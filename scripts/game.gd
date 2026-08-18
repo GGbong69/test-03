@@ -272,6 +272,11 @@ func _finish_round() -> void:
 	# 정산 내역
 	var dart_gold: int = darts_left * GameData.GOLD_PER_DART
 	var interest: int = mini(gold / GameData.INTEREST_PER, GameData.INTEREST_MAX)
+	# gold 를 더하기 전에 부른다 — "밑천"과 이자가 같은 잔액을 보게 하려는 것이다.
+	var item_rows := _gold_from_items()
+	var item_gold := 0
+	for r in item_rows:
+		item_gold += r.v
 	clear_gold_detail = [
 		{"n": "클리어", "v": GameData.CLEAR_GOLD},
 		{"n": "남은 다트 %d개" % darts_left, "v": dart_gold},
@@ -279,7 +284,9 @@ func _finish_round() -> void:
 	]
 	if stage_gold > 0:
 		clear_gold_detail.append({"n": "스테이지 보상", "v": stage_gold})
-	gold += GameData.CLEAR_GOLD + dart_gold + interest + stage_gold
+	for r in item_rows:
+		clear_gold_detail.append(r)
+	gold += GameData.CLEAR_GOLD + dart_gold + interest + stage_gold + item_gold
 
 	# 극한 판은 아이템을 하나 무료로 준다
 	if stage_item and owned.size() < GameData.MAX_ITEMS:
@@ -294,6 +301,25 @@ func _finish_round() -> void:
 
 	state = S.CLEAR
 	beep_seq([392.0, 494.0, 587.0], 0.09, 0.18, 0.22)
+
+
+func _gold_from_items() -> Array:
+	# 골드가 나오는 곳은 여기 하나뿐이다. 다트 단위로는 절대 지급하지 않는다.
+	var rows := []
+	for i in owned.size():
+		if i == sealed:
+			continue
+		var it: Dictionary = owned[i]
+		var v := 0
+		match it.get("g", ""):
+			"clear": v = it.gv
+			"spare": v = it.gv * darts_left
+			"clean": v = it.gv if not round_miss else 0
+			"blitz": v = it.gv if darts_left >= GameData.GOLD_BLITZ else 0
+			"broke": v = it.gv if gold <= GameData.GOLD_BROKE else 0
+		if v > 0:
+			rows.append({"n": it.n, "v": v})
+	return rows
 
 
 func _reroll_price() -> int:
@@ -833,6 +859,8 @@ func _land() -> void:
 	var info := hit_info(aim)
 	if has_mod("dead") and info.sector == 20:
 		info.base = 0
+	if info.mult == 0:
+		round_miss = true
 
 	# 다트 특성
 	var pierce_gain := 0
@@ -1502,6 +1530,11 @@ func _draw_shop() -> void:
 		var desc: String = GameData.item_desc(s.d) if s.type == "item" else s.d.d
 		draw_string(font, r.position + Vector2(8, 82), desc,
 				HORIZONTAL_ALIGNMENT_CENTER, r.size.x - 16, 10, C_DIM)
+		# 골드 칩은 정산 때 따로 도는 반쪽이 있다 — 금색 줄로 분리해 보여준다
+		if s.type == "item" and s.d.get("g", "") != "":
+			draw_string(font, r.position + Vector2(8, 98),
+					GameData.gold_text(s.d.g, s.d.gv),
+					HORIZONTAL_ALIGNMENT_CENTER, r.size.x - 16, 9, C_GOLD.darkened(0.15))
 		draw_string(font, r.position + Vector2(0, 116), "◆ %d" % s.cost,
 				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 14, C_GOLD if can else C_DIM.darkened(0.3))
 

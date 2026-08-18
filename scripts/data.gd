@@ -52,7 +52,28 @@ const ITEMS := [
 	{"id": "str", "n": "정밀", "c": "streak", "k": "mult_streak", "v": 3, "cost": 11},
 	{"id": "alc", "n": "기본기", "c": "always", "k": "chip", "v": 25, "cost": 11},
 	{"id": "alm", "n": "증폭기", "c": "always", "k": "xmult", "v": 2, "cost": 14},
+
+	# ── 골드 칩 ──────────────────────────────────────────
+	#  두 시계로 움직인다.
+	#    득점 반쪽 c/k/v — 다트마다. 기존 아이템과 완전히 같은 배관을 쓴다.
+	#    골드 반쪽 g/gv  — 라운드 정산 때만. game.gd 의 _gold_from_items().
+	#  골드를 다트 단위로 주면 "일부러 목표를 안 넘기고 다트를 다 던져
+	#  골드만 벌기" 가 성립한다. 정산 단위로 묶어 그 길을 막았다.
+	#  득점 반쪽은 같은 조건의 기존 아이템보다 낮다. 골드가 그 차액이다.
+	{"id": "mtc", "n": "밑천", "c": "small", "k": "mult", "v": 2,
+		"g": "broke", "gv": 4, "cost": 4},
+	{"id": "pdn", "n": "판돈", "c": "first", "k": "chip", "v": 26,
+		"g": "spare", "gv": 1, "cost": 7},
+	{"id": "bjn", "n": "본전", "c": "diff", "k": "chip", "v": 12,
+		"g": "clean", "gv": 3, "cost": 7},
+	{"id": "kns", "n": "큰손", "c": "triple", "k": "mult", "v": 3,
+		"g": "blitz", "gv": 9, "cost": 11},
+	{"id": "mlj", "n": "물주", "c": "always", "k": "chip", "v": 16,
+		"g": "clear", "gv": 4, "cost": 11},
 ]
+
+const GOLD_BROKE := 6          # "밑천" 기준 — 정산 시점 보유 골드
+const GOLD_BLITZ := 3          # "큰손" 기준 — 남은 다트
 
 # ── 다트 종류 (탄창) ──────────────────────────────────────
 #  gauge  조준 게이지 속도 배율 (낮을수록 맞히기 쉽다)
@@ -174,6 +195,28 @@ static func eff_text(k: String, v: int) -> String:
 
 static func item_desc(it: Dictionary) -> String:
 	return "%s %s" % [cond_text(it.c), eff_text(it.k, it.v)]
+
+
+# 골드 반쪽은 item_desc 에 섞지 않는다 — 발동 시점이 다르므로 따로 보여준다.
+static func gold_text(g: String, gv: int) -> String:
+	match g:
+		"clear": return "클리어 시 ◆ +%d" % gv
+		"spare": return "남은 다트 1개당 ◆ +%d" % gv
+		"clean": return "한 발도 안 빗나가면 ◆ +%d" % gv
+		"blitz": return "남은 다트 %d개 이상이면 ◆ +%d" % [GOLD_BLITZ, gv]
+		"broke": return "정산 때 보유 ◆ %d 이하면 ◆ +%d" % [GOLD_BROKE, gv]
+	return ""
+
+
+# 칩 위에 얹는 3글자 태그 (원 안에는 긴 글이 안 들어간다)
+static func gold_tag(g: String) -> String:
+	match g:
+		"clear": return "클리어"
+		"spare": return "잔탄"
+		"clean": return "무실책"
+		"blitz": return "속공"
+		"broke": return "빈털터리"
+	return ""
 
 
 static func target_of(round_no: int) -> int:
