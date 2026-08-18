@@ -1472,6 +1472,127 @@ func _panel_slot(i: int) -> void:
 
 
 # ══════════════════════════════════════════════════════════
+#  매대 아이콘
+# ──────────────────────────────────────────────────────────
+#  상점에 세 종류가 나란히 선다. 실루엣이 서로 갈려야 글자를
+#  안 읽고도 무엇인지 안다.
+#    아이템 → 원반 (draw_item_chip)
+#    개조   → 사각판 위의 미니 보드
+#    다트   → 대각선
+#  _icon_mod / _icon_dart 만 바깥에서 부른다.
+# ══════════════════════════════════════════════════════════
+
+# 미니 보드는 실제 링 비율(트리플 띠 0.10)을 쓰면 17px 반지름에서 1.7px 라
+# 사라진다. 읽히는 도식 비율을 따로 둔다 — 계측도가 아니라 기호다.
+const MB := {"bi": 0.13, "bo": 0.27, "ti": 0.46, "to": 0.60, "di": 0.84}
+const MB_SEG := 10              # 20 칸이면 한 칸 호가 5px 라 뭉갠다
+
+
+func _icon_mod(c: Vector2, r: float, id: String, dim: float) -> void:
+	# 사각 캐비닛 — 이게 없으면 칩과 똑같은 원반이라 실루엣이 안 갈린다
+	var pl := Rect2(c - Vector2(r + 3.0, r + 3.0), Vector2(r * 2.0 + 6.0, r * 2.0 + 6.0))
+	draw_rect(pl, C_PANEL.darkened(0.35 + dim * 0.3))
+	draw_rect(Rect2(pl.position, Vector2(pl.size.x, 1.0)), C_WIRE.darkened(0.35))
+
+	# 바탕 보드는 죽여 깔고, 바뀌는 곳만 원색으로 덮는다
+	var d := 0.42 + dim * 0.35
+	draw_circle(c, r, C_DARK.darkened(d * 0.5))
+	var step := TAU / float(MB_SEG)
+	for i in MB_SEG:
+		var a := float(i) * step
+		draw_colored_polygon(annulus_at(c, r * MB.bo, r * MB.di, a, a + step, 3),
+				(C_LIGHT if i % 2 == 0 else C_DARK).darkened(d))
+	# 링 강조는 draw_arc 로만 그린다. 전체 링을 폴리곤으로 넘기면 이음매가
+	# 겹친 비볼록 도형이라 삼각분할이 튄다.
+	draw_arc(c, r * (MB.ti + MB.to) * 0.5, 0.0, TAU, 20,
+			C_GREEN.darkened(d), (MB.to - MB.ti) * r)
+	draw_arc(c, r * (MB.di + 1.0) * 0.5, 0.0, TAU, 20,
+			C_RED.darkened(d), (1.0 - MB.di) * r)
+	draw_circle(c, r * MB.bo, C_GREEN.darkened(d))
+	draw_circle(c, r * MB.bi, C_RED.darkened(d))
+
+	var acc := C_ACC.darkened(dim)
+	var ghost := Color(C_TXT, 0.45 - dim * 0.3)
+	match id:
+		"trpw":
+			draw_arc(c, r * 0.53, 0.0, TAU, 24, acc, r * 0.34)
+			draw_arc(c, r * MB.ti, 0.0, TAU, 20, ghost, 1.0)
+			draw_arc(c, r * MB.to, 0.0, TAU, 20, ghost, 1.0)
+		"dblw":
+			draw_arc(c, r * 0.84, 0.0, TAU, 24, acc, r * 0.32)
+			draw_arc(c, r * MB.di, 0.0, TAU, 22, ghost, 1.0)
+		"bulw":
+			draw_circle(c, r * MB.bo * 1.7, acc)
+			draw_arc(c, r * MB.bo, 0.0, TAU, 16, ghost, 1.0)
+		"sw20":
+			# 가장 작은 섹터가 20으로 바뀐다 — 두 칸이 같은 색이 된다
+			for k in [0, 5]:
+				var a := float(k) * step
+				draw_colored_polygon(annulus_at(c, r * MB.bo, r * MB.di, a, a + step, 3), acc)
+
+
+func _icon_dart(c: Vector2, dl: float, id: String, dim: float) -> void:
+	# 보드에 꽂힌 다트와 같은 각도로 눕는다 (_draw_darts 의 Vector2(6, -10))
+	var dir := Vector2(6.0, -10.0).normalized()
+	var nrm := Vector2(-dir.y, dir.x)
+	var bw := 2.6
+	var fin := 3.2
+	var col := C_TXT
+	match id:
+		"hvy":
+			bw = 4.0
+			fin = 2.4
+			col = C_WIRE.lightened(0.30)
+		"lgt":
+			bw = 1.5
+			fin = 4.6
+			col = C_GREEN.lightened(0.35)
+		"prc":
+			bw = 2.2
+			fin = 2.8
+			col = C_CHIP.lightened(0.25)
+		"mag":
+			bw = 3.0
+			fin = 3.4
+			col = C_MULT.lightened(0.25)
+	col = col.darkened(dim)
+
+	var tip := c + dir * dl
+	var tail := c - dir * dl
+	var brl := c + dir * dl * 0.1
+
+	draw_line(tip + Vector2(1.5, 3.0), tail + Vector2(1.5, 3.0),
+			Color(0.0, 0.0, 0.0, 0.28), bw)
+	# 촉
+	draw_colored_polygon(PackedVector2Array([tip,
+			brl + nrm * bw * 0.5, brl - nrm * bw * 0.5]), C_LIGHT.darkened(dim))
+	# 배럴
+	draw_line(brl, c - dir * dl * 0.35, col, bw)
+	# 샤프트
+	draw_line(c - dir * dl * 0.35, c - dir * dl * 0.6,
+			C_DARK.lightened(0.25).darkened(dim), 1.6)
+	# 날개
+	var w0 := c - dir * dl * 0.6
+	draw_colored_polygon(PackedVector2Array([w0, w0 + nrm * fin - dir * dl * 0.2,
+			tail, w0 - nrm * fin - dir * dl * 0.2]), col)
+
+	match id:
+		"hvy":
+			for t in [0.55, 0.75]:
+				var q := brl.lerp(c - dir * dl * 0.35, t)
+				draw_line(q + nrm * bw * 0.6, q - nrm * bw * 0.6, C_DARK.darkened(dim), 2.0)
+		"lgt":
+			for k in [-1.0, 1.0]:
+				draw_line(tail + nrm * k * 2.5 - dir * 2.0,
+						tail + nrm * k * 2.5 - dir * 6.0, col, 1.0)
+		"prc":
+			draw_line(tip, tip + dir * 5.0, C_CHIP.lightened(0.4).darkened(dim), 1.0)
+		"mag":
+			draw_arc(tip + dir * 4.0, 4.5, PI * 0.15, PI * 0.85,
+					10, C_MULT.lightened(0.4).darkened(dim), 1.0)
+
+
+# ══════════════════════════════════════════════════════════
 #  툴팁 (마우스 오버)
 # ──────────────────────────────────────────────────────────
 #  바깥과 닿는 곳은 둘뿐이다.
@@ -1831,7 +1952,9 @@ func _draw_shop() -> void:
 		var r := _stock_rect(i)
 		var s: Dictionary = stock[i]
 		var can: bool = not s.sold and gold >= s.cost
-		draw_rect(r, C_PANEL.lightened(0.02) if s.sold else C_PANEL.lightened(0.10))
+		var hov: bool = tip_mark == r and tip_a > 0.004
+		draw_rect(r, C_PANEL.lightened(0.02) if s.sold
+				else C_PANEL.lightened(0.22 if hov else 0.10))
 		var top: Color = C_DIM.darkened(0.5)
 		if not s.sold:
 			top = C_ACC
@@ -1851,20 +1974,45 @@ func _draw_shop() -> void:
 			kind = "보드 개조"
 		elif s.type == "dart":
 			kind = "다트"
-		draw_string(font, r.position + Vector2(0, 24), kind,
-				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, C_DIM)
-		draw_string(font, r.position + Vector2(0, 52), s.d.n,
-				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 15, C_TXT if can else C_DIM)
-		var desc: String = GameData.item_desc(s.d) if s.type == "item" else s.d.d
-		draw_string(font, r.position + Vector2(8, 82), desc,
-				HORIZONTAL_ALIGNMENT_CENTER, r.size.x - 16, 10, C_DIM)
-		# 골드 칩은 정산 때 따로 도는 반쪽이 있다 — 금색 줄로 분리해 보여준다
-		if s.type == "item" and s.d.get("g", "") != "":
-			draw_string(font, r.position + Vector2(8, 98),
-					GameData.gold_text(s.d.g, s.d.gv),
-					HORIZONTAL_ALIGNMENT_CENTER, r.size.x - 16, 9, C_GOLD.darkened(0.15))
-		draw_gold(r.position.x + r.size.x * 0.5, r.position.y + 116.0, str(s.cost), 14,
-				C_GOLD if can else C_DIM.darkened(0.3))
+		var dim: float = 0.0 if can else 0.42
+
+		# 머리줄 — 종류는 왼쪽, 가격은 오른쪽. 가격을 여기로 올려야
+		# 아이콘이 들어갈 40px 이 나온다.
+		draw_string(font, r.position + Vector2(8, 15), kind,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 8, C_DIM.darkened(0.1))
+		draw_gold_at(r.end.x - 8.0 - gold_w(str(s.cost), 11), r.position.y + 15.0,
+				str(s.cost), 11, C_GOLD if can else C_DIM.darkened(0.3))
+
+		# 아이콘 띠
+		var ic := r.position + Vector2(73, 39)
+		match s.type:
+			"item":
+				draw_circle(ic + Vector2(1.5, 3.0), 17.0, Color(0.0, 0.0, 0.0, 0.30))
+				draw_item_chip(ic, 17.0, s.d, 0.42, 0.0, dim, 14)
+			"mod":
+				_icon_mod(ic, 15.0, s.d.id, dim)
+			"dart":
+				_icon_dart(ic, 19.0, s.d.id, dim)
+
+		draw_string(font, r.position + Vector2(0, 76), s.d.n,
+				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 14, C_TXT if can else C_DIM)
+		# 설명을 조건/효과 두 줄로 쪼갠다. 한 줄로 두면 폭을 넘겨
+		# draw_string 이 줄바꿈 없이 조용히 잘라낸다.
+		if s.type == "item":
+			draw_string(font, r.position + Vector2(6, 92), GameData.cond_text(s.d.c),
+					HORIZONTAL_ALIGNMENT_CENTER, r.size.x - 12, 10, C_DIM)
+			var ec: Color = C_CHIP.lightened(0.35) if s.d.k == "chip" else C_MULT.lightened(0.3)
+			draw_string(font, r.position + Vector2(6, 107),
+					GameData.eff_text(s.d.k, s.d.v),
+					HORIZONTAL_ALIGNMENT_CENTER, r.size.x - 12, 11, ec.darkened(dim))
+			if s.d.get("g", "") != "":
+				draw_string(font, r.position + Vector2(4, 122),
+						GameData.gold_text(s.d.g, s.d.gv),
+						HORIZONTAL_ALIGNMENT_CENTER, r.size.x - 8, 8,
+						C_GOLD.darkened(0.15 + dim))
+		else:
+			draw_string(font, r.position + Vector2(6, 99), s.d.d,
+					HORIZONTAL_ALIGNMENT_CENTER, r.size.x - 12, 10, C_DIM)
 
 	_btn(_reroll_rect(), "리롤", "무료" if reroll_cost == 0 else "", gold >= reroll_cost)
 	if reroll_cost > 0:
