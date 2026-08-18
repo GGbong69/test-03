@@ -19,6 +19,35 @@ const CARD_H := 96.0
 const SECTORS_BASE := [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5]
 const DBL_OUT := 1.00
 
+# ══════════════════════════════════════════════════════════
+#  HUD 배치표
+#  화면 좌표는 전부 여기서만 정한다. 각 판 구획은 자기 줄만 읽는다.
+#  줄을 지우고 _hud_draw() 의 호출 한 줄을 지우면 그 판만 사라진다.
+#  (매대·스테이지 카드·점수 카드·진행바는 기존 좌표 함수 그대로 둔다)
+# ══════════════════════════════════════════════════════════
+const LAY := {
+	"bar":        Rect2(0.0, 0.0, 640.0, 18.0),
+	"bar_cut":    [100.0, 584.0],
+	"bar_pip":    Rect2(44.0, 7.0, 5.0, 5.0),
+	"bar_pip_dx": 7.0,
+	"bar_gauge":  Rect2(146.0, 6.0, 360.0, 7.0),
+	"bar_score":  514.0,
+	"bar_mod":    588.0,
+
+	"bank":       Rect2(4.0, 21.0, 72.0, 46.0),
+	"sell":       Rect2(80.0, 21.0, 74.0, 46.0),
+	"cap":        Rect2(445.0, 21.0, 37.0, 46.0),
+
+	"mag":        Rect2(4.0, 71.0, 72.0, 228.0),
+	"mag_hand":   Rect2(8.0, 88.0, 64.0, 18.0),
+	"mag_slot":   Rect2(8.0, 110.0, 64.0, 27.0),
+	"mag_dy":     31.0,
+
+	"strip":      Rect2(160.0, 71.0, 320.0, 25.0),
+	"strip_x0":   206.0,
+	"strip_dx":   44.0,
+}
+
 const C_BG := Color("14111f")
 const C_LIGHT := Color("e8dfc8")
 const C_DARK := Color("2b2438")
@@ -329,6 +358,11 @@ func _reroll_price() -> int:
 
 
 func _open_shop() -> void:
+	# 라운드가 끝났다. 상점에 랙이 서므로 안 지우면 지난 판 "봉인" 딱지가
+	# 유령으로 남는다. _gold_from_items() 가 sealed 를 읽으므로
+	# _finish_round 안에서는 지우면 안 된다 — 여기가 유일하게 안전한 지점이다.
+	sealed = -1
+	_panel_reset()
 	rerolls_used = 0
 	reroll_cost = _reroll_price()
 	_roll_stock()
@@ -404,16 +438,6 @@ func _std_slot() -> int:
 		if magazine[i].id == "std":
 			return i
 	return -1
-
-
-func _mag_text() -> String:
-	var cnt := {}
-	for d in magazine:
-		cnt[d.n] = cnt.get(d.n, 0) + 1
-	var parts := []
-	for k in cnt:
-		parts.append("%s×%d" % [k, cnt[k]])
-	return "  ".join(parts)
 
 
 func _apply_mod(id: String) -> void:
@@ -1050,13 +1074,9 @@ func _draw() -> void:
 
 	_draw_board()
 	_draw_fx()
-	_draw_magazine()
 	_draw_darts()
 	_draw_aim()
-	_draw_topbar()
-	_panel_draw()
 	_draw_card()
-	_draw_pops()
 
 	if state == S.CLEAR:
 		_draw_clear()
@@ -1069,10 +1089,35 @@ func _draw() -> void:
 	else:
 		_draw_hint()
 
+	# 화면이 바뀌어도 같은 자리에 남는 것만 판이다 — 그래서 스크림 뒤에 그린다.
+	_hud_draw()
 	_tip_draw(sh)
 	draw_set_transform(Vector2.ZERO)
 	if screen_flash > 0.0:
 		draw_rect(Rect2(Vector2.ZERO, VIEW), Color(1.0, 1.0, 1.0, screen_flash * 0.34))
+
+
+# ══════════════════════════════════════════════════════════
+#  HUD 배급기
+# ──────────────────────────────────────────────────────────
+#  상태별 노출은 여기 한 곳에만 있다. 각 판은 자기 그리기만 안다.
+# ══════════════════════════════════════════════════════════
+
+func _is_play() -> bool:
+	return state == S.PICK or state == S.AIM_V or state == S.AIM_H \
+			or state == S.CONFIRM or state == S.FLY or state == S.RESOLVE
+
+
+func _hud_draw() -> void:
+	if state == S.OVER:
+		return
+	_draw_topbar()
+	if state != S.CLEAR:            # 정산 화면은 그 자체가 명세다
+		_panel_draw()
+		if _is_play():
+			_draw_magazine()
+	# 판매 팝업이 스크림(알파 0.94) 밑에 깔리면 안 보인다 — 판 다음에 그린다.
+	_draw_pops()
 
 
 func annulus_at(c: Vector2, ri: float, ro: float, a0: float, a1: float,
@@ -1210,10 +1255,10 @@ func _draw_aim() -> void:
 	elif state == S.AIM_H:
 		draw_line(Vector2(BC.x - 168.0, aim.y), Vector2(BC.x + 168.0, aim.y),
 				C_ACC.darkened(0.55), 1.0)
-		draw_line(Vector2(aim.x, BC.y - 168.0), Vector2(aim.x, BC.y + 168.0), C_ACC, 1.0)
+		draw_line(Vector2(aim.x, 70.0), Vector2(aim.x, 336.0), C_ACC, 1.0)
 	elif state == S.CONFIRM:
 		draw_line(Vector2(BC.x - 168.0, aim.y), Vector2(BC.x + 168.0, aim.y), C_ACC, 1.0)
-		draw_line(Vector2(aim.x, BC.y - 168.0), Vector2(aim.x, BC.y + 168.0), C_ACC, 1.0)
+		draw_line(Vector2(aim.x, 70.0), Vector2(aim.x, 336.0), C_ACC, 1.0)
 		var e := 1.0 - pow(1.0 - clampf(confirm_t / maxf(ch(), 0.001), 0.0, 1.0), 3.0)
 		draw_arc(aim, lerpf(22.0, 7.0, e), 0.0, TAU, 24, C_TXT, 1.0)
 		draw_arc(aim, lerpf(30.0, 11.0, e), 0.0, TAU, 24, Color(C_TXT, 0.3), 1.0)
@@ -1795,6 +1840,9 @@ func _tip_hit(m: Vector2) -> Dictionary:
 			for i in stock.size():
 				if _stock_rect(i).has_point(m):
 					return {"k": "stock", "i": i}
+			for i in GameData.MAX_ITEMS:
+				if _slot_rect(i).has_point(m):
+					return {"k": "rack", "i": i}
 		S.STAGE:
 			for i in stage_pick.size():
 				if _stage_rect(i).has_point(m):
@@ -2043,15 +2091,6 @@ func _draw_stage() -> void:
 	# 보드가 비쳐 보이게 얇게 덮는다 — 개조 상태를 확인하면서 고르라고
 	draw_rect(Rect2(Vector2.ZERO, VIEW), Color(0.04, 0.03, 0.07, 0.80))
 
-	# 아이템 패널이 y 21~65 를 차지하므로 그 아래에서 시작한다
-	var s_pre := "라운드 %d / %d    " % [round_no, GameData.ROUNDS]
-	var s_post := "    아이템 %d / %d" % [owned.size(), GameData.MAX_ITEMS]
-	var w_pre := font.get_string_size(s_pre, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x
-	var w_post := font.get_string_size(s_post, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x
-	var sx := (VIEW.x - (w_pre + gold_w(str(gold), 11) + w_post)) * 0.5
-	draw_string(font, Vector2(sx, 82), s_pre, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_DIM)
-	sx += w_pre + draw_gold_at(sx + w_pre, 82.0, str(gold), 11, C_GOLD)
-	draw_string(font, Vector2(sx, 82), s_post, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_DIM)
 	draw_string(font, Vector2(0, 98), "제약이 셀수록 상점 자금이 커진다",
 			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 10, C_DIM.darkened(0.2))
 
@@ -2094,8 +2133,6 @@ func _draw_stage() -> void:
 				HORIZONTAL_ALIGNMENT_CENTER, r.size.x,
 				11, C_GOLD if sp.d.gold > 0 else C_DIM)
 
-	_panel_draw()
-
 	draw_string(font, Vector2(0, 292), "판을 눌러 시작",
 			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 11, C_TXT)
 	draw_string(font, Vector2(0, 312), "뒤에 보이는 보드가 지금 네 보드다",
@@ -2104,20 +2141,10 @@ func _draw_stage() -> void:
 
 func _draw_shop() -> void:
 	_scrim()
-	draw_string(font, Vector2(0, 40), "상점", HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 20, C_ACC)
-	var gc: Color = C_GOLD.lerp(C_MULT, deny_flash)
-	var gx := randf_range(-deny_flash, deny_flash) * 3.0
-	var h_post := "    아이템 %d / %d" % [owned.size(), GameData.MAX_ITEMS]
-	var h_w := font.get_string_size(h_post, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
-	var hx := gx + (VIEW.x - (gold_w(str(gold), 12) + h_w)) * 0.5
-	hx += draw_gold_at(hx, 62.0, str(gold), 12, gc)
-	draw_string(font, Vector2(hx, 62), h_post, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, gc)
 	if deny_flash > 0.0:
 		draw_string(font, Vector2(0, 300), "골드가 부족하거나 슬롯이 꽉 찼다",
 				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 11,
 				Color(C_MULT.lightened(0.3), deny_flash))
-	draw_string(font, Vector2(0, 80), "탄창  " + _mag_text(),
-			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 10, C_CHIP.lightened(0.25))
 	for i in stock.size():
 		var r := _stock_rect(i)
 		var s: Dictionary = stock[i]
