@@ -219,6 +219,24 @@ static func gold_tag(g: String) -> String:
 	return ""
 
 
+# ── 판매 ──────────────────────────────────────────────────
+#  판매가 = 구매가의 절반(내림), 최소 2. 22종이 4/7/11/14 이므로 2/3/5/7 이다.
+#  올림으로 두면 7→4, 11→6 이 되어 보통 등급의 회수율이 흔함보다 높아진다.
+#  내림은 평균 회수율을 46% 로 눌러 "비싼 칩은 팔면 더 손해"를 만든다.
+#
+#  스프레드(구매가 − 판매가) = 2 / 4 / 6 / 7.
+#  이것이 "한 정산만 빌려 쓰고 되팔기" 의 손익선이다. 골드 칩의 1회 지급(gv)이
+#  이 선을 넘으면 대여가 성립한다 — 지금 넘는 것은 큰손(9 vs 6) 하나뿐이고
+#  그것도 계속 들고 있는 쪽이 낫다. 새 골드 칩의 gv 는 반드시 이 선과 비교한다.
+const SELL_DIV := 2
+const SELL_MIN := 2            # 최저 구매가가 4 라 지금은 안 걸린다. 0골드 판매를 막는 바닥.
+
+
+static func sell_value(it: Dictionary) -> int:
+	@warning_ignore("integer_division")  # 내림이 의도다 — 위 주석 참조
+	return maxi(SELL_MIN, int(it.cost) / SELL_DIV)
+
+
 static func target_of(round_no: int) -> int:
 	var i := clampi(round_no - 1, 0, TARGETS.size() - 1)
 	return TARGETS[i]

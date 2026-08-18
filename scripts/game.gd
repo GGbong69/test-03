@@ -300,6 +300,7 @@ func _finish_round() -> void:
 
 	# 정산 내역
 	var dart_gold: int = darts_left * GameData.GOLD_PER_DART
+	@warning_ignore("integer_division")  # 보유 5당 1, 내림이 규칙이다
 	var interest: int = mini(gold / GameData.INTEREST_PER, GameData.INTEREST_MAX)
 	# gold 를 더하기 전에 부른다 — "밑천"과 이자가 같은 잔액을 보게 하려는 것이다.
 	var item_rows := _gold_from_items()
@@ -318,7 +319,8 @@ func _finish_round() -> void:
 	gold += GameData.CLEAR_GOLD + dart_gold + interest + stage_gold + item_gold
 
 	# 극한 판은 아이템을 하나 무료로 준다
-	if stage_item and owned.size() < GameData.MAX_ITEMS:
+	if stage_item and stage_slots < GameData.MAX_ITEMS \
+			and owned.size() < GameData.MAX_ITEMS:
 		var pool := GameData.ITEMS.duplicate()
 		pool.shuffle()
 		for it in pool:
@@ -362,6 +364,7 @@ func _open_shop() -> void:
 	# 유령으로 남는다. _gold_from_items() 가 sealed 를 읽으므로
 	# _finish_round 안에서는 지우면 안 된다 — 여기가 유일하게 안전한 지점이다.
 	sealed = -1
+	sell_sel = -1
 	_panel_reset()
 	rerolls_used = 0
 	reroll_cost = _reroll_price()
@@ -491,6 +494,11 @@ func _open_stage() -> void:
 	# 봉인은 _start_round 에서만 다시 뽑힌다. 지우지 않으면 스테이지 선택
 	# 화면의 칩 랙이 지난 라운드 봉인을 그대로 보여준다.
 	sealed = -1
+	sell_sel = -1
+	# 극한 무료 아이템은 "고르기 전에 자리가 있었는가" 로 판정한다. 이 스냅샷이
+	# 없으면 [스테이지에서 잉여칩 판매 → 극한 선택 → 무료 칩으로 리필] 이
+	# 골드까지 받으면서 도는 무손실 루프가 된다.
+	stage_slots = owned.size()
 	var base := GameData.target_of(round_no)
 	stage_pick.clear()
 	var pool := GameData.MODIFIERS.duplicate()
@@ -668,6 +676,10 @@ func _process(d: float) -> void:
 			if qt <= 0.0:
 				_next_step()
 
+	if sell_sel >= 0:
+		sell_t += d
+		if not _can_sell() or sell_sel >= owned.size():
+			sell_sel = -1
 	_tip_update(d)
 	queue_redraw()
 
@@ -753,11 +765,15 @@ func _click(m: Vector2) -> void:
 			_open_shop()
 			return
 		S.STAGE:
+			if _sell_hit(m):
+				return
 			for i in stage_pick.size():
 				if _stage_rect(i).has_point(m):
 					_pick_stage(i)
 					return
 		S.SHOP:
+			if _sell_hit(m):
+				return
 			for i in stock.size():
 				if _stock_rect(i).has_point(m):
 					_buy(i)
@@ -1114,6 +1130,8 @@ func _hud_draw() -> void:
 	_draw_topbar()
 	if state != S.CLEAR:            # 정산 화면은 그 자체가 명세다
 		_bank_draw()
+		if _can_sell():
+			_sell_draw()
 		_panel_draw()
 		_cap_draw()
 		if _is_play():
@@ -1338,6 +1356,7 @@ func _bank_draw() -> void:
 		draw_string(font, r.position + Vector2(0.0, 42.0), "마지막 판",
 				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, C_MULT.lightened(0.2))
 	else:
+		@warning_ignore("integer_division")  # 위 _finish_round 와 같은 식이어야 한다
 		var itr: int = mini(gold / GameData.INTEREST_PER, GameData.INTEREST_MAX)
 		draw_string(font, r.position + Vector2(0.0, 42.0), "이자 +%d" % itr,
 				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9,
@@ -1559,7 +1578,9 @@ func _panel_slot(i: int) -> void:
 	var bounce: float = slot_pop[i]
 	var up: float = maxf(bounce, 0.0)
 
-	var c := cell.get_center() + Vector2(0.0, PANEL.chip_dy - bounce * PANEL.rise)
+	var sel: bool = i == sell_sel and _can_sell()
+	var c := cell.get_center() + Vector2(0.0,
+			PANEL.chip_dy - bounce * PANEL.rise - (4.0 if sel else 0.0))
 	var r: float = PANEL.r * (1.0 + bounce * PANEL.swell)
 
 	if up > 0.01:
@@ -1570,9 +1591,21 @@ func _panel_slot(i: int) -> void:
 			0.55 if lock else 0.0, 12)
 
 	# 호버 링 — 리프트는 안 쓴다. 발동 스프링의 실제 최대 리프트가 3px 뿐이라
-	# 호버까지 들어올리면 두 어휘가 뒤집힌다.
-	if i == tip_slot and tip_a > 0.004:
+	# 호버까지 들어올리면 두 어휘가 뒤집힌다. 링은 하나만 그린다 — 폭 1.0 짜리
+	# 둘을 겹치면 nearest 에서 한 덩어리 띠로 뭉개져 상태가 안 갈린다.
+	if sel:
+		var k := 0.5 + 0.5 * sin(sell_t * 9.0)
+		draw_arc(c, r + 2.0, 0.0, TAU, 24,
+				Color(C_MULT.lightened(0.25), 0.45 + 0.55 * k), 1.0)
+	elif i == tip_slot and tip_a > 0.004:
 		draw_arc(c, r + 2.0, 0.0, TAU, 24, Color(C_ACC, tip_a), 1.0)
+
+	# 상점·스테이지에서는 랙이 매물대가 된다 — 태그 자리에 회수액을 건다.
+	if _can_sell():
+		draw_gold(cell.get_center().x, cell.position.y + cell.size.y - 3.0,
+				str(GameData.sell_value(it)), 9,
+				C_ACC if sel else C_GOLD.darkened(0.30))
+		return
 
 	# 평소엔 조건 태그, 발동 직후엔 이름 — 자리를 옮기지 않고 덮어쓴다
 	var tag := GameData.gold_tag(it.get("g", "")) if it.get("g", "") != "" else ""
@@ -1589,6 +1622,93 @@ func _panel_slot(i: int) -> void:
 	draw_string(font, cell.position + Vector2(0.0, cell.size.y - 3.0), label,
 			HORIZONTAL_ALIGNMENT_CENTER, cell.size.x, 9, col)
 
+
+
+# ══════════════════════════════════════════════════════════
+#  판매 (칩 랙 → 골드)
+# ──────────────────────────────────────────────────────────
+#  바깥과 닿는 곳은 넷뿐이다.
+#    _sell_hit(m)   랙·판매판 클릭 판정   (_click 의 S.SHOP / S.STAGE)
+#    _sell_draw()   판매판 그리기         (_hud_draw)
+#    _can_sell()    지금 팔 수 있는가      (_panel_slot / _tip_build / _process)
+#    sell_sel       고른 칸 (-1 = 없음)
+#
+#  두 번 눌러야 팔린다. 첫 클릭은 칩(랙 안), 두 번째는 판매판(x[80,154])이다.
+#  두 표적이 물리적으로 갈려 있어 더블클릭이 판매로 흘러들 수 없다 —
+#  같은 자리를 두 번 누르는 방식이었다면 필요했을 타이머가 여기선 필요 없다.
+#  판매판이 자금 판 바로 옆인 것도 의도다. 파는 건 물건 옆이 아니라 지갑 옆이다.
+#
+#  S.CLEAR 에는 절대 붙이지 않는다 — 정산 지급(_finish_round 의 gold +=)이
+#  이미 끝난 시점이라 골드 칩의 "받고 즉시 되팔기" 창이 열린다.
+# ══════════════════════════════════════════════════════════
+
+var sell_sel := -1
+var sell_t := 0.0               # 선택 링 맥동에만 쓴다
+var stage_slots := 0            # 스테이지 화면에 들어설 때의 칩 개수
+
+
+func _can_sell() -> bool:
+	# R8 스테이지에서는 골드를 쓸 곳이 수학적으로 0개다 — 정산도(조기 return)
+	# 상점도 없고 슬롯을 비워도 채울 무료 아이템이 안 나온다. 기대값이 음수뿐이다.
+	if state == S.STAGE and round_no >= GameData.ROUNDS:
+		return false
+	return state == S.SHOP or state == S.STAGE
+
+
+func _sell_hit(m: Vector2) -> bool:
+	# 랙 y[21,67] 은 매대 y[104,236] · 스테이지 카드 y[112,264] 와 y 로 갈려
+	# 있어 먼저 검사해도 그쪽 클릭을 훔칠 수 없다.
+	if not _can_sell():
+		return false
+	if sell_sel >= 0 and sell_sel < owned.size() and LAY.sell.has_point(m):
+		_sell(sell_sel)
+		return true
+	for i in GameData.MAX_ITEMS:
+		if _slot_rect(i).has_point(m):
+			sell_sel = -1 if (sell_sel == i or i >= owned.size()) else i
+			sell_t = 0.0
+			beep(349.0, 0.05, 0.10)
+			return true
+	sell_sel = -1                   # 딴 데를 누르면 선택만 풀고 그대로 흘려보낸다
+	return false
+
+
+func _sell(i: int) -> void:
+	if i < 0 or i >= owned.size():
+		return
+	var v := GameData.sell_value(owned[i])
+	var at := _slot_rect(i).get_center()
+	gold += v
+	owned.remove_at(i)
+	sell_sel = -1
+	# sealed 는 owned 의 인덱스다. 판매는 SHOP/STAGE 에서만 일어나고 두 화면
+	# 모두 진입할 때 -1 로 지우므로 이미 -1 이지만, 인덱스가 밀린 뒤에 남아
+	# 있으면 엉뚱한 칩이 봉인으로 보인다. 여기서도 못 박는다.
+	sealed = -1
+	# slot_pop/slot_vel/slot_hot 은 owned 와 인덱스를 공유하고 _panel_ensure 는
+	# 크기만 맞출 뿐 내용을 안 옮긴다. 이 두 화면에서는 스프링이 전부 정지
+	# 상태라 0 으로 돌리는 것이 옮기는 것과 같은 결과이고 더 안전하다.
+	_panel_reset()
+	pop(at + Vector2(0.0, -14.0), "+%d" % v, C_GOLD, 15, 0.8)
+	beep_seq([659.0, 880.0], 0.06, 0.09, 0.18)
+
+
+func _sell_draw() -> void:
+	var r: Rect2 = LAY.sell
+	var live: bool = sell_sel >= 0 and sell_sel < owned.size()
+	draw_rect(r, C_PANEL.lightened(0.10) if live else C_PANEL)
+	draw_rect(Rect2(r.position, Vector2(r.size.x, 2.0)),
+			C_ACC if live else C_WIRE.darkened(0.35))
+	if not live:
+		draw_string(font, r.position + Vector2(0.0, 21.0), "판매",
+				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 10, C_DIM.darkened(0.1))
+		draw_string(font, r.position + Vector2(0.0, 36.0), "칩을 고르세요",
+				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, C_DIM.darkened(0.35))
+		return
+	draw_string(font, r.position + Vector2(0.0, 21.0), "팔기",
+			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 13, C_TXT)
+	draw_gold(r.get_center().x, r.position.y + 38.0,
+			"+%d" % GameData.sell_value(owned[sell_sel]), 11, C_GOLD)
 
 
 # ══════════════════════════════════════════════════════════
@@ -1895,9 +2015,9 @@ var tip_a := 0.0                # 페이드
 
 # ic  왼쪽에 붙일 제약 아이콘 id (없으면 빈 문자열 — 기존 호출은 3인자 그대로)
 # tl  이름 뒤에 9pt 로 이어 붙일 설명 (제약 줄에서만 쓴다)
-func _tip_add(t: String, sz: int, c: Color, ic := "", tl := "") -> void:
+func _tip_add(t: String, sz: int, c: Color, ic := "", tl := "", gd := "") -> void:
 	if t != "":
-		tip_lines.append({"s": t, "sz": sz, "c": c, "ic": ic, "tl": tl})
+		tip_lines.append({"s": t, "sz": sz, "c": c, "ic": ic, "tl": tl, "gd": gd})
 
 
 func _tip_clear() -> void:
@@ -1964,6 +2084,12 @@ func _tip_build(hit: Dictionary) -> void:
 				_tip_add(GameData.gold_text(it.g, it.gv), 9, C_GOLD)
 			if i == sealed:
 				_tip_add("이번 판 봉인 — 발동하지 않는다", 9, C_MULT.lightened(0.25))
+			if _can_sell():
+				_tip_add("판매가", 10, C_GOLD, "", "", str(GameData.sell_value(it)))
+				_tip_add("왼쪽 판매 판을 눌러 확정" if i == sell_sel else "누르면 고른다",
+						9, C_DIM.darkened(0.2))
+			elif state == S.STAGE:
+				_tip_add("마지막 라운드 — 골드를 쓸 곳이 없다", 9, C_DIM.darkened(0.3))
 		"stock":
 			var s: Dictionary = stock[i]
 			tip_mark = _stock_rect(i)
@@ -2003,6 +2129,8 @@ func _tip_build(hit: Dictionary) -> void:
 				rw.append("골드 +%d" % sp.d.gold)
 			if sp.d.item:
 				rw.append("아이템 1개")
+			if sp.d.item and stage_slots >= GameData.MAX_ITEMS:
+				_tip_add("칩 랙이 꽉 차 아이템은 못 받는다", 9, C_RED.lightened(0.2))
 			_tip_add(("클리어 시  " + "  ·  ".join(rw)) if not rw.is_empty()
 					else "추가 보상 없음", 9, C_GOLD if not rw.is_empty() else C_DIM.darkened(0.2))
 		"mag":
@@ -2083,6 +2211,9 @@ func _tip_draw(sh: Vector2) -> void:
 					-1, l.sz).x + 5.0
 			draw_string(font, Vector2(lx + tw, y), l.tl, HORIZONTAL_ALIGNMENT_LEFT,
 					p.x + sz.x - TIP.pad - lx - tw, 9, Color(C_DIM, tip_a))
+		if l.gd != "":
+			draw_gold_at(p.x + sz.x - TIP.pad - gold_w(l.gd, l.sz), y,
+					l.gd, l.sz, Color(l.c, tip_a))
 		y += TIP.line + (2.0 if l.ic != "" else 0.0)
 
 	draw_set_transform(sh)
@@ -2200,7 +2331,11 @@ func _draw_stage() -> void:
 			my += 22.0
 
 		var rw := "보상 없음"
-		if sp.d.gold > 0:
+		# R8 은 정산이 없다 — 극한 보상이 조기 return 뒤에 있어 전부 사라지고
+		# 목표 ×1.25 만 남는다. 함정을 얼굴에 쓴다.
+		if round_no >= GameData.ROUNDS and (sp.d.gold > 0 or sp.d.item):
+			rw = "마지막 판 · 보상 없음"
+		elif sp.d.gold > 0:
 			rw = "+%d" % sp.d.gold
 		if sp.d.item:
 			rw += "  ·  아이템 1개"
@@ -2294,7 +2429,7 @@ func _draw_shop() -> void:
 	_btn(_next_rect(), "다음 라운드 →", "R%d  목표 %d"
 			% [round_no + 1, GameData.target_of(round_no + 1)], true)
 
-	draw_string(font, Vector2(0, 316), "카드를 눌러 구매",
+	draw_string(font, Vector2(0, 316), "카드를 눌러 구매    ·    위쪽 칩을 눌러 판매",
 			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 10, C_DIM.darkened(0.2))
 
 
