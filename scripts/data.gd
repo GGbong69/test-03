@@ -26,15 +26,6 @@ const MAX_ITEMS := 5
 const SHOP_ITEMS := 2
 const SHOP_MODS := 1
 
-# ── 클리어 보너스 (3택 1) ──────────────────────────────────
-const BONUSES := [
-	{"id": "gold", "n": "자금 확보", "d": "즉시 골드 +6"},
-	{"id": "dart", "n": "여유분", "d": "다음 라운드 다트 +2"},
-	{"id": "sale", "n": "떨이", "d": "이번 상점 전부 반값"},
-]
-const BONUS_GOLD := 6
-const BONUS_DARTS := 2
-
 # ── 아이템 ────────────────────────────────────────────────
 #  c = 발동 조건, k = 효과 종류, v = 수치
 #  k: chip 점수 가산 / mult 배수 가산 / xmult 배수 곱 / mult_streak 연속수 비례

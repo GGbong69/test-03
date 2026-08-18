@@ -76,15 +76,13 @@ var won := false
 var last_sector := -1
 var streak := 0
 var dart_index := 0
-var bonus_darts := 0
-var shop_sale := false
+var round_miss := false         # 이번 라운드에 한 번이라도 빗나갔는가 (골드 칩 "본전" 판정)
 
 # ── 상점 ──────────────────────────────────────────────────
 var stock := []                 # {type:"item"/"mod", d:Dictionary, cost:int, sold:bool}
 var reroll_cost := GameData.REROLL_BASE
 var rerolls_used := 0
 var deny_flash := 0.0
-var bonus_pick := []
 var clear_gold_detail := []
 
 # ── 조준 / 정산 ───────────────────────────────────────────
@@ -187,8 +185,6 @@ func _new_run() -> void:
 	for i in GameData.DARTS_BASE:
 		magazine.append(GameData.DARTS[0])
 	owned.clear()
-	bonus_darts = 0
-	shop_sale = false
 	won = false
 	_open_stage()
 
@@ -208,14 +204,12 @@ func _start_round() -> void:
 		rt_dbl_in = DBL_OUT - (DBL_OUT - dbl_in) * 0.5
 
 	remaining = magazine.duplicate()
-	for i in bonus_darts:
-		remaining.append(GameData.DARTS[0])
 	if has_mod("short") and remaining.size() > 1:
 		remaining.pop_back()
 	cur_dart = GameData.DARTS[0]
 	darts_left = remaining.size()
 	sealed = randi() % owned.size() if has_mod("dull") and not owned.is_empty() else -1
-	bonus_darts = 0
+	round_miss = false
 	total = 0
 	shown = 0.0
 	dart_index = 0
@@ -298,21 +292,8 @@ func _finish_round() -> void:
 	stage_gold = 0
 	stage_item = false
 
-	bonus_pick = GameData.BONUSES.duplicate()
 	state = S.CLEAR
 	beep_seq([392.0, 494.0, 587.0], 0.09, 0.18, 0.22)
-
-
-func _take_bonus(i: int) -> void:
-	var b: Dictionary = bonus_pick[i]
-	match b.id:
-		"gold":
-			gold += GameData.BONUS_GOLD
-		"dart":
-			bonus_darts = GameData.BONUS_DARTS
-		"sale":
-			shop_sale = true
-	_open_shop()
 
 
 func _reroll_price() -> int:
@@ -339,29 +320,25 @@ func _roll_stock() -> void:
 			break
 		if _has_item(it.id):
 			continue
-		stock.append({"type": "item", "d": it, "cost": _price(it.cost), "sold": false})
+		stock.append({"type": "item", "d": it, "cost": it.cost, "sold": false})
 		n += 1
 	var mods := GameData.MODS.duplicate()
 	mods.shuffle()
 	for i in GameData.SHOP_MODS:
 		var m: Dictionary = mods[i]
-		stock.append({"type": "mod", "d": m, "cost": _price(m.cost), "sold": false})
+		stock.append({"type": "mod", "d": m, "cost": m.cost, "sold": false})
 
 	var darts_pool := GameData.DARTS.slice(1)
 	darts_pool.shuffle()
 	for i in GameData.SHOP_DARTS:
 		var dd: Dictionary = darts_pool[i]
-		stock.append({"type": "dart", "d": dd, "cost": _price(dd.cost), "sold": false})
+		stock.append({"type": "dart", "d": dd, "cost": dd.cost, "sold": false})
 
 
 func _deny() -> void:
 	deny_flash = 1.0
 	shake = 4.0
 	beep_seq([200.0, 150.0], 0.06, 0.10, 0.16)
-
-
-func _price(base: int) -> int:
-	return maxi(1, int(round(base * 0.5))) if shop_sale else base
 
 
 func _has_item(id: String) -> bool:
@@ -447,7 +424,6 @@ func _reroll() -> void:
 
 
 func _next_round() -> void:
-	shop_sale = false
 	round_no += 1
 	_open_stage()
 
@@ -649,7 +625,7 @@ func _auto_step() -> void:
 		S.AIM_V, S.AIM_H:
 			_advance()
 		S.CLEAR:
-			_click(_bonus_rect(randi() % bonus_pick.size()).get_center())
+			_click(Vector2(-1, -1))
 		S.STAGE:
 			_click(_stage_rect(randi() % stage_pick.size()).get_center())
 		S.SHOP:
@@ -719,10 +695,9 @@ func _click(m: Vector2) -> void:
 		S.AIM_V, S.AIM_H:
 			_advance()
 		S.CLEAR:
-			for i in bonus_pick.size():
-				if _bonus_rect(i).has_point(m):
-					_take_bonus(i)
-					return
+			# 좌표를 보지 않는다 — 아무 데나 누르든 스페이스든 상점으로 넘어간다
+			_open_shop()
+			return
 		S.STAGE:
 			for i in stage_pick.size():
 				if _stage_rect(i).has_point(m):
@@ -1010,10 +985,6 @@ func pop(p: Vector2, txt: String, c: Color, sz: int, life: float) -> void:
 # ══════════════════════════════════════════════════════════
 #  UI 좌표 (그리기와 클릭 판정이 같은 값을 쓴다)
 # ══════════════════════════════════════════════════════════
-
-func _bonus_rect(i: int) -> Rect2:
-	return Rect2(Vector2(40.0 + i * 190.0, 156.0), Vector2(168.0, 112.0))
-
 
 func _stage_rect(i: int) -> Rect2:
 	return Rect2(Vector2(32.0 + i * 196.0, 112.0), Vector2(176.0, 152.0))
@@ -1424,32 +1395,23 @@ func _draw_clear() -> void:
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 12, C_GOLD)
 		y += 17.0
 
-	draw_string(font, Vector2(0, 142), "보너스를 하나 고르세요",
-			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 12, C_TXT)
+	# 내역 아래에 합계선을 긋고 보유액을 크게 — 3택1이 있던 자리다
+	draw_rect(Rect2(Vector2(210, y + 4), Vector2(174, 1)), C_WIRE.darkened(0.4))
+	draw_string(font, Vector2(0, y + 36), "◆ %d" % gold,
+			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 22, C_GOLD)
 
-	for i in bonus_pick.size():
-		var r := _bonus_rect(i)
-		draw_rect(r, C_PANEL.lightened(0.10))
-		draw_rect(Rect2(r.position, Vector2(r.size.x, 3)), C_ACC)
-		draw_string(font, r.position + Vector2(0, 42), bonus_pick[i].n,
-				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 15, C_TXT)
-		draw_string(font, r.position + Vector2(6, 70), bonus_pick[i].d,
-				HORIZONTAL_ALIGNMENT_CENTER, r.size.x - 12, 11, C_DIM)
-
-	draw_string(font, Vector2(0, 294), "◆ %d" % gold,
-			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 16, C_GOLD)
+	_btn(Rect2(Vector2(232, 258), Vector2(176, 42)), "상점으로", "아무 키", true)
 
 
 func _draw_stage() -> void:
 	# 보드가 비쳐 보이게 얇게 덮는다 — 개조 상태를 확인하면서 고르라고
 	draw_rect(Rect2(Vector2.ZERO, VIEW), Color(0.04, 0.03, 0.07, 0.80))
 
-	draw_string(font, Vector2(0, 40), "스테이지 선택",
-			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 20, C_ACC)
-	draw_string(font, Vector2(0, 60), "라운드 %d / %d      ◆ %d      아이템 %d / %d"
+	# 아이템 패널이 y 21~65 를 차지하므로 그 아래에서 시작한다
+	draw_string(font, Vector2(0, 82), "라운드 %d / %d      ◆ %d      아이템 %d / %d"
 			% [round_no, GameData.ROUNDS, gold, owned.size(), GameData.MAX_ITEMS],
 			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 11, C_DIM)
-	draw_string(font, Vector2(0, 78), "제약이 셀수록 상점 자금이 커진다",
+	draw_string(font, Vector2(0, 98), "제약이 셀수록 상점 자금이 커진다",
 			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 10, C_DIM.darkened(0.2))
 
 	for i in stage_pick.size():
@@ -1509,10 +1471,6 @@ func _draw_shop() -> void:
 				Color(C_MULT.lightened(0.3), deny_flash))
 	draw_string(font, Vector2(0, 80), "탄창  " + _mag_text(),
 			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 10, C_CHIP.lightened(0.25))
-	if shop_sale:
-		draw_string(font, Vector2(0, 92), "떨이 — 전 품목 반값",
-				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 11, C_MULT.lightened(0.3))
-
 	for i in stock.size():
 		var r := _stock_rect(i)
 		var s: Dictionary = stock[i]
