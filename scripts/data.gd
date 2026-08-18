@@ -19,6 +19,7 @@ const CLEAR_GOLD := 4          # 클리어 기본 보상
 const GOLD_PER_DART := 1       # 남은 다트 1개당 (적은 다트로 끝낼 유인)
 const INTEREST_PER := 5        # 보유 골드 N당 이자 1 (저축 유인)
 const INTEREST_MAX := 5
+const FREE_REROLLS := 1        # 상점 방문마다 무료 리롤 (없으면 초반에 못 씀)
 const REROLL_BASE := 2
 const REROLL_STEP := 1         # 리롤할 때마다 누적 상승
 const MAX_ITEMS := 5

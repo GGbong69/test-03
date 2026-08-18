@@ -77,6 +77,8 @@ var shop_sale := false
 # ── 상점 ──────────────────────────────────────────────────
 var stock := []                 # {type:"item"/"mod", d:Dictionary, cost:int, sold:bool}
 var reroll_cost := GameData.REROLL_BASE
+var rerolls_used := 0
+var deny_flash := 0.0
 var bonus_pick := []
 var clear_gold_detail := []
 
@@ -276,8 +278,15 @@ func _take_bonus(i: int) -> void:
 	_open_shop()
 
 
+func _reroll_price() -> int:
+	if rerolls_used < GameData.FREE_REROLLS:
+		return 0
+	return GameData.REROLL_BASE + (rerolls_used - GameData.FREE_REROLLS) * GameData.REROLL_STEP
+
+
 func _open_shop() -> void:
-	reroll_cost = GameData.REROLL_BASE
+	rerolls_used = 0
+	reroll_cost = _reroll_price()
 	_roll_stock()
 	state = S.SHOP
 	beep(440.0, 0.10, 0.18)
@@ -302,6 +311,12 @@ func _roll_stock() -> void:
 		stock.append({"type": "mod", "d": m, "cost": _price(m.cost), "sold": false})
 
 
+func _deny() -> void:
+	deny_flash = 1.0
+	shake = 4.0
+	beep_seq([200.0, 150.0], 0.06, 0.10, 0.16)
+
+
 func _price(base: int) -> int:
 	return maxi(1, int(round(base * 0.5))) if shop_sale else base
 
@@ -316,10 +331,10 @@ func _has_item(id: String) -> bool:
 func _buy(i: int) -> void:
 	var s: Dictionary = stock[i]
 	if s.sold or gold < s.cost:
-		beep(150.0, 0.10, 0.14)
+		_deny()
 		return
 	if s.type == "item" and owned.size() >= GameData.MAX_ITEMS:
-		beep(150.0, 0.10, 0.14)
+		_deny()
 		return
 
 	gold -= s.cost
@@ -355,14 +370,12 @@ func _apply_mod(id: String) -> void:
 
 func _reroll() -> void:
 	if gold < reroll_cost:
-		beep(150.0, 0.10, 0.14)
+		_deny()
 		return
 	gold -= reroll_cost
-	reroll_cost += GameData.REROLL_STEP
+	rerolls_used += 1
+	reroll_cost = _reroll_price()
 	_roll_stock()
-	if _autoplay:
-		print("REROLL 성공 — 남은골드 %d / 다음비용 %d / 매물 %s"
-				% [gold, reroll_cost, str(stock.map(func(x): return x.d.n))])
 	beep(392.0, 0.09, 0.18)
 
 
@@ -508,6 +521,7 @@ func _process(d: float) -> void:
 			_auto_step()
 
 	screen_flash = maxf(screen_flash - d * 5.0, 0.0)
+	deny_flash = maxf(deny_flash - d * 2.6, 0.0)
 	shake = maxf(shake - d * 34.0, 0.0)
 	board_punch = maxf(board_punch - d * 3.4, 0.0)
 	hit_flash = maxf(hit_flash - d * 2.6, 0.0)
@@ -1237,9 +1251,15 @@ func _draw_stage() -> void:
 func _draw_shop() -> void:
 	_scrim()
 	draw_string(font, Vector2(0, 40), "상점", HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 20, C_ACC)
-	draw_string(font, Vector2(0, 62), "◆ %d      아이템 %d / %d"
+	var gc: Color = C_GOLD.lerp(C_MULT, deny_flash)
+	var gx := randf_range(-deny_flash, deny_flash) * 3.0
+	draw_string(font, Vector2(gx, 62), "◆ %d      아이템 %d / %d"
 			% [gold, owned.size(), GameData.MAX_ITEMS],
-			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 12, C_GOLD)
+			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 12, gc)
+	if deny_flash > 0.0:
+		draw_string(font, Vector2(0, 300), "골드가 부족하거나 슬롯이 꽉 찼다",
+				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 11,
+				Color(C_MULT.lightened(0.3), deny_flash))
 	if shop_sale:
 		draw_string(font, Vector2(0, 80), "떨이 — 전 품목 반값",
 				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 11, C_MULT.lightened(0.3))
@@ -1269,7 +1289,9 @@ func _draw_shop() -> void:
 		draw_string(font, r.position + Vector2(0, 116), "◆ %d" % s.cost,
 				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 14, C_GOLD if can else C_DIM.darkened(0.3))
 
-	_btn(_reroll_rect(), "리롤", "◆ %d" % reroll_cost, gold >= reroll_cost)
+	_btn(_reroll_rect(), "리롤",
+			"무료" if reroll_cost == 0 else "◆ %d" % reroll_cost,
+			gold >= reroll_cost)
 	_btn(_next_rect(), "다음 라운드 →", "R%d  목표 %d"
 			% [round_no + 1, GameData.target_of(round_no + 1)], true)
 
