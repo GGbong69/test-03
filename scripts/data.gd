@@ -63,6 +63,34 @@ const ITEMS := [
 	{"id": "alm", "n": "증폭기", "c": "always", "k": "xmult", "v": 2, "cost": 14},
 ]
 
+# ── 다트 종류 (탄창) ──────────────────────────────────────
+#  gauge  조준 게이지 속도 배율 (낮을수록 맞히기 쉽다)
+#  mult   링 배수에 가산 (최소 1로 고정)
+#  fix1   링 배수를 1로 못박음
+#  pierce 양옆 섹터의 기본 점수를 절반씩 추가
+#  magnet 착탄을 보드 중심 쪽으로 당기는 비율
+const DARTS := [
+	{"id": "std", "n": "표준", "d": "특성 없음",
+		"gauge": 1.00, "mult": 0, "fix1": false, "pierce": false, "magnet": 0.0, "cost": 0},
+	{"id": "hvy", "n": "무거운", "d": "게이지 느림 · 배수 -1",
+		"gauge": 0.55, "mult": -1, "fix1": false, "pierce": false, "magnet": 0.0, "cost": 5},
+	{"id": "lgt", "n": "가벼운", "d": "게이지 빠름 · 배수 +3",
+		"gauge": 1.90, "mult": 3, "fix1": false, "pierce": false, "magnet": 0.0, "cost": 6},
+	{"id": "prc", "n": "관통", "d": "양옆 섹터 절반 · 배수 1",
+		"gauge": 1.00, "mult": 0, "fix1": true, "pierce": true, "magnet": 0.0, "cost": 7},
+	{"id": "mag", "n": "자석", "d": "중심으로 당김 · 배수 -1",
+		"gauge": 1.00, "mult": -1, "fix1": false, "pierce": false, "magnet": 0.25, "cost": 7},
+]
+const SHOP_DARTS := 1
+
+
+static func dart_of(id: String) -> Dictionary:
+	for d in DARTS:
+		if d.id == id:
+			return d
+	return DARTS[0]
+
+
 # ── 보드 개조 ─────────────────────────────────────────────
 #  아이템이 "어디를 노릴지"를 바꾼다면, 개조는 "얼마나 잘 맞출지"를 바꾼다.
 const MODS := [

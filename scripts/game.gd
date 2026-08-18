@@ -33,7 +33,7 @@ const C_CHIP := Color("3f8fd8")
 const C_MULT := Color("e2593f")
 const C_GOLD := Color("f2c94c")
 
-enum S { AIM_V, AIM_H, CONFIRM, FLY, RESOLVE, CLEAR, SHOP, STAGE, OVER }
+enum S { PICK, AIM_V, AIM_H, CONFIRM, FLY, RESOLVE, CLEAR, SHOP, STAGE, OVER }
 
 # ── 보드 기하 (개조로 변한다) ──────────────────────────────
 var sectors := SECTORS_BASE.duplicate()
@@ -56,6 +56,11 @@ var active_mods := []           # 이번 판에 걸린 제약
 var stage_gold := 0             # 클리어 시 추가 골드
 var stage_item := false         # 클리어 시 아이템 무료 지급
 var sealed := -1                # "둔화"로 봉인된 아이템 인덱스
+
+# ── 탄창 ──────────────────────────────────────────────────
+var magazine := []              # 영구 구성 (상점에서 바꾼다)
+var remaining := []             # 이번 라운드에 남은 다트
+var cur_dart := {}              # 지금 던지는 다트
 
 # ── 진행 상태 ─────────────────────────────────────────────
 var state: int = S.AIM_V
@@ -177,6 +182,9 @@ func _new_run() -> void:
 	bull_i = 0.06
 	round_no = 1
 	gold = 4
+	magazine.clear()
+	for i in GameData.DARTS_BASE:
+		magazine.append(GameData.DARTS[0])
 	owned.clear()
 	bonus_darts = 0
 	shop_sale = false
@@ -198,9 +206,13 @@ func _start_round() -> void:
 		rt_trp_out = tc + tb * 0.5
 		rt_dbl_in = DBL_OUT - (DBL_OUT - dbl_in) * 0.5
 
-	darts_left = GameData.DARTS_BASE + bonus_darts
-	if has_mod("short"):
-		darts_left -= 1
+	remaining = magazine.duplicate()
+	for i in bonus_darts:
+		remaining.append(GameData.DARTS[0])
+	if has_mod("short") and remaining.size() > 1:
+		remaining.pop_back()
+	cur_dart = GameData.DARTS[0]
+	darts_left = remaining.size()
 	sealed = randi() % owned.size() if has_mod("dull") and not owned.is_empty() else -1
 	bonus_darts = 0
 	total = 0
@@ -222,7 +234,30 @@ func _start_round() -> void:
 	hit_flash = 0.0
 	hitstop = 0.0
 	screen_flash = 0.0
+	_to_pick()
+
+
+func _to_pick() -> void:
+	# 남은 다트가 전부 같은 종류면 고를 게 없으니 건너뛴다
+	var uniform := true
+	for r in remaining:
+		if r.id != remaining[0].id:
+			uniform = false
+			break
+	if uniform:
+		_pick_dart(0)
+	else:
+		state = S.PICK
+
+
+func _pick_dart(i: int) -> void:
+	if i < 0 or i >= remaining.size():
+		return
+	cur_dart = remaining[i]
+	remaining.remove_at(i)
+	darts_left = remaining.size()
 	state = S.AIM_V
+	beep(262.0, 0.05, 0.10)
 
 
 func _finish_round() -> void:
@@ -310,6 +345,12 @@ func _roll_stock() -> void:
 		var m: Dictionary = mods[i]
 		stock.append({"type": "mod", "d": m, "cost": _price(m.cost), "sold": false})
 
+	var darts_pool := GameData.DARTS.slice(1)
+	darts_pool.shuffle()
+	for i in GameData.SHOP_DARTS:
+		var dd: Dictionary = darts_pool[i]
+		stock.append({"type": "dart", "d": dd, "cost": _price(dd.cost), "sold": false})
+
 
 func _deny() -> void:
 	deny_flash = 1.0
@@ -337,13 +378,37 @@ func _buy(i: int) -> void:
 		_deny()
 		return
 
+	if s.type == "dart" and _std_slot() < 0:
+		_deny()
+		return
+
 	gold -= s.cost
 	s.sold = true
-	if s.type == "item":
-		owned.append(s.d)
-	else:
-		_apply_mod(s.d.id)
+	match s.type:
+		"item":
+			owned.append(s.d)
+		"mod":
+			_apply_mod(s.d.id)
+		"dart":
+			magazine[_std_slot()] = s.d
 	beep_seq([523.0, 659.0], 0.07, 0.11, 0.20)
+
+
+func _std_slot() -> int:
+	for i in magazine.size():
+		if magazine[i].id == "std":
+			return i
+	return -1
+
+
+func _mag_text() -> String:
+	var cnt := {}
+	for d in magazine:
+		cnt[d.n] = cnt.get(d.n, 0) + 1
+	var parts := []
+	for k in cnt:
+		parts.append("%s×%d" % [k, cnt[k]])
+	return "  ".join(parts)
 
 
 func _apply_mod(id: String) -> void:
@@ -474,7 +539,8 @@ func add_sparks(n: int, r0: float, r1: float, ln: float, c: Color, life: float) 
 
 
 func gs() -> float:
-	return gauge_speed * (2.0 if has_mod("gust") else 1.0)
+	var g := gauge_speed * (2.0 if has_mod("gust") else 1.0)
+	return g * (cur_dart.gauge if cur_dart.has("gauge") else 1.0)
 
 
 func ch() -> float:
@@ -487,7 +553,7 @@ func tri(t: float) -> float:
 
 
 func card_pos() -> Vector2:
-	var sx := 26.0 if card_side < 0 else VIEW.x - 26.0 - CARD_W
+	var sx := 82.0 if card_side < 0 else VIEW.x - 26.0 - CARD_W   # 왼쪽은 탄창 열을 피한다
 	var hx := -CARD_W - 40.0 if card_side < 0 else VIEW.x + 40.0
 	return Vector2(lerpf(hx, sx, card_p), card_y)
 
@@ -559,6 +625,8 @@ func _process(d: float) -> void:
 			gt += d * gs()
 			confirm_t += d
 			if confirm_t >= ch():
+				if cur_dart.get("magnet", 0.0) > 0.0:
+					aim = aim.lerp(BC, cur_dart.magnet)
 				state = S.FLY
 				fly_t = 0.0
 		S.FLY:
@@ -575,6 +643,8 @@ func _process(d: float) -> void:
 
 func _auto_step() -> void:
 	match state:
+		S.PICK:
+			_click(_mag_rect(randi() % maxi(remaining.size(), 1)).get_center())
 		S.AIM_V, S.AIM_H:
 			_advance()
 		S.CLEAR:
@@ -626,7 +696,10 @@ func _unhandled_input(e: InputEvent) -> void:
 				KEY_APOSTROPHE:
 					confirm_hold = minf(confirm_hold + 0.05, 1.5)
 				KEY_SPACE:
-					_click(Vector2(-1, -1))
+					if state == S.PICK:
+						_pick_dart(0)
+					else:
+						_click(Vector2(-1, -1))
 		return
 
 	if e is InputEventMouseButton:
@@ -637,6 +710,11 @@ func _unhandled_input(e: InputEvent) -> void:
 
 func _click(m: Vector2) -> void:
 	match state:
+		S.PICK:
+			for i in remaining.size():
+				if _mag_rect(i).has_point(m):
+					_pick_dart(i)
+					return
 		S.AIM_V, S.AIM_H:
 			_advance()
 		S.CLEAR:
@@ -779,8 +857,20 @@ func _land() -> void:
 	var info := hit_info(aim)
 	if has_mod("dead") and info.sector == 20:
 		info.base = 0
+
+	# 다트 특성
+	var pierce_gain := 0
+	if info.mult > 0:
+		if cur_dart.get("fix1", false):
+			info.mult = 1
+		if cur_dart.get("mult", 0) != 0:
+			info.mult = maxi(1, info.mult + cur_dart.mult)
+		if cur_dart.get("pierce", false) and info.idx >= 0:
+			var l: int = sectors[(info.idx + 19) % 20]
+			var r: int = sectors[(info.idx + 1) % 20]
+			pierce_gain = int((l + r) * 0.5)
+
 	darts.append(aim)
-	darts_left -= 1
 	_impact(info)
 
 	hit_flash = 1.0
@@ -831,6 +921,8 @@ func _land() -> void:
 		else:
 			queue.append({"k": "chip", "v": info.base})
 			queue.append({"k": "mult", "v": info.mult})
+		if pierce_gain > 0:
+			queue.append({"k": "pierce", "v": pierce_gain})
 		for i in fired:
 			var it: Dictionary = owned[i]
 			var amt: int = it.v * streak if it.k == "mult_streak" else it.v
@@ -851,7 +943,7 @@ func _next_step() -> void:
 		if total >= target or darts_left <= 0:
 			_finish_round()
 		else:
-			state = S.AIM_V
+			_to_pick()
 		return
 
 	var st = queue.pop_front()
@@ -868,6 +960,11 @@ func _next_step() -> void:
 		"chip":
 			cur_chip += st.v
 			beep(f, 0.10, 0.16)
+		"pierce":
+			cur_chip += st.v
+			card_item = "관통  점수 +%d" % st.v
+			pop(cc, "+%d" % st.v, C_CHIP, 17, 0.9)
+			beep(f, 0.11, 0.18)
 		"mult":
 			cur_mult = st.v
 			beep(f, 0.10, 0.16)
@@ -923,7 +1020,11 @@ func _stage_rect(i: int) -> Rect2:
 
 
 func _stock_rect(i: int) -> Rect2:
-	return Rect2(Vector2(32.0 + i * 196.0, 104.0), Vector2(176.0, 132.0))
+	return Rect2(Vector2(16.0 + i * 154.0, 104.0), Vector2(146.0, 132.0))
+
+
+func _mag_rect(i: int) -> Rect2:
+	return Rect2(Vector2(6.0, 72.0 + i * 32.0), Vector2(66.0, 28.0))
 
 
 func _reroll_rect() -> Rect2:
@@ -944,6 +1045,7 @@ func _draw() -> void:
 
 	_draw_board()
 	_draw_fx()
+	_draw_magazine()
 	_draw_darts()
 	_draw_aim()
 	_draw_topbar()
@@ -1044,6 +1146,45 @@ func _draw_fx() -> void:
 		var cs: Color = s.col
 		cs.a = 1.0 - ks
 		draw_line(BC + dir * dist, BC + dir * (dist + s.len), cs, 1.5)
+
+
+func _draw_magazine() -> void:
+	if state == S.CLEAR or state == S.SHOP or state == S.OVER:
+		return
+
+	var picking := state == S.PICK
+	var head := "탄창 — 고르세요"
+	if not picking:
+		head = "▶ " + (cur_dart.n if not cur_dart.is_empty() else "표준")
+	draw_string(font, Vector2(6, 62), head,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 10, C_ACC if picking else C_CHIP.lightened(0.25))
+
+	for i in remaining.size():
+		var r := _mag_rect(i)
+		var d: Dictionary = remaining[i]
+		var special: bool = d.id != "std"
+		var body: Color = C_PANEL.lightened(0.16 if picking else 0.04)
+		draw_rect(r, body)
+		draw_rect(Rect2(r.position, Vector2(r.size.x, 2)),
+				C_CHIP.lightened(0.2) if special else C_DIM.darkened(0.4))
+		draw_string(font, r.position + Vector2(0, 13), d.n,
+				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 11,
+				C_TXT if picking else C_DIM)
+		if special:
+			draw_string(font, r.position + Vector2(0, 24), _dart_tag(d),
+					HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 8, C_DIM)
+
+
+func _dart_tag(d: Dictionary) -> String:
+	if d.get("pierce", false):
+		return "양옆 절반"
+	if d.get("magnet", 0.0) > 0.0:
+		return "중심 당김"
+	if d.gauge < 1.0:
+		return "느림 · 배수-1"
+	if d.gauge > 1.0:
+		return "빠름 · 배수+3"
+	return ""
 
 
 func _draw_darts() -> void:
@@ -1260,8 +1401,10 @@ func _draw_shop() -> void:
 		draw_string(font, Vector2(0, 300), "골드가 부족하거나 슬롯이 꽉 찼다",
 				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 11,
 				Color(C_MULT.lightened(0.3), deny_flash))
+	draw_string(font, Vector2(0, 80), "탄창  " + _mag_text(),
+			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 10, C_CHIP.lightened(0.25))
 	if shop_sale:
-		draw_string(font, Vector2(0, 80), "떨이 — 전 품목 반값",
+		draw_string(font, Vector2(0, 92), "떨이 — 전 품목 반값",
 				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 11, C_MULT.lightened(0.3))
 
 	for i in stock.size():
@@ -1271,7 +1414,11 @@ func _draw_shop() -> void:
 		draw_rect(r, C_PANEL.lightened(0.02) if s.sold else C_PANEL.lightened(0.10))
 		var top: Color = C_DIM.darkened(0.5)
 		if not s.sold:
-			top = C_ACC if s.type == "item" else C_CHIP.lightened(0.2)
+			top = C_ACC
+			if s.type == "mod":
+				top = C_CHIP.lightened(0.2)
+			elif s.type == "dart":
+				top = C_GREEN.lightened(0.3)
 		draw_rect(Rect2(r.position, Vector2(r.size.x, 3)), top)
 
 		if s.sold:
@@ -1279,7 +1426,12 @@ func _draw_shop() -> void:
 					HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 14, C_DIM.darkened(0.3))
 			continue
 
-		draw_string(font, r.position + Vector2(0, 24), "아이템" if s.type == "item" else "보드 개조",
+		var kind := "아이템"
+		if s.type == "mod":
+			kind = "보드 개조"
+		elif s.type == "dart":
+			kind = "다트"
+		draw_string(font, r.position + Vector2(0, 24), kind,
 				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, C_DIM)
 		draw_string(font, r.position + Vector2(0, 52), s.d.n,
 				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 15, C_TXT if can else C_DIM)
@@ -1315,6 +1467,8 @@ func _draw_over() -> void:
 func _draw_hint() -> void:
 	var hint := ""
 	match state:
+		S.PICK:
+			hint = "던질 다트를 고르세요"
 		S.AIM_V:
 			hint = "클릭 → 높이 결정"
 		S.AIM_H:

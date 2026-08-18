@@ -1,3 +1,13 @@
 # Godot 4+ specific ignores
 .godot/
 /android/
+
+# 별개의 깃 저장소 — 이 프로젝트와 무관
+테스트버전/
+
+# 익스포트 결과물
+/build/
+/export/
+*.exe
+*.pck
+*.zip
