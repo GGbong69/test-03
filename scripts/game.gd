@@ -464,6 +464,9 @@ func has_mod(id: String) -> bool:
 
 
 func _open_stage() -> void:
+	# 봉인은 _start_round 에서만 다시 뽑힌다. 지우지 않으면 스테이지 선택
+	# 화면의 칩 랙이 지난 라운드 봉인을 그대로 보여준다.
+	sealed = -1
 	var base := GameData.target_of(round_no)
 	stage_pick.clear()
 	var pool := GameData.MODIFIERS.duplicate()
@@ -641,6 +644,7 @@ func _process(d: float) -> void:
 			if qt <= 0.0:
 				_next_step()
 
+	_tip_update(d)
 	queue_redraw()
 
 
@@ -1040,7 +1044,9 @@ func _next_rect() -> Rect2:
 
 func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, VIEW), C_BG)
-	draw_set_transform(Vector2(randf_range(-shake, shake), randf_range(-shake, shake)))
+	# 툴팁이 대상 테두리만 같이 흔들고 판은 고정하려면 이 값을 알아야 한다
+	var sh := Vector2(randf_range(-shake, shake), randf_range(-shake, shake))
+	draw_set_transform(sh)
 
 	_draw_board()
 	_draw_fx()
@@ -1063,6 +1069,7 @@ func _draw() -> void:
 	else:
 		_draw_hint()
 
+	_tip_draw(sh)
 	draw_set_transform(Vector2.ZERO)
 	if screen_flash > 0.0:
 		draw_rect(Rect2(Vector2.ZERO, VIEW), Color(1.0, 1.0, 1.0, screen_flash * 0.34))
@@ -1332,11 +1339,23 @@ func _slot_rect(i: int) -> Rect2:
 			Vector2(PANEL.cell, pr.size.y))
 
 
-func _chip_tier(cost: int) -> Dictionary:
-	for t in CHIP_TIERS:
-		if cost <= t.max:
-			return t
-	return CHIP_TIERS[CHIP_TIERS.size() - 1]
+func _chip_ti(cost: int) -> int:
+	for i in CHIP_TIERS.size():
+		if cost <= CHIP_TIERS[i].max:
+			return i
+	return CHIP_TIERS.size() - 1
+
+
+# 아이템 하나를 칩으로 그린다. 랙과 상점이 같은 그림을 쓰도록 여기 하나로 모았다.
+func draw_item_chip(c: Vector2, r: float, it: Dictionary, rot: float, lift: float,
+		dim: float, num_sz: int) -> void:
+	var ti := _chip_ti(it.cost)
+	draw_chip(c, r, CHIP_TIERS[ti], CHIP_SPOTS[ti], rot, lift,
+			it.get("g", "") != "", dim)
+	var val := ("×" + str(it.v)) if it.k == "xmult" else str(it.v)
+	var ink: Color = C_CHIP.lightened(0.5) if it.k == "chip" else C_MULT.lightened(0.45)
+	draw_string(font, c + Vector2(-r, float(num_sz) * 0.34), val,
+			HORIZONTAL_ALIGNMENT_CENTER, r * 2.0, num_sz, ink.darkened(dim))
 
 
 func draw_chip(c: Vector2, r: float, tier: Dictionary, spots: int, rot: float,
@@ -1427,18 +1446,13 @@ func _panel_slot(i: int) -> void:
 		draw_circle(c + Vector2(1.5, 3.0 + up * PANEL.lift), r,
 				Color(0.0, 0.0, 0.0, up * PANEL.shadow))
 
-	draw_chip(c, r, _chip_tier(it.cost), CHIP_SPOTS[CHIP_TIERS.find(_chip_tier(it.cost))],
-			bounce * PANEL.spin, up * PANEL.lift,
-			it.get("g", "") != "" and not lock, 0.55 if lock else 0.0)
+	draw_item_chip(c, r, it, bounce * PANEL.spin, up * PANEL.lift,
+			0.55 if lock else 0.0, 12)
 
-	# 인레이 숫자 — 효과 수치만. 색으로 점수인지 배수인지 가른다
-	var val := str(it.v)
-	if it.k == "xmult":
-		val = "×" + str(it.v)
-	var ink: Color = C_CHIP.lightened(0.5) if it.k == "chip" else C_MULT.lightened(0.45)
-	draw_string(font, c + Vector2(-r, 4.0), val,
-			HORIZONTAL_ALIGNMENT_CENTER, r * 2.0, 12,
-			ink.darkened(0.55) if lock else ink)
+	# 호버 링 — 리프트는 안 쓴다. 발동 스프링의 실제 최대 리프트가 3px 뿐이라
+	# 호버까지 들어올리면 두 어휘가 뒤집힌다.
+	if i == tip_slot and tip_a > 0.004:
+		draw_arc(c, r + 2.0, 0.0, TAU, 24, Color(C_ACC, tip_a), 1.0)
 
 	# 평소엔 조건 태그, 발동 직후엔 이름 — 자리를 옮기지 않고 덮어쓴다
 	var tag := GameData.gold_tag(it.get("g", "")) if it.get("g", "") != "" else ""
@@ -1455,6 +1469,213 @@ func _panel_slot(i: int) -> void:
 	draw_string(font, cell.position + Vector2(0.0, cell.size.y - 3.0), label,
 			HORIZONTAL_ALIGNMENT_CENTER, cell.size.x, 9, col)
 
+
+
+# ══════════════════════════════════════════════════════════
+#  툴팁 (마우스 오버)
+# ──────────────────────────────────────────────────────────
+#  바깥과 닿는 곳은 둘뿐이다.
+#    _tip_update(d)  매 프레임 진행     (_process 끝)
+#    _tip_draw(sh)   오버레이 다음에    (_draw)
+#  칩 랙의 호버 링만 tip_slot / tip_a 를 읽는다.
+#
+#  대상은 매 프레임 새로 찾아 그 프레임에 소비한다. 인덱스를
+#  프레임 너머로 들고 가지 않으므로 상점이 갈리거나 아이템이
+#  사라져도 범위를 넘을 수 없다.
+# ══════════════════════════════════════════════════════════
+
+const TIP := {
+	"w": 178.0,          # 판 폭 (고정 — 대상마다 크기가 출렁이면 눈이 다시 초점을 잡는다)
+	"pad": 7.0,
+	"gap": 6.0,          # 대상과 판 사이
+	"title": 15.0,       # 제목 줄 높이
+	"line": 13.0,        # 본문 줄 높이
+	"fade": 14.0,        # 페이드 속도
+	"quiet": 6.0,        # shake 가 이보다 크면 아예 안 그린다 (읽을 수 없다)
+}
+
+var tip_title := ""
+var tip_lines := []             # [{"s": String, "sz": int, "c": Color}]
+var tip_chip := {}              # 제목 옆 미니칩으로 그릴 아이템 (없으면 빈 사전)
+var tip_mark := Rect2()         # 대상 테두리 (칩 랙은 링으로 대신하므로 빈 값)
+var tip_slot := -1              # 호버 중인 칩 랙 칸
+var tip_a := 0.0                # 페이드
+
+
+func _tip_add(t: String, sz: int, c: Color) -> void:
+	if t != "":
+		tip_lines.append({"s": t, "sz": sz, "c": c})
+
+
+func _tip_clear() -> void:
+	tip_title = ""
+	tip_lines = []
+	tip_chip = {}
+	tip_mark = Rect2()
+	tip_slot = -1
+
+
+# 지금 커서 아래에 무엇이 있는가. 없으면 빈 사전.
+func _tip_hit(m: Vector2) -> Dictionary:
+	match state:
+		S.SHOP:
+			for i in stock.size():
+				if _stock_rect(i).has_point(m):
+					return {"k": "stock", "i": i}
+		S.STAGE:
+			for i in stage_pick.size():
+				if _stage_rect(i).has_point(m):
+					return {"k": "stage", "i": i}
+			for i in GameData.MAX_ITEMS:
+				if _slot_rect(i).has_point(m):
+					return {"k": "rack", "i": i}
+		S.PICK, S.AIM_V, S.AIM_H:
+			if state == S.PICK:
+				for i in remaining.size():
+					if _mag_rect(i).has_point(m):
+						return {"k": "mag", "i": i}
+			# 점수 카드가 떠 있으면 랙 툴팁이 카드를 정면으로 덮는다.
+			# 위는 상단바라 앵커를 뒤집어서 못 피한다 — 그동안 대상에서 뺀다.
+			if card_p <= 0.004:
+				for i in GameData.MAX_ITEMS:
+					if _slot_rect(i).has_point(m):
+						return {"k": "rack", "i": i}
+	return {}
+
+
+func _tip_build(hit: Dictionary) -> void:
+	_tip_clear()
+	if hit.is_empty():
+		return
+
+	var i: int = hit.i
+	match hit.k:
+		"rack":
+			tip_mark = Rect2()
+			tip_slot = i
+			if i >= owned.size():
+				tip_title = "빈 칸"
+				_tip_add("상점에서 칩을 사면 여기 꽂힌다", 9, C_DIM)
+				_tip_add("최대 %d개" % GameData.MAX_ITEMS, 9, C_DIM.darkened(0.2))
+				return
+			var it: Dictionary = owned[i]
+			tip_title = it.n
+			tip_chip = it
+			_tip_add(GameData.cond_text(it.c), 10, C_DIM)
+			_tip_add(GameData.eff_text(it.k, it.v), 11,
+					C_CHIP.lightened(0.35) if it.k == "chip" else C_MULT.lightened(0.3))
+			if it.get("g", "") != "":
+				_tip_add(GameData.gold_text(it.g, it.gv), 9, C_GOLD)
+			if i == sealed:
+				_tip_add("이번 판 봉인 — 발동하지 않는다", 9, C_MULT.lightened(0.25))
+		"stock":
+			var s: Dictionary = stock[i]
+			tip_mark = _stock_rect(i)
+			tip_title = s.d.n
+			if s.type == "item":
+				tip_chip = s.d
+				_tip_add(GameData.cond_text(s.d.c), 10, C_DIM)
+				_tip_add(GameData.eff_text(s.d.k, s.d.v), 11,
+						C_CHIP.lightened(0.35) if s.d.k == "chip" else C_MULT.lightened(0.3))
+				if s.d.get("g", "") != "":
+					_tip_add(GameData.gold_text(s.d.g, s.d.gv), 9, C_GOLD)
+			else:
+				_tip_add(s.d.d, 10, C_DIM)
+				_tip_add("보드를 바꾼다 — 런이 끝날 때까지 남는다" if s.type == "mod"
+						else "탄창의 표준 다트 1개와 바꾼다", 9, C_DIM.darkened(0.2))
+			# 못 사는 이유를 누르기 전에 알려준다. _deny() 는 세 원인을 한 문장으로 뭉갠다.
+			if s.sold:
+				_tip_add("이미 구매함", 9, C_DIM.darkened(0.3))
+			elif gold < s.cost:
+				_tip_add("골드가 %d 모자란다" % (s.cost - gold), 9, C_RED.lightened(0.2))
+			elif s.type == "item" and owned.size() >= GameData.MAX_ITEMS:
+				_tip_add("칩 랙이 꽉 찼다 (%d/%d)" % [owned.size(), GameData.MAX_ITEMS],
+						9, C_RED.lightened(0.2))
+			elif s.type == "dart" and _std_slot() < 0:
+				_tip_add("바꿀 표준 다트가 없다", 9, C_RED.lightened(0.2))
+		"stage":
+			var sp: Dictionary = stage_pick[i]
+			tip_mark = _stage_rect(i)
+			tip_title = "%s · 목표 %d" % [sp.d.n, sp.target]
+			if sp.mods.is_empty():
+				_tip_add("제약 없음 — 기본 목표 그대로", 10, C_DIM)
+			else:
+				for md in sp.mods:
+					_tip_add("%s — %s" % [md.n, md.d], 10, C_MULT.lightened(0.25))
+			var rw := []
+			if sp.d.gold > 0:
+				rw.append("골드 +%d" % sp.d.gold)
+			if sp.d.item:
+				rw.append("아이템 1개")
+			_tip_add(("클리어 시  " + "  ·  ".join(rw)) if not rw.is_empty()
+					else "추가 보상 없음", 9, C_GOLD if not rw.is_empty() else C_DIM.darkened(0.2))
+		"mag":
+			var dd: Dictionary = remaining[i]
+			tip_mark = _mag_rect(i)
+			tip_title = dd.n
+			_tip_add(dd.d, 10, C_DIM)
+			_tip_add("게이지 ×%.2f" % dd.gauge, 9, C_DIM.darkened(0.2))
+
+
+func _tip_size() -> Vector2:
+	var h: float = TIP.pad * 2.0 + TIP.title
+	for l in tip_lines:
+		h += TIP.line
+	return Vector2(TIP.w, h)
+
+
+# 대상 옆에 붙이되 화면 밖으로 나가지 않게 민다.
+func _tip_pos(sz: Vector2) -> Vector2:
+	var t := tip_mark
+	if tip_slot >= 0:
+		t = _slot_rect(tip_slot)
+	var x: float = clampf(t.get_center().x - sz.x * 0.5, 4.0, VIEW.x - sz.x - 4.0)
+	var y: float = t.end.y + TIP.gap
+	if y + sz.y > VIEW.y - 4.0:
+		y = t.position.y - TIP.gap - sz.y
+	return Vector2(x, maxf(y, 4.0))
+
+
+func _tip_update(d: float) -> void:
+	var hit := _tip_hit(get_local_mouse_position())
+	_tip_build(hit)
+	if hit.is_empty():
+		tip_a = maxf(tip_a - d * TIP.fade, 0.0)
+	else:
+		tip_a = minf(tip_a + d * TIP.fade, 1.0)
+
+
+func _tip_draw(sh: Vector2) -> void:
+	if tip_a <= 0.004 or tip_title == "" or shake > TIP.quiet:
+		return
+
+	# 테두리는 대상과 같이 흔들려야 어긋나 보이지 않는다 — 현재 transform 그대로.
+	if tip_mark.size.x > 0.0:
+		draw_rect(tip_mark, Color(C_TXT, tip_a * 0.9), false, 1.0)
+
+	# 판과 글자는 흔들리면 못 읽는다 — 흔들림 밖에서 그린다.
+	draw_set_transform(Vector2.ZERO)
+	var sz := _tip_size()
+	var p := _tip_pos(sz)
+	draw_rect(Rect2(p + Vector2(2.0, 3.0), sz), Color(0.0, 0.0, 0.0, tip_a * 0.4))
+	draw_rect(Rect2(p, sz), Color(C_PANEL.lightened(0.06), tip_a))
+	draw_rect(Rect2(p, Vector2(sz.x, 2.0)), Color(C_ACC, tip_a))
+
+	var tx: float = p.x + TIP.pad
+	if not tip_chip.is_empty():
+		draw_item_chip(p + Vector2(TIP.pad + 8.0, TIP.pad + 8.0), 8.0, tip_chip,
+				0.42, 0.0, 0.0, 8)
+		tx += 20.0
+	draw_string(font, Vector2(tx, p.y + TIP.pad + 11.0), tip_title,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(C_TXT, tip_a))
+
+	var y: float = p.y + TIP.pad + TIP.title + 10.0
+	for l in tip_lines:
+		draw_string(font, Vector2(p.x + TIP.pad, y), l.s,
+				HORIZONTAL_ALIGNMENT_LEFT, sz.x - TIP.pad * 2.0, l.sz, Color(l.c, tip_a))
+		y += TIP.line
+
+	draw_set_transform(sh)
 
 func _draw_card() -> void:
 	if card_p <= 0.004:

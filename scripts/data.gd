@@ -200,11 +200,11 @@ static func item_desc(it: Dictionary) -> String:
 # 골드 반쪽은 item_desc 에 섞지 않는다 — 발동 시점이 다르므로 따로 보여준다.
 static func gold_text(g: String, gv: int) -> String:
 	match g:
-		"clear": return "클리어 시 ◆ +%d" % gv
-		"spare": return "남은 다트 1개당 ◆ +%d" % gv
-		"clean": return "한 발도 안 빗나가면 ◆ +%d" % gv
-		"blitz": return "남은 다트 %d개 이상이면 ◆ +%d" % [GOLD_BLITZ, gv]
-		"broke": return "정산 때 보유 ◆ %d 이하면 ◆ +%d" % [GOLD_BROKE, gv]
+		"clear": return "클리어 시 골드 +%d" % gv
+		"spare": return "남은 다트 1개당 골드 +%d" % gv
+		"clean": return "한 발도 안 빗나가면 골드 +%d" % gv
+		"blitz": return "남은 다트 %d개 이상이면 골드 +%d" % [GOLD_BLITZ, gv]
+		"broke": return "정산 때 보유 골드 %d 이하면 +%d" % [GOLD_BROKE, gv]
 	return ""
 
 
