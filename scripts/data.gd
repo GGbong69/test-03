@@ -1,0 +1,161 @@
+extends RefCounted
+
+# ══════════════════════════════════════════════════════════
+#  밸런스 데이터 — 수치 조정은 전부 이 파일에서만 한다.
+#  game.gd 는 이 표를 읽어 동작만 수행한다.
+# ══════════════════════════════════════════════════════════
+
+# ── 런 구조 ────────────────────────────────────────────────
+const ROUNDS := 8
+const DARTS_BASE := 6
+
+# 조준 범위가 보드보다 넓어 약 37%는 빗나간다.
+# 무개조 기준 실제 기대값은 다트당 약 10점 → 6다트에 약 60점.
+# R1은 아이템 없이도 여유 있게 넘도록 45로 두고, 이후 약 1.75배씩 상승.
+const TARGETS := [45, 85, 150, 270, 470, 820, 1450, 2500]
+
+# ── 경제 ──────────────────────────────────────────────────
+const CLEAR_GOLD := 4          # 클리어 기본 보상
+const GOLD_PER_DART := 1       # 남은 다트 1개당 (적은 다트로 끝낼 유인)
+const INTEREST_PER := 5        # 보유 골드 N당 이자 1 (저축 유인)
+const INTEREST_MAX := 5
+const REROLL_BASE := 2
+const REROLL_STEP := 1         # 리롤할 때마다 누적 상승
+const MAX_ITEMS := 5
+const SHOP_ITEMS := 2
+const SHOP_MODS := 1
+
+# ── 클리어 보너스 (3택 1) ──────────────────────────────────
+const BONUSES := [
+	{"id": "gold", "n": "자금 확보", "d": "즉시 골드 +6"},
+	{"id": "dart", "n": "여유분", "d": "다음 라운드 다트 +2"},
+	{"id": "sale", "n": "떨이", "d": "이번 상점 전부 반값"},
+]
+const BONUS_GOLD := 6
+const BONUS_DARTS := 2
+
+# ── 아이템 ────────────────────────────────────────────────
+#  c = 발동 조건, k = 효과 종류, v = 수치
+#  k: chip 점수 가산 / mult 배수 가산 / xmult 배수 곱 / mult_streak 연속수 비례
+const ITEMS := [
+	# 흔함 4골드 — 조건이 넓고 효과가 작다
+	{"id": "trp", "n": "삼중고", "c": "triple", "k": "mult", "v": 4, "cost": 4},
+	{"id": "dbl", "n": "가장자리", "c": "double", "k": "mult", "v": 3, "cost": 4},
+	{"id": "odd", "n": "홀수 애호", "c": "odd", "k": "chip", "v": 14, "cost": 4},
+	{"id": "evn", "n": "짝수 애호", "c": "even", "k": "chip", "v": 14, "cost": 4},
+	{"id": "lft", "n": "좌익수", "c": "left", "k": "mult", "v": 2, "cost": 4},
+	{"id": "rgt", "n": "우익수", "c": "right", "k": "mult", "v": 2, "cost": 4},
+	{"id": "big", "n": "대물", "c": "big", "k": "chip", "v": 16, "cost": 4},
+	{"id": "sml", "n": "소물", "c": "small", "k": "mult", "v": 5, "cost": 4},
+
+	# 보통 7골드 — 조건이 좁은 대신 효과가 크다
+	{"id": "sam", "n": "외골수", "c": "same", "k": "mult", "v": 4, "cost": 7},
+	{"id": "dif", "n": "변덕쟁이", "c": "diff", "k": "chip", "v": 22, "cost": 7},
+	{"id": "bul", "n": "명중왕", "c": "bull", "k": "mult", "v": 8, "cost": 7},
+	{"id": "fst", "n": "첫 발", "c": "first", "k": "chip", "v": 45, "cost": 7},
+	{"id": "lst", "n": "막판", "c": "last", "k": "xmult", "v": 2, "cost": 7},
+	{"id": "mis", "n": "빈손", "c": "miss", "k": "chip", "v": 30, "cost": 7},
+
+	# 희귀 — 빌드의 축이 되는 물건
+	{"id": "str", "n": "정밀", "c": "streak", "k": "mult_streak", "v": 3, "cost": 11},
+	{"id": "alc", "n": "기본기", "c": "always", "k": "chip", "v": 25, "cost": 11},
+	{"id": "alm", "n": "증폭기", "c": "always", "k": "xmult", "v": 2, "cost": 14},
+]
+
+# ── 보드 개조 ─────────────────────────────────────────────
+#  아이템이 "어디를 노릴지"를 바꾼다면, 개조는 "얼마나 잘 맞출지"를 바꾼다.
+const MODS := [
+	{"id": "trpw", "n": "트리플 확장", "d": "트리플 링 폭 +60%", "cost": 8},
+	{"id": "dblw", "n": "더블 확장", "d": "더블 링 폭 +60%", "cost": 8},
+	{"id": "bulw", "n": "불 확장", "d": "불스아이 반경 +70%", "cost": 10},
+	{"id": "sw20", "n": "20 복제", "d": "가장 작은 섹터를 20으로", "cost": 9},
+]
+
+# ── 스테이지 제약 ─────────────────────────────────────────
+#  높은 등급의 판을 고르면 이 중에서 무작위로 붙는다.
+const MODIFIERS := [
+	{"id": "narrow", "n": "좁은 판", "d": "트리플·더블 링 폭 절반"},
+	{"id": "gust", "n": "역풍", "d": "조준 게이지 2배 속도"},
+	{"id": "fog", "n": "안개", "d": "조준 확인 구간 없음"},
+	{"id": "short", "n": "단벌", "d": "다트 1개 감소"},
+	{"id": "dead", "n": "금지 구역", "d": "20번 섹터 점수 0"},
+	{"id": "dull", "n": "둔화", "d": "아이템 하나 무작위 봉인"},
+]
+
+# ── 스테이지 등급 ─────────────────────────────────────────
+#  제약을 받아들일수록 목표는 오르지만 상점 자금이 커진다.
+const STAGES := [
+	{"id": "plain", "n": "정공", "sub": "제약 없음",
+		"mods": 0, "mul": 1.00, "gold": 0, "item": false},
+	{"id": "hard", "n": "도전", "sub": "제약 1개",
+		"mods": 1, "mul": 1.00, "gold": 5, "item": false},
+	{"id": "brutal", "n": "극한", "sub": "제약 2개 · 목표 +25%",
+		"mods": 2, "mul": 1.25, "gold": 10, "item": true},
+]
+
+# 개조 누적 한계 (링이 서로 잡아먹지 않도록)
+const TRP_BAND_MAX := 0.24
+const DBL_BAND_MAX := 0.22
+const BULL_O_MAX := 0.30
+
+
+# ── 조건 판정 ─────────────────────────────────────────────
+static func check(c: String, x: Dictionary) -> bool:
+	if x.miss:
+		return c == "miss"
+	match c:
+		"always": return true
+		"triple": return x.mult == 3
+		"double": return x.mult == 2
+		"bull": return x.sector >= 25
+		"odd": return x.sector < 25 and x.sector % 2 == 1
+		"even": return x.sector < 25 and x.sector % 2 == 0
+		"left": return x.left
+		"right": return not x.left
+		"big": return x.sector >= 15 and x.sector < 25
+		"small": return x.sector >= 1 and x.sector <= 5
+		"same": return x.same
+		"diff": return not x.same
+		"first": return x.first
+		"last": return x.last
+		"streak": return x.streak > 0
+	return false
+
+
+static func cond_text(c: String) -> String:
+	match c:
+		"always": return "모든 다트"
+		"triple": return "트리플 명중 시"
+		"double": return "더블 명중 시"
+		"bull": return "불 명중 시"
+		"odd": return "홀수 섹터 명중 시"
+		"even": return "짝수 섹터 명중 시"
+		"left": return "왼쪽 절반 명중 시"
+		"right": return "오른쪽 절반 명중 시"
+		"big": return "15 이상 섹터 명중 시"
+		"small": return "5 이하 섹터 명중 시"
+		"same": return "직전과 같은 섹터면"
+		"diff": return "직전과 다른 섹터면"
+		"first": return "라운드 첫 다트에"
+		"last": return "라운드 마지막 다트에"
+		"streak": return "연속 명중 1회마다"
+		"miss": return "빗나가면"
+	return ""
+
+
+static func eff_text(k: String, v: int) -> String:
+	match k:
+		"chip": return "점수 +%d" % v
+		"mult": return "배수 +%d" % v
+		"xmult": return "배수 ×%d" % v
+		"mult_streak": return "배수 +%d" % v
+	return ""
+
+
+static func item_desc(it: Dictionary) -> String:
+	return "%s %s" % [cond_text(it.c), eff_text(it.k, it.v)]
+
+
+static func target_of(round_no: int) -> int:
+	var i := clampi(round_no - 1, 0, TARGETS.size() - 1)
+	return TARGETS[i]
