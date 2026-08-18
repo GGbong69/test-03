@@ -1068,15 +1068,20 @@ func _draw() -> void:
 		draw_rect(Rect2(Vector2.ZERO, VIEW), Color(1.0, 1.0, 1.0, screen_flash * 0.34))
 
 
-func annulus(ri: float, ro: float, a0: float, a1: float) -> PackedVector2Array:
+func annulus_at(c: Vector2, ri: float, ro: float, a0: float, a1: float,
+		seg: int = 8) -> PackedVector2Array:
 	var pts := PackedVector2Array()
-	for i in 9:
-		var a := lerpf(a0, a1, float(i) / 8.0)
-		pts.append(BC + Vector2(sin(a), -cos(a)) * ro)
-	for i in 9:
-		var a := lerpf(a1, a0, float(i) / 8.0)
-		pts.append(BC + Vector2(sin(a), -cos(a)) * ri)
+	for i in seg + 1:
+		var a := lerpf(a0, a1, float(i) / float(seg))
+		pts.append(c + Vector2(sin(a), -cos(a)) * ro)
+	for i in seg + 1:
+		var a := lerpf(a1, a0, float(i) / float(seg))
+		pts.append(c + Vector2(sin(a), -cos(a)) * ri)
 	return pts
+
+
+func annulus(ri: float, ro: float, a0: float, a1: float) -> PackedVector2Array:
+	return annulus_at(BC, ri, ro, a0, a1)
 
 
 func _draw_board() -> void:
@@ -1216,8 +1221,7 @@ func _draw_topbar() -> void:
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_TXT)
 	draw_string(font, Vector2(48, 13), "다트 %d" % darts_left,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_DIM)
-	draw_string(font, Vector2(96, 13), "◆ %d" % gold,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_GOLD)
+	draw_gold_at(96.0, 13.0, str(gold), 11, C_GOLD)
 
 	var bar := clampf(shown / float(target), 0.0, 1.0)
 	draw_rect(Rect2(Vector2(146, 6), Vector2(360, 7)), C_BG)
@@ -1227,7 +1231,7 @@ func _draw_topbar() -> void:
 
 
 # ══════════════════════════════════════════════════════════
-#  아이템 패널
+#  칩 랙  (아이템 패널)
 # ──────────────────────────────────────────────────────────
 #  바깥과 닿는 곳은 이 넷뿐이다.
 #    _panel_fire(i)    아이템이 발동할 때        (_next_step)
@@ -1236,30 +1240,47 @@ func _draw_topbar() -> void:
 #    _panel_reset()    라운드 시작 시 정지        (_start_round)
 #  owned / sealed 를 읽기만 하고 게임 상태는 건드리지 않는다.
 #  그래서 이 구획만 지우고 다시 써도 나머지는 영향을 안 받는다.
+#
+#  아이템은 카지노 칩이다. 골드는 칩이 아니라 플라크로 그린다
+#  (draw_gold). 원반과 직사각으로 형태를 갈라 둘을 안 헷갈리게 한다.
 # ══════════════════════════════════════════════════════════
 
 # 감각 조정은 이 표에서만 한다.
 const PANEL := {
 	# 배치
-	"y": 21.0,           # 패널 위쪽
-	"h": 44.0,           # 패널 높이
-	"slot_w": 112.0,     # 슬롯 하나 크기
-	"slot_h": 34.0,
-	"gap": 6.0,          # 슬롯 사이
-	"pad": 5.0,          # 패널 안쪽 여백
+	"y": 21.0,           # 랙 위쪽
+	"h": 46.0,           # 랙 높이
+	"cell": 46.0,        # 칩 한 칸 폭
+	"pad": 6.0,          # 랙 안쪽 여백
+	"r": 15.0,           # 칩 반지름
+	"chip_dy": -3.0,     # 칸 안에서 칩 중심을 얼마나 올릴지
 
-	# 튀는 정도
+	# 튀는 정도 — 사각 슬롯 때 값을 그대로 쓴다. 꽂는 곳만 바뀌었다.
 	"kick": 7.4,         # 발동 순간 튀어오르는 힘
 	"stiff": 190.0,      # 제자리로 당기는 힘 (클수록 빨리 진동)
 	"damp": 9.0,         # 감쇠 (클수록 빨리 멈춘다)
 	"rise": 9.0,         # 최대 몇 픽셀 떠오르는가
-	"squash": 0.22,      # 늘어나고 눌리는 정도
 
-	# 강조
-	"glow": 0.5,         # 발동 시 밝아지는 정도
-	"text_grow": 0.22,   # 글자가 커지는 정도
-	"shadow": 0.34,      # 떠올랐을 때 그림자 진하기
+	# 원반에 맞는 변형 — 세로로 늘리면 원이 깨지므로 안 쓴다
+	"swell": 0.13,       # 등방 부풀림
+	"spin": 0.55,        # 스팟 회전량(rad)
+	"lift": 2.6,         # 떠오를 때 드러나는 옆면 두께
+	"shadow": 0.34,      # 그림자 진하기
+
+	# 이름 표시
+	"hot": 0.62,         # 발동 후 이름을 몇 초 보여줄지
 }
+
+# 등급(가격)별 칩 색 — 명도가 단조 하강해서 저해상도에서도 순서가 읽힌다
+const CHIP_TIERS := [
+	{"max": 4, "body": "ded5c0", "spot": "8d3b34", "edge": "b8ae97"},
+	{"max": 7, "body": "7d5ad0", "spot": "e8dfc8", "edge": "5b3fa0"},
+	{"max": 99, "body": "241e33", "spot": "f2b134", "edge": "4a3f66"},
+]
+const CHIP_SPOTS := [3, 6, 8]
+const C_FELT := Color("16281f")
+
+var slot_hot := []              # 발동 후 이름을 띄우는 잔여 시간
 
 
 func _panel_ensure() -> void:
@@ -1268,14 +1289,17 @@ func _panel_ensure() -> void:
 	if slot_pop.size() != n:
 		slot_pop.resize(n)
 		slot_vel.resize(n)
+		slot_hot.resize(n)
 		slot_pop.fill(0.0)
 		slot_vel.fill(0.0)
+		slot_hot.fill(0.0)
 
 
 func _panel_reset() -> void:
 	_panel_ensure()
 	slot_pop.fill(0.0)
 	slot_vel.fill(0.0)
+	slot_hot.fill(0.0)
 
 
 func _panel_fire(i: int) -> void:
@@ -1283,6 +1307,7 @@ func _panel_fire(i: int) -> void:
 	if i < 0 or i >= slot_pop.size():
 		return
 	slot_vel[i] = PANEL.kick
+	slot_hot[i] = PANEL.hot
 
 
 func _panel_update(d: float) -> void:
@@ -1292,66 +1317,143 @@ func _panel_update(d: float) -> void:
 		slot_vel[i] -= slot_pop[i] * PANEL.stiff * d
 		slot_vel[i] *= exp(-PANEL.damp * d)
 		slot_pop[i] = clampf(slot_pop[i] + slot_vel[i] * d, -0.6, 1.4)
+		slot_hot[i] = maxf(slot_hot[i] - d, 0.0)
 
 
 func _panel_rect() -> Rect2:
 	var n: int = GameData.MAX_ITEMS
-	var w: float = PANEL.slot_w * n + PANEL.gap * (n - 1) + PANEL.pad * 2.0
+	var w: float = PANEL.cell * n + PANEL.pad * 2.0
 	return Rect2(Vector2((VIEW.x - w) * 0.5, PANEL.y), Vector2(w, PANEL.h))
 
 
 func _slot_rect(i: int) -> Rect2:
 	var pr := _panel_rect()
-	var x: float = pr.position.x + PANEL.pad + i * (PANEL.slot_w + PANEL.gap)
-	var y: float = pr.position.y + (pr.size.y - PANEL.slot_h) * 0.5
-	return Rect2(Vector2(x, y), Vector2(PANEL.slot_w, PANEL.slot_h))
+	return Rect2(Vector2(pr.position.x + PANEL.pad + i * PANEL.cell, pr.position.y),
+			Vector2(PANEL.cell, pr.size.y))
+
+
+func _chip_tier(cost: int) -> Dictionary:
+	for t in CHIP_TIERS:
+		if cost <= t.max:
+			return t
+	return CHIP_TIERS[CHIP_TIERS.size() - 1]
+
+
+func draw_chip(c: Vector2, r: float, tier: Dictionary, spots: int, rot: float,
+		lift: float, gold_ring: bool, dim: float) -> void:
+	var body := Color(tier.body).darkened(dim)
+	var edge := Color(tier.edge).darkened(dim)
+	var spot := Color(tier.spot).darkened(dim)
+
+	# 옆면 — 떠오를수록 두꺼워져서 원반이 실제로 들린 것처럼 보인다
+	if lift > 0.05:
+		draw_circle(c + Vector2(0.0, lift), r, edge.darkened(0.35))
+	draw_circle(c, r, edge)
+	draw_circle(c, r - 1.5, body)
+
+	# 가장자리 스팟 — 바깥 반지름까지 나가야 실루엣이 갈려 칩으로 읽힌다
+	var step := TAU / float(spots * 2)
+	for i in spots:
+		var a := rot + float(i) * step * 2.0
+		draw_colored_polygon(annulus_at(c, r * 0.66, r, a - step * 0.42,
+				a + step * 0.42, 3), spot)
+
+	# 인레이 홈
+	draw_arc(c, r * 0.58, 0.0, TAU, 18, edge.lightened(0.18), 1.0)
+	if gold_ring:
+		# 돈 버는 칩이라는 표식 — 매대에서 한눈에 잡히라고
+		draw_arc(c, r - 0.5, 0.0, TAU, 22, C_GOLD, 1.0)
+
+
+# ── 플라크 (통화) ─────────────────────────────────────────
+#  칩보다 위 등급인 직사각 화폐판. 아이템이 원반이므로 통화는
+#  직사각으로 형태를 갈랐다. 대각 광택과 어두운 옆면이 금속감의
+#  전부라 둘 중 하나만 빼도 그냥 노란 네모가 된다.
+func draw_plaque(p: Vector2, w: float, h: float, c: Color) -> void:
+	draw_rect(Rect2(p + Vector2(0.0, h * 0.22), Vector2(w, h)), c.darkened(0.55))
+	draw_rect(Rect2(p, Vector2(w, h)), c)
+	draw_rect(Rect2(p + Vector2(1.0, 1.0), Vector2(w - 2.0, 1.0)), c.lightened(0.45))
+	draw_line(p + Vector2(w * 0.18, h - 1.0), p + Vector2(w * 0.72, 1.0),
+			c.lightened(0.5), 1.0)
+	draw_rect(Rect2(p + Vector2(w * 0.28, h * 0.34), Vector2(w * 0.44, h * 0.3)),
+			c.darkened(0.4))
+
+
+func gold_w(n: String, size: int) -> float:
+	return float(size) * 0.85 + 4.0 \
+			+ font.get_string_size(n, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
+
+
+# 왼쪽 정렬로 그리고 차지한 폭을 돌려준다 — 문장 중간에 끼워 넣을 때 쓴다.
+func draw_gold_at(x: float, y: float, n: String, size: int, c: Color) -> float:
+	var iw := float(size) * 0.85
+	draw_plaque(Vector2(x, y - float(size) * 0.62), iw, iw * 0.64, c)
+	draw_string(font, Vector2(x + iw + 4.0, y), n,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, size, c)
+	return gold_w(n, size)
+
+
+func draw_gold(cx: float, y: float, n: String, size: int, c: Color) -> void:
+	draw_gold_at(cx - gold_w(n, size) * 0.5, y, n, size, c)
 
 
 func _panel_draw() -> void:
 	_panel_ensure()
 	var pr := _panel_rect()
-	draw_rect(pr, C_PANEL.darkened(0.45))
-	draw_rect(Rect2(pr.position, Vector2(pr.size.x, 1.0)), C_PANEL.lightened(0.10))
+	draw_rect(pr, C_FELT)
+	draw_rect(Rect2(pr.position, Vector2(pr.size.x, 1.0)), C_FELT.lightened(0.14))
 
 	for i in GameData.MAX_ITEMS:
 		if i < owned.size():
 			_panel_slot(i)
 		else:
-			# 빈 칸을 남겨둬야 앞으로 몇 개 더 들어가는지 보인다.
-			draw_rect(_slot_rect(i), C_BG.lightened(0.03))
-			draw_rect(_slot_rect(i), C_WIRE.darkened(0.55), false, 1.0)
+			# 딜러 칩 랙의 빈 홈
+			var e := _slot_rect(i).get_center() + Vector2(0.0, PANEL.chip_dy)
+			draw_circle(e, PANEL.r * 0.72, C_FELT.darkened(0.45))
+			draw_arc(e, PANEL.r * 0.72, 0.0, TAU, 16, C_FELT.lightened(0.10), 1.0)
 
 
 func _panel_slot(i: int) -> void:
 	var it: Dictionary = owned[i]
 	var lock: bool = i == sealed
-	var r := _slot_rect(i)
+	var cell := _slot_rect(i)
 	var bounce: float = slot_pop[i]
 	var up: float = maxf(bounce, 0.0)
 
-	# 뜰 때는 세로로 늘고 가로로 좁아진다. 눌릴 때는 그 반대.
-	var sz := Vector2(r.size.x * (1.0 - bounce * PANEL.squash * 0.6),
-			r.size.y * (1.0 + bounce * PANEL.squash))
-	var c := r.get_center() + Vector2(0.0, -bounce * PANEL.rise)
-	var q := Rect2(c - sz * 0.5, sz)
+	var c := cell.get_center() + Vector2(0.0, PANEL.chip_dy - bounce * PANEL.rise)
+	var r: float = PANEL.r * (1.0 + bounce * PANEL.swell)
 
 	if up > 0.01:
-		draw_rect(Rect2(q.position + Vector2(2.0, 2.0 + up * 3.0), q.size),
+		draw_circle(c + Vector2(1.5, 3.0 + up * PANEL.lift), r,
 				Color(0.0, 0.0, 0.0, up * PANEL.shadow))
 
-	var glow: float = up * PANEL.glow
-	draw_rect(q, C_PANEL.darkened(0.35) if lock else C_PANEL.lightened(0.05 + glow))
-	if not lock and glow > 0.01:
-		draw_rect(Rect2(q.position, Vector2(q.size.x, 2.0)), C_ACC)
+	draw_chip(c, r, _chip_tier(it.cost), CHIP_SPOTS[CHIP_TIERS.find(_chip_tier(it.cost))],
+			bounce * PANEL.spin, up * PANEL.lift,
+			it.get("g", "") != "" and not lock, 0.55 if lock else 0.0)
 
-	var grow := 1.0 + up * PANEL.text_grow
-	draw_string(font, q.position + Vector2(6.0, 14.0),
-			(it.n + "  (봉인)") if lock else it.n,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, int(round(11.0 * grow)),
-			C_DIM.darkened(0.3) if lock else C_TXT)
-	draw_string(font, q.position + Vector2(6.0, 27.0), GameData.item_desc(it),
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 8,
-			C_DIM.darkened(0.4) if lock else C_DIM)
+	# 인레이 숫자 — 효과 수치만. 색으로 점수인지 배수인지 가른다
+	var val := str(it.v)
+	if it.k == "xmult":
+		val = "×" + str(it.v)
+	var ink: Color = C_CHIP.lightened(0.5) if it.k == "chip" else C_MULT.lightened(0.45)
+	draw_string(font, c + Vector2(-r, 4.0), val,
+			HORIZONTAL_ALIGNMENT_CENTER, r * 2.0, 12,
+			ink.darkened(0.55) if lock else ink)
+
+	# 평소엔 조건 태그, 발동 직후엔 이름 — 자리를 옮기지 않고 덮어쓴다
+	var tag := GameData.gold_tag(it.get("g", "")) if it.get("g", "") != "" else ""
+	if tag == "":
+		tag = GameData.cond_text(it.c).replace(" 명중 시", "").replace(" 시", "")
+	var label := tag
+	var col: Color = C_DIM.darkened(0.15)
+	if lock:
+		label = "봉인"
+		col = C_MULT.darkened(0.2)
+	elif slot_hot[i] > 0.0:
+		label = it.n
+		col = C_TXT
+	draw_string(font, cell.position + Vector2(0.0, cell.size.y - 3.0), label,
+			HORIZONTAL_ALIGNMENT_CENTER, cell.size.x, 9, col)
 
 
 func _draw_card() -> void:
@@ -1419,14 +1521,12 @@ func _draw_clear() -> void:
 	var y := 74.0
 	for row in clear_gold_detail:
 		draw_string(font, Vector2(210, y), row.n, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, C_DIM)
-		draw_string(font, Vector2(340, y), "◆ +%d" % row.v,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 12, C_GOLD)
+		draw_gold_at(340.0, y, "+%d" % row.v, 12, C_GOLD)
 		y += 17.0
 
 	# 내역 아래에 합계선을 긋고 보유액을 크게 — 3택1이 있던 자리다
 	draw_rect(Rect2(Vector2(210, y + 4), Vector2(174, 1)), C_WIRE.darkened(0.4))
-	draw_string(font, Vector2(0, y + 36), "◆ %d" % gold,
-			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 22, C_GOLD)
+	draw_gold(VIEW.x * 0.5, y + 36.0, str(gold), 22, C_GOLD)
 
 	_btn(Rect2(Vector2(232, 258), Vector2(176, 42)), "상점으로", "아무 키", true)
 
@@ -1436,9 +1536,14 @@ func _draw_stage() -> void:
 	draw_rect(Rect2(Vector2.ZERO, VIEW), Color(0.04, 0.03, 0.07, 0.80))
 
 	# 아이템 패널이 y 21~65 를 차지하므로 그 아래에서 시작한다
-	draw_string(font, Vector2(0, 82), "라운드 %d / %d      ◆ %d      아이템 %d / %d"
-			% [round_no, GameData.ROUNDS, gold, owned.size(), GameData.MAX_ITEMS],
-			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 11, C_DIM)
+	var s_pre := "라운드 %d / %d    " % [round_no, GameData.ROUNDS]
+	var s_post := "    아이템 %d / %d" % [owned.size(), GameData.MAX_ITEMS]
+	var w_pre := font.get_string_size(s_pre, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x
+	var w_post := font.get_string_size(s_post, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x
+	var sx := (VIEW.x - (w_pre + gold_w(str(gold), 11) + w_post)) * 0.5
+	draw_string(font, Vector2(sx, 82), s_pre, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_DIM)
+	sx += w_pre + draw_gold_at(sx + w_pre, 82.0, str(gold), 11, C_GOLD)
+	draw_string(font, Vector2(sx, 82), s_post, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_DIM)
 	draw_string(font, Vector2(0, 98), "제약이 셀수록 상점 자금이 커진다",
 			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 10, C_DIM.darkened(0.2))
 
@@ -1470,7 +1575,7 @@ func _draw_stage() -> void:
 
 		var rw := "보상 없음"
 		if sp.d.gold > 0:
-			rw = "◆ +%d" % sp.d.gold
+			rw = "+%d" % sp.d.gold
 		if sp.d.item:
 			rw += "  ·  아이템 1개"
 		draw_string(font, r.position + Vector2(0, r.size.y - 10), rw,
@@ -1490,9 +1595,11 @@ func _draw_shop() -> void:
 	draw_string(font, Vector2(0, 40), "상점", HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 20, C_ACC)
 	var gc: Color = C_GOLD.lerp(C_MULT, deny_flash)
 	var gx := randf_range(-deny_flash, deny_flash) * 3.0
-	draw_string(font, Vector2(gx, 62), "◆ %d      아이템 %d / %d"
-			% [gold, owned.size(), GameData.MAX_ITEMS],
-			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 12, gc)
+	var h_post := "    아이템 %d / %d" % [owned.size(), GameData.MAX_ITEMS]
+	var h_w := font.get_string_size(h_post, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
+	var hx := gx + (VIEW.x - (gold_w(str(gold), 12) + h_w)) * 0.5
+	hx += draw_gold_at(hx, 62.0, str(gold), 12, gc)
+	draw_string(font, Vector2(hx, 62), h_post, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, gc)
 	if deny_flash > 0.0:
 		draw_string(font, Vector2(0, 300), "골드가 부족하거나 슬롯이 꽉 찼다",
 				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 11,
@@ -1535,12 +1642,14 @@ func _draw_shop() -> void:
 			draw_string(font, r.position + Vector2(8, 98),
 					GameData.gold_text(s.d.g, s.d.gv),
 					HORIZONTAL_ALIGNMENT_CENTER, r.size.x - 16, 9, C_GOLD.darkened(0.15))
-		draw_string(font, r.position + Vector2(0, 116), "◆ %d" % s.cost,
-				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 14, C_GOLD if can else C_DIM.darkened(0.3))
+		draw_gold(r.position.x + r.size.x * 0.5, r.position.y + 116.0, str(s.cost), 14,
+				C_GOLD if can else C_DIM.darkened(0.3))
 
-	_btn(_reroll_rect(), "리롤",
-			"무료" if reroll_cost == 0 else "◆ %d" % reroll_cost,
-			gold >= reroll_cost)
+	_btn(_reroll_rect(), "리롤", "무료" if reroll_cost == 0 else "", gold >= reroll_cost)
+	if reroll_cost > 0:
+		var rr := _reroll_rect()
+		draw_gold(rr.position.x + rr.size.x * 0.5, rr.position.y + 35.0,
+				str(reroll_cost), 10, C_GOLD if gold >= reroll_cost else C_DIM.darkened(0.3))
 	_btn(_next_rect(), "다음 라운드 →", "R%d  목표 %d"
 			% [round_no + 1, GameData.target_of(round_no + 1)], true)
 
