@@ -114,7 +114,8 @@ var total_flash := 0.0
 # ── 이펙트 ────────────────────────────────────────────────
 var darts := []
 var pops := []
-var item_flash := [0.0, 0.0, 0.0, 0.0, 0.0]
+var slot_pop := []              # 아이템 패널 참고 — 아래 "아이템 패널" 구획
+var slot_vel := []
 var shake := 0.0
 var board_punch := 0.0
 var pitch_step := 0
@@ -234,6 +235,7 @@ func _start_round() -> void:
 	hit_flash = 0.0
 	hitstop = 0.0
 	screen_flash = 0.0
+	_panel_reset()
 	_to_pick()
 
 
@@ -611,8 +613,7 @@ func _process(d: float) -> void:
 	card_v *= exp(-17.0 * d)
 	card_p = clampf(card_p + card_v * d, -0.35, 1.35)
 
-	for i in item_flash.size():
-		item_flash[i] = maxf(item_flash[i] - d * 2.4, 0.0)
+	_panel_update(d)
 
 	match state:
 		S.AIM_V:
@@ -969,8 +970,7 @@ func _next_step() -> void:
 			cur_mult = st.v
 			beep(f, 0.10, 0.16)
 		"item":
-			if st.i < item_flash.size():
-				item_flash[st.i] = 1.0
+			_panel_fire(st.i)
 			card_item = st.lbl
 			match st.kind:
 				"chip":
@@ -1049,7 +1049,7 @@ func _draw() -> void:
 	_draw_darts()
 	_draw_aim()
 	_draw_topbar()
-	_draw_owned()
+	_panel_draw()
 	_draw_card()
 	_draw_pops()
 
@@ -1227,26 +1227,132 @@ func _draw_topbar() -> void:
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_TXT)
 
 
-func _draw_owned() -> void:
-	if owned.is_empty():
+# ══════════════════════════════════════════════════════════
+#  아이템 패널
+# ──────────────────────────────────────────────────────────
+#  바깥과 닿는 곳은 이 넷뿐이다.
+#    _panel_fire(i)    아이템이 발동할 때        (_next_step)
+#    _panel_update(d)  매 프레임 진행           (_process)
+#    _panel_draw()     매 프레임 그리기          (_draw, _draw_stage)
+#    _panel_reset()    라운드 시작 시 정지        (_start_round)
+#  owned / sealed 를 읽기만 하고 게임 상태는 건드리지 않는다.
+#  그래서 이 구획만 지우고 다시 써도 나머지는 영향을 안 받는다.
+# ══════════════════════════════════════════════════════════
+
+# 감각 조정은 이 표에서만 한다.
+const PANEL := {
+	# 배치
+	"y": 21.0,           # 패널 위쪽
+	"h": 44.0,           # 패널 높이
+	"slot_w": 112.0,     # 슬롯 하나 크기
+	"slot_h": 34.0,
+	"gap": 6.0,          # 슬롯 사이
+	"pad": 5.0,          # 패널 안쪽 여백
+
+	# 튀는 정도
+	"kick": 7.4,         # 발동 순간 튀어오르는 힘
+	"stiff": 190.0,      # 제자리로 당기는 힘 (클수록 빨리 진동)
+	"damp": 9.0,         # 감쇠 (클수록 빨리 멈춘다)
+	"rise": 9.0,         # 최대 몇 픽셀 떠오르는가
+	"squash": 0.22,      # 늘어나고 눌리는 정도
+
+	# 강조
+	"glow": 0.5,         # 발동 시 밝아지는 정도
+	"text_grow": 0.22,   # 글자가 커지는 정도
+	"shadow": 0.34,      # 떠올랐을 때 그림자 진하기
+}
+
+
+func _panel_ensure() -> void:
+	# 슬롯 수는 아이템 보유 한계를 그대로 따라간다.
+	var n: int = GameData.MAX_ITEMS
+	if slot_pop.size() != n:
+		slot_pop.resize(n)
+		slot_vel.resize(n)
+		slot_pop.fill(0.0)
+		slot_vel.fill(0.0)
+
+
+func _panel_reset() -> void:
+	_panel_ensure()
+	slot_pop.fill(0.0)
+	slot_vel.fill(0.0)
+
+
+func _panel_fire(i: int) -> void:
+	_panel_ensure()
+	if i < 0 or i >= slot_pop.size():
 		return
-	var w := 118.0
-	var gap := 6.0
-	var x0 := (VIEW.x - (w * owned.size() + gap * (owned.size() - 1))) * 0.5
-	for i in owned.size():
-		var f: float = item_flash[i] if i < item_flash.size() else 0.0
-		var x := x0 + i * (w + gap)
-		var y := 26.0 - f * 4.0
-		var lock: bool = i == sealed
-		draw_rect(Rect2(Vector2(x, y), Vector2(w, 34)),
-				C_PANEL.darkened(0.35) if lock else C_PANEL.lightened(0.05 + f * 0.45))
-		draw_string(font, Vector2(x + 6, y + 14),
-				(owned[i].n + "  (봉인)") if lock else owned[i].n,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 11,
-				C_DIM.darkened(0.3) if lock else C_TXT)
-		draw_string(font, Vector2(x + 6, y + 27), GameData.item_desc(owned[i]),
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 8,
-				C_DIM.darkened(0.4) if lock else C_DIM)
+	slot_vel[i] = PANEL.kick
+
+
+func _panel_update(d: float) -> void:
+	_panel_ensure()
+	for i in slot_pop.size():
+		# 0 으로 당기는 스프링. 지나쳐서 반대로 눌리는 게 "통통" 의 정체다.
+		slot_vel[i] -= slot_pop[i] * PANEL.stiff * d
+		slot_vel[i] *= exp(-PANEL.damp * d)
+		slot_pop[i] = clampf(slot_pop[i] + slot_vel[i] * d, -0.6, 1.4)
+
+
+func _panel_rect() -> Rect2:
+	var n: int = GameData.MAX_ITEMS
+	var w: float = PANEL.slot_w * n + PANEL.gap * (n - 1) + PANEL.pad * 2.0
+	return Rect2(Vector2((VIEW.x - w) * 0.5, PANEL.y), Vector2(w, PANEL.h))
+
+
+func _slot_rect(i: int) -> Rect2:
+	var pr := _panel_rect()
+	var x: float = pr.position.x + PANEL.pad + i * (PANEL.slot_w + PANEL.gap)
+	var y: float = pr.position.y + (pr.size.y - PANEL.slot_h) * 0.5
+	return Rect2(Vector2(x, y), Vector2(PANEL.slot_w, PANEL.slot_h))
+
+
+func _panel_draw() -> void:
+	_panel_ensure()
+	var pr := _panel_rect()
+	draw_rect(pr, C_PANEL.darkened(0.45))
+	draw_rect(Rect2(pr.position, Vector2(pr.size.x, 1.0)), C_PANEL.lightened(0.10))
+
+	for i in GameData.MAX_ITEMS:
+		if i < owned.size():
+			_panel_slot(i)
+		else:
+			# 빈 칸을 남겨둬야 앞으로 몇 개 더 들어가는지 보인다.
+			draw_rect(_slot_rect(i), C_BG.lightened(0.03))
+			draw_rect(_slot_rect(i), C_WIRE.darkened(0.55), false, 1.0)
+
+
+func _panel_slot(i: int) -> void:
+	var it: Dictionary = owned[i]
+	var lock: bool = i == sealed
+	var r := _slot_rect(i)
+	var bounce: float = slot_pop[i]
+	var up: float = maxf(bounce, 0.0)
+
+	# 뜰 때는 세로로 늘고 가로로 좁아진다. 눌릴 때는 그 반대.
+	var sz := Vector2(r.size.x * (1.0 - bounce * PANEL.squash * 0.6),
+			r.size.y * (1.0 + bounce * PANEL.squash))
+	var c := r.get_center() + Vector2(0.0, -bounce * PANEL.rise)
+	var q := Rect2(c - sz * 0.5, sz)
+
+	if up > 0.01:
+		draw_rect(Rect2(q.position + Vector2(2.0, 2.0 + up * 3.0), q.size),
+				Color(0.0, 0.0, 0.0, up * PANEL.shadow))
+
+	var glow: float = up * PANEL.glow
+	draw_rect(q, C_PANEL.darkened(0.35) if lock else C_PANEL.lightened(0.05 + glow))
+	if not lock and glow > 0.01:
+		draw_rect(Rect2(q.position, Vector2(q.size.x, 2.0)), C_ACC)
+
+	var grow := 1.0 + up * PANEL.text_grow
+	draw_string(font, q.position + Vector2(6.0, 14.0),
+			(it.n + "  (봉인)") if lock else it.n,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, int(round(11.0 * grow)),
+			C_DIM.darkened(0.3) if lock else C_TXT)
+	draw_string(font, q.position + Vector2(6.0, 27.0), GameData.item_desc(it),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 8,
+			C_DIM.darkened(0.4) if lock else C_DIM)
 
 
 func _draw_card() -> void:
@@ -1381,7 +1487,7 @@ func _draw_stage() -> void:
 				HORIZONTAL_ALIGNMENT_CENTER, r.size.x,
 				11, C_GOLD if sp.d.gold > 0 else C_DIM)
 
-	_draw_owned()
+	_panel_draw()
 
 	draw_string(font, Vector2(0, 292), "판을 눌러 시작",
 			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 11, C_TXT)
