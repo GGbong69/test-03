@@ -1593,6 +1593,156 @@ func _icon_dart(c: Vector2, dl: float, id: String, dim: float) -> void:
 
 
 # ══════════════════════════════════════════════════════════
+#  제약 아이콘
+# ──────────────────────────────────────────────────────────
+#  GameData.MODIFIERS 6종. 세 자리에서 크기만 달리 쓴다.
+#    스테이지 카드 r=9(18px) · 하단 제약 줄 r=7(14px) · 툴팁 r=7(14px)
+#  이름을 _icon_mod 로 못 짓는다 — 코드에서 mod 는 이미 보드 개조다.
+#
+#  ── 실루엣 ──
+#  이 게임은 이미 네 실루엣을 썼다.
+#    아이템     꽉 찬 원반      draw_item_chip
+#    개조       불투명 사각판    _icon_mod
+#    다트       긴 대각 획      _icon_dart
+#    빈 랙 홈   속 빈 고리      _panel_draw
+#  마지막 것이 결정적이다. 스테이지 화면 y 21~67 에 지름 21.6px 짜리
+#  빈 고리가 최대 5개 떠 있고 그 뜻이 "아직 아무것도 없음"이다.
+#  그래서 제약은 원도 사각도 대각선도 테두리도 쓰지 않는다. 바탕 없이
+#  2r 정사각 안에 획과 덩어리만 놓고 여섯이 지배 형태를 하나씩 갖는다.
+#    narrow 세로 막대쌍 · gust 겹화살 · fog 십자
+#    short  가로 층    · dead 부채꼴  · dull 자물쇠
+#  색을 다 빼도 여섯이 갈린다.
+#
+#  ── 세 톤 ──
+#    grey  살아남은 것       C_WIRE.lightened(0.18)
+#    loss  제약이 부순 것     C_MULT.lightened(0.25)  ← 옆 이름 글자와 같은 값
+#    cut   덩어리에 파낸 홈    loss 위에만 얹는다
+#  유령선(반투명 옛 형태)은 안 쓴다. 카드 바탕 C_PANEL.lightened(0.10) 은
+#  하단 줄 바탕 C_BG 보다 밝기가 5배라, 반투명 1px 선은 카드 위에서
+#  grey 와 명암이 붙어 구조선과 구별이 안 되고 오히려 더 진해진다.
+#  파선으로 끊기엔 14px 에서 호가 3~5px 라 자리가 없다. 없어진 것은
+#  "없음"과 "그 자리를 덮은 loss" 로만 말한다.
+#  cut 을 바탕색이 아니라 고정 어두운 색으로 둔 것도 같은 이유다.
+#  항상 loss 덩어리 위에만 찍으므로 대비가 7:1 로 고정이고 자리를
+#  안 탄다. 바탕색으로 구멍을 뚫으면 하단 줄에선 C_BG 와 같아져
+#  그리나 마나가 된다.
+#
+#  ── 극성 ──
+#  _icon_mod 는 좋아진 곳을 C_ACC 로 덮는다. 여기는 정확히 뒤집어
+#  나빠진 곳만 loss 로 칠한다. 이 세트에 C_ACC / C_GOLD 는 한 번도
+#  안 나온다 — 금색이 한 점만 섞여도 "얻는 것"으로 읽힌다.
+#  loss 와 grey 의 휘도차는 1.23:1 뿐이라 회색조에서 색은 못 믿는다.
+#  그래서 loss 는 여섯 중 다섯에서 그 아이콘의 가장 큰 단일 도형이다.
+#  narrow 만 예외인데, 주제가 "얇아짐" 자체라 loss 가 얇은 것이 곧 뜻이다.
+#
+#  ── 크기 ──
+#  좌표는 전부 r 비율, 두께에만 하한을 건다. narrow 의 2:1 은 하한이
+#  걸린 뒤에도 유지된다 — 굵은 쪽이 2.0 에 눌리면 얇은 쪽은 그 절반인
+#  1.0 이 되므로 비가 안 무너진다.
+#  여섯 전부 2r 정사각을 넘지 않는다. 하나라도 넘으면 세 자리의 여백
+#  검산이 아이콘마다 달라져 전부 거짓말이 된다.
+#  r=7 에서 가장 가는 획 1.05px, 가장 좁은 틈 1.09px. 하한은 r=6.5 다.
+# ══════════════════════════════════════════════════════════
+
+const LIM := {
+	"thin": 0.15, "thin_lo": 1.0,   # 맥락 획
+	"bold": 0.30, "bold_lo": 2.0,   # 구조 획
+}
+
+
+func _icon_modifier(c: Vector2, r: float, id: String, dim: float,
+		a: float = 1.0) -> void:
+	var grey := Color(C_WIRE.lightened(0.18).darkened(dim), a)
+	var loss := Color(C_MULT.lightened(0.25).darkened(dim), a)
+	var cut := Color(C_DARK.darkened(0.45), a)          # loss 덩어리 안에만
+	var w1: float = maxf(r * float(LIM.thin), float(LIM.thin_lo))
+	var w2: float = maxf(r * float(LIM.bold), float(LIM.bold_lo))
+
+	match id:
+		# ── 좁은 판 ──────────────────────────────────────
+		# 세로 막대 둘, 굵기비 정확히 2:1. 왼쪽 grey 가 원래 폭,
+		# 오른쪽 loss 가 남은 폭이다. 한 프레임에 before/after 를 같이
+		# 넣으므로 유령선이 필요 없다 — 왼쪽 막대가 이미 그 유령이다.
+		"narrow":
+			var nh := r * 1.60
+			var nw := maxf(r * 0.34, 2.0)
+			draw_rect(Rect2(c + Vector2(-r * 0.40 - nw * 0.5, -nh * 0.5),
+					Vector2(nw, nh)), grey)
+			draw_rect(Rect2(c + Vector2(r * 0.40 - nw * 0.25, -nh * 0.5),
+					Vector2(nw * 0.5, nh)), loss)
+
+		# ── 역풍 ────────────────────────────────────────
+		# 겹화살. 배속 버튼 관례 그대로라 "2배"를 개수로 말한다 —
+		# 학습 비용이 0 이고, 각진 획이라 세트에서 유일하다.
+		# 아래 가는 선은 게이지 궤도, 이 아이콘에서 유일하게 멀쩡한 것.
+		"gust":
+			draw_line(c + Vector2(-r * 0.88, r * 0.86),
+					c + Vector2(r * 0.88, r * 0.86), grey, w1)
+			for i in 2:
+				var gx := r * (-0.80 + 0.80 * float(i))
+				draw_line(c + Vector2(gx, -r * 0.46),
+						c + Vector2(gx + r * 0.44, 0.0), loss, w2)
+				draw_line(c + Vector2(gx + r * 0.44, 0.0),
+						c + Vector2(gx, r * 0.46), loss, w2)
+
+		# ── 안개 ────────────────────────────────────────
+		# CONFIRM 은 조준 십자에 링 두 개(22→7, 30→11)를 조여 붙여
+		# "멈춰 볼 틈"을 만든다. 그 링이 통째로 없다. 남은 것은 십자와
+		# 가운데 표적점뿐이고, 둘 사이의 빈 고리가 사라진 확인 구간이다.
+		"fog":
+			var hole := r * 0.34
+			for i in 4:
+				var fa := TAU * float(i) * 0.25
+				var fd := Vector2(cos(fa), sin(fa))
+				draw_line(c + fd * hole, c + fd * r * 0.86, loss, w2)
+			draw_circle(c, r * 0.16, grey)
+
+		# ── 단벌 ────────────────────────────────────────
+		# 탄창 그대로 — 가로 칸을 세로로 쌓는다(_mag_rect 도 그 배치다).
+		# 남은 두 칸은 grey, 없어진 맨 윗칸 자리에는 칸보다 긴 loss 막대를
+		# 눕힌다. 칸보다 길어야 "줄의 일원"이 아니라 "가로지른 마이너스"다.
+		"short":
+			var sbw := r * 1.30
+			var sbh := r * 0.30
+			draw_rect(Rect2(c + Vector2(-r * 0.86, -r * 0.72),
+					Vector2(r * 1.72, r * 0.34)), loss)
+			for i in 2:
+				draw_rect(Rect2(c + Vector2(-sbw * 0.5,
+						r * (-0.13 + 0.50 * float(i))), Vector2(sbw, sbh)), grey)
+
+		# ── 금지 구역 ────────────────────────────────────
+		# 20번은 화면에서 12시다 — sectors[0]=20 이고 annulus_at 의 각 0 이
+		# Vector2(sin, -cos) 라 위쪽이며 _draw_board 의 0번 칸이 그 자리를
+		# 걸친다. 그래서 꼭짓점을 아래 두고 위로 벌어지는 조각을 그린다.
+		# 여섯 중 이것만 grey 가 없다 — 조각이 통째로 죽으므로 살아남은
+		# 것이 없고, 없는 것을 그리면 거짓말이 된다.
+		"dead":
+			var ap := c + Vector2(0.0, r * 0.74)
+			var fan := PackedVector2Array([ap])
+			for i in 9:
+				var da := lerpf(-0.52, 0.52, float(i) / 8.0)
+				fan.append(ap + Vector2(sin(da), -cos(da)) * r * 1.58)
+			draw_colored_polygon(fan, loss)
+			# 0점. 폭을 조각 폭에서 역산했으므로 어느 크기에서도 안 샌다
+			# (아래 모서리 안쪽으로 0.156r = r=7 에서 1.09px 남는다).
+			draw_rect(Rect2(c + Vector2(-r * 0.44, -r * 0.54),
+					Vector2(r * 0.88, maxf(r * 0.24, 1.4))), cut)
+
+		# ── 둔화 ────────────────────────────────────────
+		# 여섯 중 유일하게 보드가 아니라 칩을 건드리는 제약이라 혼자만
+		# 기하가 아니라 물건이다 — 그 어긋남이 곧 "대상이 다르다"는 표시다.
+		# 랙이 봉인 칩에 이미 "봉인"을 C_MULT 로 찍으므로 자물쇠는
+		# 이 게임에 이미 있는 어휘다. 아치가 dead 의 부채꼴과 갈라준다.
+		"dull":
+			var ly := c.y - r * 0.13
+			draw_arc(Vector2(c.x, ly), r * 0.44, PI, TAU, 12, grey, w2)
+			draw_rect(Rect2(Vector2(c.x - r * 0.68, ly),
+					Vector2(r * 1.36, r * 0.86)), loss)
+			draw_circle(Vector2(c.x, c.y + r * 0.18), r * 0.15, cut)
+			draw_rect(Rect2(c + Vector2(-r * 0.12, r * 0.18),
+					Vector2(r * 0.24, r * 0.38)), cut)
+
+# ══════════════════════════════════════════════════════════
 #  툴팁 (마우스 오버)
 # ──────────────────────────────────────────────────────────
 #  바깥과 닿는 곳은 둘뿐이다.
@@ -1623,9 +1773,11 @@ var tip_slot := -1              # 호버 중인 칩 랙 칸
 var tip_a := 0.0                # 페이드
 
 
-func _tip_add(t: String, sz: int, c: Color) -> void:
+# ic  왼쪽에 붙일 제약 아이콘 id (없으면 빈 문자열 — 기존 호출은 3인자 그대로)
+# tl  이름 뒤에 9pt 로 이어 붙일 설명 (제약 줄에서만 쓴다)
+func _tip_add(t: String, sz: int, c: Color, ic := "", tl := "") -> void:
 	if t != "":
-		tip_lines.append({"s": t, "sz": sz, "c": c})
+		tip_lines.append({"s": t, "sz": sz, "c": c, "ic": ic, "tl": tl})
 
 
 func _tip_clear() -> void:
@@ -1722,7 +1874,7 @@ func _tip_build(hit: Dictionary) -> void:
 				_tip_add("제약 없음 — 기본 목표 그대로", 10, C_DIM)
 			else:
 				for md in sp.mods:
-					_tip_add("%s — %s" % [md.n, md.d], 10, C_MULT.lightened(0.25))
+					_tip_add(md.n, 11, C_MULT.lightened(0.25), md.id, md.d)
 			var rw := []
 			if sp.d.gold > 0:
 				rw.append("골드 +%d" % sp.d.gold)
@@ -1741,7 +1893,9 @@ func _tip_build(hit: Dictionary) -> void:
 func _tip_size() -> Vector2:
 	var h: float = TIP.pad * 2.0 + TIP.title
 	for l in tip_lines:
-		h += TIP.line
+		# 아이콘 줄만 14px 아이콘이 들어가게 2px 키운다. 극한 카드(제약 2개)가
+		# 14+15+15+15+13 = 72 로, 뒤집기 한계 86 에 14px 여유가 남는다.
+		h += TIP.line + (2.0 if l.ic != "" else 0.0)
 	return Vector2(TIP.w, h)
 
 
@@ -1790,11 +1944,23 @@ func _tip_draw(sh: Vector2) -> void:
 	draw_string(font, Vector2(tx, p.y + TIP.pad + 11.0), tip_title,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(C_TXT, tip_a))
 
+	# _tip_draw 의 본문 루프. 이 시점에 transform 은 이미 Vector2.ZERO 라
+	# 아이콘도 안 흔들린다. 페이드는 tip_a 를 알파로 넘겨 글자와 같이 뜬다.
+	# 아이콘 없는 줄은 ic == "" 로 예전 경로 그대로 간다.
 	var y: float = p.y + TIP.pad + TIP.title + 10.0
 	for l in tip_lines:
-		draw_string(font, Vector2(p.x + TIP.pad, y), l.s,
-				HORIZONTAL_ALIGNMENT_LEFT, sz.x - TIP.pad * 2.0, l.sz, Color(l.c, tip_a))
-		y += TIP.line
+		var lx: float = p.x + TIP.pad
+		if l.ic != "":
+			_icon_modifier(Vector2(lx + 7.0, y - 4.0), 7.0, l.ic, 0.0, tip_a)
+			lx += 18.0
+		draw_string(font, Vector2(lx, y), l.s, HORIZONTAL_ALIGNMENT_LEFT,
+				p.x + sz.x - TIP.pad - lx, l.sz, Color(l.c, tip_a))
+		if l.tl != "":
+			var tw: float = font.get_string_size(l.s, HORIZONTAL_ALIGNMENT_LEFT,
+					-1, l.sz).x + 5.0
+			draw_string(font, Vector2(lx + tw, y), l.tl, HORIZONTAL_ALIGNMENT_LEFT,
+					p.x + sz.x - TIP.pad - lx - tw, 9, Color(C_DIM, tip_a))
+		y += TIP.line + (2.0 if l.ic != "" else 0.0)
 
 	draw_set_transform(sh)
 
@@ -1907,13 +2073,17 @@ func _draw_stage() -> void:
 		draw_string(font, r.position + Vector2(0, 78), "목표 점수",
 				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, C_DIM)
 
-		var y := 98.0
+		# 8pt 설명 줄은 없앤다 — 640×360, texture_filter=0 에서 8px 한글은
+		# 자모 성분이 1px 밑으로 내려가 회색 얼룩이 된다. 정확한 문구는
+		# 툴팁이 그대로 들고 있으므로 잃는 정보가 없다. 카드는 셋을 훑어
+		# 하나를 고르는 면이고, 훑기에 쓰이는 채널은 글자가 아니라 실루엣이다.
+		var my := 110.0 if sp.mods.size() == 1 else 99.0
 		for m in sp.mods:
-			draw_string(font, r.position + Vector2(8, y), "· " + m.n,
-					HORIZONTAL_ALIGNMENT_LEFT, -1, 10, C_MULT.lightened(0.25))
-			draw_string(font, r.position + Vector2(8, y + 11), "  " + m.d,
-					HORIZONTAL_ALIGNMENT_LEFT, -1, 8, C_DIM)
-			y += 24.0
+			_icon_modifier(r.position + Vector2(20.0, my), 9.0, m.id, 0.0)
+			draw_string(font, r.position + Vector2(34.0, my + 4.0), m.n,
+					HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 42.0, 11,
+					C_MULT.lightened(0.25))
+			my += 22.0
 
 		var rw := "보상 없음"
 		if sp.d.gold > 0:
@@ -2054,11 +2224,20 @@ func _draw_hint() -> void:
 		draw_string(font, Vector2(0, 348), hint,
 				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 12, C_ACC)
 	if not active_mods.is_empty():
-		var names := []
+		# baseline 을 334 → 341 로 내린다. 진짜 이웃은 힌트 줄(가운데 정렬이라
+		# 가로로 안 만난다)이 아니라 점수 카드다 — card_y=232 + CARD_H=96 =
+		# 바닥 328 이고 card_side<0 이면 x 82~326 을 덮는다. 334 짜리 10pt 는
+		# 지금도 캡 상단이 ~326 이라 카드 안으로 들어가 있었다.
+		var mx := 8.0
+		draw_string(font, Vector2(mx, 341), "제약",
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 10, C_MULT.darkened(0.15))
+		mx += font.get_string_size("제약", HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x + 9.0
 		for m in active_mods:
-			names.append(m.n)
-		draw_string(font, Vector2(8, 334), "제약  " + "  ·  ".join(names),
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 10, C_MULT.lightened(0.25))
+			_icon_modifier(Vector2(mx + 7.0, 337.0), 7.0, m.id, 0.0)
+			mx += 18.0
+			draw_string(font, Vector2(mx, 341), m.n,
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 10, C_MULT.lightened(0.25))
+			mx += font.get_string_size(m.n, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x + 12.0
 
 	draw_string(font, Vector2(8, 356), "[ ] 조준 %.2f    - = 정산 %.2f    ; ' 확인텀 %.2f"
 			% [gauge_speed, beat, confirm_hold], HORIZONTAL_ALIGNMENT_LEFT, -1, 9,
