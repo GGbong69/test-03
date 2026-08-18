@@ -1113,7 +1113,9 @@ func _hud_draw() -> void:
 		return
 	_draw_topbar()
 	if state != S.CLEAR:            # 정산 화면은 그 자체가 명세다
+		_bank_draw()
 		_panel_draw()
+		_cap_draw()
 		if _is_play():
 			_draw_magazine()
 	# 판매 팝업이 스크림(알파 0.94) 밑에 깔리면 안 보인다 — 판 다음에 그린다.
@@ -1268,18 +1270,91 @@ func _draw_aim() -> void:
 
 
 func _draw_topbar() -> void:
-	draw_rect(Rect2(Vector2.ZERO, Vector2(VIEW.x, 18)), C_PANEL)
+	var r: Rect2 = LAY.bar
+	draw_rect(r, C_PANEL)
+	draw_rect(Rect2(Vector2(0.0, r.size.y - 1.0), Vector2(r.size.x, 1.0)), C_BG)
+	# 1px 두 줄이 "칸이 나뉘어 있다"를 만드는 전부다. 640x360 에서 테두리는 사치다.
+	for cx in LAY.bar_cut:
+		draw_line(Vector2(cx, 3.0), Vector2(cx, 15.0), C_BG, 1.0)
+
+	# 1칸 x[0,100] — 런 진행
 	draw_string(font, Vector2(8, 13), "R%d/%d" % [round_no, GameData.ROUNDS],
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_TXT)
-	draw_string(font, Vector2(48, 13), "다트 %d" % darts_left,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_DIM)
-	draw_gold_at(96.0, 13.0, str(gold), 11, C_GOLD)
+	var done: int = round_no if (state == S.CLEAR or state == S.SHOP) else round_no - 1
+	var pip: Rect2 = LAY.bar_pip
+	for i in GameData.ROUNDS:
+		var q := Rect2(pip.position + Vector2(float(i) * LAY.bar_pip_dx, 0.0), pip.size)
+		if i < done:
+			draw_rect(q, C_ACC)
+		elif i == done:
+			draw_rect(q, C_ACC.darkened(0.62))
+			draw_rect(q, C_ACC, false, 1.0)
+		else:
+			draw_rect(q, C_BG)
 
-	var bar := clampf(shown / float(target), 0.0, 1.0)
-	draw_rect(Rect2(Vector2(146, 6), Vector2(360, 7)), C_BG)
-	draw_rect(Rect2(Vector2(146, 6), Vector2(360.0 * bar, 7)), C_ACC)
-	draw_string(font, Vector2(514, 13), "%d / %d" % [int(shown), target],
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_TXT)
+	# 2칸 x[100,584] — 목표. 진행바 좌표는 기존 그대로다.
+	var g: Rect2 = LAY.bar_gauge
+	draw_string(font, Vector2(108, 13), "목표",
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_DIM.darkened(0.2))
+	draw_rect(g, C_BG)
+	if state == S.SHOP or state == S.STAGE:
+		# STAGE 에서 목표 숫자를 쓰면 안 된다 — 등급 배수(극한 ×1.25)가
+		# 아직 안 정해졌고 카드 셋이 서로 다른 숫자를 이미 크게 띄운다.
+		var msg := "판을 고르는 중"
+		if state == S.SHOP:
+			msg = "다음 R%d  ·  목표 %d" % [round_no + 1, GameData.target_of(round_no + 1)]
+		draw_string(font, Vector2(g.position.x, 13.0), msg,
+				HORIZONTAL_ALIGNMENT_CENTER, g.size.x, 10, C_DIM)
+	else:
+		var k := clampf(shown / float(maxi(target, 1)), 0.0, 1.0)
+		draw_rect(Rect2(g.position, Vector2(g.size.x * k, g.size.y)), C_ACC)
+		draw_string(font, Vector2(LAY.bar_score, 13.0), "%d / %d" % [int(shown), target],
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_TXT)
+
+	# 3칸 x[584,640] — 이번 판 제약 수. 이름 전체는 하단 y341 줄이 갖는다.
+	# active_mods 는 _pick_stage 에서만 갈리므로 SHOP 에는 지난 판 값이 남는다.
+	if _is_play() and not active_mods.is_empty():
+		draw_string(font, Vector2(LAY.bar_mod, 13.0), "제약 %d" % active_mods.size(),
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 10, C_MULT.lightened(0.25))
+
+
+# ── 자금 ──────────────────────────────────────────────────
+func _bank_draw() -> void:
+	var r: Rect2 = LAY.bank
+	draw_rect(r, C_PANEL)
+	draw_rect(Rect2(r.position, Vector2(r.size.x, 2.0)), C_GOLD.darkened(0.35))
+	draw_string(font, r.position + Vector2(5.0, 12.0), "자금",
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_DIM.darkened(0.15))
+
+	# deny_flash 는 상점 중앙 골드 텍스트가 쓰던 값을 그대로 물려받는다
+	var gc: Color = C_GOLD.lerp(C_MULT, deny_flash)
+	var jx := randf_range(-deny_flash, deny_flash) * 2.0
+	draw_gold(r.get_center().x + jx, r.position.y + 30.0, str(gold), 16, gc)
+
+	# 이자 미리보기. 계산식은 _finish_round 와 같고 둘 다 지급 전 잔액을 본다.
+	if state == S.SHOP and round_no + 1 >= GameData.ROUNDS:
+		# R8 은 정산이 없다 (_finish_round 의 round_no >= ROUNDS 조기 return 이
+		# 골드 지급 블록보다 앞선다). 남긴 골드는 영원히 안 돌아온다.
+		draw_string(font, r.position + Vector2(0.0, 42.0), "마지막 판",
+				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, C_MULT.lightened(0.2))
+	else:
+		var itr: int = mini(gold / GameData.INTEREST_PER, GameData.INTEREST_MAX)
+		draw_string(font, r.position + Vector2(0.0, 42.0), "이자 +%d" % itr,
+				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9,
+				C_GOLD.darkened(0.3) if itr > 0 else C_DIM.darkened(0.35))
+
+
+# ── 칩 꼬리표 ─────────────────────────────────────────────
+func _cap_draw() -> void:
+	var r: Rect2 = LAY.cap
+	draw_rect(r, C_FELT)                                   # 랙과 같은 재질
+	draw_rect(Rect2(r.position, Vector2(r.size.x, 1.0)), C_FELT.lightened(0.14))
+	draw_string(font, r.position + Vector2(0.0, 20.0), "칩",
+			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 10, C_DIM.darkened(0.1))
+	draw_string(font, r.position + Vector2(0.0, 36.0),
+			"%d/%d" % [owned.size(), GameData.MAX_ITEMS],
+			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 13,
+			C_ACC if owned.size() >= GameData.MAX_ITEMS else C_TXT)
 
 
 # ══════════════════════════════════════════════════════════
