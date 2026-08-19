@@ -1742,6 +1742,183 @@ func _sell_draw() -> void:
 
 
 # ══════════════════════════════════════════════════════════
+#  상점 테이블  (카지노 펠트 · 오버헤드 · 낙하)
+# ──────────────────────────────────────────────────────────
+#  정사영 기울임. 테이블 면에서 앙각 52°(수직에서 38°). 원근 배율은 없다 —
+#  640x360 에서 깊이 164px 짜리 판의 참원근은 1.08배라 안 보이고, 안 쓰면
+#  면 위의 축정렬 사각형이 화면에서도 축정렬 사각형이 되어 draw_rect 가
+#  근사가 아니라 정확해진다.
+#
+#  계수가 둘인 것이 이 구획의 존재 이유다.
+#    면에 누운 것의 y → sin 52° = 0.788   (TBL.flat)
+#    면에서 선 것의 y → cos 52° = 0.616   (TBL.tall — 칩 옆면에만 쓴다)
+#  하나였다면 draw_set_transform 의 scale 한 줄로 끝났다. 그리고 그 한 줄은
+#  _tip_draw(2249행)가 draw_set_transform(sh) 로 복구할 때 조용히 사라지고,
+#  _hud_draw 가 _draw_shop 다음이라 남은 scale 은 HUD 를 통째로 누른다.
+#  → 이 구획은 draw_set_transform 을 한 번도 부르지 않는다. 불변식이다.
+#
+#  바깥과 닿는 곳은 여섯뿐이다.
+#    _table_draw()      판·자리·물건·이름       (_draw_shop 맨 앞)
+#    _shop_hit(m)       커서 아래 매물 번호      (_click · _tip_hit)
+#    _spot_mark(i)      툴팁 앵커 (Rect2 규약)   (_tip_pos)
+#    _drop_roll()       새로 던진다             (_roll_stock 끝)
+#    _drop_update(d)    매 프레임 진행           (_process)
+#    _drop_settle()     즉시 착지               (_click 말미 · _auto_step)
+#  게임 상태(gold/owned/magazine)를 읽지도 쓰지도 않는다. 보는 것은
+#  stock[i].type 과 stock[i].sold 둘뿐이고 그리기 직전에만 본다.
+#
+#  자리는 정확히 4개다. SHOP_ITEMS+SHOP_MODS+SHOP_DARTS 가 4가 아니게 되면
+#  ax / ay 를 같이 늘려야 한다.
+# ══════════════════════════════════════════════════════════
+const C_TABLE := Color("1b3126")   # 펠트. 랙(C_FELT "16281f")보다 한 단 밝다 —
+                                   # 랙이 앞에 놓인 별개 물건으로 읽히게.
+const C_WOOD := Color("3a2a24")
+
+const TBL := {
+	# ── 시점 ──────────────────────────────────────────
+	"flat": 0.788,       # sin 52°
+	"tall": 0.616,       # cos 52°
+
+	# ── 판 ────────────────────────────────────────────
+	"fy": 80.0,          # 펠트 far 모서리. 상시 HUD 하단 66 에서 14px
+	"ny": 244.0,         # 펠트 near 모서리. 레일 6px 뒤가 기존 버튼 y=250
+
+	# ── 베팅 자리 ────────────────────────────────────
+	"ax": [112.0, 250.0, 390.0, 528.0],
+	"ay": [160.0, 210.0, 210.0, 160.0],   # 바깥이 딜러 쪽. 가운데가 처진 호.
+	"spot_r": 34.0,      # 인쇄 타원 rx. ry = 34 * flat = 26.8
+	# 히트는 타원이 아니라 이 반폭·반높이의 Rect2 다. 타원으로 두면 x·y 를
+	# 따로 검산한 값이 모서리에서 틀린다 — 두 축이 결합돼 있기 때문이다.
+	# 사각은 축별 검산이 곧 정답이라 _obj_hw/_obj_hh 만으로 증명된다.
+	# 인접 자리 사이에 62px 의 맨 펠트가 있어 넷은 서로 안 만난다.
+	"hw": 38.0, "hh": 31.0,
+
+	# ── 물건 ─────────────────────────────────────────
+	"chip_r": 19.0,      # 38 x 29.9 타원. 랙 칩은 30 x 30 정원이다 (일부러 다르다)
+	"chip_t": 4.5,       # 옆면 = 4.5 * tall = 2.77px. 지름 대비 0.118 —
+	                     # 실물(0.085)의 1.40배. PANEL.lift 2.6 과 같은 정도의 과장.
+	"mod_r": 19.0,       # 캐비닛 실폭 2r+6 = 44, 화면 높이 2*r*flat+6 = 35.9
+	"dart_l": 24.0,      # 반길이. 최대 도달은 dl 이 아니라 dl+8.5 다
+	                     # ("mag" 의 자기장 호가 tip+4 에 반지름 4.5)
+	"dart_psi": 0.6,     # 방위각 한계(rad). 넘으면 화면 길이가 짧아져 뭉툭해진다
+
+	# ── 흩뿌림 ───────────────────────────────────────
+	# 상한이 아니라 목표치다. 실제 값은 자리에서 물건 반폭을 뺀 만큼으로
+	# 자동으로 눌린다(_drop_roll). 물건이 자리 밖으로 새는 것이 불가능하다.
+	#   칩 ±8/±8 · 개조 ±8/±8 · 다트 ±5.5/±8
+	"jit": 8.0,
+
+	# ── 낙하 ─────────────────────────────────────────
+	# 화면 밖에서 안 던진다 — 위 66px 이 상시 HUD 라 하늘이 14px 뿐이고,
+	# 거기서 던지면 낙하의 대부분이 판 뒤에서 일어난다. 물건은 펠트의 far
+	# 모서리에서 나온다. 낙하 82 / 132px, 최대 10.1px/프레임 (칩 세로
+	# 실루엣 32.7px 의 1/3) — 고스트 없이 궤적이 이어진다.
+	#   i0 0.548 · i1 0.853 · i2 0.698 · i3 0.706  →  최장 0.853초
+	"y0": 78.0, "g": 1400.0, "stag": 0.08,
+	"e_item": 0.30, "e_mod": 0.12, "e_dart": 0.18,
+	"rest_v": 45.0, "max_d": 0.033, "spin": 7.0,
+	"light": Vector2(0.447, 0.894),   # 기존 그림자 벡터 (1.5,3.0) 의 정규화
+}
+
+var drop := []      # [{t,h,h0,v,rot,rv,psi,jx,jy,sq,sv,rest}]
+
+
+# 타원 원반. 볼록이라 한 폴리곤으로 넘겨도 안전하다.
+func _e_pts(c: Vector2, rx: float, ry: float, seg := 22) -> PackedVector2Array:
+	var pts := PackedVector2Array()
+	for i in seg:
+		var a := TAU * float(i) / float(seg)
+		pts.append(c + Vector2(sin(a) * rx, -cos(a) * ry))
+	return pts
+
+
+# 타원 띠 한 조각. annulus_at 과 같은 규약(각 0 = 12시, 시계 방향)이다.
+func _e_band(c: Vector2, rx: float, ry: float, ix: float, iy: float,
+		a0: float, a1: float, seg: int) -> PackedVector2Array:
+	var pts := PackedVector2Array()
+	for i in seg + 1:
+		var a := lerpf(a0, a1, float(i) / float(seg))
+		pts.append(c + Vector2(sin(a) * rx, -cos(a) * ry))
+	for i in seg + 1:
+		var a := lerpf(a1, a0, float(i) / float(seg))
+		pts.append(c + Vector2(sin(a) * maxf(ix, 0.3), -cos(a) * maxf(iy, 0.3)))
+	return pts
+
+
+# 온 고리는 비볼록이라 한 폴리곤으로 넘기면 삼각분할이 튄다 — 4등분한다.
+# (_icon_mod 1774행 주석이 이미 밟아 본 함정이다. 여기선 draw_arc 로 피할
+#  수 없다 — 폭 1px arc 는 눌린 12시·6시에서 0.79px 가 되어 사라진다.)
+#
+# 두 규약을 이름부터 갈라 둔다. 바꿔 쓰면 결과가 정반대로 틀린다.
+#   _e_ring_w  화면 인셋 — 폭 w 가 어느 각에서도 w.  테두리·금테·인레이 홈
+#   _e_ring_r  칩 좌표계 비율 — 12시에서 flat 배로 준다.  면의 구역
+func _e_ring_w(c: Vector2, rx: float, ry: float, w: float, col: Color) -> void:
+	for q in 4:
+		draw_colored_polygon(_e_band(c, rx, ry, rx - w, ry - w,
+				TAU * float(q) * 0.25, TAU * float(q + 1) * 0.25, 6), col)
+
+
+func _e_ring_r(c: Vector2, rx: float, ry: float, k0: float, k1: float,
+		col: Color) -> void:
+	for q in 4:
+		draw_colored_polygon(_e_band(c, rx * k1, ry * k1, rx * k0, ry * k0,
+				TAU * float(q) * 0.25, TAU * float(q + 1) * 0.25, 6), col)
+
+
+func _spot_c(i: int) -> Vector2:
+	return Vector2(TBL.ax[i], TBL.ay[i])
+
+
+# 판정. 눈에 보이는 인쇄 타원(68x53.6)보다 4px 씩 크다 — 흩뿌려진 물건을
+# 남김없이 덮으려는 것이고, 커지는 방향이라 손해가 없다.
+func _spot_rect(i: int) -> Rect2:
+	return Rect2(_spot_c(i) - Vector2(TBL.hw, TBL.hh),
+			Vector2(TBL.hw * 2.0, TBL.hh * 2.0))
+
+
+# 툴팁 앵커. 판정이 아니라 인쇄 타원에 붙인다 — 판은 사람이 보는 것에
+# 붙어야 하고, 그쪽이 4px 위라 아래 여유도 그만큼 는다.
+# 검산: 가까운 줄 하단 236.8 → 판 시작 242.8. 4줄 323.8 / 6줄 349.8 (한계 356).
+# 매대 툴팁 6줄이 이 배치의 계약이다.
+func _spot_mark(i: int) -> Rect2:
+	var c := _spot_c(i)
+	var ry: float = TBL.spot_r * TBL.flat
+	return Rect2(c - Vector2(TBL.spot_r, ry), Vector2(TBL.spot_r * 2.0, ry * 2.0))
+
+
+# 물건의 화면 반폭·반높이. 흩뿌림 한계와 그림자 크기가 여기서 나온다.
+# 새 매물 종류를 더하면 여기만 고치면 자리 밖으로 새지 않는다.
+func _obj_hw(i: int) -> float:
+	if i >= stock.size():
+		return TBL.chip_r
+	match stock[i].type:
+		"mod": return TBL.mod_r + 3.0                  # 22.0  캐비닛
+		"dart": return TBL.dart_l + 8.5                # 32.5  mag 의 자기장 호까지
+	return TBL.chip_r                                   # 19.0
+
+
+func _obj_hh(i: int) -> float:
+	if i >= stock.size():
+		return TBL.chip_r * TBL.flat
+	match stock[i].type:
+		"mod": return TBL.mod_r * TBL.flat + 3.0       # 17.97
+		"dart": return (TBL.dart_l + 8.5) * sin(TBL.dart_psi) * TBL.flat + 5.0
+	return TBL.chip_r * TBL.flat + TBL.chip_t * TBL.tall   # 17.74 (옆면 포함)
+
+
+# 히트는 물건이 아니라 펠트에 인쇄된 자리가 잡는다.
+#   · 자리는 흩뿌림·낙하와 무관하게 고정 — 커서 밑에서 표적이 안 움직인다
+#   · 낙하 중에도 잡힌다 — 연출이 읽기를 막지 않는다
+#   · 타입별 판정이 없다 — 원반이든 막대든 판이든 한 경로
+#   · 표적이 눈에 보인다 — 사각 카드가 없어진 자리를 인쇄 타원이 메운다
+# 네 사각은 x 로 62px 씩 떨어져 있어 겹칠 수 없다. z 순서가 필요 없다.
+func _shop_hit(m: Vector2) -> int:
+	for i in stock.size():
+		if i < TBL.ax.size() and _spot_rect(i).has_point(m):
+			return i
+	return -1
+
+# ══════════════════════════════════════════════════════════
 #  매대 아이콘
 # ──────────────────────────────────────────────────────────
 #  상점에 세 종류가 나란히 선다. 실루엣이 서로 갈려야 글자를
@@ -1805,7 +1982,7 @@ func _icon_mod(c: Vector2, r: float, id: String, dim: float) -> void:
 # 회전 인자 이름은 draw_item_chip 이 이미 쓰는 rot 에 맞췄고,
 # 알파 인자를 뒤에 덧붙인 것은 _icon_modifier 가 a 를 받아들인 선례와 같은 방식이다.
 func _icon_dart(c: Vector2, dl: float, id: String, dim := 0.0,
-		rot := 0.0, a := 1.0) -> void:
+		rot := 0.0, a := 1.0, sh := true) -> void:
 	# 보드에 꽂힌 다트와 같은 각도로 눕는다 (_draw_darts 의 Vector2(6, -10))
 	var dir := Vector2(6.0, -10.0).normalized().rotated(rot)
 	var nrm := Vector2(-dir.y, dir.x)
@@ -1835,8 +2012,11 @@ func _icon_dart(c: Vector2, dl: float, id: String, dim := 0.0,
 	var tail := c - dir * dl
 	var brl := c + dir * dl * 0.1
 
-	draw_line(tip + Vector2(1.5, 3.0), tail + Vector2(1.5, 3.0),
-			Color(0.0, 0.0, 0.0, 0.28 * a), bw)
+	# 내장 그림자는 고정 오프셋이라 낙하 중 하늘을 같이 난다.
+	# 테이블에서는 끄고 _goods_draw 가 높이에 맞는 그림자 하나만 그린다.
+	if sh:
+		draw_line(tip + Vector2(1.5, 3.0), tail + Vector2(1.5, 3.0),
+				Color(0.0, 0.0, 0.0, 0.28 * a), bw)
 	# 촉
 	draw_colored_polygon(PackedVector2Array([tip,
 			brl + nrm * bw * 0.5, brl - nrm * bw * 0.5]), Color(C_LIGHT.darkened(dim), a))
@@ -2045,6 +2225,7 @@ var tip_lines := []             # [{"s": String, "sz": int, "c": Color}]
 var tip_chip := {}              # 제목 옆 미니칩으로 그릴 아이템 (없으면 빈 사전)
 var tip_mark := Rect2()         # 대상 테두리 (칩 랙은 링으로 대신하므로 빈 값)
 var tip_slot := -1              # 호버 중인 칩 랙 칸
+var tip_spot := -1              # 호버 중인 매대 자리 (테이블 구획용)
 var tip_a := 0.0                # 페이드
 
 
@@ -2061,6 +2242,7 @@ func _tip_clear() -> void:
 	tip_chip = {}
 	tip_mark = Rect2()
 	tip_slot = -1
+	tip_spot = -1
 
 
 # 지금 커서 아래에 무엇이 있는가. 없으면 빈 사전.
@@ -2185,6 +2367,8 @@ func _tip_pos(sz: Vector2) -> Vector2:
 	var t := tip_mark
 	if tip_slot >= 0:
 		t = _slot_rect(tip_slot)
+	elif tip_spot >= 0:
+		t = _spot_mark(tip_spot)
 	var x: float = clampf(t.get_center().x - sz.x * 0.5, 4.0, VIEW.x - sz.x - 4.0)
 	var y: float = t.end.y + TIP.gap
 	if y + sz.y > VIEW.y - 4.0:
