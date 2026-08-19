@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "godot": {
-      "command": "D:/Godot_mcp/node.exe",
-      "args": ["D:/workspace/godot-mcp/build/index.js"],
+      "command": "npx",
+      "args": ["-y", "@coding-solo/godot-mcp"],
       "env": {
         "GODOT_PATH": "D:/Godot/Godot_v4.7.2-stable_win64.exe"
       }
