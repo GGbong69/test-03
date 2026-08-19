@@ -1823,6 +1823,51 @@ const TBL := {
 var drop := []      # [{t,h,h0,v,rot,rv,psi,jx,jy,sq,sv,rest}]
 
 
+func _table_draw() -> void:
+	# 화면이 곧 테이블의 크롭이다. 640 폭에 D자 테이블 전체를 넣으면 매물이
+	# 그 안에서 다시 쪼그라든다. 좌우는 화면 밖으로 이어진다.
+	draw_rect(Rect2(0.0, 18.0, VIEW.x, VIEW.y - 18.0), C_WOOD)
+	draw_rect(Rect2(0.0, TBL.fy, VIEW.x, TBL.ny - TBL.fy), C_TABLE)
+	var ink: Color = C_TABLE.lightened(0.34)
+
+	# 결 — 도트 격자는 프레임당 수천 콜이라 못 쓴다. 가로 1px 줄 7px 간격 = 23콜.
+	var yy: float = TBL.fy + 7.0
+	while yy < TBL.ny:
+		draw_line(Vector2(0.0, yy), Vector2(VIEW.x, yy), Color(ink, 0.05), 1.0)
+		yy += 7.0
+	# 가장자리 감쇠 — 테이블이 화면 밖으로 휘어 나간다고 말한다
+	for k in 3:
+		var ea: float = 0.10 - 0.033 * float(k)
+		draw_rect(Rect2(float(k), TBL.fy, 1.0, TBL.ny - TBL.fy), Color(0, 0, 0, ea))
+		draw_rect(Rect2(VIEW.x - 1.0 - float(k), TBL.fy, 1.0, TBL.ny - TBL.fy),
+				Color(0, 0, 0, ea))
+
+	# 딜러 라인 — 면 위에서 좌우로 뻗은 선은 이 정사영에서 정확히 화면
+	# 수평선이 된다. 근사가 아니라 공짜로 맞다.
+	draw_line(Vector2(24.0, 86.0), Vector2(VIEW.x - 24.0, 86.0), Color(ink, 0.5), 1.0)
+	# 펠트에 찍힌 규칙. 세워서 그린다 — 640x360 에서 10pt 를 0.788배로 누르면
+	# 자모가 뭉갠다(_draw_stage 가 8pt 한글을 지운 것과 같은 이유). 글자는 전부
+	# 정면이라는 예외를 한 번만 인정하고 이름·가격·안내에 똑같이 적용한다.
+	# 내용은 장식이 아니라 _buy_block 이 거절하는 세 가지 이유다.
+	draw_string(font, Vector2(0.0, 98.0),
+			"칩 5개까지    ·    다트는 표준과 교환    ·    개조는 런 끝까지",
+			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 10, Color(ink, 0.85))
+
+	# 물건은 3단계에서 여기에 그린다 (_spot_draw / _goods_draw / _bill_draw).
+
+	# 덮개 — 물건은 펠트 far 모서리(y=78)에서 나온다. 그 위로 삐져나온 부분을
+	# 먼 쪽 레일이 덮는다. 클리핑 대신 불투명 사각 하나다. 상시 HUD 는
+	# _hud_draw 가 이 위에 판을 다시 얹으므로 멀쩡하고, 결과적으로 칩 랙이
+	# 테이블 쿠션 위에 놓인 딜러 트레이로 읽힌다.
+	draw_rect(Rect2(0.0, 18.0, VIEW.x, TBL.fy - 18.0), C_WOOD.darkened(0.30))
+	draw_rect(Rect2(0.0, TBL.fy - 3.0, VIEW.x, 3.0), C_WOOD)
+	draw_rect(Rect2(0.0, TBL.fy - 1.0, VIEW.x, 1.0), C_WOOD.lightened(0.18))
+	# 가까운 쪽 레일 — 리롤·다음 버튼이 그 아래 앞치마에 얹힌다
+	draw_rect(Rect2(0.0, TBL.ny, VIEW.x, 2.0), C_WOOD.lightened(0.24))
+	draw_rect(Rect2(0.0, TBL.ny + 6.0, VIEW.x, VIEW.y - TBL.ny - 6.0),
+			C_WOOD.darkened(0.35))
+
+
 # 타원 원반. 볼록이라 한 폴리곤으로 넘겨도 안전하다.
 func _e_pts(c: Vector2, rx: float, ry: float, seg := 22) -> PackedVector2Array:
 	var pts := PackedVector2Array()
@@ -2565,6 +2610,7 @@ func _draw_stage() -> void:
 
 func _draw_shop() -> void:
 	_scrim()
+	_table_draw()
 	if deny_flash > 0.0:
 		draw_string(font, Vector2(0, 300), "골드가 부족하거나 슬롯이 꽉 찼다",
 				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 11,
