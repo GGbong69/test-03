@@ -9,9 +9,11 @@ const GameData = preload("res://scripts/data.gd")
 # 밸런스 수치는 전부 scripts/data.gd 에 있다.
 
 const VIEW := Vector2(640, 360)
-const BC := Vector2(320, 202)
-const R := 118.0
-const SWING := 132.0
+const BC := Vector2(320, 196)
+const R := 106.0
+# SWING 은 R 에 비례해야 한다. 보드만 줄이면 빗나갈 확률이 조용히 오른다.
+# 106/118 = 0.898 → 132 * 0.898 = 118.6. 명중률을 기존과 같게 유지한다.
+const SWING := 119.0
 
 const CARD_W := 244.0
 const CARD_H := 96.0
@@ -40,9 +42,11 @@ const LAY := {
 	"bar_score":  514.0,
 	"bar_mod":    588.0,
 
-	"bank":       Rect2(4.0, 21.0, 72.0, 46.0),
-	"sell":       Rect2(80.0, 21.0, 74.0, 46.0),
-	"cap":        Rect2(445.0, 21.0, 37.0, 46.0),
+	# 자금판은 플레이 중 34 높이. 이자/마지막판 줄이 필요한 상점·스테이지에서만
+	# _bank_draw 가 46 으로 늘린다. 늘 46 이면 탄창 헤더가 판 안으로 들어간다.
+	"bank":       Rect2(4.0, 20.0, 72.0, 34.0),
+	"sell":       Rect2(80.0, 20.0, 74.0, 46.0),
+	"cap":        Rect2(445.0, 20.0, 37.0, 46.0),
 }
 
 const C_BG := Color("14111f")
@@ -1242,7 +1246,8 @@ func _draw_magazine() -> void:
 	var head := "탄창 — 고르세요"
 	if not picking:
 		head = "▶ " + (cur_dart.n if not cur_dart.is_empty() else "표준")
-	draw_string(font, Vector2(6, 62), head,
+	# baseline 65 — 플레이 중 자금판은 y54 에서 끝난다. 62 는 판 안이었다.
+	draw_string(font, Vector2(6, 65), head,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 10, C_ACC if picking else C_CHIP.lightened(0.25))
 
 	for i in remaining.size():
@@ -1281,14 +1286,14 @@ func _draw_darts() -> void:
 
 func _draw_aim() -> void:
 	if state == S.AIM_V:
-		draw_line(Vector2(BC.x - 168.0, aim.y), Vector2(BC.x + 168.0, aim.y), C_ACC, 1.0)
+		draw_line(Vector2(BC.x - 151.0, aim.y), Vector2(BC.x + 151.0, aim.y), C_ACC, 1.0)
 	elif state == S.AIM_H:
-		draw_line(Vector2(BC.x - 168.0, aim.y), Vector2(BC.x + 168.0, aim.y),
+		draw_line(Vector2(BC.x - 151.0, aim.y), Vector2(BC.x + 151.0, aim.y),
 				C_ACC.darkened(0.55), 1.0)
-		draw_line(Vector2(aim.x, 70.0), Vector2(aim.x, 336.0), C_ACC, 1.0)
+		draw_line(Vector2(aim.x, 68.0), Vector2(aim.x, 334.0), C_ACC, 1.0)
 	elif state == S.CONFIRM:
-		draw_line(Vector2(BC.x - 168.0, aim.y), Vector2(BC.x + 168.0, aim.y), C_ACC, 1.0)
-		draw_line(Vector2(aim.x, 70.0), Vector2(aim.x, 336.0), C_ACC, 1.0)
+		draw_line(Vector2(BC.x - 151.0, aim.y), Vector2(BC.x + 151.0, aim.y), C_ACC, 1.0)
+		draw_line(Vector2(aim.x, 68.0), Vector2(aim.x, 334.0), C_ACC, 1.0)
 		var e := 1.0 - pow(1.0 - clampf(confirm_t / maxf(ch(), 0.001), 0.0, 1.0), 3.0)
 		draw_arc(aim, lerpf(22.0, 7.0, e), 0.0, TAU, 24, C_TXT, 1.0)
 		draw_arc(aim, lerpf(30.0, 11.0, e), 0.0, TAU, 24, Color(C_TXT, 0.3), 1.0)
@@ -1348,7 +1353,12 @@ func _draw_topbar() -> void:
 
 # ── 자금 ──────────────────────────────────────────────────
 func _bank_draw() -> void:
+	# 이자 줄은 상점·스테이지에서만 의미가 있다. 그때만 판을 늘려 담는다.
+	# 플레이 중에는 짧게 끝나야 그 아래 탄창 헤더가 들어갈 자리가 난다.
+	var wide := state == S.SHOP or state == S.STAGE
 	var r: Rect2 = LAY.bank
+	if wide:
+		r.size.y = 46.0
 	draw_rect(r, C_PANEL)
 	draw_rect(Rect2(r.position, Vector2(r.size.x, 2.0)), C_GOLD.darkened(0.35))
 	draw_string(font, r.position + Vector2(5.0, 12.0), "자금",
@@ -1358,6 +1368,9 @@ func _bank_draw() -> void:
 	var gc: Color = C_GOLD.lerp(C_MULT, deny_flash)
 	var jx := randf_range(-deny_flash, deny_flash) * 2.0
 	draw_gold(r.get_center().x + jx, r.position.y + 30.0, str(gold), 16, gc)
+
+	if not wide:
+		return
 
 	# 이자 미리보기. 계산식은 _finish_round 와 같고 둘 다 지급 전 잔액을 본다.
 	if state == S.SHOP and round_no + 1 >= GameData.ROUNDS:
@@ -1404,7 +1417,7 @@ func _cap_draw() -> void:
 # 감각 조정은 이 표에서만 한다.
 const PANEL := {
 	# 배치
-	"y": 21.0,           # 랙 위쪽
+	"y": 20.0,           # 랙 위쪽
 	"h": 46.0,           # 랙 높이
 	"cell": 46.0,        # 칩 한 칸 폭
 	"pad": 6.0,          # 랙 안쪽 여백
