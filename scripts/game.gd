@@ -18,7 +18,6 @@ const SWING := 119.0
 const CARD_W := 244.0
 const CARD_H := 96.0
 
-const SECTORS_BASE := [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5]
 
 # ══════════════════════════════════════════════════════════
 #  HUD 배치표
@@ -65,7 +64,9 @@ const C_GOLD := Color("f2c94c")
 enum S { PICK, AIM_V, AIM_H, CONFIRM, FLY, RESOLVE, CLEAR, SHOP, STAGE, OVER }
 
 # ── 보드 기하 (개조로 변한다) ──────────────────────────────
-var sectors := SECTORS_BASE.duplicate()
+#  판의 유일한 출처는 mods_own 이다. 아래 여덟은 그것을 구운 결과일 뿐이다.
+var mods_own := []
+var sectors := GameData.SECTORS_BASE.duplicate()
 var dbl_out := 1.00
 var dbl_in := 0.90
 var trp_in := 0.56
@@ -210,15 +211,8 @@ func _ready() -> void:
 # ══════════════════════════════════════════════════════════
 
 func _new_run() -> void:
-	sectors = SECTORS_BASE.duplicate()
-	dbl_out = 1.00
-	dbl_in = 0.90
-	trp_in = 0.56
-	trp_out = 0.66
-	trp2_in = 0.0
-	trp2_out = 0.0
-	bull_o = 0.14
-	bull_i = 0.06
+	mods_own.clear()
+	_board_bake()
 	round_no = 1
 	gold = 4
 	magazine.clear()
@@ -400,11 +394,32 @@ func _roll_stock() -> void:
 			continue
 		stock.append({"type": "item", "d": it, "cost": it.cost, "sold": false})
 		n += 1
-	var mods := GameData.MODS.duplicate()
+	# 판이 더는 못 받는 개조와 이미 산 개조를 여기서 뺀다.
+	# 무효 구매가 사라지는 자리는 여기 한 곳이다.
+	var mods := []
+	for m in GameData.MODS:
+		if _mod_room(m.id):
+			mods.append(m)
 	mods.shuffle()
-	for i in GameData.SHOP_MODS:
-		var m: Dictionary = mods[i]
+	var mn := 0
+	for m in mods:
+		if mn >= GameData.SHOP_MODS:
+			break
 		stock.append({"type": "mod", "d": m, "cost": m.cost, "sold": false})
+		mn += 1
+	# 개조를 다 샀거나 판이 꽉 찼다. 예전 코드는 여기서 mods[i] 로 죽었다.
+	# 자리는 정확히 4개여야 하므로(_table_draw 의 ax/ay 주석) 칩으로 메운다.
+	while mn < GameData.SHOP_MODS:
+		var got := false
+		for it in pool:
+			if _has_item(it.id) or _in_stock(it.id):
+				continue
+			stock.append({"type": "item", "d": it, "cost": it.cost, "sold": false})
+			got = true
+			break
+		if not got:
+			break
+		mn += 1
 
 	var darts_pool := GameData.DARTS.slice(1)
 	darts_pool.shuffle()
@@ -473,27 +488,151 @@ func _std_slot() -> int:
 	return -1
 
 
-func _apply_mod(id: String) -> void:
-	match id:
-		"trpw":
-			var band := minf((trp_out - trp_in) * 1.6, GameData.TRP_BAND_MAX)
-			var c := (trp_in + trp_out) * 0.5
-			trp_in = maxf(c - band * 0.5, bull_o + 0.04)
-			trp_out = minf(c + band * 0.5, dbl_in - 0.04)
-		"dblw":
-			var band := minf((dbl_out - dbl_in) * 1.6, GameData.DBL_BAND_MAX)
-			dbl_in = maxf(dbl_out - band, trp_out + 0.04)
-		"bulw":
-			bull_o = minf(bull_o * 1.7, GameData.BULL_O_MAX)
-			bull_o = minf(bull_o, trp_in - 0.04)
-			bull_i = minf(bull_i * 1.7, bull_o * 0.55)
-		"sw20":
-			var lo := 0
-			for i in sectors.size():
-				if sectors[i] < sectors[lo]:
-					lo = i
-			sectors[lo] = 20
+# ══════════════════════════════════════════════════════════
+#  보드 개조
+#
+#  판은 상태가 아니라 mods_own 의 함수다. 살 때마다 GameData.BOARD_BASE 에서
+#  MODS 표 순서대로 다시 굽는다 — 그래서 "먼저 산 개조가 나중 개조를 흔드는가"
+#  라는 물음이 아예 성립하지 않는다. 순서 무관성은 증명이 아니라 구성이다.
+#
+#  바깥과 닿는 곳은 넷뿐이다.
+#    _mod_room(id)   매대에 낼 수 있는가   (_roll_stock · _buy_block · _tip_build)
+#    _apply_mod(id)  산다                  (_buy)
+#    _board_bake()   판을 다시 굽는다       (_new_run · _apply_mod)
+#    sectors / bull_* / trp_* / trp2_* / dbl_*   (_start_round 가 rt_* 로 복사)
+#  이 구획만 지우고 다시 써도 나머지는 영향을 안 받는다.
+# ══════════════════════════════════════════════════════════
 
+# 표 한 줄을 판 한 판에 얹는다. b 와 sec 을 제자리에서 고친다.
+func _mod_step(b: Dictionary, sec: Array, m: Dictionary) -> void:
+	match m.k:
+		"band":
+			# 폭을 주고받는다. 트리플은 중심을 지키고, 더블은 바깥이 판의 끝이라
+			# 안쪽만 민다. 두 증분의 합이 0 이므로 링 총 폭 0.20 이 보존된다.
+			var dt: float = float(m.v[0]) * 0.5
+			b.ti -= dt
+			b.to += dt
+			b.din -= float(m.v[1])
+		"slide":
+			# 절대 좌표가 아니라 din 기준이다. 속살·겉살이 먼저 걸려도 결과가 산다.
+			var w: float = b.to - b.ti
+			b.to = b.din - float(m.v)
+			b.ti = b.to - w
+		"ring":
+			b.t2i = float(m.v[0])
+			b.t2o = float(m.v[1])
+		"bull":
+			# 불은 넓어지고 한복판은 좁아진다. 둘을 같게 두면 25 칸이 사라져
+			# 연속 불이 늘 same 이 되고 외골수·정밀이 터진다 — 그래서 안 붙인다.
+			b.bi = float(m.v[0])
+			b.bo = float(m.v[1])
+		"out":
+			b.dout = float(m.v)
+		"swap":
+			for k in int(m.v):
+				var lo := 0
+				for i in sec.size():
+					if sec[i] < sec[lo]:
+						lo = i
+				sec[lo] = GameData.SECTOR_MAX
+		"odd":
+			# {2k-1, 2k} → 2k-1. 결과로 홀수 열 개가 정확히 두 번씩 남는다.
+			for i in sec.size():
+				if sec[i] % 2 == 0:
+					sec[i] -= 1
+
+
+# 이 개조 목록이면 판이 어떻게 되는가. 사지 않고 물어볼 수 있어야
+# 매대 필터·거절 문구·실제 적용 셋이 같은 답을 쓴다.
+func _board_of(ids: Array) -> Array:
+	var b: Dictionary = GameData.BOARD_BASE.duplicate()
+	var sec: Array = GameData.SECTORS_BASE.duplicate()
+	for m in GameData.MODS:      # 표 순서가 곧 적용 순서다
+		if ids.has(m.id):
+			_mod_step(b, sec, m)
+	return [b, sec]
+
+
+# 판이 성립하는가. 링 순서는 hit_info 의 if 사슬이 전제하는 그것이고,
+# 판값 상한은 조합의 유일한 천장이다 — 개조마다 따로 두지 않는다.
+func _board_ok(b: Dictionary, sec: Array) -> bool:
+	var L := GameData.GEO
+	var e: float = L.eps
+	if b.bi < L.bi_min - e or b.bi > b.bo - L.bull_gap + e:
+		return false
+	if b.bo < L.bo_min - e:
+		return false
+	var inner: float = b.ti
+	if b.t2o > 0.0:
+		if b.t2o - b.t2i < L.band_min - e or b.t2o > b.ti - L.gap + e:
+			return false
+		inner = b.t2i
+	if inner < b.bo + L.gap - e or inner < L.ti_min - e:
+		return false
+	if b.to - b.ti < L.band_min - e or b.to > b.din - L.gap + e:
+		return false
+	if b.dout - b.din < L.band_min - e:
+		return false
+	for v in sec:
+		if v < 1 or v > GameData.SECTOR_MAX:
+			return false
+	return GameData.board_val(b, sec) <= GameData.board_val_max() + e
+
+
+func _board_same(b0: Dictionary, s0: Array, b1: Dictionary, s1: Array) -> bool:
+	for k in b0:
+		if absf(float(b0[k]) - float(b1[k])) > 0.0005:
+			return false
+	return s0 == s1
+
+
+# 매대에 낼 수 있는가. 산 기록 · 배타 짝 · 기하 · 판값 · "정말 바뀌는가" 를
+# 여기 한 곳에서 묻는다. 무효 구매가 생길 자리 자체가 없어지는 것이
+# 이 함수의 존재 이유다. 새 개조를 만들면 여기만 통과시켜라.
+func _mod_room(id: String) -> bool:
+	if mods_own.has(id):
+		return false
+	var m := GameData.mod_of(id)
+	if m.is_empty():
+		return false
+	if m.excl != "" and mods_own.has(m.excl):
+		return false
+	var nx := _board_of(mods_own + [id])
+	if not _board_ok(nx[0], nx[1]):
+		return false
+	var cur := _board_of(mods_own)
+	# 지금 여덟 종으로는 걸리지 않는다(배타 짝이 유일한 상쇄 경로였다).
+	# 남겨 두는 것은 다음 사람이 개조를 늘릴 때의 계약이다.
+	return not _board_same(cur[0], cur[1], nx[0], nx[1])
+
+
+func _apply_mod(id: String) -> void:
+	if not _mod_room(id):
+		return
+	mods_own.append(id)
+	_board_bake()
+
+
+# 판을 굽는다. 개조를 산 뒤와 런 초기화, 두 곳에서만 부른다.
+func _board_bake() -> void:
+	var r := _board_of(mods_own)
+	var b: Dictionary = r[0]
+	sectors = r[1]
+	bull_i = b.bi
+	bull_o = b.bo
+	trp_in = b.ti
+	trp_out = b.to
+	trp2_in = b.t2i
+	trp2_out = b.t2o
+	dbl_in = b.din
+	dbl_out = b.dout
+
+
+func _in_stock(id: String) -> bool:
+	for s in stock:
+		if s.type == "item" and s.d.id == id:
+			return true
+	return false
 
 func _reroll() -> void:
 	_hand_abort()

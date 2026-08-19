@@ -14,6 +14,16 @@ const DARTS_BASE := 6
 # R1은 아이템 없이도 여유 있게 넘도록 45로 두고, 이후 약 1.75배씩 상승.
 const TARGETS := [45, 85, 150, 270, 470, 820, 1450, 2500]
 
+# ── 보드 기하 기본값 ──────────────────────────────────────
+#  판의 출처는 여기 하나다. game.gd 의 _new_run 은 리터럴을 쓰지 않는다.
+const SECTORS_BASE := [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5]
+const BOARD_BASE := {
+	"bi": 0.06, "bo": 0.14,      # 한복판(50) · 불(25)
+	"ti": 0.56, "to": 0.66,      # 트리플 띠
+	"t2i": 0.0, "t2o": 0.0,      # 둘째 트리플 띠. 0 이면 없다 — hit_info 의 가지가 통째로 안 돈다
+	"din": 0.90, "dout": 1.00,   # 더블 띠 안쪽 · 판의 끝(= 빗나감 경계)
+}
+
 # ── 경제 ──────────────────────────────────────────────────
 const CLEAR_GOLD := 4          # 클리어 기본 보상
 const GOLD_PER_DART := 1       # 남은 다트 1개당 (적은 다트로 끝낼 유인)
@@ -104,13 +114,105 @@ static func dart_of(id: String) -> Dictionary:
 
 
 # ── 보드 개조 ─────────────────────────────────────────────
-#  아이템이 "어디를 노릴지"를 바꾼다면, 개조는 "얼마나 잘 맞출지"를 바꾼다.
+#  아이템이 hit_info 가 뱉은 결과를 읽는다면, 개조는 hit_info 가 읽는 값을 바꾼다.
+#
+#  이 표가 서 있는 전제 셋. 하나라도 무너지면 무효 구매가 되돌아온다.
+#   ① 한 종류는 런에 한 번만 산다. 누적이 없으니 누적 상한도 없다.
+#      TRP_BAND_MAX 따위를 다시 만들지 마라 — 잡을 것이 없다.
+#   ② 판은 저장하지 않는다. 살 때마다 BOARD_BASE 에서 이 표 순서대로 다시
+#      굽는다(game.gd _board_of). 그래서 "사는 순서가 판을 바꾸는가" 라는
+#      물음이 성립하지 않는다. 증명이 아니라 구성이다.
+#   ③ 조합의 천장은 개조마다가 아니라 board_val() 한 곳에 있다. 판값이 기본
+#      판의 VAL_MAX_MUL 배를 넘기는 개조는 매대에 아예 안 뜬다.
+#
+#  k = 효과 축. game.gd _mod_step 의 match 가 읽는 유일한 열쇠다.
+#  새 축을 만들려면 여기 한 줄과 저기 한 가지를 같이 늘린다. 그 둘이 접점 전부다.
+#    band   링 폭 주고받기  v = [트리플 폭 증분, 더블 폭 증분]   합이 0 이다
+#    slide  트리플 띠 이동   v = 더블 안쪽에서 띄울 간격 (절대 좌표가 아니다)
+#    ring   트리플 띠 추가   v = [안, 밖]
+#    bull   불 이중 구조     v = [한복판, 불]
+#    out    판 바깥 경계     v = 새 dbl_out
+#    swap   작은 칸 올리기   v = 올릴 칸 수 (SECTOR_MAX 로 올린다)
+#    odd    짝수 칸 내리기   v = 안 씀
+#  excl = 같이 못 사는 짝. 서로를 정확히 되돌리는 한 쌍에만 쓴다.
+#
+#  ※ 칸 값은 절대 SECTOR_MAX(20) 를 넘기지 마라. check("bull") 이
+#     sector >= 25 라, 25 짜리 칸이 생기면 그냥 칸이 불로 판정되고
+#     명중왕이 오발한다. odd/even(sector < 25) 도 같이 죽는다.
 const MODS := [
-	{"id": "trpw", "n": "트리플 확장", "d": "트리플 링 폭 +60%", "cost": 8},
-	{"id": "dblw", "n": "더블 확장", "d": "더블 링 폭 +60%", "cost": 8},
-	{"id": "bulw", "n": "불 확장", "d": "불스아이 반경 +70%", "cost": 10},
-	{"id": "sw20", "n": "20 복제", "d": "가장 작은 섹터를 20으로", "cost": 9},
+	{"id": "soks", "n": "속살", "d": "트리플 띠 +0.06 · 더블 띠 −0.06",
+		"k": "band", "v": [0.06, -0.06], "excl": "guts", "cost": 9},
+	{"id": "guts", "n": "겉살", "d": "더블 띠 +0.06 · 트리플 띠 −0.06",
+		"k": "band", "v": [-0.06, 0.06], "excl": "soks", "cost": 6},
+	{"id": "byer", "n": "벼랑", "d": "트리플 띠가 더블 바로 안쪽으로",
+		"k": "slide", "v": 0.03, "excl": "", "cost": 7},
+	{"id": "arst", "n": "아랫목", "d": "안쪽에 트리플 띠 하나 더",
+		"k": "ring", "v": [0.38, 0.46], "excl": "", "cost": 9},
+	{"id": "mung", "n": "멍석", "d": "불 +0.06 · 한복판 −0.02",
+		"k": "bull", "v": [0.04, 0.20], "excl": "", "cost": 8},
+	{"id": "panb", "n": "판벌이", "d": "판이 커진다 — 빗나감이 준다",
+		"k": "out", "v": 1.10, "excl": "", "cost": 12},
+	{"id": "pang", "n": "판갈이", "d": "가장 작은 세 칸이 20이 된다",
+		"k": "swap", "v": 3, "excl": "", "cost": 9},
+	{"id": "jjkp", "n": "짝패", "d": "칸마다 짝이 생긴다 · 짝수 칸 −1",
+		"k": "odd", "v": 0, "excl": "", "cost": 6},
 ]
+
+#  판이 성립하기 위한 순서 규칙. 밸런스 상한이 아니라 hit_info 의 if 사슬이
+#  전제하는 순서 그 자체다 — 이걸 통과하면 50/25/배수3/배수2 판정이 안 깨진다.
+#    bi <= bo < t2i < t2o < ti < to < din < dout
+const GEO := {
+	"bi_min": 0.02,     # 한복판 최소 반경
+	"bull_gap": 0.02,   # 25 띠의 최소 폭. 0 이면 25 칸이 사라져 외골수·정밀이 흔들린다
+	"bo_min": 0.08,
+	"ti_min": 0.30,     # 띠가 판 한복판까지 기어들어오지 않게
+	"band_min": 0.02,   # 링의 최소 폭
+	"gap": 0.03,        # 띠와 띠 사이 단색의 최소 폭
+	"eps": 0.0005,      # 0.56 - 0.03 != 0.53 인 부동소수 오차를 흡수한다
+}
+
+const SECTOR_MAX := 20      # 위 ※ 주석 참조. 25 를 넘기면 안 되는 것이 아니라 20 을 넘기면 안 된다
+
+#  판값 — 균등 조준 다트당 기대 점수(섹터 실제 평균 기준). 기하와 섹터를
+#  한 저울에 올리는 유일한 숫자다. 개조가 슬롯을 안 먹는 대신 이것이 슬롯이다.
+#  기본 판 15.431 → 상한 23.147. 지금 여덟 종에서 이 상한이 눈에 보이는 곳은
+#  딱 하나 — 판벌이와 판갈이(둘 다 빌드를 안 가리는 카드)를 함께 못 산다.
+const VAL_W := {"bull_i": 50.0, "bull_o": 25.0, "trp": 3.0, "dbl": 2.0, "plain": 1.0}
+const VAL_MAX_MUL := 1.50
+
+
+static func mod_of(id: String) -> Dictionary:
+	for m in MODS:
+		if m.id == id:
+			return m
+	return {}
+
+
+static func board_val(b: Dictionary, sec: Array) -> float:
+	var a_trp: float = b.to * b.to - b.ti * b.ti
+	if b.t2o > 0.0:
+		a_trp += b.t2o * b.t2o - b.t2i * b.t2i
+	var a_dbl: float = b.dout * b.dout - b.din * b.din
+	var a_pln: float = (b.dout * b.dout - b.bo * b.bo) - a_trp - a_dbl
+	var s := 0.0
+	for v in sec:
+		s += float(v)
+	s /= float(sec.size())
+	return VAL_W.bull_i * b.bi * b.bi \
+			+ VAL_W.bull_o * (b.bo * b.bo - b.bi * b.bi) \
+			+ s * (VAL_W.trp * a_trp + VAL_W.dbl * a_dbl + VAL_W.plain * a_pln)
+
+
+static func board_val_max() -> float:
+	return board_val(BOARD_BASE, SECTORS_BASE) * VAL_MAX_MUL
+
+
+# ── 삭제 ──────────────────────────────────────────────────
+#  const TRP_BAND_MAX := 0.24
+#  const DBL_BAND_MAX := 0.22
+#  const BULL_O_MAX   := 0.30
+#  누적 구매가 없어져 상한이 잡을 것이 없다. 남겨 두면 다음 사람이
+#  "개조가 쌓인다" 는 거짓 전제를 읽는다.
 
 # ── 스테이지 제약 ─────────────────────────────────────────
 #  높은 등급의 판을 고르면 이 중에서 무작위로 붙는다.
@@ -133,12 +235,6 @@ const STAGES := [
 	{"id": "brutal", "n": "극한", "sub": "제약 2개 · 목표 +25%",
 		"mods": 2, "mul": 1.25, "gold": 10, "item": true},
 ]
-
-# 개조 누적 한계 (링이 서로 잡아먹지 않도록)
-const TRP_BAND_MAX := 0.24
-const DBL_BAND_MAX := 0.22
-const BULL_O_MAX := 0.30
-
 
 # ── 조건 판정 ─────────────────────────────────────────────
 static func check(c: String, x: Dictionary) -> bool:
