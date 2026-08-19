@@ -27,7 +27,7 @@ const DBL_OUT := 1.00
 #  줄을 지우고 _hud_draw() 의 호출 한 줄을 지우면 그 판만 사라진다.
 #
 #  주의 — 화면 좌표가 여기에만 있는 것이 아니다. 나머지 소유자는 이렇다.
-#    _stage_rect / _stock_rect / _mag_rect / _reroll_rect / _next_rect
+#    _stage_rect / _obj_box / _mag_rect / _reroll_rect / _next_rect
 #    PANEL · _panel_rect · _slot_rect        (칩 랙)
 #    card_pos                                 (점수 카드)
 #    _draw_hint 의 341 · 348 · 356            (하단 세 줄)
@@ -176,6 +176,7 @@ var beep_gap := 0.07
 
 func _ready() -> void:
 	_autoplay = OS.get_cmdline_user_args().has("autoplay")
+	drop_fast = _autoplay          # 헤드리스는 낙하를 안 기다린다
 	if _autoplay:
 		# 검증 실행에서만 전 구간을 빠르게 통과시킨다 (실제 기본값은 위 선언부)
 		gauge_speed = 2.2
@@ -397,6 +398,10 @@ func _roll_stock() -> void:
 	for i in GameData.SHOP_DARTS:
 		var dd: Dictionary = darts_pool[i]
 		stock.append({"type": "dart", "d": dd, "cost": dd.cost, "sold": false})
+
+	# 딜러가 판을 쓸고 다시 던진다. 리롤이 배치를 안 바꾸면 낙하가 배치를
+	# 결정한다는 전제 자체가 거짓말이 된다.
+	_drop_roll()
 
 
 func _deny() -> void:
@@ -663,6 +668,7 @@ func _process(d: float) -> void:
 	card_p = clampf(card_p + card_v * d, -0.35, 1.35)
 
 	_panel_update(d)
+	_drop_update(d)
 
 	match state:
 		S.AIM_V:
@@ -788,14 +794,22 @@ func _click(m: Vector2) -> void:
 		S.SHOP:
 			if _sell_hit(m):
 				return
-			for i in stock.size():
-				if _stock_rect(i).has_point(m):
-					_buy(i)
-					return
+			# 버튼이 먼저다 — 이 둘만은 낙하와 무관하게 자리가 고정이다.
 			if _reroll_rect().has_point(m):
 				_reroll()
-			elif _next_rect().has_point(m):
+				return
+			if _next_rect().has_point(m):
 				_next_round()
+				return
+			if _drop_busy():
+				# 커서 밑에서 물건이 움직이는 동안 구매가 성립하면 "누른 것" 과
+				# "산 것" 이 갈린다. 첫 클릭은 "지금 세운다" 로만 쓴다.
+				_drop_settle()
+				beep(330.0, 0.05, 0.10)
+				return
+			var hi := _shop_hit(m)
+			if hi >= 0:
+				_buy(hi)
 		S.OVER:
 			_new_run()
 
@@ -1074,10 +1088,6 @@ func pop(p: Vector2, txt: String, c: Color, sz: int, life: float) -> void:
 
 func _stage_rect(i: int) -> Rect2:
 	return Rect2(Vector2(32.0 + i * 196.0, 112.0), Vector2(176.0, 152.0))
-
-
-func _stock_rect(i: int) -> Rect2:
-	return Rect2(Vector2(16.0 + i * 154.0, 104.0), Vector2(146.0, 132.0))
 
 
 func _mag_rect(i: int) -> Rect2:
@@ -1776,51 +1786,20 @@ const C_WOOD := Color("3a2a24")
 
 const TBL := {
 	# ── 시점 ──────────────────────────────────────────
-	"flat": 0.788,       # sin 52°
-	"tall": 0.616,       # cos 52°
+	"flat": 0.788,       # sin 52°  — 면에 누운 것의 y 압축. w 에만 곱한다
+	"tall": 0.616,       # cos 52°  — 면에서 선 것의 y 압축. h 에만 곱한다
 
 	# ── 판 ────────────────────────────────────────────
 	"fy": 80.0,          # 펠트 far 모서리. 상시 HUD 하단 66 에서 14px
 	"ny": 244.0,         # 펠트 near 모서리. 레일 6px 뒤가 기존 버튼 y=250
 
-	# ── 베팅 자리 ────────────────────────────────────
-	"ax": [112.0, 250.0, 390.0, 528.0],
-	"ay": [160.0, 210.0, 210.0, 160.0],   # 바깥이 딜러 쪽. 가운데가 처진 호.
-	"spot_r": 34.0,      # 인쇄 타원 rx. ry = 34 * flat = 26.8
-	# 히트는 타원이 아니라 이 반폭·반높이의 Rect2 다. 타원으로 두면 x·y 를
-	# 따로 검산한 값이 모서리에서 틀린다 — 두 축이 결합돼 있기 때문이다.
-	# 사각은 축별 검산이 곧 정답이라 _obj_hw/_obj_hh 만으로 증명된다.
-	# 인접 자리 사이에 62px 의 맨 펠트가 있어 넷은 서로 안 만난다.
-	"hw": 38.0, "hh": 31.0,
-
 	# ── 물건 ─────────────────────────────────────────
 	"chip_r": 19.0,      # 38 x 29.9 타원. 랙 칩은 30 x 30 정원이다 (일부러 다르다)
-	"chip_t": 4.5,       # 옆면 = 4.5 * tall = 2.77px. 지름 대비 0.118 —
-	                     # 실물(0.085)의 1.40배. PANEL.lift 2.6 과 같은 정도의 과장.
+	"chip_t": 4.5,       # 옆면 = 4.5 * tall = 2.77px
 	"mod_r": 19.0,       # 캐비닛 실폭 2r+6 = 44, 화면 높이 2*r*flat+6 = 35.9
-	"dart_l": 24.0,      # 반길이. 최대 도달은 dl 이 아니라 dl+8.5 다
-	                     # ("mag" 의 자기장 호가 tip+4 에 반지름 4.5)
-	"dart_psi": 0.6,     # 방위각 한계(rad). 넘으면 화면 길이가 짧아져 뭉툭해진다
-
-	# ── 흩뿌림 ───────────────────────────────────────
-	# 상한이 아니라 목표치다. 실제 값은 자리에서 물건 반폭을 뺀 만큼으로
-	# 자동으로 눌린다(_drop_roll). 물건이 자리 밖으로 새는 것이 불가능하다.
-	#   칩 ±8/±8 · 개조 ±8/±8 · 다트 ±5.5/±8
-	"jit": 8.0,
-
-	# ── 낙하 ─────────────────────────────────────────
-	# 화면 밖에서 안 던진다 — 위 66px 이 상시 HUD 라 하늘이 14px 뿐이고,
-	# 거기서 던지면 낙하의 대부분이 판 뒤에서 일어난다. 물건은 펠트의 far
-	# 모서리에서 나온다. 낙하 82 / 132px, 최대 10.1px/프레임 (칩 세로
-	# 실루엣 32.7px 의 1/3) — 고스트 없이 궤적이 이어진다.
-	#   i0 0.548 · i1 0.853 · i2 0.698 · i3 0.706  →  최장 0.853초
-	"y0": 78.0, "g": 1400.0, "stag": 0.08,
-	"e_item": 0.30, "e_mod": 0.12, "e_dart": 0.18,
-	"rest_v": 45.0, "max_d": 0.033, "spin": 7.0,
+	"dart_l": 24.0,      # 반길이. 최대 도달은 dl+8.5 ("mag" 자기장 호)
 	"light": Vector2(0.447, 0.894),   # 기존 그림자 벡터 (1.5,3.0) 의 정규화
 }
-
-var drop := []      # [{t,h,h0,v,rot,rv,psi,jx,jy,sq,sv,rest}]
 
 
 func _table_draw() -> void:
@@ -1853,7 +1832,7 @@ func _table_draw() -> void:
 			"칩 5개까지    ·    다트는 표준과 교환    ·    개조는 런 끝까지",
 			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 10, Color(ink, 0.85))
 
-	# 물건은 3단계에서 여기에 그린다 (_spot_draw / _goods_draw / _bill_draw).
+	_goods_draw()
 
 	# 덮개 — 물건은 펠트 far 모서리(y=78)에서 나온다. 그 위로 삐져나온 부분을
 	# 먼 쪽 레일이 덮는다. 클리핑 대신 불투명 사각 하나다. 상시 HUD 는
@@ -1866,6 +1845,7 @@ func _table_draw() -> void:
 	draw_rect(Rect2(0.0, TBL.ny, VIEW.x, 2.0), C_WOOD.lightened(0.24))
 	draw_rect(Rect2(0.0, TBL.ny + 6.0, VIEW.x, VIEW.y - TBL.ny - 6.0),
 			C_WOOD.darkened(0.35))
+	_bill_draw()
 
 
 # 타원 원반. 볼록이라 한 폴리곤으로 넘겨도 안전하다.
@@ -1910,58 +1890,653 @@ func _e_ring_r(c: Vector2, rx: float, ry: float, k0: float, k1: float,
 				TAU * float(q) * 0.25, TAU * float(q + 1) * 0.25, 6), col)
 
 
-func _spot_c(i: int) -> Vector2:
-	return Vector2(TBL.ax[i], TBL.ay[i])
+# ══════════════════════════════════════════════════════════
+#  낙하 물리  (면 좌표계)
+# ──────────────────────────────────────────────────────────
+#  물리는 테이블 면 위의 2D 다. 화면은 그것을 52° 로 눌러 그린 그림자일 뿐이다.
+#    면 좌표   u 가로(화면 x 와 1:1) · w 깊이 · h 면에서 뜬 높이  ← 물리는 이것만 안다
+#    화면 좌표 x · y                                            ← 그리기·히트만 안다
+#  다리는 _p2s / _p2g 둘뿐이다. TBL.flat / TBL.tall 이 곱해지는 곳은 그 둘과
+#  _dart_e · _obj_box · _obj_shape · _obj_shadow · _chip_flat 뿐이다. grep 으로 검산된다.
+#  역변환(_s2p)은 만들지 않는다 — 화면 y 하나에 w 와 h 가 섞여 있어 유일하지 않다.
+#  그래서 히트는 마우스를 면으로 보내지 않고 물건을 화면으로 보낸다.
+#
+#  수치는 이 표 하나다. 주석의 실측값은 이 코드를 그대로 옮긴 검증기로 1500롤
+#  돌려 잰 것이다 (매물 4개 · 고정 서브스텝 1/160).
+# ══════════════════════════════════════════════════════════
+const DROP := {
+	# ── 트레이 (면 좌표) ─────────────────────────────
+	#  u 는 물체 화면 반폭(hw)을 뺀 값이 중심 한계. w 는 중심 기준.
+	#  w_hi 165 를 정한 것은 레일이 아니라 가격판이다 — 지면 y = 80+165*0.788 = 210,
+	#  가격 baseline 240, 글자 바닥 242, 레일 244. 물건 자체는 훨씬 위에서 멈춘다.
+	#  w_lo 52 는 펠트 인쇄 문구(글자 y[88,98]) 아래 4px. 실측 최상단 108.2.
+	"u_lo": 14.0, "u_hi": 626.0, "w_lo": 52.0, "w_hi": 165.0,
+	"lane": 0.55,        # 출발 u 의 레인 혼합비. 0=난장 1=정렬. 구석 몰림 손잡이
+
+	# ── 던지기 (먼 레일 뒤 슈트에서 앞으로 던진다) ──
+	#  h0 는 화면으로 62~74px. w0=-10 이라 출발점 화면 y 는 -2~10 — 덮개와 HUD 뒤다.
+	#  물건은 낙하 후반(y>80)에 레일 밑에서 튀어나온다. 착지 w 실측 p50 79.
+	"w0": -10.0, "h0_lo": 100.0, "h0_hi": 120.0,
+	"vw_lo": 160.0, "vw_hi": 250.0, "vu_amp": 36.0, "vh_hi": 40.0,
+	"om_amp": 7.0, "stag": 0.08,
+
+	# ── 적분 (반음시 오일러 · 고정 서브스텝) ────────
+	#  sub 은 터널링 때문이 아니다 — 실측 최대 상대변위가 1/160 에서 1.45px 이고
+	#  가장 작은 상호작용 현이 2(19+9)=56px 이라 1/60 이어도 안 뚫린다.
+	#  sub 이 실제로 사는 이유는 바닥 관통 깊이다: |vh| 최대 575 에서
+	#  1/160 은 3.6면px(화면 2.2), 1/60 은 9.6면px(화면 5.9) — 반발이 펠트 위
+	#  공중에서 일어나기 시작한다.
+	"g": 1400.0, "sub": 0.00625, "max_d": 0.033, "sub_max": 8,
+
+	# ── 반발 · 마찰 ──────────────────────────────────
+	"e_item": 0.34, "e_mod": 0.16, "e_dart": 0.24,
+	"e_wall": 0.30, "e_pair": 0.30, "mu_b": 0.22,
+	"a_fric": 520.0,     # 쿨롱(등감속). 지수감쇠로 두면 정착이 증명 안 된다
+	"a_spin": 30.0, "inv_i": 0.010, "om_cap": 10.0, "v_wake": 10.0,
+	"h_touch": 0.5, "v_land": 42.0,
+
+	# ── 정착 ─────────────────────────────────────────
+	#  증명 상한 2.15초. 실측 p50 1.23 · 최대 1.37 (1500롤, t_max 발동 0회).
+	#  마지막 가시 움직임과 drop_awake=false 사이의 죽은 꼬리는 최대 0.20초다.
+	"v_sleep": 6.0, "om_sleep": 0.35, "t_sleep": 0.12,
+	"t_max": 2.6, "relax": 3, "relax_hard": 12,
+
+	# ── 면 위 충돌 원 ────────────────────────────────
+	#  칩 원 1개(실루엣과 정확히 일치) · 개조 원 1개 · 다트 원 3개(캡슐).
+	#  다트에 가운데 원이 있어 칩-다트 최소 중심거리가 방위와 무관하게 28 이다.
+	#  이 28 이 가격판 겹침 불가 정리의 전제다 (아래 _bill_draw 주석).
+	"r_item": 19.0, "r_mod": 21.0, "r_dart": 9.0, "d_dart": 16.0,
+
+	# ── 화면 반폭 (좌우 벽 전용 — 충돌 반지름과 다르다) ──
+	#  벽은 "그려지는 것" 을 가두고 충돌은 "형상" 이라 두 일에 각각 맞는 값이다.
+	"hw_item": 19.0, "hw_mod": 22.0, "hw_dart": 37.5,
+
+	# ── 연출 (전부 그리기 전용. 물리에 한 방울도 안 흘린다) ──
+	"lift_hov": 6.0, "lift_k": 260.0, "lift_c": 22.0,
+	"wob_k": 150.0, "wob_c": 11.0,
+	"sold_t": 0.34, "dim_off": 0.30, "sh_a": 0.34, "sh_grow": 0.030,
+	"bill_dy": 30.0,
+}
+
+var drop := []          # 물체 하나 = 사전 하나. stock 과 인덱스를 공유한다.
+var drop_t := 0.0       # 이번 낙하의 경과
+var drop_acc := 0.0     # 서브스텝 누적기 (나머지를 이월해 프레임률 독립을 만든다)
+var drop_awake := false
+var drop_fast := false  # 헤드리스 — 낙하를 안 기다리고 즉시 감는다
 
 
-# 판정. 눈에 보이는 인쇄 타원(68x53.6)보다 4px 씩 크다 — 흩뿌려진 물건을
-# 남김없이 덮으려는 것이고, 커지는 방향이라 손해가 없다.
-func _spot_rect(i: int) -> Rect2:
-	return Rect2(_spot_c(i) - Vector2(TBL.hw, TBL.hh),
-			Vector2(TBL.hw * 2.0, TBL.hh * 2.0))
+# ══ 투영 — flat/tall 이 곱해지는 원점 ══
+func _p2s(u: float, w: float, h: float) -> Vector2:
+	return Vector2(u, TBL.fy + w * TBL.flat - h * TBL.tall)
 
 
-# 툴팁 앵커. 판정이 아니라 인쇄 타원에 붙인다 — 판은 사람이 보는 것에
-# 붙어야 하고, 그쪽이 4px 위라 아래 여유도 그만큼 는다.
-# 검산: 가까운 줄 하단 236.8 → 판 시작 242.8. 4줄 323.8 / 6줄 349.8 (한계 356).
-# 매대 툴팁 6줄이 이 배치의 계약이다.
-func _spot_mark(i: int) -> Rect2:
-	var c := _spot_c(i)
-	var ry: float = TBL.spot_r * TBL.flat
-	return Rect2(c - Vector2(TBL.spot_r, ry), Vector2(TBL.spot_r * 2.0, ry * 2.0))
+func _p2g(w: float) -> float:
+	return TBL.fy + w * TBL.flat
 
 
-# 물건의 화면 반폭·반높이. 흩뿌림 한계와 그림자 크기가 여기서 나온다.
-# 새 매물 종류를 더하면 여기만 고치면 자리 밖으로 새지 않는다.
-func _obj_hw(i: int) -> float:
-	if i >= stock.size():
-		return TBL.chip_r
+# 면 위 방위각 psi → 화면 방향. 벡터 길이가 곧 전경축소율이다 (|e| ∈ [0.788, 1.0]).
+# 정사영이라 근사가 아니다. 최소가 0.788 배라 다트가 점으로 뭉개지지 않는다.
+func _dart_e(it: Dictionary) -> Vector2:
+	return Vector2(cos(it.psi), sin(it.psi) * TBL.flat)
+
+
+# ══ 던지기 — 난수를 쓰는 유일한 곳 (물체당 7뽑기) ══
+func _drop_roll() -> void:
+	drop.clear()
+	drop_t = 0.0
+	drop_acc = 0.0
+	var n := stock.size()
+	for i in n:
+		var r: float = DROP.r_item
+		var nb := 1
+		var e: float = DROP.e_item
+		var hw: float = DROP.hw_item
+		match stock[i].type:
+			"mod":
+				r = DROP.r_mod
+				e = DROP.e_mod
+				hw = DROP.hw_mod
+			"dart":
+				r = DROP.r_dart
+				nb = 3
+				e = DROP.e_dart
+				hw = DROP.hw_dart
+		# 완전 난수면 넷 중 둘이 같은 지점에 쏟아지는 판이 잦고, 그 둘이 같이
+		# 벽으로 밀린다. 레인은 출발만 벌려 둘 뿐 정착 위치를 통제하지 않는다.
+		var lane: float = lerpf(DROP.u_lo + 90.0, DROP.u_hi - 90.0,
+				(float(i) + 0.5) / float(n))
+		var u0 := randf_range(DROP.u_lo + hw, DROP.u_hi - hw)
+		drop.append({
+			"u": lerpf(u0, lane, DROP.lane), "w": DROP.w0,
+			"h": randf_range(DROP.h0_lo, DROP.h0_hi),
+			"vu": randf_range(-DROP.vu_amp, DROP.vu_amp),
+			"vw": randf_range(DROP.vw_lo, DROP.vw_hi),
+			"vh": randf_range(0.0, DROP.vh_hi),
+			"psi": randf() * TAU,
+			"om": randf_range(-DROP.om_amp, DROP.om_amp),
+			"r": r, "nb": nb, "e": e, "hw": hw, "t0": float(i) * DROP.stag,
+			"air": true, "into": false, "sleep": false, "rest": 0.0,
+			"wob": 0.0, "wv": 0.0, "lift": 0.0, "lv": 0.0,
+			"sold": 0.0, "to": Vector2.ZERO, "gone": false,
+		})
+	drop_awake = true
+	if drop_fast:
+		_drop_settle()
+
+
+func _drop_busy() -> bool:
+	return drop_awake
+
+
+func _drop_update(d: float) -> void:
+	if state != S.SHOP:
+		return
+	var dd: float = minf(d, DROP.max_d)
+	if drop_awake:
+		# 나머지를 버리지 않고 이월한다. 모든 스텝이 정확히 sub 이라 프레임률이
+		# 배치를 못 흔든다 — 60/144/30/75fps 와 즉시정착의 최대 위치차 0.000000px.
+		drop_acc += dd
+		var n := 0
+		while drop_acc >= DROP.sub and n < DROP.sub_max:
+			drop_acc -= DROP.sub
+			drop_t += DROP.sub
+			_drop_step(DROP.sub)
+			n += 1
+		if drop_t > DROP.t_max and drop_awake:
+			_drop_settle()      # 증명(2.15초) 밖이다. 이유를 안 캐고 못 박는다
+	_drop_extras(dd)
+
+
+func _drop_step(dt: float) -> void:
+	for it in drop:
+		if it.gone or it.sleep or it.sold > 0.0 or drop_t < it.t0:
+			continue
+		if it.air:
+			it.vh -= DROP.g * dt
+			it.h += it.vh * dt
+		it.u += it.vu * dt
+		it.w += it.vw * dt
+		it.psi += it.om * dt
+
+		if it.h <= 0.0:
+			it.h = 0.0
+			# 반발 "후" 속도로 가른다. 충돌 속도로 가르면 e=0.16 짜리 개조가
+			# 0.02px 짜리 안 보이는 호를 한 번 더 그리고 호 개수 증명이 틀어진다.
+			var rv: float = -it.vh * it.e
+			if rv >= DROP.v_land:
+				it.vh = rv
+				# 수평이 주는 유일한 이산 지점. 그래서 수평 속력이 던진 값 위로
+				# 스스로 오르는 경로가 물체 간 교환 말고는 없다.
+				it.vu *= 1.0 - DROP.mu_b
+				it.vw *= 1.0 - DROP.mu_b
+				it.om *= 1.0 - DROP.mu_b
+				_drop_wob(it, rv)
+			else:
+				# air 플래그로 가른다. |vh| 임계로 가르면 그 임계가 g*sub(8.75)와
+				# 결합해 sub 을 바꾸는 순간 조용히 틀린다.
+				if it.air:
+					_drop_wob(it, 26.0)
+				it.air = false
+				it.vh = 0.0
+
+		if it.h <= DROP.h_touch:
+			# 쿨롱 등감속. 유한 시간에 정확히 0 이 된다 — 정착 증명의 열쇠다.
+			var sp := sqrt(it.vu * it.vu + it.vw * it.vw)
+			if sp > 0.0001:
+				var k: float = maxf(sp - DROP.a_fric * dt, 0.0) / sp
+				it.vu *= k
+				it.vw *= k
+			it.om = signf(it.om) * maxf(absf(it.om) - DROP.a_spin * dt, 0.0)
+
+		_drop_walls(it)
+
+	for k in int(DROP.relax):
+		_drop_pairs()
+
+	var was := drop_awake
+	drop_awake = false
+	for it in drop:
+		if it.gone or it.sold > 0.0:
+			continue
+		if drop_t < it.t0:
+			drop_awake = true
+			continue
+		if it.sleep:
+			continue
+		var still: bool = it.h <= 0.01 \
+				and absf(it.vu) + absf(it.vw) + absf(it.vh) < DROP.v_sleep \
+				and absf(it.om) < DROP.om_sleep
+		it.rest = (it.rest + dt) if still else 0.0
+		if it.rest >= DROP.t_sleep:
+			it.sleep = true
+			it.vu = 0.0
+			it.vw = 0.0
+			it.vh = 0.0
+			it.om = 0.0
+		else:
+			drop_awake = true
+	if was and not drop_awake:
+		_drop_lock()
+
+
+# 착지 흔들림 — 그리기 전용 스프링에 한 대 먹인다. 물리로 안 돌아온다.
+func _drop_wob(it: Dictionary, v: float) -> void:
+	it.wv = maxf(it.wv, clampf(absf(v) / 260.0, 0.0, 1.0))
+
+
+# 스윕이 아니라 위치 클램프다 — 후조건이라 벽 터널링이 구조적으로 불가능하다.
+func _drop_walls(it: Dictionary) -> void:
+	var lo: float = DROP.u_lo + it.hw
+	var hi: float = DROP.u_hi - it.hw
+	if it.u < lo:
+		it.u = lo
+		it.vu = absf(it.vu) * DROP.e_wall
+	elif it.u > hi:
+		it.u = hi
+		it.vu = -absf(it.vu) * DROP.e_wall
+	# 먼 벽은 일방통행이다. w0 = -10 (레일 뒤) 에서 던지므로 진입 전에는 안 건다.
+	if not it.into:
+		if it.w >= DROP.w_lo:
+			it.into = true
+	elif it.w < DROP.w_lo:
+		it.w = DROP.w_lo
+		it.vw = absf(it.vw) * DROP.e_wall
+	if it.w > DROP.w_hi:
+		it.w = DROP.w_hi
+		it.vw = -absf(it.vw) * DROP.e_wall
+
+
+# 밀어낸 뒤 위치만 자른다. 속도를 안 건드리는 게 _drop_walls 와의 차이다.
+# 먼 벽은 반드시 into 뒤에만 — 이 조건이 없으면 아직 레일 뒤에 있는 물건이
+# 남과 한 번 닿는 것만으로 트레이 한가운데로 순간이동한다.
+func _drop_clamp(it: Dictionary) -> void:
+	it.u = clampf(it.u, DROP.u_lo + it.hw, DROP.u_hi - it.hw)
+	if it.into:
+		it.w = maxf(it.w, DROP.w_lo)
+	it.w = minf(it.w, DROP.w_hi)
+
+
+# 면 위 충돌 원 k 번의 중심. 다트만 3개(0=꼬리 1=중심 2=촉).
+func _drop_sub(it: Dictionary, k: int) -> Vector2:
+	var c := Vector2(it.u, it.w)
+	if it.nb == 1 or k == 1:
+		return c
+	var dir := Vector2(cos(it.psi), sin(it.psi)) * DROP.d_dart
+	return c + (dir if k == 2 else -dir)
+
+
+func _drop_live(it: Dictionary) -> bool:
+	return not it.gone and it.sold <= 0.0 and drop_t >= it.t0
+
+
+# 4물체 → 쌍 6개 → 원-원 검사 12회. 브로드페이즈를 붙이면 코드만 는다.
+func _drop_pairs() -> void:
+	for a in drop.size():
+		if not _drop_live(drop[a]):
+			continue
+		for b in range(a + 1, drop.size()):
+			if not _drop_live(drop[b]):
+				continue
+			for ia in int(drop[a].nb):
+				for ib in int(drop[b].nb):
+					_drop_pair(drop[a], ia, drop[b], ib)
+
+
+func _drop_pair(A: Dictionary, ia: int, B: Dictionary, ib: int) -> void:
+	var pa := _drop_sub(A, ia)
+	var pb := _drop_sub(B, ib)
+	var dv := pb - pa
+	var dist := dv.length()
+	var sep: float = A.r + B.r
+	if dist >= sep:
+		return
+	var n := (dv / dist) if dist > 0.0001 else Vector2(1.0, 0.0)
+
+	# ① 위치 — 면 안에서만 민다. h 를 안 건드리므로 위치에너지를 못 만든다.
+	#    텔레포트인데도 발산이 불가능한 이유가 이 한 줄이다.
+	var push := n * (sep - dist) * 0.5
+	A.u -= push.x
+	A.w -= push.y
+	B.u += push.x
+	B.w += push.y
+
+	# ② 속도 — 다가오는 중일 때만. 이 조건이 없으면 접촉 상태에서 매 패스
+	#    힘이 들어가 떤다. 등질량이라 이 형태가 곧 운동량 보존이고 e<1 이라
+	#    운동에너지는 항상 준다.
+	var rel := (Vector2(B.vu, B.vw) - Vector2(A.vu, A.vw)).dot(n)
+	if rel < 0.0:
+		var j: float = -(1.0 + DROP.e_pair) * rel * 0.5
+		A.vu -= n.x * j
+		A.vw -= n.y * j
+		B.vu += n.x * j
+		B.vw += n.y * j
+		# ③ 회전은 곁가지다. om 은 그리기와 자기 감쇠 말고 아무 데도 안 먹인다 —
+		#    inv_i 를 틀리게 잡아도 선형 수렴 증명이 안 깨진다. 상한만 못 박는다.
+		var ra := pa - Vector2(A.u, A.w)
+		var rb := pb - Vector2(B.u, B.w)
+		A.om = clampf(A.om - (ra.x * n.y - ra.y * n.x) * j * DROP.inv_i,
+				-DROP.om_cap, DROP.om_cap)
+		B.om = clampf(B.om + (rb.x * n.y - rb.y * n.x) * j * DROP.inv_i,
+				-DROP.om_cap, DROP.om_cap)
+		# 자던 것을 깨운다. 이게 없으면 먼저 선 물건이 못 밀리는 말뚝이 되고
+		# "서로 부딪힌다" 가 절반만 참이 된다. 수렴은 안 깨진다 — 총 운동에너지가
+		# 단조 비증가라 깨움은 재분배일 뿐이다.
+		if rel < -DROP.v_wake:
+			if A.sleep:
+				A.sleep = false
+				A.rest = 0.0
+			if B.sleep:
+				B.sleep = false
+				B.rest = 0.0
+
+	_drop_clamp(A)
+	_drop_clamp(B)
+
+
+# 정착 확정. "겹침 없고 트레이 안" 이 정착의 정의다.
+# 실현가능성: 원 지름 합 166 vs 트레이 폭 580 (3.5배). 데드락이 불가능하다.
+# 실측 — 1500롤 전부 잔여 겹침 0.000px · 트레이 이탈 0.
+func _drop_lock() -> void:
+	for it in drop:
+		it.into = true
+	for k in int(DROP.relax_hard):
+		_drop_pairs()
+	for it in drop:
+		_drop_clamp(it)
+
+
+# 소비자가 둘이다 — 헤드리스(_drop_roll 말미)와 낙하 중 사람의 클릭.
+# 근사가 아니라 같은 _drop_step 을 같은 고정 dt 로 감으므로 결과가 완전히 같다.
+# 실측 최대 199 서브스텝 (예산 424).
+func _drop_settle() -> void:
+	var guard := int(DROP.t_max / DROP.sub) + 8
+	while drop_awake and guard > 0:
+		guard -= 1
+		drop_t += DROP.sub
+		_drop_step(DROP.sub)
+		if drop_t > DROP.t_max:
+			break
+	for it in drop:
+		it.vu = 0.0
+		it.vw = 0.0
+		it.vh = 0.0
+		it.om = 0.0
+		it.h = 0.0
+		it.air = false
+		it.sleep = true
+		it.rest = DROP.t_sleep
+	_drop_lock()
+	drop_awake = false
+	drop_acc = 0.0
+	if _autoplay:
+		_drop_verify()
+
+
+# 물리와 무관한 것만. drop_awake 와 상관없이 매 프레임 돈다.
+# tip_spot 은 지난 프레임 값이다(_tip_update 가 _process 끝) — 들어올림 1프레임 지연.
+func _drop_extras(d: float) -> void:
+	var hov: int = tip_spot if tip_a > 0.004 else -1
+	for i in drop.size():
+		var it: Dictionary = drop[i]
+		if it.gone:
+			continue
+		# stock 을 읽는 곳 셋 중 하나. _buy 는 "건드리면 안 됨" 이라 폴링한다.
+		if it.sold <= 0.0 and i < stock.size() and stock[i].sold:
+			it.sold = 0.0001
+			_drop_leave(i)
+		if it.sold > 0.0:
+			it.sold = minf(it.sold + d / DROP.sold_t, 1.0)
+			if it.sold >= 1.0:
+				it.gone = true
+			continue
+		it.wv -= it.wob * DROP.wob_k * d
+		it.wv *= exp(-DROP.wob_c * d)
+		it.wob = clampf(it.wob + it.wv * d, -1.0, 1.0)
+		var tgt: float = DROP.lift_hov if i == hov else 0.0
+		it.lv += (tgt - it.lift) * DROP.lift_k * d
+		it.lv *= exp(-DROP.lift_c * d)
+		it.lift = clampf(it.lift + it.lv * d, -2.0, DROP.lift_hov + 3.0)
+
+
+func _drop_leave(i: int) -> void:
+	var it: Dictionary = drop[i]
+	var p := _p2s(it.u, it.w, it.h)
 	match stock[i].type:
-		"mod": return TBL.mod_r + 3.0                  # 22.0  캐비닛
-		"dart": return TBL.dart_l + 8.5                # 32.5  mag 의 자기장 호까지
-	return TBL.chip_r                                   # 19.0
+		"item":
+			# 랙 칩의 튐 한 번이 "어디로 갔는가" 의 전부다.
+			var si := clampi(owned.size() - 1, 0, GameData.MAX_ITEMS - 1)
+			it.to = _slot_rect(si).get_center()
+			_panel_fire(si)
+		"mod":
+			it.to = p + Vector2(0.0, -30.0)
+			pop(p + Vector2(0.0, -8.0), "보드 개조", C_CHIP.lightened(0.25), 13, 0.9)
+		_:
+			it.to = p + Vector2(0.0, -30.0)
+			pop(p + Vector2(0.0, -8.0), "탄창 교체", C_GREEN.lightened(0.3), 13, 0.9)
 
 
-func _obj_hh(i: int) -> float:
-	if i >= stock.size():
-		return TBL.chip_r * TBL.flat
+# ══════════════════════════════════════════════════════════
+#  히트 — 자리가 아니라 물건을 잡는다
+# ══════════════════════════════════════════════════════════
+
+# 그리기 순서와 히트 순서를 한 배열에서 뽑는다. 따로 만들면 언젠가 갈리고,
+# 갈리는 순간 "보이는 건 앞엣건데 잡히는 건 뒤엣것" 이 되어 못 고치는 버그로 읽힌다.
+func _z_order() -> Array:
+	var z := []
+	for i in mini(drop.size(), stock.size()):
+		if not drop[i].gone:
+			z.append(i)
+	z.sort_custom(func(a, b): return drop[a].w < drop[b].w)
+	return z
+
+
+# 히트 광역검사와 툴팁 앵커. 항상 lift 를 뺀 h 로 만든다 — 판정 사각이
+# 들어올림을 따라가면 커서 끝에 걸린 물체가 60Hz 로 떤다.
+func _obj_box(i: int) -> Rect2:
+	var it: Dictionary = drop[i]
+	var c := _p2s(it.u, it.w, it.h)
 	match stock[i].type:
-		"mod": return TBL.mod_r * TBL.flat + 3.0       # 17.97
-		"dart": return (TBL.dart_l + 8.5) * sin(TBL.dart_psi) * TBL.flat + 5.0
-	return TBL.chip_r * TBL.flat + TBL.chip_t * TBL.tall   # 17.74 (옆면 포함)
+		"mod":
+			var em := Vector2(TBL.mod_r + 3.0, TBL.mod_r * TBL.flat + 3.0)
+			return Rect2(c - em, em * 2.0)
+		"dart":
+			var de := _dart_e(it)
+			var dl: float = TBL.dart_l * de.length() + 8.5
+			var dn := de.normalized()
+			var ed := Vector2(absf(dn.x) * dl + 5.0, absf(dn.y) * dl + 5.0)
+			return Rect2(c - ed, ed * 2.0)
+	var ry: float = TBL.chip_r * TBL.flat + TBL.chip_t * TBL.tall
+	return Rect2(c - Vector2(TBL.chip_r, ry), Vector2(TBL.chip_r * 2.0, ry * 2.0))
 
 
-# 히트는 물건이 아니라 펠트에 인쇄된 자리가 잡는다.
-#   · 자리는 흩뿌림·낙하와 무관하게 고정 — 커서 밑에서 표적이 안 움직인다
-#   · 낙하 중에도 잡힌다 — 연출이 읽기를 막지 않는다
-#   · 타입별 판정이 없다 — 원반이든 막대든 판이든 한 경로
-#   · 표적이 눈에 보인다 — 사각 카드가 없어진 자리를 인쇄 타원이 메운다
-# 네 사각은 x 로 62px 씩 떨어져 있어 겹칠 수 없다. z 순서가 필요 없다.
+func _obj_shape(i: int, m: Vector2) -> bool:
+	var it: Dictionary = drop[i]
+	var c := _p2s(it.u, it.w, it.h)
+	match stock[i].type:
+		"mod":
+			# 52° 정사영에서 면 위 축정렬 사각은 화면에서도 축정렬 사각이다.
+			# 근사가 아니라 공짜로 정확하다.
+			return absf(m.x - c.x) <= TBL.mod_r + 5.0 \
+					and absf(m.y - c.y) <= TBL.mod_r * TBL.flat + 5.0
+		"dart":
+			var de := _dart_e(it)
+			var dl: float = TBL.dart_l * de.length() + 4.0
+			var dn := de.normalized()
+			return _seg_d(m, c - dn * dl, c + dn * dl) <= 7.0
+	var lz: float = TBL.chip_t * TBL.tall * 0.5          # 옆면 슬리버를 덮는다
+	var q := (m - c - Vector2(0.0, lz)) / Vector2(TBL.chip_r + 2.0,
+			TBL.chip_r * TBL.flat + lz + 2.0)
+	return q.length_squared() <= 1.0
+
+
+func _seg_d(p: Vector2, a: Vector2, b: Vector2) -> float:
+	var ab := b - a
+	var l2 := ab.length_squared()
+	if l2 < 0.0001:
+		return p.distance_to(a)
+	return p.distance_to(a + ab * clampf((p - a).dot(ab) / l2, 0.0, 1.0))
+
+
+# 커서 아래 매물. _z_order 를 정확히 거꾸로 훑는다 — 위에 그려진 것이 잡힌다.
+# 박스는 통과했는데 모양이 아니면 다음(아래) 물체로 흘려보낸다. 다트의 빈 박스가
+# 뒤엣 칩을 가로채지 못하는 경로가 이것이다.
+# 실측 — 정착 배치 300판을 1px 격자로 전수 조사해 못 잡는 물체 0/1200,
+# 최소 표적 면적 667px²(다트) · 1158(칩) · 1719(개조).
 func _shop_hit(m: Vector2) -> int:
-	for i in stock.size():
-		if i < TBL.ax.size() and _spot_rect(i).has_point(m):
+	var lz: float = DROP.lift_hov * TBL.tall             # 3.70 — 들린 위치까지 덮는다
+	var z := _z_order()
+	for k in range(z.size() - 1, -1, -1):
+		var i: int = z[k]
+		if drop[i].sold > 0.0:
+			continue
+		if not _obj_box(i).grow_individual(2.0, 2.0 + lz, 2.0, 2.0).has_point(m):
+			continue
+		# 순수 수직 평행이동의 스윕이라 두 점 OR 이 정확한 덮개다 (근사가 아니다)
+		if _obj_shape(i, m) or _obj_shape(i, m + Vector2(0.0, lz)):
 			return i
 	return -1
+
+
+# ══════════════════════════════════════════════════════════
+#  그리기
+# ══════════════════════════════════════════════════════════
+
+# _table_draw 의 "물건은 여기에" 자리 (덮개 앞 — 낙하 중 위로 삐져나온 건 잘린다)
+func _goods_draw() -> void:
+	# 팔려 나간 자리에 남는 코스터 자국. 개수를 보존하고 "여긴 이제 빈 자리" 를 말한다.
+	for i in mini(drop.size(), stock.size()):
+		var g: Dictionary = drop[i]
+		if g.gone:
+			_e_ring_w(Vector2(g.u, _p2g(g.w)), 13.0, 13.0 * TBL.flat, 1.0,
+					C_TABLE.darkened(0.35))
+	var z := _z_order()
+	for i in z:                     # 그림자 먼저 전부 — 어떤 몸통보다도 밑이다
+		_obj_shadow(i)
+	var hov: int = tip_spot if tip_a > 0.004 else -1
+	for i in z:
+		_obj_draw(i, 0.0 if (hov < 0 or hov == i) else DROP.dim_off)
+
+
+# 그림자가 없으면 높이 h 와 깊이 w 가 화면 y 하나로 뭉개져 구분이 안 된다.
+# 장식이 아니라 이 투영의 유일한 깊이 단서다.
+func _obj_shadow(i: int) -> void:
+	var it: Dictionary = drop[i]
+	if it.sold > 0.0:
+		return
+	var hh: float = it.h + it.lift
+	var k: float = 1.0 + hh * DROP.sh_grow
+	var col := Color(0.0, 0.0, 0.0, DROP.sh_a / k)
+	for s in int(it.nb):
+		var sp := _drop_sub(it, s)
+		# 기존 그림자 벡터 (1.5,3.0) = light * 3.35. h=0 에서 정확히 일치한다.
+		var g := Vector2(sp.x, _p2g(sp.y)) + TBL.light * (3.35 + hh * 0.10)
+		draw_colored_polygon(_e_pts(g, it.r * k, it.r * k * TBL.flat, 14), col)
+
+
+func _obj_draw(i: int, dim: float) -> void:
+	var it: Dictionary = drop[i]
+	var s: Dictionary = stock[i]
+	var c := _p2s(it.u, it.w, it.h + it.lift)
+	if it.sold > 0.0:
+		# 팔린 물건은 면을 떠난다 — 화면 좌표로 넘어가는 유일한 지점이다.
+		c = c.lerp(it.to, 1.0 - pow(1.0 - float(it.sold), 3.0))
+		dim = float(it.sold) * 0.55
+	match s.type:
+		"item":
+			_chip_flat(c, s.d, it.psi, dim, it.wob)
+		"mod":
+			_icon_mod(c, TBL.mod_r, s.d.id, dim)
+		_:
+			# sh=false — 내장 그림자는 고정 오프셋이라 낙하 중 하늘을 같이 난다
+			var de := _dart_e(it)
+			_icon_dart(c, TBL.dart_l * de.length(), s.d.id, dim,
+					de.angle() + 1.0304, 1.0 - dim * 0.5, false)
+
+
+# 펠트에 누운 칩. 랙의 draw_chip(정원)은 안 고친다 — 같은 물건의 다른 자세다.
+# _e_ring_w(화면 인셋)와 _e_ring_r(비율)을 섞어 쓰지 않는다.
+func _chip_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: float) -> void:
+	var ti := _chip_ti(it.cost)
+	var t: Dictionary = CHIP_TIERS[ti]
+	var rx: float = TBL.chip_r * (1.0 + wob * 0.05)
+	var ry: float = TBL.chip_r * TBL.flat * (1.0 - wob * 0.12)
+	var body := Color(t.body).darkened(dim)
+	var edge := Color(t.edge).darkened(dim)
+	var sd: float = TBL.chip_t * TBL.tall              # 옆면 2.77px
+	draw_colored_polygon(_e_pts(c + Vector2(0.0, sd), rx, ry), edge.darkened(0.35))
+	draw_colored_polygon(_e_pts(c, rx, ry), edge)
+	draw_colored_polygon(_e_pts(c, rx - 1.5, ry - 1.5), body)
+	var step := TAU / float(CHIP_SPOTS[ti] * 2)
+	for k in CHIP_SPOTS[ti]:
+		var a := rot + float(k) * step * 2.0
+		draw_colored_polygon(_e_band(c, rx, ry, rx * 0.66, ry * 0.66,
+				a - step * 0.42, a + step * 0.42, 3), Color(t.spot).darkened(dim))
+	_e_ring_r(c, rx, ry, 0.55, 0.61, edge.lightened(0.18))
+	if it.get("g", "") != "":
+		_e_ring_w(c, rx, ry, 1.0, C_GOLD.darkened(dim))
+	var val := ("×" + str(it.v)) if it.k == "xmult" else str(it.v)
+	var ink: Color = C_CHIP.lightened(0.5) if it.k == "chip" else C_MULT.lightened(0.45)
+	draw_string(font, c + Vector2(-rx, 4.0), val,
+			HORIZONTAL_ALIGNMENT_CENTER, rx * 2.0, 12, ink.darkened(dim))
+
+
+# _table_draw 의 맨 끝 (덮개·레일 뒤) — 가격은 절대 안 잘려야 한다.
+#
+# 넷이 안 겹치는 근거는 라벨 회피 알고리즘이 아니라 분리 불변식이다.
+#   · 가격판은 지면점 기준 균일 오프셋(bill_dy)이라 화면 y 가 w 의 단조함수다.
+#     → 두 판이 겹치려면 |Δu| < 21.6 이고 |Δw| < 9/0.788 = 11.4,
+#       즉 면 거리 < √(21.6² + 11.4²) = 24.4 여야 한다.
+#   · 분리 솔버가 보장하는 최소 면 거리는 칩-다트 28 · 개조-다트 30 · 칩-칩 38.
+#     24.4 < 28 이므로 겹침이 불가능하다. 실측 1500롤 겹침 0, 최소 y차 16.2px.
+#   · 전제: 가격 문자열이 2자리 이내(bw ≤ 25). 지금 최대 가격은 14 다.
+#     세 자리가 생기면 이 정리부터 다시 세워야 한다.
+func _bill_draw() -> void:
+	for i in mini(drop.size(), stock.size()):
+		var it: Dictionary = drop[i]
+		var s: Dictionary = stock[i]
+		var txt := str(s.cost)
+		var bw := gold_w(txt, 9)
+		var col: Color = C_GOLD if (not s.sold and gold >= s.cost) \
+				else C_DIM.darkened(0.25)
+		draw_gold_at(it.u - bw * 0.5, _p2g(it.w) + DROP.bill_dy, txt, 9, col)
+
+
+# 헤드리스 전용 자가검사. "정착 = 겹침 없고 · 트레이 안이고 · 넷 다 잡힌다" 를
+# 기하 근사가 아니라 _shop_hit 자체로 잰다. 2px 격자라 상점 방문당 26,880 호출 —
+# 오토플레이에서만 돈다. 실측 pen 0.000 · oob 0 · 최소표적 844~1156px².
+func _drop_verify() -> void:
+	var pen := 0.0
+	var oob := 0
+	for a in drop.size():
+		var A: Dictionary = drop[a]
+		var ok: bool = A.h <= 0.01
+		ok = ok and A.u >= DROP.u_lo + A.hw - 0.01 and A.u <= DROP.u_hi - A.hw + 0.01
+		ok = ok and A.w >= DROP.w_lo - 0.01 and A.w <= DROP.w_hi + 0.01
+		if not ok:
+			oob += 1
+		for b in range(a + 1, drop.size()):
+			var B: Dictionary = drop[b]
+			for ia in int(A.nb):
+				for ib in int(B.nb):
+					pen = maxf(pen, A.r + B.r
+							- _drop_sub(A, ia).distance_to(_drop_sub(B, ib)))
+	var area := []
+	area.resize(drop.size())
+	area.fill(0)
+	var y := 84.0
+	while y < 252.0:
+		var x := 1.0
+		while x < 640.0:
+			var hi := _shop_hit(Vector2(x, y))
+			if hi >= 0:
+				area[hi] += 4
+			x += 2.0
+		y += 2.0
+	var mn := 1 << 30
+	for v in area:
+		mn = mini(mn, v)
+	if pen > 0.5 or oob > 0 or mn < 200:
+		push_warning("drop: 정착 불변식 위반 pen=%.2f oob=%d 최소표적=%d" % [pen, oob, mn])
 
 # ══════════════════════════════════════════════════════════
 #  매대 아이콘
@@ -2294,9 +2869,11 @@ func _tip_clear() -> void:
 func _tip_hit(m: Vector2) -> Dictionary:
 	match state:
 		S.SHOP:
-			for i in stock.size():
-				if _stock_rect(i).has_point(m):
-					return {"k": "stock", "i": i}
+			# 날아다니는 동안은 매물 툴팁을 안 띄운다 — 판이 미끄러져 못 읽는다.
+			if not _drop_busy():
+				var hi := _shop_hit(m)
+				if hi >= 0:
+					return {"k": "stock", "i": hi}
 			for i in GameData.MAX_ITEMS:
 				if _slot_rect(i).has_point(m):
 					return {"k": "rack", "i": i}
@@ -2354,7 +2931,8 @@ func _tip_build(hit: Dictionary) -> void:
 				_tip_add("마지막 라운드 — 골드를 쓸 곳이 없다", 9, C_DIM.darkened(0.3))
 		"stock":
 			var s: Dictionary = stock[i]
-			tip_mark = _stock_rect(i)
+			tip_mark = Rect2()      # 칩 랙과 같은 진영 — 사각 테두리 안 두른다
+			tip_spot = i
 			tip_title = s.d.n
 			if s.type == "item":
 				tip_chip = s.d
@@ -2412,8 +2990,8 @@ func _tip_pos(sz: Vector2) -> Vector2:
 	var t := tip_mark
 	if tip_slot >= 0:
 		t = _slot_rect(tip_slot)
-	elif tip_spot >= 0:
-		t = _spot_mark(tip_spot)
+	elif tip_spot >= 0 and tip_spot < drop.size():
+		t = _obj_box(tip_spot)
 	var x: float = clampf(t.get_center().x - sz.x * 0.5, 4.0, VIEW.x - sz.x - 4.0)
 	var y: float = t.end.y + TIP.gap
 	if y + sz.y > VIEW.y - 4.0:
@@ -2615,72 +3193,6 @@ func _draw_shop() -> void:
 		draw_string(font, Vector2(0, 300), "골드가 부족하거나 슬롯이 꽉 찼다",
 				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 11,
 				Color(C_MULT.lightened(0.3), deny_flash))
-	for i in stock.size():
-		var r := _stock_rect(i)
-		var s: Dictionary = stock[i]
-		var can: bool = not s.sold and gold >= s.cost
-		var hov: bool = tip_mark == r and tip_a > 0.004
-		draw_rect(r, C_PANEL.lightened(0.02) if s.sold
-				else C_PANEL.lightened(0.22 if hov else 0.10))
-		var top: Color = C_DIM.darkened(0.5)
-		if not s.sold:
-			top = C_ACC
-			if s.type == "mod":
-				top = C_CHIP.lightened(0.2)
-			elif s.type == "dart":
-				top = C_GREEN.lightened(0.3)
-		draw_rect(Rect2(r.position, Vector2(r.size.x, 3)), top)
-
-		if s.sold:
-			draw_string(font, r.position + Vector2(0, 70), "구매함",
-					HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 14, C_DIM.darkened(0.3))
-			continue
-
-		var kind := "아이템"
-		if s.type == "mod":
-			kind = "보드 개조"
-		elif s.type == "dart":
-			kind = "다트"
-		var dim: float = 0.0 if can else 0.42
-
-		# 머리줄 — 종류는 왼쪽, 가격은 오른쪽. 가격을 여기로 올려야
-		# 아이콘이 들어갈 40px 이 나온다.
-		draw_string(font, r.position + Vector2(8, 15), kind,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 8, C_DIM.darkened(0.1))
-		draw_gold_at(r.end.x - 8.0 - gold_w(str(s.cost), 11), r.position.y + 15.0,
-				str(s.cost), 11, C_GOLD if can else C_DIM.darkened(0.3))
-
-		# 아이콘 띠
-		var ic := r.position + Vector2(73, 39)
-		match s.type:
-			"item":
-				draw_circle(ic + Vector2(1.5, 3.0), 17.0, Color(0.0, 0.0, 0.0, 0.30))
-				draw_item_chip(ic, 17.0, s.d, 0.42, 0.0, dim, 14)
-			"mod":
-				_icon_mod(ic, 15.0, s.d.id, dim)
-			"dart":
-				_icon_dart(ic, 19.0, s.d.id, dim)
-
-		draw_string(font, r.position + Vector2(0, 76), s.d.n,
-				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 14, C_TXT if can else C_DIM)
-		# 설명을 조건/효과 두 줄로 쪼갠다. 한 줄로 두면 폭을 넘겨
-		# draw_string 이 줄바꿈 없이 조용히 잘라낸다.
-		if s.type == "item":
-			draw_string(font, r.position + Vector2(6, 92), GameData.cond_text(s.d.c),
-					HORIZONTAL_ALIGNMENT_CENTER, r.size.x - 12, 10, C_DIM)
-			var ec: Color = C_CHIP.lightened(0.35) if s.d.k == "chip" else C_MULT.lightened(0.3)
-			draw_string(font, r.position + Vector2(6, 107),
-					GameData.eff_text(s.d.k, s.d.v),
-					HORIZONTAL_ALIGNMENT_CENTER, r.size.x - 12, 11, ec.darkened(dim))
-			if s.d.get("g", "") != "":
-				draw_string(font, r.position + Vector2(4, 122),
-						GameData.gold_text(s.d.g, s.d.gv),
-						HORIZONTAL_ALIGNMENT_CENTER, r.size.x - 8, 8,
-						C_GOLD.darkened(0.15 + dim))
-		else:
-			draw_string(font, r.position + Vector2(6, 99), s.d.d,
-					HORIZONTAL_ALIGNMENT_CENTER, r.size.x - 12, 10, C_DIM)
-
 	_btn(_reroll_rect(), "리롤", "무료" if reroll_cost == 0 else "", gold >= reroll_cost)
 	if reroll_cost > 0:
 		var rr := _reroll_rect()
@@ -2689,7 +3201,10 @@ func _draw_shop() -> void:
 	_btn(_next_rect(), "다음 라운드 →", "R%d  목표 %d"
 			% [round_no + 1, GameData.target_of(round_no + 1)], true)
 
-	draw_string(font, Vector2(0, 316), "카드를 눌러 구매    ·    위쪽 칩을 눌러 판매",
+	var tip := "물건을 눌러 구매    ·    위쪽 칩을 눌러 판매"
+	if _drop_busy():
+		tip = "떨어지는 중  —  아무 데나 눌러 바로 세운다"
+	draw_string(font, Vector2(0, 316), tip,
 			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 10, C_DIM.darkened(0.2))
 
 
