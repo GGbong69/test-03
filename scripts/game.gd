@@ -367,6 +367,7 @@ func _open_shop() -> void:
 	# _finish_round 안에서는 지우면 안 된다 — 여기가 유일하게 안전한 지점이다.
 	sealed = -1
 	sell_sel = -1
+	buy_sel = -1
 	_panel_reset()
 	rerolls_used = 0
 	reroll_cost = _reroll_price()
@@ -483,6 +484,7 @@ func _apply_mod(id: String) -> void:
 
 
 func _reroll() -> void:
+	_hand_abort()
 	if gold < reroll_cost:
 		_deny()
 		return
@@ -494,6 +496,7 @@ func _reroll() -> void:
 
 
 func _next_round() -> void:
+	_hand_abort()
 	round_no += 1
 	_open_stage()
 
@@ -512,6 +515,7 @@ func _open_stage() -> void:
 	# 화면의 칩 랙이 지난 라운드 봉인을 그대로 보여준다.
 	sealed = -1
 	sell_sel = -1
+	buy_sel = -1
 	# 극한 무료 아이템은 "고르기 전에 자리가 있었는가" 로 판정한다. 이 스냅샷이
 	# 없으면 [스테이지에서 잉여칩 판매 → 극한 선택 → 무료 칩으로 리필] 이
 	# 골드까지 받으면서 도는 무손실 루프가 된다.
@@ -758,8 +762,15 @@ func _unhandled_input(e: InputEvent) -> void:
 					confirm_hold = maxf(confirm_hold - 0.05, 0.0)
 				KEY_APOSTROPHE:
 					confirm_hold = minf(confirm_hold + 0.05, 1.5)
+				KEY_ESCAPE:
+					if hand_st != H.NONE:
+						_hand_abort()
+					else:
+						buy_sel = -1
 				KEY_SPACE:
-					if state == S.PICK:
+					if hand_st != H.NONE:
+						_hand_abort()
+					elif state == S.PICK:
 						_pick_dart(0)
 					else:
 						_click(Vector2(-1, -1))
@@ -767,8 +778,16 @@ func _unhandled_input(e: InputEvent) -> void:
 
 	if e is InputEventMouseButton:
 		var mb := e as InputEventMouseButton
-		if mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
+		if mb.button_index != MOUSE_BUTTON_LEFT:
+			return
+		if mb.pressed:
+			if _hand_press(mb.position):
+				return                    # 삼킨다 — 탭인지 드래그인지 아직 모른다
 			_click(mb.position)
+		else:
+			_hand_release(mb.position)
+	elif e is InputEventMouseMotion:
+		_hand_motion((e as InputEventMouseMotion).position)
 
 
 func _click(m: Vector2) -> void:
@@ -792,14 +811,23 @@ func _click(m: Vector2) -> void:
 					_pick_stage(i)
 					return
 		S.SHOP:
+			# 랙·판매판이 먼저다. 기존 순서를 그대로 지킨다.
 			if _sell_hit(m):
+				buy_sel = -1            # 펜딩 액션은 언제나 하나다
 				return
 			# 버튼이 먼저다 — 이 둘만은 낙하와 무관하게 자리가 고정이다.
 			if _reroll_rect().has_point(m):
+				_hand_abort()
 				_reroll()
 				return
 			if _next_rect().has_point(m):
+				_hand_abort()
 				_next_round()
+				return
+			# 계산대도 자리가 고정이다. 낙하 검사보다 앞에 둬서 언제 눌러도
+			# 같은 뜻이 되게 한다 (낙하 중엔 buy_sel 이 이미 -1 이라 안내만 뜬다).
+			if PAY.has_point(m):
+				_pay_click()
 				return
 			if _drop_busy():
 				# 커서 밑에서 물건이 움직이는 동안 구매가 성립하면 "누른 것" 과
@@ -809,7 +837,9 @@ func _click(m: Vector2) -> void:
 				return
 			var hi := _shop_hit(m)
 			if hi >= 0:
-				_buy(hi)
+				_shop_tap(hi)           # 1클릭 즉시 구매 → 고르기로 내린다
+			else:
+				buy_sel = -1            # 맨 펠트 = 취소
 		S.OVER:
 			_new_run()
 
@@ -1954,7 +1984,7 @@ const DROP := {
 	# ── 연출 (전부 그리기 전용. 물리에 한 방울도 안 흘린다) ──
 	"lift_hov": 6.0, "lift_k": 260.0, "lift_c": 22.0,
 	"wob_k": 150.0, "wob_c": 11.0,
-	"sold_t": 0.34, "dim_off": 0.30, "sh_a": 0.34, "sh_grow": 0.030,
+	"sold_t": 0.46, "dim_off": 0.30, "sh_a": 0.34, "sh_grow": 0.030,
 	"bill_dy": 30.0,
 }
 
@@ -1982,6 +2012,7 @@ func _dart_e(it: Dictionary) -> Vector2:
 
 # ══ 던지기 — 난수를 쓰는 유일한 곳 (물체당 7뽑기) ══
 func _drop_roll() -> void:
+	_hand_abort()
 	drop.clear()
 	drop_t = 0.0
 	drop_acc = 0.0
@@ -2015,6 +2046,7 @@ func _drop_roll() -> void:
 			"psi": randf() * TAU,
 			"om": randf_range(-DROP.om_amp, DROP.om_amp),
 			"r": r, "nb": nb, "e": e, "hw": hw, "t0": float(i) * DROP.stag,
+			"held": false, "slot": -1, "mark": Vector2.ZERO, "scuff": [],
 			"air": true, "into": false, "sleep": false, "rest": 0.0,
 			"wob": 0.0, "wv": 0.0, "lift": 0.0, "lv": 0.0,
 			"sold": 0.0, "to": Vector2.ZERO, "gone": false,
@@ -2029,6 +2061,7 @@ func _drop_busy() -> bool:
 
 
 func _drop_update(d: float) -> void:
+	_hand_update(d)
 	if state != S.SHOP:
 		return
 	var dd: float = minf(d, DROP.max_d)
@@ -2096,7 +2129,7 @@ func _drop_step(dt: float) -> void:
 	var was := drop_awake
 	drop_awake = false
 	for it in drop:
-		if it.gone or it.sold > 0.0:
+		if it.gone or it.sold > 0.0 or it.held:
 			continue
 		if drop_t < it.t0:
 			drop_awake = true
@@ -2166,7 +2199,7 @@ func _drop_sub(it: Dictionary, k: int) -> Vector2:
 
 
 func _drop_live(it: Dictionary) -> bool:
-	return not it.gone and it.sold <= 0.0 and drop_t >= it.t0
+	return not it.gone and it.sold <= 0.0 and drop_t >= it.t0 and not it.held
 
 
 # 4물체 → 쌍 6개 → 원-원 검사 12회. 브로드페이즈를 붙이면 코드만 는다.
@@ -2242,6 +2275,8 @@ func _drop_lock() -> void:
 	for k in int(DROP.relax_hard):
 		_drop_pairs()
 	for it in drop:
+		if it.held:
+			continue
 		_drop_clamp(it)
 
 
@@ -2249,6 +2284,7 @@ func _drop_lock() -> void:
 # 근사가 아니라 같은 _drop_step 을 같은 고정 dt 로 감으므로 결과가 완전히 같다.
 # 실측 최대 199 서브스텝 (예산 424).
 func _drop_settle() -> void:
+	_hand_abort()
 	var guard := int(DROP.t_max / DROP.sub) + 8
 	while drop_awake and guard > 0:
 		guard -= 1
@@ -2286,13 +2322,17 @@ func _drop_extras(d: float) -> void:
 			_drop_leave(i)
 		if it.sold > 0.0:
 			it.sold = minf(it.sold + d / DROP.sold_t, 1.0)
-			if it.sold >= 1.0:
+			if it.sold >= 1.0 and not it.gone:
 				it.gone = true
+				_drop_arrive(i)
 			continue
 		it.wv -= it.wob * DROP.wob_k * d
 		it.wv *= exp(-DROP.wob_c * d)
 		it.wob = clampf(it.wob + it.wv * d, -1.0, 1.0)
-		var tgt: float = DROP.lift_hov if i == hov else 0.0
+		if not it.held:
+			it.mark = Vector2(it.u, it.w)
+		# 든 물건은 눌린다 — 들리지 않는 노선이라 이것이 "잡았다" 의 전부다.
+		var tgt: float = -HAND.dip if it.held else (DROP.lift_hov if i == hov else 0.0)
 		it.lv += (tgt - it.lift) * DROP.lift_k * d
 		it.lv *= exp(-DROP.lift_c * d)
 		it.lift = clampf(it.lift + it.lv * d, -2.0, DROP.lift_hov + 3.0)
@@ -2301,12 +2341,14 @@ func _drop_extras(d: float) -> void:
 func _drop_leave(i: int) -> void:
 	var it: Dictionary = drop[i]
 	var p := _p2s(it.u, it.w, it.h)
+	# 랙 칸은 이륙 시점에 굳힌다. 도착할 때 다시 계산하면 그 사이 판매·구매로
+	# owned 가 바뀌어 엉뚱한 칸이 튄다. 튐 자체는 _drop_arrive 로 옮겼다 —
+	# 물건이 아직 테이블에 있는데 랙이 먼저 반응하면 인과가 뒤집힌다.
+	it.slot = -1
 	match stock[i].type:
 		"item":
-			# 랙 칩의 튐 한 번이 "어디로 갔는가" 의 전부다.
-			var si := clampi(owned.size() - 1, 0, GameData.MAX_ITEMS - 1)
-			it.to = _slot_rect(si).get_center()
-			_panel_fire(si)
+			it.slot = clampi(owned.size() - 1, 0, GameData.MAX_ITEMS - 1)
+			it.to = _slot_rect(it.slot).get_center()
 		"mod":
 			it.to = p + Vector2(0.0, -30.0)
 			pop(p + Vector2(0.0, -8.0), "보드 개조", C_CHIP.lightened(0.25), 13, 0.9)
@@ -2324,8 +2366,13 @@ func _drop_leave(i: int) -> void:
 func _z_order() -> Array:
 	var z := []
 	for i in mini(drop.size(), stock.size()):
-		if not drop[i].gone:
-			z.append(i)
+		if drop[i].gone or drop[i].sold > 0.0:
+			continue
+		# ARMED 는 안 뺀다 — 아직 아무 일도 안 일어난 상태라, 빼면 누르고
+		# 있는 동안 물건·가격·툴팁이 통째로 사라진다.
+		if hand_st == H.CARRY and i == hand_i:
+			continue
+		z.append(i)
 	z.sort_custom(func(a, b): return drop[a].w < drop[b].w)
 	return z
 
@@ -2439,8 +2486,18 @@ func _obj_draw(i: int, dim: float) -> void:
 	var c := _p2s(it.u, it.w, it.h + it.lift)
 	if it.sold > 0.0:
 		# 팔린 물건은 면을 떠난다 — 화면 좌표로 넘어가는 유일한 지점이다.
-		c = c.lerp(it.to, 1.0 - pow(1.0 - float(it.sold), 3.0))
-		dim = float(it.sold) * 0.55
+		# 무릎 둘. 드래그로 산 것은 첫 다리 길이가 0 이고, 클릭으로 산 것은
+		# 펠트에서 계산대까지 미끄러진 뒤 같은 자리에서 같은 곡선으로 떠난다.
+		# 플래그가 0개다 — 물체 위치가 경로를 추론한다.
+		var sv: float = float(it.sold)
+		var via := PAY.get_center()
+		if sv < HAND.knee:
+			var ka: float = sv / HAND.knee
+			c = c.lerp(via, ka * ka)
+		else:
+			var kb: float = (sv - HAND.knee) / (1.0 - HAND.knee)
+			c = via.lerp(it.to, 1.0 - pow(1.0 - kb, 3.0))
+		dim = sv * 0.55
 	match s.type:
 		"item":
 			_chip_flat(c, s.d, it.psi, dim, it.wob)
@@ -2537,6 +2594,11 @@ func _drop_verify() -> void:
 		mn = mini(mn, v)
 	if pen > 0.5 or oob > 0 or mn < 200:
 		push_warning("drop: 정착 불변식 위반 pen=%.2f oob=%d 최소표적=%d" % [pen, oob, mn])
+	if hand_st != H.NONE or buy_sel >= 0:
+		push_warning("hand: 오토플레이에서 손 상태 %d / buy_sel %d" % [hand_st, buy_sel])
+	for it in drop:
+		if it.held:
+			push_warning("hand: 오토플레이에서 held 물체")
 
 # ══════════════════════════════════════════════════════════
 #  매대 아이콘
@@ -2818,6 +2880,425 @@ func _icon_modifier(c: Vector2, r: float, id: String, dim: float,
 					Vector2(r * 0.24, r * 0.38)), cut)
 
 # ══════════════════════════════════════════════════════════
+#  손 · 계산대   (끌어 옮기기 · 두 갈래 구매)
+# ──────────────────────────────────────────────────────────
+#  물체는 안 들린다. h ≡ 0 이다. 커서는 펠트 위의 물건을 민다.
+#  이 한 줄이 두 가지를 동시에 산다.
+#    ① 역변환.  _p2s 는 못 뒤집는다(화면 y 에 w 와 h 가 섞인다). 뒤집는 것은
+#       _p2s 가 아니라 _p2g 다 — _p2g(w) = fy + w*0.788 은 flat != 0 인
+#       일변수 아핀사상이라 전단사고, 그 역이 _g2w 다. h 를 0 으로 못 박은
+#       절단면 하나만 뒤집는 것이라 근사가 0 이다.
+#    ② 수렴 증명.  이 구획이 h · vh 에 쓰는 값은 0 뿐이고, 손에 든 물체는
+#       적분기(_drop_step)에 한 번도 안 들어간다. 놓을 때 속도도 0 이라
+#       적분기가 아예 안 돈다 — 겹침은 _drop_lock 의 위치 분리 12패스가
+#       그 자리에서 정리한다(전부 v=0 이라 임펄스·깨우기가 안 걸린다).
+#       낙하 구획의 "vh 를 양수로 만드는 경로가 없다" 가 문자 그대로 산다.
+#       드래그가 drop_awake 를 켜지 않으므로 입력 잠금 창도 안 생긴다.
+#
+#  바깥과 닿는 곳은 아홉이다.
+#    _hand_press/_motion/_release  입력          (_unhandled_input)
+#    _hand_update(d)               매 프레임      (_drop_update 첫 줄)
+#    _hand_abort()                 손을 비운다     (_drop_roll · _drop_settle
+#                                                  · _reroll · _next_round 맨 앞)
+#    _shop_tap(i) / _pay_click()   고르기 · 확정   (_click 의 S.SHOP)
+#    _pay_draw()/_hold_draw()/_fly_draw()          (_draw_shop 말미)
+#    buy_sel                       고른 매물 (-1 = 없음). sell_sel 과 배타
+#    drop[i].held/.slot/.mark/.scuff               새 필드 넷
+#
+#  불변식 — held 인 물체의 u/w 를 쓰는 곳은 _hand_update 하나뿐이다.
+#  grep 으로 검산된다. 나머지는 _drop_step 의 skip 한 토큰과 _drop_live 의
+#  한 토큰으로 자동으로 빠진다.
+# ══════════════════════════════════════════════════════════
+
+enum H { NONE, ARMED, CARRY }
+
+var hand_st: int = H.NONE
+var hand_i := -1                 # 집은 매물. drop/stock 공용 인덱스
+var hand_p0 := Vector2.ZERO      # 누른 화면 좌표. 탭은 이 점으로 판정한다
+var hand_m := Vector2.ZERO       # 마지막 커서 화면 좌표
+var hand_far := 0.0              # 누름 이후 |m - p0| 의 **누적 최대**. 단조 비감소
+var hand_off := Vector2.ZERO     # 면 좌표 잡기 오프셋. ramp 로 0 에 녹는다
+var hand_lit := false            # 지금 계산대가 켜져 있는가 (래치음 에지 · 판 얼굴)
+
+var buy_sel := -1                # 2클릭 구매의 1단계
+var pay_flash := 0.0
+var pay_msg := ""
+var pay_msg_t := 0.0
+
+const HAND := {
+	# ── 판정 ─────────────────────────────────────────
+	"slip": 5.0,
+	#  클릭↔드래그 임계 (640x360 뷰 px). 창 기본이 1280x720 이라 실제 10 device px.
+	#  최소 표적 면적 실측 667px²(다트 ≈26x26)의 19% — 5px 미끄러져도 같은 물체 위다.
+	#  **안전장치가 아니라 감각 손잡이다.** 오분류가 골드를 쓰는 경로가 구조적으로
+	#  없으므로(§4·§9) 3 으로 줄이든 8 로 늘리든 게임이 안 깨진다.
+
+	# ── 손 ───────────────────────────────────────────
+	"v_cap": 1800.0,
+	#  물체가 커서를 따라가는 최대 속력(면px/s). 60fps 에서 프레임당 30 면px
+	#  (화면 30 x 23.6). 손에 든 것은 적분기 밖이라 이건 터널링 상한이 아니라
+	#  무게감 손잡이다 — 후려치면 아주 살짝 끌린다.
+	"ramp": 260.0,
+	#  잡기 오프셋을 0 으로 녹이는 속도(면px/s). 최대 오프셋은 다트 반폭 37.5 와
+	#  깊이 42.6 → 0.164초. 녹고 나면 **커서 = 물체 지면점** 이라 계산대 판정이
+	#  커서 기준과 물체 기준으로 갈릴 수 없다. 이 한 줄이 두 기준의 불일치를 없앤다.
+	"dip": 1.5,
+	#  잡힌 물체가 눌리는 깊이(면). 기존 lift clamp 하한 -2.0 안쪽이라 공짜.
+	#  호버는 +6 으로 뜬다 — 뜸/눌림이 정반대라 두 상태가 안 헷갈린다.
+
+	# ── 계산대 ───────────────────────────────────────
+	"back_pad": 10.0,
+	#  반송·취소 때 근쪽 벽(w_hi 165)에서 안쪽으로 두는 여유(면px). 레일에 딱
+	#  붙여 놓으면 가격판(지면 y + 30 = 240)이 레일 244 에 닿는다. 10 면 = 화면 7.9px.
+	"back_v": 900.0,
+	#  계산대 도크로 붙고 떨어지는 속도(면px/s). 도크 간격 242.39 - 165 = 77.39 면
+	#  → 0.086초. 손 속도(v_cap)와 갈라 둔 이유는 도크가 손이 아니라 판의 동작이라서다.
+	#  계단 클램프였다면 경계에서 화면 61px 순간이동이 난다 — 그래서 이징이다.
+	"latch_gap": 6.0,
+	#  래치 히스테리시스(화면 px). 진입은 PAY, 이탈은 PAY.grow(6).
+	#  경계에서 손이 떨려도 523Hz 가 연타되지 않고 판 얼굴이 안 깜빡인다.
+	"flash": 2.6,
+	#  계산대 섬광 감쇠(1/s). deny_flash 와 같은 속도라 승낙과 거절이 같은 박자다 → 0.38초.
+	"msg_t": 1.4,
+	#  거절 사유를 하단에 띄우는 시간(초). _buy_block 의 문장을 그대로 쓴다.
+	"knee": 0.26,
+	#  구매 연출이 계산대를 지나는 진행도. sold_t 0.46 을 0.12s / 0.34s 로 가른다
+	#  (뒤 0.34 는 기존 sold_t 를 그대로 물려받은 두 번째 다리다).
+
+	# ── 연출 (전부 그리기 전용. 물리에 한 방울도 안 흘린다) ──
+	"land_wob": 90.0,
+	#  놓을 때 _drop_wob 에 먹이는 값. wv = 90/260 = 0.346 으로 착지 반발(rv≈84)과
+	#  같은 크기다 — 놓기와 착지가 같은 어휘를 쓴다.
+	"scuff_n": 10,      # 마찰 자국 링버퍼 길이. 0.42초 뒤 알파 0
+	"scuff_dt": 0.02,   # 적립 최소 간격(초)
+	"scuff_min": 0.6,   # 적립 최소 이동(면px). 제자리 떨림으로 자국이 안 쌓이게
+}
+
+
+# 계산대. 리롤(x[32,184])과 다음(x[432,608]) 사이의 비어 있던 248px 만 쓴다 —
+# 기존 좌표를 하나도 안 밀어낸다. y 는 셋이 같아 [리롤][계산대][다음] 이 한 줄이다.
+#
+# 왜 펠트가 아니라 레일 아래인가 — 물리로 굴러 들어가는 것이 부등식 위반이다.
+#   물리 트레이 최대 깊이  w_hi = 165  → 지면 y = _p2g(165) = 210.02
+#   계산대 상단                            250.0
+#   40px 의 죽은 띠. 잉크로 재도 최악(세로 다트 박스 하단 242.4 · _shop_hit
+#   여유 포함 248.1)이 250 을 못 넘는다. 솔버에 한 줄도 안 가르치고 불가능하다.
+const PAY := Rect2(196.0, 250.0, 228.0, 42.0)
+
+
+# ══ 면 ↔ 화면 — h = 0 절단면 위에서만 ══
+#  _p2s 의 역이 아니다(그건 존재하지 않는다). _p2g 의 역이다.
+#  불변식: held 인 물체에만, 이 구획에서만 쓴다. h != 0 에 쓰면 틀린 답이 나온다.
+func _g2w(y: float) -> float:
+	return (y - TBL.fy) / TBL.flat
+
+
+func _pay_w() -> float:
+	return _g2w(PAY.get_center().y)          # 242.39
+
+
+# ══ 입력 ══════════════════════════════════════════════
+# true 를 돌려주면 _click 을 안 부른다(삼킨다).
+func _hand_press(m: Vector2) -> bool:
+	if _autoplay:
+		return false                          # 좌표 입력은 오토플레이의 어휘가 아니다
+	if state != S.SHOP or _drop_busy():
+		return false
+	# 랙·판매판·버튼·계산대가 먼저라는 규약을 구조로 못 박는다. 지금은 y 로
+	# 갈려 있어(매물 최상단 99.3 > 랙 하단 66) 없어도 되지만 손잡이다.
+	if _panel_rect().has_point(m) or LAY.sell.has_point(m) or PAY.has_point(m):
+		return false
+	if _reroll_rect().has_point(m) or _next_rect().has_point(m):
+		return false
+	var i := _shop_hit(m)
+	if i < 0:
+		return false
+	hand_st = H.ARMED
+	hand_i = i
+	hand_p0 = m
+	hand_m = m
+	hand_far = 0.0
+	return true
+
+
+func _hand_motion(m: Vector2) -> void:
+	if hand_st == H.NONE:
+		return
+	hand_m = m
+	if hand_st == H.ARMED:
+		# **누적 최대**다. 현재 거리가 아니다. 이 한 줄이 [끌고 갔다 돌아와서 뗌]
+		# → 탭 판정이라는 경로를 원천 차단한다.
+		hand_far = maxf(hand_far, m.distance_to(hand_p0))
+		if hand_far > HAND.slip:
+			_hand_take()
+
+
+func _hand_take() -> void:
+	var it: Dictionary = drop[hand_i]
+	hand_st = H.CARRY
+	# 집는 순간 물체가 안 튄다. 이 오프셋은 ramp 로 0 에 녹으므로 0.17초 뒤에는
+	# 커서 = 물체 지면점이고, 그때부터 계산대 판정이 커서 기준과 물체 기준으로
+	# 갈릴 수 없다. 그전에도 판정은 커서 하나만 본다.
+	hand_off = Vector2(it.u, it.w) - Vector2(hand_p0.x, _g2w(hand_p0.y))
+	it.held = true
+	it.h = 0.0                # ← 이 노선 전체가 이 두 줄이다
+	it.vh = 0.0
+	it.vu = 0.0
+	it.vw = 0.0
+	it.om = 0.0
+	it.air = false
+	it.sleep = true           # 정착 인구조사에서 빠진다 → 드는 동안 _drop_busy() 가 false
+	it.rest = DROP.t_sleep
+	it.scuff = []
+	hand_lit = false
+	buy_sel = -1
+	sell_sel = -1             # 드래그는 _click 을 안 거쳐 _sell_hit 의 낙수가 안 온다
+	beep(196.0, 0.04, 0.08)
+
+
+func _hand_release(m: Vector2) -> void:
+	if hand_st == H.NONE:
+		return
+	var i := hand_i
+	var lit := hand_lit
+	var was_carry: bool = hand_st == H.CARRY
+	hand_st = H.NONE
+	hand_i = -1
+	hand_far = 0.0
+	hand_lit = false
+	if not was_carry:
+		_shop_tap(i)                          # 안 움직였다 = 탭 = 고르기
+		return
+	if i < 0 or i >= drop.size():
+		return
+	hand_m = m
+	var it: Dictionary = drop[i]
+	it.held = false
+	if lit:
+		var blk := _buy_block(i)
+		if blk == "":
+			_pay_take(i)
+			return                            # 이미 떠났다. 자리로 안 돌려보낸다
+		it.w = DROP.w_hi - HAND.back_pad      # 판이 물건을 밀어냈다
+		pay_msg = blk
+		pay_msg_t = HAND.msg_t
+		_deny()
+	else:
+		beep(147.0, 0.05, 0.07)
+	_hand_land(it)
+
+
+# 물리에 반납한다. 속도를 안 준다 — 그래서 적분기가 한 번도 안 돌고, 낙하
+# 구획의 수렴 증명이 이 기능을 아예 못 본다. drop_awake 도 안 켜므로
+# _drop_busy() 가 계속 false 다 → 곧바로 다음 물건을 집을 수 있다.
+# 겹침은 _drop_lock 의 위치 분리 12패스가 그 자리에서 정리한다. 전부 v=0 이라
+# _drop_pair 의 ②임펄스·③깨우기가 안 걸린다 — 순수 위치 해소다.
+func _hand_land(it: Dictionary) -> void:
+	it.h = 0.0
+	it.air = false
+	it.vu = 0.0
+	it.vw = 0.0
+	it.vh = 0.0
+	it.om = 0.0
+	it.sleep = true
+	it.rest = DROP.t_sleep
+	it.u = clampf(it.u, DROP.u_lo + it.hw, DROP.u_hi - it.hw)
+	it.w = clampf(it.w, DROP.w_lo, DROP.w_hi)
+	it.scuff = []
+	_drop_wob(it, HAND.land_wob)
+	_drop_lock()
+
+
+# 손을 비우는 유일한 문.
+func _hand_abort() -> void:
+	if hand_i >= 0 and hand_i < drop.size():
+		var it: Dictionary = drop[hand_i]
+		if it.held:
+			it.held = false
+			it.w = minf(it.w, DROP.w_hi - HAND.back_pad)
+			_hand_land(it)
+	hand_st = H.NONE
+	hand_i = -1
+	hand_far = 0.0
+	hand_lit = false
+	buy_sel = -1
+
+
+# ══ 프레임 ════════════════════════════════════════════
+func _hand_update(d: float) -> void:
+	pay_flash = maxf(pay_flash - d * HAND.flash, 0.0)
+	pay_msg_t = maxf(pay_msg_t - d, 0.0)
+	# 인덱스를 프레임 너머로 들고 가는 유일한 변수라 여기서 못 박는다 (sell_sel 과 같은 대접)
+	if buy_sel >= 0 and (state != S.SHOP or buy_sel >= stock.size()
+			or stock[buy_sel].sold):
+		buy_sel = -1
+	if hand_st == H.NONE:
+		return
+	if state != S.SHOP or hand_i < 0 or hand_i >= drop.size():
+		_hand_abort()
+		return
+	# 창 밖에서 떼어 released 를 못 받은 경우의 안전망
+	if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		_hand_release(hand_m)
+		return
+	if hand_st != H.CARRY:
+		return
+	var it: Dictionary = drop[hand_i]
+	hand_off = hand_off.move_toward(Vector2.ZERO, HAND.ramp * d)
+
+	# 래치는 히스테리시스로 건다 — 경계에서 소리와 판 얼굴이 연타되지 않는다.
+	var inside: bool = PAY.grow(HAND.latch_gap).has_point(hand_m) if hand_lit \
+			else PAY.has_point(hand_m)
+	if inside and not hand_lit:
+		beep(523.0, 0.04, 0.10)
+	hand_lit = inside
+
+	var ut: float = hand_m.x + hand_off.x
+	var wt: float = _g2w(hand_m.y) + hand_off.y
+	if hand_lit:
+		# 계산대는 문이 아니라 도크다. 붙는 것은 판의 동작이라 손 속도와 무관하다.
+		ut = clampf(ut, PAY.position.x + it.hw, PAY.end.x - it.hw)
+		wt = _pay_w()
+	else:
+		wt = clampf(wt, DROP.w_lo, DROP.w_hi)   # 펠트 밖으로는 안 나간다
+	ut = clampf(ut, DROP.u_lo + it.hw, DROP.u_hi - it.hw)
+	var lim: float = HAND.back_v if (hand_lit or it.w > DROP.w_hi) else HAND.v_cap
+	var p := Vector2(it.u, it.w).move_toward(Vector2(ut, wt), lim * d)
+	it.u = p.x
+	it.w = p.y
+	_hand_scuff(it, d)
+
+
+func _hand_scuff(it: Dictionary, d: float) -> void:
+	for s in it.scuff:
+		s.t += d
+	var g := Vector2(it.u, _p2g(it.w))
+	if it.scuff.is_empty() or (it.scuff[-1].t >= HAND.scuff_dt
+			and it.scuff[-1].p.distance_to(g) >= HAND.scuff_min):
+		it.scuff.append({"p": g, "t": 0.0})
+		if it.scuff.size() > int(HAND.scuff_n):
+			it.scuff.pop_front()
+
+
+# ══ 구매 두 갈래 — 둘 다 계산대에서 끝난다 ═══════════
+func _shop_tap(i: int) -> void:
+	sell_sel = -1
+	buy_sel = -1 if buy_sel == i else i
+	beep(349.0 if buy_sel >= 0 else 262.0, 0.05, 0.10)   # 349 는 랙 선택과 같은 음
+
+
+func _pay_click() -> void:
+	if buy_sel < 0:
+		pay_msg = "먼저 물건을 고른다"
+		pay_msg_t = HAND.msg_t
+		_deny()
+		return
+	var blk := _buy_block(buy_sel)
+	if blk != "":
+		pay_msg = blk                 # 선택은 유지한다 — 고쳐서 다시 누를 수 있어야 한다
+		pay_msg_t = HAND.msg_t
+		_deny()
+		return
+	var i := buy_sel
+	buy_sel = -1
+	_pay_take(i)
+
+
+# 두 경로가 만나는 한 점. _buy 는 한 글자도 안 고친다 —
+# stock[i].sold 를 _drop_extras 가 폴링해 _drop_leave 를 띄운다.
+func _pay_take(i: int) -> void:
+	var cost: int = stock[i].cost
+	_buy(i)
+	pay_flash = 1.0
+	pay_msg = ""
+	pay_msg_t = 0.0
+	pop(Vector2(LAY.bank.get_center().x, 78.0), "-%d" % cost, C_GOLD, 13, 0.7)
+
+
+# ══ 그리기 ════════════════════════════════════════════
+# 버튼(_btn)이 아니라 판(_sell_draw)의 어법이다 — 누르는 것이 아니라 놓는 자리다.
+func _pay_draw() -> void:
+	var i: int = hand_i if hand_st == H.CARRY else buy_sel
+	var live: bool = i >= 0 and i < stock.size()
+	var blk: String = _buy_block(i) if live else ""
+	var ok: bool = live and blk == ""
+	var body: Color = C_PANEL
+	if pay_flash > 0.0:
+		body = C_PANEL.lerp(C_ACC, pay_flash * 0.55)
+	elif ok and (hand_st != H.CARRY or hand_lit):
+		body = C_PANEL.lightened(0.12)
+	draw_rect(PAY, body)
+	var top: Color = C_WIRE.darkened(0.35)
+	if live:
+		top = C_ACC if ok else C_RED
+	draw_rect(Rect2(PAY.position, Vector2(PAY.size.x, 2.0)), top)
+	if not live:
+		draw_string(font, PAY.position + Vector2(0.0, 20.0), "계산대",
+				HORIZONTAL_ALIGNMENT_CENTER, PAY.size.x, 12, C_DIM.darkened(0.1))
+		draw_string(font, PAY.position + Vector2(0.0, 34.0), "여기에 놓거나  ·  골라서 누른다",
+				HORIZONTAL_ALIGNMENT_CENTER, PAY.size.x, 9, C_DIM.darkened(0.35))
+		return
+	var cost: int = stock[i].cost
+	var gc: Color = C_GOLD if ok else C_DIM.darkened(0.25)
+	if hand_st == H.CARRY:
+		# 물건이 판 가운데를 덮는다 — 글자를 좌우로 가른다
+		draw_string(font, PAY.position + Vector2(8.0, 26.0), "구매" if ok else "못 산다",
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 13, C_TXT if ok else C_DIM)
+		draw_gold_at(PAY.end.x - 8.0 - gold_w(str(cost), 11),
+				PAY.position.y + 26.0, str(cost), 11, gc)
+	else:
+		draw_string(font, PAY.position + Vector2(0.0, 20.0),
+				"구매  ·  %s" % stock[i].d.n,
+				HORIZONTAL_ALIGNMENT_CENTER, PAY.size.x, 12, C_TXT if ok else C_DIM)
+		draw_gold(PAY.get_center().x, PAY.position.y + 36.0, str(cost), 11, gc)
+
+
+# 손에 든 것 하나만 따로, 앞치마·버튼 다음에 그린다. _goods_draw 는 앞치마보다
+# 먼저 나가므로 계산대까지 내려온 물건이 거기서는 덮인다.
+func _hold_draw() -> void:
+	if hand_st != H.CARRY or hand_i < 0 or hand_i >= drop.size():
+		return
+	var it: Dictionary = drop[hand_i]
+	# 자리 링. h ≡ 0 이라 몸통 중심이 곧 지면점이고, 링과 몸통이 안 갈린다.
+	# 팔려나간 자리의 코스터 자국과 같은 함수·같은 어법 — "링 = 자리".
+	_e_ring_w(Vector2(it.u, _p2g(it.w)), it.r + 3.0, (it.r + 3.0) * TBL.flat, 1.0,
+			Color(C_ACC if hand_lit else C_TXT, 0.55))
+	_obj_shadow(hand_i)
+	_obj_draw(hand_i, 0.0)
+
+
+func _scuff_draw(it: Dictionary) -> void:
+	var col: Color = C_TABLE.darkened(0.22)
+	for s in it.scuff:
+		var a: float = clampf(1.0 - s.t / 0.42, 0.0, 1.0) * 0.5
+		if a > 0.01:
+			draw_colored_polygon(_e_pts(s.p, it.r * 0.5, it.r * 0.5 * TBL.flat, 10),
+					Color(col, a))
+
+
+# 팔린 물건의 비행. _goods_draw 안에 두면 먼 덮개(y[18,80])와 앞치마(y[250,360])가
+# 덮어 두 다리 중 1.5개가 안 보인다 — 드래그 구매의 첫 다리는 통째로, 랙으로
+# 가는 두 번째 다리는 0.19초가 가려진다. 그래서 판·버튼 다음에 따로 그린다.
+func _fly_draw() -> void:
+	for i in mini(drop.size(), stock.size()):
+		if drop[i].gone or drop[i].sold <= 0.0:
+			continue
+		_obj_draw(i, 0.0)
+
+
+func _drop_arrive(i: int) -> void:
+	# 도착에서 튄다. 이륙에서 튀면 칩이 도착하기 0.46초 전에 랙이 먼저 튄다 —
+	# 지금 있는 연출의 유일한 거짓말이었다.
+	var it: Dictionary = drop[i]
+	match stock[i].type:
+		"item":
+			_panel_fire(it.slot)
+		"mod":
+			pop(it.to, "보드 개조", C_CHIP.lightened(0.25), 13, 0.9)
+		_:
+			pop(it.to, "탄창 교체", C_GREEN.lightened(0.3), 13, 0.9)
+
+# ══════════════════════════════════════════════════════════
 #  툴팁 (마우스 오버)
 # ──────────────────────────────────────────────────────────
 #  바깥과 닿는 곳은 둘뿐이다.
@@ -2869,6 +3350,8 @@ func _tip_clear() -> void:
 func _tip_hit(m: Vector2) -> Dictionary:
 	match state:
 		S.SHOP:
+			if hand_st == H.CARRY:
+				return {}                 # 드는 동안 툴팁은 끈다
 			# 날아다니는 동안은 매물 툴팁을 안 띄운다 — 판이 미끄러져 못 읽는다.
 			if not _drop_busy():
 				var hi := _shop_hit(m)
@@ -3189,10 +3672,6 @@ func _draw_stage() -> void:
 func _draw_shop() -> void:
 	_scrim()
 	_table_draw()
-	if deny_flash > 0.0:
-		draw_string(font, Vector2(0, 300), "골드가 부족하거나 슬롯이 꽉 찼다",
-				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 11,
-				Color(C_MULT.lightened(0.3), deny_flash))
 	_btn(_reroll_rect(), "리롤", "무료" if reroll_cost == 0 else "", gold >= reroll_cost)
 	if reroll_cost > 0:
 		var rr := _reroll_rect()
@@ -3200,13 +3679,37 @@ func _draw_shop() -> void:
 				str(reroll_cost), 10, C_GOLD if gold >= reroll_cost else C_DIM.darkened(0.3))
 	_btn(_next_rect(), "다음 라운드 →", "R%d  목표 %d"
 			% [round_no + 1, GameData.target_of(round_no + 1)], true)
+	_pay_draw()
+	_hold_draw()
+	_fly_draw()
 
-	var tip := "물건을 눌러 구매    ·    위쪽 칩을 눌러 판매"
+	# 거절 사유. 기존 y300 중앙 문자열은 계산대(x[196,424])와 정면 충돌한다 —
+	# 왼쪽으로 옮기고 폭을 184 로 묶는다. 문구는 _buy_block 이 만든다
+	# ("5단계의 계산대 라벨이 세 번째 소비자" 가 여기서 성립한다).
+	var msg := ""
+	var ma := 0.0
+	if pay_msg_t > 0.0:
+		msg = pay_msg
+		ma = minf(pay_msg_t * 3.0, 1.0)
+	elif deny_flash > 0.0:
+		msg = "골드가 부족하거나 슬롯이 꽉 찼다"
+		ma = deny_flash
+	elif hand_st == H.CARRY and hand_lit:
+		msg = _buy_block(hand_i)
+		ma = 0.85
+	if msg != "":
+		draw_string(font, Vector2(12.0, 306.0), msg, HORIZONTAL_ALIGNMENT_LEFT,
+				184.0, 10, Color(C_MULT.lightened(0.3), ma))
+
+	var tip := "끌어서 옮긴다  ·  눌러 고르고 계산대로  ·  위쪽 칩을 눌러 판매"
 	if _drop_busy():
 		tip = "떨어지는 중  —  아무 데나 눌러 바로 세운다"
+	elif hand_st == H.CARRY:
+		tip = "계산대에 놓으면 구매  ·  펠트에 놓으면 그냥 옮긴다"
+	elif buy_sel >= 0:
+		tip = "계산대를 눌러 구매  ·  다시 누르면 취소"
 	draw_string(font, Vector2(0, 316), tip,
 			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 10, C_DIM.darkened(0.2))
-
 
 func _draw_over() -> void:
 	_scrim()
