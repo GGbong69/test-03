@@ -19,7 +19,6 @@ const CARD_W := 244.0
 const CARD_H := 96.0
 
 const SECTORS_BASE := [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5]
-const DBL_OUT := 1.00
 
 # ══════════════════════════════════════════════════════════
 #  HUD 배치표
@@ -67,18 +66,25 @@ enum S { PICK, AIM_V, AIM_H, CONFIRM, FLY, RESOLVE, CLEAR, SHOP, STAGE, OVER }
 
 # ── 보드 기하 (개조로 변한다) ──────────────────────────────
 var sectors := SECTORS_BASE.duplicate()
+var dbl_out := 1.00
 var dbl_in := 0.90
 var trp_in := 0.56
 var trp_out := 0.66
+var trp2_in := 0.0
+var trp2_out := 0.0
 var bull_o := 0.14
 var bull_i := 0.06
 
 # 라운드 동안 실제로 쓰이는 값 (영구 개조 + 이번 판 제약)
+var rt_dbl_out := 1.00
 var rt_dbl_in := 0.90
 var rt_trp_in := 0.56
 var rt_trp_out := 0.66
+var rt_trp2_in := 0.0
+var rt_trp2_out := 0.0
 var rt_bull_o := 0.14
 var rt_bull_i := 0.06
+var dead_idx := 0               # "금지 구역"이 죽이는 칸
 
 # ── 스테이지 선택 ─────────────────────────────────────────
 var stage_pick := []            # 이번에 제시된 3개 후보
@@ -205,9 +211,12 @@ func _ready() -> void:
 
 func _new_run() -> void:
 	sectors = SECTORS_BASE.duplicate()
+	dbl_out = 1.00
 	dbl_in = 0.90
 	trp_in = 0.56
 	trp_out = 0.66
+	trp2_in = 0.0
+	trp2_out = 0.0
 	bull_o = 0.14
 	bull_i = 0.06
 	round_no = 1
@@ -222,9 +231,12 @@ func _new_run() -> void:
 
 func _start_round() -> void:
 	# 영구 개조값에서 출발해 이번 판 제약을 얹는다
+	rt_dbl_out = dbl_out
 	rt_dbl_in = dbl_in
 	rt_trp_in = trp_in
 	rt_trp_out = trp_out
+	rt_trp2_in = trp2_in
+	rt_trp2_out = trp2_out
 	rt_bull_o = bull_o
 	rt_bull_i = bull_i
 	if has_mod("narrow"):
@@ -232,7 +244,7 @@ func _start_round() -> void:
 		var tb := (trp_out - trp_in) * 0.5
 		rt_trp_in = tc - tb * 0.5
 		rt_trp_out = tc + tb * 0.5
-		rt_dbl_in = DBL_OUT - (DBL_OUT - dbl_in) * 0.5
+		rt_dbl_in = dbl_out - (dbl_out - dbl_in) * 0.5
 
 	remaining = magazine.duplicate()
 	if has_mod("short") and remaining.size() > 1:
@@ -469,8 +481,8 @@ func _apply_mod(id: String) -> void:
 			trp_in = maxf(c - band * 0.5, bull_o + 0.04)
 			trp_out = minf(c + band * 0.5, dbl_in - 0.04)
 		"dblw":
-			var band := minf((DBL_OUT - dbl_in) * 1.6, GameData.DBL_BAND_MAX)
-			dbl_in = maxf(DBL_OUT - band, trp_out + 0.04)
+			var band := minf((dbl_out - dbl_in) * 1.6, GameData.DBL_BAND_MAX)
+			dbl_in = maxf(dbl_out - band, trp_out + 0.04)
 		"bulw":
 			bull_o = minf(bull_o * 1.7, GameData.BULL_O_MAX)
 			bull_o = minf(bull_o, trp_in - 0.04)
@@ -851,7 +863,7 @@ func _click(m: Vector2) -> void:
 func hit_info(p: Vector2) -> Dictionary:
 	var v := p - BC
 	var r := v.length()
-	if r > R:
+	if r > R * rt_dbl_out:                                    # ← ① 판벌이
 		return {"base": 0, "mult": 0, "sector": -1, "idx": -1, "r0": 0.0, "r1": 0.0}
 	if r <= R * rt_bull_i:
 		return {"base": 50, "mult": 1, "sector": 50, "idx": -1, "r0": 0.0, "r1": R * rt_bull_i}
@@ -870,7 +882,7 @@ func hit_info(p: Vector2) -> Dictionary:
 	if r >= R * rt_dbl_in:
 		m = 2
 		r0 = R * rt_dbl_in
-		r1 = R * DBL_OUT
+		r1 = R * rt_dbl_out                                   # ← ① 판벌이
 	elif r >= R * rt_trp_in and r <= R * rt_trp_out:
 		m = 3
 		r0 = R * rt_trp_in
@@ -878,9 +890,23 @@ func hit_info(p: Vector2) -> Dictionary:
 	elif r > R * rt_trp_out:
 		r0 = R * rt_trp_out
 		r1 = R * rt_dbl_in
+	elif rt_trp2_out > 0.0:                                   # ← ② 아랫목
+		# 기존 네 가지의 조건식은 한 글자도 안 건드렸다. 이 가지가 잡는 구간은
+		# "불 바깥 ~ 첫 트리플 안쪽" 하나뿐이고, 그건 지금까지 마지막 else 가
+		# r0/r1 만 채우고 지나가던 죽은 땅이다. 배수를 바꾸는 새 경로는 하나다.
+		if r >= R * rt_trp2_in and r <= R * rt_trp2_out:
+			m = 3
+			r0 = R * rt_trp2_in
+			r1 = R * rt_trp2_out
+		elif r < R * rt_trp2_in:
+			r1 = R * rt_trp2_in        # 명중 섬광이 새 띠를 덮지 않게 구간을 자른다
+		else:
+			r0 = R * rt_trp2_out
 
 	return {"base": val, "mult": m, "sector": val, "idx": idx, "r0": r0, "r1": r1}
 
+# 반환값의 치역이 안 변한다:  mult ∈ {0,1,2,3}   sector ∈ {-1} ∪ [1,20] ∪ {25,50}
+# 그래서 data.gd 의 check() 와 cond_text() 는 한 글자도 안 고친다.
 
 func _impact(info: Dictionary) -> void:
 	var lbl := Vector2(0.0, 26.0) if aim.y < BC.y else Vector2(0.0, -24.0)
@@ -916,7 +942,7 @@ func _impact(info: Dictionary) -> void:
 			hit_flash_amt = 0.7
 			beep_seq([330.0, 330.0], 0.075, 0.11, 0.20)
 			add_wave(aim, 3.0, 42.0, C_ACC, 0.75, 1.5, 0.40)
-			add_ring_fx(R * rt_dbl_in, R * DBL_OUT, C_ACC, 0.50)
+			add_ring_fx(R * rt_dbl_in, R * rt_dbl_out, C_ACC, 0.50)
 			pop(aim + lbl, "더블", C_ACC, 15, 0.8)
 		3:
 			shake = 9.5
@@ -959,7 +985,7 @@ func _land() -> void:
 		aim = BC + Vector2(cos(a), sin(a)) * sqrt(randf()) * R * 0.95
 
 	var info := hit_info(aim)
-	if has_mod("dead") and info.sector == 20:
+	if has_mod("dead") and info.idx == dead_idx:
 		info.base = 0
 	if info.mult == 0:
 		round_miss = true
@@ -1224,7 +1250,7 @@ func _draw_board() -> void:
 		draw_colored_polygon(annulus(R * rt_bull_o * push, R * rt_trp_in * push, a0, a1), base_c)
 		draw_colored_polygon(annulus(R * rt_trp_out * push, R * rt_dbl_in * push, a0, a1), base_c)
 		draw_colored_polygon(annulus(R * rt_trp_in * push, R * rt_trp_out * push, a0, a1), ring_c)
-		draw_colored_polygon(annulus(R * rt_dbl_in * push, R * DBL_OUT * push, a0, a1), ring_c)
+		draw_colored_polygon(annulus(R * rt_dbl_in * push, R * rt_dbl_out * push, a0, a1), ring_c)
 
 	for i in 20:
 		var a := i * sw - sw * 0.5
