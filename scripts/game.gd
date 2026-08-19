@@ -21,9 +21,15 @@ const DBL_OUT := 1.00
 
 # ══════════════════════════════════════════════════════════
 #  HUD 배치표
-#  화면 좌표는 전부 여기서만 정한다. 각 판 구획은 자기 줄만 읽는다.
+#  상시 HUD 띠(상단바·자금·판매·용량)의 좌표만 여기서 정한다.
 #  줄을 지우고 _hud_draw() 의 호출 한 줄을 지우면 그 판만 사라진다.
-#  (매대·스테이지 카드·점수 카드·진행바는 기존 좌표 함수 그대로 둔다)
+#
+#  주의 — 화면 좌표가 여기에만 있는 것이 아니다. 나머지 소유자는 이렇다.
+#    _stage_rect / _stock_rect / _mag_rect / _reroll_rect / _next_rect
+#    PANEL · _panel_rect · _slot_rect        (칩 랙)
+#    card_pos                                 (점수 카드)
+#    _draw_hint 의 341 · 348 · 356            (하단 세 줄)
+#  이 목록을 사실과 다르게 두면 다음 사람이 잘못된 전제로 판단한다.
 # ══════════════════════════════════════════════════════════
 const LAY := {
 	"bar":        Rect2(0.0, 0.0, 640.0, 18.0),
@@ -37,15 +43,6 @@ const LAY := {
 	"bank":       Rect2(4.0, 21.0, 72.0, 46.0),
 	"sell":       Rect2(80.0, 21.0, 74.0, 46.0),
 	"cap":        Rect2(445.0, 21.0, 37.0, 46.0),
-
-	"mag":        Rect2(4.0, 71.0, 72.0, 228.0),
-	"mag_hand":   Rect2(8.0, 88.0, 64.0, 18.0),
-	"mag_slot":   Rect2(8.0, 110.0, 64.0, 27.0),
-	"mag_dy":     31.0,
-
-	"strip":      Rect2(160.0, 71.0, 320.0, 25.0),
-	"strip_x0":   206.0,
-	"strip_dx":   44.0,
 }
 
 const C_BG := Color("14111f")
@@ -411,19 +408,30 @@ func _has_item(id: String) -> bool:
 	return false
 
 
-func _buy(i: int) -> void:
+# 못 사는 이유는 여기 한 곳에서만 판정한다.
+# _buy 의 거절과 툴팁 문구가 갈라지면 "살 수 있어 보이는데 안 사지는" 상태가 생긴다.
+# 빈 문자열이면 살 수 있다는 뜻이다. 5단계의 계산대 라벨이 세 번째 소비자가 된다.
+func _buy_block(i: int) -> String:
+	if i < 0 or i >= stock.size():
+		return "없는 매물"
 	var s: Dictionary = stock[i]
-	if s.sold or gold < s.cost:
-		_deny()
-		return
+	if s.sold:
+		return "이미 구매함"
+	if gold < s.cost:
+		return "골드가 %d 모자란다" % (s.cost - gold)
 	if s.type == "item" and owned.size() >= GameData.MAX_ITEMS:
-		_deny()
-		return
-
+		return "칩 랙이 꽉 찼다 (%d/%d)" % [owned.size(), GameData.MAX_ITEMS]
 	if s.type == "dart" and _std_slot() < 0:
+		return "바꿀 표준 다트가 없다"
+	return ""
+
+
+func _buy(i: int) -> void:
+	if _buy_block(i) != "":
 		_deny()
 		return
 
+	var s: Dictionary = stock[i]
 	gold -= s.cost
 	s.sold = true
 	match s.type:
@@ -695,17 +703,19 @@ func _auto_step() -> void:
 		S.STAGE:
 			_click(_stage_rect(randi() % stage_pick.size()).get_center())
 		S.SHOP:
+			# 좌표가 아니라 함수를 직접 부른다. 4단계에서 _stock_rect 가 사라지므로
+			# 여기서 미리 끊어 둬야 그 삭제가 순수 삭제가 된다.
 			var buyable := []
 			for i in stock.size():
-				if not stock[i].sold and gold >= stock[i].cost:
+				if _buy_block(i) == "":
 					buyable.append(i)
 			var roll := randf()
 			if not buyable.is_empty() and roll < 0.55:
-				_click(_stock_rect(buyable[randi() % buyable.size()]).get_center())
+				_buy(buyable[randi() % buyable.size()])
 			elif gold >= reroll_cost and roll < 0.8:
-				_click(_reroll_rect().get_center())
+				_reroll()
 			else:
-				_click(_next_rect().get_center())
+				_next_round()
 		S.OVER:
 			_click(Vector2(320, 180))
 
@@ -1571,6 +1581,13 @@ func _panel_draw() -> void:
 			draw_arc(e, PANEL.r * 0.72, 0.0, TAU, 16, C_FELT.lightened(0.10), 1.0)
 
 
+# 칩 i 의 고정 기울기 계수(-0.5~0.5). 인덱스로만 결정되므로 프레임 간 안 흔들린다.
+# 상시 기울기는 정적이라 히트박스와 싸우지 않는다 — 그래서 calm 게이트를 안 탄다.
+# 3단계에서 PANEL.tilt 를 곱해 쓴다. (지금은 미사용)
+func _panel_tilt(i: int) -> float:
+	return sin(float(i) * 2.399963) * 0.5
+
+
 func _panel_slot(i: int) -> void:
 	var it: Dictionary = owned[i]
 	var lock: bool = i == sealed
@@ -1771,9 +1788,13 @@ func _icon_mod(c: Vector2, r: float, id: String, dim: float) -> void:
 				draw_colored_polygon(annulus_at(c, r * MB.bo, r * MB.di, a, a + step, 3), acc)
 
 
-func _icon_dart(c: Vector2, dl: float, id: String, dim: float) -> void:
+# rot 은 기본 각도에서 더 돌릴 양(레일 정렬 · 탁자 위 흩뿌림), a 는 알파(focus 감쇠).
+# 회전 인자 이름은 draw_item_chip 이 이미 쓰는 rot 에 맞췄고,
+# 알파 인자를 뒤에 덧붙인 것은 _icon_modifier 가 a 를 받아들인 선례와 같은 방식이다.
+func _icon_dart(c: Vector2, dl: float, id: String, dim := 0.0,
+		rot := 0.0, a := 1.0) -> void:
 	# 보드에 꽂힌 다트와 같은 각도로 눕는다 (_draw_darts 의 Vector2(6, -10))
-	var dir := Vector2(6.0, -10.0).normalized()
+	var dir := Vector2(6.0, -10.0).normalized().rotated(rot)
 	var nrm := Vector2(-dir.y, dir.x)
 	var bw := 2.6
 	var fin := 3.2
@@ -1795,22 +1816,22 @@ func _icon_dart(c: Vector2, dl: float, id: String, dim: float) -> void:
 			bw = 3.0
 			fin = 3.4
 			col = C_MULT.lightened(0.25)
-	col = col.darkened(dim)
+	col = Color(col.darkened(dim), a)
 
 	var tip := c + dir * dl
 	var tail := c - dir * dl
 	var brl := c + dir * dl * 0.1
 
 	draw_line(tip + Vector2(1.5, 3.0), tail + Vector2(1.5, 3.0),
-			Color(0.0, 0.0, 0.0, 0.28), bw)
+			Color(0.0, 0.0, 0.0, 0.28 * a), bw)
 	# 촉
 	draw_colored_polygon(PackedVector2Array([tip,
-			brl + nrm * bw * 0.5, brl - nrm * bw * 0.5]), C_LIGHT.darkened(dim))
+			brl + nrm * bw * 0.5, brl - nrm * bw * 0.5]), Color(C_LIGHT.darkened(dim), a))
 	# 배럴
 	draw_line(brl, c - dir * dl * 0.35, col, bw)
 	# 샤프트
 	draw_line(c - dir * dl * 0.35, c - dir * dl * 0.6,
-			C_DARK.lightened(0.25).darkened(dim), 1.6)
+			Color(C_DARK.lightened(0.25).darkened(dim), a), 1.6)
 	# 날개
 	var w0 := c - dir * dl * 0.6
 	draw_colored_polygon(PackedVector2Array([w0, w0 + nrm * fin - dir * dl * 0.2,
@@ -1820,16 +1841,17 @@ func _icon_dart(c: Vector2, dl: float, id: String, dim: float) -> void:
 		"hvy":
 			for t in [0.55, 0.75]:
 				var q := brl.lerp(c - dir * dl * 0.35, t)
-				draw_line(q + nrm * bw * 0.6, q - nrm * bw * 0.6, C_DARK.darkened(dim), 2.0)
+				draw_line(q + nrm * bw * 0.6, q - nrm * bw * 0.6,
+						Color(C_DARK.darkened(dim), a), 2.0)
 		"lgt":
 			for k in [-1.0, 1.0]:
 				draw_line(tail + nrm * k * 2.5 - dir * 2.0,
 						tail + nrm * k * 2.5 - dir * 6.0, col, 1.0)
 		"prc":
-			draw_line(tip, tip + dir * 5.0, C_CHIP.lightened(0.4).darkened(dim), 1.0)
+			draw_line(tip, tip + dir * 5.0, Color(C_CHIP.lightened(0.4).darkened(dim), a), 1.0)
 		"mag":
 			draw_arc(tip + dir * 4.0, 4.5, PI * 0.15, PI * 0.85,
-					10, C_MULT.lightened(0.4).darkened(dim), 1.0)
+					10, Color(C_MULT.lightened(0.4).darkened(dim), a), 1.0)
 
 
 # ══════════════════════════════════════════════════════════
@@ -2105,16 +2127,11 @@ func _tip_build(hit: Dictionary) -> void:
 				_tip_add(s.d.d, 10, C_DIM)
 				_tip_add("보드를 바꾼다 — 런이 끝날 때까지 남는다" if s.type == "mod"
 						else "탄창의 표준 다트 1개와 바꾼다", 9, C_DIM.darkened(0.2))
-			# 못 사는 이유를 누르기 전에 알려준다. _deny() 는 세 원인을 한 문장으로 뭉갠다.
-			if s.sold:
-				_tip_add("이미 구매함", 9, C_DIM.darkened(0.3))
-			elif gold < s.cost:
-				_tip_add("골드가 %d 모자란다" % (s.cost - gold), 9, C_RED.lightened(0.2))
-			elif s.type == "item" and owned.size() >= GameData.MAX_ITEMS:
-				_tip_add("칩 랙이 꽉 찼다 (%d/%d)" % [owned.size(), GameData.MAX_ITEMS],
-						9, C_RED.lightened(0.2))
-			elif s.type == "dart" and _std_slot() < 0:
-				_tip_add("바꿀 표준 다트가 없다", 9, C_RED.lightened(0.2))
+			# 못 사는 이유를 누르기 전에 알려준다. _deny() 는 원인을 한 문장으로 뭉갠다.
+			var blk := _buy_block(i)
+			if blk != "":
+				_tip_add(blk, 9,
+						C_DIM.darkened(0.3) if s.sold else C_RED.lightened(0.2))
 		"stage":
 			var sp: Dictionary = stage_pick[i]
 			tip_mark = _stage_rect(i)
