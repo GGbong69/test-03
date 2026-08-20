@@ -1,0 +1,19 @@
+[remap]
+
+importer="csv_translation"
+type="Translation"
+uid="uid://bhmfyawn02lbt"
+
+[deps]
+
+files=["res://data/_stats.fire.translation", "res://data/_stats.gain.translation", "res://data/_stats.gain.translation"]
+
+source_file="res://data/_stats.csv"
+dest_files=["res://data/_stats.fire.translation", "res://data/_stats.gain.translation", "res://data/_stats.gain.translation"]
+
+[params]
+
+compress=1
+delimiter=0
+unescape_keys=false
+unescape_translations=true

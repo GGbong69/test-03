@@ -1,27 +1,27 @@
-﻿id,name,cond,kind,value,cost,gold,gv,note
-trp,삼중고,triple,mult,4,4,,,흔함 — 조건이 넓고 효과가 작다
-dbl,가장자리,double,mult,3,4,,,흔함
-odd,홀수 애호,odd,chip,14,4,,,흔함
-evn,짝수 애호,even,chip,14,4,,,흔함
-lft,좌익수,left,mult,2,4,,,흔함
-rgt,우익수,right,mult,2,4,,,흔함
-big,대물,big,chip,16,4,,,흔함
-sml,소물,small,mult,5,4,,,흔함
-sam,외골수,same,mult,4,7,,,보통 — 조건이 좁은 대신 효과가 크다
-dif,변덕쟁이,diff,chip,22,7,,,보통
-bul,명중왕,bull,mult,8,7,,,보통
-fst,첫 발,first,chip,45,7,,,보통
-lst,막판,last,xmult,2,7,,,보통
-mis,빈손,miss,chip,30,7,,,보통
-str,정밀,streak,mult_streak,3,11,,,희귀 — 빌드의 축
-alc,기본기,always,chip,25,11,,,희귀
-alm,증폭기,always,xmult,2,14,,,희귀
-mtc,밑천,small,mult,2,4,broke,4,골드 칩 — 득점 반쪽은 같은 조건 기존 것보다 낮다
-pdn,판돈,first,chip,26,7,spare,1,골드 칩
-bjn,본전,diff,chip,12,7,clean,3,골드 칩
-kns,큰손,triple,mult,3,11,blitz,9,골드 칩
-mlj,물주,always,chip,16,11,clear,4,골드 칩
-bnd,띠쟁이,band,chip,20,7,,,보통 — 링 행에 처음 붙는 칩. 불에서 0
-smt,손맛,warm,chip,30,7,,,보통 — 라운드에 트리플을 한 번 뚫고 나면
-kkt,칼끝,double,xmult,2,11,,,희귀 — 두 번째 곱셈 층. 바깥 띠
-mid,중물,mid,chip,40,14,,,희귀 — 가운데 아홉 칸. 조준점을 옮긴다
+﻿id,name,cond,kind,value,cost,gold,gv,fire_pct,gain_dart,gain_gold,note
+trp,삼중고,triple,mult,4,4,,,7.58,3.17,0.79,흔함 — 조건이 넓고 효과가 작다
+dbl,가장자리,double,mult,3,4,,,11.86,3.74,0.94,흔함
+odd,홀수 애호,odd,chip,14,4,,,30.41,6.14,1.53,흔함
+evn,짝수 애호,even,chip,14,4,,,30.67,6.19,1.55,흔함
+lft,좌익수,left,mult,2,4,,,31.14,7.24,1.81,흔함
+rgt,우익수,right,mult,2,4,,,31.16,6.32,1.58,흔함
+big,대물,big,chip,16,4,,,18.44,4.25,1.06,흔함
+sml,소물,small,mult,5,4,,,15.26,2.29,0.57,흔함
+sam,외골수,same,mult,4,7,,,1.54,0.66,0.09,보통 — 조건이 좁은 대신 효과가 크다
+dif,변덕쟁이,diff,chip,22,7,,,60.76,19.16,2.74,보통
+bul,명중왕,bull,mult,8,7,,,1.22,2.88,0.41,보통
+fst,첫 발,first,chip,45,7,,,10.45,6.72,0.96,보통
+lst,막판,last,xmult,2,7,,,10.40,1.59,0.23,보통
+mis,빈손,miss,chip,30,7,,,37.70,11.31,1.62,보통
+str,정밀,streak,mult_streak,3,11,,,1.54,0.50,0.05,희귀 — 빌드의 축
+alc,기본기,always,chip,25,11,,,62.30,22.33,2.03,희귀
+alm,증폭기,always,xmult,2,14,,,62.30,9.61,0.69,희귀
+mtc,밑천,small,mult,2,4,broke,4,15.26,0.91,0.23,골드 칩 — 득점 반쪽은 같은 조건 기존 것보다 낮다
+pdn,판돈,first,chip,26,7,spare,1,10.45,3.89,0.56,골드 칩
+bjn,본전,diff,chip,12,7,clean,3,60.76,10.45,1.49,골드 칩
+kns,큰손,triple,mult,3,11,blitz,9,7.58,2.38,0.22,골드 칩
+mlj,물주,always,chip,16,11,clear,4,62.30,14.29,1.30,골드 칩
+bnd,띠쟁이,band,chip,20,7,,,19.44,9.29,1.33,보통 — 링 행에 처음 붙는 칩. 불에서 0
+smt,손맛,warm,chip,30,7,,,10.63,4.58,0.65,보통 — 라운드에 트리플을 한 번 뚫고 나면
+kkt,칼끝,double,xmult,2,11,,,11.86,2.49,0.23,희귀 — 두 번째 곱셈 층. 바깥 띠
+mid,중물,mid,chip,40,14,,,27.38,15.82,1.13,희귀 — 가운데 아홉 칸. 조준점을 옮긴다
