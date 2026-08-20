@@ -1682,13 +1682,10 @@ func _bank_draw() -> void:
 		r.size.y = 46.0
 	draw_rect(r, C_PANEL)
 	draw_rect(Rect2(r.position, Vector2(r.size.x, 2.0)), C_GOLD.darkened(0.35))
-	draw_string(font, r.position + Vector2(5.0, 12.0), "자금",
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_DIM.darkened(0.15))
-
 	# deny_flash 는 상점 중앙 골드 텍스트가 쓰던 값을 그대로 물려받는다
 	var gc: Color = C_GOLD.lerp(C_MULT, deny_flash)
 	var jx := randf_range(-deny_flash, deny_flash) * 2.0
-	draw_gold(r.get_center().x + jx, r.position.y + 30.0, str(gold), 16, gc)
+	draw_gold(r.get_center().x + jx, r.position.y + 26.0, str(gold), 16, gc)
 
 	if not wide:
 		return
@@ -2168,8 +2165,6 @@ func _sell_draw() -> void:
 	if not live:
 		draw_string(font, r.position + Vector2(0.0, 21.0), "판매",
 				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 10, C_DIM.darkened(0.1))
-		draw_string(font, r.position + Vector2(0.0, 36.0), "칩을 고르세요",
-				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, C_DIM.darkened(0.35))
 		return
 	draw_string(font, r.position + Vector2(0.0, 21.0), "팔기",
 			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 13, C_TXT)
@@ -2252,12 +2247,6 @@ func _table_draw() -> void:
 	draw_line(Vector2(24.0, 86.0), Vector2(VIEW.x - 24.0, 86.0), Color(ink, 0.5), 1.0)
 	# 펠트에 찍힌 규칙. 세워서 그린다 — 640x360 에서 10pt 를 0.788배로 누르면
 	# 자모가 뭉갠다(_draw_stage 가 8pt 한글을 지운 것과 같은 이유). 글자는 전부
-	# 정면이라는 예외를 한 번만 인정하고 이름·가격·안내에 똑같이 적용한다.
-	# 내용은 장식이 아니라 _buy_block 이 거절하는 세 가지 이유다.
-	draw_string(font, Vector2(0.0, 98.0),
-			"칩 5개까지    ·    다트는 표준과 교환    ·    개조는 런 끝까지",
-			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 10, Color(ink, 0.85))
-
 	_goods_draw()
 
 	# 덮개 — 물건은 펠트 far 모서리(y=78)에서 나온다. 그 위로 삐져나온 부분을
@@ -3703,8 +3692,6 @@ func _pay_draw() -> void:
 	if not live:
 		draw_string(font, PAY.position + Vector2(0.0, 20.0), "계산대",
 				HORIZONTAL_ALIGNMENT_CENTER, PAY.size.x, 12, C_DIM.darkened(0.1))
-		draw_string(font, PAY.position + Vector2(0.0, 34.0), "여기에 놓거나  ·  골라서 누른다",
-				HORIZONTAL_ALIGNMENT_CENTER, PAY.size.x, 9, C_DIM.darkened(0.35))
 		return
 	var cost: int = stock[i].cost
 	var gc: Color = C_GOLD if ok else C_DIM.darkened(0.25)
@@ -4133,8 +4120,6 @@ func _draw_stage() -> void:
 
 	draw_string(font, Vector2(0, 292), "판을 눌러 시작",
 			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 11, C_TXT)
-	draw_string(font, Vector2(0, 312), "뒤에 보이는 보드가 지금 네 보드다",
-			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 9, C_DIM.darkened(0.25))
 
 
 func _draw_shop() -> void:
@@ -4145,8 +4130,7 @@ func _draw_shop() -> void:
 		var rr := _reroll_rect()
 		draw_gold(rr.position.x + rr.size.x * 0.5, rr.position.y + 35.0,
 				str(reroll_cost), 10, C_GOLD if gold >= reroll_cost else C_DIM.darkened(0.3))
-	_btn(_next_rect(), "다음 라운드 →", "R%d  목표 %d"
-			% [round_no + 1, GameData.target_of(round_no + 1)], true)
+	_btn(_next_rect(), "다음 라운드 →", "", true)
 	_pay_draw()
 	_hold_draw()
 	_fly_draw()
@@ -4169,7 +4153,9 @@ func _draw_shop() -> void:
 		draw_string(font, Vector2(12.0, 306.0), msg, HORIZONTAL_ALIGNMENT_LEFT,
 				184.0, 10, Color(C_MULT.lightened(0.3), ma))
 
-	var tip := "끌어서 옮긴다  ·  눌러 고르고 계산대로  ·  위쪽 칩을 눌러 판매"
+	# 대기 중에는 아무 말도 안 한다. 조작을 시작한 뒤의 세 가지만 남긴다 —
+	# 그것들은 설명이 아니라 지금 무슨 상태인가를 알리는 것이다.
+	var tip := ""
 	if _drop_busy():
 		tip = "떨어지는 중  —  아무 데나 눌러 바로 세운다"
 	elif hand_st == H.CARRY:
