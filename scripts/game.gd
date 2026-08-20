@@ -1004,7 +1004,12 @@ func _click(m: Vector2) -> void:
 				if _mag_rect(i).has_point(m):
 					_pick_dart(i)
 					return
-			_advance()
+			# 다트판 위에서만 잠긴다. 아무 데나 눌러도 되면 벽의 자루를 고르려다
+			# 빗나간 클릭이 그대로 조준이 되어, 무르지 못하는 실수가 생긴다.
+			# 숫자 고리까지 포함해 R*1.22 로 넉넉히 잡는다.
+			# m.x < 0 은 키보드에서 온 것이다 — 좌표가 없으므로 통과시킨다.
+			if m.x < 0.0 or (m - BC).length() <= R * 1.22:
+				_advance()
 		S.CLEAR:
 			# 좌표를 보지 않는다 — 아무 데나 누르든 스페이스든 상점으로 넘어간다
 			_open_shop()
@@ -4184,9 +4189,9 @@ func _draw_hint() -> void:
 		S.PICK:
 			hint = "던질 다트를 고르세요"
 		S.AIM_V:
-			hint = "클릭 → 높이 결정"
+			hint = "다트판을 눌러 높이 결정"
 		S.AIM_H:
-			hint = "클릭 → 좌우 결정"
+			hint = "다트판을 눌러 좌우 결정"
 		S.CONFIRM:
 			hint = "조준 확인"
 	if hint != "":
