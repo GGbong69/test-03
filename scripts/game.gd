@@ -1502,6 +1502,20 @@ func _grip_draw() -> void:
 	var n := remaining.size()
 	var picking := state == S.PICK
 
+	# 왼쪽 벽. 꽂힐 면이 없으면 다트가 그냥 떠 있는 것으로 읽힌다.
+	var w: float = GRIP.wall
+	draw_rect(Rect2(0.0, 18.0, w, VIEW.y - 18.0), C_DARK.lightened(0.06))
+	draw_line(Vector2(w, 18.0), Vector2(w, VIEW.y), C_WIRE.darkened(0.25), 1.0)
+	# 결 — 벽이 면이라는 것만 알리면 된다
+	for gy in range(30, 356, 14):
+		draw_line(Vector2(2.0, float(gy)), Vector2(w - 2.0, float(gy) + 3.0),
+				C_DARK.darkened(0.25), 1.0)
+	# 꽂힌 자리마다 파인 자국
+	for i in n:
+		var ps := _grip_pose(i)
+		if grip_t >= float(i) * GRIP.gap + GRIP.fly:
+			draw_circle(Vector2(w - 1.0, ps.c.y), 2.4, C_BG.darkened(0.25))
+
 	var hov := -1
 	for i in n:
 		if i < grip_hov.size() and grip_hov[i] > 0.5:
@@ -1516,8 +1530,8 @@ func _grip_draw() -> void:
 	# 지금 던지는 자루는 벽에서 뽑혀 나와 아래에 따로 선다.
 	# "▶ 표준" 이라 적던 자리를 물건 자체로 바꾼 것이다.
 	if not picking and not cur_dart.is_empty():
-		_icon_dart(Vector2(GRIP.x + 30.0, 332.0), GRIP.dl + 3.0,
-				String(cur_dart.id), 0.0, GRIP.tilt + 0.42, 1.0)
+		_icon_dart(Vector2(GRIP.x + 26.0, 330.0), GRIP.dl + 3.0,
+				String(cur_dart.id), 0.0, GRIP.tilt + 0.62, 1.0)
 
 
 # 라운드에 들어서면 오른쪽에서 날아와 하나씩 꽂힌다.
@@ -1530,7 +1544,7 @@ func _grip_one(i: int, picking: bool) -> void:
 	var e: float = 1.0 - pow(1.0 - t, 3.0)
 	var from: Vector2 = ps.c + Vector2(760.0, -46.0)
 	# 나는 동안은 진행 방향으로 눕고, 꽂히면서 제 기울기로 선다.
-	var rr: float = lerpf(GRIP.tilt - 0.62, ps.rot, e)
+	var rr: float = lerpf(GRIP.tilt - 0.16, ps.rot, e)
 	_icon_dart(from.lerp(ps.c, e), GRIP.dl, remaining[i].id,
 			0.0 if picking else 0.34, rr, 1.0)
 
@@ -1716,16 +1730,21 @@ const C_FELT := Color("16281f")
 const GRIP := {
 	# 왼쪽 벽에 꽂아 둔 다트. 손을 그리지 않는다 — 도형으로 그린 손은
 	# 어느 각도로 그려도 색 덩어리로 읽혔다.
-	"x": 56.0,           # 꽂힌 다트의 중심 x
+	# 촉 끝 = x - dl. 이 값이 벽 두께보다 작아야 꽂힌 것으로 읽힌다.
+	# 34 - 26 = 8 이라 벽(0~12) 안으로 4px 물린다.
+	"x": 34.0,           # 꽂힌 다트의 중심 x
 	"cy": 224.0,         # 세로 가운데 — 자루 수와 무관하게 여기 모인다
 	"dy": 31.0,          # 자루 사이 간격
 	"dl": 26.0,          # 다트 반길이
-	"tilt": -1.69,       # 벽에 꽂힌 기본 각. 촉이 왼쪽 위, 꼬리가 오른쪽 아래로 처진다
-	"jit": 0.115,        # 자루마다 살짝 다른 기울기 — 사람이 꽂은 것으로 읽힌다
+	# 왼쪽 벽에 수직으로 = 화면에서 수평으로 꽂힌다. 촉이 왼쪽, 꼬리가 오른쪽.
+	# _icon_dart 가 이미 atan2(6,10) 만큼 기울어 있으므로 그만큼 빼 준다.
+	"tilt": -2.111,      # -PI/2 - 0.5404
+	"jit": 0.087,        # 자루마다 ±5도. 넘으면 흩어져 보이고 없으면 찍어낸 것으로 보인다
 	"lift": 11.0,        # 커서를 올린 자루가 뽑혀 나오는 거리
 	"hit": 18.0,         # 잡기 반경
 	"fly": 0.26,         # 한 자루가 날아와 꽂히기까지
 	"gap": 0.085,        # 자루 사이 시차
+	"wall": 12.0,        # 왼쪽 벽 두께
 	"ang": 0.5404,       # _icon_dart 가 이미 기울어 있는 각 = atan2(6, 10)
 }
 
