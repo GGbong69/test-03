@@ -154,7 +154,7 @@ var last_gain := 0
 var total_flash := 0.0
 
 # ── 이펙트 ────────────────────────────────────────────────
-var darts := []
+var darts := []                 # 보드에 꽂힌 것들 {p 착탄점, id 다트 종류, rot 기울기}
 var pops := []
 var slot_pop := []              # 아이템 패널 참고 — 아래 "아이템 패널" 구획
 var slot_vel := []
@@ -1196,7 +1196,9 @@ func _land() -> void:
 			var r: int = sectors[(info.idx + 1) % 20]
 			pierce_gain = int((l + r) * 0.5)
 
-	darts.append(aim)
+	# 꽂힌 자루마다 살짝 다른 각. 한 번 정하고 저장하므로 프레임 간 안 흔들린다.
+	darts.append({"p": aim, "id": String(cur_dart.get("id", "std")),
+			"rot": randf_range(-0.26, 0.26)})
 	_impact(info)
 
 	hit_flash = 1.0
@@ -1582,9 +1584,11 @@ func _grip_one(i: int, picking: bool) -> void:
 
 
 func _draw_darts() -> void:
-	for d in darts:
-		draw_line(d + Vector2(6, -10), d, C_TXT, 1.0)
-		draw_circle(d, 2.5, C_ACC)
+	for e in darts:
+		# 촉이 착탄점에 오도록 중심을 뒤로 물린다 — _icon_dart 는 tip = c + dir*dl 이다.
+		# 예전에는 선 하나와 점 하나로 그려서 다트가 아니라 압정으로 보였다.
+		var dir := Vector2(6.0, -10.0).normalized().rotated(e.rot)
+		_icon_dart(e.p - dir * DART_DL, DART_DL, e.id, 0.0, e.rot, 1.0)
 
 
 func _draw_aim() -> void:
@@ -2993,6 +2997,7 @@ func _drop_verify() -> void:
 # 미니 보드는 실제 링 비율(트리플 띠 0.10)을 쓰면 17px 반지름에서 1.7px 라
 # 사라진다. 읽히는 도식 비율을 따로 둔다 — 계측도가 아니라 기호다.
 const MB := {"bi": 0.13, "bo": 0.27, "ti": 0.46, "to": 0.60, "di": 0.84}
+const DART_DL := 10.0           # 보드에 꽂힌 다트 반길이
 const MB_SEG := 10              # 20 칸이면 한 칸 호가 5px 라 뭉갠다
 
 
@@ -3108,7 +3113,9 @@ func _icon_mod(c: Vector2, r: float, id: String, dim: float) -> void:
 # 알파 인자를 뒤에 덧붙인 것은 _icon_modifier 가 a 를 받아들인 선례와 같은 방식이다.
 func _icon_dart(c: Vector2, dl: float, id: String, dim := 0.0,
 		rot := 0.0, a := 1.0, sh := true) -> void:
-	# 보드에 꽂힌 다트와 같은 각도로 눕는다 (_draw_darts 의 Vector2(6, -10))
+	# 기본 각도. 촉이 오른쪽 위, 꼬리가 왼쪽 아래로 눕는다.
+	# (옛 주석은 _draw_darts 와 같은 각이라고 했지만 그쪽은 꼬리가 오른쪽 위라
+	#  실제로는 정반대였다. 지금은 _draw_darts 도 이 함수를 쓴다.)
 	var dir := Vector2(6.0, -10.0).normalized().rotated(rot)
 	var nrm := Vector2(-dir.y, dir.x)
 	# 굵기는 길이를 따라간다. 절대값으로 두면 dl 을 키웠을 때 길기만 하고
