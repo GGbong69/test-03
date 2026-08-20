@@ -252,6 +252,7 @@ func _start_round() -> void:
 		remaining.pop_back()
 	cur_dart = GameData.DARTS[0]
 	darts_left = remaining.size()
+	grip_t = 0.0
 	sealed = randi() % owned.size() if has_mod("dull") and not owned.is_empty() else -1
 	round_miss = false
 	total = 0
@@ -860,7 +861,10 @@ func _process(d: float) -> void:
 		sell_t += d
 		if not _can_sell() or sell_sel >= owned.size():
 			sell_sel = -1
-	# 쥔 손 — 커서가 올라간 다트만 뽑힌다.
+	if _is_play():
+		grip_t += d
+
+	# 벽에 꽂힌 다트 — 커서가 올라간 자루만 뽑혀 나온다.
 	# 히트는 뽑히기 전 자리(_grip_pose 의 hit)로 하므로 표적이 안 도망간다.
 	if grip_hov.size() != remaining.size():
 		grip_hov.resize(remaining.size())
@@ -1308,29 +1312,32 @@ func _stage_rect(i: int) -> Rect2:
 	return Rect2(Vector2(32.0 + i * 196.0, 112.0), Vector2(176.0, 152.0))
 
 
-# 부채에서 i 번 다트가 어디에 어떻게 놓이는가.
+# 자루마다 살짝 다른 기울기. 인덱스로만 정해지므로 프레임 간 안 흔들리고
+# 리롤·재입장에도 같은 배치가 나온다.
+func _grip_tilt(i: int) -> float:
+	return GRIP.tilt + sin(float(i) * 12.9898) * GRIP.jit
+
+
+# i 번 다트가 벽 어디에 어떤 각으로 꽂혀 있는가.
 # 그리기와 잡기가 같은 함수를 본다 — 갈라지면 보이는 곳과 눌리는 곳이 어긋난다.
 func _grip_pose(i: int) -> Dictionary:
 	var n: int = maxi(remaining.size(), 1)
-	var st: float = minf(GRIP.step, GRIP.span / float(maxi(n - 1, 1)))
-	var th: float = GRIP.mid + (float(i) - float(n - 1) * 0.5) * st
-	var u := Vector2(sin(th), -cos(th))
-	var base: Vector2 = Vector2(GRIP.px, GRIP.py) + u * GRIP.arc
+	var base := Vector2(GRIP.x,
+			GRIP.cy - float(n - 1) * GRIP.dy * 0.5 + float(i) * GRIP.dy)
+	var rot: float = _grip_tilt(i)
+	# 뽑히는 방향은 자루 축을 따라 꼬리 쪽이다. 옆으로 밀면 뽑는 것으로 안 보인다.
+	var axis := Vector2(6.0, -10.0).normalized().rotated(rot)
 	var lf: float = GRIP.lift * (grip_hov[i] if i < grip_hov.size() else 0.0)
 	return {
-		"c": base + u * lf,
-		"rot": th - GRIP.ang,
-		"th": th,
+		"c": base - axis * lf,
+		"rot": rot,
 		# 히트 상자는 뽑히기 전 자리에 고정한다. 그리는 자리를 따라가면
-		# 커서를 올린 순간 표적이 도망가 다시 잡아야 한다 —
-		# 칩 랙에서 이미 한 번 밟은 함정이라 여기서는 처음부터 갈라 둔다.
+		# 커서를 올린 순간 표적이 도망가 다시 잡아야 한다.
 		"hit": Rect2(base - Vector2(GRIP.hit, GRIP.hit),
 				Vector2(GRIP.hit * 2.0, GRIP.hit * 2.0)),
 	}
 
 
-# 소비자 다섯(그리기 · _click · _tip_hit · _tip_build · _auto_step)이 전부
-# 이 한 줄을 통해 새 자세를 따라온다. 다섯 곳을 개별로 고치지 않는다.
 func _mag_rect(i: int) -> Rect2:
 	return _grip_pose(i).hit
 
@@ -1493,44 +1500,39 @@ func _grip_draw() -> void:
 	if state == S.CLEAR or state == S.SHOP or state == S.STAGE or state == S.OVER:
 		return
 	var n := remaining.size()
-	var p := Vector2(GRIP.px, GRIP.py)
 	var picking := state == S.PICK
 
-	# 손등 — 부채 뒤에 깔린다. 화면 밖으로 잘려 손목이 안 보인다.
-	draw_circle(p + Vector2(0.0, 6.0), GRIP.arc * 0.46, C_SKIN.darkened(0.42))
-
-	# 다트. 커서가 올라간 것을 맨 나중에 그려 위로 올린다.
 	var hov := -1
 	for i in n:
 		if i < grip_hov.size() and grip_hov[i] > 0.5:
 			hov = i
+
 	for i in n:
-		if i == hov:
-			continue
-		var ps := _grip_pose(i)
-		_icon_dart(ps.c, GRIP.dl, remaining[i].id, 0.0 if picking else 0.34, ps.rot, 1.0)
+		if i != hov:
+			_grip_one(i, picking)
 	if hov >= 0:
-		var ph := _grip_pose(hov)
-		_icon_dart(ph.c, GRIP.dl + 1.0, remaining[hov].id, 0.0, ph.rot, 1.0)
+		_grip_one(hov, picking)
 
-	# 손가락 — 부채 중심을 도는 띠 셋이 다트 위를 가로지른다.
-	# 손 전체를 도형으로 그리면 못 그린 손이 되고, 손가락만 그리면 쥔 것이 읽힌다.
-	if n > 0:
-		var st: float = minf(GRIP.step, GRIP.span / float(maxi(n - 1, 1)))
-		var half: float = float(n - 1) * 0.5 * st + 0.34
-		for k in 3:
-			# 자루 끝을 쥔다. arc-dl 이 다트 꼬리이므로 그 언저리에 첫 띠를 두고
-			# 나머지는 손 안쪽으로 내린다. 위로 올리면 다트를 덮어 버린다.
-			var rr: float = GRIP.arc - GRIP.dl + 6.0 - float(k) * 13.0
-			draw_arc(p, rr, GRIP.mid - half - PI * 0.5, GRIP.mid + half - PI * 0.5,
-					22, C_SKIN.darkened(0.08 + float(k) * 0.14), 13.0 - float(k) * 1.4)
-
-	# 지금 던지는 다트는 손에서 빠져나와 부채 앞에 따로 선다.
-	# 글자로 "▶ 표준" 이라 적던 자리를 물건 자체로 바꾼다.
+	# 지금 던지는 자루는 벽에서 뽑혀 나와 아래에 따로 선다.
+	# "▶ 표준" 이라 적던 자리를 물건 자체로 바꾼 것이다.
 	if not picking and not cur_dart.is_empty():
-		var u := Vector2(sin(GRIP.mid), -cos(GRIP.mid))
-		_icon_dart(p + u * (GRIP.arc + 52.0), GRIP.dl + 3.0,
-				String(cur_dart.id), 0.0, GRIP.mid - GRIP.ang, 1.0)
+		_icon_dart(Vector2(GRIP.x + 30.0, 332.0), GRIP.dl + 3.0,
+				String(cur_dart.id), 0.0, GRIP.tilt + 0.42, 1.0)
+
+
+# 라운드에 들어서면 오른쪽에서 날아와 하나씩 꽂힌다.
+# 들어서자마자 이미 꽂혀 있으면 누가 언제 꽂았는지가 설명되지 않는다.
+func _grip_one(i: int, picking: bool) -> void:
+	var ps := _grip_pose(i)
+	var t: float = clampf((grip_t - float(i) * GRIP.gap) / GRIP.fly, 0.0, 1.0)
+	if t <= 0.0:
+		return
+	var e: float = 1.0 - pow(1.0 - t, 3.0)
+	var from: Vector2 = ps.c + Vector2(760.0, -46.0)
+	# 나는 동안은 진행 방향으로 눕고, 꽂히면서 제 기울기로 선다.
+	var rr: float = lerpf(GRIP.tilt - 0.62, ps.rot, e)
+	_icon_dart(from.lerp(ps.c, e), GRIP.dl, remaining[i].id,
+			0.0 if picking else 0.34, rr, 1.0)
 
 
 func _draw_darts() -> void:
@@ -1706,28 +1708,31 @@ const CHIP_TIERS := [
 ]
 const CHIP_SPOTS := [3, 6, 8]
 const C_FELT := Color("16281f")
-const C_SKIN := Color("c2a07a")
 
 # 쥔 손 — 남은 다트를 부채로 쥐고 있다.
 #  실제 다트 선수는 남은 다트를 반대쪽 손에 쥔다. 그걸 그대로 둔다.
 #  남은 개수를 숫자나 슬롯이 아니라 손의 무게가 말한다.
 #  중심이 화면 아래 밖이라 부채가 화면 하단에서 올라오는 것으로 읽힌다.
 const GRIP := {
-	# 중심을 화면 한참 아래로 내리고 반지름을 키우면 부채가 얕게 누워
-	# 하단을 가로지른다. 손은 화면 밖에 있고 다트만 올라온 것으로 읽힌다.
-	"px": 40.0, "py": 470.0,   # 부채 중심 (화면 밖)
-	"arc": 190.0,               # 중심에서 다트 중심까지
-	"mid": 0.42,               # 부채가 향하는 각 (위에서 오른쪽으로, 라디안)
-	"span": 0.90,              # 최대 벌림 — 몇 자루든 이보다 안 벌어진다.
-							   # 넓으면 끝 다트가 화면 아래로 눕는다.
-	"step": 0.17,              # 다트 사이 최대 각
-	"dl": 30.0,                # 다트 반길이
-	"lift": 14.0,               # 커서를 올린 다트가 뽑혀 나오는 거리
-	"hit": 20.0,               # 잡기 반경
-	"ang": 0.5404,             # _icon_dart 가 이미 기울어 있는 각 = atan2(6, 10)
+	# 왼쪽 벽에 꽂아 둔 다트. 손을 그리지 않는다 — 도형으로 그린 손은
+	# 어느 각도로 그려도 색 덩어리로 읽혔다.
+	"x": 56.0,           # 꽂힌 다트의 중심 x
+	"cy": 224.0,         # 세로 가운데 — 자루 수와 무관하게 여기 모인다
+	"dy": 31.0,          # 자루 사이 간격
+	"dl": 26.0,          # 다트 반길이
+	"tilt": -1.69,       # 벽에 꽂힌 기본 각. 촉이 왼쪽 위, 꼬리가 오른쪽 아래로 처진다
+	"jit": 0.115,        # 자루마다 살짝 다른 기울기 — 사람이 꽂은 것으로 읽힌다
+	"lift": 11.0,        # 커서를 올린 자루가 뽑혀 나오는 거리
+	"hit": 18.0,         # 잡기 반경
+	"fly": 0.26,         # 한 자루가 날아와 꽂히기까지
+	"gap": 0.085,        # 자루 사이 시차
+	"ang": 0.5404,       # _icon_dart 가 이미 기울어 있는 각 = atan2(6, 10)
 }
 
+
+
 var grip_hov := []              # 다트별 뽑힘 정도 0~1
+var grip_t := 0.0               # 라운드 시작 후 경과 — 날아와 꽂히는 연출용
 
 var slot_hot := []              # 발동 후 이름을 띄우는 잔여 시간
 
