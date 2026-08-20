@@ -1720,16 +1720,95 @@ func _chip_ti(cost: int) -> int:
 	return CHIP_TIERS.size() - 1
 
 
+# 조건 그림 — 칩이 "언제" 터지는가를 얼굴에 새긴다.
+#
+# 지금까지 칩은 값(얼마나)만 보였다. 그래서 등급·잉크·숫자가 같으면
+# 조건이 정반대여도 똑같이 보였다 — 홀수 애호와 짝수 애호, 좌익수와 우익수가
+# 화면에서 구분 불가였다. 재미의 절반은 조건 쪽인데 그게 안 그려지고 있었다.
+#
+# 열여섯 조건을 원시 도형만으로 가른다. 글자는 안 쓴다 — 랙 반지름 15 에서
+# 얼굴에 남는 자리가 지름 17px 라 한글은 물론 숫자도 둘은 안 들어간다.
+# 갈리는 축을 도형 갈래로 나눠 뒀다: 선 / 점 / 반원 / 삼각 / 원 / 원쌍 / 막대 / X.
+# 같은 갈래 안에서만 개수와 방향으로 갈리므로 실루엣이 먼저 읽힌다.
+func _icon_cond(c: Vector2, r: float, cond: String, col: Color) -> void:
+	var u := r * 0.62          # 도형 반경 — 얼굴 안에 머무는 상한
+	match cond:
+		"always":
+			draw_circle(c, u * 0.78, col)
+		"triple":
+			for i in 3:
+				var y := c.y + (float(i) - 1.0) * u * 0.62
+				draw_line(Vector2(c.x - u, y), Vector2(c.x + u, y), col, 1.0)
+		"double":
+			for i in 2:
+				var y := c.y + (float(i) * 2.0 - 1.0) * u * 0.42
+				draw_line(Vector2(c.x - u, y), Vector2(c.x + u, y), col, 1.0)
+		"bull":
+			draw_arc(c, u * 0.86, 0.0, TAU, 14, col, 1.0)
+			draw_circle(c, u * 0.34, col)
+		"odd":
+			draw_circle(c, u * 0.46, col)
+		"even":
+			for k in [-1.0, 1.0]:
+				draw_circle(c + Vector2(k * u * 0.48, 0.0), u * 0.42, col)
+		"left":
+			draw_colored_polygon(_half_disc(c, u, true), col)
+			draw_arc(c, u, 0.0, TAU, 16, col, 1.0)
+		"right":
+			draw_colored_polygon(_half_disc(c, u, false), col)
+			draw_arc(c, u, 0.0, TAU, 16, col, 1.0)
+		"big":
+			draw_colored_polygon(PackedVector2Array([c + Vector2(0.0, -u),
+					c + Vector2(u * 0.9, u * 0.62), c + Vector2(-u * 0.9, u * 0.62)]), col)
+		"small":
+			draw_colored_polygon(PackedVector2Array([c + Vector2(0.0, u),
+					c + Vector2(u * 0.9, -u * 0.62), c + Vector2(-u * 0.9, -u * 0.62)]), col)
+		"same":
+			# 두 원이 반쯤 겹친다 — 겹침이 곧 "같다"
+			for k in [-1.0, 1.0]:
+				draw_arc(c + Vector2(k * u * 0.34, 0.0), u * 0.62, 0.0, TAU, 14, col, 1.0)
+		"diff":
+			# 하나는 채우고 하나는 비운다 — 대비가 곧 "다르다"
+			draw_circle(c + Vector2(-u * 0.46, 0.0), u * 0.44, col)
+			draw_arc(c + Vector2(u * 0.46, 0.0), u * 0.44, 0.0, TAU, 12, col, 1.0)
+		"first":
+			draw_line(c + Vector2(-u * 0.8, -u * 0.7), c + Vector2(-u * 0.8, u * 0.7), col, 1.6)
+			draw_circle(c + Vector2(u * 0.3, 0.0), u * 0.38, col)
+		"last":
+			draw_circle(c + Vector2(-u * 0.3, 0.0), u * 0.38, col)
+			draw_line(c + Vector2(u * 0.8, -u * 0.7), c + Vector2(u * 0.8, u * 0.7), col, 1.6)
+		"streak":
+			for i in 3:
+				draw_circle(c + Vector2((float(i) - 1.0) * u * 0.66,
+						(1.0 - float(i)) * u * 0.52), u * 0.28, col)
+		"miss":
+			for k in [-1.0, 1.0]:
+				draw_line(c + Vector2(-u * 0.75, k * u * 0.75),
+						c + Vector2(u * 0.75, -k * u * 0.75), col, 1.4)
+
+
+func _half_disc(c: Vector2, u: float, left: bool) -> PackedVector2Array:
+	var pts := PackedVector2Array()
+	for i in 13:
+		var a := PI * 0.5 + PI * float(i) / 12.0 * (1.0 if left else -1.0)
+		pts.append(c + Vector2(cos(a), sin(a)) * u)
+	return pts
+
+
 # 아이템 하나를 칩으로 그린다. 랙과 상점이 같은 그림을 쓰도록 여기 하나로 모았다.
 func draw_item_chip(c: Vector2, r: float, it: Dictionary, rot: float, lift: float,
 		dim: float, num_sz: int) -> void:
 	var ti := _chip_ti(it.cost)
 	draw_chip(c, r, CHIP_TIERS[ti], CHIP_SPOTS[ti], rot, lift,
 			it.get("g", "") != "", dim)
-	var val := ("×" + str(it.v)) if it.k == "xmult" else str(it.v)
+	# 얼굴을 위아래로 가른다 — 위는 조건(언제 터지는가), 아래는 값(얼마나).
+	# 값만 있으면 조건이 정반대인 짝이 똑같이 보인다.
 	var ink: Color = C_CHIP.lightened(0.5) if it.k == "chip" else C_MULT.lightened(0.45)
-	draw_string(font, c + Vector2(-r, float(num_sz) * 0.34), val,
-			HORIZONTAL_ALIGNMENT_CENTER, r * 2.0, num_sz, ink.darkened(dim))
+	_icon_cond(c + Vector2(0.0, -r * 0.33), r * 0.42, String(it.c), ink.darkened(dim + 0.08))
+	var val := ("×" + str(it.v)) if it.k == "xmult" else str(it.v)
+	var vs: int = maxi(7, int(float(num_sz) * 0.84))
+	draw_string(font, c + Vector2(-r, r * 0.34 + float(vs) * 0.34), val,
+			HORIZONTAL_ALIGNMENT_CENTER, r * 2.0, vs, ink.darkened(dim))
 
 
 func draw_chip(c: Vector2, r: float, tier: Dictionary, spots: int, rot: float,
