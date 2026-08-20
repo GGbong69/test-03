@@ -21,3 +21,7 @@ pdn,판돈,first,chip,26,7,spare,1,골드 칩
 bjn,본전,diff,chip,12,7,clean,3,골드 칩
 kns,큰손,triple,mult,3,11,blitz,9,골드 칩
 mlj,물주,always,chip,16,11,clear,4,골드 칩
+bnd,띠쟁이,band,chip,20,7,,,보통 — 링 행에 처음 붙는 칩. 불에서 0
+smt,손맛,warm,chip,30,7,,,보통 — 라운드에 트리플을 한 번 뚫고 나면
+kkt,칼끝,double,xmult,2,11,,,희귀 — 두 번째 곱셈 층. 바깥 띠
+mid,중물,mid,chip,40,14,,,희귀 — 가운데 아홉 칸. 조준점을 옮긴다

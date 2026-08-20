@@ -53,8 +53,22 @@ const SHOP_MODS := 1
 #    note  주석. 코드는 안 읽는다
 const ITEMS_CSV := "res://data/items.csv"
 
-const CONDS := ["always", "triple", "double", "bull", "odd", "even", "left",
-		"right", "big", "small", "same", "diff", "first", "last", "streak", "miss"]
+const CONDS := ["always", "triple", "double", "band", "bull", "odd", "even", "left",
+		"right", "big", "mid", "small", "same", "diff", "first", "last",
+		"streak", "warm", "miss"]
+
+# 조건 포함관계. A 가 B 를 담으면 A 로 뜨는 다트는 B 로도 뜬다.
+# check() 를 고치면 여기도 같이 고친다 — 하위호환 검사의 유일한 근거다.
+const COND_SUB := {
+	"always": ["triple", "double", "band", "bull", "odd", "even", "left", "right",
+			"big", "mid", "small", "same", "diff", "first", "last", "streak", "warm"],
+	"band": ["triple", "double"],
+	"same": ["streak"], "streak": ["same"],   # streak>0 ⟺ same. 같은 술어다
+	"diff": ["first"],                        # last_sector 는 라운드마다 -1 로 선다
+}
+
+# 완전분할 — 같은 k 로 한 분할을 다 덮으면 합성 무조건 카드가 된다.
+const COND_PART := [["left", "right"], ["odd", "even"], ["mid", "big", "small"]]
 const KINDS := ["chip", "mult", "xmult", "mult_streak"]
 const GOLDS := ["clear", "spare", "clean", "blitz", "broke"]
 
@@ -133,12 +147,29 @@ static func _validate(rows: Array) -> void:
 				push_error("아이템 표: %s — 골드 값이 0 이하다" % who)
 		# 같은 조건·효과인데 값만 다른 쌍은 한쪽이 반드시 하위호환이 된다.
 		for ot in rows:
-			if ot.id == it.id or ot.c != it.c or ot.k != it.k:
+			if ot.id == it.id or ot.k != it.k:
 				continue
 			if it.has("g") != ot.has("g"):
 				continue
-			if it.v >= ot.v and it.cost <= ot.cost:
+			var covers: bool = it.c == ot.c \
+					or (COND_SUB.has(it.c) and COND_SUB[it.c].has(ot.c))
+			if covers and it.v >= ot.v and it.cost <= ot.cost:
 				push_error("아이템 표: %s 가 %s(%s) 의 상위호환이다" % [who, ot.n, ot.id])
+	# 완전분할을 한 효과로 다 덮으면 조건이 사라진 것과 같다.
+	for part in COND_PART:
+		for kk in KINDS:
+			var cov := 0
+			for cc in part:
+				for it2 in rows:
+					if it2.c == cc and it2.k == kk:
+						cov += 1
+						break
+			if cov == part.size():
+				# 오타가 아니라 설계 사안이라 경고로 둔다. 완전분할을 한 효과로
+				# 다 덮으면 그 조건은 사실상 사라진다 — 두 장을 같이 사면
+				# 조건 없는 카드가 된다. 지금 걸리는 둘은 원래 있던 것이다.
+				push_warning("아이템 표: %s 를 %s 로 다 덮는다 — 두 장을 같이 사면 무조건 카드"
+						% [part, kk])
 
 
 const GOLD_BROKE := 6          # "밑천" 기준 — 정산 시점 보유 골드
@@ -303,18 +334,22 @@ static func check(c: String, x: Dictionary) -> bool:
 		"always": return true
 		"triple": return x.mult == 3
 		"double": return x.mult == 2
+		# 링이면 어디든. 불은 mult 1 이라 정의상 빠진다.
+		"band": return x.mult == 2 or x.mult == 3
 		"bull": return x.sector >= 25
 		"odd": return x.sector < 25 and x.sector % 2 == 1
 		"even": return x.sector < 25 and x.sector % 2 == 0
 		"left": return x.left
 		"right": return not x.left
 		"big": return x.sector >= 15 and x.sector < 25
+		"mid": return x.sector >= 6 and x.sector <= 14
 		"small": return x.sector >= 1 and x.sector <= 5
 		"same": return x.same
 		"diff": return not x.same
 		"first": return x.first
 		"last": return x.last
 		"streak": return x.streak > 0
+		"warm": return x.warm
 	return false
 
 
@@ -323,18 +358,21 @@ static func cond_text(c: String) -> String:
 		"always": return "모든 다트"
 		"triple": return "트리플 명중 시"
 		"double": return "더블 명중 시"
+		"band": return "트리플·더블 어디든"
 		"bull": return "불 명중 시"
 		"odd": return "홀수 섹터 명중 시"
 		"even": return "짝수 섹터 명중 시"
 		"left": return "왼쪽 절반 명중 시"
 		"right": return "오른쪽 절반 명중 시"
 		"big": return "15 이상 섹터 명중 시"
+		"mid": return "6~14 섹터 명중 시"
 		"small": return "5 이하 섹터 명중 시"
 		"same": return "직전과 같은 섹터면"
 		"diff": return "직전과 다른 섹터면"
 		"first": return "라운드 첫 다트에"
 		"last": return "라운드 마지막 다트에"
 		"streak": return "연속 명중 1회마다"
+		"warm": return "이번 라운드에 트리플을 맞힌 뒤"
 		"miss": return "빗나가면"
 	return ""
 

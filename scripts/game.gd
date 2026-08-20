@@ -120,7 +120,8 @@ var won := false
 var last_sector := -1
 var streak := 0
 var dart_index := 0
-var round_miss := false         # 이번 라운드에 한 번이라도 빗나갔는가 (골드 칩 "본전" 판정)
+var round_miss := false
+var round_trp := false          # 이번 라운드에 트리플이 나왔는가 ("손맛")         # 이번 라운드에 한 번이라도 빗나갔는가 (골드 칩 "본전" 판정)
 
 # ── 상점 ──────────────────────────────────────────────────
 var stock := []                 # {type:"item"/"mod", d:Dictionary, cost:int, sold:bool}
@@ -262,6 +263,7 @@ func _start_round() -> void:
 	grip_pick = -1
 	sealed = randi() % owned.size() if has_mod("dull") and not owned.is_empty() else -1
 	round_miss = false
+	round_trp = false
 	total = 0
 	shown = 0.0
 	dart_index = 0
@@ -1224,6 +1226,7 @@ func _land() -> void:
 		"first": dart_index == 0,
 		"last": darts_left == 0,
 		"streak": streak,
+		"warm": round_trp,
 	}
 
 	cur_chip = 0
@@ -1265,6 +1268,10 @@ func _land() -> void:
 		queue.append({"k": "total"})
 
 	last_sector = info.sector
+	# ctx 를 만든 뒤여야 한다 — 불을 붙인 그 다트에는 손맛이 안 뜬다.
+	# 그게 삼중고(트리플 위에)와 손맛(트리플 뒤에)이 갈리는 지점이다.
+	if info.mult == 3:
+		round_trp = true
 	dart_index += 1
 	state = S.RESOLVE
 	qt = beat * 1.1
@@ -1932,6 +1939,27 @@ func _icon_cond(c: Vector2, r: float, cond: String, col: Color) -> void:
 			for k in [-1.0, 1.0]:
 				draw_line(c + Vector2(-u * 0.75, k * u * 0.75),
 						c + Vector2(u * 0.75, -k * u * 0.75), col, 1.4)
+		"band":
+			# 랙 r=15 → r_icon 6.30 → u 3.906. 두 호의 중심 간격 2.227px,
+			# 굵기 1.0 을 빼면 배경이 1.23px 남는다 — 1배에서 두 겹으로 갈린다.
+			var a0 := -PI * 0.5 - 1.22
+			var a1 := -PI * 0.5 + 1.22
+			draw_arc(c, u * 0.95, a0, a1, 12, col, 1.0)
+			draw_arc(c, u * 0.38, a0, a1, 8, col, 1.0)
+		"warm":
+			# 내림 사선. 오름은 정밀(점 3개)이 이미 쓴다. 획 사이 수직 간격 2.20px.
+			for i in 3:
+				var o := (float(i) - 1.0) * u * 0.62
+				draw_line(c + Vector2(-u * 0.34 + o, -u * 0.74),
+						c + Vector2(u * 0.34 + o, u * 0.74), col, 1.0)
+		"mid":
+			# 대물 ▲ 과 소물 ▼ 이 꼭짓점에서 만난다. 만나는 곳이 곧 가운데다.
+			draw_colored_polygon(PackedVector2Array([
+					c + Vector2(-u * 0.85, -u * 0.72),
+					c + Vector2(u * 0.85, -u * 0.72), c]), col)
+			draw_colored_polygon(PackedVector2Array([
+					c + Vector2(-u * 0.85, u * 0.72),
+					c + Vector2(u * 0.85, u * 0.72), c]), col)
 
 
 func _half_disc(c: Vector2, u: float, left: bool) -> PackedVector2Array:
