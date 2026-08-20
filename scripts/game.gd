@@ -253,6 +253,13 @@ func _start_round() -> void:
 	cur_dart = GameData.DARTS[0]
 	darts_left = remaining.size()
 	grip_t = 0.0
+	# 칸은 시작 때 한 번 정하고 끝까지 안 바꾼다. 자루가 빠질 때마다 다시
+	# 가운데 맞추면 남은 것들이 미끄러져 꽂혀 있는 것으로 안 보인다.
+	grip_slot.clear()
+	for gi in remaining.size():
+		grip_slot.append(gi)
+	grip_n = remaining.size()
+	grip_pick = -1
 	sealed = randi() % owned.size() if has_mod("dull") and not owned.is_empty() else -1
 	round_miss = false
 	total = 0
@@ -279,6 +286,10 @@ func _start_round() -> void:
 
 
 func _to_pick() -> void:
+	# 먼저 고르는 상태로 들어선다. _pick_dart 가 "고르는 중일 때만 조준으로
+	# 넘어간다" 는 가드를 갖고 있어(조준 중 갈아타기가 상태를 되돌리면 안 된다),
+	# 여기서 상태를 안 세우면 이전 화면에 그대로 머문다.
+	state = S.PICK
 	# 남은 다트가 전부 같은 종류면 고를 게 없으니 건너뛴다
 	var uniform := true
 	for r in remaining:
@@ -287,18 +298,29 @@ func _to_pick() -> void:
 			break
 	if uniform:
 		_pick_dart(0)
-	else:
-		state = S.PICK
 
 
+# 고를 때 벽에서 빼지 않는다. 뽑아 든 것으로만 표시하고 실제로 빠지는 것은
+# 던지는 순간이다. 그래서 조준 중에도 마음이 바뀌면 다른 자루로 갈아탈 수 있다.
 func _pick_dart(i: int) -> void:
 	if i < 0 or i >= remaining.size():
 		return
+	grip_pick = i
 	cur_dart = remaining[i]
-	remaining.remove_at(i)
-	darts_left = remaining.size()
-	state = S.AIM_V
+	darts_left = remaining.size() - 1     # 이번 자루를 뺀 나머지
+	if state == S.PICK:
+		state = S.AIM_V
 	beep(262.0, 0.05, 0.10)
+
+
+# 던지는 순간 벽에서 실제로 빠진다.
+func _grip_consume() -> void:
+	if grip_pick < 0 or grip_pick >= remaining.size():
+		return
+	remaining.remove_at(grip_pick)
+	grip_slot.remove_at(grip_pick)
+	grip_pick = -1
+	darts_left = remaining.size()
 
 
 func _finish_round() -> void:
@@ -846,6 +868,7 @@ func _process(d: float) -> void:
 			if confirm_t >= ch():
 				if cur_dart.get("magnet", 0.0) > 0.0:
 					aim = aim.lerp(BC, cur_dart.magnet)
+				_grip_consume()
 				state = S.FLY
 				fly_t = 0.0
 		S.FLY:
@@ -870,7 +893,7 @@ func _process(d: float) -> void:
 		grip_hov.resize(remaining.size())
 		grip_hov.fill(0.0)
 	var gi := -1
-	if state == S.PICK:
+	if state == S.PICK or state == S.AIM_V or state == S.AIM_H:
 		var gm := get_local_mouse_position()
 		for i in remaining.size():
 			# 뒤에 그려진 것이 위에 있다. 마지막 명중을 택해 그리기 순서와 맞춘다.
@@ -975,6 +998,12 @@ func _click(m: Vector2) -> void:
 					_pick_dart(i)
 					return
 		S.AIM_V, S.AIM_H:
+			# 조준 중에도 벽의 다른 자루로 갈아탈 수 있다. 벽을 먼저 보고,
+			# 아무 자루도 안 눌렸을 때만 게이지를 잠근다.
+			for i in remaining.size():
+				if _mag_rect(i).has_point(m):
+					_pick_dart(i)
+					return
 			_advance()
 		S.CLEAR:
 			# 좌표를 보지 않는다 — 아무 데나 누르든 스페이스든 상점으로 넘어간다
@@ -1321,13 +1350,17 @@ func _grip_tilt(i: int) -> float:
 # i 번 다트가 벽 어디에 어떤 각으로 꽂혀 있는가.
 # 그리기와 잡기가 같은 함수를 본다 — 갈라지면 보이는 곳과 눌리는 곳이 어긋난다.
 func _grip_pose(i: int) -> Dictionary:
-	var n: int = maxi(remaining.size(), 1)
+	# 칸은 시작 때 배정된 그대로다. 남은 개수가 아니라 시작 개수로 가운데를
+	# 맞추므로, 자루가 빠져도 나머지가 제자리에 그대로 꽂혀 있다.
+	var slot: int = grip_slot[i] if i < grip_slot.size() else i
 	var base := Vector2(GRIP.x,
-			GRIP.cy - float(n - 1) * GRIP.dy * 0.5 + float(i) * GRIP.dy)
-	var rot: float = _grip_tilt(i)
+			GRIP.cy - float(maxi(grip_n, 1) - 1) * GRIP.dy * 0.5 + float(slot) * GRIP.dy)
+	var rot: float = _grip_tilt(slot)
 	# 뽑히는 방향은 자루 축을 따라 꼬리 쪽이다. 옆으로 밀면 뽑는 것으로 안 보인다.
 	var axis := Vector2(6.0, -10.0).normalized().rotated(rot)
 	var lf: float = GRIP.lift * (grip_hov[i] if i < grip_hov.size() else 0.0)
+	if i == grip_pick:
+		lf += GRIP.pull
 	return {
 		"c": base - axis * lf,
 		"rot": rot,
@@ -1521,32 +1554,31 @@ func _grip_draw() -> void:
 		if i < grip_hov.size() and grip_hov[i] > 0.5:
 			hov = i
 
+	# 고른 자루와 커서가 얹힌 자루를 맨 나중에 그려 위로 올린다.
+	var top: int = hov if hov >= 0 else grip_pick
 	for i in n:
-		if i != hov:
+		if i != top:
 			_grip_one(i, picking)
-	if hov >= 0:
-		_grip_one(hov, picking)
-
-	# 지금 던지는 자루는 벽에서 뽑혀 나와 아래에 따로 선다.
-	# "▶ 표준" 이라 적던 자리를 물건 자체로 바꾼 것이다.
-	if not picking and not cur_dart.is_empty():
-		_icon_dart(Vector2(GRIP.x + 26.0, 330.0), GRIP.dl + 3.0,
-				String(cur_dart.id), 0.0, GRIP.tilt + 0.62, 1.0)
+	if top >= 0:
+		_grip_one(top, picking)
 
 
 # 라운드에 들어서면 오른쪽에서 날아와 하나씩 꽂힌다.
 # 들어서자마자 이미 꽂혀 있으면 누가 언제 꽂았는지가 설명되지 않는다.
 func _grip_one(i: int, picking: bool) -> void:
 	var ps := _grip_pose(i)
-	var t: float = clampf((grip_t - float(i) * GRIP.gap) / GRIP.fly, 0.0, 1.0)
+	var slot: int = grip_slot[i] if i < grip_slot.size() else i
+	var t: float = clampf((grip_t - float(slot) * GRIP.gap) / GRIP.fly, 0.0, 1.0)
 	if t <= 0.0:
 		return
 	var e: float = 1.0 - pow(1.0 - t, 3.0)
 	var from: Vector2 = ps.c + Vector2(760.0, -46.0)
 	# 나는 동안은 진행 방향으로 눕고, 꽂히면서 제 기울기로 선다.
 	var rr: float = lerpf(GRIP.tilt - 0.16, ps.rot, e)
-	_icon_dart(from.lerp(ps.c, e), GRIP.dl, remaining[i].id,
-			0.0 if picking else 0.34, rr, 1.0)
+	# 고른 자루는 뽑혀 나와 밝게 선다 — 지금 던질 것이 무엇인지가 벽 위에서 읽힌다.
+	var dim: float = 0.0 if (picking or i == grip_pick) else 0.26
+	_icon_dart(from.lerp(ps.c, e), GRIP.dl + (3.0 if i == grip_pick else 0.0),
+			remaining[i].id, dim, rr, 1.0)
 
 
 func _draw_darts() -> void:
@@ -1741,6 +1773,7 @@ const GRIP := {
 	"tilt": -2.111,      # -PI/2 - 0.5404
 	"jit": 0.087,        # 자루마다 ±5도. 넘으면 흩어져 보이고 없으면 찍어낸 것으로 보인다
 	"lift": 11.0,        # 커서를 올린 자루가 뽑혀 나오는 거리
+	"pull": 26.0,        # 고른 자루가 뽑혀 나오는 거리 — 든 것으로 읽혀야 한다
 	"hit": 18.0,         # 잡기 반경
 	"fly": 0.26,         # 한 자루가 날아와 꽂히기까지
 	"gap": 0.085,        # 자루 사이 시차
@@ -1752,6 +1785,9 @@ const GRIP := {
 
 var grip_hov := []              # 다트별 뽑힘 정도 0~1
 var grip_t := 0.0               # 라운드 시작 후 경과 — 날아와 꽂히는 연출용
+var grip_slot := []             # remaining[i] 가 벽의 몇 번 칸에 꽂혀 있는가
+var grip_n := 0                 # 이번 라운드 시작 자루 수 — 칸 배치의 기준
+var grip_pick := -1             # 지금 고른 자루 (remaining 인덱스). 던져야 빠진다
 
 var slot_hot := []              # 발동 후 이름을 띄우는 잔여 시간
 
@@ -3780,10 +3816,10 @@ func _tip_hit(m: Vector2) -> Dictionary:
 				if _slot_rect(i).has_point(m):
 					return {"k": "rack", "i": i}
 		S.PICK, S.AIM_V, S.AIM_H:
-			if state == S.PICK:
-				for i in remaining.size():
-					if _mag_rect(i).has_point(m):
-						return {"k": "mag", "i": i}
+			# 조준 중에도 갈아탈 수 있으므로 그때도 벽을 짚어 준다
+			for i in remaining.size():
+				if _mag_rect(i).has_point(m):
+					return {"k": "mag", "i": i}
 			# 점수 카드가 떠 있으면 랙 툴팁이 카드를 정면으로 덮는다.
 			# 위는 상단바라 앵커를 뒤집어서 못 피한다 — 그동안 대상에서 뺀다.
 			if card_p <= 0.004:
