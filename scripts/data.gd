@@ -36,51 +36,110 @@ const MAX_ITEMS := 5
 const SHOP_ITEMS := 2
 const SHOP_MODS := 1
 
-# ── 아이템 ────────────────────────────────────────────────
-#  c = 발동 조건, k = 효과 종류, v = 수치
-#  k: chip 점수 가산 / mult 배수 가산 / xmult 배수 곱 / mult_streak 연속수 비례
-const ITEMS := [
-	# 흔함 4골드 — 조건이 넓고 효과가 작다
-	{"id": "trp", "n": "삼중고", "c": "triple", "k": "mult", "v": 4, "cost": 4},
-	{"id": "dbl", "n": "가장자리", "c": "double", "k": "mult", "v": 3, "cost": 4},
-	{"id": "odd", "n": "홀수 애호", "c": "odd", "k": "chip", "v": 14, "cost": 4},
-	{"id": "evn", "n": "짝수 애호", "c": "even", "k": "chip", "v": 14, "cost": 4},
-	{"id": "lft", "n": "좌익수", "c": "left", "k": "mult", "v": 2, "cost": 4},
-	{"id": "rgt", "n": "우익수", "c": "right", "k": "mult", "v": 2, "cost": 4},
-	{"id": "big", "n": "대물", "c": "big", "k": "chip", "v": 16, "cost": 4},
-	{"id": "sml", "n": "소물", "c": "small", "k": "mult", "v": 5, "cost": 4},
+# ── 아이템 표 ─────────────────────────────────────────────
+#  수치는 res://data/items.csv 에 있다. 엑셀로 열어 고치고 저장하면 끝이다.
+#  (UTF-8 BOM 으로 저장돼 있어 엑셀이 한글을 안 깬다. 다른 인코딩으로
+#   덮어쓰면 이름이 깨지므로 엑셀에서 "CSV UTF-8" 로 저장할 것.)
+#
+#  왜 코드가 아니라 파일인가 — 종수가 늘수록 스프레드시트에서 정렬·비교하며
+#  밸런스를 보는 편이 낫다. 대신 오타가 컴파일에 안 걸리므로 _validate() 가
+#  그 자리를 대신한다. 표가 틀리면 게임이 조용히 이상해지는 대신 시작할 때
+#  push_error 로 소리를 낸다.
+#
+#  열: id,name,cond,kind,value,cost,gold,gv,note
+#    cond  check() 가 아는 조건 이름
+#    kind  chip / mult / xmult / mult_streak
+#    gold  비어 있으면 골드 반쪽 없음. 있으면 gold_text() 가 아는 이름
+#    note  주석. 코드는 안 읽는다
+const ITEMS_CSV := "res://data/items.csv"
 
-	# 보통 7골드 — 조건이 좁은 대신 효과가 크다
-	{"id": "sam", "n": "외골수", "c": "same", "k": "mult", "v": 4, "cost": 7},
-	{"id": "dif", "n": "변덕쟁이", "c": "diff", "k": "chip", "v": 22, "cost": 7},
-	{"id": "bul", "n": "명중왕", "c": "bull", "k": "mult", "v": 8, "cost": 7},
-	{"id": "fst", "n": "첫 발", "c": "first", "k": "chip", "v": 45, "cost": 7},
-	{"id": "lst", "n": "막판", "c": "last", "k": "xmult", "v": 2, "cost": 7},
-	{"id": "mis", "n": "빈손", "c": "miss", "k": "chip", "v": 30, "cost": 7},
+const CONDS := ["always", "triple", "double", "bull", "odd", "even", "left",
+		"right", "big", "small", "same", "diff", "first", "last", "streak", "miss"]
+const KINDS := ["chip", "mult", "xmult", "mult_streak"]
+const GOLDS := ["clear", "spare", "clean", "blitz", "broke"]
 
-	# 희귀 — 빌드의 축이 되는 물건
-	{"id": "str", "n": "정밀", "c": "streak", "k": "mult_streak", "v": 3, "cost": 11},
-	{"id": "alc", "n": "기본기", "c": "always", "k": "chip", "v": 25, "cost": 11},
-	{"id": "alm", "n": "증폭기", "c": "always", "k": "xmult", "v": 2, "cost": 14},
+static var _items: Array = []
 
-	# ── 골드 칩 ──────────────────────────────────────────
-	#  두 시계로 움직인다.
-	#    득점 반쪽 c/k/v — 다트마다. 기존 아이템과 완전히 같은 배관을 쓴다.
-	#    골드 반쪽 g/gv  — 라운드 정산 때만. game.gd 의 _gold_from_items().
-	#  골드를 다트 단위로 주면 "일부러 목표를 안 넘기고 다트를 다 던져
-	#  골드만 벌기" 가 성립한다. 정산 단위로 묶어 그 길을 막았다.
-	#  득점 반쪽은 같은 조건의 기존 아이템보다 낮다. 골드가 그 차액이다.
-	{"id": "mtc", "n": "밑천", "c": "small", "k": "mult", "v": 2,
-		"g": "broke", "gv": 4, "cost": 4},
-	{"id": "pdn", "n": "판돈", "c": "first", "k": "chip", "v": 26,
-		"g": "spare", "gv": 1, "cost": 7},
-	{"id": "bjn", "n": "본전", "c": "diff", "k": "chip", "v": 12,
-		"g": "clean", "gv": 3, "cost": 7},
-	{"id": "kns", "n": "큰손", "c": "triple", "k": "mult", "v": 3,
-		"g": "blitz", "gv": 9, "cost": 11},
-	{"id": "mlj", "n": "물주", "c": "always", "k": "chip", "v": 16,
-		"g": "clear", "gv": 4, "cost": 11},
-]
+
+static func items() -> Array:
+	if _items.is_empty():
+		_items = _load()
+	return _items
+
+
+static func _load() -> Array:
+	var out := []
+	var f := FileAccess.open(ITEMS_CSV, FileAccess.READ)
+	if f == null:
+		push_error("아이템 표를 못 연다: %s" % ITEMS_CSV)
+		return out
+	var head := f.get_csv_line()
+	# BOM 은 첫 칸 앞에 붙는다. 지우지 않으면 "id" 가 "\ufeffid" 가 된다.
+	if head.size() > 0:
+		head[0] = head[0].lstrip("\ufeff")
+	var col := {}
+	for i in head.size():
+		col[head[i].strip_edges()] = i
+	for need in ["id", "name", "cond", "kind", "value", "cost"]:
+		if not col.has(need):
+			push_error("아이템 표에 '%s' 열이 없다" % need)
+			f.close()
+			return out
+	while not f.eof_reached():
+		var r := f.get_csv_line()
+		if r.size() < head.size() or r[col.id].strip_edges() == "":
+			continue
+		var it := {
+			"id": r[col.id].strip_edges(),
+			"n": r[col.name].strip_edges(),
+			"c": r[col.cond].strip_edges(),
+			"k": r[col.kind].strip_edges(),
+			"v": int(r[col.value]),
+			"cost": int(r[col.cost]),
+		}
+		if col.has("gold") and r[col.gold].strip_edges() != "":
+			it["g"] = r[col.gold].strip_edges()
+			it["gv"] = int(r[col.gv]) if col.has("gv") else 0
+		out.append(it)
+	f.close()
+	_validate(out)
+	return out
+
+
+# 오타가 실행 중에야 터지는 것을 막는다. CSV 에는 컴파일이 없으므로
+# 이 함수가 그 자리를 대신한다. 게임을 멈추지는 않는다 — 무엇이 틀렸는지
+# 전부 뱉고 계속 간다. 한 줄 고치고 다시 켜는 것보다 한 번에 보는 게 낫다.
+static func _validate(rows: Array) -> void:
+	var seen := {}
+	for it in rows:
+		var who: String = "%s(%s)" % [it.n, it.id]
+		if seen.has(it.id):
+			push_error("아이템 표: id 중복 %s" % it.id)
+		seen[it.id] = true
+		if it.id.length() != 3:
+			push_error("아이템 표: %s — id 는 세 글자여야 한다" % who)
+		if not CONDS.has(it.c):
+			push_error("아이템 표: %s — 모르는 조건 '%s'" % [who, it.c])
+		if not KINDS.has(it.k):
+			push_error("아이템 표: %s — 모르는 효과 '%s'" % [who, it.k])
+		if it.v <= 0:
+			push_error("아이템 표: %s — 값이 0 이하다" % who)
+		if it.cost <= 0:
+			push_error("아이템 표: %s — 가격이 0 이하다" % who)
+		if it.has("g"):
+			if not GOLDS.has(it.g):
+				push_error("아이템 표: %s — 모르는 골드 조건 '%s'" % [who, it.g])
+			if int(it.gv) <= 0:
+				push_error("아이템 표: %s — 골드 값이 0 이하다" % who)
+		# 같은 조건·효과인데 값만 다른 쌍은 한쪽이 반드시 하위호환이 된다.
+		for ot in rows:
+			if ot.id == it.id or ot.c != it.c or ot.k != it.k:
+				continue
+			if it.has("g") != ot.has("g"):
+				continue
+			if it.v >= ot.v and it.cost <= ot.cost:
+				push_error("아이템 표: %s 가 %s(%s) 의 상위호환이다" % [who, ot.n, ot.id])
+
 
 const GOLD_BROKE := 6          # "밑천" 기준 — 정산 시점 보유 골드
 const GOLD_BLITZ := 3          # "큰손" 기준 — 남은 다트

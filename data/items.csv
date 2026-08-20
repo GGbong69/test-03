@@ -1,0 +1,23 @@
+﻿id,name,cond,kind,value,cost,gold,gv,note
+trp,삼중고,triple,mult,4,4,,,흔함 — 조건이 넓고 효과가 작다
+dbl,가장자리,double,mult,3,4,,,흔함
+odd,홀수 애호,odd,chip,14,4,,,흔함
+evn,짝수 애호,even,chip,14,4,,,흔함
+lft,좌익수,left,mult,2,4,,,흔함
+rgt,우익수,right,mult,2,4,,,흔함
+big,대물,big,chip,16,4,,,흔함
+sml,소물,small,mult,5,4,,,흔함
+sam,외골수,same,mult,4,7,,,보통 — 조건이 좁은 대신 효과가 크다
+dif,변덕쟁이,diff,chip,22,7,,,보통
+bul,명중왕,bull,mult,8,7,,,보통
+fst,첫 발,first,chip,45,7,,,보통
+lst,막판,last,xmult,2,7,,,보통
+mis,빈손,miss,chip,30,7,,,보통
+str,정밀,streak,mult_streak,3,11,,,희귀 — 빌드의 축
+alc,기본기,always,chip,25,11,,,희귀
+alm,증폭기,always,xmult,2,14,,,희귀
+mtc,밑천,small,mult,2,4,broke,4,골드 칩 — 득점 반쪽은 같은 조건 기존 것보다 낮다
+pdn,판돈,first,chip,26,7,spare,1,골드 칩
+bjn,본전,diff,chip,12,7,clean,3,골드 칩
+kns,큰손,triple,mult,3,11,blitz,9,골드 칩
+mlj,물주,always,chip,16,11,clear,4,골드 칩

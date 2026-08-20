@@ -359,7 +359,7 @@ func _finish_round() -> void:
 	# 극한 판은 아이템을 하나 무료로 준다
 	if stage_item and stage_slots < GameData.MAX_ITEMS \
 			and owned.size() < GameData.MAX_ITEMS:
-		var pool := GameData.ITEMS.duplicate()
+		var pool := GameData.items().duplicate()
 		pool.shuffle()
 		for it in pool:
 			if not _has_item(it.id):
@@ -414,7 +414,7 @@ func _open_shop() -> void:
 
 func _roll_stock() -> void:
 	stock.clear()
-	var pool := GameData.ITEMS.duplicate()
+	var pool := GameData.items().duplicate()
 	pool.shuffle()
 	var n := 0
 	for it in pool:
