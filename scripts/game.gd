@@ -1194,7 +1194,8 @@ func _land() -> void:
 	queue.clear()
 
 	card_side = -1 if aim.x > BC.x else 1
-	card_y = 206.0 if aim.y < BC.y else 74.0
+	# 왼쪽 카드는 반드시 위로 간다. 아래 왼쪽은 손 부채가 통째로 쓴다.
+	card_y = 74.0 if card_side < 0 else (206.0 if aim.y < BC.y else 74.0)
 	card_target = 1.0
 
 	var fired := []
@@ -1496,7 +1497,7 @@ func _grip_draw() -> void:
 	var picking := state == S.PICK
 
 	# 손등 — 부채 뒤에 깔린다. 화면 밖으로 잘려 손목이 안 보인다.
-	draw_circle(p + Vector2(0.0, 6.0), 36.0, C_SKIN.darkened(0.42))
+	draw_circle(p + Vector2(0.0, 6.0), GRIP.arc * 0.46, C_SKIN.darkened(0.42))
 
 	# 다트. 커서가 올라간 것을 맨 나중에 그려 위로 올린다.
 	var hov := -1
@@ -1518,15 +1519,17 @@ func _grip_draw() -> void:
 		var st: float = minf(GRIP.step, GRIP.span / float(maxi(n - 1, 1)))
 		var half: float = float(n - 1) * 0.5 * st + 0.34
 		for k in 3:
-			var rr: float = GRIP.arc - 19.0 - float(k) * 11.0
+			# 자루 끝을 쥔다. arc-dl 이 다트 꼬리이므로 그 언저리에 첫 띠를 두고
+			# 나머지는 손 안쪽으로 내린다. 위로 올리면 다트를 덮어 버린다.
+			var rr: float = GRIP.arc - GRIP.dl + 6.0 - float(k) * 13.0
 			draw_arc(p, rr, GRIP.mid - half - PI * 0.5, GRIP.mid + half - PI * 0.5,
-					16, C_SKIN.darkened(0.08 + float(k) * 0.14), 9.5 - float(k) * 0.7)
+					22, C_SKIN.darkened(0.08 + float(k) * 0.14), 13.0 - float(k) * 1.4)
 
 	# 지금 던지는 다트는 손에서 빠져나와 부채 앞에 따로 선다.
 	# 글자로 "▶ 표준" 이라 적던 자리를 물건 자체로 바꾼다.
 	if not picking and not cur_dart.is_empty():
 		var u := Vector2(sin(GRIP.mid), -cos(GRIP.mid))
-		_icon_dart(p + u * (GRIP.arc + 36.0), GRIP.dl + 2.0,
+		_icon_dart(p + u * (GRIP.arc + 52.0), GRIP.dl + 3.0,
 				String(cur_dart.id), 0.0, GRIP.mid - GRIP.ang, 1.0)
 
 
@@ -1710,15 +1713,17 @@ const C_SKIN := Color("c2a07a")
 #  남은 개수를 숫자나 슬롯이 아니라 손의 무게가 말한다.
 #  중심이 화면 아래 밖이라 부채가 화면 하단에서 올라오는 것으로 읽힌다.
 const GRIP := {
-	"px": 78.0, "py": 400.0,   # 부채 중심 (화면 밖)
-	"arc": 74.0,               # 중심에서 다트 중심까지
-	"mid": 0.32,               # 부채가 향하는 각 (위에서 오른쪽으로, 라디안)
-	"span": 0.95,              # 최대 벌림 — 몇 자루든 이보다 안 벌어진다.
-	                           # 넓으면 끝 다트가 화면 아래로 눕는다.
-	"step": 0.20,              # 다트 사이 최대 각
-	"dl": 18.0,                # 다트 반길이
-	"lift": 9.0,               # 커서를 올린 다트가 뽑혀 나오는 거리
-	"hit": 12.0,               # 잡기 반경
+	# 중심을 화면 한참 아래로 내리고 반지름을 키우면 부채가 얕게 누워
+	# 하단을 가로지른다. 손은 화면 밖에 있고 다트만 올라온 것으로 읽힌다.
+	"px": 40.0, "py": 470.0,   # 부채 중심 (화면 밖)
+	"arc": 190.0,               # 중심에서 다트 중심까지
+	"mid": 0.42,               # 부채가 향하는 각 (위에서 오른쪽으로, 라디안)
+	"span": 0.90,              # 최대 벌림 — 몇 자루든 이보다 안 벌어진다.
+							   # 넓으면 끝 다트가 화면 아래로 눕는다.
+	"step": 0.17,              # 다트 사이 최대 각
+	"dl": 30.0,                # 다트 반길이
+	"lift": 14.0,               # 커서를 올린 다트가 뽑혀 나오는 거리
+	"hit": 20.0,               # 잡기 반경
 	"ang": 0.5404,             # _icon_dart 가 이미 기울어 있는 각 = atan2(6, 10)
 }
 
@@ -3046,25 +3051,30 @@ func _icon_dart(c: Vector2, dl: float, id: String, dim := 0.0,
 	# 보드에 꽂힌 다트와 같은 각도로 눕는다 (_draw_darts 의 Vector2(6, -10))
 	var dir := Vector2(6.0, -10.0).normalized().rotated(rot)
 	var nrm := Vector2(-dir.y, dir.x)
-	var bw := 2.6
-	var fin := 3.2
+	# 굵기는 길이를 따라간다. 절대값으로 두면 dl 을 키웠을 때 길기만 하고
+	# 얇은 막대가 된다 — 손 부채(dl 30)에서 실제로 그렇게 나왔다.
+	# 기준은 매대 크기 dl 19. 바닥을 둬 보드에 꽂힌 다트(dl 7)가
+	# 실오라기가 되는 것을 막는다.
+	var k: float = maxf(0.75, dl / 19.0)
+	var bw := 2.6 * k
+	var fin := 3.2 * k
 	var col := C_TXT
 	match id:
 		"hvy":
-			bw = 4.0
-			fin = 2.4
+			bw = 4.0 * k
+			fin = 2.4 * k
 			col = C_WIRE.lightened(0.30)
 		"lgt":
-			bw = 1.5
-			fin = 4.6
+			bw = 1.5 * k
+			fin = 4.6 * k
 			col = C_GREEN.lightened(0.35)
 		"prc":
-			bw = 2.2
-			fin = 2.8
+			bw = 2.2 * k
+			fin = 2.8 * k
 			col = C_CHIP.lightened(0.25)
 		"mag":
-			bw = 3.0
-			fin = 3.4
+			bw = 3.0 * k
+			fin = 3.4 * k
 			col = C_MULT.lightened(0.25)
 	col = Color(col.darkened(dim), a)
 
@@ -3097,13 +3107,13 @@ func _icon_dart(c: Vector2, dl: float, id: String, dim := 0.0,
 				draw_line(q + nrm * bw * 0.6, q - nrm * bw * 0.6,
 						Color(C_DARK.darkened(dim), a), 2.0)
 		"lgt":
-			for k in [-1.0, 1.0]:
-				draw_line(tail + nrm * k * 2.5 - dir * 2.0,
-						tail + nrm * k * 2.5 - dir * 6.0, col, 1.0)
+			for side in [-1.0, 1.0]:
+				draw_line(tail + nrm * side * 2.5 * k - dir * 2.0 * k,
+						tail + nrm * side * 2.5 * k - dir * 6.0 * k, col, 1.0)
 		"prc":
-			draw_line(tip, tip + dir * 5.0, Color(C_CHIP.lightened(0.4).darkened(dim), a), 1.0)
+			draw_line(tip, tip + dir * 5.0 * k, Color(C_CHIP.lightened(0.4).darkened(dim), a), 1.0)
 		"mag":
-			draw_arc(tip + dir * 4.0, 4.5, PI * 0.15, PI * 0.85,
+			draw_arc(tip + dir * 4.0 * k, 4.5 * k, PI * 0.15, PI * 0.85,
 					10, Color(C_MULT.lightened(0.4).darkened(dim), a), 1.0)
 
 
