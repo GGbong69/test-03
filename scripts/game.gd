@@ -1343,10 +1343,18 @@ func _stage_rect(i: int) -> Rect2:
 	return Rect2(Vector2(32.0 + i * 196.0, 112.0), Vector2(176.0, 152.0))
 
 
-# 자루마다 살짝 다른 기울기. 인덱스로만 정해지므로 프레임 간 안 흔들리고
+# 칸 번호에서 0~1 을 뽑는다.
+# sin(i * 12.9898) 을 그대로 쓰면 작은 i 에서 값이 한쪽으로 몰린다 —
+# 0, 0.41, 0.75, 0.95, 0.99 로 전부 양수에 커지기만 해서 다섯 자루가
+# 같은 방향으로 거의 같은 각이 됐다. 큰 수를 곱해 소수부만 남겨야 흩어진다.
+func _grip_rnd(i: int, seed: float) -> float:
+	return fposmod(sin(float(i) * 12.9898 + seed) * 43758.5453, 1.0)
+
+
+# 자루마다 살짝 다른 기울기. 칸 번호로만 정해지므로 프레임 간 안 흔들리고
 # 리롤·재입장에도 같은 배치가 나온다.
 func _grip_tilt(i: int) -> float:
-	return GRIP.tilt + sin(float(i) * 12.9898) * GRIP.jit
+	return GRIP.tilt + (_grip_rnd(i, 78.233) - 0.5) * 2.0 * GRIP.jit
 
 
 # i 번 다트가 벽 어디에 어떤 각으로 꽂혀 있는가.
@@ -1355,8 +1363,11 @@ func _grip_pose(i: int) -> Dictionary:
 	# 칸은 시작 때 배정된 그대로다. 남은 개수가 아니라 시작 개수로 가운데를
 	# 맞추므로, 자루가 빠져도 나머지가 제자리에 그대로 꽂혀 있다.
 	var slot: int = grip_slot[i] if i < grip_slot.size() else i
-	var base := Vector2(GRIP.x,
-			GRIP.cy - float(maxi(grip_n, 1) - 1) * GRIP.dy * 0.5 + float(slot) * GRIP.dy)
+	# 깊이와 높이도 같이 흔든다. 각도만 흔들면 자로 잰 듯 줄 맞춘 티가 남는다.
+	var base := Vector2(
+			GRIP.x + (_grip_rnd(slot, 12.77) - 0.5) * 2.0 * GRIP.deep,
+			GRIP.cy - float(maxi(grip_n, 1) - 1) * GRIP.dy * 0.5 + float(slot) * GRIP.dy
+					+ (_grip_rnd(slot, 41.31) - 0.5) * 2.0 * GRIP.sway)
 	var rot: float = _grip_tilt(slot)
 	# 뽑히는 방향은 자루 축을 따라 꼬리 쪽이다. 옆으로 밀면 뽑는 것으로 안 보인다.
 	var axis := Vector2(6.0, -10.0).normalized().rotated(rot)
@@ -1775,7 +1786,9 @@ const GRIP := {
 	# 왼쪽 벽에 수직으로 = 화면에서 수평으로 꽂힌다. 촉이 왼쪽, 꼬리가 오른쪽.
 	# _icon_dart 가 이미 atan2(6,10) 만큼 기울어 있으므로 그만큼 빼 준다.
 	"tilt": -2.111,      # -PI/2 - 0.5404
-	"jit": 0.087,        # 자루마다 ±5도. 넘으면 흩어져 보이고 없으면 찍어낸 것으로 보인다
+	"jit": 0.105,        # 자루마다 ±6도. 넘으면 흩어져 보이고 없으면 찍어낸 것으로 보인다
+	"deep": 4.0,         # 박힌 깊이 편차 — 어떤 건 더 들어가고 어떤 건 덜 들어간다
+	"sway": 2.5,         # 높이 편차 — 칸 간격은 그대로 두고 자리만 살짝 흔든다
 	"lift": 11.0,        # 커서를 올린 자루가 뽑혀 나오는 거리
 	"pull": 26.0,        # 고른 자루가 뽑혀 나오는 거리 — 든 것으로 읽혀야 한다
 	"hit": 18.0,         # 잡기 반경
