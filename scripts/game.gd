@@ -860,6 +860,21 @@ func _process(d: float) -> void:
 		sell_t += d
 		if not _can_sell() or sell_sel >= owned.size():
 			sell_sel = -1
+	# 쥔 손 — 커서가 올라간 다트만 뽑힌다.
+	# 히트는 뽑히기 전 자리(_grip_pose 의 hit)로 하므로 표적이 안 도망간다.
+	if grip_hov.size() != remaining.size():
+		grip_hov.resize(remaining.size())
+		grip_hov.fill(0.0)
+	var gi := -1
+	if state == S.PICK:
+		var gm := get_local_mouse_position()
+		for i in remaining.size():
+			# 뒤에 그려진 것이 위에 있다. 마지막 명중을 택해 그리기 순서와 맞춘다.
+			if _grip_pose(i).hit.has_point(gm):
+				gi = i
+	for i in grip_hov.size():
+		grip_hov[i] = move_toward(grip_hov[i], 1.0 if i == gi else 0.0, d * 7.0)
+
 	_tip_update(d)
 	queue_redraw()
 
@@ -1179,7 +1194,7 @@ func _land() -> void:
 	queue.clear()
 
 	card_side = -1 if aim.x > BC.x else 1
-	card_y = 232.0 if aim.y < BC.y else 74.0
+	card_y = 206.0 if aim.y < BC.y else 74.0
 	card_target = 1.0
 
 	var fired := []
@@ -1292,8 +1307,31 @@ func _stage_rect(i: int) -> Rect2:
 	return Rect2(Vector2(32.0 + i * 196.0, 112.0), Vector2(176.0, 152.0))
 
 
+# 부채에서 i 번 다트가 어디에 어떻게 놓이는가.
+# 그리기와 잡기가 같은 함수를 본다 — 갈라지면 보이는 곳과 눌리는 곳이 어긋난다.
+func _grip_pose(i: int) -> Dictionary:
+	var n: int = maxi(remaining.size(), 1)
+	var st: float = minf(GRIP.step, GRIP.span / float(maxi(n - 1, 1)))
+	var th: float = GRIP.mid + (float(i) - float(n - 1) * 0.5) * st
+	var u := Vector2(sin(th), -cos(th))
+	var base: Vector2 = Vector2(GRIP.px, GRIP.py) + u * GRIP.arc
+	var lf: float = GRIP.lift * (grip_hov[i] if i < grip_hov.size() else 0.0)
+	return {
+		"c": base + u * lf,
+		"rot": th - GRIP.ang,
+		"th": th,
+		# 히트 상자는 뽑히기 전 자리에 고정한다. 그리는 자리를 따라가면
+		# 커서를 올린 순간 표적이 도망가 다시 잡아야 한다 —
+		# 칩 랙에서 이미 한 번 밟은 함정이라 여기서는 처음부터 갈라 둔다.
+		"hit": Rect2(base - Vector2(GRIP.hit, GRIP.hit),
+				Vector2(GRIP.hit * 2.0, GRIP.hit * 2.0)),
+	}
+
+
+# 소비자 다섯(그리기 · _click · _tip_hit · _tip_build · _auto_step)이 전부
+# 이 한 줄을 통해 새 자세를 따라온다. 다섯 곳을 개별로 고치지 않는다.
 func _mag_rect(i: int) -> Rect2:
-	return Rect2(Vector2(6.0, 72.0 + i * 32.0), Vector2(66.0, 28.0))
+	return _grip_pose(i).hit
 
 
 func _reroll_rect() -> Rect2:
@@ -1361,7 +1399,7 @@ func _hud_draw() -> void:
 		_panel_draw()
 		_cap_draw()
 		if _is_play():
-			_draw_magazine()
+			_grip_draw()
 	# 판매 팝업이 스크림(알파 0.94) 밑에 깔리면 안 보인다 — 판 다음에 그린다.
 	_draw_pops()
 
@@ -1450,44 +1488,46 @@ func _draw_fx() -> void:
 		draw_line(BC + dir * dist, BC + dir * (dist + s.len), cs, 1.5)
 
 
-func _draw_magazine() -> void:
-	if state == S.CLEAR or state == S.SHOP or state == S.OVER:
+func _grip_draw() -> void:
+	if state == S.CLEAR or state == S.SHOP or state == S.STAGE or state == S.OVER:
 		return
-
+	var n := remaining.size()
+	var p := Vector2(GRIP.px, GRIP.py)
 	var picking := state == S.PICK
-	var head := "탄창 — 고르세요"
-	if not picking:
-		head = "▶ " + (cur_dart.n if not cur_dart.is_empty() else "표준")
-	# baseline 65 — 플레이 중 자금판은 y54 에서 끝난다. 62 는 판 안이었다.
-	draw_string(font, Vector2(6, 65), head,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 10, C_ACC if picking else C_CHIP.lightened(0.25))
 
-	for i in remaining.size():
-		var r := _mag_rect(i)
-		var d: Dictionary = remaining[i]
-		var special: bool = d.id != "std"
-		var body: Color = C_PANEL.lightened(0.16 if picking else 0.04)
-		draw_rect(r, body)
-		draw_rect(Rect2(r.position, Vector2(r.size.x, 2)),
-				C_CHIP.lightened(0.2) if special else C_DIM.darkened(0.4))
-		draw_string(font, r.position + Vector2(0, 13), d.n,
-				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 11,
-				C_TXT if picking else C_DIM)
-		if special:
-			draw_string(font, r.position + Vector2(0, 24), _dart_tag(d),
-					HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 8, C_DIM)
+	# 손등 — 부채 뒤에 깔린다. 화면 밖으로 잘려 손목이 안 보인다.
+	draw_circle(p + Vector2(0.0, 6.0), 36.0, C_SKIN.darkened(0.42))
 
+	# 다트. 커서가 올라간 것을 맨 나중에 그려 위로 올린다.
+	var hov := -1
+	for i in n:
+		if i < grip_hov.size() and grip_hov[i] > 0.5:
+			hov = i
+	for i in n:
+		if i == hov:
+			continue
+		var ps := _grip_pose(i)
+		_icon_dart(ps.c, GRIP.dl, remaining[i].id, 0.0 if picking else 0.34, ps.rot, 1.0)
+	if hov >= 0:
+		var ph := _grip_pose(hov)
+		_icon_dart(ph.c, GRIP.dl + 1.0, remaining[hov].id, 0.0, ph.rot, 1.0)
 
-func _dart_tag(d: Dictionary) -> String:
-	if d.get("pierce", false):
-		return "양옆 절반"
-	if d.get("magnet", 0.0) > 0.0:
-		return "중심 당김"
-	if d.gauge < 1.0:
-		return "느림 · 배수-1"
-	if d.gauge > 1.0:
-		return "빠름 · 배수+3"
-	return ""
+	# 손가락 — 부채 중심을 도는 띠 셋이 다트 위를 가로지른다.
+	# 손 전체를 도형으로 그리면 못 그린 손이 되고, 손가락만 그리면 쥔 것이 읽힌다.
+	if n > 0:
+		var st: float = minf(GRIP.step, GRIP.span / float(maxi(n - 1, 1)))
+		var half: float = float(n - 1) * 0.5 * st + 0.34
+		for k in 3:
+			var rr: float = GRIP.arc - 19.0 - float(k) * 11.0
+			draw_arc(p, rr, GRIP.mid - half - PI * 0.5, GRIP.mid + half - PI * 0.5,
+					16, C_SKIN.darkened(0.08 + float(k) * 0.14), 9.5 - float(k) * 0.7)
+
+	# 지금 던지는 다트는 손에서 빠져나와 부채 앞에 따로 선다.
+	# 글자로 "▶ 표준" 이라 적던 자리를 물건 자체로 바꾼다.
+	if not picking and not cur_dart.is_empty():
+		var u := Vector2(sin(GRIP.mid), -cos(GRIP.mid))
+		_icon_dart(p + u * (GRIP.arc + 36.0), GRIP.dl + 2.0,
+				String(cur_dart.id), 0.0, GRIP.mid - GRIP.ang, 1.0)
 
 
 func _draw_darts() -> void:
@@ -1559,8 +1599,11 @@ func _draw_topbar() -> void:
 	# 3칸 x[584,640] — 이번 판 제약 수. 이름 전체는 하단 y341 줄이 갖는다.
 	# active_mods 는 _pick_stage 에서만 갈리므로 SHOP 에는 지난 판 값이 남는다.
 	if _is_play() and not active_mods.is_empty():
-		draw_string(font, Vector2(LAY.bar_mod, 13.0), "제약 %d" % active_mods.size(),
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 10, C_MULT.lightened(0.25))
+		# 숫자 대신 아이콘. 하단의 제약 줄을 지웠으므로 여기가 유일한 상시 표기다.
+		# 무엇이 걸렸는지까지 보이므로 "제약 2" 보다 담는 정보가 오히려 많다.
+		for k in mini(active_mods.size(), 3):
+			_icon_modifier(Vector2(LAY.bar_mod + 8.0 + float(k) * 16.0, 9.0),
+					6.0, active_mods[k].id, 0.0)
 
 
 # ── 자금 ──────────────────────────────────────────────────
@@ -1660,6 +1703,26 @@ const CHIP_TIERS := [
 ]
 const CHIP_SPOTS := [3, 6, 8]
 const C_FELT := Color("16281f")
+const C_SKIN := Color("c2a07a")
+
+# 쥔 손 — 남은 다트를 부채로 쥐고 있다.
+#  실제 다트 선수는 남은 다트를 반대쪽 손에 쥔다. 그걸 그대로 둔다.
+#  남은 개수를 숫자나 슬롯이 아니라 손의 무게가 말한다.
+#  중심이 화면 아래 밖이라 부채가 화면 하단에서 올라오는 것으로 읽힌다.
+const GRIP := {
+	"px": 78.0, "py": 400.0,   # 부채 중심 (화면 밖)
+	"arc": 74.0,               # 중심에서 다트 중심까지
+	"mid": 0.32,               # 부채가 향하는 각 (위에서 오른쪽으로, 라디안)
+	"span": 0.95,              # 최대 벌림 — 몇 자루든 이보다 안 벌어진다.
+	                           # 넓으면 끝 다트가 화면 아래로 눕는다.
+	"step": 0.20,              # 다트 사이 최대 각
+	"dl": 18.0,                # 다트 반길이
+	"lift": 9.0,               # 커서를 올린 다트가 뽑혀 나오는 거리
+	"hit": 12.0,               # 잡기 반경
+	"ang": 0.5404,             # _icon_dart 가 이미 기울어 있는 각 = atan2(6, 10)
+}
+
+var grip_hov := []              # 다트별 뽑힘 정도 0~1
 
 var slot_hot := []              # 발동 후 이름을 띄우는 잔여 시간
 
@@ -4053,22 +4116,8 @@ func _draw_hint() -> void:
 	if hint != "":
 		draw_string(font, Vector2(0, 348), hint,
 				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 12, C_ACC)
-	if not active_mods.is_empty():
-		# baseline 을 334 → 341 로 내린다. 진짜 이웃은 힌트 줄(가운데 정렬이라
-		# 가로로 안 만난다)이 아니라 점수 카드다 — card_y=232 + CARD_H=96 =
-		# 바닥 328 이고 card_side<0 이면 x 82~326 을 덮는다. 334 짜리 10pt 는
-		# 지금도 캡 상단이 ~326 이라 카드 안으로 들어가 있었다.
-		var mx := 8.0
-		draw_string(font, Vector2(mx, 341), "제약",
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 10, C_MULT.darkened(0.15))
-		mx += font.get_string_size("제약", HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x + 9.0
-		for m in active_mods:
-			_icon_modifier(Vector2(mx + 7.0, 337.0), 7.0, m.id, 0.0)
-			mx += 18.0
-			draw_string(font, Vector2(mx, 341), m.n,
-					HORIZONTAL_ALIGNMENT_LEFT, -1, 10, C_MULT.lightened(0.25))
-			mx += font.get_string_size(m.n, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x + 12.0
 
-	draw_string(font, Vector2(8, 356), "[ ] 조준 %.2f    - = 정산 %.2f    ; ' 확인텀 %.2f"
+	# 손 부채가 하단 좌측을 쓰므로 오른쪽으로 비킨다.
+	draw_string(font, Vector2(VIEW.x - 262.0, 356), "[ ] 조준 %.2f    - = 정산 %.2f    ; ' 확인텀 %.2f"
 			% [gauge_speed, beat, confirm_hold], HORIZONTAL_ALIGNMENT_LEFT, -1, 9,
 			C_DIM.darkened(0.25))
