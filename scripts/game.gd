@@ -39,6 +39,35 @@ const CARD_H := 96.0
 #  project.godot 에 명시할 수는 없다 — keep 이 엔진 기본값이라 에디터가
 #  저장할 때마다 그 줄을 지운다. 그래서 근거를 코드 쪽에 남긴다.
 # ══════════════════════════════════════════════════════════
+# 상점·스테이지는 카지노 테이블이 화면 전부를 쓴다. 런 바를 내리고
+# 그 자리(16px)를 딜러에게 준다 — 딜러가 사람으로 읽히려면 세로가 필요하고,
+# 목표·점수 진행은 던지는 중에만 쓸모가 있다. 다음 라운드 목표는
+# "다음" 버튼이 이미 들고 있다.
+const HUD_UP := -16.0
+
+
+func _bar_hidden() -> bool:
+	return state == S.SHOP or state == S.STAGE
+
+
+func _hud_dy() -> float:
+	return HUD_UP if _bar_hidden() else 0.0
+
+
+# 자금판은 상점·스테이지에서 이자 줄이 붙어 46 으로 자란다.
+func _bank_rect() -> Rect2:
+	var r: Rect2 = LAY.bank
+	r.position.y += _hud_dy()
+	if _bar_hidden() or state == S.CLEAR:
+		r.size.y = 46.0
+	return r
+
+
+# 런 바가 없는 화면에서도 몇 판째인지는 남아야 한다. 자금판 머리띠가 진행바다.
+func _run_done() -> int:
+	return round_no if (state == S.CLEAR or state == S.SHOP) else round_no - 1
+
+
 const LAY := {
 	"bar":        Rect2(0.0, 0.0, 640.0, 18.0),
 	"bar_cut":    [100.0, 584.0],
@@ -1525,7 +1554,8 @@ func _is_play() -> bool:
 func _hud_draw() -> void:
 	if state == S.OVER:
 		return
-	_draw_topbar()
+	if not _bar_hidden():
+		_draw_topbar()
 	if state != S.CLEAR:            # 정산 화면은 그 자체가 명세다
 		_bank_draw()
 		# 상점에서는 왼쪽 창구가 판매판을 대신한다. 스테이지 화면에는 판이 없어
@@ -1758,18 +1788,20 @@ func _draw_topbar() -> void:
 func _bank_draw() -> void:
 	# 이자 줄은 상점·스테이지에서만 의미가 있다. 그때만 판을 늘려 담는다.
 	# 플레이 중에는 짧게 끝나야 그 아래 탄창 헤더가 들어갈 자리가 난다.
-	var wide := state == S.SHOP or state == S.STAGE
-	var r: Rect2 = LAY.bank
-	if wide:
-		r.size.y = 46.0
+	var r := _bank_rect()
 	draw_rect(r, C_PANEL)
+	# 런 바가 없는 화면에서는 머리띠가 진행바다. 몇 판째인지가 안 사라진다.
+	if _bar_hidden():
+		var k := clampf(float(_run_done()) / float(GameData.rounds_n()), 0.0, 1.0)
+		draw_rect(Rect2(r.position, Vector2(r.size.x * k, 2.0)), C_ACC)
 	draw_rect(Rect2(r.position, Vector2(r.size.x, 2.0)), C_GOLD.darkened(0.35))
 	# deny_flash 는 상점 중앙 골드 텍스트가 쓰던 값을 그대로 물려받는다
 	var gc: Color = C_GOLD.lerp(C_MULT, deny_flash)
 	var jx := randf_range(-deny_flash, deny_flash) * 2.0
 	draw_gold(r.get_center().x + jx, r.position.y + 26.0, str(gold), 16, gc)
 
-	if not wide:
+	# 이자 줄은 판이 늘어난 화면에서만 담긴다.
+	if r.size.y < 46.0:
 		return
 
 	# 이자 미리보기. 계산식은 _finish_round 와 같고 둘 다 지급 전 잔액을 본다.
@@ -1789,6 +1821,7 @@ func _bank_draw() -> void:
 # ── 칩 꼬리표 ─────────────────────────────────────────────
 func _cap_draw() -> void:
 	var r: Rect2 = LAY.cap
+	r.position.y += _hud_dy()
 	draw_rect(r, C_FELT)                                   # 랙과 같은 재질
 	draw_rect(Rect2(r.position, Vector2(r.size.x, 1.0)), C_FELT.lightened(0.14))
 	draw_string(font, r.position + Vector2(0.0, 20.0), "칩",
@@ -1929,9 +1962,11 @@ func _panel_update(d: float) -> void:
 
 
 func _panel_rect() -> Rect2:
+	# _slot_rect 가 이걸 파생하므로 판매 판정·툴팁 앵커·구매 비행 목표가
+	# 전부 따라온다. 좌표 소유자를 안 늘리는 자리다.
 	var n: int = GameData.max_items()
 	var w: float = PANEL.cell * n + PANEL.pad * 2.0
-	return Rect2(Vector2((VIEW.x - w) * 0.5, PANEL.y), Vector2(w, PANEL.h))
+	return Rect2(Vector2((VIEW.x - w) * 0.5, PANEL.y + _hud_dy()), Vector2(w, PANEL.h))
 
 
 func _slot_rect(i: int) -> Rect2:
@@ -2396,7 +2431,9 @@ func _table_draw() -> void:
 func _felt_draw() -> void:
 	# 화면이 곧 테이블의 크롭이다. 640 폭에 D자 테이블 전체를 넣으면 매물이
 	# 그 안에서 다시 쪼그라든다. 좌우는 화면 밖으로 이어진다.
-	draw_rect(Rect2(0.0, 18.0, VIEW.x, VIEW.y - 18.0), C_WOOD)
+	# 0 에서 시작한다. _draw_stage 는 _scrim() 을 안 부르므로 바를 지운
+	# 자리에 다트판이 그대로 비친다.
+	draw_rect(Rect2(0.0, 0.0, VIEW.x, VIEW.y), C_WOOD)
 	# 펠트는 사다리꼴이다. 좌우 빗변이 그대로 창구라 모양이 곧 규칙이다.
 	var felt := PackedVector2Array([
 			Vector2(CHUTE.back, TBL.fy), Vector2(VIEW.x - CHUTE.back, TBL.fy),
@@ -2426,7 +2463,7 @@ func _cover_draw() -> void:
 	# 먼 쪽 레일이 덮는다. 클리핑 대신 불투명 사각 하나다. 상시 HUD 는
 	# _hud_draw 가 이 위에 판을 다시 얹으므로 멀쩡하고, 결과적으로 칩 랙이
 	# 테이블 쿠션 위에 놓인 딜러 트레이로 읽힌다.
-	draw_rect(Rect2(0.0, 18.0, VIEW.x, TBL.fy - 18.0), C_WOOD.darkened(0.30))
+	draw_rect(Rect2(0.0, 0.0, VIEW.x, TBL.fy), C_WOOD.darkened(0.30))
 	_npc_body()
 	draw_rect(Rect2(0.0, TBL.fy - 3.0, VIEW.x, 3.0), C_WOOD)
 	draw_rect(Rect2(0.0, TBL.fy - 1.0, VIEW.x, 1.0), C_WOOD.lightened(0.18))
@@ -4147,7 +4184,7 @@ func _pay_take(i: int) -> void:
 	pay_flash = 1.0
 	pay_msg = ""
 	pay_msg_t = 0.0
-	pop(Vector2(LAY.bank.get_center().x, 78.0), "-%d" % cost, C_GOLD, 13, 0.7)
+	pop(_bank_rect().get_center() + Vector2(0.0, 30.0), "-%d" % cost, C_GOLD, 13, 0.7)
 
 
 # ══ 그리기 ════════════════════════════════════════════
@@ -4482,7 +4519,8 @@ func _scrim() -> void:
 	draw_rect(Rect2(Vector2.ZERO, VIEW), Color(0.04, 0.03, 0.07, 0.94))
 
 
-func _btn(r: Rect2, label: String, sub: String, on: bool) -> void:
+func _btn(r: Rect2, label: String, sub: String, on: bool,
+		sub_col: Color = C_GOLD) -> void:
 	draw_rect(r, C_PANEL.lightened(0.10) if on else C_PANEL.darkened(0.2))
 	draw_rect(Rect2(r.position, Vector2(r.size.x, 2)), C_ACC if on else C_DIM.darkened(0.5))
 	draw_string(font, r.position + Vector2(0, 20), label,

@@ -4,7 +4,7 @@ extends SceneTree
 # 오토플레이가 통과한 프레임이 실제로 어떻게 보이는지는 눈으로만 알 수 있다.
 # 헤드리스로는 못 돈다 — 렌더러가 있어야 뷰포트가 그려진다.
 
-var g: Node2D = null
+var g = null
 var frames := 0
 var shots := 0
 const PLAN := [
