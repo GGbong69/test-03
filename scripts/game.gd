@@ -2470,6 +2470,7 @@ var drop := []          # 물체 하나 = 사전 하나. stock 과 인덱스를 
 var drop_t := 0.0       # 이번 낙하의 경과
 var drop_acc := 0.0     # 서브스텝 누적기 (나머지를 이월해 프레임률 독립을 만든다)
 var drop_awake := false
+var drop_toss := false  # 지금 깨어 있는 이유가 던지기인가 (낙하와 다른 상태다)
 var drop_fast := false  # 헤드리스 — 낙하를 안 기다리고 즉시 감는다
 
 
@@ -2494,6 +2495,7 @@ func _drop_roll() -> void:
 	drop.clear()
 	drop_t = 0.0
 	drop_acc = 0.0
+	drop_toss = false
 	var n := stock.size()
 	for i in n:
 		var r: float = DROP.r_item
@@ -2534,8 +2536,11 @@ func _drop_roll() -> void:
 		_drop_settle()
 
 
+# "떨어지는 중" 이다. 던져서 미끄러지는 것은 여기 안 든다 — 물건이 이미
+# 펠트 위에 있고 읽히므로, 툴팁을 끄거나 클릭을 "지금 세운다" 로 삼키거나
+# 다음 물건 집기를 막을 이유가 없다. 소비자 넷이 전부 그 뜻으로 쓴다.
 func _drop_busy() -> bool:
-	return drop_awake
+	return drop_awake and not drop_toss
 
 
 func _drop_update(d: float) -> void:
@@ -2627,6 +2632,7 @@ func _drop_step(dt: float) -> void:
 		else:
 			drop_awake = true
 	if was and not drop_awake:
+		drop_toss = false
 		_drop_lock()
 
 
@@ -2781,6 +2787,7 @@ func _drop_settle() -> void:
 		it.rest = DROP.t_sleep
 	_drop_lock()
 	drop_awake = false
+	drop_toss = false
 	drop_acc = 0.0
 	if _autoplay:
 		_drop_verify()
@@ -3469,6 +3476,7 @@ var hand_m := Vector2.ZERO       # 마지막 커서 화면 좌표
 var hand_far := 0.0              # 누름 이후 |m - p0| 의 **누적 최대**. 단조 비감소
 var hand_off := Vector2.ZERO     # 면 좌표 잡기 오프셋. ramp 로 0 에 녹는다
 var hand_lit := false            # 지금 계산대가 켜져 있는가 (래치음 에지 · 판 얼굴)
+var hand_v := Vector2.ZERO       # 든 물체의 평활 속도(면px/s). 놓을 때 이걸 넘긴다
 
 var buy_sel := -1                # 2클릭 구매의 1단계
 var pay_flash := 0.0
@@ -3522,6 +3530,25 @@ const HAND := {
 	"scuff_n": 10,      # 마찰 자국 링버퍼 길이. 0.42초 뒤 알파 0
 	"scuff_dt": 0.02,   # 적립 최소 간격(초)
 	"scuff_min": 0.6,   # 적립 최소 이동(면px). 제자리 떨림으로 자국이 안 쌓이게
+
+	# ── 던지기 ───────────────────────────────────────
+	#  놓는 순간의 손 속도를 물리에 넘긴다. 물체는 뜨지 않는다 — h·vh 는 0 에
+	#  못 박은 채 면 위에서만 미끄러진다. 그래서 낙하 구획의 "vh 를 양수로
+	#  만드는 경로가 없다" 가 이 기능이 붙어도 문자 그대로 산다.
+	"toss_tau": 0.055,
+	#  손 속도 평활 시간(초). 프레임 하나의 튐으로 던져지지 않게 3~4프레임을 섞는다.
+	#  놓기 직전의 감속도 같이 섞이므로 "멈춰서 놓으면 안 미끄러진다" 가 성립한다.
+	"toss_min": 45.0,
+	#  이 아래는 아예 안 던진다(면px/s). 미끄럼 거리 v²/2a = 1.9면px 이라
+	#  눈에 안 보이는 구간이다. 조심해서 놓는 배치의 정확도를 지키는 죽은 띠다.
+	"toss": 0.34,
+	#  손 속도 → 물체 속도 비율. 손은 v_cap 1800 까지 가지만 물건은 그만큼 안 난다.
+	"toss_cap": 210.0,
+	#  상한(면px/s). 마찰 a_fric 520 에서 미끄럼 거리 v²/2a = 42.4 면px
+	#  (화면 가로 42 · 세로 33), 멈추기까지 0.40초. "후려쳐도 살짝" 의 상한이다.
+	"toss_spin": 0.010,
+	#  던진 속력 → 회전(rad/s). 상한에서 2.1, a_spin 30 으로 0.07초에 멎는다.
+	#  미끄럼보다 훨씬 짧게 두는 것이 의도다 — 놓는 손짓의 잔상이지 팽이가 아니다.
 }
 
 
@@ -3600,6 +3627,7 @@ func _hand_take() -> void:
 	it.sleep = true           # 정착 인구조사에서 빠진다 → 드는 동안 _drop_busy() 가 false
 	it.rest = DROP.t_sleep
 	it.scuff = []
+	hand_v = Vector2.ZERO
 	hand_lit = false
 	buy_sel = -1
 	sell_sel = -1             # 드래그는 _click 을 안 거쳐 _sell_hit 의 낙수가 안 온다
@@ -3633,30 +3661,68 @@ func _hand_release(m: Vector2) -> void:
 		pay_msg = blk
 		pay_msg_t = HAND.msg_t
 		_deny()
-	else:
-		beep(147.0, 0.05, 0.07)
-	_hand_land(it)
+		_hand_land(it)
+		return
+	beep(147.0, 0.05, 0.07)
+	_hand_land(it, _toss_of(hand_v))
 
 
-# 물리에 반납한다. 속도를 안 준다 — 그래서 적분기가 한 번도 안 돌고, 낙하
-# 구획의 수렴 증명이 이 기능을 아예 못 본다. drop_awake 도 안 켜므로
-# _drop_busy() 가 계속 false 다 → 곧바로 다음 물건을 집을 수 있다.
-# 겹침은 _drop_lock 의 위치 분리 12패스가 그 자리에서 정리한다. 전부 v=0 이라
-# _drop_pair 의 ②임펄스·③깨우기가 안 걸린다 — 순수 위치 해소다.
-func _hand_land(it: Dictionary) -> void:
+# 놓는 손짓을 물체 속도로 옮긴다. 죽은 띠(toss_min) 아래면 0 을 돌려주고,
+# 그러면 _hand_land 가 예전 그대로 — 속도 없이 그 자리에 놓는 길로 간다.
+func _toss_of(v: Vector2) -> Vector2:
+	var t := v * HAND.toss
+	var sp := t.length()
+	if sp < HAND.toss_min:
+		return Vector2.ZERO
+	return t * (minf(sp, HAND.toss_cap) / sp)
+
+
+# 물리에 반납한다.
+#
+# 속도 0 으로 반납하면(살며시 놓기 · 반송 · 취소) 적분기가 한 번도 안 돌고
+# drop_awake 도 안 켜진다 — 곧바로 다음 물건을 집을 수 있다. 겹침은
+# _drop_lock 의 위치 분리 12패스가 그 자리에서 정리하고, 전부 v=0 이라
+# _drop_pair 의 ②임펄스·③깨우기가 안 걸린다(순수 위치 해소).
+#
+# 속도를 실어 반납하면(던지기) 면 위에서만 미끄러진다. h·vh 는 0 에 못 박혀
+# 있어 낙하 구획의 "vh 를 양수로 만드는 경로가 없다" 가 그대로 산다. 멈추는
+# 것은 쿨롱 마찰(a_fric 520)이 유한 시간에 정확히 0 을 만들어 주므로 정착
+# 증명이 이미 덮고 있다 — 상한 210 에서 0.40초 · 42면px 다.
+func _hand_land(it: Dictionary, v := Vector2.ZERO) -> void:
 	it.h = 0.0
 	it.air = false
-	it.vu = 0.0
-	it.vw = 0.0
 	it.vh = 0.0
-	it.om = 0.0
-	it.sleep = true
-	it.rest = DROP.t_sleep
+	it.vu = v.x
+	it.vw = v.y
 	it.u = clampf(it.u, DROP.u_lo + it.hw, DROP.u_hi - it.hw)
 	it.w = clampf(it.w, DROP.w_lo, DROP.w_hi)
 	it.scuff = []
-	_drop_wob(it, HAND.land_wob)
-	_drop_lock()
+	if v == Vector2.ZERO:
+		it.om = 0.0
+		it.sleep = true
+		it.rest = DROP.t_sleep
+		_drop_wob(it, HAND.land_wob)
+		_drop_lock()
+		return
+	var sp := v.length()
+	it.om = clampf(-v.x * HAND.toss_spin, -DROP.om_cap, DROP.om_cap)
+	it.sleep = false
+	it.rest = 0.0
+	_drop_wob(it, maxf(HAND.land_wob, sp))
+	_toss_wake()
+
+
+# 던지기는 새 낙하로 센다. drop_t 를 물려받으면 t_max(2.6초) 예산이 이미
+# 소진돼 있어 던지자마자 _drop_settle 이 물건을 순간이동시킨다. 입장 시차
+# t0 도 같이 0 으로 내린다 — 첫 낙하에서만 뜻이 있는 값이라, 안 내리면
+# 시차가 남은 물건이 _drop_live 에서 빠져 부딪히지 않는 유령이 된다.
+func _toss_wake() -> void:
+	drop_t = 0.0
+	drop_acc = 0.0
+	for e in drop:
+		e.t0 = 0.0
+	drop_awake = true
+	drop_toss = true
 
 
 # 손을 비우는 유일한 문.
@@ -3713,9 +3779,20 @@ func _hand_update(d: float) -> void:
 		wt = clampf(wt, DROP.w_lo, DROP.w_hi)   # 펠트 밖으로는 안 나간다
 	ut = clampf(ut, DROP.u_lo + it.hw, DROP.u_hi - it.hw)
 	var lim: float = HAND.back_v if (hand_lit or it.w > DROP.w_hi) else HAND.v_cap
-	var p := Vector2(it.u, it.w).move_toward(Vector2(ut, wt), lim * d)
+	var was := Vector2(it.u, it.w)
+	var p := was.move_toward(Vector2(ut, wt), lim * d)
 	it.u = p.x
 	it.w = p.y
+
+	# 던질 속도는 커서가 아니라 물체가 실제로 간 거리로 잰다. 그래야 v_cap
+	# 이 만드는 무게감이 던지기에도 그대로 실린다 — 후려쳐도 물건은 그만큼
+	# 못 따라오고, 못 따라온 만큼 안 날아간다. 계산대에 붙어 있는 동안은
+	# 판이 끄는 것이라 손짓이 아니다. 0 으로 둬서 거절 반송이 안 튀게 한다.
+	if d > 0.0:
+		if hand_lit:
+			hand_v = Vector2.ZERO
+		else:
+			hand_v = hand_v.lerp((p - was) / d, clampf(d / HAND.toss_tau, 0.0, 1.0))
 	_hand_scuff(it, d)
 
 
