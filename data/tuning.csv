@@ -13,6 +13,7 @@ reroll_base,2,int,0,99,상점,유료 리롤 첫 가격
 reroll_step,1,int,0,99,상점,리롤할 때마다 누적 상승
 max_items,5,int,1,9,상점,칩 슬롯. 넣는 것이 곧 빼는 것이 되는 수
 darts_base,6,int,1,12,런,탄창 기본 크기. rounds.darts 가 라운드별로 덮는다
+stage_picks,3,int,1,6,런,스테이지 화면에 까는 제약 카드 수. 이 중 하나를 반드시 고른다 — 스킵이 없다
 board_r,106.0,float,40.0,200.0,판,보드 반지름(px). aim_swing 이 이 값에 비례해야 한다
 aim_swing,119.0,float,40.0,260.0,판,조준 게이지 진폭(px). board_r 의 1.1226배 — 이 비가 빗나감 37.68% 를 만든다
 sector_max,20,int,1,24,판,"칸 값 상한. 25 이상이 되면 check(""bull"") 이 칸을 불로 읽는다"

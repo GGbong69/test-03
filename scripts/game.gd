@@ -97,11 +97,8 @@ var rt_bull_i := 0.06
 var dead_idx := -1              # "금지 구역"이 죽이는 칸. -1 이면 안 걸렸다
 
 # ── 스테이지 선택 ─────────────────────────────────────────
-var stage_pick := []            # 이번에 제시된 3개 후보
-var active_mods := []           # 이번 판에 걸린 제약
-var stage_gold := 0             # 클리어 시 추가 골드
-var stage_item := false         # 클리어 시 아이템 무료 지급
-var stage_tier := "plain"       # 이번에 고른 등급. 다음 매대의 희귀도 저울이 된다
+var stage_pick := []            # 이번에 깔린 제약 카드들
+var active_mods := []           # 이번 판에 걸린 제약 (지금은 언제나 한 장)
 var sealed := -1                # "둔화"로 봉인된 아이템 인덱스
 
 # ── 탄창 ──────────────────────────────────────────────────
@@ -363,23 +360,9 @@ func _finish_round() -> void:
 		{"n": "남은 다트 %d개" % darts_left, "v": dart_gold},
 		{"n": "이자", "v": interest},
 	]
-	if stage_gold > 0:
-		clear_gold_detail.append({"n": "스테이지 보상", "v": stage_gold})
 	for r in item_rows:
 		clear_gold_detail.append(r)
-	gold += GameData.clear_gold() + dart_gold + interest + stage_gold + item_gold
-
-	# 극한 판은 아이템을 하나 무료로 준다
-	if stage_item and stage_slots < GameData.max_items() \
-			and owned.size() < GameData.max_items():
-		var pool := GameData.items().duplicate()
-		pool.shuffle()
-		for it in pool:
-			if not _has_item(it.id):
-				owned.append(it)
-				break
-	stage_gold = 0
-	stage_item = false
+	gold += GameData.clear_gold() + dart_gold + interest + item_gold
 
 	state = S.CLEAR
 	beep_seq([392.0, 494.0, 587.0], 0.09, 0.18, 0.22)
@@ -426,15 +409,15 @@ func _open_shop() -> void:
 
 
 #  가중치 뽑기. 칩과 제약이 같은 저울을 쓴다 — 제약은 행에 w 를 들고 있고,
-#  칩은 등급 표에서 등급×스테이지 등급으로 가져온다. 균등 shuffle 이던
-#  시절에는 14골드 희귀가 4골드 흔함과 같은 확률로 R2 매대에 떴다.
-func _draw_weighted(pool: Array, tier: String) -> Dictionary:
+#  칩은 등급 표에서 가져온다. 균등 shuffle 이던 시절에는 14골드 희귀가
+#  4골드 흔함과 같은 확률로 R2 매대에 떴다.
+func _draw_weighted(pool: Array) -> Dictionary:
 	if pool.is_empty():
 		return {}
 	var sum := 0.0
 	var ws := []
 	for e in pool:
-		var w: float = float(e.w) if e.has("w") else GameData.item_weight(e, tier)
+		var w: float = float(e.w) if e.has("w") else GameData.item_weight(e)
 		ws.append(maxf(w, 0.0))
 		sum += maxf(w, 0.0)
 	if sum <= 0.0:
@@ -453,7 +436,6 @@ func _roll_stock() -> void:
 	stock.clear()
 	var nxt := round_no + 1
 	var w := GameData.shop_of(nxt)
-	var tier: String = stage_tier
 
 	# 후보를 먼저 거른다 — 이미 가진 칩과 아직 안 풀린 칩은 애초에 안 뜬다.
 	var pool := []
@@ -464,7 +446,7 @@ func _roll_stock() -> void:
 
 	var n := 0
 	while n < int(w.items):
-		var it := _draw_weighted(pool, tier)
+		var it := _draw_weighted(pool)
 		if it.is_empty():
 			break
 		pool.erase(it)
@@ -487,7 +469,7 @@ func _roll_stock() -> void:
 	# 개조를 다 샀거나 판이 꽉 찼다. 예전 코드는 여기서 mods[i] 로 죽었다.
 	# 자리는 정확히 4개여야 하므로(_table_draw 의 ax/ay 주석) 칩으로 메운다.
 	while mn < int(w.mods):
-		var fill := _draw_weighted(pool, tier)
+		var fill := _draw_weighted(pool)
 		if fill.is_empty():
 			break
 		pool.erase(fill)
@@ -750,46 +732,27 @@ func _open_stage() -> void:
 	sealed = -1
 	sell_sel = -1
 	buy_sel = -1
-	# 극한 무료 아이템은 "고르기 전에 자리가 있었는가" 로 판정한다. 이 스냅샷이
-	# 없으면 [스테이지에서 잉여칩 판매 → 극한 선택 → 무료 칩으로 리필] 이
-	# 골드까지 받으면서 도는 무손실 루프가 된다.
 	stage_slots = owned.size()
+	# 등급(정공·도전·극한)이 없다. 매 라운드 제약 셋을 깔고 하나를 고른다 —
+	# 고르는 질문이 "얼마나 무리할까" 에서 "어느 쪽이 내 빌드에 덜 아픈가" 로
+	# 바뀌었다. 보상은 붙지 않는다. 제약은 대가를 치르는 것이 아니라 그냥 판이다.
 	var base := GameData.target_of(round_no)
 	stage_pick.clear()
-	# 아직 안 풀린 제약은 뺀다. "둔화"(칩 봉인)가 R1 극한에 붙으면 가진 칩이
-	# 없어 공짜 제약이 되므로 modifiers.csv 가 min_round 로 늦춘다.
-	var pool := []
-	for md in GameData.modifiers():
-		if md.min_round <= round_no:
-			pool.append(md)
-	for st in GameData.stages():
-		var picked := []
-		var left := pool.duplicate()
-		for i in st.mods:
-			var md := _draw_weighted(left, "")
-			if md.is_empty():
-				break
-			picked.append(md)
-			# 같은 축을 둘 뽑으면 하나가 조용히 묻힌다. 축째로 걷어낸다.
-			for other in left.duplicate():
-				if other.k == md.k:
-					left.erase(other)
-		stage_pick.append({
-			"d": st,
-			"mods": picked,
-			"target": int(round(base * st.mul)),
-		})
+	var left := GameData.modifiers().duplicate()
+	for i in GameData.stage_picks():
+		var md := _draw_weighted(left)
+		if md.is_empty():
+			break
+		left.erase(md)               # 같은 카드가 두 장 깔리지 않는다
+		stage_pick.append({"d": md, "target": base})
 	state = S.STAGE
 	beep_seq([392.0, 494.0], 0.09, 0.14, 0.18)
 
 
 func _pick_stage(i: int) -> void:
 	var sp: Dictionary = stage_pick[i]
-	active_mods = sp.mods.duplicate()
+	active_mods = [sp.d]
 	target = sp.target
-	stage_gold = sp.d.gold
-	stage_item = sp.d.item
-	stage_tier = sp.d.id
 	beep_seq([523.0, 659.0, 784.0], 0.07, 0.12, 0.20)
 	_start_round()
 
@@ -4316,21 +4279,9 @@ func _tip_build(hit: Dictionary) -> void:
 		"stage":
 			var sp: Dictionary = stage_pick[i]
 			tip_mark = _stage_rect(i)
-			tip_title = "%s · 목표 %d" % [sp.d.n, sp.target]
-			if sp.mods.is_empty():
-				_tip_add("제약 없음 — 기본 목표 그대로", 10, C_DIM)
-			else:
-				for md in sp.mods:
-					_tip_add(md.n, 11, C_MULT.lightened(0.25), md.id, md.d)
-			var rw := []
-			if sp.d.gold > 0:
-				rw.append("골드 +%d" % sp.d.gold)
-			if sp.d.item:
-				rw.append("아이템 1개")
-			if sp.d.item and stage_slots >= GameData.max_items():
-				_tip_add("칩 랙이 꽉 차 아이템은 못 받는다", 9, C_RED.lightened(0.2))
-			_tip_add(("클리어 시  " + "  ·  ".join(rw)) if not rw.is_empty()
-					else "추가 보상 없음", 9, C_GOLD if not rw.is_empty() else C_DIM.darkened(0.2))
+			tip_title = sp.d.n
+			_tip_add(sp.d.d, 11, C_MULT.lightened(0.25))
+			_tip_add("목표 %d" % sp.target, 10, C_DIM)
 		"mag":
 			var dd: Dictionary = remaining[i]
 			tip_mark = _mag_rect(i)
@@ -4497,55 +4448,30 @@ func _draw_stage() -> void:
 	# 보드가 비쳐 보이게 얇게 덮는다 — 개조 상태를 확인하면서 고르라고
 	draw_rect(Rect2(Vector2.ZERO, VIEW), Color(0.04, 0.03, 0.07, 0.80))
 
-	draw_string(font, Vector2(0, 98), "제약이 셀수록 상점 자금이 커진다",
-			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 10, C_DIM.darkened(0.2))
+	draw_string(font, Vector2(0, 96), "제약 하나를 반드시 고른다  ·  보상은 없다",
+			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 10, C_DIM)
 
 	for i in stage_pick.size():
 		var r := _stage_rect(i)
 		var sp: Dictionary = stage_pick[i]
-		var tone: Color = [C_GREEN, C_ACC, C_MULT][i]
+		var md: Dictionary = sp.d
 
 		draw_rect(r, C_PANEL.lightened(0.10))
-		draw_rect(Rect2(r.position, Vector2(r.size.x, 3)), tone)
+		draw_rect(Rect2(r.position, Vector2(r.size.x, 3)), C_MULT)
 
-		draw_string(font, r.position + Vector2(0, 24), sp.d.n,
-				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 15, C_TXT)
-		draw_string(font, r.position + Vector2(0, 38), sp.d.sub,
-				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, C_DIM)
+		# 얼굴은 그림이 먼저다. 카드 셋을 훑어 하나를 고르는 면이고,
+		# 훑기에 쓰이는 채널은 글자가 아니라 실루엣이다.
+		_icon_modifier(r.position + Vector2(r.size.x * 0.5, 46.0), 22.0, md.id, 0.0)
 
-		draw_string(font, r.position + Vector2(0, 66), str(sp.target),
-				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 24, tone.lightened(0.3))
-		draw_string(font, r.position + Vector2(0, 78), "목표 점수",
-				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, C_DIM)
+		draw_string(font, r.position + Vector2(0, 88), md.n,
+				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 15, C_MULT.lightened(0.3))
+		draw_string(font, r.position + Vector2(8, 106), md.d,
+				HORIZONTAL_ALIGNMENT_CENTER, r.size.x - 16.0, 10, C_DIM)
 
-		# 8pt 설명 줄은 없앤다 — 640×360, texture_filter=0 에서 8px 한글은
-		# 자모 성분이 1px 밑으로 내려가 회색 얼룩이 된다. 정확한 문구는
-		# 툴팁이 그대로 들고 있으므로 잃는 정보가 없다. 카드는 셋을 훑어
-		# 하나를 고르는 면이고, 훑기에 쓰이는 채널은 글자가 아니라 실루엣이다.
-		var my := 110.0 if sp.mods.size() == 1 else 99.0
-		for m in sp.mods:
-			_icon_modifier(r.position + Vector2(20.0, my), 9.0, m.id, 0.0)
-			draw_string(font, r.position + Vector2(34.0, my + 4.0), m.n,
-					HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 42.0, 11,
-					C_MULT.lightened(0.25))
-			my += 22.0
-
-		var rw := "보상 없음"
-		# R8 은 정산이 없다 — 극한 보상이 조기 return 뒤에 있어 전부 사라지고
-		# 목표 ×1.25 만 남는다. 함정을 얼굴에 쓴다.
-		if round_no >= GameData.rounds_n() and (sp.d.gold > 0 or sp.d.item):
-			rw = "마지막 판 · 보상 없음"
-		elif sp.d.gold > 0:
-			rw = "+%d" % sp.d.gold
-		if sp.d.item:
-			rw += "  ·  아이템 1개"
-		draw_string(font, r.position + Vector2(0, r.size.y - 10), rw,
-				HORIZONTAL_ALIGNMENT_CENTER, r.size.x,
-				11, C_GOLD if sp.d.gold > 0 else C_DIM)
-
-	draw_string(font, Vector2(0, 292), "판을 눌러 시작",
-			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 11, C_TXT)
-
+		draw_string(font, r.position + Vector2(0, 136), str(sp.target),
+				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 20, C_TXT)
+		draw_string(font, r.position + Vector2(0, 146), "목표 점수",
+				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, C_DIM.darkened(0.2))
 
 func _draw_shop() -> void:
 	_scrim()

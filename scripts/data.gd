@@ -12,10 +12,9 @@ extends RefCounted
 #    rarity.csv     등급 3  — 등장 가중치의 유일한 출처
 #    mods.csv       개조 8  — 판 기하를 바꾼다
 #    darts.csv      다트 5  — 탄창에 드는 것
-#    modifiers.csv  제약 6  — 높은 등급 판에 붙는다
-#    stages.csv     등급 3  — 정공 · 도전 · 극한
+#    modifiers.csv  제약 6  — 스테이지 선택 그 자체다
 #    rounds.csv     라운드 8 — 목표 점수와 매대 폭
-#    tuning.csv     스칼라 23 — 행이 안 느는 값만 모은다
+#    tuning.csv     스칼라 24 — 행이 안 느는 값만 모은다
 #
 #  아홉 번째 장 _stats.csv 는 게임이 안 읽는다. 밑줄이 그 뜻이다.
 #  scripts/tools/item_stats.gd 가 덮어쓰는 측정 산출물이고, 밸런스 근거로만
@@ -32,7 +31,8 @@ extends RefCounted
 #  표를 늘려도 코드가 안 느는 것과 느는 것
 #    안 는다 — items 한 줄, rounds 한 줄, tuning 한 줄, 기존 축을 쓰는 mods 한 줄
 #    는다   — 새 cond(check + cond_text + _icon_cond 셋), 새 다트(_icon_dart),
-#            새 축(mods 또는 modifiers 의 match 한 가지)
+#            새 축(mods 또는 modifiers 의 match 한 가지),
+#            새 제약(_icon_modifier 한 가지 — 카드 얼굴에 그림이 있어야 한다)
 # ══════════════════════════════════════════════════════════
 
 #  익스포트 주의 — data/*.csv 는 .import 에서 importer="keep" 이어야 한다.
@@ -49,7 +49,6 @@ const FILES := {
 	"mods": "mods.csv",
 	"darts": "darts.csv",
 	"modifiers": "modifiers.csv",
-	"stages": "stages.csv",
 	"rounds": "rounds.csv",
 	"tuning": "tuning.csv",
 }
@@ -60,7 +59,7 @@ const TUNE_KEYS := [
 	"start_gold", "clear_gold", "gold_per_dart", "interest_per", "interest_max",
 	"gold_broke", "gold_blitz", "sell_div", "sell_min",
 	"free_rerolls", "reroll_base", "reroll_step", "max_items",
-	"darts_base",
+	"darts_base", "stage_picks",
 	"board_r", "aim_swing", "sector_max", "val_max_mul",
 	"gauge_speed", "resolve_beat", "confirm_hold", "fly_time", "aim_click_r",
 ]
@@ -246,15 +245,14 @@ static func items() -> Array:
 
 
 # 등장 가중치와 해금 라운드. 등급이 기본을 정하고 칩이 예외로 덮는다.
-static func item_weight(it: Dictionary, tier: String) -> float:
+static func item_weight(it: Dictionary) -> float:
 	boot()
 	for r in _raw.get("items", []):
 		if r.get("id") == it.id and String(r.get("weight", "")) != "":
 			return _f(r, "weight", "items")
-	var col := "w_" + ("plain" if tier == "" else tier)
 	for r in _raw.get("rarity", []):
 		if r.get("id") == it.get("rarity", "common"):
-			return _f(r, col, "rarity", 1.0)
+			return _f(r, "weight", "rarity", 1.0)
 	return 1.0
 
 
@@ -376,34 +374,10 @@ static func modifiers() -> Array:
 			"k": r.get("axis", ""),
 			"v": v,
 			"w": _f(r, "weight", "modifiers", 1.0),
-			"min_round": _i(r, "min_round", "modifiers", 1),
 			"d": fill(r.get("desc", ""), {"v": v}),
 			"line": r.get("_line", 0),
 		})
 	_cache["modifiers"] = out
-	return out
-
-
-# ── 스테이지 등급 ─────────────────────────────────────────
-static func stages() -> Array:
-	boot()
-	if _cache.has("stages"):
-		return _cache["stages"]
-	var out := []
-	for r in _raw.get("stages", []):
-		var mn := _i(r, "mods_n", "stages")
-		var mul := _f(r, "target_mul", "stages", 1.0)
-		out.append({
-			"id": r.get("id", ""),
-			"n": r.get("name", ""),
-			"mods": mn,
-			"mul": mul,
-			"gold": _i(r, "gold", "stages"),
-			"item": _b(r, "free_item", "stages"),
-			"sub": fill(r.get("sub", ""), {"mods_n": mn, "target_mul": mul}),
-			"line": r.get("_line", 0),
-		})
-	_cache["stages"] = out
 	return out
 
 
@@ -474,6 +448,7 @@ static func free_rerolls() -> int: return tune_i("free_rerolls")
 static func reroll_base() -> int: return tune_i("reroll_base")
 static func reroll_step() -> int: return tune_i("reroll_step")
 static func max_items() -> int: return tune_i("max_items")
+static func stage_picks() -> int: return tune_i("stage_picks")
 static func sector_max() -> int: return tune_i("sector_max")
 static func val_max_mul() -> float: return tune("val_max_mul")
 
@@ -661,7 +636,6 @@ static func _validate() -> void:
 	_v_mods()
 	_v_darts()
 	_v_modifiers()
-	_v_stages()
 	_v_rounds()
 	_v_cross()
 
@@ -862,6 +836,7 @@ static func _v_darts() -> void:
 static func _v_modifiers() -> void:
 	var raw: Array = _raw.get("modifiers", [])
 	var axes := {}
+	var seen_id := {}
 	for r in raw:
 		var who := "modifiers:%d %s(%s)" % [r.get("_line", 0), r.get("name", ""), r.get("id", "")]
 		var ax: String = r.get("axis", "")
@@ -870,35 +845,26 @@ static func _v_modifiers() -> void:
 		axes[ax] = int(axes.get(ax, 0)) + 1
 		if _f(r, "weight", "modifiers") <= 0.0:
 			_errs.append("%s — weight 가 0 이하다" % who)
+		if seen_id.has(r.get("id", "")):
+			_errs.append("%s — id 중복" % who)
+		seen_id[r.get("id", "")] = true
 		if ax == "sector_kill":
 			var v := _i(r, "v", "modifiers")
 			if v < 0 or v >= SECTORS_BASE.size():
 				_errs.append("%s — sector_kill 의 v 는 0~%d 인덱스여야 한다" % [who, SECTORS_BASE.size() - 1])
 		_v_desc(who, r.get("desc", ""), ["v"])
-	# 스테이지가 제약 둘을 뽑을 때 같은 축이 겹치면 하나가 조용히 묻힌다.
-	# 축이 행마다 하나뿐이면 그 위험은 없지만, 늘어나면 뽑기 쪽을 고쳐야 한다.
+	# 한 판에 제약이 하나뿐이라 축 중복이 게임에 안 나타난다. 그래도 세어 둔다 —
+	# 카드를 둘 이상 붙이는 날 이 경고가 먼저 울려야 한다.
 	var reused := []
 	for a in axes:
 		if int(axes[a]) > 1:
 			reused.append(a)
 	if not reused.is_empty():
-		_warns.append("modifiers — 축을 둘 이상이 나눠 쓴다: %s. 제약 뽑기에서 축 중복을 막아야 한다" % [reused])
-
-
-static func _v_stages() -> void:
-	var raw: Array = _raw.get("stages", [])
-	if raw.is_empty():
-		_errs.append("stages — 표가 비었다")
-	var mods_avail: Array = _raw.get("modifiers", [])
-	var mn := mods_avail.size()
-	for r in raw:
-		var who := "stages:%d %s(%s)" % [r.get("_line", 0), r.get("name", ""), r.get("id", "")]
-		var n := _i(r, "mods_n", "stages")
-		if n < 0 or n > mn:
-			_errs.append("%s — 제약 %d개를 요구하는데 표에는 %d종뿐이다" % [who, n, mn])
-		if _f(r, "target_mul", "stages") <= 0.0:
-			_errs.append("%s — target_mul 이 0 이하다" % who)
-		_v_desc(who, r.get("sub", ""), ["mods_n", "target_mul"])
+		_warns.append("modifiers — 축을 둘 이상이 나눠 쓴다: %s" % [reused])
+	# 스테이지 화면이 까는 장수보다 후보가 적으면 같은 카드가 두 번 뜬다.
+	var need := tune_i("stage_picks")
+	if raw.size() < need:
+		_errs.append("modifiers — 제약이 %d종인데 스테이지가 %d장을 깐다" % [raw.size(), need])
 
 
 static func _v_rounds() -> void:
@@ -948,10 +914,6 @@ static func _v_cross() -> void:
 		var mr2 := _i(r, "min_round", "rarity", 1)
 		if mr2 < 2 or mr2 > n:
 			_errs.append("rarity:%d — min_round %d 는 2~%d 여야 한다" % [r.get("_line", 0), mr2, n])
-	for r in _raw.get("modifiers", []):
-		var mr3 := _i(r, "min_round", "modifiers", 1)
-		if mr3 < 1 or mr3 > n:
-			_errs.append("modifiers:%d — min_round %d 는 1~%d 여야 한다" % [r.get("_line", 0), mr3, n])
 	# 매대가 마르면 리롤이 같은 물건을 다시 뱉는다. 라운드마다 후보 수가
 	# 매대 폭보다 넉넉한지 센다 — 소유 칩이 후보에서 빠지므로 여유를 둔다.
 	var need := 0
@@ -966,13 +928,10 @@ static func _v_cross() -> void:
 		if cnt < need:
 			_warns.append("items — R%d 에 뜰 수 있는 칩이 %d장뿐이다. 매대 %d칸 + 슬롯을 채우면 마른다"
 					% [rd, cnt, need])
-	# 등장 가중치가 세 등급 모두 0 인 칩은 표에 있으나 게임에 없다.
+	# 가중치가 0 인 칩은 표에 있으나 게임에 없다.
 	for it in items():
-		var s := 0.0
-		for tier in ["plain", "hard", "brutal"]:
-			s += item_weight(it, tier)
-		if s <= 0.0:
-			_errs.append("items — %s(%s) 는 어느 등급에서도 안 뜬다" % [it.n, it.id])
+		if item_weight(it) <= 0.0:
+			_errs.append("items — %s(%s) 는 매대에 안 뜬다" % [it.n, it.id])
 
 
 # desc 의 중괄호가 실제 열 이름과 안 맞으면 화면에 중괄호가 그대로 나간다.
