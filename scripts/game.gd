@@ -51,8 +51,9 @@ const LAY := {
 	# 자금판은 플레이 중 34 높이. 이자/마지막판 줄이 필요한 상점·스테이지에서만
 	# _bank_draw 가 46 으로 늘린다. 늘 46 이면 탄창 헤더가 판 안으로 들어간다.
 	"bank":       Rect2(4.0, 20.0, 72.0, 34.0),
+	# 판매판은 이제 스테이지 화면에만 쓴다. 상점에서는 왼쪽 창구가 대신한다.
 	"sell":       Rect2(80.0, 20.0, 74.0, 46.0),
-	"cap":        Rect2(445.0, 20.0, 37.0, 46.0),
+	"cap":        Rect2(436.0, 20.0, 37.0, 32.0),
 }
 
 const C_BG := Color("14111f")
@@ -714,6 +715,7 @@ func _reroll() -> void:
 	gold -= reroll_cost
 	rerolls_used += 1
 	reroll_cost = _reroll_price()
+	npc_t = 1.0                  # 딜러가 판을 쓸고 다시 던진다
 	_roll_stock()
 	beep(392.0, 0.09, 0.18)
 
@@ -1099,8 +1101,9 @@ func _click(m: Vector2) -> void:
 				return
 			# 계산대도 자리가 고정이다. 낙하 검사보다 앞에 둬서 언제 눌러도
 			# 같은 뜻이 되게 한다 (낙하 중엔 buy_sel 이 이미 -1 이라 안내만 뜬다).
-			if PAY.has_point(m):
-				_pay_click()
+			var cz := _chute_at(m, 0.0)
+			if cz >= 0:
+				_chute_click(cz)
 				return
 			if _drop_busy():
 				# 커서 밑에서 물건이 움직이는 동안 구매가 성립하면 "누른 것" 과
@@ -1520,7 +1523,9 @@ func _hud_draw() -> void:
 	_draw_topbar()
 	if state != S.CLEAR:            # 정산 화면은 그 자체가 명세다
 		_bank_draw()
-		if _can_sell():
+		# 상점에서는 왼쪽 창구가 판매판을 대신한다. 스테이지 화면에는 판이 없어
+		# 창구도 없으므로 거기서만 이 판을 세운다.
+		if _can_sell() and state != S.SHOP:
 			_sell_draw()
 		_panel_draw()
 		_cap_draw()
@@ -1807,12 +1812,15 @@ func _cap_draw() -> void:
 # 감각 조정은 이 표에서만 한다.
 const PANEL := {
 	# 배치
-	"y": 20.0,           # 랙 위쪽
-	"h": 46.0,           # 랙 높이
-	"cell": 46.0,        # 칩 한 칸 폭
+	"y": 20.0,           # 랙 위쪽. 아래 y[56,112] 가 딜러 자리다
+	# 높이 46 을 38 로 줄인 것은 딜러 때문이다. 랙 아래끝(58)과 카운터(77)
+	# 사이의 19px 이 머리가 들어갈 유일한 자리다 — 랙을 그대로 두면 실루엣이
+	# 통째로 랙 뒤에 숨어 "누가 판다" 가 화면에서 안 읽힌다.
+	"h": 32.0,           # 랙 높이
+	"cell": 42.0,        # 칩 한 칸 폭
 	"pad": 6.0,          # 랙 안쪽 여백
-	"r": 15.0,           # 칩 반지름
-	"chip_dy": -3.0,     # 칸 안에서 칩 중심을 얼마나 올릴지
+	"r": 13.0,           # 칩 반지름
+	"chip_dy": -1.0,     # 칸 안에서 칩 중심을 얼마나 올릴지
 
 	# 튀는 정도 — 사각 슬롯 때 값을 그대로 쓴다. 꽂는 곳만 바뀌었다.
 	"kick": 7.4,         # 발동 순간 튀어오르는 힘
@@ -2212,11 +2220,12 @@ func _can_sell() -> bool:
 
 
 func _sell_hit(m: Vector2) -> bool:
-	# 랙 y[21,67] 은 매대 y[104,236] · 스테이지 카드 y[112,264] 와 y 로 갈려
+	# 랙 y[44,76] 은 매대 y[104,236] · 스테이지 카드 y[112,264] 와 y 로 갈려
 	# 있어 먼저 검사해도 그쪽 클릭을 훔칠 수 없다.
 	if not _can_sell():
 		return false
-	if sell_sel >= 0 and sell_sel < owned.size() and LAY.sell.has_point(m):
+	if state != S.SHOP and sell_sel >= 0 and sell_sel < owned.size() \
+			and LAY.sell.has_point(m):
 		_sell(sell_sel)
 		return true
 	for i in GameData.max_items():
@@ -2298,13 +2307,65 @@ const C_TABLE := Color("1b3126")   # 펠트. 랙(C_FELT "16281f")보다 한 단 
 								   # 랙이 앞에 놓인 별개 물건으로 읽히게.
 const C_WOOD := Color("3a2a24")
 
+
+# ══════════════════════════════════════════════════════════
+#  딜러 — 카운터 뒤 실루엣
+#
+#  얼굴을 안 그린다. 640x360 에서 사람 얼굴은 어떤 각도로 그려도 뭉개진다 —
+#  남은 다트를 손이 부채처럼 들고 있게 했다가 두 번 다 살구색 덩어리로 읽혀
+#  버린 것과 같은 문제다. 뒤에서 오는 빛에 잘린 윤곽 하나면 "누가 판다" 는
+#  말이 성립하고, 이 해상도에서 그 이상은 손해다.
+#
+#  자리는 랙 아래끝(58)과 카운터 윗면(77) 사이 19px 이 전부다. 그래서 머리가
+#  작고 어깨가 넓다 — 앙각 52°에서 카운터에 기댄 사람의 실제 실루엣이기도 하다.
+#  어깨 반폭은 랙 반폭(116)보다 넓어야 한다. 안 그러면 통째로 랙 뒤에 숨는다.
+#
+#  움직이는 것은 둘뿐이다. 숨(항상)과 리롤(판을 쓸고 다시 던질 때).
+#  구매·판매에는 안 움직인다 — 그 순간에는 물건과 숫자를 봐야 한다.
+# ══════════════════════════════════════════════════════════
+#  처음에 어깨를 반폭 138 로 잡고 팔을 수평으로 뻗었더니 화면에 검은 막대
+#  하나가 생겼다. 사람으로 읽히게 하는 것은 크기가 아니라 실루엣이 끊기는
+#  자리다 — 머리와 어깨 사이의 목, 어깨에서 팔꿈치로 내려가는 사선,
+#  팔꿈치에서 가운데로 되돌아오는 아래팔. 그 셋이 있으면 6px 두께로도
+#  사람이고, 없으면 두께를 어떻게 줘도 막대다.
+#  세로로 갈리는 것이 전부다. 머리 · 목 · 어깨 · 카운터에 얹힌 팔이 서로
+#  다른 높이에 있으면 사람이고, 같은 높이에 몰리면 두께를 어떻게 줘도 막대다.
+#
+#  팔은 좁게 모았다. 그림에서는 카운터를 따라 좌우로 넓게 뻗지만, 640x360
+#  에서 그러면 대칭 V 하나가 되어 사람이 아니라 옷걸이로 읽힌다(넓혀서
+#  두 번 그려 보고 확인했다). 팔꿈치를 몸 가까이 붙이고 손을 가운데에
+#  모으면 세로로 긴 덩어리가 되어 그 자리에서 사람이 된다.
+const NPC := {
+	"cx": 320.0,
+	"head_y": 62.0, "head_rx": 12.0, "head_ry": 11.0,
+	"neck_y": 70.0, "neck_w": 5.0, "neck_h": 14.0,
+	# 몸통은 넓이보다 높이가 커야 한다. 어깨를 넓히면 그 순간 옷걸이가 된다 —
+	# 어깨 반폭 26 은 머리 반폭 12 의 두 배 남짓이고, 도트 캐릭터의 비율이다.
+	"sh_y": 82.0,        # 어깨 윗선
+	"sh_w": 26.0,        # 어깨 반폭 (위)
+	"sh_w2": 23.0,       # 몸통 아래폭
+	"torso_y": 111.0,    # 몸통이 끝나는 높이 (카운터 레일 뒤로 잘린다)
+	"arm_root": Vector2(23.0, 88.0),  # 팔이 어깨에서 나가는 점 (중심에서 · 화면 y)
+	"hand": Vector2(78.0, 114.0),     # 카운터에 얹힌 팔 끝 (중심에서 · 화면 y)
+	"upper": 10.0,       # 팔 두께
+	"hand_r": 6.0,       # 팔 끝 마디
+	"breathe": 1.2,      # 숨 진폭(px)
+	"lift": 11.0,        # 리롤 때 팔이 드는 높이(px)
+}
+var npc_clock := 0.0
+var npc_t := 0.0        # 리롤 반응. 1 → 0 으로 준다
+
 const TBL := {
 	# ── 시점 ──────────────────────────────────────────
 	"flat": 0.788,       # sin 52°  — 면에 누운 것의 y 압축. w 에만 곱한다
 	"tall": 0.616,       # cos 52°  — 면에서 선 것의 y 압축. h 에만 곱한다
 
 	# ── 판 ────────────────────────────────────────────
-	"fy": 80.0,          # 펠트 far 모서리. 상시 HUD 하단 66 에서 14px
+	# 80 에서 112 로 내렸다. 카운터 위 62px 로는 사람 실루엣이 안 읽힌다 —
+	# 머리·목·어깨가 한 줄에 겹쳐 검은 막대가 된다(두 번 그려 보고 확인했다).
+	# 94px 이면 머리(56~76) · 목 · 어깨(84~112)가 세로로 갈린다.
+	# 펠트가 164 에서 132 로 얕아진 대신 트레이 w 범위를 같이 줄였다.
+	"fy": 112.0,         # 펠트 far 모서리
 	"ny": 244.0,         # 펠트 near 모서리. 레일 6px 뒤가 기존 버튼 y=250
 
 	# ── 물건 ─────────────────────────────────────────
@@ -2320,24 +2381,28 @@ func _table_draw() -> void:
 	# 화면이 곧 테이블의 크롭이다. 640 폭에 D자 테이블 전체를 넣으면 매물이
 	# 그 안에서 다시 쪼그라든다. 좌우는 화면 밖으로 이어진다.
 	draw_rect(Rect2(0.0, 18.0, VIEW.x, VIEW.y - 18.0), C_WOOD)
-	draw_rect(Rect2(0.0, TBL.fy, VIEW.x, TBL.ny - TBL.fy), C_TABLE)
+	# 펠트는 사다리꼴이다. 좌우 빗변이 그대로 창구라 모양이 곧 규칙이다.
+	var felt := PackedVector2Array([
+			Vector2(CHUTE.back, TBL.fy), Vector2(VIEW.x - CHUTE.back, TBL.fy),
+			Vector2(VIEW.x, TBL.ny), Vector2(0.0, TBL.ny)])
+	draw_colored_polygon(felt, C_TABLE)
 	var ink: Color = C_TABLE.lightened(0.34)
 
 	# 결 — 도트 격자는 프레임당 수천 콜이라 못 쓴다. 가로 1px 줄 7px 간격 = 23콜.
+	# 빗변까지만 긋는다.
 	var yy: float = TBL.fy + 7.0
 	while yy < TBL.ny:
-		draw_line(Vector2(0.0, yy), Vector2(VIEW.x, yy), Color(ink, 0.05), 1.0)
+		var e := _chute_edge(yy)
+		draw_line(Vector2(e, yy), Vector2(VIEW.x - e, yy), Color(ink, 0.05), 1.0)
 		yy += 7.0
-	# 가장자리 감쇠 — 테이블이 화면 밖으로 휘어 나간다고 말한다
-	for k in 3:
-		var ea: float = 0.10 - 0.033 * float(k)
-		draw_rect(Rect2(float(k), TBL.fy, 1.0, TBL.ny - TBL.fy), Color(0, 0, 0, ea))
-		draw_rect(Rect2(VIEW.x - 1.0 - float(k), TBL.fy, 1.0, TBL.ny - TBL.fy),
-				Color(0, 0, 0, ea))
+
+	_chute_draw()
 
 	# 딜러 라인 — 면 위에서 좌우로 뻗은 선은 이 정사영에서 정확히 화면
 	# 수평선이 된다. 근사가 아니라 공짜로 맞다.
-	draw_line(Vector2(24.0, 86.0), Vector2(VIEW.x - 24.0, 86.0), Color(ink, 0.5), 1.0)
+	var dly: float = TBL.fy + 7.0
+	var de := _chute_edge(dly)
+	draw_line(Vector2(de + 8.0, dly), Vector2(VIEW.x - de - 8.0, dly), Color(ink, 0.5), 1.0)
 	# 펠트에 찍힌 규칙. 세워서 그린다 — 640x360 에서 10pt 를 0.788배로 누르면
 	# 자모가 뭉갠다(_draw_stage 가 8pt 한글을 지운 것과 같은 이유). 글자는 전부
 	_goods_draw()
@@ -2347,13 +2412,127 @@ func _table_draw() -> void:
 	# _hud_draw 가 이 위에 판을 다시 얹으므로 멀쩡하고, 결과적으로 칩 랙이
 	# 테이블 쿠션 위에 놓인 딜러 트레이로 읽힌다.
 	draw_rect(Rect2(0.0, 18.0, VIEW.x, TBL.fy - 18.0), C_WOOD.darkened(0.30))
+	_npc_body()
 	draw_rect(Rect2(0.0, TBL.fy - 3.0, VIEW.x, 3.0), C_WOOD)
 	draw_rect(Rect2(0.0, TBL.fy - 1.0, VIEW.x, 1.0), C_WOOD.lightened(0.18))
+	_npc_arms()
 	# 가까운 쪽 레일 — 리롤·다음 버튼이 그 아래 앞치마에 얹힌다
 	draw_rect(Rect2(0.0, TBL.ny, VIEW.x, 2.0), C_WOOD.lightened(0.24))
 	draw_rect(Rect2(0.0, TBL.ny + 6.0, VIEW.x, VIEW.y - TBL.ny - 6.0),
 			C_WOOD.darkened(0.35))
 	_bill_draw()
+
+
+# 창구 둘. 펠트 빗변 바깥의 삼각형이 몸통이고, 결이 미끄럼틀이라고 말한다.
+func _chute_draw() -> void:
+	for z in 2:
+		var lit: bool = hand_zone == z
+		var body: Color = C_WOOD.darkened(0.46)
+		if pay_flash > 0.0 and lit:
+			body = body.lerp(C_ACC, pay_flash * 0.5)
+		elif lit:
+			body = C_WOOD.darkened(0.22)
+		var p := PackedVector2Array()
+		if z == Z_SELL:
+			p.append(Vector2(0.0, TBL.fy))
+			p.append(Vector2(CHUTE.back, TBL.fy))
+			p.append(Vector2(0.0, TBL.ny))
+		else:
+			p.append(Vector2(VIEW.x, TBL.fy))
+			p.append(Vector2(VIEW.x - CHUTE.back, TBL.fy))
+			p.append(Vector2(VIEW.x, TBL.ny))
+		draw_colored_polygon(p, body)
+		var gr := Color(C_WOOD.lightened(0.55), 0.16 if lit else 0.10)
+		var yy: float = TBL.fy + 4.0
+		while yy < TBL.ny:
+			var e := _chute_edge(yy)
+			if e > 2.0:
+				if z == Z_SELL:
+					draw_line(Vector2(0.0, yy), Vector2(e, yy), gr, 1.0)
+				else:
+					draw_line(Vector2(VIEW.x - e, yy), Vector2(VIEW.x, yy), gr, 1.0)
+			yy += 5.0
+		draw_line(p[1], p[2], Color(C_ACC if lit else C_WOOD.lightened(0.34),
+				0.95 if lit else 0.50), 1.0)
+	_chute_label()
+
+
+# 창구 얼굴. 무엇을 들었는지에 따라 왼쪽이나 오른쪽 하나만 값을 말한다.
+func _chute_label() -> void:
+	var ly: float = TBL.fy + 12.0
+	var si: int = hand_i if (hand_st == H.CARRY and hand_src == 1) else sell_sel
+	var slive: bool = _can_sell() and si >= 0 and si < owned.size()
+	draw_string(font, Vector2(5.0, ly), "판매", HORIZONTAL_ALIGNMENT_LEFT, -1, 11,
+			C_TXT if slive else C_DIM)
+	if slive:
+		draw_gold_at(5.0, ly + 17.0, "+%d" % GameData.sell_value(owned[si]), 11, C_GOLD)
+
+	var bi: int = hand_i if (hand_st == H.CARRY and hand_src == 0) else buy_sel
+	var blive: bool = bi >= 0 and bi < stock.size()
+	var ok: bool = blive and _buy_block(bi) == ""
+	draw_string(font, Vector2(VIEW.x - 27.0, ly), "구매", HORIZONTAL_ALIGNMENT_LEFT, -1, 11,
+			(C_TXT if ok else C_MULT.lightened(0.2)) if blive else C_DIM)
+	if blive:
+		var cs := str(stock[bi].cost)
+		draw_gold_at(VIEW.x - 5.0 - gold_w(cs, 11), ly + 17.0, cs, 11,
+				C_GOLD if ok else C_DIM.darkened(0.25))
+
+
+# 딜러 몸통 — 카운터 위로 올라온 부분만. 랙이 이 위에 얹혀 트레이로 읽힌다.
+func _npc_body() -> void:
+	var bob: float = sin(npc_clock * 1.5) * NPC.breathe
+	var body: Color = C_WOOD.darkened(0.84)
+	var rim: Color = C_WOOD.lightened(0.42)
+	var cx: float = NPC.cx
+	var sy: float = NPC.sh_y + bob
+	# 목 — 머리와 어깨를 잇되 가늘게. 이 잘록함이 실루엣을 사람으로 만든다.
+	# 머리보다 먼저 그려 머리가 목 위를 덮게 한다(안 그러면 장기말이 된다).
+	draw_rect(Rect2(cx - NPC.neck_w, NPC.neck_y + bob, NPC.neck_w * 2.0, NPC.neck_h), body)
+	# 어깨~가슴. 위가 좁고 카운터로 갈수록 넓어진다. 가운데는 랙이 가린다.
+	var pts := PackedVector2Array()
+	var n := 12
+	for i in n + 1:
+		var a := PI * float(i) / float(n)
+		pts.append(Vector2(cx - NPC.sh_w * cos(a), sy + 6.0 * (1.0 - sin(a))))
+	pts.append(Vector2(cx + NPC.sh_w2, NPC.torso_y + bob))
+	pts.append(Vector2(cx - NPC.sh_w2, NPC.torso_y + bob))
+	draw_colored_polygon(pts, body)
+	var hc := Vector2(cx, NPC.head_y + bob)
+	draw_colored_polygon(_e_pts(hc, NPC.head_rx, NPC.head_ry, 16), body)
+	# 뒤에서 오는 빛. 머리는 한 바퀴 두른다 — 이 한 줄이 덩어리를 사람으로 만든다.
+	draw_arc(hc, NPC.head_rx + 0.5, 0.0, TAU, 20, Color(rim, 0.70), 1.0)
+	var top := PackedVector2Array()
+	for i in n + 1:
+		var a2 := PI * float(i) / float(n)
+		top.append(Vector2(cx - NPC.sh_w * cos(a2), sy + 6.0 * (1.0 - sin(a2))))
+	draw_polyline(top, Color(rim, 0.55), 1.0)
+
+
+# 팔 — 카운터에 얹힌다. 레일을 그린 뒤에 그려야 "얹혔다" 가 된다.
+func _npc_arms() -> void:
+	var bob: float = sin(npc_clock * 1.5) * NPC.breathe
+	# 리롤 — 팔꿈치를 들었다 놓는다. 판을 쓸고 다시 던지는 몸짓이다.
+	var lift: float = NPC.lift * sin(clampf(npc_t, 0.0, 1.0) * PI)
+	# 팔은 몸통보다 한 단 밝다. 랙이 펠트보다 한 단 밝은 것과 같은 어법으로,
+	# "앞에 있다" 를 값 차이로 말한다. 실루엣의 순수함보다 읽히는 쪽을 골랐다.
+	var body: Color = C_WOOD.darkened(0.68)
+	var rim: Color = C_WOOD.lightened(0.42)
+	var cx: float = NPC.cx
+	var hy: float = NPC.hand.y + bob - lift
+	# 팔 둘이 어깨에서 카운터로 내려간다. 둘 사이가 벌어져 있어야 그 틈으로
+	# 벽이 보이고, 그 틈 하나가 덩어리를 몸통과 팔로 가른다.
+	for k in 2:
+		var side: float = -1.0 if k == 0 else 1.0
+		var sh := Vector2(cx + side * NPC.arm_root.x, NPC.arm_root.y + bob)
+		var hd := Vector2(cx + side * NPC.hand.x, hy)
+		draw_line(sh, hd, body, NPC.upper)
+		draw_colored_polygon(_e_pts(hd, NPC.hand_r, NPC.hand_r * 0.8, 12), body)
+		# 바깥 윗선에만 빛 — 사선 하나가 팔을 팔로 만든다
+		var nrm := (hd - sh).normalized().orthogonal() * (NPC.upper * 0.5)
+		if nrm.y > 0.0:
+			nrm = -nrm
+		draw_line(sh + nrm, hd + nrm, Color(rim, 0.62), 1.0)
+		draw_arc(hd, NPC.hand_r + 0.5, PI * 0.5, PI * 1.5, 8, Color(rim, 0.40), 1.0)
 
 
 # 타원 원반. 볼록이라 한 폴리곤으로 넘겨도 안전하다.
@@ -2418,13 +2597,21 @@ const DROP := {
 	#  w_hi 165 를 정한 것은 레일이 아니라 가격판이다 — 지면 y = 80+165*0.788 = 210,
 	#  가격 baseline 240, 글자 바닥 242, 레일 244. 물건 자체는 훨씬 위에서 멈춘다.
 	#  w_lo 52 는 펠트 인쇄 문구(글자 y[88,98]) 아래 4px. 실측 최상단 108.2.
-	"u_lo": 14.0, "u_hi": 626.0, "w_lo": 52.0, "w_hi": 165.0,
+	#  좌우 한계는 창구가 정한다. 펠트는 사다리꼴이고 가장 좁은 곳이 뒤쪽이라,
+	#  거기서 물건의 바깥 모서리가 빗변을 안 넘도록 잡았다 (다트 반폭 37.5 ·
+	#  화면 위쪽 끝 y 119 에서 빗변 x 75.8 → 최소 u 113.3 < 153.5). 손으로
+	#  끌지 않는 한 어떤 물건도 창구에 못 닿는다 — 계산대가 레일 아래였을 때의
+	#  죽은 띠를 세로에서 가로로 옮긴 것이고, 솔버는 여전히 이 사실을 모른다.
+	#
+	#  w 위쪽 24 는 물건 윗모서리가 카운터(112)를 안 넘는 선이고, 아래쪽 126 은
+	#  가격판(지면 +30)이 앞 레일(244)을 안 넘는 선이다. 둘 다 그림이 정한다.
+	"u_lo": 116.0, "u_hi": 524.0, "w_lo": 24.0, "w_hi": 126.0,
 	"lane": 0.55,        # 출발 u 의 레인 혼합비. 0=난장 1=정렬. 구석 몰림 손잡이
 
 	# ── 던지기 (먼 레일 뒤 슈트에서 앞으로 던진다) ──
 	#  h0 는 화면으로 62~74px. w0=-10 이라 출발점 화면 y 는 -2~10 — 덮개와 HUD 뒤다.
 	#  물건은 낙하 후반(y>80)에 레일 밑에서 튀어나온다. 착지 w 실측 p50 79.
-	"w0": -10.0, "h0_lo": 100.0, "h0_hi": 120.0,
+	"w0": -10.0, "h0_lo": 100.0, "h0_hi": 120.0,   # 지면 y 104 · 화면 y 30~42
 	"vw_lo": 160.0, "vw_hi": 250.0, "vu_amp": 36.0, "vh_hi": 40.0,
 	"om_amp": 7.0, "stag": 0.08,
 
@@ -2548,6 +2735,8 @@ func _drop_update(d: float) -> void:
 	if state != S.SHOP:
 		return
 	var dd: float = minf(d, DROP.max_d)
+	npc_clock += dd
+	npc_t = maxf(npc_t - dd * 1.7, 0.0)
 	if drop_awake:
 		# 나머지를 버리지 않고 이월한다. 모든 스텝이 정확히 sub 이라 프레임률이
 		# 배치를 못 흔든다 — 60/144/30/75fps 와 즉시정착의 최대 위치차 0.000000px.
@@ -2975,7 +3164,7 @@ func _obj_draw(i: int, dim: float) -> void:
 		# 펠트에서 계산대까지 미끄러진 뒤 같은 자리에서 같은 곡선으로 떠난다.
 		# 플래그가 0개다 — 물체 위치가 경로를 추론한다.
 		var sv: float = float(it.sold)
-		var via := PAY.get_center()
+		var via := Vector2(_chute_dock_u(Z_BUY, it.w), _p2g(it.w))
 		if sv < HAND.knee:
 			var ka: float = sv / HAND.knee
 			c = c.lerp(via, ka * ka)
@@ -3452,14 +3641,19 @@ func _icon_modifier(c: Vector2, r: float, id: String, dim: float,
 #       낙하 구획의 "vh 를 양수로 만드는 경로가 없다" 가 문자 그대로 산다.
 #       드래그가 drop_awake 를 켜지 않으므로 입력 잠금 창도 안 생긴다.
 #
-#  바깥과 닿는 곳은 아홉이다.
+#  드는 것이 둘이다. 매대의 물건(hand_src 0)은 위 문단 그대로 면 위를 밀려
+#  다니고, 랙의 칩(hand_src 1)은 물리 물체가 아니라 커서 밑의 그림뿐이다.
+#  랙 칩 쪽은 적분기·펠트·겹침 어디에도 안 닿는다 — 그려지고, 놓이면 팔린다.
+#
+#  바깥과 닿는 곳은 열이다.
 #    _hand_press/_motion/_release  입력          (_unhandled_input)
 #    _hand_update(d)               매 프레임      (_drop_update 첫 줄)
 #    _hand_abort()                 손을 비운다     (_drop_roll · _drop_settle
 #                                                  · _reroll · _next_round 맨 앞)
-#    _shop_tap(i) / _pay_click()   고르기 · 확정   (_click 의 S.SHOP)
-#    _pay_draw()/_hold_draw()/_fly_draw()          (_draw_shop 말미)
-#    buy_sel                       고른 매물 (-1 = 없음). sell_sel 과 배타
+#    _shop_tap(i) / _rack_tap(i)   고르기          (_hand_release 의 탭 갈래)
+#    _chute_click(z) / _pay_click() 확정           (_click 의 S.SHOP)
+#    _chute_draw()/_hold_draw()/_fly_draw()        (_table_draw · _draw_shop 말미)
+#    buy_sel / sell_sel            고른 매물 · 고른 칩. 서로 배타
 #    drop[i].held/.slot/.mark/.scuff               새 필드 넷
 #
 #  불변식 — held 인 물체의 u/w 를 쓰는 곳은 _hand_update 하나뿐이다.
@@ -3475,7 +3669,8 @@ var hand_p0 := Vector2.ZERO      # 누른 화면 좌표. 탭은 이 점으로 �
 var hand_m := Vector2.ZERO       # 마지막 커서 화면 좌표
 var hand_far := 0.0              # 누름 이후 |m - p0| 의 **누적 최대**. 단조 비감소
 var hand_off := Vector2.ZERO     # 면 좌표 잡기 오프셋. ramp 로 0 에 녹는다
-var hand_lit := false            # 지금 계산대가 켜져 있는가 (래치음 에지 · 판 얼굴)
+var hand_zone := -1              # 지금 켜진 창구 (-1 없음 · 0 판매 · 1 구매)
+var hand_src := 0                # 무엇을 들었나 (0 = 매대 물건 · 1 = 랙 칩)
 var hand_v := Vector2.ZERO       # 든 물체의 평활 속도(면px/s). 놓을 때 이걸 넘긴다
 
 var buy_sel := -1                # 2클릭 구매의 1단계
@@ -3505,16 +3700,12 @@ const HAND := {
 	#  호버는 +6 으로 뜬다 — 뜸/눌림이 정반대라 두 상태가 안 헷갈린다.
 
 	# ── 계산대 ───────────────────────────────────────
-	"back_pad": 10.0,
-	#  반송·취소 때 근쪽 벽(w_hi 165)에서 안쪽으로 두는 여유(면px). 레일에 딱
-	#  붙여 놓으면 가격판(지면 y + 30 = 240)이 레일 244 에 닿는다. 10 면 = 화면 7.9px.
 	"back_v": 900.0,
-	#  계산대 도크로 붙고 떨어지는 속도(면px/s). 도크 간격 242.39 - 165 = 77.39 면
-	#  → 0.086초. 손 속도(v_cap)와 갈라 둔 이유는 도크가 손이 아니라 판의 동작이라서다.
-	#  계단 클램프였다면 경계에서 화면 61px 순간이동이 난다 — 그래서 이징이다.
+	#  창구 도크로 붙고 떨어지는 속도(면px/s). 도크가 손이 아니라 판의 동작이라
+	#  손 속도(v_cap)와 갈라 뒀다. 계단 클램프였다면 경계에서 순간이동이 난다.
 	"latch_gap": 6.0,
-	#  래치 히스테리시스(화면 px). 진입은 PAY, 이탈은 PAY.grow(6).
-	#  경계에서 손이 떨려도 523Hz 가 연타되지 않고 판 얼굴이 안 깜빡인다.
+	#  창구 래치 히스테리시스(화면 px). 진입은 빗변 그대로, 이탈은 +6.
+	#  경계에서 손이 떨려도 523Hz 가 연타되지 않고 창구 얼굴이 안 깜빡인다.
 	"flash": 2.6,
 	#  계산대 섬광 감쇠(1/s). deny_flash 와 같은 속도라 승낙과 거절이 같은 박자다 → 0.38초.
 	"msg_t": 1.4,
@@ -3552,15 +3743,45 @@ const HAND := {
 }
 
 
-# 계산대. 리롤(x[32,184])과 다음(x[432,608]) 사이의 비어 있던 248px 만 쓴다 —
-# 기존 좌표를 하나도 안 밀어낸다. y 는 셋이 같아 [리롤][계산대][다음] 이 한 줄이다.
+# 창구 둘. 펠트 사다리꼴의 좌우 빗변이 그대로 창구다 —
+# 왼쪽으로 밀면 팔고, 오른쪽으로 밀면 산다.
 #
-# 왜 펠트가 아니라 레일 아래인가 — 물리로 굴러 들어가는 것이 부등식 위반이다.
-#   물리 트레이 최대 깊이  w_hi = 165  → 지면 y = _p2g(165) = 210.02
-#   계산대 상단                            250.0
-#   40px 의 죽은 띠. 잉크로 재도 최악(세로 다트 박스 하단 242.4 · _shop_hit
-#   여유 포함 248.1)이 250 을 못 넘는다. 솔버에 한 줄도 안 가르치고 불가능하다.
-const PAY := Rect2(196.0, 250.0, 228.0, 42.0)
+# 방향이 곧 뜻이라 라벨을 안 읽어도 성립한다. 대신 반대로 밀면 거절한다:
+# 랙의 칩은 왼쪽만, 매대의 물건은 오른쪽만 받는다. 계산대 하나가 양방향이던
+# 시절에는 "무엇을 밀었는가" 가 방향을 정했지만, 지금은 방향이 먼저다.
+#
+# 물리로 굴러 들어가는 것은 여전히 부등식 위반이다 — DROP.u_lo/u_hi 주석 참조.
+const CHUTE := {
+	"back": 80.0,     # 카운터 높이(TBL.fy)에서 펠트가 시작하는 x. 앞으로 갈수록 0
+	"gap": 6.0,       # 래치 히스테리시스(화면 px). 진입 0 · 이탈 +gap
+}
+const Z_SELL := 0
+const Z_BUY := 1
+
+
+# 그 높이에서 펠트가 시작하는 x. 좌우 대칭이라 왼쪽 값 하나로 둘 다 낸다.
+func _chute_edge(y: float) -> float:
+	var t := clampf((y - TBL.fy) / (TBL.ny - TBL.fy), 0.0, 1.0)
+	return CHUTE.back * (1.0 - t)
+
+
+# 커서가 어느 창구 위인가. pad 로 히스테리시스를 만든다.
+func _chute_at(m: Vector2, pad: float) -> int:
+	if m.y < TBL.fy - pad or m.y > TBL.ny + pad:
+		return -1
+	var e := _chute_edge(m.y) + pad
+	if m.x <= e:
+		return Z_SELL
+	if m.x >= VIEW.x - e:
+		return Z_BUY
+	return -1
+
+
+# 도킹 목표 u. 물건 중심을 빗변 위에 얹어 반쯤 걸치게 한다 — "건네는 중" 이다.
+# 계산대 때와 같이 붙는 속도는 손과 갈라 둔다. 도크는 손이 아니라 판의 동작이다.
+func _chute_dock_u(zone: int, w: float) -> float:
+	var e := _chute_edge(_p2g(w))
+	return e if zone == Z_SELL else VIEW.x - e
 
 
 # ══ 면 ↔ 화면 — h = 0 절단면 위에서만 ══
@@ -3570,10 +3791,6 @@ func _g2w(y: float) -> float:
 	return (y - TBL.fy) / TBL.flat
 
 
-func _pay_w() -> float:
-	return _g2w(PAY.get_center().y)          # 242.39
-
-
 # ══ 입력 ══════════════════════════════════════════════
 # true 를 돌려주면 _click 을 안 부른다(삼킨다).
 func _hand_press(m: Vector2) -> bool:
@@ -3581,16 +3798,28 @@ func _hand_press(m: Vector2) -> bool:
 		return false                          # 좌표 입력은 오토플레이의 어휘가 아니다
 	if state != S.SHOP or _drop_busy():
 		return false
-	# 랙·판매판·버튼·계산대가 먼저라는 규약을 구조로 못 박는다. 지금은 y 로
-	# 갈려 있어(매물 최상단 99.3 > 랙 하단 66) 없어도 되지만 손잡이다.
-	if _panel_rect().has_point(m) or LAY.sell.has_point(m) or PAY.has_point(m):
-		return false
 	if _reroll_rect().has_point(m) or _next_rect().has_point(m):
+		return false
+	# 랙의 칩도 집는다 — 왼쪽 창구로 밀면 판다. 매대보다 먼저 보는 이유는
+	# y 로 갈려 있어(매물 최상단 99.3 > 랙 하단 58) 겹칠 수 없기 때문이 아니라,
+	# 겹치게 되는 날 무엇이 이기는지를 여기 한 줄로 정해 두기 위해서다.
+	if _can_sell():
+		for k in mini(owned.size(), GameData.max_items()):
+			if _slot_rect(k).has_point(m):
+				hand_st = H.ARMED
+				hand_src = 1
+				hand_i = k
+				hand_p0 = m
+				hand_m = m
+				hand_far = 0.0
+				return true
+	if _panel_rect().has_point(m):
 		return false
 	var i := _shop_hit(m)
 	if i < 0:
 		return false
 	hand_st = H.ARMED
+	hand_src = 0
 	hand_i = i
 	hand_p0 = m
 	hand_m = m
@@ -3611,8 +3840,17 @@ func _hand_motion(m: Vector2) -> void:
 
 
 func _hand_take() -> void:
-	var it: Dictionary = drop[hand_i]
 	hand_st = H.CARRY
+	hand_v = Vector2.ZERO
+	hand_zone = -1
+	buy_sel = -1
+	sell_sel = -1             # 드래그는 _click 을 안 거쳐 _sell_hit 의 낙수가 안 온다
+	if hand_src == 1:
+		# 랙 칩은 물리 물체가 아니다. 적분기에 넣을 것이 없어 커서만 따라간다.
+		hand_off = Vector2.ZERO
+		beep(196.0, 0.04, 0.08)
+		return
+	var it: Dictionary = drop[hand_i]
 	# 집는 순간 물체가 안 튄다. 이 오프셋은 ramp 로 0 에 녹으므로 0.17초 뒤에는
 	# 커서 = 물체 지면점이고, 그때부터 계산대 판정이 커서 기준과 물체 기준으로
 	# 갈릴 수 없다. 그전에도 판정은 커서 하나만 본다.
@@ -3627,10 +3865,6 @@ func _hand_take() -> void:
 	it.sleep = true           # 정착 인구조사에서 빠진다 → 드는 동안 _drop_busy() 가 false
 	it.rest = DROP.t_sleep
 	it.scuff = []
-	hand_v = Vector2.ZERO
-	hand_lit = false
-	buy_sel = -1
-	sell_sel = -1             # 드래그는 _click 을 안 거쳐 _sell_hit 의 낙수가 안 온다
 	beep(196.0, 0.04, 0.08)
 
 
@@ -3638,26 +3872,45 @@ func _hand_release(m: Vector2) -> void:
 	if hand_st == H.NONE:
 		return
 	var i := hand_i
-	var lit := hand_lit
+	var src := hand_src
+	var z := hand_zone
 	var was_carry: bool = hand_st == H.CARRY
 	hand_st = H.NONE
 	hand_i = -1
 	hand_far = 0.0
-	hand_lit = false
-	if not was_carry:
-		_shop_tap(i)                          # 안 움직였다 = 탭 = 고르기
+	hand_zone = -1
+	hand_src = 0
+	if not was_carry:                         # 안 움직였다 = 탭 = 고르기
+		if src == 1:
+			_rack_tap(i)
+		else:
+			_shop_tap(i)
 		return
+
+	# 랙 칩 — 왼쪽 창구만 받는다.
+	if src == 1:
+		if z == Z_SELL and _can_sell() and i >= 0 and i < owned.size():
+			_sell(i)
+		elif z == Z_BUY:
+			pay_msg = "오른쪽은 사는 창구다"
+			pay_msg_t = HAND.msg_t
+			_deny()
+		else:
+			beep(147.0, 0.05, 0.07)           # 그냥 제자리로 돌아간다
+		return
+
 	if i < 0 or i >= drop.size():
 		return
 	hand_m = m
 	var it: Dictionary = drop[i]
 	it.held = false
-	if lit:
-		var blk := _buy_block(i)
+	if z >= 0:
+		var blk := "왼쪽은 파는 창구다" if z == Z_SELL else _buy_block(i)
 		if blk == "":
 			_pay_take(i)
 			return                            # 이미 떠났다. 자리로 안 돌려보낸다
-		it.w = DROP.w_hi - HAND.back_pad      # 판이 물건을 밀어냈다
+		# 판이 물건을 밀어냈다 — 창구가 좌우라 밀어내는 방향도 가로다.
+		it.u = clampf(it.u, DROP.u_lo + it.hw, DROP.u_hi - it.hw)
 		pay_msg = blk
 		pay_msg_t = HAND.msg_t
 		_deny()
@@ -3727,16 +3980,17 @@ func _toss_wake() -> void:
 
 # 손을 비우는 유일한 문.
 func _hand_abort() -> void:
-	if hand_i >= 0 and hand_i < drop.size():
+	if hand_src == 0 and hand_i >= 0 and hand_i < drop.size():
 		var it: Dictionary = drop[hand_i]
 		if it.held:
 			it.held = false
-			it.w = minf(it.w, DROP.w_hi - HAND.back_pad)
+			it.u = clampf(it.u, DROP.u_lo + it.hw, DROP.u_hi - it.hw)
 			_hand_land(it)
 	hand_st = H.NONE
 	hand_i = -1
 	hand_far = 0.0
-	hand_lit = false
+	hand_zone = -1
+	hand_src = 0
 	buy_sel = -1
 
 
@@ -3750,7 +4004,8 @@ func _hand_update(d: float) -> void:
 		buy_sel = -1
 	if hand_st == H.NONE:
 		return
-	if state != S.SHOP or hand_i < 0 or hand_i >= drop.size():
+	var n_src: int = owned.size() if hand_src == 1 else drop.size()
+	if state != S.SHOP or hand_i < 0 or hand_i >= n_src:
 		_hand_abort()
 		return
 	# 창 밖에서 떼어 released 를 못 받은 경우의 안전망
@@ -3759,26 +4014,26 @@ func _hand_update(d: float) -> void:
 		return
 	if hand_st != H.CARRY:
 		return
+
+	# 래치는 히스테리시스로 건다 — 경계에서 소리와 창구 얼굴이 연타되지 않는다.
+	var z := _chute_at(hand_m, HAND.latch_gap if hand_zone >= 0 else 0.0)
+	if z >= 0 and z != hand_zone:
+		beep(523.0, 0.04, 0.10)
+	hand_zone = z
+
+	if hand_src == 1:
+		return                                  # 랙 칩은 커서에 붙어 다닌다
 	var it: Dictionary = drop[hand_i]
 	hand_off = hand_off.move_toward(Vector2.ZERO, HAND.ramp * d)
 
-	# 래치는 히스테리시스로 건다 — 경계에서 소리와 판 얼굴이 연타되지 않는다.
-	var inside: bool = PAY.grow(HAND.latch_gap).has_point(hand_m) if hand_lit \
-			else PAY.has_point(hand_m)
-	if inside and not hand_lit:
-		beep(523.0, 0.04, 0.10)
-	hand_lit = inside
-
 	var ut: float = hand_m.x + hand_off.x
-	var wt: float = _g2w(hand_m.y) + hand_off.y
-	if hand_lit:
-		# 계산대는 문이 아니라 도크다. 붙는 것은 판의 동작이라 손 속도와 무관하다.
-		ut = clampf(ut, PAY.position.x + it.hw, PAY.end.x - it.hw)
-		wt = _pay_w()
+	var wt: float = clampf(_g2w(hand_m.y) + hand_off.y, DROP.w_lo, DROP.w_hi)
+	if hand_zone >= 0:
+		# 창구는 문이 아니라 도크다. 붙는 것은 판의 동작이라 손 속도와 무관하다.
+		ut = _chute_dock_u(hand_zone, wt)
 	else:
-		wt = clampf(wt, DROP.w_lo, DROP.w_hi)   # 펠트 밖으로는 안 나간다
-	ut = clampf(ut, DROP.u_lo + it.hw, DROP.u_hi - it.hw)
-	var lim: float = HAND.back_v if (hand_lit or it.w > DROP.w_hi) else HAND.v_cap
+		ut = clampf(ut, DROP.u_lo + it.hw, DROP.u_hi - it.hw)
+	var lim: float = HAND.back_v if hand_zone >= 0 else HAND.v_cap
 	var was := Vector2(it.u, it.w)
 	var p := was.move_toward(Vector2(ut, wt), lim * d)
 	it.u = p.x
@@ -3789,7 +4044,7 @@ func _hand_update(d: float) -> void:
 	# 못 따라오고, 못 따라온 만큼 안 날아간다. 계산대에 붙어 있는 동안은
 	# 판이 끄는 것이라 손짓이 아니다. 0 으로 둬서 거절 반송이 안 튀게 한다.
 	if d > 0.0:
-		if hand_lit:
+		if hand_zone >= 0:
 			hand_v = Vector2.ZERO
 		else:
 			hand_v = hand_v.lerp((p - was) / d, clampf(d / HAND.toss_tau, 0.0, 1.0))
@@ -3814,9 +4069,33 @@ func _shop_tap(i: int) -> void:
 	beep(349.0 if buy_sel >= 0 else 262.0, 0.05, 0.10)   # 349 는 랙 선택과 같은 음
 
 
+# 랙 칩을 끌지 않고 톡 눌렀을 때. 두 클릭 경로의 1단계다.
+func _rack_tap(i: int) -> void:
+	buy_sel = -1
+	if i < 0 or i >= owned.size() or not _can_sell():
+		sell_sel = -1
+		return
+	sell_sel = -1 if sell_sel == i else i
+	sell_t = 0.0
+	beep(349.0 if sell_sel >= 0 else 262.0, 0.05, 0.10)
+
+
+# 창구를 눌렀을 때. 방향이 무엇을 뜻하는지는 여기서도 같다.
+func _chute_click(z: int) -> void:
+	if z == Z_SELL:
+		if _can_sell() and sell_sel >= 0 and sell_sel < owned.size():
+			_sell(sell_sel)
+			return
+		pay_msg = "먼저 랙에서 팔 칩을 고른다"
+		pay_msg_t = HAND.msg_t
+		_deny()
+		return
+	_pay_click()
+
+
 func _pay_click() -> void:
 	if buy_sel < 0:
-		pay_msg = "먼저 물건을 고른다"
+		pay_msg = "먼저 매대에서 살 물건을 고른다"
 		pay_msg_t = HAND.msg_t
 		_deny()
 		return
@@ -3844,50 +4123,26 @@ func _pay_take(i: int) -> void:
 
 # ══ 그리기 ════════════════════════════════════════════
 # 버튼(_btn)이 아니라 판(_sell_draw)의 어법이다 — 누르는 것이 아니라 놓는 자리다.
-func _pay_draw() -> void:
-	var i: int = hand_i if hand_st == H.CARRY else buy_sel
-	var live: bool = i >= 0 and i < stock.size()
-	var blk: String = _buy_block(i) if live else ""
-	var ok: bool = live and blk == ""
-	var body: Color = C_PANEL
-	if pay_flash > 0.0:
-		body = C_PANEL.lerp(C_ACC, pay_flash * 0.55)
-	elif ok and (hand_st != H.CARRY or hand_lit):
-		body = C_PANEL.lightened(0.12)
-	draw_rect(PAY, body)
-	var top: Color = C_WIRE.darkened(0.35)
-	if live:
-		top = C_ACC if ok else C_RED
-	draw_rect(Rect2(PAY.position, Vector2(PAY.size.x, 2.0)), top)
-	if not live:
-		draw_string(font, PAY.position + Vector2(0.0, 20.0), "계산대",
-				HORIZONTAL_ALIGNMENT_CENTER, PAY.size.x, 12, C_DIM.darkened(0.1))
-		return
-	var cost: int = stock[i].cost
-	var gc: Color = C_GOLD if ok else C_DIM.darkened(0.25)
-	if hand_st == H.CARRY:
-		# 물건이 판 가운데를 덮는다 — 글자를 좌우로 가른다
-		draw_string(font, PAY.position + Vector2(8.0, 26.0), "구매" if ok else "못 산다",
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 13, C_TXT if ok else C_DIM)
-		draw_gold_at(PAY.end.x - 8.0 - gold_w(str(cost), 11),
-				PAY.position.y + 26.0, str(cost), 11, gc)
-	else:
-		draw_string(font, PAY.position + Vector2(0.0, 20.0),
-				"구매  ·  %s" % stock[i].d.n,
-				HORIZONTAL_ALIGNMENT_CENTER, PAY.size.x, 12, C_TXT if ok else C_DIM)
-		draw_gold(PAY.get_center().x, PAY.position.y + 36.0, str(cost), 11, gc)
-
-
-# 손에 든 것 하나만 따로, 앞치마·버튼 다음에 그린다. _goods_draw 는 앞치마보다
-# 먼저 나가므로 계산대까지 내려온 물건이 거기서는 덮인다.
+# 손에 든 것 하나만 따로, 앞치마·버튼 다음에 그린다. _goods_draw 는 창구보다
+# 먼저 나가므로 창구까지 밀어 넣은 물건이 거기서는 덮인다.
 func _hold_draw() -> void:
-	if hand_st != H.CARRY or hand_i < 0 or hand_i >= drop.size():
+	if hand_st != H.CARRY:
+		return
+	if hand_src == 1:
+		# 랙에서 뽑은 칩. 물리 물체가 아니라 커서 밑의 그림뿐이다.
+		if hand_i < 0 or hand_i >= owned.size():
+			return
+		_e_ring_w(hand_m, PANEL.r + 4.0, (PANEL.r + 4.0) * TBL.flat, 1.0,
+				Color(C_ACC if hand_zone == Z_SELL else C_TXT, 0.55))
+		draw_item_chip(hand_m, PANEL.r, owned[hand_i], 0.0, 0.0, 0.0, 12)
+		return
+	if hand_i < 0 or hand_i >= drop.size():
 		return
 	var it: Dictionary = drop[hand_i]
 	# 자리 링. h ≡ 0 이라 몸통 중심이 곧 지면점이고, 링과 몸통이 안 갈린다.
 	# 팔려나간 자리의 코스터 자국과 같은 함수·같은 어법 — "링 = 자리".
 	_e_ring_w(Vector2(it.u, _p2g(it.w)), it.r + 3.0, (it.r + 3.0) * TBL.flat, 1.0,
-			Color(C_ACC if hand_lit else C_TXT, 0.55))
+			Color(C_ACC if hand_zone >= 0 else C_TXT, 0.55))
 	_obj_shadow(hand_i)
 	_obj_draw(hand_i, 0.0)
 
@@ -4301,13 +4556,11 @@ func _draw_shop() -> void:
 		draw_gold(rr.position.x + rr.size.x * 0.5, rr.position.y + 35.0,
 				str(reroll_cost), 10, C_GOLD if gold >= reroll_cost else C_DIM.darkened(0.3))
 	_btn(_next_rect(), "다음 라운드 →", "", true)
-	_pay_draw()
 	_hold_draw()
 	_fly_draw()
 
-	# 거절 사유. 기존 y300 중앙 문자열은 계산대(x[196,424])와 정면 충돌한다 —
-	# 왼쪽으로 옮기고 폭을 184 로 묶는다. 문구는 _buy_block 이 만든다
-	# ("5단계의 계산대 라벨이 세 번째 소비자" 가 여기서 성립한다).
+	# 거절 사유. 창구가 좌우로 갔으므로 앞치마 가운데가 비었다 — 거기 쓴다.
+	# 문구는 _buy_block 이 만든다.
 	var msg := ""
 	var ma := 0.0
 	if pay_msg_t > 0.0:
@@ -4316,12 +4569,15 @@ func _draw_shop() -> void:
 	elif deny_flash > 0.0:
 		msg = "골드가 부족하거나 슬롯이 꽉 찼다"
 		ma = deny_flash
-	elif hand_st == H.CARRY and hand_lit:
-		msg = _buy_block(hand_i)
+	elif hand_st == H.CARRY and hand_zone >= 0:
+		if hand_src == 1:
+			msg = "" if hand_zone == Z_SELL else "오른쪽은 사는 창구다"
+		else:
+			msg = "왼쪽은 파는 창구다" if hand_zone == Z_SELL else _buy_block(hand_i)
 		ma = 0.85
 	if msg != "":
-		draw_string(font, Vector2(12.0, 306.0), msg, HORIZONTAL_ALIGNMENT_LEFT,
-				184.0, 10, Color(C_MULT.lightened(0.3), ma))
+		draw_string(font, Vector2(196.0, 306.0), msg, HORIZONTAL_ALIGNMENT_CENTER,
+				248.0, 10, Color(C_MULT.lightened(0.3), ma))
 
 	# 대기 중에는 아무 말도 안 한다. 조작을 시작한 뒤의 세 가지만 남긴다 —
 	# 그것들은 설명이 아니라 지금 무슨 상태인가를 알리는 것이다.
@@ -4329,9 +4585,12 @@ func _draw_shop() -> void:
 	if _drop_busy():
 		tip = "떨어지는 중  —  아무 데나 눌러 바로 세운다"
 	elif hand_st == H.CARRY:
-		tip = "계산대에 놓으면 구매  ·  펠트에 놓으면 그냥 옮긴다"
+		tip = "왼쪽 끝에 밀면 판매  ·  오른쪽 끝에 밀면 구매  ·  펠트에 놓으면 그냥 옮긴다" \
+				if hand_src == 0 else "왼쪽 끝에 밀면 판매"
 	elif buy_sel >= 0:
-		tip = "계산대를 눌러 구매  ·  다시 누르면 취소"
+		tip = "오른쪽 끝을 눌러 구매  ·  다시 누르면 취소"
+	elif sell_sel >= 0:
+		tip = "왼쪽 끝을 눌러 판매  ·  다시 누르면 취소"
 	draw_string(font, Vector2(0, 316), tip,
 			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 10, C_DIM.darkened(0.2))
 
