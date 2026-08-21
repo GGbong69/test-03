@@ -738,6 +738,7 @@ func _open_stage() -> void:
 	# 바뀌었다. 보상은 붙지 않는다. 제약은 대가를 치르는 것이 아니라 그냥 판이다.
 	var base := GameData.target_of(round_no)
 	stage_pick.clear()
+	stage_t = 0.0
 	var left := GameData.modifiers().duplicate()
 	for i in GameData.stage_picks():
 		var md := _draw_weighted(left)
@@ -1043,6 +1044,10 @@ func _click(m: Vector2) -> void:
 			return
 		S.STAGE:
 			if _sell_hit(m):
+				return
+			# 마지막 장이 설 때까지는 못 고른다. 움직이는 것을 누르면
+			# 무엇을 눌렀는지가 커서와 카드 중 어느 쪽 기준인지 갈린다.
+			if stage_t < _deal_time():
 				return
 			for i in stage_pick.size():
 				if _stage_rect(i).has_point(m):
@@ -1377,8 +1382,45 @@ func pop(p: Vector2, txt: String, c: Color, sz: int, life: float) -> void:
 #  UI 좌표 (그리기와 클릭 판정이 같은 값을 쓴다)
 # ══════════════════════════════════════════════════════════
 
+#  카드는 펠트 위에 눕는다. 세 장 + 사이 여백이 펠트의 가장 좁은 곳(y=126,
+#  빗변 x 71.5)보다 안쪽에 들어가야 창구를 안 침범한다 — 150*3 + 14*2 = 478,
+#  가운데 정렬하면 x[81,559] 라 양쪽으로 9.5px 남는다.
+const CARD := {"w": 150.0, "h": 108.0, "gap": 14.0, "y": 126.0}
+
+
 func _stage_rect(i: int) -> Rect2:
-	return Rect2(Vector2(32.0 + i * 196.0, 112.0), Vector2(176.0, 152.0))
+	var n: float = maxf(float(stage_pick.size()), 1.0)
+	var total: float = CARD.w * n + CARD.gap * (n - 1.0)
+	return Rect2(Vector2((VIEW.x - total) * 0.5 + float(i) * (CARD.w + CARD.gap),
+			CARD.y), Vector2(CARD.w, CARD.h))
+
+
+#  딜러가 한 장씩 밀어 내려 준다. 카운터 뒤에서 나와 자리에 서고 한 번 튄다.
+#  물리 트레이에 안 넣는다 — 카드 셋이 트레이 폭(408)보다 넓어 솔버에 넣으면
+#  서로 밀려나 자리가 안 선다. 여기서 필요한 것은 충돌이 아니라 손짓이다.
+const DEAL := {
+	"dur": 0.34,     # 한 장이 미끄러져 자리에 서는 시간
+	"stag": 0.11,    # 장 사이 시차. 왼쪽부터 나온다
+	"hop": 7.0,      # 착지 뒤 튀는 높이(px)
+}
+
+
+func _deal_time() -> float:
+	return float(DEAL.dur) + float(DEAL.stag) * maxf(float(stage_pick.size()) - 1.0, 0.0)
+
+
+func _stage_pose(i: int) -> Vector2:
+	var r := _stage_rect(i)
+	var t: float = stage_t - float(i) * float(DEAL.stag)
+	var k: float = clampf(t / float(DEAL.dur), 0.0, 1.0)
+	var e: float = 1.0 - pow(1.0 - k, 3.0)
+	var from := Vector2(VIEW.x * 0.5 - r.size.x * 0.5, TBL.fy - r.size.y - 4.0)
+	var p := from.lerp(r.position, e)
+	if k >= 1.0:
+		var bt: float = t - float(DEAL.dur)
+		if bt < 0.6:
+			p.y -= float(DEAL.hop) * exp(-bt * 11.0) * absf(sin(bt * 19.0))
+	return p
 
 
 # 칸 번호에서 0~1 을 뽑는다.
@@ -2172,6 +2214,7 @@ func _panel_slot(i: int) -> void:
 var sell_sel := -1
 var sell_t := 0.0               # 선택 링 맥동에만 쓴다
 var stage_slots := 0            # 스테이지 화면에 들어설 때의 칩 개수
+var stage_t := 0.0              # 카드가 깔리는 경과. _open_stage 에서 0 으로 선다
 
 
 func _can_sell() -> bool:
@@ -2340,7 +2383,17 @@ const TBL := {
 }
 
 
+#  테이블을 두 조각으로 나눠 둔다. 사이에 무엇을 끼우느냐가 화면을 가른다 —
+#  상점은 매물을, 스테이지는 제약 카드를 끼운다. 카운터 뒤에서 나오는 것이
+#  덮개에 잘리는 순서가 두 화면에서 정확히 같아진다.
 func _table_draw() -> void:
+	_felt_draw()
+	_goods_draw()
+	_cover_draw()
+	_bill_draw()
+
+
+func _felt_draw() -> void:
 	# 화면이 곧 테이블의 크롭이다. 640 폭에 D자 테이블 전체를 넣으면 매물이
 	# 그 안에서 다시 쪼그라든다. 좌우는 화면 밖으로 이어진다.
 	draw_rect(Rect2(0.0, 18.0, VIEW.x, VIEW.y - 18.0), C_WOOD)
@@ -2366,11 +2419,10 @@ func _table_draw() -> void:
 	var dly: float = TBL.fy + 7.0
 	var de := _chute_edge(dly)
 	draw_line(Vector2(de + 8.0, dly), Vector2(VIEW.x - de - 8.0, dly), Color(ink, 0.5), 1.0)
-	# 펠트에 찍힌 규칙. 세워서 그린다 — 640x360 에서 10pt 를 0.788배로 누르면
-	# 자모가 뭉갠다(_draw_stage 가 8pt 한글을 지운 것과 같은 이유). 글자는 전부
-	_goods_draw()
 
-	# 덮개 — 물건은 펠트 far 모서리(y=78)에서 나온다. 그 위로 삐져나온 부분을
+
+func _cover_draw() -> void:
+	# 덮개 — 물건은 카운터 뒤에서 나온다. 그 위로 삐져나온 부분을
 	# 먼 쪽 레일이 덮는다. 클리핑 대신 불투명 사각 하나다. 상시 HUD 는
 	# _hud_draw 가 이 위에 판을 다시 얹으므로 멀쩡하고, 결과적으로 칩 랙이
 	# 테이블 쿠션 위에 놓인 딜러 트레이로 읽힌다.
@@ -2383,13 +2435,13 @@ func _table_draw() -> void:
 	draw_rect(Rect2(0.0, TBL.ny, VIEW.x, 2.0), C_WOOD.lightened(0.24))
 	draw_rect(Rect2(0.0, TBL.ny + 6.0, VIEW.x, VIEW.y - TBL.ny - 6.0),
 			C_WOOD.darkened(0.35))
-	_bill_draw()
 
 
 # 창구 둘. 펠트 빗변 바깥의 삼각형이 몸통이고, 결이 미끄럼틀이라고 말한다.
 func _chute_draw() -> void:
+	var open: bool = state == S.SHOP
 	for z in 2:
-		var lit: bool = hand_zone == z
+		var lit: bool = open and hand_zone == z
 		var body: Color = C_WOOD.darkened(0.46)
 		if pay_flash > 0.0 and lit:
 			body = body.lerp(C_ACC, pay_flash * 0.5)
@@ -2417,7 +2469,18 @@ func _chute_draw() -> void:
 			yy += 5.0
 		draw_line(p[1], p[2], Color(C_ACC if lit else C_WOOD.lightened(0.34),
 				0.95 if lit else 0.50), 1.0)
-	_chute_label()
+		if not open:
+			# 닫힌 창구 — 셔터 두 줄. 스테이지 화면에서는 사고팔 것이 없다.
+			for k in 2:
+				var sy: float = TBL.fy + 26.0 + float(k) * 13.0
+				var e := _chute_edge(sy)
+				if e < 6.0:
+					continue
+				var x0: float = 2.0 if z == Z_SELL else VIEW.x - e
+				draw_rect(Rect2(x0, sy, e - 2.0, 3.0),
+						Color(C_WOOD.darkened(0.70), 0.85))
+	if open:
+		_chute_label()
 
 
 # 창구 얼굴. 무엇을 들었는지에 따라 왼쪽이나 오른쪽 하나만 값을 말한다.
@@ -2695,6 +2758,9 @@ func _drop_busy() -> bool:
 
 func _drop_update(d: float) -> void:
 	_hand_update(d)
+	if state == S.STAGE:
+		stage_t += d
+		npc_clock += d
 	if state != S.SHOP:
 		return
 	var dd: float = minf(d, DROP.max_d)
@@ -4445,33 +4511,69 @@ func _draw_clear() -> void:
 
 
 func _draw_stage() -> void:
-	# 보드가 비쳐 보이게 얇게 덮는다 — 개조 상태를 확인하면서 고르라고
-	draw_rect(Rect2(Vector2.ZERO, VIEW), Color(0.04, 0.03, 0.07, 0.80))
-
-	draw_string(font, Vector2(0, 96), "제약 하나를 반드시 고른다  ·  보상은 없다",
-			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 10, C_DIM)
-
+	# 상점과 같은 테이블이다. 상점 다음에 바로 오는 화면이라 틀이 이어진다 —
+	# 매물이 있던 자리에 제약 카드가 놓이고, 창구는 닫혀 있다.
+	_felt_draw()
 	for i in stage_pick.size():
-		var r := _stage_rect(i)
-		var sp: Dictionary = stage_pick[i]
-		var md: Dictionary = sp.d
+		_stage_card(i)
+	_cover_draw()
 
-		draw_rect(r, C_PANEL.lightened(0.10))
-		draw_rect(Rect2(r.position, Vector2(r.size.x, 3)), C_MULT)
+	# 앞치마 — 상점에서는 리롤·다음 버튼이 있던 자리다. 여기서는 지금 판이
+	# 어떻게 생겼는지를 보여준다. 테이블이 보드를 덮어 버렸으므로 그 정보를
+	# 여기서 갚는다 — "좁은 판" 이 아픈지 아닌지는 산 개조가 정하기 때문이다.
+	var ay: float = TBL.ny + 24.0
+	draw_string(font, Vector2(0, ay), "지금 판",
+			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 10, C_DIM.darkened(0.25))
+	if mods_own.is_empty():
+		draw_string(font, Vector2(0, ay + 26.0), "개조 없음 — 기본 판",
+				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 11, C_DIM.darkened(0.1))
+	else:
+		var n: int = mods_own.size()
+		var step := 52.0
+		var x0: float = VIEW.x * 0.5 - (float(n) - 1.0) * step * 0.5
+		for i in n:
+			var mid: String = mods_own[i]
+			_icon_mod(Vector2(x0 + float(i) * step, ay + 24.0), 13.0, mid, 0.0)
+			draw_string(font, Vector2(x0 + float(i) * step - 26.0, ay + 48.0),
+					GameData.mod_of(mid).get("n", ""),
+					HORIZONTAL_ALIGNMENT_CENTER, 52.0, 9, C_DIM.darkened(0.15))
 
-		# 얼굴은 그림이 먼저다. 카드 셋을 훑어 하나를 고르는 면이고,
-		# 훑기에 쓰이는 채널은 글자가 아니라 실루엣이다.
-		_icon_modifier(r.position + Vector2(r.size.x * 0.5, 46.0), 22.0, md.id, 0.0)
+	draw_string(font, Vector2(0, VIEW.y - 10.0),
+			"제약 하나를 반드시 고른다  ·  보상은 없다",
+			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 10, C_DIM.darkened(0.25))
 
-		draw_string(font, r.position + Vector2(0, 88), md.n,
-				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 15, C_MULT.lightened(0.3))
-		draw_string(font, r.position + Vector2(8, 106), md.d,
-				HORIZONTAL_ALIGNMENT_CENTER, r.size.x - 16.0, 10, C_DIM)
 
-		draw_string(font, r.position + Vector2(0, 136), str(sp.target),
-				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 20, C_TXT)
-		draw_string(font, r.position + Vector2(0, 146), "목표 점수",
-				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, C_DIM.darkened(0.2))
+func _stage_card(i: int) -> void:
+	var sp: Dictionary = stage_pick[i]
+	var md: Dictionary = sp.d
+	var sz: Vector2 = _stage_rect(i).size
+	var p := _stage_pose(i)
+	# tip_mark 는 _tip_build 가 스테이지 카드일 때만 이 사각형을 담는다.
+	var hot: bool = tip_a > 0.004 and tip_mark == _stage_rect(i)
+	if hot:
+		p.y -= 3.0
+
+	# 펠트에 지는 그림자. 카드가 놓인 것이지 떠 있는 것이 아니라고 말한다.
+	draw_rect(Rect2(p + Vector2(3.0, 4.0), sz), Color(0, 0, 0, 0.28))
+
+	var body: Color = C_PANEL.lightened(0.16 if hot else 0.10)
+	draw_rect(Rect2(p, sz), body)
+	draw_rect(Rect2(p, Vector2(sz.x, 3.0)), C_MULT.lightened(0.15 if hot else 0.0))
+	# 카드 테두리 한 줄 — 펠트 위에서 가장자리가 안 뭉개지게
+	draw_rect(Rect2(p, Vector2(sz.x, 1.0)), Color(C_WIRE, 0.0))
+	draw_rect(Rect2(p + Vector2(0.0, sz.y - 1.0), Vector2(sz.x, 1.0)),
+			Color(C_BG, 0.55))
+
+	# 얼굴은 그림이 먼저다. 카드 셋을 훑어 하나를 고르는 면이고,
+	# 훑기에 쓰이는 채널은 글자가 아니라 실루엣이다.
+	_icon_modifier(p + Vector2(sz.x * 0.5, 32.0), 19.0, md.id, 0.0)
+
+	draw_string(font, p + Vector2(0.0, 68.0), md.n,
+			HORIZONTAL_ALIGNMENT_CENTER, sz.x, 14, C_MULT.lightened(0.32))
+	draw_string(font, p + Vector2(8.0, 84.0), md.d,
+			HORIZONTAL_ALIGNMENT_CENTER, sz.x - 16.0, 9, C_DIM)
+	draw_string(font, p + Vector2(0.0, 101.0), "목표 %d" % sp.target,
+			HORIZONTAL_ALIGNMENT_CENTER, sz.x, 10, C_DIM.darkened(0.15))
 
 func _draw_shop() -> void:
 	_scrim()
