@@ -2412,67 +2412,66 @@ const C_WOOD := Color("3a2a24")
 
 
 # ══════════════════════════════════════════════════════════
-#  딜러 — 크롭된 상반신
+#  딜러 — 어둠 속 그림자 (스프라이트)
 #
-#  얼굴도 목도 어깨도 화면에 없다. 카메라가 그만큼 가깝다는 뜻이고, 그래서
-#  몸통이 커진다. 얼굴을 안 그리는 이유는 예전과 같다 — 640x360 에서 사람
-#  얼굴은 어떤 각도로도 뭉개진다. 달라진 것은 그 결론을 "작게 그려 실루엣만"
-#  에서 "잘라내고 크게" 로 뒤집은 것이다.
+#  이 게임에서 그림 파일을 쓰는 곳은 여기 하나다. 나머지는 전부 _draw() 도형이다.
+#  예외를 둔 이유는 화풍이 아니라 밀도다 — 73px 안에 사람을 넣으려면 도형으로는
+#  옷의 정보량을 못 만든다. 그리고 이 그림은 게임에 맞춰 그려졌다: 색이 16개
+#  이하고, 반투명 화소가 0 이고(최근접 필터에 맞다), 어둠 속 실루엣이다.
+#  앞서 시도했던 채색 일러스트는 몸통 하나가 2,598색이라 칩(58색)·펠트(2색)와
+#  45배 차이가 났고, 팔레트로 눌러도 형태가 그라데이션에 실려 있어 안 됐다.
 #
-#  ── 크롭선은 화면 맨 위다 ────────────────────────────────
-#  칩 랙이 바닥(y320)으로 내려간 뒤로 상단을 가리는 판은 자금판
-#  x[4,76] · y[4,50] 하나뿐이고 그건 딜러의 x 와 안 겹친다. 그래서
-#  딜러는 화면 맨 위에서 잘린다 — 몸통 윗변을 y<0 에 두면 크롭이
-#  카메라의 것이 되고 얼굴·목·어깨가 화면 밖으로 나간다.
-#  보이는 세로는 y[0,109] 의 109px, 팔은 131 까지 간다 (109 에서 먼 레일이
-#  몸통을 자르고, 131.8 이 정착 물건이 칠하는 최상단이다).
-#  랙이 위에 있던 시절에는 이게 73px 이었다. 그 73px 이 조끼를 아무리
-#  잘 그려도 사람으로 안 읽히던 원인의 절반이었다.
-#  가로 상한은 자금판이다 — 반폭이 320−76 = 244 를 넘으면 겹친다.
+#  ── 조명을 걷어낸 이유 ──────────────────────────────────
+#  한때 램프 하나로 테이블만 비추는 조명을 넣었다가 뺐다. 세 지점을
+#  렌더해 나란히 놓고 보니 셋 다 손해였다.
+#    · 빛 웅덩이 — 부드러운 방사 그라데이션이라 하드엣지 도형 위에서
+#      뿌옇게 떴다. 펠트가 면으로 안 읽히고 매물 대비가 죽었다.
+#    · 비네트 — 창구 글씨("판매"·"구매")를 죽였다. 그 둘이 상점의
+#      핵심 조작을 알리는 유일한 글자다.
+#    · 낙차 — 벽을 어둡게 하면 이미 어두운 이 그림(수트 ≈32)이 벽
+#      (28,22,18)에 잠긴다. 벽을 그대로 두는 쪽이 실루엣이 더 선다.
+#  어둠은 조명으로 만드는 것이 아니라 그림이 들고 오는 것이다.
 #
-#  ── 옷걸이 판별식은 그대로다 ─────────────────────────────
-#  옛 그림이 옷걸이였던 이유는 크기가 아니라 자세였다. 좌우 대칭 V 는 팔이
-#  몸보다 커지는 순간 철사가 된다. 여기서는 팔꿈치를 몸통 **안**에 두고
-#  아래팔만 바깥아래로 내보낸다 — 뿌리가 안 보이므로 어깨를 안 그리고도
-#  팔이 어딘가에서 온다. 대칭 V 가 아니라 몸통 하나에 두 갈래다.
+#  ── 조립 ────────────────────────────────────────────────
+#  다섯 조각을 관절로 잇는다. 관절 좌표는 눈이 아니라 알파로 읽었다 —
+#  각 부품의 행/열별 불투명 구간을 훑어 소매 끝의 가운데를 집었다.
+#  부품 좌표계(몸통 왼위가 원점)에서의 배치가 PARTS 이고, 화면으로는
+#  _npc_at() 하나가 옮긴다. 배율과 바닥 y 만 바꾸면 전체가 따라온다.
 #
-#  ── 73px 짜리 검은 사다리꼴은 사람이 아니라 구멍이다 ────
-#  그려서 확인했다. 형태를 주는 것은 크기도 테두리도 아니고 옷이다. 셔츠 V
-#  하나와 단추 세 개면 같은 실루엣이 조끼 입은 딜러가 된다. V 꼭짓점은
-#  반드시 랙 밑변(36)보다 아래여야 한다 — 위면 통째로 랙 뒤라 아무 일도 안 한다.
-#
-#  ── 값 사다리 ────────────────────────────────────────────
-#  조끼 9 < 소매 24 < 벽 41 < 셔츠 93 < 커프 111 < 림 141.
-#  앞의 간격 15(소매−조끼) 와 17(벽−소매) 은 옛 주석이 실측으로 못 박은
-#  값이라 그대로 지킨다 — 10 은 실패했고 15 는 됐다.
-#
-#  ── 움직이는 것은 둘이다 ────────────────────────────────
-#  숨과 쓸기. 숨은 몸통 윗변이 아니라 **V 꼭짓점·단추·팔꿈치**를 움직인다 —
-#  윗변은 y=4 라 랙 뒤이고, 거기를 흔들면 아무 데서도 안 보인다.
+#  세로 예산: 조립본이 부품좌표 221 높이이고 배율 0.80 이라 화면 177 이다.
+#  바닥을 128 에 두면 윗변이 −49 — 어깨가 화면 밖으로 잘려 크롭이 성립하고,
+#  아래로는 정착 물건이 칠하는 최상단(131.8, 2000롤 실측)을 안 넘는다.
 # ══════════════════════════════════════════════════════════
+const SPR_TORSO := preload("res://assets/npc_shadow/parts/torso.png")
+const SPR_UP_L := preload("res://assets/npc_shadow/parts/upper_left.png")
+const SPR_UP_R := preload("res://assets/npc_shadow/parts/upper_right.png")
+const SPR_FO_L := preload("res://assets/npc_shadow/parts/fore_left.png")
+const SPR_FO_R := preload("res://assets/npc_shadow/parts/fore_right.png")
+const SPR_SWEEP := preload("res://assets/npc_shadow/sweep_forward.png")
+
+# 부품 좌표계에서의 자리 (몸통 왼위 = 원점). 관절을 맞춰 계산한 값이다:
+#   위팔 = 몸통 어깨 − 위팔 어깨,  아래팔 = 위팔 팔꿈치 − 아래팔 팔꿈치
+const PARTS := {
+	"torso": Vector2(0.0, 0.0),
+	"up_l": Vector2(-54.0, 56.0), "up_r": Vector2(182.0, 56.0),
+	"fo_l": Vector2(-35.0, 146.0), "fo_r": Vector2(58.0, 146.0),
+}
+
 const NPC := {
 	"cx": 320.0,
-	"top": -8.0,         # 화면 밖. 크롭선이 곧 화면 맨 위다
-	"cut": 112.0,        # 허리 = 카운터
-	"hc": 104.0,         # 가슴 반폭. 자금판(반폭 244)까지 여유가 있다
-	"hw": 86.0,          # 허리 반폭 (y=cut)
-	"vee_w": 40.0,       # 셔츠 V 반폭 (y=top)
-	"vee_y": 64.0,       # V 꼭짓점
-	"btn_y": 76.0, "btn_dy": 15.0, "btn_r": 3.2,
-	"belt": 6.0,
-	# 팔꿈치는 몸통 안이다 — y=88 의 몸통 반폭이 89.6 이라 12px 들어가 있다.
-	# 소매와 조끼가 15/255 밖에 안 갈리므로 그 겹침이 "몸에 붙은 팔" 로 읽힌다.
-	"elbow": Vector2(78.0, 88.0),
-	# 손은 펠트를 밟는다 — 그래야 카운터에 얹힌 것이 아니라 판에 놓인 것이
-	# 된다. 밑끝이 114 + hand_ry 8 = 122 이고, 물건 윗끝은 지면점 −25.08
-	# (다트 "lgt" 꼬리 날개가 최대)이므로 지면 y ≥ 147.08, 즉 w ≥ 44.5 인
-	# 물건은 손과 안 만난다. 2000롤 실측 정착 최소 w 가 44.75 다 — 0.25 로
-	# 스친다. 이 여유가 불편하면 손을 올리지 말고 DROP.w_lo 를 올려라.
-	"hand": Vector2(152.0, 120.0),
-	"fo_w": 20.0,
-	"cuff_t": 0.72,
-	"hand_rx": 13.0, "hand_ry": 9.0,
-	"breathe": 1.8,
+	"scale": 0.80,
+	"base": 128.0,       # 조립본 아래끝이 놓이는 화면 y
+	"span": 221.0,       # 조립본 높이 (부품좌표)
+	"mid": 111.5,        # 몸통 가로 가운데 (부품좌표)
+	"breathe": 1.6,
+	# 쓸기로 넘어갈 때 오른 팔꿈치·손이 출발하는 자리 (화면). 아래팔 부품의
+	# 팔꿈치와 장갑 중심을 화면으로 옮긴 값이라 이어짐이 끊기지 않는다.
+	"r_el": Vector2(74.0, 88.0),
+	"r_hd": Vector2(-6.0, 116.0),
+	# 쓸기 팔 — 세로로 뻗은 한 장이다. 손끝이 아래(y=158), 어깨가 위(y=0).
+	"sw_tip": Vector2(20.0, 152.0),
+	"sw_k": 1.15,        # 장갑 크기를 쉴 때 팔과 맞춘 배율
+	"fade": 0.45,        # 쉴 때 팔 ↔ 쓸기 팔 교차 소멸 구간
 }
 var npc_clock := 0.0
 
@@ -2543,63 +2542,6 @@ const TBL := {
 }
 
 
-# ══════════════════════════════════════════════════════════
-#  조명 — 램프 하나가 테이블만 비춘다
-# ──────────────────────────────────────────────────────────
-#  Inscryption 의 구도다. 빛이 테이블에만 떨어지면 세 가지가 공짜로 나온다.
-#    ① 딜러가 어둠 속이라 얼굴을 안 그려도 된다. 640x360 에서 사람 얼굴이
-#       뭉개진다는 문제를 피하는 것이 아니라 아예 없애 버린다.
-#    ② 어둠 속 실루엣은 색이 몇 개 안 된다. 나머지가 전부 3~6톤짜리 도형인
-#       이 게임에서 화풍이 안 싸우는 유일한 방법이다.
-#    ③ 시선이 펠트로 간다. 매물과 던진 다트가 있어야 할 곳이 거기다.
-#
-#  셰이더는 안 쓴다. 알파 낮은 도형을 겹쳐 쌓으면 그라데이션이 되고,
-#  이 해상도에서는 그 계단이 오히려 도트에 맞는다.
-# ══════════════════════════════════════════════════════════
-const LAMP := {
-	# 빛 웅덩이. 펠트 한가운데보다 살짝 앞(아래)이다 — 램프가 플레이어
-	# 쪽으로 기울어 매달린 것으로 읽히고, 매물이 앉는 띠(y 147~211)가
-	# 가장 밝아진다.
-	"c": Vector2(320.0, 186.0),
-	"rx": 300.0, "ry": 104.0,
-	# 링 수가 적으면 동심원 띠로 읽힌다. 22겹에 알파 0.011 이면 계단이
-	# 1/255 아래로 내려가 안 보인다. 반지름을 제곱으로 줄여 바깥이 빽빽해진다 —
-	# 웅덩이 가장자리가 부드럽고 가운데가 또렷해지는 쪽이다.
-	"rings": 22, "a": 0.011,
-	"tint": Color(1.0, 0.90, 0.68),
-	# 딜러 뒤 낙차. 카운터(112)에서 0, 화면 맨 위에서 최대다.
-	"fall": 14, "fall_a": 0.052,
-	"vig": 0.34, "vig_w": 52.0, "vig_n": 9,
-}
-
-
-# 빛 웅덩이. 큰 것부터 겹쳐 안쪽이 밝아진다.
-func _lamp_pool() -> void:
-	for k in int(LAMP.rings):
-		var t: float = 1.0 - float(k) / float(LAMP.rings)
-		var r: float = t * t
-		draw_colored_polygon(_e_pts(LAMP.c, LAMP.rx * r, LAMP.ry * r, 30),
-				Color(LAMP.tint, LAMP.a))
-
-
-# 딜러 뒤 어둠. 위로 갈수록 짙어지는 사각 더미다.
-func _lamp_fall() -> void:
-	for k in int(LAMP.fall):
-		var t: float = float(k) / float(LAMP.fall)
-		draw_rect(Rect2(0.0, 0.0, VIEW.x, TBL.fy * (1.0 - t)),
-				Color(0.0, 0.0, 0.0, LAMP.fall_a))
-
-
-# 가장자리 어둠. 네 변에서 안쪽으로 좁아지는 띠를 겹친다.
-func _lamp_vig() -> void:
-	var a := Color(0.0, 0.0, 0.0, LAMP.vig / float(LAMP.vig_n))
-	for k in int(LAMP.vig_n):
-		var w: float = LAMP.vig_w * (1.0 - float(k) / float(LAMP.vig_n))
-		draw_rect(Rect2(0.0, 0.0, w, VIEW.y), a)
-		draw_rect(Rect2(VIEW.x - w, 0.0, w, VIEW.y), a)
-		draw_rect(Rect2(0.0, VIEW.y - w, VIEW.x, w), a)
-
-
 #  테이블을 두 조각으로 나눠 둔다. 사이에 무엇을 끼우느냐가 화면을 가른다 —
 #  상점은 매물을, 스테이지는 제약 카드를 끼운다. 카운터 뒤에서 나오는 것이
 #  덮개에 잘리는 순서가 두 화면에서 정확히 같아진다.
@@ -2609,7 +2551,6 @@ func _table_draw() -> void:
 	_waste_draw()
 	_cover_draw()
 	_bill_draw()
-	_lamp_vig()                  # 맨 끝 — HUD 와 버튼은 이 뒤라 안 어두워진다
 
 
 func _felt_draw() -> void:
@@ -2633,7 +2574,6 @@ func _felt_draw() -> void:
 		draw_line(Vector2(e, yy), Vector2(VIEW.x - e, yy), Color(ink, 0.05), 1.0)
 		yy += 7.0
 
-	_lamp_pool()                 # 결 위, 창구 아래 — 빛은 면에 깔린다
 	_chute_draw()
 
 	# 딜러 라인 — 면 위에서 좌우로 뻗은 선은 이 정사영에서 정확히 화면
@@ -2653,9 +2593,6 @@ func _cover_draw() -> void:
 	draw_rect(Rect2(0.0, TBL.fy - 3.0, VIEW.x, 3.0), C_WOOD)
 	draw_rect(Rect2(0.0, TBL.fy - 1.0, VIEW.x, 1.0), C_WOOD.lightened(0.18))
 	_npc_arms()
-	_lamp_fall()                 # 딜러까지 같이 어두워져야 실루엣이 된다
-	_npc_body(true)              # 림만 어둠 위로. 이 두 줄이 실루엣을 세운다
-	_npc_arms(true)
 	# 가까운 쪽 레일 — 리롤·다음 버튼이 그 아래 앞치마에 얹힌다
 	draw_rect(Rect2(0.0, TBL.ny, VIEW.x, 2.0), C_WOOD.lightened(0.24))
 	draw_rect(Rect2(0.0, TBL.ny + 6.0, VIEW.x, VIEW.y - TBL.ny - 6.0),
@@ -2729,98 +2666,77 @@ func _chute_label() -> void:
 				C_GOLD if ok else C_DIM.darkened(0.25))
 
 
-# 딜러 몸통 — 카운터 위로 올라온 부분만. 랙이 이 위에 얹혀 트레이로 읽힌다.
-# 딜러 몸통 — 카운터 위로 올라온 부분만. 랙이 이 위에 얹혀 트레이로 읽힌다.
-# rim=true 면 윤곽선만 그린다. 램프의 낙차(_lamp_fall) **뒤에** 한 번 더
-# 불러서 그 획만 어둠 위로 남긴다 — 실루엣을 사람으로 뒤집는 유일한 획이라
-# 같이 어두워지면 딜러가 배경에 잠긴다(조끼 9 vs 벽 41, 낙차 뒤 차이 20/255).
-func _npc_body(rim_only := false) -> void:
-	var br: float = sin(npc_clock * 1.5) * float(NPC.breathe)
-	var cx: float = NPC.cx + _sweep_lean()
-	var rim: Color = C_WOOD.lightened(0.62)
-	if rim_only:
-		# 위가 밝고 아래로 꺼진다. 한 줄로 끝까지 그으면 빛이 아니라 광선으로
-		# 읽힌다 — 실제로 그래 봤다. 네 토막으로 나눠 알파를 떨어뜨린다.
-		for s in [-1.0, 1.0]:
-			for k in 4:
-				var t0: float = float(k) / 4.0
-				var t1: float = float(k + 1) / 4.0
-				draw_line(Vector2(cx + s * lerpf(NPC.hc, NPC.hw, t0), lerpf(NPC.top, NPC.cut, t0)),
-						Vector2(cx + s * lerpf(NPC.hc, NPC.hw, t1), lerpf(NPC.top, NPC.cut, t1)),
-						Color(rim, 0.72 * (1.0 - t0 * 0.85)), 1.0)
+# 스프라이트 한 장. draw_texture_rect 이 아니라 UV 폴리곤인 이유는 회전이다 —
+# 이 구획은 draw_set_transform 을 한 번도 안 부른다는 불변식이 있고, 회전을
+# 트랜스폼으로 하면 그게 깨진다. 폴리곤은 상태를 안 남긴다.
+#   at  화면에서 앵커가 놓일 자리
+#   anc 스프라이트 안의 앵커 (픽셀)
+#   ax  스프라이트의 +x 가 화면에서 향할 방향. 길이가 곧 가로 배율이다
+#   ay  마찬가지로 +y. 보통 ax 를 90° 돌린 것이다
+func _spr(tex: Texture2D, at: Vector2, anc: Vector2, ax: Vector2, ay: Vector2,
+		a := 1.0) -> void:
+	if a <= 0.004:
 		return
-	# 몸통. 위는 랙(y<36) 뒤로 사라지고 아래는 카운터에 박힌다. 사다리꼴
-	# 하나면 충분하다 — 이 크롭에서 어깨 사면은 화면 밖이라 그릴 것이 없다.
-	draw_colored_polygon(PackedVector2Array([
-			Vector2(cx - NPC.hc, NPC.top), Vector2(cx + NPC.hc, NPC.top),
-			Vector2(cx + NPC.hw, NPC.cut), Vector2(cx - NPC.hw, NPC.cut)]),
-			C_WOOD.darkened(0.84))
-	# 셔츠 V — 조끼가 벌어진 자리. 이 한 조각이 사다리꼴을 옷으로 만든다.
-	# 꼭짓점만 숨을 탄다. 윗변은 랙 뒤라 움직여도 아무 데서도 안 보인다.
-	draw_colored_polygon(PackedVector2Array([
-			Vector2(cx - NPC.vee_w, NPC.top), Vector2(cx + NPC.vee_w, NPC.top),
-			Vector2(cx, NPC.vee_y + br)]), C_LIGHT.darkened(0.86))
-	# 단추 셋. 세로 한 줄이 가운데를 잡아 좌우 대칭을 몸으로 읽게 한다.
-	for k in 3:
-		draw_colored_polygon(_e_pts(
-				Vector2(cx, NPC.btn_y + float(k) * NPC.btn_dy + br),
-				NPC.btn_r, NPC.btn_r, 12), C_WOOD.lightened(0.13))
-	# 허리띠 — 몸통이 카운터에서 끊기는 자리에 가로 획을 하나 준다.
-	draw_rect(Rect2(cx - NPC.hw - 1.0, NPC.cut - NPC.belt,
-			(NPC.hw + 1.0) * 2.0, NPC.belt), C_WOOD.darkened(0.90))
+	var sz := tex.get_size()
+	var o := at - ax * anc.x - ay * anc.y
+	var col := Color(1.0, 1.0, 1.0, a)
+	draw_polygon(
+			PackedVector2Array([o, o + ax * sz.x, o + ax * sz.x + ay * sz.y, o + ay * sz.y]),
+			PackedColorArray([col, col, col, col]),
+			PackedVector2Array([Vector2(0.0, 0.0), Vector2(1.0, 0.0),
+					Vector2(1.0, 1.0), Vector2(0.0, 1.0)]),
+			tex)
 
+
+# 부품 좌표 → 화면. 배율과 바닥 y 만 바꾸면 딜러 전체가 따라온다.
+func _npc_at(p: Vector2) -> Vector2:
+	var s: float = NPC.scale
+	return Vector2(NPC.cx + _sweep_lean() + (p.x - NPC.mid) * s,
+			NPC.base - (NPC.span - p.y) * s)
+
+
+func _npc_part(tex: Texture2D, key: String, dy := 0.0, a := 1.0) -> void:
+	var s: float = NPC.scale
+	_spr(tex, _npc_at(PARTS[key]) + Vector2(0.0, dy), Vector2.ZERO,
+			Vector2(s, 0.0), Vector2(0.0, s), a)
+
+
+func _npc_body() -> void:
+	_npc_part(SPR_TORSO, "torso")
 
 
 # 팔 — 먼 레일 다음이라 "카운터에 얹혔다" 가 된다.
 # 왼팔은 늘 쉰다. 오른팔만 쓸기를 한다 — 판매 창구가 왼쪽이라 오른손이
-# 바깥에서 안으로 긁는 쪽이고, 좌우가 갈리는 순간 옷걸이 대칭이 깨진다.
-#
-# 쉴 때는 아래팔만 그린다. 팔꿈치가 몸통 **안**이라 위팔은 통째로 가려지고,
-# 그래서 어깨를 안 그리고도 팔이 몸에서 나온다. 쓸기 때만 팔꿈치가 몸 밖으로
-# 나가므로 그때만 위팔이 필요해진다.
-func _npc_arms(rim_only := false) -> void:
+# 바깥에서 안으로 긁는 쪽이고, 좌우가 갈리는 순간 대칭이 깨진다.
+# 숨은 아래팔에만 태운다. 몸통은 위가 화면 밖이고 아래가 레일에 잘려서
+# 어느 쪽으로 움직여도 화면에서 안 보인다 — 거기 태우면 비용만 든다.
+func _npc_arms() -> void:
 	var br: float = sin(npc_clock * 1.5) * float(NPC.breathe)
-	var cx: float = NPC.cx + _sweep_lean()
-	_npc_fore(Vector2(cx - NPC.elbow.x, NPC.elbow.y + br * 0.6),
-			Vector2(cx - NPC.hand.x, NPC.hand.y + br * 0.15), NPC.fo_w, rim_only)
 	var a := _sweep_amt()
-	if a > 0.004 and not rim_only:
-		# 위팔. 뿌리는 조끼 안이고, 팔을 뻗을수록 몸 밖으로 자라 나온다.
-		# 몸통 앞이다 — 가슴을 가로질러 긁는 동작이라 그게 맞다.
-		# 아래팔보다 굵어야 한다. 같은 두께면 관절이 있어도 막대 하나로
-		# 읽힌다 — 옷걸이 때와 같은 실패다.
-		var el := _sweep_elbow()
-		draw_line(Vector2(cx + 70.0, 84.0), el,
-				C_WOOD.darkened(0.58), lerpf(NPC.fo_w, SWEEP.up_w, a))
-		# draw_line 은 butt cap 이라 이음매에 홈이 판다. 마디로 메운다.
-		draw_circle(el, lerpf(NPC.fo_w, SWEEP.up_w, a) * 0.5, C_WOOD.darkened(0.58))
-	var q: float = br * (1.0 - a)
-	_npc_fore(_sweep_elbow() + Vector2(0.0, q * 0.6),
-			_sweep_hand() + Vector2(0.0, q * 0.15),
-			lerpf(NPC.fo_w, NPC.fo_w + 2.0, a), rim_only)
+	var f: float = clampf(a / NPC.fade, 0.0, 1.0)      # 교차 소멸 비율
+	_npc_part(SPR_UP_L, "up_l")
+	_npc_part(SPR_FO_L, "fo_l", br)
+	_npc_part(SPR_UP_R, "up_r", 0.0, 1.0 - f)
+	_npc_part(SPR_FO_R, "fo_r", br, 1.0 - f)
+	if f > 0.004:
+		_npc_rake(f)
 
 
-func _npc_fore(el: Vector2, hd: Vector2, w: float, rim_only := false) -> void:
-	var d := hd - el
-	if rim_only:
-		var nn := d.normalized().orthogonal() * (w * 0.5)
-		if nn.y > 0.0:
-			nn = -nn
-		draw_line(el + nn, hd + nn, Color(C_WOOD.lightened(0.62), 0.85), 1.0)
-		return
-	draw_line(el, hd, C_WOOD.darkened(0.58), w)
-	# 커프 — 손과 소매를 가르는 한 획. 손목이 어디인지 말해 주는 것이
-	# 손가락을 그리는 것보다 이 해상도에서 싸고 확실하다.
-	var c0 := el + d * NPC.cuff_t
-	draw_line(c0, c0 + d * 0.10, C_LIGHT.darkened(0.52), w + 1.0)
-	draw_colored_polygon(_e_pts(hd, NPC.hand_rx, NPC.hand_ry, 14),
-			C_WOOD.lightened(0.09))
-
+# 훑는 팔. 손끝이 훑는 선의 끝(_sweep_hand)에 놓이고 팔이 그 선을 따라 눕는다.
+# 그림과 물리가 같은 선을 읽는다는 뜻이다 — _sweep_line 하나가 둘의 출처다.
+# 스프라이트는 세로로 뻗은 팔이라 +y 가 손끝 쪽이고, 그래서 +y 를 훑는
+# 방향에 그대로 얹으면 된다. 회전 계산이 한 줄로 끝나는 이유다.
+func _npc_rake(a: float) -> void:
+	var el := _sweep_elbow()
+	var hd := _sweep_hand()
+	var d := (hd - el).normalized()          # 팔꿈치 → 손. 훑는 방향
+	var k: float = NPC.scale * NPC.sw_k
+	_spr(SPR_SWEEP, hd, NPC.sw_tip, d.orthogonal() * -k, d * k, a)
 
 
 # ══ 쓸기 자세 — 그리기와 물리가 같은 식을 읽는다 ═════════
 
-# 훑는 선. 면 좌표 w 에서의 u 다. 화면에서는 이 선이 곧 아래팔이다 —
+# 훑는 선. 면 좌표 w 에서의 u 다. 화면에서는 이 선이 곧 팔이다 —
 # 52° 정사영에서 면 위 직선은 화면 직선이라 근사가 아니라 같은 선이다.
 func _sweep_line(w: float) -> float:
 	return _sweep_u() + SWEEP.tilt * (SWEEP.w_hd - w)
@@ -2846,7 +2762,6 @@ func _sweep_amt() -> float:
 
 # 몸통이 팔을 따라간다. 뻗을 때 오른쪽, 훑으면서 왼쪽으로 실린다.
 # 팔 길이를 늘리는 대신 몸을 옮기는 것이 사람이 하는 일이다.
-# 320 ± (24 + 104) = [192, 448]. 자금판(x≤76)과 안 겹친다.
 func _sweep_lean() -> float:
 	if not sweep_live:
 		return 0.0
@@ -2855,12 +2770,12 @@ func _sweep_lean() -> float:
 
 
 func _sweep_elbow() -> Vector2:
-	var rest := Vector2(NPC.cx + _sweep_lean() + NPC.elbow.x, NPC.elbow.y)
+	var rest := Vector2(NPC.cx + _sweep_lean() + NPC.r_el.x, NPC.r_el.y)
 	return rest.lerp(Vector2(_sweep_line(SWEEP.w_el), _p2g(SWEEP.w_el)), _sweep_amt())
 
 
 func _sweep_hand() -> Vector2:
-	var rest := Vector2(NPC.cx + _sweep_lean() + NPC.hand.x, NPC.hand.y)
+	var rest := Vector2(NPC.cx + _sweep_lean() + NPC.r_hd.x, NPC.r_hd.y)
 	return rest.lerp(Vector2(_sweep_line(SWEEP.w_hd), _p2g(SWEEP.w_hd)), _sweep_amt())
 
 
