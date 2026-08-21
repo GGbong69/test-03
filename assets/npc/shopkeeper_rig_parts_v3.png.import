@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://byja0i8e2qs5k"
-path="res://.godot/imported/fore_l.png-e6562e3003a929e386cbf65d3c05eded.ctex"
+uid="uid://d1mogjyqk5d8s"
+path="res://.godot/imported/shopkeeper_rig_parts_v3.png-2a8b75f8ed22a6401dc12e5f6ccf48eb.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/npc/fore_l.png"
-dest_files=["res://.godot/imported/fore_l.png-e6562e3003a929e386cbf65d3c05eded.ctex"]
+source_file="res://assets/npc/shopkeeper_rig_parts_v3.png"
+dest_files=["res://.godot/imported/shopkeeper_rig_parts_v3.png-2a8b75f8ed22a6401dc12e5f6ccf48eb.ctex"]
 
 [params]
 
@@ -37,4 +37,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=0
+detect_3d/compress_to=1

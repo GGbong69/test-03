@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://c1h0h8bhhksba"
-path="res://.godot/imported/sleeve.png-fb464ae839f64f96ad1d855efa738923.ctex"
+uid="uid://c63mtm2klthl5"
+path="res://.godot/imported/shopkeeper_sweep_forward_v2.png-4c9f9d3c74646de6cabba698e93219d2.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/npc/sleeve.png"
-dest_files=["res://.godot/imported/sleeve.png-fb464ae839f64f96ad1d855efa738923.ctex"]
+source_file="res://assets/npc/shopkeeper_sweep_forward_v2.png"
+dest_files=["res://.godot/imported/shopkeeper_sweep_forward_v2.png-4c9f9d3c74646de6cabba698e93219d2.ctex"]
 
 [params]
 
@@ -37,4 +37,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=0
+detect_3d/compress_to=1

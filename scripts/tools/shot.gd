@@ -41,6 +41,16 @@ func _process(_d: float) -> bool:
 	# 카드 딜링이 끝날 때까지 기다린다. 55프레임으로는 셋째 장이 아직 난다.
 	if frames == 190:
 		_save("shot_stage.png")
+	# 던지는 중 화면. 상단 UI 가 어디를 쓰는지는 여기서만 다르다 —
+	# 런 바가 살아 있고 _grip_draw 가 붙는다.
+	if frames == 195:
+		g._click(g._stage_rect(0).get_center())
+	if frames == 240:
+		_save("shot_play.png")
+	if frames == 245:
+		g._click(g._mag_rect(0).get_center())
+	if frames == 280:
+		_save("shot_aim.png")
 		busy = true
 		_sweep_shots()
 	return false

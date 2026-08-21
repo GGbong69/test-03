@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cvg3fjswxsrny"
-path="res://.godot/imported/torso.png-e1ca8aee3fc1401e3aea35f800b34e61.ctex"
+uid="uid://dfybbaveo5sa3"
+path="res://.godot/imported/shopkeeper_idle_master_v2.png-ecbf8e985c767d9486be632514e2cb1b.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/npc/torso.png"
-dest_files=["res://.godot/imported/torso.png-e1ca8aee3fc1401e3aea35f800b34e61.ctex"]
+source_file="res://assets/npc/shopkeeper_idle_master_v2.png"
+dest_files=["res://.godot/imported/shopkeeper_idle_master_v2.png-ecbf8e985c767d9486be632514e2cb1b.ctex"]
 
 [params]
 
@@ -37,4 +37,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=0
+detect_3d/compress_to=1
