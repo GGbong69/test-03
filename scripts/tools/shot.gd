@@ -23,11 +23,23 @@ func _initialize() -> void:
 	var scn: PackedScene = load("res://scenes/main.tscn")
 	g = scn.instantiate()
 	root.add_child(g)
+	# 게임 시계를 우리가 돈다. 엔진에 맡기면 우리 _process 가 게임보다
+	# 먼저 돌아, 눌러 둔 툴팁을 게임이 그 프레임에 다시 켠다.
+	g.set_process(false)
 
 
 func _process(_d: float) -> bool:
 	if busy:
 		return false
+	# 실제 마우스가 창 위 어디에 있느냐에 따라 툴팁이 떠서 딜러를 가린다.
+	# _tip_update 는 get_local_mouse_position() 을 읽으므로 촬영이 재현되지
+	# 않는다. 게임을 먼저 돌리고 그 뒤에 눌러 끈다 — 툴팁은 촬영 대상이 아니다.
+	if g != null:
+		g.set_process(false)      # 한 번으로는 안 붙는다. 매 프레임 눌러 둔다
+		g._process(1.0 / 60.0)
+		g.tip_a = 0.0
+		g.tip_title = ""
+		g.queue_redraw()
 	frames += 1
 	if frames == 10:
 		# 상점으로 보낸다. 낙하를 즉시 감아 정착 상태를 찍는다.
