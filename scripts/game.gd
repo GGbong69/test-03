@@ -2376,25 +2376,63 @@ const C_WOOD := Color("3a2a24")
 #  에서 그러면 대칭 V 하나가 되어 사람이 아니라 옷걸이로 읽힌다(넓혀서
 #  두 번 그려 보고 확인했다). 팔꿈치를 몸 가까이 붙이고 손을 가운데에
 #  모으면 세로로 긴 덩어리가 되어 그 자리에서 사람이 된다.
+# ══════════════════════════════════════════════════════════
+#  딜러 — 카운터에 팔을 얹은 상반신
+#
+#  얼굴은 안 그린다(a15bffc). 손가락도 안 그린다 — 아래 "버린 노선" 참조.
+#
+#  ── 왜 지금 것이 옷걸이인가 (코드와 실측 둘 다) ──────────
+#  옛 _npc_body 의 어깨 돔 끝점은 a=0/π 에서 (294,88)·(346,88) 이고
+#  옛 NPC.arm_root 는 (297,88)·(343,88) 이다. y 가 같고 x 가 3px 차이라
+#  어깨선과 팔이 **한 획으로 이어졌다.** 그래서 자리를 아무리 벌려도
+#  큰 옷걸이가 될 뿐이었다 — 세로 56px 은 원인이 아니라 증상이다.
+#  shot_shop.png 를 딜러 두 색 마스크로 가로줄마다 재면:
+#    반폭 y84=14 → y119=84, 35줄이 줄당 2.0px 로 오차 없는 **직선 하나**.
+#    최대 반폭 84 = 머리 반폭 12 의 **7.0배**. 그것이 옷걸이의 비다.
+#
+#  ── 새 그림이 사람인 근거 (전부 실측. 렌더해서 픽셀로 쟀다) ──
+#  ① 최대 반폭 84 → 58 (−31%). 머리 반폭 대비 7.0 → **4.5**.
+#     팔이 몸보다 커지는 순간 옷걸이가 된다. 그 비를 뒤집었다.
+#  ② 겨드랑이 구멍이 **아래에서 닫힌다.** y92 에 열려 y98 에 최대 11px 이
+#     되었다가 y101 에서 0 으로 닫힌다(한쪽 약 49px²).
+#     지금 것도 구멍은 있다 — y96 에 열려 30px 까지 벌어진 채 레일(109)이
+#     자를 때까지 **안 닫힌다.** 닫히지 않는 쐐기가 바로 옷걸이의 V 다.
+#     (설계안 하나가 "지금은 구멍이 없다" 고 적었는데 실측으로 거짓이다.
+#      구멍의 유무가 아니라 닫히느냐가 판별한다.)
+#  ③ 윤곽에 **되돌아오는 구간**이 생긴다. 반폭 58(y101) → 33(y110),
+#     9줄 하강. 지금은 y84~115 가 통째로 단조 증가다. 철사는 안 되돌아온다.
+#  ④ 사람으로 읽히는 덩어리(머리+몸통) 면적 1636 → 2316px² (**+42%**).
+#     "훨씬 크게" 를 팔을 늘려서가 아니라 몸통으로 갚았다.
+#  ⑤ 딜러가 펠트를 한 픽셀도 안 밟는다. 지금은 손이 y119 까지 내려와
+#     펠트를 7px 밟고 매물 띠(최상단 115.9)를 침범한다. 새 최하단 111.5.
+#
+#  움직이는 것은 여전히 둘이다. 숨(항상)과 리롤. 다만 **무엇이 움직이는지**
+#  를 바꿨다 — 손과 허리는 못 박고 어깨만 오르내린다. 통째로 평행이동하면
+#  그림이 떠는 것이지 숨쉬는 것이 아니고, 옷걸이는 평행이동만 한다.
+# ══════════════════════════════════════════════════════════
 const NPC := {
 	"cx": 320.0,
-	"head_y": 62.0, "head_rx": 12.0, "head_ry": 11.0,
-	"neck_y": 70.0, "neck_w": 5.0, "neck_h": 14.0,
-	# 몸통은 넓이보다 높이가 커야 한다. 어깨를 넓히면 그 순간 옷걸이가 된다 —
-	# 어깨 반폭 26 은 머리 반폭 12 의 두 배 남짓이고, 도트 캐릭터의 비율이다.
-	"sh_y": 82.0,        # 어깨 윗선
-	"sh_w": 26.0,        # 어깨 반폭 (위)
-	"sh_w2": 23.0,       # 몸통 아래폭
-	"torso_y": 111.0,    # 몸통이 끝나는 높이 (카운터 레일 뒤로 잘린다)
-	"arm_root": Vector2(23.0, 88.0),  # 팔이 어깨에서 나가는 점 (중심에서 · 화면 y)
-	"hand": Vector2(78.0, 114.0),     # 카운터에 얹힌 팔 끝 (중심에서 · 화면 y)
-	"upper": 10.0,       # 팔 두께
-	"hand_r": 6.0,       # 팔 끝 마디
-	"breathe": 1.2,      # 숨 진폭(px)
-	"lift": 11.0,        # 리롤 때 팔이 드는 높이(px)
+	"head_y": 54.0, "head_rx": 13.0, "head_ry": 12.0,
+	"neck_y": 64.0, "neck_w": 6.0, "neck_h": 14.0,
+	# 몸통 — 어깨 반폭 34(y81) → 허리 반폭 26(y112). 허리는 숨을 안 탄다.
+	# (숨을 태우면 bob 최대에서 몸통 아래끝이 113.2 로 펠트를 밟는다. 실측함.)
+	"tor_y": 76.0, "tor_w": 6.0,
+	"sh_y": 81.0, "sh_w": 34.0,
+	"wa_y": 112.0, "wa_w": 26.0,
+	# 팔뿌리는 어깨끝(34)보다 **안쪽**인 30 이다. 그래야 윗팔 사각의 바깥
+	# 위 모서리가 어깨 사면 안에서 나와 뜬 조각이 안 생긴다(4.3px 안쪽).
+	# 옛 값처럼 팔뿌리와 어깨끝을 같은 y 에 두면 그 순간 한 획이 된다.
+	"arm": Vector2(30.0, 85.0),
+	"elbow": Vector2(52.0, 101.0),
+	"hand": Vector2(29.0, 106.0),
+	"up_w": 12.0, "fo_w": 10.0, "joint": 6.0,
+	"hand_rx": 7.5, "hand_ry": 5.5,
+	"breathe": 1.2,      # 어깨만. 손·허리는 0
+	"sweep": 10.0,       # 리롤 — 손이 안쪽으로 미끄러지는 거리(화면 px)
 }
 var npc_clock := 0.0
 var npc_t := 0.0        # 리롤 반응. 1 → 0 으로 준다
+
 
 const TBL := {
 	# ── 시점 ──────────────────────────────────────────
@@ -2542,63 +2580,87 @@ func _chute_label() -> void:
 
 
 # 딜러 몸통 — 카운터 위로 올라온 부분만. 랙이 이 위에 얹혀 트레이로 읽힌다.
+# 딜러 몸통 — 카운터 위로 올라온 부분만. 랙이 이 위에 얹혀 트레이로 읽힌다.
 func _npc_body() -> void:
-	var bob: float = sin(npc_clock * 1.5) * NPC.breathe
+	var bob: float = sin(npc_clock * 1.5) * float(NPC.breathe)
 	var body: Color = C_WOOD.darkened(0.84)
 	var rim: Color = C_WOOD.lightened(0.42)
 	var cx: float = NPC.cx
+
+	# 목 — 머리보다 먼저. 머리가 목 위를 덮어야 장기말이 안 된다.
+	# 반폭 6 = 머리 반폭 13 의 0.46. 이 잘록함이 9줄 평지로 남는다.
+	draw_rect(Rect2(cx - NPC.neck_w, NPC.neck_y + bob,
+			NPC.neck_w * 2.0, NPC.neck_h), body)
+
+	# 몸통 6점. 볼록이라 한 폴리곤으로 안전하다.
+	# 위 네 점만 숨을 탄다 — 허리는 카운터에 박혀 있다. 평행이동이 아니라
+	# 변형이 되고, 덤으로 아래끝이 절대 펠트(112)를 안 넘는다.
+	var ty: float = NPC.tor_y + bob
 	var sy: float = NPC.sh_y + bob
-	# 목 — 머리와 어깨를 잇되 가늘게. 이 잘록함이 실루엣을 사람으로 만든다.
-	# 머리보다 먼저 그려 머리가 목 위를 덮게 한다(안 그러면 장기말이 된다).
-	draw_rect(Rect2(cx - NPC.neck_w, NPC.neck_y + bob, NPC.neck_w * 2.0, NPC.neck_h), body)
-	# 어깨~가슴. 위가 좁고 카운터로 갈수록 넓어진다. 가운데는 랙이 가린다.
-	var pts := PackedVector2Array()
-	var n := 12
-	for i in n + 1:
-		var a := PI * float(i) / float(n)
-		pts.append(Vector2(cx - NPC.sh_w * cos(a), sy + 6.0 * (1.0 - sin(a))))
-	pts.append(Vector2(cx + NPC.sh_w2, NPC.torso_y + bob))
-	pts.append(Vector2(cx - NPC.sh_w2, NPC.torso_y + bob))
-	draw_colored_polygon(pts, body)
+	draw_colored_polygon(PackedVector2Array([
+			Vector2(cx - NPC.tor_w, ty), Vector2(cx - NPC.sh_w, sy),
+			Vector2(cx - NPC.wa_w, NPC.wa_y), Vector2(cx + NPC.wa_w, NPC.wa_y),
+			Vector2(cx + NPC.sh_w, sy), Vector2(cx + NPC.tor_w, ty)]), body)
+
 	var hc := Vector2(cx, NPC.head_y + bob)
-	draw_colored_polygon(_e_pts(hc, NPC.head_rx, NPC.head_ry, 16), body)
-	# 뒤에서 오는 빛. 머리는 한 바퀴 두른다 — 이 한 줄이 덩어리를 사람으로 만든다.
-	draw_arc(hc, NPC.head_rx + 0.5, 0.0, TAU, 20, Color(rim, 0.70), 1.0)
-	var top := PackedVector2Array()
-	for i in n + 1:
-		var a2 := PI * float(i) / float(n)
-		top.append(Vector2(cx - NPC.sh_w * cos(a2), sy + 6.0 * (1.0 - sin(a2))))
-	draw_polyline(top, Color(rim, 0.55), 1.0)
+	draw_colored_polygon(_e_pts(hc, NPC.head_rx, NPC.head_ry, 20), body)
+	# 뒤에서 오는 빛. 머리는 한 바퀴 두른다 — 이 한 줄이 덩어리를 사람으로.
+	# 림 반지름 +0.5 와 선폭 1.0 의 바깥 절반까지 세면 최상단은
+	# 54 − 12 − 0.5 − 0.5 − 1.2(숨) = 39.8 이다. 랙 아래끝 36 과 3.8px.
+	draw_arc(hc, NPC.head_rx + 0.5, 0.0, TAU, 24, Color(rim, 0.70), 1.0)
+
+	# 어깨 사면에만 빛. 목(6)에서 어깨끝(34)까지 5줄에 줄당 5.6px —
+	# 그 아래 팔 바깥선이 줄당 1.4px 다. 기울기 비 4배가 삼각근의 모서리고,
+	# 옛 그림에는 이 꺾임이 0° 였다(어깨선과 팔이 같은 획이었으므로).
+	for k in 2:
+		var s: float = -1.0 if k == 0 else 1.0
+		draw_line(Vector2(cx + s * NPC.tor_w, ty),
+				Vector2(cx + s * NPC.sh_w, sy), Color(rim, 0.55), 1.0)
 
 
-# 팔 — 카운터에 얹힌다. 레일을 그린 뒤에 그려야 "얹혔다" 가 된다.
+# 팔 — 레일 다음에 그려야 "얹혔다" 가 된다.
+#  윗팔 50.8° · 아래팔 −9.5°, 팔꿈치에서 119.7° 꺾인다. 옷걸이는 꺾임이 0개다.
+#  손은 카운터에 붙어 숨을 안 탄다. 어깨만 1.2px 오르내리므로 윗팔이 늘었다
+#  준다 — 관절이 있다는 증거이고, 비용은 0 이다.
 func _npc_arms() -> void:
-	var bob: float = sin(npc_clock * 1.5) * NPC.breathe
-	# 리롤 — 팔꿈치를 들었다 놓는다. 판을 쓸고 다시 던지는 몸짓이다.
-	var lift: float = NPC.lift * sin(clampf(npc_t, 0.0, 1.0) * PI)
-	# 팔은 몸통보다 한 단 밝다. 랙이 펠트보다 한 단 밝은 것과 같은 어법으로,
-	# "앞에 있다" 를 값 차이로 말한다. 실루엣의 순수함보다 읽히는 쪽을 골랐다.
-	var body: Color = C_WOOD.darkened(0.68)
+	var bob: float = sin(npc_clock * 1.5) * float(NPC.breathe)
+	# 리롤 — 판을 쓸고 다시 던진다. 아래팔을 회전시키지 않는다:
+	# 52° 정사영에서 면 위의 좌우 이동은 정확히 화면 수평 이동이라
+	# (_felt_draw 딜러 라인과 같은 근거) 손의 x 만 안쪽으로 밀면 궤적이
+	# 카운터 결과 평행해지고 세로 예산을 한 픽셀도 안 쓴다.
+	# 회전을 쓰면 한쪽 방향은 손이 가슴으로 올라가고, 반대 방향은 손이
+	# 카운터(112)를 넘어 펠트를 밟는다. 둘 다 못 쓴다.
+	var sw: float = float(NPC.sweep) * sin(clampf(npc_t, 0.0, 1.0) * PI)
+	# 몸통보다 두 단 밝다. 몸통 (9,7,6) · 팔 (24,18,15) · 벽 (41,29,25) 로
+	# 값 사다리가 고르게 선다. 옛 0.68 은 (19,13,12) 라 몸통과 10/255 밖에
+	# 안 갈렸고, 그래서 배 앞을 지나는 팔이 배에 붙어 보였다.
+	var body: Color = C_WOOD.darkened(0.58)
 	var rim: Color = C_WOOD.lightened(0.42)
 	var cx: float = NPC.cx
-	var hy: float = NPC.hand.y + bob - lift
-	# 팔 둘이 어깨에서 카운터로 내려간다. 둘 사이가 벌어져 있어야 그 틈으로
-	# 벽이 보이고, 그 틈 하나가 덩어리를 몸통과 팔로 가른다.
 	for k in 2:
-		var side: float = -1.0 if k == 0 else 1.0
-		var sh := Vector2(cx + side * NPC.arm_root.x, NPC.arm_root.y + bob)
-		var hd := Vector2(cx + side * NPC.hand.x, hy)
-		draw_line(sh, hd, body, NPC.upper)
-		draw_colored_polygon(_e_pts(hd, NPC.hand_r, NPC.hand_r * 0.8, 12), body)
-		# 바깥 윗선에만 빛 — 사선 하나가 팔을 팔로 만든다
-		var nrm := (hd - sh).normalized().orthogonal() * (NPC.upper * 0.5)
-		if nrm.y > 0.0:
-			nrm = -nrm
-		draw_line(sh + nrm, hd + nrm, Color(rim, 0.62), 1.0)
-		draw_arc(hd, NPC.hand_r + 0.5, PI * 0.5, PI * 1.5, 8, Color(rim, 0.40), 1.0)
+		var s: float = -1.0 if k == 0 else 1.0
+		var sh := Vector2(cx + s * NPC.arm.x, NPC.arm.y + bob)
+		var el := Vector2(cx + s * NPC.elbow.x,
+				NPC.elbow.y + bob * 0.35 - sw * 0.15)
+		var hd := Vector2(cx + s * (NPC.hand.x - sw), NPC.hand.y)
+		draw_line(sh, el, body, NPC.up_w)
+		draw_line(el, hd, body, NPC.fo_w)
+		# draw_line 은 butt cap 이라 이음매에 홈이 판다. 팔꿈치 마디로 메운다.
+		# 어깨 쪽 이음매는 몸통 안(4.3px)이라 마디가 필요 없다 — 2콜 아낀다.
+		draw_circle(el, NPC.joint, body)
+		draw_colored_polygon(_e_pts(hd, NPC.hand_rx, NPC.hand_ry, 14), body)
+		# 빛은 윗팔 바깥선과 아래팔 윗선에만. 손가락마다 두르면 1px 이
+		# 쪼개져 사라진다 — 이 해상도가 이미 두 번 가르친 것이다.
+		var n1 := (el - sh).normalized().orthogonal() * (NPC.up_w * 0.5)
+		if n1.x * s < 0.0:
+			n1 = -n1
+		draw_line(sh + n1, el + n1, Color(rim, 0.62), 1.0)
+		var n2 := (hd - el).normalized().orthogonal() * (NPC.fo_w * 0.5)
+		if n2.y > 0.0:
+			n2 = -n2
+		draw_line(el + n2, hd + n2, Color(rim, 0.62), 1.0)
 
 
-# 타원 원반. 볼록이라 한 폴리곤으로 넘겨도 안전하다.
 func _e_pts(c: Vector2, rx: float, ry: float, seg := 22) -> PackedVector2Array:
 	var pts := PackedVector2Array()
 	for i in seg:
