@@ -1072,8 +1072,6 @@ func _click(m: Vector2) -> void:
 			_open_shop()
 			return
 		S.STAGE:
-			if _sell_hit(m):
-				return
 			# 마지막 장이 설 때까지는 못 고른다. 움직이는 것을 누르면
 			# 무엇을 눌렀는지가 커서와 카드 중 어느 쪽 기준인지 갈린다.
 			if stage_t < _deal_time():
@@ -1083,7 +1081,19 @@ func _click(m: Vector2) -> void:
 					_pick_stage(i)
 					return
 		S.SHOP:
-			# 랙·판매판이 먼저다. 기존 순서를 그대로 지킨다.
+			# 창구가 먼저다. 뒤에 두면 _sell_hit 이 sell_sel 을 지운 뒤
+			# 창구가 "먼저 랙에서 팔 칩을 고른다" 로 거절해 2클릭 판매가
+			# 통째로 죽는다. 랙(y[4,36])과 창구(y[112,244])는 y 로 갈려
+			# 있어 순서를 바꿔도 서로 안 훔친다.
+			# 창구가 자리 고정이라 낙하 검사보다도 앞이다. 그리고 _sell_hit
+			# 보다도 앞이어야 한다 — 뒤에 두면 _sell_hit 이 sell_sel 을 지운
+			# 뒤 창구가 "먼저 랙에서 팔 칩을 고른다" 로 거절해 2클릭 판매가
+			# 통째로 죽는다. 랙(y[4,36])과 창구(y[112,244])는 y 로 갈려 있어
+			# 순서를 바꿔도 서로 안 훔친다.
+			var cz := _chute_at(m, 0.0)
+			if cz >= 0:
+				_chute_click(cz)
+				return
 			if _sell_hit(m):
 				buy_sel = -1            # 펜딩 액션은 언제나 하나다
 				return
@@ -1095,12 +1105,6 @@ func _click(m: Vector2) -> void:
 			if _next_rect().has_point(m):
 				_hand_abort()
 				_next_round()
-				return
-			# 계산대도 자리가 고정이다. 낙하 검사보다 앞에 둬서 언제 눌러도
-			# 같은 뜻이 되게 한다 (낙하 중엔 buy_sel 이 이미 -1 이라 안내만 뜬다).
-			var cz := _chute_at(m, 0.0)
-			if cz >= 0:
-				_chute_click(cz)
 				return
 			if _drop_busy():
 				# 커서 밑에서 물건이 움직이는 동안 구매가 성립하면 "누른 것" 과
@@ -1600,10 +1604,6 @@ func _hud_draw() -> void:
 		_draw_topbar()
 	if state != S.CLEAR:            # 정산 화면은 그 자체가 명세다
 		_bank_draw()
-		# 상점에서는 왼쪽 창구가 판매판을 대신한다. 스테이지 화면에는 판이 없어
-		# 창구도 없으므로 거기서만 이 판을 세운다.
-		if _can_sell() and state != S.SHOP:
-			_sell_draw()
 		_panel_draw()
 		_cap_draw()
 		if _is_play():
@@ -2295,11 +2295,10 @@ var stage_t := 0.0              # 카드가 깔리는 경과. _open_stage 에서
 
 
 func _can_sell() -> bool:
-	# R8 스테이지에서는 골드를 쓸 곳이 수학적으로 0개다 — 정산도(조기 return)
-	# 상점도 없고 슬롯을 비워도 채울 무료 아이템이 안 나온다. 기대값이 음수뿐이다.
-	if state == S.STAGE and round_no >= GameData.rounds_n():
-		return false
-	return state == S.SHOP or state == S.STAGE
+	# 상점에서만 판다. 스테이지는 창구에 셔터가 내려 있고, 파는 자리가
+	# 창구 하나뿐이므로 창구가 없는 화면에서는 팔 방법도 없다.
+	# (R8 예외는 같이 사라졌다 — 스테이지에서 못 파니 따질 일이 없다.)
+	return state == S.SHOP
 
 
 func _sell_hit(m: Vector2) -> bool:
@@ -4458,10 +4457,8 @@ func _tip_build(hit: Dictionary) -> void:
 				_tip_add("이번 판 봉인 — 발동하지 않는다", 9, C_MULT.lightened(0.25))
 			if _can_sell():
 				_tip_add("판매가", 10, C_GOLD, "", "", str(GameData.sell_value(it)))
-				_tip_add("왼쪽 판매 판을 눌러 확정" if i == sell_sel else "누르면 고른다",
+				_tip_add("왼쪽 창구를 눌러 판다" if i == sell_sel else "누르면 고른다",
 						9, C_DIM.darkened(0.2))
-			elif state == S.STAGE:
-				_tip_add("마지막 라운드 — 골드를 쓸 곳이 없다", 9, C_DIM.darkened(0.3))
 		"stock":
 			var s: Dictionary = stock[i]
 			tip_mark = Rect2()      # 칩 랙과 같은 진영 — 사각 테두리 안 두른다
