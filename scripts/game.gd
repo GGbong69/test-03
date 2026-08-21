@@ -1411,17 +1411,59 @@ func pop(p: Vector2, txt: String, c: Color, sz: int, life: float) -> void:
 #  UI 좌표 (그리기와 클릭 판정이 같은 값을 쓴다)
 # ══════════════════════════════════════════════════════════
 
-#  카드는 펠트 위에 눕는다. 세 장 + 사이 여백이 펠트의 가장 좁은 곳(y=126,
-#  빗변 x 71.5)보다 안쪽에 들어가야 창구를 안 침범한다 — 150*3 + 14*2 = 478,
-#  가운데 정렬하면 x[81,559] 라 양쪽으로 9.5px 남는다.
-const CARD := {"w": 150.0, "h": 108.0, "gap": 14.0, "y": 126.0}
+# ══════════════════════════════════════════════════════════
+#  스테이지 카드 — 펠트에 눕는다
+#
+#  52° 정사영에서 면 위의 축정렬 사각형은 화면에서도 축정렬 사각형이고
+#  깊이만 flat(0.788) 배로 눌린다. 전단도 원근 배율도 없다 — 그래서
+#  "눕히기" 는 h 에 곱셈 하나이고 draw_set_transform 금지 불변식을 안 건드린다.
+#  화면 높이 86 = 면 깊이 109.1 × 0.788.
+#
+#  ⚠ 정직하게 적는다: 지금 카드도 이미 가로가 긴 1.39:1 이고 위 주석이
+#  이미 "카드는 펠트 위에 눕는다" 고 적어 뒀다. 이번 변경의 실체는 투영을
+#  바꾸는 것이 **아니라** 다음 넷이다.
+#    ① h 108 → 86, 비 1.39 → 1.78. 더 납작해진다.
+#    ② 그림자 벡터를 임의값 (3,4) 에서 매물과 같은 TBL.light*3.35 = (1.5,3.0)
+#       으로 바꾼다. 같은 빛 아래 있다는 진술이 "눕혔다" 의 절반이다.
+#    ③ 가까운 모서리에 두께 2px. 칩 옆면(4.5*tall=2.77)과 같은 어법이고,
+#       두께가 없으면 카드가 펠트에 인쇄된 무늬로 읽힌다.
+#    ④ 폭을 상수에서 n 역산으로 바꾼다. 지금 값은 n=4 에서
+#       150*4+14*3 = 642 > 640 으로 실제로 터진다.
+#  ①만으로도 딜러 여유가 7px(현재 딜러 아래끝 119 vs 카드 126)에서
+#  28.5px 로 벌어진다. 새 딜러(111.5)와 합쳐 "안 가린다" 가 성립한다.
+#
+#  ── 글자는 왜 안 눕히는가 ────────────────────────────
+#  카드는 눌리고 카드 위의 인쇄는 안 눌린다. 새 예외가 아니라 네 번째 사례다.
+#    _chip_flat  0.788 로 눌린 원반 위에 정면 숫자 12px
+#    _bill_draw  누운 물건 앞에 정면 가격 플라크
+#    _icon_mod   펠트에 놓인 캐비닛의 판 그림이 등방 원
+#  상점 한 번에 여덟 번 일어나는 일이다. 카드만 글자를 눕히면 한 화면에
+#  활자법이 둘이 된다. 그리고 크기 9 한글 몸통 ≈7px × 0.788 = 5.5px 라
+#  가로획 셋짜리(목·표·풍)가 뭉갠다 — 착시는 0 을 사고 가독성을 전부 판다.
+#  아이콘도 같은 이유로 안 눕힌다. 카드의 인쇄물이다.
+#
+#  ── 넓이 불변식 ────────────────────────────────────
+#  줄은 x[76,564] = 488 에 갇힌다. 카드 윗변 y=140 에서 창구 빗변이
+#  _chute_edge(140) = 63.0 이므로 양쪽 13px 이 남고, 닫힌 셔터(y138·151,
+#  x 최대 64.2/56.4)에도 안 닿는다.
+#    n=3 → w 153.3 ✔   n=4 → w 111.5 ✔   n=5 → w 86.4 ✘
+#  n=5 가 죽는 이유는 폭이 아니라 글자다. 설명 최장 "트리플·더블 링 폭
+#  0.5배" 가 크기 9 에서 실측 95.0px 이고, n=4 의 안쪽 폭 99.5 가 마지막
+#  여유다. stage_picks 를 5 이상으로 올리려면 설명을 툴팁으로 내리는
+#  별개 결정이 먼저다.
+# ══════════════════════════════════════════════════════════
+const CARD := {
+	"x0": 76.0, "y": 140.0, "h": 86.0, "gap": 14.0, "th": 2.0,
+	"icon": 30.0, "icon_r": 17.0, "name": 64.0, "desc": 81.0,
+}
 
 
 func _stage_rect(i: int) -> Rect2:
 	var n: float = maxf(float(stage_pick.size()), 1.0)
-	var total: float = CARD.w * n + CARD.gap * (n - 1.0)
-	return Rect2(Vector2((VIEW.x - total) * 0.5 + float(i) * (CARD.w + CARD.gap),
-			CARD.y), Vector2(CARD.w, CARD.h))
+	var span: float = VIEW.x - CARD.x0 * 2.0
+	var w: float = (span - CARD.gap * (n - 1.0)) / n
+	return Rect2(Vector2(CARD.x0 + float(i) * (w + CARD.gap), CARD.y),
+			Vector2(w, CARD.h))
 
 
 #  딜러가 한 장씩 밀어 내려 준다. 카운터 뒤에서 나와 자리에 서고 한 번 튄다.
@@ -1430,7 +1472,7 @@ func _stage_rect(i: int) -> Rect2:
 const DEAL := {
 	"dur": 0.34,     # 한 장이 미끄러져 자리에 서는 시간
 	"stag": 0.11,    # 장 사이 시차. 왼쪽부터 나온다
-	"hop": 7.0,      # 착지 뒤 튀는 높이(px)
+	"hop": 4.0,      # 착지 뒤 튀는 높이(px)
 }
 
 
@@ -4611,69 +4653,87 @@ func _draw_clear() -> void:
 
 
 func _draw_stage() -> void:
-	# 상점과 같은 테이블이다. 상점 다음에 바로 오는 화면이라 틀이 이어진다 —
-	# 매물이 있던 자리에 제약 카드가 놓이고, 창구는 닫혀 있다.
+	# 상점과 같은 테이블이다. 매물이 있던 자리에 제약 카드가 놓이고,
+	# 창구는 좌우 다 셔터가 내려가 있다 — 그 화면에서는 아무것도 안 판다.
 	_felt_draw()
+	# 런 바가 들고 있던 것과 카드에서 뺀 것이 여기서 만난다.
+	# 딜러 라인(y119) 바로 밑 — 카지노가 펠트에 테이블 리밋을 인쇄하는 자리다.
+	# target_of(round_no) 는 _open_stage 가 base 를 만든 그 식이다(출처 하나).
+	# 카드보다 **먼저** 그린다. 미끄러져 오는 카드가 글자를 덮어야 순서가 맞다.
+	draw_string(font, Vector2(0.0, 131.0),
+			"R%d / %d   ·   목표 %d" % [round_no, GameData.rounds_n(),
+					GameData.target_of(round_no)],
+			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 10,
+			Color(C_TABLE.lightened(0.34), 0.75))
 	for i in stage_pick.size():
 		_stage_card(i)
 	_cover_draw()
+	_apron_mods()
 
-	# 앞치마 — 상점에서는 리롤·다음 버튼이 있던 자리다. 여기서는 지금 판이
-	# 어떻게 생겼는지를 보여준다. 테이블이 보드를 덮어 버렸으므로 그 정보를
-	# 여기서 갚는다 — "좁은 판" 이 아픈지 아닌지는 산 개조가 정하기 때문이다.
-	var ay: float = TBL.ny + 24.0
-	draw_string(font, Vector2(0, ay), "지금 판",
-			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 10, C_DIM.darkened(0.25))
-	if mods_own.is_empty():
-		draw_string(font, Vector2(0, ay + 26.0), "개조 없음 — 기본 판",
-				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 11, C_DIM.darkened(0.1))
-	else:
-		var n: int = mods_own.size()
-		var step := 52.0
-		var x0: float = VIEW.x * 0.5 - (float(n) - 1.0) * step * 0.5
-		for i in n:
-			var mid: String = mods_own[i]
-			_icon_mod(Vector2(x0 + float(i) * step, ay + 24.0), 13.0, mid, 0.0)
-			draw_string(font, Vector2(x0 + float(i) * step - 26.0, ay + 48.0),
-					GameData.mod_of(mid).get("n", ""),
-					HORIZONTAL_ALIGNMENT_CENTER, 52.0, 9, C_DIM.darkened(0.15))
 
-	draw_string(font, Vector2(0, VIEW.y - 10.0),
-			"제약 하나를 반드시 고른다  ·  보상은 없다",
-			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 10, C_DIM.darkened(0.25))
+# 앞치마 = 산 개조를 거는 선반. 상점에서 리롤·다음 버튼이 서는 띠와
+# 같은 줄(중심 y 272 = 250+42/2 −(-1))을 쓴다 — 두 화면이 같은 틀이라는
+# 말이 여기서도 지켜진다.
+# 개조(mods.csv)는 _icon_mod, 제약(modifiers.csv)은 _icon_modifier 다.
+# 캐비닛과 획으로 형태가 갈려 있어 아래(내가 산 것)와 위(내가 고를 것)가
+# 안 섞인다. 이름 최장 실측 27px < 칸 52px.
+func _apron_mods() -> void:
+	var n: int = mods_own.size()
+	if n == 0:
+		# 빈 홈 하나. 랙이 빈 칸에 유령 홈을 그리는 어법 그대로이고 크기도
+		# 실제 캐비닛(2r+6 = 32)과 같다. "개조 없음" 이라고 쓰는 것보다
+		# R1 플레이어에게 더 많이 가르친다 — 비었다가 아니라 여기에 걸린다.
+		var e := Rect2(VIEW.x * 0.5 - 16.0, 256.0, 32.0, 32.0)
+		draw_rect(e, C_WOOD.darkened(0.55))
+		draw_rect(e, C_WOOD.lightened(0.10), false, 1.0)
+		return
+	var step: float = minf(52.0, 560.0 / float(n))
+	var x0: float = VIEW.x * 0.5 - (float(n) - 1.0) * step * 0.5
+	for i in n:
+		var mid: String = mods_own[i]
+		var mx: float = x0 + float(i) * step
+		_icon_mod(Vector2(mx, 272.0), 13.0, mid, 0.0)
+		draw_string(font, Vector2(mx - step * 0.5, 300.0),
+				GameData.mod_of(mid).get("n", ""),
+				HORIZONTAL_ALIGNMENT_CENTER, step, 9, C_DIM.darkened(0.15))
 
 
 func _stage_card(i: int) -> void:
-	var sp: Dictionary = stage_pick[i]
-	var md: Dictionary = sp.d
-	var sz: Vector2 = _stage_rect(i).size
+	var md: Dictionary = stage_pick[i].d
+	var r := _stage_rect(i)
+	var sz: Vector2 = r.size
 	var p := _stage_pose(i)
-	# tip_mark 는 _tip_build 가 스테이지 카드일 때만 이 사각형을 담는다.
-	var hot: bool = tip_a > 0.004 and tip_mark == _stage_rect(i)
-	if hot:
-		p.y -= 3.0
+	var hot: bool = tip_a > 0.004 and tip_mark == r
+	# 매대와 같은 숫자를 빌린다: DROP.lift_hov * tall = 3.70.
+	# _stage_rect(히트·툴팁 앵커)는 들림을 안 따라간다 — 따라가면 커서 끝에
+	# 걸린 것이 60Hz 로 떤다(_obj_box 의 불변식). 그리는 자리만 뜬다.
+	var lz: float = (DROP.lift_hov * TBL.tall) if hot else 0.0
+	p.y -= lz
 
-	# 펠트에 지는 그림자. 카드가 놓인 것이지 떠 있는 것이 아니라고 말한다.
-	draw_rect(Rect2(p + Vector2(3.0, 4.0), sz), Color(0, 0, 0, 0.28))
+	# 그림자는 매물과 같은 빛 벡터다. 들린 만큼 멀어진다.
+	draw_rect(Rect2(p + TBL.light * 3.35 + Vector2(0.0, lz), sz),
+			Color(0.0, 0.0, 0.0, 0.30))
 
-	var body: Color = C_PANEL.lightened(0.16 if hot else 0.10)
+	var body: Color = C_PANEL.lightened(0.18 if hot else 0.10)
+	# 가까운 모서리의 두께 — 물건이지 인쇄가 아니라고 말하는 2px.
+	draw_rect(Rect2(Vector2(p.x, p.y + sz.y), Vector2(sz.x, CARD.th)),
+			body.darkened(0.45))
 	draw_rect(Rect2(p, sz), body)
-	draw_rect(Rect2(p, Vector2(sz.x, 3.0)), C_MULT.lightened(0.15 if hot else 0.0))
-	# 카드 테두리 한 줄 — 펠트 위에서 가장자리가 안 뭉개지게
-	draw_rect(Rect2(p, Vector2(sz.x, 1.0)), Color(C_WIRE, 0.0))
+	draw_rect(Rect2(p, Vector2(sz.x, 2.0)), C_MULT.lightened(0.20 if hot else 0.0))
 	draw_rect(Rect2(p + Vector2(0.0, sz.y - 1.0), Vector2(sz.x, 1.0)),
 			Color(C_BG, 0.55))
 
-	# 얼굴은 그림이 먼저다. 카드 셋을 훑어 하나를 고르는 면이고,
-	# 훑기에 쓰이는 채널은 글자가 아니라 실루엣이다.
-	_icon_modifier(p + Vector2(sz.x * 0.5, 32.0), 19.0, md.id, 0.0)
+	# 얼굴은 그림이 먼저다. 훑는 채널은 글자가 아니라 실루엣이다.
+	# 아이콘이 축("링이 나빠진다")을 말하고 설명이 양("0.5배")을 말한다.
+	# "목표" 는 안 쓴다 — _open_stage 가 base 하나를 n장에 복사하므로 셋이
+	# 같은 값이고, 셋 중 하나를 고르는 면에서 판별 정보량이 0 비트다.
+	# 등급 배수가 있던 시절의 잔재이고 00a4076 에서 죽었어야 했다.
+	_icon_modifier(p + Vector2(sz.x * 0.5, CARD.icon), CARD.icon_r, md.id, 0.0)
+	draw_string(font, p + Vector2(0.0, CARD.name), md.n,
+			HORIZONTAL_ALIGNMENT_CENTER, sz.x, 13, C_MULT.lightened(0.32))
+	draw_string(font, p + Vector2(6.0, CARD.desc), md.d,
+			HORIZONTAL_ALIGNMENT_CENTER, sz.x - 12.0, 9, C_DIM)
 
-	draw_string(font, p + Vector2(0.0, 68.0), md.n,
-			HORIZONTAL_ALIGNMENT_CENTER, sz.x, 14, C_MULT.lightened(0.32))
-	draw_string(font, p + Vector2(8.0, 84.0), md.d,
-			HORIZONTAL_ALIGNMENT_CENTER, sz.x - 16.0, 9, C_DIM)
-	draw_string(font, p + Vector2(0.0, 101.0), "목표 %d" % sp.target,
-			HORIZONTAL_ALIGNMENT_CENTER, sz.x, 10, C_DIM.darkened(0.15))
 
 func _draw_shop() -> void:
 	_scrim()
