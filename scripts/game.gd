@@ -430,6 +430,7 @@ func _open_shop() -> void:
 	sell_sel = -1
 	buy_sel = -1
 	_panel_reset()
+	_sweep_reset()
 	rerolls_used = 0
 	reroll_cost = _reroll_price()
 	_roll_stock()
@@ -718,7 +719,11 @@ func _in_stock(id: String) -> bool:
 			return true
 	return false
 
+# 골드 정산은 즉시 끝낸다 — 재진입 방지의 근거이자 버튼 가격표의 출처다.
+# 판을 갈아 끼우는 일만 딜러에게 넘긴다.
 func _reroll() -> void:
+	if sweep_live:
+		return                   # 쓸기는 중단도 재진입도 없다
 	_hand_abort()
 	if gold < reroll_cost:
 		_deny()
@@ -726,8 +731,10 @@ func _reroll() -> void:
 	gold -= reroll_cost
 	rerolls_used += 1
 	reroll_cost = _reroll_price()
-	npc_t = 1.0                  # 딜러가 판을 쓸고 다시 던진다
-	_roll_stock()
+	if drop_fast:
+		_roll_stock()            # 헤드리스는 팔을 안 기다린다. 새 판이 곧 결과다
+	else:
+		_sweep_begin()           # 끝에서 _sweep_deal 이 _roll_stock 을 부른다
 	beep(392.0, 0.09, 0.18)
 
 
@@ -1081,15 +1088,13 @@ func _click(m: Vector2) -> void:
 					_pick_stage(i)
 					return
 		S.SHOP:
-			# 창구가 먼저다. 뒤에 두면 _sell_hit 이 sell_sel 을 지운 뒤
-			# 창구가 "먼저 랙에서 팔 칩을 고른다" 로 거절해 2클릭 판매가
-			# 통째로 죽는다. 랙(y[4,36])과 창구(y[112,244])는 y 로 갈려
-			# 있어 순서를 바꿔도 서로 안 훔친다.
-			# 창구가 자리 고정이라 낙하 검사보다도 앞이다. 그리고 _sell_hit
-			# 보다도 앞이어야 한다 — 뒤에 두면 _sell_hit 이 sell_sel 을 지운
-			# 뒤 창구가 "먼저 랙에서 팔 칩을 고른다" 로 거절해 2클릭 판매가
-			# 통째로 죽는다. 랙(y[4,36])과 창구(y[112,244])는 y 로 갈려 있어
-			# 순서를 바꿔도 서로 안 훔친다.
+			if sweep_live:
+				return          # 쓸기는 중단 불가다. 클릭을 통째로 삼킨다
+			# 창구가 먼저다. 자리가 고정이라 낙하 검사보다 앞이고, _sell_hit
+			# 보다도 앞이어야 한다 — 뒤에 두면 _sell_hit 이 sell_sel 을 지운 뒤
+			# 창구가 "먼저 랙에서 팔 칩을 고른다" 로 거절해 2클릭 판매가 통째로
+			# 죽는다. 랙(y[4,36])과 창구(y[112,244])는 y 로 갈려 있어 순서를
+			# 바꿔도 서로 안 훔친다.
 			var cz := _chute_at(m, 0.0)
 			if cz >= 0:
 				_chute_click(cz)
@@ -2391,89 +2396,116 @@ const C_WOOD := Color("3a2a24")
 
 
 # ══════════════════════════════════════════════════════════
-#  딜러 — 카운터 뒤 실루엣
+#  딜러 — 크롭된 상반신
 #
-#  얼굴을 안 그린다. 640x360 에서 사람 얼굴은 어떤 각도로 그려도 뭉개진다 —
-#  남은 다트를 손이 부채처럼 들고 있게 했다가 두 번 다 살구색 덩어리로 읽혀
-#  버린 것과 같은 문제다. 뒤에서 오는 빛에 잘린 윤곽 하나면 "누가 판다" 는
-#  말이 성립하고, 이 해상도에서 그 이상은 손해다.
+#  얼굴도 목도 어깨도 화면에 없다. 카메라가 그만큼 가깝다는 뜻이고, 그래서
+#  몸통이 커진다. 얼굴을 안 그리는 이유는 예전과 같다 — 640x360 에서 사람
+#  얼굴은 어떤 각도로도 뭉개진다. 달라진 것은 그 결론을 "작게 그려 실루엣만"
+#  에서 "잘라내고 크게" 로 뒤집은 것이다.
 #
-#  자리는 랙 아래끝(58)과 카운터 윗면(77) 사이 19px 이 전부다. 그래서 머리가
-#  작고 어깨가 넓다 — 앙각 52°에서 카운터에 기댄 사람의 실제 실루엣이기도 하다.
-#  어깨 반폭은 랙 반폭(116)보다 넓어야 한다. 안 그러면 통째로 랙 뒤에 숨는다.
+#  ── 크롭이 성립하는 사각은 화면에 딱 하나다 ──────────────
+#  딜러보다 나중에 그려지는 불투명 판은 _hud_draw 의 셋뿐이다 — 자금판
+#  x[4,76] · 칩 랙 x[209,431] · 칩 카운터 x[436,473], 전부 y 가 4 에서
+#  시작한다. 그중 딜러의 x 와 겹치는 것은 랙 하나다. 그래서 제약이 둘이다.
+#    ① 실루엣 최상단은 y ≥ 4 다. 위로 더 가면 상단바가 상점·스테이지에서
+#       꺼져 있어(_bar_hidden) 덮개가 아예 없고, 화면 맨 위에 조끼색 띠가
+#       폭 전체로 남는다. 6 을 쓴다 — 랙과 딜러가 같은 transform(shake) 안이라
+#       상대 가림은 흔들려도 안 변하고, 2px 은 반올림 여유다.
+#    ② y < 36 에서 반폭은 111 이하다. 넘으면 랙 왼쪽 구멍(x[76,209])이나
+#       오른쪽 5px 틈(x[431,436])으로 샌다. "크게" 가 부딪히는 벽이 이것이다.
+#  보이는 세로는 y[36,109] 의 73px 이다 — 109 에서 먼 레일이 몸통을 자른다.
+#  스테이지 화면은 상단 UI 가 완전히 같아서 계산이 하나로 끝난다.
 #
-#  움직이는 것은 둘뿐이다. 숨(항상)과 리롤(판을 쓸고 다시 던질 때).
-#  구매·판매에는 안 움직인다 — 그 순간에는 물건과 숫자를 봐야 한다.
-# ══════════════════════════════════════════════════════════
-#  처음에 어깨를 반폭 138 로 잡고 팔을 수평으로 뻗었더니 화면에 검은 막대
-#  하나가 생겼다. 사람으로 읽히게 하는 것은 크기가 아니라 실루엣이 끊기는
-#  자리다 — 머리와 어깨 사이의 목, 어깨에서 팔꿈치로 내려가는 사선,
-#  팔꿈치에서 가운데로 되돌아오는 아래팔. 그 셋이 있으면 6px 두께로도
-#  사람이고, 없으면 두께를 어떻게 줘도 막대다.
-#  세로로 갈리는 것이 전부다. 머리 · 목 · 어깨 · 카운터에 얹힌 팔이 서로
-#  다른 높이에 있으면 사람이고, 같은 높이에 몰리면 두께를 어떻게 줘도 막대다.
+#  ── 옷걸이 판별식은 그대로다 ─────────────────────────────
+#  옛 그림이 옷걸이였던 이유는 크기가 아니라 자세였다. 좌우 대칭 V 는 팔이
+#  몸보다 커지는 순간 철사가 된다. 여기서는 팔꿈치를 몸통 **안**에 두고
+#  아래팔만 바깥아래로 내보낸다 — 뿌리가 안 보이므로 어깨를 안 그리고도
+#  팔이 어딘가에서 온다. 대칭 V 가 아니라 몸통 하나에 두 갈래다.
 #
-#  팔은 좁게 모았다. 그림에서는 카운터를 따라 좌우로 넓게 뻗지만, 640x360
-#  에서 그러면 대칭 V 하나가 되어 사람이 아니라 옷걸이로 읽힌다(넓혀서
-#  두 번 그려 보고 확인했다). 팔꿈치를 몸 가까이 붙이고 손을 가운데에
-#  모으면 세로로 긴 덩어리가 되어 그 자리에서 사람이 된다.
-# ══════════════════════════════════════════════════════════
-#  딜러 — 카운터에 팔을 얹은 상반신
+#  ── 73px 짜리 검은 사다리꼴은 사람이 아니라 구멍이다 ────
+#  그려서 확인했다. 형태를 주는 것은 크기도 테두리도 아니고 옷이다. 셔츠 V
+#  하나와 단추 세 개면 같은 실루엣이 조끼 입은 딜러가 된다. V 꼭짓점은
+#  반드시 랙 밑변(36)보다 아래여야 한다 — 위면 통째로 랙 뒤라 아무 일도 안 한다.
 #
-#  얼굴은 안 그린다(a15bffc). 손가락도 안 그린다 — 아래 "버린 노선" 참조.
+#  ── 값 사다리 ────────────────────────────────────────────
+#  조끼 9 < 소매 24 < 벽 41 < 셔츠 93 < 커프 111 < 림 141.
+#  앞의 간격 15(소매−조끼) 와 17(벽−소매) 은 옛 주석이 실측으로 못 박은
+#  값이라 그대로 지킨다 — 10 은 실패했고 15 는 됐다.
 #
-#  ── 왜 지금 것이 옷걸이인가 (코드와 실측 둘 다) ──────────
-#  옛 _npc_body 의 어깨 돔 끝점은 a=0/π 에서 (294,88)·(346,88) 이고
-#  옛 NPC.arm_root 는 (297,88)·(343,88) 이다. y 가 같고 x 가 3px 차이라
-#  어깨선과 팔이 **한 획으로 이어졌다.** 그래서 자리를 아무리 벌려도
-#  큰 옷걸이가 될 뿐이었다 — 세로 56px 은 원인이 아니라 증상이다.
-#  shot_shop.png 를 딜러 두 색 마스크로 가로줄마다 재면:
-#    반폭 y84=14 → y119=84, 35줄이 줄당 2.0px 로 오차 없는 **직선 하나**.
-#    최대 반폭 84 = 머리 반폭 12 의 **7.0배**. 그것이 옷걸이의 비다.
-#
-#  ── 새 그림이 사람인 근거 (전부 실측. 렌더해서 픽셀로 쟀다) ──
-#  ① 최대 반폭 84 → 58 (−31%). 머리 반폭 대비 7.0 → **4.5**.
-#     팔이 몸보다 커지는 순간 옷걸이가 된다. 그 비를 뒤집었다.
-#  ② 겨드랑이 구멍이 **아래에서 닫힌다.** y92 에 열려 y98 에 최대 11px 이
-#     되었다가 y101 에서 0 으로 닫힌다(한쪽 약 49px²).
-#     지금 것도 구멍은 있다 — y96 에 열려 30px 까지 벌어진 채 레일(109)이
-#     자를 때까지 **안 닫힌다.** 닫히지 않는 쐐기가 바로 옷걸이의 V 다.
-#     (설계안 하나가 "지금은 구멍이 없다" 고 적었는데 실측으로 거짓이다.
-#      구멍의 유무가 아니라 닫히느냐가 판별한다.)
-#  ③ 윤곽에 **되돌아오는 구간**이 생긴다. 반폭 58(y101) → 33(y110),
-#     9줄 하강. 지금은 y84~115 가 통째로 단조 증가다. 철사는 안 되돌아온다.
-#  ④ 사람으로 읽히는 덩어리(머리+몸통) 면적 1636 → 2316px² (**+42%**).
-#     "훨씬 크게" 를 팔을 늘려서가 아니라 몸통으로 갚았다.
-#  ⑤ 딜러가 펠트를 한 픽셀도 안 밟는다. 지금은 손이 y119 까지 내려와
-#     펠트를 7px 밟고 매물 띠(최상단 115.9)를 침범한다. 새 최하단 111.5.
-#
-#  움직이는 것은 여전히 둘이다. 숨(항상)과 리롤. 다만 **무엇이 움직이는지**
-#  를 바꿨다 — 손과 허리는 못 박고 어깨만 오르내린다. 통째로 평행이동하면
-#  그림이 떠는 것이지 숨쉬는 것이 아니고, 옷걸이는 평행이동만 한다.
+#  ── 움직이는 것은 둘이다 ────────────────────────────────
+#  숨과 쓸기. 숨은 몸통 윗변이 아니라 **V 꼭짓점·단추·팔꿈치**를 움직인다 —
+#  윗변은 y=4 라 랙 뒤이고, 거기를 흔들면 아무 데서도 안 보인다.
 # ══════════════════════════════════════════════════════════
 const NPC := {
 	"cx": 320.0,
-	"head_y": 54.0, "head_rx": 13.0, "head_ry": 12.0,
-	"neck_y": 64.0, "neck_w": 6.0, "neck_h": 14.0,
-	# 몸통 — 어깨 반폭 34(y81) → 허리 반폭 26(y112). 허리는 숨을 안 탄다.
-	# (숨을 태우면 bob 최대에서 몸통 아래끝이 113.2 로 펠트를 밟는다. 실측함.)
-	"tor_y": 76.0, "tor_w": 6.0,
-	"sh_y": 81.0, "sh_w": 34.0,
-	"wa_y": 112.0, "wa_w": 26.0,
-	# 팔뿌리는 어깨끝(34)보다 **안쪽**인 30 이다. 그래야 윗팔 사각의 바깥
-	# 위 모서리가 어깨 사면 안에서 나와 뜬 조각이 안 생긴다(4.3px 안쪽).
-	# 옛 값처럼 팔뿌리와 어깨끝을 같은 y 에 두면 그 순간 한 획이 된다.
-	"arm": Vector2(30.0, 85.0),
-	"elbow": Vector2(52.0, 101.0),
-	"hand": Vector2(29.0, 106.0),
-	"up_w": 12.0, "fo_w": 10.0, "joint": 6.0,
-	"hand_rx": 7.5, "hand_ry": 5.5,
-	"breathe": 1.2,      # 어깨만. 손·허리는 0
-	"sweep": 10.0,       # 리롤 — 손이 안쪽으로 미끄러지는 거리(화면 px)
+	"top": 6.0,          # 실루엣 최상단. 랙 윗변(4)보다 2px 안쪽이다
+	"cut": 112.0,        # 허리 = 카운터
+	"hc": 72.0,          # 가슴 반폭 (y=top). 111 이 한계다
+	"hw": 60.0,          # 허리 반폭 (y=cut)
+	"vee_w": 27.0,       # 셔츠 V 반폭 (y=top)
+	"vee_y": 58.0,       # V 꼭짓점. 랙 밑변 36 보다 22px 아래다
+	"btn_y": 70.0, "btn_dy": 13.0, "btn_r": 2.9,
+	"belt": 5.0,
+	# 팔꿈치는 몸통 안이다 — y=84 의 몸통 반폭이 63.1 이라 9px 들어가 있다.
+	# 소매와 조끼가 15/255 밖에 안 갈리므로 그 겹침이 "몸에 붙은 팔" 로 읽힌다.
+	"elbow": Vector2(54.0, 84.0),
+	# 손은 펠트를 밟는다 — 그래야 카운터에 얹힌 것이 아니라 판에 놓인 것이
+	# 된다. 밑끝이 114 + hand_ry 8 = 122 이고, 물건 윗끝은 지면점 −25.08
+	# (다트 "lgt" 꼬리 날개가 최대)이므로 지면 y ≥ 147.08, 즉 w ≥ 44.5 인
+	# 물건은 손과 안 만난다. 2000롤 실측 정착 최소 w 가 44.75 다 — 0.25 로
+	# 스친다. 이 여유가 불편하면 손을 올리지 말고 DROP.w_lo 를 올려라.
+	"hand": Vector2(114.0, 114.0),
+	"fo_w": 16.0,
+	"cuff_t": 0.72,
+	"hand_rx": 11.0, "hand_ry": 8.0,
+	"breathe": 1.4,
 }
 var npc_clock := 0.0
-var npc_t := 0.0        # 리롤 반응. 1 → 0 으로 준다
 
+
+# ══════════════════════════════════════════════════════════
+#  쓸기 — 리롤이 하는 일
+# ──────────────────────────────────────────────────────────
+#  딜러가 판을 쓸어 왼쪽(판매) 창구로 넣고 새로 뿌린다. 세 박자다 —
+#  뻗기 · 훑기 · 복귀. 물리가 열리는 것은 훑기 동안뿐이다(sweep_on).
+#
+#  아래팔은 면 위의 직선이고, 52° 정사영에서 면 위 직선은 화면 직선이라
+#  **그려지는 아래팔이 곧 미는 선이다.** 근사가 아니라 _sweep_line 하나를
+#  그리기와 물리가 같이 읽는 것이다.
+#
+#  선은 트레이 w[24,126] 을 정확히 덮는다 — 팔꿈치가 w 24 (화면 y 130.9),
+#  손이 w 126 (y 211.3). 물건 중심은 _drop_walls·_drop_clamp 가 그 구간에
+#  못 박으므로 팔이 못 만나는 물건이 존재할 수 없다. 경우를 안 따져도 된다.
+#
+#  기울기를 창구 빗변과 **평행**으로 잡은 것이 이 표의 유일한 묘수다.
+#  e(w) = 80 − 0.477576·w 이고 tilt 가 같은 0.477576 이므로
+#     line(w) − e(w) = u1 − 19.83      … w 와 무관한 상수
+#  가 된다. 그래서 "어느 깊이에서 빠지는가" 를 따질 일이 없다. 물건이
+#  놓이는 자리가 line(w) − r 이므로 조건이 u1 − 19.83 ≤ r 하나로 줄고,
+#  가장 빡빡한 칩(r 19)이 u1 ≤ 38.8 을 준다. 18 은 그 안이다.
+#  시작점 u0 = 529 는 반대쪽이다. 물건이 물리적으로 닿을 수 있는 가장
+#  오른쪽 실체가 u_hi − hw + r = 524 − 19 + 19 = 524 이므로(실측 최대는
+#  486) 선이 거기보다 오른쪽에서 출발하면 팔 오른쪽에 남는 물건이 없다.
+#
+#  물건이 빗변을 넘으면 물리를 떠나 waste 로 간다. drop 은 stock 과 인덱스를
+#  나누므로 거기 남겨 두면 "쓸려 가는 중인데 살 수 있는" 상태가 생긴다.
+const SWEEP := {
+	"reach": 0.16,       # 팔을 오른쪽 끝까지 뻗는다
+	"rake": 0.52,        # 훑는다. 이 동안만 왼쪽 벽이 열린다
+	"back": 0.30,        # 복귀. 새 매물은 이 동안 이미 떨어지고 있다
+	"u0": 529.0, "u1": 18.0,
+	"w_el": 24.0, "w_hd": 126.0,
+	"tilt": 0.477576,    # 창구 빗변의 기울기 그대로. 아래 주석이 이유다
+	"lean": 20.0,        # 몸통이 팔을 따라가는 거리. 320±(20+72) 는 랙 안이다
+	"push": 620.0,       # 밀린 물건이 받는 최소 좌향 속도 (면px/s)
+	"up_w": 23.0,        # 위팔 두께. 아래팔(16)보다 굵어야 관절이 읽힌다
+	"fall_g": 900.0, "fall_c": 3.2, "fall_t": 0.44,
+}
+var sweep_t := 0.0       # 쓸기 경과(초)
+var sweep_live := false  # 연출 전체가 도는 중 — 입력을 통째로 삼킨다
+var sweep_on := false    # 훑기 중 — 물리가 열린 구간
+var sweep_dealt := false # 새 판을 이미 깔았는가
+var waste := []          # 창구로 빠진 물건. stock 사본을 들고 다닌다
 
 const TBL := {
 	# ── 시점 ──────────────────────────────────────────
@@ -2503,6 +2535,7 @@ const TBL := {
 func _table_draw() -> void:
 	_felt_draw()
 	_goods_draw()
+	_waste_draw()
 	_cover_draw()
 	_bill_draw()
 
@@ -2623,83 +2656,251 @@ func _chute_label() -> void:
 # 딜러 몸통 — 카운터 위로 올라온 부분만. 랙이 이 위에 얹혀 트레이로 읽힌다.
 # 딜러 몸통 — 카운터 위로 올라온 부분만. 랙이 이 위에 얹혀 트레이로 읽힌다.
 func _npc_body() -> void:
-	var bob: float = sin(npc_clock * 1.5) * float(NPC.breathe)
-	var body: Color = C_WOOD.darkened(0.84)
+	var br: float = sin(npc_clock * 1.5) * float(NPC.breathe)
+	var cx: float = NPC.cx + _sweep_lean()
 	var rim: Color = C_WOOD.lightened(0.42)
-	var cx: float = NPC.cx
-
-	# 목 — 머리보다 먼저. 머리가 목 위를 덮어야 장기말이 안 된다.
-	# 반폭 6 = 머리 반폭 13 의 0.46. 이 잘록함이 9줄 평지로 남는다.
-	draw_rect(Rect2(cx - NPC.neck_w, NPC.neck_y + bob,
-			NPC.neck_w * 2.0, NPC.neck_h), body)
-
-	# 몸통 6점. 볼록이라 한 폴리곤으로 안전하다.
-	# 위 네 점만 숨을 탄다 — 허리는 카운터에 박혀 있다. 평행이동이 아니라
-	# 변형이 되고, 덤으로 아래끝이 절대 펠트(112)를 안 넘는다.
-	var ty: float = NPC.tor_y + bob
-	var sy: float = NPC.sh_y + bob
+	# 몸통. 위는 랙(y<36) 뒤로 사라지고 아래는 카운터에 박힌다. 사다리꼴
+	# 하나면 충분하다 — 이 크롭에서 어깨 사면은 화면 밖이라 그릴 것이 없다.
 	draw_colored_polygon(PackedVector2Array([
-			Vector2(cx - NPC.tor_w, ty), Vector2(cx - NPC.sh_w, sy),
-			Vector2(cx - NPC.wa_w, NPC.wa_y), Vector2(cx + NPC.wa_w, NPC.wa_y),
-			Vector2(cx + NPC.sh_w, sy), Vector2(cx + NPC.tor_w, ty)]), body)
+			Vector2(cx - NPC.hc, NPC.top), Vector2(cx + NPC.hc, NPC.top),
+			Vector2(cx + NPC.hw, NPC.cut), Vector2(cx - NPC.hw, NPC.cut)]),
+			C_WOOD.darkened(0.84))
+	# 셔츠 V — 조끼가 벌어진 자리. 이 한 조각이 사다리꼴을 옷으로 만든다.
+	# 꼭짓점만 숨을 탄다. 윗변은 랙 뒤라 움직여도 아무 데서도 안 보인다.
+	draw_colored_polygon(PackedVector2Array([
+			Vector2(cx - NPC.vee_w, NPC.top), Vector2(cx + NPC.vee_w, NPC.top),
+			Vector2(cx, NPC.vee_y + br)]), C_LIGHT.darkened(0.60))
+	# 단추 셋. 세로 한 줄이 가운데를 잡아 좌우 대칭을 몸으로 읽게 한다.
+	for k in 3:
+		draw_colored_polygon(_e_pts(
+				Vector2(cx, NPC.btn_y + float(k) * NPC.btn_dy + br),
+				NPC.btn_r, NPC.btn_r, 12), C_WOOD.lightened(0.13))
+	# 허리띠 — 몸통이 카운터에서 끊기는 자리에 가로 획을 하나 준다.
+	draw_rect(Rect2(cx - NPC.hw - 1.0, NPC.cut - NPC.belt,
+			(NPC.hw + 1.0) * 2.0, NPC.belt), C_WOOD.darkened(0.90))
+	# 옆선 빛. 벽과 100/255 갈리는 유일한 고대비 획이고, 이게 없으면
+	# 조끼(9)와 벽(41)의 32 차이만 남아 실루엣이 벽에 잠긴다.
+	for s in [-1.0, 1.0]:
+		draw_line(Vector2(cx + s * NPC.hc, NPC.top),
+				Vector2(cx + s * NPC.hw, NPC.cut), Color(rim, 0.55), 1.0)
 
-	var hc := Vector2(cx, NPC.head_y + bob)
-	draw_colored_polygon(_e_pts(hc, NPC.head_rx, NPC.head_ry, 20), body)
-	# 뒤에서 오는 빛. 머리는 한 바퀴 두른다 — 이 한 줄이 덩어리를 사람으로.
-	# 림 반지름 +0.5 와 선폭 1.0 의 바깥 절반까지 세면 최상단은
-	# 54 − 12 − 0.5 − 0.5 − 1.2(숨) = 39.8 이다. 랙 아래끝 36 과 3.8px.
-	draw_arc(hc, NPC.head_rx + 0.5, 0.0, TAU, 24, Color(rim, 0.70), 1.0)
 
-	# 어깨 사면에만 빛. 목(6)에서 어깨끝(34)까지 5줄에 줄당 5.6px —
-	# 그 아래 팔 바깥선이 줄당 1.4px 다. 기울기 비 4배가 삼각근의 모서리고,
-	# 옛 그림에는 이 꺾임이 0° 였다(어깨선과 팔이 같은 획이었으므로).
-	for k in 2:
-		var s: float = -1.0 if k == 0 else 1.0
-		draw_line(Vector2(cx + s * NPC.tor_w, ty),
-				Vector2(cx + s * NPC.sh_w, sy), Color(rim, 0.55), 1.0)
-
-
-# 팔 — 레일 다음에 그려야 "얹혔다" 가 된다.
-#  윗팔 50.8° · 아래팔 −9.5°, 팔꿈치에서 119.7° 꺾인다. 옷걸이는 꺾임이 0개다.
-#  손은 카운터에 붙어 숨을 안 탄다. 어깨만 1.2px 오르내리므로 윗팔이 늘었다
-#  준다 — 관절이 있다는 증거이고, 비용은 0 이다.
+# 팔 — 먼 레일 다음이라 "카운터에 얹혔다" 가 된다.
+# 왼팔은 늘 쉰다. 오른팔만 쓸기를 한다 — 판매 창구가 왼쪽이라 오른손이
+# 바깥에서 안으로 긁는 쪽이고, 좌우가 갈리는 순간 옷걸이 대칭이 깨진다.
+#
+# 쉴 때는 아래팔만 그린다. 팔꿈치가 몸통 **안**이라 위팔은 통째로 가려지고,
+# 그래서 어깨를 안 그리고도 팔이 몸에서 나온다. 쓸기 때만 팔꿈치가 몸 밖으로
+# 나가므로 그때만 위팔이 필요해진다.
 func _npc_arms() -> void:
-	var bob: float = sin(npc_clock * 1.5) * float(NPC.breathe)
-	# 리롤 — 판을 쓸고 다시 던진다. 아래팔을 회전시키지 않는다:
-	# 52° 정사영에서 면 위의 좌우 이동은 정확히 화면 수평 이동이라
-	# (_felt_draw 딜러 라인과 같은 근거) 손의 x 만 안쪽으로 밀면 궤적이
-	# 카운터 결과 평행해지고 세로 예산을 한 픽셀도 안 쓴다.
-	# 회전을 쓰면 한쪽 방향은 손이 가슴으로 올라가고, 반대 방향은 손이
-	# 카운터(112)를 넘어 펠트를 밟는다. 둘 다 못 쓴다.
-	var sw: float = float(NPC.sweep) * sin(clampf(npc_t, 0.0, 1.0) * PI)
-	# 몸통보다 두 단 밝다. 몸통 (9,7,6) · 팔 (24,18,15) · 벽 (41,29,25) 로
-	# 값 사다리가 고르게 선다. 옛 0.68 은 (19,13,12) 라 몸통과 10/255 밖에
-	# 안 갈렸고, 그래서 배 앞을 지나는 팔이 배에 붙어 보였다.
-	var body: Color = C_WOOD.darkened(0.58)
-	var rim: Color = C_WOOD.lightened(0.42)
-	var cx: float = NPC.cx
-	for k in 2:
-		var s: float = -1.0 if k == 0 else 1.0
-		var sh := Vector2(cx + s * NPC.arm.x, NPC.arm.y + bob)
-		var el := Vector2(cx + s * NPC.elbow.x,
-				NPC.elbow.y + bob * 0.35 - sw * 0.15)
-		var hd := Vector2(cx + s * (NPC.hand.x - sw), NPC.hand.y)
-		draw_line(sh, el, body, NPC.up_w)
-		draw_line(el, hd, body, NPC.fo_w)
-		# draw_line 은 butt cap 이라 이음매에 홈이 판다. 팔꿈치 마디로 메운다.
-		# 어깨 쪽 이음매는 몸통 안(4.3px)이라 마디가 필요 없다 — 2콜 아낀다.
-		draw_circle(el, NPC.joint, body)
-		draw_colored_polygon(_e_pts(hd, NPC.hand_rx, NPC.hand_ry, 14), body)
-		# 빛은 윗팔 바깥선과 아래팔 윗선에만. 손가락마다 두르면 1px 이
-		# 쪼개져 사라진다 — 이 해상도가 이미 두 번 가르친 것이다.
-		var n1 := (el - sh).normalized().orthogonal() * (NPC.up_w * 0.5)
-		if n1.x * s < 0.0:
-			n1 = -n1
-		draw_line(sh + n1, el + n1, Color(rim, 0.62), 1.0)
-		var n2 := (hd - el).normalized().orthogonal() * (NPC.fo_w * 0.5)
-		if n2.y > 0.0:
-			n2 = -n2
-		draw_line(el + n2, hd + n2, Color(rim, 0.62), 1.0)
+	var br: float = sin(npc_clock * 1.5) * float(NPC.breathe)
+	var cx: float = NPC.cx + _sweep_lean()
+	_npc_fore(Vector2(cx - NPC.elbow.x, NPC.elbow.y + br * 0.6),
+			Vector2(cx - NPC.hand.x, NPC.hand.y + br * 0.15), NPC.fo_w)
+	var a := _sweep_amt()
+	if a > 0.004:
+		# 위팔. 뿌리는 조끼 안이고, 팔을 뻗을수록 몸 밖으로 자라 나온다.
+		# 몸통 앞이다 — 가슴을 가로질러 긁는 동작이라 그게 맞다.
+		# 아래팔보다 굵어야 한다. 같은 두께면 관절이 있어도 막대 하나로
+		# 읽힌다 — 옷걸이 때와 같은 실패다.
+		var el := _sweep_elbow()
+		draw_line(Vector2(cx + 48.0, 80.0), el,
+				C_WOOD.darkened(0.58), lerpf(NPC.fo_w, SWEEP.up_w, a))
+		# draw_line 은 butt cap 이라 이음매에 홈이 판다. 마디로 메운다.
+		draw_circle(el, lerpf(NPC.fo_w, SWEEP.up_w, a) * 0.5, C_WOOD.darkened(0.58))
+	var q: float = br * (1.0 - a)
+	_npc_fore(_sweep_elbow() + Vector2(0.0, q * 0.6),
+			_sweep_hand() + Vector2(0.0, q * 0.15),
+			lerpf(NPC.fo_w, NPC.fo_w + 2.0, a))
+
+
+func _npc_fore(el: Vector2, hd: Vector2, w: float) -> void:
+	var d := hd - el
+	draw_line(el, hd, C_WOOD.darkened(0.58), w)
+	# 커프 — 손과 소매를 가르는 한 획. 손목이 어디인지 말해 주는 것이
+	# 손가락을 그리는 것보다 이 해상도에서 싸고 확실하다.
+	var c0 := el + d * NPC.cuff_t
+	draw_line(c0, c0 + d * 0.10, C_LIGHT.darkened(0.52), w + 1.0)
+	draw_colored_polygon(_e_pts(hd, NPC.hand_rx, NPC.hand_ry, 14),
+			C_WOOD.lightened(0.09))
+	# 빛은 윗선에만. 두르면 1px 이 쪼개져 사라진다 — 이 해상도가 가르친 것이다.
+	var n := d.normalized().orthogonal() * (w * 0.5)
+	if n.y > 0.0:
+		n = -n
+	draw_line(el + n, hd + n, Color(C_WOOD.lightened(0.42), 0.55), 1.0)
+
+
+# ══ 쓸기 자세 — 그리기와 물리가 같은 식을 읽는다 ═════════
+
+# 훑는 선. 면 좌표 w 에서의 u 다. 화면에서는 이 선이 곧 아래팔이다 —
+# 52° 정사영에서 면 위 직선은 화면 직선이라 근사가 아니라 같은 선이다.
+func _sweep_line(w: float) -> float:
+	return _sweep_u() + SWEEP.tilt * (SWEEP.w_hd - w)
+
+
+# 손의 u. 훑기 전이면 시작점, 후면 끝점에 머문다 — 복귀는 _sweep_amt 가 한다.
+func _sweep_u() -> float:
+	return lerpf(SWEEP.u0, SWEEP.u1,
+			_ease_io((sweep_t - SWEEP.reach) / SWEEP.rake))
+
+
+# 쉬는 자세와 훑는 자세를 섞는 비율. 뻗기에 0→1, 훑기에 1, 복귀에 1→0.
+func _sweep_amt() -> float:
+	if not sweep_live:
+		return 0.0
+	if sweep_t < SWEEP.reach:
+		return _ease_io(sweep_t / SWEEP.reach)
+	var t: float = sweep_t - SWEEP.reach - SWEEP.rake
+	if t <= 0.0:
+		return 1.0
+	return 1.0 - _ease_io(t / SWEEP.back)
+
+
+# 몸통이 팔을 따라간다. 뻗을 때 오른쪽, 훑으면서 왼쪽으로 실린다.
+# 팔 길이를 늘리는 대신 몸을 옮기는 것이 사람이 하는 일이다.
+# 320 ± (20 + 72) = [228, 412] 이라 랙 x[209,431] 을 안 벗어난다.
+func _sweep_lean() -> float:
+	if not sweep_live:
+		return 0.0
+	var k: float = clampf((_sweep_u() - SWEEP.u1) / (SWEEP.u0 - SWEEP.u1), 0.0, 1.0)
+	return lerpf(-SWEEP.lean, SWEEP.lean, k) * _sweep_amt()
+
+
+func _sweep_elbow() -> Vector2:
+	var rest := Vector2(NPC.cx + _sweep_lean() + NPC.elbow.x, NPC.elbow.y)
+	return rest.lerp(Vector2(_sweep_line(SWEEP.w_el), _p2g(SWEEP.w_el)), _sweep_amt())
+
+
+func _sweep_hand() -> Vector2:
+	var rest := Vector2(NPC.cx + _sweep_lean() + NPC.hand.x, NPC.hand.y)
+	return rest.lerp(Vector2(_sweep_line(SWEEP.w_hd), _p2g(SWEEP.w_hd)), _sweep_amt())
+
+
+func _ease_io(t: float) -> float:
+	var k := clampf(t, 0.0, 1.0)
+	return 2.0 * k * k if k < 0.5 else 1.0 - pow(-2.0 * k + 2.0, 2.0) * 0.5
+
+
+# ══ 쓸기 타임라인 ════════════════════════════════════════
+
+# 훑는 중인가. 가격판·코스터 자국·안내 문구가 이걸 읽는다 —
+# 복귀 구간은 이미 새 판이 떨어지는 중이라 평소처럼 굴어야 한다.
+func _sweep_wipe() -> bool:
+	return sweep_live and not sweep_dealt
+
+
+func _sweep_reset() -> void:
+	sweep_t = 0.0
+	sweep_live = false
+	sweep_on = false
+	sweep_dealt = false
+	waste.clear()
+
+
+# 골드 정산은 _reroll 이 이미 끝냈다. 여기는 연출과 물리만 연다.
+func _sweep_begin() -> void:
+	# 팔은 h 를 안 읽는다. 낙하 중에 리롤을 누르면 공중에 뜬 물건을 그대로
+	# 관통하므로, 시작 전에 h ≡ 0 으로 만들어 전제를 세운다.
+	if drop_awake:
+		_drop_settle()
+	_sweep_reset()
+	sweep_live = true
+	buy_sel = -1
+	# t_max(2.6초) 감시가 쓸기 도중에 터져 _drop_settle 이 물건을 트레이 안으로
+	# 되끌어오는 것을 막는다. 지난 낙하의 경과는 여기서 버린다.
+	drop_t = 0.0
+	drop_acc = 0.0
+	drop_awake = true
+	for it in drop:
+		it.sleep = false
+		it.rest = 0.0
+
+
+func _sweep_update(d: float) -> void:
+	if not sweep_live:
+		return
+	sweep_t += d
+	var t1: float = SWEEP.reach + SWEEP.rake
+	sweep_on = sweep_t >= SWEEP.reach and sweep_t < t1
+	if not sweep_dealt and sweep_t >= t1:
+		sweep_dealt = true
+		_sweep_deal()
+	if sweep_t >= t1 + SWEEP.back:
+		sweep_live = false
+		sweep_on = false
+
+
+# 훑기가 끝났다. 남은 것이 있으면(선이 트레이를 전부 덮으므로 있을 수 없다)
+# 같이 구멍으로 보내고 새 판을 깐다. _roll_stock 은 한 글자도 안 고쳤다 —
+# 그것이 상점 입장(_open_shop)에 쓸기가 안 붙는 유일한 무조건 보장이다.
+func _sweep_deal() -> void:
+	for i in mini(drop.size(), stock.size()):
+		_sweep_sink(i)
+	_roll_stock()
+
+
+# 팔이 미는 한 번. 다트는 원 3개라 중심만 보면 촉이 팔을 통과한다 —
+# _drop_sub 로 부분원마다 보고 가장 깊이 물린 만큼 중심을 옮긴다.
+# 팔은 무한질량이라 한쪽만 움직이고, h 는 한 번도 안 건드린다.
+func _sweep_push(i: int) -> void:
+	var it: Dictionary = drop[i]
+	if it.gone or it.sold > 0.0 or it.held:
+		return
+	var over := 0.0
+	for k in int(it.nb):
+		var sp := _drop_sub(it, k)
+		over = maxf(over, sp.x - (_sweep_line(sp.y) - it.r))
+	if over > 0.0:
+		it.u -= over
+		it.vu = minf(it.vu, -SWEEP.push)
+		it.sleep = false
+		it.rest = 0.0
+	# 빗변을 넘었으면 물리를 떠난다. _drop_lo 가 왼쪽 벽을 여기까지 물렸으므로
+	# _drop_walls 가 정확히 이 값으로 잘라 놓은 뒤다.
+	if it.u <= _chute_dock_u(Z_SELL, it.w) + 0.02:
+		_sweep_sink(i)
+
+
+# 빗변을 넘었다. 물리를 떠나 구멍으로 간다. drop 에서는 gone 이 되고 그림만
+# waste 로 옮겨 간다 — stock 과 인덱스를 안 나누는 사본이라, 쓸려 가는 물건이
+# 여전히 팔리거나 툴팁을 띄우는 상태가 생길 수 없다.
+func _sweep_sink(i: int) -> void:
+	var it: Dictionary = drop[i]
+	if it.gone or it.sold > 0.0:
+		return
+	var wd: Dictionary = it.duplicate()
+	wd["s"] = stock[i]
+	wd["t"] = 0.0
+	wd["vh"] = 0.0
+	waste.append(wd)
+	it.gone = true
+	it.vu = 0.0
+	it.vw = 0.0
+	it.om = 0.0
+	beep(196.0, 0.05, 0.09)
+
+
+# 구멍 속. 면을 떠났으므로 벽도 쌍 충돌도 안 본다 — h 를 음수로 떨어뜨리면
+# _p2s 가 알아서 화면 아래로 보낸다. 빗면을 미끄러지는 그림이 공짜로 나온다.
+func _waste_update(d: float) -> void:
+	var k := waste.size() - 1
+	while k >= 0:
+		var it: Dictionary = waste[k]
+		it.t += d / SWEEP.fall_t
+		if it.t >= 1.0:
+			waste.remove_at(k)
+		else:
+			it.vh -= SWEEP.fall_g * d
+			it.h += it.vh * d
+			it.u += it.vu * d
+			it.vu *= exp(-SWEEP.fall_c * d)
+			it.psi += it.om * d
+		k -= 1
+
+
+func _waste_draw() -> void:
+	for it in waste:
+		_obj_paint(it, it.s, minf(float(it.t) * 1.3, 0.94))
 
 
 func _e_pts(c: Vector2, rx: float, ry: float, seg := 22) -> PackedVector2Array:
@@ -2905,8 +3106,9 @@ func _drop_update(d: float) -> void:
 		return
 	var dd: float = minf(d, DROP.max_d)
 	npc_clock += dd
-	npc_t = maxf(npc_t - dd * 1.7, 0.0)
-	if drop_awake:
+	_sweep_update(dd)
+	_waste_update(dd)
+	if drop_awake or sweep_live:
 		# 나머지를 버리지 않고 이월한다. 모든 스텝이 정확히 sub 이라 프레임률이
 		# 배치를 못 흔든다 — 60/144/30/75fps 와 즉시정착의 최대 위치차 0.000000px.
 		drop_acc += dd
@@ -2922,8 +3124,12 @@ func _drop_update(d: float) -> void:
 
 
 func _drop_step(dt: float) -> void:
-	for it in drop:
-		if it.gone or it.sleep or it.sold > 0.0 or drop_t < it.t0:
+	for i in drop.size():
+		var it: Dictionary = drop[i]
+		if it.gone or it.sold > 0.0 or drop_t < it.t0:
+			continue
+		# 쓸기 중에는 아무도 안 잔다 — 팔이 언제 닿을지 물체가 모른다.
+		if it.sleep and not sweep_on:
 			continue
 		if it.air:
 			it.vh -= DROP.g * dt
@@ -2963,9 +3169,16 @@ func _drop_step(dt: float) -> void:
 			it.om = signf(it.om) * maxf(absf(it.om) - DROP.a_spin * dt, 0.0)
 
 		_drop_walls(it)
+		if sweep_on:
+			_sweep_push(i)
 
 	for k in int(DROP.relax):
 		_drop_pairs()
+	if sweep_on:
+		# 분리 솔버는 위치를 순간이동시키므로 relax 뒤에 팔 오른쪽으로 되밀린
+		# 물건이 남을 수 있다. 팔은 무한질량이라 마지막 말이 팔의 것이다.
+		for i in mini(drop.size(), stock.size()):
+			_sweep_push(i)
 
 	var was := drop_awake
 	drop_awake = false
@@ -2989,7 +3202,7 @@ func _drop_step(dt: float) -> void:
 			it.om = 0.0
 		else:
 			drop_awake = true
-	if was and not drop_awake:
+	if was and not drop_awake and not sweep_live:
 		drop_toss = false
 		_drop_lock()
 
@@ -3000,12 +3213,21 @@ func _drop_wob(it: Dictionary, v: float) -> void:
 
 
 # 스윕이 아니라 위치 클램프다 — 후조건이라 벽 터널링이 구조적으로 불가능하다.
+# 쓸기 중에는 왼쪽 벽이 창구 빗변으로 물러난다. 그 밖은 물리가 아니라 구멍이다.
+# 새 기하를 안 만든다 — _chute_dock_u 는 구매 비행의 무릎이 쓰는 바로 그 수다.
+func _drop_lo(it: Dictionary) -> float:
+	return _chute_dock_u(Z_SELL, it.w) if sweep_on else DROP.u_lo + it.hw
+
+
 func _drop_walls(it: Dictionary) -> void:
-	var lo: float = DROP.u_lo + it.hw
+	var lo: float = _drop_lo(it)
 	var hi: float = DROP.u_hi - it.hw
 	if it.u < lo:
 		it.u = lo
-		it.vu = absf(it.vu) * DROP.e_wall
+		# 쓸기 중 왼쪽은 벽이 아니라 구멍이라 안 튕긴다. _sweep_push 가
+		# 곧바로 이 물건을 waste 로 보낸다.
+		if not sweep_on:
+			it.vu = absf(it.vu) * DROP.e_wall
 	elif it.u > hi:
 		it.u = hi
 		it.vu = -absf(it.vu) * DROP.e_wall
@@ -3025,7 +3247,7 @@ func _drop_walls(it: Dictionary) -> void:
 # 먼 벽은 반드시 into 뒤에만 — 이 조건이 없으면 아직 레일 뒤에 있는 물건이
 # 남과 한 번 닿는 것만으로 트레이 한가운데로 순간이동한다.
 func _drop_clamp(it: Dictionary) -> void:
-	it.u = clampf(it.u, DROP.u_lo + it.hw, DROP.u_hi - it.hw)
+	it.u = clampf(it.u, _drop_lo(it), DROP.u_hi - it.hw)
 	if it.into:
 		it.w = maxf(it.w, DROP.w_lo)
 	it.w = minf(it.w, DROP.w_hi)
@@ -3117,7 +3339,7 @@ func _drop_lock() -> void:
 	for k in int(DROP.relax_hard):
 		_drop_pairs()
 	for it in drop:
-		if it.held:
+		if it.held or it.gone:
 			continue
 		_drop_clamp(it)
 
@@ -3296,7 +3518,7 @@ func _goods_draw() -> void:
 	# 팔려 나간 자리에 남는 코스터 자국. 개수를 보존하고 "여긴 이제 빈 자리" 를 말한다.
 	for i in mini(drop.size(), stock.size()):
 		var g: Dictionary = drop[i]
-		if g.gone:
+		if g.gone and not _sweep_wipe():
 			_e_ring_w(Vector2(g.u, _p2g(g.w)), 13.0, 13.0 * TBL.flat, 1.0,
 					C_TABLE.darkened(0.35))
 	var z := _z_order()
@@ -3324,8 +3546,12 @@ func _obj_shadow(i: int) -> void:
 
 
 func _obj_draw(i: int, dim: float) -> void:
-	var it: Dictionary = drop[i]
-	var s: Dictionary = stock[i]
+	_obj_paint(drop[i], stock[i], dim)
+
+
+# drop/stock 인덱스에서 떼어 낸 몸통. 창구로 빠진 물건(waste)이 두 번째
+# 소비자다 — 그쪽은 stock 을 안 들고 자기 사본을 들고 온다.
+func _obj_paint(it: Dictionary, s: Dictionary, dim: float) -> void:
 	var c := _p2s(it.u, it.w, it.h + it.lift)
 	if it.sold > 0.0:
 		# 팔린 물건은 면을 떠난다 — 화면 좌표로 넘어가는 유일한 지점이다.
@@ -3391,8 +3617,12 @@ func _chip_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: float) 
 #   · 전제: 가격 문자열이 2자리 이내(bw ≤ 25). 지금 최대 가격은 14 다.
 #     세 자리가 생기면 이 정리부터 다시 세워야 한다.
 func _bill_draw() -> void:
+	if _sweep_wipe():
+		return              # 쓸려 나가는 물건에 가격을 안 붙인다
 	for i in mini(drop.size(), stock.size()):
 		var it: Dictionary = drop[i]
+		if not it.into:
+			continue        # 아직 레일 뒤다. 물건보다 가격이 먼저 뜨면 안 된다
 		var s: Dictionary = stock[i]
 		var txt := str(s.cost)
 		var bw := gold_w(txt, 9)
@@ -3409,6 +3639,8 @@ func _drop_verify() -> void:
 	var oob := 0
 	for a in drop.size():
 		var A: Dictionary = drop[a]
+		if A.gone:
+			continue
 		var ok: bool = A.h <= 0.01
 		ok = ok and A.u >= DROP.u_lo + A.hw - 0.01 and A.u <= DROP.u_hi - A.hw + 0.01
 		ok = ok and A.w >= DROP.w_lo - 0.01 and A.w <= DROP.w_hi + 0.01
@@ -3433,8 +3665,10 @@ func _drop_verify() -> void:
 			x += 2.0
 		y += 2.0
 	var mn := 1 << 30
-	for v in area:
-		mn = mini(mn, v)
+	for i in area.size():
+		if drop[i].gone:
+			continue
+		mn = mini(mn, area[i])
 	if pen > 0.5 or oob > 0 or mn < 200:
 		push_warning("drop: 정착 불변식 위반 pen=%.2f oob=%d 최소표적=%d" % [pen, oob, mn])
 	if hand_st != H.NONE or buy_sel >= 0:
@@ -4767,7 +5001,9 @@ func _draw_shop() -> void:
 	# 대기 중에는 아무 말도 안 한다. 조작을 시작한 뒤의 세 가지만 남긴다 —
 	# 그것들은 설명이 아니라 지금 무슨 상태인가를 알리는 것이다.
 	var tip := ""
-	if _drop_busy():
+	if _sweep_wipe():
+		tip = "딜러가 판을 쓸어 담는다"
+	elif _drop_busy():
 		tip = "떨어지는 중  —  아무 데나 눌러 바로 세운다"
 	elif hand_st == H.CARRY:
 		tip = "왼쪽 끝에 밀면 판매  ·  오른쪽 끝에 밀면 구매  ·  펠트에 놓으면 그냥 옮긴다" \
