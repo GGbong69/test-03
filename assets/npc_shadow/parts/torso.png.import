@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://c63mtm2klthl5"
-path="res://.godot/imported/shopkeeper_sweep_forward_v2.png-4c9f9d3c74646de6cabba698e93219d2.ctex"
+uid="uid://bxnql7wxqp2vp"
+path="res://.godot/imported/torso.png-51b23d30e8fe41e435bd22343fd3e9e0.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/npc/shopkeeper_sweep_forward_v2.png"
-dest_files=["res://.godot/imported/shopkeeper_sweep_forward_v2.png-4c9f9d3c74646de6cabba698e93219d2.ctex"]
+source_file="res://assets/npc_shadow/parts/torso.png"
+dest_files=["res://.godot/imported/torso.png-51b23d30e8fe41e435bd22343fd3e9e0.ctex"]
 
 [params]
 

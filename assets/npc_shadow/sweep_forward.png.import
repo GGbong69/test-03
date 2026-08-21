@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://d1mogjyqk5d8s"
-path="res://.godot/imported/shopkeeper_rig_parts_v3.png-2a8b75f8ed22a6401dc12e5f6ccf48eb.ctex"
+uid="uid://dqwvqaillgos"
+path="res://.godot/imported/sweep_forward.png-8ec59119690851169f18039c9bf1c11e.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/npc/shopkeeper_rig_parts_v3.png"
-dest_files=["res://.godot/imported/shopkeeper_rig_parts_v3.png-2a8b75f8ed22a6401dc12e5f6ccf48eb.ctex"]
+source_file="res://assets/npc_shadow/sweep_forward.png"
+dest_files=["res://.godot/imported/sweep_forward.png-8ec59119690851169f18039c9bf1c11e.ctex"]
 
 [params]
 

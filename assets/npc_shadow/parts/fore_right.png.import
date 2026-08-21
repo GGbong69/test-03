@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dfybbaveo5sa3"
-path="res://.godot/imported/shopkeeper_idle_master_v2.png-ecbf8e985c767d9486be632514e2cb1b.ctex"
+uid="uid://cfhq3fl4li260"
+path="res://.godot/imported/fore_right.png-8df52099a6e87768b5c679b4907fa71e.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/npc/shopkeeper_idle_master_v2.png"
-dest_files=["res://.godot/imported/shopkeeper_idle_master_v2.png-ecbf8e985c767d9486be632514e2cb1b.ctex"]
+source_file="res://assets/npc_shadow/parts/fore_right.png"
+dest_files=["res://.godot/imported/fore_right.png-8df52099a6e87768b5c679b4907fa71e.ctex"]
 
 [params]
 
