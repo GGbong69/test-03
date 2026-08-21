@@ -11,3 +11,6 @@
 *.exe
 *.pck
 *.zip
+
+# 고닷이 CSV 에서 뽑아내는 부산물
+*.translation

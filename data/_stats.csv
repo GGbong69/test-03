@@ -1,0 +1,27 @@
+id,name,rarity,cond,kind,value,cost,fire_pct,gain_per_dart,gain_per_round,gain_per_gold,gold_per_round,board,aim_model,samples,seed,_src_hash
+big,대물,common,big,chip,16,4,18.32,4.23,25.36,1.057,0.00,base,uniform_sq,360000,20260821,71ce8f5b9edb
+dbl,가장자리,common,double,mult,3,4,11.77,3.69,22.17,0.924,0.00,base,uniform_sq,360000,20260821,71ce8f5b9edb
+evn,짝수 애호,common,even,chip,14,4,30.50,6.15,36.89,1.537,0.00,base,uniform_sq,360000,20260821,71ce8f5b9edb
+lft,좌익수,common,left,mult,2,4,31.05,7.21,43.25,1.802,0.00,base,uniform_sq,360000,20260821,71ce8f5b9edb
+mtc,밑천,common,small,mult,2,4,15.32,0.92,5.51,0.229,4.00,base,uniform_sq,360000,20260821,71ce8f5b9edb
+odd,홀수 애호,common,odd,chip,14,4,30.57,6.18,37.07,1.545,0.00,base,uniform_sq,360000,20260821,71ce8f5b9edb
+rgt,우익수,common,right,mult,2,4,31.19,6.31,37.85,1.577,0.00,base,uniform_sq,360000,20260821,71ce8f5b9edb
+sml,소물,common,small,mult,5,4,15.32,2.29,13.77,0.574,0.00,base,uniform_sq,360000,20260821,71ce8f5b9edb
+trp,삼중고,common,triple,mult,4,4,7.61,3.20,19.18,0.799,0.00,base,uniform_sq,360000,20260821,71ce8f5b9edb
+bjn,본전,uncommon,diff,chip,12,7,60.66,10.43,62.61,1.491,0.17,base,uniform_sq,360000,20260821,71ce8f5b9edb
+bnd,띠쟁이,uncommon,band,chip,20,7,19.38,9.27,55.64,1.325,0.00,base,uniform_sq,360000,20260821,71ce8f5b9edb
+bul,명중왕,uncommon,bull,mult,8,7,1.18,2.81,16.84,0.401,0.00,base,uniform_sq,360000,20260821,71ce8f5b9edb
+fst,첫 발,uncommon,first,chip,45,7,10.32,6.65,39.91,0.950,0.00,base,uniform_sq,360000,20260821,71ce8f5b9edb
+lst,막판,uncommon,last,xmult,2,7,10.38,1.60,9.58,0.228,0.00,base,uniform_sq,360000,20260821,71ce8f5b9edb
+pdn,판돈,uncommon,first,chip,26,7,10.32,3.84,23.06,0.549,0.00,base,uniform_sq,360000,20260821,71ce8f5b9edb
+sam,외골수,uncommon,same,mult,4,7,1.58,0.67,4.03,0.096,0.00,base,uniform_sq,360000,20260821,71ce8f5b9edb
+smt,손맛,uncommon,warm,chip,30,7,10.70,4.60,27.59,0.657,0.00,base,uniform_sq,360000,20260821,71ce8f5b9edb
+dif,변덕쟁이,rare,diff,chip,22,7,60.66,19.13,114.78,2.733,0.00,base,uniform_sq,360000,20260821,71ce8f5b9edb
+mis,빈손,rare,miss,chip,30,7,37.76,11.33,67.97,1.618,0.00,base,uniform_sq,360000,20260821,71ce8f5b9edb
+alc,기본기,rare,always,chip,25,11,62.24,22.31,133.84,2.028,0.00,base,uniform_sq,360000,20260821,71ce8f5b9edb
+kkt,칼끝,rare,double,xmult,2,11,11.77,2.46,14.78,0.224,0.00,base,uniform_sq,360000,20260821,71ce8f5b9edb
+kns,큰손,rare,triple,mult,3,11,7.61,2.40,14.38,0.218,0.00,base,uniform_sq,360000,20260821,71ce8f5b9edb
+mlj,물주,rare,always,chip,16,11,62.24,14.28,85.66,1.298,4.00,base,uniform_sq,360000,20260821,71ce8f5b9edb
+str,정밀,rare,streak,mult_streak,3,11,1.58,0.52,3.10,0.047,0.00,base,uniform_sq,360000,20260821,71ce8f5b9edb
+alm,증폭기,rare,always,xmult,2,14,62.24,9.59,57.52,0.685,0.00,base,uniform_sq,360000,20260821,71ce8f5b9edb
+mid,중물,rare,mid,chip,40,14,27.42,15.82,94.90,1.130,0.00,base,uniform_sq,360000,20260821,71ce8f5b9edb

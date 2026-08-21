@@ -10,10 +10,11 @@ const GameData = preload("res://scripts/data.gd")
 
 const VIEW := Vector2(640, 360)
 const BC := Vector2(320, 196)
-const R := 106.0
-# SWING 은 R 에 비례해야 한다. 보드만 줄이면 빗나갈 확률이 조용히 오른다.
-# 106/118 = 0.898 → 132 * 0.898 = 118.6. 명중률을 기존과 같게 유지한다.
-const SWING := 119.0
+# 판 반지름과 조준 진폭은 tuning.csv 에 나란히 있다. SWING 은 R 에 비례해야
+# 하고(보드만 줄이면 빗나갈 확률이 조용히 오른다), 그 비 1.1226 이 빗나감
+# 37.68% 를 만든다. 둘을 같은 표에 둔 덕에 검증기가 비를 직접 잰다.
+var R := GameData.tune("board_r")
+var SWING := GameData.tune("aim_swing")
 
 const CARD_W := 244.0
 const CARD_H := 96.0
@@ -92,13 +93,14 @@ var rt_trp2_in := 0.0
 var rt_trp2_out := 0.0
 var rt_bull_o := 0.14
 var rt_bull_i := 0.06
-var dead_idx := 0               # "금지 구역"이 죽이는 칸
+var dead_idx := -1              # "금지 구역"이 죽이는 칸. -1 이면 안 걸렸다
 
 # ── 스테이지 선택 ─────────────────────────────────────────
 var stage_pick := []            # 이번에 제시된 3개 후보
 var active_mods := []           # 이번 판에 걸린 제약
 var stage_gold := 0             # 클리어 시 추가 골드
 var stage_item := false         # 클리어 시 아이템 무료 지급
+var stage_tier := "plain"       # 이번에 고른 등급. 다음 매대의 희귀도 저울이 된다
 var sealed := -1                # "둔화"로 봉인된 아이템 인덱스
 
 # ── 탄창 ──────────────────────────────────────────────────
@@ -109,11 +111,11 @@ var cur_dart := {}              # 지금 던지는 다트
 # ── 진행 상태 ─────────────────────────────────────────────
 var state: int = S.AIM_V
 var round_no := 1
-var target := 60
+var target := 0
 var total := 0
 var shown := 0.0
-var darts_left := 6
-var gold := 4
+var darts_left := 0
+var gold := 0
 var owned := []
 var won := false
 
@@ -125,15 +127,15 @@ var round_trp := false          # 이번 라운드에 트리플이 나왔는가 
 
 # ── 상점 ──────────────────────────────────────────────────
 var stock := []                 # {type:"item"/"mod", d:Dictionary, cost:int, sold:bool}
-var reroll_cost := GameData.REROLL_BASE
+var reroll_cost := GameData.reroll_base()
 var rerolls_used := 0
 var deny_flash := 0.0
 var clear_gold_detail := []
 
 # ── 조준 / 정산 ───────────────────────────────────────────
-var gauge_speed := 0.7
-var beat := 0.34
-var confirm_hold := 0.45
+var gauge_speed := GameData.tune("gauge_speed")
+var beat := GameData.tune("resolve_beat")
+var confirm_hold := GameData.tune("confirm_hold")
 var gt := 0.0
 var confirm_t := 0.0
 var aim := Vector2(320, 202)
@@ -222,10 +224,10 @@ func _new_run() -> void:
 	mods_own.clear()
 	_board_bake()
 	round_no = 1
-	gold = 4
+	gold = GameData.start_gold()
 	magazine.clear()
-	for i in GameData.DARTS_BASE:
-		magazine.append(GameData.DARTS[0])
+	for i in GameData.tune_i("darts_base"):
+		magazine.append(GameData.darts()[0])
 	owned.clear()
 	won = false
 	_open_stage()
@@ -241,17 +243,23 @@ func _start_round() -> void:
 	rt_trp2_out = trp2_out
 	rt_bull_o = bull_o
 	rt_bull_i = bull_i
-	if has_mod("narrow"):
+	var bw := mod_v("band_mul", 1.0)
+	if not is_equal_approx(bw, 1.0):
 		var tc := (trp_in + trp_out) * 0.5
 		var tb := (trp_out - trp_in) * 0.5
-		rt_trp_in = tc - tb * 0.5
-		rt_trp_out = tc + tb * 0.5
-		rt_dbl_in = dbl_out - (dbl_out - dbl_in) * 0.5
+		rt_trp_in = tc - tb * bw
+		rt_trp_out = tc + tb * bw
+		rt_dbl_in = dbl_out - (dbl_out - dbl_in) * bw
 
 	remaining = magazine.duplicate()
-	if has_mod("short") and remaining.size() > 1:
+	var dadd := int(mod_v("darts_add", 0.0))
+	while dadd < 0 and remaining.size() > 1:
 		remaining.pop_back()
-	cur_dart = GameData.DARTS[0]
+		dadd += 1
+	while dadd > 0:
+		remaining.append(magazine[remaining.size() % magazine.size()])
+		dadd -= 1
+	cur_dart = GameData.darts()[0]
 	darts_left = remaining.size()
 	grip_t = 0.0
 	# 칸은 시작 때 한 번 정하고 끝까지 안 바꾼다. 자루가 빠질 때마다 다시
@@ -261,7 +269,9 @@ func _start_round() -> void:
 		grip_slot.append(gi)
 	grip_n = remaining.size()
 	grip_pick = -1
-	sealed = randi() % owned.size() if has_mod("dull") and not owned.is_empty() else -1
+	var seal := int(mod_v("seal_items", 0.0))
+	sealed = randi() % owned.size() if seal > 0 and not owned.is_empty() else -1
+	dead_idx = int(mod_v("sector_kill", -1.0))
 	round_miss = false
 	round_trp = false
 	total = 0
@@ -332,23 +342,23 @@ func _finish_round() -> void:
 		beep_seq([300.0, 240.0, 180.0], 0.13, 0.24, 0.22)
 		return
 
-	if round_no >= GameData.ROUNDS:
+	if round_no >= GameData.rounds_n():
 		state = S.OVER
 		won = true
 		beep_seq([262.0, 330.0, 392.0, 523.0, 659.0], 0.10, 0.22, 0.26)
 		return
 
 	# 정산 내역
-	var dart_gold: int = darts_left * GameData.GOLD_PER_DART
+	var dart_gold: int = darts_left * GameData.gold_per_dart()
 	@warning_ignore("integer_division")  # 보유 5당 1, 내림이 규칙이다
-	var interest: int = mini(gold / GameData.INTEREST_PER, GameData.INTEREST_MAX)
+	var interest: int = mini(gold / GameData.interest_per(), GameData.interest_max())
 	# gold 를 더하기 전에 부른다 — "밑천"과 이자가 같은 잔액을 보게 하려는 것이다.
 	var item_rows := _gold_from_items()
 	var item_gold := 0
 	for r in item_rows:
 		item_gold += r.v
 	clear_gold_detail = [
-		{"n": "클리어", "v": GameData.CLEAR_GOLD},
+		{"n": "클리어", "v": GameData.clear_gold()},
 		{"n": "남은 다트 %d개" % darts_left, "v": dart_gold},
 		{"n": "이자", "v": interest},
 	]
@@ -356,11 +366,11 @@ func _finish_round() -> void:
 		clear_gold_detail.append({"n": "스테이지 보상", "v": stage_gold})
 	for r in item_rows:
 		clear_gold_detail.append(r)
-	gold += GameData.CLEAR_GOLD + dart_gold + interest + stage_gold + item_gold
+	gold += GameData.clear_gold() + dart_gold + interest + stage_gold + item_gold
 
 	# 극한 판은 아이템을 하나 무료로 준다
-	if stage_item and stage_slots < GameData.MAX_ITEMS \
-			and owned.size() < GameData.MAX_ITEMS:
+	if stage_item and stage_slots < GameData.max_items() \
+			and owned.size() < GameData.max_items():
 		var pool := GameData.items().duplicate()
 		pool.shuffle()
 		for it in pool:
@@ -386,17 +396,17 @@ func _gold_from_items() -> Array:
 			"clear": v = it.gv
 			"spare": v = it.gv * darts_left
 			"clean": v = it.gv if not round_miss else 0
-			"blitz": v = it.gv if darts_left >= GameData.GOLD_BLITZ else 0
-			"broke": v = it.gv if gold <= GameData.GOLD_BROKE else 0
+			"blitz": v = it.gv if darts_left >= GameData.gold_blitz() else 0
+			"broke": v = it.gv if gold <= GameData.gold_broke() else 0
 		if v > 0:
 			rows.append({"n": it.n, "v": v})
 	return rows
 
 
 func _reroll_price() -> int:
-	if rerolls_used < GameData.FREE_REROLLS:
+	if rerolls_used < GameData.free_rerolls():
 		return 0
-	return GameData.REROLL_BASE + (rerolls_used - GameData.FREE_REROLLS) * GameData.REROLL_STEP
+	return GameData.reroll_base() + (rerolls_used - GameData.free_rerolls()) * GameData.reroll_step()
 
 
 func _open_shop() -> void:
@@ -414,48 +424,78 @@ func _open_shop() -> void:
 	beep(440.0, 0.10, 0.18)
 
 
+#  가중치 뽑기. 칩과 제약이 같은 저울을 쓴다 — 제약은 행에 w 를 들고 있고,
+#  칩은 등급 표에서 등급×스테이지 등급으로 가져온다. 균등 shuffle 이던
+#  시절에는 14골드 희귀가 4골드 흔함과 같은 확률로 R2 매대에 떴다.
+func _draw_weighted(pool: Array, tier: String) -> Dictionary:
+	if pool.is_empty():
+		return {}
+	var sum := 0.0
+	var ws := []
+	for e in pool:
+		var w: float = float(e.w) if e.has("w") else GameData.item_weight(e, tier)
+		ws.append(maxf(w, 0.0))
+		sum += maxf(w, 0.0)
+	if sum <= 0.0:
+		return pool[randi() % pool.size()]
+	var r := randf() * sum
+	for i in pool.size():
+		r -= ws[i]
+		if r <= 0.0:
+			return pool[i]
+	return pool[pool.size() - 1]
+
+
+#  매대는 라운드 N 을 클리어한 뒤 N+1 을 위해 열린다. 그래서 폭도 해금도
+#  다음 라운드 번호로 본다 — rounds.csv 의 마지막 행이 비어 있는 이유다.
 func _roll_stock() -> void:
 	stock.clear()
-	var pool := GameData.items().duplicate()
-	pool.shuffle()
-	var n := 0
-	for it in pool:
-		if n >= GameData.SHOP_ITEMS:
-			break
-		if _has_item(it.id):
+	var nxt := round_no + 1
+	var w := GameData.shop_of(nxt)
+	var tier: String = stage_tier
+
+	# 후보를 먼저 거른다 — 이미 가진 칩과 아직 안 풀린 칩은 애초에 안 뜬다.
+	var pool := []
+	for it in GameData.items():
+		if _has_item(it.id) or GameData.item_min_round(it) > nxt:
 			continue
+		pool.append(it)
+
+	var n := 0
+	while n < int(w.items):
+		var it := _draw_weighted(pool, tier)
+		if it.is_empty():
+			break
+		pool.erase(it)
 		stock.append({"type": "item", "d": it, "cost": it.cost, "sold": false})
 		n += 1
+
 	# 판이 더는 못 받는 개조와 이미 산 개조를 여기서 뺀다.
 	# 무효 구매가 사라지는 자리는 여기 한 곳이다.
 	var mods := []
-	for m in GameData.MODS:
+	for m in GameData.mods():
 		if _mod_room(m.id):
 			mods.append(m)
 	mods.shuffle()
 	var mn := 0
 	for m in mods:
-		if mn >= GameData.SHOP_MODS:
+		if mn >= int(w.mods):
 			break
 		stock.append({"type": "mod", "d": m, "cost": m.cost, "sold": false})
 		mn += 1
 	# 개조를 다 샀거나 판이 꽉 찼다. 예전 코드는 여기서 mods[i] 로 죽었다.
 	# 자리는 정확히 4개여야 하므로(_table_draw 의 ax/ay 주석) 칩으로 메운다.
-	while mn < GameData.SHOP_MODS:
-		var got := false
-		for it in pool:
-			if _has_item(it.id) or _in_stock(it.id):
-				continue
-			stock.append({"type": "item", "d": it, "cost": it.cost, "sold": false})
-			got = true
+	while mn < int(w.mods):
+		var fill := _draw_weighted(pool, tier)
+		if fill.is_empty():
 			break
-		if not got:
-			break
+		pool.erase(fill)
+		stock.append({"type": "item", "d": fill, "cost": fill.cost, "sold": false})
 		mn += 1
 
-	var darts_pool := GameData.DARTS.slice(1)
+	var darts_pool := GameData.darts().slice(1)
 	darts_pool.shuffle()
-	for i in GameData.SHOP_DARTS:
+	for i in mini(int(w.darts), darts_pool.size()):
 		var dd: Dictionary = darts_pool[i]
 		stock.append({"type": "dart", "d": dd, "cost": dd.cost, "sold": false})
 
@@ -488,8 +528,8 @@ func _buy_block(i: int) -> String:
 		return "이미 구매함"
 	if gold < s.cost:
 		return "골드가 %d 모자란다" % (s.cost - gold)
-	if s.type == "item" and owned.size() >= GameData.MAX_ITEMS:
-		return "칩 랙이 꽉 찼다 (%d/%d)" % [owned.size(), GameData.MAX_ITEMS]
+	if s.type == "item" and owned.size() >= GameData.max_items():
+		return "칩 랙이 꽉 찼다 (%d/%d)" % [owned.size(), GameData.max_items()]
 	if s.type == "dart" and _std_slot() < 0:
 		return "바꿀 표준 다트가 없다"
 	return ""
@@ -566,7 +606,7 @@ func _mod_step(b: Dictionary, sec: Array, m: Dictionary) -> void:
 				for i in sec.size():
 					if sec[i] < sec[lo]:
 						lo = i
-				sec[lo] = GameData.SECTOR_MAX
+				sec[lo] = GameData.sector_max()
 		"odd":
 			# {2k-1, 2k} → 2k-1. 결과로 홀수 열 개가 정확히 두 번씩 남는다.
 			for i in sec.size():
@@ -579,7 +619,7 @@ func _mod_step(b: Dictionary, sec: Array, m: Dictionary) -> void:
 func _board_of(ids: Array) -> Array:
 	var b: Dictionary = GameData.BOARD_BASE.duplicate()
 	var sec: Array = GameData.SECTORS_BASE.duplicate()
-	for m in GameData.MODS:      # 표 순서가 곧 적용 순서다
+	for m in GameData.mods():      # 표 순서가 곧 적용 순서다
 		if ids.has(m.id):
 			_mod_step(b, sec, m)
 	return [b, sec]
@@ -606,7 +646,7 @@ func _board_ok(b: Dictionary, sec: Array) -> bool:
 	if b.dout - b.din < L.band_min - e:
 		return false
 	for v in sec:
-		if v < 1 or v > GameData.SECTOR_MAX:
+		if v < 1 or v > GameData.sector_max():
 			return false
 	return GameData.board_val(b, sec) <= GameData.board_val_max() + e
 
@@ -686,9 +726,18 @@ func _next_round() -> void:
 
 # ── 스테이지 선택 ─────────────────────────────────────────
 
-func has_mod(id: String) -> bool:
+# 제약은 이름이 아니라 축으로 읽는다. modifiers.csv 에 band_mul 1.50 "넓은 판"
+# 을 한 줄 더해도 여기는 안 늘어난다 — 그것이 이 표가 데이터인 이유다.
+func mod_v(axis: String, dflt: float) -> float:
 	for m in active_mods:
-		if m.id == id:
+		if m.k == axis:
+			return float(m.v)
+	return dflt
+
+
+func has_axis(axis: String) -> bool:
+	for m in active_mods:
+		if m.k == axis:
 			return true
 	return false
 
@@ -705,14 +754,24 @@ func _open_stage() -> void:
 	stage_slots = owned.size()
 	var base := GameData.target_of(round_no)
 	stage_pick.clear()
-	var pool := GameData.MODIFIERS.duplicate()
-	pool.shuffle()
-	var used := 0
-	for st in GameData.STAGES:
+	# 아직 안 풀린 제약은 뺀다. "둔화"(칩 봉인)가 R1 극한에 붙으면 가진 칩이
+	# 없어 공짜 제약이 되므로 modifiers.csv 가 min_round 로 늦춘다.
+	var pool := []
+	for md in GameData.modifiers():
+		if md.min_round <= round_no:
+			pool.append(md)
+	for st in GameData.stages():
 		var picked := []
+		var left := pool.duplicate()
 		for i in st.mods:
-			picked.append(pool[(used + i) % pool.size()])
-		used += st.mods
+			var md := _draw_weighted(left, "")
+			if md.is_empty():
+				break
+			picked.append(md)
+			# 같은 축을 둘 뽑으면 하나가 조용히 묻힌다. 축째로 걷어낸다.
+			for other in left.duplicate():
+				if other.k == md.k:
+					left.erase(other)
 		stage_pick.append({
 			"d": st,
 			"mods": picked,
@@ -728,6 +787,7 @@ func _pick_stage(i: int) -> void:
 	target = sp.target
 	stage_gold = sp.d.gold
 	stage_item = sp.d.item
+	stage_tier = sp.d.id
 	beep_seq([523.0, 659.0, 784.0], 0.07, 0.12, 0.20)
 	_start_round()
 
@@ -782,12 +842,12 @@ func add_sparks(n: int, r0: float, r1: float, ln: float, c: Color, life: float) 
 
 
 func gs() -> float:
-	var g := gauge_speed * (2.0 if has_mod("gust") else 1.0)
+	var g := gauge_speed * mod_v("gauge_mul", 1.0)
 	return g * (cur_dart.gauge if cur_dart.has("gauge") else 1.0)
 
 
 func ch() -> float:
-	return 0.0 if has_mod("fog") else confirm_hold
+	return confirm_hold * mod_v("confirm_mul", 1.0)
 
 
 func tri(t: float) -> float:
@@ -875,7 +935,7 @@ func _process(d: float) -> void:
 				fly_t = 0.0
 		S.FLY:
 			fly_t += d
-			if fly_t >= 0.2:
+			if fly_t >= GameData.tune("fly_time"):
 				_land()
 		S.RESOLVE:
 			qt -= d
@@ -1010,7 +1070,7 @@ func _click(m: Vector2) -> void:
 			# 빗나간 클릭이 그대로 조준이 되어, 무르지 못하는 실수가 생긴다.
 			# 숫자 고리까지 포함해 R*1.22 로 넉넉히 잡는다.
 			# m.x < 0 은 키보드에서 온 것이다 — 좌표가 없으므로 통과시킨다.
-			if m.x < 0.0 or (m - BC).length() <= R * 1.22:
+			if m.x < 0.0 or (m - BC).length() <= R * GameData.tune("aim_click_r"):
 				_advance()
 		S.CLEAR:
 			# 좌표를 보지 않는다 — 아무 데나 누르든 스페이스든 상점으로 넘어간다
@@ -1186,7 +1246,7 @@ func _land() -> void:
 		aim = BC + Vector2(cos(a), sin(a)) * sqrt(randf()) * R * 0.95
 
 	var info := hit_info(aim)
-	if has_mod("dead") and info.idx == dead_idx:
+	if dead_idx >= 0 and info.idx == dead_idx:
 		info.base = 0
 	if info.mult == 0:
 		round_miss = true
@@ -1641,11 +1701,11 @@ func _draw_topbar() -> void:
 		draw_line(Vector2(cx, 3.0), Vector2(cx, 15.0), C_BG, 1.0)
 
 	# 1칸 x[0,100] — 런 진행
-	draw_string(font, Vector2(8, 13), "R%d/%d" % [round_no, GameData.ROUNDS],
+	draw_string(font, Vector2(8, 13), "R%d/%d" % [round_no, GameData.rounds_n()],
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_TXT)
 	var done: int = round_no if (state == S.CLEAR or state == S.SHOP) else round_no - 1
 	var pip: Rect2 = LAY.bar_pip
-	for i in GameData.ROUNDS:
+	for i in GameData.rounds_n():
 		var q := Rect2(pip.position + Vector2(float(i) * LAY.bar_pip_dx, 0.0), pip.size)
 		if i < done:
 			draw_rect(q, C_ACC)
@@ -1703,14 +1763,14 @@ func _bank_draw() -> void:
 		return
 
 	# 이자 미리보기. 계산식은 _finish_round 와 같고 둘 다 지급 전 잔액을 본다.
-	if state == S.SHOP and round_no + 1 >= GameData.ROUNDS:
+	if state == S.SHOP and round_no + 1 >= GameData.rounds_n():
 		# R8 은 정산이 없다 (_finish_round 의 round_no >= ROUNDS 조기 return 이
 		# 골드 지급 블록보다 앞선다). 남긴 골드는 영원히 안 돌아온다.
 		draw_string(font, r.position + Vector2(0.0, 42.0), "마지막 판",
 				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, C_MULT.lightened(0.2))
 	else:
 		@warning_ignore("integer_division")  # 위 _finish_round 와 같은 식이어야 한다
-		var itr: int = mini(gold / GameData.INTEREST_PER, GameData.INTEREST_MAX)
+		var itr: int = mini(gold / GameData.interest_per(), GameData.interest_max())
 		draw_string(font, r.position + Vector2(0.0, 42.0), "이자 +%d" % itr,
 				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9,
 				C_GOLD.darkened(0.3) if itr > 0 else C_DIM.darkened(0.35))
@@ -1724,9 +1784,9 @@ func _cap_draw() -> void:
 	draw_string(font, r.position + Vector2(0.0, 20.0), "칩",
 			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 10, C_DIM.darkened(0.1))
 	draw_string(font, r.position + Vector2(0.0, 36.0),
-			"%d/%d" % [owned.size(), GameData.MAX_ITEMS],
+			"%d/%d" % [owned.size(), GameData.max_items()],
 			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 13,
-			C_ACC if owned.size() >= GameData.MAX_ITEMS else C_TXT)
+			C_ACC if owned.size() >= GameData.max_items() else C_TXT)
 
 
 # ══════════════════════════════════════════════════════════
@@ -1820,7 +1880,7 @@ var slot_hot := []              # 발동 후 이름을 띄우는 잔여 시간
 
 func _panel_ensure() -> void:
 	# 슬롯 수는 아이템 보유 한계를 그대로 따라간다.
-	var n: int = GameData.MAX_ITEMS
+	var n: int = GameData.max_items()
 	if slot_pop.size() != n:
 		slot_pop.resize(n)
 		slot_vel.resize(n)
@@ -1856,7 +1916,7 @@ func _panel_update(d: float) -> void:
 
 
 func _panel_rect() -> Rect2:
-	var n: int = GameData.MAX_ITEMS
+	var n: int = GameData.max_items()
 	var w: float = PANEL.cell * n + PANEL.pad * 2.0
 	return Rect2(Vector2((VIEW.x - w) * 0.5, PANEL.y), Vector2(w, PANEL.h))
 
@@ -2050,7 +2110,7 @@ func _panel_draw() -> void:
 	draw_rect(pr, C_FELT)
 	draw_rect(Rect2(pr.position, Vector2(pr.size.x, 1.0)), C_FELT.lightened(0.14))
 
-	for i in GameData.MAX_ITEMS:
+	for i in GameData.max_items():
 		if i < owned.size():
 			_panel_slot(i)
 		else:
@@ -2146,7 +2206,7 @@ var stage_slots := 0            # 스테이지 화면에 들어설 때의 칩 �
 func _can_sell() -> bool:
 	# R8 스테이지에서는 골드를 쓸 곳이 수학적으로 0개다 — 정산도(조기 return)
 	# 상점도 없고 슬롯을 비워도 채울 무료 아이템이 안 나온다. 기대값이 음수뿐이다.
-	if state == S.STAGE and round_no >= GameData.ROUNDS:
+	if state == S.STAGE and round_no >= GameData.rounds_n():
 		return false
 	return state == S.SHOP or state == S.STAGE
 
@@ -2159,7 +2219,7 @@ func _sell_hit(m: Vector2) -> bool:
 	if sell_sel >= 0 and sell_sel < owned.size() and LAY.sell.has_point(m):
 		_sell(sell_sel)
 		return true
-	for i in GameData.MAX_ITEMS:
+	for i in GameData.max_items():
 		if _slot_rect(i).has_point(m):
 			sell_sel = -1 if (sell_sel == i or i >= owned.size()) else i
 			sell_t = 0.0
@@ -2765,7 +2825,7 @@ func _drop_leave(i: int) -> void:
 	it.slot = -1
 	match stock[i].type:
 		"item":
-			it.slot = clampi(owned.size() - 1, 0, GameData.MAX_ITEMS - 1)
+			it.slot = clampi(owned.size() - 1, 0, GameData.max_items() - 1)
 			it.to = _slot_rect(it.slot).get_center()
 		"mod":
 			it.to = p + Vector2(0.0, -30.0)
@@ -3222,7 +3282,7 @@ func _icon_dart(c: Vector2, dl: float, id: String, dim := 0.0,
 # ══════════════════════════════════════════════════════════
 #  제약 아이콘
 # ──────────────────────────────────────────────────────────
-#  GameData.MODIFIERS 6종. 세 자리에서 크기만 달리 쓴다.
+#  GameData.modifiers() 6종. 세 자리에서 크기만 달리 쓴다.
 #    스테이지 카드 r=9(18px) · 하단 제약 줄 r=7(14px) · 툴팁 r=7(14px)
 #  이름을 _icon_mod 로 못 짓는다 — 코드에서 mod 는 이미 보드 개조다.
 #
@@ -3845,14 +3905,14 @@ func _tip_hit(m: Vector2) -> Dictionary:
 				var hi := _shop_hit(m)
 				if hi >= 0:
 					return {"k": "stock", "i": hi}
-			for i in GameData.MAX_ITEMS:
+			for i in GameData.max_items():
 				if _slot_rect(i).has_point(m):
 					return {"k": "rack", "i": i}
 		S.STAGE:
 			for i in stage_pick.size():
 				if _stage_rect(i).has_point(m):
 					return {"k": "stage", "i": i}
-			for i in GameData.MAX_ITEMS:
+			for i in GameData.max_items():
 				if _slot_rect(i).has_point(m):
 					return {"k": "rack", "i": i}
 		S.PICK, S.AIM_V, S.AIM_H:
@@ -3863,7 +3923,7 @@ func _tip_hit(m: Vector2) -> Dictionary:
 			# 점수 카드가 떠 있으면 랙 툴팁이 카드를 정면으로 덮는다.
 			# 위는 상단바라 앵커를 뒤집어서 못 피한다 — 그동안 대상에서 뺀다.
 			if card_p <= 0.004:
-				for i in GameData.MAX_ITEMS:
+				for i in GameData.max_items():
 					if _slot_rect(i).has_point(m):
 						return {"k": "rack", "i": i}
 	return {}
@@ -3882,7 +3942,7 @@ func _tip_build(hit: Dictionary) -> void:
 			if i >= owned.size():
 				tip_title = "빈 칸"
 				_tip_add("상점에서 칩을 사면 여기 꽂힌다", 9, C_DIM)
-				_tip_add("최대 %d개" % GameData.MAX_ITEMS, 9, C_DIM.darkened(0.2))
+				_tip_add("최대 %d개" % GameData.max_items(), 9, C_DIM.darkened(0.2))
 				return
 			var it: Dictionary = owned[i]
 			tip_title = it.n
@@ -3935,7 +3995,7 @@ func _tip_build(hit: Dictionary) -> void:
 				rw.append("골드 +%d" % sp.d.gold)
 			if sp.d.item:
 				rw.append("아이템 1개")
-			if sp.d.item and stage_slots >= GameData.MAX_ITEMS:
+			if sp.d.item and stage_slots >= GameData.max_items():
 				_tip_add("칩 랙이 꽉 차 아이템은 못 받는다", 9, C_RED.lightened(0.2))
 			_tip_add(("클리어 시  " + "  ·  ".join(rw)) if not rw.is_empty()
 					else "추가 보상 없음", 9, C_GOLD if not rw.is_empty() else C_DIM.darkened(0.2))
@@ -4141,7 +4201,7 @@ func _draw_stage() -> void:
 		var rw := "보상 없음"
 		# R8 은 정산이 없다 — 극한 보상이 조기 return 뒤에 있어 전부 사라지고
 		# 목표 ×1.25 만 남는다. 함정을 얼굴에 쓴다.
-		if round_no >= GameData.ROUNDS and (sp.d.gold > 0 or sp.d.item):
+		if round_no >= GameData.rounds_n() and (sp.d.gold > 0 or sp.d.item):
 			rw = "마지막 판 · 보상 없음"
 		elif sp.d.gold > 0:
 			rw = "+%d" % sp.d.gold
@@ -4202,7 +4262,7 @@ func _draw_over() -> void:
 	_scrim()
 	if won:
 		draw_string(font, Vector2(0, 150), "완주!", HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 34, C_ACC)
-		draw_string(font, Vector2(0, 186), "%d개 라운드를 모두 넘겼다" % GameData.ROUNDS,
+		draw_string(font, Vector2(0, 186), "%d개 라운드를 모두 넘겼다" % GameData.rounds_n(),
 				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 13, C_TXT)
 	else:
 		draw_string(font, Vector2(0, 150), "실패", HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 34, C_MULT)

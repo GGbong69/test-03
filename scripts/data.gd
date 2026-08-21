@@ -1,57 +1,512 @@
 extends RefCounted
 
 # ══════════════════════════════════════════════════════════
-#  밸런스 데이터 — 수치 조정은 전부 이 파일에서만 한다.
-#  game.gd 는 이 표를 읽어 동작만 수행한다.
+#  데이터 테이블 로더
+#
+#  수치는 res://data/ 의 표 여덟 장에 있다. 이 파일은 그 표를 읽고,
+#  틀린 곳을 전부 모아 뱉고, game.gd 가 쓰는 모양으로 내준다.
+#  숫자 리터럴을 여기에 다시 적지 마라 — 그 순간 출처가 둘이 된다.
+#
+#  표 여덟 장
+#    items.csv      칩 26   — 이 세트의 대표 표
+#    rarity.csv     등급 3  — 등장 가중치의 유일한 출처
+#    mods.csv       개조 8  — 판 기하를 바꾼다
+#    darts.csv      다트 5  — 탄창에 드는 것
+#    modifiers.csv  제약 6  — 높은 등급 판에 붙는다
+#    stages.csv     등급 3  — 정공 · 도전 · 극한
+#    rounds.csv     라운드 8 — 목표 점수와 매대 폭
+#    tuning.csv     스칼라 23 — 행이 안 느는 값만 모은다
+#
+#  아홉 번째 장 _stats.csv 는 게임이 안 읽는다. 밑줄이 그 뜻이다.
+#  scripts/tools/item_stats.gd 가 덮어쓰는 측정 산출물이고, 밸런스 근거로만
+#  본다. 로더가 그 파일을 여는 곳은 이 파일 어디에도 없다.
+#
+#  표에 없는 것 — 왜 여기 안 오는가
+#    check() 의 조건 19가지        술어다. 임계값만 빼면 술어가 두 쪽 난다
+#    hit_info() 의 링 순서         반환 치역이 check() 와 맺은 계약이다
+#    _mod_step 의 축 match         축이 늘 때만 코드가 느는 것이 옳은 접점이다
+#    GEO · BOARD_BASE · VAL_W      1행짜리라 CSV 로 얻는 것이 없고,
+#                                  검사 순서와 적분식이 값과 떨어지면 뜻이 죽는다
+#    판매가                        cost 로 파생한다. 개별 조정 불가가 설계다
+#
+#  표를 늘려도 코드가 안 느는 것과 느는 것
+#    안 는다 — items 한 줄, rounds 한 줄, tuning 한 줄, 기존 축을 쓰는 mods 한 줄
+#    는다   — 새 cond(check + cond_text + _icon_cond 셋), 새 다트(_icon_dart),
+#            새 축(mods 또는 modifiers 의 match 한 가지)
 # ══════════════════════════════════════════════════════════
 
-# ── 런 구조 ────────────────────────────────────────────────
-const ROUNDS := 8
-const DARTS_BASE := 6
+#  익스포트 주의 — data/*.csv 는 .import 에서 importer="keep" 이어야 한다.
+#  고닷 4 는 CSV 를 기본적으로 번역 파일(csv_translation)로 잡고, 그러면
+#  원본 파일이 빌드에 안 실려 FileAccess.open 이 null 을 돌려준다. 즉
+#  에디터에서는 멀쩡하고 익스포트한 빌드에서만 칩이 한 장도 없다.
+#  (이 프로젝트에서 실제로 그 상태였다.) 익스포트 템플릿이 깔린 뒤에는
+#  첫 프리셋의 "비-리소스 파일 필터" 에 data/*.csv 도 같이 적고, 한 번
+#  빌드해서 표가 살아 있는지 확인할 것. 아직 확인 못 했다.
+const DIR := "res://data/"
+const FILES := {
+	"items": "items.csv",
+	"rarity": "rarity.csv",
+	"mods": "mods.csv",
+	"darts": "darts.csv",
+	"modifiers": "modifiers.csv",
+	"stages": "stages.csv",
+	"rounds": "rounds.csv",
+	"tuning": "tuning.csv",
+}
 
-# 조준 범위가 보드보다 넓어 약 37%는 빗나간다.
-# 무개조 기준 실제 기대값은 다트당 약 10점 → 6다트에 약 60점.
-# R1은 아이템 없이도 여유 있게 넘도록 45로 두고, 이후 약 1.75배씩 상승.
-const TARGETS := [45, 85, 150, 270, 470, 820, 1450, 2500]
+# tuning.csv 가 반드시 가져야 하는 열쇠. 목록이 곧 계약이다 —
+# 코드가 읽는데 표에 없으면 부팅이 소리를 낸다.
+const TUNE_KEYS := [
+	"start_gold", "clear_gold", "gold_per_dart", "interest_per", "interest_max",
+	"gold_broke", "gold_blitz", "sell_div", "sell_min",
+	"free_rerolls", "reroll_base", "reroll_step", "max_items",
+	"darts_base",
+	"board_r", "aim_swing", "sector_max", "val_max_mul",
+	"gauge_speed", "resolve_beat", "confirm_hold", "fly_time", "aim_click_r",
+]
 
-# ── 보드 기하 기본값 ──────────────────────────────────────
-#  판의 출처는 여기 하나다. game.gd 의 _new_run 은 리터럴을 쓰지 않는다.
+const RARITIES := ["common", "uncommon", "rare"]
+const MOD_AXES := ["band", "slide", "ring", "bull", "out", "swap", "odd"]
+const MODIFIER_AXES := ["band_mul", "gauge_mul", "confirm_mul", "darts_add",
+		"sector_kill", "seal_items"]
+
+static var _raw := {}                # 표 이름 → Array[Dictionary] (전부 문자열)
+static var _tune := {}               # key → int/float
+static var _cache := {}              # 가공한 결과
+static var _errs: PackedStringArray = []
+static var _warns: PackedStringArray = []
+static var _booted := false
+
+
+# ── 부팅 ──────────────────────────────────────────────────
+#  표를 전부 읽고 한 번에 검사한다. 첫 에러에서 멈추지 않는다 —
+#  한 줄 고치고 다시 켜는 것보다 한 번에 다 보는 편이 빠르다.
+static func boot() -> void:
+	if _booted:
+		return
+	_booted = true
+	for name in FILES:
+		_raw[name] = _read(DIR + FILES[name], name)
+	_load_tune()
+	_validate()
+	for e in _errs:
+		push_error("데이터 표: " + e)
+	for w in _warns:
+		push_warning("데이터 표: " + w)
+
+
+static func errors() -> PackedStringArray:
+	boot()
+	return _errs
+
+
+static func warnings() -> PackedStringArray:
+	boot()
+	return _warns
+
+
+# ── CSV 읽기 ──────────────────────────────────────────────
+#  헤더 이름으로만 접근한다. 열을 옮기거나 사이에 끼워도 안 깨진다.
+#  밑줄로 시작하는 열은 사람이 읽는 주석이라 그대로 담되 이름을 남긴다.
+static func _read(path: String, who: String) -> Array:
+	var out := []
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		_errs.append("%s — 파일을 못 연다: %s" % [who, path])
+		return out
+	var head := f.get_csv_line()
+	if head.is_empty():
+		_errs.append("%s — 빈 파일이다" % who)
+		f.close()
+		return out
+	# BOM 은 첫 칸 앞에 붙는다. 안 지우면 "id" 가 "﻿id" 가 된다.
+	head[0] = head[0].lstrip("﻿")
+	for i in head.size():
+		head[i] = head[i].strip_edges()
+	var ln := 1
+	while not f.eof_reached():
+		var r := f.get_csv_line()
+		ln += 1
+		# 빈 행 판정이 먼저다. 파일이 CRLF 로 끝나면 마지막에 빈 행이 하나 온다.
+		if r.is_empty() or r[0].strip_edges() == "":
+			continue
+		if r.size() > head.size():
+			_errs.append("%s:%d — 칸이 헤더보다 많다(%d > %d). 따옴표 없는 쉼표가 열을 밀었다"
+					% [who, ln, r.size(), head.size()])
+			continue
+		if r.size() < head.size():
+			_warns.append("%s:%d — 칸이 모자란다(%d < %d). 빈 값으로 채운다"
+					% [who, ln, r.size(), head.size()])
+		var row := {"_line": ln}
+		for i in head.size():
+			row[head[i]] = r[i].strip_edges() if i < r.size() else ""
+		out.append(row)
+	f.close()
+	return out
+
+
+static func rows(name: String) -> Array:
+	boot()
+	return _raw.get(name, [])
+
+
+# ── 값 꺼내기 ─────────────────────────────────────────────
+#  조용한 캐스팅을 안 한다. "3.5" 를 int 로 읽어 3 이 되는 일이
+#  아무 소리 없이 지나가면 밸런스가 어긋난 채로 굴러간다.
+static func _i(row: Dictionary, col: String, who: String, dflt := 0) -> int:
+	var s: String = str(row.get(col, "")).strip_edges()
+	if s == "":
+		return dflt
+	if not s.is_valid_int():
+		_errs.append("%s:%d — %s 가 정수가 아니다: '%s'" % [who, row.get("_line", 0), col, s])
+		return dflt
+	return int(s)
+
+
+static func _f(row: Dictionary, col: String, who: String, dflt := 0.0) -> float:
+	var s: String = str(row.get(col, "")).strip_edges()
+	if s == "":
+		return dflt
+	if not s.is_valid_float():
+		_errs.append("%s:%d — %s 가 실수가 아니다: '%s'" % [who, row.get("_line", 0), col, s])
+		return dflt
+	return float(s)
+
+
+# 참/거짓은 1/0 정수로만 쓴다. 엑셀이 TRUE 를 로케일 따라 참/TRUE 로
+# 되돌려 놓기 때문에, 문자열로 두면 저장 한 번에 칩이 조용히 사라진다.
+static func _b(row: Dictionary, col: String, who: String) -> bool:
+	var s: String = str(row.get(col, "")).strip_edges()
+	if s == "":
+		return false
+	if s != "0" and s != "1":
+		_errs.append("%s:%d — %s 는 1 또는 0 이어야 한다: '%s'" % [who, row.get("_line", 0), col, s])
+		return false
+	return s == "1"
+
+
+# ── 표시 문장 ─────────────────────────────────────────────
+#  desc 열은 수치를 문장에 안 박는다. {v0} 는 값을, {v0:+} 는 부호를
+#  붙여 넣는다. 값을 고치면 문장이 따라 바뀌므로 표가 거짓말을 못 한다.
+static func fill(tpl: String, vals: Dictionary) -> String:
+	var out := tpl
+	for k in vals:
+		var v = vals[k]
+		out = out.replace("{%s}" % k, _num(v))
+		out = out.replace("{%s:+}" % k, ("+" if _pos(v) else "") + _num(v))
+	return out
+
+
+static func _pos(v) -> bool:
+	return (v is float and v >= 0.0) or (v is int and v >= 0)
+
+
+static func _num(v) -> String:
+	if v is float:
+		var s := "%.2f" % v
+		# 1.00 은 1 로, 0.50 은 0.5 로. 표에 적힌 자릿수를 그대로 보이면
+		# 화면이 지저분해진다.
+		s = s.rstrip("0").rstrip(".")
+		return "0" if s == "" or s == "-" else s
+	return str(v)
+
+
+# ══════════════════════════════════════════════════════════
+#  표 → 게임이 쓰는 모양
+# ══════════════════════════════════════════════════════════
+
+# ── 칩 ────────────────────────────────────────────────────
+#  열: id name rarity cond kind value cost gold gv weight min_round enabled
+static func items() -> Array:
+	boot()
+	if _cache.has("items"):
+		return _cache["items"]
+	var out := []
+	for r in _raw.get("items", []):
+		if not _b(r, "enabled", "items"):
+			continue
+		var rar: String = r.get("rarity", "common")
+		var it := {
+			"id": r.get("id", ""),
+			"n": r.get("name", ""),
+			"c": r.get("cond", ""),
+			"k": r.get("kind", ""),
+			"v": _i(r, "value", "items"),
+			"cost": _i(r, "cost", "items"),
+			"rarity": rar,
+			"tags": String(r.get("_tags", "")).split(";", false),
+			"line": r.get("_line", 0),
+		}
+		if String(r.get("gold", "")) != "":
+			it["g"] = r.get("gold")
+			it["gv"] = _i(r, "gv", "items")
+		out.append(it)
+	_cache["items"] = out
+	return out
+
+
+# 등장 가중치와 해금 라운드. 등급이 기본을 정하고 칩이 예외로 덮는다.
+static func item_weight(it: Dictionary, tier: String) -> float:
+	boot()
+	for r in _raw.get("items", []):
+		if r.get("id") == it.id and String(r.get("weight", "")) != "":
+			return _f(r, "weight", "items")
+	var col := "w_" + ("plain" if tier == "" else tier)
+	for r in _raw.get("rarity", []):
+		if r.get("id") == it.get("rarity", "common"):
+			return _f(r, col, "rarity", 1.0)
+	return 1.0
+
+
+static func item_min_round(it: Dictionary) -> int:
+	boot()
+	for r in _raw.get("items", []):
+		if r.get("id") == it.id and String(r.get("min_round", "")) != "":
+			return _i(r, "min_round", "items")
+	for r in _raw.get("rarity", []):
+		if r.get("id") == it.get("rarity", "common"):
+			return _i(r, "min_round", "rarity", 1)
+	return 1
+
+
+static func rarity_color(rar: String) -> Color:
+	boot()
+	for r in _raw.get("rarity", []):
+		if r.get("id") == rar:
+			return Color(String(r.get("color", "8f86a8")))
+	return Color("8f86a8")
+
+
+static func rarity_name(rar: String) -> String:
+	boot()
+	for r in _raw.get("rarity", []):
+		if r.get("id") == rar:
+			return r.get("name", rar)
+	return rar
+
+
+# ── 보드 개조 ─────────────────────────────────────────────
+#  k = 효과 축. game.gd _mod_step 의 match 가 읽는 유일한 열쇠다.
+#    band   링 폭 주고받기  v = [트리플 증분, 더블 증분]   합이 0 이다
+#    slide  트리플 띠 이동   v = 더블 안쪽에서 띄울 간격
+#    ring   트리플 띠 추가   v = [안, 밖]
+#    bull   불 이중 구조     v = [한복판, 불]
+#    out    판 바깥 경계     v = 새 dbl_out
+#    swap   작은 칸 올리기   v = 올릴 칸 수
+#    odd    짝수 칸 내리기   v = 안 씀
+static func mods() -> Array:
+	boot()
+	if _cache.has("mods"):
+		return _cache["mods"]
+	var out := []
+	for r in _raw.get("mods", []):
+		var axis: String = r.get("axis", "")
+		var v0 := _f(r, "v0", "mods")
+		var has1 := String(r.get("v1", "")) != ""
+		var v1 := _f(r, "v1", "mods")
+		out.append({
+			"id": r.get("id", ""),
+			"n": r.get("name", ""),
+			"k": axis,
+			"v": [v0, v1] if has1 else v0,
+			"excl": r.get("excl", ""),
+			"cost": _i(r, "cost", "mods"),
+			"d": fill(r.get("desc", ""), {"v0": v0, "v1": v1}),
+			"line": r.get("_line", 0),
+		})
+	_cache["mods"] = out
+	return out
+
+
+static func mod_of(id: String) -> Dictionary:
+	for m in mods():
+		if m.id == id:
+			return m
+	return {}
+
+
+# ── 다트 ──────────────────────────────────────────────────
+static func darts() -> Array:
+	boot()
+	if _cache.has("darts"):
+		return _cache["darts"]
+	var out := []
+	for r in _raw.get("darts", []):
+		var g := _f(r, "gauge", "darts", 1.0)
+		var mu := _i(r, "mult", "darts")
+		var ps := _f(r, "pierce_side", "darts")
+		var mg := _f(r, "magnet", "darts")
+		out.append({
+			"id": r.get("id", ""),
+			"n": r.get("name", ""),
+			"gauge": g,
+			"mult": mu,
+			"fix1": _b(r, "fix1", "darts"),
+			"pierce": ps > 0.0,
+			"side": ps,
+			"magnet": mg,
+			"cost": _i(r, "cost", "darts"),
+			"d": fill(r.get("desc", ""),
+					{"gauge": g, "mult": mu, "pierce_side": ps, "magnet": mg}),
+			"line": r.get("_line", 0),
+		})
+	_cache["darts"] = out
+	return out
+
+
+static func dart_of(id: String) -> Dictionary:
+	var d := darts()
+	for x in d:
+		if x.id == id:
+			return x
+	return d[0] if not d.is_empty() else {}
+
+
+# ── 스테이지 제약 ─────────────────────────────────────────
+static func modifiers() -> Array:
+	boot()
+	if _cache.has("modifiers"):
+		return _cache["modifiers"]
+	var out := []
+	for r in _raw.get("modifiers", []):
+		var v := _f(r, "v", "modifiers")
+		out.append({
+			"id": r.get("id", ""),
+			"n": r.get("name", ""),
+			"k": r.get("axis", ""),
+			"v": v,
+			"w": _f(r, "weight", "modifiers", 1.0),
+			"min_round": _i(r, "min_round", "modifiers", 1),
+			"d": fill(r.get("desc", ""), {"v": v}),
+			"line": r.get("_line", 0),
+		})
+	_cache["modifiers"] = out
+	return out
+
+
+# ── 스테이지 등급 ─────────────────────────────────────────
+static func stages() -> Array:
+	boot()
+	if _cache.has("stages"):
+		return _cache["stages"]
+	var out := []
+	for r in _raw.get("stages", []):
+		var mn := _i(r, "mods_n", "stages")
+		var mul := _f(r, "target_mul", "stages", 1.0)
+		out.append({
+			"id": r.get("id", ""),
+			"n": r.get("name", ""),
+			"mods": mn,
+			"mul": mul,
+			"gold": _i(r, "gold", "stages"),
+			"item": _b(r, "free_item", "stages"),
+			"sub": fill(r.get("sub", ""), {"mods_n": mn, "target_mul": mul}),
+			"line": r.get("_line", 0),
+		})
+	_cache["stages"] = out
+	return out
+
+
+# ── 라운드 ────────────────────────────────────────────────
+static func rounds_n() -> int:
+	return rows("rounds").size()
+
+
+static func _round_row(n: int) -> Dictionary:
+	var rs := rows("rounds")
+	if rs.is_empty():
+		return {}
+	return rs[clampi(n - 1, 0, rs.size() - 1)]
+
+
+static func target_of(round_no: int) -> int:
+	return _i(_round_row(round_no), "target", "rounds")
+
+
+static func darts_of(round_no: int) -> int:
+	var r := _round_row(round_no)
+	var n := _i(r, "darts", "rounds", 0)
+	return n if n > 0 else tune_i("darts_base")
+
+
+# 상점은 라운드 N 을 클리어한 뒤 N+1 을 위해 열린다. 그래서 이 함수에는
+# 다음 라운드 번호를 넘긴다. 마지막 행의 상점 칸은 비어 있다.
+static func shop_of(round_no: int) -> Dictionary:
+	var r := _round_row(round_no)
+	return {
+		"items": _i(r, "shop_items", "rounds", 0),
+		"mods": _i(r, "shop_mods", "rounds", 0),
+		"darts": _i(r, "shop_darts", "rounds", 0),
+	}
+
+
+# ── 전역 스칼라 ───────────────────────────────────────────
+static func _load_tune() -> void:
+	for r in _raw.get("tuning", []):
+		var k: String = r.get("key", "")
+		if k == "":
+			continue
+		var t: String = r.get("type", "float")
+		_tune[k] = _i(r, "value", "tuning") if t == "int" else _f(r, "value", "tuning")
+
+
+static func tune(key: String) -> float:
+	boot()
+	if not _tune.has(key):
+		push_error("데이터 표: tuning 에 '%s' 가 없다" % key)
+		return 0.0
+	return float(_tune[key])
+
+
+static func tune_i(key: String) -> int:
+	return int(round(tune(key)))
+
+
+# game.gd 가 이름으로 부르는 것들. 표를 한 겹 가려 호출부를 짧게 둔다.
+static func start_gold() -> int: return tune_i("start_gold")
+static func clear_gold() -> int: return tune_i("clear_gold")
+static func gold_per_dart() -> int: return tune_i("gold_per_dart")
+static func interest_per() -> int: return tune_i("interest_per")
+static func interest_max() -> int: return tune_i("interest_max")
+static func gold_broke() -> int: return tune_i("gold_broke")
+static func gold_blitz() -> int: return tune_i("gold_blitz")
+static func free_rerolls() -> int: return tune_i("free_rerolls")
+static func reroll_base() -> int: return tune_i("reroll_base")
+static func reroll_step() -> int: return tune_i("reroll_step")
+static func max_items() -> int: return tune_i("max_items")
+static func sector_max() -> int: return tune_i("sector_max")
+static func val_max_mul() -> float: return tune("val_max_mul")
+
+
+# ══════════════════════════════════════════════════════════
+#  표로 안 뺀 것 — 술어와 기하
+# ══════════════════════════════════════════════════════════
+
+# 판의 기본 모양. 1행짜리라 CSV 로 얻는 것이 없고, "길이 20" 계약은
+# 어차피 hit_info 에 남는다.
 const SECTORS_BASE := [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5]
 const BOARD_BASE := {
 	"bi": 0.06, "bo": 0.14,      # 한복판(50) · 불(25)
 	"ti": 0.56, "to": 0.66,      # 트리플 띠
-	"t2i": 0.0, "t2o": 0.0,      # 둘째 트리플 띠. 0 이면 없다 — hit_info 의 가지가 통째로 안 돈다
+	"t2i": 0.0, "t2o": 0.0,      # 둘째 트리플 띠. 0 이면 없다
 	"din": 0.90, "dout": 1.00,   # 더블 띠 안쪽 · 판의 끝(= 빗나감 경계)
 }
 
-# ── 경제 ──────────────────────────────────────────────────
-const CLEAR_GOLD := 4          # 클리어 기본 보상
-const GOLD_PER_DART := 1       # 남은 다트 1개당 (적은 다트로 끝낼 유인)
-const INTEREST_PER := 5        # 보유 골드 N당 이자 1 (저축 유인)
-const INTEREST_MAX := 5
-const FREE_REROLLS := 1        # 상점 방문마다 무료 리롤 (없으면 초반에 못 씀)
-const REROLL_BASE := 2
-const REROLL_STEP := 1         # 리롤할 때마다 누적 상승
-const MAX_ITEMS := 5
-const SHOP_ITEMS := 2
-const SHOP_MODS := 1
+# 판이 성립하기 위한 순서 규칙. 밸런스 상한이 아니라 hit_info 의 if 사슬이
+# 전제하는 순서 그 자체다 — bi <= bo < t2i < t2o < ti < to < din < dout
+const GEO := {
+	"bi_min": 0.02,     # 한복판 최소 반경
+	"bull_gap": 0.02,   # 25 띠의 최소 폭. 0 이면 25 칸이 사라진다
+	"bo_min": 0.08,
+	"ti_min": 0.30,     # 띠가 판 한복판까지 기어들어오지 않게
+	"band_min": 0.02,   # 링의 최소 폭
+	"gap": 0.03,        # 띠와 띠 사이 단색의 최소 폭
+	"eps": 0.0005,      # 0.56 - 0.03 != 0.53 인 부동소수 오차를 흡수한다
+}
 
-# ── 아이템 표 ─────────────────────────────────────────────
-#  수치는 res://data/items.csv 에 있다. 엑셀로 열어 고치고 저장하면 끝이다.
-#  (UTF-8 BOM 으로 저장돼 있어 엑셀이 한글을 안 깬다. 다른 인코딩으로
-#   덮어쓰면 이름이 깨지므로 엑셀에서 "CSV UTF-8" 로 저장할 것.)
-#
-#  왜 코드가 아니라 파일인가 — 종수가 늘수록 스프레드시트에서 정렬·비교하며
-#  밸런스를 보는 편이 낫다. 대신 오타가 컴파일에 안 걸리므로 _validate() 가
-#  그 자리를 대신한다. 표가 틀리면 게임이 조용히 이상해지는 대신 시작할 때
-#  push_error 로 소리를 낸다.
-#
-#  열: id,name,cond,kind,value,cost,gold,gv,note
-#    cond  check() 가 아는 조건 이름
-#    kind  chip / mult / xmult / mult_streak
-#    gold  비어 있으면 골드 반쪽 없음. 있으면 gold_text() 가 아는 이름
-#    note  주석. 코드는 안 읽는다
-const ITEMS_CSV := "res://data/items.csv"
+# 판값 — 균등 조준 다트당 기대 점수. 기하와 섹터를 한 저울에 올리는 유일한
+# 숫자다. 가중치는 값이지만 적분식과 떨어지면 뜻이 죽어 여기 같이 둔다.
+const VAL_W := {"bull_i": 50.0, "bull_o": 25.0, "trp": 3.0, "dbl": 2.0, "plain": 1.0}
 
 const CONDS := ["always", "triple", "double", "band", "bull", "odd", "even", "left",
 		"right", "big", "mid", "small", "same", "diff", "first", "last",
@@ -59,6 +514,7 @@ const CONDS := ["always", "triple", "double", "band", "bull", "odd", "even", "le
 
 # 조건 포함관계. A 가 B 를 담으면 A 로 뜨는 다트는 B 로도 뜬다.
 # check() 를 고치면 여기도 같이 고친다 — 하위호환 검사의 유일한 근거다.
+# 검증기는 이 표를 전이폐포로 닫은 뒤 쓴다.
 const COND_SUB := {
 	"always": ["triple", "double", "band", "bull", "odd", "even", "left", "right",
 			"big", "mid", "small", "same", "diff", "first", "last", "streak", "warm"],
@@ -71,211 +527,6 @@ const COND_SUB := {
 const COND_PART := [["left", "right"], ["odd", "even"], ["mid", "big", "small"]]
 const KINDS := ["chip", "mult", "xmult", "mult_streak"]
 const GOLDS := ["clear", "spare", "clean", "blitz", "broke"]
-
-static var _items: Array = []
-
-
-static func items() -> Array:
-	if _items.is_empty():
-		_items = _load()
-	return _items
-
-
-static func _load() -> Array:
-	var out := []
-	var f := FileAccess.open(ITEMS_CSV, FileAccess.READ)
-	if f == null:
-		push_error("아이템 표를 못 연다: %s" % ITEMS_CSV)
-		return out
-	var head := f.get_csv_line()
-	# BOM 은 첫 칸 앞에 붙는다. 지우지 않으면 "id" 가 "\ufeffid" 가 된다.
-	if head.size() > 0:
-		head[0] = head[0].lstrip("\ufeff")
-	var col := {}
-	for i in head.size():
-		col[head[i].strip_edges()] = i
-	for need in ["id", "name", "cond", "kind", "value", "cost"]:
-		if not col.has(need):
-			push_error("아이템 표에 '%s' 열이 없다" % need)
-			f.close()
-			return out
-	while not f.eof_reached():
-		var r := f.get_csv_line()
-		if r.size() < head.size() or r[col.id].strip_edges() == "":
-			continue
-		var it := {
-			"id": r[col.id].strip_edges(),
-			"n": r[col.name].strip_edges(),
-			"c": r[col.cond].strip_edges(),
-			"k": r[col.kind].strip_edges(),
-			"v": int(r[col.value]),
-			"cost": int(r[col.cost]),
-		}
-		if col.has("gold") and r[col.gold].strip_edges() != "":
-			it["g"] = r[col.gold].strip_edges()
-			it["gv"] = int(r[col.gv]) if col.has("gv") else 0
-		out.append(it)
-	f.close()
-	_validate(out)
-	return out
-
-
-# 오타가 실행 중에야 터지는 것을 막는다. CSV 에는 컴파일이 없으므로
-# 이 함수가 그 자리를 대신한다. 게임을 멈추지는 않는다 — 무엇이 틀렸는지
-# 전부 뱉고 계속 간다. 한 줄 고치고 다시 켜는 것보다 한 번에 보는 게 낫다.
-static func _validate(rows: Array) -> void:
-	var seen := {}
-	for it in rows:
-		var who: String = "%s(%s)" % [it.n, it.id]
-		if seen.has(it.id):
-			push_error("아이템 표: id 중복 %s" % it.id)
-		seen[it.id] = true
-		if it.id.length() != 3:
-			push_error("아이템 표: %s — id 는 세 글자여야 한다" % who)
-		if not CONDS.has(it.c):
-			push_error("아이템 표: %s — 모르는 조건 '%s'" % [who, it.c])
-		if not KINDS.has(it.k):
-			push_error("아이템 표: %s — 모르는 효과 '%s'" % [who, it.k])
-		if it.v <= 0:
-			push_error("아이템 표: %s — 값이 0 이하다" % who)
-		if it.cost <= 0:
-			push_error("아이템 표: %s — 가격이 0 이하다" % who)
-		if it.has("g"):
-			if not GOLDS.has(it.g):
-				push_error("아이템 표: %s — 모르는 골드 조건 '%s'" % [who, it.g])
-			if int(it.gv) <= 0:
-				push_error("아이템 표: %s — 골드 값이 0 이하다" % who)
-		# 같은 조건·효과인데 값만 다른 쌍은 한쪽이 반드시 하위호환이 된다.
-		for ot in rows:
-			if ot.id == it.id or ot.k != it.k:
-				continue
-			if it.has("g") != ot.has("g"):
-				continue
-			var covers: bool = it.c == ot.c \
-					or (COND_SUB.has(it.c) and COND_SUB[it.c].has(ot.c))
-			if covers and it.v >= ot.v and it.cost <= ot.cost:
-				push_error("아이템 표: %s 가 %s(%s) 의 상위호환이다" % [who, ot.n, ot.id])
-	# 완전분할을 한 효과로 다 덮으면 조건이 사라진 것과 같다.
-	for part in COND_PART:
-		for kk in KINDS:
-			var cov := 0
-			for cc in part:
-				for it2 in rows:
-					if it2.c == cc and it2.k == kk:
-						cov += 1
-						break
-			if cov == part.size():
-				# 오타가 아니라 설계 사안이라 경고로 둔다. 완전분할을 한 효과로
-				# 다 덮으면 그 조건은 사실상 사라진다 — 두 장을 같이 사면
-				# 조건 없는 카드가 된다. 지금 걸리는 둘은 원래 있던 것이다.
-				push_warning("아이템 표: %s 를 %s 로 다 덮는다 — 두 장을 같이 사면 무조건 카드"
-						% [part, kk])
-
-
-const GOLD_BROKE := 6          # "밑천" 기준 — 정산 시점 보유 골드
-const GOLD_BLITZ := 3          # "큰손" 기준 — 남은 다트
-
-# ── 다트 종류 (탄창) ──────────────────────────────────────
-#  gauge  조준 게이지 속도 배율 (낮을수록 맞히기 쉽다)
-#  mult   링 배수에 가산 (최소 1로 고정)
-#  fix1   링 배수를 1로 못박음
-#  pierce 양옆 섹터의 기본 점수를 절반씩 추가
-#  magnet 착탄을 보드 중심 쪽으로 당기는 비율
-const DARTS := [
-	{"id": "std", "n": "표준", "d": "특성 없음",
-		"gauge": 1.00, "mult": 0, "fix1": false, "pierce": false, "magnet": 0.0, "cost": 0},
-	{"id": "hvy", "n": "무거운", "d": "게이지 느림 · 배수 -1",
-		"gauge": 0.55, "mult": -1, "fix1": false, "pierce": false, "magnet": 0.0, "cost": 5},
-	{"id": "lgt", "n": "가벼운", "d": "게이지 빠름 · 배수 +3",
-		"gauge": 1.90, "mult": 3, "fix1": false, "pierce": false, "magnet": 0.0, "cost": 6},
-	{"id": "prc", "n": "관통", "d": "양옆 섹터 절반 · 배수 1",
-		"gauge": 1.00, "mult": 0, "fix1": true, "pierce": true, "magnet": 0.0, "cost": 7},
-	{"id": "mag", "n": "자석", "d": "중심으로 당김 · 배수 -1",
-		"gauge": 1.00, "mult": -1, "fix1": false, "pierce": false, "magnet": 0.25, "cost": 7},
-]
-const SHOP_DARTS := 1
-
-
-static func dart_of(id: String) -> Dictionary:
-	for d in DARTS:
-		if d.id == id:
-			return d
-	return DARTS[0]
-
-
-# ── 보드 개조 ─────────────────────────────────────────────
-#  아이템이 hit_info 가 뱉은 결과를 읽는다면, 개조는 hit_info 가 읽는 값을 바꾼다.
-#
-#  이 표가 서 있는 전제 셋. 하나라도 무너지면 무효 구매가 되돌아온다.
-#   ① 한 종류는 런에 한 번만 산다. 누적이 없으니 누적 상한도 없다.
-#      TRP_BAND_MAX 따위를 다시 만들지 마라 — 잡을 것이 없다.
-#   ② 판은 저장하지 않는다. 살 때마다 BOARD_BASE 에서 이 표 순서대로 다시
-#      굽는다(game.gd _board_of). 그래서 "사는 순서가 판을 바꾸는가" 라는
-#      물음이 성립하지 않는다. 증명이 아니라 구성이다.
-#   ③ 조합의 천장은 개조마다가 아니라 board_val() 한 곳에 있다. 판값이 기본
-#      판의 VAL_MAX_MUL 배를 넘기는 개조는 매대에 아예 안 뜬다.
-#
-#  k = 효과 축. game.gd _mod_step 의 match 가 읽는 유일한 열쇠다.
-#  새 축을 만들려면 여기 한 줄과 저기 한 가지를 같이 늘린다. 그 둘이 접점 전부다.
-#    band   링 폭 주고받기  v = [트리플 폭 증분, 더블 폭 증분]   합이 0 이다
-#    slide  트리플 띠 이동   v = 더블 안쪽에서 띄울 간격 (절대 좌표가 아니다)
-#    ring   트리플 띠 추가   v = [안, 밖]
-#    bull   불 이중 구조     v = [한복판, 불]
-#    out    판 바깥 경계     v = 새 dbl_out
-#    swap   작은 칸 올리기   v = 올릴 칸 수 (SECTOR_MAX 로 올린다)
-#    odd    짝수 칸 내리기   v = 안 씀
-#  excl = 같이 못 사는 짝. 서로를 정확히 되돌리는 한 쌍에만 쓴다.
-#
-#  ※ 칸 값은 절대 SECTOR_MAX(20) 를 넘기지 마라. check("bull") 이
-#     sector >= 25 라, 25 짜리 칸이 생기면 그냥 칸이 불로 판정되고
-#     명중왕이 오발한다. odd/even(sector < 25) 도 같이 죽는다.
-const MODS := [
-	{"id": "soks", "n": "속살", "d": "트리플 띠 +0.06 · 더블 띠 −0.06",
-		"k": "band", "v": [0.06, -0.06], "excl": "guts", "cost": 9},
-	{"id": "guts", "n": "겉살", "d": "더블 띠 +0.06 · 트리플 띠 −0.06",
-		"k": "band", "v": [-0.06, 0.06], "excl": "soks", "cost": 6},
-	{"id": "byer", "n": "벼랑", "d": "트리플 띠가 더블 바로 안쪽으로",
-		"k": "slide", "v": 0.03, "excl": "", "cost": 7},
-	{"id": "arst", "n": "아랫목", "d": "안쪽에 트리플 띠 하나 더",
-		"k": "ring", "v": [0.38, 0.46], "excl": "", "cost": 9},
-	{"id": "mung", "n": "멍석", "d": "불 +0.06 · 한복판 −0.02",
-		"k": "bull", "v": [0.04, 0.20], "excl": "", "cost": 8},
-	{"id": "panb", "n": "판벌이", "d": "판이 커진다 — 빗나감이 준다",
-		"k": "out", "v": 1.10, "excl": "", "cost": 12},
-	{"id": "pang", "n": "판갈이", "d": "가장 작은 세 칸이 20이 된다",
-		"k": "swap", "v": 3, "excl": "", "cost": 9},
-	{"id": "jjkp", "n": "짝패", "d": "칸마다 짝이 생긴다 · 짝수 칸 −1",
-		"k": "odd", "v": 0, "excl": "", "cost": 6},
-]
-
-#  판이 성립하기 위한 순서 규칙. 밸런스 상한이 아니라 hit_info 의 if 사슬이
-#  전제하는 순서 그 자체다 — 이걸 통과하면 50/25/배수3/배수2 판정이 안 깨진다.
-#    bi <= bo < t2i < t2o < ti < to < din < dout
-const GEO := {
-	"bi_min": 0.02,     # 한복판 최소 반경
-	"bull_gap": 0.02,   # 25 띠의 최소 폭. 0 이면 25 칸이 사라져 외골수·정밀이 흔들린다
-	"bo_min": 0.08,
-	"ti_min": 0.30,     # 띠가 판 한복판까지 기어들어오지 않게
-	"band_min": 0.02,   # 링의 최소 폭
-	"gap": 0.03,        # 띠와 띠 사이 단색의 최소 폭
-	"eps": 0.0005,      # 0.56 - 0.03 != 0.53 인 부동소수 오차를 흡수한다
-}
-
-const SECTOR_MAX := 20      # 위 ※ 주석 참조. 25 를 넘기면 안 되는 것이 아니라 20 을 넘기면 안 된다
-
-#  판값 — 균등 조준 다트당 기대 점수(섹터 실제 평균 기준). 기하와 섹터를
-#  한 저울에 올리는 유일한 숫자다. 개조가 슬롯을 안 먹는 대신 이것이 슬롯이다.
-#  기본 판 15.431 → 상한 23.147. 지금 여덟 종에서 이 상한이 눈에 보이는 곳은
-#  딱 하나 — 판벌이와 판갈이(둘 다 빌드를 안 가리는 카드)를 함께 못 산다.
-const VAL_W := {"bull_i": 50.0, "bull_o": 25.0, "trp": 3.0, "dbl": 2.0, "plain": 1.0}
-const VAL_MAX_MUL := 1.50
-
-
-static func mod_of(id: String) -> Dictionary:
-	for m in MODS:
-		if m.id == id:
-			return m
-	return {}
 
 
 static func board_val(b: Dictionary, sec: Array) -> float:
@@ -294,37 +545,8 @@ static func board_val(b: Dictionary, sec: Array) -> float:
 
 
 static func board_val_max() -> float:
-	return board_val(BOARD_BASE, SECTORS_BASE) * VAL_MAX_MUL
+	return board_val(BOARD_BASE, SECTORS_BASE) * val_max_mul()
 
-
-# ── 삭제 ──────────────────────────────────────────────────
-#  const TRP_BAND_MAX := 0.24
-#  const DBL_BAND_MAX := 0.22
-#  const BULL_O_MAX   := 0.30
-#  누적 구매가 없어져 상한이 잡을 것이 없다. 남겨 두면 다음 사람이
-#  "개조가 쌓인다" 는 거짓 전제를 읽는다.
-
-# ── 스테이지 제약 ─────────────────────────────────────────
-#  높은 등급의 판을 고르면 이 중에서 무작위로 붙는다.
-const MODIFIERS := [
-	{"id": "narrow", "n": "좁은 판", "d": "트리플·더블 링 폭 절반"},
-	{"id": "gust", "n": "역풍", "d": "조준 게이지 2배 속도"},
-	{"id": "fog", "n": "안개", "d": "조준 확인 구간 없음"},
-	{"id": "short", "n": "단벌", "d": "다트 1개 감소"},
-	{"id": "dead", "n": "금지 구역", "d": "20번 섹터 점수 0"},
-	{"id": "dull", "n": "둔화", "d": "아이템 하나 무작위 봉인"},
-]
-
-# ── 스테이지 등급 ─────────────────────────────────────────
-#  제약을 받아들일수록 목표는 오르지만 상점 자금이 커진다.
-const STAGES := [
-	{"id": "plain", "n": "정공", "sub": "제약 없음",
-		"mods": 0, "mul": 1.00, "gold": 0, "item": false},
-	{"id": "hard", "n": "도전", "sub": "제약 1개",
-		"mods": 1, "mul": 1.00, "gold": 5, "item": false},
-	{"id": "brutal", "n": "극한", "sub": "제약 2개 · 목표 +25%",
-		"mods": 2, "mul": 1.25, "gold": 10, "item": true},
-]
 
 # ── 조건 판정 ─────────────────────────────────────────────
 static func check(c: String, x: Dictionary) -> bool:
@@ -390,18 +612,18 @@ static func item_desc(it: Dictionary) -> String:
 	return "%s %s" % [cond_text(it.c), eff_text(it.k, it.v)]
 
 
-# 골드 반쪽은 item_desc 에 섞지 않는다 — 발동 시점이 다르므로 따로 보여준다.
+# 골드 반쪽은 item_desc 에 안 섞는다 — 발동 시점이 다르므로 따로 보여준다.
 static func gold_text(g: String, gv: int) -> String:
 	match g:
 		"clear": return "클리어 시 골드 +%d" % gv
 		"spare": return "남은 다트 1개당 골드 +%d" % gv
 		"clean": return "한 발도 안 빗나가면 골드 +%d" % gv
-		"blitz": return "남은 다트 %d개 이상이면 골드 +%d" % [GOLD_BLITZ, gv]
-		"broke": return "정산 때 보유 골드 %d 이하면 +%d" % [GOLD_BROKE, gv]
+		"blitz": return "남은 다트 %d개 이상이면 골드 +%d" % [gold_blitz(), gv]
+		"broke": return "정산 때 보유 골드 %d 이하면 +%d" % [gold_broke(), gv]
 	return ""
 
 
-# 칩 위에 얹는 3글자 태그 (원 안에는 긴 글이 안 들어간다)
+# 칩 위에 얹는 짧은 태그 (원 안에는 긴 글이 안 들어간다)
 static func gold_tag(g: String) -> String:
 	match g:
 		"clear": return "클리어"
@@ -413,7 +635,7 @@ static func gold_tag(g: String) -> String:
 
 
 # ── 판매 ──────────────────────────────────────────────────
-#  판매가 = 구매가의 절반(내림), 최소 2. 22종이 4/7/11/14 이므로 2/3/5/7 이다.
+#  판매가 = 구매가의 절반(내림), 최소 2. 26종이 4/7/11/14 이므로 2/3/5/7 이다.
 #  올림으로 두면 7→4, 11→6 이 되어 보통 등급의 회수율이 흔함보다 높아진다.
 #  내림은 평균 회수율을 46% 로 눌러 "비싼 칩은 팔면 더 손해"를 만든다.
 #
@@ -421,15 +643,352 @@ static func gold_tag(g: String) -> String:
 #  이것이 "한 정산만 빌려 쓰고 되팔기" 의 손익선이다. 골드 칩의 1회 지급(gv)이
 #  이 선을 넘으면 대여가 성립한다 — 지금 넘는 것은 큰손(9 vs 6) 하나뿐이고
 #  그것도 계속 들고 있는 쪽이 낫다. 새 골드 칩의 gv 는 반드시 이 선과 비교한다.
-const SELL_DIV := 2
-const SELL_MIN := 2            # 최저 구매가가 4 라 지금은 안 걸린다. 0골드 판매를 막는 바닥.
-
-
 static func sell_value(it: Dictionary) -> int:
+	var div := maxi(1, tune_i("sell_div"))
 	@warning_ignore("integer_division")  # 내림이 의도다 — 위 주석 참조
-	return maxi(SELL_MIN, int(it.cost) / SELL_DIV)
+	return maxi(tune_i("sell_min"), int(it.cost) / div)
 
 
-static func target_of(round_no: int) -> int:
-	var i := clampi(round_no - 1, 0, TARGETS.size() - 1)
-	return TARGETS[i]
+# ══════════════════════════════════════════════════════════
+#  검증
+#
+#  CSV 에는 컴파일이 없다. 이 함수가 그 자리를 대신한다.
+#  게임을 멈추지는 않는다 — 무엇이 틀렸는지 전부 모아 두고 계속 간다.
+# ══════════════════════════════════════════════════════════
+static func _validate() -> void:
+	_v_tuning()
+	_v_items()
+	_v_mods()
+	_v_darts()
+	_v_modifiers()
+	_v_stages()
+	_v_rounds()
+	_v_cross()
+
+
+static func _v_tuning() -> void:
+	var seen := {}
+	for r in _raw.get("tuning", []):
+		var k: String = r.get("key", "")
+		if seen.has(k):
+			_errs.append("tuning:%d — key 중복 '%s'" % [r.get("_line", 0), k])
+		seen[k] = true
+		var t: String = r.get("type", "")
+		if t != "int" and t != "float":
+			_errs.append("tuning:%d — type 은 int 또는 float 여야 한다: '%s'" % [r.get("_line", 0), t])
+		var v := _f(r, "value", "tuning")
+		var lo := _f(r, "min", "tuning", -INF)
+		var hi := _f(r, "max", "tuning", INF)
+		if v < lo or v > hi:
+			_errs.append("tuning:%d — %s = %s 가 범위 [%s, %s] 밖이다" % [r.get("_line", 0), k, v, lo, hi])
+	for k in TUNE_KEYS:
+		if not seen.has(k):
+			_errs.append("tuning — 코드가 읽는 '%s' 가 표에 없다" % k)
+	for k in seen:
+		if not TUNE_KEYS.has(k):
+			_warns.append("tuning — 표에만 있고 코드가 안 읽는 key '%s' (오타인가)" % k)
+	# 이 프로젝트에서 유일하게 문서화된 불변식이다. 보드만 줄이면 빗나갈
+	# 확률이 조용히 오른다 — 두 값을 같은 표에 두고 비를 검사한다.
+	if _tune.has("board_r") and _tune.has("aim_swing") and float(_tune["board_r"]) > 0.0:
+		var ratio := float(_tune["aim_swing"]) / float(_tune["board_r"])
+		if absf(ratio - 1.1226) > 0.056:
+			_warns.append("tuning — aim_swing/board_r = %.4f 다. 기준 1.1226 에서 5%% 넘게 벗어나면 빗나감 확률이 바뀐다" % ratio)
+	if _tune.has("sector_max") and int(_tune["sector_max"]) >= 25:
+		_errs.append("tuning — sector_max 가 25 이상이다. check(\"bull\") 이 sector >= 25 라 칸이 불로 판정된다")
+
+
+static func _v_items() -> void:
+	var raw: Array = _raw.get("items", [])
+	var seen := {}
+	var sub := _sub_closure()
+	for r in raw:
+		var who := "items:%d %s(%s)" % [r.get("_line", 0), r.get("name", ""), r.get("id", "")]
+		var id: String = r.get("id", "")
+		if seen.has(id):
+			_errs.append("%s — id 중복" % who)
+		seen[id] = r
+		if id.length() != 3:
+			_errs.append("%s — id 는 세 글자여야 한다" % who)
+		if not CONDS.has(r.get("cond", "")):
+			_errs.append("%s — 모르는 조건 '%s'" % [who, r.get("cond", "")])
+		if not KINDS.has(r.get("kind", "")):
+			_errs.append("%s — 모르는 효과 '%s'" % [who, r.get("kind", "")])
+		if not RARITIES.has(r.get("rarity", "")):
+			_errs.append("%s — 모르는 등급 '%s'" % [who, r.get("rarity", "")])
+		if _i(r, "value", "items") <= 0:
+			_errs.append("%s — 값이 0 이하다" % who)
+		if _i(r, "cost", "items") <= 0:
+			_errs.append("%s — 가격이 0 이하다" % who)
+		if String(r.get("weight", "")) != "" and _f(r, "weight", "items") <= 0.0:
+			_errs.append("%s — weight 가 0 이하다" % who)
+		if String(r.get("gold", "")) != "":
+			if not GOLDS.has(r.get("gold")):
+				_errs.append("%s — 모르는 골드 조건 '%s'" % [who, r.get("gold")])
+			if _i(r, "gv", "items") <= 0:
+				_errs.append("%s — 골드 값이 0 이하다" % who)
+		# 등급은 가격 4단을 따르는 것이 기본이다. 어긋나면 의도적 이상치이므로
+		# 근거를 요구한다 — _note 가 비어 있으면 그냥 실수다.
+		var want := _rarity_of_cost(_i(r, "cost", "items"))
+		if want != "" and r.get("rarity", "") != want:
+			if String(r.get("_note", "")).find("등급 예외") < 0:
+				_warns.append("%s — 가격 %s 는 보통 %s 인데 %s 다. 이상치면 _note 에 '등급 예외' 를 적어라"
+						% [who, r.get("cost"), want, r.get("rarity")])
+	# 상위호환 — 같은 효과이고 조건이 상대를 담는데 값이 크고 가격이 싸면
+	# 상대 카드는 영원히 안 팔린다.
+	for a in raw:
+		for b in raw:
+			if a.get("id") == b.get("id") or a.get("kind") != b.get("kind"):
+				continue
+			if (String(a.get("gold", "")) != "") != (String(b.get("gold", "")) != ""):
+				continue
+			var ca: String = a.get("cond", "")
+			var cb: String = b.get("cond", "")
+			var covers: bool = ca == cb or (sub.has(ca) and sub[ca].has(cb))
+			if covers and _i(a, "value", "items") >= _i(b, "value", "items") \
+					and _i(a, "cost", "items") <= _i(b, "cost", "items"):
+				_errs.append("items — %s(%s) 가 %s(%s) 의 상위호환이다"
+						% [a.get("name"), a.get("id"), b.get("name"), b.get("id")])
+	# 완전분할 — 같은 효과로 한 분할을 다 덮으면 조건이 사라진 것과 같다.
+	for part in COND_PART:
+		for kk in KINDS:
+			var cov := 0
+			for cc in part:
+				for r2 in raw:
+					if r2.get("cond") == cc and r2.get("kind") == kk:
+						cov += 1
+						break
+			if cov == part.size():
+				_warns.append("items — %s 를 %s 로 다 덮는다. 두 장을 같이 사면 조건 없는 카드가 된다"
+						% [part, kk])
+	# 아무 칩도 안 쓰는 조건은 화면에 영영 안 나온다. 숫자를 손으로 적지 않고
+	# 여기서 센다 — 손으로 적은 현황은 커밋 한 번에 낡는다.
+	var used := {}
+	for r3 in raw:
+		used[r3.get("cond", "")] = true
+	var idle := []
+	for c in CONDS:
+		if not used.has(c):
+			idle.append(c)
+	if not idle.is_empty():
+		_warns.append("items — 어떤 칩도 안 쓰는 조건 %d종: %s" % [idle.size(), idle])
+
+
+static func _rarity_of_cost(cost: int) -> String:
+	match cost:
+		4: return "common"
+		7: return "uncommon"
+		11, 14: return "rare"
+	return ""
+
+
+# COND_SUB 를 전이폐포로 닫는다. always ⊃ band ⊃ triple 이 성립하는 것이
+# always 목록에 triple 이 직접 적혀 있어서일 뿐이면, 새 조건을 사이에
+# 끼웠을 때 조용히 놓친다.
+static func _sub_closure() -> Dictionary:
+	var out := {}
+	for k in COND_SUB:
+		out[k] = COND_SUB[k].duplicate()
+	var moved := true
+	while moved:
+		moved = false
+		for k in out.keys():
+			for c in out[k].duplicate():
+				if not out.has(c):
+					continue
+				for g in out[c]:
+					if g != k and not out[k].has(g):
+						out[k].append(g)
+						moved = true
+	return out
+
+
+static func _v_mods() -> void:
+	var raw: Array = _raw.get("mods", [])
+	var seen := {}
+	for r in raw:
+		var who := "mods:%d %s(%s)" % [r.get("_line", 0), r.get("name", ""), r.get("id", "")]
+		var id: String = r.get("id", "")
+		if seen.has(id):
+			_errs.append("%s — id 중복" % who)
+		seen[id] = r
+		if id.length() != 4:
+			_errs.append("%s — 개조 id 는 네 글자여야 한다" % who)
+		if not MOD_AXES.has(r.get("axis", "")):
+			_errs.append("%s — 모르는 축 '%s'" % [who, r.get("axis", "")])
+		if _i(r, "cost", "mods") <= 0:
+			_errs.append("%s — 가격이 0 이하다" % who)
+		# 링 폭 주고받기는 합이 0 이어야 한다. 아니면 판값이 조용히 오른다.
+		if r.get("axis", "") == "band":
+			var sum := _f(r, "v0", "mods") + _f(r, "v1", "mods")
+			if absf(sum) > 0.0005:
+				_errs.append("%s — band 축은 v0+v1 이 0 이어야 한다 (지금 %.3f)" % [who, sum])
+		_v_desc(who, r.get("desc", ""), ["v0", "v1"])
+	# 배타는 대칭이어야 한다. 한쪽만 적으면 사는 순서에 따라 결과가 달라진다.
+	for r in raw:
+		var e: String = r.get("excl", "")
+		if e == "":
+			continue
+		if not seen.has(e):
+			_errs.append("mods:%d — excl 이 없는 id 를 가리킨다: '%s'" % [r.get("_line", 0), e])
+		elif seen[e].get("excl", "") != r.get("id"):
+			_errs.append("mods:%d — 배타가 한쪽만 있다: %s→%s 인데 반대가 없다"
+					% [r.get("_line", 0), r.get("id"), e])
+
+
+static func _v_darts() -> void:
+	var seen := {}
+	for r in _raw.get("darts", []):
+		var who := "darts:%d %s(%s)" % [r.get("_line", 0), r.get("name", ""), r.get("id", "")]
+		var id: String = r.get("id", "")
+		if seen.has(id):
+			_errs.append("%s — id 중복" % who)
+		seen[id] = true
+		if _f(r, "gauge", "darts") <= 0.0:
+			_errs.append("%s — 게이지 배율이 0 이하다" % who)
+		var mg := _f(r, "magnet", "darts")
+		if mg < 0.0 or mg >= 1.0:
+			_errs.append("%s — magnet 은 0 이상 1 미만이어야 한다 (지금 %s)" % [who, mg])
+		if _i(r, "cost", "darts") < 0:
+			_errs.append("%s — 가격이 음수다" % who)
+		_v_desc(who, r.get("desc", ""), ["gauge", "mult", "pierce_side", "magnet"])
+	# 첫 행은 기본 다트다. dart_of() 의 폴백이 여기에 걸려 있다.
+	var d: Array = _raw.get("darts", [])
+	if d.is_empty():
+		_errs.append("darts — 표가 비었다. 기본 다트가 없으면 탄창이 안 선다")
+	elif _i(d[0], "cost", "darts") != 0:
+		_warns.append("darts — 첫 행은 기본 다트라 가격이 0 이어야 한다")
+
+
+static func _v_modifiers() -> void:
+	var raw: Array = _raw.get("modifiers", [])
+	var axes := {}
+	for r in raw:
+		var who := "modifiers:%d %s(%s)" % [r.get("_line", 0), r.get("name", ""), r.get("id", "")]
+		var ax: String = r.get("axis", "")
+		if not MODIFIER_AXES.has(ax):
+			_errs.append("%s — 모르는 축 '%s'" % [who, ax])
+		axes[ax] = int(axes.get(ax, 0)) + 1
+		if _f(r, "weight", "modifiers") <= 0.0:
+			_errs.append("%s — weight 가 0 이하다" % who)
+		if ax == "sector_kill":
+			var v := _i(r, "v", "modifiers")
+			if v < 0 or v >= SECTORS_BASE.size():
+				_errs.append("%s — sector_kill 의 v 는 0~%d 인덱스여야 한다" % [who, SECTORS_BASE.size() - 1])
+		_v_desc(who, r.get("desc", ""), ["v"])
+	# 스테이지가 제약 둘을 뽑을 때 같은 축이 겹치면 하나가 조용히 묻힌다.
+	# 축이 행마다 하나뿐이면 그 위험은 없지만, 늘어나면 뽑기 쪽을 고쳐야 한다.
+	var reused := []
+	for a in axes:
+		if int(axes[a]) > 1:
+			reused.append(a)
+	if not reused.is_empty():
+		_warns.append("modifiers — 축을 둘 이상이 나눠 쓴다: %s. 제약 뽑기에서 축 중복을 막아야 한다" % [reused])
+
+
+static func _v_stages() -> void:
+	var raw: Array = _raw.get("stages", [])
+	if raw.is_empty():
+		_errs.append("stages — 표가 비었다")
+	var mods_avail: Array = _raw.get("modifiers", [])
+	var mn := mods_avail.size()
+	for r in raw:
+		var who := "stages:%d %s(%s)" % [r.get("_line", 0), r.get("name", ""), r.get("id", "")]
+		var n := _i(r, "mods_n", "stages")
+		if n < 0 or n > mn:
+			_errs.append("%s — 제약 %d개를 요구하는데 표에는 %d종뿐이다" % [who, n, mn])
+		if _f(r, "target_mul", "stages") <= 0.0:
+			_errs.append("%s — target_mul 이 0 이하다" % who)
+		_v_desc(who, r.get("sub", ""), ["mods_n", "target_mul"])
+
+
+static func _v_rounds() -> void:
+	var raw: Array = _raw.get("rounds", [])
+	if raw.is_empty():
+		_errs.append("rounds — 표가 비었다")
+		return
+	var prev := 0
+	for i in raw.size():
+		var r: Dictionary = raw[i]
+		var who := "rounds:%d" % r.get("_line", 0)
+		if _i(r, "round_no", "rounds") != i + 1:
+			_errs.append("%s — round_no 는 1부터 빠짐없이 이어져야 한다" % who)
+		var t := _i(r, "target", "rounds")
+		if t <= prev:
+			_errs.append("%s — 목표가 안 오른다 (%d → %d)" % [who, prev, t])
+		prev = t
+		if _i(r, "darts", "rounds") <= 0:
+			_errs.append("%s — 다트가 0 이하다" % who)
+		var last := i == raw.size() - 1
+		var si := String(r.get("shop_items", "")) + String(r.get("shop_mods", "")) + String(r.get("shop_darts", ""))
+		if last:
+			# 마지막 라운드 뒤에는 상점이 없다. 칸이 차 있으면 안 열리는
+			# 상점의 폭을 적어 둔 것이라 다음 사람이 거짓 전제를 읽는다.
+			if si != "":
+				_errs.append("%s — 마지막 라운드의 상점 칸은 비어야 한다" % who)
+		else:
+			var w := _i(r, "shop_items", "rounds") + _i(r, "shop_mods", "rounds") \
+					+ _i(r, "shop_darts", "rounds")
+			# 매대 자리는 정확히 넷이다(game.gd _table_draw 의 ax/ay).
+			if w != 4:
+				_errs.append("%s — 매대 폭 합이 %d 다. 자리는 정확히 4개여야 한다" % [who, w])
+
+
+static func _v_cross() -> void:
+	# 해금 라운드가 상점보다 뒤면 그 칩은 영영 안 뜬다. 상점은 라운드 N 을
+	# 클리어한 뒤 N+1 을 위해 열리므로 볼 수 있는 최소 라운드는 2 다.
+	var n := rows("rounds").size()
+	for r in _raw.get("items", []):
+		if String(r.get("min_round", "")) == "":
+			continue
+		var mr := _i(r, "min_round", "items")
+		if mr < 2 or mr > n:
+			_errs.append("items:%d — min_round %d 는 2~%d 여야 한다 (R1 앞에는 상점이 없다)"
+					% [r.get("_line", 0), mr, n])
+	for r in _raw.get("rarity", []):
+		var mr2 := _i(r, "min_round", "rarity", 1)
+		if mr2 < 2 or mr2 > n:
+			_errs.append("rarity:%d — min_round %d 는 2~%d 여야 한다" % [r.get("_line", 0), mr2, n])
+	for r in _raw.get("modifiers", []):
+		var mr3 := _i(r, "min_round", "modifiers", 1)
+		if mr3 < 1 or mr3 > n:
+			_errs.append("modifiers:%d — min_round %d 는 1~%d 여야 한다" % [r.get("_line", 0), mr3, n])
+	# 매대가 마르면 리롤이 같은 물건을 다시 뱉는다. 라운드마다 후보 수가
+	# 매대 폭보다 넉넉한지 센다 — 소유 칩이 후보에서 빠지므로 여유를 둔다.
+	var need := 0
+	for r in rows("rounds"):
+		need = maxi(need, _i(r, "shop_items", "rounds"))
+	need += tune_i("max_items")
+	for rd in range(2, n + 1):
+		var cnt := 0
+		for it in items():
+			if item_min_round(it) <= rd:
+				cnt += 1
+		if cnt < need:
+			_warns.append("items — R%d 에 뜰 수 있는 칩이 %d장뿐이다. 매대 %d칸 + 슬롯을 채우면 마른다"
+					% [rd, cnt, need])
+	# 등장 가중치가 세 등급 모두 0 인 칩은 표에 있으나 게임에 없다.
+	for it in items():
+		var s := 0.0
+		for tier in ["plain", "hard", "brutal"]:
+			s += item_weight(it, tier)
+		if s <= 0.0:
+			_errs.append("items — %s(%s) 는 어느 등급에서도 안 뜬다" % [it.n, it.id])
+
+
+# desc 의 중괄호가 실제 열 이름과 안 맞으면 화면에 중괄호가 그대로 나간다.
+static func _v_desc(who: String, tpl: String, allowed: Array) -> void:
+	var i := 0
+	while true:
+		var a := tpl.find("{", i)
+		if a < 0:
+			break
+		var b := tpl.find("}", a)
+		if b < 0:
+			_errs.append("%s — desc 의 중괄호가 안 닫혔다" % who)
+			break
+		var key := tpl.substr(a + 1, b - a - 1)
+		if key.ends_with(":+"):
+			key = key.substr(0, key.length() - 2)
+		if not allowed.has(key):
+			_errs.append("%s — desc 에 없는 열을 쓴다: {%s}. 쓸 수 있는 것은 %s" % [who, key, allowed])
+		i = b + 1
