@@ -14,4 +14,5 @@
 
 # 고닷이 CSV 에서 뽑아내는 부산물
 *.translation
-shot_*.png
+# 스크린샷 — scripts/tools/shot.gd 가 떨구는 검증용 결과물
+/shots/*.png

@@ -4,6 +4,9 @@ extends SceneTree
 # 오토플레이가 통과한 프레임이 실제로 어떻게 보이는지는 눈으로만 알 수 있다.
 # 헤드리스로는 못 돈다 — 렌더러가 있어야 뷰포트가 그려진다.
 #
+# shots/ 에 떨군다. 거기 .gdignore 가 있어서 고닷이 이 png 들을 텍스처로
+# 가져가지 않는다 — 안 그러면 스크린샷마다 .import 짝이 생겨 저장소에 쌓인다.
+#
 # 쓸기는 시간이 있는 연출이라 한 장으로는 판단이 안 된다. 게임의 _process 를
 # 끄고 물리를 손으로 감아 여섯 시점을 박제한다. 안 끄면 await 하는 동안
 # 게임 시계가 같이 흘러 타임라인이 두 배로 간다 (한 번 당했다).
@@ -35,7 +38,8 @@ func _process(_d: float) -> bool:
 		_save("shot_shop.png")
 	if frames == 55:
 		g._open_stage()
-	if frames == 110:
+	# 카드 딜링이 끝날 때까지 기다린다. 55프레임으로는 셋째 장이 아직 난다.
+	if frames == 190:
 		_save("shot_stage.png")
 		busy = true
 		_sweep_shots()
@@ -46,6 +50,12 @@ func _process(_d: float) -> bool:
 # 반영돼야 하므로 sweep_t 만 옮기고 그리는 것으로는 부족하다.
 func _sweep_shots() -> void:
 	g.set_process(false)
+	# 스테이지에서 넘어왔으므로 그때 잡힌 툴팁이 굳어 있다. 게임에서는
+	# _tip_update 가 매 프레임 다시 판정해 저절로 풀리는데 여기서는 _process
+	# 를 꺼 놨으니 손으로 지운다 — 안 지우면 상점 화면에 스테이지 카드
+	# 테두리가 남아 없는 버그를 보고하게 된다.
+	g._tip_clear()
+	g.tip_a = 0.0
 	g.state = g.S.SHOP
 	g.gold = 24
 	g._open_shop()
@@ -77,5 +87,5 @@ func _sweep_shots() -> void:
 
 func _save(name: String) -> void:
 	var img := root.get_texture().get_image()
-	img.save_png("res://" + name)
+	img.save_png("res://shots/" + name)
 	print("저장: ", name, "  ", img.get_width(), "x", img.get_height())
