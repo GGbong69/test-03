@@ -80,8 +80,7 @@ const LAY := {
 	# 자금판은 플레이 중 34 높이. 이자/마지막판 줄이 필요한 상점·스테이지에서만
 	# _bank_draw 가 46 으로 늘린다. 늘 46 이면 탄창 헤더가 판 안으로 들어간다.
 	"bank":       Rect2(4.0, 20.0, 72.0, 34.0),
-	# 판매판은 이제 스테이지 화면에만 쓴다. 상점에서는 왼쪽 창구가 대신한다.
-	"sell":       Rect2(80.0, 20.0, 74.0, 46.0),
+	# 옛 판매판 자리(x[80,154])는 소비 아이템 칸(_cons_rect)이 쓴다.
 	"cap":        Rect2(436.0, 20.0, 37.0, 32.0),
 }
 
@@ -147,6 +146,7 @@ var owned := []
 var won := false
 
 var last_sector := -1
+var last_miss := false          # 직전 투척이 빗나갔는가 — 조건 missp 가 읽는다
 var streak := 0
 var dart_index := 0
 var round_miss := false
@@ -256,6 +256,8 @@ func _new_run() -> void:
 	for i in GameData.tune_i("darts_base"):
 		magazine.append(GameData.darts()[0])
 	owned.clear()
+	cons.clear()
+	track_lv.clear()
 	won = false
 	_open_stage()
 
@@ -279,6 +281,14 @@ func _start_round() -> void:
 		rt_dbl_in = dbl_out - (dbl_out - dbl_in) * bw
 
 	remaining = magazine.duplicate()
+	# 이번 라운드의 기본 다트 수는 rounds.csv 의 darts 열이 정한다.
+	# tuning.csv 비고가 오래전부터 그렇게 적혀 있었는데 코드가 안 읽고
+	# 있었다 — 표가 거짓말을 하던 자리다. 탄창보다 많으면 순환해서 채운다.
+	var want := GameData.darts_of(round_no)
+	while remaining.size() > want and remaining.size() > 1:
+		remaining.pop_back()
+	while remaining.size() < want and not magazine.is_empty():
+		remaining.append(magazine[remaining.size() % magazine.size()])
 	var dadd := int(mod_v("darts_add", 0.0))
 	while dadd < 0 and remaining.size() > 1:
 		remaining.pop_back()
@@ -306,6 +316,7 @@ func _start_round() -> void:
 	dart_index = 0
 	streak = 0
 	last_sector = -1
+	last_miss = false     # 직전 칸과 같은 규칙 — 라운드가 바뀌면 "직전" 이 없다
 	cur_chip = 0
 	cur_mult = 0
 	darts.clear()
@@ -512,6 +523,19 @@ func _roll_stock() -> void:
 		var dd: Dictionary = darts_pool[i]
 		stock.append({"type": "dart", "d": dd, "cost": dd.cost, "sold": false})
 
+	# 소비 아이템 — 상점 구성이 미정(기획 메모 990006)이라 임시 규칙로 낸다:
+	# shop_cons 가 켜져 있으면 칩 자리 하나를 소비 아이템으로 바꾼다.
+	# 자리 수 4는 안 변한다 — _table_draw 의 ax/ay 전제가 사는 이유다.
+	if GameData.tune_i("shop_cons") == 1:
+		var cp := GameData.consumables()
+		if not cp.is_empty():
+			for k in stock.size():
+				if stock[k].type == "item":
+					var cd: Dictionary = cp[randi() % cp.size()]
+					stock[k] = {"type": "cons", "d": cd, "cost": cd.cost,
+							"sold": false}
+					break
+
 	# 딜러가 판을 쓸고 다시 던진다. 리롤이 배치를 안 바꾸면 낙하가 배치를
 	# 결정한다는 전제 자체가 거짓말이 된다.
 	_drop_roll()
@@ -545,6 +569,8 @@ func _buy_block(i: int) -> String:
 		return "칩 랙이 꽉 찼다 (%d/%d)" % [owned.size(), GameData.max_items()]
 	if s.type == "dart" and _std_slot() < 0:
 		return "바꿀 표준 다트가 없다"
+	if s.type == "cons" and cons.size() >= GameData.cons_slots():
+		return "소비 아이템 칸이 꽉 찼다 (%d/%d)" % [cons.size(), GameData.cons_slots()]
 	return ""
 
 
@@ -563,6 +589,10 @@ func _buy(i: int) -> void:
 			_apply_mod(s.d.id)
 		"dart":
 			magazine[_std_slot()] = s.d
+		"cons":
+			# 칸으로 들어간다. 상점 즉시 사용은 칸에서 바로 누르면 되므로
+			# 별도 경로가 없다 — 확인 버튼을 만들지 않는 규칙과도 맞는다.
+			cons.append(s.d)
 	beep_seq([523.0, 659.0], 0.07, 0.11, 0.20)
 
 
@@ -781,7 +811,12 @@ func _open_stage() -> void:
 		if md.is_empty():
 			break
 		left.erase(md)               # 같은 카드가 두 장 깔리지 않는다
-		stage_pick.append({"d": md, "target": base})
+		# "높은 목표"(스펙 700001 · 확정)는 목표 자체를 올린다. 카드에 오른
+		# 목표가 곧 그 라운드의 목표다 — 화면과 판정이 같은 수를 읽는다.
+		var tgt := base
+		if String(md.k) == "target_mul":
+			tgt = int(ceil(float(base) * float(md.v)))
+		stage_pick.append({"d": md, "target": tgt})
 	state = S.STAGE
 	beep_seq([392.0, 494.0], 0.09, 0.14, 0.18)
 
@@ -1062,14 +1097,13 @@ func _click(m: Vector2) -> void:
 					_pick_dart(i)
 					return
 		S.AIM_V, S.AIM_H:
-			# 조준 중에도 벽의 다른 자루로 갈아탈 수 있다. 벽을 먼저 보고,
-			# 아무 자루도 안 눌렸을 때만 게이지를 잠근다.
-			for i in remaining.size():
-				if _mag_rect(i).has_point(m):
-					_pick_dart(i)
-					return
-			# 다트판 위에서만 잠긴다. 아무 데나 눌러도 되면 벽의 자루를 고르려다
-			# 빗나간 클릭이 그대로 조준이 되어, 무르지 못하는 실수가 생긴다.
+			# 조준이 시작되면 다트를 못 바꾼다 — 확정 규칙이다
+			# (조준중다트변경=False). 전에는 벽의 자루를 눌러 갈아탈 수
+			# 있었는데, 그러면 "이 자루로 던진다" 는 결정이 끝까지 결정이
+			# 아니게 된다. 고르는 자리는 PICK 하나다.
+			#
+			# 다트판 위에서만 잠긴다. 아무 데나 눌러도 되면 빗나간 클릭이
+			# 그대로 조준이 되어, 무르지 못하는 실수가 생긴다.
 			# 숫자 고리까지 포함해 R*1.22 로 넉넉히 잡는다.
 			# m.x < 0 은 키보드에서 온 것이다 — 좌표가 없으므로 통과시킨다.
 			if m.x < 0.0 or (m - BC).length() <= R * GameData.tune("aim_click_r"):
@@ -1133,12 +1167,21 @@ func _click(m: Vector2) -> void:
 func hit_info(p: Vector2) -> Dictionary:
 	var v := p - BC
 	var r := v.length()
+	# 기본점수·기본배수는 areas.csv(착탄 영역 · 전부 확정)가 정한다.
+	# 여기 있던 50/25/0 하드코딩이 그리로 갔다. 기하(반지름)는 판의 모양이라
+	# 개조가 주무르는 값이고, 영역의 값은 데이터다 — 소유가 다르다.
 	if r > R * rt_dbl_out:                                    # ← ① 판벌이
-		return {"base": 0, "mult": 0, "sector": -1, "idx": -1, "r0": 0.0, "r1": 0.0}
+		var ao := GameData.area("out")
+		return {"base": ao.base, "mult": 0, "sector": -1, "idx": -1,
+				"r0": 0.0, "r1": 0.0, "track": ao.track}
 	if r <= R * rt_bull_i:
-		return {"base": 50, "mult": 1, "sector": 50, "idx": -1, "r0": 0.0, "r1": R * rt_bull_i}
+		var bi := GameData.area("bull_i")
+		return {"base": bi.base, "mult": bi.mult, "sector": bi.base, "idx": -1,
+				"r0": 0.0, "r1": R * rt_bull_i, "track": bi.track}
 	if r <= R * rt_bull_o:
-		return {"base": 25, "mult": 1, "sector": 25, "idx": -1, "r0": 0.0, "r1": R * rt_bull_o}
+		var bo := GameData.area("bull_o")
+		return {"base": bo.base, "mult": bo.mult, "sector": bo.base, "idx": -1,
+				"r0": 0.0, "r1": R * rt_bull_o, "track": bo.track}
 
 	var ang := atan2(v.x, -v.y)
 	if ang < 0.0:
@@ -1146,15 +1189,18 @@ func hit_info(p: Vector2) -> Dictionary:
 	var idx := int(floor((ang + PI / 20.0) / (TAU / 20.0))) % 20
 	var val: int = sectors[idx]
 
-	var m := 1
+	var m: int = GameData.area("single").mult
+	var trk: int = GameData.area("single").track
 	var r0 := R * rt_bull_o
 	var r1 := R * rt_trp_in
 	if r >= R * rt_dbl_in:
-		m = 2
+		m = GameData.area("double").mult
+		trk = GameData.area("double").track
 		r0 = R * rt_dbl_in
 		r1 = R * rt_dbl_out                                   # ← ① 판벌이
 	elif r >= R * rt_trp_in and r <= R * rt_trp_out:
-		m = 3
+		m = GameData.area("triple").mult
+		trk = GameData.area("triple").track
 		r0 = R * rt_trp_in
 		r1 = R * rt_trp_out
 	elif r > R * rt_trp_out:
@@ -1165,7 +1211,8 @@ func hit_info(p: Vector2) -> Dictionary:
 		# "불 바깥 ~ 첫 트리플 안쪽" 하나뿐이고, 그건 지금까지 마지막 else 가
 		# r0/r1 만 채우고 지나가던 죽은 땅이다. 배수를 바꾸는 새 경로는 하나다.
 		if r >= R * rt_trp2_in and r <= R * rt_trp2_out:
-			m = 3
+			m = GameData.area("triple").mult
+			trk = GameData.area("triple").track
 			r0 = R * rt_trp2_in
 			r1 = R * rt_trp2_out
 		elif r < R * rt_trp2_in:
@@ -1173,7 +1220,8 @@ func hit_info(p: Vector2) -> Dictionary:
 		else:
 			r0 = R * rt_trp2_out
 
-	return {"base": val, "mult": m, "sector": val, "idx": idx, "r0": r0, "r1": r1}
+	return {"base": val, "mult": m, "sector": val, "idx": idx, "r0": r0, "r1": r1,
+			"track": trk}
 
 # 반환값의 치역이 안 변한다:  mult ∈ {0,1,2,3}   sector ∈ {-1} ∪ [1,20] ∪ {25,50}
 # 그래서 data.gd 의 check() 와 cond_text() 는 한 글자도 안 고친다.
@@ -1272,6 +1320,18 @@ func _land() -> void:
 			var r: int = sectors[(info.idx + 1) % 20]
 			pierce_gain = int((l + r) * 0.5)
 
+	# 영역 강화 — 소비 아이템이 올린 트랙 레벨. 레벨별 수치 행이 전부
+	# 미정이라 track_bonus 는 지금 0 을 돌려준다 — 자리만 세워 둔 훅이다.
+	# 다트 보정 뒤에 얹는 순서는 임시다(공식 내 위치 미정 · 기획 메모 990008).
+	# 빗나감(보드 아웃)의 점수는 정산 큐가 0 을 직접 넣으므로, 보드 아웃
+	# 강화가 확정되면 그쪽 줄부터 고쳐야 한다.
+	var tlv := int(track_lv.get(int(info.get("track", 0)), 0))
+	if tlv > 0:
+		var tb := GameData.track_bonus(int(info.track), tlv)
+		info.base += int(tb.s)
+		if info.mult > 0:
+			info.mult += int(tb.m)
+
 	# 꽂힌 자루마다 살짝 다른 각. 한 번 정하고 저장하므로 프레임 간 안 흔들린다.
 	darts.append({"p": aim, "id": String(cur_dart.get("id", "std")),
 			"rot": randf_range(-0.26, 0.26)})
@@ -1290,6 +1350,7 @@ func _land() -> void:
 		"sector": info.sector,
 		"mult": info.mult,
 		"miss": info.mult == 0,
+		"missp": last_miss,
 		"left": aim.x < BC.x,
 		"same": same,
 		"first": dart_index == 0,
@@ -1337,6 +1398,7 @@ func _land() -> void:
 		queue.append({"k": "total"})
 
 	last_sector = info.sector
+	last_miss = info.mult == 0
 	# ctx 를 만든 뒤여야 한다 — 불을 붙인 그 다트에는 손맛이 안 뜬다.
 	# 그게 삼중고(트리플 위에)와 손맛(트리플 뒤에)이 갈리는 지점이다.
 	if info.mult == 3:
@@ -1609,6 +1671,7 @@ func _hud_draw() -> void:
 		_draw_topbar()
 	if state != S.CLEAR:            # 정산 화면은 그 자체가 명세다
 		_bank_draw()
+		_cons_draw()
 		_panel_draw()
 		_cap_draw()
 		if _is_play():
@@ -2094,6 +2157,12 @@ func _icon_cond(c: Vector2, r: float, cond: String, col: Color) -> void:
 			for k in [-1.0, 1.0]:
 				draw_line(c + Vector2(-u * 0.75, k * u * 0.75),
 						c + Vector2(u * 0.75, -k * u * 0.75), col, 1.4)
+		"missp":
+			# 빗나감이 이어졌다 — 작은 X 둘이 나란히 선다
+			for dx in [-0.52, 0.52]:
+				for k in [-1.0, 1.0]:
+					draw_line(c + Vector2((dx - 0.38) * u, k * u * 0.62),
+							c + Vector2((dx + 0.38) * u, -k * u * 0.62), col, 1.2)
 		"band":
 			# 랙 r=15 → r_icon 6.30 → u 3.906. 두 호의 중심 간격 2.227px,
 			# 굵기 1.0 을 빼면 배경이 1.23px 남는다 — 1배에서 두 겹으로 갈린다.
@@ -2131,6 +2200,11 @@ func draw_item_chip(c: Vector2, r: float, it: Dictionary, rot: float, lift: floa
 	var ti := _chip_ti(it.cost)
 	draw_chip(c, r, CHIP_TIERS[ti], CHIP_SPOTS[ti], rot, lift,
 			it.get("g", "") != "", dim)
+	# 등급 고리. 색은 rarity.csv 가 정한다 — 정의만 있고 아무도 안 부르던
+	# rarity_color() 가 이 한 줄로 산다. 흔함은 안 그린다(고리가 곧 "귀하다").
+	if String(it.get("rarity", "common")) != "common":
+		draw_arc(c, r - 3.0, 0.0, TAU, 24,
+				Color(GameData.rarity_color(String(it.rarity)), 1.0 - dim), 1.0)
 	# 얼굴을 위아래로 가른다 — 위는 조건(언제 터지는가), 아래는 값(얼마나).
 	# 값만 있으면 조건이 정반대인 짝이 똑같이 보인다.
 	var ink: Color = C_CHIP.lightened(0.5) if it.k == "chip" else C_MULT.lightened(0.45)
@@ -2278,13 +2352,12 @@ func _panel_slot(i: int) -> void:
 # ══════════════════════════════════════════════════════════
 #  판매 (칩 랙 → 골드)
 # ──────────────────────────────────────────────────────────
-#  바깥과 닿는 곳은 넷뿐이다.
-#    _sell_hit(m)   랙·판매판 클릭 판정   (_click 의 S.SHOP / S.STAGE)
-#    _sell_draw()   판매판 그리기         (_hud_draw)
+#  바깥과 닿는 곳은 셋뿐이다.
+#    _sell_hit(m)   랙 클릭 판정          (_click 의 S.SHOP)
 #    _can_sell()    지금 팔 수 있는가      (_panel_slot / _tip_build / _process)
 #    sell_sel       고른 칸 (-1 = 없음)
 #
-#  두 번 눌러야 팔린다. 첫 클릭은 칩(랙 안), 두 번째는 판매판(x[80,154])이다.
+#  두 번 눌러야 팔린다. 첫 클릭은 칩(랙 안), 두 번째는 왼쪽 창구다.
 #  두 표적이 물리적으로 갈려 있어 더블클릭이 판매로 흘러들 수 없다 —
 #  같은 자리를 두 번 누르는 방식이었다면 필요했을 타이머가 여기선 필요 없다.
 #  판매판이 자금 판 바로 옆인 것도 의도다. 파는 건 물건 옆이 아니라 지갑 옆이다.
@@ -2309,12 +2382,10 @@ func _can_sell() -> bool:
 func _sell_hit(m: Vector2) -> bool:
 	# 랙 y[44,76] 은 매대 y[104,236] · 스테이지 카드 y[112,264] 와 y 로 갈려
 	# 있어 먼저 검사해도 그쪽 클릭을 훔칠 수 없다.
+	# (판매판 분기가 여기 있었다 — _can_sell 이 SHOP 전용이 되면서 영원히
+	#  못 닿는 가지가 됐고, 그리는 쪽 _sell_draw 도 호출이 0이었다. 걷어냈다.)
 	if not _can_sell():
 		return false
-	if state != S.SHOP and sell_sel >= 0 and sell_sel < owned.size() \
-			and LAY.sell.has_point(m):
-		_sell(sell_sel)
-		return true
 	for i in GameData.max_items():
 		if _slot_rect(i).has_point(m):
 			sell_sel = -1 if (sell_sel == i or i >= owned.size()) else i
@@ -2345,20 +2416,62 @@ func _sell(i: int) -> void:
 	beep_seq([659.0, 880.0], 0.06, 0.09, 0.18)
 
 
-func _sell_draw() -> void:
-	var r: Rect2 = LAY.sell
-	var live: bool = sell_sel >= 0 and sell_sel < owned.size()
-	draw_rect(r, C_PANEL.lightened(0.10) if live else C_PANEL)
-	draw_rect(Rect2(r.position, Vector2(r.size.x, 2.0)),
-			C_ACC if live else C_WIRE.darkened(0.35))
-	if not live:
-		draw_string(font, r.position + Vector2(0.0, 21.0), "판매",
-				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 10, C_DIM.darkened(0.1))
+# ══════════════════════════════════════════════════════════
+#  소비 아이템 — 사서 쟁여 뒀다가 한 번 쓰고 사라지는 것
+# ──────────────────────────────────────────────────────────
+#  확정 규칙: 칸 2 · 상점 즉시 사용 가능 · 보관 가능 · 라운드 중 사용 가능 ·
+#  사용 확정은 누르고 뗄 때 · 확인 버튼과 비교 팝업은 만들지 않는다.
+#  칸 두 개는 옛 판매판이 쓰던 자리(자금판 오른쪽)에 선다.
+#
+#  영역 강화형은 대상이 트랙 하나로 정해져 있어 "대상 클릭" 이 곧 사용이다.
+#  가공형(제안)은 대상을 골라야 하므로 흐름이 다르다 — 데이터만 실려 있고
+#  사용은 아직 막혀 있다.
+# ══════════════════════════════════════════════════════════
+
+var cons := []                  # 보유 소비 아이템 (최대 cons_slots)
+var track_lv := {}              # 영역 강화 트랙 레벨 {트랙ID: int}
+
+
+func _cons_rect(i: int) -> Rect2:
+	return Rect2(80.0 + float(i) * 27.0, 21.0, 24.0, 24.0)
+
+
+func _cons_hit(m: Vector2) -> int:
+	for i in cons.size():
+		if _cons_rect(i).has_point(m):
+			return i
+	return -1
+
+
+func _cons_use(i: int) -> void:
+	if i < 0 or i >= cons.size():
 		return
-	draw_string(font, r.position + Vector2(0.0, 21.0), "팔기",
-			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 13, C_TXT)
-	draw_gold(r.get_center().x, r.position.y + 38.0,
-			"+%d" % GameData.sell_value(owned[sell_sel]), 11, C_GOLD)
+	var c: Dictionary = cons[i]
+	if c.cat != "area":
+		# 가공형은 대상 선택 흐름이 아직 없다 — 데이터 스캐폴드 단계다
+		pay_msg = "가공은 아직 준비 중이다"
+		pay_msg_t = HAND.msg_t
+		_deny()
+		return
+	track_lv[c.track] = int(track_lv.get(c.track, 0)) + 1
+	var at := _cons_rect(i).get_center()
+	cons.remove_at(i)
+	pop(at + Vector2(0.0, 26.0), "%s  Lv%d" % [c.n, track_lv[c.track]],
+			C_ACC, 10, 0.9)
+	beep_seq([523.0, 659.0], 0.06, 0.10, 0.18)
+
+
+func _cons_draw() -> void:
+	for i in GameData.cons_slots():
+		var r := _cons_rect(i)
+		var live: bool = i < cons.size()
+		draw_rect(r, C_PANEL.lightened(0.08) if live else C_PANEL.darkened(0.15))
+		draw_rect(r, C_WIRE.darkened(0.15) if live else C_WIRE.darkened(0.45),
+				false, 1.0)
+		if live:
+			draw_string(font, r.position + Vector2(0.0, 15.0),
+					String(cons[i].n).substr(0, 2), HORIZONTAL_ALIGNMENT_CENTER,
+					r.size.x, 9, C_TXT)
 
 
 # ══════════════════════════════════════════════════════════
@@ -3667,6 +3780,18 @@ func _obj_paint(it: Dictionary, s: Dictionary, dim: float) -> void:
 	match s.type:
 		"item":
 			_chip_flat(c, s.d, it.psi, dim, it.wob)
+		"cons":
+			# 소비 아이템 — 작은 사각 꾸러미. 개조(캐비닛)보다 작고 칩(원반)과
+			# 형태가 갈린다. 아트 방향이 미정이라 실루엣만 세워 둔다.
+			var ce := Vector2(11.0, 11.0 * TBL.flat)
+			var body: Color = C_PANEL.lightened(0.22 - dim * 0.2)
+			draw_colored_polygon(PackedVector2Array([
+					c + Vector2(-ce.x, -ce.y), c + Vector2(ce.x, -ce.y),
+					c + Vector2(ce.x, ce.y), c + Vector2(-ce.x, ce.y)]), body)
+			draw_rect(Rect2(c - ce, ce * 2.0), C_WIRE.darkened(0.2), false, 1.0)
+			draw_string(font, Vector2(c.x - ce.x, c.y + 3.5),
+					String(s.d.n).substr(0, 2), HORIZONTAL_ALIGNMENT_CENTER,
+					ce.x * 2.0, 8, Color(C_TXT, 1.0 - dim))
 		"mod":
 			_icon_mod(c, TBL.mod_r, s.d.id, dim)
 		_:
@@ -4296,7 +4421,33 @@ func _g2w(y: float) -> float:
 func _hand_press(m: Vector2) -> bool:
 	if _autoplay:
 		return false                          # 좌표 입력은 오토플레이의 어휘가 아니다
-	if state != S.SHOP or _drop_busy():
+	# 소비 아이템 슬롯 — 상점과 PICK 에서 산다. 사용 확정은 뗄 때다.
+	if (state == S.SHOP and not sweep_live) or state == S.PICK:
+		var ci := _cons_hit(m)
+		if ci >= 0:
+			hand_st = H.ARMED
+			hand_src = 4
+			hand_i = ci
+			hand_p0 = m
+			hand_m = m
+			hand_far = 0.0
+			return true
+	if state != S.SHOP or sweep_live:
+		return false
+	# 창구 — 구매·판매 확정은 눌렀다 **뗄 때** 실행한다(확정 규칙:
+	# 아이템 구매와 사용은 마우스 버튼을 눌렀다 뗄 때). 창구 자리는 고정이라
+	# 낙하 중에도 잡는다. 끌고 나가면 취소다 — 버튼과 같은 문법이다.
+	# 오토플레이·프로브는 _click 을 직접 부르므로 그쪽 경로는 그대로 산다.
+	var cz := _chute_at(m, 0.0)
+	if cz >= 0:
+		hand_st = H.ARMED
+		hand_src = 2
+		hand_i = cz
+		hand_p0 = m
+		hand_m = m
+		hand_far = 0.0
+		return true
+	if _drop_busy():
 		return false
 	if _reroll_rect().has_point(m) or _next_rect().has_point(m):
 		return false
@@ -4336,7 +4487,10 @@ func _hand_motion(m: Vector2) -> void:
 		# → 탭 판정이라는 경로를 원천 차단한다.
 		hand_far = maxf(hand_far, m.distance_to(hand_p0))
 		if hand_far > HAND.slip:
-			_hand_take()
+			if hand_src >= 2:
+				_hand_abort()     # 창구·소비 슬롯은 버튼이다. 끌면 취소다
+			else:
+				_hand_take()
 
 
 func _hand_take() -> void:
@@ -4380,14 +4534,22 @@ func _hand_release(m: Vector2) -> void:
 	hand_far = 0.0
 	hand_zone = -1
 	hand_src = 0
-	if not was_carry:                         # 안 움직였다 = 탭 = 고르기
-		if src == 1:
+	if not was_carry:                         # 안 움직였다 = 탭
+		if src == 2:
+			# 창구 확정 — 뗄 때도 같은 창구 안이어야 한다. 눌러 놓고 밖에서
+			# 떼면 취소다. 버튼의 문법 그대로다.
+			if _chute_at(m, 0.0) == i:
+				_chute_click(i)
+		elif src == 4:
+			if _cons_hit(m) == i:
+				_cons_use(i)
+		elif src == 1:
 			_rack_tap(i)
 		else:
 			_shop_tap(i)
 		return
 
-	# 랙 칩 — 왼쪽 창구만 받는다.
+	# 랙 칩 — 왼쪽 창구는 판매, 다른 랙 칸 위는 순서 바꾸기.
 	if src == 1:
 		if z == Z_SELL and _can_sell() and i >= 0 and i < owned.size():
 			_sell(i)
@@ -4396,7 +4558,15 @@ func _hand_release(m: Vector2) -> void:
 			pay_msg_t = HAND.msg_t
 			_deny()
 		else:
-			beep(147.0, 0.05, 0.07)           # 그냥 제자리로 돌아간다
+			# 아이템 순서 변경 — 확정 규칙이다(아이템순서변경=True). 발동이
+			# 랙 순서라 순서가 값을 바꾸는데, 지금까지 되팔고 다시 사는 것
+			# 말고는 고칠 길이 없었다. 정산 중에는 손 시스템 자체가 안 살아
+			# 있으므로 "득점 시작 시 순서 스냅샷" 계약과 안 부딪힌다.
+			var j := _slot_at(m)
+			if j >= 0 and i >= 0 and i < owned.size() and j != i:
+				_rack_reorder(i, j)
+			else:
+				beep(147.0, 0.05, 0.07)       # 그냥 제자리로 돌아간다
 		return
 
 	if i < 0 or i >= drop.size():
@@ -4580,6 +4750,33 @@ func _rack_tap(i: int) -> void:
 	beep(349.0 if sell_sel >= 0 else 262.0, 0.05, 0.10)
 
 
+# 커서가 랙의 몇째 칸 위인가. 빈 칸도 자리로 친다 — 맨 뒤로 보내는 드롭이다.
+func _slot_at(m: Vector2) -> int:
+	for k in GameData.max_items():
+		if _slot_rect(k).has_point(m):
+			return k
+	return -1
+
+
+# 랙 순서 바꾸기. i 를 뽑아 j 자리에 끼운다 — 자리를 서로 맞바꾸는 것이
+# 아니라 끼워 넣기다. 발동 순서가 곧 랙 순서이므로 이 함수가 사실상
+# "정산식 편집기"다. 봉인은 칩이 아니라 자리에 걸리는 게 아니라 칩에
+# 걸리므로, 같은 칩을 따라가게 한다.
+func _rack_reorder(i: int, j: int) -> void:
+	j = mini(j, owned.size() - 1)
+	var sealed_it: Dictionary = owned[sealed] if sealed >= 0 and sealed < owned.size() else {}
+	var it: Dictionary = owned.pop_at(i)
+	owned.insert(j, it)
+	if not sealed_it.is_empty():
+		sealed = owned.find(sealed_it)
+	sell_sel = -1
+	# slot_pop/vel/hot 은 인덱스를 공유한다. 하나만 지우면 크기가 어긋나
+	# _panel_update 가 넘어진다 — _sell 과 같은 이유, 같은 처방이다.
+	_panel_reset()
+	beep(392.0, 0.05, 0.10)
+	pop(_slot_rect(j).get_center() + Vector2(0.0, 22.0), "순서 변경", C_TXT, 9, 0.8)
+
+
 # 창구를 눌렀을 때. 방향이 무엇을 뜻하는지는 여기서도 같다.
 func _chute_click(z: int) -> void:
 	if z == Z_SELL:
@@ -4622,7 +4819,7 @@ func _pay_take(i: int) -> void:
 
 
 # ══ 그리기 ════════════════════════════════════════════
-# 버튼(_btn)이 아니라 판(_sell_draw)의 어법이다 — 누르는 것이 아니라 놓는 자리다.
+# 버튼(_btn)이 아니라 판의 어법이다 — 누르는 것이 아니라 놓는 자리다.
 # 손에 든 것 하나만 따로, 앞치마·버튼 다음에 그린다. _goods_draw 는 창구보다
 # 먼저 나가므로 창구까지 밀어 넣은 물건이 거기서는 덮인다.
 func _hold_draw() -> void:
@@ -4802,6 +4999,10 @@ func _tip_build(hit: Dictionary) -> void:
 						C_CHIP.lightened(0.35) if s.d.k == "chip" else C_MULT.lightened(0.3))
 				if s.d.get("g", "") != "":
 					_tip_add(GameData.gold_text(s.d.g, s.d.gv), 9, C_GOLD)
+			elif s.type == "cons":
+				_tip_add(s.d.d, 10, C_DIM)
+				_tip_add("한 번 쓰고 사라진다 — 사면 왼쪽 위 칸에 들어간다",
+						9, C_DIM.darkened(0.2))
 			else:
 				_tip_add(s.d.d, 10, C_DIM)
 				_tip_add("보드를 바꾼다 — 런이 끝날 때까지 남는다" if s.type == "mod"
@@ -4823,6 +5024,10 @@ func _tip_build(hit: Dictionary) -> void:
 			tip_title = dd.n
 			_tip_add(dd.d, 10, C_DIM)
 			_tip_add("게이지 ×%.2f" % dd.gauge, 9, C_DIM.darkened(0.2))
+			if int(dd.get("mult", 0)) != 0:
+				_tip_add("배수 %+d" % int(dd.mult), 9, C_MULT.lightened(0.25))
+			if dd.get("fix1", false):
+				_tip_add("배수를 1로 고정", 9, C_MULT.lightened(0.25))
 
 
 func _tip_size() -> Vector2:
@@ -5141,6 +5346,9 @@ func _draw_hint() -> void:
 				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 12, C_ACC)
 
 	# 손 부채가 하단 좌측을 쓰므로 오른쪽으로 비킨다.
-	draw_string(font, Vector2(VIEW.x - 262.0, 356), "[ ] 조준 %.2f    - = 정산 %.2f    ; ' 확인텀 %.2f"
-			% [gauge_speed, beat, confirm_hold], HORIZONTAL_ALIGNMENT_LEFT, -1, 9,
-			C_DIM.darkened(0.25))
+	# 조절 값 표시는 개발 빌드 전용이다 — 내보낸 exe 와 문서용 스크린샷에
+	# 이 줄이 찍혀 나가는 것을 한 번 겪었다. 조절 키 자체는 릴리즈에도 산다.
+	if OS.is_debug_build():
+		draw_string(font, Vector2(VIEW.x - 262.0, 356), "[ ] 조준 %.2f    - = 정산 %.2f    ; ' 확인텀 %.2f"
+				% [gauge_speed, beat, confirm_hold], HORIZONTAL_ALIGNMENT_LEFT, -1, 9,
+				C_DIM.darkened(0.25))

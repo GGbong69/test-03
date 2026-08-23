@@ -51,6 +51,14 @@ const FILES := {
 	"modifiers": "modifiers.csv",
 	"rounds": "rounds.csv",
 	"tuning": "tuning.csv",
+	# ── HIGHTONE 스펙(2026-08-23 통합 컨텍스트)에서 온 표 ──
+	# areas 는 전부 확정이라 게임이 직접 읽는다. 나머지는 상태 열이 문이다 —
+	# 가안·제안·미정 행은 자리(스캐폴드)이고, 검증기가 집계만 한다.
+	"areas": "areas.csv",
+	"area_up": "area_upgrades.csv",
+	"cons": "consumables.csv",
+	"proc": "processing.csv",
+	"spec_map": "spec_map.csv",
 }
 
 # tuning.csv 가 반드시 가져야 하는 열쇠. 목록이 곧 계약이다 —
@@ -62,12 +70,13 @@ const TUNE_KEYS := [
 	"darts_base", "stage_picks",
 	"board_r", "aim_swing", "sector_max", "val_max_mul",
 	"gauge_speed", "resolve_beat", "confirm_hold", "fly_time", "aim_click_r",
+	"cons_slots", "shop_cons", "cons_price_tmp",
 ]
 
 const RARITIES := ["common", "uncommon", "rare"]
 const MOD_AXES := ["band", "slide", "ring", "bull", "out", "swap", "odd"]
 const MODIFIER_AXES := ["band_mul", "gauge_mul", "confirm_mul", "darts_add",
-		"sector_kill", "seal_items"]
+		"sector_kill", "seal_items", "target_mul"]
 
 static var _raw := {}                # 표 이름 → Array[Dictionary] (전부 문자열)
 static var _tune := {}               # key → int/float
@@ -283,6 +292,74 @@ static func rarity_name(rar: String) -> String:
 	return rar
 
 
+# ── 착탄 영역 (areas.csv · 전부 확정) ─────────────────────
+#  key 는 코드가 부르는 이름(single/double/triple/bull_o/bull_i/out)이고
+#  wb 는 스펙 워크북의 영역ID다. hit_info 가 매 판정마다 부르므로 캐시한다.
+static func area(key: String) -> Dictionary:
+	boot()
+	if not _cache.has("areas"):
+		var m := {}
+		for r in _raw.get("areas", []):
+			m[String(r.get("key", ""))] = {
+				"base": _i(r, "base", "areas", 0),
+				"mult": _i(r, "mult", "areas", 1),
+				"track": _i(r, "track", "areas", 0),
+			}
+		_cache["areas"] = m
+	var a: Dictionary = _cache["areas"]
+	if not a.has(key):
+		push_error("데이터 표: areas 에 '%s' 가 없다" % key)
+		return {"base": 0, "mult": 1, "track": 0}
+	return a[key]
+
+
+# ── 영역 강화 (area_upgrades.csv · 수치 전부 미정) ────────
+#  트랙의 1..lv 레벨 행을 합쳐 돌려준다. 지금은 모든 행의 수치 칸이 비어
+#  있으므로(미정) 0 이 나온다 — 자리만 세워 둔 표다.
+static func track_bonus(track: int, lv: int) -> Dictionary:
+	boot()
+	var out := {"s": 0, "m": 0}
+	for r in _raw.get("area_up", []):
+		if _i(r, "track", "area_up", 0) != track:
+			continue
+		if _i(r, "level", "area_up", 0) > lv:
+			continue
+		out.s += _i(r, "add_score", "area_up", 0)
+		out.m += _i(r, "add_mult", "area_up", 0)
+	return out
+
+
+# ── 소비 아이템 (consumables.csv · 전부 가안) ─────────────
+#  enabled 행만 산다. 가격 칸이 비면(미정) 임시가 cons_price_tmp 를 쓴다 —
+#  임시값은 tuning.csv 에 TODO 와 같이 있다. 스펙의 미정 가격을 데이터에서
+#  확정해 버리지 않기 위한 우회다.
+static func consumables() -> Array:
+	boot()
+	if _cache.has("cons"):
+		return _cache["cons"]
+	var out := []
+	for r in _raw.get("cons", []):
+		if not _b(r, "enabled", "cons"):
+			continue
+		var cost := _i(r, "cost", "cons", 0)
+		out.append({
+			"id": r.get("id", ""),
+			"n": r.get("name", ""),
+			"d": r.get("desc", ""),
+			"cat": r.get("cat", ""),
+			"track": _i(r, "track", "cons", 0),
+			"cost": cost if cost > 0 else tune_i("cons_price_tmp"),
+			"line": r.get("_line", 0),
+		})
+	_cache["cons"] = out
+	return out
+
+
+static func cons_slots() -> int:
+	return tune_i("cons_slots")
+
+
+
 # ── 보드 개조 ─────────────────────────────────────────────
 #  k = 효과 축. game.gd _mod_step 의 match 가 읽는 유일한 열쇠다.
 #    band   링 폭 주고받기  v = [트리플 증분, 더블 증분]   합이 0 이다
@@ -485,7 +562,7 @@ const VAL_W := {"bull_i": 50.0, "bull_o": 25.0, "trp": 3.0, "dbl": 2.0, "plain":
 
 const CONDS := ["always", "triple", "double", "band", "bull", "odd", "even", "left",
 		"right", "big", "mid", "small", "same", "diff", "first", "last",
-		"streak", "warm", "miss"]
+		"streak", "warm", "miss", "missp"]
 
 # 조건 포함관계. A 가 B 를 담으면 A 로 뜨는 다트는 B 로도 뜬다.
 # check() 를 고치면 여기도 같이 고친다 — 하위호환 검사의 유일한 근거다.
@@ -525,8 +602,11 @@ static func board_val_max() -> float:
 
 # ── 조건 판정 ─────────────────────────────────────────────
 static func check(c: String, x: Dictionary) -> bool:
+	# 빗나가면 명중 조건은 전부 죽는다. 예외는 빗나감을 읽는 두 술어뿐이다 —
+	# miss(이번이 빗나감)와 missp(직전이 빗나감). 스펙 확정 아이템 100003이
+	# "직전도 빗나갔다면 x2" 라서, 빗나간 발 위에서도 missp 는 살아야 한다.
 	if x.miss:
-		return c == "miss"
+		return c == "miss" or (c == "missp" and x.missp)
 	match c:
 		"always": return true
 		"triple": return x.mult == 3
@@ -547,6 +627,7 @@ static func check(c: String, x: Dictionary) -> bool:
 		"last": return x.last
 		"streak": return x.streak > 0
 		"warm": return x.warm
+		"missp": return x.missp
 	return false
 
 
@@ -571,6 +652,7 @@ static func cond_text(c: String) -> String:
 		"streak": return "연속 명중 1회마다"
 		"warm": return "이번 라운드에 트리플을 맞힌 뒤"
 		"miss": return "빗나가면"
+		"missp": return "직전 투척이 빗나갔다면"
 	return ""
 
 
@@ -638,6 +720,51 @@ static func _validate() -> void:
 	_v_modifiers()
 	_v_rounds()
 	_v_cross()
+	_v_spec()
+
+
+# 스펙 표 다섯 장의 무결성. 상태 열이 문이다 — 확정만 런타임이고,
+# 나머지는 자리다. 여기서는 참조가 실재하는지와 필수 칸만 본다.
+static func _v_spec() -> void:
+	var keys := {}
+	for r in _raw.get("areas", []):
+		var k: String = r.get("key", "")
+		if keys.has(k):
+			_errs.append("areas:%d — key 중복 '%s'" % [r.get("_line", 0), k])
+		keys[k] = true
+		if String(r.get("status", "")) != "확정":
+			_warns.append("areas:%d — 확정이 아닌 행이 런타임에 실린다" % r.get("_line", 0))
+	for need in ["single", "double", "triple", "bull_o", "bull_i", "out"]:
+		if not keys.has(need):
+			_errs.append("areas — 코드가 읽는 key '%s' 가 없다" % need)
+	var tracks := {}
+	for r in _raw.get("area_up", []):
+		tracks[_i(r, "track", "area_up", 0)] = true
+	for r in _raw.get("areas", []):
+		var t := _i(r, "track", "areas", 0)
+		if t > 0 and not tracks.has(t):
+			_errs.append("areas:%d — 강화 트랙 %d 가 area_upgrades 에 없다" % [r.get("_line", 0), t])
+	for r in _raw.get("cons", []):
+		if String(r.get("cat", "")) == "area" and not tracks.has(_i(r, "track", "cons", 0)):
+			_errs.append("cons:%d — 강화 트랙 %d 가 area_upgrades 에 없다" % [r.get("_line", 0), _i(r, "track", "cons", 0)])
+	# spec_map 의 game_id 는 실재해야 한다. 빈칸은 "자리만" 이라 넘어간다.
+	var ids := {}
+	for r in _raw.get("items", []):
+		ids[String(r.get("id", ""))] = true
+	for r in _raw.get("cons", []):
+		ids[String(r.get("id", ""))] = true
+	for r in _raw.get("darts", []):
+		ids[String(r.get("id", ""))] = true
+	for r in _raw.get("modifiers", []):
+		ids[String(r.get("id", ""))] = true
+	for r in _raw.get("proc", []):
+		ids[String(r.get("id", ""))] = true
+	for r in _raw.get("areas", []):
+		ids[String(r.get("key", ""))] = true
+	for r in _raw.get("spec_map", []):
+		var g: String = r.get("game_id", "")
+		if g != "" and not ids.has(g):
+			_errs.append("spec_map:%d — game_id '%s' 가 어느 표에도 없다" % [r.get("_line", 0), g])
 
 
 static func _v_tuning() -> void:

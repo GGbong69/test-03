@@ -62,6 +62,7 @@ func _initialize() -> void:
 
 	for r in ROUNDS:
 		var last_sec := -1
+		var last_miss := false
 		var streak := 0
 		var warm := false
 		var round_miss := false
@@ -87,6 +88,7 @@ func _initialize() -> void:
 				"last": d == per_round - 1,
 				"streak": streak,
 				"warm": warm,
+				"missp": last_miss,
 			}
 			var b: float = float(info.base)
 			var m: float = float(info.mult)
@@ -110,6 +112,7 @@ func _initialize() -> void:
 			if info.mult == 3:
 				warm = true
 			last_sec = info.sector
+			last_miss = is_miss
 		if not round_miss:
 			clean_rounds += 1
 			for i in n:

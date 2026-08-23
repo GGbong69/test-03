@@ -1,0 +1,7 @@
+﻿key,wb,name,status,calc,base,mult,track,_note
+single,600001,싱글,확정,sector,,1,610001,점수 = 보드 숫자
+double,600002,더블,확정,sector,,2,610002,
+triple,600003,트리플,확정,sector,,3,610003,
+bull_o,600004,아우터 불,확정,fixed,25,1,610004,이너 불과 강화 트랙 공유
+bull_i,600005,이너 불,확정,fixed,50,1,610004,
+out,600006,보드 아웃,확정,fixed,0,1,610005,기본 점수 0 유지. 내부 mult 0 은 빗나감 깃발이고 정산 큐가 배수 1 을 넣는다
