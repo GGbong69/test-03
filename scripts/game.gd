@@ -2894,22 +2894,29 @@ const NPC := {
 	# 더 센 것이 나왔다: 팔이 검사 칸 안에서 몸통과 **아예 다른 덩어리**가
 	# 된다. 실루엣을 단색으로 칠하면 셋으로 갈린다(몸통 · 팔 · 팔).
 	"el_l": Vector2(-94.0, -104.0), "wr_l": Vector2(-78.0, -2.0),
-	# 오른쪽 손목이 왼쪽보다 밖(104)·뒤(−14)인 것은 손이 143° 로 몸통을
-	# 향해 돌아오기 때문이다. u 88 에 두면 손끝이 몸통 위로 8px 올라타
-	# 팔과 몸이 한 덩어리로 붙고(실측), 그렇다고 각을 세우면 손끝 w 가
-	# 31 까지 나가 정착 물건 최상단(131.8)을 뚫는다. 통로가 그만큼 좁다.
-	"el_r": Vector2(96.0, -103.0), "wr_r": Vector2(104.0, -14.0),
+	# 오른쪽 손목 −6 은 왼쪽 −2 와 4w 차다 — 손이 거울짝이 된 뒤에도
+	# 정확히 같은 높이에 두지는 않는다(완전대칭은 옷걸이의 냄새다).
+	# u 88 에 두면 손끝이 몸통 위로 올라타 한 덩어리로 붙는다(실측).
+	"el_r": Vector2(96.0, -103.0), "wr_r": Vector2(104.0, -6.0),
+	# 쓸기 자세의 뿌리. 어깨는 랙 뒤(w −115 → 화면 y 21)에 못 박는다 —
+	# 옛 쓸기는 팔을 미는 선 그 자체로 그려서, 몸에 안 붙은 210px 장대가
+	# 화면을 가로질렀다. 이제 선은 도구(밀대)가 긋고 팔은 자루만 쥔다.
+	"sh_r": Vector2(62.0, -115.0),
+	"up_l": 88.0, "fo_l": 92.0,     # 위팔·아래팔 길이 (면px)
+	"reach": 145.0,                  # 어깨에서 손까지 최대 뻗음
 	# 팔꿈치 26 → 손목 13 → 너클 18. **손목이 전체 최소폭**이고 손이 거기서
 	# 1.66배로 되벌어진다. 이 계단이 관절이 있다는 유일한 표시다 —
 	# 옛 값은 팔꿈치도 9, 손목도 9, 손도 9 라 팔 하나가 통짜 막대였다.
 	"el_w": 13.0, "wr_w": 6.5,
 	"arm_t": 12.0, "hand_t": 9.0,
-	# 좌우가 다르다. 각도 17° 차 · 길이 12% 차 · 팔꿈치 u 2 / w 1 차.
-	# 둘 다 왼쪽을 가리키는 것은 일부러다 — 미러링은 둘이 서로 반대를
-	# 볼 때 생기고, 같은 쪽을 보면 그 순간 자세가 된다. 쓸기가 왼쪽으로
-	# 가므로 쉬는 자세가 그쪽을 미리 가리키는 것이기도 하다.
+	# 왼손(화면 오른쪽)은 오른손의 거울짝이다 — 다각형도 뒤집고 각도도
+	# 거울로 잡는다(거울각 20° + 비대칭용 4°). 각도만 두고 다각형만
+	# 뒤집으면 엄지가 화면 안쪽으로 넘어가 정사영에 눌리고, 다각형만
+	# 두고 각도만 세우면 손이 매달린 덩어리가 된다 — 둘 다 해 봤다.
+	# 거울로 온전히 뒤집으면 엄지 투영이 오른손과 정확히 같아진다.
+	# 남는 비대칭은 각 4° · 길이 12% · 손목 w 12 차다.
 	"ang_l": 160.0, "sc_l": 0.88,
-	"ang_r": 143.0, "ang_sw": 150.0,
+	"ang_r": 24.0,       # 쓸 때의 손각은 상수가 아니라 자루 방향이 정한다
 	# 위팔은 따로 안 그린다. 팔은 상자 **하나**다 — 팔꿈치에서 손목까지 한
 	# 덩어리로 누워 있고, 팔꿈치를 꺾으면 서 있는 도형과 누운 도형이
 	# 한 팔 안에서 섞여 이음매가 부러져 보인다(그려서 확인했다).
@@ -2946,12 +2953,12 @@ var npc_clock := 0.0
 #  딜러가 판을 쓸어 왼쪽(판매) 창구로 넣고 새로 뿌린다. 세 박자다 —
 #  뻗기 · 훑기 · 복귀. 물리가 열리는 것은 훑기 동안뿐이다(sweep_on).
 #
-#  아래팔은 면 위의 직선이고, 52° 정사영에서 면 위 직선은 화면 직선이라
-#  **그려지는 아래팔이 곧 미는 선이다.** 근사가 아니라 _sweep_line 하나를
-#  그리기와 물리가 같이 읽는 것이다.
+#  미는 것은 딜러가 쥔 밀대다. 바가 면 위의 직선이고, 52° 정사영에서
+#  면 위 직선은 화면 직선이라 **그려지는 바가 곧 미는 선이다.** 근사가
+#  아니라 _sweep_line 하나를 그리기와 물리가 같이 읽는 것이다.
 #
-#  선은 트레이 w[24,126] 을 정확히 덮는다 — 팔꿈치가 w 24 (화면 y 130.9),
-#  손이 w 126 (y 211.3). 물건 중심은 _drop_walls·_drop_clamp 가 그 구간에
+#  바는 트레이 w[24,126] 을 정확히 덮는다 — 위끝이 w 24 (화면 y 130.9),
+#  아래끝이 w 126 (y 211.3). 물건 중심은 _drop_walls·_drop_clamp 가 그 구간에
 #  못 박으므로 팔이 못 만나는 물건이 존재할 수 없다. 경우를 안 따져도 된다.
 #
 #  기울기를 창구 빗변과 **평행**으로 잡은 것이 이 표의 유일한 묘수다.
@@ -2967,19 +2974,14 @@ var npc_clock := 0.0
 #  물건이 빗변을 넘으면 물리를 떠나 waste 로 간다. drop 은 stock 과 인덱스를
 #  나누므로 거기 남겨 두면 "쓸려 가는 중인데 살 수 있는" 상태가 생긴다.
 const SWEEP := {
-	"reach": 0.16,       # 팔을 오른쪽 끝까지 뻗는다
+	"reach": 0.26,       # 팔을 오른쪽 끝까지 뻗는다. 0.16 은 순간이동으로 읽혔다
 	"rake": 0.52,        # 훑는다. 이 동안만 왼쪽 벽이 열린다
 	"back": 0.30,        # 복귀. 새 매물은 이 동안 이미 떨어지고 있다
 	"u0": 529.0, "u1": 18.0,
 	"w_el": 24.0, "w_hd": 126.0,
-	# 그리는 팔은 미는 구간보다 뒤로 더 뻗는다. 같은 직선 위이므로 물리는
-	# 한 글자도 안 바뀌고, 팔이 몸 쪽(w −52 → 화면 y 71)까지 이어져
-	# 펠트 위에 상자가 동강 떠 있는 그림이 안 된다.
-	"w_back": -52.0,
 	"tilt": 0.477576,    # 창구 빗변의 기울기 그대로. 아래 주석이 이유다
 	"lean": 20.0,        # 몸통이 팔을 따라가는 거리. 320±(20+72) 는 랙 안이다
 	"push": 620.0,       # 밀린 물건이 받는 최소 좌향 속도 (면px/s)
-	"up_w": 23.0,        # 위팔 두께. 아래팔(16)보다 굵어야 관절이 읽힌다
 	"fall_g": 900.0, "fall_c": 3.2, "fall_t": 0.44,
 }
 var sweep_t := 0.0       # 쓸기 경과(초)
@@ -3178,38 +3180,99 @@ func _npc_arms() -> void:
 	var a := _sweep_amt()
 	# 쉬는 팔. 숨은 팔꿈치를 손목보다 크게 흔든다 — 뿌리가 랙 뒤라
 	# 팔꿈치 쪽 진폭은 안 보이고 팔 전체의 기울기로만 나온다.
-	_npc_limb(Vector2(cx + NPC.el_l.x, NPC.el_l.y + br * 0.5),
-			Vector2(cx + NPC.wr_l.x, NPC.wr_l.y + br * 0.2),
+	# 쓸 때는 손을 바깥(왼쪽)으로 물린다 — 밀대 손이 왼가슴 앞에서 끝나므로
+	# 위로 물리면 정확히 그 자리다(검토 실측). 옆으로 비키는 게 답이다.
+	var pull := Vector2(-26.0, 6.0) * a
+	_npc_limb(Vector2(cx + NPC.el_l.x, NPC.el_l.y + br * 0.5) + pull * 0.3,
+			Vector2(cx + NPC.wr_l.x, NPC.wr_l.y + br * 0.2) + pull,
 			deg_to_rad(NPC.ang_l), NPC.sc_l)
-	# 쓸는 팔. 끝점도 면 좌표라 팔이 그대로 미는 선 위에 눕는다.
+	# 쓸는 팔 — 딜러는 판을 맨팔로 안 훑는다. 밀대(푸셔)를 쥔다.
+	# 미는 선 u0→u1 은 529px 를 건너는데 어깨는 몸통에 붙어 있다 — 사람
+	# 팔로는 그 폭이 안 나오고, 억지로 그리면 몸에서 떨어진 장대가 된다
+	# (실제로 그랬다). 도구가 선을 긋고, 팔은 자루를 쥐고 몸 앞을
+	# 가로지른다. 물리는 같은 _sweep_line 을 읽으므로 한 글자도 안 변한다.
 	var el := Vector2(cx + NPC.el_r.x, NPC.el_r.y + br * 0.5)
 	var wr := Vector2(cx + NPC.wr_r.x, NPC.wr_r.y + br * 0.2)
 	var ang: float = deg_to_rad(NPC.ang_r)
+	var sh := Vector2(cx + NPC.sh_r.x, NPC.sh_r.y)
 	if a > 0.004:
-		el = _sweep_elbow()
-		wr = _sweep_hand()
-		# 손목이 꺾인다. 옛 코드는 손 방향이 (hd−el) 이라 팔과 손이 한
-		# 직선이었고, 그래서 관절이 없는 막대가 됐다. 150° 는 손끝이
-		# w 146(화면 y 227)에서 멈추는 각이다 — 레일(244)에 안 닿는다.
-		ang = lerp_angle(ang, deg_to_rad(NPC.ang_sw), a)
-	_npc_limb(el, wr, ang, 1.0)
+		# 밀대 — 바가 물리 구간 w[24,126] 을 정확히 덮는다
+		var bt := Vector2(_sweep_line(SWEEP.w_el), SWEEP.w_el)
+		var bb := Vector2(_sweep_line(SWEEP.w_hd), SWEEP.w_hd)
+		# 손은 어깨에서 바 위끝을 향해 닿는 데까지만 뻗는다. 자루가 손을
+		# 지나 더 길어도 된다 — 진짜 크루피어도 자루를 훑어 쥔다.
+		var dv := bt - sh
+		# 관절에서 52 를 띄운다. 손끝이 손목에서 43 뻗으므로 34 로는 황동
+		# 관절이 손가락 밑에 묻힌다(검토 실측) — 도구가 검은 막대가 된다.
+		var grip := sh + dv / dv.length() * minf(dv.length() - 52.0, NPC.reach)
+		wr = wr.lerp(grip, a)
+		ang = lerp_angle(ang, (bt - wr).angle(), a)
+		# 팔꿈치 — 두 마디 IK. 손이 몸 앞을 가로지르는 동안 팔꿈치가
+		# 바깥으로 벌어져야 관절이 산다.
+		var d := (wr - sh).length()
+		var eik := sh + (wr - sh) * (NPC.up_l / maxf(d, 0.001))
+		if d < NPC.up_l + NPC.fo_l:
+			var a1: float = acos(clampf(
+					(NPC.up_l * NPC.up_l + d * d - NPC.fo_l * NPC.fo_l)
+					/ (2.0 * NPC.up_l * d), -1.0, 1.0))
+			var bang: float = (wr - sh).angle()
+			# 두 가지 중 팔꿈치가 **아래로 처지는 쪽**(w 큰 쪽)을 고른다.
+			# 한쪽으로 못 박으면 반대편 자세에서 팔꿈치가 랙 뒤·허공으로
+			# 넘어가 팔 뿌리가 어깨를 떠나 미끄러진다(검토 실측 — 두 번).
+			var e1 := sh + Vector2(cos(bang + a1), sin(bang + a1)) * NPC.up_l
+			var e2 := sh + Vector2(cos(bang - a1), sin(bang - a1)) * NPC.up_l
+			eik = e1 if e1.y > e2.y else e2
+		el = el.lerp(eik, a)
+		# 도구는 뻗기 중간부터 스르르 든다 — 팔보다 먼저 나타나면 유령이다
+		var ta := clampf((a - 0.35) / 0.3, 0.0, 1.0)
+		if ta > 0.0:
+			# 도구는 팔과 다른 색이어야 한다. 소매색 자루는 "관절 여러 개
+			# 달린 긴 팔" 로 읽혔다(검토 실측) — 옻칠 검정에 황동 관절이다.
+			var t_side := Color(C_WOOD.darkened(0.9), ta)
+			var t_top := Color(C_WOOD.darkened(0.45), ta)
+			var t_sh := Color(C_WOOD.darkened(0.84), ta * 0.8)
+			# 접지 그림자 — 이게 없으면 바가 서 있는 날이 아니라 허공의
+			# 지팡이다. 손 그림자와 같은 수법, 면에서 w+3.
+			_npc_taper(wr + Vector2(0, 3), bt + Vector2(0, 3), 2.2, 2.2, 0.0,
+					t_sh, t_sh)
+			_npc_taper(bt + Vector2(0, 3), bb + Vector2(0, 3), 4.5, 4.5, 0.0,
+					t_sh, t_sh)
+			_npc_taper(wr, bt, 2.2, 2.2, 6.0, t_side, t_top)     # 자루
+			_npc_taper(bt, bb, 4.5, 4.5, 12.0, t_side, t_top)    # 바 — 미는 날
+			# 관절 놉 — 자루와 바의 각은 프레임마다 다르다. 고정 도구라면
+			# 부러진 것이고, 여기 황동 원판이 "머리가 도는 밀대" 로 바꾼다.
+			var knob := PackedVector2Array()
+			for k in 8:
+				var ka := TAU * float(k) / 8.0
+				knob.append(bt + Vector2(cos(ka), sin(ka)) * 5.0)
+			_npc_flat(knob, 11.0, Color(C_GOLD.darkened(0.75), ta),
+					Color(C_GOLD.darkened(0.5), ta))
+	# 위팔 — 쉴 때는 어깨·팔꿈치가 다 랙 뒤라 안 보이고, 쓸 때만 드러난다
+	_npc_taper(sh, el, 11.5, NPC.el_w, NPC.arm_t,
+			C_WOOD.darkened(0.84), C_WOOD.lightened(0.04))
+	# 이 팔이 딜러의 왼팔이다 — 손은 거울상으로 붙는다.
+	_npc_limb(el, wr, ang, 1.0, true)
 
 
 # 팔 하나 + 손 하나. 면 좌표(u,w) 로 받는다.
 # 값 사다리를 여기서 못 박는다 — 소매 윗면 66 은 벽 41 보다 **밝다**.
 # 옛 소매 24 는 벽보다 어두워서 팔이 벽에 잠겨 있었다. 손 윗면 133 은
 # 화면에서 가장 밝은 덩어리이고, 그래서 눈이 손부터 본다.
-func _npc_limb(el: Vector2, wr: Vector2, ang: float, sc: float) -> void:
+func _npc_limb(el: Vector2, wr: Vector2, ang: float, sc: float,
+		mir: bool = false) -> void:
 	var ex := Vector2(cos(ang), sin(ang))
-	# 엄지는 **늘 관객 쪽(+w)** 이다. 좌우를 거울로 뒤집어 봤더니 한쪽
-	# 엄지가 뒤로 넘어가고, 그쪽은 정사영이 0.788 로 눌러서 8px 짜리
-	# 노치가 6px 이 되며 통째로 사라졌다 — 그 손만 다시 빵이 됐다.
-	# 손바닥을 아래로 두고 손끝을 옆으로 두면 실제로도 엄지가 앞이다.
-	# 덤으로 두 손이 거울상이 아니라 평행이동이 돼 대칭 점수가 더 깨진다.
-	var ey := Vector2(-ex.y, ex.x)
+	# 손대칭이 문제였다. 같은 다각형을 두 팔에 평행이동만 해서 붙이면
+	# 딜러가 오른손을 두 개 단다 — 마주 본 사람의 두 손은 거울상이다.
+	# 뒤집기는 다각형과 각도를 **함께** 거울로 잡아야 한다. 다각형만
+	# 뒤집으면 엄지가 화면 안쪽(−w)으로 넘어가 정사영이 8px 노치를
+	# 6px 로 누르고(실측 — 그 손만 빵이 된다), 각도까지 뒤집으면 엄지
+	# 방향이 오른손과 거울로 정확히 같아서 투영 손실도 같다.
+	var ey := Vector2(ex.y, -ex.x) if mir else Vector2(-ex.y, ex.x)
 	var hand := PackedVector2Array()
 	for q in PALM:
 		hand.append(wr + ex * (q.x * sc) + ey * (q.y * sc))
+	if mir:
+		hand.reverse()          # 뒤집힌 감김을 되돌린다 — 삼각분할이 읽는 값이다
 	# 접지 그림자 — 같은 손을 면에서 w+3 밀어 어둡게 깐다. 화면에서는
 	# 2.4px 아래다. 이 한 조각이 "떠 있는 손"과 "판에 놓인 손"을 가른다.
 	var sh := PackedVector2Array()
@@ -3233,11 +3296,17 @@ func _npc_limb(el: Vector2, wr: Vector2, ang: float, sc: float) -> void:
 func _npc_flat(pts: PackedVector2Array, t: float, side: Color,
 		top: Color) -> void:
 	var lo := PackedVector2Array()
+	var md := PackedVector2Array()
 	var hi := PackedVector2Array()
 	for q in pts:
 		lo.append(_p2s(q.x, q.y, 0.0))
+		md.append(_p2s(q.x, q.y, t * 0.5))
 		hi.append(_p2s(q.x, q.y, t))
 	draw_colored_polygon(lo, side)
+	# 중간층 — 노치 같은 오목 꼭짓점에서 아래층과 윗층의 래스터가 서로
+	# 어긋나면 그 틈으로 펠트가 1px 뚫린다(쓸기 두 자세에서 실측).
+	# 같은 도형을 반 높이에 한 번 더 깔면 어긋남이 절반이라 안 뚫린다.
+	draw_colored_polygon(md, side)
 	draw_colored_polygon(hi, top)
 
 
@@ -3284,18 +3353,6 @@ func _sweep_lean() -> float:
 		return 0.0
 	var k: float = clampf((_sweep_u() - SWEEP.u1) / (SWEEP.u0 - SWEEP.u1), 0.0, 1.0)
 	return lerpf(-SWEEP.lean, SWEEP.lean, k) * _sweep_amt()
-
-
-# 쉴 때와 훑을 때를 섞는다. 둘 다 **면 좌표**(u,w) 다 — 훑는 선이 이미
-# 면 위의 직선이므로, 팔을 면에서 그리는 순간 그림과 물리가 같은 수를 읽는다.
-func _sweep_elbow() -> Vector2:
-	var rest := Vector2(NPC.cx + _sweep_lean() + NPC.el_r.x, NPC.el_r.y)
-	return rest.lerp(Vector2(_sweep_line(SWEEP.w_back), SWEEP.w_back), _sweep_amt())
-
-
-func _sweep_hand() -> Vector2:
-	var rest := Vector2(NPC.cx + _sweep_lean() + NPC.wr_r.x, NPC.wr_r.y)
-	return rest.lerp(Vector2(_sweep_line(SWEEP.w_hd), SWEEP.w_hd), _sweep_amt())
 
 
 func _ease_io(t: float) -> float:
