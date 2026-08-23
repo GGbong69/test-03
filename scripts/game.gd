@@ -148,6 +148,16 @@ var won := false
 
 var last_sector := -1
 var last_miss := false          # 직전 투척이 빗나갔는가 — 조건 missp 가 읽는다
+# ── 조커 이식이 들여온 라운드 추적 ──
+# 패턴 조건("같은 숫자 2회 이후" 류)은 명중 이력에서 나온다. 라운드마다 비운다.
+var sec_cnt := {}               # 숫자 → 이번 라운드 명중 수
+var zone_cnt := {}              # 영역 종류(single/double/triple/bull) → 명중 수
+var pat := {}                   # 완성된 패턴 깃발. "이후" 조건이 읽는다
+var seen_risk := false          # risk1 용 — 이번 라운드에 risk 명중이 있었나
+var low_hit := 0                # 이번 라운드 최저 명중 숫자 (0 = 아직 없음)
+var round_darts := 6            # 이번 라운드 시작 다트 수 (few·missing 이 읽는다)
+var throw6 := 0                 # sixth 용 던진 수 카운터 (런 단위 · 발동 시 리셋)
+var zone_hist := {}             # 런 단위 영역 종류 누적 명중 (zonehist 배율)
 var streak := 0
 var dart_index := 0
 var round_miss := false
@@ -264,6 +274,8 @@ func _new_run() -> void:
 	owned.clear()
 	cons.clear()
 	track_lv.clear()
+	throw6 = 0
+	zone_hist.clear()
 	won = false
 	_open_stage()
 
@@ -296,6 +308,9 @@ func _start_round() -> void:
 	while remaining.size() < want and not magazine.is_empty():
 		remaining.append(magazine[remaining.size() % magazine.size()])
 	var dadd := int(mod_v("darts_add", 0.0))
+	# 아이템이 주고받는 다트 (조커 이식 — 곡예 다트맨 -2 등)
+	for o in owned:
+		dadd += int(o.get("dadd", 0))
 	while dadd < 0 and remaining.size() > 1:
 		remaining.pop_back()
 		dadd += 1
@@ -304,6 +319,7 @@ func _start_round() -> void:
 		dadd -= 1
 	cur_dart = GameData.darts()[0]
 	darts_left = remaining.size()
+	round_darts = remaining.size()
 	grip_t = 0.0
 	# 칸은 시작 때 한 번 정하고 끝까지 안 바꾼다. 자루가 빠질 때마다 다시
 	# 가운데 맞추면 남은 것들이 미끄러져 꽂혀 있는 것으로 안 보인다.
@@ -323,6 +339,11 @@ func _start_round() -> void:
 	streak = 0
 	last_sector = -1
 	last_miss = false     # 직전 칸과 같은 규칙 — 라운드가 바뀌면 "직전" 이 없다
+	sec_cnt.clear()
+	zone_cnt.clear()
+	pat.clear()
+	seen_risk = false
+	low_hit = 0
 	cur_chip = 0
 	cur_mult = 0
 	darts.clear()
@@ -381,6 +402,20 @@ func _grip_consume() -> void:
 
 func _finish_round() -> void:
 	if total < target:
+		# 목숨 아이템(조커 이식 110099) — 총점이 목표의 일정 비율 이상이면
+		# 실패를 한 번 무르고 자신을 부순다. 라운드는 클리어로 친다.
+		for i in owned.size():
+			var sv: Dictionary = owned[i]
+			if String(sv.get("k", "")) == "save" 					and float(total) >= float(target) * float(sv.v) / 100.0:
+				var at := _slot_rect(mini(i, GameData.max_items() - 1)).get_center()
+				owned.remove_at(i)
+				_panel_reset()
+				pop(at + Vector2(0.0, 24.0), "%s — 실패를 막았다" % sv.n,
+						C_ACC, 11, 1.2)
+				beep_seq([392.0, 523.0], 0.09, 0.16, 0.22)
+				_round_end_wear()
+				_settle_clear()
+				return
 		state = S.OVER
 		won = false
 		beep_seq([300.0, 240.0, 180.0], 0.13, 0.24, 0.22)
@@ -392,6 +427,12 @@ func _finish_round() -> void:
 		beep_seq([262.0, 330.0, 392.0, 523.0, 659.0], 0.10, 0.22, 0.26)
 		return
 
+	_round_end_wear()
+	_settle_clear()
+
+
+# 정산 — 실패 방지로 넘어온 라운드도 같은 길을 걷는다.
+func _settle_clear() -> void:
 	# 정산 내역
 	var dart_gold: int = darts_left * GameData.gold_per_dart()
 	@warning_ignore("integer_division")  # 보유 5당 1, 내림이 규칙이다
@@ -414,6 +455,33 @@ func _finish_round() -> void:
 	beep_seq([392.0, 494.0, 587.0], 0.09, 0.18, 0.22)
 
 
+# 라운드 종료의 마모 — 감쇠(rdec)와 확률 파괴(boom). 조커 이식이 들여왔다.
+# 정산보다 먼저 부른다: 이번 라운드 일한 값은 이미 점수로 냈고, 골드 정산은
+# 남은 자만 받는 것이 "라운드 종료 시 파괴" 의 뜻에 맞다.
+func _round_end_wear() -> void:
+	var i := owned.size() - 1
+	while i >= 0:
+		var it: Dictionary = owned[i]
+		var dead := false
+		if String(it.get("grow", "")) == "rdec":
+			it.gs = int(it.get("gs", 0)) + 1
+			if int(it.v) - int(it.gstep) * int(it.gs) <= 0:
+				dead = true
+		match String(it.get("boom", "")):
+			"r6":
+				if randf() < 1.0 / 6.0:
+					dead = true
+			"r1000":
+				if randf() < 0.001:
+					dead = true
+		if dead:
+			pop(_slot_rect(mini(i, GameData.max_items() - 1)).get_center()
+					+ Vector2(0.0, 24.0), "%s — 부서졌다" % it.n, C_MULT, 11, 1.1)
+			owned.remove_at(i)
+			_panel_reset()
+		i -= 1
+
+
 func _gold_from_items() -> Array:
 	# 골드가 나오는 곳은 여기 하나뿐이다. 다트 단위로는 절대 지급하지 않는다.
 	var rows := []
@@ -428,6 +496,7 @@ func _gold_from_items() -> Array:
 			"clean": v = it.gv if not round_miss else 0
 			"blitz": v = it.gv if darts_left >= GameData.gold_blitz() else 0
 			"broke": v = it.gv if gold <= GameData.gold_broke() else 0
+			"round": v = it.gv
 		if v > 0:
 			rows.append({"n": it.n, "v": v})
 	return rows
@@ -590,7 +659,11 @@ func _buy(i: int) -> void:
 	s.sold = true
 	match s.type:
 		"item":
-			owned.append(s.d)
+			# 사본이다. 성장 상태(gs)가 원본 카탈로그에 붙으면 다음 런까지
+			# 살아남는다 — 컬렉션과 매대가 같은 사전을 읽기 때문이다.
+			var cp: Dictionary = s.d.duplicate()
+			cp.gs = 0
+			owned.append(cp)
 		"mod":
 			_apply_mod(s.d.id)
 		"dart":
@@ -1206,10 +1279,20 @@ func _click(m: Vector2) -> void:
 					beep(440.0, 0.05, 0.12)
 					return
 		S.COLLECT:
-			for t in 4:
+			for t in 5:
 				if _col_tab_rect(t).has_point(m):
 					collect_tab = t
+					collect_page = 0
 					beep(392.0, 0.04, 0.10)
+					return
+			if _col_pages() > 1:
+				if _col_arrow_rect(false).has_point(m):
+					collect_page = (collect_page - 1 + _col_pages()) % _col_pages()
+					beep(392.0, 0.04, 0.08)
+					return
+				if _col_arrow_rect(true).has_point(m):
+					collect_page = (collect_page + 1) % _col_pages()
+					beep(392.0, 0.04, 0.08)
 					return
 			if _menu_back_rect().has_point(m):
 				state = S.TITLE
@@ -1402,6 +1485,30 @@ func _land() -> void:
 	var same: bool = info.sector > 0 and info.sector == last_sector
 	streak = streak + 1 if same else 0
 
+	# 이번 발의 영역 종류. 패턴 추적의 화폐다.
+	var zone := ""
+	if info.mult > 0:
+		if info.idx == -1:
+			zone = "bull"
+		elif info.mult == 3:
+			zone = "triple"
+		elif info.mult == 2:
+			zone = "double"
+		else:
+			zone = "single"
+	var is_risk: bool = info.mult >= 2 or info.sector >= 25
+	throw6 += 1
+
+	# rackval 배율 — 이 발에서 파는 값이 아니라 지금 랙의 값이다.
+	var rv_all := 0
+	for o in owned:
+		rv_all += GameData.sell_value(o)
+
+	var mag_hvy := 0
+	for md in magazine:
+		if String(md.get("id", "")) == "hvy":
+			mag_hvy += 1
+
 	var ctx := {
 		"sector": info.sector,
 		"mult": info.mult,
@@ -1413,6 +1520,31 @@ func _land() -> void:
 		"last": darts_left == 0,
 		"streak": streak,
 		"warm": round_trp,
+		# ── 조커 이식 조건 재료. 패턴 깃발은 이번 발 이전의 것이다 —
+		#    "맞힌 뒤" 는 완성한 발이 아니라 그 다음 발부터라는 뜻이다.
+		"risk1": is_risk and not seen_risk,
+		"few": round_darts <= 3,
+		"sixth": throw6 >= 6,
+		"pair": pat.get("pair", false),
+		"trip": pat.get("trip", false),
+		"quad": pat.get("quad", false),
+		"pair2": pat.get("pair2", false),
+		"spread": pat.get("spread", false),
+		"zone3": pat.get("zone3", false),
+		"zones2": pat.get("zones2", false),
+		"zones4": pat.get("zones4", false),
+		"rezone": zone != "" and zone_cnt.get(zone, 0) > 0,
+		# ── 배율 재료 ──
+		"darts_left": darts_left,
+		"items_n": owned.size(),
+		"gold": gold,
+		"mag_hvy": mag_hvy,
+		"round_darts": round_darts,
+		"low": low_hit,
+		"zonehist": zone_hist.get(zone, 0) + 1 if zone != "" else 0,
+		"empty_n": GameData.max_items() - owned.size(),
+		"rackval_all": rv_all,
+		"rand01": randf(),
 	}
 
 	cur_chip = 0
@@ -1448,10 +1580,71 @@ func _land() -> void:
 			queue.append({"k": "pierce", "v": pierce_gain})
 		for i in fired:
 			var it: Dictionary = owned[i]
-			var amt: int = it.v * streak if it.k == "mult_streak" else it.v
-			queue.append({"k": "item", "i": i, "kind": it.k, "v": amt,
-					"lbl": "%s  %s" % [it.n, GameData.eff_text(it.k, amt)]})
+			if it.k == "save":
+				continue          # 목숨은 정산이 아니라 라운드 실패가 읽는다
+			# fire 성장은 발동 자체가 걸음이다 — 먼저 오르고 그 값으로 낸다.
+			if String(it.get("grow", "")) == "fire":
+				it.gs = int(it.get("gs", 0)) + int(it.get("gstep", 0))
+			# rackval 은 자기 몫을 뺀다 — 자기 판매가로 자기가 커지면 순환이다.
+			ctx.rackval_others = ctx.rackval_all - GameData.sell_value(it)
+			var amt: int = GameData.item_amt(it, ctx)
+			if amt != 0:
+				queue.append({"k": "item", "i": i, "kind": it.k, "v": amt,
+						"lbl": "%s  %s" % [it.n, GameData.eff_text(
+								"mult" if it.k == "mult_rand" else it.k, amt)]})
+			# 보조 효과 — 복합 아이템(점수+배수)의 두 번째 줄
+			if String(it.get("k2", "")) != "" and it.v2 != 0:
+				queue.append({"k": "item", "i": i, "kind": it.k2, "v": it.v2,
+						"lbl": "%s  %s" % [it.n, GameData.eff_text(it.k2, it.v2)]})
+			# 즉시 골드 — 위험 영역 절반 확률
+			if String(it.get("g", "")) == "risk50" and randf() < 0.5:
+				gold += int(it.get("gv", 0))
+				pop(_slot_rect(mini(i, GameData.max_items() - 1)).get_center()
+						+ Vector2(0.0, 24.0), "+%d" % it.gv, C_GOLD, 11, 0.8)
+			# 영역 승급 — 발동 4회 중 1회꼴로 맞은 영역의 강화 트랙이 오른다
+			if String(it.get("side", "")) == "trackup25" and randf() < 0.25 \
+					and int(info.get("track", 0)) > 0:
+				track_lv[info.track] = int(track_lv.get(info.track, 0)) + 1
+				pop(BC + Vector2(0.0, -52.0), "영역 강화 +1", C_ACC, 10, 0.9)
 		queue.append({"k": "total"})
+
+	# 이력 갱신은 ctx 를 만든 뒤다 — 패턴은 다음 발부터 산다.
+	if zone != "":
+		if info.sector >= 1 and info.sector <= 20:
+			sec_cnt[info.sector] = int(sec_cnt.get(info.sector, 0)) + 1
+		zone_cnt[zone] = int(zone_cnt.get(zone, 0)) + 1
+		zone_hist[zone] = int(zone_hist.get(zone, 0)) + 1
+		if is_risk:
+			seen_risk = true
+		if info.sector >= 1 and info.sector <= 20:
+			low_hit = info.sector if low_hit == 0 else mini(low_hit, info.sector)
+		# 깃발 — 한 번 서면 라운드 끝까지 산다
+		var pairs := 0
+		var maxrep := 0
+		for kx in sec_cnt:
+			maxrep = maxi(maxrep, int(sec_cnt[kx]))
+			if int(sec_cnt[kx]) >= 2:
+				pairs += 1
+		if maxrep >= 2: pat.pair = true
+		if maxrep >= 3: pat.trip = true
+		if maxrep >= 4: pat.quad = true
+		if pairs >= 2: pat.pair2 = true
+		if sec_cnt.size() >= 3: pat.spread = true
+		for kz in zone_cnt:
+			if int(zone_cnt[kz]) >= 3:
+				pat.zone3 = true
+		if zone_cnt.size() >= 2: pat.zones2 = true
+		if zone_cnt.size() >= 4: pat.zones4 = true
+	if throw6 >= 6:
+		throw6 = 0
+	# 성장 걸음 — hitmiss 는 매 발, tdec 는 던질 때마다
+	for o in owned:
+		match String(o.get("grow", "")):
+			"hitmiss":
+				o.gs = maxi(0, int(o.get("gs", 0))
+						+ (int(o.gstep) if info.mult > 0 else -int(o.gstep)))
+			"tdec":
+				o.gs = int(o.get("gs", 0)) + 1
 
 	last_sector = info.sector
 	last_miss = info.mult == 0
@@ -2167,6 +2360,13 @@ func _chip_ti(cost: int) -> int:
 # 같은 갈래 안에서만 개수와 방향으로 갈리므로 실루엣이 먼저 읽힌다.
 func _icon_cond(c: Vector2, r: float, cond: String, col: Color) -> void:
 	var u := r * 0.62          # 도형 반경 — 얼굴 안에 머무는 상한
+	# 숫자 지정 조건 — 숫자가 곧 아이콘이다. 셋 넘으면 첫 수에 점을 단다.
+	if cond.begins_with("sec:"):
+		var parts := cond.substr(4).split(",")
+		var txt := "·".join(parts) if parts.size() <= 2 else parts[0] + "⋯"
+		draw_string(font, c + Vector2(-r, u * 0.55), txt,
+				HORIZONTAL_ALIGNMENT_CENTER, r * 2.0, maxi(6, int(u * 1.1)), col)
+		return
 	match cond:
 		"always":
 			draw_circle(c, u * 0.78, col)
@@ -2226,6 +2426,55 @@ func _icon_cond(c: Vector2, r: float, cond: String, col: Color) -> void:
 				for k in [-1.0, 1.0]:
 					draw_line(c + Vector2((dx - 0.38) * u, k * u * 0.62),
 							c + Vector2((dx + 0.38) * u, -k * u * 0.62), col, 1.2)
+		"risk":
+			# 위험 영역 셋 — 두 호(띠) + 중심 점(불)
+			draw_arc(c, u * 0.92, -2.2, -0.9, 8, col, 1.0)
+			draw_arc(c, u * 0.92, 0.9, 2.2, 8, col, 1.0)
+			draw_circle(c, u * 0.3, col)
+		"risk1":
+			draw_arc(c, u * 0.92, -2.2, 2.2, 14, col, 1.0)
+			draw_string(font, c + Vector2(-u, u * 0.5), "1",
+					HORIZONTAL_ALIGNMENT_CENTER, u * 2.0, maxi(6, int(u * 1.2)), col)
+		"few":
+			for i in 3:
+				var bx := c.x + (float(i) - 1.0) * u * 0.6
+				draw_line(Vector2(bx, c.y + u * 0.5), Vector2(bx, c.y - u * 0.1
+						- float(i == 1) * u * 0.4), col, 1.3)
+		"sixth":
+			draw_string(font, c + Vector2(-u, u * 0.55), "6",
+					HORIZONTAL_ALIGNMENT_CENTER, u * 2.0, maxi(7, int(u * 1.5)), col)
+		"pair":
+			for dx in [-0.45, 0.45]:
+				draw_circle(c + Vector2(dx * u, 0.0), u * 0.3, col)
+		"trip":
+			for dx in [-0.66, 0.0, 0.66]:
+				draw_circle(c + Vector2(dx * u, 0.0), u * 0.26, col)
+		"quad":
+			for dx in [-0.45, 0.45]:
+				for dy in [-0.45, 0.45]:
+					draw_circle(c + Vector2(dx * u, dy * u), u * 0.26, col)
+		"pair2":
+			for dx in [-0.72, -0.3, 0.3, 0.72]:
+				draw_circle(c + Vector2(dx * u, float(absf(dx) < 0.5) * u * 0.4
+						- u * 0.2), u * 0.22, col)
+		"spread":
+			draw_circle(c + Vector2(-u * 0.6, u * 0.45), u * 0.26, col)
+			draw_circle(c + Vector2(u * 0.1, -u * 0.55), u * 0.26, col)
+			draw_circle(c + Vector2(u * 0.65, u * 0.25), u * 0.26, col)
+		"zone3":
+			for rr in [0.35, 0.65, 0.95]:
+				draw_arc(c, u * rr, -2.4, -0.7, 8, col, 1.0)
+		"zones2":
+			draw_arc(c, u * 0.85, PI * 0.6, PI * 1.4, 10, col, 1.2)
+			draw_arc(c, u * 0.85, -PI * 0.4, PI * 0.4, 10, col, 1.2)
+		"zones4":
+			for aa in [0.785, 2.356, 3.927, 5.498]:
+				draw_circle(c + Vector2(cos(aa), sin(aa)) * u * 0.62, u * 0.24, col)
+		"rezone":
+			draw_arc(c, u * 0.7, -2.6, 1.6, 12, col, 1.2)
+			var tp := c + Vector2(cos(1.6), sin(1.6)) * u * 0.7
+			draw_colored_polygon(PackedVector2Array([tp + Vector2(0.3, -0.4) * u,
+					tp + Vector2(-0.5, -0.1) * u, tp + Vector2(0.2, 0.5) * u]), col)
 		"band":
 			# 랙 r=15 → r_icon 6.30 → u 3.906. 두 호의 중심 간격 2.227px,
 			# 굵기 1.0 을 빼면 배경이 1.23px 남는다 — 1배에서 두 겹으로 갈린다.
@@ -5022,10 +5271,10 @@ func _tip_hit(m: Vector2) -> Dictionary:
 				if _slot_rect(i).has_point(m):
 					return {"k": "rack", "i": i}
 		S.COLLECT:
-			var kk: String = ["citem", "cmod", "cdart", "cetc"][collect_tab]
+			var kk: String = ["citem", "cmod", "cdart", "ccons", "cmodf"][collect_tab]
 			for i in _col_count():
 				if _col_cell(i).has_point(m):
-					return {"k": kk, "i": i}
+					return {"k": kk, "i": collect_page * COL_PAGE + i}
 		S.PICK, S.AIM_V, S.AIM_H:
 			# 조준 중에도 갈아탈 수 있으므로 그때도 벽을 짚어 준다
 			for i in remaining.size():
@@ -5059,7 +5308,7 @@ func _tip_build(hit: Dictionary) -> void:
 			tip_title = it.n
 			tip_chip = it
 			_tip_add(GameData.cond_text(it.c), 10, C_DIM)
-			_tip_add(GameData.eff_text(it.k, it.v), 11,
+			_tip_add(GameData.eff_line(it), 11,
 					C_CHIP.lightened(0.35) if it.k == "chip" else C_MULT.lightened(0.3))
 			if it.get("g", "") != "":
 				_tip_add(GameData.gold_text(it.g, it.gv), 9, C_GOLD)
@@ -5077,7 +5326,7 @@ func _tip_build(hit: Dictionary) -> void:
 			if s.type == "item":
 				tip_chip = s.d
 				_tip_add(GameData.cond_text(s.d.c), 10, C_DIM)
-				_tip_add(GameData.eff_text(s.d.k, s.d.v), 11,
+				_tip_add(GameData.eff_line(s.d), 11,
 						C_CHIP.lightened(0.35) if s.d.k == "chip" else C_MULT.lightened(0.3))
 				if s.d.get("g", "") != "":
 					_tip_add(GameData.gold_text(s.d.g, s.d.gv), 9, C_GOLD)
@@ -5102,11 +5351,11 @@ func _tip_build(hit: Dictionary) -> void:
 			_tip_add("목표 %d" % sp.target, 10, C_DIM)
 		"citem":
 			var it: Dictionary = GameData.items()[i]
-			tip_mark = _col_cell(i)
+			tip_mark = _col_cell(i % COL_PAGE)
 			tip_title = it.n
 			tip_chip = it
 			_tip_add(GameData.cond_text(it.c), 10, C_DIM)
-			_tip_add(GameData.eff_text(it.k, it.v), 11,
+			_tip_add(GameData.eff_line(it), 11,
 					C_CHIP.lightened(0.35) if it.k == "chip" else C_MULT.lightened(0.3))
 			if it.get("g", "") != "":
 				_tip_add(GameData.gold_text(it.g, it.gv), 9, C_GOLD)
@@ -5114,31 +5363,31 @@ func _tip_build(hit: Dictionary) -> void:
 					9, C_DIM.darkened(0.2))
 		"cmod":
 			var md: Dictionary = GameData.mods()[i]
-			tip_mark = _col_cell(i)
+			tip_mark = _col_cell(i % COL_PAGE)
 			tip_title = md.n
 			_tip_add(md.d, 10, C_DIM)
 			_tip_add("보드 개조 · %d골드" % md.cost, 9, C_DIM.darkened(0.2))
 		"cdart":
 			var dt: Dictionary = GameData.darts()[i]
-			tip_mark = _col_cell(i)
+			tip_mark = _col_cell(i % COL_PAGE)
 			tip_title = dt.n
 			_tip_add(dt.d, 10, C_DIM)
 			_tip_add("게이지 ×%.2f" % dt.gauge, 9, C_DIM.darkened(0.2))
 			if int(dt.get("mult", 0)) != 0:
 				_tip_add("배수 %+d" % int(dt.mult), 9, C_MULT.lightened(0.25))
-		"cetc":
-			tip_mark = _col_cell(i)
-			var cs: Array = GameData.consumables()
-			if i < cs.size():
-				tip_title = cs[i].n
-				_tip_add(cs[i].d, 10, C_DIM)
-				_tip_add("소비 아이템 · 한 번 쓰고 사라진다", 9, C_DIM.darkened(0.2))
-			else:
-				var mo: Dictionary = GameData.modifiers()[i - cs.size()]
-				tip_title = mo.n
-				_tip_add(mo.d, 10, C_DIM)
-				_tip_add("라운드 제약 — 셋 중 하나를 반드시 고른다", 9,
-						C_DIM.darkened(0.2))
+		"ccons":
+			tip_mark = _col_cell(i % COL_PAGE)
+			var cd: Dictionary = GameData.consumables()[i]
+			tip_title = cd.n
+			_tip_add(cd.d, 10, C_DIM)
+			_tip_add("소비 아이템 · 한 번 쓰고 사라진다", 9, C_DIM.darkened(0.2))
+		"cmodf":
+			tip_mark = _col_cell(i % COL_PAGE)
+			var mo: Dictionary = GameData.modifiers()[i]
+			tip_title = mo.n
+			_tip_add(mo.d, 10, C_DIM)
+			_tip_add("라운드 제약 — 셋 중 하나를 반드시 고른다", 9,
+					C_DIM.darkened(0.2))
 		"mag":
 			var dd: Dictionary = remaining[i]
 			tip_mark = _mag_rect(i)
@@ -5510,16 +5759,34 @@ func _draw_settings() -> void:
 
 # ── 컬렉션 — 게임에 실린 전부를 편다. 해금이 없으므로 도감이 곧 전량이다 ──
 
-func _col_count() -> int:
+const COL_PAGE := 28        # 7 × 4 — 한 쪽에 얹는 수
+var collect_page := 0
+
+
+func _col_total() -> int:
 	match collect_tab:
 		0: return GameData.items().size()
 		1: return GameData.mods().size()
 		2: return GameData.darts().size()
-	return GameData.consumables().size() + GameData.modifiers().size()
+		3: return GameData.consumables().size()
+	return GameData.modifiers().size()
+
+
+# 이번 쪽에 실제로 놓인 수. 칸 인덱스는 쪽 안에서 0부터다.
+func _col_count() -> int:
+	return clampi(_col_total() - collect_page * COL_PAGE, 0, COL_PAGE)
+
+
+func _col_pages() -> int:
+	return maxi(1, int(ceil(float(_col_total()) / float(COL_PAGE))))
 
 
 func _col_tab_rect(t: int) -> Rect2:
-	return Rect2(Vector2(96.0 + float(t) * 118.0, 42.0), Vector2(110.0, 24.0))
+	return Rect2(Vector2(70.0 + float(t) * 102.0, 42.0), Vector2(96.0, 24.0))
+
+
+func _col_arrow_rect(right: bool) -> Rect2:
+	return Rect2(Vector2(560.0 if right else 44.0, 322.0), Vector2(36.0, 30.0))
 
 
 func _col_cell(i: int) -> Rect2:
@@ -5537,44 +5804,52 @@ func _draw_collect() -> void:
 			VIEW.x, 18, C_TXT)
 	var tabs := ["칩 %d" % GameData.items().size(),
 			"개조 %d" % GameData.mods().size(),
-			"다트 %d" % GameData.darts().size(), "소비·제약"]
-	for t in 4:
+			"다트 %d" % GameData.darts().size(),
+			"소비 %d" % GameData.consumables().size(),
+			"제약 %d" % GameData.modifiers().size()]
+	for t in 5:
 		_btn(_col_tab_rect(t), tabs[t], "", t == collect_tab)
 
+	var base := collect_page * COL_PAGE
 	for i in _col_count():
 		var cell := _col_cell(i)
 		var c := cell.get_center() + Vector2(0.0, -8.0)
+		var gi := base + i
 		var nm := ""
 		match collect_tab:
 			0:
-				var it: Dictionary = GameData.items()[i]
+				var it: Dictionary = GameData.items()[gi]
 				draw_item_chip(c, 13.0, it, 0.0, 0.0, 0.0, 9)
 				nm = it.n
 			1:
-				var md: Dictionary = GameData.mods()[i]
+				var md: Dictionary = GameData.mods()[gi]
 				_icon_mod(c, 13.0, md.id, 0.0)
 				nm = md.n
 			2:
-				var dt: Dictionary = GameData.darts()[i]
+				var dt: Dictionary = GameData.darts()[gi]
 				_icon_dart(c, 15.0, dt.id, 0.0, -0.62)
 				nm = dt.n
 			3:
 				var cs: Array = GameData.consumables()
-				if i < cs.size():
-					var e := Vector2(11.0, 9.0)
-					draw_rect(Rect2(c - e, e * 2.0), C_PANEL.lightened(0.22))
-					draw_rect(Rect2(c - e, e * 2.0), C_WIRE.darkened(0.2), false, 1.0)
-					draw_string(font, Vector2(c.x - e.x, c.y + 3.0),
-							String(cs[i].n).substr(0, 2),
-							HORIZONTAL_ALIGNMENT_CENTER, e.x * 2.0, 8, C_TXT)
-					nm = cs[i].n
-				else:
-					var mo: Dictionary = GameData.modifiers()[i - cs.size()]
-					_icon_modifier(c, 11.0, mo.id, 0.0)
-					nm = mo.n
+				var e := Vector2(11.0, 9.0)
+				draw_rect(Rect2(c - e, e * 2.0), C_PANEL.lightened(0.22))
+				draw_rect(Rect2(c - e, e * 2.0), C_WIRE.darkened(0.2), false, 1.0)
+				draw_string(font, Vector2(c.x - e.x, c.y + 3.0),
+						String(cs[gi].n).substr(0, 2),
+						HORIZONTAL_ALIGNMENT_CENTER, e.x * 2.0, 8, C_TXT)
+				nm = cs[gi].n
+			4:
+				var mo: Dictionary = GameData.modifiers()[gi]
+				_icon_modifier(c, 11.0, mo.id, 0.0)
+				nm = mo.n
 		draw_string(font, Vector2(cell.position.x, cell.end.y - 8.0), nm,
 				HORIZONTAL_ALIGNMENT_CENTER, cell.size.x, 8, C_DIM)
 
+	if _col_pages() > 1:
+		_btn(_col_arrow_rect(false), "◀", "", true)
+		_btn(_col_arrow_rect(true), "▶", "", true)
+		draw_string(font, Vector2(0, 318), "%d / %d" % [collect_page + 1, _col_pages()],
+				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 9, C_DIM)
 	_btn(_menu_back_rect(), "뒤로", "ESC", true)
 
 

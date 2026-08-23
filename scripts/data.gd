@@ -234,15 +234,28 @@ static func items() -> Array:
 		if not _b(r, "enabled", "items"):
 			continue
 		var rar: String = r.get("rarity", "common")
+		# sec 조건은 숫자 집합을 조건 문자열에 싣는다 — check() 가 아이템을
+		# 몰라도 판정할 수 있게 "sec:4,10" 꼴로 굳힌다.
+		var cnd: String = r.get("cond", "")
+		if cnd == "sec":
+			cnd = "sec:" + String(r.get("secs", "")).replace(";", ",")
 		var it := {
 			"id": r.get("id", ""),
 			"n": r.get("name", ""),
-			"c": r.get("cond", ""),
+			"c": cnd,
 			"k": r.get("kind", ""),
 			"v": _i(r, "value", "items"),
 			"cost": _i(r, "cost", "items"),
 			"rarity": rar,
 			"tags": String(r.get("_tags", "")).split(";", false),
+			"per": r.get("per", ""),
+			"k2": r.get("k2", ""),
+			"v2": _i(r, "v2", "items", 0),
+			"grow": r.get("grow", ""),
+			"gstep": _i(r, "gstep", "items", 0),
+			"boom": r.get("boom", ""),
+			"dadd": _i(r, "dadd", "items", 0),
+			"side": r.get("side", ""),
 			"line": r.get("_line", 0),
 		}
 		if String(r.get("gold", "")) != "":
@@ -562,7 +575,12 @@ const VAL_W := {"bull_i": 50.0, "bull_o": 25.0, "trp": 3.0, "dbl": 2.0, "plain":
 
 const CONDS := ["always", "triple", "double", "band", "bull", "odd", "even", "left",
 		"right", "big", "mid", "small", "same", "diff", "first", "last",
-		"streak", "warm", "miss", "missp"]
+		"streak", "warm", "miss", "missp",
+		# 조커 이식(2026-08-23 · 사용자 지시로 후보 시트 구현)이 들여온 조건들.
+		# "이후" 붙은 패턴 조건은 완성한 발이 아니라 그 다음 발부터 선다.
+		"risk", "risk1", "few", "sixth",
+		"pair", "trip", "quad", "pair2", "spread",
+		"zone3", "zones2", "zones4", "rezone", "sec"]
 
 # 조건 포함관계. A 가 B 를 담으면 A 로 뜨는 다트는 B 로도 뜬다.
 # check() 를 고치면 여기도 같이 고친다 — 하위호환 검사의 유일한 근거다.
@@ -577,8 +595,8 @@ const COND_SUB := {
 
 # 완전분할 — 같은 k 로 한 분할을 다 덮으면 합성 무조건 카드가 된다.
 const COND_PART := [["left", "right"], ["odd", "even"], ["mid", "big", "small"]]
-const KINDS := ["chip", "mult", "xmult", "mult_streak"]
-const GOLDS := ["clear", "spare", "clean", "blitz", "broke"]
+const KINDS := ["chip", "mult", "xmult", "mult_streak", "mult_rand", "save"]
+const GOLDS := ["clear", "spare", "clean", "blitz", "broke", "round", "risk50"]
 
 
 static func board_val(b: Dictionary, sec: Array) -> float:
@@ -628,6 +646,24 @@ static func check(c: String, x: Dictionary) -> bool:
 		"streak": return x.streak > 0
 		"warm": return x.warm
 		"missp": return x.missp
+		"risk": return x.mult >= 2 or x.sector >= 25
+		"risk1": return x.get("risk1", false)
+		"few": return x.get("few", false)
+		"sixth": return x.get("sixth", false)
+		"pair": return x.get("pair", false)
+		"trip": return x.get("trip", false)
+		"quad": return x.get("quad", false)
+		"pair2": return x.get("pair2", false)
+		"spread": return x.get("spread", false)
+		"zone3": return x.get("zone3", false)
+		"zones2": return x.get("zones2", false)
+		"zones4": return x.get("zones4", false)
+		"rezone": return x.get("rezone", false)
+	if c.begins_with("sec:"):
+		for t in c.substr(4).split(","):
+			if x.sector == int(t):
+				return true
+		return false
 	return false
 
 
@@ -653,7 +689,93 @@ static func cond_text(c: String) -> String:
 		"warm": return "이번 라운드에 트리플을 맞힌 뒤"
 		"miss": return "빗나가면"
 		"missp": return "직전 투척이 빗나갔다면"
+		"risk": return "더블·트리플·불 명중 시"
+		"risk1": return "라운드 첫 더블·트리플·불 명중 시"
+		"few": return "이번 라운드 다트가 3개 이하면"
+		"sixth": return "매 6번째 투척에"
+		"pair": return "같은 숫자 2회를 맞힌 뒤"
+		"trip": return "같은 숫자 3회를 맞힌 뒤"
+		"quad": return "같은 숫자 4회를 맞힌 뒤"
+		"pair2": return "다른 두 숫자를 각 2회 맞힌 뒤"
+		"spread": return "다른 숫자 세 곳을 맞힌 뒤"
+		"zone3": return "같은 영역 종류 3회를 맞힌 뒤"
+		"zones2": return "다른 영역 2종을 맞힌 뒤"
+		"zones4": return "네 영역을 모두 맞힌 뒤"
+		"rezone": return "이미 명중한 영역을 다시 맞히면"
+	if c.begins_with("sec:"):
+		return c.substr(4).replace(",", "·") + "번 명중 시"
 	return ""
+
+
+# 아이템 하나가 이번 발에 내는 수. x 는 판정 문맥 + 배율 재료다.
+#   streak/darts_left/items_n/gold/mag_hvy/round_darts/low/zonehist/
+#   rackval_others/empty_n/rand01
+# grow 아이템의 상태는 아이템 사전의 gs 에 있다(산 순간 0). fire 성장은
+# 호출 전에 gs 를 올려 두는 것이 규약이다 — 첫 발동이 gstep 을 낸다.
+static func item_amt(it: Dictionary, x: Dictionary) -> int:
+	var g: String = String(it.get("grow", ""))
+	if g == "fire" or g == "hitmiss":
+		return int(it.get("gs", 0))
+	if g == "tdec" or g == "rdec":
+		return maxi(0, int(it.v) - int(it.get("gstep", 0)) * int(it.get("gs", 0)))
+	var v: int = it.v
+	match String(it.get("k", "")):
+		"mult_streak":
+			return v * int(x.get("streak", 0))
+		"mult_rand":
+			return int(round(float(x.get("rand01", 0.0)) * float(v)))
+		"xmult":
+			if String(it.get("per", "")) == "empty":
+				return maxi(1, int(x.get("empty_n", 0)))
+			return v
+	match String(it.get("per", "")):
+		"darts_left": v *= int(x.get("darts_left", 0))
+		"items": v *= int(x.get("items_n", 0))
+		"gold": v *= int(x.get("gold", 0))
+		"gold5": v *= int(x.get("gold", 0)) / 5
+		"mag_hvy": v *= int(x.get("mag_hvy", 0))
+		"missing": v *= maxi(0, 6 - int(x.get("round_darts", 6)))
+		"low": v *= int(x.get("low", 0))
+		"zonehist": v *= int(x.get("zonehist", 0))
+		"rackval": v *= int(x.get("rackval_others", 0))
+	return v
+
+
+# 화면용 효과 문장 — per·grow 가 있으면 수 하나로는 거짓말이 되므로
+# 배율의 정체를 같이 적는다.
+static func eff_line(it: Dictionary) -> String:
+	# 점수도 배수도 없는 카드 — 골드·다트·승급이 본업이다
+	if String(it.get("k", "")) == "":
+		var da := int(it.get("dadd", 0))
+		if da != 0:
+			return "라운드 시작 다트 %+d" % da
+		if String(it.get("side", "")) == "trackup25":
+			return "발동 4회 중 1회꼴로 맞은 영역의 강화가 오른다"
+		return "골드로만 일한다"
+	var g: String = String(it.get("grow", ""))
+	if g == "hitmiss":
+		return "명중마다 배수 +%d · 빗나가면 −%d" % [it.gstep, it.gstep]
+	if g == "fire":
+		return "발동할 때마다 %s +%d 누적" % ["점수" if it.k == "chip" else "배수", it.gstep]
+	if g == "tdec":
+		return "%s +%d 에서 시작 · 던질 때마다 −%d" 				% ["점수" if it.k == "chip" else "배수", it.v, it.gstep]
+	if g == "rdec":
+		return "배수 +%d 에서 시작 · 라운드마다 −%d · 0이면 파괴" % [it.v, it.gstep]
+	var base := eff_text(it.k, it.v)
+	match String(it.get("per", "")):
+		"darts_left": return "남은 다트 1개당 " + base
+		"items": return "보유 아이템 1개당 " + base
+		"gold": return "보유 골드 1당 " + base
+		"gold5": return "보유 골드 5당 " + base
+		"mag_hvy": return "무거운 다트 1개당 " + base
+		"missing": return "기본에서 줄어든 다트 1개당 " + base
+		"low": return "라운드 최저 명중 숫자 1당 " + base
+		"zonehist": return "이 영역의 런 누적 명중 1회당 " + base
+		"rackval": return "다른 아이템 판매가 합계만큼 " + base.split(" ")[0] + " 추가"
+		"empty": return "배수 × 빈 아이템 칸 수 (최소 ×1)"
+	if String(it.get("k2", "")) != "":
+		return base + " · " + eff_text(it.k2, it.v2)
+	return base
 
 
 static func eff_text(k: String, v: int) -> String:
@@ -662,6 +784,8 @@ static func eff_text(k: String, v: int) -> String:
 		"mult": return "배수 +%d" % v
 		"xmult": return "배수 ×%d" % v
 		"mult_streak": return "배수 +%d" % v
+		"mult_rand": return "배수 +0~%d 무작위" % v
+		"save": return "실패 1회 방지 (총점이 목표의 %d%% 이상일 때)" % v
 	return ""
 
 
@@ -808,16 +932,30 @@ static func _v_items() -> void:
 		if seen.has(id):
 			_errs.append("%s — id 중복" % who)
 		seen[id] = r
-		if id.length() != 3:
-			_errs.append("%s — id 는 세 글자여야 한다" % who)
+		if id.length() < 3 or id.length() > 4:
+			_errs.append("%s — id 는 3~4 글자여야 한다" % who)
+		# 꺼진 행은 자리다 — 조커 후보 90행이 엔진 미지원으로 대기 중이라
+		# 효과 칸이 비어 있다. 켜는 순간부터 아래 전부를 묻는다.
+		if not _b(r, "enabled", "items"):
+			continue
 		if not CONDS.has(r.get("cond", "")):
 			_errs.append("%s — 모르는 조건 '%s'" % [who, r.get("cond", "")])
-		if not KINDS.has(r.get("kind", "")):
+		# 효과 없는 카드도 있다 — 골드·다트·승급만 하는 조커들. 그때는
+		# 빈 kind 를 허락하되 부가 효과가 하나는 있어야 한다.
+		if String(r.get("kind", "")) == "":
+			if String(r.get("gold", "")) == "" and String(r.get("dadd", "")) == "" 					and String(r.get("side", "")) == "":
+				_errs.append("%s — 효과도 부가도 없는 빈 카드다" % who)
+		elif not KINDS.has(r.get("kind", "")):
 			_errs.append("%s — 모르는 효과 '%s'" % [who, r.get("kind", "")])
 		if not RARITIES.has(r.get("rarity", "")):
 			_errs.append("%s — 모르는 등급 '%s'" % [who, r.get("rarity", "")])
-		if _i(r, "value", "items") <= 0:
+		# fire·hitmiss 성장은 0에서 시작하는 것이 설계다. 빈 kind 도 값이 없다.
+		if String(r.get("kind", "")) != "" 				and String(r.get("grow", "")) != "fire" 				and String(r.get("grow", "")) != "hitmiss" 				and _i(r, "value", "items") <= 0:
 			_errs.append("%s — 값이 0 이하다" % who)
+		if String(r.get("grow", "")) != "" 				and not ["fire", "hitmiss", "tdec", "rdec"].has(String(r.get("grow", ""))):
+			_errs.append("%s — 모르는 성장 '%s'" % [who, r.get("grow")])
+		if String(r.get("cond", "")) == "sec" and String(r.get("secs", "")) == "":
+			_errs.append("%s — sec 조건인데 secs 칸이 비었다" % who)
 		if _i(r, "cost", "items") <= 0:
 			_errs.append("%s — 가격이 0 이하다" % who)
 		if String(r.get("weight", "")) != "" and _f(r, "weight", "items") <= 0.0:
@@ -837,10 +975,22 @@ static func _v_items() -> void:
 	# 상위호환 — 같은 효과이고 조건이 상대를 담는데 값이 크고 가격이 싸면
 	# 상대 카드는 영원히 안 팔린다.
 	for a in raw:
+		if not _b(a, "enabled", "items"):
+			continue
 		for b in raw:
+			if not _b(b, "enabled", "items"):
+				continue
 			if a.get("id") == b.get("id") or a.get("kind") != b.get("kind"):
 				continue
-			if (String(a.get("gold", "")) != "") != (String(b.get("gold", "")) != ""):
+			# 골드는 발동 조건이 다르면 다른 카드다 — 있냐 없냐만으로 못 가른다
+			if String(a.get("gold", "")) != String(b.get("gold", "")):
+				continue
+			# 배율·성장·보조 효과가 다르면 값의 크고 작음이 우열이 아니다
+			if String(a.get("per", "")) != String(b.get("per", "")) 					or String(a.get("grow", "")) != String(b.get("grow", "")) 					or String(a.get("k2", "")) != String(b.get("k2", "")) 					or String(a.get("dadd", "")) != String(b.get("dadd", "")):
+				continue
+			if String(a.get("grow", "")) != "":
+				continue
+			if String(a.get("boom", "")) != String(b.get("boom", "")) 					or String(a.get("side", "")) != String(b.get("side", "")) 					or String(a.get("secs", "")) != String(b.get("secs", "")):
 				continue
 			var ca: String = a.get("cond", "")
 			var cb: String = b.get("cond", "")
@@ -855,7 +1005,7 @@ static func _v_items() -> void:
 			var cov := 0
 			for cc in part:
 				for r2 in raw:
-					if r2.get("cond") == cc and r2.get("kind") == kk:
+					if r2.get("cond") == cc and r2.get("kind") == kk 							and _b(r2, "enabled", "items"):
 						cov += 1
 						break
 			if cov == part.size():
@@ -865,7 +1015,8 @@ static func _v_items() -> void:
 	# 여기서 센다 — 손으로 적은 현황은 커밋 한 번에 낡는다.
 	var used := {}
 	for r3 in raw:
-		used[r3.get("cond", "")] = true
+		if _b(r3, "enabled", "items"):
+			used[r3.get("cond", "")] = true
 	var idle := []
 	for c in CONDS:
 		if not used.has(c):
