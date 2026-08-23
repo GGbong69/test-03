@@ -2898,10 +2898,8 @@ const NPC := {
 	# 정확히 같은 높이에 두지는 않는다(완전대칭은 옷걸이의 냄새다).
 	# u 88 에 두면 손끝이 몸통 위로 올라타 한 덩어리로 붙는다(실측).
 	"el_r": Vector2(96.0, -103.0), "wr_r": Vector2(104.0, -6.0),
-	# 쓸기 팔의 뿌리. 어깨는 랙 뒤(w −115 → 화면 y 21)에 못 박는다 —
-	# 아래팔이 미는 선 위에 눕는 동안 위팔이 여기서 팔꿈치까지 이어져,
-	# 팔이 몸에서 나온다. 뿌리 없는 장대가 화면을 가로지르던 옛 그림의
-	# 잘못은 길이가 아니라 연결이었다.
+	# 쓸기 팔의 뿌리. 어깨 u +62 는 몸통 윗반폭(72) 안이라, 몸이 어디를
+	# 걷든 소매가 조끼에서 나온다. w −115(화면 y 21)는 쉴 때 랙 뒤다.
 	"sh_r": Vector2(62.0, -115.0),
 	# 팔꿈치 26 → 손목 13 → 너클 18. **손목이 전체 최소폭**이고 손이 거기서
 	# 1.66배로 되벌어진다. 이 계단이 관절이 있다는 유일한 표시다 —
@@ -2980,7 +2978,7 @@ const SWEEP := {
 	"u0": 529.0, "u1": 18.0,
 	"w_el": 24.0, "w_hd": 126.0,
 	"tilt": 0.477576,    # 창구 빗변의 기울기 그대로. 아래 주석이 이유다
-	"lean": 34.0,        # 몸통이 팔을 따라가는 거리. 320±(34+72) 는 랙 안이다
+	"el_off": 92.0,      # 훑는 동안 팔꿈치의 몸 중심 기준 u 오프셋 — 팔 자세를 고정한다
 	"push": 620.0,       # 밀린 물건이 받는 최소 좌향 속도 (면px/s)
 	"fall_g": 900.0, "fall_c": 3.2, "fall_t": 0.44,
 }
@@ -3180,19 +3178,17 @@ func _npc_arms() -> void:
 	var a := _sweep_amt()
 	# 쉬는 팔. 숨은 팔꿈치를 손목보다 크게 흔든다 — 뿌리가 랙 뒤라
 	# 팔꿈치 쪽 진폭은 안 보이고 팔 전체의 기울기로만 나온다.
-	# 기울임은 왼쪽으로 5 까지만 탄다: 몸이 쓸기를 따라 34 기울 때 이 팔의
-	# 팔꿈치 뿌리(cx−105)가 랙 왼끝(209) 밖으로 나오기 때문이다. 손을
-	# 카운터에 짚고 몸만 기대는 그림이 되고, 그게 실제 자세이기도 하다.
-	var cxr: float = NPC.cx + clampf(_sweep_lean(), -5.0, SWEEP.lean)
-	_npc_limb(Vector2(cxr + NPC.el_l.x, NPC.el_l.y + br * 0.5),
-			Vector2(cxr + NPC.wr_l.x, NPC.wr_l.y + br * 0.2),
+	# 몸이 걸으면 같이 걷는다 — 몸에 붙은 것은 몸의 좌표를 산다.
+	_npc_limb(Vector2(cx + NPC.el_l.x, NPC.el_l.y + br * 0.5),
+			Vector2(cx + NPC.wr_l.x, NPC.wr_l.y + br * 0.2),
 			deg_to_rad(NPC.ang_l), NPC.sc_l)
 	# 쓸는 팔 — 맨팔이 판을 훑는다. 아래팔이 미는 선 위에 눕는다:
 	# 52° 정사영에서 면 위 직선은 화면 직선이라 **그려지는 아래팔이 곧
-	# 미는 선이다.** 팔꿈치가 선 위끝(w 24), 손목이 아래끝(w 126)이고,
-	# 위팔이 랙 뒤 어깨에서 그 팔꿈치까지 이어져 팔이 몸에서 나온다.
-	# 팔은 길어진다 — 만화의 팔이다. 뿌리와 관절이 있으면 성립하고,
-	# 없으면 장대가 된다는 것을 세 번의 검토가 가르쳐 줬다.
+	# 미는 선이다.** 팔꿈치가 선 위끝(w 24), 손목이 아래끝(w 126).
+	# 팔은 사람 비율 그대로다 — _sweep_lean 이 몸을 선에 붙여 걸리므로
+	# 훑는 내내 어깨(+62)·팔꿈치(+92)·손목이 몸 기준 상수이고, 어깨는
+	# 항상 몸통 실루엣(반폭 72) 안에서 나온다. 팔을 늘였던 이전 판은
+	# 뿌리를 달아도 장대 냄새가 빠지지 않았다.
 	var el := Vector2(cx + NPC.el_r.x, NPC.el_r.y + br * 0.5)
 	var wr := Vector2(cx + NPC.wr_r.x, NPC.wr_r.y + br * 0.2)
 	var ang: float = deg_to_rad(NPC.ang_r)
@@ -3207,16 +3203,17 @@ func _npc_arms() -> void:
 	# 위팔 — 쉴 때는 어깨·팔꿈치가 다 랙 뒤라 안 보이고, 쓸 때만 드러난다
 	_npc_taper(sh, el, 11.5, NPC.el_w, NPC.arm_t,
 			C_WOOD.darkened(0.84), C_WOOD.lightened(0.04))
-	# 이 팔이 딜러의 왼팔이다 — 손은 거울상으로 붙는다.
-	_npc_limb(el, wr, ang, 1.0, true)
 	# 관절 원판 — 위팔과 아래팔은 상자 둘이라 굽은 모서리 바깥에서 윗면이
 	# 만나지 못하고, 그 틈으로 옆면의 어둠이 12px 쐐기로 파고든다(검토
-	# 실측). 같은 색 원판 하나가 모서리를 둥글게 덮는다.
+	# 실측). 같은 색 원판이 틈을 밑에서 메운다 — 위에 얹으면 이번엔
+	# 원판의 옆면이 실루엣 밖으로 삐져나온다(그것도 검토가 잡았다).
 	var jd := PackedVector2Array()
 	for k in 8:
 		var ka := TAU * (float(k) + 0.5) / 8.0
-		jd.append(el + Vector2(cos(ka), sin(ka)) * (NPC.el_w + 0.5))
+		jd.append(el + Vector2(cos(ka), sin(ka)) * (NPC.el_w - 1.0))
 	_npc_flat(jd, NPC.arm_t, C_WOOD.darkened(0.84), C_WOOD.lightened(0.04))
+	# 이 팔이 딜러의 왼팔이다 — 손은 거울상으로 붙는다.
+	_npc_limb(el, wr, ang, 1.0, true)
 
 
 # 팔 하나 + 손 하나. 면 좌표(u,w) 로 받는다.
@@ -3246,6 +3243,13 @@ func _npc_limb(el: Vector2, wr: Vector2, ang: float, sc: float,
 	draw_colored_polygon(sh, C_WOOD.darkened(0.84))
 	_npc_taper(el, wr, NPC.el_w, NPC.wr_w, NPC.arm_t,
 			C_WOOD.darkened(0.84), C_WOOD.lightened(0.04))
+	# 손목 덮개 — 팔 상자와 손 다각형의 이음새에서 래스터가 어긋나면
+	# 펠트가 1px 새어 나온다(검토 실측). 작은 원판이 밑에서 메운다.
+	var wc := PackedVector2Array()
+	for k in 8:
+		var ka := TAU * (float(k) + 0.5) / 8.0
+		wc.append(wr + Vector2(cos(ka), sin(ka)) * (NPC.wr_w + 2.0) * sc)
+	_npc_flat(wc, NPC.hand_t, C_WOOD.darkened(0.84), C_WOOD.lightened(0.13))
 	# 손목 이음선은 **어둡게**. 밝은 커프 띠로 갈라 봤다가 옷이 아니라
 	# 띠 자체로 읽혀서 졌다 — 양옆보다 밝은 좁은 획은 형태를 자른다.
 	# 어두운 획은 반대로 잇는다. 여기서는 손 옆면(84)이 그 역할을 한다.
@@ -3310,14 +3314,15 @@ func _sweep_amt() -> float:
 	return 1.0 - _ease_io(t / SWEEP.back)
 
 
-# 몸통이 팔을 따라간다. 뻗을 때 오른쪽, 훑으면서 왼쪽으로 실린다.
-# 팔 길이를 늘리는 대신 몸을 옮기는 것이 사람이 하는 일이다.
-# 320 ± (20 + 72) = [228, 412] 이라 랙 x[209,431] 을 안 벗어난다.
+# 몸통이 팔 대신 걷는다. 긴 판을 훑는 사람은 팔을 늘리지 않고 판을 따라
+# 이동한다 — 훑는 내내 팔꿈치가 몸 중심 +el_off 에 머물도록 몸 전체가
+# 선을 따라간다. 그래서 팔의 상대 자세는 상수이고, 변형이 없다.
+# 몸통은 랙·자금판·칩 카운터 **뒤로** 지나간다(HUD 가 나중에 그려진다) —
+# 카운터 뒤를 걷는 딜러라는 깊이가 공짜로 맞는다.
 func _sweep_lean() -> float:
 	if not sweep_live:
 		return 0.0
-	var k: float = clampf((_sweep_u() - SWEEP.u1) / (SWEEP.u0 - SWEEP.u1), 0.0, 1.0)
-	return lerpf(-SWEEP.lean, SWEEP.lean, k) * _sweep_amt()
+	return (_sweep_line(SWEEP.w_el) - SWEEP.el_off - NPC.cx) * _sweep_amt()
 
 
 func _ease_io(t: float) -> float:
