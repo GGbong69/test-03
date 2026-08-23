@@ -1,0 +1,19 @@
+[remap]
+
+importer="csv_translation"
+type="Translation"
+uid="uid://b1ugt4td3pktw"
+
+[deps]
+
+files=["res://data/spec_map.sheet.translation", "res://data/spec_map.game.translation", "res://data/spec_map.status.translation"]
+
+source_file="res://data/spec_map.csv"
+dest_files=["res://data/spec_map.sheet.translation", "res://data/spec_map.game.translation", "res://data/spec_map.status.translation"]
+
+[params]
+
+compress=1
+delimiter=0
+unescape_keys=false
+unescape_translations=true

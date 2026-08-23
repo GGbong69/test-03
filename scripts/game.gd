@@ -98,7 +98,8 @@ const C_CHIP := Color("3f8fd8")
 const C_MULT := Color("e2593f")
 const C_GOLD := Color("f2c94c")
 
-enum S { PICK, AIM_V, AIM_H, CONFIRM, FLY, RESOLVE, CLEAR, SHOP, STAGE, OVER }
+enum S { PICK, AIM_V, AIM_H, CONFIRM, FLY, RESOLVE, CLEAR, SHOP, STAGE, OVER,
+		TITLE, SETTINGS, COLLECT }
 
 # ── 보드 기하 (개조로 변한다) ──────────────────────────────
 #  판의 유일한 출처는 mods_own 이다. 아래 여덟은 그것을 구운 결과일 뿐이다.
@@ -240,7 +241,12 @@ func _ready() -> void:
 	p.play()
 	pb = p.get_stream_playback()
 
-	_new_run()
+	if _autoplay:
+		_new_run()
+	else:
+		# 제목 화면. 판을 배경으로 깔아야 하므로 기본 판만 먼저 굽는다.
+		_board_bake()
+		state = S.TITLE
 
 
 # ══════════════════════════════════════════════════════════
@@ -1061,14 +1067,22 @@ func _unhandled_input(e: InputEvent) -> void:
 					confirm_hold = maxf(confirm_hold - 0.05, 0.0)
 				KEY_APOSTROPHE:
 					confirm_hold = minf(confirm_hold + 0.05, 1.5)
+				KEY_F11:
+					_toggle_fullscreen()
 				KEY_ESCAPE:
-					if hand_st != H.NONE:
+					if state == S.SETTINGS or state == S.COLLECT:
+						state = S.TITLE
+					elif hand_st != H.NONE:
 						_hand_abort()
 					else:
 						buy_sel = -1
 				KEY_SPACE:
 					if hand_st != H.NONE:
 						_hand_abort()
+					elif state == S.TITLE:
+						_new_run()
+					elif state == S.SETTINGS or state == S.COLLECT:
+						state = S.TITLE
 					elif state == S.PICK:
 						_pick_dart(0)
 					else:
@@ -1157,7 +1171,49 @@ func _click(m: Vector2) -> void:
 			else:
 				buy_sel = -1            # 맨 펠트 = 취소
 		S.OVER:
-			_new_run()
+			# 검증 실행은 소크 테스트라 곧장 다음 런으로 돈다. 사람은 제목으로.
+			if _autoplay:
+				_new_run()
+			else:
+				state = S.TITLE
+				beep(330.0, 0.06, 0.12)
+		S.TITLE:
+			for i in 4:
+				if _menu_rect(i).has_point(m):
+					match i:
+						0:
+							_new_run()
+						1:
+							collect_tab = 0
+							state = S.COLLECT
+						2:
+							state = S.SETTINGS
+						3:
+							get_tree().quit()
+					beep(523.0, 0.06, 0.14)
+					return
+		S.SETTINGS:
+			for i in 3:
+				if _menu_rect(i).has_point(m):
+					match i:
+						0:
+							_toggle_fullscreen()
+						1:
+							muted = not muted
+							AudioServer.set_bus_mute(0, muted)
+						2:
+							state = S.TITLE
+					beep(440.0, 0.05, 0.12)
+					return
+		S.COLLECT:
+			for t in 4:
+				if _col_tab_rect(t).has_point(m):
+					collect_tab = t
+					beep(392.0, 0.04, 0.10)
+					return
+			if _menu_back_rect().has_point(m):
+				state = S.TITLE
+				beep(330.0, 0.05, 0.10)
 
 
 # ══════════════════════════════════════════════════════════
@@ -1642,6 +1698,12 @@ func _draw() -> void:
 		_draw_shop()
 	elif state == S.OVER:
 		_draw_over()
+	elif state == S.TITLE:
+		_draw_title()
+	elif state == S.SETTINGS:
+		_draw_settings()
+	elif state == S.COLLECT:
+		_draw_collect()
 	else:
 		_draw_hint()
 
@@ -1665,7 +1727,8 @@ func _is_play() -> bool:
 
 
 func _hud_draw() -> void:
-	if state == S.OVER:
+	if state == S.OVER or state == S.TITLE or state == S.SETTINGS \
+			or state == S.COLLECT:
 		return
 	if not _bar_hidden():
 		_draw_topbar()
@@ -4236,6 +4299,20 @@ func _icon_modifier(c: Vector2, r: float, id: String, dim: float,
 			draw_rect(Rect2(c + Vector2(-r * 0.44, -r * 0.54),
 					Vector2(r * 0.88, maxf(r * 0.24, 1.4))), cut)
 
+		# ── 높은 목표 ────────────────────────────────────
+		# 목표선(가로획)이 있고 그 위를 뚫고 오르는 화살표. 손실색 하나다 —
+		# 제약 세트에는 얻는 색이 한 점도 안 들어간다는 규칙 그대로다.
+		"tgt":
+			draw_rect(Rect2(c + Vector2(-r * 0.7, r * 0.5),
+					Vector2(r * 1.4, w1)), grey)
+			draw_rect(Rect2(c + Vector2(-w2 * 0.5, -r * 0.34),
+					Vector2(w2, r * 0.9)), loss)
+			var tipv := PackedVector2Array([
+					c + Vector2(0.0, -r * 0.86),
+					c + Vector2(-r * 0.42, -r * 0.22),
+					c + Vector2(r * 0.42, -r * 0.22)])
+			draw_colored_polygon(tipv, loss)
+
 		# ── 둔화 ────────────────────────────────────────
 		# 여섯 중 유일하게 보드가 아니라 칩을 건드리는 제약이라 혼자만
 		# 기하가 아니라 물건이다 — 그 어긋남이 곧 "대상이 다르다"는 표시다.
@@ -4944,6 +5021,11 @@ func _tip_hit(m: Vector2) -> Dictionary:
 			for i in GameData.max_items():
 				if _slot_rect(i).has_point(m):
 					return {"k": "rack", "i": i}
+		S.COLLECT:
+			var kk: String = ["citem", "cmod", "cdart", "cetc"][collect_tab]
+			for i in _col_count():
+				if _col_cell(i).has_point(m):
+					return {"k": kk, "i": i}
 		S.PICK, S.AIM_V, S.AIM_H:
 			# 조준 중에도 갈아탈 수 있으므로 그때도 벽을 짚어 준다
 			for i in remaining.size():
@@ -5018,6 +5100,45 @@ func _tip_build(hit: Dictionary) -> void:
 			tip_title = sp.d.n
 			_tip_add(sp.d.d, 11, C_MULT.lightened(0.25))
 			_tip_add("목표 %d" % sp.target, 10, C_DIM)
+		"citem":
+			var it: Dictionary = GameData.items()[i]
+			tip_mark = _col_cell(i)
+			tip_title = it.n
+			tip_chip = it
+			_tip_add(GameData.cond_text(it.c), 10, C_DIM)
+			_tip_add(GameData.eff_text(it.k, it.v), 11,
+					C_CHIP.lightened(0.35) if it.k == "chip" else C_MULT.lightened(0.3))
+			if it.get("g", "") != "":
+				_tip_add(GameData.gold_text(it.g, it.gv), 9, C_GOLD)
+			_tip_add("%s · %d골드" % [GameData.rarity_name(it.rarity), it.cost],
+					9, C_DIM.darkened(0.2))
+		"cmod":
+			var md: Dictionary = GameData.mods()[i]
+			tip_mark = _col_cell(i)
+			tip_title = md.n
+			_tip_add(md.d, 10, C_DIM)
+			_tip_add("보드 개조 · %d골드" % md.cost, 9, C_DIM.darkened(0.2))
+		"cdart":
+			var dt: Dictionary = GameData.darts()[i]
+			tip_mark = _col_cell(i)
+			tip_title = dt.n
+			_tip_add(dt.d, 10, C_DIM)
+			_tip_add("게이지 ×%.2f" % dt.gauge, 9, C_DIM.darkened(0.2))
+			if int(dt.get("mult", 0)) != 0:
+				_tip_add("배수 %+d" % int(dt.mult), 9, C_MULT.lightened(0.25))
+		"cetc":
+			tip_mark = _col_cell(i)
+			var cs: Array = GameData.consumables()
+			if i < cs.size():
+				tip_title = cs[i].n
+				_tip_add(cs[i].d, 10, C_DIM)
+				_tip_add("소비 아이템 · 한 번 쓰고 사라진다", 9, C_DIM.darkened(0.2))
+			else:
+				var mo: Dictionary = GameData.modifiers()[i - cs.size()]
+				tip_title = mo.n
+				_tip_add(mo.d, 10, C_DIM)
+				_tip_add("라운드 제약 — 셋 중 하나를 반드시 고른다", 9,
+						C_DIM.darkened(0.2))
 		"mag":
 			var dd: Dictionary = remaining[i]
 			tip_mark = _mag_rect(i)
@@ -5327,7 +5448,134 @@ func _draw_over() -> void:
 		draw_string(font, Vector2(0, 150), "실패", HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 34, C_MULT)
 		draw_string(font, Vector2(0, 186), "라운드 %d — %d / %d" % [round_no, total, target],
 				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 13, C_TXT)
-	draw_string(font, Vector2(0, 226), "클릭 → 새 런", HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 12, C_DIM)
+	draw_string(font, Vector2(0, 226), "클릭 → 제목으로", HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 12, C_DIM)
+
+
+# ══════════════════════════════════════════════════════════
+#  제목 · 설정 · 컬렉션
+# ──────────────────────────────────────────────────────────
+#  셋 다 판을 배경으로 깔고 스크림을 덮는다 — OVER 와 같은 문법이다.
+#  버튼은 _btn 하나로 통일한다. 전용 위젯이 없는 것이 이 게임의 어법이다.
+# ══════════════════════════════════════════════════════════
+
+var collect_tab := 0
+var muted := false
+
+
+func _menu_rect(i: int) -> Rect2:
+	return Rect2(Vector2(226.0, 190.0 + float(i) * 40.0), Vector2(188.0, 32.0))
+
+
+func _menu_back_rect() -> Rect2:
+	return Rect2(Vector2(226.0, 322.0), Vector2(188.0, 30.0))
+
+
+func _toggle_fullscreen() -> void:
+	# 에디터에 내장된 실행에서는 창 모드를 못 바꾼다 — 내장 해제나
+	# 내보낸 빌드에서만 실제로 커진다.
+	var fs := DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
+	DisplayServer.window_set_mode(
+			DisplayServer.WINDOW_MODE_WINDOWED if fs
+			else DisplayServer.WINDOW_MODE_FULLSCREEN)
+
+
+func _draw_title() -> void:
+	_scrim()
+	draw_string(font, Vector2(0, 108), "하이톤", HORIZONTAL_ALIGNMENT_CENTER,
+			VIEW.x, 40, C_TXT)
+	draw_string(font, Vector2(0, 132), "HIGHTONE", HORIZONTAL_ALIGNMENT_CENTER,
+			VIEW.x, 12, C_DIM)
+	draw_string(font, Vector2(0, 158), "던지는 손과 읽는 머리가 곱해지는 다트 로그라이트",
+			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 10, C_DIM.darkened(0.15))
+	var names := ["시작", "컬렉션", "설정", "종료"]
+	var subs := ["스페이스", "", "", ""]
+	for i in 4:
+		_btn(_menu_rect(i), names[i], subs[i], true)
+	if OS.is_debug_build():
+		draw_string(font, Vector2(0, 352), "프로토타입 — 세이브 없음 · 한 판 완결",
+				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 9, C_DIM.darkened(0.35))
+
+
+func _draw_settings() -> void:
+	_scrim()
+	draw_string(font, Vector2(0, 96), "설정", HORIZONTAL_ALIGNMENT_CENTER,
+			VIEW.x, 24, C_TXT)
+	var fs := DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
+	_btn(_menu_rect(0), "전체화면  %s" % ("켬" if fs else "끔"), "F11", true)
+	_btn(_menu_rect(1), "소리  %s" % ("끔" if muted else "켬"), "", true)
+	_btn(_menu_rect(2), "뒤로", "ESC", true)
+	draw_string(font, Vector2(0, 330), "설정은 저장되지 않는다 — 세이브가 없는 프로토타입이다",
+			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 9, C_DIM.darkened(0.3))
+
+
+# ── 컬렉션 — 게임에 실린 전부를 편다. 해금이 없으므로 도감이 곧 전량이다 ──
+
+func _col_count() -> int:
+	match collect_tab:
+		0: return GameData.items().size()
+		1: return GameData.mods().size()
+		2: return GameData.darts().size()
+	return GameData.consumables().size() + GameData.modifiers().size()
+
+
+func _col_tab_rect(t: int) -> Rect2:
+	return Rect2(Vector2(96.0 + float(t) * 118.0, 42.0), Vector2(110.0, 24.0))
+
+
+func _col_cell(i: int) -> Rect2:
+	var cols := 7
+	var cw := 86.0
+	var ch := 58.0
+	var x0 := (VIEW.x - cw * float(cols)) * 0.5
+	return Rect2(Vector2(x0 + float(i % cols) * cw, 72.0 + float(i / cols) * ch),
+			Vector2(cw, ch))
+
+
+func _draw_collect() -> void:
+	_scrim()
+	draw_string(font, Vector2(0, 30), "컬렉션", HORIZONTAL_ALIGNMENT_CENTER,
+			VIEW.x, 18, C_TXT)
+	var tabs := ["칩 %d" % GameData.items().size(),
+			"개조 %d" % GameData.mods().size(),
+			"다트 %d" % GameData.darts().size(), "소비·제약"]
+	for t in 4:
+		_btn(_col_tab_rect(t), tabs[t], "", t == collect_tab)
+
+	for i in _col_count():
+		var cell := _col_cell(i)
+		var c := cell.get_center() + Vector2(0.0, -8.0)
+		var nm := ""
+		match collect_tab:
+			0:
+				var it: Dictionary = GameData.items()[i]
+				draw_item_chip(c, 13.0, it, 0.0, 0.0, 0.0, 9)
+				nm = it.n
+			1:
+				var md: Dictionary = GameData.mods()[i]
+				_icon_mod(c, 13.0, md.id, 0.0)
+				nm = md.n
+			2:
+				var dt: Dictionary = GameData.darts()[i]
+				_icon_dart(c, 15.0, dt.id, 0.0, -0.62)
+				nm = dt.n
+			3:
+				var cs: Array = GameData.consumables()
+				if i < cs.size():
+					var e := Vector2(11.0, 9.0)
+					draw_rect(Rect2(c - e, e * 2.0), C_PANEL.lightened(0.22))
+					draw_rect(Rect2(c - e, e * 2.0), C_WIRE.darkened(0.2), false, 1.0)
+					draw_string(font, Vector2(c.x - e.x, c.y + 3.0),
+							String(cs[i].n).substr(0, 2),
+							HORIZONTAL_ALIGNMENT_CENTER, e.x * 2.0, 8, C_TXT)
+					nm = cs[i].n
+				else:
+					var mo: Dictionary = GameData.modifiers()[i - cs.size()]
+					_icon_modifier(c, 11.0, mo.id, 0.0)
+					nm = mo.n
+		draw_string(font, Vector2(cell.position.x, cell.end.y - 8.0), nm,
+				HORIZONTAL_ALIGNMENT_CENTER, cell.size.x, 8, C_DIM)
+
+	_btn(_menu_back_rect(), "뒤로", "ESC", true)
 
 
 func _draw_hint() -> void:

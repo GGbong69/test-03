@@ -1,0 +1,19 @@
+[remap]
+
+importer="csv_translation"
+type="Translation"
+uid="uid://dp32afy42nkqp"
+
+[deps]
+
+files=["res://data/area_upgrades.track.translation", "res://data/area_upgrades.name.translation", "res://data/area_upgrades.level.translation", "res://data/area_upgrades.status.translation"]
+
+source_file="res://data/area_upgrades.csv"
+dest_files=["res://data/area_upgrades.track.translation", "res://data/area_upgrades.name.translation", "res://data/area_upgrades.level.translation", "res://data/area_upgrades.status.translation"]
+
+[params]
+
+compress=1
+delimiter=0
+unescape_keys=false
+unescape_translations=true
