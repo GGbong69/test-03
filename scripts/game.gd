@@ -5833,8 +5833,8 @@ func _draw_title() -> void:
 # 제목에서 연 설정에는 로비 행이 무의미하다 — 이미 로비다.
 func _set_rows() -> Array:
 	if pause_from >= 0:
-		return ["fs", "vol", "lobby", "quit", "back"]
-	return ["fs", "vol", "quit", "back"]
+		return ["back", "fs", "vol", "lobby", "quit"]
+	return ["back", "fs", "vol", "quit"]
 
 
 func _set_rect(i: int) -> Rect2:
@@ -5880,7 +5880,8 @@ func _draw_settings() -> void:
 			"quit":
 				_btn(r, "게임 나가기", "", true)
 			"back":
-				_btn(r, "뒤로", "ESC", true)
+				# 판 중이면 "계속하기" 다 — 돌아가는 곳이 판이니까.
+				_btn(r, "계속하기" if pause_from >= 0 else "뒤로", "ESC", true)
 
 
 # 설정을 닫는다 — 판 중에 열었으면 그 자리로, 아니면 제목으로.
