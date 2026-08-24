@@ -4152,7 +4152,12 @@ func _obj_paint(it: Dictionary, s: Dictionary, dim: float) -> void:
 					String(s.d.n).substr(0, 2), HORIZONTAL_ALIGNMENT_CENTER,
 					ce.x * 2.0, 8, Color(C_TXT, 1.0 - dim))
 		"mod":
-			_icon_mod(c, TBL.mod_r, s.d.id, dim)
+			# 칩과 같은 어법으로 눕는다 — 옆면을 깔고 윗면을 얹는다.
+			# 정면 원반은 컬렉션의 것이고, 테이블 위의 것은 누워야 한다.
+			draw_colored_polygon(_e_pts(c, TBL.mod_r, TBL.mod_r * TBL.flat),
+					C_DARK.darkened(0.72 + dim * 0.2))
+			_icon_mod(c - Vector2(0.0, TBL.chip_t * TBL.tall),
+					TBL.mod_r, s.d.id, dim, TBL.flat)
 		_:
 			# sh=false — 내장 그림자는 고정 오프셋이라 낙하 중 하늘을 같이 난다
 			var de := _dart_e(it)
@@ -4264,7 +4269,7 @@ func _drop_verify() -> void:
 #  상점에 세 종류가 나란히 선다. 실루엣이 서로 갈려야 글자를
 #  안 읽고도 무엇인지 안다.
 #    아이템 → 원반 (draw_item_chip)
-#    개조   → 사각판 위의 미니 보드
+#    개조   → 미니 보드 — 상점에선 눕고(fl=TBL.flat) 컬렉션에선 정면(fl 1)
 #    다트   → 대각선
 #  _icon_mod / _icon_dart 만 바깥에서 부른다.
 # ══════════════════════════════════════════════════════════
@@ -4285,7 +4290,8 @@ const MB_SEG := 10              # 20 칸이면 한 칸 호가 5px 라 뭉갠다
 # 정확한 기하가 아니라 기호다. 실제 링 폭 0.10 은 17px 반지름에서 1.7px 라
 # 사라지고, 속살(+0.06)과 겉살(-0.06)의 차이는 1px 여서 안 갈린다.
 # 그래서 방향과 대소만 살리고 폭은 읽히도록 과장한다.
-func _icon_mod(c: Vector2, r: float, id: String, dim: float) -> void:
+func _icon_mod(c: Vector2, r: float, id: String, dim: float,
+		fl: float = 1.0) -> void:
 	var m := GameData.mod_of(id)
 	var k := String(m.get("k", ""))
 
@@ -4297,24 +4303,25 @@ func _icon_mod(c: Vector2, r: float, id: String, dim: float) -> void:
 	var ghost := Color(C_TXT, 0.45 - dim * 0.3)
 	var step := TAU / float(MB_SEG)
 
-	# 바탕 보드 — 죽여 깔고, 바뀌는 곳만 원색으로 덮는다
-	draw_circle(c, br, C_DARK.darkened(d * 0.5))
+	# 모든 프리미티브가 타원 헬퍼를 지난다 — fl 1.0 이면 정면 원이고,
+	# TBL.flat 이면 테이블에 누운 판이다. 원 전용 draw_circle·draw_arc 는
+	# 여기서 못 쓴다: 눕힌 원반의 링은 12시에서 fl 배로 줄어야 한다.
+	draw_colored_polygon(_e_pts(c, br, br * fl), C_DARK.darkened(d * 0.5))
 	for i in MB_SEG:
 		var a := float(i) * step
-		draw_colored_polygon(annulus_at(c, br * MB.bo, br * MB.di, a, a + step, 3),
+		draw_colored_polygon(_e_band(c, br * MB.di, br * MB.di * fl,
+				br * MB.bo, br * MB.bo * fl, a, a + step, 3),
 				(C_LIGHT if i % 2 == 0 else C_DARK).darkened(d))
-	# 링 강조는 draw_arc 로만 그린다. 전체 링을 폴리곤으로 넘기면 이음매가
-	# 겹친 비볼록 도형이라 삼각분할이 튄다.
 	var trp_lit := k == "band" or k == "slide" or k == "ring"
 	if not trp_lit:
-		draw_arc(c, br * (MB.ti + MB.to) * 0.5, 0.0, TAU, 20,
-				C_GREEN.darkened(d), (MB.to - MB.ti) * br)
+		_e_ring_r(c, br, br * fl, MB.ti, MB.to, C_GREEN.darkened(d))
 	if k != "band" and k != "out":
-		draw_arc(c, br * (MB.di + 1.0) * 0.5, 0.0, TAU, 20,
-				C_RED.darkened(d), (1.0 - MB.di) * br)
+		_e_ring_r(c, br, br * fl, MB.di, 1.0, C_RED.darkened(d))
 	if k != "bull":
-		draw_circle(c, br * MB.bo, C_GREEN.darkened(d))
-		draw_circle(c, br * MB.bi, C_RED.darkened(d))
+		draw_colored_polygon(_e_pts(c, br * MB.bo, br * MB.bo * fl, 14),
+				C_GREEN.darkened(d))
+		draw_colored_polygon(_e_pts(c, br * MB.bi, br * MB.bi * fl, 10),
+				C_RED.darkened(d))
 
 	match k:
 		"band":
@@ -4323,59 +4330,66 @@ func _icon_mod(c: Vector2, r: float, id: String, dim: float) -> void:
 			var up: bool = float(m.v[0]) > 0.0
 			var wt: float = 0.24 if up else 0.06
 			var wd: float = 0.07 if up else 0.26
-			draw_arc(c, br * 0.53, 0.0, TAU, 24, acc, wt * br)
-			draw_arc(c, br * (1.0 - wd * 0.5), 0.0, TAU, 24,
-					C_RED.lightened(0.25).darkened(dim), wd * br)
+			_e_ring_r(c, br, br * fl, 0.53 - wt * 0.5, 0.53 + wt * 0.5, acc)
+			_e_ring_r(c, br, br * fl, 1.0 - wd, 1.0,
+					C_RED.lightened(0.25).darkened(dim))
 			# 원래 폭을 유령선으로 남겨 "무엇이 무엇으로 바뀌었는가" 를 읽힌다
 			for q in [MB.ti, MB.to, MB.di]:
-				draw_arc(c, br * q, 0.0, TAU, 20, ghost, 1.0)
+				_e_ring_w(c, br * q, br * q * fl, 1.0, ghost)
 		"slide":
 			# 띠가 더블 바로 안쪽으로 옮겨간다. 원래 자리와 새 자리를 같이 보인다.
 			var w: float = MB.to - MB.ti
-			draw_arc(c, br * (MB.ti + MB.to) * 0.5, 0.0, TAU, 20, ghost, w * br)
-			draw_arc(c, br * (MB.di - w * 0.5 - 0.02), 0.0, TAU, 24, acc, w * br)
+			_e_ring_r(c, br, br * fl, MB.ti, MB.to, ghost)
+			_e_ring_r(c, br, br * fl, MB.di - w - 0.02, MB.di - 0.02, acc)
 			for i in 4:
 				var a := float(i) * TAU * 0.25 + step * 0.5
 				var u := Vector2(sin(a), -cos(a))
-				draw_line(c + u * br * 0.62, c + u * br * 0.76, acc, 1.0)
+				draw_line(c + Vector2(u.x * br * 0.62, u.y * br * 0.62 * fl),
+						c + Vector2(u.x * br * 0.76, u.y * br * 0.76 * fl),
+						acc, 1.0)
 		"ring":
 			# 안쪽에 띠가 하나 더 생긴다. 기존 띠는 초록 그대로 두어 "추가" 로 읽힌다.
-			draw_arc(c, br * (MB.ti + MB.to) * 0.5, 0.0, TAU, 20,
-					C_GREEN.darkened(d), (MB.to - MB.ti) * br)
+			_e_ring_r(c, br, br * fl, MB.ti, MB.to, C_GREEN.darkened(d))
 			# 두 띠 사이를 비워 두 개임이 세어지게 한다. 얇으면 무늬로 읽힌다.
-			draw_arc(c, br * 0.33, 0.0, TAU, 22, acc, 0.15 * br)
+			_e_ring_r(c, br, br * fl, 0.33 - 0.075, 0.33 + 0.075, acc)
 		"bull":
 			# 불은 넓어지고 한복판은 좁아진다. 원래 불 크기를 유령선으로.
-			draw_circle(c, br * MB.bo * 1.55, acc)
-			draw_circle(c, br * MB.bi * 0.65, C_RED.lightened(0.2).darkened(dim))
-			draw_arc(c, br * MB.bo, 0.0, TAU, 16, ghost, 1.0)
+			draw_colored_polygon(_e_pts(c, br * MB.bo * 1.55,
+					br * MB.bo * 1.55 * fl, 14), acc)
+			draw_colored_polygon(_e_pts(c, br * MB.bi * 0.65,
+					br * MB.bi * 0.65 * fl, 10),
+					C_RED.lightened(0.2).darkened(dim))
+			_e_ring_w(c, br * MB.bo, br * MB.bo * fl, 1.0, ghost)
 		"out":
 			# 판이 커진다. 바탕을 줄여 그렸으므로 그 바깥이 새로 생긴 땅이다.
-			draw_arc(c, br * (MB.di + 1.0) * 0.5, 0.0, TAU, 20,
-					C_RED.darkened(d), (1.0 - MB.di) * br)
-			draw_arc(c, (br + r) * 0.5, 0.0, TAU, 26, acc, r - br)
-			draw_arc(c, br, 0.0, TAU, 20, ghost, 1.0)
+			_e_ring_r(c, br, br * fl, MB.di, 1.0, C_RED.darkened(d))
+			_e_ring_r(c, br, br * fl, 1.0, r / br, acc)
+			_e_ring_w(c, br, br * fl, 1.0, ghost)
 		"swap":
 			# 가장 작은 칸 v 개가 최대값이 된다. 바뀌는 칸 수를 그대로 칠한다.
 			# 칸 값이 최대로 "올라간다". 판 밖으로 삐져나오게 그려 승격을 보인다.
 			# 짝패도 부채꼴을 쓰므로 이 삐침이 둘을 가르는 유일한 표식이다.
-			var n: int = clampi(int(m.v), 1, MB_SEG)
-			for i in n:
+			var cnt: int = clampi(int(m.v), 1, MB_SEG)
+			for i in cnt:
 				var a := float(i * 2) * step
-				draw_colored_polygon(annulus_at(c, br * MB.bo, br * 1.14,
+				draw_colored_polygon(_e_band(c, br * 1.14, br * 1.14 * fl,
+						br * MB.bo, br * MB.bo * fl,
 						a + step * 0.12, a + step * 0.88, 3), acc)
 		"odd":
-			# 칸마다 짝이 생긴다. 붙어 있는 두 칸이 같은 값이 되는 것을 보인다.
 			# 붙은 두 칸이 같은 값이 된다. 바깥에서 다리로 묶어 "짝" 을 명시한다.
 			# 판갈이와 갈리는 지점은 이 다리와, 부채꼴이 판 안에 머문다는 것이다.
 			for pair in [0, 4, 8]:
 				for j in 2:
 					var a := float(pair + j) * step
-					draw_colored_polygon(annulus_at(c, br * MB.bo, br * MB.di,
-							a, a + step, 3), acc if j == 0 else acc.darkened(0.3))
+					draw_colored_polygon(_e_band(c, br * MB.di, br * MB.di * fl,
+							br * MB.bo, br * MB.bo * fl, a, a + step, 3),
+							acc if j == 0 else acc.darkened(0.3))
 				var a0 := float(pair) * step
-				draw_arc(c, br * (MB.di + 0.07), a0 - PI * 0.5,
-						a0 + step * 2.0 - PI * 0.5, 8, acc, 1.6)
+				draw_colored_polygon(_e_band(c, br * (MB.di + 0.07) + 0.8,
+						(br * (MB.di + 0.07) + 0.8) * fl,
+						br * (MB.di + 0.07) - 0.8,
+						(br * (MB.di + 0.07) - 0.8) * fl,
+						a0, a0 + step * 2.0, 8), acc)
 
 
 # rot 은 기본 각도에서 더 돌릴 양(레일 정렬 · 탁자 위 흩뿌림), a 는 알파(focus 감쇠).
