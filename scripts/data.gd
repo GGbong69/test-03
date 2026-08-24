@@ -750,8 +750,8 @@ static func eff_line(it: Dictionary) -> String:
 		if da != 0:
 			return "라운드 시작 다트 %+d" % da
 		if String(it.get("side", "")) == "trackup25":
-			return "발동 4회 중 1회꼴로 맞은 영역의 강화가 오른다"
-		return "골드로만 일한다"
+			return "발동 4회 중 1회, 맞은 영역 강화 +1"
+		return ""     # 골드 카드 — 효과는 골드 줄이 이미 말한다
 	var g: String = String(it.get("grow", ""))
 	if g == "hitmiss":
 		return "명중마다 배수 +%d · 빗나가면 −%d" % [it.gstep, it.gstep]

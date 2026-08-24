@@ -5340,7 +5340,7 @@ func _tip_build(hit: Dictionary) -> void:
 			if it.get("g", "") != "":
 				_tip_add(GameData.gold_text(it.g, it.gv), 9, C_GOLD)
 			if i == sealed:
-				_tip_add("이번 판 봉인 — 발동하지 않는다", 9, C_MULT.lightened(0.25))
+				_tip_add("이번 판 봉인", 9, C_MULT.lightened(0.25))
 			if _can_sell():
 				_tip_add("판매가", 10, C_GOLD, "", "", str(GameData.sell_value(it)))
 				_tip_add("왼쪽 창구를 눌러 판다" if i == sell_sel else "누르면 고른다",
@@ -5357,14 +5357,9 @@ func _tip_build(hit: Dictionary) -> void:
 						C_CHIP.lightened(0.35) if s.d.k == "chip" else C_MULT.lightened(0.3))
 				if s.d.get("g", "") != "":
 					_tip_add(GameData.gold_text(s.d.g, s.d.gv), 9, C_GOLD)
-			elif s.type == "cons":
-				_tip_add(s.d.d, 10, C_DIM)
-				_tip_add("한 번 쓰고 사라진다 — 사면 왼쪽 위 칸에 들어간다",
-						9, C_DIM.darkened(0.2))
 			else:
+				# 소비·개조·다트 — 효과 한 줄이면 된다. 분류 해설은 소음이다.
 				_tip_add(s.d.d, 10, C_DIM)
-				_tip_add("보드를 바꾼다 — 런이 끝날 때까지 남는다" if s.type == "mod"
-						else "탄창의 표준 다트 1개와 바꾼다", 9, C_DIM.darkened(0.2))
 			# 못 사는 이유를 누르기 전에 알려준다. _deny() 는 원인을 한 문장으로 뭉갠다.
 			var blk := _buy_block(i)
 			if blk != "":
@@ -5407,14 +5402,11 @@ func _tip_build(hit: Dictionary) -> void:
 			var cd: Dictionary = GameData.consumables()[i]
 			tip_title = cd.n
 			_tip_add(cd.d, 10, C_DIM)
-			_tip_add("소비 아이템 · 한 번 쓰고 사라진다", 9, C_DIM.darkened(0.2))
 		"cmodf":
 			tip_mark = _col_cell(i % COL_PAGE)
 			var mo: Dictionary = GameData.modifiers()[i]
 			tip_title = mo.n
 			_tip_add(mo.d, 10, C_DIM)
-			_tip_add("라운드 제약 — 셋 중 하나를 반드시 고른다", 9,
-					C_DIM.darkened(0.2))
 		"mag":
 			var dd: Dictionary = remaining[i]
 			tip_mark = _mag_rect(i)
