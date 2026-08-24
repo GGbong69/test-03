@@ -1,19 +1,4 @@
 [remap]
 
-importer="csv_translation"
-type="Translation"
+importer="keep"
 uid="uid://dp15iwoq8pu0e"
-
-[deps]
-
-files=["res://data/consumables.wb.translation", "res://data/consumables.name.translation", "res://data/consumables.desc.translation", "res://data/consumables.status.translation", "res://data/consumables.cat.translation", "res://data/consumables.target.translation", "res://data/consumables.track.translation", "res://data/consumables.enabled.translation"]
-
-source_file="res://data/consumables.csv"
-dest_files=["res://data/consumables.wb.translation", "res://data/consumables.name.translation", "res://data/consumables.desc.translation", "res://data/consumables.status.translation", "res://data/consumables.cat.translation", "res://data/consumables.target.translation", "res://data/consumables.track.translation", "res://data/consumables.enabled.translation"]
-
-[params]
-
-compress=1
-delimiter=0
-unescape_keys=false
-unescape_translations=true

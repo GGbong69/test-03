@@ -1,19 +1,4 @@
 [remap]
 
-importer="csv_translation"
-type="Translation"
+importer="keep"
 uid="uid://c1yv3okj51mjv"
-
-[deps]
-
-files=["res://data/processing.wb.translation", "res://data/processing.name.translation", "res://data/processing.status.translation", "res://data/processing.target.translation", "res://data/processing.desc.translation", "res://data/processing.max.translation", "res://data/processing.redo.translation", "res://data/processing.enabled.translation"]
-
-source_file="res://data/processing.csv"
-dest_files=["res://data/processing.wb.translation", "res://data/processing.name.translation", "res://data/processing.status.translation", "res://data/processing.target.translation", "res://data/processing.desc.translation", "res://data/processing.max.translation", "res://data/processing.redo.translation", "res://data/processing.enabled.translation"]
-
-[params]
-
-compress=1
-delimiter=0
-unescape_keys=false
-unescape_translations=true

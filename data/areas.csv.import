@@ -1,19 +1,4 @@
 [remap]
 
-importer="csv_translation"
-type="Translation"
+importer="keep"
 uid="uid://dfkjvbt2ytokx"
-
-[deps]
-
-files=["res://data/areas.wb.translation", "res://data/areas.name.translation", "res://data/areas.status.translation", "res://data/areas.calc.translation", "res://data/areas.base.translation", "res://data/areas.mult.translation", "res://data/areas.track.translation"]
-
-source_file="res://data/areas.csv"
-dest_files=["res://data/areas.wb.translation", "res://data/areas.name.translation", "res://data/areas.status.translation", "res://data/areas.calc.translation", "res://data/areas.base.translation", "res://data/areas.mult.translation", "res://data/areas.track.translation"]
-
-[params]
-
-compress=1
-delimiter=0
-unescape_keys=false
-unescape_translations=true
