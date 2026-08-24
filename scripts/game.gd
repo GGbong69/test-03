@@ -2913,7 +2913,7 @@ const NPC := {
 	# 거울로 온전히 뒤집으면 엄지 투영이 오른손과 정확히 같아진다.
 	# 남는 비대칭은 각 4° · 길이 12% · 손목 w 12 차다.
 	"ang_l": 160.0, "sc_l": 0.88,
-	"ang_r": 24.0, "ang_sw": 150.0,
+	"ang_r": 24.0,       # 쓸 때의 손각은 상수가 아니라 팔 방향이 정한다
 	# 위팔은 따로 안 그린다. 팔은 상자 **하나**다 — 팔꿈치에서 손목까지 한
 	# 덩어리로 누워 있고, 팔꿈치를 꺾으면 서 있는 도형과 누운 도형이
 	# 한 팔 안에서 섞여 이음매가 부러져 보인다(그려서 확인했다).
@@ -2978,7 +2978,9 @@ const SWEEP := {
 	"u0": 529.0, "u1": 18.0,
 	"w_el": 24.0, "w_hd": 126.0,
 	"tilt": 0.477576,    # 창구 빗변의 기울기 그대로. 아래 주석이 이유다
-	"el_off": 92.0,      # 훑는 동안 팔꿈치의 몸 중심 기준 u 오프셋 — 팔 자세를 고정한다
+	"tilt_deg": 5.0,     # 몸 기울기 — 뻗을 때 +5°(95도), 훑어 끝나면 −5°(85도)
+	"w_wr": 74.0,        # 훑을 때 손목 깊이. 손끝이 미는 선 아래끝(126) 근처를 덮는다
+	"hand_up": 1.55,     # 훑을 때 손 배율 — 가까이 온 것은 커진다. 원근이다
 	"push": 620.0,       # 밀린 물건이 받는 최소 좌향 속도 (면px/s)
 	"fall_g": 900.0, "fall_c": 3.2, "fall_t": 0.44,
 }
@@ -3138,33 +3140,36 @@ func _chute_label() -> void:
 # 딜러 몸통 — 카운터 위로 올라온 부분만. 랙이 이 위에 얹혀 트레이로 읽힌다.
 func _npc_body() -> void:
 	var br: float = sin(npc_clock * 1.5) * float(NPC.breathe)
-	var cx: float = NPC.cx + _sweep_lean()
+	var cx: float = NPC.cx
 	# 141 에서 내렸다. 손 윗면(133)보다 밝은 것이 화면에 있으면 안 된다 —
 	# 눈은 가장 밝은 데로 먼저 가고, 그게 옆구리 획이면 딜러가 안 읽힌다.
 	var rim: Color = C_WOOD.lightened(0.26)
 	# 몸통. 위는 랙(y<36) 뒤로 사라지고 아래는 카운터에 박힌다. 사다리꼴
 	# 하나면 충분하다 — 이 크롭에서 어깨 사면은 화면 밖이라 그릴 것이 없다.
+	# 쓸 때는 윗점들이 _npc_tl 로 허리축 기울임을 탄다.
 	draw_colored_polygon(PackedVector2Array([
-			Vector2(cx - NPC.hc, NPC.top), Vector2(cx + NPC.hc, NPC.top),
+			_npc_tl(Vector2(cx - NPC.hc, NPC.top)),
+			_npc_tl(Vector2(cx + NPC.hc, NPC.top)),
 			Vector2(cx + NPC.hw, NPC.cut), Vector2(cx - NPC.hw, NPC.cut)]),
 			C_WOOD.darkened(0.84))
 	# 셔츠 V — 조끼가 벌어진 자리. 이 한 조각이 사다리꼴을 옷으로 만든다.
 	# 꼭짓점만 숨을 탄다. 윗변은 랙 뒤라 움직여도 아무 데서도 안 보인다.
 	draw_colored_polygon(PackedVector2Array([
-			Vector2(cx - NPC.vee_w, NPC.top), Vector2(cx + NPC.vee_w, NPC.top),
-			Vector2(cx, NPC.vee_y + br)]), C_LIGHT.darkened(0.60))
+			_npc_tl(Vector2(cx - NPC.vee_w, NPC.top)),
+			_npc_tl(Vector2(cx + NPC.vee_w, NPC.top)),
+			_npc_tl(Vector2(cx, NPC.vee_y + br))]), C_LIGHT.darkened(0.60))
 	# 단추 셋. 세로 한 줄이 가운데를 잡아 좌우 대칭을 몸으로 읽게 한다.
 	for k in 3:
 		draw_colored_polygon(_e_pts(
-				Vector2(cx, NPC.btn_y + float(k) * NPC.btn_dy + br),
+				_npc_tl(Vector2(cx, NPC.btn_y + float(k) * NPC.btn_dy + br)),
 				NPC.btn_r, NPC.btn_r, 12), C_WOOD.lightened(0.13))
-	# 허리띠 — 몸통이 카운터에서 끊기는 자리에 가로 획을 하나 준다.
+	# 허리띠 — 몸통이 카운터에서 끊기는 자리에 가로 획. 축이 여기라 안 기운다.
 	draw_rect(Rect2(cx - NPC.hw - 1.0, NPC.cut - NPC.belt,
 			(NPC.hw + 1.0) * 2.0, NPC.belt), C_WOOD.darkened(0.90))
 	# 옆선 빛. 벽과 100/255 갈리는 유일한 고대비 획이고, 이게 없으면
 	# 조끼(9)와 벽(41)의 32 차이만 남아 실루엣이 벽에 잠긴다.
 	for s in [-1.0, 1.0]:
-		draw_line(Vector2(cx + s * NPC.hc, NPC.top),
+		draw_line(_npc_tl(Vector2(cx + s * NPC.hc, NPC.top)),
 				Vector2(cx + s * NPC.hw, NPC.cut), Color(rim, 0.55), 1.0)
 
 
@@ -3174,46 +3179,45 @@ func _npc_body() -> void:
 # 물리가 이미 팔을 골라 놨다.
 func _npc_arms() -> void:
 	var br: float = sin(npc_clock * 1.5) * float(NPC.breathe)
-	var cx: float = NPC.cx + _sweep_lean()
+	var cx: float = NPC.cx
 	var a := _sweep_amt()
 	# 쉬는 팔. 숨은 팔꿈치를 손목보다 크게 흔든다 — 뿌리가 랙 뒤라
 	# 팔꿈치 쪽 진폭은 안 보이고 팔 전체의 기울기로만 나온다.
-	# 몸이 걸으면 같이 걷는다 — 몸에 붙은 것은 몸의 좌표를 산다.
-	_npc_limb(Vector2(cx + NPC.el_l.x, NPC.el_l.y + br * 0.5),
-			Vector2(cx + NPC.wr_l.x, NPC.wr_l.y + br * 0.2),
+	# 몸이 기울면 뿌리도 그만큼 밀린다.
+	_npc_limb(Vector2(cx + NPC.el_l.x + _npc_sway(NPC.el_l.y),
+			NPC.el_l.y + br * 0.5),
+			Vector2(cx + NPC.wr_l.x + _npc_sway(NPC.wr_l.y),
+			NPC.wr_l.y + br * 0.2),
 			deg_to_rad(NPC.ang_l), NPC.sc_l)
-	# 쓸는 팔 — 맨팔이 판을 훑는다. 아래팔이 미는 선 위에 눕는다:
-	# 52° 정사영에서 면 위 직선은 화면 직선이라 **그려지는 아래팔이 곧
-	# 미는 선이다.** 팔꿈치가 선 위끝(w 24), 손목이 아래끝(w 126).
-	# 팔은 사람 비율 그대로다 — _sweep_lean 이 몸을 선에 붙여 걸리므로
-	# 훑는 내내 어깨(+62)·팔꿈치(+92)·손목이 몸 기준 상수이고, 어깨는
-	# 항상 몸통 실루엣(반폭 72) 안에서 나온다. 팔을 늘였던 이전 판은
-	# 뿌리를 달아도 장대 냄새가 빠지지 않았다.
-	var el := Vector2(cx + NPC.el_r.x, NPC.el_r.y + br * 0.5)
-	var wr := Vector2(cx + NPC.wr_r.x, NPC.wr_r.y + br * 0.2)
+	# 쓸는 팔 — 어깨부터 **쭉 편 채** 휩쓴다. 몸이 +5° 기울며 뻗고,
+	# −5° 로 넘어가는 동안 팔이 부채꼴로 판을 쓴다. 팔꿈치는 어깨-손목
+	# 직선 위라 안 굽고, 손으로 갈수록 굵어지다 손이 1.55배가 된다 —
+	# 관객 쪽으로 내려온 것은 크게 보이는 것이 원근이다.
+	var el := Vector2(cx + NPC.el_r.x + _npc_sway(NPC.el_r.y),
+			NPC.el_r.y + br * 0.5)
+	var wr := Vector2(cx + NPC.wr_r.x + _npc_sway(NPC.wr_r.y),
+			NPC.wr_r.y + br * 0.2)
 	var ang: float = deg_to_rad(NPC.ang_r)
-	var sh := Vector2(cx + NPC.sh_r.x, NPC.sh_r.y)
+	var sh := Vector2(cx + NPC.sh_r.x + _npc_sway(NPC.sh_r.y), NPC.sh_r.y)
 	if a > 0.004:
-		el = el.lerp(Vector2(_sweep_line(SWEEP.w_el), SWEEP.w_el), a)
-		wr = wr.lerp(Vector2(_sweep_line(SWEEP.w_hd), SWEEP.w_hd), a)
-		# 손목이 꺾인다. 손 방향을 (wr−el) 로 두면 팔과 손이 한 직선이라
-		# 관절 없는 막대가 된다. 150° 는 손끝이 w 146(화면 y 227)에서
-		# 멈추는 각이다 — 레일(244)에 안 닿는다.
-		ang = lerp_angle(ang, deg_to_rad(NPC.ang_sw), a)
-	# 위팔 — 쉴 때는 어깨·팔꿈치가 다 랙 뒤라 안 보이고, 쓸 때만 드러난다
-	_npc_taper(sh, el, 11.5, NPC.el_w, NPC.arm_t,
+		var wt := Vector2(_sweep_line(SWEEP.w_wr), SWEEP.w_wr)
+		wr = wr.lerp(wt, a)
+		el = el.lerp(sh + (wr - sh) * 0.55, a)
+		# 손도 팔의 연장이다 — 쭉 편 팔은 손까지 한 방향이다.
+		ang = lerp_angle(ang, (wr - sh).angle(), a)
+	var hs := lerpf(1.0, SWEEP.hand_up, a)
+	# 위팔 — 쉴 때는 어깨·팔꿈치가 다 랙 뒤라 안 보이고, 쓸 때만 드러난다.
+	# 어깨 쪽이 가늘어지는 것도 원근이다 — 먼 것이 가늘다.
+	_npc_taper(sh, el, lerpf(11.5, 8.0, a), NPC.el_w, NPC.arm_t,
 			C_WOOD.darkened(0.84), C_WOOD.lightened(0.04))
-	# 관절 원판 — 위팔과 아래팔은 상자 둘이라 굽은 모서리 바깥에서 윗면이
-	# 만나지 못하고, 그 틈으로 옆면의 어둠이 12px 쐐기로 파고든다(검토
-	# 실측). 같은 색 원판이 틈을 밑에서 메운다 — 위에 얹으면 이번엔
-	# 원판의 옆면이 실루엣 밖으로 삐져나온다(그것도 검토가 잡았다).
+	# 관절 원판 — 쉬는 자세로 오갈 때 굽는 모서리의 틈을 밑에서 메운다.
 	var jd := PackedVector2Array()
 	for k in 8:
 		var ka := TAU * (float(k) + 0.5) / 8.0
 		jd.append(el + Vector2(cos(ka), sin(ka)) * (NPC.el_w - 1.0))
 	_npc_flat(jd, NPC.arm_t, C_WOOD.darkened(0.84), C_WOOD.lightened(0.04))
 	# 이 팔이 딜러의 왼팔이다 — 손은 거울상으로 붙는다.
-	_npc_limb(el, wr, ang, 1.0, true)
+	_npc_limb(el, wr, ang, hs, true, lerpf(NPC.wr_w, 13.5, a))
 
 
 # 팔 하나 + 손 하나. 면 좌표(u,w) 로 받는다.
@@ -3221,7 +3225,9 @@ func _npc_arms() -> void:
 # 옛 소매 24 는 벽보다 어두워서 팔이 벽에 잠겨 있었다. 손 윗면 133 은
 # 화면에서 가장 밝은 덩어리이고, 그래서 눈이 손부터 본다.
 func _npc_limb(el: Vector2, wr: Vector2, ang: float, sc: float,
-		mir: bool = false) -> void:
+		mir: bool = false, wrr: float = -1.0) -> void:
+	if wrr < 0.0:
+		wrr = NPC.wr_w
 	var ex := Vector2(cos(ang), sin(ang))
 	# 손대칭이 문제였다. 같은 다각형을 두 팔에 평행이동만 해서 붙이면
 	# 딜러가 오른손을 두 개 단다 — 마주 본 사람의 두 손은 거울상이다.
@@ -3241,14 +3247,14 @@ func _npc_limb(el: Vector2, wr: Vector2, ang: float, sc: float,
 	for q in hand:
 		sh.append(_p2s(q.x, q.y + 3.0, 0.0))
 	draw_colored_polygon(sh, C_WOOD.darkened(0.84))
-	_npc_taper(el, wr, NPC.el_w, NPC.wr_w, NPC.arm_t,
+	_npc_taper(el, wr, NPC.el_w, wrr, NPC.arm_t,
 			C_WOOD.darkened(0.84), C_WOOD.lightened(0.04))
 	# 손목 덮개 — 팔 상자와 손 다각형의 이음새에서 래스터가 어긋나면
 	# 펠트가 1px 새어 나온다(검토 실측). 작은 원판이 밑에서 메운다.
 	var wc := PackedVector2Array()
 	for k in 8:
 		var ka := TAU * (float(k) + 0.5) / 8.0
-		wc.append(wr + Vector2(cos(ka), sin(ka)) * (NPC.wr_w + 2.0) * sc)
+		wc.append(wr + Vector2(cos(ka), sin(ka)) * (wrr + 2.0) * sc)
 	_npc_flat(wc, NPC.hand_t, C_WOOD.darkened(0.84), C_WOOD.lightened(0.13))
 	# 손목 이음선은 **어둡게**. 밝은 커프 띠로 갈라 봤다가 옷이 아니라
 	# 띠 자체로 읽혀서 졌다 — 양옆보다 밝은 좁은 획은 형태를 자른다.
@@ -3314,15 +3320,29 @@ func _sweep_amt() -> float:
 	return 1.0 - _ease_io(t / SWEEP.back)
 
 
-# 몸통이 팔 대신 걷는다. 긴 판을 훑는 사람은 팔을 늘리지 않고 판을 따라
-# 이동한다 — 훑는 내내 팔꿈치가 몸 중심 +el_off 에 머물도록 몸 전체가
-# 선을 따라간다. 그래서 팔의 상대 자세는 상수이고, 변형이 없다.
-# 몸통은 랙·자금판·칩 카운터 **뒤로** 지나간다(HUD 가 나중에 그려진다) —
-# 카운터 뒤를 걷는 딜러라는 깊이가 공짜로 맞는다.
-func _sweep_lean() -> float:
+# 몸은 제자리에서 **기울기만** 한다 — 뻗을 때 오른쪽으로 +5°, 훑으면서
+# 왼쪽 −5° 까지. 허리(w 0 = 카운터 선)가 축이다. 걷기도 팔 늘리기도
+# 시켜 봤지만 다 부자연스러웠다 — 기울고, 팔은 쭉 편 채 원근으로 큰다.
+func _sweep_tilt() -> float:
 	if not sweep_live:
 		return 0.0
-	return (_sweep_line(SWEEP.w_el) - SWEEP.el_off - NPC.cx) * _sweep_amt()
+	var k: float = clampf((_sweep_u() - SWEEP.u1) / (SWEEP.u0 - SWEEP.u1), 0.0, 1.0)
+	return deg_to_rad(lerpf(-SWEEP.tilt_deg, SWEEP.tilt_deg, k)) * _sweep_amt()
+
+
+# 기울임을 화면 점에 얹는다 — 허리(NPC.cx, cut)를 축으로 돈다.
+func _npc_tl(pt: Vector2) -> Vector2:
+	var th := _sweep_tilt()
+	if absf(th) < 0.0005:
+		return pt
+	var pv := Vector2(NPC.cx, NPC.cut)
+	return pv + (pt - pv).rotated(th)
+
+
+# 팔 뿌리(면 좌표 u,w)의 기울임 보정 — 허리축이 w 0 이라, 위로 갈수록
+# (w 음수) 기울기만큼 u 가 밀린다. 작은 각이라 회전 대신 밀기로 충분하다.
+func _npc_sway(w: float) -> float:
+	return -w * TBL.flat * _sweep_tilt()
 
 
 func _ease_io(t: float) -> float:
@@ -4268,11 +4288,6 @@ const MB_SEG := 10              # 20 칸이면 한 칸 호가 5px 라 뭉갠다
 func _icon_mod(c: Vector2, r: float, id: String, dim: float) -> void:
 	var m := GameData.mod_of(id)
 	var k := String(m.get("k", ""))
-
-	# 사각 캐비닛 — 이게 없으면 칩과 똑같은 원반이라 실루엣이 안 갈린다
-	var pl := Rect2(c - Vector2(r + 3.0, r + 3.0), Vector2(r * 2.0 + 6.0, r * 2.0 + 6.0))
-	draw_rect(pl, C_PANEL.darkened(0.35 + dim * 0.3))
-	draw_rect(Rect2(pl.position, Vector2(pl.size.x, 1.0)), C_WIRE.darkened(0.35))
 
 	# 판벌이는 판이 커지는 것 자체가 효과다. 바탕을 줄여 그려야 커질 자리가 난다.
 	var br: float = r * (0.84 if k == "out" else 1.0)
@@ -5327,9 +5342,6 @@ func _tip_build(hit: Dictionary) -> void:
 			tip_mark = Rect2()
 			tip_slot = i
 			if i >= owned.size():
-				tip_title = "빈 칸"
-				_tip_add("상점에서 칩을 사면 여기 꽂힌다", 9, C_DIM)
-				_tip_add("최대 %d개" % GameData.max_items(), 9, C_DIM.darkened(0.2))
 				return
 			var it: Dictionary = owned[i]
 			tip_title = it.n
@@ -5343,8 +5355,6 @@ func _tip_build(hit: Dictionary) -> void:
 				_tip_add("이번 판 봉인", 9, C_MULT.lightened(0.25))
 			if _can_sell():
 				_tip_add("판매가", 10, C_GOLD, "", "", str(GameData.sell_value(it)))
-				_tip_add("왼쪽 창구를 눌러 판다" if i == sell_sel else "누르면 고른다",
-						9, C_DIM.darkened(0.2))
 		"stock":
 			var s: Dictionary = stock[i]
 			tip_mark = Rect2()      # 칩 랙과 같은 진영 — 사각 테두리 안 두른다
@@ -5689,22 +5699,6 @@ func _draw_shop() -> void:
 		draw_string(font, Vector2(196.0, 306.0), msg, HORIZONTAL_ALIGNMENT_CENTER,
 				248.0, 10, Color(C_MULT.lightened(0.3), ma))
 
-	# 대기 중에는 아무 말도 안 한다. 조작을 시작한 뒤의 세 가지만 남긴다 —
-	# 그것들은 설명이 아니라 지금 무슨 상태인가를 알리는 것이다.
-	var tip := ""
-	if _sweep_wipe():
-		tip = "딜러가 판을 쓸어 담는다"
-	elif _drop_busy():
-		tip = "떨어지는 중  —  아무 데나 눌러 바로 세운다"
-	elif hand_st == H.CARRY:
-		tip = "왼쪽 끝에 밀면 판매  ·  오른쪽 끝에 밀면 구매  ·  펠트에 놓으면 그냥 옮긴다" \
-				if hand_src == 0 else "왼쪽 끝에 밀면 판매"
-	elif buy_sel >= 0:
-		tip = "오른쪽 끝을 눌러 구매  ·  다시 누르면 취소"
-	elif sell_sel >= 0:
-		tip = "왼쪽 끝을 눌러 판매  ·  다시 누르면 취소"
-	draw_string(font, Vector2(0, 316), tip,
-			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 10, C_DIM.darkened(0.2))
 
 func _draw_over() -> void:
 	_scrim()
@@ -5716,7 +5710,6 @@ func _draw_over() -> void:
 		draw_string(font, Vector2(0, 150), "실패", HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 34, C_MULT)
 		draw_string(font, Vector2(0, 186), "라운드 %d — %d / %d" % [round_no, total, target],
 				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 13, C_TXT)
-	draw_string(font, Vector2(0, 226), "클릭 → 제목으로", HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 12, C_DIM)
 
 
 # ══════════════════════════════════════════════════════════
@@ -5753,15 +5746,10 @@ func _draw_title() -> void:
 			VIEW.x, 40, C_TXT)
 	draw_string(font, Vector2(0, 132), "HIGHTONE", HORIZONTAL_ALIGNMENT_CENTER,
 			VIEW.x, 12, C_DIM)
-	draw_string(font, Vector2(0, 158), "던지는 손과 읽는 머리가 곱해지는 다트 로그라이트",
-			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 10, C_DIM.darkened(0.15))
 	var names := ["시작", "컬렉션", "설정", "종료"]
 	var subs := ["스페이스", "", "", ""]
 	for i in 4:
 		_btn(_menu_rect(i), names[i], subs[i], true)
-	if OS.is_debug_build():
-		draw_string(font, Vector2(0, 352), "프로토타입 — 세이브 없음 · 한 판 완결",
-				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 9, C_DIM.darkened(0.35))
 
 
 func _draw_settings() -> void:
@@ -5772,8 +5760,6 @@ func _draw_settings() -> void:
 	_btn(_menu_rect(0), "전체화면  %s" % ("켬" if fs else "끔"), "F11", true)
 	_btn(_menu_rect(1), "소리  %s" % ("끔" if muted else "켬"), "", true)
 	_btn(_menu_rect(2), "뒤로", "ESC", true)
-	draw_string(font, Vector2(0, 330), "설정은 저장되지 않는다 — 세이브가 없는 프로토타입이다",
-			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 9, C_DIM.darkened(0.3))
 
 
 # ── 컬렉션 — 게임에 실린 전부를 편다. 해금이 없으므로 도감이 곧 전량이다 ──
