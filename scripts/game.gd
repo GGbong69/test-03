@@ -1276,22 +1276,27 @@ func _click(m: Vector2) -> void:
 					beep(523.0, 0.06, 0.14)
 					return
 		S.SETTINGS:
-			for i in 3:
-				if _menu_rect(i).has_point(m):
-					match i:
-						0:
-							_toggle_fullscreen()
-						1:
-							# 왼쪽 반 = 줄이고, 오른쪽 반 = 키운다
-							var half: bool = m.x < _menu_rect(1).get_center().x
-							volume = clampi(volume + (-1 if half else 1), 0, 4)
-							AudioServer.set_bus_volume_db(0,
-									linear_to_db(maxf(float(volume) * 0.25, 0.0001)))
-							AudioServer.set_bus_mute(0, volume == 0)
-						2:
-							_settings_back()
-					beep(440.0, 0.05, 0.12)
-					return
+			var rows := _set_rows()
+			for i in rows.size():
+				if not _set_rect(i).has_point(m):
+					continue
+				match rows[i]:
+					"fs":
+						_toggle_fullscreen()
+					"vol":
+						var tr := _vol_track(_set_rect(i))
+						vol = snappedf(clampf(
+								(m.x - tr.position.x) / tr.size.x, 0.0, 1.0), 0.05)
+						_apply_vol()
+					"lobby":
+						pause_from = -1
+						state = S.TITLE
+					"quit":
+						get_tree().quit()
+					"back":
+						_settings_back()
+				beep(440.0, 0.05, 0.12)
+				return
 		S.COLLECT:
 			for t in 5:
 				if _col_tab_rect(t).has_point(m):
@@ -5791,7 +5796,7 @@ func _draw_over() -> void:
 # ══════════════════════════════════════════════════════════
 
 var collect_tab := 0
-var volume := 4          # 소리 크기 0~4 = 0·25·50·75·100%
+var vol := 1.0           # 소리 크기 0~1. 게이지를 눌러 정한다
 var pause_from := -1     # 게임 중 ESC 로 설정을 열면 돌아갈 상태. -1 = 제목
 
 
@@ -5824,14 +5829,58 @@ func _draw_title() -> void:
 		_btn(_menu_rect(i), names[i], subs[i], true)
 
 
+# 설정의 행 — 판 중에 열었을 때만 "로비로 나가기" 가 낀다.
+# 제목에서 연 설정에는 로비 행이 무의미하다 — 이미 로비다.
+func _set_rows() -> Array:
+	if pause_from >= 0:
+		return ["fs", "vol", "lobby", "quit", "back"]
+	return ["fs", "vol", "quit", "back"]
+
+
+func _set_rect(i: int) -> Rect2:
+	return Rect2(Vector2(226.0, 132.0 + float(i) * 40.0), Vector2(188.0, 32.0))
+
+
+# 게이지의 홈 — 행 안에서 소리 글자 오른쪽부터 끝까지다.
+func _vol_track(r: Rect2) -> Rect2:
+	return Rect2(r.position + Vector2(58.0, 13.0), Vector2(r.size.x - 74.0, 6.0))
+
+
+func _apply_vol() -> void:
+	AudioServer.set_bus_volume_db(0, linear_to_db(maxf(vol, 0.0001)))
+	AudioServer.set_bus_mute(0, vol <= 0.001)
+
+
 func _draw_settings() -> void:
 	_scrim()
 	draw_string(font, Vector2(0, 96), "설정", HORIZONTAL_ALIGNMENT_CENTER,
 			VIEW.x, 24, C_TXT)
 	var fs := DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
-	_btn(_menu_rect(0), "전체화면  %s" % ("켬" if fs else "끔"), "F11", true)
-	_btn(_menu_rect(1), "◀  소리 %d%%  ▶" % (volume * 25), "", true)
-	_btn(_menu_rect(2), "뒤로", "ESC", true)
+	var rows := _set_rows()
+	for i in rows.size():
+		var r := _set_rect(i)
+		match rows[i]:
+			"fs":
+				_btn(r, "전체화면  %s" % ("켬" if fs else "끔"), "F11", true)
+			"vol":
+				# 게이지 — 누른 자리가 곧 크기다. 홈을 깔고 찬 만큼 채운다.
+				draw_rect(r, C_PANEL.lightened(0.10))
+				draw_rect(Rect2(r.position, Vector2(r.size.x, 2)), C_ACC)
+				draw_string(font, r.position + Vector2(12, 20), "소리",
+						HORIZONTAL_ALIGNMENT_LEFT, -1, 12, C_TXT)
+				var tr := _vol_track(r)
+				draw_rect(tr, C_PANEL.darkened(0.45))
+				if vol > 0.0:
+					draw_rect(Rect2(tr.position, Vector2(tr.size.x * vol, tr.size.y)),
+							C_GOLD.darkened(0.15))
+				var kx: float = tr.position.x + tr.size.x * vol
+				draw_rect(Rect2(kx - 1.5, tr.position.y - 3.0, 3.0, 12.0), C_TXT)
+			"lobby":
+				_btn(r, "로비로 나가기", "", true)
+			"quit":
+				_btn(r, "게임 나가기", "", true)
+			"back":
+				_btn(r, "뒤로", "ESC", true)
 
 
 # 설정을 닫는다 — 판 중에 열었으면 그 자리로, 아니면 제목으로.
