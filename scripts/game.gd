@@ -1143,18 +1143,28 @@ func _unhandled_input(e: InputEvent) -> void:
 				KEY_F11:
 					_toggle_fullscreen()
 				KEY_ESCAPE:
-					if state == S.SETTINGS or state == S.COLLECT:
+					if state == S.SETTINGS:
+						_settings_back()
+					elif state == S.COLLECT:
 						state = S.TITLE
 					elif hand_st != H.NONE:
 						_hand_abort()
-					else:
+					elif buy_sel >= 0 or sell_sel >= 0:
 						buy_sel = -1
+						sell_sel = -1
+					elif state != S.TITLE and state != S.OVER:
+						# 판 중의 ESC 는 일시정지다 — 설정을 열고, 닫으면
+						# 열던 자리로 돌아간다. 진행 상태는 전부 그대로다.
+						pause_from = state
+						state = S.SETTINGS
 				KEY_SPACE:
 					if hand_st != H.NONE:
 						_hand_abort()
 					elif state == S.TITLE:
 						_new_run()
-					elif state == S.SETTINGS or state == S.COLLECT:
+					elif state == S.SETTINGS:
+						_settings_back()
+					elif state == S.COLLECT:
 						state = S.TITLE
 					elif state == S.PICK:
 						_pick_dart(0)
@@ -1272,10 +1282,14 @@ func _click(m: Vector2) -> void:
 						0:
 							_toggle_fullscreen()
 						1:
-							muted = not muted
-							AudioServer.set_bus_mute(0, muted)
+							# 왼쪽 반 = 줄이고, 오른쪽 반 = 키운다
+							var half: bool = m.x < _menu_rect(1).get_center().x
+							volume = clampi(volume + (-1 if half else 1), 0, 4)
+							AudioServer.set_bus_volume_db(0,
+									linear_to_db(maxf(float(volume) * 0.25, 0.0001)))
+							AudioServer.set_bus_mute(0, volume == 0)
 						2:
-							state = S.TITLE
+							_settings_back()
 					beep(440.0, 0.05, 0.12)
 					return
 		S.COLLECT:
@@ -2082,20 +2096,47 @@ func _draw_darts() -> void:
 
 func _draw_aim() -> void:
 	if state == S.AIM_V:
-		draw_line(Vector2(BC.x - 151.0, aim.y), Vector2(BC.x + 151.0, aim.y), C_ACC, 1.0)
+		_aim_h_line(aim.y, C_ACC)
 	elif state == S.AIM_H:
-		draw_line(Vector2(BC.x - 151.0, aim.y), Vector2(BC.x + 151.0, aim.y),
-				C_ACC.darkened(0.55), 1.0)
-		draw_line(Vector2(aim.x, 68.0), Vector2(aim.x, 334.0), C_ACC, 1.0)
+		_aim_h_line(aim.y, C_ACC.darkened(0.55))
+		_aim_v_line(aim.x, C_ACC)
 	elif state == S.CONFIRM:
-		draw_line(Vector2(BC.x - 151.0, aim.y), Vector2(BC.x + 151.0, aim.y), C_ACC, 1.0)
-		draw_line(Vector2(aim.x, 68.0), Vector2(aim.x, 334.0), C_ACC, 1.0)
-		var e := 1.0 - pow(1.0 - clampf(confirm_t / maxf(ch(), 0.001), 0.0, 1.0), 3.0)
-		draw_arc(aim, lerpf(22.0, 7.0, e), 0.0, TAU, 24, C_TXT, 1.0)
-		draw_arc(aim, lerpf(30.0, 11.0, e), 0.0, TAU, 24, Color(C_TXT, 0.3), 1.0)
+		_aim_h_line(aim.y, C_ACC)
+		_aim_v_line(aim.x, C_ACC)
+		if mod_v("fog", 0.0) <= 0.0:
+			var e := 1.0 - pow(1.0 - clampf(confirm_t / maxf(ch(), 0.001), 0.0, 1.0), 3.0)
+			draw_arc(aim, lerpf(22.0, 7.0, e), 0.0, TAU, 24, C_TXT, 1.0)
+			draw_arc(aim, lerpf(30.0, 11.0, e), 0.0, TAU, 24, Color(C_TXT, 0.3), 1.0)
 	elif state == S.FLY:
 		var k := 1.0 - fly_t / 0.2
 		draw_circle(aim, 3.0 + k * 26.0, Color(C_TXT, 0.2 + k * 0.55))
+
+
+# 조준선 한 줄. 안개가 걸리면 판 원 안쪽이 비고 바깥 꼬리만 남는다 —
+# 확인 텀을 0 으로 만들던 옛 안개는 아무것도 안 바꾸는 것과 같았다.
+# 확인 구간은 입력을 안 받는 순수 연출이라 없어져도 티가 안 났던 것이다.
+func _aim_h_line(y: float, col: Color) -> void:
+	var fog: bool = mod_v("fog", 0.0) > 0.0
+	var dy: float = y - BC.y
+	var rr: float = R + 8.0
+	if not fog or absf(dy) >= rr:
+		draw_line(Vector2(BC.x - 151.0, y), Vector2(BC.x + 151.0, y), col, 1.0)
+		return
+	var cut: float = sqrt(maxf(rr * rr - dy * dy, 0.0))
+	draw_line(Vector2(BC.x - 151.0, y), Vector2(BC.x - cut, y), col, 1.0)
+	draw_line(Vector2(BC.x + cut, y), Vector2(BC.x + 151.0, y), col, 1.0)
+
+
+func _aim_v_line(x: float, col: Color) -> void:
+	var fog: bool = mod_v("fog", 0.0) > 0.0
+	var dx: float = x - BC.x
+	var rr: float = R + 8.0
+	if not fog or absf(dx) >= rr:
+		draw_line(Vector2(x, 68.0), Vector2(x, 334.0), col, 1.0)
+		return
+	var cut: float = sqrt(maxf(rr * rr - dx * dx, 0.0))
+	draw_line(Vector2(x, 68.0), Vector2(x, BC.y - cut), col, 1.0)
+	draw_line(Vector2(x, BC.y + cut), Vector2(x, 334.0), col, 1.0)
 
 
 func _draw_topbar() -> void:
@@ -4107,11 +4148,27 @@ func _obj_shadow(i: int) -> void:
 	var hh: float = it.h + it.lift
 	var k: float = 1.0 + hh * DROP.sh_grow
 	var col := Color(0.0, 0.0, 0.0, DROP.sh_a / k)
-	for s in int(it.nb):
-		var sp := _drop_sub(it, s)
-		# 기존 그림자 벡터 (1.5,3.0) = light * 3.35. h=0 에서 정확히 일치한다.
-		var g := Vector2(sp.x, _p2g(sp.y)) + TBL.light * (3.35 + hh * 0.10)
-		draw_colored_polygon(_e_pts(g, it.r * k, it.r * k * TBL.flat, 14), col)
+	# 기존 그림자 벡터 (1.5,3.0) = light * 3.35. h=0 에서 정확히 일치한다.
+	var g := Vector2(it.u, _p2g(it.w)) + TBL.light * (3.35 + hh * 0.10)
+	match stock[i].type:
+		"dart":
+			# 가는 막대의 그림자는 가는 막대다 — 충돌 부위 세 곳에 원을
+			# 찍으면 애벌레가 된다(실측). 다트 방향으로 누운 가는 타원 하나.
+			var de := _dart_e(it)
+			var dirv := de.normalized()
+			var L: float = TBL.dart_l * de.length() * 0.92 * k
+			var pts := PackedVector2Array()
+			for q in 12:
+				var a := TAU * float(q) / 12.0
+				var e := Vector2(cos(a) * L, sin(a) * 2.4 * k)
+				pts.append(g + Vector2(e.x * dirv.x - e.y * dirv.y,
+						e.x * dirv.y + e.y * dirv.x))
+			draw_colored_polygon(pts, col)
+		"cons":
+			# 꾸러미는 칩보다 작다 — 칩 반지름 그림자를 깔면 빛무리가 된다.
+			draw_colored_polygon(_e_pts(g, 12.5 * k, 12.5 * k * TBL.flat, 12), col)
+		_:
+			draw_colored_polygon(_e_pts(g, it.r * k, it.r * k * TBL.flat, 14), col)
 
 
 func _obj_draw(i: int, dim: float) -> void:
@@ -5734,7 +5791,8 @@ func _draw_over() -> void:
 # ══════════════════════════════════════════════════════════
 
 var collect_tab := 0
-var muted := false
+var volume := 4          # 소리 크기 0~4 = 0·25·50·75·100%
+var pause_from := -1     # 게임 중 ESC 로 설정을 열면 돌아갈 상태. -1 = 제목
 
 
 func _menu_rect(i: int) -> Rect2:
@@ -5772,8 +5830,14 @@ func _draw_settings() -> void:
 			VIEW.x, 24, C_TXT)
 	var fs := DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
 	_btn(_menu_rect(0), "전체화면  %s" % ("켬" if fs else "끔"), "F11", true)
-	_btn(_menu_rect(1), "소리  %s" % ("끔" if muted else "켬"), "", true)
+	_btn(_menu_rect(1), "◀  소리 %d%%  ▶" % (volume * 25), "", true)
 	_btn(_menu_rect(2), "뒤로", "ESC", true)
+
+
+# 설정을 닫는다 — 판 중에 열었으면 그 자리로, 아니면 제목으로.
+func _settings_back() -> void:
+	state = pause_from if pause_from >= 0 else S.TITLE
+	pause_from = -1
 
 
 # ── 컬렉션 — 게임에 실린 전부를 편다. 해금이 없으므로 도감이 곧 전량이다 ──

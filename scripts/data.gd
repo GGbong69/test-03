@@ -75,7 +75,7 @@ const TUNE_KEYS := [
 
 const RARITIES := ["common", "uncommon", "rare"]
 const MOD_AXES := ["band", "slide", "ring", "bull", "out", "swap", "odd"]
-const MODIFIER_AXES := ["band_mul", "gauge_mul", "confirm_mul", "darts_add",
+const MODIFIER_AXES := ["band_mul", "gauge_mul", "confirm_mul", "fog", "darts_add",
 		"sector_kill", "seal_items", "target_mul"]
 
 static var _raw := {}                # 표 이름 → Array[Dictionary] (전부 문자열)
