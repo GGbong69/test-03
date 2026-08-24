@@ -408,11 +408,20 @@ func _finish_round() -> void:
 			var sv: Dictionary = owned[i]
 			if String(sv.get("k", "")) == "save" 					and float(total) >= float(target) * float(sv.v) / 100.0:
 				var at := _slot_rect(mini(i, GameData.max_items() - 1)).get_center()
+				_seal_drop(i)
 				owned.remove_at(i)
 				_panel_reset()
 				pop(at + Vector2(0.0, 24.0), "%s — 실패를 막았다" % sv.n,
 						C_ACC, 11, 1.2)
 				beep_seq([392.0, 523.0], 0.09, 0.16, 0.22)
+				# 마지막 라운드에서 목숨이 터져도 완주는 완주다. 여기서 곧장
+				# 정산으로 가면 아래 완주 검사에 못 닿아, 상점이 0칸으로 열리고
+				# 목표 2500 짜리 유령 9라운드가 시작된다.
+				if round_no >= GameData.rounds_n():
+					state = S.OVER
+					won = true
+					beep_seq([262.0, 330.0, 392.0, 523.0, 659.0], 0.10, 0.22, 0.26)
+					return
 				_round_end_wear()
 				_settle_clear()
 				return
@@ -455,6 +464,19 @@ func _settle_clear() -> void:
 	beep_seq([392.0, 494.0, 587.0], 0.09, 0.18, 0.22)
 
 
+# 봉인은 자리가 아니라 칩에 걸린다. owned 에서 원소를 빼면 뒤 인덱스가
+# 하나씩 당겨지므로 sealed 도 같이 민다 — 안 밀면 _gold_from_items 가
+# 엉뚱한 칩의 골드를 지우고, 범위를 벗어나면 봉인이 통째로 증발한다.
+# _rack_reorder 는 칩을 따라가는 같은 규약을 이미 지키고 있었다.
+func _seal_drop(i: int) -> void:
+	if sealed < 0:
+		return
+	if sealed == i:
+		sealed = -1
+	elif sealed > i:
+		sealed -= 1
+
+
 # 라운드 종료의 마모 — 감쇠(rdec)와 확률 파괴(boom). 조커 이식이 들여왔다.
 # 정산보다 먼저 부른다: 이번 라운드 일한 값은 이미 점수로 냈고, 골드 정산은
 # 남은 자만 받는 것이 "라운드 종료 시 파괴" 의 뜻에 맞다.
@@ -477,6 +499,7 @@ func _round_end_wear() -> void:
 		if dead:
 			pop(_slot_rect(mini(i, GameData.max_items() - 1)).get_center()
 					+ Vector2(0.0, 24.0), "%s — 부서졌다" % it.n, C_MULT, 11, 1.1)
+			_seal_drop(i)
 			owned.remove_at(i)
 			_panel_reset()
 		i -= 1
@@ -1714,10 +1737,14 @@ func _next_step() -> void:
 			match st.kind:
 				"chip":
 					cur_chip += st.v
-				"mult", "mult_streak":
+				"mult", "mult_streak", "mult_rand":
 					cur_mult += st.v
 				"xmult":
 					cur_mult *= st.v
+				_:
+					# 갈래를 안 늘리면 새 효과가 소리 없이 사라진다. mult_rand 가
+					# 그렇게 죽어 있었고, 표는 그 카드를 87장 중 4위로 적고 있었다.
+					push_error("정산: 모르는 효과 '%s' — 점수에 안 실린다" % st.kind)
 			var col: Color = C_CHIP if st.kind == "chip" else C_MULT
 			pop(cc, GameData.eff_text(st.kind, st.v), col, 17, 0.9)
 			beep(f, 0.11, 0.18)

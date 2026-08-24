@@ -586,11 +586,21 @@ const CONDS := ["always", "triple", "double", "band", "bull", "odd", "even", "le
 # check() 를 고치면 여기도 같이 고친다 — 하위호환 검사의 유일한 근거다.
 # 검증기는 이 표를 전이폐포로 닫은 뒤 쓴다.
 const COND_SUB := {
+	# always 는 빗나감 둘(miss·missp)만 빼고 전부 담는다 — check() 가 빗나간
+	# 발에서 먼저 돌아서기 때문이다.
 	"always": ["triple", "double", "band", "bull", "odd", "even", "left", "right",
-			"big", "mid", "small", "same", "diff", "first", "last", "streak", "warm"],
+			"big", "mid", "small", "same", "diff", "first", "last", "streak", "warm",
+			"risk", "risk1", "few", "sixth", "pair", "trip", "quad", "pair2",
+			"spread", "zone3", "zones2", "zones4", "rezone", "sec"],
+	# risk = 배수 2 이상 또는 불. 링 둘과 불을 통째로 담는다.
+	"risk": ["triple", "double", "band", "bull", "risk1"],
 	"band": ["triple", "double"],
 	"same": ["streak"], "streak": ["same"],   # streak>0 ⟺ same. 같은 술어다
 	"diff": ["first"],                        # last_sector 는 라운드마다 -1 로 선다
+	# 반복 횟수는 threshold 다. 넓은 쪽이 좁은 쪽을 담는다 (2 ⊇ 3 ⊇ 4).
+	"pair": ["trip", "quad", "pair2"],
+	"trip": ["quad"],
+	"zones2": ["zones4"],
 }
 
 # 완전분할 — 같은 k 로 한 분할을 다 덮으면 합성 무조건 카드가 된다.
