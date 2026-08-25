@@ -770,7 +770,8 @@ static func eff_line(it: Dictionary) -> String:
 	if g == "fire":
 		return "발동할 때마다 %s +%d 누적" % ["점수" if it.k == "chip" else "배수", it.gstep]
 	if g == "tdec":
-		return "%s +%d 에서 시작 · 던질 때마다 −%d" 				% ["점수" if it.k == "chip" else "배수", it.v, it.gstep]
+		return "%s +%d 에서 시작 · 던질 때마다 −%d" \
+				% ["점수" if it.k == "chip" else "배수", it.v, it.gstep]
 	if g == "rdec":
 		return "배수 +%d 에서 시작 · 라운드마다 −%d · 0이면 파괴" % [it.v, it.gstep]
 	var base := eff_text(it.k, it.v)
@@ -817,6 +818,15 @@ static func item_desc(it: Dictionary) -> String:
 
 
 # 골드 반쪽은 item_desc 에 안 섞는다 — 발동 시점이 다르므로 따로 보여준다.
+# 이 발이 즉시 골드를 낳는가. risk50 은 정산이 아니라 착탄에 붙으므로
+# _gold_from_items 밖에 사는 유일한 골드다 — 게임과 측정기가 같은 술어를
+# 읽어야 표가 거짓말을 안 한다. 게이트가 없던 동안 게임은 표의 3배를 벌었다.
+static func gold_dart_hit(it: Dictionary, x: Dictionary) -> bool:
+	if String(it.get("g", "")) != "risk50":
+		return false
+	return int(x.get("mult", 0)) >= 2 or int(x.get("sector", 0)) >= 25
+
+
 static func gold_text(g: String, gv: int) -> String:
 	match g:
 		"clear": return "클리어 시 골드 +%d" % gv
@@ -970,16 +980,19 @@ static func _v_items() -> void:
 		# 효과 없는 카드도 있다 — 골드·다트·승급만 하는 조커들. 그때는
 		# 빈 kind 를 허락하되 부가 효과가 하나는 있어야 한다.
 		if String(r.get("kind", "")) == "":
-			if String(r.get("gold", "")) == "" and String(r.get("dadd", "")) == "" 					and String(r.get("side", "")) == "":
+			if String(r.get("gold", "")) == "" and String(r.get("dadd", "")) == "" \
+					and String(r.get("side", "")) == "":
 				_errs.append("%s — 효과도 부가도 없는 빈 카드다" % who)
 		elif not KINDS.has(r.get("kind", "")):
 			_errs.append("%s — 모르는 효과 '%s'" % [who, r.get("kind", "")])
 		if not RARITIES.has(r.get("rarity", "")):
 			_errs.append("%s — 모르는 등급 '%s'" % [who, r.get("rarity", "")])
 		# fire·hitmiss 성장은 0에서 시작하는 것이 설계다. 빈 kind 도 값이 없다.
-		if String(r.get("kind", "")) != "" 				and String(r.get("grow", "")) != "fire" 				and String(r.get("grow", "")) != "hitmiss" 				and _i(r, "value", "items") <= 0:
+		if String(r.get("kind", "")) != "" \
+				and String(r.get("grow", "")) != "fire" 				and String(r.get("grow", "")) != "hitmiss" 				and _i(r, "value", "items") <= 0:
 			_errs.append("%s — 값이 0 이하다" % who)
-		if String(r.get("grow", "")) != "" 				and not ["fire", "hitmiss", "tdec", "rdec"].has(String(r.get("grow", ""))):
+		if String(r.get("grow", "")) != "" \
+				and not ["fire", "hitmiss", "tdec", "rdec"].has(String(r.get("grow", ""))):
 			_errs.append("%s — 모르는 성장 '%s'" % [who, r.get("grow")])
 		if String(r.get("cond", "")) == "sec" and String(r.get("secs", "")) == "":
 			_errs.append("%s — sec 조건인데 secs 칸이 비었다" % who)
@@ -1013,11 +1026,13 @@ static func _v_items() -> void:
 			if String(a.get("gold", "")) != String(b.get("gold", "")):
 				continue
 			# 배율·성장·보조 효과가 다르면 값의 크고 작음이 우열이 아니다
-			if String(a.get("per", "")) != String(b.get("per", "")) 					or String(a.get("grow", "")) != String(b.get("grow", "")) 					or String(a.get("k2", "")) != String(b.get("k2", "")) 					or String(a.get("dadd", "")) != String(b.get("dadd", "")):
+			if String(a.get("per", "")) != String(b.get("per", "")) \
+					or String(a.get("grow", "")) != String(b.get("grow", "")) 					or String(a.get("k2", "")) != String(b.get("k2", "")) 					or String(a.get("dadd", "")) != String(b.get("dadd", "")):
 				continue
 			if String(a.get("grow", "")) != "":
 				continue
-			if String(a.get("boom", "")) != String(b.get("boom", "")) 					or String(a.get("side", "")) != String(b.get("side", "")) 					or String(a.get("secs", "")) != String(b.get("secs", "")):
+			if String(a.get("boom", "")) != String(b.get("boom", "")) \
+					or String(a.get("side", "")) != String(b.get("side", "")) 					or String(a.get("secs", "")) != String(b.get("secs", "")):
 				continue
 			var ca: String = a.get("cond", "")
 			var cb: String = b.get("cond", "")
@@ -1032,7 +1047,8 @@ static func _v_items() -> void:
 			var cov := 0
 			for cc in part:
 				for r2 in raw:
-					if r2.get("cond") == cc and r2.get("kind") == kk 							and _b(r2, "enabled", "items"):
+					if r2.get("cond") == cc and r2.get("kind") == kk \
+							and _b(r2, "enabled", "items"):
 						cov += 1
 						break
 			if cov == part.size():
@@ -1233,12 +1249,28 @@ static func _v_cross() -> void:
 		if cnt < need:
 			_warns.append("items — R%d 에 뜰 수 있는 칩이 %d장뿐이다. 매대 %d칸 + 슬롯을 채우면 마른다"
 					% [rd, cnt, need])
-	# 얼굴에 효과가 한 줄도 안 나오는 칩 — 무슨 물건인지 모르는 채로 값을
-	# 치러야 한다. gold_text 가 GOLDS 를 다 안 덮어서 실제로 두 장이 그랬다.
+	# 얼굴에 효과가 안 나오는 칩 — 무슨 물건인지 모르는 채로 값을 치러야
+	# 한다. 한 줄도 없는 경우만 보면 부족하다: j138 은 dadd 가 얼굴에서
+	# 사라졌는데도 "점수 +250" 이 있어서 그 검사를 통과했다. 효과 열마다
+	# 대응하는 말이 있는지 센다.
 	for it2 in items():
-		if eff_line(it2) == "" 				and gold_text(String(it2.get("g", "")), int(it2.get("gv", 0))) == "":
+		var face := eff_line(it2)
+		var gtx := gold_text(String(it2.get("g", "")), int(it2.get("gv", 0)))
+		if face == "" and gtx == "":
 			_errs.append("items — %s(%s) 는 화면에 효과가 한 줄도 안 나온다"
 					% [it2.n, it2.id])
+			continue
+		# 값이 든 열은 반드시 얼굴에 흔적이 있어야 한다
+		if String(it2.get("k", "")) != "" and face == "":
+			_errs.append("items — %s(%s) 의 효과가 얼굴에 없다" % [it2.n, it2.id])
+		if int(it2.get("dadd", 0)) != 0 and face.find("다트") < 0:
+			_errs.append("items — %s(%s) 의 다트 증감이 얼굴에 없다" % [it2.n, it2.id])
+		if String(it2.get("side", "")) != "" and face.find("강화") < 0:
+			_errs.append("items — %s(%s) 의 영역 승급이 얼굴에 없다" % [it2.n, it2.id])
+		if String(it2.get("boom", "")) != "" and face.find("파괴") < 0:
+			_errs.append("items — %s(%s) 의 파괴 확률이 얼굴에 없다" % [it2.n, it2.id])
+		if String(it2.get("g", "")) != "" and gtx == "":
+			_errs.append("items — %s(%s) 의 골드가 얼굴에 없다" % [it2.n, it2.id])
 
 	# 가중치가 0 인 칩은 표에 있으나 게임에 없다.
 	for it in items():

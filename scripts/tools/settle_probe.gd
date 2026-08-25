@@ -13,6 +13,7 @@ const GameData = preload("res://scripts/data.gd")
 #    ① mult_rand 가 정산 match 에 갈래가 없어 배수에 안 실렸다
 #       (표는 그 카드를 87장 중 4위로 적고 있었다)
 #    ② owned 에서 칩을 뺄 때 sealed 를 안 밀어 엉뚱한 칩이 봉인으로 읽혔다
+#       (헬퍼가 아니라 호출부 — 마모·목숨 — 를 밟는다. 봉인된 목숨도 본다)
 #    ③ 마지막 라운드에서 목숨이 터지면 완주 검사를 건너뛰어
 #       빈 상점과 유령 9라운드가 열렸다
 # ══════════════════════════════════════════════════════════
@@ -52,21 +53,46 @@ func _initialize() -> void:
 	_say(g.cur_mult == 1, "모르는 효과는 점수에 안 실린다 (에러 한 줄이 위에 뜬다)",
 			"cur_mult %d" % g.cur_mult)
 
-	# ② 봉인이 칩을 따라간다 — 앞자리가 부서지면 인덱스가 밀린다
-	g.owned = [_item("trp"), _item("dbl"), _item("bnd")]
+	# ② 봉인이 칩을 따라간다 — 헬퍼를 직접 부르면 산술만 재고 끝난다.
+	# 결함이 있던 자리는 호출부(_round_end_wear · _finish_round)이므로
+	# 거기를 실제로 밟는다. rdec 이 0 에 닿아 앞자리가 부서지는 라운드다.
+	var dec: Dictionary = _item("j040")     # 소모성 증폭기 — rdec 4, 값 20
+	dec.gs = 4                              # 다음 걸음에 20 − 4*5 ≤ 0 → 파괴
+	g.owned = [dec, _item("dbl"), _item("bnd")]
 	g._panel_reset()
 	g.sealed = 2
 	var keep: String = String(g.owned[2].id)
-	g._seal_drop(0)
-	g.owned.remove_at(0)
-	var ok2: bool = g.sealed == 1 and String(g.owned[g.sealed].id) == keep
-	_say(ok2, "봉인이 칩을 따라간다", "sealed %d → %s" % [g.sealed,
+	g._round_end_wear()
+	var ok2: bool = g.owned.size() == 2 and g.sealed == 1 \
+			and String(g.owned[g.sealed].id) == keep
+	_say(ok2, "라운드 마모가 봉인을 민다", "칩 %d장 · sealed %d → %s"
+			% [g.owned.size(), g.sealed,
 			String(g.owned[g.sealed].id) if g.sealed >= 0 else "-"])
+
+	# 봉인된 칩은 목숨을 안 쓴다 — 봉인은 발동을 막는 것이고 목숨도 발동이다
+	g.round_no = 3
+	g.target = 1000
+	g.total = 900
+	g.owned = [_item("j099")]               # 비상 골격
+	g._panel_reset()
+	g.sealed = 0
+	g.won = false
+	g._finish_round()
+	_say(g.state == g.S.OVER and not g.won, "봉인된 목숨은 안 터진다",
+			"state %d · 칩 %d장" % [g.state, g.owned.size()])
+
+	# 목숨이 터지면 봉인도 같이 정리된다 — 봉인이 뒷자리일 때
+	g.round_no = 3
+	g.total = 900
+	g.owned = [_item("j099"), _item("bnd")]
+	g._panel_reset()
 	g.sealed = 1
-	g._seal_drop(1)
-	_say(g.sealed == -1, "봉인 대상이 부서지면 풀린다", "sealed %d" % g.sealed)
+	g._finish_round()
+	_say(g.sealed == 0 and g.owned.size() == 1, "목숨이 터져도 봉인이 칩을 따라간다",
+			"sealed %d · 칩 %d장" % [g.sealed, g.owned.size()])
 
 	# ③ 마지막 라운드에서 목숨이 터져도 완주다
+	g.sealed = -1
 	g.round_no = GameData.rounds_n()
 	g.target = 1000
 	g.total = 900
@@ -86,5 +112,5 @@ func _initialize() -> void:
 	g._finish_round()
 	_say(g.state == g.S.CLEAR, "그 앞 라운드는 정산으로", "state %d" % g.state)
 
-	print("\n%s" % ("실패 %d건" % fails if fails > 0 else "다섯 검사 전부 통과"))
+	print("\n%s" % ("실패 %d건" % fails if fails > 0 else "여덟 검사 전부 통과"))
 	quit(mini(fails, 125))

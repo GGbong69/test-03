@@ -54,9 +54,11 @@ func _initialize() -> void:
 	var fire := []          # 발동 횟수
 	var gain := []          # 점수 기여 합
 	var clean_hit := []     # "무실책" 골드가 걸린 라운드 수
+	var ghit := []          # risk50 즉시 골드가 걸린 발 수
 	fire.resize(n); fire.fill(0)
 	gain.resize(n); gain.fill(0.0)
 	clean_hit.resize(n); clean_hit.fill(0)
+	ghit.resize(n); ghit.fill(0)
 	for it in items:
 		it.gs = 0
 
@@ -66,7 +68,6 @@ func _initialize() -> void:
 	var base_sum := 0.0
 	var miss := 0
 	var clean_rounds := 0
-	var risk_hits := 0      # risk50 골드용 — 라운드당 위험 명중 평균이 필요하다
 
 	for r in ROUNDS:
 		if r % window == 0:
@@ -106,8 +107,6 @@ func _initialize() -> void:
 				else:
 					zone = "single"
 			var is_risk: bool = info.mult >= 2 or info.sector >= 25
-			if is_risk and not is_miss:
-				risk_hits += 1
 			var ctx := {
 				"sector": info.sector,
 				"mult": info.mult,
@@ -149,6 +148,10 @@ func _initialize() -> void:
 
 			for i in n:
 				var it: Dictionary = items[i]
+				# 즉시 골드는 게임과 같은 술어로 센다 — 판정이 갈리면 표가
+				# 조용히 거짓말을 한다(실제로 3배 어긋나 있었다).
+				if GameData.gold_dart_hit(it, ctx):
+					ghit[i] += 1
 				if GameData.check(it.c, ctx):
 					fire[i] += 1
 					if String(it.get("grow", "")) == "fire":
@@ -205,7 +208,6 @@ func _initialize() -> void:
 				if items[i].get("g", "") == "clean":
 					clean_hit[i] += 1
 
-	var risk_per_round := float(risk_hits) / float(ROUNDS)
 	var hash_src := _balance_hash()
 	var f := FileAccess.open(OUT, FileAccess.WRITE)
 	f.store_line("id,name,rarity,cond,kind,value,cost,fire_pct,gain_per_dart,"
@@ -216,7 +218,8 @@ func _initialize() -> void:
 		var gp: float = float(gain[i]) / float(darts)
 		var gr: float = gp * float(per_round)
 		var gold: float = _gold_per_round(it,
-				float(clean_hit[i]) / float(ROUNDS), risk_per_round)
+				float(clean_hit[i]) / float(ROUNDS),
+				float(ghit[i]) / float(ROUNDS))
 		f.store_line("%s,%s,%s,%s,%s,%d,%d,%.2f,%.2f,%.2f,%.3f,%.2f,%s,%s,%d,%d,%s"
 				% [it.id, it.n, it.rarity, String(it.c).replace(",", ";"), it.k, it.v, it.cost,
 					fp, gp, gr, gp / float(it.cost), gold,
@@ -244,7 +247,7 @@ func _score_delta(kind: String, amt: int, b: float, m: float) -> float:
 
 
 # 라운드당 골드. 모델이 여섯 발을 다 던지므로 남은 다트에 걸린 것은 못 잰다.
-func _gold_per_round(it: Dictionary, clean_p: float, risk_pr: float) -> float:
+func _gold_per_round(it: Dictionary, clean_p: float, ghit_pr: float) -> float:
 	if String(it.get("g", "")) == "":
 		return 0.0
 	var gv := float(it.gv)
@@ -253,7 +256,7 @@ func _gold_per_round(it: Dictionary, clean_p: float, risk_pr: float) -> float:
 		"clean": return gv * clean_p
 		"broke": return gv          # 보유 골드 조건은 이 모델 밖이다
 		"round": return gv
-		"risk50": return gv * 0.5 * risk_pr
+		"risk50": return gv * 0.5 * ghit_pr
 		"spare", "blitz": return 0.0   # 남은 다트를 모사하지 않는다
 	return 0.0
 

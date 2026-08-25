@@ -405,8 +405,11 @@ func _finish_round() -> void:
 		# 목숨 아이템(조커 이식 110099) — 총점이 목표의 일정 비율 이상이면
 		# 실패를 한 번 무르고 자신을 부순다. 라운드는 클리어로 친다.
 		for i in owned.size():
+			if i == sealed:
+				continue          # 봉인은 발동을 막는다 — 목숨도 발동이다
 			var sv: Dictionary = owned[i]
-			if String(sv.get("k", "")) == "save" 					and float(total) >= float(target) * float(sv.v) / 100.0:
+			if String(sv.get("k", "")) == "save" \
+					and float(total) >= float(target) * float(sv.v) / 100.0:
 				var at := _slot_rect(mini(i, GameData.max_items() - 1)).get_center()
 				_seal_drop(i)
 				owned.remove_at(i)
@@ -1638,8 +1641,8 @@ func _land() -> void:
 			if String(it.get("k2", "")) != "" and it.v2 != 0:
 				queue.append({"k": "item", "i": i, "kind": it.k2, "v": it.v2,
 						"lbl": "%s  %s" % [it.n, GameData.eff_text(it.k2, it.v2)]})
-			# 즉시 골드 — 위험 영역 절반 확률
-			if String(it.get("g", "")) == "risk50" and randf() < 0.5:
+			# 즉시 골드 — 위험 영역 절반 확률. 판정은 data.gd 가 쥔다.
+			if GameData.gold_dart_hit(it, ctx) and randf() < 0.5:
 				gold += int(it.get("gv", 0))
 				pop(_slot_rect(mini(i, GameData.max_items() - 1)).get_center()
 						+ Vector2(0.0, 24.0), "+%d" % it.gv, C_GOLD, 11, 0.8)
@@ -1746,7 +1749,12 @@ func _next_step() -> void:
 					# 그렇게 죽어 있었고, 표는 그 카드를 87장 중 4위로 적고 있었다.
 					push_error("정산: 모르는 효과 '%s' — 점수에 안 실린다" % st.kind)
 			var col: Color = C_CHIP if st.kind == "chip" else C_MULT
-			pop(cc, GameData.eff_text(st.kind, st.v), col, 17, 0.9)
+			# st.v 는 이미 굴린 값이다 — kind 를 날것으로 넘기면 "배수 +0~7
+			# 무작위" 가 떠서 결과를 상한으로 뒤집어 읽힌다. 큐 라벨(1634)과
+			# 같은 매핑을 여기도 쓴다.
+			pop(cc, GameData.eff_text(
+					"mult" if st.kind == "mult_rand" else String(st.kind), st.v),
+					col, 17, 0.9)
 			beep(f, 0.11, 0.18)
 			shake = 3.0
 		"total":
@@ -2984,7 +2992,8 @@ const NPC := {
 	# 뒤집으면 엄지가 화면 안쪽으로 넘어가 정사영에 눌리고, 다각형만
 	# 두고 각도만 세우면 손이 매달린 덩어리가 된다 — 둘 다 해 봤다.
 	# 거울로 온전히 뒤집으면 엄지 투영이 오른손과 정확히 같아진다.
-	# 남는 비대칭은 각 4° · 길이 12% · 손목 w 12 차다.
+	# 지금은 각이 완전한 거울(112+68=180)이고, 남는 비대칭은 길이 5% 와
+	# 손목 w 4 다 — 손각을 사람 관절 범위로 눕히면서 각의 4° 를 내줬다.
 	# 손각은 팔 방향에서 얼마나 꺾이느냐로 정한다. 옛 값(160·24)은 팔이
 	# 면에서 81°·85° 로 내려오는데 손을 160°·24° 로 뒀다 — 79°·61° 꺾인
 	# 손목이라 사람 관절이 못 하는 각이고, 화면에서는 팔에 신발을 신긴
