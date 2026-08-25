@@ -39,9 +39,11 @@ extends RefCounted
 #  고닷 4 는 CSV 를 기본적으로 번역 파일(csv_translation)로 잡고, 그러면
 #  원본 파일이 빌드에 안 실려 FileAccess.open 이 null 을 돌려준다. 즉
 #  에디터에서는 멀쩡하고 익스포트한 빌드에서만 칩이 한 장도 없다.
-#  (이 프로젝트에서 실제로 그 상태였다.) 익스포트 템플릿이 깔린 뒤에는
-#  첫 프리셋의 "비-리소스 파일 필터" 에 data/*.csv 도 같이 적고, 한 번
-#  빌드해서 표가 살아 있는지 확인할 것. 아직 확인 못 했다.
+#  (이 프로젝트에서 두 번 그 상태였다 — 처음 items.csv, 다음 새 표 다섯.)
+#  프리셋의 비-리소스 필터에 data/*.csv 를 적어 두었고, 실제 빌드한 pck 를
+#  열어 표 열셋이 내용까지 실렸고 .translation 은 0개임을 확인했다.
+#  고칠 때는 고닷을 끄고 고쳐야 한다 — 켠 채로 고치면 리임포트가 옛 .import
+#  를 되써 버린다(한 번 당했다).
 const DIR := "res://data/"
 const FILES := {
 	"items": "items.csv",
@@ -784,7 +786,18 @@ static func eff_line(it: Dictionary) -> String:
 		"rackval": return "다른 아이템 판매가 합계만큼 " + base.split(" ")[0] + " 추가"
 		"empty": return "배수 × 빈 아이템 칸 수 (최소 ×1)"
 	if String(it.get("k2", "")) != "":
-		return base + " · " + eff_text(it.k2, it.v2)
+		base += " · " + eff_text(it.k2, it.v2)
+	# 부가 효과는 kind 가 있어도 붙는다. 빈 kind 갈래에서만 읽으면
+	# 다트를 깎는 대가가 얼굴에서 사라진다.
+	var da2 := int(it.get("dadd", 0))
+	if da2 != 0:
+		base += " · 라운드 시작 다트 %+d" % da2
+	if String(it.get("side", "")) == "trackup25":
+		base += " · 4회 중 1회 영역 강화 +1"
+	if String(it.get("boom", "")) == "r6":
+		base += " · 라운드마다 1/6 확률로 파괴"
+	elif String(it.get("boom", "")) == "r1000":
+		base += " · 라운드마다 0.1% 확률로 파괴"
 	return base
 
 
@@ -811,6 +824,8 @@ static func gold_text(g: String, gv: int) -> String:
 		"clean": return "한 발도 안 빗나가면 골드 +%d" % gv
 		"blitz": return "남은 다트 %d개 이상이면 골드 +%d" % [gold_blitz(), gv]
 		"broke": return "정산 때 보유 골드 %d 이하면 +%d" % [gold_broke(), gv]
+		"round": return "라운드마다 골드 +%d" % gv
+		"risk50": return "더블·트리플·불 명중 시 절반 확률로 골드 +%d" % gv
 	return ""
 
 
@@ -822,6 +837,8 @@ static func gold_tag(g: String) -> String:
 		"clean": return "무실책"
 		"blitz": return "속공"
 		"broke": return "빈털터리"
+		"round": return "정기"
+		"risk50": return "위험수당"
 	return ""
 
 
@@ -1216,6 +1233,13 @@ static func _v_cross() -> void:
 		if cnt < need:
 			_warns.append("items — R%d 에 뜰 수 있는 칩이 %d장뿐이다. 매대 %d칸 + 슬롯을 채우면 마른다"
 					% [rd, cnt, need])
+	# 얼굴에 효과가 한 줄도 안 나오는 칩 — 무슨 물건인지 모르는 채로 값을
+	# 치러야 한다. gold_text 가 GOLDS 를 다 안 덮어서 실제로 두 장이 그랬다.
+	for it2 in items():
+		if eff_line(it2) == "" 				and gold_text(String(it2.get("g", "")), int(it2.get("gv", 0))) == "":
+			_errs.append("items — %s(%s) 는 화면에 효과가 한 줄도 안 나온다"
+					% [it2.n, it2.id])
+
 	# 가중치가 0 인 칩은 표에 있으나 게임에 없다.
 	for it in items():
 		if item_weight(it) <= 0.0:
