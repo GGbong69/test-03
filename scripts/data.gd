@@ -8,7 +8,7 @@ extends RefCounted
 #  숫자 리터럴을 여기에 다시 적지 마라 — 그 순간 출처가 둘이 된다.
 #
 #  표 여덟 장
-#    items.csv      칩 26   — 이 세트의 대표 표
+#    items.csv      스티커 26   — 이 세트의 대표 표
 #    rarity.csv     등급 3  — 등장 가중치의 유일한 출처
 #    mods.csv       개조 8  — 판 기하를 바꾼다
 #    darts.csv      다트 5  — 탄창에 드는 것
@@ -38,7 +38,7 @@ extends RefCounted
 #  익스포트 주의 — data/*.csv 는 .import 에서 importer="keep" 이어야 한다.
 #  고닷 4 는 CSV 를 기본적으로 번역 파일(csv_translation)로 잡고, 그러면
 #  원본 파일이 빌드에 안 실려 FileAccess.open 이 null 을 돌려준다. 즉
-#  에디터에서는 멀쩡하고 익스포트한 빌드에서만 칩이 한 장도 없다.
+#  에디터에서는 멀쩡하고 익스포트한 빌드에서만 스티커가 한 장도 없다.
 #  (이 프로젝트에서 두 번 그 상태였다 — 처음 items.csv, 다음 새 표 다섯.)
 #  프리셋의 비-리소스 필터에 data/*.csv 를 적어 두었고, 실제 빌드한 pck 를
 #  열어 표 열셋이 내용까지 실렸고 .translation 은 0개임을 확인했다.
@@ -184,7 +184,7 @@ static func _f(row: Dictionary, col: String, who: String, dflt := 0.0) -> float:
 
 
 # 참/거짓은 1/0 정수로만 쓴다. 엑셀이 TRUE 를 로케일 따라 참/TRUE 로
-# 되돌려 놓기 때문에, 문자열로 두면 저장 한 번에 칩이 조용히 사라진다.
+# 되돌려 놓기 때문에, 문자열로 두면 저장 한 번에 스티커가 조용히 사라진다.
 static func _b(row: Dictionary, col: String, who: String) -> bool:
 	var s: String = str(row.get(col, "")).strip_edges()
 	if s == "":
@@ -225,7 +225,7 @@ static func _num(v) -> String:
 #  표 → 게임이 쓰는 모양
 # ══════════════════════════════════════════════════════════
 
-# ── 칩 ────────────────────────────────────────────────────
+# ── 스티커 ────────────────────────────────────────────────────
 #  열: id name rarity cond kind value cost gold gv weight min_round enabled
 static func items() -> Array:
 	boot()
@@ -268,7 +268,7 @@ static func items() -> Array:
 	return out
 
 
-# 등장 가중치와 해금 라운드. 등급이 기본을 정하고 칩이 예외로 덮는다.
+# 등장 가중치와 해금 라운드. 등급이 기본을 정하고 스티커가 예외로 덮는다.
 static func item_weight(it: Dictionary) -> float:
 	boot()
 	for r in _raw.get("items", []):
@@ -839,7 +839,7 @@ static func gold_text(g: String, gv: int) -> String:
 	return ""
 
 
-# 칩 위에 얹는 짧은 태그 (원 안에는 긴 글이 안 들어간다)
+# 스티커 위에 얹는 짧은 태그 (원 안에는 긴 글이 안 들어간다)
 static func gold_tag(g: String) -> String:
 	match g:
 		"clear": return "클리어"
@@ -855,12 +855,12 @@ static func gold_tag(g: String) -> String:
 # ── 판매 ──────────────────────────────────────────────────
 #  판매가 = 구매가의 절반(내림), 최소 2. 26종이 4/7/11/14 이므로 2/3/5/7 이다.
 #  올림으로 두면 7→4, 11→6 이 되어 보통 등급의 회수율이 흔함보다 높아진다.
-#  내림은 평균 회수율을 46% 로 눌러 "비싼 칩은 팔면 더 손해"를 만든다.
+#  내림은 평균 회수율을 46% 로 눌러 "비싼 스티커는 팔면 더 손해"를 만든다.
 #
 #  스프레드(구매가 − 판매가) = 2 / 4 / 6 / 7.
-#  이것이 "한 정산만 빌려 쓰고 되팔기" 의 손익선이다. 골드 칩의 1회 지급(gv)이
-#  이 선을 넘으면 대여가 성립한다 — 지금 넘는 것은 큰손(9 vs 6) 하나뿐이고
-#  그것도 계속 들고 있는 쪽이 낫다. 새 골드 칩의 gv 는 반드시 이 선과 비교한다.
+#  이것이 "한 정산만 빌려 쓰고 되팔기" 의 손익선이다. 골드 스티커의 1회 지급(gv)이
+#  이 선을 넘으면 대여가 성립한다 — 지금 넘는 것은 속사(9 vs 6) 하나뿐이고
+#  그것도 계속 들고 있는 쪽이 낫다. 새 골드 스티커의 gv 는 반드시 이 선과 비교한다.
 static func sell_value(it: Dictionary) -> int:
 	var div := maxi(1, tune_i("sell_div"))
 	@warning_ignore("integer_division")  # 내림이 의도다 — 위 주석 참조
@@ -1054,7 +1054,7 @@ static func _v_items() -> void:
 			if cov == part.size():
 				_warns.append("items — %s 를 %s 로 다 덮는다. 두 장을 같이 사면 조건 없는 카드가 된다"
 						% [part, kk])
-	# 아무 칩도 안 쓰는 조건은 화면에 영영 안 나온다. 숫자를 손으로 적지 않고
+	# 아무 스티커도 안 쓰는 조건은 화면에 영영 안 나온다. 숫자를 손으로 적지 않고
 	# 여기서 센다 — 손으로 적은 현황은 커밋 한 번에 낡는다.
 	var used := {}
 	for r3 in raw:
@@ -1065,7 +1065,7 @@ static func _v_items() -> void:
 		if not used.has(c):
 			idle.append(c)
 	if not idle.is_empty():
-		_warns.append("items — 어떤 칩도 안 쓰는 조건 %d종: %s" % [idle.size(), idle])
+		_warns.append("items — 어떤 스티커도 안 쓰는 조건 %d종: %s" % [idle.size(), idle])
 
 
 static func _rarity_of_cost(cost: int) -> String:
@@ -1221,7 +1221,7 @@ static func _v_rounds() -> void:
 
 
 static func _v_cross() -> void:
-	# 해금 라운드가 상점보다 뒤면 그 칩은 영영 안 뜬다. 상점은 라운드 N 을
+	# 해금 라운드가 상점보다 뒤면 그 스티커는 영영 안 뜬다. 상점은 라운드 N 을
 	# 클리어한 뒤 N+1 을 위해 열리므로 볼 수 있는 최소 라운드는 2 다.
 	var n := rows("rounds").size()
 	for r in _raw.get("items", []):
@@ -1236,7 +1236,7 @@ static func _v_cross() -> void:
 		if mr2 < 2 or mr2 > n:
 			_errs.append("rarity:%d — min_round %d 는 2~%d 여야 한다" % [r.get("_line", 0), mr2, n])
 	# 매대가 마르면 리롤이 같은 물건을 다시 뱉는다. 라운드마다 후보 수가
-	# 매대 폭보다 넉넉한지 센다 — 소유 칩이 후보에서 빠지므로 여유를 둔다.
+	# 매대 폭보다 넉넉한지 센다 — 소유 스티커가 후보에서 빠지므로 여유를 둔다.
 	var need := 0
 	for r in rows("rounds"):
 		need = maxi(need, _i(r, "shop_items", "rounds"))
@@ -1247,12 +1247,12 @@ static func _v_cross() -> void:
 			if item_min_round(it) <= rd:
 				cnt += 1
 		if cnt < need:
-			_warns.append("items — R%d 에 뜰 수 있는 칩이 %d장뿐이다. 매대 %d칸 + 슬롯을 채우면 마른다"
+			_warns.append("items — R%d 에 뜰 수 있는 스티커가 %d장뿐이다. 매대 %d칸 + 슬롯을 채우면 마른다"
 					% [rd, cnt, need])
-	# 얼굴에 효과가 안 나오는 칩 — 무슨 물건인지 모르는 채로 값을 치러야
-	# 한다. 한 줄도 없는 경우만 보면 부족하다: j138 은 dadd 가 얼굴에서
-	# 사라졌는데도 "점수 +250" 이 있어서 그 검사를 통과했다. 효과 열마다
-	# 대응하는 말이 있는지 센다.
+	# 얼굴에 효과가 한 줄도 안 나오는 스티커 — 무슨 물건인지 모르는 채로 값을
+	# 치러야 한다. gold_text 가 GOLDS 를 다 안 덮어서 실제로 두 장이 그랬다.
+	# 한 줄도 없는 경우만 보면 부족하다: j138 은 dadd 가 얼굴에서 사라졌는데도
+	# "점수 +250" 이 있어서 그 검사를 통과했다. 효과 열마다 대응하는 말이 있는지 센다.
 	for it2 in items():
 		var face := eff_line(it2)
 		var gtx := gold_text(String(it2.get("g", "")), int(it2.get("gv", 0)))
@@ -1272,7 +1272,7 @@ static func _v_cross() -> void:
 		if String(it2.get("g", "")) != "" and gtx == "":
 			_errs.append("items — %s(%s) 의 골드가 얼굴에 없다" % [it2.n, it2.id])
 
-	# 가중치가 0 인 칩은 표에 있으나 게임에 없다.
+	# 가중치가 0 인 스티커는 표에 있으나 게임에 없다.
 	for it in items():
 		if item_weight(it) <= 0.0:
 			_errs.append("items — %s(%s) 는 매대에 안 뜬다" % [it.n, it.id])
