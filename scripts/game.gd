@@ -36,7 +36,7 @@ const CARD_H := 96.0
 #
 #  주의 — 화면 좌표가 여기에만 있는 것이 아니다. 나머지 소유자는 이렇다.
 #    _stage_rect / _obj_box / _mag_rect / _reroll_rect / _next_rect
-#    PANEL · _panel_rect · _slot_rect        (칩 랙)
+#    PANEL · _panel_rect · _slot_rect        (스티커 랙)
 #    card_pos                                 (점수 카드)
 #    _draw_hint 의 341 · 348 · 356            (하단 세 줄)
 #  이 목록을 사실과 다르게 두면 다음 사람이 잘못된 전제로 판단한다.
@@ -170,7 +170,7 @@ var zone_hist := {}             # 런 단위 영역 종류 누적 명중 (zonehi
 var streak := 0
 var dart_index := 0
 var round_miss := false
-var round_trp := false          # 이번 라운드에 트리플이 나왔는가 ("손맛")         # 이번 라운드에 한 번이라도 빗나갔는가 (골드 칩 "본전" 판정)
+var round_trp := false          # 이번 라운드에 트리플이 나왔는가 ("손맛")         # 이번 라운드에 한 번이라도 빗나갔는가 (골드 스티커 "새 자리" 판정)
 
 # ── 상점 ──────────────────────────────────────────────────
 var stock := []                 # {type:"item"/"mod", d:Dictionary, cost:int, sold:bool}
@@ -459,7 +459,7 @@ func _settle_clear() -> void:
 	var dart_gold: int = darts_left * GameData.gold_per_dart()
 	@warning_ignore("integer_division")  # 보유 5당 1, 내림이 규칙이다
 	var interest: int = mini(gold / GameData.interest_per(), GameData.interest_max())
-	# gold 를 더하기 전에 부른다 — "밑천"과 이자가 같은 잔액을 보게 하려는 것이다.
+	# gold 를 더하기 전에 부른다 — "굳은살"과 이자가 같은 잔액을 보게 하려는 것이다.
 	var item_rows := _gold_from_items()
 	var item_gold := 0
 	for r in item_rows:
@@ -477,10 +477,10 @@ func _settle_clear() -> void:
 	beep_seq([392.0, 494.0, 587.0], 0.09, 0.18, 0.22)
 
 
-# 봉인은 자리가 아니라 칩에 걸린다. owned 에서 원소를 빼면 뒤 인덱스가
+# 봉인은 자리가 아니라 스티커에 걸린다. owned 에서 원소를 빼면 뒤 인덱스가
 # 하나씩 당겨지므로 sealed 도 같이 민다 — 안 밀면 _gold_from_items 가
-# 엉뚱한 칩의 골드를 지우고, 범위를 벗어나면 봉인이 통째로 증발한다.
-# _rack_reorder 는 칩을 따라가는 같은 규약을 이미 지키고 있었다.
+# 엉뚱한 스티커의 골드를 지우고, 범위를 벗어나면 봉인이 통째로 증발한다.
+# _rack_reorder 는 스티커를 따라가는 같은 규약을 이미 지키고 있었다.
 func _seal_drop(i: int) -> void:
 	if sealed < 0:
 		return
@@ -560,8 +560,8 @@ func _open_shop() -> void:
 	beep(440.0, 0.10, 0.18)
 
 
-#  가중치 뽑기. 칩과 제약이 같은 저울을 쓴다 — 제약은 행에 w 를 들고 있고,
-#  칩은 등급 표에서 가져온다. 균등 shuffle 이던 시절에는 14골드 희귀가
+#  가중치 뽑기. 스티커와 제약이 같은 저울을 쓴다 — 제약은 행에 w 를 들고 있고,
+#  스티커는 등급 표에서 가져온다. 균등 shuffle 이던 시절에는 14골드 희귀가
 #  4골드 흔함과 같은 확률로 R2 매대에 떴다.
 func _draw_weighted(pool: Array) -> Dictionary:
 	if pool.is_empty():
@@ -589,7 +589,7 @@ func _roll_stock() -> void:
 	var nxt := round_no + 1
 	var w := GameData.shop_of(nxt)
 
-	# 후보를 먼저 거른다 — 이미 가진 칩과 아직 안 풀린 칩은 애초에 안 뜬다.
+	# 후보를 먼저 거른다 — 이미 가진 스티커와 아직 안 풀린 스티커는 애초에 안 뜬다.
 	var pool := []
 	for it in GameData.items():
 		if _has_item(it.id) or GameData.item_min_round(it) > nxt:
@@ -619,7 +619,7 @@ func _roll_stock() -> void:
 		stock.append({"type": "mod", "d": m, "cost": m.cost, "sold": false})
 		mn += 1
 	# 개조를 다 샀거나 판이 꽉 찼다. 예전 코드는 여기서 mods[i] 로 죽었다.
-	# 자리는 정확히 4개여야 하므로(_table_draw 의 ax/ay 주석) 칩으로 메운다.
+	# 자리는 정확히 4개여야 하므로(_table_draw 의 ax/ay 주석) 스티커로 메운다.
 	while mn < int(w.mods):
 		var fill := _draw_weighted(pool)
 		if fill.is_empty():
@@ -635,7 +635,7 @@ func _roll_stock() -> void:
 		stock.append({"type": "dart", "d": dd, "cost": dd.cost, "sold": false})
 
 	# 소비 아이템 — 상점 구성이 미정(기획 메모 990006)이라 임시 규칙로 낸다:
-	# shop_cons 가 켜져 있으면 칩 자리 하나를 소비 아이템으로 바꾼다.
+	# shop_cons 가 켜져 있으면 스티커 자리 하나를 소비 아이템으로 바꾼다.
 	# 자리 수 4는 안 변한다 — _table_draw 의 ax/ay 전제가 사는 이유다.
 	if GameData.tune_i("shop_cons") == 1:
 		var cp := GameData.consumables()
@@ -677,7 +677,7 @@ func _buy_block(i: int) -> String:
 	if gold < s.cost:
 		return "골드가 %d 모자란다" % (s.cost - gold)
 	if s.type == "item" and owned.size() >= GameData.max_items():
-		return "칩 랙이 꽉 찼다 (%d/%d)" % [owned.size(), GameData.max_items()]
+		return "스티커 판이 꽉 찼다 (%d/%d)" % [owned.size(), GameData.max_items()]
 	if s.type == "dart" and _std_slot() < 0:
 		return "바꿀 표준 다트가 없다"
 	if s.type == "cons" and cons.size() >= GameData.cons_slots():
@@ -909,7 +909,7 @@ func has_axis(axis: String) -> bool:
 
 func _open_stage() -> void:
 	# 봉인은 _start_round 에서만 다시 뽑힌다. 지우지 않으면 스테이지 선택
-	# 화면의 칩 랙이 지난 라운드 봉인을 그대로 보여준다.
+	# 화면의 스티커 랙이 지난 라운드 봉인을 그대로 보여준다.
 	sealed = -1
 	sell_sel = -1
 	buy_sel = -1
@@ -1259,7 +1259,7 @@ func _click(m: Vector2) -> void:
 				return          # 쓸기는 중단 불가다. 클릭을 통째로 삼킨다
 			# 창구가 먼저다. 자리가 고정이라 낙하 검사보다 앞이고, _sell_hit
 			# 보다도 앞이어야 한다 — 뒤에 두면 _sell_hit 이 sell_sel 을 지운 뒤
-			# 창구가 "먼저 랙에서 팔 칩을 고른다" 로 거절해 2클릭 판매가 통째로
+			# 창구가 "먼저 판에서 팔 스티커를 고른다" 로 거절해 2클릭 판매가 통째로
 			# 죽는다. 랙(y[4,36])과 창구(y[112,244])는 y 로 갈려 있어 순서를
 			# 바꿔도 서로 안 훔친다.
 			var cz := _chute_at(m, 0.0)
@@ -1804,7 +1804,7 @@ func pop(p: Vector2, txt: String, c: Color, sz: int, life: float) -> void:
 #    ① h 108 → 86, 비 1.39 → 1.78. 더 납작해진다.
 #    ② 그림자 벡터를 임의값 (3,4) 에서 매물과 같은 TBL.light*3.35 = (1.5,3.0)
 #       으로 바꾼다. 같은 빛 아래 있다는 진술이 "눕혔다" 의 절반이다.
-#    ③ 가까운 모서리에 두께 2px. 칩 옆면(4.5*tall=2.77)과 같은 어법이고,
+#    ③ 가까운 모서리에 두께 2px. 스티커 옆면(4.5*tall=2.77)과 같은 어법이고,
 #       두께가 없으면 카드가 펠트에 인쇄된 무늬로 읽힌다.
 #    ④ 폭을 상수에서 n 역산으로 바꾼다. 지금 값은 n=4 에서
 #       150*4+14*3 = 642 > 640 으로 실제로 터진다.
@@ -1813,7 +1813,7 @@ func pop(p: Vector2, txt: String, c: Color, sz: int, life: float) -> void:
 #
 #  ── 글자는 왜 안 눕히는가 ────────────────────────────
 #  카드는 눌리고 카드 위의 인쇄는 안 눌린다. 새 예외가 아니라 네 번째 사례다.
-#    _chip_flat  0.788 로 눌린 원반 위에 정면 숫자 12px
+#    _sticker_flat  0.788 로 눌린 원반 위에 정면 숫자 12px
 #    _bill_draw  누운 물건 앞에 정면 가격 플라크
 #    _icon_mod   펠트에 놓인 캐비닛의 판 그림이 등방 원
 #  상점 한 번에 여덟 번 일어나는 일이다. 카드만 글자를 눕히면 한 화면에
@@ -2270,13 +2270,13 @@ func _bank_draw() -> void:
 				C_GOLD.darkened(0.3) if itr > 0 else C_DIM.darkened(0.35))
 
 
-# ── 칩 꼬리표 ─────────────────────────────────────────────
+# ── 스티커 꼬리표 ─────────────────────────────────────────────
 func _cap_draw() -> void:
 	var r: Rect2 = LAY.cap
 	r.position.y += _hud_dy()
 	draw_rect(r, C_FELT)                                   # 랙과 같은 재질
 	draw_rect(Rect2(r.position, Vector2(r.size.x, 1.0)), C_FELT.lightened(0.14))
-	draw_string(font, r.position + Vector2(0.0, 20.0), "칩",
+	draw_string(font, r.position + Vector2(0.0, 20.0), "스티커",
 			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 10, C_DIM.darkened(0.1))
 	draw_string(font, r.position + Vector2(0.0, 36.0),
 			"%d/%d" % [owned.size(), GameData.max_items()],
@@ -2285,7 +2285,7 @@ func _cap_draw() -> void:
 
 
 # ══════════════════════════════════════════════════════════
-#  칩 랙  (아이템 패널)
+#  스티커 랙  (아이템 패널)
 # ──────────────────────────────────────────────────────────
 #  바깥과 닿는 곳은 이 넷뿐이다.
 #    _panel_fire(i)    아이템이 발동할 때        (_next_step)
@@ -2295,7 +2295,7 @@ func _cap_draw() -> void:
 #  owned / sealed 를 읽기만 하고 게임 상태는 건드리지 않는다.
 #  그래서 이 구획만 지우고 다시 써도 나머지는 영향을 안 받는다.
 #
-#  아이템은 카지노 칩이다. 골드는 칩이 아니라 플라크로 그린다
+#  아이템은 원형 스티커다. 골드는 스티커가 아니라 플라크로 그린다
 #  (draw_gold). 원반과 직사각으로 형태를 갈라 둘을 안 헷갈리게 한다.
 # ══════════════════════════════════════════════════════════
 
@@ -2307,10 +2307,10 @@ const PANEL := {
 	# 사이의 19px 이 머리가 들어갈 유일한 자리다 — 랙을 그대로 두면 실루엣이
 	# 통째로 랙 뒤에 숨어 "누가 판다" 가 화면에서 안 읽힌다.
 	"h": 32.0,           # 랙 높이
-	"cell": 42.0,        # 칩 한 칸 폭
+	"cell": 42.0,        # 스티커 한 칸 폭
 	"pad": 6.0,          # 랙 안쪽 여백
-	"r": 13.0,           # 칩 반지름
-	"chip_dy": -1.0,     # 칸 안에서 칩 중심을 얼마나 올릴지
+	"r": 13.0,           # 스티커 반지름
+	"chip_dy": -1.0,     # 칸 안에서 스티커 중심을 얼마나 올릴지
 
 	# 튀는 정도 — 사각 슬롯 때 값을 그대로 쓴다. 꽂는 곳만 바뀌었다.
 	"kick": 7.4,         # 발동 순간 튀어오르는 힘
@@ -2328,13 +2328,24 @@ const PANEL := {
 	"hot": 0.62,         # 발동 후 이름을 몇 초 보여줄지
 }
 
-# 등급(가격)별 칩 색 — 명도가 단조 하강해서 저해상도에서도 순서가 읽힌다
-const CHIP_TIERS := [
-	{"max": 4, "body": "ded5c0", "spot": "8d3b34", "edge": "b8ae97"},
-	{"max": 7, "body": "7d5ad0", "spot": "e8dfc8", "edge": "5b3fa0"},
-	{"max": 99, "body": "241e33", "spot": "f2b134", "edge": "4a3f66"},
+# 등급(가격)별 스티커 — 명도가 단조 하강해서 저해상도에서도 순서가 읽힌다.
+#
+#  원래는 카지노 칩이었다. 대회 제출본에서 사행성 기호를 걷어내며 스티커로
+#  갈았는데 실루엣(원반)은 한 픽셀도 안 건드렸다 — 낙하 솔버·랙·컬렉션이
+#  전부 "원 하나" 를 전제로 서 있어서, 여기만 바꾸면 나머지가 안 흔들린다.
+#  갈린 것은 테두리 어법 하나다: 가장자리 스팟(칩을 칩으로 만들던 유일한
+#  표식)을 빼고 다이컷 흰 테두리를 둘렀다.
+#
+#  등급의 둘째 신호는 마감(fin)이다 — 0 매트 · 1 유광 · 2 홀로그램.
+#  색만으로는 저해상도에서 두 단이 붙는데, 마감은 형태라 안 붙는다.
+const STK_TIERS := [
+	{"max": 4, "body": "ded5c0", "fin": 0},
+	{"max": 7, "body": "7d5ad0", "fin": 1},
+	{"max": 99, "body": "241e33", "fin": 2},
 ]
-const CHIP_SPOTS := [3, 6, 8]
+const C_DIECUT := Color("f4f0e6")   # 다이컷 테두리. 이 흰 띠 하나가 "스티커"를 말한다
+const C_LINER := Color("efe9db")    # 이형지 뒷면 — 말릴 때만 보인다. 인쇄가 없다
+const HOLO := [Color("74d6ea"), Color("ef86c6"), Color("ffd873")]
 const C_FELT := Color("16281f")
 
 # 쥔 손 — 남은 다트를 부채로 쥐고 있다.
@@ -2411,6 +2422,7 @@ func _panel_update(d: float) -> void:
 		slot_vel[i] *= exp(-PANEL.damp * d)
 		slot_pop[i] = clampf(slot_pop[i] + slot_vel[i] * d, -0.6, 1.4)
 		slot_hot[i] = maxf(slot_hot[i] - d, 0.0)
+	peel_t += d
 
 
 func _panel_rect() -> Rect2:
@@ -2427,16 +2439,16 @@ func _slot_rect(i: int) -> Rect2:
 			Vector2(PANEL.cell, pr.size.y))
 
 
-func _chip_ti(cost: int) -> int:
-	for i in CHIP_TIERS.size():
-		if cost <= CHIP_TIERS[i].max:
+func _stk_ti(cost: int) -> int:
+	for i in STK_TIERS.size():
+		if cost <= STK_TIERS[i].max:
 			return i
-	return CHIP_TIERS.size() - 1
+	return STK_TIERS.size() - 1
 
 
-# 조건 그림 — 칩이 "언제" 터지는가를 얼굴에 새긴다.
+# 조건 그림 — 스티커가 "언제" 터지는가를 얼굴에 새긴다.
 #
-# 지금까지 칩은 값(얼마나)만 보였다. 그래서 등급·잉크·숫자가 같으면
+# 지금까지 스티커는 값(얼마나)만 보였다. 그래서 등급·잉크·숫자가 같으면
 # 조건이 정반대여도 똑같이 보였다 — 홀수 애호와 짝수 애호, 좌익수와 우익수가
 # 화면에서 구분 불가였다. 재미의 절반은 조건 쪽인데 그게 안 그려지고 있었다.
 #
@@ -2592,16 +2604,20 @@ func _half_disc(c: Vector2, u: float, left: bool) -> PackedVector2Array:
 	return pts
 
 
-# 아이템 하나를 칩으로 그린다. 랙과 상점이 같은 그림을 쓰도록 여기 하나로 모았다.
-func draw_item_chip(c: Vector2, r: float, it: Dictionary, rot: float, lift: float,
-		dim: float, num_sz: int) -> void:
-	var ti := _chip_ti(it.cost)
-	draw_chip(c, r, CHIP_TIERS[ti], CHIP_SPOTS[ti], rot, lift,
-			it.get("g", "") != "", dim)
+# 아이템 하나를 스티커로 그린다. 랙과 상점이 같은 그림을 쓰도록 여기 하나로 모았다.
+func draw_item_sticker(c: Vector2, r: float, it: Dictionary, rot: float, lift: float,
+		dim: float, num_sz: int, peel := 0.0) -> void:
+	var ti := _stk_ti(it.cost)
+	draw_sticker(c, r, STK_TIERS[ti], rot, lift, it.get("g", "") != "", dim, peel)
+	var y := _peel_y(r, peel)
 	# 등급 고리. 색은 rarity.csv 가 정한다 — 정의만 있고 아무도 안 부르던
 	# rarity_color() 가 이 한 줄로 산다. 흔함은 안 그린다(고리가 곧 "귀하다").
+	# 말린 상태에서는 접는 선 위쪽만 그린다 — 아래로 넘어가면 떨어져 나간
+	# 자리에 인쇄가 떠서 종이가 아니라 유령이 된다.
 	if String(it.get("rarity", "common")) != "common":
-		draw_arc(c, r - 3.0, 0.0, TAU, 24,
+		var rr := r - 3.0
+		var t2: float = asin(clampf(y / rr, -1.0, 1.0)) if y < rr else PI * 0.5
+		draw_arc(c, rr, PI - t2, TAU + t2, 24,
 				Color(GameData.rarity_color(String(it.rarity)), 1.0 - dim), 1.0)
 	# 얼굴을 위아래로 가른다 — 위는 조건(언제 터지는가), 아래는 값(얼마나).
 	# 값만 있으면 조건이 정반대인 짝이 똑같이 보인다.
@@ -2609,38 +2625,99 @@ func draw_item_chip(c: Vector2, r: float, it: Dictionary, rot: float, lift: floa
 	_icon_cond(c + Vector2(0.0, -r * 0.33), r * 0.42, String(it.c), ink.darkened(dim + 0.08))
 	var val := ("×" + str(it.v)) if it.k == "xmult" else str(it.v)
 	var vs: int = maxi(7, int(float(num_sz) * 0.84))
-	draw_string(font, c + Vector2(-r, r * 0.34 + float(vs) * 0.34), val,
-			HORIZONTAL_ALIGNMENT_CENTER, r * 2.0, vs, ink.darkened(dim))
+	var vy := r * 0.34 + float(vs) * 0.34
+	if vy + 2.0 < y:
+		draw_string(font, c + Vector2(-r, vy), val,
+				HORIZONTAL_ALIGNMENT_CENTER, r * 2.0, vs, ink.darkened(dim))
+	# 말린 끝은 인쇄를 덮는다. 그래서 맨 마지막이다 — 순서가 곧 물리다.
+	_peel_fold(c, r, peel, dim)
 
 
-func draw_chip(c: Vector2, r: float, tier: Dictionary, spots: int, rot: float,
-		lift: float, gold_ring: bool, dim: float) -> void:
+# 스티커 몸통. 랙·매대·툴팁·컬렉션이 같은 그림을 쓰도록 여기 하나로 모았다.
+#  gold_rim — 골드를 버는 스티커는 다이컷을 금박으로 찍는다. 링을 하나 더
+#  두르지 않는 이유는 반지름 13px 에 고리 셋(다이컷·등급·골드)이 들어가면
+#  1.5px 간격으로 뭉개져 셋 다 안 읽히기 때문이다. 테두리 색은 공짜다.
+func draw_sticker(c: Vector2, r: float, tier: Dictionary, rot: float,
+		lift: float, gold_rim: bool, dim: float, peel := 0.0) -> void:
 	var body := Color(tier.body).darkened(dim)
-	var edge := Color(tier.edge).darkened(dim)
-	var spot := Color(tier.spot).darkened(dim)
+	var rim: Color = (C_GOLD if gold_rim else C_DIECUT).darkened(dim)
+	var rw: float = clampf(r * 0.16, 1.0, 2.2)      # 다이컷 폭. r=8 툴팁에서도 안 뭉갠다
+	var y := _peel_y(r, peel)
 
-	# 옆면 — 떠오를수록 두꺼워져서 원반이 실제로 들린 것처럼 보인다
+	# 종이라 옆면이 없다. 들리면 두께 대신 그림자만 자란다 — 칩의 원기둥
+	# 옆면(1.5px)을 그대로 두면 두꺼운 원반으로 되돌아간다.
 	if lift > 0.05:
-		draw_circle(c + Vector2(0.0, lift), r, edge.darkened(0.35))
-	draw_circle(c, r, edge)
-	draw_circle(c, r - 1.5, body)
+		draw_circle(c + Vector2(0.0, lift), r, Color(0.0, 0.0, 0.0, 0.22))
 
-	# 가장자리 스팟 — 바깥 반지름까지 나가야 실루엣이 갈려 칩으로 읽힌다
-	var step := TAU / float(spots * 2)
-	for i in spots:
-		var a := rot + float(i) * step * 2.0
-		draw_colored_polygon(annulus_at(c, r * 0.66, r, a - step * 0.42,
-				a + step * 0.42, 3), spot)
+	_disc_seg(c, r, y, rim)                         # 다이컷 테두리
+	# 인쇄 가장자리 1px. 흔함(크림 ded5c0)과 다이컷(f4f0e6)은 명도차가 9% 뿐이라
+	# 이 줄이 없으면 둘이 한 덩어리 흰 원으로 뭉개진다. 나머지 두 등급은 대비가
+	# 충분하지만 같은 그림을 쓰는 편이 어법이 안 갈린다.
+	_disc_seg(c, r - rw, y, body.darkened(0.34))
+	_disc_seg(c, r - rw - 1.0, y, body)             # 인쇄면
 
-	# 인레이 홈
-	draw_arc(c, r * 0.58, 0.0, TAU, 18, edge.lightened(0.18), 1.0)
-	if gold_ring:
-		# 돈 버는 칩이라는 표식 — 매대에서 한눈에 잡히라고
-		draw_arc(c, r - 0.5, 0.0, TAU, 22, C_GOLD, 1.0)
+	# 마감. 각 규약은 annulus_at 그대로다(0 = 12시, 시계 방향) — 둘 다 왼쪽
+	# 위를 향하므로 접는 선(아래) 아래로 새지 않는다. peel 을 안 봐도 된다.
+	var fa := 1.0 - dim
+	match int(tier.fin):
+		1:
+			# 유광 — 왼쪽 위 대각 초승달 하나
+			draw_colored_polygon(annulus_at(c, r * 0.50, r - rw - 0.3,
+					rot - 1.45, rot - 0.35, 6), Color(1.0, 1.0, 1.0, 0.32 * fa))
+		2:
+			# 홀로그램 — 가운데서 퍼지는 무지개 부채 셋
+			for k in 3:
+				var a := rot - 1.85 + float(k) * 0.72
+				draw_colored_polygon(annulus_at(c, r * 0.20, r - rw - 0.3,
+						a, a + 0.46, 4), Color(HOLO[k], 0.55 * fa))
+
+
+# 접는 선의 높이(중심 기준 아래 방향). peel 1 이면 거의 다 말린다.
+func _peel_y(r: float, peel: float) -> float:
+	return r * (1.0 - clampf(peel, 0.0, 1.0) * 0.78)
+
+
+# 원반에서 접는 선 위쪽만 채운다(활꼴). y >= r 이면 그냥 정원이라
+# peel 0 인 흔한 경로에서 폴리곤을 안 만든다.
+func _disc_seg(c: Vector2, r: float, y: float, col: Color) -> void:
+	if y >= r - 0.4:
+		draw_circle(c, r, col)
+		return
+	var t := asin(clampf(y / r, -1.0, 1.0))
+	var pts := PackedVector2Array()
+	for i in 21:
+		var a: float = (PI - t) + (PI + 2.0 * t) * float(i) / 20.0
+		pts.append(c + Vector2(cos(a), sin(a)) * r)
+	draw_colored_polygon(pts, col)
+
+
+# 스티커를 떼면 아래 끝이 위로 말린다. 아래 활꼴을 접는 선에 대해 미러링하는
+# 것이 전부다 — 종이접기 그대로라 곡률을 풀 일이 없다. 뒤집힌 쪽은 이형지라
+# 인쇄가 없고, 그래서 얼굴 위에 겹쳐도 무엇이 가려졌는지가 안 헷갈린다.
+func _peel_fold(c: Vector2, r: float, peel: float, dim: float) -> void:
+	var y := _peel_y(r, peel)
+	if y >= r - 0.6:
+		return
+	var t := asin(clampf(y / r, -1.0, 1.0))
+	var pts := PackedVector2Array()
+	for i in 17:
+		var a: float = t + (PI - 2.0 * t) * float(i) / 16.0
+		var q := Vector2(cos(a), sin(a)) * r
+		pts.append(c + Vector2(q.x, y - (q.y - y)))
+	draw_colored_polygon(pts, C_LINER.darkened(dim))
+	# 접힌 가장자리 — 이형지와 얼굴을 가른다. 색 대비만으로는 흔함 등급에서
+	# 둘이 붙는다(크림 vs 이형지 명도차 8%). 선이 대비를 대신한다.
+	for i in pts.size() - 1:
+		draw_line(pts[i], pts[i + 1], Color(0.0, 0.0, 0.0, 0.30), 1.0)
+	# 접는 선 = 아직 붙어 있는 마지막 자리. 이 한 줄이 없으면 뒷면이 그냥
+	# 얼굴 위에 뜬 밝은 반달로 보인다.
+	var hx := sqrt(maxf(r * r - y * y, 0.0))
+	draw_line(c + Vector2(-hx, y), c + Vector2(hx, y),
+			Color(0.0, 0.0, 0.0, 0.45), 1.0)
 
 
 # ── 플라크 (통화) ─────────────────────────────────────────
-#  칩보다 위 등급인 직사각 화폐판. 아이템이 원반이므로 통화는
+#  스티커보다 위 등급인 직사각 화폐판. 아이템이 원반이므로 통화는
 #  직사각으로 형태를 갈랐다. 대각 광택과 어두운 옆면이 금속감의
 #  전부라 둘 중 하나만 빼도 그냥 노란 네모가 된다.
 func draw_plaque(p: Vector2, w: float, h: float, c: Color) -> void:
@@ -2679,15 +2756,18 @@ func _panel_draw() -> void:
 
 	for i in GameData.max_items():
 		if i < owned.size():
-			_panel_slot(i)
+			if hand_st == H.CARRY and hand_src == 1 and i == hand_i:
+				_panel_gap(i)     # 지금 손에 들려 있다. 자리에는 자국만 남는다
+			else:
+				_panel_slot(i)
 		else:
-			# 딜러 칩 랙의 빈 홈
+			# 아직 안 채운 빈 자리
 			var e := _slot_rect(i).get_center() + Vector2(0.0, PANEL.chip_dy)
 			draw_circle(e, PANEL.r * 0.72, C_FELT.darkened(0.45))
 			draw_arc(e, PANEL.r * 0.72, 0.0, TAU, 16, C_FELT.lightened(0.10), 1.0)
 
 
-# 칩 i 의 고정 기울기 계수(-0.5~0.5). 인덱스로만 결정되므로 프레임 간 안 흔들린다.
+# 스티커 i 의 고정 기울기 계수(-0.5~0.5). 인덱스로만 결정되므로 프레임 간 안 흔들린다.
 # 상시 기울기는 정적이라 히트박스와 싸우지 않는다 — 그래서 calm 게이트를 안 탄다.
 # 3단계에서 PANEL.tilt 를 곱해 쓴다. (지금은 미사용)
 func _panel_tilt(i: int) -> float:
@@ -2710,7 +2790,7 @@ func _panel_slot(i: int) -> void:
 		draw_circle(c + Vector2(1.5, 3.0 + up * PANEL.lift), r,
 				Color(0.0, 0.0, 0.0, up * PANEL.shadow))
 
-	draw_item_chip(c, r, it, bounce * PANEL.spin, up * PANEL.lift,
+	draw_item_sticker(c, r, it, bounce * PANEL.spin, up * PANEL.lift,
 			0.55 if lock else 0.0, 12)
 
 	# 호버 링 — 리프트는 안 쓴다. 발동 스프링의 실제 최대 리프트가 3px 뿐이라
@@ -2748,25 +2828,25 @@ func _panel_slot(i: int) -> void:
 
 
 # ══════════════════════════════════════════════════════════
-#  판매 (칩 랙 → 골드)
+#  판매 (스티커 랙 → 골드)
 # ──────────────────────────────────────────────────────────
 #  바깥과 닿는 곳은 셋뿐이다.
 #    _sell_hit(m)   랙 클릭 판정          (_click 의 S.SHOP)
 #    _can_sell()    지금 팔 수 있는가      (_panel_slot / _tip_build / _process)
 #    sell_sel       고른 칸 (-1 = 없음)
 #
-#  두 번 눌러야 팔린다. 첫 클릭은 칩(랙 안), 두 번째는 왼쪽 창구다.
+#  두 번 눌러야 팔린다. 첫 클릭은 스티커(랙 안), 두 번째는 왼쪽 창구다.
 #  두 표적이 물리적으로 갈려 있어 더블클릭이 판매로 흘러들 수 없다 —
 #  같은 자리를 두 번 누르는 방식이었다면 필요했을 타이머가 여기선 필요 없다.
 #  판매판이 자금 판 바로 옆인 것도 의도다. 파는 건 물건 옆이 아니라 지갑 옆이다.
 #
 #  S.CLEAR 에는 절대 붙이지 않는다 — 정산 지급(_finish_round 의 gold +=)이
-#  이미 끝난 시점이라 골드 칩의 "받고 즉시 되팔기" 창이 열린다.
+#  이미 끝난 시점이라 골드 스티커의 "받고 즉시 되팔기" 창이 열린다.
 # ══════════════════════════════════════════════════════════
 
 var sell_sel := -1
 var sell_t := 0.0               # 선택 링 맥동에만 쓴다
-var stage_slots := 0            # 스테이지 화면에 들어설 때의 칩 개수
+var stage_slots := 0            # 스테이지 화면에 들어설 때의 스티커 개수
 var stage_t := 0.0              # 카드가 깔리는 경과. _open_stage 에서 0 으로 선다
 
 
@@ -2804,7 +2884,7 @@ func _sell(i: int) -> void:
 	sell_sel = -1
 	# sealed 는 owned 의 인덱스다. 판매는 SHOP/STAGE 에서만 일어나고 두 화면
 	# 모두 진입할 때 -1 로 지우므로 이미 -1 이지만, 인덱스가 밀린 뒤에 남아
-	# 있으면 엉뚱한 칩이 봉인으로 보인다. 여기서도 못 박는다.
+	# 있으면 엉뚱한 스티커가 봉인으로 보인다. 여기서도 못 박는다.
 	sealed = -1
 	# slot_pop/slot_vel/slot_hot 은 owned 와 인덱스를 공유하고 _panel_ensure 는
 	# 크기만 맞출 뿐 내용을 안 옮긴다. 이 두 화면에서는 스프링이 전부 정지
@@ -2882,7 +2962,7 @@ func _cons_draw() -> void:
 #
 #  계수가 둘인 것이 이 구획의 존재 이유다.
 #    면에 누운 것의 y → sin 52° = 0.788   (TBL.flat)
-#    면에서 선 것의 y → cos 52° = 0.616   (TBL.tall — 칩 옆면에만 쓴다)
+#    면에서 선 것의 y → cos 52° = 0.616   (TBL.tall — 스티커 옆면에만 쓴다)
 #  하나였다면 draw_set_transform 의 scale 한 줄로 끝났다. 그리고 그 한 줄은
 #  _tip_draw(2249행)가 draw_set_transform(sh) 로 복구할 때 조용히 사라지고,
 #  _hud_draw 가 _draw_shop 다음이라 남은 scale 은 HUD 를 통째로 누른다.
@@ -2916,7 +2996,7 @@ const C_WOOD := Color("3a2a24")
 #
 #  ── 크롭이 성립하는 사각은 화면에 딱 하나다 ──────────────
 #  딜러보다 나중에 그려지는 불투명 판은 _hud_draw 의 셋뿐이다 — 자금판
-#  x[4,76] · 칩 랙 x[209,431] · 칩 카운터 x[436,473], 전부 y 가 4 에서
+#  x[4,76] · 스티커 랙 x[209,431] · 스티커 카운터 x[436,473], 전부 y 가 4 에서
 #  시작한다. 그중 딜러의 x 와 겹치는 것은 랙 하나다. 그래서 제약이 둘이다.
 #    ① 실루엣 최상단은 y ≥ 4 다. 위로 더 가면 상단바가 상점·스테이지에서
 #       꺼져 있어(_bar_hidden) 덮개가 아예 없고, 화면 맨 위에 조끼색 띠가
@@ -2960,7 +3040,7 @@ const NPC := {
 	# 팔은 **판 위에 누운 상자**다. 몸통은 서 있고 팔은 누워 있으므로 같은
 	# 도형으로 그리면 안 된다 — 누운 것은 화면 좌표가 아니라 면 좌표(u,w)로
 	# 그려야 52° 정사영이 공짜로 붙는다. 옆면(h=0)을 깔고 윗면(h=t)을 얹는
-	# 어법은 칩(_chip_flat)과 같다. 이 게임이 이미 쓰는 문법이다.
+	# 어법은 스티커(_sticker_flat)과 같다. 이 게임이 이미 쓰는 문법이다.
 	#
 	# ── 다섯 번 실패한 뒤에 알아낸 것 ────────────────────────
 	# 선 · V자 · 커프 · 타원 · 상자를 차례로 시도했고 전부 졌다. 다섯 가지는
@@ -3056,7 +3136,7 @@ var npc_clock := 0.0
 #     line(w) − e(w) = u1 − 19.83      … w 와 무관한 상수
 #  가 된다. 그래서 "어느 깊이에서 빠지는가" 를 따질 일이 없다. 물건이
 #  놓이는 자리가 line(w) − r 이므로 조건이 u1 − 19.83 ≤ r 하나로 줄고,
-#  가장 빡빡한 칩(r 19)이 u1 ≤ 38.8 을 준다. 18 은 그 안이다.
+#  가장 빡빡한 스티커(r 19)이 u1 ≤ 38.8 을 준다. 18 은 그 안이다.
 #  시작점 u0 = 529 는 반대쪽이다. 물건이 물리적으로 닿을 수 있는 가장
 #  오른쪽 실체가 u_hi − hw + r = 524 − 19 + 19 = 524 이므로(실측 최대는
 #  486) 선이 거기보다 오른쪽에서 출발하면 팔 오른쪽에 남는 물건이 없다.
@@ -3096,7 +3176,7 @@ const TBL := {
 	"ny": 244.0,         # 펠트 near 모서리. 레일 6px 뒤가 기존 버튼 y=250
 
 	# ── 물건 ─────────────────────────────────────────
-	"chip_r": 19.0,      # 38 x 29.9 타원. 랙 칩은 30 x 30 정원이다 (일부러 다르다)
+	"chip_r": 19.0,      # 38 x 29.9 타원. 랙 스티커는 30 x 30 정원이다 (일부러 다르다)
 	"chip_t": 4.5,       # 옆면 = 4.5 * tall = 2.77px
 	"mod_r": 19.0,       # 캐비닛 실폭 2r+6 = 44, 화면 높이 2*r*flat+6 = 35.9
 	"dart_l": 24.0,      # 반길이. 최대 도달은 dl+8.5 ("mag" 자기장 호)
@@ -3148,7 +3228,7 @@ func _felt_draw() -> void:
 func _cover_draw() -> void:
 	# 덮개 — 물건은 카운터 뒤에서 나온다. 그 위로 삐져나온 부분을
 	# 먼 쪽 레일이 덮는다. 클리핑 대신 불투명 사각 하나다. 상시 HUD 는
-	# _hud_draw 가 이 위에 판을 다시 얹으므로 멀쩡하고, 결과적으로 칩 랙이
+	# _hud_draw 가 이 위에 판을 다시 얹으므로 멀쩡하고, 결과적으로 스티커 랙이
 	# 테이블 쿠션 위에 놓인 딜러 트레이로 읽힌다.
 	draw_rect(Rect2(0.0, 0.0, VIEW.x, TBL.fy), C_WOOD.darkened(0.30))
 	_npc_body()
@@ -3357,7 +3437,7 @@ func _npc_limb(el: Vector2, wr: Vector2, ang: float, sc: float,
 
 # 면 위에 누운 다각형 하나. 옆면(h=0)을 먼저 깔고 윗면(h=t)을 얹는다 —
 # 윗면이 t*tall 만큼 위로 올라가므로 아래로 삐져나온 옆면이 그대로
-# 두께가 된다. 칩과 같은 수법이다. 옆면 색을 **인자로 받는** 것이 중요하다:
+# 두께가 된다. 스티커와 같은 수법이다. 옆면 색을 **인자로 받는** 것이 중요하다:
 # 옛 _npc_slab 은 col.darkened(0.58) 로 자동 파생했는데, 그 결과가
 # 조끼색과 같은 값이라 몸통 위에 겹치는 구간에서 두께가 통째로 사라졌다.
 func _npc_flat(pts: PackedVector2Array, t: float, side: Color,
@@ -3591,7 +3671,7 @@ func _e_band(c: Vector2, rx: float, ry: float, ix: float, iy: float,
 #
 # 두 규약을 이름부터 갈라 둔다. 바꿔 쓰면 결과가 정반대로 틀린다.
 #   _e_ring_w  화면 인셋 — 폭 w 가 어느 각에서도 w.  테두리·금테·인레이 홈
-#   _e_ring_r  칩 좌표계 비율 — 12시에서 flat 배로 준다.  면의 구역
+#   _e_ring_r  스티커 좌표계 비율 — 12시에서 flat 배로 준다.  면의 구역
 func _e_ring_w(c: Vector2, rx: float, ry: float, w: float, col: Color) -> void:
 	for q in 4:
 		draw_colored_polygon(_e_band(c, rx, ry, rx - w, ry - w,
@@ -3612,7 +3692,7 @@ func _e_ring_r(c: Vector2, rx: float, ry: float, k0: float, k1: float,
 #    면 좌표   u 가로(화면 x 와 1:1) · w 깊이 · h 면에서 뜬 높이  ← 물리는 이것만 안다
 #    화면 좌표 x · y                                            ← 그리기·히트만 안다
 #  다리는 _p2s / _p2g 둘뿐이다. TBL.flat / TBL.tall 이 곱해지는 곳은 그 둘과
-#  _dart_e · _obj_box · _obj_shape · _obj_shadow · _chip_flat 뿐이다. grep 으로 검산된다.
+#  _dart_e · _obj_box · _obj_shape · _obj_shadow · _sticker_flat 뿐이다. grep 으로 검산된다.
 #  역변환(_s2p)은 만들지 않는다 — 화면 y 하나에 w 와 h 가 섞여 있어 유일하지 않다.
 #  그래서 히트는 마우스를 면으로 보내지 않고 물건을 화면으로 보낸다.
 #
@@ -3665,8 +3745,8 @@ const DROP := {
 	"t_max": 2.6, "relax": 3, "relax_hard": 12,
 
 	# ── 면 위 충돌 원 ────────────────────────────────
-	#  칩 원 1개(실루엣과 정확히 일치) · 개조 원 1개 · 다트 원 3개(캡슐).
-	#  다트에 가운데 원이 있어 칩-다트 최소 중심거리가 방위와 무관하게 28 이다.
+	#  스티커 원 1개(실루엣과 정확히 일치) · 개조 원 1개 · 다트 원 3개(캡슐).
+	#  다트에 가운데 원이 있어 스티커-다트 최소 중심거리가 방위와 무관하게 28 이다.
 	#  이 28 이 가격판 겹침 불가 정리의 전제다 (아래 _bill_draw 주석).
 	"r_item": 19.0, "r_mod": 21.0, "r_dart": 9.0, "d_dart": 16.0,
 
@@ -4152,9 +4232,9 @@ func _seg_d(p: Vector2, a: Vector2, b: Vector2) -> float:
 
 # 커서 아래 매물. _z_order 를 정확히 거꾸로 훑는다 — 위에 그려진 것이 잡힌다.
 # 박스는 통과했는데 모양이 아니면 다음(아래) 물체로 흘려보낸다. 다트의 빈 박스가
-# 뒤엣 칩을 가로채지 못하는 경로가 이것이다.
+# 뒤엣 스티커를 가로채지 못하는 경로가 이것이다.
 # 실측 — 정착 배치 300판을 1px 격자로 전수 조사해 못 잡는 물체 0/1200,
-# 최소 표적 면적 667px²(다트) · 1158(칩) · 1719(개조).
+# 최소 표적 면적 667px²(다트) · 1158(스티커) · 1719(개조).
 func _shop_hit(m: Vector2) -> int:
 	var lz: float = DROP.lift_hov * TBL.tall             # 3.70 — 들린 위치까지 덮는다
 	var z := _z_order()
@@ -4216,7 +4296,7 @@ func _obj_shadow(i: int) -> void:
 						e.x * dirv.y + e.y * dirv.x))
 			draw_colored_polygon(pts, col)
 		"cons":
-			# 꾸러미는 칩보다 작다 — 칩 반지름 그림자를 깔면 빛무리가 된다.
+			# 꾸러미는 스티커보다 작다 — 스티커 반지름 그림자를 깔면 빛무리가 된다.
 			draw_colored_polygon(_e_pts(g, 12.5 * k, 12.5 * k * TBL.flat, 12), col)
 		_:
 			draw_colored_polygon(_e_pts(g, it.r * k, it.r * k * TBL.flat, 14), col)
@@ -4246,9 +4326,9 @@ func _obj_paint(it: Dictionary, s: Dictionary, dim: float) -> void:
 		dim = sv * 0.55
 	match s.type:
 		"item":
-			_chip_flat(c, s.d, it.psi, dim, it.wob)
+			_sticker_flat(c, s.d, it.psi, dim, it.wob)
 		"cons":
-			# 소비 아이템 — 작은 사각 꾸러미. 개조(캐비닛)보다 작고 칩(원반)과
+			# 소비 아이템 — 작은 사각 꾸러미. 개조(캐비닛)보다 작고 스티커(원반)과
 			# 형태가 갈린다. 아트 방향이 미정이라 실루엣만 세워 둔다.
 			var ce := Vector2(11.0, 11.0 * TBL.flat)
 			var body: Color = C_PANEL.lightened(0.22 - dim * 0.2)
@@ -4260,7 +4340,7 @@ func _obj_paint(it: Dictionary, s: Dictionary, dim: float) -> void:
 					String(s.d.n).substr(0, 2), HORIZONTAL_ALIGNMENT_CENTER,
 					ce.x * 2.0, 8, Color(C_TXT, 1.0 - dim))
 		"mod":
-			# 칩과 같은 어법으로 눕는다 — 옆면을 깔고 윗면을 얹는다.
+			# 스티커와 같은 어법으로 눕는다 — 옆면을 깔고 윗면을 얹는다.
 			# 정면 원반은 컬렉션의 것이고, 테이블 위의 것은 누워야 한다.
 			draw_colored_polygon(_e_pts(c, TBL.mod_r, TBL.mod_r * TBL.flat),
 					C_DARK.darkened(0.72 + dim * 0.2))
@@ -4273,27 +4353,37 @@ func _obj_paint(it: Dictionary, s: Dictionary, dim: float) -> void:
 					de.angle() + 1.0304, 1.0 - dim * 0.5, false)
 
 
-# 펠트에 누운 칩. 랙의 draw_chip(정원)은 안 고친다 — 같은 물건의 다른 자세다.
-# _e_ring_w(화면 인셋)와 _e_ring_r(비율)을 섞어 쓰지 않는다.
-func _chip_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: float) -> void:
-	var ti := _chip_ti(it.cost)
-	var t: Dictionary = CHIP_TIERS[ti]
+# 펠트에 누운 스티커. 랙의 draw_sticker(정원)은 안 고친다 — 같은 물건의
+# 다른 자세다. _e_ring_w(화면 인셋)와 _e_ring_r(비율)을 섞어 쓰지 않는다.
+#
+#  여기서도 갈린 것은 테두리뿐이다: 가장자리 스팟과 인레이 홈(둘 다 스티커의
+#  어휘)을 빼고, 다이컷과 마감을 랙과 같은 각 규약으로 얹었다. 옆면은
+#  종이 두께라 그림자로만 남는다 — 히트박스(TBL.chip_t)는 안 건드렸다.
+func _sticker_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: float) -> void:
+	var ti := _stk_ti(it.cost)
+	var t: Dictionary = STK_TIERS[ti]
 	var rx: float = TBL.chip_r * (1.0 + wob * 0.05)
 	var ry: float = TBL.chip_r * TBL.flat * (1.0 - wob * 0.12)
 	var body := Color(t.body).darkened(dim)
-	var edge := Color(t.edge).darkened(dim)
-	var sd: float = TBL.chip_t * TBL.tall              # 옆면 2.77px
-	draw_colored_polygon(_e_pts(c + Vector2(0.0, sd), rx, ry), edge.darkened(0.35))
-	draw_colored_polygon(_e_pts(c, rx, ry), edge)
-	draw_colored_polygon(_e_pts(c, rx - 1.5, ry - 1.5), body)
-	var step := TAU / float(CHIP_SPOTS[ti] * 2)
-	for k in CHIP_SPOTS[ti]:
-		var a := rot + float(k) * step * 2.0
-		draw_colored_polygon(_e_band(c, rx, ry, rx * 0.66, ry * 0.66,
-				a - step * 0.42, a + step * 0.42, 3), Color(t.spot).darkened(dim))
-	_e_ring_r(c, rx, ry, 0.55, 0.61, edge.lightened(0.18))
-	if it.get("g", "") != "":
-		_e_ring_w(c, rx, ry, 1.0, C_GOLD.darkened(dim))
+	var rim: Color = (C_GOLD if it.get("g", "") != "" else C_DIECUT).darkened(dim)
+	var rw := 2.2
+	var sd: float = TBL.chip_t * TBL.tall              # 그림자 낙차 2.77px
+	draw_colored_polygon(_e_pts(c + Vector2(0.0, sd), rx, ry),
+			Color(0.0, 0.0, 0.0, 0.26 * (1.0 - dim)))
+	draw_colored_polygon(_e_pts(c, rx, ry), rim)
+	draw_colored_polygon(_e_pts(c, rx - rw, ry - rw * TBL.flat), body)
+	var fa := 1.0 - dim
+	match int(t.fin):
+		1:
+			draw_colored_polygon(_e_band(c, rx - rw - 0.3, ry - rw * TBL.flat - 0.3,
+					rx * 0.50, ry * 0.50, rot - 1.45, rot - 0.35, 6),
+					Color(1.0, 1.0, 1.0, 0.22 * fa))
+		2:
+			for k in 3:
+				var a := rot - 1.85 + float(k) * 0.72
+				draw_colored_polygon(_e_band(c, rx - rw - 0.3, ry - rw * TBL.flat - 0.3,
+						rx * 0.20, ry * 0.20, a, a + 0.46, 4),
+						Color(HOLO[k], 0.34 * fa))
 	var val := ("×" + str(it.v)) if it.k == "xmult" else str(it.v)
 	var ink: Color = C_CHIP.lightened(0.5) if it.k == "chip" else C_MULT.lightened(0.45)
 	draw_string(font, c + Vector2(-rx, 4.0), val,
@@ -4306,7 +4396,7 @@ func _chip_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: float) 
 #   · 가격판은 지면점 기준 균일 오프셋(bill_dy)이라 화면 y 가 w 의 단조함수다.
 #     → 두 판이 겹치려면 |Δu| < 21.6 이고 |Δw| < 9/0.788 = 11.4,
 #       즉 면 거리 < √(21.6² + 11.4²) = 24.4 여야 한다.
-#   · 분리 솔버가 보장하는 최소 면 거리는 칩-다트 28 · 개조-다트 30 · 칩-칩 38.
+#   · 분리 솔버가 보장하는 최소 면 거리는 스티커-다트 28 · 개조-다트 30 · 스티커-스티커 38.
 #     24.4 < 28 이므로 겹침이 불가능하다. 실측 1500롤 겹침 0, 최소 y차 16.2px.
 #   · 전제: 가격 문자열이 2자리 이내(bw ≤ 25). 지금 최대 가격은 14 다.
 #     세 자리가 생기면 이 정리부터 다시 세워야 한다.
@@ -4376,7 +4466,7 @@ func _drop_verify() -> void:
 # ──────────────────────────────────────────────────────────
 #  상점에 세 종류가 나란히 선다. 실루엣이 서로 갈려야 글자를
 #  안 읽고도 무엇인지 안다.
-#    아이템 → 원반 (draw_item_chip)
+#    아이템 → 원반 (draw_item_sticker)
 #    개조   → 미니 보드 — 상점에선 눕고(fl=TBL.flat) 컬렉션에선 정면(fl 1)
 #    다트   → 대각선
 #  _icon_mod / _icon_dart 만 바깥에서 부른다.
@@ -4501,7 +4591,7 @@ func _icon_mod(c: Vector2, r: float, id: String, dim: float,
 
 
 # rot 은 기본 각도에서 더 돌릴 양(레일 정렬 · 탁자 위 흩뿌림), a 는 알파(focus 감쇠).
-# 회전 인자 이름은 draw_item_chip 이 이미 쓰는 rot 에 맞췄고,
+# 회전 인자 이름은 draw_item_sticker 이 이미 쓰는 rot 에 맞췄고,
 # 알파 인자를 뒤에 덧붙인 것은 _icon_modifier 가 a 를 받아들인 선례와 같은 방식이다.
 func _icon_dart(c: Vector2, dl: float, id: String, dim := 0.0,
 		rot := 0.0, a := 1.0, sh := true) -> void:
@@ -4585,7 +4675,7 @@ func _icon_dart(c: Vector2, dl: float, id: String, dim := 0.0,
 #
 #  ── 실루엣 ──
 #  이 게임은 이미 네 실루엣을 썼다.
-#    아이템     꽉 찬 원반      draw_item_chip
+#    아이템     꽉 찬 원반      draw_item_sticker
 #    개조       불투명 사각판    _icon_mod
 #    다트       긴 대각 획      _icon_dart
 #    빈 랙 홈   속 빈 고리      _panel_draw
@@ -4727,9 +4817,9 @@ func _icon_modifier(c: Vector2, r: float, id: String, dim: float,
 			draw_colored_polygon(tipv, loss)
 
 		# ── 둔화 ────────────────────────────────────────
-		# 여섯 중 유일하게 보드가 아니라 칩을 건드리는 제약이라 혼자만
+		# 여섯 중 유일하게 보드가 아니라 스티커를 건드리는 제약이라 혼자만
 		# 기하가 아니라 물건이다 — 그 어긋남이 곧 "대상이 다르다"는 표시다.
-		# 랙이 봉인 칩에 이미 "봉인"을 C_MULT 로 찍으므로 자물쇠는
+		# 랙이 봉인 스티커에 이미 "봉인"을 C_MULT 로 찍으므로 자물쇠는
 		# 이 게임에 이미 있는 어휘다. 아치가 dead 의 부채꼴과 갈라준다.
 		"dull":
 			var ly := c.y - r * 0.13
@@ -4757,8 +4847,8 @@ func _icon_modifier(c: Vector2, r: float, id: String, dim: float,
 #       드래그가 drop_awake 를 켜지 않으므로 입력 잠금 창도 안 생긴다.
 #
 #  드는 것이 둘이다. 매대의 물건(hand_src 0)은 위 문단 그대로 면 위를 밀려
-#  다니고, 랙의 칩(hand_src 1)은 물리 물체가 아니라 커서 밑의 그림뿐이다.
-#  랙 칩 쪽은 적분기·펠트·겹침 어디에도 안 닿는다 — 그려지고, 놓이면 팔린다.
+#  다니고, 랙의 스티커(hand_src 1)은 물리 물체가 아니라 커서 밑의 그림뿐이다.
+#  랙 스티커 쪽은 적분기·펠트·겹침 어디에도 안 닿는다 — 그려지고, 놓이면 팔린다.
 #
 #  바깥과 닿는 곳은 열이다.
 #    _hand_press/_motion/_release  입력          (_unhandled_input)
@@ -4768,7 +4858,7 @@ func _icon_modifier(c: Vector2, r: float, id: String, dim: float,
 #    _shop_tap(i) / _rack_tap(i)   고르기          (_hand_release 의 탭 갈래)
 #    _chute_click(z) / _pay_click() 확정           (_click 의 S.SHOP)
 #    _chute_draw()/_hold_draw()/_fly_draw()        (_table_draw · _draw_shop 말미)
-#    buy_sel / sell_sel            고른 매물 · 고른 칩. 서로 배타
+#    buy_sel / sell_sel            고른 매물 · 고른 스티커. 서로 배타
 #    drop[i].held/.slot/.mark/.scuff               새 필드 넷
 #
 #  불변식 — held 인 물체의 u/w 를 쓰는 곳은 _hand_update 하나뿐이다.
@@ -4785,7 +4875,8 @@ var hand_m := Vector2.ZERO       # 마지막 커서 화면 좌표
 var hand_far := 0.0              # 누름 이후 |m - p0| 의 **누적 최대**. 단조 비감소
 var hand_off := Vector2.ZERO     # 면 좌표 잡기 오프셋. ramp 로 0 에 녹는다
 var hand_zone := -1              # 지금 켜진 창구 (-1 없음 · 0 판매 · 1 구매)
-var hand_src := 0                # 무엇을 들었나 (0 = 매대 물건 · 1 = 랙 칩)
+var hand_src := 0                # 무엇을 들었나 (0 = 매대 물건 · 1 = 랙 스티커)
+var peel_t := 0.0                # 랙에서 뗀 뒤 지난 시간(초). 말림 감쇠에만 쓴다
 var hand_v := Vector2.ZERO       # 든 물체의 평활 속도(면px/s). 놓을 때 이걸 넘긴다
 
 var buy_sel := -1                # 2클릭 구매의 1단계
@@ -4862,7 +4953,7 @@ const HAND := {
 # 왼쪽으로 밀면 팔고, 오른쪽으로 밀면 산다.
 #
 # 방향이 곧 뜻이라 라벨을 안 읽어도 성립한다. 대신 반대로 밀면 거절한다:
-# 랙의 칩은 왼쪽만, 매대의 물건은 오른쪽만 받는다. 계산대 하나가 양방향이던
+# 랙의 스티커는 왼쪽만, 매대의 물건은 오른쪽만 받는다. 계산대 하나가 양방향이던
 # 시절에는 "무엇을 밀었는가" 가 방향을 정했지만, 지금은 방향이 먼저다.
 #
 # 물리로 굴러 들어가는 것은 여전히 부등식 위반이다 — DROP.u_lo/u_hi 주석 참조.
@@ -4941,7 +5032,7 @@ func _hand_press(m: Vector2) -> bool:
 		return false
 	if _reroll_rect().has_point(m) or _next_rect().has_point(m):
 		return false
-	# 랙의 칩도 집는다 — 왼쪽 창구로 밀면 판다. 매대보다 먼저 보는 이유는
+	# 랙의 스티커도 집는다 — 왼쪽 창구로 밀면 판다. 매대보다 먼저 보는 이유는
 	# y 로 갈려 있어(매물 최상단 99.3 > 랙 하단 58) 겹칠 수 없기 때문이 아니라,
 	# 겹치게 되는 날 무엇이 이기는지를 여기 한 줄로 정해 두기 위해서다.
 	if _can_sell():
@@ -4990,8 +5081,9 @@ func _hand_take() -> void:
 	buy_sel = -1
 	sell_sel = -1             # 드래그는 _click 을 안 거쳐 _sell_hit 의 낙수가 안 온다
 	if hand_src == 1:
-		# 랙 칩은 물리 물체가 아니다. 적분기에 넣을 것이 없어 커서만 따라간다.
+		# 랙 스티커는 물리 물체가 아니다. 적분기에 넣을 것이 없어 커서만 따라간다.
 		hand_off = Vector2.ZERO
+		peel_t = 0.0              # 떼는 순간. 말림이 여기서부터 잦아든다
 		beep(196.0, 0.04, 0.08)
 		return
 	var it: Dictionary = drop[hand_i]
@@ -5039,7 +5131,7 @@ func _hand_release(m: Vector2) -> void:
 			_shop_tap(i)
 		return
 
-	# 랙 칩 — 왼쪽 창구는 판매, 다른 랙 칸 위는 순서 바꾸기.
+	# 랙 스티커 — 왼쪽 창구는 판매, 다른 랙 칸 위는 순서 바꾸기.
 	if src == 1:
 		if z == Z_SELL and _can_sell() and i >= 0 and i < owned.size():
 			_sell(i)
@@ -5182,7 +5274,7 @@ func _hand_update(d: float) -> void:
 	hand_zone = z
 
 	if hand_src == 1:
-		return                                  # 랙 칩은 커서에 붙어 다닌다
+		return                                  # 랙 스티커는 커서에 붙어 다닌다
 	var it: Dictionary = drop[hand_i]
 	hand_off = hand_off.move_toward(Vector2.ZERO, HAND.ramp * d)
 
@@ -5229,7 +5321,7 @@ func _shop_tap(i: int) -> void:
 	beep(349.0 if buy_sel >= 0 else 262.0, 0.05, 0.10)   # 349 는 랙 선택과 같은 음
 
 
-# 랙 칩을 끌지 않고 톡 눌렀을 때. 두 클릭 경로의 1단계다.
+# 랙 스티커를 끌지 않고 톡 눌렀을 때. 두 클릭 경로의 1단계다.
 func _rack_tap(i: int) -> void:
 	buy_sel = -1
 	if i < 0 or i >= owned.size() or not _can_sell():
@@ -5250,8 +5342,8 @@ func _slot_at(m: Vector2) -> int:
 
 # 랙 순서 바꾸기. i 를 뽑아 j 자리에 끼운다 — 자리를 서로 맞바꾸는 것이
 # 아니라 끼워 넣기다. 발동 순서가 곧 랙 순서이므로 이 함수가 사실상
-# "정산식 편집기"다. 봉인은 칩이 아니라 자리에 걸리는 게 아니라 칩에
-# 걸리므로, 같은 칩을 따라가게 한다.
+# "정산식 편집기"다. 봉인은 스티커가 아니라 자리에 걸리는 게 아니라 스티커에
+# 걸리므로, 같은 스티커를 따라가게 한다.
 func _rack_reorder(i: int, j: int) -> void:
 	j = mini(j, owned.size() - 1)
 	var sealed_it: Dictionary = owned[sealed] if sealed >= 0 and sealed < owned.size() else {}
@@ -5267,13 +5359,30 @@ func _rack_reorder(i: int, j: int) -> void:
 	pop(_slot_rect(j).get_center() + Vector2(0.0, 22.0), "순서 변경", C_TXT, 9, 0.8)
 
 
+# 든 스티커의 말림. 뗄 때 크게 젖혔다가 0.11초 만에 잦아들어 손 안에서
+# 살짝 말린 채로 남는다. 정착값 0.28 은 "떼어져 있다" 를 말하는 최소치이면서,
+# 접는 선을 값 숫자(반지름 13 에서 아래 9.8px)보다 낮게 두는 상한이기도 하다 —
+# r*(1-0.78*0.28) = 10.16 > 9.8. 더 올리면 들고 있는 동안 값이 안 보인다.
+# 0.32 는 떼는 순간의 튕김이라 값을 잠깐 먹는다. 0.1초짜리라 괜찮다.
+func _peel_now() -> float:
+	return 0.28 + 0.32 * exp(-peel_t / 0.10)
+
+
+# 떼어낸 자리. 빈 홈(반지름 0.72)이 아니라 스티커와 같은 반지름의 자국이다 —
+# "여기 붙어 있었다" 와 "여기는 원래 비어 있다" 가 같은 그림이면 안 된다.
+func _panel_gap(i: int) -> void:
+	var e := _slot_rect(i).get_center() + Vector2(0.0, PANEL.chip_dy)
+	draw_circle(e, PANEL.r, C_FELT.darkened(0.30))
+	draw_arc(e, PANEL.r, 0.0, TAU, 24, C_FELT.lightened(0.22), 1.0)
+
+
 # 창구를 눌렀을 때. 방향이 무엇을 뜻하는지는 여기서도 같다.
 func _chute_click(z: int) -> void:
 	if z == Z_SELL:
 		if _can_sell() and sell_sel >= 0 and sell_sel < owned.size():
 			_sell(sell_sel)
 			return
-		pay_msg = "먼저 랙에서 팔 칩을 고른다"
+		pay_msg = "먼저 판에서 팔 스티커를 고른다"
 		pay_msg_t = HAND.msg_t
 		_deny()
 		return
@@ -5316,12 +5425,13 @@ func _hold_draw() -> void:
 	if hand_st != H.CARRY:
 		return
 	if hand_src == 1:
-		# 랙에서 뽑은 칩. 물리 물체가 아니라 커서 밑의 그림뿐이다.
+		# 랙에서 뗀 스티커. 물리 물체가 아니라 커서 밑의 그림뿐이다.
 		if hand_i < 0 or hand_i >= owned.size():
 			return
 		_e_ring_w(hand_m, PANEL.r + 4.0, (PANEL.r + 4.0) * TBL.flat, 1.0,
 				Color(C_ACC if hand_zone == Z_SELL else C_TXT, 0.55))
-		draw_item_chip(hand_m, PANEL.r, owned[hand_i], 0.0, 0.0, 0.0, 12)
+		draw_item_sticker(hand_m, PANEL.r, owned[hand_i], 0.0, 0.0, 0.0, 12,
+				_peel_now())
 		return
 	if hand_i < 0 or hand_i >= drop.size():
 		return
@@ -5354,7 +5464,7 @@ func _fly_draw() -> void:
 
 
 func _drop_arrive(i: int) -> void:
-	# 도착에서 튄다. 이륙에서 튀면 칩이 도착하기 0.46초 전에 랙이 먼저 튄다 —
+	# 도착에서 튄다. 이륙에서 튀면 스티커가 도착하기 0.46초 전에 랙이 먼저 튄다 —
 	# 지금 있는 연출의 유일한 거짓말이었다.
 	var it: Dictionary = drop[i]
 	match stock[i].type:
@@ -5371,7 +5481,7 @@ func _drop_arrive(i: int) -> void:
 #  바깥과 닿는 곳은 둘뿐이다.
 #    _tip_update(d)  매 프레임 진행     (_process 끝)
 #    _tip_draw(sh)   오버레이 다음에    (_draw)
-#  칩 랙의 호버 링만 tip_slot / tip_a 를 읽는다.
+#  스티커 랙의 호버 링만 tip_slot / tip_a 를 읽는다.
 #
 #  대상은 매 프레임 새로 찾아 그 프레임에 소비한다. 인덱스를
 #  프레임 너머로 들고 가지 않으므로 상점이 갈리거나 아이템이
@@ -5390,9 +5500,9 @@ const TIP := {
 
 var tip_title := ""
 var tip_lines := []             # [{"s": String, "sz": int, "c": Color}]
-var tip_chip := {}              # 제목 옆 미니칩으로 그릴 아이템 (없으면 빈 사전)
-var tip_mark := Rect2()         # 대상 테두리 (칩 랙은 링으로 대신하므로 빈 값)
-var tip_slot := -1              # 호버 중인 칩 랙 칸
+var tip_chip := {}              # 제목 옆 미니스티커로 그릴 아이템 (없으면 빈 사전)
+var tip_mark := Rect2()         # 대상 테두리 (스티커 랙은 링으로 대신하므로 빈 값)
+var tip_slot := -1              # 호버 중인 스티커 랙 칸
 var tip_spot := -1              # 호버 중인 매대 자리 (테이블 구획용)
 var tip_a := 0.0                # 페이드
 
@@ -5479,7 +5589,7 @@ func _tip_build(hit: Dictionary) -> void:
 				_tip_add("판매가", 10, C_GOLD, "", "", str(GameData.sell_value(it)))
 		"stock":
 			var s: Dictionary = stock[i]
-			tip_mark = Rect2()      # 칩 랙과 같은 진영 — 사각 테두리 안 두른다
+			tip_mark = Rect2()      # 스티커 랙과 같은 진영 — 사각 테두리 안 두른다
 			tip_spot = i
 			tip_title = s.d.n
 			if s.type == "item":
@@ -5601,7 +5711,7 @@ func _tip_draw(sh: Vector2) -> void:
 
 	var tx: float = p.x + TIP.pad
 	if not tip_chip.is_empty():
-		draw_item_chip(p + Vector2(TIP.pad + 8.0, TIP.pad + 8.0), 8.0, tip_chip,
+		draw_item_sticker(p + Vector2(TIP.pad + 8.0, TIP.pad + 8.0), 8.0, tip_chip,
 				0.42, 0.0, 0.0, 8)
 		tx += 20.0
 	draw_string(font, Vector2(tx, p.y + TIP.pad + 11.0), tip_title,
@@ -5981,7 +6091,7 @@ func _draw_collect() -> void:
 	_scrim()
 	draw_string(font, Vector2(0, 30), "컬렉션", HORIZONTAL_ALIGNMENT_CENTER,
 			VIEW.x, 18, C_TXT)
-	var tabs := ["칩 %d" % GameData.items().size(),
+	var tabs := ["스티커 %d" % GameData.items().size(),
 			"개조 %d" % GameData.mods().size(),
 			"다트 %d" % GameData.darts().size(),
 			"소비 %d" % GameData.consumables().size(),
@@ -5998,7 +6108,7 @@ func _draw_collect() -> void:
 		match collect_tab:
 			0:
 				var it: Dictionary = GameData.items()[gi]
-				draw_item_chip(c, 13.0, it, 0.0, 0.0, 0.0, 9)
+				draw_item_sticker(c, 13.0, it, 0.0, 0.0, 0.0, 9)
 				nm = it.n
 			1:
 				var md: Dictionary = GameData.mods()[gi]
