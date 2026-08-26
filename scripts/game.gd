@@ -9,6 +9,15 @@ const GameData = preload("res://scripts/data.gd")
 # 밸런스 수치는 전부 scripts/data.gd 에 있다.
 
 const VIEW := Vector2(640, 360)
+
+#  글꼴 — 프로젝트에 실어 둔다.
+#  OS 글꼴(SystemFont)은 웹에서 빈손으로 돌아와 한글이 전부 네모가 되고,
+#  데스크톱에서도 기기에 뭐가 깔렸느냐에 따라 다른 글꼴이 잡힌다. 실어 두면
+#  브라우저와 윈도가 같은 화면을 그린다.
+#  Paperlogy 는 Thin(1) 부터 Black(9) 까지 아홉 단계다. 두께를 바꾸려면
+#  fonts/ 에 그 파일을 넣고 이 줄만 고치면 된다 — 부르는 곳은 _ready 한 곳뿐이다.
+const FONT_PATH := "res://fonts/Paperlogy-5Medium.ttf"
+
 const BC := Vector2(320, 196)
 # 판 반지름과 조준 진폭은 tuning.csv 에 나란히 있다. SWING 은 R 에 비례해야
 # 하고(보드만 줄이면 빗나갈 확률이 조용히 오른다), 그 비 1.1226 이 빗나감
@@ -238,15 +247,19 @@ func _ready() -> void:
 		beat = 0.10
 		confirm_hold = 0.05
 
-	var sf := SystemFont.new()
-	sf.font_names = PackedStringArray(["Malgun Gothic", "Segoe UI", "Arial"])
-	font = sf
+	font = load(FONT_PATH)
 
 	var p := AudioStreamPlayer.new()
 	var gen := AudioStreamGenerator.new()
 	gen.mix_rate = 44100.0
 	gen.buffer_length = 0.08
 	p.stream = gen
+	#  웹의 기본 재생 방식은 Sample 이다 — 스트림을 미리 통째로 굽는 방식이라
+	#  매 프레임 채워 넣는 AudioStreamGenerator 를 못 받는다. 브라우저 콘솔에
+	#  "cannot be sampled" 한 줄만 뜨고 소리가 통째로 안 난다.
+	#  프로젝트 설정의 default_playback_type.web 은 안 먹었다(4.7.2 에서 확인).
+	#  노드에 직접 박아야 듣는다. 데스크톱에선 어차피 같은 값이라 무해하다.
+	p.playback_type = AudioServer.PLAYBACK_TYPE_STREAM
 	add_child(p)
 	p.play()
 	pb = p.get_stream_playback()
@@ -2436,7 +2449,7 @@ func _icon_cond(c: Vector2, r: float, cond: String, col: Color) -> void:
 	# 숫자 지정 조건 — 숫자가 곧 아이콘이다. 셋 넘으면 첫 수에 점을 단다.
 	if cond.begins_with("sec:"):
 		var parts := cond.substr(4).split(",")
-		var txt := "·".join(parts) if parts.size() <= 2 else parts[0] + "⋯"
+		var txt := "·".join(parts) if parts.size() <= 2 else parts[0] + "…"
 		draw_string(font, c + Vector2(-r, u * 0.55), txt,
 				HORIZONTAL_ALIGNMENT_CENTER, r * 2.0, maxi(6, int(u * 1.1)), col)
 		return

@@ -4,3 +4,6 @@
 # 데이터 표는 엑셀이 여닫는 파일이라 CRLF 로 둔다. LF 로 정규화하면
 # 엑셀이 저장할 때 다시 CRLF 로 돌려놓아 매번 전 줄 diff 가 난다.
 data/*.csv text eol=crlf
+
+# 글꼴은 바이너리다 — eol 정규화가 파일을 망친다.
+*.ttf binary
