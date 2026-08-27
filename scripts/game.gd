@@ -590,7 +590,11 @@ func _draw_weighted(pool: Array) -> Dictionary:
 func _roll_stock() -> void:
 	stock.clear()
 	var nxt := round_no + 1
-	var w := GameData.shop_of(nxt)
+	# 상점 칸은 그 라운드 **뒤**의 상점 폭이다 — 검증기가 마지막 라운드의
+	# 칸을 비우라고 강제하는 근거가 그것이다. 다음 행을 읽으면 7라운드를
+	# 넘긴 상점이 8라운드의 빈 칸을 읽어 매물이 하나도 안 뜬다.
+	# 1~6 은 다음 행도 같은 2·1·1 이라 여기까지 안 보였다.
+	var w := GameData.shop_of(round_no)
 
 	# 후보를 먼저 거른다 — 이미 가진 스티커와 아직 안 풀린 스티커는 애초에 안 뜬다.
 	var pool := []
@@ -1050,7 +1054,7 @@ func _process(d: float) -> void:
 	board_punch = maxf(board_punch - d * 3.4, 0.0)
 	hit_flash = maxf(hit_flash - d * 2.6, 0.0)
 	total_flash = maxf(total_flash - d * 3.0, 0.0)
-	shown = lerpf(shown, float(total), 1.0 - pow(0.02, d))
+	_tick_score(d)
 
 	for w in waves:
 		w.t += d
@@ -1121,6 +1125,15 @@ func _process(d: float) -> void:
 
 	_tip_update(d)
 	queue_redraw()
+
+
+# 점수판이 따라 올라가는 수. lerp 는 목표에 닿지 않고 밑에서 수렴하므로
+# 반 점 안에 들면 딱 붙인다 — 안 붙이면 45 를 44.9997 로 들고 있게 되고,
+# 점수판이 그 값을 버려서 "44 / 45 인데 클리어" 로 읽힌다(플레이 보고).
+func _tick_score(d: float) -> void:
+	shown = lerpf(shown, float(total), 1.0 - pow(0.02, d))
+	if absf(shown - float(total)) < 0.5:
+		shown = float(total)
 
 
 func _auto_step() -> void:
@@ -2231,7 +2244,8 @@ func _draw_topbar() -> void:
 	else:
 		var k := clampf(shown / float(maxi(target, 1)), 0.0, 1.0)
 		draw_rect(Rect2(g.position, Vector2(g.size.x * k, g.size.y)), C_ACC)
-		draw_string(font, Vector2(LAY.bar_score, 13.0), "%d / %d" % [int(shown), target],
+		draw_string(font, Vector2(LAY.bar_score, 13.0),
+				"%d / %d" % [int(round(shown)), target],
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_TXT)
 
 	# 3칸 x[584,640] — 이번 판 제약 수. 이름 전체는 하단 y341 줄이 갖는다.

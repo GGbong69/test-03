@@ -16,6 +16,8 @@ const GameData = preload("res://scripts/data.gd")
 #       (헬퍼가 아니라 호출부 — 마모·목숨 — 를 밟는다. 봉인된 목숨도 본다)
 #    ③ 마지막 라운드에서 목숨이 터지면 완주 검사를 건너뛰어
 #       빈 상점과 유령 9라운드가 열렸다
+#    ④ 점수판이 애니메이션 값을 버려 45 를 "44 / 45" 로 적었다
+#    ⑤ 상점이 다음 라운드 행의 폭을 읽어 7라운드 뒤 매대가 통째로 비었다
 # ══════════════════════════════════════════════════════════
 
 var fails := 0
@@ -112,5 +114,27 @@ func _initialize() -> void:
 	g._finish_round()
 	_say(g.state == g.S.CLEAR, "그 앞 라운드는 정산으로", "state %d" % g.state)
 
-	print("\n%s" % ("실패 %d건" % fails if fails > 0 else "여덟 검사 전부 통과"))
+	# ④ 점수판은 목표에 닿으면 목표를 적는다. lerp 는 밑에서 수렴하므로
+	#    버리면 45 가 영원히 44 로 보인다 — 반올림하고 반 점 안에서 붙인다.
+	g.total = 45
+	g.target = 45
+	g.shown = 0.0
+	for _i2 in 600:
+		g._tick_score(1.0 / 60.0)
+	_say(g.shown == 45.0 and int(round(g.shown)) == 45,
+			"점수판이 목표에 닿으면 목표를 적는다",
+			"shown %.4f → %d" % [g.shown, int(round(g.shown))])
+
+	# ⑤ 상점 폭은 그 라운드 **뒤**의 것이다 — 마지막 앞 라운드에도 매대가 선다
+	var last: int = GameData.rounds_n()
+	g.round_no = last - 1
+	g.gold = 99
+	g.owned = []
+	g.mods_own = []
+	g._panel_reset()
+	g._roll_stock()
+	_say(g.stock.size() == 4, "마지막 앞 라운드에도 매대가 넷",
+			"R%d 뒤 매물 %d칸" % [g.round_no, g.stock.size()])
+
+	print("\n%s" % ("실패 %d건" % fails if fails > 0 else "열 검사 전부 통과"))
 	quit(mini(fails, 125))
