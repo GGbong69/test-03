@@ -109,7 +109,7 @@ const C_MULT := Color("e2593f")
 const C_GOLD := Color("f2c94c")
 
 enum S { PICK, AIM_V, AIM_H, CONFIRM, FLY, RESOLVE, CLEAR, SHOP, STAGE, OVER,
-		TITLE, SETTINGS, COLLECT }
+		TITLE, SETTINGS, COLLECT, NEWRUN }
 
 # ── 보드 기하 (개조로 변한다) ──────────────────────────────
 #  판의 유일한 출처는 mods_own 이다. 아래 여덟은 그것을 구운 결과일 뿐이다.
@@ -285,10 +285,18 @@ func _new_run() -> void:
 	mods_own.clear()
 	_board_bake()
 	round_no = 1
-	gold = GameData.start_gold()
+	# 시작 조건은 스타트팩이 쥔다 — 표가 비면 튜닝 값이 그대로 남는다.
+	var pk := GameData.pack_row()
+	gold = GameData.start_gold() + int(pk.get("gold_add", 0))
 	magazine.clear()
-	for i in GameData.tune_i("darts_base"):
-		magazine.append(GameData.darts()[0])
+	var dart_id := String(pk.get("dart_id", "std"))
+	var d0: Dictionary = GameData.darts()[0]
+	for dd in GameData.darts():
+		if String(dd.id) == dart_id:
+			d0 = dd
+	var nd: int = maxi(1, GameData.tune_i("darts_base") + int(pk.get("darts_add", 0)))
+	for i in nd:
+		magazine.append(d0)
 	owned.clear()
 	cons.clear()
 	track_lv.clear()
@@ -523,11 +531,12 @@ func _seal_drop(i: int) -> void:
 func _stake_unlock_next() -> void:
 	var rows := GameData.stakes()
 	var cur := String(GameData.stake_row().get("id", ""))
+	Save.unlock(GameData.win_key(cur))      # 이 팩으로 이 단을 넘겼다
 	for i in rows.size():
 		if String(rows[i].get("id", "")) != cur or i + 1 >= rows.size():
 			continue
 		var nxt := String(rows[i + 1].get("id", ""))
-		if Save.unlock("stake:" + nxt):
+		if Save.unlock(GameData.stake_key(nxt)):
 			pop(Vector2(VIEW.x * 0.5, 210.0),
 					"%s 열렸다" % rows[i + 1].get("name", ""), C_GOLD, 13, 1.6)
 		return
@@ -1286,7 +1295,7 @@ func _unhandled_input(e: InputEvent) -> void:
 				KEY_ESCAPE:
 					if state == S.SETTINGS:
 						_settings_back()
-					elif state == S.COLLECT:
+					elif state == S.COLLECT or state == S.NEWRUN:
 						state = S.TITLE
 					elif hand_st != H.NONE:
 						_hand_abort()
@@ -1302,7 +1311,12 @@ func _unhandled_input(e: InputEvent) -> void:
 					if hand_st != H.NONE:
 						_hand_abort()
 					elif state == S.TITLE:
-						_new_run()
+						_open_newrun()
+					elif state == S.NEWRUN:
+						if _pack_open(newrun_pip):
+							_new_run()
+						else:
+							_deny()
 					elif state == S.SETTINGS:
 						_settings_back()
 					elif state == S.COLLECT:
@@ -1395,13 +1409,13 @@ func _click(m: Vector2) -> void:
 			else:
 				buy_sel = -1            # 맨 펠트 = 취소
 		S.OVER:
-			# 검증 실행은 소크 테스트라 곧장 다음 런으로 돈다. 사람은 제목으로.
+			# 검증 실행은 소크 테스트라 곧장 다음 런으로 돈다. 사람은 새 런으로 —
+			# 팩과 판돈을 다시 고를 자리가 거기다.
 			if _autoplay:
 				_new_run()
 			else:
-				state = S.TITLE
-				beep(330.0, 0.06, 0.12)
-		S.TITLE:
+				_open_newrun()
+		S.NEWRUN:
 			for i in GameData.stakes().size():
 				if not _stake_rect(i).has_point(m):
 					continue
@@ -1413,11 +1427,29 @@ func _click(m: Vector2) -> void:
 				Save.flush()
 				beep(523.0, 0.05, 0.12)
 				return
+			if GameData.packs().size() > 1:
+				for right in [false, true]:
+					if _pack_arrow(right).has_point(m):
+						_pack_view(newrun_pip + (1 if right else -1))
+						beep(392.0, 0.04, 0.10)
+						return
+			if _newrun_go().has_point(m):
+				if not _pack_open(newrun_pip):
+					_deny()
+					return
+				_new_run()
+				beep(523.0, 0.06, 0.14)
+				return
+			if _newrun_back().has_point(m):
+				state = S.TITLE
+				beep(330.0, 0.05, 0.10)
+				return
+		S.TITLE:
 			for i in 4:
 				if _menu_rect(i).has_point(m):
 					match i:
 						0:
-							_new_run()
+							_open_newrun()
 						1:
 							collect_tab = 0
 							state = S.COLLECT
@@ -2100,6 +2132,8 @@ func _draw() -> void:
 		_draw_settings()
 	elif state == S.COLLECT:
 		_draw_collect()
+	elif state == S.NEWRUN:
+		_draw_newrun()
 	else:
 		_draw_hint()
 
@@ -2124,7 +2158,7 @@ func _is_play() -> bool:
 
 func _hud_draw() -> void:
 	if state == S.OVER or state == S.TITLE or state == S.SETTINGS \
-			or state == S.COLLECT:
+			or state == S.COLLECT or state == S.NEWRUN:
 		return
 	if not _bar_hidden():
 		_draw_topbar()
@@ -6194,6 +6228,7 @@ func _toggle_fullscreen() -> void:
 func _load_settings() -> void:
 	# 판돈도 저장에서 되살린다. 모르는 id 면 stake_row 가 첫 단으로 떨군다.
 	GameData.stake = String(Save.get_set("stake", ""))
+	GameData.pack = String(Save.get_set("pack", ""))
 	vol = clampf(float(Save.get_set("vol", 1.0)), 0.0, 1.0)
 	_apply_vol()
 	if bool(Save.get_set("fullscreen", false)):
@@ -6213,41 +6248,224 @@ func _draw_title() -> void:
 	var subs := ["스페이스", "", "", ""]
 	for i in 4:
 		_btn(_menu_rect(i), names[i], subs[i], true)
-	_stake_draw()
 
 
-# 판돈 줄 — 여덟 점을 한 줄로 깐다. 열린 것만 색이 차고, 지금 고른 것에
-# 테가 선다. 이름은 아래 한 줄로 낸다 — 점 여덟에 글자를 붙이면 안 읽힌다.
-func _stake_draw() -> void:
-	var rows := GameData.stakes()
-	if rows.is_empty():
-		return
-	var cur := GameData.stake_row()
-	for i in rows.size():
-		var r := _stake_rect(i)
-		var on: bool = _stake_open(i)
-		var col := Color(String(rows[i].get("color", "cfc9bd")))
-		draw_rect(r, col if on else C_PANEL.lightened(0.06))
-		if not on:
-			draw_rect(r, C_WIRE.darkened(0.3), false, 1.0)
-		if String(rows[i].get("id", "")) == String(cur.get("id", "")):
-			draw_rect(r.grow(2.0), C_TXT, false, 1.0)
-	draw_string(font, Vector2(0, 176), String(cur.get("name", "")),
-			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 10, C_DIM)
+# ══════════════════════════════════════════════════════════
+#  새 런 — 팩과 판돈을 같이 고른다
+# ──────────────────────────────────────────────────────────
+#  발라트로가 PLAY 뒤에 여는 run_setup 이 이 자리다. 타이틀에는 덱도
+#  판돈도 없다 — 거기 있던 것을 여기로 옮겼다.
+#
+#  발라트로와 다르게 잡은 둘.
+#    ① 판돈을 화살표 사이클이 아니라 여덟 칸을 눕혀 곧장 누른다. 클릭
+#       하나로 도는 게임에서 금 판돈에 가려고 일곱 번 넘기는 것은
+#       조작이 아니라 형벌이다. 640x360 에 세로 기둥을 놓을 자리도 없다.
+#    ② 발라트로는 이 화면을 게임오버에서 열면 못 빠져나가는데, 여기서는
+#       뒤로가 늘 산다. 나갈 길 없는 화면을 만들지 않는다.
+#
+#  "시작" 은 확인 버튼이 아니다 — 팩과 판돈은 누르는 순간 확정되어
+#  저장까지 끝나 있고, 이 버튼은 던지러 가는 이동이다.
+# ══════════════════════════════════════════════════════════
+
+var newrun_pip := 0             # 지금 보고 있는 팩 번호
+
+
+func _pack_rect() -> Rect2:
+	return Rect2(Vector2(76.0, 52.0), Vector2(488.0, 132.0))
+
+
+func _pack_arrow(right: bool) -> Rect2:
+	return Rect2(Vector2(574.0 if right else 40.0, 96.0), Vector2(26.0, 44.0))
 
 
 func _stake_rect(i: int) -> Rect2:
-	var w := 18.0
-	var x0: float = VIEW.x * 0.5 - (8.0 * w + 7.0 * 4.0) * 0.5
-	return Rect2(Vector2(x0 + float(i) * (w + 4.0), 152.0), Vector2(w, 14.0))
+	return Rect2(Vector2(167.0 + float(i) * 39.0, 198.0), Vector2(33.0, 22.0))
 
 
-# 첫 단은 늘 열려 있고, 나머지는 앞 단으로 완주해야 열린다.
+func _newrun_go() -> Rect2:
+	return Rect2(Vector2(236.0, 306.0), Vector2(168.0, 34.0))
+
+
+func _newrun_back() -> Rect2:
+	return Rect2(Vector2(44.0, 312.0), Vector2(88.0, 28.0))
+
+
+# 팩은 첫 행이 늘 열려 있고, 나머지는 해금 키를 읽는다.
+func _pack_open(i: int) -> bool:
+	var rows := GameData.packs()
+	if i <= 0 or i >= rows.size():
+		return i == 0
+	return Save.unlocked("pack:" + String(rows[i].get("id", "")))
+
+
+# 판돈은 팩마다 따로 뚫린다 — 첫 단은 늘 열려 있고 나머지는 앞 단 완주다.
 func _stake_open(i: int) -> bool:
 	var rows := GameData.stakes()
 	if i <= 0 or i >= rows.size():
 		return i == 0
-	return Save.unlocked("stake:" + String(rows[i].get("id", "")))
+	return Save.unlocked(GameData.stake_key(String(rows[i].get("id", ""))))
+
+
+func _stake_won(i: int) -> bool:
+	var rows := GameData.stakes()
+	if i < 0 or i >= rows.size():
+		return false
+	return Save.unlocked(GameData.win_key(String(rows[i].get("id", ""))))
+
+
+# 팩을 넘기면 판돈을 그 팩이 뚫은 만큼으로 내린다. 발라트로가 덱을 바꿀 때
+# 하는 그 한 줄이고, 이게 있어야 "판돈은 팩마다 따로 뚫는다" 가 읽힌다.
+func _pack_view(i: int) -> void:
+	var rows := GameData.packs()
+	if rows.is_empty():
+		return
+	newrun_pip = posmod(i, rows.size())
+	GameData.pack = String(rows[newrun_pip].get("id", ""))
+	Save.set_set("pack", GameData.pack)
+	var top := 0
+	for k in GameData.stakes().size():
+		if _stake_open(k):
+			top = k
+	if GameData.stake_idx() > top:
+		GameData.stake = String(GameData.stakes()[top].get("id", ""))
+		Save.set_set("stake", GameData.stake)
+	Save.flush()
+
+
+# 저장에 남은 팩을 화면의 지금 자리로 맞춘 뒤 연다.
+func _open_newrun() -> void:
+	var rows := GameData.packs()
+	newrun_pip = 0
+	for i in rows.size():
+		if String(rows[i].get("id", "")) == GameData.pack:
+			newrun_pip = i
+	_pack_view(newrun_pip)
+	state = S.NEWRUN
+	beep(440.0, 0.05, 0.12)
+
+
+func _draw_newrun() -> void:
+	_scrim()
+	draw_string(font, Vector2(0, 32), "새 런", HORIZONTAL_ALIGNMENT_CENTER,
+			VIEW.x, 18, C_TXT)
+
+	var packs := GameData.packs()
+	var many: bool = packs.size() > 1
+	for right in [false, true]:
+		var ar := _pack_arrow(right)
+		draw_rect(ar, C_PANEL.lightened(0.10) if many else C_PANEL.darkened(0.2))
+		draw_rect(Rect2(ar.position, Vector2(ar.size.x, 2.0)),
+				C_ACC if many else C_DIM.darkened(0.5))
+		draw_string(font, ar.position + Vector2(0.0, 28.0), "▶" if right else "◀",
+				HORIZONTAL_ALIGNMENT_CENTER, ar.size.x, 12, C_TXT if many else C_DIM)
+
+	# 팩 패널 — 왼쪽에 탄창(팩의 얼굴), 오른쪽에 이름과 값
+	var pr := _pack_rect()
+	draw_rect(pr, C_PANEL.lightened(0.10))
+	draw_rect(Rect2(pr.position, Vector2(pr.size.x, 2.0)), C_ACC)
+	var open: bool = _pack_open(newrun_pip)
+	var row: Dictionary = packs[newrun_pip] if newrun_pip < packs.size() else {}
+	var dim: float = 0.0 if open else 0.55
+	for k in 3:
+		_icon_dart(Vector2(150.0, 100.0 + float(k) * 18.0), 22.0,
+				String(row.get("dart_id", "std")), dim,
+				deg_to_rad(-18.0 + float(k) * 18.0), 1.0 - dim * 0.6)
+	draw_string(font, Vector2(230, 84), String(row.get("name", "")) if open else "잠김",
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 13, C_TXT if open else C_DIM)
+	var eb := Rect2(Vector2(230.0, 96.0), Vector2(310.0, 76.0))
+	draw_rect(eb, C_PANEL.darkened(0.2))
+	var lines := _pack_lines(row) if open else [_pack_cond(row)]
+	for li in mini(lines.size(), 4):
+		draw_string(font, Vector2(242, 116 + li * 16), lines[li],
+				HORIZONTAL_ALIGNMENT_LEFT, eb.size.x - 24.0, 10,
+				C_TXT if open else C_DIM)
+	# 이 팩으로 넘긴 가장 높은 판돈 — 한 번도 못 넘겼으면 안 그린다
+	var best := -1
+	for k in GameData.stakes().size():
+		if _stake_won(k):
+			best = k
+	if best >= 0:
+		draw_rect(Rect2(196.0, 60.0, 16.0, 11.0),
+				Color(String(GameData.stakes()[best].get("color", "cfc9bd"))))
+	if many:
+		var pw: float = float(packs.size()) * 4.0 + float(packs.size() - 1) * 6.0
+		for k in packs.size():
+			draw_rect(Rect2(VIEW.x * 0.5 - pw * 0.5 + float(k) * 10.0, 190.0, 4.0, 4.0),
+					C_TXT if k == newrun_pip else C_PANEL.lightened(0.06))
+
+	# 판돈 사다리 — 왼쪽이 약한 단이다. 가로로 눕혔으니 읽는 방향을 따른다.
+	var st := GameData.stakes()
+	var cur := GameData.stake_row()
+	for i in st.size():
+		var r := _stake_rect(i)
+		var col := Color(String(st[i].get("color", "cfc9bd")))
+		if _stake_open(i):
+			draw_rect(r, col)
+			if _stake_won(i):
+				draw_rect(Rect2(r.position.x, r.end.y, r.size.x, 2.0), C_GOLD)
+		else:
+			# 못 여는 단은 좁은 토막으로 — 자리는 지키되 값은 안 보인다
+			draw_rect(Rect2(r.position.x + 10.0, r.position.y, 13.0, r.size.y),
+					C_PANEL.lightened(0.06))
+			draw_rect(Rect2(r.position.x + 10.0, r.position.y, 13.0, r.size.y),
+					C_WIRE.darkened(0.3), false, 1.0)
+		if String(st[i].get("id", "")) == String(cur.get("id", "")):
+			draw_rect(r.grow(2.0), C_TXT, false, 1.0)
+	draw_string(font, Vector2(0, 238), String(cur.get("name", "")),
+			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 13,
+			Color(String(cur.get("color", "cfc9bd"))))
+	var sb := Rect2(Vector2(160.0, 244.0), Vector2(320.0, 52.0))
+	draw_rect(sb, C_PANEL.darkened(0.2))
+	var sl := _stake_lines()
+	for li in sl.size():
+		draw_string(font, Vector2(172 + (0 if li < 3 else 158), 262 + (li % 3) * 14),
+				sl[li], HORIZONTAL_ALIGNMENT_LEFT, 150.0, 10, C_TXT)
+
+	_btn(_newrun_go(), "시작", "스페이스", open)
+	_btn(_newrun_back(), "뒤로", "ESC", true)
+
+
+# 팩이 미는 값만 줄로 낸다 — 해설은 안 쓴다.
+func _pack_lines(row: Dictionary) -> Array:
+	var out := []
+	out.append("다트 %d" % (GameData.tune_i("darts_base") + int(row.get("darts_add", 0))))
+	out.append("시작 골드 %d" % (GameData.start_gold() + int(row.get("gold_add", 0))))
+	out.append("스티커 칸 %d" % int(row.get("item_slots", GameData.tune_i("max_items"))))
+	out.append("소비 칸 %d" % int(row.get("cons_slots", GameData.tune_i("cons_slots"))))
+	return out
+
+
+func _pack_cond(row: Dictionary) -> String:
+	var pq := String(row.get("prereq", ""))
+	return "%s 완주" % pq if pq != "" else "잠김"
+
+
+# 판돈이 미는 값 — 1단부터 지금 단까지 쌓인 결과만 적는다.
+func _stake_lines() -> Array:
+	var out := []
+	var r := GameData.stake_row()
+	if String(r.get("curve", "base")) != "base":
+		# 열 이름(curve_a)은 표의 말이지 사람의 말이 아니다. 곱이 앤티마다
+		# 다르므로 첫 앤티와 마지막 앤티의 값을 범위로 적는다.
+		var lo := GameData.stake_mul(1)
+		var hi := GameData.stake_mul(GameData.rounds_n())
+		out.append("목표 ×%.2f~%.2f" % [lo, hi] if hi > lo else "목표 ×%.2f" % hi)
+	if String(r.get("reward_small", "")) != "" \
+			and int(GameData.stake_v("reward_small", 3.0)) < 3:
+		out.append("작은 판 보상 %d" % int(GameData.stake_v("reward_small", 3.0)))
+	if int(GameData.stake_v("seal_items", 0.0)) > 0:
+		out.append("봉인 %d" % int(GameData.stake_v("seal_items", 0.0)))
+	if int(GameData.stake_v("darts_add", 0.0)) != 0:
+		out.append("다트 %+d" % int(GameData.stake_v("darts_add", 0.0)))
+	if GameData.stake_v("shop_cost_mul", 1.0) != 1.0:
+		out.append("매대 ×%.2f" % GameData.stake_v("shop_cost_mul", 1.0))
+	if int(GameData.stake_v("perish", 0.0)) > 0:
+		out.append("삭음 %d판" % int(GameData.stake_v("perish", 0.0)))
+	if int(GameData.stake_v("rent", 0.0)) > 0:
+		out.append("자릿세 %d" % int(GameData.stake_v("rent", 0.0)))
+	if out.is_empty():
+		out.append("기준")
+	return out
 
 
 # 설정의 행 — 판 중에 열었을 때만 "로비로 나가기" 가 낀다.

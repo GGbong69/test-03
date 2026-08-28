@@ -55,6 +55,7 @@ const FILES := {
 	"antes": "antes.csv",
 	"blinds": "blinds.csv",
 	"stakes": "stakes.csv",
+	"packs": "packs.csv",
 	"tuning": "tuning.csv",
 	# ── HIGHTONE 스펙(2026-08-23 통합 컨텍스트)에서 온 표 ──
 	# areas 는 전부 확정이라 게임이 직접 읽는다. 나머지는 상태 열이 문이다 —
@@ -374,7 +375,7 @@ static func consumables() -> Array:
 
 
 static func cons_slots() -> int:
-	return tune_i("cons_slots")
+	return int(pack_v("cons_slots", float(tune_i("cons_slots"))))
 
 
 
@@ -532,6 +533,53 @@ static func blind_of(n: int) -> Dictionary:
 # 지금 판돈의 id. 빈 값이면 흰 판돈이다 — 표의 첫 행이 그 자리를 맡는다.
 static var stake := ""
 
+# 지금 스타트팩의 id. 발라트로의 덱 자리다 — 런의 시작 조건을 쥔다.
+static var pack := ""
+
+
+static func packs() -> Array:
+	boot()
+	return _raw.get("packs", [])
+
+
+static func pack_row(id := "") -> Dictionary:
+	var want: String = id if id != "" else pack
+	var rows := packs()
+	if rows.is_empty():
+		return {}
+	for r in rows:
+		if String(r.get("id", "")) == want:
+			return r
+	return rows[0]                       # 빈 값·모르는 id 는 첫 팩으로 떨어진다
+
+
+static func pack_v(key: String, dflt: float) -> float:
+	var r := pack_row()
+	if r.is_empty() or String(r.get(key, "")) == "":
+		return dflt
+	return _f(r, key, "packs", dflt)
+
+
+# 해금·완주 키는 팩별로 갈린다 — 발라트로도 판돈을 덱마다 따로 뚫는다.
+static func stake_key(stake_id: String, pack_id := "") -> String:
+	var pk: String = pack_id if pack_id != "" else String(pack_row().get("id", ""))
+	return "stake:%s:%s" % [pk, stake_id]
+
+
+static func win_key(stake_id: String, pack_id := "") -> String:
+	var pk: String = pack_id if pack_id != "" else String(pack_row().get("id", ""))
+	return "win:%s:%s" % [pk, stake_id]
+
+
+# 표에서 이 판돈이 몇째 단인가. 사다리의 잠김·완주 표시가 이 번호를 읽는다.
+static func stake_idx(id := "") -> int:
+	var want: String = id if id != "" else stake
+	var rows := stakes()
+	for i in rows.size():
+		if String(rows[i].get("id", "")) == want:
+			return i
+	return 0
+
 
 # 표는 셋이 축을 하나씩 쥔다 — antes 가 곡선, blinds 가 앤티 안의 비율,
 # stakes 가 난이도. 판돈은 곡선을 **고르는** 것이지 곱하는 것이 아니다:
@@ -643,7 +691,8 @@ static func gold_blitz() -> int: return tune_i("gold_blitz")
 static func free_rerolls() -> int: return tune_i("free_rerolls")
 static func reroll_base() -> int: return tune_i("reroll_base")
 static func reroll_step() -> int: return tune_i("reroll_step")
-static func max_items() -> int: return tune_i("max_items")
+static func max_items() -> int:
+	return int(pack_v("item_slots", float(tune_i("max_items"))))
 static func stage_picks() -> int: return tune_i("stage_picks")
 static func sector_max() -> int: return tune_i("sector_max")
 static func val_max_mul() -> float: return tune("val_max_mul")
@@ -988,6 +1037,7 @@ static func _validate() -> void:
 	_v_spec()
 	_v_stats()
 	_v_stakes()
+	_v_packs()
 
 
 # 스펙 표 다섯 장의 무결성. 상태 열이 문이다 — 확정만 런타임이고,
@@ -1080,6 +1130,35 @@ static func _v_stakes() -> void:
 		if h < hard:
 			_warns.append("stakes:%d %s — 앞 단보다 무르다" % [r2.get("_line", 0), r2.get("name", "")])
 		hard = maxi(hard, h)
+
+
+# 스타트팩. 첫 행은 늘 열려 있어야 하고(런을 못 시작하면 게임이 안 돈다),
+# 다트 id 는 실재해야 하며, 칸 수는 0 보다 커야 한다.
+static func _v_packs() -> void:
+	var raw: Array = _raw.get("packs", [])
+	if raw.is_empty():
+		_errs.append("packs — 표가 비었다. 시작할 팩이 없으면 런이 안 선다")
+		return
+	var dids := {}
+	for d in _raw.get("darts", []):
+		dids[String(d.get("id", ""))] = true
+	var seen := {}
+	for i in raw.size():
+		var r: Dictionary = raw[i]
+		var who := "packs:%d %s" % [r.get("_line", 0), r.get("name", "")]
+		var id: String = r.get("id", "")
+		if id == "" or seen.has(id):
+			_errs.append("%s — id 가 비었거나 중복이다" % who)
+		seen[id] = true
+		if i == 0 and String(r.get("prereq", "")) != "":
+			_errs.append("%s — 첫 팩은 늘 열려 있어야 한다" % who)
+		var dd: String = r.get("dart_id", "")
+		if dd != "" and not dids.has(dd):
+			_errs.append("%s — 다트 '%s' 가 darts.csv 에 없다" % [who, dd])
+		if _i(r, "item_slots", "packs", 1) <= 0:
+			_errs.append("%s — 스티커 칸이 0 이하다" % who)
+		if _i(r, "darts_add", "packs", 0) <= -int(tune_i("darts_base")):
+			_errs.append("%s — 다트 증감이 탄창을 다 없앤다" % who)
 
 
 static func _v_spec() -> void:

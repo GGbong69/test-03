@@ -19,6 +19,8 @@ const Save = preload("res://scripts/save.gd")
 #    ② 계단 — 여덟 단이 순서대로 서고 선행이 바로 앞 단이다
 #    ③ 미는 값 — 봉인·다트·보상·가격이 표대로 나온다
 #    ④ 모르는 id 는 첫 단으로 떨어진다 (옛 저장이 게임을 안 깬다)
+#    ⑤ 판돈은 타이틀이 아니라 새 런 화면에서 고른다 — 발라트로의 run_setup
+#       자리다. 타이틀에 두었다가 되돌린 적이 있으므로 흐름을 못 박는다
 # ══════════════════════════════════════════════════════════
 
 var fails := 0
@@ -85,6 +87,38 @@ func _initialize() -> void:
 			and GameData.target_of(last) == t_white,
 			"모르는 판돈은 첫 단으로 떨어진다", String(fb.get("name", "")))
 
+	# ⑤ 흐름 — 타이틀의 시작은 런을 안 열고 새 런 화면을 연다
 	GameData.stake = ""
-	print("\n%s" % ("실패 %d건" % fails if fails > 0 else "아홉 검사 전부 통과"))
+	Save.path = "user://_probe_stake.cfg"
+	Save.wipe()
+	var g: Node = load("res://scenes/main.tscn").instantiate()
+	root.add_child(g)
+	g.state = g.S.TITLE
+	g._click(g._menu_rect(0).get_center())
+	_say(g.state == g.S.NEWRUN, "타이틀의 시작은 새 런 화면을 연다",
+			"state %d" % g.state)
+
+	# 잠긴 단은 못 고른다 — 첫 판에는 흰 단만 열려 있다
+	var before := GameData.stake
+	g._click(g._stake_rect(3).get_center())
+	_say(GameData.stake == before, "잠긴 판돈은 안 골라진다", "판돈 '%s'" % GameData.stake)
+
+	# 열린 단은 눌리고 저장에 남는다
+	Save.unlock(GameData.stake_key("red"))
+	g._click(g._stake_rect(1).get_center())
+	_say(GameData.stake == "red" and String(Save.get_set("stake", "")) == "red",
+			"열린 판돈은 눌리고 저장된다", "판돈 '%s'" % GameData.stake)
+
+	# 시작이 런을 연다
+	g._click(g._newrun_go().get_center())
+	_say(g.state != g.S.NEWRUN and g.round_no == 1, "시작이 런을 연다",
+			"state %d · 판 %d" % [g.state, g.round_no])
+
+	# 판돈은 팩마다 따로 뚫린다 — 키에 팩 id 가 들어 있다
+	_say(GameData.stake_key("red", "base") == "stake:base:red"
+			and GameData.stake_key("red", "other") == "stake:other:red",
+			"판돈 해금은 팩마다 갈린다", GameData.stake_key("red", "base"))
+
+	GameData.stake = ""
+	print("\n%s" % ("실패 %d건" % fails if fails > 0 else "열넷 검사 전부 통과"))
 	quit(mini(fails, 125))

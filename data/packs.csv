@@ -1,0 +1,2 @@
+id,name,color,dart_id,darts_add,gold_add,item_slots,cons_slots,grant_mod,prereq,unlock_stat,unlock_v,_note
+base,기본 팩,cfc9bd,std,0,0,5,2,,,,,기준선. 튜닝 표의 값을 그대로 쓴다 — 이 팩의 효과 줄이 곧 게임의 기본값이다
