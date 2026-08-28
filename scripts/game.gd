@@ -6311,9 +6311,13 @@ func _draw_blind() -> void:
 			"라운드 %d / %d" % [GameData.ante_of(round_no), GameData.antes_n()],
 			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 10,
 			Color(C_TABLE.lightened(0.34), 0.75))
+	# 선 카드만 딜러 앞이다 — 제약 카드와 같은 규칙
+	var cur: int = clampi(GameData.blind_idx(round_no), 0, per - 1)
 	for i in per:
-		_blind_card(i, first + i)
+		if i != cur:
+			_blind_card(i, first + i)
 	_cover_draw()
+	_blind_card(cur, first + cur)
 
 	var skippable: bool = GameData.skippable(round_no)
 	_btn(_blind_go(), "던진다", "목표 %d" % GameData.target_of(round_no), true)
@@ -6403,9 +6407,12 @@ func _draw_stage() -> void:
 			front = i
 		else:
 			_stage_card(i)
+	# 누운 카드는 딜러 손 **아래**다 — 카운터에 놓인 것이니 그게 맞다. 선
+	# 카드는 그 위다. 카운터보다 앞으로 나와 세운 것을 손이 덮으면 든 것으로
+	# 안 읽힌다. 그래서 덮개를 사이에 끼운다.
+	_cover_draw()
 	if front >= 0:
 		_stage_card(front)
-	_cover_draw()
 	_apron_mods()
 
 
