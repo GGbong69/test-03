@@ -2138,6 +2138,7 @@ func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, VIEW), C_BG)
 	# 툴팁이 대상 테두리만 같이 흔들고 판은 고정하려면 이 값을 알아야 한다
 	var sh := Vector2(randf_range(-shake, shake), randf_range(-shake, shake))
+	shake_off = sh
 	draw_set_transform(sh)
 
 	_draw_board()
@@ -3100,7 +3101,10 @@ func _elide(t: String, w: float, sz: int) -> String:
 var sell_sel := -1
 var sell_t := 0.0               # 선택 링 맥동에만 쓴다
 var stage_slots := 0
-var stage_stand := []           # 카드마다 0(누움) ~ 1(섬)            # 스테이지 화면에 들어설 때의 스티커 개수
+var stage_stand := []           # 카드마다 0(누움) ~ 1(섬)
+# 이번 프레임의 흔들림 이동. 카드 얼굴이 제 변환을 걸 때 여기에 겹치고,
+# 끝나면 이 값으로 되돌린다 — 안 되돌리면 남은 변환이 HUD 를 통째로 민다.
+var shake_off := Vector2.ZERO            # 스테이지 화면에 들어설 때의 스티커 개수
 var stage_t := 0.0              # 카드가 깔리는 경과. _open_stage 에서 0 으로 선다
 
 
@@ -3239,6 +3243,12 @@ func _cons_draw() -> void:
 #  _tip_draw(2249행)가 draw_set_transform(sh) 로 복구할 때 조용히 사라지고,
 #  _hud_draw 가 _draw_shop 다음이라 남은 scale 은 HUD 를 통째로 누른다.
 #  → 이 구획은 draw_set_transform 을 한 번도 부르지 않는다. 불변식이다.
+#
+#  예외 하나 — _stage_card 의 얼굴. 카드가 면에 누우면 그 위의 아이콘과
+#  글자도 같이 누워야 하는데, 글자는 좌표를 옮겨서는 못 눕힌다. 그래서
+#  거기서만 draw_set_transform_matrix 를 걸고 **같은 함수 안에서**
+#  draw_set_transform(shake_off) 로 되돌린다. 되돌리는 줄이 없으면
+#  남은 변환이 _hud_draw 를 통째로 민다 — 위 문단이 말하는 그 사고다.
 #
 #  바깥과 닿는 곳은 여섯뿐이다.
 #    _table_draw()      판·자리·물건·이름       (_draw_shop 맨 앞)
@@ -6164,8 +6174,16 @@ func _draw_stage() -> void:
 					GameData.blind_name(round_no), GameData.target_of(round_no)],
 			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 10,
 			Color(C_TABLE.lightened(0.34), 0.75))
+	# 선 카드가 맨 위에 온다. 커지면서 이웃을 밀고 들어가는데 그리는 순서가
+	# 고정이면 오른쪽 카드가 그 위를 덮어 든 것이 아래로 보인다.
+	var front := -1
 	for i in stage_pick.size():
-		_stage_card(i)
+		if float(stage_stand[i] if i < stage_stand.size() else 0.0) > 0.004:
+			front = i
+		else:
+			_stage_card(i)
+	if front >= 0:
+		_stage_card(front)
 	_cover_draw()
 	_apron_mods()
 
@@ -6203,6 +6221,33 @@ func _apron_mods() -> void:
 				HORIZONTAL_ALIGNMENT_CENTER, step, 9, C_DIM.darkened(0.15))
 
 
+# 화면 x 를 펠트 폭에 맞춰 좁힌다. 펠트는 y 마다 폭이 다르고(창구 빗변),
+# 그 비를 그대로 곱하면 면에 놓인 것이 판과 같이 모인다.
+func _felt_x(x: float, y: float, up: float) -> float:
+	var sc: float = (VIEW.x - _chute_edge(y) * 2.0) / VIEW.x
+	return VIEW.x * 0.5 + (x - VIEW.x * 0.5) * lerpf(sc, 1.0, up)
+
+
+# 카드 한 장의 네 귀퉁이. up 0 이면 면에 누워 사다리꼴이고, 1 이면 화면에
+# 세워져 직사각형이다. 밑변(가까운 모서리)이 축이라 자리에서 안 미끄러진다.
+func _card_quad(px: float, w: float, foot: float, up: float,
+		hs := 1.0) -> PackedVector2Array:
+	var hh: float = CARD.h * lerpf(TBL.flat, 1.0, up) * hs
+	var top: float = foot - hh
+	var q := PackedVector2Array()
+	for c in [Vector2(px, top), Vector2(px + w, top),
+			Vector2(px + w, foot), Vector2(px, foot)]:
+		q.append(Vector2(_felt_x(c.x, c.y, up), c.y))
+	return q
+
+
+# 카드 안에서 세로 t(0 위 ~ 1 아래) 자리의 왼끝·오른끝·y.
+# 얼굴(아이콘·글자)이 사다리꼴을 따라가려면 이 셋이 필요하다.
+func _card_row(q: PackedVector2Array, t: float) -> Vector3:
+	return Vector3(lerpf(q[0].x, q[3].x, t), lerpf(q[1].x, q[2].x, t),
+			lerpf(q[0].y, q[3].y, t))
+
+
 func _stage_card(i: int) -> void:
 	var md: Dictionary = stage_pick[i].d
 	var r := _stage_rect(i)
@@ -6210,28 +6255,36 @@ func _stage_card(i: int) -> void:
 	var p := _stage_pose(i)
 	var up: float = stage_stand[i] if i < stage_stand.size() else 0.0
 
-	# 서는 것은 **가까운 모서리를 축으로** 몸을 세우는 일이다. 누운 카드의
-	# 세로는 flat(0.788)배로 눌려 있고, 서면 1 로 돌아온다. 밑변은 안 움직여야
-	# 축이 바닥에 붙어 있는 것으로 읽힌다.
-	var f: float = lerpf(TBL.flat, 1.0, up)
-	var hh: float = CARD.h * f
-	var foot: float = p.y + sz.y
-	var top: float = foot - hh
+	# 서는 것은 **가까운 모서리를 축으로** 몸을 세우는 일이다. 누운 카드는
+	# 세로가 flat(0.788)배로 눌리고 **폭이 펠트를 따라 좁아진다** — 뒤로 갈수록
+	# 좁아지는 그 사다리꼴이 "판 위에 놓였다" 를 말하는 전부다. 서면 둘 다 풀린다.
+	# 집어 든 카드는 커지고 떠오른다. 같은 자리에서 눌림만 풀면 "조금 길어진
+	# 사각형" 이라 든 것으로 안 읽힌다 — 손에 온 것은 눈에 가까워진 것이다.
+	var gs: float = 1.0 + 0.12 * up
+	var w2: float = sz.x * gs
+	var px2: float = p.x - (w2 - sz.x) * 0.5
+	var foot: float = p.y + sz.y - 7.0 * up
+	var q := _card_quad(px2, w2, foot, up, gs)
 
 	# 그림자는 매물과 같은 빛 벡터다. 서면 카드가 멀어지므로 그림자도 진다.
-	draw_rect(Rect2(Vector2(p.x, top) + TBL.light * (2.0 + 5.0 * up),
-			Vector2(sz.x, hh)), Color(0.0, 0.0, 0.0, 0.22 + 0.14 * up))
+	var sh := PackedVector2Array()
+	for c in q:
+		sh.append(c + TBL.light * (2.0 + 5.0 * up))
+	draw_colored_polygon(sh, Color(0.0, 0.0, 0.0, 0.22 + 0.14 * up))
 
 	var body: Color = C_PANEL.lightened(0.10 + 0.08 * up)
 	# 가까운 모서리의 두께 — 물건이지 인쇄가 아니라고 말한다. 누웠을 때는
 	# 카드 옆면이 거의 안 보이고, 서면 두꺼워진다.
-	draw_rect(Rect2(Vector2(p.x, foot), Vector2(sz.x, CARD.th * (0.5 + up))),
-			body.darkened(0.45))
-	draw_rect(Rect2(Vector2(p.x, top), Vector2(sz.x, hh)), body)
-	draw_rect(Rect2(Vector2(p.x, top), Vector2(sz.x, 2.0)),
+	var th: float = CARD.th * (0.5 + up)
+	draw_colored_polygon(PackedVector2Array([q[3], q[2],
+			q[2] + Vector2(0.0, th), q[3] + Vector2(0.0, th)]), body.darkened(0.45))
+	draw_colored_polygon(q, body)
+	# 먼 모서리의 띠 — 카드가 서면 켜진다
+	draw_colored_polygon(PackedVector2Array([q[0], q[1],
+			q[1] + Vector2(0.0, 2.0), q[0] + Vector2(0.0, 2.0)]),
 			C_MULT.lightened(0.20 * up))
-	draw_rect(Rect2(Vector2(p.x, foot - 1.0), Vector2(sz.x, 1.0)),
-			Color(C_BG, 0.55))
+	draw_colored_polygon(PackedVector2Array([q[3] - Vector2(0.0, 1.0),
+			q[2] - Vector2(0.0, 1.0), q[2], q[3]]), Color(C_BG, 0.55))
 
 	# 얼굴은 그림이 먼저다. 훑는 채널은 글자가 아니라 실루엣이다.
 	# 아이콘이 축("링이 나빠진다")을 말하고 설명이 양("0.5배")을 말한다.
@@ -6239,14 +6292,24 @@ func _stage_card(i: int) -> void:
 	# **자리**가 눌리면 얼굴이 카드를 따라간다.
 	# "목표" 는 안 쓴다 — _open_stage 가 base 하나를 n장에 복사하므로 셋이
 	# 같은 값이고, 셋 중 하나를 고르는 면에서 판별 정보량이 0 비트다.
-	_icon_modifier(Vector2(p.x + sz.x * 0.5, top + CARD.icon * f),
-			CARD.icon_r * (0.82 + 0.18 * up), md.id, 0.0)
-	draw_string(font, Vector2(p.x, top + CARD.name * f), md.n,
+	# 얼굴도 카드와 같이 눕는다. 몸통만 눕히고 글자를 화면에 붙여 두면
+	# 카드 위에 스티커를 얹은 것으로 읽힌다 — 판에 인쇄된 것이 아니다.
+	# 사다리꼴을 아핀으로 근사한다(위·아래 변의 평균). 정확히는 못 맞지만
+	# 카드 한 장 안에서 위아래 폭 차가 15px 라 눈에 안 걸린다.
+	var ax: Vector2 = ((q[1] - q[0]) + (q[2] - q[3])) * 0.5 / sz.x
+	var ay: Vector2 = ((q[3] - q[0]) + (q[2] - q[1])) * 0.5 / CARD.h
+	var mid: Vector2 = (q[0] + q[1] + q[2] + q[3]) * 0.25
+	var org: Vector2 = mid - ax * (sz.x * 0.5) - ay * (CARD.h * 0.5)
+	draw_set_transform_matrix(Transform2D(ax, ay, org + shake_off))
+	_icon_modifier(Vector2(sz.x * 0.5, CARD.icon), CARD.icon_r, md.id, 0.0)
+	draw_string(font, Vector2(0.0, CARD.name), md.n,
 			HORIZONTAL_ALIGNMENT_CENTER, sz.x, 13, C_MULT.lightened(0.32))
 	# 효과는 일어서야 보인다. 누운 카드에 여덟 글자를 눕혀 두면 못 읽는다.
 	if up > 0.02:
-		draw_string(font, Vector2(p.x + 6.0, top + CARD.desc * f), md.d,
+		draw_string(font, Vector2(6.0, CARD.desc), md.d,
 				HORIZONTAL_ALIGNMENT_CENTER, sz.x - 12.0, 9, Color(C_DIM, up))
+	# 반드시 되돌린다. 남기면 _hud_draw 가 통째로 눌린다.
+	draw_set_transform(shake_off)
 
 
 func _draw_shop() -> void:
