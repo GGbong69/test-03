@@ -8,8 +8,10 @@ extends SceneTree
 #  여기 넷이 다 통과하는데도 안 좋아 보이면 그건 형태가 아니라 색 문제고,
 #  하나라도 떨어지면 색을 아무리 만져도 안 산다. 순서가 그렇다.
 #
-#  검사 칸은 x[170,470] y[36,132] 이다. 위는 칩 랙 밑변(36), 아래는 정착
-#  물건이 칠하는 최상단(131.8, 2000롤 실측) — 딜러가 그릴 수 있는 전부다.
+#  검사 칸의 위는 **스티커 랙 밑변**이고 아래는 정착 물건이 칠하는
+#  최상단(131.8, 2000롤 실측) — 딜러가 그릴 수 있는 전부다. 윗변을 손으로
+#  적었더니 랙을 키운 날 그 띠가 칸에 들어와 몸통과 두 팔을 한 덩어리로
+#  이었다(랙은 배경색이 아니라 전경으로 세어진다). 그래서 랙에서 뽑는다.
 #
 #  헤드리스로는 못 돈다. 뷰포트를 실제로 그려야 화소를 읽는다.
 #
@@ -18,10 +20,10 @@ extends SceneTree
 
 const X0 := 170
 const X1 := 470
-const Y0 := 36
 const Y1 := 132
 const W := X1 - X0
-const H := Y1 - Y0
+var Y0 := 36
+var H := Y1 - Y0
 
 var g = null
 var frames := 0
@@ -68,7 +70,14 @@ func _process(_d: float) -> bool:
 	return false
 
 
+# 랙 밑변 아래 2px 부터 본다. 상점에서 랙은 HUD_UP 만큼 올라가 있다.
+func _win() -> void:
+	Y0 = int(ceil(g.PANEL.y + g.HUD_UP + g.PANEL.h)) + 2
+	H = Y1 - Y0
+
+
 func _measure() -> void:
+	_win()
 	var w: Color = g.C_WOOD
 	bg_cols = [w.darkened(0.30), w, w.lightened(0.18), w.lightened(0.24),
 			w.darkened(0.35)]
