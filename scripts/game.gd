@@ -91,10 +91,10 @@ const LAY := {
 	# _bank_draw 가 46 으로 늘린다. 늘 46 이면 탄창 헤더가 판 안으로 들어간다.
 	"bank":       Rect2(4.0, 20.0, 72.0, 34.0),
 	# 옛 판매판 자리(x[80,154])는 소비 아이템 칸(_cons_rect)이 쓴다.
-	"cap":        Rect2(478.0, 20.0, 37.0, 36.0),
+	"cap":        Rect2(490.0, 20.0, 40.0, 44.0),
 	# 소비 칸은 자금판 오른쪽. 이름을 안 달았더니 플레이 피드백에서
 	# "어디 있는지 몰랐다" 가 나왔다 — 칸 밑에 이름과 수를 적는다.
-	"cons":       Rect2(84.0, 20.0, 84.0, 36.0),
+	"cons":       Rect2(84.0, 20.0, 68.0, 44.0),
 }
 
 const C_BG := Color("14111f")
@@ -2492,9 +2492,9 @@ func _cap_draw() -> void:
 	r.position.y += _hud_dy()
 	draw_rect(r, C_FELT)                                   # 랙과 같은 재질
 	draw_rect(Rect2(r.position, Vector2(r.size.x, 1.0)), C_FELT.lightened(0.14))
-	draw_string(font, r.position + Vector2(0.0, 15.0), "스티커",
+	draw_string(font, r.position + Vector2(0.0, 18.0), "스티커",
 			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 10, C_DIM.darkened(0.1))
-	draw_string(font, r.position + Vector2(0.0, 31.0),
+	draw_string(font, r.position + Vector2(0.0, 36.0),
 			"%d/%d" % [owned.size(), GameData.max_items()],
 			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 13,
 			C_ACC if owned.size() >= GameData.max_items() else C_TXT)
@@ -2526,10 +2526,10 @@ const PANEL := {
 	# 였고, 실제로 칸 밑 이름이 서로 겹쳐 안 읽혔다(실측). 랙은 넓히되
 	# **가운데를 지킨다** — 딜러 윗머리(y<36 반폭 111 = x[209,431])가
 	# 랙 뒤에 숨는 것이 실루엣의 전제라 옮기면 벽으로 샌다.
-	"h": 36.0,           # 랙 높이
-	"cell": 56.0,        # 스티커 한 칸 폭
+	"h": 44.0,           # 랙 높이
+	"cell": 62.0,        # 스티커 한 칸 폭
 	"pad": 6.0,          # 랙 안쪽 여백
-	"r": 16.0,           # 스티커 반지름
+	"r": 19.0,           # 스티커 반지름
 	"chip_dy": -1.0,     # 칸 안에서 스티커 중심을 얼마나 올릴지
 
 	# 튀는 정도 — 사각 슬롯 때 값을 그대로 쓴다. 꽂는 곳만 바뀌었다.
@@ -3298,8 +3298,8 @@ const NPC := {
 	"hc": 72.0,          # 가슴 반폭 (y=top). 111 이 한계다
 	"hw": 60.0,          # 허리 반폭 (y=cut)
 	"vee_w": 27.0,       # 셔츠 V 반폭 (y=top)
-	"vee_y": 63.0,       # V 꼭짓점. 랙 밑변(56)보다 7px 아래여야 보인다
-	"btn_y": 74.0, "btn_dy": 12.0, "btn_r": 2.9,
+	"vee_y": 68.0,       # V 꼭짓점. 상점 랙 밑변(48)보다 20px 아래라 V 가 산다
+	"btn_y": 78.0, "btn_dy": 11.0, "btn_r": 2.9,
 	"belt": 5.0,
 	# 팔은 **판 위에 누운 상자**다. 몸통은 서 있고 팔은 누워 있으므로 같은
 	# 도형으로 그리면 안 된다 — 누운 것은 화면 좌표가 아니라 면 좌표(u,w)로
