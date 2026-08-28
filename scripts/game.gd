@@ -6200,7 +6200,11 @@ const TIP := {
 var tip_title := ""
 var tip_lines := []             # [{"s": String, "sz": int, "c": Color}]
 var tip_chip := {}              # 제목 옆 미니스티커로 그릴 아이템 (없으면 빈 사전)
-var tip_mark := Rect2()         # 대상 테두리 (스티커 랙은 링으로 대신하므로 빈 값)
+var tip_mark := Rect2()         # 대상 사각 (스티커 랙은 링으로 대신하므로 빈 값)
+# 그 사각에 테두리를 두르는가. tip_mark 를 비우는 것과 다르다 — 제약
+# 카드는 "커서 아래 카드가 선다" 를 tip_mark 로 판정하므로(_drop_update)
+# 사각 자체는 살아 있어야 하고, 그리기만 빠져야 한다.
+var tip_box := true
 var tip_slot := -1              # 호버 중인 스티커 랙 칸
 var tip_spot := -1              # 호버 중인 매대 자리 (테이블 구획용)
 var tip_a := 0.0                # 페이드
@@ -6226,6 +6230,12 @@ func _tip_add(t: String, sz: int, c: Color, ic := "", tl := "", gd := "") -> voi
 # 길면 글자 단위로 자른다 — 한글은 띄어쓰기가 성겨서 그 갈래가 실제로 온다.
 func _tip_wrap(t: String, w: float, sz: int) -> PackedStringArray:
 	var out := PackedStringArray()
+	# 글꼴이 없는 실행(헤드리스 도구)에서는 재는 것 자체가 안 된다. 감싸기는
+	# 그리기용이라 그냥 통줄로 넘긴다 — 툴팁을 세우는 검사가 이 한 줄
+	# 때문에 헤드리스에서 못 도는 것이 더 손해다.
+	if font == null:
+		out.append(t)
+		return out
 	if w <= 1.0 or font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x <= w:
 		out.append(t)
 		return out
@@ -6259,6 +6269,7 @@ func _tip_clear() -> void:
 	tip_lines = []
 	tip_chip = {}
 	tip_mark = Rect2()
+	tip_box = true
 	tip_slot = -1
 	tip_spot = -1
 
@@ -6349,7 +6360,12 @@ func _tip_build(hit: Dictionary) -> void:
 						C_DIM.darkened(0.3) if s.sold else C_RED.lightened(0.2))
 		"stage":
 			var sp: Dictionary = stage_pick[i]
+			# 사각은 남기고 테두리만 뺀다. 카드는 서면서 커지고 밝아지는데
+			# 테두리는 **누웠을 때의 자리**에 그려져, 선 카드 위에 어긋난
+			# 흰 상자가 뜬다. 선 것 자체가 이미 표시라 두를 것이 없다 —
+			# 매대(stock)와 스티커 랙이 먼저 간 길이다.
 			tip_mark = _stage_rect(i)
+			tip_box = false
 			tip_title = sp.d.n
 			_tip_add(sp.d.d, 11, C_MULT.lightened(0.25))
 			_tip_add("목표 %d" % sp.target, 10, C_DIM)
@@ -6445,7 +6461,7 @@ func _tip_draw(sh: Vector2) -> void:
 		return
 
 	# 테두리는 대상과 같이 흔들려야 어긋나 보이지 않는다 — 현재 transform 그대로.
-	if tip_mark.size.x > 0.0:
+	if tip_box and tip_mark.size.x > 0.0:
 		draw_rect(tip_mark, Color(C_TXT, tip_a * 0.9), false, 1.0)
 
 	# 판과 글자는 흔들리면 못 읽는다 — 흔들림 밖에서 그린다.

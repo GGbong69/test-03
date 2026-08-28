@@ -156,6 +156,18 @@ func _initialize() -> void:
 	_say(g.stage_stand.size() == g.stage_pick.size()
 			and float(g.stage_stand[0]) == 0.0,
 			"쉬는 카드는 누워 있다", "선 정도 %.2f" % float(g.stage_stand[0]))
+	# 툴팁의 대상 사각은 남고 테두리만 빠진다. 사각이 죽으면 "커서 아래
+	# 카드가 선다" 판정(_drop_update)이 같이 죽고, 테두리가 살면 누웠을
+	# 때의 자리에 흰 상자가 선 카드 위로 어긋나 뜬다 — 둘 다 눈으로만
+	# 보이는 사고라 여기서 못 박는다.
+	g._tip_build({"k": "stage", "i": 1})
+	_say(g.tip_mark == g._stage_rect(1) and not g.tip_box,
+			"선 카드에는 테두리를 안 두른다",
+			"사각 %s · 테두리 %s" % [g.tip_mark == g._stage_rect(1), g.tip_box])
+	g._tip_clear()
+	_say(g.tip_box and g.tip_mark == Rect2(),
+			"툴팁이 꺼지면 기본값으로 돌아온다")
+
 	# 마지막 장이 설 때까지는 못 고른다 — 그 규칙을 먼저 확인하고,
 	# 딜을 끝낸 뒤 눌러 본다.
 	g._click(g._stage_rect(1).get_center())
@@ -168,5 +180,5 @@ func _initialize() -> void:
 			"누운 칸을 눌러 고른다",
 			"state %d · 제약 %d" % [g.state, g.active_mods.size()])
 
-	print("\n%s" % ("실패 %d건" % fails if fails > 0 else "열넷 검사 전부 통과"))
+	print("\n%s" % ("실패 %d건" % fails if fails > 0 else "열여섯 검사 전부 통과"))
 	quit(mini(fails, 125))
