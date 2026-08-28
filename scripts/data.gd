@@ -880,6 +880,54 @@ static func check(c: String, x: Dictionary) -> bool:
 	return false
 
 
+# 스티커 칸 밑에 붙는 짧은 말. cond_text 는 툴팁용 문장이라 56px 칸에서
+# 가운데가 잘려 글자 조각으로 읽혔다 — 자리마다 필요한 길이가 다르므로
+# 말을 둘로 나눈다. 긴 쪽이 뜻을 말하고 짧은 쪽이 자리를 지킨다.
+static func cond_tag(c: String) -> String:
+	match c:
+		"always": return "언제나"
+		"triple": return "트리플"
+		"double": return "더블"
+		"band": return "띠"
+		"bull": return "불"
+		"odd": return "홀수"
+		"even": return "짝수"
+		"left": return "왼쪽"
+		"right": return "오른쪽"
+		"big": return "15 이상"
+		"mid": return "6~14"
+		"small": return "5 이하"
+		"same": return "같은 칸"
+		"diff": return "다른 칸"
+		"first": return "첫 발"
+		"last": return "막 발"
+		"streak": return "연속"
+		"warm": return "트리플 뒤"
+		"miss": return "빗나감"
+		"missp": return "연속 빗나감"
+		"risk": return "더블·트리플·불"
+		"risk1": return "첫 고난도"
+		"few": return "다트 3 이하"
+		"sixth": return "여섯째"
+		"pair": return "같은 수 2"
+		"trip": return "같은 수 3"
+		"quad": return "같은 수 4"
+		"pair2": return "두 쌍"
+		"spread": return "세 곳"
+		"zone3": return "한 영역 3"
+		"zones2": return "두 영역"
+		"zones4": return "네 영역"
+		"rezone": return "다시 그 영역"
+	if c.begins_with("sec:"):
+		return c.substr(4).replace(",", "·") + "번"
+	if c.begins_with("col:"):
+		var nm := PackedStringArray()
+		for t in c.substr(4).split(","):
+			nm.append(color_name(int(t)))
+		return "·".join(nm)
+	return ""
+
+
 static func cond_text(c: String) -> String:
 	match c:
 		"always": return "모든 다트"

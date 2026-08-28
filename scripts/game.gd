@@ -91,7 +91,10 @@ const LAY := {
 	# _bank_draw 가 46 으로 늘린다. 늘 46 이면 탄창 헤더가 판 안으로 들어간다.
 	"bank":       Rect2(4.0, 20.0, 72.0, 34.0),
 	# 옛 판매판 자리(x[80,154])는 소비 아이템 칸(_cons_rect)이 쓴다.
-	"cap":        Rect2(436.0, 20.0, 37.0, 32.0),
+	"cap":        Rect2(478.0, 20.0, 37.0, 36.0),
+	# 소비 칸은 자금판 오른쪽. 이름을 안 달았더니 플레이 피드백에서
+	# "어디 있는지 몰랐다" 가 나왔다 — 칸 밑에 이름과 수를 적는다.
+	"cons":       Rect2(84.0, 20.0, 84.0, 36.0),
 }
 
 const C_BG := Color("14111f")
@@ -2489,9 +2492,9 @@ func _cap_draw() -> void:
 	r.position.y += _hud_dy()
 	draw_rect(r, C_FELT)                                   # 랙과 같은 재질
 	draw_rect(Rect2(r.position, Vector2(r.size.x, 1.0)), C_FELT.lightened(0.14))
-	draw_string(font, r.position + Vector2(0.0, 20.0), "스티커",
+	draw_string(font, r.position + Vector2(0.0, 15.0), "스티커",
 			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 10, C_DIM.darkened(0.1))
-	draw_string(font, r.position + Vector2(0.0, 36.0),
+	draw_string(font, r.position + Vector2(0.0, 31.0),
 			"%d/%d" % [owned.size(), GameData.max_items()],
 			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 13,
 			C_ACC if owned.size() >= GameData.max_items() else C_TXT)
@@ -2519,10 +2522,14 @@ const PANEL := {
 	# 높이 46 을 38 로 줄인 것은 딜러 때문이다. 랙 아래끝(58)과 카운터(77)
 	# 사이의 19px 이 머리가 들어갈 유일한 자리다 — 랙을 그대로 두면 실루엣이
 	# 통째로 랙 뒤에 숨어 "누가 판다" 가 화면에서 안 읽힌다.
-	"h": 32.0,           # 랙 높이
-	"cell": 42.0,        # 스티커 한 칸 폭
+	# 높이 32 → 36, 칸 42 → 56. 플레이 피드백이 "아이템 칸이 너무 작다"
+	# 였고, 실제로 칸 밑 이름이 서로 겹쳐 안 읽혔다(실측). 랙은 넓히되
+	# **가운데를 지킨다** — 딜러 윗머리(y<36 반폭 111 = x[209,431])가
+	# 랙 뒤에 숨는 것이 실루엣의 전제라 옮기면 벽으로 샌다.
+	"h": 36.0,           # 랙 높이
+	"cell": 56.0,        # 스티커 한 칸 폭
 	"pad": 6.0,          # 랙 안쪽 여백
-	"r": 13.0,           # 스티커 반지름
+	"r": 16.0,           # 스티커 반지름
 	"chip_dy": -1.0,     # 칸 안에서 스티커 중심을 얼마나 올릴지
 
 	# 튀는 정도 — 사각 슬롯 때 값을 그대로 쓴다. 꽂는 곳만 바뀌었다.
@@ -2982,10 +2989,10 @@ func _panel_draw() -> void:
 			else:
 				_panel_slot(i)
 		else:
-			# 아직 안 채운 빈 자리
-			var e := _slot_rect(i).get_center() + Vector2(0.0, PANEL.chip_dy)
-			draw_circle(e, PANEL.r * 0.72, C_FELT.darkened(0.45))
-			draw_arc(e, PANEL.r * 0.72, 0.0, TAU, 16, C_FELT.lightened(0.10), 1.0)
+			# 빈 자리는 비워 둔다. 동그란 홈을 파 두었더니 "여기 뭔가 있다"
+			# 로 읽혔다 — 발라트로도 빈 조커 칸에 아무것도 안 그린다.
+			# 칸이 몇인지는 카운터가 이미 말한다.
+			pass
 
 
 # 스티커 i 의 고정 기울기 계수(-0.5~0.5). 인덱스로만 결정되므로 프레임 간 안 흔들린다.
@@ -3031,11 +3038,11 @@ func _panel_slot(i: int) -> void:
 				C_ACC if sel else C_GOLD.darkened(0.30))
 		return
 
-	# 평소엔 조건 태그, 발동 직후엔 이름 — 자리를 옮기지 않고 덮어쓴다
-	var tag := GameData.gold_tag(it.get("g", "")) if it.get("g", "") != "" else ""
-	if tag == "":
-		tag = GameData.cond_text(it.c).replace(" 명중 시", "").replace(" 시", "")
-	var label := tag
+	# 평소엔 아무 글자도 안 쓴다. 조건은 스티커 얼굴의 아이콘이 이미
+	# 말하고, 칸 밑에 문장을 깔면 스티커에 눌려 조각으로 읽힌다(실측).
+	# 발라트로도 조커 밑에 글자를 안 둔다 — 카드가 곧 이름이다.
+	# 글자가 뜨는 것은 상태 둘뿐이다: 봉인됐거나, 지금 보고 있거나.
+	var label := ""
 	var col: Color = C_DIM.darkened(0.15)
 	if lock:
 		label = "봉인"
@@ -3043,8 +3050,26 @@ func _panel_slot(i: int) -> void:
 	elif slot_hot[i] > 0.0:
 		label = it.n
 		col = C_TXT
-	draw_string(font, cell.position + Vector2(0.0, cell.size.y - 3.0), label,
+	if label == "":
+		return
+	# 그래도 넘치면 뒤를 자른다 — draw_string 은 폭을 넘으면 가운데를
+	# 잘라 조각을 남기므로, 자를 자리는 우리가 고른다.
+	draw_string(font, cell.position + Vector2(0.0, cell.size.y - 3.0),
+			_elide(label, cell.size.x - 2.0, 9),
 			HORIZONTAL_ALIGNMENT_CENTER, cell.size.x, 9, col)
+
+
+# 폭에 맞게 뒤를 자른다. 자른 티를 내야 "짧은 이름" 과 안 헷갈린다.
+func _elide(t: String, w: float, sz: int) -> String:
+	if font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x <= w:
+		return t
+	var out := ""
+	for i in t.length():
+		var cand := out + t[i] + "…"
+		if font.get_string_size(cand, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x > w:
+			break
+		out += t[i]
+	return out + "…"
 
 
 
@@ -3134,7 +3159,10 @@ var track_lv := {}              # 영역 강화 트랙 레벨 {트랙ID: int}
 
 
 func _cons_rect(i: int) -> Rect2:
-	return Rect2(80.0 + float(i) * 27.0, 21.0, 24.0, 24.0)
+	var c: Rect2 = LAY.cons
+	var w: float = (c.size.x - 4.0) * 0.5
+	return Rect2(c.position.x + float(i) * (w + 4.0), c.position.y + _hud_dy(),
+			w, c.size.y)
 
 
 func _cons_hit(m: Vector2) -> int:
@@ -3165,16 +3193,27 @@ func _cons_use(i: int) -> void:
 
 
 func _cons_draw() -> void:
+	# 랙과 같은 재질로 깐다 — 같은 재질이 "여기도 물건 두는 자리다" 를 말한다.
+	var box: Rect2 = LAY.cons
+	box.position.y += _hud_dy()
+	draw_rect(box, C_FELT)
+	draw_rect(Rect2(box.position, Vector2(box.size.x, 1.0)), C_FELT.lightened(0.14))
 	for i in GameData.cons_slots():
-		var r := _cons_rect(i)
+		var r := _cons_rect(i).grow(-3.0)
 		var live: bool = i < cons.size()
-		draw_rect(r, C_PANEL.lightened(0.08) if live else C_PANEL.darkened(0.15))
-		draw_rect(r, C_WIRE.darkened(0.15) if live else C_WIRE.darkened(0.45),
-				false, 1.0)
 		if live:
-			draw_string(font, r.position + Vector2(0.0, 15.0),
+			draw_rect(r, C_PANEL.lightened(0.10))
+			draw_rect(r, C_WIRE.darkened(0.15), false, 1.0)
+			draw_string(font, r.position + Vector2(0.0, r.size.y * 0.5 + 4.0),
 					String(cons[i].n).substr(0, 2), HORIZONTAL_ALIGNMENT_CENTER,
 					r.size.x, 9, C_TXT)
+	# 이름과 수 — 랙 밑은 딜러 자리라 못 쓰지만 이 자리는 벽이다.
+	draw_string(font, Vector2(box.position.x, box.end.y + 9.0), "소비",
+			HORIZONTAL_ALIGNMENT_CENTER, box.size.x * 0.5, 9, C_DIM.darkened(0.1))
+	draw_string(font, Vector2(box.get_center().x, box.end.y + 9.0),
+			"%d/%d" % [cons.size(), GameData.cons_slots()],
+			HORIZONTAL_ALIGNMENT_CENTER, box.size.x * 0.5, 9,
+			C_ACC if cons.size() >= GameData.cons_slots() else C_TXT)
 
 
 # ══════════════════════════════════════════════════════════
@@ -3259,8 +3298,8 @@ const NPC := {
 	"hc": 72.0,          # 가슴 반폭 (y=top). 111 이 한계다
 	"hw": 60.0,          # 허리 반폭 (y=cut)
 	"vee_w": 27.0,       # 셔츠 V 반폭 (y=top)
-	"vee_y": 58.0,       # V 꼭짓점. 랙 밑변 36 보다 22px 아래다
-	"btn_y": 70.0, "btn_dy": 13.0, "btn_r": 2.9,
+	"vee_y": 63.0,       # V 꼭짓점. 랙 밑변(56)보다 7px 아래여야 보인다
+	"btn_y": 74.0, "btn_dy": 12.0, "btn_r": 2.9,
 	"belt": 5.0,
 	# 팔은 **판 위에 누운 상자**다. 몸통은 서 있고 팔은 누워 있으므로 같은
 	# 도형으로 그리면 안 된다 — 누운 것은 화면 좌표가 아니라 면 좌표(u,w)로
