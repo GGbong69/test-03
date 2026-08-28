@@ -49,7 +49,7 @@ const CARD_H := 96.0
 #  project.godot 에 명시할 수는 없다 — keep 이 엔진 기본값이라 에디터가
 #  저장할 때마다 그 줄을 지운다. 그래서 근거를 코드 쪽에 남긴다.
 # ══════════════════════════════════════════════════════════
-# 상점·스테이지는 카지노 테이블이 화면 전부를 쓴다. 런 바를 내리고
+# 상점·스테이지는 테이블이 화면 전부를 쓴다. 런 바를 내리고
 # 그 자리(16px)를 딜러에게 준다 — 딜러가 사람으로 읽히려면 세로가 필요하고,
 # 목표·점수 진행은 던지는 중에만 쓸모가 있다. 다음 라운드 목표는
 # "다음" 버튼이 이미 들고 있다.
@@ -355,7 +355,7 @@ func _start_round() -> void:
 		grip_slot.append(gi)
 	grip_n = remaining.size()
 	grip_pick = -1
-	# 제약 둔화와 판돈이 같은 축을 민다 — 검정 판돈부터는 매 판 상시다.
+	# 제약 둔화와 리그이 같은 축을 민다 — 검정 리그부터는 매 판 상시다.
 	var seal := int(mod_v("seal_items", 0.0)) \
 			+ int(GameData.stake_v("seal_items", 0.0))
 	sealed = randi() % owned.size() if seal > 0 and not owned.is_empty() else -1
@@ -494,7 +494,7 @@ func _settle_clear() -> void:
 	# 클리어 보상은 판마다 다르다 — 작은 3 · 큰 4 · 보스 5.
 	# 발라트로와 같은 값이고, blinds.csv 가 쥔다.
 	var clear := GameData.reward_of(round_no)
-	# 붉은 판돈부터 작은 판이 골드를 안 준다. 곡선이 아니라 여유를 깎는 단이다.
+	# 붉은 리그부터 작은 판이 골드를 안 준다. 곡선이 아니라 여유를 깎는 단이다.
 	if GameData.blind_idx(round_no) == 0:
 		clear = int(GameData.stake_v("reward_small", float(clear)))
 	clear_gold_detail = [
@@ -527,7 +527,7 @@ func _seal_drop(i: int) -> void:
 		sealed -= 1
 
 
-# 완주하면 다음 판돈이 열린다. 표 순서가 곧 계단이라 지금 단의 다음 행이다.
+# 완주하면 다음 리그이 열린다. 표 순서가 곧 계단이라 지금 단의 다음 행이다.
 func _stake_unlock_next() -> void:
 	var rows := GameData.stakes()
 	var cur := String(GameData.stake_row().get("id", ""))
@@ -546,19 +546,19 @@ func _stake_unlock_next() -> void:
 # 정산보다 먼저 부른다: 이번 라운드 일한 값은 이미 점수로 냈고, 골드 정산은
 # 남은 자만 받는 것이 "라운드 종료 시 파괴" 의 뜻에 맞다.
 func _round_end_wear() -> void:
-	# 자릿세 — 금 판돈. 골드가 없으면 0 에서 멈춘다(빚을 안 만든다).
+	# 유지비 — 금 리그. 골드가 없으면 0 에서 멈춘다(빚을 안 만든다).
 	var rent := int(GameData.stake_v("rent", 0.0))
 	if rent > 0 and gold > 0:
 		var pay: int = mini(rent, gold)
 		gold -= pay
 		pop(_slot_rect(0).get_center() + Vector2(0.0, -22.0),
-				"자릿세 −%d" % pay, C_MULT, 11, 1.0)
+				"유지비 −%d" % pay, C_MULT, 11, 1.0)
 	var per := int(GameData.stake_v("perish", 0.0))
 	var i := owned.size() - 1
 	while i >= 0:
 		var it: Dictionary = owned[i]
 		var dead := false
-		# 삭음 — 주황 판돈. 산 판을 기억해 두었다가 그만큼 지나면 부순다.
+		# 삭음 — 주황 리그. 산 판을 기억해 두었다가 그만큼 지나면 부순다.
 		if per > 0:
 			var age := round_no - int(it.get("bought", round_no))
 			if age >= per:
@@ -648,9 +648,9 @@ func _draw_weighted(pool: Array) -> Dictionary:
 
 
 #  매대는 판 N 을 클리어한 뒤 N+1 을 위해 열린다. 그래서 폭도 해금도
-#  다음 판 번호로 본다. 앤티 표는 앤티당 한 줄이라 옛 rounds.csv 처럼
+#  다음 판 번호로 본다. 라운드 표는 라운드당 한 줄이라 옛 rounds.csv 처럼
 #  "마지막 행을 비워 둔다" 는 규약이 없다 — 마지막 판이면 애초에 상점을 안 연다.
-# 판돈이 미는 값 — 주황부터 매대가 비싸다. 올림이라 4골드가 5가 된다.
+# 리그이 미는 값 — 주황부터 매대가 비싸다. 올림이라 4골드가 5가 된다.
 func _stake_cost(c: int) -> int:
 	var m := GameData.stake_v("shop_cost_mul", 1.0)
 	return c if m == 1.0 else maxi(1, int(ceil(float(c) * m)))
@@ -659,8 +659,8 @@ func _stake_cost(c: int) -> int:
 func _roll_stock() -> void:
 	stock.clear()
 	var nxt := round_no + 1
-	# 상점 칸은 그 판 **뒤**의 상점 폭이다. 앤티 표를 읽으므로 같은 앤티
-	# 안에서는 세 판이 같은 폭을 본다 — 앤티가 바뀌는 경계에서만 값이 갈린다.
+	# 상점 칸은 그 판 **뒤**의 상점 폭이다. 라운드 표를 읽으므로 같은 라운드
+	# 안에서는 세 판이 같은 폭을 본다 — 라운드가 바뀌는 경계에서만 값이 갈린다.
 	var w := GameData.shop_of(round_no)
 
 	# 후보를 먼저 거른다 — 이미 가진 스티커와 아직 안 풀린 스티커는 애초에 안 뜬다.
@@ -777,7 +777,7 @@ func _buy(i: int) -> void:
 			# 살아남는다 — 컬렉션과 매대가 같은 사전을 읽기 때문이다.
 			var cp: Dictionary = s.d.duplicate()
 			cp.gs = 0
-			cp.bought = round_no          # 삭음(주황 판돈)이 읽는 나이다
+			cp.bought = round_no          # 삭음(주황 리그)이 읽는 나이다
 			owned.append(cp)
 		"mod":
 			_apply_mod(s.d.id)
@@ -1410,7 +1410,7 @@ func _click(m: Vector2) -> void:
 				buy_sel = -1            # 맨 펠트 = 취소
 		S.OVER:
 			# 검증 실행은 소크 테스트라 곧장 다음 런으로 돈다. 사람은 새 런으로 —
-			# 팩과 판돈을 다시 고를 자리가 거기다.
+			# 팩과 리그을 다시 고를 자리가 거기다.
 			if _autoplay:
 				_new_run()
 			else:
@@ -2371,11 +2371,11 @@ func _draw_topbar() -> void:
 		draw_line(Vector2(cx, 3.0), Vector2(cx, 15.0), C_BG, 1.0)
 
 	# 1칸 x[0,100] — 런 진행
-	draw_string(font, Vector2(8, 13), "A%d/%d"
+	draw_string(font, Vector2(8, 13), "R%d/%d"
 			% [GameData.ante_of(round_no), GameData.antes_n()],
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_TXT)
-	# 칸은 **앤티** 여덟이다. 판 스물넷을 다 찍으면 44 + 7x23 + 5 = 210px 라
-	# 목표 게이지(x 146~506)를 밀고 들어간다. 대신 지금 앤티의 칸을 넘긴
+	# 칸은 **라운드** 여덟이다. 판 스물넷을 다 찍으면 44 + 7x23 + 5 = 210px 라
+	# 목표 게이지(x 146~506)를 밀고 들어간다. 대신 지금 라운드의 칸을 넘긴
 	# 판 수만큼 아래에서 채운다 — 5px 를 셋으로 나누면 한 판이 1.67px 이고,
 	# nearest 에서 0/2/3/5 로 떨어져 세 단이 실제로 갈린다.
 	var ante := GameData.ante_of(round_no)
@@ -2523,7 +2523,7 @@ const PANEL := {
 
 # 등급(가격)별 스티커 — 명도가 단조 하강해서 저해상도에서도 순서가 읽힌다.
 #
-#  원래는 카지노 칩이었다. 대회 제출본에서 사행성 기호를 걷어내며 스티커로
+#  원래는 노름칩이었다. 대회 제출본에서 사행성 기호를 걷어내며 스티커로
 #  갈았는데 실루엣(원반)은 한 픽셀도 안 건드렸다 — 낙하 솔버·랙·컬렉션이
 #  전부 "원 하나" 를 전제로 서 있어서, 여기만 바꾸면 나머지가 안 흔들린다.
 #  갈린 것은 테두리 어법 하나다: 가장자리 스팟(칩을 칩으로 만들던 유일한
@@ -3150,7 +3150,7 @@ func _cons_draw() -> void:
 
 
 # ══════════════════════════════════════════════════════════
-#  상점 테이블  (카지노 펠트 · 오버헤드 · 낙하)
+#  상점 테이블  (펠트 · 오버헤드 · 낙하)
 # ──────────────────────────────────────────────────────────
 #  정사영 기울임. 테이블 면에서 앙각 52°(수직에서 38°). 원근 배율은 없다 —
 #  640x360 에서 깊이 164px 짜리 판의 참원근은 1.08배라 안 보이고, 안 쓰면
@@ -6044,7 +6044,7 @@ func _btn(r: Rect2, label: String, sub: String, on: bool,
 
 func _draw_clear() -> void:
 	_scrim()
-	draw_string(font, Vector2(0, 46), "앤티 %d  %s 클리어"
+	draw_string(font, Vector2(0, 46), "라운드 %d  %s 클리어"
 			% [GameData.ante_of(round_no), GameData.blind_name(round_no)],
 			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 22, C_ACC)
 
@@ -6066,11 +6066,11 @@ func _draw_stage() -> void:
 	# 창구는 좌우 다 셔터가 내려가 있다 — 그 화면에서는 아무것도 안 판다.
 	_felt_draw()
 	# 런 바가 들고 있던 것과 카드에서 뺀 것이 여기서 만난다.
-	# 딜러 라인(y119) 바로 밑 — 카지노가 펠트에 테이블 리밋을 인쇄하는 자리다.
+	# 진행자 라인(y119) 바로 밑 — 펠트에 규격을 인쇄하는 자리다.
 	# target_of(round_no) 는 _open_stage 가 base 를 만든 그 식이다(출처 하나).
 	# 카드보다 **먼저** 그린다. 미끄러져 오는 카드가 글자를 덮어야 순서가 맞다.
 	draw_string(font, Vector2(0.0, 131.0),
-			"앤티 %d / %d   ·   %s   ·   목표 %d"
+			"라운드 %d / %d   ·   %s   ·   목표 %d"
 			% [GameData.ante_of(round_no), GameData.antes_n(),
 					GameData.blind_name(round_no), GameData.target_of(round_no)],
 			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 10,
@@ -6186,7 +6186,7 @@ func _draw_over() -> void:
 				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 13, C_TXT)
 	else:
 		draw_string(font, Vector2(0, 150), "실패", HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 34, C_MULT)
-		draw_string(font, Vector2(0, 186), "앤티 %d %s — %d / %d"
+		draw_string(font, Vector2(0, 186), "라운드 %d %s — %d / %d"
 				% [GameData.ante_of(round_no), GameData.blind_name(round_no), total, target],
 				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 13, C_TXT)
 
@@ -6226,7 +6226,7 @@ func _toggle_fullscreen() -> void:
 # 에디터 내장 실행처럼 못 바꾸는 자리가 있어서, 원한 값이 아니라 **된 값**을
 # 저장해야 다음 실행에서 안 어긋난다.
 func _load_settings() -> void:
-	# 판돈도 저장에서 되살린다. 모르는 id 면 stake_row 가 첫 단으로 떨군다.
+	# 리그도 저장에서 되살린다. 모르는 id 면 stake_row 가 첫 단으로 떨군다.
 	GameData.stake = String(Save.get_set("stake", ""))
 	GameData.pack = String(Save.get_set("pack", ""))
 	vol = clampf(float(Save.get_set("vol", 1.0)), 0.0, 1.0)
@@ -6251,19 +6251,19 @@ func _draw_title() -> void:
 
 
 # ══════════════════════════════════════════════════════════
-#  새 런 — 팩과 판돈을 같이 고른다
+#  새 런 — 팩과 리그을 같이 고른다
 # ──────────────────────────────────────────────────────────
 #  발라트로가 PLAY 뒤에 여는 run_setup 이 이 자리다. 타이틀에는 덱도
-#  판돈도 없다 — 거기 있던 것을 여기로 옮겼다.
+#  리그도 없다 — 거기 있던 것을 여기로 옮겼다.
 #
 #  발라트로와 다르게 잡은 둘.
-#    ① 판돈을 화살표 사이클이 아니라 여덟 칸을 눕혀 곧장 누른다. 클릭
-#       하나로 도는 게임에서 금 판돈에 가려고 일곱 번 넘기는 것은
+#    ① 리그을 화살표 사이클이 아니라 여덟 칸을 눕혀 곧장 누른다. 클릭
+#       하나로 도는 게임에서 금 리그에 가려고 일곱 번 넘기는 것은
 #       조작이 아니라 형벌이다. 640x360 에 세로 기둥을 놓을 자리도 없다.
 #    ② 발라트로는 이 화면을 게임오버에서 열면 못 빠져나가는데, 여기서는
 #       뒤로가 늘 산다. 나갈 길 없는 화면을 만들지 않는다.
 #
-#  "시작" 은 확인 버튼이 아니다 — 팩과 판돈은 누르는 순간 확정되어
+#  "시작" 은 확인 버튼이 아니다 — 팩과 리그은 누르는 순간 확정되어
 #  저장까지 끝나 있고, 이 버튼은 던지러 가는 이동이다.
 # ══════════════════════════════════════════════════════════
 
@@ -6298,7 +6298,7 @@ func _pack_open(i: int) -> bool:
 	return Save.unlocked("pack:" + String(rows[i].get("id", "")))
 
 
-# 판돈은 팩마다 따로 뚫린다 — 첫 단은 늘 열려 있고 나머지는 앞 단 완주다.
+# 리그은 팩마다 따로 뚫린다 — 첫 단은 늘 열려 있고 나머지는 앞 단 완주다.
 func _stake_open(i: int) -> bool:
 	var rows := GameData.stakes()
 	if i <= 0 or i >= rows.size():
@@ -6313,8 +6313,8 @@ func _stake_won(i: int) -> bool:
 	return Save.unlocked(GameData.win_key(String(rows[i].get("id", ""))))
 
 
-# 팩을 넘기면 판돈을 그 팩이 뚫은 만큼으로 내린다. 발라트로가 덱을 바꿀 때
-# 하는 그 한 줄이고, 이게 있어야 "판돈은 팩마다 따로 뚫는다" 가 읽힌다.
+# 팩을 넘기면 리그을 그 팩이 뚫은 만큼으로 내린다. 발라트로가 덱을 바꿀 때
+# 하는 그 한 줄이고, 이게 있어야 "리그은 팩마다 따로 뚫는다" 가 읽힌다.
 func _pack_view(i: int) -> void:
 	var rows := GameData.packs()
 	if rows.is_empty():
@@ -6379,7 +6379,7 @@ func _draw_newrun() -> void:
 		draw_string(font, Vector2(242, 116 + li * 16), lines[li],
 				HORIZONTAL_ALIGNMENT_LEFT, eb.size.x - 24.0, 10,
 				C_TXT if open else C_DIM)
-	# 이 팩으로 넘긴 가장 높은 판돈 — 한 번도 못 넘겼으면 안 그린다
+	# 이 팩으로 넘긴 가장 높은 리그 — 한 번도 못 넘겼으면 안 그린다
 	var best := -1
 	for k in GameData.stakes().size():
 		if _stake_won(k):
@@ -6393,7 +6393,7 @@ func _draw_newrun() -> void:
 			draw_rect(Rect2(VIEW.x * 0.5 - pw * 0.5 + float(k) * 10.0, 190.0, 4.0, 4.0),
 					C_TXT if k == newrun_pip else C_PANEL.lightened(0.06))
 
-	# 판돈 사다리 — 왼쪽이 약한 단이다. 가로로 눕혔으니 읽는 방향을 따른다.
+	# 리그 사다리 — 왼쪽이 약한 단이다. 가로로 눕혔으니 읽는 방향을 따른다.
 	var st := GameData.stakes()
 	var cur := GameData.stake_row()
 	for i in st.size():
@@ -6440,13 +6440,13 @@ func _pack_cond(row: Dictionary) -> String:
 	return "%s 완주" % pq if pq != "" else "잠김"
 
 
-# 판돈이 미는 값 — 1단부터 지금 단까지 쌓인 결과만 적는다.
+# 리그이 미는 값 — 1단부터 지금 단까지 쌓인 결과만 적는다.
 func _stake_lines() -> Array:
 	var out := []
 	var r := GameData.stake_row()
 	if String(r.get("curve", "base")) != "base":
-		# 열 이름(curve_a)은 표의 말이지 사람의 말이 아니다. 곱이 앤티마다
-		# 다르므로 첫 앤티와 마지막 앤티의 값을 범위로 적는다.
+		# 열 이름(curve_a)은 표의 말이지 사람의 말이 아니다. 곱이 라운드마다
+		# 다르므로 첫 라운드와 마지막 라운드의 값을 범위로 적는다.
 		var lo := GameData.stake_mul(1)
 		var hi := GameData.stake_mul(GameData.rounds_n())
 		out.append("목표 ×%.2f~%.2f" % [lo, hi] if hi > lo else "목표 ×%.2f" % hi)
@@ -6462,7 +6462,7 @@ func _stake_lines() -> Array:
 	if int(GameData.stake_v("perish", 0.0)) > 0:
 		out.append("삭음 %d판" % int(GameData.stake_v("perish", 0.0)))
 	if int(GameData.stake_v("rent", 0.0)) > 0:
-		out.append("자릿세 %d" % int(GameData.stake_v("rent", 0.0)))
+		out.append("유지비 %d" % int(GameData.stake_v("rent", 0.0)))
 	if out.is_empty():
 		out.append("기준")
 	return out

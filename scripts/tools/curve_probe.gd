@@ -6,7 +6,7 @@ const GameData = preload("res://scripts/data.gd")
 #  목표 곡선 측정 — 24판이 실제로 어디서 막히는가
 #
 #  실행:  godot --path . --headless --quit-after 600000 -s scripts/tools/curve_probe.gd -- autoplay
-#         (판돈을 재려면)  ... -- autoplay green   ·   ... -- autoplay purple
+#         (리그을 재려면)  ... -- autoplay green   ·   ... -- autoplay purple
 #
 #  8라운드에서 24판으로 늘리며 곡선을 다시 잡았는데, 그 값은 **감으로**
 #  고른 것이다. 상점이 7번에서 23번으로 늘면 빌드가 얼마나 세지는지는
@@ -19,7 +19,7 @@ const GameData = preload("res://scripts/data.gd")
 #  "오토플레이가 어디서 막히는가" 를 기준선으로 삼아 사람 몫의 여유를 둔다.
 #
 #  내는 것
-#    · 런마다 도달한 판과 앤티
+#    · 런마다 도달한 판과 라운드
 #    · 판별 통과율 — 어느 판이 벽인가가 여기서 보인다
 #    · 완주율
 # ══════════════════════════════════════════════════════════
@@ -53,7 +53,7 @@ func _initialize() -> void:
 			GameData.stake = t
 		elif t.begins_with("runs="):
 			RUNS = maxi(1, int(t.substr(5)))
-	print("판돈: %s" % (GameData.stake if GameData.stake != "" else "흰색(기본)"))
+	print("리그: %s" % (GameData.stake if GameData.stake != "" else "흰색(기본)"))
 
 
 func _finish() -> void:
@@ -68,7 +68,7 @@ func _finish() -> void:
 			reached[0] if not reached.is_empty() else 0,
 			reached[reached.size() - 1] if not reached.is_empty() else 0])
 
-	print("\n판  앤티 종류      목표     들어섬  넘김   통과율   평균다트   여유")
+	print("\n판  라운드 종류      목표     들어섬  넘김   통과율   평균다트   여유")
 	for n in range(1, GameData.rounds_n() + 1):
 		var sn := int(seen.get(n, 0))
 		var pn := int(passed.get(n, 0))

@@ -13,8 +13,8 @@ extends RefCounted
 #    mods.csv       개조 8  — 판 기하를 바꾼다
 #    darts.csv      다트 5  — 탄창에 드는 것
 #    modifiers.csv  제약 6  — 스테이지 선택 그 자체다
-#    antes.csv      앤티 8 — 목표 곡선 · 판돈 배수 · 매대 폭
-#    blinds.csv     블라인드 3 — 앤티 안의 배수·보상·건너뛰기
+#    antes.csv      라운드 8 — 목표 곡선 · 리그 배수 · 매대 폭
+#    blinds.csv     블라인드 3 — 라운드 안의 배수·보상·건너뛰기
 #    tuning.csv     스칼라 24 — 행이 안 느는 값만 모은다
 #
 #  아홉 번째 장 _stats.csv 는 게임이 안 읽는다. 밑줄이 그 뜻이다.
@@ -479,18 +479,18 @@ static func modifiers() -> Array:
 
 # ── 라운드 ────────────────────────────────────────────────
 # ══════════════════════════════════════════════════════════
-#  앤티와 블라인드
+#  라운드와 블라인드
 # ──────────────────────────────────────────────────────────
-#  발라트로 구조를 그대로 옮겼다. 8앤티 × 3블라인드 = 24판이다.
+#  발라트로 구조를 그대로 옮겼다. 8라운드 × 3블라인드 = 24판이다.
 #  게임 쪽은 여전히 1..24 짜리 **한 개의 정수**(round_no)만 들고 다닌다 —
-#  (앤티, 종류) 짝을 상태로 만들면 저장·HUD·정산이 전부 두 값을 맞춰야
+#  (라운드, 종류) 짝을 상태로 만들면 저장·HUD·정산이 전부 두 값을 맞춰야
 #  하고, 언젠가 어긋난다. 여기서 나눗셈 한 번으로 파생시킨다.
 #
-#      앤티 = (n - 1) / 3 + 1        종류 = (n - 1) % 3
+#      라운드 = (n - 1) / 3 + 1        종류 = (n - 1) % 3
 #
-#  목표 = 앤티 기본 × 블라인드 배수 × 판돈 배수.
+#  목표 = 라운드 기본 × 블라인드 배수 × 리그 배수.
 #  세 표가 각자 한 축씩만 쥔다 — antes.csv 가 곡선을, blinds.csv 가
-#  앤티 안의 비율을, 판돈이 난이도를 쥔다.
+#  라운드 안의 비율을, 리그이 난이도를 쥔다.
 static func blinds_per_ante() -> int:
 	var n := rows("blinds").size()
 	return n if n > 0 else 3
@@ -530,7 +530,7 @@ static func blind_of(n: int) -> Dictionary:
 	return rs[clampi(blind_idx(n), 0, rs.size() - 1)]
 
 
-# 지금 판돈의 id. 빈 값이면 흰 판돈이다 — 표의 첫 행이 그 자리를 맡는다.
+# 지금 리그의 id. 빈 값이면 흰 리그이다 — 표의 첫 행이 그 자리를 맡는다.
 static var stake := ""
 
 # 지금 스타트팩의 id. 발라트로의 덱 자리다 — 런의 시작 조건을 쥔다.
@@ -560,7 +560,7 @@ static func pack_v(key: String, dflt: float) -> float:
 	return _f(r, key, "packs", dflt)
 
 
-# 해금·완주 키는 팩별로 갈린다 — 발라트로도 판돈을 덱마다 따로 뚫는다.
+# 해금·완주 키는 팩별로 갈린다 — 발라트로도 리그을 덱마다 따로 뚫는다.
 static func stake_key(stake_id: String, pack_id := "") -> String:
 	var pk: String = pack_id if pack_id != "" else String(pack_row().get("id", ""))
 	return "stake:%s:%s" % [pk, stake_id]
@@ -571,7 +571,7 @@ static func win_key(stake_id: String, pack_id := "") -> String:
 	return "win:%s:%s" % [pk, stake_id]
 
 
-# 표에서 이 판돈이 몇째 단인가. 사다리의 잠김·완주 표시가 이 번호를 읽는다.
+# 표에서 이 리그이 몇째 단인가. 사다리의 잠김·완주 표시가 이 번호를 읽는다.
 static func stake_idx(id := "") -> int:
 	var want: String = id if id != "" else stake
 	var rows := stakes()
@@ -581,8 +581,8 @@ static func stake_idx(id := "") -> int:
 	return 0
 
 
-# 표는 셋이 축을 하나씩 쥔다 — antes 가 곡선, blinds 가 앤티 안의 비율,
-# stakes 가 난이도. 판돈은 곡선을 **고르는** 것이지 곱하는 것이 아니다:
+# 표는 셋이 축을 하나씩 쥔다 — antes 가 곡선, blinds 가 라운드 안의 비율,
+# stakes 가 난이도. 리그은 곡선을 **고르는** 것이지 곱하는 것이 아니다:
 # curve 열이 antes.csv 의 어느 열을 볼지 가리킨다(base 면 곱 없음).
 static func stakes() -> Array:
 	boot()
@@ -600,7 +600,7 @@ static func stake_row(id := "") -> Dictionary:
 	return rows[0]                       # 빈 값·모르는 id 는 첫 단으로 떨어진다
 
 
-# 판돈이 미는 값 하나. 표에 없는 열을 물으면 기본값이 돌아온다.
+# 리그이 미는 값 하나. 표에 없는 열을 물으면 기본값이 돌아온다.
 static func stake_v(key: String, dflt: float) -> float:
 	var r := stake_row()
 	if r.is_empty() or String(r.get(key, "")) == "":
@@ -646,7 +646,7 @@ static func blind_name(n: int) -> String:
 	return String(blind_of(n).get("name", ""))
 
 
-# 상점은 판 N 을 클리어한 뒤 N+1 을 위해 열린다. 앤티 표는 앤티당 한 줄뿐이라
+# 상점은 판 N 을 클리어한 뒤 N+1 을 위해 열린다. 라운드 표는 라운드당 한 줄뿐이라
 # 옛 rounds.csv 처럼 "마지막 행을 비워 둔다" 는 규약이 필요 없다 — 마지막
 # 판이면 호출부가 애초에 상점을 안 연다.
 static func shop_of(n: int) -> Dictionary:
@@ -1082,9 +1082,9 @@ static func balance_hash() -> String:
 	return "|".join(parts).md5_text().substr(0, 12)
 
 
-# 판돈 여덟. 순서가 곧 계단이라 prereq 가 앞 행을 가리켜야 하고, 곡선은
+# 리그 여덟. 순서가 곧 계단이라 prereq 가 앞 행을 가리켜야 하고, 곡선은
 # antes.csv 에 실재하는 열이어야 한다 — 오타가 나면 조용히 배수 1 이 되어
-# "어려운 판돈인데 안 어려운" 상태가 생긴다.
+# "어려운 리그인데 안 어려운" 상태가 생긴다.
 static func _v_stakes() -> void:
 	var raw: Array = _raw.get("stakes", [])
 	if raw.is_empty():
@@ -1481,20 +1481,20 @@ static func _v_rounds() -> void:
 		if _i(r, "darts", "antes") <= 0:
 			_errs.append("%s — 다트가 0 이하다" % who)
 		# 매대 자리는 정확히 넷이다(game.gd _table_draw 의 ax/ay).
-		# 앤티 표에는 "마지막 행을 비운다" 규약이 없다 — 마지막 판이면
+		# 라운드 표에는 "마지막 행을 비운다" 규약이 없다 — 마지막 판이면
 		# 호출부가 애초에 상점을 안 연다.
 		var w := _i(r, "shop_items", "antes") + _i(r, "shop_mods", "antes") \
 				+ _i(r, "shop_darts", "antes")
 		if w != 4:
 			_errs.append("%s — 매대 폭 합이 %d 다. 자리는 정확히 4개여야 한다" % [who, w])
-		# 판돈 배수는 1 이상이고 앤티를 따라 안 내려간다 — 내려가면
-		# "더 어려운 판돈인데 목표가 더 낮다" 가 된다.
+		# 리그 배수는 1 이상이고 라운드를 따라 안 내려간다 — 내려가면
+		# "더 어려운 리그인데 목표가 더 낮다" 가 된다.
 		for col in ["curve_a", "curve_b"]:
 			var m := _f(r, col, "antes", 0.0)
 			if m < 1.0:
-				_errs.append("%s — %s 가 %.2f 다. 1.00 미만이면 판돈이 쉬워진다" % [who, col, m])
+				_errs.append("%s — %s 가 %.2f 다. 1.00 미만이면 리그이 쉬워진다" % [who, col, m])
 			if i > 0 and m < _f(raw[i - 1], col, "antes", 0.0) - 0.001:
-				_errs.append("%s — %s 가 앞 앤티보다 낮다" % [who, col])
+				_errs.append("%s — %s 가 앞 라운드보다 낮다" % [who, col])
 
 	var bl: Array = _raw.get("blinds", [])
 	if bl.is_empty():
@@ -1517,11 +1517,11 @@ static func _v_rounds() -> void:
 			if _b(r, "skippable", "blinds"):
 				_errs.append("%s — 보스는 못 건너뛴다" % who2)
 	if boss != 1:
-		_errs.append("blinds — 보스가 %d개다. 앤티마다 정확히 하나여야 한다" % boss)
+		_errs.append("blinds — 보스가 %d개다. 라운드마다 정확히 하나여야 한다" % boss)
 	# 보스가 제약을 깔려면 제약이 stage_picks 만큼 있어야 한다 — 그 검사는
 	# _v_modifiers 가 이미 한다. 여기서는 보스가 마지막인지만 본다.
 	if boss == 1 and not _b(bl[bl.size() - 1], "boss", "blinds"):
-		_errs.append("blinds — 보스는 앤티의 마지막 판이어야 한다")
+		_errs.append("blinds — 보스는 라운드의 마지막 판이어야 한다")
 
 
 static func _v_cross() -> void:
