@@ -14,7 +14,8 @@ const Save = preload("res://scripts/save.gd")
 #
 #  재는 것
 #    ① 흐름 — 던지면 전환이 켜지고 상태·데이터는 그 프레임에 다 선다
-#    ② 첫 프레임에 판이 실제로 **누워 화면 안에** 있다
+#    ② 첫 프레임에 판이 실제로 **누워 화면 안에** 있고, 판이 뜰 때
+#       테이블은 이미 화면 밖이다 (두 층은 안 겹친다)
 #    ③ 전환 중에는 클릭이 안 먹고, 아무 키나 누르면 건너뛴다
 #    ④ 판정 사각은 전환 중에 한 픽셀도 안 움직인다
 #    ⑤ 전환은 게임 상태를 한 비트도 안 바꾼다
@@ -75,10 +76,29 @@ func _initialize() -> void:
 	var top: float = g._swap_map(g.BC.y - g.R * 1.13)
 	var bot: float = g._swap_map(g.BC.y + g.R * 1.13)
 	_say(a0 < 0.001, "첫 프레임에 판이 누워 있다", "선 정도 %.4f" % a0)
-	_say(top > 200.0 and bot < 360.0,
-			"누운 판이 화면 안에 있다", "y[%.1f, %.1f]" % [top, bot])
+	_say(top >= 360.0,
+			"누운 판은 화면 밖에서 시작한다", "윗변 y %.1f" % top)
 	_say(g._swap_gone() < 0.001, "테이블은 아직 제자리다",
 			"빠진 정도 %.4f" % g._swap_gone())
+
+	# ②' 두 층은 안 겹친다 — 판이 조금이라도 뜬 프레임에는 테이블이
+	#     이미 화면 밖이다. 한 프레임을 재는 게 아니라 타임라인 전체를
+	#     훑는다. 겹치면 올라오는 판이 남은 펠트 위에 얹힌 물건으로 읽힌다.
+	var worst := 0.0
+	var high := 360.0
+	while g.swap_live:
+		var dx: float = float(g.SWAP.dx) * g._swap_gone()
+		if dx < g.VIEW.x:                       # 테이블이 아직 화면에 있다
+			high = minf(high, g._swap_map(g.BC.y - g.R * 1.13))
+			worst = maxf(worst, g.VIEW.x - dx)
+		g._process(1.0 / 60.0)
+	_say(high >= 360.0, "테이블이 있는 동안 판은 화면 밖이다",
+			"판 윗변 최고 y %.1f (테이블 최대 %.0fpx 남음)" % [high, worst])
+
+	# 다시 연다 — 아래 검사들이 도는 전환을 쓴다
+	g.round_no = 1
+	g._open_blind()
+	g._click(g._blind_go().get_center())
 
 	# ④ 판정 사각은 전환 내내 한 픽셀도 안 움직인다
 	var r0 := _rects(g)
@@ -125,7 +145,16 @@ func _initialize() -> void:
 			and is_equal_approx(g._swap_gone(), 1.0),
 			"돌아올 때는 선 판·빠진 테이블에서 시작",
 			"선 %.3f · 빠진 %.3f" % [g._swap_rise(), g._swap_gone()])
-	_wind(g, 0.31)
+	# 돌아오는 길에서는 테이블이 판을 덮으므로 순서가 반대다 — 테이블이
+	# 화면에 발을 들이는 프레임에는 판이 이미 다 누워 있어야 한다.
+	var hi := 360.0
+	while g.swap_live:
+		if float(g.SWAP.dx) * g._swap_gone() < g.VIEW.x:
+			hi = minf(hi, g._swap_map(g.BC.y - g.R * 1.13))
+		g._process(1.0 / 60.0)
+	_say(hi >= 360.0, "테이블이 들 때 판은 이미 화면 밖이다",
+			"판 윗변 최고 y %.1f" % hi)
+	_wind(g, 0.02)
 	_say(not g.swap_live and g.state == g.S.SHOP,
 			"돌아오는 길도 스스로 끝난다", "state %d" % g.state)
 
@@ -154,5 +183,5 @@ func _initialize() -> void:
 	_say(not g.swap_live, "돌아올 곳이 상점이 아니면 안 켠다")
 
 	print("
-%s" % ("실패 %d건" % fails if fails > 0 else "열여섯 검사 전부 통과"))
+%s" % ("실패 %d건" % fails if fails > 0 else "열여덟 검사 전부 통과"))
 	quit(mini(fails, 125))
