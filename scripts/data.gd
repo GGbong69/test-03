@@ -13,7 +13,8 @@ extends RefCounted
 #    mods.csv       개조 8  — 판 기하를 바꾼다
 #    darts.csv      다트 5  — 탄창에 드는 것
 #    modifiers.csv  제약 6  — 스테이지 선택 그 자체다
-#    rounds.csv     라운드 8 — 목표 점수와 매대 폭
+#    antes.csv      앤티 8 — 목표 곡선 · 판돈 배수 · 매대 폭
+#    blinds.csv     블라인드 3 — 앤티 안의 배수·보상·건너뛰기
 #    tuning.csv     스칼라 24 — 행이 안 느는 값만 모은다
 #
 #  아홉 번째 장 _stats.csv 는 게임이 안 읽는다. 밑줄이 그 뜻이다.
@@ -51,7 +52,8 @@ const FILES := {
 	"mods": "mods.csv",
 	"darts": "darts.csv",
 	"modifiers": "modifiers.csv",
-	"rounds": "rounds.csv",
+	"antes": "antes.csv",
+	"blinds": "blinds.csv",
 	"tuning": "tuning.csv",
 	# ── HIGHTONE 스펙(2026-08-23 통합 컨텍스트)에서 온 표 ──
 	# areas 는 전부 확정이라 게임이 직접 읽는다. 나머지는 상태 열이 문이다 —
@@ -474,35 +476,111 @@ static func modifiers() -> Array:
 
 
 # ── 라운드 ────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════
+#  앤티와 블라인드
+# ──────────────────────────────────────────────────────────
+#  발라트로 구조를 그대로 옮겼다. 8앤티 × 3블라인드 = 24판이다.
+#  게임 쪽은 여전히 1..24 짜리 **한 개의 정수**(round_no)만 들고 다닌다 —
+#  (앤티, 종류) 짝을 상태로 만들면 저장·HUD·정산이 전부 두 값을 맞춰야
+#  하고, 언젠가 어긋난다. 여기서 나눗셈 한 번으로 파생시킨다.
+#
+#      앤티 = (n - 1) / 3 + 1        종류 = (n - 1) % 3
+#
+#  목표 = 앤티 기본 × 블라인드 배수 × 판돈 배수.
+#  세 표가 각자 한 축씩만 쥔다 — antes.csv 가 곡선을, blinds.csv 가
+#  앤티 안의 비율을, 판돈이 난이도를 쥔다.
+static func blinds_per_ante() -> int:
+	var n := rows("blinds").size()
+	return n if n > 0 else 3
+
+
+static func antes_n() -> int:
+	return rows("antes").size()
+
+
+# 전체 판 수. game.gd 의 round_no 는 1..이 값이다.
 static func rounds_n() -> int:
-	return rows("rounds").size()
+	return antes_n() * blinds_per_ante()
 
 
-static func _round_row(n: int) -> Dictionary:
-	var rs := rows("rounds")
+static func ante_of(n: int) -> int:
+	var per := blinds_per_ante()
+	@warning_ignore("integer_division")
+	var a := (clampi(n, 1, rounds_n()) - 1) / per + 1
+	return a
+
+
+static func blind_idx(n: int) -> int:
+	return (clampi(n, 1, rounds_n()) - 1) % blinds_per_ante()
+
+
+static func _ante_row(n: int) -> Dictionary:
+	var rs := rows("antes")
 	if rs.is_empty():
 		return {}
-	return rs[clampi(n - 1, 0, rs.size() - 1)]
+	return rs[clampi(ante_of(n) - 1, 0, rs.size() - 1)]
 
 
-static func target_of(round_no: int) -> int:
-	return _i(_round_row(round_no), "target", "rounds")
+static func blind_of(n: int) -> Dictionary:
+	var rs := rows("blinds")
+	if rs.is_empty():
+		return {}
+	return rs[clampi(blind_idx(n), 0, rs.size() - 1)]
 
 
-static func darts_of(round_no: int) -> int:
-	var r := _round_row(round_no)
-	var n := _i(r, "darts", "rounds", 0)
-	return n if n > 0 else tune_i("darts_base")
+# 판돈 배수. 4단계에서 켠다 — 지금은 언제나 흰색(배수 1)이다.
+static var stake := ""
 
 
-# 상점은 라운드 N 을 클리어한 뒤 N+1 을 위해 열린다. 그래서 이 함수에는
-# 다음 라운드 번호를 넘긴다. 마지막 행의 상점 칸은 비어 있다.
-static func shop_of(round_no: int) -> Dictionary:
-	var r := _round_row(round_no)
+static func stake_mul(n: int) -> float:
+	var col := ""
+	match stake:
+		"green": col = "green_mul"
+		"purple": col = "purple_mul"
+		_: return 1.0
+	var v := _f(_ante_row(n), col, "antes", 1.0)
+	return v if v > 0.0 else 1.0
+
+
+static func target_of(n: int) -> int:
+	var base := _i(_ante_row(n), "base", "antes")
+	var m := _f(blind_of(n), "mult", "blinds", 1.0)
+	return int(round(float(base) * m * stake_mul(n)))
+
+
+static func darts_of(n: int) -> int:
+	var d := _i(_ante_row(n), "darts", "antes", 0)
+	return d if d > 0 else tune_i("darts_base")
+
+
+# 이 판을 넘기면 받는 골드. 작은 3 · 큰 4 · 보스 5 —
+# tuning 의 clear_gold 를 대신한다(그 행은 이제 이 표의 폴백이다).
+static func reward_of(n: int) -> int:
+	var r := _i(blind_of(n), "reward", "blinds", 0)
+	return r if r > 0 else tune_i("clear_gold")
+
+
+static func is_boss(n: int) -> bool:
+	return _b(blind_of(n), "boss", "blinds")
+
+
+static func skippable(n: int) -> bool:
+	return _b(blind_of(n), "skippable", "blinds")
+
+
+static func blind_name(n: int) -> String:
+	return String(blind_of(n).get("name", ""))
+
+
+# 상점은 판 N 을 클리어한 뒤 N+1 을 위해 열린다. 앤티 표는 앤티당 한 줄뿐이라
+# 옛 rounds.csv 처럼 "마지막 행을 비워 둔다" 는 규약이 필요 없다 — 마지막
+# 판이면 호출부가 애초에 상점을 안 연다.
+static func shop_of(n: int) -> Dictionary:
+	var r := _ante_row(n)
 	return {
-		"items": _i(r, "shop_items", "rounds", 0),
-		"mods": _i(r, "shop_mods", "rounds", 0),
-		"darts": _i(r, "shop_darts", "rounds", 0),
+		"items": _i(r, "shop_items", "antes", 0),
+		"mods": _i(r, "shop_mods", "antes", 0),
+		"darts": _i(r, "shop_darts", "antes", 0),
 	}
 
 
@@ -1189,41 +1267,70 @@ static func _v_modifiers() -> void:
 
 
 static func _v_rounds() -> void:
-	var raw: Array = _raw.get("rounds", [])
+	var raw: Array = _raw.get("antes", [])
 	if raw.is_empty():
-		_errs.append("rounds — 표가 비었다")
+		_errs.append("antes — 표가 비었다")
 		return
 	var prev := 0
 	for i in raw.size():
 		var r: Dictionary = raw[i]
-		var who := "rounds:%d" % r.get("_line", 0)
-		if _i(r, "round_no", "rounds") != i + 1:
-			_errs.append("%s — round_no 는 1부터 빠짐없이 이어져야 한다" % who)
-		var t := _i(r, "target", "rounds")
+		var who := "antes:%d" % r.get("_line", 0)
+		if _i(r, "ante", "antes") != i + 1:
+			_errs.append("%s — ante 는 1부터 빠짐없이 이어져야 한다" % who)
+		var t := _i(r, "base", "antes")
 		if t <= prev:
-			_errs.append("%s — 목표가 안 오른다 (%d → %d)" % [who, prev, t])
+			_errs.append("%s — 기본 목표가 안 오른다 (%d → %d)" % [who, prev, t])
 		prev = t
-		if _i(r, "darts", "rounds") <= 0:
+		if _i(r, "darts", "antes") <= 0:
 			_errs.append("%s — 다트가 0 이하다" % who)
-		var last := i == raw.size() - 1
-		var si := String(r.get("shop_items", "")) + String(r.get("shop_mods", "")) + String(r.get("shop_darts", ""))
-		if last:
-			# 마지막 라운드 뒤에는 상점이 없다. 칸이 차 있으면 안 열리는
-			# 상점의 폭을 적어 둔 것이라 다음 사람이 거짓 전제를 읽는다.
-			if si != "":
-				_errs.append("%s — 마지막 라운드의 상점 칸은 비어야 한다" % who)
-		else:
-			var w := _i(r, "shop_items", "rounds") + _i(r, "shop_mods", "rounds") \
-					+ _i(r, "shop_darts", "rounds")
-			# 매대 자리는 정확히 넷이다(game.gd _table_draw 의 ax/ay).
-			if w != 4:
-				_errs.append("%s — 매대 폭 합이 %d 다. 자리는 정확히 4개여야 한다" % [who, w])
+		# 매대 자리는 정확히 넷이다(game.gd _table_draw 의 ax/ay).
+		# 앤티 표에는 "마지막 행을 비운다" 규약이 없다 — 마지막 판이면
+		# 호출부가 애초에 상점을 안 연다.
+		var w := _i(r, "shop_items", "antes") + _i(r, "shop_mods", "antes") \
+				+ _i(r, "shop_darts", "antes")
+		if w != 4:
+			_errs.append("%s — 매대 폭 합이 %d 다. 자리는 정확히 4개여야 한다" % [who, w])
+		# 판돈 배수는 1 이상이고 앤티를 따라 안 내려간다 — 내려가면
+		# "더 어려운 판돈인데 목표가 더 낮다" 가 된다.
+		for col in ["green_mul", "purple_mul"]:
+			var m := _f(r, col, "antes", 0.0)
+			if m < 1.0:
+				_errs.append("%s — %s 가 %.2f 다. 1.00 미만이면 판돈이 쉬워진다" % [who, col, m])
+			if i > 0 and m < _f(raw[i - 1], col, "antes", 0.0) - 0.001:
+				_errs.append("%s — %s 가 앞 앤티보다 낮다" % [who, col])
+
+	var bl: Array = _raw.get("blinds", [])
+	if bl.is_empty():
+		_errs.append("blinds — 표가 비었다")
+		return
+	var boss := 0
+	var pm := 0.0
+	for r in bl:
+		var who2 := "blinds:%d" % r.get("_line", 0)
+		var m2 := _f(r, "mult", "blinds", 0.0)
+		if m2 <= 0.0:
+			_errs.append("%s — 배수가 0 이하다" % who2)
+		if m2 < pm:
+			_errs.append("%s — 배수가 앞 블라인드보다 낮다. 순서가 곧 난이도다" % who2)
+		pm = m2
+		if _i(r, "reward", "blinds", 0) <= 0:
+			_errs.append("%s — 보상이 0 이하다" % who2)
+		if _b(r, "boss", "blinds"):
+			boss += 1
+			if _b(r, "skippable", "blinds"):
+				_errs.append("%s — 보스는 못 건너뛴다" % who2)
+	if boss != 1:
+		_errs.append("blinds — 보스가 %d개다. 앤티마다 정확히 하나여야 한다" % boss)
+	# 보스가 제약을 깔려면 제약이 stage_picks 만큼 있어야 한다 — 그 검사는
+	# _v_modifiers 가 이미 한다. 여기서는 보스가 마지막인지만 본다.
+	if boss == 1 and not _b(bl[bl.size() - 1], "boss", "blinds"):
+		_errs.append("blinds — 보스는 앤티의 마지막 판이어야 한다")
 
 
 static func _v_cross() -> void:
 	# 해금 라운드가 상점보다 뒤면 그 스티커는 영영 안 뜬다. 상점은 라운드 N 을
 	# 클리어한 뒤 N+1 을 위해 열리므로 볼 수 있는 최소 라운드는 2 다.
-	var n := rows("rounds").size()
+	var n := rounds_n()
 	for r in _raw.get("items", []):
 		if String(r.get("min_round", "")) == "":
 			continue
@@ -1238,8 +1345,8 @@ static func _v_cross() -> void:
 	# 매대가 마르면 리롤이 같은 물건을 다시 뱉는다. 라운드마다 후보 수가
 	# 매대 폭보다 넉넉한지 센다 — 소유 스티커가 후보에서 빠지므로 여유를 둔다.
 	var need := 0
-	for r in rows("rounds"):
-		need = maxi(need, _i(r, "shop_items", "rounds"))
+	for r in rows("antes"):
+		need = maxi(need, _i(r, "shop_items", "antes"))
 	need += tune_i("max_items")
 	for rd in range(2, n + 1):
 		var cnt := 0

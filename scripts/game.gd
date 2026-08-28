@@ -317,7 +317,7 @@ func _start_round() -> void:
 		rt_dbl_in = dbl_out - (dbl_out - dbl_in) * bw
 
 	remaining = magazine.duplicate()
-	# 이번 라운드의 기본 다트 수는 rounds.csv 의 darts 열이 정한다.
+	# 이번 판의 기본 다트 수는 antes.csv 의 darts 열이 정한다.
 	# tuning.csv 비고가 오래전부터 그렇게 적혀 있었는데 코드가 안 읽고
 	# 있었다 — 표가 거짓말을 하던 자리다. 탄창보다 많으면 순환해서 채운다.
 	var want := GameData.darts_of(round_no)
@@ -478,14 +478,17 @@ func _settle_clear() -> void:
 	var item_gold := 0
 	for r in item_rows:
 		item_gold += r.v
+	# 클리어 보상은 판마다 다르다 — 작은 3 · 큰 4 · 보스 5.
+	# 발라트로와 같은 값이고, blinds.csv 가 쥔다.
+	var clear := GameData.reward_of(round_no)
 	clear_gold_detail = [
-		{"n": "클리어", "v": GameData.clear_gold()},
+		{"n": GameData.blind_name(round_no), "v": clear},
 		{"n": "남은 다트 %d개" % darts_left, "v": dart_gold},
 		{"n": "이자", "v": interest},
 	]
 	for r in item_rows:
 		clear_gold_detail.append(r)
-	gold += GameData.clear_gold() + dart_gold + interest + item_gold
+	gold += clear + dart_gold + interest + item_gold
 
 	state = S.CLEAR
 	beep_seq([392.0, 494.0, 587.0], 0.09, 0.18, 0.22)
@@ -596,15 +599,14 @@ func _draw_weighted(pool: Array) -> Dictionary:
 	return pool[pool.size() - 1]
 
 
-#  매대는 라운드 N 을 클리어한 뒤 N+1 을 위해 열린다. 그래서 폭도 해금도
-#  다음 라운드 번호로 본다 — rounds.csv 의 마지막 행이 비어 있는 이유다.
+#  매대는 판 N 을 클리어한 뒤 N+1 을 위해 열린다. 그래서 폭도 해금도
+#  다음 판 번호로 본다. 앤티 표는 앤티당 한 줄이라 옛 rounds.csv 처럼
+#  "마지막 행을 비워 둔다" 는 규약이 없다 — 마지막 판이면 애초에 상점을 안 연다.
 func _roll_stock() -> void:
 	stock.clear()
 	var nxt := round_no + 1
-	# 상점 칸은 그 라운드 **뒤**의 상점 폭이다 — 검증기가 마지막 라운드의
-	# 칸을 비우라고 강제하는 근거가 그것이다. 다음 행을 읽으면 7라운드를
-	# 넘긴 상점이 8라운드의 빈 칸을 읽어 매물이 하나도 안 뜬다.
-	# 1~6 은 다음 행도 같은 2·1·1 이라 여기까지 안 보였다.
+	# 상점 칸은 그 판 **뒤**의 상점 폭이다. 앤티 표를 읽으므로 같은 앤티
+	# 안에서는 세 판이 같은 폭을 본다 — 앤티가 바뀌는 경계에서만 값이 갈린다.
 	var w := GameData.shop_of(round_no)
 
 	# 후보를 먼저 거른다 — 이미 가진 스티커와 아직 안 풀린 스티커는 애초에 안 뜬다.
@@ -937,12 +939,23 @@ func _open_stage() -> void:
 	sell_sel = -1
 	buy_sel = -1
 	stage_slots = owned.size()
-	# 등급(정공·도전·극한)이 없다. 매 라운드 제약 셋을 깔고 하나를 고른다 —
-	# 고르는 질문이 "얼마나 무리할까" 에서 "어느 쪽이 내 빌드에 덜 아픈가" 로
+	# 등급(정공·도전·극한)이 없다. 제약 셋을 깔고 하나를 고른다 — 고르는
+	# 질문이 "얼마나 무리할까" 에서 "어느 쪽이 내 빌드에 덜 아픈가" 로
 	# 바뀌었다. 보상은 붙지 않는다. 제약은 대가를 치르는 것이 아니라 그냥 판이다.
+	#
+	# **보스 판에서만 깐다.** 발라트로가 보스 블라인드에만 효과를 붙이는 것과
+	# 같은 자리다. 다른 점 하나: 발라트로는 무엇이 나올지 못 고르는데 우리는
+	# 셋 중에 고른다 — 조준 게임이라 "이 제약이 내 손에 얼마나 아픈가" 를
+	# 플레이어가 실제로 안다.
 	var base := GameData.target_of(round_no)
 	stage_pick.clear()
 	stage_t = 0.0
+	if not GameData.is_boss(round_no):
+		# 작은 판·큰 판은 제약이 없다. 화면을 띄우지 않고 바로 던지러 간다.
+		active_mods = []
+		target = base
+		_start_round()
+		return
 	var left := GameData.modifiers().duplicate()
 	for i in GameData.stage_picks():
 		var md := _draw_weighted(left)
@@ -950,7 +963,7 @@ func _open_stage() -> void:
 			break
 		left.erase(md)               # 같은 카드가 두 장 깔리지 않는다
 		# "높은 목표"(스펙 700001 · 확정)는 목표 자체를 올린다. 카드에 오른
-		# 목표가 곧 그 라운드의 목표다 — 화면과 판정이 같은 수를 읽는다.
+		# 목표가 곧 그 판의 목표다 — 화면과 판정이 같은 수를 읽는다.
 		var tgt := base
 		if String(md.k) == "target_mul":
 			tgt = int(ceil(float(base) * float(md.v)))
@@ -2253,31 +2266,45 @@ func _draw_topbar() -> void:
 		draw_line(Vector2(cx, 3.0), Vector2(cx, 15.0), C_BG, 1.0)
 
 	# 1칸 x[0,100] — 런 진행
-	draw_string(font, Vector2(8, 13), "R%d/%d" % [round_no, GameData.rounds_n()],
+	draw_string(font, Vector2(8, 13), "A%d/%d"
+			% [GameData.ante_of(round_no), GameData.antes_n()],
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_TXT)
-	var done: int = round_no if (state == S.CLEAR or state == S.SHOP) else round_no - 1
+	# 칸은 **앤티** 여덟이다. 판 스물넷을 다 찍으면 44 + 7x23 + 5 = 210px 라
+	# 목표 게이지(x 146~506)를 밀고 들어간다. 대신 지금 앤티의 칸을 넘긴
+	# 판 수만큼 아래에서 채운다 — 5px 를 셋으로 나누면 한 판이 1.67px 이고,
+	# nearest 에서 0/2/3/5 로 떨어져 세 단이 실제로 갈린다.
+	var ante := GameData.ante_of(round_no)
+	var per := GameData.blinds_per_ante()
+	var done_b: int = GameData.blind_idx(round_no) \
+			+ (1 if (state == S.CLEAR or state == S.SHOP) else 0)
 	var pip: Rect2 = LAY.bar_pip
-	for i in GameData.rounds_n():
+	for i in GameData.antes_n():
 		var q := Rect2(pip.position + Vector2(float(i) * LAY.bar_pip_dx, 0.0), pip.size)
-		if i < done:
+		if i < ante - 1:
 			draw_rect(q, C_ACC)
-		elif i == done:
+		elif i == ante - 1:
 			draw_rect(q, C_ACC.darkened(0.62))
+			if done_b > 0:
+				var h := q.size.y * float(mini(done_b, per)) / float(per)
+				draw_rect(Rect2(q.position + Vector2(0.0, q.size.y - h),
+						Vector2(q.size.x, h)), C_ACC)
 			draw_rect(q, C_ACC, false, 1.0)
 		else:
 			draw_rect(q, C_BG)
 
 	# 2칸 x[100,584] — 목표. 진행바 좌표는 기존 그대로다.
 	var g: Rect2 = LAY.bar_gauge
-	draw_string(font, Vector2(108, 13), "목표",
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_DIM.darkened(0.2))
+	draw_string(font, Vector2(104, 13), GameData.blind_name(round_no),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 9,
+			C_ACC if GameData.is_boss(round_no) else C_DIM.darkened(0.2))
 	draw_rect(g, C_BG)
 	if state == S.SHOP or state == S.STAGE:
 		# STAGE 에서 목표 숫자를 쓰면 안 된다 — 등급 배수(극한 ×1.25)가
 		# 아직 안 정해졌고 카드 셋이 서로 다른 숫자를 이미 크게 띄운다.
 		var msg := "판을 고르는 중"
 		if state == S.SHOP:
-			msg = "다음 R%d  ·  목표 %d" % [round_no + 1, GameData.target_of(round_no + 1)]
+			msg = "다음 %s  ·  목표 %d" % [GameData.blind_name(round_no + 1),
+				GameData.target_of(round_no + 1)]
 		draw_string(font, Vector2(g.position.x, 13.0), msg,
 				HORIZONTAL_ALIGNMENT_CENTER, g.size.x, 10, C_DIM)
 	else:
@@ -5866,7 +5893,8 @@ func _btn(r: Rect2, label: String, sub: String, on: bool,
 
 func _draw_clear() -> void:
 	_scrim()
-	draw_string(font, Vector2(0, 46), "라운드 %d 클리어" % round_no,
+	draw_string(font, Vector2(0, 46), "앤티 %d  %s 클리어"
+			% [GameData.ante_of(round_no), GameData.blind_name(round_no)],
 			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 22, C_ACC)
 
 	var y := 74.0
@@ -5891,8 +5919,9 @@ func _draw_stage() -> void:
 	# target_of(round_no) 는 _open_stage 가 base 를 만든 그 식이다(출처 하나).
 	# 카드보다 **먼저** 그린다. 미끄러져 오는 카드가 글자를 덮어야 순서가 맞다.
 	draw_string(font, Vector2(0.0, 131.0),
-			"R%d / %d   ·   목표 %d" % [round_no, GameData.rounds_n(),
-					GameData.target_of(round_no)],
+			"앤티 %d / %d   ·   %s   ·   목표 %d"
+			% [GameData.ante_of(round_no), GameData.antes_n(),
+					GameData.blind_name(round_no), GameData.target_of(round_no)],
 			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 10,
 			Color(C_TABLE.lightened(0.34), 0.75))
 	for i in stage_pick.size():
@@ -6006,7 +6035,8 @@ func _draw_over() -> void:
 				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 13, C_TXT)
 	else:
 		draw_string(font, Vector2(0, 150), "실패", HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 34, C_MULT)
-		draw_string(font, Vector2(0, 186), "라운드 %d — %d / %d" % [round_no, total, target],
+		draw_string(font, Vector2(0, 186), "앤티 %d %s — %d / %d"
+				% [GameData.ante_of(round_no), GameData.blind_name(round_no), total, target],
 				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 13, C_TXT)
 
 
