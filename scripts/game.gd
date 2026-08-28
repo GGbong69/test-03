@@ -1176,6 +1176,17 @@ func _auto_step() -> void:
 		S.STAGE:
 			_click(_stage_rect(randi() % stage_pick.size()).get_center())
 		S.SHOP:
+			# 소비 아이템은 쟁여 둘 이유가 없다 — 들자마자 쓴다.
+			#
+			# 이 세 줄이 없으면 **영역 강화 트랙이 측정에서 통째로 빠진다.**
+			# 오토플레이가 소비를 사서 칸에 넣기만 하고 안 써서, 성장 축 둘
+			# (트랙 강화 · 개조) 중 하나가 없는 게임을 재게 된다. 그 수치로
+			# 목표 곡선을 잡으면 실제보다 낮게 잡힌다 — curve_probe 를 처음
+			# 돌렸을 때 실제로 그랬다.
+			for ci in cons.size():
+				if String(cons[ci].get("cat", "")) == "area":
+					_cons_use(ci)
+					return
 			# 좌표가 아니라 함수를 직접 부른다. 4단계에서 _stock_rect 가 사라지므로
 			# 여기서 미리 끊어 둬야 그 삭제가 순수 삭제가 된다.
 			var buyable := []
