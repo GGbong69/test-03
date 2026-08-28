@@ -257,6 +257,7 @@ func _gold_per_round(it: Dictionary, clean_p: float, ghit_pr: float) -> float:
 		"broke": return gv          # 보유 골드 조건은 이 모델 밖이다
 		"round": return gv
 		"risk50": return gv * 0.5 * ghit_pr
+		"hit": return gv * ghit_pr
 		"spare", "blitz": return 0.0   # 남은 다트를 모사하지 않는다
 	return 0.0
 

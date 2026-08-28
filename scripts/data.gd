@@ -56,6 +56,7 @@ const FILES := {
 	"blinds": "blinds.csv",
 	"stakes": "stakes.csv",
 	"packs": "packs.csv",
+	"colors": "colors.csv",
 	"tuning": "tuning.csv",
 	# ── HIGHTONE 스펙(2026-08-23 통합 컨텍스트)에서 온 표 ──
 	# areas 는 전부 확정이라 게임이 직접 읽는다. 나머지는 상태 열이 문이다 —
@@ -245,6 +246,8 @@ static func items() -> Array:
 		var cnd: String = r.get("cond", "")
 		if cnd == "sec":
 			cnd = "sec:" + String(r.get("secs", "")).replace(";", ",")
+		elif cnd == "col":
+			cnd = "col:" + String(r.get("secs", "")).replace(";", ",")
 		var it := {
 			"id": r.get("id", ""),
 			"n": r.get("name", ""),
@@ -704,6 +707,41 @@ static func val_max_mul() -> float: return tune("val_max_mul")
 
 # 판의 기본 모양. 1행짜리라 CSV 로 얻는 것이 없고, "길이 20" 계약은
 # 어차피 hit_info 에 남는다.
+# 칸 색 — 발라트로의 문양 자리다. 판의 좌/우·홀/짝·대/소는 전부 위치와
+# 칸 값에서 파생되므로 독립축이 아니다(값을 바꾸면 홀짝과 대소가 같이
+# 바뀐다). 기하와 무관하고 다시 칠할 수 있는 넷째 속성이 필요했다.
+# 기본 배치는 실물 다트판대로 밝은 칸·어두운 칸 교대다 — 지금 화면과
+# 한 픽셀도 안 달라진다.
+static func colors() -> Array:
+	boot()
+	return _raw.get("colors", [])
+
+
+static func color_n() -> int:
+	return maxi(1, colors().size())
+
+
+static func color_hex(i: int) -> String:
+	var c := colors()
+	if i < 0 or i >= c.size():
+		return "e8dfc8"
+	return String(c[i].get("hex", "e8dfc8"))
+
+
+static func color_name(i: int) -> String:
+	var c := colors()
+	if i < 0 or i >= c.size():
+		return ""
+	return String(c[i].get("name", ""))
+
+
+static func colors_base() -> Array:
+	var out := []
+	for i in SECTORS_BASE.size():
+		out.append(i % 2)
+	return out
+
+
 const SECTORS_BASE := [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5]
 const BOARD_BASE := {
 	"bi": 0.06, "bo": 0.14,      # 한복판(50) · 불(25)
@@ -735,7 +773,7 @@ const CONDS := ["always", "triple", "double", "band", "bull", "odd", "even", "le
 		# "이후" 붙은 패턴 조건은 완성한 발이 아니라 그 다음 발부터 선다.
 		"risk", "risk1", "few", "sixth",
 		"pair", "trip", "quad", "pair2", "spread",
-		"zone3", "zones2", "zones4", "rezone", "sec"]
+		"zone3", "zones2", "zones4", "rezone", "sec", "col"]
 
 # 조건 포함관계. A 가 B 를 담으면 A 로 뜨는 다트는 B 로도 뜬다.
 # check() 를 고치면 여기도 같이 고친다 — 하위호환 검사의 유일한 근거다.
@@ -761,7 +799,8 @@ const COND_SUB := {
 # 완전분할 — 같은 k 로 한 분할을 다 덮으면 합성 무조건 카드가 된다.
 const COND_PART := [["left", "right"], ["odd", "even"], ["mid", "big", "small"]]
 const KINDS := ["chip", "mult", "xmult", "mult_streak", "mult_rand", "save"]
-const GOLDS := ["clear", "spare", "clean", "blitz", "broke", "round", "risk50"]
+const GOLDS := ["clear", "spare", "clean", "blitz", "broke", "round", "risk50",
+		"hit"]
 
 
 static func board_val(b: Dictionary, sec: Array) -> float:
@@ -829,6 +868,15 @@ static func check(c: String, x: Dictionary) -> bool:
 			if x.sector == int(t):
 				return true
 		return false
+	if c.begins_with("col:"):
+		# 불·아웃은 색이 없다(-1). 칸에 꽂혀야 색 조건이 선다.
+		var cv := int(x.get("col", -1))
+		if cv < 0:
+			return false
+		for t in c.substr(4).split(","):
+			if cv == int(t):
+				return true
+		return false
 	return false
 
 
@@ -869,6 +917,11 @@ static func cond_text(c: String) -> String:
 		"rezone": return "이미 명중한 영역을 다시 맞히면"
 	if c.begins_with("sec:"):
 		return c.substr(4).replace(",", "·") + "번 명중 시"
+	if c.begins_with("col:"):
+		var nm := PackedStringArray()
+		for t in c.substr(4).split(","):
+			nm.append(color_name(int(t)))
+		return "·".join(nm) + " 칸 명중 시"
 	return ""
 
 
@@ -975,9 +1028,14 @@ static func item_desc(it: Dictionary) -> String:
 # _gold_from_items 밖에 사는 유일한 골드다 — 게임과 측정기가 같은 술어를
 # 읽어야 표가 거짓말을 안 한다. 게이트가 없던 동안 게임은 표의 3배를 벌었다.
 static func gold_dart_hit(it: Dictionary, x: Dictionary) -> bool:
-	if String(it.get("g", "")) != "risk50":
-		return false
-	return int(x.get("mult", 0)) >= 2 or int(x.get("sector", 0)) >= 25
+	match String(it.get("g", "")):
+		"risk50":
+			return int(x.get("mult", 0)) >= 2 or int(x.get("sector", 0)) >= 25
+		"hit":
+			# 그 칩의 조건이 걸린 발마다. 조건이 이미 골드의 문이므로
+			# 여기서 술어를 또 만들지 않는다 — check 하나가 둘을 다 판다.
+			return check(String(it.get("c", "")), x)
+	return false
 
 
 static func gold_text(g: String, gv: int) -> String:
@@ -989,6 +1047,7 @@ static func gold_text(g: String, gv: int) -> String:
 		"broke": return "정산 때 보유 골드 %d 이하면 +%d" % [gold_broke(), gv]
 		"round": return "라운드마다 골드 +%d" % gv
 		"risk50": return "더블·트리플·불 명중 시 절반 확률로 골드 +%d" % gv
+		"hit": return "발동할 때마다 골드 +%d" % gv
 	return ""
 
 
@@ -1038,6 +1097,7 @@ static func _validate() -> void:
 	_v_stats()
 	_v_stakes()
 	_v_packs()
+	_v_colors()
 
 
 # 스펙 표 다섯 장의 무결성. 상태 열이 문이다 — 확정만 런타임이고,
@@ -1159,6 +1219,43 @@ static func _v_packs() -> void:
 			_errs.append("%s — 스티커 칸이 0 이하다" % who)
 		if _i(r, "darts_add", "packs", 0) <= -int(tune_i("darts_base")):
 			_errs.append("%s — 다트 증감이 탄창을 다 없앤다" % who)
+
+
+# 칸 색. 표가 비면 판이 통째로 한 색이 되고 색 조건 카드가 다 죽는다.
+# 그리고 col: 은 완전분할이 될 수 있다 — 색 전부를 한 카드가 쓰면
+# 조건이 사라진 것과 같은데, COND_PART 는 조건 **이름** 배열이라
+# 접두 패턴을 못 본다. 여기서 따로 센다.
+static func _v_colors() -> void:
+	var raw: Array = _raw.get("colors", [])
+	if raw.is_empty():
+		_errs.append("colors — 표가 비었다. 칸에 색이 없으면 색 조건이 다 죽는다")
+		return
+	var seen := {}
+	for i in raw.size():
+		var r: Dictionary = raw[i]
+		var who := "colors:%d %s" % [r.get("_line", 0), r.get("name", "")]
+		if _i(r, "id", "colors", -1) != i:
+			_errs.append("%s — id 는 0 부터 빠짐없이 이어져야 한다" % who)
+		var hx: String = r.get("hex", "")
+		if hx.length() != 6:
+			_errs.append("%s — hex 가 여섯 자가 아니다: '%s'" % [who, hx])
+		if seen.has(hx):
+			_errs.append("%s — 같은 색이 둘이다: '%s'" % [who, hx])
+		seen[hx] = true
+	var full := raw.size()
+	for it in items():
+		var c: String = it.c
+		if not c.begins_with("col:"):
+			continue
+		var toks := {}
+		for t in c.substr(4).split(","):
+			var v := int(t)
+			if v < 0 or v >= full:
+				_errs.append("items — %s(%s) 의 색 %d 가 표에 없다" % [it.n, it.id, v])
+			toks[v] = true
+		if toks.size() >= full:
+			_errs.append("items — %s(%s) 가 색 전부를 쓴다. 조건이 없는 것과 같다"
+					% [it.n, it.id])
 
 
 static func _v_spec() -> void:

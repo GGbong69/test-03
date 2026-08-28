@@ -130,6 +130,31 @@ func _process(_d: float) -> bool:
 			"%d줄 · 넘친 줄 %d · 높이 %.0f > %.0f" % [wrapped, over, tall, short])
 	g._tip_clear()
 
-	print("%s" % ("아홉 검사 전부 통과" if fails == 0 else "실패 %d건" % fails))
+	# ⑩ 칸 색 — 기본 배치는 실물 다트판대로 교대이고, 화면과 판정이
+	#    같은 배열을 읽는다. 불·아웃은 색이 없다(-1).
+	var base_alt := true
+	for i in g.sec_col.size():
+		if int(g.sec_col[i]) != i % 2:
+			base_alt = false
+	var bull: Dictionary = g.hit_info(g.BC)
+	var out: Dictionary = g.hit_info(g.BC + Vector2(g.R * 2.0, 0.0))
+	var wedge: Dictionary = g.hit_info(g.BC + Vector2(0.0, -g.R * 0.5))
+	_ok("칸 색 기본 배치", base_alt and g.sec_col.size() == 20,
+			"%d칸 · 교대 %s" % [g.sec_col.size(), base_alt])
+	_ok("불·아웃은 색이 없다", int(bull.col) == -1 and int(out.col) == -1,
+			"불 %d · 아웃 %d" % [int(bull.col), int(out.col)])
+	_ok("칸은 표의 색을 돌려준다",
+			int(wedge.col) == g._sec_col(int(wedge.idx))
+			and int(wedge.col) >= 0 and int(wedge.col) < GameData.color_n(),
+			"%d번 칸 색 %d / %d종" % [int(wedge.sector), int(wedge.col),
+			GameData.color_n()])
+	# 조건은 색을 읽는다 — 맞는 색이면 서고 다른 색이면 안 선다
+	var cx := {"sector": 20, "mult": 1, "miss": false, "col": 2}
+	_ok("색 조건이 색을 가린다",
+			GameData.check("col:2", cx) and not GameData.check("col:0,1", cx)
+			and GameData.check("col:1,2", cx),
+			"col:2 참 · col:0,1 거짓 · col:1,2 참")
+
+	print("%s" % ("열셋 검사 전부 통과" if fails == 0 else "실패 %d건" % fails))
 	quit(1 if fails > 0 else 0)
 	return false

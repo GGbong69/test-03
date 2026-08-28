@@ -111,6 +111,18 @@ const C_GOLD := Color("f2c94c")
 enum S { PICK, AIM_V, AIM_H, CONFIRM, FLY, RESOLVE, CLEAR, SHOP, STAGE, OVER,
 		TITLE, SETTINGS, COLLECT, NEWRUN }
 
+# 칸 색 — 길이 20, 값은 colors.csv 의 id. _board_bake 가 굽고
+# 손질·개칠이 고친다. 굽기 전(첫 프레임)에는 비어 있을 수 있으므로
+# 읽는 쪽은 반드시 _sec_col 을 지난다.
+var sec_col := []
+
+
+func _sec_col(i: int) -> int:
+	if i < 0 or i >= sec_col.size():
+		return i % 2 if i >= 0 else -1
+	return int(sec_col[i])
+
+
 # ── 보드 기하 (개조로 변한다) ──────────────────────────────
 #  판의 유일한 출처는 mods_own 이다. 아래 여덟은 그것을 구운 결과일 뿐이다.
 var mods_own := []
@@ -927,6 +939,10 @@ func _board_bake() -> void:
 	var r := _board_of(mods_own)
 	var b: Dictionary = r[0]
 	sectors = r[1]
+	# 칸 색 — 굽는 자리가 여기 하나뿐이라 손질·개칠이 색을 바꿔도
+	# 다시 구우면 그대로 산다. 길이가 어긋나면 통째로 다시 깐다.
+	if sec_col.size() != sectors.size():
+		sec_col = GameData.colors_base()
 	bull_i = b.bi
 	bull_o = b.bo
 	trp_in = b.ti
@@ -1516,15 +1532,15 @@ func hit_info(p: Vector2) -> Dictionary:
 	if r > R * rt_dbl_out:                                    # ← ① 판벌이
 		var ao := GameData.area("out")
 		return {"base": ao.base, "mult": 0, "sector": -1, "idx": -1,
-				"r0": 0.0, "r1": 0.0, "track": ao.track}
+				"r0": 0.0, "r1": 0.0, "track": ao.track, "col": -1}
 	if r <= R * rt_bull_i:
 		var bi := GameData.area("bull_i")
 		return {"base": bi.base, "mult": bi.mult, "sector": bi.base, "idx": -1,
-				"r0": 0.0, "r1": R * rt_bull_i, "track": bi.track}
+				"r0": 0.0, "r1": R * rt_bull_i, "track": bi.track, "col": -1}
 	if r <= R * rt_bull_o:
 		var bo := GameData.area("bull_o")
 		return {"base": bo.base, "mult": bo.mult, "sector": bo.base, "idx": -1,
-				"r0": 0.0, "r1": R * rt_bull_o, "track": bo.track}
+				"r0": 0.0, "r1": R * rt_bull_o, "track": bo.track, "col": -1}
 
 	var ang := atan2(v.x, -v.y)
 	if ang < 0.0:
@@ -1564,10 +1580,10 @@ func hit_info(p: Vector2) -> Dictionary:
 			r0 = R * rt_trp2_out
 
 	return {"base": val, "mult": m, "sector": val, "idx": idx, "r0": r0, "r1": r1,
-			"track": trk}
+			"track": trk, "col": _sec_col(idx)}
 
-# 반환값의 치역이 안 변한다:  mult ∈ {0,1,2,3}   sector ∈ {-1} ∪ [1,20] ∪ {25,50}
-# 그래서 data.gd 의 check() 와 cond_text() 는 한 글자도 안 고친다.
+# 반환값의 치역:  mult ∈ {0,1,2,3}   sector ∈ {-1} ∪ [1,20] ∪ {25,50}
+#                col ∈ {-1} ∪ [0, colors.csv 행 수)   — 불·아웃은 -1 이다
 
 func _impact(info: Dictionary) -> void:
 	var lbl := Vector2(0.0, 26.0) if aim.y < BC.y else Vector2(0.0, -24.0)
@@ -1810,8 +1826,10 @@ func _land() -> void:
 			if String(it.get("k2", "")) != "" and it.v2 != 0:
 				queue.append({"k": "item", "i": i, "kind": it.k2, "v": it.v2,
 						"lbl": "%s  %s" % [it.n, GameData.eff_text(it.k2, it.v2)]})
-			# 즉시 골드 — 위험 영역 절반 확률. 판정은 data.gd 가 쥔다.
-			if GameData.gold_dart_hit(it, ctx) and randf() < 0.5:
+			# 즉시 골드 — 판정은 data.gd 가 쥔다. risk50 만 절반 확률이고
+			# hit 은 조건이 곧 문이라 걸리면 그대로 준다.
+			if GameData.gold_dart_hit(it, ctx) \
+					and (String(it.get("g", "")) != "risk50" or randf() < 0.5):
 				gold += int(it.get("gv", 0))
 				pop(_slot_rect(mini(i, GameData.max_items() - 1)).get_center()
 						+ Vector2(0.0, 24.0), "+%d" % it.gv, C_GOLD, 11, 0.8)
@@ -2198,7 +2216,9 @@ func _draw_board() -> void:
 	for i in 20:
 		var a0 := i * sw - sw * 0.5
 		var a1 := a0 + sw
-		var base_c: Color = C_LIGHT if i % 2 == 0 else C_DARK
+		# 칸 색은 표가 정한다. 띠 색은 지금 규칙(i%2 → 빨강/초록)을 유지한다 —
+		# 띠까지 데이터로 보내면 칸 색과 띠 색이 겹쳐 읽힘이 무너진다.
+		var base_c := Color(GameData.color_hex(_sec_col(i)))
 		var ring_c: Color = C_RED if i % 2 == 0 else C_GREEN
 		draw_colored_polygon(annulus(R * rt_bull_o * push, R * rt_trp_in * push, a0, a1), base_c)
 		draw_colored_polygon(annulus(R * rt_trp_out * push, R * rt_dbl_in * push, a0, a1), base_c)
@@ -2652,6 +2672,14 @@ func _stk_ti(cost: int) -> int:
 func _icon_cond(c: Vector2, r: float, cond: String, col: Color) -> void:
 	var u := r * 0.62          # 도형 반경 — 얼굴 안에 머무는 상한
 	# 숫자 지정 조건 — 숫자가 곧 아이콘이다. 셋 넘으면 첫 수에 점을 단다.
+	if cond.begins_with("col:"):
+		# 색 조건은 글자가 아니라 칠로 말한다. 쓰는 색을 나란히 눕힌다.
+		var cs := cond.substr(4).split(",")
+		var bw: float = r * 1.7 / float(maxi(cs.size(), 1))
+		for k in cs.size():
+			draw_rect(Rect2(c.x - r * 0.85 + float(k) * bw, c.y - u * 0.6,
+					bw - 1.0, u * 1.2), Color(GameData.color_hex(int(cs[k]))))
+		return
 	if cond.begins_with("sec:"):
 		var parts := cond.substr(4).split(",")
 		var txt := "·".join(parts) if parts.size() <= 2 else parts[0] + "…"
