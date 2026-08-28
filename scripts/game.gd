@@ -1,6 +1,7 @@
 extends Node2D
 
 const GameData = preload("res://scripts/data.gd")
+const Save = preload("res://scripts/save.gd")
 
 # ── 다트 로그라이트 프로토타입 ──────────────────────────────
 # 흐름: 라운드 플레이 → 클리어 정산(보너스 3택) → 상점 → 다음 라운드
@@ -264,6 +265,9 @@ func _ready() -> void:
 	p.play()
 	pb = p.get_stream_playback()
 
+	# 저장은 소리 장치를 세운 **뒤**에 읽는다 — _apply_vol 이 버스를 만진다.
+	_load_settings()
+
 	if _autoplay:
 		_new_run()
 	else:
@@ -277,6 +281,7 @@ func _ready() -> void:
 # ══════════════════════════════════════════════════════════
 
 func _new_run() -> void:
+	Save.bump("runs")
 	mods_own.clear()
 	_board_bake()
 	round_no = 1
@@ -414,6 +419,10 @@ func _grip_consume() -> void:
 
 
 func _finish_round() -> void:
+	Save.peak("best_round", round_no)
+	Save.peak("best_score", total)
+	Save.peak("best_gold", gold)
+	Save.flush()
 	if total < target:
 		# 목숨 아이템(조커 이식 110099) — 총점이 목표의 일정 비율 이상이면
 		# 실패를 한 번 무르고 자신을 부순다. 라운드는 클리어로 친다.
@@ -449,6 +458,8 @@ func _finish_round() -> void:
 	if round_no >= GameData.rounds_n():
 		state = S.OVER
 		won = true
+		Save.bump("wins")
+		Save.flush()
 		beep_seq([262.0, 330.0, 392.0, 523.0, 659.0], 0.10, 0.22, 0.26)
 		return
 
@@ -700,6 +711,10 @@ func _buy(i: int) -> void:
 	var s: Dictionary = stock[i]
 	gold -= s.cost
 	s.sold = true
+	match String(s.type):
+		"item": Save.bump("items_bought")
+		"mod": Save.bump("mods_bought")
+		"dart": Save.bump("darts_bought")
 	match s.type:
 		"item":
 			# 사본이다. 성장 상태(gs)가 원본 카탈로그에 붙으면 다음 런까지
@@ -881,6 +896,7 @@ func _reroll() -> void:
 		_deny()
 		return
 	gold -= reroll_cost
+	Save.bump("rerolls")
 	rerolls_used += 1
 	reroll_cost = _reroll_price()
 	if drop_fast:
@@ -1340,6 +1356,7 @@ func _click(m: Vector2) -> void:
 						vol = snappedf(clampf(
 								(m.x - tr.position.x) / tr.size.x, 0.0, 1.0), 0.05)
 						_apply_vol()
+						Save.set_set("vol", vol)
 					"lobby":
 						pause_from = -1
 						state = S.TITLE
@@ -1688,6 +1705,18 @@ func _land() -> void:
 				track_lv[info.track] = int(track_lv.get(info.track, 0)) + 1
 				pop(BC + Vector2(0.0, -52.0), "영역 강화 +1", C_ACC, 10, 0.9)
 		queue.append({"k": "total"})
+
+	# 통계는 해금 조건보다 **먼저** 세기 시작한다. 조건을 나중에 달면
+	# 그때부터 세어져서 이미 한 플레이가 증발한다.
+	Save.bump("darts")
+	if info.mult == 0:
+		Save.bump("misses")
+	elif info.idx == -1:
+		Save.bump("bulls")
+	elif info.mult >= 3:
+		Save.bump("triples")
+	elif info.mult == 2:
+		Save.bump("doubles")
 
 	# 이력 갱신은 ctx 를 만든 뒤다 — 패턴은 다음 발부터 산다.
 	if zone != "":
@@ -2912,6 +2941,8 @@ func _sell(i: int) -> void:
 	var v := GameData.sell_value(owned[i])
 	var at := _slot_rect(i).get_center()
 	gold += v
+	Save.bump("sold")
+	Save.bump("gold_earned", v)
 	owned.remove_at(i)
 	sell_sel = -1
 	# sealed 는 owned 의 인덱스다. 판매는 SHOP/STAGE 에서만 일어나고 두 화면
@@ -2964,6 +2995,8 @@ func _cons_use(i: int) -> void:
 		_deny()
 		return
 	track_lv[c.track] = int(track_lv.get(c.track, 0)) + 1
+	Save.bump("cons_used")
+	Save.peak("best_track", int(track_lv[c.track]))
 	var at := _cons_rect(i).get_center()
 	cons.remove_at(i)
 	pop(at + Vector2(0.0, 26.0), "%s  Lv%d" % [c.n, track_lv[c.track]],
@@ -5985,7 +6018,8 @@ func _draw_over() -> void:
 # ══════════════════════════════════════════════════════════
 
 var collect_tab := 0
-var vol := 1.0           # 소리 크기 0~1. 게이지를 눌러 정한다
+var vol := 1.0           # 소리 크기 0~1. 게이지를 눌러 정한다.
+                         # 실제 초기값은 _ready 가 저장에서 읽는다.
 var pause_from := -1     # 게임 중 ESC 로 설정을 열면 돌아갈 상태. -1 = 제목
 
 
@@ -6004,6 +6038,20 @@ func _toggle_fullscreen() -> void:
 	DisplayServer.window_set_mode(
 			DisplayServer.WINDOW_MODE_WINDOWED if fs
 			else DisplayServer.WINDOW_MODE_FULLSCREEN)
+	Save.set_set("fullscreen", not fs)
+
+
+# 저장에서 설정을 되돌린다. 창 모드는 실제로 바꿔 보고 결과를 다시 읽는다 —
+# 에디터 내장 실행처럼 못 바꾸는 자리가 있어서, 원한 값이 아니라 **된 값**을
+# 저장해야 다음 실행에서 안 어긋난다.
+func _load_settings() -> void:
+	vol = clampf(float(Save.get_set("vol", 1.0)), 0.0, 1.0)
+	_apply_vol()
+	if bool(Save.get_set("fullscreen", false)):
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+		var got := DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
+		if not got:
+			Save.set_set("fullscreen", false)
 
 
 func _draw_title() -> void:
