@@ -1531,10 +1531,13 @@ func _land() -> void:
 			pierce_gain = int((l + r) * 0.5)
 
 	# 영역 강화 — 소비 아이템이 올린 트랙 레벨. 레벨별 수치 행이 전부
-	# 미정이라 track_bonus 는 지금 0 을 돌려준다 — 자리만 세워 둔 훅이다.
-	# 다트 보정 뒤에 얹는 순서는 임시다(공식 내 위치 미정 · 기획 메모 990008).
-	# 빗나감(보드 아웃)의 점수는 정산 큐가 0 을 직접 넣으므로, 보드 아웃
-	# 강화가 확정되면 그쪽 줄부터 고쳐야 한다.
+	# 영역 강화 (= 발라트로의 행성 카드). 소비 아이템이 트랙 레벨을 올리고
+	# 그 레벨의 1..lv 행을 합친 것이 여기 얹힌다. 다트 보정 **뒤**에 오는
+	# 순서는 의도한 것이다 — 다트의 배수 하한(maxi(1, ...))을 먼저 통과시킨
+	# 뒤에 트랙 배수를 더해야, 무거운 다트가 트랙 투자를 통째로 먹지 않는다.
+	#
+	# info.mult > 0 가드 때문에 빗나감은 배수를 못 받는다. 점수만 받는다 —
+	# 그게 보드 아웃 트랙의 전부이고, 빗나감 깃발이 살아 있는 이유다.
 	var tlv := int(track_lv.get(int(info.get("track", 0)), 0))
 	if tlv > 0:
 		var tb := GameData.track_bonus(int(info.track), tlv)
@@ -1637,12 +1640,19 @@ func _land() -> void:
 		if GameData.check(owned[i].c, ctx):
 			fired.append(i)
 
-	if info.mult == 0 and fired.is_empty():
+	# 빗나감이라도 보드 아웃 트랙을 올렸으면 점수가 난다 — info.base 는
+	# 위에서 track_bonus 를 이미 받았다. 트랙이 0 이면 base 도 0 이라
+	# 조건식이 예전과 완전히 같은 자리로 떨어진다.
+	#
+	# 빗나감 **깃발**은 안 건드린다. info.mult 는 여전히 0 이고 배수 1 은
+	# 큐가 넣는다 — 실패 조건 스티커(빗나감·연속 빗나감)가 그대로 산다.
+	# 점수가 나는 빗나감과 실패로 세는 빗나감은 다른 축이다.
+	if info.mult == 0 and fired.is_empty() and info.base <= 0:
 		queue.append({"k": "miss"})
 	else:
 		if info.mult == 0:
 			queue.append({"k": "miss"})
-			queue.append({"k": "chip", "v": 0})
+			queue.append({"k": "chip", "v": info.base})
 			queue.append({"k": "mult", "v": 1})
 		else:
 			queue.append({"k": "chip", "v": info.base})
