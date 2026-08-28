@@ -261,17 +261,6 @@ func _gold_per_round(it: Dictionary, clean_p: float, ghit_pr: float) -> float:
 	return 0.0
 
 
-# items.csv 에서 밸런스에 영향을 주는 열만 이어 붙여 해시한다. 파일 수정
-# 시각을 쓰면 git 체크아웃마다 "낡았다" 가 뜨고, 늑대 소년 경고는 없는
-# 경고보다 나쁘다. 이름이나 _note 만 고친 커밋은 통계를 안 낡게 만든다.
+# 해시는 data.gd 가 쥔다 — 검증기가 같은 함수로 대조해야 낡음이 잡힌다.
 func _balance_hash() -> String:
-	var parts := PackedStringArray()
-	for r in GameData.rows("items"):
-		parts.append("%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s" % [
-			r.get("id", ""), r.get("cond", ""), r.get("kind", ""),
-			r.get("value", ""), r.get("cost", ""), r.get("gold", ""),
-			r.get("gv", ""), r.get("enabled", ""),
-			r.get("per", ""), r.get("k2", ""), r.get("v2", ""),
-			r.get("grow", ""), r.get("gstep", ""), r.get("boom", ""),
-			r.get("dadd", ""), r.get("side", ""), r.get("secs", "")])
-	return "|".join(parts).md5_text().substr(0, 12)
+	return GameData.balance_hash()

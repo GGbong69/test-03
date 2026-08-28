@@ -960,10 +960,51 @@ static func _validate() -> void:
 	_v_rounds()
 	_v_cross()
 	_v_spec()
+	_v_stats()
 
 
 # 스펙 표 다섯 장의 무결성. 상태 열이 문이다 — 확정만 런타임이고,
 # 나머지는 자리다. 여기서는 참조가 실재하는지와 필수 칸만 본다.
+# item_stats 가 표 머리에 밸런스 열의 해시를 적어 둔다. 여태 쓰기만 하고
+# 아무도 안 읽어서, 값을 고치고 다시 안 재면 조용히 옛 수를 보고 있었다 —
+# 실제로 학교/집 병합에서 옛 사본이 올라왔고 아무 소리도 안 났다.
+# 여기서 대조한다. 경고다: 표가 낡았다고 게임이 안 도는 것은 아니다.
+static func _v_stats() -> void:
+	var f := FileAccess.open(DIR + "_stats.csv", FileAccess.READ)
+	if f == null:
+		_warns.append("_stats.csv — 표가 없다. item_stats 를 한 번 돌려라")
+		return
+	f.get_line()                              # 머리글
+	var first := f.get_line()
+	f.close()
+	var cols := first.split(",")
+	if cols.size() < 17:
+		_warns.append("_stats.csv — 열이 모자라다. 서식이 바뀌었으면 여기도 고쳐라")
+		return
+	var got: String = cols[16].strip_edges()
+	var want := balance_hash()
+	if got != want:
+		_warns.append("_stats.csv — 낡았다 (표 %s · 지금 %s). item_stats 를 다시 돌려라"
+				% [got, want])
+
+
+# items.csv 에서 밸런스에 영향을 주는 열만 이어 붙여 해시한다. 이름이나
+# _note 만 고친 커밋은 통계를 안 낡게 만든다. item_stats 가 이 함수를 써서
+# 표에 적고, _v_stats 가 같은 함수로 대조한다 — 두 곳이 각자 셈하면
+# 갈라지고, 갈라지면 늑대 소년이 된다.
+static func balance_hash() -> String:
+	var parts := PackedStringArray()
+	for r in rows("items"):
+		parts.append("%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s" % [
+			r.get("id", ""), r.get("cond", ""), r.get("kind", ""),
+			r.get("value", ""), r.get("cost", ""), r.get("gold", ""),
+			r.get("gv", ""), r.get("enabled", ""),
+			r.get("per", ""), r.get("k2", ""), r.get("v2", ""),
+			r.get("grow", ""), r.get("gstep", ""), r.get("boom", ""),
+			r.get("dadd", ""), r.get("side", ""), r.get("secs", "")])
+	return "|".join(parts).md5_text().substr(0, 12)
+
+
 static func _v_spec() -> void:
 	var keys := {}
 	for r in _raw.get("areas", []):

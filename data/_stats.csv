@@ -1,89 +1,88 @@
-id,name,rarity,cond,kind,value,cost,fire_pct,gain_per_dart,gain_per_round,gain_per_gold,gold_per_round,board,aim_model,samples,seed,_src_hash
-big,대물,common,big,chip,16,4,18.34,4.23,25.41,1.059,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-dbl,가장자리,common,double,mult,3,4,11.79,3.72,22.29,0.929,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-evn,짝수 애호,common,even,chip,14,4,30.47,6.15,36.91,1.538,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-lft,좌익수,common,left,mult,2,4,31.07,7.20,43.21,1.800,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-mtc,굳은살,common,small,mult,2,4,15.31,0.92,5.50,0.229,4.00,base,uniform_sq,360000,20260821,5236016b73ec
-odd,홀수 애호,common,odd,chip,14,4,30.63,6.18,37.10,1.546,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-rgt,우익수,common,right,mult,2,4,31.21,6.32,37.92,1.580,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-sml,소물,common,small,mult,5,4,15.31,2.29,13.75,0.573,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-trp,삼중고,common,triple,mult,4,4,7.61,3.19,19.16,0.798,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-bjn,새 자리,uncommon,diff,chip,12,7,60.73,10.45,62.67,1.492,0.17,base,uniform_sq,360000,20260821,5236016b73ec
-bnd,띠쟁이,uncommon,band,chip,20,7,19.40,9.28,55.69,1.326,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-bul,명중왕,uncommon,bull,mult,8,7,1.18,2.79,16.77,0.399,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-fst,첫 발,uncommon,first,chip,45,7,10.35,6.66,39.94,0.951,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-lst,막판,uncommon,last,xmult,2,7,10.42,1.61,9.66,0.230,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-pdn,선취점,uncommon,first,chip,26,7,10.35,3.85,23.07,0.549,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-sam,외골수,uncommon,same,mult,4,7,1.55,0.66,3.97,0.094,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-smt,손맛,uncommon,warm,chip,30,7,10.60,4.57,27.41,0.653,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-dif,변덕쟁이,rare,diff,chip,22,7,60.73,19.15,114.90,2.736,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-mis,빈손,rare,miss,chip,30,7,37.72,11.31,67.89,1.616,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-alc,기본기,rare,always,chip,25,11,62.28,22.32,133.94,2.029,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-kkt,칼끝,rare,double,xmult,2,11,11.79,2.48,14.86,0.225,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-kns,속사,rare,triple,mult,3,11,7.61,2.39,14.37,0.218,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-mlj,후원자,rare,always,chip,16,11,62.28,14.29,85.72,1.299,4.00,base,uniform_sq,360000,20260821,5236016b73ec
-str,정밀,rare,streak,mult_streak,3,11,1.55,0.51,3.05,0.046,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-alm,증폭기,rare,always,xmult,2,14,62.28,9.60,57.57,0.685,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-mid,중물,rare,mid,chip,40,14,27.45,15.84,95.05,1.132,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-msm,빗나감 배수,common,miss,mult,2,4,37.72,0.00,0.00,0.000,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-msx,연속 빗나감,uncommon,missp,xmult,2,7,31.47,3.03,18.19,0.433,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j002,랙 집합체,common,always,mult,3,4,62.28,20.28,121.69,5.071,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j003,잔여 깃발,common,always,chip,30,4,62.28,66.79,400.77,16.699,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j005,모험심,common,always,,0,4,62.28,0.00,0.00,0.000,1.24,base,uniform_sq,360000,20260821,5236016b73ec
-j006,과충전 증폭기,common,always,xmult,3,4,62.28,19.19,115.15,4.798,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j008,이중 짝맞춤,common,pair2,chip,80,4,0.06,0.06,0.36,0.015,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j009,영역 집중,common,zone3,chip,80,4,6.68,7.67,46.01,1.917,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j010,분산 궤적,common,spread,mult,12,4,13.29,17.39,104.32,4.347,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j012,결벽,common,always,,0,4,62.28,0.00,0.00,0.000,0.12,base,uniform_sq,360000,20260821,5236016b73ec
-j013,분산 관통,common,spread,chip,100,4,13.29,19.10,114.61,4.776,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j014,한 영역 고집,common,zone3,mult,10,4,6.68,7.27,43.61,1.817,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j017,짝수 보정기,common,even,mult,4,4,30.47,13.39,80.36,3.348,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j021,정산 모듈,common,always,,0,4,62.28,0.00,0.00,0.000,4.00,base,uniform_sq,360000,20260821,5236016b73ec
-j024,명중 적립기,common,always,mult,0,4,62.28,47.32,283.94,11.831,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j025,불안정 증폭기,common,always,mult,15,4,62.28,101.41,608.47,25.353,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j026,소수 정예,common,few,mult,20,4,0.00,0.00,0.00,0.000,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j029,녹는 점수원,common,always,chip,100,4,62.28,19.54,117.23,4.884,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j030,기본 증폭기,common,always,mult,4,8,62.28,27.04,162.26,3.380,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j031,같은 숫자 한 쌍,common,pair,mult,8,4,3.61,3.12,18.72,0.780,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j032,예비 다트 홀더,common,always,,0,4,62.28,0.00,0.00,0.000,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j034,이중 짝 증폭,common,pair2,mult,10,4,0.06,0.06,0.35,0.015,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j036,오차 인쇄,common,always,mult_rand,23,4,62.28,77.61,465.68,19.403,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j037,마지막 고도,common,last,mult,15,4,10.42,16.98,101.85,4.244,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j038,홀수 보정기,common,odd,chip,31,5,30.63,13.69,82.16,2.739,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j039,첫 고난도 촬영,common,risk1,xmult,2,4,12.48,3.16,18.99,0.791,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j040,소모성 증폭기,common,always,mult,20,4,62.28,91.30,547.81,22.825,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j041,최저점 반격,common,always,mult,2,4,62.28,75.93,455.57,18.982,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j046,분산 주자,common,spread,chip,0,4,13.29,12.00,71.99,2.999,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j047,고난도 표적,common,risk,chip,30,8,20.58,14.28,85.67,3.570,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j048,불 연구원,common,bull,chip,20,4,1.18,1.63,9.80,0.408,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j049,무거운 대기열,common,always,mult,13,4,62.28,0.00,0.00,0.000,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j050,같은 숫자 보너스,common,pair,chip,50,4,3.61,2.59,15.53,0.647,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j051,고난도 미소,common,risk,mult,5,4,20.58,11.93,71.58,2.982,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j054,착탄 이력계,common,always,mult,1,4,62.28,11.85,71.13,2.964,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j056,진열 가치,common,always,mult,1,4,62.28,0.00,0.00,0.000,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j058,4·10 무전기,common,sec:4;10,chip,10,4,6.05,2.56,15.37,0.640,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j059,세 발 집중,common,trip,chip,100,4,0.08,0.12,0.71,0.030,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j061,세 발 증폭,common,trip,mult,12,4,0.08,0.10,0.60,0.025,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j062,마지막 곡예,uncommon,last,xmult,3,8,10.42,3.22,19.32,0.403,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j067,자금 증폭끈,uncommon,always,mult,2,7,62.28,0.00,0.00,0.000,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j068,자금 과녁,uncommon,always,chip,2,7,62.28,0.00,0.00,0.000,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j070,반복 궤도,uncommon,rezone,xmult,3,7,30.04,7.49,44.93,1.070,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j079,압축 투척,uncommon,always,mult,4,7,62.28,0.00,0.00,0.000,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j080,피보나치 과녁,uncommon,sec:1;2;3;5;8,mult,8,7,15.37,4.68,28.06,0.668,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j082,네 영역 화분,uncommon,zones4,xmult,3,7,0.06,0.02,0.10,0.002,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j089,빈 랙 형판,uncommon,always,xmult,1,7,62.28,28.79,172.72,4.112,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j090,여섯 번째 약속,uncommon,sixth,xmult,4,7,10.42,4.83,28.98,0.690,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j099,비상 골격,uncommon,always,save,25,7,62.28,0.00,0.00,0.000,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j108,이종 영역 관측,uncommon,zones2,xmult,2,7,18.32,2.83,17.00,0.405,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j115,영역 승급기,uncommon,always,,0,7,62.28,0.00,0.00,0.000,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j116,쌍쌍 바지,uncommon,pair2,mult,0,7,0.06,0.01,0.08,0.002,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j118,중량 다트 계수기,uncommon,always,chip,25,7,62.28,0.00,0.00,0.000,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j138,곡예 다트맨,rare,always,chip,250,11,62.28,223.23,1339.40,20.294,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j139,두 발의 결속,rare,pair,xmult,2,11,3.61,0.55,3.33,0.050,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j140,네 발의 가족,rare,quad,xmult,4,11,0.00,0.00,0.00,0.000,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j141,분산의 질서,rare,spread,xmult,3,11,13.29,4.11,24.67,0.374,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j142,영역 부족,rare,zone3,xmult,2,11,6.68,1.03,6.17,0.094,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j143,세 발의 결속,rare,trip,xmult,3,11,0.08,0.02,0.14,0.002,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j145,작은 2번 과녁,rare,sec:2,chip,0,11,3.07,0.61,3.64,0.055,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-j149,12·13 왕가,rare,sec:12;13,xmult,2,11,6.13,1.11,6.64,0.101,0.00,base,uniform_sq,360000,20260821,5236016b73ec
-
+﻿id,name,rarity,cond,kind,value,cost,fire_pct,gain_per_dart,gain_per_round,gain_per_gold,gold_per_round,board,aim_model,samples,seed,_src_hash
+big,대물,common,big,chip,16,4,18.34,4.23,25.41,1.059,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+dbl,가장자리,common,double,mult,3,4,11.79,3.72,22.29,0.929,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+evn,짝수 애호,common,even,chip,14,4,30.47,6.15,36.91,1.538,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+lft,좌익수,common,left,mult,2,4,31.07,7.20,43.21,1.800,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+mtc,굳은살,common,small,mult,2,4,15.31,0.92,5.50,0.229,4.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+odd,홀수 애호,common,odd,chip,14,4,30.63,6.18,37.10,1.546,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+rgt,우익수,common,right,mult,2,4,31.21,6.32,37.92,1.580,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+sml,소물,common,small,mult,5,4,15.31,2.29,13.75,0.573,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+trp,삼중고,common,triple,mult,4,4,7.61,3.19,19.16,0.798,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+bjn,새 자리,uncommon,diff,chip,12,7,60.73,10.45,62.67,1.492,0.17,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+bnd,띠쟁이,uncommon,band,chip,20,7,19.40,9.28,55.69,1.326,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+bul,명중왕,uncommon,bull,mult,8,7,1.18,2.79,16.77,0.399,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+fst,첫 발,uncommon,first,chip,45,7,10.35,6.66,39.94,0.951,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+lst,막판,uncommon,last,xmult,2,7,10.42,1.61,9.66,0.230,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+pdn,선취점,uncommon,first,chip,26,7,10.35,3.85,23.07,0.549,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+sam,외골수,uncommon,same,mult,4,7,1.55,0.66,3.97,0.094,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+smt,손맛,uncommon,warm,chip,30,7,10.60,4.57,27.41,0.653,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+dif,변덕쟁이,rare,diff,chip,22,7,60.73,19.15,114.90,2.736,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+mis,빈손,rare,miss,chip,30,7,37.72,11.31,67.89,1.616,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+alc,기본기,rare,always,chip,25,11,62.28,22.32,133.94,2.029,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+kkt,칼끝,rare,double,xmult,2,11,11.79,2.48,14.86,0.225,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+kns,속사,rare,triple,mult,3,11,7.61,2.39,14.37,0.218,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+mlj,후원자,rare,always,chip,16,11,62.28,14.29,85.72,1.299,4.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+str,정밀,rare,streak,mult_streak,3,11,1.55,0.51,3.05,0.046,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+alm,증폭기,rare,always,xmult,2,14,62.28,9.60,57.57,0.685,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+mid,중물,rare,mid,chip,40,14,27.45,15.84,95.05,1.132,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+msm,빗나감 배수,common,miss,mult,2,4,37.72,0.00,0.00,0.000,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+msx,연속 빗나감,uncommon,missp,xmult,2,7,31.47,3.03,18.19,0.433,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j002,랙 집합체,common,always,mult,3,4,62.28,20.28,121.69,5.071,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j003,잔여 깃발,common,always,chip,30,4,62.28,66.79,400.77,16.699,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j005,모험심,common,always,,0,4,62.28,0.00,0.00,0.000,1.24,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j006,과충전 증폭기,common,always,xmult,3,4,62.28,19.19,115.15,4.798,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j008,이중 짝맞춤,common,pair2,chip,80,4,0.06,0.06,0.36,0.015,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j009,영역 집중,common,zone3,chip,80,4,6.68,7.67,46.01,1.917,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j010,분산 궤적,common,spread,mult,12,4,13.29,17.39,104.32,4.347,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j012,결벽,common,always,,0,4,62.28,0.00,0.00,0.000,0.12,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j013,분산 관통,common,spread,chip,100,4,13.29,19.10,114.61,4.776,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j014,한 영역 고집,common,zone3,mult,10,4,6.68,7.27,43.61,1.817,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j017,짝수 보정기,common,even,mult,4,4,30.47,13.39,80.36,3.348,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j021,정산 모듈,common,always,,0,4,62.28,0.00,0.00,0.000,4.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j024,명중 적립기,common,always,mult,0,4,62.28,128.82,772.89,32.204,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j025,불안정 증폭기,common,always,mult,15,4,62.28,101.41,608.47,25.353,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j026,소수 정예,common,few,mult,20,4,0.00,0.00,0.00,0.000,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j029,녹는 점수원,common,always,chip,100,4,62.28,6.51,39.09,1.629,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j030,기본 증폭기,common,always,mult,4,8,62.28,27.04,162.26,3.380,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j031,같은 숫자 한 쌍,common,pair,mult,8,4,3.61,3.12,18.72,0.780,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j032,예비 다트 홀더,common,always,,0,4,62.28,0.00,0.00,0.000,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j034,이중 짝 증폭,common,pair2,mult,10,4,0.06,0.06,0.35,0.015,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j036,오차 인쇄,common,always,mult_rand,23,4,62.28,77.61,465.68,19.403,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j037,마지막 고도,common,last,mult,15,4,10.42,16.98,101.85,4.244,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j038,홀수 보정기,common,odd,chip,31,5,30.63,13.69,82.16,2.739,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j039,첫 고난도 촬영,common,risk1,xmult,2,4,12.48,3.16,18.99,0.791,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j040,소모성 증폭기,common,always,mult,20,4,62.28,83.37,500.20,20.842,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j041,최저점 반격,common,always,mult,2,4,62.28,75.93,455.57,18.982,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j046,분산 주자,common,spread,chip,0,4,13.29,30.23,181.39,7.558,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j047,고난도 표적,common,risk,chip,30,8,20.58,14.28,85.67,1.785,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j048,불 연구원,common,bull,chip,20,4,1.18,1.63,9.80,0.408,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j049,무거운 대기열,common,always,mult,13,4,62.28,0.00,0.00,0.000,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j050,같은 숫자 보너스,common,pair,chip,50,4,3.61,2.59,15.53,0.647,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j051,고난도 미소,common,risk,mult,5,5,20.58,11.93,71.58,2.386,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j054,착탄 이력계,common,always,mult,1,4,62.28,11.85,71.13,2.964,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j056,진열 가치,common,always,mult,1,4,62.28,0.00,0.00,0.000,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j058,4·10 무전기,common,sec:4;10,chip,10,4,6.05,2.56,15.37,0.640,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j059,세 발 집중,common,trip,chip,100,4,0.08,0.12,0.71,0.030,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j061,세 발 증폭,common,trip,mult,12,4,0.08,0.10,0.60,0.025,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j062,마지막 곡예,uncommon,last,xmult,3,8,10.42,3.22,19.32,0.403,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j067,자금 증폭끈,uncommon,always,mult,2,7,62.28,0.00,0.00,0.000,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j068,자금 과녁,uncommon,always,chip,2,7,62.28,0.00,0.00,0.000,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j070,반복 궤도,uncommon,rezone,xmult,3,7,30.04,7.49,44.93,1.070,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j079,압축 투척,uncommon,always,mult,4,7,62.28,0.00,0.00,0.000,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j080,피보나치 과녁,uncommon,sec:1;2;3;5;8,mult,8,7,15.37,4.68,28.06,0.668,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j082,네 영역 화분,uncommon,zones4,xmult,3,7,0.06,0.02,0.10,0.002,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j089,빈 랙 형판,uncommon,always,xmult,1,7,62.28,28.79,172.72,4.112,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j090,여섯 번째 약속,uncommon,sixth,xmult,4,7,10.42,4.83,28.98,0.690,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j099,비상 골격,uncommon,always,save,25,7,62.28,0.00,0.00,0.000,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j108,이종 영역 관측,uncommon,zones2,xmult,2,7,18.32,2.83,17.00,0.405,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j115,영역 승급기,uncommon,always,,0,7,62.28,0.00,0.00,0.000,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j116,쌍쌍 바지,uncommon,pair2,mult,0,7,0.06,0.01,0.08,0.002,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j118,중량 다트 계수기,uncommon,always,chip,25,7,62.28,0.00,0.00,0.000,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j138,곡예 다트맨,rare,always,chip,250,11,62.28,223.23,1339.40,20.294,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j139,두 발의 결속,rare,pair,xmult,2,11,3.61,0.55,3.33,0.050,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j140,네 발의 가족,rare,quad,xmult,4,11,0.00,0.00,0.00,0.000,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j141,분산의 질서,rare,spread,xmult,3,11,13.29,4.11,24.67,0.374,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j142,영역 부족,rare,zone3,xmult,2,11,6.68,1.03,6.17,0.094,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j143,세 발의 결속,rare,trip,xmult,3,11,0.08,0.02,0.14,0.002,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j145,작은 2번 과녁,rare,sec:2,chip,0,11,3.07,1.12,6.74,0.102,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
+j149,12·13 왕가,rare,sec:12;13,xmult,2,11,6.13,1.11,6.64,0.101,0.00,base,uniform_sq,360000,20260821,1bbcd2deb7f0
