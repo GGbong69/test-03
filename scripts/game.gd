@@ -1023,6 +1023,7 @@ func _open_stage() -> void:
 	# 플레이어가 실제로 안다.
 	var base := GameData.target_of(round_no)
 	stage_pick.clear()
+	stage_stand.clear()
 	stage_t = 0.0
 	if not GameData.is_boss(round_no):
 		# 작은 판·큰 판은 제약이 없다. 화면을 띄우지 않고 바로 던지러 간다.
@@ -1042,6 +1043,7 @@ func _open_stage() -> void:
 		if String(md.k) == "target_mul":
 			tgt = int(ceil(float(base) * float(md.v)))
 		stage_pick.append({"d": md, "target": tgt})
+		stage_stand.append(0.0)
 	state = S.STAGE
 	beep_seq([392.0, 494.0], 0.09, 0.14, 0.18)
 
@@ -2034,12 +2036,17 @@ const CARD := {
 }
 
 
+# 카드가 **누워 있는** 자리다. 히트 칸과 툴팁 앵커가 이걸 읽으므로
+# 반드시 쉬는 모습이어야 한다 — 선 모습을 주면 아직 안 선 카드의
+# 허공을 눌러도 잡힌다. 서면서 커지는 쪽은 위로만 자라므로, 누운 칸에
+# 커서가 있는 한 계속 서 있다(떨림이 없다).
 func _stage_rect(i: int) -> Rect2:
 	var n: float = maxf(float(stage_pick.size()), 1.0)
 	var span: float = VIEW.x - CARD.x0 * 2.0
 	var w: float = (span - CARD.gap * (n - 1.0)) / n
-	return Rect2(Vector2(CARD.x0 + float(i) * (w + CARD.gap), CARD.y),
-			Vector2(w, CARD.h))
+	var hh: float = CARD.h * TBL.flat
+	return Rect2(Vector2(CARD.x0 + float(i) * (w + CARD.gap),
+			CARD.y + CARD.h - hh), Vector2(w, hh))
 
 
 #  딜러가 한 장씩 밀어 내려 준다. 카운터 뒤에서 나와 자리에 서고 한 번 튄다.
@@ -3092,7 +3099,8 @@ func _elide(t: String, w: float, sz: int) -> String:
 
 var sell_sel := -1
 var sell_t := 0.0               # 선택 링 맥동에만 쓴다
-var stage_slots := 0            # 스테이지 화면에 들어설 때의 스티커 개수
+var stage_slots := 0
+var stage_stand := []           # 카드마다 0(누움) ~ 1(섬)            # 스테이지 화면에 들어설 때의 스티커 개수
 var stage_t := 0.0              # 카드가 깔리는 경과. _open_stage 에서 0 으로 선다
 
 
@@ -4117,6 +4125,11 @@ func _drop_update(d: float) -> void:
 	if state == S.STAGE:
 		stage_t += d
 		npc_clock += d
+		# 커서 아래 카드만 선다. tip_mark 를 읽으므로 툴팁과 같은 판정이고,
+		# 그래서 "글자가 뜨는 카드" 와 "선 카드" 가 절대 안 갈린다.
+		for i in mini(stage_stand.size(), stage_pick.size()):
+			var on: bool = tip_a > 0.004 and tip_mark == _stage_rect(i)
+			stage_stand[i] = move_toward(stage_stand[i], 1.0 if on else 0.0, d * 7.0)
 	if state != S.SHOP:
 		return
 	var dd: float = minf(d, DROP.max_d)
@@ -6195,36 +6208,45 @@ func _stage_card(i: int) -> void:
 	var r := _stage_rect(i)
 	var sz: Vector2 = r.size
 	var p := _stage_pose(i)
-	var hot: bool = tip_a > 0.004 and tip_mark == r
-	# 매대와 같은 숫자를 빌린다: DROP.lift_hov * tall = 3.70.
-	# _stage_rect(히트·툴팁 앵커)는 들림을 안 따라간다 — 따라가면 커서 끝에
-	# 걸린 것이 60Hz 로 떤다(_obj_box 의 불변식). 그리는 자리만 뜬다.
-	var lz: float = (DROP.lift_hov * TBL.tall) if hot else 0.0
-	p.y -= lz
+	var up: float = stage_stand[i] if i < stage_stand.size() else 0.0
 
-	# 그림자는 매물과 같은 빛 벡터다. 들린 만큼 멀어진다.
-	draw_rect(Rect2(p + TBL.light * 3.35 + Vector2(0.0, lz), sz),
-			Color(0.0, 0.0, 0.0, 0.30))
+	# 서는 것은 **가까운 모서리를 축으로** 몸을 세우는 일이다. 누운 카드의
+	# 세로는 flat(0.788)배로 눌려 있고, 서면 1 로 돌아온다. 밑변은 안 움직여야
+	# 축이 바닥에 붙어 있는 것으로 읽힌다.
+	var f: float = lerpf(TBL.flat, 1.0, up)
+	var hh: float = CARD.h * f
+	var foot: float = p.y + sz.y
+	var top: float = foot - hh
 
-	var body: Color = C_PANEL.lightened(0.18 if hot else 0.10)
-	# 가까운 모서리의 두께 — 물건이지 인쇄가 아니라고 말하는 2px.
-	draw_rect(Rect2(Vector2(p.x, p.y + sz.y), Vector2(sz.x, CARD.th)),
+	# 그림자는 매물과 같은 빛 벡터다. 서면 카드가 멀어지므로 그림자도 진다.
+	draw_rect(Rect2(Vector2(p.x, top) + TBL.light * (2.0 + 5.0 * up),
+			Vector2(sz.x, hh)), Color(0.0, 0.0, 0.0, 0.22 + 0.14 * up))
+
+	var body: Color = C_PANEL.lightened(0.10 + 0.08 * up)
+	# 가까운 모서리의 두께 — 물건이지 인쇄가 아니라고 말한다. 누웠을 때는
+	# 카드 옆면이 거의 안 보이고, 서면 두꺼워진다.
+	draw_rect(Rect2(Vector2(p.x, foot), Vector2(sz.x, CARD.th * (0.5 + up))),
 			body.darkened(0.45))
-	draw_rect(Rect2(p, sz), body)
-	draw_rect(Rect2(p, Vector2(sz.x, 2.0)), C_MULT.lightened(0.20 if hot else 0.0))
-	draw_rect(Rect2(p + Vector2(0.0, sz.y - 1.0), Vector2(sz.x, 1.0)),
+	draw_rect(Rect2(Vector2(p.x, top), Vector2(sz.x, hh)), body)
+	draw_rect(Rect2(Vector2(p.x, top), Vector2(sz.x, 2.0)),
+			C_MULT.lightened(0.20 * up))
+	draw_rect(Rect2(Vector2(p.x, foot - 1.0), Vector2(sz.x, 1.0)),
 			Color(C_BG, 0.55))
 
 	# 얼굴은 그림이 먼저다. 훑는 채널은 글자가 아니라 실루엣이다.
 	# 아이콘이 축("링이 나빠진다")을 말하고 설명이 양("0.5배")을 말한다.
+	# 글자 자리는 카드가 눌린 만큼 같이 눌린다 — 글자 크기는 못 눌러도
+	# **자리**가 눌리면 얼굴이 카드를 따라간다.
 	# "목표" 는 안 쓴다 — _open_stage 가 base 하나를 n장에 복사하므로 셋이
 	# 같은 값이고, 셋 중 하나를 고르는 면에서 판별 정보량이 0 비트다.
-	# 등급 배수가 있던 시절의 잔재이고 00a4076 에서 죽었어야 했다.
-	_icon_modifier(p + Vector2(sz.x * 0.5, CARD.icon), CARD.icon_r, md.id, 0.0)
-	draw_string(font, p + Vector2(0.0, CARD.name), md.n,
+	_icon_modifier(Vector2(p.x + sz.x * 0.5, top + CARD.icon * f),
+			CARD.icon_r * (0.82 + 0.18 * up), md.id, 0.0)
+	draw_string(font, Vector2(p.x, top + CARD.name * f), md.n,
 			HORIZONTAL_ALIGNMENT_CENTER, sz.x, 13, C_MULT.lightened(0.32))
-	draw_string(font, p + Vector2(6.0, CARD.desc), md.d,
-			HORIZONTAL_ALIGNMENT_CENTER, sz.x - 12.0, 9, C_DIM)
+	# 효과는 일어서야 보인다. 누운 카드에 여덟 글자를 눕혀 두면 못 읽는다.
+	if up > 0.02:
+		draw_string(font, Vector2(p.x + 6.0, top + CARD.desc * f), md.d,
+				HORIZONTAL_ALIGNMENT_CENTER, sz.x - 12.0, 9, Color(C_DIM, up))
 
 
 func _draw_shop() -> void:

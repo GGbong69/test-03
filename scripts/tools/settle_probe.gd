@@ -18,6 +18,8 @@ const GameData = preload("res://scripts/data.gd")
 #       빈 상점과 유령 9라운드가 열렸다
 #    ④ 점수판이 애니메이션 값을 버려 45 를 "44 / 45" 로 적었다
 #    ⑤ 상점이 다음 라운드 행의 폭을 읽어 7라운드 뒤 매대가 통째로 비었다
+#    ⑥ 제약 카드는 테이블에 눕는다. 히트 칸이 **쉬는 모습**(누운 카드)이어야
+#       아직 안 선 카드의 허공을 눌러도 안 잡힌다
 # ══════════════════════════════════════════════════════════
 
 var fails := 0
@@ -136,5 +138,34 @@ func _initialize() -> void:
 	_say(g.stock.size() == 4, "마지막 앞 라운드에도 매대가 넷",
 			"R%d 뒤 매물 %d칸" % [g.round_no, g.stock.size()])
 
-	print("\n%s" % ("실패 %d건" % fails if fails > 0 else "열 검사 전부 통과"))
+	# ⑥ 누운 제약 카드 — 칸이 펠트 안이고 서로 안 겹치며, 눌러서 골라진다
+	g.sealed = -1
+	g._new_run()
+	g.round_no = 3                      # 보스 판이라 제약 셋이 깔린다
+	g._open_stage()
+	var inside := true
+	for a in g.stage_pick.size():
+		var ra: Rect2 = g._stage_rect(a)
+		if ra.position.y < g.TBL.fy or ra.end.y > g.TBL.ny:
+			inside = false
+		for b in g.stage_pick.size():
+			if a != b and ra.intersects(g._stage_rect(b)):
+				inside = false
+	_say(inside and g.stage_pick.size() == 3,
+			"누운 카드가 펠트 안에 안 겹치게", "%d장" % g.stage_pick.size())
+	_say(g.stage_stand.size() == g.stage_pick.size()
+			and float(g.stage_stand[0]) == 0.0,
+			"쉬는 카드는 누워 있다", "선 정도 %.2f" % float(g.stage_stand[0]))
+	# 마지막 장이 설 때까지는 못 고른다 — 그 규칙을 먼저 확인하고,
+	# 딜을 끝낸 뒤 눌러 본다.
+	g._click(g._stage_rect(1).get_center())
+	_say(g.state == g.S.STAGE and g.active_mods.is_empty(),
+			"딜 중에는 안 골라진다", "state %d" % g.state)
+	g.stage_t = g._deal_time() + 0.1
+	g._click(g._stage_rect(1).get_center())
+	_say(g.state != g.S.STAGE and g.active_mods.size() == 1,
+			"누운 칸을 눌러 고른다",
+			"state %d · 제약 %d" % [g.state, g.active_mods.size()])
+
+	print("\n%s" % ("실패 %d건" % fails if fails > 0 else "열넷 검사 전부 통과"))
 	quit(mini(fails, 125))
