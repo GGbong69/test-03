@@ -109,6 +109,27 @@ func _process(_d: float) -> bool:
 			"명중+직전빗 %s · 명중+직전명중 %s · 연속빗나감 %s · 빗나감에 always %s"
 			% [hit_prev_miss, hit_prev_ok, miss_prev_miss, plain_on_miss])
 
-	print("%s" % ("여덟 검사 전부 통과" if fails == 0 else "실패 %d건" % fails))
+	# ⑨ 툴팁이 폭을 안 넘는다 — draw_string 은 폭을 넘으면 자를 뿐이라
+	#    "던질 때마다 −5" 의 −5 가 통째로 사라져 있었다. 폭은 고정이고
+	#    넘치면 아래로 늘어난다.
+	g._tip_clear()
+	g.tip_title = "긴 설명"
+	g._tip_add("점수 +100 에서 시작 · 던질 때마다 −5", 11, g.C_TXT)
+	var wrapped: int = g.tip_lines[0].wr.size()
+	var over := 0
+	for seg in g.tip_lines[0].wr:
+		if g.font.get_string_size(seg, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x \
+				> g.TIP.w - g.TIP.pad * 2.0 + 0.5:
+			over += 1
+	var tall: float = g._tip_size().y
+	g._tip_clear()
+	g.tip_title = "짧은 설명"
+	g._tip_add("점수 +5", 11, g.C_TXT)
+	var short: float = g._tip_size().y
+	_ok("툴팁이 폭을 안 넘고 아래로 는다", wrapped >= 2 and over == 0 and tall > short,
+			"%d줄 · 넘친 줄 %d · 높이 %.0f > %.0f" % [wrapped, over, tall, short])
+	g._tip_clear()
+
+	print("%s" % ("아홉 검사 전부 통과" if fails == 0 else "실패 %d건" % fails))
 	quit(1 if fails > 0 else 0)
 	return false

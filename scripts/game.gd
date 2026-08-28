@@ -5674,8 +5674,49 @@ var tip_a := 0.0                # 페이드
 # ic  왼쪽에 붙일 제약 아이콘 id (없으면 빈 문자열 — 기존 호출은 3인자 그대로)
 # tl  이름 뒤에 9pt 로 이어 붙일 설명 (제약 줄에서만 쓴다)
 func _tip_add(t: String, sz: int, c: Color, ic := "", tl := "", gd := "") -> void:
-	if t != "":
-		tip_lines.append({"s": t, "sz": sz, "c": c, "ic": ic, "tl": tl, "gd": gd})
+	if t == "":
+		return
+	# 여기서 접어 둔다. 크기 재기(_tip_size)와 그리기(_tip_draw)가 같은
+	# 배열을 읽어야 판 높이와 글이 어긋나지 않는다.
+	var w: float = TIP.w - TIP.pad * 2.0
+	if ic != "":
+		w -= 18.0                       # 아이콘 자리
+	if gd != "":
+		w -= gold_w(gd, sz) + 6.0       # 오른쪽에 붙는 값 자리
+	tip_lines.append({"s": t, "sz": sz, "c": c, "ic": ic, "tl": tl, "gd": gd,
+			"wr": _tip_wrap(t, w, sz)})
+
+
+# 한 줄을 판 폭에 맞게 접는다. 낱말 경계를 먼저 보고, 낱말 하나가 폭보다
+# 길면 글자 단위로 자른다 — 한글은 띄어쓰기가 성겨서 그 갈래가 실제로 온다.
+func _tip_wrap(t: String, w: float, sz: int) -> PackedStringArray:
+	var out := PackedStringArray()
+	if w <= 1.0 or font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x <= w:
+		out.append(t)
+		return out
+	var line := ""
+	for word in t.split(" "):
+		var cand: String = word if line == "" else line + " " + word
+		if font.get_string_size(cand, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x <= w:
+			line = cand
+			continue
+		if line != "":
+			out.append(line)
+			line = ""
+		if font.get_string_size(word, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x <= w:
+			line = word
+			continue
+		for ci in word.length():
+			var ch := word[ci]
+			if font.get_string_size(line + ch, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x <= w:
+				line += ch
+			else:
+				if line != "":
+					out.append(line)
+				line = ch
+	if line != "":
+		out.append(line)
+	return out
 
 
 func _tip_clear() -> void:
@@ -5830,7 +5871,8 @@ func _tip_size() -> Vector2:
 	for l in tip_lines:
 		# 아이콘 줄만 14px 아이콘이 들어가게 2px 키운다. 극한 카드(제약 2개)가
 		# 14+15+15+15+13 = 72 로, 뒤집기 한계 86 에 14px 여유가 남는다.
-		h += TIP.line + (2.0 if l.ic != "" else 0.0)
+		# 접힌 줄은 그만큼 아래로 쌓는다 — 폭은 안 늘린다.
+		h += TIP.line * float(maxi(1, l.wr.size())) + (2.0 if l.ic != "" else 0.0)
 	return Vector2(TIP.w, h)
 
 
@@ -5890,17 +5932,21 @@ func _tip_draw(sh: Vector2) -> void:
 		if l.ic != "":
 			_icon_modifier(Vector2(lx + 7.0, y - 4.0), 7.0, l.ic, 0.0, tip_a)
 			lx += 18.0
-		draw_string(font, Vector2(lx, y), l.s, HORIZONTAL_ALIGNMENT_LEFT,
-				p.x + sz.x - TIP.pad - lx, l.sz, Color(l.c, tip_a))
-		if l.tl != "":
-			var tw: float = font.get_string_size(l.s, HORIZONTAL_ALIGNMENT_LEFT,
-					-1, l.sz).x + 5.0
-			draw_string(font, Vector2(lx + tw, y), l.tl, HORIZONTAL_ALIGNMENT_LEFT,
-					p.x + sz.x - TIP.pad - lx - tw, 9, Color(C_DIM, tip_a))
+		# 붙는 값(오른쪽 정렬)과 꼬리표는 첫 줄에 선다 — 접힌 아랫줄로
+		# 내려가면 무엇에 붙은 값인지가 안 읽힌다.
 		if l.gd != "":
 			draw_gold_at(p.x + sz.x - TIP.pad - gold_w(l.gd, l.sz), y,
 					l.gd, l.sz, Color(l.c, tip_a))
-		y += TIP.line + (2.0 if l.ic != "" else 0.0)
+		if l.tl != "":
+			var tw: float = font.get_string_size(l.wr[0], HORIZONTAL_ALIGNMENT_LEFT,
+					-1, l.sz).x + 5.0
+			draw_string(font, Vector2(lx + tw, y), l.tl, HORIZONTAL_ALIGNMENT_LEFT,
+					p.x + sz.x - TIP.pad - lx - tw, 9, Color(C_DIM, tip_a))
+		for wi in l.wr.size():
+			draw_string(font, Vector2(lx, y), l.wr[wi], HORIZONTAL_ALIGNMENT_LEFT,
+					-1, l.sz, Color(l.c, tip_a))
+			y += TIP.line
+		y += 2.0 if l.ic != "" else 0.0
 
 	draw_set_transform(sh)
 
