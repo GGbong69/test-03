@@ -326,6 +326,7 @@ func _start_round() -> void:
 	while remaining.size() < want and not magazine.is_empty():
 		remaining.append(magazine[remaining.size() % magazine.size()])
 	var dadd := int(mod_v("darts_add", 0.0))
+	dadd += int(GameData.stake_v("darts_add", 0.0))
 	# 아이템이 주고받는 다트 (조커 이식 — 곡예 다트맨 -2 등)
 	for o in owned:
 		dadd += int(o.get("dadd", 0))
@@ -346,7 +347,9 @@ func _start_round() -> void:
 		grip_slot.append(gi)
 	grip_n = remaining.size()
 	grip_pick = -1
-	var seal := int(mod_v("seal_items", 0.0))
+	# 제약 둔화와 판돈이 같은 축을 민다 — 검정 판돈부터는 매 판 상시다.
+	var seal := int(mod_v("seal_items", 0.0)) \
+			+ int(GameData.stake_v("seal_items", 0.0))
 	sealed = randi() % owned.size() if seal > 0 and not owned.is_empty() else -1
 	dead_idx = int(mod_v("sector_kill", -1.0))
 	round_miss = false
@@ -456,6 +459,7 @@ func _finish_round() -> void:
 		return
 
 	if round_no >= GameData.rounds_n():
+		_stake_unlock_next()
 		state = S.OVER
 		won = true
 		Save.bump("wins")
@@ -472,7 +476,8 @@ func _settle_clear() -> void:
 	# 정산 내역
 	var dart_gold: int = darts_left * GameData.gold_per_dart()
 	@warning_ignore("integer_division")  # 보유 5당 1, 내림이 규칙이다
-	var interest: int = mini(gold / GameData.interest_per(), GameData.interest_max())
+	var interest: int = mini(gold / GameData.interest_per(),
+			GameData.interest_max() + int(GameData.stake_v("interest_add", 0.0)))
 	# gold 를 더하기 전에 부른다 — "굳은살"과 이자가 같은 잔액을 보게 하려는 것이다.
 	var item_rows := _gold_from_items()
 	var item_gold := 0
@@ -481,6 +486,9 @@ func _settle_clear() -> void:
 	# 클리어 보상은 판마다 다르다 — 작은 3 · 큰 4 · 보스 5.
 	# 발라트로와 같은 값이고, blinds.csv 가 쥔다.
 	var clear := GameData.reward_of(round_no)
+	# 붉은 판돈부터 작은 판이 골드를 안 준다. 곡선이 아니라 여유를 깎는 단이다.
+	if GameData.blind_idx(round_no) == 0:
+		clear = int(GameData.stake_v("reward_small", float(clear)))
 	clear_gold_detail = [
 		{"n": GameData.blind_name(round_no), "v": clear},
 		{"n": "남은 다트 %d개" % darts_left, "v": dart_gold},
@@ -489,6 +497,10 @@ func _settle_clear() -> void:
 	for r in item_rows:
 		clear_gold_detail.append(r)
 	gold += clear + dart_gold + interest + item_gold
+	# 여태 판매분만 세고 있었다 — 클리어·잔탄·이자·아이템 골드가 통째로
+	# 빠져서 통계의 번 돈이 실제의 일부였다. 해금 조건이 이 키를 읽기
+	# 전에 고친다. 이미 쌓인 저장은 못 되살리므로 임계값을 그 위에서 잡는다.
+	Save.bump("gold_earned", clear + dart_gold + interest + item_gold)
 
 	state = S.CLEAR
 	beep_seq([392.0, 494.0, 587.0], 0.09, 0.18, 0.22)
@@ -507,14 +519,41 @@ func _seal_drop(i: int) -> void:
 		sealed -= 1
 
 
+# 완주하면 다음 판돈이 열린다. 표 순서가 곧 계단이라 지금 단의 다음 행이다.
+func _stake_unlock_next() -> void:
+	var rows := GameData.stakes()
+	var cur := String(GameData.stake_row().get("id", ""))
+	for i in rows.size():
+		if String(rows[i].get("id", "")) != cur or i + 1 >= rows.size():
+			continue
+		var nxt := String(rows[i + 1].get("id", ""))
+		if Save.unlock("stake:" + nxt):
+			pop(Vector2(VIEW.x * 0.5, 210.0),
+					"%s 열렸다" % rows[i + 1].get("name", ""), C_GOLD, 13, 1.6)
+		return
+
+
 # 라운드 종료의 마모 — 감쇠(rdec)와 확률 파괴(boom). 조커 이식이 들여왔다.
 # 정산보다 먼저 부른다: 이번 라운드 일한 값은 이미 점수로 냈고, 골드 정산은
 # 남은 자만 받는 것이 "라운드 종료 시 파괴" 의 뜻에 맞다.
 func _round_end_wear() -> void:
+	# 자릿세 — 금 판돈. 골드가 없으면 0 에서 멈춘다(빚을 안 만든다).
+	var rent := int(GameData.stake_v("rent", 0.0))
+	if rent > 0 and gold > 0:
+		var pay: int = mini(rent, gold)
+		gold -= pay
+		pop(_slot_rect(0).get_center() + Vector2(0.0, -22.0),
+				"자릿세 −%d" % pay, C_MULT, 11, 1.0)
+	var per := int(GameData.stake_v("perish", 0.0))
 	var i := owned.size() - 1
 	while i >= 0:
 		var it: Dictionary = owned[i]
 		var dead := false
+		# 삭음 — 주황 판돈. 산 판을 기억해 두었다가 그만큼 지나면 부순다.
+		if per > 0:
+			var age := round_no - int(it.get("bought", round_no))
+			if age >= per:
+				dead = true
 		if String(it.get("grow", "")) == "rdec":
 			it.gs = int(it.get("gs", 0)) + 1
 			if int(it.v) - int(it.gstep) * int(it.gs) <= 0:
@@ -602,6 +641,12 @@ func _draw_weighted(pool: Array) -> Dictionary:
 #  매대는 판 N 을 클리어한 뒤 N+1 을 위해 열린다. 그래서 폭도 해금도
 #  다음 판 번호로 본다. 앤티 표는 앤티당 한 줄이라 옛 rounds.csv 처럼
 #  "마지막 행을 비워 둔다" 는 규약이 없다 — 마지막 판이면 애초에 상점을 안 연다.
+# 판돈이 미는 값 — 주황부터 매대가 비싸다. 올림이라 4골드가 5가 된다.
+func _stake_cost(c: int) -> int:
+	var m := GameData.stake_v("shop_cost_mul", 1.0)
+	return c if m == 1.0 else maxi(1, int(ceil(float(c) * m)))
+
+
 func _roll_stock() -> void:
 	stock.clear()
 	var nxt := round_no + 1
@@ -622,7 +667,7 @@ func _roll_stock() -> void:
 		if it.is_empty():
 			break
 		pool.erase(it)
-		stock.append({"type": "item", "d": it, "cost": it.cost, "sold": false})
+		stock.append({"type": "item", "d": it, "cost": _stake_cost(it.cost), "sold": false})
 		n += 1
 
 	# 판이 더는 못 받는 개조와 이미 산 개조를 여기서 뺀다.
@@ -636,7 +681,7 @@ func _roll_stock() -> void:
 	for m in mods:
 		if mn >= int(w.mods):
 			break
-		stock.append({"type": "mod", "d": m, "cost": m.cost, "sold": false})
+		stock.append({"type": "mod", "d": m, "cost": _stake_cost(m.cost), "sold": false})
 		mn += 1
 	# 개조를 다 샀거나 판이 꽉 찼다. 예전 코드는 여기서 mods[i] 로 죽었다.
 	# 자리는 정확히 4개여야 하므로(_table_draw 의 ax/ay 주석) 스티커로 메운다.
@@ -645,14 +690,14 @@ func _roll_stock() -> void:
 		if fill.is_empty():
 			break
 		pool.erase(fill)
-		stock.append({"type": "item", "d": fill, "cost": fill.cost, "sold": false})
+		stock.append({"type": "item", "d": fill, "cost": _stake_cost(fill.cost), "sold": false})
 		mn += 1
 
 	var darts_pool := GameData.darts().slice(1)
 	darts_pool.shuffle()
 	for i in mini(int(w.darts), darts_pool.size()):
 		var dd: Dictionary = darts_pool[i]
-		stock.append({"type": "dart", "d": dd, "cost": dd.cost, "sold": false})
+		stock.append({"type": "dart", "d": dd, "cost": _stake_cost(dd.cost), "sold": false})
 
 	# 소비 아이템 — 상점 구성이 미정(기획 메모 990006)이라 임시 규칙로 낸다:
 	# shop_cons 가 켜져 있으면 스티커 자리 하나를 소비 아이템으로 바꾼다.
@@ -663,7 +708,7 @@ func _roll_stock() -> void:
 			for k in stock.size():
 				if stock[k].type == "item":
 					var cd: Dictionary = cp[randi() % cp.size()]
-					stock[k] = {"type": "cons", "d": cd, "cost": cd.cost,
+					stock[k] = {"type": "cons", "d": cd, "cost": _stake_cost(cd.cost),
 							"sold": false}
 					break
 
@@ -723,6 +768,7 @@ func _buy(i: int) -> void:
 			# 살아남는다 — 컬렉션과 매대가 같은 사전을 읽기 때문이다.
 			var cp: Dictionary = s.d.duplicate()
 			cp.gs = 0
+			cp.bought = round_no          # 삭음(주황 판돈)이 읽는 나이다
 			owned.append(cp)
 		"mod":
 			_apply_mod(s.d.id)
@@ -1035,7 +1081,10 @@ func gs() -> float:
 
 
 func ch() -> float:
-	return confirm_hold * mod_v("confirm_mul", 1.0)
+	# 제약이 못 건드린다 — 확인 구간은 입력을 안 받는 순수 연출이라 배수를
+	# 걸어도 화면에서 아무 일이 안 일어난다. 안개가 그 축을 쓰다가 죽은
+	# 효과가 됐고, 지금은 조준선을 지우는 fog 축으로 옮겼다.
+	return confirm_hold
 
 
 func tri(t: float) -> float:
@@ -1353,6 +1402,17 @@ func _click(m: Vector2) -> void:
 				state = S.TITLE
 				beep(330.0, 0.06, 0.12)
 		S.TITLE:
+			for i in GameData.stakes().size():
+				if not _stake_rect(i).has_point(m):
+					continue
+				if not _stake_open(i):
+					_deny()
+					return
+				GameData.stake = String(GameData.stakes()[i].get("id", ""))
+				Save.set_set("stake", GameData.stake)
+				Save.flush()
+				beep(523.0, 0.05, 0.12)
+				return
 			for i in 4:
 				if _menu_rect(i).has_point(m):
 					match i:
@@ -6086,6 +6146,8 @@ func _toggle_fullscreen() -> void:
 # 에디터 내장 실행처럼 못 바꾸는 자리가 있어서, 원한 값이 아니라 **된 값**을
 # 저장해야 다음 실행에서 안 어긋난다.
 func _load_settings() -> void:
+	# 판돈도 저장에서 되살린다. 모르는 id 면 stake_row 가 첫 단으로 떨군다.
+	GameData.stake = String(Save.get_set("stake", ""))
 	vol = clampf(float(Save.get_set("vol", 1.0)), 0.0, 1.0)
 	_apply_vol()
 	if bool(Save.get_set("fullscreen", false)):
@@ -6105,6 +6167,41 @@ func _draw_title() -> void:
 	var subs := ["스페이스", "", "", ""]
 	for i in 4:
 		_btn(_menu_rect(i), names[i], subs[i], true)
+	_stake_draw()
+
+
+# 판돈 줄 — 여덟 점을 한 줄로 깐다. 열린 것만 색이 차고, 지금 고른 것에
+# 테가 선다. 이름은 아래 한 줄로 낸다 — 점 여덟에 글자를 붙이면 안 읽힌다.
+func _stake_draw() -> void:
+	var rows := GameData.stakes()
+	if rows.is_empty():
+		return
+	var cur := GameData.stake_row()
+	for i in rows.size():
+		var r := _stake_rect(i)
+		var on: bool = _stake_open(i)
+		var col := Color(String(rows[i].get("color", "cfc9bd")))
+		draw_rect(r, col if on else C_PANEL.lightened(0.06))
+		if not on:
+			draw_rect(r, C_WIRE.darkened(0.3), false, 1.0)
+		if String(rows[i].get("id", "")) == String(cur.get("id", "")):
+			draw_rect(r.grow(2.0), C_TXT, false, 1.0)
+	draw_string(font, Vector2(0, 176), String(cur.get("name", "")),
+			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 10, C_DIM)
+
+
+func _stake_rect(i: int) -> Rect2:
+	var w := 18.0
+	var x0: float = VIEW.x * 0.5 - (8.0 * w + 7.0 * 4.0) * 0.5
+	return Rect2(Vector2(x0 + float(i) * (w + 4.0), 152.0), Vector2(w, 14.0))
+
+
+# 첫 단은 늘 열려 있고, 나머지는 앞 단으로 완주해야 열린다.
+func _stake_open(i: int) -> bool:
+	var rows := GameData.stakes()
+	if i <= 0 or i >= rows.size():
+		return i == 0
+	return Save.unlocked("stake:" + String(rows[i].get("id", "")))
 
 
 # 설정의 행 — 판 중에 열었을 때만 "로비로 나가기" 가 낀다.

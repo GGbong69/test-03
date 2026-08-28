@@ -26,7 +26,11 @@ extends RefCounted
 #  세이브 하나 때문에 실행이 안 되는 것이 제출본에서 가장 나쁜 결말이다.
 # ══════════════════════════════════════════════════════════
 
+# 검사가 진짜 저장을 지우고 해금까지 심고 있었다 — 판돈이 해금을 읽기
+# 시작하면서 드러났다. 경로를 상수가 아니라 변수로 두어 프로브가 제 자리를
+# 쓰게 한다. 게임은 이 값을 절대 안 바꾼다.
 const PATH := "user://hightone.cfg"
+static var path := PATH
 
 const S_SET := "설정"
 const S_UNL := "해금"
@@ -58,9 +62,9 @@ static func boot() -> void:
 		return
 	_loaded = true
 	_cfg = ConfigFile.new()
-	if not FileAccess.file_exists(PATH):
+	if not FileAccess.file_exists(path):
 		return
-	var e := _cfg.load(PATH)
+	var e := _cfg.load(path)
 	if e != OK:
 		_err = "저장 파일을 못 읽었다 (%d) — 기본값으로 시작한다" % e
 		push_warning(_err)
@@ -69,7 +73,7 @@ static func boot() -> void:
 
 static func flush() -> void:
 	boot()
-	var e := _cfg.save(PATH)
+	var e := _cfg.save(path)
 	if e != OK:
 		_err = "저장 실패 (%d)" % e
 		push_warning(_err)

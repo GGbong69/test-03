@@ -54,6 +54,7 @@ const FILES := {
 	"modifiers": "modifiers.csv",
 	"antes": "antes.csv",
 	"blinds": "blinds.csv",
+	"stakes": "stakes.csv",
 	"tuning": "tuning.csv",
 	# ── HIGHTONE 스펙(2026-08-23 통합 컨텍스트)에서 온 표 ──
 	# areas 는 전부 확정이라 게임이 직접 읽는다. 나머지는 상태 열이 문이다 —
@@ -79,7 +80,7 @@ const TUNE_KEYS := [
 
 const RARITIES := ["common", "uncommon", "rare"]
 const MOD_AXES := ["band", "slide", "ring", "bull", "out", "swap", "odd"]
-const MODIFIER_AXES := ["band_mul", "gauge_mul", "confirm_mul", "fog", "darts_add",
+const MODIFIER_AXES := ["band_mul", "gauge_mul", "fog", "darts_add",
 		"sector_kill", "seal_items", "target_mul"]
 
 static var _raw := {}                # 표 이름 → Array[Dictionary] (전부 문자열)
@@ -528,16 +529,41 @@ static func blind_of(n: int) -> Dictionary:
 	return rs[clampi(blind_idx(n), 0, rs.size() - 1)]
 
 
-# 판돈 배수. 4단계에서 켠다 — 지금은 언제나 흰색(배수 1)이다.
+# 지금 판돈의 id. 빈 값이면 흰 판돈이다 — 표의 첫 행이 그 자리를 맡는다.
 static var stake := ""
 
 
+# 표는 셋이 축을 하나씩 쥔다 — antes 가 곡선, blinds 가 앤티 안의 비율,
+# stakes 가 난이도. 판돈은 곡선을 **고르는** 것이지 곱하는 것이 아니다:
+# curve 열이 antes.csv 의 어느 열을 볼지 가리킨다(base 면 곱 없음).
+static func stakes() -> Array:
+	boot()
+	return _raw.get("stakes", [])
+
+
+static func stake_row(id := "") -> Dictionary:
+	var want: String = id if id != "" else stake
+	var rows := stakes()
+	if rows.is_empty():
+		return {}
+	for r in rows:
+		if String(r.get("id", "")) == want:
+			return r
+	return rows[0]                       # 빈 값·모르는 id 는 첫 단으로 떨어진다
+
+
+# 판돈이 미는 값 하나. 표에 없는 열을 물으면 기본값이 돌아온다.
+static func stake_v(key: String, dflt: float) -> float:
+	var r := stake_row()
+	if r.is_empty() or String(r.get(key, "")) == "":
+		return dflt
+	return _f(r, key, "stakes", dflt)
+
+
 static func stake_mul(n: int) -> float:
-	var col := ""
-	match stake:
-		"green": col = "green_mul"
-		"purple": col = "purple_mul"
-		_: return 1.0
+	var col := String(stake_row().get("curve", "base"))
+	if col == "base" or col == "":
+		return 1.0
 	var v := _f(_ante_row(n), col, "antes", 1.0)
 	return v if v > 0.0 else 1.0
 
@@ -961,6 +987,7 @@ static func _validate() -> void:
 	_v_cross()
 	_v_spec()
 	_v_stats()
+	_v_stakes()
 
 
 # 스펙 표 다섯 장의 무결성. 상태 열이 문이다 — 확정만 런타임이고,
@@ -1003,6 +1030,56 @@ static func balance_hash() -> String:
 			r.get("grow", ""), r.get("gstep", ""), r.get("boom", ""),
 			r.get("dadd", ""), r.get("side", ""), r.get("secs", "")])
 	return "|".join(parts).md5_text().substr(0, 12)
+
+
+# 판돈 여덟. 순서가 곧 계단이라 prereq 가 앞 행을 가리켜야 하고, 곡선은
+# antes.csv 에 실재하는 열이어야 한다 — 오타가 나면 조용히 배수 1 이 되어
+# "어려운 판돈인데 안 어려운" 상태가 생긴다.
+static func _v_stakes() -> void:
+	var raw: Array = _raw.get("stakes", [])
+	if raw.is_empty():
+		_errs.append("stakes — 표가 비었다")
+		return
+	var ante_cols := {}
+	var ar: Array = _raw.get("antes", [])
+	if not ar.is_empty():
+		for k in ar[0].keys():
+			ante_cols[String(k)] = true
+	var seen := {}
+	var prev := ""
+	for i in raw.size():
+		var r: Dictionary = raw[i]
+		var who := "stakes:%d %s" % [r.get("_line", 0), r.get("name", "")]
+		var id: String = r.get("id", "")
+		if id == "" or seen.has(id):
+			_errs.append("%s — id 가 비었거나 중복이다" % who)
+		seen[id] = true
+		var cv: String = r.get("curve", "")
+		if cv != "base" and not ante_cols.has(cv):
+			_errs.append("%s — 곡선 열 '%s' 가 antes.csv 에 없다" % [who, cv])
+		var pq: String = r.get("prereq", "")
+		if i == 0:
+			if pq != "":
+				_errs.append("%s — 첫 단은 선행이 없어야 한다" % who)
+		elif pq != prev:
+			_errs.append("%s — 선행이 바로 앞 단(%s)이 아니다: '%s'" % [who, prev, pq])
+		prev = id
+		if _f(r, "shop_cost_mul", "stakes", 1.0) <= 0.0:
+			_errs.append("%s — 매대 가격 배수가 0 이하다" % who)
+		if _i(r, "darts_add", "stakes", 0) <= -int(tune_i("darts_base")):
+			_errs.append("%s — 다트 증감이 탄창을 다 없앤다" % who)
+	# 계단은 한 방향이어야 한다 — 뒤 단이 앞 단보다 쉬우면 고를 이유가 없다.
+	var hard := 0
+	for r2 in raw:
+		var h := (0 if String(r2.get("curve", "")) == "base" else 1) \
+				+ _i(r2, "seal_items", "stakes", 0) \
+				- _i(r2, "darts_add", "stakes", 0) \
+				+ (1 if _f(r2, "shop_cost_mul", "stakes", 1.0) > 1.0 else 0) \
+				+ (1 if _i(r2, "perish", "stakes", 0) > 0 else 0) \
+				+ (1 if _i(r2, "rent", "stakes", 0) > 0 else 0)
+		if h < hard:
+			_warns.append("stakes:%d %s — 앞 단보다 무르다" % [r2.get("_line", 0), r2.get("name", "")])
+		hard = maxi(hard, h)
 
 
 static func _v_spec() -> void:
@@ -1333,7 +1410,7 @@ static func _v_rounds() -> void:
 			_errs.append("%s — 매대 폭 합이 %d 다. 자리는 정확히 4개여야 한다" % [who, w])
 		# 판돈 배수는 1 이상이고 앤티를 따라 안 내려간다 — 내려가면
 		# "더 어려운 판돈인데 목표가 더 낮다" 가 된다.
-		for col in ["green_mul", "purple_mul"]:
+		for col in ["curve_a", "curve_b"]:
 			var m := _f(r, col, "antes", 0.0)
 			if m < 1.0:
 				_errs.append("%s — %s 가 %.2f 다. 1.00 미만이면 판돈이 쉬워진다" % [who, col, m])

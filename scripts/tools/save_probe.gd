@@ -34,6 +34,9 @@ func _say(ok: bool, name: String, detail := "") -> void:
 
 
 func _initialize() -> void:
+	# 진짜 저장은 안 건드린다 — 이 검사는 지우고 깨뜨리는 것이 일이라,
+	# 플레이어 파일을 쓰면 검사 한 번에 해금과 통계가 날아간다.
+	Save.path = "user://_probe.cfg"
 	var pass2 := false
 	var pass3 := false
 	for a in OS.get_cmdline_user_args():
@@ -53,7 +56,7 @@ func _initialize() -> void:
 
 
 func _pass1() -> void:
-	print("1차 — 쓴다  (%s)" % ProjectSettings.globalize_path(Save.PATH))
+	print("1차 — 쓴다  (%s)" % ProjectSettings.globalize_path(Save.path))
 	Save.wipe()
 	_say(Save.stat("darts") == 0 and not Save.unlocked("pack:mag"),
 			"지운 뒤에는 전부 기본값", "darts %d" % Save.stat("darts"))
@@ -111,7 +114,7 @@ func _pass2() -> void:
 	_say(not Save.unlocked("pack:없는것"), "안 연 것은 안 열려 있다")
 
 	# 깨진 파일로 게임이 죽지 않는다 — 쓰레기를 써 놓고 새로 읽힌다.
-	var f := FileAccess.open(Save.PATH, FileAccess.WRITE)
+	var f := FileAccess.open(Save.path, FileAccess.WRITE)
 	if f != null:
 		f.store_string("이건 설정 파일이 아니다 [[[ = = ] ] ]\n= 3 ㅋ")
 		f.close()
