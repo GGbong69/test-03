@@ -163,6 +163,7 @@ func _initialize() -> void:
 			"딜 중에는 안 골라진다", "state %d" % g.state)
 	g.stage_t = g._deal_time() + 0.1
 	g._click(g._stage_rect(1).get_center())
+	# 여기서도 판 갈이가 낀다. 상태·데이터는 그 프레임에 선다.
 	_say(g.state != g.S.STAGE and g.active_mods.size() == 1,
 			"누운 칸을 눌러 고른다",
 			"state %d · 제약 %d" % [g.state, g.active_mods.size()])

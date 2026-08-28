@@ -323,6 +323,10 @@ func _new_run() -> void:
 
 
 func _start_round() -> void:
+	# 테이블을 빼고 판을 세운다. **데이터보다 먼저** 부른다 — 이 아래가
+	# 판의 링 폭(rt_*)을 다시 잡으므로, 연출을 나중에 열면 올라오는 동안은
+	# 지난 판의 모양이었다가 다 선 순간 툭 바뀐다.
+	_swap_begin(true)
 	# 영구 개조값에서 출발해 이번 판 제약을 얹는다
 	rt_dbl_out = dbl_out
 	rt_dbl_in = dbl_in
@@ -1410,6 +1414,11 @@ func _unhandled_input(e: InputEvent) -> void:
 	if e is InputEventKey:
 		var k := e as InputEventKey
 		if k.pressed and not k.echo:
+			if swap_live:
+				# 연출은 아무 키로나 건너뛴다. 잠긴 채로 못 빠져나가는
+				# 자리를 안 만드는 것이 ESC(일시정지)보다 앞선다.
+				_swap_skip()
+				return
 			match k.keycode:
 				KEY_BRACKETLEFT:
 					gauge_speed = maxf(gauge_speed - 0.05, 0.15)
@@ -1475,6 +1484,8 @@ func _unhandled_input(e: InputEvent) -> void:
 
 
 func _click(m: Vector2) -> void:
+	if swap_live:
+		return          # 갈아 끼우는 동안은 아무것도 안 받는다
 	match state:
 		S.PICK:
 			for i in remaining.size():
@@ -1496,6 +1507,7 @@ func _click(m: Vector2) -> void:
 		S.CLEAR:
 			# 좌표를 보지 않는다 — 아무 데나 누르든 스페이스든 상점으로 넘어간다
 			_open_shop()
+			_swap_begin(false)   # 상점이 선 뒤라야 들어오는 테이블에 그릴 것이 있다
 			return
 		S.BLIND:
 			if _blind_go().has_point(m):
@@ -2261,6 +2273,172 @@ func _next_rect() -> Rect2:
 #  그리기
 # ══════════════════════════════════════════════════════════
 
+# ══════════════════════════════════════════════════════════
+#  판 갈이 — 테이블 화면 ↔ 다트판 화면
+# ──────────────────────────────────────────────────────────
+#  테이블이 오른쪽으로 빠지고, 그 **앞에서** 판이 누운 채 올라와 선다.
+#  돌아올 때는 같은 타임라인을 거꾸로 감는다 — 시각을 뒤집는 함수가
+#  하나뿐이라 두 방향이 영영 안 갈린다.
+#
+#  이 연출은 게임 상태를 한 비트도 안 만진다. 상태는 부르는 쪽이 그
+#  프레임에 다 바꾸고 여기는 그림만 붙잡는다. 그래서 프로브가 전부
+#  그대로 살고, 소크(drop_fast)가 연출을 통째로 건너뛰어도 두 쪽이
+#  정확히 같은 게임을 한다.
+#
+#  바깥과 닿는 곳은 여섯이다.
+#    _swap_begin(to_board)  전환을 연다   (_start_round 맨 앞 · _click S.CLEAR)
+#    _swap_update(d)        매 프레임      (_drop_update 맨 앞)
+#    _swap_skip()           즉시 끝낸다    (프로브·도구)
+#    _swap_rise()           판이 선 정도   (_swap_board · _draw_board · _grip_draw)
+#    _swap_gone()           테이블이 빠진 정도 (_swap_screen · _cover_draw)
+#    swap_live              입력 잠금 하나
+# ══════════════════════════════════════════════════════════
+
+const SWAP := {
+	"dur":   0.30,    # 총 길이. 0.20 은 컷으로 읽히고 0.45 는 기다려진다
+	"rise":  0.30,    # 판이 서기까지. **0 부터** 돈다 — 첫 프레임에 누운 판이 보여야 한다
+	"fall":  0.20,    # 판이 다시 눕기까지. 서는 것보다 빨라야 한다 — 드러누운
+	                  # 판이 들어오는 테이블 앞을 오래 막으면 안 된다
+	"hold":  0.04,    # 테이블이 늦게 뜨는 시차. 판이 먼저 얼굴을 내민다
+	"out":   0.26,    # 테이블이 화면 밖으로 빠지는 시간
+	"dx":    700.0,   # 테이블 이동. 640 에 카드 그림자·앞치마 여유 60
+	# 딜러는 가로로만 빼면 안 된다. 실루엣은 랙(x[159,481] y[4,48]) 뒤에
+	# 잘리는 것을 전제로 그린 크롭이라(NPC.top 주석), 89px 만 밀려도 평평한
+	# 절단면과 잘린 팔 뿌리가 드러난다. 그래서 위로도 같이 뺀다 — 랙이
+	# 곧 퇴장문이다. 184 면 절단면이 랙을 벗어나기 전에 화면 위로 넘어간다.
+	"npc":   184.0,
+	"dy":    28.0,    # 누운 판이 아래로 잠기는 깊이
+	"lie":   0.30,    # 누운 판의 y 배율 = sin 17.5°. 이보다 납작하면 고리가
+	                  # 1px 밑으로 뭉개지고 가로 스포크가 통째로 사라진다
+	"pivot": 1.13,    # 축 = 판 아래 모서리. _draw_board 의 숫자 고리 배율 그대로
+	"grip":  108.0,   # 탄창 벽이 왼쪽에서 들어오는 거리. 뽑힌 자루 꼬리까지 뺀다
+}
+
+var swap_t := 0.0        # 전환 경과(초)
+var swap_live := false   # 전환이 도는 중 — 입력을 통째로 삼킨다
+var swap_in := true      # true 테이블→판 · false 판→테이블
+var swap_scr := -1       # 그 동안 그릴 테이블 화면. state 는 이미 반대편이다
+
+
+func _e_out(k: float) -> float:
+	return 1.0 - pow(1.0 - clampf(k, 0.0, 1.0), 3.0)
+
+
+# 판이 선 정도. 0 = 아래에 누워 있다 · 1 = 제자리에 서 있다.
+#
+# 두 방향이 **각자의 시계로** 같은 ease-out 을 탄다. 한쪽 타임라인을
+# 거꾸로 감는 쪽이 짧지만, 뒤집힌 ease-out 은 ease-in 이 되어 돌아오는
+# 길이 굼뜨다 멈칫하고 끝에서 들이받는다 — 찍어 보고 알았다.
+func _swap_rise() -> float:
+	if not swap_live:
+		return 1.0
+	if swap_in:
+		return _e_out(swap_t / float(SWAP.rise))
+	return 1.0 - _e_out(swap_t / float(SWAP.fall))
+
+
+# 테이블이 빠져나간 정도. 0 = 제자리 · 1 = 화면 밖.
+func _swap_gone() -> float:
+	if not swap_live:
+		return 0.0
+	if swap_in:
+		return _e_out((swap_t - float(SWAP.hold)) / float(SWAP.out))
+	return 1.0 - _e_out(swap_t / float(SWAP.dur))
+
+
+# 판 아래 모서리 = 눕히기의 축. 그리기와 검사가 같은 식을 쓴다.
+func _swap_py() -> float:
+	return BC.y + R * float(SWAP.pivot)
+
+
+func _swap_begin(to_board: bool) -> void:
+	# 소크와 도구는 연출을 안 탄다. 이 함수가 게임 상태를 안 만지므로
+	# 건너뛰어도 두 쪽이 정확히 같은 게임을 한다.
+	if drop_fast:
+		return
+	if to_board:
+		if state != S.BLIND and state != S.STAGE:
+			return          # 테이블에서 온 것이 아니면 갈아 끼울 것이 없다
+	elif state != S.SHOP:
+		return
+	swap_t = 0.0
+	swap_live = true
+	swap_in = to_board
+	swap_scr = state
+
+
+func _swap_update(d: float) -> void:
+	if not swap_live:
+		return
+	swap_t += d
+	npc_clock += d          # 딜러는 빠지는 동안에도 숨을 쉰다
+	if swap_t >= float(SWAP.dur):
+		_swap_skip()
+
+
+# 연출을 즉시 끝낸다. 프로브·도구가 감을 손잡이다.
+func _swap_skip() -> void:
+	swap_t = 0.0
+	swap_live = false
+	swap_scr = -1
+
+
+# 판 층의 한 점이 지금 화면 어디로 가는가. 그리기와 검사가 같은 식을 쓴다 —
+# "누운 판이 실제로 화면 안에 있는가" 는 눈이 아니라 이 함수가 답해야 한다.
+func _swap_map(y: float) -> float:
+	var a := _swap_rise()
+	var sy: float = lerpf(float(SWAP.lie), 1.0, a)
+	return _swap_py() * (1.0 - sy) + y * sy + float(SWAP.dy) * (1.0 - a)
+
+
+# 판 층을 눕히고 내린다. x 는 안 누른다 — 바닥에 누운 원반은 세로만 준다.
+# 흔들림은 origin 에 더해 배율 **밖**에 둔다. 안 그러면 판이 누울수록
+# 불스아이의 타격감이 각도에 따라 옅어진다.
+# _swap_map(y) = _swap_map(0) + y*sy 라서 두 함수가 같은 두 수를 쓴다.
+func _swap_board(sh: Vector2) -> void:
+	if not swap_live:
+		return
+	var sy: float = lerpf(float(SWAP.lie), 1.0, _swap_rise())
+	draw_set_transform_matrix(Transform2D(Vector2(1.0, 0.0), Vector2(0.0, sy),
+			Vector2(0.0, _swap_map(0.0)) + sh))
+
+
+# 나가는(들어오는) 테이블 한 벌. shake_off **자체**를 잠깐 밀었다 되돌린다 —
+# 카드 얼굴(_stage_card · _blind_card)이 draw_set_transform(shake_off) 로
+# 복귀하므로, 오프셋을 새 변수에 담으면 그 복귀가 오프셋을 조용히 떨군다.
+func _swap_screen(sh: Vector2) -> void:
+	shake_off = sh + Vector2(float(SWAP.dx) * _swap_gone(), 0.0)
+	draw_set_transform(shake_off)
+	_draw_screen(swap_scr)
+	shake_off = sh
+	draw_set_transform(sh)
+
+
+# 화면 한 벌. state 가 아니라 scr 를 받는다 — 전환 중에는 그려야 할
+# 테이블이 이미 바뀐 state 와 다르기 때문이다.
+func _draw_screen(scr: int) -> void:
+	if scr == S.CLEAR:
+		_draw_clear()
+	elif scr == S.BLIND:
+		_draw_blind()
+	elif scr == S.STAGE:
+		_draw_stage()
+	elif scr == S.SHOP:
+		_draw_shop()
+	elif scr == S.OVER:
+		_draw_over()
+	elif scr == S.TITLE:
+		_draw_title()
+	elif scr == S.SETTINGS:
+		_draw_settings()
+	elif scr == S.COLLECT:
+		_draw_collect()
+	elif scr == S.NEWRUN:
+		_draw_newrun()
+	else:
+		_draw_hint()
+
+
 func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, VIEW), C_BG)
 	# 툴팁이 대상 테두리만 같이 흔들고 판은 고정하려면 이 값을 알아야 한다
@@ -2268,36 +2446,33 @@ func _draw() -> void:
 	shake_off = sh
 	draw_set_transform(sh)
 
+	# 갈아 끼우는 동안에는 층 순서가 뒤집힌다. 평소에는 테이블이 화면을
+	# 통째로 덮는 불투명 한 장이라 판이 그 밑에 있어도 되는데, 전환에서는
+	# **판이 테이블 앞으로** 일어서야 한다 — 밑에 두면 누운 판이 앞치마
+	# (y[268,360])에 가려 한 프레임도 안 보인다. 그 한 줄이 이 연출의 전부다.
+	if swap_live:
+		_swap_screen(sh)
+
+	_swap_board(sh)
 	_draw_board()
 	_draw_fx()
 	_draw_darts()
-	_draw_aim()
-	_draw_card()
-
-	if state == S.CLEAR:
-		_draw_clear()
-	elif state == S.BLIND:
-		_draw_blind()
-	elif state == S.STAGE:
-		_draw_stage()
-	elif state == S.SHOP:
-		_draw_shop()
-	elif state == S.OVER:
-		_draw_over()
-	elif state == S.TITLE:
-		_draw_title()
-	elif state == S.SETTINGS:
-		_draw_settings()
-	elif state == S.COLLECT:
-		_draw_collect()
-	elif state == S.NEWRUN:
-		_draw_newrun()
+	draw_set_transform(sh)          # 눕힘을 반드시 되돌린다
+	if swap_live:
+		# 정산 화면의 스크림(0.94)을 이어받아 푼다. 안 풀면 눌러 넘긴
+		# 첫 프레임이 전환에서 가장 밝은 프레임이 된다 — 이음새가 아니라
+		# 번쩍임이다. 나가는 쪽은 밝은 테이블에서 오므로 안 건다.
+		if not swap_in:
+			draw_rect(Rect2(Vector2.ZERO, VIEW), Color(C_BG, 0.94 * _swap_gone()))
 	else:
-		_draw_hint()
+		_draw_aim()
+		_draw_card()
+		_draw_screen(state)
 
 	# 화면이 바뀌어도 같은 자리에 남는 것만 판이다 — 그래서 스크림 뒤에 그린다.
 	_hud_draw()
-	_tip_draw(sh)
+	if not swap_live:
+		_tip_draw(sh)
 	draw_set_transform(Vector2.ZERO)
 	if screen_flash > 0.0:
 		draw_rect(Rect2(Vector2.ZERO, VIEW), Color(1.0, 1.0, 1.0, screen_flash * 0.34))
@@ -2325,8 +2500,18 @@ func _hud_draw() -> void:
 		_cons_draw()
 		_panel_draw()
 		_cap_draw()
-		if _is_play():
+		# 나가는 전환에서만 같이 들어온다. 돌아오는 쪽은 안 그린다 —
+		# HUD 는 스크림 위라, 벽만 어두운 화면에 홀로 밝게 뜬다.
+		# 스크림이 0.94 로 시작하므로 사라지는 것도 안 보인다.
+		if _is_play() or (swap_live and swap_in):
+			# 왼쪽에서 미끄러져 든다. 테이블이 오른쪽으로 빠지므로 두
+			# 층이 서로를 안 스친다 — 드러난 자리를 벽이 곧바로 메운다.
+			var gx: float = -float(SWAP.grip) * (1.0 - _swap_rise())
+			if gx < -0.01:
+				draw_set_transform(shake_off + Vector2(gx, 0.0))
 			_grip_draw()
+			if gx < -0.01:
+				draw_set_transform(shake_off)
 	# 판매 팝업이 스크림(알파 0.94) 밑에 깔리면 안 보인다 — 판 다음에 그린다.
 	_draw_pops()
 
@@ -2381,11 +2566,15 @@ func _draw_board() -> void:
 			var a0 := hit_idx * sw - sw * 0.5
 			draw_colored_polygon(annulus(hit_r0 * push, hit_r1 * push, a0, a0 + sw), fc)
 
-	for i in 20:
-		var a := i * sw
-		var p := BC + Vector2(sin(a), -cos(a)) * R * 1.13
-		draw_string(font, p + Vector2(-14, 5), str(sectors[i]),
-				HORIZONTAL_ALIGNMENT_CENTER, 28, 12, C_DIM)
+	# 칸 숫자는 누우면 지운다. 비균일 배율이 글자를 세로로만 눌러
+	# 12px 글자가 3.6px 얼룩이 된다 — 글자는 눌러서 눕힐 수 없다.
+	var na: float = clampf((_swap_rise() - 0.45) / 0.35, 0.0, 1.0)
+	if na > 0.01:
+		for i in 20:
+			var a := i * sw
+			var p := BC + Vector2(sin(a), -cos(a)) * R * 1.13
+			draw_string(font, p + Vector2(-14, 5), str(sectors[i]),
+					HORIZONTAL_ALIGNMENT_CENTER, 28, 12, Color(C_DIM, na))
 
 
 func _draw_fx() -> void:
@@ -2417,9 +2606,10 @@ func _draw_fx() -> void:
 		draw_line(BC + dir * dist, BC + dir * (dist + s.len), cs, 1.5)
 
 
+# 벽을 언제 그리는가는 부르는 쪽(_hud_draw)이 정한다. 여기 있던 조기
+# 반환은 상류 게이트에 가려 한 번도 안 닿던 죽은 가드였고, 두 곳에 같은
+# 규칙을 적어 두면 다음에 조건을 바꾸는 사람이 한 곳만 고친다.
 func _grip_draw() -> void:
-	if state == S.CLEAR or state == S.SHOP or state == S.STAGE or state == S.OVER:
-		return
 	var n := remaining.size()
 	var picking := state == S.PICK
 
@@ -3657,10 +3847,25 @@ func _cover_draw() -> void:
 	# _hud_draw 가 이 위에 판을 다시 얹으므로 멀쩡하고, 결과적으로 스티커 랙이
 	# 테이블 쿠션 위에 놓인 딜러 트레이로 읽힌다.
 	draw_rect(Rect2(0.0, 0.0, VIEW.x, TBL.fy), C_WOOD.darkened(0.30))
+	# 딜러만 위로 더 뺀다. 실루엣은 랙 뒤에 잘리는 것을 전제로 그린
+	# 크롭이라(NPC.top), 가로로만 밀면 평평한 절단면이 드러난다. 랙이
+	# 퇴장문이다. 구획 규약(draw_set_transform 금지)의 두 번째 예외이고,
+	# _stage_card 와 같은 규칙으로 **같은 함수 안에서** 되돌린다. 배율이
+	# 아니라 이동뿐이라 규약이 막는 사고(남은 scale 이 HUD 를 누른다)는
+	# 원리상 못 일어난다.
+	var nd: float = float(SWAP.npc) * _swap_gone()
+	if nd > 0.01:
+		draw_set_transform(shake_off - Vector2(0.0, nd))
 	_npc_body()
+	if nd > 0.01:
+		draw_set_transform(shake_off)
 	draw_rect(Rect2(0.0, TBL.fy - 3.0, VIEW.x, 3.0), C_WOOD)
 	draw_rect(Rect2(0.0, TBL.fy - 1.0, VIEW.x, 1.0), C_WOOD.lightened(0.18))
+	if nd > 0.01:
+		draw_set_transform(shake_off - Vector2(0.0, nd))
 	_npc_arms()
+	if nd > 0.01:
+		draw_set_transform(shake_off)
 	# 가까운 쪽 레일 — 리롤·다음 버튼이 그 아래 앞치마에 얹힌다
 	draw_rect(Rect2(0.0, TBL.ny, VIEW.x, 2.0), C_WOOD.lightened(0.24))
 	draw_rect(Rect2(0.0, TBL.ny + 6.0, VIEW.x, VIEW.y - TBL.ny - 6.0),
@@ -4269,6 +4474,7 @@ func _drop_busy() -> bool:
 
 
 func _drop_update(d: float) -> void:
+	_swap_update(d)          # 상태를 안 가린다 — 전환은 두 화면 사이에 있다
 	_hand_update(d)
 	if state == S.BLIND:
 		blind_t += d
@@ -5438,6 +5644,8 @@ func _g2w(y: float) -> float:
 # ══ 입력 ══════════════════════════════════════════════
 # true 를 돌려주면 _click 을 안 부른다(삼킨다).
 func _hand_press(m: Vector2) -> bool:
+	if swap_live:
+		return false
 	if _autoplay:
 		return false                          # 좌표 입력은 오토플레이의 어휘가 아니다
 	# 소비 아이템 슬롯 — 상점과 PICK 에서 산다. 사용 확정은 뗄 때다.
@@ -6165,6 +6373,12 @@ func _tip_pos(sz: Vector2) -> Vector2:
 
 
 func _tip_update(d: float) -> void:
+	if swap_live:
+		# 커서 아래 물건이 통째로 미끄러지는 중이다. 판정은 안 움직이므로
+		# 툴팁만 그 자리에 붙어 남는다 — 뜯어 둔다.
+		tip_a = 0.0
+		_tip_clear()
+		return
 	var hit := _tip_hit(get_local_mouse_position())
 	_tip_build(hit)
 	if hit.is_empty():

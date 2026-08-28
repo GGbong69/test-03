@@ -52,8 +52,11 @@ func _initialize() -> void:
 
 	# 던지면 라운드가 선다
 	g._click(g._blind_go().get_center())
+	# 판 갈이 연출이 낀다. 그림만 붙잡고 상태·데이터는 그 프레임에 서므로
+	# 아래 단언은 그대로다 — 그 약속이 깨지면 여기서 먼저 터진다.
 	_say(g.state != g.S.BLIND and g.target == GameData.target_of(1),
 			"던지면 라운드가 선다", "state %d · 목표 %d" % [g.state, g.target])
+	g._swap_skip()
 
 	# ② 보스는 못 건너뛴다
 	g.round_no = GameData.blinds_per_ante()          # 앤티 1 의 마지막 판
