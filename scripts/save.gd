@@ -45,7 +45,7 @@ const S_STA := "통계"
 const STATS := [
 	"runs", "wins", "darts", "triples", "doubles", "bulls", "misses",
 	"items_bought", "mods_bought", "darts_bought", "cons_used",
-	"rerolls", "sold", "gold_earned",
+	"rerolls", "sold", "gold_earned", "skips",
 	"best_round", "best_score", "best_gold", "best_track",
 ]
 # 최댓값으로 다루는 것들. 나머지는 누적이다.

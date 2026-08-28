@@ -57,6 +57,7 @@ const FILES := {
 	"stakes": "stakes.csv",
 	"packs": "packs.csv",
 	"colors": "colors.csv",
+	"tags": "tags.csv",
 	"tuning": "tuning.csv",
 	# ── HIGHTONE 스펙(2026-08-23 통합 컨텍스트)에서 온 표 ──
 	# areas 는 전부 확정이라 게임이 직접 읽는다. 나머지는 상태 열이 문이다 —
@@ -641,6 +642,41 @@ static func is_boss(n: int) -> bool:
 	return _b(blind_of(n), "boss", "blinds")
 
 
+# 딱지 — 판을 건너뛴 값이다. 건너뛰면 점수도 골드도 없으므로 이것이
+# 없으면 건너뛰기는 순손실이고 아무도 안 누른다.
+#   when  now(즉시) · round(다음 판) · shop(다음 상점) · stage(다음 보스 판)
+const TAG_WHEN := ["now", "round", "shop", "stage"]
+const TAG_KINDS := ["gold", "dart", "track", "cons", "item",
+		"reroll", "shop", "picks", "free"]
+
+
+static func tags() -> Array:
+	boot()
+	return _raw.get("tags", [])
+
+
+# 이 판에 걸 수 있는 딱지 하나. 앤티가 문이고 가중치가 저울이다.
+static func tag_roll(ante: int) -> Dictionary:
+	var pool := []
+	var sum := 0.0
+	for r in tags():
+		if _i(r, "min_ante", "tags", 1) > ante:
+			continue
+		var w := _f(r, "weight", "tags", 1.0)
+		if w <= 0.0:
+			continue
+		pool.append(r)
+		sum += w
+	if pool.is_empty():
+		return {}
+	var t := randf() * sum
+	for r in pool:
+		t -= _f(r, "weight", "tags", 1.0)
+		if t <= 0.0:
+			return r
+	return pool[pool.size() - 1]
+
+
 static func skippable(n: int) -> bool:
 	return _b(blind_of(n), "skippable", "blinds")
 
@@ -1146,6 +1182,7 @@ static func _validate() -> void:
 	_v_stakes()
 	_v_packs()
 	_v_colors()
+	_v_tags()
 
 
 # 스펙 표 다섯 장의 무결성. 상태 열이 문이다 — 확정만 런타임이고,
@@ -1273,6 +1310,36 @@ static func _v_packs() -> void:
 # 그리고 col: 은 완전분할이 될 수 있다 — 색 전부를 한 카드가 쓰면
 # 조건이 사라진 것과 같은데, COND_PART 는 조건 **이름** 배열이라
 # 접두 패턴을 못 본다. 여기서 따로 센다.
+# 딱지. 모르는 갈래·때를 쓰면 조용히 아무 일도 안 하는 딱지가 된다 —
+# 건너뛰기를 눌렀는데 아무것도 안 오는 것이 이 표의 유일한 사고다.
+static func _v_tags() -> void:
+	var raw: Array = _raw.get("tags", [])
+	if raw.is_empty():
+		_errs.append("tags — 표가 비었다. 딱지가 없으면 건너뛰기가 순손실이다")
+		return
+	var seen := {}
+	var first := false
+	for r in raw:
+		var who := "tags:%d %s" % [r.get("_line", 0), r.get("name", "")]
+		var id: String = r.get("id", "")
+		if id == "" or seen.has(id):
+			_errs.append("%s — id 가 비었거나 중복이다" % who)
+		seen[id] = true
+		if not TAG_KINDS.has(String(r.get("kind", ""))):
+			_errs.append("%s — 모르는 갈래 '%s'" % [who, r.get("kind", "")])
+		if not TAG_WHEN.has(String(r.get("when", ""))):
+			_errs.append("%s — 모르는 때 '%s'" % [who, r.get("when", "")])
+		if _i(r, "v", "tags", 0) <= 0:
+			_errs.append("%s — 값이 0 이하다" % who)
+		if _f(r, "weight", "tags", 0.0) <= 0.0:
+			_errs.append("%s — 가중치가 0 이하라 영영 안 뜬다" % who)
+		if _i(r, "min_ante", "tags", 1) <= 1:
+			first = true
+		_v_desc(who, r.get("desc", ""), ["v"])
+	if not first:
+		_errs.append("tags — 앤티 1 에 뜰 수 있는 딱지가 없다. 첫 건너뛰기가 빈손이 된다")
+
+
 static func _v_colors() -> void:
 	var raw: Array = _raw.get("colors", [])
 	if raw.is_empty():
