@@ -102,7 +102,7 @@ func _initialize() -> void:
 
 	# ④ 판정 사각은 전환 내내 한 픽셀도 안 움직인다
 	var r0 := _rects(g)
-	_wind(g, 0.15)
+	_wind(g, 0.28)
 	var same := true
 	var moved := ""
 	var r1 := _rects(g)
@@ -123,13 +123,13 @@ func _initialize() -> void:
 	var gold0: int = g.gold
 	var rn0: int = g.round_no
 	var rem0: int = g.remaining.size()
-	_wind(g, 0.10)
+	_wind(g, 0.18)
 	_say(g.gold == gold0 and g.round_no == rn0 and g.remaining.size() == rem0,
 			"전환은 게임을 안 만진다",
 			"골드 %d · 판 %d · %d발" % [g.gold, g.round_no, g.remaining.size()])
 
 	# ⑥ 스스로 끝나고, 끝나면 두 값이 정확히 제자리다
-	_wind(g, 0.30)
+	_wind(g, 0.62)
 	_say(not g.swap_live and is_equal_approx(g._swap_rise(), 1.0)
 			and is_zero_approx(g._swap_gone()),
 			"끝나면 판이 제자리에 선다",

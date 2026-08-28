@@ -14,7 +14,7 @@ var g = null
 var busy := false
 
 const SUB := 1.0 / 60.0
-const AT := [0.0, 0.05, 0.10, 0.15, 0.22, 0.30]
+const AT := [0.0, 0.10, 0.20, 0.30, 0.42, 0.59]
 
 
 func _initialize() -> void:
