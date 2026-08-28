@@ -68,15 +68,20 @@ func _finish() -> void:
 			reached[0] if not reached.is_empty() else 0,
 			reached[reached.size() - 1] if not reached.is_empty() else 0])
 
-	print("\n판  앤티 종류      목표     들어섬  넘김   통과율")
+	print("\n판  앤티 종류      목표     들어섬  넘김   통과율   평균다트   여유")
 	for n in range(1, GameData.rounds_n() + 1):
 		var sn := int(seen.get(n, 0))
 		var pn := int(passed.get(n, 0))
 		if sn == 0:
 			continue
-		print("%2d   A%d  %-7s %7d   %3d   %3d   %5.0f%%"
+		# 여유 = 6발을 다 썼을 때 낼 수 있는 점수 / 목표. 쓴 발이 적을수록 크다.
+		# 2발에 넘겼으면 x3.0 이고, 6발을 다 쓰고 겨우 넘겼으면 x1.0 이다.
+		var du := float(used.get(n, 0)) / float(maxi(pn, 1))
+		var head := float(GameData.darts_of(n)) / maxf(du, 0.5)
+		print("%2d   A%d  %-7s %7d   %3d   %3d   %5.0f%%   %6.1f   x%.1f"
 				% [n, GameData.ante_of(n), GameData.blind_name(n),
-				GameData.target_of(n), sn, pn, 100.0 * float(pn) / float(sn)])
+				GameData.target_of(n), sn, pn, 100.0 * float(pn) / float(sn),
+				du, head])
 	quit(0)
 
 
