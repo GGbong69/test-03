@@ -58,6 +58,7 @@ const FILES := {
 	"packs": "packs.csv",
 	"colors": "colors.csv",
 	"tags": "tags.csv",
+	"vouchers": "vouchers.csv",
 	"tuning": "tuning.csv",
 	# ── HIGHTONE 스펙(2026-08-23 통합 컨텍스트)에서 온 표 ──
 	# areas 는 전부 확정이라 게임이 직접 읽는다. 나머지는 상태 열이 문이다 —
@@ -91,6 +92,19 @@ const MOD_AXES := ["band", "slide", "ring", "bull", "out", "swap", "odd"]
 #   판밖 darts_add · seal_items · target_mul · reward_mul
 # 축 하나에 걸리는 자리가 정확히 한 곳이어야 한다. 두 곳이 되는 순간
 # "이 제약이 무엇을 하는가" 가 코드에서 안 읽힌다.
+# 설비가 밀 수 있는 축과 그 바닥·천장. 목록이 곧 계약이다 — 코드가 안 읽는
+# 키를 표에 적으면 조용히 아무 일도 안 하는 설비가 되고(안개가 그랬다),
+# 바닥이 없으면 음수 한 줄이 런을 잠근다. stage_picks 가 0 이 되면 보스
+# 화면에 누를 카드가 없어 영영 안 넘어간다 — 그래서 키마다 범위를 쥔다.
+const VOUCHER_KEYS := {
+	"shop_items":    [0.0, 6.0],    # 표 2 + 여기 + 딱지 2 ≤ 8칸
+	"free_rerolls":  [0.0, 4.0],
+	"interest_add":  [0.0, 10.0],   # 상한 15 = 보유 75. 런 최적 잔고의 세 배다
+	"darts_add":     [0.0, 2.0],    # 스티커·딱지까지 아홉이면 벽 밖으로 나간다
+	"gauge_mul":     [0.25, 4.0],
+}
+const VOUCHER_OPS := ["add", "mul"]
+
 const MODIFIER_AXES := ["band_mul", "gauge_mul", "fog", "darts_add",
 		"sector_kill", "seal_items", "target_mul",
 		"color_kill", "ring_kill", "odd_mul", "spin", "reward_mul"]
@@ -686,6 +700,119 @@ static func tag_roll(ante: int) -> Dictionary:
 	return pool[pool.size() - 1]
 
 
+# ── 설비 ──────────────────────────────────────────────────
+#  상점에서 사면 런 내내 남는 영구 업그레이드. 리그(런 시작에 고른다)와
+#  딱지(한 번 쓰고 사라진다) 사이의 빈 자리다.
+#
+#  산 목록을 여기 static 으로 두는 이유는 하나다 — max_items() 처럼
+#  값을 내는 래퍼가 전부 static 이고, 그것을 읽는 자리가 서른 곳쯤 된다.
+#  노드에 두면 그 서른 곳을 전부 고쳐야 하고 래퍼가 존재할 이유가 없어진다.
+static var vouchers_own: Array = []
+static var _vou := {}            # key → [add, mul]. 아래 셋 말고는 아무도 안 만진다
+
+
+static func vouchers() -> Array:
+	boot()
+	if _cache.has("vouchers"):
+		return _cache["vouchers"]
+	var out := []
+	for r in _raw.get("vouchers", []):
+		var v := _f(r, "v", "vouchers")
+		var op: String = r.get("op", "")
+		out.append({
+			"id": r.get("id", ""), "n": r.get("name", ""),
+			"key": r.get("key", ""), "v": v,
+			"op": op if op != "" else "add",
+			"cost": _i(r, "cost", "vouchers"),
+			"prereq": r.get("prereq", ""),
+			"min_ante": _i(r, "min_ante", "vouchers", 1),
+			"w": _f(r, "weight", "vouchers", 1.0),
+			"d": fill(r.get("desc", ""), {"v": v}),
+			"line": r.get("_line", 0),
+		})
+	_cache["vouchers"] = out
+	return out
+
+
+static func voucher_of(id: String) -> Dictionary:
+	for f in vouchers():
+		if String(f.id) == id:
+			return f
+	return {}
+
+
+static func voucher_clear() -> void:
+	vouchers_own.clear()
+	_vou.clear()
+
+
+static func voucher_set(ids: Array) -> void:
+	vouchers_own = ids.duplicate()
+	_vou_bake()
+
+
+static func voucher_add(id: String) -> void:
+	if vouchers_own.has(id):
+		return
+	vouchers_own.append(id)
+	_vou_bake()
+
+
+static func _vou_bake() -> void:
+	_vou.clear()
+	for f in vouchers():
+		if not vouchers_own.has(String(f.id)):
+			continue
+		var e: Array = _vou.get(String(f.key), [0.0, 1.0])
+		if String(f.op) == "mul":
+			e[1] = float(e[1]) * float(f.v)
+		else:
+			e[0] = float(e[0]) + float(f.v)
+		_vou[String(f.key)] = e
+
+
+# 설비가 민 값. (기본 + 더한 것) × 곱한 것.
+#
+# 리그·딱지와의 순서는 축마다 다르고, 그것이 사실이다. shop_items 는
+# 표 → 설비 → 딱지, darts_add 는 제약 → 리그 → 딱지 → 설비 → 스티커.
+# "설비가 늘 마지막" 같은 규칙을 주석으로 세우면 거짓 불변식이 된다 —
+# 전부 add 라 지금은 수가 같지만, 다음 사람이 그 순서를 근거로 mul 을
+# 얹으면 세 자리가 한꺼번에 틀린다. 축마다 적용부 주석이 순서를 쥔다.
+static func voucher_v(key: String, dflt: float) -> float:
+	var e: Array = _vou.get(key, [0.0, 1.0])
+	return (dflt + float(e[0])) * float(e[1])
+
+
+static func voucher_i(key: String, dflt: int) -> int:
+	return int(round(voucher_v(key, float(dflt))))
+
+
+# 이 상점에 걸 설비 하나. 앤티가 문이고 앞선 단이 열쇠다.
+static func voucher_roll(ante: int) -> Dictionary:
+	var pool := []
+	var sum := 0.0
+	for f in vouchers():
+		if vouchers_own.has(String(f.id)):
+			continue
+		if int(f.min_ante) > ante:
+			continue
+		var pq := String(f.prereq)
+		if pq != "" and not vouchers_own.has(pq):
+			continue
+		if float(f.w) <= 0.0:
+			continue
+		pool.append(f)
+		sum += float(f.w)
+	if pool.is_empty():
+		return {}
+	var t := randf() * sum
+	for f in pool:
+		t -= float(f.w)
+		if t <= 0.0:
+			return f
+	return pool[pool.size() - 1]
+
+
 static func skippable(n: int) -> bool:
 	return _b(blind_of(n), "skippable", "blinds")
 
@@ -700,7 +827,10 @@ static func blind_name(n: int) -> String:
 static func shop_of(n: int) -> Dictionary:
 	var r := _ante_row(n)
 	return {
-		"items": _i(r, "shop_items", "antes", 0),
+		# 설비가 여기 얹힌다 — 표 → 설비 → 딱지 순서다(딱지는 _roll_stock 이
+		# 이 값 뒤에 더한다). 매대 폭을 읽는 자리가 여기 하나뿐이라 여기가
+		# 유일한 합류점이다.
+		"items": voucher_i("shop_items", _i(r, "shop_items", "antes", 0)),
 		"mods": _i(r, "shop_mods", "antes", 0),
 		"darts": _i(r, "shop_darts", "antes", 0),
 	}
@@ -1192,6 +1322,7 @@ static func _validate() -> void:
 	_v_packs()
 	_v_colors()
 	_v_tags()
+	_v_vouchers()
 
 
 # 스펙 표 다섯 장의 무결성. 상태 열이 문이다 — 확정만 런타임이고,
@@ -1347,6 +1478,69 @@ static func _v_tags() -> void:
 		_v_desc(who, r.get("desc", ""), ["v"])
 	if not first:
 		_errs.append("tags — 앤티 1 에 뜰 수 있는 딱지가 없다. 첫 건너뛰기가 빈손이 된다")
+
+
+# 설비. 모르는 축·모르는 연산·범위 밖 값이 셋 다 같은 얼굴을 한다 —
+# 표는 멀쩡한데 게임에서 아무 일도 안 일어나거나, 반대로 런이 잠긴다.
+static func _v_vouchers() -> void:
+	var raw: Array = _raw.get("vouchers", [])
+	if raw.is_empty():
+		_errs.append("vouchers — 표가 비었다. 상점 선반이 여덟 앤티 내내 빈다")
+		return
+	var seen := {}
+	var first := false
+	for r in raw:
+		var who := "vouchers:%d %s" % [r.get("_line", 0), r.get("name", "")]
+		var id: String = r.get("id", "")
+		if id == "" or seen.has(id):
+			_errs.append("%s — id 가 비었거나 중복이다" % who)
+		seen[id] = true
+		var key: String = r.get("key", "")
+		if not VOUCHER_KEYS.has(key):
+			_errs.append("%s — 모르는 축 '%s'" % [who, key])
+		var op: String = r.get("op", "")
+		if not VOUCHER_OPS.has(op):
+			_errs.append("%s — 모르는 연산 '%s'" % [who, op])
+		if _i(r, "cost", "vouchers") <= 0:
+			_errs.append("%s — 값이 0 이하다" % who)
+		if _f(r, "weight", "vouchers", 0.0) <= 0.0:
+			_errs.append("%s — 가중치가 0 이하라 영영 안 뜬다" % who)
+		if _i(r, "min_ante", "vouchers", 1) <= 1 and String(r.get("prereq", "")) == "":
+			first = true
+		var pq: String = r.get("prereq", "")
+		if pq != "" and not seen.has(pq):
+			_errs.append("%s — 앞선 단 '%s' 가 표에 없거나 아래에 있다" % [who, pq])
+		_v_desc(who, r.get("desc", ""), ["v"])
+	if not first:
+		_errs.append("vouchers — 앤티 1 에 조건 없이 뜰 설비가 없다")
+	# 축마다 쌓을 수 있는 최대를 미리 더해 본다. 표만 보고 계산되는 것을
+	# 게임을 돌려서 알아내면 늦다 — 런이 잠기는 축이 그 안에 있다.
+	var add := {}
+	var mul := {}
+	for r in raw:
+		var key2: String = r.get("key", "")
+		if not VOUCHER_KEYS.has(key2):
+			continue
+		if String(r.get("op", "")) == "mul":
+			mul[key2] = float(mul.get(key2, 1.0)) * _f(r, "v", "vouchers", 1.0)
+		else:
+			add[key2] = float(add.get(key2, 0.0)) + _f(r, "v", "vouchers", 0.0)
+	for key3 in VOUCHER_KEYS:
+		var lim: Array = VOUCHER_KEYS[key3]
+		# 한 축은 add 아니면 mul, 하나만 쓴다. 섞이는 순간 "무엇을 먼저
+		# 하느냐" 가 값을 바꾸고, 그 순서는 축마다 다른 자리에서 정해진다
+		# (shop_items 는 표→설비→딱지, darts_add 는 리그→딱지→설비).
+		# 섞지 않으면 그 물음이 아예 안 생긴다.
+		if add.has(key3) and mul.has(key3):
+			_errs.append("vouchers — %s 에 add 와 mul 이 섞였다. 축 하나에 하나만 쓴다"
+					% key3)
+			continue
+		if not add.has(key3) and not mul.has(key3):
+			continue                      # 아직 아무도 안 미는 축이다
+		var got: float = float(add[key3]) if add.has(key3) else float(mul[key3])
+		if got < float(lim[0]) or got > float(lim[1]):
+			_errs.append("vouchers — %s 를 다 모으면 %.2f 다. 허용은 %.2f~%.2f"
+					% [key3, got, lim[0], lim[1]])
 
 
 static func _v_colors() -> void:

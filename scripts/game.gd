@@ -149,6 +149,13 @@ var rt_trp2_out := 0.0
 var rt_bull_o := 0.14
 var rt_bull_i := 0.06
 var dead_idx := -1              # "금지 구역"이 죽이는 칸. -1 이면 안 걸렸다
+# ── 설비 선반 ────────────────────────────────────────────
+#  상점 왼쪽 벽에 걸린다. **매대(stock)에 안 넣는다** — 매대는 딜러가
+#  쓸어 다시 던지는 판이고 설비는 그 판에 안 오른다. 리롤해도 안 씻기는
+#  것이 코드 0줄로 성립하는 이유가 그것이다(_roll_stock 은 stock 만 지운다).
+#  한 앤티에 하나. 사면 사라지고 그 앤티에는 다시 안 뜬다.
+var shelf := {}                 # 이 상점에 걸린 설비. 비면 없다
+var shelf_ante := 0             # 그 설비를 굴린 앤티. 앤티가 바뀔 때만 다시 굴린다
 var dead_col := -1              # 값을 죽이는 칸 색 번호. -1 이면 안 걸렸다
 var dead_ring := 0              # 무효가 되는 배수(2 더블 · 3 트리플). 0 이면 없다
 var odd_mul := 1.0              # 홀수 칸 값 배수
@@ -328,6 +335,7 @@ func _new_run() -> void:
 	throw6 = 0
 	zone_hist.clear()
 	won = false
+	GameData.voucher_clear()     # 설비는 런 스코프다. 지우는 자리는 여기 하나
 	spin_cur = 0
 	dead_col = -1
 	dead_ring = 0
@@ -370,6 +378,10 @@ func _start_round() -> void:
 	var dadd := int(mod_v("darts_add", 0.0))
 	dadd += int(GameData.stake_v("darts_add", 0.0))
 	dadd += _spend_tags("dart")          # 딱지 — 다음 판 한 번만 산다
+	dadd += GameData.voucher_i("darts_add", 0)   # 설비 — 런 내내 산다
+	# 순서: 제약 → 리그 → 딱지 → 설비 → 스티커. 전부 더하기라 지금은 수가
+	# 같지만, 이 줄들 중 하나라도 곱이 되면 순서가 값을 바꾼다. 그때 고칠
+	# 자리가 여기 하나다.
 	# 아이템이 주고받는 다트 (조커 이식 — 곡예 다트맨 -2 등)
 	for o in owned:
 		dadd += int(o.get("dadd", 0))
@@ -525,8 +537,7 @@ func _settle_clear() -> void:
 	# 정산 내역
 	var dart_gold: int = darts_left * GameData.gold_per_dart()
 	@warning_ignore("integer_division")  # 보유 5당 1, 내림이 규칙이다
-	var interest: int = mini(gold / GameData.interest_per(),
-			GameData.interest_max() + int(GameData.stake_v("interest_add", 0.0)))
+	var interest: int = mini(gold / GameData.interest_per(), _interest_cap())
 	# gold 를 더하기 전에 부른다 — "굳은살"과 이자가 같은 잔액을 보게 하려는 것이다.
 	var item_rows := _gold_from_items()
 	var item_gold := 0
@@ -647,10 +658,66 @@ func _gold_from_items() -> Array:
 	return rows
 
 
+# 무료 새로고침 횟수 — 표 + 설비. 딱지(무료 새로고침)는 이 값이 아니라
+# rerolls_used 를 음수로 밀어 좌변에 붙는다. 같은 축이 아니라 같은 비교의
+# 반대편이라, 둘을 한 수로 합치면 안 된다.
+func _free_rerolls() -> int:
+	return GameData.free_rerolls() + GameData.voucher_i("free_rerolls", 0)
+
+
+# 이자 상한 = 표 + 리그 + 설비. 정산(_settle_clear)과 자금판 미리보기가
+# 같은 식을 읽어야 한다 — 갈려 있으면 화면에 적힌 수와 실제로 들어오는
+# 골드가 다르고, 그건 플레이어가 못 고치는 종류의 거짓말이다.
+func _interest_cap() -> int:
+	return GameData.interest_max() + int(GameData.stake_v("interest_add", 0.0)) 			+ GameData.voucher_i("interest_add", 0)
+
+
+# 벽에 걸린 설비 한 장. 매물과 다른 어휘로 그린다 — 매물은 펠트 위에
+# 놓인 둥근 물건이고 이것은 벽에 박힌 네모 판이다. 같은 어휘를 쓰면
+# "이것도 쓸려 나가나" 를 플레이어가 물어야 한다.
+func _shelf_draw() -> void:
+	var r := _shelf_rect()
+	if shelf.is_empty():
+		return
+	var can: bool = gold >= int(shelf.cost)
+	draw_rect(Rect2(r.position + Vector2(2.0, 3.0), r.size), Color(0.0, 0.0, 0.0, 0.30))
+	draw_rect(r, C_PANEL.lightened(0.04) if can else C_PANEL.darkened(0.18))
+	# 걸이 — 위쪽 한 획이 "벽에 박혀 있다" 를 말한다. 매대의 값딱지와 다른 신호다.
+	draw_rect(Rect2(r.position, Vector2(r.size.x, 2.0)),
+			C_ACC if can else C_DIM.darkened(0.3))
+	draw_string(font, r.position + Vector2(0.0, 18.0), "설비",
+			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 8, C_DIM)
+	draw_string(font, r.position + Vector2(0.0, 32.0), String(shelf.n),
+			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 11,
+			C_TXT if can else C_DIM.darkened(0.2))
+	draw_gold(r.position.x + r.size.x * 0.5, r.position.y + 46.0,
+			str(int(shelf.cost)), 10, C_GOLD if can else C_DIM.darkened(0.3))
+
+
+# 사면 사라지고 효과만 남는다. 랙에도 소비 칸에도 안 들어간다 —
+# 어디에도 안 쌓이는 유일한 구매다.
+func _shelf_buy() -> void:
+	if shelf.is_empty():
+		return
+	if gold < int(shelf.cost):
+		_deny()
+		return
+	gold -= int(shelf.cost)
+	GameData.voucher_add(String(shelf.id))
+	Save.bump("vouchers_bought")
+	pop(_shelf_rect().get_center(), String(shelf.n), C_ACC, 12, 1.4)
+	shelf = {}
+	# 매대 폭·무료 새로고침이 이 순간 바뀔 수 있다. 이번 판은 이미 굴린
+	# 뒤라 폭은 다음 새로고침부터 넓어지고, 값은 지금 다시 매긴다.
+	reroll_cost = _reroll_price()
+	_panel_reset()
+	beep_seq([392.0, 523.0, 659.0], 0.07, 0.14, 0.18)
+
+
 func _reroll_price() -> int:
-	if rerolls_used < GameData.free_rerolls():
+	if rerolls_used < _free_rerolls():
 		return 0
-	return GameData.reroll_base() + (rerolls_used - GameData.free_rerolls()) * GameData.reroll_step()
+	return GameData.reroll_base() + (rerolls_used - _free_rerolls()) * GameData.reroll_step()
 
 
 func _open_shop() -> void:
@@ -664,6 +731,13 @@ func _open_shop() -> void:
 	_sweep_reset()
 	rerolls_used = -_spend_tags("reroll")   # 딱지 — 무료 새로고침을 앞당긴다
 	reroll_cost = _reroll_price()
+	# 설비는 앤티가 바뀔 때만 갈린다. 같은 앤티의 상점 셋이 같은 것을 본다 —
+	# 발라트로가 바우처를 앤티마다 하나 거는 것과 같은 자리다. 안 사면
+	# 다음 상점에도 그대로 걸려 있고, 앤티가 넘어가면 사라진다.
+	var ante := GameData.ante_of(round_no)
+	if ante != shelf_ante:
+		shelf_ante = ante
+		shelf = GameData.voucher_roll(ante)
 	_roll_stock()
 	state = S.SHOP
 	beep(440.0, 0.10, 0.18)
@@ -1262,7 +1336,9 @@ func add_sparks(n: int, r0: float, r1: float, ln: float, c: Color, life: float) 
 
 
 func gs() -> float:
-	var g := gauge_speed * mod_v("gauge_mul", 1.0)
+	# 이 게임 고유의 축. 제약이 미는 그 줄에 설비가 나란히 얹힌다 —
+	# 둘 다 곱이라 순서가 값을 안 바꾼다.
+	var g := gauge_speed * mod_v("gauge_mul", 1.0) 			* GameData.voucher_v("gauge_mul", 1.0)
 	return g * (cur_dart.gauge if cur_dart.has("gauge") else 1.0)
 
 
@@ -1435,7 +1511,11 @@ func _auto_step() -> void:
 				if _buy_block(i) == "":
 					buyable.append(i)
 			var roll := randf()
-			if not buyable.is_empty() and roll < 0.55:
+			# 설비를 먼저 본다. 소크가 안 사면 넓어진 매대·늘어난 다트를
+			# 한 번도 안 굴려 보게 되고, 그러면 이 시스템에 그물이 없다.
+			if not shelf.is_empty() and gold >= int(shelf.cost) and roll < 0.35:
+				_shelf_buy()
+			elif not buyable.is_empty() and roll < 0.55:
 				_buy(buyable[randi() % buyable.size()])
 			elif gold >= reroll_cost and roll < 0.8:
 				_reroll()
@@ -1575,6 +1655,12 @@ func _click(m: Vector2) -> void:
 		S.SHOP:
 			if sweep_live:
 				return          # 쓸기는 중단 불가다. 클릭을 통째로 삼킨다
+			# 선반은 쓸기 가드 **뒤**다. 앞에 두면 쓸기 도중에 진열대를 사서
+			# 그 직후 _sweep_deal 이 넓어진 폭으로 판을 깔고, "새 판이 같은
+			# 수로 선다"(sweep_probe)가 깨진다.
+			if not shelf.is_empty() and _shelf_rect().has_point(m):
+				_shelf_buy()
+				return
 			# 창구가 먼저다. 자리가 고정이라 낙하 검사보다 앞이고, _sell_hit
 			# 보다도 앞이어야 한다 — 뒤에 두면 _sell_hit 이 sell_sel 을 지운 뒤
 			# 창구가 "먼저 판에서 팔 스티커를 고른다" 로 거절해 2클릭 판매가 통째로
@@ -2286,15 +2372,27 @@ func _grip_tilt(i: int) -> float:
 
 # i 번 다트가 벽 어디에 어떤 각으로 꽂혀 있는가.
 # 그리기와 잡기가 같은 함수를 본다 — 갈라지면 보이는 곳과 눌리는 곳이 어긋난다.
+# 자루 사이 간격. 자루가 늘면 좁힌다 — 간격이 31 로 고정이면 아홉 자루째의
+# 판정 사각(±18)이 화면(360) 아래로 6px 나가고, 열 자루면 자루 자체가
+# 화면 밖이라 눌러서 고를 수가 없다. 그런데 오토플레이는 _mag_rect 의
+# 중심 좌표를 스스로 만들어 넘기므로 소크가 그걸 못 잡는다.
+#   마지막 자루 아래끝 = cy 224 + (n-1)*dy/2 + hit 18 ≤ 360
+#   → dy ≤ 236 / (n-1)
+# 기본 여섯 + 스티커 하나 + 딱지 하나 + 설비 하나 = 아홉이 실제 상한이다.
+func _grip_dy() -> float:
+	return minf(float(GRIP.dy), 236.0 / maxf(float(grip_n) - 1.0, 1.0))
+
+
 func _grip_pose(i: int) -> Dictionary:
 	# 칸은 시작 때 배정된 그대로다. 남은 개수가 아니라 시작 개수로 가운데를
 	# 맞추므로, 자루가 빠져도 나머지가 제자리에 그대로 꽂혀 있다.
 	var slot: int = grip_slot[i] if i < grip_slot.size() else i
 	# 깊이와 높이도 같이 흔든다. 각도만 흔들면 자로 잰 듯 줄 맞춘 티가 남는다.
+	var dy := _grip_dy()
 	var base := Vector2(
 			GRIP.x + (_grip_rnd(slot, 12.77) - 0.5) * 2.0 * GRIP.deep,
-			GRIP.cy - float(maxi(grip_n, 1) - 1) * GRIP.dy * 0.5 + float(slot) * GRIP.dy
-					+ (_grip_rnd(slot, 41.31) - 0.5) * 2.0 * GRIP.sway)
+			GRIP.cy - float(maxi(grip_n, 1) - 1) * dy * 0.5 + float(slot) * dy
+					+ (_grip_rnd(slot, 41.31) - 0.5) * GRIP.sway * 2.0)
 	var rot: float = _grip_tilt(slot)
 	# 뽑히는 방향은 자루 축을 따라 꼬리 쪽이다. 옆으로 밀면 뽑는 것으로 안 보인다.
 	var axis := Vector2(6.0, -10.0).normalized().rotated(rot)
@@ -2313,6 +2411,12 @@ func _grip_pose(i: int) -> Dictionary:
 
 func _mag_rect(i: int) -> Rect2:
 	return _grip_pose(i).hit
+
+
+# 선반 자리. 왼쪽 벽 — 자금판(y 20~54) 아래, 판매 창구 이름표(y 128) 위다.
+# 매대 물건은 펠트 위에 물리로 떨어지므로 이 사각과 영영 안 겹친다.
+func _shelf_rect() -> Rect2:
+	return Rect2(Vector2(8.0, 62.0), Vector2(138.0, 52.0))
 
 
 func _reroll_rect() -> Rect2:
@@ -2909,7 +3013,7 @@ func _bank_draw() -> void:
 				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, C_MULT.lightened(0.2))
 	else:
 		@warning_ignore("integer_division")  # 위 _finish_round 와 같은 식이어야 한다
-		var itr: int = mini(gold / GameData.interest_per(), GameData.interest_max())
+		var itr: int = mini(gold / GameData.interest_per(), _interest_cap())
 		draw_string(font, r.position + Vector2(0.0, 42.0), "이자 +%d" % itr,
 				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9,
 				C_GOLD.darkened(0.3) if itr > 0 else C_DIM.darkened(0.35))
@@ -6914,6 +7018,7 @@ func _draw_shop() -> void:
 		var rr := _reroll_rect()
 		draw_gold(rr.position.x + rr.size.x * 0.5, rr.position.y + 35.0,
 				str(reroll_cost), 10, C_GOLD if gold >= reroll_cost else C_DIM.darkened(0.3))
+	_shelf_draw()
 	_btn(_next_rect(), "다음 라운드 →", "", true)
 	_hold_draw()
 	_fly_draw()
