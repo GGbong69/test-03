@@ -7098,11 +7098,11 @@ func _draw_newrun() -> void:
 	draw_string(font, Vector2(0, 238), String(cur.get("name", "")),
 			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 13,
 			Color(String(cur.get("color", "cfc9bd"))))
-	var sb := Rect2(Vector2(160.0, 244.0), Vector2(320.0, 52.0))
-	draw_rect(sb, C_PANEL.darkened(0.2))
+	draw_rect(Rect2(Vector2(160.0, 242.0), Vector2(320.0, 61.0)),
+			C_PANEL.darkened(0.2))
 	var sl := _stake_lines()
 	for li in sl.size():
-		draw_string(font, Vector2(172 + (0 if li < 3 else 158), 262 + (li % 3) * 14),
+		draw_string(font, _stake_line_at(li),
 				sl[li], HORIZONTAL_ALIGNMENT_LEFT, 150.0, 10, C_TXT)
 
 	_btn(_newrun_go(), "시작", "스페이스", open)
@@ -7125,6 +7125,20 @@ func _pack_cond(row: Dictionary) -> String:
 
 
 # 리그이 미는 값 — 1단부터 지금 단까지 쌓인 결과만 적는다.
+# 줄 수는 단마다 다르다 — 흰 리그은 한 줄이고 금 리그은 일곱 줄이다.
+# 칸당 세 줄로 못 박아 두었더니 일곱째 줄이 오른쪽 칸 첫 줄 **위에** 겹쳐
+# 찍혔다(금 리그의 "유지비 3" 이 "다트 -1" 을 덮었다). 가장 긴 단에 맞춰
+# 네 줄로 고정한다 — 단을 훑을 때 칸이 들썩이지 않는 편이 낫다.
+const STAKE_ROWS := 4
+
+
+# 리그 설명 한 줄이 앉는 자리. 그리기와 검사가 같은 식을 쓴다 — 글자
+# 겹침은 눈으로만 보이는 사고라, 자리를 함수로 내놔야 프로브가 잴 수 있다.
+func _stake_line_at(li: int) -> Vector2:
+	return Vector2(172.0 + (0.0 if li < STAKE_ROWS else 158.0),
+			258.0 + float(li % STAKE_ROWS) * 13.0)
+
+
 func _stake_lines() -> Array:
 	var out := []
 	var r := GameData.stake_row()

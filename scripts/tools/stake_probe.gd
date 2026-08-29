@@ -119,6 +119,26 @@ func _initialize() -> void:
 			and GameData.stake_key("red", "other") == "stake:other:red",
 			"리그 해금은 팩마다 갈린다", GameData.stake_key("red", "base"))
 
+	# 설명 줄이 서로 안 겹친다. 여덟 단을 전부 깔아 자리를 실제로 세어
+	# 본다 — 금 리그의 일곱째 줄이 오른쪽 칸 첫 줄 위에 찍히던 사고가
+	# 여기 없으면 눈으로만 보이고, 그 단을 열어 보기 전에는 눈에도 안 띈다.
+	var worst := ""
+	var most := 0
+	for row in GameData.stakes():
+		GameData.stake = String(row.get("id", ""))
+		var lines: Array = g._stake_lines()
+		most = maxi(most, lines.size())
+		var seen := {}
+		for li in lines.size():
+			var at: Vector2 = g._stake_line_at(li)
+			if seen.has(at):
+				worst = "%s — %d번 줄이 %d번과 같은 자리" % [GameData.stake, li, seen[at]]
+			seen[at] = li
+	_say(worst == "", "설명 줄이 안 겹친다",
+			worst if worst != "" else "최대 %d줄 · 칸당 %d줄 × 2" % [most, g.STAKE_ROWS])
+	_say(most <= g.STAKE_ROWS * 2,
+			"가장 긴 단이 칸 안에 든다", "%d줄 / %d칸" % [most, g.STAKE_ROWS * 2])
+
 	GameData.stake = ""
-	print("\n%s" % ("실패 %d건" % fails if fails > 0 else "열넷 검사 전부 통과"))
+	print("\n%s" % ("실패 %d건" % fails if fails > 0 else "열여섯 검사 전부 통과"))
 	quit(mini(fails, 125))
