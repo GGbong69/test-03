@@ -258,6 +258,12 @@ func _ready() -> void:
 	_autoplay = OS.get_cmdline_user_args().has("autoplay")
 	drop_fast = _autoplay          # 헤드리스는 낙하를 안 기다린다
 	if _autoplay:
+		# 소크는 사람의 저장에 손대지 않는다. 한 번 돌 때마다 런·다트·
+		# 골드가 실제 통계에 쌓이고, 해금 조건이 바로 그 통계를 읽는다 —
+		# 회귀를 돌릴수록 해금이 저절로 열리는 저장이 된다(runs 가 89 에서
+		# 90 이 되는 것을 보고 알았다). 프로브가 Save.path 를 옮기는 것과
+		# 같은 이유이고, 오토플레이는 그 규약이 빠져 있던 유일한 자리다.
+		Save.path = "user://_autoplay.cfg"
 		# 검증 실행에서만 전 구간을 빠르게 통과시킨다 (실제 기본값은 위 선언부)
 		gauge_speed = 2.2
 		beat = 0.10

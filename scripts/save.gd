@@ -113,6 +113,25 @@ static func unlock(id: String) -> bool:
 	return true
 
 
+# 해금을 되돌린다. 개발 도구(tools/unlock.gd)만 부른다 — 심는 것만큼
+# 지우는 것이 있어야 해금 흐름을 다시 시험할 수 있다. 게임은 안 부른다.
+static func lock(id: String) -> bool:
+	boot()
+	if not _cfg.has_section_key(S_UNL, id):
+		return false
+	_cfg.erase_section_key(S_UNL, id)
+	flush()
+	return true
+
+
+# 심어 둔 해금 키 전부. unlocked_of 와 달리 갈래 접두사를 안 떼고 준다.
+static func unlock_keys() -> PackedStringArray:
+	boot()
+	if not _cfg.has_section(S_UNL):
+		return PackedStringArray()
+	return _cfg.get_section_keys(S_UNL)
+
+
 static func unlocked_of(kind: String) -> PackedStringArray:
 	boot()
 	var out := PackedStringArray()
