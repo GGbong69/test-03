@@ -83,8 +83,17 @@ const TUNE_KEYS := [
 
 const RARITIES := ["common", "uncommon", "rare"]
 const MOD_AXES := ["band", "slide", "ring", "bull", "out", "swap", "odd"]
+# 제약의 축. 발라트로의 보스 블라인드가 손패·플레잉 카드를 때리는 자리에
+# 우리는 **판과 조준**이 있다. 그래서 축을 네 갈래로 벌린다 —
+#   칸   sector_kill · color_kill · odd_mul · spin
+#   링   band_mul · ring_kill
+#   조준 gauge_mul · fog
+#   판밖 darts_add · seal_items · target_mul · reward_mul
+# 축 하나에 걸리는 자리가 정확히 한 곳이어야 한다. 두 곳이 되는 순간
+# "이 제약이 무엇을 하는가" 가 코드에서 안 읽힌다.
 const MODIFIER_AXES := ["band_mul", "gauge_mul", "fog", "darts_add",
-		"sector_kill", "seal_items", "target_mul"]
+		"sector_kill", "seal_items", "target_mul",
+		"color_kill", "ring_kill", "odd_mul", "spin", "reward_mul"]
 
 static var _raw := {}                # 표 이름 → Array[Dictionary] (전부 문자열)
 static var _tune := {}               # key → int/float
@@ -1660,6 +1669,24 @@ static func _v_modifiers() -> void:
 			var v := _i(r, "v", "modifiers")
 			if v < 0 or v >= SECTORS_BASE.size():
 				_errs.append("%s — sector_kill 의 v 는 0~%d 인덱스여야 한다" % [who, SECTORS_BASE.size() - 1])
+		# 아래 넷은 값의 치역이 곧 뜻이다. 범위를 벗어나면 제약이 조용히
+		# 아무 일도 안 하는 카드가 된다 — 고른 사람만 손해다.
+		if ax == "color_kill":
+			var cv := _i(r, "v", "modifiers")
+			if cv < 0 or cv >= color_n():
+				_errs.append("%s — color_kill 의 v 는 0~%d 색 번호여야 한다" % [who, color_n() - 1])
+		if ax == "ring_kill":
+			var rv := _i(r, "v", "modifiers")
+			if rv != 2 and rv != 3:
+				_errs.append("%s — ring_kill 의 v 는 2(더블) 또는 3(트리플)이다" % who)
+		if ax == "spin":
+			var sv := _i(r, "v", "modifiers")
+			if sv <= 0 or sv >= SECTORS_BASE.size():
+				_errs.append("%s — spin 의 v 는 1~%d 칸이다. 0 은 안 도는 것이다"
+						% [who, SECTORS_BASE.size() - 1])
+		if ax == "odd_mul" or ax == "reward_mul":
+			if _f(r, "v", "modifiers") < 0.0:
+				_errs.append("%s — %s 의 v 가 음수다" % [who, ax])
 		_v_desc(who, r.get("desc", ""), ["v"])
 	# 한 판에 제약이 하나뿐이라 축 중복이 게임에 안 나타난다. 그래도 세어 둔다 —
 	# 카드를 둘 이상 붙이는 날 이 경고가 먼저 울려야 한다.

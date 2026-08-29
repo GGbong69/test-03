@@ -149,6 +149,10 @@ var rt_trp2_out := 0.0
 var rt_bull_o := 0.14
 var rt_bull_i := 0.06
 var dead_idx := -1              # "금지 구역"이 죽이는 칸. -1 이면 안 걸렸다
+var dead_col := -1              # 값을 죽이는 칸 색 번호. -1 이면 안 걸렸다
+var dead_ring := 0              # 무효가 되는 배수(2 더블 · 3 트리플). 0 이면 없다
+var odd_mul := 1.0              # 홀수 칸 값 배수
+var spin_cur := 0               # 판이 지금 몇 칸 돌아가 있는가. 되돌릴 때 쓴다
 
 # ── 스테이지 선택 ─────────────────────────────────────────
 var stage_pick := []            # 이번에 깔린 제약 카드들
@@ -324,6 +328,10 @@ func _new_run() -> void:
 	throw6 = 0
 	zone_hist.clear()
 	won = false
+	spin_cur = 0
+	dead_col = -1
+	dead_ring = 0
+	odd_mul = 1.0
 	pending_tags.clear()
 	_open_blind()
 
@@ -387,6 +395,12 @@ func _start_round() -> void:
 			+ int(GameData.stake_v("seal_items", 0.0))
 	sealed = randi() % owned.size() if seal > 0 and not owned.is_empty() else -1
 	dead_idx = int(mod_v("sector_kill", -1.0))
+	dead_col = int(mod_v("color_kill", -1.0))
+	dead_ring = int(mod_v("ring_kill", 0.0))
+	odd_mul = mod_v("odd_mul", 1.0)
+	# 돌아간 각도를 지금 값으로 맞춘다. 차이만큼만 돌리므로 제약이 빠진
+	# 판에서는 저절로 제자리로 돌아온다.
+	_board_spin(int(mod_v("spin", 0.0)) - spin_cur)
 	round_miss = false
 	round_trp = false
 	total = 0
@@ -524,6 +538,9 @@ func _settle_clear() -> void:
 	# 붉은 리그부터 작은 판이 골드를 안 준다. 곡선이 아니라 여유를 깎는 단이다.
 	if GameData.blind_idx(round_no) == 0:
 		clear = int(GameData.stake_v("reward_small", float(clear)))
+	# 제약이 이 판의 보상을 깎는다. 리그 뒤에 온다 — 리그이 정한 값을
+	# 제약이 다시 미는 순서라야 "이 판만" 이 성립한다.
+	clear = int(floor(float(clear) * mod_v("reward_mul", 1.0)))
 	clear_gold_detail = [
 		{"n": GameData.blind_name(round_no), "v": clear},
 		{"n": "남은 다트 %d개" % darts_left, "v": dart_gold},
@@ -959,8 +976,31 @@ func _apply_mod(id: String) -> void:
 	_board_bake()
 
 
+# 판을 n 칸 돌린다. 값과 색이 **같이** 돌아야 한다 — 색만 남으면 판이
+# 뒤집힌 것이 아니라 색칠이 어긋난 것으로 읽힌다.
+#
+# 배열을 직접 돌리되 지금 각도(spin_cur)를 들고 있어서, 다음 판에서
+# 차이만큼만 되돌린다. _board_bake 로 되굽는 방법은 못 쓴다 — 색은
+# 일부러 되굽기에서 안 지워지기 때문이다(_board_bake 주석).
+func _board_spin(n: int) -> void:
+	var m: int = sectors.size()
+	if m == 0:
+		return
+	var k: int = ((n % m) + m) % m
+	spin_cur = ((spin_cur + k) % m + m) % m
+	if k == 0:
+		return
+	sectors = sectors.slice(k) + sectors.slice(0, k)
+	if sec_col.size() == m:
+		sec_col = sec_col.slice(k) + sec_col.slice(0, k)
+
+
 # 판을 굽는다. 개조를 산 뒤와 런 초기화, 두 곳에서만 부른다.
 func _board_bake() -> void:
+	# 되굽기 전에 회전을 푼다. 굽기는 sectors 를 밑바닥에서 새로 만드는데
+	# sec_col 은 일부러 안 지운다(아래 주석). 그대로 두면 개조를 산 순간
+	# 숫자만 제자리로 가고 색은 돌아간 채 남아 판이 어긋난다.
+	_board_spin(-spin_cur)
 	var r := _board_of(mods_own)
 	var b: Dictionary = r[0]
 	sectors = r[1]
@@ -1805,8 +1845,16 @@ func _land() -> void:
 		aim = BC + Vector2(cos(a), sin(a)) * sqrt(randf()) * R * 0.95
 
 	var info := hit_info(aim)
+	# 칸을 죽이는 축 셋. 번호 · 색 · 홀짝 순으로 좁아진다.
 	if dead_idx >= 0 and info.idx == dead_idx:
 		info.base = 0
+	if dead_col >= 0 and int(info.col) == dead_col:
+		info.base = 0
+	if not is_equal_approx(odd_mul, 1.0) and info.idx >= 0 			and int(info.base) % 2 == 1:
+		info.base = int(round(float(info.base) * odd_mul))
+	# 링을 죽이는 축. 배수만 1 로 내린다 — 값은 그대로다.
+	if dead_ring > 0 and int(info.mult) == dead_ring:
+		info.mult = 1
 	if info.mult == 0:
 		round_miss = true
 
@@ -2588,7 +2636,17 @@ func _draw_board() -> void:
 		# 칸 색은 표가 정한다. 띠 색은 지금 규칙(i%2 → 빨강/초록)을 유지한다 —
 		# 띠까지 데이터로 보내면 칸 색과 띠 색이 겹쳐 읽힘이 무너진다.
 		var base_c := Color(GameData.color_hex(_sec_col(i)))
+		# 죽은 칸은 죽은 것으로 보여야 한다. 값이 0 인데 판이 멀쩡해 보이면
+		# 제약이 아니라 버그로 읽힌다 — "금지 구역"이 여태 그랬다.
+		# 색 축(그늘)은 색 자체가 표시지만, 죽었다는 것까지는 색이 안 말한다.
+		var dead: bool = i == dead_idx or (dead_col >= 0 and _sec_col(i) == dead_col)
 		var ring_c: Color = C_RED if i % 2 == 0 else C_GREEN
+		if dead:
+			# **배경 쪽으로** 뺀다. C_DARK 로 낮추면 먹색 칸(2b2438)이 그 색과
+			# 같아서 "그늘"이 아무것도 안 바꾼 것처럼 보였다 — 죽은 표시는
+			# 원래 색이 무엇이든 같은 곳으로 가야 한다. 구멍처럼 읽힌다.
+			base_c = base_c.lerp(C_BG, 0.72)
+			ring_c = ring_c.lerp(C_BG, 0.72)
 		draw_colored_polygon(annulus(R * rt_bull_o * push, R * rt_trp_in * push, a0, a1), base_c)
 		draw_colored_polygon(annulus(R * rt_trp_out * push, R * rt_dbl_in * push, a0, a1), base_c)
 		draw_colored_polygon(annulus(R * rt_trp_in * push, R * rt_trp_out * push, a0, a1), ring_c)
