@@ -4479,6 +4479,20 @@ func _dart_e(it: Dictionary) -> Vector2:
 
 
 # ══ 던지기 — 난수를 쓰는 유일한 곳 (물체당 7뽑기) ══
+# 레인 안쪽 여백. 매물이 늘면 줄여서 폭을 벌린다 — 그리기와 검사가 같은
+# 식을 써야 "여섯이 뭉친다" 를 눈이 아니라 수로 잡는다.
+func _lane_pad(n: int) -> float:
+	return maxf(90.0 - maxf(float(n) - 4.0, 0.0) * 22.0, 26.0)
+
+
+# 매물 하나가 받는 레인 폭(면 px). 스티커 지름이 38 이라 이보다 좁아지면
+# 서로를 밀고 값딱지가 겹친다.
+func _lane_w(n: int) -> float:
+	if n <= 0:
+		return 0.0
+	return (float(DROP.u_hi) - float(DROP.u_lo) - _lane_pad(n) * 2.0) / float(n)
+
+
 func _drop_roll() -> void:
 	_hand_abort()
 	drop.clear()
@@ -4503,7 +4517,12 @@ func _drop_roll() -> void:
 				hw = DROP.hw_dart
 		# 완전 난수면 넷 중 둘이 같은 지점에 쏟아지는 판이 잦고, 그 둘이 같이
 		# 벽으로 밀린다. 레인은 출발만 벌려 둘 뿐 정착 위치를 통제하지 않는다.
-		var lane: float = lerpf(DROP.u_lo + 90.0, DROP.u_hi - 90.0,
+		#
+		# 안쪽 여백이 90 으로 고정이라 레인이 몇 개든 폭이 228px 이었다.
+		# 넷일 때는 57px 씩이라 넉넉한데, "넓은 매대" 딱지로 여섯이 되면
+		# 38px 씩이 되어 스티커(지름 38)가 서로를 밀고 값딱지가 겹친다.
+		# 레인 수가 늘면 여백을 줄여 폭을 벌린다 — 창구 빗변까지는 안 간다.
+		var lane: float = lerpf(DROP.u_lo + _lane_pad(n), DROP.u_hi - _lane_pad(n),
 				(float(i) + 0.5) / float(n))
 		var u0 := randf_range(DROP.u_lo + hw, DROP.u_hi - hw)
 		drop.append({

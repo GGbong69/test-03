@@ -30,7 +30,8 @@ func _initialize() -> void:
 	fail += _t_sell(g)
 	fail += _t_sell_wrong(g)
 	fail += _t_move(g)
-	print("\n%s" % ("실패 %d건" % fail if fail > 0 else "일곱 검사 전부 통과"))
+	fail += _t_lanes(g)
+	print("\n%s" % ("실패 %d건" % fail if fail > 0 else "여덟 검사 전부 통과"))
 	quit(mini(fail, 125))
 
 
@@ -40,6 +41,20 @@ func _say(ok: bool, name: String, detail := "") -> int:
 
 
 # ① 물리 트레이의 어느 점에서도 물건이 빗변을 안 넘는가
+# 매대가 넓어져도 매물이 안 뭉친다. "넓은 매대" 딱지가 넷을 여섯으로
+# 늘리는데 레인 안쪽 여백이 90 으로 고정이라 한 칸 폭이 38px 로 좁아졌다 —
+# 스티커 지름과 같은 값이라 서로를 밀고 값딱지가 겹쳤다. 딱지가 주는
+# 최대는 +2 이므로 넷에서 여섯까지 잰다.
+func _t_lanes(g: Node) -> int:
+	var tight := ""
+	for k in range(4, 7):
+		if g._lane_w(k) < 50.0:
+			tight = "%d개에서 %.1fpx" % [k, g._lane_w(k)]
+	return _say(tight == "", "매대가 넓어져도 안 뭉친다",
+			tight if tight != "" else "넷 %.1f · 여섯 %.1fpx"
+			% [g._lane_w(4), g._lane_w(6)])
+
+
 func _t_geometry(g: Node) -> int:
 	var worst := 999.0
 	var where := ""
