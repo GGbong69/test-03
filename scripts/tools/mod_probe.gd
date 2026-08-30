@@ -42,7 +42,9 @@ func _row(id: String) -> Dictionary:
 # 그 제약 하나만 걸고 라운드를 연다.
 func _arm(g: Node, id: String) -> void:
 	var r := _row(id)
-	g.active_mods = [] if r.is_empty() else [{"k": r.k, "v": float(r.v), "n": r.n}]
+	# 표의 행을 통째로 싣는다 — 게임이 그렇게 한다(_pick_stage 의 sp.d).
+	# 손으로 골라 담으면 id 가 빠져 그리기가 터진다.
+	g.active_mods = [] if r.is_empty() else [r]
 	g._start_round()
 	g._swap_skip()
 

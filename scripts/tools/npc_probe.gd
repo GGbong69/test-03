@@ -51,6 +51,17 @@ func _ok(name: String, cond: bool, detail: String) -> void:
 
 
 func _process(_d: float) -> bool:
+	# 창을 논리 해상도에 맞춘다. 늘리기 방식이 canvas_items 라 화면은 창
+	# 해상도로 그려지는데, 이 검사의 좌표(랙 밑변·정착 최상단)는 전부
+	# 640x360 자다 — 창이 크면 왼쪽 위 사분면만 재게 되고 실제로 그랬다
+	# (밝은 덩어리가 둘에서 다섯이 됐다). 배율을 곱해 보정하는 대신 창을
+	# 맞춘다 — 배율이 끼면 실측 임계값도 같이 흔들려서, 이 프로브가 재는
+	# 것이 형태가 아니라 배율이 된다.
+	#
+	# 여기서 하는 이유: _process 안에서 await 를 쓰면 이 함수가 코루틴이
+	# 되어 SceneTree 규약이 깨지고 검사가 한 줄도 안 돈다(한 번 당했다).
+	if frames == 0 and g != null:
+		DisplayServer.window_set_size(Vector2i(int(g.VIEW.x), int(g.VIEW.y)))
 	# 게임 시계를 우리가 돈다. 엔진에 맡기면 툴팁이 프레임마다 되살아나
 	# 딜러를 가린다 — shot.gd 가 같은 이유로 같은 짓을 한다.
 	if g != null:
@@ -82,6 +93,11 @@ func _measure() -> void:
 	bg_cols = [w.darkened(0.30), w, w.lightened(0.18), w.lightened(0.24),
 			w.darkened(0.35)]
 	var img := root.get_texture().get_image()
+	if img.get_width() != int(g.VIEW.x):
+		print("  창이 %dx%d 다 — 이 검사는 논리 해상도(%dx%d)에서만 돈다"
+				% [img.get_width(), img.get_height(), g.VIEW.x, g.VIEW.y])
+		fails += 1
+		return
 
 	# 두 가면을 뜬다 — 딜러인가(실루엣), 그리고 밝은가(L* 45 이상).
 	var fg := PackedByteArray()
