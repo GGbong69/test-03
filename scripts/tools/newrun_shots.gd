@@ -41,6 +41,19 @@ func _run() -> void:
 	for i in 8:
 		g._process(1.0 / 60.0)
 	g._open_newrun()
+	# 팩을 하나씩 넘겨 본다 — 잠긴 히든이 어떻게 보이는지가 여기서만 보인다.
+	for pi in GameData.packs().size():
+		g._pack_view(pi)
+		for i in 4:
+			g._process(1.0 / 60.0)
+			g.tip_a = 0.0
+		g.queue_redraw()
+		await process_frame
+		await process_frame
+		var pn := "pack_%d_%s.png" % [pi, GameData.packs()[pi].get("id", "")]
+		root.get_texture().get_image().save_png("res://shots/" + pn)
+		print("저장: %s" % pn)
+	g._pack_view(0)
 	var st := GameData.stakes()
 	for k in st.size():
 		GameData.stake = String(st[k].get("id", ""))

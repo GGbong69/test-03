@@ -154,6 +154,8 @@ var dead_idx := -1              # "금지 구역"이 죽이는 칸. -1 이면 �
 #  쓸어 다시 던지는 판이고 설비는 그 판에 안 오른다. 리롤해도 안 씻기는
 #  것이 코드 0줄로 성립하는 이유가 그것이다(_roll_stock 은 stock 만 지운다).
 #  한 앤티에 하나. 사면 사라지고 그 앤티에는 다시 안 뜬다.
+var aim_mode := "std"           # 이 런의 조준 방식. 팩이 정한다
+var score_mode := "std"         # 이 런의 점수 계산 방식. 팩이 정한다
 var shelf := {}                 # 이 상점에 걸린 설비. 비면 없다
 var shelf_ante := 0             # 그 설비를 굴린 앤티. 앤티가 바뀔 때만 다시 굴린다
 var dead_col := -1              # 값을 죽이는 칸 색 번호. -1 이면 안 걸렸다
@@ -407,6 +409,16 @@ func _start_round() -> void:
 			+ int(GameData.stake_v("seal_items", 0.0))
 	sealed = randi() % owned.size() if seal > 0 and not owned.is_empty() else -1
 	dead_idx = int(mod_v("sector_kill", -1.0))
+	# 팩의 변형을 라운드 시작에 한 번 읽는다. 코드에 갈래가 없는 이름이면
+	# 여기서 한 번 울린다 — 매 프레임 울리면 로그가 못 쓰게 된다.
+	aim_mode = GameData.aim_mode()
+	score_mode = GameData.score_mode()
+	if not GameData.AIM_MODES.has(aim_mode):
+		push_error("조준: 모르는 방식 '%s' — AIM_MODES 에 없다" % aim_mode)
+		aim_mode = "std"
+	if not GameData.SCORE_MODES.has(score_mode):
+		push_error("점수: 모르는 방식 '%s' — SCORE_MODES 에 없다" % score_mode)
+		score_mode = "std"
 	dead_col = int(mod_v("color_kill", -1.0))
 	dead_ring = int(mod_v("ring_kill", 0.0))
 	odd_mul = mod_v("odd_mul", 1.0)
@@ -516,14 +528,18 @@ func _finish_round() -> void:
 				return
 		state = S.OVER
 		won = false
+		_pack_unlock_check()
+		Save.flush()
 		beep_seq([300.0, 240.0, 180.0], 0.13, 0.24, 0.22)
 		return
 
 	if round_no >= GameData.rounds_n():
 		_stake_unlock_next()
+		_pack_unlock_next()
 		state = S.OVER
 		won = true
 		Save.bump("wins")
+		_pack_unlock_check()
 		Save.flush()
 		beep_seq([262.0, 330.0, 392.0, 523.0, 659.0], 0.10, 0.22, 0.26)
 		return
@@ -583,6 +599,38 @@ func _seal_drop(i: int) -> void:
 
 
 # 완주하면 다음 리그이 열린다. 표 순서가 곧 계단이라 지금 단의 다음 행이다.
+# 기본 팩은 완주로 열린다 — 표 순서대로 다음 하나. 리그 사다리와 같은 모양이다.
+func _pack_unlock_next() -> void:
+	var rows := GameData.packs_of("base")
+	var cur := String(GameData.pack_row().get("id", ""))
+	for i in rows.size():
+		if String(rows[i].get("id", "")) != cur or i + 1 >= rows.size():
+			continue
+		var nxt: Dictionary = rows[i + 1]
+		if Save.unlock("pack:" + String(nxt.get("id", ""))):
+			pop(Vector2(VIEW.x * 0.5, 232.0),
+					"%s 열렸다" % nxt.get("name", ""), C_GOLD, 13, 1.6)
+		return
+
+
+# 히든 팩은 통계 하나가 문이다. 런이 끝날 때와 새 런 화면을 열 때 본다 —
+# 조건이 채워진 순간이 아니라 런 경계에서 여는 것은 발라트로와 같다.
+# 저장을 읽는 쪽이 여기라 data.gd 는 저장을 모른 채로 남는다(검증기가 순수해야 한다).
+func _pack_unlock_check() -> void:
+	for r in GameData.packs_of("hidden"):
+		var id := String(r.get("id", ""))
+		if Save.unlocked("pack:" + id):
+			continue
+		var st := String(r.get("unlock_stat", ""))
+		if st == "":
+			continue
+		if Save.stat(st) < int(String(r.get("unlock_v", "0"))):
+			continue
+		if Save.unlock("pack:" + id):
+			pop(Vector2(VIEW.x * 0.5, 232.0),
+					"%s 열렸다" % r.get("name", ""), C_ACC, 13, 1.6)
+
+
 func _stake_unlock_next() -> void:
 	var rows := GameData.stakes()
 	var cur := String(GameData.stake_row().get("id", ""))
@@ -1417,12 +1465,8 @@ func _process(d: float) -> void:
 	_drop_update(d)
 
 	match state:
-		S.AIM_V:
-			gt += d * gs()
-			aim.y = lerpf(BC.y - SWING, BC.y + SWING, tri(gt))
-		S.AIM_H:
-			gt += d * gs()
-			aim.x = lerpf(BC.x - SWING, BC.x + SWING, tri(gt))
+		S.AIM_V, S.AIM_H:
+			_aim_tick(d)
 		S.CONFIRM:
 			gt += d * gs()
 			confirm_t += d
@@ -1523,6 +1567,48 @@ func _auto_step() -> void:
 				_next_round()
 		S.OVER:
 			_click(Vector2(320, 180))
+
+
+# ══════════════════════════════════════════════════════════
+#  히든 팩이 갈라지는 두 자리
+# ──────────────────────────────────────────────────────────
+#  기본 팩들은 값만 바꾼다 — 다트 수, 시작 골드, 칸 수. 히든 팩은
+#  **조준하는 법**과 **점수 내는 법**이 다르다. 그 둘이 갈라지는 자리가
+#  이 게임에 정확히 두 곳이고, 여기다.
+#
+#  지금은 std 하나뿐이다. 변형의 내용은 아직 안 정했고 여기는 자리만
+#  세워 둔 것이다. 새 방식을 만들려면
+#    ① data.gd 의 AIM_MODES / SCORE_MODES 에 이름을 적고
+#    ② 아래 match 에 그 이름의 갈래를 파고
+#    ③ packs.csv 의 aim / score 열에 그 이름을 쓴다
+#  ①을 빼먹으면 검증기가 막는다. ②를 빼먹으면 라운드 시작에 오류가 뜬다.
+#  둘 다 조용히 std 로 도는 것을 막으려고 있다 — 안개가 그렇게 죽었었다.
+#
+#  방식은 **라운드 시작에 한 번** 읽어 둔다. 매 프레임 표를 뒤지지 않고,
+#  라운드 도중에 팩이 바뀔 일도 없다. 제약 축들과 같은 규약이다.
+# ══════════════════════════════════════════════════════════
+
+func _aim_tick(d: float) -> void:
+	match aim_mode:
+		# 새 방식은 여기 갈래를 판다.
+		_:
+			# 게이지가 왕복하고 누른 순간 그 축이 잠긴다. 세로 먼저 가로 다음.
+			# 모르는 이름도 여기로 떨어진다 — 소리는 _start_round 가 이미
+			# 냈고, 여기서 멎으면 조준이 영영 안 잠겨 런이 통째로 막힌다.
+			gt += d * gs()
+			if state == S.AIM_V:
+				aim.y = lerpf(BC.y - SWING, BC.y + SWING, tri(gt))
+			else:
+				aim.x = lerpf(BC.x - SWING, BC.x + SWING, tri(gt))
+
+
+# 이 다트의 점수. 칩과 배수를 어떻게 합치는가 — 그 한 줄이 이 게임의
+# 점수 계산 방식 전부다.
+func _score_combine(chip: int, mult: int) -> int:
+	match score_mode:
+		"std":
+			return chip * mult
+	return chip * mult
 
 
 func _advance() -> void:
@@ -2235,7 +2321,7 @@ func _next_step() -> void:
 			shake = 3.0
 		"total":
 			var was_short := total < target
-			last_gain = cur_chip * cur_mult
+			last_gain = _score_combine(cur_chip, cur_mult)
 			total += last_gain
 			card_mode = 1
 			total_flash = 1.0
@@ -7200,6 +7286,7 @@ func _pack_view(i: int) -> void:
 
 # 저장에 남은 팩을 화면의 지금 자리로 맞춘 뒤 연다.
 func _open_newrun() -> void:
+	_pack_unlock_check()          # 지난 런에서 채운 조건이 여기서 열린다
 	var rows := GameData.packs()
 	newrun_pip = 0
 	for i in rows.size():
@@ -7236,7 +7323,11 @@ func _draw_newrun() -> void:
 		_icon_dart(Vector2(150.0, 100.0 + float(k) * 18.0), 22.0,
 				String(row.get("dart_id", "std")), dim,
 				deg_to_rad(-18.0 + float(k) * 18.0), 1.0 - dim * 0.6)
-	draw_string(font, Vector2(230, 84), String(row.get("name", "")) if open else "잠김",
+	# 잠긴 히든은 이름도 안 보인다 — 그게 히든이다. 기본은 "잠김" 으로
+	# 무엇이 남았는지는 보인다(다음에 무엇이 열리는지가 완주의 값이다).
+	var hid: bool = not open and GameData.pack_kind(row) == "hidden"
+	draw_string(font, Vector2(230, 84),
+			String(row.get("name", "")) if open else ("???" if hid else "잠김"),
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 13, C_TXT if open else C_DIM)
 	var eb := Rect2(Vector2(230.0, 96.0), Vector2(310.0, 76.0))
 	draw_rect(eb, C_PANEL.darkened(0.2))
@@ -7301,9 +7392,12 @@ func _pack_lines(row: Dictionary) -> Array:
 	return out
 
 
+# 잠긴 팩에 적는 한 줄. 히든은 조건을 안 알려 준다 — 알려 주면 히든이 아니다.
 func _pack_cond(row: Dictionary) -> String:
+	if GameData.pack_kind(row) == "hidden":
+		return "조건 미달"
 	var pq := String(row.get("prereq", ""))
-	return "%s 완주" % pq if pq != "" else "잠김"
+	return "%s 완주" % pq if pq != "" else "완주로 열린다"
 
 
 # 리그이 미는 값 — 1단부터 지금 단까지 쌓인 결과만 적는다.

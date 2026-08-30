@@ -105,6 +105,29 @@ const VOUCHER_KEYS := {
 }
 const VOUCHER_OPS := ["add", "mul"]
 
+# ── 팩의 갈래와 변형 ──────────────────────────────────────
+#  base    런을 완주하면 표 순서대로 다음 것이 열린다
+#  hidden  조건을 채워야 열린다. 그리고 **조준과 점수 계산이 달라진다** —
+#          기본 팩들이 값만 바꾸는 것과 갈리는 자리다.
+#
+#  아래 둘은 **아직 std 하나뿐이다.** 변형의 내용은 안 정했고, 여기는
+#  갈라지는 자리만 세워 둔 것이다. 새 변형을 만들려면 이름을 여기 적고
+#  game.gd 의 _aim_tick / _score_combine 에 그 이름의 갈래를 판다.
+#  등록 안 된 이름을 표에 적으면 검증기가 막는다 — 조용히 std 로 도는
+#  것이 이 시스템에서 가장 나쁜 결말이다(안개가 그랬다).
+# 저장의 통계 열쇠 이름. save.gd 를 preload 하면 표 검증기가 저장 파일을
+# 읽기 시작한다 — 검증기는 순수 함수여야 하므로 이름만 여기 둔다.
+# save.gd 의 STATS 와 어긋나면 save_probe 가 잡는다.
+const Save_STATS := [
+	"runs", "wins", "darts", "triples", "doubles", "bulls", "misses",
+	"items_bought", "mods_bought", "darts_bought", "cons_used",
+	"rerolls", "sold", "gold_earned", "skips", "vouchers_bought",
+	"best_round", "best_score", "best_gold", "best_track",
+]
+const PACK_KINDS := ["base", "hidden"]
+const AIM_MODES := ["std"]
+const SCORE_MODES := ["std"]
+
 const MODIFIER_AXES := ["band_mul", "gauge_mul", "fog", "darts_add",
 		"sector_kill", "seal_items", "target_mul",
 		"color_kill", "ring_kill", "odd_mul", "spin", "reward_mul"]
@@ -578,6 +601,31 @@ static func pack_row(id := "") -> Dictionary:
 		if String(r.get("id", "")) == want:
 			return r
 	return rows[0]                       # 빈 값·모르는 id 는 첫 팩으로 떨어진다
+
+
+static func pack_kind(row := {}) -> String:
+	var r: Dictionary = row if not row.is_empty() else pack_row()
+	var k: String = r.get("kind", "")
+	return k if k != "" else "base"
+
+
+# 지금 팩의 조준 방식. 표가 비었으면 std 다 — 옛 저장이 안 깨진다.
+static func aim_mode() -> String:
+	var m: String = pack_row().get("aim", "")
+	return m if m != "" else "std"
+
+
+static func score_mode() -> String:
+	var m: String = pack_row().get("score", "")
+	return m if m != "" else "std"
+
+
+static func packs_of(kind: String) -> Array:
+	var out := []
+	for r in packs():
+		if pack_kind(r) == kind:
+			out.append(r)
+	return out
 
 
 static func pack_v(key: String, dflt: float) -> float:
@@ -1435,6 +1483,27 @@ static func _v_packs() -> void:
 		if id == "" or seen.has(id):
 			_errs.append("%s — id 가 비었거나 중복이다" % who)
 		seen[id] = true
+		# 갈래와 변형. 등록 안 된 이름은 여기서 막는다 — 안 막으면 표에
+		# 오타 하나가 조용히 기본 팩으로 도는 히든 팩을 만든다.
+		var kind: String = r.get("kind", "")
+		if kind != "" and not PACK_KINDS.has(kind):
+			_errs.append("%s — 모르는 갈래 '%s'" % [who, kind])
+		var am: String = r.get("aim", "")
+		if am != "" and not AIM_MODES.has(am):
+			_errs.append("%s — 모르는 조준 방식 '%s'. AIM_MODES 에 먼저 적어라"
+					% [who, am])
+		var sm: String = r.get("score", "")
+		if sm != "" and not SCORE_MODES.has(sm):
+			_errs.append("%s — 모르는 계산 방식 '%s'. SCORE_MODES 에 먼저 적어라"
+					% [who, sm])
+		# 히든은 조건이 있어야 히든이다. 없으면 영영 안 열린다.
+		if pack_kind(r) == "hidden" and String(r.get("unlock_stat", "")) == "" 				and String(r.get("prereq", "")) == "":
+			_errs.append("%s — 히든인데 여는 조건이 없다. 영영 안 열린다" % who)
+		if pack_kind(r) == "base" and String(r.get("unlock_stat", "")) != "":
+			_warns.append("%s — 기본 팩에 통계 조건이 붙었다. 기본은 완주로 연다" % who)
+		var us: String = r.get("unlock_stat", "")
+		if us != "" and not Save_STATS.has(us):
+			_errs.append("%s — 모르는 통계 열쇠 '%s'" % [who, us])
 		if i == 0 and String(r.get("prereq", "")) != "":
 			_errs.append("%s — 첫 팩은 늘 열려 있어야 한다" % who)
 		var dd: String = r.get("dart_id", "")
