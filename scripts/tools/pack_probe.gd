@@ -60,13 +60,25 @@ func _initialize() -> void:
 			"기본과 히든이 갈려 있다",
 			"기본 %d · 히든 %d · 조건 없는 것 '%s'" % [base_n, hid.size(), no_cond])
 
-	# ③ 방식이 팩에서 읽힌다 — 라운드 시작에 한 번
+	# ③ 계산은 팩이, 조준은 **든 스티커**가 쥔다
 	GameData.pack = "base"
 	g._new_run()
 	g._swap_skip()
-	_say(g.aim_mode == GameData.aim_mode() and g.score_mode == GameData.score_mode()
-			and g.aim_mode == "std",
-			"방식을 팩에서 읽는다", "조준 '%s' · 계산 '%s'" % [g.aim_mode, g.score_mode])
+	_say(g.score_mode == GameData.score_mode() and g.aim_mode == "std",
+			"계산은 팩이 쥔다", "조준 '%s' · 계산 '%s'" % [g.aim_mode, g.score_mode])
+
+	# 조준 방식을 쥔 스티커를 손에 넣으면 그 방식으로 던진다.
+	# 봉인되면 그 판은 다시 기본으로 돌아간다 — 스티커의 규칙 그대로다.
+	var fake: Dictionary = GameData.items()[0].duplicate()
+	fake.aim = "std"
+	g.owned = [fake]
+	g.sealed = -1
+	_say(g._aim_from_items() == "std", "스티커가 조준을 쥔다",
+			"'%s'" % g._aim_from_items())
+	g.sealed = 0
+	_say(g._aim_from_items() == "std", "봉인된 스티커는 조준을 안 쥔다")
+	g.owned = []
+	g.sealed = -1
 
 	# ③' 두 갈래가 실제로 그 값을 쓴다
 	var chip := 7
@@ -143,5 +155,5 @@ func _initialize() -> void:
 
 	Save.wipe()
 	print("
-%s" % ("실패 %d건" % fails if fails > 0 else "열한 검사 전부 통과"))
+%s" % ("실패 %d건" % fails if fails > 0 else "열셋 검사 전부 통과"))
 	quit(mini(fails, 125))

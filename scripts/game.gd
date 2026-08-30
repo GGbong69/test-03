@@ -337,8 +337,21 @@ func _new_run() -> void:
 	throw6 = 0
 	zone_hist.clear()
 	won = false
+	# 팩이 쥐여 주는 스티커. 히든 팩이 조준 방식을 넘기는 통로다.
+	var gi := GameData.pack_grant()
+	if gi != "":
+		for it in GameData.items():
+			if String(it.id) != gi:
+				continue
+			var gp: Dictionary = it.duplicate()
+			gp.gs = 0
+			gp.bought = 0
+			owned.append(gp)
+			break
+		_panel_reset()
 	blind_tags.clear()
 	blind_tags_ante = 0
+	blind_skipped.clear()
 	GameData.voucher_clear()     # 설비는 런 스코프다. 지우는 자리는 여기 하나
 	spin_cur = 0
 	dead_col = -1
@@ -411,9 +424,15 @@ func _start_round() -> void:
 			+ int(GameData.stake_v("seal_items", 0.0))
 	sealed = randi() % owned.size() if seal > 0 and not owned.is_empty() else -1
 	dead_idx = int(mod_v("sector_kill", -1.0))
-	# 팩의 변형을 라운드 시작에 한 번 읽는다. 코드에 갈래가 없는 이름이면
+	# 변형을 라운드 시작에 한 번 읽는다. 코드에 갈래가 없는 이름이면
 	# 여기서 한 번 울린다 — 매 프레임 울리면 로그가 못 쓰게 된다.
-	aim_mode = GameData.aim_mode()
+	#
+	# 조준은 **든 스티커**가 쥔다. 팩이 직접 들고 있으면 그 방식을 런
+	# 도중에 얻거나 잃을 수 없다 — 스티커로 오면 사고 팔고 봉인되는
+	# 것들과 같은 규칙 아래 놓이고, 그 자체가 판단거리가 된다.
+	# 계산 방식은 팩이 그대로 쥔다. 그것은 이 런이 어떤 판인가에 대한
+	# 약속이라 도중에 바뀌면 안 된다.
+	aim_mode = _aim_from_items()
 	score_mode = GameData.score_mode()
 	if not GameData.AIM_MODES.has(aim_mode):
 		push_error("조준: 모르는 방식 '%s' — AIM_MODES 에 없다" % aim_mode)
@@ -1224,6 +1243,28 @@ func _blind_go() -> Rect2:
 #
 # _btn 을 안 쓴다. 그것은 46px 버튼용이라 부제를 y+35 에 놓는데
 # 이 판은 28px 이고, 그 차이만큼 글자가 판 밖으로 나갔다.
+# 지나간 판의 자리. 고른 것이 무엇이었는지만 남긴다.
+func _skip_past(r: Rect2, rn: int) -> void:
+	var took: bool = bool(blind_skipped.get(rn, false))
+	draw_rect(r, C_PANEL.darkened(0.52))
+	draw_rect(Rect2(r.position, Vector2(r.size.x, 1.0)),
+			C_ACC.darkened(0.72) if took else C_WIRE.darkened(0.4))
+	if not took:
+		draw_string(font, r.position + Vector2(0.0, 18.0), "던졌다",
+				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, C_DIM.darkened(0.42))
+		return
+	var t := _blind_tag(rn)
+	_icon_tag(Vector2(r.position.x + 13.0, r.get_center().y), 6.5,
+			String(t.get("kind", "")), 0.34)
+	var tx: float = r.position.x + 24.0
+	var tw: float = r.size.x - 28.0
+	draw_string(font, Vector2(tx, r.position.y + 12.0), "건너뜀",
+			HORIZONTAL_ALIGNMENT_LEFT, tw, 10, C_DIM.darkened(0.32))
+	draw_string(font, Vector2(tx, r.position.y + 23.0),
+			_elide(_tag_text(t), tw, 9), HORIZONTAL_ALIGNMENT_LEFT, tw, 9,
+			C_GOLD.darkened(0.58))
+
+
 func _skip_plate(r: Rect2, t: Dictionary, on: bool) -> void:
 	var a: float = 1.0 if on else 0.55
 	draw_rect(r, C_PANEL.lightened(0.10) if on else C_PANEL.darkened(0.34))
@@ -1264,6 +1305,7 @@ func _skip_blind() -> void:
 	if not GameData.skippable(round_no):
 		_deny()
 		return
+	blind_skipped[round_no] = true
 	if not blind_tag.is_empty():
 		_take_tag(blind_tag)
 	Save.bump("skips")
@@ -1676,6 +1718,19 @@ func _auto_step() -> void:
 #  방식은 **라운드 시작에 한 번** 읽어 둔다. 매 프레임 표를 뒤지지 않고,
 #  라운드 도중에 팩이 바뀔 일도 없다. 제약 축들과 같은 규약이다.
 # ══════════════════════════════════════════════════════════
+
+# 든 스티커 중 조준 방식을 쥔 첫 장. 둘을 같이 들면 랙 앞자리가
+# 이긴다 — 스티커 순서는 플레이어가 끌어서 바꿀 수 있으므로 "무엇이
+# 이기나" 가 손에 있다.
+func _aim_from_items() -> String:
+	for i in owned.size():
+		if i == sealed:
+			continue          # 봉인된 스티커는 이번 판에 일을 안 한다
+		var am := String(owned[i].get("aim", ""))
+		if am != "":
+			return am
+	return "std"
+
 
 func _aim_tick(d: float) -> void:
 	match aim_mode:
@@ -3818,6 +3873,9 @@ var blind_tag := {}             # 지금 건너뛰면 받을 딱지. 화면에 �
 # 이 화면의 일이다. 앤티가 바뀔 때까지 값이 안 흔들려야 그 비교가 선다.
 var blind_tags := {}
 var blind_tags_ante := 0
+# 건너뛴 판. 지난 판의 자리를 비우면 "내가 무엇을 골랐더라" 가 화면에서
+# 사라진다 — 셋을 비교해 고르는 화면인데 고른 흔적만 없어지는 셈이다.
+var blind_skipped := {}
 var pending_tags := []          # 나중에 쓸 딱지들 [{kind, v, when, n}]
 var blind_t := 0.0              # 화면이 열린 뒤 흐른 시간(카드 미끄러짐)            # 스테이지 화면에 들어설 때의 스티커 개수
 var stage_t := 0.0              # 카드가 깔리는 경과. _open_stage 에서 0 으로 선다
@@ -7210,6 +7268,10 @@ func _draw_blind() -> void:
 	for i in per:
 		var srn: int = first + i
 		if srn < round_no:
+			# 지나간 판도 자리를 지킨다. 건너뛴 것은 그 값을, 던진 것은
+			# 던졌다는 것을 남긴다 — 자리가 비면 무엇을 골랐는지가 화면에서
+			# 없어지고, 그러면 남은 판을 고르는 근거 하나가 사라진다.
+			_skip_past(_skip_rect(i), srn)
 			continue
 		if srn == round_no:
 			# 이름이 아니라 **효과**를 적는다. "여벌 다트" 는 이름이고,

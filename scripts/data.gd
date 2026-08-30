@@ -312,6 +312,8 @@ static func items() -> Array:
 			"boom": r.get("boom", ""),
 			"dadd": _i(r, "dadd", "items", 0),
 			"side": r.get("side", ""),
+			# 조준 방식. 비면 std 다 — 178장 중 이것을 쥔 장이 몇 없다.
+			"aim": r.get("aim", ""),
 			"line": r.get("_line", 0),
 		}
 		if String(r.get("gold", "")) != "":
@@ -609,10 +611,11 @@ static func pack_kind(row := {}) -> String:
 	return k if k != "" else "base"
 
 
-# 지금 팩의 조준 방식. 표가 비었으면 std 다 — 옛 저장이 안 깨진다.
-static func aim_mode() -> String:
-	var m: String = pack_row().get("aim", "")
-	return m if m != "" else "std"
+# 팩이 런 시작에 쥐여 주는 스티커. 히든 팩이 조준 방식을 넘기는 통로다 —
+# 팩이 방식을 직접 들고 있으면 그 방식을 런 도중에 얻거나 잃을 수 없다.
+# 스티커로 오면 사고 팔고 봉인되는 것들과 같은 규칙 아래 놓인다.
+static func pack_grant() -> String:
+	return String(pack_row().get("grant_item", ""))
 
 
 static func score_mode() -> String:
@@ -1371,6 +1374,7 @@ static func _validate() -> void:
 	_v_colors()
 	_v_tags()
 	_v_vouchers()
+	_v_item_aim()
 
 
 # 스펙 표 다섯 장의 무결성. 상태 열이 문이다 — 확정만 런타임이고,
@@ -1467,6 +1471,23 @@ static func _v_stakes() -> void:
 
 # 스타트팩. 첫 행은 늘 열려 있어야 하고(런을 못 시작하면 게임이 안 돈다),
 # 다트 id 는 실재해야 하며, 칸 수는 0 보다 커야 한다.
+static func _has_item_id(id: String) -> bool:
+	for r in _raw.get("items", []):
+		if String(r.get("id", "")) == id:
+			return true
+	return false
+
+
+# 스티커가 쥔 조준 방식. 등록 안 된 이름이면 조용히 std 로 도는 스티커가
+# 된다 — 히든 팩이 통째로 아무 일도 안 하는 팩이 되는 길이다.
+static func _v_item_aim() -> void:
+	for r in _raw.get("items", []):
+		var am: String = r.get("aim", "")
+		if am != "" and not AIM_MODES.has(am):
+			_errs.append("items:%d %s — 모르는 조준 방식 '%s'. AIM_MODES 에 먼저 적어라"
+					% [r.get("_line", 0), r.get("name", ""), am])
+
+
 static func _v_packs() -> void:
 	var raw: Array = _raw.get("packs", [])
 	if raw.is_empty():
@@ -1488,10 +1509,9 @@ static func _v_packs() -> void:
 		var kind: String = r.get("kind", "")
 		if kind != "" and not PACK_KINDS.has(kind):
 			_errs.append("%s — 모르는 갈래 '%s'" % [who, kind])
-		var am: String = r.get("aim", "")
-		if am != "" and not AIM_MODES.has(am):
-			_errs.append("%s — 모르는 조준 방식 '%s'. AIM_MODES 에 먼저 적어라"
-					% [who, am])
+		var gi: String = r.get("grant_item", "")
+		if gi != "" and not _has_item_id(gi):
+			_errs.append("%s — 없는 스티커 '%s' 를 준다" % [who, gi])
 		var sm: String = r.get("score", "")
 		if sm != "" and not SCORE_MODES.has(sm):
 			_errs.append("%s — 모르는 계산 방식 '%s'. SCORE_MODES 에 먼저 적어라"
