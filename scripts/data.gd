@@ -611,11 +611,21 @@ static func pack_kind(row := {}) -> String:
 	return k if k != "" else "base"
 
 
-# 팩이 런 시작에 쥐여 주는 스티커. 히든 팩이 조준 방식을 넘기는 통로다 —
-# 팩이 방식을 직접 들고 있으면 그 방식을 런 도중에 얻거나 잃을 수 없다.
-# 스티커로 오면 사고 팔고 봉인되는 것들과 같은 규칙 아래 놓인다.
-static func pack_grant() -> String:
-	return String(pack_row().get("grant_item", ""))
+# 팩이 런 시작에 쥐여 주는 것들. 네 갈래를 같은 규약으로 읽는다 —
+# 세미콜론으로 여럿, 빈 값이면 없다.
+#   grant_item     스티커  (히든 팩이 조준 방식을 넘기는 통로)
+#   grant_mod      개조    (판 모양을 바꾼 채 시작한다)
+#   grant_voucher  설비
+#   grant_cons     소비 아이템
+#
+# 팩이 효과를 직접 들고 있지 않고 **물건으로** 준다. 그래야 그 물건이
+# 사고 팔고 봉인되는 규칙 아래 놓인다 — 팩이 직접 쥐면 런 도중에
+# 얻거나 잃을 수 없고, 그러면 그 팩은 처음부터 끝까지 같은 판이다.
+static func pack_grants(key: String) -> PackedStringArray:
+	var raw := String(pack_row().get(key, ""))
+	if raw == "":
+		return PackedStringArray()
+	return raw.split(";", false)
 
 
 static func score_mode() -> String:
@@ -1471,8 +1481,8 @@ static func _v_stakes() -> void:
 
 # 스타트팩. 첫 행은 늘 열려 있어야 하고(런을 못 시작하면 게임이 안 돈다),
 # 다트 id 는 실재해야 하며, 칸 수는 0 보다 커야 한다.
-static func _has_item_id(id: String) -> bool:
-	for r in _raw.get("items", []):
+static func _has_row(table: String, id: String) -> bool:
+	for r in _raw.get(table, []):
 		if String(r.get("id", "")) == id:
 			return true
 	return false
@@ -1509,9 +1519,15 @@ static func _v_packs() -> void:
 		var kind: String = r.get("kind", "")
 		if kind != "" and not PACK_KINDS.has(kind):
 			_errs.append("%s — 모르는 갈래 '%s'" % [who, kind])
-		var gi: String = r.get("grant_item", "")
-		if gi != "" and not _has_item_id(gi):
-			_errs.append("%s — 없는 스티커 '%s' 를 준다" % [who, gi])
+		# 주는 것들이 실제로 표에 있는가. 없는 id 를 주면 그 팩은 조용히
+		# 아무것도 안 주고 시작한다 — 히든 팩이 통째로 죽는 길이다.
+		for gk in [["grant_item", "items"], ["grant_mod", "mods"],
+				["grant_voucher", "vouchers"], ["grant_cons", "cons"]]:
+			for gid in String(r.get(gk[0], "")).split(";", false):
+				if not _has_row(gk[1], gid):
+					_errs.append("%s — %s 에 없는 '%s' 를 준다" % [who, gk[1], gid])
+		if _i(r, "dart_gold", "packs", 0) < 0:
+			_errs.append("%s — 잔탄 골드가 음수다" % who)
 		var sm: String = r.get("score", "")
 		if sm != "" and not SCORE_MODES.has(sm):
 			_errs.append("%s — 모르는 계산 방식 '%s'. SCORE_MODES 에 먼저 적어라"

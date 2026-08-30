@@ -337,18 +337,7 @@ func _new_run() -> void:
 	throw6 = 0
 	zone_hist.clear()
 	won = false
-	# 팩이 쥐여 주는 스티커. 히든 팩이 조준 방식을 넘기는 통로다.
-	var gi := GameData.pack_grant()
-	if gi != "":
-		for it in GameData.items():
-			if String(it.id) != gi:
-				continue
-			var gp: Dictionary = it.duplicate()
-			gp.gs = 0
-			gp.bought = 0
-			owned.append(gp)
-			break
-		_panel_reset()
+	_pack_grants()
 	blind_tags.clear()
 	blind_tags_ante = 0
 	blind_skipped.clear()
@@ -572,9 +561,17 @@ func _finish_round() -> void:
 # 정산 — 실패 방지로 넘어온 라운드도 같은 길을 걷는다.
 func _settle_clear() -> void:
 	# 정산 내역
-	var dart_gold: int = darts_left * GameData.gold_per_dart()
+	# 잔탄 골드는 팩이 덮을 수 있다. 이자를 끈 팩이 그 자리를 여기서
+	# 되돌려 받는다 — 저축이 값을 잃으면 버는 길이 하나 있어야 한다.
+	var dart_gold: int = darts_left \
+			* int(GameData.pack_v("dart_gold", float(GameData.gold_per_dart())))
 	@warning_ignore("integer_division")  # 보유 5당 1, 내림이 규칙이다
 	var interest: int = mini(gold / GameData.interest_per(), _interest_cap())
+	# 이자를 끄는 팩. 상한을 0 으로 만드는 대신 여기서 끊는다 —
+	# 상한은 리그·설비도 미는 값이라, 거기 0 을 섞으면 "누가 껐나" 가
+	# 안 읽힌다. 팩이 끈 것은 팩 자리에서 끈다.
+	if GameData.pack_v("interest_off", 0.0) > 0.0:
+		interest = 0
 	# gold 를 더하기 전에 부른다 — "굳은살"과 이자가 같은 잔액을 보게 하려는 것이다.
 	var item_rows := _gold_from_items()
 	var item_gold := 0
@@ -621,6 +618,38 @@ func _seal_drop(i: int) -> void:
 
 # 완주하면 다음 리그이 열린다. 표 순서가 곧 계단이라 지금 단의 다음 행이다.
 # 기본 팩은 완주로 열린다 — 표 순서대로 다음 하나. 리그 사다리와 같은 모양이다.
+# 팩이 쥐여 주는 것들. 네 갈래를 한자리에서 푼다 — 갈래마다 다른
+# 자리에서 풀면 "이 팩이 무엇을 주고 시작하나" 를 네 곳에서 읽어야 한다.
+#
+# 개조는 판을 다시 굽는다(mods_own 이 판의 유일한 출처다). 설비는
+# GameData 의 static 목록에 들어가고, 소비와 스티커는 칸에 담긴다.
+# 칸이 모자라면 안 담는다 — 팩이 제 칸보다 많이 주면 그건 표의 잘못이고
+# 검증기가 잡을 자리다. 여기서 칸을 늘려 주면 그 잘못이 숨는다.
+func _pack_grants() -> void:
+	for id in GameData.pack_grants("grant_mod"):
+		if not mods_own.has(String(id)):
+			mods_own.append(String(id))
+	if not mods_own.is_empty():
+		_board_bake()
+	for id in GameData.pack_grants("grant_voucher"):
+		GameData.voucher_add(String(id))
+	for id in GameData.pack_grants("grant_cons"):
+		for c in GameData.consumables():
+			if String(c.id) == String(id) and cons.size() < GameData.cons_slots():
+				cons.append(c)
+				break
+	for id in GameData.pack_grants("grant_item"):
+		for it in GameData.items():
+			if String(it.id) != String(id) or owned.size() >= GameData.max_items():
+				continue
+			var gp: Dictionary = it.duplicate()
+			gp.gs = 0
+			gp.bought = 0
+			owned.append(gp)
+			break
+	_panel_reset()
+
+
 func _pack_unlock_next() -> void:
 	var rows := GameData.packs_of("base")
 	var cur := String(GameData.pack_row().get("id", ""))
@@ -3408,18 +3437,52 @@ func _panel_update(d: float) -> void:
 	peel_t += d
 
 
+# 칸 폭. 다섯까지는 62 고정이고, 그 위로는 좁혀서 이웃을 안 밟는다.
+#
+# 62 는 원래 이름 때문에 잡은 값이었다 — "칸 42 → 56 은 칸 밑 이름이
+# 서로 겹쳐 안 읽혔다(실측)" 가 위 주석이다. 그런데 그 이름은 지금
+# 없다(봉인·호버일 때만 뜬다). 그래서 남은 하한은 그리는 것의 크기다:
+# 스티커 원반 지름 38 과 호버 링 지름 42. 46 이면 링 양옆에 2px 이
+# 남는다 — 그 아래로는 링이 칸 밖으로 샌다.
+#
+# 위 한계는 이웃이다. 왼쪽 소비 칸이 152 에서 끝나고 오른쪽 수용량
+# 꼬리표가 490 에서 시작하므로 랙이 쓸 수 있는 폭은 334 다.
+const PANEL_CELL_MIN := 46.0
+const PANEL_SPAN := 330.0     # 소비(152)와 꼬리표(490) 사이, 여유 2px 씩
+# 랙 판의 최소 폭. 딜러 윗머리가 x[209,431] 이라 그것을 덮으려면 222 가
+# 필요하다. 칸이 셋 이하로 줄면 칸만으로는 그 폭이 안 나오고, 그때
+# 머리가 랙 밖으로 새어 실루엣이 통째로 무너진다 — 칸 수와 판 폭을
+# 갈라 둔 이유가 그것이다. 판은 늘 이만큼이고 칸은 그 안에서 가운데다.
+const PANEL_W_MIN := 228.0
+
+
+func _panel_cell() -> float:
+	var n: int = maxi(GameData.max_items(), 1)
+	return clampf((PANEL_SPAN - PANEL.pad * 2.0) / float(n),
+			PANEL_CELL_MIN, float(PANEL.cell))
+
+
 func _panel_rect() -> Rect2:
 	# _slot_rect 가 이걸 파생하므로 판매 판정·툴팁 앵커·구매 비행 목표가
 	# 전부 따라온다. 좌표 소유자를 안 늘리는 자리다.
+	#
+	# **가운데를 지킨다.** 딜러 윗머리(y<36 반폭 111 = x[209,431])가 랙 뒤에
+	# 숨는 것이 실루엣의 전제다. 한쪽으로 붙여 키우면 칸 수가 줄었을 때
+	# 머리가 랙 밖으로 새고, 그건 여섯 번 다시 그린 자리다.
 	var n: int = GameData.max_items()
-	var w: float = PANEL.cell * n + PANEL.pad * 2.0
+	var w: float = maxf(_panel_cell() * float(n) + PANEL.pad * 2.0, PANEL_W_MIN)
 	return Rect2(Vector2((VIEW.x - w) * 0.5, PANEL.y + _hud_dy()), Vector2(w, PANEL.h))
 
 
 func _slot_rect(i: int) -> Rect2:
 	var pr := _panel_rect()
-	return Rect2(Vector2(pr.position.x + PANEL.pad + i * PANEL.cell, pr.position.y),
-			Vector2(PANEL.cell, pr.size.y))
+	# 칸은 판 안에서 **가운데** 정렬이다. 판이 최소 폭에 걸려 칸보다
+	# 넓어질 수 있으므로 왼쪽에서 재면 오른쪽에 빈 띠가 남는다.
+	var cw: float = _panel_cell()
+	return Rect2(Vector2(pr.get_center().x
+			- cw * float(GameData.max_items()) * 0.5 + float(i) * cw,
+			pr.position.y),
+			Vector2(cw, pr.size.y))
 
 
 func _stk_ti(cost: int) -> int:
