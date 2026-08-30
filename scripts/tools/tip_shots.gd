@@ -1,0 +1,74 @@
+extends SceneTree
+
+const GameData = preload("res://scripts/data.gd")
+const Save = preload("res://scripts/save.gd")
+
+# 툴팁을 갈래마다 찍는다. 툴팁은 커서가 있어야 뜨는데 촬영에는 커서가
+# 없어서 여태 한 장도 안 찍혀 있었다 — 흰 테두리 어긋남이 그래서 살아남았다.
+# _tip_build 를 직접 불러 세운다.
+#
+#   godot --path . --quit-after 900 --script scripts/tools/tip_shots.gd
+
+var g = null
+var busy := false
+
+
+func _initialize() -> void:
+	Save.path = "user://_shot_tip.cfg"
+	Save.wipe()
+	g = load("res://scenes/main.tscn").instantiate()
+	root.add_child(g)
+	g.set_process(false)
+
+
+func _process(_d: float) -> bool:
+	if g != null:
+		g.set_process(false)
+	if busy:
+		return false
+	busy = true
+	_run()
+	return false
+
+
+func _shoot(name: String, hit: Dictionary) -> void:
+	for i in 4:
+		g._process(1.0 / 60.0)
+		g._swap_skip()
+	g._tip_build(hit)
+	g.tip_a = 1.0
+	g.queue_redraw()
+	await process_frame
+	await process_frame
+	root.get_texture().get_image().save_png("res://shots/" + name)
+	print("저장: %-18s %-6s %s" % [name, g.tip_tag, g.tip_title])
+
+
+func _run() -> void:
+	for i in 8:
+		g._process(1.0 / 60.0)
+	GameData.voucher_clear()
+	g._new_run()
+	g._swap_skip()
+
+	# 매대 — 한 자리에 네 갈래가 섞여 뜬다
+	g.round_no = 1
+	g.gold = 60
+	g._open_shop()
+	g._swap_skip()
+	g._drop_settle()
+	for k in g.stock.size():
+		await _shoot("tip_stock%d.png" % k, {"k": "stock", "i": k})
+
+	# 보스 제약
+	g.round_no = GameData.blinds_per_ante()
+	g._open_stage()
+	g.stage_t = 9.0
+	await _shoot("tip_stage.png", {"k": "stage", "i": 1})
+
+	# 탄창 자루
+	g.round_no = 1
+	g._start_round()
+	g._swap_skip()
+	await _shoot("tip_mag.png", {"k": "mag", "i": 0})
+	quit()

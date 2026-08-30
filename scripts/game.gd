@@ -1198,8 +1198,14 @@ func _blind_go() -> Rect2:
 	return _next_rect()
 
 
+# 건너뛰기는 **건너뛸 판 바로 아래**에 붙는다. 앞치마 왼쪽에 두었을 때는
+# 그 버튼이 어느 판을 건너뛰는지가 화면에 안 적혀 있었다 — 판이 셋이고
+# 버튼은 하나인데 둘이 멀리 떨어져 있으면 잇는 것은 플레이어의 추측이다.
 func _blind_skip() -> Rect2:
-	return _reroll_rect()
+	var r := _row_rect(clampi(GameData.blind_idx(round_no), 0,
+			GameData.blinds_per_ante() - 1), GameData.blinds_per_ante())
+	return Rect2(Vector2(r.position.x + 6.0, r.end.y + 8.0),
+			Vector2(r.size.x - 12.0, 28.0))
 
 
 # 건너뛴다 — 점수도 골드도 없다. 딱지를 받고 다음 판으로 넘어간다.
@@ -6473,6 +6479,12 @@ const TIP := {
 var tip_title := ""
 var tip_lines := []             # [{"s": String, "sz": int, "c": Color}]
 var tip_chip := {}              # 제목 옆 미니스티커로 그릴 아이템 (없으면 빈 사전)
+# 갈래 칩 — 툴팁 맨 아래에 한 낱말. "이게 뭐냐" 가 이름만으로는 안 풀린다.
+# 스티커와 소비 아이템이 둘 다 둥근 판이고 개조와 설비가 둘 다 네모라,
+# 그림만으로는 갈래가 안 갈린다. 발라트로가 툴팁 밑에 부스터/조커/타로를
+# 칩으로 붙이는 그 자리다.
+var tip_tag := ""               # 칩에 적을 낱말. 비면 안 그린다
+var tip_tag_c := Color(1, 1, 1)
 var tip_mark := Rect2()         # 대상 사각 (스티커 랙은 링으로 대신하므로 빈 값)
 # 그 사각에 테두리를 두르는가. tip_mark 를 비우는 것과 다르다 — 제약
 # 카드는 "커서 아래 카드가 선다" 를 tip_mark 로 판정하므로(_drop_update)
@@ -6541,6 +6553,7 @@ func _tip_clear() -> void:
 	tip_title = ""
 	tip_lines = []
 	tip_chip = {}
+	tip_tag = ""
 	tip_mark = Rect2()
 	tip_box = true
 	tip_slot = -1
@@ -6595,6 +6608,7 @@ func _tip_build(hit: Dictionary) -> void:
 	var i: int = hit.i
 	match hit.k:
 		"rack":
+			_tip_set_tag("스티커")
 			tip_mark = Rect2()
 			tip_slot = i
 			if i >= owned.size():
@@ -6613,6 +6627,17 @@ func _tip_build(hit: Dictionary) -> void:
 				_tip_add("판매가", 10, C_GOLD, "", "", str(GameData.sell_value(it)))
 		"stock":
 			var s: Dictionary = stock[i]
+			# 매대는 한 자리에 네 갈래가 섞여 뜬다 — 그림만으로는 스티커와
+			# 소비가, 개조와 설비가 안 갈린다. 칩이 그것을 한 낱말로 푼다.
+			match String(s.type):
+				"item":
+					_tip_set_tag("스티커")
+				"mod":
+					_tip_set_tag("개조")
+				"dart":
+					_tip_set_tag("다트")
+				"cons":
+					_tip_set_tag("소비")
 			tip_mark = Rect2()      # 스티커 랙과 같은 진영 — 사각 테두리 안 두른다
 			tip_spot = i
 			tip_title = s.d.n
@@ -6632,6 +6657,7 @@ func _tip_build(hit: Dictionary) -> void:
 				_tip_add(blk, 9,
 						C_DIM.darkened(0.3) if s.sold else C_RED.lightened(0.2))
 		"stage":
+			_tip_set_tag("제약")
 			var sp: Dictionary = stage_pick[i]
 			# 사각은 남기고 테두리만 뺀다. 카드는 서면서 커지고 밝아지는데
 			# 테두리는 **누웠을 때의 자리**에 그려져, 선 카드 위에 어긋난
@@ -6643,6 +6669,7 @@ func _tip_build(hit: Dictionary) -> void:
 			_tip_add(sp.d.d, 11, C_MULT.lightened(0.25))
 			_tip_add("목표 %d" % sp.target, 10, C_DIM)
 		"citem":
+			_tip_set_tag("스티커")
 			var it: Dictionary = GameData.items()[i]
 			tip_mark = _col_cell(i % COL_PAGE)
 			tip_title = it.n
@@ -6655,12 +6682,14 @@ func _tip_build(hit: Dictionary) -> void:
 			_tip_add("%s · %d골드" % [GameData.rarity_name(it.rarity), it.cost],
 					9, C_DIM.darkened(0.2))
 		"cmod":
+			_tip_set_tag("개조")
 			var md: Dictionary = GameData.mods()[i]
 			tip_mark = _col_cell(i % COL_PAGE)
 			tip_title = md.n
 			_tip_add(md.d, 10, C_DIM)
 			_tip_add("보드 개조 · %d골드" % md.cost, 9, C_DIM.darkened(0.2))
 		"cdart":
+			_tip_set_tag("다트")
 			var dt: Dictionary = GameData.darts()[i]
 			tip_mark = _col_cell(i % COL_PAGE)
 			tip_title = dt.n
@@ -6669,16 +6698,19 @@ func _tip_build(hit: Dictionary) -> void:
 			if int(dt.get("mult", 0)) != 0:
 				_tip_add("배수 %+d" % int(dt.mult), 9, C_MULT.lightened(0.25))
 		"ccons":
+			_tip_set_tag("소비")
 			tip_mark = _col_cell(i % COL_PAGE)
 			var cd: Dictionary = GameData.consumables()[i]
 			tip_title = cd.n
 			_tip_add(cd.d, 10, C_DIM)
 		"cmodf":
+			_tip_set_tag("제약")
 			tip_mark = _col_cell(i % COL_PAGE)
 			var mo: Dictionary = GameData.modifiers()[i]
 			tip_title = mo.n
 			_tip_add(mo.d, 10, C_DIM)
 		"mag":
+			_tip_set_tag("다트")
 			var dd: Dictionary = remaining[i]
 			tip_mark = _mag_rect(i)
 			tip_title = dd.n
@@ -6690,8 +6722,30 @@ func _tip_build(hit: Dictionary) -> void:
 				_tip_add("배수를 1로 고정", 9, C_MULT.lightened(0.25))
 
 
+# 갈래 칩 하나. 이름 · 색을 같이 정한다 — 색이 갈래를 절반쯤 말한다.
+func _tip_set_tag(k: String) -> void:
+	tip_tag = k
+	match k:
+		"스티커":
+			tip_tag_c = C_CHIP.lightened(0.15)
+		"소비":
+			tip_tag_c = C_ACC
+		"개조":
+			tip_tag_c = C_MULT.lightened(0.20)
+		"다트":
+			tip_tag_c = C_TXT.darkened(0.15)
+		"설비":
+			tip_tag_c = C_GOLD
+		"제약":
+			tip_tag_c = C_RED.lightened(0.20)
+		_:
+			tip_tag_c = C_DIM
+
+
 func _tip_size() -> Vector2:
 	var h: float = TIP.pad * 2.0 + TIP.title
+	if tip_tag != "":
+		h += TIP.line + 3.0
 	for l in tip_lines:
 		# 아이콘 줄만 14px 아이콘이 들어가게 2px 키운다. 극한 카드(제약 2개)가
 		# 14+15+15+15+13 = 72 로, 뒤집기 한계 86 에 14px 여유가 남는다.
@@ -6777,6 +6831,19 @@ func _tip_draw(sh: Vector2) -> void:
 					-1, l.sz, Color(l.c, tip_a))
 			y += TIP.line
 		y += 2.0 if l.ic != "" else 0.0
+
+	# 갈래 칩 — 맨 아래 왼쪽에 한 낱말. 이름 위가 아니라 아래에 두는 것은
+	# 읽는 순서가 "무엇이다 → 무슨 효과다 → 어느 갈래다" 이기 때문이다.
+	# 갈래를 먼저 읽히면 이름을 안 읽고 넘긴다.
+	if tip_tag != "":
+		var tw2: float = font.get_string_size(tip_tag, HORIZONTAL_ALIGNMENT_LEFT,
+				-1, 9).x + 10.0
+		var tr := Rect2(Vector2(p.x + TIP.pad, y + 1.0), Vector2(tw2, 12.0))
+		draw_rect(tr, Color(tip_tag_c, tip_a * 0.22))
+		draw_rect(Rect2(tr.position, Vector2(tr.size.x, 1.0)),
+				Color(tip_tag_c, tip_a * 0.85))
+		draw_string(font, tr.position + Vector2(5.0, 9.0), tip_tag,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(tip_tag_c, tip_a))
 
 	draw_set_transform(sh)
 
@@ -6936,8 +7003,15 @@ func _blind_card(i: int, rn: int) -> void:
 	else:
 		draw_string(font, Vector2(0.0, 56.0), "목표 %d" % GameData.target_of(rn),
 				HORIZONTAL_ALIGNMENT_CENTER, sz.x, 11, ink)
-		draw_string(font, Vector2(0.0, 76.0), "보상 %d" % GameData.reward_of(rn),
-				HORIZONTAL_ALIGNMENT_CENTER, sz.x, 9, C_GOLD.darkened(0.15))
+		# 보상은 수가 아니라 **금화 개수**로 낸다. 3 과 5 의 차이는 읽어야
+		# 알지만 금화 셋과 다섯은 안 읽고도 보인다. 카드가 누워 있을 때
+		# 특히 그렇다 — 눌린 글자는 못 읽어도 개수는 세인다.
+		var rw: int = GameData.reward_of(rn)
+		var cw: float = 7.0
+		var cx0: float = sz.x * 0.5 - float(rw) * cw * 0.5
+		for ci in mini(rw, 8):
+			draw_plaque(Vector2(cx0 + float(ci) * cw, 70.0), 5.5, 3.6,
+					C_GOLD if not done else C_DIM.darkened(0.3))
 	draw_set_transform(shake_off)
 
 
