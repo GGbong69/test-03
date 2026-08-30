@@ -337,6 +337,8 @@ func _new_run() -> void:
 	throw6 = 0
 	zone_hist.clear()
 	won = false
+	blind_tags.clear()
+	blind_tags_ante = 0
 	GameData.voucher_clear()     # 설비는 런 스코프다. 지우는 자리는 여기 하나
 	spin_cur = 0
 	dead_col = -1
@@ -1181,10 +1183,20 @@ func _open_blind() -> void:
 	sell_sel = -1
 	buy_sel = -1
 	blind_t = 0.0
-	# 건너뛸 수 있는 판에서만 딱지를 굴린다. 미리 굴려 두어야 "무엇을 받고
-	# 무엇을 버리는가" 를 보고 고를 수 있다 — 안 보이면 도박이지 선택이 아니다.
-	blind_tag = GameData.tag_roll(GameData.ante_of(round_no)) \
-			if GameData.skippable(round_no) else {}
+	# 앤티의 딱지를 한꺼번에 굴린다. 미리 굴려 두어야 "무엇을 받고 무엇을
+	# 버리는가" 를 보고 고를 수 있다 — 안 보이면 도박이지 선택이 아니다.
+	# 앤티가 그대로면 다시 안 굴린다. 판을 넘길 때마다 뒤 판의 딱지가
+	# 바뀌면 아까 그것을 보고 세운 계획이 매번 무너진다.
+	var bta := GameData.ante_of(round_no)
+	if bta != blind_tags_ante:
+		blind_tags_ante = bta
+		blind_tags.clear()
+		var bf := _ante_first()
+		for k in GameData.blinds_per_ante():
+			var brn: int = bf + k
+			if GameData.skippable(brn):
+				blind_tags[brn] = GameData.tag_roll(bta)
+	blind_tag = _blind_tag(round_no)
 	state = S.BLIND
 	beep_seq([392.0, 523.0], 0.07, 0.12, 0.18)
 
@@ -1194,6 +1206,11 @@ func _ante_first() -> int:
 	return round_no - GameData.blind_idx(round_no)
 
 
+# 그 판을 건너뛰면 받을 딱지. 없으면 빈 사전이다(보스 판).
+func _blind_tag(rn: int) -> Dictionary:
+	return blind_tags.get(rn, {})
+
+
 func _blind_go() -> Rect2:
 	return _next_rect()
 
@@ -1201,11 +1218,45 @@ func _blind_go() -> Rect2:
 # 건너뛰기는 **건너뛸 판 바로 아래**에 붙는다. 앞치마 왼쪽에 두었을 때는
 # 그 버튼이 어느 판을 건너뛰는지가 화면에 안 적혀 있었다 — 판이 셋이고
 # 버튼은 하나인데 둘이 멀리 떨어져 있으면 잇는 것은 플레이어의 추측이다.
-func _blind_skip() -> Rect2:
-	var r := _row_rect(clampi(GameData.blind_idx(round_no), 0,
-			GameData.blinds_per_ante() - 1), GameData.blinds_per_ante())
+# 건너뛰기 판 한 장. 지금 판이든 뒤 판이든 **같은 모양**이고 밝기만
+# 다르다 — 다른 모양으로 그리면 "이건 뭐고 저건 뭔가" 를 한 번 더
+# 배워야 한다. 셋을 나란히 놓고 비교하는 화면이라 특히 그렇다.
+#
+# _btn 을 안 쓴다. 그것은 46px 버튼용이라 부제를 y+35 에 놓는데
+# 이 판은 28px 이고, 그 차이만큼 글자가 판 밖으로 나갔다.
+func _skip_plate(r: Rect2, t: Dictionary, on: bool) -> void:
+	var a: float = 1.0 if on else 0.55
+	draw_rect(r, C_PANEL.lightened(0.10) if on else C_PANEL.darkened(0.34))
+	draw_rect(Rect2(r.position, Vector2(r.size.x, 2.0 if on else 1.0)),
+			C_ACC if on else C_ACC.darkened(0.55))
+	if t.is_empty():
+		draw_string(font, r.position + Vector2(0.0, 12.0), "못 건너뛴다",
+				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 10, C_DIM)
+		draw_string(font, r.position + Vector2(0.0, 23.0), "보스 판",
+				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, C_DIM.darkened(0.3))
+		return
+	_icon_tag(Vector2(r.position.x + 13.0, r.get_center().y), 6.5,
+			String(t.get("kind", "")), a)
+	var tx: float = r.position.x + 24.0
+	var tw: float = r.size.x - 28.0
+	draw_string(font, Vector2(tx, r.position.y + 12.0),
+			"건너뛴다" if on else "건너뛰면",
+			HORIZONTAL_ALIGNMENT_LEFT, tw, 10,
+			C_TXT if on else C_DIM.darkened(0.1))
+	draw_string(font, Vector2(tx, r.position.y + 23.0),
+			_elide(_tag_text(t), tw, 9), HORIZONTAL_ALIGNMENT_LEFT, tw, 9,
+			C_GOLD if on else C_GOLD.darkened(0.34))
+
+
+func _skip_rect(i: int) -> Rect2:
+	var r := _row_rect(i, GameData.blinds_per_ante())
 	return Rect2(Vector2(r.position.x + 6.0, r.end.y + 8.0),
 			Vector2(r.size.x - 12.0, 28.0))
+
+
+func _blind_skip() -> Rect2:
+	return _skip_rect(clampi(GameData.blind_idx(round_no), 0,
+			GameData.blinds_per_ante() - 1))
 
 
 # 건너뛴다 — 점수도 골드도 없다. 딱지를 받고 다음 판으로 넘어간다.
@@ -3761,6 +3812,12 @@ var shake_off := Vector2.ZERO
 #  보스 판은 못 건너뛴다(blinds.csv 의 skippable 이 문이고, 검증기가
 #  마지막 판만 0 인 것을 강제한다).
 var blind_tag := {}             # 지금 건너뛰면 받을 딱지. 화면에 미리 보인다
+# 판 번호 → 그 판을 건너뛰면 받을 딱지. **앤티에 들어올 때 한꺼번에 굴린다.**
+# 지금 판만 굴리면 "뒤 판을 건너뛰면 뭘 받나" 를 화면에 못 적는다 — 그걸
+# 모르면 지금 판을 건너뛸지 말지도 못 정한다. 셋을 같이 보고 고르는 것이
+# 이 화면의 일이다. 앤티가 바뀔 때까지 값이 안 흔들려야 그 비교가 선다.
+var blind_tags := {}
+var blind_tags_ante := 0
 var pending_tags := []          # 나중에 쓸 딱지들 [{kind, v, when, n}]
 var blind_t := 0.0              # 화면이 열린 뒤 흐른 시간(카드 미끄러짐)            # 스테이지 화면에 들어설 때의 스티커 개수
 var stage_t := 0.0              # 카드가 깔리는 경과. _open_stage 에서 0 으로 선다
@@ -3874,9 +3931,8 @@ func _cons_draw() -> void:
 		if live:
 			draw_rect(r, C_PANEL.lightened(0.10))
 			draw_rect(r, C_WIRE.darkened(0.15), false, 1.0)
-			draw_string(font, r.position + Vector2(0.0, r.size.y * 0.5 + 4.0),
-					String(cons[i].n).substr(0, 2), HORIZONTAL_ALIGNMENT_CENTER,
-					r.size.x, 9, C_TXT)
+			_icon_area(r.get_center(), minf(r.size.x, r.size.y) * 0.40,
+					String(cons[i].id))
 	# 이름과 수 — 랙 밑은 딜러 자리라 못 쓰지만 이 자리는 벽이다.
 	draw_string(font, Vector2(box.position.x, box.end.y + 9.0), "소비",
 			HORIZONTAL_ALIGNMENT_CENTER, box.size.x * 0.5, 9, C_DIM.darkened(0.1))
@@ -5344,9 +5400,7 @@ func _obj_paint(it: Dictionary, s: Dictionary, dim: float) -> void:
 					c + Vector2(-ce.x, -ce.y), c + Vector2(ce.x, -ce.y),
 					c + Vector2(ce.x, ce.y), c + Vector2(-ce.x, ce.y)]), body)
 			draw_rect(Rect2(c - ce, ce * 2.0), C_WIRE.darkened(0.2), false, 1.0)
-			draw_string(font, Vector2(c.x - ce.x, c.y + 3.5),
-					String(s.d.n).substr(0, 2), HORIZONTAL_ALIGNMENT_CENTER,
-					ce.x * 2.0, 8, Color(C_TXT, 1.0 - dim))
+			_icon_area(c, ce.y * 0.78, String(s.d.id), 1.0 - dim)
 		"mod":
 			# 스티커와 같은 어법으로 눕는다 — 옆면을 깔고 윗면을 얹는다.
 			# 정면 원반은 컬렉션의 것이고, 테이블 위의 것은 누워야 한다.
@@ -5730,6 +5784,133 @@ const LIM := {
 	"thin": 0.15, "thin_lo": 1.0,   # 맥락 획
 	"bold": 0.30, "bold_lo": 2.0,   # 구조 획
 }
+
+
+# ══════════════════════════════════════════════════════════
+#  소비 아이템 · 딱지 아이콘
+# ──────────────────────────────────────────────────────────
+#  둘 다 여태 글자 두 자로 그려져 있었다(_obj_paint 주석: "아트 방향이
+#  미정이라 실루엣만 세워 둔다"). 칸이 26px 이라 이름이 안 들어가고,
+#  들어가도 "싱글"과 "삯"은 같은 크기의 검은 얼룩이다.
+#
+#  소비는 **판 자체를 어휘로 쓴다.** 다섯 종이 전부 영역 강화라 무엇을
+#  올리는지가 곧 판의 어느 고리인지다 — 같은 원에 다른 고리를 밝히면
+#  다섯이 한 가족으로 읽히고, 새 영역이 생겨도 고리 하나만 더하면 된다.
+#  이름을 몰라도 어디가 세지는지는 보인다.
+#
+#  딱지는 **받는 것의 모양**을 쓴다. 골드는 동전, 다트는 다트, 매대는
+#  늘어선 칸. 딱지 열 종이 서로 다른 것을 주므로 한 가족일 이유가 없다.
+# ══════════════════════════════════════════════════════════
+
+# 판 고리의 안팎 비율. hit_info 의 rt_* 와 같은 뜻이되 아이콘용 고정값이다 —
+# 개조가 판을 주무르면 아이콘까지 흔들려서 "어느 고리인가" 가 안 읽힌다.
+const ICO := {
+	"bull": 0.20, "in_lo": 0.20, "in_hi": 0.46,
+	"trp_lo": 0.46, "trp_hi": 0.60,
+	"out_lo": 0.60, "out_hi": 0.84,
+	"dbl_lo": 0.84, "dbl_hi": 1.00,
+}
+
+
+func _ring(c: Vector2, r: float, lo: float, hi: float, col: Color) -> void:
+	draw_colored_polygon(annulus_at(c, r * lo, r * hi, 0.0, TAU, 24), col)
+
+
+# 소비 아이템 — 작은 판에 해당 고리 하나만 밝힌다.
+#
+# 처음엔 고리 다섯을 다 그렸다가 뭉갰다. 반지름이 9px 이라 한 고리가
+# 2px 이고, 꺼진 고리끼리는 서로 안 갈린다. **밝히는 것은 늘 하나**이므로
+# 판은 한 색으로 깔고 그 위에 켜진 고리만 얹는다 — 경계선은 켜진 고리의
+# 가장자리가 대신한다. 그리는 것이 줄면 작은 칸에서 더 잘 읽힌다.
+func _icon_area(c: Vector2, r: float, id: String, a := 1.0) -> void:
+	var off := Color(C_WIRE.lightened(0.10), a)
+	var on := Color(C_ACC, a)
+	draw_circle(c, r, off)
+	match id:
+		"c_db":
+			_ring(c, r, ICO.dbl_lo, ICO.dbl_hi, on)
+		"c_tr":
+			_ring(c, r, ICO.trp_lo, ICO.trp_hi, on)
+		"c_sg":
+			# 싱글은 고리가 둘이다(트리플 안쪽과 바깥쪽). 넓은 쪽만 켜면
+			# 트리플과 같은 그림이 되므로 둘 다 켠다.
+			_ring(c, r, ICO.out_lo, ICO.out_hi, on)
+			_ring(c, r, ICO.in_lo, ICO.in_hi, on)
+		"c_bl":
+			draw_circle(c, r * 0.34, on)
+		"c_bo":
+			# 판에 없는 영역이다 — 판을 어둡게 죽이고 밖으로 네 획을 뻗는다.
+			draw_circle(c, r * 0.88, Color(C_DARK.darkened(0.30), a))
+			for i in 4:
+				var d := Vector2(cos(TAU * float(i) * 0.25 + PI * 0.25),
+						sin(TAU * float(i) * 0.25 + PI * 0.25))
+				draw_line(c + d * r * 1.10, c + d * r * 1.66, on,
+						maxf(r * 0.22, 1.0))
+		_:
+			draw_circle(c, r * 0.34, Color(C_DARK.darkened(0.30), a))
+
+
+# 딱지 — 받는 것의 모양. 칸이 작아 획 셋을 안 넘긴다.
+func _icon_tag(c: Vector2, r: float, kind: String, a := 1.0) -> void:
+	var col := Color(C_GOLD, a)
+	var w := maxf(r * 0.26, 1.0)
+	match kind:
+		"gold", "free":
+			# 동전. 외상은 그 동전에 빗금을 그어 "안 낸다" 를 만든다.
+			draw_colored_polygon(_e_pts(c, r * 0.86, r * 0.62, 12), col)
+			if kind == "free":
+				draw_line(c + Vector2(-r * 0.9, r * 0.7), c + Vector2(r * 0.9, -r * 0.7),
+						Color(C_DARK.darkened(0.4), a), w * 1.4)
+		"dart":
+			# 촉이 왼쪽 아래, 꼬리가 오른쪽 위. 벽에 꽂힌 자루와 같은 기울기다.
+			var dv := Vector2(0.80, -0.62).normalized()
+			draw_line(c - dv * r * 0.9, c + dv * r * 0.9, Color(C_TXT, a), w)
+			draw_colored_polygon(PackedVector2Array([
+					c - dv * r * 1.15, c - dv * r * 0.35 + Vector2(-dv.y, dv.x) * r * 0.34,
+					c - dv * r * 0.35 - Vector2(-dv.y, dv.x) * r * 0.34]), col)
+		"track":
+			# 판 하나와 위로 뻗은 화살 — 어느 고리인지는 굴려 봐야 안다.
+			draw_circle(c + Vector2(0.0, r * 0.18), r * 0.66,
+					Color(C_WIRE.darkened(0.18), a))
+			draw_circle(c + Vector2(0.0, r * 0.18), r * 0.24, col)
+			draw_colored_polygon(PackedVector2Array([
+					c + Vector2(0.0, -r * 1.15), c + Vector2(-r * 0.46, -r * 0.52),
+					c + Vector2(r * 0.46, -r * 0.52)]), col)
+		"cons":
+			# 꾸러미 — 상점 테이블 위의 소비 아이템과 같은 네모다.
+			draw_rect(Rect2(c - Vector2(r * 0.74, r * 0.74),
+					Vector2(r * 1.48, r * 1.48)), Color(C_ACC, a))
+			draw_rect(Rect2(c - Vector2(r * 0.74, r * 0.16),
+					Vector2(r * 1.48, r * 0.32)), Color(C_DARK.darkened(0.3), a))
+		"item":
+			# 스티커 원반. 랙에 붙는 그것이다.
+			draw_circle(c, r * 0.84, Color(C_CHIP.lightened(0.10), a))
+			draw_circle(c, r * 0.40, Color(C_DARK.darkened(0.3), a))
+		"reroll":
+			# 한 바퀴 돌아오는 화살. 새로고침 관례 그대로다.
+			draw_arc(c, r * 0.72, PI * 0.35, PI * 1.85, 16, col, w)
+			draw_colored_polygon(PackedVector2Array([
+					c + Vector2(r * 0.72, -r * 0.30), c + Vector2(r * 0.28, -r * 0.30),
+					c + Vector2(r * 0.62, -r * 0.90)]), col)
+		"shop":
+			# 늘어선 매대 칸. 셋째 칸만 밝은 것이 "한 칸 더" 다.
+			for i in 3:
+				var bx := c + Vector2(-r * 0.94 + float(i) * r * 0.72, -r * 0.42)
+				draw_rect(Rect2(bx, Vector2(r * 0.50, r * 0.84)),
+						col if i == 2 else Color(C_WIRE.darkened(0.15), a))
+		"picks":
+			# 부챗살로 벌린 카드 셋 — 제약 선택지가 그 모양으로 깔린다.
+			for i in 3:
+				var rot := deg_to_rad(-22.0 + float(i) * 22.0)
+				var up := Vector2(0.0, -1.0).rotated(rot)
+				var sd := Vector2(1.0, 0.0).rotated(rot) * r * 0.30
+				var bt := c + Vector2(0.0, r * 0.62)
+				draw_colored_polygon(PackedVector2Array([
+						bt - sd, bt + sd, bt + sd + up * r * 1.28,
+						bt - sd + up * r * 1.28]),
+						col if i == 1 else Color(C_WIRE.darkened(0.15), a))
+		_:
+			draw_circle(c, r * 0.7, col)
 
 
 func _icon_modifier(c: Vector2, r: float, id: String, dim: float,
@@ -6622,8 +6803,12 @@ func _tip_hit(m: Vector2) -> Dictionary:
 		S.BLIND:
 			# 버튼에는 효과 한 줄만 들어간다(폭이 141px 이다). 딱지의 이름과
 			# 언제 쓰이는지는 툴팁이 맡는다.
-			if not blind_tag.is_empty() and _blind_skip().has_point(m):
-				return {"k": "tag", "i": 0}
+			for bi in GameData.blinds_per_ante():
+				var brn2: int = _ante_first() + bi
+				if brn2 < round_no or _blind_tag(brn2).is_empty():
+					continue
+				if _skip_rect(bi).has_point(m):
+					return {"k": "tag", "i": brn2}
 			for i in pending_tags.size():
 				if _pend_rect(i).has_point(m):
 					return {"k": "pend", "i": i}
@@ -6706,11 +6891,16 @@ func _tip_build(hit: Dictionary) -> void:
 				_tip_add(blk, 9,
 						C_DIM.darkened(0.3) if s.sold else C_RED.lightened(0.2))
 		"tag":
+			# i 는 자리 번호가 아니라 **판 번호**다. 뒤 판의 딱지도 짚으므로
+			# 어느 판의 것인지가 열쇠여야 한다.
+			var bt := _blind_tag(i)
+			if bt.is_empty():
+				return
 			_tip_set_tag("딱지")
-			tip_mark = _blind_skip()
-			tip_title = String(blind_tag.get("name", ""))
-			_tip_add(_tag_text(blind_tag), 10, C_ACC)
-			_tip_add(_tag_when(blind_tag), 9, C_DIM)
+			tip_mark = _skip_rect(GameData.blind_idx(i))
+			tip_title = String(bt.get("name", ""))
+			_tip_add(_tag_text(bt), 10, C_ACC)
+			_tip_add(_tag_when(bt), 9, C_DIM)
 		"pend":
 			if i >= pending_tags.size():
 				return
@@ -7013,25 +7203,33 @@ func _draw_blind() -> void:
 	_cover_draw()
 	_blind_card(cur, first + cur)
 
-	var skippable: bool = GameData.skippable(round_no)
 	_btn(_blind_go(), "던진다", "목표 %d" % GameData.target_of(round_no), true)
-	if skippable:
-		# 이름이 아니라 **효과**를 적는다. "여벌 다트" 는 이름이고, 건너뛸지
-		# 말지를 정하는 데 필요한 것은 "다음 판 다트 +1개" 다. 이름은 툴팁에
-		# 있다 — 고르는 자리에 필요한 것과 알아 두면 좋은 것이 다르다.
-		_btn(_blind_skip(), "건너뛴다",
-				_elide(_tag_text(blind_tag), _blind_skip().size.x - 10.0, 10),
-				true, C_ACC)
-	else:
-		_btn(_blind_skip(), "못 건너뛴다", "보스 판", false)
+	# 판마다 건너뛰기 자리를 깐다. **뒤 판의 보상도 같이 보인다** —
+	# 지금 판을 건너뛸지는 뒤에 무엇이 기다리는지를 봐야 정해진다.
+	# 지난 판은 안 그린다(이미 지나갔다), 지금 판만 누를 수 있다.
+	for i in per:
+		var srn: int = first + i
+		if srn < round_no:
+			continue
+		if srn == round_no:
+			# 이름이 아니라 **효과**를 적는다. "여벌 다트" 는 이름이고,
+			# 건너뛸지 말지를 정하는 데 필요한 것은 "다트 +1개" 다. 이름은
+			# 툴팁에 있다 — 고르는 자리에 필요한 것과 알아 두면 좋은 것이 다르다.
+			_skip_plate(_blind_skip(), blind_tag, true)
+			continue
+		var pt := _blind_tag(srn)
+		if not pt.is_empty():
+			_skip_plate(_skip_rect(i), pt, false)
 	# 쌓아 둔 딱지 — 언제 쓰이는지는 이름이 말한다
 	for i in pending_tags.size():
 		var r := _pend_rect(i)
 		draw_rect(r, C_PANEL.lightened(0.10))
 		draw_rect(Rect2(r.position, Vector2(r.size.x, 1.0)), C_ACC)
-		draw_string(font, r.position + Vector2(0.0, 11.0),
-				String(pending_tags[i].n), HORIZONTAL_ALIGNMENT_CENTER,
-				r.size.x, 8, C_TXT)
+		_icon_tag(Vector2(r.position.x + 8.0, r.get_center().y + 0.5), 5.0,
+				String(pending_tags[i].kind))
+		draw_string(font, r.position + Vector2(15.0, 11.0),
+				_elide(String(pending_tags[i].n), r.size.x - 18.0, 8),
+				HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 18.0, 8, C_TXT)
 
 
 # 판 한 장. 지금 판이면 서고 나머지는 눕는다.
