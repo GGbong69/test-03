@@ -66,6 +66,31 @@ func _run() -> void:
 	g.stage_t = 9.0
 	await _shoot("tip_stage.png", {"k": "stage", "i": 1})
 
+	# 든 소비 아이템 — 산 뒤로는 아무 데서도 효과를 안 말하던 자리다
+	g.round_no = 1
+	g._open_shop()
+	g._swap_skip()
+	g.cons.clear()
+	for c in GameData.consumables():
+		if g.cons.size() < 2:
+			g.cons.append(c)
+	await _shoot("tip_held.png", {"k": "held", "i": 0})
+
+	# 건너뛰기 딱지 — 버튼에는 효과 한 줄, 툴팁에 이름과 때
+	g.round_no = 1
+	g._open_blind()
+	g._swap_skip()
+	if g.blind_tag.is_empty():
+		g.blind_tag = GameData.tags()[0]
+	await _shoot("tip_tag.png", {"k": "tag", "i": 0})
+
+	# 쌓아 둔 딱지
+	g.pending_tags.clear()
+	for t in GameData.tags():
+		if String(t.get("when", "now")) != "now" and g.pending_tags.size() < 2:
+			g._take_tag(t)
+	await _shoot("tip_pend.png", {"k": "pend", "i": 0})
+
 	# 탄창 자루
 	g.round_no = 1
 	g._start_round()

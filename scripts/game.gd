@@ -1220,6 +1220,35 @@ func _skip_blind() -> void:
 	_open_blind()
 
 
+# 딱지의 효과 한 줄. 표의 desc 는 {v} 를 안 채운 날것이라 여기서 채운다.
+# 이름만으로는 무슨 값을 받는지 모른다 — "여벌 다트" 가 몇 개인지,
+# "넓은 매대" 가 몇 칸인지는 이 줄에만 있다.
+# 언제 쓰이는가. 즉시 받는 것과 다음 상점까지 쥐고 있는 것이 화면에서
+# 안 갈렸다 — "무료 새로고침" 을 지금 받는지 다음 상점에서 받는지가
+# 건너뛸지 말지를 바꾼다.
+func _tag_when(t: Dictionary) -> String:
+	match String(t.get("when", "now")):
+		"round":
+			return "다음 판에"
+		"shop":
+			return "다음 상점에서"
+		"stage":
+			return "다음 보스 판에"
+	return "바로"
+
+
+# 쌓아 둔 딱지 한 자리. 그리기와 판정이 같은 식을 쓴다.
+func _pend_rect(i: int) -> Rect2:
+	return Rect2(Vector2(8.0 + float(i) * 62.0, VIEW.y - 20.0), Vector2(58.0, 14.0))
+
+
+func _tag_text(t: Dictionary) -> String:
+	if t.is_empty():
+		return ""
+	return GameData.fill(String(t.get("desc", "")),
+			{"v": float(String(t.get("v", "0")))})
+
+
 # 딱지 하나를 받는다. 지금 쓰는 것은 바로 쓰고, 나중 것은 쌓아 둔다.
 func _take_tag(t: Dictionary) -> void:
 	var kind := String(t.get("kind", ""))
@@ -1227,7 +1256,10 @@ func _take_tag(t: Dictionary) -> void:
 	var when := String(t.get("when", "now"))
 	var at := Vector2(VIEW.x * 0.5, TBL.fy + 40.0)
 	if when != "now":
-		pending_tags.append({"kind": kind, "v": v, "n": String(t.get("name", ""))})
+		# 효과 줄과 때를 같이 싣는다 — 쌓인 딱지에 커서를 올렸을 때
+		# 이름만 있으면 무엇이 기다리는지가 이름 그대로 수수께끼다.
+		pending_tags.append({"kind": kind, "v": v, "n": String(t.get("name", "")),
+				"d": _tag_text(t), "w": _tag_when(t)})
 		pop(at, "%s" % t.get("name", ""), C_ACC, 13, 1.4)
 		return
 	match kind:
@@ -6566,6 +6598,12 @@ func _tip_hit(m: Vector2) -> Dictionary:
 		S.SHOP:
 			if hand_st == H.CARRY:
 				return {}                 # 드는 동안 툴팁은 끈다
+			# 든 소비 아이템 — 칸에 이름 세 글자만 적혀 있어 무슨 효과인지
+			# 알 길이 없었다. 살 때는 매대 툴팁이 말해 주는데 산 뒤로는
+			# 아무 데서도 안 말한다. 쓰는 자리가 곧 모르는 자리였다.
+			var ch := _cons_hit(m)
+			if ch >= 0:
+				return {"k": "held", "i": ch}
 			# 날아다니는 동안은 매물 툴팁을 안 띄운다 — 판이 미끄러져 못 읽는다.
 			if not _drop_busy():
 				var hi := _shop_hit(m)
@@ -6581,12 +6619,23 @@ func _tip_hit(m: Vector2) -> Dictionary:
 			for i in GameData.max_items():
 				if _slot_rect(i).has_point(m):
 					return {"k": "rack", "i": i}
+		S.BLIND:
+			# 버튼에는 효과 한 줄만 들어간다(폭이 141px 이다). 딱지의 이름과
+			# 언제 쓰이는지는 툴팁이 맡는다.
+			if not blind_tag.is_empty() and _blind_skip().has_point(m):
+				return {"k": "tag", "i": 0}
+			for i in pending_tags.size():
+				if _pend_rect(i).has_point(m):
+					return {"k": "pend", "i": i}
 		S.COLLECT:
 			var kk: String = ["citem", "cmod", "cdart", "ccons", "cmodf"][collect_tab]
 			for i in _col_count():
 				if _col_cell(i).has_point(m):
 					return {"k": kk, "i": collect_page * COL_PAGE + i}
 		S.PICK, S.AIM_V, S.AIM_H:
+			var ch2 := _cons_hit(m)
+			if ch2 >= 0:
+				return {"k": "held", "i": ch2}
 			# 조준 중에도 갈아탈 수 있으므로 그때도 벽을 짚어 준다
 			for i in remaining.size():
 				if _mag_rect(i).has_point(m):
@@ -6656,6 +6705,28 @@ func _tip_build(hit: Dictionary) -> void:
 			if blk != "":
 				_tip_add(blk, 9,
 						C_DIM.darkened(0.3) if s.sold else C_RED.lightened(0.2))
+		"tag":
+			_tip_set_tag("딱지")
+			tip_mark = _blind_skip()
+			tip_title = String(blind_tag.get("name", ""))
+			_tip_add(_tag_text(blind_tag), 10, C_ACC)
+			_tip_add(_tag_when(blind_tag), 9, C_DIM)
+		"pend":
+			if i >= pending_tags.size():
+				return
+			_tip_set_tag("딱지")
+			tip_mark = _pend_rect(i)
+			tip_title = String(pending_tags[i].n)
+			_tip_add(String(pending_tags[i].get("d", "")), 10, C_ACC)
+			_tip_add(String(pending_tags[i].get("w", "")), 9, C_DIM)
+		"held":
+			if i >= cons.size():
+				return
+			var hc: Dictionary = cons[i]
+			_tip_set_tag("소비")
+			tip_mark = _cons_rect(i)
+			tip_title = String(hc.n)
+			_tip_add(String(hc.d), 10, C_ACC)
 		"stage":
 			_tip_set_tag("제약")
 			var sp: Dictionary = stage_pick[i]
@@ -6945,15 +7016,17 @@ func _draw_blind() -> void:
 	var skippable: bool = GameData.skippable(round_no)
 	_btn(_blind_go(), "던진다", "목표 %d" % GameData.target_of(round_no), true)
 	if skippable:
+		# 이름이 아니라 **효과**를 적는다. "여벌 다트" 는 이름이고, 건너뛸지
+		# 말지를 정하는 데 필요한 것은 "다음 판 다트 +1개" 다. 이름은 툴팁에
+		# 있다 — 고르는 자리에 필요한 것과 알아 두면 좋은 것이 다르다.
 		_btn(_blind_skip(), "건너뛴다",
-				String(blind_tag.get("name", "")) if not blind_tag.is_empty() else "",
+				_elide(_tag_text(blind_tag), _blind_skip().size.x - 10.0, 10),
 				true, C_ACC)
 	else:
 		_btn(_blind_skip(), "못 건너뛴다", "보스 판", false)
 	# 쌓아 둔 딱지 — 언제 쓰이는지는 이름이 말한다
 	for i in pending_tags.size():
-		var r := Rect2(Vector2(8.0 + float(i) * 62.0, VIEW.y - 20.0),
-				Vector2(58.0, 14.0))
+		var r := _pend_rect(i)
 		draw_rect(r, C_PANEL.lightened(0.10))
 		draw_rect(Rect2(r.position, Vector2(r.size.x, 1.0)), C_ACC)
 		draw_string(font, r.position + Vector2(0.0, 11.0),

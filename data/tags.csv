@@ -1,11 +1,11 @@
-id,name,kind,v,when,min_ante,weight,desc,_note
+﻿id,name,kind,v,when,min_ante,weight,desc,_note
 t_gold,삯,gold,6,now,1,1.00,골드 +{v},건너뛴 판의 보상 대신 받는다. 가장 흔하고 가장 안전하다
 t_purse,두둑한 삯,gold,12,now,3,0.70,골드 +{v},앤티 3부터. 삯의 큰 판
-t_dart,여벌 다트,dart,1,round,1,1.00,다음 판 다트 +{v}개,다음 판에서만 산다 — 쟁여 두는 축이 아니다
+t_dart,여벌 다트,dart,1,round,1,1.00,다트 +{v}개,다음 판에서만 산다 — 쟁여 두는 축이 아니다
 t_track,영역 승급,track,1,now,1,0.90,무작위 영역 강화 +{v},행성 카드 한 장을 공짜로 받는 것과 같다
 t_cons,보급,cons,1,now,1,0.90,소비 아이템 {v}장,칸이 꽉 차 있으면 안 들어온다
 t_sticker,견본,item,1,now,2,0.60,스티커 {v}장,앤티 2부터. 랙이 꽉 차 있으면 안 들어온다
-t_reroll,무료 새로고침,reroll,2,shop,1,0.90,다음 상점 무료 새로고침 +{v}회,
-t_wide,넓은 매대,shop,2,shop,2,0.70,다음 상점 매물 +{v}칸,앤티 2부터. 자리가 넷을 넘으면 아랫줄로 흐른다
-t_picks,여유로운 선택,picks,1,stage,2,0.60,다음 보스 판 제약 선택지 +{v}장,앤티 2부터
-t_free,외상,free,1,shop,3,0.50,다음 상점 물건 {v}개가 공짜,앤티 3부터. 가장 귀하다
+t_reroll,무료 새로고침,reroll,2,shop,1,0.90,무료 새로고침 +{v}회,
+t_wide,넓은 매대,shop,2,shop,2,0.70,매물 +{v}칸,앤티 2부터. 자리가 넷을 넘으면 아랫줄로 흐른다
+t_picks,여유로운 선택,picks,1,stage,2,0.60,제약 선택지 +{v}장,앤티 2부터
+t_free,외상,free,1,shop,3,0.50,물건 {v}개가 공짜,앤티 3부터. 가장 귀하다
