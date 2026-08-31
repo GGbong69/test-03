@@ -1799,10 +1799,14 @@ const PULL := {
 }
 
 # 흔들 조준. 커서 둘레의 원 안에서 **새 자리를 계속 뽑고 그리로 달려간다.**
-# 감쇠 랜덤워크로 만들었더니 가운데서 속도가 죽어 멎은 것처럼 보였다 —
 # 도착하기 전에 다음 자리를 뽑으므로 늘 움직이고, 다음 자리가 어디일지
 # 모르므로 기다렸다 누르기가 안 통한다.
-const DRIFT := {"span": 0.20, "hold": 0.08, "speed": 300.0}
+#
+# 빠르기는 참고한 게임(Darts: skill issue)에 맞춘다 — 그 게임의 점은
+# 눈으로 따라갈 수 있게 어슬렁거리지, 파르르 떨지 않는다. 10초에 원
+# 지름의 대여섯 배쯤 지난다. 감쇠 랜덤워크(멎어 보임)와 초당 300px
+# (떨림) 둘 다 지나쳤던 자리다 — 프로브가 위아래 양쪽을 다 막는다.
+const DRIFT := {"span": 0.32, "hold": 0.45, "speed": 40.0}
 
 
 # 다트마다 조준을 새로 세운다. 빗각의 축은 여기서 뽑으므로 한 발 안에서는
@@ -3410,21 +3414,59 @@ func _draw_aim_live() -> void:
 			_aim_circle(mouse_at, R * float(DRIFT.span), Color(C_ACC, 0.45))
 			_aim_dot(aim, C_ACC)
 		"pull":
-			# 벽의 자루에서 출발한다. 쥐기 전에는 고리만 두어 "여기서 떠난다"
-			# 를 보이고, 쥐면 지금 놓았을 때 갈 자리를 선으로 낸다.
-			var org := _pull_org()
-			draw_arc(org, 9.0, 0.0, TAU, 20, Color(C_ACC, 0.3), 1.0)
-			if pull_at.x >= 0.0:
-				draw_arc(mouse_at, 5.0, 0.0, TAU, 16, Color(C_ACC, 0.45), 1.0)
-				if _pull_vec().length() >= float(PULL.least):
-					draw_line(org, aim, Color(C_ACC, 0.5), 1.0)
-					_aim_dot(aim, C_ACC)
+			_draw_pull()
 		_:
 			if two:
 				_aim_h_line(aim.y, dim)
 				_aim_v_line(aim.x, C_ACC)
 			else:
 				_aim_h_line(aim.y, C_ACC)
+
+
+# 당김의 그림. 이 방식의 어려움은 **얼마나 세게 튕겨야 하는지 배울
+# 길이 없다**는 것이었다 — 벽에서 판까지가 265px 인데 손에는 아무
+# 눈금도 없다. 그래서 셋을 낸다.
+#   ① 던지는 줄 위에서 **판에 얹히는 구간**만 밝게 — 점을 그 안에
+#      넣으면 된다는 것이 한눈에 보인다. 세기를 가르치는 것은 이것이다
+#   ② 착탄점에 **산포 고리** — 같은 자리에 두 번은 못 꽂으므로
+#      점 하나로 그리면 없는 정확도를 약속하는 셈이다
+#   ③ 힘이 모자라면 빈 점 — 아무것도 안 그리면 고장 난 것으로 읽힌다
+func _draw_pull() -> void:
+	var org := _pull_org()
+	draw_arc(org, 9.0, 0.0, TAU, 20, Color(C_ACC, 0.3), 1.0)
+	if pull_at.x < 0.0:
+		return
+	draw_arc(mouse_at, 5.0, 0.0, TAU, 16, Color(C_ACC, 0.45), 1.0)
+	var v := _pull_vec()
+	if v.length() < 0.5:
+		return
+	var u := v.normalized()
+	var weak: bool = v.length() < float(PULL.least)
+	draw_line(org, aim, Color(C_ACC, 0.16 if weak else 0.26), 1.0)
+	# 판에 얹히는 구간 — 이 줄이 판 원을 지나는 두 자리 사이다. 밝기만
+	# 달리해서는 판 무늬 위에서 안 갈린다. 양 끝에 눈금을 세워 "여기서
+	# 여기까지" 를 눈이 먼저 잡게 한다.
+	var f := org - BC
+	var bq := f.dot(u)
+	var dq := bq * bq - (f.length_squared() - R * R)
+	if dq > 0.0:
+		var rt := sqrt(dq)
+		var t0 := maxf(-bq - rt, 0.0)
+		var t1 := maxf(-bq + rt, 0.0)
+		if t1 > t0:
+			var n := u.orthogonal() * 5.0
+			var a0 := org + u * t0
+			var a1 := org + u * t1
+			draw_line(a0, a1, Color(C_BG, 0.55), 3.0)
+			draw_line(a0, a1, C_ACC, 1.0)
+			for e in [a0, a1]:
+				draw_line(e - n, e + n, Color(C_BG, 0.55), 3.0)
+				draw_line(e - n, e + n, C_ACC, 1.0)
+	if weak:
+		draw_arc(aim, 4.0, 0.0, TAU, 16, Color(C_ACC, 0.4), 1.0)
+		return
+	_aim_dot(aim, C_ACC)
+	draw_arc(aim, float(PULL.spread) + 2.0, 0.0, TAU, 18, Color(C_ACC, 0.4), 1.0)
 
 
 # 조준용 원. 얇은 선 하나는 판 무늬에 묻힌다 — 판의 삼중 고리와 반지름이
