@@ -150,7 +150,7 @@ const AIM_HINT := {
 	"place": ["꽂을 자리를 누르세요"],
 	"pull": ["누른 채 당겼다 놓으세요"],
 }
-const SCORE_MODES := ["std"]
+const SCORE_MODES := ["std", "bal"]
 
 const MODIFIER_AXES := ["band_mul", "gauge_mul", "fog", "darts_add",
 		"sector_kill", "seal_items", "target_mul",
@@ -762,10 +762,18 @@ static func stake_mul(n: int) -> float:
 	return v if v > 0.0 else 1.0
 
 
+# 팩이 목표를 통째로 늘리거나 줄인다. **계산 방식을 바꾸는 팩은 이것
+# 없이는 못 산다** — antes 의 목표(40 → 105 → 220 …)가 "칩 × 배수" 를
+# 기준으로 잡혀 있어서, 합치는 법이 바뀌면 그 곡선이 통째로 어긋난다.
+# 저울은 칩이 배수보다 훨씬 큰 보통 판에서 점수를 몇 배로 올린다.
+static func target_mul() -> float:
+	return _f(pack_row(), "target_mul", "packs", 1.0)
+
+
 static func target_of(n: int) -> int:
 	var base := _i(_ante_row(n), "base", "antes")
 	var m := _f(blind_of(n), "mult", "blinds", 1.0)
-	return int(round(float(base) * m * stake_mul(n)))
+	return int(round(float(base) * m * stake_mul(n) * target_mul()))
 
 
 static func darts_of(n: int) -> int:
@@ -1365,6 +1373,20 @@ static func eff_text(k: String, v: int) -> String:
 	return ""
 
 
+# 계산 방식의 짧은 이름과 하는 일.
+static func score_name(m: String) -> String:
+	match m:
+		"std": return "기본"
+		"bal": return "저울"
+	return m
+
+
+static func score_text(m: String) -> String:
+	match m:
+		"bal": return "점수와 배수를 평균으로 맞춘 뒤 곱합니다"
+	return ""
+
+
 # 조준 방식의 짧은 이름. 목록·화면에서 std 같은 속이름을 안 보이게 한다.
 static func aim_name(m: String) -> String:
 	match m:
@@ -1663,6 +1685,13 @@ static func _v_packs() -> void:
 		if off and String(r.get("desc", "")) == "":
 			_errs.append("%s — 기준선과 다른데 줄글이 없다" % who)
 		var sm: String = r.get("score", "")
+		var tm := String(r.get("target_mul", ""))
+		if tm != "" and _f(r, "target_mul", "packs", 1.0) <= 0.0:
+			_errs.append("%s — 목표 배수가 0 이하다" % who)
+		# 합치는 법이 바뀌면 antes 의 곡선이 어긋난다. 값은 사람이 정해야
+		# 하는 것이라 기본값으로 때우지 않고 여기서 막는다.
+		if sm != "" and sm != "std" and tm == "":
+			_errs.append("%s — 계산 방식이 %s 인데 목표 배수가 비었다" % [who, sm])
 		if sm != "" and not SCORE_MODES.has(sm):
 			_errs.append("%s — 모르는 계산 방식 '%s'. SCORE_MODES 에 먼저 적어라"
 					% [who, sm])

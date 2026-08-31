@@ -1900,6 +1900,12 @@ func _score_combine(chip: int, mult: int) -> int:
 	match score_mode:
 		"std":
 			return chip * mult
+		"bal":
+			# 점수와 배수를 평균으로 맞춘 뒤 곱한다. 한쪽에만 쌓는 빌드가
+			# 통째로 죽고 양쪽을 고르게 올린 빌드가 가장 커진다 — 같은
+			# 합에서 곱이 가장 큰 자리가 두 값이 같은 자리이기 때문이다.
+			var x := int(round((float(chip) + float(mult)) * 0.5))
+			return x * x
 	return chip * mult
 
 

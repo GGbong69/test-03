@@ -233,7 +233,8 @@ static func _cur_name(e: Dictionary) -> String:
 	if k == "score":
 		var sm: Array = GameData.SCORE_MODES
 		var j2: int = i % maxi(sm.size(), 1)
-		return "%d/%d %s" % [j2 + 1, sm.size(), sm[j2]]
+		return "%d/%d %s" % [j2 + 1, sm.size(),
+				GameData.score_name(String(sm[j2]))]
 	var rows := _list(k)
 	if rows.is_empty():
 		return "(없음)"

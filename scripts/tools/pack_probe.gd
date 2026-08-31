@@ -86,6 +86,14 @@ func _initialize() -> void:
 	g.score_mode = "std"
 	_say(g._score_combine(chip, mult) == chip * mult,
 			"std 계산은 칩 × 배수", "%d × %d = %d" % [chip, mult, g._score_combine(chip, mult)])
+	g.score_mode = "bal"
+	_say(g._score_combine(chip, mult) == 25, "저울은 평균을 맞춘 뒤 곱한다",
+			"(7+3)/2 = 5 · 5×5 = %d" % g._score_combine(chip, mult))
+	# 저울은 칩이 배수보다 클수록 크게 튄다. 목표 배수가 왜 필요한지가 이
+	# 한 줄에 있다 — 보통 판(칩 40 · 배수 3)에서 std 의 세 배를 넘는다.
+	_say(g._score_combine(40, 3) > 3 * (40 * 3), "저울은 보통 판에서 크게 튄다",
+			"std %d → 저울 %d" % [40 * 3, g._score_combine(40, 3)])
+	g.score_mode = "std"
 
 	# 표적을 화면 밖에 두고 시작한다. 같은 틱 수를 두 번 돌리면 게이지가
 	# 같은 자리에 착지해서 "안 움직였다" 와 구분이 안 된다 — 실제로 한 번
