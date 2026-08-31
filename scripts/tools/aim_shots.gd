@@ -60,7 +60,42 @@ func _run() -> void:
 
 	for c in CUTS:
 		await _cut(c[0], c[1], int(c[2]), bool(c[3]), int(c[4]))
+	await _kick_card()
 	quit()
+
+
+# 연발 한 발의 점수 카드. 카드가 보여 주는 "칩 x 배수" 와 실제로 오르는
+# 총점이 같아야 한다 — 정산 결과만 깎았을 때는 50x1 을 보여 주고 13 만
+# 올랐다. 화면이 거짓말을 하던 자리라 사진으로 남긴다.
+func _kick_card() -> void:
+	if g.remaining.is_empty():
+		g._start_round()
+	g.target = 999999
+	g.owned = []
+	g.sealed = -1
+	g.total = 0
+	g.state = g.S.PICK
+	g._pick_dart(0)
+	g.aim_mode = "kick"
+	g._aim_begin()
+	var p: Vector2 = g.BC
+	g.mouse_at = p
+	g._click(p)
+	var t := 0
+	while g.burst_left > 0 and t < 600:
+		g.mouse_at = p + Vector2(0.0, -g.kick_o.y)   # 반동을 눌러 잡는다
+		g._aim_tick(FPS)
+		t += 1
+	while t < 900 and g.card_mode != 1:
+		g._process(FPS)
+		t += 1
+	g.tip_a = 0.0
+	g.queue_redraw()
+	await process_frame
+	await process_frame
+	root.get_texture().get_image().save_png("res://shots/aim_kick_card.png")
+	print("저장: aim_kick_card.png  카드 %d x %d · 이 발 %d점 · 총점 %d"
+			% [g.cur_chip, g.cur_mult, g.last_gain, g.total])
 
 
 func _cut(name: String, mode: String, t1v: int, two: bool, t2: int) -> void:

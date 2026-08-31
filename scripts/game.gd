@@ -173,6 +173,8 @@ var drift_t := 0.0              # 다음 자리를 뽑기까지 남은 시간
 var kick_o := Vector2.ZERO      # 반동으로 밀린 양
 var burst_left := 0             # 남은 작은 다트 수
 var kick_pellet := false        # 지금 정산하는 것이 연발의 한 발인가
+var burst_n := 0                # 이번 연발의 발 수. 다 팔 때까지 안 준다
+var settle_n := 0               # 이번 정산의 걸음 수. 걸음마다 안 준다
 var burst_t := 0.0              # 다음 발까지 남은 시간
 var burst_hits := []            # 꽂힌 자리 — 정산이 하나씩 판다
 var mouse_at := Vector2(320, 180)   # 마지막 마우스 자리(놓기·당김이 읽는다)
@@ -1816,6 +1818,10 @@ const PULL := {
 # 꽂힌 자리를 하나씩 판다.
 # 발 수와 점수 몫은 표에 있다(kick_n · kick_share) — 그 둘은 균형이고,
 # 아래 넷은 손맛이다.
+# 정산 걸음의 빠르기. free 걸음까지는 그대로, 그 뒤로는 남은 걸음마다
+# step 만큼 짧아지고 min 에서 멎는다.
+const PACE := {"free": 5.0, "step": 0.055, "min": 0.30, "shot": 4.0}
+
 const KICK := {
 	"gap": 0.11,      # 발 사이 간격(초)
 	"up": 10.0,       # 발마다 위로 밀리는 양(px)
@@ -1852,6 +1858,7 @@ func _aim_begin() -> void:
 	drift_t = 0.0
 	kick_o = Vector2.ZERO
 	burst_left = 0
+	burst_n = 0
 	burst_t = 0.0
 	burst_hits = []
 	_pull_drop()
@@ -2187,6 +2194,7 @@ func _click(m: Vector2) -> void:
 				if burst_left <= 0 and burst_hits.is_empty():
 					mouse_at = m
 					burst_left = GameData.tune_i("kick_n")
+					burst_n = burst_left
 					burst_t = 0.0
 				return
 			_advance()
@@ -2739,8 +2747,42 @@ func _land(mark := true) -> void:
 	if info.mult == 3:
 		round_trp = true
 	dart_index += 1
+	# 큐를 다 세운 뒤라야 이 정산이 얼마나 긴지 알 수 있다.
+	settle_n = queue.size()
 	state = S.RESOLVE
 	qt = beat * 1.1
+
+
+# 작은 다트의 칩. **들어올 때** 깎는다 — 정산 결과만 깎으면 카드는
+# "50 x 1" 을 보여 주고 총점은 13 만 오른다. 화면이 거짓말을 하는 것이다.
+#
+# 판에서 온 칩이든 스티커가 얹은 칩이든 다 여기를 지난다. 칩만 깎고
+# 스티커를 안 깎으면 조건 없는 "점수 +16" 한 장이 발마다 온전히 얹혀
+# 자루 하나가 다섯 자루가 된다.
+#
+# **배수는 안 깎는다.** 보통 한 발과 연발 한 발에 같은 배수가 곱해지므로
+# 비는 그대로다(다섯 발 x 0.25 = 1.25배). 고리가 준 x3 을 x0.75 로
+# 적으면 그것이 더 큰 거짓말이다.
+func _chip_gain(v: int) -> int:
+	if not kick_pellet or v <= 0:
+		return v
+	return maxi(1, int(round(float(v) * GameData.tune("kick_share"))))
+
+
+# 정산이 길수록 걸음을 재게 한다. 스무 걸음이 줄줄이 서 있는데 한 걸음씩
+# 같은 박자로 세면 손이 놀고 기다리게 된다 — 발라트로가 그렇게 한다.
+#
+# **남은 걸음이 아니라 정산 전체 크기로 잰다.** 남은 것으로 재면 뒤로
+# 갈수록 배수가 1 로 돌아가서, 정작 제일 답답한 꼬리가 제일 느려진다.
+# 그렇게 만들었더니 연발이 10.7초에서 8.7초로밖에 안 줄었다.
+#
+# 짧은 정산은 안 건드린다(free 걸음까지는 배수 1). 맨 다트 한 발은
+# 걸음이 셋이라 지금과 똑같이 돈다. 연발 한 발은 걸음 넷쯤으로 쳐서
+# 같이 센다 — 안 그러면 연발은 짧은 정산 다섯 번이라 하나도 안 빨라진다.
+func _pace() -> float:
+	var load := float(settle_n) + float(burst_n) * float(PACE.shot)
+	return clampf(1.0 - maxf(load - float(PACE.free), 0.0) * float(PACE.step),
+			float(PACE.min), 1.0)
 
 
 func _next_step() -> void:
@@ -2752,6 +2794,7 @@ func _next_step() -> void:
 			aim = burst_hits.pop_front()
 			_land(false)
 			return
+		burst_n = 0               # 연발이 다 팔렸다. 이제 보통 걸음이다
 		# 목표를 넘긴 순간 라운드 종료 — 남은 다트는 골드로 환산된다
 		if total >= target or darts_left <= 0:
 			_finish_round()
@@ -2760,7 +2803,8 @@ func _next_step() -> void:
 		return
 
 	var st = queue.pop_front()
-	qt = beat
+	var pace := _pace()
+	qt = beat * pace
 	pitch_step += 1
 	var f := 392.0 * pow(2.0, float(pitch_step) / 12.0)
 	var cc := card_pos() + Vector2(CARD_W * 0.5, 12.0)
@@ -2769,14 +2813,15 @@ func _next_step() -> void:
 		"miss":
 			card_item = "빗나감"
 			beep(180.0, 0.20, 0.14)
-			qt = beat * 1.4
+			qt = beat * 1.4 * pace
 		"chip":
-			cur_chip += st.v
+			cur_chip += _chip_gain(st.v)
 			beep(f, 0.10, 0.16)
 		"pierce":
-			cur_chip += st.v
-			card_item = "관통  점수 +%d" % st.v
-			pop(cc, "+%d" % st.v, C_CHIP, 17, 0.9)
+			var pg := _chip_gain(st.v)
+			cur_chip += pg
+			card_item = "관통  점수 +%d" % pg
+			pop(cc, "+%d" % pg, C_CHIP, 17, 0.9)
 			beep(f, 0.11, 0.18)
 		"mult":
 			cur_mult = st.v
@@ -2786,7 +2831,7 @@ func _next_step() -> void:
 			card_item = st.lbl
 			match st.kind:
 				"chip":
-					cur_chip += st.v
+					cur_chip += _chip_gain(st.v)
 				"mult", "mult_streak", "mult_rand":
 					cur_mult += st.v
 				"xmult":
@@ -2807,19 +2852,12 @@ func _next_step() -> void:
 		"total":
 			var was_short := total < target
 			last_gain = _score_combine(cur_chip, cur_mult)
-			# 연발의 한 발은 **작은 다트**다. 판에서 온 점수든 스티커가 얹은
-			# 점수든 다 같이 줄어야 "조금씩" 이 된다 — 칩만 깎으면 점수
-			# 스티커가 발마다 온전히 얹혀서 한 자루가 다섯 자루가 된다.
-			# 0 은 0 으로 둔다. 빗나감에 1 점이 붙으면 빗나감이 아니게 된다.
-			if kick_pellet and last_gain > 0:
-				last_gain = maxi(1, int(round(float(last_gain)
-						* GameData.tune("kick_share"))))
 			total += last_gain
 			card_mode = 1
 			total_flash = 1.0
 			shake = 9.0
 			board_punch = 1.0
-			qt = beat * 2.6
+			qt = beat * 2.6 * pace
 			if was_short and total >= target:
 				# 목표 돌파 — 라운드가 여기서 끝난다
 				beep_seq([392.0, 523.0, 659.0, 784.0], 0.08, 0.26, 0.26)

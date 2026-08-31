@@ -472,6 +472,24 @@ func _kick(g: Node) -> void:
 	# 발마다 정산 애니메이션이 한 번씩 돈다. 한 발이 다섯 발이 되면
 	# 기다리는 시간도 다섯 배다 — 점수를 어떻게 셀지 정할 때 같이 볼 수
 	# 있게 재어 둔다. 실패로 안 만드는 것은 아직 정한 값이 없어서다.
+	# 걸음 빠르기. **짧은 정산은 안 건드린다** — 맨 다트 한 발이 갑자기
+	# 빨라지면 게임 전체의 박자가 바뀐 것이고, 그건 부탁받은 일이 아니다.
+	g.burst_n = 0
+	g.settle_n = 3
+	var p_bare: float = g._pace()
+	g.settle_n = 14
+	var p_many: float = g._pace()
+	g.settle_n = 3
+	g.burst_n = GameData.tune_i("kick_n")
+	var p_kick: float = g._pace()
+	g.burst_n = 0
+	_say(is_equal_approx(p_bare, 1.0), "맨 다트 한 발은 박자가 그대로다",
+			"걸음 셋 → 배수 %.2f" % p_bare)
+	_say(p_many < 0.7 and p_many > p_kick, "스티커가 줄줄이면 걸음이 재진다",
+			"걸음 열넷 → 배수 %.2f" % p_many)
+	_say(p_kick <= float(g.PACE.min) + 0.001, "연발은 가장 재게 돈다",
+			"배수 %.2f (바닥 %.2f)" % [p_kick, g.PACE.min])
+
 	_say(true, "연발 한 번을 정산하는 데 걸리는 시간",
 			"%.1f초 (한 발당 %.1f초 · 발마다 카드가 뜬다)"
 			% [float(t2) * FPS / 3.0, float(t2) * FPS / float(n * 3)])
