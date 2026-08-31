@@ -3,7 +3,7 @@ extends RefCounted
 # ══════════════════════════════════════════════════════════
 #  개발자 모드
 # ──────────────────────────────────────────────────────────
-#  게임에 든 것을 손으로 다 켜 보는 자리. 프로브는 "값이 맞는가" 를 재고
+#  여는 키는 \ 다. 게임에 든 것을 손으로 다 켜 보는 자리. 프로브는 "값이 맞는가" 를 재고
 #  이것은 "만져 보면 어떤가" 를 본다 — 둘은 다른 일이다. 스티커 178장을
 #  하나씩 사서 확인하려면 런을 백 번 돌아야 한다.
 #
@@ -39,10 +39,11 @@ const ROW := 15.0
 # ── 바깥과 닿는 셋 ────────────────────────────────────────
 
 static func key(g: Node, code: int) -> bool:
-	if code == KEY_F1:
+	# \ 는 [ ] 옆이라 손이 이미 거기 있다 — 게이지 속도 조절과 같은 자리다.
+	if code == KEY_BACKSLASH:
 		on = not on
 		if on:
-			msg = "F1 로 닫는다"
+			msg = "\\ 로 닫는다"
 			msg_t = 2.0
 		return true
 	if not on:
@@ -92,7 +93,7 @@ static func draw(g: Node) -> void:
 	g.draw_rect(Rect2(p.position, Vector2(p.size.x, 2.0)), Color(1.0, 0.35, 0.35))
 	g.draw_string(g.font, p.position + Vector2(8.0, 15.0), "개발자",
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1.0, 0.35, 0.35))
-	g.draw_string(g.font, p.position + Vector2(0.0, 15.0), "F1 닫기 · TAB 다음 쪽",
+	g.draw_string(g.font, p.position + Vector2(0.0, 15.0), "\\ 닫기 · TAB 다음 쪽",
 			HORIZONTAL_ALIGNMENT_RIGHT, p.size.x - 8.0, 11, Color(0.55, 0.52, 0.60))
 
 	for i in PAGES.size():
