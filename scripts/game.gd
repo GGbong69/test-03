@@ -170,6 +170,10 @@ var pull_log := []              # 최근 손자리 [{p,t}] — 놓는 순간의 
 var drift_o := Vector2.ZERO     # 흔들림 — 커서에서 조준점까지
 var drift_to := Vector2.ZERO    # 지금 달려가는 자리
 var drift_t := 0.0              # 다음 자리를 뽑기까지 남은 시간
+var kick_o := Vector2.ZERO      # 반동으로 밀린 양
+var burst_left := 0             # 남은 작은 다트 수
+var burst_t := 0.0              # 다음 발까지 남은 시간
+var burst_hits := []            # 꽂힌 자리 — 정산이 하나씩 판다
 var mouse_at := Vector2(320, 180)   # 마지막 마우스 자리(놓기·당김이 읽는다)
 var mouse_down := false         # 왼쪽 단추를 쥐고 있는가. 당김이 뗌을 여기서 안다
 # 조준의 무작위는 **제 난수통**을 쓴다. 전역 난수를 태우면 다트를 집을
@@ -1660,7 +1664,11 @@ func _process(d: float) -> void:
 		S.FLY:
 			fly_t += d
 			if fly_t >= GameData.tune("fly_time"):
-				_land()
+				if burst_hits.is_empty():
+					_land()
+				else:
+					aim = burst_hits.pop_front()
+					_land(false)
 		S.RESOLVE:
 			qt -= d
 			if qt <= 0.0:
@@ -1798,6 +1806,23 @@ const PULL := {
 	"spread": 4.0,                 # 산포. 같은 자리에 두 번은 못 꽂는다
 }
 
+# 반동 조준. 한 발이 작은 다트 여러 발이 된다. 쏠 때마다 조준이 위로
+# 밀리므로 손으로 눌러 잡아야 한다 — FPS 의 스프레이다.
+#
+# 연발을 **다 쏜 뒤에** 정산한다. 이 게임의 정산은 발마다 카드가 뜨고
+# 큐가 도는 애니메이션이라 한 발에 1초 넘게 걸리는데, 그 사이에 반동을
+# 잡으라고 하면 잡을 것이 없다. 쏘는 동안은 손만 일하고, 다 쏜 뒤에
+# 꽂힌 자리를 하나씩 판다.
+const KICK := {
+	"n": 5,           # 한 발이 되는 작은 다트 수
+	"gap": 0.11,      # 발 사이 간격(초)
+	"up": 10.0,       # 발마다 위로 밀리는 양(px)
+	"side": 5.0,      # 좌우 흔들림 폭(px)
+	# 회복은 연사보다 **느려야** 한다. 30px/s 로 두었더니 발 사이 0.11초에
+	# 거의 다 돌아와서 발이 안 걸어 올라갔다 — 잡을 것이 없는 반동이었다.
+	"settle": 14.0,   # 밀린 것이 제자리로 돌아오는 빠르기(px/s)
+}
+
 # 흔들 조준. 커서 둘레의 원 안에서 **새 자리를 계속 뽑고 그리로 달려간다.**
 # 도착하기 전에 다음 자리를 뽑으므로 늘 움직이고, 다음 자리가 어디일지
 # 모르므로 기다렸다 누르기가 안 통한다.
@@ -1823,6 +1848,10 @@ func _aim_begin() -> void:
 	drift_o = Vector2.ZERO
 	drift_to = Vector2.ZERO
 	drift_t = 0.0
+	kick_o = Vector2.ZERO
+	burst_left = 0
+	burst_t = 0.0
+	burst_hits = []
 	_pull_drop()
 
 
@@ -1909,6 +1938,22 @@ func _pull_point() -> Vector2:
 	return _aim_clamp(_pull_org() + _pull_vec())
 
 
+# 작은 다트 한 발. 꽂고, 반동을 얹고, 마지막이면 정산으로 넘긴다.
+func _kick_fire() -> void:
+	burst_hits.append(aim)
+	# 여기서 화면에 꽂는다. 정산은 이미 꽂힌 자리를 읽으므로 그때는
+	# 다시 안 꽂는다(_land 의 mark=false).
+	darts.append({"p": aim, "id": String(cur_dart.get("id", "std")),
+			"rot": randf_range(-0.26, 0.26)})
+	beep(520.0, 0.04, 0.09)
+	kick_o += Vector2(aim_rng.randf_range(-float(KICK.side), float(KICK.side)),
+			-float(KICK.up))
+	burst_left -= 1
+	burst_t = float(KICK.gap)
+	if burst_left <= 0:
+		_advance()
+
+
 func _aim_tick(d: float) -> void:
 	gt += d * gs()
 	match aim_mode:
@@ -1949,6 +1994,15 @@ func _aim_tick(d: float) -> void:
 			aim = _aim_clamp(mouse_at + drift_o)
 		"place":
 			aim = _aim_clamp(mouse_at)
+		"kick":
+			# 조준은 손을 따라간다. 반동이 그 위에 얹혀 밀고, 손이 눌러 잡는다.
+			# 안 잡으면 발이 위로 걸어 올라가 판을 벗어난다.
+			kick_o = kick_o.move_toward(Vector2.ZERO, float(KICK.settle) * d)
+			aim = _aim_clamp(mouse_at + kick_o)
+			if burst_left > 0:
+				burst_t -= d
+				if burst_t <= 0.0:
+					_kick_fire()
 		"pull":
 			if pull_at.x < 0.0:
 				aim = _pull_org()       # 아직 안 쥐었다. 다트는 벽에 박혀 있다
@@ -2125,6 +2179,14 @@ func _click(m: Vector2) -> void:
 			if m.x >= 0.0 and aim_mode == "place":
 				mouse_at = m
 				aim = _aim_clamp(m)          # 누른 자리가 곧 꽂히는 자리다
+			# 반동은 누름이 **방아쇠**다. 잠그는 것은 마지막 발이 나간 뒤라
+			# 여기서 _advance 를 안 한다 — 하면 첫 발만 나가고 끝난다.
+			if aim_mode == "kick" and m.x >= 0.0:
+				if burst_left <= 0 and burst_hits.is_empty():
+					mouse_at = m
+					burst_left = int(KICK.n)
+					burst_t = 0.0
+				return
 			_advance()
 		S.CLEAR:
 			# 좌표를 보지 않는다 — 아무 데나 누르든 스페이스든 상점으로 넘어간다
@@ -2420,7 +2482,7 @@ func _impact(info: Dictionary) -> void:
 			pop(BC + Vector2(0.0, -38.0), "불스아이", C_ACC, 20, 1.1)
 
 
-func _land() -> void:
+func _land(mark := true) -> void:
 	if _autoplay:
 		# 검증 실행은 보드 안에 고르게 꽂아서 라운드가 진행되게 한다
 		var a := randf() * TAU
@@ -2468,8 +2530,10 @@ func _land() -> void:
 			info.mult += int(tb.m)
 
 	# 꽂힌 자루마다 살짝 다른 각. 한 번 정하고 저장하므로 프레임 간 안 흔들린다.
-	darts.append({"p": aim, "id": String(cur_dart.get("id", "std")),
-			"rot": randf_range(-0.26, 0.26)})
+	# 연발은 쏘는 동안 이미 꽂아 두었으므로 여기서는 안 꽂는다.
+	if mark:
+		darts.append({"p": aim, "id": String(cur_dart.get("id", "std")),
+				"rot": randf_range(-0.26, 0.26)})
 	_impact(info)
 
 	hit_flash = 1.0
@@ -2677,6 +2741,12 @@ func _land() -> void:
 func _next_step() -> void:
 	if queue.is_empty():
 		card_target = 0.0
+		# 반동은 한 발이 여러 발이다. 남은 작은 다트가 있으면 다음 발을
+		# 판다 — 자루는 이미 하나만 썼으므로 라운드 계산은 안 건드린다.
+		if not burst_hits.is_empty():
+			aim = burst_hits.pop_front()
+			_land(false)
+			return
 		# 목표를 넘긴 순간 라운드 종료 — 남은 다트는 골드로 환산된다
 		if total >= target or darts_left <= 0:
 			_finish_round()
@@ -3408,6 +3478,17 @@ func _draw_aim_live() -> void:
 			_aim_v_line(aim.x, C_ACC)
 		"place":
 			_aim_dot(aim, C_ACC)
+		"kick":
+			_aim_dot(aim, C_ACC)
+			# 손에서 조준점까지가 **밀린 양**이다. 이 선이 길어질수록 손을
+			# 더 내려야 한다 — 얼마나 눌러야 하는지가 그대로 보인다.
+			if kick_o.length() > 1.5:
+				draw_line(mouse_at, aim, Color(C_ACC, 0.45), 1.0)
+				draw_arc(mouse_at, 3.0, 0.0, TAU, 12, Color(C_ACC, 0.55), 1.0)
+			# 남은 발. 다 쏘기 전에는 조준을 못 놓는다
+			for pi in burst_left:
+				draw_rect(Rect2(aim + Vector2(-9.0 + float(pi) * 5.0, 11.0),
+						Vector2(3.0, 3.0)), C_ACC)
 		"drift":
 			# 떠도는 테두리를 같이 보여 준다 — 어디까지 튈 수 있는지가
 			# 보여야 "그 안에서 언제 누를까" 가 판단이 된다.

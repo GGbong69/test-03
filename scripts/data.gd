@@ -126,7 +126,7 @@ const Save_STATS := [
 ]
 const PACK_KINDS := ["base", "hidden"]
 const AIM_MODES := ["std", "ring", "tilt", "cross", "drift", "place",
-		"pull"]
+		"pull", "kick"]
 
 # 조준을 **몇 번 잠그는가**. 둘이면 축을 하나씩(세로 먼저 가로 다음),
 # 하나면 누르는 그 한 번에 자리가 통째로 정해진다. 상태 기계가 이 수를
@@ -134,7 +134,7 @@ const AIM_MODES := ["std", "ring", "tilt", "cross", "drift", "place",
 # 잠그는 방식으로 돌아 화면과 조작이 어긋난다 — 검증기가 막는다.
 const AIM_STAGES := {
 	"std": 2, "ring": 2, "tilt": 2,
-	"cross": 1, "drift": 1, "place": 1, "pull": 1,
+	"cross": 1, "drift": 1, "place": 1, "pull": 1, "kick": 1,
 }
 
 # 잠그는 칸마다 화면 아래에 뜰 말. 방식마다 무엇을 정하는지가 달라서
@@ -148,6 +148,7 @@ const AIM_HINT := {
 	"drift": ["떠도는 조준점을 눌러 결정"],
 	"place": ["꽂을 자리를 누르세요"],
 	"pull": ["벽의 다트를 잡고 판 쪽으로 튕기세요"],
+	"kick": ["눌러 쏘고 밀리는 조준을 따라 잡으세요"],
 }
 const SCORE_MODES := ["std", "bal"]
 
@@ -1396,6 +1397,7 @@ static func aim_name(m: String) -> String:
 		"drift": return "흔들"
 		"place": return "놓기"
 		"pull": return "당김"
+		"kick": return "반동"
 	return m
 
 
@@ -1408,6 +1410,7 @@ static func aim_text(m: String) -> String:
 		"drift": return "조준점이 커서 둘레를 제멋대로 떠돕니다"
 		"place": return "조준점을 원하는 자리에 직접 놓습니다"
 		"pull": return "튕기는 속도와 방향으로 다트를 던집니다"
+		"kick": return "한 발이 작은 다트 여러 발이 되며, 쏠 때마다 조준이 밀립니다"
 	return ""
 
 

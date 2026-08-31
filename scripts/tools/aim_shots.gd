@@ -25,6 +25,7 @@ const CUTS := [
 	["drift", "drift", 47, false, 0],
 	["place", "place", 12, false, 0],
 	["pull", "pull", 12, false, 0],
+	["kick", "kick", 0, false, 0],
 ]
 
 
@@ -74,6 +75,14 @@ func _cut(name: String, mode: String, t1v: int, two: bool, t2: int) -> void:
 	g.mouse_at = g.BC + Vector2(46.0, -34.0)
 	if mode == "drift":
 		t1 = 40                     # 흔들림이 자리를 잡을 만큼 돌린다
+	if mode == "kick":
+		# 연발 도중을 잡는다 — 두 발쯤 나가서 반동이 얹혔을 때.
+		var spot: Vector2 = g.BC + Vector2(14.0, 34.0)
+		g.mouse_at = spot
+		g._click(spot)
+		for q in 16:
+			g._aim_tick(FPS)
+		t1 = 0
 	if mode == "pull":
 		# 벽의 자루를 잡고 판 쪽으로 튕기는 도중을 잡는다. 쥔 채로 두어야
 		# "놓았다" 로 안 읽히므로 mouse_down 을 세워 둔다.

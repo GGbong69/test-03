@@ -23,7 +23,9 @@ const GameData = preload("res://scripts/data.gd")
 #    ⑤ 놓기는 누른 자리에. 흔들은 커서를 따라다니고, 당김은 **끌고 온
 #       거리가 아니라 놓는 순간의 속도**로 던진다 — 참고한 두 웹 게임의
 #       방식이고, 처음에 둘 다 틀리게 만들었던 자리다
-#    ⑥ 스티커가 방식을 쥔다. 봉인되면 안 쥔다
+#    ⑥ 반동은 한 발이 여러 발이 된다 — 자루는 하나만 줄고, 꽂힌 자리가
+#       모두 정산된다. 안 잡으면 발이 위로 걸어 올라간다
+#    ⑦ 스티커가 방식을 쥔다. 봉인되면 안 쥔다
 #    ⑦ 여덟 갈래 전부 확인·비행을 지나 착탄까지 간다 (조준이 영영 안
 #       잠기면 런이 통째로 막힌다)
 # ══════════════════════════════════════════════════════════
@@ -107,7 +109,7 @@ func _mode(g: Node, m: String) -> void:
 	# ② 움직인다 · ③ 봉투 안에 있다
 	# 당김은 여기서 안 잰다 — 쥐기 전에는 다트가 제자리에 가만히 있는
 	# 것이 옳다. 움직임은 _pull 이 손을 흔들어 가며 따로 잰다.
-	for stg in (range(stages) if m != "pull" else []):
+	for stg in (range(stages) if m != "pull" and m != "kick" else []):
 		var st: int = g.S.AIM_V if stg == 0 else g.S.AIM_H
 		g.aim_mode = m
 		g.state = g.S.AIM_V
@@ -158,6 +160,10 @@ func _mode(g: Node, m: String) -> void:
 
 	if m == "drift":
 		_drift(g)
+
+	if m == "kick":
+		_kick(g)
+		return                     # 연발은 _throw 의 한 발 셈과 어긋난다
 
 	# ⑦ 착탄까지 간다
 	_throw(g, m, stages)
@@ -363,6 +369,78 @@ func _pull(g: Node) -> void:
 	_let_go(g)
 	_say(g.aim.distance_to(org) > soft + 8.0, "세게 튕길수록 멀리 간다",
 			"약하게 %.0f · 세게 %.0f" % [soft, g.aim.distance_to(org)])
+
+
+# ── 반동: 한 발이 여러 발 ────────────────────────────────
+#  FPS 의 스프레이다. 쏠 때마다 조준이 위로 밀리고 손이 눌러 잡는다.
+#  이 게임의 정산은 발마다 카드가 뜨는 애니메이션이라 연발 중에는 못
+#  돌린다 — 다 쏜 뒤에 꽂힌 자리를 하나씩 판다. 그 두 토막이 다
+#  이어지는지가 여기서 걸린다.
+func _kick(g: Node) -> void:
+	if g.remaining.is_empty():
+		g._start_round()
+	g.state = g.S.PICK
+	g._pick_dart(0)
+	g.aim_mode = "kick"
+	g._aim_begin()
+	var n: int = int(g.KICK.n)
+	var spot: Vector2 = g.BC + Vector2(0.0, 30.0)
+	g.mouse_at = spot
+
+	# 누름은 방아쇠다 — 그 자리에서 잠기면 안 된다
+	g._click(spot)
+	_say(g.state == g.S.AIM_V and g.burst_left == n,
+			"누르면 연발이 시작되고 그 자리에서 안 잠긴다",
+			"%s · 남은 발 %d/%d" % [_sname(g, g.state), g.burst_left, n])
+
+	# 손을 안 움직이면 발이 위로 걸어 올라간다
+	var guard := 0
+	while g.burst_left > 0 and guard < 600:
+		g._aim_tick(FPS)
+		guard += 1
+	_say(g.burst_hits.size() == n, "연발이 %d발을 꽂는다" % n,
+			"%d발 · %d틱" % [g.burst_hits.size(), guard])
+	_say(g.state == g.S.CONFIRM, "마지막 발이 나가면 잠긴다", _sname(g, g.state))
+	var climb: float = float(g.burst_hits[0].y) - float(g.burst_hits[n - 1].y)
+	_say(climb > float(g.KICK.up) * float(n - 1) * 0.6,
+			"안 잡으면 발이 위로 걸어 올라간다",
+			"첫 발 y %.0f → 끝 발 y %.0f (%.0fpx 위로)"
+			% [g.burst_hits[0].y, g.burst_hits[n - 1].y, climb])
+
+	# 손을 내리면 잡힌다 — 반동만큼 따라 내린다
+	g.state = g.S.AIM_V
+	g._aim_begin()
+	g.mouse_at = spot
+	g._click(spot)
+	guard = 0
+	while g.burst_left > 0 and guard < 600:
+		g.mouse_at = spot + Vector2(0.0, -g.kick_o.y)   # 밀린 만큼 눌러 잡는다
+		g._aim_tick(FPS)
+		guard += 1
+	var held := 0.0
+	for h in g.burst_hits:
+		held = maxf(held, absf(float(h.y) - spot.y))
+	_say(held < 6.0, "손으로 누르면 발이 한자리에 모인다",
+			"가장 벗어난 발 %.1fpx" % held)
+
+	# 다 쏜 뒤 꽂힌 자리가 하나씩 정산된다. 자루는 하나만 준다.
+	var before: int = g.remaining.size()
+	var marks: int = g.darts.size()
+	var seen := {}
+	var tick := 0
+	while tick < 3000 and not seen.has(g.S.RESOLVE):
+		g._process(FPS)
+		seen[g.state] = true
+		tick += 1
+	while tick < 3000 and not g.burst_hits.is_empty():
+		g._process(FPS)
+		tick += 1
+	_say(g.burst_hits.is_empty(), "꽂힌 자리를 하나도 안 남기고 다 판다",
+			"남은 자리 %d · %d틱" % [g.burst_hits.size(), tick])
+	_say(g.remaining.size() == before - 1, "연발이어도 자루는 하나만 쓴다",
+			"%d → %d" % [before, g.remaining.size()])
+	_say(g.darts.size() == marks, "정산이 다트를 두 번 안 꽂는다",
+			"쏠 때 %d개 · 정산 뒤 %d개" % [marks, g.darts.size()])
 
 
 # ── 놓기: 누른 자리가 곧 꽂히는 자리 ─────────────────────
