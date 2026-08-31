@@ -383,7 +383,7 @@ func _kick(g: Node) -> void:
 	g._pick_dart(0)
 	g.aim_mode = "kick"
 	g._aim_begin()
-	var n: int = int(g.KICK.n)
+	var n: int = GameData.tune_i("kick_n")
 	var spot: Vector2 = g.BC + Vector2(0.0, 30.0)
 	g.mouse_at = spot
 
@@ -475,6 +475,76 @@ func _kick(g: Node) -> void:
 	_say(true, "연발 한 번을 정산하는 데 걸리는 시간",
 			"%.1f초 (한 발당 %.1f초 · 발마다 카드가 뜬다)"
 			% [float(t2) * FPS / 3.0, float(t2) * FPS / float(n * 3)])
+
+	# 작은 다트는 점수를 **조금씩만** 받는다. 스티커를 다 뺀 맨 판에서
+	# 같은 자리(불)에 보통 한 발과 연발 다섯 발을 꽂아 견준다 — 이 비가
+	# 반동의 세기다. 칩만 깎고 스티커를 안 깎으면 여기서 안 걸리므로
+	# 랙을 비우고 재는 것이 아니라, 랙을 채워서도 한 번 더 잰다.
+	var one := _score_at(g, "std", g.BC)
+	var five := _score_at(g, "kick", g.BC)
+	var want := float(GameData.tune("kick_share")) * float(n)
+	_say(one > 0 and five > 0, "맨 판에서 둘 다 점수가 난다",
+			"보통 %d점 · 연발 다섯 %d점" % [one, five])
+	_say(absf(float(five) / maxf(float(one), 1.0) - want) < want * 0.35,
+			"연발 다섯이 보통 한 발의 %.2f배쯤이다" % want,
+			"실제 %.2f배 (한 발당 %d%%)"
+			% [float(five) / maxf(float(one), 1.0),
+				int(round(GameData.tune("kick_share") * 100.0))])
+
+	# 점수 스티커를 한 장 얹어도 몫이 지켜지는가 — 칩만 깎았다면 여기서
+	# 연발 쪽이 훌쩍 커진다(스티커가 발마다 온전히 얹히기 때문이다).
+	var chip := _item(g, "chip")
+	if not chip.is_empty():
+		g.owned = [chip]
+		var one2 := _score_at(g, "std", g.BC, false)
+		var five2 := _score_at(g, "kick", g.BC, false)
+		g.owned = []
+		_say(absf(float(five2) / maxf(float(one2), 1.0) - want) < want * 0.35,
+				"스티커를 얹어도 몫이 지켜진다",
+				"%s 얹고 — 보통 %d점 · 연발 %d점 (%.2f배)"
+				% [chip.n, one2, five2, float(five2) / maxf(float(one2), 1.0)])
+
+
+# 조건 없는 점수 스티커 한 장. 연발이 발마다 이걸 온전히 받으면 몫이 깨진다.
+func _item(g: Node, kind: String) -> Dictionary:
+	for it in GameData.items():
+		if String(it.get("k", "")) == kind and String(it.get("c", "")) == "always" \
+				and String(it.get("grow", "")) == "" and String(it.get("per", "")) == "":
+			return it.duplicate()
+	return {}
+
+
+# 한 자리에 꽂고 정산이 끝날 때까지 돌린 뒤 그 라운드의 점수를 낸다.
+func _score_at(g: Node, mode: String, p: Vector2, wipe := true) -> int:
+	if wipe:
+		g.owned = []
+		g.sealed = -1
+	if g.remaining.size() < 2:
+		g._start_round()
+	g.target = 999999          # 라운드가 중간에 끝나면 정산이 잘린다
+	g.total = 0
+	g.state = g.S.PICK
+	g._pick_dart(0)
+	g.aim_mode = mode
+	g._aim_begin()
+	g.mouse_at = p
+	var t := 0
+	if mode == "kick":
+		g._click(p)
+		while g.burst_left > 0 and t < 900:
+			g.mouse_at = p + Vector2(0.0, -g.kick_o.y)   # 반동을 눌러 잡는다
+			g._aim_tick(FPS)
+			t += 1
+	else:
+		g._advance()
+		if int(GameData.AIM_STAGES.get(mode, 2)) >= 2:
+			g._advance()
+		g.aim = p
+	while t < 6000 and (g.state == g.S.CONFIRM or g.state == g.S.FLY
+			or g.state == g.S.RESOLVE or not g.burst_hits.is_empty()):
+		g._process(FPS)
+		t += 1
+	return int(g.total)
 
 
 # ── 놓기: 누른 자리가 곧 꽂히는 자리 ─────────────────────

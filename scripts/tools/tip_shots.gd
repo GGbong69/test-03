@@ -96,4 +96,14 @@ func _run() -> void:
 	g._start_round()
 	g._swap_skip()
 	await _shoot("tip_mag.png", {"k": "mag", "i": 0})
+
+	# 조준 스티커 — 이 장들은 조건도 배수도 없고 조준이 곧 효과다.
+	# 문구가 길어 접힐 수 있으므로 눈으로 확인할 자리가 필요하다.
+	for it in GameData.items():
+		if String(it.get("aim", "")) == "":
+			continue
+		g.owned = [it.duplicate()]
+		g.sealed = -1
+		g._panel_reset()
+		await _shoot("tip_aim_%s.png" % it.get("aim"), {"k": "rack", "i": 0})
 	quit()

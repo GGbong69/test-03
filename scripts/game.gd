@@ -172,6 +172,7 @@ var drift_to := Vector2.ZERO    # 지금 달려가는 자리
 var drift_t := 0.0              # 다음 자리를 뽑기까지 남은 시간
 var kick_o := Vector2.ZERO      # 반동으로 밀린 양
 var burst_left := 0             # 남은 작은 다트 수
+var kick_pellet := false        # 지금 정산하는 것이 연발의 한 발인가
 var burst_t := 0.0              # 다음 발까지 남은 시간
 var burst_hits := []            # 꽂힌 자리 — 정산이 하나씩 판다
 var mouse_at := Vector2(320, 180)   # 마지막 마우스 자리(놓기·당김이 읽는다)
@@ -1813,8 +1814,9 @@ const PULL := {
 # 큐가 도는 애니메이션이라 한 발에 1초 넘게 걸리는데, 그 사이에 반동을
 # 잡으라고 하면 잡을 것이 없다. 쏘는 동안은 손만 일하고, 다 쏜 뒤에
 # 꽂힌 자리를 하나씩 판다.
+# 발 수와 점수 몫은 표에 있다(kick_n · kick_share) — 그 둘은 균형이고,
+# 아래 넷은 손맛이다.
 const KICK := {
-	"n": 5,           # 한 발이 되는 작은 다트 수
 	"gap": 0.11,      # 발 사이 간격(초)
 	"up": 10.0,       # 발마다 위로 밀리는 양(px)
 	"side": 5.0,      # 좌우 흔들림 폭(px)
@@ -2184,7 +2186,7 @@ func _click(m: Vector2) -> void:
 			if aim_mode == "kick" and m.x >= 0.0:
 				if burst_left <= 0 and burst_hits.is_empty():
 					mouse_at = m
-					burst_left = int(KICK.n)
+					burst_left = GameData.tune_i("kick_n")
 					burst_t = 0.0
 				return
 			_advance()
@@ -2482,7 +2484,10 @@ func _impact(info: Dictionary) -> void:
 			pop(BC + Vector2(0.0, -38.0), "불스아이", C_ACC, 20, 1.1)
 
 
+# mark 가 false 면 연발의 한 발이다 — 이미 꽂혀 있고, 점수도 한 발치가
+# 아니라 작은 다트 몫만 받는다.
 func _land(mark := true) -> void:
+	kick_pellet = not mark
 	if _autoplay:
 		# 검증 실행은 보드 안에 고르게 꽂아서 라운드가 진행되게 한다
 		var a := randf() * TAU
@@ -2802,6 +2807,13 @@ func _next_step() -> void:
 		"total":
 			var was_short := total < target
 			last_gain = _score_combine(cur_chip, cur_mult)
+			# 연발의 한 발은 **작은 다트**다. 판에서 온 점수든 스티커가 얹은
+			# 점수든 다 같이 줄어야 "조금씩" 이 된다 — 칩만 깎으면 점수
+			# 스티커가 발마다 온전히 얹혀서 한 자루가 다섯 자루가 된다.
+			# 0 은 0 으로 둔다. 빗나감에 1 점이 붙으면 빗나감이 아니게 된다.
+			if kick_pellet and last_gain > 0:
+				last_gain = maxi(1, int(round(float(last_gain)
+						* GameData.tune("kick_share"))))
 			total += last_gain
 			card_mode = 1
 			total_flash = 1.0

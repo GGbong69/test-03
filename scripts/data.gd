@@ -80,6 +80,7 @@ const TUNE_KEYS := [
 	"board_r", "aim_swing", "sector_max", "val_max_mul",
 	"gauge_speed", "resolve_beat", "confirm_hold", "fly_time", "aim_click_r",
 	"cons_slots", "shop_cons", "cons_price_tmp",
+	"kick_n", "kick_share",
 ]
 
 const RARITIES := ["common", "uncommon", "rare"]
@@ -1410,7 +1411,9 @@ static func aim_text(m: String) -> String:
 		"drift": return "조준점이 커서 둘레를 제멋대로 떠돕니다"
 		"place": return "조준점을 원하는 자리에 직접 놓습니다"
 		"pull": return "튕기는 속도와 방향으로 다트를 던집니다"
-		"kick": return "한 발이 작은 다트 여러 발이 되며, 쏠 때마다 조준이 밀립니다"
+		"kick":
+			# 손으로 적은 수는 표와 어긋난다 — 표에서 꽂는다
+			return "한 발이 작은 다트 %d발이 되고 발마다 점수의 %d%%를 받으며, 쏠 때마다 조준이 밀립니다" % [tune_i("kick_n"), int(round(tune("kick_share") * 100.0))]
 	return ""
 
 
