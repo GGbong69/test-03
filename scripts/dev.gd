@@ -34,6 +34,8 @@ static var msg_t := 0.0
 const PAGES := ["경제·진행", "물건", "판·조준", "해금"]
 const W := 300.0
 const ROW := 15.0
+const ARW := 13.0              # 화살표 칸 너비
+const VALW := 116.0            # 값 칸 너비
 
 
 # ── 바깥과 닿는 셋 ────────────────────────────────────────
@@ -68,17 +70,17 @@ static func click(g: Node, m: Vector2) -> bool:
 			continue
 		var e: Dictionary = rows[i]
 		if String(e.t) == "list":
-			# 왼쪽 3분의 1 은 이전, 오른쪽 3분의 1 은 다음, 가운데는 실행
-			var f: float = (m.x - r.position.x) / r.size.x
 			var n: int = int(e.n)
 			if n > 0:
 				var cur: int = int(pick.get(e.k, 0))
-				if f < 0.30:
+				if _arrow(r, false).has_point(m):
 					pick[e.k] = (cur - 1 + n) % n
-				elif f > 0.70:
+				elif _arrow(r, true).has_point(m):
 					pick[e.k] = (cur + 1) % n
-				else:
-					_run(g, e)
+				# **고른 것이 곧 적용이다.** 화살표가 값만 바꾸고 적용을 따로
+				# 눌러야 하면, 검사 도구에서 그 한 번을 빠뜨리는 것이 기본값이
+				# 된다 — 눌러도 게임이 안 바뀌는 것으로 보인다.
+				_run(g, e)
 		else:
 			_run(g, e)
 		return true
@@ -111,9 +113,16 @@ static func draw(g: Node) -> void:
 		g.draw_string(g.font, r.position + Vector2(6.0, 11.0), String(e.n1),
 				HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 12.0, 11, Color(0.86, 0.86, 0.92))
 		if String(e.t) == "list":
-			g.draw_string(g.font, r.position + Vector2(0.0, 11.0),
-					"◀ %s ▶" % _cur_name(e), HORIZONTAL_ALIGNMENT_RIGHT,
-					r.size.x - 6.0, 11, Color(1.0, 0.80, 0.35))
+			var col := Color(1.0, 0.80, 0.35)
+			var la := _arrow(r, false)
+			var ra := _arrow(r, true)
+			g.draw_string(g.font, la.position + Vector2(0.0, 11.0), "◀",
+					HORIZONTAL_ALIGNMENT_CENTER, la.size.x, 11, col)
+			g.draw_string(g.font, ra.position + Vector2(0.0, 11.0), "▶",
+					HORIZONTAL_ALIGNMENT_CENTER, ra.size.x, 11, col)
+			var vb := _val_box(r)
+			g.draw_string(g.font, vb.position + Vector2(0.0, 11.0), _cur_name(e),
+					HORIZONTAL_ALIGNMENT_CENTER, vb.size.x, 11, col)
 
 	if msg != "":
 		g.draw_string(g.font, p.position + Vector2(6.0, p.size.y - 6.0), msg,
@@ -131,6 +140,23 @@ static func tick(d: float) -> void:
 
 static func _panel() -> Rect2:
 	return Rect2(Vector2(4.0, 22.0), Vector2(W, 330.0))
+
+
+# 목록 줄의 화살표 칸. **그려지는 자리와 눌리는 자리가 같아야 한다.**
+# 예전에는 "◀ 값 ▶" 을 오른쪽 정렬로 그려 놓고 줄을 3등분해서 판정했다.
+# 그러면 두 화살표가 다 오른쪽 3분의 1 안에 들어가서 ◀ 가 "다음" 이 되고,
+# 적용은 아무것도 안 그려진 가운데 빈 칸을 눌러야 일어났다 — 화살표를
+# 아무리 눌러도 게임이 안 바뀌는 것으로 보였다.
+static func _arrow(r: Rect2, next: bool) -> Rect2:
+	var right: float = r.position.x + r.size.x - 6.0
+	var x: float = right - ARW if next else right - ARW - VALW - ARW
+	return Rect2(Vector2(x, r.position.y), Vector2(ARW, r.size.y))
+
+
+static func _val_box(r: Rect2) -> Rect2:
+	var la := _arrow(r, false)
+	return Rect2(Vector2(la.position.x + ARW, r.position.y),
+			Vector2(VALW, r.size.y))
 
 
 static func _tab(i: int) -> Rect2:
@@ -250,6 +276,25 @@ static func _say(t: String) -> void:
 	msg_t = 2.5
 
 
+# 조준 방식을 **스티커로도** 쥐여 준다. 값만 박아 두면 다음 _start_round
+# 가 든 스티커를 다시 읽어 std 로 되돌린다 — 판을 넘기는 순간 조용히
+# 풀리는 것이다. 게임에서 방식이 오는 길이 스티커 하나뿐이므로,
+# 검사도 그 길로 가야 검사한 것이 실제로 도는 것과 같아진다.
+static func _aim_sticker(g: Node, am: String) -> void:
+	for j in range(g.owned.size() - 1, -1, -1):
+		if String(g.owned[j].get("aim", "")) != "":
+			g.owned.remove_at(j)      # 겹치면 앞엣것이 이긴다. 먼저 뗀다
+	if am != "std":
+		for it in GameData.items():
+			if String(it.get("aim", "")) == am:
+				while g.owned.size() >= GameData.max_items():
+					g.owned.pop_back()
+				g.owned.insert(0, it.duplicate())
+				break
+	g.sealed = -1                 # 뗀 자리 때문에 봉인 번호가 밀렸다
+	g._panel_reset()
+
+
 static func _run(g: Node, e: Dictionary) -> void:
 	var k := String(e.get("k", ""))
 	var i: int = int(pick.get(k, 0))
@@ -344,11 +389,13 @@ static func _run(g: Node, e: Dictionary) -> void:
 	var rows := _list(k)
 	match k:
 		"aim":
-			g.aim_mode = String(GameData.AIM_MODES[i % GameData.AIM_MODES.size()])
+			var am := String(GameData.AIM_MODES[i % GameData.AIM_MODES.size()])
+			g.aim_mode = am
 			# 방식마다 쓰는 값이 달라 갈아탄 자리에 남은 값이 섞인다 —
 			# 반지름·축을 여기서 새로 세운다.
 			g._aim_begin()
-			_say("조준 '%s'" % g.aim_mode)
+			_aim_sticker(g, am)
+			_say("조준 %s" % GameData.aim_name(am))
 		"score":
 			g.score_mode = String(GameData.SCORE_MODES[i % GameData.SCORE_MODES.size()])
 			_say("계산 '%s'" % g.score_mode)
