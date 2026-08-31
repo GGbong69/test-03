@@ -442,6 +442,40 @@ func _kick(g: Node) -> void:
 	_say(g.darts.size() == marks, "정산이 다트를 두 번 안 꽂는다",
 			"쏠 때 %d개 · 정산 뒤 %d개" % [marks, g.darts.size()])
 
+	# 연발을 잇달아 세 번. 발과 발 사이에 남는 상태가 있으면 여기서
+	# 걸린다 — **오토플레이는 이 길을 못 걷는다.** 반동 스티커를 안 들고,
+	# _auto_step 은 조준 칸에서 그냥 _advance 를 부르기 때문이다.
+	g._start_round()
+	g.target = 999999          # 라운드가 중간에 끝나면 셈이 어긋난다
+	var d0: int = g.remaining.size()
+	var m0: int = g.darts.size()
+	var shots := 0
+	var t2 := 0
+	while shots < 3 and t2 < 9000:
+		var idle: bool = g.burst_left <= 0 and g.burst_hits.is_empty()
+		if idle and (g.state == g.S.PICK or g.state == g.S.AIM_V):
+			if g.state == g.S.PICK:
+				g._pick_dart(0)
+			g.aim_mode = "kick"
+			g.mouse_at = spot
+			g._click(spot)
+			shots += 1
+		g._process(FPS)
+		t2 += 1
+	while t2 < 9000 and not g.burst_hits.is_empty():
+		g._process(FPS)
+		t2 += 1
+	_say(g.remaining.size() == d0 - 3, "연발 셋이 자루 셋만 쓴다",
+			"%d → %d" % [d0, g.remaining.size()])
+	_say(g.darts.size() == m0 + n * 3, "연발 셋이 작은 다트 %d개를 꽂는다" % (n * 3),
+			"%d → %d" % [m0, g.darts.size()])
+	# 발마다 정산 애니메이션이 한 번씩 돈다. 한 발이 다섯 발이 되면
+	# 기다리는 시간도 다섯 배다 — 점수를 어떻게 셀지 정할 때 같이 볼 수
+	# 있게 재어 둔다. 실패로 안 만드는 것은 아직 정한 값이 없어서다.
+	_say(true, "연발 한 번을 정산하는 데 걸리는 시간",
+			"%.1f초 (한 발당 %.1f초 · 발마다 카드가 뜬다)"
+			% [float(t2) * FPS / 3.0, float(t2) * FPS / float(n * 3)])
+
 
 # ── 놓기: 누른 자리가 곧 꽂히는 자리 ─────────────────────
 func _place(g: Node) -> void:
