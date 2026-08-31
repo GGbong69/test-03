@@ -75,19 +75,19 @@ func _cut(name: String, mode: String, t1v: int, two: bool, t2: int) -> void:
 	if mode == "drift":
 		t1 = 40                     # 흔들림이 자리를 잡을 만큼 돌린다
 	if mode == "pull":
-		# 뒤로 당겼다가 앞으로 튕기는 도중을 잡는다. 쥔 채로 두어야
+		# 벽의 자루를 잡고 판 쪽으로 튕기는 도중을 잡는다. 쥔 채로 두어야
 		# "놓았다" 로 안 읽히므로 mouse_down 을 세워 둔다.
-		var org: Vector2 = g.PULL.org
+		var org: Vector2 = g._pull_org()
 		g.mouse_down = true
 		g.mouse_at = org
 		g._pull_grab(org)
-		for q in 20:
-			g.mouse_at = org + Vector2(0.0, float(q + 1) * 3.0)
-			g._aim_tick(0.4 / 20.0)
-		var back: Vector2 = g.mouse_at
-		for q in 4:
-			g.mouse_at = back.lerp(back + Vector2(-46.0, -74.0), float(q + 1) / 4.0)
-			g._aim_tick(0.06 / 4.0)
+		# 세기는 상수에서 거꾸로 뽑는다 — 손으로 적으면 vs 를 만질 때마다
+		# 그림만 조용히 판을 벗어난다.
+		var tgt: Vector2 = g.BC + Vector2(26.0, -44.0)
+		var need: Vector2 = (tgt - org) / float(g.PULL.vs) * 0.08
+		for q in 6:
+			g.mouse_at = org.lerp(org + need, float(q + 1) / 6.0)
+			g._aim_tick(0.08 / 6.0)
 		t1 = 0
 	for i in t1:
 		g._aim_tick(FPS)

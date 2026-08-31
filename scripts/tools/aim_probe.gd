@@ -223,16 +223,26 @@ func _drift(g: Node) -> void:
 		g._aim_begin()
 		g.mouse_at = spot
 		var near := 0
+		var path := 0.0
+		var prev: Vector2 = g.aim
 		for i in 600:
 			g._aim_tick(FPS)
+			path += prev.distance_to(g.aim)
+			prev = g.aim
 			worst = maxf(worst, g.aim.distance_to(spot))
 			seen[Vector2i(g.aim.round())] = true
 			if g.aim.distance_to(spot) <= span + 0.5:
 				near += 1
 		_say(near == 600, "흔들이 커서 %s 를 안 벗어난다" % spot,
 				"반경 %.1f 안 %d/600" % [span, near])
-	_say(seen.size() >= 20, "흔들이 실제로 떠돈다", "서로 다른 자리 %d" % seen.size())
-	_say(worst > span * 0.4, "흔들이 원을 넉넉히 쓴다",
+		# **빠르기**. 감쇠 랜덤워크로 만들었을 때는 가운데서 속도가 죽어
+		# 10초에 겨우 원을 몇 번 오갔고, 화면에서는 멎은 것으로 보였다.
+		# 10초에 원 지름의 스무 배는 지나야 "떠돈다" 로 읽힌다.
+		_say(path > span * 40.0, "흔들이 눈에 띄게 빠르다",
+				"10초에 %.0fpx (지름 %.0f 의 %.1f배)"
+				% [path, span * 2.0, path / (span * 2.0)])
+	_say(seen.size() >= 60, "흔들이 실제로 떠돈다", "서로 다른 자리 %d" % seen.size())
+	_say(worst > span * 0.75, "흔들이 원을 가장자리까지 쓴다",
 			"가장 멀리 %.1f / %.1f" % [worst, span])
 
 
@@ -256,17 +266,25 @@ func _let_go(g: Node) -> void:
 
 
 func _pull(g: Node) -> void:
-	var org: Vector2 = g.PULL.org
+	# 던지는 자리는 **고른 자루가 꽂힌 데**다 — 자루가 있어야 한다
+	if g.remaining.is_empty():
+		g._start_round()
+	g.state = g.S.PICK
+	g._pick_dart(0)
 	g.aim_mode = "pull"
+	var org: Vector2 = g._pull_org()
+	_say(org.x < g.BC.x - g.R, "다트가 왼쪽 벽에서 떠난다",
+			"출발 %s · 판 왼쪽 끝 %.0f" % [org, g.BC.x - g.R])
 
-	# 판 아래를 눌러도 쥐어진다 — 여기가 다트의 출발 자리다
+	# 벽을 눌러도 쥐어진다 — 판 위를 눌러야 한다는 규칙 밖이다
 	g.state = g.S.AIM_V
 	g._aim_begin()
 	g._click(org)
 	_say(g.pull_at.distance_to(org) < 0.6 and g.state == g.S.AIM_V,
-			"판 아래에서 다트를 쥔다", "쥔 자리 %s · %s" % [g.pull_at, _sname(g, g.state)])
+			"벽에서 다트를 쥔다", "쥔 자리 %s · %s" % [g.pull_at, _sname(g, g.state)])
 
-	# 가만히 놓으면 안 던진다
+	# 쥐었다 가만히 놓으면 안 던진다. 착탄점으로 재면 벽에서 판까지의
+	# 거리가 끼어들어 이것이 통과해 버린다 — 던지는 벡터로 재야 한다.
 	g.state = g.S.AIM_V
 	g._aim_begin()
 	_flick(g, org, org, 0.30, 18)
@@ -277,53 +295,72 @@ func _pull(g: Node) -> void:
 
 	# **같은 거리라도 느리면 안 나가고 빠르면 나간다** — 이 한 쌍이
 	# "거리가 아니라 속도" 를 못 박는다
+	var far := Vector2(120.0, 0.0)
 	g.state = g.S.AIM_V
 	g._aim_begin()
-	_flick(g, org, org + Vector2(0.0, -100.0), 1.20, 72)
+	_flick(g, org, org + far, 1.20, 72)
 	_let_go(g)
 	var slow_st: int = g.state
 	g.state = g.S.AIM_V
 	g._aim_begin()
-	_flick(g, org, org + Vector2(0.0, -100.0), 0.08, 6)
+	_flick(g, org, org + far, 0.08, 6)
 	_let_go(g)
 	var fast_st: int = g.state
 	var fast_hit: Vector2 = g.aim
 	_say(slow_st == g.S.AIM_V and fast_st == g.S.CONFIRM,
 			"같은 거리라도 느리면 안 나가고 빠르면 나간다",
 			"느리게 %s · 빠르게 %s" % [_sname(g, slow_st), _sname(g, fast_st)])
-	_say(fast_hit.y < org.y - 60.0 and absf(fast_hit.x - org.x) < 30.0,
-			"위로 튕기면 위로 날아간다", "착탄 %s" % fast_hit)
+	_say(fast_st == g.S.CONFIRM, "빠르게 튕기면 던져진다", "착탄 %s" % fast_hit)
+
+	# 눈금이 맞는가. 판 한가운데를 노리는 세기를 **상수에서 거꾸로 뽑아**
+	# 던져 본다 — 손으로 적은 수를 두면 vs 를 만질 때마다 검사가 같이
+	# 거짓말을 한다. 놓는 틱까지 창에 들어오므로 그만큼 더 끌어야 한다.
+	var dt := 0.08 + FPS
+	var aimed: Vector2 = (g.BC - org) / float(g.PULL.vs) * dt
+	g.state = g.S.AIM_V
+	g._aim_begin()
+	_flick(g, org, org + aimed, 0.08, 6)
+	_let_go(g)
+	_say(g.aim.distance_to(g.BC) < g.R * 0.2, "한가운데를 노린 세기는 한가운데다",
+			"착탄 %s · 중심에서 %.1f" % [g.aim, g.aim.distance_to(g.BC)])
+
+	# 사람 손 눈금. 세기를 달리해도 흔한 손놀림이면 판에 얹혀야 한다 —
+	# 이것이 깨지면 vs 가 사람이 못 내는 속도를 요구하고 있는 것이다.
+	var on := 0
+	for px in [70.0, 90.0, 110.0, 130.0]:
+		g.state = g.S.AIM_V
+		g._aim_begin()
+		_flick(g, org, org + Vector2(px, 0.0), 0.08, 6)
+		_let_go(g)
+		if g.aim.distance_to(g.BC) <= g.R:
+			on += 1
+	_say(on >= 3, "흔한 세기로 튕기면 판에 얹힌다", "0.08초에 70~130px 중 %d/4" % on)
 
 	# 튕기는 방향이 곧 겨냥이다
 	g.state = g.S.AIM_V
 	g._aim_begin()
-	_flick(g, org, org + Vector2(-90.0, -90.0), 0.08, 6)
+	_flick(g, org, org + Vector2(120.0, -80.0), 0.08, 6)
 	_let_go(g)
-	_say(g.aim.x < org.x - 30.0 and g.aim.y < org.y - 30.0,
-			"왼쪽 위로 튕기면 왼쪽 위로 간다", "착탄 %s" % g.aim)
+	var up: Vector2 = g.aim
+	g.state = g.S.AIM_V
+	g._aim_begin()
+	_flick(g, org, org + Vector2(120.0, 80.0), 0.08, 6)
+	_let_go(g)
+	_say(up.y < g.aim.y - 20.0, "위로 튕기면 위에, 아래로 튕기면 아래에 꽂힌다",
+			"위 %.0f · 아래 %.0f" % [up.y, g.aim.y])
 
-	# 뒤로 당겼다 튕기면 더 멀리 간다 (당김은 배수로만 얹힌다)
+	# 세게 튕길수록 멀리 간다
 	g.state = g.S.AIM_V
 	g._aim_begin()
-	_flick(g, org, org + Vector2(0.0, -70.0), 0.08, 6)
+	_flick(g, org, org + Vector2(70.0, 0.0), 0.08, 6)
 	_let_go(g)
-	var plain: float = g.aim.distance_to(org)
+	var soft: float = g.aim.distance_to(org)
 	g.state = g.S.AIM_V
 	g._aim_begin()
-	g.mouse_down = true
-	g.mouse_at = org
-	g._pull_grab(org)
-	for i in 30:                       # 천천히 뒤로 당긴다(창 밖으로 밀린다)
-		g.mouse_at = org + Vector2(0.0, float(i + 1) * 100.0 / 30.0)
-		g._aim_tick(0.5 / 30.0)
-	var back: Vector2 = g.mouse_at
-	for i in 6:                        # 같은 세기로 앞으로 튕긴다
-		g.mouse_at = back.lerp(back + Vector2(0.0, -70.0), float(i + 1) / 6.0)
-		g._aim_tick(0.08 / 6.0)
+	_flick(g, org, org + Vector2(150.0, 0.0), 0.08, 6)
 	_let_go(g)
-	var drawn: float = g.aim.distance_to(org)
-	_say(drawn > plain + 8.0, "뒤로 당겼다 튕기면 더 멀리 간다",
-			"그냥 %.0f · 당기고 %.0f" % [plain, drawn])
+	_say(g.aim.distance_to(org) > soft + 8.0, "세게 튕길수록 멀리 간다",
+			"약하게 %.0f · 세게 %.0f" % [soft, g.aim.distance_to(org)])
 
 
 # ── 놓기: 누른 자리가 곧 꽂히는 자리 ─────────────────────

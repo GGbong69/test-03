@@ -165,11 +165,11 @@ var aim_r := 0.0                # 원·선 조준이 잠근 반지름
 var aim_a := 0.0                # 빗각 조준이 잠근 첫 축의 값
 var aim_ax := 0.0               # 빗각 조준의 축 각도. 다트마다 새로 뽑는다
 var pull_at := Vector2(-1, -1)  # 당김이 다트를 쥔 자리. x < 0 이면 안 쥐었다
-var pull_far := 0.0             # 뒤로 당긴 최대 거리 — 힘의 배수가 된다
 var pull_t := 0.0               # 쥔 뒤 흐른 시간
 var pull_log := []              # 최근 손자리 [{p,t}] — 놓는 순간의 속도를 잰다
 var drift_o := Vector2.ZERO     # 흔들림 — 커서에서 조준점까지
-var drift_v := Vector2.ZERO
+var drift_to := Vector2.ZERO    # 지금 달려가는 자리
+var drift_t := 0.0              # 다음 자리를 뽑기까지 남은 시간
 var mouse_at := Vector2(320, 180)   # 마지막 마우스 자리(놓기·당김이 읽는다)
 var mouse_down := false         # 왼쪽 단추를 쥐고 있는가. 당김이 뗌을 여기서 안다
 # 조준의 무작위는 **제 난수통**을 쓴다. 전역 난수를 태우면 다트를 집을
@@ -1786,19 +1786,23 @@ func _aim_from_items() -> String:
 # 뒤로 끌었다가 그 자리에서 가만히 놓으면 아무 데도 안 간다. 당긴 거리는
 # 그 위에 얹히는 배수일 뿐이다. 다트는 판 아래 제자리에서 출발한다.
 const PULL := {
-	# 판 아래·안내문 위. 348 줄의 글씨와 겹치면 던지는 자리가 글자에 묻힌다.
-	"org": Vector2(320.0, 330.0),
+	# 자루를 못 찾을 때만 쓰는 자리. 보통은 고른 자루가 꽂힌 데서 떠난다.
+	"org": Vector2(40.0, 224.0),
 	"win": 0.12,                   # 속도를 재는 창(초). 손이 마지막에 한 일만 본다
-	"vs": 0.112,                   # 속도 → 거리(초). 1200px/s 면 판 한가운데다
-	"draw": 100.0,                 # 이만큼 뒤로 당기면 배수가 한 단 오른다
-	"bonus": 1.5,                  # 당김 배수 상한 — x1 에서 x2.5 까지
-	"least": 31.0,                 # 이보다 약하면 안 던진다. 다시 쥔다
+	# 속도 → 거리(초). 벽에서 판 한가운데까지 약 265px 이므로 1000px/s 쯤이
+	# 정중앙이다 — 창 해상도로는 초당 2000px, 흔한 손놀림 하나다.
+	# 640px/s 에서 1380px/s 사이가 판에 얹히므로 두 배가 조금 넘는 폭이
+	# 있고, 그보다 세게 튕기면 오른쪽으로 지나간다.
+	"vs": 0.26,
+	"least": 120.0,                # 이보다 안 나가면 안 던진다. 다시 쥔다
 	"spread": 4.0,                 # 산포. 같은 자리에 두 번은 못 꽂는다
 }
 
-# 흔들 조준. 커서 둘레의 작은 원 안을 조준점이 제멋대로 떠돈다 —
-# 겨눌 곳은 정하되 정확히는 못 정한다. span 은 판 반지름에 대한 비다.
-const DRIFT := {"span": 0.20, "kick": 420.0, "damp": 0.92}
+# 흔들 조준. 커서 둘레의 원 안에서 **새 자리를 계속 뽑고 그리로 달려간다.**
+# 감쇠 랜덤워크로 만들었더니 가운데서 속도가 죽어 멎은 것처럼 보였다 —
+# 도착하기 전에 다음 자리를 뽑으므로 늘 움직이고, 다음 자리가 어디일지
+# 모르므로 기다렸다 누르기가 안 통한다.
+const DRIFT := {"span": 0.20, "hold": 0.08, "speed": 300.0}
 
 
 # 다트마다 조준을 새로 세운다. 빗각의 축은 여기서 뽑으므로 한 발 안에서는
@@ -1813,7 +1817,8 @@ func _aim_begin() -> void:
 	if aim_mode == "tilt":
 		aim_ax = randf() * TAU
 	drift_o = Vector2.ZERO
-	drift_v = Vector2.ZERO
+	drift_to = Vector2.ZERO
+	drift_t = 0.0
 	_pull_drop()
 
 
@@ -1848,17 +1853,24 @@ func _aim_clamp(p: Vector2) -> Vector2:
 	return BC + (p - BC).limit_length(R * GameData.tune("aim_click_r"))
 
 
-# 다트를 쥔다. 판 위가 아니라 판 아래에서 쥐므로 조준 클릭 규칙 밖이다.
+# 던지는 자리 = **고른 자루가 꽂혀 있는 데**. 이 게임의 다트는 왼쪽 벽에
+# 박혀 있으므로 거기서 떠난다. 자루마다 높이가 달라 던지는 각도가 매번
+# 조금씩 다르다 — 벽의 어느 칸을 뽑았는가가 그대로 손맛이 된다.
+func _pull_org() -> Vector2:
+	if grip_pick >= 0 and grip_pick < remaining.size():
+		return _grip_pose(grip_pick).c
+	return PULL.org
+
+
+# 다트를 쥔다. 판 위가 아니라 왼쪽 벽에서 쥐므로 조준 클릭 규칙 밖이다.
 func _pull_grab(m: Vector2) -> void:
 	pull_at = m
-	pull_far = 0.0
 	pull_t = 0.0
 	pull_log = [{"p": m, "t": 0.0}]
 
 
 func _pull_drop() -> void:
 	pull_at = Vector2(-1, -1)
-	pull_far = 0.0
 	pull_t = 0.0
 	pull_log = []
 
@@ -1870,10 +1882,13 @@ func _pull_sample(d: float) -> void:
 	pull_log.append({"p": mouse_at, "t": pull_t})
 	while pull_log.size() > 2 and pull_t - float(pull_log[0].t) > PULL.win:
 		pull_log.pop_front()
-	pull_far = maxf(pull_far, mouse_at.y - pull_at.y)   # 판 반대쪽으로 당긴 만큼
 
 
-# 던지는 벡터. 창 안의 속도에 당김 배수를 얹는다.
+# 던지는 벡터 = 창 안의 손 속도. **끌고 온 거리가 아니다.**
+#
+# 참고한 게임에는 뒤로 당긴 거리가 배수로 얹혔는데, 그 게임은 다트가
+# 화면 아래에 있어 뒤로 당길 자리가 있었다. 우리 다트는 왼쪽 벽에 박혀
+# 있어서 뒤로는 34px 밖에 없다 — 못 쓰는 손잡이를 두느니 뺀다.
 func _pull_vec() -> Vector2:
 	if pull_log.size() < 2:
 		return Vector2.ZERO
@@ -1881,14 +1896,13 @@ func _pull_vec() -> Vector2:
 	var b: Vector2 = pull_log[pull_log.size() - 1].p
 	var dt: float = maxf(float(pull_log[pull_log.size() - 1].t)
 			- float(pull_log[0].t), 0.016)
-	var bonus: float = 1.0 + minf(PULL.bonus, maxf(pull_far, 0.0) / PULL.draw)
-	return (b - a) / dt * PULL.vs * bonus
+	return (b - a) / dt * PULL.vs
 
 
-# 지금 놓으면 어디에 꽂히는가. 출발 자리는 늘 판 아래 제자리다 —
-# 뒤로 당겨도 겨냥이 안 옮겨지고, 튕기는 방향만 겨냥이 된다.
+# 지금 놓으면 어디에 꽂히는가. 출발 자리는 늘 자루가 꽂힌 데다 —
+# 손을 어디로 끌고 갔든 겨냥이 안 옮겨지고, 튕기는 방향만 겨냥이 된다.
 func _pull_point() -> Vector2:
-	return _aim_clamp(PULL.org + _pull_vec())
+	return _aim_clamp(_pull_org() + _pull_vec())
 
 
 func _aim_tick(d: float) -> void:
@@ -1916,27 +1930,35 @@ func _aim_tick(d: float) -> void:
 			aim.y = lerpf(BC.y - SWING, BC.y + SWING, tri(gt))
 			aim.x = lerpf(BC.x - SWING, BC.x + SWING, tri(gt * 1.37))
 		"drift":
-			# **커서 둘레**의 작은 원 안을 제멋대로 떠돈다. 겨눌 곳은 정하되
-			# 정확히는 못 정한다 — 커서를 옮기면 그 원도 따라온다. 판 한가운데
-			# 를 도는 것이 아니라 손을 따라다니는 것이 이 방식의 전부다.
+			# **커서 둘레**의 작은 원 안을 제멋대로 떠돈다. 커서를 옮기면 그
+			# 원도 따라온다 — 판 한가운데를 도는 것이 아니라 손을 따라다니는
+			# 것이 이 방식의 전부다.
 			var w := R * float(DRIFT.span)
-			drift_v += Vector2(aim_rng.randf_range(-1.0, 1.0),
-					aim_rng.randf_range(-1.0, 1.0)) * (float(DRIFT.kick) * d * gs())
-			drift_v *= pow(float(DRIFT.damp), d * 60.0)
-			drift_o = (drift_o + drift_v * d).limit_length(w)
+			drift_t -= d * gs()
+			if drift_t <= 0.0:
+				# 원 안에서 고르게 뽑는다. 반지름에 제곱근을 안 씌우면 가운데로
+				# 쏠려 가장자리를 거의 안 쓴다.
+				drift_to = Vector2.RIGHT.rotated(aim_rng.randf() * TAU) \
+						* (sqrt(aim_rng.randf()) * w)
+				drift_t = float(DRIFT.hold)
+			drift_o = drift_o.move_toward(drift_to, float(DRIFT.speed) * d * gs())
 			aim = _aim_clamp(mouse_at + drift_o)
 		"place":
 			aim = _aim_clamp(mouse_at)
 		"pull":
 			if pull_at.x < 0.0:
-				aim = PULL.org          # 아직 안 쥐었다. 다트는 제자리에 있다
+				aim = _pull_org()       # 아직 안 쥐었다. 다트는 벽에 박혀 있다
 			else:
 				_pull_sample(d)
 				aim = _pull_point()
 				if not mouse_down:
-					# 뒤로 당겼다가 그냥 놓은 손이다 — 안 던지고 다시 쥐게 한다.
-					# 힘이 없는데도 던지면 매번 판 아래에 꽂혀 다트만 없어진다.
-					if (aim - PULL.org).length() < float(PULL.least):
+					# 쥐었다가 그냥 놓은 손이다 — 안 던지고 다시 쥐게 한다.
+					# 힘이 없는데도 던지면 매번 벽 옆에 꽂혀 다트만 없어진다.
+					#
+					# **던지는 벡터**를 잰다. 착탄점으로 재면 벽에서 판까지의
+					# 거리가 늘 끼어든다 — 손이 가만히 있어도 _aim_clamp 가
+					# 판 언저리로 끌어다 놓아서, 안 던진 것이 던진 것이 된다.
+					if _pull_vec().length() < float(PULL.least):
 						_pull_drop()
 					else:
 						var sp: float = PULL.spread
@@ -3388,16 +3410,13 @@ func _draw_aim_live() -> void:
 			_aim_circle(mouse_at, R * float(DRIFT.span), Color(C_ACC, 0.45))
 			_aim_dot(aim, C_ACC)
 		"pull":
-			var org: Vector2 = PULL.org
-			draw_arc(org, 7.0, PI, TAU, 18, Color(C_ACC, 0.35), 1.0)
-			if pull_at.x < 0.0:
-				_aim_dot(org, Color(C_ACC, 0.55))   # 아직 안 쥔 다트
-			else:
-				# 당긴 만큼 고리가 차오르고, 지금 놓으면 갈 자리를 선으로 낸다.
-				var f := clampf(pull_far / float(PULL.draw), 0.0, float(PULL.bonus))
-				draw_arc(mouse_at, 5.0 + f * 7.0, 0.0, TAU, 20,
-						Color(C_ACC, 0.35 + f * 0.3), 1.0)
-				if (aim - org).length() >= float(PULL.least):
+			# 벽의 자루에서 출발한다. 쥐기 전에는 고리만 두어 "여기서 떠난다"
+			# 를 보이고, 쥐면 지금 놓았을 때 갈 자리를 선으로 낸다.
+			var org := _pull_org()
+			draw_arc(org, 9.0, 0.0, TAU, 20, Color(C_ACC, 0.3), 1.0)
+			if pull_at.x >= 0.0:
+				draw_arc(mouse_at, 5.0, 0.0, TAU, 16, Color(C_ACC, 0.45), 1.0)
+				if _pull_vec().length() >= float(PULL.least):
 					draw_line(org, aim, Color(C_ACC, 0.5), 1.0)
 					_aim_dot(aim, C_ACC)
 		_:
