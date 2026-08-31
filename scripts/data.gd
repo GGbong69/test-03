@@ -633,6 +633,30 @@ static func score_mode() -> String:
 	return m if m != "" else "std"
 
 
+# 팩 설명 한 줄. **문장은 사람이 쓰고 숫자는 표에서 꽂는다.**
+#
+# 줄글이 목록보다 읽힌다 — 처음 보는 사람은 "시작 골드 +10 · 소비 칸 1"
+# 을 두 번 읽어야 하고 "골드 14개로 시작한다. 소비 칸은 1개다" 는 한 번
+# 읽는다. 대신 손으로 쓴 문장은 표와 어긋날 수 있으므로 숫자를 직접
+# 안 적는다 — items.csv·tags.csv·vouchers.csv 가 이미 쓰는 규약이고,
+# 검증기가 모르는 열쇠를 막는다.
+const PACK_DESC_KEYS := ["darts", "gold", "items", "cons", "dartgold"]
+
+
+static func pack_desc(row := {}) -> String:
+	var r: Dictionary = row if not row.is_empty() else pack_row()
+	var tpl := String(r.get("desc", ""))
+	if tpl == "":
+		return ""
+	return fill(tpl, {
+		"darts": tune_i("darts_base") + _i(r, "darts_add", "packs", 0),
+		"gold": start_gold() + _i(r, "gold_add", "packs", 0),
+		"items": _i(r, "item_slots", "packs", tune_i("max_items")),
+		"cons": _i(r, "cons_slots", "packs", tune_i("cons_slots")),
+		"dartgold": _i(r, "dart_gold", "packs", gold_per_dart()),
+	})
+
+
 static func packs_of(kind: String) -> Array:
 	var out := []
 	for r in packs():
@@ -1541,6 +1565,19 @@ static func _v_packs() -> void:
 					_errs.append("%s — %s 에 없는 '%s' 를 준다" % [who, gk[1], gid])
 		if _i(r, "dart_gold", "packs", 0) < 0:
 			_errs.append("%s — 잔탄 골드가 음수다" % who)
+		_v_desc(who, r.get("desc", ""), PACK_DESC_KEYS)
+		# 기준선과 다른 데가 있는데 줄글이 없으면 그 팩은 화면에서 기본
+		# 팩과 구분이 안 된다. 일당 팩이 실제로 그랬다.
+		var off := _i(r, "darts_add", "packs", 0) != 0 \
+				or _i(r, "gold_add", "packs", 0) != 0 \
+				or String(r.get("interest_off", "")) != "" \
+				or String(r.get("dart_gold", "")) != "" \
+				or (String(r.get("item_slots", "")) != ""
+						and _i(r, "item_slots", "packs", 0) != tune_i("max_items")) \
+				or (String(r.get("cons_slots", "")) != ""
+						and _i(r, "cons_slots", "packs", 0) != tune_i("cons_slots"))
+		if off and String(r.get("desc", "")) == "":
+			_errs.append("%s — 기준선과 다른데 줄글이 없다" % who)
 		var sm: String = r.get("score", "")
 		if sm != "" and not SCORE_MODES.has(sm):
 			_errs.append("%s — 모르는 계산 방식 '%s'. SCORE_MODES 에 먼저 적어라"
