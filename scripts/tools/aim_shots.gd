@@ -19,7 +19,6 @@ const CUTS := [
 	["std_2", "std", 22, true, 34],
 	["ring_1", "ring", 30, false, 0],
 	["ring_2", "ring", 30, true, 14],
-	["ray_2", "ray", 34, true, 12],
 	["tilt_1", "tilt", 24, false, 0],
 	["tilt_2", "tilt", 24, true, 40],
 	["cross", "cross", 26, false, 0],
@@ -73,13 +72,22 @@ func _cut(name: String, mode: String, t1v: int, two: bool, t2: int) -> void:
 	g._aim_begin()
 	# 손을 읽는 갈래는 커서를 놓아 준다. 당김은 쥔 자리까지 잡아 준다.
 	g.mouse_at = g.BC + Vector2(46.0, -34.0)
+	if mode == "drift":
+		t1 = 40                     # 흔들림이 자리를 잡을 만큼 돌린다
 	if mode == "pull":
-		g.pull_at = g.BC + Vector2(38.0, -22.0)
-		g.mouse_at = g.pull_at + Vector2(-52.0, 66.0)
-		# 헤드리스는 버튼이 눌린 적이 없어서, 쥔 채로 한 틱만 돌려도
-		# 그 자리에서 "놓았다" 로 읽혀 확인 칸으로 넘어간다.
-		# 당기는 중의 그림을 보려면 틱을 안 돌리고 자리만 세운다.
-		g.aim = g._pull_point()
+		# 뒤로 당겼다가 앞으로 튕기는 도중을 잡는다. 쥔 채로 두어야
+		# "놓았다" 로 안 읽히므로 mouse_down 을 세워 둔다.
+		var org: Vector2 = g.PULL.org
+		g.mouse_down = true
+		g.mouse_at = org
+		g._pull_grab(org)
+		for q in 20:
+			g.mouse_at = org + Vector2(0.0, float(q + 1) * 3.0)
+			g._aim_tick(0.4 / 20.0)
+		var back: Vector2 = g.mouse_at
+		for q in 4:
+			g.mouse_at = back.lerp(back + Vector2(-46.0, -74.0), float(q + 1) / 4.0)
+			g._aim_tick(0.06 / 4.0)
 		t1 = 0
 	for i in t1:
 		g._aim_tick(FPS)

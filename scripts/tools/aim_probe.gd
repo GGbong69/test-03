@@ -19,8 +19,10 @@ const GameData = preload("res://scripts/data.gd")
 #    ② 조준점이 실제로 움직인다 — 안 움직이면 아무 때나 눌러도 같은 자리다
 #    ③ 조준점이 게이지 봉투를 안 벗어난다. 클릭 반경이 아니다 —
 #       기본 게이지도 모서리에서 그 밖으로 나가고 그것이 빗나감이다
-#    ④ 원·선 조준의 2단계가 1단계에서 잠근 원 **위**에 있다
-#    ⑤ 놓기는 누른 자리에, 당김은 뗀 순간에 — 누름과 뗌의 뜻이 방식마다 다르다
+#    ④ 원 조준의 2단계가 1단계에서 잠근 원 **위**에 있다
+#    ⑤ 놓기는 누른 자리에. 흔들은 커서를 따라다니고, 당김은 **끌고 온
+#       거리가 아니라 놓는 순간의 속도**로 던진다 — 참고한 두 웹 게임의
+#       방식이고, 처음에 둘 다 틀리게 만들었던 자리다
 #    ⑥ 스티커가 방식을 쥔다. 봉인되면 안 쥔다
 #    ⑦ 여덟 갈래 전부 확인·비행을 지나 착탄까지 간다 (조준이 영영 안
 #       잠기면 런이 통째로 막힌다)
@@ -102,8 +104,10 @@ func _mode(g: Node, m: String) -> void:
 	_say(g.state == want, "%s 는 %d번 잠근다" % [m, stages],
 			"AIM_V 에서 한 번 잠그니 %s" % _sname(g, g.state))
 
-	# ② 움직인다 · ③ 판 안에 있다
-	for stg in range(stages):
+	# ② 움직인다 · ③ 봉투 안에 있다
+	# 당김은 여기서 안 잰다 — 쥐기 전에는 다트가 제자리에 가만히 있는
+	# 것이 옳다. 움직임은 _pull 이 손을 흔들어 가며 따로 잰다.
+	for stg in (range(stages) if m != "pull" else []):
 		var st: int = g.S.AIM_V if stg == 0 else g.S.AIM_H
 		g.aim_mode = m
 		g.state = g.S.AIM_V
@@ -124,7 +128,7 @@ func _mode(g: Node, m: String) -> void:
 				"봉투 %.0f 밖 %d틱" % [lim, out])
 
 	# ④ 원·선은 잠근 원 위에 있다
-	if m == "ring" or m == "ray":
+	if m == "ring":
 		g.state = g.S.AIM_V
 		g._aim_begin()
 		_spin(g, m, 37)
@@ -141,8 +145,8 @@ func _mode(g: Node, m: String) -> void:
 		_say(half[0] and half[1], "%s 가 원의 양쪽을 다 훑는다" % m,
 				"오른쪽 %s · 왼쪽 %s" % [half[0], half[1]])
 
-	# 겹조준·흔들은 한 줄로 굳으면 아무 때나 눌러도 되는 방식이 된다
-	if m == "cross" or m == "drift":
+	# 겹조준은 한 줄로 굳으면 아무 때나 눌러도 되는 방식이 된다
+	if m == "cross":
 		g.state = g.S.AIM_V
 		g._aim_begin()
 		var quad := {}
@@ -151,6 +155,9 @@ func _mode(g: Node, m: String) -> void:
 			quad[Vector2i(signi(int(g.aim.x - g.BC.x)), signi(int(g.aim.y - g.BC.y)))] = true
 		_say(quad.size() >= 4, "%s 궤적이 한 줄로 안 굳는다" % m,
 				"지나간 사분면 %d" % quad.size())
+
+	if m == "drift":
+		_drift(g)
 
 	# ⑦ 착탄까지 간다
 	_throw(g, m, stages)
@@ -203,6 +210,122 @@ func _throw(g: Node, m: String, stages: int) -> void:
 	_say(locks == stages, "%s 는 잠금이 %d회로 끝난다" % [m, stages], "실제 %d회" % locks)
 
 
+# ── 흔들: 커서 둘레를 떠돈다 ─────────────────────────────
+#  참고한 게임(Darts: skill issue)은 "your cursor moves unpredictably
+#  within a small circular area" 다. 판 한가운데를 도는 것이 아니라
+#  **손을 따라다니는** 것이 이 방식의 전부다 — 처음에 그것을 놓쳤다.
+func _drift(g: Node) -> void:
+	var span: float = g.R * float(g.DRIFT.span)
+	var worst := 0.0
+	var seen := {}
+	for spot in [g.BC + Vector2(-52.0, -30.0), g.BC + Vector2(44.0, 38.0)]:
+		g.state = g.S.AIM_V
+		g._aim_begin()
+		g.mouse_at = spot
+		var near := 0
+		for i in 600:
+			g._aim_tick(FPS)
+			worst = maxf(worst, g.aim.distance_to(spot))
+			seen[Vector2i(g.aim.round())] = true
+			if g.aim.distance_to(spot) <= span + 0.5:
+				near += 1
+		_say(near == 600, "흔들이 커서 %s 를 안 벗어난다" % spot,
+				"반경 %.1f 안 %d/600" % [span, near])
+	_say(seen.size() >= 20, "흔들이 실제로 떠돈다", "서로 다른 자리 %d" % seen.size())
+	_say(worst > span * 0.4, "흔들이 원을 넉넉히 쓴다",
+			"가장 멀리 %.1f / %.1f" % [worst, span])
+
+
+# ── 당김: 끌고 온 거리가 아니라 놓는 순간의 속도 ─────────
+#  참고한 게임(Dartlatro)의 주석이 그대로 말한다 — "the dart flies in the
+#  direction your hand is moving at the moment you let go, not the net
+#  drag distance." 처음에는 당긴 **거리**로 만들었고 그것이 틀렸다.
+func _flick(g: Node, from: Vector2, to: Vector2, secs: float, steps: int) -> void:
+	g.mouse_down = true
+	g.mouse_at = from
+	g._pull_grab(from)
+	var d := secs / float(steps)
+	for i in steps:
+		g.mouse_at = from.lerp(to, float(i + 1) / float(steps))
+		g._aim_tick(d)
+
+
+func _let_go(g: Node) -> void:
+	g.mouse_down = false
+	g._aim_tick(FPS)
+
+
+func _pull(g: Node) -> void:
+	var org: Vector2 = g.PULL.org
+	g.aim_mode = "pull"
+
+	# 판 아래를 눌러도 쥐어진다 — 여기가 다트의 출발 자리다
+	g.state = g.S.AIM_V
+	g._aim_begin()
+	g._click(org)
+	_say(g.pull_at.distance_to(org) < 0.6 and g.state == g.S.AIM_V,
+			"판 아래에서 다트를 쥔다", "쥔 자리 %s · %s" % [g.pull_at, _sname(g, g.state)])
+
+	# 가만히 놓으면 안 던진다
+	g.state = g.S.AIM_V
+	g._aim_begin()
+	_flick(g, org, org, 0.30, 18)
+	_let_go(g)
+	_say(g.state == g.S.AIM_V and g.pull_at.x < 0.0,
+			"가만히 놓으면 안 던지고 다시 쥐게 한다",
+			"%s · 쥔 자리 %s" % [_sname(g, g.state), g.pull_at])
+
+	# **같은 거리라도 느리면 안 나가고 빠르면 나간다** — 이 한 쌍이
+	# "거리가 아니라 속도" 를 못 박는다
+	g.state = g.S.AIM_V
+	g._aim_begin()
+	_flick(g, org, org + Vector2(0.0, -100.0), 1.20, 72)
+	_let_go(g)
+	var slow_st: int = g.state
+	g.state = g.S.AIM_V
+	g._aim_begin()
+	_flick(g, org, org + Vector2(0.0, -100.0), 0.08, 6)
+	_let_go(g)
+	var fast_st: int = g.state
+	var fast_hit: Vector2 = g.aim
+	_say(slow_st == g.S.AIM_V and fast_st == g.S.CONFIRM,
+			"같은 거리라도 느리면 안 나가고 빠르면 나간다",
+			"느리게 %s · 빠르게 %s" % [_sname(g, slow_st), _sname(g, fast_st)])
+	_say(fast_hit.y < org.y - 60.0 and absf(fast_hit.x - org.x) < 30.0,
+			"위로 튕기면 위로 날아간다", "착탄 %s" % fast_hit)
+
+	# 튕기는 방향이 곧 겨냥이다
+	g.state = g.S.AIM_V
+	g._aim_begin()
+	_flick(g, org, org + Vector2(-90.0, -90.0), 0.08, 6)
+	_let_go(g)
+	_say(g.aim.x < org.x - 30.0 and g.aim.y < org.y - 30.0,
+			"왼쪽 위로 튕기면 왼쪽 위로 간다", "착탄 %s" % g.aim)
+
+	# 뒤로 당겼다 튕기면 더 멀리 간다 (당김은 배수로만 얹힌다)
+	g.state = g.S.AIM_V
+	g._aim_begin()
+	_flick(g, org, org + Vector2(0.0, -70.0), 0.08, 6)
+	_let_go(g)
+	var plain: float = g.aim.distance_to(org)
+	g.state = g.S.AIM_V
+	g._aim_begin()
+	g.mouse_down = true
+	g.mouse_at = org
+	g._pull_grab(org)
+	for i in 30:                       # 천천히 뒤로 당긴다(창 밖으로 밀린다)
+		g.mouse_at = org + Vector2(0.0, float(i + 1) * 100.0 / 30.0)
+		g._aim_tick(0.5 / 30.0)
+	var back: Vector2 = g.mouse_at
+	for i in 6:                        # 같은 세기로 앞으로 튕긴다
+		g.mouse_at = back.lerp(back + Vector2(0.0, -70.0), float(i + 1) / 6.0)
+		g._aim_tick(0.08 / 6.0)
+	_let_go(g)
+	var drawn: float = g.aim.distance_to(org)
+	_say(drawn > plain + 8.0, "뒤로 당겼다 튕기면 더 멀리 간다",
+			"그냥 %.0f · 당기고 %.0f" % [plain, drawn])
+
+
 # ── 놓기: 누른 자리가 곧 꽂히는 자리 ─────────────────────
 func _place(g: Node) -> void:
 	g.aim_mode = "place"
@@ -219,35 +342,6 @@ func _place(g: Node) -> void:
 	g._click(g.BC + Vector2(0.0, -lim - 30.0))
 	_say(g.state == g.S.AIM_V and g.aim == before, "판 밖을 누르면 안 잠긴다",
 			"%s · 조준 그대로 %s" % [_sname(g, g.state), g.aim == before])
-
-
-# ── 당김: 누름은 쥐는 것, 뗌이 던지는 것 ──────────────────
-func _pull(g: Node) -> void:
-	g.aim_mode = "pull"
-	g.state = g.S.AIM_V
-	g._aim_begin()
-	var p: Vector2 = g.BC + Vector2(20.0, 10.0)
-	g._click(p)
-	_say(g.state == g.S.AIM_V, "당김은 누를 때 안 잠긴다", _sname(g, g.state))
-	_say(g.pull_at.distance_to(p) < 0.6, "당김이 쥔 자리를 기억한다", str(g.pull_at))
-
-	# 헤드리스는 버튼이 눌린 적이 없다 — 다음 틱이 곧 "놓는 순간" 이다
-	g.mouse_at = p + Vector2(0.0, g.PULL.ideal)
-	g._aim_tick(FPS)
-	_say(g.aim.distance_to(p) < 1.0, "알맞게 당기면 짚은 자리에 꽂힌다",
-			"짚은 %s · 조준 %s" % [p, g.aim])
-	_say(g.state == g.S.CONFIRM, "놓는 순간 던진다", _sname(g, g.state))
-
-	g.state = g.S.AIM_V
-	g._aim_begin()
-	g.pull_at = p
-	g.mouse_at = p + Vector2(0.0, g.PULL.ideal + 40.0)
-	var far: Vector2 = g._pull_point()
-	g.mouse_at = p + Vector2(0.0, g.PULL.ideal - 40.0)
-	var near: Vector2 = g._pull_point()
-	_say(far.y < p.y - 1.0 and near.y > p.y + 1.0,
-			"더 당기면 지나가고 덜 당기면 못 미친다",
-			"과 %.1f · 짚은 %.1f · 부족 %.1f" % [far.y, p.y, near.y])
 
 
 # ── 스티커가 방식을 쥔다 ─────────────────────────────────

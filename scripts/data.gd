@@ -125,15 +125,15 @@ const Save_STATS := [
 	"best_round", "best_score", "best_gold", "best_track",
 ]
 const PACK_KINDS := ["base", "hidden"]
-const AIM_MODES := ["std", "ring", "ray", "tilt", "cross", "drift",
-		"place", "pull"]
+const AIM_MODES := ["std", "ring", "tilt", "cross", "drift", "place",
+		"pull"]
 
 # 조준을 **몇 번 잠그는가**. 둘이면 축을 하나씩(세로 먼저 가로 다음),
 # 하나면 누르는 그 한 번에 자리가 통째로 정해진다. 상태 기계가 이 수를
 # 읽고 갈리므로, 새 방식을 AIM_MODES 에만 적고 여기 빠뜨리면 두 번
 # 잠그는 방식으로 돌아 화면과 조작이 어긋난다 — 검증기가 막는다.
 const AIM_STAGES := {
-	"std": 2, "ring": 2, "ray": 2, "tilt": 2,
+	"std": 2, "ring": 2, "tilt": 2,
 	"cross": 1, "drift": 1, "place": 1, "pull": 1,
 }
 
@@ -143,12 +143,11 @@ const AIM_STAGES := {
 const AIM_HINT := {
 	"std": ["다트판을 눌러 높이 결정", "다트판을 눌러 좌우 결정"],
 	"ring": ["다트판을 눌러 원 크기 결정", "다트판을 눌러 각도 결정"],
-	"ray": ["다트판을 눌러 원 크기 결정", "다트판을 눌러 교차점 결정"],
 	"tilt": ["다트판을 눌러 첫 축 결정", "다트판을 눌러 둘째 축 결정"],
 	"cross": ["다트판을 눌러 교차점 결정"],
 	"drift": ["떠도는 조준점을 눌러 결정"],
 	"place": ["꽂을 자리를 누르세요"],
-	"pull": ["누른 채 당겼다 놓으세요"],
+	"pull": ["다트를 당겼다 앞으로 튕기세요"],
 }
 const SCORE_MODES := ["std", "bal"]
 
@@ -1392,7 +1391,6 @@ static func aim_name(m: String) -> String:
 	match m:
 		"std": return "기본"
 		"ring": return "원"
-		"ray": return "선"
 		"tilt": return "빗각"
 		"cross": return "겹"
 		"drift": return "흔들"
@@ -1405,12 +1403,11 @@ static func aim_name(m: String) -> String:
 static func aim_text(m: String) -> String:
 	match m:
 		"ring": return "원의 크기와 각도로 조준합니다"
-		"ray": return "원의 크기와 가로선의 높이로 조준합니다"
 		"tilt": return "조준선이 다트마다 다른 각도로 기웁니다"
 		"cross": return "가로세로 조준선이 함께 움직이며 한 번에 잠깁니다"
-		"drift": return "조준점이 계속 떠돌며 누르는 순간 멈춥니다"
+		"drift": return "조준점이 커서 둘레를 제멋대로 떠돕니다"
 		"place": return "조준점을 원하는 자리에 직접 놓습니다"
-		"pull": return "당긴 길이가 힘이 되며 놓는 순간 던집니다"
+		"pull": return "튕기는 속도와 방향으로 다트를 던집니다"
 	return ""
 
 
