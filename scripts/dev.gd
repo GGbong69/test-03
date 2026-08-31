@@ -224,10 +224,16 @@ static func _list(k: String) -> Array:
 static func _cur_name(e: Dictionary) -> String:
 	var k := String(e.k)
 	var i: int = int(pick.get(k, 0))
+	# 표가 아니라 상수 목록이라 _list 를 안 지난다 — 그래도 화면에서는
+	# 다른 줄과 같은 꼴("3/8 빗각")로 보여야 몇 가지 중 몇 번째인지 안다.
 	if k == "aim":
-		return String(GameData.AIM_MODES[i % maxi(GameData.AIM_MODES.size(), 1)])
+		var am: Array = GameData.AIM_MODES
+		var j: int = i % maxi(am.size(), 1)
+		return "%d/%d %s" % [j + 1, am.size(), GameData.aim_name(String(am[j]))]
 	if k == "score":
-		return String(GameData.SCORE_MODES[i % maxi(GameData.SCORE_MODES.size(), 1)])
+		var sm: Array = GameData.SCORE_MODES
+		var j2: int = i % maxi(sm.size(), 1)
+		return "%d/%d %s" % [j2 + 1, sm.size(), sm[j2]]
 	var rows := _list(k)
 	if rows.is_empty():
 		return "(없음)"
@@ -338,6 +344,9 @@ static func _run(g: Node, e: Dictionary) -> void:
 	match k:
 		"aim":
 			g.aim_mode = String(GameData.AIM_MODES[i % GameData.AIM_MODES.size()])
+			# 방식마다 쓰는 값이 달라 갈아탄 자리에 남은 값이 섞인다 —
+			# 반지름·축을 여기서 새로 세운다.
+			g._aim_begin()
 			_say("조준 '%s'" % g.aim_mode)
 		"score":
 			g.score_mode = String(GameData.SCORE_MODES[i % GameData.SCORE_MODES.size()])

@@ -125,7 +125,31 @@ const Save_STATS := [
 	"best_round", "best_score", "best_gold", "best_track",
 ]
 const PACK_KINDS := ["base", "hidden"]
-const AIM_MODES := ["std"]
+const AIM_MODES := ["std", "ring", "ray", "tilt", "cross", "drift",
+		"place", "pull"]
+
+# 조준을 **몇 번 잠그는가**. 둘이면 축을 하나씩(세로 먼저 가로 다음),
+# 하나면 누르는 그 한 번에 자리가 통째로 정해진다. 상태 기계가 이 수를
+# 읽고 갈리므로, 새 방식을 AIM_MODES 에만 적고 여기 빠뜨리면 두 번
+# 잠그는 방식으로 돌아 화면과 조작이 어긋난다 — 검증기가 막는다.
+const AIM_STAGES := {
+	"std": 2, "ring": 2, "ray": 2, "tilt": 2,
+	"cross": 1, "drift": 1, "place": 1, "pull": 1,
+}
+
+# 잠그는 칸마다 화면 아래에 뜰 말. 방식마다 무엇을 정하는지가 달라서
+# 한 문장을 돌려 쓰면 "눌러 좌우 결정" 을 읽고 원 크기를 정하게 된다.
+# 칸 수와 문장 수가 어긋나면 안내가 빈 채로 뜬다 — 검증기가 막는다.
+const AIM_HINT := {
+	"std": ["다트판을 눌러 높이 결정", "다트판을 눌러 좌우 결정"],
+	"ring": ["다트판을 눌러 원 크기 결정", "다트판을 눌러 각도 결정"],
+	"ray": ["다트판을 눌러 원 크기 결정", "다트판을 눌러 교차점 결정"],
+	"tilt": ["다트판을 눌러 첫 축 결정", "다트판을 눌러 둘째 축 결정"],
+	"cross": ["다트판을 눌러 교차점 결정"],
+	"drift": ["떠도는 조준점을 눌러 결정"],
+	"place": ["꽂을 자리를 누르세요"],
+	"pull": ["누른 채 당겼다 놓으세요"],
+}
 const SCORE_MODES := ["std"]
 
 const MODIFIER_AXES := ["band_mul", "gauge_mul", "fog", "darts_add",
@@ -1280,6 +1304,10 @@ static func item_amt(it: Dictionary, x: Dictionary) -> int:
 # 화면용 효과 문장 — per·grow 가 있으면 수 하나로는 거짓말이 되므로
 # 배율의 정체를 같이 적는다.
 static func eff_line(it: Dictionary) -> String:
+	# 조준을 쥔 장은 점수 열이 통째로 비어 있다 — 조준이 곧 효과다.
+	var am := aim_text(String(it.get("aim", "")))
+	if am != "":
+		return am
 	# 점수도 배수도 없는 카드 — 골드·다트·승급이 본업이다
 	if String(it.get("k", "")) == "":
 		var da := int(it.get("dadd", 0))
@@ -1337,7 +1365,38 @@ static func eff_text(k: String, v: int) -> String:
 	return ""
 
 
+# 조준 방식의 짧은 이름. 목록·화면에서 std 같은 속이름을 안 보이게 한다.
+static func aim_name(m: String) -> String:
+	match m:
+		"std": return "기본"
+		"ring": return "원"
+		"ray": return "선"
+		"tilt": return "빗각"
+		"cross": return "겹"
+		"drift": return "흔들"
+		"place": return "놓기"
+		"pull": return "당김"
+	return m
+
+
+# 조준 방식이 하는 일. 조건도 배수도 아니므로 이 한 줄이 설명 전부다.
+static func aim_text(m: String) -> String:
+	match m:
+		"ring": return "원의 크기와 각도로 조준합니다"
+		"ray": return "원의 크기와 가로선의 높이로 조준합니다"
+		"tilt": return "조준선이 다트마다 다른 각도로 기웁니다"
+		"cross": return "가로세로 조준선이 함께 움직이며 한 번에 잠깁니다"
+		"drift": return "조준점이 계속 떠돌며 누르는 순간 멈춥니다"
+		"place": return "조준점을 원하는 자리에 직접 놓습니다"
+		"pull": return "당긴 길이가 힘이 되며 놓는 순간 던집니다"
+	return ""
+
+
 static func item_desc(it: Dictionary) -> String:
+	# 조준을 쥔 장은 조건·효과 칸이 비어 있다. 그 장은 조준이 곧 효과다.
+	var am := aim_text(String(it.get("aim", "")))
+	if am != "":
+		return am
 	return "%s %s" % [cond_text(it.c), eff_text(it.k, it.v)]
 
 
@@ -1538,6 +1597,21 @@ static func _has_row(table: String, id: String) -> bool:
 # 스티커가 쥔 조준 방식. 등록 안 된 이름이면 조용히 std 로 도는 스티커가
 # 된다 — 히든 팩이 통째로 아무 일도 안 하는 팩이 되는 길이다.
 static func _v_item_aim() -> void:
+	for m in AIM_MODES:
+		var st: int = AIM_STAGES.get(m, 0)
+		if st < 1 or st > 2:
+			_errs.append("조준 %s — AIM_STAGES 에 잠그는 횟수(1 또는 2)가 없다" % m)
+		if aim_text(m) == "" and m != "std":
+			_errs.append("조준 %s — aim_text 에 문구가 없다. 스티커가 빈 칸이 된다" % m)
+		if aim_name(m) == m:
+			_errs.append("조준 %s — aim_name 에 짧은 이름이 없다. 속이름이 화면에 뜬다" % m)
+		var hs: Array = AIM_HINT.get(m, [])
+		if hs.size() != st:
+			_errs.append("조준 %s — 잠금 %d회인데 안내가 %d줄이다"
+					% [m, st, hs.size()])
+		for h in hs:
+			if String(h).strip_edges() == "":
+				_errs.append("조준 %s — 안내 한 줄이 비었다" % m)
 	for r in _raw.get("items", []):
 		var am: String = r.get("aim", "")
 		if am != "" and not AIM_MODES.has(am):
@@ -1830,12 +1904,19 @@ static func _v_items() -> void:
 		# 효과 칸이 비어 있다. 켜는 순간부터 아래 전부를 묻는다.
 		if not _b(r, "enabled", "items"):
 			continue
-		if not CONDS.has(r.get("cond", "")):
+		# 조준을 쥔 장은 발동 조건이 없다 — 터지는 물건이 아니라 던지는
+		# 방법이라 한 판 내내 켜져 있다. always 를 적으면 "모든 다트마다"
+		# 라는 없는 발동이 얼굴에 뜬다.
+		var aimed := String(r.get("aim", "")) != ""
+		if aimed and String(r.get("cond", "")) != "":
+			_errs.append("%s — 조준 스티커에 발동 조건이 붙었다" % who)
+		if not aimed and not CONDS.has(r.get("cond", "")):
 			_errs.append("%s — 모르는 조건 '%s'" % [who, r.get("cond", "")])
 		# 효과 없는 카드도 있다 — 골드·다트·승급만 하는 조커들. 그때는
 		# 빈 kind 를 허락하되 부가 효과가 하나는 있어야 한다.
 		if String(r.get("kind", "")) == "":
-			if String(r.get("gold", "")) == "" and String(r.get("dadd", "")) == "" \
+			if not aimed and String(r.get("gold", "")) == "" \
+					and String(r.get("dadd", "")) == "" \
 					and String(r.get("side", "")) == "":
 				_errs.append("%s — 효과도 부가도 없는 빈 카드다" % who)
 		elif not KINDS.has(r.get("kind", "")):
@@ -1876,6 +1957,11 @@ static func _v_items() -> void:
 			if not _b(b, "enabled", "items"):
 				continue
 			if a.get("id") == b.get("id") or a.get("kind") != b.get("kind"):
+				continue
+			# 조준을 쥔 장끼리는 우열이 없다 — 던지는 방법이 다를 뿐이다.
+			# 점수 열이 다 비어 있어서 값 비교가 전부 동점으로 읽히는데,
+			# 동점은 이 검사에서 "싸고 안 밀린다" 와 같은 말이 된다.
+			if String(a.get("aim", "")) != "" or String(b.get("aim", "")) != "":
 				continue
 			# 골드는 발동 조건이 다르면 다른 카드다 — 있냐 없냐만으로 못 가른다
 			if String(a.get("gold", "")) != String(b.get("gold", "")):

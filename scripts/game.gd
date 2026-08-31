@@ -161,6 +161,11 @@ var dead_idx := -1              # "금지 구역"이 죽이는 칸. -1 이면 �
 #  한 앤티에 하나. 사면 사라지고 그 앤티에는 다시 안 뜬다.
 var aim_mode := "std"           # 이 런의 조준 방식. 팩이 정한다
 var score_mode := "std"         # 이 런의 점수 계산 방식. 팩이 정한다
+var aim_r := 0.0                # 원·선 조준이 잠근 반지름
+var aim_a := 0.0                # 빗각 조준이 잠근 첫 축의 값
+var aim_ax := 0.0               # 빗각 조준의 축 각도. 다트마다 새로 뽑는다
+var pull_at := Vector2(-1, -1)  # 당김 조준이 쥔 자리. x < 0 이면 아직 안 쥐었다
+var mouse_at := Vector2(320, 180)   # 마지막 마우스 자리(놓기·당김이 읽는다)
 var shelf := {}                 # 이 상점에 걸린 설비. 비면 없다
 var shelf_ante := 0             # 그 설비를 굴린 앤티. 앤티가 바뀔 때만 다시 굴린다
 var dead_col := -1              # 값을 죽이는 칸 색 번호. -1 이면 안 걸렸다
@@ -496,6 +501,7 @@ func _pick_dart(i: int) -> void:
 	darts_left = remaining.size() - 1     # 이번 자루를 뺀 나머지
 	if state == S.PICK:
 		state = S.AIM_V
+	_aim_begin()
 	beep(262.0, 0.05, 0.10)
 
 
@@ -1665,7 +1671,7 @@ func _process(d: float) -> void:
 		grip_hov.fill(0.0)
 	var gi := -1
 	if state == S.PICK or state == S.AIM_V or state == S.AIM_H:
-		var gm := get_local_mouse_position()
+		var gm := _cursor()
 		for i in remaining.size():
 			# 뒤에 그려진 것이 위에 있다. 마지막 명중을 택해 그리기 순서와 맞춘다.
 			if _grip_pose(i).hit.has_point(gm):
@@ -1767,14 +1773,121 @@ func _aim_from_items() -> String:
 	return "std"
 
 
+# 당김 조준의 손맛. ideal 만큼 당기면 짚은 자리에 꽂히고, 더 당기면
+# 손 반대쪽으로 지나가고 덜 당기면 못 미친다. far 는 아무리 끌어도
+# 힘이 더 안 붙는 선 — 없으면 화면 끝까지 끌어 판 밖으로 던지게 된다.
+const PULL := {"ideal": 64.0, "gain": 0.55, "far": 150.0}
+
+
+# 다트마다 조준을 새로 세운다. 빗각의 축은 여기서 뽑으므로 한 발 안에서는
+# 축이 안 흔들리고 다음 발에서는 반드시 바뀐다. gt 는 손대지 않는다 —
+# 게이지가 자유롭게 돌아야 집는 순간의 위상이 매번 다르다.
+func _aim_begin() -> void:
+	aim_r = 0.0
+	aim_a = 0.0
+	# 빗각일 때만 뽑는다. 늘 뽑으면 다트를 집을 때마다 전역 난수 줄이
+	# 한 칸씩 밀려, 조준과 아무 상관없는 상점·성장 뽑기가 통째로
+	# 달라진다 — joker_probe 가 그렇게 다른 런을 걸어 실패했다.
+	if aim_mode == "tilt":
+		aim_ax = randf() * TAU
+	pull_at = Vector2(-1, -1)
+
+
+func _aim_stages() -> int:
+	return int(GameData.AIM_STAGES.get(aim_mode, 2))
+
+
+func _aim_hint(stage: int) -> String:
+	var a: Array = GameData.AIM_HINT.get(aim_mode, [])
+	return String(a[stage]) if stage < a.size() else ""
+
+
+# 커서 자리. 뷰포트가 없으면 — 헤드리스 검사가 _process 를 직접 밀
+# 때가 그렇다 — 마지막으로 받은 자리를 쓴다. 없는 커서를 엔진에
+# 물으면 오류가 나고, 검사가 보려던 것과 상관없는 데서 프레임이 멎는다.
+func _cursor() -> Vector2:
+	return get_local_mouse_position() if get_viewport() != null else mouse_at
+
+
+# 이 방식이 쓰는 축 한 쌍. 빗각만 기울고 나머지는 화면의 가로세로 그대로다.
+func _aim_axes() -> Array:
+	if aim_mode == "tilt":
+		var u := Vector2(cos(aim_ax), sin(aim_ax))
+		return [u, u.orthogonal()]
+	return [Vector2(1.0, 0.0), Vector2(0.0, 1.0)]
+
+
+# 조준점이 나갈 수 있는 끝. 클릭이 잠기는 반경과 같은 선이라 "누를 수
+# 있는 자리"와 "꽂힐 수 있는 자리"가 어긋나지 않는다. 빗나감 띠가 이
+# 안에 있으므로 놓기 조준도 빗나갈 수 있다.
+func _aim_clamp(p: Vector2) -> Vector2:
+	return BC + (p - BC).limit_length(R * GameData.tune("aim_click_r"))
+
+
+# 원과 가로선이 만나는 자리. 선이 위아래로 왕복하고 교차점은 반 바퀴마다
+# 좌우가 바뀐다 — 그래야 한 바퀴가 원 전체를 덮는다. 한쪽만 쓰면 반원은
+# 영영 못 맞힌다. 뒤집히는 순간은 원의 맨 위·맨 아래라 점이 안 튄다.
+func _ray_point(t: float) -> Vector2:
+	var y := lerpf(-aim_r, aim_r, tri(t))
+	var side := 1.0 if fmod(t, 2.0) < 1.0 else -1.0
+	return BC + Vector2(side * sqrt(maxf(aim_r * aim_r - y * y, 0.0)), y)
+
+
+func _pull_point() -> Vector2:
+	var v := mouse_at - pull_at
+	var l := minf(v.length(), PULL.far)
+	var dir := v.normalized() if l >= 0.5 else Vector2(0.0, -1.0)
+	return _aim_clamp(pull_at - dir * ((l - PULL.ideal) * PULL.gain))
+
+
 func _aim_tick(d: float) -> void:
+	gt += d * gs()
 	match aim_mode:
-		# 새 방식은 여기 갈래를 판다.
+		"ring", "ray":
+			# 1단계는 중심에서 원이 커진다. 2단계는 그 원 위를 훑는다 —
+			# 원 조준은 점이 한 방향으로 돌고, 선 조준은 가로선이 오르내린다.
+			if state == S.AIM_V:
+				aim_r = lerpf(4.0, R, tri(gt))
+				aim = BC + Vector2(0.0, -aim_r)
+			elif aim_mode == "ring":
+				var an := fposmod(gt, 1.0) * TAU - PI * 0.5
+				aim = BC + Vector2(cos(an), sin(an)) * aim_r
+			else:
+				aim = _ray_point(gt)
+		"tilt":
+			# 기울어진 축 한 쌍을 쓸 뿐, 잠그는 순서는 기본과 같다.
+			var ax := _aim_axes()
+			if state == S.AIM_V:
+				aim_a = lerpf(-SWING, SWING, tri(gt))
+				aim = BC + ax[0] * aim_a
+			else:
+				aim = BC + ax[0] * aim_a + ax[1] * lerpf(-SWING, SWING, tri(gt))
+		"cross":
+			# 두 축이 서로 다른 박자로 동시에 간다. 1.37 은 1 과 안 맞아떨어져
+			# 궤적이 대각선 한 줄로 굳지 않는다 — 굳으면 아무 때나 눌러도 된다.
+			aim.y = lerpf(BC.y - SWING, BC.y + SWING, tri(gt))
+			aim.x = lerpf(BC.x - SWING, BC.x + SWING, tri(gt * 1.37))
+		"drift":
+			# 주기가 다른 물결 넷을 겹쳐 되돌아오지 않는 길을 만든다. 왕복이
+			# 아니므로 "끝에서 기다렸다 누르기" 가 안 통한다.
+			var w := SWING * 0.62
+			aim = BC + Vector2(
+					sin(gt * 2.1) * 0.7 + sin(gt * 3.7) * 0.42,
+					cos(gt * 1.7) * 0.7 + sin(gt * 2.9) * 0.42) * w
+		"place":
+			aim = _aim_clamp(mouse_at)
+		"pull":
+			if pull_at.x < 0.0:
+				aim = _aim_clamp(mouse_at)
+			else:
+				aim = _pull_point()
+				# 놓는 순간이 던지는 순간이다. 뗌은 클릭으로 안 오므로 여기서 본다.
+				if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+					_advance()
 		_:
 			# 게이지가 왕복하고 누른 순간 그 축이 잠긴다. 세로 먼저 가로 다음.
 			# 모르는 이름도 여기로 떨어진다 — 소리는 _start_round 가 이미
 			# 냈고, 여기서 멎으면 조준이 영영 안 잠겨 런이 통째로 막힌다.
-			gt += d * gs()
 			if state == S.AIM_V:
 				aim.y = lerpf(BC.y - SWING, BC.y + SWING, tri(gt))
 			else:
@@ -1793,6 +1906,14 @@ func _score_combine(chip: int, mult: int) -> int:
 func _advance() -> void:
 	match state:
 		S.AIM_V:
+			# 한 번에 잠그는 방식은 두 번째 칸을 건너뛴다. 안 건너뛰면
+			# 이미 정해진 자리를 두고 아무 일도 안 하는 칸을 한 번 더
+			# 눌러야 한다.
+			if _aim_stages() < 2:
+				state = S.CONFIRM
+				confirm_t = 0.0
+				beep(400.0, 0.06, 0.12)
+				return
 			state = S.AIM_H
 			beep(300.0, 0.05, 0.10)
 		S.AIM_H:
@@ -1873,7 +1994,10 @@ func _unhandled_input(e: InputEvent) -> void:
 		else:
 			_hand_release(mb.position)
 	elif e is InputEventMouseMotion:
-		_hand_motion((e as InputEventMouseMotion).position)
+		# 손 상태와 무관하게 받아 둔다 — _hand_motion 은 쥐고 있을 때만
+		# 갱신하는데, 놓기·당김 조준은 아무것도 안 쥔 채로 자리를 읽는다.
+		mouse_at = (e as InputEventMouseMotion).position
+		_hand_motion(mouse_at)
 
 
 func _click(m: Vector2) -> void:
@@ -1897,8 +2021,19 @@ func _click(m: Vector2) -> void:
 			# 그대로 조준이 되어, 무르지 못하는 실수가 생긴다.
 			# 숫자 고리까지 포함해 R*1.22 로 넉넉히 잡는다.
 			# m.x < 0 은 키보드에서 온 것이다 — 좌표가 없으므로 통과시킨다.
-			if m.x < 0.0 or (m - BC).length() <= R * GameData.tune("aim_click_r"):
-				_advance()
+			if m.x >= 0.0 and (m - BC).length() > R * GameData.tune("aim_click_r"):
+				return
+			if state != S.PICK and m.x >= 0.0:
+				mouse_at = m
+				match aim_mode:
+					"place":
+						aim = _aim_clamp(m)      # 누른 자리가 곧 꽂히는 자리다
+					"pull":
+						# 누름은 쥐는 것이다 — 던지는 것은 뗄 때고, 그 뗌은
+						# _aim_tick 이 본다. 여기서 잠그면 당길 틈이 없다.
+						pull_at = _aim_clamp(m)
+						return
+			_advance()
 		S.CLEAR:
 			# 좌표를 보지 않는다 — 아무 데나 누르든 스페이스든 상점으로 넘어간다
 			_open_shop()
@@ -3145,11 +3280,8 @@ func _draw_darts() -> void:
 
 
 func _draw_aim() -> void:
-	if state == S.AIM_V:
-		_aim_h_line(aim.y, C_ACC)
-	elif state == S.AIM_H:
-		_aim_h_line(aim.y, C_ACC.darkened(0.55))
-		_aim_v_line(aim.x, C_ACC)
+	if state == S.AIM_V or state == S.AIM_H:
+		_draw_aim_live()
 	elif state == S.CONFIRM:
 		_aim_h_line(aim.y, C_ACC)
 		_aim_v_line(aim.x, C_ACC)
@@ -3160,6 +3292,76 @@ func _draw_aim() -> void:
 	elif state == S.FLY:
 		var k := 1.0 - fly_t / 0.2
 		draw_circle(aim, 3.0 + k * 26.0, Color(C_TXT, 0.2 + k * 0.55))
+
+
+# 조준 중의 그림. 방식마다 **무엇이 잠겼고 무엇이 움직이는지**가 다르다 —
+# 잠긴 것은 어둡게, 움직이는 것은 밝게. 이 규칙 하나로 여덟이 다 읽힌다.
+func _draw_aim_live() -> void:
+	var dim := C_ACC.darkened(0.55)
+	var two := state == S.AIM_H
+	match aim_mode:
+		"ring", "ray":
+			_aim_circle(aim_r, Color(C_ACC, 0.55) if two else C_ACC)
+			if two:
+				if aim_mode == "ray":
+					_aim_h_line(aim.y, C_ACC)
+				_aim_dot(aim, C_ACC)
+		"tilt":
+			var ax := _aim_axes()
+			if two:
+				_aim_ray(BC + ax[0] * aim_a, ax[1], dim)
+				_aim_ray(aim, ax[0], C_ACC)
+			else:
+				_aim_ray(aim, ax[1], C_ACC)
+		"cross":
+			_aim_h_line(aim.y, C_ACC)
+			_aim_v_line(aim.x, C_ACC)
+		"drift", "place":
+			_aim_dot(aim, C_ACC)
+		"pull":
+			_aim_dot(aim, C_ACC)
+			if pull_at.x >= 0.0:
+				# 쥔 자리에서 손까지 당긴 만큼을 보여 준다 — 이 길이가 힘이다.
+				draw_line(pull_at, mouse_at, Color(C_ACC, 0.6), 1.0)
+				draw_arc(pull_at, 3.0, 0.0, TAU, 14, Color(C_ACC, 0.75), 1.0)
+		_:
+			if two:
+				_aim_h_line(aim.y, dim)
+				_aim_v_line(aim.x, C_ACC)
+			else:
+				_aim_h_line(aim.y, C_ACC)
+
+
+# 조준용 원. 얇은 선 하나는 판 무늬에 묻힌다 — 판의 삼중 고리와 반지름이
+# 겹치면 아예 안 보인다. 어두운 바닥을 깔아 어느 칸 위에서도 뜨게 한다.
+# 잠근 원은 색을 어둡게 말고 **옅게** 죽인다. 어둡힌 강조색은 판의 붉은
+# 칸과 같은 색이 되어 버린다.
+func _aim_circle(r: float, col: Color) -> void:
+	var rr := maxf(r, 1.0)
+	draw_arc(BC, rr, 0.0, TAU, 48, Color(C_BG, 0.7), 3.0)
+	draw_arc(BC, rr, 0.0, TAU, 48, col, 1.0)
+
+
+# 선이 없는 방식의 조준점. 원 하나로는 판의 고리와 헷갈려서 십자를 겹친다.
+func _aim_dot(p: Vector2, col: Color) -> void:
+	draw_arc(p, 4.0, 0.0, TAU, 16, col, 1.0)
+	draw_line(p - Vector2(8.0, 0.0), p + Vector2(8.0, 0.0), col, 1.0)
+	draw_line(p - Vector2(0.0, 8.0), p + Vector2(0.0, 8.0), col, 1.0)
+
+
+# 기울어진 조준선. 가로세로 두 줄이 못 그리는 축을 그린다 — 안개 규칙은
+# 같다(판 안쪽이 비고 바깥 꼬리만 남는다).
+func _aim_ray(p: Vector2, dir: Vector2, col: Color) -> void:
+	var foot := p + dir * (BC - p).dot(dir)
+	var h := foot.distance_to(BC)
+	var rr: float = R + 8.0
+	var far := 151.0
+	if mod_v("fog", 0.0) <= 0.0 or h >= rr:
+		draw_line(foot - dir * far, foot + dir * far, col, 1.0)
+		return
+	var cut: float = sqrt(maxf(rr * rr - h * h, 0.0))
+	draw_line(foot - dir * far, foot - dir * cut, col, 1.0)
+	draw_line(foot + dir * cut, foot + dir * far, col, 1.0)
 
 
 # 조준선 한 줄. 안개가 걸리면 판 원 안쪽이 비고 바깥 꼬리만 남는다 —
@@ -7169,7 +7371,7 @@ func _tip_update(d: float) -> void:
 		tip_a = 0.0
 		_tip_clear()
 		return
-	var hit := _tip_hit(get_local_mouse_position())
+	var hit := _tip_hit(_cursor())
 	_tip_build(hit)
 	if hit.is_empty():
 		tip_a = maxf(tip_a - d * TIP.fade, 0.0)
@@ -8140,9 +8342,9 @@ func _draw_hint() -> void:
 		S.PICK:
 			hint = "던질 다트를 고르세요"
 		S.AIM_V:
-			hint = "다트판을 눌러 높이 결정"
+			hint = _aim_hint(0)
 		S.AIM_H:
-			hint = "다트판을 눌러 좌우 결정"
+			hint = _aim_hint(1)
 		S.CONFIRM:
 			hint = "조준 확인"
 	if hint != "":
