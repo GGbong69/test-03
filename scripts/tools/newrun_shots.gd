@@ -22,6 +22,9 @@ func _initialize() -> void:
 	Save.wipe()
 	for r in GameData.stakes():
 		Save.unlock(GameData.stake_key(String(r.get("id", ""))))
+	# 팩도 전부 연다 — 잠긴 팩은 효과 줄 대신 조건 줄이 뜬다.
+	for r in GameData.packs():
+		Save.unlock("pack:" + String(r.get("id", "")))
 	g = load("res://scenes/main.tscn").instantiate()
 	root.add_child(g)
 	g.set_process(false)

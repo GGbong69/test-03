@@ -1481,6 +1481,19 @@ static func _v_stakes() -> void:
 
 # 스타트팩. 첫 행은 늘 열려 있어야 하고(런을 못 시작하면 게임이 안 돈다),
 # 다트 id 는 실재해야 하며, 칸 수는 0 보다 커야 한다.
+# 표의 행 이름. id 는 표의 말이지 사람의 말이 아니라, 화면에는 이름이 간다.
+static func row_name(table: String, id: String) -> String:
+	boot()
+	for r in _raw.get(table, []):
+		if String(r.get("id", "")) == id:
+			return String(r.get("name", id))
+	return id
+
+
+static func dart_name(id: String) -> String:
+	return row_name("darts", id)
+
+
 static func _has_row(table: String, id: String) -> bool:
 	for r in _raw.get(table, []):
 		if String(r.get("id", "")) == id:

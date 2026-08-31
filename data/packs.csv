@@ -1,7 +1,7 @@
 ﻿id,name,kind,grant_item,grant_voucher,grant_cons,interest_off,dart_gold,score,color,dart_id,darts_add,gold_add,item_slots,cons_slots,grant_mod,prereq,unlock_stat,unlock_v,_note
 base,기본 팩,base,,,,,,std,cfc9bd,std,0,0,5,2,,,,,기준선. 튜닝 표의 값을 그대로 쓴다 — 이 팩의 효과 줄이 곧 게임의 기본값이다
-p_mag,여벌 팩,base,,,,,,,479a58,std,1,,5,2,,base,,,다트 하나. 점수 +17% 이자 잔탄 골드 +1 — 점수와 경제를 같이 민다
+p_mag,여벌 팩,base,,,,,0,,479a58,std,1,,5,2,,base,,,다트 하나를 더 주되 잔탄이 값을 잃는다. 여벌이 있으니 아껴 쓸 이유가 없다는 것이 이 팩의 말이다 — 점수는 오르고 "일찍 끝내 골드를 번다" 는 길이 닫힌다
 p_rack,넓은 랙,base,,,,,,,4a6fa5,std,-1,,6,2,,p_mag,,,스티커 한 칸을 다트 한 발과 바꾼다. 칸이 여섯이면 칸 폭이 62 → 53 이 된다
-p_adv,선금 팩,base,,,,,,,d4a12a,std,,10,5,2,,p_rack,,,시작 자금 4 → 14. 첫 상점에서 희귀 스티커(11~14)에 손이 닿는다
+p_adv,선금 팩,base,,,,,,,d4a12a,std,,10,5,1,,p_rack,,,선금을 받고 소비 칸 하나를 내준다. 첫 상점에서 희귀(11~14)에 손이 닿는 대신 판을 고칠 여지가 준다
 p_wage,일당 팩,base,,,,1,2,,c0503a,std,,,5,2,,p_adv,,,이자를 끄고 잔탄 골드를 두 배로. 모으는 대신 남기는 판이 된다
 p_x1,미정,hidden,,,,,,std,7a4f9e,std,0,0,5,2,,,bulls,50,히든 자리. 조준·계산 변형은 아직 안 정했다 — aim/score 를 std 가 아닌 이름으로 바꾸고 그 이름을 AIM_MODES/SCORE_MODES 에 등록하면 산다. 지금은 기본과 똑같이 돈다

@@ -7814,11 +7814,13 @@ func _draw_newrun() -> void:
 	draw_string(font, Vector2(230, 84),
 			String(row.get("name", "")) if open else ("???" if hid else "잠김"),
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 13, C_TXT if open else C_DIM)
-	var eb := Rect2(Vector2(230.0, 96.0), Vector2(310.0, 76.0))
+	# 다섯 줄까지 든다. 넷일 때는 아래가 비지만, 팩마다 칸 높이가
+	# 출렁이면 넘길 때 눈이 자리를 다시 잡아야 한다.
+	var eb := Rect2(Vector2(230.0, 94.0), Vector2(310.0, 86.0))
 	draw_rect(eb, C_PANEL.darkened(0.2))
 	var lines := _pack_lines(row) if open else [_pack_cond(row)]
-	for li in mini(lines.size(), 4):
-		draw_string(font, Vector2(242, 116 + li * 16), lines[li],
+	for li in mini(lines.size(), 5):
+		draw_string(font, Vector2(242, 112 + li * 15), lines[li],
 				HORIZONTAL_ALIGNMENT_LEFT, eb.size.x - 24.0, 11,
 				C_TXT if open else C_DIM)
 	# 이 팩으로 넘긴 가장 높은 리그 — 한 번도 못 넘겼으면 안 그린다
@@ -7868,12 +7870,46 @@ func _draw_newrun() -> void:
 
 
 # 팩이 미는 값만 줄로 낸다 — 해설은 안 쓴다.
+# 팩이 기준선과 **다른 것만** 낸다.
+#
+# 넷을 늘 적던 때는 일당 팩이 기본 팩과 글자 하나 안 다르게 보였다 —
+# 그 팩의 전부인 "이자 없음 · 잔탄당 2골드" 가 어느 줄에도 없었기
+# 때문이다. 표에 열이 늘 때마다 이 함수를 같이 늘려야 하는 구조였고,
+# 늘리는 것을 잊으면 그 열은 화면에서 없는 것이 된다.
+#
+# 다른 것만 적으면 기준선(기본 팩)은 "기준" 한 줄이 되는데, 그게
+# 그 팩의 정직한 설명이다 — 아무것도 안 주고 아무것도 안 뺀다.
 func _pack_lines(row: Dictionary) -> Array:
 	var out := []
-	out.append("다트 %d" % (GameData.tune_i("darts_base") + int(row.get("darts_add", 0))))
-	out.append("시작 골드 %d" % (GameData.start_gold() + int(row.get("gold_add", 0))))
-	out.append("스티커 칸 %d" % int(row.get("item_slots", GameData.tune_i("max_items"))))
-	out.append("소비 칸 %d" % int(row.get("cons_slots", GameData.tune_i("cons_slots"))))
+	var da := int(row.get("darts_add", 0))
+	if da != 0:
+		out.append("다트 %+d" % da)
+	var ga := int(row.get("gold_add", 0))
+	if ga != 0:
+		out.append("시작 골드 %+d" % ga)
+	var isl := int(row.get("item_slots", GameData.tune_i("max_items")))
+	if isl != GameData.tune_i("max_items"):
+		out.append("스티커 칸 %d" % isl)
+	var csl := int(row.get("cons_slots", GameData.tune_i("cons_slots")))
+	if csl != GameData.tune_i("cons_slots"):
+		out.append("소비 칸 %d" % csl)
+	if String(row.get("interest_off", "")) != "" \
+			and int(row.get("interest_off", 0)) > 0:
+		out.append("이자 없음")
+	if String(row.get("dart_gold", "")) != "":
+		var dg := int(row.get("dart_gold", 0))
+		if dg != GameData.gold_per_dart():
+			out.append("잔탄 1개당 %d골드" % dg)
+	var did := String(row.get("dart_id", ""))
+	if did != "" and did != "std":
+		out.append("%s 다트로 시작" % GameData.dart_name(did))
+	# 쥐여 주는 것들 — 이름으로 낸다. id 는 표의 말이지 사람의 말이 아니다.
+	for gk in [["grant_item", "items"], ["grant_mod", "mods"],
+			["grant_voucher", "vouchers"], ["grant_cons", "cons"]]:
+		for gid in String(row.get(gk[0], "")).split(";", false):
+			out.append("%s 들고 시작" % GameData.row_name(gk[1], String(gid)))
+	if out.is_empty():
+		out.append("기준")
 	return out
 
 
@@ -7882,7 +7918,10 @@ func _pack_cond(row: Dictionary) -> String:
 	if GameData.pack_kind(row) == "hidden":
 		return "조건 미달"
 	var pq := String(row.get("prereq", ""))
-	return "%s 완주" % pq if pq != "" else "완주로 열린다"
+	if pq == "":
+		return "완주로 열린다"
+	# 이름으로 낸다. id 를 그대로 내면 "p_mag 완주" 가 화면에 뜬다.
+	return "%s 완주" % GameData.row_name("packs", pq)
 
 
 # 리그이 미는 값 — 1단부터 지금 단까지 쌓인 결과만 적는다.
