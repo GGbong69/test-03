@@ -2,6 +2,8 @@ extends Node2D
 
 const GameData = preload("res://scripts/data.gd")
 const Save = preload("res://scripts/save.gd")
+# DEV — 정식 출시에서 지운다. 지우는 자리는 이 줄과 아래 "# DEV" 셋뿐이다.
+const Dev = preload("res://scripts/dev.gd")
 
 # ── 다트 로그라이트 프로토타입 ──────────────────────────────
 # 흐름: 라운드 플레이 → 클리어 정산(보너스 3택) → 상점 → 다음 라운드
@@ -17,7 +19,10 @@ const VIEW := Vector2(640, 360)
 #  브라우저와 윈도가 같은 화면을 그린다.
 #  Paperlogy 는 Thin(1) 부터 Black(9) 까지 아홉 단계다. 두께를 바꾸려면
 #  fonts/ 에 그 파일을 넣고 이 줄만 고치면 된다 — 부르는 곳은 _ready 한 곳뿐이다.
-const FONT_PATH := "res://fonts/Paperlogy-5Medium.ttf"
+# 픽셀 한글 글꼴. 11px 로 설계돼 있어서 11 · 22 · 33 에서 획이 딱 떨어진다 —
+# 매끈한 TTF 를 8~9px 로 래스터화하면 획이 통째로 사라지는 자리가 그 반대다.
+# 갈무리(OFL) — fonts/Galmuri-LICENSE.txt
+const FONT_PATH := "res://fonts/Galmuri11.ttf"
 
 const BC := Vector2(320, 196)
 # 판 반지름과 조준 진폭은 tuning.csv 에 나란히 있다. SWING 은 R 에 비례해야
@@ -1622,6 +1627,7 @@ func _process(d: float) -> void:
 	card_p = clampf(card_p + card_v * d, -0.35, 1.35)
 
 	_panel_update(d)
+	Dev.tick(d)          # DEV
 	_drop_update(d)
 
 	match state:
@@ -1799,6 +1805,8 @@ func _unhandled_input(e: InputEvent) -> void:
 	if e is InputEventKey:
 		var k := e as InputEventKey
 		if k.pressed and not k.echo:
+			if Dev.key(self, k.keycode):          # DEV
+				return
 			if swap_live:
 				# 연출은 아무 키로나 건너뛴다. 잠긴 채로 못 빠져나가는
 				# 자리를 안 만드는 것이 ESC(일시정지)보다 앞선다.
@@ -1869,6 +1877,8 @@ func _unhandled_input(e: InputEvent) -> void:
 
 
 func _click(m: Vector2) -> void:
+	if Dev.click(self, m):          # DEV
+		return
 	if swap_live:
 		return          # 갈아 끼우는 동안은 아무것도 안 받는다
 	match state:
@@ -2928,6 +2938,8 @@ func _draw() -> void:
 	_hud_draw()
 	if not swap_live:
 		_tip_draw(sh)
+	draw_set_transform(Vector2.ZERO)
+	Dev.draw(self)          # DEV
 	draw_set_transform(Vector2.ZERO)
 	if screen_flash > 0.0:
 		draw_rect(Rect2(Vector2.ZERO, VIEW), Color(1.0, 1.0, 1.0, screen_flash * 0.34))
@@ -7183,10 +7195,13 @@ func _tip_draw(sh: Vector2) -> void:
 
 	var tx: float = p.x + TIP.pad
 	if not tip_chip.is_empty():
-		draw_item_sticker(p + Vector2(TIP.pad + 8.0, TIP.pad + 8.0), 8.0, tip_chip,
+		draw_item_sticker(p + Vector2(TIP.pad + 8.0, TIP.pad + 9.0), 8.0, tip_chip,
 				0.42, 0.0, 0.0, 8)
-		tx += 20.0
-	draw_string(font, Vector2(tx, p.y + TIP.pad + 11.0), tip_title,
+		# 원반 지름이 16 이라 pad+16 에서 끝난다. 20 이면 글자와 4px 밖에
+		# 안 떨어져 둘이 한 덩어리로 붙어 보였다 — 아이콘은 글자가 아니라
+		# 그림이므로 낱말 사이보다 넓게 띄워야 따로 읽힌다.
+		tx += 27.0
+	draw_string(font, Vector2(tx, p.y + TIP.pad + 12.0), tip_title,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(C_TXT, tip_a))
 
 	# _tip_draw 의 본문 루프. 이 시점에 transform 은 이미 Vector2.ZERO 라
@@ -7804,7 +7819,7 @@ func _draw_newrun() -> void:
 	var lines := _pack_lines(row) if open else [_pack_cond(row)]
 	for li in mini(lines.size(), 4):
 		draw_string(font, Vector2(242, 116 + li * 16), lines[li],
-				HORIZONTAL_ALIGNMENT_LEFT, eb.size.x - 24.0, 10,
+				HORIZONTAL_ALIGNMENT_LEFT, eb.size.x - 24.0, 11,
 				C_TXT if open else C_DIM)
 	# 이 팩으로 넘긴 가장 높은 리그 — 한 번도 못 넘겼으면 안 그린다
 	var best := -1
