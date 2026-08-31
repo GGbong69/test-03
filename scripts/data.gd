@@ -640,7 +640,11 @@ static func score_mode() -> String:
 # 읽는다. 대신 손으로 쓴 문장은 표와 어긋날 수 있으므로 숫자를 직접
 # 안 적는다 — items.csv·tags.csv·vouchers.csv 가 이미 쓰는 규약이고,
 # 검증기가 모르는 열쇠를 막는다.
-const PACK_DESC_KEYS := ["darts", "gold", "items", "cons", "dartgold"]
+# 총량과 증감을 둘 다 낸다. 줄글이 "추가 다트 1개" 처럼 **늘고 준 것**을
+# 말하므로 증감이 주로 쓰이고, 방향은 낱말이 쥔다 — 그래서 _d 는
+# 절댓값이다. "다트 -1개 감소" 처럼 부호가 두 번 붙지 않게 한다.
+const PACK_DESC_KEYS := ["darts", "gold", "items", "cons", "dartgold",
+		"darts_d", "gold_d", "items_d", "cons_d"]
 
 
 static func pack_desc(row := {}) -> String:
@@ -648,12 +652,18 @@ static func pack_desc(row := {}) -> String:
 	var tpl := String(r.get("desc", ""))
 	if tpl == "":
 		return ""
+	var isl := _i(r, "item_slots", "packs", tune_i("max_items"))
+	var csl := _i(r, "cons_slots", "packs", tune_i("cons_slots"))
 	return fill(tpl, {
 		"darts": tune_i("darts_base") + _i(r, "darts_add", "packs", 0),
 		"gold": start_gold() + _i(r, "gold_add", "packs", 0),
-		"items": _i(r, "item_slots", "packs", tune_i("max_items")),
-		"cons": _i(r, "cons_slots", "packs", tune_i("cons_slots")),
+		"items": isl,
+		"cons": csl,
 		"dartgold": _i(r, "dart_gold", "packs", gold_per_dart()),
+		"darts_d": absi(_i(r, "darts_add", "packs", 0)),
+		"gold_d": absi(_i(r, "gold_add", "packs", 0)),
+		"items_d": absi(isl - tune_i("max_items")),
+		"cons_d": absi(csl - tune_i("cons_slots")),
 	})
 
 
