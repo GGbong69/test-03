@@ -442,7 +442,7 @@ func _start_round() -> void:
 		grip_slot.append(gi)
 	grip_n = remaining.size()
 	grip_pick = -1
-	# 제약 둔화와 리그이 같은 축을 민다 — 검정 리그부터는 매 판 상시다.
+	# 제약 둔화와 리그이 같은 축을 민다 — 보라 리그부터는 매 판 상시다.
 	var seal := int(mod_v("seal_items", 0.0)) \
 			+ int(GameData.stake_v("seal_items", 0.0))
 	sealed = randi() % owned.size() if seal > 0 and not owned.is_empty() else -1
@@ -620,7 +620,7 @@ func _settle_clear() -> void:
 	# 클리어 보상은 판마다 다르다 — 작은 3 · 큰 4 · 보스 5.
 	# 발라트로와 같은 값이고, blinds.csv 가 쥔다.
 	var clear := GameData.reward_of(round_no)
-	# 붉은 리그부터 작은 판이 골드를 안 준다. 곡선이 아니라 여유를 깎는 단이다.
+	# 초록 리그부터 작은 판이 골드를 안 준다. 곡선이 아니라 여유를 깎는 단이다.
 	if GameData.blind_idx(round_no) == 0:
 		clear = int(GameData.stake_v("reward_small", float(clear)))
 	# 제약이 이 판의 보상을 깎는다. 리그 뒤에 온다 — 리그이 정한 값을
@@ -739,7 +739,7 @@ func _stake_unlock_next() -> void:
 # 정산보다 먼저 부른다: 이번 라운드 일한 값은 이미 점수로 냈고, 골드 정산은
 # 남은 자만 받는 것이 "라운드 종료 시 파괴" 의 뜻에 맞다.
 func _round_end_wear() -> void:
-	# 유지비 — 금 리그. 골드가 없으면 0 에서 멈춘다(빚을 안 만든다).
+	# 유지비 — 검정 리그. 골드가 없으면 0 에서 멈춘다(빚을 안 만든다).
 	var rent := int(GameData.stake_v("rent", 0.0))
 	if rent > 0 and gold > 0:
 		var pay: int = mini(rent, gold)
@@ -8324,7 +8324,7 @@ func _draw_title() -> void:
 #
 #  발라트로와 다르게 잡은 둘.
 #    ① 리그을 화살표 사이클이 아니라 여덟 칸을 눕혀 곧장 누른다. 클릭
-#       하나로 도는 게임에서 금 리그에 가려고 일곱 번 넘기는 것은
+#       하나로 도는 게임에서 검정 리그에 가려고 일곱 번 넘기는 것은
 #       조작이 아니라 형벌이다. 640x360 에 세로 기둥을 놓을 자리도 없다.
 #    ② 발라트로는 이 화면을 게임오버에서 열면 못 빠져나가는데, 여기서는
 #       뒤로가 늘 산다. 나갈 길 없는 화면을 만들지 않는다.
@@ -9394,9 +9394,9 @@ func _pack_cond(row: Dictionary) -> String:
 
 
 # 리그이 미는 값 — 1단부터 지금 단까지 쌓인 결과만 적는다.
-# 줄 수는 단마다 다르다 — 흰 리그은 한 줄이고 금 리그은 일곱 줄이다.
+# 줄 수는 단마다 다르다 — 흰 리그은 한 줄이고 검정 리그은 일곱 줄이다.
 # 칸당 세 줄로 못 박아 두었더니 일곱째 줄이 오른쪽 칸 첫 줄 **위에** 겹쳐
-# 찍혔다(금 리그의 "유지비 3" 이 "다트 -1" 을 덮었다). 가장 긴 단에 맞춰
+# 찍혔다(검정 리그의 "유지비 3" 이 "다트 -1" 을 덮었다). 가장 긴 단에 맞춰
 # 네 줄로 고정한다 — 단을 훑을 때 칸이 들썩이지 않는 편이 낫다.
 const STAKE_ROWS := 4
 

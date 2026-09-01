@@ -4,7 +4,7 @@ const GameData = preload("res://scripts/data.gd")
 const Save = preload("res://scripts/save.gd")
 
 # 제약 축마다 판이 실제로 어떻게 보이는지 찍는다. 한 장만 찍으면
-# 놓친다 — 금 리그 겹침을 그렇게 놓쳤다. 표의 모든 행을 돈다.
+# 놓친다 — 검정 리그 겹침을 그렇게 놓쳤다. 표의 모든 행을 돈다.
 #
 #   godot --path . --quit-after 2000 --script scripts/tools/mod_shots.gd
 

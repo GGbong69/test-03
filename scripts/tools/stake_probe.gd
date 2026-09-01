@@ -40,16 +40,16 @@ func _initialize() -> void:
 	var last: int = GameData.rounds_n()
 	GameData.stake = ""
 	var t_white := GameData.target_of(last)
-	GameData.stake = "green"
-	var t_green := GameData.target_of(last)
-	GameData.stake = "purple"
-	var t_purple := GameData.target_of(last)
-	_say(t_green > t_white and t_purple > t_green, "곡선이 단마다 가팔라진다",
-			"흰 %d < 초록 %d < 보라 %d" % [t_white, t_green, t_purple])
+	GameData.stake = "blue"
+	var t_blue := GameData.target_of(last)
+	GameData.stake = "yellow"
+	var t_yellow := GameData.target_of(last)
+	_say(t_blue > t_white and t_yellow > t_blue, "곡선이 단마다 가팔라진다",
+			"흰 %d < 파랑 %d < 노랑 %d" % [t_white, t_blue, t_yellow])
 
-	# 붉은 리그은 곡선이 base 다 — 여유만 깎고 목표는 그대로여야 한다
-	GameData.stake = "red"
-	_say(GameData.target_of(last) == t_white, "붉은 단은 곡선을 안 건드린다",
+	# 초록 리그은 곡선이 base 다 — 여유만 깎고 목표는 그대로여야 한다
+	GameData.stake = "green"
+	_say(GameData.target_of(last) == t_white, "초록 단은 곡선을 안 건드린다",
 			"목표 %d" % GameData.target_of(last))
 
 	# ② 계단 — 선행이 바로 앞 단이다
@@ -63,20 +63,20 @@ func _initialize() -> void:
 			"%s → … → %s" % [rows[0].get("name", ""), rows[rows.size() - 1].get("name", "")])
 
 	# ③ 미는 값 — 표에 적힌 대로 나온다
-	GameData.stake = "red"
+	GameData.stake = "green"
 	_say(int(GameData.stake_v("reward_small", 9)) == 0,
-			"붉은 단은 작은 판 보상이 0", "%d" % int(GameData.stake_v("reward_small", 9)))
-	GameData.stake = "black"
+			"초록 단은 작은 판 보상이 0", "%d" % int(GameData.stake_v("reward_small", 9)))
+	GameData.stake = "purple"
 	_say(int(GameData.stake_v("seal_items", 0)) == 1,
-			"검정 단은 스티커를 봉인한다", "%d장" % int(GameData.stake_v("seal_items", 0)))
-	GameData.stake = "blue"
+			"보라 단은 스티커를 봉인한다", "%d장" % int(GameData.stake_v("seal_items", 0)))
+	GameData.stake = "red"
 	_say(int(GameData.stake_v("darts_add", 0)) == -1,
-			"파랑 단은 다트를 깎는다", "%+d발" % int(GameData.stake_v("darts_add", 0)))
-	GameData.stake = "gold"
+			"붉은 단은 다트를 깎는다", "%+d발" % int(GameData.stake_v("darts_add", 0)))
+	GameData.stake = "black"
 	var costly: bool = GameData.stake_v("shop_cost_mul", 1.0) > 1.0 \
 			and int(GameData.stake_v("rent", 0)) > 0 \
 			and int(GameData.stake_v("perish", 0)) > 0
-	_say(costly, "금 단은 값·유지비·삭음을 다 얹는다",
+	_say(costly, "검정 단은 값·유지비·삭음을 다 얹는다",
 			"×%.2f · 유지비 %d · 삭음 %d판" % [GameData.stake_v("shop_cost_mul", 1.0),
 			int(GameData.stake_v("rent", 0)), int(GameData.stake_v("perish", 0))])
 
@@ -104,9 +104,9 @@ func _initialize() -> void:
 	_say(GameData.stake == before, "잠긴 리그은 안 골라진다", "리그 '%s'" % GameData.stake)
 
 	# 열린 단은 눌리고 저장에 남는다
-	Save.unlock(GameData.stake_key("red"))
+	Save.unlock(GameData.stake_key("green"))
 	g._click(g._stake_rect(1).get_center())
-	_say(GameData.stake == "red" and String(Save.get_set("stake", "")) == "red",
+	_say(GameData.stake == "green" and String(Save.get_set("stake", "")) == "green",
 			"열린 리그은 눌리고 저장된다", "리그 '%s'" % GameData.stake)
 
 	# 시작이 런을 연다
@@ -115,12 +115,12 @@ func _initialize() -> void:
 			"state %d · 판 %d" % [g.state, g.round_no])
 
 	# 리그은 팩마다 따로 뚫린다 — 키에 팩 id 가 들어 있다
-	_say(GameData.stake_key("red", "base") == "stake:base:red"
-			and GameData.stake_key("red", "other") == "stake:other:red",
-			"리그 해금은 팩마다 갈린다", GameData.stake_key("red", "base"))
+	_say(GameData.stake_key("green", "base") == "stake:base:green"
+			and GameData.stake_key("green", "other") == "stake:other:green",
+			"리그 해금은 팩마다 갈린다", GameData.stake_key("green", "base"))
 
 	# 설명 줄이 서로 안 겹친다. 여덟 단을 전부 깔아 자리를 실제로 세어
-	# 본다 — 금 리그의 일곱째 줄이 오른쪽 칸 첫 줄 위에 찍히던 사고가
+	# 본다 — 검정 리그의 일곱째 줄이 오른쪽 칸 첫 줄 위에 찍히던 사고가
 	# 여기 없으면 눈으로만 보이고, 그 단을 열어 보기 전에는 눈에도 안 띈다.
 	var worst := ""
 	var most := 0

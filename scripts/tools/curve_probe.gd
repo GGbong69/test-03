@@ -6,7 +6,7 @@ const GameData = preload("res://scripts/data.gd")
 #  목표 곡선 측정 — 24판이 실제로 어디서 막히는가
 #
 #  실행:  godot --path . --headless --quit-after 600000 -s scripts/tools/curve_probe.gd -- autoplay
-#         (리그을 재려면)  ... -- autoplay green   ·   ... -- autoplay purple
+#         (리그을 재려면)  ... -- autoplay blue   ·   ... -- autoplay yellow
 #
 #  8라운드에서 24판으로 늘리며 곡선을 다시 잡았는데, 그 값은 **감으로**
 #  고른 것이다. 상점이 7번에서 23번으로 늘면 빌드가 얼마나 세지는지는
@@ -49,7 +49,10 @@ func _initialize() -> void:
 	seed(20260826)
 	for a in OS.get_cmdline_user_args():
 		var t := String(a)
-		if t == "green" or t == "purple":
+		# 표에 있는 리그 id 면 그것으로 잰다. 색 순서가 바뀌어도 안 깨지도록
+		# id 를 박지 않고 표에 물어본다 — 모르는 말이면 stake_row 가 첫 단을
+		# 돌려주므로 id 가 안 맞고, 그대로 지나간다.
+		if String(GameData.stake_row(t).get("id", "")) == t:
 			GameData.stake = t
 		elif t.begins_with("runs="):
 			RUNS = maxi(1, int(t.substr(5)))

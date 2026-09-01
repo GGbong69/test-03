@@ -7,7 +7,7 @@ const Save = preload("res://scripts/save.gd")
 #
 #   godot --path . --quit-after 1200 --script scripts/tools/newrun_shots.gd
 #
-# 단마다 설명 줄 수가 1~7 로 다른데(금 리그이 일곱 줄), 한 단만 찍고
+# 단마다 설명 줄 수가 1~7 로 다른데(검정 리그이 일곱 줄), 한 단만 찍고
 # 넘어가면 긴 단의 글자 겹침을 못 본다 — 실제로 그렇게 놓쳤다.
 # 자리 겹침 자체는 stake_probe 가 수로 재고, 여기는 눈으로 본다.
 #
