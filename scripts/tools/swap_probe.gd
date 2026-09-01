@@ -85,7 +85,7 @@ func _initialize() -> void:
 	#     이미 화면 밖이다. 한 프레임을 재는 게 아니라 타임라인 전체를
 	#     훑는다. 겹치면 올라오는 판이 남은 펠트 위에 얹힌 물건으로 읽힌다.
 	var worst := 0.0
-	var high := 360.0
+	var high := INF          # 실제 최솟값을 잰다. 360 으로 시작하면 여유가 늘 0 으로 찍힌다
 	while g.swap_live:
 		var dx: float = float(g.SWAP.dx) * g._swap_gone()
 		if dx < g.VIEW.x:                       # 테이블이 아직 화면에 있다
@@ -93,7 +93,8 @@ func _initialize() -> void:
 			worst = maxf(worst, g.VIEW.x - dx)
 		g._process(1.0 / 60.0)
 	_say(high >= 360.0, "테이블이 있는 동안 판은 화면 밖이다",
-			"판 윗변 최고 y %.1f (테이블 최대 %.0fpx 남음)" % [high, worst])
+			"판 윗변 최고 y %.1f · 여유 %.1fpx (테이블 최대 %.0fpx 남음)"
+			% [high, high - 360.0, worst])
 
 	# 다시 연다 — 아래 검사들이 도는 전환을 쓴다
 	g.round_no = 1
@@ -101,8 +102,11 @@ func _initialize() -> void:
 	g._click(g._blind_go().get_center())
 
 	# ④ 판정 사각은 전환 내내 한 픽셀도 안 움직인다
+	#    감는 시간은 SWAP 에서 뽑는다 — 손으로 적어 두면 길이를 고칠 때마다
+	#    프로브가 같이 거짓말을 한다(0.59 → 0.36 에서 실제로 그럴 뻔했다).
+	var dur: float = float(g.SWAP.dur)
 	var r0 := _rects(g)
-	_wind(g, 0.28)
+	_wind(g, dur * 0.47)
 	var same := true
 	var moved := ""
 	var r1 := _rects(g)
@@ -123,13 +127,13 @@ func _initialize() -> void:
 	var gold0: int = g.gold
 	var rn0: int = g.round_no
 	var rem0: int = g.remaining.size()
-	_wind(g, 0.18)
+	_wind(g, dur * 0.30)
 	_say(g.gold == gold0 and g.round_no == rn0 and g.remaining.size() == rem0,
 			"전환은 게임을 안 만진다",
 			"골드 %d · 판 %d · %d발" % [g.gold, g.round_no, g.remaining.size()])
 
 	# ⑥ 스스로 끝나고, 끝나면 두 값이 정확히 제자리다
-	_wind(g, 0.62)
+	_wind(g, dur * 1.05)
 	_say(not g.swap_live and is_equal_approx(g._swap_rise(), 1.0)
 			and is_zero_approx(g._swap_gone()),
 			"끝나면 판이 제자리에 선다",
@@ -147,14 +151,14 @@ func _initialize() -> void:
 			"선 %.3f · 빠진 %.3f" % [g._swap_rise(), g._swap_gone()])
 	# 돌아오는 길에서는 테이블이 판을 덮으므로 순서가 반대다 — 테이블이
 	# 화면에 발을 들이는 프레임에는 판이 이미 다 누워 있어야 한다.
-	var hi := 360.0
+	var hi := INF
 	while g.swap_live:
 		if float(g.SWAP.dx) * g._swap_gone() < g.VIEW.x:
 			hi = minf(hi, g._swap_map(g.BC.y - g.R * 1.13))
 		g._process(1.0 / 60.0)
 	_say(hi >= 360.0, "테이블이 들 때 판은 이미 화면 밖이다",
-			"판 윗변 최고 y %.1f" % hi)
-	_wind(g, 0.02)
+			"판 윗변 최고 y %.1f · 여유 %.1fpx" % [hi, hi - 360.0])
+	_wind(g, dur * 0.05)
 	_say(not g.swap_live and g.state == g.S.SHOP,
 			"돌아오는 길도 스스로 끝난다", "state %d" % g.state)
 
