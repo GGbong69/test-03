@@ -21,6 +21,7 @@ const Save = preload("res://scripts/save.gd")
 #    ② 넘기는 동안만 두 벌이고, 다 넘기면 나간 통이 사라진다
 #    ③ 연타해도 통이 쌓이지 않는다
 #    ④ 화면을 뜨면(제목 · 런 시작) 뷰포트가 지워진다
+#    ⑤ 팩별 통 겉(CUP_SKIN) 표에 없는 팩·없는 벽·없는 속성이 없다
 # ══════════════════════════════════════════════════════════
 var g = null
 var busy := false
@@ -94,5 +95,24 @@ func _run() -> void:
 	await _wait(6)
 	_say(g.cup_vp == null, "런을 시작하면 통이 지워진다",
 			"state %d" % g.state)
-	print("여덟 검사 · 실패 %d" % fails)
+	# 팩별 통 겉 표. 오타는 잠자코 기본 통으로 떨어지므로 여기서 잡는다 —
+	# 없는 팩 · 없는 벽 이름 · CUP_SKIN0 에 없는 속성 셋 다 본다.
+	var ids := []
+	for r in GameData.packs():
+		ids.append(String(r.get("id", "")))
+	var bad := []
+	for k in g.CUP_SKIN:
+		if not ids.has(String(k)):
+			bad.append("팩 없음 " + String(k))
+			continue
+		var sk: Dictionary = g.CUP_SKIN[k]
+		for f in sk:
+			if not g.CUP_SKIN0.has(String(f)):
+				bad.append("속성 없음 %s.%s" % [k, f])
+		if sk.has("wall") and not g.CUP_WALLS.has(String(sk["wall"])):
+			bad.append("벽 없음 %s=%s" % [k, sk["wall"]])
+	_say(bad.is_empty(), "통 겉 표가 팩·벽·속성 이름과 맞는다",
+			", ".join(bad) if not bad.is_empty() else "%d줄" % g.CUP_SKIN.size())
+
+	print("아홉 검사 · 실패 %d" % fails)
 	quit(fails)

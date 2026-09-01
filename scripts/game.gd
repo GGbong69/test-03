@@ -8343,12 +8343,13 @@ var newrun_pip := 0             # 지금 보고 있는 팩 번호
 #  **팩이 무엇을 미는지를 한 획도 안 말했다** — 여벌 팩도 셋, 넓은 랙도
 #  셋이었다. 통 하나로 바꾸면 팩이 미는 것이 그대로 그림이 된다.
 #    통 안   탄창 그대로. 자루 수(darts_base + darts_add)와 종류(dart_id)
-#    통 옆   사물로 보이는 나머지. 골드·스티커·개조·칸·이자
-#  글줄과 같은 것을 두 번 말하는 셈인데, 글은 정확하고 그림은 빠르다.
-#  여섯 팩을 훑으며 고를 때 눈이 먼저 잡는 것은 그림 쪽이다.
+#    통 겉   나머지 전부. 팩마다 다른 통이 곧 그 팩이다(CUP_SKIN)
+#  한때는 통 옆에 골드·스티커·칸 아이콘을 늘어 놓았다. 그 줄은 효과 글줄을
+#  아이콘으로 한 번 더 읽는 것이라 자리만 먹고 아무것도 안 보탰다 —
+#  팩의 성질은 통 하나가 통째로 말한다.
 #
-#  잠긴 팩은 통만 어둡게 세우고 **안도 옆도 안 그린다.** 그리면 히든이
-#  히든이 아니다 — 잠긴 팩의 효과 줄을 안 적는 규칙과 같은 규칙이다.
+#  잠긴 팩은 기준선 통을 어둡게 세우고 **안도 겉도 그 팩의 것을 안 쓴다.**
+#  쓰면 히든이 히든이 아니다 — 효과 줄을 안 적는 규칙과 같은 규칙이다.
 #
 #  넘기기는 필름이다. 나가는 통과 들어오는 통이 같은 오프셋으로 같이
 #  움직이고, 무대 밖으로 나간 몫은 판 바탕으로 덮어 자른다 — 그리기
@@ -8386,11 +8387,6 @@ const CUP := {
 	"tilt":    0.011,  # 뒤처진 1px 당 기울기(rad)
 	"lean":    0.34,   # 기울기 상한(rad, 19.5°). 이 위로는 통에서 쏟아진 그림이 된다
 }
-
-# 소품이 서는 자리 — 통 바닥 중심에서 잰다. 오른쪽·왼쪽을 번갈아 채우고
-# 셋째 짝은 한 단 뒤(위)에 선다. 지금 표의 팩은 최대 둘이라 앞 짝만 쓴다.
-const CUP_SPOT := [Vector2(46.0, -6.0), Vector2(-46.0, -6.0),
-		Vector2(61.0, -21.0), Vector2(-61.0, -21.0)]
 
 var cup_t := 1.0        # 넘기기 진행 0~1 (1 = 멈춰 있다)
 var cup_dir := 1        # +1 다음 팩(통은 왼쪽으로 나간다) · -1 이전 팩
@@ -8535,118 +8531,6 @@ func _cup_darts(cx: float, id: String, n: int, dim: float, lean: float) -> void:
 		hi -= 1
 
 
-# 통 옆에 놓을 것들. **사물로 보이는 것만** 고른다 — 목표 배수나 곡선처럼
-# 모양이 없는 값은 글줄이 맡는다. 자루 수와 자루 종류는 통 안이 이미
-# 말하므로 여기 안 넣는다.
-#
-# 판단 기준은 _pack_lines 와 같은 것을 본다(표의 열, 튜닝 기준선과의 차이).
-# 둘이 어긋나면 글은 "골드 +10" 인데 옆에 아무것도 안 놓인 팩이 생긴다.
-func _cup_props(row: Dictionary) -> Array:
-	var out := []
-	var ga := int(row.get("gold_add", 0))
-	if ga != 0:
-		out.append({"k": "gold", "v": ga})
-	for gk in [["grant_item", "item"], ["grant_mod", "mod"],
-			["grant_cons", "cons"], ["grant_voucher", "vch"]]:
-		for gid in String(row.get(gk[0], "")).split(";", false):
-			out.append({"k": String(gk[1]), "id": String(gid), "v": 0})
-	var isl := int(row.get("item_slots", GameData.tune_i("max_items")))
-	if isl != GameData.tune_i("max_items"):
-		out.append({"k": "slot", "v": isl - GameData.tune_i("max_items")})
-	var csl := int(row.get("cons_slots", GameData.tune_i("cons_slots")))
-	if csl != GameData.tune_i("cons_slots"):
-		out.append({"k": "cslot", "v": csl - GameData.tune_i("cons_slots")})
-	if String(row.get("interest_off", "")) != "" 			and int(row.get("interest_off", 0)) > 0:
-		out.append({"k": "noint", "v": 0})
-	if String(row.get("dart_gold", "")) != "":
-		var dg := int(row.get("dart_gold", 0))
-		if dg != GameData.gold_per_dart():
-			out.append({"k": "dgold", "v": dg})
-	return out
-
-
-# 빈 칸 하나 — 랙 홈(원)과 소비 칸(사각)을 늘리거나 줄이는 소품.
-# 게임이 이미 쓰는 어휘를 그대로 빌린다: 속 빈 고리 = "여기 아직 아무것도
-# 없음"(_panel_draw), 사각 꾸러미 = 소비(_obj_paint).
-func _cup_slot(c: Vector2, r: float, v: int, round_slot: bool, a: float) -> void:
-	var col := Color(C_WIRE.lightened(0.10) if v > 0 else C_MULT.lightened(0.20), a)
-	if round_slot:
-		draw_arc(c, r, 0.0, TAU, 20, col, 1.4)
-	else:
-		draw_rect(Rect2(c - Vector2(r, r * 0.86), Vector2(r * 2.0, r * 1.72)),
-				col, false, 1.4)
-	# 더하기 · 빼기. 칸 안에 놓아야 "이 칸이 는다/준다" 로 읽힌다.
-	draw_line(c - Vector2(r * 0.46, 0.0), c + Vector2(r * 0.46, 0.0), col, 1.6)
-	if v > 0:
-		draw_line(c - Vector2(0.0, r * 0.46), c + Vector2(0.0, r * 0.46), col, 1.6)
-
-
-# 쏟아진 동전이 앉는 자리. 손으로 흩어 둔다 — 규칙으로 만들면 규칙이 보인다.
-const COIN_SCAT := [Vector2(1.0, 3.5), Vector2(-4.5, -1.0), Vector2(5.5, -3.5)]
-
-
-# 동전 하나. 골드는 원반이 아니라 플라크다(draw_gold 와 같은 어법) —
-# 스티커 원반과 형태로 갈라 둔 것을 여기서도 지킨다.
-func _cup_coin(c: Vector2, a: float, dim: float) -> void:
-	draw_plaque(c - Vector2(5.5, 3.5), 11.0, 7.0, Color(C_GOLD.darkened(dim), a))
-
-
-# 소품 하나. 반지름 9 안쪽에 든다 — 통 옆에 남는 자리가 그만큼이다.
-func _cup_prop(c: Vector2, pr: Dictionary, dim: float) -> void:
-	var a: float = 1.0 - dim * 0.5
-	var v := int(pr.get("v", 0))
-	match String(pr.k):
-		"gold":
-			# 통 옆에 쏟아 둔 것으로 읽혀야 한다 — 가지런히 쌓으면 은행이다.
-			# 개수는 값이 아니라 "적다/많다" 만 말한다. 정확한 수는 글줄에 있다.
-			var n: int = clampi(absi(v) / 5 + 1, 1, 3)
-			for i in n:
-				_cup_coin(c + COIN_SCAT[i], a, dim)
-		"item":
-			for it in GameData.items():
-				if String(it.id) == String(pr.id):
-					draw_item_sticker(c, 9.0, it, -0.30, 0.0, dim, 9)
-					break
-		"mod":
-			_icon_mod(c, 9.0, String(pr.id), dim, 1.0)
-		"cons":
-			draw_rect(Rect2(c - Vector2(8.5, 8.5), Vector2(17.0, 17.0)),
-					Color(C_PANEL.lightened(0.22).darkened(dim), a))
-			draw_rect(Rect2(c - Vector2(8.5, 8.5), Vector2(17.0, 17.0)),
-					Color(C_WIRE.darkened(0.2 + dim), a), false, 1.0)
-			_icon_area(c, 6.6, String(pr.id), a)
-		"vch":
-			# 설비는 상점 선반에 서는 판이다 — 세워 둔 작은 간판으로 낸다.
-			draw_rect(Rect2(c - Vector2(7.0, 9.0), Vector2(14.0, 18.0)),
-					Color(C_PANEL.lightened(0.26).darkened(dim), a))
-			draw_rect(Rect2(c - Vector2(7.0, 9.0), Vector2(14.0, 2.0)),
-					Color(C_GOLD.darkened(dim), a))
-		"slot":
-			_cup_slot(c, 8.5, v, true, a)
-		"cslot":
-			_cup_slot(c, 8.5, v, false, a)
-		"noint":
-			# 이자는 **쌓인 돈이 스스로 느는 것**이다. 그래서 세로로 포갠
-			# 돈탑에 빗금을 긋는다 — 잔탄 골드(자루 + 동전)와 형태로 갈린다.
-			for i in 3:
-				_cup_coin(c + Vector2(0.0, 5.0 - float(i) * 4.5), a, dim)
-			draw_line(c + Vector2(-9.0, 8.0), c + Vector2(9.0, -8.0),
-					Color(C_MULT.lightened(0.2), a), 2.0)
-		"dgold":
-			# 잔탄이 돈이 된다(또는 안 된다). 자루 그림은 딱지 아이콘을
-			# 그대로 빌린다 — 같은 뜻이 화면 두 곳에서 다른 그림이면
-			# 플레이어가 둘을 따로 배워야 한다.
-			_icon_tag(c + Vector2(-4.5, 3.0), 6.5, "dart", a)
-			if v <= 0:
-				_cup_coin(c + Vector2(4.5, -4.0), a * 0.55, dim + 0.25)
-				draw_line(c + Vector2(-1.5, 2.0), c + Vector2(10.5, -10.0),
-						Color(C_MULT.lightened(0.2), a), 2.0)
-			else:
-				for i in mini(v, 2):
-					_cup_coin(c + Vector2(4.5 + float(i) * 2.5,
-							-4.0 - float(i) * 4.5), a, dim)
-
-
 # 렌더러가 없을 때 서는 2D 받침 한 벌. dx 는 필름 오프셋이다.
 # 소품은 여기서 안 그린다 — 3D 경로와 같은 것을 두 번 그리게 된다.
 func _cup_one(pi: int, dx: float) -> void:
@@ -8722,6 +8606,19 @@ const CUP3 := {
 	"h":      1.02,    # 높이 (50px). 자루 길이의 63% 를 담근다 — 얕으면 지렛대로 쏟긴다
 	"seg":      14,    # 벽 충돌을 두르는 조각 수. 원통 충돌은 속이 안 비므로 나눠 두른다
 
+	# ── 그물 ─────────────────────────────────────────
+	#  벽은 철망이다. 알파 시저라 구멍이 깊이까지 뚫린다 — 반투명이 아니라
+	#  없는 자리다.
+	#  칸 크기는 화면 픽셀이 정한다. 통 둘레가 화면에서 154px 이므로 가로
+	#  텍셀을 160 으로 두면 텍셀 하나가 화면 픽셀 하나다. 이보다 잘게 뜨면
+	#  한 픽셀 안에 철사와 구멍이 같이 들어와 그물이 얼룩이 된다.
+	"net_w":   160,    # 텍스처 가로 = 둘레 한 바퀴. 화면 둘레와 거의 1:1
+	"net_h":    72,    # 텍스처 세로
+	"net_x":    34,    # 한 바퀴 마름모 수 (칸 4.7텍셀 ≒ 화면 4.5px)
+	"net_y":    16,    # 세로 마름모 수. 칸이 가로세로 같게 보이는 수다
+	"net_t":     0.15, # 철사 반두께(칸의 몇 배). 0.15 = 가로로 1.4텍셀
+	"net_hem":   2,    # 위아래로 막아 두는 텍셀 수. 구멍이 테를 물면 톱니가 난다
+
 	# ── 자루 ─────────────────────────────────────────
 	"dl":     0.81,    # 반길이 (40px). 온 길이가 통 높이의 1.8배라 절반이 밖에 선다
 	"dr":     0.055,   # 배럴 반지름
@@ -8765,8 +8662,35 @@ const CUP3 := {
 	"lid":    26.0,    # 아가리 위로 통째로 떠오를 때 눌러 내리는 가속도
 }
 
+# 팩마다 통이 다르다. 통은 팩의 얼굴이라 여섯 팩을 훑을 때 눈이 먼저
+# 잡는 것이 이것이다 — 글줄을 읽기 전에 "아까 그 통" 으로 팩이 갈린다.
+# 표에 없는 팩은 기본 통을 쓴다. 나머지 셋은 아직 안 정했다.
+#
+#   wall     벽을 어떻게 두르는가. CUP_WALLS 에 있는 이름만 쓴다
+#   wide     통 반지름 배율. **물리도 같이 넓어진다** — 벽 충돌·자루가
+#            앉는 고리·줄이 전부 이 값을 곱한 반지름을 본다. 그림만 늘리면
+#            자루가 안 보이는 벽에 막혀 통 한가운데 몰린다
+#   sticker  아가리 아래에 스티커 한 장. 랙이 넓다는 말을 통이 대신 한다
+#
+# **잠긴 팩은 이 표를 안 본다**(_cup3_skin). 겉이 새면 히든이 히든이 아니다 —
+# 자루 수와 종류를 기준선으로 세우는 것과 같은 규칙이다.
+const CUP_SKIN := {
+	"base":   {},                                  # 기준선. 민 원통
+	"p_mag":  {"wall": "net"},                     # 여벌 팩. 철망
+	"p_rack": {"wide": 1.15, "sticker": true},     # 넓은 랙. 넓은 통에 스티커 한 장
+}
+
+# 겉 하나가 안 적은 값. 표는 다른 것만 적는다.
+const CUP_SKIN0 := {"wall": "solid", "wide": 1.0, "sticker": false}
+
+# 있는 벽의 온 목록. _cup3_cup 의 match 와 짝이다 — 표에 오타를 내면
+# 잠자코 민 통이 서므로(match 의 기본 갈래) 눈으로는 못 잡는다.
+# cup_probe 가 이 목록으로 표를 검사한다.
+const CUP_WALLS := ["solid", "net"]
+
 var cup_vp: SubViewport = null
 var cup_rigs := []      # [{"cup": AnimatableBody3D, "darts": Array, "pi": int}]
+var cup_net: ImageTexture = null    # 벽 그물. 한 번 떠서 계속 쓴다
 
 
 # 1 월드 단위가 몇 px 인가. 무대와 카메라가 같은 식을 봐야 2D 소품이
@@ -8793,43 +8717,74 @@ func _cup3_eye() -> float:
 	return (_cup_foot() - _cup_stage().get_center().y) 			/ (cos(deg_to_rad(float(CUP3.pitch))) * _cup3_ppu())
 
 
+# 벽에 두르는 그물 무늬. 알파 0 인 자리가 구멍이다. 마름모 두 갈래를
+# 겹쳐 짠다 — 격자로 두면 벽이 창틀로 읽히고, 마름모라야 철망이 된다.
+# 한 벌만 떠서 두 통이 나눠 쓴다(넘길 때 통이 둘이다).
+func _cup3_net() -> ImageTexture:
+	if cup_net != null:
+		return cup_net
+	var tw: int = CUP3.net_w
+	var th: int = CUP3.net_h
+	var hem: int = CUP3.net_hem
+	var t: float = CUP3.net_t
+	var img := Image.create(tw, th, false, Image.FORMAT_RGBA8)
+	for y in th:
+		for x in tw:
+			var u := (float(x) + 0.5) / float(tw) * float(CUP3.net_x)
+			var v := (float(y) + 0.5) / float(th) * float(CUP3.net_y)
+			var a := fposmod(u + v, 1.0)
+			var b := fposmod(u - v, 1.0)
+			var on := minf(a, 1.0 - a) < t or minf(b, 1.0 - b) < t
+			if y < hem or y >= th - hem:
+				on = true
+			img.set_pixel(x, y, Color(1.0, 1.0, 1.0, 1.0 if on else 0.0))
+	cup_net = ImageTexture.create_from_image(img)
+	return cup_net
+
+
 # 납작하게 굳힌다 — 반사와 광택이 들어오면 이 화면만 다른 게임이 된다.
-func _cup3_mat(col: Color) -> StandardMaterial3D:
+# net 은 벽 한 겹 몫이다. 알파 블렌드가 아니라 시저인 것이 핵심이다 —
+# 블렌드는 깊이를 안 써서 구멍 너머가 그리는 차례대로 지워진다.
+# 뒷면을 안 자르는 것은 아가리 너머로 뒷벽 그물의 안쪽이 보여야 해서다.
+func _cup3_mat(col: Color, net := false) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
 	m.albedo_color = col
 	m.roughness = 1.0
 	m.metallic = 0.0
 	m.specular = 0.0
+	if net:
+		m.albedo_texture = _cup3_net()
+		m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+		m.alpha_scissor_threshold = 0.5
+		m.cull_mode = BaseMaterial3D.CULL_DISABLED
 	return m
 
 
 func _cup3_mesh(parent: Node3D, mesh: Mesh, col: Color, at: Vector3,
-		rot := Vector3.ZERO) -> void:
+		rot := Vector3.ZERO, net := false) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	mi.mesh = mesh
-	mi.material_override = _cup3_mat(col)
+	mi.material_override = _cup3_mat(col, net)
 	mi.position = at
 	mi.rotation = rot
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	parent.add_child(mi)
+	return mi
 
 
-# 통 하나. 원점은 **바닥 한가운데**라 y 0 이 곧 놓인 자리다.
-func _cup3_cup() -> AnimatableBody3D:
-	var r: float = CUP3.r
-	var w: float = CUP3.wall
-	var h: float = CUP3.h
-	var b := AnimatableBody3D.new()
-	b.sync_to_physics = true
-
+# ── 벽: 민 통 ────────────────────────────────────────
+# 기준선. 벽 두 겹에 굵은 테 하나다.
+func _cup3_wall_solid(b: Node3D, r: float, w: float, h: float) -> void:
+	var face := _cup3_face("solid", r, w)
 	var outer := CylinderMesh.new()
-	outer.top_radius = r + w
-	outer.bottom_radius = r + w
+	outer.top_radius = face
+	outer.bottom_radius = face
 	outer.height = h
 	outer.cap_top = false
 	outer.cap_bottom = false
 	outer.radial_segments = 26
-	_cup3_mesh(b, outer, C_WIRE.darkened(0.44), Vector3(0.0, h * 0.5, 0.0))
+	_cup3_mesh(b, outer, _cup3_wall_col("solid"), Vector3(0.0, h * 0.5, 0.0))
 	# 안쪽 벽은 법선을 뒤집어야 안이 보인다. 양면 재질로 두면 안쪽이
 	# 바깥 빛을 받아 통이 유리로 보인다.
 	var inner := CylinderMesh.new()
@@ -8841,18 +8796,216 @@ func _cup3_cup() -> AnimatableBody3D:
 	inner.radial_segments = 26
 	inner.flip_faces = true
 	_cup3_mesh(b, inner, C_DARK.darkened(0.28), Vector3(0.0, h * 0.5, 0.0))
-	var base := CylinderMesh.new()
-	base.top_radius = r + w
-	base.bottom_radius = r + w
-	base.height = w * 1.6
-	base.radial_segments = 26
-	_cup3_mesh(b, base, C_WIRE.darkened(0.52), Vector3(0.0, w * 0.8, 0.0))
 	var lip := TorusMesh.new()
 	lip.inner_radius = r
 	lip.outer_radius = r + w
 	lip.rings = 26
 	lip.ring_segments = 6
 	_cup3_mesh(b, lip, C_WIRE.lightened(0.18), Vector3(0.0, h, 0.0))
+
+
+# ── 벽: 철망 ─────────────────────────────────────────
+# 벽은 그물 한 겹과 그 뒤의 어두운 속통, 둘로 선다.
+#   그물   진짜로 뚫려 있다(알파 시저). 철사가 가늘어 통이 묽어지는
+#          만큼 색을 한 단 올렸다 — 0.44 로는 벽이 실루엣만 남는다.
+#   속통   구멍 너머에 서는 어둠. **속을 다 비우면 못 쓴다** — 흰 배럴
+#          여섯이 1px 짜리 구멍마다 조각조각 비쳐 그물이 얼룩이 되고,
+#          자루가 출렁일 때마다 그 얼룩이 같이 끓는다. 실물 철망 통도
+#          안이 어두우면 구멍은 그냥 검다.
+# 속통은 양면이다. 아가리로 들여다본 뒷벽 안쪽이 그 뒷면이다.
+func _cup3_wall_net(b: Node3D, r: float, w: float, h: float) -> void:
+	var face := _cup3_face("net", r, w)
+	var wall := CylinderMesh.new()
+	wall.top_radius = face
+	wall.bottom_radius = face
+	wall.height = h
+	wall.cap_top = false
+	wall.cap_bottom = false
+	wall.radial_segments = 26
+	_cup3_mesh(b, wall, _cup3_wall_col("net"), Vector3(0.0, h * 0.5, 0.0),
+			Vector3.ZERO, true)
+	var drum := CylinderMesh.new()
+	drum.top_radius = face - 0.01
+	drum.bottom_radius = face - 0.01
+	drum.height = h
+	drum.cap_top = false
+	drum.cap_bottom = false
+	drum.radial_segments = 26
+	var dm := _cup3_mesh(b, drum, C_DARK.darkened(0.29), Vector3(0.0, h * 0.5, 0.0))
+	dm.material_override.cull_mode = BaseMaterial3D.CULL_DISABLED
+	# 아가리 테. 실물 철망 통은 여기가 굵게 말려 있지만 그 굵기는 안 따라간다 —
+	# 50px 짜리 통에서 굵은 테는 통을 뚜껑 덮은 깡통으로 만든다. 그물이 위에서
+	# 톱니로 끊기지만 않으면 되므로 1.4px 짜리 실선 한 줄이면 족하다.
+	var lip := TorusMesh.new()
+	lip.inner_radius = face - 0.012
+	lip.outer_radius = face + 0.012
+	lip.rings = 26
+	lip.ring_segments = 6
+	_cup3_mesh(b, lip, C_WIRE.lightened(0.18), Vector3(0.0, h, 0.0))
+
+
+# 그 팩의 통 겉. 안 적은 값은 기본값으로 채워 낸다 — 부르는 쪽이
+# get(키, 기본값) 을 흩어 두면 기본값이 파일 여러 곳에 눌러앉는다.
+# 잠긴 팩은 표를 안 보고 기준선 통을 세운다.
+func _cup3_skin(pi: int) -> Dictionary:
+	var out := CUP_SKIN0.duplicate()
+	var packs := GameData.packs()
+	if pi < 0 or pi >= packs.size() or not _pack_open(pi):
+		return out
+	var row: Dictionary = CUP_SKIN.get(String(packs[pi].get("id", "")), {})
+	for k in row:
+		out[k] = row[k]
+	return out
+
+
+# 벽 바깥면의 반지름. 벽마다 다르다 — 민 통은 r+w 에, 철망은 그 절반에
+# 선다. 스티커가 이것을 보고 앉는다. 손으로 적어 두면 벽을 한 번 만질
+# 때마다 스티커가 벽 속에 파묻혀 통째로 사라진다(한 번 당했다).
+func _cup3_face(wall: String, r: float, w: float) -> float:
+	return r + w * 0.5 if wall == "net" else r + w
+
+
+# 벽 바깥면의 색. 스티커 그늘이 이것을 보고 제 벽보다 한 단 어두워진다 —
+# 고정색으로 적어 두면 벽이 어두운 겉에서는 그늘이 벽보다 밝아진다.
+func _cup3_wall_col(wall: String) -> Color:
+	return C_WIRE.darkened(0.30 if wall == "net" else 0.44)
+
+
+# 통에 붙는 스티커 한 장. 값은 전부 통 크기에 대한 비라 넓은 통에 붙어도
+# 같은 스티커로 보인다.
+const CUP_STK := {
+	"at":   -0.70,   # 통 앞에서 왼쪽으로 돌린 각(rad). 왼쪽 실루엣에 걸칠 만큼
+	                 # 돌려야 종이가 벽을 감고 도는 것이 보인다 — 정면에 두면
+	                 # 통이 원통인지 판때기인지 이 그림만으로는 안 갈린다
+	"r":     0.46,   # 아가리 반지름의 몇 배. 통 폭의 41%
+	"y":     0.34,   # 통 높이의 몇 배. 이보다 낮추면 바닥 테를 문다
+	"face":  0.78,   # 얼굴/다이컷 반지름 비. draw_sticker 의 다이컷 폭과 같은 뜻
+	"peel":  0.50,   # 아래 끝이 말린 정도. 2D 와 같은 식(_peel_y)을 쓴다
+	"curl":  1.10,   # 말린 자락이 도는 각(rad, 63°). 이만큼 젖혀야
+	                 # 이형지가 위를 보고 빛을 받는다(안 젖히면 늘 그늘이라
+	                 # 얼굴과 8% 차로 붙는다). 더 젖히면 자락이 옆으로 서서
+	                 # 내려다보는 카메라에는 실선 한 줄로만 남는다
+}
+
+
+# 벽 위의 한 점. u 는 붙은 자리(at)에서 벽을 따라 잰 가로 거리(호 길이),
+# v 는 높이, lift 는 벽에서 뜬 거리다. 각은 **뜨기 전 반지름**으로 잰다 —
+# 뜬 반지름으로 재면 자락이 위로 접히면서 옆으로도 미끄러진다.
+func _cup3_on(rad: float, at: float, u: float, v: float, y0: float,
+		lift := 0.0) -> Vector3:
+	var a := at + u / rad
+	var rr := rad + lift
+	return Vector3(sin(a) * rr, y0 + v, cos(a) * rr)
+
+
+# 원반을 접는 선(fy)으로 가른 한 조각. 평평한 판을 대면 8px 짜리 스티커도
+# 가장자리가 벽으로 파고들므로 원통을 그대로 따라간다.
+#   part 0  접는 선 위. 벽에 눕는다 (fy 가 반지름보다 크면 온 원이다)
+#   part 1  접는 선 아래를 위로 만다. 2D 는 미러링(각 없는 접기)이면 되지만
+#           3D 는 각이 곧 빛이라 진짜로 곡률을 준다 — 종이는 일정한 곡률로
+#           휘므로 접는 선에서 잰 길이 d 가 그대로 각 k*d 다
+#   part 2  접는 선 아래. 벽에 눕는다. 자락이 들려 드러난 자리다
+func _cup3_leaf(rad: float, at: float, sr: float, y0: float, fy: float,
+		part: int, curl: float, off: float) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	# 접는 선은 한가운데 **아래**에 있다(fy < 0). 2D 는 화면 y 가 아래로
+	# 자라 같은 선을 +로 적는다 — 부호 하나로 자락이 통 위로 날아간다.
+	var full := fy <= -sr + 0.001
+	if part != 0 and full:
+		return st.commit()                 # 접힐 자락이 없다
+	var t0 := asin(clampf(fy / sr, -1.0, 1.0))
+	var a0 := t0
+	var a1 := PI - t0
+	if part == 0 and full:
+		a0 = -PI * 0.5
+		a1 = PI * 1.5
+	elif part != 0:
+		a0 = PI - t0
+		a1 = TAU + t0
+	var cen := Vector2(0.0, 0.0 if full else fy)
+	var n := 20
+	var pts := PackedVector2Array()
+	for i in n + 1:
+		var a := lerpf(a0, a1, float(i) / float(n))
+		pts.append(Vector2(cos(a), sin(a)) * sr)
+	# 곡률. 자락 길이(접는 선에서 원반 끝까지)를 다 돌면 curl 이 된다.
+	var kv: float = curl / maxf(sr + fy, 0.001)
+	for i in n:
+		# 고닷의 앞면은 **시계 방향**이다. 반시계로 감으면 판이 벽 안쪽만
+		# 보게 되어 화면에서 통째로 사라진다(한 번 당했다). 마는 것은 감는
+		# 방향을 뒤집으므로 자락만 차례가 반대다.
+		var tri: Array = [cen, pts[i], pts[i + 1]] if part == 1 			else [cen, pts[i + 1], pts[i]]
+		for j in 3:
+			var q: Vector2 = tri[j]
+			var v := q.y
+			var lift := off
+			var nrm := Vector3(0.0, 0.0, 0.0)
+			var a := at + q.x / rad
+			if part == 1:
+				var th := kv * (fy - q.y)          # 접는 선에서 잰 각
+				v = fy + sin(th) / kv
+				lift = off + (1.0 - cos(th)) / kv
+				nrm = Vector3(sin(a) * cos(th), sin(th), cos(a) * cos(th))
+			else:
+				nrm = Vector3(sin(a), 0.0, cos(a))
+			st.set_normal(nrm.normalized())
+			st.add_vertex(_cup3_on(rad, at, q.x, v, y0, lift))
+	return st.commit()
+
+
+# 통에 붙은 스티커. 게임의 다른 자리에서 쓰는 어법 그대로다 — 흰 다이컷 테
+# 한 겹에 크림색 얼굴, 아래 끝은 말려 이형지가 보인다(draw_sticker).
+# 반지름 10px 에 인쇄까지 넣으면 조건 아이콘이 두 픽셀로 뭉개지므로
+# 여기서는 테·얼굴·말린 자락까지만 낸다.
+func _cup3_sticker(b: Node3D, rad: float, r: float, h: float, wall: String) -> void:
+	var sr: float = r * float(CUP_STK.r)
+	var y0: float = h * float(CUP_STK.y)
+	var at: float = CUP_STK.at
+	var cl: float = CUP_STK.curl
+	# 2D 와 같은 식을 쓰되 부호를 뒤집는다 — 여기 y 는 위로 자란다.
+	var fy := -_peel_y(sr, float(CUP_STK.peel))
+	# 붙어 있던 자리. 자락이 들리면 여기가 드러난다 — 3D 쪽 그림자맵은
+	# 꺼 두었으므로(_cup3_open) 이 어두운 활꼴 하나가 그림자를 대신한다.
+	# 없으면 자락이 벽에 뜬 게 아니라 벽에 그려진 무늬로 읽힌다.
+	_cup3_mesh(b, _cup3_leaf(rad, at, sr, y0, fy, 2, 0.0, 0.002),
+			_cup3_wall_col(wall).darkened(0.16), Vector3.ZERO)
+	_cup3_mesh(b, _cup3_leaf(rad, at, sr, y0, fy, 0, 0.0, 0.004),
+			C_DIECUT, Vector3.ZERO)
+	_cup3_mesh(b, _cup3_leaf(rad, at, sr * float(CUP_STK.face), y0, fy,
+			0, 0.0, 0.008), Color(STK_TIERS[0].body), Vector3.ZERO)
+	# 뒤집힌 쪽은 이형지라 인쇄가 없다. 그래서 얼굴 위에 겹쳐도 무엇이
+	# 가려졌는지가 안 헷갈린다. 종이는 옆면이 없으니 양면으로 둔다.
+	# 말리면서 위를 보게 되므로 뿌리는 얼굴과 같은 밝기고 끝으로 갈수록
+	# 밝아진다 — 그 그러데이션 하나가 "접혔다" 를 말한다.
+	var fl := _cup3_mesh(b, _cup3_leaf(rad, at, sr, y0, fy, 1, cl, 0.006),
+			C_LINER, Vector3.ZERO)
+	fl.material_override.cull_mode = BaseMaterial3D.CULL_DISABLED
+
+
+# 통 하나. 원점은 **바닥 한가운데**라 y 0 이 곧 놓인 자리다.
+# 겉이 통의 크기까지 정하므로(wide) 충돌도 여기서 같은 r 을 본다.
+func _cup3_cup(skin: Dictionary) -> AnimatableBody3D:
+	var r: float = float(CUP3.r) * float(skin.wide)
+	var w: float = CUP3.wall
+	var h: float = CUP3.h
+	var b := AnimatableBody3D.new()
+	b.sync_to_physics = true
+
+	match String(skin.wall):
+		"net":
+			_cup3_wall_net(b, r, w, h)
+		_:
+			_cup3_wall_solid(b, r, w, h)
+	if bool(skin.sticker):
+		_cup3_sticker(b, _cup3_face(String(skin.wall), r, w), r, h,
+				String(skin.wall))
+	var base := CylinderMesh.new()
+	base.top_radius = r + w
+	base.bottom_radius = r + w
+	base.height = w * 1.6
+	base.radial_segments = 26
+	_cup3_mesh(b, base, C_WIRE.darkened(0.52), Vector3(0.0, w * 0.8, 0.0))
 
 	var fl := CollisionShape3D.new()
 	var fs := CylinderShape3D.new()
@@ -8955,7 +9108,11 @@ func _cup3_spawn(pi: int, x: float) -> void:
 	var id: String = String(row.get("dart_id", "std")) if open else "std"
 	var n: int = _cup_dart_n(row) if open else GameData.tune_i("darts_base")
 
-	var cup := _cup3_cup()
+	var skin := _cup3_skin(pi)
+	# 이 통의 안쪽 반지름. 넓은 통은 자루가 앉는 고리도 줄도 같이 넓어진다 —
+	# 통마다 다르므로 rig 에 적어 두고 물리가 그것을 본다(_cup3_step_rig).
+	var r: float = float(CUP3.r) * float(skin.wide)
+	var cup := _cup3_cup(skin)
 	cup.position = Vector3(x, 0.0, 0.0)
 	cup_vp.add_child(cup)
 
@@ -8963,7 +9120,7 @@ func _cup3_spawn(pi: int, x: float) -> void:
 	# 한 점에 모아 놓았더니 솔버가 겹침을 푸느라 첫 프레임에 통 밖으로
 	# 터뜨렸다 — 물리는 겹친 채로 시작하는 것을 제일 싫어한다.
 	var rt: float = float(CUP3.dr) * 2.6            # 촉이 앉는 고리
-	var rc: float = float(CUP3.r) * 0.62            # 꽁지가 벌어지는 고리
+	var rc: float = r * 0.62                        # 꽁지가 벌어지는 고리
 	var darts := []
 	for i in n:
 		var b := _cup3_dart(id)
@@ -8978,7 +9135,7 @@ func _cup3_spawn(pi: int, x: float) -> void:
 				side.normalized()), tip + up * float(CUP3.dl))
 		cup_vp.add_child(b)
 		darts.append(b)
-	cup_rigs.append({"cup": cup, "darts": darts, "pi": pi})
+	cup_rigs.append({"cup": cup, "darts": darts, "pi": pi, "r": r})
 
 
 func _cup3_kill(rig: Dictionary) -> void:
@@ -9062,7 +9219,7 @@ func _cup3_step_rig(rig: Dictionary, x: float, moving: bool) -> void:
 	if not is_instance_valid(rig.cup):
 		return
 	rig.cup.position.x = x
-	var r: float = CUP3.r
+	var r: float = float(rig.get("r", CUP3.r))
 	var lea: float = r * float(CUP3.leash)
 	for b in rig.darts:
 		if not is_instance_valid(b):
@@ -9127,23 +9284,6 @@ func _cup_slides() -> Array:
 			{"pi": newrun_pip, "dx": s + float(cup_dir) * float(CUP.span)}]
 
 
-# 통 옆에 놓인 것들. 통이 3D 라도 소품은 2D 다 — 골드 플라크와 스티커
-# 원반은 게임의 다른 자리에서 쓰는 그 그림 그대로여야 같은 물건으로 읽힌다.
-func _cup_props_draw() -> void:
-	var packs := GameData.packs()
-	for sl in _cup_slides():
-		var pi: int = int(sl.pi)
-		if pi < 0 or pi >= packs.size() or not _pack_open(pi):
-			continue
-		var props := _cup_props(packs[pi])
-		var foot := Vector2(_cup_stage().get_center().x + float(sl.dx), _cup_foot())
-		for i in mini(props.size(), CUP_SPOT.size()):
-			var at: Vector2 = foot + CUP_SPOT[i]
-			draw_colored_polygon(_e_pts(at + Vector2(1.0, 9.0), 9.0, 3.0, 14),
-					Color(0.0, 0.0, 0.0, 0.26))
-			_cup_prop(at, props[i], 0.0)
-
-
 func _cup_draw(pr: Rect2) -> void:
 	var stage := _cup_stage()
 	draw_rect(stage, C_PANEL.darkened(0.20))
@@ -9158,7 +9298,6 @@ func _cup_draw(pr: Rect2) -> void:
 	else:
 		for sl in _cup_slides():
 			_cup_one(int(sl.pi), float(sl.dx))
-	_cup_props_draw()
 	_cup_mask(stage, pr)
 	draw_rect(stage, C_PANEL.darkened(0.42), false, 1.0)
 
