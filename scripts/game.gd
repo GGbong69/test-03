@@ -402,7 +402,15 @@ func _start_round() -> void:
 	# 이번 판의 기본 다트 수는 antes.csv 의 darts 열이 정한다.
 	# tuning.csv 비고가 오래전부터 그렇게 적혀 있었는데 코드가 안 읽고
 	# 있었다 — 표가 거짓말을 하던 자리다. 탄창보다 많으면 순환해서 채운다.
-	var want := GameData.darts_of(round_no)
+	#
+	# **팩 몫을 같이 더한다.** 팩의 darts_add 는 _new_run 이 탄창 크기에만
+	# 넣어 두는데, antes 의 수로 곧장 자르면 그 몫이 통째로 없어졌다 —
+	# 여벌 팩이 탄창 일곱 자루를 쥐고도 여섯 발만 던지고 있었고, 넓은 랙은
+	# 다섯 자루를 쥐고도 여섯 발을 던졌다(둘 다 팩 설명과 반대다).
+	# 아래 dadd 사슬(제약·리그·딱지·설비·스티커)과 달리 팩만 탄창 쪽에
+	# 살았던 것이 원인이라, 팩도 같은 자리에서 센다.
+	var want := (GameData.darts_of(round_no)
+			+ int(GameData.pack_v("darts_add", 0.0)))
 	while remaining.size() > want and remaining.size() > 1:
 		remaining.pop_back()
 	while remaining.size() < want and not magazine.is_empty():
@@ -508,7 +516,12 @@ func _to_pick() -> void:
 
 
 # 고를 때 벽에서 빼지 않는다. 뽑아 든 것으로만 표시하고 실제로 빠지는 것은
-# 던지는 순간이다. 그래서 조준 중에도 마음이 바뀌면 다른 자루로 갈아탈 수 있다.
+# 던지는 순간이다.
+#
+# **조준이 시작되면 다트를 못 바꾼다**(확정 규칙 조준중다트변경=False).
+# 아래 state == S.PICK 가드가 그것이고, 갈아타는 클릭 자체는 _click 의
+# AIM_V/AIM_H 갈래가 막는다. 여기 "조준 중에도 갈아탈 수 있다" 고 적혀
+# 있었는데 규칙과 정반대였다 — 규칙이 바뀔 때 주석이 안 따라온 자리다.
 func _pick_dart(i: int) -> void:
 	if i < 0 or i >= remaining.size():
 		return
@@ -2218,10 +2231,24 @@ func _click(m: Vector2) -> void:
 					_pick_dart(i)
 					return
 		S.AIM_V, S.AIM_H:
-			# 조준이 시작되면 다트를 못 바꾼다 — 확정 규칙이다
-			# (조준중다트변경=False). 전에는 벽의 자루를 눌러 갈아탈 수
-			# 있었는데, 그러면 "이 자루로 던진다" 는 결정이 끝까지 결정이
-			# 아니게 된다. 고르는 자리는 PICK 하나다.
+			# 다트를 갈아타는 것은 **첫 축을 잠그기 전까지**다.
+			# 규칙이 뜻하는 것은 "던질 자루를 무를 수 없다" 가 아니라
+			# "잠근 것을 무를 수 없다" 이므로, 결정의 순간을 잠금에 둔다.
+			# 한 번 잠근 뒤(AIM_H)에는 못 바꾼다 — 세로를 맞춰 놓고 자루를
+			# 갈면 그 세로가 어느 자루의 것인지가 없어진다.
+			# 한 번에 잠그는 방식들은 잠그기 전이 곧 조준 내내이므로,
+			# 그 방식에서는 던지기 직전까지 갈아탈 수 있다.
+			#
+			# 당김은 뺀다. 거기서는 **벽의 자루를 쥐는 것이 곧 던지기**라
+			# (_pull_grab 은 조준 클릭 규칙 밖이다) 같은 클릭에 두 뜻을
+			# 실을 수 없다. 반동도 연발이 도는 중에는 안 받는다.
+			if (state == S.AIM_V and m.x >= 0.0 and aim_mode != "pull"
+					and burst_left <= 0 and burst_hits.is_empty()):
+				for i in remaining.size():
+					if _mag_rect(i).has_point(m):
+						if i != grip_pick:
+							_pick_dart(i)
+						return
 			#
 			# 다트판 위에서만 잠긴다. 아무 데나 눌러도 되면 빗나간 클릭이
 			# 그대로 조준이 되어, 무르지 못하는 실수가 생긴다.
@@ -2471,19 +2498,33 @@ func hit_info(p: Vector2) -> Dictionary:
 # 반환값의 치역:  mult ∈ {0,1,2,3}   sector ∈ {-1} ∪ [1,20] ∪ {25,50}
 #                col ∈ {-1} ∪ [0, colors.csv 행 수)   — 불·아웃은 -1 이다
 
-func _impact(info: Dictionary) -> void:
+# 착탄 연출. 등급은 **꽂힌 자리**가 정한다 — 점수에 쓰는 배수가 아니다.
+#
+# 둘을 같은 수로 읽고 있었고, 그래서 배수를 건드리는 것이 하나라도 끼면
+# 연출이 통째로 어긋났다. 트리플에 꽂았을 때 실제로 이랬다:
+#   무거운(-1)  "더블" 이 뜬다        — 맞은 자리를 두고 거짓말을 한다
+#   자석(-1)    "더블" 이 뜬다
+#   관통(고정 1) 아무것도 안 뜬다
+#   가벼운(+3)  아무것도 안 뜬다      — 배수 6은 어느 갈래에도 안 걸린다
+# 영역 강화 트랙도 배수를 더하므로 트리플을 올릴수록 트리플 연출이 죽었다.
+# 표준 다트에 트랙 0일 때만 맞던 연출이다.
+#
+# 링을 죽이는 제약(민짜)은 그대로 반영한다 — 죽은 띠는 죽은 것으로 보여야
+# 한다는 규칙이 이미 판 그리기에 있고(_draw_board 의 dead), 그 축은 "꽂힌
+# 자리가 무엇인가" 를 실제로 바꾼다. 다트와 트랙은 점수를 바꿀 뿐이다.
+func _impact(info: Dictionary, hit_mult: int) -> void:
 	var lbl := Vector2(0.0, 26.0) if aim.y < BC.y else Vector2(0.0, -24.0)
 
 	var grade := 1
-	if info.mult == 0:
+	if hit_mult == 0:
 		grade = 0
 	elif info.sector == 50:
 		grade = 5
 	elif info.sector == 25:
 		grade = 4
-	elif info.mult == 3:
+	elif hit_mult == 3:
 		grade = 3
-	elif info.mult == 2:
+	elif hit_mult == 2:
 		grade = 2
 
 	match grade:
@@ -2563,6 +2604,9 @@ func _land(mark := true) -> void:
 		info.mult = 1
 	if info.mult == 0:
 		round_miss = true
+	# 꽂힌 자리의 배수. 여기까지가 "판이 무엇인가" 이고, 아래는 "내 다트가
+	# 그것을 어떻게 셈하는가" 다. 연출은 앞의 것을 쓴다(_impact 주석 참조).
+	var land_mult: int = int(info.mult)
 
 	# 다트 특성
 	var pierce_gain := 0
@@ -2596,7 +2640,9 @@ func _land(mark := true) -> void:
 	if mark:
 		darts.append({"p": aim, "id": String(cur_dart.get("id", "std")),
 				"rot": randf_range(-0.26, 0.26)})
-	_impact(info)
+	# 연출에는 **꽂힌 자리의 배수**를 넘긴다. info.mult 는 이 위에서
+	# 다트와 트랙이 이미 주무른 값이라, 그걸 넘기면 연출이 점수를 따라간다.
+	_impact(info, land_mult)
 
 	hit_flash = 1.0
 	hit_idx = info.idx
@@ -3405,11 +3451,22 @@ func annulus(ri: float, ro: float, a0: float, a1: float) -> PackedVector2Array:
 	return annulus_at(BC, ri, ro, a0, a1)
 
 
+# 판 바깥선에서 gap(R 배수)만큼 바깥. 뒤판과 숫자 고리가 같은 식을 본다 —
+# 갈라 두면 개조로 판이 커질 때 하나만 안 따라간다.
+func _board_rim(gap: float) -> float:
+	return R * (rt_dbl_out + gap)
+
+
 func _draw_board() -> void:
 	var sw := 18.0 * PI / 180.0
 	var push := 1.0 + board_punch * 0.028
 
-	draw_circle(BC, R * 1.07 * push, C_DARK.darkened(0.4))
+	# 판 뒤판과 숫자 고리는 **판 바깥선을 따라간다.** 1.07 · 1.13 을
+	# 박아 두었더니 개조 "판벌이"(바깥선 1.10)를 사는 순간 뒤판이 판보다
+	# 안쪽으로 들어가고 숫자가 띠 위에 겹쳐 앉았다 — 판 모양은 데이터인데
+	# 그 둘레만 상수였던 자리다. 간격은 그대로라 기본 판에서는 한 픽셀도
+	# 안 달라진다.
+	draw_circle(BC, _board_rim(0.07) * push, C_DARK.darkened(0.4))
 
 	for i in 20:
 		var a0 := i * sw - sw * 0.5
@@ -3455,7 +3512,7 @@ func _draw_board() -> void:
 	if na > 0.01:
 		for i in 20:
 			var a := i * sw
-			var p := BC + Vector2(sin(a), -cos(a)) * R * 1.13
+			var p := BC + Vector2(sin(a), -cos(a)) * _board_rim(0.13)
 			draw_string(font, p + Vector2(-14, 5), str(sectors[i]),
 					HORIZONTAL_ALIGNMENT_CENTER, 28, 12, Color(C_DIM, na))
 
