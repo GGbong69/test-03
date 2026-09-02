@@ -2775,9 +2775,14 @@ func _land(mark := true) -> void:
 		if cur_dart.get("mult", 0) != 0:
 			info.mult = maxi(1, info.mult + cur_dart.mult)
 		if cur_dart.get("pierce", false) and info.idx >= 0:
-			var l: int = sectors[(info.idx + 19) % 20]
-			var r: int = sectors[(info.idx + 1) % 20]
-			pierce_gain = int((l + r) * 0.5)
+			# 양옆 칸의 몫은 darts.csv 의 pierce_side 가 정한다 — 카드 문장이
+			# 그 수를 그대로 찍는다. 여기 0.5 를 박아 두면 표를 고쳐도 안 따라온다.
+			# 칸 수도 sectors 에서 읽는다. 20 을 박으면 개조가 칸을 늘리는 날
+			# 배열 밖을 짚는다.
+			var n: int = sectors.size()
+			var l: int = sectors[(info.idx + n - 1) % n]
+			var r: int = sectors[(info.idx + 1) % n]
+			pierce_gain = int(float(l + r) * float(cur_dart.get("side", 0.5)))
 
 	# 영역 강화 — 소비 아이템이 올린 트랙 레벨. 레벨별 수치 행이 전부
 	# 영역 강화 (= 발라트로의 행성 카드). 소비 아이템이 트랙 레벨을 올리고
