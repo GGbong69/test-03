@@ -926,6 +926,11 @@ func _roll_stock() -> void:
 	for it in GameData.items():
 		if _has_item(it.id) or GameData.item_min_round(it) > nxt:
 			continue
+		# 가중치 0 은 **매대에 안 뜬다는 뜻**이다. 저울에만 맡기면 마지막
+		# 원소로 떨어지는 폴백(_draw_weighted)에 걸려 아주 가끔 뜬다.
+		# 전설이 그 자리라, 따로 얻는 길로만 오게 하려면 여기서 빼야 한다.
+		if GameData.item_weight(it) <= 0.0:
+			continue
 		pool.append(it)
 
 	var n := 0
@@ -4199,6 +4204,9 @@ const STK_TIERS := [
 	{"rarity": "common", "body": "ded5c0", "fin": 0},
 	{"rarity": "uncommon", "body": "7d5ad0", "fin": 1},
 	{"rarity": "rare", "body": "241e33", "fin": 2},
+	# 전설 — 홀로그램을 부채 셋이 아니라 온 바퀴로 두른다. 같은 어법의
+	# 한 단 위라 새 표식을 배우지 않아도 "홀로보다 더" 로 읽힌다.
+	{"rarity": "legendary", "body": "3a1030", "fin": 3},
 ]
 const C_DIECUT := Color("f4f0e6")   # 다이컷 테두리. 이 흰 띠 하나가 "스티커"를 말한다
 const C_LINER := Color("efe9db")    # 이형지 뒷면 — 말릴 때만 보인다. 인쇄가 없다
@@ -4569,6 +4577,14 @@ func draw_sticker(c: Vector2, r: float, tier: Dictionary, rot: float,
 				var a := rot - 1.85 + float(k) * 0.72
 				draw_colored_polygon(annulus_at(c, r * 0.20, r - rw - 0.3,
 						a, a + 0.46, 4), Color(HOLO[k], 0.55 * fa))
+		3:
+			# 전설 — 같은 무지개를 온 바퀴로. 부채가 끊기지 않으므로
+			# 홀로그램 옆에 두면 "다 덮였다" 가 곧 한 단 위로 읽힌다.
+			for k in 6:
+				var a2 := rot + float(k) * (TAU / 6.0)
+				draw_colored_polygon(annulus_at(c, r * 0.20, r - rw - 0.3,
+						a2, a2 + TAU / 6.0, 4),
+						Color(HOLO[k % 3], 0.42 * fa))
 
 
 # 접는 선의 높이(중심 기준 아래 방향). peel 1 이면 거의 다 말린다.
@@ -6419,6 +6435,12 @@ func _sticker_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: floa
 				draw_colored_polygon(_e_band(c, rx - rw - 0.3, ry - rw * TBL.flat - 0.3,
 						rx * 0.20, ry * 0.20, a, a + 0.46, 4),
 						Color(HOLO[k], 0.34 * fa))
+		3:
+			for k in 6:
+				var a2 := rot + float(k) * (TAU / 6.0)
+				draw_colored_polygon(_e_band(c, rx - rw - 0.3, ry - rw * TBL.flat - 0.3,
+						rx * 0.20, ry * 0.20, a2, a2 + TAU / 6.0, 4),
+						Color(HOLO[k % 3], 0.26 * fa))
 	var val := ("×" + str(it.v)) if it.k == "xmult" else str(it.v)
 	var ink: Color = C_CHIP.lightened(0.5) if it.k == "chip" else C_MULT.lightened(0.45)
 	draw_string(font, c + Vector2(-rx, 4.0), val,

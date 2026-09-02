@@ -83,7 +83,10 @@ const TUNE_KEYS := [
 	"kick_n", "kick_share",
 ]
 
-const RARITIES := ["common", "uncommon", "rare"]
+# 등급 네 단. 발라트로의 이름을 따른다 — 일반 · 희귀 · 레어 · 전설.
+# 속이름(id)은 안 바꿨다. 코드가 그것으로 갈리고 표·저장·CSV 가 전부
+# 같은 낱말을 쓰므로, 한글 이름만 rarity.csv 에서 옮긴다.
+const RARITIES := ["common", "uncommon", "rare", "legendary"]
 const MOD_AXES := ["band", "slide", "ring", "bull", "out", "swap", "odd"]
 # 제약의 축. 발라트로의 보스 블라인드가 손패·플레잉 카드를 때리는 자리에
 # 우리는 **판과 조준**이 있다. 그래서 축을 네 갈래로 벌린다 —
@@ -2054,6 +2057,7 @@ static func _rarity_of_cost(cost: int) -> String:
 		4: return "common"
 		7: return "uncommon"
 		11, 14: return "rare"
+		20: return "legendary"
 	return ""
 
 
