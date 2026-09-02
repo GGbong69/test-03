@@ -217,6 +217,11 @@ var last_miss := false          # 직전 투척이 빗나갔는가 — 조건 mi
 var sec_cnt := {}               # 숫자 → 이번 라운드 명중 수
 var zone_cnt := {}              # 영역 종류(single/double/triple/bull) → 명중 수
 var pat := {}                   # 완성된 패턴 깃발. "이후" 조건이 읽는다
+# 마지막 발의 판정 문맥과 그 일련번호. 조건 프로브가 게임과 **같은** 문맥을
+# 읽는 창구다 — 프로브가 제 문맥을 지으면 ctx 에 열이 하나 빠져도 못 잡는다.
+# 실제로 색 조건 일곱 장이 그렇게 죽어 있었고 측정기도 같이 속았다.
+var last_ctx := {}
+var land_n := 0
 var seen_risk := false          # risk1 용 — 이번 라운드에 risk 명중이 있었나
 var low_hit := 0                # 이번 라운드 최저 명중 숫자 (0 = 아직 없음)
 var round_darts := 6            # 이번 라운드 시작 다트 수 (few·missing 이 읽는다)
@@ -324,6 +329,14 @@ func _ready() -> void:
 	add_child(p)
 	p.play()
 	pb = p.get_stream_playback()
+
+	# 파일 소리를 낼 자리 넷. 합성음과 같은 버스에 서므로 음량 조절이
+	# 한 곳에서 둘 다 듣는다(_apply_vol 은 버스를 만진다).
+	for i in 4:
+		var sp := AudioStreamPlayer.new()
+		sp.playback_type = AudioServer.PLAYBACK_TYPE_STREAM
+		add_child(sp)
+		sfx_pool.append(sp)
 
 	# 저장은 소리 장치를 세운 **뒤**에 읽는다 — _apply_vol 이 버스를 만진다.
 	_load_settings()
@@ -531,7 +544,7 @@ func _pick_dart(i: int) -> void:
 	if state == S.PICK:
 		state = S.AIM_V
 	_aim_begin()
-	beep(262.0, 0.05, 0.10)
+	_sfx("dart_pick")
 
 
 # 던지는 순간 벽에서 실제로 빠진다.
@@ -564,14 +577,14 @@ func _finish_round() -> void:
 				_panel_reset()
 				pop(at + Vector2(0.0, 24.0), "%s — 실패를 막았다" % sv.n,
 						C_ACC, 11, 1.2)
-				beep_seq([392.0, 523.0], 0.09, 0.16, 0.22)
+				_sfx("save_life")
 				# 마지막 라운드에서 목숨이 터져도 완주는 완주다. 여기서 곧장
 				# 정산으로 가면 아래 완주 검사에 못 닿아, 상점이 0칸으로 열리고
 				# 목표 2500 짜리 유령 9라운드가 시작된다.
 				if round_no >= GameData.rounds_n():
 					state = S.OVER
 					won = true
-					beep_seq([262.0, 330.0, 392.0, 523.0, 659.0], 0.10, 0.22, 0.26)
+					_sfx("run_win")
 					return
 				_round_end_wear()
 				_settle_clear()
@@ -580,7 +593,7 @@ func _finish_round() -> void:
 		won = false
 		_pack_unlock_check()
 		Save.flush()
-		beep_seq([300.0, 240.0, 180.0], 0.13, 0.24, 0.22)
+		_sfx("run_lose")
 		return
 
 	if round_no >= GameData.rounds_n():
@@ -591,7 +604,7 @@ func _finish_round() -> void:
 		Save.bump("wins")
 		_pack_unlock_check()
 		Save.flush()
-		beep_seq([262.0, 330.0, 392.0, 523.0, 659.0], 0.10, 0.22, 0.26)
+		_sfx("run_win")
 		return
 
 	_round_end_wear()
@@ -640,7 +653,7 @@ func _settle_clear() -> void:
 	Save.bump("gold_earned", clear + dart_gold + interest + item_gold)
 
 	state = S.CLEAR
-	beep_seq([392.0, 494.0, 587.0], 0.09, 0.18, 0.22)
+	_sfx("round_clear")
 
 
 # 봉인은 자리가 아니라 스티커에 걸린다. owned 에서 원소를 빼면 뒤 인덱스가
@@ -849,7 +862,7 @@ func _shelf_buy() -> void:
 	# 뒤라 폭은 다음 새로고침부터 넓어지고, 값은 지금 다시 매긴다.
 	reroll_cost = _reroll_price()
 	_panel_reset()
-	beep_seq([392.0, 523.0, 659.0], 0.07, 0.14, 0.18)
+	_sfx("voucher_buy")
 
 
 func _reroll_price() -> int:
@@ -878,7 +891,7 @@ func _open_shop() -> void:
 		shelf = GameData.voucher_roll(ante)
 	_roll_stock()
 	state = S.SHOP
-	beep(440.0, 0.10, 0.18)
+	_sfx("shop_open")
 
 
 #  가중치 뽑기. 스티커와 제약이 같은 저울을 쓴다 — 제약은 행에 w 를 들고 있고,
@@ -1000,7 +1013,7 @@ func _roll_stock() -> void:
 func _deny() -> void:
 	deny_flash = 1.0
 	shake = 4.0
-	beep_seq([200.0, 150.0], 0.06, 0.10, 0.16)
+	_sfx("deny")
 
 
 func _has_item(id: String) -> bool:
@@ -1058,7 +1071,7 @@ func _buy(i: int) -> void:
 			# 칸으로 들어간다. 상점 즉시 사용은 칸에서 바로 누르면 되므로
 			# 별도 경로가 없다 — 확인 버튼을 만들지 않는 규칙과도 맞는다.
 			cons.append(s.d)
-	beep_seq([523.0, 659.0], 0.07, 0.11, 0.20)
+	_sfx("buy")
 
 
 func _std_slot() -> int:
@@ -1258,7 +1271,7 @@ func _reroll() -> void:
 		_roll_stock()            # 헤드리스는 팔을 안 기다린다. 새 판이 곧 결과다
 	else:
 		_sweep_begin()           # 끝에서 _sweep_deal 이 _roll_stock 을 부른다
-	beep(392.0, 0.09, 0.18)
+	_sfx("reroll")
 
 
 func _next_round() -> void:
@@ -1291,7 +1304,7 @@ func _open_blind() -> void:
 				blind_tags[brn] = GameData.tag_roll(bta)
 	blind_tag = _blind_tag(round_no)
 	state = S.BLIND
-	beep_seq([392.0, 523.0], 0.07, 0.12, 0.18)
+	_sfx("blind_open")
 
 
 # 이 앤티의 첫 판 번호. 세 판을 늘어놓을 때 기준이 된다.
@@ -1564,20 +1577,149 @@ func _open_stage() -> void:
 		stage_pick.append({"d": md, "target": tgt})
 		stage_stand.append(0.0)
 	state = S.STAGE
-	beep_seq([392.0, 494.0], 0.09, 0.14, 0.18)
+	_sfx("stage_open")
 
 
 func _pick_stage(i: int) -> void:
 	var sp: Dictionary = stage_pick[i]
 	active_mods = [sp.d]
 	target = sp.target
-	beep_seq([523.0, 659.0, 784.0], 0.07, 0.12, 0.20)
+	_sfx("stage_pick")
 	_start_round()
 
 
 # ══════════════════════════════════════════════════════════
 #  오디오
 # ══════════════════════════════════════════════════════════
+
+# ══════════════════════════════════════════════════════════
+#  소리 — 이름 있는 사건
+#
+#  여태 소리는 부르는 자리마다 날 숫자였다. `beep(392.0, 0.06, 0.14)` 이
+#  쉰여섯 곳이었고, 어느 것이 "판을 넘겼다" 이고 어느 것이 "못 산다" 인지는
+#  둘레 코드를 읽어야 알 수 있었다. 소리 파일을 넣으려면 그 쉰여섯을
+#  하나씩 되짚어야 했다.
+#
+#  이제 부르는 자리는 **이름만 댄다.** 그 이름으로 둘이 갈린다.
+#      res://sfx/<이름>.wav 가 있으면   그 파일을 낸다
+#      없으면                           아래 표의 합성음을 낸다
+#  파일을 떨구는 것만으로 소리가 바뀐다 — 코드는 한 글자도 안 고친다.
+#  일부만 넣어도 된다. 넣은 것만 파일이 되고 나머지는 합성음으로 남는다.
+#
+#  표의 수치는 옮기기 전 그 자리에 있던 값 **그대로**다. 지금 소리는
+#  한 음도 안 달라졌다.
+#
+#  f 를 넘기는 자리가 넷 있다(정산 걸음). 거기는 음이 반음씩 오르는 것이
+#  소리의 내용이므로, 파일이 있으면 같은 비로 pitch_scale 을 민다.
+# ══════════════════════════════════════════════════════════
+const SFX_DIR := "res://sfx/"
+
+# 정산 걸음의 기준 음. 파일을 얼마나 밀어 올릴지가 이 값 대비로 정해진다.
+const SFX_BASE := 392.0
+
+const SFX := {
+	# ── 던지기 ────────────────────────────────────
+	"dart_pick":      {"f": 262.0, "d": 0.05, "a": 0.10},
+	"aim_lock_first": {"f": 300.0, "d": 0.05, "a": 0.10},
+	"aim_lock_last":  {"f": 400.0, "d": 0.06, "a": 0.12},
+	"kick_shot":      {"f": 520.0, "d": 0.04, "a": 0.09},
+
+	# ── 착탄 (등급이 곧 소리다) ──────────────────
+	"hit_miss":       {"seq": [150.0], "gap": 0.0, "d": 0.22, "a": 0.11},
+	"hit_single":     {"seq": [160.0], "gap": 0.0, "d": 0.13, "a": 0.19},
+	"hit_double":     {"seq": [330.0, 330.0], "gap": 0.075, "d": 0.11, "a": 0.20},
+	"hit_triple":     {"seq": [330.0, 415.0, 494.0], "gap": 0.07, "d": 0.12, "a": 0.22},
+	"hit_bull_o":     {"seq": [262.0, 392.0, 523.0], "gap": 0.07, "d": 0.15, "a": 0.24},
+	"hit_bull_i":     {"seq": [262.0, 392.0, 523.0, 659.0], "gap": 0.07, "d": 0.17, "a": 0.26},
+
+	# ── 정산 (반음씩 오른다 — 게임 이름이 여기서 왔다) ──
+	"settle_miss":    {"f": 180.0, "d": 0.20, "a": 0.14},
+	"settle_step":    {"f": SFX_BASE, "d": 0.10, "a": 0.16},
+	"settle_pierce":  {"f": SFX_BASE, "d": 0.11, "a": 0.18},
+	"settle_item":    {"f": SFX_BASE, "d": 0.11, "a": 0.18},
+	"settle_total":   {"f": 196.0, "d": 0.34, "a": 0.26},
+	"target_hit":     {"seq": [392.0, 523.0, 659.0, 784.0], "gap": 0.08, "d": 0.26, "a": 0.26},
+
+	# ── 판과 런 ───────────────────────────────────
+	"round_clear":    {"seq": [392.0, 494.0, 587.0], "gap": 0.09, "d": 0.18, "a": 0.22},
+	"save_life":      {"seq": [392.0, 523.0], "gap": 0.09, "d": 0.16, "a": 0.22},
+	"run_win":        {"seq": [262.0, 330.0, 392.0, 523.0, 659.0], "gap": 0.10, "d": 0.22, "a": 0.26},
+	"run_lose":       {"seq": [300.0, 240.0, 180.0], "gap": 0.13, "d": 0.24, "a": 0.22},
+	"blind_open":     {"seq": [392.0, 523.0], "gap": 0.07, "d": 0.12, "a": 0.18},
+	"blind_go":       {"f": 523.0, "d": 0.06, "a": 0.14},
+	"stage_open":     {"seq": [392.0, 494.0], "gap": 0.09, "d": 0.14, "a": 0.18},
+	"stage_pick":     {"seq": [523.0, 659.0, 784.0], "gap": 0.07, "d": 0.12, "a": 0.20},
+
+	# ── 상점 ──────────────────────────────────────
+	"shop_open":      {"f": 440.0, "d": 0.10, "a": 0.18},
+	"buy":            {"seq": [523.0, 659.0], "gap": 0.07, "d": 0.11, "a": 0.20},
+	"sell":           {"seq": [659.0, 880.0], "gap": 0.06, "d": 0.09, "a": 0.18},
+	"deny":           {"seq": [200.0, 150.0], "gap": 0.06, "d": 0.10, "a": 0.16},
+	"reroll":         {"f": 392.0, "d": 0.09, "a": 0.18},
+	"voucher_buy":    {"seq": [392.0, 523.0, 659.0], "gap": 0.07, "d": 0.14, "a": 0.18},
+	"cons_use":       {"seq": [523.0, 659.0], "gap": 0.06, "d": 0.10, "a": 0.18},
+	"sweep_sink":     {"f": 196.0, "d": 0.05, "a": 0.09},
+	"drop_skip":      {"f": 330.0, "d": 0.05, "a": 0.10},
+	"chute_enter":    {"f": 523.0, "d": 0.04, "a": 0.10},
+
+	# ── 손 ────────────────────────────────────────
+	"hand_take":      {"f": 196.0, "d": 0.04, "a": 0.08},
+	"hand_drop":      {"f": 147.0, "d": 0.05, "a": 0.07},
+	"shop_select":    {"f": 349.0, "d": 0.05, "a": 0.10},
+	"shop_deselect":  {"f": 262.0, "d": 0.05, "a": 0.10},
+	"rack_select":    {"f": 349.0, "d": 0.05, "a": 0.10},
+	"rack_deselect":  {"f": 262.0, "d": 0.05, "a": 0.10},
+	"rack_move":      {"f": 392.0, "d": 0.05, "a": 0.10},
+
+	# ── 메뉴 ──────────────────────────────────────
+	"newrun_open":    {"f": 440.0, "d": 0.05, "a": 0.12},
+	"pack_flip":      {"f": 392.0, "d": 0.04, "a": 0.10},
+	"stake_pick":     {"f": 523.0, "d": 0.05, "a": 0.12},
+	"run_start":      {"f": 523.0, "d": 0.06, "a": 0.14},
+	"menu_pick":      {"f": 523.0, "d": 0.06, "a": 0.14},
+	"menu_pick2":     {"f": 392.0, "d": 0.04, "a": 0.10},
+	"menu_back":      {"f": 440.0, "d": 0.05, "a": 0.12},
+	"back":           {"f": 330.0, "d": 0.05, "a": 0.10},
+	"page":           {"f": 392.0, "d": 0.04, "a": 0.08},
+}
+
+# 파일을 낼 자리들. 겹쳐 나는 소리가 서로를 안 끊게 몇 개 돌려 쓴다.
+var sfx_pool := []
+var sfx_next := 0
+# 이름 → AudioStream. **없다는 것도 기억한다** — 소리마다 파일 시스템을
+# 두드리면 정산 한 걸음마다 디스크를 때린다.
+var sfx_cache := {}
+
+
+func _sfx(name: String, f := 0.0) -> void:
+	var st := _sfx_file(name)
+	if st != null and not sfx_pool.is_empty():
+		var pl: AudioStreamPlayer = sfx_pool[sfx_next]
+		sfx_next = (sfx_next + 1) % sfx_pool.size()
+		pl.stream = st
+		# 정산 걸음은 음이 오르는 것이 소리의 내용이다. 파일도 같은 비로 민다.
+		pl.pitch_scale = 1.0 if f <= 0.0 else clampf(f / SFX_BASE, 0.25, 4.0)
+		pl.play()
+		return
+	var e: Dictionary = SFX.get(name, {})
+	if e.is_empty():
+		# 표에 없는 이름은 조용히 무음이 된다 — 그게 제일 찾기 어렵다.
+		push_error("소리: 모르는 이름 '%s' — SFX 표에 먼저 적어라" % name)
+		return
+	if e.has("seq"):
+		beep_seq(e.seq, e.gap, e.d, e.a)
+	else:
+		beep(f if f > 0.0 else float(e.f), e.d, e.a)
+
+
+func _sfx_file(name: String) -> AudioStream:
+	if sfx_cache.has(name):
+		return sfx_cache[name]
+	var path := SFX_DIR + name + ".wav"
+	var st: AudioStream = load(path) if ResourceLoader.exists(path) else null
+	sfx_cache[name] = st
+	return st
+
 
 func beep(f: float, decay: float, a: float) -> void:
 	beep_q.clear()
@@ -2026,7 +2168,7 @@ func _kick_fire() -> void:
 	# 다시 안 꽂는다(_land 의 mark=false).
 	darts.append({"p": aim, "id": String(cur_dart.get("id", "std")),
 			"rot": randf_range(-0.26, 0.26)})
-	beep(520.0, 0.04, 0.09)
+	_sfx("kick_shot")
 	kick_o += Vector2(aim_rng.randf_range(-float(KICK.side), float(KICK.side)),
 			-float(KICK.up))
 	burst_left -= 1
@@ -2139,14 +2281,14 @@ func _advance() -> void:
 			if _aim_stages() < 2:
 				state = S.CONFIRM
 				confirm_t = 0.0
-				beep(400.0, 0.06, 0.12)
+				_sfx("aim_lock_last")
 				return
 			state = S.AIM_H
-			beep(300.0, 0.05, 0.10)
+			_sfx("aim_lock_first")
 		S.AIM_H:
 			state = S.CONFIRM
 			confirm_t = 0.0
-			beep(400.0, 0.06, 0.12)
+			_sfx("aim_lock_last")
 
 
 func _unhandled_input(e: InputEvent) -> void:
@@ -2292,7 +2434,7 @@ func _click(m: Vector2) -> void:
 		S.BLIND:
 			if _blind_go().has_point(m):
 				_open_stage()
-				beep(523.0, 0.06, 0.14)
+				_sfx("blind_go")
 				return
 			if _blind_skip().has_point(m):
 				_skip_blind()
@@ -2340,7 +2482,7 @@ func _click(m: Vector2) -> void:
 				# 커서 밑에서 물건이 움직이는 동안 구매가 성립하면 "누른 것" 과
 				# "산 것" 이 갈린다. 첫 클릭은 "지금 세운다" 로만 쓴다.
 				_drop_settle()
-				beep(330.0, 0.05, 0.10)
+				_sfx("drop_skip")
 				return
 			var hi := _shop_hit(m)
 			if hi >= 0:
@@ -2364,24 +2506,24 @@ func _click(m: Vector2) -> void:
 				GameData.stake = String(GameData.stakes()[i].get("id", ""))
 				Save.set_set("stake", GameData.stake)
 				Save.flush()
-				beep(523.0, 0.05, 0.12)
+				_sfx("stake_pick")
 				return
 			if GameData.packs().size() > 1:
 				for right in [false, true]:
 					if _pack_arrow(right).has_point(m):
 						_pack_step(1 if right else -1)
-						beep(392.0, 0.04, 0.10)
+						_sfx("pack_flip")
 						return
 			if _newrun_go().has_point(m):
 				if not _pack_open(newrun_pip):
 					_deny()
 					return
 				_new_run()
-				beep(523.0, 0.06, 0.14)
+				_sfx("run_start")
 				return
 			if _newrun_back().has_point(m):
 				state = S.TITLE
-				beep(330.0, 0.05, 0.10)
+				_sfx("back")
 				return
 		S.TITLE:
 			for i in 4:
@@ -2396,7 +2538,7 @@ func _click(m: Vector2) -> void:
 							state = S.SETTINGS
 						3:
 							get_tree().quit()
-					beep(523.0, 0.06, 0.14)
+					_sfx("menu_pick")
 					return
 		S.SETTINGS:
 			var rows := _set_rows()
@@ -2419,27 +2561,27 @@ func _click(m: Vector2) -> void:
 						get_tree().quit()
 					"back":
 						_settings_back()
-				beep(440.0, 0.05, 0.12)
+				_sfx("menu_back")
 				return
 		S.COLLECT:
 			for t in 5:
 				if _col_tab_rect(t).has_point(m):
 					collect_tab = t
 					collect_page = 0
-					beep(392.0, 0.04, 0.10)
+					_sfx("menu_pick2")
 					return
 			if _col_pages() > 1:
 				if _col_arrow_rect(false).has_point(m):
 					collect_page = (collect_page - 1 + _col_pages()) % _col_pages()
-					beep(392.0, 0.04, 0.08)
+					_sfx("page")
 					return
 				if _col_arrow_rect(true).has_point(m):
 					collect_page = (collect_page + 1) % _col_pages()
-					beep(392.0, 0.04, 0.08)
+					_sfx("page")
 					return
 			if _menu_back_rect().has_point(m):
 				state = S.TITLE
-				beep(330.0, 0.05, 0.10)
+				_sfx("back")
 
 
 # ══════════════════════════════════════════════════════════
@@ -2542,19 +2684,19 @@ func _impact(info: Dictionary, hit_mult: int) -> void:
 			shake = 1.5
 			board_punch = 0.15
 			hit_flash_amt = 0.25
-			beep_seq([150.0], 0.0, 0.22, 0.11)
+			_sfx("hit_miss")
 		1:
 			shake = 3.0
 			board_punch = 0.45
 			hit_flash_amt = 0.4
-			beep_seq([160.0], 0.0, 0.13, 0.19)
+			_sfx("hit_single")
 			add_wave(aim, 3.0, 24.0, C_TXT, 0.35, 1.0, 0.28)
 		2:
 			shake = 6.5
 			board_punch = 0.8
 			hitstop = 0.05
 			hit_flash_amt = 0.7
-			beep_seq([330.0, 330.0], 0.075, 0.11, 0.20)
+			_sfx("hit_double")
 			add_wave(aim, 3.0, 42.0, C_ACC, 0.75, 1.5, 0.40)
 			add_ring_fx(R * rt_dbl_in, R * rt_dbl_out, C_ACC, 0.50)
 			pop(aim + lbl, "더블", C_ACC, 15, 0.8)
@@ -2563,7 +2705,7 @@ func _impact(info: Dictionary, hit_mult: int) -> void:
 			board_punch = 1.0
 			hitstop = 0.09
 			hit_flash_amt = 0.9
-			beep_seq([330.0, 415.0, 494.0], 0.07, 0.12, 0.22)
+			_sfx("hit_triple")
 			add_wave(aim, 3.0, 54.0, C_ACC, 0.85, 2.0, 0.45)
 			add_wave(aim, 3.0, 32.0, C_TXT, 0.60, 1.0, 0.32)
 			add_ring_fx(R * rt_trp_in, R * rt_trp_out, C_ACC, 0.55)
@@ -2573,7 +2715,7 @@ func _impact(info: Dictionary, hit_mult: int) -> void:
 			board_punch = 1.0
 			hitstop = 0.11
 			hit_flash_amt = 0.9
-			beep_seq([262.0, 392.0, 523.0], 0.07, 0.15, 0.24)
+			_sfx("hit_bull_o")
 			add_wave(BC, R * rt_bull_o, R * 1.15, C_GREEN.lightened(0.45), 0.80, 2.0, 0.50)
 			add_wave(BC, 4.0, 46.0, C_TXT, 0.70, 1.5, 0.35)
 			add_sparks(10, R * rt_bull_o, R * 0.95, 12.0, C_GREEN.lightened(0.5), 0.42)
@@ -2584,7 +2726,7 @@ func _impact(info: Dictionary, hit_mult: int) -> void:
 			hitstop = 0.15
 			hit_flash_amt = 1.0
 			screen_flash = 1.0
-			beep_seq([262.0, 392.0, 523.0, 659.0], 0.07, 0.17, 0.26)
+			_sfx("hit_bull_i")
 			add_wave(BC, R * rt_bull_i, R * 1.35, C_RED.lightened(0.45), 0.90, 2.5, 0.60)
 			add_wave(BC, R * rt_bull_i, R * 0.90, C_ACC, 0.80, 2.0, 0.45)
 			add_wave(BC, 3.0, 52.0, C_TXT, 0.80, 1.5, 0.32)
@@ -2687,20 +2829,66 @@ func _land(mark := true) -> void:
 		if String(md.get("id", "")) == "hvy":
 			mag_hvy += 1
 
+	# ── 이력 갱신 — ctx 를 만들기 **전**이다 ─────────────────────
+	#  패턴 깃발은 완성한 그 발부터 선다. 전에는 이 블록이 ctx 뒤에 있어서
+	#  「같은 숫자 3회」가 3번째 발이 아니라 4번째 발에야 섰다 — 6발 라운드에서
+	#  세 발·네 발 계열이 사실상 안 뜨던 원인이다.
+	#
+	#  순서가 바뀌었으므로 갱신 **전** 값을 봐야 하는 넷은 먼저 떠 둔다.
+	#  이 넷의 뜻은 하나도 안 바뀐다:
+	#    rezone   이미 맞힌 영역을 **다시** 맞히면 — 이번 발 전의 이력을 본다
+	#    risk1    라운드 **첫** 고난도 명중 — 갱신 뒤엔 영영 거짓이 된다
+	#    low      이번 발 전까지의 최저 칸
+	#    zonehist 이 영역을 몇 번째로 맞히는가 — 이번 발을 포함한다(종전과 같다)
+	var rezone_pre: bool = zone != "" and zone_cnt.get(zone, 0) > 0
+	var risk1_pre: bool = is_risk and not seen_risk
+	var low_pre := low_hit
+	var zonehist_pre: int = (zone_hist.get(zone, 0) + 1) if zone != "" else 0
+	if zone != "":
+		if info.sector >= 1 and info.sector <= 20:
+			sec_cnt[info.sector] = int(sec_cnt.get(info.sector, 0)) + 1
+		zone_cnt[zone] = int(zone_cnt.get(zone, 0)) + 1
+		zone_hist[zone] = int(zone_hist.get(zone, 0)) + 1
+		if is_risk:
+			seen_risk = true
+		if info.sector >= 1 and info.sector <= 20:
+			low_hit = info.sector if low_hit == 0 else mini(low_hit, info.sector)
+		# 깃발 — 한 번 서면 라운드 끝까지 산다
+		var pairs := 0
+		var maxrep := 0
+		for kx in sec_cnt:
+			maxrep = maxi(maxrep, int(sec_cnt[kx]))
+			if int(sec_cnt[kx]) >= 2:
+				pairs += 1
+		if maxrep >= 2: pat.pair = true
+		if maxrep >= 3: pat.trip = true
+		if maxrep >= 4: pat.quad = true
+		if pairs >= 2: pat.pair2 = true
+		if sec_cnt.size() >= 3: pat.spread = true
+		for kz in zone_cnt:
+			if int(zone_cnt[kz]) >= 3:
+				pat.zone3 = true
+		if zone_cnt.size() >= 2: pat.zones2 = true
+		if zone_cnt.size() >= 4: pat.zones4 = true
+
 	var ctx := {
 		"sector": info.sector,
 		"mult": info.mult,
 		"miss": info.mult == 0,
 		"missp": last_miss,
 		"left": aim.x < BC.x,
+		# 꽂힌 칸의 색. hit_info 가 이미 실어 보내는데 여기서 안 옮겨
+		# 담아서, col 조건 일곱 장이 통째로 죽어 있었다 — check() 는
+		# 없는 열을 -1 로 읽고 "칸에 안 꽂혔다" 로 판정한다.
+		"col": int(info.get("col", -1)),
 		"same": same,
 		"first": dart_index == 0,
 		"last": darts_left == 0,
 		"streak": streak,
 		"warm": round_trp,
-		# ── 조커 이식 조건 재료. 패턴 깃발은 이번 발 이전의 것이다 —
-		#    "맞힌 뒤" 는 완성한 발이 아니라 그 다음 발부터라는 뜻이다.
-		"risk1": is_risk and not seen_risk,
+		# ── 조커 이식 조건 재료. 패턴 깃발은 이번 발을 **포함한** 것이다 —
+		#    「같은 숫자 3회」는 3번째 발부터 선다. 위 이력 갱신 블록 참조.
+		"risk1": risk1_pre,
 		"few": round_darts <= 3,
 		"sixth": throw6 >= 6,
 		"pair": pat.get("pair", false),
@@ -2711,19 +2899,21 @@ func _land(mark := true) -> void:
 		"zone3": pat.get("zone3", false),
 		"zones2": pat.get("zones2", false),
 		"zones4": pat.get("zones4", false),
-		"rezone": zone != "" and zone_cnt.get(zone, 0) > 0,
+		"rezone": rezone_pre,
 		# ── 배율 재료 ──
 		"darts_left": darts_left,
 		"items_n": owned.size(),
 		"gold": gold,
 		"mag_hvy": mag_hvy,
 		"round_darts": round_darts,
-		"low": low_hit,
-		"zonehist": zone_hist.get(zone, 0) + 1 if zone != "" else 0,
+		"low": low_pre,
+		"zonehist": zonehist_pre,
 		"empty_n": GameData.max_items() - owned.size(),
 		"rackval_all": rv_all,
 		"rand01": randf(),
 	}
+	last_ctx = ctx
+	land_n += 1
 
 	cur_chip = 0
 	cur_mult = 0
@@ -2807,33 +2997,7 @@ func _land(mark := true) -> void:
 	elif info.mult == 2:
 		Save.bump("doubles")
 
-	# 이력 갱신은 ctx 를 만든 뒤다 — 패턴은 다음 발부터 산다.
-	if zone != "":
-		if info.sector >= 1 and info.sector <= 20:
-			sec_cnt[info.sector] = int(sec_cnt.get(info.sector, 0)) + 1
-		zone_cnt[zone] = int(zone_cnt.get(zone, 0)) + 1
-		zone_hist[zone] = int(zone_hist.get(zone, 0)) + 1
-		if is_risk:
-			seen_risk = true
-		if info.sector >= 1 and info.sector <= 20:
-			low_hit = info.sector if low_hit == 0 else mini(low_hit, info.sector)
-		# 깃발 — 한 번 서면 라운드 끝까지 산다
-		var pairs := 0
-		var maxrep := 0
-		for kx in sec_cnt:
-			maxrep = maxi(maxrep, int(sec_cnt[kx]))
-			if int(sec_cnt[kx]) >= 2:
-				pairs += 1
-		if maxrep >= 2: pat.pair = true
-		if maxrep >= 3: pat.trip = true
-		if maxrep >= 4: pat.quad = true
-		if pairs >= 2: pat.pair2 = true
-		if sec_cnt.size() >= 3: pat.spread = true
-		for kz in zone_cnt:
-			if int(zone_cnt[kz]) >= 3:
-				pat.zone3 = true
-		if zone_cnt.size() >= 2: pat.zones2 = true
-		if zone_cnt.size() >= 4: pat.zones4 = true
+	# 이력 갱신은 ctx 를 만들기 **전**으로 옮겼다 — 이 위쪽 블록이다.
 	if throw6 >= 6:
 		throw6 = 0
 	# 성장 걸음 — hitmiss 는 매 발, tdec 는 던질 때마다
@@ -2917,20 +3081,20 @@ func _next_step() -> void:
 	match st.k:
 		"miss":
 			card_item = "빗나감"
-			beep(180.0, 0.20, 0.14)
+			_sfx("settle_miss")
 			qt = beat * 1.4 * pace
 		"chip":
 			cur_chip += _chip_gain(st.v)
-			beep(f, 0.10, 0.16)
+			_sfx("settle_step", f)
 		"pierce":
 			var pg := _chip_gain(st.v)
 			cur_chip += pg
 			card_item = "관통  점수 +%d" % pg
 			pop(cc, "+%d" % pg, C_CHIP, 17, 0.9)
-			beep(f, 0.11, 0.18)
+			_sfx("settle_pierce", f)
 		"mult":
 			cur_mult = st.v
-			beep(f, 0.10, 0.16)
+			_sfx("settle_step", f)
 		"item":
 			_panel_fire(st.i)
 			card_item = st.lbl
@@ -2952,7 +3116,7 @@ func _next_step() -> void:
 			pop(cc, GameData.eff_text(
 					"mult" if st.kind == "mult_rand" else String(st.kind), st.v),
 					col, 17, 0.9)
-			beep(f, 0.11, 0.18)
+			_sfx("settle_item", f)
 			shake = 3.0
 		"total":
 			var was_short := total < target
@@ -2965,13 +3129,13 @@ func _next_step() -> void:
 			qt = beat * 2.6 * pace
 			if was_short and total >= target:
 				# 목표 돌파 — 라운드가 여기서 끝난다
-				beep_seq([392.0, 523.0, 659.0, 784.0], 0.08, 0.26, 0.26)
+				_sfx("target_hit")
 				screen_flash = 0.7
 				shake = 13.0
 				pop(BC + Vector2(0.0, -46.0), "목표 달성", C_ACC, 22, 1.2)
 				qt = beat * 3.4
 			else:
-				beep(196.0, 0.34, 0.26)
+				_sfx("settle_total")
 
 
 func pop(p: Vector2, txt: String, c: Color, sz: int, life: float) -> void:
@@ -4830,7 +4994,7 @@ func _sell_hit(m: Vector2) -> bool:
 		if _slot_rect(i).has_point(m):
 			sell_sel = -1 if (sell_sel == i or i >= owned.size()) else i
 			sell_t = 0.0
-			beep(349.0, 0.05, 0.10)
+			_sfx("rack_select")
 			return true
 	sell_sel = -1                   # 딴 데를 누르면 선택만 풀고 그대로 흘려보낸다
 	return false
@@ -4855,7 +5019,7 @@ func _sell(i: int) -> void:
 	# 상태라 0 으로 돌리는 것이 옮기는 것과 같은 결과이고 더 안전하다.
 	_panel_reset()
 	pop(at + Vector2(0.0, -14.0), "+%d" % v, C_GOLD, 15, 0.8)
-	beep_seq([659.0, 880.0], 0.06, 0.09, 0.18)
+	_sfx("sell")
 
 
 # ══════════════════════════════════════════════════════════
@@ -4905,7 +5069,7 @@ func _cons_use(i: int) -> void:
 	cons.remove_at(i)
 	pop(at + Vector2(0.0, 26.0), "%s  Lv%d" % [c.n, track_lv[c.track]],
 			C_ACC, 10, 0.9)
-	beep_seq([523.0, 659.0], 0.06, 0.10, 0.18)
+	_sfx("cons_use")
 
 
 func _cons_draw() -> void:
@@ -5643,7 +5807,7 @@ func _sweep_sink(i: int) -> void:
 	it.vu = 0.0
 	it.vw = 0.0
 	it.om = 0.0
-	beep(196.0, 0.05, 0.09)
+	_sfx("sweep_sink")
 
 
 # 구멍 속. 면을 떠났으므로 벽도 쌍 충돌도 안 본다 — h 를 음수로 떨어뜨리면
@@ -7279,7 +7443,7 @@ func _hand_take() -> void:
 		# 랙 스티커는 물리 물체가 아니다. 적분기에 넣을 것이 없어 커서만 따라간다.
 		hand_off = Vector2.ZERO
 		peel_t = 0.0              # 떼는 순간. 말림이 여기서부터 잦아든다
-		beep(196.0, 0.04, 0.08)
+		_sfx("hand_take")
 		return
 	var it: Dictionary = drop[hand_i]
 	# 집는 순간 물체가 안 튄다. 이 오프셋은 ramp 로 0 에 녹으므로 0.17초 뒤에는
@@ -7296,7 +7460,7 @@ func _hand_take() -> void:
 	it.sleep = true           # 정착 인구조사에서 빠진다 → 드는 동안 _drop_busy() 가 false
 	it.rest = DROP.t_sleep
 	it.scuff = []
-	beep(196.0, 0.04, 0.08)
+	_sfx("hand_take")
 
 
 func _hand_release(m: Vector2) -> void:
@@ -7343,7 +7507,7 @@ func _hand_release(m: Vector2) -> void:
 			if j >= 0 and i >= 0 and i < owned.size() and j != i:
 				_rack_reorder(i, j)
 			else:
-				beep(147.0, 0.05, 0.07)       # 그냥 제자리로 돌아간다
+				_sfx("hand_drop")       # 그냥 제자리로 돌아간다
 		return
 
 	if i < 0 or i >= drop.size():
@@ -7363,7 +7527,7 @@ func _hand_release(m: Vector2) -> void:
 		_deny()
 		_hand_land(it)
 		return
-	beep(147.0, 0.05, 0.07)
+	_sfx("hand_drop")
 	_hand_land(it, _toss_of(hand_v))
 
 
@@ -7465,7 +7629,7 @@ func _hand_update(d: float) -> void:
 	# 래치는 히스테리시스로 건다 — 경계에서 소리와 창구 얼굴이 연타되지 않는다.
 	var z := _chute_at(hand_m, HAND.latch_gap if hand_zone >= 0 else 0.0)
 	if z >= 0 and z != hand_zone:
-		beep(523.0, 0.04, 0.10)
+		_sfx("chute_enter")
 	hand_zone = z
 
 	if hand_src == 1:
@@ -7513,7 +7677,7 @@ func _hand_scuff(it: Dictionary, d: float) -> void:
 func _shop_tap(i: int) -> void:
 	sell_sel = -1
 	buy_sel = -1 if buy_sel == i else i
-	beep(349.0 if buy_sel >= 0 else 262.0, 0.05, 0.10)   # 349 는 랙 선택과 같은 음
+	_sfx("shop_select" if buy_sel >= 0 else "shop_deselect")
 
 
 # 랙 스티커를 끌지 않고 톡 눌렀을 때. 두 클릭 경로의 1단계다.
@@ -7524,7 +7688,7 @@ func _rack_tap(i: int) -> void:
 		return
 	sell_sel = -1 if sell_sel == i else i
 	sell_t = 0.0
-	beep(349.0 if sell_sel >= 0 else 262.0, 0.05, 0.10)
+	_sfx("rack_select" if sell_sel >= 0 else "rack_deselect")
 
 
 # 커서가 랙의 몇째 칸 위인가. 빈 칸도 자리로 친다 — 맨 뒤로 보내는 드롭이다.
@@ -7550,7 +7714,7 @@ func _rack_reorder(i: int, j: int) -> void:
 	# slot_pop/vel/hot 은 인덱스를 공유한다. 하나만 지우면 크기가 어긋나
 	# _panel_update 가 넘어진다 — _sell 과 같은 이유, 같은 처방이다.
 	_panel_reset()
-	beep(392.0, 0.05, 0.10)
+	_sfx("rack_move")
 	pop(_slot_rect(j).get_center() + Vector2(0.0, 22.0), "순서 변경", C_TXT, 9, 0.8)
 
 
@@ -9888,7 +10052,7 @@ func _open_newrun() -> void:
 	_cup_reset()
 	_cup3_open()
 	state = S.NEWRUN
-	beep(440.0, 0.05, 0.12)
+	_sfx("newrun_open")
 
 
 func _draw_newrun() -> void:
