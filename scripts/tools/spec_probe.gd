@@ -7,6 +7,7 @@ extends SceneTree
 #
 #    ① 창구 확정이 눌렀다 뗄 때 실행되는가 (아이템 구매·사용 = release)
 #    ② 랙 드래그 재정렬이 순서를 실제로 바꾸는가 (아이템순서변경=True)
+#       — 함수만이 아니라 **마우스 경로로**, 화면별로 잰다
 #    ③ 소비 아이템 — 사면 칸에 들어가고, 쓰면 트랙 레벨이 오르는가
 #    ④ 조건 missp — 직전 투척이 빗나갔을 때만 서는가 (스펙 100003)
 #
@@ -72,6 +73,30 @@ func _process(_d: float) -> bool:
 	g._rack_reorder(0, 2)
 	_ok("재정렬 0 → 2", g.owned[0].n == n1 and g.owned[2].n == n0,
 			"순서 [%s, %s, %s]" % [g.owned[0].n, g.owned[1].n, g.owned[2].n])
+
+	# ── ②-b 재정렬을 **마우스 경로로** 잰다. _rack_reorder 를 직접 부르면
+	#      "함수가 도는가" 만 알 뿐, 손이 거기까지 닿는지는 안 잰다 —
+	#      그 사이에 상태 잠금 셋이 있었고, 판에서는 하나도 안 열렸다.
+	for row in [["SHOP", g.S.SHOP, true], ["PICK", g.S.PICK, true],
+			["AIM_V", g.S.AIM_V, true], ["BLIND", g.S.BLIND, true],
+			["STAGE", g.S.STAGE, true], ["RESOLVE", g.S.RESOLVE, false]]:
+		g.state = row[1]
+		g.burst_left = 0
+		g.owned = [GameData.items()[0], GameData.items()[1], GameData.items()[2]]
+		g._panel_reset()
+		var a: String = g.owned[0].n
+		var b: String = g.owned[1].n
+		var p_from: Vector2 = g._slot_rect(0).get_center()
+		var p_to: Vector2 = g._slot_rect(2).get_center()
+		g._hand_press(p_from)
+		g._hand_motion(p_to)             # HAND.slip 을 넘겨 ARMED → CARRY
+		var carried: bool = g.hand_st == g.H.CARRY
+		g._hand_release(p_to)
+		var moved: bool = g.owned[0].n == b and g.owned[2].n == a
+		_ok("%s 에서 끌어 재정렬" % row[0], carried == row[2] and moved == row[2],
+				"집힘 %s · 순서 [%s, %s, %s]"
+				% [carried, g.owned[0].n, g.owned[1].n, g.owned[2].n])
+	g.state = g.S.SHOP
 
 	# ── ③ 소비 아이템 — 산다 · 칸에 선다 · 쓰면 트랙이 오른다
 	var pool: Array = GameData.consumables()
