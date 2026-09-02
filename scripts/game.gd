@@ -8944,12 +8944,13 @@ const CUP_SKIN := {
 	"p_rack": {"wide": 1.15, "sticker": true},     # 넓은 랙. 넓은 통에 스티커 한 장
 	# 선금 팩. 금빛 통에, 선금을 받았으니 발치에 플라크가 흩어져 있다.
 	# 팩이 미는 것(시작 골드 +10)이 글줄이 아니라 바닥에 놓인 물건으로 보인다.
-	"p_adv":  {"tint": "gold", "gold": 5},
+	"p_adv":  {"tint": "gold", "gold": 5, "dart": "gold"},
 }
 
 # 겉 하나가 안 적은 값. 표는 다른 것만 적는다.
+#   dart  자루 색을 덮는다. 빈 값이면 다트 종류가 정하는 색 그대로다.
 const CUP_SKIN0 := {"wall": "solid", "wide": 1.0, "sticker": false,
-		"tint": "steel", "gold": 0}
+		"tint": "steel", "gold": 0, "dart": ""}
 
 # 있는 색의 온 목록. 벽 갈래와 독립이라 금빛 철망도 설 수 있다.
 const CUP_TINTS := ["steel", "gold"]
@@ -9437,10 +9438,18 @@ func _dart3_meshes(b: Node3D, dl: float, dr: float, fin: float, col: Color) -> v
 				Vector3(0.0, PI * 0.5 * float(q), 0.0))
 
 
-func _cup3_dart(id: String) -> RigidBody3D:
+# 자루 색은 **다트 종류가 정한다** — 무거운 회색 · 가벼운 초록 · 관통 파랑 ·
+# 자석 빨강. 그 축을 팩이 덮을 수 있게 하되, 덮어도 되는 자리는 하나뿐이다:
+# 탄창이 전부 표준인 팩. 표준은 색이 하나뿐이라 덮어도 가릴 정보가 없다.
+# 특별한 다트를 쥔 팩에서 덮으면 그 다트가 무엇인지가 그림에서 사라진다 —
+# cup_probe 가 그 짝을 검사한다(주석으로 부탁하지 않는다).
+func _cup3_dart(id: String, tint: String) -> RigidBody3D:
 	var dl: float = CUP3.dl
 	var dr: float = CUP3.dr
-	var col := _dart3_col(id)
+	# 덮는 색은 통보다 **한 단 밝다.** 통 벽이 같은 색을 0.44 어둡게 쓰므로
+	# 그대로 쓰면 금빛 통 안의 금빛 자루가 한 덩어리로 뭉갠다 — 찍어 보고
+	# 알았다. 색이 같아도 값이 갈리면 형태가 산다.
+	var col := _cup3_tint(tint).lightened(0.34) if tint != "" else _dart3_col(id)
 
 	var b := RigidBody3D.new()
 	b.mass = CUP3.mass
@@ -9496,7 +9505,7 @@ func _cup3_spawn(pi: int, x: float) -> void:
 	var rc: float = r * 0.62                        # 꽁지가 벌어지는 고리
 	var darts := []
 	for i in n:
-		var b := _cup3_dart(id)
+		var b := _cup3_dart(id, String(skin.dart))
 		var a := TAU * float(i) / float(n) + 0.4
 		var out := Vector3(sin(a), 0.0, cos(a))
 		var tip := Vector3(x, 0.0, 0.0) + out * rt + Vector3(0.0, float(CUP3.wall) * 2.2, 0.0)

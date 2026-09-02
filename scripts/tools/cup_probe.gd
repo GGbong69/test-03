@@ -114,6 +114,20 @@ func _run() -> void:
 		# 색도 벽과 같은 규약이다 — 오타를 내면 잠자코 강철빛으로 떨어진다.
 		if sk.has("tint") and not g.CUP_TINTS.has(String(sk["tint"])):
 			bad.append("색 없음 %s=%s" % [k, sk["tint"]])
+		if sk.has("dart"):
+			if not g.CUP_TINTS.has(String(sk["dart"])):
+				bad.append("자루색 없음 %s=%s" % [k, sk["dart"]])
+			# 자루 색은 다트 종류를 가르는 축이다. 표준 탄창(색이 하나뿐)인
+			# 팩에서만 덮을 수 있다 — 특별한 다트를 쥔 팩에서 덮으면 그
+			# 다트가 무엇인지가 그림에서 사라진다.
+			var did := "std"
+			for pr in GameData.packs():
+				if String(pr.get("id", "")) == String(k):
+					did = String(pr.get("dart_id", "std"))
+					if did == "":
+						did = "std"
+			if did != "std":
+				bad.append("자루색을 덮는데 탄창이 %s 다 (%s)" % [did, k])
 	_say(bad.is_empty(), "통 겉 표가 팩·벽·속성 이름과 맞는다",
 			", ".join(bad) if not bad.is_empty() else "%d줄" % g.CUP_SKIN.size())
 
