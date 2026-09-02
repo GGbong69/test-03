@@ -1702,6 +1702,11 @@ func _process(d: float) -> void:
 	# 길이 셋(ESC · 뒤로 · 시작)이라 각각에 달면 언젠가 하나를 빠뜨린다.
 	if state != S.NEWRUN and cup_vp != null:
 		_cup3_close()
+	# 판에 꽂힌 다트의 3D 무대도 같은 규약이다. 판이 안 서는 화면에서는
+	# 지운다 — 상점·제목·컬렉션에서 뒤에 남아 돌 이유가 없다.
+	# 판 갈이가 도는 동안(swap_live)은 판이 아직 화면에 있으므로 살려 둔다.
+	if bd_vp != null and not _is_play() and not swap_live:
+		_bd3_close()
 	Dev.tick(d)          # DEV
 	_drop_update(d)
 
@@ -3627,7 +3632,194 @@ const DART_MIN := 4.0       # 정면으로 본 자루의 반길이
 const DART_MAX := 22.0      # 판 밖 먼 빗나감이 작살이 되는 것을 막는다
 
 
+# ══════════════════════════════════════════════════════════
+#  판에 꽂힌 다트 — 3D 무대
+#
+#  통(새 런 화면)이 이미 3D 다. 자루 메시를 _dart3_meshes 로 같이 쓰므로
+#  여기서 새로 만드는 것은 **무대뿐**이다 — 뷰포트 하나와 카메라 하나.
+#
+#  ── 카메라가 설 자리는 이미 정해져 있었다 ────────────────
+#  2D 판이 정원으로 그려진다는 것이 곧 "눈은 판 한가운데를 지나는 축
+#  위에 있다" 는 뜻이다. 3D 는 그 전제를 실제 카메라로 세운 것뿐이라
+#  두 그림이 어긋날 자리가 없다.
+#
+#  ── 픽셀을 맞추는 규약 ───────────────────────────────
+#  **판 평면(z=0)에서 월드 1 = 화면 1px.** 원근 카메라의 z=0 면 반높이가
+#  D·tan(fov/2) 이므로 그것을 뷰포트 반높이와 같게 잡으면 된다. 그러면
+#  착탄점을 2D 좌표 그대로 꽂을 수 있고, 판·섬광·물결과 한 픽셀도 안 어긋난다.
+#
+#  ── 원근의 세기는 2D 받침과 같은 수다 ───────────────────
+#  꽁지(z=len)는 D/(D−len) 배로 벌어져 찍힌다. 그 벌어짐이 곧
+#  DART_PERSP = len/(D−len) 이라, D 를 거기서 거꾸로 뽑는다.
+#  같은 수를 두 곳에 적지 않으므로 3D 가 꺼진 자리(헤드리스)로 떨어져도
+#  다트가 튀지 않는다.
+#
+#  ── 뷰포트가 640x392 인 이유 ──────────────────────────
+#  카메라 축이 뷰포트 한가운데를 지난다. 그 한가운데가 BC(320,196)에
+#  앉아야 하므로 세로가 196*2 다. 아래 32px 은 화면 밖으로 잘린다 —
+#  거기 꽂히는 다트가 없다.
+#
+#  ── 렌더러가 없으면 2D 가 대신 선다 ────────────────────
+#  헤드리스 프로브·도구에서는 뷰포트가 빈 그림을 돌려준다. 그때는
+#  _draw_darts_2d 가 같은 투영을 손으로 계산해 그린다. 두 벌을 나란히
+#  두려는 게 아니라, 검사가 다트 없는 판을 보지 않게 하는 받침이다.
+# ══════════════════════════════════════════════════════════
+
+const BD3 := {
+	# 자루 온 길이(px). 판 지름 196px 이 실물 다트판(바깥 지름 451mm)이라
+	# 치면 1px ≈ 2.3mm 이고, 실물 자루 140mm 가 61px 이다. 80 은 거기서
+	# 한 뼘 키운 값 — 61 로는 꽁지가 판에 붙어 원근이 안 읽힌다.
+	"len":  80.0,
+	"r":     1.5,      # 배럴 반지름. 정면으로 본 자루의 굵기가 이것이다
+	"fin":   3.4,      # 날개 반폭. 불에 꽂힌 발은 이 십자가 전부라 넉넉히 준다
+	# 꽁지가 위로 드는 각(rad). 실물 다트는 호를 그려 꽂히므로 꽁지가 든다.
+	# 0.14 로는 그 기울기가 원근보다 커서 불에 꽂은 발이 점으로 안 뭉치고
+	# 위로 선 막대가 됐다 — 이 화면에서 읽히는 것은 기울기가 아니라 원근이다.
+	"rise":  0.06,
+	"jit":   0.13,     # 자루마다의 손떨림(rad)
+}
+
+var bd_vp: SubViewport = null
+var bd_nodes := []          # darts 와 인덱스를 공유하는 Node3D 들
+
+
+func _bd3_live() -> bool:
+	return bd_vp != null and is_instance_valid(bd_vp)
+
+
+# 눈 거리. 원근의 세기(DART_PERSP)가 이 값을 정한다 — 거꾸로가 아니다.
+func _bd3_eye() -> float:
+	return float(BD3.len) * (1.0 + 1.0 / float(DART_PERSP))
+
+
+func _bd3_size() -> Vector2:
+	return Vector2(VIEW.x, BC.y * 2.0)
+
+
+func _bd3_open() -> void:
+	if _bd3_live():
+		return
+	var sz := _bd3_size()
+	bd_vp = SubViewport.new()
+	bd_vp.size = Vector2i(int(sz.x), int(sz.y))
+	bd_vp.own_world_3d = true
+	bd_vp.transparent_bg = true
+	# 처음 한 벌은 열면서 굽는다. 그 뒤로는 자루 수가 달라질 때만
+	# _bd3_sync 가 다시 굽도록 다시 건다.
+	bd_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+	bd_vp.msaa_3d = Viewport.MSAA_DISABLED
+	bd_vp.gui_disable_input = true
+	add_child(bd_vp)
+
+	var d := _bd3_eye()
+	var cam := Camera3D.new()
+	cam.projection = Camera3D.PROJECTION_PERSPECTIVE
+	# z=0 면의 반높이가 뷰포트 반높이와 같아진다 = 월드 1 이 1px 이다.
+	cam.fov = rad_to_deg(2.0 * atan(sz.y * 0.5 / d))
+	cam.near = 1.0
+	cam.far = d * 2.0
+	cam.position = Vector3(0.0, 0.0, d)
+	bd_vp.add_child(cam)
+
+	# 빛은 왼쪽 위에서. 화면의 다른 입체(스티커 마감·플라크 광택)가 쓰는
+	# 방향과 같다 — 한 화면에 광원이 둘이면 어느 쪽이 위인지가 안 읽힌다.
+	var lt := DirectionalLight3D.new()
+	lt.rotation_degrees = Vector3(-38.0, -30.0, 0.0)
+	lt.light_energy = 1.15
+	lt.shadow_enabled = false
+	bd_vp.add_child(lt)
+
+	var we := WorldEnvironment.new()
+	var env := Environment.new()
+	env.background_mode = Environment.BG_CANVAS
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = C_PANEL.lightened(0.50)
+	env.ambient_light_energy = 1.10
+	we.environment = env
+	bd_vp.add_child(we)
+
+
+func _bd3_close() -> void:
+	bd_nodes.clear()
+	if _bd3_live():
+		bd_vp.queue_free()
+	bd_vp = null
+
+
+# 착탄점 하나가 3D 어디에 어떤 자세로 서는가.
+# 화면 y 는 아래로 크고 월드 y 는 위로 크므로 부호를 뒤집는다.
+func _bd3_pose(e: Dictionary) -> Transform3D:
+	var p: Vector2 = e.p
+	var land := Vector3(p.x - BC.x, -(p.y - BC.y), 0.0)
+	# 자루 축 — 눈 쪽(+Z)에서 출발해 꽁지를 들고, 자루마다 조금씩 흔든다.
+	var j: float = float(e.get("rot", 0.0))
+	var ax := Vector3(0.0, 0.0, 1.0)
+	# +X 둘레의 회전은 +Z 를 −Y 로 보낸다. 꽁지를 **위로** 들려면 부호가
+	# 음수다 — 양수로 두었더니 12시에 꽂은 발에서 기울기가 원근과 정면으로
+	# 상쇄되어, 판 끝이 판 가운데보다 짧게 비쳤다(프로브가 잡았다).
+	ax = ax.rotated(Vector3.RIGHT, -(float(BD3.rise) + j * float(BD3.jit)))
+	ax = ax.rotated(Vector3.UP, j)
+	var yv := ax.normalized()
+	var xv := Vector3.UP.cross(yv)
+	if xv.length() < 0.01:
+		xv = Vector3.RIGHT
+	xv = xv.normalized()
+	# 촉 끝이 로컬 −dl 이라는 _dart3_meshes 의 약속을 여기서 읽는다.
+	return Transform3D(Basis(xv, yv, xv.cross(yv)),
+			land + yv * float(BD3.len) * 0.5)
+
+
+# darts 배열과 3D 노드를 맞춘다. 수가 달라졌을 때만 다시 세운다 —
+# 라운드마다 열두 발을 넘지 않으므로 통째로 다시 세워도 싸다.
+func _bd3_sync() -> void:
+	if not _bd3_live():
+		return
+	if bd_nodes.size() != darts.size():
+		# 꽂힌 자루는 한 번 서면 안 움직인다. 그래서 그릴 때마다 3D 를 다시
+		# 굽지 않고, 수가 달라진 프레임에만 한 번 굽는다 — UPDATE_ALWAYS 로
+		# 두면 640x392 짜리 3D 화면을 라운드 내내 매 프레임 다시 그린다.
+		bd_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+		for n in bd_nodes:
+			if is_instance_valid(n):
+				n.queue_free()
+		bd_nodes.clear()
+		for e in darts:
+			var n := Node3D.new()
+			_dart3_meshes(n, float(BD3.len) * 0.5, float(BD3.r), float(BD3.fin),
+					_dart3_col(String(e.get("id", "std"))))
+			bd_vp.add_child(n)
+			bd_nodes.append(n)
+	for i in mini(bd_nodes.size(), darts.size()):
+		if is_instance_valid(bd_nodes[i]):
+			bd_nodes[i].transform = _bd3_pose(darts[i])
+
+
 func _draw_darts() -> void:
+	# 렌더러가 있으면 3D 무대를 연다. 없는 자리(헤드리스)에서는 안 열리고
+	# 아래 2D 받침이 그대로 선다 — 여는 쪽에서 한 번만 가른다.
+	if not _bd3_live() and get_viewport() != null and not darts.is_empty():
+		_bd3_open()
+	# **비어도 맞춘다.** 라운드가 바뀌면 darts 만 비고 3D 자루는 뒤에 남아,
+	# 새 판 위에 지난 판의 다트가 그대로 꽂혀 있었다(프로브가 잡았다).
+	# 맞추는 자리가 하나뿐이라야 그 일이 안 생긴다.
+	if _bd3_live():
+		_bd3_sync()
+	if darts.is_empty():
+		return
+	if _bd3_live():
+		var tex: Texture2D = bd_vp.get_texture()
+		if tex != null:
+			var sz := _bd3_size()
+			# 눕히기 변환이 걸린 채로 그린다 — 판과 같이 눌려야 판 갈이
+			# 연출에서 다트만 서 있는 그림이 안 나온다.
+			draw_texture_rect(tex, Rect2(Vector2.ZERO, sz), false)
+			return
+	_draw_darts_2d()
+
+
+# 3D 가 없을 때의 받침. 같은 투영을 손으로 계산한다 — 자세한 근거는
+# 위 구획 주석과 DART_PERSP 에 있다.
+func _draw_darts_2d() -> void:
 	for e in darts:
 		var v: Vector2 = e.p - BC
 		var r := v.length()
@@ -9076,19 +9268,59 @@ func _cup3_cup(skin: Dictionary) -> AnimatableBody3D:
 
 
 # 자루 하나. 축은 +Y 가 꽁지다 — 캡슐 충돌과 같은 축이라 둘이 안 어긋난다.
+# 자루 색. _icon_dart 의 그것과 같은 값이라야 2D 받침과 3D 가 같은
+# 다트로 읽힌다 — 다섯 종을 색으로 가르는 규약이 화면마다 갈리면 안 된다.
+func _dart3_col(id: String) -> Color:
+	match id:
+		"hvy": return C_WIRE.lightened(0.30)
+		"lgt": return C_GREEN.lightened(0.35)
+		"prc": return C_CHIP.lightened(0.25)
+		"mag": return C_MULT.lightened(0.25)
+	return C_TXT
+
+
+# 자루 한 벌의 메시. **두 무대가 같이 쓴다** — 통(새 런 화면)과 판에
+# 꽂힌 다트다. 한 곳에서 만들어야 두 화면의 다트가 같은 물건으로 보인다.
+#
+# 자루의 축은 로컬 +Y 이고 촉이 −Y 쪽이다. 촉 끝은 정확히 −dl 에 온다
+# (촉 원뿔이 −dl*0.82 에 서고 높이가 dl*0.36 이므로 −dl*0.82−dl*0.18).
+# 꽂는 쪽이 그 약속을 읽고 자리를 잡으므로 비율을 바꾸면 같이 고친다.
+#
+# 비율은 _icon_dart 와 같다 — 2D 받침과 3D 가 다른 다트로 보이면
+# 받침이 받침 구실을 못한다.
+func _dart3_meshes(b: Node3D, dl: float, dr: float, fin: float, col: Color) -> void:
+	var tip := CylinderMesh.new()
+	tip.top_radius = dr
+	tip.bottom_radius = 0.0
+	tip.height = dl * 0.36
+	tip.radial_segments = 8
+	_cup3_mesh(b, tip, C_LIGHT, Vector3(0.0, -dl * 0.82, 0.0))
+	var bar := CylinderMesh.new()
+	bar.top_radius = dr
+	bar.bottom_radius = dr
+	bar.height = dl * 0.84
+	bar.radial_segments = 10
+	_cup3_mesh(b, bar, col, Vector3(0.0, -dl * 0.22, 0.0))
+	var sha := CylinderMesh.new()
+	sha.top_radius = dr * 0.42
+	sha.bottom_radius = dr * 0.42
+	sha.height = dl * 0.30
+	sha.radial_segments = 6
+	_cup3_mesh(b, sha, C_DARK.lightened(0.25), Vector3(0.0, dl * 0.35, 0.0))
+	# 날개는 배럴보다 한 단 어둡다 — 둘이 같은 흰색이면 표준 다트가
+	# 머리 큰 흰 막대 하나로 뭉쳐 보인다(2D 아이콘은 굵기로 갈리지만
+	# 3D 는 같은 빛을 받아 굵기 차이가 안 읽힌다).
+	var fm := BoxMesh.new()
+	fm.size = Vector3(fin * 2.0, dl * 0.42, 0.012 * dl / 0.81)
+	for q in 2:
+		_cup3_mesh(b, fm, col.darkened(0.18), Vector3(0.0, dl * 0.76, 0.0),
+				Vector3(0.0, PI * 0.5 * float(q), 0.0))
+
+
 func _cup3_dart(id: String) -> RigidBody3D:
 	var dl: float = CUP3.dl
 	var dr: float = CUP3.dr
-	var col := C_TXT
-	match id:
-		"hvy":
-			col = C_WIRE.lightened(0.30)
-		"lgt":
-			col = C_GREEN.lightened(0.35)
-		"prc":
-			col = C_CHIP.lightened(0.25)
-		"mag":
-			col = C_MULT.lightened(0.25)
+	var col := _dart3_col(id)
 
 	var b := RigidBody3D.new()
 	b.mass = CUP3.mass
@@ -9111,34 +9343,9 @@ func _cup3_dart(id: String) -> RigidBody3D:
 	cs.shape = cap
 	b.add_child(cs)
 
-	# 촉 · 배럴 · 샤프트 · 날개. 비율은 _icon_dart 와 같다 — 2D 받침과
-	# 3D 가 다른 다트로 보이면 받침이 받침 구실을 못한다.
-	var tip := CylinderMesh.new()
-	tip.top_radius = dr
-	tip.bottom_radius = 0.0
-	tip.height = dl * 0.36
-	tip.radial_segments = 8
-	_cup3_mesh(b, tip, C_LIGHT, Vector3(0.0, -dl * 0.82, 0.0))
-	var bar := CylinderMesh.new()
-	bar.top_radius = dr
-	bar.bottom_radius = dr
-	bar.height = dl * 0.84
-	bar.radial_segments = 10
-	_cup3_mesh(b, bar, col, Vector3(0.0, -dl * 0.22, 0.0))
-	var sha := CylinderMesh.new()
-	sha.top_radius = dr * 0.42
-	sha.bottom_radius = dr * 0.42
-	sha.height = dl * 0.30
-	sha.radial_segments = 6
-	_cup3_mesh(b, sha, C_DARK.lightened(0.25), Vector3(0.0, dl * 0.35, 0.0))
-	# 날개는 배럴보다 한 단 어둡다 — 둘이 같은 흰색이면 표준 다트가
-	# 머리 큰 흰 막대 하나로 뭉쳐 보인다(2D 아이콘은 굵기로 갈리지만
-	# 3D 는 같은 빛을 받아 굵기 차이가 안 읽힌다).
-	var fin := BoxMesh.new()
-	fin.size = Vector3(float(CUP3.fin) * 2.0, dl * 0.42, 0.012)
-	for q in 2:
-		_cup3_mesh(b, fin, col.darkened(0.18), Vector3(0.0, dl * 0.76, 0.0),
-				Vector3(0.0, PI * 0.5 * float(q), 0.0))
+	# 촉 · 배럴 · 샤프트 · 날개는 _dart3_meshes 가 세운다 — 판에 꽂힌
+	# 다트와 같은 벌이다.
+	_dart3_meshes(b, dl, dr, float(CUP3.fin), col)
 	return b
 
 
