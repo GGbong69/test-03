@@ -9044,7 +9044,11 @@ func _cup3_mat(col: Color, net := false) -> StandardMaterial3D:
 	m.albedo_color = col
 	m.roughness = 1.0
 	m.metallic = 0.0
-	m.specular = 0.0
+	# 반사광을 끈다. 여기 `specular = 0.0` 이라고 적혀 있었는데 그것은
+	# 고닷 3.x 의 이름이라 4 에서는 **아무 일도 안 하고 경고만 냈다** —
+	# 메시 하나당 한 줄씩이라 편집기 출력이 그 한 줄로 뒤덮였다(자루·통·
+	# 플라크가 늘수록 같이 늘었다). 4 의 이름은 이것이다.
+	m.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
 	if net:
 		m.albedo_texture = _cup3_net()
 		m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
