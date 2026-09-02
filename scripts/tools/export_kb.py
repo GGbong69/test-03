@@ -20,6 +20,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import math
 import os
 import re
 import sys
@@ -28,6 +29,9 @@ from datetime import date
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DATA = os.path.join(ROOT, "data")
 SCRIPTS = os.path.join(ROOT, "scripts")
+# 저장소 규약이 LF 다(.gitattributes). 윈도우 기본 텍스트 모드로 쓰면 매번
+# 전 줄이 바뀐 것으로 잡혀 내보낸 문서의 diff 를 아무도 못 읽는다.
+LF = chr(10)
 OUT = os.path.join(ROOT, "docs", "export")
 
 
@@ -221,7 +225,7 @@ DARTS = typed(read_csv("darts"),
               bool_cols=("fix1",))
 MODIFIERS = typed(read_csv("modifiers"), float_cols=("v", "weight"))
 ANTES = typed(read_csv("antes"),
-              int_cols=("ante", "base", "shop_items", "shop_mods", "shop_darts", "darts"),
+              int_cols=("ante", "shop_items", "shop_mods", "shop_darts", "darts"),
               float_cols=("curve_a", "curve_b"))
 BLINDS = typed(read_csv("blinds"), int_cols=("reward",), float_cols=("mult",),
                bool_cols=("skippable", "boss"))
@@ -543,6 +547,27 @@ BLINDS_PER = len(BLINDS)
 ROUNDS_N = len(ANTES) * BLINDS_PER
 
 
+# 앤티 기본 목표. data.gd 의 ante_base 와 **같은 식**이다 — 표에서 열이
+# 사라졌으므로 여기도 손잡이 셋을 읽어 다시 센다. 두 구현이 갈리면
+# KB 의 목표가 게임의 목표와 달라지므로, 식을 바꿀 때는 둘을 같이 고친다.
+def ante_base(a: int) -> float:
+    n = len(ANTES)
+    first = float(TUNE["curve_first"])
+    last = float(TUNE["curve_last"])
+    if n <= 1 or first <= 0 or last <= 0:
+        return max(first, 1.0)
+    a = min(max(a, 1), n)
+    # 양 끝은 식을 안 태운다 — data.gd 의 ante_base 와 같은 이유, 같은 처방이다.
+    if a == 1:
+        return first
+    if a == n:
+        return last
+    t = (a - 1) / (n - 1)
+    k = (a - 1) * (n - a)
+    bow = float(TUNE["curve_bow"]) * k / (((n - 1) ** 2) / 4.0)
+    return 10 ** (math.log10(first) + t * (math.log10(last) - math.log10(first)) + bow)
+
+
 def stake_mul(ante_row, stake_row) -> float:
     col = stake_row.get("curve", "base")
     if col in ("base", None, ""):
@@ -565,10 +590,10 @@ def schedule(stake_id="white") -> list[dict]:
             "ante": a["ante"],
             "blind": b["id"],
             "blind_ko": b["name"],
-            "base": a["base"],
+            "base": round(ante_base(a["ante"])),
             "blind_mult": b["mult"],
             "stake_mul": stake_mul(a, stake),
-            "target": round(a["base"] * b["mult"] * stake_mul(a, stake)),
+            "target": round(ante_base(a["ante"]) * b["mult"] * stake_mul(a, stake)),
             "darts": a["darts"],
             "reward_gold": reward,
             "skippable": b["skippable"],
@@ -1217,11 +1242,15 @@ def build_md() -> str:
     # 15 antes
     w("## 15. 라운드 곡선과 목표\n")
     w("```")
-    w("  목표 = 앤티 기본(base) × 판 배수(blind.mult) × 리그 곡선(stake.curve)")
+    w("  목표 = 앤티 기본 × 판 배수(blind.mult) × 리그 곡선(stake.curve)")
+    w("  앤티 기본 = 10 ^ ( 직선(curve_first → curve_last) + curve_bow · 배부름 )")
+    w("  배부름(n) = (n-1)(N-n) / ((N-1)^2 / 4)      양 끝 0, 한가운데 1")
     w("```\n")
-    w("**앤티 표** (`antes.csv`)\n")
+    w("**곡선 손잡이** (`tuning.csv`) — curve_first %s · curve_last %s · curve_bow %s\n"
+      % (TUNE["curve_first"], TUNE["curve_last"], TUNE["curve_bow"]))
+    w("**앤티 표** (`antes.csv` · 기본은 손잡이에서 나온다)\n")
     w(md_table(["앤티", "기본", "curve_a", "curve_b", "매대(스티커/개조/다트)", "다트", "비고"],
-               [[a["ante"], a["base"], a["curve_a"], a["curve_b"],
+               [[a["ante"], round(ante_base(a["ante"])), a["curve_a"], a["curve_b"],
                  "%d / %d / %d" % (a["shop_items"], a["shop_mods"], a["shop_darts"]),
                  a["darts"], g(a["_note"])] for a in ANTES]))
     w("\n**판 종류 표** (`blinds.csv`)\n")
@@ -1440,10 +1469,10 @@ def main() -> int:
     os.makedirs(OUT, exist_ok=True)
     j = build_json()
     jp = os.path.join(OUT, "hightone_kb.json")
-    with io.open(jp, "w", encoding="utf-8") as f:
+    with io.open(jp, "w", encoding="utf-8", newline=LF) as f:
         json.dump(j, f, ensure_ascii=False, indent=1)
     mp = os.path.join(OUT, "hightone_kb.md")
-    with io.open(mp, "w", encoding="utf-8") as f:
+    with io.open(mp, "w", encoding="utf-8", newline=LF) as f:
         f.write(build_md())
     print("JSON  %s  (%.1f KB)" % (jp, os.path.getsize(jp) / 1024))
     print("MD    %s  (%.1f KB)" % (mp, os.path.getsize(mp) / 1024))

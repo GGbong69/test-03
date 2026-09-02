@@ -1,5 +1,5 @@
 ﻿id,name,color,curve,reward_small,seal_items,darts_add,shop_cost_mul,interest_add,perish,rent,prereq,_note
-white,흰 리그,cfc9bd,base,3,0,0,1.00,0,0,0,,기준선. 라운드 표의 base 곡선을 그대로 쓴다
+white,흰 리그,cfc9bd,base,3,0,0,1.00,0,0,0,,기준선. tuning 의 curve_* 곡선을 그대로 쓴다
 green,초록 리그,479a58,base,0,0,0,1.00,0,0,0,white,작은 판이 골드를 안 준다. 곡선은 그대로 — 첫 단은 난이도가 아니라 여유를 깎는다
 blue,파랑 리그,4a6fa5,curve_a,0,0,0,1.00,0,0,0,green,곡선이 가팔라진다. antes.csv 의 curve_a 열이 그 값이다
 purple,보라 리그,7a4f9e,curve_a,0,1,0,1.00,0,0,0,blue,매 판 스티커 하나가 봉인된 채 시작한다. 제약 둔화의 상시판이다
