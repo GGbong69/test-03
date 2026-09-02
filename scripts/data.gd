@@ -1975,8 +1975,16 @@ static func _v_items() -> void:
 				_errs.append("%s — 골드 값이 0 이하다" % who)
 		# 등급은 가격 4단을 따르는 것이 기본이다. 어긋나면 의도적 이상치이므로
 		# 근거를 요구한다 — _note 가 비어 있으면 그냥 실수다.
-		var want := _rarity_of_cost(_i(r, "cost", "items"))
-		if want != "" and r.get("rarity", "") != want:
+		#
+		# 표에 없는 가격은 **그 자체가 물음**이다. 여기서 조용히 넘기고 있었고
+		# 그 틈으로 5골드·8골드 짜리 다섯 장이 대조를 한 번도 안 받았다.
+		# 얼굴의 단이 가격에서 나오던 시절에는 그 다섯이 틀린 단을 달고 찍혔다.
+		var cst := _i(r, "cost", "items")
+		var want := _rarity_of_cost(cst)
+		if want == "":
+			_warns.append("%s — 가격 %d 는 등급 4단(4·7·11·14) 밖이라 등급과 대조할 수 없다"
+					% [who, cst])
+		elif r.get("rarity", "") != want:
 			if String(r.get("_note", "")).find("등급 예외") < 0:
 				_warns.append("%s — 가격 %s 는 보통 %s 인데 %s 다. 이상치면 _note 에 '등급 예외' 를 적어라"
 						% [who, r.get("cost"), want, r.get("rarity")])

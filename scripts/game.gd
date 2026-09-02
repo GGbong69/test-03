@@ -4189,10 +4189,16 @@ const PANEL := {
 #
 #  등급의 둘째 신호는 마감(fin)이다 — 0 매트 · 1 유광 · 2 홀로그램.
 #  색만으로는 저해상도에서 두 단이 붙는데, 마감은 형태라 안 붙는다.
+#  단은 **희귀도 열이 정한다.** 가격으로 재던 것을 옮겼다 — 가격은 등급을
+#  따라가는 것이 기본이지만 예외가 있고(변덕쟁이·빈손은 희귀인데 7골드),
+#  검증기는 4·7·11·14 만 대조하므로 5골드·8골드 짜리는 아예 안 본다.
+#  그 틈으로 다섯 장이 얼굴에 틀린 단을 달고 있었다: 5골드 흔함이 유광,
+#  8골드 흔함·보통이 홀로그램으로 찍혔다. 값이 아니라 등급을 그려야
+#  "이 카드가 얼마나 귀한가" 가 얼굴과 데이터에서 같은 말을 한다.
 const STK_TIERS := [
-	{"max": 4, "body": "ded5c0", "fin": 0},
-	{"max": 7, "body": "7d5ad0", "fin": 1},
-	{"max": 99, "body": "241e33", "fin": 2},
+	{"rarity": "common", "body": "ded5c0", "fin": 0},
+	{"rarity": "uncommon", "body": "7d5ad0", "fin": 1},
+	{"rarity": "rare", "body": "241e33", "fin": 2},
 ]
 const C_DIECUT := Color("f4f0e6")   # 다이컷 테두리. 이 흰 띠 하나가 "스티커"를 말한다
 const C_LINER := Color("efe9db")    # 이형지 뒷면 — 말릴 때만 보인다. 인쇄가 없다
@@ -4324,11 +4330,11 @@ func _slot_rect(i: int) -> Rect2:
 			Vector2(cw, pr.size.y))
 
 
-func _stk_ti(cost: int) -> int:
+func _stk_ti(rarity: String) -> int:
 	for i in STK_TIERS.size():
-		if cost <= STK_TIERS[i].max:
+		if String(STK_TIERS[i].rarity) == rarity:
 			return i
-	return STK_TIERS.size() - 1
+	return 0
 
 
 # 조건 그림 — 스티커가 "언제" 터지는가를 얼굴에 새긴다.
@@ -4500,7 +4506,7 @@ func _half_disc(c: Vector2, u: float, left: bool) -> PackedVector2Array:
 # 아이템 하나를 스티커로 그린다. 랙과 상점이 같은 그림을 쓰도록 여기 하나로 모았다.
 func draw_item_sticker(c: Vector2, r: float, it: Dictionary, rot: float, lift: float,
 		dim: float, num_sz: int, peel := 0.0) -> void:
-	var ti := _stk_ti(it.cost)
+	var ti := _stk_ti(String(it.get("rarity", "common")))
 	draw_sticker(c, r, STK_TIERS[ti], rot, lift, it.get("g", "") != "", dim, peel)
 	var y := _peel_y(r, peel)
 	# 등급 고리. 색은 rarity.csv 가 정한다 — 정의만 있고 아무도 안 부르던
@@ -6389,7 +6395,7 @@ func _obj_paint(it: Dictionary, s: Dictionary, dim: float) -> void:
 #  어휘)을 빼고, 다이컷과 마감을 랙과 같은 각 규약으로 얹었다. 옆면은
 #  종이 두께라 그림자로만 남는다 — 히트박스(TBL.chip_t)는 안 건드렸다.
 func _sticker_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: float) -> void:
-	var ti := _stk_ti(it.cost)
+	var ti := _stk_ti(String(it.get("rarity", "common")))
 	var t: Dictionary = STK_TIERS[ti]
 	var rx: float = TBL.chip_r * (1.0 + wob * 0.05)
 	var ry: float = TBL.chip_r * TBL.flat * (1.0 - wob * 0.12)
