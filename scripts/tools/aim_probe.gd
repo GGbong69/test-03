@@ -1,6 +1,7 @@
 extends SceneTree
 
 const GameData = preload("res://scripts/data.gd")
+const Save = preload("res://scripts/save.gd")
 
 # ══════════════════════════════════════════════════════════
 #  조준 방식 검사 — 여덟 갈래가 다 살아 있는가
@@ -43,8 +44,22 @@ func _say(ok: bool, name: String, detail := "") -> void:
 
 
 func _initialize() -> void:
+	# 흔들 조준(drift)은 randf 로 떠돈다. 시드가 없어 "원을 가장자리까지
+	# 쓴다"(worst > span*0.75) 가 다섯 번에 한 번꼴로 그냥 실패했다 —
+	# 되는 코드에서 우연히 빨간불이 뜨는 검사는 그 뒤로 아무도 안 믿는다.
+	#
+	# 시드만으로는 안 됐다. 이 프로브만 Save.path 를 안 옮겨서 **사람의 실제
+	# 저장**을 읽고 있었고, 해금 상태가 물건 풀을 바꿔 난수 소비 순서가
+	# 달라졌다. 다른 프로브가 전부 지키는 규약이 여기만 빠져 있었다.
+	Save.path = "user://_probe_aim.cfg"
+	Save.wipe()
+	seed(20260902)
 	var g: Node = load("res://scenes/main.tscn").instantiate()
 	root.add_child(g)
+	# 흔들의 난수는 전역이 아니라 game.gd 의 aim_rng 다. RandomNumberGenerator
+	# 는 만들 때 스스로 시드를 뽑으므로 전역 seed() 가 안 닿는다 — 여기를
+	# 안 박으면 위 두 줄을 다 해도 값이 계속 흔들린다.
+	g.aim_rng.seed = 20260902
 	g.set_process(false)
 	g._new_run()
 	g._start_round()
