@@ -8942,10 +8942,17 @@ const CUP_SKIN := {
 	"base":   {},                                  # 기준선. 민 원통
 	"p_mag":  {"wall": "net"},                     # 여벌 팩. 철망
 	"p_rack": {"wide": 1.15, "sticker": true},     # 넓은 랙. 넓은 통에 스티커 한 장
+	# 선금 팩. 금빛 통에, 선금을 받았으니 발치에 플라크가 흩어져 있다.
+	# 팩이 미는 것(시작 골드 +10)이 글줄이 아니라 바닥에 놓인 물건으로 보인다.
+	"p_adv":  {"tint": "gold", "gold": 5},
 }
 
 # 겉 하나가 안 적은 값. 표는 다른 것만 적는다.
-const CUP_SKIN0 := {"wall": "solid", "wide": 1.0, "sticker": false}
+const CUP_SKIN0 := {"wall": "solid", "wide": 1.0, "sticker": false,
+		"tint": "steel", "gold": 0}
+
+# 있는 색의 온 목록. 벽 갈래와 독립이라 금빛 철망도 설 수 있다.
+const CUP_TINTS := ["steel", "gold"]
 
 # 있는 벽의 온 목록. _cup3_cup 의 match 와 짝이다 — 표에 오타를 내면
 # 잠자코 민 통이 서므로(match 의 기본 갈래) 눈으로는 못 잡는다.
@@ -9039,7 +9046,7 @@ func _cup3_mesh(parent: Node3D, mesh: Mesh, col: Color, at: Vector3,
 
 # ── 벽: 민 통 ────────────────────────────────────────
 # 기준선. 벽 두 겹에 굵은 테 하나다.
-func _cup3_wall_solid(b: Node3D, r: float, w: float, h: float) -> void:
+func _cup3_wall_solid(b: Node3D, r: float, w: float, h: float, tint: String) -> void:
 	var face := _cup3_face("solid", r, w)
 	var outer := CylinderMesh.new()
 	outer.top_radius = face
@@ -9048,7 +9055,7 @@ func _cup3_wall_solid(b: Node3D, r: float, w: float, h: float) -> void:
 	outer.cap_top = false
 	outer.cap_bottom = false
 	outer.radial_segments = 26
-	_cup3_mesh(b, outer, _cup3_wall_col("solid"), Vector3(0.0, h * 0.5, 0.0))
+	_cup3_mesh(b, outer, _cup3_wall_col("solid", tint), Vector3(0.0, h * 0.5, 0.0))
 	# 안쪽 벽은 법선을 뒤집어야 안이 보인다. 양면 재질로 두면 안쪽이
 	# 바깥 빛을 받아 통이 유리로 보인다.
 	var inner := CylinderMesh.new()
@@ -9065,7 +9072,7 @@ func _cup3_wall_solid(b: Node3D, r: float, w: float, h: float) -> void:
 	lip.outer_radius = r + w
 	lip.rings = 26
 	lip.ring_segments = 6
-	_cup3_mesh(b, lip, C_WIRE.lightened(0.18), Vector3(0.0, h, 0.0))
+	_cup3_mesh(b, lip, _cup3_tint(tint).lightened(0.18), Vector3(0.0, h, 0.0))
 
 
 # ── 벽: 철망 ─────────────────────────────────────────
@@ -9077,7 +9084,7 @@ func _cup3_wall_solid(b: Node3D, r: float, w: float, h: float) -> void:
 #          자루가 출렁일 때마다 그 얼룩이 같이 끓는다. 실물 철망 통도
 #          안이 어두우면 구멍은 그냥 검다.
 # 속통은 양면이다. 아가리로 들여다본 뒷벽 안쪽이 그 뒷면이다.
-func _cup3_wall_net(b: Node3D, r: float, w: float, h: float) -> void:
+func _cup3_wall_net(b: Node3D, r: float, w: float, h: float, tint: String) -> void:
 	var face := _cup3_face("net", r, w)
 	var wall := CylinderMesh.new()
 	wall.top_radius = face
@@ -9086,7 +9093,7 @@ func _cup3_wall_net(b: Node3D, r: float, w: float, h: float) -> void:
 	wall.cap_top = false
 	wall.cap_bottom = false
 	wall.radial_segments = 26
-	_cup3_mesh(b, wall, _cup3_wall_col("net"), Vector3(0.0, h * 0.5, 0.0),
+	_cup3_mesh(b, wall, _cup3_wall_col("net", tint), Vector3(0.0, h * 0.5, 0.0),
 			Vector3.ZERO, true)
 	var drum := CylinderMesh.new()
 	drum.top_radius = face - 0.01
@@ -9105,7 +9112,7 @@ func _cup3_wall_net(b: Node3D, r: float, w: float, h: float) -> void:
 	lip.outer_radius = face + 0.012
 	lip.rings = 26
 	lip.ring_segments = 6
-	_cup3_mesh(b, lip, C_WIRE.lightened(0.18), Vector3(0.0, h, 0.0))
+	_cup3_mesh(b, lip, _cup3_tint(tint).lightened(0.18), Vector3(0.0, h, 0.0))
 
 
 # 그 팩의 통 겉. 안 적은 값은 기본값으로 채워 낸다 — 부르는 쪽이
@@ -9131,8 +9138,16 @@ func _cup3_face(wall: String, r: float, w: float) -> float:
 
 # 벽 바깥면의 색. 스티커 그늘이 이것을 보고 제 벽보다 한 단 어두워진다 —
 # 고정색으로 적어 두면 벽이 어두운 겉에서는 그늘이 벽보다 밝아진다.
-func _cup3_wall_col(wall: String) -> Color:
-	return C_WIRE.darkened(0.30 if wall == "net" else 0.44)
+func _cup3_wall_col(wall: String, tint: String) -> Color:
+	return _cup3_tint(tint).darkened(0.30 if wall == "net" else 0.44)
+
+
+# 통 몸의 바탕색. 겉 표의 tint 가 고른다. 벽 갈래(민·철망)와 **독립**이라
+# 둘을 곱해 쓸 수 있다 — 금빛 철망을 만들 때 표에 한 칸만 적으면 된다.
+func _cup3_tint(tint: String) -> Color:
+	match tint:
+		"gold": return C_GOLD
+	return C_WIRE
 
 
 # 통에 붙는 스티커 한 장. 값은 전부 통 크기에 대한 비라 넓은 통에 붙어도
@@ -9222,7 +9237,8 @@ func _cup3_leaf(rad: float, at: float, sr: float, y0: float, fy: float,
 # 한 겹에 크림색 얼굴, 아래 끝은 말려 이형지가 보인다(draw_sticker).
 # 반지름 10px 에 인쇄까지 넣으면 조건 아이콘이 두 픽셀로 뭉개지므로
 # 여기서는 테·얼굴·말린 자락까지만 낸다.
-func _cup3_sticker(b: Node3D, rad: float, r: float, h: float, wall: String) -> void:
+func _cup3_sticker(b: Node3D, rad: float, r: float, h: float, wall: String,
+		tint: String) -> void:
 	var sr: float = r * float(CUP_STK.r)
 	var y0: float = h * float(CUP_STK.y)
 	var at: float = CUP_STK.at
@@ -9233,7 +9249,7 @@ func _cup3_sticker(b: Node3D, rad: float, r: float, h: float, wall: String) -> v
 	# 꺼 두었으므로(_cup3_open) 이 어두운 활꼴 하나가 그림자를 대신한다.
 	# 없으면 자락이 벽에 뜬 게 아니라 벽에 그려진 무늬로 읽힌다.
 	_cup3_mesh(b, _cup3_leaf(rad, at, sr, y0, fy, 2, 0.0, 0.002),
-			_cup3_wall_col(wall).darkened(0.16), Vector3.ZERO)
+			_cup3_wall_col(wall, tint).darkened(0.16), Vector3.ZERO)
 	_cup3_mesh(b, _cup3_leaf(rad, at, sr, y0, fy, 0, 0.0, 0.004),
 			C_DIECUT, Vector3.ZERO)
 	_cup3_mesh(b, _cup3_leaf(rad, at, sr * float(CUP_STK.face), y0, fy,
@@ -9256,20 +9272,21 @@ func _cup3_cup(skin: Dictionary) -> AnimatableBody3D:
 	var b := AnimatableBody3D.new()
 	b.sync_to_physics = true
 
+	var tint := String(skin.tint)
 	match String(skin.wall):
 		"net":
-			_cup3_wall_net(b, r, w, h)
+			_cup3_wall_net(b, r, w, h, tint)
 		_:
-			_cup3_wall_solid(b, r, w, h)
+			_cup3_wall_solid(b, r, w, h, tint)
 	if bool(skin.sticker):
 		_cup3_sticker(b, _cup3_face(String(skin.wall), r, w), r, h,
-				String(skin.wall))
+				String(skin.wall), tint)
 	var base := CylinderMesh.new()
 	base.top_radius = r + w
 	base.bottom_radius = r + w
 	base.height = w * 1.6
 	base.radial_segments = 26
-	_cup3_mesh(b, base, C_WIRE.darkened(0.52), Vector3(0.0, w * 0.8, 0.0))
+	_cup3_mesh(b, base, _cup3_tint(tint).darkened(0.52), Vector3(0.0, w * 0.8, 0.0))
 
 	var fl := CollisionShape3D.new()
 	var fs := CylinderShape3D.new()
@@ -9278,6 +9295,18 @@ func _cup3_cup(skin: Dictionary) -> AnimatableBody3D:
 	fl.shape = fs
 	fl.position = Vector3(0.0, w, 0.0)
 	b.add_child(fl)
+	# 발치 바닥. **통 몸에 붙인다** — 통이 미끄러질 때 바닥도 같이 가야
+	# 발치에 놓인 것이 통을 따라간다. 따로 세우면 통만 나가고 골드는
+	# 무대 한가운데 남는다.
+	# 골드가 없는 팩에는 안 붙인다. 아무것도 안 놓이는 바닥은 물리에
+	# 몸 하나를 더 얹을 뿐이다.
+	if int(skin.gold) > 0:
+		var gd := CollisionShape3D.new()
+		var gb := BoxShape3D.new()
+		gb.size = Vector3(r * 7.0, w * 2.0, r * 4.0)
+		gd.shape = gb
+		gd.position = Vector3(0.0, -w, 0.0)
+		b.add_child(gd)
 	# 원통 충돌은 속이 안 비므로 벽을 조각으로 두른다. 조각 폭에 1.25 를
 	# 곱해 겹쳐야 이음매로 자루가 새 나가지 않는다.
 	var n: int = CUP3.seg
@@ -9290,6 +9319,71 @@ func _cup3_cup(skin: Dictionary) -> AnimatableBody3D:
 		cs.position = Vector3(sin(a) * (r + w), h * 0.5, cos(a) * (r + w))
 		cs.rotation = Vector3(0.0, a, 0.0)
 		b.add_child(cs)
+	return b
+
+
+# ══════════════════════════════════════════════════════════
+#  골드 — 3D 플라크
+#
+#  이 게임의 통화는 **직사각**이다. 아이템이 원반이라 통화를 직사각으로
+#  갈라 둔 것이고(draw_plaque 주석), 그 어법을 3D 에도 그대로 옮긴다 —
+#  여기서만 동전을 쓰면 화면마다 돈이 다른 물건이 된다.
+#
+#  2D 플라크의 네 가지 표식 중 셋을 옮긴다. 몸 · 어두운 옆면 · 파인 판.
+#  대각 광택만 뺐다 — 3D 는 빛이 그 일을 한다.
+#  비율도 2D 를 따른다: 세로 = 가로의 0.64 (draw_gold_at 의 iw · iw*0.64).
+# ══════════════════════════════════════════════════════════
+
+const GOLD3 := {
+	"w":     0.22,     # 가로. 무대에서 13px 이라 발치에서 셀 수 있다
+	"t":     0.05,     # 두께
+	"mass":  0.06,
+	"grav":  6.0,      # 자루와 같은 중력. 한 무대에 중력이 둘이면 안 된다
+	"ldamp": 0.9,
+	"adamp": 3.2,
+	"fric":  0.85,     # 잘 안 미끄러진다 — 던져 놓은 것이 굴러가면 안 된다
+	"bounce": 0.05,
+	# 통 중심에서 이만큼(안반지름 배) 떨어진 데 떨군다. 통 바깥선이 1.13
+	# 이고 플라크 반대각이 0.34 이라, 1.45 로는 벽 안에서 생겨 솔버가
+	# 밀어내며 어디로 튈지 모르게 됐다. 2.0 이면 벽에서 확실히 떨어진다.
+	"spill": 2.0,
+	"drop":  0.55,     # 떨구는 높이. 낮으면 겹쳐 나고 높으면 튀어 나간다
+	# 이보다 멀어지면 발치로 도로 부른다(안반지름 배). **놓는 자리보다
+	# 넉넉히 밖이어야 한다** — 2.6 은 가장 바깥에 놓이는 2.44 와 붙어 있어서,
+	# 놓자마자 도로 불리기를 되풀이하다 통 한쪽에 다 쌓였다.
+	"keep":  3.4,
+}
+
+
+func _cup3_gold() -> RigidBody3D:
+	var gw: float = GOLD3.w
+	var gt: float = GOLD3.t
+	var gd: float = gw * 0.64          # 2D 플라크의 세로비 그대로
+
+	var b := RigidBody3D.new()
+	b.mass = GOLD3.mass
+	b.gravity_scale = GOLD3.grav
+	b.linear_damp = GOLD3.ldamp
+	b.angular_damp = GOLD3.adamp
+	b.continuous_cd = true
+	var pm := PhysicsMaterial.new()
+	pm.friction = GOLD3.fric
+	pm.bounce = GOLD3.bounce
+	b.physics_material_override = pm
+
+	var cs := CollisionShape3D.new()
+	var bx := BoxShape3D.new()
+	bx.size = Vector3(gw, gt, gd)
+	cs.shape = bx
+	b.add_child(cs)
+
+	var body := BoxMesh.new()
+	body.size = Vector3(gw, gt, gd)
+	_cup3_mesh(b, body, C_GOLD, Vector3.ZERO)
+	# 파인 판. 2D 가 가운데를 어둡게 찍는 그 자리다 — 윗면에서 살짝 들어간다.
+	var inl := BoxMesh.new()
+	inl.size = Vector3(gw * 0.44, gt * 0.5, gd * 0.30)
+	_cup3_mesh(b, inl, C_GOLD.darkened(0.40), Vector3(0.0, gt * 0.42, 0.0))
 	return b
 
 
@@ -9414,13 +9508,35 @@ func _cup3_spawn(pi: int, x: float) -> void:
 				side.normalized()), tip + up * float(CUP3.dl))
 		cup_vp.add_child(b)
 		darts.append(b)
-	cup_rigs.append({"cup": cup, "darts": darts, "pi": pi, "r": r})
+	# 발치의 골드. 잠긴 팩에는 안 놓는다 — 무엇을 주는 팩인지가 그림으로
+	# 새면 효과 줄을 안 적어 둔 뜻이 없어진다(자루 수와 같은 규칙이다).
+	var gold3 := []
+	if open:
+		var gn: int = int(skin.gold)
+		for i in gn:
+			var gb := _cup3_gold()
+			# 통 좌우로 갈라 흩는다. 한쪽에 몰면 통이 기운 것으로 보인다.
+			var sd := 1.0 if i % 2 == 0 else -1.0
+			var t := float(i) / maxf(float(gn) - 1.0, 1.0)
+			gb.position = Vector3(
+					x + sd * r * float(GOLD3.spill) * (0.72 + t * 0.5),
+					float(GOLD3.drop) + t * 0.16,
+					lerpf(-r * 0.9, r * 0.9, fposmod(t * 2.37, 1.0)))
+			# 떨어지며 도는 각. 다 같은 각으로 떨구면 카드 다발로 쌓인다.
+			gb.rotation = Vector3(0.0, t * TAU * 0.83, 0.0)
+			cup_vp.add_child(gb)
+			gold3.append(gb)
+	cup_rigs.append({"cup": cup, "darts": darts, "pi": pi, "r": r,
+			"gold": gold3})
 
 
 func _cup3_kill(rig: Dictionary) -> void:
 	for b in rig.get("darts", []):
 		if is_instance_valid(b):
 			b.queue_free()
+	for gb in rig.get("gold", []):
+		if is_instance_valid(gb):
+			gb.queue_free()
 	if is_instance_valid(rig.cup):
 		rig.cup.queue_free()
 	cup_rigs.erase(rig)
@@ -9497,7 +9613,7 @@ func _cup3_step(dir: int) -> void:
 func _cup3_step_rig(rig: Dictionary, x: float, moving: bool, dt: float) -> void:
 	if not is_instance_valid(rig.cup):
 		return
-	# 통이 이 걸음에 간 속도. 자루를 끌 때 이것을 맞춘다.
+	# 통이 이 걸음에 간 속도. 자루와 골드를 끌 때 이것을 맞춘다.
 	var vx: float = (x - float(rig.get("px", x))) / maxf(dt, 0.0001)
 	rig["px"] = x
 	rig.cup.position.x = x
@@ -9561,6 +9677,27 @@ func _cup3_step_rig(rig: Dictionary, x: float, moving: bool, dt: float) -> void:
 			b.linear_velocity = Vector3.ZERO
 			b.angular_velocity = Vector3.ZERO
 			b.transform = Transform3D(Basis(), Vector3(x, float(CUP3.dl) * 0.8, 0.0))
+
+	# 발치의 골드. 자루와 같은 규약이다 — 통이 끌고 가고, 너무 멀어지면
+	# 발치로 도로 부른다. 다른 것은 바닥이 통 몸에 붙어 있다는 것뿐이라
+	# 가만히 두면 마찰이 알아서 데려간다. 끌기는 그 마찰이 놓치는 몫이다.
+	for gb in rig.get("gold", []):
+		if not is_instance_valid(gb):
+			continue
+		if moving:
+			gb.sleeping = false
+			gb.apply_central_force(Vector3(vx - gb.linear_velocity.x, 0.0, 0.0)
+					* float(CUP3.drag) * gb.mass)
+		var go := Vector2(gb.global_position.x - x, gb.global_position.z)
+		if go.length() > r * float(GOLD3.keep) or gb.global_position.y < -0.4:
+			# **있던 쪽으로** 도로 부른다. 오른쪽으로만 부르면 미끄러질 때마다
+			# 왼쪽 것이 하나씩 오른쪽으로 넘어가, 몇 번 넘기면 골드가 통
+			# 한쪽에 다 쌓인다(찍어 보고 알았다).
+			var sd2 := -1.0 if go.x < 0.0 else 1.0
+			gb.linear_velocity = Vector3.ZERO
+			gb.angular_velocity = Vector3.ZERO
+			gb.global_position = Vector3(x + sd2 * r * float(GOLD3.spill),
+					float(GOLD3.drop), 0.0)
 
 
 func _cup3_phys(dt: float) -> void:

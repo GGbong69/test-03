@@ -111,6 +111,9 @@ func _run() -> void:
 				bad.append("속성 없음 %s.%s" % [k, f])
 		if sk.has("wall") and not g.CUP_WALLS.has(String(sk["wall"])):
 			bad.append("벽 없음 %s=%s" % [k, sk["wall"]])
+		# 색도 벽과 같은 규약이다 — 오타를 내면 잠자코 강철빛으로 떨어진다.
+		if sk.has("tint") and not g.CUP_TINTS.has(String(sk["tint"])):
+			bad.append("색 없음 %s=%s" % [k, sk["tint"]])
 	_say(bad.is_empty(), "통 겉 표가 팩·벽·속성 이름과 맞는다",
 			", ".join(bad) if not bad.is_empty() else "%d줄" % g.CUP_SKIN.size())
 
@@ -154,11 +157,35 @@ func _run() -> void:
 		# 1.45(20도)로 잡았더니 자루를 느슨하게 푼 뒤로 세 번에 한 번씩
 		# 걸렸다 — 기대 눕는 각의 자연스러운 폭 안이었다. 회귀 검사가
 		# 멀쩡한 값을 두고 우는 것이 안 우는 것보다 나쁘다.
-		if wi > 1.0 or wt > 2.1:
+		# 촉 선에 여유 한 톨을 둔다. 벽 지키기가 촉을 **정확히** 벽에 붙여
+		# 놓으므로(넘어간 만큼만 밀어 넣는다) 값이 1.0 에 딱 서고, 그러면
+		# 부동소수 끝자리가 어느 쪽으로 떨어지느냐로 통과·실패가 갈린다.
+		# 재는 자리가 아니라 세는 자리의 문제다.
+		if wi > 1.001 or wt > 2.1:
 			esc.append("%s(촉 %.2f 꽁지 %.2f)"
 					% [GameData.packs()[g.newrun_pip].get("id", ""), wi, wt])
 	_say(esc.is_empty(), "넘긴 뒤에도 자루가 통 안에 남는다",
 			", ".join(esc) if not esc.is_empty() else "여섯 팩 전부")
 
-	print("열 검사 · 실패 %d" % fails)
+	# 발치의 골드. 표가 적은 수만큼 서고, 안 적은 팩에는 하나도 없어야 한다 —
+	# 잠긴 팩에도 없어야 한다(무엇을 주는 팩인지가 그림으로 새면 안 된다).
+	var gbad := []
+	for pi in GameData.packs().size():
+		g._pack_view(pi)
+		g._cup3_close()
+		g._cup3_open()
+		await _wait(80)
+		var want := 0
+		var sk2: Dictionary = g._cup3_skin(pi)
+		if g._pack_open(pi):
+			want = int(sk2.gold)
+		var got := 0
+		for rig in g.cup_rigs:
+			got += rig.get("gold", []).size()
+		if got != want:
+			gbad.append("%s %d/%d" % [GameData.packs()[pi].get("id", ""), got, want])
+	_say(gbad.is_empty(), "발치 골드가 표대로 선다",
+			", ".join(gbad) if not gbad.is_empty() else "여섯 팩 전부")
+
+	print("열두 검사 · 실패 %d" % fails)
 	quit(fails)
