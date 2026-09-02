@@ -1076,7 +1076,9 @@ const CONDS := ["always", "triple", "double", "band", "bull", "odd", "even", "le
 		"right", "big", "mid", "small", "same", "diff", "first", "last",
 		"streak", "warm", "miss", "missp",
 		# 조커 이식(2026-08-23 · 사용자 지시로 후보 시트 구현)이 들여온 조건들.
-		# "이후" 붙은 패턴 조건은 완성한 발이 아니라 그 다음 발부터 선다.
+		# 패턴 조건은 완성한 **그 발부터** 선다(2026-09-02 규칙 변경).
+		# 예외는 warm 하나다 — 「삼중고」(트리플 위에)와 「손맛」(트리플 뒤에)을
+		# 가르는 것이 그 조건의 정체성이라 다음 발부터를 지킨다.
 		"risk", "risk1", "few", "sixth",
 		"pair", "trip", "quad", "pair2", "spread",
 		"zone3", "zones2", "zones4", "rezone", "sec", "col"]
@@ -1260,14 +1262,14 @@ static func cond_text(c: String) -> String:
 		"risk1": return "라운드 첫 더블·트리플·불 명중 시"
 		"few": return "이번 라운드 다트가 3개 이하면"
 		"sixth": return "매 6번째 투척에"
-		"pair": return "같은 숫자 2회를 맞힌 뒤"
-		"trip": return "같은 숫자 3회를 맞힌 뒤"
-		"quad": return "같은 숫자 4회를 맞힌 뒤"
-		"pair2": return "다른 두 숫자를 각 2회 맞힌 뒤"
-		"spread": return "다른 숫자 세 곳을 맞힌 뒤"
-		"zone3": return "같은 영역 종류 3회를 맞힌 뒤"
-		"zones2": return "다른 영역 2종을 맞힌 뒤"
-		"zones4": return "네 영역을 모두 맞힌 뒤"
+		"pair": return "같은 숫자 2회를 맞힌 발부터"
+		"trip": return "같은 숫자 3회를 맞힌 발부터"
+		"quad": return "같은 숫자 4회를 맞힌 발부터"
+		"pair2": return "다른 두 숫자를 각 2회 맞힌 발부터"
+		"spread": return "다른 숫자 세 곳을 맞힌 발부터"
+		"zone3": return "같은 영역 종류 3회를 맞힌 발부터"
+		"zones2": return "다른 영역 2종을 맞힌 발부터"
+		"zones4": return "네 영역을 모두 맞힌 발부터"
 		"rezone": return "이미 명중한 영역을 다시 맞히면"
 	if c.begins_with("sec:"):
 		return c.substr(4).replace(",", "·") + "번 명중 시"
