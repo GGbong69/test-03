@@ -225,6 +225,11 @@ var land_n := 0
 var seen_risk := false          # risk1 용 — 이번 라운드에 risk 명중이 있었나
 var low_hit := 0                # 이번 라운드 최저 명중 숫자 (0 = 아직 없음)
 var round_darts := 6            # 이번 라운드 시작 다트 수 (few·missing 이 읽는다)
+# 제약·리그·딱지·설비·스티커가 손대기 **전**의 다트 수. 「기본에서 줄어든
+# 다트 1개당」이 읽는 그 기본이다. 팩이 이 수를 바꾸므로(여벌 +1 · 넓은 랙 -1)
+# 6 을 박아 두면 안 된다 — 넓은 랙은 아무것도 안 잃고 한 발 줄어든 것으로
+# 읽히고, 여벌은 한 발을 잃고도 안 줄어든 것으로 읽힌다.
+var round_base := 6
 var throw6 := 0                 # sixth 용 던진 수 카운터 (런 단위 · 발동 시 리셋)
 var zone_hist := {}             # 런 단위 영역 종류 누적 명중 (zonehist 배율)
 var streak := 0
@@ -428,6 +433,8 @@ func _start_round() -> void:
 		remaining.pop_back()
 	while remaining.size() < want and not magazine.is_empty():
 		remaining.append(magazine[remaining.size() % magazine.size()])
+	# 여기까지가 "기본" 이다 — 판과 팩이 정한 수. 아래 dadd 사슬이 그것을 깎는다.
+	round_base = remaining.size()
 	var dadd := int(mod_v("darts_add", 0.0))
 	dadd += int(GameData.stake_v("darts_add", 0.0))
 	dadd += _spend_tags("dart")          # 딱지 — 다음 판 한 번만 산다
@@ -2906,6 +2913,7 @@ func _land(mark := true) -> void:
 		"gold": gold,
 		"mag_hvy": mag_hvy,
 		"round_darts": round_darts,
+		"round_base": round_base,
 		"low": low_pre,
 		"zonehist": zonehist_pre,
 		"empty_n": GameData.max_items() - owned.size(),

@@ -1306,7 +1306,11 @@ static func item_amt(it: Dictionary, x: Dictionary) -> int:
 		"gold": v *= int(x.get("gold", 0))
 		"gold5": v *= int(x.get("gold", 0)) / 5
 		"mag_hvy": v *= int(x.get("mag_hvy", 0))
-		"missing": v *= maxi(0, 6 - int(x.get("round_darts", 6)))
+		# 기본은 표가 정한다(팩이 여벌 +1 · 넓은 랙 -1 로 민다). 여기 6 을
+		# 박아 두면 넓은 랙이 공짜로 한 단을 받고, 여벌은 한 발을 잃고도
+		# 아무것도 못 받는다.
+		"missing": v *= maxi(0, int(x.get("round_base", 6))
+				- int(x.get("round_darts", 6)))
 		"low": v *= int(x.get("low", 0))
 		"zonehist": v *= int(x.get("zonehist", 0))
 		"rackval": v *= int(x.get("rackval_others", 0))
