@@ -81,6 +81,7 @@ const TUNE_KEYS := [
 	"gauge_speed", "resolve_beat", "confirm_hold", "fly_time", "aim_click_r",
 	"cons_slots", "shop_cons", "cons_price_tmp",
 	"kick_n", "kick_share",
+	"curve_first", "curve_last", "curve_bow",
 ]
 
 # 등급 네 단. 발라트로의 이름을 따른다 — 일반 · 희귀 · 레어 · 전설.
@@ -774,10 +775,56 @@ static func target_mul() -> float:
 	return _f(pack_row(), "target_mul", "packs", 1.0)
 
 
+# ══════════════════════════════════════════════════════════
+#  목표 곡선 — 표 여덟 줄이 아니라 함수 하나다
+# ──────────────────────────────────────────────────────────
+#  앤티 기본을 손으로 여덟 개 쳐 넣고 있었다. 그러면 곡선을 고칠 때마다
+#  여덟 값의 **비**를 사람이 암산해야 하고, 실제로 그래서 모양이 뒤집혀
+#  있었다 — 3차 측정이 「판 3·4 에서 62% 가 죽고 판 7~24 는 대부분 100%」
+#  라고 말했다. 초반이 벽이고 후반이 공짜였다.
+#
+#  이제 세 손잡이가 곡선 전체를 쥔다. **모양과 크기가 갈라져 있다.**
+#
+#      log10 T(n) = 직선(첫값 → 끝값) + bow · 배부름(n)
+#      배부름(n)  = (n-1)(N-n) / ((N-1)²/4)      양 끝 0, 한가운데 1
+#
+#    · curve_first  첫 판의 목표. 튜토리얼 구간을 여기 하나로 잡는다
+#    · curve_last   앤티 8 기본. 첫값과의 비가 곧 런의 총 배율이다
+#    · curve_bow    배부름. 0 이면 등비(직선), + 면 앞이 가파르고 뒤가 완만하다
+#
+#  bow 0.28 은 감이 아니라 **발라트로 앤티 1~8(300…50000)을 역산한 값**이다.
+#  같은 식에 그 두 끝값을 넣으면 0.22~0.33 이 나오고, 평균이 0.28 이다.
+#  그래서 이 게임의 곡선은 "발라트로와 같은 모양, 다른 크기" 가 된다 —
+#  크기만 curve_last 로 따로 민다.
+#
+#  앤티가 여덟이 아니게 되어도 식이 안 깨진다. N 은 antes 표의 줄 수다.
+static func ante_base(a: int) -> float:
+	var n := antes_n()
+	var first := tune("curve_first")
+	var last := tune("curve_last")
+	if n <= 1 or first <= 0.0 or last <= 0.0:
+		return maxf(first, 1.0)
+	# 양 끝은 식을 안 태운다. 배부름이 거기서 0 이라 결과는 같아야 하는데,
+	# 10^log10(x) 가 x 를 정확히 안 돌려준다 — 25 가 24.999999 로 나오면
+	# 큰 판(x1.5)이 37.5 에서 37 로 떨어져 표와 화면이 1점 갈린다.
+	var ai := clampi(a, 1, n)
+	if ai == 1:
+		return first
+	if ai == n:
+		return last
+	var t := clampf(float(ai - 1) / float(n - 1), 0.0, 1.0)
+	var lg := log(first) / log(10.0)
+	var lg_end := log(last) / log(10.0)
+	# 배부름은 양 끝에서 정확히 0 이다 — 두 끝값은 손잡이가 적은 그대로 선다.
+	var k := float(ai - 1) * float(n - ai)
+	var bow := tune("curve_bow") * k / (float((n - 1) * (n - 1)) / 4.0)
+	return pow(10.0, lg + t * (lg_end - lg) + bow)
+
+
 static func target_of(n: int) -> int:
-	var base := _i(_ante_row(n), "base", "antes")
+	var base := ante_base(ante_of(n))
 	var m := _f(blind_of(n), "mult", "blinds", 1.0)
-	return int(round(float(base) * m * stake_mul(n) * target_mul()))
+	return int(round(base * m * stake_mul(n) * target_mul()))
 
 
 static func darts_of(n: int) -> int:
@@ -2202,16 +2249,28 @@ static func _v_rounds() -> void:
 	if raw.is_empty():
 		_errs.append("antes — 표가 비었다")
 		return
-	var prev := 0
+	# 목표 곡선은 이제 표가 아니라 함수다(ante_base). 그래서 검사도 줄이
+	# 아니라 **식이 뱉는 수열**에 건다 — 손잡이 셋을 아무 값으로 돌려도
+	# 목표가 안 내려가고, 첫 값이 무장 없는 한 라운드 기댓값(6발 x 14.4 = 86)을
+	# 안 넘는지를 본다. 튜토리얼 앤티가 상한의 93% 를 요구하던 것이
+	# 3차 측정에서 나온 진짜 벽이었고, 그 벽을 표에서는 못 봤었다.
+	var prevb := 0.0
+	for a in range(1, raw.size() + 1):
+		var b := ante_base(a)
+		if b <= prevb:
+			_errs.append("antes — 앤티 %d 목표가 안 오른다 (%.0f → %.0f). curve_bow 가 너무 크다"
+					% [a, prevb, b])
+		prevb = b
+	var unarmed := float(tune_i("darts_base")) * 14.4
+	if ante_base(1) > unarmed * 0.6:
+		_errs.append("tuning — curve_first %.0f 가 무장 없는 한 라운드 기댓값 %.0f 의 60%% 를 넘는다. 첫 앤티가 튜토리얼이 아니게 된다"
+				% [ante_base(1), unarmed])
+
 	for i in raw.size():
 		var r: Dictionary = raw[i]
 		var who := "antes:%d" % r.get("_line", 0)
 		if _i(r, "ante", "antes") != i + 1:
 			_errs.append("%s — ante 는 1부터 빠짐없이 이어져야 한다" % who)
-		var t := _i(r, "base", "antes")
-		if t <= prev:
-			_errs.append("%s — 기본 목표가 안 오른다 (%d → %d)" % [who, prev, t])
-		prev = t
 		if _i(r, "darts", "antes") <= 0:
 			_errs.append("%s — 다트가 0 이하다" % who)
 		# 매대 자리는 정확히 넷이다(game.gd _table_draw 의 ax/ay).

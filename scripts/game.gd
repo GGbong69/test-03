@@ -587,7 +587,7 @@ func _finish_round() -> void:
 				_sfx("save_life")
 				# 마지막 라운드에서 목숨이 터져도 완주는 완주다. 여기서 곧장
 				# 정산으로 가면 아래 완주 검사에 못 닿아, 상점이 0칸으로 열리고
-				# 목표 2500 짜리 유령 9라운드가 시작된다.
+				# 목표가 앤티 8 그대로인 유령 25판이 시작된다.
 				if round_no >= GameData.rounds_n():
 					state = S.OVER
 					won = true
@@ -3608,6 +3608,7 @@ func _hud_draw() -> void:
 		_cons_draw()
 		_panel_draw()
 		_cap_draw()
+		_rack_hold_draw()   # 판 위다 — 끌고 다니는 스티커는 무엇에도 안 덮인다
 		# 나가는 전환에서만 같이 들어온다. 돌아오는 쪽은 안 그린다 —
 		# HUD 는 스크림 위라, 벽만 어두운 화면에 홀로 밝게 뜬다.
 		# 스크림이 0.94 로 시작하므로 사라지는 것도 안 보인다.
@@ -4996,6 +4997,24 @@ func _can_sell() -> bool:
 	# 창구 하나뿐이므로 창구가 없는 화면에서는 팔 방법도 없다.
 	# (R8 예외는 같이 사라졌다 — 스테이지에서 못 파니 따질 일이 없다.)
 	return state == S.SHOP
+
+
+# 랙 순서를 지금 바꿀 수 있는가. **파는 것과 갈라 둔다.** 파는 자리는 창구
+# 하나뿐이라 상점 전용이지만, 순서는 발동 규칙이라 판 위에서도 만진다 —
+# 발동이 랙 순서인데(16쪽) 순서를 상점에서만 만질 수 있으면 판에 서고
+# 나서는 자기 정산식을 못 고친다. 조커를 아무 때나 끄는 그 문법이다.
+#
+# 막는 자리는 넷뿐이다.
+#   · 랙이 안 그려지는 화면 — _hud_draw 가 거르는 것들과 CLEAR
+#   · 전환·쓸기 — 입력을 통째로 삼키는 두 연출
+#   · RESOLVE — queue 가 owned 인덱스(k=item 의 i)를 들고 있다. 끼워 넣으면
+#     엉뚱한 스티커가 카드에 뜬다. 「득점 시작 시 순서 스냅샷」이 여기서
+#     지켜진다. 큐는 다트가 꽂힐 때 세워지므로 FLY 까지는 열어 둬도 된다
+#   · 연발이 도는 중 — 커서가 곧 조준이라(kick) 끄는 손이 남은 발을 끌고 간다
+func _can_rack_move() -> bool:
+	if swap_live or sweep_live or state == S.RESOLVE or burst_left > 0:
+		return false
+	return state == S.SHOP or state == S.STAGE or state == S.BLIND or _is_play()
 
 
 func _sell_hit(m: Vector2) -> bool:
@@ -7427,10 +7446,27 @@ func _hand_press(m: Vector2) -> bool:
 			hand_m = m
 			hand_far = 0.0
 			return true
-	# 판 중의 랙 순서 변경. 상점 가지는 아래에 그대로 두었다 — 거기서는
-	# 창구·낙하·버튼을 먼저 보고 나서 집어야 한다.
-	if state != S.SHOP and _hand_live() and _rack_grab(m):
-		return true
+# 랙의 스티커 — **상점 잠금 위**다. 순서 바꾸기는 판 위에서도 돌아야
+# 하므로 화면을 안 가린다(_can_rack_move). 훔칠 걱정이 없는 것은 y 가
+# 갈려 있기 때문이다 — 랙 y[20,64](상단바가 숨으면 [4,48]) 아래로
+# 창구·버튼 y[112,334], 매물 최상단 99.3, 그리고 조준이 잠기는 반경
+# BC.y - 98*1.22 = 76.4 가 전부 내려가 있다. 누른 자리가 랙 안이면
+# 조준·구매·창구 어느 것도 그 클릭을 원한 적이 없다.
+if _can_rack_move():
+	for k in mini(owned.size(), GameData.max_items()):
+		if _slot_rect(k).has_point(m):
+			hand_st = H.ARMED
+			hand_src = 1
+			hand_i = k
+			hand_p0 = m
+			hand_m = m
+			hand_far = 0.0
+			return true
+
+# 판 중의 랙 순서 변경. 상점 가지는 아래에 그대로 두었다 — 거기서는
+# 창구·낙하·버튼을 먼저 보고 나서 집어야 한다.
+if state != S.SHOP and _hand_live() and _rack_grab(m):
+	return true
 	if state != S.SHOP or sweep_live:
 		return false
 	# 창구 — 구매·판매 확정은 눌렀다 **뗄 때** 실행한다(확정 규칙:
@@ -7450,11 +7486,11 @@ func _hand_press(m: Vector2) -> bool:
 		return false
 	if _reroll_rect().has_point(m) or _next_rect().has_point(m):
 		return false
-	# 랙의 스티커도 집는다 — 왼쪽 창구로 밀면 판다. 매대보다 먼저 보는 이유는
-	# y 로 갈려 있어(매물 최상단 99.3 > 랙 하단 58) 겹칠 수 없기 때문이 아니라,
-	# 겹치게 되는 날 무엇이 이기는지를 여기 한 줄로 정해 두기 위해서다.
-	if _can_sell() and _rack_grab(m):
-		return true
+# 랙의 스티커도 집는다 — 왼쪽 창구로 밀면 판다. 매대보다 먼저 보는 이유는
+# y 로 갈려 있어(매물 최상단 99.3 > 랙 하단 58) 겹칠 수 없기 때문이 아니라,
+# 겹치게 되는 날 무엇이 이기는지를 여기 한 줄로 정해 두기 위해서다.
+if _can_sell() and _rack_grab(m):
+	return true
 	if _panel_rect().has_point(m):
 		return false
 	var i := _shop_hit(m)
@@ -7552,8 +7588,9 @@ func _hand_release(m: Vector2) -> void:
 		else:
 			# 아이템 순서 변경 — 확정 규칙이다(아이템순서변경=True). 발동이
 			# 랙 순서라 순서가 값을 바꾸는데, 지금까지 되팔고 다시 사는 것
-			# 말고는 고칠 길이 없었다. 정산 중에는 손 시스템 자체가 안 살아
-			# 있으므로 "득점 시작 시 순서 스냅샷" 계약과 안 부딪힌다.
+			# 말고는 고칠 길이 없었다. "득점 시작 시 순서 스냅샷" 계약은
+			# _can_rack_move 가 RESOLVE 를 접어서 지킨다 — 큐가 서고 나면
+			# 손이 아예 안 열린다.
 			var j := _slot_at(m)
 			if j >= 0 and i >= 0 and i < owned.size() and j != i:
 				_rack_reorder(i, j)
@@ -7666,20 +7703,20 @@ func _hand_update(d: float) -> void:
 		buy_sel = -1
 	if hand_st == H.NONE:
 		return
-	# 쥔 것이 **어느 배열의** 몇째인가. 넷 다 drop 크기로 재고 있었다 —
-	# 소비 슬롯은 cons 의 색인이고 창구는 배열이 아니라 구역 번호다.
-	# 매대가 다 팔려 drop 이 비면 소비도 창구도 손에서 놓쳐 버렸다.
-	var n_src: int = drop.size()
-	match hand_src:
-		1: n_src = owned.size()
-		2: n_src = 2                          # Z_SELL · Z_BUY
-		4: n_src = cons.size()
-	# 사는 화면도 쥔 것에 따라 다르다. 매물(0)과 창구(2)는 상점의 물건이라
-	# 상점을 벗어나면 손을 놓는다. 랙(1)과 소비(4)는 판 중에도 산다.
-	var live := _hand_live()
-	if hand_src == 0 or hand_src == 2:
-		live = state == S.SHOP and not sweep_live
-	if not live or hand_i < 0 or hand_i >= n_src:
+# 쥔 것이 **어느 배열의** 몇째인가. 넷 다 drop 크기로 재고 있었다 —
+# 소비 슬롯은 cons 의 색인이고 창구는 배열이 아니라 구역 번호다.
+# 매대가 다 팔려 drop 이 비면 소비도 창구도 손에서 놓쳐 버렸다.
+var n_src: int = drop.size()
+match hand_src:
+	1: n_src = owned.size()
+	2: n_src = 2                          # Z_SELL · Z_BUY
+	4: n_src = cons.size()
+# 사는 화면도 쥔 것에 따라 다르다. 매물(0)과 창구(2)는 상점의 물건이라
+# 상점을 벗어나면 손을 놓는다. 랙(1)과 소비(4)는 판 중에도 산다.
+var live := _hand_live()
+if hand_src == 0 or hand_src == 2:
+	live = state == S.SHOP and not sweep_live
+if not live or hand_i < 0 or hand_i >= n_src:
 		_hand_abort()
 		return
 	# 창 밖에서 떼어 released 를 못 받은 경우의 안전망
@@ -7690,10 +7727,12 @@ func _hand_update(d: float) -> void:
 		return
 
 	# 래치는 히스테리시스로 건다 — 경계에서 소리와 창구 얼굴이 연타되지 않는다.
-	# 창구는 상점에만 있다. 판 중에 랙 스티커를 끌 때 이것을 걸면 없는 창구의
-	# 소리가 나고, 뗄 때 "오른쪽은 사는 창구다" 가 뜬다.
-	var pad: float = HAND.latch_gap if hand_zone >= 0 else 0.0
-	var z := _chute_at(hand_m, pad) if state == S.SHOP else -1
+# 창구는 상점에만 있다. 판 중에 랙 스티커를 끌 때 이것을 걸면 없는 창구의
+# 소리가 나고, 뗄 때 "오른쪽은 사는 창구다" 가 뜬다.
+var pad: float = HAND.latch_gap if hand_zone >= 0 else 0.0
+var z := -1
+if _can_sell():
+	z = _chute_at(hand_m, pad)
 	if z >= 0 and z != hand_zone:
 		_sfx("chute_enter")
 	hand_zone = z
@@ -7793,6 +7832,33 @@ func _peel_now() -> float:
 	return 0.28 + 0.32 * exp(-peel_t / 0.10)
 
 
+# 든 랙 스티커. 물리 물체가 아니라 커서 밑의 그림뿐이다.
+#
+# **랙을 그린 다음**이라는 것이 이 함수가 따로 있는 이유다. 예전에는
+# _draw_shop 말미의 _hold_draw 가 그렸는데, _hud_draw 는 그보다 뒤라
+# 판(_panel_draw)이 든 스티커를 덮었다 — 끌어다 다른 칸 위에 올리는 순간
+# 손에 든 것이 판 밑으로 사라져서, 놓을 자리를 보면서 놓을 수가 없었다.
+# 상점에서도 그랬다. 순서 바꾸기가 "안 된다" 로 읽히던 자리다.
+func _rack_hold_draw() -> void:
+	if hand_st != H.CARRY or hand_src != 1:
+		return
+	if hand_i < 0 or hand_i >= owned.size():
+		return
+	# 끼워 넣을 자리. 자국(_panel_gap)이 "여기서 뗐다" 를 말하는 동안
+	# 이 고리가 "여기로 간다" 를 말한다 — 둘이 같이 서야 이동이 읽힌다.
+	# 빈 칸에 떨구면 맨 뒤로 가므로 _rack_reorder 와 **같은 식**으로 접는다.
+	var j := _slot_at(hand_m)
+	if j >= 0:
+		j = mini(j, owned.size() - 1)
+		if j != hand_i:
+			draw_arc(_slot_rect(j).get_center() + Vector2(0.0, PANEL.chip_dy),
+					PANEL.r + 2.0, 0.0, TAU, 24, Color(C_ACC, 0.9), 1.0)
+	_e_ring_w(hand_m, PANEL.r + 4.0, (PANEL.r + 4.0) * TBL.flat, 1.0,
+			Color(C_ACC if hand_zone == Z_SELL else C_TXT, 0.55))
+	draw_item_sticker(hand_m, PANEL.r, owned[hand_i], 0.0, 0.0, 0.0, 12,
+			_peel_now())
+
+
 # 떼어낸 자리. 빈 홈(반지름 0.72)이 아니라 스티커와 같은 반지름의 자국이다 —
 # "여기 붙어 있었다" 와 "여기는 원래 비어 있다" 가 같은 그림이면 안 된다.
 func _panel_gap(i: int) -> void:
@@ -7867,10 +7933,9 @@ func _hold_rack_draw() -> void:
 
 
 func _hold_draw() -> void:
-	if hand_st != H.CARRY:
-		return
-	if hand_src == 1:
-		return                  # 랙 스티커는 _hold_rack_draw 가 HUD 위에 그린다
+# 랙 스티커는 여기서 안 그린다 — _rack_hold_draw 가 판 위에서 맡는다.
+if hand_st != H.CARRY or hand_src != 0:
+	return
 	if hand_i < 0 or hand_i >= drop.size():
 		return
 	var it: Dictionary = drop[hand_i]
