@@ -3687,6 +3687,12 @@ func _bd3_live() -> bool:
 	return bd_vp != null and is_instance_valid(bd_vp)
 
 
+# 이 실행에 진짜 렌더러가 있는가. 3D 무대를 여는 자리는 전부 이것을 지난다 —
+# 헤드리스에서 3D 뷰포트를 세우면 언젠가 죽는다.
+func _has_renderer() -> bool:
+	return DisplayServer.get_name() != "headless"
+
+
 # 눈 거리. 원근의 세기(DART_PERSP)가 이 값을 정한다 — 거꾸로가 아니다.
 func _bd3_eye() -> float:
 	return float(BD3.len) * (1.0 + 1.0 / float(DART_PERSP))
@@ -3797,7 +3803,13 @@ func _bd3_sync() -> void:
 func _draw_darts() -> void:
 	# 렌더러가 있으면 3D 무대를 연다. 없는 자리(헤드리스)에서는 안 열리고
 	# 아래 2D 받침이 그대로 선다 — 여는 쪽에서 한 번만 가른다.
-	if not _bd3_live() and get_viewport() != null and not darts.is_empty():
+	#
+	# 가드를 get_viewport() != null 로 두었던 것이 틀렸다. **헤드리스에도
+	# 뷰포트는 있다** — 없는 것은 렌더러다. 그래서 검사마다 3D 무대가 열렸고,
+	# 프로브가 간헐적으로 세그폴트했다(settle · stake · mod 가 번갈아 죽었다).
+	# 매번 다른 프로브가 죽어서 원인이 안 보였다. 화면 서버 이름이 그것을
+	# 정확히 말하는 유일한 값이다.
+	if not _bd3_live() and _has_renderer() and not darts.is_empty():
 		_bd3_open()
 	# **비어도 맞춘다.** 라운드가 바뀌면 darts 만 비고 3D 자루는 뒤에 남아,
 	# 새 판 위에 지난 판의 다트가 그대로 꽂혀 있었다(프로브가 잡았다).
@@ -9558,6 +9570,12 @@ func _cup3_kill(rig: Dictionary) -> void:
 
 func _cup3_open() -> void:
 	if _cup3_live():
+		return
+	# 헤드리스에서는 아예 안 세운다. 빈 그림을 돌려받아 2D 받침이 서는 것은
+	# 맞지만, 그 사이 3D 뷰포트와 강체가 렌더러 없이 서 있다가 간헐적으로
+	# 죽는다 — 프로브가 번갈아 세그폴트하던 원인이 여기였다.
+	# 열지 않으면 _cup3_live() 가 false 라 아래 길이 전부 2D 로 떨어진다.
+	if not _has_renderer():
 		return
 	var st := _cup_stage()
 	cup_vp = SubViewport.new()
