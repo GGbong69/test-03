@@ -1768,9 +1768,9 @@ func _process(d: float) -> void:
 # 점수판이 그 값을 버려서 "44 / 45 인데 클리어" 로 읽힌다(플레이 보고).
 # 3D 통은 여기서만 만진다. 강체를 그리기 틱에서 밀면 물리 서버가 그
 # 프레임에 되돌려 놓아 아무 일도 안 일어난다.
-func _physics_process(_d: float) -> void:
+func _physics_process(d: float) -> void:
 	if state == S.NEWRUN:
-		_cup3_phys()
+		_cup3_phys(d)
 
 
 func _tick_score(d: float) -> void:
@@ -8881,7 +8881,10 @@ const CUP3 := {
 	"com":    0.34,    # 반길이의 몇 배만큼 촉 쪽으로
 	#  세우는 토크. 실물 통은 자루가 서로 받칠 만큼 좁은데, 그만큼 좁히면
 	#  화면에서 통이 안 보인다. 넓힌 몫을 이 힘으로 갚는다.
-	"stand": 10.0,
+	#  10 으로는 넘긴 뒤에 자루가 기운 채로 가라앉아 날개가 아가리 밖에
+	#  남았다. 자루가 적은 팩(넓은 랙 다섯 발)에서 제일 심했다 —
+	#  서로 받칠 이웃이 적을수록 이 힘이 더 필요하다.
+	"stand": 18.0,
 	#  줄 — 촉이 통 안쪽 이만큼을 넘어가려 하면 축 쪽으로 당긴다. 순간이동이
 	#  아니라 힘이라 물리가 계속 주인이고, 출렁임은 그대로 두고 이탈만 막는다.
 	"leash":  0.45,    # 안쪽 반지름의 몇 배부터 당길지
@@ -8896,7 +8899,15 @@ const CUP3 := {
 	#  **중심력이 아니라 꽁지 자리에 거는 힘**이다 — 중심에 걸면 자루가
 	#  통째로 밀려 이번엔 촉이 반대로 샌다. 꽁지에 걸어야 세우는 토크가 된다.
 	"fold":   1.00,    # 아가리 반지름의 몇 배부터 당길지
-	"tuck":  150.0,    # 당기는 세기
+	"tuck":  260.0,    # 당기는 세기
+	#  끌기 — 통이 제 자루를 데려가는 몫.
+	#  벽이 자루를 밀어 나르는 것은 물리로는 접촉이고, 미끄러지는 속도에서는
+	#  솔버가 그 접촉을 놓친다. 놓치면 통만 가고 자루는 제자리에 남아
+	#  **벽을 뚫고 나온다** — 실측 촉 1.6×r 이었다(벽은 1.0×r).
+	#  가로 속도만 통에 맞춘다. **돌기는 안 건드린다** — 달그락은 꽁지가
+	#  흔들려서 나는 소리지 자루가 뒤처져서 나는 소리가 아니다.
+	#  뒤처짐 ≈ 통 속도 / 이 값이라, 30 이면 최고 속도에서 0.13 (0.35×r) 이다.
+	"drag":   30.0,
 	"lid":    26.0,    # 아가리 위로 통째로 떠오를 때 눌러 내리는 가속도
 }
 
@@ -9113,16 +9124,16 @@ func _cup3_wall_col(wall: String) -> Color:
 # 같은 스티커로 보인다.
 const CUP_STK := {
 	"at":   -0.70,   # 통 앞에서 왼쪽으로 돌린 각(rad). 왼쪽 실루엣에 걸칠 만큼
-	                 # 돌려야 종이가 벽을 감고 도는 것이 보인다 — 정면에 두면
-	                 # 통이 원통인지 판때기인지 이 그림만으로는 안 갈린다
+					 # 돌려야 종이가 벽을 감고 도는 것이 보인다 — 정면에 두면
+					 # 통이 원통인지 판때기인지 이 그림만으로는 안 갈린다
 	"r":     0.46,   # 아가리 반지름의 몇 배. 통 폭의 41%
 	"y":     0.34,   # 통 높이의 몇 배. 이보다 낮추면 바닥 테를 문다
 	"face":  0.78,   # 얼굴/다이컷 반지름 비. draw_sticker 의 다이컷 폭과 같은 뜻
 	"peel":  0.50,   # 아래 끝이 말린 정도. 2D 와 같은 식(_peel_y)을 쓴다
 	"curl":  1.10,   # 말린 자락이 도는 각(rad, 63°). 이만큼 젖혀야
-	                 # 이형지가 위를 보고 빛을 받는다(안 젖히면 늘 그늘이라
-	                 # 얼굴과 8% 차로 붙는다). 더 젖히면 자락이 옆으로 서서
-	                 # 내려다보는 카메라에는 실선 한 줄로만 남는다
+					 # 이형지가 위를 보고 빛을 받는다(안 젖히면 늘 그늘이라
+					 # 얼굴과 8% 차로 붙는다). 더 젖히면 자락이 옆으로 서서
+					 # 내려다보는 카메라에는 실선 한 줄로만 남는다
 }
 
 
@@ -9468,9 +9479,12 @@ func _cup3_step(dir: int) -> void:
 # 강체 자리를 _process 에서 건드리면 물리 서버가 그 프레임에 덮어써서
 # 아무 일도 안 일어난다. 처음에 그렇게 짰다가 자루가 통을 안 따라가고
 # 허공에 굳어 남았다 — 강체를 만지는 자리는 _physics_process 하나다.
-func _cup3_step_rig(rig: Dictionary, x: float, moving: bool) -> void:
+func _cup3_step_rig(rig: Dictionary, x: float, moving: bool, dt: float) -> void:
 	if not is_instance_valid(rig.cup):
 		return
+	# 통이 이 걸음에 간 속도. 자루를 끌 때 이것을 맞춘다.
+	var vx: float = (x - float(rig.get("px", x))) / maxf(dt, 0.0001)
+	rig["px"] = x
 	rig.cup.position.x = x
 	var r: float = float(rig.get("r", CUP3.r))
 	var lea: float = r * float(CUP3.leash)
@@ -9481,6 +9495,10 @@ func _cup3_step_rig(rig: Dictionary, x: float, moving: bool) -> void:
 		# 허공에 서 있던 그림이 이것이었다. 미끄러지는 동안은 안 재운다.
 		if moving:
 			b.sleeping = false
+			# 끌기 — 벽이 놓친 접촉을 힘으로 메운다. 가로 속도만 맞추므로
+			# 자루는 여전히 뒤처지고 흔들린다(CUP3.drag 주석 참조).
+			b.apply_central_force(Vector3(vx - b.linear_velocity.x, 0.0, 0.0)
+					* float(CUP3.drag) * b.mass)
 		var t: Transform3D = b.global_transform
 		var tip: Vector3 = t.origin - t.basis.y * float(CUP3.dl)
 		var off := Vector2(tip.x - x, tip.z)
@@ -9502,6 +9520,26 @@ func _cup3_step_rig(rig: Dictionary, x: float, moving: bool) -> void:
 		# 세우는 토크 — 통 안에서 자루끼리 받쳐 주는 몫이다. 기울기의
 		# sin 에 비례하므로 곧추설수록 저절로 잦아든다.
 		b.apply_torque(t.basis.y.cross(Vector3.UP) * float(CUP3.stand) * b.mass)
+		# 벽은 뚫리지 않는다.
+		#
+		# 줄(leash)은 **힘**이라 언제나 늦을 수 있다. 미끄러지는 동안 실제로
+		# 늦었다 — 촉이 1.4×r 까지 나가 벽 밖에 섰고, 마지막 그물의 문턱
+		# (1.8×r)에는 안 닿아서 그대로 남았다. 힘으로 당기기엔 이미 멀고
+		# 그물로 잡기엔 가까운 죽은 구간이었다. 열에 한 번쯤 걸려서
+		# "자꾸 삐져나온다" 로 보였다.
+		#
+		# 그래서 여기서는 자리를 옮긴다. 넘어간 만큼만 안으로 밀고 바깥으로
+		# 가던 속도를 지운다 — 한 프레임에 옮기는 양이 얼마 안 되므로
+		# 눈에는 벽을 타고 미끄러지는 것으로 보인다. 줄은 여기까지 오지
+		# 않게 미리 당기는 몫이고, 이것은 못 막았을 때의 바닥이다.
+		var ov := Vector2(tip.x - x, tip.z)
+		if ov.length() > r:
+			var back2 := ov.normalized() * (ov.length() - r)
+			b.global_position -= Vector3(back2.x, 0.0, back2.y)
+			var rad := Vector3(ov.x, 0.0, ov.y).normalized()
+			var outv: float = b.linear_velocity.dot(rad)
+			if outv > 0.0:
+				b.linear_velocity -= rad * outv
 		# 마지막 그물. 힘으로도 못 돌아온 자루는 통 한가운데에 도로 세운다 —
 		# 물리는 언젠가 새고, 새면 자루가 화면 밖 허공에 남아 눈에 띈다.
 		if off.length() > r * 1.8 or tip.y < -0.25 or tip.y > float(CUP3.h) * 2.0:
@@ -9510,7 +9548,7 @@ func _cup3_step_rig(rig: Dictionary, x: float, moving: bool) -> void:
 			b.transform = Transform3D(Basis(), Vector3(x, float(CUP3.dl) * 0.8, 0.0))
 
 
-func _cup3_phys() -> void:
+func _cup3_phys(dt: float) -> void:
 	if not _cup3_live():
 		return
 	if cup_t >= 1.0:
@@ -9518,12 +9556,12 @@ func _cup3_phys() -> void:
 		while cup_rigs.size() > 1:
 			_cup3_kill(cup_rigs[0])
 		if not cup_rigs.is_empty():
-			_cup3_step_rig(cup_rigs[0], 0.0, false)
+			_cup3_step_rig(cup_rigs[0], 0.0, false, dt)
 		return
 	var sl := _cup_slides()
 	var ppu := _cup3_ppu()
 	for i in mini(cup_rigs.size(), sl.size()):
-		_cup3_step_rig(cup_rigs[i], float(sl[i].dx) / ppu, true)
+		_cup3_step_rig(cup_rigs[i], float(sl[i].dx) / ppu, true, dt)
 
 
 # 지금 화면에 선 통들과 그 가로 오프셋(px). **자리를 아는 곳은 여기 하나**다 —

@@ -114,5 +114,46 @@ func _run() -> void:
 	_say(bad.is_empty(), "통 겉 표가 팩·벽·속성 이름과 맞는다",
 			", ".join(bad) if not bad.is_empty() else "%d줄" % g.CUP_SKIN.size())
 
-	print("아홉 검사 · 실패 %d" % fails)
+	# 자루가 통 안에 남는가 — **넘긴 뒤에** 본다.
+	#
+	# 이 검사가 없어서 한 번 속았다. 손으로 재던 때는 _pack_view 로 팩 번호만
+	# 바꾸고 있었는데, 그것은 통을 다시 세우지 않는다(_pack_step 이 그 일을
+	# 한다). 그래서 늘 처음 세운 통을 재고 "다 담겨 있다" 는 답을 받았다.
+	# 실제로는 미끄러지는 동안 촉이 1.6×r 까지 나가 벽을 뚫고 있었다.
+	#
+	# 그래서 여기서는 **반드시 _pack_step 으로 넘긴다.** 재는 것은 둘이다 —
+	# 촉이 벽(1.0×r) 안에 있는가, 꽁지가 아가리 바깥선(1.13×r) 안에 있는가.
+	g._open_newrun()
+	await _wait(60)
+	var esc := []
+	for pi in GameData.packs().size():
+		if pi > 0:
+			g._pack_step(1)
+		await _wait(110)
+		var wt := 0.0
+		var wi := 0.0
+		for rig in g.cup_rigs:
+			if not is_instance_valid(rig.cup):
+				continue
+			var rr: float = float(rig.get("r", g.CUP3.r))
+			var cx: float = rig.cup.position.x
+			for b in rig.darts:
+				if not is_instance_valid(b):
+					continue
+				var t: Transform3D = b.global_transform
+				var tip: Vector3 = t.origin - t.basis.y * float(g.CUP3.dl)
+				var tl: Vector3 = t.origin + t.basis.y * float(g.CUP3.dl)
+				wi = maxf(wi, Vector2(tip.x - cx, tip.z).length() / rr)
+				wt = maxf(wt, Vector2(tl.x - cx, tl.z).length() / rr)
+		# 촉은 **벽**이다 — 1.0 을 넘으면 뚫고 나온 것이고 봐줄 여지가 없다.
+		# 꽁지는 다르다. 통에 기대 선 자루는 날개가 아가리 밖으로 나오는
+		# 것이 정상이라, 넘어가면 안 되는 선이 아니라 "쏟아진 것으로 보이는"
+		# 선을 잡는다. 1.45 는 자루가 20도쯤 기운 자리다.
+		if wi > 1.0 or wt > 1.45:
+			esc.append("%s(촉 %.2f 꽁지 %.2f)"
+					% [GameData.packs()[g.newrun_pip].get("id", ""), wi, wt])
+	_say(esc.is_empty(), "넘긴 뒤에도 자루가 통 안에 남는다",
+			", ".join(esc) if not esc.is_empty() else "여섯 팩 전부")
+
+	print("열 검사 · 실패 %d" % fails)
 	quit(fails)
