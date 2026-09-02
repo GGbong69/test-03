@@ -107,18 +107,53 @@ func _initialize() -> void:
 				else:
 					zone = "single"
 			var is_risk: bool = info.mult >= 2 or info.sector >= 25
+
+			# ── 이력 갱신 — ctx 를 만들기 전. game.gd 의 _land 와 같은 순서다.
+			#    갱신 전 값을 봐야 하는 셋(rezone·risk1·low)은 먼저 떠 둔다.
+			var rezone_pre: bool = zone != "" and zone_cnt.get(zone, 0) > 0
+			var risk1_pre: bool = is_risk and not is_miss and not seen_risk
+			var low_pre := low_hit
+			var zonehist_pre: int = (zone_cnt.get(zone, 0) + 1) if zone != "" else 0
+			if zone != "":
+				if info.sector >= 1 and info.sector <= 20:
+					sec_cnt[info.sector] = int(sec_cnt.get(info.sector, 0)) + 1
+				zone_cnt[zone] = int(zone_cnt.get(zone, 0)) + 1
+				if is_risk:
+					seen_risk = true
+				if info.sector >= 1 and info.sector <= 20:
+					low_hit = info.sector if low_hit == 0 else mini(low_hit, info.sector)
+				var pairs := 0
+				var maxrep := 0
+				for kx in sec_cnt:
+					maxrep = maxi(maxrep, int(sec_cnt[kx]))
+					if int(sec_cnt[kx]) >= 2:
+						pairs += 1
+				if maxrep >= 2: pat.pair = true
+				if maxrep >= 3: pat.trip = true
+				if maxrep >= 4: pat.quad = true
+				if pairs >= 2: pat.pair2 = true
+				if sec_cnt.size() >= 3: pat.spread = true
+				for kz in zone_cnt:
+					if int(zone_cnt[kz]) >= 3:
+						pat.zone3 = true
+				if zone_cnt.size() >= 2: pat.zones2 = true
+				if zone_cnt.size() >= 4: pat.zones4 = true
+
 			var ctx := {
 				"sector": info.sector,
 				"mult": info.mult,
 				"miss": is_miss,
 				"left": p.x < g.BC.x,
+				# 게임의 _land 와 같은 열. 이것이 빠져 있어서 col 조건
+				# 일곱 장이 36만 표본에서 발동률 0.00 으로 찍혔다.
+				"col": int(info.get("col", -1)),
 				"same": same,
 				"first": d == 0,
 				"last": d == per_round - 1,
 				"streak": streak,
 				"warm": warm,
 				"missp": last_miss,
-				"risk1": is_risk and not is_miss and not seen_risk,
+				"risk1": risk1_pre,
 				"few": per_round <= 3,
 				"sixth": d == per_round - 1,   # 6발 라운드에선 매 여섯째 = 막발
 				"pair": pat.get("pair", false),
@@ -129,15 +164,16 @@ func _initialize() -> void:
 				"zone3": pat.get("zone3", false),
 				"zones2": pat.get("zones2", false),
 				"zones4": pat.get("zones4", false),
-				"rezone": zone != "" and zone_cnt.get(zone, 0) > 0,
+				"rezone": rezone_pre,
 				# 배율 재료 — 전제 ② 의 solo 값들
 				"darts_left": per_round - 1 - d,
 				"items_n": 1,
 				"gold": 0,
 				"mag_hvy": 0,
 				"round_darts": per_round,
-				"low": low_hit,
-				"zonehist": zone_cnt.get(zone, 0) + 1 if zone != "" else 0,
+				"round_base": per_round,   # 측정기는 제약을 안 건다 — 기본 = 실제
+				"low": low_pre,
+				"zonehist": zonehist_pre,
 				"empty_n": GameData.max_items() - 1,
 				"rackval_others": 0,
 				"rand01": rng.randf(),
@@ -169,31 +205,8 @@ func _initialize() -> void:
 						it.gs = int(it.gs) + 1
 			if info.mult == 3:
 				warm = true
-			# 이력 갱신 — ctx 를 만든 뒤. 패턴은 다음 발부터 산다
-			if zone != "":
-				if info.sector >= 1 and info.sector <= 20:
-					sec_cnt[info.sector] = int(sec_cnt.get(info.sector, 0)) + 1
-				zone_cnt[zone] = int(zone_cnt.get(zone, 0)) + 1
-				if is_risk:
-					seen_risk = true
-				if info.sector >= 1 and info.sector <= 20:
-					low_hit = info.sector if low_hit == 0 else mini(low_hit, info.sector)
-				var pairs := 0
-				var maxrep := 0
-				for kx in sec_cnt:
-					maxrep = maxi(maxrep, int(sec_cnt[kx]))
-					if int(sec_cnt[kx]) >= 2:
-						pairs += 1
-				if maxrep >= 2: pat.pair = true
-				if maxrep >= 3: pat.trip = true
-				if maxrep >= 4: pat.quad = true
-				if pairs >= 2: pat.pair2 = true
-				if sec_cnt.size() >= 3: pat.spread = true
-				for kz in zone_cnt:
-					if int(zone_cnt[kz]) >= 3:
-						pat.zone3 = true
-				if zone_cnt.size() >= 2: pat.zones2 = true
-				if zone_cnt.size() >= 4: pat.zones4 = true
+			# 이력 갱신은 ctx 를 만들기 **전**으로 옮겼다 — game.gd 의 _land 와
+			# 같은 자리다. 두 곳의 순서가 갈리면 표가 조용히 거짓말을 한다.
 			last_sec = info.sector
 			last_miss = is_miss
 		# 라운드 끝 — rdec 감쇠. 0 에 닿으면 다시 산 것으로 친다(전제 ④)
