@@ -814,13 +814,13 @@ def appendix_tables(prs, page):
 
     darts, mods = tbl("darts"), tbl("mods")
     emit("다트 · 개조", "다트 %d종 · 개조 %d종" % (len(darts), len(mods)),
-         [{"type": "table", "rh": 0.22, "size": 10.0, "heading": "다트 — 표준 1발을 대체한다",
+         [{"type": "table", "rh": 0.22, "size": 10.0, "heading": "다트 — 표준 1발을 대체함",
            "cols": ["이름", "게이지", "배수", "효과", "가격"],
            "w": [1.0, 0.7, 0.5, 3.2, 0.6],
            "rows": [[d["name"], "×%s" % num(d["gauge"]), num(d["mult"], "0"),
                      d.get("desc_ko") or "—",
                      "%sG" % num(d["cost"]) if d["cost"] else "기본"] for d in darts]},
-          {"type": "table", "rh": 0.22, "size": 10.0, "heading": "개조 — 판의 기하를 바꾼다 · 런 동안 유지",
+          {"type": "table", "rh": 0.22, "size": 10.0, "heading": "개조 — 판의 기하를 바꿈 · 런 동안 유지",
            "cols": ["이름", "축", "효과", "배타", "가격"],
            "w": [1.0, 0.8, 2.8, 0.8, 0.6],
            "rows": [[m["name"], m["axis"], m.get("desc_ko") or "—",
@@ -840,7 +840,7 @@ def appendix_tables(prs, page):
            "w": [1.1, 2.6, 0.5, 0.5, 1.0],
            "rows": [[v["name"], v.get("desc_ko") or "—", "%sG" % num(v["cost"]),
                      num(v["min_ante"]), v.get("prereq") or "—"] for v in vo]},
-          {"type": "table", "rh": 0.22, "size": 10.0, "heading": "딱지 — 소판·대판을 건너뛸 때만 받는다",
+          {"type": "table", "rh": 0.22, "size": 10.0, "heading": "딱지 — 작은 판·큰 판을 건너뛸 때만",
            "cols": ["이름", "효과", "시점", "라운드"],
            "w": [1.1, 2.9, 0.9, 0.5],
            "rows": [[t["name"], t.get("desc_ko") or "—", t["when"], num(t["min_ante"])]
@@ -849,7 +849,7 @@ def appendix_tables(prs, page):
     st, pk = tbl("stakes"), tbl("packs")
     emit("리그 · 스타트 팩", "리그 %d단 · 팩 %d종" % (len(st), len(pk)),
          [{"type": "table", "rh": 0.22, "size": 10.0,
-           "heading": "리그 — 앞 단을 완주하면 다음 단이 열린다",
+           "heading": "리그 — 앞 단을 완주하면 다음 단 해금",
            "cols": ["리그", "곡선", "작은 판 골드", "봉인", "다트", "진열대 가격", "삭음", "유지비"],
            "rows": [[s_["name"], s_["curve"], num(s_["reward_small"], "0"),
                      num(s_["seal_items"], "0"), num(s_["darts_add"], "0"),
