@@ -7243,13 +7243,15 @@ func _candy_tex_live(id: String, roll: float, wob: float, live: bool) -> Texture
 		candy_live.erase(id)
 		return null
 	var mi: MeshInstance3D = e.mi
-	# roll=0(아직 손이 안 던졌다)일 때도 정지 아이콘(_candy_tex, -24° Y)과
-	# 같은 자세로 보이게 그 값을 기준으로 깐다. 두 축을 다른 비로 섞는
-	# 것은 한 축만 돌면 바퀴처럼 규칙적으로 읽혀서다 — 비를 다르게 섞으면
-	# 던져진 사탕이 제멋대로 구르는 것처럼 보인다.
-	mi.rotation.x = roll
-	mi.rotation.y = deg_to_rad(-24.0) + roll * 0.37
-	mi.rotation.z = clampf(wob * 2.2, -0.5, 0.5)     # 착지 잔진동
+	# 다트와 같은 이유 · 같은 길이다 — Basis 를 통째로 assign 하는 길은
+	# 이 뷰포트 조합에서 렌더가 깨졌다(듬성듬성한 점만 찍혔다. 원인은
+	# 못 잡았다). rotation.x/y/z 개별 대입은 그려지는 것을 확인했으므로
+	# 그 길을 쓴다. x·y 는 정지 아이콘과 같은 -24° 로 고정하고 roll 은
+	# z 하나에만 싣는다 — 완전한 길이 불변은 아니지만(실측 26~37px 정도
+	# 왕복) 두 축을 다 돌리던 것보다 훨씬 안정적이다.
+	mi.rotation.x = 0.0
+	mi.rotation.y = deg_to_rad(-24.0)
+	mi.rotation.z = roll + clampf(wob * 2.2, -0.5, 0.5)
 	var vp: SubViewport = e.vp
 	vp.render_target_update_mode = (
 			SubViewport.UPDATE_ALWAYS if live else SubViewport.UPDATE_ONCE)
@@ -10086,10 +10088,20 @@ func _dart_tex_live(id: String, roll: float, wob: float, live: bool) -> Texture2
 		dart_live.erase(id)
 		return null
 	var mi: MeshInstance3D = e.mi
-	# 눕힌 기본 자세(66°) 위에 구름을 얹는다 — 사탕과 같은 두 축 배합.
-	mi.rotation.x = deg_to_rad(66.0) + roll
-	mi.rotation.y = deg_to_rad(-18.0) + roll * 0.37
-	mi.rotation.z = clampf(wob * 2.2, -0.5, 0.5)
+	# 옛 식(rotation.x/y 를 둘 다 roll 로 움직임)은 카메라를 향해 눕는
+	# 성분이 섞여 있었다 — 자루가 막대인데 돌아가는 동안 화면에 보이는
+	# 길이가 줄었다 늘었다 했다(정사영에서 축이 시야축에 가까워질수록
+	# 짧아진다). 막대는 늘거나 줄지 않는다 — 화면 평면 안에서만 돌아야
+	# 한다. Basis 를 통째로 assign 하는 길(mi.basis=... / mi.transform=...)은
+	# 이 뷰포트 조합에서 렌더가 깨졌다(실측 — 듬성듬성 점만 찍혔다).
+	# rotation.x/y/z 개별 대입은 확인된 대로 잘 그려지므로 그 길을 쓰되,
+	# x·y 는 고정하고 roll 은 z 하나에만 싣는다 — z 는 카메라를 정면으로
+	#보는 축이라(x·y 기울기가 크지 않은 한) 이 축만 돌리면 화면에 보이는
+	# 길이가 거의 안 바뀐다. 둘 다 roll 로 돌리던 옛 식은 자루가 화면
+	# 안쪽으로 눕는 순간이 있어 길이가 늘었다 줄었다 했다.
+	mi.rotation.x = deg_to_rad(50.0)
+	mi.rotation.y = deg_to_rad(-14.0)
+	mi.rotation.z = roll + clampf(wob * 2.2, -0.5, 0.5)
 	var vp: SubViewport = e.vp
 	vp.render_target_update_mode = (
 			SubViewport.UPDATE_ALWAYS if live else SubViewport.UPDATE_ONCE)
