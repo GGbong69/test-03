@@ -7070,6 +7070,91 @@ func _ring(c: Vector2, r: float, lo: float, hi: float, col: Color) -> void:
 # 2px 이고, 꺼진 고리끼리는 서로 안 갈린다. **밝히는 것은 늘 하나**이므로
 # 판은 한 색으로 깔고 그 위에 켜진 고리만 얹는다 — 경계선은 켜진 고리의
 # 가장자리가 대신한다. 그리는 것이 줄면 작은 칸에서 더 잘 읽힌다.
+# ── 사탕 그림 ────────────────────────────────────────
+#  모델을 작은 3D 무대에 세워 한 번 굽고, 그 그림을 아이콘으로 쓴다.
+#  다트판(_bd3_)·컵(_cup3_)이 이미 쓰는 어법이다 — 화면은 2D 로 남고
+#  물건만 3D 다. 한 사탕에 무대 하나, UPDATE_ONCE 라 굽는 것은 한 번뿐이다.
+#
+#  트랙과 사탕을 짝지었다. 색이 아니라 **모양**이 트랙을 말한다 —
+#  26px 칸에서 색 다섯은 서로 안 갈리지만 곰·꼬임·지팡이·막대·판은 갈린다.
+const CANDY3 := {
+	"c_sg": "gummy",       # 싱글 — 곰젤리
+	"c_db": "twist",       # 더블 — 꼬인 사탕
+	"c_tr": "cane",        # 트리플 — 지팡이 사탕
+	"c_bl": "pop",         # 불 — 막대사탕
+	"c_bo": "bar",         # 보드 아웃 — 초콜릿 판
+}
+const CANDY_VP := Vector2i(34, 46)     # 굽는 크기. 칸(26x38)보다 한 뼘 크다
+
+var candy_vp := {}                     # id → SubViewport
+
+
+# 그 사탕의 그림. 없으면 굽고, 못 구우면 null 이다(헤드리스).
+func _candy_tex(id: String) -> Texture2D:
+	if candy_vp.has(id):
+		var v: SubViewport = candy_vp[id]
+		return v.get_texture() if is_instance_valid(v) else null
+	if not _has_renderer() or not CANDY3.has(id):
+		return null
+	var nm: String = CANDY3[id]
+	var mesh: Mesh = load("res://assets/candy/%s.obj" % nm)
+	if mesh == null:
+		return null
+
+	var vp := SubViewport.new()
+	vp.size = CANDY_VP
+	vp.own_world_3d = true
+	vp.transparent_bg = true
+	vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+	vp.msaa_3d = Viewport.MSAA_DISABLED
+	vp.gui_disable_input = true
+	add_child(vp)
+	candy_vp[id] = vp
+
+	var ab := mesh.get_aabb()
+	var mi := MeshInstance3D.new()
+	mi.mesh = mesh
+	# obj 의 mtl 은 pymeshlab 이 텍스처 없는 것으로 덮어 쓴다. 여기서 물린다.
+	var mat := StandardMaterial3D.new()
+	var tex: Texture2D = load("res://assets/candy/%s.jpg" % nm)
+	if tex != null:
+		mat.albedo_texture = tex
+	mat.roughness = 0.55
+	mat.specular = 0.30
+	mi.material_override = mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var k := 1.0 / maxf(maxf(ab.size.x, ab.size.y), 0.001)
+	mi.scale = Vector3.ONE * k
+	mi.position = -ab.get_center() * k
+	mi.rotation_degrees = Vector3(0.0, -24.0, 0.0)
+	vp.add_child(mi)
+
+	var lt := DirectionalLight3D.new()
+	lt.rotation_degrees = Vector3(-46.0, -28.0, 0.0)
+	lt.light_energy = 1.5
+	vp.add_child(lt)
+
+	var we := WorldEnvironment.new()
+	var env := Environment.new()
+	env.background_mode = Environment.BG_CLEAR_COLOR
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color(0.72, 0.70, 0.80)
+	env.ambient_light_energy = 0.9
+	we.environment = env
+	vp.add_child(we)
+
+	var cam := Camera3D.new()
+	cam.projection = Camera3D.PROJECTION_ORTHOGONAL
+	cam.keep_aspect = Camera3D.KEEP_HEIGHT
+	cam.size = 1.18                      # 1.0 짜리 물건에 여백 한 뼘
+	cam.near = 0.01
+	cam.far = 10.0
+	vp.add_child(cam)
+	cam.global_position = Vector3(0.0, 0.0, 3.0)
+	cam.look_at(Vector3.ZERO, Vector3.UP)
+	return vp.get_texture()
+
+
 # 사탕 몸통 색 — 판이 이미 쓰는 색에서 가져온다. 트랙과 색이 같아야
 # 「어느 자리를 올리는 사탕인가」가 그림만으로 읽힌다.
 const CANDY := {
@@ -7086,6 +7171,15 @@ const CANDY := {
 #
 # r 은 **몸통** 반지름이다. 포장까지 1.5r 이므로 칸 반폭보다 작게 준다.
 func _icon_cons(c: Vector2, r: float, id: String, a := 1.0) -> void:
+	# 모델이 있으면 그것을 쓴다. 없는 자리(헤드리스·프로브)는 아래 손그림이
+	# 그대로 선다 — 프로브가 렌더러 없이 도는 자리가 있다.
+	var t := _candy_tex(id)
+	if t != null:
+		var h := r * 3.1
+		var w := h * float(CANDY_VP.x) / float(CANDY_VP.y)
+		draw_texture_rect(t, Rect2(c - Vector2(w, h) * 0.5, Vector2(w, h)),
+				false, Color(1.0, 1.0, 1.0, a))
+		return
 	var body: Color = CANDY.get(id, C_DIM)
 	body = Color(body, a)
 	var ink := Color(C_DARK.darkened(0.25), a)
