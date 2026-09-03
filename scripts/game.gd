@@ -5999,6 +5999,12 @@ const DROP := {
 	#  1/160 은 3.6면px(화면 2.2), 1/60 은 9.6면px(화면 5.9) — 반발이 펠트 위
 	#  공중에서 일어나기 시작한다.
 	"g": 1400.0, "sub": 0.00625, "max_d": 0.033, "sub_max": 8,
+	# 막대의 방향별 마찰비(a_fric 에 곱한다). 자기 축을 가로질러 밀리면
+	# 구르고, 축을 따라 밀리면 촉이 긁힌다 — 같은 세기로 밀어도 옆으로
+	# 굴린 것이 두 배 넘게 멀리 간다. a_fric 520 기준 굴림 286 · 미끄럼
+	# 702 이고, 상한 속도 260 에서 미끄럼 거리가 118px 대 48px 이다.
+	# 둘 다 양수라 "유한 시간에 정확히 0" 인 정착 증명은 그대로 산다.
+	"mu_roll": 0.55, "mu_slide": 1.35,
 	"tumble_rate": 0.145,
 	#  미끄러진 거리(면px) 당 도는 각(rad). 3D 로 세워 그리는 물체(사탕·
 	#  다트) 전용이다 — 다른 물체가 쓰는 psi/om 회전은 그대로 둔다. 새
@@ -6208,7 +6214,19 @@ func _drop_step(dt: float) -> void:
 			# 쿨롱 등감속. 유한 시간에 정확히 0 이 된다 — 정착 증명의 열쇠다.
 			var sp := sqrt(it.vu * it.vu + it.vw * it.vw)
 			if sp > 0.0001:
-				var k: float = maxf(sp - DROP.a_fric * dt, 0.0) / sp
+				var af: float = DROP.a_fric
+				if i < stock.size() and stock[i].type == "dart":
+					# 막대는 방향에 따라 다르게 멎는다. psi 가 자루의 축이다.
+					var ax := Vector2(cos(it.psi), sin(it.psi))
+					var al: float = absf((Vector2(it.vu, it.vw) / sp).dot(ax))
+					af = DROP.a_fric * lerpf(DROP.mu_roll, DROP.mu_slide, al)
+					# 구른 만큼 자기 축이 돈다. 축을 가로지르는 성분만
+					# 굴림을 만든다 — 축을 따라 미끄러질 때는 안 돈다.
+					# 부호는 어느 쪽으로 밀렸는지가 정한다.
+					var pp: float = sp * sqrt(maxf(1.0 - al * al, 0.0))
+					var sg: float = signf(it.vu * ax.y - it.vw * ax.x)
+					it.roll = it.get("roll", 0.0) + pp * sg * DROP.tumble_rate * dt
+				var k: float = maxf(sp - af * dt, 0.0) / sp
 				it.vu *= k
 				it.vw *= k
 			it.om = signf(it.om) * maxf(absf(it.om) - DROP.a_spin * dt, 0.0)
@@ -6447,7 +6465,7 @@ func _drop_extras(d: float) -> void:
 		# 아크 + 몇 번의 바운스) — handled 없이 적분하면 손도 안 댔는데
 		# 몇 바퀴씩 돌아 있었다("갑자기 꽂힌 것처럼" 제보의 절반은 이거다).
 		# 손이 실제로 던진 뒤부터만(_hand_land 가 handled 를 켠다) 구른다.
-		if i < stock.size() and bool(it.get("handled", false)) 				and (stock[i].type == "cons" or stock[i].type == "dart"):
+		if i < stock.size() and bool(it.get("handled", false)) 				and stock[i].type == "cons":
 			var tsp: float = Vector2(it.vu, it.vw).length()
 			it.roll = it.get("roll", 0.0) + tsp * DROP.tumble_rate * d
 		if not it.held:
@@ -6684,29 +6702,11 @@ func _obj_paint(it: Dictionary, s: Dictionary, dim: float) -> void:
 			_icon_mod(c - Vector2(0.0, TBL.chip_t * TBL.tall),
 					TBL.mod_r, s.d.id, dim, TBL.flat)
 		_:
-			# 다트 — 머리 방향은 물리의 psi, 자기 축 구름은 roll 이다.
-			# 얼릴 조건은 사탕과 같다: 잠든 뒤에도 wob·구름 관성이 몇
-			# 프레임 더 산다.
-			var dlive: bool = not (bool(it.get("sleep", false))
-					and absf(float(it.get("wob", 0.0))) < 0.02
-					and absf(float(it.get("wv", 0.0))) < 0.02
-					and Vector2(it.get("vu", 0.0), it.get("vw", 0.0)).length() < 1.0)
-			var dtex := _dart_tex_live(String(s.d.id), float(it.get("psi", 0.0)),
-					float(it.get("roll", 0.0)), float(it.get("wob", 0.0)), dlive)
-			if dtex != null:
-				# 무대에 여백이 있으므로 그리는 칸은 그만큼 크다 —
-				# 자루가 화면에서 차지하는 길이는 옛 2D 아이콘과 같다
-				# (TBL.dart_l 24 의 두 배 = 48px 쯤).
-				var dh := 56.0
-				var dw := dh * float(DART_VP.x) / float(DART_VP.y)
-				draw_texture_rect(dtex, Rect2(c - Vector2(dw, dh) * 0.5, Vector2(dw, dh)),
-						false, Color(1.0 - dim * 0.3, 1.0 - dim * 0.3, 1.0 - dim * 0.3,
-								1.0 - dim))
-			else:
-				# sh=false — 내장 그림자는 고정 오프셋이라 낙하 중 하늘을 같이 난다
-				var de := _dart_e(it)
-				_icon_dart(c, TBL.dart_l * de.length(), s.d.id, dim,
-						de.angle() + 1.0304, 1.0 - dim * 0.5, false)
+			# sh=false — 내장 그림자는 고정 오프셋이라 낙하 중 하늘을 같이 난다
+			var de := _dart_e(it)
+			_icon_dart(c, TBL.dart_l * de.length(), s.d.id, dim,
+					de.angle() + 1.0304, 1.0 - dim * 0.5, false,
+					float(it.get("roll", 0.0)))
 
 
 # 펠트에 누운 동전. 동전 슬롯의 draw_sticker(정원)은 안 고친다 — 같은 물건의
@@ -6962,7 +6962,7 @@ func _icon_mod(c: Vector2, r: float, id: String, dim: float,
 # 회전 인자 이름은 draw_item_sticker 이 이미 쓰는 rot 에 맞췄고,
 # 알파 인자를 뒤에 덧붙인 것은 _icon_modifier 가 a 를 받아들인 선례와 같은 방식이다.
 func _icon_dart(c: Vector2, dl: float, id: String, dim := 0.0,
-		rot := 0.0, a := 1.0, sh := true) -> void:
+		rot := 0.0, a := 1.0, sh := true, spin := 0.0) -> void:
 	# 기본 각도. 촉이 오른쪽 위, 꼬리가 왼쪽 아래로 눕는다.
 	# (옛 주석은 _draw_darts 와 같은 각이라고 했지만 그쪽은 꼬리가 오른쪽 위라
 	#  실제로는 정반대였다. 지금은 _draw_darts 도 이 함수를 쓴다.)
@@ -7015,10 +7015,22 @@ func _icon_dart(c: Vector2, dl: float, id: String, dim := 0.0,
 	# 샤프트
 	draw_line(c - dir * dl * 0.35, c - dir * dl * 0.6,
 			Color(C_DARK.lightened(0.25).darkened(dim), a), 1.6)
-	# 날개
+	# 날개 — 실제 깃은 십자로 세운 두 장이다. 자루가 자기 축으로 구르면
+	# 한 쌍은 정면(넓게), 나머지 한 쌍은 옆면(얇게)으로 돌아간다. 그
+	# 폭 둘을 spin 의 cos·sin 으로 갈라 그리면 구름이 폭 변화로 읽히고,
+	# **길이는 안 건드린다** — 막대는 굴러도 늘지 않는다.
+	# 넓은 쪽은 |cos|·|sin| 중 큰 것이라 0.707~1.0 사이를 오간다. 십자
+	# 깃이 실제로 그렇다 — 완전히 사라지는 순간이 없다.
 	var w0 := c - dir * dl * 0.6
-	draw_colored_polygon(PackedVector2Array([w0, w0 + nrm * fin - dir * dl * 0.2,
-			tail, w0 - nrm * fin - dir * dl * 0.2]), col)
+	var fa: float = fin * maxf(absf(cos(spin)), absf(sin(spin)))
+	var fb: float = fin * minf(absf(cos(spin)), absf(sin(spin)))
+	draw_colored_polygon(PackedVector2Array([w0, w0 + nrm * fa - dir * dl * 0.2,
+			tail, w0 - nrm * fa - dir * dl * 0.2]), col)
+	# 옆면으로 선 나머지 한 장. 이 얇은 선이 구르는 것을 읽히게 한다.
+	if fb > 0.5:
+		var fm := w0.lerp(tail, 0.45)
+		draw_line(fm + nrm * fb, fm - nrm * fb,
+				Color(col.darkened(0.4), a), maxf(1.0, k * 0.9))
 
 	match id:
 		"hvy":
@@ -10026,125 +10038,6 @@ func _dart3_col(id: String) -> Color:
 		"prc": return C_CHIP.lightened(0.25)
 		"mag": return C_MULT.lightened(0.25)
 	return C_TXT
-
-
-# ── 테이블의 다트 — 사탕과 같은 어법, 같은 자산 방식 ──────
-# 예전엔 게임 안에 구운 정점 상수(DART3M)를 썼다 — 다트판용으로 오래
-# 전에 축을 −Y·길이 1.0 으로 맞춰 둔 것이다. 그 낡은 관례를 안 지키고
-# assets/candy/*.obj 와 같은 방식으로 새로 뽑는다: 원본을 다시 줄이고,
-# 중심·크기는 AABB 로 그때그때 재서 맞춘다 — 축이 어디를 보든 코드가
-# 알아서 맞춘다.
-#
-# 무대를 **테이블과 같은 시점**으로 세운다. 화면의 펠트는 52° 기울여
-# 보는 면이고(TBL.flat = sin 52°), 그 위에 누운 물건은 그 각으로 눌려
-# 보인다. 다트 무대의 카메라도 같은 각으로 내려다봐야 자루가 펠트에
-# 누운 것으로 읽힌다 — 정면 카메라로 두면 어느 각에선 자루가 화면
-# 안쪽을 향해 「꽂힌 것처럼」 보인다.
-#
-# 자루가 화면을 가로지를 때가 가장 길다(길이 그대로). 화면 안쪽을 향하면
-# 눌린다 — 그게 이 투영에서 맞는 길이다.
-#
-# 무대는 정사각이다. 머리가 어느 쪽을 향해도 자루가 안 잘려야 한다 —
-# 가로로 길게 잡았더니 머리가 기울 때 위아래가 잘렸다(실측).
-const DART_VP := Vector2i(44, 44)
-
-var dart_live := {}      # id → {"vp":SubViewport,"mi":MeshInstance3D}
-
-
-func _dart_build(id: String) -> Dictionary:
-	var mesh: Mesh = load("res://assets/dart.obj")
-	if mesh == null:
-		return {}
-	var vp := SubViewport.new()
-	vp.size = DART_VP
-	vp.own_world_3d = true
-	vp.transparent_bg = true
-	vp.render_target_update_mode = SubViewport.UPDATE_ONCE
-	vp.msaa_3d = Viewport.MSAA_DISABLED
-	vp.gui_disable_input = true
-	add_child(vp)
-
-	var ab := mesh.get_aabb()
-	var mi := MeshInstance3D.new()
-	mi.mesh = mesh
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = _dart3_col(id)
-	mat.roughness = 0.4
-	mat.specular = 0.35
-	mi.material_override = mat
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	# 세 축 중 가장 긴 것 기준으로 정규화한다 — 이 원본은 길이가 X 축이다
-	# (옛 DART3M 은 Y 였다. 모델마다 다르므로 축을 가정하지 않는다).
-	var k := 1.0 / maxf(maxf(ab.size.x, ab.size.y), maxf(ab.size.z, 0.001))
-	mi.scale = Vector3.ONE * k
-	mi.position = -ab.get_center() * k
-	vp.add_child(mi)
-
-	var lt := DirectionalLight3D.new()
-	lt.rotation_degrees = Vector3(-46.0, -28.0, 0.0)
-	lt.light_energy = 1.5
-	vp.add_child(lt)
-
-	var we := WorldEnvironment.new()
-	var env := Environment.new()
-	env.background_mode = Environment.BG_CLEAR_COLOR
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.72, 0.70, 0.80)
-	env.ambient_light_energy = 0.9
-	we.environment = env
-	vp.add_child(we)
-
-	var cam := Camera3D.new()
-	cam.projection = Camera3D.PROJECTION_ORTHOGONAL
-	cam.keep_aspect = Camera3D.KEEP_HEIGHT
-	cam.size = 1.22      # 길이 1.0 짜리가 어느 머리 각에서도 안 잘릴 여백
-	cam.near = 0.01
-	cam.far = 10.0
-	vp.add_child(cam)
-	# 펠트를 보는 각 그대로 — 52° 위에서 내려다본다. 그래서 자루가
-	# 「누워 있다」로 읽히고, 머리 방향이 돌 때의 눌림이 테이블의 다른
-	# 물건들과 같은 규약을 따른다.
-	var el := deg_to_rad(52.0)
-	cam.global_position = Vector3(0.0, sin(el), cos(el)) * 3.0
-	cam.look_at(Vector3.ZERO, Vector3.UP)
-	return {"vp": vp, "mi": mi}
-
-
-# 펠트에 누운 막대가 구르는 방식은 둘뿐이다. 공중에서 앞뒤로 넘어가는
-# 텀블은 여기 없다 — 그게 「바닥에 꽂힌 것처럼」 보이던 원인이다.
-#
-#   head  — 머리 방향. 테이블 평면에서 도는 각이고, 물리가 이미 psi 로
-#           계산해 둔 값 그대로다(a_spin 마찰이 펠트에서 멎게 한다).
-#           이 회전이 곧 다른 물건·그림자가 쓰는 규약이라 눌림도 공짜로 맞다.
-#   barrel— 자기 축을 따라 도는 통나무 구름. 미끄러진 거리만큼 돈다
-#           (DROP.tumble_rate). 자루는 거의 축대칭이라 이 회전은 깃과
-#           음영으로만 드러난다 — 그래서 과하지 않고, 길이도 안 건드린다.
-#
-# 이 원본의 길이축은 로컬 X 다. 배럴은 그 축 둘레, 머리는 월드 Y 둘레다.
-func _dart_tex_live(id: String, head: float, barrel: float, wob: float,
-		live: bool) -> Texture2D:
-	if not dart_live.has(id):
-		if not _has_renderer():
-			return null
-		dart_live[id] = _dart_build(id)
-	var e: Dictionary = dart_live[id]
-	if not is_instance_valid(e.vp):
-		dart_live.erase(id)
-		return null
-	var mi: MeshInstance3D = e.mi
-	# 착지 잔진동은 펠트에서 살짝 들썩이는 것이라 머리 방향에 얹는다.
-	var hd := head + clampf(wob * 0.35, -0.12, 0.12)
-	# 머리를 가로 쪽으로 누른다. 투영만 따르면 머리가 화면 안쪽을 향할 때
-	# 자루가 수직선이 되는데, 길이는 그게 맞아도 눈에는 「펠트에 꽂혀
-	# 섰다」로 읽힌다(실제 제보가 그거였다). 안쪽 성분을 0.5 로 줄이면
-	# 한 바퀴를 다 돌면서도 눕는 자세에 오래 머물러 「누워 굴러간다」로
-	# 읽힌다 — 회전을 막지 않고 체류 시간만 옮기는 방식이다.
-	hd = atan2(sin(hd) * 0.5, cos(hd))
-	mi.basis = Basis(Vector3.UP, hd) * Basis(Vector3.RIGHT, barrel)
-	var vp: SubViewport = e.vp
-	vp.render_target_update_mode = (
-			SubViewport.UPDATE_ALWAYS if live else SubViewport.UPDATE_ONCE)
-	return vp.get_texture()
 
 
 # 자루 한 벌의 메시. **두 무대가 같이 쓴다** — 통(새 런 화면)과 판에
