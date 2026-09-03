@@ -6628,8 +6628,12 @@ func _obj_paint(it: Dictionary, s: Dictionary, dim: float) -> void:
 			# 사탕 — 카드가 아니라 모델이 구르며 떨어진다. it.psi 는 물리가
 			# 이미 매기는 회전이다(_drop_roll 의 om 이 프레임마다 더한다) —
 			# 그 값을 그대로 3D 야로 옮기면 손으로 맞출 각이 없다.
-			var live := not bool(it.get("sleep", false))
-			var ctex := _candy_tex_live(String(s.d.id), float(it.get("psi", 0.0)), live)
+			# sleep 만 보고 얼리면 안 된다 — 잠든 뒤에도 wob 스프링은 몇 프레임
+			# 더 감쇠한다(_drop_wob 는 sleep 을 안 본다). 그 잔진동까지 찍혀야
+			# "털썩 떨어져 두어 번 흔들리다 멎는다" 가 화면에 남는다.
+			var still: bool = bool(it.get("sleep", false)) 					and absf(float(it.get("wob", 0.0))) < 0.02 					and absf(float(it.get("wv", 0.0))) < 0.02
+			var ctex := _candy_tex_live(String(s.d.id), float(it.get("psi", 0.0)),
+					float(it.get("wob", 0.0)), not still)
 			if ctex != null:
 				var ch := 30.0
 				var cw := ch * float(CANDY_VP.x) / float(CANDY_VP.y)
@@ -7177,12 +7181,18 @@ func _candy_tex(id: String) -> Texture2D:
 var candy_live := {}       # id → {"vp":SubViewport,"mi":MeshInstance3D} — 테이블에 구르는 사탕
 
 
-# 테이블에 떨어진 사탕. 물리가 이미 계산해 둔 회전(psi)을 그대로 3D 로
+# 테이블에 떨어진 사탕. 물리가 이미 계산해 둔 값 둘을 그대로 3D 로
 # 옮긴다 — 카드 뒤에 아이콘을 얹는 대신 모델 자체가 구르며 떨어진다.
-# live 가 참인 동안(공중 · 아직 안 잠듦) 매 프레임 다시 굽고, 잠들면
-# 마지막 자세로 얼린다 — _bd3_fly 와 같은 어법이다. 상점엔 사탕이 한
-# 번에 한 장뿐이라(매대 규칙) 인스턴스를 공유해도 겹칠 일이 없다.
-func _candy_tex_live(id: String, yaw: float, live: bool) -> Texture2D:
+#   yaw(psi) — 던진 방향의 스핀(_hand_land 의 om = -vx * toss_spin).
+#              손으로 세게 후려칠수록 빨리 돈다.
+#   wob      — 충격의 크기로 매기는 감쇠 진동(-1~1). 살며시 놓으면 거의
+#              안 눕고, 세게 던질수록 크게 젖혀 떨어지는 순간 "뒤집힌다".
+#              물리 쪽은 이미 매 프레임 이 스프링을 적분해 두고 있었다
+#              (_drop_wob) — 3D 로 옮기지 않았을 뿐이다.
+# live 가 참인 동안(아직 안 잠듦) 매 프레임 다시 굽고, 잠들면 마지막
+# 자세로 얼린다 — _bd3_fly 와 같은 어법이다. 상점엔 사탕이 한 번에
+# 한 장뿐이라(매대 규칙) 인스턴스를 공유해도 겹칠 일이 없다.
+func _candy_tex_live(id: String, yaw: float, wob: float, live: bool) -> Texture2D:
 	if not candy_live.has(id):
 		if not _has_renderer() or not CANDY3.has(id):
 			return null
@@ -7196,7 +7206,13 @@ func _candy_tex_live(id: String, yaw: float, live: bool) -> Texture2D:
 		return null
 	var mi: MeshInstance3D = e.mi
 	mi.rotation.y = yaw
-	mi.rotation.x = sin(yaw * 1.7) * 0.18     # 구르는 결 — 회전축이 살짝 흔들린다
+	# wob 는 이 값을 처음 준 쪽(_drop_wob)에서 "손으로 만졌을 때의 미세한
+	# 흔들림"용으로 잡은 크기다 — 세게 던져도 피크가 0.04~0.08 이라 그대로
+	# 쓰면 안 보인다. 여기서만 배율을 키운다: 다른 물체(동전·보드 확장)는
+	# 2D 라 흔들림이 원래 작아도 되지만, 3D 사탕은 그 값이 통째로 넘어짐
+	# 각도가 되므로 세게 던질수록 실제로 휘청하다 뒤집히는 게 보여야 한다.
+	mi.rotation.x = clampf(wob * 6.0, -1.15, 1.15)
+	mi.rotation.z = clampf(wob * 2.2, -0.5, 0.5)
 	var vp: SubViewport = e.vp
 	vp.render_target_update_mode = (
 			SubViewport.UPDATE_ALWAYS if live else SubViewport.UPDATE_ONCE)
