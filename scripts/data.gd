@@ -1372,6 +1372,11 @@ static func eff_line(it: Dictionary) -> String:
 	# 조준을 쥔 장은 점수 열이 통째로 비어 있다 — 조준이 곧 효과다.
 	var am := aim_text(String(it.get("aim", "")))
 	if am != "":
+		# 조준 동전은 정확도를 탄창으로 산다. 그 값이 얼굴에 없으면
+		# 무엇을 주고 무엇을 받는지가 카드에서 안 읽힌다.
+		var ad := int(it.get("dadd", 0))
+		if ad != 0:
+			return "%s · 판 시작 다트 %+d" % [am, ad]
 		return am
 	# 점수도 배수도 없는 카드 — 골드·다트·승급이 본업이다
 	if String(it.get("k", "")) == "":
