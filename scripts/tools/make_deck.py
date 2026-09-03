@@ -90,6 +90,24 @@ def set_width(w):
 SZ_TITLE, SZ_LEAD, SZ_HEAD, SZ_BODY, SZ_SMALL = 20.25, 15.0, 13.5, 12.0, 10.5
 
 
+def _apply_font(run, name, size, color):
+    """라틴만이 아니라 한글(ea)·기타(cs) 자형까지 같은 글꼴로 박는다.
+    font.name 만 쓰면 한글이 테마 기본 글꼴로 떨어진다."""
+    run.font.name = name
+    run.font.size = Pt(size)
+    run.font.color.rgb = color
+    rPr = run._r.get_or_add_rPr()
+    latin = rPr.find(qn("a:latin"))
+    idx = (list(rPr).index(latin) + 1) if latin is not None else len(rPr)
+    for tag in ("a:ea", "a:cs"):
+        el = rPr.find(qn(tag))
+        if el is None:
+            rPr.insert(idx, rPr.makeelement(qn(tag), {"typeface": name}))
+            idx += 1
+        else:
+            el.set("typeface", name)
+
+
 def _tf(shape):
     tf = shape.text_frame
     tf.word_wrap = True
@@ -111,9 +129,7 @@ def text(slide, x, y, w, h, s, size=SZ_BODY, font=F_BODY, color=C_TEXT,
             p.space_before = Pt(space)
         run = p.add_run()
         run.text = line
-        run.font.name = font
-        run.font.size = Pt(size)
-        run.font.color.rgb = color
+        _apply_font(run, font, size, color)
     return box
 
 
@@ -259,9 +275,7 @@ def _cell(c, s, size, font, color, bg=None, align=PP_ALIGN.LEFT):
     p.alignment = align
     r = p.add_run()
     r.text = T(s)
-    r.font.name = font
-    r.font.size = Pt(size)
-    r.font.color.rgb = color
+    _apply_font(r, font, size, color)
 
 
 def make_table(slide, x, y, widths, heights, header, rows, band=True, size=None):
@@ -357,9 +371,7 @@ def draw_flow(slide, y, b, x=L, w=None):
         p.alignment = PP_ALIGN.CENTER
         r = p.add_run()
         r.text = T(s)
-        r.font.name = F_SEMI
-        r.font.size = Pt(SZ_BODY)
-        r.font.color.rgb = C_TEXT
+        _apply_font(r, F_SEMI, SZ_BODY, C_TEXT)
         if i < n - 1:
             line(slide, xx + bw + 0.02, y + bh / 2, xx + bw + gap - 0.02, y + bh / 2,
                  color=C_ACC, width=1.0)
@@ -385,15 +397,15 @@ def draw_steps(slide, y, b, x=L, w=None):
         p.line_spacing = 1.2
         rn = p.add_run()
         rn.text = "%02d  " % (i + 1)
-        rn.font.name, rn.font.size, rn.font.color.rgb = F_BOLD, Pt(SZ_BODY), C_ACC
+        _apply_font(rn, F_BOLD, SZ_BODY, C_ACC)
         rt = p.add_run()
         rt.text = T(row[0] if row else "")
-        rt.font.name, rt.font.size, rt.font.color.rgb = F_SEMI, Pt(SZ_BODY), C_TEXT
+        _apply_font(rt, F_SEMI, SZ_BODY, C_TEXT)
         p2 = tf.add_paragraph()
         p2.line_spacing = 1.2
         rd = p2.add_run()
         rd.text = T(row[1] if len(row) > 1 else "")
-        rd.font.name, rd.font.size, rd.font.color.rgb = F_BODY, Pt(SZ_BODY - 0.5), C_MUTE
+        _apply_font(rd, F_BODY, SZ_BODY - 0.5, C_MUTE)
         line(slide, xx, yy + 0.62, xx + colw, yy + 0.62)
     return y + half * 0.70 + 0.08
 
