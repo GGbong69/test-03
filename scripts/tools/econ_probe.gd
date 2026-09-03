@@ -3,7 +3,7 @@ extends SceneTree
 const GameData = preload("res://scripts/data.gd")
 
 # ══════════════════════════════════════════════════════════
-#  경제 측정 — 앤티 2 까지 손에 쥐는 골드와 그 돈이 산 것
+#  경제 측정 — 라운드 2 까지 손에 쥐는 골드와 그 돈이 산 것
 #
 #  실행:  godot --path . --headless --quit-after 600000 \
 #           -s scripts/tools/econ_probe.gd -- autoplay runs=24
@@ -29,7 +29,7 @@ var gold_track := 0
 var own_in := 0
 var buys := []
 
-# 라운드 번호 → 통계
+# 판 번호 → 통계
 var g_in := {}      # 상점 진입 골드의 합
 var g_out := {}     # 상점 퇴장 골드의 합
 var g_n := {}       # 표본 수
@@ -37,7 +37,7 @@ var own_at := {}    # 그 판을 시작할 때 든 스티커 수의 합
 var own_n := {}
 var spend_kind := {}   # 종류 → [횟수, 합계]
 var rerolls := 0
-var vouchers := 0
+var fixtures := 0
 var reached := []
 var wins := 0
 var last_round := 1
@@ -47,7 +47,7 @@ var passed := {}
 var seen := {}
 var broke_shop := 0   # 상점에서 아무것도 못 산 횟수(제일 싼 매물보다 돈이 적었다)
 var shop_visits := 0
-var cheapest_gap := {}  # 라운드 → 못 산 상점 수
+var cheapest_gap := {}  # 판 → 못 산 상점 수
 
 
 func _initialize() -> void:
@@ -56,11 +56,11 @@ func _initialize() -> void:
 	seed(20260826)
 	for a in OS.get_cmdline_user_args():
 		var t := String(a)
-		if String(GameData.stake_row(t).get("id", "")) == t:
-			GameData.stake = t
+		if String(GameData.league_row(t).get("id", "")) == t:
+			GameData.league = t
 		elif t.begins_with("runs="):
 			RUNS = maxi(1, int(t.substr(5)))
-	print("리그: %s" % (GameData.stake if GameData.stake != "" else "흰색(기본)"))
+	print("리그: %s" % (GameData.league if GameData.league != "" else "흰색(기본)"))
 
 
 func _add(d: Dictionary, k, v) -> void:
@@ -71,13 +71,13 @@ func _finish() -> void:
 	print("\n런 %d회 · 완주 %d회" % [runs, wins])
 	print("\n판별 — 그 판을 넘긴 뒤 열린 상점")
 	print("판  A  종류     목표   판시작든스티커  상점진입골드  상점퇴장골드  표본")
-	for n in range(1, GameData.rounds_n() + 1):
+	for n in range(1, GameData.legs_n() + 1):
 		var c: int = int(g_n.get(n, 0))
 		if c == 0:
 			continue
 		var oc: int = int(own_n.get(n, 0))
 		print("%2d  A%d %-7s %6d      %4.2f          %5.1f         %5.1f      %3d"
-				% [n, GameData.ante_of(n), GameData.blind_name(n),
+				% [n, GameData.round_of(n), GameData.leg_name(n),
 				GameData.target_of(n),
 				float(own_at.get(n, 0)) / float(maxi(oc, 1)),
 				float(g_in.get(n, 0)) / float(c),
@@ -91,19 +91,19 @@ func _finish() -> void:
 	print("\n상점 방문 %d회 · 그중 한 푼도 못 쓴 방문 %d회 (%.0f%%)"
 			% [shop_visits, broke_shop, 100.0 * float(broke_shop) / float(maxi(shop_visits, 1))])
 	print("판별 '한 푼도 못 씀' 횟수:")
-	for n in range(1, GameData.rounds_n() + 1):
+	for n in range(1, GameData.legs_n() + 1):
 		if int(cheapest_gap.get(n, 0)) > 0:
 			print("   판 %2d — %d회 / %d" % [n, int(cheapest_gap[n]), int(g_n.get(n, 0))])
 
 	print("\n판별 통과율 · 평균 다트")
-	for n in range(1, GameData.rounds_n() + 1):
+	for n in range(1, GameData.legs_n() + 1):
 		var sn := int(seen.get(n, 0))
 		if sn == 0:
 			continue
 		var pn := int(passed.get(n, 0))
 		var du := float(used.get(n, 0)) / float(maxi(pn, 1))
 		print("%2d  A%d %-7s %6d  들어섬 %3d  넘김 %3d  %5.0f%%  다트 %.1f"
-				% [n, GameData.ante_of(n), GameData.blind_name(n),
+				% [n, GameData.round_of(n), GameData.leg_name(n),
 				GameData.target_of(n), sn, pn, 100.0 * float(pn) / float(sn), du])
 	quit(0)
 
@@ -122,20 +122,20 @@ func _process(_d: float) -> bool:
 	var st_before: int = g.state
 	g._process(1.0 / 60.0)
 
-	if g.round_no != last_round:
-		if g.round_no > last_round:
+	if g.leg_no != last_round:
+		if g.leg_no > last_round:
 			_add(passed, last_round, 1)
 			_add(used, last_round, last_used)
-		seen[g.round_no] = int(seen.get(g.round_no, 0)) + 1
-		_add(own_at, g.round_no, g.owned.size())
-		_add(own_n, g.round_no, 1)
-		last_round = g.round_no
-	if g.round_darts > 0 and g.darts_left <= g.round_darts:
-		last_used = g.round_darts - g.darts_left
+		seen[g.leg_no] = int(seen.get(g.leg_no, 0)) + 1
+		_add(own_at, g.leg_no, g.owned.size())
+		_add(own_n, g.leg_no, 1)
+		last_round = g.leg_no
+	if g.leg_darts > 0 and g.darts_left <= g.leg_darts:
+		last_used = g.leg_darts - g.darts_left
 
 	# 상점 진입 / 퇴장
 	if st_before != g.S.SHOP and g.state == g.S.SHOP:
-		shop_no = g.round_no
+		shop_no = g.leg_no
 		gold_in = int(g.gold)
 		gold_track = int(g.gold)
 		own_in = g.owned.size()
@@ -169,8 +169,8 @@ func _process(_d: float) -> bool:
 	if g.state == g.S.OVER:
 		if g.won:
 			wins += 1
-			_add(passed, g.round_no, 1)
-		reached.append(g.round_no)
+			_add(passed, g.leg_no, 1)
+		reached.append(g.leg_no)
 		runs += 1
 		if runs >= RUNS:
 			_finish()

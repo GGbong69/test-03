@@ -67,7 +67,7 @@ func _process(_d: float) -> bool:
 		return true
 
 	for n in rolls:
-		g.round_no = 1 + (n % 7)      # 매대 구성은 1~7 라운드 모두 2/1/1 로 같다
+		g.leg_no = 1 + (n % 7)      # 매대 구성은 1~7 판 모두 2/1/1 로 같다
 		g._open_shop()
 		g._drop_settle()
 		if g.drop_t > g.DROP.t_max:

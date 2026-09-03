@@ -97,7 +97,7 @@ func _load_stats() -> void:
 const PER_KEYS := {
 	"darts_left": ["darts_left"], "items": ["items_n"],
 	"gold": ["gold"], "gold5": ["gold"], "mag_hvy": ["mag_hvy"],
-	"missing": ["round_base", "round_darts"], "low": ["low"],
+	"missing": ["leg_base", "leg_darts"], "low": ["low"],
 	"zonehist": ["zonehist"], "rackval": ["rackval_all"],
 	"empty": ["empty_n"],
 }
@@ -150,9 +150,9 @@ func _tally() -> void:
 
 
 # ── 3단. 두 자가 못 보는 길을 손으로 깐다 ──────────────────
-#  few 는 라운드 시작 다트가 3개 이하여야 선다. 기본 6발이므로 「곡예
+#  few 는 판 시작 다트가 3개 이하여야 선다. 기본 6발이므로 「곡예
 #  다트맨」(dadd -2)과 「단벌」(darts_add -1)을 같이 쥐여 줘야 3발이 된다.
-#  _start_round 가 그 셈을 하는 유일한 자리라 그것을 다시 부른다.
+#  _start_leg 가 그 셈을 하는 유일한 자리라 그것을 다시 부른다.
 func _aim_arm() -> void:
 	var acro := {}
 	for it in GameData.items():
@@ -167,7 +167,7 @@ func _aim_arm() -> void:
 	acro.gs = 0
 	g.owned = [acro]
 	g.active_mods = [short]
-	g._start_round()
+	g._start_leg()
 
 
 func _aim_check() -> void:
@@ -268,12 +268,12 @@ func _process(_d: float) -> bool:
 		if seen < MIN_DARTS:
 			_tally()
 			# 소크가 끝나는 그 발에서 3단을 깐다 — 랙과 제약을 갈아 끼우고
-			# 라운드를 다시 연다. 여기부터의 발은 소크 셈에 안 들어간다.
+			# 판을 다시 연다. 여기부터의 발은 소크 셈에 안 들어간다.
 			if seen >= MIN_DARTS:
 				_aim_arm()
 		else:
 			_aim_check()
-			# 3발 라운드라 한 라운드면 충분하다. 넉넉히 보고 닫는다.
+			# 3발 판라 한 판면 충분하다. 넉넉히 보고 닫는다.
 			if aim_n >= 3:
 				_report()
 				return false

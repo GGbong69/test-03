@@ -3,9 +3,9 @@ extends SceneTree
 #  문서용 화면 촬영
 #
 #  shot.gd 는 개발 중 눈으로 확인하려고 찍는다. 이건 기획서에 넣을 것을 찍는다.
-#  차이는 하나다 — **런 중반을 찍는다.** 1라운드 화면에는 칩 랙이 비어 있고
+#  차이는 하나다 — **런 중반을 찍는다.** 1판 화면에는 칩 랙이 비어 있고
 #  점수가 두 자리라, 만든 것을 보여 주는 그림으로는 아무 값이 없다.
-#  오토플레이를 태워 목표 라운드까지 실제로 플레이시킨 뒤, 그때부터
+#  오토플레이를 태워 목표 판까지 실제로 플레이시킨 뒤, 그때부터
 #  상태가 바뀔 때마다 한 장씩 건진다.
 #
 #  헤드리스로는 못 돈다 — 뷰포트를 실제로 그려야 화소가 나온다.
@@ -49,7 +49,7 @@ func _process(_d: float) -> bool:
 		hold[st] = int(hold.get(st, 0)) + 1
 
 	# 런 중반부터 건진다. 그 전에는 게임이 스스로 굴러가게 둔다.
-	if g.round_no >= from_round:
+	if g.leg_no >= from_round:
 		var name: String = WANT[st] if st < WANT.size() else str(st)
 		# 상태마다 몇 프레임 뒤에 찍을지가 다르다 — 정산은 카드가 다 뜬 뒤,
 		# 조준은 게이지가 화면 가운데쯤 왔을 때가 그림이 된다.
@@ -93,5 +93,5 @@ func _delay(name: String) -> int:
 func _save(name: String) -> void:
 	var img := root.get_texture().get_image()
 	img.save_png("res://shots/" + name)
-	print("저장: ", name, "  R", g.round_no, " 누적 ", g.total,
+	print("저장: ", name, "  R", g.leg_no, " 누적 ", g.total,
 			" 골드 ", g.gold, " 보유 ", g.owned.size())

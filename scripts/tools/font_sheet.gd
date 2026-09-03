@@ -80,7 +80,7 @@ func _paint(cv: Node2D) -> void:
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 12, C_TXT)
 		cv.draw_string(f, Vector2(490, y + 42), "R1/8    목표  0 / 45    이자 +4",
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_TXT)
-		cv.draw_string(f, Vector2(490, y + 60), "다음 라운드 →    리롤   판매   구매",
+		cv.draw_string(f, Vector2(490, y + 60), "다음 판 →    리롤   판매   구매",
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 10, C_GOLD)
 		cv.draw_string(f, Vector2(490, y + 78), "연속 빗나감 · 증폭기 · 빗나감 배수 · 12×3 · 20…",
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_DIM)

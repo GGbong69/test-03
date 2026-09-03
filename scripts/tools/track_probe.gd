@@ -68,7 +68,7 @@ func _fresh(g: Node) -> void:
 	g.remaining = [GameData.darts()[0]]
 	g.cur_dart = GameData.darts()[0]
 	g.darts_left = 9
-	g.round_darts = 9
+	g.leg_darts = 9
 
 
 func _initialize() -> void:

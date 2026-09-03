@@ -40,7 +40,7 @@ func _run() -> void:
 		# 상단바의 제약 아이콘이 매 프레임 터졌다 — 게임은 modifiers() 의
 		# 행을 통째로 싣는다(_pick_stage 의 sp.d).
 		g.active_mods = [m]
-		g._start_round()
+		g._start_leg()
 		g._swap_skip()
 		for i in 6:
 			g._process(1.0 / 60.0)

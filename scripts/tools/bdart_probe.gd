@@ -17,7 +17,7 @@ const Save = preload("res://scripts/save.gd")
 #  재는 것
 #    ① 촉이 착탄점에 **정확히** 온다 — 3D 가 2D 판정과 어긋나면 안 된다
 #    ② 꽁지는 눈 쪽으로 서고, 축에서 멀수록 화면에 길게 비친다
-#    ③ 던질수록 자루가 늘고 라운드가 바뀌면 0 으로 돌아간다
+#    ③ 던질수록 자루가 늘고 판이 바뀌면 0 으로 돌아간다
 #    ④ 판이 아닌 화면으로 나가면 뷰포트가 지워진다
 #    ⑤ 판 갈이가 도는 동안은 안 지워진다 — 판이 아직 화면에 있다
 #    ⑥ 원근의 세기가 2D 받침과 같은 수에서 나온다
@@ -64,7 +64,7 @@ func _tip_screen(t: Transform3D) -> Vector2:
 func _run() -> void:
 	await _wait(4)
 	g._new_run()
-	g._start_round()
+	g._start_leg()
 	g._swap_skip()
 
 	# ① 촉이 착탄점에 온다
@@ -108,7 +108,7 @@ func _run() -> void:
 			"3D %.1f px vs 2D %.1f px (기울기 몫 %.1f 제외)"
 			% [got, want, lens[0]])
 
-	# ③ 던질수록 늘고 라운드마다 0 이다
+	# ③ 던질수록 늘고 판마다 0 이다
 	g.darts.append({"p": g.BC, "id": "std", "rot": 0.0})
 	g.darts.append({"p": g.BC + Vector2(40.0, 0.0), "id": "hvy", "rot": 0.1})
 	g.queue_redraw()
@@ -121,12 +121,12 @@ func _run() -> void:
 	await _wait(3)
 	_say(g.bd_nodes.size() == 3, "던지면 는다", "%d벌" % g.bd_nodes.size())
 
-	g._start_round()
+	g._start_leg()
 	g._swap_skip()
 	g.queue_redraw()
 	await _wait(3)
 	_say(g.darts.is_empty() and g.bd_nodes.is_empty(),
-			"라운드가 바뀌면 0 으로 돌아간다", "%d벌" % g.bd_nodes.size())
+			"판이 바뀌면 0 으로 돌아간다", "%d벌" % g.bd_nodes.size())
 
 	# ⑤ 판 갈이 도중에는 안 지운다
 	g.darts.append({"p": g.BC, "id": "std", "rot": 0.0})
@@ -148,8 +148,8 @@ func _run() -> void:
 	_say(g.bd_nodes.is_empty(), "자루 목록도 빈다", "%d벌" % g.bd_nodes.size())
 
 	# 다시 열린다
-	g.round_no = 1
-	g._start_round()
+	g.leg_no = 1
+	g._start_leg()
 	g._swap_skip()
 	g.darts.append({"p": g.BC + Vector2(20.0, -20.0), "id": "std", "rot": 0.0})
 	g.queue_redraw()

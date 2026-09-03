@@ -57,11 +57,11 @@ func _shots(tag: String) -> void:
 func _run() -> void:
 	_tick(4)
 	g._new_run()
-	g.blind_t = 9.0
+	g.leg_t = 9.0
 	_tick(4)
 
 	# ① 테이블 → 판
-	g._click(g._blind_go().get_center())
+	g._click(g._leg_go().get_center())
 	await _shots("swapo")
 
 	# ② 판 → 테이블. 정산을 거치지 않고 같은 통로만 연다.
@@ -76,7 +76,7 @@ func _run() -> void:
 	#    로 복귀하므로 오프셋을 shake_off 자체에 실은 판단이 여기서 증명된다.
 	#    복귀가 어긋나면 카드가 제자리에 남고 테이블만 빠진다.
 	_tick(4)
-	g.round_no = GameData.blinds_per_ante()
+	g.leg_no = GameData.legs_per_round()
 	g._open_stage()
 	g.stage_t = 9.0
 	_tick(4)

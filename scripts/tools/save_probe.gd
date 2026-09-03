@@ -88,11 +88,11 @@ func _pass1() -> void:
 	# 해금 — 처음 열 때만 true
 	var a := Save.unlock("pack:mag")
 	var b := Save.unlock("pack:mag")
-	Save.unlock("stake:green")
+	Save.unlock("league:green")
 	_say(a and not b, "해금은 처음 한 번만 새것이다", "1회 %s · 2회 %s" % [a, b])
 	var packs := Save.unlocked_of("pack")
 	_say(packs.size() == 1 and packs[0] == "mag", "갈래별로 훑는다",
-			"pack: %s · stake: %s" % [packs, Save.unlocked_of("stake")])
+			"pack: %s · league: %s" % [packs, Save.unlocked_of("league")])
 
 	Save.flush()
 	_say(Save.last_error() == "", "쓰기가 실패하지 않았다", Save.last_error())
@@ -108,9 +108,9 @@ func _pass2() -> void:
 			% [Save.stat("darts"), Save.stat("triples")])
 	_say(Save.stat("best_score") == 120, "최댓값이 살아남았다",
 			"%d" % Save.stat("best_score"))
-	_say(Save.unlocked("pack:mag") and Save.unlocked("stake:green"),
-			"해금이 살아남았다", "pack %s · stake %s"
-			% [Save.unlocked_of("pack"), Save.unlocked_of("stake")])
+	_say(Save.unlocked("pack:mag") and Save.unlocked("league:green"),
+			"해금이 살아남았다", "pack %s · league %s"
+			% [Save.unlocked_of("pack"), Save.unlocked_of("league")])
 	_say(not Save.unlocked("pack:없는것"), "안 연 것은 안 열려 있다")
 
 	# 깨진 파일로 게임이 죽지 않는다 — 쓰레기를 써 놓고 새로 읽힌다.
@@ -142,7 +142,7 @@ func _pass3() -> void:
 	g.remaining = [GameData.darts()[0]]
 	g.cur_dart = GameData.darts()[0]
 	g.darts_left = 999
-	g.round_darts = 999
+	g.leg_darts = 999
 
 	# 판 안 12시(싱글) 10발 · 판 밖 4발. 큐는 매번 비우고 던진다 —
 	# _land 는 큐에 쌓기만 하고 정산은 _next_step 이 한다.

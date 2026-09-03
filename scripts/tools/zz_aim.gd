@@ -9,7 +9,7 @@ func _initialize() -> void:
 	var g: Node = load("res://scenes/main.tscn").instantiate()
 	root.add_child(g)
 	g.set_process(false)
-	g._new_run(); g._start_round()
+	g._new_run(); g._start_leg()
 	seed(77)
 	var SW: float = g.SWING
 	var SP := GameData.tune("gauge_speed")

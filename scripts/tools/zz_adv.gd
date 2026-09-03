@@ -6,7 +6,7 @@ func _initialize() -> void:
 	root.add_child(g)
 	g.set_process(false)
 	g._new_run()
-	g._start_round()
+	g._start_leg()
 	seed(1234)
 
 	# ── 1. 오토플레이와 똑같은 분포로 한 발 기댓값 ──────────
@@ -57,22 +57,22 @@ func _initialize() -> void:
 		print("[D] 불 겨냥      sigma=%4.0fpx → 한 발 %6.2f  (6발 %7.0f)" % [sg, t / float(M), 6.0 * t / float(M)])
 
 	# ── 5. 목표 곡선 — 지금 값과 대안들 ─────────────────────
-	print("\n[E] 앤티 기본 (first=%.0f last=%.0f bow=%.2f)"
+	print("\n[E] 라운드 기본 (first=%.0f last=%.0f bow=%.2f)"
 			% [GameData.tune("curve_first"), GameData.tune("curve_last"), GameData.tune("curve_bow")])
-	for a in range(1, GameData.antes_n() + 1):
-		print("   앤티 %d  기본 %8.1f   작은 %7d  큰 %7d  보스 %7d"
-				% [a, GameData.ante_base(a),
-				int(round(GameData.ante_base(a))),
-				int(round(GameData.ante_base(a) * 1.5)),
-				int(round(GameData.ante_base(a) * 2.0))])
+	for a in range(1, GameData.rounds_n() + 1):
+		print("   라운드 %d  기본 %8.1f   작은 %7d  큰 %7d  보스 %7d"
+				% [a, GameData.round_base(a),
+				int(round(GameData.round_base(a))),
+				int(round(GameData.round_base(a) * 1.5)),
+				int(round(GameData.round_base(a) * 2.0))])
 
 	# ── 6. 리그(스테이크) 곡선 ──────────────────────────────
-	print("\n[F] 리그별 앤티 8 보스 목표")
-	for r in GameData.stakes():
+	print("\n[F] 리그별 라운드 8 보스 목표")
+	for r in GameData.leagues():
 		var id := String(r.get("id", ""))
-		GameData.stake = id
-		print("   %-7s %-8s 곡선열=%-7s  앤티8보스 %9d   다트 %d"
+		GameData.league = id
+		print("   %-7s %-8s 곡선열=%-7s  라운드8보스 %9d   다트 %d"
 				% [id, String(r.get("name", "")), String(r.get("curve", "")),
 				GameData.target_of(24), GameData.darts_of(24) + int(r.get("darts_add", 0))])
-	GameData.stake = "white"
+	GameData.league = "white"
 	quit(0)

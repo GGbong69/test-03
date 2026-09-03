@@ -63,7 +63,7 @@ func _process(_d: float) -> bool:
 		last_state = g.state
 	lands = int(g.land_n)
 	if frames % 40 == 0:
-		print("  … 런 %d · 다트 %d · 라운드 %d" % [runs, lands, g.round_no])
+		print("  … 런 %d · 다트 %d · 판 %d" % [runs, lands, g.leg_no])
 	if runs >= 30:
 		print("\n소크 끝 — 런 %d회 · 다트 %d발" % [runs, lands])
 		quit(0)

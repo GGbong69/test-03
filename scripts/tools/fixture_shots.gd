@@ -5,7 +5,7 @@ const Save = preload("res://scripts/save.gd")
 
 # 설비 선반을 눈으로 본다 — 걸린 상점, 못 사는 상점, 넓어진 매대, 늘어난 벽.
 #
-#   godot --path . --quit-after 900 --script scripts/tools/voucher_shots.gd
+#   godot --path . --quit-after 900 --script scripts/tools/fixture_shots.gd
 
 var g = null
 var busy := false
@@ -39,20 +39,20 @@ func _shoot(name: String) -> void:
 	await process_frame
 	await process_frame
 	root.get_texture().get_image().save_png("res://shots/" + name)
-	print("저장: %-22s 설비 %d개" % [name, GameData.vouchers_own.size()])
+	print("저장: %-22s 설비 %d개" % [name, GameData.fixtures_own.size()])
 
 
 func _run() -> void:
 	for i in 8:
 		g._process(1.0 / 60.0)
-	GameData.voucher_clear()
+	GameData.fixture_clear()
 	g._new_run()
 	g._swap_skip()
 
 	# 걸린 선반 — 살 수 있을 때
-	g.round_no = 1
+	g.leg_no = 1
 	g.gold = 40
-	g.shelf_ante = 0
+	g.shelf_round = 0
 	g._open_shop()
 	await _shoot("vou_shelf.png")
 
@@ -62,15 +62,15 @@ func _run() -> void:
 	await _shoot("vou_poor.png")
 
 	# 다 사고 난 매대 — 진열대 둘이면 여섯 칸
-	GameData.voucher_set(["v_shelf", "v_shelf2", "v_mag"])
+	GameData.fixture_set(["v_shelf", "v_shelf2", "v_mag"])
 	g.gold = 40
-	g.shelf_ante = 0
+	g.shelf_round = 0
 	g._open_shop()
 	await _shoot("vou_wide.png")
 
 	# 늘어난 벽 — 다트 아홉
-	g.round_no = 1
-	g._start_round()
+	g.leg_no = 1
+	g._start_leg()
 	g._swap_skip()
 	while g.remaining.size() < 9:
 		g.remaining.append(g.remaining[0])

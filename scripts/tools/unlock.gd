@@ -38,10 +38,10 @@ func _list() -> void:
 		var on: bool = i == 0 or Save.unlocked("pack:" + id)
 		print("  %s %-8s %s" % ["●" if on else "○", id, pr[i].get("name", "")])
 	print("리그")
-	var sr := GameData.stakes()
+	var sr := GameData.leagues()
 	for i in sr.size():
 		var id := String(sr[i].get("id", ""))
-		var on: bool = i == 0 or Save.unlocked(GameData.stake_key(id))
+		var on: bool = i == 0 or Save.unlocked(GameData.league_key(id))
 		var won: bool = Save.unlocked(GameData.win_key(id))
 		print("  %s %-8s %s%s" % ["●" if on else "○", id, sr[i].get("name", ""),
 				"  (완주)" if won else ""])
@@ -55,7 +55,7 @@ func _initialize() -> void:
 		return
 
 	var packs := GameData.packs()
-	var stakes := GameData.stakes()
+	var leagues := GameData.leagues()
 	var n := 0
 
 	if args.has("lock"):
@@ -63,7 +63,7 @@ func _initialize() -> void:
 		# 아니라 실제로 넘긴 흔적이다.
 		for k in Save.unlock_keys():
 			var key := String(k)
-			if key.begins_with("stake:") or key.begins_with("pack:"):
+			if key.begins_with("league:") or key.begins_with("pack:"):
 				if Save.lock(key):
 					n += 1
 		_say(n, "지운 해금")
@@ -76,8 +76,8 @@ func _initialize() -> void:
 		# 리그은 팩마다 따로 뚫린다. 모든 팩 × 모든 단을 연다.
 		for p in packs:
 			var pid := String(p.get("id", ""))
-			for i in range(1, stakes.size()):
-				if Save.unlock(GameData.stake_key(String(stakes[i].get("id", "")), pid)):
+			for i in range(1, leagues.size()):
+				if Save.unlock(GameData.league_key(String(leagues[i].get("id", "")), pid)):
 					n += 1
 		_say(n, "새로 연 것")
 

@@ -39,13 +39,13 @@ func _row(id: String) -> Dictionary:
 	return {}
 
 
-# 그 제약 하나만 걸고 라운드를 연다.
+# 그 제약 하나만 걸고 판을 연다.
 func _arm(g: Node, id: String) -> void:
 	var r := _row(id)
 	# 표의 행을 통째로 싣는다 — 게임이 그렇게 한다(_pick_stage 의 sp.d).
 	# 손으로 골라 담으면 id 가 빠져 그리기가 터진다.
 	g.active_mods = [] if r.is_empty() else [r]
-	g._start_round()
+	g._start_leg()
 	g._swap_skip()
 
 
@@ -211,14 +211,14 @@ func _initialize() -> void:
 			"회전 %d · 숫자 제자리 %s · 색 제자리 %s" % [g.spin_cur, not mixed, col_ok])
 
 	# ⑥ 판밖 축 — 보상
-	g.round_no = 2
+	g.leg_no = 2
 	_arm(g, "dry")
 	g.gold = 0
 	g.total = GameData.target_of(2)
 	g.darts_left = 0
 	g._settle_clear()
 	var dry_gold: int = g.gold
-	g.round_no = 2
+	g.leg_no = 2
 	_arm(g, "")
 	g.gold = 0
 	g.total = GameData.target_of(2)

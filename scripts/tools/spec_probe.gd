@@ -78,7 +78,7 @@ func _process(_d: float) -> bool:
 	#      "함수가 도는가" 만 알 뿐, 손이 거기까지 닿는지는 안 잰다 —
 	#      그 사이에 상태 잠금 셋이 있었고, 판에서는 하나도 안 열렸다.
 	for row in [["SHOP", g.S.SHOP, true], ["PICK", g.S.PICK, true],
-			["AIM_V", g.S.AIM_V, true], ["BLIND", g.S.BLIND, true],
+			["AIM_V", g.S.AIM_V, true], ["LEG", g.S.LEG, true],
 			["STAGE", g.S.STAGE, true], ["RESOLVE", g.S.RESOLVE, false]]:
 		g.state = row[1]
 		g.burst_left = 0

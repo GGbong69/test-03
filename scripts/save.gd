@@ -38,18 +38,18 @@ const S_STA := "통계"
 
 # 통계 키 — 전부 int 누적이거나 최댓값이다.
 #  누적(bump): 던진 다트·트리플·불·빗나감·구매·판매·리롤·소비·런·완주
-#  최댓값(peak): 도달 라운드·한 라운드 점수·보유 골드·트랙 레벨
+#  최댓값(peak): 도달 판·한 판 점수·보유 골드·트랙 레벨
 #
 #  발라트로의 해금 조건이 전부 이 두 모양이라(“타로 25장 사용”, “한 손에
 #  10만점”) 두 연산만 있으면 조건표를 데이터로 쓸 수 있다.
 const STATS := [
 	"runs", "wins", "darts", "triples", "doubles", "bulls", "misses",
 	"items_bought", "mods_bought", "darts_bought", "cons_used",
-	"rerolls", "sold", "gold_earned", "skips", "vouchers_bought",
-	"best_round", "best_score", "best_gold", "best_track",
+	"rerolls", "sold", "gold_earned", "skips", "fixtures_bought",
+	"best_leg", "best_score", "best_gold", "best_track",
 ]
 # 최댓값으로 다루는 것들. 나머지는 누적이다.
-const PEAKS := ["best_round", "best_score", "best_gold", "best_track"]
+const PEAKS := ["best_leg", "best_score", "best_gold", "best_track"]
 
 static var _cfg: ConfigFile = null
 static var _loaded := false
@@ -96,7 +96,7 @@ static func set_set(key: String, v: Variant) -> void:
 
 
 # ── 해금 ────────────────────────────────────────────────
-#  id 는 "pack:mag" · "stake:green" 처럼 갈래를 앞에 둔다. 표가 자라도
+#  id 는 "pack:mag" · "league:green" 처럼 갈래를 앞에 둔다. 표가 자라도
 #  키가 안 부딪히고, 갈래별로 훑을 수 있다.
 static func unlocked(id: String) -> bool:
 	boot()
@@ -150,7 +150,7 @@ static func stat(key: String) -> int:
 
 
 # 누적. 저장은 안 한다 — 한 발 던질 때마다 디스크를 때리면 안 된다.
-# 라운드 끝과 런 끝에서 flush() 를 부른다.
+# 판 끝과 런 끝에서 flush() 를 부른다.
 static func bump(key: String, n := 1) -> void:
 	boot()
 	if not STATS.has(key):

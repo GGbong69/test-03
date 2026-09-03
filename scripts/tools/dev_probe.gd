@@ -21,7 +21,7 @@ const Dev = preload("res://scripts/dev.gd")
 #    ① 그려지는 화살표 칸과 값 칸이 줄 안에서 안 겹치고 안 삐져나온다
 #    ② ◀ 는 뒤로, ▶ 는 앞으로 — 방향이 안 뒤집힌다
 #    ③ 누르는 그 순간 게임에 반영된다 (따로 적용을 안 눌러도)
-#    ④ 반영된 조준이 판을 넘겨도 남는다 — _start_round 가 든 스티커를
+#    ④ 반영된 조준이 판을 넘겨도 남는다 — _start_leg 가 든 스티커를
 #       다시 읽으므로, 값만 박으면 다음 판에서 조용히 std 로 풀린다
 #    ⑤ 여덟 방식을 차례로 다 고를 수 있다
 # ══════════════════════════════════════════════════════════
@@ -124,7 +124,7 @@ func _aim(g: Node) -> void:
 	# 판을 넘겨도 남는다 — 이것이 값만 박으면 안 되는 자리다
 	Dev.click(g, ra.get_center())
 	var want := String(g.aim_mode)
-	g._start_round()
+	g._start_leg()
 	_say(g.aim_mode == want, "고른 조준이 판을 넘겨도 남는다",
 			"고른 %s · 판 넘긴 뒤 %s" % [want, g.aim_mode])
 	_say(g._aim_from_items() == want, "스티커가 그 방식을 쥐고 있다",

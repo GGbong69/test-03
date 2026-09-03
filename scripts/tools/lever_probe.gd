@@ -76,7 +76,7 @@ func _process(_d: float) -> bool:
 	if g.state == g.S.OVER:
 		if g.won:
 			wins += 1
-		reached.append(g.round_no)
+		reached.append(g.leg_no)
 		runs += 1
 		if runs >= RUNS:
 			var s := 0
@@ -86,7 +86,7 @@ func _process(_d: float) -> bool:
 			out.append("%-26s 완주 %2d/%2d (%3.0f%%) · 도달 평균 %5.1f · 중앙 %2d · 최종 목표 %d"
 					% [CASES[ci].n, wins, RUNS, 100.0 * float(wins) / float(RUNS),
 					float(s) / float(RUNS), reached[reached.size() / 2],
-					GameData.target_of(GameData.rounds_n())])
+					GameData.target_of(GameData.legs_n())])
 			print("   " + out[out.size() - 1])
 			ci += 1
 			if ci >= CASES.size():

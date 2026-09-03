@@ -14,7 +14,7 @@ const Save = preload("res://scripts/save.gd")
 #
 #    ① 표의 갈래·방식 이름이 전부 코드에 등록돼 있다
 #    ② 히든에는 여는 조건이 있다 (없으면 영영 안 열린다)
-#    ③ 조준·계산이 팩에서 실제로 읽힌다 (라운드 시작에 한 번)
+#    ③ 조준·계산이 팩에서 실제로 읽힌다 (판 시작에 한 번)
 #    ④ 등록 안 된 이름은 std 로 떨어지되 **조용히는 아니다**
 #    ⑤ 히든은 조건을 채우면 열리고, 못 채우면 안 열린다
 #    ⑥ 잠긴 히든은 이름도 조건도 안 보인다
@@ -34,7 +34,7 @@ func _initialize() -> void:
 	Save.wipe()
 	var g: Node = load("res://scenes/main.tscn").instantiate()
 	root.add_child(g)
-	GameData.voucher_clear()
+	GameData.fixture_clear()
 
 	# ① 표와 코드가 같은 이름을 안다
 	var bad := ""
@@ -107,13 +107,13 @@ func _initialize() -> void:
 	_say(g.aim.y > 0.0 and g.gt > 0.0,
 			"std 조준은 게이지가 움직인다", "y -999 → %.1f · gt %.3f" % [g.aim.y, g.gt])
 
-	# ④ 라운드 시작 가드가 모르는 이름을 잡아 std 로 되돌린다.
+	# ④ 판 시작 가드가 모르는 이름을 잡아 std 로 되돌린다.
 	#    소리는 그 자리에서 한 번 나고, 조준은 안 멎는다 — 멎으면 조준이
 	#    영영 안 잠겨 런이 통째로 막힌다.
 	g.aim_mode = "없는것"
 	g.score_mode = "없는것"
-	g.round_no = 1
-	g._start_round()
+	g.leg_no = 1
+	g._start_leg()
 	g._swap_skip()
 	_say(g.aim_mode == "std" and g.score_mode == "std",
 			"모르는 방식은 std 로 되돌린다", "'%s' · '%s'" % [g.aim_mode, g.score_mode])

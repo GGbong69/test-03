@@ -31,9 +31,9 @@ func _run() -> void:
 		g._process(1.0 / 60.0)
 	g._new_run()
 	g._swap_skip()
-	g._skip_blind()          # 작은 판을 건너뛴다
+	g._skip_leg()          # 작은 판을 건너뛴다
 	g._swap_skip()
-	g.blind_t = 9.0
+	g.leg_t = 9.0
 	for i in 6:
 		g._process(1.0 / 60.0)
 		g.tip_a = 0.0
@@ -41,5 +41,5 @@ func _run() -> void:
 	await process_frame
 	await process_frame
 	root.get_texture().get_image().save_png("res://shots/skip_past.png")
-	print("저장: skip_past.png  판 %d · 건너뛴 판 %s" % [g.round_no, g.blind_skipped])
+	print("저장: skip_past.png  판 %d · 건너뛴 판 %s" % [g.leg_no, g.leg_skipped])
 	quit()

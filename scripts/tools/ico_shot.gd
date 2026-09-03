@@ -44,7 +44,7 @@ func _run() -> void:
 			c2.bought = 0
 			g.owned.append(c2)
 	g._panel_reset()
-	g.round_no = 1
+	g.leg_no = 1
 	g._open_shop()
 	g._swap_skip()
 	for i in 20:

@@ -54,7 +54,7 @@ func _process(_d: float) -> bool:
 	var max_steps := 0
 
 	for r in rolls:
-		g.round_no = 1 + (r % 7)
+		g.leg_no = 1 + (r % 7)
 		g.gold = 99
 		g._open_shop()
 		g._drop_settle()
