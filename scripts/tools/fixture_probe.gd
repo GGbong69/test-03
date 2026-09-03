@@ -4,12 +4,12 @@ const GameData = preload("res://scripts/data.gd")
 const Save = preload("res://scripts/save.gd")
 
 # ══════════════════════════════════════════════════════════
-#  장갑 회귀 검사
+#  사진 회귀 검사
 #
 #  실행:  godot --path . --headless --quit-after 4000 --script scripts/tools/fixture_probe.gd
 #  종료 코드 = 실패 개수
 #
-#  장갑의 약속은 둘이다.
+#  사진의 약속은 둘이다.
 #    ① 산 것이 **실제로 그 값을 민다** — 표만 맞고 아무 데도 안 걸리는
 #       사고가 이 저장소의 단골이다(안개가 그랬고, 넓은 테이블 뱃지도
 #       여섯을 굴리기만 하고 뭉쳤다).
@@ -116,7 +116,7 @@ func _initialize() -> void:
 	g._swap_skip()
 	_say(GameData.fixtures_own.is_empty()
 			and int(GameData.shop_of(1).items) == w0,
-			"새 런에서 장갑이 사라진다", "%d개" % GameData.fixtures_own.size())
+			"새 런에서 사진이 사라진다", "%d개" % GameData.fixtures_own.size())
 
 	# ⑤ 리롤에 안 씻긴다
 	GameData.fixture_clear()

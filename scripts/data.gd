@@ -97,8 +97,8 @@ const MOD_AXES := ["band", "slide", "ring", "bull", "out", "swap", "odd"]
 #   판밖 darts_add · seal_items · target_mul · reward_mul
 # 축 하나에 걸리는 자리가 정확히 한 곳이어야 한다. 두 곳이 되는 순간
 # "이 제약이 무엇을 하는가" 가 코드에서 안 읽힌다.
-# 장갑이 밀 수 있는 축과 그 바닥·천장. 목록이 곧 계약이다 — 코드가 안 읽는
-# 키를 표에 적으면 조용히 아무 일도 안 하는 장갑이 되고(안개가 그랬다),
+# 사진이 밀 수 있는 축과 그 바닥·천장. 목록이 곧 계약이다 — 코드가 안 읽는
+# 키를 표에 적으면 조용히 아무 일도 안 하는 사진이 되고(안개가 그랬다),
 # 바닥이 없으면 음수 한 줄이 런을 잠근다. stage_picks 가 0 이 되면 보스
 # 화면에 누를 카드가 없어 영영 안 넘어간다 — 그래서 키마다 범위를 쥔다.
 const VOUCHER_KEYS := {
@@ -644,7 +644,7 @@ static func pack_kind(row := {}) -> String:
 # 세미콜론으로 여럿, 빈 값이면 없다.
 #   grant_item     동전  (히든 다트통이 조준 방식을 넘기는 통로)
 #   grant_mod      보드 확장    (판 모양을 바꾼 채 시작한다)
-#   grant_fixture  장갑
+#   grant_fixture  사진
 #   grant_cons     사탕
 #
 # 다트통이 효과를 직접 들고 있지 않고 **물건으로** 준다. 그래야 그 물건이
@@ -878,7 +878,7 @@ static func tag_roll(round: int) -> Dictionary:
 	return pool[pool.size() - 1]
 
 
-# ── 장갑 ──────────────────────────────────────────────────
+# ── 사진 ──────────────────────────────────────────────────
 #  상점에서 사면 런 내내 남는 영구 업그레이드. 리그(런 시작에 고른다)와
 #  뱃지(한 번 쓰고 사라진다) 사이의 빈 자리다.
 #
@@ -949,11 +949,11 @@ static func _vou_bake() -> void:
 		_vou[String(f.key)] = e
 
 
-# 장갑이 민 값. (기본 + 더한 것) × 곱한 것.
+# 사진이 민 값. (기본 + 더한 것) × 곱한 것.
 #
 # 리그·뱃지와의 순서는 축마다 다르고, 그것이 사실이다. shop_items 는
-# 표 → 장갑 → 뱃지, darts_add 는 제약 → 리그 → 뱃지 → 장갑 → 동전.
-# "장갑이 늘 마지막" 같은 규칙을 주석으로 세우면 거짓 불변식이 된다 —
+# 표 → 사진 → 뱃지, darts_add 는 제약 → 리그 → 뱃지 → 사진 → 동전.
+# "사진이 늘 마지막" 같은 규칙을 주석으로 세우면 거짓 불변식이 된다 —
 # 전부 add 라 지금은 수가 같지만, 다음 사람이 그 순서를 근거로 mul 을
 # 얹으면 세 자리가 한꺼번에 틀린다. 축마다 적용부 주석이 순서를 쥔다.
 static func fixture_v(key: String, dflt: float) -> float:
@@ -965,7 +965,7 @@ static func fixture_i(key: String, dflt: int) -> int:
 	return int(round(fixture_v(key, float(dflt))))
 
 
-# 이 상점에 걸 장갑 하나. 라운드가 문이고 앞선 단이 열쇠다.
+# 이 상점에 걸 사진 하나. 라운드가 문이고 앞선 단이 열쇠다.
 static func fixture_roll(round: int) -> Dictionary:
 	var pool := []
 	var sum := 0.0
@@ -1005,7 +1005,7 @@ static func leg_name(n: int) -> String:
 static func shop_of(n: int) -> Dictionary:
 	var r := _round_row(n)
 	return {
-		# 장갑이 여기 얹힌다 — 표 → 장갑 → 뱃지 순서다(뱃지는 _roll_stock 이
+		# 사진이 여기 얹힌다 — 표 → 사진 → 뱃지 순서다(뱃지는 _roll_stock 이
 		# 이 값 뒤에 더한다). 테이블 폭을 읽는 자리가 여기 하나뿐이라 여기가
 		# 유일한 합류점이다.
 		"items": fixture_i("shop_items", _i(r, "shop_items", "rounds", 0)),
@@ -1807,7 +1807,7 @@ static func _v_tags() -> void:
 		_errs.append("tags — 라운드 1 에 뜰 수 있는 뱃지가 없다. 첫 건너뛰기가 빈손이 된다")
 
 
-# 장갑. 모르는 축·모르는 연산·범위 밖 값이 셋 다 같은 얼굴을 한다 —
+# 사진. 모르는 축·모르는 연산·범위 밖 값이 셋 다 같은 얼굴을 한다 —
 # 표는 멀쩡한데 게임에서 아무 일도 안 일어나거나, 반대로 런이 잠긴다.
 static func _v_vouchers() -> void:
 	var raw: Array = _raw.get("fixtures", [])
@@ -1839,7 +1839,7 @@ static func _v_vouchers() -> void:
 			_errs.append("%s — 앞선 단 '%s' 가 표에 없거나 아래에 있다" % [who, pq])
 		_v_desc(who, r.get("desc", ""), ["v"])
 	if not first:
-		_errs.append("fixtures — 라운드 1 에 조건 없이 뜰 장갑이 없다")
+		_errs.append("fixtures — 라운드 1 에 조건 없이 뜰 사진이 없다")
 	# 축마다 쌓을 수 있는 최대를 미리 더해 본다. 표만 보고 계산되는 것을
 	# 게임을 돌려서 알아내면 늦다 — 런이 잠기는 축이 그 안에 있다.
 	var add := {}
@@ -1856,7 +1856,7 @@ static func _v_vouchers() -> void:
 		var lim: Array = VOUCHER_KEYS[key3]
 		# 한 축은 add 아니면 mul, 하나만 쓴다. 섞이는 순간 "무엇을 먼저
 		# 하느냐" 가 값을 바꾸고, 그 순서는 축마다 다른 자리에서 정해진다
-		# (shop_items 는 표→장갑→뱃지, darts_add 는 리그→뱃지→장갑).
+		# (shop_items 는 표→사진→뱃지, darts_add 는 리그→뱃지→사진).
 		# 섞지 않으면 그 물음이 아예 안 생긴다.
 		if add.has(key3) and mul.has(key3):
 			_errs.append("fixtures — %s 에 add 와 mul 이 섞였다. 축 하나에 하나만 쓴다"

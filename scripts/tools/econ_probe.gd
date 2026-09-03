@@ -158,7 +158,7 @@ func _process(_d: float) -> bool:
 			kind = "동전"
 			own_in = g.owned.size()
 		elif spent >= 5:
-			kind = "장갑/보드 확장/다트"
+			kind = "사진/보드 확장/다트"
 		if not spend_kind.has(kind):
 			spend_kind[kind] = [0, 0]
 		spend_kind[kind][0] += 1

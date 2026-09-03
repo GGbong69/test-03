@@ -682,7 +682,7 @@ RULES = {
         "modes": "조준 방식은 **든 동전**가 쥔다(a*** 동전 7장). 다트통이 아니라 동전라 "
                  "사고 팔고 봉인되는 규칙 아래 놓인다.",
         "stages": "잠그는 횟수는 방식마다 다르다 — 2회(기본·원·빗각) / 1회(나머지).",
-        "gauge": "게이지 속도 %s. 게임 중 [ ] 키로 조절된다. 제약 '역풍'과 장갑 '침착'이 "
+        "gauge": "게이지 속도 %s. 게임 중 [ ] 키로 조절된다. 제약 '역풍'과 사진 '침착'이 "
                  "같은 축을 민다." % TUNE["gauge_speed"],
     },
     "economy": {
@@ -693,7 +693,7 @@ RULES = {
                    "골드 동전 (정산 시점 8종)",
                    "동전 판매",
                    "건너뛴 판의 뱃지"],
-        "outgo": ["테이블 구매(동전 · 보드 확장 · 다트 · 소비)", "유료 리롤", "장갑 구매",
+        "outgo": ["테이블 구매(동전 · 보드 확장 · 다트 · 소비)", "유료 리롤", "사진 구매",
                   "리그 유지비 — 판마다 %d골드 (%s)"
                   % (max(s["rent"] or 0 for s in STAKES),
                      ", ".join(s["name"] for s in STAKES if s["rent"]))],
@@ -713,7 +713,7 @@ RULES = {
                     "애초에 후보에서 빠진다.",
         "mods": "판이 더는 못 받는 보드 확장(기하 순서 위반 · 판값 상한 초과)와 이미 산 보드 확장은 "
                 "후보에서 빠진다. 무효 구매가 존재할 수 없다.",
-        "voucher": "장갑은 테이블이 아니라 왼쪽 벽에 걸린다. 앤티당 하나, 리롤로 안 씻긴다.",
+        "voucher": "사진은 테이블이 아니라 왼쪽 벽에 걸린다. 앤티당 하나, 리롤로 안 씻긴다.",
         "physics": "매물은 상인이 펠트 위로 던져 굴린다. 리롤하면 쓸어 담고 다시 던진다. "
                    "구매는 물건을 계산대로 밀거나 두 번 누른다.",
     },
@@ -866,7 +866,7 @@ def build_md() -> str:
     for i, t in enumerate([
         "게임 정체", "핵심 루프", "점수 계산", "다트판 기하", "조준 방식",
         "동전 (아이템)", "보드 확장", "다트", "사탕과 트랙 강화",
-        "제약 (보스 판)", "뱃지 (건너뛰기 보상)", "장갑 (바우처)",
+        "제약 (보스 판)", "뱃지 (건너뛰기 보상)", "사진 (바우처)",
         "다트통", "리그 (난이도 단계)", "라운드 곡선과 목표",
         "경제 상수", "화면과 조작", "저장 · 해금 · 통계",
         "어휘 사전", "아직 안 정한 것", "측정 데이터",
@@ -893,7 +893,7 @@ def build_md() -> str:
         ["  등급별(활성)", " · ".join("%s %d" % (RARITY_KO[k], v) for k, v in c["items_by_rarity"].items())],
         ["보드 확장", "%d종" % c["mods"]], ["다트", "%d종" % c["darts"]],
         ["제약", "%d종" % c["modifiers"]], ["뱃지", "%d종" % c["tags"]],
-        ["장갑", "%d종" % c["vouchers"]], ["다트통", "%d종" % c["packs"]],
+        ["사진", "%d종" % c["vouchers"]], ["다트통", "%d종" % c["packs"]],
         ["리그", "%d단" % c["stakes"]], ["착탄 영역", "%d종" % c["areas"]],
         ["사탕", "%d종 (활성)" % c["consumables_enabled"]],
         ["스티커", "%d종 (전부 미구현)" % c["processing"]],
@@ -1187,7 +1187,7 @@ def build_md() -> str:
     w("\n---\n")
 
     # 12 vouchers
-    w("## 12. 장갑 (바우처)\n")
+    w("## 12. 사진 (바우처)\n")
     w("상점에서 사면 런 내내 남는 영구 업그레이드. 리그(런 시작에 고른다)와 "
       "뱃지(한 번 쓰고 사라진다) 사이의 빈 자리다.\n")
     w("- 테이블이 아니라 **왼쪽 벽**에 걸린다. 리롤해도 안 씻긴다.")
@@ -1197,7 +1197,7 @@ def build_md() -> str:
                [[v["id"], v["name"], v["key"], v["v"], v["op"], v["cost"], g(v["prereq"]),
                  v["min_ante"], v["weight"], desc_fill(v.get("desc"), v, {}), g(v["_note"])]
                 for v in VOUCHERS]))
-    w("\n**장갑이 밀 수 있는 축과 범위** (`VOUCHER_KEYS` — 목록이 곧 계약이다)\n")
+    w("\n**사진이 밀 수 있는 축과 범위** (`VOUCHER_KEYS` — 목록이 곧 계약이다)\n")
     w(md_table(["열쇠", "바닥", "천장"],
                [[k, v[0] if isinstance(v, list) else v, v[1] if isinstance(v, list) else ""]
                 for k, v in (CODE["vocab"]["VOUCHER_KEYS"] or {}).items()]))
@@ -1359,7 +1359,7 @@ def build_md() -> str:
         "doubles": "더블", "bulls": "불", "misses": "빗나감",
         "items_bought": "산 동전", "mods_bought": "산 보드 확장", "darts_bought": "산 다트",
         "cons_used": "쓴 사탕", "rerolls": "리롤", "sold": "판 동전",
-        "gold_earned": "번 골드", "skips": "건너뛴 판", "vouchers_bought": "산 장갑",
+        "gold_earned": "번 골드", "skips": "건너뛴 판", "vouchers_bought": "산 사진",
         "best_round": "최고 도달 판", "best_score": "한 판 최고 점수",
         "best_gold": "최고 보유 골드", "best_track": "최고 트랙 레벨",
     }
@@ -1398,7 +1398,7 @@ def build_md() -> str:
         ["탄창", "magazine", "이 런의 다트 구성"],
         ["제약", "modifier / active_mods", "보스 판에 걸리는 페널티. 셋 중 하나를 고른다"],
         ["뱃지", "tag / pending_tags", "판을 건너뛴 값"],
-        ["장갑", "voucher / shelf", "런 내내 남는 영구 업그레이드"],
+        ["사진", "voucher / shelf", "런 내내 남는 영구 업그레이드"],
         ["다트통", "pack", "다트통. 발라트로의 덱"],
         ["리그", "stake", "난이도 단계. 발라트로의 스테이크"],
         ["앤티", "ante", "라운드 묶음. 앤티 하나에 판 %d개" % BLINDS_PER],

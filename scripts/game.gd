@@ -154,9 +154,9 @@ var rt_trp2_out := 0.0
 var rt_bull_o := 0.14
 var rt_bull_i := 0.06
 var dead_idx := -1              # "금지 구역"이 죽이는 칸. -1 이면 안 걸렸다
-# ── 장갑 선반 ────────────────────────────────────────────
+# ── 사진 선반 ────────────────────────────────────────────
 #  상점 왼쪽 벽에 걸린다. **테이블(stock)에 안 넣는다** — 테이블은 상인이
-#  쓸어 다시 던지는 판이고 장갑은 그 판에 안 오른다. 리롤해도 안 씻기는
+#  쓸어 다시 던지는 판이고 사진은 그 판에 안 오른다. 리롤해도 안 씻기는
 #  것이 코드 0줄로 성립하는 이유가 그것이다(_roll_stock 은 stock 만 지운다).
 #  한 라운드에 하나. 사면 사라지고 그 라운드에는 다시 안 뜬다.
 var aim_mode := "std"           # 이 런의 조준 방식. 다트통이 정한다
@@ -182,8 +182,8 @@ var mouse_down := false         # 왼쪽 단추를 쥐고 있는가. 당김이 �
 # 조준의 무작위는 **제 난수통**을 쓴다. 전역 난수를 태우면 다트를 집을
 # 때마다 줄이 밀려 상점·성장 뽑기가 통째로 달라진다.
 var aim_rng := RandomNumberGenerator.new()
-var shelf := {}                 # 이 상점에 걸린 장갑. 비면 없다
-var shelf_round := 0             # 그 장갑을 굴린 라운드. 라운드가 바뀔 때만 다시 굴린다
+var shelf := {}                 # 이 상점에 걸린 사진. 비면 없다
+var shelf_round := 0             # 그 사진을 굴린 라운드. 라운드가 바뀔 때만 다시 굴린다
 var dead_col := -1              # 값을 죽이는 칸 색 번호. -1 이면 안 걸렸다
 var dead_ring := 0              # 무효가 되는 배수(2 더블 · 3 트리플). 0 이면 없다
 var odd_mul := 1.0              # 홀수 칸 값 배수
@@ -225,7 +225,7 @@ var land_n := 0
 var seen_risk := false          # risk1 용 — 이번 판에 risk 명중이 있었나
 var low_hit := 0                # 이번 판 최저 명중 숫자 (0 = 아직 없음)
 var leg_darts := 6            # 이번 판 시작 다트 수 (few·missing 이 읽는다)
-# 제약·리그·뱃지·장갑·동전이 손대기 **전**의 다트 수. 「기본에서 줄어든
+# 제약·리그·뱃지·사진·동전이 손대기 **전**의 다트 수. 「기본에서 줄어든
 # 다트 1개당」이 읽는 그 기본이다. 다트통이 이 수를 바꾸므로(여벌 +1 · 넓은 동전 슬롯 -1)
 # 6 을 박아 두면 안 된다 — 넓은 동전 슬롯은 아무것도 안 잃고 한 발 줄어든 것으로
 # 읽히고, 여벌은 한 발을 잃고도 안 줄어든 것으로 읽힌다.
@@ -386,7 +386,7 @@ func _new_run() -> void:
 	leg_tags.clear()
 	leg_tags_round = 0
 	leg_skipped.clear()
-	GameData.fixture_clear()     # 장갑은 런 스코프다. 지우는 자리는 여기 하나
+	GameData.fixture_clear()     # 사진은 런 스코프다. 지우는 자리는 여기 하나
 	spin_cur = 0
 	dead_col = -1
 	dead_ring = 0
@@ -426,7 +426,7 @@ func _start_leg() -> void:
 	# 넣어 두는데, rounds 의 수로 곧장 자르면 그 몫이 통째로 없어졌다 —
 	# 여벌 다트통이 탄창 일곱 자루를 쥐고도 여섯 발만 던지고 있었고, 넓은 동전 슬롯은
 	# 다섯 자루를 쥐고도 여섯 발을 던졌다(둘 다 다트통 설명과 반대다).
-	# 아래 dadd 사슬(제약·리그·뱃지·장갑·동전)과 달리 다트통만 탄창 쪽에
+	# 아래 dadd 사슬(제약·리그·뱃지·사진·동전)과 달리 다트통만 탄창 쪽에
 	# 살았던 것이 원인이라, 다트통도 같은 자리에서 센다.
 	var want := (GameData.darts_of(leg_no)
 			+ int(GameData.pack_v("darts_add", 0.0)))
@@ -439,8 +439,8 @@ func _start_leg() -> void:
 	var dadd := int(mod_v("darts_add", 0.0))
 	dadd += int(GameData.league_v("darts_add", 0.0))
 	dadd += _spend_tags("dart")          # 뱃지 — 다음 판 한 번만 산다
-	dadd += GameData.fixture_i("darts_add", 0)   # 장갑 — 런 내내 산다
-	# 순서: 제약 → 리그 → 뱃지 → 장갑 → 동전. 전부 더하기라 지금은 수가
+	dadd += GameData.fixture_i("darts_add", 0)   # 사진 — 런 내내 산다
+	# 순서: 제약 → 리그 → 뱃지 → 사진 → 동전. 전부 더하기라 지금은 수가
 	# 같지만, 이 줄들 중 하나라도 곱이 되면 순서가 값을 바꾼다. 그때 고칠
 	# 자리가 여기 하나다.
 	# 아이템이 주고받는 다트 (조커 이식 — 곡예 다트맨 -2 등)
@@ -629,7 +629,7 @@ func _settle_clear() -> void:
 	@warning_ignore("integer_division")  # 보유 5당 1, 내림이 규칙이다
 	var interest: int = mini(gold / GameData.interest_per(), _interest_cap())
 	# 이자를 끄는 다트통. 상한을 0 으로 만드는 대신 여기서 끊는다 —
-	# 상한은 리그·장갑도 미는 값이라, 거기 0 을 섞으면 "누가 껐나" 가
+	# 상한은 리그·사진도 미는 값이라, 거기 0 을 섞으면 "누가 껐나" 가
 	# 안 읽힌다. 다트통이 끈 것은 다트통 자리에서 끈다.
 	if GameData.pack_v("interest_off", 0.0) > 0.0:
 		interest = 0
@@ -682,7 +682,7 @@ func _seal_drop(i: int) -> void:
 # 다트통이 쥐여 주는 것들. 네 갈래를 한자리에서 푼다 — 갈래마다 다른
 # 자리에서 풀면 "이 다트통이 무엇을 주고 시작하나" 를 네 곳에서 읽어야 한다.
 #
-# 보드 확장은 판을 다시 굽는다(mods_own 이 판의 유일한 출처다). 장갑은
+# 보드 확장은 판을 다시 굽는다(mods_own 이 판의 유일한 출처다). 사진은
 # GameData 의 static 목록에 들어가고, 소비와 동전은 칸에 담긴다.
 # 칸이 모자라면 안 담는다 — 다트통이 제 칸보다 많이 주면 그건 표의 잘못이고
 # 검증기가 잡을 자리다. 여기서 칸을 늘려 주면 그 잘못이 숨는다.
@@ -817,21 +817,21 @@ func _gold_from_items() -> Array:
 	return rows
 
 
-# 무료 리롤 횟수 — 표 + 장갑. 뱃지(무료 리롤)는 이 값이 아니라
+# 무료 리롤 횟수 — 표 + 사진. 뱃지(무료 리롤)는 이 값이 아니라
 # rerolls_used 를 음수로 밀어 좌변에 붙는다. 같은 축이 아니라 같은 비교의
 # 반대편이라, 둘을 한 수로 합치면 안 된다.
 func _free_rerolls() -> int:
 	return GameData.free_rerolls() + GameData.fixture_i("free_rerolls", 0)
 
 
-# 이자 상한 = 표 + 리그 + 장갑. 정산(_settle_clear)과 자금판 미리보기가
+# 이자 상한 = 표 + 리그 + 사진. 정산(_settle_clear)과 자금판 미리보기가
 # 같은 식을 읽어야 한다 — 갈려 있으면 화면에 적힌 수와 실제로 들어오는
 # 골드가 다르고, 그건 플레이어가 못 고치는 종류의 거짓말이다.
 func _interest_cap() -> int:
 	return GameData.interest_max() + int(GameData.league_v("interest_add", 0.0)) 			+ GameData.fixture_i("interest_add", 0)
 
 
-# 벽에 걸린 장갑 한 장. 매물과 다른 어휘로 그린다 — 매물은 펠트 위에
+# 벽에 걸린 사진 한 장. 매물과 다른 어휘로 그린다 — 매물은 펠트 위에
 # 놓인 둥근 물건이고 이것은 벽에 박힌 네모 판이다. 같은 어휘를 쓰면
 # "이것도 쓸려 나가나" 를 플레이어가 물어야 한다.
 func _shelf_draw() -> void:
@@ -844,7 +844,7 @@ func _shelf_draw() -> void:
 	# 걸이 — 위쪽 한 획이 "벽에 박혀 있다" 를 말한다. 테이블의 값뱃지와 다른 신호다.
 	draw_rect(Rect2(r.position, Vector2(r.size.x, 2.0)),
 			C_ACC if can else C_DIM.darkened(0.3))
-	draw_string(font, r.position + Vector2(0.0, 18.0), "장갑",
+	draw_string(font, r.position + Vector2(0.0, 18.0), "사진",
 			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 8, C_DIM)
 	draw_string(font, r.position + Vector2(0.0, 32.0), String(shelf.n),
 			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 11,
@@ -890,7 +890,7 @@ func _open_shop() -> void:
 	_sweep_reset()
 	rerolls_used = -_spend_tags("reroll")   # 뱃지 — 무료 리롤을 앞당긴다
 	reroll_cost = _reroll_price()
-	# 장갑은 라운드가 바뀔 때만 갈린다. 같은 라운드의 상점 셋이 같은 것을 본다 —
+	# 사진은 라운드가 바뀔 때만 갈린다. 같은 라운드의 상점 셋이 같은 것을 본다 —
 	# 발라트로가 바우처를 라운드마다 하나 거는 것과 같은 자리다. 안 사면
 	# 다음 상점에도 그대로 걸려 있고, 라운드가 넘어가면 사라진다.
 	var round := GameData.round_of(leg_no)
@@ -1775,7 +1775,7 @@ func add_sparks(n: int, r0: float, r1: float, ln: float, c: Color, life: float) 
 
 
 func gs() -> float:
-	# 이 게임 고유의 축. 제약이 미는 그 줄에 장갑이 나란히 얹힌다 —
+	# 이 게임 고유의 축. 제약이 미는 그 줄에 사진이 나란히 얹힌다 —
 	# 둘 다 곱이라 순서가 값을 안 바꾼다.
 	var g := gauge_speed * mod_v("gauge_mul", 1.0) 			* GameData.fixture_v("gauge_mul", 1.0)
 	return g * (cur_dart.gauge if cur_dart.has("gauge") else 1.0)
@@ -1972,7 +1972,7 @@ func _auto_step() -> void:
 				if _buy_block(i) == "":
 					buyable.append(i)
 			var roll := randf()
-			# 장갑을 먼저 본다. 소크가 안 사면 넓어진 테이블·늘어난 다트를
+			# 사진을 먼저 본다. 소크가 안 사면 넓어진 테이블·늘어난 다트를
 			# 한 번도 안 굴려 보게 되고, 그러면 이 시스템에 그물이 없다.
 			if not shelf.is_empty() and gold >= int(shelf.cost) and roll < 0.35:
 				_shelf_buy()
@@ -3280,7 +3280,7 @@ func _grip_tilt(i: int) -> float:
 # 중심 좌표를 스스로 만들어 넘기므로 소크가 그걸 못 잡는다.
 #   마지막 자루 아래끝 = cy 224 + (n-1)*dy/2 + hit 18 ≤ 360
 #   → dy ≤ 236 / (n-1)
-# 기본 여섯 + 동전 하나 + 뱃지 하나 + 장갑 하나 = 아홉이 실제 상한이다.
+# 기본 여섯 + 동전 하나 + 뱃지 하나 + 사진 하나 = 아홉이 실제 상한이다.
 func _grip_dy() -> float:
 	return minf(float(GRIP.dy), 236.0 / maxf(float(grip_n) - 1.0, 1.0))
 
@@ -8016,7 +8016,7 @@ var tip_title := ""
 var tip_lines := []             # [{"s": String, "sz": int, "c": Color}]
 var tip_chip := {}              # 제목 옆 미니동전로 그릴 아이템 (없으면 빈 사전)
 # 갈래 기본 점수 — 툴팁 맨 아래에 한 낱말. "이게 뭐냐" 가 이름만으로는 안 풀린다.
-# 동전과 사탕이 둘 다 둥근 판이고 보드 확장과 장갑이 둘 다 네모라,
+# 동전과 사탕이 둘 다 둥근 판이고 보드 확장과 사진이 둘 다 네모라,
 # 그림만으로는 갈래가 안 갈린다. 발라트로가 툴팁 밑에 부스터/조커/타로를
 # 기본 점수으로 붙이는 그 자리다.
 var tip_tag := ""               # 기본 점수에 적을 낱말. 비면 안 그린다
@@ -8194,7 +8194,7 @@ func _tip_build(hit: Dictionary) -> void:
 		"stock":
 			var s: Dictionary = stock[i]
 			# 테이블은 한 자리에 네 갈래가 섞여 뜬다 — 그림만으로는 동전과
-			# 소비가, 보드 확장과 장갑이 안 갈린다. 기본 점수가 그것을 한 낱말로 푼다.
+			# 소비가, 보드 확장과 사진이 안 갈린다. 기본 점수가 그것을 한 낱말로 푼다.
 			match String(s.type):
 				"item":
 					_tip_set_tag("동전")
@@ -8327,7 +8327,7 @@ func _tip_set_tag(k: String) -> void:
 			tip_tag_c = C_MULT.lightened(0.20)
 		"다트":
 			tip_tag_c = C_TXT.darkened(0.15)
-		"장갑":
+		"사진":
 			tip_tag_c = C_GOLD
 		"제약":
 			tip_tag_c = C_RED.lightened(0.20)

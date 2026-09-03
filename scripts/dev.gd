@@ -203,7 +203,7 @@ static func _rows(g: Node) -> Array:
 						"n": GameData.mods().size()},
 				{"n1": "다트 바꾸기", "t": "list", "k": "dart",
 						"n": GameData.darts().size()},
-				{"n1": "장갑 주기", "t": "list", "k": "vou",
+				{"n1": "사진 주기", "t": "list", "k": "vou",
 						"n": GameData.fixtures().size()},
 				{"n1": "뱃지 주기", "t": "list", "k": "tag",
 						"n": GameData.tags().size()},
@@ -424,7 +424,7 @@ static func _run(g: Node, e: Dictionary) -> void:
 		"vou":
 			if not rows.is_empty():
 				GameData.fixture_add(String(rows[i % rows.size()].id))
-				_say("장갑 %d개" % GameData.fixtures_own.size())
+				_say("사진 %d개" % GameData.fixtures_own.size())
 		"tag":
 			if not rows.is_empty():
 				g._take_tag(rows[i % rows.size()])

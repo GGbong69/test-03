@@ -3,7 +3,7 @@ extends SceneTree
 const GameData = preload("res://scripts/data.gd")
 const Save = preload("res://scripts/save.gd")
 
-# 장갑 선반을 눈으로 본다 — 걸린 상점, 못 사는 상점, 넓어진 테이블, 늘어난 벽.
+# 사진 선반을 눈으로 본다 — 걸린 상점, 못 사는 상점, 넓어진 테이블, 늘어난 벽.
 #
 #   godot --path . --quit-after 900 --script scripts/tools/fixture_shots.gd
 
@@ -39,7 +39,7 @@ func _shoot(name: String) -> void:
 	await process_frame
 	await process_frame
 	root.get_texture().get_image().save_png("res://shots/" + name)
-	print("저장: %-22s 장갑 %d개" % [name, GameData.fixtures_own.size()])
+	print("저장: %-22s 사진 %d개" % [name, GameData.fixtures_own.size()])
 
 
 func _run() -> void:
