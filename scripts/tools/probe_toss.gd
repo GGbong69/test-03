@@ -33,8 +33,8 @@ func _initialize() -> void:
 			if it.sleep and absf(it.wob) < 0.01 and absf(it.wv) < 0.01:
 				break
 		var dist: float = absf(it.u - u0)
-		print("손속도 %6.0f -> om=%.2f vu=%7.1f -> 미끄럼 거리 %.1fpx"
-				% [spd, om0, vu0, dist])
+		print("손속도 %6.0f -> vu=%7.1f -> 미끄럼 거리 %6.1fpx -> roll %.2frad (%.1f바퀴)"
+				% [spd, vu0, dist, it.roll, it.roll / TAU])
 		# 원위치로 되돌려 다음 세기를 같은 조건에서 잰다
 		it.u = u0
 		it.vu = 0.0
@@ -42,5 +42,6 @@ func _initialize() -> void:
 		it.om = 0.0
 		it.wob = 0.0
 		it.wv = 0.0
+		it.roll = 0.0
 		it.sleep = true
 	quit()

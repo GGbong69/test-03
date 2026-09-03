@@ -5999,6 +5999,11 @@ const DROP := {
 	#  1/160 은 3.6면px(화면 2.2), 1/60 은 9.6면px(화면 5.9) — 반발이 펠트 위
 	#  공중에서 일어나기 시작한다.
 	"g": 1400.0, "sub": 0.00625, "max_d": 0.033, "sub_max": 8,
+	"candy_roll": 0.145,
+	#  사탕이 미끄러진 거리(면px) 당 도는 각(rad). 3D 전용 — 다른 물체의
+	#  회전(psi/om)은 그대로 두고 사탕만 이 축을 더 쓴다. 새 toss_cap
+	#  260 의 최대 미끄럼 65면px 에서 65*0.145 ≈ 9.4rad(1.5바퀴) — 세게
+	#  던지면 눈에 보이게 굴러 넘어가고, 살짝 밀면 그만큼만 기운다.
 
 	# ── 반발 · 마찰 ──────────────────────────────────
 	"e_item": 0.34, "e_mod": 0.16, "e_dart": 0.24,
@@ -6113,6 +6118,7 @@ func _drop_roll() -> void:
 			"air": true, "into": false, "sleep": false, "rest": 0.0,
 			"wob": 0.0, "wv": 0.0, "lift": 0.0, "lv": 0.0,
 			"sold": 0.0, "to": Vector2.ZERO, "gone": false,
+			"roll": 0.0,      # 사탕 전용 — 미끄러진 거리만큼 3D 로 굴러 넘어간다
 		})
 	drop_awake = true
 	if drop_fast:
@@ -6432,6 +6438,13 @@ func _drop_extras(d: float) -> void:
 		it.wv -= it.wob * DROP.wob_k * d
 		it.wv *= exp(-DROP.wob_c * d)
 		it.wob = clampf(it.wob + it.wv * d, -1.0, 1.0)
+		# 사탕은 미끄러진 거리만큼 구른다 — "굴러서 뒤집힌다". psi/om 은
+		# 다른 물체와 공유하는 회전(a_spin 30 이 0.09초 안에 죽인다)이라
+		# 여기 쓰면 표가 안 난다. 이 축은 사탕 전용이고 속도가 그대로
+		# 회전 속도다 — 세게 던져 멀리 밀릴수록 더 많이 구른다.
+		if i < stock.size() and stock[i].type == "cons":
+			var csp: float = Vector2(it.vu, it.vw).length()
+			it.roll = it.get("roll", 0.0) + csp * DROP.candy_roll * d
 		if not it.held:
 			it.mark = Vector2(it.u, it.w)
 		# 든 물건은 눌린다 — 들리지 않는 노선이라 이것이 "잡았다" 의 전부다.
@@ -6629,10 +6642,11 @@ func _obj_paint(it: Dictionary, s: Dictionary, dim: float) -> void:
 			# 이미 매기는 회전이다(_drop_roll 의 om 이 프레임마다 더한다) —
 			# 그 값을 그대로 3D 야로 옮기면 손으로 맞출 각이 없다.
 			# sleep 만 보고 얼리면 안 된다 — 잠든 뒤에도 wob 스프링은 몇 프레임
-			# 더 감쇠한다(_drop_wob 는 sleep 을 안 본다). 그 잔진동까지 찍혀야
-			# "털썩 떨어져 두어 번 흔들리다 멎는다" 가 화면에 남는다.
-			var still: bool = bool(it.get("sleep", false)) 					and absf(float(it.get("wob", 0.0))) < 0.02 					and absf(float(it.get("wv", 0.0))) < 0.02
-			var ctex := _candy_tex_live(String(s.d.id), float(it.get("psi", 0.0)),
+			# 더 감쇠하고, 구르던 관성도 완전히 멎을 시간이 더 든다.
+			# "털썩 떨어져 두어 번 흔들리다 멎는다" 가 화면에 남으려면
+			# 세 값(흔들림·흔들림 속도·미끄럼 속도)이 다 죽어야 한다.
+			var still: bool = bool(it.get("sleep", false)) 					and absf(float(it.get("wob", 0.0))) < 0.02 					and absf(float(it.get("wv", 0.0))) < 0.02 					and Vector2(it.get("vu", 0.0), it.get("vw", 0.0)).length() < 1.0
+			var ctex := _candy_tex_live(String(s.d.id), float(it.get("roll", 0.0)),
 					float(it.get("wob", 0.0)), not still)
 			if ctex != null:
 				var ch := 30.0
@@ -7181,18 +7195,17 @@ func _candy_tex(id: String) -> Texture2D:
 var candy_live := {}       # id → {"vp":SubViewport,"mi":MeshInstance3D} — 테이블에 구르는 사탕
 
 
-# 테이블에 떨어진 사탕. 물리가 이미 계산해 둔 값 둘을 그대로 3D 로
-# 옮긴다 — 카드 뒤에 아이콘을 얹는 대신 모델 자체가 구르며 떨어진다.
-#   yaw(psi) — 던진 방향의 스핀(_hand_land 의 om = -vx * toss_spin).
-#              손으로 세게 후려칠수록 빨리 돈다.
-#   wob      — 충격의 크기로 매기는 감쇠 진동(-1~1). 살며시 놓으면 거의
-#              안 눕고, 세게 던질수록 크게 젖혀 떨어지는 순간 "뒤집힌다".
-#              물리 쪽은 이미 매 프레임 이 스프링을 적분해 두고 있었다
-#              (_drop_wob) — 3D 로 옮기지 않았을 뿐이다.
-# live 가 참인 동안(아직 안 잠듦) 매 프레임 다시 굽고, 잠들면 마지막
+# 테이블에 떨어진 사탕. 물리가 이미 계산해 둔 값을 그대로 3D 로 옮긴다 —
+# 카드 뒤에 아이콘을 얹는 대신 모델 자체가 구르며 떨어진다.
+#   roll — 미끄러진 거리를 그대로 도는 각으로 쓴다(DROP.candy_roll,
+#          _drop_extras 가 매 프레임 적분). 다른 물체와 공유하는 psi/om
+#          은 마찰(a_spin 30)이 0.09초 안에 죽여서 3D 로 옮겨도 표가 안
+#          난다 — 그래서 사탕만 따로 "미끄러진 만큼 구른다" 축을 하나 둔다.
+#   wob  — 충격의 크기로 매기는 감쇠 진동. 착지 잔진동만 담당한다.
+# live 가 참인 동안(아직 다 안 멈춤) 매 프레임 다시 굽고, 멈추면 마지막
 # 자세로 얼린다 — _bd3_fly 와 같은 어법이다. 상점엔 사탕이 한 번에
 # 한 장뿐이라(매대 규칙) 인스턴스를 공유해도 겹칠 일이 없다.
-func _candy_tex_live(id: String, yaw: float, wob: float, live: bool) -> Texture2D:
+func _candy_tex_live(id: String, roll: float, wob: float, live: bool) -> Texture2D:
 	if not candy_live.has(id):
 		if not _has_renderer() or not CANDY3.has(id):
 			return null
@@ -7205,14 +7218,11 @@ func _candy_tex_live(id: String, yaw: float, wob: float, live: bool) -> Texture2
 		candy_live.erase(id)
 		return null
 	var mi: MeshInstance3D = e.mi
-	mi.rotation.y = yaw
-	# wob 는 이 값을 처음 준 쪽(_drop_wob)에서 "손으로 만졌을 때의 미세한
-	# 흔들림"용으로 잡은 크기다 — 세게 던져도 피크가 0.04~0.08 이라 그대로
-	# 쓰면 안 보인다. 여기서만 배율을 키운다: 다른 물체(동전·보드 확장)는
-	# 2D 라 흔들림이 원래 작아도 되지만, 3D 사탕은 그 값이 통째로 넘어짐
-	# 각도가 되므로 세게 던질수록 실제로 휘청하다 뒤집히는 게 보여야 한다.
-	mi.rotation.x = clampf(wob * 6.0, -1.15, 1.15)
-	mi.rotation.z = clampf(wob * 2.2, -0.5, 0.5)
+	# 두 축을 다른 비로 섞는다 — 한 축만 돌면 바퀴처럼 규칙적으로 읽히고,
+	# 비를 다르게 섞으면 던져진 사탕이 제멋대로 구르는 것처럼 보인다.
+	mi.rotation.x = roll
+	mi.rotation.y = roll * 0.37
+	mi.rotation.z = clampf(wob * 2.2, -0.5, 0.5)     # 착지 잔진동
 	var vp: SubViewport = e.vp
 	vp.render_target_update_mode = (
 			SubViewport.UPDATE_ALWAYS if live else SubViewport.UPDATE_ONCE)
