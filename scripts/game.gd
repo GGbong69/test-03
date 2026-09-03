@@ -345,6 +345,15 @@ func _ready() -> void:
 		add_child(sp)
 		sfx_pool.append(sp)
 
+	# 음악 — 크로스페이드를 하려면 둘이 동시에 울려야 하므로 자리가 둘이다.
+	# 같은 버스(0)에 서므로 _apply_vol 이 효과음과 함께 한 번에 줄인다.
+	for i in 2:
+		var mp := AudioStreamPlayer.new()
+		mp.playback_type = AudioServer.PLAYBACK_TYPE_STREAM
+		mp.volume_db = -80.0
+		add_child(mp)
+		mus_pl.append(mp)
+
 	# 저장은 소리 장치를 세운 **뒤**에 읽는다 — _apply_vol 이 버스를 만진다.
 	_load_settings()
 
@@ -1788,6 +1797,7 @@ func card_pos() -> Vector2:
 
 func _process(d: float) -> void:
 	_fill_audio()
+	_mus_update(d)
 
 	if not beep_q.is_empty():
 		beep_t -= d
@@ -11189,6 +11199,93 @@ func _set_rect(i: int) -> Rect2:
 # 게이지의 홈 — 행 안에서 소리 글자 오른쪽부터 끝까지다.
 func _vol_track(r: Rect2) -> Rect2:
 	return Rect2(r.position + Vector2(58.0, 13.0), Vector2(r.size.x - 74.0, 6.0))
+
+
+# ══════════════════════════════════════════════════════════
+#  음악
+#
+#  네 곡이 화면을 따라 갈린다. 갈아 끼울 때 뚝 끊지 않고 겹쳐 넘긴다 —
+#  플레이어가 둘인 이유가 그것 하나다. 한쪽이 잦아드는 동안 다른 쪽이
+#  올라오고, 다 넘어가면 잦아든 쪽이 멈춘다.
+#
+#  화면과 곡의 대응은 _mus_want 한 곳에만 있다. 상태가 늘면 거기만 고친다.
+const MUS := {
+	"lobby":  "res://assets/music/lobby.mp3",   # 로비 — 타이틀·설정·컬렉션
+	"select": "res://assets/music/select.mp3",  # 고르는 자리 — 판 선택·상점·정산
+	"game":   "res://assets/music/game.mp3",    # 판 위 — 작은 판·큰 판
+	"boss":   "res://assets/music/boss.mp3",    # 판 위 — 보스 판
+}
+const MUS_DB := -8.0      # 음악의 기준 크기. 효과음에 묻히지 않을 만큼만 낮다
+const MUS_FADE := 1.4     # 겹쳐 넘기는 시간(초)
+
+var mus_pl := []          # AudioStreamPlayer 둘
+var mus_i := 0            # 지금 소리 내는 쪽
+var mus_key := ""         # 그쪽이 물고 있는 곡
+var mus_x := 1.0          # 넘김 진행도 0~1. 1 이면 넘김이 끝난 상태다
+
+
+# 지금 화면이 원하는 곡. 덮개 화면은 **뒤 화면을 따른다** — 잠깐 여는 판
+# 때문에 곡이 바뀌면 그게 더 눈에 띈다(런 정보·일시정지가 그 자리다).
+func _mus_want() -> String:
+	var st := state
+	if st == S.RUNINFO:
+		st = run_from
+	elif st == S.SETTINGS and pause_from >= 0:
+		st = pause_from
+	match st:
+		S.TITLE, S.SETTINGS, S.COLLECT, S.NEWRUN, S.OVER:
+			return "lobby"
+		S.STAGE, S.SHOP, S.LEG, S.CLEAR:
+			return "select"
+	return "boss" if GameData.is_boss(leg_no) else "game"
+
+
+func _mus_update(d: float) -> void:
+	if mus_pl.size() < 2:
+		return
+	var want := _mus_want()
+	if want != mus_key:
+		_mus_to(want)
+	# 넘기는 중이면 두 쪽을 반대로 민다. 다 넘어가면 뒤쪽을 멈춘다 —
+	# 안 멈추면 곡 넷이 전부 돌면서 CPU 와 배를 같이 먹는다.
+	if mus_x < 1.0:
+		mus_x = minf(mus_x + d / MUS_FADE, 1.0)
+		var cur: AudioStreamPlayer = mus_pl[mus_i]
+		var old: AudioStreamPlayer = mus_pl[1 - mus_i]
+		cur.volume_db = _mus_db(mus_x)
+		old.volume_db = _mus_db(1.0 - mus_x)
+		if mus_x >= 1.0 and old.playing:
+			old.stop()
+
+
+# 진행도를 데시벨로. 선형으로 섞으면 가운데가 파인다(두 소리의 에너지가
+# 합이 아니라 제곱합이라서) — 제곱근을 취해 힘을 일정하게 잡는다.
+func _mus_db(x: float) -> float:
+	if x <= 0.001:
+		return -80.0
+	return MUS_DB + linear_to_db(sqrt(clampf(x, 0.0, 1.0)))
+
+
+func _mus_to(key: String) -> void:
+	# 자리가 아직 안 섰다(_ready 전). 프로브가 첫 프레임 앞에서 부르는
+	# 경로가 있으므로 여기서 막는다 — 곡을 기억도 하지 않는다. 자리가
+	# 서고 나면 _mus_update 가 want 와 다름을 보고 다시 부른다.
+	if mus_pl.size() < 2 or not MUS.has(key):
+		return
+	var st: AudioStream = load(String(MUS[key]))
+	if st == null:
+		return
+	# mp3 는 임포트 설정이 아니라 자원의 값으로 순환한다. 코드에서 물려야
+	# 어떤 임포트 상태에서도 끊기지 않는다.
+	if st is AudioStreamMP3:
+		(st as AudioStreamMP3).loop = true
+	mus_key = key
+	mus_i = 1 - mus_i
+	mus_x = 0.0
+	var cur: AudioStreamPlayer = mus_pl[mus_i]
+	cur.stream = st
+	cur.volume_db = -80.0
+	cur.play()
 
 
 func _apply_vol() -> void:
