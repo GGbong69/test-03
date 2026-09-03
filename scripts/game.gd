@@ -6118,7 +6118,8 @@ func _drop_roll() -> void:
 			"air": true, "into": false, "sleep": false, "rest": 0.0,
 			"wob": 0.0, "wv": 0.0, "lift": 0.0, "lv": 0.0,
 			"sold": 0.0, "to": Vector2.ZERO, "gone": false,
-			"roll": 0.0,      # 사탕 전용 — 미끄러진 거리만큼 3D 로 굴러 넘어간다
+			"roll": 0.0,      # 3D 로 세워 그리는 물체가 구른 각(사탕·다트)
+			"handled": false, # 손이 실제로 던진 적이 있는가 — roll 을 그 뒤부터만 쌓는다
 		})
 	drop_awake = true
 	if drop_fast:
@@ -6442,7 +6443,11 @@ func _drop_extras(d: float) -> void:
 		# 다른 물체와 공유하는 회전(a_spin 30 이 0.09초 안에 죽인다)이라
 		# 3D 로 세워 그리는 물체에 쓰면 표가 안 난다. 이 축은 그 둘 전용이고
 		# 속도가 그대로 회전 속도다 — 세게 던져 멀리 밀릴수록 더 많이 구른다.
-		if i < stock.size() and (stock[i].type == "cons" or stock[i].type == "dart"):
+		# 딜러가 던져 테이블에 앉히는 것 자체도 꽤 멀리 미끄러진다(초반
+		# 아크 + 몇 번의 바운스) — handled 없이 적분하면 손도 안 댔는데
+		# 몇 바퀴씩 돌아 있었다("갑자기 꽂힌 것처럼" 제보의 절반은 이거다).
+		# 손이 실제로 던진 뒤부터만(_hand_land 가 handled 를 켠다) 구른다.
+		if i < stock.size() and bool(it.get("handled", false)) 				and (stock[i].type == "cons" or stock[i].type == "dart"):
 			var tsp: float = Vector2(it.vu, it.vw).length()
 			it.roll = it.get("roll", 0.0) + tsp * DROP.tumble_rate * d
 		if not it.held:
@@ -6587,7 +6592,12 @@ func _obj_shadow(i: int) -> void:
 	if it.sold > 0.0:
 		return
 	var hh: float = it.h + it.lift
-	var k: float = 1.0 + hh * DROP.sh_grow
+	# 상한을 안 두면 딜러가 던지는 초반 아크(h 100~120)에서 k 가 4.4 를
+	# 넘는다 — 실제 그림(다트 26px)의 세 배가 넘는 그림자가 되어, 물건이
+	# 하늘에 있는데 바닥엔 그보다 훨씬 큰 검은 자국만 진하게 남는다
+	# ("바닥에 꽂힌 것처럼 보인다" 는 제보가 이거다). 2.0 에서 끊는다 —
+	# 낮은 바운스의 "떠 있다" 느낌은 남기고 던지기 아크의 과장만 없앤다.
+	var k: float = minf(1.0 + hh * DROP.sh_grow, 2.0)
 	var col := Color(0.0, 0.0, 0.0, DROP.sh_a / k)
 	# 기존 그림자 벡터 (1.5,3.0) = light * 3.35. h=0 에서 정확히 일치한다.
 	var g := Vector2(it.u, _p2g(it.w)) + TBL.light * (3.35 + hh * 0.10)
@@ -7233,10 +7243,12 @@ func _candy_tex_live(id: String, roll: float, wob: float, live: bool) -> Texture
 		candy_live.erase(id)
 		return null
 	var mi: MeshInstance3D = e.mi
-	# 두 축을 다른 비로 섞는다 — 한 축만 돌면 바퀴처럼 규칙적으로 읽히고,
-	# 비를 다르게 섞으면 던져진 사탕이 제멋대로 구르는 것처럼 보인다.
+	# roll=0(아직 손이 안 던졌다)일 때도 정지 아이콘(_candy_tex, -24° Y)과
+	# 같은 자세로 보이게 그 값을 기준으로 깐다. 두 축을 다른 비로 섞는
+	# 것은 한 축만 돌면 바퀴처럼 규칙적으로 읽혀서다 — 비를 다르게 섞으면
+	# 던져진 사탕이 제멋대로 구르는 것처럼 보인다.
 	mi.rotation.x = roll
-	mi.rotation.y = roll * 0.37
+	mi.rotation.y = deg_to_rad(-24.0) + roll * 0.37
 	mi.rotation.z = clampf(wob * 2.2, -0.5, 0.5)     # 착지 잔진동
 	var vp: SubViewport = e.vp
 	vp.render_target_update_mode = (
@@ -7931,6 +7943,7 @@ func _hand_land(it: Dictionary, v := Vector2.ZERO) -> void:
 	it.om = clampf(-v.x * HAND.toss_spin, -DROP.om_cap, DROP.om_cap)
 	it.sleep = false
 	it.rest = 0.0
+	it.handled = true    # 여기서부터 3D 구름(roll)이 붙는다 — 손이 던졌다
 	_drop_wob(it, maxf(HAND.land_wob, sp))
 	_toss_wake()
 
