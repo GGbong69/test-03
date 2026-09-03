@@ -322,6 +322,8 @@ func _ready() -> void:
 
 	font = load(FONT_PATH)
 
+	_bus_setup()      # 소리 자리를 세우기 전에 버스가 있어야 한다
+
 	var p := AudioStreamPlayer.new()
 	var gen := AudioStreamGenerator.new()
 	gen.mix_rate = 44100.0
@@ -333,6 +335,7 @@ func _ready() -> void:
 	#  프로젝트 설정의 default_playback_type.web 은 안 먹었다(4.7.2 에서 확인).
 	#  노드에 직접 박아야 듣는다. 데스크톱에선 어차피 같은 값이라 무해하다.
 	p.playback_type = AudioServer.PLAYBACK_TYPE_STREAM
+	p.bus = "SFX"
 	add_child(p)
 	p.play()
 	pb = p.get_stream_playback()
@@ -342,6 +345,7 @@ func _ready() -> void:
 	for i in 4:
 		var sp := AudioStreamPlayer.new()
 		sp.playback_type = AudioServer.PLAYBACK_TYPE_STREAM
+		sp.bus = "SFX"
 		add_child(sp)
 		sfx_pool.append(sp)
 
@@ -351,6 +355,7 @@ func _ready() -> void:
 		var mp := AudioStreamPlayer.new()
 		mp.playback_type = AudioServer.PLAYBACK_TYPE_STREAM
 		mp.volume_db = -80.0
+		mp.bus = "Music"
 		add_child(mp)
 		mus_pl.append(mp)
 
@@ -2399,11 +2404,19 @@ func _unhandled_input(e: InputEvent) -> void:
 				return                    # 삼킨다 — 탭인지 드래그인지 아직 모른다
 			_click(mb.position)
 		else:
+			if set_drag >= 0:
+				# 저장은 뗄 때 한 번. 끄는 동안 매 프레임 쓰면 파일을 두드린다.
+				_set_slide_end()
+				return
 			_hand_release(mb.position)
 	elif e is InputEventMouseMotion:
 		# 손 상태와 무관하게 받아 둔다 — _hand_motion 은 쥐고 있을 때만
 		# 갱신하는데, 놓기·당김 조준은 아무것도 안 쥔 채로 자리를 읽는다.
 		mouse_at = (e as InputEventMouseMotion).position
+		# 게이지를 끌고 있으면 손보다 먼저 본다 — 설정 화면에는 손이 없다.
+		if set_drag >= 0:
+			_set_slide(set_drag, mouse_at)
+			return
 		_hand_motion(mouse_at)
 
 
@@ -2578,12 +2591,11 @@ func _click(m: Vector2) -> void:
 				match rows[i]:
 					"fs":
 						_toggle_fullscreen()
-					"vol":
-						var tr := _vol_track(_set_rect(i))
-						vol = snappedf(clampf(
-								(m.x - tr.position.x) / tr.size.x, 0.0, 1.0), 0.05)
-						_apply_vol()
-						Save.set_set("vol", vol)
+					"vol", "mus":
+						# 누른 자리로 곧장 가고 뗄 때까지 따라온다. 예전에는 클릭 한 번만
+						# 받고 0.05 로 끊어서 계단처럼 움직였다 — 그게 조작감의 정체다.
+						set_drag = i
+						_set_slide(i, m)
 					"lobby":
 						pause_from = -1
 						state = S.TITLE
@@ -2604,7 +2616,7 @@ func _click(m: Vector2) -> void:
 				_sfx("menu_back")
 			return
 		S.COLLECT:
-			for t in 5:
+			for t in COL_TABS.size():
 				if _col_tab_rect(t).has_point(m):
 					collect_tab = t
 					collect_page = 0
@@ -9335,7 +9347,11 @@ func _draw_over() -> void:
 # ══════════════════════════════════════════════════════════
 
 var collect_tab := 0
-var vol := 1.0           # 소리 크기 0~1. 게이지를 눌러 정한다.
+# 소리 크기 0~1. 효과음과 음악을 따로 잡는다 — 깔개는 계속 울리고 효과음은
+# 순간이라, 한 손잡이로 묶으면 한쪽에 맞추면 다른 쪽이 어긋난다.
+var vol := 1.0           # 효과음. 예전 저장 키("vol")를 그대로 물려받는다
+var vol_mus := 0.8       # 음악. 깔개라 기본값이 효과음보다 한 뼘 낮다
+var set_drag := -1       # 끌고 있는 게이지 행. -1 이면 안 끈다
 						 # 실제 초기값은 _ready 가 저장에서 읽는다.
 var pause_from := -1     # 게임 중 ESC 로 설정을 열면 돌아갈 상태. -1 = 제목
 
@@ -9366,6 +9382,7 @@ func _load_settings() -> void:
 	GameData.league = String(Save.get_set("league", ""))
 	GameData.pack = String(Save.get_set("pack", ""))
 	vol = clampf(float(Save.get_set("vol", 1.0)), 0.0, 1.0)
+	vol_mus = clampf(float(Save.get_set("vol_mus", 0.8)), 0.0, 1.0)
 	_apply_vol()
 	if bool(Save.get_set("fullscreen", false)):
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
@@ -11201,8 +11218,8 @@ func _league_lines() -> Array:
 # 제목에서 연 설정에는 로비 행이 무의미하다 — 이미 로비다.
 func _set_rows() -> Array:
 	if pause_from >= 0:
-		return ["back", "fs", "vol", "lobby", "quit"]
-	return ["back", "fs", "vol", "quit"]
+		return ["back", "fs", "vol", "mus", "lobby", "quit"]
+	return ["back", "fs", "vol", "mus", "quit"]
 
 
 func _set_rect(i: int) -> Rect2:
@@ -11210,6 +11227,62 @@ func _set_rect(i: int) -> Rect2:
 
 
 # 게이지의 홈 — 행 안에서 소리 글자 오른쪽부터 끝까지다.
+# 게이지 한 칸을 커서 자리로 민다. 누를 때와 끌 때가 같은 문을 쓴다.
+#
+# 끊는 단위는 0.01 이다 — 예전 0.05 는 스무 칸이라 끄는 동안 계단이 손에
+# 그대로 느껴졌다. 백 칸이면 게이지 폭(114px)보다 촘촘해 눈에는 이어져
+# 보이고, 그래도 끊어 두는 것은 소수점이 저장에 그대로 들어가지 않게 하려는
+# 것이다.
+func _set_slide(i: int, m: Vector2) -> void:
+	var rows := _set_rows()
+	if i < 0 or i >= rows.size():
+		return
+	var key := String(rows[i])
+	var tr := _vol_track(_set_rect(i))
+	var x := snappedf(clampf((m.x - tr.position.x) / tr.size.x, 0.0, 1.0), 0.01)
+	if key == "vol":
+		vol = x
+	elif key == "mus":
+		vol_mus = x
+	else:
+		return
+	_apply_vol()
+
+
+func _set_slide_end() -> void:
+	var rows := _set_rows()
+	if set_drag >= 0 and set_drag < rows.size():
+		var key := String(rows[set_drag])
+		if key == "vol":
+			Save.set_set("vol", vol)
+		elif key == "mus":
+			Save.set_set("vol_mus", vol_mus)
+	set_drag = -1
+
+
+# 게이지 한 줄. 효과음과 음악이 같은 그림을 쓴다 — 둘이 다르게 생기면
+# 같은 종류의 손잡이로 안 읽힌다.
+func _vol_row(r: Rect2, i: int, label: String, v: float) -> void:
+	var hot: bool = set_drag == i
+	draw_rect(r, C_PANEL.lightened(0.16 if hot else 0.10))
+	draw_rect(Rect2(r.position, Vector2(r.size.x, 2)), C_ACC)
+	draw_string(font, r.position + Vector2(10, 20), label,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_TXT)
+	var tr := _vol_track(r)
+	draw_rect(tr, C_PANEL.darkened(0.45))
+	if v > 0.0:
+		draw_rect(Rect2(tr.position, Vector2(tr.size.x * v, tr.size.y)),
+				C_GOLD.darkened(0.0 if hot else 0.15))
+	# 손잡이 — 끄는 동안 굵어진다. 잡고 있다는 것을 눈으로도 안다.
+	var kx: float = tr.position.x + tr.size.x * v
+	var kw: float = 5.0 if hot else 3.0
+	draw_rect(Rect2(kx - kw * 0.5, tr.position.y - 4.0, kw, 14.0), C_TXT)
+	# 수를 같이 쓴다. 게이지만 있으면 지금 몇인지를 눈대중해야 한다.
+	draw_string(font, Vector2(r.end.x - 32.0, r.position.y + 20.0),
+			"%d" % int(round(v * 100.0)), HORIZONTAL_ALIGNMENT_RIGHT, 26.0, 10,
+			C_TXT if hot else C_DIM)
+
+
 func _vol_track(r: Rect2) -> Rect2:
 	return Rect2(r.position + Vector2(58.0, 13.0), Vector2(r.size.x - 74.0, 6.0))
 
@@ -11312,9 +11385,29 @@ func _mus_to(key: String) -> void:
 	cur.play()
 
 
+# 버스 셋을 세운다 — Master 아래에 효과음·음악. 한 번만 만들고, 이름으로
+# 찾으므로 두 번 불러도 안 늘어난다.
+func _bus_setup() -> void:
+	for nm in ["SFX", "Music"]:
+		if AudioServer.get_bus_index(nm) >= 0:
+			continue
+		var i := AudioServer.bus_count
+		AudioServer.add_bus(i)
+		AudioServer.set_bus_name(i, nm)
+		AudioServer.set_bus_send(i, "Master")
+
+
 func _apply_vol() -> void:
-	AudioServer.set_bus_volume_db(0, linear_to_db(maxf(vol, 0.0001)))
-	AudioServer.set_bus_mute(0, vol <= 0.001)
+	# Master 는 안 건드린다 — 예전에는 여기를 줄였는데, 그러면 둘을 가른
+	# 뜻이 없다. 각자의 버스만 만진다.
+	var si := AudioServer.get_bus_index("SFX")
+	var mi := AudioServer.get_bus_index("Music")
+	if si >= 0:
+		AudioServer.set_bus_volume_db(si, linear_to_db(maxf(vol, 0.0001)))
+		AudioServer.set_bus_mute(si, vol <= 0.001)
+	if mi >= 0:
+		AudioServer.set_bus_volume_db(mi, linear_to_db(maxf(vol_mus, 0.0001)))
+		AudioServer.set_bus_mute(mi, vol_mus <= 0.001)
 
 
 func _draw_settings() -> void:
@@ -11328,19 +11421,9 @@ func _draw_settings() -> void:
 		match rows[i]:
 			"fs":
 				_btn(r, "전체화면  %s" % ("켬" if fs else "끔"), "F11", true)
-			"vol":
-				# 게이지 — 누른 자리가 곧 크기다. 홈을 깔고 찬 만큼 채운다.
-				draw_rect(r, C_PANEL.lightened(0.10))
-				draw_rect(Rect2(r.position, Vector2(r.size.x, 2)), C_ACC)
-				draw_string(font, r.position + Vector2(12, 20), "소리",
-						HORIZONTAL_ALIGNMENT_LEFT, -1, 12, C_TXT)
-				var tr := _vol_track(r)
-				draw_rect(tr, C_PANEL.darkened(0.45))
-				if vol > 0.0:
-					draw_rect(Rect2(tr.position, Vector2(tr.size.x * vol, tr.size.y)),
-							C_GOLD.darkened(0.15))
-				var kx: float = tr.position.x + tr.size.x * vol
-				draw_rect(Rect2(kx - 1.5, tr.position.y - 3.0, 3.0, 12.0), C_TXT)
+			"vol", "mus":
+				var sfx: bool = String(rows[i]) == "vol"
+				_vol_row(r, i, "효과음" if sfx else "음악", vol if sfx else vol_mus)
 			"lobby":
 				_btn(r, "로비로 나가기", "", true)
 			"quit":
@@ -11368,6 +11451,7 @@ func _col_total() -> int:
 		1: return GameData.mods().size()
 		2: return GameData.darts().size()
 		3: return GameData.consumables().size()
+		4: return GameData.fixtures().size()
 	return GameData.modifiers().size()
 
 
@@ -11381,7 +11465,11 @@ func _col_pages() -> int:
 
 
 func _col_tab_rect(t: int) -> Rect2:
-	return Rect2(Vector2(70.0 + float(t) * 102.0, 42.0), Vector2(96.0, 24.0))
+	# 여섯 칸을 화면 안에 고르게 편다. 다섯일 때 쓰던 102px 고정 간격은
+	# 여섯째가 화면(640) 밖으로 나간다 — 폭에서 나눠 쓴다.
+	var n := float(COL_TABS.size())
+	var w: float = (VIEW.x - 44.0) / n
+	return Rect2(Vector2(22.0 + w * float(t), 42.0), Vector2(w - 6.0, 24.0))
 
 
 func _col_arrow_rect(right: bool) -> Rect2:
@@ -11610,6 +11698,11 @@ func _ri_carry(p: Rect2) -> void:
 	_ri_block(xr, y0, cw, "판", mod_rows if not mod_rows.is_empty() else ["기본"])
 
 
+# 컬렉션 탭. 사진이 빠져 있었다 — 산 뒤에 런 정보에서만 보이고 도감에는
+# 아예 없었다. 표가 있으면 도감에도 있어야 한다.
+const COL_TABS := ["동전", "보드 확장", "다트", "사탕", "사진", "제약"]
+
+
 func _draw_collect() -> void:
 	_scrim()
 	draw_string(font, Vector2(0, 30), "컬렉션", HORIZONTAL_ALIGNMENT_CENTER,
@@ -11618,8 +11711,9 @@ func _draw_collect() -> void:
 			"보드 확장 %d" % GameData.mods().size(),
 			"다트 %d" % GameData.darts().size(),
 			"사탕 %d" % GameData.consumables().size(),
+			"사진 %d" % GameData.fixtures().size(),
 			"제약 %d" % GameData.modifiers().size()]
-	for t in 5:
+	for t in COL_TABS.size():
 		_btn(_col_tab_rect(t), tabs[t], "", t == collect_tab)
 
 	var base := collect_page * COL_PAGE
@@ -11642,15 +11736,16 @@ func _draw_collect() -> void:
 				_icon_dart(c, 15.0, dt.id, 0.0, -0.62)
 				nm = dt.n
 			3:
+				# 테이블에 뜨는 그림 그대로 쓴다 — 두 글자 상자였을 때는
+				# 컬렉션의 사탕과 판 위의 사탕이 다른 물건으로 보였다.
 				var cs: Array = GameData.consumables()
-				var e := Vector2(11.0, 9.0)
-				draw_rect(Rect2(c - e, e * 2.0), C_PANEL.lightened(0.22))
-				draw_rect(Rect2(c - e, e * 2.0), C_WIRE.darkened(0.2), false, 1.0)
-				draw_string(font, Vector2(c.x - e.x, c.y + 3.0),
-						String(cs[gi].n).substr(0, 2),
-						HORIZONTAL_ALIGNMENT_CENTER, e.x * 2.0, 8, C_TXT)
+				_icon_cons(c, 11.0, String(cs[gi].id))
 				nm = cs[gi].n
 			4:
+				var fx: Dictionary = GameData.fixtures()[gi]
+				_fix_flat(c, {}, 0.0, 0.0)
+				nm = fx.n
+			5:
 				var mo: Dictionary = GameData.modifiers()[gi]
 				_icon_modifier(c, 11.0, mo.id, 0.0)
 				nm = mo.n
