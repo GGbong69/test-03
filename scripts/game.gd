@@ -834,45 +834,6 @@ func _interest_cap() -> int:
 # 벽에 걸린 사진 한 장. 매물과 다른 어휘로 그린다 — 매물은 펠트 위에
 # 놓인 둥근 물건이고 이것은 벽에 박힌 네모 판이다. 같은 어휘를 쓰면
 # "이것도 쓸려 나가나" 를 플레이어가 물어야 한다.
-func _shelf_draw() -> void:
-	var r := _shelf_rect()
-	if shelf.is_empty():
-		return
-	var can: bool = gold >= int(shelf.cost)
-	draw_rect(Rect2(r.position + Vector2(2.0, 3.0), r.size), Color(0.0, 0.0, 0.0, 0.30))
-	draw_rect(r, C_PANEL.lightened(0.04) if can else C_PANEL.darkened(0.18))
-	# 걸이 — 위쪽 한 획이 "벽에 박혀 있다" 를 말한다. 테이블의 값뱃지와 다른 신호다.
-	draw_rect(Rect2(r.position, Vector2(r.size.x, 2.0)),
-			C_ACC if can else C_DIM.darkened(0.3))
-	draw_string(font, r.position + Vector2(0.0, 18.0), "사진",
-			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 8, C_DIM)
-	draw_string(font, r.position + Vector2(0.0, 32.0), String(shelf.n),
-			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 11,
-			C_TXT if can else C_DIM.darkened(0.2))
-	draw_gold(r.position.x + r.size.x * 0.5, r.position.y + 46.0,
-			str(int(shelf.cost)), 10, C_GOLD if can else C_DIM.darkened(0.3))
-
-
-# 사면 사라지고 효과만 남는다. 동전 슬롯에도 사탕 칸에도 안 들어간다 —
-# 어디에도 안 쌓이는 유일한 구매다.
-func _shelf_buy() -> void:
-	if shelf.is_empty():
-		return
-	if gold < int(shelf.cost):
-		_deny()
-		return
-	gold -= int(shelf.cost)
-	GameData.fixture_add(String(shelf.id))
-	Save.bump("fixtures_bought")
-	pop(_shelf_rect().get_center(), String(shelf.n), C_ACC, 12, 1.4)
-	shelf = {}
-	# 테이블 폭·무료 리롤이 이 순간 바뀔 수 있다. 이번 판은 이미 굴린
-	# 뒤라 폭은 다음 리롤부터 넓어지고, 값은 지금 다시 매긴다.
-	reroll_cost = _reroll_price()
-	_panel_reset()
-	_sfx("fixture_buy")
-
-
 func _reroll_price() -> int:
 	if rerolls_used < _free_rerolls():
 		return 0
@@ -1007,6 +968,14 @@ func _roll_stock() -> void:
 							"sold": false}
 					break
 
+	# 사진 — 라운드마다 하나 걸린다(shelf_round 가 그것을 지킨다). 벽에
+	# 걸린 패널이었는데 다른 매물과 같은 규약을 못 따랐다 — 툴팁도
+	# 창구도 손도 안 닿았다. 테이블에 내려놓으면 그 넷이 공짜로 붙는다.
+	# 리롤해도 같은 사진이 다시 온다. 사면 shelf 가 비어 안 온다.
+	if not shelf.is_empty():
+		stock.append({"type": "fix", "d": shelf, "cost": int(shelf.cost),
+				"sold": false})
+
 	# 뱃지 "외상" — 앞에서부터 몇 개를 0골드로 만든다. 안 팔린 것만 고른다.
 	for k in stock.size():
 		if tag_free <= 0:
@@ -1065,6 +1034,7 @@ func _buy(i: int) -> void:
 		"item": Save.bump("items_bought")
 		"mod": Save.bump("mods_bought")
 		"dart": Save.bump("darts_bought")
+		"fix": Save.bump("fixtures_bought")
 	match s.type:
 		"item":
 			# 사본이다. 성장 상태(gs)가 원본 카탈로그에 붙으면 다음 런까지
@@ -1081,7 +1051,16 @@ func _buy(i: int) -> void:
 			# 칸으로 들어간다. 상점 즉시 사용은 칸에서 바로 누르면 되므로
 			# 별도 경로가 없다 — 확인 버튼을 만들지 않는 규칙과도 맞는다.
 			cons.append(s.d)
-	_sfx("buy")
+		"fix":
+			# 사면 사라지고 효과만 런 끝까지 남는다. 동전 슬롯에도 사탕
+			# 칸에도 안 들어간다. shelf 를 비워 리롤에도 다시 안 온다.
+			GameData.fixture_add(String(s.d.id))
+			shelf = {}
+			# 테이블 폭·무료 리롤이 이 순간 바뀔 수 있다. 이번 판은 이미
+			# 굴린 뒤라 폭은 다음 리롤부터 넓어지고, 값은 지금 다시 매긴다.
+			reroll_cost = _reroll_price()
+			_panel_reset()
+	_sfx("fixture_buy" if s.type == "fix" else "buy")
 
 
 func _std_slot() -> int:
@@ -1974,10 +1953,17 @@ func _auto_step() -> void:
 				if _buy_block(i) == "":
 					buyable.append(i)
 			var roll := randf()
-			# 사진을 먼저 본다. 소크가 안 사면 넓어진 테이블·늘어난 다트를
-			# 한 번도 안 굴려 보게 되고, 그러면 이 시스템에 그물이 없다.
-			if not shelf.is_empty() and gold >= int(shelf.cost) and roll < 0.35:
-				_shelf_buy()
+			# 사진도 이제 테이블 매물이라 buyable 에 같이 든다 — 따로
+			# 굴리는 갈래가 없어졌다. 다만 소크가 사진을 한 번도 안 사면
+			# 넓어진 테이블·늘어난 다트를 굴려 보지 못하므로, 사진이
+			# 떠 있으면 그것을 먼저 집는다.
+			var fixi := -1
+			for i in buyable:
+				if stock[i].type == "fix":
+					fixi = i
+					break
+			if fixi >= 0 and roll < 0.35:
+				_buy(fixi)
 			elif not buyable.is_empty() and roll < 0.55:
 				_buy(buyable[randi() % buyable.size()])
 			elif gold >= reroll_cost and roll < 0.8:
@@ -2464,12 +2450,6 @@ func _click(m: Vector2) -> void:
 		S.SHOP:
 			if sweep_live:
 				return          # 쓸기는 중단 불가다. 클릭을 통째로 삼킨다
-			# 선반은 쓸기 가드 **뒤**다. 앞에 두면 쓸기 도중에 진열대를 사서
-			# 그 직후 _sweep_deal 이 넓어진 폭으로 판을 깔고, "새 판이 같은
-			# 수로 선다"(sweep_probe)가 깨진다.
-			if not shelf.is_empty() and _shelf_rect().has_point(m):
-				_shelf_buy()
-				return
 			# 창구가 먼저다. 자리가 고정이라 낙하 검사보다 앞이고, _sell_hit
 			# 보다도 앞이어야 한다 — 뒤에 두면 _sell_hit 이 sell_sel 을 지운 뒤
 			# 창구가 "먼저 판에서 팔 동전을 고른다" 로 거절해 2클릭 판매가 통째로
@@ -3319,10 +3299,6 @@ func _mag_rect(i: int) -> Rect2:
 
 # 선반 자리. 왼쪽 벽 — 자금판(y 20~54) 아래, 판매 창구 이름표(y 128) 위다.
 # 테이블 물건은 펠트 위에 물리로 떨어지므로 이 사각과 영영 안 겹친다.
-func _shelf_rect() -> Rect2:
-	return Rect2(Vector2(8.0, 62.0), Vector2(138.0, 52.0))
-
-
 func _reroll_rect() -> Rect2:
 	return Rect2(Vector2(32.0, 288.0), Vector2(152.0, 46.0))
 
@@ -6029,10 +6005,12 @@ const DROP := {
 	#  다트에 가운데 원이 있어 동전-다트 최소 중심거리가 방위와 무관하게 28 이다.
 	#  이 28 이 가격판 겹침 불가 정리의 전제다 (아래 _bill_draw 주석).
 	"r_item": 19.0, "r_mod": 21.0, "r_dart": 9.0, "d_dart": 16.0,
+	#  사진은 폴라로이드다 — 동전보다 조금 작은 네모라 반지름도 그만큼 작다.
+	"r_fix": 16.0,
 
 	# ── 화면 반폭 (좌우 벽 전용 — 충돌 반지름과 다르다) ──
 	#  벽은 "그려지는 것" 을 가두고 충돌은 "형상" 이라 두 일에 각각 맞는 값이다.
-	"hw_item": 19.0, "hw_mod": 22.0, "hw_dart": 37.5,
+	"hw_item": 19.0, "hw_mod": 22.0, "hw_dart": 37.5, "hw_fix": 17.0,
 
 	# ── 연출 (전부 그리기 전용. 물리에 한 방울도 안 흘린다) ──
 	"lift_hov": 6.0, "lift_k": 260.0, "lift_c": 22.0,
@@ -6101,6 +6079,12 @@ func _drop_roll() -> void:
 				nb = 3
 				e = DROP.e_dart
 				hw = DROP.hw_dart
+			"fix":
+				# 종이는 안 튄다 — 반발을 동전의 절반으로 둔다. 떨어져
+				# 찰싹 붙는 것이 "사진" 의 무게다.
+				r = DROP.r_fix
+				e = DROP.e_item * 0.5
+				hw = DROP.hw_fix
 		# 완전 난수면 넷 중 둘이 같은 지점에 쏟아지는 판이 잦고, 그 둘이 같이
 		# 벽으로 밀린다. 레인은 출발만 벌려 둘 뿐 정착 위치를 통제하지 않는다.
 		#
@@ -6531,6 +6515,11 @@ func _obj_box(i: int) -> Rect2:
 			var dn := de.normalized()
 			var ed := Vector2(absf(dn.x) * dl + 5.0, absf(dn.y) * dl + 5.0)
 			return Rect2(c - ed, ed * 2.0)
+		"fix":
+			# 돌아간 네모의 축정렬 덮개. 반폭·반높이의 큰 쪽으로 잡는다.
+			var fr: float = maxf(FIX_W, FIX_H) + 3.0
+			var ef := Vector2(fr, fr * TBL.flat + 3.0)
+			return Rect2(c - ef, ef * 2.0)
 	var ry: float = TBL.chip_r * TBL.flat + TBL.chip_t * TBL.tall
 	return Rect2(c - Vector2(TBL.chip_r, ry), Vector2(TBL.chip_r * 2.0, ry * 2.0))
 
@@ -6549,10 +6538,31 @@ func _obj_shape(i: int, m: Vector2) -> bool:
 			var dl: float = TBL.dart_l * de.length() + 4.0
 			var dn := de.normalized()
 			return _seg_d(m, c - dn * dl, c + dn * dl) <= 7.0
+		"fix":
+			# 그리는 것과 같은 네 귀퉁이를 쓴다 — 둘이 어긋날 수가 없다.
+			return _in_poly(m, _fix_quad(c, it.psi, 1.14))
 	var lz: float = TBL.chip_t * TBL.tall * 0.5          # 옆면 슬리버를 덮는다
 	var q := (m - c - Vector2(0.0, lz)) / Vector2(TBL.chip_r + 2.0,
 			TBL.chip_r * TBL.flat + lz + 2.0)
 	return q.length_squared() <= 1.0
+
+
+# 볼록 다각형 안인가. 사진의 네 귀퉁이가 유일한 소비자다 — 돌아간
+# 네모라 축정렬 검사로는 귀퉁이가 어긋난다. 감기 방향과 무관하게 맞다:
+# 모든 외적의 부호가 같으면 안이다.
+func _in_poly(m: Vector2, pts: PackedVector2Array) -> bool:
+	var sg := 0.0
+	for i in pts.size():
+		var a := pts[i]
+		var b := pts[(i + 1) % pts.size()]
+		var cr := (b.x - a.x) * (m.y - a.y) - (b.y - a.y) * (m.x - a.x)
+		if absf(cr) < 0.0001:
+			continue
+		if sg == 0.0:
+			sg = signf(cr)
+		elif signf(cr) != sg:
+			return false
+	return true
 
 
 func _seg_d(p: Vector2, a: Vector2, b: Vector2) -> float:
@@ -6639,6 +6649,10 @@ func _obj_shadow(i: int) -> void:
 		"cons":
 			# 꾸러미는 동전보다 작다 — 동전 반지름 그림자를 깔면 빛무리가 된다.
 			draw_colored_polygon(_e_pts(g, 12.5 * k, 12.5 * k * TBL.flat, 12), col)
+		"fix":
+			# 사진은 네모라 그림자도 네모다. 타원을 깔면 원반으로 읽힌다.
+			var fq := _fix_quad(g, it.psi, k)
+			draw_colored_polygon(fq, col)
 		_:
 			draw_colored_polygon(_e_pts(g, it.r * k, it.r * k * TBL.flat, 14), col)
 
@@ -6694,6 +6708,8 @@ func _obj_paint(it: Dictionary, s: Dictionary, dim: float) -> void:
 						c + Vector2(ce.x, ce.y), c + Vector2(-ce.x, ce.y)]), body)
 				draw_rect(Rect2(c - ce, ce * 2.0), C_WIRE.darkened(0.2), false, 1.0)
 				_icon_cons(c, ce.y * 0.56, String(s.d.id), 1.0 - dim)
+		"fix":
+			_fix_flat(c, it, it.psi, dim)
 		"mod":
 			# 동전과 같은 어법으로 눕는다 — 옆면을 깔고 윗면을 얹는다.
 			# 정면 원반은 컬렉션의 것이고, 테이블 위의 것은 누워야 한다.
@@ -6707,6 +6723,54 @@ func _obj_paint(it: Dictionary, s: Dictionary, dim: float) -> void:
 			_icon_dart(c, TBL.dart_l * de.length(), s.d.id, dim,
 					de.angle() + 1.0304, 1.0 - dim * 0.5, false,
 					float(it.get("roll", 0.0)))
+
+
+# 펠트에 누운 사진의 네 귀퉁이. 그림자와 몸통이 같은 식을 써야 둘이 안 어긋난다.
+# 세로는 TBL.flat 으로 누른다 — 면에 누운 것의 규약이다. psi 로 살짝 돌려
+# 두면 넉 장이 쏟아져도 판박이로 겹쳐 보이지 않는다.
+const FIX_W := 13.0      # 반폭
+const FIX_H := 11.0      # 반높이(누르기 전)
+
+
+func _fix_quad(c: Vector2, rot: float, k := 1.0) -> PackedVector2Array:
+	var co := cos(rot) * k
+	var si := sin(rot) * k
+	var pts := PackedVector2Array()
+	for q in [Vector2(-FIX_W, -FIX_H), Vector2(FIX_W, -FIX_H),
+			Vector2(FIX_W, FIX_H), Vector2(-FIX_W, FIX_H)]:
+		var e := Vector2(q.x * co - q.y * si, q.x * si + q.y * co)
+		pts.append(c + Vector2(e.x, e.y * TBL.flat))
+	return pts
+
+
+# 펠트에 누운 사진 — 폴라로이드다. 테두리가 두껍고 아래가 더 두껍다.
+# 그 한 가지로 동전(원반)·사탕(덩어리)·다트(막대)와 실루엣이 갈린다.
+func _fix_flat(c: Vector2, it: Dictionary, rot: float, dim: float) -> void:
+	var co := cos(rot)
+	var si := sin(rot)
+	# 종이 두께 — 아래로 한 획. 면에 놓인 것이 떠 보이지 않게 한다.
+	var body := _fix_quad(c, rot)
+	draw_colored_polygon(_fix_quad(c + Vector2(0.0, 1.2), rot),
+			Color(0.0, 0.0, 0.0, 0.35))
+	draw_colored_polygon(body, Color(C_LIGHT.lightened(0.30).darkened(dim), 1.0))
+
+	# 인화면 — 테두리를 남기고 안쪽에. 아래 여백이 더 넓은 것이 폴라로이드다.
+	var inner := PackedVector2Array()
+	for q in [Vector2(-9.0, -8.0), Vector2(9.0, -8.0),
+			Vector2(9.0, 3.0), Vector2(-9.0, 3.0)]:
+		var e := Vector2(q.x * co - q.y * si, q.x * si + q.y * co)
+		inner.append(c + Vector2(e.x, e.y * TBL.flat))
+	draw_colored_polygon(inner, Color(C_DARK.lightened(0.10).darkened(dim), 1.0))
+
+	# 찍힌 것 — 판이다. 이 게임의 사진이 무엇을 찍은 것인지 한 점으로 말한다.
+	var ic := c + Vector2((-0.0 * co - -2.5 * si),
+			(-0.0 * si + -2.5 * co) * TBL.flat)
+	_ring(ic, 4.2, 0.62, 1.0, Color(C_WIRE.darkened(0.1 + dim), 0.75))
+	draw_circle(ic, 1.6, Color(C_RED.darkened(dim), 0.9))
+
+	# 테두리 한 획 — 종이의 끝을 못 박는다.
+	draw_polyline(_fix_quad(c, rot) + PackedVector2Array([body[0]]),
+			Color(C_WIRE.darkened(0.25 + dim), 0.5), 1.0)
 
 
 # 펠트에 누운 동전. 동전 슬롯의 draw_sticker(정원)은 안 고친다 — 같은 물건의
@@ -8481,6 +8545,8 @@ func _tip_build(hit: Dictionary) -> void:
 					_tip_set_tag("다트")
 				"cons":
 					_tip_set_tag("사탕")
+				"fix":
+					_tip_set_tag("사진")
 			tip_mark = Rect2()      # 동전 슬롯과 같은 진영 — 사각 테두리 안 두른다
 			tip_spot = i
 			tip_title = s.d.n
@@ -8492,7 +8558,7 @@ func _tip_build(hit: Dictionary) -> void:
 				if s.d.get("g", "") != "":
 					_tip_add(GameData.gold_text(s.d.g, s.d.gv), 9, C_GOLD)
 			else:
-				# 사탕·보드 확장·다트 — 효과 한 줄이면 된다. 분류 해설은 소음이다.
+				# 사탕·보드 확장·다트·사진 — 효과 한 줄이면 된다. 분류 해설은 소음이다.
 				_tip_add(s.d.d, 10, C_DIM)
 			# 못 사는 이유를 누르기 전에 알려준다. _deny() 는 원인을 한 문장으로 뭉갠다.
 			var blk := _buy_block(i)
@@ -9089,7 +9155,6 @@ func _draw_shop() -> void:
 		var rr := _reroll_rect()
 		draw_gold(rr.position.x + rr.size.x * 0.5, rr.position.y + 35.0,
 				str(reroll_cost), 10, C_GOLD if gold >= reroll_cost else C_DIM.darkened(0.3))
-	_shelf_draw()
 	_btn(_next_rect(), "다음 판 →", "", true)
 	_hold_draw()
 	_fly_draw()
