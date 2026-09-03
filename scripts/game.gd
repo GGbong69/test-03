@@ -6625,15 +6625,26 @@ func _obj_paint(it: Dictionary, s: Dictionary, dim: float) -> void:
 		"item":
 			_sticker_flat(c, s.d, it.psi, dim, it.wob)
 		"cons":
-			# 사탕 — 작은 사각 꾸러미. 보드 확장(캐비닛)보다 작고 동전(원반)과
-			# 형태가 갈린다. 아트 방향이 미정이라 실루엣만 세워 둔다.
-			var ce := Vector2(11.0, 11.0 * TBL.flat)
-			var body: Color = C_PANEL.lightened(0.22 - dim * 0.2)
-			draw_colored_polygon(PackedVector2Array([
-					c + Vector2(-ce.x, -ce.y), c + Vector2(ce.x, -ce.y),
-					c + Vector2(ce.x, ce.y), c + Vector2(-ce.x, ce.y)]), body)
-			draw_rect(Rect2(c - ce, ce * 2.0), C_WIRE.darkened(0.2), false, 1.0)
-			_icon_cons(c, ce.y * 0.56, String(s.d.id), 1.0 - dim)
+			# 사탕 — 카드가 아니라 모델이 구르며 떨어진다. it.psi 는 물리가
+			# 이미 매기는 회전이다(_drop_roll 의 om 이 프레임마다 더한다) —
+			# 그 값을 그대로 3D 야로 옮기면 손으로 맞출 각이 없다.
+			var live := not bool(it.get("sleep", false))
+			var ctex := _candy_tex_live(String(s.d.id), float(it.get("psi", 0.0)), live)
+			if ctex != null:
+				var ch := 30.0
+				var cw := ch * float(CANDY_VP.x) / float(CANDY_VP.y)
+				draw_texture_rect(ctex, Rect2(c - Vector2(cw, ch) * 0.5, Vector2(cw, ch)),
+						false, Color(1.0 - dim * 0.3, 1.0 - dim * 0.3, 1.0 - dim * 0.3,
+								1.0 - dim))
+			else:
+				# 렌더러가 없는 자리(헤드리스 프로브)의 옛 실루엣.
+				var ce := Vector2(11.0, 11.0 * TBL.flat)
+				var body: Color = C_PANEL.lightened(0.22 - dim * 0.2)
+				draw_colored_polygon(PackedVector2Array([
+						c + Vector2(-ce.x, -ce.y), c + Vector2(ce.x, -ce.y),
+						c + Vector2(ce.x, ce.y), c + Vector2(-ce.x, ce.y)]), body)
+				draw_rect(Rect2(c - ce, ce * 2.0), C_WIRE.darkened(0.2), false, 1.0)
+				_icon_cons(c, ce.y * 0.56, String(s.d.id), 1.0 - dim)
 		"mod":
 			# 동전과 같은 어법으로 눕는다 — 옆면을 깔고 윗면을 얹는다.
 			# 정면 원반은 컬렉션의 것이고, 테이블 위의 것은 누워야 한다.
@@ -7089,18 +7100,12 @@ const CANDY_VP := Vector2i(34, 46)     # 굽는 크기. 칸(26x38)보다 한 뼘
 var candy_vp := {}                     # id → SubViewport
 
 
-# 그 사탕의 그림. 없으면 굽고, 못 구우면 null 이다(헤드리스).
-func _candy_tex(id: String) -> Texture2D:
-	if candy_vp.has(id):
-		var v: SubViewport = candy_vp[id]
-		return v.get_texture() if is_instance_valid(v) else null
-	if not _has_renderer() or not CANDY3.has(id):
-		return null
-	var nm: String = CANDY3[id]
+# 무대 하나를 짓는다 — 뷰포트 · 메시 · 빛 · 카메라. 회전은 안 건드린다,
+# 정적 굽기(_candy_tex)와 라이브 스핀(_candy_tex_live)이 각자 정한다.
+func _candy_build(nm: String) -> Dictionary:
 	var mesh: Mesh = load("res://assets/candy/%s.obj" % nm)
 	if mesh == null:
-		return null
-
+		return {}
 	var vp := SubViewport.new()
 	vp.size = CANDY_VP
 	vp.own_world_3d = true
@@ -7109,7 +7114,6 @@ func _candy_tex(id: String) -> Texture2D:
 	vp.msaa_3d = Viewport.MSAA_DISABLED
 	vp.gui_disable_input = true
 	add_child(vp)
-	candy_vp[id] = vp
 
 	var ab := mesh.get_aabb()
 	var mi := MeshInstance3D.new()
@@ -7126,7 +7130,6 @@ func _candy_tex(id: String) -> Texture2D:
 	var k := 1.0 / maxf(maxf(ab.size.x, ab.size.y), 0.001)
 	mi.scale = Vector3.ONE * k
 	mi.position = -ab.get_center() * k
-	mi.rotation_degrees = Vector3(0.0, -24.0, 0.0)
 	vp.add_child(mi)
 
 	var lt := DirectionalLight3D.new()
@@ -7152,6 +7155,51 @@ func _candy_tex(id: String) -> Texture2D:
 	vp.add_child(cam)
 	cam.global_position = Vector3(0.0, 0.0, 3.0)
 	cam.look_at(Vector3.ZERO, Vector3.UP)
+	return {"vp": vp, "mi": mi}
+
+
+# 그 사탕의 그림(정지). 컬렉션·소비 칸처럼 늘 같은 자세로 보이는 자리다.
+# 없으면 굽고, 못 구우면 null 이다(헤드리스).
+func _candy_tex(id: String) -> Texture2D:
+	if candy_vp.has(id):
+		var v: SubViewport = candy_vp[id]
+		return v.get_texture() if is_instance_valid(v) else null
+	if not _has_renderer() or not CANDY3.has(id):
+		return null
+	var b := _candy_build(String(CANDY3[id]))
+	if b.is_empty():
+		return null
+	candy_vp[id] = b.vp
+	(b.mi as MeshInstance3D).rotation_degrees = Vector3(0.0, -24.0, 0.0)
+	return b.vp.get_texture()
+
+
+var candy_live := {}       # id → {"vp":SubViewport,"mi":MeshInstance3D} — 테이블에 구르는 사탕
+
+
+# 테이블에 떨어진 사탕. 물리가 이미 계산해 둔 회전(psi)을 그대로 3D 로
+# 옮긴다 — 카드 뒤에 아이콘을 얹는 대신 모델 자체가 구르며 떨어진다.
+# live 가 참인 동안(공중 · 아직 안 잠듦) 매 프레임 다시 굽고, 잠들면
+# 마지막 자세로 얼린다 — _bd3_fly 와 같은 어법이다. 상점엔 사탕이 한
+# 번에 한 장뿐이라(매대 규칙) 인스턴스를 공유해도 겹칠 일이 없다.
+func _candy_tex_live(id: String, yaw: float, live: bool) -> Texture2D:
+	if not candy_live.has(id):
+		if not _has_renderer() or not CANDY3.has(id):
+			return null
+		var b := _candy_build(String(CANDY3[id]))
+		if b.is_empty():
+			return null
+		candy_live[id] = b
+	var e: Dictionary = candy_live[id]
+	if not is_instance_valid(e.vp):
+		candy_live.erase(id)
+		return null
+	var mi: MeshInstance3D = e.mi
+	mi.rotation.y = yaw
+	mi.rotation.x = sin(yaw * 1.7) * 0.18     # 구르는 결 — 회전축이 살짝 흔들린다
+	var vp: SubViewport = e.vp
+	vp.render_target_update_mode = (
+			SubViewport.UPDATE_ALWAYS if live else SubViewport.UPDATE_ONCE)
 	return vp.get_texture()
 
 
