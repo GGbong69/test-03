@@ -5439,11 +5439,23 @@ const TBL3 := {
 	"px":    430.0,     # 테이블 폭이 화면에서 먹는 px
 	"cx":    320.0,     # 화면상 중심
 	"cy":    196.0,
-	"elev":   52.0,     # 앙각. 2D 와 같은 각이라야 붙는다
+	"elev":   32.0,     # 앙각
 	"yaw":   180.0,     # 평평한 변을 딜러 쪽(뒤)으로 돌린다
 	"bands":     4,     # 명암 계단
 	"steps":    12,     # 색 계단
+
+	# ── 딜러 ─────────────────────────────────────────
+	"npc":    "res://assets/dealer.glb",
+	"npc_h":  330.0,    # 키가 화면에서 먹는 px
+	"npc_x":  320.0,    # 화면상 발밑 자리
+	"npc_y":  268.0,
+	"npc_z":  -150.0,   # 테이블 뒤로 물린 거리(월드)
+	"npc_yaw": 180.0,   # 이쪽을 보게
 }
+
+# 3D 딜러가 서면 2D 조끼는 안 그린다. 팔(쓸기)은 아직 2D 다 —
+# 그 연출을 3D 로 옮기기 전까지 둘이 같이 산다.
+const NPC3 := true
 
 var tbl_vp: SubViewport = null
 
@@ -5507,6 +5519,53 @@ func _tbl3_open() -> void:
 	# 화면 중심에서 원하는 자리로 민다. 정사영이라 1 유닛이 1px 이다.
 	var b := cam.global_transform.basis
 	mi.position = -ab.get_center() * k 			+ b.x * (float(TBL3.cx) - VIEW.x * 0.5) 			+ b.y * (VIEW.y * 0.5 - float(TBL3.cy))
+
+	if NPC3:
+		_tbl3_npc(b)
+
+
+# 딜러를 테이블 뒤에 세운다. 리깅 모델이라 메시를 안 줄였다 —
+# 스킨 가중치가 감축에서 안 살아남는다(1만 면이면 이 화면엔 넉넉하다).
+func _tbl3_npc(b: Basis) -> void:
+	var scn: PackedScene = load(String(TBL3.npc))
+	if scn == null:
+		print("[tbl3] 딜러 못 읽음")
+		return
+	var n: Node3D = scn.instantiate()
+	tbl_vp.add_child(n)
+	# 리깅 모델은 Skeleton3D 밑에 메시가 든다. 직속 자식만 훑으면 하나도
+	# 못 찾아 상자가 비고, 키 맞춤이 0 으로 나눠져 모델이 사라진다.
+	var mis: Array[MeshInstance3D] = []
+	_gather_mesh(n, mis)
+	if mis.is_empty():
+		print("[tbl3] 딜러에 메시가 없다")
+		return
+	var ab: AABB = mis[0].get_aabb()
+	for i in range(1, mis.size()):
+		ab = ab.merge(mis[i].get_aabb())
+	var k: float = float(TBL3.npc_h) / maxf(ab.size.y, 0.001)
+	print("[tbl3] 딜러 메시 ", mis.size(), " aabb ", ab.size, " 배율 ", k)
+	n.scale = Vector3.ONE * k
+	n.rotation_degrees = Vector3(0.0, float(TBL3.npc_yaw), 0.0)
+	# 발밑이 화면 npc_y 에 오도록 상자 밑면을 기준으로 놓는다.
+	n.position = Vector3(0.0, 0.0, float(TBL3.npc_z)) 			+ b.x * (float(TBL3.npc_x) - VIEW.x * 0.5) 			+ b.y * (VIEW.y * 0.5 - float(TBL3.npc_y)) 			- Vector3(0.0, ab.position.y * k, 0.0)
+	for mi in mis:
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		var src := mi.get_active_material(0)
+		var tex: Texture2D = null
+		if src is StandardMaterial3D:
+			tex = (src as StandardMaterial3D).albedo_texture
+		var m := _dot_mat("")
+		if tex != null:
+			m.set_shader_parameter("albedo_tex", tex)
+		mi.material_override = m
+
+
+func _gather_mesh(n: Node, out: Array[MeshInstance3D]) -> void:
+	if n is MeshInstance3D:
+		out.append(n as MeshInstance3D)
+	for c in n.get_children():
+		_gather_mesh(c, out)
 
 
 func _felt_draw() -> void:
@@ -5661,6 +5720,8 @@ func _chute_label() -> void:
 # 딜러 몸통 — 카운터 위로 올라온 부분만. 랙이 이 위에 얹혀 트레이로 읽힌다.
 # 딜러 몸통 — 카운터 위로 올라온 부분만. 랙이 이 위에 얹혀 트레이로 읽힌다.
 func _npc_body() -> void:
+	if NPC3 and _tbl3_live():
+		return      # 3D 딜러가 섰다
 	var br: float = sin(npc_clock * 1.5) * float(NPC.breathe)
 	var cx: float = NPC.cx
 	# 141 에서 내렸다. 손 윗면(133)보다 밝은 것이 화면에 있으면 안 된다 —
