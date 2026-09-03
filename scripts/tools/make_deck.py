@@ -716,7 +716,9 @@ def toc(prs, entries):
     if not entries:
         return slide
 
-    H_CH, H_IT, BUD = 0.36, 0.205, Y_MAX - Y_BODY
+    # 파워포인트가 글자에 맞춰 행을 늘리므로 어림보다 조금 크게 잡는다.
+    # 딱 맞게 잡았더니 마지막 줄이 쪽 밖으로 밀려 사라졌다.
+    H_CH, H_IT, BUD = 0.38, 0.215, Y_MAX - Y_BODY - 0.20
     blocks, cur = [], []
     for e in entries:                       # 장 단위로 묶는다
         if e[0] == "chapter" and cur:
