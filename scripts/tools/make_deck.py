@@ -13,6 +13,8 @@ import os
 import sys
 
 from pptx import Presentation
+from pptx.chart.data import CategoryChartData
+from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION
 from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE
 from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
@@ -31,6 +33,11 @@ except Exception:
 # 왼쪽이 지금 본문에 적힌 말, 오른쪽이 화면에 나갈 말이다.
 # 이름을 갈 때는 오른쪽만 고친다. 긴 말부터 바꾸므로 겹쳐도 안전하다.
 TERMS = {
+    "스티커 랙": "스티커 칸",
+    "빈 랙": "빈 스티커 칸",
+    "랙": "스티커 칸",
+    "매대": "진열대",
+    "탄창": "다트 묶음",
     "스티커": "스티커",
     "딱지": "딱지",
     "설비": "설비",
@@ -42,7 +49,6 @@ TERMS = {
     "라운드": "라운드",
     "리그": "리그",
     "제약": "제약",
-    "탄창": "탄창",
     "영역 강화": "영역 강화",
     "소비 아이템": "소비 아이템",
     "스타트 팩": "스타트 팩",
@@ -90,7 +96,7 @@ Y_RULE = 1.25
 Y_BODY = 1.46
 Y_MAX = 6.92
 
-W_BODY = 8.65        # 본문 폭. 오른쪽 3.2인치는 이미지 자리로 비운다
+W_BODY = 9.90        # 본문 폭. 오른쪽 2.7인치는 이미지 자리로 비운다
 CW = W               # 지금 쪽의 본문 폭 (set_width 가 바꾼다)
 
 
@@ -213,7 +219,8 @@ def table_geom(b, x=L, w=W):
     return xs, widths
 
 
-def row_height(row, widths, row_h=ROW_H):
+def row_height(row, widths, row_h=None):
+    row_h = row_h or ROW_H
     lines = 1
     for ci, w in enumerate(widths):
         cell = row[ci] if ci < len(row) else ""
@@ -232,6 +239,8 @@ def block_height(b, w=None):
         return 0.26 * _wrapped(b.get("text", ""), cap_of(w)) + 0.12
     if t == "flow":
         return 1.50
+    if t == "chart":
+        return (HEAD_H if b.get("heading") else 0.0) + b.get("h", 3.5) + 0.10
     head = HEAD_H if b.get("heading") else 0.0
     if t == "kv":
         rows = b.get("rows") or []
@@ -251,7 +260,8 @@ def block_height(b, w=None):
     if t == "table":
         _, widths = table_geom(b, L, w)
         rows = b.get("rows") or []
-        return head + 0.30 + sum(row_height(r, widths) for r in rows) + 0.10
+        rh = b.get("rh")
+        return head + 0.30 + sum(row_height(r, widths, rh) for r in rows) + 0.10
     return 0.3
 
 
@@ -359,8 +369,10 @@ def draw_table(slide, y, b, x=L, w=None):
     if not rows:
         return y
     _, widths = table_geom(b, x, w)
-    heights = [0.30] + [row_height(r, widths) for r in rows]
-    return make_table(slide, x, y, widths, heights, cols, rows) + 0.10
+    rh = b.get("rh")
+    heights = [0.30] + [row_height(r, widths, rh) for r in rows]
+    return make_table(slide, x, y, widths, heights, cols, rows,
+                      size=b.get("size")) + 0.10
 
 
 def draw_flow(slide, y, b, x=L, w=None):
@@ -431,7 +443,41 @@ def draw_note(slide, y, b, x=L, w=None):
     return y + h + 0.12
 
 
-DRAW = {"kv": draw_kv, "split": draw_split, "table": draw_table,
+def draw_chart(slide, y, b, x=L, w=None):
+    """꺾은선 그래프. 목표 곡선처럼 수치보다 모양이 중요한 곳에 쓴다."""
+    w = w or CW
+    if b.get("heading"):
+        y = draw_heading(slide, y, b["heading"], x, w)
+    cd = CategoryChartData()
+    cd.categories = [str(c) for c in b.get("cats", [])]
+    for nm, vals in (b.get("series") or {}).items():
+        cd.add_series(T(nm), vals)
+    h = b.get("h", 3.5)
+    gf = slide.shapes.add_chart(XL_CHART_TYPE.LINE_MARKERS,
+                                Inches(x), Inches(y), Inches(w), Inches(h), cd)
+    ch = gf.chart
+    ch.has_title = False
+    ch.has_legend = True
+    ch.legend.position = XL_LEGEND_POSITION.BOTTOM
+    ch.legend.include_in_layout = False
+    ch.legend.font.size = Pt(10)
+    ch.legend.font.name = F_BODY
+    for ax in (ch.category_axis, ch.value_axis):
+        ax.tick_labels.font.size = Pt(10)
+        ax.tick_labels.font.name = F_BODY
+    ch.value_axis.has_major_gridlines = True
+    if b.get("log"):                       # 25 에서 32,000 까지 — 로그 축이라야 앞이 보인다
+        vax = ch.value_axis._element
+        lb = vax.makeelement(qn("c:logBase"), {"val": "10"})
+        vax.insert(list(vax).index(vax.find(qn("c:scaling"))) if vax.find(qn("c:scaling")) is not None else 0, lb)
+        sc = vax.find(qn("c:scaling"))
+        if sc is not None:
+            sc.insert(0, sc.makeelement(qn("c:logBase"), {"val": "10"}))
+            vax.remove(lb)
+    return y + h + 0.10
+
+
+DRAW = {"chart": draw_chart, "kv": draw_kv, "split": draw_split, "table": draw_table,
         "flow": draw_flow, "steps": draw_steps, "note": draw_note}
 
 
@@ -449,7 +495,7 @@ def chrome(slide, title, page):
 
 OVERFLOW = []
 TRIM = True          # 한 쪽을 넘기면 조금 덜어낸다. 그래도 넘치면 쪽을 나눈다
-MAX_CUT = 0          # 한 쪽에서 뺄 수 있는 행의 최대 수
+MAX_CUT = 40         # 한 쪽에 담기게 덜어낸다. 쪽을 쪼개지 않는다
 
 
 def _bottom(related):
@@ -482,13 +528,16 @@ def _pairable(b):
     return True
 
 
+PAIR = True
+
+
 def pack(blocks):
     """블록을 줄로 묶는다. 나란히 놓아 자리를 버는 둘은 한 줄에 넣는다."""
     lines, i = [], 0
     while i < len(blocks):
         a = blocks[i]
         b = blocks[i + 1] if i + 1 < len(blocks) else None
-        if b is not None and _pairable(a) and _pairable(b):
+        if PAIR and b is not None and _pairable(a) and _pairable(b):
             pair = max(block_height(a, HALF), block_height(b, HALF))
             seq = block_height(a) + block_height(b) + GAP
             if pair <= seq * 0.82:
@@ -523,9 +572,14 @@ def page_height(lead, lines):
 
 
 def fit_page(chapter, title, lead, blocks):
+    global PAIR
+    PAIR = chapter != "데이터"
     set_width(W if chapter == "데이터" else W_BODY)
     """한 쪽에 들어갈 때까지 덜어낸다. 뺀 것은 CUTS 에 남긴다."""
-    blocks = [dict(b) for b in blocks]
+    blocks = [{**b,
+               **({"rows": [list(r) for r in b["rows"]]} if b.get("rows") else {}),
+               **({"rows2": [list(r) for r in b["rows2"]]} if b.get("rows2") else {})}
+              for b in blocks]
     budget = Y_MAX - Y_BODY
     if page_height(lead, pack(blocks)) <= budget:
         return blocks
@@ -541,8 +595,13 @@ def fit_page(chapter, title, lead, blocks):
     # 2) 가장 행이 많은 블록에서 끝 행부터 뺀다. 조금만 — 넘게 넘치면 쪽을 나눈다
     cut = 0
     while page_height(lead, pack(blocks)) > budget and cut < MAX_CUT:
-        cand = [b for b in blocks if b.get("rows") and len(b["rows"]) > 3]
+        cand = [b for b in blocks if b.get("rows") and len(b["rows"]) > 2]
         if not cand:
+            if len(blocks) > 1:                      # 마지막 수단 — 뒤 블록을 통째로
+                gone = blocks.pop()
+                CUTS.append("%s - %s · 블록 「%s」 통째" % (chapter, title,
+                            gone.get("heading") or gone.get("type")))
+                continue
             break
         cut += 1
         b = max(cand, key=lambda x: len(x["rows"]))
@@ -556,6 +615,8 @@ def fit_page(chapter, title, lead, blocks):
 def content_slide(prs, page, chapter, title, lead, blocks, related):
     """한 페이지 분량을 그린다. 넘치면 「(이어서)」 쪽으로 넘긴다.
     다음에 쓸 쪽 번호를 돌려준다."""
+    global PAIR
+    PAIR = chapter != "데이터"
     set_width(W if chapter == "데이터" else W_BODY)
     usable = [b for b in blocks if DRAW.get(b.get("type"))]
     if TRIM:
@@ -666,99 +727,90 @@ def appendix_stickers(prs, page):
     global TRIM
     TRIM = False
     live = [r for r in tbl("items") if r.get("enabled")]
-    per_page = 15
-    out = []
-    for key, ko in (("common", "일반"), ("uncommon", "희귀"), ("rare", "레어")):
-        sub = [r for r in live if r.get("rarity") == key]
-        npg = max(1, -(-len(sub) // per_page))          # 쪽수를 정하고 고르게 나눈다
-        size = -(-len(sub) // npg)
-        chunks = [sub[i:i + size] for i in range(0, len(sub), size)]
-        for i, chunk in enumerate(chunks, 1):
-            rows = []
-            for r in chunk:
-                eff = r.get("effect_ko") or ""
-                gold = r.get("gold_ko") or ""
-                if gold:
-                    eff = (eff + " · " + gold) if eff and eff != "—" else gold
-                m = r.get("measured") or {}
-                rows.append([r["name"], r.get("rarity_ko") or "—",
-                             r.get("cond_ko") or "모든 다트", eff or "—",
-                             "%sG" % num(r.get("cost"), "0")])
-            out.append(("스티커 · %s %d/%d" % (ko, i, len(chunks)),
-                        "%s %d장" % (ko, len(sub)),
-                        [{"type": "table",
-                          "cols": ["이름", "희귀도", "조건", "효과", "가격"],
-                          "w": [1.15, 0.62, 2.05, 2.0, 0.45],
-                          "rows": rows}]))
-    for title, lead, blocks in out:
-        page = content_slide(prs, page, "데이터", title, lead, blocks, [])
-    return page, len(live)
+    rank = {"일반": 0, "희귀": 1, "레어": 2, "전설": 3}
+    live.sort(key=lambda r: (rank.get(r.get("rarity_ko"), 9), r.get("cost") or 0, r["name"]))
+    rows = []
+    for r in live:
+        eff = r.get("effect_ko") or ""
+        gold = r.get("gold_ko") or ""
+        if gold:
+            eff = (eff + " · " + gold) if eff and eff != "—" else gold
+        rows.append([r["name"], r.get("rarity_ko") or "—",
+                     r.get("cond_ko") or "모든 다트", eff or "—",
+                     "%sG" % num(r.get("cost"), "0")])
+    per = 25
+    npg = -(-len(rows) // per)
+    size = -(-len(rows) // npg)
+    for i in range(npg):
+        chunk = rows[i * size:(i + 1) * size]
+        content_slide(prs, page, "데이터",
+                      "스티커 %d/%d" % (i + 1, npg),
+                      "",
+                      [{"type": "table",
+                        "cols": ["이름", "희귀도", "조건", "효과", "가격"],
+                        "w": [1.15, 0.62, 2.05, 2.0, 0.45],
+                        "rh": 0.205, "size": 9.5, "rows": chunk}], [])
+        page += 1
+    return page, len(rows)
 
 
 def appendix_tables(prs, page):
+    global TRIM
+    TRIM = True
+
     def emit(title, lead, blocks):
         nonlocal page
-        page = content_slide(prs, page, "데이터", title, lead, blocks, [])
+        page = content_slide(prs, page, "데이터", title, "", blocks, [])
 
     darts, mods = tbl("darts"), tbl("mods")
     emit("다트 · 개조", "다트 %d종 · 개조 %d종" % (len(darts), len(mods)),
-         [{"type": "table", "heading": "다트 — 표준 1발을 대체한다",
+         [{"type": "table", "rh": 0.22, "size": 10.0, "heading": "다트 — 표준 1발을 대체한다",
            "cols": ["이름", "게이지", "배수", "효과", "가격"],
            "w": [1.0, 0.7, 0.5, 3.2, 0.6],
            "rows": [[d["name"], "×%s" % num(d["gauge"]), num(d["mult"], "0"),
                      d.get("desc_ko") or "—",
                      "%sG" % num(d["cost"]) if d["cost"] else "기본"] for d in darts]},
-          {"type": "table", "heading": "개조 — 판의 기하를 바꾼다 · 런 동안 유지",
+          {"type": "table", "rh": 0.22, "size": 10.0, "heading": "개조 — 판의 기하를 바꾼다 · 런 동안 유지",
            "cols": ["이름", "축", "효과", "배타", "가격"],
            "w": [1.0, 0.8, 2.8, 0.8, 0.6],
            "rows": [[m["name"], m["axis"], m.get("desc_ko") or "—",
                      m.get("excl") or "—", "%sG" % num(m["cost"])] for m in mods]}])
 
-    md, areas = tbl("modifiers"), tbl("areas")
-    emit("보스 제약 · 착탄 영역", "제약 %d종 · 영역 %d종" % (len(md), len(areas)),
-         [{"type": "table", "heading": "보스 제약 — 입장 전 3개 중 1개를 고른다",
-           "cols": ["이름", "축", "효과"],
+    md = tbl("modifiers")
+    emit("보스 제약", "%d종 · 보스 판 입장 전 3장 중 1장을 고른다" % len(md),
+         [{"type": "table", "rh": 0.22, "size": 10.0,
+           "cols": ["이름", "무엇을 건드리나", "효과"],
            "w": [1.0, 1.1, 3.4],
-           "rows": [[m["name"], m["axis"], m.get("desc_ko") or "—"] for m in md]},
-          {"type": "table", "heading": "착탄 영역",
-           "cols": ["영역", "기본 점수", "기본 배수"],
-           "w": [1.0, 1.2, 3.3],
-           "rows": [[a["name"], num(a["base"], "섹터 숫자"), num(a["mult"], "1")]
-                    for a in areas]}])
+           "rows": [[m["name"], m["axis"], m.get("desc_ko") or "—"] for m in md]}])
 
     vo, tg = tbl("vouchers"), tbl("tags")
     emit("설비 · 딱지", "설비 %d종 · 딱지 %d종" % (len(vo), len(tg)),
-         [{"type": "table", "heading": "설비 — 상점 왼쪽 벽, 라운드마다 하나",
+         [{"type": "table", "rh": 0.22, "size": 10.0, "heading": "설비 — 상점 왼쪽 벽, 라운드마다 하나",
            "cols": ["이름", "효과", "가격", "라운드", "선행"],
            "w": [1.1, 2.6, 0.5, 0.5, 1.0],
            "rows": [[v["name"], v.get("desc_ko") or "—", "%sG" % num(v["cost"]),
                      num(v["min_ante"]), v.get("prereq") or "—"] for v in vo]},
-          {"type": "table", "heading": "딱지 — 소판·대판을 건너뛸 때만 받는다",
+          {"type": "table", "rh": 0.22, "size": 10.0, "heading": "딱지 — 소판·대판을 건너뛸 때만 받는다",
            "cols": ["이름", "효과", "시점", "라운드"],
            "w": [1.1, 2.9, 0.9, 0.5],
            "rows": [[t["name"], t.get("desc_ko") or "—", t["when"], num(t["min_ante"])]
                     for t in tg]}])
 
-    st = tbl("stakes")
-    emit("리그", "%d단 · 앞 단을 완주하면 다음 단이 열린다" % len(st),
-         [{"type": "table",
-           "cols": ["리그", "곡선", "소판 골드", "봉인", "다트", "매대 가격", "삭음", "유지비"],
-           "rows": [[s["name"], s["curve"], num(s["reward_small"], "0"),
-                     num(s["seal_items"], "0"), num(s["darts_add"], "0"),
-                     "×%s" % num(s["shop_cost_mul"]), num(s["perish"], "0"),
-                     num(s["rent"], "0")] for s in st]},
-          {"type": "note",
-           "text": "곡선 base 는 기준 곡선, curve_a·curve_b 는 라운드 표의 가팔라진 열이다. "
-                   "삭음은 산 스티커가 몇 판 뒤에 사라지는가, 유지비는 판마다 내는 골드다."}])
-
-    pk = tbl("packs")
-    emit("스타트 팩", "%d종 · 직접 버프가 아니라 물건과 대가를 준다" % len(pk),
-         [{"type": "table",
-           "cols": ["팩", "다트", "시작 골드", "랙", "소비 칸", "대가와 변화"],
-           "w": [1.0, 0.55, 0.7, 0.45, 0.6, 3.6],
-           "rows": [[p["name"], num(p["darts_add"], "0"), num(p["gold_add"], "0"),
-                     num(p["item_slots"]), num(p["cons_slots"]),
-                     (p.get("desc_ko") or p.get("desc") or "—")] for p in pk]}])
+    st, pk = tbl("stakes"), tbl("packs")
+    emit("리그 · 스타트 팩", "리그 %d단 · 팩 %d종" % (len(st), len(pk)),
+         [{"type": "table", "rh": 0.22, "size": 10.0,
+           "heading": "리그 — 앞 단을 완주하면 다음 단이 열린다",
+           "cols": ["리그", "곡선", "작은 판 골드", "봉인", "다트", "진열대 가격", "삭음", "유지비"],
+           "rows": [[s_["name"], s_["curve"], num(s_["reward_small"], "0"),
+                     num(s_["seal_items"], "0"), num(s_["darts_add"], "0"),
+                     "×%s" % num(s_["shop_cost_mul"]), num(s_["perish"], "0"),
+                     num(s_["rent"], "0")] for s_ in st]},
+          {"type": "table", "rh": 0.22, "size": 10.0, "heading": "스타트 팩",
+           "cols": ["팩", "다트", "시작 골드", "스티커 칸", "소비 칸", "대가와 변화"],
+           "w": [1.0, 0.55, 0.7, 0.7, 0.6, 3.4],
+           "rows": [[q["name"], num(q["darts_add"], "0"), num(q["gold_add"], "0"),
+                     num(q["item_slots"]), num(q["cons_slots"]),
+                     (q.get("desc_ko") or q.get("desc") or "—")] for q in pk]}])
 
     au = tbl("area_upgrades")
     tracks = {}
@@ -770,34 +822,19 @@ def appendix_tables(prs, page):
             "max_items", "darts_base", "cons_slots", "curve_first", "curve_last"]
     emit("영역 강화 · 튜닝 상수",
          "강화 %d트랙 · 레벨당 증분" % len(tracks),
-         [{"type": "table", "heading": "영역 강화 — 런 동안 유지",
+         [{"type": "table", "rh": 0.22, "size": 10.0, "heading": "영역 강화 — 런 동안 유지",
            "cols": ["트랙", "레벨", "레벨당 점수", "레벨당 배수"],
            "rows": [[k, str(len(v)),
                      " · ".join(num(x["add_score"], "0") for x in v),
                      " · ".join(num(x["add_mult"], "—") for x in v)]
                     for k, v in tracks.items()]},
-          {"type": "table", "heading": "튜닝 상수",
+          {"type": "table", "rh": 0.22, "size": 10.0, "heading": "튜닝 상수",
            "cols": ["키", "값", "키", "값"],
            "rows": [[keys[i], num(tn.get(keys[i])),
                      keys[i + 1] if i + 1 < len(keys) else "",
                      num(tn.get(keys[i + 1])) if i + 1 < len(keys) else ""]
                     for i in range(0, len(keys), 2)]}])
 
-    sch = (kb().get("derived", {}).get("schedule") or {}).get("white") or []
-    if sch:
-        emit("목표 점수 — 흰 리그 24판",
-             "라운드 8 × 판 3. 목표 = 라운드 기준값 × 판 배수",
-             [{"type": "table",
-               "cols": ["라운드", "작은 판", "큰 판", "보스 판", "다트", "보상 (소·대·보스)"],
-               "rows": [[str(a),
-                         *[str(next((r["target"] for r in sch
-                                     if r["ante"] == a and r["blind"] == b), "—"))
-                           for b in ("small", "big", "boss")],
-                         str(next((r["darts"] for r in sch if r["ante"] == a), "—")),
-                         " · ".join(str(next((r["reward_gold"] for r in sch
-                                              if r["ante"] == a and r["blind"] == b), "—"))
-                                    for b in ("small", "big", "boss"))]
-                        for a in range(1, 9)]}])
     return page
 
 
@@ -849,6 +886,7 @@ def build(pages_json, out_path):
 
     _, marks, _, _ = _run(pages)            # 1차 — 쪽 범위를 잰다
     OVERFLOW.clear()
+    CUTS.clear()
     prs, _, total, n_stick = _run(pages, marks)   # 2차 — 목차를 채워 짓는다
     prs.save(out_path)
     return total, n_stick
