@@ -117,7 +117,7 @@ const C_MULT := Color("e2593f")
 const C_GOLD := Color("f2c94c")
 
 enum S { PICK, AIM_V, AIM_H, CONFIRM, FLY, RESOLVE, CLEAR, SHOP, STAGE, OVER,
-		TITLE, SETTINGS, COLLECT, NEWRUN, LEG }
+		TITLE, SETTINGS, COLLECT, NEWRUN, LEG, RUNINFO }
 
 # 칸 색 — 길이 20, 값은 colors.csv 의 id. _board_bake 가 굽고
 # 손질·개칠이 고친다. 굽기 전(첫 프레임)에는 비어 있을 수 있으므로
@@ -183,6 +183,7 @@ var mouse_down := false         # 왼쪽 단추를 쥐고 있는가. 당김이 �
 # 때마다 줄이 밀려 상점·성장 뽑기가 통째로 달라진다.
 var aim_rng := RandomNumberGenerator.new()
 var shelf := {}                 # 이 상점에 걸린 사진. 비면 없다
+var run_from := S.SHOP           # 런 정보를 열던 자리. 닫으면 그리로 돌아간다
 var shelf_round := 0             # 그 사진을 굴린 라운드. 라운드가 바뀔 때만 다시 굴린다
 var dead_col := -1              # 값을 죽이는 칸 색 번호. -1 이면 안 걸렸다
 var dead_ring := 0              # 무효가 되는 배수(2 더블 · 3 트리플). 0 이면 없다
@@ -2314,10 +2315,22 @@ func _unhandled_input(e: InputEvent) -> void:
 					confirm_hold = maxf(confirm_hold - 0.05, 0.0)
 				KEY_APOSTROPHE:
 					confirm_hold = minf(confirm_hold + 0.05, 1.5)
+				KEY_TAB:
+					# 런 정보 — 런 안에서만 뜻이 있다. 타이틀·설정·컬렉션에서는
+					# 볼 런이 없고, 연출 중(RESOLVE·전환)에는 입력을 안 받는다.
+					if state == S.RUNINFO:
+						state = run_from
+						_sfx("menu_back")
+					elif _runinfo_ok():
+						run_from = state
+						state = S.RUNINFO
+						_sfx("menu_pick")
 				KEY_F11:
 					_toggle_fullscreen()
 				KEY_ESCAPE:
-					if state == S.SETTINGS:
+					if state == S.RUNINFO:
+						state = run_from
+					elif state == S.SETTINGS:
 						_settings_back()
 					elif state == S.COLLECT or state == S.NEWRUN:
 						state = S.TITLE
@@ -2556,6 +2569,11 @@ func _click(m: Vector2) -> void:
 						_settings_back()
 				_sfx("menu_back")
 				return
+		S.RUNINFO:
+			if _runinfo_back_rect().has_point(m):
+				state = run_from
+				_sfx("menu_back")
+			return
 		S.COLLECT:
 			for t in 5:
 				if _col_tab_rect(t).has_point(m):
@@ -3530,6 +3548,8 @@ func _draw_screen(scr: int) -> void:
 		_draw_settings()
 	elif scr == S.COLLECT:
 		_draw_collect()
+	elif scr == S.RUNINFO:
+		_draw_runinfo()
 	elif scr == S.NEWRUN:
 		_draw_newrun()
 	else:
@@ -3595,7 +3615,7 @@ func _is_play() -> bool:
 
 func _hud_draw() -> void:
 	if state == S.OVER or state == S.TITLE or state == S.SETTINGS \
-			or state == S.COLLECT or state == S.NEWRUN:
+			or state == S.COLLECT or state == S.NEWRUN or state == S.RUNINFO:
 		return
 	if not _bar_hidden():
 		_draw_topbar()
@@ -11235,6 +11255,108 @@ func _col_cell(i: int) -> Rect2:
 	var x0 := (VIEW.x - cw * float(cols)) * 0.5
 	return Rect2(Vector2(x0 + float(i % cols) * cw, 72.0 + float(i / cols) * ch),
 			Vector2(cw, ch))
+
+
+# ══════════════════════════════════════════════════════════
+#  런 정보
+#
+#  런 안에서 지금 무엇을 들고 있는지 한 화면에 모은다. 만든 이유는
+#  **사진**이다 — 사면 사라지고 효과만 남는 물건이라 산 뒤에는 어디서도
+#  안 보였다. 무료 리롤이 왜 늘었는지, 테이블이 왜 넓어졌는지 화면에
+#  물어볼 자리가 없었다.
+#
+#  진행·경제는 상단바가 이미 말하지만 여기서 한 번 더 모은다 — 상단바는
+#  숨을 수 있고(_bar_hidden), 목표 대비 지금이 몇인지는 판 중에만 뜬다.
+func _runinfo_rows() -> Array:
+	var rd: int = GameData.round_of(leg_no)
+	var mx: int = GameData.max_items()
+	var cs: int = GameData.cons_slots()
+
+	# 다트통 구성 — 같은 것끼리 묶는다. 여섯 줄을 그대로 세우면 표가 아니다.
+	var mag := {}
+	for d in magazine:
+		var nm := String(d.get("n", d.get("id", "?")))
+		mag[nm] = int(mag.get(nm, 0)) + 1
+	var mag_rows := []
+	for nm in mag:
+		mag_rows.append("%s x%d" % [nm, mag[nm]])
+
+	# 보유한 사진 — 이 화면의 이유다
+	var fix_rows := []
+	for f in GameData.fixtures():
+		if GameData.fixtures_own.has(String(f.id)):
+			fix_rows.append(String(f.n))
+
+	# 보드 확장
+	var mod_rows := []
+	for m in GameData.mods():
+		if mods_own.has(String(m.id)):
+			mod_rows.append(String(m.n))
+
+	return [
+		["진행", [
+			"라운드  %d / %d" % [rd, GameData.rounds_n()],
+			"판  %d / %d" % [leg_no, GameData.legs_n()],
+			"목표  %d" % target,
+			"지금  %d" % total,
+		]],
+		["경제", [
+			"골드  %d" % gold,
+			# 상단바와 같은 식이어야 한다 — 두 자리가 다른 수를 말하면 안 된다
+			"이자  +%d" % mini(gold / GameData.interest_per(), _interest_cap()),
+			"리롤  %d" % reroll_cost,
+		]],
+		["보유", [
+			"동전  %d / %d" % [owned.size(), mx],
+			"사탕  %d / %d" % [cons.size(), cs],
+		]],
+		["사진", fix_rows if not fix_rows.is_empty() else ["없음"]],
+		["다트통", mag_rows if not mag_rows.is_empty() else ["없음"]],
+		["판", mod_rows if not mod_rows.is_empty() else ["기본"]],
+	]
+
+
+func _draw_runinfo() -> void:
+	_scrim()
+	draw_string(font, Vector2(0, 28), "런 정보", HORIZONTAL_ALIGNMENT_CENTER,
+			VIEW.x, 18, C_TXT)
+
+	# 두 칸으로 나눈다. 왼쪽은 수, 오른쪽은 목록 — 목록이 길어질 쪽을
+	# 오른쪽에 둬야 왼쪽 수가 아래로 밀리지 않는다.
+	var rows := _runinfo_rows()
+	var cw: float = (VIEW.x - 54.0) * 0.5
+	var col_x := [22.0, 32.0 + cw]
+	var col_y := [46.0, 46.0]
+	for r in rows.size():
+		var side: int = 0 if r < 3 else 1
+		var head := String(rows[r][0])
+		var body: Array = rows[r][1]
+		var x: float = col_x[side]
+		var y: float = col_y[side]
+
+		draw_string(font, Vector2(x, y + 9.0), head, HORIZONTAL_ALIGNMENT_LEFT,
+				-1, 11, C_ACC)
+		draw_rect(Rect2(x, y + 13.0, cw, 1.0), Color(C_WIRE.darkened(0.3), 0.5))
+		y += 26.0
+		for ln in body:
+			draw_string(font, Vector2(x + 4.0, y), String(ln),
+					HORIZONTAL_ALIGNMENT_LEFT, cw - 8.0, 10, C_TXT)
+			y += 14.0
+		col_y[side] = y + 10.0
+
+	_btn(_runinfo_back_rect(), "닫기", "탭", false)
+
+
+# 런 정보를 열 수 있는가. 런 밖(타이틀·컬렉션·설정·새 런)에는 볼 런이
+# 없고, 연출 중에는 입력을 안 받는다 — _can_rack_move 가 그 둘을 이미
+# 정확히 가르므로 같은 판정을 쓴다. 정산 화면(CLEAR)은 그 자체가 명세라
+# 덮을 이유가 없다.
+func _runinfo_ok() -> bool:
+	return _can_rack_move() or state == S.CLEAR
+
+
+func _runinfo_back_rect() -> Rect2:
+	return Rect2(Vector2(VIEW.x * 0.5 - 56.0, VIEW.y - 40.0), Vector2(112.0, 28.0))
 
 
 func _draw_collect() -> void:
