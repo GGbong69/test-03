@@ -5163,7 +5163,7 @@ func _cons_draw() -> void:
 		if live:
 			draw_rect(r, C_PANEL.lightened(0.10))
 			draw_rect(r, C_WIRE.darkened(0.15), false, 1.0)
-			_icon_area(r.get_center(), minf(r.size.x, r.size.y) * 0.40,
+			_icon_cons(r.get_center(), minf(r.size.x, r.size.y) * 0.30,
 					String(cons[i].id))
 	# 이름과 수 — 동전 슬롯 밑은 상인 자리라 못 쓰지만 이 자리는 벽이다.
 	draw_string(font, Vector2(box.position.x, box.end.y + 9.0), "사탕",
@@ -6633,7 +6633,7 @@ func _obj_paint(it: Dictionary, s: Dictionary, dim: float) -> void:
 					c + Vector2(-ce.x, -ce.y), c + Vector2(ce.x, -ce.y),
 					c + Vector2(ce.x, ce.y), c + Vector2(-ce.x, ce.y)]), body)
 			draw_rect(Rect2(c - ce, ce * 2.0), C_WIRE.darkened(0.2), false, 1.0)
-			_icon_area(c, ce.y * 0.78, String(s.d.id), 1.0 - dim)
+			_icon_cons(c, ce.y * 0.56, String(s.d.id), 1.0 - dim)
 		"mod":
 			# 동전과 같은 어법으로 눕는다 — 옆면을 깔고 윗면을 얹는다.
 			# 정면 원반은 컬렉션의 것이고, 테이블 위의 것은 누워야 한다.
@@ -7070,6 +7070,58 @@ func _ring(c: Vector2, r: float, lo: float, hi: float, col: Color) -> void:
 # 2px 이고, 꺼진 고리끼리는 서로 안 갈린다. **밝히는 것은 늘 하나**이므로
 # 판은 한 색으로 깔고 그 위에 켜진 고리만 얹는다 — 경계선은 켜진 고리의
 # 가장자리가 대신한다. 그리는 것이 줄면 작은 칸에서 더 잘 읽힌다.
+# 사탕 몸통 색 — 판이 이미 쓰는 색에서 가져온다. 트랙과 색이 같아야
+# 「어느 자리를 올리는 사탕인가」가 그림만으로 읽힌다.
+const CANDY := {
+	"c_sg": C_LIGHT,          # 싱글 — 판의 밝은 칸
+	"c_db": C_GREEN,          # 더블 — 판의 초록 띠
+	"c_tr": C_RED,            # 트리플 — 판의 붉은 띠
+	"c_bl": C_ACC,            # 불 — 한복판
+	"c_bo": C_WIRE,           # 보드 아웃 — 판 밖
+}
+
+
+# 사탕. 실루엣이 먼저다 — 26px 칸에서 고리 그림은 다른 물건과 안 갈리지만
+# 포장 끝 둘이 달린 몸통은 한눈에 사탕이다. 고리는 그 얼굴에 얹는다.
+#
+# r 은 **몸통** 반지름이다. 포장까지 1.5r 이므로 칸 반폭보다 작게 준다.
+func _icon_cons(c: Vector2, r: float, id: String, a := 1.0) -> void:
+	var body: Color = CANDY.get(id, C_DIM)
+	body = Color(body, a)
+	var ink := Color(C_DARK.darkened(0.25), a)
+	# 포장 끝. 몸통에 물린 자리는 좁고 바깥은 벌어진다.
+	for sgn in [-1.0, 1.0]:
+		draw_colored_polygon(PackedVector2Array([
+				Vector2(c.x + sgn * r * 0.72, c.y - r * 0.24),
+				Vector2(c.x + sgn * r * 0.72, c.y + r * 0.24),
+				Vector2(c.x + sgn * r * 1.52, c.y + r * 0.62),
+				Vector2(c.x + sgn * r * 1.52, c.y - r * 0.62)]),
+				Color(body.darkened(0.30), a))
+	draw_circle(c, r, body)
+	# 트랙 표식. 켜진 고리 하나만 얹는다 — 몸통 색이 이미 트랙을 말하므로
+	# 여기서는 어느 고리인지만 못 박으면 된다.
+	match id:
+		"c_db":
+			_ring(c, r * 0.80, ICO.dbl_lo, ICO.dbl_hi, ink)
+		"c_tr":
+			_ring(c, r * 0.80, ICO.trp_lo, ICO.trp_hi, ink)
+		"c_sg":
+			_ring(c, r * 0.80, ICO.out_lo, ICO.out_hi, ink)
+		"c_bl":
+			draw_circle(c, r * 0.34, ink)
+		"c_bo":
+			# 판 밖이다 — 몸통 안에 판을 작게 두고 밖으로 획 넷을 뻗는다.
+			draw_circle(c, r * 0.34, ink)
+			for i in 4:
+				var d := Vector2(cos(TAU * float(i) * 0.25 + PI * 0.25),
+						sin(TAU * float(i) * 0.25 + PI * 0.25))
+				draw_line(c + d * r * 0.50, c + d * r * 0.92, ink,
+						maxf(r * 0.16, 1.0))
+	# 광택 한 점. 몸통이 공이라는 것을 이 점 하나가 말한다.
+	draw_circle(c + Vector2(-r * 0.34, -r * 0.36), maxf(r * 0.17, 1.0),
+			Color(C_LIGHT, a * 0.55))
+
+
 func _icon_area(c: Vector2, r: float, id: String, a := 1.0) -> void:
 	var off := Color(C_WIRE.lightened(0.10), a)
 	var on := Color(C_ACC, a)
