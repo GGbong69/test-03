@@ -5,8 +5,8 @@ extends SceneTree
 #     godot --script scripts/tools/shot_table.gd
 
 const SRC := [
-	["res://imported_models/balatro-table-hole-3d/table.obj", "table.png"],
-	["res://imported_models/balatro-hole-cap-3d/cap.obj", "cap.png"],
+	["res://imported_models/balatro-table-hole-3d/table_tex.obj", "table_tex.png",
+		"res://imported_models/balatro-table-hole-3d/balatro-table-hole-3d_base_color.jpg"],
 ]
 
 var i := 0
@@ -32,25 +32,31 @@ func _obj(path: String) -> ArrayMesh:
 		return null
 	var vs := PackedVector3Array()
 	var ns := PackedVector3Array()
+	var ts := PackedVector2Array()
 	var ov := PackedVector3Array()
-	var on := PackedVector3Array()
+	var ou := PackedVector2Array()
 	while not f.eof_reached():
 		var p := f.get_line().split(" ", false)
-		if p.size() < 4:
-			continue
+		if p.size() < 3:
+			continue        # vt 는 토큰이 셋이다 — 넷으로 자르면 UV 가 통째로 빠진다
 		if p[0] == "v":
 			vs.append(Vector3(float(p[1]), float(p[2]), float(p[3])))
 		elif p[0] == "vn":
 			ns.append(Vector3(float(p[1]), float(p[2]), float(p[3])))
+		elif p[0] == "vt":
+			ts.append(Vector2(float(p[1]), 1.0 - float(p[2])))
 		elif p[0] == "f":
 			for k in 3:
 				var t := p[1 + k].split("/")
 				ov.append(vs[int(t[0]) - 1])
-				if t.size() > 2 and t[2] != "" and ns.size() > 0:
-					on.append(ns[int(t[2]) - 1])
+				if t.size() > 1 and t[1] != "" and ts.size() > 0:
+					ou.append(ts[int(t[1]) - 1])
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var has_uv := ou.size() == ov.size()
 	for k in ov.size():
+		if has_uv:
+			st.set_uv(ou[k])
 		st.add_vertex(ov[k])
 	st.generate_normals()
 	return st.commit()
@@ -68,8 +74,15 @@ func _shots() -> void:
 		var mi := MeshInstance3D.new()
 		mi.mesh = mesh
 		var mat := StandardMaterial3D.new()
-		mat.albedo_color = Color(0.20, 0.42, 0.28)
 		mat.roughness = 0.9
+		if pair.size() > 2:
+			var im := Image.new()
+			if im.load(pair[2]) == OK:
+				mat.albedo_texture = ImageTexture.create_from_image(im)
+			else:
+				print("텍스처 못 읽음: ", pair[2])
+		else:
+			mat.albedo_color = Color(0.20, 0.42, 0.28)
 		mi.material_override = mat
 		root.add_child(mi)
 
