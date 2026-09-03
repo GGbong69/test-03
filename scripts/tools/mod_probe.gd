@@ -193,7 +193,7 @@ func _initialize() -> void:
 			back = false
 	_say(g.spin_cur == 0 and back, "제약이 빠지면 판이 제자리로")
 
-	# ⑤' 굽는 사이에도 안 어긋난다. 개조를 사면 _board_bake 가 sectors 를
+	# ⑤' 굽는 사이에도 안 어긋난다. 보드 확장를 사면 _board_bake 가 sectors 를
 	#     밑바닥에서 새로 만드는데 sec_col 은 일부러 안 지운다 — 그대로 두면
 	#     숫자만 제자리로 가고 색만 돌아간 채 남는다.
 	_arm(g, "turn")

@@ -9,14 +9,14 @@ const GameData = preload("res://scripts/data.gd")
 #             -s scripts/tools/axis_probe.gd -- autoplay runs=24
 #
 #  curve_probe 는 "어디서 죽는가" 를 잰다. 이것은 "무엇을 쥐고 죽는가" 를
-#  잰다. 판이 넘어갈 때마다 랙·트랙·개조·자루·설비를 통째로 찍어 두고,
+#  잰다. 판이 넘어갈 때마다 동전 슬롯·트랙·보드 확장·자루·장갑를 통째로 찍어 두고,
 #  판마다 실제로 난 점수와 같이 낸다.
 #
 #  내는 것
 #    · 판별 평균: 목표 · 실제 낸 점수 · 쓴 다트 · 여유배율
-#    · 판별 평균 보유: 스티커 수 · 트랙 레벨 합 · 개조 수 · 설비 수 · 비표준 자루
-#    · 각 축이 상한(스티커 5칸 · 트랙 40레벨 · 개조 8 · 설비 7)에 닿는 판
-#    · 판 점수를 축별로 쪼갠 몫 — 판 · 트랙 · 스티커
+#    · 판별 평균 보유: 동전 수 · 트랙 레벨 합 · 보드 확장 수 · 장갑 수 · 비표준 자루
+#    · 각 축이 상한(동전 5칸 · 트랙 40레벨 · 보드 확장 8 · 장갑 7)에 닿는 판
+#    · 판 점수를 축별로 쪼갠 몫 — 판 · 트랙 · 동전
 # ══════════════════════════════════════════════════════════
 
 var g: Node = null
@@ -70,7 +70,7 @@ func _snap(n: int) -> void:
 		if String(d.get("id", "std")) != "std":
 			nonstd += 1
 	r.dart += float(nonstd)
-	# 랙의 곱연산 총량 — xmult 만 곱해 둔다. 빌드가 얼마나 폭발했는지의 척도다.
+	# 동전 슬롯의 곱연산 총량 — xmult 만 곱해 둔다. 빌드가 얼마나 폭발했는지의 척도다.
 	var xm := 1.0
 	for o in g.owned:
 		if String(o.get("k", "")) == "xmult":
@@ -81,7 +81,7 @@ func _snap(n: int) -> void:
 
 
 func _finish() -> void:
-	print("\n판  A  종류      목표    통과율  평균다트  여유   낸점수   스티커 트랙 개조 설비 자루  x곱")
+	print("\n판  A  종류      목표    통과율  평균다트  여유   낸점수   동전 트랙 보드 확장 장갑 자루  x곱")
 	for n in range(1, GameData.legs_n() + 1):
 		if not st.has(n):
 			continue
@@ -97,8 +97,8 @@ func _finish() -> void:
 				float(r.items) / sn, float(r.trk) / sn, float(r.mods) / sn,
 				float(r.vou) / sn, float(r.dart) / sn, float(r.xm) / sn])
 
-	print("\n축별 점수 몫 (판이 준 칩 · 트랙이 얹은 칩/배수 · 스티커가 얹은 것)")
-	print("판   판몫%   트랙몫%   스티커몫%")
+	print("\n축별 점수 몫 (판이 준 기본 점수 · 트랙이 얹은 기본 점수/배수 · 동전가 얹은 것)")
+	print("판   판몫%   트랙몫%   동전몫%")
 	for n in range(1, GameData.legs_n() + 1):
 		if not st.has(n):
 			continue
@@ -169,8 +169,8 @@ var _rscore := 0.0
 
 # 한 발의 정산 큐를 축별로 쪼갠다.
 #   판몫    = 칸 값(트랙 보정 전) x 판 배수
-#   트랙몫  = 트랙이 얹은 칩/배수가 더한 만큼
-#   스티커몫 = 나머지 전부
+#   트랙몫  = 트랙이 얹은 기본 점수/배수가 더한 만큼
+#   동전몫 = 나머지 전부
 # 큐는 이미 트랙이 얹힌 값을 들고 있으므로, 트랙 보너스를 다시 계산해서 뺀다.
 func _split_queue() -> void:
 	var chip := 0
@@ -193,7 +193,7 @@ func _split_queue() -> void:
 	var raw_mult: int = maxi(base_mult - int(tb.m), 1)
 	var board := raw_chip * raw_mult
 	var withtrk := base_chip * base_mult
-	# 스티커까지 얹은 최종
+	# 동전까지 얹은 최종
 	var c := base_chip
 	var m := base_mult
 	for q in g.queue:

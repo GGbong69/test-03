@@ -38,13 +38,13 @@ func _initialize() -> void:
 			sd = int(t)
 		elif String(t).begins_with("p_") or String(t) == "base":
 			pk = String(t)
-	# 팩을 박아 두는 자리. 기본 팩만 돌면 다트 수·칸 수·이자를 미는
+	# 다트통을 박아 두는 자리. 기본 다트통만 돌면 다트 수·칸 수·이자를 미는
 	# 갈래가 통째로 안 밟힌다 — 「기본에서 줄어든 다트」 버그가 그랬다.
 	if pk != "":
 		GameData.pack = pk
 	pack_want = pk
 	seed(sd)
-	print("소크 시드 %d · 팩 %s" % [sd, pk if pk != "" else "(저장값)"])
+	print("소크 시드 %d · 다트통 %s" % [sd, pk if pk != "" else "(저장값)"])
 
 
 func _process(_d: float) -> bool:

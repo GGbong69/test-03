@@ -6,9 +6,9 @@ extends SceneTree
 #  기존 프로브가 안 보던 자리다.
 #
 #    ① 창구 확정이 눌렀다 뗄 때 실행되는가 (아이템 구매·사용 = release)
-#    ② 랙 드래그 재정렬이 순서를 실제로 바꾸는가 (아이템순서변경=True)
+#    ② 동전 슬롯 드래그 재정렬이 순서를 실제로 바꾸는가 (아이템순서변경=True)
 #       — 함수만이 아니라 **마우스 경로로**, 화면별로 잰다
-#    ③ 소비 아이템 — 사면 칸에 들어가고, 쓰면 트랙 레벨이 오르는가
+#    ③ 사탕 — 사면 칸에 들어가고, 쓰면 트랙 레벨이 오르는가
 #    ④ 조건 missp — 직전 투척이 빗나갔을 때만 서는가 (스펙 100003)
 #
 #  실행:  godot --path . --headless -s scripts/tools/spec_probe.gd
@@ -53,19 +53,19 @@ func _process(_d: float) -> bool:
 	var g0: int = g.gold
 	var took: bool = g._hand_press(_chute_pt(false))
 	_ok("창구 누름 → 아직 안 판다", took and g.gold == g0 and g.owned.size() == 3,
-			"press 삼킴 %s · 골드 %d · 칩 %d" % [took, g.gold, g.owned.size()])
+			"press 삼킴 %s · 골드 %d · 기본 점수 %d" % [took, g.gold, g.owned.size()])
 	g._hand_release(Vector2(320.0, 180.0))      # 창구 밖에서 뗌 = 취소
 	_ok("창구 밖에서 뗌 → 취소", g.gold == g0 and g.owned.size() == 3,
-			"골드 %d · 칩 %d" % [g.gold, g.owned.size()])
+			"골드 %d · 기본 점수 %d" % [g.gold, g.owned.size()])
 	g._click(g._slot_rect(0).get_center())      # 다시 고른다 (탭이 풀렸을 수 있다)
 	if g.sell_sel != 0:
 		g._click(g._slot_rect(0).get_center())
 	g._hand_press(_chute_pt(false))
 	g._hand_release(_chute_pt(false))           # 같은 창구 안에서 뗌 = 판매
 	_ok("창구 안에서 뗌 → 판매", g.gold > g0 and g.owned.size() == 2,
-			"골드 %d → %d · 칩 %d" % [g0, g.gold, g.owned.size()])
+			"골드 %d → %d · 기본 점수 %d" % [g0, g.gold, g.owned.size()])
 
-	# ── ② 랙 재정렬 — 0번을 맨 뒤로 끼우면 순서가 민다
+	# ── ② 동전 슬롯 재정렬 — 0번을 맨 뒤로 끼우면 순서가 민다
 	g.owned = [GameData.items()[0], GameData.items()[1], GameData.items()[2]]
 	g._panel_reset()
 	var n0: String = g.owned[0].n
@@ -98,21 +98,21 @@ func _process(_d: float) -> bool:
 				% [carried, g.owned[0].n, g.owned[1].n, g.owned[2].n])
 	g.state = g.S.SHOP
 
-	# ── ③ 소비 아이템 — 산다 · 칸에 선다 · 쓰면 트랙이 오른다
+	# ── ③ 사탕 — 산다 · 칸에 선다 · 쓰면 트랙이 오른다
 	var pool: Array = GameData.consumables()
-	_ok("소비 아이템 표", pool.size() >= 5, "%d종 (영역 강화 5 + 가공 2 중 활성)" % pool.size())
+	_ok("사탕 표", pool.size() >= 5, "%d종 (트랙 강화 5 + 스티커 2 중 활성)" % pool.size())
 	var ci := -1
 	for i in g.stock.size():
 		if g.stock[i].type == "cons":
 			ci = i
 			break
 	if ci < 0:
-		# 매대에 안 떴으면 직접 심는다 — 여기서 재는 것은 등장 확률이 아니라 경로다
+		# 테이블에 안 떴으면 직접 심는다 — 여기서 재는 것은 등장 확률이 아니라 경로다
 		g.stock[0] = {"type": "cons", "d": pool[0], "cost": pool[0].cost, "sold": false}
 		ci = 0
 	var cg: int = g.gold
 	g._buy(ci)
-	_ok("소비 아이템 구매 → 칸", g.cons.size() == 1 and g.gold == cg - g.stock[ci].cost,
+	_ok("사탕 구매 → 칸", g.cons.size() == 1 and g.gold == cg - g.stock[ci].cost,
 			"칸 %d/%d · 골드 %d" % [g.cons.size(), GameData.cons_slots(), g.gold])
 	var trk: int = g.cons[0].track
 	var lv0: int = int(g.track_lv.get(trk, 0))

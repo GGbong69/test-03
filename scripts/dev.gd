@@ -4,7 +4,7 @@ extends RefCounted
 #  개발자 모드
 # ──────────────────────────────────────────────────────────
 #  여는 키는 \ 다. 게임에 든 것을 손으로 다 켜 보는 자리. 프로브는 "값이 맞는가" 를 재고
-#  이것은 "만져 보면 어떤가" 를 본다 — 둘은 다른 일이다. 스티커 178장을
+#  이것은 "만져 보면 어떤가" 를 본다 — 둘은 다른 일이다. 동전 178장을
 #  하나씩 사서 확인하려면 런을 백 번 돌아야 한다.
 #
 #  ── 지우는 법 ────────────────────────────────────────────
@@ -193,21 +193,21 @@ static func _rows(g: Node) -> Array:
 			]
 		1:
 			return [
-				{"n1": "스티커 주기", "t": "list", "k": "item",
+				{"n1": "동전 주기", "t": "list", "k": "item",
 						"n": GameData.items().size()},
-				{"n1": "스티커 무작위", "t": "act", "a": "item_rand"},
-				{"n1": "랙 비우기", "t": "act", "a": "item_clear"},
+				{"n1": "동전 무작위", "t": "act", "a": "item_rand"},
+				{"n1": "동전 슬롯 비우기", "t": "act", "a": "item_clear"},
 				{"n1": "소비 주기", "t": "list", "k": "cons",
 						"n": GameData.consumables().size()},
-				{"n1": "개조 달기", "t": "list", "k": "mod",
+				{"n1": "보드 확장 달기", "t": "list", "k": "mod",
 						"n": GameData.mods().size()},
 				{"n1": "다트 바꾸기", "t": "list", "k": "dart",
 						"n": GameData.darts().size()},
-				{"n1": "설비 주기", "t": "list", "k": "vou",
+				{"n1": "장갑 주기", "t": "list", "k": "vou",
 						"n": GameData.fixtures().size()},
-				{"n1": "딱지 주기", "t": "list", "k": "tag",
+				{"n1": "뱃지 주기", "t": "list", "k": "tag",
 						"n": GameData.tags().size()},
-				{"n1": "매대 다시 굴리기", "t": "act", "a": "restock"},
+				{"n1": "테이블 다시 굴리기", "t": "act", "a": "restock"},
 			]
 		2:
 			return [
@@ -220,7 +220,7 @@ static func _rows(g: Node) -> Array:
 						"n": GameData.SCORE_MODES.size()},
 				{"n1": "리그", "t": "list", "k": "league",
 						"n": GameData.leagues().size()},
-				{"n1": "팩", "t": "list", "k": "pack",
+				{"n1": "다트통", "t": "list", "k": "pack",
 						"n": GameData.packs().size()},
 				{"n1": "판 다시 굽기", "t": "act", "a": "bake"},
 			]
@@ -276,9 +276,9 @@ static func _say(t: String) -> void:
 	msg_t = 2.5
 
 
-# 조준 방식을 **스티커로도** 쥐여 준다. 값만 박아 두면 다음 _start_leg
-# 가 든 스티커를 다시 읽어 std 로 되돌린다 — 판을 넘기는 순간 조용히
-# 풀리는 것이다. 게임에서 방식이 오는 길이 스티커 하나뿐이므로,
+# 조준 방식을 **동전로도** 쥐여 준다. 값만 박아 두면 다음 _start_leg
+# 가 든 동전를 다시 읽어 std 로 되돌린다 — 판을 넘기는 순간 조용히
+# 풀리는 것이다. 게임에서 방식이 오는 길이 동전 하나뿐이므로,
 # 검사도 그 길로 가야 검사한 것이 실제로 도는 것과 같아진다.
 static func _aim_sticker(g: Node, am: String) -> void:
 	for j in range(g.owned.size() - 1, -1, -1):
@@ -346,11 +346,11 @@ static func _run(g: Node, e: Dictionary) -> void:
 			g.owned.clear()
 			g.sealed = -1
 			g._panel_reset()
-			_say("랙 비움")
+			_say("동전 슬롯 비움")
 			return
 		"restock":
 			g._roll_stock()
-			_say("매대 다시")
+			_say("테이블 다시")
 			return
 		"mf_off":
 			g.active_mods = []
@@ -412,7 +412,7 @@ static func _run(g: Node, e: Dictionary) -> void:
 				if not g.mods_own.has(mid):
 					g.mods_own.append(mid)
 				g._board_bake()
-				_say("개조 %s" % mid)
+				_say("보드 확장 %s" % mid)
 		"dart":
 			if not rows.is_empty():
 				var dd: Dictionary = rows[i % rows.size()]
@@ -424,7 +424,7 @@ static func _run(g: Node, e: Dictionary) -> void:
 		"vou":
 			if not rows.is_empty():
 				GameData.fixture_add(String(rows[i % rows.size()].id))
-				_say("설비 %d개" % GameData.fixtures_own.size())
+				_say("장갑 %d개" % GameData.fixtures_own.size())
 		"tag":
 			if not rows.is_empty():
 				g._take_tag(rows[i % rows.size()])
@@ -440,12 +440,12 @@ static func _run(g: Node, e: Dictionary) -> void:
 		"pack":
 			if not rows.is_empty():
 				GameData.pack = String(rows[i % rows.size()].get("id", ""))
-				_say("팩 %s — 새 런부터" % GameData.pack)
+				_say("다트통 %s — 새 런부터" % GameData.pack)
 
 
 static func _give_item(g: Node, it: Dictionary) -> void:
 	if g.owned.size() >= GameData.max_items():
-		_say("랙이 꽉 찼다")
+		_say("동전 슬롯이 꽉 찼다")
 		return
 	var c: Dictionary = it.duplicate()
 	c.gs = 0

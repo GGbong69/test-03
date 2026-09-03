@@ -31,7 +31,7 @@ func _initialize() -> void:
 func _process(_d: float) -> bool:
 	if busy:
 		return false
-	# 실제 마우스가 창 위 어디에 있느냐에 따라 툴팁이 떠서 딜러를 가린다.
+	# 실제 마우스가 창 위 어디에 있느냐에 따라 툴팁이 떠서 상인를 가린다.
 	# _tip_update 는 get_local_mouse_position() 을 읽으므로 촬영이 재현되지
 	# 않는다. 게임을 먼저 돌리고 그 뒤에 눌러 끈다 — 툴팁은 촬영 대상이 아니다.
 	if g != null:

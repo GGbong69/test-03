@@ -88,7 +88,7 @@ func _paint(cv: Node2D) -> void:
 		# 오른쪽 — 큰 숫자(정산 팝업)
 		cv.draw_string(f, Vector2(910, y + 52), "+12",
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 34, C_GOLD)
-		cv.draw_string(f, Vector2(1010, y + 40), "칩 87",
+		cv.draw_string(f, Vector2(1010, y + 40), "기본 점수 87",
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 13, C_TXT)
 		cv.draw_string(f, Vector2(1010, y + 60), "무료",
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_ACC)

@@ -2,14 +2,14 @@ extends SceneTree
 
 const GameData = preload("res://scripts/data.gd")
 
-#  스티커 그림을 눈으로 검산한다. 오토플레이는 "안 죽었다" 만 말한다 —
+#  동전 그림을 눈으로 검산한다. 오토플레이는 "안 죽었다" 만 말한다 —
 #  다이컷 폭·마감 셋·말림이 실제로 갈려 보이는지는 화소로만 알 수 있다.
 #
 #  실행:  godot --path . -s scripts/tools/sticker_shot.gd   (헤드리스 불가)
 #
 #  찍는 것 넷:
-#    stk_rack     랙에 다섯 장 — 매트·유광·홀로 + 금박 테두리
-#    stk_peel     막 뗀 스티커(말림 최대)
+#    stk_rack     동전 슬롯에 다섯 장 — 매트·유광·홀로 + 금박 테두리
+#    stk_peel     막 뗀 동전(말림 최대)
 #    stk_peel2    손에서 정착한 말림
 #    stk_collect  컬렉션 격자 — 87장이 한 화면에서 안 뭉개지는가
 
@@ -60,7 +60,7 @@ func _process(_d: float) -> bool:
 		_save("stk_rack.png")
 	# 손 상태를 직접 박는다. _hand_press/_hand_motion 으로 몰면 그다음 프레임의
 	# _hand_update 가 진짜 커서(촬영에는 없다)를 읽어 손이 화면 밖으로 샌다.
-	# 여기서 보려는 것은 손의 판정이 아니라 스티커 그림이다 — shop_probe 가
+	# 여기서 보려는 것은 손의 판정이 아니라 동전 그림이다 — shop_probe 가
 	# 판정을 따로 본다.
 	if frames >= 40 and frames <= 48:
 		g.hand_st = g.H.CARRY

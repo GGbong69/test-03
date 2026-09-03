@@ -4,7 +4,7 @@ const GameData = preload("res://scripts/data.gd")
 const Save = preload("res://scripts/save.gd")
 
 # ══════════════════════════════════════════════════════════
-#  조작 검사 — 소비 아이템 사용과 랙 순서 변경이 어느 화면에서 사는가
+#  조작 검사 — 사탕 사용과 동전 슬롯 순서 변경이 어느 화면에서 사는가
 #
 #  실행:  godot --path . --headless --quit-after 4000 \
 #             --script scripts/tools/input_probe.gd
@@ -18,8 +18,8 @@ const Save = preload("res://scripts/save.gd")
 #  무엇이 규칙인가 (docs/게임내용.md)
 #    소비 — "상점에서 즉시 쓸 수 있고, 보관할 수 있고, **판 중에도**
 #           쓸 수 있다. 사용 확정은 누르고 뗄 때다."
-#    랙  — "드래그는 두 곳에서 쓴다 — 상점에서 매물을 계산대로 밀 때,
-#           랙에서 스티커 순서를 바꾸거나 팔 때."
+#    동전 슬롯  — "드래그는 두 곳에서 쓴다 — 상점에서 매물을 계산대로 밀 때,
+#           동전 슬롯에서 동전 순서를 바꾸거나 팔 때."
 #           순서는 발동 순서라 판 중에 고칠 수 있어야 뜻이 있다. 정산 중에는
 #           손 시스템이 안 산다(그래서 "득점 시작 시 스냅샷" 과 안 부딪힌다).
 #
@@ -39,7 +39,7 @@ var fails := 0
 
 # 판 중으로 세는 화면들. RESOLVE 는 뺀다 — 정산 중에는 손이 안 산다.
 const PLAY := ["PICK", "AIM_V", "AIM_H", "CONFIRM", "FLY"]
-# 고르는 화면들. 랙과 소비 칸이 여기에도 그려지고, LEG 는 툴팁까지 띄운다.
+# 고르는 화면들. 동전 슬롯과 사탕 칸이 여기에도 그려지고, LEG 는 툴팁까지 띄운다.
 const PICKING := ["LEG", "STAGE"]
 
 
@@ -122,7 +122,7 @@ func _st(name: String) -> int:
 	return int(g.S[name])
 
 
-# 화면을 진짜에 가깝게 세운다. 상점은 매대를 실제로 굴려야 한다 —
+# 화면을 진짜에 가깝게 세운다. 상점은 테이블를 실제로 굴려야 한다 —
 # _hand_update 가 drop 배열 크기를 보고 손을 취소하기 때문이다.
 func _stage(state_name: String) -> void:
 	g.state = _st(state_name)
@@ -154,9 +154,9 @@ func _rack_moves(state_name: String) -> bool:
 
 func _run() -> void:
 	g._new_run()
-	print("\n── 조작 검사 ── 소비 아이템 사용 · 랙 순서 변경\n")
+	print("\n── 조작 검사 ── 사탕 사용 · 동전 슬롯 순서 변경\n")
 
-	print("  [소비 아이템]  규칙: 상점 + 판 중")
+	print("  [사탕]  규칙: 상점 + 판 중")
 	var ok_shop := _cons_works("SHOP")
 	_say(ok_shop, "상점에서 쓸 수 있다")
 	var dead := []
@@ -172,7 +172,7 @@ func _run() -> void:
 	_say(pdead.is_empty(), "고르는 화면에서 쓸 수 있다",
 			"안 먹는 화면: %s" % ("없음" if pdead.is_empty() else ", ".join(pdead)))
 
-	print("\n  [랙 순서 변경]  규칙: 판 중에 고칠 수 있어야 한다")
+	print("\n  [동전 슬롯 순서 변경]  규칙: 판 중에 고칠 수 있어야 한다")
 	var ok_rshop := _rack_moves("SHOP")
 	_say(ok_rshop, "상점에서 순서를 바꾼다")
 	var rdead := []

@@ -3,7 +3,7 @@ extends SceneTree
 const GameData = preload("res://scripts/data.gd")
 const Save = preload("res://scripts/save.gd")
 
-# 넓은 매대 딱지가 실제로 도는지 눈으로 본다. 자리 넷을 전제한 주석이
+# 넓은 테이블 뱃지가 실제로 도는지 눈으로 본다. 자리 넷을 전제한 주석이
 # 남아 있어(_table_draw), 여섯 개를 던지면 겹치는지 확인이 필요하다.
 
 var g = null
@@ -49,7 +49,7 @@ func _run() -> void:
 	g._open_shop()
 	await _shoot("shop_now.png")
 
-	g.pending_tags.append({"kind": "shop", "v": 2, "n": "넓은 매대"})
+	g.pending_tags.append({"kind": "shop", "v": 2, "n": "넓은 테이블"})
 	g._open_shop()
 	await _shoot("shop_wide.png")
 	quit()

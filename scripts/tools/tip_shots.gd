@@ -51,7 +51,7 @@ func _run() -> void:
 	g._new_run()
 	g._swap_skip()
 
-	# 매대 — 한 자리에 네 갈래가 섞여 뜬다
+	# 테이블 — 한 자리에 네 갈래가 섞여 뜬다
 	g.leg_no = 1
 	g.gold = 60
 	g._open_shop()
@@ -66,7 +66,7 @@ func _run() -> void:
 	g.stage_t = 9.0
 	await _shoot("tip_stage.png", {"k": "stage", "i": 1})
 
-	# 든 소비 아이템 — 산 뒤로는 아무 데서도 효과를 안 말하던 자리다
+	# 든 사탕 — 산 뒤로는 아무 데서도 효과를 안 말하던 자리다
 	g.leg_no = 1
 	g._open_shop()
 	g._swap_skip()
@@ -76,7 +76,7 @@ func _run() -> void:
 			g.cons.append(c)
 	await _shoot("tip_held.png", {"k": "held", "i": 0})
 
-	# 건너뛰기 딱지 — 버튼에는 효과 한 줄, 툴팁에 이름과 때
+	# 건너뛰기 뱃지 — 버튼에는 효과 한 줄, 툴팁에 이름과 때
 	g.leg_no = 1
 	g._open_leg()
 	g._swap_skip()
@@ -84,7 +84,7 @@ func _run() -> void:
 		g.leg_tag = GameData.tags()[0]
 	await _shoot("tip_tag.png", {"k": "tag", "i": 0})
 
-	# 쌓아 둔 딱지
+	# 쌓아 둔 뱃지
 	g.pending_tags.clear()
 	for t in GameData.tags():
 		if String(t.get("when", "now")) != "now" and g.pending_tags.size() < 2:
@@ -97,7 +97,7 @@ func _run() -> void:
 	g._swap_skip()
 	await _shoot("tip_mag.png", {"k": "mag", "i": 0})
 
-	# 조준 스티커 — 이 장들은 조건도 배수도 없고 조준이 곧 효과다.
+	# 조준 동전 — 이 장들은 조건도 배수도 없고 조준이 곧 효과다.
 	# 문구가 길어 접힐 수 있으므로 눈으로 확인할 자리가 필요하다.
 	for it in GameData.items():
 		if String(it.get("aim", "")) == "":

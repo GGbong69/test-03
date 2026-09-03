@@ -21,7 +21,7 @@ const Dev = preload("res://scripts/dev.gd")
 #    ① 그려지는 화살표 칸과 값 칸이 줄 안에서 안 겹치고 안 삐져나온다
 #    ② ◀ 는 뒤로, ▶ 는 앞으로 — 방향이 안 뒤집힌다
 #    ③ 누르는 그 순간 게임에 반영된다 (따로 적용을 안 눌러도)
-#    ④ 반영된 조준이 판을 넘겨도 남는다 — _start_leg 가 든 스티커를
+#    ④ 반영된 조준이 판을 넘겨도 남는다 — _start_leg 가 든 동전를
 #       다시 읽으므로, 값만 박으면 다음 판에서 조용히 std 로 풀린다
 #    ⑤ 여덟 방식을 차례로 다 고를 수 있다
 # ══════════════════════════════════════════════════════════
@@ -127,29 +127,29 @@ func _aim(g: Node) -> void:
 	g._start_leg()
 	_say(g.aim_mode == want, "고른 조준이 판을 넘겨도 남는다",
 			"고른 %s · 판 넘긴 뒤 %s" % [want, g.aim_mode])
-	_say(g._aim_from_items() == want, "스티커가 그 방식을 쥐고 있다",
+	_say(g._aim_from_items() == want, "동전가 그 방식을 쥐고 있다",
 			g._aim_from_items())
 
-	# 겹쳐 고르면 앞엣것이 남지 않는다 — 조준 스티커는 한 장뿐이어야 한다
+	# 겹쳐 고르면 앞엣것이 남지 않는다 — 조준 동전는 한 장뿐이어야 한다
 	Dev.click(g, ra.get_center())
 	Dev.click(g, ra.get_center())
 	var held := 0
 	for it in g.owned:
 		if String(it.get("aim", "")) != "":
 			held += 1
-	_say(held <= 1, "조준 스티커가 겹쳐 쌓이지 않는다", "쥔 장 %d" % held)
-	_say(g.owned.size() <= GameData.max_items(), "랙이 안 넘친다",
+	_say(held <= 1, "조준 동전가 겹쳐 쌓이지 않는다", "쥔 장 %d" % held)
+	_say(g.owned.size() <= GameData.max_items(), "동전 슬롯이 안 넘친다",
 			"%d / %d" % [g.owned.size(), GameData.max_items()])
 
-	# std 로 돌아오면 스티커도 없어진다
+	# std 로 돌아오면 동전도 없어진다
 	Dev.pick["aim"] = 0
 	Dev.click(g, Dev._val_box(r).get_center())
 	var left := 0
 	for it in g.owned:
 		if String(it.get("aim", "")) != "":
 			left += 1
-	_say(g.aim_mode == "std" and left == 0, "기본으로 돌리면 스티커도 떨어진다",
-			"방식 %s · 남은 조준 스티커 %d" % [g.aim_mode, left])
+	_say(g.aim_mode == "std" and left == 0, "기본으로 돌리면 동전도 떨어진다",
+			"방식 %s · 남은 조준 동전 %d" % [g.aim_mode, left])
 
 
 func _score(g: Node) -> void:

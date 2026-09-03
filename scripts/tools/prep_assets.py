@@ -11,7 +11,7 @@
 #   2. 텍스처를 512 로 줄인다 — 화면이 640x360 이라 4096 은 낭비다.
 #   3. .mtl 을 써서 obj 가 그 텍스처를 가리키게 한다.
 #
-# 리깅된 딜러는 손대지 않는다. 스킨 가중치가 감축에서 살아남지 않는다.
+# 리깅된 상인는 손대지 않는다. 스킨 가중치가 감축에서 살아남지 않는다.
 
 import os
 import shutil
@@ -81,7 +81,7 @@ def main():
             with open(obj, "w", encoding="utf-8") as fh:
                 fh.write("mtllib %s.mtl\nusemtl %s\n%s" % (name, name, body))
 
-    # 딜러는 그대로 옮긴다 — 리깅과 애니메이션이 붙어 있다
+    # 상인는 그대로 옮긴다 — 리깅과 애니메이션이 붙어 있다
     dl = os.path.join(SRC, "balatro-dealer-rigged", "Meshy_AI_balatro_dealer_rigged_biped")
     for src_name, dst_name in (
             ("Meshy_AI_balatro_dealer_rigged_biped_Character_output.glb", "dealer.glb"),

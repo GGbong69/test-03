@@ -31,7 +31,7 @@ func _list() -> void:
 	for k in keys:
 		print("  %s" % k)
 	print("")
-	print("팩")
+	print("다트통")
 	var pr := GameData.packs()
 	for i in pr.size():
 		var id := String(pr[i].get("id", ""))
@@ -73,7 +73,7 @@ func _initialize() -> void:
 		for i in range(1, packs.size()):
 			if Save.unlock("pack:" + String(packs[i].get("id", ""))):
 				n += 1
-		# 리그은 팩마다 따로 뚫린다. 모든 팩 × 모든 단을 연다.
+		# 리그은 다트통마다 따로 뚫린다. 모든 다트통 × 모든 단을 연다.
 		for p in packs:
 			var pid := String(p.get("id", ""))
 			for i in range(1, leagues.size()):

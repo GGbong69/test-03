@@ -3,17 +3,17 @@ extends SceneTree
 const GameData = preload("res://scripts/data.gd")
 
 # ══════════════════════════════════════════════════════════
-#  빌드 상한 — 사람이 고른 랙은 곡선을 얼마나 넘어서는가
+#  빌드 상한 — 사람이 고른 동전 슬롯은 곡선을 얼마나 넘어서는가
 #
 #  실행:  godot --path . --headless --quit-after 900000 \
 #             -s scripts/tools/build_probe.gd -- autoplay runs=8 rack=j024,j046,j006
 #
-#  소크의 매수자는 **무작위**다. 매대 넷 중 하나를 눈 감고 집는다. 그래서
+#  소크의 매수자는 **무작위**다. 테이블 넷 중 하나를 눈 감고 집는다. 그래서
 #  소크가 재는 것은 "사람이 짜는 빌드" 가 아니라 "잡동사니 빌드" 다.
 #  사람은 골라 산다 — 그 차이가 얼마인지를 여기서 잰다.
 #
-#  랙을 미리 채워 두고 같은 오토플레이를 돌린다. 상점에서 더 사지 않게
-#  랙을 꽉 채운 채로 시작하는 것과 같은 효과다(칸이 차면 _buy_block 이 막는다).
+#  동전 슬롯을 미리 채워 두고 같은 오토플레이를 돌린다. 상점에서 더 사지 않게
+#  동전 슬롯을 꽉 채운 채로 시작하는 것과 같은 효과다(칸이 차면 _buy_block 이 막는다).
 # ══════════════════════════════════════════════════════════
 
 var g: Node = null
@@ -42,7 +42,7 @@ func _initialize() -> void:
 			RUNS = maxi(1, int(t.substr(5)))
 		elif t.begins_with("rack="):
 			RACK = t.substr(5).split(",")
-	print("랙: %s · 런 %d회" % [", ".join(RACK), RUNS])
+	print("동전 슬롯: %s · 런 %d회" % [", ".join(RACK), RUNS])
 
 
 func _fill_rack() -> void:

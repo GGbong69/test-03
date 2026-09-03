@@ -4,16 +4,16 @@ const GameData = preload("res://scripts/data.gd")
 const Save = preload("res://scripts/save.gd")
 
 # ══════════════════════════════════════════════════════════
-#  설비 회귀 검사
+#  장갑 회귀 검사
 #
 #  실행:  godot --path . --headless --quit-after 4000 --script scripts/tools/fixture_probe.gd
 #  종료 코드 = 실패 개수
 #
-#  설비의 약속은 둘이다.
+#  장갑의 약속은 둘이다.
 #    ① 산 것이 **실제로 그 값을 민다** — 표만 맞고 아무 데도 안 걸리는
-#       사고가 이 저장소의 단골이다(안개가 그랬고, 넓은 매대 딱지도
+#       사고가 이 저장소의 단골이다(안개가 그랬고, 넓은 테이블 뱃지도
 #       여섯을 굴리기만 하고 뭉쳤다).
-#    ② 런 스코프다 — 새 런에서 사라지고, 새로고침에 안 씻긴다.
+#    ② 런 스코프다 — 새 런에서 사라지고, 리롤에 안 씻긴다.
 #
 #  static 에 사는 값이라 프로브가 서로를 오염시킨다. 검사마다
 #  fixture_clear() 로 시작한다.
@@ -53,7 +53,7 @@ func _initialize() -> void:
 	var w1: int = int(GameData.shop_of(1).items)
 	GameData.fixture_set(["v_shelf", "v_shelf2"])
 	var w2: int = int(GameData.shop_of(1).items)
-	_say(w1 == w0 + 1 and w2 == w0 + 2, "진열대가 매대를 넓힌다",
+	_say(w1 == w0 + 1 and w2 == w0 + 2, "진열대가 테이블를 넓힌다",
 			"%d → %d → %d칸" % [w0, w1, w2])
 
 	GameData.fixture_clear()
@@ -61,7 +61,7 @@ func _initialize() -> void:
 	var p0: int = g._reroll_price()
 	GameData.fixture_set(["v_roll"])
 	var p1: int = g._reroll_price()
-	_say(p0 > 0 and p1 == 0, "덤 새로고침이 값을 0 으로", "%d → %d골드" % [p0, p1])
+	_say(p0 > 0 and p1 == 0, "덤 리롤이 값을 0 으로", "%d → %d골드" % [p0, p1])
 
 	GameData.fixture_clear()
 	var c0: int = g._interest_cap()
@@ -116,9 +116,9 @@ func _initialize() -> void:
 	g._swap_skip()
 	_say(GameData.fixtures_own.is_empty()
 			and int(GameData.shop_of(1).items) == w0,
-			"새 런에서 설비가 사라진다", "%d개" % GameData.fixtures_own.size())
+			"새 런에서 장갑가 사라진다", "%d개" % GameData.fixtures_own.size())
 
-	# ⑤ 새로고침에 안 씻긴다
+	# ⑤ 리롤에 안 씻긴다
 	GameData.fixture_clear()
 	g.leg_no = 1
 	g.gold = 99
@@ -128,7 +128,7 @@ func _initialize() -> void:
 	g._reroll()
 	g._sweep_reset()
 	_say(not had.is_empty() and g.shelf == had,
-			"새로고침해도 선반은 그대로", String(had.get("n", "(없음)")))
+			"리롤해도 선반은 그대로", String(had.get("n", "(없음)")))
 
 	# ⑥ 사면 골드를 내고 목록에 남고 선반이 빈다
 	g.gold = 99

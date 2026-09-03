@@ -41,16 +41,16 @@ func _process(_d: float) -> bool:
 	g._open_shop()
 	g._drop_settle()
 
-	# ── 판매: 랙 칩 클릭 → 왼쪽 창구 클릭
+	# ── 판매: 동전 슬롯 기본 점수 클릭 → 왼쪽 창구 클릭
 	g.owned = [GameData.items()[0]]
 	g._panel_reset()
 	g._click(g._slot_rect(0).get_center())
-	_ok("랙 칩 클릭 → 고름", g.sell_sel == 0, "sell_sel %d" % g.sell_sel)
+	_ok("동전 슬롯 기본 점수 클릭 → 고름", g.sell_sel == 0, "sell_sel %d" % g.sell_sel)
 
 	var g0: int = g.gold
 	g._click(_chute_pt(false))
 	_ok("왼쪽 창구 클릭 → 판매", g.gold > g0 and g.owned.is_empty(),
-			"골드 %d → %d · 남은 칩 %d" % [g0, g.gold, g.owned.size()])
+			"골드 %d → %d · 남은 기본 점수 %d" % [g0, g.gold, g.owned.size()])
 
 	# ── 구매: 매물 클릭 → 오른쪽 창구 클릭
 	var hit := -1

@@ -4,7 +4,7 @@ const GameData = preload("res://scripts/data.gd")
 const Save = preload("res://scripts/save.gd")
 
 # ══════════════════════════════════════════════════════════
-#  점수 검산 — 활성 스티커를 다섯 장씩 돌려 가며 전부 쥐여 보고,
+#  점수 검산 — 활성 동전를 다섯 장씩 돌려 가며 전부 쥐여 보고,
 #  매 발의 정산을 게임과 따로 셈해서 대 본다
 #
 #  실행:  godot --path . --headless --quit-after 900000 \
@@ -12,14 +12,14 @@ const Save = preload("res://scripts/save.gd")
 #  종료 코드 = 어긋난 발의 수
 #
 #  왜 있는가
-#    프로브 열다섯이 상점·매대·리그·설비·판 개조를 다 재는데, 정작
+#    프로브 열다섯이 상점·테이블·리그·장갑·판 보드 확장를 다 재는데, 정작
 #    **점수 자체**를 재는 것이 없었다. 조건이 맞는지(cond_probe)와 그래서
 #    몇 점이 나는지는 다른 질문이다. 조건이 서고도 점수에 안 실리는 길이
 #    실제로 있었다 — mult_rand 가 정산의 match 갈래에 없어 소리 없이
 #    사라졌던 자리가 그것이고, 그 흉터가 game.gd 의 push_error 로 남아 있다.
 #
 #  네 가지를 잰다
-#    ① 큐 ↔ 조건   정산 큐에 오른 스티커가 곧 조건이 선 스티커인가.
+#    ① 큐 ↔ 조건   정산 큐에 오른 동전가 곧 조건이 선 동전인가.
 #                  조건이 섰는데 큐에 없으면 점수에 안 실린 것이고,
 #                  큐에 있는데 조건이 안 섰으면 남의 발에 얹힌 것이다.
 #    ② 큐 → 점수   큐를 따로 굴려 나온 수가 게임이 적은 last_gain 과 같은가.
@@ -27,9 +27,9 @@ const Save = preload("res://scripts/save.gd")
 #    ③ 효과 갈래   큐에 오른 kind 가 정산이 아는 다섯 중 하나인가.
 #    ④ 치역        점수·배수가 음수로 안 떨어지는가.
 #
-#  스티커를 쥐여 주는 법
+#  동전를 쥐여 주는 법
 #    오토플레이가 사는 것만 보면 99장 중 몇 장은 런이 끝나도록 안 나온다.
-#    ROTATE 발마다 랙을 다음 다섯 장으로 갈아 끼워 전부 한 번씩 던지게 한다.
+#    ROTATE 발마다 동전 슬롯을 다음 다섯 장으로 갈아 끼워 전부 한 번씩 던지게 한다.
 #    봉인(sealed)은 끈다 — 봉인은 shop_probe 가 따로 본다.
 #
 #  안 재는 것
@@ -38,8 +38,8 @@ const Save = preload("res://scripts/save.gd")
 # ══════════════════════════════════════════════════════════
 
 const WARM := 2
-const ROTATE := 12            # 이만큼 던지면 랙을 다음 다섯 장으로 간다
-const ARM := 5                # 랙 칸 수와 같다
+const ROTATE := 12            # 이만큼 던지면 동전 슬롯을 다음 다섯 장으로 간다
+const ARM := 5                # 동전 슬롯 칸 수와 같다
 const STEPS := 600
 
 var g: Node = null
@@ -50,9 +50,9 @@ var skipped := 0              # 연발이라 건너뛴 발
 var bad := 0
 var logs := []                # 어긋난 자리. 앞의 몇 개만 찍는다
 var items := []
-var cursor := 0               # 다음에 쥐여 줄 스티커
-var played := {}              # 스티커 id → 실제로 던져 본 발 수
-var fired := {}               # 스티커 id → 점수에 실린 발 수
+var cursor := 0               # 다음에 쥐여 줄 동전
+var played := {}              # 동전 id → 실제로 던져 본 발 수
+var fired := {}               # 동전 id → 점수에 실린 발 수
 var min_mult := 999
 var min_chip := 999
 var pend := {}                # 정산이 끝나기를 기다리는 스냅샷
@@ -70,7 +70,7 @@ func _initialize() -> void:
 		items.append(it)
 
 
-# 다음 다섯 장으로 랙을 간다. 성장값은 0 에서 시작한다 — 산 순간의 규약이다.
+# 다음 다섯 장으로 동전 슬롯을 간다. 성장값은 0 에서 시작한다 — 산 순간의 규약이다.
 func _arm() -> void:
 	var rack := []
 	for k in ARM:
@@ -99,7 +99,7 @@ func _snap() -> void:
 		skipped += 1
 		return
 
-	# ── ① 큐에 오른 스티커 ↔ 조건이 선 스티커
+	# ── ① 큐에 오른 동전 ↔ 조건이 선 동전
 	var in_q := {}
 	var kinds_ok := true
 	var chip := 0
@@ -120,7 +120,7 @@ func _snap() -> void:
 					_: kinds_ok = false
 
 	# 봉인은 발동을 막는다 — 게임의 fired 루프가 이 인덱스를 건너뛴다.
-	# 「둔화」가 걸린 판은 랙을 갈아 끼운 뒤에도 다시 선다.
+	# 「둔화」가 걸린 판은 동전 슬롯을 갈아 끼운 뒤에도 다시 선다.
 	var seal := int(g.sealed)
 	var want := {}
 	for i in g.owned.size():
@@ -185,8 +185,8 @@ func _fail(what: String, detail: String) -> void:
 
 
 # ── 카드가 적은 대로 내는가 — per 배율의 뜻을 직접 댄다 ──────
-#  소크는 기본 팩(6발)만 돌아서 「기본에서 줄어든 다트」의 기본이 6 으로
-#  박혀 있어도 안 걸린다. 팩이 그 수를 바꾸는 두 경우를 손으로 세운다.
+#  소크는 기본 다트통(6발)만 돌아서 「기본에서 줄어든 다트」의 기본이 6 으로
+#  박혀 있어도 안 걸린다. 다트통이 그 수를 바꾸는 두 경우를 손으로 세운다.
 func _per_check() -> void:
 	var j079 := {}
 	for it in GameData.items():
@@ -197,11 +197,11 @@ func _per_check() -> void:
 	var v: int = int(j079.v)
 	var cases := [
 		# 이름                        기본  실제  기대 배수
-		["기본 팩 · 안 줄었다",          6, 6, 0],
-		["기본 팩 · 단벌",              6, 5, v],
-		["기본 팩 · 단벌 + 곡예",        6, 3, v * 3],
-		["넓은 랙(5발) · 안 줄었다",     5, 5, 0],
-		["여벌 팩(7발) · 단벌",          7, 6, v],
+		["기본 다트통 · 안 줄었다",          6, 6, 0],
+		["기본 다트통 · 단벌",              6, 5, v],
+		["기본 다트통 · 단벌 + 곡예",        6, 3, v * 3],
+		["넓은 동전 슬롯(5발) · 안 줄었다",     5, 5, 0],
+		["여벌 다트통(7발) · 단벌",          7, 6, v],
 	]
 	for c in cases:
 		var ctx := {"leg_base": c[1], "leg_darts": c[2],
@@ -231,7 +231,7 @@ func _report() -> void:
 			never.append(it)
 		elif int(fired[String(it.id)]) == 0 and String(it.c) != "" 				and String(it.k) != "save":
 			nofire.append(it)
-	print("\n  던져 본 스티커 %d / %d" % [items.size() - never.size(), items.size()])
+	print("\n  던져 본 동전 %d / %d" % [items.size() - never.size(), items.size()])
 	if not never.is_empty():
 		var ids := []
 		for it in never:

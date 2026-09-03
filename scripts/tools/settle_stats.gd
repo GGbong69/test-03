@@ -1,11 +1,11 @@
 extends SceneTree
 
 # ══════════════════════════════════════════════════════════
-#  settle_stats — 정착 실측 (딜러 팔 크롭 · 리롤 쓸기 설계용 치수)
+#  settle_stats — 정착 실측 (상인 팔 크롭 · 리롤 쓸기 설계용 치수)
 #
 #  실행:  "D:/Godot/Godot_v4.7.1-stable_win64_console.exe" --path . --script scripts/tools/settle_stats.gd
 #
-#  한 롤 = _open_shop() → _drop_settle().  매물 4개(칩2·개조1·다트1).
+#  한 롤 = _open_shop() → _drop_settle().  매물 4개(기본 점수2·보드 확장1·다트1).
 #  낙하를 감은 뒤 물건의 면 좌표(u,w)와 화면 좌표를 그대로 긁는다.
 #
 #  잰 것 다섯
@@ -16,11 +16,11 @@ extends SceneTree
 #    ⑤ 실제로 그려지는 화면 반폭
 #
 #  ⚠ 화면 기하는 game.gd 를 **옮겨 적은 사본**이다. 그리기가 바뀌면 이 도구는
-#     조용히 거짓말을 한다. 딜러·팔·손 치수 주석이 여기 나온 숫자를 인용하고
+#     조용히 거짓말을 한다. 상인·팔·손 치수 주석이 여기 나온 숫자를 인용하고
 #     있으므로, 그리기를 고쳤으면 아래 목록을 따라가 같이 고쳐라.
 #  옮긴 자리:
-#    칩   _chip_flat   game.gd:3358-3363  (ry = chip_r*flat, 옆면 sd = chip_t*tall)
-#    개조 _icon_mod    game.gd:3479       (pl = c-(r+3,r+3), 2r+6 정사각)
+#    기본 점수   _chip_flat   game.gd:3358-3363  (ry = chip_r*flat, 옆면 sd = chip_t*tall)
+#    보드 확장 _icon_mod    game.gd:3479       (pl = c-(r+3,r+3), 2r+6 정사각)
 #    다트 _icon_dart   game.gd:3574-3644
 #    그림자 _obj_shadow game.gd:3312-3324 (light*3.35, 타원 r × r*flat)
 #    가격판 _bill_draw  game.gd:3393-3401 + draw_gold_at game.gd:2185-2191
@@ -67,7 +67,7 @@ func _process(_d: float) -> bool:
 		return true
 
 	for n in rolls:
-		g.leg_no = 1 + (n % 7)      # 매대 구성은 1~7 판 모두 2/1/1 로 같다
+		g.leg_no = 1 + (n % 7)      # 테이블 구성은 1~7 판 모두 2/1/1 로 같다
 		g._open_shop()
 		g._drop_settle()
 		if g.drop_t > g.DROP.t_max:
@@ -124,7 +124,7 @@ func _body_box(it: Dictionary, s: Dictionary) -> Rect2:
 			return Rect2(c - Vector2(r, r), Vector2(r * 2.0, r * 2.0))
 		"dart":
 			return _dart_box(it, String(s.d.id))
-	# 칩 — game.gd:3358-3363. 옆면 타원이 sd 만큼 아래로 한 겹 더 깔린다.
+	# 기본 점수 — game.gd:3358-3363. 옆면 타원이 sd 만큼 아래로 한 겹 더 깔린다.
 	var rx: float = g.TBL.chip_r
 	var ry: float = g.TBL.chip_r * g.TBL.flat
 	var sd: float = g.TBL.chip_t * g.TBL.tall

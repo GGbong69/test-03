@@ -12,7 +12,7 @@ const GameData = preload("res://scripts/data.gd")
 #  플레이어가 **무엇을 살 돈이 있었는가** 를 낸다.
 #    · 상점마다 들어설 때 가진 골드 · 나올 때 남은 골드
 #    · 산 것의 종류와 값
-#    · 그 판에 든 스티커 수
+#    · 그 판에 든 동전 수
 #  곡선 탓인지 돈 탓인지를 가르는 데 쓴다.
 # ══════════════════════════════════════════════════════════
 
@@ -33,7 +33,7 @@ var buys := []
 var g_in := {}      # 상점 진입 골드의 합
 var g_out := {}     # 상점 퇴장 골드의 합
 var g_n := {}       # 표본 수
-var own_at := {}    # 그 판을 시작할 때 든 스티커 수의 합
+var own_at := {}    # 그 판을 시작할 때 든 동전 수의 합
 var own_n := {}
 var spend_kind := {}   # 종류 → [횟수, 합계]
 var rerolls := 0
@@ -70,7 +70,7 @@ func _add(d: Dictionary, k, v) -> void:
 func _finish() -> void:
 	print("\n런 %d회 · 완주 %d회" % [runs, wins])
 	print("\n판별 — 그 판을 넘긴 뒤 열린 상점")
-	print("판  A  종류     목표   판시작든스티커  상점진입골드  상점퇴장골드  표본")
+	print("판  A  종류     목표   판시작든동전  상점진입골드  상점퇴장골드  표본")
 	for n in range(1, GameData.legs_n() + 1):
 		var c: int = int(g_n.get(n, 0))
 		if c == 0:
@@ -117,7 +117,7 @@ func _process(_d: float) -> bool:
 	if frames == 1:
 		seen[1] = int(seen.get(1, 0)) + 1
 
-	# 판을 시작할 때 든 스티커 수
+	# 판을 시작할 때 든 동전 수
 	g.set_process(false)
 	var st_before: int = g.state
 	g._process(1.0 / 60.0)
@@ -155,10 +155,10 @@ func _process(_d: float) -> bool:
 		gold_track = int(g.gold)
 		var kind := "리롤"
 		if g.owned.size() > own_in:
-			kind = "스티커"
+			kind = "동전"
 			own_in = g.owned.size()
 		elif spent >= 5:
-			kind = "설비/개조/다트"
+			kind = "장갑/보드 확장/다트"
 		if not spend_kind.has(kind):
 			spend_kind[kind] = [0, 0]
 		spend_kind[kind][0] += 1

@@ -3,7 +3,7 @@ extends SceneTree
 const GameData = preload("res://scripts/data.gd")
 const Save = preload("res://scripts/save.gd")
 
-# 소비 아이템 아이콘 다섯 종을 실제 칸 크기와 확대로 나란히 찍는다.
+# 사탕 아이콘 다섯 종을 실제 칸 크기와 확대로 나란히 찍는다.
 var g = null
 var busy := false
 
@@ -29,7 +29,7 @@ func _process(_d: float) -> bool:
 func _run() -> void:
 	for i in 8:
 		g._process(1.0 / 60.0)
-	GameData.pack = "p_rack"       # 스티커 여섯 칸 팩
+	GameData.pack = "p_rack"       # 동전 여섯 칸 다트통
 	g._new_run()
 	g._swap_skip()
 	g.cons.clear()

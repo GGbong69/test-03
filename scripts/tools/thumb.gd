@@ -20,7 +20,7 @@ const OUT := Vector2i(1920, 1080)
 var vp: SubViewport = null
 var g = null
 var frames := 0
-var mode := 0        # 0 판 · 1 딜러
+var mode := 0        # 0 판 · 1 상인
 
 
 func _initialize() -> void:
@@ -62,7 +62,7 @@ func _process(_d: float) -> bool:
 		g._open_shop()
 		g._drop_settle()
 
-	# ── 딜러와 펠트. 상점 화면 전체가 한 장에 들어오는 배율이다.
+	# ── 상인와 펠트. 상점 화면 전체가 한 장에 들어오는 배율이다.
 	if frames == 70:
 		_look(3.0, Vector2(320.0, 180.0))
 	if frames == 74:

@@ -3,7 +3,7 @@ extends SceneTree
 const GameData = preload("res://scripts/data.gd")
 
 # ══════════════════════════════════════════════════════════
-#  소비 아이템 — 어느 화면에서 실제로 써지는가
+#  사탕 — 어느 화면에서 실제로 써지는가
 #
 #  실행:  godot --path . --headless --quit-after 120000 -s scripts/tools/cons_probe.gd
 #
@@ -70,7 +70,7 @@ func _process(_d: float) -> bool:
 	if frames < 30:
 		return false
 
-	print("소비 아이템 사용 — 화면별")
+	print("사탕 사용 — 화면별")
 	g._autoplay = false
 	var states := {
 		"SHOP": g.S.SHOP, "PICK": g.S.PICK, "AIM_V": g.S.AIM_V,

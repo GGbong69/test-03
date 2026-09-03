@@ -46,7 +46,7 @@ func _initialize() -> void:
 	var prev := 0.0
 	for a in range(1, n + 1):
 		var b := GameData.round_base(a)
-		# 판 번호로 되돌려 실제 목표를 읽는다 — 판돈·팩 배수까지 탄 값이다.
+		# 판 번호로 되돌려 실제 목표를 읽는다 — 판돈·다트통 배수까지 탄 값이다.
 		var r0 := (a - 1) * GameData.legs_per_round() + 1
 		var row := ""
 		for k in GameData.legs_per_round():

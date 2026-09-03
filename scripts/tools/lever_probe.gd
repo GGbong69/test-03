@@ -9,7 +9,7 @@ const GameData = preload("res://scripts/data.gd")
 #             -s scripts/tools/lever_probe.gd -- autoplay runs=12
 #
 #  같은 시드로 손잡이 하나씩만 바꿔 완주율과 벽을 잰다. 곡선을 미는 것과
-#  랙을 좁히는 것, 어느 쪽이 같은 힘으로 더 미는가가 답이다.
+#  동전 슬롯을 좁히는 것, 어느 쪽이 같은 힘으로 더 미는가가 답이다.
 # ══════════════════════════════════════════════════════════
 
 var g: Node = null
@@ -20,7 +20,7 @@ const FRAME_CAP := 400000
 
 # 시험할 손잡이. {이름: {tuning 키: 값}}
 var CASES := [
-	{"n": "랙 5→3", "t": {"max_items": 3.0}},
+	{"n": "동전 슬롯 5→3", "t": {"max_items": 3.0}},
 	{"n": "곡선 4000→16000", "t": {"curve_last": 16000.0}},
 	{"n": "다트 6→4", "t": {"darts_base": 4.0}},
 ]

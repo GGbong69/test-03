@@ -4,7 +4,7 @@ const GameData = preload("res://scripts/data.gd")
 const Save = preload("res://scripts/save.gd")
 
 # ══════════════════════════════════════════════════════════
-#  팩 통(3D) 수명 검사
+#  다트통 통(3D) 수명 검사
 #
 #  실행:  godot --path . --quit-after 3000 --script scripts/tools/cup_probe.gd
 #  종료 코드 = 실패 개수
@@ -17,11 +17,11 @@ const Save = preload("res://scripts/save.gd")
 #  World3D 에서 돈다.
 #
 #  재는 것
-#    ① 화면을 열면 통이 서고 자루 수가 그 팩의 탄창과 같다
+#    ① 화면을 열면 통이 서고 자루 수가 그 다트통의 탄창과 같다
 #    ② 넘기는 동안만 두 벌이고, 다 넘기면 나간 통이 사라진다
 #    ③ 연타해도 통이 쌓이지 않는다
 #    ④ 화면을 뜨면(제목 · 런 시작) 뷰포트가 지워진다
-#    ⑤ 팩별 통 겉(CUP_SKIN) 표에 없는 팩·없는 벽·없는 속성이 없다
+#    ⑤ 다트통별 통 겉(CUP_SKIN) 표에 없는 다트통·없는 벽·없는 속성이 없다
 # ══════════════════════════════════════════════════════════
 var g = null
 var busy := false
@@ -69,7 +69,7 @@ func _run() -> void:
 	_say(g.cup_rigs.size() == 2, "넘기는 동안 두 벌", "%d벌" % g.cup_rigs.size())
 	await _wait(220)
 	_say(g.cup_rigs.size() == 1, "다 넘기면 나간 통이 사라진다", "%d벌" % g.cup_rigs.size())
-	_say(g.cup_rigs[0].darts.size() == 7, "새 팩의 자루 수로 선다",
+	_say(g.cup_rigs[0].darts.size() == 7, "새 다트통의 자루 수로 선다",
 			"%d개" % g.cup_rigs[0].darts.size())
 
 	# 연달아 눌러도 줄이 안 밀린다
@@ -95,15 +95,15 @@ func _run() -> void:
 	await _wait(6)
 	_say(g.cup_vp == null, "런을 시작하면 통이 지워진다",
 			"state %d" % g.state)
-	# 팩별 통 겉 표. 오타는 잠자코 기본 통으로 떨어지므로 여기서 잡는다 —
-	# 없는 팩 · 없는 벽 이름 · CUP_SKIN0 에 없는 속성 셋 다 본다.
+	# 다트통별 통 겉 표. 오타는 잠자코 기본 통으로 떨어지므로 여기서 잡는다 —
+	# 없는 다트통 · 없는 벽 이름 · CUP_SKIN0 에 없는 속성 셋 다 본다.
 	var ids := []
 	for r in GameData.packs():
 		ids.append(String(r.get("id", "")))
 	var bad := []
 	for k in g.CUP_SKIN:
 		if not ids.has(String(k)):
-			bad.append("팩 없음 " + String(k))
+			bad.append("다트통 없음 " + String(k))
 			continue
 		var sk: Dictionary = g.CUP_SKIN[k]
 		for f in sk:
@@ -118,7 +118,7 @@ func _run() -> void:
 			if not g.CUP_TINTS.has(String(sk["dart"])):
 				bad.append("자루색 없음 %s=%s" % [k, sk["dart"]])
 			# 자루 색은 다트 종류를 가르는 축이다. 표준 탄창(색이 하나뿐)인
-			# 팩에서만 덮을 수 있다 — 특별한 다트를 쥔 팩에서 덮으면 그
+			# 다트통에서만 덮을 수 있다 — 특별한 다트를 쥔 다트통에서 덮으면 그
 			# 다트가 무엇인지가 그림에서 사라진다.
 			var did := "std"
 			for pr in GameData.packs():
@@ -128,12 +128,12 @@ func _run() -> void:
 						did = "std"
 			if did != "std":
 				bad.append("자루색을 덮는데 탄창이 %s 다 (%s)" % [did, k])
-	_say(bad.is_empty(), "통 겉 표가 팩·벽·속성 이름과 맞는다",
+	_say(bad.is_empty(), "통 겉 표가 다트통·벽·속성 이름과 맞는다",
 			", ".join(bad) if not bad.is_empty() else "%d줄" % g.CUP_SKIN.size())
 
 	# 자루가 통 안에 남는가 — **넘긴 뒤에** 본다.
 	#
-	# 이 검사가 없어서 한 번 속았다. 손으로 재던 때는 _pack_view 로 팩 번호만
+	# 이 검사가 없어서 한 번 속았다. 손으로 재던 때는 _pack_view 로 다트통 번호만
 	# 바꾸고 있었는데, 그것은 통을 다시 세우지 않는다(_pack_step 이 그 일을
 	# 한다). 그래서 늘 처음 세운 통을 재고 "다 담겨 있다" 는 답을 받았다.
 	# 실제로는 미끄러지는 동안 촉이 1.6×r 까지 나가 벽을 뚫고 있었다.
@@ -179,10 +179,10 @@ func _run() -> void:
 			esc.append("%s(촉 %.2f 꽁지 %.2f)"
 					% [GameData.packs()[g.newrun_pip].get("id", ""), wi, wt])
 	_say(esc.is_empty(), "넘긴 뒤에도 자루가 통 안에 남는다",
-			", ".join(esc) if not esc.is_empty() else "여섯 팩 전부")
+			", ".join(esc) if not esc.is_empty() else "여섯 다트통 전부")
 
-	# 발치의 골드. 표가 적은 수만큼 서고, 안 적은 팩에는 하나도 없어야 한다 —
-	# 잠긴 팩에도 없어야 한다(무엇을 주는 팩인지가 그림으로 새면 안 된다).
+	# 발치의 골드. 표가 적은 수만큼 서고, 안 적은 다트통에는 하나도 없어야 한다 —
+	# 잠긴 다트통에도 없어야 한다(무엇을 주는 다트통인지가 그림으로 새면 안 된다).
 	var gbad := []
 	for pi in GameData.packs().size():
 		g._pack_view(pi)
@@ -199,7 +199,7 @@ func _run() -> void:
 		if got != want:
 			gbad.append("%s %d/%d" % [GameData.packs()[pi].get("id", ""), got, want])
 	_say(gbad.is_empty(), "발치 골드가 표대로 선다",
-			", ".join(gbad) if not gbad.is_empty() else "여섯 팩 전부")
+			", ".join(gbad) if not gbad.is_empty() else "여섯 다트통 전부")
 
 	print("열두 검사 · 실패 %d" % fails)
 	quit(fails)

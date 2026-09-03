@@ -68,7 +68,7 @@ func _initialize() -> void:
 			"초록 단은 작은 판 보상이 0", "%d" % int(GameData.league_v("reward_small", 9)))
 	GameData.league = "purple"
 	_say(int(GameData.league_v("seal_items", 0)) == 1,
-			"보라 단은 스티커를 봉인한다", "%d장" % int(GameData.league_v("seal_items", 0)))
+			"보라 단은 동전를 봉인한다", "%d장" % int(GameData.league_v("seal_items", 0)))
 	GameData.league = "red"
 	_say(int(GameData.league_v("darts_add", 0)) == -1,
 			"붉은 단은 다트를 깎는다", "%+d발" % int(GameData.league_v("darts_add", 0)))
@@ -114,10 +114,10 @@ func _initialize() -> void:
 	_say(g.state != g.S.NEWRUN and g.leg_no == 1, "시작이 런을 연다",
 			"state %d · 판 %d" % [g.state, g.leg_no])
 
-	# 리그은 팩마다 따로 뚫린다 — 키에 팩 id 가 들어 있다
+	# 리그은 다트통마다 따로 뚫린다 — 키에 다트통 id 가 들어 있다
 	_say(GameData.league_key("green", "base") == "league:base:green"
 			and GameData.league_key("green", "other") == "league:other:green",
-			"리그 해금은 팩마다 갈린다", GameData.league_key("green", "base"))
+			"리그 해금은 다트통마다 갈린다", GameData.league_key("green", "base"))
 
 	# 설명 줄이 서로 안 겹친다. 여덟 단을 전부 깔아 자리를 실제로 세어
 	# 본다 — 검정 리그의 일곱째 줄이 오른쪽 칸 첫 줄 위에 찍히던 사고가

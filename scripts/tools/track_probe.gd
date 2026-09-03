@@ -3,7 +3,7 @@ extends SceneTree
 const GameData = preload("res://scripts/data.gd")
 
 # ══════════════════════════════════════════════════════════
-#  영역 강화 트랙 (= 발라트로의 행성 카드) 회귀 검사
+#  트랙 (= 발라트로의 행성 카드) 회귀 검사
 #
 #  실행:  godot --path . --headless --script scripts/tools/track_probe.gd
 #  종료 코드 = 실패 개수
@@ -11,7 +11,7 @@ const GameData = preload("res://scripts/data.gd")
 #  이 시스템은 **배관이 다 깔린 채로 죽어 있었다.** _cons_use 가 track_lv 를
 #  올리고, _land 가 track_bonus 를 얹고, area_upgrades.csv 가 그 값을 쥔다 —
 #  셋이 이어져 있는데 표의 수치 칸이 전부 비어서 언제나 0 이 돌아왔다.
-#  소비 아이템이 4골드를 받고 아무 일도 안 하던 것이 그 결과다.
+#  사탕이 4골드를 받고 아무 일도 안 하던 것이 그 결과다.
 #
 #  표를 채웠으니 이제 끝단에서 값이 실제로 나오는지 본다. 표만 읽는 검사는
 #  안 한다 — 죽어 있던 이유가 표가 아니라 표와 코드 **사이**였기 때문이다.
@@ -21,8 +21,8 @@ const GameData = preload("res://scripts/data.gd")
 #    ② 배수를 주는 트랙은 배수에도 실린다
 #    ③ 레벨이 누적된다 (1..lv 합)
 #    ④ 보드 아웃 강화가 빗나감에 점수를 준다 — 정산 큐가 0 을 박던 자리다
-#    ⑤ 그런데 빗나감 **깃발**은 살아 있다 (실패 조건 스티커가 안 죽는다)
-#    ⑥ 소비 아이템을 쓰면 트랙이 오른다
+#    ⑤ 그런데 빗나감 **깃발**은 살아 있다 (실패 조건 동전가 안 죽는다)
+#    ⑥ 사탕을 쓰면 트랙이 오른다
 # ══════════════════════════════════════════════════════════
 
 var fails := 0
@@ -106,11 +106,11 @@ func _initialize() -> void:
 	_say(m0[0] == 0 and m3[0] > 0, "빗나감이 보드 아웃 강화를 받는다",
 			"Lv0 %d점 → Lv3 %d점" % [m0[0], m3[0]])
 
-	# ⑤ 그래도 빗나감 깃발은 산다 — 이게 죽으면 실패 조건 스티커가 통째로 죽는다
+	# ⑤ 그래도 빗나감 깃발은 산다 — 이게 죽으면 실패 조건 동전가 통째로 죽는다
 	_say(m0[2] and m3[2], "점수가 나도 빗나감으로 센다",
 			"Lv0 miss=%s · Lv3 miss=%s" % [m0[2], m3[2]])
 
-	# ⑥ 소비 아이템이 트랙을 올린다
+	# ⑥ 사탕이 트랙을 올린다
 	_fresh(g)
 	var cs: Array = GameData.consumables()
 	var pick := {}
@@ -119,14 +119,14 @@ func _initialize() -> void:
 			pick = c
 			break
 	if pick.is_empty():
-		_say(false, "소비 아이템이 트랙을 올린다", "area 갈래 소비가 없다")
+		_say(false, "사탕이 트랙을 올린다", "area 갈래 소비가 없다")
 	else:
 		g.cons = [pick]
 		var before: int = int(g.track_lv.get(pick.track, 0))
 		g._cons_use(0)
 		var after: int = int(g.track_lv.get(pick.track, 0))
 		_say(after == before + 1 and g.cons.is_empty(),
-				"소비 아이템이 트랙을 올린다",
+				"사탕이 트랙을 올린다",
 				"%s: Lv%d → Lv%d · 칸 %d개 남음" % [pick.n, before, after, g.cons.size()])
 
 	print("\n%s" % ("실패 %d건" % fails if fails > 0 else "열 검사 전부 통과"))

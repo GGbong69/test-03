@@ -4,11 +4,11 @@ const GameData = preload("res://scripts/data.gd")
 const Save = preload("res://scripts/save.gd")
 
 # ══════════════════════════════════════════════════════════
-#  조건 전수 검사 — 활성 스티커 한 장 한 장을 실제로 플레이해 본다
+#  조건 전수 검사 — 활성 동전 한 장 한 장을 실제로 플레이해 본다
 #
 #  실행:  godot --path . --headless --quit-after 900000 \
 #             -s scripts/tools/cond_probe.gd -- autoplay
-#  종료 코드 = 죽은 스티커 수 + ctx 에 빠진 열 수
+#  종료 코드 = 죽은 동전 수 + ctx 에 빠진 열 수
 #
 #  왜 있는가
 #    「지정색 증폭기 B」가 설명대로 안 먹었다. 원인은 조건식이 아니라
@@ -19,22 +19,22 @@ const Save = preload("res://scripts/save.gd")
 #
 #  어떻게 재는가
 #    게임을 오토플레이로 돌리고, 매 발마다 **게임이 만든 그 ctx**(g.last_ctx)를
-#    받아 활성 스티커 전부의 check() 를 다시 돌린다. 제 문맥을 짓지 않는다 —
+#    받아 활성 동전 전부의 check() 를 다시 돌린다. 제 문맥을 짓지 않는다 —
 #    그게 이 버그를 놓친 이유이기 때문이다.
 #
 #  두 자로 잰다
 #    ① ctx 열 대조 — check() 가 읽는 열이 게임의 산 ctx 에 실제로 있는가.
 #       조건 이름과 열 이름이 같은 것이 규약이라, 새 조건을 달고 열을
 #       안 실으면 _keys_of 의 기본 갈래가 저절로 잡는다.
-#    ② 실전 소크 — 2500발을 돌려 어느 스티커가 한 번이라도 걸리는가.
+#    ② 실전 소크 — 2500발을 돌려 어느 동전가 한 번이라도 걸리는가.
 #       0회인 장은 측정기 표(36만 표본)와 대 본다. 거기서도 0.00 이면
 #       확률이 낮은 것이 아니라 길이 막힌 것이다.
 #
 #  소크가 못 보는 것 — 판정 전에 알고 있어야 한다
 #    · 오토플레이는 판 안에만 꽂는다(_land). 빗나감 조건은 소크에서 영영
 #      안 걸리므로 측정기 표로만 판단한다.
-#    · 측정기는 스티커를 **한 장씩** 재고 판은 무개조 기본판이다. 다른
-#      스티커나 개조가 있어야 서는 조건은 두 자 모두에서 0 으로 나온다.
+#    · 측정기는 동전를 **한 장씩** 재고 판은 무보드 확장 기본판이다. 다른
+#      동전나 보드 확장가 있어야 서는 조건은 두 자 모두에서 0 으로 나온다.
 #      그건 "죽었다" 가 아니라 "이 자로는 못 잰다" 다 — 그래서 3단이 있다.
 #
 #  ③ 표적 검사 — 두 자가 못 보는 길을 손으로 걸어 본다
@@ -56,10 +56,10 @@ var g: Node = null
 var frames := 0
 var seen := 0                 # 처리한 발 수
 var last_n := 0
-var fire := {}                # 스티커 id → 걸린 횟수
+var fire := {}                # 동전 id → 걸린 횟수
 var cond_fire := {}           # 조건 문자열 → 걸린 발 수 (발당 한 번만 센다)
 var items := []
-var missing := {}             # ctx 에 없던 열 → 그 열을 읽는 스티커 id 들
+var missing := {}             # ctx 에 없던 열 → 그 열을 읽는 동전 id 들
 var stat := {}                # data/_stats.csv 의 발동률. 희귀와 죽음을 가른다
 var aim_n := 0                # 3단 — 표적 검사가 쓴 발 수
 var aim_ok := {}              # 표적 검사 결과. 조건 → 실제로 섰는가
@@ -78,7 +78,7 @@ func _initialize() -> void:
 	_load_stats()
 
 
-# 36만 표본짜리 측정기 표. 실전 소크에서 0회인 스티커가 여기서도 0.00 이면
+# 36만 표본짜리 측정기 표. 실전 소크에서 0회인 동전가 여기서도 0.00 이면
 # 확률이 낮은 것이 아니라 길이 막힌 것이다 — 그 둘을 가르는 자다.
 func _load_stats() -> void:
 	var f := FileAccess.open("res://data/_stats.csv", FileAccess.READ)
@@ -180,7 +180,7 @@ func _aim_check() -> void:
 
 
 func _report() -> void:
-	print("\n── 조건 전수 검사 ── 다트 %d발 · 활성 스티커 %d장\n" % [seen, items.size()])
+	print("\n── 조건 전수 검사 ── 다트 %d발 · 활성 동전 %d장\n" % [seen, items.size()])
 
 	if not missing.is_empty():
 		print("  ★ ctx 에 없는 열 — 그 조건은 조용히 거짓이 된다")
@@ -206,7 +206,7 @@ func _report() -> void:
 				rareo.append(it)
 
 	if never.is_empty():
-		print("  두 자 모두에서 0인 스티커 없음")
+		print("  두 자 모두에서 0인 동전 없음")
 	else:
 		print("  ★ 두 자 모두 0 — 소크 %d발 0회 · 측정기 36만 표본 0.00%%" % seen)
 		for it in never:
@@ -267,7 +267,7 @@ func _process(_d: float) -> bool:
 			continue
 		if seen < MIN_DARTS:
 			_tally()
-			# 소크가 끝나는 그 발에서 3단을 깐다 — 랙과 제약을 갈아 끼우고
+			# 소크가 끝나는 그 발에서 3단을 깐다 — 동전 슬롯과 제약을 갈아 끼우고
 			# 판을 다시 연다. 여기부터의 발은 소크 셈에 안 들어간다.
 			if seen >= MIN_DARTS:
 				_aim_arm()

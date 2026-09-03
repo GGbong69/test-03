@@ -33,28 +33,10 @@ except Exception:
 # 왼쪽이 지금 본문에 적힌 말, 오른쪽이 화면에 나갈 말이다.
 # 이름을 갈 때는 오른쪽만 고친다. 긴 말부터 바꾸므로 겹쳐도 안전하다.
 TERMS = {
-    "영역 강화 트랙": "영역 강화 트랙",   # 「트랙」 안의 「랙」을 막는 파수꾼
+    # 본문은 이미 새 말로 적혀 있다. 여기 남은 것은 파수꾼뿐이다 —
+    # 「트랙」 안의 「동전 슬롯」 같은 겹침을 막는다.
     "트랙": "트랙",
-    "스티커 슬롯": "스티커 칸",
-    "스티커 랙": "스티커 칸",
-    "빈 랙": "빈 스티커 칸",
-    "랙": "스티커 칸",
-    "매대": "진열대",
-    "정산 큐": "정산 순서",
-    "탄창": "다트 묶음",
-    "스티커": "스티커",
-    "딱지": "딱지",
-    "설비": "설비",
-    "개조": "개조",
-    "칩": "칩",
-    "배수": "배수",
-    "다트": "다트",
-    "라운드": "라운드",
-    "리그": "리그",
-    "제약": "제약",
-    "영역 강화": "영역 강화",
-    "소비 아이템": "소비 아이템",
-    "스타트 팩": "스타트 팩",
+    "동전 슬롯": "동전 슬롯",
 }
 # 코드 이름은 기획서에 안 나온다. 칸 값이 통째로 이것이면 우리말로 바꾼다.
 CODE = {
@@ -72,7 +54,7 @@ CODE = {
     "band_mul": "링 폭", "color_kill": "칸 색", "darts_add": "다트 수",
     "fog": "시야", "gauge_mul": "조준 속도", "odd_mul": "홀수 칸 값",
     "reward_mul": "보상 골드", "ring_kill": "트리플 배수",
-    "seal_items": "스티커 봉인", "sector_kill": "칸 점수",
+    "seal_items": "동전 봉인", "sector_kill": "칸 점수",
     "spin": "판 회전", "target_mul": "목표 점수",
     # 개조가 건드리는 축
     "band": "띠 폭", "bull": "불 크기", "odd": "짝 만들기", "out": "판 크기",
@@ -85,7 +67,7 @@ CODE = {
     "interest_max": "이자 상한", "sell_div": "판매가 나눗수",
     "sell_min": "판매가 하한", "free_rerolls": "무료 새로고침",
     "reroll_base": "새로고침 첫값", "reroll_step": "새로고침 증가폭",
-    "max_items": "스티커 칸", "darts_base": "기본 다트 수",
+    "max_items": "동전 슬롯", "darts_base": "기본 다트 수",
     "cons_slots": "소비 칸", "curve_first": "첫 판 목표", "curve_last": "마지막 판 목표",
 }
 
@@ -784,7 +766,19 @@ def toc(prs, entries):
 
 KB_PATH = os.path.join(ROOT, "docs", "export", "hightone_kb.json")
 # 저장소는 아직 「앤티 > 판 > 라운드」로 적는다. 기획서는 「런 > 라운드 > 판」이다.
-KB_RENAME = {"앤티": "라운드", "라운드": "판"}
+KB_RENAME = {
+    # 계층
+    "앤티": "라운드", "라운드": "판",
+    # 파수꾼 — 긴 말이 먼저 걸려야 안쪽이 안 바뀐다
+    "영역 강화 트랙": "트랙", "트랙": "트랙",
+    "스티커 랙": "동전 슬롯", "빈 랙": "빈 동전 슬롯", "보드 개조": "보드 확장",
+    "다트통": "다트통", "소비 칸": "사탕 칸",
+    # 갈아 끼우는 말
+    "칩": "기본 점수", "스티커": "동전", "랙": "동전 슬롯",
+    "개조": "보드 확장", "영역 강화": "트랙 강화", "소비 아이템": "사탕",
+    "가공": "스티커", "매대": "테이블", "딜러": "상인", "새로고침": "리롤",
+    "설비": "장갑", "딱지": "뱃지", "팩": "다트통",
+}
 _KB = None
 
 
@@ -829,7 +823,7 @@ def appendix_stickers(prs, page):
     for i in range(npg):
         chunk = rows[i * size:(i + 1) * size]
         content_slide(prs, page, "데이터",
-                      "스티커 %d/%d" % (i + 1, npg),
+                      "동전 %d/%d" % (i + 1, npg),
                       "",
                       [{"type": "table",
                         "cols": ["이름", "희귀도", "조건", "효과", "가격"],
@@ -848,14 +842,14 @@ def appendix_tables(prs, page):
         page = content_slide(prs, page, "데이터", title, "", blocks, [])
 
     darts, mods = tbl("darts"), tbl("mods")
-    emit("다트 · 개조", "다트 %d종 · 개조 %d종" % (len(darts), len(mods)),
+    emit("다트 · 보드 확장", "다트 %d종 · 보드 확장 %d종" % (len(darts), len(mods)),
          [{"type": "table", "rh": 0.22, "size": 10.0, "heading": "다트 — 표준 1발을 대체함",
            "cols": ["이름", "게이지", "배수", "효과", "가격"],
            "w": [1.0, 0.7, 0.5, 3.2, 0.6],
            "rows": [[d["name"], "×%s" % num(d["gauge"]), num(d["mult"], "0"),
                      d.get("desc_ko") or "—",
                      "%sG" % num(d["cost"]) if d["cost"] else "기본"] for d in darts]},
-          {"type": "table", "rh": 0.22, "size": 10.0, "heading": "개조 — 다트판의 모양을 바꿈 · 런 동안 유지",
+          {"type": "table", "rh": 0.22, "size": 10.0, "heading": "보드 확장 — 다트판의 모양을 바꿈 · 런 동안 유지",
            "cols": ["이름", "축", "효과", "배타", "가격"],
            "w": [1.0, 0.8, 2.8, 0.8, 0.6],
            "rows": [[m["name"], m["axis"], m.get("desc_ko") or "—",
@@ -869,20 +863,20 @@ def appendix_tables(prs, page):
            "rows": [[m["name"], m["axis"], m.get("desc_ko") or "—"] for m in md]}])
 
     vo, tg = tbl("vouchers"), tbl("tags")
-    emit("설비 · 딱지", "설비 %d종 · 딱지 %d종" % (len(vo), len(tg)),
-         [{"type": "table", "rh": 0.22, "size": 10.0, "heading": "설비 — 상점 왼쪽 벽, 라운드마다 하나",
+    emit("장갑 · 뱃지", "장갑 %d종 · 뱃지 %d종" % (len(vo), len(tg)),
+         [{"type": "table", "rh": 0.22, "size": 10.0, "heading": "장갑 — 상점 왼쪽 벽, 라운드마다 하나",
            "cols": ["이름", "효과", "가격", "라운드", "선행"],
            "w": [1.1, 2.6, 0.5, 0.5, 1.0],
            "rows": [[v["name"], v.get("desc_ko") or "—", "%sG" % num(v["cost"]),
                      num(v["min_ante"]), v.get("prereq") or "—"] for v in vo]},
-          {"type": "table", "rh": 0.22, "size": 10.0, "heading": "딱지 — 작은 판·큰 판을 건너뛸 때만",
+          {"type": "table", "rh": 0.22, "size": 10.0, "heading": "뱃지 — 작은 판·큰 판을 건너뛸 때만",
            "cols": ["이름", "효과", "시점", "라운드"],
            "w": [1.1, 2.9, 0.9, 0.5],
            "rows": [[t["name"], t.get("desc_ko") or "—", t["when"], num(t["min_ante"])]
                     for t in tg]}])
 
     st, pk = tbl("stakes"), tbl("packs")
-    emit("리그 · 스타트 팩", "리그 %d단 · 팩 %d종" % (len(st), len(pk)),
+    emit("리그 · 다트통", "리그 %d단 · 팩 %d종" % (len(st), len(pk)),
          [{"type": "table", "rh": 0.22, "size": 10.0,
            "heading": "리그 — 앞 단을 완주하면 다음 단 해금",
            "cols": ["리그", "곡선", "작은 판 골드", "봉인", "다트", "진열대 가격", "삭음", "유지비"],
@@ -890,7 +884,7 @@ def appendix_tables(prs, page):
                      num(s_["seal_items"], "0"), num(s_["darts_add"], "0"),
                      "×%s" % num(s_["shop_cost_mul"]), num(s_["perish"], "0"),
                      num(s_["rent"], "0")] for s_ in st]},
-          {"type": "table", "rh": 0.22, "size": 10.0, "heading": "스타트 팩",
+          {"type": "table", "rh": 0.22, "size": 10.0, "heading": "다트통",
            "cols": ["팩", "다트", "시작 골드", "스티커 칸", "소비 칸", "대가와 변화"],
            "w": [1.0, 0.55, 0.7, 0.7, 0.6, 3.4],
            "rows": [[q["name"], num(q["darts_add"], "0"), num(q["gold_add"], "0"),
@@ -905,9 +899,9 @@ def appendix_tables(prs, page):
     keys = ["start_gold", "clear_gold", "gold_per_dart", "interest_per", "interest_max",
             "sell_div", "sell_min", "free_rerolls", "reroll_base", "reroll_step",
             "max_items", "darts_base", "cons_slots", "curve_first", "curve_last"]
-    emit("영역 강화 · 튜닝 상수",
+    emit("트랙 강화 · 튜닝 상수",
          "강화 %d트랙 · 레벨당 증분" % len(tracks),
-         [{"type": "table", "rh": 0.22, "size": 10.0, "heading": "영역 강화 — 런 동안 유지",
+         [{"type": "table", "rh": 0.22, "size": 10.0, "heading": "트랙 강화 — 런 동안 유지",
            "cols": ["트랙", "레벨", "레벨당 점수", "레벨당 배수"],
            "rows": [[k, str(len(v)),
                      " · ".join(num(x["add_score"], "0") for x in v),
@@ -929,9 +923,9 @@ SECTIONS = [
     ("02", "기획 의도", "", "한 줄 정의 · 왜 다트판인가 · 무엇을 덜어냈나 · 실력 × 빌드 · 타깃"),
     ("03", "시스템", "", "런 · 판 · 다트 · 조준 · 점수 · 스티커 · 조건 · 개조 · 강화 · 제약"),
     ("04", "재미 요소", "", "코어 루프 · 조준 · 조합 · 발동 순서 · 선택의 저울"),
-    ("05", "보상 요소", "", "골드 · 이자 · 상점 · 딜러 · 설비 · 딱지 · 팩 · 리그"),
+    ("05", "보상 요소", "", "골드 · 이자 · 상점 · 딜러 · 장갑 · 뱃지 · 팩 · 리그"),
     ("06", "UI/UX", "", "레이아웃 · 조작 · 화면 전이 · 상태별 처리"),
-    ("07", "데이터", "", "스티커 전종 · 다트 · 개조 · 제약 · 리그 · 튜닝 상수"),
+    ("07", "데이터", "", "동전 전종 · 다트 · 보드 확장 · 제약 · 리그 · 튜닝 상수"),
 ]
 
 
@@ -977,7 +971,7 @@ def _run(pages, toc_rows=None):
         seen.add(base)
         it += 1
         rows.append(["page", "%d.%d|%s" % (cn, it, no),
-                     "스티커 전종 99장" if base == "스티커" else nm])
+                     "동전 전종 99장" if base == "스티커" else nm])
     return prs, rows, page - 1, n_stick
 
 

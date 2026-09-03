@@ -12,7 +12,7 @@ const GameData = preload("res://scripts/data.gd")
 #  직접 부른다. 래치(_chute_at)는 따로 격자로 훑어 확인한다.
 #
 #  보는 것 넷
-#    ① 방향이 뜻이 되는가   매물→오른쪽 = 구매 · 랙 칩→왼쪽 = 판매
+#    ① 방향이 뜻이 되는가   매물→오른쪽 = 구매 · 동전 슬롯 기본 점수→왼쪽 = 판매
 #    ② 반대로 밀면 거절하는가
 #    ③ 펠트에 놓으면 그냥 옮기는가
 #    ④ 물리로는 창구에 못 닿는가 — 트레이 네 귀가 빗변 안쪽인가
@@ -41,16 +41,16 @@ func _say(ok: bool, name: String, detail := "") -> int:
 
 
 # ① 물리 트레이의 어느 점에서도 물건이 빗변을 안 넘는가
-# 매대가 넓어져도 매물이 안 뭉친다. "넓은 매대" 딱지가 넷을 여섯으로
+# 테이블가 넓어져도 매물이 안 뭉친다. "넓은 테이블" 뱃지가 넷을 여섯으로
 # 늘리는데 레인 안쪽 여백이 90 으로 고정이라 한 칸 폭이 38px 로 좁아졌다 —
-# 스티커 지름과 같은 값이라 서로를 밀고 값딱지가 겹쳤다. 딱지가 주는
+# 동전 지름과 같은 값이라 서로를 밀고 값뱃지가 겹쳤다. 뱃지가 주는
 # 최대는 +2 이므로 넷에서 여섯까지 잰다.
 func _t_lanes(g: Node) -> int:
 	var tight := ""
 	for k in range(4, 7):
 		if g._lane_w(k) < 50.0:
 			tight = "%d개에서 %.1fpx" % [k, g._lane_w(k)]
-	return _say(tight == "", "매대가 넓어져도 안 뭉친다",
+	return _say(tight == "", "테이블가 넓어져도 안 뭉친다",
 			tight if tight != "" else "넷 %.1f · 여섯 %.1fpx"
 			% [g._lane_w(4), g._lane_w(6)])
 
@@ -150,7 +150,7 @@ func _t_buy_wrong(g: Node) -> int:
 			"매물 → 왼쪽 = 거절", "골드 %d · u %.1f · 사유 '%s'" % [g.gold, it.u, g.pay_msg])
 
 
-# ⑤ 랙 칩을 왼쪽으로 → 판다
+# ⑤ 동전 슬롯 기본 점수을 왼쪽으로 → 판다
 func _t_sell(g: Node) -> int:
 	_shop(g)
 	g.owned.clear()
@@ -163,11 +163,11 @@ func _t_sell(g: Node) -> int:
 	var v: int = GameData.sell_value(g.owned[0])
 	var n: int = g.owned.size()
 	_drag(g, g._slot_rect(0).get_center(), _sell_pt(g))
-	return _say(g.owned.size() == n - 1 and g.gold == before + v, "랙 칩 → 왼쪽 = 판매",
-			"골드 %d → %d (+%d) · 남은 칩 %d" % [before, g.gold, v, g.owned.size()])
+	return _say(g.owned.size() == n - 1 and g.gold == before + v, "동전 슬롯 기본 점수 → 왼쪽 = 판매",
+			"골드 %d → %d (+%d) · 남은 기본 점수 %d" % [before, g.gold, v, g.owned.size()])
 
 
-# ⑥ 랙 칩을 오른쪽으로 → 거절하고 랙에 그대로 있다
+# ⑥ 동전 슬롯 기본 점수을 오른쪽으로 → 거절하고 동전 슬롯에 그대로 있다
 func _t_sell_wrong(g: Node) -> int:
 	_shop(g)
 	g.owned.clear()
@@ -175,8 +175,8 @@ func _t_sell_wrong(g: Node) -> int:
 	g._panel_reset()
 	var before: int = g.gold
 	_drag(g, g._slot_rect(0).get_center(), _buy_pt(g))
-	return _say(g.owned.size() == 1 and g.gold == before, "랙 칩 → 오른쪽 = 거절",
-			"골드 %d · 남은 칩 %d · 사유 '%s'" % [g.gold, g.owned.size(), g.pay_msg])
+	return _say(g.owned.size() == 1 and g.gold == before, "동전 슬롯 기본 점수 → 오른쪽 = 거절",
+			"골드 %d · 남은 기본 점수 %d · 사유 '%s'" % [g.gold, g.owned.size(), g.pay_msg])
 
 
 # ⑦ 펠트에 놓으면 그냥 옮긴다
