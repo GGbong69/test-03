@@ -6605,7 +6605,12 @@ func _obj_shadow(i: int) -> void:
 		"dart":
 			# 가는 막대의 그림자는 가는 막대다 — 충돌 부위 세 곳에 원을
 			# 찍으면 애벌레가 된다(실측). 다트 방향으로 누운 가는 타원 하나.
-			var de := _dart_e(it)
+			#
+			# 방향은 psi 가 아니라 roll 에서 가져온다 — 화면에 실제로
+			# 보이는 3D 다트는 이제 roll 로 돈다(psi 는 다른 물체와 공유
+			#하는 회전이라 손을 안 대면 거의 안 움직인다). psi 를 그대로
+			# 쓰면 그림자가 눈에 보이는 회전과 따로 놀았다.
+			var de := Vector2(cos(it.roll), sin(it.roll) * TBL.flat)
 			var dirv := de.normalized()
 			var L: float = TBL.dart_l * de.length() * 0.92 * k
 			var pts := PackedVector2Array()
@@ -10021,16 +10026,24 @@ func _dart3_col(id: String) -> Color:
 	return C_TXT
 
 
-# ── 테이블의 다트 — 사탕과 같은 어법 ─────────────────
-# 판에 꽂힌 다트(_dart3_meshes)와 재질만 같고 무대는 따로 쓴다 — 상점
-# 물건은 한 번에 한 자리(shop_darts=1)뿐이라 사탕처럼 id 하나에 뷰포트
-# 하나면 된다.
-const DART_VP := Vector2i(46, 30)
+# ── 테이블의 다트 — 사탕과 같은 어법, 같은 자산 방식 ──────
+# 예전엔 게임 안에 구운 정점 상수(DART3M)를 썼다 — 다트판용으로 오래
+# 전에 축을 −Y·길이 1.0 으로 맞춰 둔 것이다. 그 낡은 관례를 안 지키고
+# assets/candy/*.obj 와 같은 방식으로 새로 뽑는다: 원본을 다시 줄이고,
+# 중심·크기는 AABB 로 그때그때 재서 맞춘다 — 축이 어디를 보든 코드가
+# 알아서 맞춘다.
+#
+# 뷰포트는 세로가 길다 — 세워 놓았을 때가 가장 긴 자세라야 그 자세에서
+# 잘리지 않는다(가로로 뉘었을 때만 길고 세로일 때 짧으면 거꾸로다).
+const DART_VP := Vector2i(30, 46)
 
 var dart_live := {}      # id → {"vp":SubViewport,"mi":MeshInstance3D}
 
 
 func _dart_build(id: String) -> Dictionary:
+	var mesh: Mesh = load("res://assets/dart.obj")
+	if mesh == null:
+		return {}
 	var vp := SubViewport.new()
 	vp.size = DART_VP
 	vp.own_world_3d = true
@@ -10040,16 +10053,20 @@ func _dart_build(id: String) -> Dictionary:
 	vp.gui_disable_input = true
 	add_child(vp)
 
+	var ab := mesh.get_aabb()
 	var mi := MeshInstance3D.new()
-	mi.mesh = _mesh_dart3m()
+	mi.mesh = mesh
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = _dart3_col(id)
 	mat.roughness = 0.4
 	mat.specular = 0.35
 	mi.material_override = mat
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	# 회전은 _dart_tex_live 가 매 프레임 통째로 다시 정한다 — 여기서
-	# 정해 봐야 그쪽이 바로 덮어쓴다. 기본 자세도 그 함수에 있다.
+	# 세 축 중 가장 긴 것 기준으로 정규화한다 — 이 원본은 길이가 X 축이다
+	# (옛 DART3M 은 Y 였다. 모델마다 다르므로 축을 가정하지 않는다).
+	var k := 1.0 / maxf(maxf(ab.size.x, ab.size.y), maxf(ab.size.z, 0.001))
+	mi.scale = Vector3.ONE * k
+	mi.position = -ab.get_center() * k
 	vp.add_child(mi)
 
 	var lt := DirectionalLight3D.new()
@@ -10069,7 +10086,7 @@ func _dart_build(id: String) -> Dictionary:
 	var cam := Camera3D.new()
 	cam.projection = Camera3D.PROJECTION_ORTHOGONAL
 	cam.keep_aspect = Camera3D.KEEP_HEIGHT
-	cam.size = 0.72        # 길이 1.0 짜리가 대각으로 누우면 이만큼 필요하다
+	cam.size = 1.16
 	cam.near = 0.01
 	cam.far = 10.0
 	vp.add_child(cam)
@@ -10078,6 +10095,9 @@ func _dart_build(id: String) -> Dictionary:
 	return {"vp": vp, "mi": mi}
 
 
+# 길이축(정규화된 로컬 X)이 화면 평면 안에 최대한 남아야 늘었다 줄었다
+# 안 한다. z 를 고정하고 roll 을 x 에 실으면, y 를 살짝 기울인 기준
+# 자세 위에서 길이축이 카메라 쪽으로 눕지 않고 화면 안에서만 돈다.
 func _dart_tex_live(id: String, roll: float, wob: float, live: bool) -> Texture2D:
 	if not dart_live.has(id):
 		if not _has_renderer():
@@ -10088,20 +10108,9 @@ func _dart_tex_live(id: String, roll: float, wob: float, live: bool) -> Texture2
 		dart_live.erase(id)
 		return null
 	var mi: MeshInstance3D = e.mi
-	# 옛 식(rotation.x/y 를 둘 다 roll 로 움직임)은 카메라를 향해 눕는
-	# 성분이 섞여 있었다 — 자루가 막대인데 돌아가는 동안 화면에 보이는
-	# 길이가 줄었다 늘었다 했다(정사영에서 축이 시야축에 가까워질수록
-	# 짧아진다). 막대는 늘거나 줄지 않는다 — 화면 평면 안에서만 돌아야
-	# 한다. Basis 를 통째로 assign 하는 길(mi.basis=... / mi.transform=...)은
-	# 이 뷰포트 조합에서 렌더가 깨졌다(실측 — 듬성듬성 점만 찍혔다).
-	# rotation.x/y/z 개별 대입은 확인된 대로 잘 그려지므로 그 길을 쓰되,
-	# x·y 는 고정하고 roll 은 z 하나에만 싣는다 — z 는 카메라를 정면으로
-	#보는 축이라(x·y 기울기가 크지 않은 한) 이 축만 돌리면 화면에 보이는
-	# 길이가 거의 안 바뀐다. 둘 다 roll 로 돌리던 옛 식은 자루가 화면
-	# 안쪽으로 눕는 순간이 있어 길이가 늘었다 줄었다 했다.
-	mi.rotation.x = deg_to_rad(50.0)
-	mi.rotation.y = deg_to_rad(-14.0)
-	mi.rotation.z = roll + clampf(wob * 2.2, -0.5, 0.5)
+	mi.rotation.y = deg_to_rad(20.0)
+	mi.rotation.z = deg_to_rad(24.0)
+	mi.rotation.x = roll + clampf(wob * 2.2, -0.5, 0.5)
 	var vp: SubViewport = e.vp
 	vp.render_target_update_mode = (
 			SubViewport.UPDATE_ALWAYS if live else SubViewport.UPDATE_ONCE)
