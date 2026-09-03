@@ -38,12 +38,19 @@ func _diag_len(img: Image) -> float:
 	return best
 
 func _go() -> void:
+	print("── 머리 방향(psi)을 돌린다. 투영상 가로일 때 길고 안쪽일 때 눌려야 맞다")
 	for r in [0.0, PI * 0.25, PI * 0.5, PI * 0.75, PI, PI * 1.25]:
-		var t: Texture2D = g._dart_tex_live("std", r, 0.0, true)
+		var t: Texture2D = g._dart_tex_live("std", r, 0.0, 0.0, true)
 		await process_frame
 		await process_frame
 		var img: Image = t.get_image()
 		var ln := _diag_len(img)
-		print("roll=%.2f(%.0f°) -> 실제 길이(대각 최대거리) %.1f px"
-				% [r, rad_to_deg(r), ln])
+		print("머리 %3.0f° -> 보이는 길이 %.1f px" % [rad_to_deg(r), ln])
+	print("── 배럴롤(자기 축)만 돌린다. 길이가 거의 안 바뀌어야 맞다")
+	for b in [0.0, PI * 0.5, PI, PI * 1.5]:
+		var t2: Texture2D = g._dart_tex_live("std", 0.0, b, 0.0, true)
+		await process_frame
+		await process_frame
+		var img2: Image = t2.get_image()
+		print("배럴 %3.0f° -> 보이는 길이 %.1f px" % [rad_to_deg(b), _diag_len(img2)])
 	quit()

@@ -6606,11 +6606,9 @@ func _obj_shadow(i: int) -> void:
 			# 가는 막대의 그림자는 가는 막대다 — 충돌 부위 세 곳에 원을
 			# 찍으면 애벌레가 된다(실측). 다트 방향으로 누운 가는 타원 하나.
 			#
-			# 방향은 psi 가 아니라 roll 에서 가져온다 — 화면에 실제로
-			# 보이는 3D 다트는 이제 roll 로 돈다(psi 는 다른 물체와 공유
-			#하는 회전이라 손을 안 대면 거의 안 움직인다). psi 를 그대로
-			# 쓰면 그림자가 눈에 보이는 회전과 따로 놀았다.
-			var de := Vector2(cos(it.roll), sin(it.roll) * TBL.flat)
+			# 방향은 psi 다 — 3D 자루의 머리 방향도 psi 를 쓰므로 둘이
+			# 같은 값을 본다. roll 은 자기 축 구름이라 실루엣을 안 돌린다.
+			var de := _dart_e(it)
 			var dirv := de.normalized()
 			var L: float = TBL.dart_l * de.length() * 0.92 * k
 			var pts := PackedVector2Array()
@@ -6686,16 +6684,20 @@ func _obj_paint(it: Dictionary, s: Dictionary, dim: float) -> void:
 			_icon_mod(c - Vector2(0.0, TBL.chip_t * TBL.tall),
 					TBL.mod_r, s.d.id, dim, TBL.flat)
 		_:
-			# 다트 — 사탕과 같은 어법이다. 얼릴 조건도 같다: 잠든 뒤에도
-			# wob·구름 관성이 몇 프레임 더 산다.
+			# 다트 — 머리 방향은 물리의 psi, 자기 축 구름은 roll 이다.
+			# 얼릴 조건은 사탕과 같다: 잠든 뒤에도 wob·구름 관성이 몇
+			# 프레임 더 산다.
 			var dlive: bool = not (bool(it.get("sleep", false))
 					and absf(float(it.get("wob", 0.0))) < 0.02
 					and absf(float(it.get("wv", 0.0))) < 0.02
 					and Vector2(it.get("vu", 0.0), it.get("vw", 0.0)).length() < 1.0)
-			var dtex := _dart_tex_live(String(s.d.id), float(it.get("roll", 0.0)),
-					float(it.get("wob", 0.0)), dlive)
+			var dtex := _dart_tex_live(String(s.d.id), float(it.get("psi", 0.0)),
+					float(it.get("roll", 0.0)), float(it.get("wob", 0.0)), dlive)
 			if dtex != null:
-				var dh := 26.0
+				# 무대에 여백이 있으므로 그리는 칸은 그만큼 크다 —
+				# 자루가 화면에서 차지하는 길이는 옛 2D 아이콘과 같다
+				# (TBL.dart_l 24 의 두 배 = 48px 쯤).
+				var dh := 56.0
 				var dw := dh * float(DART_VP.x) / float(DART_VP.y)
 				draw_texture_rect(dtex, Rect2(c - Vector2(dw, dh) * 0.5, Vector2(dw, dh)),
 						false, Color(1.0 - dim * 0.3, 1.0 - dim * 0.3, 1.0 - dim * 0.3,
@@ -10033,9 +10035,18 @@ func _dart3_col(id: String) -> Color:
 # 중심·크기는 AABB 로 그때그때 재서 맞춘다 — 축이 어디를 보든 코드가
 # 알아서 맞춘다.
 #
-# 뷰포트는 세로가 길다 — 세워 놓았을 때가 가장 긴 자세라야 그 자세에서
-# 잘리지 않는다(가로로 뉘었을 때만 길고 세로일 때 짧으면 거꾸로다).
-const DART_VP := Vector2i(30, 46)
+# 무대를 **테이블과 같은 시점**으로 세운다. 화면의 펠트는 52° 기울여
+# 보는 면이고(TBL.flat = sin 52°), 그 위에 누운 물건은 그 각으로 눌려
+# 보인다. 다트 무대의 카메라도 같은 각으로 내려다봐야 자루가 펠트에
+# 누운 것으로 읽힌다 — 정면 카메라로 두면 어느 각에선 자루가 화면
+# 안쪽을 향해 「꽂힌 것처럼」 보인다.
+#
+# 자루가 화면을 가로지를 때가 가장 길다(길이 그대로). 화면 안쪽을 향하면
+# 눌린다 — 그게 이 투영에서 맞는 길이다.
+#
+# 무대는 정사각이다. 머리가 어느 쪽을 향해도 자루가 안 잘려야 한다 —
+# 가로로 길게 잡았더니 머리가 기울 때 위아래가 잘렸다(실측).
+const DART_VP := Vector2i(44, 44)
 
 var dart_live := {}      # id → {"vp":SubViewport,"mi":MeshInstance3D}
 
@@ -10086,19 +10097,32 @@ func _dart_build(id: String) -> Dictionary:
 	var cam := Camera3D.new()
 	cam.projection = Camera3D.PROJECTION_ORTHOGONAL
 	cam.keep_aspect = Camera3D.KEEP_HEIGHT
-	cam.size = 1.16
+	cam.size = 1.22      # 길이 1.0 짜리가 어느 머리 각에서도 안 잘릴 여백
 	cam.near = 0.01
 	cam.far = 10.0
 	vp.add_child(cam)
-	cam.global_position = Vector3(0.0, 0.0, 3.0)
+	# 펠트를 보는 각 그대로 — 52° 위에서 내려다본다. 그래서 자루가
+	# 「누워 있다」로 읽히고, 머리 방향이 돌 때의 눌림이 테이블의 다른
+	# 물건들과 같은 규약을 따른다.
+	var el := deg_to_rad(52.0)
+	cam.global_position = Vector3(0.0, sin(el), cos(el)) * 3.0
 	cam.look_at(Vector3.ZERO, Vector3.UP)
 	return {"vp": vp, "mi": mi}
 
 
-# 길이 불변보다 구르는 맛이 먼저라고 정했다 — 사탕과 같은 두 축
-# 배합으로 되돌린다. 한 축만 돌리면 바퀴처럼 규칙적으로 읽히고, 비를
-# 다르게 섞은 두 축이 던져진 것처럼 제멋대로 구르는 느낌을 낸다.
-func _dart_tex_live(id: String, roll: float, wob: float, live: bool) -> Texture2D:
+# 펠트에 누운 막대가 구르는 방식은 둘뿐이다. 공중에서 앞뒤로 넘어가는
+# 텀블은 여기 없다 — 그게 「바닥에 꽂힌 것처럼」 보이던 원인이다.
+#
+#   head  — 머리 방향. 테이블 평면에서 도는 각이고, 물리가 이미 psi 로
+#           계산해 둔 값 그대로다(a_spin 마찰이 펠트에서 멎게 한다).
+#           이 회전이 곧 다른 물건·그림자가 쓰는 규약이라 눌림도 공짜로 맞다.
+#   barrel— 자기 축을 따라 도는 통나무 구름. 미끄러진 거리만큼 돈다
+#           (DROP.tumble_rate). 자루는 거의 축대칭이라 이 회전은 깃과
+#           음영으로만 드러난다 — 그래서 과하지 않고, 길이도 안 건드린다.
+#
+# 이 원본의 길이축은 로컬 X 다. 배럴은 그 축 둘레, 머리는 월드 Y 둘레다.
+func _dart_tex_live(id: String, head: float, barrel: float, wob: float,
+		live: bool) -> Texture2D:
 	if not dart_live.has(id):
 		if not _has_renderer():
 			return null
@@ -10108,9 +10132,15 @@ func _dart_tex_live(id: String, roll: float, wob: float, live: bool) -> Texture2
 		dart_live.erase(id)
 		return null
 	var mi: MeshInstance3D = e.mi
-	mi.rotation.x = deg_to_rad(66.0) + roll
-	mi.rotation.y = deg_to_rad(-18.0) + roll * 0.37
-	mi.rotation.z = clampf(wob * 2.2, -0.5, 0.5)
+	# 착지 잔진동은 펠트에서 살짝 들썩이는 것이라 머리 방향에 얹는다.
+	var hd := head + clampf(wob * 0.35, -0.12, 0.12)
+	# 머리를 가로 쪽으로 누른다. 투영만 따르면 머리가 화면 안쪽을 향할 때
+	# 자루가 수직선이 되는데, 길이는 그게 맞아도 눈에는 「펠트에 꽂혀
+	# 섰다」로 읽힌다(실제 제보가 그거였다). 안쪽 성분을 0.5 로 줄이면
+	# 한 바퀴를 다 돌면서도 눕는 자세에 오래 머물러 「누워 굴러간다」로
+	# 읽힌다 — 회전을 막지 않고 체류 시간만 옮기는 방식이다.
+	hd = atan2(sin(hd) * 0.5, cos(hd))
+	mi.basis = Basis(Vector3.UP, hd) * Basis(Vector3.RIGHT, barrel)
 	var vp: SubViewport = e.vp
 	vp.render_target_update_mode = (
 			SubViewport.UPDATE_ALWAYS if live else SubViewport.UPDATE_ONCE)
