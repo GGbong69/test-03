@@ -5427,6 +5427,87 @@ func _table_draw() -> void:
 	_bill_draw()
 
 
+# ── 상점 테이블 3D ───────────────────────────────────
+#  펠트 자리에 Meshy 테이블을 깐다. **좌표계는 안 건드린다** — 창구도
+#  물건 자리도 히트 판정도 2D 사다리꼴 그대로다. 이 무대는 배경일 뿐이다.
+#
+#  정사영이라야 한다. 2D 쪽이 원근 배율 없이 sin/cos 두 계수로만 눕히므로
+#  (TBL.flat · TBL.tall), 3D 도 같은 규칙이어야 두 층이 안 어긋난다.
+#  keep_aspect 를 폭으로 두고 size 를 VIEW.x 로 주면 **월드 1 = 1px** 이다.
+const TBL3 := {
+	"model": "res://assets/table.obj",
+	"px":    980.0,     # 테이블 폭이 화면에서 먹는 px. 좌우는 화면 밖으로 나간다
+	"cx":    320.0,     # 화면상 중심
+	"cy":    206.0,
+	"elev":   52.0,     # 앙각. 2D 와 같은 각이라야 붙는다
+	"yaw":   180.0,     # 평평한 변을 딜러 쪽(뒤)으로 돌린다
+	"bands":     4,     # 명암 계단
+	"steps":    12,     # 색 계단
+}
+
+var tbl_vp: SubViewport = null
+
+
+func _tbl3_live() -> bool:
+	return is_instance_valid(tbl_vp)
+
+
+func _dot_mat(tex: String, tint := Color.WHITE) -> ShaderMaterial:
+	var m := ShaderMaterial.new()
+	m.shader = load("res://scripts/shaders/dot.gdshader")
+	var t: Texture2D = load(tex) if tex != "" else null
+	if t != null:
+		m.set_shader_parameter("albedo_tex", t)
+	m.set_shader_parameter("tint", tint)
+	m.set_shader_parameter("light_bands", int(TBL3.bands))
+	m.set_shader_parameter("color_steps", int(TBL3.steps))
+	return m
+
+
+func _tbl3_open() -> void:
+	if _tbl3_live():
+		return
+	var mesh: Mesh = load(String(TBL3.model))
+	if mesh == null:
+		return
+	tbl_vp = SubViewport.new()
+	tbl_vp.size = Vector2i(int(VIEW.x), int(VIEW.y))
+	tbl_vp.own_world_3d = true
+	tbl_vp.transparent_bg = true
+	tbl_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+	tbl_vp.msaa_3d = Viewport.MSAA_DISABLED
+	tbl_vp.gui_disable_input = true
+	add_child(tbl_vp)
+
+	var cam := Camera3D.new()
+	cam.projection = Camera3D.PROJECTION_ORTHOGONAL
+	cam.keep_aspect = Camera3D.KEEP_WIDTH
+	cam.size = VIEW.x                     # 월드 1 = 1px
+	cam.near = 1.0
+	cam.far = 4000.0
+	var e := deg_to_rad(float(TBL3.elev))
+	cam.position = Vector3(0.0, sin(e), cos(e)) * 1200.0
+	tbl_vp.add_child(cam)
+	cam.look_at(Vector3.ZERO, Vector3.UP)
+
+	var lt := DirectionalLight3D.new()
+	lt.rotation_degrees = Vector3(-58.0, -30.0, 0.0)
+	tbl_vp.add_child(lt)
+
+	var mi := MeshInstance3D.new()
+	mi.mesh = mesh
+	mi.material_override = _dot_mat("res://assets/table_albedo.jpg")
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var ab := mesh.get_aabb()
+	var k: float = float(TBL3.px) / maxf(ab.size.x, 0.001)
+	mi.scale = Vector3.ONE * k
+	mi.rotation_degrees = Vector3(0.0, float(TBL3.yaw), 0.0)
+	tbl_vp.add_child(mi)
+	# 화면 중심에서 원하는 자리로 민다. 정사영이라 1 유닛이 1px 이다.
+	var b := cam.global_transform.basis
+	mi.position = -ab.get_center() * k 			+ b.x * (float(TBL3.cx) - VIEW.x * 0.5) 			+ b.y * (VIEW.y * 0.5 - float(TBL3.cy))
+
+
 func _felt_draw() -> void:
 	# 화면이 곧 테이블의 크롭이다. 640 폭에 D자 테이블 전체를 넣으면 매물이
 	# 그 안에서 다시 쪼그라든다. 좌우는 화면 밖으로 이어진다.
@@ -5440,7 +5521,13 @@ func _felt_draw() -> void:
 	var felt := PackedVector2Array([
 			Vector2(CHUTE.back, TBL.fy), Vector2(VIEW.x - CHUTE.back, TBL.fy),
 			Vector2(VIEW.x, TBL.ny), Vector2(0.0, TBL.ny)])
-	draw_colored_polygon(felt, C_TABLE)
+	if not _tbl3_live() and _has_renderer():
+		_tbl3_open()
+	var tbl_tex: Texture2D = tbl_vp.get_texture() if _tbl3_live() else null
+	if tbl_tex != null:
+		draw_texture_rect(tbl_tex, Rect2(Vector2.ZERO, VIEW), false)
+	else:
+		draw_colored_polygon(felt, C_TABLE)
 	var ink: Color = C_TABLE.lightened(0.34)
 
 	# 결 — 도트 격자는 프레임당 수천 콜이라 못 쓴다. 가로 1px 줄 7px 간격 = 23콜.
