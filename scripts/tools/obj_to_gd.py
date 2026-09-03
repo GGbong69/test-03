@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # OBJ → GDScript ArrayMesh 상수.
 #
+# const 가 아니라 static var 다 — Vector3() 배열은 GDScript 에서 상수식이 아니다.
+#
 # Meshy 가 뽑은 형태를 파일이 아니라 코드로 들인다. 저장소의 "이미지 0개"
 # 규칙이 유지되고, .import 부산물도 .uid 도 안 생긴다.
 # _cup3_leaf (scripts/game.gd:9463) 가 이미 쓰는 어법과 같다.
@@ -102,14 +104,14 @@ def main():
     print("# %s — %s 에서 구움. 정점 %d · 삼각형 %d"
           % (name, Path(a.obj).name, len(verts), len(order) // 3))
     print("# 파일은 저장소에 안 들어간다. 이 상수가 형태 전부다.")
-    print("const %s_V := PackedVector3Array([" % name)
+    print("static var %s_V := PackedVector3Array([" % name)
     print(wrap([vec3(v) for v in verts], 3, "\t"))
     print("])")
     if ns:
-        print("const %s_N := PackedVector3Array([" % name)
+        print("static var %s_N := PackedVector3Array([" % name)
         print(wrap([vec3(n) for n in norms], 3, "\t"))
         print("])")
-    print("const %s_I := PackedInt32Array([" % name)
+    print("static var %s_I := PackedInt32Array([" % name)
     print(wrap([str(i) for i in order], 12, "\t"))
     print("])")
     print()
