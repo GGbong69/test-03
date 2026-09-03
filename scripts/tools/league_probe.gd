@@ -6,11 +6,11 @@ const Save = preload("res://scripts/save.gd")
 # ══════════════════════════════════════════════════════════
 #  리그 8단 회귀 검사
 #
-#  실행:  godot --path . --headless --quit-after 600 --script scripts/tools/stake_probe.gd
+#  실행:  godot --path . --headless --quit-after 600 --script scripts/tools/league_probe.gd
 #  종료 코드 = 실패 개수
 #
 #  리그은 표도 배관도 오래 전부터 있었는데 스위치를 켜는 손이 없었다 —
-#  game.gd 에 `GameData.stake =` 대입이 0건이라 antes.csv 의 곡선 두 열이
+#  game.gd 에 `GameData.league =` 대입이 0건이라 rounds.csv 의 곡선 두 열이
 #  통째로 죽어 있었다. 그런 자리는 한 번 살려 두면 조용히 다시 죽으므로
 #  여기서 못 박는다.
 #
@@ -33,22 +33,22 @@ func _say(ok: bool, name: String, detail := "") -> void:
 
 
 func _initialize() -> void:
-	var rows := GameData.stakes()
+	var rows := GameData.leagues()
 	_say(rows.size() == 8, "리그 여덟 단", "%d단" % rows.size())
 
-	# ① 곡선 — 마지막 라운드의 보스 판(24판)으로 잰다
-	var last: int = GameData.rounds_n()
-	GameData.stake = ""
+	# ① 곡선 — 마지막 판의 보스 판(24판)으로 잰다
+	var last: int = GameData.legs_n()
+	GameData.league = ""
 	var t_white := GameData.target_of(last)
-	GameData.stake = "blue"
+	GameData.league = "blue"
 	var t_blue := GameData.target_of(last)
-	GameData.stake = "yellow"
+	GameData.league = "yellow"
 	var t_yellow := GameData.target_of(last)
 	_say(t_blue > t_white and t_yellow > t_blue, "곡선이 단마다 가팔라진다",
 			"흰 %d < 파랑 %d < 노랑 %d" % [t_white, t_blue, t_yellow])
 
 	# 초록 리그은 곡선이 base 다 — 여유만 깎고 목표는 그대로여야 한다
-	GameData.stake = "green"
+	GameData.league = "green"
 	_say(GameData.target_of(last) == t_white, "초록 단은 곡선을 안 건드린다",
 			"목표 %d" % GameData.target_of(last))
 
@@ -63,32 +63,32 @@ func _initialize() -> void:
 			"%s → … → %s" % [rows[0].get("name", ""), rows[rows.size() - 1].get("name", "")])
 
 	# ③ 미는 값 — 표에 적힌 대로 나온다
-	GameData.stake = "green"
-	_say(int(GameData.stake_v("reward_small", 9)) == 0,
-			"초록 단은 작은 판 보상이 0", "%d" % int(GameData.stake_v("reward_small", 9)))
-	GameData.stake = "purple"
-	_say(int(GameData.stake_v("seal_items", 0)) == 1,
-			"보라 단은 스티커를 봉인한다", "%d장" % int(GameData.stake_v("seal_items", 0)))
-	GameData.stake = "red"
-	_say(int(GameData.stake_v("darts_add", 0)) == -1,
-			"붉은 단은 다트를 깎는다", "%+d발" % int(GameData.stake_v("darts_add", 0)))
-	GameData.stake = "black"
-	var costly: bool = GameData.stake_v("shop_cost_mul", 1.0) > 1.0 \
-			and int(GameData.stake_v("rent", 0)) > 0 \
-			and int(GameData.stake_v("perish", 0)) > 0
+	GameData.league = "green"
+	_say(int(GameData.league_v("reward_small", 9)) == 0,
+			"초록 단은 작은 판 보상이 0", "%d" % int(GameData.league_v("reward_small", 9)))
+	GameData.league = "purple"
+	_say(int(GameData.league_v("seal_items", 0)) == 1,
+			"보라 단은 스티커를 봉인한다", "%d장" % int(GameData.league_v("seal_items", 0)))
+	GameData.league = "red"
+	_say(int(GameData.league_v("darts_add", 0)) == -1,
+			"붉은 단은 다트를 깎는다", "%+d발" % int(GameData.league_v("darts_add", 0)))
+	GameData.league = "black"
+	var costly: bool = GameData.league_v("shop_cost_mul", 1.0) > 1.0 \
+			and int(GameData.league_v("rent", 0)) > 0 \
+			and int(GameData.league_v("perish", 0)) > 0
 	_say(costly, "검정 단은 값·유지비·삭음을 다 얹는다",
-			"×%.2f · 유지비 %d · 삭음 %d판" % [GameData.stake_v("shop_cost_mul", 1.0),
-			int(GameData.stake_v("rent", 0)), int(GameData.stake_v("perish", 0))])
+			"×%.2f · 유지비 %d · 삭음 %d판" % [GameData.league_v("shop_cost_mul", 1.0),
+			int(GameData.league_v("rent", 0)), int(GameData.league_v("perish", 0))])
 
 	# ④ 모르는 id — 옛 저장이 게임을 안 깨야 한다
-	GameData.stake = "nosuch"
-	var fb := GameData.stake_row()
+	GameData.league = "nosuch"
+	var fb := GameData.league_row()
 	_say(String(fb.get("id", "")) == String(rows[0].get("id", ""))
 			and GameData.target_of(last) == t_white,
 			"모르는 리그은 첫 단으로 떨어진다", String(fb.get("name", "")))
 
 	# ⑤ 흐름 — 타이틀의 시작은 런을 안 열고 새 런 화면을 연다
-	GameData.stake = ""
+	GameData.league = ""
 	Save.path = "user://_probe_stake.cfg"
 	Save.wipe()
 	var g: Node = load("res://scenes/main.tscn").instantiate()
@@ -99,46 +99,46 @@ func _initialize() -> void:
 			"state %d" % g.state)
 
 	# 잠긴 단은 못 고른다 — 첫 판에는 흰 단만 열려 있다
-	var before := GameData.stake
-	g._click(g._stake_rect(3).get_center())
-	_say(GameData.stake == before, "잠긴 리그은 안 골라진다", "리그 '%s'" % GameData.stake)
+	var before := GameData.league
+	g._click(g._league_rect(3).get_center())
+	_say(GameData.league == before, "잠긴 리그은 안 골라진다", "리그 '%s'" % GameData.league)
 
 	# 열린 단은 눌리고 저장에 남는다
-	Save.unlock(GameData.stake_key("green"))
-	g._click(g._stake_rect(1).get_center())
-	_say(GameData.stake == "green" and String(Save.get_set("stake", "")) == "green",
-			"열린 리그은 눌리고 저장된다", "리그 '%s'" % GameData.stake)
+	Save.unlock(GameData.league_key("green"))
+	g._click(g._league_rect(1).get_center())
+	_say(GameData.league == "green" and String(Save.get_set("league", "")) == "green",
+			"열린 리그은 눌리고 저장된다", "리그 '%s'" % GameData.league)
 
 	# 시작이 런을 연다
 	g._click(g._newrun_go().get_center())
-	_say(g.state != g.S.NEWRUN and g.round_no == 1, "시작이 런을 연다",
-			"state %d · 판 %d" % [g.state, g.round_no])
+	_say(g.state != g.S.NEWRUN and g.leg_no == 1, "시작이 런을 연다",
+			"state %d · 판 %d" % [g.state, g.leg_no])
 
 	# 리그은 팩마다 따로 뚫린다 — 키에 팩 id 가 들어 있다
-	_say(GameData.stake_key("green", "base") == "stake:base:green"
-			and GameData.stake_key("green", "other") == "stake:other:green",
-			"리그 해금은 팩마다 갈린다", GameData.stake_key("green", "base"))
+	_say(GameData.league_key("green", "base") == "league:base:green"
+			and GameData.league_key("green", "other") == "league:other:green",
+			"리그 해금은 팩마다 갈린다", GameData.league_key("green", "base"))
 
 	# 설명 줄이 서로 안 겹친다. 여덟 단을 전부 깔아 자리를 실제로 세어
 	# 본다 — 검정 리그의 일곱째 줄이 오른쪽 칸 첫 줄 위에 찍히던 사고가
 	# 여기 없으면 눈으로만 보이고, 그 단을 열어 보기 전에는 눈에도 안 띈다.
 	var worst := ""
 	var most := 0
-	for row in GameData.stakes():
-		GameData.stake = String(row.get("id", ""))
-		var lines: Array = g._stake_lines()
+	for row in GameData.leagues():
+		GameData.league = String(row.get("id", ""))
+		var lines: Array = g._league_lines()
 		most = maxi(most, lines.size())
 		var seen := {}
 		for li in lines.size():
-			var at: Vector2 = g._stake_line_at(li)
+			var at: Vector2 = g._league_line_at(li)
 			if seen.has(at):
-				worst = "%s — %d번 줄이 %d번과 같은 자리" % [GameData.stake, li, seen[at]]
+				worst = "%s — %d번 줄이 %d번과 같은 자리" % [GameData.league, li, seen[at]]
 			seen[at] = li
 	_say(worst == "", "설명 줄이 안 겹친다",
 			worst if worst != "" else "최대 %d줄 · 칸당 %d줄 × 2" % [most, g.STAKE_ROWS])
 	_say(most <= g.STAKE_ROWS * 2,
 			"가장 긴 단이 칸 안에 든다", "%d줄 / %d칸" % [most, g.STAKE_ROWS * 2])
 
-	GameData.stake = ""
+	GameData.league = ""
 	print("\n%s" % ("실패 %d건" % fails if fails > 0 else "열여섯 검사 전부 통과"))
 	quit(mini(fails, 125))

@@ -63,13 +63,13 @@ func _initialize() -> void:
 
 	# ① 던지면 전환이 켜진다 — 그리고 상태·데이터는 **그 프레임에** 다 선다
 	var want: int = GameData.target_of(1)
-	g._click(g._blind_go().get_center())
-	_say(g.swap_live and g.state != g.S.BLIND and g.target == want
+	g._click(g._leg_go().get_center())
+	_say(g.swap_live and g.state != g.S.LEG and g.target == want
 			and not g.remaining.is_empty(),
 			"던지면 켜지되 판은 그 프레임에 선다",
 			"live=%s state=%d 목표 %d 다트 %d발"
 			% [g.swap_live, g.state, g.target, g.remaining.size()])
-	_say(g.swap_scr == g.S.BLIND, "빠져나갈 화면을 기억한다", "scr %d" % g.swap_scr)
+	_say(g.swap_scr == g.S.LEG, "빠져나갈 화면을 기억한다", "scr %d" % g.swap_scr)
 
 	# ② 첫 프레임 — 판이 누웠고, 그 자세가 화면 안이다
 	var a0: float = g._swap_rise()
@@ -97,9 +97,9 @@ func _initialize() -> void:
 			% [high, high - 360.0, worst])
 
 	# 다시 연다 — 아래 검사들이 도는 전환을 쓴다
-	g.round_no = 1
-	g._open_blind()
-	g._click(g._blind_go().get_center())
+	g.leg_no = 1
+	g._open_leg()
+	g._click(g._leg_go().get_center())
 
 	# ④ 판정 사각은 전환 내내 한 픽셀도 안 움직인다
 	#    감는 시간은 SWAP 에서 뽑는다 — 손으로 적어 두면 길이를 고칠 때마다
@@ -125,12 +125,12 @@ func _initialize() -> void:
 
 	# ⑤ 게임 상태를 한 비트도 안 바꾼다
 	var gold0: int = g.gold
-	var rn0: int = g.round_no
+	var rn0: int = g.leg_no
 	var rem0: int = g.remaining.size()
 	_wind(g, dur * 0.30)
-	_say(g.gold == gold0 and g.round_no == rn0 and g.remaining.size() == rem0,
+	_say(g.gold == gold0 and g.leg_no == rn0 and g.remaining.size() == rem0,
 			"전환은 게임을 안 만진다",
-			"골드 %d · 판 %d · %d발" % [g.gold, g.round_no, g.remaining.size()])
+			"골드 %d · 판 %d · %d발" % [g.gold, g.leg_no, g.remaining.size()])
 
 	# ⑥ 스스로 끝나고, 끝나면 두 값이 정확히 제자리다
 	_wind(g, dur * 1.05)
@@ -163,17 +163,17 @@ func _initialize() -> void:
 			"돌아오는 길도 스스로 끝난다", "state %d" % g.state)
 
 	# ③' 아무 키나 누르면 건너뛴다 — 잠긴 채로 못 나오는 자리를 안 만든다
-	g.round_no = 1
-	g._open_blind()
-	g._click(g._blind_go().get_center())
+	g.leg_no = 1
+	g._open_leg()
+	g._click(g._leg_go().get_center())
 	_key(g, KEY_SPACE)
 	_say(not g.swap_live, "아무 키나 누르면 건너뛴다")
 
 	# ⑧ 소크는 아예 안 켠다 — 켜면 소크와 사람이 다른 게임을 한다
 	g._swap_skip()
 	g.drop_fast = true
-	g.round_no = 1
-	g._open_blind()
+	g.leg_no = 1
+	g._open_leg()
 	g._swap_begin(true)
 	_say(not g.swap_live, "소크는 연출을 안 켠다")
 	g.drop_fast = false

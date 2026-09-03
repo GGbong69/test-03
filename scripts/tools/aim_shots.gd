@@ -69,7 +69,7 @@ func _run() -> void:
 # 올랐다. 화면이 거짓말을 하던 자리라 사진으로 남긴다.
 func _kick_card() -> void:
 	if g.remaining.is_empty():
-		g._start_round()
+		g._start_leg()
 	g.target = 999999
 	g.owned = []
 	g.sealed = -1
@@ -101,7 +101,7 @@ func _kick_card() -> void:
 func _cut(name: String, mode: String, t1v: int, two: bool, t2: int) -> void:
 	var t1 := t1v
 	if g.remaining.is_empty():
-		g._start_round()
+		g._start_leg()
 	g.state = g.S.PICK
 	g._pick_dart(0)
 	g.aim_mode = mode

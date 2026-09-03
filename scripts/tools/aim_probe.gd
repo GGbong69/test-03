@@ -10,7 +10,7 @@ const Save = preload("res://scripts/save.gd")
 #  종료 코드 = 실패 개수
 #
 #  오토플레이로는 이 자리를 못 잰다. _land 가 검증 실행일 때 aim 을 통째로
-#  버리고 판 안 아무 데나 꽂기 때문이다 — 조준이 어디를 가리키든 라운드는
+#  버리고 판 안 아무 데나 꽂기 때문이다 — 조준이 어디를 가리키든 판은
 #  똑같이 진행되므로, 조준이 죽어도 소크는 오류 0 으로 통과한다.
 #  그래서 여기서는 틱을 직접 몰고 착탄 자리를 직접 읽는다.
 #
@@ -62,7 +62,7 @@ func _initialize() -> void:
 	g.aim_rng.seed = 20260902
 	g.set_process(false)
 	g._new_run()
-	g._start_round()
+	g._start_leg()
 	# 조준점이 나갈 수 있는 끝. **클릭 반경이 아니다** — 기본 게이지는 두
 	# 축이 각각 SWING 까지 가므로 모서리가 SWING*sqrt(2) 다. 그 바깥 띠가
 	# 빗나감이고 설계대로다(aim_swing 110 : board_r 98 = 빗나감 37.68%).
@@ -207,10 +207,10 @@ func _sname(g: Node, s: int) -> String:
 # 다트를 집어 확인·비행을 지나 착탄까지. 조준이 영영 안 잠기는 방식이
 # 있으면 여기서 걸린다 — 그 방식을 쥔 런은 통째로 못 넘어간다.
 func _throw(g: Node, m: String, stages: int) -> void:
-	# 앞선 방식이 자루를 다 썼으면 새 라운드를 연다 — 집을 다트가
+	# 앞선 방식이 자루를 다 썼으면 새 판을 연다 — 집을 다트가
 	# 없으면 _pick_dart 가 조용히 돌아가고 상태가 PICK 에 굳는다.
 	if g.remaining.is_empty():
-		g._start_round()
+		g._start_leg()
 	g.state = g.S.PICK
 	g._pick_dart(0)
 	g.aim_mode = m                 # _pick_dart 는 방식을 안 건드린다. 못 박아 둔다
@@ -291,7 +291,7 @@ func _let_go(g: Node) -> void:
 func _pull(g: Node) -> void:
 	# 던지는 자리는 **고른 자루가 꽂힌 데**다 — 자루가 있어야 한다
 	if g.remaining.is_empty():
-		g._start_round()
+		g._start_leg()
 	g.state = g.S.PICK
 	g._pick_dart(0)
 	g.aim_mode = "pull"
@@ -393,7 +393,7 @@ func _pull(g: Node) -> void:
 #  이어지는지가 여기서 걸린다.
 func _kick(g: Node) -> void:
 	if g.remaining.is_empty():
-		g._start_round()
+		g._start_leg()
 	g.state = g.S.PICK
 	g._pick_dart(0)
 	g.aim_mode = "kick"
@@ -460,8 +460,8 @@ func _kick(g: Node) -> void:
 	# 연발을 잇달아 세 번. 발과 발 사이에 남는 상태가 있으면 여기서
 	# 걸린다 — **오토플레이는 이 길을 못 걷는다.** 반동 스티커를 안 들고,
 	# _auto_step 은 조준 칸에서 그냥 _advance 를 부르기 때문이다.
-	g._start_round()
-	g.target = 999999          # 라운드가 중간에 끝나면 셈이 어긋난다
+	g._start_leg()
+	g.target = 999999          # 판이 중간에 끝나면 셈이 어긋난다
 	var d0: int = g.remaining.size()
 	var m0: int = g.darts.size()
 	var shots := 0
@@ -547,14 +547,14 @@ func _item(g: Node, kind: String) -> Dictionary:
 	return {}
 
 
-# 한 자리에 꽂고 정산이 끝날 때까지 돌린 뒤 그 라운드의 점수를 낸다.
+# 한 자리에 꽂고 정산이 끝날 때까지 돌린 뒤 그 판의 점수를 낸다.
 func _score_at(g: Node, mode: String, p: Vector2, wipe := true) -> int:
 	if wipe:
 		g.owned = []
 		g.sealed = -1
 	if g.remaining.size() < 2:
-		g._start_round()
-	g.target = 999999          # 라운드가 중간에 끝나면 정산이 잘린다
+		g._start_leg()
+	g.target = 999999          # 판이 중간에 끝나면 정산이 잘린다
 	g.total = 0
 	g.state = g.S.PICK
 	g._pick_dart(0)

@@ -26,8 +26,8 @@ const FRAME_CAP := 400000
 var last_round := 1
 var st := {}
 var _used := 0
-# 라운드에서 실제로 낸 총점이 아니라 **첫 발이 낸 점수**를 따로 본다 —
-# 라운드는 목표를 넘기는 순간 끝나므로 총점은 언제나 목표에 붙어 있다.
+# 판에서 실제로 낸 총점이 아니라 **첫 발이 낸 점수**를 따로 본다 —
+# 판은 목표를 넘기는 순간 끝나므로 총점은 언제나 목표에 붙어 있다.
 var first_gain := 0
 var got_first := false
 
@@ -67,7 +67,7 @@ func _row(n: int) -> Dictionary:
 
 func _finish() -> void:
 	print("\n판  목표      통과율  평균다트  여유    첫발점수    목표대비   성장치합")
-	for n in range(1, GameData.rounds_n() + 1):
+	for n in range(1, GameData.legs_n() + 1):
 		if not st.has(n):
 			continue
 		var r: Dictionary = st[n]
@@ -101,14 +101,14 @@ func _process(_d: float) -> bool:
 	g.set_process(false)
 	g._process(1.0 / 60.0)
 
-	# 그 라운드의 첫 발이 낸 점수 — 여유의 진짜 척도다.
+	# 그 판의 첫 발이 낸 점수 — 여유의 진짜 척도다.
 	if pre == g.S.RESOLVE and g.state != g.S.RESOLVE and not got_first:
 		if g.last_gain > 0:
 			first_gain = g.last_gain
 			got_first = true
 
-	if g.round_no != last_round:
-		if g.round_no > last_round:
+	if g.leg_no != last_round:
+		if g.leg_no > last_round:
 			var r := _row(last_round)
 			r["pass"] = int(r["pass"]) + 1
 			r.used = float(r.used) + float(_used)
@@ -117,16 +117,16 @@ func _process(_d: float) -> bool:
 			for o in g.owned:
 				gs += int(o.get("gs", 0))
 			r.gs = float(r.gs) + float(gs)
-		_row(g.round_no).seen += 1
-		last_round = g.round_no
+		_row(g.leg_no).seen += 1
+		last_round = g.leg_no
 		first_gain = 0
 		got_first = false
-	if g.round_darts > 0 and g.darts_left <= g.round_darts:
-		_used = g.round_darts - g.darts_left
+	if g.leg_darts > 0 and g.darts_left <= g.leg_darts:
+		_used = g.leg_darts - g.darts_left
 
 	if g.state == g.S.OVER:
 		runs += 1
-		print("  … 런 %d 끝 (판 %d · 완주 %s)" % [runs, g.round_no, str(g.won)])
+		print("  … 런 %d 끝 (판 %d · 완주 %s)" % [runs, g.leg_no, str(g.won)])
 		if runs >= RUNS:
 			_finish()
 			return true

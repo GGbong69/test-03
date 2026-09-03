@@ -185,10 +185,10 @@ static func _rows(g: Node) -> Array:
 				{"n1": "이 판 목표 채우기", "t": "act", "a": "fill"},
 				{"n1": "이 판 클리어", "t": "act", "a": "clear"},
 				{"n1": "즉시 실패", "t": "act", "a": "lose"},
-				{"n1": "판 +1", "t": "act", "a": "round", "v": 1},
-				{"n1": "판 −1", "t": "act", "a": "round", "v": -1},
+				{"n1": "판 +1", "t": "act", "a": "leg", "v": 1},
+				{"n1": "판 −1", "t": "act", "a": "leg", "v": -1},
 				{"n1": "상점 열기", "t": "act", "a": "shop"},
-				{"n1": "판 선택 열기", "t": "act", "a": "blind"},
+				{"n1": "판 선택 열기", "t": "act", "a": "leg"},
 				{"n1": "다트 다시 채우기", "t": "act", "a": "refill"},
 			]
 		1:
@@ -204,7 +204,7 @@ static func _rows(g: Node) -> Array:
 				{"n1": "다트 바꾸기", "t": "list", "k": "dart",
 						"n": GameData.darts().size()},
 				{"n1": "설비 주기", "t": "list", "k": "vou",
-						"n": GameData.vouchers().size()},
+						"n": GameData.fixtures().size()},
 				{"n1": "딱지 주기", "t": "list", "k": "tag",
 						"n": GameData.tags().size()},
 				{"n1": "매대 다시 굴리기", "t": "act", "a": "restock"},
@@ -218,8 +218,8 @@ static func _rows(g: Node) -> Array:
 						"n": GameData.AIM_MODES.size()},
 				{"n1": "계산 방식", "t": "list", "k": "score",
 						"n": GameData.SCORE_MODES.size()},
-				{"n1": "리그", "t": "list", "k": "stake",
-						"n": GameData.stakes().size()},
+				{"n1": "리그", "t": "list", "k": "league",
+						"n": GameData.leagues().size()},
 				{"n1": "팩", "t": "list", "k": "pack",
 						"n": GameData.packs().size()},
 				{"n1": "판 다시 굽기", "t": "act", "a": "bake"},
@@ -239,10 +239,10 @@ static func _list(k: String) -> Array:
 		"cons": return GameData.consumables()
 		"mod": return GameData.mods()
 		"dart": return GameData.darts()
-		"vou": return GameData.vouchers()
+		"vou": return GameData.fixtures()
 		"tag": return GameData.tags()
 		"mf": return GameData.modifiers()
-		"stake": return GameData.stakes()
+		"league": return GameData.leagues()
 		"pack": return GameData.packs()
 	return []
 
@@ -276,7 +276,7 @@ static func _say(t: String) -> void:
 	msg_t = 2.5
 
 
-# 조준 방식을 **스티커로도** 쥐여 준다. 값만 박아 두면 다음 _start_round
+# 조준 방식을 **스티커로도** 쥐여 준다. 값만 박아 두면 다음 _start_leg
 # 가 든 스티커를 다시 읽어 std 로 되돌린다 — 판을 넘기는 순간 조용히
 # 풀리는 것이다. 게임에서 방식이 오는 길이 스티커 하나뿐이므로,
 # 검사도 그 길로 가야 검사한 것이 실제로 도는 것과 같아진다.
@@ -310,31 +310,31 @@ static func _run(g: Node, e: Dictionary) -> void:
 			return
 		"clear":
 			g.total = g.target
-			g._finish_round()
+			g._finish_leg()
 			_say("클리어")
 			return
 		"lose":
 			g.total = 0
 			g.darts_left = 0
 			g.remaining.clear()
-			g._finish_round()
+			g._finish_leg()
 			_say("실패")
 			return
-		"round":
-			g.round_no = clampi(g.round_no + int(e.v), 1, GameData.rounds_n())
-			g._open_blind()
-			_say("판 %d" % g.round_no)
+		"leg":
+			g.leg_no = clampi(g.leg_no + int(e.v), 1, GameData.legs_n())
+			g._open_leg()
+			_say("판 %d" % g.leg_no)
 			return
 		"shop":
 			g._open_shop()
 			_say("상점")
 			return
-		"blind":
-			g._open_blind()
+		"leg":
+			g._open_leg()
 			_say("판 선택")
 			return
 		"refill":
-			g._start_round()
+			g._start_leg()
 			_say("다트 %d발" % g.remaining.size())
 			return
 		"item_rand":
@@ -354,7 +354,7 @@ static func _run(g: Node, e: Dictionary) -> void:
 			return
 		"mf_off":
 			g.active_mods = []
-			g._start_round()
+			g._start_leg()
 			_say("제약 없음")
 			return
 		"bake":
@@ -367,8 +367,8 @@ static func _run(g: Node, e: Dictionary) -> void:
 				if Save.unlock("pack:" + String(r.get("id", ""))):
 					n += 1
 			for r in GameData.packs():
-				for st in GameData.stakes():
-					if Save.unlock(GameData.stake_key(String(st.get("id", "")),
+				for st in GameData.leagues():
+					if Save.unlock(GameData.league_key(String(st.get("id", "")),
 							String(r.get("id", "")))):
 						n += 1
 			_say("%d개 열었다" % n)
@@ -419,24 +419,24 @@ static func _run(g: Node, e: Dictionary) -> void:
 				g.magazine.clear()
 				for z in 6:
 					g.magazine.append(dd)
-				g._start_round()
+				g._start_leg()
 				_say("다트 %s" % dd.get("n", dd.get("name", "")))
 		"vou":
 			if not rows.is_empty():
-				GameData.voucher_add(String(rows[i % rows.size()].id))
-				_say("설비 %d개" % GameData.vouchers_own.size())
+				GameData.fixture_add(String(rows[i % rows.size()].id))
+				_say("설비 %d개" % GameData.fixtures_own.size())
 		"tag":
 			if not rows.is_empty():
 				g._take_tag(rows[i % rows.size()])
 		"mf":
 			if not rows.is_empty():
 				g.active_mods = [rows[i % rows.size()]]
-				g._start_round()
+				g._start_leg()
 				_say("제약 %s" % g.active_mods[0].get("n", ""))
-		"stake":
+		"league":
 			if not rows.is_empty():
-				GameData.stake = String(rows[i % rows.size()].get("id", ""))
-				_say("리그 %s" % GameData.stake)
+				GameData.league = String(rows[i % rows.size()].get("id", ""))
+				_say("리그 %s" % GameData.league)
 		"pack":
 			if not rows.is_empty():
 				GameData.pack = String(rows[i % rows.size()].get("id", ""))
@@ -449,7 +449,7 @@ static func _give_item(g: Node, it: Dictionary) -> void:
 		return
 	var c: Dictionary = it.duplicate()
 	c.gs = 0
-	c.bought = g.round_no
+	c.bought = g.leg_no
 	g.owned.append(c)
 	g._panel_reset()
 	_say("%s" % c.get("n", ""))

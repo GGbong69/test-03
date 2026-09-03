@@ -1,4 +1,4 @@
-﻿id,name,key,v,op,cost,prereq,min_ante,weight,desc,_note
+﻿id,name,key,v,op,cost,prereq,min_round,weight,desc,_note
 v_shelf,진열대,shop_items,1,add,10,,1,1.00,매대 칸 +{v},shop_of 의 items 에 얹힌다. 이번 상점은 이미 굴린 뒤라 다음 새로고침부터 넓어진다
 v_shelf2,긴 진열대,shop_items,1,add,10,v_shelf,3,0.70,매대 칸 +{v},딱지 넓은 매대까지 겹치면 여덟. _lane_w(8)=44.5 로 실측 겹침 0 이다
 v_roll,덤 새로고침,free_rerolls,1,add,10,,1,1.00,무료 새로고침 +{v}회,reroll_base 를 깎는 쪽은 안 쓴다 — desc 의 {v}가 "-1" 로 나가 증분이 절대값으로 읽힌다

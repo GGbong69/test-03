@@ -27,8 +27,8 @@ const GameData = preload("res://scripts/data.gd")
 #    ③ 조준은 게이지가 훑는 사각형 위 균등분포다(aim_model=uniform_sq).
 #       실제 사람은 가운데를 노리므로 중앙 조건(불·중물)은 여기 값보다 더 자주,
 #       가장자리 조건(더블·띠쟁이)은 덜 걸린다.
-#    ④ 성장(grow)은 런 하나 길이(라운드 표 전부)를 창으로 잰다. 창이 끝나면
-#       성장값을 비운다 — 6만 라운드를 연속으로 자라게 두면 기여가 무한대로
+#    ④ 성장(grow)은 런 하나 길이(판 표 전부)를 창으로 잰다. 창이 끝나면
+#       성장값을 비운다 — 6만 판을 연속으로 자라게 두면 기여가 무한대로
 #       달아나고, 실제 런은 그만큼 길지 않다. rdec 파괴는 다시 산 것으로 친다.
 #
 #  시드를 박아 두 번 돌리면 같은 값이 나온다. 시드가 없으면 hvy 의 배수를
@@ -53,7 +53,7 @@ func _initialize() -> void:
 	var n := items.size()
 	var fire := []          # 발동 횟수
 	var gain := []          # 점수 기여 합
-	var clean_hit := []     # "무실책" 골드가 걸린 라운드 수
+	var clean_hit := []     # "무실책" 골드가 걸린 판 수
 	var ghit := []          # risk50 즉시 골드가 걸린 발 수
 	fire.resize(n); fire.fill(0)
 	gain.resize(n); gain.fill(0.0)
@@ -63,7 +63,7 @@ func _initialize() -> void:
 		it.gs = 0
 
 	var per_round: int = GameData.darts_of(1)
-	var window: int = GameData.rounds_n()       # 성장 창 = 런 길이
+	var window: int = GameData.legs_n()       # 성장 창 = 런 길이
 	var darts := 0
 	var base_sum := 0.0
 	var miss := 0
@@ -77,8 +77,8 @@ func _initialize() -> void:
 		var last_miss := false
 		var streak := 0
 		var warm := false
-		var round_miss := false
-		# 라운드 패턴 추적 — 게임의 _land 후처리와 같은 규칙
+		var leg_miss := false
+		# 판 패턴 추적 — 게임의 _land 후처리와 같은 규칙
 		var sec_cnt := {}
 		var zone_cnt := {}
 		var pat := {}
@@ -93,7 +93,7 @@ func _initialize() -> void:
 			var is_miss: bool = info.mult == 0
 			if is_miss:
 				miss += 1
-				round_miss = true
+				leg_miss = true
 			var same: bool = info.sector > 0 and info.sector == last_sec
 			streak = streak + 1 if same else 0
 			var zone := ""
@@ -155,7 +155,7 @@ func _initialize() -> void:
 				"missp": last_miss,
 				"risk1": risk1_pre,
 				"few": per_round <= 3,
-				"sixth": d == per_round - 1,   # 6발 라운드에선 매 여섯째 = 막발
+				"sixth": d == per_round - 1,   # 6발 판에선 매 여섯째 = 막발
 				"pair": pat.get("pair", false),
 				"trip": pat.get("trip", false),
 				"quad": pat.get("quad", false),
@@ -170,8 +170,8 @@ func _initialize() -> void:
 				"items_n": 1,
 				"gold": 0,
 				"mag_hvy": 0,
-				"round_darts": per_round,
-				"round_base": per_round,   # 측정기는 제약을 안 건다 — 기본 = 실제
+				"leg_darts": per_round,
+				"leg_base": per_round,   # 측정기는 제약을 안 건다 — 기본 = 실제
 				"low": low_pre,
 				"zonehist": zonehist_pre,
 				"empty_n": GameData.max_items() - 1,
@@ -209,13 +209,13 @@ func _initialize() -> void:
 			# 같은 자리다. 두 곳의 순서가 갈리면 표가 조용히 거짓말을 한다.
 			last_sec = info.sector
 			last_miss = is_miss
-		# 라운드 끝 — rdec 감쇠. 0 에 닿으면 다시 산 것으로 친다(전제 ④)
+		# 판 끝 — rdec 감쇠. 0 에 닿으면 다시 산 것으로 친다(전제 ④)
 		for it in items:
 			if String(it.get("grow", "")) == "rdec":
 				it.gs = int(it.gs) + 1
 				if int(it.v) - int(it.gstep) * int(it.gs) <= 0:
 					it.gs = 0
-		if not round_miss:
+		if not leg_miss:
 			clean_rounds += 1
 			for i in n:
 				if items[i].get("g", "") == "clean":
@@ -224,7 +224,7 @@ func _initialize() -> void:
 	var hash_src := _balance_hash()
 	var f := FileAccess.open(OUT, FileAccess.WRITE)
 	f.store_line("id,name,rarity,cond,kind,value,cost,fire_pct,gain_per_dart,"
-			+ "gain_per_round,gain_per_gold,gold_per_round,board,aim_model,samples,seed,_src_hash")
+			+ "gain_per_leg,gain_per_gold,gold_per_leg,board,aim_model,samples,seed,_src_hash")
 	for i in n:
 		var it: Dictionary = items[i]
 		var fp: float = 100.0 * float(fire[i]) / float(darts)
@@ -239,7 +239,7 @@ func _initialize() -> void:
 					BOARD, AIM, darts, SEED, hash_src])
 	f.close()
 
-	print("다트 %d발 · 빗나감 %.2f%% · 무실책 라운드 %.2f%% · 무개조 판 다트당 기본 %.2f점"
+	print("다트 %d발 · 빗나감 %.2f%% · 무실책 판 %.2f%% · 무개조 판 다트당 기본 %.2f점"
 			% [darts, 100.0 * float(miss) / float(darts),
 				100.0 * float(clean_rounds) / float(ROUNDS),
 				base_sum / float(darts)])
@@ -259,13 +259,13 @@ func _score_delta(kind: String, amt: int, b: float, m: float) -> float:
 	return 0.0     # save · 빈 kind — 점수 밖에서 일한다
 
 
-# 라운드당 골드. 모델이 여섯 발을 다 던지므로 남은 다트에 걸린 것은 못 잰다.
+# 판당 골드. 모델이 여섯 발을 다 던지므로 남은 다트에 걸린 것은 못 잰다.
 func _gold_per_round(it: Dictionary, clean_p: float, ghit_pr: float) -> float:
 	if String(it.get("g", "")) == "":
 		return 0.0
 	var gv := float(it.gv)
 	match String(it.g):
-		"clear": return gv          # 넘긴 라운드마다. 모델은 늘 넘긴다고 본다
+		"clear": return gv          # 넘긴 판마다. 모델은 늘 넘긴다고 본다
 		"clean": return gv * clean_p
 		"broke": return gv          # 보유 골드 조건은 이 모델 밖이다
 		"round": return gv

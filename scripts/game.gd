@@ -6,7 +6,7 @@ const Save = preload("res://scripts/save.gd")
 const Dev = preload("res://scripts/dev.gd")
 
 # ── 다트 로그라이트 프로토타입 ──────────────────────────────
-# 흐름: 라운드 플레이 → 클리어 정산(보너스 3택) → 상점 → 다음 라운드
+# 흐름: 판 플레이 → 클리어 정산(보너스 3택) → 상점 → 다음 판
 # 조작: 마우스 클릭 / 스페이스 (상하 → 좌우 → 확인 → 발사)
 #       [ ] 조준 속도   - = 정산 속도   ; ' 확인 텀
 # 밸런스 수치는 전부 scripts/data.gd 에 있다.
@@ -56,7 +56,7 @@ const CARD_H := 96.0
 # ══════════════════════════════════════════════════════════
 # 상점·스테이지는 테이블이 화면 전부를 쓴다. 런 바를 내리고
 # 그 자리(16px)를 딜러에게 준다 — 딜러가 사람으로 읽히려면 세로가 필요하고,
-# 목표·점수 진행은 던지는 중에만 쓸모가 있다. 다음 라운드 목표는
+# 목표·점수 진행은 던지는 중에만 쓸모가 있다. 다음 판 목표는
 # "다음" 버튼이 이미 들고 있다.
 const HUD_UP := -16.0
 
@@ -80,7 +80,7 @@ func _bank_rect() -> Rect2:
 
 # 런 바가 없는 화면에서도 몇 판째인지는 남아야 한다. 자금판 머리띠가 진행바다.
 func _run_done() -> int:
-	return round_no if (state == S.CLEAR or state == S.SHOP) else round_no - 1
+	return leg_no if (state == S.CLEAR or state == S.SHOP) else leg_no - 1
 
 
 const LAY := {
@@ -117,7 +117,7 @@ const C_MULT := Color("e2593f")
 const C_GOLD := Color("f2c94c")
 
 enum S { PICK, AIM_V, AIM_H, CONFIRM, FLY, RESOLVE, CLEAR, SHOP, STAGE, OVER,
-		TITLE, SETTINGS, COLLECT, NEWRUN, BLIND }
+		TITLE, SETTINGS, COLLECT, NEWRUN, LEG }
 
 # 칸 색 — 길이 20, 값은 colors.csv 의 id. _board_bake 가 굽고
 # 손질·개칠이 고친다. 굽기 전(첫 프레임)에는 비어 있을 수 있으므로
@@ -144,7 +144,7 @@ var trp2_out := 0.0
 var bull_o := 0.14
 var bull_i := 0.06
 
-# 라운드 동안 실제로 쓰이는 값 (영구 개조 + 이번 판 제약)
+# 판 동안 실제로 쓰이는 값 (영구 개조 + 이번 판 제약)
 var rt_dbl_out := 1.00
 var rt_dbl_in := 0.90
 var rt_trp_in := 0.56
@@ -158,7 +158,7 @@ var dead_idx := -1              # "금지 구역"이 죽이는 칸. -1 이면 �
 #  상점 왼쪽 벽에 걸린다. **매대(stock)에 안 넣는다** — 매대는 딜러가
 #  쓸어 다시 던지는 판이고 설비는 그 판에 안 오른다. 리롤해도 안 씻기는
 #  것이 코드 0줄로 성립하는 이유가 그것이다(_roll_stock 은 stock 만 지운다).
-#  한 앤티에 하나. 사면 사라지고 그 앤티에는 다시 안 뜬다.
+#  한 라운드에 하나. 사면 사라지고 그 라운드에는 다시 안 뜬다.
 var aim_mode := "std"           # 이 런의 조준 방식. 팩이 정한다
 var score_mode := "std"         # 이 런의 점수 계산 방식. 팩이 정한다
 var aim_r := 0.0                # 원·선 조준이 잠근 반지름
@@ -183,7 +183,7 @@ var mouse_down := false         # 왼쪽 단추를 쥐고 있는가. 당김이 �
 # 때마다 줄이 밀려 상점·성장 뽑기가 통째로 달라진다.
 var aim_rng := RandomNumberGenerator.new()
 var shelf := {}                 # 이 상점에 걸린 설비. 비면 없다
-var shelf_ante := 0             # 그 설비를 굴린 앤티. 앤티가 바뀔 때만 다시 굴린다
+var shelf_round := 0             # 그 설비를 굴린 라운드. 라운드가 바뀔 때만 다시 굴린다
 var dead_col := -1              # 값을 죽이는 칸 색 번호. -1 이면 안 걸렸다
 var dead_ring := 0              # 무효가 되는 배수(2 더블 · 3 트리플). 0 이면 없다
 var odd_mul := 1.0              # 홀수 칸 값 배수
@@ -196,12 +196,12 @@ var sealed := -1                # "둔화"로 봉인된 아이템 인덱스
 
 # ── 탄창 ──────────────────────────────────────────────────
 var magazine := []              # 영구 구성 (상점에서 바꾼다)
-var remaining := []             # 이번 라운드에 남은 다트
+var remaining := []             # 이번 판에 남은 다트
 var cur_dart := {}              # 지금 던지는 다트
 
 # ── 진행 상태 ─────────────────────────────────────────────
 var state: int = S.AIM_V
-var round_no := 1
+var leg_no := 1
 var target := 0
 var total := 0
 var shown := 0.0
@@ -212,9 +212,9 @@ var won := false
 
 var last_sector := -1
 var last_miss := false          # 직전 투척이 빗나갔는가 — 조건 missp 가 읽는다
-# ── 조커 이식이 들여온 라운드 추적 ──
-# 패턴 조건("같은 숫자 2회 이후" 류)은 명중 이력에서 나온다. 라운드마다 비운다.
-var sec_cnt := {}               # 숫자 → 이번 라운드 명중 수
+# ── 조커 이식이 들여온 판 추적 ──
+# 패턴 조건("같은 숫자 2회 이후" 류)은 명중 이력에서 나온다. 판마다 비운다.
+var sec_cnt := {}               # 숫자 → 이번 판 명중 수
 var zone_cnt := {}              # 영역 종류(single/double/triple/bull) → 명중 수
 var pat := {}                   # 완성된 패턴 깃발. "이후" 조건이 읽는다
 # 마지막 발의 판정 문맥과 그 일련번호. 조건 프로브가 게임과 **같은** 문맥을
@@ -222,20 +222,20 @@ var pat := {}                   # 완성된 패턴 깃발. "이후" 조건이 �
 # 실제로 색 조건 일곱 장이 그렇게 죽어 있었고 측정기도 같이 속았다.
 var last_ctx := {}
 var land_n := 0
-var seen_risk := false          # risk1 용 — 이번 라운드에 risk 명중이 있었나
-var low_hit := 0                # 이번 라운드 최저 명중 숫자 (0 = 아직 없음)
-var round_darts := 6            # 이번 라운드 시작 다트 수 (few·missing 이 읽는다)
+var seen_risk := false          # risk1 용 — 이번 판에 risk 명중이 있었나
+var low_hit := 0                # 이번 판 최저 명중 숫자 (0 = 아직 없음)
+var leg_darts := 6            # 이번 판 시작 다트 수 (few·missing 이 읽는다)
 # 제약·리그·딱지·설비·스티커가 손대기 **전**의 다트 수. 「기본에서 줄어든
 # 다트 1개당」이 읽는 그 기본이다. 팩이 이 수를 바꾸므로(여벌 +1 · 넓은 랙 -1)
 # 6 을 박아 두면 안 된다 — 넓은 랙은 아무것도 안 잃고 한 발 줄어든 것으로
 # 읽히고, 여벌은 한 발을 잃고도 안 줄어든 것으로 읽힌다.
-var round_base := 6
+var leg_base := 6
 var throw6 := 0                 # sixth 용 던진 수 카운터 (런 단위 · 발동 시 리셋)
 var zone_hist := {}             # 런 단위 영역 종류 누적 명중 (zonehist 배율)
 var streak := 0
 var dart_index := 0
-var round_miss := false
-var round_trp := false          # 이번 라운드에 트리플이 나왔는가 ("손맛")         # 이번 라운드에 한 번이라도 빗나갔는가 (골드 스티커 "새 자리" 판정)
+var leg_miss := false
+var leg_trp := false          # 이번 판에 트리플이 나왔는가 ("손맛")         # 이번 판에 한 번이라도 빗나갔는가 (골드 스티커 "새 자리" 판정)
 
 # ── 상점 ──────────────────────────────────────────────────
 var stock := []                 # {type:"item"/"mod", d:Dictionary, cost:int, sold:bool}
@@ -355,14 +355,14 @@ func _ready() -> void:
 
 
 # ══════════════════════════════════════════════════════════
-#  런 / 라운드 진행
+#  런 / 판 진행
 # ══════════════════════════════════════════════════════════
 
 func _new_run() -> void:
 	Save.bump("runs")
 	mods_own.clear()
 	_board_bake()
-	round_no = 1
+	leg_no = 1
 	# 시작 조건은 스타트팩이 쥔다 — 표가 비면 튜닝 값이 그대로 남는다.
 	var pk := GameData.pack_row()
 	gold = GameData.start_gold() + int(pk.get("gold_add", 0))
@@ -382,19 +382,19 @@ func _new_run() -> void:
 	zone_hist.clear()
 	won = false
 	_pack_grants()
-	blind_tags.clear()
-	blind_tags_ante = 0
-	blind_skipped.clear()
-	GameData.voucher_clear()     # 설비는 런 스코프다. 지우는 자리는 여기 하나
+	leg_tags.clear()
+	leg_tags_round = 0
+	leg_skipped.clear()
+	GameData.fixture_clear()     # 설비는 런 스코프다. 지우는 자리는 여기 하나
 	spin_cur = 0
 	dead_col = -1
 	dead_ring = 0
 	odd_mul = 1.0
 	pending_tags.clear()
-	_open_blind()
+	_open_leg()
 
 
-func _start_round() -> void:
+func _start_leg() -> void:
 	# 테이블을 빼고 판을 세운다. **데이터보다 먼저** 부른다 — 이 아래가
 	# 판의 링 폭(rt_*)을 다시 잡으므로, 연출을 나중에 열면 올라오는 동안은
 	# 지난 판의 모양이었다가 다 선 순간 툭 바뀐다.
@@ -417,28 +417,28 @@ func _start_round() -> void:
 		rt_dbl_in = dbl_out - (dbl_out - dbl_in) * bw
 
 	remaining = magazine.duplicate()
-	# 이번 판의 기본 다트 수는 antes.csv 의 darts 열이 정한다.
+	# 이번 판의 기본 다트 수는 rounds.csv 의 darts 열이 정한다.
 	# tuning.csv 비고가 오래전부터 그렇게 적혀 있었는데 코드가 안 읽고
 	# 있었다 — 표가 거짓말을 하던 자리다. 탄창보다 많으면 순환해서 채운다.
 	#
 	# **팩 몫을 같이 더한다.** 팩의 darts_add 는 _new_run 이 탄창 크기에만
-	# 넣어 두는데, antes 의 수로 곧장 자르면 그 몫이 통째로 없어졌다 —
+	# 넣어 두는데, rounds 의 수로 곧장 자르면 그 몫이 통째로 없어졌다 —
 	# 여벌 팩이 탄창 일곱 자루를 쥐고도 여섯 발만 던지고 있었고, 넓은 랙은
 	# 다섯 자루를 쥐고도 여섯 발을 던졌다(둘 다 팩 설명과 반대다).
 	# 아래 dadd 사슬(제약·리그·딱지·설비·스티커)과 달리 팩만 탄창 쪽에
 	# 살았던 것이 원인이라, 팩도 같은 자리에서 센다.
-	var want := (GameData.darts_of(round_no)
+	var want := (GameData.darts_of(leg_no)
 			+ int(GameData.pack_v("darts_add", 0.0)))
 	while remaining.size() > want and remaining.size() > 1:
 		remaining.pop_back()
 	while remaining.size() < want and not magazine.is_empty():
 		remaining.append(magazine[remaining.size() % magazine.size()])
 	# 여기까지가 "기본" 이다 — 판과 팩이 정한 수. 아래 dadd 사슬이 그것을 깎는다.
-	round_base = remaining.size()
+	leg_base = remaining.size()
 	var dadd := int(mod_v("darts_add", 0.0))
-	dadd += int(GameData.stake_v("darts_add", 0.0))
+	dadd += int(GameData.league_v("darts_add", 0.0))
 	dadd += _spend_tags("dart")          # 딱지 — 다음 판 한 번만 산다
-	dadd += GameData.voucher_i("darts_add", 0)   # 설비 — 런 내내 산다
+	dadd += GameData.fixture_i("darts_add", 0)   # 설비 — 런 내내 산다
 	# 순서: 제약 → 리그 → 딱지 → 설비 → 스티커. 전부 더하기라 지금은 수가
 	# 같지만, 이 줄들 중 하나라도 곱이 되면 순서가 값을 바꾼다. 그때 고칠
 	# 자리가 여기 하나다.
@@ -453,7 +453,7 @@ func _start_round() -> void:
 		dadd -= 1
 	cur_dart = GameData.darts()[0]
 	darts_left = remaining.size()
-	round_darts = remaining.size()
+	leg_darts = remaining.size()
 	grip_t = 0.0
 	# 칸은 시작 때 한 번 정하고 끝까지 안 바꾼다. 자루가 빠질 때마다 다시
 	# 가운데 맞추면 남은 것들이 미끄러져 꽂혀 있는 것으로 안 보인다.
@@ -464,10 +464,10 @@ func _start_round() -> void:
 	grip_pick = -1
 	# 제약 둔화와 리그이 같은 축을 민다 — 보라 리그부터는 매 판 상시다.
 	var seal := int(mod_v("seal_items", 0.0)) \
-			+ int(GameData.stake_v("seal_items", 0.0))
+			+ int(GameData.league_v("seal_items", 0.0))
 	sealed = randi() % owned.size() if seal > 0 and not owned.is_empty() else -1
 	dead_idx = int(mod_v("sector_kill", -1.0))
-	# 변형을 라운드 시작에 한 번 읽는다. 코드에 갈래가 없는 이름이면
+	# 변형을 판 시작에 한 번 읽는다. 코드에 갈래가 없는 이름이면
 	# 여기서 한 번 울린다 — 매 프레임 울리면 로그가 못 쓰게 된다.
 	#
 	# 조준은 **든 스티커**가 쥔다. 팩이 직접 들고 있으면 그 방식을 런
@@ -489,14 +489,14 @@ func _start_round() -> void:
 	# 돌아간 각도를 지금 값으로 맞춘다. 차이만큼만 돌리므로 제약이 빠진
 	# 판에서는 저절로 제자리로 돌아온다.
 	_board_spin(int(mod_v("spin", 0.0)) - spin_cur)
-	round_miss = false
-	round_trp = false
+	leg_miss = false
+	leg_trp = false
 	total = 0
 	shown = 0.0
 	dart_index = 0
 	streak = 0
 	last_sector = -1
-	last_miss = false     # 직전 칸과 같은 규칙 — 라운드가 바뀌면 "직전" 이 없다
+	last_miss = false     # 직전 칸과 같은 규칙 — 판이 바뀌면 "직전" 이 없다
 	sec_cnt.clear()
 	zone_cnt.clear()
 	pat.clear()
@@ -564,14 +564,14 @@ func _grip_consume() -> void:
 	darts_left = remaining.size()
 
 
-func _finish_round() -> void:
-	Save.peak("best_round", round_no)
+func _finish_leg() -> void:
+	Save.peak("best_leg", leg_no)
 	Save.peak("best_score", total)
 	Save.peak("best_gold", gold)
 	Save.flush()
 	if total < target:
 		# 목숨 아이템(조커 이식 110099) — 총점이 목표의 일정 비율 이상이면
-		# 실패를 한 번 무르고 자신을 부순다. 라운드는 클리어로 친다.
+		# 실패를 한 번 무르고 자신을 부순다. 판은 클리어로 친다.
 		for i in owned.size():
 			if i == sealed:
 				continue          # 봉인은 발동을 막는다 — 목숨도 발동이다
@@ -585,15 +585,15 @@ func _finish_round() -> void:
 				pop(at + Vector2(0.0, 24.0), "%s — 실패를 막았다" % sv.n,
 						C_ACC, 11, 1.2)
 				_sfx("save_life")
-				# 마지막 라운드에서 목숨이 터져도 완주는 완주다. 여기서 곧장
+				# 마지막 판에서 목숨이 터져도 완주는 완주다. 여기서 곧장
 				# 정산으로 가면 아래 완주 검사에 못 닿아, 상점이 0칸으로 열리고
-				# 목표가 앤티 8 그대로인 유령 25판이 시작된다.
-				if round_no >= GameData.rounds_n():
+				# 목표가 라운드 8 그대로인 유령 25판이 시작된다.
+				if leg_no >= GameData.legs_n():
 					state = S.OVER
 					won = true
 					_sfx("run_win")
 					return
-				_round_end_wear()
+				_leg_end_wear()
 				_settle_clear()
 				return
 		state = S.OVER
@@ -603,8 +603,8 @@ func _finish_round() -> void:
 		_sfx("run_lose")
 		return
 
-	if round_no >= GameData.rounds_n():
-		_stake_unlock_next()
+	if leg_no >= GameData.legs_n():
+		_league_unlock_next()
 		_pack_unlock_next()
 		state = S.OVER
 		won = true
@@ -614,11 +614,11 @@ func _finish_round() -> void:
 		_sfx("run_win")
 		return
 
-	_round_end_wear()
+	_leg_end_wear()
 	_settle_clear()
 
 
-# 정산 — 실패 방지로 넘어온 라운드도 같은 길을 걷는다.
+# 정산 — 실패 방지로 넘어온 판도 같은 길을 걷는다.
 func _settle_clear() -> void:
 	# 정산 내역
 	# 잔탄 골드는 팩이 덮을 수 있다. 이자를 끈 팩이 그 자리를 여기서
@@ -638,16 +638,16 @@ func _settle_clear() -> void:
 	for r in item_rows:
 		item_gold += r.v
 	# 클리어 보상은 판마다 다르다 — 작은 3 · 큰 4 · 보스 5.
-	# 발라트로와 같은 값이고, blinds.csv 가 쥔다.
-	var clear := GameData.reward_of(round_no)
+	# 발라트로와 같은 값이고, legs.csv 가 쥔다.
+	var clear := GameData.reward_of(leg_no)
 	# 초록 리그부터 작은 판이 골드를 안 준다. 곡선이 아니라 여유를 깎는 단이다.
-	if GameData.blind_idx(round_no) == 0:
-		clear = int(GameData.stake_v("reward_small", float(clear)))
+	if GameData.leg_idx(leg_no) == 0:
+		clear = int(GameData.league_v("reward_small", float(clear)))
 	# 제약이 이 판의 보상을 깎는다. 리그 뒤에 온다 — 리그이 정한 값을
 	# 제약이 다시 미는 순서라야 "이 판만" 이 성립한다.
 	clear = int(floor(float(clear) * mod_v("reward_mul", 1.0)))
 	clear_gold_detail = [
-		{"n": GameData.blind_name(round_no), "v": clear},
+		{"n": GameData.leg_name(leg_no), "v": clear},
 		{"n": "남은 다트 %d개" % darts_left, "v": dart_gold},
 		{"n": "이자", "v": interest},
 	]
@@ -660,7 +660,7 @@ func _settle_clear() -> void:
 	Save.bump("gold_earned", clear + dart_gold + interest + item_gold)
 
 	state = S.CLEAR
-	_sfx("round_clear")
+	_sfx("leg_clear")
 
 
 # 봉인은 자리가 아니라 스티커에 걸린다. owned 에서 원소를 빼면 뒤 인덱스가
@@ -691,8 +691,8 @@ func _pack_grants() -> void:
 			mods_own.append(String(id))
 	if not mods_own.is_empty():
 		_board_bake()
-	for id in GameData.pack_grants("grant_voucher"):
-		GameData.voucher_add(String(id))
+	for id in GameData.pack_grants("grant_fixture"):
+		GameData.fixture_add(String(id))
 	for id in GameData.pack_grants("grant_cons"):
 		for c in GameData.consumables():
 			if String(c.id) == String(id) and cons.size() < GameData.cons_slots():
@@ -741,39 +741,39 @@ func _pack_unlock_check() -> void:
 					"%s 열렸다" % r.get("name", ""), C_ACC, 13, 1.6)
 
 
-func _stake_unlock_next() -> void:
-	var rows := GameData.stakes()
-	var cur := String(GameData.stake_row().get("id", ""))
+func _league_unlock_next() -> void:
+	var rows := GameData.leagues()
+	var cur := String(GameData.league_row().get("id", ""))
 	Save.unlock(GameData.win_key(cur))      # 이 팩으로 이 단을 넘겼다
 	for i in rows.size():
 		if String(rows[i].get("id", "")) != cur or i + 1 >= rows.size():
 			continue
 		var nxt := String(rows[i + 1].get("id", ""))
-		if Save.unlock(GameData.stake_key(nxt)):
+		if Save.unlock(GameData.league_key(nxt)):
 			pop(Vector2(VIEW.x * 0.5, 210.0),
 					"%s 열렸다" % rows[i + 1].get("name", ""), C_GOLD, 13, 1.6)
 		return
 
 
-# 라운드 종료의 마모 — 감쇠(rdec)와 확률 파괴(boom). 조커 이식이 들여왔다.
-# 정산보다 먼저 부른다: 이번 라운드 일한 값은 이미 점수로 냈고, 골드 정산은
-# 남은 자만 받는 것이 "라운드 종료 시 파괴" 의 뜻에 맞다.
-func _round_end_wear() -> void:
+# 판 종료의 마모 — 감쇠(rdec)와 확률 파괴(boom). 조커 이식이 들여왔다.
+# 정산보다 먼저 부른다: 이번 판 일한 값은 이미 점수로 냈고, 골드 정산은
+# 남은 자만 받는 것이 "판 종료 시 파괴" 의 뜻에 맞다.
+func _leg_end_wear() -> void:
 	# 유지비 — 검정 리그. 골드가 없으면 0 에서 멈춘다(빚을 안 만든다).
-	var rent := int(GameData.stake_v("rent", 0.0))
+	var rent := int(GameData.league_v("rent", 0.0))
 	if rent > 0 and gold > 0:
 		var pay: int = mini(rent, gold)
 		gold -= pay
 		pop(_slot_rect(0).get_center() + Vector2(0.0, -22.0),
 				"유지비 −%d" % pay, C_MULT, 11, 1.0)
-	var per := int(GameData.stake_v("perish", 0.0))
+	var per := int(GameData.league_v("perish", 0.0))
 	var i := owned.size() - 1
 	while i >= 0:
 		var it: Dictionary = owned[i]
 		var dead := false
 		# 삭음 — 주황 리그. 산 판을 기억해 두었다가 그만큼 지나면 부순다.
 		if per > 0:
-			var age := round_no - int(it.get("bought", round_no))
+			var age := leg_no - int(it.get("bought", leg_no))
 			if age >= per:
 				dead = true
 		if String(it.get("grow", "")) == "rdec":
@@ -807,10 +807,10 @@ func _gold_from_items() -> Array:
 		match it.get("g", ""):
 			"clear": v = it.gv
 			"spare": v = it.gv * darts_left
-			"clean": v = it.gv if not round_miss else 0
+			"clean": v = it.gv if not leg_miss else 0
 			"blitz": v = it.gv if darts_left >= GameData.gold_blitz() else 0
 			"broke": v = it.gv if gold <= GameData.gold_broke() else 0
-			"round": v = it.gv
+			"leg": v = it.gv
 		if v > 0:
 			rows.append({"n": it.n, "v": v})
 	return rows
@@ -820,14 +820,14 @@ func _gold_from_items() -> Array:
 # rerolls_used 를 음수로 밀어 좌변에 붙는다. 같은 축이 아니라 같은 비교의
 # 반대편이라, 둘을 한 수로 합치면 안 된다.
 func _free_rerolls() -> int:
-	return GameData.free_rerolls() + GameData.voucher_i("free_rerolls", 0)
+	return GameData.free_rerolls() + GameData.fixture_i("free_rerolls", 0)
 
 
 # 이자 상한 = 표 + 리그 + 설비. 정산(_settle_clear)과 자금판 미리보기가
 # 같은 식을 읽어야 한다 — 갈려 있으면 화면에 적힌 수와 실제로 들어오는
 # 골드가 다르고, 그건 플레이어가 못 고치는 종류의 거짓말이다.
 func _interest_cap() -> int:
-	return GameData.interest_max() + int(GameData.stake_v("interest_add", 0.0)) 			+ GameData.voucher_i("interest_add", 0)
+	return GameData.interest_max() + int(GameData.league_v("interest_add", 0.0)) 			+ GameData.fixture_i("interest_add", 0)
 
 
 # 벽에 걸린 설비 한 장. 매물과 다른 어휘로 그린다 — 매물은 펠트 위에
@@ -861,15 +861,15 @@ func _shelf_buy() -> void:
 		_deny()
 		return
 	gold -= int(shelf.cost)
-	GameData.voucher_add(String(shelf.id))
-	Save.bump("vouchers_bought")
+	GameData.fixture_add(String(shelf.id))
+	Save.bump("fixtures_bought")
 	pop(_shelf_rect().get_center(), String(shelf.n), C_ACC, 12, 1.4)
 	shelf = {}
 	# 매대 폭·무료 새로고침이 이 순간 바뀔 수 있다. 이번 판은 이미 굴린
 	# 뒤라 폭은 다음 새로고침부터 넓어지고, 값은 지금 다시 매긴다.
 	reroll_cost = _reroll_price()
 	_panel_reset()
-	_sfx("voucher_buy")
+	_sfx("fixture_buy")
 
 
 func _reroll_price() -> int:
@@ -879,9 +879,9 @@ func _reroll_price() -> int:
 
 
 func _open_shop() -> void:
-	# 라운드가 끝났다. 상점에 랙이 서므로 안 지우면 지난 판 "봉인" 딱지가
+	# 판이 끝났다. 상점에 랙이 서므로 안 지우면 지난 판 "봉인" 딱지가
 	# 유령으로 남는다. _gold_from_items() 가 sealed 를 읽으므로
-	# _finish_round 안에서는 지우면 안 된다 — 여기가 유일하게 안전한 지점이다.
+	# _finish_leg 안에서는 지우면 안 된다 — 여기가 유일하게 안전한 지점이다.
 	sealed = -1
 	sell_sel = -1
 	buy_sel = -1
@@ -889,13 +889,13 @@ func _open_shop() -> void:
 	_sweep_reset()
 	rerolls_used = -_spend_tags("reroll")   # 딱지 — 무료 새로고침을 앞당긴다
 	reroll_cost = _reroll_price()
-	# 설비는 앤티가 바뀔 때만 갈린다. 같은 앤티의 상점 셋이 같은 것을 본다 —
-	# 발라트로가 바우처를 앤티마다 하나 거는 것과 같은 자리다. 안 사면
-	# 다음 상점에도 그대로 걸려 있고, 앤티가 넘어가면 사라진다.
-	var ante := GameData.ante_of(round_no)
-	if ante != shelf_ante:
-		shelf_ante = ante
-		shelf = GameData.voucher_roll(ante)
+	# 설비는 라운드가 바뀔 때만 갈린다. 같은 라운드의 상점 셋이 같은 것을 본다 —
+	# 발라트로가 바우처를 라운드마다 하나 거는 것과 같은 자리다. 안 사면
+	# 다음 상점에도 그대로 걸려 있고, 라운드가 넘어가면 사라진다.
+	var round := GameData.round_of(leg_no)
+	if round != shelf_round:
+		shelf_round = round
+		shelf = GameData.fixture_roll(round)
 	_roll_stock()
 	state = S.SHOP
 	_sfx("shop_open")
@@ -924,27 +924,27 @@ func _draw_weighted(pool: Array) -> Dictionary:
 
 
 #  매대는 판 N 을 클리어한 뒤 N+1 을 위해 열린다. 그래서 폭도 해금도
-#  다음 판 번호로 본다. 라운드 표는 라운드당 한 줄이라 옛 rounds.csv 처럼
+#  다음 판 번호로 본다. 판 표는 판당 한 줄이라 옛 rounds.csv 처럼
 #  "마지막 행을 비워 둔다" 는 규약이 없다 — 마지막 판이면 애초에 상점을 안 연다.
 # 리그이 미는 값 — 주황부터 매대가 비싸다. 올림이라 4골드가 5가 된다.
-func _stake_cost(c: int) -> int:
-	var m := GameData.stake_v("shop_cost_mul", 1.0)
+func _league_cost(c: int) -> int:
+	var m := GameData.league_v("shop_cost_mul", 1.0)
 	return c if m == 1.0 else maxi(1, int(ceil(float(c) * m)))
 
 
 func _roll_stock() -> void:
 	stock.clear()
-	var nxt := round_no + 1
+	var nxt := leg_no + 1
 	var tag_more := _spend_tags("shop")     # 딱지 — 매물이 는다
 	var tag_free := _spend_tags("free")     # 딱지 — 몇 개가 공짜다
-	# 상점 칸은 그 판 **뒤**의 상점 폭이다. 라운드 표를 읽으므로 같은 라운드
-	# 안에서는 세 판이 같은 폭을 본다 — 라운드가 바뀌는 경계에서만 값이 갈린다.
-	var w := GameData.shop_of(round_no)
+	# 상점 칸은 그 판 **뒤**의 상점 폭이다. 판 표를 읽으므로 같은 판
+	# 안에서는 세 판이 같은 폭을 본다 — 판이 바뀌는 경계에서만 값이 갈린다.
+	var w := GameData.shop_of(leg_no)
 
 	# 후보를 먼저 거른다 — 이미 가진 스티커와 아직 안 풀린 스티커는 애초에 안 뜬다.
 	var pool := []
 	for it in GameData.items():
-		if _has_item(it.id) or GameData.item_min_round(it) > nxt:
+		if _has_item(it.id) or GameData.item_min_leg(it) > nxt:
 			continue
 		# 가중치 0 은 **매대에 안 뜬다는 뜻**이다. 저울에만 맡기면 마지막
 		# 원소로 떨어지는 폴백(_draw_weighted)에 걸려 아주 가끔 뜬다.
@@ -959,7 +959,7 @@ func _roll_stock() -> void:
 		if it.is_empty():
 			break
 		pool.erase(it)
-		stock.append({"type": "item", "d": it, "cost": _stake_cost(it.cost), "sold": false})
+		stock.append({"type": "item", "d": it, "cost": _league_cost(it.cost), "sold": false})
 		n += 1
 
 	# 판이 더는 못 받는 개조와 이미 산 개조를 여기서 뺀다.
@@ -973,7 +973,7 @@ func _roll_stock() -> void:
 	for m in mods:
 		if mn >= int(w.mods):
 			break
-		stock.append({"type": "mod", "d": m, "cost": _stake_cost(m.cost), "sold": false})
+		stock.append({"type": "mod", "d": m, "cost": _league_cost(m.cost), "sold": false})
 		mn += 1
 	# 개조를 다 샀거나 판이 꽉 찼다. 예전 코드는 여기서 mods[i] 로 죽었다.
 	# 자리는 정확히 4개여야 하므로(_table_draw 의 ax/ay 주석) 스티커로 메운다.
@@ -982,14 +982,14 @@ func _roll_stock() -> void:
 		if fill.is_empty():
 			break
 		pool.erase(fill)
-		stock.append({"type": "item", "d": fill, "cost": _stake_cost(fill.cost), "sold": false})
+		stock.append({"type": "item", "d": fill, "cost": _league_cost(fill.cost), "sold": false})
 		mn += 1
 
 	var darts_pool := GameData.darts().slice(1)
 	darts_pool.shuffle()
 	for i in mini(int(w.darts), darts_pool.size()):
 		var dd: Dictionary = darts_pool[i]
-		stock.append({"type": "dart", "d": dd, "cost": _stake_cost(dd.cost), "sold": false})
+		stock.append({"type": "dart", "d": dd, "cost": _league_cost(dd.cost), "sold": false})
 
 	# 소비 아이템 — 상점 구성이 미정(기획 메모 990006)이라 임시 규칙로 낸다:
 	# shop_cons 가 켜져 있으면 스티커 자리 하나를 소비 아이템으로 바꾼다.
@@ -1000,7 +1000,7 @@ func _roll_stock() -> void:
 			for k in stock.size():
 				if stock[k].type == "item":
 					var cd: Dictionary = cp[randi() % cp.size()]
-					stock[k] = {"type": "cons", "d": cd, "cost": _stake_cost(cd.cost),
+					stock[k] = {"type": "cons", "d": cd, "cost": _league_cost(cd.cost),
 							"sold": false}
 					break
 
@@ -1068,7 +1068,7 @@ func _buy(i: int) -> void:
 			# 살아남는다 — 컬렉션과 매대가 같은 사전을 읽기 때문이다.
 			var cp: Dictionary = s.d.duplicate()
 			cp.gs = 0
-			cp.bought = round_no          # 삭음(주황 리그)이 읽는 나이다
+			cp.bought = leg_no          # 삭음(주황 리그)이 읽는 나이다
 			owned.append(cp)
 		"mod":
 			_apply_mod(s.d.id)
@@ -1099,7 +1099,7 @@ func _std_slot() -> int:
 #    _mod_room(id)   매대에 낼 수 있는가   (_roll_stock · _buy_block · _tip_build)
 #    _apply_mod(id)  산다                  (_buy)
 #    _board_bake()   판을 다시 굽는다       (_new_run · _apply_mod)
-#    sectors / bull_* / trp_* / trp2_* / dbl_*   (_start_round 가 rt_* 로 복사)
+#    sectors / bull_* / trp_* / trp2_* / dbl_*   (_start_leg 가 rt_* 로 복사)
 #  이 구획만 지우고 다시 써도 나머지는 영향을 안 받는다.
 # ══════════════════════════════════════════════════════════
 
@@ -1281,50 +1281,50 @@ func _reroll() -> void:
 	_sfx("reroll")
 
 
-func _next_round() -> void:
+func _next_leg() -> void:
 	_hand_abort()
-	round_no += 1
-	_open_blind()
+	leg_no += 1
+	_open_leg()
 
 
 # ══════════════════════════════════════════════════════════
 #  판 선택
 # ══════════════════════════════════════════════════════════
 
-func _open_blind() -> void:
+func _open_leg() -> void:
 	sealed = -1
 	sell_sel = -1
 	buy_sel = -1
-	blind_t = 0.0
-	# 앤티의 딱지를 한꺼번에 굴린다. 미리 굴려 두어야 "무엇을 받고 무엇을
+	leg_t = 0.0
+	# 라운드의 딱지를 한꺼번에 굴린다. 미리 굴려 두어야 "무엇을 받고 무엇을
 	# 버리는가" 를 보고 고를 수 있다 — 안 보이면 도박이지 선택이 아니다.
-	# 앤티가 그대로면 다시 안 굴린다. 판을 넘길 때마다 뒤 판의 딱지가
+	# 라운드가 그대로면 다시 안 굴린다. 판을 넘길 때마다 뒤 판의 딱지가
 	# 바뀌면 아까 그것을 보고 세운 계획이 매번 무너진다.
-	var bta := GameData.ante_of(round_no)
-	if bta != blind_tags_ante:
-		blind_tags_ante = bta
-		blind_tags.clear()
-		var bf := _ante_first()
-		for k in GameData.blinds_per_ante():
+	var bta := GameData.round_of(leg_no)
+	if bta != leg_tags_round:
+		leg_tags_round = bta
+		leg_tags.clear()
+		var bf := _round_first()
+		for k in GameData.legs_per_round():
 			var brn: int = bf + k
 			if GameData.skippable(brn):
-				blind_tags[brn] = GameData.tag_roll(bta)
-	blind_tag = _blind_tag(round_no)
-	state = S.BLIND
-	_sfx("blind_open")
+				leg_tags[brn] = GameData.tag_roll(bta)
+	leg_tag = _leg_tag(leg_no)
+	state = S.LEG
+	_sfx("leg_open")
 
 
-# 이 앤티의 첫 판 번호. 세 판을 늘어놓을 때 기준이 된다.
-func _ante_first() -> int:
-	return round_no - GameData.blind_idx(round_no)
+# 이 라운드의 첫 판 번호. 세 판을 늘어놓을 때 기준이 된다.
+func _round_first() -> int:
+	return leg_no - GameData.leg_idx(leg_no)
 
 
 # 그 판을 건너뛰면 받을 딱지. 없으면 빈 사전이다(보스 판).
-func _blind_tag(rn: int) -> Dictionary:
-	return blind_tags.get(rn, {})
+func _leg_tag(rn: int) -> Dictionary:
+	return leg_tags.get(rn, {})
 
 
-func _blind_go() -> Rect2:
+func _leg_go() -> Rect2:
 	return _next_rect()
 
 
@@ -1370,7 +1370,7 @@ const SKIP := {
 
 # 지나간 판의 자리. 고른 것이 무엇이었는지만 남긴다.
 func _skip_past(r: Rect2, rn: int) -> void:
-	var took: bool = bool(blind_skipped.get(rn, false))
+	var took: bool = bool(leg_skipped.get(rn, false))
 	draw_rect(r, C_PANEL.darkened(0.52))
 	draw_rect(Rect2(r.position, Vector2(r.size.x, 1.0)),
 			C_ACC.darkened(0.72) if took else C_WIRE.darkened(0.4))
@@ -1378,7 +1378,7 @@ func _skip_past(r: Rect2, rn: int) -> void:
 		draw_string(font, r.position + Vector2(0.0, SKIP.y0), "던졌다",
 				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, C_DIM.darkened(0.42))
 		return
-	var t := _blind_tag(rn)
+	var t := _leg_tag(rn)
 	_icon_tag(Vector2(r.position.x + SKIP.ix, r.get_center().y), 6.5,
 			String(t.get("kind", "")), 0.34)
 	var tx: float = r.position.x + SKIP.tx
@@ -1415,27 +1415,27 @@ func _skip_plate(r: Rect2, t: Dictionary, on: bool) -> void:
 
 
 func _skip_rect(i: int) -> Rect2:
-	var r := _row_rect(i, GameData.blinds_per_ante())
+	var r := _row_rect(i, GameData.legs_per_round())
 	return Rect2(Vector2(r.position.x + 6.0, r.end.y + SKIP.dy),
 			Vector2(r.size.x - 12.0, SKIP.h))
 
 
-func _blind_skip() -> Rect2:
-	return _skip_rect(clampi(GameData.blind_idx(round_no), 0,
-			GameData.blinds_per_ante() - 1))
+func _leg_skip() -> Rect2:
+	return _skip_rect(clampi(GameData.leg_idx(leg_no), 0,
+			GameData.legs_per_round() - 1))
 
 
 # 건너뛴다 — 점수도 골드도 없다. 딱지를 받고 다음 판으로 넘어간다.
-func _skip_blind() -> void:
-	if not GameData.skippable(round_no):
+func _skip_leg() -> void:
+	if not GameData.skippable(leg_no):
 		_deny()
 		return
-	blind_skipped[round_no] = true
-	if not blind_tag.is_empty():
-		_take_tag(blind_tag)
+	leg_skipped[leg_no] = true
+	if not leg_tag.is_empty():
+		_take_tag(leg_tag)
 	Save.bump("skips")
-	round_no += 1
-	_open_blind()
+	leg_no += 1
+	_open_leg()
 
 
 # 딱지의 효과 한 줄. 표의 desc 는 {v} 를 안 채운 날것이라 여기서 채운다.
@@ -1446,7 +1446,7 @@ func _skip_blind() -> void:
 # 건너뛸지 말지를 바꾼다.
 func _tag_when(t: Dictionary) -> String:
 	match String(t.get("when", "now")):
-		"round":
+		"leg":
 			return "다음 판에"
 		"shop":
 			return "다음 상점에서"
@@ -1503,13 +1503,13 @@ func _take_tag(t: Dictionary) -> void:
 		"item":
 			var pool := []
 			for it in GameData.items():
-				if not _has_item(it.id) and GameData.item_min_round(it) <= round_no:
+				if not _has_item(it.id) and GameData.item_min_leg(it) <= leg_no:
 					pool.append(it)
 			for i in v:
 				if owned.size() < GameData.max_items() and not pool.is_empty():
 					var pick: Dictionary = pool[randi() % pool.size()].duplicate()
 					pick.gs = 0
-					pick.bought = round_no
+					pick.bought = leg_no
 					owned.append(pick)
 					_panel_reset()
 	pop(at, "%s" % t.get("name", ""), C_ACC, 13, 1.4)
@@ -1546,8 +1546,8 @@ func has_axis(axis: String) -> bool:
 
 
 func _open_stage() -> void:
-	# 봉인은 _start_round 에서만 다시 뽑힌다. 지우지 않으면 스테이지 선택
-	# 화면의 스티커 랙이 지난 라운드 봉인을 그대로 보여준다.
+	# 봉인은 _start_leg 에서만 다시 뽑힌다. 지우지 않으면 스테이지 선택
+	# 화면의 스티커 랙이 지난 판 봉인을 그대로 보여준다.
 	sealed = -1
 	sell_sel = -1
 	buy_sel = -1
@@ -1560,15 +1560,15 @@ func _open_stage() -> void:
 	# 같은 자리다. 다른 점 하나: 발라트로는 무엇이 나올지 못 고르는데 우리는
 	# 셋 중에 고른다 — 조준 게임이라 "이 제약이 내 손에 얼마나 아픈가" 를
 	# 플레이어가 실제로 안다.
-	var base := GameData.target_of(round_no)
+	var base := GameData.target_of(leg_no)
 	stage_pick.clear()
 	stage_stand.clear()
 	stage_t = 0.0
-	if not GameData.is_boss(round_no):
+	if not GameData.is_boss(leg_no):
 		# 작은 판·큰 판은 제약이 없다. 화면을 띄우지 않고 바로 던지러 간다.
 		active_mods = []
 		target = base
-		_start_round()
+		_start_leg()
 		return
 	var left := GameData.modifiers().duplicate()
 	for i in GameData.stage_picks() + _spend_tags("picks"):
@@ -1592,7 +1592,7 @@ func _pick_stage(i: int) -> void:
 	active_mods = [sp.d]
 	target = sp.target
 	_sfx("stage_pick")
-	_start_round()
+	_start_leg()
 
 
 # ══════════════════════════════════════════════════════════
@@ -1648,12 +1648,12 @@ const SFX := {
 	"target_hit":     {"seq": [392.0, 523.0, 659.0, 784.0], "gap": 0.08, "d": 0.26, "a": 0.26},
 
 	# ── 판과 런 ───────────────────────────────────
-	"round_clear":    {"seq": [392.0, 494.0, 587.0], "gap": 0.09, "d": 0.18, "a": 0.22},
+	"leg_clear":    {"seq": [392.0, 494.0, 587.0], "gap": 0.09, "d": 0.18, "a": 0.22},
 	"save_life":      {"seq": [392.0, 523.0], "gap": 0.09, "d": 0.16, "a": 0.22},
 	"run_win":        {"seq": [262.0, 330.0, 392.0, 523.0, 659.0], "gap": 0.10, "d": 0.22, "a": 0.26},
 	"run_lose":       {"seq": [300.0, 240.0, 180.0], "gap": 0.13, "d": 0.24, "a": 0.22},
-	"blind_open":     {"seq": [392.0, 523.0], "gap": 0.07, "d": 0.12, "a": 0.18},
-	"blind_go":       {"f": 523.0, "d": 0.06, "a": 0.14},
+	"leg_open":     {"seq": [392.0, 523.0], "gap": 0.07, "d": 0.12, "a": 0.18},
+	"leg_go":       {"f": 523.0, "d": 0.06, "a": 0.14},
 	"stage_open":     {"seq": [392.0, 494.0], "gap": 0.09, "d": 0.14, "a": 0.18},
 	"stage_pick":     {"seq": [523.0, 659.0, 784.0], "gap": 0.07, "d": 0.12, "a": 0.20},
 
@@ -1663,7 +1663,7 @@ const SFX := {
 	"sell":           {"seq": [659.0, 880.0], "gap": 0.06, "d": 0.09, "a": 0.18},
 	"deny":           {"seq": [200.0, 150.0], "gap": 0.06, "d": 0.10, "a": 0.16},
 	"reroll":         {"f": 392.0, "d": 0.09, "a": 0.18},
-	"voucher_buy":    {"seq": [392.0, 523.0, 659.0], "gap": 0.07, "d": 0.14, "a": 0.18},
+	"fixture_buy":    {"seq": [392.0, 523.0, 659.0], "gap": 0.07, "d": 0.14, "a": 0.18},
 	"cons_use":       {"seq": [523.0, 659.0], "gap": 0.06, "d": 0.10, "a": 0.18},
 	"sweep_sink":     {"f": 196.0, "d": 0.05, "a": 0.09},
 	"drop_skip":      {"f": 330.0, "d": 0.05, "a": 0.10},
@@ -1681,7 +1681,7 @@ const SFX := {
 	# ── 메뉴 ──────────────────────────────────────
 	"newrun_open":    {"f": 440.0, "d": 0.05, "a": 0.12},
 	"pack_flip":      {"f": 392.0, "d": 0.04, "a": 0.10},
-	"stake_pick":     {"f": 523.0, "d": 0.05, "a": 0.12},
+	"league_pick":     {"f": 523.0, "d": 0.05, "a": 0.12},
 	"run_start":      {"f": 523.0, "d": 0.06, "a": 0.14},
 	"menu_pick":      {"f": 523.0, "d": 0.06, "a": 0.14},
 	"menu_pick2":     {"f": 392.0, "d": 0.04, "a": 0.10},
@@ -1776,7 +1776,7 @@ func add_sparks(n: int, r0: float, r1: float, ln: float, c: Color, life: float) 
 func gs() -> float:
 	# 이 게임 고유의 축. 제약이 미는 그 줄에 설비가 나란히 얹힌다 —
 	# 둘 다 곱이라 순서가 값을 안 바꾼다.
-	var g := gauge_speed * mod_v("gauge_mul", 1.0) 			* GameData.voucher_v("gauge_mul", 1.0)
+	var g := gauge_speed * mod_v("gauge_mul", 1.0) 			* GameData.fixture_v("gauge_mul", 1.0)
 	return g * (cur_dart.gauge if cur_dart.has("gauge") else 1.0)
 
 
@@ -1935,10 +1935,10 @@ func _tick_score(d: float) -> void:
 
 func _auto_step() -> void:
 	match state:
-		S.BLIND:
+		S.LEG:
 			# 열에 하나꼴로 건너뛴다 — 두 길이 다 돌아야 소크가 뜻이 있다
-			if GameData.skippable(round_no) and randf() < 0.1:
-				_skip_blind()
+			if GameData.skippable(leg_no) and randf() < 0.1:
+				_skip_leg()
 			else:
 				_open_stage()
 		S.PICK:
@@ -1977,7 +1977,7 @@ func _auto_step() -> void:
 			elif gold >= reroll_cost and roll < 0.8:
 				_reroll()
 			else:
-				_next_round()
+				_next_leg()
 		S.OVER:
 			_click(Vector2(320, 180))
 
@@ -1994,11 +1994,11 @@ func _auto_step() -> void:
 #    ① data.gd 의 AIM_MODES / SCORE_MODES 에 이름을 적고
 #    ② 아래 match 에 그 이름의 갈래를 파고
 #    ③ packs.csv 의 aim / score 열에 그 이름을 쓴다
-#  ①을 빼먹으면 검증기가 막는다. ②를 빼먹으면 라운드 시작에 오류가 뜬다.
+#  ①을 빼먹으면 검증기가 막는다. ②를 빼먹으면 판 시작에 오류가 뜬다.
 #  둘 다 조용히 std 로 도는 것을 막으려고 있다 — 안개가 그렇게 죽었었다.
 #
-#  방식은 **라운드 시작에 한 번** 읽어 둔다. 매 프레임 표를 뒤지지 않고,
-#  라운드 도중에 팩이 바뀔 일도 없다. 제약 축들과 같은 규약이다.
+#  방식은 **판 시작에 한 번** 읽어 둔다. 매 프레임 표를 뒤지지 않고,
+#  판 도중에 팩이 바뀔 일도 없다. 제약 축들과 같은 규약이다.
 # ══════════════════════════════════════════════════════════
 
 # 든 스티커 중 조준 방식을 쥔 첫 장. 둘을 같이 들면 랙 앞자리가
@@ -2256,7 +2256,7 @@ func _aim_tick(d: float) -> void:
 						_advance()
 		_:
 			# 게이지가 왕복하고 누른 순간 그 축이 잠긴다. 세로 먼저 가로 다음.
-			# 모르는 이름도 여기로 떨어진다 — 소리는 _start_round 가 이미
+			# 모르는 이름도 여기로 떨어진다 — 소리는 _start_leg 가 이미
 			# 냈고, 여기서 멎으면 조준이 영영 안 잠겨 런이 통째로 막힌다.
 			if state == S.AIM_V:
 				aim.y = lerpf(BC.y - SWING, BC.y + SWING, tri(gt))
@@ -2438,13 +2438,13 @@ func _click(m: Vector2) -> void:
 			_open_shop()
 			_swap_begin(false)   # 상점이 선 뒤라야 들어오는 테이블에 그릴 것이 있다
 			return
-		S.BLIND:
-			if _blind_go().has_point(m):
+		S.LEG:
+			if _leg_go().has_point(m):
 				_open_stage()
-				_sfx("blind_go")
+				_sfx("leg_go")
 				return
-			if _blind_skip().has_point(m):
-				_skip_blind()
+			if _leg_skip().has_point(m):
+				_skip_leg()
 				return
 		S.STAGE:
 			# 마지막 장이 설 때까지는 못 고른다. 움직이는 것을 누르면
@@ -2483,7 +2483,7 @@ func _click(m: Vector2) -> void:
 				return
 			if _next_rect().has_point(m):
 				_hand_abort()
-				_next_round()
+				_next_leg()
 				return
 			if _drop_busy():
 				# 커서 밑에서 물건이 움직이는 동안 구매가 성립하면 "누른 것" 과
@@ -2504,16 +2504,16 @@ func _click(m: Vector2) -> void:
 			else:
 				_open_newrun()
 		S.NEWRUN:
-			for i in GameData.stakes().size():
-				if not _stake_rect(i).has_point(m):
+			for i in GameData.leagues().size():
+				if not _league_rect(i).has_point(m):
 					continue
-				if not _stake_open(i):
+				if not _league_open(i):
 					_deny()
 					return
-				GameData.stake = String(GameData.stakes()[i].get("id", ""))
-				Save.set_set("stake", GameData.stake)
+				GameData.league = String(GameData.leagues()[i].get("id", ""))
+				Save.set_set("league", GameData.league)
 				Save.flush()
-				_sfx("stake_pick")
+				_sfx("league_pick")
 				return
 			if GameData.packs().size() > 1:
 				for right in [false, true]:
@@ -2746,7 +2746,7 @@ func _impact(info: Dictionary, hit_mult: int) -> void:
 func _land(mark := true) -> void:
 	kick_pellet = not mark
 	if _autoplay:
-		# 검증 실행은 보드 안에 고르게 꽂아서 라운드가 진행되게 한다
+		# 검증 실행은 보드 안에 고르게 꽂아서 판이 진행되게 한다
 		var a := randf() * TAU
 		aim = BC + Vector2(cos(a), sin(a)) * sqrt(randf()) * R * 0.95
 
@@ -2762,7 +2762,7 @@ func _land(mark := true) -> void:
 	if dead_ring > 0 and int(info.mult) == dead_ring:
 		info.mult = 1
 	if info.mult == 0:
-		round_miss = true
+		leg_miss = true
 	# 꽂힌 자리의 배수. 여기까지가 "판이 무엇인가" 이고, 아래는 "내 다트가
 	# 그것을 어떻게 셈하는가" 다. 연출은 앞의 것을 쓴다(_impact 주석 참조).
 	var land_mult: int = int(info.mult)
@@ -2843,13 +2843,13 @@ func _land(mark := true) -> void:
 
 	# ── 이력 갱신 — ctx 를 만들기 **전**이다 ─────────────────────
 	#  패턴 깃발은 완성한 그 발부터 선다. 전에는 이 블록이 ctx 뒤에 있어서
-	#  「같은 숫자 3회」가 3번째 발이 아니라 4번째 발에야 섰다 — 6발 라운드에서
+	#  「같은 숫자 3회」가 3번째 발이 아니라 4번째 발에야 섰다 — 6발 판에서
 	#  세 발·네 발 계열이 사실상 안 뜨던 원인이다.
 	#
 	#  순서가 바뀌었으므로 갱신 **전** 값을 봐야 하는 넷은 먼저 떠 둔다.
 	#  이 넷의 뜻은 하나도 안 바뀐다:
 	#    rezone   이미 맞힌 영역을 **다시** 맞히면 — 이번 발 전의 이력을 본다
-	#    risk1    라운드 **첫** 고난도 명중 — 갱신 뒤엔 영영 거짓이 된다
+	#    risk1    판 **첫** 고난도 명중 — 갱신 뒤엔 영영 거짓이 된다
 	#    low      이번 발 전까지의 최저 칸
 	#    zonehist 이 영역을 몇 번째로 맞히는가 — 이번 발을 포함한다(종전과 같다)
 	var rezone_pre: bool = zone != "" and zone_cnt.get(zone, 0) > 0
@@ -2865,7 +2865,7 @@ func _land(mark := true) -> void:
 			seen_risk = true
 		if info.sector >= 1 and info.sector <= 20:
 			low_hit = info.sector if low_hit == 0 else mini(low_hit, info.sector)
-		# 깃발 — 한 번 서면 라운드 끝까지 산다
+		# 깃발 — 한 번 서면 판 끝까지 산다
 		var pairs := 0
 		var maxrep := 0
 		for kx in sec_cnt:
@@ -2897,11 +2897,11 @@ func _land(mark := true) -> void:
 		"first": dart_index == 0,
 		"last": darts_left == 0,
 		"streak": streak,
-		"warm": round_trp,
+		"warm": leg_trp,
 		# ── 조커 이식 조건 재료. 패턴 깃발은 이번 발을 **포함한** 것이다 —
 		#    「같은 숫자 3회」는 3번째 발부터 선다. 위 이력 갱신 블록 참조.
 		"risk1": risk1_pre,
-		"few": round_darts <= 3,
+		"few": leg_darts <= 3,
 		"sixth": throw6 >= 6,
 		"pair": pat.get("pair", false),
 		"trip": pat.get("trip", false),
@@ -2917,8 +2917,8 @@ func _land(mark := true) -> void:
 		"items_n": owned.size(),
 		"gold": gold,
 		"mag_hvy": mag_hvy,
-		"round_darts": round_darts,
-		"round_base": round_base,
+		"leg_darts": leg_darts,
+		"leg_base": leg_base,
 		"low": low_pre,
 		"zonehist": zonehist_pre,
 		"empty_n": GameData.max_items() - owned.size(),
@@ -2969,7 +2969,7 @@ func _land(mark := true) -> void:
 		for i in fired:
 			var it: Dictionary = owned[i]
 			if it.k == "save":
-				continue          # 목숨은 정산이 아니라 라운드 실패가 읽는다
+				continue          # 목숨은 정산이 아니라 판 실패가 읽는다
 			# fire 성장은 발동 자체가 걸음이다 — 먼저 오르고 그 값으로 낸다.
 			if String(it.get("grow", "")) == "fire":
 				it.gs = int(it.get("gs", 0)) + int(it.get("gstep", 0))
@@ -3027,7 +3027,7 @@ func _land(mark := true) -> void:
 	# ctx 를 만든 뒤여야 한다 — 불을 붙인 그 다트에는 손맛이 안 뜬다.
 	# 그게 삼중고(트리플 위에)와 손맛(트리플 뒤에)이 갈리는 지점이다.
 	if info.mult == 3:
-		round_trp = true
+		leg_trp = true
 	dart_index += 1
 	# 큐를 다 세운 뒤라야 이 정산이 얼마나 긴지 알 수 있다.
 	settle_n = queue.size()
@@ -3071,15 +3071,15 @@ func _next_step() -> void:
 	if queue.is_empty():
 		card_target = 0.0
 		# 반동은 한 발이 여러 발이다. 남은 작은 다트가 있으면 다음 발을
-		# 판다 — 자루는 이미 하나만 썼으므로 라운드 계산은 안 건드린다.
+		# 판다 — 자루는 이미 하나만 썼으므로 판 계산은 안 건드린다.
 		if not burst_hits.is_empty():
 			aim = burst_hits.pop_front()
 			_land(false)
 			return
 		burst_n = 0               # 연발이 다 팔렸다. 이제 보통 걸음이다
-		# 목표를 넘긴 순간 라운드 종료 — 남은 다트는 골드로 환산된다
+		# 목표를 넘긴 순간 판 종료 — 남은 다트는 골드로 환산된다
 		if total >= target or darts_left <= 0:
-			_finish_round()
+			_finish_leg()
 		else:
 			_to_pick()
 		return
@@ -3141,7 +3141,7 @@ func _next_step() -> void:
 			board_punch = 1.0
 			qt = beat * 2.6 * pace
 			if was_short and total >= target:
-				# 목표 돌파 — 라운드가 여기서 끝난다
+				# 목표 돌파 — 판이 여기서 끝난다
 				_sfx("target_hit")
 				screen_flash = 0.7
 				shake = 13.0
@@ -3342,7 +3342,7 @@ func _next_rect() -> Rect2:
 #  정확히 같은 게임을 한다.
 #
 #  바깥과 닿는 곳은 여섯이다.
-#    _swap_begin(to_board)  전환을 연다   (_start_round 맨 앞 · _click S.CLEAR)
+#    _swap_begin(to_board)  전환을 연다   (_start_leg 맨 앞 · _click S.CLEAR)
 #    _swap_update(d)        매 프레임      (_drop_update 맨 앞)
 #    _swap_skip()           즉시 끝낸다    (프로브·도구)
 #    _swap_rise()           판이 선 정도   (_swap_board · _draw_board · _grip_draw)
@@ -3443,7 +3443,7 @@ func _swap_begin(to_board: bool) -> void:
 	if drop_fast:
 		return
 	if to_board:
-		if state != S.BLIND and state != S.STAGE:
+		if state != S.LEG and state != S.STAGE:
 			return          # 테이블에서 온 것이 아니면 갈아 끼울 것이 없다
 	elif state != S.SHOP:
 		return
@@ -3503,7 +3503,7 @@ func _swap_pin() -> Vector2:
 
 
 # 나가는(들어오는) 테이블 한 벌. shake_off **자체**를 잠깐 밀었다 되돌린다 —
-# 카드 얼굴(_stage_card · _blind_card)이 draw_set_transform(shake_off) 로
+# 카드 얼굴(_stage_card · _leg_card)이 draw_set_transform(shake_off) 로
 # 복귀하므로, 오프셋을 새 변수에 담으면 그 복귀가 오프셋을 조용히 떨군다.
 func _swap_screen(sh: Vector2) -> void:
 	shake_off = sh + Vector2(float(SWAP.dx) * _swap_gone(), 0.0)
@@ -3518,8 +3518,8 @@ func _swap_screen(sh: Vector2) -> void:
 func _draw_screen(scr: int) -> void:
 	if scr == S.CLEAR:
 		_draw_clear()
-	elif scr == S.BLIND:
-		_draw_blind()
+	elif scr == S.LEG:
+		_draw_leg()
 	elif scr == S.STAGE:
 		_draw_stage()
 	elif scr == S.SHOP:
@@ -3769,7 +3769,7 @@ func _grip_draw() -> void:
 		_grip_one(top, picking)
 
 
-# 라운드에 들어서면 오른쪽에서 날아와 하나씩 꽂힌다.
+# 판에 들어서면 오른쪽에서 날아와 하나씩 꽂힌다.
 # 들어서자마자 이미 꽂혀 있으면 누가 언제 꽂았는지가 설명되지 않는다.
 func _grip_one(i: int, picking: bool) -> void:
 	var ps := _grip_pose(i)
@@ -3959,14 +3959,14 @@ func _bd3_pose(e: Dictionary) -> Transform3D:
 
 
 # darts 배열과 3D 노드를 맞춘다. 수가 달라졌을 때만 다시 세운다 —
-# 라운드마다 열두 발을 넘지 않으므로 통째로 다시 세워도 싸다.
+# 판마다 열두 발을 넘지 않으므로 통째로 다시 세워도 싸다.
 func _bd3_sync() -> void:
 	if not _bd3_live():
 		return
 	if bd_nodes.size() != darts.size():
 		# 꽂힌 자루는 한 번 서면 안 움직인다. 그래서 그릴 때마다 3D 를 다시
 		# 굽지 않고, 수가 달라진 프레임에만 한 번 굽는다 — UPDATE_ALWAYS 로
-		# 두면 640x392 짜리 3D 화면을 라운드 내내 매 프레임 다시 그린다.
+		# 두면 640x392 짜리 3D 화면을 판 내내 매 프레임 다시 그린다.
 		bd_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
 		for n in bd_nodes:
 			if is_instance_valid(n):
@@ -3989,12 +3989,12 @@ func _draw_darts() -> void:
 	#
 	# 가드를 get_viewport() != null 로 두었던 것이 틀렸다. **헤드리스에도
 	# 뷰포트는 있다** — 없는 것은 렌더러다. 그래서 검사마다 3D 무대가 열렸고,
-	# 프로브가 간헐적으로 세그폴트했다(settle · stake · mod 가 번갈아 죽었다).
+	# 프로브가 간헐적으로 세그폴트했다(settle · league · mod 가 번갈아 죽었다).
 	# 매번 다른 프로브가 죽어서 원인이 안 보였다. 화면 서버 이름이 그것을
 	# 정확히 말하는 유일한 값이다.
 	if not _bd3_live() and _has_renderer() and not darts.is_empty():
 		_bd3_open()
-	# **비어도 맞춘다.** 라운드가 바뀌면 darts 만 비고 3D 자루는 뒤에 남아,
+	# **비어도 맞춘다.** 판이 바뀌면 darts 만 비고 3D 자루는 뒤에 남아,
 	# 새 판 위에 지난 판의 다트가 그대로 꽂혀 있었다(프로브가 잡았다).
 	# 맞추는 자리가 하나뿐이라야 그 일이 안 생긴다.
 	if _bd3_live():
@@ -4209,22 +4209,22 @@ func _draw_topbar() -> void:
 
 	# 1칸 x[0,100] — 런 진행
 	draw_string(font, Vector2(8, 13), "R%d/%d"
-			% [GameData.ante_of(round_no), GameData.antes_n()],
+			% [GameData.round_of(leg_no), GameData.rounds_n()],
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_TXT)
-	# 칸은 **라운드** 여덟이다. 판 스물넷을 다 찍으면 44 + 7x23 + 5 = 210px 라
-	# 목표 게이지(x 146~506)를 밀고 들어간다. 대신 지금 라운드의 칸을 넘긴
+	# 칸은 **판** 여덟이다. 판 스물넷을 다 찍으면 44 + 7x23 + 5 = 210px 라
+	# 목표 게이지(x 146~506)를 밀고 들어간다. 대신 지금 판의 칸을 넘긴
 	# 판 수만큼 아래에서 채운다 — 5px 를 셋으로 나누면 한 판이 1.67px 이고,
 	# nearest 에서 0/2/3/5 로 떨어져 세 단이 실제로 갈린다.
-	var ante := GameData.ante_of(round_no)
-	var per := GameData.blinds_per_ante()
-	var done_b: int = GameData.blind_idx(round_no) \
+	var round := GameData.round_of(leg_no)
+	var per := GameData.legs_per_round()
+	var done_b: int = GameData.leg_idx(leg_no) \
 			+ (1 if (state == S.CLEAR or state == S.SHOP) else 0)
 	var pip: Rect2 = LAY.bar_pip
-	for i in GameData.antes_n():
+	for i in GameData.rounds_n():
 		var q := Rect2(pip.position + Vector2(float(i) * LAY.bar_pip_dx, 0.0), pip.size)
-		if i < ante - 1:
+		if i < round - 1:
 			draw_rect(q, C_ACC)
-		elif i == ante - 1:
+		elif i == round - 1:
 			draw_rect(q, C_ACC.darkened(0.62))
 			if done_b > 0:
 				var h := q.size.y * float(mini(done_b, per)) / float(per)
@@ -4236,17 +4236,17 @@ func _draw_topbar() -> void:
 
 	# 2칸 x[100,584] — 목표. 진행바 좌표는 기존 그대로다.
 	var g: Rect2 = LAY.bar_gauge
-	draw_string(font, Vector2(104, 13), GameData.blind_name(round_no),
+	draw_string(font, Vector2(104, 13), GameData.leg_name(leg_no),
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 9,
-			C_ACC if GameData.is_boss(round_no) else C_DIM.darkened(0.2))
+			C_ACC if GameData.is_boss(leg_no) else C_DIM.darkened(0.2))
 	draw_rect(g, C_BG)
 	if state == S.SHOP or state == S.STAGE:
 		# STAGE 에서 목표 숫자를 쓰면 안 된다 — 등급 배수(극한 ×1.25)가
 		# 아직 안 정해졌고 카드 셋이 서로 다른 숫자를 이미 크게 띄운다.
 		var msg := "판을 고르는 중"
 		if state == S.SHOP:
-			msg = "다음 %s  ·  목표 %d" % [GameData.blind_name(round_no + 1),
-				GameData.target_of(round_no + 1)]
+			msg = "다음 %s  ·  목표 %d" % [GameData.leg_name(leg_no + 1),
+				GameData.target_of(leg_no + 1)]
 		draw_string(font, Vector2(g.position.x, 13.0), msg,
 				HORIZONTAL_ALIGNMENT_CENTER, g.size.x, 10, C_DIM)
 	else:
@@ -4274,7 +4274,7 @@ func _bank_draw() -> void:
 	draw_rect(r, C_PANEL)
 	# 런 바가 없는 화면에서는 머리띠가 진행바다. 몇 판째인지가 안 사라진다.
 	if _bar_hidden():
-		var k := clampf(float(_run_done()) / float(GameData.rounds_n()), 0.0, 1.0)
+		var k := clampf(float(_run_done()) / float(GameData.legs_n()), 0.0, 1.0)
 		draw_rect(Rect2(r.position, Vector2(r.size.x * k, 2.0)), C_ACC)
 	draw_rect(Rect2(r.position, Vector2(r.size.x, 2.0)), C_GOLD.darkened(0.35))
 	# deny_flash 는 상점 중앙 골드 텍스트가 쓰던 값을 그대로 물려받는다
@@ -4286,14 +4286,14 @@ func _bank_draw() -> void:
 	if r.size.y < 46.0:
 		return
 
-	# 이자 미리보기. 계산식은 _finish_round 와 같고 둘 다 지급 전 잔액을 본다.
-	if state == S.SHOP and round_no + 1 >= GameData.rounds_n():
-		# R8 은 정산이 없다 (_finish_round 의 round_no >= ROUNDS 조기 return 이
+	# 이자 미리보기. 계산식은 _finish_leg 와 같고 둘 다 지급 전 잔액을 본다.
+	if state == S.SHOP and leg_no + 1 >= GameData.legs_n():
+		# R8 은 정산이 없다 (_finish_leg 의 leg_no >= ROUNDS 조기 return 이
 		# 골드 지급 블록보다 앞선다). 남긴 골드는 영원히 안 돌아온다.
 		draw_string(font, r.position + Vector2(0.0, 42.0), "마지막 판",
 				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, C_MULT.lightened(0.2))
 	else:
-		@warning_ignore("integer_division")  # 위 _finish_round 와 같은 식이어야 한다
+		@warning_ignore("integer_division")  # 위 _finish_leg 와 같은 식이어야 한다
 		var itr: int = mini(gold / GameData.interest_per(), _interest_cap())
 		draw_string(font, r.position + Vector2(0.0, 42.0), "이자 +%d" % itr,
 				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9,
@@ -4321,7 +4321,7 @@ func _cap_draw() -> void:
 #    _panel_fire(i)    아이템이 발동할 때        (_next_step)
 #    _panel_update(d)  매 프레임 진행           (_process)
 #    _panel_draw()     매 프레임 그리기          (_draw, _draw_stage)
-#    _panel_reset()    라운드 시작 시 정지        (_start_round)
+#    _panel_reset()    판 시작 시 정지        (_start_leg)
 #  owned / sealed 를 읽기만 하고 게임 상태는 건드리지 않는다.
 #  그래서 이 구획만 지우고 다시 써도 나머지는 영향을 안 받는다.
 #
@@ -4422,9 +4422,9 @@ const GRIP := {
 
 
 var grip_hov := []              # 다트별 뽑힘 정도 0~1
-var grip_t := 0.0               # 라운드 시작 후 경과 — 날아와 꽂히는 연출용
+var grip_t := 0.0               # 판 시작 후 경과 — 날아와 꽂히는 연출용
 var grip_slot := []             # remaining[i] 가 벽의 몇 번 칸에 꽂혀 있는가
-var grip_n := 0                 # 이번 라운드 시작 자루 수 — 칸 배치의 기준
+var grip_n := 0                 # 이번 판 시작 자루 수 — 칸 배치의 기준
 var grip_pick := -1             # 지금 고른 자루 (remaining 인덱스). 던져야 빠진다
 
 var slot_hot := []              # 발동 후 이름을 띄우는 잔여 시간
@@ -4958,7 +4958,7 @@ func _elide(t: String, w: float, sz: int) -> String:
 #  같은 자리를 두 번 누르는 방식이었다면 필요했을 타이머가 여기선 필요 없다.
 #  판매판이 자금 판 바로 옆인 것도 의도다. 파는 건 물건 옆이 아니라 지갑 옆이다.
 #
-#  S.CLEAR 에는 절대 붙이지 않는다 — 정산 지급(_finish_round 의 gold +=)이
+#  S.CLEAR 에는 절대 붙이지 않는다 — 정산 지급(_finish_leg 의 gold +=)이
 #  이미 끝난 시점이라 골드 스티커의 "받고 즉시 되팔기" 창이 열린다.
 # ══════════════════════════════════════════════════════════
 
@@ -4971,22 +4971,22 @@ var stage_stand := []           # 카드마다 0(누움) ~ 1(섬)
 var shake_off := Vector2.ZERO
 
 # ── 판 선택 ──────────────────────────────────────────────
-#  앤티의 세 판을 늘어놓고 지금 판을 던지거나 건너뛴다. 건너뛰면 점수도
+#  라운드의 세 판을 늘어놓고 지금 판을 던지거나 건너뛴다. 건너뛰면 점수도
 #  골드도 없고 대신 딱지를 받는다 — 그 교환이 이 화면의 전부다.
-#  보스 판은 못 건너뛴다(blinds.csv 의 skippable 이 문이고, 검증기가
+#  보스 판은 못 건너뛴다(legs.csv 의 skippable 이 문이고, 검증기가
 #  마지막 판만 0 인 것을 강제한다).
-var blind_tag := {}             # 지금 건너뛰면 받을 딱지. 화면에 미리 보인다
-# 판 번호 → 그 판을 건너뛰면 받을 딱지. **앤티에 들어올 때 한꺼번에 굴린다.**
+var leg_tag := {}             # 지금 건너뛰면 받을 딱지. 화면에 미리 보인다
+# 판 번호 → 그 판을 건너뛰면 받을 딱지. **라운드에 들어올 때 한꺼번에 굴린다.**
 # 지금 판만 굴리면 "뒤 판을 건너뛰면 뭘 받나" 를 화면에 못 적는다 — 그걸
 # 모르면 지금 판을 건너뛸지 말지도 못 정한다. 셋을 같이 보고 고르는 것이
-# 이 화면의 일이다. 앤티가 바뀔 때까지 값이 안 흔들려야 그 비교가 선다.
-var blind_tags := {}
-var blind_tags_ante := 0
+# 이 화면의 일이다. 라운드가 바뀔 때까지 값이 안 흔들려야 그 비교가 선다.
+var leg_tags := {}
+var leg_tags_round := 0
 # 건너뛴 판. 지난 판의 자리를 비우면 "내가 무엇을 골랐더라" 가 화면에서
 # 사라진다 — 셋을 비교해 고르는 화면인데 고른 흔적만 없어지는 셈이다.
-var blind_skipped := {}
+var leg_skipped := {}
 var pending_tags := []          # 나중에 쓸 딱지들 [{kind, v, when, n}]
-var blind_t := 0.0              # 화면이 열린 뒤 흐른 시간(카드 미끄러짐)            # 스테이지 화면에 들어설 때의 스티커 개수
+var leg_t := 0.0              # 화면이 열린 뒤 흐른 시간(카드 미끄러짐)            # 스테이지 화면에 들어설 때의 스티커 개수
 var stage_t := 0.0              # 카드가 깔리는 경과. _open_stage 에서 0 으로 선다
 
 
@@ -5012,7 +5012,7 @@ func _can_sell() -> bool:
 func _can_rack_move() -> bool:
 	if swap_live or sweep_live or state == S.RESOLVE or burst_left > 0:
 		return false
-	return state == S.SHOP or state == S.STAGE or state == S.BLIND or _is_play()
+	return state == S.SHOP or state == S.STAGE or state == S.LEG or _is_play()
 
 
 func _sell_hit(m: Vector2) -> bool:
@@ -5057,7 +5057,7 @@ func _sell(i: int) -> void:
 # ══════════════════════════════════════════════════════════
 #  소비 아이템 — 사서 쟁여 뒀다가 한 번 쓰고 사라지는 것
 # ──────────────────────────────────────────────────────────
-#  확정 규칙: 칸 2 · 상점 즉시 사용 가능 · 보관 가능 · 라운드 중 사용 가능 ·
+#  확정 규칙: 칸 2 · 상점 즉시 사용 가능 · 보관 가능 · 판 중 사용 가능 ·
 #  사용 확정은 누르고 뗄 때 · 확인 버튼과 비교 팝업은 만들지 않는다.
 #  칸 두 개는 옛 판매판이 쓰던 자리(자금판 오른쪽)에 선다.
 #
@@ -6081,8 +6081,8 @@ func _drop_busy() -> bool:
 func _drop_update(d: float) -> void:
 	_swap_update(d)          # 상태를 안 가린다 — 전환은 두 화면 사이에 있다
 	_hand_update(d)
-	if state == S.BLIND:
-		blind_t += d
+	if state == S.LEG:
+		leg_t += d
 		npc_clock += d
 	if state == S.STAGE:
 		stage_t += d
@@ -7243,7 +7243,7 @@ func _icon_modifier(c: Vector2, r: float, id: String, dim: float,
 #    _hand_press/_motion/_release  입력          (_unhandled_input)
 #    _hand_update(d)               매 프레임      (_drop_update 첫 줄)
 #    _hand_abort()                 손을 비운다     (_drop_roll · _drop_settle
-#                                                  · _reroll · _next_round 맨 앞)
+#                                                  · _reroll · _next_leg 맨 앞)
 #    _shop_tap(i) / _rack_tap(i)   고르기          (_hand_release 의 탭 갈래)
 #    _chute_click(z) / _pay_click() 확정           (_click 의 S.SHOP)
 #    _chute_draw()/_hold_draw()/_fly_draw()        (_table_draw · _draw_shop 말미)
@@ -7395,11 +7395,11 @@ func _g2w(y: float) -> float:
 # 안 먹는 것은 플레이어에게 규칙이 아니라 고장이다.
 #
 # 확정 규칙(docs/게임내용.md): 소비는 "상점에서 즉시 쓸 수 있고, 보관할 수
-# 있고, 라운드 중에도 쓸 수 있다". 랙 순서는 발동 순서라 판을 보면서
+# 있고, 판 중에도 쓸 수 있다". 랙 순서는 발동 순서라 판을 보면서
 # 고칠 수 있어야 뜻이 있다.
 #
-# 판 고르기(BLIND)와 제약 고르기(STAGE)도 산다. 두 화면은 _hud_draw 가 랙과
-# 소비 칸을 그대로 그리고, BLIND 는 _tip_hit 이 툴팁까지 띄운다 — 이름과 효과를
+# 판 고르기(LEG)와 제약 고르기(STAGE)도 산다. 두 화면은 _hud_draw 가 랙과
+# 소비 칸을 그대로 그리고, LEG 는 _tip_hit 이 툴팁까지 띄운다 — 이름과 효과를
 # 읽어 주고 나서 누르면 아무 일도 안 나는 자리였다. 무엇을 들고 있는지가 곧
 # "던질까 건너뛸까" 의 근거인데, 고르는 자리에서 그걸 못 고쳤다.
 #
@@ -7408,7 +7408,7 @@ func _g2w(y: float) -> float:
 func _hand_live() -> bool:
 	if state == S.SHOP:
 		return not sweep_live
-	if state == S.BLIND or state == S.STAGE:
+	if state == S.LEG or state == S.STAGE:
 		return true
 	return _is_play() and state != S.RESOLVE
 
@@ -8077,7 +8077,7 @@ func _tip_hit(m: Vector2) -> Dictionary:
 			for i in GameData.max_items():
 				if _slot_rect(i).has_point(m):
 					return {"k": "rack", "i": i}
-		S.BLIND:
+		S.LEG:
 			# 랙과 소비 칸은 판 선택 화면에도 그대로 떠 있는데(_hud_draw)
 			# 여기만 대상에서 빠져 있었다. 무엇을 들고 있는지가 곧 "던질까
 			# 건너뛸까" 의 근거인데, 정작 고르는 자리에서 그것을 못 읽었다.
@@ -8089,9 +8089,9 @@ func _tip_hit(m: Vector2) -> Dictionary:
 					return {"k": "rack", "i": i}
 			# 버튼에는 효과 한 줄만 들어간다(폭이 141px 이다). 딱지의 이름과
 			# 언제 쓰이는지는 툴팁이 맡는다.
-			for bi in GameData.blinds_per_ante():
-				var brn2: int = _ante_first() + bi
-				if brn2 < round_no or _blind_tag(brn2).is_empty():
+			for bi in GameData.legs_per_round():
+				var brn2: int = _round_first() + bi
+				if brn2 < leg_no or _leg_tag(brn2).is_empty():
 					continue
 				if _skip_rect(bi).has_point(m):
 					return {"k": "tag", "i": brn2}
@@ -8179,11 +8179,11 @@ func _tip_build(hit: Dictionary) -> void:
 		"tag":
 			# i 는 자리 번호가 아니라 **판 번호**다. 뒤 판의 딱지도 짚으므로
 			# 어느 판의 것인지가 열쇠여야 한다.
-			var bt := _blind_tag(i)
+			var bt := _leg_tag(i)
 			if bt.is_empty():
 				return
 			_tip_set_tag("딱지")
-			tip_mark = _skip_rect(GameData.blind_idx(i))
+			tip_mark = _skip_rect(GameData.leg_idx(i))
 			tip_title = String(bt.get("name", ""))
 			_tip_add(_tag_text(bt), 10, C_ACC)
 			_tip_add(_tag_when(bt), 9, C_DIM)
@@ -8481,7 +8481,7 @@ func _btn(r: Rect2, label: String, sub: String, on: bool,
 func _draw_clear() -> void:
 	_scrim()
 	draw_string(font, Vector2(0, 46), "라운드 %d  %s 클리어"
-			% [GameData.ante_of(round_no), GameData.blind_name(round_no)],
+			% [GameData.round_of(leg_no), GameData.leg_name(leg_no)],
 			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 22, C_ACC)
 
 	var y := 74.0
@@ -8497,43 +8497,43 @@ func _draw_clear() -> void:
 	_btn(Rect2(Vector2(232, 258), Vector2(176, 42)), "상점으로", "아무 키", true)
 
 
-# 앤티의 세 판을 테이블에 늘어놓는다. 지난 판은 엎어져 어둡고, 지금 판은
+# 라운드의 세 판을 테이블에 늘어놓는다. 지난 판은 엎어져 어둡고, 지금 판은
 # 서 있고, 다음 판은 누워 있다 — 제약 카드와 같은 어법이라 새로 배울 것이 없다.
-func _draw_blind() -> void:
+func _draw_leg() -> void:
 	_felt_draw()
-	var first := _ante_first()
-	var per: int = GameData.blinds_per_ante()
+	var first := _round_first()
+	var per: int = GameData.legs_per_round()
 	draw_string(font, Vector2(0.0, TBL.fy + 3.0),
-			"라운드 %d / %d" % [GameData.ante_of(round_no), GameData.antes_n()],
+			"라운드 %d / %d" % [GameData.round_of(leg_no), GameData.rounds_n()],
 			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 10,
 			Color(C_TABLE.lightened(0.34), 0.75))
 	# 선 카드만 딜러 앞이다 — 제약 카드와 같은 규칙
-	var cur: int = clampi(GameData.blind_idx(round_no), 0, per - 1)
+	var cur: int = clampi(GameData.leg_idx(leg_no), 0, per - 1)
 	for i in per:
 		if i != cur:
-			_blind_card(i, first + i)
+			_leg_card(i, first + i)
 	_cover_draw()
-	_blind_card(cur, first + cur)
+	_leg_card(cur, first + cur)
 
-	_btn(_blind_go(), "던진다", "목표 %d" % GameData.target_of(round_no), true)
+	_btn(_leg_go(), "던진다", "목표 %d" % GameData.target_of(leg_no), true)
 	# 판마다 건너뛰기 자리를 깐다. **뒤 판의 보상도 같이 보인다** —
 	# 지금 판을 건너뛸지는 뒤에 무엇이 기다리는지를 봐야 정해진다.
 	# 지난 판은 안 그린다(이미 지나갔다), 지금 판만 누를 수 있다.
 	for i in per:
 		var srn: int = first + i
-		if srn < round_no:
+		if srn < leg_no:
 			# 지나간 판도 자리를 지킨다. 건너뛴 것은 그 값을, 던진 것은
 			# 던졌다는 것을 남긴다 — 자리가 비면 무엇을 골랐는지가 화면에서
 			# 없어지고, 그러면 남은 판을 고르는 근거 하나가 사라진다.
 			_skip_past(_skip_rect(i), srn)
 			continue
-		if srn == round_no:
+		if srn == leg_no:
 			# 이름이 아니라 **효과**를 적는다. "여벌 다트" 는 이름이고,
 			# 건너뛸지 말지를 정하는 데 필요한 것은 "다트 +1개" 다. 이름은
 			# 툴팁에 있다 — 고르는 자리에 필요한 것과 알아 두면 좋은 것이 다르다.
-			_skip_plate(_blind_skip(), blind_tag, true)
+			_skip_plate(_leg_skip(), leg_tag, true)
 			continue
-		var pt := _blind_tag(srn)
+		var pt := _leg_tag(srn)
 		if not pt.is_empty():
 			_skip_plate(_skip_rect(i), pt, false)
 	# 쌓아 둔 딱지 — 언제 쓰이는지는 이름이 말한다
@@ -8550,13 +8550,13 @@ func _draw_blind() -> void:
 
 
 # 판 한 장. 지금 판이면 서고 나머지는 눕는다.
-func _blind_card(i: int, rn: int) -> void:
-	var r := _row_rect(i, GameData.blinds_per_ante())
+func _leg_card(i: int, rn: int) -> void:
+	var r := _row_rect(i, GameData.legs_per_round())
 	var sz: Vector2 = r.size
-	var done: bool = rn < round_no
-	var up: float = 1.0 if rn == round_no else 0.0
+	var done: bool = rn < leg_no
+	var up: float = 1.0 if rn == leg_no else 0.0
 	# 미끄러져 들어온다 — 제약 카드와 같은 딜 어법
-	var k: float = clampf((blind_t - float(i) * float(DEAL.stag))
+	var k: float = clampf((leg_t - float(i) * float(DEAL.stag))
 			/ float(DEAL.dur), 0.0, 1.0)
 	var e: float = 1.0 - pow(1.0 - k, 3.0)
 	var px: float = lerpf(VIEW.x * 0.5 - sz.x * 0.5, r.position.x, e)
@@ -8574,7 +8574,7 @@ func _blind_card(i: int, rn: int) -> void:
 	draw_colored_polygon(q, body)
 	draw_colored_polygon(PackedVector2Array([q[0], q[1],
 			q[1] + Vector2(0.0, 2.0), q[0] + Vector2(0.0, 2.0)]),
-			C_ACC if rn == round_no else C_MULT.darkened(0.4))
+			C_ACC if rn == leg_no else C_MULT.darkened(0.4))
 
 	var ax: Vector2 = ((q[1] - q[0]) + (q[2] - q[3])) * 0.5 / sz.x
 	var ay: Vector2 = ((q[3] - q[0]) + (q[2] - q[1])) * 0.5 / CARD.h
@@ -8582,9 +8582,9 @@ func _blind_card(i: int, rn: int) -> void:
 	draw_set_transform_matrix(Transform2D(ax, ay,
 			mid - ax * (sz.x * 0.5) - ay * (CARD.h * 0.5) + shake_off))
 	var ink: Color = C_DIM.darkened(0.3) if done else C_TXT
-	draw_string(font, Vector2(0.0, 30.0), GameData.blind_name(rn),
+	draw_string(font, Vector2(0.0, 30.0), GameData.leg_name(rn),
 			HORIZONTAL_ALIGNMENT_CENTER, sz.x, 13,
-			ink if rn != round_no else C_ACC)
+			ink if rn != leg_no else C_ACC)
 	if done:
 		draw_string(font, Vector2(0.0, 56.0), "넘김",
 				HORIZONTAL_ALIGNMENT_CENTER, sz.x, 11, C_DIM.darkened(0.3))
@@ -8609,12 +8609,12 @@ func _draw_stage() -> void:
 	_felt_draw()
 	# 런 바가 들고 있던 것과 카드에서 뺀 것이 여기서 만난다.
 	# 진행자 라인(y119) 바로 밑 — 펠트에 규격을 인쇄하는 자리다.
-	# target_of(round_no) 는 _open_stage 가 base 를 만든 그 식이다(출처 하나).
+	# target_of(leg_no) 는 _open_stage 가 base 를 만든 그 식이다(출처 하나).
 	# 카드보다 **먼저** 그린다. 미끄러져 오는 카드가 글자를 덮어야 순서가 맞다.
 	draw_string(font, Vector2(0.0, 131.0),
 			"라운드 %d / %d   ·   %s   ·   목표 %d"
-			% [GameData.ante_of(round_no), GameData.antes_n(),
-					GameData.blind_name(round_no), GameData.target_of(round_no)],
+			% [GameData.round_of(leg_no), GameData.rounds_n(),
+					GameData.leg_name(leg_no), GameData.target_of(leg_no)],
 			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 10,
 			Color(C_TABLE.lightened(0.34), 0.75))
 	# 선 카드가 맨 위에 온다. 커지면서 이웃을 밀고 들어가는데 그리는 순서가
@@ -8767,7 +8767,7 @@ func _draw_shop() -> void:
 		draw_gold(rr.position.x + rr.size.x * 0.5, rr.position.y + 35.0,
 				str(reroll_cost), 10, C_GOLD if gold >= reroll_cost else C_DIM.darkened(0.3))
 	_shelf_draw()
-	_btn(_next_rect(), "다음 라운드 →", "", true)
+	_btn(_next_rect(), "다음 판 →", "", true)
 	_hold_draw()
 	_fly_draw()
 
@@ -8796,12 +8796,12 @@ func _draw_over() -> void:
 	_scrim()
 	if won:
 		draw_string(font, Vector2(0, 150), "완주!", HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 34, C_ACC)
-		draw_string(font, Vector2(0, 186), "%d개 라운드를 모두 넘겼다" % GameData.rounds_n(),
+		draw_string(font, Vector2(0, 186), "%d개 판을 모두 넘겼다" % GameData.legs_n(),
 				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 13, C_TXT)
 	else:
 		draw_string(font, Vector2(0, 150), "실패", HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 34, C_MULT)
 		draw_string(font, Vector2(0, 186), "라운드 %d %s — %d / %d"
-				% [GameData.ante_of(round_no), GameData.blind_name(round_no), total, target],
+				% [GameData.round_of(leg_no), GameData.leg_name(leg_no), total, target],
 				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 13, C_TXT)
 
 
@@ -8840,8 +8840,8 @@ func _toggle_fullscreen() -> void:
 # 에디터 내장 실행처럼 못 바꾸는 자리가 있어서, 원한 값이 아니라 **된 값**을
 # 저장해야 다음 실행에서 안 어긋난다.
 func _load_settings() -> void:
-	# 리그도 저장에서 되살린다. 모르는 id 면 stake_row 가 첫 단으로 떨군다.
-	GameData.stake = String(Save.get_set("stake", ""))
+	# 리그도 저장에서 되살린다. 모르는 id 면 league_row 가 첫 단으로 떨군다.
+	GameData.league = String(Save.get_set("league", ""))
 	GameData.pack = String(Save.get_set("pack", ""))
 	vol = clampf(float(Save.get_set("vol", 1.0)), 0.0, 1.0)
 	_apply_vol()
@@ -10092,7 +10092,7 @@ func _pack_arrow(right: bool) -> Rect2:
 	return Rect2(Vector2(574.0 if right else 40.0, 96.0), Vector2(26.0, 44.0))
 
 
-func _stake_rect(i: int) -> Rect2:
+func _league_rect(i: int) -> Rect2:
 	return Rect2(Vector2(167.0 + float(i) * 39.0, 198.0), Vector2(33.0, 22.0))
 
 
@@ -10113,15 +10113,15 @@ func _pack_open(i: int) -> bool:
 
 
 # 리그은 팩마다 따로 뚫린다 — 첫 단은 늘 열려 있고 나머지는 앞 단 완주다.
-func _stake_open(i: int) -> bool:
-	var rows := GameData.stakes()
+func _league_open(i: int) -> bool:
+	var rows := GameData.leagues()
 	if i <= 0 or i >= rows.size():
 		return i == 0
-	return Save.unlocked(GameData.stake_key(String(rows[i].get("id", ""))))
+	return Save.unlocked(GameData.league_key(String(rows[i].get("id", ""))))
 
 
-func _stake_won(i: int) -> bool:
-	var rows := GameData.stakes()
+func _league_won(i: int) -> bool:
+	var rows := GameData.leagues()
 	if i < 0 or i >= rows.size():
 		return false
 	return Save.unlocked(GameData.win_key(String(rows[i].get("id", ""))))
@@ -10137,12 +10137,12 @@ func _pack_view(i: int) -> void:
 	GameData.pack = String(rows[newrun_pip].get("id", ""))
 	Save.set_set("pack", GameData.pack)
 	var top := 0
-	for k in GameData.stakes().size():
-		if _stake_open(k):
+	for k in GameData.leagues().size():
+		if _league_open(k):
 			top = k
-	if GameData.stake_idx() > top:
-		GameData.stake = String(GameData.stakes()[top].get("id", ""))
-		Save.set_set("stake", GameData.stake)
+	if GameData.league_idx() > top:
+		GameData.league = String(GameData.leagues()[top].get("id", ""))
+		Save.set_set("league", GameData.league)
 	Save.flush()
 
 
@@ -10201,13 +10201,13 @@ func _draw_newrun() -> void:
 				C_TXT if open else C_DIM)
 	# 이 팩으로 넘긴 가장 높은 리그 — 한 번도 못 넘겼으면 안 그린다
 	var best := -1
-	for k in GameData.stakes().size():
-		if _stake_won(k):
+	for k in GameData.leagues().size():
+		if _league_won(k):
 			best = k
 	# 옛 자리(196,60)는 통 무대 한가운데였다 — 통 위에 색 조각이 떠 있었다.
 	if best >= 0:
 		draw_rect(Rect2(536.0, 62.0, 16.0, 11.0),
-				Color(String(GameData.stakes()[best].get("color", "cfc9bd"))))
+				Color(String(GameData.leagues()[best].get("color", "cfc9bd"))))
 	if many:
 		var pw: float = float(packs.size()) * 4.0 + float(packs.size() - 1) * 6.0
 		for k in packs.size():
@@ -10215,14 +10215,14 @@ func _draw_newrun() -> void:
 					C_TXT if k == newrun_pip else C_PANEL.lightened(0.06))
 
 	# 리그 사다리 — 왼쪽이 약한 단이다. 가로로 눕혔으니 읽는 방향을 따른다.
-	var st := GameData.stakes()
-	var cur := GameData.stake_row()
+	var st := GameData.leagues()
+	var cur := GameData.league_row()
 	for i in st.size():
-		var r := _stake_rect(i)
+		var r := _league_rect(i)
 		var col := Color(String(st[i].get("color", "cfc9bd")))
-		if _stake_open(i):
+		if _league_open(i):
 			draw_rect(r, col)
-			if _stake_won(i):
+			if _league_won(i):
 				draw_rect(Rect2(r.position.x, r.end.y, r.size.x, 2.0), C_GOLD)
 		else:
 			# 못 여는 단은 좁은 토막으로 — 자리는 지키되 값은 안 보인다
@@ -10237,9 +10237,9 @@ func _draw_newrun() -> void:
 			Color(String(cur.get("color", "cfc9bd"))))
 	draw_rect(Rect2(Vector2(160.0, 242.0), Vector2(320.0, 61.0)),
 			C_PANEL.darkened(0.2))
-	var sl := _stake_lines()
+	var sl := _league_lines()
 	for li in sl.size():
-		draw_string(font, _stake_line_at(li),
+		draw_string(font, _league_line_at(li),
 				sl[li], HORIZONTAL_ALIGNMENT_LEFT, 150.0, 10, C_TXT)
 
 	_btn(_newrun_go(), "시작", "스페이스", open)
@@ -10293,7 +10293,7 @@ func _pack_lines(row: Dictionary) -> Array:
 		out.append("%s 다트로 시작" % GameData.dart_name(did))
 	# 쥐여 주는 것들 — 이름으로 낸다. id 는 표의 말이지 사람의 말이 아니다.
 	for gk in [["grant_item", "items"], ["grant_mod", "mods"],
-			["grant_voucher", "vouchers"], ["grant_cons", "cons"]]:
+			["grant_fixture", "fixtures"], ["grant_cons", "cons"]]:
 		for gid in String(row.get(gk[0], "")).split(";", false):
 			out.append("%s 들고 시작" % GameData.row_name(gk[1], String(gid)))
 	if out.is_empty():
@@ -10322,33 +10322,33 @@ const STAKE_ROWS := 4
 
 # 리그 설명 한 줄이 앉는 자리. 그리기와 검사가 같은 식을 쓴다 — 글자
 # 겹침은 눈으로만 보이는 사고라, 자리를 함수로 내놔야 프로브가 잴 수 있다.
-func _stake_line_at(li: int) -> Vector2:
+func _league_line_at(li: int) -> Vector2:
 	return Vector2(172.0 + (0.0 if li < STAKE_ROWS else 158.0),
 			258.0 + float(li % STAKE_ROWS) * 13.0)
 
 
-func _stake_lines() -> Array:
+func _league_lines() -> Array:
 	var out := []
-	var r := GameData.stake_row()
+	var r := GameData.league_row()
 	if String(r.get("curve", "base")) != "base":
-		# 열 이름(curve_a)은 표의 말이지 사람의 말이 아니다. 곱이 라운드마다
-		# 다르므로 첫 라운드와 마지막 라운드의 값을 범위로 적는다.
-		var lo := GameData.stake_mul(1)
-		var hi := GameData.stake_mul(GameData.rounds_n())
+		# 열 이름(curve_a)은 표의 말이지 사람의 말이 아니다. 곱이 판마다
+		# 다르므로 첫 판과 마지막 판의 값을 범위로 적는다.
+		var lo := GameData.league_mul(1)
+		var hi := GameData.league_mul(GameData.legs_n())
 		out.append("목표 ×%.2f~%.2f" % [lo, hi] if hi > lo else "목표 ×%.2f" % hi)
 	if String(r.get("reward_small", "")) != "" \
-			and int(GameData.stake_v("reward_small", 3.0)) < 3:
-		out.append("작은 판 보상 %d" % int(GameData.stake_v("reward_small", 3.0)))
-	if int(GameData.stake_v("seal_items", 0.0)) > 0:
-		out.append("봉인 %d" % int(GameData.stake_v("seal_items", 0.0)))
-	if int(GameData.stake_v("darts_add", 0.0)) != 0:
-		out.append("다트 %+d" % int(GameData.stake_v("darts_add", 0.0)))
-	if GameData.stake_v("shop_cost_mul", 1.0) != 1.0:
-		out.append("매대 ×%.2f" % GameData.stake_v("shop_cost_mul", 1.0))
-	if int(GameData.stake_v("perish", 0.0)) > 0:
-		out.append("삭음 %d판" % int(GameData.stake_v("perish", 0.0)))
-	if int(GameData.stake_v("rent", 0.0)) > 0:
-		out.append("유지비 %d" % int(GameData.stake_v("rent", 0.0)))
+			and int(GameData.league_v("reward_small", 3.0)) < 3:
+		out.append("작은 판 보상 %d" % int(GameData.league_v("reward_small", 3.0)))
+	if int(GameData.league_v("seal_items", 0.0)) > 0:
+		out.append("봉인 %d" % int(GameData.league_v("seal_items", 0.0)))
+	if int(GameData.league_v("darts_add", 0.0)) != 0:
+		out.append("다트 %+d" % int(GameData.league_v("darts_add", 0.0)))
+	if GameData.league_v("shop_cost_mul", 1.0) != 1.0:
+		out.append("매대 ×%.2f" % GameData.league_v("shop_cost_mul", 1.0))
+	if int(GameData.league_v("perish", 0.0)) > 0:
+		out.append("삭음 %d판" % int(GameData.league_v("perish", 0.0)))
+	if int(GameData.league_v("rent", 0.0)) > 0:
+		out.append("유지비 %d" % int(GameData.league_v("rent", 0.0)))
 	if out.is_empty():
 		out.append("기준")
 	return out

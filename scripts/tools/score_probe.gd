@@ -76,7 +76,7 @@ func _arm() -> void:
 	for k in ARM:
 		var it: Dictionary = items[(cursor + k) % items.size()].duplicate()
 		it.gs = 0
-		it.bought = g.round_no
+		it.bought = g.leg_no
 		rack.append(it)
 	cursor = (cursor + ARM) % items.size()
 	g.owned = rack
@@ -120,14 +120,14 @@ func _snap() -> void:
 					_: kinds_ok = false
 
 	# 봉인은 발동을 막는다 — 게임의 fired 루프가 이 인덱스를 건너뛴다.
-	# 「둔화」가 걸린 라운드는 랙을 갈아 끼운 뒤에도 다시 선다.
+	# 「둔화」가 걸린 판은 랙을 갈아 끼운 뒤에도 다시 선다.
 	var seal := int(g.sealed)
 	var want := {}
 	for i in g.owned.size():
 		var it: Dictionary = g.owned[i]
 		played[String(it.id)] = int(played[String(it.id)]) + 1
 		if i == seal or String(it.k) == "save":
-			continue      # 목숨은 정산이 아니라 라운드 실패가 읽는다
+			continue      # 목숨은 정산이 아니라 판 실패가 읽는다
 		if GameData.check(String(it.c), ctx):
 			want[i] = true
 			fired[String(it.id)] = int(fired[String(it.id)]) + 1
@@ -204,7 +204,7 @@ func _per_check() -> void:
 		["여벌 팩(7발) · 단벌",          7, 6, v],
 	]
 	for c in cases:
-		var ctx := {"round_base": c[1], "round_darts": c[2],
+		var ctx := {"leg_base": c[1], "leg_darts": c[2],
 				"sector": 5, "mult": 1, "miss": false}
 		var got: int = GameData.item_amt(j079, ctx)
 		if got != int(c[3]):

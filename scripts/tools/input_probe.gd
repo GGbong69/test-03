@@ -16,7 +16,7 @@ const Save = preload("res://scripts/save.gd")
 #    안 먹는 것은 플레이어에게 "고장" 이지 "규칙" 이 아니다.
 #
 #  무엇이 규칙인가 (docs/게임내용.md)
-#    소비 — "상점에서 즉시 쓸 수 있고, 보관할 수 있고, **라운드 중에도**
+#    소비 — "상점에서 즉시 쓸 수 있고, 보관할 수 있고, **판 중에도**
 #           쓸 수 있다. 사용 확정은 누르고 뗄 때다."
 #    랙  — "드래그는 두 곳에서 쓴다 — 상점에서 매물을 계산대로 밀 때,
 #           랙에서 스티커 순서를 바꾸거나 팔 때."
@@ -37,10 +37,10 @@ var g = null
 var busy := false
 var fails := 0
 
-# 라운드 중으로 세는 화면들. RESOLVE 는 뺀다 — 정산 중에는 손이 안 산다.
+# 판 중으로 세는 화면들. RESOLVE 는 뺀다 — 정산 중에는 손이 안 산다.
 const PLAY := ["PICK", "AIM_V", "AIM_H", "CONFIRM", "FLY"]
-# 고르는 화면들. 랙과 소비 칸이 여기에도 그려지고, BLIND 는 툴팁까지 띄운다.
-const PICKING := ["BLIND", "STAGE"]
+# 고르는 화면들. 랙과 소비 칸이 여기에도 그려지고, LEG 는 툴팁까지 띄운다.
+const PICKING := ["LEG", "STAGE"]
 
 
 func _say(ok: bool, name: String, detail := "") -> void:
@@ -156,14 +156,14 @@ func _run() -> void:
 	g._new_run()
 	print("\n── 조작 검사 ── 소비 아이템 사용 · 랙 순서 변경\n")
 
-	print("  [소비 아이템]  규칙: 상점 + 라운드 중")
+	print("  [소비 아이템]  규칙: 상점 + 판 중")
 	var ok_shop := _cons_works("SHOP")
 	_say(ok_shop, "상점에서 쓸 수 있다")
 	var dead := []
 	for s in PLAY:
 		if not _cons_works(s):
 			dead.append(s)
-	_say(dead.is_empty(), "라운드 중에 쓸 수 있다",
+	_say(dead.is_empty(), "판 중에 쓸 수 있다",
 			"안 먹는 화면: %s" % ("없음" if dead.is_empty() else ", ".join(dead)))
 	var pdead := []
 	for s in PICKING:
@@ -179,7 +179,7 @@ func _run() -> void:
 	for s in PLAY:
 		if not _rack_moves(s):
 			rdead.append(s)
-	_say(rdead.is_empty(), "라운드 중에 순서를 바꾼다",
+	_say(rdead.is_empty(), "판 중에 순서를 바꾼다",
 			"안 먹는 화면: %s" % ("없음" if rdead.is_empty() else ", ".join(rdead)))
 	var rpdead := []
 	for s in PICKING:

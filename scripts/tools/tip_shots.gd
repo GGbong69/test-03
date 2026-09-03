@@ -47,12 +47,12 @@ func _shoot(name: String, hit: Dictionary) -> void:
 func _run() -> void:
 	for i in 8:
 		g._process(1.0 / 60.0)
-	GameData.voucher_clear()
+	GameData.fixture_clear()
 	g._new_run()
 	g._swap_skip()
 
 	# 매대 — 한 자리에 네 갈래가 섞여 뜬다
-	g.round_no = 1
+	g.leg_no = 1
 	g.gold = 60
 	g._open_shop()
 	g._swap_skip()
@@ -61,13 +61,13 @@ func _run() -> void:
 		await _shoot("tip_stock%d.png" % k, {"k": "stock", "i": k})
 
 	# 보스 제약
-	g.round_no = GameData.blinds_per_ante()
+	g.leg_no = GameData.legs_per_round()
 	g._open_stage()
 	g.stage_t = 9.0
 	await _shoot("tip_stage.png", {"k": "stage", "i": 1})
 
 	# 든 소비 아이템 — 산 뒤로는 아무 데서도 효과를 안 말하던 자리다
-	g.round_no = 1
+	g.leg_no = 1
 	g._open_shop()
 	g._swap_skip()
 	g.cons.clear()
@@ -77,11 +77,11 @@ func _run() -> void:
 	await _shoot("tip_held.png", {"k": "held", "i": 0})
 
 	# 건너뛰기 딱지 — 버튼에는 효과 한 줄, 툴팁에 이름과 때
-	g.round_no = 1
-	g._open_blind()
+	g.leg_no = 1
+	g._open_leg()
 	g._swap_skip()
-	if g.blind_tag.is_empty():
-		g.blind_tag = GameData.tags()[0]
+	if g.leg_tag.is_empty():
+		g.leg_tag = GameData.tags()[0]
 	await _shoot("tip_tag.png", {"k": "tag", "i": 0})
 
 	# 쌓아 둔 딱지
@@ -92,8 +92,8 @@ func _run() -> void:
 	await _shoot("tip_pend.png", {"k": "pend", "i": 0})
 
 	# 탄창 자루
-	g.round_no = 1
-	g._start_round()
+	g.leg_no = 1
+	g._start_leg()
 	g._swap_skip()
 	await _shoot("tip_mag.png", {"k": "mag", "i": 0})
 

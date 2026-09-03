@@ -64,7 +64,7 @@ func _process(_d: float) -> bool:
 	if done:
 		quit(0)
 		return true
-	# 오토플레이로 라운드까지 굴린 뒤 상태를 직접 세워서 각 화면을 시험한다.
+	# 오토플레이로 판까지 굴린 뒤 상태를 직접 세워서 각 화면을 시험한다.
 	g.set_process(false)
 	g._process(1.0 / 60.0)
 	if frames < 30:
@@ -74,7 +74,7 @@ func _process(_d: float) -> bool:
 	g._autoplay = false
 	var states := {
 		"SHOP": g.S.SHOP, "PICK": g.S.PICK, "AIM_V": g.S.AIM_V,
-		"BLIND": g.S.BLIND, "STAGE": g.S.STAGE, "CLEAR": g.S.CLEAR,
+		"LEG": g.S.LEG, "STAGE": g.S.STAGE, "CLEAR": g.S.CLEAR,
 	}
 	for k in states:
 		g.state = states[k]

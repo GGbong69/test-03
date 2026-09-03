@@ -12,7 +12,7 @@ const GameData = preload("res://scripts/data.gd")
 #
 #  성장(gs)·이중 효과(k2)·숫자 지정(sec)·목숨(save)·파괴(boom/rdec)·
 #  다트 증감(dadd)·즉시 골드(risk50)·영역 승급(side) 을 쥔 채로
-#  오토플레이를 여러 라운드 돌리고, 스크립트 오류 없이 상태가 앞으로
+#  오토플레이를 여러 판 돌리고, 스크립트 오류 없이 상태가 앞으로
 #  가는지와 성장값이 실제로 움직였는지를 본다.
 # ══════════════════════════════════════════════════════════
 
@@ -65,13 +65,13 @@ func _process(_d: float) -> bool:
 		_arm()
 	if frames == 3000:
 		_ok("성장값이 움직인다", gs_seen, "gs_seen %s" % gs_seen)
-		_ok("상태가 앞으로 간다", g.round_no >= 1 and runs >= 1,
-				"라운드 %d · 런 %d" % [g.round_no, runs])
+		_ok("상태가 앞으로 간다", g.leg_no >= 1 and runs >= 1,
+				"판 %d · 런 %d" % [g.leg_no, runs])
 		_ok("골드가 셈에 남아 있다", g.gold >= 0, "골드 %d" % g.gold)
 		var amt_ok := true
 		# item_amt 가 새 모양 전부에서 답을 내는지 — 대표 문맥 하나로 훑는다
 		var ctx := {"streak": 1, "darts_left": 3, "items_n": 4, "gold": 20,
-				"mag_hvy": 2, "round_darts": 4, "low": 5, "zonehist": 2,
+				"mag_hvy": 2, "leg_darts": 4, "low": 5, "zonehist": 2,
 				"empty_n": 2, "rackval_others": 6, "rand01": 0.5,
 				"sector": 4, "mult": 2, "miss": false}
 		for it in GameData.items():

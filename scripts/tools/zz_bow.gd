@@ -18,7 +18,7 @@ func row(name: String, first: float, last: float, bow: float) -> void:
 	print(s)
 
 func _initialize() -> void:
-	print("배부름 계수 k(a) = (a-1)(8-a)/12.25  — bow 가 각 앤티에 실리는 무게")
+	print("배부름 계수 k(a) = (a-1)(8-a)/12.25  — bow 가 각 라운드에 실리는 무게")
 	var s1 := "  k(a)     "
 	var s2 := "  t(a)     "
 	for a in range(1,9):
@@ -27,7 +27,7 @@ func _initialize() -> void:
 	print(s1); print(s2)
 	print("\n  → k 는 4.5 를 축으로 좌우대칭이다 (k2=k7, k3=k6, k4=k5).")
 	print("  → 그러나 t 는 단조증가다. 두 벡터가 **일차독립**이므로")
-	print("     (Δlog last, Δbow) 두 손잡이로 임의의 두 앤티를 반대로 움직일 수 있다.\n")
+	print("     (Δlog last, Δbow) 두 손잡이로 임의의 두 라운드를 반대로 움직일 수 있다.\n")
 
 	print("%-28s %8s %8s %8s %8s %8s %8s %8s %8s" % ["", "A1","A2","A3","A4","A5","A6","A7","A8"])
 	row("현재 25/4000/+0.10", 25.0, 4000.0, 0.10)

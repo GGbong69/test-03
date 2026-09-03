@@ -3,7 +3,7 @@ extends SceneTree
 const GameData = preload("res://scripts/data.gd")
 
 # ══════════════════════════════════════════════════════════
-#  정산 큐 · 라운드 종료 회귀 검사
+#  정산 큐 · 판 종료 회귀 검사
 #
 #  실행:  godot --path . --headless --script scripts/tools/settle_probe.gd
 #  종료 코드 = 실패 개수
@@ -14,10 +14,10 @@ const GameData = preload("res://scripts/data.gd")
 #       (표는 그 카드를 87장 중 4위로 적고 있었다)
 #    ② owned 에서 칩을 뺄 때 sealed 를 안 밀어 엉뚱한 칩이 봉인으로 읽혔다
 #       (헬퍼가 아니라 호출부 — 마모·목숨 — 를 밟는다. 봉인된 목숨도 본다)
-#    ③ 마지막 라운드에서 목숨이 터지면 완주 검사를 건너뛰어
-#       빈 상점과 유령 9라운드가 열렸다
+#    ③ 마지막 판에서 목숨이 터지면 완주 검사를 건너뛰어
+#       빈 상점과 유령 9판이 열렸다
 #    ④ 점수판이 애니메이션 값을 버려 45 를 "44 / 45" 로 적었다
-#    ⑤ 상점이 다음 라운드 행의 폭을 읽어 7라운드 뒤 매대가 통째로 비었다
+#    ⑤ 상점이 다음 판 행의 폭을 읽어 7판 뒤 매대가 통째로 비었다
 #    ⑥ 제약 카드는 테이블에 눕는다. 히트 칸이 **쉬는 모습**(누운 카드)이어야
 #       아직 안 선 카드의 허공을 눌러도 안 잡힌다
 # ══════════════════════════════════════════════════════════
@@ -58,63 +58,63 @@ func _initialize() -> void:
 			"cur_mult %d" % g.cur_mult)
 
 	# ② 봉인이 칩을 따라간다 — 헬퍼를 직접 부르면 산술만 재고 끝난다.
-	# 결함이 있던 자리는 호출부(_round_end_wear · _finish_round)이므로
-	# 거기를 실제로 밟는다. rdec 이 0 에 닿아 앞자리가 부서지는 라운드다.
+	# 결함이 있던 자리는 호출부(_leg_end_wear · _finish_leg)이므로
+	# 거기를 실제로 밟는다. rdec 이 0 에 닿아 앞자리가 부서지는 판다.
 	var dec: Dictionary = _item("j040")     # 소모성 증폭기 — rdec 4, 값 20
 	dec.gs = 4                              # 다음 걸음에 20 − 4*5 ≤ 0 → 파괴
 	g.owned = [dec, _item("dbl"), _item("bnd")]
 	g._panel_reset()
 	g.sealed = 2
 	var keep: String = String(g.owned[2].id)
-	g._round_end_wear()
+	g._leg_end_wear()
 	var ok2: bool = g.owned.size() == 2 and g.sealed == 1 \
 			and String(g.owned[g.sealed].id) == keep
-	_say(ok2, "라운드 마모가 봉인을 민다", "칩 %d장 · sealed %d → %s"
+	_say(ok2, "판 마모가 봉인을 민다", "칩 %d장 · sealed %d → %s"
 			% [g.owned.size(), g.sealed,
 			String(g.owned[g.sealed].id) if g.sealed >= 0 else "-"])
 
 	# 봉인된 칩은 목숨을 안 쓴다 — 봉인은 발동을 막는 것이고 목숨도 발동이다
-	g.round_no = 3
+	g.leg_no = 3
 	g.target = 1000
 	g.total = 900
 	g.owned = [_item("j099")]               # 비상 골격
 	g._panel_reset()
 	g.sealed = 0
 	g.won = false
-	g._finish_round()
+	g._finish_leg()
 	_say(g.state == g.S.OVER and not g.won, "봉인된 목숨은 안 터진다",
 			"state %d · 칩 %d장" % [g.state, g.owned.size()])
 
 	# 목숨이 터지면 봉인도 같이 정리된다 — 봉인이 뒷자리일 때
-	g.round_no = 3
+	g.leg_no = 3
 	g.total = 900
 	g.owned = [_item("j099"), _item("bnd")]
 	g._panel_reset()
 	g.sealed = 1
-	g._finish_round()
+	g._finish_leg()
 	_say(g.sealed == 0 and g.owned.size() == 1, "목숨이 터져도 봉인이 칩을 따라간다",
 			"sealed %d · 칩 %d장" % [g.sealed, g.owned.size()])
 
-	# ③ 마지막 라운드에서 목숨이 터져도 완주다
+	# ③ 마지막 판에서 목숨이 터져도 완주다
 	g.sealed = -1
-	g.round_no = GameData.rounds_n()
+	g.leg_no = GameData.legs_n()
 	g.target = 1000
 	g.total = 900
 	g.owned = [_item("j099")]          # 비상 골격 — 목표의 v% 이상이면 실패를 무른다
 	g._panel_reset()
 	g.won = false
-	g._finish_round()
-	_say(g.state == g.S.OVER and g.won, "마지막 라운드 목숨 = 완주",
-			"state %d · won %s · round %d" % [g.state, g.won, g.round_no])
+	g._finish_leg()
+	_say(g.state == g.S.OVER and g.won, "마지막 판 목숨 = 완주",
+			"state %d · won %s · round %d" % [g.state, g.won, g.leg_no])
 
 	# ③-b 마지막이 아니면 정산으로 간다
-	g.round_no = 3
+	g.leg_no = 3
 	g.target = 1000
 	g.total = 900
 	g.owned = [_item("j099")]
 	g._panel_reset()
-	g._finish_round()
-	_say(g.state == g.S.CLEAR, "그 앞 라운드는 정산으로", "state %d" % g.state)
+	g._finish_leg()
+	_say(g.state == g.S.CLEAR, "그 앞 판은 정산으로", "state %d" % g.state)
 
 	# ④ 점수판은 목표에 닿으면 목표를 적는다. lerp 는 밑에서 수렴하므로
 	#    버리면 45 가 영원히 44 로 보인다 — 반올림하고 반 점 안에서 붙인다.
@@ -127,21 +127,21 @@ func _initialize() -> void:
 			"점수판이 목표에 닿으면 목표를 적는다",
 			"shown %.4f → %d" % [g.shown, int(round(g.shown))])
 
-	# ⑤ 상점 폭은 그 라운드 **뒤**의 것이다 — 마지막 앞 라운드에도 매대가 선다
-	var last: int = GameData.rounds_n()
-	g.round_no = last - 1
+	# ⑤ 상점 폭은 그 판 **뒤**의 것이다 — 마지막 앞 판에도 매대가 선다
+	var last: int = GameData.legs_n()
+	g.leg_no = last - 1
 	g.gold = 99
 	g.owned = []
 	g.mods_own = []
 	g._panel_reset()
 	g._roll_stock()
-	_say(g.stock.size() == 4, "마지막 앞 라운드에도 매대가 넷",
-			"R%d 뒤 매물 %d칸" % [g.round_no, g.stock.size()])
+	_say(g.stock.size() == 4, "마지막 앞 판에도 매대가 넷",
+			"R%d 뒤 매물 %d칸" % [g.leg_no, g.stock.size()])
 
 	# ⑥ 누운 제약 카드 — 칸이 펠트 안이고 서로 안 겹치며, 눌러서 골라진다
 	g.sealed = -1
 	g._new_run()
-	g.round_no = 3                      # 보스 판이라 제약 셋이 깔린다
+	g.leg_no = 3                      # 보스 판이라 제약 셋이 깔린다
 	g._open_stage()
 	var inside := true
 	for a in g.stage_pick.size():

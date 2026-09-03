@@ -9,14 +9,14 @@ const GameData = preload("res://scripts/data.gd")
 #             -s scripts/tools/axis_probe.gd -- autoplay runs=24
 #
 #  curve_probe 는 "어디서 죽는가" 를 잰다. 이것은 "무엇을 쥐고 죽는가" 를
-#  잰다. 라운드가 넘어갈 때마다 랙·트랙·개조·자루·설비를 통째로 찍어 두고,
+#  잰다. 판이 넘어갈 때마다 랙·트랙·개조·자루·설비를 통째로 찍어 두고,
 #  판마다 실제로 난 점수와 같이 낸다.
 #
 #  내는 것
 #    · 판별 평균: 목표 · 실제 낸 점수 · 쓴 다트 · 여유배율
 #    · 판별 평균 보유: 스티커 수 · 트랙 레벨 합 · 개조 수 · 설비 수 · 비표준 자루
 #    · 각 축이 상한(스티커 5칸 · 트랙 40레벨 · 개조 8 · 설비 7)에 닿는 판
-#    · 라운드 점수를 축별로 쪼갠 몫 — 판 · 트랙 · 스티커
+#    · 판 점수를 축별로 쪼갠 몫 — 판 · 트랙 · 스티커
 # ══════════════════════════════════════════════════════════
 
 var g: Node = null
@@ -28,7 +28,7 @@ const FRAME_CAP := 3000000
 var last_round := 1
 # 판 번호 → 누적 통계
 var st := {}
-# 이번 라운드에 축별로 얼마씩 실렸는가 (정산 큐를 뜯어 센다)
+# 이번 판에 축별로 얼마씩 실렸는가 (정산 큐를 뜯어 센다)
 var acc := {}
 
 
@@ -38,11 +38,11 @@ func _initialize() -> void:
 	seed(20260826)
 	for a in OS.get_cmdline_user_args():
 		var t := String(a)
-		if String(GameData.stake_row(t).get("id", "")) == t:
-			GameData.stake = t
+		if String(GameData.league_row(t).get("id", "")) == t:
+			GameData.league = t
 		elif t.begins_with("runs="):
 			RUNS = maxi(1, int(t.substr(5)))
-	print("리그: %s · 런 %d회" % [GameData.stake if GameData.stake != "" else "흰색(기본)", RUNS])
+	print("리그: %s · 런 %d회" % [GameData.league if GameData.league != "" else "흰색(기본)", RUNS])
 
 
 func _row(n: int) -> Dictionary:
@@ -54,7 +54,7 @@ func _row(n: int) -> Dictionary:
 	return st[n]
 
 
-# 라운드에 들어설 때 지금 쥔 것을 찍는다.
+# 판에 들어설 때 지금 쥔 것을 찍는다.
 func _snap(n: int) -> void:
 	var r := _row(n)
 	r.seen += 1
@@ -64,7 +64,7 @@ func _snap(n: int) -> void:
 		tl += int(g.track_lv[k])
 	r.trk += float(tl)
 	r.mods += float(g.mods_own.size())
-	r.vou += float(GameData.vouchers_own.size())
+	r.vou += float(GameData.fixtures_own.size())
 	var nonstd := 0
 	for d in g.magazine:
 		if String(d.get("id", "std")) != "std":
@@ -82,7 +82,7 @@ func _snap(n: int) -> void:
 
 func _finish() -> void:
 	print("\n판  A  종류      목표    통과율  평균다트  여유   낸점수   스티커 트랙 개조 설비 자루  x곱")
-	for n in range(1, GameData.rounds_n() + 1):
+	for n in range(1, GameData.legs_n() + 1):
 		if not st.has(n):
 			continue
 		var r: Dictionary = st[n]
@@ -90,7 +90,7 @@ func _finish() -> void:
 		var pn := float(r["pass"])
 		var du: float = float(r.used) / maxf(pn, 1.0)
 		print("%2d %2d  %-7s %7d  %5.0f%%  %5.1f  x%.2f  %8.0f   %4.1f  %4.1f %4.1f %4.1f %4.1f  x%.1f"
-				% [n, GameData.ante_of(n), GameData.blind_name(n),
+				% [n, GameData.round_of(n), GameData.leg_name(n),
 				GameData.target_of(n), 100.0 * pn / maxf(sn, 1.0), du,
 				float(GameData.darts_of(n)) / maxf(du, 0.5),
 				float(r.score) / maxf(pn, 1.0),
@@ -99,7 +99,7 @@ func _finish() -> void:
 
 	print("\n축별 점수 몫 (판이 준 칩 · 트랙이 얹은 칩/배수 · 스티커가 얹은 것)")
 	print("판   판몫%   트랙몫%   스티커몫%")
-	for n in range(1, GameData.rounds_n() + 1):
+	for n in range(1, GameData.legs_n() + 1):
 		if not st.has(n):
 			continue
 		var r: Dictionary = st[n]
@@ -134,25 +134,25 @@ func _process(_d: float) -> bool:
 	if pre_state != g.S.RESOLVE and g.state == g.S.RESOLVE:
 		_split_queue()
 
-	if g.round_no != last_round:
-		if g.round_no > last_round:
+	if g.leg_no != last_round:
+		if g.leg_no > last_round:
 			var r := _row(last_round)
 			r["pass"] = int(r["pass"]) + 1
 			r.used = float(r.used) + float(_used)
 			r.score = float(r.score) + float(_rscore)
-		_snap(g.round_no)
-		last_round = g.round_no
+		_snap(g.leg_no)
+		last_round = g.leg_no
 		_rscore = 0.0
-	if g.round_darts > 0 and g.darts_left <= g.round_darts:
-		_used = g.round_darts - g.darts_left
+	if g.leg_darts > 0 and g.darts_left <= g.leg_darts:
+		_used = g.leg_darts - g.darts_left
 	_rscore = float(g.total)
 
 	if g.state == g.S.OVER:
 		if g.won:
-			var r2 := _row(g.round_no)
+			var r2 := _row(g.leg_no)
 			r2["pass"] = int(r2["pass"]) + 1
 		runs += 1
-		print("  … 런 %d 끝 (판 %d)" % [runs, g.round_no])
+		print("  … 런 %d 끝 (판 %d)" % [runs, g.leg_no])
 		if runs >= RUNS:
 			_finish()
 			return true
@@ -207,7 +207,7 @@ func _split_queue() -> void:
 			"xmult":
 				m *= int(q.get("v", 0))
 	var full := c * m
-	var r := _row(g.round_no)
+	var r := _row(g.leg_no)
 	r.c_board = float(r.c_board) + float(board)
 	r.c_trk = float(r.c_trk) + float(maxi(withtrk - board, 0))
 	r.c_item = float(r.c_item) + float(maxi(full - withtrk, 0))

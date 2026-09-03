@@ -32,8 +32,8 @@ func _run() -> void:
 		g._process(1.0 / 60.0)
 	g._new_run()
 	g._swap_skip()
-	g.round_no = 1
-	g._start_round()
+	g.leg_no = 1
+	g._start_leg()
 	g._swap_skip()
 	Dev.on = true
 	for pg in Dev.PAGES.size():
