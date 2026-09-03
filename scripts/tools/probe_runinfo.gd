@@ -24,6 +24,12 @@ func _initialize() -> void:
 	g.run_from = g.state
 	g.state = g.S.RUNINFO
 	print("열었다 state=RUNINFO? %s" % (g.state == g.S.RUNINFO))
+	# 탭 넷이 다 눌리는가
+	for t in 4:
+		g.runinfo_tab = 0
+		g._click(g._ri_tab_rect(t).get_center())
+		print("탭 %d 클릭 -> runinfo_tab=%d %s"
+				% [t, g.runinfo_tab, "ok" if g.runinfo_tab == t else "실패"])
 	var mid: Vector2 = g._runinfo_back_rect().get_center()
 	g._click(mid)
 	print("닫기 클릭 후 제자리(PICK)? %s" % (g.state == g.S.PICK))

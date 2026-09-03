@@ -380,6 +380,7 @@ func _new_run() -> void:
 	owned.clear()
 	cons.clear()
 	track_lv.clear()
+	track_hits.clear()          # 트랙 레벨과 같은 런 스코프다
 	throw6 = 0
 	zone_hist.clear()
 	won = false
@@ -2570,6 +2571,11 @@ func _click(m: Vector2) -> void:
 				_sfx("menu_back")
 				return
 		S.RUNINFO:
+			for t in RI_TABS.size():
+				if _ri_tab_rect(t).has_point(m):
+					runinfo_tab = t
+					_sfx("menu_pick2")
+					return
 			if _runinfo_back_rect().has_point(m):
 				state = run_from
 				_sfx("menu_back")
@@ -2769,6 +2775,13 @@ func _land(mark := true) -> void:
 		leg_miss = true
 	# 꽂힌 자리의 배수. 여기까지가 "판이 무엇인가" 이고, 아래는 "내 다트가
 	# 그것을 어떻게 셈하는가" 다. 연출은 앞의 것을 쓴다(_impact 주석 참조).
+	# 이 런에서 어느 트랙을 몇 번 맞혔나. 런 정보 화면이 읽는다 —
+	# 여기가 "판이 무엇인가" 가 끝나는 자리라 칸 죽이기·홀짝 보정을
+	# 이미 다 지난 뒤다. 즉 화면에 뜨는 수는 실제로 셈에 들어간 착탄이다.
+	var _tk: int = int(info.get("track", 0))
+	if _tk != 0:
+		track_hits[_tk] = int(track_hits.get(_tk, 0)) + 1
+
 	var land_mult: int = int(info.mult)
 
 	# 다트 특성
@@ -3589,6 +3602,11 @@ func _draw() -> void:
 	else:
 		_draw_aim()
 		_draw_card()
+		# 런 정보는 화면을 갈아 끼우는 것이 아니라 **판 위에 뜨는 판**이다.
+		# 열던 화면을 먼저 그리고 그 위에 얹어야 "잠깐 확인하고 닫는다" 로
+		# 읽힌다 — 뒤가 검으면 다른 화면으로 넘어간 것처럼 보인다.
+		if state == S.RUNINFO:
+			_draw_screen(run_from)
 		_draw_screen(state)
 
 	# 화면이 바뀌어도 같은 자리에 남는 것만 판이다 — 그래서 스크림 뒤에 그린다.
@@ -5166,6 +5184,7 @@ func _sell(i: int) -> void:
 
 var cons := []                  # 보유 사탕 (최대 cons_slots)
 var track_lv := {}              # 트랙 레벨 {트랙ID: int}
+var track_hits := {}            # 이 런에서 그 트랙을 몇 번 맞혔나 {트랙ID: int}
 
 
 func _cons_rect(i: int) -> Rect2:
@@ -11260,91 +11279,38 @@ func _col_cell(i: int) -> Rect2:
 # ══════════════════════════════════════════════════════════
 #  런 정보
 #
-#  런 안에서 지금 무엇을 들고 있는지 한 화면에 모은다. 만든 이유는
-#  **사진**이다 — 사면 사라지고 효과만 남는 물건이라 산 뒤에는 어디서도
-#  안 보였다. 무료 리롤이 왜 늘었는지, 테이블이 왜 넓어졌는지 화면에
-#  물어볼 자리가 없었다.
+#  런 안에서 지금 무엇을 들고 있는지 묻는 자리. 만든 이유는 **사진**이다 —
+#  사면 사라지고 효과만 남는 물건이라 산 뒤에는 어디서도 안 보였다.
 #
-#  진행·경제는 상단바가 이미 말하지만 여기서 한 번 더 모은다 — 상단바는
-#  숨을 수 있고(_bar_hidden), 목표 대비 지금이 몇인지는 판 중에만 뜬다.
-func _runinfo_rows() -> Array:
-	var rd: int = GameData.round_of(leg_no)
-	var mx: int = GameData.max_items()
-	var cs: int = GameData.cons_slots()
+#  한 화면에 다 늘어놓았더니 여섯 구획이 한꺼번에 밀려들어 읽히지 않았다.
+#  탭으로 가른다 — 컬렉션 화면이 이미 쓰는 어법이고, 한 번에 한 가지만
+#  본다. 전체 화면이 아니라 판 위에 뜨는 판이다: 열어도 뒤의 게임이
+#  남아 있어야 "잠깐 확인하고 닫는다" 로 읽힌다.
+const RI_TABS := ["진행", "트랙", "사진", "보유"]
 
-	# 다트통 구성 — 같은 것끼리 묶는다. 여섯 줄을 그대로 세우면 표가 아니다.
-	var mag := {}
-	for d in magazine:
-		var nm := String(d.get("n", d.get("id", "?")))
-		mag[nm] = int(mag.get(nm, 0)) + 1
-	var mag_rows := []
-	for nm in mag:
-		mag_rows.append("%s x%d" % [nm, mag[nm]])
-
-	# 보유한 사진 — 이 화면의 이유다
-	var fix_rows := []
-	for f in GameData.fixtures():
-		if GameData.fixtures_own.has(String(f.id)):
-			fix_rows.append(String(f.n))
-
-	# 보드 확장
-	var mod_rows := []
-	for m in GameData.mods():
-		if mods_own.has(String(m.id)):
-			mod_rows.append(String(m.n))
-
-	return [
-		["진행", [
-			"라운드  %d / %d" % [rd, GameData.rounds_n()],
-			"판  %d / %d" % [leg_no, GameData.legs_n()],
-			"목표  %d" % target,
-			"지금  %d" % total,
-		]],
-		["경제", [
-			"골드  %d" % gold,
-			# 상단바와 같은 식이어야 한다 — 두 자리가 다른 수를 말하면 안 된다
-			"이자  +%d" % mini(gold / GameData.interest_per(), _interest_cap()),
-			"리롤  %d" % reroll_cost,
-		]],
-		["보유", [
-			"동전  %d / %d" % [owned.size(), mx],
-			"사탕  %d / %d" % [cons.size(), cs],
-		]],
-		["사진", fix_rows if not fix_rows.is_empty() else ["없음"]],
-		["다트통", mag_rows if not mag_rows.is_empty() else ["없음"]],
-		["판", mod_rows if not mod_rows.is_empty() else ["기본"]],
-	]
+var runinfo_tab := 0
 
 
-func _draw_runinfo() -> void:
-	_scrim()
-	draw_string(font, Vector2(0, 28), "런 정보", HORIZONTAL_ALIGNMENT_CENTER,
-			VIEW.x, 18, C_TXT)
+func _ri_panel() -> Rect2:
+	# 트랙 탭이 가장 길다 — 머리 22 + 여섯 줄 x15 = 112. 거기에 탭줄(34)과
+	# 뒤로 버튼(34)과 여백을 더한 값이 이 높이다. 더 키우면 아래가 비고,
+	# 줄이면 트랙이 잘린다.
+	var h := 214.0
+	return Rect2(Vector2(74.0, (VIEW.y - h) * 0.5), Vector2(VIEW.x - 148.0, h))
 
-	# 두 칸으로 나눈다. 왼쪽은 수, 오른쪽은 목록 — 목록이 길어질 쪽을
-	# 오른쪽에 둬야 왼쪽 수가 아래로 밀리지 않는다.
-	var rows := _runinfo_rows()
-	var cw: float = (VIEW.x - 54.0) * 0.5
-	var col_x := [22.0, 32.0 + cw]
-	var col_y := [46.0, 46.0]
-	for r in rows.size():
-		var side: int = 0 if r < 3 else 1
-		var head := String(rows[r][0])
-		var body: Array = rows[r][1]
-		var x: float = col_x[side]
-		var y: float = col_y[side]
 
-		draw_string(font, Vector2(x, y + 9.0), head, HORIZONTAL_ALIGNMENT_LEFT,
-				-1, 11, C_ACC)
-		draw_rect(Rect2(x, y + 13.0, cw, 1.0), Color(C_WIRE.darkened(0.3), 0.5))
-		y += 26.0
-		for ln in body:
-			draw_string(font, Vector2(x + 4.0, y), String(ln),
-					HORIZONTAL_ALIGNMENT_LEFT, cw - 8.0, 10, C_TXT)
-			y += 14.0
-		col_y[side] = y + 10.0
+func _ri_tab_rect(t: int) -> Rect2:
+	var p := _ri_panel()
+	var w: float = (p.size.x - 24.0) / float(RI_TABS.size())
+	return Rect2(p.position.x + 12.0 + w * float(t), p.position.y + 8.0,
+			w - 4.0, 18.0)
 
-	_btn(_runinfo_back_rect(), "닫기", "탭", false)
+
+func _runinfo_back_rect() -> Rect2:
+	# 힌트 글자가 버튼 아래에 붙으므로(_btn) 판 안에 들어오게 띄운다.
+	var p := _ri_panel()
+	return Rect2(p.position.x + 12.0, p.position.y + p.size.y - 38.0,
+			p.size.x - 24.0, 17.0)
 
 
 # 런 정보를 열 수 있는가. 런 밖(타이틀·컬렉션·설정·새 런)에는 볼 런이
@@ -11355,8 +11321,158 @@ func _runinfo_ok() -> bool:
 	return _can_rack_move() or state == S.CLEAR
 
 
-func _runinfo_back_rect() -> Rect2:
-	return Rect2(Vector2(VIEW.x * 0.5 - 56.0, VIEW.y - 40.0), Vector2(112.0, 28.0))
+func _draw_runinfo() -> void:
+	# 뒤를 통째로 가리지 않는다. 게임이 비쳐야 "잠깐 여는 판" 이다.
+	draw_rect(Rect2(Vector2.ZERO, VIEW), Color(0.0, 0.0, 0.0, 0.55))
+	var p := _ri_panel()
+	draw_rect(Rect2(p.position + Vector2(2.0, 3.0), p.size), Color(0.0, 0.0, 0.0, 0.4))
+	draw_rect(p, C_PANEL.darkened(0.10))
+	draw_rect(p, C_WIRE.darkened(0.25), false, 1.0)
+
+	for t in RI_TABS.size():
+		_btn(_ri_tab_rect(t), RI_TABS[t], "", t == runinfo_tab)
+	# 고른 탭을 가리키는 삼각형 — 발라트로가 쓰는 신호다. 버튼 강조만으로는
+	# 넷이 같은 빨강이라 어느 것이 켜졌는지 한눈에 안 온다.
+	var tr := _ri_tab_rect(runinfo_tab)
+	var tx: float = tr.get_center().x
+	draw_colored_polygon(PackedVector2Array([
+			Vector2(tx - 4.0, tr.position.y - 6.0), Vector2(tx + 4.0, tr.position.y - 6.0),
+			Vector2(tx, tr.position.y - 1.0)]), C_ACC)
+
+	match runinfo_tab:
+		0: _ri_progress(p)
+		1: _ri_tracks(p)
+		2: _ri_photos(p)
+		3: _ri_carry(p)
+
+	_btn(_runinfo_back_rect(), "뒤로", "탭", false)
+
+
+# 한 구획을 세운다. 제목 한 줄 · 밑줄 · 그 아래 줄들. 넷이 같이 쓴다.
+func _ri_block(x: float, y: float, w: float, head: String, rows: Array) -> float:
+	draw_string(font, Vector2(x, y + 9.0), head, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_ACC)
+	draw_rect(Rect2(x, y + 13.0, w, 1.0), Color(C_WIRE.darkened(0.3), 0.5))
+	y += 26.0
+	for ln in rows:
+		draw_string(font, Vector2(x + 4.0, y), String(ln),
+				HORIZONTAL_ALIGNMENT_LEFT, w - 8.0, 10, C_TXT)
+		y += 14.0
+	return y + 10.0
+
+
+func _ri_progress(p: Rect2) -> void:
+	var rd: int = GameData.round_of(leg_no)
+	@warning_ignore("integer_division")  # 상단바와 같은 식이어야 한다
+	var itr: int = mini(gold / GameData.interest_per(), _interest_cap())
+	var cw: float = (p.size.x - 40.0) * 0.5
+	var y0: float = p.position.y + 36.0
+	_ri_block(p.position.x + 16.0, y0, cw, "진행", [
+		"라운드  %d / %d" % [rd, GameData.rounds_n()],
+		"판  %d / %d" % [leg_no, GameData.legs_n()],
+		"목표  %d" % target,
+		"지금  %d" % total,
+	])
+	_ri_block(p.position.x + 24.0 + cw, y0, cw, "경제", [
+		"골드  %d" % gold,
+		"이자  +%d" % itr,
+		"리롤  %d" % reroll_cost,
+	])
+
+
+# 발라트로의 포커 핸드 표와 같은 자리다 — 레벨 · 이름 · 점수 x 배수 ·
+# 이 런에서 맞힌 횟수. 트랙이 0 인 영역(보드 아웃)은 강화를 못 받으므로
+# 레벨 칸을 비운다.
+func _ri_tracks(p: Rect2) -> void:
+	var x: float = p.position.x + 16.0
+	var w: float = p.size.x - 32.0
+	var y: float = p.position.y + 36.0
+	draw_string(font, Vector2(x + 4.0, y + 9.0), "레벨", HORIZONTAL_ALIGNMENT_LEFT,
+			-1, 9, C_DIM)
+	draw_string(font, Vector2(x + 46.0, y + 9.0), "트랙", HORIZONTAL_ALIGNMENT_LEFT,
+			-1, 9, C_DIM)
+	draw_string(font, Vector2(x + w - 96.0, y + 9.0), "점수 x 배수",
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_DIM)
+	draw_string(font, Vector2(x + w - 24.0, y + 9.0), "맞힘", HORIZONTAL_ALIGNMENT_LEFT,
+			-1, 9, C_DIM)
+	draw_rect(Rect2(x, y + 13.0, w, 1.0), Color(C_WIRE.darkened(0.3), 0.5))
+	y += 22.0
+
+	for a in GameData.areas_all():
+		var tk: int = int(a.get("track", 0))
+		var lv: int = int(track_lv.get(tk, 1)) if tk != 0 else 0
+		var n: int = int(track_hits.get(tk, 0))
+		var b := GameData.track_bonus(tk, lv) if tk != 0 else {"s": 0, "m": 0}
+		var sc: int = int(a.get("base", 0)) + int(b.s)
+		var ml: int = int(a.get("mult", 1)) + int(b.m)
+
+		draw_string(font, Vector2(x + 4.0, y + 8.0),
+				("Lv.%d" % lv) if tk != 0 else "—", HORIZONTAL_ALIGNMENT_LEFT, -1, 10,
+				C_GREEN.lightened(0.2) if lv > 1 else C_DIM)
+		draw_string(font, Vector2(x + 46.0, y + 8.0), String(a.get("n", "?")),
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 10, C_TXT)
+		# 점수는 판 숫자를 곱하는 자리라 표에 값이 없는 트랙이 있다(싱글).
+		# 그때는 수를 꾸며 내지 않고 "판 숫자" 라고 말한다.
+		var sct := ("판 숫자" if sc == 0 else str(sc))
+		draw_string(font, Vector2(x + w - 96.0, y + 8.0), sct,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 10, C_CHIP.lightened(0.3))
+		draw_string(font, Vector2(x + w - 46.0, y + 8.0), "x%d" % ml,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 10, C_MULT.lightened(0.25))
+		draw_string(font, Vector2(x + w - 24.0, y + 8.0), str(n),
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 10,
+				C_GOLD if n > 0 else C_DIM.darkened(0.2))
+		y += 15.0
+
+
+# 발라트로의 바우처 탭과 같은 자리. 효과 한 줄까지 같이 세운다 — 이름만
+# 있으면 왜 산 것인지 다시 알 수 없다.
+func _ri_photos(p: Rect2) -> void:
+	var x: float = p.position.x + 16.0
+	var w: float = p.size.x - 32.0
+	var y: float = p.position.y + 36.0
+	var own := []
+	for f in GameData.fixtures():
+		if GameData.fixtures_own.has(String(f.id)):
+			own.append(f)
+	draw_string(font, Vector2(x, y + 9.0), "이번 런에서 산 사진 %d" % own.size(),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_ACC)
+	draw_rect(Rect2(x, y + 13.0, w, 1.0), Color(C_WIRE.darkened(0.3), 0.5))
+	y += 24.0
+	if own.is_empty():
+		draw_string(font, Vector2(x + 4.0, y + 8.0), "아직 없다",
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 10, C_DIM)
+		return
+	for f in own:
+		draw_string(font, Vector2(x + 4.0, y + 8.0), String(f.n),
+				HORIZONTAL_ALIGNMENT_LEFT, 110.0, 10, C_TXT)
+		draw_string(font, Vector2(x + 120.0, y + 8.0), String(f.d),
+				HORIZONTAL_ALIGNMENT_LEFT, w - 124.0, 10, C_DIM)
+		y += 15.0
+
+
+func _ri_carry(p: Rect2) -> void:
+	var mag := {}
+	for d in magazine:
+		var nm := String(d.get("n", d.get("id", "?")))
+		mag[nm] = int(mag.get(nm, 0)) + 1
+	var mag_rows := []
+	for nm in mag:
+		mag_rows.append("%s x%d" % [nm, mag[nm]])
+
+	var mod_rows := []
+	for m in GameData.mods():
+		if mods_own.has(String(m.id)):
+			mod_rows.append(String(m.n))
+
+	var cw: float = (p.size.x - 40.0) * 0.5
+	var y0: float = p.position.y + 36.0
+	var xl: float = p.position.x + 16.0
+	var xr: float = p.position.x + 24.0 + cw
+	var y := _ri_block(xl, y0, cw, "칸", [
+		"동전  %d / %d" % [owned.size(), GameData.max_items()],
+		"사탕  %d / %d" % [cons.size(), GameData.cons_slots()],
+	])
+	_ri_block(xl, y, cw, "다트통", mag_rows if not mag_rows.is_empty() else ["없음"])
+	_ri_block(xr, y0, cw, "판", mod_rows if not mod_rows.is_empty() else ["기본"])
 
 
 func _draw_collect() -> void:

@@ -404,6 +404,10 @@ static func area(key: String) -> Dictionary:
 				"base": _i(r, "base", "areas", 0),
 				"mult": _i(r, "mult", "areas", 1),
 				"track": _i(r, "track", "areas", 0),
+				# 이름은 런 정보 화면이 쓴다. hit_info 는 안 읽지만 표에
+				# 이미 있는 칸이라 여기서 같이 실어 두는 것이 표를 두 번
+				# 읽는 것보다 싸다.
+				"n": String(r.get("name", "")),
 			}
 		_cache["areas"] = m
 	var a: Dictionary = _cache["areas"]
@@ -411,6 +415,18 @@ static func area(key: String) -> Dictionary:
 		push_error("데이터 표: areas 에 '%s' 가 없다" % key)
 		return {"base": 0, "mult": 1, "track": 0}
 	return a[key]
+
+
+# 표에 적힌 순서대로 영역 전부. 런 정보 화면이 트랙 표를 세울 때 쓴다 —
+# area(key) 는 한 칸씩 묻는 문이고 이쪽은 표 전체를 한 번에 본다.
+# out(보드 아웃)도 포함한다: 트랙이 0 이라 강화는 못 받지만 판에 있는
+# 영역이고, 빼면 "다섯 중 넷만 보인다" 가 된다.
+static func areas_all() -> Array:
+	boot()
+	var out := []
+	for r in _raw.get("areas", []):
+		out.append(area(String(r.get("key", ""))))
+	return out
 
 
 # ── 트랙 강화 (area_upgrades.csv · 수치 전부 미정) ────────
