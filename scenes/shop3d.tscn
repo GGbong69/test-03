@@ -1,7 +1,7 @@
 [gd_scene load_steps=10 format=3]
 
 [ext_resource type="Script" path="res://scripts/shop3d.gd" id="1_scr"]
-[ext_resource type="Mesh" path="res://assets/table.obj" id="2_tbl"]
+[ext_resource type="PackedScene" path="res://assets/table_full.glb" id="2_tbl"]
 [ext_resource type="PackedScene" path="res://assets/dealer.glb" id="3_npc"]
 [ext_resource type="Shader" path="res://scripts/shaders/dot.gdshader" id="4_dot"]
 [ext_resource type="Texture2D" path="res://assets/table_albedo.jpg" id="5_tex"]
@@ -30,11 +30,8 @@ size = Vector3(0.24, 0.012, 0.34)
 [node name="Shop3D" type="Node3D"]
 script = ExtResource("1_scr")
 
-[node name="Table" type="MeshInstance3D" parent="."]
+[node name="Table" parent="." instance=ExtResource("2_tbl")]
 transform = Transform3D(0.99812, 0, 0, 0, 0.99812, 0, 0, 0, 0.99812, 0.0008, 0.43279, 0.0012)
-mesh = ExtResource("2_tbl")
-material_override = SubResource("MatTable")
-cast_shadow = 0
 
 [node name="Dealer" parent="." instance=ExtResource("3_npc")]
 transform = Transform3D(1.04938, 0, 0, 0, 1.04938, 0, 0, 0, 1.04938, 0, 0, -0.62)

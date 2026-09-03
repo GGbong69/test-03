@@ -41,14 +41,15 @@ var hot := -1
 
 
 func _ready() -> void:
-	_skin_dealer()
+	_skin("Dealer")
+	_skin("Table")      # 원본 glb 라 임포터 재질이 붙어 있다
 	_aim()
 
 
 # 딜러는 glb 인스턴스라 임포터가 붙인 재질을 쓴다. 도트 셰이더로 갈아
 # 끼우되 텍스처는 그대로 물려준다 — 조끼·장갑 색이 거기 있다.
-func _skin_dealer() -> void:
-	var npc := get_node_or_null("Dealer")
+func _skin(who: String) -> void:
+	var npc := get_node_or_null(who)
 	if npc == null:
 		return
 	var mis: Array[MeshInstance3D] = []
