@@ -5,8 +5,8 @@ extends SceneTree
 #     godot --script scripts/tools/shot_table.gd
 
 const SRC := [
-	["res://imported_models/balatro-table-hole-3d/table_flat.obj", "shot_table.png"],
-	["res://imported_models/balatro-hole-cap-3d/balatro-hole-cap-3d_1500.obj", "shot_cap.png"],
+	["res://imported_models/balatro-table-hole-3d/table.obj", "table.png"],
+	["res://imported_models/balatro-hole-cap-3d/cap.obj", "cap.png"],
 ]
 
 var i := 0
@@ -48,14 +48,12 @@ func _obj(path: String) -> ArrayMesh:
 				ov.append(vs[int(t[0]) - 1])
 				if t.size() > 2 and t[2] != "" and ns.size() > 0:
 					on.append(ns[int(t[2]) - 1])
-	var a := []
-	a.resize(Mesh.ARRAY_MAX)
-	a[Mesh.ARRAY_VERTEX] = ov
-	if on.size() == ov.size():
-		a[Mesh.ARRAY_NORMAL] = on
-	var m := ArrayMesh.new()
-	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, a)
-	return m
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for k in ov.size():
+		st.add_vertex(ov[k])
+	st.generate_normals()
+	return st.commit()
 
 
 func _shots() -> void:
@@ -84,8 +82,6 @@ func _shots() -> void:
 		cam.far = r * 8.0
 		root.add_child(cam)
 		# 트리에 붙은 뒤에 겨눈다 — 붙기 전 look_at 은 전역 변환이 없어 헛돈다
-		cam.global_position = c + Vector3(0.0, r * 1.55, r * 0.05)   # 거의 바로 위에서
-		cam.look_at(c, Vector3.UP)
 		cam.make_current()
 
 		var lt := DirectionalLight3D.new()
@@ -101,10 +97,13 @@ func _shots() -> void:
 		amb.environment = env
 		root.add_child(amb)
 
-		await process_frame
-		await process_frame
-		var img := root.get_texture().get_image()
-		img.save_png("res://shots/" + pair[1])
-		print("저장: ", pair[1], "  면 ", mesh.get_faces().size() / 3,
-				"  aabb ", ab.size)
+		var views := {"iso": Vector3(1.0, 1.0, 1.0)}
+		for vk in views:
+			cam.global_position = c + (views[vk] as Vector3).normalized() * r * 1.6
+			cam.look_at(c, Vector3.UP)
+			await process_frame
+			await process_frame
+			var img := root.get_texture().get_image()
+			img.save_png("res://shots/%s_%s.png" % [pair[1].get_basename(), vk])
+		print("저장: ", pair[1], "  면 ", mesh.get_faces().size() / 3, "  aabb ", ab.size)
 	quit()

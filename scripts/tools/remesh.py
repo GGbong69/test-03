@@ -25,6 +25,14 @@ def run(src, faces, out=None, quality=0.3, flat=False):
     ms = pymeshlab.MeshSet()
     t0 = time.time()
     ms.load_new_mesh(src)
+    # 줄이기 전에 위상을 고친다. 겹친 면과 비정상 모서리가 감축을 망친다.
+    for fn in ("meshing_remove_duplicate_faces", "meshing_remove_duplicate_vertices",
+               "meshing_repair_non_manifold_edges", "meshing_repair_non_manifold_vertices",
+               "meshing_remove_unreferenced_vertices"):
+        try:
+            getattr(ms, fn)()
+        except Exception:
+            pass
     m = ms.current_mesh()
     f0, v0 = m.face_number(), m.vertex_number()
     has_uv = (m.has_wedge_tex_coord() or m.has_vertex_tex_coord()) and not flat
@@ -34,16 +42,20 @@ def run(src, faces, out=None, quality=0.3, flat=False):
           .format(f0, v0, "있음" if has_uv else "없음", time.time() - t0))
 
     t0 = time.time()
+    # preservetopology 를 안 켜면 첫 판에서 형태가 부서진다. Meshy 메시는
+    # 비정상 위상(non-manifold)이 많아 그 보호 없이는 겉면이 찢어진다 —
+    # 목표를 8천으로 줘도 3천으로 줘도 똑같은 덩어리가 나왔다.
+    # autoclean 도 끈다. 작은 조각을 지우면서 얇은 테를 같이 가져간다.
     opts = dict(targetfacenum=faces, qualitythr=quality,
-                preserveboundary=True, preservenormal=True,
-                planarquadric=True, autoclean=True)
+                preserveboundary=True, preservetopology=True,
+                preservenormal=True, planarquadric=True)
     # 한 번으로는 목표까지 안 간다 — Meshy 메시는 첫 판에서 3% 쯤에 멈춘다.
     # 같은 필터를 다시 걸면 그 자리에서 또 내려간다. 안 줄면 멈춘다.
     prev = f0
     for _ in range(12):
         if has_uv:
             o = dict(opts)
-            o.pop("autoclean", None)      # 텍스처 갈래는 이 인자를 안 받는다
+            o.pop("preservetopology", None)   # 텍스처 갈래는 이 인자를 안 받는다
             ms.meshing_decimation_quadric_edge_collapse_with_texture(**o)
         else:
             ms.meshing_decimation_quadric_edge_collapse(**opts)
