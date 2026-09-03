@@ -15,6 +15,7 @@ from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE
 from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
+from pptx.oxml.ns import qn
 from pptx.util import Emu, Inches, Pt
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -74,6 +75,17 @@ W = R - L                   # 본문 너비 11.83
 Y_RULE = 1.25
 Y_BODY = 1.46
 Y_MAX = 6.92
+
+W_BODY = 8.65        # 본문 폭. 오른쪽 3.2인치는 이미지 자리로 비운다
+CW = W               # 지금 쪽의 본문 폭 (set_width 가 바꾼다)
+
+
+def set_width(w):
+    """이 쪽의 본문 폭을 정한다. 나란히 놓는 폭도 같이 따라간다."""
+    global CW, HALF
+    CW = w
+    HALF = (w - 0.45) / 2
+
 
 SZ_TITLE, SZ_LEAD, SZ_HEAD, SZ_BODY, SZ_SMALL = 20.25, 15.0, 13.5, 12.0, 10.5
 
@@ -180,10 +192,11 @@ def row_height(row, widths, row_h=ROW_H):
 
 
 def label_w_for(w):
-    return 2.35 if w > W * 0.8 else 1.55
+    return 2.20 if w > W * 0.6 else 1.45
 
 
-def block_height(b, w=W):
+def block_height(b, w=None):
+    w = w or CW
     t = b.get("type")
     if t == "note":
         return 0.26 * _wrapped(b.get("text", ""), cap_of(w)) + 0.12
@@ -195,15 +208,16 @@ def block_height(b, w=W):
         cap = cap_of(w - label_w_for(w))
         return head + sum(ROW_H * _wrapped(r[1] if len(r) > 1 else "", cap) for r in rows) + 0.10
     if t == "split":
-        half = (w - 0.55) / 2
-        cap = cap_of(half - 1.55)
+        half = (w - 0.45) / 2
+        cap = cap_of(half - 1.45)
         a = sum(ROW_H * _wrapped(r[1] if len(r) > 1 else "", cap) for r in (b.get("rows") or []))
         c = sum(ROW_H * _wrapped(r[1] if len(r) > 1 else "", cap) for r in (b.get("rows2") or []))
         return HEAD_H + max(a, c) + 0.10
     if t == "steps":
         rows = b.get("rows") or []
-        n = (len(rows) + 1) // 2 if w > W * 0.8 else len(rows)
-        return head + n * 0.72 + 0.08
+        two = w > W * 0.62 and len(rows) > 4
+        n = (len(rows) + 1) // 2 if two else len(rows)
+        return head + n * 0.70 + 0.08
     if t == "table":
         _, widths = table_geom(b, L, w)
         rows = b.get("rows") or []
@@ -212,111 +226,180 @@ def block_height(b, w=W):
 
 
 # ── 블록 그리기 ────────────────────────────────────────────────────
-def draw_heading(slide, y, s, x=L, w=W):
-    text(slide, x, y, w, 0.30, s, size=SZ_HEAD, font=F_SEMI, color=C_ACC)
+# 규칙 둘.
+#   1. 표는 PPTX 의 진짜 표(a:tbl)로 넣는다. 도형 위에 텍스트 박스를 겹치지 않는다.
+#   2. 한 박스에 들어갈 글은 한 박스에 쓴다. 줄마다 박스를 새로 만들지 않는다.
+NO_STYLE = "{2D5ABB26-0587-4C30-8999-92F81FD0307C}"      # 스타일 없음 · 눈금 없음
+
+
+def _plain(table):
+    """기본 표 스타일(파란 줄무늬·테두리)을 벗긴다."""
+    pr = table._tbl.tblPr
+    for k in ("firstRow", "bandRow", "lastRow", "firstCol", "lastCol", "bandCol"):
+        pr.set(k, "0")
+    el = pr.find(qn("a:tableStyleId"))
+    if el is None:
+        el = pr.makeelement(qn("a:tableStyleId"), {})
+        pr.append(el)
+    el.text = NO_STYLE
+
+
+def _cell(c, s, size, font, color, bg=None, align=PP_ALIGN.LEFT):
+    c.margin_left, c.margin_right = Inches(0.10), Inches(0.08)
+    c.margin_top, c.margin_bottom = Inches(0.02), Inches(0.02)
+    c.vertical_anchor = MSO_ANCHOR.MIDDLE
+    if bg is None:
+        c.fill.background()
+    else:
+        c.fill.solid()
+        c.fill.fore_color.rgb = bg
+    tf = c.text_frame
+    tf.word_wrap = True
+    p = tf.paragraphs[0]
+    p.alignment = align
+    r = p.add_run()
+    r.text = T(s)
+    r.font.name = font
+    r.font.size = Pt(size)
+    r.font.color.rgb = color
+
+
+def make_table(slide, x, y, widths, heights, header, rows, band=True, size=None):
+    """진짜 표 하나. header 가 None 이면 머리줄 없는 표다."""
+    size = size or (SZ_BODY - 0.5)
+    n = len(widths)
+    nr = len(rows) + (1 if header else 0)
+    gf = slide.shapes.add_table(nr, n, Inches(x), Inches(y),
+                                Inches(sum(widths)), Inches(sum(heights)))
+    t = gf.table
+    _plain(t)
+    for i, cw in enumerate(widths):
+        t.columns[i].width = Inches(cw)
+    for i, hh in enumerate(heights):
+        t.rows[i].height = Inches(hh)
+    off = 0
+    if header:
+        for ci in range(n):
+            _cell(t.cell(0, ci), header[ci] if ci < len(header) else "",
+                  SZ_SMALL, F_SEMI, C_WHITE, C_DARK)
+        off = 1
+    for ri, row in enumerate(rows):
+        bg = C_BAND if (band and ri % 2 == 1) else None
+        for ci in range(n):
+            _cell(t.cell(off + ri, ci), row[ci] if ci < len(row) else "", size,
+                  F_SEMI if ci == 0 else F_BODY, C_TEXT if ci == 0 else C_MUTE, bg)
+    return y + sum(heights)
+
+
+def draw_heading(slide, y, s, x=L, w=None):
+    text(slide, x, y, w or CW, 0.30, s, size=SZ_HEAD, font=F_SEMI, color=C_ACC)
     return y + HEAD_H
 
 
-def draw_kv(slide, y, b, x=L, w=W, label_w=None, chars=None):
+def draw_kv(slide, y, b, x=L, w=None, label_w=None):
+    """머리줄 없는 2열 표. 테두리도 줄무늬도 없다."""
+    w = w or CW
     if label_w is None:
         label_w = label_w_for(w)
-    if chars is None:
-        chars = cap_of(w - label_w)
     if b.get("heading"):
-        text(slide, x, y, w, 0.30, b["heading"], size=SZ_HEAD, font=F_SEMI, color=C_ACC)
-        y += HEAD_H
-    for row in b.get("rows") or []:
-        k = row[0] if row else ""
-        v = row[1] if len(row) > 1 else ""
-        h = ROW_H * _wrapped(v, chars)
-        text(slide, x, y, label_w - 0.12, h, k, size=SZ_BODY, font=F_SEMI, color=C_TEXT)
-        text(slide, x + label_w, y, w - label_w, h, v, size=SZ_BODY, color=C_MUTE)
-        y += h
-    return y + 0.10
+        y = draw_heading(slide, y, b["heading"], x, w)
+    rows = b.get("rows") or []
+    if not rows:
+        return y
+    widths = [label_w, w - label_w]
+    heights = [row_height(r, widths) for r in rows]
+    return make_table(slide, x, y, widths, heights, None, rows,
+                      band=False, size=SZ_BODY) + 0.10
 
 
-def draw_split(slide, y, b, x=L, w=W):
-    half = (w - 0.55) / 2
-    x2 = x + half + 0.55
-    line(slide, x + half + 0.275, y + 0.04, x + half + 0.275, y + block_height(b, w) - 0.2)
+def draw_split(slide, y, b, x=L, w=None):
+    w = w or CW
+    half = (w - 0.45) / 2
     ya = draw_kv(slide, y, {"heading": b.get("heading"), "rows": b.get("rows")},
-                 x=x, w=half, label_w=1.55)
+                 x=x, w=half, label_w=1.45)
     yb = draw_kv(slide, y, {"heading": b.get("heading2"), "rows": b.get("rows2")},
-                 x=x2, w=half, label_w=1.55)
+                 x=x + half + 0.45, w=half, label_w=1.45)
     return max(ya, yb)
 
 
-def draw_table(slide, y, b, x=L, w=W):
+def draw_table(slide, y, b, x=L, w=None):
+    w = w or CW
     cols = b.get("cols") or []
     rows = b.get("rows") or []
     if b.get("heading"):
         y = draw_heading(slide, y, b["heading"], x, w)
-    n = max(1, len(cols))
-    xs, widths = table_geom(b, x, w)
-
-    hh = 0.30
-    rect(slide, x, y, w, hh, fill=C_DARK)
-    for i, c in enumerate(cols):
-        text(slide, xs[i] + 0.12, y + 0.05, widths[i] - 0.18, hh, c,
-             size=SZ_SMALL, font=F_SEMI, color=C_WHITE)
-    y += hh
-
-    for ri, row in enumerate(rows):
-        rh = row_height(row, widths)
-        if ri % 2 == 1:
-            rect(slide, x, y, w, rh, fill=C_BAND)
-        for ci in range(n):
-            cell = row[ci] if ci < len(row) else ""
-            text(slide, xs[ci] + 0.12, y + 0.035, widths[ci] - 0.18, rh, cell,
-                 size=SZ_BODY - 0.5, font=(F_SEMI if ci == 0 else F_BODY),
-                 color=(C_TEXT if ci == 0 else C_MUTE))
-        line(slide, x, y + rh, x + w, y + rh, color=RGBColor(0xE6, 0xE6, 0xE4), width=0.5)
-        y += rh
-    return y + 0.10
+    if not rows:
+        return y
+    _, widths = table_geom(b, x, w)
+    heights = [0.30] + [row_height(r, widths) for r in rows]
+    return make_table(slide, x, y, widths, heights, cols, rows) + 0.10
 
 
-def draw_flow(slide, y, b, x=L, w=W):
+def draw_flow(slide, y, b, x=L, w=None):
+    """둥근 상자 안에 글을 직접 넣는다 — 상자 따로 글 따로가 아니다."""
+    w = w or CW
     items = [i for i in (b.get("items") or []) if i][:6]
     if not items:
         return y
     n = len(items)
-    gap = 0.18
+    gap = 0.16
     bw = (w - gap * (n - 1)) / n
-    bh = 1.05
-    x0 = x
+    bh = 1.00
     for i, s in enumerate(items):
-        x = x0 + i * (bw + gap)
-        rect(slide, x, y, bw, bh, fill=None, edge=RGBColor(0xC9, 0xCC, 0xD0),
-             shape=MSO_SHAPE.ROUNDED_RECTANGLE)
-        text(slide, x + 0.10, y + 0.12, bw - 0.2, bh - 0.24, s, size=SZ_BODY,
-             font=F_SEMI, color=C_TEXT, align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE)
+        xx = x + i * (bw + gap)
+        sp = rect(slide, xx, y, bw, bh, fill=None, edge=RGBColor(0xC9, 0xCC, 0xD0),
+                  shape=MSO_SHAPE.ROUNDED_RECTANGLE)
+        tf = _tf(sp)
+        tf.margin_left = tf.margin_right = Inches(0.06)
+        tf.vertical_anchor = MSO_ANCHOR.MIDDLE
+        tf.word_wrap = True
+        p = tf.paragraphs[0]
+        p.alignment = PP_ALIGN.CENTER
+        r = p.add_run()
+        r.text = T(s)
+        r.font.name = F_SEMI
+        r.font.size = Pt(SZ_BODY)
+        r.font.color.rgb = C_TEXT
         if i < n - 1:
-            line(slide, x + bw + 0.03, y + bh / 2, x + bw + gap - 0.03, y + bh / 2,
+            line(slide, xx + bw + 0.02, y + bh / 2, xx + bw + gap - 0.02, y + bh / 2,
                  color=C_ACC, width=1.0)
-    return y + bh + 0.25
+    return y + bh + 0.22
 
 
-def draw_steps(slide, y, b, x=L, w=W):
+def draw_steps(slide, y, b, x=L, w=None):
+    """한 걸음이 텍스트 박스 하나. 번호 · 제목 · 설명을 한 박스에 담는다."""
+    w = w or CW
     rows = b.get("rows") or []
     if b.get("heading"):
         y = draw_heading(slide, y, b["heading"], x, w)
-    two = w > W * 0.8
+    two = w > W * 0.62 and len(rows) > 4
     half = (len(rows) + 1) // 2 if two else len(rows)
-    colw = (w - 0.55) / 2 if two else w
+    colw = (w - 0.45) / 2 if two else w
     for i, row in enumerate(rows):
         col, idx = ((0, i) if i < half else (1, i - half)) if two else (0, i)
-        xx = x + col * (colw + 0.55)
-        yy = y + idx * 0.72
-        text(slide, xx, yy, 0.55, 0.28, "%02d" % (i + 1), size=SZ_HEAD, font=F_BOLD, color=C_ACC)
-        text(slide, xx + 0.60, yy, colw - 0.60, 0.28,
-             row[0] if row else "", size=SZ_BODY, font=F_SEMI, color=C_TEXT)
-        text(slide, xx + 0.60, yy + 0.28, colw - 0.60, 0.38,
-             row[1] if len(row) > 1 else "", size=SZ_BODY - 0.5, color=C_MUTE)
-        line(slide, xx + 0.60, yy + 0.65, xx + colw, yy + 0.65)
-    return y + half * 0.72 + 0.08
+        xx = x + col * (colw + 0.45)
+        yy = y + idx * 0.70
+        box = slide.shapes.add_textbox(Inches(xx), Inches(yy), Inches(colw), Inches(0.66))
+        tf = _tf(box)
+        p = tf.paragraphs[0]
+        p.line_spacing = 1.2
+        rn = p.add_run()
+        rn.text = "%02d  " % (i + 1)
+        rn.font.name, rn.font.size, rn.font.color.rgb = F_BOLD, Pt(SZ_BODY), C_ACC
+        rt = p.add_run()
+        rt.text = T(row[0] if row else "")
+        rt.font.name, rt.font.size, rt.font.color.rgb = F_SEMI, Pt(SZ_BODY), C_TEXT
+        p2 = tf.add_paragraph()
+        p2.line_spacing = 1.2
+        rd = p2.add_run()
+        rd.text = T(row[1] if len(row) > 1 else "")
+        rd.font.name, rd.font.size, rd.font.color.rgb = F_BODY, Pt(SZ_BODY - 0.5), C_MUTE
+        line(slide, xx, yy + 0.62, xx + colw, yy + 0.62)
+    return y + half * 0.70 + 0.08
 
 
-def draw_note(slide, y, b, x=L, w=W):
+def draw_note(slide, y, b, x=L, w=None):
+    w = w or CW
     h = 0.26 * _wrapped(b.get("text", ""), cap_of(w))
     text(slide, x, y, w, h, b.get("text", ""), size=SZ_BODY - 0.5, color=C_MUTE)
     return y + h + 0.12
@@ -347,7 +430,7 @@ def _bottom(related):
     return Y_MAX if related else Y_MAX + 0.34
 
 
-HALF = (W - 0.55) / 2
+HALF = (W - 0.45) / 2
 GAP = 0.16
 
 
@@ -414,6 +497,7 @@ def page_height(lead, lines):
 
 
 def fit_page(chapter, title, lead, blocks):
+    set_width(W if chapter == "데이터" else W_BODY)
     """한 쪽에 들어갈 때까지 덜어낸다. 뺀 것은 CUTS 에 남긴다."""
     blocks = [dict(b) for b in blocks]
     budget = Y_MAX - Y_BODY
@@ -446,6 +530,7 @@ def fit_page(chapter, title, lead, blocks):
 def content_slide(prs, page, chapter, title, lead, blocks, related):
     """한 페이지 분량을 그린다. 넘치면 「(이어서)」 쪽으로 넘긴다.
     다음에 쓸 쪽 번호를 돌려준다."""
+    set_width(W if chapter == "데이터" else W_BODY)
     usable = [b for b in blocks if DRAW.get(b.get("type"))]
     if TRIM:
         usable = fit_page(chapter, title, lead, usable)
@@ -568,14 +653,14 @@ def appendix_stickers(prs, page):
                 if gold:
                     eff = (eff + " · " + gold) if eff and eff != "—" else gold
                 m = r.get("measured") or {}
-                rows.append([r["name"], r.get("cond_ko") or "모든 다트", eff or "—",
-                             "%sG" % num(r.get("cost"), "0"),
-                             ("%.1f%%" % m["fire_pct"]) if m.get("fire_pct") is not None else "—"])
+                rows.append([r["name"], r.get("rarity_ko") or "—",
+                             r.get("cond_ko") or "모든 다트", eff or "—",
+                             "%sG" % num(r.get("cost"), "0")])
             out.append(("스티커 · %s %d/%d" % (ko, i, len(chunks)),
-                        "%s %d장 · 발동률은 36만 발 실측" % (ko, len(sub)),
+                        "%s %d장" % (ko, len(sub)),
                         [{"type": "table",
-                          "cols": ["이름", "조건", "효과", "가격", "발동률"],
-                          "w": [1.05, 2.15, 2.05, 0.42, 0.52],
+                          "cols": ["이름", "희귀도", "조건", "효과", "가격"],
+                          "w": [1.15, 0.62, 2.05, 2.0, 0.45],
                           "rows": rows}]))
     for title, lead, blocks in out:
         page = content_slide(prs, page, "데이터", title, lead, blocks, [])
@@ -690,16 +775,17 @@ def appendix_tables(prs, page):
 
 # ── 조립 ──────────────────────────────────────────────────────────
 SECTIONS = [
-    ("01", "기획 의도", "", "한 줄 정의 · 왜 다트판인가 · 무엇을 덜어냈나 · 실력 × 빌드 · 타깃"),
-    ("02", "시스템", "", "런 · 판 · 다트 · 조준 · 점수 · 스티커 · 조건 · 개조 · 강화 · 제약"),
-    ("03", "재미 요소", "", "코어 루프 · 조준 · 조합 · 발동 순서 · 선택의 저울"),
-    ("04", "보상 요소", "", "골드 · 이자 · 상점 · 딜러 · 설비 · 딱지 · 팩 · 리그"),
-    ("05", "UI/UX", "", "레이아웃 · 조작 · 화면 전이 · 상태별 처리 · 가독성"),
-    ("06", "데이터", "", "스티커 전종 · 다트 · 개조 · 제약 · 리그 · 튜닝 상수"),
+    ("01", "용어", "", "점수와 판 · 모으는 것 · 런 바깥"),
+    ("02", "기획 의도", "", "한 줄 정의 · 왜 다트판인가 · 무엇을 덜어냈나 · 실력 × 빌드 · 타깃"),
+    ("03", "시스템", "", "런 · 판 · 다트 · 조준 · 점수 · 스티커 · 조건 · 개조 · 강화 · 제약"),
+    ("04", "재미 요소", "", "코어 루프 · 조준 · 조합 · 발동 순서 · 선택의 저울"),
+    ("05", "보상 요소", "", "골드 · 이자 · 상점 · 딜러 · 설비 · 딱지 · 팩 · 리그"),
+    ("06", "UI/UX", "", "레이아웃 · 조작 · 화면 전이 · 상태별 처리"),
+    ("07", "데이터", "", "스티커 전종 · 다트 · 개조 · 제약 · 리그 · 튜닝 상수"),
 ]
 
 
-ORDER = ["기획 의도", "시스템", "재미 요소", "보상 요소", "UI/UX"]
+ORDER = ["용어", "기획 의도", "시스템", "재미 요소", "보상 요소", "UI/UX"]
 
 
 def _run(pages, spans=None):
