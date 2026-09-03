@@ -11281,6 +11281,14 @@ func _vol_row(r: Rect2, i: int, label: String, v: float) -> void:
 	draw_string(font, Vector2(r.end.x - 32.0, r.position.y + 20.0),
 			"%d" % int(round(v * 100.0)), HORIZONTAL_ALIGNMENT_RIGHT, 26.0, 10,
 			C_TXT if hot else C_DIM)
+	# 음악 줄에는 지금 무엇이 울리는지 같이 쓴다. "안 들린다" 가 소리
+	# 문제인지 재생 문제인지, 열어 보면 이 한 줄로 갈린다.
+	if label == "음악":
+		var on: bool = mus_pl.size() > 0 and mus_pl[mus_i].playing
+		draw_string(font, Vector2(r.position.x + 10.0, r.end.y + 9.0),
+			("재생 중 · %s" % mus_key) if on else "재생 안 함",
+			HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 20.0, 8,
+			C_DIM if on else C_MULT.lightened(0.2))
 
 
 func _vol_track(r: Rect2) -> Rect2:
