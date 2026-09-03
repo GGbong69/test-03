@@ -12,62 +12,63 @@ extends Node3D
 #   2. 집는 판정은 레이캐스트다. 사다리꼴 안쪽 검사가 아니다.
 #   3. 화면은 640x360 · nearest 그대로다. 도트는 해상도가 만든다.
 #
+# **물건은 씬에 노드로 있다.** 코드가 만들지 않는다 — 에디터에서 골라
+# 옮기고 돌릴 수 있어야 한다. 이 스크립트가 하는 일은 셋뿐이다:
+# 카메라 겨누기, 딜러에 도트 재질 입히기, 집기 판정.
+#
 # 단위는 미터다. 테이블 폭 1.9m, 딜러 키 1.7m — 실물 크기라야 카메라
 # 화각과 조명이 상식대로 먹는다.
 
-const TABLE := "res://assets/table.obj"
-const TABLE_TEX := "res://assets/table_albedo.jpg"
-const DEALER := "res://assets/dealer.glb"
 const DOT := "res://scripts/shaders/dot.gdshader"
 
-const TABLE_W := 1.90          # 테이블 폭(m)
-const CARD := Vector3(0.24, 0.012, 0.34)   # 매물 판 크기(m)
-
-# 에디터에서 그대로 만진다. 값을 바꾸면 다음 프레임에 카메라가 따라온다 —
-# 숫자를 코드에서 고치고 다시 띄우는 왕복이 없다.
+# 에디터에서 그대로 만진다. 값을 바꾸면 다음 프레임에 카메라가 따라온다.
 @export_group("카메라")
+@export var aim_camera := true                          # 끄면 Cam 을 손으로 놓는다
 @export_range(15.0, 80.0, 0.5) var cam_fov := 42.0
 @export_range(2.0, 70.0, 0.5) var cam_elev := 17.0      # 앙각(도)
 @export_range(0.4, 6.0, 0.01) var cam_dist := 1.46      # 거리(m)
-@export_range(-1.0, 1.5, 0.01) var cam_look_y := 0.16   # 상판에서 이만큼 위를 본다
+@export_range(-1.0, 2.0, 0.01) var cam_look_y := 1.02   # 바라보는 높이(m)
 @export_range(-1.5, 1.5, 0.01) var cam_look_z := -0.16
 
-@export_group("딜러")
-@export_range(1.2, 2.2, 0.01) var dealer_h := 1.70
-@export_range(-1.6, 0.2, 0.01) var dealer_z := -0.62
-@export_range(-180.0, 180.0, 1.0) var dealer_yaw := 0.0
-
-@export_group("매물")
-@export_range(1, 8, 1) var slot_n := 4
-@export_range(0.10, 0.70, 0.01) var slot_gap := 0.34
-@export_range(-0.6, 0.6, 0.01) var slot_z := 0.10
+@export_group("도트")
+@export_range(2, 8, 1) var light_bands := 4
+@export_range(2, 32, 1) var color_steps := 12
 
 @onready var cam: Camera3D = $Cam
+@onready var slots_root: Node3D = $Slots
 
-var top_y := 0.0               # 상판 높이(m). 테이블 상자에서 잰다
-var slots: Array[Node3D] = []
-var hot := -1                  # 커서 아래 자리
+var hot := -1
 
 
 func _ready() -> void:
-	_build_table()
-	_build_dealer()
-	_build_slots()
-	_aim_camera()
+	_skin_dealer()
+	_aim()
 
 
-# ── 재질 ─────────────────────────────────────────────
-# 도트 셰이더 하나로 통일한다. 명암을 계단으로 끊어야 640x360 에 찍혔을 때
-# 손으로 칠한 화면과 붙는다 — 매끄러운 PBR 은 도트로 줄여도 안 붙는다.
-func _dot(tex: Texture2D, tint := Color.WHITE, bands := 4, steps := 12) -> ShaderMaterial:
-	var m := ShaderMaterial.new()
-	m.shader = load(DOT)
-	if tex != null:
-		m.set_shader_parameter("albedo_tex", tex)
-	m.set_shader_parameter("tint", tint)
-	m.set_shader_parameter("light_bands", bands)
-	m.set_shader_parameter("color_steps", steps)
-	return m
+# 딜러는 glb 인스턴스라 임포터가 붙인 재질을 쓴다. 도트 셰이더로 갈아
+# 끼우되 텍스처는 그대로 물려준다 — 조끼·장갑 색이 거기 있다.
+func _skin_dealer() -> void:
+	var npc := get_node_or_null("Dealer")
+	if npc == null:
+		return
+	var mis: Array[MeshInstance3D] = []
+	_meshes(npc, mis)
+	for mi in mis:
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		if mi.material_override != null:
+			continue
+		var tex: Texture2D = null
+		var src := mi.get_active_material(0)
+		if src is StandardMaterial3D:
+			tex = (src as StandardMaterial3D).albedo_texture
+		var m := ShaderMaterial.new()
+		m.shader = load(DOT)
+		if tex != null:
+			m.set_shader_parameter("albedo_tex", tex)
+		m.set_shader_parameter("tint", Color.WHITE)
+		m.set_shader_parameter("light_bands", light_bands)
+		m.set_shader_parameter("color_steps", color_steps)
+		mi.material_override = m
 
 
 func _meshes(n: Node, out: Array[MeshInstance3D]) -> void:
@@ -77,156 +78,69 @@ func _meshes(n: Node, out: Array[MeshInstance3D]) -> void:
 		_meshes(c, out)
 
 
-func _box(n: Node) -> AABB:
-	var mis: Array[MeshInstance3D] = []
-	_meshes(n, mis)
-	if mis.is_empty():
-		return AABB()
-	var ab: AABB = mis[0].get_aabb()
-	for i in range(1, mis.size()):
-		ab = ab.merge(mis[i].get_aabb())
-	return ab
-
-
-# ── 테이블 ───────────────────────────────────────────
-func _build_table() -> void:
-	var mesh: Mesh = load(TABLE)
-	if mesh == null:
-		push_warning("테이블 메시가 없다: " + TABLE)
-		return
-	var mi := MeshInstance3D.new()
-	mi.mesh = mesh
-	mi.material_override = _dot(load(TABLE_TEX))
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(mi)
-
-	var ab := mesh.get_aabb()
-	var k := TABLE_W / maxf(ab.size.x, 0.001)
-	mi.scale = Vector3.ONE * k
-	# 바닥이 y=0 에 오게 내린다. 상판 높이는 상자 윗면이다.
-	mi.position = Vector3(-ab.get_center().x * k, -ab.position.y * k,
-			-ab.get_center().z * k)
-	top_y = ab.size.y * k
-	mi.name = "Table"
-
-
-# ── 딜러 ─────────────────────────────────────────────
-func _build_dealer() -> void:
-	var scn: PackedScene = load(DEALER)
-	if scn == null:
-		push_warning("딜러 씬이 없다: " + DEALER)
-		return
-	var n: Node3D = scn.instantiate()
-	add_child(n)
-	n.name = "Dealer"
-	var ab := _box(n)
-	if ab.size.y <= 0.0:
-		return
-	var k := dealer_h / ab.size.y
-	n.scale = Vector3.ONE * k
-	n.rotation_degrees = Vector3(0.0, dealer_yaw, 0.0)   # 모델 정면이 +Z 다
-	# 테이블 건너편에 세운다. 발이 바닥(y=0)에 닿는다.
-	n.position = Vector3(0.0, -ab.position.y * k, dealer_z)
-	var mis: Array[MeshInstance3D] = []
-	_meshes(n, mis)
-	for mi in mis:
-		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		var tex: Texture2D = null
-		var src := mi.get_active_material(0)
-		if src is StandardMaterial3D:
-			tex = (src as StandardMaterial3D).albedo_texture
-		mi.material_override = _dot(tex)
-
-
-# ── 매물 ─────────────────────────────────────────────
-# 자리는 월드 좌표다. 상판 위에 나란히 눕히고, 살짝 세워 얼굴이 보이게 한다.
-func _build_slots() -> void:
-	var x0 := -slot_gap * (float(slot_n) - 1.0) * 0.5
-	for i in slot_n:
-		var s := Node3D.new()
-		s.name = "Slot%d" % i
-		s.position = Vector3(x0 + slot_gap * float(i), top_y, slot_z)
-		add_child(s)
-
-		var mi := MeshInstance3D.new()
-		var bm := BoxMesh.new()
-		bm.size = CARD
-		mi.mesh = bm
-		mi.position = Vector3(0.0, CARD.y * 0.5, 0.0)
-		mi.rotation_degrees = Vector3(-14.0, 0.0, 0.0)   # 앞으로 살짝 눕힌다
-		mi.material_override = _dot(null, Color(0.62, 0.58, 0.52))
-		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		s.add_child(mi)
-
-		# 레이캐스트가 집을 몸. 판정이 그림과 같은 상자라야 어긋나지 않는다.
-		var body := StaticBody3D.new()
-		var col := CollisionShape3D.new()
-		var sh := BoxShape3D.new()
-		sh.size = CARD
-		col.shape = sh
-		body.add_child(col)
-		body.position = mi.position
-		body.rotation = mi.rotation
-		body.set_meta("slot", i)
-		s.add_child(body)
-		slots.append(s)
-
-
 # ── 카메라 ───────────────────────────────────────────
-# 원근이다. 정사영으로 두면 옛 화면과 같은 평평함이 남는다 — 3D 로 바꾸는
-# 이유가 깊이라, 그 깊이를 카메라가 만들어야 한다. 화각은 좁게(35°) 잡아
-# 가장자리가 안 늘어나게 한다.
-func _aim_camera() -> void:
-	if cam == null:
+# 옛 2D 상점의 구도다 — 테이블이 화면을 좌우로 넘치고 딜러는 상반신만
+# 위에 걸린다. 넘치게 하려면 카메라가 가까워야 한다: 화각 42°·16:9 에서
+# 가로 시야가 거리의 약 1.4 배라, 1.9m 테이블을 넘기려면 1.5m 안쪽이다.
+func _aim() -> void:
+	if cam == null or not aim_camera:
 		return
-	# 옛 2D 상점의 구도다 — 테이블이 화면을 좌우로 넘치고, 딜러는 상반신만
-	# 위에 걸린다. 넘치게 하려면 카메라가 가까워야 한다: 화각 42° · 16:9 에서
-	# 가로 시야가 거리의 약 1.4 배라, 1.9m 테이블을 넘치려면 1.5m 안쪽이다.
-	var look := Vector3(0.0, top_y + cam_look_y, cam_look_z)
+	var look := Vector3(0.0, cam_look_y, cam_look_z)
 	var e := deg_to_rad(cam_elev)
 	cam.fov = cam_fov
-	cam.near = 0.03
-	cam.far = 20.0
 	cam.position = look + Vector3(0.0, sin(e), cos(e)) * cam_dist
 	cam.look_at(look, Vector3.UP)
 
 
-# 에디터에서는 매 프레임 다시 겨눈다. 인스펙터 값이 바로 화면에 든다.
 func _process(_d: float) -> void:
 	if Engine.is_editor_hint():
-		_aim_camera()
+		_aim()
 
 
 # ── 집기 ─────────────────────────────────────────────
-# 사다리꼴 안쪽 검사가 아니라 레이캐스트다. 자리가 옮겨져도 판정이 따라온다.
+# 사다리꼴 안쪽 검사가 아니라 레이캐스트다. 자리를 에디터에서 옮겨도
+# 판정이 따라온다 — 그림과 몸이 같은 노드에 붙어 있기 때문이다.
 func _pick(m: Vector2) -> int:
+	if cam == null or slots_root == null:
+		return -1
 	var from := cam.project_ray_origin(m)
-	var to := from + cam.project_ray_normal(m) * 20.0
-	var q := PhysicsRayQueryParameters3D.create(from, to)
+	var q := PhysicsRayQueryParameters3D.create(from, from + cam.project_ray_normal(m) * 20.0)
 	var hit := get_world_3d().direct_space_state.intersect_ray(q)
 	if hit.is_empty():
 		return -1
-	var c: Object = hit.get("collider")
-	return int(c.get_meta("slot", -1)) if c != null and c.has_meta("slot") else -1
+	var n: Node = hit.get("collider") as Node
+	while n != null and n.get_parent() != slots_root:
+		n = n.get_parent()
+	return slots_root.get_children().find(n) if n != null else -1
 
 
 func _unhandled_input(ev: InputEvent) -> void:
+	if Engine.is_editor_hint():
+		return
 	if ev is InputEventMouseMotion:
 		var n := _pick((ev as InputEventMouseMotion).position)
 		if n != hot:
 			hot = n
-			_light_slots()
+			_light()
 	elif ev is InputEventMouseButton and (ev as InputEventMouseButton).pressed:
 		var n := _pick((ev as InputEventMouseButton).position)
 		if n >= 0:
 			print("샀다: 자리 ", n)
 
 
-func _light_slots() -> void:
-	for i in slots.size():
-		var mi := slots[i].get_child(0) as MeshInstance3D
+# 재질은 씬이 공유한다. 한 자리만 밝히려면 그 자리 것을 떼어 내야 한다.
+func _light() -> void:
+	var kids := slots_root.get_children()
+	for i in kids.size():
+		var mi := kids[i] as MeshInstance3D
+		if mi == null:
+			continue
 		var m := mi.material_override as ShaderMaterial
-		if m != null:
-			m.set_shader_parameter("tint",
-					Color(0.98, 0.90, 0.62) if i == hot else Color(0.62, 0.58, 0.52))
-		slots[i].position.y = top_y + (0.02 if i == hot else 0.0)
+		if m == null:
+			continue
+		if not m.resource_local_to_scene:
+			m = m.duplicate() as ShaderMaterial
+			m.resource_local_to_scene = true
+			mi.material_override = m
+		m.set_shader_parameter("tint",
+				Color(0.98, 0.90, 0.62) if i == hot else Color(0.62, 0.58, 0.52))

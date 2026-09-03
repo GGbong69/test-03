@@ -1,11 +1,95 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=10 format=3]
 
-[ext_resource type="Script" path="res://scripts/shop3d.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/shop3d.gd" id="1_scr"]
+[ext_resource type="Mesh" path="res://assets/table.obj" id="2_tbl"]
+[ext_resource type="PackedScene" path="res://assets/dealer.glb" id="3_npc"]
+[ext_resource type="Shader" path="res://scripts/shaders/dot.gdshader" id="4_dot"]
+[ext_resource type="Texture2D" path="res://assets/table_albedo.jpg" id="5_tex"]
+
+[sub_resource type="ShaderMaterial" id="MatTable"]
+shader = ExtResource("4_dot")
+shader_parameter/albedo_tex = ExtResource("5_tex")
+shader_parameter/tint = Color(1, 1, 1, 1)
+shader_parameter/light_bands = 4
+shader_parameter/color_steps = 12
+shader_parameter/ambient = 0.34
+
+[sub_resource type="ShaderMaterial" id="MatCard"]
+shader = ExtResource("4_dot")
+shader_parameter/tint = Color(0.62, 0.58, 0.52, 1)
+shader_parameter/light_bands = 4
+shader_parameter/color_steps = 12
+shader_parameter/ambient = 0.34
+
+[sub_resource type="BoxMesh" id="CardMesh"]
+size = Vector3(0.24, 0.012, 0.34)
+
+[sub_resource type="BoxShape3D" id="CardShape"]
+size = Vector3(0.24, 0.012, 0.34)
 
 [node name="Shop3D" type="Node3D"]
-script = ExtResource("1")
+script = ExtResource("1_scr")
+
+[node name="Table" type="MeshInstance3D" parent="."]
+transform = Transform3D(0.99812, 0, 0, 0, 0.99812, 0, 0, 0, 0.99812, 0.0008, 0.43279, 0.0012)
+mesh = ExtResource("2_tbl")
+material_override = SubResource("MatTable")
+cast_shadow = 0
+
+[node name="Dealer" parent="." instance=ExtResource("3_npc")]
+transform = Transform3D(1.04938, 0, 0, 0, 1.04938, 0, 0, 0, 1.04938, 0, 0, -0.62)
+
+[node name="Slots" type="Node3D" parent="."]
+
+[node name="Slot0" type="MeshInstance3D" parent="Slots"]
+transform = Transform3D(1, 0, 0, 0, 0.9703, -0.24192, 0, 0.24192, 0.9703, -0.51, 0.8701, 0.1)
+mesh = SubResource("CardMesh")
+material_override = SubResource("MatCard")
+cast_shadow = 0
+
+[node name="Body" type="StaticBody3D" parent="Slots/Slot0"]
+
+[node name="Col" type="CollisionShape3D" parent="Slots/Slot0/Body"]
+shape = SubResource("CardShape")
+
+[node name="Slot1" type="MeshInstance3D" parent="Slots"]
+transform = Transform3D(1, 0, 0, 0, 0.9703, -0.24192, 0, 0.24192, 0.9703, -0.17, 0.8701, 0.1)
+mesh = SubResource("CardMesh")
+material_override = SubResource("MatCard")
+cast_shadow = 0
+
+[node name="Body" type="StaticBody3D" parent="Slots/Slot1"]
+
+[node name="Col" type="CollisionShape3D" parent="Slots/Slot1/Body"]
+shape = SubResource("CardShape")
+
+[node name="Slot2" type="MeshInstance3D" parent="Slots"]
+transform = Transform3D(1, 0, 0, 0, 0.9703, -0.24192, 0, 0.24192, 0.9703, 0.17, 0.8701, 0.1)
+mesh = SubResource("CardMesh")
+material_override = SubResource("MatCard")
+cast_shadow = 0
+
+[node name="Body" type="StaticBody3D" parent="Slots/Slot2"]
+
+[node name="Col" type="CollisionShape3D" parent="Slots/Slot2/Body"]
+shape = SubResource("CardShape")
+
+[node name="Slot3" type="MeshInstance3D" parent="Slots"]
+transform = Transform3D(1, 0, 0, 0, 0.9703, -0.24192, 0, 0.24192, 0.9703, 0.51, 0.8701, 0.1)
+mesh = SubResource("CardMesh")
+material_override = SubResource("MatCard")
+cast_shadow = 0
+
+[node name="Body" type="StaticBody3D" parent="Slots/Slot3"]
+
+[node name="Col" type="CollisionShape3D" parent="Slots/Slot3/Body"]
+shape = SubResource("CardShape")
 
 [node name="Cam" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.9563, -0.29237, 0, 0.29237, 0.9563, 0, 1.45098, 1.23615)
+fov = 42.0
+near = 0.03
+far = 20.0
 
 [node name="Key" type="DirectionalLight3D" parent="."]
 transform = Transform3D(0.87, -0.35, 0.35, 0, 0.7, 0.71, -0.5, -0.61, 0.61, 0, 3, 2)
