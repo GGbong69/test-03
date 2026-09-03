@@ -8,6 +8,7 @@
 
 import csv
 import json
+import re
 import os
 import sys
 
@@ -38,7 +39,7 @@ TERMS = {
     "칩": "칩",
     "배수": "배수",
     "다트": "다트",
-    "앤티": "앤티",
+    "라운드": "라운드",
     "리그": "리그",
     "제약": "제약",
     "탄창": "탄창",
@@ -46,15 +47,28 @@ TERMS = {
     "소비 아이템": "소비 아이템",
     "스타트 팩": "스타트 팩",
 }
-_SUBS = sorted(((k, v) for k, v in TERMS.items() if k != v), key=lambda p: -len(p[0]))
+_SUBS = {k: v for k, v in TERMS.items() if k != v}
+_PAT = re.compile("|".join(sorted((re.escape(k) for k in _SUBS), key=len, reverse=True)))     if _SUBS else None
 
 
 def T(s):
-    """용어를 치환한다."""
+    """용어를 한 번에 치환한다. 사슬로 물리지 않게 동시 치환이다."""
     s = "" if s is None else str(s)
-    for k, v in _SUBS:
-        s = s.replace(k, v)
-    return s
+    return _PAT.sub(lambda m: _SUBS[m.group(0)], s) if _PAT else s
+
+
+def simul(obj, mapping):
+    """자료 구조 전체의 문자열을 동시 치환한다."""
+    pat = re.compile("|".join(sorted((re.escape(k) for k in mapping), key=len, reverse=True)))
+    def go(o):
+        if isinstance(o, str):
+            return pat.sub(lambda m: mapping[m.group(0)], o)
+        if isinstance(o, list):
+            return [go(x) for x in o]
+        if isinstance(o, dict):
+            return {k: go(v) for k, v in o.items()}
+        return o
+    return go(obj)
 
 
 # ── 서식 ──────────────────────────────────────────────────────────
@@ -623,6 +637,8 @@ def toc(prs, sections):
 # 뽑아 둔 것이다. 조건·효과 문장이 이미 게임과 같은 함수로 렌더링돼 있으므로
 # 여기서 다시 만들지 않는다. 데이터가 바뀌면 export_kb.py 를 먼저 돌린다.
 KB_PATH = os.path.join(ROOT, "docs", "export", "hightone_kb.json")
+# 저장소는 아직 「앤티 > 판 > 라운드」로 적는다. 기획서는 「런 > 라운드 > 판」이다.
+KB_RENAME = {"앤티": "라운드", "라운드": "판"}
 _KB = None
 
 
@@ -630,7 +646,7 @@ def kb():
     global _KB
     if _KB is None:
         with open(KB_PATH, encoding="utf-8") as fh:
-            _KB = json.load(fh)
+            _KB = simul(json.load(fh), KB_RENAME)
     return _KB
 
 
@@ -712,13 +728,13 @@ def appendix_tables(prs, page):
 
     vo, tg = tbl("vouchers"), tbl("tags")
     emit("설비 · 딱지", "설비 %d종 · 딱지 %d종" % (len(vo), len(tg)),
-         [{"type": "table", "heading": "설비 — 상점 왼쪽 벽, 앤티마다 하나",
-           "cols": ["이름", "효과", "가격", "앤티", "선행"],
+         [{"type": "table", "heading": "설비 — 상점 왼쪽 벽, 라운드마다 하나",
+           "cols": ["이름", "효과", "가격", "라운드", "선행"],
            "w": [1.1, 2.6, 0.5, 0.5, 1.0],
            "rows": [[v["name"], v.get("desc_ko") or "—", "%sG" % num(v["cost"]),
                      num(v["min_ante"]), v.get("prereq") or "—"] for v in vo]},
           {"type": "table", "heading": "딱지 — 소판·대판을 건너뛸 때만 받는다",
-           "cols": ["이름", "효과", "시점", "앤티"],
+           "cols": ["이름", "효과", "시점", "라운드"],
            "w": [1.1, 2.9, 0.9, 0.5],
            "rows": [[t["name"], t.get("desc_ko") or "—", t["when"], num(t["min_ante"])]
                     for t in tg]}])
@@ -732,7 +748,7 @@ def appendix_tables(prs, page):
                      "×%s" % num(s["shop_cost_mul"]), num(s["perish"], "0"),
                      num(s["rent"], "0")] for s in st]},
           {"type": "note",
-           "text": "곡선 base 는 기준 곡선, curve_a·curve_b 는 앤티 표의 가팔라진 열이다. "
+           "text": "곡선 base 는 기준 곡선, curve_a·curve_b 는 라운드 표의 가팔라진 열이다. "
                    "삭음은 산 스티커가 몇 판 뒤에 사라지는가, 유지비는 판마다 내는 골드다."}])
 
     pk = tbl("packs")
@@ -770,9 +786,9 @@ def appendix_tables(prs, page):
     sch = (kb().get("derived", {}).get("schedule") or {}).get("white") or []
     if sch:
         emit("목표 점수 — 흰 리그 24판",
-             "앤티 8 × 판 3. 목표 = 앤티 기준값 × 판 배수",
+             "라운드 8 × 판 3. 목표 = 라운드 기준값 × 판 배수",
              [{"type": "table",
-               "cols": ["앤티", "작은 판", "큰 판", "보스 판", "다트", "보상 (소·대·보스)"],
+               "cols": ["라운드", "작은 판", "큰 판", "보스 판", "다트", "보상 (소·대·보스)"],
                "rows": [[str(a),
                          *[str(next((r["target"] for r in sch
                                      if r["ante"] == a and r["blind"] == b), "—"))
