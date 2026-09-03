@@ -56,6 +56,39 @@ TERMS = {
     "소비 아이템": "소비 아이템",
     "스타트 팩": "스타트 팩",
 }
+# 코드 이름은 기획서에 안 나온다. 칸 값이 통째로 이것이면 우리말로 바꾼다.
+CODE = {
+    # 효과 갈래
+    "chip": "점수 더하기", "mult": "배수 더하기", "xmult": "배수 곱하기",
+    "mult_streak": "연속 배수", "mult_rand": "무작위 배수",
+    "save": "실패 방지", "save 효과": "실패 방지 효과", "kind": "갈래",
+    # 골드가 들어오는 때
+    "gold": "이름", "clear 클리어": "클리어", "spare 잔탄": "잔탄",
+    "clean 무실책": "무실책", "blitz 속공": "속공", "broke 빈털터리": "빈털터리",
+    "round 정기": "정기", "risk50 위험수당": "위험수당", "hit": "명중마다",
+    # 조건
+    "always": "언제나", "col": "칸 색", "sec — 지정 칸": "지정 칸",
+    # 보스 제약이 건드리는 축
+    "band_mul": "링 폭", "color_kill": "칸 색", "darts_add": "다트 수",
+    "fog": "시야", "gauge_mul": "조준 속도", "odd_mul": "홀수 칸 값",
+    "reward_mul": "보상 골드", "ring_kill": "트리플 배수",
+    "seal_items": "스티커 봉인", "sector_kill": "칸 점수",
+    "spin": "판 회전", "target_mul": "목표 점수",
+    # 개조가 건드리는 축
+    "band": "띠 폭", "bull": "불 크기", "odd": "짝 만들기", "out": "판 크기",
+    "ring": "띠 위치", "slide": "띠 이동", "swap": "칸 숫자",
+    # 리그 곡선
+    "base": "기준", "curve_a": "가파름 1단", "curve_b": "가파름 2단",
+    # 튜닝 상수
+    "start_gold": "시작 골드", "clear_gold": "클리어 보상",
+    "gold_per_dart": "남은 다트 1발당", "interest_per": "이자 기준 금액",
+    "interest_max": "이자 상한", "sell_div": "판매가 나눗수",
+    "sell_min": "판매가 하한", "free_rerolls": "무료 새로고침",
+    "reroll_base": "새로고침 첫값", "reroll_step": "새로고침 증가폭",
+    "max_items": "스티커 칸", "darts_base": "기본 다트 수",
+    "cons_slots": "소비 칸", "curve_first": "첫 판 목표", "curve_last": "마지막 판 목표",
+}
+
 # 같은 말로 가는 짝도 남긴다 — 「트랙」처럼 긴 말이 먼저 걸려야
 # 그 안의 짧은 말(「랙」)이 안 바뀐다.
 _SUBS = dict(TERMS)
@@ -65,6 +98,7 @@ _PAT = re.compile("|".join(sorted((re.escape(k) for k in _SUBS), key=len, revers
 def T(s):
     """용어를 한 번에 치환한다. 사슬로 물리지 않게 동시 치환이다."""
     s = "" if s is None else str(s)
+    s = CODE.get(s.strip(), s)          # 칸이 통째로 코드 이름이면 갈아 끼운다
     return _PAT.sub(lambda m: _SUBS[m.group(0)], s) if _PAT else s
 
 
@@ -250,7 +284,8 @@ def block_height(b, w=None):
     if t == "kv":
         rows = b.get("rows") or []
         cap = cap_of(w - label_w_for(w))
-        return head + sum(ROW_H * _wrapped(r[1] if len(r) > 1 else "", cap) for r in rows) + 0.10
+        rh = b.get("rh") or ROW_H
+        return head + sum(rh * _wrapped(r[1] if len(r) > 1 else "", cap) for r in rows) + 0.10
     if t == "split":
         half = (w - 0.45) / 2
         cap = cap_of(half - 1.45)
@@ -350,9 +385,10 @@ def draw_kv(slide, y, b, x=L, w=None, label_w=None):
     if not rows:
         return y
     widths = [label_w, w - label_w]
-    heights = [row_height(r, widths) for r in rows]
+    rh = b.get("rh")
+    heights = [row_height(r, widths, rh) for r in rows]
     return make_table(slide, x, y, widths, heights, None, rows,
-                      band=False, size=SZ_BODY) + 0.10
+                      band=False, size=b.get("size") or SZ_BODY) + 0.10
 
 
 def draw_split(slide, y, b, x=L, w=None):
@@ -590,6 +626,11 @@ def fit_page(chapter, title, lead, blocks):
     if page_height(lead, pack(blocks)) <= budget:
         return blocks
 
+    # 0) 먼저 촘촘하게 담아 본다. 줄을 버리는 것보다 이게 낫다.
+    if page_height(lead, pack(blocks)) > budget:
+        for b in blocks:
+            if b.get("rows") and not b.get("rh"):
+                b["rh"], b["size"] = 0.225, 11.0
     # 1) note 를 뺀다 — 보조 문장이라 가장 먼저 버린다
     for b in list(blocks):
         if page_height(lead, pack(blocks)) <= budget:
@@ -729,21 +770,15 @@ def toc(prs, entries):
             t.rows[k].height = Inches(h)
         for k, (kind, no, name) in enumerate(col):
             if kind == "chapter":
-                _cell(t.cell(k, 0), no.split("|")[0], SZ_HEAD - 0.5, F_BOLD, C_ACC)
-                _cell(t.cell(k, 1), name, SZ_HEAD - 0.5, F_BOLD, C_TEXT)
+                _cell(t.cell(k, 0), no.split("|")[0], SZ_HEAD - 0.5, F_BOLD, C_ACC, C_BAND)
+                _cell(t.cell(k, 1), name, SZ_HEAD - 0.5, F_BOLD, C_TEXT, C_BAND)
                 _cell(t.cell(k, 2), no.split("|")[1], SZ_SMALL, F_SEMI, C_MUTE,
-                      align=PP_ALIGN.RIGHT)
+                      C_BAND, align=PP_ALIGN.RIGHT)
             else:
                 _cell(t.cell(k, 0), no.split("|")[0], SZ_BODY - 0.5, F_BODY, C_MUTE)
                 _cell(t.cell(k, 1), name, SZ_BODY, F_BODY, C_TEXT)
                 _cell(t.cell(k, 2), no.split("|")[1], SZ_BODY - 0.5, F_BODY, C_MUTE,
                       align=PP_ALIGN.RIGHT)
-        y = Y_BODY
-        for k, h in enumerate(heights):
-            if col[k][0] == "chapter":
-                line(slide, x, y + h - 0.05, x + colw, y + h - 0.05,
-                     color=RGBColor(0xC0, 0xC4, 0xC9), width=0.9)
-            y += h
     return slide
 
 
@@ -820,7 +855,7 @@ def appendix_tables(prs, page):
            "rows": [[d["name"], "×%s" % num(d["gauge"]), num(d["mult"], "0"),
                      d.get("desc_ko") or "—",
                      "%sG" % num(d["cost"]) if d["cost"] else "기본"] for d in darts]},
-          {"type": "table", "rh": 0.22, "size": 10.0, "heading": "개조 — 판의 기하를 바꿈 · 런 동안 유지",
+          {"type": "table", "rh": 0.22, "size": 10.0, "heading": "개조 — 다트판의 모양을 바꿈 · 런 동안 유지",
            "cols": ["이름", "축", "효과", "배타", "가격"],
            "w": [1.0, 0.8, 2.8, 0.8, 0.6],
            "rows": [[m["name"], m["axis"], m.get("desc_ko") or "—",
