@@ -943,7 +943,8 @@ func _roll_stock() -> void:
 	var w := GameData.shop_of(leg_no)
 
 	# 후보를 먼저 거른다 — 이미 가진 동전만 뺀다. 등장 조건은 없앴고
-	# 무엇이 뜨는지는 등급 가중치가 혼자 정한다(min_leg 는 전부 1 이다).
+	# 무엇이 뜨는지는 등급 가중치가 혼자 정한다(min_leg 는 전부 2 —
+	# 첫 상점이 열리는 판이라 아무것도 안 막는다).
 	var pool := []
 	for it in GameData.items():
 		if _has_item(it.id) or GameData.item_min_leg(it) > nxt:
