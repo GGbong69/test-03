@@ -40,6 +40,7 @@ TERMS = {
     "빈 랙": "빈 스티커 칸",
     "랙": "스티커 칸",
     "매대": "진열대",
+    "정산 큐": "정산 순서",
     "탄창": "다트 묶음",
     "스티커": "스티커",
     "딱지": "딱지",
@@ -681,40 +682,59 @@ def cover(prs):
     text(slide, 11.9, 7.02, 0.68, 0.22, "01", size=SZ_SMALL, color=C_MUTE, align=PP_ALIGN.RIGHT)
 
 
-def toc(slide_pres, entries):
-    """목차. 꾸미지 않는다 — 쪽 번호와 제목만 두 단으로 죽 적는다.
-    한 단이 글상자 하나다."""
-    slide = new_slide(slide_pres)
+def toc(prs, entries):
+    """목차. 세 단으로 나누고 쪽 번호를 오른쪽 끝에 세운다.
+    한 단이 표 하나라 번호가 자로 잰 듯 선다."""
+    slide = new_slide(prs)
     chrome(slide, "목차", 2)
-    half = (len(entries) + 1) // 2
-    cols = [entries[:half], entries[half:]]
-    for ci, col in enumerate(cols):
-        box = slide.shapes.add_textbox(Inches(L + ci * 6.05), Inches(Y_BODY),
-                                       Inches(5.6), Inches(5.4))
-        tf = _tf(box)
-        first = True
-        for kind, no, name in col:
-            para = tf.paragraphs[0] if first else tf.add_paragraph()
-            first = False
-            para.line_spacing = 1.15
+    if not entries:
+        return slide
+    # 장 단위로 단에 담는다. 장이 한 단을 넘치면 다음 단에 「(이어서)」로 잇는다.
+    H_CH, H_IT, BUD = 0.40, 0.245, Y_MAX - Y_BODY
+    cols, cur, used, cap = [], [], 0.0, None
+    for e in entries:
+        h = H_CH if e[0] == "chapter" else H_IT
+        if e[0] == "chapter":
+            cap = e[2]
+        if used + h > BUD and cur:
+            cols.append(cur)
+            cur, used = ([["chapter", "", cap + " (이어서)"]] if e[0] != "chapter" else []), 0.0
+            used = H_CH if cur else 0.0
+        cur.append(list(e))
+        used += h
+    if cur:
+        cols.append(cur)
+    colw = (W - 2 * 0.5) / 3
+    for ci, col in enumerate(cols[:3]):
+        if not col:
+            continue
+        heights = [(0.40 if k == "chapter" else 0.245) for k, _, _ in col]
+        x = L + ci * (colw + 0.5)
+        gf = slide.shapes.add_table(len(col), 2, Inches(x), Inches(Y_BODY),
+                                    Inches(colw), Inches(sum(heights)))
+        t = gf.table
+        _plain(t)
+        t.columns[0].width = Inches(colw - 0.92)
+        t.columns[1].width = Inches(0.92)
+        for k, h in enumerate(heights):
+            t.rows[k].height = Inches(h)
+        for k, (kind, no, name) in enumerate(col):
             if kind == "chapter":
-                if not first:
-                    para.space_before = Pt(7)
-                r = para.add_run()
-                r.text = T(name)
-                _apply_font(r, F_SEMI, SZ_HEAD - 1.0, C_ACC)
+                _cell(t.cell(k, 0), name, SZ_HEAD - 0.5, F_BOLD, C_TEXT)
+                _cell(t.cell(k, 1), no, SZ_SMALL, F_SEMI, C_ACC, align=PP_ALIGN.RIGHT)
             else:
-                r = para.add_run()
-                r.text = "%s   " % no
-                _apply_font(r, F_BODY, SZ_BODY, C_MUTE)
-                r2 = para.add_run()
-                r2.text = T(name)
-                _apply_font(r2, F_BODY, SZ_BODY, C_TEXT)
+                _cell(t.cell(k, 0), name, SZ_BODY, F_BODY, C_TEXT)
+                _cell(t.cell(k, 1), no, SZ_BODY - 0.5, F_BODY, C_MUTE, align=PP_ALIGN.RIGHT)
+        # 장 이름 아래 가는 줄 — 단이 셋이라 이게 없으면 다 같은 무게로 읽힌다
+        y = Y_BODY
+        for k, h in enumerate(heights):
+            if col[k][0] == "chapter":
+                line(slide, x, y + h - 0.07, x + colw, y + h - 0.07,
+                     color=RGBColor(0xC9, 0xCC, 0xD0), width=0.75)
+            y += h
+    return slide
 
-# ── 부록: KB 익스포트를 그대로 표로 ──────────────────────────────────
-# docs/export/hightone_kb.json 은 scripts/tools/export_kb.py 가 CSV + data.gd 에서
-# 뽑아 둔 것이다. 조건·효과 문장이 이미 게임과 같은 함수로 렌더링돼 있으므로
-# 여기서 다시 만들지 않는다. 데이터가 바뀌면 export_kb.py 를 먼저 돌린다.
+
 KB_PATH = os.path.join(ROOT, "docs", "export", "hightone_kb.json")
 # 저장소는 아직 「앤티 > 판 > 라운드」로 적는다. 기획서는 「런 > 라운드 > 판」이다.
 KB_RENAME = {"앤티": "라운드", "라운드": "판"}
@@ -884,19 +904,23 @@ def _run(pages, toc_rows=None):
     for name in ORDER:
         got = [q for q in pages if q.get("chapter") == name]
         if got:
-            rows.append(("chapter", "", name))
+            rows.append(["chapter", "", name])
+            head = len(rows) - 1
+            first = page
         for p in got:
-            rows.append(("page", "%02d" % page, p["title"]))
+            rows.append(["page", "%02d" % page, p["title"]])
             page = content_slide(prs, page, p["chapter"], p["title"], p.get("lead", ""),
                                  p.get("blocks", []), p.get("related", []))
+        if got:
+            rows[head][1] = "%d–%d" % (first, page - 1)
 
     start = page
     page, n_stick = appendix_stickers(prs, page)
     page = appendix_tables(prs, page)
-    rows.append(("chapter", "", "데이터"))
-    rows.append(("page", "%02d" % start,
-                 "스티커 전종 · 다트 · 개조 · 제약 · 설비 · 리그 · 튜닝  (%d–%d)"
-                 % (start, page - 1)))
+    rows.append(["chapter", "%d–%d" % (start, page - 1), "데이터"])
+    for nm in ("스티커 전종 99장", "다트 · 개조", "보스 제약", "설비 · 딱지",
+               "리그 · 스타트 팩", "영역 강화 · 튜닝 상수"):
+        rows.append(["page", "", nm])
     return prs, rows, page - 1, n_stick
 
 
