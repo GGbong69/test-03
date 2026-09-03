@@ -10095,9 +10095,9 @@ func _dart_build(id: String) -> Dictionary:
 	return {"vp": vp, "mi": mi}
 
 
-# 길이축(정규화된 로컬 X)이 화면 평면 안에 최대한 남아야 늘었다 줄었다
-# 안 한다. z 를 고정하고 roll 을 x 에 실으면, y 를 살짝 기울인 기준
-# 자세 위에서 길이축이 카메라 쪽으로 눕지 않고 화면 안에서만 돈다.
+# 길이 불변보다 구르는 맛이 먼저라고 정했다 — 사탕과 같은 두 축
+# 배합으로 되돌린다. 한 축만 돌리면 바퀴처럼 규칙적으로 읽히고, 비를
+# 다르게 섞은 두 축이 던져진 것처럼 제멋대로 구르는 느낌을 낸다.
 func _dart_tex_live(id: String, roll: float, wob: float, live: bool) -> Texture2D:
 	if not dart_live.has(id):
 		if not _has_renderer():
@@ -10108,9 +10108,9 @@ func _dart_tex_live(id: String, roll: float, wob: float, live: bool) -> Texture2
 		dart_live.erase(id)
 		return null
 	var mi: MeshInstance3D = e.mi
-	mi.rotation.y = deg_to_rad(20.0)
-	mi.rotation.z = deg_to_rad(24.0)
-	mi.rotation.x = roll + clampf(wob * 2.2, -0.5, 0.5)
+	mi.rotation.x = deg_to_rad(66.0) + roll
+	mi.rotation.y = deg_to_rad(-18.0) + roll * 0.37
+	mi.rotation.z = clampf(wob * 2.2, -0.5, 0.5)
 	var vp: SubViewport = e.vp
 	vp.render_target_update_mode = (
 			SubViewport.UPDATE_ALWAYS if live else SubViewport.UPDATE_ONCE)
