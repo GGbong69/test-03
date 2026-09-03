@@ -26,7 +26,7 @@ const Save = preload("res://scripts/save.gd")
 #       방식이고, 처음에 둘 다 틀리게 만들었던 자리다
 #    ⑥ 반동은 한 발이 여러 발이 된다 — 자루는 하나만 줄고, 꽂힌 자리가
 #       모두 정산된다. 안 잡으면 발이 위로 걸어 올라간다
-#    ⑦ 동전가 방식을 쥔다. 봉인되면 안 쥔다
+#    ⑦ 동전이 방식을 쥔다. 봉인되면 안 쥔다
 #    ⑦ 여덟 갈래 전부 확인·비행을 지나 착탄까지 간다 (조준이 영영 안
 #       잠기면 런이 통째로 막힌다)
 # ══════════════════════════════════════════════════════════
@@ -94,7 +94,7 @@ func _table() -> void:
 			bad.append(m)
 	_say(bad.is_empty(), "모든 방식에 잠그는 횟수가 있다",
 			"%d가지 · 빠진 것 %s" % [GameData.AIM_MODES.size(), bad])
-	# 조준을 쥔 동전가 없는 방식은 런에서 영영 안 나온다 (기본은 빼고)
+	# 조준을 쥔 동전이 없는 방식은 런에서 영영 안 나온다 (기본은 빼고)
 	var held := {}
 	for it in GameData.items():
 		var am := String(it.get("aim", ""))
@@ -104,7 +104,7 @@ func _table() -> void:
 	for m in GameData.AIM_MODES:
 		if m != "std" and not held.has(m):
 			orphan.append(m)
-	_say(orphan.is_empty(), "방식마다 그것을 쥔 동전가 있다",
+	_say(orphan.is_empty(), "방식마다 그것을 쥔 동전이 있다",
 			"쥔 방식 %d · 주인 없음 %s" % [held.size(), orphan])
 
 
@@ -458,7 +458,7 @@ func _kick(g: Node) -> void:
 			"쏠 때 %d개 · 정산 뒤 %d개" % [marks, g.darts.size()])
 
 	# 연발을 잇달아 세 번. 발과 발 사이에 남는 상태가 있으면 여기서
-	# 걸린다 — **오토플레이는 이 길을 못 걷는다.** 반동 동전를 안 들고,
+	# 걸린다 — **오토플레이는 이 길을 못 걷는다.** 반동 동전을 안 들고,
 	# _auto_step 은 조준 칸에서 그냥 _advance 를 부르기 때문이다.
 	g._start_leg()
 	g.target = 999999          # 판이 중간에 끝나면 셈이 어긋난다
@@ -500,7 +500,7 @@ func _kick(g: Node) -> void:
 	g.burst_n = 0
 	_say(is_equal_approx(p_bare, 1.0), "맨 다트 한 발은 박자가 그대로다",
 			"걸음 셋 → 배수 %.2f" % p_bare)
-	_say(p_many < 0.7 and p_many > p_kick, "동전가 줄줄이면 걸음이 재진다",
+	_say(p_many < 0.7 and p_many > p_kick, "동전이 줄줄이면 걸음이 재진다",
 			"걸음 열넷 → 배수 %.2f" % p_many)
 	_say(p_kick <= float(g.PACE.min) + 0.001, "연발은 가장 재게 돈다",
 			"배수 %.2f (바닥 %.2f)" % [p_kick, g.PACE.min])
@@ -509,9 +509,9 @@ func _kick(g: Node) -> void:
 			"%.1f초 (한 발당 %.1f초 · 발마다 카드가 뜬다)"
 			% [float(t2) * FPS / 3.0, float(t2) * FPS / float(n * 3)])
 
-	# 작은 다트는 점수를 **조금씩만** 받는다. 동전를 다 뺀 맨 판에서
+	# 작은 다트는 점수를 **조금씩만** 받는다. 동전을 다 뺀 맨 판에서
 	# 같은 자리(불)에 보통 한 발과 연발 다섯 발을 꽂아 견준다 — 이 비가
-	# 반동의 세기다. 기본 점수만 깎고 동전를 안 깎으면 여기서 안 걸리므로
+	# 반동의 세기다. 기본 점수만 깎고 동전을 안 깎으면 여기서 안 걸리므로
 	# 동전 슬롯을 비우고 재는 것이 아니라, 동전 슬롯을 채워서도 한 번 더 잰다.
 	var one := _score_at(g, "std", g.BC)
 	var five := _score_at(g, "kick", g.BC)
@@ -524,8 +524,8 @@ func _kick(g: Node) -> void:
 			% [float(five) / maxf(float(one), 1.0),
 				int(round(GameData.tune("kick_share") * 100.0))])
 
-	# 점수 동전를 한 장 얹어도 몫이 지켜지는가 — 기본 점수만 깎았다면 여기서
-	# 연발 쪽이 훌쩍 커진다(동전가 발마다 온전히 얹히기 때문이다).
+	# 점수 동전을 한 장 얹어도 몫이 지켜지는가 — 기본 점수만 깎았다면 여기서
+	# 연발 쪽이 훌쩍 커진다(동전이 발마다 온전히 얹히기 때문이다).
 	var chip := _item(g, "chip")
 	if not chip.is_empty():
 		g.owned = [chip]
@@ -533,7 +533,7 @@ func _kick(g: Node) -> void:
 		var five2 := _score_at(g, "kick", g.BC, false)
 		g.owned = []
 		_say(absf(float(five2) / maxf(float(one2), 1.0) - want) < want * 0.35,
-				"동전를 얹어도 몫이 지켜진다",
+				"동전을 얹어도 몫이 지켜진다",
 				"%s 얹고 — 보통 %d점 · 연발 %d점 (%.2f배)"
 				% [chip.n, one2, five2, float(five2) / maxf(float(one2), 1.0)])
 
@@ -598,7 +598,7 @@ func _place(g: Node) -> void:
 			"%s · 조준 그대로 %s" % [_sname(g, g.state), g.aim == before])
 
 
-# ── 동전가 방식을 쥔다 ─────────────────────────────────
+# ── 동전이 방식을 쥔다 ─────────────────────────────────
 func _items(g: Node) -> void:
 	var n := 0
 	for it in GameData.items():
@@ -610,14 +610,14 @@ func _items(g: Node) -> void:
 		g.sealed = -1
 		_say(g._aim_from_items() == am, "%s 가 %s 를 쥔다" % [it.n, am],
 				g._aim_from_items())
-	_say(n > 0, "조준을 쥔 동전가 있다", "%d장" % n)
+	_say(n > 0, "조준을 쥔 동전이 있다", "%d장" % n)
 
 	# 봉인된 장은 이번 판에 일을 안 한다 — 조준도 마찬가지다
 	for it in GameData.items():
 		if String(it.get("aim", "")) != "":
 			g.owned = [it.duplicate()]
 			g.sealed = 0
-			_say(g._aim_from_items() == "std", "봉인된 조준 동전는 안 쥔다",
+			_say(g._aim_from_items() == "std", "봉인된 조준 동전은 안 쥔다",
 					g._aim_from_items())
 			break
 	g.owned = []

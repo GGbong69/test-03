@@ -67,16 +67,16 @@ func _initialize() -> void:
 	_say(g.score_mode == GameData.score_mode() and g.aim_mode == "std",
 			"계산은 다트통이 쥔다", "조준 '%s' · 계산 '%s'" % [g.aim_mode, g.score_mode])
 
-	# 조준 방식을 쥔 동전를 손에 넣으면 그 방식으로 던진다.
+	# 조준 방식을 쥔 동전을 손에 넣으면 그 방식으로 던진다.
 	# 봉인되면 그 판은 다시 기본으로 돌아간다 — 동전의 규칙 그대로다.
 	var fake: Dictionary = GameData.items()[0].duplicate()
 	fake.aim = "std"
 	g.owned = [fake]
 	g.sealed = -1
-	_say(g._aim_from_items() == "std", "동전가 조준을 쥔다",
+	_say(g._aim_from_items() == "std", "동전이 조준을 쥔다",
 			"'%s'" % g._aim_from_items())
 	g.sealed = 0
-	_say(g._aim_from_items() == "std", "봉인된 동전는 조준을 안 쥔다")
+	_say(g._aim_from_items() == "std", "봉인된 동전은 조준을 안 쥔다")
 	g.owned = []
 	g.sealed = -1
 
@@ -89,7 +89,7 @@ func _initialize() -> void:
 	g.score_mode = "bal"
 	_say(g._score_combine(chip, mult) == 25, "저울은 평균을 맞춘 뒤 곱한다",
 			"(7+3)/2 = 5 · 5×5 = %d" % g._score_combine(chip, mult))
-	# 저울은 기본 점수이 배수보다 클수록 크게 튄다. 목표 배수가 왜 필요한지가 이
+	# 저울은 기본 점수가 배수보다 클수록 크게 튄다. 목표 배수가 왜 필요한지가 이
 	# 한 줄에 있다 — 보통 판(기본 점수 40 · 배수 3)에서 std 의 세 배를 넘는다.
 	_say(g._score_combine(40, 3) > 3 * (40 * 3), "저울은 보통 판에서 크게 튄다",
 			"std %d → 저울 %d" % [40 * 3, g._score_combine(40, 3)])

@@ -9,7 +9,7 @@ const GameData = preload("res://scripts/data.gd")
 #             -s scripts/tools/axis_probe.gd -- autoplay runs=24
 #
 #  curve_probe 는 "어디서 죽는가" 를 잰다. 이것은 "무엇을 쥐고 죽는가" 를
-#  잰다. 판이 넘어갈 때마다 동전 슬롯·트랙·보드 확장·자루·장갑를 통째로 찍어 두고,
+#  잰다. 판이 넘어갈 때마다 동전 슬롯·트랙·보드 확장·자루·장갑을 통째로 찍어 두고,
 #  판마다 실제로 난 점수와 같이 낸다.
 #
 #  내는 것
@@ -97,7 +97,7 @@ func _finish() -> void:
 				float(r.items) / sn, float(r.trk) / sn, float(r.mods) / sn,
 				float(r.vou) / sn, float(r.dart) / sn, float(r.xm) / sn])
 
-	print("\n축별 점수 몫 (판이 준 기본 점수 · 트랙이 얹은 기본 점수/배수 · 동전가 얹은 것)")
+	print("\n축별 점수 몫 (판이 준 기본 점수 · 트랙이 얹은 기본 점수/배수 · 동전이 얹은 것)")
 	print("판   판몫%   트랙몫%   동전몫%")
 	for n in range(1, GameData.legs_n() + 1):
 		if not st.has(n):

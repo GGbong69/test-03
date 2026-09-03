@@ -122,7 +122,7 @@ func _st(name: String) -> int:
 	return int(g.S[name])
 
 
-# 화면을 진짜에 가깝게 세운다. 상점은 테이블를 실제로 굴려야 한다 —
+# 화면을 진짜에 가깝게 세운다. 상점은 테이블을 실제로 굴려야 한다 —
 # _hand_update 가 drop 배열 크기를 보고 손을 취소하기 때문이다.
 func _stage(state_name: String) -> void:
 	g.state = _st(state_name)

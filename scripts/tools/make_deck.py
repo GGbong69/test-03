@@ -65,8 +65,8 @@ CODE = {
     "start_gold": "시작 골드", "clear_gold": "클리어 보상",
     "gold_per_dart": "남은 다트 1발당", "interest_per": "이자 기준 금액",
     "interest_max": "이자 상한", "sell_div": "판매가 나눗수",
-    "sell_min": "판매가 하한", "free_rerolls": "무료 새로고침",
-    "reroll_base": "새로고침 첫값", "reroll_step": "새로고침 증가폭",
+    "sell_min": "판매가 하한", "free_rerolls": "무료 리롤",
+    "reroll_base": "리롤 첫값", "reroll_step": "리롤 증가폭",
     "max_items": "동전 슬롯", "darts_base": "기본 다트 수",
     "cons_slots": "소비 칸", "curve_first": "첫 판 목표", "curve_last": "마지막 판 목표",
 }

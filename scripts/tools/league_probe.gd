@@ -68,7 +68,7 @@ func _initialize() -> void:
 			"초록 단은 작은 판 보상이 0", "%d" % int(GameData.league_v("reward_small", 9)))
 	GameData.league = "purple"
 	_say(int(GameData.league_v("seal_items", 0)) == 1,
-			"보라 단은 동전를 봉인한다", "%d장" % int(GameData.league_v("seal_items", 0)))
+			"보라 단은 동전을 봉인한다", "%d장" % int(GameData.league_v("seal_items", 0)))
 	GameData.league = "red"
 	_say(int(GameData.league_v("darts_add", 0)) == -1,
 			"붉은 단은 다트를 깎는다", "%+d발" % int(GameData.league_v("darts_add", 0)))

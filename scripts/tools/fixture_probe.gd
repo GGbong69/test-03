@@ -53,7 +53,7 @@ func _initialize() -> void:
 	var w1: int = int(GameData.shop_of(1).items)
 	GameData.fixture_set(["v_shelf", "v_shelf2"])
 	var w2: int = int(GameData.shop_of(1).items)
-	_say(w1 == w0 + 1 and w2 == w0 + 2, "진열대가 테이블를 넓힌다",
+	_say(w1 == w0 + 1 and w2 == w0 + 2, "진열대가 테이블을 넓힌다",
 			"%d → %d → %d칸" % [w0, w1, w2])
 
 	GameData.fixture_clear()
@@ -116,7 +116,7 @@ func _initialize() -> void:
 	g._swap_skip()
 	_say(GameData.fixtures_own.is_empty()
 			and int(GameData.shop_of(1).items) == w0,
-			"새 런에서 장갑가 사라진다", "%d개" % GameData.fixtures_own.size())
+			"새 런에서 장갑이 사라진다", "%d개" % GameData.fixtures_own.size())
 
 	# ⑤ 리롤에 안 씻긴다
 	GameData.fixture_clear()

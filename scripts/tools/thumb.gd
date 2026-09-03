@@ -62,7 +62,7 @@ func _process(_d: float) -> bool:
 		g._open_shop()
 		g._drop_settle()
 
-	# ── 상인와 펠트. 상점 화면 전체가 한 장에 들어오는 배율이다.
+	# ── 상인과 펠트. 상점 화면 전체가 한 장에 들어오는 배율이다.
 	if frames == 70:
 		_look(3.0, Vector2(320.0, 180.0))
 	if frames == 74:
