@@ -39,7 +39,7 @@ extends RefCounted
 #  익스포트 주의 — data/*.csv 는 .import 에서 importer="keep" 이어야 한다.
 #  고닷 4 는 CSV 를 기본적으로 번역 파일(csv_translation)로 잡고, 그러면
 #  원본 파일이 빌드에 안 실려 FileAccess.open 이 null 을 돌려준다. 즉
-#  에디터에서는 멀쩡하고 익스포트한 빌드에서만 동전가 한 장도 없다.
+#  에디터에서는 멀쩡하고 익스포트한 빌드에서만 동전이 한 장도 없다.
 #  (이 프로젝트에서 두 번 그 상태였다 — 처음 items.csv, 다음 새 표 다섯.)
 #  프리셋의 비-리소스 필터에 data/*.csv 를 적어 두었고, 실제 빌드한 pck 를
 #  열어 표 열셋이 내용까지 실렸고 .translation 은 0개임을 확인했다.
@@ -97,8 +97,8 @@ const MOD_AXES := ["band", "slide", "ring", "bull", "out", "swap", "odd"]
 #   판밖 darts_add · seal_items · target_mul · reward_mul
 # 축 하나에 걸리는 자리가 정확히 한 곳이어야 한다. 두 곳이 되는 순간
 # "이 제약이 무엇을 하는가" 가 코드에서 안 읽힌다.
-# 장갑가 밀 수 있는 축과 그 바닥·천장. 목록이 곧 계약이다 — 코드가 안 읽는
-# 키를 표에 적으면 조용히 아무 일도 안 하는 장갑가 되고(안개가 그랬다),
+# 장갑이 밀 수 있는 축과 그 바닥·천장. 목록이 곧 계약이다 — 코드가 안 읽는
+# 키를 표에 적으면 조용히 아무 일도 안 하는 장갑이 되고(안개가 그랬다),
 # 바닥이 없으면 음수 한 줄이 런을 잠근다. stage_picks 가 0 이 되면 보스
 # 화면에 누를 카드가 없어 영영 안 넘어간다 — 그래서 키마다 범위를 쥔다.
 const VOUCHER_KEYS := {
@@ -265,7 +265,7 @@ static func _f(row: Dictionary, col: String, who: String, dflt := 0.0) -> float:
 
 
 # 참/거짓은 1/0 정수로만 쓴다. 엑셀이 TRUE 를 로케일 따라 참/TRUE 로
-# 되돌려 놓기 때문에, 문자열로 두면 저장 한 번에 동전가 조용히 사라진다.
+# 되돌려 놓기 때문에, 문자열로 두면 저장 한 번에 동전이 조용히 사라진다.
 static func _b(row: Dictionary, col: String, who: String) -> bool:
 	var s: String = str(row.get(col, "")).strip_edges()
 	if s == "":
@@ -353,7 +353,7 @@ static func items() -> Array:
 	return out
 
 
-# 등장 가중치와 해금 판. 등급이 기본을 정하고 동전가 예외로 덮는다.
+# 등장 가중치와 해금 판. 등급이 기본을 정하고 동전이 예외로 덮는다.
 static func item_weight(it: Dictionary) -> float:
 	boot()
 	for r in _raw.get("items", []):
@@ -770,7 +770,7 @@ static func league_mul(n: int) -> float:
 # 다트통이 목표를 통째로 늘리거나 줄인다. **계산 방식을 바꾸는 다트통은 이것
 # 없이는 못 산다** — rounds 의 목표(40 → 105 → 220 …)가 "기본 점수 × 배수" 를
 # 기준으로 잡혀 있어서, 합치는 법이 바뀌면 그 곡선이 통째로 어긋난다.
-# 저울은 기본 점수이 배수보다 훨씬 큰 보통 판에서 점수를 몇 배로 올린다.
+# 저울은 기본 점수가 배수보다 훨씬 큰 보통 판에서 점수를 몇 배로 올린다.
 static func target_mul() -> float:
 	return _f(pack_row(), "target_mul", "packs", 1.0)
 
@@ -949,11 +949,11 @@ static func _vou_bake() -> void:
 		_vou[String(f.key)] = e
 
 
-# 장갑가 민 값. (기본 + 더한 것) × 곱한 것.
+# 장갑이 민 값. (기본 + 더한 것) × 곱한 것.
 #
 # 리그·뱃지와의 순서는 축마다 다르고, 그것이 사실이다. shop_items 는
 # 표 → 장갑 → 뱃지, darts_add 는 제약 → 리그 → 뱃지 → 장갑 → 동전.
-# "장갑가 늘 마지막" 같은 규칙을 주석으로 세우면 거짓 불변식이 된다 —
+# "장갑이 늘 마지막" 같은 규칙을 주석으로 세우면 거짓 불변식이 된다 —
 # 전부 add 라 지금은 수가 같지만, 다음 사람이 그 순서를 근거로 mul 을
 # 얹으면 세 자리가 한꺼번에 틀린다. 축마다 적용부 주석이 순서를 쥔다.
 static func fixture_v(key: String, dflt: float) -> float:
@@ -1005,7 +1005,7 @@ static func leg_name(n: int) -> String:
 static func shop_of(n: int) -> Dictionary:
 	var r := _round_row(n)
 	return {
-		# 장갑가 여기 얹힌다 — 표 → 장갑 → 뱃지 순서다(뱃지는 _roll_stock 이
+		# 장갑이 여기 얹힌다 — 표 → 장갑 → 뱃지 순서다(뱃지는 _roll_stock 이
 		# 이 값 뒤에 더한다). 테이블 폭을 읽는 자리가 여기 하나뿐이라 여기가
 		# 유일한 합류점이다.
 		"items": fixture_i("shop_items", _i(r, "shop_items", "rounds", 0)),
@@ -1525,7 +1525,7 @@ static func gold_tag(g: String) -> String:
 # ── 판매 ──────────────────────────────────────────────────
 #  판매가 = 구매가의 절반(내림), 최소 2. 26종이 4/7/11/14 이므로 2/3/5/7 이다.
 #  올림으로 두면 7→4, 11→6 이 되어 보통 등급의 회수율이 흔함보다 높아진다.
-#  내림은 평균 회수율을 46% 로 눌러 "비싼 동전는 팔면 더 손해"를 만든다.
+#  내림은 평균 회수율을 46% 로 눌러 "비싼 동전은 팔면 더 손해"를 만든다.
 #
 #  스프레드(구매가 − 판매가) = 2 / 4 / 6 / 7.
 #  이것이 "한 정산만 빌려 쓰고 되팔기" 의 손익선이다. 골드 동전의 1회 지급(gv)이
@@ -1675,7 +1675,7 @@ static func _has_row(table: String, id: String) -> bool:
 	return false
 
 
-# 동전가 쥔 조준 방식. 등록 안 된 이름이면 조용히 std 로 도는 동전가
+# 동전이 쥔 조준 방식. 등록 안 된 이름이면 조용히 std 로 도는 동전이
 # 된다 — 히든 다트통이 통째로 아무 일도 안 하는 다트통이 되는 길이다.
 static func _v_item_aim() -> void:
 	for m in AIM_MODES:
@@ -1683,7 +1683,7 @@ static func _v_item_aim() -> void:
 		if st < 1 or st > 2:
 			_errs.append("조준 %s — AIM_STAGES 에 잠그는 횟수(1 또는 2)가 없다" % m)
 		if aim_text(m) == "" and m != "std":
-			_errs.append("조준 %s — aim_text 에 문구가 없다. 동전가 빈 칸이 된다" % m)
+			_errs.append("조준 %s — aim_text 에 문구가 없다. 동전이 빈 칸이 된다" % m)
 		if aim_name(m) == m:
 			_errs.append("조준 %s — aim_name 에 짧은 이름이 없다. 속이름이 화면에 뜬다" % m)
 		var hs: Array = AIM_HINT.get(m, [])
@@ -1839,7 +1839,7 @@ static func _v_vouchers() -> void:
 			_errs.append("%s — 앞선 단 '%s' 가 표에 없거나 아래에 있다" % [who, pq])
 		_v_desc(who, r.get("desc", ""), ["v"])
 	if not first:
-		_errs.append("fixtures — 라운드 1 에 조건 없이 뜰 장갑가 없다")
+		_errs.append("fixtures — 라운드 1 에 조건 없이 뜰 장갑이 없다")
 	# 축마다 쌓을 수 있는 최대를 미리 더해 본다. 표만 보고 계산되는 것을
 	# 게임을 돌려서 알아내면 늦다 — 런이 잠기는 축이 그 안에 있다.
 	var add := {}
@@ -2318,7 +2318,7 @@ static func _v_legs() -> void:
 
 
 static func _v_cross() -> void:
-	# 해금 판이 상점보다 뒤면 그 동전는 영영 안 뜬다. 상점은 판 N 을
+	# 해금 판이 상점보다 뒤면 그 동전은 영영 안 뜬다. 상점은 판 N 을
 	# 클리어한 뒤 N+1 을 위해 열리므로 볼 수 있는 최소 판은 2 다.
 	var n := legs_n()
 	for r in _raw.get("items", []):
@@ -2332,8 +2332,8 @@ static func _v_cross() -> void:
 		var mr2 := _i(r, "min_leg", "rarity", 1)
 		if mr2 < 2 or mr2 > n:
 			_errs.append("rarity:%d — min_leg %d 는 2~%d 여야 한다" % [r.get("_line", 0), mr2, n])
-	# 테이블가 마르면 리롤이 같은 물건을 다시 뱉는다. 판마다 후보 수가
-	# 테이블 폭보다 넉넉한지 센다 — 소유 동전가 후보에서 빠지므로 여유를 둔다.
+	# 테이블이 마르면 리롤이 같은 물건을 다시 뱉는다. 판마다 후보 수가
+	# 테이블 폭보다 넉넉한지 센다 — 소유 동전이 후보에서 빠지므로 여유를 둔다.
 	var need := 0
 	for r in rows("rounds"):
 		need = maxi(need, _i(r, "shop_items", "rounds"))
@@ -2344,7 +2344,7 @@ static func _v_cross() -> void:
 			if item_min_leg(it) <= rd:
 				cnt += 1
 		if cnt < need:
-			_warns.append("items — R%d 에 뜰 수 있는 동전가 %d장뿐이다. 테이블 %d칸 + 슬롯을 채우면 마른다"
+			_warns.append("items — R%d 에 뜰 수 있는 동전이 %d장뿐이다. 테이블 %d칸 + 슬롯을 채우면 마른다"
 					% [rd, cnt, need])
 	# 얼굴에 효과가 한 줄도 안 나오는 동전 — 무슨 물건인지 모르는 채로 값을
 	# 치러야 한다. gold_text 가 GOLDS 를 다 안 덮어서 실제로 두 장이 그랬다.
@@ -2369,7 +2369,7 @@ static func _v_cross() -> void:
 		if String(it2.get("g", "")) != "" and gtx == "":
 			_errs.append("items — %s(%s) 의 골드가 얼굴에 없다" % [it2.n, it2.id])
 
-	# 가중치가 0 인 동전는 표에 있으나 게임에 없다.
+	# 가중치가 0 인 동전은 표에 있으나 게임에 없다.
 	for it in items():
 		if item_weight(it) <= 0.0:
 			_errs.append("items — %s(%s) 는 테이블에 안 뜬다" % [it.n, it.id])

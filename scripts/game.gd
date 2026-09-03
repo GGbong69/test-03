@@ -42,7 +42,7 @@ const CARD_H := 96.0
 #
 #  주의 — 화면 좌표가 여기에만 있는 것이 아니다. 나머지 소유자는 이렇다.
 #    _stage_rect / _obj_box / _mag_rect / _reroll_rect / _next_rect
-#    PANEL · _panel_rect · _slot_rect        (동전 슬롯)
+#    PANEL · _panel_rect · _slot_rect        (스티커 랙)
 #    card_pos                                 (점수 카드)
 #    _draw_hint 의 341 · 348 · 356            (하단 세 줄)
 #  이 목록을 사실과 다르게 두면 다음 사람이 잘못된 전제로 판단한다.
@@ -55,7 +55,7 @@ const CARD_H := 96.0
 #  저장할 때마다 그 줄을 지운다. 그래서 근거를 코드 쪽에 남긴다.
 # ══════════════════════════════════════════════════════════
 # 상점·스테이지는 테이블이 화면 전부를 쓴다. 런 바를 내리고
-# 그 자리(16px)를 상인에게 준다 — 상인가 사람으로 읽히려면 세로가 필요하고,
+# 그 자리(16px)를 딜러에게 준다 — 딜러가 사람으로 읽히려면 세로가 필요하고,
 # 목표·점수 진행은 던지는 중에만 쓸모가 있다. 다음 판 목표는
 # "다음" 버튼이 이미 들고 있다.
 const HUD_UP := -16.0
@@ -95,9 +95,9 @@ const LAY := {
 	# 자금판은 플레이 중 34 높이. 이자/마지막판 줄이 필요한 상점·스테이지에서만
 	# _bank_draw 가 46 으로 늘린다. 늘 46 이면 탄창 헤더가 판 안으로 들어간다.
 	"bank":       Rect2(4.0, 20.0, 72.0, 34.0),
-	# 옛 판매판 자리(x[80,154])는 사탕 칸(_cons_rect)이 쓴다.
+	# 옛 판매판 자리(x[80,154])는 소비 아이템 칸(_cons_rect)이 쓴다.
 	"cap":        Rect2(490.0, 20.0, 40.0, 44.0),
-	# 사탕 칸은 자금판 오른쪽. 이름을 안 달았더니 플레이 피드백에서
+	# 소비 칸은 자금판 오른쪽. 이름을 안 달았더니 플레이 피드백에서
 	# "어디 있는지 몰랐다" 가 나왔다 — 칸 밑에 이름과 수를 적는다.
 	"cons":       Rect2(84.0, 20.0, 68.0, 44.0),
 }
@@ -131,7 +131,7 @@ func _sec_col(i: int) -> int:
 	return int(sec_col[i])
 
 
-# ── 보드 기하 (보드 확장로 변한다) ──────────────────────────────
+# ── 보드 기하 (개조로 변한다) ──────────────────────────────
 #  판의 유일한 출처는 mods_own 이다. 아래 여덟은 그것을 구운 결과일 뿐이다.
 var mods_own := []
 var sectors := GameData.SECTORS_BASE.duplicate()
@@ -144,7 +144,7 @@ var trp2_out := 0.0
 var bull_o := 0.14
 var bull_i := 0.06
 
-# 판 동안 실제로 쓰이는 값 (영구 보드 확장 + 이번 판 제약)
+# 판 동안 실제로 쓰이는 값 (영구 개조 + 이번 판 제약)
 var rt_dbl_out := 1.00
 var rt_dbl_in := 0.90
 var rt_trp_in := 0.56
@@ -154,13 +154,13 @@ var rt_trp2_out := 0.0
 var rt_bull_o := 0.14
 var rt_bull_i := 0.06
 var dead_idx := -1              # "금지 구역"이 죽이는 칸. -1 이면 안 걸렸다
-# ── 장갑 선반 ────────────────────────────────────────────
-#  상점 왼쪽 벽에 걸린다. **테이블(stock)에 안 넣는다** — 테이블는 상인가
-#  쓸어 다시 던지는 판이고 장갑는 그 판에 안 오른다. 리롤해도 안 씻기는
+# ── 설비 선반 ────────────────────────────────────────────
+#  상점 왼쪽 벽에 걸린다. **매대(stock)에 안 넣는다** — 매대는 딜러가
+#  쓸어 다시 던지는 판이고 설비는 그 판에 안 오른다. 리롤해도 안 씻기는
 #  것이 코드 0줄로 성립하는 이유가 그것이다(_roll_stock 은 stock 만 지운다).
 #  한 라운드에 하나. 사면 사라지고 그 라운드에는 다시 안 뜬다.
-var aim_mode := "std"           # 이 런의 조준 방식. 다트통이 정한다
-var score_mode := "std"         # 이 런의 점수 계산 방식. 다트통이 정한다
+var aim_mode := "std"           # 이 런의 조준 방식. 팩이 정한다
+var score_mode := "std"         # 이 런의 점수 계산 방식. 팩이 정한다
 var aim_r := 0.0                # 원·선 조준이 잠근 반지름
 var aim_a := 0.0                # 빗각 조준이 잠근 첫 축의 값
 var aim_ax := 0.0               # 빗각 조준의 축 각도. 다트마다 새로 뽑는다
@@ -182,8 +182,8 @@ var mouse_down := false         # 왼쪽 단추를 쥐고 있는가. 당김이 �
 # 조준의 무작위는 **제 난수통**을 쓴다. 전역 난수를 태우면 다트를 집을
 # 때마다 줄이 밀려 상점·성장 뽑기가 통째로 달라진다.
 var aim_rng := RandomNumberGenerator.new()
-var shelf := {}                 # 이 상점에 걸린 장갑. 비면 없다
-var shelf_round := 0             # 그 장갑를 굴린 라운드. 라운드가 바뀔 때만 다시 굴린다
+var shelf := {}                 # 이 상점에 걸린 설비. 비면 없다
+var shelf_round := 0             # 그 설비를 굴린 라운드. 라운드가 바뀔 때만 다시 굴린다
 var dead_col := -1              # 값을 죽이는 칸 색 번호. -1 이면 안 걸렸다
 var dead_ring := 0              # 무효가 되는 배수(2 더블 · 3 트리플). 0 이면 없다
 var odd_mul := 1.0              # 홀수 칸 값 배수
@@ -225,9 +225,9 @@ var land_n := 0
 var seen_risk := false          # risk1 용 — 이번 판에 risk 명중이 있었나
 var low_hit := 0                # 이번 판 최저 명중 숫자 (0 = 아직 없음)
 var leg_darts := 6            # 이번 판 시작 다트 수 (few·missing 이 읽는다)
-# 제약·리그·뱃지·장갑·동전가 손대기 **전**의 다트 수. 「기본에서 줄어든
-# 다트 1개당」이 읽는 그 기본이다. 다트통이 이 수를 바꾸므로(여벌 +1 · 넓은 동전 슬롯 -1)
-# 6 을 박아 두면 안 된다 — 넓은 동전 슬롯은 아무것도 안 잃고 한 발 줄어든 것으로
+# 제약·리그·딱지·설비·스티커가 손대기 **전**의 다트 수. 「기본에서 줄어든
+# 다트 1개당」이 읽는 그 기본이다. 팩이 이 수를 바꾸므로(여벌 +1 · 넓은 랙 -1)
+# 6 을 박아 두면 안 된다 — 넓은 랙은 아무것도 안 잃고 한 발 줄어든 것으로
 # 읽히고, 여벌은 한 발을 잃고도 안 줄어든 것으로 읽힌다.
 var leg_base := 6
 var throw6 := 0                 # sixth 용 던진 수 카운터 (런 단위 · 발동 시 리셋)
@@ -235,7 +235,7 @@ var zone_hist := {}             # 런 단위 영역 종류 누적 명중 (zonehi
 var streak := 0
 var dart_index := 0
 var leg_miss := false
-var leg_trp := false          # 이번 판에 트리플이 나왔는가 ("손맛")         # 이번 판에 한 번이라도 빗나갔는가 (골드 동전 "새 자리" 판정)
+var leg_trp := false          # 이번 판에 트리플이 나왔는가 ("손맛")         # 이번 판에 한 번이라도 빗나갔는가 (골드 스티커 "새 자리" 판정)
 
 # ── 상점 ──────────────────────────────────────────────────
 var stock := []                 # {type:"item"/"mod", d:Dictionary, cost:int, sold:bool}
@@ -364,7 +364,7 @@ func _new_run() -> void:
 	mods_own.clear()
 	_board_bake()
 	leg_no = 1
-	# 시작 조건은 다트통이 쥔다 — 표가 비면 튜닝 값이 그대로 남는다.
+	# 시작 조건은 스타트팩이 쥔다 — 표가 비면 튜닝 값이 그대로 남는다.
 	var pk := GameData.pack_row()
 	gold = GameData.start_gold() + int(pk.get("gold_add", 0))
 	magazine.clear()
@@ -386,7 +386,7 @@ func _new_run() -> void:
 	leg_tags.clear()
 	leg_tags_round = 0
 	leg_skipped.clear()
-	GameData.fixture_clear()     # 장갑는 런 스코프다. 지우는 자리는 여기 하나
+	GameData.fixture_clear()     # 설비는 런 스코프다. 지우는 자리는 여기 하나
 	spin_cur = 0
 	dead_col = -1
 	dead_ring = 0
@@ -400,7 +400,7 @@ func _start_leg() -> void:
 	# 판의 링 폭(rt_*)을 다시 잡으므로, 연출을 나중에 열면 올라오는 동안은
 	# 지난 판의 모양이었다가 다 선 순간 툭 바뀐다.
 	_swap_begin(true)
-	# 영구 보드 확장값에서 출발해 이번 판 제약을 얹는다
+	# 영구 개조값에서 출발해 이번 판 제약을 얹는다
 	rt_dbl_out = dbl_out
 	rt_dbl_in = dbl_in
 	rt_trp_in = trp_in
@@ -422,25 +422,25 @@ func _start_leg() -> void:
 	# tuning.csv 비고가 오래전부터 그렇게 적혀 있었는데 코드가 안 읽고
 	# 있었다 — 표가 거짓말을 하던 자리다. 탄창보다 많으면 순환해서 채운다.
 	#
-	# **다트통 몫을 같이 더한다.** 다트통의 darts_add 는 _new_run 이 탄창 크기에만
+	# **팩 몫을 같이 더한다.** 팩의 darts_add 는 _new_run 이 탄창 크기에만
 	# 넣어 두는데, rounds 의 수로 곧장 자르면 그 몫이 통째로 없어졌다 —
-	# 여벌 다트통이 탄창 일곱 자루를 쥐고도 여섯 발만 던지고 있었고, 넓은 동전 슬롯은
-	# 다섯 자루를 쥐고도 여섯 발을 던졌다(둘 다 다트통 설명과 반대다).
-	# 아래 dadd 사슬(제약·리그·뱃지·장갑·동전)과 달리 다트통만 탄창 쪽에
-	# 살았던 것이 원인이라, 다트통도 같은 자리에서 센다.
+	# 여벌 팩이 탄창 일곱 자루를 쥐고도 여섯 발만 던지고 있었고, 넓은 랙은
+	# 다섯 자루를 쥐고도 여섯 발을 던졌다(둘 다 팩 설명과 반대다).
+	# 아래 dadd 사슬(제약·리그·딱지·설비·스티커)과 달리 팩만 탄창 쪽에
+	# 살았던 것이 원인이라, 팩도 같은 자리에서 센다.
 	var want := (GameData.darts_of(leg_no)
 			+ int(GameData.pack_v("darts_add", 0.0)))
 	while remaining.size() > want and remaining.size() > 1:
 		remaining.pop_back()
 	while remaining.size() < want and not magazine.is_empty():
 		remaining.append(magazine[remaining.size() % magazine.size()])
-	# 여기까지가 "기본" 이다 — 판과 다트통이 정한 수. 아래 dadd 사슬이 그것을 깎는다.
+	# 여기까지가 "기본" 이다 — 판과 팩이 정한 수. 아래 dadd 사슬이 그것을 깎는다.
 	leg_base = remaining.size()
 	var dadd := int(mod_v("darts_add", 0.0))
 	dadd += int(GameData.league_v("darts_add", 0.0))
-	dadd += _spend_tags("dart")          # 뱃지 — 다음 판 한 번만 산다
-	dadd += GameData.fixture_i("darts_add", 0)   # 장갑 — 런 내내 산다
-	# 순서: 제약 → 리그 → 뱃지 → 장갑 → 동전. 전부 더하기라 지금은 수가
+	dadd += _spend_tags("dart")          # 딱지 — 다음 판 한 번만 산다
+	dadd += GameData.fixture_i("darts_add", 0)   # 설비 — 런 내내 산다
+	# 순서: 제약 → 리그 → 딱지 → 설비 → 스티커. 전부 더하기라 지금은 수가
 	# 같지만, 이 줄들 중 하나라도 곱이 되면 순서가 값을 바꾼다. 그때 고칠
 	# 자리가 여기 하나다.
 	# 아이템이 주고받는 다트 (조커 이식 — 곡예 다트맨 -2 등)
@@ -471,10 +471,10 @@ func _start_leg() -> void:
 	# 변형을 판 시작에 한 번 읽는다. 코드에 갈래가 없는 이름이면
 	# 여기서 한 번 울린다 — 매 프레임 울리면 로그가 못 쓰게 된다.
 	#
-	# 조준은 **든 동전**가 쥔다. 다트통이 직접 들고 있으면 그 방식을 런
-	# 도중에 얻거나 잃을 수 없다 — 동전로 오면 사고 팔고 봉인되는
+	# 조준은 **든 스티커**가 쥔다. 팩이 직접 들고 있으면 그 방식을 런
+	# 도중에 얻거나 잃을 수 없다 — 스티커로 오면 사고 팔고 봉인되는
 	# 것들과 같은 규칙 아래 놓이고, 그 자체가 판단거리가 된다.
-	# 계산 방식은 다트통이 그대로 쥔다. 그것은 이 런이 어떤 판인가에 대한
+	# 계산 방식은 팩이 그대로 쥔다. 그것은 이 런이 어떤 판인가에 대한
 	# 약속이라 도중에 바뀌면 안 된다.
 	aim_mode = _aim_from_items()
 	score_mode = GameData.score_mode()
@@ -622,15 +622,15 @@ func _finish_leg() -> void:
 # 정산 — 실패 방지로 넘어온 판도 같은 길을 걷는다.
 func _settle_clear() -> void:
 	# 정산 내역
-	# 잔탄 골드는 다트통이 덮을 수 있다. 이자를 끈 다트통이 그 자리를 여기서
+	# 잔탄 골드는 팩이 덮을 수 있다. 이자를 끈 팩이 그 자리를 여기서
 	# 되돌려 받는다 — 저축이 값을 잃으면 버는 길이 하나 있어야 한다.
 	var dart_gold: int = darts_left \
 			* int(GameData.pack_v("dart_gold", float(GameData.gold_per_dart())))
 	@warning_ignore("integer_division")  # 보유 5당 1, 내림이 규칙이다
 	var interest: int = mini(gold / GameData.interest_per(), _interest_cap())
-	# 이자를 끄는 다트통. 상한을 0 으로 만드는 대신 여기서 끊는다 —
-	# 상한은 리그·장갑도 미는 값이라, 거기 0 을 섞으면 "누가 껐나" 가
-	# 안 읽힌다. 다트통이 끈 것은 다트통 자리에서 끈다.
+	# 이자를 끄는 팩. 상한을 0 으로 만드는 대신 여기서 끊는다 —
+	# 상한은 리그·설비도 미는 값이라, 거기 0 을 섞으면 "누가 껐나" 가
+	# 안 읽힌다. 팩이 끈 것은 팩 자리에서 끈다.
 	if GameData.pack_v("interest_off", 0.0) > 0.0:
 		interest = 0
 	# gold 를 더하기 전에 부른다 — "굳은살"과 이자가 같은 잔액을 보게 하려는 것이다.
@@ -664,10 +664,10 @@ func _settle_clear() -> void:
 	_sfx("leg_clear")
 
 
-# 봉인은 자리가 아니라 동전에 걸린다. owned 에서 원소를 빼면 뒤 인덱스가
+# 봉인은 자리가 아니라 스티커에 걸린다. owned 에서 원소를 빼면 뒤 인덱스가
 # 하나씩 당겨지므로 sealed 도 같이 민다 — 안 밀면 _gold_from_items 가
-# 엉뚱한 동전의 골드를 지우고, 범위를 벗어나면 봉인이 통째로 증발한다.
-# _rack_reorder 는 동전를 따라가는 같은 규약을 이미 지키고 있었다.
+# 엉뚱한 스티커의 골드를 지우고, 범위를 벗어나면 봉인이 통째로 증발한다.
+# _rack_reorder 는 스티커를 따라가는 같은 규약을 이미 지키고 있었다.
 func _seal_drop(i: int) -> void:
 	if sealed < 0:
 		return
@@ -678,13 +678,13 @@ func _seal_drop(i: int) -> void:
 
 
 # 완주하면 다음 리그이 열린다. 표 순서가 곧 계단이라 지금 단의 다음 행이다.
-# 기본 다트통은 완주로 열린다 — 표 순서대로 다음 하나. 리그 사다리와 같은 모양이다.
-# 다트통이 쥐여 주는 것들. 네 갈래를 한자리에서 푼다 — 갈래마다 다른
-# 자리에서 풀면 "이 다트통이 무엇을 주고 시작하나" 를 네 곳에서 읽어야 한다.
+# 기본 팩은 완주로 열린다 — 표 순서대로 다음 하나. 리그 사다리와 같은 모양이다.
+# 팩이 쥐여 주는 것들. 네 갈래를 한자리에서 푼다 — 갈래마다 다른
+# 자리에서 풀면 "이 팩이 무엇을 주고 시작하나" 를 네 곳에서 읽어야 한다.
 #
-# 보드 확장는 판을 다시 굽는다(mods_own 이 판의 유일한 출처다). 장갑는
-# GameData 의 static 목록에 들어가고, 소비와 동전는 칸에 담긴다.
-# 칸이 모자라면 안 담는다 — 다트통이 제 칸보다 많이 주면 그건 표의 잘못이고
+# 개조는 판을 다시 굽는다(mods_own 이 판의 유일한 출처다). 설비는
+# GameData 의 static 목록에 들어가고, 소비와 스티커는 칸에 담긴다.
+# 칸이 모자라면 안 담는다 — 팩이 제 칸보다 많이 주면 그건 표의 잘못이고
 # 검증기가 잡을 자리다. 여기서 칸을 늘려 주면 그 잘못이 숨는다.
 func _pack_grants() -> void:
 	for id in GameData.pack_grants("grant_mod"):
@@ -724,7 +724,7 @@ func _pack_unlock_next() -> void:
 		return
 
 
-# 히든 다트통은 통계 하나가 문이다. 런이 끝날 때와 새 런 화면을 열 때 본다 —
+# 히든 팩은 통계 하나가 문이다. 런이 끝날 때와 새 런 화면을 열 때 본다 —
 # 조건이 채워진 순간이 아니라 런 경계에서 여는 것은 발라트로와 같다.
 # 저장을 읽는 쪽이 여기라 data.gd 는 저장을 모른 채로 남는다(검증기가 순수해야 한다).
 func _pack_unlock_check() -> void:
@@ -745,7 +745,7 @@ func _pack_unlock_check() -> void:
 func _league_unlock_next() -> void:
 	var rows := GameData.leagues()
 	var cur := String(GameData.league_row().get("id", ""))
-	Save.unlock(GameData.win_key(cur))      # 이 다트통으로 이 단을 넘겼다
+	Save.unlock(GameData.win_key(cur))      # 이 팩으로 이 단을 넘겼다
 	for i in rows.size():
 		if String(rows[i].get("id", "")) != cur or i + 1 >= rows.size():
 			continue
@@ -817,21 +817,21 @@ func _gold_from_items() -> Array:
 	return rows
 
 
-# 무료 리롤 횟수 — 표 + 장갑. 뱃지(무료 리롤)는 이 값이 아니라
+# 무료 새로고침 횟수 — 표 + 설비. 딱지(무료 새로고침)는 이 값이 아니라
 # rerolls_used 를 음수로 밀어 좌변에 붙는다. 같은 축이 아니라 같은 비교의
 # 반대편이라, 둘을 한 수로 합치면 안 된다.
 func _free_rerolls() -> int:
 	return GameData.free_rerolls() + GameData.fixture_i("free_rerolls", 0)
 
 
-# 이자 상한 = 표 + 리그 + 장갑. 정산(_settle_clear)과 자금판 미리보기가
+# 이자 상한 = 표 + 리그 + 설비. 정산(_settle_clear)과 자금판 미리보기가
 # 같은 식을 읽어야 한다 — 갈려 있으면 화면에 적힌 수와 실제로 들어오는
 # 골드가 다르고, 그건 플레이어가 못 고치는 종류의 거짓말이다.
 func _interest_cap() -> int:
 	return GameData.interest_max() + int(GameData.league_v("interest_add", 0.0)) 			+ GameData.fixture_i("interest_add", 0)
 
 
-# 벽에 걸린 장갑 한 장. 매물과 다른 어휘로 그린다 — 매물은 펠트 위에
+# 벽에 걸린 설비 한 장. 매물과 다른 어휘로 그린다 — 매물은 펠트 위에
 # 놓인 둥근 물건이고 이것은 벽에 박힌 네모 판이다. 같은 어휘를 쓰면
 # "이것도 쓸려 나가나" 를 플레이어가 물어야 한다.
 func _shelf_draw() -> void:
@@ -841,10 +841,10 @@ func _shelf_draw() -> void:
 	var can: bool = gold >= int(shelf.cost)
 	draw_rect(Rect2(r.position + Vector2(2.0, 3.0), r.size), Color(0.0, 0.0, 0.0, 0.30))
 	draw_rect(r, C_PANEL.lightened(0.04) if can else C_PANEL.darkened(0.18))
-	# 걸이 — 위쪽 한 획이 "벽에 박혀 있다" 를 말한다. 테이블의 값뱃지와 다른 신호다.
+	# 걸이 — 위쪽 한 획이 "벽에 박혀 있다" 를 말한다. 매대의 값딱지와 다른 신호다.
 	draw_rect(Rect2(r.position, Vector2(r.size.x, 2.0)),
 			C_ACC if can else C_DIM.darkened(0.3))
-	draw_string(font, r.position + Vector2(0.0, 18.0), "장갑",
+	draw_string(font, r.position + Vector2(0.0, 18.0), "설비",
 			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 8, C_DIM)
 	draw_string(font, r.position + Vector2(0.0, 32.0), String(shelf.n),
 			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 11,
@@ -853,7 +853,7 @@ func _shelf_draw() -> void:
 			str(int(shelf.cost)), 10, C_GOLD if can else C_DIM.darkened(0.3))
 
 
-# 사면 사라지고 효과만 남는다. 동전 슬롯에도 사탕 칸에도 안 들어간다 —
+# 사면 사라지고 효과만 남는다. 랙에도 소비 칸에도 안 들어간다 —
 # 어디에도 안 쌓이는 유일한 구매다.
 func _shelf_buy() -> void:
 	if shelf.is_empty():
@@ -866,8 +866,8 @@ func _shelf_buy() -> void:
 	Save.bump("fixtures_bought")
 	pop(_shelf_rect().get_center(), String(shelf.n), C_ACC, 12, 1.4)
 	shelf = {}
-	# 테이블 폭·무료 리롤이 이 순간 바뀔 수 있다. 이번 판은 이미 굴린
-	# 뒤라 폭은 다음 리롤부터 넓어지고, 값은 지금 다시 매긴다.
+	# 매대 폭·무료 새로고침이 이 순간 바뀔 수 있다. 이번 판은 이미 굴린
+	# 뒤라 폭은 다음 새로고침부터 넓어지고, 값은 지금 다시 매긴다.
 	reroll_cost = _reroll_price()
 	_panel_reset()
 	_sfx("fixture_buy")
@@ -880,7 +880,7 @@ func _reroll_price() -> int:
 
 
 func _open_shop() -> void:
-	# 판이 끝났다. 상점에 동전 슬롯이 서므로 안 지우면 지난 판 "봉인" 뱃지가
+	# 판이 끝났다. 상점에 랙이 서므로 안 지우면 지난 판 "봉인" 딱지가
 	# 유령으로 남는다. _gold_from_items() 가 sealed 를 읽으므로
 	# _finish_leg 안에서는 지우면 안 된다 — 여기가 유일하게 안전한 지점이다.
 	sealed = -1
@@ -888,9 +888,9 @@ func _open_shop() -> void:
 	buy_sel = -1
 	_panel_reset()
 	_sweep_reset()
-	rerolls_used = -_spend_tags("reroll")   # 뱃지 — 무료 리롤을 앞당긴다
+	rerolls_used = -_spend_tags("reroll")   # 딱지 — 무료 새로고침을 앞당긴다
 	reroll_cost = _reroll_price()
-	# 장갑는 라운드가 바뀔 때만 갈린다. 같은 라운드의 상점 셋이 같은 것을 본다 —
+	# 설비는 라운드가 바뀔 때만 갈린다. 같은 라운드의 상점 셋이 같은 것을 본다 —
 	# 발라트로가 바우처를 라운드마다 하나 거는 것과 같은 자리다. 안 사면
 	# 다음 상점에도 그대로 걸려 있고, 라운드가 넘어가면 사라진다.
 	var round := GameData.round_of(leg_no)
@@ -902,9 +902,9 @@ func _open_shop() -> void:
 	_sfx("shop_open")
 
 
-#  가중치 뽑기. 동전와 제약이 같은 저울을 쓴다 — 제약은 행에 w 를 들고 있고,
-#  동전는 등급 표에서 가져온다. 균등 shuffle 이던 시절에는 14골드 희귀가
-#  4골드 흔함과 같은 확률로 R2 테이블에 떴다.
+#  가중치 뽑기. 스티커와 제약이 같은 저울을 쓴다 — 제약은 행에 w 를 들고 있고,
+#  스티커는 등급 표에서 가져온다. 균등 shuffle 이던 시절에는 14골드 희귀가
+#  4골드 흔함과 같은 확률로 R2 매대에 떴다.
 func _draw_weighted(pool: Array) -> Dictionary:
 	if pool.is_empty():
 		return {}
@@ -924,10 +924,10 @@ func _draw_weighted(pool: Array) -> Dictionary:
 	return pool[pool.size() - 1]
 
 
-#  테이블는 판 N 을 클리어한 뒤 N+1 을 위해 열린다. 그래서 폭도 해금도
+#  매대는 판 N 을 클리어한 뒤 N+1 을 위해 열린다. 그래서 폭도 해금도
 #  다음 판 번호로 본다. 판 표는 판당 한 줄이라 옛 rounds.csv 처럼
 #  "마지막 행을 비워 둔다" 는 규약이 없다 — 마지막 판이면 애초에 상점을 안 연다.
-# 리그이 미는 값 — 주황부터 테이블가 비싸다. 올림이라 4골드가 5가 된다.
+# 리그이 미는 값 — 주황부터 매대가 비싸다. 올림이라 4골드가 5가 된다.
 func _league_cost(c: int) -> int:
 	var m := GameData.league_v("shop_cost_mul", 1.0)
 	return c if m == 1.0 else maxi(1, int(ceil(float(c) * m)))
@@ -936,18 +936,18 @@ func _league_cost(c: int) -> int:
 func _roll_stock() -> void:
 	stock.clear()
 	var nxt := leg_no + 1
-	var tag_more := _spend_tags("shop")     # 뱃지 — 매물이 는다
-	var tag_free := _spend_tags("free")     # 뱃지 — 몇 개가 공짜다
+	var tag_more := _spend_tags("shop")     # 딱지 — 매물이 는다
+	var tag_free := _spend_tags("free")     # 딱지 — 몇 개가 공짜다
 	# 상점 칸은 그 판 **뒤**의 상점 폭이다. 판 표를 읽으므로 같은 판
 	# 안에서는 세 판이 같은 폭을 본다 — 판이 바뀌는 경계에서만 값이 갈린다.
 	var w := GameData.shop_of(leg_no)
 
-	# 후보를 먼저 거른다 — 이미 가진 동전와 아직 안 풀린 동전는 애초에 안 뜬다.
+	# 후보를 먼저 거른다 — 이미 가진 스티커와 아직 안 풀린 스티커는 애초에 안 뜬다.
 	var pool := []
 	for it in GameData.items():
 		if _has_item(it.id) or GameData.item_min_leg(it) > nxt:
 			continue
-		# 가중치 0 은 **테이블에 안 뜬다는 뜻**이다. 저울에만 맡기면 마지막
+		# 가중치 0 은 **매대에 안 뜬다는 뜻**이다. 저울에만 맡기면 마지막
 		# 원소로 떨어지는 폴백(_draw_weighted)에 걸려 아주 가끔 뜬다.
 		# 전설이 그 자리라, 따로 얻는 길로만 오게 하려면 여기서 빼야 한다.
 		if GameData.item_weight(it) <= 0.0:
@@ -963,7 +963,7 @@ func _roll_stock() -> void:
 		stock.append({"type": "item", "d": it, "cost": _league_cost(it.cost), "sold": false})
 		n += 1
 
-	# 판이 더는 못 받는 보드 확장와 이미 산 보드 확장를 여기서 뺀다.
+	# 판이 더는 못 받는 개조와 이미 산 개조를 여기서 뺀다.
 	# 무효 구매가 사라지는 자리는 여기 한 곳이다.
 	var mods := []
 	for m in GameData.mods():
@@ -976,8 +976,8 @@ func _roll_stock() -> void:
 			break
 		stock.append({"type": "mod", "d": m, "cost": _league_cost(m.cost), "sold": false})
 		mn += 1
-	# 보드 확장를 다 샀거나 판이 꽉 찼다. 예전 코드는 여기서 mods[i] 로 죽었다.
-	# 자리는 정확히 4개여야 하므로(_table_draw 의 ax/ay 주석) 동전로 메운다.
+	# 개조를 다 샀거나 판이 꽉 찼다. 예전 코드는 여기서 mods[i] 로 죽었다.
+	# 자리는 정확히 4개여야 하므로(_table_draw 의 ax/ay 주석) 스티커로 메운다.
 	while mn < int(w.mods):
 		var fill := _draw_weighted(pool)
 		if fill.is_empty():
@@ -992,8 +992,8 @@ func _roll_stock() -> void:
 		var dd: Dictionary = darts_pool[i]
 		stock.append({"type": "dart", "d": dd, "cost": _league_cost(dd.cost), "sold": false})
 
-	# 사탕 — 상점 구성이 미정(기획 메모 990006)이라 임시 규칙로 낸다:
-	# shop_cons 가 켜져 있으면 동전 자리 하나를 사탕으로 바꾼다.
+	# 소비 아이템 — 상점 구성이 미정(기획 메모 990006)이라 임시 규칙로 낸다:
+	# shop_cons 가 켜져 있으면 스티커 자리 하나를 소비 아이템으로 바꾼다.
 	# 자리 수 4는 안 변한다 — _table_draw 의 ax/ay 전제가 사는 이유다.
 	if GameData.tune_i("shop_cons") == 1:
 		var cp := GameData.consumables()
@@ -1005,7 +1005,7 @@ func _roll_stock() -> void:
 							"sold": false}
 					break
 
-	# 뱃지 "외상" — 앞에서부터 몇 개를 0골드로 만든다. 안 팔린 것만 고른다.
+	# 딱지 "외상" — 앞에서부터 몇 개를 0골드로 만든다. 안 팔린 것만 고른다.
 	for k in stock.size():
 		if tag_free <= 0:
 			break
@@ -1013,7 +1013,7 @@ func _roll_stock() -> void:
 			stock[k].cost = 0
 			tag_free -= 1
 
-	# 상인가 판을 쓸고 다시 던진다. 리롤이 배치를 안 바꾸면 낙하가 배치를
+	# 딜러가 판을 쓸고 다시 던진다. 리롤이 배치를 안 바꾸면 낙하가 배치를
 	# 결정한다는 전제 자체가 거짓말이 된다.
 	_drop_roll()
 
@@ -1043,11 +1043,11 @@ func _buy_block(i: int) -> String:
 	if gold < s.cost:
 		return "골드가 %d 모자란다" % (s.cost - gold)
 	if s.type == "item" and owned.size() >= GameData.max_items():
-		return "동전 판이 꽉 찼다 (%d/%d)" % [owned.size(), GameData.max_items()]
+		return "스티커 판이 꽉 찼다 (%d/%d)" % [owned.size(), GameData.max_items()]
 	if s.type == "dart" and _std_slot() < 0:
 		return "바꿀 표준 다트가 없다"
 	if s.type == "cons" and cons.size() >= GameData.cons_slots():
-		return "사탕 칸이 꽉 찼다 (%d/%d)" % [cons.size(), GameData.cons_slots()]
+		return "소비 아이템 칸이 꽉 찼다 (%d/%d)" % [cons.size(), GameData.cons_slots()]
 	return ""
 
 
@@ -1066,7 +1066,7 @@ func _buy(i: int) -> void:
 	match s.type:
 		"item":
 			# 사본이다. 성장 상태(gs)가 원본 카탈로그에 붙으면 다음 런까지
-			# 살아남는다 — 컬렉션과 테이블가 같은 사전을 읽기 때문이다.
+			# 살아남는다 — 컬렉션과 매대가 같은 사전을 읽기 때문이다.
 			var cp: Dictionary = s.d.duplicate()
 			cp.gs = 0
 			cp.bought = leg_no          # 삭음(주황 리그)이 읽는 나이다
@@ -1090,14 +1090,14 @@ func _std_slot() -> int:
 
 
 # ══════════════════════════════════════════════════════════
-#  보드 확장
+#  보드 개조
 #
 #  판은 상태가 아니라 mods_own 의 함수다. 살 때마다 GameData.BOARD_BASE 에서
-#  MODS 표 순서대로 다시 굽는다 — 그래서 "먼저 산 보드 확장가 나중 보드 확장를 흔드는가"
+#  MODS 표 순서대로 다시 굽는다 — 그래서 "먼저 산 개조가 나중 개조를 흔드는가"
 #  라는 물음이 아예 성립하지 않는다. 순서 무관성은 증명이 아니라 구성이다.
 #
 #  바깥과 닿는 곳은 넷뿐이다.
-#    _mod_room(id)   테이블에 낼 수 있는가   (_roll_stock · _buy_block · _tip_build)
+#    _mod_room(id)   매대에 낼 수 있는가   (_roll_stock · _buy_block · _tip_build)
 #    _apply_mod(id)  산다                  (_buy)
 #    _board_bake()   판을 다시 굽는다       (_new_run · _apply_mod)
 #    sectors / bull_* / trp_* / trp2_* / dbl_*   (_start_leg 가 rt_* 로 복사)
@@ -1143,8 +1143,8 @@ func _mod_step(b: Dictionary, sec: Array, m: Dictionary) -> void:
 					sec[i] -= 1
 
 
-# 이 보드 확장 목록이면 판이 어떻게 되는가. 사지 않고 물어볼 수 있어야
-# 테이블 필터·거절 문구·실제 적용 셋이 같은 답을 쓴다.
+# 이 개조 목록이면 판이 어떻게 되는가. 사지 않고 물어볼 수 있어야
+# 매대 필터·거절 문구·실제 적용 셋이 같은 답을 쓴다.
 func _board_of(ids: Array) -> Array:
 	var b: Dictionary = GameData.BOARD_BASE.duplicate()
 	var sec: Array = GameData.SECTORS_BASE.duplicate()
@@ -1155,7 +1155,7 @@ func _board_of(ids: Array) -> Array:
 
 
 # 판이 성립하는가. 링 순서는 hit_info 의 if 사슬이 전제하는 그것이고,
-# 판값 상한은 조합의 유일한 천장이다 — 보드 확장마다 따로 두지 않는다.
+# 판값 상한은 조합의 유일한 천장이다 — 개조마다 따로 두지 않는다.
 func _board_ok(b: Dictionary, sec: Array) -> bool:
 	var L := GameData.GEO
 	var e: float = L.eps
@@ -1187,9 +1187,9 @@ func _board_same(b0: Dictionary, s0: Array, b1: Dictionary, s1: Array) -> bool:
 	return s0 == s1
 
 
-# 테이블에 낼 수 있는가. 산 기록 · 배타 짝 · 기하 · 판값 · "정말 바뀌는가" 를
+# 매대에 낼 수 있는가. 산 기록 · 배타 짝 · 기하 · 판값 · "정말 바뀌는가" 를
 # 여기 한 곳에서 묻는다. 무효 구매가 생길 자리 자체가 없어지는 것이
-# 이 함수의 존재 이유다. 새 보드 확장를 만들면 여기만 통과시켜라.
+# 이 함수의 존재 이유다. 새 개조를 만들면 여기만 통과시켜라.
 func _mod_room(id: String) -> bool:
 	if mods_own.has(id):
 		return false
@@ -1203,7 +1203,7 @@ func _mod_room(id: String) -> bool:
 		return false
 	var cur := _board_of(mods_own)
 	# 지금 여덟 종으로는 걸리지 않는다(배타 짝이 유일한 상쇄 경로였다).
-	# 남겨 두는 것은 다음 사람이 보드 확장를 늘릴 때의 계약이다.
+	# 남겨 두는 것은 다음 사람이 개조를 늘릴 때의 계약이다.
 	return not _board_same(cur[0], cur[1], nx[0], nx[1])
 
 
@@ -1233,10 +1233,10 @@ func _board_spin(n: int) -> void:
 		sec_col = sec_col.slice(k) + sec_col.slice(0, k)
 
 
-# 판을 굽는다. 보드 확장를 산 뒤와 런 초기화, 두 곳에서만 부른다.
+# 판을 굽는다. 개조를 산 뒤와 런 초기화, 두 곳에서만 부른다.
 func _board_bake() -> void:
 	# 되굽기 전에 회전을 푼다. 굽기는 sectors 를 밑바닥에서 새로 만드는데
-	# sec_col 은 일부러 안 지운다(아래 주석). 그대로 두면 보드 확장를 산 순간
+	# sec_col 은 일부러 안 지운다(아래 주석). 그대로 두면 개조를 산 순간
 	# 숫자만 제자리로 가고 색은 돌아간 채 남아 판이 어긋난다.
 	_board_spin(-spin_cur)
 	var r := _board_of(mods_own)
@@ -1263,7 +1263,7 @@ func _in_stock(id: String) -> bool:
 	return false
 
 # 골드 정산은 즉시 끝낸다 — 재진입 방지의 근거이자 버튼 가격표의 출처다.
-# 판을 갈아 끼우는 일만 상인에게 넘긴다.
+# 판을 갈아 끼우는 일만 딜러에게 넘긴다.
 func _reroll() -> void:
 	if sweep_live:
 		return                   # 쓸기는 중단도 재진입도 없다
@@ -1297,9 +1297,9 @@ func _open_leg() -> void:
 	sell_sel = -1
 	buy_sel = -1
 	leg_t = 0.0
-	# 라운드의 뱃지를 한꺼번에 굴린다. 미리 굴려 두어야 "무엇을 받고 무엇을
+	# 라운드의 딱지를 한꺼번에 굴린다. 미리 굴려 두어야 "무엇을 받고 무엇을
 	# 버리는가" 를 보고 고를 수 있다 — 안 보이면 도박이지 선택이 아니다.
-	# 라운드가 그대로면 다시 안 굴린다. 판을 넘길 때마다 뒤 판의 뱃지가
+	# 라운드가 그대로면 다시 안 굴린다. 판을 넘길 때마다 뒤 판의 딱지가
 	# 바뀌면 아까 그것을 보고 세운 계획이 매번 무너진다.
 	var bta := GameData.round_of(leg_no)
 	if bta != leg_tags_round:
@@ -1320,7 +1320,7 @@ func _round_first() -> int:
 	return leg_no - GameData.leg_idx(leg_no)
 
 
-# 그 판을 건너뛰면 받을 뱃지. 없으면 빈 사전이다(보스 판).
+# 그 판을 건너뛰면 받을 딱지. 없으면 빈 사전이다(보스 판).
 func _leg_tag(rn: int) -> Dictionary:
 	return leg_tags.get(rn, {})
 
@@ -1361,7 +1361,7 @@ const SKIP := {
 	"y1":  15.0,     # 첫 줄(10pt) 베이스라인
 	"y2":  28.0,     # 둘째 줄(9pt) 베이스라인
 	"y0":  21.0,     # 한 줄만 있을 때(9pt) — 머리띠 아래 칸의 가운데
-	"ix":  14.0,     # 뱃지 그림 중심 x. 그림 반지름 6.5, 잉크 오른끝이 20.5
+	"ix":  14.0,     # 딱지 그림 중심 x. 그림 반지름 6.5, 잉크 오른끝이 20.5
 	# 글 왼쪽. 그림에서 7.5px 띄운다 — 그림은 글자가 아니라 그림이므로
 	# 낱말 사이(4px)보다 넓게 벌려야 둘이 한 덩어리로 안 읽힌다.
 	"tx":  28.0,
@@ -1426,7 +1426,7 @@ func _leg_skip() -> Rect2:
 			GameData.legs_per_round() - 1))
 
 
-# 건너뛴다 — 점수도 골드도 없다. 뱃지를 받고 다음 판으로 넘어간다.
+# 건너뛴다 — 점수도 골드도 없다. 딱지를 받고 다음 판으로 넘어간다.
 func _skip_leg() -> void:
 	if not GameData.skippable(leg_no):
 		_deny()
@@ -1439,11 +1439,11 @@ func _skip_leg() -> void:
 	_open_leg()
 
 
-# 뱃지의 효과 한 줄. 표의 desc 는 {v} 를 안 채운 날것이라 여기서 채운다.
+# 딱지의 효과 한 줄. 표의 desc 는 {v} 를 안 채운 날것이라 여기서 채운다.
 # 이름만으로는 무슨 값을 받는지 모른다 — "여벌 다트" 가 몇 개인지,
-# "넓은 테이블" 가 몇 칸인지는 이 줄에만 있다.
+# "넓은 매대" 가 몇 칸인지는 이 줄에만 있다.
 # 언제 쓰이는가. 즉시 받는 것과 다음 상점까지 쥐고 있는 것이 화면에서
-# 안 갈렸다 — "무료 리롤" 을 지금 받는지 다음 상점에서 받는지가
+# 안 갈렸다 — "무료 새로고침" 을 지금 받는지 다음 상점에서 받는지가
 # 건너뛸지 말지를 바꾼다.
 func _tag_when(t: Dictionary) -> String:
 	match String(t.get("when", "now")):
@@ -1456,9 +1456,9 @@ func _tag_when(t: Dictionary) -> String:
 	return "바로"
 
 
-# 쌓아 둔 뱃지 한 자리. 그리기와 판정이 같은 식을 쓴다.
+# 쌓아 둔 딱지 한 자리. 그리기와 판정이 같은 식을 쓴다.
 #
-# 폭 58 에 글 왼쪽 15 였을 때 "넓은 테이블" 의 테이블 그림(반지름 5, 잉크
+# 폭 58 에 글 왼쪽 15 였을 때 "넓은 매대" 의 매대 그림(반지름 5, 잉크
 # 오른끝 13)과 첫 글자가 2px 로 붙어, 그림이 글자의 일부로 읽혔다.
 # 자리를 4px 늘리고 글을 20 으로 민다 — 이름 최장이 35px(8pt)이라
 # 남는 38 로 안 잘리고, 아홉 장까지는 640 안에 선다.
@@ -1473,14 +1473,14 @@ func _tag_text(t: Dictionary) -> String:
 			{"v": float(String(t.get("v", "0")))})
 
 
-# 뱃지 하나를 받는다. 지금 쓰는 것은 바로 쓰고, 나중 것은 쌓아 둔다.
+# 딱지 하나를 받는다. 지금 쓰는 것은 바로 쓰고, 나중 것은 쌓아 둔다.
 func _take_tag(t: Dictionary) -> void:
 	var kind := String(t.get("kind", ""))
 	var v := int(t.get("v", 0))
 	var when := String(t.get("when", "now"))
 	var at := Vector2(VIEW.x * 0.5, TBL.fy + 40.0)
 	if when != "now":
-		# 효과 줄과 때를 같이 싣는다 — 쌓인 뱃지에 커서를 올렸을 때
+		# 효과 줄과 때를 같이 싣는다 — 쌓인 딱지에 커서를 올렸을 때
 		# 이름만 있으면 무엇이 기다리는지가 이름 그대로 수수께끼다.
 		pending_tags.append({"kind": kind, "v": v, "n": String(t.get("name", "")),
 				"d": _tag_text(t), "w": _tag_when(t)})
@@ -1516,7 +1516,7 @@ func _take_tag(t: Dictionary) -> void:
 	pop(at, "%s" % t.get("name", ""), C_ACC, 13, 1.4)
 
 
-# 쌓아 둔 뱃지에서 한 갈래를 꺼내 값을 합친다. 꺼내면 사라진다.
+# 쌓아 둔 딱지에서 한 갈래를 꺼내 값을 합친다. 꺼내면 사라진다.
 func _spend_tags(kind: String) -> int:
 	var sum := 0
 	var i := pending_tags.size() - 1
@@ -1548,7 +1548,7 @@ func has_axis(axis: String) -> bool:
 
 func _open_stage() -> void:
 	# 봉인은 _start_leg 에서만 다시 뽑힌다. 지우지 않으면 스테이지 선택
-	# 화면의 동전 슬롯이 지난 판 봉인을 그대로 보여준다.
+	# 화면의 스티커 랙이 지난 판 봉인을 그대로 보여준다.
 	sealed = -1
 	sell_sel = -1
 	buy_sel = -1
@@ -1775,7 +1775,7 @@ func add_sparks(n: int, r0: float, r1: float, ln: float, c: Color, life: float) 
 
 
 func gs() -> float:
-	# 이 게임 고유의 축. 제약이 미는 그 줄에 장갑가 나란히 얹힌다 —
+	# 이 게임 고유의 축. 제약이 미는 그 줄에 설비가 나란히 얹힌다 —
 	# 둘 다 곱이라 순서가 값을 안 바꾼다.
 	var g := gauge_speed * mod_v("gauge_mul", 1.0) 			* GameData.fixture_v("gauge_mul", 1.0)
 	return g * (cur_dart.gauge if cur_dart.has("gauge") else 1.0)
@@ -1954,11 +1954,11 @@ func _auto_step() -> void:
 		S.STAGE:
 			_click(_stage_rect(randi() % stage_pick.size()).get_center())
 		S.SHOP:
-			# 사탕은 쟁여 둘 이유가 없다 — 들자마자 쓴다.
+			# 소비 아이템은 쟁여 둘 이유가 없다 — 들자마자 쓴다.
 			#
-			# 이 세 줄이 없으면 **트랙이 측정에서 통째로 빠진다.**
+			# 이 세 줄이 없으면 **영역 강화 트랙이 측정에서 통째로 빠진다.**
 			# 오토플레이가 소비를 사서 칸에 넣기만 하고 안 써서, 성장 축 둘
-			# (트랙 강화 · 보드 확장) 중 하나가 없는 게임을 재게 된다. 그 수치로
+			# (트랙 강화 · 개조) 중 하나가 없는 게임을 재게 된다. 그 수치로
 			# 목표 곡선을 잡으면 실제보다 낮게 잡힌다 — curve_probe 를 처음
 			# 돌렸을 때 실제로 그랬다.
 			for ci in cons.size():
@@ -1972,7 +1972,7 @@ func _auto_step() -> void:
 				if _buy_block(i) == "":
 					buyable.append(i)
 			var roll := randf()
-			# 장갑를 먼저 본다. 소크가 안 사면 넓어진 테이블·늘어난 다트를
+			# 설비를 먼저 본다. 소크가 안 사면 넓어진 매대·늘어난 다트를
 			# 한 번도 안 굴려 보게 되고, 그러면 이 시스템에 그물이 없다.
 			if not shelf.is_empty() and gold >= int(shelf.cost) and roll < 0.35:
 				_shelf_buy()
@@ -1987,9 +1987,9 @@ func _auto_step() -> void:
 
 
 # ══════════════════════════════════════════════════════════
-#  히든 다트통이 갈라지는 두 자리
+#  히든 팩이 갈라지는 두 자리
 # ──────────────────────────────────────────────────────────
-#  기본 다트통들은 값만 바꾼다 — 다트 수, 시작 골드, 칸 수. 히든 다트통은
+#  기본 팩들은 값만 바꾼다 — 다트 수, 시작 골드, 칸 수. 히든 팩은
 #  **조준하는 법**과 **점수 내는 법**이 다르다. 그 둘이 갈라지는 자리가
 #  이 게임에 정확히 두 곳이고, 여기다.
 #
@@ -2002,16 +2002,16 @@ func _auto_step() -> void:
 #  둘 다 조용히 std 로 도는 것을 막으려고 있다 — 안개가 그렇게 죽었었다.
 #
 #  방식은 **판 시작에 한 번** 읽어 둔다. 매 프레임 표를 뒤지지 않고,
-#  판 도중에 다트통이 바뀔 일도 없다. 제약 축들과 같은 규약이다.
+#  판 도중에 팩이 바뀔 일도 없다. 제약 축들과 같은 규약이다.
 # ══════════════════════════════════════════════════════════
 
-# 든 동전 중 조준 방식을 쥔 첫 장. 둘을 같이 들면 동전 슬롯 앞자리가
-# 이긴다 — 동전 순서는 플레이어가 끌어서 바꿀 수 있으므로 "무엇이
+# 든 스티커 중 조준 방식을 쥔 첫 장. 둘을 같이 들면 랙 앞자리가
+# 이긴다 — 스티커 순서는 플레이어가 끌어서 바꿀 수 있으므로 "무엇이
 # 이기나" 가 손에 있다.
 func _aim_from_items() -> String:
 	for i in owned.size():
 		if i == sealed:
-			continue          # 봉인된 동전는 이번 판에 일을 안 한다
+			continue          # 봉인된 스티커는 이번 판에 일을 안 한다
 		var am := String(owned[i].get("aim", ""))
 		if am != "":
 			return am
@@ -2268,7 +2268,7 @@ func _aim_tick(d: float) -> void:
 				aim.x = lerpf(BC.x - SWING, BC.x + SWING, tri(gt))
 
 
-# 이 다트의 점수. 기본 점수과 배수를 어떻게 합치는가 — 그 한 줄이 이 게임의
+# 이 다트의 점수. 칩과 배수를 어떻게 합치는가 — 그 한 줄이 이 게임의
 # 점수 계산 방식 전부다.
 func _score_combine(chip: int, mult: int) -> int:
 	match score_mode:
@@ -2470,8 +2470,8 @@ func _click(m: Vector2) -> void:
 				return
 			# 창구가 먼저다. 자리가 고정이라 낙하 검사보다 앞이고, _sell_hit
 			# 보다도 앞이어야 한다 — 뒤에 두면 _sell_hit 이 sell_sel 을 지운 뒤
-			# 창구가 "먼저 판에서 팔 동전를 고른다" 로 거절해 2클릭 판매가 통째로
-			# 죽는다. 동전 슬롯(y[4,36])과 창구(y[112,244])는 y 로 갈려 있어 순서를
+			# 창구가 "먼저 판에서 팔 스티커를 고른다" 로 거절해 2클릭 판매가 통째로
+			# 죽는다. 랙(y[4,36])과 창구(y[112,244])는 y 로 갈려 있어 순서를
 			# 바꿔도 서로 안 훔친다.
 			var cz := _chute_at(m, 0.0)
 			if cz >= 0:
@@ -2502,7 +2502,7 @@ func _click(m: Vector2) -> void:
 				buy_sel = -1            # 맨 펠트 = 취소
 		S.OVER:
 			# 검증 실행은 소크 테스트라 곧장 다음 런으로 돈다. 사람은 새 런으로 —
-			# 다트통과 리그을 다시 고를 자리가 거기다.
+			# 팩과 리그을 다시 고를 자리가 거기다.
 			if _autoplay:
 				_new_run()
 			else:
@@ -2604,7 +2604,7 @@ func hit_info(p: Vector2) -> Dictionary:
 	var r := v.length()
 	# 기본점수·기본배수는 areas.csv(착탄 영역 · 전부 확정)가 정한다.
 	# 여기 있던 50/25/0 하드코딩이 그리로 갔다. 기하(반지름)는 판의 모양이라
-	# 보드 확장가 주무르는 값이고, 영역의 값은 데이터다 — 소유가 다르다.
+	# 개조가 주무르는 값이고, 영역의 값은 데이터다 — 소유가 다르다.
 	if r > R * rt_dbl_out:                                    # ← ① 판벌이
 		var ao := GameData.area("out")
 		return {"base": ao.base, "mult": 0, "sector": -1, "idx": -1,
@@ -2669,7 +2669,7 @@ func hit_info(p: Vector2) -> Dictionary:
 #   자석(-1)    "더블" 이 뜬다
 #   관통(고정 1) 아무것도 안 뜬다
 #   가벼운(+3)  아무것도 안 뜬다      — 배수 6은 어느 갈래에도 안 걸린다
-# 트랙도 배수를 더하므로 트리플을 올릴수록 트리플 연출이 죽었다.
+# 영역 강화 트랙도 배수를 더하므로 트리플을 올릴수록 트리플 연출이 죽었다.
 # 표준 다트에 트랙 0일 때만 맞던 연출이다.
 #
 # 링을 죽이는 제약(민짜)은 그대로 반영한다 — 죽은 띠는 죽은 것으로 보여야
@@ -2781,15 +2781,15 @@ func _land(mark := true) -> void:
 		if cur_dart.get("pierce", false) and info.idx >= 0:
 			# 양옆 칸의 몫은 darts.csv 의 pierce_side 가 정한다 — 카드 문장이
 			# 그 수를 그대로 찍는다. 여기 0.5 를 박아 두면 표를 고쳐도 안 따라온다.
-			# 칸 수도 sectors 에서 읽는다. 20 을 박으면 보드 확장가 칸을 늘리는 날
+			# 칸 수도 sectors 에서 읽는다. 20 을 박으면 개조가 칸을 늘리는 날
 			# 배열 밖을 짚는다.
 			var n: int = sectors.size()
 			var l: int = sectors[(info.idx + n - 1) % n]
 			var r: int = sectors[(info.idx + 1) % n]
 			pierce_gain = int(float(l + r) * float(cur_dart.get("side", 0.5)))
 
-	# 트랙 강화 — 사탕이 올린 트랙 레벨. 레벨별 수치 행이 전부
-	# 트랙 강화 (= 발라트로의 행성 카드). 사탕이 트랙 레벨을 올리고
+	# 영역 강화 — 소비 아이템이 올린 트랙 레벨. 레벨별 수치 행이 전부
+	# 영역 강화 (= 발라트로의 행성 카드). 소비 아이템이 트랙 레벨을 올리고
 	# 그 레벨의 1..lv 행을 합친 것이 여기 얹힌다. 다트 보정 **뒤**에 오는
 	# 순서는 의도한 것이다 — 다트의 배수 하한(maxi(1, ...))을 먼저 통과시킨
 	# 뒤에 트랙 배수를 더해야, 무거운 다트가 트랙 투자를 통째로 먹지 않는다.
@@ -2835,7 +2835,7 @@ func _land(mark := true) -> void:
 	var is_risk: bool = info.mult >= 2 or info.sector >= 25
 	throw6 += 1
 
-	# rackval 배율 — 이 발에서 파는 값이 아니라 지금 동전 슬롯의 값이다.
+	# rackval 배율 — 이 발에서 파는 값이 아니라 지금 랙의 값이다.
 	var rv_all := 0
 	for o in owned:
 		rv_all += GameData.sell_value(o)
@@ -2956,7 +2956,7 @@ func _land(mark := true) -> void:
 	# 조건식이 예전과 완전히 같은 자리로 떨어진다.
 	#
 	# 빗나감 **깃발**은 안 건드린다. info.mult 는 여전히 0 이고 배수 1 은
-	# 큐가 넣는다 — 실패 조건 동전(빗나감·연속 빗나감)가 그대로 산다.
+	# 큐가 넣는다 — 실패 조건 스티커(빗나감·연속 빗나감)가 그대로 산다.
 	# 점수가 나는 빗나감과 실패로 세는 빗나감은 다른 축이다.
 	if info.mult == 0 and fired.is_empty() and info.base <= 0:
 		queue.append({"k": "miss"})
@@ -2999,7 +2999,7 @@ func _land(mark := true) -> void:
 			if String(it.get("side", "")) == "trackup25" and randf() < 0.25 \
 					and int(info.get("track", 0)) > 0:
 				track_lv[info.track] = int(track_lv.get(info.track, 0)) + 1
-				pop(BC + Vector2(0.0, -52.0), "트랙 강화 +1", C_ACC, 10, 0.9)
+				pop(BC + Vector2(0.0, -52.0), "영역 강화 +1", C_ACC, 10, 0.9)
 		queue.append({"k": "total"})
 
 	# 통계는 해금 조건보다 **먼저** 세기 시작한다. 조건을 나중에 달면
@@ -3039,11 +3039,11 @@ func _land(mark := true) -> void:
 	qt = beat * 1.1
 
 
-# 작은 다트의 기본 점수. **들어올 때** 깎는다 — 정산 결과만 깎으면 카드는
+# 작은 다트의 칩. **들어올 때** 깎는다 — 정산 결과만 깎으면 카드는
 # "50 x 1" 을 보여 주고 총점은 13 만 오른다. 화면이 거짓말을 하는 것이다.
 #
-# 판에서 온 기본 점수이든 동전가 얹은 기본 점수이든 다 여기를 지난다. 기본 점수만 깎고
-# 동전를 안 깎으면 조건 없는 "점수 +16" 한 장이 발마다 온전히 얹혀
+# 판에서 온 칩이든 스티커가 얹은 칩이든 다 여기를 지난다. 칩만 깎고
+# 스티커를 안 깎으면 조건 없는 "점수 +16" 한 장이 발마다 온전히 얹혀
 # 자루 하나가 다섯 자루가 된다.
 #
 # **배수는 안 깎는다.** 보통 한 발과 연발 한 발에 같은 배수가 곱해지므로
@@ -3177,12 +3177,12 @@ func pop(p: Vector2, txt: String, c: Color, sz: int, life: float) -> void:
 #    ① h 108 → 86, 비 1.39 → 1.78. 더 납작해진다.
 #    ② 그림자 벡터를 임의값 (3,4) 에서 매물과 같은 TBL.light*3.35 = (1.5,3.0)
 #       으로 바꾼다. 같은 빛 아래 있다는 진술이 "눕혔다" 의 절반이다.
-#    ③ 가까운 모서리에 두께 2px. 동전 옆면(4.5*tall=2.77)과 같은 어법이고,
+#    ③ 가까운 모서리에 두께 2px. 스티커 옆면(4.5*tall=2.77)과 같은 어법이고,
 #       두께가 없으면 카드가 펠트에 인쇄된 무늬로 읽힌다.
 #    ④ 폭을 상수에서 n 역산으로 바꾼다. 지금 값은 n=4 에서
 #       150*4+14*3 = 642 > 640 으로 실제로 터진다.
-#  ①만으로도 상인 여유가 7px(현재 상인 아래끝 119 vs 카드 126)에서
-#  28.5px 로 벌어진다. 새 상인(111.5)와 합쳐 "안 가린다" 가 성립한다.
+#  ①만으로도 딜러 여유가 7px(현재 딜러 아래끝 119 vs 카드 126)에서
+#  28.5px 로 벌어진다. 새 딜러(111.5)와 합쳐 "안 가린다" 가 성립한다.
 #
 #  ── 글자는 왜 안 눕히는가 ────────────────────────────
 #  카드는 눌리고 카드 위의 인쇄는 안 눌린다. 새 예외가 아니라 네 번째 사례다.
@@ -3230,7 +3230,7 @@ func _row_rect(i: int, cnt: int) -> Rect2:
 			CARD.y + CARD.h - hh), Vector2(w, hh))
 
 
-#  상인가 한 장씩 밀어 내려 준다. 카운터 뒤에서 나와 자리에 서고 한 번 튄다.
+#  딜러가 한 장씩 밀어 내려 준다. 카운터 뒤에서 나와 자리에 서고 한 번 튄다.
 #  물리 트레이에 안 넣는다 — 카드 셋이 트레이 폭(408)보다 넓어 솔버에 넣으면
 #  서로 밀려나 자리가 안 선다. 여기서 필요한 것은 충돌이 아니라 손짓이다.
 const DEAL := {
@@ -3280,7 +3280,7 @@ func _grip_tilt(i: int) -> float:
 # 중심 좌표를 스스로 만들어 넘기므로 소크가 그걸 못 잡는다.
 #   마지막 자루 아래끝 = cy 224 + (n-1)*dy/2 + hit 18 ≤ 360
 #   → dy ≤ 236 / (n-1)
-# 기본 여섯 + 동전 하나 + 뱃지 하나 + 장갑 하나 = 아홉이 실제 상한이다.
+# 기본 여섯 + 스티커 하나 + 딱지 하나 + 설비 하나 = 아홉이 실제 상한이다.
 func _grip_dy() -> float:
 	return minf(float(GRIP.dy), 236.0 / maxf(float(grip_n) - 1.0, 1.0))
 
@@ -3316,7 +3316,7 @@ func _mag_rect(i: int) -> Rect2:
 
 
 # 선반 자리. 왼쪽 벽 — 자금판(y 20~54) 아래, 판매 창구 이름표(y 128) 위다.
-# 테이블 물건은 펠트 위에 물리로 떨어지므로 이 사각과 영영 안 겹친다.
+# 매대 물건은 펠트 위에 물리로 떨어지므로 이 사각과 영영 안 겹친다.
 func _shelf_rect() -> Rect2:
 	return Rect2(Vector2(8.0, 62.0), Vector2(138.0, 52.0))
 
@@ -3387,10 +3387,10 @@ const SWAP := {
 	"fall":  0.11,
 	"tin":   0.23,    # 돌아올 때 테이블이 드는 시간 (lead 부터)
 	"dx":    700.0,   # 테이블 이동. 640 에 카드 그림자·앞치마 여유 60
-	# 상인는 가로로만 빼면 안 된다. 실루엣은 동전 슬롯(x[159,481] y[4,48]) 뒤에
+	# 딜러는 가로로만 빼면 안 된다. 실루엣은 랙(x[159,481] y[4,48]) 뒤에
 	# 잘리는 것을 전제로 그린 크롭이라(NPC.top 주석), 89px 만 밀려도 평평한
-	# 절단면과 잘린 팔 뿌리가 드러난다. 그래서 위로도 같이 뺀다 — 동전 슬롯이
-	# 곧 퇴장문이다. 184 면 절단면이 동전 슬롯을 벗어나기 전에 화면 위로 넘어간다.
+	# 절단면과 잘린 팔 뿌리가 드러난다. 그래서 위로도 같이 뺀다 — 랙이
+	# 곧 퇴장문이다. 184 면 절단면이 랙을 벗어나기 전에 화면 위로 넘어간다.
 	"npc":   184.0,
 	# 누운 판이 아래로 잠기는 깊이. 판은 시작할 때 **화면 밖**에 있어야
 	# 한다 — 28 로는 앞치마 높이라, 아직 안 빠진 테이블 위에 판이 누워
@@ -3461,7 +3461,7 @@ func _swap_update(d: float) -> void:
 	if not swap_live:
 		return
 	swap_t += d
-	npc_clock += d          # 상인는 빠지는 동안에도 숨을 쉰다
+	npc_clock += d          # 딜러는 빠지는 동안에도 숨을 쉰다
 	if swap_t >= float(SWAP.dur):
 		_swap_skip()
 
@@ -3493,7 +3493,7 @@ func _swap_board(sh: Vector2) -> void:
 			Vector2(0.0, _swap_map(0.0)) + sh))
 
 
-# 방의 벽. **안 움직인다.** 옮겨야 하는 것은 카운터·상인·판 셋뿐이고,
+# 방의 벽. **안 움직인다.** 옮겨야 하는 것은 카운터·딜러·판 셋뿐이고,
 # 벽까지 같이 밀면 화면이 통째로 옮겨져 무엇이 움직였는지 안 읽힌다.
 # 대신 색만 건너간다 — 테이블 화면의 바탕은 벽(C_WOOD)이고 판 화면의
 # 바탕은 C_BG 라, 안 바꾸면 두 색의 경계선이 화면을 쓸고 지나간다.
@@ -3610,7 +3610,7 @@ func _hud_draw() -> void:
 		_cons_draw()
 		_panel_draw()
 		_cap_draw()
-		_rack_hold_draw()   # 판 위다 — 끌고 다니는 동전는 무엇에도 안 덮인다
+		_rack_hold_draw()   # 판 위다 — 끌고 다니는 스티커는 무엇에도 안 덮인다
 		# 나가는 전환에서만 같이 들어온다. 돌아오는 쪽은 안 그린다 —
 		# HUD 는 스크림 위라, 벽만 어두운 화면에 홀로 밝게 뜬다.
 		# 스크림이 0.94 로 시작하므로 사라지는 것도 안 보인다.
@@ -3644,7 +3644,7 @@ func annulus(ri: float, ro: float, a0: float, a1: float) -> PackedVector2Array:
 
 
 # 판 바깥선에서 gap(R 배수)만큼 바깥. 뒤판과 숫자 고리가 같은 식을 본다 —
-# 갈라 두면 보드 확장로 판이 커질 때 하나만 안 따라간다.
+# 갈라 두면 개조로 판이 커질 때 하나만 안 따라간다.
 func _board_rim(gap: float) -> float:
 	return R * (rt_dbl_out + gap)
 
@@ -3654,7 +3654,7 @@ func _draw_board() -> void:
 	var push := 1.0 + board_punch * 0.028
 
 	# 판 뒤판과 숫자 고리는 **판 바깥선을 따라간다.** 1.07 · 1.13 을
-	# 박아 두었더니 보드 확장 "판벌이"(바깥선 1.10)를 사는 순간 뒤판이 판보다
+	# 박아 두었더니 개조 "판벌이"(바깥선 1.10)를 사는 순간 뒤판이 판보다
 	# 안쪽으로 들어가고 숫자가 띠 위에 겹쳐 앉았다 — 판 모양은 데이터인데
 	# 그 둘레만 상수였던 자리다. 간격은 그대로라 기본 판에서는 한 픽셀도
 	# 안 달라진다.
@@ -3914,7 +3914,7 @@ func _bd3_open() -> void:
 	cam.position = Vector3(0.0, 0.0, d)
 	bd_vp.add_child(cam)
 
-	# 빛은 왼쪽 위에서. 화면의 다른 입체(동전 마감·플라크 광택)가 쓰는
+	# 빛은 왼쪽 위에서. 화면의 다른 입체(스티커 마감·플라크 광택)가 쓰는
 	# 방향과 같다 — 한 화면에 광원이 둘이면 어느 쪽이 위인지가 안 읽힌다.
 	var lt := DirectionalLight3D.new()
 	lt.rotation_degrees = Vector3(-38.0, -30.0, 0.0)
@@ -4345,13 +4345,13 @@ func _bank_draw() -> void:
 				C_GOLD.darkened(0.3) if itr > 0 else C_DIM.darkened(0.35))
 
 
-# ── 동전 꼬리표 ─────────────────────────────────────────────
+# ── 스티커 꼬리표 ─────────────────────────────────────────────
 func _cap_draw() -> void:
 	var r: Rect2 = LAY.cap
 	r.position.y += _hud_dy()
-	draw_rect(r, C_FELT)                                   # 동전 슬롯과 같은 재질
+	draw_rect(r, C_FELT)                                   # 랙과 같은 재질
 	draw_rect(Rect2(r.position, Vector2(r.size.x, 1.0)), C_FELT.lightened(0.14))
-	draw_string(font, r.position + Vector2(0.0, 18.0), "동전",
+	draw_string(font, r.position + Vector2(0.0, 18.0), "스티커",
 			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 10, C_DIM.darkened(0.1))
 	draw_string(font, r.position + Vector2(0.0, 36.0),
 			"%d/%d" % [owned.size(), GameData.max_items()],
@@ -4360,7 +4360,7 @@ func _cap_draw() -> void:
 
 
 # ══════════════════════════════════════════════════════════
-#  동전 슬롯  (아이템 패널)
+#  스티커 랙  (아이템 패널)
 # ──────────────────────────────────────────────────────────
 #  바깥과 닿는 곳은 이 넷뿐이다.
 #    _panel_fire(i)    아이템이 발동할 때        (_next_step)
@@ -4370,26 +4370,26 @@ func _cap_draw() -> void:
 #  owned / sealed 를 읽기만 하고 게임 상태는 건드리지 않는다.
 #  그래서 이 구획만 지우고 다시 써도 나머지는 영향을 안 받는다.
 #
-#  아이템은 원형 동전다. 골드는 동전가 아니라 플라크로 그린다
+#  아이템은 원형 스티커다. 골드는 스티커가 아니라 플라크로 그린다
 #  (draw_gold). 원반과 직사각으로 형태를 갈라 둘을 안 헷갈리게 한다.
 # ══════════════════════════════════════════════════════════
 
 # 감각 조정은 이 표에서만 한다.
 const PANEL := {
 	# 배치
-	"y": 20.0,           # 동전 슬롯 위쪽. 아래 y[56,112] 가 상인 자리다
-	# 높이 46 을 38 로 줄인 것은 상인 때문이다. 동전 슬롯 아래끝(58)과 카운터(77)
-	# 사이의 19px 이 머리가 들어갈 유일한 자리다 — 동전 슬롯을 그대로 두면 실루엣이
-	# 통째로 동전 슬롯 뒤에 숨어 "누가 판다" 가 화면에서 안 읽힌다.
+	"y": 20.0,           # 랙 위쪽. 아래 y[56,112] 가 딜러 자리다
+	# 높이 46 을 38 로 줄인 것은 딜러 때문이다. 랙 아래끝(58)과 카운터(77)
+	# 사이의 19px 이 머리가 들어갈 유일한 자리다 — 랙을 그대로 두면 실루엣이
+	# 통째로 랙 뒤에 숨어 "누가 판다" 가 화면에서 안 읽힌다.
 	# 높이 32 → 36, 칸 42 → 56. 플레이 피드백이 "아이템 칸이 너무 작다"
-	# 였고, 실제로 칸 밑 이름이 서로 겹쳐 안 읽혔다(실측). 동전 슬롯은 넓히되
-	# **가운데를 지킨다** — 상인 윗머리(y<36 반폭 111 = x[209,431])가
-	# 동전 슬롯 뒤에 숨는 것이 실루엣의 전제라 옮기면 벽으로 샌다.
-	"h": 44.0,           # 동전 슬롯 높이
-	"cell": 62.0,        # 동전 한 칸 폭
-	"pad": 6.0,          # 동전 슬롯 안쪽 여백
-	"r": 19.0,           # 동전 반지름
-	"chip_dy": -1.0,     # 칸 안에서 동전 중심을 얼마나 올릴지
+	# 였고, 실제로 칸 밑 이름이 서로 겹쳐 안 읽혔다(실측). 랙은 넓히되
+	# **가운데를 지킨다** — 딜러 윗머리(y<36 반폭 111 = x[209,431])가
+	# 랙 뒤에 숨는 것이 실루엣의 전제라 옮기면 벽으로 샌다.
+	"h": 44.0,           # 랙 높이
+	"cell": 62.0,        # 스티커 한 칸 폭
+	"pad": 6.0,          # 랙 안쪽 여백
+	"r": 19.0,           # 스티커 반지름
+	"chip_dy": -1.0,     # 칸 안에서 스티커 중심을 얼마나 올릴지
 
 	# 튀는 정도 — 사각 슬롯 때 값을 그대로 쓴다. 꽂는 곳만 바뀌었다.
 	"kick": 7.4,         # 발동 순간 튀어오르는 힘
@@ -4407,12 +4407,12 @@ const PANEL := {
 	"hot": 0.62,         # 발동 후 이름을 몇 초 보여줄지
 }
 
-# 등급(가격)별 동전 — 명도가 단조 하강해서 저해상도에서도 순서가 읽힌다.
+# 등급(가격)별 스티커 — 명도가 단조 하강해서 저해상도에서도 순서가 읽힌다.
 #
-#  원래는 노름기본 점수이었다. 대회 제출본에서 사행성 기호를 걷어내며 동전로
-#  갈았는데 실루엣(원반)은 한 픽셀도 안 건드렸다 — 낙하 솔버·동전 슬롯·컬렉션이
+#  원래는 노름칩이었다. 대회 제출본에서 사행성 기호를 걷어내며 스티커로
+#  갈았는데 실루엣(원반)은 한 픽셀도 안 건드렸다 — 낙하 솔버·랙·컬렉션이
 #  전부 "원 하나" 를 전제로 서 있어서, 여기만 바꾸면 나머지가 안 흔들린다.
-#  갈린 것은 테두리 어법 하나다: 가장자리 스팟(기본 점수을 기본 점수으로 만들던 유일한
+#  갈린 것은 테두리 어법 하나다: 가장자리 스팟(칩을 칩으로 만들던 유일한
 #  표식)을 빼고 다이컷 흰 테두리를 둘렀다.
 #
 #  등급의 둘째 신호는 마감(fin)이다 — 0 매트 · 1 유광 · 2 홀로그램.
@@ -4431,7 +4431,7 @@ const STK_TIERS := [
 	# 한 단 위라 새 표식을 배우지 않아도 "홀로보다 더" 로 읽힌다.
 	{"rarity": "legendary", "body": "3a1030", "fin": 3},
 ]
-const C_DIECUT := Color("f4f0e6")   # 다이컷 테두리. 이 흰 띠 하나가 "동전"를 말한다
+const C_DIECUT := Color("f4f0e6")   # 다이컷 테두리. 이 흰 띠 하나가 "스티커"를 말한다
 const C_LINER := Color("efe9db")    # 이형지 뒷면 — 말릴 때만 보인다. 인쇄가 없다
 const HOLO := [Color("74d6ea"), Color("ef86c6"), Color("ffd873")]
 const C_FELT := Color("16281f")
@@ -4518,16 +4518,16 @@ func _panel_update(d: float) -> void:
 # 62 는 원래 이름 때문에 잡은 값이었다 — "칸 42 → 56 은 칸 밑 이름이
 # 서로 겹쳐 안 읽혔다(실측)" 가 위 주석이다. 그런데 그 이름은 지금
 # 없다(봉인·호버일 때만 뜬다). 그래서 남은 하한은 그리는 것의 크기다:
-# 동전 원반 지름 38 과 호버 링 지름 42. 46 이면 링 양옆에 2px 이
+# 스티커 원반 지름 38 과 호버 링 지름 42. 46 이면 링 양옆에 2px 이
 # 남는다 — 그 아래로는 링이 칸 밖으로 샌다.
 #
-# 위 한계는 이웃이다. 왼쪽 사탕 칸이 152 에서 끝나고 오른쪽 수용량
-# 꼬리표가 490 에서 시작하므로 동전 슬롯이 쓸 수 있는 폭은 334 다.
+# 위 한계는 이웃이다. 왼쪽 소비 칸이 152 에서 끝나고 오른쪽 수용량
+# 꼬리표가 490 에서 시작하므로 랙이 쓸 수 있는 폭은 334 다.
 const PANEL_CELL_MIN := 46.0
 const PANEL_SPAN := 330.0     # 소비(152)와 꼬리표(490) 사이, 여유 2px 씩
-# 동전 슬롯 판의 최소 폭. 상인 윗머리가 x[209,431] 이라 그것을 덮으려면 222 가
+# 랙 판의 최소 폭. 딜러 윗머리가 x[209,431] 이라 그것을 덮으려면 222 가
 # 필요하다. 칸이 셋 이하로 줄면 칸만으로는 그 폭이 안 나오고, 그때
-# 머리가 동전 슬롯 밖으로 새어 실루엣이 통째로 무너진다 — 칸 수와 판 폭을
+# 머리가 랙 밖으로 새어 실루엣이 통째로 무너진다 — 칸 수와 판 폭을
 # 갈라 둔 이유가 그것이다. 판은 늘 이만큼이고 칸은 그 안에서 가운데다.
 const PANEL_W_MIN := 228.0
 
@@ -4542,9 +4542,9 @@ func _panel_rect() -> Rect2:
 	# _slot_rect 가 이걸 파생하므로 판매 판정·툴팁 앵커·구매 비행 목표가
 	# 전부 따라온다. 좌표 소유자를 안 늘리는 자리다.
 	#
-	# **가운데를 지킨다.** 상인 윗머리(y<36 반폭 111 = x[209,431])가 동전 슬롯 뒤에
+	# **가운데를 지킨다.** 딜러 윗머리(y<36 반폭 111 = x[209,431])가 랙 뒤에
 	# 숨는 것이 실루엣의 전제다. 한쪽으로 붙여 키우면 칸 수가 줄었을 때
-	# 머리가 동전 슬롯 밖으로 새고, 그건 여섯 번 다시 그린 자리다.
+	# 머리가 랙 밖으로 새고, 그건 여섯 번 다시 그린 자리다.
 	var n: int = GameData.max_items()
 	var w: float = maxf(_panel_cell() * float(n) + PANEL.pad * 2.0, PANEL_W_MIN)
 	return Rect2(Vector2((VIEW.x - w) * 0.5, PANEL.y + _hud_dy()), Vector2(w, PANEL.h))
@@ -4568,13 +4568,13 @@ func _stk_ti(rarity: String) -> int:
 	return 0
 
 
-# 조건 그림 — 동전가 "언제" 터지는가를 얼굴에 새긴다.
+# 조건 그림 — 스티커가 "언제" 터지는가를 얼굴에 새긴다.
 #
-# 지금까지 동전는 값(얼마나)만 보였다. 그래서 등급·잉크·숫자가 같으면
+# 지금까지 스티커는 값(얼마나)만 보였다. 그래서 등급·잉크·숫자가 같으면
 # 조건이 정반대여도 똑같이 보였다 — 홀수 애호와 짝수 애호, 좌익수와 우익수가
 # 화면에서 구분 불가였다. 재미의 절반은 조건 쪽인데 그게 안 그려지고 있었다.
 #
-# 열여섯 조건을 원시 도형만으로 가른다. 글자는 안 쓴다 — 동전 슬롯 반지름 15 에서
+# 열여섯 조건을 원시 도형만으로 가른다. 글자는 안 쓴다 — 랙 반지름 15 에서
 # 얼굴에 남는 자리가 지름 17px 라 한글은 물론 숫자도 둘은 안 들어간다.
 # 갈리는 축을 도형 갈래로 나눠 뒀다: 선 / 점 / 반원 / 삼각 / 원 / 원쌍 / 막대 / X.
 # 같은 갈래 안에서만 개수와 방향으로 갈리므로 실루엣이 먼저 읽힌다.
@@ -4704,7 +4704,7 @@ func _icon_cond(c: Vector2, r: float, cond: String, col: Color) -> void:
 			draw_colored_polygon(PackedVector2Array([tp + Vector2(0.3, -0.4) * u,
 					tp + Vector2(-0.5, -0.1) * u, tp + Vector2(0.2, 0.5) * u]), col)
 		"band":
-			# 동전 슬롯 r=15 → r_icon 6.30 → u 3.906. 두 호의 중심 간격 2.227px,
+			# 랙 r=15 → r_icon 6.30 → u 3.906. 두 호의 중심 간격 2.227px,
 			# 굵기 1.0 을 빼면 배경이 1.23px 남는다 — 1배에서 두 겹으로 갈린다.
 			var a0 := -PI * 0.5 - 1.22
 			var a1 := -PI * 0.5 + 1.22
@@ -4734,7 +4734,7 @@ func _half_disc(c: Vector2, u: float, left: bool) -> PackedVector2Array:
 	return pts
 
 
-# 아이템 하나를 동전로 그린다. 동전 슬롯과 상점이 같은 그림을 쓰도록 여기 하나로 모았다.
+# 아이템 하나를 스티커로 그린다. 랙과 상점이 같은 그림을 쓰도록 여기 하나로 모았다.
 func draw_item_sticker(c: Vector2, r: float, it: Dictionary, rot: float, lift: float,
 		dim: float, num_sz: int, peel := 0.0) -> void:
 	var ti := _stk_ti(String(it.get("rarity", "common")))
@@ -4763,8 +4763,8 @@ func draw_item_sticker(c: Vector2, r: float, it: Dictionary, rot: float, lift: f
 	_peel_fold(c, r, peel, dim)
 
 
-# 동전 몸통. 동전 슬롯·테이블·툴팁·컬렉션이 같은 그림을 쓰도록 여기 하나로 모았다.
-#  gold_rim — 골드를 버는 동전는 다이컷을 금박으로 찍는다. 링을 하나 더
+# 스티커 몸통. 랙·매대·툴팁·컬렉션이 같은 그림을 쓰도록 여기 하나로 모았다.
+#  gold_rim — 골드를 버는 스티커는 다이컷을 금박으로 찍는다. 링을 하나 더
 #  두르지 않는 이유는 반지름 13px 에 고리 셋(다이컷·등급·골드)이 들어가면
 #  1.5px 간격으로 뭉개져 셋 다 안 읽히기 때문이다. 테두리 색은 공짜다.
 func draw_sticker(c: Vector2, r: float, tier: Dictionary, rot: float,
@@ -4774,7 +4774,7 @@ func draw_sticker(c: Vector2, r: float, tier: Dictionary, rot: float,
 	var rw: float = clampf(r * 0.16, 1.0, 2.2)      # 다이컷 폭. r=8 툴팁에서도 안 뭉갠다
 	var y := _peel_y(r, peel)
 
-	# 종이라 옆면이 없다. 들리면 두께 대신 그림자만 자란다 — 기본 점수의 원기둥
+	# 종이라 옆면이 없다. 들리면 두께 대신 그림자만 자란다 — 칩의 원기둥
 	# 옆면(1.5px)을 그대로 두면 두꺼운 원반으로 되돌아간다.
 	if lift > 0.05:
 		draw_circle(c + Vector2(0.0, lift), r, Color(0.0, 0.0, 0.0, 0.22))
@@ -4829,7 +4829,7 @@ func _disc_seg(c: Vector2, r: float, y: float, col: Color) -> void:
 	draw_colored_polygon(pts, col)
 
 
-# 동전를 떼면 아래 끝이 위로 말린다. 아래 활꼴을 접는 선에 대해 미러링하는
+# 스티커를 떼면 아래 끝이 위로 말린다. 아래 활꼴을 접는 선에 대해 미러링하는
 # 것이 전부다 — 종이접기 그대로라 곡률을 풀 일이 없다. 뒤집힌 쪽은 이형지라
 # 인쇄가 없고, 그래서 얼굴 위에 겹쳐도 무엇이 가려졌는지가 안 헷갈린다.
 func _peel_fold(c: Vector2, r: float, peel: float, dim: float) -> void:
@@ -4855,7 +4855,7 @@ func _peel_fold(c: Vector2, r: float, peel: float, dim: float) -> void:
 
 
 # ── 플라크 (통화) ─────────────────────────────────────────
-#  동전보다 위 등급인 직사각 화폐판. 아이템이 원반이므로 통화는
+#  스티커보다 위 등급인 직사각 화폐판. 아이템이 원반이므로 통화는
 #  직사각으로 형태를 갈랐다. 대각 광택과 어두운 옆면이 금속감의
 #  전부라 둘 중 하나만 빼도 그냥 노란 네모가 된다.
 func draw_plaque(p: Vector2, w: float, h: float, c: Color) -> void:
@@ -4868,7 +4868,7 @@ func draw_plaque(p: Vector2, w: float, h: float, c: Color) -> void:
 			c.darkened(0.4))
 
 
-# 플라크와 수 사이. 크기에 비례해야 22pt 정산 총액과 9pt 값뱃지가 같은
+# 플라크와 수 사이. 크기에 비례해야 22pt 정산 총액과 9pt 값딱지가 같은
 # 밀도로 읽힌다 — 4px 로 못 박아 두면 큰 쪽만 붙어 보인다. 재는 쪽과
 # 그리는 쪽이 같은 값을 봐야 가운데·오른쪽 정렬이 안 어긋난다.
 func gold_gap(size: int) -> float:
@@ -4912,7 +4912,7 @@ func _panel_draw() -> void:
 			pass
 
 
-# 동전 i 의 고정 기울기 계수(-0.5~0.5). 인덱스로만 결정되므로 프레임 간 안 흔들린다.
+# 스티커 i 의 고정 기울기 계수(-0.5~0.5). 인덱스로만 결정되므로 프레임 간 안 흔들린다.
 # 상시 기울기는 정적이라 히트박스와 싸우지 않는다 — 그래서 calm 게이트를 안 탄다.
 # 3단계에서 PANEL.tilt 를 곱해 쓴다. (지금은 미사용)
 func _panel_tilt(i: int) -> float:
@@ -4948,15 +4948,15 @@ func _panel_slot(i: int) -> void:
 	elif i == tip_slot and tip_a > 0.004:
 		draw_arc(c, r + 2.0, 0.0, TAU, 24, Color(C_ACC, tip_a), 1.0)
 
-	# 상점·스테이지에서는 동전 슬롯이 매물대가 된다 — 태그 자리에 회수액을 건다.
+	# 상점·스테이지에서는 랙이 매물대가 된다 — 태그 자리에 회수액을 건다.
 	if _can_sell():
 		draw_gold(cell.get_center().x, cell.position.y + cell.size.y - 3.0,
 				str(GameData.sell_value(it)), 9,
 				C_ACC if sel else C_GOLD.darkened(0.30))
 		return
 
-	# 평소엔 아무 글자도 안 쓴다. 조건은 동전 얼굴의 아이콘이 이미
-	# 말하고, 칸 밑에 문장을 깔면 동전에 눌려 조각으로 읽힌다(실측).
+	# 평소엔 아무 글자도 안 쓴다. 조건은 스티커 얼굴의 아이콘이 이미
+	# 말하고, 칸 밑에 문장을 깔면 스티커에 눌려 조각으로 읽힌다(실측).
 	# 발라트로도 조커 밑에 글자를 안 둔다 — 카드가 곧 이름이다.
 	# 글자가 뜨는 것은 상태 둘뿐이다: 봉인됐거나, 지금 보고 있거나.
 	var label := ""
@@ -4991,20 +4991,20 @@ func _elide(t: String, w: float, sz: int) -> String:
 
 
 # ══════════════════════════════════════════════════════════
-#  판매 (동전 슬롯 → 골드)
+#  판매 (스티커 랙 → 골드)
 # ──────────────────────────────────────────────────────────
 #  바깥과 닿는 곳은 셋뿐이다.
-#    _sell_hit(m)   동전 슬롯 클릭 판정          (_click 의 S.SHOP)
+#    _sell_hit(m)   랙 클릭 판정          (_click 의 S.SHOP)
 #    _can_sell()    지금 팔 수 있는가      (_panel_slot / _tip_build / _process)
 #    sell_sel       고른 칸 (-1 = 없음)
 #
-#  두 번 눌러야 팔린다. 첫 클릭은 동전(동전 슬롯 안), 두 번째는 왼쪽 창구다.
+#  두 번 눌러야 팔린다. 첫 클릭은 스티커(랙 안), 두 번째는 왼쪽 창구다.
 #  두 표적이 물리적으로 갈려 있어 더블클릭이 판매로 흘러들 수 없다 —
 #  같은 자리를 두 번 누르는 방식이었다면 필요했을 타이머가 여기선 필요 없다.
 #  판매판이 자금 판 바로 옆인 것도 의도다. 파는 건 물건 옆이 아니라 지갑 옆이다.
 #
 #  S.CLEAR 에는 절대 붙이지 않는다 — 정산 지급(_finish_leg 의 gold +=)이
-#  이미 끝난 시점이라 골드 동전의 "받고 즉시 되팔기" 창이 열린다.
+#  이미 끝난 시점이라 골드 스티커의 "받고 즉시 되팔기" 창이 열린다.
 # ══════════════════════════════════════════════════════════
 
 var sell_sel := -1
@@ -5017,11 +5017,11 @@ var shake_off := Vector2.ZERO
 
 # ── 판 선택 ──────────────────────────────────────────────
 #  라운드의 세 판을 늘어놓고 지금 판을 던지거나 건너뛴다. 건너뛰면 점수도
-#  골드도 없고 대신 뱃지를 받는다 — 그 교환이 이 화면의 전부다.
+#  골드도 없고 대신 딱지를 받는다 — 그 교환이 이 화면의 전부다.
 #  보스 판은 못 건너뛴다(legs.csv 의 skippable 이 문이고, 검증기가
 #  마지막 판만 0 인 것을 강제한다).
-var leg_tag := {}             # 지금 건너뛰면 받을 뱃지. 화면에 미리 보인다
-# 판 번호 → 그 판을 건너뛰면 받을 뱃지. **라운드에 들어올 때 한꺼번에 굴린다.**
+var leg_tag := {}             # 지금 건너뛰면 받을 딱지. 화면에 미리 보인다
+# 판 번호 → 그 판을 건너뛰면 받을 딱지. **라운드에 들어올 때 한꺼번에 굴린다.**
 # 지금 판만 굴리면 "뒤 판을 건너뛰면 뭘 받나" 를 화면에 못 적는다 — 그걸
 # 모르면 지금 판을 건너뛸지 말지도 못 정한다. 셋을 같이 보고 고르는 것이
 # 이 화면의 일이다. 라운드가 바뀔 때까지 값이 안 흔들려야 그 비교가 선다.
@@ -5030,8 +5030,8 @@ var leg_tags_round := 0
 # 건너뛴 판. 지난 판의 자리를 비우면 "내가 무엇을 골랐더라" 가 화면에서
 # 사라진다 — 셋을 비교해 고르는 화면인데 고른 흔적만 없어지는 셈이다.
 var leg_skipped := {}
-var pending_tags := []          # 나중에 쓸 뱃지들 [{kind, v, when, n}]
-var leg_t := 0.0              # 화면이 열린 뒤 흐른 시간(카드 미끄러짐)            # 스테이지 화면에 들어설 때의 동전 개수
+var pending_tags := []          # 나중에 쓸 딱지들 [{kind, v, when, n}]
+var leg_t := 0.0              # 화면이 열린 뒤 흐른 시간(카드 미끄러짐)            # 스테이지 화면에 들어설 때의 스티커 개수
 var stage_t := 0.0              # 카드가 깔리는 경과. _open_stage 에서 0 으로 선다
 
 
@@ -5042,16 +5042,16 @@ func _can_sell() -> bool:
 	return state == S.SHOP
 
 
-# 동전 슬롯 순서를 지금 바꿀 수 있는가. **파는 것과 갈라 둔다.** 파는 자리는 창구
+# 랙 순서를 지금 바꿀 수 있는가. **파는 것과 갈라 둔다.** 파는 자리는 창구
 # 하나뿐이라 상점 전용이지만, 순서는 발동 규칙이라 판 위에서도 만진다 —
-# 발동이 동전 슬롯 순서인데(16쪽) 순서를 상점에서만 만질 수 있으면 판에 서고
+# 발동이 랙 순서인데(16쪽) 순서를 상점에서만 만질 수 있으면 판에 서고
 # 나서는 자기 정산식을 못 고친다. 조커를 아무 때나 끄는 그 문법이다.
 #
 # 막는 자리는 넷뿐이다.
-#   · 동전 슬롯이 안 그려지는 화면 — _hud_draw 가 거르는 것들과 CLEAR
+#   · 랙이 안 그려지는 화면 — _hud_draw 가 거르는 것들과 CLEAR
 #   · 전환·쓸기 — 입력을 통째로 삼키는 두 연출
 #   · RESOLVE — queue 가 owned 인덱스(k=item 의 i)를 들고 있다. 끼워 넣으면
-#     엉뚱한 동전가 카드에 뜬다. 「득점 시작 시 순서 스냅샷」이 여기서
+#     엉뚱한 스티커가 카드에 뜬다. 「득점 시작 시 순서 스냅샷」이 여기서
 #     지켜진다. 큐는 다트가 꽂힐 때 세워지므로 FLY 까지는 열어 둬도 된다
 #   · 연발이 도는 중 — 커서가 곧 조준이라(kick) 끄는 손이 남은 발을 끌고 간다
 func _can_rack_move() -> bool:
@@ -5061,7 +5061,7 @@ func _can_rack_move() -> bool:
 
 
 func _sell_hit(m: Vector2) -> bool:
-	# 동전 슬롯 y[44,76] 은 테이블 y[104,236] · 스테이지 카드 y[112,264] 와 y 로 갈려
+	# 랙 y[44,76] 은 매대 y[104,236] · 스테이지 카드 y[112,264] 와 y 로 갈려
 	# 있어 먼저 검사해도 그쪽 클릭을 훔칠 수 없다.
 	# (판매판 분기가 여기 있었다 — _can_sell 이 SHOP 전용이 되면서 영원히
 	#  못 닿는 가지가 됐고, 그리는 쪽 _sell_draw 도 호출이 0이었다. 걷어냈다.)
@@ -5089,7 +5089,7 @@ func _sell(i: int) -> void:
 	sell_sel = -1
 	# sealed 는 owned 의 인덱스다. 판매는 SHOP/STAGE 에서만 일어나고 두 화면
 	# 모두 진입할 때 -1 로 지우므로 이미 -1 이지만, 인덱스가 밀린 뒤에 남아
-	# 있으면 엉뚱한 동전가 봉인으로 보인다. 여기서도 못 박는다.
+	# 있으면 엉뚱한 스티커가 봉인으로 보인다. 여기서도 못 박는다.
 	sealed = -1
 	# slot_pop/slot_vel/slot_hot 은 owned 와 인덱스를 공유하고 _panel_ensure 는
 	# 크기만 맞출 뿐 내용을 안 옮긴다. 이 두 화면에서는 스프링이 전부 정지
@@ -5100,19 +5100,19 @@ func _sell(i: int) -> void:
 
 
 # ══════════════════════════════════════════════════════════
-#  사탕 — 사서 쟁여 뒀다가 한 번 쓰고 사라지는 것
+#  소비 아이템 — 사서 쟁여 뒀다가 한 번 쓰고 사라지는 것
 # ──────────────────────────────────────────────────────────
 #  확정 규칙: 칸 2 · 상점 즉시 사용 가능 · 보관 가능 · 판 중 사용 가능 ·
 #  사용 확정은 누르고 뗄 때 · 확인 버튼과 비교 팝업은 만들지 않는다.
 #  칸 두 개는 옛 판매판이 쓰던 자리(자금판 오른쪽)에 선다.
 #
-#  트랙 강화형은 대상이 트랙 하나로 정해져 있어 "대상 클릭" 이 곧 사용이다.
-#  스티커형(제안)은 대상을 골라야 하므로 흐름이 다르다 — 데이터만 실려 있고
+#  영역 강화형은 대상이 트랙 하나로 정해져 있어 "대상 클릭" 이 곧 사용이다.
+#  가공형(제안)은 대상을 골라야 하므로 흐름이 다르다 — 데이터만 실려 있고
 #  사용은 아직 막혀 있다.
 # ══════════════════════════════════════════════════════════
 
-var cons := []                  # 보유 사탕 (최대 cons_slots)
-var track_lv := {}              # 트랙 레벨 {트랙ID: int}
+var cons := []                  # 보유 소비 아이템 (최대 cons_slots)
+var track_lv := {}              # 영역 강화 트랙 레벨 {트랙ID: int}
 
 
 func _cons_rect(i: int) -> Rect2:
@@ -5134,8 +5134,8 @@ func _cons_use(i: int) -> void:
 		return
 	var c: Dictionary = cons[i]
 	if c.cat != "area":
-		# 스티커형은 대상 선택 흐름이 아직 없다 — 데이터 스캐폴드 단계다
-		pay_msg = "스티커은 아직 준비 중이다"
+		# 가공형은 대상 선택 흐름이 아직 없다 — 데이터 스캐폴드 단계다
+		pay_msg = "가공은 아직 준비 중이다"
 		pay_msg_t = HAND.msg_t
 		_deny()
 		return
@@ -5150,7 +5150,7 @@ func _cons_use(i: int) -> void:
 
 
 func _cons_draw() -> void:
-	# 동전 슬롯과 같은 재질로 깐다 — 같은 재질이 "여기도 물건 두는 자리다" 를 말한다.
+	# 랙과 같은 재질로 깐다 — 같은 재질이 "여기도 물건 두는 자리다" 를 말한다.
 	var box: Rect2 = LAY.cons
 	box.position.y += _hud_dy()
 	draw_rect(box, C_FELT)
@@ -5163,8 +5163,8 @@ func _cons_draw() -> void:
 			draw_rect(r, C_WIRE.darkened(0.15), false, 1.0)
 			_icon_area(r.get_center(), minf(r.size.x, r.size.y) * 0.40,
 					String(cons[i].id))
-	# 이름과 수 — 동전 슬롯 밑은 상인 자리라 못 쓰지만 이 자리는 벽이다.
-	draw_string(font, Vector2(box.position.x, box.end.y + 9.0), "사탕",
+	# 이름과 수 — 랙 밑은 딜러 자리라 못 쓰지만 이 자리는 벽이다.
+	draw_string(font, Vector2(box.position.x, box.end.y + 9.0), "소비",
 			HORIZONTAL_ALIGNMENT_CENTER, box.size.x * 0.5, 9, C_DIM.darkened(0.1))
 	draw_string(font, Vector2(box.get_center().x, box.end.y + 9.0),
 			"%d/%d" % [cons.size(), GameData.cons_slots()],
@@ -5182,7 +5182,7 @@ func _cons_draw() -> void:
 #
 #  계수가 둘인 것이 이 구획의 존재 이유다.
 #    면에 누운 것의 y → sin 52° = 0.788   (TBL.flat)
-#    면에서 선 것의 y → cos 52° = 0.616   (TBL.tall — 동전 옆면에만 쓴다)
+#    면에서 선 것의 y → cos 52° = 0.616   (TBL.tall — 스티커 옆면에만 쓴다)
 #  하나였다면 draw_set_transform 의 scale 한 줄로 끝났다. 그리고 그 한 줄은
 #  _tip_draw(2249행)가 draw_set_transform(sh) 로 복구할 때 조용히 사라지고,
 #  _hud_draw 가 _draw_shop 다음이라 남은 scale 은 HUD 를 통째로 누른다.
@@ -5207,13 +5207,13 @@ func _cons_draw() -> void:
 #  자리는 정확히 4개다. SHOP_ITEMS+SHOP_MODS+SHOP_DARTS 가 4가 아니게 되면
 #  ax / ay 를 같이 늘려야 한다.
 # ══════════════════════════════════════════════════════════
-const C_TABLE := Color("1b3126")   # 펠트. 동전 슬롯(C_FELT "16281f")보다 한 단 밝다 —
-								   # 동전 슬롯이 앞에 놓인 별개 물건으로 읽히게.
+const C_TABLE := Color("1b3126")   # 펠트. 랙(C_FELT "16281f")보다 한 단 밝다 —
+								   # 랙이 앞에 놓인 별개 물건으로 읽히게.
 const C_WOOD := Color("3a2a24")
 
 
 # ══════════════════════════════════════════════════════════
-#  상인 — 크롭된 상반신
+#  딜러 — 크롭된 상반신
 #
 #  얼굴도 목도 어깨도 화면에 없다. 카메라가 그만큼 가깝다는 뜻이고, 그래서
 #  몸통이 커진다. 얼굴을 안 그리는 이유는 예전과 같다 — 640x360 에서 사람
@@ -5221,14 +5221,14 @@ const C_WOOD := Color("3a2a24")
 #  에서 "잘라내고 크게" 로 뒤집은 것이다.
 #
 #  ── 크롭이 성립하는 사각은 화면에 딱 하나다 ──────────────
-#  상인보다 나중에 그려지는 불투명 판은 _hud_draw 의 셋뿐이다 — 자금판
-#  x[4,76] · 동전 슬롯 x[209,431] · 동전 카운터 x[436,473], 전부 y 가 4 에서
-#  시작한다. 그중 상인의 x 와 겹치는 것은 동전 슬롯 하나다. 그래서 제약이 둘이다.
+#  딜러보다 나중에 그려지는 불투명 판은 _hud_draw 의 셋뿐이다 — 자금판
+#  x[4,76] · 스티커 랙 x[209,431] · 스티커 카운터 x[436,473], 전부 y 가 4 에서
+#  시작한다. 그중 딜러의 x 와 겹치는 것은 랙 하나다. 그래서 제약이 둘이다.
 #    ① 실루엣 최상단은 y ≥ 4 다. 위로 더 가면 상단바가 상점·스테이지에서
 #       꺼져 있어(_bar_hidden) 덮개가 아예 없고, 화면 맨 위에 조끼색 띠가
-#       폭 전체로 남는다. 6 을 쓴다 — 동전 슬롯과 상인가 같은 transform(shake) 안이라
+#       폭 전체로 남는다. 6 을 쓴다 — 랙과 딜러가 같은 transform(shake) 안이라
 #       상대 가림은 흔들려도 안 변하고, 2px 은 반올림 여유다.
-#    ② y < 36 에서 반폭은 111 이하다. 넘으면 동전 슬롯 왼쪽 구멍(x[76,209])이나
+#    ② y < 36 에서 반폭은 111 이하다. 넘으면 랙 왼쪽 구멍(x[76,209])이나
 #       오른쪽 5px 틈(x[431,436])으로 샌다. "크게" 가 부딪히는 벽이 이것이다.
 #  보이는 세로는 y[36,109] 의 73px 이다 — 109 에서 먼 레일이 몸통을 자른다.
 #  스테이지 화면은 상단 UI 가 완전히 같아서 계산이 하나로 끝난다.
@@ -5241,8 +5241,8 @@ const C_WOOD := Color("3a2a24")
 #
 #  ── 73px 짜리 검은 사다리꼴은 사람이 아니라 구멍이다 ────
 #  그려서 확인했다. 형태를 주는 것은 크기도 테두리도 아니고 옷이다. 셔츠 V
-#  하나와 단추 세 개면 같은 실루엣이 조끼 입은 상인가 된다. V 꼭짓점은
-#  반드시 동전 슬롯 밑변(36)보다 아래여야 한다 — 위면 통째로 동전 슬롯 뒤라 아무 일도 안 한다.
+#  하나와 단추 세 개면 같은 실루엣이 조끼 입은 딜러가 된다. V 꼭짓점은
+#  반드시 랙 밑변(36)보다 아래여야 한다 — 위면 통째로 랙 뒤라 아무 일도 안 한다.
 #
 #  ── 값 사다리 ────────────────────────────────────────────
 #  조끼 9 < 소매 24 < 벽 41 < 셔츠 93 < 커프 111 < 림 141.
@@ -5251,25 +5251,25 @@ const C_WOOD := Color("3a2a24")
 #
 #  ── 움직이는 것은 둘이다 ────────────────────────────────
 #  숨과 쓸기. 숨은 몸통 윗변이 아니라 **V 꼭짓점·단추·팔꿈치**를 움직인다 —
-#  윗변은 y=4 라 동전 슬롯 뒤이고, 거기를 흔들면 아무 데서도 안 보인다.
+#  윗변은 y=4 라 랙 뒤이고, 거기를 흔들면 아무 데서도 안 보인다.
 # ══════════════════════════════════════════════════════════
 const NPC := {
 	"cx": 320.0,
-	# 테이블이 내려가면 상인도 **통째로** 내려간다 — cut 만 내리면 몸통이
+	# 테이블이 내려가면 딜러도 **통째로** 내려간다 — cut 만 내리면 몸통이
 	# 늘어나 팔과 붙는다. top 과 cut 의 차(106)가 곧 몸의 길이이고,
 	# 그 값이 팔·옷의 모든 비례를 쥔다.
-	"top": 22.0,         # 실루엣 최상단. 상점 동전 슬롯(y[4,48]) 뒤라 안 보인다
+	"top": 22.0,         # 실루엣 최상단. 상점 랙(y[4,48]) 뒤라 안 보인다
 	"cut": 128.0,        # 허리 = 카운터. TBL.fy 와 같은 값이어야 한다
 	"hc": 72.0,          # 가슴 반폭 (y=top). 111 이 한계다
 	"hw": 60.0,          # 허리 반폭 (y=cut)
 	"vee_w": 27.0,       # 셔츠 V 반폭 (y=top)
-	"vee_y": 84.0,       # V 꼭짓점. 상점 동전 슬롯 밑변(48)보다 36px 아래라 V 가 산다
+	"vee_y": 84.0,       # V 꼭짓점. 상점 랙 밑변(48)보다 36px 아래라 V 가 산다
 	"btn_y": 94.0, "btn_dy": 11.0, "btn_r": 2.9,
 	"belt": 5.0,
 	# 팔은 **판 위에 누운 상자**다. 몸통은 서 있고 팔은 누워 있으므로 같은
 	# 도형으로 그리면 안 된다 — 누운 것은 화면 좌표가 아니라 면 좌표(u,w)로
 	# 그려야 52° 정사영이 공짜로 붙는다. 옆면(h=0)을 깔고 윗면(h=t)을 얹는
-	# 어법은 동전(_sticker_flat)과 같다. 이 게임이 이미 쓰는 문법이다.
+	# 어법은 스티커(_sticker_flat)과 같다. 이 게임이 이미 쓰는 문법이다.
 	#
 	# ── 다섯 번 실패한 뒤에 알아낸 것 ────────────────────────
 	# 선 · V자 · 커프 · 타원 · 상자를 차례로 시도했고 전부 졌다. 다섯 가지는
@@ -5280,12 +5280,12 @@ const NPC := {
 	# 0 으로 돌아가면 다섯 번째 실패가 여섯 번째가 된다.
 	#
 	# ── 갈라짐 ──────────────────────────────────────────────
-	# 팔꿈치를 몸통 **밖**·동전 슬롯 **뒤**로 뺀다. 뿌리가 동전 슬롯(x[209,431] y[4,36])에
+	# 팔꿈치를 몸통 **밖**·랙 **뒤**로 뺀다. 뿌리가 랙(x[209,431] y[4,36])에
 	# 잘리므로 어깨를 안 그리고도 팔이 몸에서 나오고, 팔과 옆구리 사이에
 	# 12px 짜리 배경 골이 세로로 75px 뚫린다.
 	#
 	# 설계할 때는 이걸 "닫힌 구멍" 으로 잡았는데 재 보니 아니었다 — 위는
-	# 동전 슬롯에, 아래는 카운터(cut 112)에 열려 있어서 닫히지가 않는다. 대신
+	# 랙에, 아래는 카운터(cut 112)에 열려 있어서 닫히지가 않는다. 대신
 	# 더 센 것이 나왔다: 팔이 검사 칸 안에서 몸통과 **아예 다른 덩어리**가
 	# 된다. 실루엣을 단색으로 칠하면 셋으로 갈린다(몸통 · 팔 · 팔).
 	"el_l": Vector2(-94.0, -104.0), "wr_l": Vector2(-78.0, -2.0),
@@ -5294,7 +5294,7 @@ const NPC := {
 	# u 88 에 두면 손끝이 몸통 위로 올라타 한 덩어리로 붙는다(실측).
 	"el_r": Vector2(96.0, -103.0), "wr_r": Vector2(104.0, -6.0),
 	# 쓸기 팔의 뿌리. 어깨 u +62 는 몸통 윗반폭(72) 안이라, 몸이 어디를
-	# 걷든 소매가 조끼에서 나온다. w −115(화면 y 21)는 쉴 때 동전 슬롯 뒤다.
+	# 걷든 소매가 조끼에서 나온다. w −115(화면 y 21)는 쉴 때 랙 뒤다.
 	"sh_r": Vector2(62.0, -115.0),
 	# 팔꿈치 26 → 손목 13 → 너클 18. **손목이 전체 최소폭**이고 손이 거기서
 	# 1.66배로 되벌어진다. 이 계단이 관절이 있다는 유일한 표시다 —
@@ -5349,12 +5349,12 @@ var npc_clock := 0.0
 # ══════════════════════════════════════════════════════════
 #  쓸기 — 리롤이 하는 일
 # ──────────────────────────────────────────────────────────
-#  상인가 판을 쓸어 왼쪽(판매) 창구로 넣고 새로 뿌린다. 세 박자다 —
+#  딜러가 판을 쓸어 왼쪽(판매) 창구로 넣고 새로 뿌린다. 세 박자다 —
 #  뻗기 · 훑기 · 복귀. 물리가 열리는 것은 훑기 동안뿐이다(sweep_on).
 #
 #  아래팔은 면 위의 직선이고, 52° 정사영에서 면 위 직선은 화면 직선이라
 #  **그려지는 아래팔이 곧 미는 선이다.** 근사가 아니라 _sweep_line 하나를
-#  그리기와 물리가 같이 읽는 것이다. 위팔이 동전 슬롯 뒤 어깨와 팔꿈치를 이어
+#  그리기와 물리가 같이 읽는 것이다. 위팔이 랙 뒤 어깨와 팔꿈치를 이어
 #  팔을 몸에 묶는다 — 길이는 만화지만 뿌리는 실물이다.
 #
 #  아래팔은 트레이 w[24,126] 을 정확히 덮는다 — 팔꿈치가 w 24 (화면 y 130.9),
@@ -5367,7 +5367,7 @@ var npc_clock := 0.0
 #     line(w) − e(w) = u1 + tilt·w_hd − back      … w 와 무관한 상수
 #  가 된다. 그래서 "어느 깊이에서 빠지는가" 를 따질 일이 없다. 물건이
 #  놓이는 자리가 line(w) − r 이므로 조건이 그 상수 ≤ r 하나로 줄고,
-#  지금 값은 18 + 56.74 − 80 = −5.26 이라 가장 빡빡한 동전(r 19)도
+#  지금 값은 18 + 56.74 − 80 = −5.26 이라 가장 빡빡한 스티커(r 19)도
 #  넉넉히 지난다.
 #  시작점 u0 = 529 는 반대쪽이다. 물건이 물리적으로 닿을 수 있는 가장
 #  오른쪽 실체가 u_hi − hw + r = 524 − 19 + 19 = 524 이므로(실측 최대는
@@ -5408,7 +5408,7 @@ const TBL := {
 	"ny": 268.0,         # 펠트 near 모서리. 레일 6px 뒤가 버튼 줄이다
 
 	# ── 물건 ─────────────────────────────────────────
-	"chip_r": 19.0,      # 38 x 29.9 타원. 동전 슬롯 동전는 30 x 30 정원이다 (일부러 다르다)
+	"chip_r": 19.0,      # 38 x 29.9 타원. 랙 스티커는 30 x 30 정원이다 (일부러 다르다)
 	"chip_t": 4.5,       # 옆면 = 4.5 * tall = 2.77px
 	"mod_r": 19.0,       # 캐비닛 실폭 2r+6 = 44, 화면 높이 2*r*flat+6 = 35.9
 	"dart_l": 24.0,      # 반길이. 최대 도달은 dl+8.5 ("mag" 자기장 호)
@@ -5427,147 +5427,6 @@ func _table_draw() -> void:
 	_bill_draw()
 
 
-# ── 상점 테이블 3D ───────────────────────────────────
-#  펠트 자리에 Meshy 테이블을 깐다. **좌표계는 안 건드린다** — 창구도
-#  물건 자리도 히트 판정도 2D 사다리꼴 그대로다. 이 무대는 배경일 뿐이다.
-#
-#  정사영이라야 한다. 2D 쪽이 원근 배율 없이 sin/cos 두 계수로만 눕히므로
-#  (TBL.flat · TBL.tall), 3D 도 같은 규칙이어야 두 층이 안 어긋난다.
-#  keep_aspect 를 폭으로 두고 size 를 VIEW.x 로 주면 **월드 1 = 1px** 이다.
-const TBL3 := {
-	"model": "res://assets/table.obj",
-	"px":    430.0,     # 테이블 폭이 화면에서 먹는 px
-	"cx":    320.0,     # 화면상 중심
-	"cy":    196.0,
-	"elev":   32.0,     # 앙각
-	"yaw":   180.0,     # 평평한 변을 상인 쪽(뒤)으로 돌린다
-	"bands":     4,     # 명암 계단
-	"steps":    12,     # 색 계단
-
-	# ── 상인 ─────────────────────────────────────────
-	"npc":    "res://assets/dealer.glb",
-	"npc_h":  330.0,    # 키가 화면에서 먹는 px
-	"npc_x":  320.0,    # 화면상 발밑 자리
-	"npc_y":  268.0,
-	"npc_z":  -150.0,   # 테이블 뒤로 물린 거리(월드)
-	"npc_yaw": 180.0,   # 이쪽을 보게
-}
-
-# 3D 상인가 서면 2D 조끼는 안 그린다. 팔(쓸기)은 아직 2D 다 —
-# 그 연출을 3D 로 옮기기 전까지 둘이 같이 산다.
-const NPC3 := true
-
-var tbl_vp: SubViewport = null
-
-
-func _tbl3_live() -> bool:
-	return is_instance_valid(tbl_vp)
-
-
-func _dot_mat(tex: String, tint := Color.WHITE) -> ShaderMaterial:
-	var m := ShaderMaterial.new()
-	m.shader = load("res://scripts/shaders/dot.gdshader")
-	var t: Texture2D = load(tex) if tex != "" else null
-	if t != null:
-		m.set_shader_parameter("albedo_tex", t)
-	m.set_shader_parameter("tint", tint)
-	m.set_shader_parameter("light_bands", int(TBL3.bands))
-	m.set_shader_parameter("color_steps", int(TBL3.steps))
-	return m
-
-
-func _tbl3_open() -> void:
-	if _tbl3_live():
-		return
-	var mesh: Mesh = load(String(TBL3.model))
-	if mesh == null:
-		return
-	tbl_vp = SubViewport.new()
-	tbl_vp.size = Vector2i(int(VIEW.x), int(VIEW.y))
-	tbl_vp.own_world_3d = true
-	tbl_vp.transparent_bg = true
-	tbl_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
-	tbl_vp.msaa_3d = Viewport.MSAA_DISABLED
-	tbl_vp.gui_disable_input = true
-	add_child(tbl_vp)
-
-	var cam := Camera3D.new()
-	cam.projection = Camera3D.PROJECTION_ORTHOGONAL
-	cam.keep_aspect = Camera3D.KEEP_WIDTH
-	cam.size = VIEW.x                     # 월드 1 = 1px
-	cam.near = 1.0
-	cam.far = 4000.0
-	var e := deg_to_rad(float(TBL3.elev))
-	cam.position = Vector3(0.0, sin(e), cos(e)) * 1200.0
-	tbl_vp.add_child(cam)
-	cam.look_at(Vector3.ZERO, Vector3.UP)
-
-	var lt := DirectionalLight3D.new()
-	lt.rotation_degrees = Vector3(-58.0, -30.0, 0.0)
-	tbl_vp.add_child(lt)
-
-	var mi := MeshInstance3D.new()
-	mi.mesh = mesh
-	mi.material_override = _dot_mat("res://assets/table_albedo.jpg")
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var ab := mesh.get_aabb()
-	print("[tbl3] ", String(TBL3.model), "  aabb ", ab.size, "  면 ", mesh.get_faces().size() / 3)
-	var k: float = float(TBL3.px) / maxf(ab.size.x, 0.001)
-	mi.scale = Vector3.ONE * k
-	mi.rotation_degrees = Vector3(0.0, float(TBL3.yaw), 0.0)
-	tbl_vp.add_child(mi)
-	# 화면 중심에서 원하는 자리로 민다. 정사영이라 1 유닛이 1px 이다.
-	var b := cam.global_transform.basis
-	mi.position = -ab.get_center() * k 			+ b.x * (float(TBL3.cx) - VIEW.x * 0.5) 			+ b.y * (VIEW.y * 0.5 - float(TBL3.cy))
-
-	if NPC3:
-		_tbl3_npc(b)
-
-
-# 상인를 테이블 뒤에 세운다. 리깅 모델이라 메시를 안 줄였다 —
-# 스킨 가중치가 감축에서 안 살아남는다(1만 면이면 이 화면엔 넉넉하다).
-func _tbl3_npc(b: Basis) -> void:
-	var scn: PackedScene = load(String(TBL3.npc))
-	if scn == null:
-		print("[tbl3] 상인 못 읽음")
-		return
-	var n: Node3D = scn.instantiate()
-	tbl_vp.add_child(n)
-	# 리깅 모델은 Skeleton3D 밑에 메시가 든다. 직속 자식만 훑으면 하나도
-	# 못 찾아 상자가 비고, 키 맞춤이 0 으로 나눠져 모델이 사라진다.
-	var mis: Array[MeshInstance3D] = []
-	_gather_mesh(n, mis)
-	if mis.is_empty():
-		print("[tbl3] 상인에 메시가 없다")
-		return
-	var ab: AABB = mis[0].get_aabb()
-	for i in range(1, mis.size()):
-		ab = ab.merge(mis[i].get_aabb())
-	var k: float = float(TBL3.npc_h) / maxf(ab.size.y, 0.001)
-	print("[tbl3] 상인 메시 ", mis.size(), " aabb ", ab.size, " 배율 ", k)
-	n.scale = Vector3.ONE * k
-	n.rotation_degrees = Vector3(0.0, float(TBL3.npc_yaw), 0.0)
-	# 발밑이 화면 npc_y 에 오도록 상자 밑면을 기준으로 놓는다.
-	n.position = Vector3(0.0, 0.0, float(TBL3.npc_z)) 			+ b.x * (float(TBL3.npc_x) - VIEW.x * 0.5) 			+ b.y * (VIEW.y * 0.5 - float(TBL3.npc_y)) 			- Vector3(0.0, ab.position.y * k, 0.0)
-	for mi in mis:
-		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		var src := mi.get_active_material(0)
-		var tex: Texture2D = null
-		if src is StandardMaterial3D:
-			tex = (src as StandardMaterial3D).albedo_texture
-		var m := _dot_mat("")
-		if tex != null:
-			m.set_shader_parameter("albedo_tex", tex)
-		mi.material_override = m
-
-
-func _gather_mesh(n: Node, out: Array[MeshInstance3D]) -> void:
-	if n is MeshInstance3D:
-		out.append(n as MeshInstance3D)
-	for c in n.get_children():
-		_gather_mesh(c, out)
-
-
 func _felt_draw() -> void:
 	# 화면이 곧 테이블의 크롭이다. 640 폭에 D자 테이블 전체를 넣으면 매물이
 	# 그 안에서 다시 쪼그라든다. 좌우는 화면 밖으로 이어진다.
@@ -5581,13 +5440,7 @@ func _felt_draw() -> void:
 	var felt := PackedVector2Array([
 			Vector2(CHUTE.back, TBL.fy), Vector2(VIEW.x - CHUTE.back, TBL.fy),
 			Vector2(VIEW.x, TBL.ny), Vector2(0.0, TBL.ny)])
-	if not _tbl3_live() and _has_renderer():
-		_tbl3_open()
-	var tbl_tex: Texture2D = tbl_vp.get_texture() if _tbl3_live() else null
-	if tbl_tex != null:
-		draw_texture_rect(tbl_tex, Rect2(Vector2.ZERO, VIEW), false)
-	else:
-		draw_colored_polygon(felt, C_TABLE)
+	draw_colored_polygon(felt, C_TABLE)
 	var ink: Color = C_TABLE.lightened(0.34)
 
 	# 결 — 도트 격자는 프레임당 수천 콜이라 못 쓴다. 가로 1px 줄 7px 간격 = 23콜.
@@ -5600,7 +5453,7 @@ func _felt_draw() -> void:
 
 	_chute_draw()
 
-	# 상인 라인 — 면 위에서 좌우로 뻗은 선은 이 정사영에서 정확히 화면
+	# 딜러 라인 — 면 위에서 좌우로 뻗은 선은 이 정사영에서 정확히 화면
 	# 수평선이 된다. 근사가 아니라 공짜로 맞다.
 	var dly: float = TBL.fy + 7.0
 	var de := _chute_edge(dly)
@@ -5610,8 +5463,8 @@ func _felt_draw() -> void:
 func _cover_draw() -> void:
 	# 덮개 — 물건은 카운터 뒤에서 나온다. 그 위로 삐져나온 부분을
 	# 먼 쪽 레일이 덮는다. 클리핑 대신 불투명 사각 하나다. 상시 HUD 는
-	# _hud_draw 가 이 위에 판을 다시 얹으므로 멀쩡하고, 결과적으로 동전 슬롯이
-	# 테이블 쿠션 위에 놓인 상인 트레이로 읽힌다.
+	# _hud_draw 가 이 위에 판을 다시 얹으므로 멀쩡하고, 결과적으로 스티커 랙이
+	# 테이블 쿠션 위에 놓인 딜러 트레이로 읽힌다.
 	# 카운터 뒤 벽도 방이다 — 자리를 지킨 채 색만 건너간다. 자리는
 	# 지키되 그리는 **차례**는 그대로여야 한다. 이 사각의 일이 카운터 뒤에서
 	# 올라오는 물건을 덮는 것이라, 맨 밑으로 내리면 낙하 중인 매물이
@@ -5625,8 +5478,8 @@ func _cover_draw() -> void:
 			_swap_wall(C_WOOD.darkened(0.30).lerp(C_WOOD, _swap_gone())))
 	if swap_live:
 		draw_set_transform(shake_off)
-	# 상인만 위로 더 뺀다. 실루엣은 동전 슬롯 뒤에 잘리는 것을 전제로 그린
-	# 크롭이라(NPC.top), 가로로만 밀면 평평한 절단면이 드러난다. 동전 슬롯이
+	# 딜러만 위로 더 뺀다. 실루엣은 랙 뒤에 잘리는 것을 전제로 그린
+	# 크롭이라(NPC.top), 가로로만 밀면 평평한 절단면이 드러난다. 랙이
 	# 퇴장문이다. 구획 규약(draw_set_transform 금지)의 두 번째 예외이고,
 	# _stage_card 와 같은 규칙으로 **같은 함수 안에서** 되돌린다. 배율이
 	# 아니라 이동뿐이라 규약이 막는 사고(남은 scale 이 HUD 를 누른다)는
@@ -5717,17 +5570,15 @@ func _chute_label() -> void:
 				C_GOLD if ok else C_DIM.darkened(0.25))
 
 
-# 상인 몸통 — 카운터 위로 올라온 부분만. 동전 슬롯이 이 위에 얹혀 트레이로 읽힌다.
-# 상인 몸통 — 카운터 위로 올라온 부분만. 동전 슬롯이 이 위에 얹혀 트레이로 읽힌다.
+# 딜러 몸통 — 카운터 위로 올라온 부분만. 랙이 이 위에 얹혀 트레이로 읽힌다.
+# 딜러 몸통 — 카운터 위로 올라온 부분만. 랙이 이 위에 얹혀 트레이로 읽힌다.
 func _npc_body() -> void:
-	if NPC3 and _tbl3_live():
-		return      # 3D 상인가 섰다
 	var br: float = sin(npc_clock * 1.5) * float(NPC.breathe)
 	var cx: float = NPC.cx
 	# 141 에서 내렸다. 손 윗면(133)보다 밝은 것이 화면에 있으면 안 된다 —
-	# 눈은 가장 밝은 데로 먼저 가고, 그게 옆구리 획이면 상인가 안 읽힌다.
+	# 눈은 가장 밝은 데로 먼저 가고, 그게 옆구리 획이면 딜러가 안 읽힌다.
 	var rim: Color = C_WOOD.lightened(0.26)
-	# 몸통. 위는 동전 슬롯(y<36) 뒤로 사라지고 아래는 카운터에 박힌다. 사다리꼴
+	# 몸통. 위는 랙(y<36) 뒤로 사라지고 아래는 카운터에 박힌다. 사다리꼴
 	# 하나면 충분하다 — 이 크롭에서 어깨 사면은 화면 밖이라 그릴 것이 없다.
 	# 쓸 때는 윗점들이 _npc_tl 로 허리축 기울임을 탄다.
 	draw_colored_polygon(PackedVector2Array([
@@ -5736,7 +5587,7 @@ func _npc_body() -> void:
 			Vector2(cx + NPC.hw, NPC.cut), Vector2(cx - NPC.hw, NPC.cut)]),
 			C_WOOD.darkened(0.84))
 	# 셔츠 V — 조끼가 벌어진 자리. 이 한 조각이 사다리꼴을 옷으로 만든다.
-	# 꼭짓점만 숨을 탄다. 윗변은 동전 슬롯 뒤라 움직여도 아무 데서도 안 보인다.
+	# 꼭짓점만 숨을 탄다. 윗변은 랙 뒤라 움직여도 아무 데서도 안 보인다.
 	draw_colored_polygon(PackedVector2Array([
 			_npc_tl(Vector2(cx - NPC.vee_w, NPC.top)),
 			_npc_tl(Vector2(cx + NPC.vee_w, NPC.top)),
@@ -5757,14 +5608,14 @@ func _npc_body() -> void:
 
 
 # 팔 — 먼 레일 다음이라 "카운터에 얹혔다" 가 된다.
-# 오른쪽(화면) 팔만 쓸기를 한다. 마주 본 사람이므로 그것이 상인의 **왼팔**
+# 오른쪽(화면) 팔만 쓸기를 한다. 마주 본 사람이므로 그것이 딜러의 **왼팔**
 # 이다 — 쓸기는 u 529 에서 18 로 가는데 529 에 닿는 팔이 그쪽뿐이라
 # 물리가 이미 팔을 골라 놨다.
 func _npc_arms() -> void:
 	var br: float = sin(npc_clock * 1.5) * float(NPC.breathe)
 	var cx: float = NPC.cx
 	var a := _sweep_amt()
-	# 쉬는 팔. 숨은 팔꿈치를 손목보다 크게 흔든다 — 뿌리가 동전 슬롯 뒤라
+	# 쉬는 팔. 숨은 팔꿈치를 손목보다 크게 흔든다 — 뿌리가 랙 뒤라
 	# 팔꿈치 쪽 진폭은 안 보이고 팔 전체의 기울기로만 나온다.
 	# 몸이 기울면 뿌리도 그만큼 밀린다.
 	_npc_limb(Vector2(cx + NPC.el_l.x + _npc_sway(NPC.el_l.y),
@@ -5803,7 +5654,7 @@ func _npc_arms() -> void:
 		var ka := TAU * (float(k) + 0.5) / 8.0
 		jd.append(el + Vector2(cos(ka), sin(ka)) * (NPC.el_w - 1.0))
 	_npc_flat(jd, NPC.arm_t, C_WOOD.darkened(0.84), C_WOOD.lightened(0.04))
-	# 이 팔이 상인의 왼팔이다 — 손은 거울상으로 붙는다.
+	# 이 팔이 딜러의 왼팔이다 — 손은 거울상으로 붙는다.
 	_npc_limb(el, wr, ang, hs, true, lerpf(NPC.wr_w, 13.5, a))
 
 
@@ -5817,7 +5668,7 @@ func _npc_limb(el: Vector2, wr: Vector2, ang: float, sc: float,
 		wrr = NPC.wr_w
 	var ex := Vector2(cos(ang), sin(ang))
 	# 손대칭이 문제였다. 같은 다각형을 두 팔에 평행이동만 해서 붙이면
-	# 상인가 오른손을 두 개 단다 — 마주 본 사람의 두 손은 거울상이다.
+	# 딜러가 오른손을 두 개 단다 — 마주 본 사람의 두 손은 거울상이다.
 	# 뒤집기는 다각형과 각도를 **함께** 거울로 잡아야 한다. 다각형만
 	# 뒤집으면 엄지가 화면 안쪽(−w)으로 넘어가 정사영이 8px 노치를
 	# 6px 로 누르고(실측 — 그 손만 빵이 된다), 각도까지 뒤집으면 엄지
@@ -5852,7 +5703,7 @@ func _npc_limb(el: Vector2, wr: Vector2, ang: float, sc: float,
 
 # 면 위에 누운 다각형 하나. 옆면(h=0)을 먼저 깔고 윗면(h=t)을 얹는다 —
 # 윗면이 t*tall 만큼 위로 올라가므로 아래로 삐져나온 옆면이 그대로
-# 두께가 된다. 동전와 같은 수법이다. 옆면 색을 **인자로 받는** 것이 중요하다:
+# 두께가 된다. 스티커와 같은 수법이다. 옆면 색을 **인자로 받는** 것이 중요하다:
 # 옛 _npc_slab 은 col.darkened(0.58) 로 자동 파생했는데, 그 결과가
 # 조끼색과 같은 값이라 몸통 위에 겹치는 구간에서 두께가 통째로 사라졌다.
 func _npc_flat(pts: PackedVector2Array, t: float, side: Color,
@@ -6086,7 +5937,7 @@ func _e_band(c: Vector2, rx: float, ry: float, ix: float, iy: float,
 #
 # 두 규약을 이름부터 갈라 둔다. 바꿔 쓰면 결과가 정반대로 틀린다.
 #   _e_ring_w  화면 인셋 — 폭 w 가 어느 각에서도 w.  테두리·금테·인레이 홈
-#   _e_ring_r  동전 좌표계 비율 — 12시에서 flat 배로 준다.  면의 구역
+#   _e_ring_r  스티커 좌표계 비율 — 12시에서 flat 배로 준다.  면의 구역
 func _e_ring_w(c: Vector2, rx: float, ry: float, w: float, col: Color) -> void:
 	for q in 4:
 		draw_colored_polygon(_e_band(c, rx, ry, rx - w, ry - w,
@@ -6160,8 +6011,8 @@ const DROP := {
 	"t_max": 2.6, "relax": 3, "relax_hard": 12,
 
 	# ── 면 위 충돌 원 ────────────────────────────────
-	#  동전 원 1개(실루엣과 정확히 일치) · 보드 확장 원 1개 · 다트 원 3개(캡슐).
-	#  다트에 가운데 원이 있어 동전-다트 최소 중심거리가 방위와 무관하게 28 이다.
+	#  스티커 원 1개(실루엣과 정확히 일치) · 개조 원 1개 · 다트 원 3개(캡슐).
+	#  다트에 가운데 원이 있어 스티커-다트 최소 중심거리가 방위와 무관하게 28 이다.
 	#  이 28 이 가격판 겹침 불가 정리의 전제다 (아래 _bill_draw 주석).
 	"r_item": 19.0, "r_mod": 21.0, "r_dart": 9.0, "d_dart": 16.0,
 
@@ -6206,8 +6057,8 @@ func _lane_pad(n: int) -> float:
 	return maxf(90.0 - maxf(float(n) - 4.0, 0.0) * 22.0, 26.0)
 
 
-# 매물 하나가 받는 레인 폭(면 px). 동전 지름이 38 이라 이보다 좁아지면
-# 서로를 밀고 값뱃지가 겹친다.
+# 매물 하나가 받는 레인 폭(면 px). 스티커 지름이 38 이라 이보다 좁아지면
+# 서로를 밀고 값딱지가 겹친다.
 func _lane_w(n: int) -> float:
 	if n <= 0:
 		return 0.0
@@ -6240,8 +6091,8 @@ func _drop_roll() -> void:
 		# 벽으로 밀린다. 레인은 출발만 벌려 둘 뿐 정착 위치를 통제하지 않는다.
 		#
 		# 안쪽 여백이 90 으로 고정이라 레인이 몇 개든 폭이 228px 이었다.
-		# 넷일 때는 57px 씩이라 넉넉한데, "넓은 테이블" 뱃지로 여섯이 되면
-		# 38px 씩이 되어 동전(지름 38)가 서로를 밀고 값뱃지가 겹친다.
+		# 넷일 때는 57px 씩이라 넉넉한데, "넓은 매대" 딱지로 여섯이 되면
+		# 38px 씩이 되어 스티커(지름 38)가 서로를 밀고 값딱지가 겹친다.
 		# 레인 수가 늘면 여백을 줄여 폭을 벌린다 — 창구 빗변까지는 안 간다.
 		var lane: float = lerpf(DROP.u_lo + _lane_pad(n), DROP.u_hi - _lane_pad(n),
 				(float(i) + 0.5) / float(n))
@@ -6324,7 +6175,7 @@ func _drop_step(dt: float) -> void:
 
 		if it.h <= 0.0:
 			it.h = 0.0
-			# 반발 "후" 속도로 가른다. 충돌 속도로 가르면 e=0.16 짜리 보드 확장가
+			# 반발 "후" 속도로 가른다. 충돌 속도로 가르면 e=0.16 짜리 개조가
 			# 0.02px 짜리 안 보이는 호를 한 번 더 그리고 호 개수 증명이 틀어진다.
 			var rv: float = -it.vh * it.e
 			if rv >= DROP.v_land:
@@ -6590,9 +6441,9 @@ func _drop_extras(d: float) -> void:
 func _drop_leave(i: int) -> void:
 	var it: Dictionary = drop[i]
 	var p := _p2s(it.u, it.w, it.h)
-	# 동전 슬롯 칸은 이륙 시점에 굳힌다. 도착할 때 다시 계산하면 그 사이 판매·구매로
+	# 랙 칸은 이륙 시점에 굳힌다. 도착할 때 다시 계산하면 그 사이 판매·구매로
 	# owned 가 바뀌어 엉뚱한 칸이 튄다. 튐 자체는 _drop_arrive 로 옮겼다 —
-	# 물건이 아직 테이블에 있는데 동전 슬롯이 먼저 반응하면 인과가 뒤집힌다.
+	# 물건이 아직 테이블에 있는데 랙이 먼저 반응하면 인과가 뒤집힌다.
 	it.slot = -1
 	match stock[i].type:
 		"item":
@@ -6600,7 +6451,7 @@ func _drop_leave(i: int) -> void:
 			it.to = _slot_rect(it.slot).get_center()
 		"mod":
 			it.to = p + Vector2(0.0, -30.0)
-			pop(p + Vector2(0.0, -8.0), "보드 확장", C_CHIP.lightened(0.25), 13, 0.9)
+			pop(p + Vector2(0.0, -8.0), "보드 개조", C_CHIP.lightened(0.25), 13, 0.9)
 		_:
 			it.to = p + Vector2(0.0, -30.0)
 			pop(p + Vector2(0.0, -8.0), "탄창 교체", C_GREEN.lightened(0.3), 13, 0.9)
@@ -6675,9 +6526,9 @@ func _seg_d(p: Vector2, a: Vector2, b: Vector2) -> float:
 
 # 커서 아래 매물. _z_order 를 정확히 거꾸로 훑는다 — 위에 그려진 것이 잡힌다.
 # 박스는 통과했는데 모양이 아니면 다음(아래) 물체로 흘려보낸다. 다트의 빈 박스가
-# 뒤엣 동전를 가로채지 못하는 경로가 이것이다.
+# 뒤엣 스티커를 가로채지 못하는 경로가 이것이다.
 # 실측 — 정착 배치 300판을 1px 격자로 전수 조사해 못 잡는 물체 0/1200,
-# 최소 표적 면적 667px²(다트) · 1158(동전) · 1719(보드 확장).
+# 최소 표적 면적 667px²(다트) · 1158(스티커) · 1719(개조).
 func _shop_hit(m: Vector2) -> int:
 	var lz: float = DROP.lift_hov * TBL.tall             # 3.70 — 들린 위치까지 덮는다
 	var z := _z_order()
@@ -6739,7 +6590,7 @@ func _obj_shadow(i: int) -> void:
 						e.x * dirv.y + e.y * dirv.x))
 			draw_colored_polygon(pts, col)
 		"cons":
-			# 꾸러미는 동전보다 작다 — 동전 반지름 그림자를 깔면 빛무리가 된다.
+			# 꾸러미는 스티커보다 작다 — 스티커 반지름 그림자를 깔면 빛무리가 된다.
 			draw_colored_polygon(_e_pts(g, 12.5 * k, 12.5 * k * TBL.flat, 12), col)
 		_:
 			draw_colored_polygon(_e_pts(g, it.r * k, it.r * k * TBL.flat, 14), col)
@@ -6771,7 +6622,7 @@ func _obj_paint(it: Dictionary, s: Dictionary, dim: float) -> void:
 		"item":
 			_sticker_flat(c, s.d, it.psi, dim, it.wob)
 		"cons":
-			# 사탕 — 작은 사각 꾸러미. 보드 확장(캐비닛)보다 작고 동전(원반)과
+			# 소비 아이템 — 작은 사각 꾸러미. 개조(캐비닛)보다 작고 스티커(원반)과
 			# 형태가 갈린다. 아트 방향이 미정이라 실루엣만 세워 둔다.
 			var ce := Vector2(11.0, 11.0 * TBL.flat)
 			var body: Color = C_PANEL.lightened(0.22 - dim * 0.2)
@@ -6781,7 +6632,7 @@ func _obj_paint(it: Dictionary, s: Dictionary, dim: float) -> void:
 			draw_rect(Rect2(c - ce, ce * 2.0), C_WIRE.darkened(0.2), false, 1.0)
 			_icon_area(c, ce.y * 0.78, String(s.d.id), 1.0 - dim)
 		"mod":
-			# 동전와 같은 어법으로 눕는다 — 옆면을 깔고 윗면을 얹는다.
+			# 스티커와 같은 어법으로 눕는다 — 옆면을 깔고 윗면을 얹는다.
 			# 정면 원반은 컬렉션의 것이고, 테이블 위의 것은 누워야 한다.
 			draw_colored_polygon(_e_pts(c, TBL.mod_r, TBL.mod_r * TBL.flat),
 					C_DARK.darkened(0.72 + dim * 0.2))
@@ -6794,11 +6645,11 @@ func _obj_paint(it: Dictionary, s: Dictionary, dim: float) -> void:
 					de.angle() + 1.0304, 1.0 - dim * 0.5, false)
 
 
-# 펠트에 누운 동전. 동전 슬롯의 draw_sticker(정원)은 안 고친다 — 같은 물건의
+# 펠트에 누운 스티커. 랙의 draw_sticker(정원)은 안 고친다 — 같은 물건의
 # 다른 자세다. _e_ring_w(화면 인셋)와 _e_ring_r(비율)을 섞어 쓰지 않는다.
 #
-#  여기서도 갈린 것은 테두리뿐이다: 가장자리 스팟과 인레이 홈(둘 다 동전의
-#  어휘)을 빼고, 다이컷과 마감을 동전 슬롯과 같은 각 규약으로 얹었다. 옆면은
+#  여기서도 갈린 것은 테두리뿐이다: 가장자리 스팟과 인레이 홈(둘 다 스티커의
+#  어휘)을 빼고, 다이컷과 마감을 랙과 같은 각 규약으로 얹었다. 옆면은
 #  종이 두께라 그림자로만 남는다 — 히트박스(TBL.chip_t)는 안 건드렸다.
 func _sticker_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: float) -> void:
 	var ti := _stk_ti(String(it.get("rarity", "common")))
@@ -6843,7 +6694,7 @@ func _sticker_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: floa
 #   · 가격판은 지면점 기준 균일 오프셋(bill_dy)이라 화면 y 가 w 의 단조함수다.
 #     → 두 판이 겹치려면 |Δu| < 21.6 이고 |Δw| < 9/0.788 = 11.4,
 #       즉 면 거리 < √(21.6² + 11.4²) = 24.4 여야 한다.
-#   · 분리 솔버가 보장하는 최소 면 거리는 동전-다트 28 · 보드 확장-다트 30 · 동전-동전 38.
+#   · 분리 솔버가 보장하는 최소 면 거리는 스티커-다트 28 · 개조-다트 30 · 스티커-스티커 38.
 #     24.4 < 28 이므로 겹침이 불가능하다. 실측 1500롤 겹침 0, 최소 y차 16.2px.
 #   · 전제: 가격 문자열이 2자리 이내(bw ≤ 25). 지금 최대 가격은 14 다.
 #     세 자리가 생기면 이 정리부터 다시 세워야 한다.
@@ -6909,12 +6760,12 @@ func _drop_verify() -> void:
 			push_warning("hand: 오토플레이에서 held 물체")
 
 # ══════════════════════════════════════════════════════════
-#  테이블 아이콘
+#  매대 아이콘
 # ──────────────────────────────────────────────────────────
 #  상점에 세 종류가 나란히 선다. 실루엣이 서로 갈려야 글자를
 #  안 읽고도 무엇인지 안다.
 #    아이템 → 원반 (draw_item_sticker)
-#    보드 확장   → 미니 보드 — 상점에선 눕고(fl=TBL.flat) 컬렉션에선 정면(fl 1)
+#    개조   → 미니 보드 — 상점에선 눕고(fl=TBL.flat) 컬렉션에선 정면(fl 1)
 #    다트   → 대각선
 #  _icon_mod / _icon_dart 만 바깥에서 부른다.
 # ══════════════════════════════════════════════════════════
@@ -6932,10 +6783,10 @@ const DART_DL := 16.0
 const MB_SEG := 10              # 20 칸이면 한 칸 호가 5px 라 뭉갠다
 
 
-# 보드 확장 아이콘은 id 가 아니라 효과 축(k)으로 갈린다.
+# 개조 아이콘은 id 가 아니라 효과 축(k)으로 갈린다.
 # data.gd 가 "k 는 _mod_step 의 match 가 읽는 유일한 열쇠" 라고 못박았으므로
-# 여기도 같은 열쇠를 쓴다. 같은 축의 보드 확장가 새로 생기면 아이콘이 저절로 맞는다.
-# (옛 판에서는 여기가 id 로 갈려 있어, 보드 확장가 여덟 종으로 바뀐 뒤
+# 여기도 같은 열쇠를 쓴다. 같은 축의 개조가 새로 생기면 아이콘이 저절로 맞는다.
+# (옛 판에서는 여기가 id 로 갈려 있어, 개조가 여덟 종으로 바뀐 뒤
 #  match 가 하나도 안 걸려 여덟 개가 전부 민무늬로 그려지고 있었다.)
 #
 # 정확한 기하가 아니라 기호다. 실제 링 폭 0.10 은 17px 반지름에서 1.7px 라
@@ -7055,7 +6906,7 @@ func _icon_dart(c: Vector2, dl: float, id: String, dim := 0.0,
 	var nrm := Vector2(-dir.y, dir.x)
 	# 굵기는 길이를 따라간다. 절대값으로 두면 dl 을 키웠을 때 길기만 하고
 	# 얇은 막대가 된다 — 손 부채(dl 30)에서 실제로 그렇게 나왔다.
-	# 기준은 테이블 크기 dl 19. 바닥을 둬 짧게 부르는 자리가 실오라기가
+	# 기준은 매대 크기 dl 19. 바닥을 둬 짧게 부르는 자리가 실오라기가
 	# 되는 것을 막는다. 보드에 꽂힌 다트가 그 바닥에 걸려 있었는데
 	# (dl 7 → 10 → 지금 16), 굵기가 안 늘어 길이만 긴 막대로 보였다.
 	# 지금은 16/19 = 0.84 라 처음으로 바닥 위에 선다 — 바닥이 걸리는
@@ -7127,14 +6978,14 @@ func _icon_dart(c: Vector2, dl: float, id: String, dim := 0.0,
 # ──────────────────────────────────────────────────────────
 #  GameData.modifiers() 6종. 세 자리에서 크기만 달리 쓴다.
 #    스테이지 카드 r=9(18px) · 하단 제약 줄 r=7(14px) · 툴팁 r=7(14px)
-#  이름을 _icon_mod 로 못 짓는다 — 코드에서 mod 는 이미 보드 확장다.
+#  이름을 _icon_mod 로 못 짓는다 — 코드에서 mod 는 이미 보드 개조다.
 #
 #  ── 실루엣 ──
 #  이 게임은 이미 네 실루엣을 썼다.
 #    아이템     꽉 찬 원반      draw_item_sticker
-#    보드 확장       불투명 사각판    _icon_mod
+#    개조       불투명 사각판    _icon_mod
 #    다트       긴 대각 획      _icon_dart
-#    빈 동전 슬롯 홈   속 빈 고리      _panel_draw
+#    빈 랙 홈   속 빈 고리      _panel_draw
 #  마지막 것이 결정적이다. 스테이지 화면 y 21~67 에 지름 21.6px 짜리
 #  빈 고리가 최대 5개 떠 있고 그 뜻이 "아직 아무것도 없음"이다.
 #  그래서 제약은 원도 사각도 대각선도 테두리도 쓰지 않는다. 바탕 없이
@@ -7181,23 +7032,23 @@ const LIM := {
 
 
 # ══════════════════════════════════════════════════════════
-#  사탕 · 뱃지 아이콘
+#  소비 아이템 · 딱지 아이콘
 # ──────────────────────────────────────────────────────────
 #  둘 다 여태 글자 두 자로 그려져 있었다(_obj_paint 주석: "아트 방향이
 #  미정이라 실루엣만 세워 둔다"). 칸이 26px 이라 이름이 안 들어가고,
 #  들어가도 "싱글"과 "삯"은 같은 크기의 검은 얼룩이다.
 #
-#  소비는 **판 자체를 어휘로 쓴다.** 다섯 종이 전부 트랙 강화라 무엇을
+#  소비는 **판 자체를 어휘로 쓴다.** 다섯 종이 전부 영역 강화라 무엇을
 #  올리는지가 곧 판의 어느 고리인지다 — 같은 원에 다른 고리를 밝히면
 #  다섯이 한 가족으로 읽히고, 새 영역이 생겨도 고리 하나만 더하면 된다.
 #  이름을 몰라도 어디가 세지는지는 보인다.
 #
-#  뱃지는 **받는 것의 모양**을 쓴다. 골드는 동전, 다트는 다트, 테이블는
-#  늘어선 칸. 뱃지 열 종이 서로 다른 것을 주므로 한 가족일 이유가 없다.
+#  딱지는 **받는 것의 모양**을 쓴다. 골드는 동전, 다트는 다트, 매대는
+#  늘어선 칸. 딱지 열 종이 서로 다른 것을 주므로 한 가족일 이유가 없다.
 # ══════════════════════════════════════════════════════════
 
 # 판 고리의 안팎 비율. hit_info 의 rt_* 와 같은 뜻이되 아이콘용 고정값이다 —
-# 보드 확장가 판을 주무르면 아이콘까지 흔들려서 "어느 고리인가" 가 안 읽힌다.
+# 개조가 판을 주무르면 아이콘까지 흔들려서 "어느 고리인가" 가 안 읽힌다.
 const ICO := {
 	"bull": 0.20, "in_lo": 0.20, "in_hi": 0.46,
 	"trp_lo": 0.46, "trp_hi": 0.60,
@@ -7210,7 +7061,7 @@ func _ring(c: Vector2, r: float, lo: float, hi: float, col: Color) -> void:
 	draw_colored_polygon(annulus_at(c, r * lo, r * hi, 0.0, TAU, 24), col)
 
 
-# 사탕 — 작은 판에 해당 고리 하나만 밝힌다.
+# 소비 아이템 — 작은 판에 해당 고리 하나만 밝힌다.
 #
 # 처음엔 고리 다섯을 다 그렸다가 뭉갰다. 반지름이 9px 이라 한 고리가
 # 2px 이고, 꺼진 고리끼리는 서로 안 갈린다. **밝히는 것은 늘 하나**이므로
@@ -7244,7 +7095,7 @@ func _icon_area(c: Vector2, r: float, id: String, a := 1.0) -> void:
 			draw_circle(c, r * 0.34, Color(C_DARK.darkened(0.30), a))
 
 
-# 뱃지 — 받는 것의 모양. 칸이 작아 획 셋을 안 넘긴다.
+# 딱지 — 받는 것의 모양. 칸이 작아 획 셋을 안 넘긴다.
 func _icon_tag(c: Vector2, r: float, kind: String, a := 1.0) -> void:
 	var col := Color(C_GOLD, a)
 	var w := maxf(r * 0.26, 1.0)
@@ -7271,23 +7122,23 @@ func _icon_tag(c: Vector2, r: float, kind: String, a := 1.0) -> void:
 					c + Vector2(0.0, -r * 1.15), c + Vector2(-r * 0.46, -r * 0.52),
 					c + Vector2(r * 0.46, -r * 0.52)]), col)
 		"cons":
-			# 꾸러미 — 상점 테이블 위의 사탕과 같은 네모다.
+			# 꾸러미 — 상점 테이블 위의 소비 아이템과 같은 네모다.
 			draw_rect(Rect2(c - Vector2(r * 0.74, r * 0.74),
 					Vector2(r * 1.48, r * 1.48)), Color(C_ACC, a))
 			draw_rect(Rect2(c - Vector2(r * 0.74, r * 0.16),
 					Vector2(r * 1.48, r * 0.32)), Color(C_DARK.darkened(0.3), a))
 		"item":
-			# 동전 원반. 동전 슬롯에 붙는 그것이다.
+			# 스티커 원반. 랙에 붙는 그것이다.
 			draw_circle(c, r * 0.84, Color(C_CHIP.lightened(0.10), a))
 			draw_circle(c, r * 0.40, Color(C_DARK.darkened(0.3), a))
 		"reroll":
-			# 한 바퀴 돌아오는 화살. 리롤 관례 그대로다.
+			# 한 바퀴 돌아오는 화살. 새로고침 관례 그대로다.
 			draw_arc(c, r * 0.72, PI * 0.35, PI * 1.85, 16, col, w)
 			draw_colored_polygon(PackedVector2Array([
 					c + Vector2(r * 0.72, -r * 0.30), c + Vector2(r * 0.28, -r * 0.30),
 					c + Vector2(r * 0.62, -r * 0.90)]), col)
 		"shop":
-			# 늘어선 테이블 칸. 셋째 칸만 밝은 것이 "한 칸 더" 다.
+			# 늘어선 매대 칸. 셋째 칸만 밝은 것이 "한 칸 더" 다.
 			for i in 3:
 				var bx := c + Vector2(-r * 0.94 + float(i) * r * 0.72, -r * 0.42)
 				draw_rect(Rect2(bx, Vector2(r * 0.50, r * 0.84)),
@@ -7400,9 +7251,9 @@ func _icon_modifier(c: Vector2, r: float, id: String, dim: float,
 			draw_colored_polygon(tipv, loss)
 
 		# ── 둔화 ────────────────────────────────────────
-		# 여섯 중 유일하게 보드가 아니라 동전를 건드리는 제약이라 혼자만
+		# 여섯 중 유일하게 보드가 아니라 스티커를 건드리는 제약이라 혼자만
 		# 기하가 아니라 물건이다 — 그 어긋남이 곧 "대상이 다르다"는 표시다.
-		# 동전 슬롯이 봉인 동전에 이미 "봉인"을 C_MULT 로 찍으므로 자물쇠는
+		# 랙이 봉인 스티커에 이미 "봉인"을 C_MULT 로 찍으므로 자물쇠는
 		# 이 게임에 이미 있는 어휘다. 아치가 dead 의 부채꼴과 갈라준다.
 		"dull":
 			var ly := c.y - r * 0.13
@@ -7429,9 +7280,9 @@ func _icon_modifier(c: Vector2, r: float, id: String, dim: float,
 #       낙하 구획의 "vh 를 양수로 만드는 경로가 없다" 가 문자 그대로 산다.
 #       드래그가 drop_awake 를 켜지 않으므로 입력 잠금 창도 안 생긴다.
 #
-#  드는 것이 둘이다. 테이블의 물건(hand_src 0)은 위 문단 그대로 면 위를 밀려
-#  다니고, 동전 슬롯의 동전(hand_src 1)은 물리 물체가 아니라 커서 밑의 그림뿐이다.
-#  동전 슬롯 동전 쪽은 적분기·펠트·겹침 어디에도 안 닿는다 — 그려지고, 놓이면 팔린다.
+#  드는 것이 둘이다. 매대의 물건(hand_src 0)은 위 문단 그대로 면 위를 밀려
+#  다니고, 랙의 스티커(hand_src 1)은 물리 물체가 아니라 커서 밑의 그림뿐이다.
+#  랙 스티커 쪽은 적분기·펠트·겹침 어디에도 안 닿는다 — 그려지고, 놓이면 팔린다.
 #
 #  바깥과 닿는 곳은 열이다.
 #    _hand_press/_motion/_release  입력          (_unhandled_input)
@@ -7441,7 +7292,7 @@ func _icon_modifier(c: Vector2, r: float, id: String, dim: float,
 #    _shop_tap(i) / _rack_tap(i)   고르기          (_hand_release 의 탭 갈래)
 #    _chute_click(z) / _pay_click() 확정           (_click 의 S.SHOP)
 #    _chute_draw()/_hold_draw()/_fly_draw()        (_table_draw · _draw_shop 말미)
-#    buy_sel / sell_sel            고른 매물 · 고른 동전. 서로 배타
+#    buy_sel / sell_sel            고른 매물 · 고른 스티커. 서로 배타
 #    drop[i].held/.slot/.mark/.scuff               새 필드 넷
 #
 #  불변식 — held 인 물체의 u/w 를 쓰는 곳은 _hand_update 하나뿐이다.
@@ -7458,8 +7309,8 @@ var hand_m := Vector2.ZERO       # 마지막 커서 화면 좌표
 var hand_far := 0.0              # 누름 이후 |m - p0| 의 **누적 최대**. 단조 비감소
 var hand_off := Vector2.ZERO     # 면 좌표 잡기 오프셋. ramp 로 0 에 녹는다
 var hand_zone := -1              # 지금 켜진 창구 (-1 없음 · 0 판매 · 1 구매)
-var hand_src := 0                # 무엇을 들었나 (0 = 테이블 물건 · 1 = 동전 슬롯 동전)
-var peel_t := 0.0                # 동전 슬롯에서 뗀 뒤 지난 시간(초). 말림 감쇠에만 쓴다
+var hand_src := 0                # 무엇을 들었나 (0 = 매대 물건 · 1 = 랙 스티커)
+var peel_t := 0.0                # 랙에서 뗀 뒤 지난 시간(초). 말림 감쇠에만 쓴다
 var hand_v := Vector2.ZERO       # 든 물체의 평활 속도(면px/s). 놓을 때 이걸 넘긴다
 
 var buy_sel := -1                # 2클릭 구매의 1단계
@@ -7536,7 +7387,7 @@ const HAND := {
 # 왼쪽으로 밀면 팔고, 오른쪽으로 밀면 산다.
 #
 # 방향이 곧 뜻이라 라벨을 안 읽어도 성립한다. 대신 반대로 밀면 거절한다:
-# 동전 슬롯의 동전는 왼쪽만, 테이블의 물건은 오른쪽만 받는다. 계산대 하나가 양방향이던
+# 랙의 스티커는 왼쪽만, 매대의 물건은 오른쪽만 받는다. 계산대 하나가 양방향이던
 # 시절에는 "무엇을 밀었는가" 가 방향을 정했지만, 지금은 방향이 먼저다.
 #
 # 물리로 굴러 들어가는 것은 여전히 부등식 위반이다 — DROP.u_lo/u_hi 주석 참조.
@@ -7584,21 +7435,21 @@ func _g2w(y: float) -> float:
 
 # 손이 사는 화면. 상점과 **판 중**이다.
 #
-# 사탕과 동전 슬롯 순서 변경은 화면에 늘 보인다(_hud_draw 가 정산·제목류만
+# 소비 아이템과 랙 순서 변경은 화면에 늘 보인다(_hud_draw 가 정산·제목류만
 # 빼고 매 프레임 그린다). 그런데 눌리는 화면은 상점 하나뿐이었다 — 보이는데
 # 안 먹는 것은 플레이어에게 규칙이 아니라 고장이다.
 #
 # 확정 규칙(docs/게임내용.md): 소비는 "상점에서 즉시 쓸 수 있고, 보관할 수
-# 있고, 판 중에도 쓸 수 있다". 동전 슬롯 순서는 발동 순서라 판을 보면서
+# 있고, 판 중에도 쓸 수 있다". 랙 순서는 발동 순서라 판을 보면서
 # 고칠 수 있어야 뜻이 있다.
 #
-# 판 고르기(LEG)와 제약 고르기(STAGE)도 산다. 두 화면은 _hud_draw 가 동전 슬롯과
-# 사탕 칸을 그대로 그리고, LEG 는 _tip_hit 이 툴팁까지 띄운다 — 이름과 효과를
+# 판 고르기(LEG)와 제약 고르기(STAGE)도 산다. 두 화면은 _hud_draw 가 랙과
+# 소비 칸을 그대로 그리고, LEG 는 _tip_hit 이 툴팁까지 띄운다 — 이름과 효과를
 # 읽어 주고 나서 누르면 아무 일도 안 나는 자리였다. 무엇을 들고 있는지가 곧
 # "던질까 건너뛸까" 의 근거인데, 고르는 자리에서 그걸 못 고쳤다.
 #
-# 정산(RESOLVE)만 뺀다. 큐가 동전 슬롯 인덱스를 들고 있어서 순서를 바꾸면 엉뚱한
-# 카드가 빛나고, 사탕 칸이 정산 넘기기 클릭을 훔친다.
+# 정산(RESOLVE)만 뺀다. 큐가 랙 인덱스를 들고 있어서 순서를 바꾸면 엉뚱한
+# 카드가 빛나고, 소비 슬롯이 정산 넘기기 클릭을 훔친다.
 func _hand_live() -> bool:
 	if state == S.SHOP:
 		return not sweep_live
@@ -7607,7 +7458,7 @@ func _hand_live() -> bool:
 	return _is_play() and state != S.RESOLVE
 
 
-# 동전 슬롯 동전를 집는다. 집었으면 true. 파는 것은 뗄 때 _can_sell 이 다시 판다.
+# 랙 스티커를 집는다. 집었으면 true. 파는 것은 뗄 때 _can_sell 이 다시 판다.
 func _rack_grab(m: Vector2) -> bool:
 	for k in mini(owned.size(), GameData.max_items()):
 		if _slot_rect(k).has_point(m):
@@ -7627,7 +7478,7 @@ func _hand_press(m: Vector2) -> bool:
 		return false
 	if _autoplay:
 		return false                          # 좌표 입력은 오토플레이의 어휘가 아니다
-	# 사탕 슬롯 — 상점과 판 중. 사용 확정은 뗄 때다.
+	# 소비 아이템 슬롯 — 상점과 판 중. 사용 확정은 뗄 때다.
 	if _hand_live():
 		var ci := _cons_hit(m)
 		if ci >= 0:
@@ -7638,11 +7489,11 @@ func _hand_press(m: Vector2) -> bool:
 			hand_m = m
 			hand_far = 0.0
 			return true
-	# 동전 슬롯의 동전 — **상점 잠금 위**다. 순서 바꾸기는 판 위에서도 돌아야
+	# 랙의 스티커 — **상점 잠금 위**다. 순서 바꾸기는 판 위에서도 돌아야
 	# 하므로 화면을 안 가린다(_can_rack_move). 훔칠 걱정이 없는 것은 y 가
-	# 갈려 있기 때문이다 — 동전 슬롯 y[20,64](상단바가 숨으면 [4,48]) 아래로
+	# 갈려 있기 때문이다 — 랙 y[20,64](상단바가 숨으면 [4,48]) 아래로
 	# 창구·버튼 y[112,334], 매물 최상단 99.3, 그리고 조준이 잠기는 반경
-	# BC.y - 98*1.22 = 76.4 가 전부 내려가 있다. 누른 자리가 동전 슬롯 안이면
+	# BC.y - 98*1.22 = 76.4 가 전부 내려가 있다. 누른 자리가 랙 안이면
 	# 조준·구매·창구 어느 것도 그 클릭을 원한 적이 없다.
 	if _can_rack_move() and _rack_grab(m):
 		return true
@@ -7665,8 +7516,8 @@ func _hand_press(m: Vector2) -> bool:
 		return false
 	if _reroll_rect().has_point(m) or _next_rect().has_point(m):
 		return false
-	# 동전 슬롯은 위에서 이미 집었다. 여기 남은 것은 빈 칸과 판 여백이다 —
-	# 삼켜서 테이블 클릭으로 안 새게 한다.
+	# 랙은 위에서 이미 집었다. 여기 남은 것은 빈 칸과 판 여백이다 —
+	# 삼켜서 매대 클릭으로 안 새게 한다.
 	if _panel_rect().has_point(m):
 		return false
 	var i := _shop_hit(m)
@@ -7691,7 +7542,7 @@ func _hand_motion(m: Vector2) -> void:
 		hand_far = maxf(hand_far, m.distance_to(hand_p0))
 		if hand_far > HAND.slip:
 			if hand_src >= 2:
-				_hand_abort()     # 창구·사탕 칸은 버튼이다. 끌면 취소다
+				_hand_abort()     # 창구·소비 슬롯은 버튼이다. 끌면 취소다
 			else:
 				_hand_take()
 
@@ -7703,7 +7554,7 @@ func _hand_take() -> void:
 	buy_sel = -1
 	sell_sel = -1             # 드래그는 _click 을 안 거쳐 _sell_hit 의 낙수가 안 온다
 	if hand_src == 1:
-		# 동전 슬롯 동전는 물리 물체가 아니다. 적분기에 넣을 것이 없어 커서만 따라간다.
+		# 랙 스티커는 물리 물체가 아니다. 적분기에 넣을 것이 없어 커서만 따라간다.
 		hand_off = Vector2.ZERO
 		peel_t = 0.0              # 떼는 순간. 말림이 여기서부터 잦아든다
 		_sfx("hand_take")
@@ -7753,7 +7604,7 @@ func _hand_release(m: Vector2) -> void:
 			_shop_tap(i)
 		return
 
-	# 동전 슬롯 동전 — 왼쪽 창구는 판매, 다른 동전 슬롯 칸 위는 순서 바꾸기.
+	# 랙 스티커 — 왼쪽 창구는 판매, 다른 랙 칸 위는 순서 바꾸기.
 	if src == 1:
 		if z == Z_SELL and _can_sell() and i >= 0 and i < owned.size():
 			_sell(i)
@@ -7763,7 +7614,7 @@ func _hand_release(m: Vector2) -> void:
 			_deny()
 		else:
 			# 아이템 순서 변경 — 확정 규칙이다(아이템순서변경=True). 발동이
-			# 동전 슬롯 순서라 순서가 값을 바꾸는데, 지금까지 되팔고 다시 사는 것
+			# 랙 순서라 순서가 값을 바꾸는데, 지금까지 되팔고 다시 사는 것
 			# 말고는 고칠 길이 없었다. "득점 시작 시 순서 스냅샷" 계약은
 			# _can_rack_move 가 RESOLVE 를 접어서 지킨다 — 큐가 서고 나면
 			# 손이 아예 안 열린다.
@@ -7880,15 +7731,15 @@ func _hand_update(d: float) -> void:
 	if hand_st == H.NONE:
 		return
 	# 쥔 것이 **어느 배열의** 몇째인가. 넷 다 drop 크기로 재고 있었다 —
-	# 사탕 칸은 cons 의 색인이고 창구는 배열이 아니라 구역 번호다.
-	# 테이블가 다 팔려 drop 이 비면 소비도 창구도 손에서 놓쳐 버렸다.
+	# 소비 슬롯은 cons 의 색인이고 창구는 배열이 아니라 구역 번호다.
+	# 매대가 다 팔려 drop 이 비면 소비도 창구도 손에서 놓쳐 버렸다.
 	var n_src: int = drop.size()
 	match hand_src:
 		1: n_src = owned.size()
 		2: n_src = 2                          # Z_SELL · Z_BUY
 		4: n_src = cons.size()
 	# 사는 화면도 쥔 것에 따라 다르다. 매물(0)과 창구(2)는 상점의 물건이라
-	# 상점을 벗어나면 손을 놓는다. 동전 슬롯(1)과 소비(4)는 판 중에도 산다.
+	# 상점을 벗어나면 손을 놓는다. 랙(1)과 소비(4)는 판 중에도 산다.
 	var live := _hand_live()
 	if hand_src == 0 or hand_src == 2:
 		live = state == S.SHOP and not sweep_live
@@ -7903,7 +7754,7 @@ func _hand_update(d: float) -> void:
 		return
 
 	# 래치는 히스테리시스로 건다 — 경계에서 소리와 창구 얼굴이 연타되지 않는다.
-	# 창구는 상점에만 있다. 판 중에 동전 슬롯 동전를 끌 때 이것을 걸면 없는 창구의
+	# 창구는 상점에만 있다. 판 중에 랙 스티커를 끌 때 이것을 걸면 없는 창구의
 	# 소리가 나고, 뗄 때 "오른쪽은 사는 창구다" 가 뜬다.
 	var pad: float = HAND.latch_gap if hand_zone >= 0 else 0.0
 	var z := -1
@@ -7914,7 +7765,7 @@ func _hand_update(d: float) -> void:
 	hand_zone = z
 
 	if hand_src == 1:
-		return                                  # 동전 슬롯 동전는 커서에 붙어 다닌다
+		return                                  # 랙 스티커는 커서에 붙어 다닌다
 	var it: Dictionary = drop[hand_i]
 	hand_off = hand_off.move_toward(Vector2.ZERO, HAND.ramp * d)
 
@@ -7961,7 +7812,7 @@ func _shop_tap(i: int) -> void:
 	_sfx("shop_select" if buy_sel >= 0 else "shop_deselect")
 
 
-# 동전 슬롯 동전를 끌지 않고 톡 눌렀을 때. 두 클릭 경로의 1단계다.
+# 랙 스티커를 끌지 않고 톡 눌렀을 때. 두 클릭 경로의 1단계다.
 func _rack_tap(i: int) -> void:
 	buy_sel = -1
 	if i < 0 or i >= owned.size() or not _can_sell():
@@ -7972,7 +7823,7 @@ func _rack_tap(i: int) -> void:
 	_sfx("rack_select" if sell_sel >= 0 else "rack_deselect")
 
 
-# 커서가 동전 슬롯의 몇째 칸 위인가. 빈 칸도 자리로 친다 — 맨 뒤로 보내는 드롭이다.
+# 커서가 랙의 몇째 칸 위인가. 빈 칸도 자리로 친다 — 맨 뒤로 보내는 드롭이다.
 func _slot_at(m: Vector2) -> int:
 	for k in GameData.max_items():
 		if _slot_rect(k).has_point(m):
@@ -7980,10 +7831,10 @@ func _slot_at(m: Vector2) -> int:
 	return -1
 
 
-# 동전 슬롯 순서 바꾸기. i 를 뽑아 j 자리에 끼운다 — 자리를 서로 맞바꾸는 것이
-# 아니라 끼워 넣기다. 발동 순서가 곧 동전 슬롯 순서이므로 이 함수가 사실상
-# "정산식 편집기"다. 봉인은 동전가 아니라 자리에 걸리는 게 아니라 동전에
-# 걸리므로, 같은 동전를 따라가게 한다.
+# 랙 순서 바꾸기. i 를 뽑아 j 자리에 끼운다 — 자리를 서로 맞바꾸는 것이
+# 아니라 끼워 넣기다. 발동 순서가 곧 랙 순서이므로 이 함수가 사실상
+# "정산식 편집기"다. 봉인은 스티커가 아니라 자리에 걸리는 게 아니라 스티커에
+# 걸리므로, 같은 스티커를 따라가게 한다.
 func _rack_reorder(i: int, j: int) -> void:
 	j = mini(j, owned.size() - 1)
 	var sealed_it: Dictionary = owned[sealed] if sealed >= 0 and sealed < owned.size() else {}
@@ -7999,7 +7850,7 @@ func _rack_reorder(i: int, j: int) -> void:
 	pop(_slot_rect(j).get_center() + Vector2(0.0, 22.0), "순서 변경", C_TXT, 9, 0.8)
 
 
-# 든 동전의 말림. 뗄 때 크게 젖혔다가 0.11초 만에 잦아들어 손 안에서
+# 든 스티커의 말림. 뗄 때 크게 젖혔다가 0.11초 만에 잦아들어 손 안에서
 # 살짝 말린 채로 남는다. 정착값 0.28 은 "떼어져 있다" 를 말하는 최소치이면서,
 # 접는 선을 값 숫자(반지름 13 에서 아래 9.8px)보다 낮게 두는 상한이기도 하다 —
 # r*(1-0.78*0.28) = 10.16 > 9.8. 더 올리면 들고 있는 동안 값이 안 보인다.
@@ -8008,11 +7859,11 @@ func _peel_now() -> float:
 	return 0.28 + 0.32 * exp(-peel_t / 0.10)
 
 
-# 든 동전 슬롯 동전. 물리 물체가 아니라 커서 밑의 그림뿐이다.
+# 든 랙 스티커. 물리 물체가 아니라 커서 밑의 그림뿐이다.
 #
-# **동전 슬롯을 그린 다음**이라는 것이 이 함수가 따로 있는 이유다. 예전에는
+# **랙을 그린 다음**이라는 것이 이 함수가 따로 있는 이유다. 예전에는
 # _draw_shop 말미의 _hold_draw 가 그렸는데, _hud_draw 는 그보다 뒤라
-# 판(_panel_draw)이 든 동전를 덮었다 — 끌어다 다른 칸 위에 올리는 순간
+# 판(_panel_draw)이 든 스티커를 덮었다 — 끌어다 다른 칸 위에 올리는 순간
 # 손에 든 것이 판 밑으로 사라져서, 놓을 자리를 보면서 놓을 수가 없었다.
 # 상점에서도 그랬다. 순서 바꾸기가 "안 된다" 로 읽히던 자리다.
 func _rack_hold_draw() -> void:
@@ -8035,7 +7886,7 @@ func _rack_hold_draw() -> void:
 			_peel_now())
 
 
-# 떼어낸 자리. 빈 홈(반지름 0.72)이 아니라 동전와 같은 반지름의 자국이다 —
+# 떼어낸 자리. 빈 홈(반지름 0.72)이 아니라 스티커와 같은 반지름의 자국이다 —
 # "여기 붙어 있었다" 와 "여기는 원래 비어 있다" 가 같은 그림이면 안 된다.
 func _panel_gap(i: int) -> void:
 	var e := _slot_rect(i).get_center() + Vector2(0.0, PANEL.chip_dy)
@@ -8049,7 +7900,7 @@ func _chute_click(z: int) -> void:
 		if _can_sell() and sell_sel >= 0 and sell_sel < owned.size():
 			_sell(sell_sel)
 			return
-		pay_msg = "먼저 판에서 팔 동전를 고른다"
+		pay_msg = "먼저 판에서 팔 스티커를 고른다"
 		pay_msg_t = HAND.msg_t
 		_deny()
 		return
@@ -8058,7 +7909,7 @@ func _chute_click(z: int) -> void:
 
 func _pay_click() -> void:
 	if buy_sel < 0:
-		pay_msg = "먼저 테이블에서 살 물건을 고른다"
+		pay_msg = "먼저 매대에서 살 물건을 고른다"
 		pay_msg_t = HAND.msg_t
 		_deny()
 		return
@@ -8089,7 +7940,7 @@ func _pay_take(i: int) -> void:
 # 손에 든 것 하나만 따로, 앞치마·버튼 다음에 그린다. _goods_draw 는 창구보다
 # 먼저 나가므로 창구까지 밀어 넣은 물건이 거기서는 덮인다.
 func _hold_draw() -> void:
-	# 동전 슬롯 동전는 여기서 안 그린다 — _rack_hold_draw 가 판 위에서 맡는다.
+	# 랙 스티커는 여기서 안 그린다 — _rack_hold_draw 가 판 위에서 맡는다.
 	if hand_st != H.CARRY or hand_src != 0:
 		return
 	if hand_i < 0 or hand_i >= drop.size():
@@ -8113,7 +7964,7 @@ func _scuff_draw(it: Dictionary) -> void:
 
 
 # 팔린 물건의 비행. _goods_draw 안에 두면 먼 덮개(y[18,80])와 앞치마(y[250,360])가
-# 덮어 두 다리 중 1.5개가 안 보인다 — 드래그 구매의 첫 다리는 통째로, 동전 슬롯으로
+# 덮어 두 다리 중 1.5개가 안 보인다 — 드래그 구매의 첫 다리는 통째로, 랙으로
 # 가는 두 번째 다리는 0.19초가 가려진다. 그래서 판·버튼 다음에 따로 그린다.
 func _fly_draw() -> void:
 	for i in mini(drop.size(), stock.size()):
@@ -8123,14 +7974,14 @@ func _fly_draw() -> void:
 
 
 func _drop_arrive(i: int) -> void:
-	# 도착에서 튄다. 이륙에서 튀면 동전가 도착하기 0.46초 전에 동전 슬롯이 먼저 튄다 —
+	# 도착에서 튄다. 이륙에서 튀면 스티커가 도착하기 0.46초 전에 랙이 먼저 튄다 —
 	# 지금 있는 연출의 유일한 거짓말이었다.
 	var it: Dictionary = drop[i]
 	match stock[i].type:
 		"item":
 			_panel_fire(it.slot)
 		"mod":
-			pop(it.to, "보드 확장", C_CHIP.lightened(0.25), 13, 0.9)
+			pop(it.to, "보드 개조", C_CHIP.lightened(0.25), 13, 0.9)
 		_:
 			pop(it.to, "탄창 교체", C_GREEN.lightened(0.3), 13, 0.9)
 
@@ -8140,7 +7991,7 @@ func _drop_arrive(i: int) -> void:
 #  바깥과 닿는 곳은 둘뿐이다.
 #    _tip_update(d)  매 프레임 진행     (_process 끝)
 #    _tip_draw(sh)   오버레이 다음에    (_draw)
-#  동전 슬롯의 호버 링만 tip_slot / tip_a 를 읽는다.
+#  스티커 랙의 호버 링만 tip_slot / tip_a 를 읽는다.
 #
 #  대상은 매 프레임 새로 찾아 그 프레임에 소비한다. 인덱스를
 #  프레임 너머로 들고 가지 않으므로 상점이 갈리거나 아이템이
@@ -8154,28 +8005,28 @@ const TIP := {
 	"title": 15.0,       # 제목 줄 높이
 	"line": 13.0,        # 본문 줄 높이
 	"base": 10.0,        # 본문 블록 윗변에서 첫 줄 베이스라인까지 (10pt 의 오름)
-	"chip_gap": 5.0,     # 본문 아래끝과 갈래 기본 점수 사이
-	"chip_h": 12.0,      # 갈래 기본 점수 높이
+	"chip_gap": 5.0,     # 본문 아래끝과 갈래 칩 사이
+	"chip_h": 12.0,      # 갈래 칩 높이
 	"fade": 14.0,        # 페이드 속도
 	"quiet": 6.0,        # shake 가 이보다 크면 아예 안 그린다 (읽을 수 없다)
 }
 
 var tip_title := ""
 var tip_lines := []             # [{"s": String, "sz": int, "c": Color}]
-var tip_chip := {}              # 제목 옆 미니동전로 그릴 아이템 (없으면 빈 사전)
-# 갈래 기본 점수 — 툴팁 맨 아래에 한 낱말. "이게 뭐냐" 가 이름만으로는 안 풀린다.
-# 동전와 사탕이 둘 다 둥근 판이고 보드 확장와 장갑가 둘 다 네모라,
+var tip_chip := {}              # 제목 옆 미니스티커로 그릴 아이템 (없으면 빈 사전)
+# 갈래 칩 — 툴팁 맨 아래에 한 낱말. "이게 뭐냐" 가 이름만으로는 안 풀린다.
+# 스티커와 소비 아이템이 둘 다 둥근 판이고 개조와 설비가 둘 다 네모라,
 # 그림만으로는 갈래가 안 갈린다. 발라트로가 툴팁 밑에 부스터/조커/타로를
-# 기본 점수으로 붙이는 그 자리다.
-var tip_tag := ""               # 기본 점수에 적을 낱말. 비면 안 그린다
+# 칩으로 붙이는 그 자리다.
+var tip_tag := ""               # 칩에 적을 낱말. 비면 안 그린다
 var tip_tag_c := Color(1, 1, 1)
-var tip_mark := Rect2()         # 대상 사각 (동전 슬롯은 링으로 대신하므로 빈 값)
+var tip_mark := Rect2()         # 대상 사각 (스티커 랙은 링으로 대신하므로 빈 값)
 # 그 사각에 테두리를 두르는가. tip_mark 를 비우는 것과 다르다 — 제약
 # 카드는 "커서 아래 카드가 선다" 를 tip_mark 로 판정하므로(_drop_update)
 # 사각 자체는 살아 있어야 하고, 그리기만 빠져야 한다.
 var tip_box := true
-var tip_slot := -1              # 호버 중인 동전 슬롯 칸
-var tip_spot := -1              # 호버 중인 테이블 자리 (테이블 구획용)
+var tip_slot := -1              # 호버 중인 스티커 랙 칸
+var tip_spot := -1              # 호버 중인 매대 자리 (테이블 구획용)
 var tip_a := 0.0                # 페이드
 
 
@@ -8250,8 +8101,8 @@ func _tip_hit(m: Vector2) -> Dictionary:
 		S.SHOP:
 			if hand_st == H.CARRY:
 				return {}                 # 드는 동안 툴팁은 끈다
-			# 든 사탕 — 칸에 이름 세 글자만 적혀 있어 무슨 효과인지
-			# 알 길이 없었다. 살 때는 테이블 툴팁이 말해 주는데 산 뒤로는
+			# 든 소비 아이템 — 칸에 이름 세 글자만 적혀 있어 무슨 효과인지
+			# 알 길이 없었다. 살 때는 매대 툴팁이 말해 주는데 산 뒤로는
 			# 아무 데서도 안 말한다. 쓰는 자리가 곧 모르는 자리였다.
 			var ch := _cons_hit(m)
 			if ch >= 0:
@@ -8272,7 +8123,7 @@ func _tip_hit(m: Vector2) -> Dictionary:
 				if _slot_rect(i).has_point(m):
 					return {"k": "rack", "i": i}
 		S.LEG:
-			# 동전 슬롯과 사탕 칸은 판 선택 화면에도 그대로 떠 있는데(_hud_draw)
+			# 랙과 소비 칸은 판 선택 화면에도 그대로 떠 있는데(_hud_draw)
 			# 여기만 대상에서 빠져 있었다. 무엇을 들고 있는지가 곧 "던질까
 			# 건너뛸까" 의 근거인데, 정작 고르는 자리에서 그것을 못 읽었다.
 			var ch3 := _cons_hit(m)
@@ -8281,7 +8132,7 @@ func _tip_hit(m: Vector2) -> Dictionary:
 			for i in GameData.max_items():
 				if _slot_rect(i).has_point(m):
 					return {"k": "rack", "i": i}
-			# 버튼에는 효과 한 줄만 들어간다(폭이 141px 이다). 뱃지의 이름과
+			# 버튼에는 효과 한 줄만 들어간다(폭이 141px 이다). 딱지의 이름과
 			# 언제 쓰이는지는 툴팁이 맡는다.
 			for bi in GameData.legs_per_round():
 				var brn2: int = _round_first() + bi
@@ -8305,7 +8156,7 @@ func _tip_hit(m: Vector2) -> Dictionary:
 			for i in remaining.size():
 				if _mag_rect(i).has_point(m):
 					return {"k": "mag", "i": i}
-			# 점수 카드가 떠 있으면 동전 슬롯 툴팁이 카드를 정면으로 덮는다.
+			# 점수 카드가 떠 있으면 랙 툴팁이 카드를 정면으로 덮는다.
 			# 위는 상단바라 앵커를 뒤집어서 못 피한다 — 그동안 대상에서 뺀다.
 			if card_p <= 0.004:
 				for i in GameData.max_items():
@@ -8322,7 +8173,7 @@ func _tip_build(hit: Dictionary) -> void:
 	var i: int = hit.i
 	match hit.k:
 		"rack":
-			_tip_set_tag("동전")
+			_tip_set_tag("스티커")
 			tip_mark = Rect2()
 			tip_slot = i
 			if i >= owned.size():
@@ -8341,18 +8192,18 @@ func _tip_build(hit: Dictionary) -> void:
 				_tip_add("판매가", 10, C_GOLD, "", "", str(GameData.sell_value(it)))
 		"stock":
 			var s: Dictionary = stock[i]
-			# 테이블는 한 자리에 네 갈래가 섞여 뜬다 — 그림만으로는 동전와
-			# 소비가, 보드 확장와 장갑가 안 갈린다. 기본 점수이 그것을 한 낱말로 푼다.
+			# 매대는 한 자리에 네 갈래가 섞여 뜬다 — 그림만으로는 스티커와
+			# 소비가, 개조와 설비가 안 갈린다. 칩이 그것을 한 낱말로 푼다.
 			match String(s.type):
 				"item":
-					_tip_set_tag("동전")
+					_tip_set_tag("스티커")
 				"mod":
-					_tip_set_tag("보드 확장")
+					_tip_set_tag("개조")
 				"dart":
 					_tip_set_tag("다트")
 				"cons":
-					_tip_set_tag("사탕")
-			tip_mark = Rect2()      # 동전 슬롯과 같은 진영 — 사각 테두리 안 두른다
+					_tip_set_tag("소비")
+			tip_mark = Rect2()      # 스티커 랙과 같은 진영 — 사각 테두리 안 두른다
 			tip_spot = i
 			tip_title = s.d.n
 			if s.type == "item":
@@ -8363,7 +8214,7 @@ func _tip_build(hit: Dictionary) -> void:
 				if s.d.get("g", "") != "":
 					_tip_add(GameData.gold_text(s.d.g, s.d.gv), 9, C_GOLD)
 			else:
-				# 소비·보드 확장·다트 — 효과 한 줄이면 된다. 분류 해설은 소음이다.
+				# 소비·개조·다트 — 효과 한 줄이면 된다. 분류 해설은 소음이다.
 				_tip_add(s.d.d, 10, C_DIM)
 			# 못 사는 이유를 누르기 전에 알려준다. _deny() 는 원인을 한 문장으로 뭉갠다.
 			var blk := _buy_block(i)
@@ -8371,12 +8222,12 @@ func _tip_build(hit: Dictionary) -> void:
 				_tip_add(blk, 9,
 						C_DIM.darkened(0.3) if s.sold else C_RED.lightened(0.2))
 		"tag":
-			# i 는 자리 번호가 아니라 **판 번호**다. 뒤 판의 뱃지도 짚으므로
+			# i 는 자리 번호가 아니라 **판 번호**다. 뒤 판의 딱지도 짚으므로
 			# 어느 판의 것인지가 열쇠여야 한다.
 			var bt := _leg_tag(i)
 			if bt.is_empty():
 				return
-			_tip_set_tag("뱃지")
+			_tip_set_tag("딱지")
 			tip_mark = _skip_rect(GameData.leg_idx(i))
 			tip_title = String(bt.get("name", ""))
 			_tip_add(_tag_text(bt), 10, C_ACC)
@@ -8384,7 +8235,7 @@ func _tip_build(hit: Dictionary) -> void:
 		"pend":
 			if i >= pending_tags.size():
 				return
-			_tip_set_tag("뱃지")
+			_tip_set_tag("딱지")
 			tip_mark = _pend_rect(i)
 			tip_title = String(pending_tags[i].n)
 			_tip_add(String(pending_tags[i].get("d", "")), 10, C_ACC)
@@ -8393,7 +8244,7 @@ func _tip_build(hit: Dictionary) -> void:
 			if i >= cons.size():
 				return
 			var hc: Dictionary = cons[i]
-			_tip_set_tag("사탕")
+			_tip_set_tag("소비")
 			tip_mark = _cons_rect(i)
 			tip_title = String(hc.n)
 			_tip_add(String(hc.d), 10, C_ACC)
@@ -8403,14 +8254,14 @@ func _tip_build(hit: Dictionary) -> void:
 			# 사각은 남기고 테두리만 뺀다. 카드는 서면서 커지고 밝아지는데
 			# 테두리는 **누웠을 때의 자리**에 그려져, 선 카드 위에 어긋난
 			# 흰 상자가 뜬다. 선 것 자체가 이미 표시라 두를 것이 없다 —
-			# 테이블(stock)와 동전 슬롯이 먼저 간 길이다.
+			# 매대(stock)와 스티커 랙이 먼저 간 길이다.
 			tip_mark = _stage_rect(i)
 			tip_box = false
 			tip_title = sp.d.n
 			_tip_add(sp.d.d, 11, C_MULT.lightened(0.25))
 			_tip_add("목표 %d" % sp.target, 10, C_DIM)
 		"citem":
-			_tip_set_tag("동전")
+			_tip_set_tag("스티커")
 			var it: Dictionary = GameData.items()[i]
 			tip_mark = _col_cell(i % COL_PAGE)
 			tip_title = it.n
@@ -8423,12 +8274,12 @@ func _tip_build(hit: Dictionary) -> void:
 			_tip_add("%s · %d골드" % [GameData.rarity_name(it.rarity), it.cost],
 					9, C_DIM.darkened(0.2))
 		"cmod":
-			_tip_set_tag("보드 확장")
+			_tip_set_tag("개조")
 			var md: Dictionary = GameData.mods()[i]
 			tip_mark = _col_cell(i % COL_PAGE)
 			tip_title = md.n
 			_tip_add(md.d, 10, C_DIM)
-			_tip_add("보드 확장 · %d골드" % md.cost, 9, C_DIM.darkened(0.2))
+			_tip_add("보드 개조 · %d골드" % md.cost, 9, C_DIM.darkened(0.2))
 		"cdart":
 			_tip_set_tag("다트")
 			var dt: Dictionary = GameData.darts()[i]
@@ -8439,7 +8290,7 @@ func _tip_build(hit: Dictionary) -> void:
 			if int(dt.get("mult", 0)) != 0:
 				_tip_add("배수 %+d" % int(dt.mult), 9, C_MULT.lightened(0.25))
 		"ccons":
-			_tip_set_tag("사탕")
+			_tip_set_tag("소비")
 			tip_mark = _col_cell(i % COL_PAGE)
 			var cd: Dictionary = GameData.consumables()[i]
 			tip_title = cd.n
@@ -8463,19 +8314,19 @@ func _tip_build(hit: Dictionary) -> void:
 				_tip_add("배수를 1로 고정", 9, C_MULT.lightened(0.25))
 
 
-# 갈래 기본 점수 하나. 이름 · 색을 같이 정한다 — 색이 갈래를 절반쯤 말한다.
+# 갈래 칩 하나. 이름 · 색을 같이 정한다 — 색이 갈래를 절반쯤 말한다.
 func _tip_set_tag(k: String) -> void:
 	tip_tag = k
 	match k:
-		"동전":
+		"스티커":
 			tip_tag_c = C_CHIP.lightened(0.15)
-		"사탕":
+		"소비":
 			tip_tag_c = C_ACC
-		"보드 확장":
+		"개조":
 			tip_tag_c = C_MULT.lightened(0.20)
 		"다트":
 			tip_tag_c = C_TXT.darkened(0.15)
-		"장갑":
+		"설비":
 			tip_tag_c = C_GOLD
 		"제약":
 			tip_tag_c = C_RED.lightened(0.20)
@@ -8486,7 +8337,7 @@ func _tip_set_tag(k: String) -> void:
 # 제목 줄과 본문 사이. 픽셀 글꼴은 내림이 2px 뿐이라 줄 높이에만 맡기면
 # 제목의 아랫획과 첫 줄의 윗획이 서로 닿는다 — 최소 3px 은 띄운다.
 #
-# 미니동전가 붙은 툴팁은 더 벌린다. 원반(반지름 8, 중심 pad+9)의 아래끝은
+# 미니스티커가 붙은 툴팁은 더 벌린다. 원반(반지름 8, 중심 pad+9)의 아래끝은
 # pad+17 인데 제목 칸은 pad+15 에서 끝난다. 2px 이 남으므로 바로 아래
 # 첫 줄이 원반 밑동을 물었다 — 글자끼리 닿는 것과 다르다. 원반은 그림이라
 # 1px 만 겹쳐도 획이 아니라 얼룩으로 읽힌다.
@@ -8495,9 +8346,9 @@ func _tip_lead() -> float:
 
 
 # 본문 블록의 높이. 크기 재기(_tip_size)와 그리기(_tip_draw)가 **같은 식**을
-# 봐야 갈래 기본 점수이 판 밖으로 새지 않는다 — 예전에는 그리기가 마지막 줄의
-# 베이스라인에서 기본 점수 자리를 재고 크기 재기는 블록 아래끝에서 재서, 그 차이
-# (내림 + 다음 줄 오름 = 10px)만큼 기본 점수이 밀려 아래 여백을 통째로 먹었다.
+# 봐야 갈래 칩이 판 밖으로 새지 않는다 — 예전에는 그리기가 마지막 줄의
+# 베이스라인에서 칩 자리를 재고 크기 재기는 블록 아래끝에서 재서, 그 차이
+# (내림 + 다음 줄 오름 = 10px)만큼 칩이 밀려 아래 여백을 통째로 먹었다.
 func _tip_body_h() -> float:
 	var h := 0.0
 	for l in tip_lines:
@@ -8596,14 +8447,14 @@ func _tip_draw(sh: Vector2) -> void:
 			y += TIP.line
 		y += 2.0 if l.ic != "" else 0.0
 
-	# 갈래 기본 점수 — 맨 아래 왼쪽에 한 낱말. 이름 위가 아니라 아래에 두는 것은
+	# 갈래 칩 — 맨 아래 왼쪽에 한 낱말. 이름 위가 아니라 아래에 두는 것은
 	# 읽는 순서가 "무엇이다 → 무슨 효과다 → 어느 갈래다" 이기 때문이다.
 	# 갈래를 먼저 읽히면 이름을 안 읽고 넘긴다.
 	if tip_tag != "":
 		var tw2: float = font.get_string_size(tip_tag, HORIZONTAL_ALIGNMENT_LEFT,
 				-1, 9).x + 10.0
 		# 본문 **블록 아래끝**에서 잰다. y 는 다음 줄의 베이스라인이라
-		# 그것으로 재면 기본 점수이 10px 아래로 밀려 판 밑변에 걸쳐 잘렸다.
+		# 그것으로 재면 칩이 10px 아래로 밀려 판 밑변에 걸쳐 잘렸다.
 		var tr := Rect2(Vector2(p.x + TIP.pad, top + _tip_body_h() + TIP.chip_gap),
 				Vector2(tw2, TIP.chip_h))
 		draw_rect(tr, Color(tip_tag_c, tip_a * 0.22))
@@ -8701,7 +8552,7 @@ func _draw_leg() -> void:
 			"라운드 %d / %d" % [GameData.round_of(leg_no), GameData.rounds_n()],
 			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 10,
 			Color(C_TABLE.lightened(0.34), 0.75))
-	# 선 카드만 상인 앞이다 — 제약 카드와 같은 규칙
+	# 선 카드만 딜러 앞이다 — 제약 카드와 같은 규칙
 	var cur: int = clampi(GameData.leg_idx(leg_no), 0, per - 1)
 	for i in per:
 		if i != cur:
@@ -8730,7 +8581,7 @@ func _draw_leg() -> void:
 		var pt := _leg_tag(srn)
 		if not pt.is_empty():
 			_skip_plate(_skip_rect(i), pt, false)
-	# 쌓아 둔 뱃지 — 언제 쓰이는지는 이름이 말한다
+	# 쌓아 둔 딱지 — 언제 쓰이는지는 이름이 말한다
 	for i in pending_tags.size():
 		var r := _pend_rect(i)
 		draw_rect(r, C_PANEL.lightened(0.10))
@@ -8819,7 +8670,7 @@ func _draw_stage() -> void:
 			front = i
 		else:
 			_stage_card(i)
-	# 누운 카드는 상인 손 **아래**다 — 카운터에 놓인 것이니 그게 맞다. 선
+	# 누운 카드는 딜러 손 **아래**다 — 카운터에 놓인 것이니 그게 맞다. 선
 	# 카드는 그 위다. 카운터보다 앞으로 나와 세운 것을 손이 덮으면 든 것으로
 	# 안 읽힌다. 그래서 덮개를 사이에 끼운다.
 	_cover_draw()
@@ -8828,11 +8679,11 @@ func _draw_stage() -> void:
 	_apron_mods()
 
 
-# 앞치마 = 산 보드 확장를 거는 선반. 상점에서 리롤·다음 버튼이 서는 띠와
+# 앞치마 = 산 개조를 거는 선반. 상점에서 리롤·다음 버튼이 서는 띠와
 # 같은 줄을 쓴다 — 두 화면이 같은 틀이라는 말이 여기서도 지켜진다.
 # 값을 손으로 적지 않고 버튼 사각에서 뽑는다. 손으로 적었더니 버튼을
 # 내렸을 때 선반만 옛 자리에 남아 펠트 위에 검은 네모가 떴다.
-# 보드 확장(mods.csv)는 _icon_mod, 제약(modifiers.csv)은 _icon_modifier 다.
+# 개조(mods.csv)는 _icon_mod, 제약(modifiers.csv)은 _icon_modifier 다.
 # 캐비닛과 획으로 형태가 갈려 있어 아래(내가 산 것)와 위(내가 고를 것)가
 # 안 섞인다. 이름 최장 실측 27px < 칸 52px.
 # 앞치마 줄의 중심. 버튼 띠와 같은 줄이다.
@@ -8843,8 +8694,8 @@ func _apron_y() -> float:
 func _apron_mods() -> void:
 	var n: int = mods_own.size()
 	if n == 0:
-		# 빈 홈 하나. 동전 슬롯이 빈 칸에 유령 홈을 그리는 어법 그대로이고 크기도
-		# 실제 캐비닛(2r+6 = 32)과 같다. "보드 확장 없음" 이라고 쓰는 것보다
+		# 빈 홈 하나. 랙이 빈 칸에 유령 홈을 그리는 어법 그대로이고 크기도
+		# 실제 캐비닛(2r+6 = 32)과 같다. "개조 없음" 이라고 쓰는 것보다
 		# R1 플레이어에게 더 많이 가르친다 — 비었다가 아니라 여기에 걸린다.
 		var e := Rect2(VIEW.x * 0.5 - 16.0, _apron_y() - 16.0, 32.0, 32.0)
 		draw_rect(e, C_WOOD.darkened(0.55))
@@ -8933,7 +8784,7 @@ func _stage_card(i: int) -> void:
 	# "목표" 는 안 쓴다 — _open_stage 가 base 하나를 n장에 복사하므로 셋이
 	# 같은 값이고, 셋 중 하나를 고르는 면에서 판별 정보량이 0 비트다.
 	# 얼굴도 카드와 같이 눕는다. 몸통만 눕히고 글자를 화면에 붙여 두면
-	# 카드 위에 동전를 얹은 것으로 읽힌다 — 판에 인쇄된 것이 아니다.
+	# 카드 위에 스티커를 얹은 것으로 읽힌다 — 판에 인쇄된 것이 아니다.
 	# 사다리꼴을 아핀으로 근사한다(위·아래 변의 평균). 정확히는 못 맞지만
 	# 카드 한 장 안에서 위아래 폭 차가 15px 라 눈에 안 걸린다.
 	var ax: Vector2 = ((q[1] - q[0]) + (q[2] - q[3])) * 0.5 / sz.x
@@ -9059,7 +8910,7 @@ func _draw_title() -> void:
 
 
 # ══════════════════════════════════════════════════════════
-#  새 런 — 다트통과 리그을 같이 고른다
+#  새 런 — 팩과 리그을 같이 고른다
 # ──────────────────────────────────────────────────────────
 #  발라트로가 PLAY 뒤에 여는 run_setup 이 이 자리다. 타이틀에는 덱도
 #  리그도 없다 — 거기 있던 것을 여기로 옮겼다.
@@ -9071,26 +8922,26 @@ func _draw_title() -> void:
 #    ② 발라트로는 이 화면을 게임오버에서 열면 못 빠져나가는데, 여기서는
 #       뒤로가 늘 산다. 나갈 길 없는 화면을 만들지 않는다.
 #
-#  "시작" 은 확인 버튼이 아니다 — 다트통과 리그은 누르는 순간 확정되어
+#  "시작" 은 확인 버튼이 아니다 — 팩과 리그은 누르는 순간 확정되어
 #  저장까지 끝나 있고, 이 버튼은 던지러 가는 이동이다.
 # ══════════════════════════════════════════════════════════
 
-var newrun_pip := 0             # 지금 보고 있는 다트통 번호
+var newrun_pip := 0             # 지금 보고 있는 팩 번호
 
 
 # ══════════════════════════════════════════════════════════
-#  다트통 통 — 다트통의 얼굴
+#  팩 통 — 스타트팩의 얼굴
 # ──────────────────────────────────────────────────────────
-#  다트 세 자루를 허공에 흩어 놓던 자리다. 그 셋은 어느 다트통에서나 셋이라
-#  **다트통이 무엇을 미는지를 한 획도 안 말했다** — 여벌 다트통도 셋, 넓은 동전 슬롯도
-#  셋이었다. 통 하나로 바꾸면 다트통이 미는 것이 그대로 그림이 된다.
+#  다트 세 자루를 허공에 흩어 놓던 자리다. 그 셋은 어느 팩에서나 셋이라
+#  **팩이 무엇을 미는지를 한 획도 안 말했다** — 여벌 팩도 셋, 넓은 랙도
+#  셋이었다. 통 하나로 바꾸면 팩이 미는 것이 그대로 그림이 된다.
 #    통 안   탄창 그대로. 자루 수(darts_base + darts_add)와 종류(dart_id)
-#    통 겉   나머지 전부. 다트통마다 다른 통이 곧 그 다트통이다(CUP_SKIN)
-#  한때는 통 옆에 골드·동전·칸 아이콘을 늘어 놓았다. 그 줄은 효과 글줄을
+#    통 겉   나머지 전부. 팩마다 다른 통이 곧 그 팩이다(CUP_SKIN)
+#  한때는 통 옆에 골드·스티커·칸 아이콘을 늘어 놓았다. 그 줄은 효과 글줄을
 #  아이콘으로 한 번 더 읽는 것이라 자리만 먹고 아무것도 안 보탰다 —
-#  다트통의 성질은 통 하나가 통째로 말한다.
+#  팩의 성질은 통 하나가 통째로 말한다.
 #
-#  잠긴 다트통은 기준선 통을 어둡게 세우고 **안도 겉도 그 다트통의 것을 안 쓴다.**
+#  잠긴 팩은 기준선 통을 어둡게 세우고 **안도 겉도 그 팩의 것을 안 쓴다.**
 #  쓰면 히든이 히든이 아니다 — 효과 줄을 안 적는 규칙과 같은 규칙이다.
 #
 #  넘기기는 필름이다. 나가는 통과 들어오는 통이 같은 오프셋으로 같이
@@ -9122,7 +8973,7 @@ const CUP := {
 	# 미끄러지는 시간(초). 0.85 였다 — 물리가 따라올 참이 필요해 길게 잡은
 	# 값이었는데, 그 이유가 없어졌다. 통이 제 자루를 끌고 가고(CUP3.drag)
 	# 벽이 자리를 옮겨서 지켜지므로(_cup3_step_rig 의 벽 지키기), 빨리
-	# 밀어도 자루가 안 샌다. 여섯 다트통을 훑을 때 한 번에 0.85초는 답답하다.
+	# 밀어도 자루가 안 샌다. 여섯 팩을 훑을 때 한 번에 0.85초는 답답하다.
 	#
 	# 판 갈이(0.36)까지 당겨 봤지만 거기서는 자루가 벽에 눌린 채 가라앉는다
 	# (촉이 내내 1.00×r — 벽 지키기가 매 프레임 붙잡고 있다는 뜻이다).
@@ -9140,8 +8991,8 @@ const CUP := {
 }
 
 var cup_t := 1.0        # 넘기기 진행 0~1 (1 = 멈춰 있다)
-var cup_dir := 1        # +1 다음 다트통(통은 왼쪽으로 나간다) · -1 이전 다트통
-var cup_prev := 0       # 미끄러지는 동안 나가는 다트통 번호
+var cup_dir := 1        # +1 다음 팩(통은 왼쪽으로 나간다) · -1 이전 팩
+var cup_prev := 0       # 미끄러지는 동안 나가는 팩 번호
 # 통이 지금까지 간 거리. **끊기지 않는 값**이라야 관성이 안 튄다 —
 # 화면 오프셋은 넘길 때마다 0 으로 되돌아가므로 그것으로는 못 잰다.
 var cup_run := 0.0
@@ -9166,7 +9017,7 @@ func _cup_reset() -> void:
 	cup_mv = 0.0
 
 
-# 다트통을 한 칸 넘긴다. 값을 바꾸는 것은 _pack_view 가 그대로 하고,
+# 팩을 한 칸 넘긴다. 값을 바꾸는 것은 _pack_view 가 그대로 하고,
 # 여기는 그림이 어느 쪽으로 미끄러질지만 정한다.
 func _pack_step(dir: int) -> void:
 	if GameData.packs().size() < 2:
@@ -9200,7 +9051,7 @@ func _cup_lean() -> float:
 			-float(CUP.lean), float(CUP.lean))
 
 
-# 통에 꽂힌 자루 수 = 그 다트통이 런을 시작하는 탄창 크기(_new_run 과 같은 식).
+# 통에 꽂힌 자루 수 = 그 팩이 런을 시작하는 탄창 크기(_new_run 과 같은 식).
 # 갈라 두면 화면이 여섯 자루를 보여 주고 게임이 일곱 발을 주는 일이 난다.
 func _cup_dart_n(row: Dictionary) -> int:
 	return maxi(1, GameData.tune_i("darts_base") + int(row.get("darts_add", 0)))
@@ -9295,7 +9146,7 @@ func _cup_one(pi: int, dx: float) -> void:
 	var lean := _cup_lean()
 
 	_cup_body(cx, dim, false)
-	# 잠긴 다트통은 **기준선 탄창**을 세운다. 그 다트통의 수와 종류를 그리면 효과 줄을
+	# 잠긴 팩은 **기준선 탄창**을 세운다. 그 팩의 수와 종류를 그리면 효과 줄을
 	# 안 적어 둔 뜻이 없어진다 — 히든의 다트가 그림으로 새는 자리였다.
 	if open:
 		_cup_darts(cx, String(row.get("dart_id", "std")),
@@ -9321,7 +9172,7 @@ func _cup_mask(stage: Rect2, pr: Rect2) -> void:
 
 
 # ══════════════════════════════════════════════════════════
-#  다트통 통 — 3D 강체
+#  팩 통 — 3D 강체
 # ──────────────────────────────────────────────────────────
 #  통과 자루를 진짜 3D 로 세운다. 넘길 때 자루가 벽에 밀리고 멎을 때
 #  반대쪽 벽을 때리는 것이 손으로 그린 기울기가 아니라 물리다 — 자루
@@ -9430,26 +9281,26 @@ const CUP3 := {
 	"lid":    26.0,    # 아가리 위로 통째로 떠오를 때 눌러 내리는 가속도
 }
 
-# 다트통마다 통이 다르다. 통은 다트통의 얼굴이라 여섯 다트통을 훑을 때 눈이 먼저
-# 잡는 것이 이것이다 — 글줄을 읽기 전에 "아까 그 통" 으로 다트통이 갈린다.
-# 표에 없는 다트통은 기본 통을 쓴다. 나머지 셋은 아직 안 정했다.
+# 팩마다 통이 다르다. 통은 팩의 얼굴이라 여섯 팩을 훑을 때 눈이 먼저
+# 잡는 것이 이것이다 — 글줄을 읽기 전에 "아까 그 통" 으로 팩이 갈린다.
+# 표에 없는 팩은 기본 통을 쓴다. 나머지 셋은 아직 안 정했다.
 #
 #   wall     벽을 어떻게 두르는가. CUP_WALLS 에 있는 이름만 쓴다
 #   wide     통 반지름 배율. **물리도 같이 넓어진다** — 벽 충돌·자루가
 #            앉는 고리·줄이 전부 이 값을 곱한 반지름을 본다. 그림만 늘리면
 #            자루가 안 보이는 벽에 막혀 통 한가운데 몰린다
-#   sticker  아가리 아래에 동전 한 장. 동전 슬롯이 넓다는 말을 통이 대신 한다
+#   sticker  아가리 아래에 스티커 한 장. 랙이 넓다는 말을 통이 대신 한다
 #
-# **잠긴 다트통은 이 표를 안 본다**(_cup3_skin). 겉이 새면 히든이 히든이 아니다 —
+# **잠긴 팩은 이 표를 안 본다**(_cup3_skin). 겉이 새면 히든이 히든이 아니다 —
 # 자루 수와 종류를 기준선으로 세우는 것과 같은 규칙이다.
 const CUP_SKIN := {
 	"base":   {},                                  # 기준선. 민 원통
-	"p_mag":  {"wall": "net"},                     # 여벌 다트통. 철망
-	"p_rack": {"wide": 1.15, "sticker": true},     # 넓은 동전 슬롯. 넓은 통에 동전 한 장
-	# 선금 다트통. 선금을 받았으니 통이 금빛이고 발치에 플라크가 흩어져 있다 —
-	# 다트통이 미는 것(시작 골드)이 글줄이 아니라 물건으로 보인다.
+	"p_mag":  {"wall": "net"},                     # 여벌 팩. 철망
+	"p_rack": {"wide": 1.15, "sticker": true},     # 넓은 랙. 넓은 통에 스티커 한 장
+	# 선금 팩. 선금을 받았으니 통이 금빛이고 발치에 플라크가 흩어져 있다 —
+	# 팩이 미는 것(시작 골드)이 글줄이 아니라 물건으로 보인다.
 	"p_adv":  {"tint": "gold", "gold": 5},
-	# 일당 다트통. 이자를 끄고 **남은 다트 1개당** 골드를 두 배로 주는 다트통이라,
+	# 일당 팩. 이자를 끄고 **남은 다트 1개당** 골드를 두 배로 주는 팩이라,
 	# 자루 자체가 돈이다. 그래서 통이 아니라 자루가 금빛이다.
 	"p_wage": {"dart": "gold"},
 }
@@ -9627,9 +9478,9 @@ func _cup3_wall_net(b: Node3D, r: float, w: float, h: float, tint: String) -> vo
 	_cup3_mesh(b, lip, _cup3_tint(tint).lightened(0.18), Vector3(0.0, h, 0.0))
 
 
-# 그 다트통의 통 겉. 안 적은 값은 기본값으로 채워 낸다 — 부르는 쪽이
+# 그 팩의 통 겉. 안 적은 값은 기본값으로 채워 낸다 — 부르는 쪽이
 # get(키, 기본값) 을 흩어 두면 기본값이 파일 여러 곳에 눌러앉는다.
-# 잠긴 다트통은 표를 안 보고 기준선 통을 세운다.
+# 잠긴 팩은 표를 안 보고 기준선 통을 세운다.
 func _cup3_skin(pi: int) -> Dictionary:
 	var out := CUP_SKIN0.duplicate()
 	var packs := GameData.packs()
@@ -9642,13 +9493,13 @@ func _cup3_skin(pi: int) -> Dictionary:
 
 
 # 벽 바깥면의 반지름. 벽마다 다르다 — 민 통은 r+w 에, 철망은 그 절반에
-# 선다. 동전가 이것을 보고 앉는다. 손으로 적어 두면 벽을 한 번 만질
-# 때마다 동전가 벽 속에 파묻혀 통째로 사라진다(한 번 당했다).
+# 선다. 스티커가 이것을 보고 앉는다. 손으로 적어 두면 벽을 한 번 만질
+# 때마다 스티커가 벽 속에 파묻혀 통째로 사라진다(한 번 당했다).
 func _cup3_face(wall: String, r: float, w: float) -> float:
 	return r + w * 0.5 if wall == "net" else r + w
 
 
-# 벽 바깥면의 색. 동전 그늘이 이것을 보고 제 벽보다 한 단 어두워진다 —
+# 벽 바깥면의 색. 스티커 그늘이 이것을 보고 제 벽보다 한 단 어두워진다 —
 # 고정색으로 적어 두면 벽이 어두운 겉에서는 그늘이 벽보다 밝아진다.
 func _cup3_wall_col(wall: String, tint: String) -> Color:
 	return _cup3_tint(tint).darkened(0.30 if wall == "net" else 0.44)
@@ -9662,8 +9513,8 @@ func _cup3_tint(tint: String) -> Color:
 	return C_WIRE
 
 
-# 통에 붙는 동전 한 장. 값은 전부 통 크기에 대한 비라 넓은 통에 붙어도
-# 같은 동전로 보인다.
+# 통에 붙는 스티커 한 장. 값은 전부 통 크기에 대한 비라 넓은 통에 붙어도
+# 같은 스티커로 보인다.
 const CUP_STK := {
 	"at":   -0.70,   # 통 앞에서 왼쪽으로 돌린 각(rad). 왼쪽 실루엣에 걸칠 만큼
 					 # 돌려야 종이가 벽을 감고 도는 것이 보인다 — 정면에 두면
@@ -9689,7 +9540,7 @@ func _cup3_on(rad: float, at: float, u: float, v: float, y0: float,
 	return Vector3(sin(a) * rr, y0 + v, cos(a) * rr)
 
 
-# 원반을 접는 선(fy)으로 가른 한 조각. 평평한 판을 대면 8px 짜리 동전도
+# 원반을 접는 선(fy)으로 가른 한 조각. 평평한 판을 대면 8px 짜리 스티커도
 # 가장자리가 벽으로 파고들므로 원통을 그대로 따라간다.
 #   part 0  접는 선 위. 벽에 눕는다 (fy 가 반지름보다 크면 온 원이다)
 #   part 1  접는 선 아래를 위로 만다. 2D 는 미러링(각 없는 접기)이면 되지만
@@ -9745,7 +9596,7 @@ func _cup3_leaf(rad: float, at: float, sr: float, y0: float, fy: float,
 	return st.commit()
 
 
-# 통에 붙은 동전. 게임의 다른 자리에서 쓰는 어법 그대로다 — 흰 다이컷 테
+# 통에 붙은 스티커. 게임의 다른 자리에서 쓰는 어법 그대로다 — 흰 다이컷 테
 # 한 겹에 크림색 얼굴, 아래 끝은 말려 이형지가 보인다(draw_sticker).
 # 반지름 10px 에 인쇄까지 넣으면 조건 아이콘이 두 픽셀로 뭉개지므로
 # 여기서는 테·얼굴·말린 자락까지만 낸다.
@@ -9810,7 +9661,7 @@ func _cup3_cup(skin: Dictionary) -> AnimatableBody3D:
 	# 발치 바닥. **통 몸에 붙인다** — 통이 미끄러질 때 바닥도 같이 가야
 	# 발치에 놓인 것이 통을 따라간다. 따로 세우면 통만 나가고 골드는
 	# 무대 한가운데 남는다.
-	# 골드가 없는 다트통에는 안 붙인다. 아무것도 안 놓이는 바닥은 물리에
+	# 골드가 없는 팩에는 안 붙인다. 아무것도 안 놓이는 바닥은 물리에
 	# 몸 하나를 더 얹을 뿐이다.
 	if int(skin.gold) > 0:
 		var gd := CollisionShape3D.new()
@@ -10271,9 +10122,9 @@ func _dart3_meshes(b: Node3D, dl: float, dr: float, fin: float, col: Color) -> v
 
 
 # 자루 색은 **다트 종류가 정한다** — 무거운 회색 · 가벼운 초록 · 관통 파랑 ·
-# 자석 빨강. 그 축을 다트통이 덮을 수 있게 하되, 덮어도 되는 자리는 하나뿐이다:
-# 탄창이 전부 표준인 다트통. 표준은 색이 하나뿐이라 덮어도 가릴 정보가 없다.
-# 특별한 다트를 쥔 다트통에서 덮으면 그 다트가 무엇인지가 그림에서 사라진다 —
+# 자석 빨강. 그 축을 팩이 덮을 수 있게 하되, 덮어도 되는 자리는 하나뿐이다:
+# 탄창이 전부 표준인 팩. 표준은 색이 하나뿐이라 덮어도 가릴 정보가 없다.
+# 특별한 다트를 쥔 팩에서 덮으면 그 다트가 무엇인지가 그림에서 사라진다 —
 # cup_probe 가 그 짝을 검사한다(주석으로 부탁하지 않는다).
 func _cup3_dart(id: String, tint: String, cup_tint: String) -> RigidBody3D:
 	var dl: float = CUP3.dl
@@ -10322,7 +10173,7 @@ func _cup3_spawn(pi: int, x: float) -> void:
 		return
 	var row: Dictionary = packs[pi]
 	var open: bool = _pack_open(pi)
-	# 잠긴 다트통은 기준선 탄창을 세운다 — 수와 종류가 그림으로 새면 효과 줄을
+	# 잠긴 팩은 기준선 탄창을 세운다 — 수와 종류가 그림으로 새면 효과 줄을
 	# 안 적어 둔 뜻이 없어진다.
 	var id: String = String(row.get("dart_id", "std")) if open else "std"
 	var n: int = _cup_dart_n(row) if open else GameData.tune_i("darts_base")
@@ -10354,7 +10205,7 @@ func _cup3_spawn(pi: int, x: float) -> void:
 				side.normalized()), tip + up * float(CUP3.dl))
 		cup_vp.add_child(b)
 		darts.append(b)
-	# 발치의 골드. 잠긴 다트통에는 안 놓는다 — 무엇을 주는 다트통인지가 그림으로
+	# 발치의 골드. 잠긴 팩에는 안 놓는다 — 무엇을 주는 팩인지가 그림으로
 	# 새면 효과 줄을 안 적어 둔 뜻이 없어진다(자루 수와 같은 규칙이다).
 	var gold3 := []
 	if open:
@@ -10448,7 +10299,7 @@ func _cup3_step(dir: int) -> void:
 	if not _cup3_live():
 		return
 	# 미끄러지는 도중에 또 눌렀다면 나가던 통은 그 자리에서 지운다 —
-	# 셋이 겹쳐 서면 어느 것이 지금 다트통인지가 화면에서 안 갈린다.
+	# 셋이 겹쳐 서면 어느 것이 지금 팩인지가 화면에서 안 갈린다.
 	while cup_rigs.size() > 1:
 		_cup3_kill(cup_rigs[0])
 	if not cup_rigs.is_empty() and is_instance_valid(cup_rigs[0].cup):
@@ -10619,7 +10470,7 @@ func _newrun_back() -> Rect2:
 	return Rect2(Vector2(44.0, 312.0), Vector2(88.0, 28.0))
 
 
-# 다트통은 첫 행이 늘 열려 있고, 나머지는 해금 키를 읽는다.
+# 팩은 첫 행이 늘 열려 있고, 나머지는 해금 키를 읽는다.
 func _pack_open(i: int) -> bool:
 	var rows := GameData.packs()
 	if i <= 0 or i >= rows.size():
@@ -10627,7 +10478,7 @@ func _pack_open(i: int) -> bool:
 	return Save.unlocked("pack:" + String(rows[i].get("id", "")))
 
 
-# 리그은 다트통마다 따로 뚫린다 — 첫 단은 늘 열려 있고 나머지는 앞 단 완주다.
+# 리그은 팩마다 따로 뚫린다 — 첫 단은 늘 열려 있고 나머지는 앞 단 완주다.
 func _league_open(i: int) -> bool:
 	var rows := GameData.leagues()
 	if i <= 0 or i >= rows.size():
@@ -10642,8 +10493,8 @@ func _league_won(i: int) -> bool:
 	return Save.unlocked(GameData.win_key(String(rows[i].get("id", ""))))
 
 
-# 다트통을 넘기면 리그을 그 다트통이 뚫은 만큼으로 내린다. 발라트로가 덱을 바꿀 때
-# 하는 그 한 줄이고, 이게 있어야 "리그은 다트통마다 따로 뚫는다" 가 읽힌다.
+# 팩을 넘기면 리그을 그 팩이 뚫은 만큼으로 내린다. 발라트로가 덱을 바꿀 때
+# 하는 그 한 줄이고, 이게 있어야 "리그은 팩마다 따로 뚫는다" 가 읽힌다.
 func _pack_view(i: int) -> void:
 	var rows := GameData.packs()
 	if rows.is_empty():
@@ -10661,7 +10512,7 @@ func _pack_view(i: int) -> void:
 	Save.flush()
 
 
-# 저장에 남은 다트통을 화면의 지금 자리로 맞춘 뒤 연다.
+# 저장에 남은 팩을 화면의 지금 자리로 맞춘 뒤 연다.
 func _open_newrun() -> void:
 	_pack_unlock_check()          # 지난 런에서 채운 조건이 여기서 열린다
 	var rows := GameData.packs()
@@ -10691,7 +10542,7 @@ func _draw_newrun() -> void:
 		draw_string(font, ar.position + Vector2(0.0, 28.0), "▶" if right else "◀",
 				HORIZONTAL_ALIGNMENT_CENTER, ar.size.x, 12, C_TXT if many else C_DIM)
 
-	# 다트통 패널 — 왼쪽에 통(다트통의 얼굴), 오른쪽에 이름과 값
+	# 팩 패널 — 왼쪽에 통(팩의 얼굴), 오른쪽에 이름과 값
 	var pr := _pack_rect()
 	draw_rect(pr, C_PANEL.lightened(0.10))
 	var open: bool = _pack_open(newrun_pip)
@@ -10705,7 +10556,7 @@ func _draw_newrun() -> void:
 	draw_string(font, Vector2(230, 84),
 			String(row.get("name", "")) if open else ("???" if hid else "잠김"),
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 13, C_TXT if open else C_DIM)
-	# 다섯 줄까지 든다. 넷일 때는 아래가 비지만, 다트통마다 칸 높이가
+	# 다섯 줄까지 든다. 넷일 때는 아래가 비지만, 팩마다 칸 높이가
 	# 출렁이면 넘길 때 눈이 자리를 다시 잡아야 한다.
 	var eb := Rect2(Vector2(230.0, 94.0), Vector2(310.0, 86.0))
 	draw_rect(eb, C_PANEL.darkened(0.2))
@@ -10714,7 +10565,7 @@ func _draw_newrun() -> void:
 		draw_string(font, Vector2(242, 112 + li * 15), lines[li],
 				HORIZONTAL_ALIGNMENT_LEFT, eb.size.x - 24.0, 11,
 				C_TXT if open else C_DIM)
-	# 이 다트통으로 넘긴 가장 높은 리그 — 한 번도 못 넘겼으면 안 그린다
+	# 이 팩으로 넘긴 가장 높은 리그 — 한 번도 못 넘겼으면 안 그린다
 	var best := -1
 	for k in GameData.leagues().size():
 		if _league_won(k):
@@ -10761,22 +10612,22 @@ func _draw_newrun() -> void:
 	_btn(_newrun_back(), "뒤로", "ESC", true)
 
 
-# 다트통이 미는 값만 줄로 낸다 — 해설은 안 쓴다.
-# 다트통 설명. 표의 줄글이 있으면 그것을 폭에 맞게 접어서 낸다 —
-# "시작 골드 +10 · 사탕 칸 1" 은 두 번 읽어야 하고 "골드 14개로
-# 시작한다. 사탕 칸은 1개다" 는 한 번 읽는다.
+# 팩이 미는 값만 줄로 낸다 — 해설은 안 쓴다.
+# 팩 설명. 표의 줄글이 있으면 그것을 폭에 맞게 접어서 낸다 —
+# "시작 골드 +10 · 소비 칸 1" 은 두 번 읽어야 하고 "골드 14개로
+# 시작한다. 소비 칸은 1개다" 는 한 번 읽는다.
 #
 # 줄글이 없으면 아래처럼 **기준선과 다른 것만** 낸다. 그것이 없는
-# 다트통(기준선 그대로)은 "기준" 한 줄이고, 그게 그 다트통의 정직한 설명이다.
-# 줄글 없이 기준선과 다르기만 한 다트통은 검증기가 막는다.
+# 팩(기준선 그대로)은 "기준" 한 줄이고, 그게 그 팩의 정직한 설명이다.
+# 줄글 없이 기준선과 다르기만 한 팩은 검증기가 막는다.
 #
-# 넷을 늘 적던 때는 일당 다트통이 기본 다트통과 글자 하나 안 다르게 보였다 —
-# 그 다트통의 전부인 "이자 없음 · 잔탄당 2골드" 가 어느 줄에도 없었기
+# 넷을 늘 적던 때는 일당 팩이 기본 팩과 글자 하나 안 다르게 보였다 —
+# 그 팩의 전부인 "이자 없음 · 잔탄당 2골드" 가 어느 줄에도 없었기
 # 때문이다. 표에 열이 늘 때마다 이 함수를 같이 늘려야 하는 구조였고,
 # 늘리는 것을 잊으면 그 열은 화면에서 없는 것이 된다.
 #
-# 다른 것만 적으면 기준선(기본 다트통)은 "기준" 한 줄이 되는데, 그게
-# 그 다트통의 정직한 설명이다 — 아무것도 안 주고 아무것도 안 뺀다.
+# 다른 것만 적으면 기준선(기본 팩)은 "기준" 한 줄이 되는데, 그게
+# 그 팩의 정직한 설명이다 — 아무것도 안 주고 아무것도 안 뺀다.
 func _pack_lines(row: Dictionary) -> Array:
 	var out := []
 	var d := GameData.pack_desc(row)
@@ -10792,10 +10643,10 @@ func _pack_lines(row: Dictionary) -> Array:
 		out.append("시작 골드 %+d" % ga)
 	var isl := int(row.get("item_slots", GameData.tune_i("max_items")))
 	if isl != GameData.tune_i("max_items"):
-		out.append("동전 칸 %d" % isl)
+		out.append("스티커 칸 %d" % isl)
 	var csl := int(row.get("cons_slots", GameData.tune_i("cons_slots")))
 	if csl != GameData.tune_i("cons_slots"):
-		out.append("사탕 칸 %d" % csl)
+		out.append("소비 칸 %d" % csl)
 	if String(row.get("interest_off", "")) != "" \
 			and int(row.get("interest_off", 0)) > 0:
 		out.append("이자 없음")
@@ -10816,7 +10667,7 @@ func _pack_lines(row: Dictionary) -> Array:
 	return out
 
 
-# 잠긴 다트통에 적는 한 줄. 히든은 조건을 안 알려 준다 — 알려 주면 히든이 아니다.
+# 잠긴 팩에 적는 한 줄. 히든은 조건을 안 알려 준다 — 알려 주면 히든이 아니다.
 func _pack_cond(row: Dictionary) -> String:
 	if GameData.pack_kind(row) == "hidden":
 		return "조건 미달"
@@ -10859,7 +10710,7 @@ func _league_lines() -> Array:
 	if int(GameData.league_v("darts_add", 0.0)) != 0:
 		out.append("다트 %+d" % int(GameData.league_v("darts_add", 0.0)))
 	if GameData.league_v("shop_cost_mul", 1.0) != 1.0:
-		out.append("테이블 ×%.2f" % GameData.league_v("shop_cost_mul", 1.0))
+		out.append("매대 ×%.2f" % GameData.league_v("shop_cost_mul", 1.0))
 	if int(GameData.league_v("perish", 0.0)) > 0:
 		out.append("삭음 %d판" % int(GameData.league_v("perish", 0.0)))
 	if int(GameData.league_v("rent", 0.0)) > 0:
@@ -10975,8 +10826,8 @@ func _draw_collect() -> void:
 	_scrim()
 	draw_string(font, Vector2(0, 30), "컬렉션", HORIZONTAL_ALIGNMENT_CENTER,
 			VIEW.x, 18, C_TXT)
-	var tabs := ["동전 %d" % GameData.items().size(),
-			"보드 확장 %d" % GameData.mods().size(),
+	var tabs := ["스티커 %d" % GameData.items().size(),
+			"개조 %d" % GameData.mods().size(),
 			"다트 %d" % GameData.darts().size(),
 			"소비 %d" % GameData.consumables().size(),
 			"제약 %d" % GameData.modifiers().size()]

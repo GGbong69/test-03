@@ -1,6 +1,7 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene format=3 uid="uid://d3pf633u4j1pd"]
 
-[ext_resource type="Script" path="res://scripts/game.gd" id="1_game"]
+[ext_resource type="Script" uid="uid://dpt2ooupkysmi" path="res://scripts/game.gd" id="1_game"]
 
-[node name="Game" type="Node2D"]
+[node name="Game" type="Node2D" unique_id=1017909776]
 script = ExtResource("1_game")
+metadata/__editor_changed = true
