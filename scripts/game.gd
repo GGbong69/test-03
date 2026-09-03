@@ -252,6 +252,7 @@ var gt := 0.0
 var confirm_t := 0.0
 var aim := Vector2(320, 202)
 var fly_t := 0.0
+var fly_rot := 0.0            # 나는 동안 쓰는 흔들림. 꽂힌 뒤에도 같은 값이다
 var queue := []
 var qt := 0.0
 var cur_chip := 0
@@ -1876,6 +1877,9 @@ func _process(d: float) -> void:
 				_grip_consume()
 				state = S.FLY
 				fly_t = 0.0
+				# 꽂힐 각을 지금 정한다. 나는 동안과 꽂힌 뒤가 같은 각이라야
+				# 착탄 프레임에서 자루가 홱 돌지 않는다.
+				fly_rot = randf_range(-0.26, 0.26)
 		S.FLY:
 			fly_t += d
 			if fly_t >= GameData.tune("fly_time"):
@@ -2174,7 +2178,7 @@ func _kick_fire() -> void:
 	# 여기서 화면에 꽂는다. 정산은 이미 꽂힌 자리를 읽으므로 그때는
 	# 다시 안 꽂는다(_land 의 mark=false).
 	darts.append({"p": aim, "id": String(cur_dart.get("id", "std")),
-			"rot": randf_range(-0.26, 0.26)})
+			"rot": fly_rot})
 	_sfx("kick_shot")
 	kick_o += Vector2(aim_rng.randf_range(-float(KICK.side), float(KICK.side)),
 			-float(KICK.up))
@@ -3960,6 +3964,45 @@ func _bd3_pose(e: Dictionary) -> Transform3D:
 
 # darts 배열과 3D 노드를 맞춘다. 수가 달라졌을 때만 다시 세운다 —
 # 판마다 열두 발을 넘지 않으므로 통째로 다시 세워도 싸다.
+# ── 눈 뒤에서 판까지 ─────────────────────────────────
+# 던진 자루가 카메라 앞에서 출발해 착탄점에 꽂힌다. FLY 동안만 산다.
+# 그동안은 무대를 매 프레임 다시 굽는다 — 0.2초뿐이라 값이 싸다.
+var bd_fly: Node3D = null
+
+
+func _bd3_flying() -> bool:
+	return state == S.FLY and _bd3_live()
+
+
+func _bd3_fly() -> void:
+	if not _bd3_live():
+		return
+	if state != S.FLY:
+		if is_instance_valid(bd_fly):
+			bd_fly.queue_free()
+			bd_fly = null
+			bd_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+		return
+	if not is_instance_valid(bd_fly):
+		bd_fly = Node3D.new()
+		_dart3_meshes(bd_fly, float(BD3.len) * 0.5, float(BD3.r), float(BD3.fin),
+				_dart3_col(String(cur_dart.get("id", "std"))))
+		bd_vp.add_child(bd_fly)
+	bd_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	var end := _bd3_pose({"p": aim, "rot": fly_rot})
+	# 출발점은 눈 바로 앞, 화면 아래쪽이다 — 손에서 떠난 것처럼 읽힌다.
+	# 원근이 알아서 크게 잡아 주므로 자루를 따로 키우지 않는다.
+	# 눈에 바짝 붙여 둔다. 0.62 로 두었더니 출발부터 판 앞이라 "날아왔다" 가
+	# 아니라 "판 위에서 미끄러졌다" 로 보였다. 원근이 자루를 키우는 자리는
+	# 카메라 코앞뿐이다.
+	var beg := Vector3(end.origin.x * 0.15 - 18.0, end.origin.y * 0.15 - 46.0,
+			_bd3_eye() * 0.86)
+	var t := clampf(fly_t / maxf(GameData.tune("fly_time"), 0.001), 0.0, 1.0)
+	# 끝에서 살짝 붙는다 — 등속이면 원근 때문에 뒤로 갈수록 느려 보인다.
+	var e := t * t * (3.0 - 2.0 * t)
+	bd_fly.transform = Transform3D(end.basis, beg.lerp(end.origin, e))
+
+
 func _bd3_sync() -> void:
 	if not _bd3_live():
 		return
@@ -3992,14 +4035,16 @@ func _draw_darts() -> void:
 	# 프로브가 간헐적으로 세그폴트했다(settle · league · mod 가 번갈아 죽었다).
 	# 매번 다른 프로브가 죽어서 원인이 안 보였다. 화면 서버 이름이 그것을
 	# 정확히 말하는 유일한 값이다.
-	if not _bd3_live() and _has_renderer() and not darts.is_empty():
+	if not _bd3_live() and _has_renderer() and (not darts.is_empty() or state == S.FLY):
 		_bd3_open()
 	# **비어도 맞춘다.** 판이 바뀌면 darts 만 비고 3D 자루는 뒤에 남아,
 	# 새 판 위에 지난 판의 다트가 그대로 꽂혀 있었다(프로브가 잡았다).
 	# 맞추는 자리가 하나뿐이라야 그 일이 안 생긴다.
 	if _bd3_live():
 		_bd3_sync()
-	if darts.is_empty():
+		_bd3_fly()
+	# 첫 발은 꽂힌 자루가 없다. 나는 자루만 있어도 무대를 그려야 한다.
+	if darts.is_empty() and not _bd3_flying():
 		return
 	if _bd3_live():
 		var tex: Texture2D = bd_vp.get_texture()
