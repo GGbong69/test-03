@@ -499,6 +499,7 @@ def chrome(slide, title, page):
 
 
 OVERFLOW = []
+APPENDIX = []      # 부록 쪽 (번호, 제목) — 목차가 쓴다
 TRIM = True          # 한 쪽을 넘기면 조금 덜어낸다. 그래도 넘치면 쪽을 나눈다
 MAX_CUT = 40         # 한 쪽에 담기게 덜어낸다. 쪽을 쪼개지 않는다
 
@@ -623,6 +624,8 @@ def content_slide(prs, page, chapter, title, lead, blocks, related):
     global PAIR
     PAIR = chapter != "데이터"
     set_width(W if chapter == "데이터" else W_BODY)
+    if chapter == "데이터":
+        APPENDIX.append(("%02d" % page, title))
     usable = [b for b in blocks if DRAW.get(b.get("type"))]
     if TRIM:
         usable = fit_page(chapter, title, lead, usable)
@@ -683,54 +686,63 @@ def cover(prs):
 
 
 def toc(prs, entries):
-    """목차. 세 단으로 나누고 쪽 번호를 오른쪽 끝에 세운다.
-    한 단이 표 하나라 번호가 자로 잰 듯 선다."""
+    """목차. 장에 번호를 매기고 쪽마다 1.1 을 단다 — 계층이 번호로 읽힌다.
+    장은 단을 넘어 쪼개지 않는다. 한 단이 표 하나다."""
     slide = new_slide(prs)
     chrome(slide, "목차", 2)
     if not entries:
         return slide
-    # 장 단위로 단에 담는다. 장이 한 단을 넘치면 다음 단에 「(이어서)」로 잇는다.
-    H_CH, H_IT, BUD = 0.40, 0.245, Y_MAX - Y_BODY
-    cols, cur, used, cap = [], [], 0.0, None
-    for e in entries:
-        h = H_CH if e[0] == "chapter" else H_IT
-        if e[0] == "chapter":
-            cap = e[2]
-        if used + h > BUD and cur:
-            cols.append(cur)
-            cur, used = ([["chapter", "", cap + " (이어서)"]] if e[0] != "chapter" else []), 0.0
-            used = H_CH if cur else 0.0
-        cur.append(list(e))
-        used += h
+
+    H_CH, H_IT, BUD = 0.36, 0.205, Y_MAX - Y_BODY
+    blocks, cur = [], []
+    for e in entries:                       # 장 단위로 묶는다
+        if e[0] == "chapter" and cur:
+            blocks.append(cur)
+            cur = []
+        cur.append(e)
     if cur:
-        cols.append(cur)
+        blocks.append(cur)
+
+    cols, col, used = [], [], 0.0
+    for b in blocks:                        # 넘치면 다음 단으로. 쪼개지 않는다
+        h = H_CH + H_IT * (len(b) - 1)
+        if col and used + h > BUD:
+            cols.append(col)
+            col, used = [], 0.0
+        col += b
+        used += h
+    if col:
+        cols.append(col)
+
     colw = (W - 2 * 0.5) / 3
     for ci, col in enumerate(cols[:3]):
-        if not col:
-            continue
-        heights = [(0.40 if k == "chapter" else 0.245) for k, _, _ in col]
+        heights = [(H_CH if k == "chapter" else H_IT) for k, _, _ in col]
         x = L + ci * (colw + 0.5)
-        gf = slide.shapes.add_table(len(col), 2, Inches(x), Inches(Y_BODY),
+        gf = slide.shapes.add_table(len(col), 3, Inches(x), Inches(Y_BODY),
                                     Inches(colw), Inches(sum(heights)))
         t = gf.table
         _plain(t)
-        t.columns[0].width = Inches(colw - 0.92)
-        t.columns[1].width = Inches(0.92)
+        t.columns[0].width = Inches(0.62)
+        t.columns[1].width = Inches(colw - 1.50)
+        t.columns[2].width = Inches(0.88)
         for k, h in enumerate(heights):
             t.rows[k].height = Inches(h)
         for k, (kind, no, name) in enumerate(col):
             if kind == "chapter":
-                _cell(t.cell(k, 0), name, SZ_HEAD - 0.5, F_BOLD, C_TEXT)
-                _cell(t.cell(k, 1), no, SZ_SMALL, F_SEMI, C_ACC, align=PP_ALIGN.RIGHT)
+                _cell(t.cell(k, 0), no.split("|")[0], SZ_HEAD - 0.5, F_BOLD, C_ACC)
+                _cell(t.cell(k, 1), name, SZ_HEAD - 0.5, F_BOLD, C_TEXT)
+                _cell(t.cell(k, 2), no.split("|")[1], SZ_SMALL, F_SEMI, C_MUTE,
+                      align=PP_ALIGN.RIGHT)
             else:
-                _cell(t.cell(k, 0), name, SZ_BODY, F_BODY, C_TEXT)
-                _cell(t.cell(k, 1), no, SZ_BODY - 0.5, F_BODY, C_MUTE, align=PP_ALIGN.RIGHT)
-        # 장 이름 아래 가는 줄 — 단이 셋이라 이게 없으면 다 같은 무게로 읽힌다
+                _cell(t.cell(k, 0), no.split("|")[0], SZ_BODY - 0.5, F_BODY, C_MUTE)
+                _cell(t.cell(k, 1), name, SZ_BODY, F_BODY, C_TEXT)
+                _cell(t.cell(k, 2), no.split("|")[1], SZ_BODY - 0.5, F_BODY, C_MUTE,
+                      align=PP_ALIGN.RIGHT)
         y = Y_BODY
         for k, h in enumerate(heights):
             if col[k][0] == "chapter":
-                line(slide, x, y + h - 0.07, x + colw, y + h - 0.07,
-                     color=RGBColor(0xC9, 0xCC, 0xD0), width=0.75)
+                line(slide, x, y + h - 0.05, x + colw, y + h - 0.05,
+                     color=RGBColor(0xC0, 0xC4, 0xC9), width=0.9)
             y += h
     return slide
 
@@ -900,27 +912,37 @@ def _run(pages, toc_rows=None):
     cover(prs)
     toc(prs, toc_rows or [])
 
-    rows, page = [], 3
+    APPENDIX.clear()
+    rows, page, cn = [], 3, 0
     for name in ORDER:
         got = [q for q in pages if q.get("chapter") == name]
-        if got:
-            rows.append(["chapter", "", name])
-            head = len(rows) - 1
-            first = page
+        if not got:
+            continue
+        cn += 1
+        rows.append(["chapter", "%d|" % cn, name])
+        head, first, it = len(rows) - 1, page, 0
         for p in got:
-            rows.append(["page", "%02d" % page, p["title"]])
+            it += 1
+            rows.append(["page", "%d.%d|%02d" % (cn, it, page), p["title"]])
             page = content_slide(prs, page, p["chapter"], p["title"], p.get("lead", ""),
                                  p.get("blocks", []), p.get("related", []))
-        if got:
-            rows[head][1] = "%d–%d" % (first, page - 1)
+        rows[head][1] += "%d–%d" % (first, page - 1)
 
     start = page
     page, n_stick = appendix_stickers(prs, page)
     page = appendix_tables(prs, page)
-    rows.append(["chapter", "%d–%d" % (start, page - 1), "데이터"])
-    for nm in ("스티커 전종 99장", "다트 · 개조", "보스 제약", "설비 · 딱지",
-               "리그 · 스타트 팩", "영역 강화 · 튜닝 상수"):
-        rows.append(["page", "", nm])
+    cn += 1
+    rows.append(["chapter", "%d|%d–%d" % (cn, start, page - 1), "데이터"])
+    seen = set()
+    it = 0
+    for no, nm in APPENDIX:
+        base = nm.split(" ")[0] if nm.startswith("스티커") else nm
+        if base in seen:
+            continue
+        seen.add(base)
+        it += 1
+        rows.append(["page", "%d.%d|%s" % (cn, it, no),
+                     "스티커 전종 99장" if base == "스티커" else nm])
     return prs, rows, page - 1, n_stick
 
 
