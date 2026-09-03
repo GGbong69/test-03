@@ -1483,11 +1483,24 @@ func _take_tag(t: Dictionary) -> void:
 			gold += v
 			Save.bump("gold_earned", v)
 		"track":
-			var trs := GameData.rows("area_up")
-			if not trs.is_empty():
-				var tk := int(trs[randi() % trs.size()].get("track", 0))
-				track_lv[tk] = int(track_lv.get(tk, 0)) + 1
-				Save.peak("best_track", int(track_lv[tk]))
+			# 트랙을 고르는 것이지 강화 줄을 고르는 것이 아니다. 표는 트랙당
+			# 여덟 줄이라 줄에서 뽑아도 지금은 고르게 나오지만, 트랙마다
+			# 줄 수가 달라지는 순간 조용히 치우친다. 트랙에서 뽑는다.
+			var tks := {}
+			for r in GameData.rows("area_up"):
+				tks[int(r.get("track", 0))] = true
+			var tkl := tks.keys()
+			if not tkl.is_empty():
+				# v 만큼 올린다. 표에는 +1 뿐이지만 값을 무시하고 있었다.
+				for _k in maxi(v, 1):
+					var tk: int = tkl[randi() % tkl.size()]
+					track_lv[tk] = int(track_lv.get(tk, 0)) + 1
+					Save.peak("best_track", int(track_lv[tk]))
+					# 무엇이 올랐는지 말한다. 이 뱃지만 아무 말이 없었다 —
+					# 화면에 트랙 레벨을 쓰는 자리가 런 정보뿐이라, 말이
+					# 없으면 "안 걸렸다" 와 구별이 안 된다.
+					pop(at, "%s 강화 Lv.%d" % [_track_name(tk),
+							int(track_lv[tk]) + 1], C_GREEN.lightened(0.2), 12, 1.3)
 		"cons":
 			var cp := GameData.consumables()
 			for i in v:
@@ -11425,6 +11438,15 @@ func _runinfo_back_rect() -> Rect2:
 # 없고, 연출 중에는 입력을 안 받는다 — _can_rack_move 가 그 둘을 이미
 # 정확히 가르므로 같은 판정을 쓴다. 정산 화면(CLEAR)은 그 자체가 명세라
 # 덮을 이유가 없다.
+# 트랙 ID 를 사람이 읽는 이름으로. areas.csv 가 이미 이름을 들고 있다 —
+# 불은 아우터·이너가 트랙을 나눠 쓰므로 먼저 만나는 이름으로 답한다.
+func _track_name(tk: int) -> String:
+	for a in GameData.areas_all():
+		if int(a.get("track", 0)) == tk:
+			return String(a.get("n", "?"))
+	return "트랙"
+
+
 func _runinfo_ok() -> bool:
 	return _can_rack_move() or state == S.CLEAR
 
@@ -11507,15 +11529,20 @@ func _ri_tracks(p: Rect2) -> void:
 
 	for a in GameData.areas_all():
 		var tk: int = int(a.get("track", 0))
-		var lv: int = int(track_lv.get(tk, 1)) if tk != 0 else 0
+		# track_lv 는 **강화 횟수**다 — 0 이 "아직 안 올렸다" 이고 점수 쪽도
+		# 그 규약으로 읽는다(tlv > 0 일 때만 보너스를 더한다). 기본값을 1 로
+		# 읽었더니 두 가지가 한꺼번에 틀렸다: 안 올렸는데 1레벨 보너스가
+		# 붙어 보였고, 한 번 올려도 화면의 수가 안 바뀌었다.
+		var lv: int = int(track_lv.get(tk, 0))
 		var n: int = int(track_hits.get(tk, 0))
 		var b := GameData.track_bonus(tk, lv) if tk != 0 else {"s": 0, "m": 0}
 		var sc: int = int(a.get("base", 0)) + int(b.s)
 		var ml: int = int(a.get("mult", 1)) + int(b.m)
 
+		# 화면에는 lv+1 로 쓴다 — 안 올린 트랙이 Lv.1 로 읽히는 편이 익숙하다.
 		draw_string(font, Vector2(x + 4.0, y + 8.0),
-				("Lv.%d" % lv) if tk != 0 else "—", HORIZONTAL_ALIGNMENT_LEFT, -1, 10,
-				C_GREEN.lightened(0.2) if lv > 1 else C_DIM)
+				("Lv.%d" % (lv + 1)) if tk != 0 else "—", HORIZONTAL_ALIGNMENT_LEFT,
+				-1, 10, C_GREEN.lightened(0.2) if lv > 0 else C_DIM)
 		draw_string(font, Vector2(x + 46.0, y + 8.0), String(a.get("n", "?")),
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 10, C_TXT)
 		# 점수는 판 숫자를 곱하는 자리라 표에 값이 없는 트랙이 있다(싱글).
