@@ -53,12 +53,11 @@ func _go() -> void:
 	print("던진 뒤 vu=", it.vu)
 
 	var cum := 0
-	for step in [3, 4, 5, 6, 8, 10, 14, 20, 30]:
+	for step in [6, 20]:
 		for k in step:
 			g._drop_update(1.0 / 60.0)
 		cum += step
 		g.queue_redraw()
-		await process_frame
 		await process_frame
 		var img := root.get_texture().get_image()
 		img.save_png("res://shots/flip_%03d.png" % cum)

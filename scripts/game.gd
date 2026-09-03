@@ -5999,11 +5999,11 @@ const DROP := {
 	#  1/160 은 3.6면px(화면 2.2), 1/60 은 9.6면px(화면 5.9) — 반발이 펠트 위
 	#  공중에서 일어나기 시작한다.
 	"g": 1400.0, "sub": 0.00625, "max_d": 0.033, "sub_max": 8,
-	"candy_roll": 0.145,
-	#  사탕이 미끄러진 거리(면px) 당 도는 각(rad). 3D 전용 — 다른 물체의
-	#  회전(psi/om)은 그대로 두고 사탕만 이 축을 더 쓴다. 새 toss_cap
-	#  260 의 최대 미끄럼 65면px 에서 65*0.145 ≈ 9.4rad(1.5바퀴) — 세게
-	#  던지면 눈에 보이게 굴러 넘어가고, 살짝 밀면 그만큼만 기운다.
+	"tumble_rate": 0.145,
+	#  미끄러진 거리(면px) 당 도는 각(rad). 3D 로 세워 그리는 물체(사탕·
+	#  다트) 전용이다 — 다른 물체가 쓰는 psi/om 회전은 그대로 둔다. 새
+	#  toss_cap 260 의 최대 미끄럼 65면px 에서 65*0.145 ≈ 9.4rad(1.5바퀴) —
+	#  세게 던지면 눈에 보이게 굴러 넘어가고, 살짝 밀면 그만큼만 기운다.
 
 	# ── 반발 · 마찰 ──────────────────────────────────
 	"e_item": 0.34, "e_mod": 0.16, "e_dart": 0.24,
@@ -6438,13 +6438,13 @@ func _drop_extras(d: float) -> void:
 		it.wv -= it.wob * DROP.wob_k * d
 		it.wv *= exp(-DROP.wob_c * d)
 		it.wob = clampf(it.wob + it.wv * d, -1.0, 1.0)
-		# 사탕은 미끄러진 거리만큼 구른다 — "굴러서 뒤집힌다". psi/om 은
+		# 사탕·다트는 미끄러진 거리만큼 구른다 — "굴러서 뒤집힌다". psi/om 은
 		# 다른 물체와 공유하는 회전(a_spin 30 이 0.09초 안에 죽인다)이라
-		# 여기 쓰면 표가 안 난다. 이 축은 사탕 전용이고 속도가 그대로
-		# 회전 속도다 — 세게 던져 멀리 밀릴수록 더 많이 구른다.
-		if i < stock.size() and stock[i].type == "cons":
-			var csp: float = Vector2(it.vu, it.vw).length()
-			it.roll = it.get("roll", 0.0) + csp * DROP.candy_roll * d
+		# 3D 로 세워 그리는 물체에 쓰면 표가 안 난다. 이 축은 그 둘 전용이고
+		# 속도가 그대로 회전 속도다 — 세게 던져 멀리 밀릴수록 더 많이 구른다.
+		if i < stock.size() and (stock[i].type == "cons" or stock[i].type == "dart"):
+			var tsp: float = Vector2(it.vu, it.vw).length()
+			it.roll = it.get("roll", 0.0) + tsp * DROP.tumble_rate * d
 		if not it.held:
 			it.mark = Vector2(it.u, it.w)
 		# 든 물건은 눌린다 — 들리지 않는 노선이라 이것이 "잡았다" 의 전부다.
@@ -6671,10 +6671,25 @@ func _obj_paint(it: Dictionary, s: Dictionary, dim: float) -> void:
 			_icon_mod(c - Vector2(0.0, TBL.chip_t * TBL.tall),
 					TBL.mod_r, s.d.id, dim, TBL.flat)
 		_:
-			# sh=false — 내장 그림자는 고정 오프셋이라 낙하 중 하늘을 같이 난다
-			var de := _dart_e(it)
-			_icon_dart(c, TBL.dart_l * de.length(), s.d.id, dim,
-					de.angle() + 1.0304, 1.0 - dim * 0.5, false)
+			# 다트 — 사탕과 같은 어법이다. 얼릴 조건도 같다: 잠든 뒤에도
+			# wob·구름 관성이 몇 프레임 더 산다.
+			var dlive: bool = not (bool(it.get("sleep", false))
+					and absf(float(it.get("wob", 0.0))) < 0.02
+					and absf(float(it.get("wv", 0.0))) < 0.02
+					and Vector2(it.get("vu", 0.0), it.get("vw", 0.0)).length() < 1.0)
+			var dtex := _dart_tex_live(String(s.d.id), float(it.get("roll", 0.0)),
+					float(it.get("wob", 0.0)), dlive)
+			if dtex != null:
+				var dh := 26.0
+				var dw := dh * float(DART_VP.x) / float(DART_VP.y)
+				draw_texture_rect(dtex, Rect2(c - Vector2(dw, dh) * 0.5, Vector2(dw, dh)),
+						false, Color(1.0 - dim * 0.3, 1.0 - dim * 0.3, 1.0 - dim * 0.3,
+								1.0 - dim))
+			else:
+				# sh=false — 내장 그림자는 고정 오프셋이라 낙하 중 하늘을 같이 난다
+				var de := _dart_e(it)
+				_icon_dart(c, TBL.dart_l * de.length(), s.d.id, dim,
+						de.angle() + 1.0304, 1.0 - dim * 0.5, false)
 
 
 # 펠트에 누운 동전. 동전 슬롯의 draw_sticker(정원)은 안 고친다 — 같은 물건의
@@ -9989,6 +10004,83 @@ func _dart3_col(id: String) -> Color:
 		"prc": return C_CHIP.lightened(0.25)
 		"mag": return C_MULT.lightened(0.25)
 	return C_TXT
+
+
+# ── 테이블의 다트 — 사탕과 같은 어법 ─────────────────
+# 판에 꽂힌 다트(_dart3_meshes)와 재질만 같고 무대는 따로 쓴다 — 상점
+# 물건은 한 번에 한 자리(shop_darts=1)뿐이라 사탕처럼 id 하나에 뷰포트
+# 하나면 된다.
+const DART_VP := Vector2i(46, 30)
+
+var dart_live := {}      # id → {"vp":SubViewport,"mi":MeshInstance3D}
+
+
+func _dart_build(id: String) -> Dictionary:
+	var vp := SubViewport.new()
+	vp.size = DART_VP
+	vp.own_world_3d = true
+	vp.transparent_bg = true
+	vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+	vp.msaa_3d = Viewport.MSAA_DISABLED
+	vp.gui_disable_input = true
+	add_child(vp)
+
+	var mi := MeshInstance3D.new()
+	mi.mesh = _mesh_dart3m()
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = _dart3_col(id)
+	mat.roughness = 0.4
+	mat.specular = 0.35
+	mi.material_override = mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	# 회전은 _dart_tex_live 가 매 프레임 통째로 다시 정한다 — 여기서
+	# 정해 봐야 그쪽이 바로 덮어쓴다. 기본 자세도 그 함수에 있다.
+	vp.add_child(mi)
+
+	var lt := DirectionalLight3D.new()
+	lt.rotation_degrees = Vector3(-46.0, -28.0, 0.0)
+	lt.light_energy = 1.5
+	vp.add_child(lt)
+
+	var we := WorldEnvironment.new()
+	var env := Environment.new()
+	env.background_mode = Environment.BG_CLEAR_COLOR
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color(0.72, 0.70, 0.80)
+	env.ambient_light_energy = 0.9
+	we.environment = env
+	vp.add_child(we)
+
+	var cam := Camera3D.new()
+	cam.projection = Camera3D.PROJECTION_ORTHOGONAL
+	cam.keep_aspect = Camera3D.KEEP_HEIGHT
+	cam.size = 0.72        # 길이 1.0 짜리가 대각으로 누우면 이만큼 필요하다
+	cam.near = 0.01
+	cam.far = 10.0
+	vp.add_child(cam)
+	cam.global_position = Vector3(0.0, 0.0, 3.0)
+	cam.look_at(Vector3.ZERO, Vector3.UP)
+	return {"vp": vp, "mi": mi}
+
+
+func _dart_tex_live(id: String, roll: float, wob: float, live: bool) -> Texture2D:
+	if not dart_live.has(id):
+		if not _has_renderer():
+			return null
+		dart_live[id] = _dart_build(id)
+	var e: Dictionary = dart_live[id]
+	if not is_instance_valid(e.vp):
+		dart_live.erase(id)
+		return null
+	var mi: MeshInstance3D = e.mi
+	# 눕힌 기본 자세(66°) 위에 구름을 얹는다 — 사탕과 같은 두 축 배합.
+	mi.rotation.x = deg_to_rad(66.0) + roll
+	mi.rotation.y = deg_to_rad(-18.0) + roll * 0.37
+	mi.rotation.z = clampf(wob * 2.2, -0.5, 0.5)
+	var vp: SubViewport = e.vp
+	vp.render_target_update_mode = (
+			SubViewport.UPDATE_ALWAYS if live else SubViewport.UPDATE_ONCE)
+	return vp.get_texture()
 
 
 # 자루 한 벌의 메시. **두 무대가 같이 쓴다** — 통(새 런 화면)과 판에
