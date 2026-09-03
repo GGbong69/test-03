@@ -33,6 +33,8 @@ except Exception:
 # 왼쪽이 지금 본문에 적힌 말, 오른쪽이 화면에 나갈 말이다.
 # 이름을 갈 때는 오른쪽만 고친다. 긴 말부터 바꾸므로 겹쳐도 안전하다.
 TERMS = {
+    "영역 강화 트랙": "영역 강화 트랙",   # 「트랙」 안의 「랙」을 막는 파수꾼
+    "트랙": "트랙",
     "스티커 랙": "스티커 칸",
     "빈 랙": "빈 스티커 칸",
     "랙": "스티커 칸",
@@ -42,7 +44,6 @@ TERMS = {
     "딱지": "딱지",
     "설비": "설비",
     "개조": "개조",
-    "랙": "랙",
     "칩": "칩",
     "배수": "배수",
     "다트": "다트",
@@ -53,7 +54,9 @@ TERMS = {
     "소비 아이템": "소비 아이템",
     "스타트 팩": "스타트 팩",
 }
-_SUBS = {k: v for k, v in TERMS.items() if k != v}
+# 같은 말로 가는 짝도 남긴다 — 「트랙」처럼 긴 말이 먼저 걸려야
+# 그 안의 짧은 말(「랙」)이 안 바뀐다.
+_SUBS = dict(TERMS)
 _PAT = re.compile("|".join(sorted((re.escape(k) for k in _SUBS), key=len, reverse=True)))     if _SUBS else None
 
 
@@ -677,21 +680,35 @@ def cover(prs):
     text(slide, 11.9, 7.02, 0.68, 0.22, "01", size=SZ_SMALL, color=C_MUTE, align=PP_ALIGN.RIGHT)
 
 
-def toc(prs, sections):
-    slide = new_slide(prs)
+def toc(slide_pres, entries):
+    """목차. 꾸미지 않는다 — 쪽 번호와 제목만 두 단으로 죽 적는다.
+    한 단이 글상자 하나다."""
+    slide = new_slide(slide_pres)
     chrome(slide, "목차", 2)
-    colw = (W - 0.55) / 2
-    half = (len(sections) + 1) // 2
-    for i, (no, name, span, keys) in enumerate(sections):
-        col, idx = (0, i) if i < half else (1, i - half)
-        x = L + col * (colw + 0.55)
-        y = Y_BODY + 0.10 + idx * 1.16
-        text(slide, x, y, 0.60, 0.33, no, size=SZ_HEAD, font=F_BOLD, color=C_ACC)
-        text(slide, x + 0.71, y, colw - 0.71, 0.33, "%s  %s" % (name, span),
-             size=SZ_HEAD, font=F_SEMI, color=C_TEXT)
-        text(slide, x + 0.71, y + 0.40, colw - 0.71, 0.62, keys, size=SZ_BODY, color=C_MUTE)
-        line(slide, x + 0.71, y + 1.02, x + colw, y + 1.02)
-
+    half = (len(entries) + 1) // 2
+    cols = [entries[:half], entries[half:]]
+    for ci, col in enumerate(cols):
+        box = slide.shapes.add_textbox(Inches(L + ci * 6.05), Inches(Y_BODY),
+                                       Inches(5.6), Inches(5.4))
+        tf = _tf(box)
+        first = True
+        for kind, no, name in col:
+            para = tf.paragraphs[0] if first else tf.add_paragraph()
+            first = False
+            para.line_spacing = 1.15
+            if kind == "chapter":
+                if not first:
+                    para.space_before = Pt(7)
+                r = para.add_run()
+                r.text = T(name)
+                _apply_font(r, F_SEMI, SZ_HEAD - 1.0, C_ACC)
+            else:
+                r = para.add_run()
+                r.text = "%s   " % no
+                _apply_font(r, F_BODY, SZ_BODY, C_MUTE)
+                r2 = para.add_run()
+                r2.text = T(name)
+                _apply_font(r2, F_BODY, SZ_BODY, C_TEXT)
 
 # ── 부록: KB 익스포트를 그대로 표로 ──────────────────────────────────
 # docs/export/hightone_kb.json 은 scripts/tools/export_kb.py 가 CSV + data.gd 에서
@@ -853,41 +870,43 @@ SECTIONS = [
 ORDER = ["용어", "기획 의도", "시스템", "재미 요소", "보상 요소", "UI/UX"]
 
 
-def _run(pages, spans=None):
+def _run(pages, toc_rows=None):
     """덱을 한 번 짓는다. spans 가 없으면 목차의 쪽 범위를 비워 둔다."""
     prs = Presentation()
     prs.slide_width = Inches(13.3333)
     prs.slide_height = Inches(7.5)
 
     cover(prs)
-    secs = [(s[0], s[1], ("%d–%d" % spans[s[1]]) if spans and s[1] in spans else "", s[3])
-            for s in SECTIONS]
-    toc(prs, secs)
+    toc(prs, toc_rows or [])
 
-    marks, page = {}, 3
+    rows, page = [], 3
     for name in ORDER:
-        start = page
-        for p in [q for q in pages if q.get("chapter") == name]:
+        got = [q for q in pages if q.get("chapter") == name]
+        if got:
+            rows.append(("chapter", "", name))
+        for p in got:
+            rows.append(("page", "%02d" % page, p["title"]))
             page = content_slide(prs, page, p["chapter"], p["title"], p.get("lead", ""),
                                  p.get("blocks", []), p.get("related", []))
-        if page > start:
-            marks[name] = (start, page - 1)
 
     start = page
     page, n_stick = appendix_stickers(prs, page)
     page = appendix_tables(prs, page)
-    marks["데이터"] = (start, page - 1)
-    return prs, marks, page - 1, n_stick
+    rows.append(("chapter", "", "데이터"))
+    rows.append(("page", "%02d" % start,
+                 "스티커 전종 · 다트 · 개조 · 제약 · 설비 · 리그 · 튜닝  (%d–%d)"
+                 % (start, page - 1)))
+    return prs, rows, page - 1, n_stick
 
 
 def build(pages_json, out_path):
     with open(pages_json, encoding="utf-8") as fh:
         pages = json.load(fh)["pages"]
 
-    _, marks, _, _ = _run(pages)            # 1차 — 쪽 범위를 잰다
+    _, rows, _, _ = _run(pages)             # 1차 — 쪽 번호를 잰다
     OVERFLOW.clear()
     CUTS.clear()
-    prs, _, total, n_stick = _run(pages, marks)   # 2차 — 목차를 채워 짓는다
+    prs, _, total, n_stick = _run(pages, rows)    # 2차 — 목차를 채워 짓는다
     prs.save(out_path)
     return total, n_stick
 
