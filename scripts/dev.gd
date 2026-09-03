@@ -197,7 +197,7 @@ static func _rows(g: Node) -> Array:
 						"n": GameData.items().size()},
 				{"n1": "동전 무작위", "t": "act", "a": "item_rand"},
 				{"n1": "동전 슬롯 비우기", "t": "act", "a": "item_clear"},
-				{"n1": "소비 주기", "t": "list", "k": "cons",
+				{"n1": "사탕 주기", "t": "list", "k": "cons",
 						"n": GameData.consumables().size()},
 				{"n1": "보드 확장 달기", "t": "list", "k": "mod",
 						"n": GameData.mods().size()},
@@ -405,7 +405,7 @@ static func _run(g: Node, e: Dictionary) -> void:
 		"cons":
 			if not rows.is_empty() and g.cons.size() < GameData.cons_slots():
 				g.cons.append(rows[i % rows.size()])
-				_say("소비 %d/%d" % [g.cons.size(), GameData.cons_slots()])
+				_say("사탕 %d/%d" % [g.cons.size(), GameData.cons_slots()])
 		"mod":
 			if not rows.is_empty():
 				var mid := String(rows[i % rows.size()].id)

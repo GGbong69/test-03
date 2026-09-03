@@ -119,7 +119,7 @@ func _initialize() -> void:
 			pick = c
 			break
 	if pick.is_empty():
-		_say(false, "사탕이 트랙을 올린다", "area 갈래 소비가 없다")
+		_say(false, "사탕이 트랙을 올린다", "area 갈래 사탕가 없다")
 	else:
 		g.cons = [pick]
 		var before: int = int(g.track_lv.get(pick.track, 0))

@@ -68,7 +68,7 @@ CODE = {
     "sell_min": "판매가 하한", "free_rerolls": "무료 리롤",
     "reroll_base": "리롤 첫값", "reroll_step": "리롤 증가폭",
     "max_items": "동전 슬롯", "darts_base": "기본 다트 수",
-    "cons_slots": "소비 칸", "curve_first": "첫 판 목표", "curve_last": "마지막 판 목표",
+    "cons_slots": "사탕 칸", "curve_first": "첫 판 목표", "curve_last": "마지막 판 목표",
 }
 
 # 같은 말로 가는 짝도 남긴다 — 「트랙」처럼 긴 말이 먼저 걸려야
@@ -887,7 +887,7 @@ def appendix_tables(prs, page):
                      "×%s" % num(s_["shop_cost_mul"]), num(s_["perish"], "0"),
                      num(s_["rent"], "0")] for s_ in st]},
           {"type": "table", "rh": 0.22, "size": 10.0, "heading": "다트통",
-           "cols": ["팩", "다트", "시작 골드", "스티커 칸", "소비 칸", "대가와 변화"],
+           "cols": ["팩", "다트", "시작 골드", "스티커 칸", "사탕 칸", "대가와 변화"],
            "w": [1.0, 0.55, 0.7, 0.7, 0.6, 3.4],
            "rows": [[q["name"], num(q["darts_add"], "0"), num(q["gold_add"], "0"),
                      num(q["item_slots"]), num(q["cons_slots"]),

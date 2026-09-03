@@ -53,7 +53,7 @@ func _try(label: String) -> void:
 	_press(m)
 	_release(m)
 	var after: int = int(g.track_lv.get(tk, 0))
-	print("  %-10s  칸 좌표 %s · 손 상태 %d · 트랙 %d→%d · 남은 소비 %d  →  %s"
+	print("  %-10s  칸 좌표 %s · 손 상태 %d · 트랙 %d→%d · 남은 사탕 %d  →  %s"
 			% [label, str(m), g.hand_st, before, after, g.cons.size(),
 			"쓰인다" if after > before else "**안 쓰인다**"])
 	g.cons.clear()

@@ -54,5 +54,5 @@ func _run() -> void:
 	await process_frame
 	await process_frame
 	root.get_texture().get_image().save_png("res://shots/rack6.png")
-	print("저장: rack6.png  소비 %d칸" % g.cons.size())
+	print("저장: rack6.png  사탕 %d칸" % g.cons.size())
 	quit()
