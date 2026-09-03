@@ -11301,11 +11301,10 @@ const MUS := {
 	"game":   "res://assets/music/game.mp3",    # 판 위 — 작은 판·큰 판
 	"boss":   "res://assets/music/boss.mp3",    # 판 위 — 보스 판
 }
-#  음악의 기준 크기. -8 로 뒀더니 안 들린다는 제보가 왔다 — 사용자 음량이
-#  0.35 면 버스가 이미 -9.1dB 라 합이 -17dB(진폭 14%)까지 내려간다.
-#  깔개는 계속 울리는 소리라 효과음보다 낮아야 하지만, 그 여유는 -3 이면
-#  충분하다. 여기서 더 낮추려면 사용자 음량이 낮을 때를 같이 재야 한다.
-const MUS_DB := -3.0
+#  음악의 기준 크기. 낮출 이유가 없어졌다 — 깔개를 효과음보다 낮게 두는
+#  일은 이제 버스가 따로 맡고(사용자가 직접 정한다), 곡 자체가 조용해서
+#  여기서 더 깎으면 안 들린다. 0 으로 두고 큰 조절은 컴프레서가 한다.
+const MUS_DB := 0.0
 
 const MUS_FADE := 1.4     # 겹쳐 넘기는 시간(초)
 
@@ -11395,6 +11394,7 @@ func _bus_setup() -> void:
 		AudioServer.add_bus(i)
 		AudioServer.set_bus_name(i, nm)
 		AudioServer.set_bus_send(i, "Master")
+
 
 
 func _apply_vol() -> void:
