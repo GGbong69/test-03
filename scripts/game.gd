@@ -3575,8 +3575,6 @@ func _draw() -> void:
 
 	# 화면이 바뀌어도 같은 자리에 남는 것만 판이다 — 그래서 스크림 뒤에 그린다.
 	_hud_draw()
-	# 든 스티커는 랙 판 위다. HUD 앞에 그리면 집어 든 그 자리에서 판에 덮인다.
-	_hold_rack_draw()
 	if not swap_live:
 		_tip_draw(sh)
 	draw_set_transform(Vector2.ZERO)
@@ -7446,27 +7444,14 @@ func _hand_press(m: Vector2) -> bool:
 			hand_m = m
 			hand_far = 0.0
 			return true
-# 랙의 스티커 — **상점 잠금 위**다. 순서 바꾸기는 판 위에서도 돌아야
-# 하므로 화면을 안 가린다(_can_rack_move). 훔칠 걱정이 없는 것은 y 가
-# 갈려 있기 때문이다 — 랙 y[20,64](상단바가 숨으면 [4,48]) 아래로
-# 창구·버튼 y[112,334], 매물 최상단 99.3, 그리고 조준이 잠기는 반경
-# BC.y - 98*1.22 = 76.4 가 전부 내려가 있다. 누른 자리가 랙 안이면
-# 조준·구매·창구 어느 것도 그 클릭을 원한 적이 없다.
-if _can_rack_move():
-	for k in mini(owned.size(), GameData.max_items()):
-		if _slot_rect(k).has_point(m):
-			hand_st = H.ARMED
-			hand_src = 1
-			hand_i = k
-			hand_p0 = m
-			hand_m = m
-			hand_far = 0.0
-			return true
-
-# 판 중의 랙 순서 변경. 상점 가지는 아래에 그대로 두었다 — 거기서는
-# 창구·낙하·버튼을 먼저 보고 나서 집어야 한다.
-if state != S.SHOP and _hand_live() and _rack_grab(m):
-	return true
+	# 랙의 스티커 — **상점 잠금 위**다. 순서 바꾸기는 판 위에서도 돌아야
+	# 하므로 화면을 안 가린다(_can_rack_move). 훔칠 걱정이 없는 것은 y 가
+	# 갈려 있기 때문이다 — 랙 y[20,64](상단바가 숨으면 [4,48]) 아래로
+	# 창구·버튼 y[112,334], 매물 최상단 99.3, 그리고 조준이 잠기는 반경
+	# BC.y - 98*1.22 = 76.4 가 전부 내려가 있다. 누른 자리가 랙 안이면
+	# 조준·구매·창구 어느 것도 그 클릭을 원한 적이 없다.
+	if _can_rack_move() and _rack_grab(m):
+		return true
 	if state != S.SHOP or sweep_live:
 		return false
 	# 창구 — 구매·판매 확정은 눌렀다 **뗄 때** 실행한다(확정 규칙:
@@ -7486,11 +7471,8 @@ if state != S.SHOP and _hand_live() and _rack_grab(m):
 		return false
 	if _reroll_rect().has_point(m) or _next_rect().has_point(m):
 		return false
-# 랙의 스티커도 집는다 — 왼쪽 창구로 밀면 판다. 매대보다 먼저 보는 이유는
-# y 로 갈려 있어(매물 최상단 99.3 > 랙 하단 58) 겹칠 수 없기 때문이 아니라,
-# 겹치게 되는 날 무엇이 이기는지를 여기 한 줄로 정해 두기 위해서다.
-if _can_sell() and _rack_grab(m):
-	return true
+	# 랙은 위에서 이미 집었다. 여기 남은 것은 빈 칸과 판 여백이다 —
+	# 삼켜서 매대 클릭으로 안 새게 한다.
 	if _panel_rect().has_point(m):
 		return false
 	var i := _shop_hit(m)
@@ -7703,20 +7685,20 @@ func _hand_update(d: float) -> void:
 		buy_sel = -1
 	if hand_st == H.NONE:
 		return
-# 쥔 것이 **어느 배열의** 몇째인가. 넷 다 drop 크기로 재고 있었다 —
-# 소비 슬롯은 cons 의 색인이고 창구는 배열이 아니라 구역 번호다.
-# 매대가 다 팔려 drop 이 비면 소비도 창구도 손에서 놓쳐 버렸다.
-var n_src: int = drop.size()
-match hand_src:
-	1: n_src = owned.size()
-	2: n_src = 2                          # Z_SELL · Z_BUY
-	4: n_src = cons.size()
-# 사는 화면도 쥔 것에 따라 다르다. 매물(0)과 창구(2)는 상점의 물건이라
-# 상점을 벗어나면 손을 놓는다. 랙(1)과 소비(4)는 판 중에도 산다.
-var live := _hand_live()
-if hand_src == 0 or hand_src == 2:
-	live = state == S.SHOP and not sweep_live
-if not live or hand_i < 0 or hand_i >= n_src:
+	# 쥔 것이 **어느 배열의** 몇째인가. 넷 다 drop 크기로 재고 있었다 —
+	# 소비 슬롯은 cons 의 색인이고 창구는 배열이 아니라 구역 번호다.
+	# 매대가 다 팔려 drop 이 비면 소비도 창구도 손에서 놓쳐 버렸다.
+	var n_src: int = drop.size()
+	match hand_src:
+		1: n_src = owned.size()
+		2: n_src = 2                          # Z_SELL · Z_BUY
+		4: n_src = cons.size()
+	# 사는 화면도 쥔 것에 따라 다르다. 매물(0)과 창구(2)는 상점의 물건이라
+	# 상점을 벗어나면 손을 놓는다. 랙(1)과 소비(4)는 판 중에도 산다.
+	var live := _hand_live()
+	if hand_src == 0 or hand_src == 2:
+		live = state == S.SHOP and not sweep_live
+	if not live or hand_i < 0 or hand_i >= n_src:
 		_hand_abort()
 		return
 	# 창 밖에서 떼어 released 를 못 받은 경우의 안전망
@@ -7727,12 +7709,12 @@ if not live or hand_i < 0 or hand_i >= n_src:
 		return
 
 	# 래치는 히스테리시스로 건다 — 경계에서 소리와 창구 얼굴이 연타되지 않는다.
-# 창구는 상점에만 있다. 판 중에 랙 스티커를 끌 때 이것을 걸면 없는 창구의
-# 소리가 나고, 뗄 때 "오른쪽은 사는 창구다" 가 뜬다.
-var pad: float = HAND.latch_gap if hand_zone >= 0 else 0.0
-var z := -1
-if _can_sell():
-	z = _chute_at(hand_m, pad)
+	# 창구는 상점에만 있다. 판 중에 랙 스티커를 끌 때 이것을 걸면 없는 창구의
+	# 소리가 나고, 뗄 때 "오른쪽은 사는 창구다" 가 뜬다.
+	var pad: float = HAND.latch_gap if hand_zone >= 0 else 0.0
+	var z := -1
+	if _can_sell():
+		z = _chute_at(hand_m, pad)
 	if z >= 0 and z != hand_zone:
 		_sfx("chute_enter")
 	hand_zone = z
@@ -7912,30 +7894,10 @@ func _pay_take(i: int) -> void:
 # 버튼(_btn)이 아니라 판의 어법이다 — 누르는 것이 아니라 놓는 자리다.
 # 손에 든 것 하나만 따로, 앞치마·버튼 다음에 그린다. _goods_draw 는 창구보다
 # 먼저 나가므로 창구까지 밀어 넣은 물건이 거기서는 덮인다.
-# 손에 든 랙 스티커. **HUD 뒤에** 그린다 — _hold_draw 는 테이블 층이고
-# _draw 에서 _hud_draw 보다 **앞**에 온다. 랙 판이 화면 위쪽에 붙어 있어서
-# 거기 그리면 집어 든 순간 판 밑으로 숨는다. 집는 자리가 곧 가려지는 자리라,
-# 끌어도 아무것도 안 따라오는 것으로 보였다.
-#
-# 상점 전용도 아니다. _hold_draw 는 _draw_shop 안에서만 불리는데 순서 변경은
-# 판 중과 고르는 화면에서도 되므로, 그 화면들에서는 끌리는 그림이 통째로
-# 없었다. _draw 에서 한 번 부르면 모든 화면이 같이 산다.
-func _hold_rack_draw() -> void:
-	if hand_st != H.CARRY or hand_src != 1:
-		return
-	if hand_i < 0 or hand_i >= owned.size():
-		return
-	# 랙에서 뗀 스티커. 물리 물체가 아니라 커서 밑의 그림뿐이다.
-	_e_ring_w(hand_m, PANEL.r + 4.0, (PANEL.r + 4.0) * TBL.flat, 1.0,
-			Color(C_ACC if hand_zone == Z_SELL else C_TXT, 0.55))
-	draw_item_sticker(hand_m, PANEL.r, owned[hand_i], 0.0, 0.0, 0.0, 12,
-			_peel_now())
-
-
 func _hold_draw() -> void:
-# 랙 스티커는 여기서 안 그린다 — _rack_hold_draw 가 판 위에서 맡는다.
-if hand_st != H.CARRY or hand_src != 0:
-	return
+	# 랙 스티커는 여기서 안 그린다 — _rack_hold_draw 가 판 위에서 맡는다.
+	if hand_st != H.CARRY or hand_src != 0:
+		return
 	if hand_i < 0 or hand_i >= drop.size():
 		return
 	var it: Dictionary = drop[hand_i]
