@@ -28,3 +28,6 @@
 
 # 파이썬 도구 부산물
 __pycache__/
+
+# Meshy 플러그인이 받아 오는 모델 — 게임에 들일 것만 따로 옮긴다
+/imported_models/
