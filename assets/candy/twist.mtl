@@ -1,0 +1,4 @@
+# twist — prep_candy.py 가 씀
+newmtl twist
+Kd 1.000 1.000 1.000
+map_Kd twist.jpg

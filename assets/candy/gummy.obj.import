@@ -1,0 +1,25 @@
+[remap]
+
+importer="wavefront_obj"
+importer_version=1
+type="Mesh"
+uid="uid://jpj545fmttyj"
+path="res://.godot/imported/gummy.obj-9722e30630daa8ed8093649276c1eaae.mesh"
+
+[deps]
+
+files=["res://.godot/imported/gummy.obj-9722e30630daa8ed8093649276c1eaae.mesh"]
+
+source_file="res://assets/candy/gummy.obj"
+dest_files=["res://.godot/imported/gummy.obj-9722e30630daa8ed8093649276c1eaae.mesh", "res://.godot/imported/gummy.obj-9722e30630daa8ed8093649276c1eaae.mesh"]
+
+[params]
+
+generate_tangents=true
+generate_lods=true
+generate_shadow_mesh=true
+generate_lightmap_uv2=false
+generate_lightmap_uv2_texel_size=0.2
+scale_mesh=Vector3(1, 1, 1)
+offset_mesh=Vector3(0, 0, 0)
+force_disable_mesh_compression=false
