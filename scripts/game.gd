@@ -3299,6 +3299,22 @@ func _mag_rect(i: int) -> Rect2:
 
 # 선반 자리. 왼쪽 벽 — 자금판(y 20~54) 아래, 판매 창구 이름표(y 128) 위다.
 # 테이블 물건은 펠트 위에 물리로 떨어지므로 이 사각과 영영 안 겹친다.
+# 상점 밖에서 고른 동전을 파는 버튼. 고른 것이 없거나 상점이면 빈 사각이다
+# (상점에는 창구가 있고, 두 자리를 같이 두면 같은 일에 문이 둘이 된다).
+#
+# 자리는 고른 칸 바로 아래다. 동전 슬롯 아래 y[64,76] 은 창구·버튼(112~)과
+# 매물 최상단(99.3)과 조준 잠금 반경(76.4) 어디에도 안 겹치는 띠다.
+func _sell_btn_rect() -> Rect2:
+	if state == S.SHOP or sell_sel < 0 or sell_sel >= owned.size():
+		return Rect2()
+	if not _can_sell():
+		return Rect2()
+	var cell := _slot_rect(sell_sel)
+	var w := 46.0
+	return Rect2(cell.get_center().x - w * 0.5, cell.position.y + cell.size.y + 1.0,
+			w, 13.0)
+
+
 func _reroll_rect() -> Rect2:
 	return Rect2(Vector2(32.0, 288.0), Vector2(152.0, 46.0))
 
@@ -4472,6 +4488,20 @@ func _panel_reset() -> void:
 	slot_hot.fill(0.0)
 
 
+# 동전 하나가 빠졌다. 스프링 셋도 같이 밀어낸다 — owned 와 인덱스를
+# 공유하므로, 안 밀면 뒤 동전이 앞 동전의 스프링을 물려받는다.
+# 통째로 0 으로 돌리는 길(_panel_reset)은 상점에서만 안전했다: 판 위에서는
+# 발동 스프링이 살아 있어 애니메이션이 그 자리에서 튄다. 이제 어디서든
+# 파므로 밀어내는 쪽이 맞다.
+func _panel_pull(i: int) -> void:
+	_panel_ensure()
+	if i < 0 or i >= slot_pop.size():
+		return
+	for arr in [slot_pop, slot_vel, slot_hot]:
+		arr.remove_at(i)
+		arr.append(0.0)
+
+
 func _panel_fire(i: int) -> void:
 	_panel_ensure()
 	if i < 0 or i >= slot_pop.size():
@@ -4888,6 +4918,22 @@ func _panel_draw() -> void:
 			# 로 읽혔다 — 발라트로도 빈 조커 칸에 아무것도 안 그린다.
 			# 칸이 몇인지는 카운터가 이미 말한다.
 			pass
+	_sell_btn_draw()
+
+
+# 상점 밖의 판매 버튼. 창구가 하는 말("판매 +N")을 그대로 한다.
+func _sell_btn_draw() -> void:
+	var r := _sell_btn_rect()
+	if r.size.x <= 0.0:
+		return
+	var hot: bool = hand_st == H.ARMED and hand_src == 5
+	var v := GameData.sell_value(owned[sell_sel])
+	draw_rect(Rect2(r.position + Vector2(1.0, 2.0), r.size), Color(0.0, 0.0, 0.0, 0.35))
+	draw_rect(r, C_PANEL.lightened(0.12 if hot else 0.02))
+	# 위쪽 한 획 — 리롤·다음 판 버튼과 같은 어법이라 "버튼"으로 읽힌다.
+	draw_rect(Rect2(r.position, Vector2(r.size.x, 1.0)), C_ACC if hot else C_GOLD)
+	draw_gold(r.position.x + r.size.x * 0.5, r.position.y + r.size.y - 3.0,
+			"+%d" % v, 9, C_GOLD)
 
 
 # 동전 i 의 고정 기울기 계수(-0.5~0.5). 인덱스로만 결정되므로 프레임 간 안 흔들린다.
@@ -4926,8 +4972,11 @@ func _panel_slot(i: int) -> void:
 	elif i == tip_slot and tip_a > 0.004:
 		draw_arc(c, r + 2.0, 0.0, TAU, 24, Color(C_ACC, tip_a), 1.0)
 
-	# 상점·스테이지에서는 동전 슬롯이 매물대가 된다 — 태그 자리에 회수액을 건다.
-	if _can_sell():
+	# 상점에서는 동전 슬롯이 매물대가 된다 — 태그 자리에 회수액을 건다.
+	# 상점 밖에서는 안 쓴다. 파는 값은 판매 버튼이 이미 말하고(_sell_btn_draw),
+	# 둘 다 켜면 같은 수가 두 번 붙는다. "평소엔 아무 글자도 안 쓴다"
+	# 규칙(아래 주석)이 사는 자리도 그래서 여기다.
+	if _can_sell() and state == S.SHOP:
 		draw_gold(cell.get_center().x, cell.position.y + cell.size.y - 3.0,
 				str(GameData.sell_value(it)), 9,
 				C_ACC if sel else C_GOLD.darkened(0.30))
@@ -5014,10 +5063,14 @@ var stage_t := 0.0              # 카드가 깔리는 경과. _open_stage 에서
 
 
 func _can_sell() -> bool:
-	# 상점에서만 판다. 스테이지는 창구에 셔터가 내려 있고, 파는 자리가
-	# 창구 하나뿐이므로 창구가 없는 화면에서는 팔 방법도 없다.
-	# (R8 예외는 같이 사라졌다 — 스테이지에서 못 파니 따질 일이 없다.)
-	return state == S.SHOP
+	# 어디서든 판다. 파는 자리가 창구 하나뿐이라 상점 전용이었는데,
+	# 그러면 판에 서고 나서는 자기 정산식을 줄일 수 없다 — 순서는
+	# 아무 때나 바꾸는데(_can_rack_move) 빼는 것만 못하는 건 어긋난다.
+	# 조커를 아무 때나 파는 그 문법으로 맞춘다.
+	#
+	# 창구는 상점에만 있으므로 상점 밖에서는 **고른 동전 아래의 판매
+	# 버튼**이 그 일을 한다(_sell_btn_rect). 두 자리가 같은 _sell 을 부른다.
+	return _can_rack_move()
 
 
 # 동전 슬롯 순서를 지금 바꿀 수 있는가. **파는 것과 갈라 둔다.** 파는 자리는 창구
@@ -5065,14 +5118,16 @@ func _sell(i: int) -> void:
 	Save.bump("gold_earned", v)
 	owned.remove_at(i)
 	sell_sel = -1
-	# sealed 는 owned 의 인덱스다. 판매는 SHOP/STAGE 에서만 일어나고 두 화면
-	# 모두 진입할 때 -1 로 지우므로 이미 -1 이지만, 인덱스가 밀린 뒤에 남아
-	# 있으면 엉뚱한 동전이 봉인으로 보인다. 여기서도 못 박는다.
-	sealed = -1
-	# slot_pop/slot_vel/slot_hot 은 owned 와 인덱스를 공유하고 _panel_ensure 는
-	# 크기만 맞출 뿐 내용을 안 옮긴다. 이 두 화면에서는 스프링이 전부 정지
-	# 상태라 0 으로 돌리는 것이 옮기는 것과 같은 결과이고 더 안전하다.
-	_panel_reset()
+	# sealed 는 owned 의 인덱스다. 이제 판 위에서도 파므로 살아 있는 값일
+	# 수 있다 — 지우지 말고 **같이 밀어야** 봉인이 같은 동전에 남는다.
+	# 판 것이 봉인이었으면 그때만 지운다.
+	if sealed == i:
+		sealed = -1
+	elif sealed > i:
+		sealed -= 1
+	# slot_pop/slot_vel/slot_hot 도 owned 와 인덱스를 공유한다. 같이 밀어야
+	# 뒤 동전이 앞 동전의 스프링을 물려받지 않는다.
+	_panel_pull(i)
 	pop(at + Vector2(0.0, -14.0), "+%d" % v, C_GOLD, 15, 0.8)
 	_sfx("sell")
 
@@ -7830,6 +7885,17 @@ func _hand_press(m: Vector2) -> bool:
 			hand_m = m
 			hand_far = 0.0
 			return true
+	# 판매 버튼 — 상점 밖에서 파는 유일한 자리다. 동전 슬롯 잡기보다 먼저
+	# 본다. 확정은 **뗄 때**고 끌고 나가면 취소다 — 창구·사탕 칸과 같은
+	# 문법이라 실수로 파는 경로가 없다.
+	if _sell_btn_rect().has_point(m):
+		hand_st = H.ARMED
+		hand_src = 5
+		hand_i = sell_sel
+		hand_p0 = m
+		hand_m = m
+		hand_far = 0.0
+		return true
 	# 동전 슬롯의 동전 — **상점 잠금 위**다. 순서 바꾸기는 판 위에서도 돌아야
 	# 하므로 화면을 안 가린다(_can_rack_move). 훔칠 걱정이 없는 것은 y 가
 	# 갈려 있기 때문이다 — 동전 슬롯 y[20,64](상단바가 숨으면 [4,48]) 아래로
@@ -7931,7 +7997,11 @@ func _hand_release(m: Vector2) -> void:
 	hand_zone = -1
 	hand_src = 0
 	if not was_carry:                         # 안 움직였다 = 탭
-		if src == 2:
+		if src == 5:
+			# 뗄 때도 같은 버튼 안이어야 한다. 버튼의 문법 그대로다.
+			if _sell_btn_rect().has_point(m) and i >= 0 and i < owned.size():
+				_sell(i)
+		elif src == 2:
 			# 창구 확정 — 뗄 때도 같은 창구 안이어야 한다. 눌러 놓고 밖에서
 			# 떼면 취소다. 버튼의 문법 그대로다.
 			if _chute_at(m, 0.0) == i:
@@ -8080,8 +8150,10 @@ func _hand_update(d: float) -> void:
 		1: n_src = owned.size()
 		2: n_src = 2                          # Z_SELL · Z_BUY
 		4: n_src = cons.size()
+		5: n_src = owned.size()               # 판매 버튼도 owned 의 색인이다
 	# 사는 화면도 쥔 것에 따라 다르다. 매물(0)과 창구(2)는 상점의 물건이라
-	# 상점을 벗어나면 손을 놓는다. 동전 슬롯(1)과 사탕(4)는 판 중에도 산다.
+	# 상점을 벗어나면 손을 놓는다. 동전 슬롯(1)·사탕(4)·판매 버튼(5)은
+	# 판 중에도 산다.
 	var live := _hand_live()
 	if hand_src == 0 or hand_src == 2:
 		live = state == S.SHOP and not sweep_live
