@@ -11215,13 +11215,19 @@ const MUS := {
 	"game":   "res://assets/music/game.mp3",    # 판 위 — 작은 판·큰 판
 	"boss":   "res://assets/music/boss.mp3",    # 판 위 — 보스 판
 }
-const MUS_DB := -8.0      # 음악의 기준 크기. 효과음에 묻히지 않을 만큼만 낮다
+#  음악의 기준 크기. -8 로 뒀더니 안 들린다는 제보가 왔다 — 사용자 음량이
+#  0.35 면 버스가 이미 -9.1dB 라 합이 -17dB(진폭 14%)까지 내려간다.
+#  깔개는 계속 울리는 소리라 효과음보다 낮아야 하지만, 그 여유는 -3 이면
+#  충분하다. 여기서 더 낮추려면 사용자 음량이 낮을 때를 같이 재야 한다.
+const MUS_DB := -3.0
+
 const MUS_FADE := 1.4     # 겹쳐 넘기는 시간(초)
 
 var mus_pl := []          # AudioStreamPlayer 둘
 var mus_i := 0            # 지금 소리 내는 쪽
 var mus_key := ""         # 그쪽이 물고 있는 곡
 var mus_x := 1.0          # 넘김 진행도 0~1. 1 이면 넘김이 끝난 상태다
+var mus_warned := {}      # 못 읽은 곡을 한 번만 말하려고 기억한다
 
 
 # 지금 화면이 원하는 곡. 덮개 화면은 **뒤 화면을 따른다** — 잠깐 여는 판
@@ -11274,6 +11280,11 @@ func _mus_to(key: String) -> void:
 		return
 	var st: AudioStream = load(String(MUS[key]))
 	if st == null:
+		# 조용히 넘어가면 원인을 못 찾는다. 편집기가 새 파일을 아직 안
+		# 읽었을 때 이 자리가 무음의 유일한 출구다 — 한 번은 말하게 한다.
+		if not mus_warned.has(key):
+			mus_warned[key] = true
+			push_warning("음악을 못 읽었다: %s — 임포트가 안 됐을 수 있다" % MUS[key])
 		return
 	# mp3 는 임포트 설정이 아니라 자원의 값으로 순환한다. 코드에서 물려야
 	# 어떤 임포트 상태에서도 끊기지 않는다.
