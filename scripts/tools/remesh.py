@@ -21,13 +21,15 @@ for _s in (sys.stdout, sys.stderr):
         pass
 
 
-def run(src, faces, out=None, quality=0.3):
+def run(src, faces, out=None, quality=0.3, flat=False):
     ms = pymeshlab.MeshSet()
     t0 = time.time()
     ms.load_new_mesh(src)
     m = ms.current_mesh()
     f0, v0 = m.face_number(), m.vertex_number()
-    has_uv = m.has_wedge_tex_coord() or m.has_vertex_tex_coord()
+    has_uv = (m.has_wedge_tex_coord() or m.has_vertex_tex_coord()) and not flat
+    # 텍스처를 지키는 갈래는 6만쯤에서 더 안 내려간다 — UV 이음매가 벽이다.
+    # 평면 색으로 쓸 것이면 UV 를 버리고 줄여야 목표까지 간다.
     print("읽음  면 {:,} · 정점 {:,} · UV {} · {:.1f}초"
           .format(f0, v0, "있음" if has_uv else "없음", time.time() - t0))
 
@@ -35,12 +37,20 @@ def run(src, faces, out=None, quality=0.3):
     opts = dict(targetfacenum=faces, qualitythr=quality,
                 preserveboundary=True, preservenormal=True,
                 planarquadric=True, autoclean=True)
-    if has_uv:
-        # UV 를 지키는 갈래. 텍스처가 안 밀린다. autoclean 을 안 받는다.
-        opts.pop("autoclean", None)
-        ms.meshing_decimation_quadric_edge_collapse_with_texture(**opts)
-    else:
-        ms.meshing_decimation_quadric_edge_collapse(**opts)
+    # 한 번으로는 목표까지 안 간다 — Meshy 메시는 첫 판에서 3% 쯤에 멈춘다.
+    # 같은 필터를 다시 걸면 그 자리에서 또 내려간다. 안 줄면 멈춘다.
+    prev = f0
+    for _ in range(12):
+        if has_uv:
+            o = dict(opts)
+            o.pop("autoclean", None)      # 텍스처 갈래는 이 인자를 안 받는다
+            ms.meshing_decimation_quadric_edge_collapse_with_texture(**o)
+        else:
+            ms.meshing_decimation_quadric_edge_collapse(**opts)
+        n = ms.current_mesh().face_number()
+        if n <= faces * 1.07 or n >= prev * 0.98:
+            break
+        prev = n
     m = ms.current_mesh()
     print("줄임  면 {:,} → {:,} ({:.3f}%) · {:.1f}초"
           .format(f0, m.face_number(), m.face_number() * 100.0 / max(1, f0),
@@ -63,10 +73,12 @@ def main():
     ap.add_argument("src")
     ap.add_argument("--faces", type=int, required=True, help="목표 삼각형 수")
     ap.add_argument("--out", default=None)
+    ap.add_argument("--flat", action="store_true",
+                    help="UV 를 버리고 줄인다. 평면 색으로 쓸 때")
     ap.add_argument("--quality", type=float, default=0.3,
                     help="낮을수록 더 과감하게 줄인다 (기본 0.3)")
     a = ap.parse_args()
-    run(a.src, a.faces, a.out, a.quality)
+    run(a.src, a.faces, a.out, a.quality, a.flat)
 
 
 if __name__ == "__main__":
