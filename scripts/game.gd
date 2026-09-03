@@ -5436,9 +5436,9 @@ func _table_draw() -> void:
 #  keep_aspect 를 폭으로 두고 size 를 VIEW.x 로 주면 **월드 1 = 1px** 이다.
 const TBL3 := {
 	"model": "res://assets/table.obj",
-	"px":    980.0,     # 테이블 폭이 화면에서 먹는 px. 좌우는 화면 밖으로 나간다
+	"px":    430.0,     # 테이블 폭이 화면에서 먹는 px
 	"cx":    320.0,     # 화면상 중심
-	"cy":    206.0,
+	"cy":    196.0,
 	"elev":   52.0,     # 앙각. 2D 와 같은 각이라야 붙는다
 	"yaw":   180.0,     # 평평한 변을 딜러 쪽(뒤)으로 돌린다
 	"bands":     4,     # 명암 계단
@@ -5499,6 +5499,7 @@ func _tbl3_open() -> void:
 	mi.material_override = _dot_mat("res://assets/table_albedo.jpg")
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var ab := mesh.get_aabb()
+	print("[tbl3] ", String(TBL3.model), "  aabb ", ab.size, "  면 ", mesh.get_faces().size() / 3)
 	var k: float = float(TBL3.px) / maxf(ab.size.x, 0.001)
 	mi.scale = Vector3.ONE * k
 	mi.rotation_degrees = Vector3(0.0, float(TBL3.yaw), 0.0)
