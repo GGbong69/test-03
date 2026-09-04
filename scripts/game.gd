@@ -8636,7 +8636,7 @@ func _tip_hit(m: Vector2) -> Dictionary:
 				if _pend_rect(i).has_point(m):
 					return {"k": "pend", "i": i}
 		S.COLLECT:
-			var kk: String = ["citem", "cmod", "cdart", "ccons", "cmodf"][collect_tab]
+			var kk := String(COL_TABS[collect_tab].k)
 			for i in _col_count():
 				if _col_cell(i).has_point(m):
 					return {"k": kk, "i": collect_page * COL_PAGE + i}
@@ -8789,6 +8789,12 @@ func _tip_build(hit: Dictionary) -> void:
 			var cd: Dictionary = GameData.consumables()[i]
 			tip_title = cd.n
 			_tip_add(cd.d, 10, C_DIM)
+		"cfix":
+			_tip_set_tag("사진")
+			tip_mark = _col_cell(i % COL_PAGE)
+			var fx: Dictionary = GameData.fixtures()[i]
+			tip_title = fx.n
+			_tip_add(fx.d, 10, C_DIM)
 		"cmodf":
 			_tip_set_tag("제약")
 			tip_mark = _col_cell(i % COL_PAGE)
@@ -11704,21 +11710,32 @@ func _ri_carry(p: Rect2) -> void:
 
 # 컬렉션 탭. 사진이 빠져 있었다 — 산 뒤에 런 정보에서만 보이고 도감에는
 # 아예 없었다. 표가 있으면 도감에도 있어야 한다.
-const COL_TABS := ["동전", "보드 확장", "다트", "사탕", "사진", "제약"]
+#
+# 이름과 툴팁 열쇠를 **한 줄에 같이** 둔다. 전에는 두 곳이 각자 순서를
+# 적고 있었고, 사진 탭을 넷째에 끼워 넣자 툴팁 배열만 다섯 칸으로 남아
+# 사진이 제약 설명을 집었다. 한 곳에서 나오면 그런 어긋남이 안 생긴다.
+const COL_TABS := [
+	{"n": "동전", "k": "citem"},
+	{"n": "보드 확장", "k": "cmod"},
+	{"n": "다트", "k": "cdart"},
+	{"n": "사탕", "k": "ccons"},
+	{"n": "사진", "k": "cfix"},
+	{"n": "제약", "k": "cmodf"},
+]
 
 
 func _draw_collect() -> void:
 	_scrim()
 	draw_string(font, Vector2(0, 30), "컬렉션", HORIZONTAL_ALIGNMENT_CENTER,
 			VIEW.x, 18, C_TXT)
-	var tabs := ["동전 %d" % GameData.items().size(),
-			"보드 확장 %d" % GameData.mods().size(),
-			"다트 %d" % GameData.darts().size(),
-			"사탕 %d" % GameData.consumables().size(),
-			"사진 %d" % GameData.fixtures().size(),
-			"제약 %d" % GameData.modifiers().size()]
+	# 이름은 COL_TABS 가, 개수는 표가 낸다 — 이름을 여기서 또 적으면
+	# 탭이 늘 때 순서가 또 어긋난다.
+	var cnt := [GameData.items().size(), GameData.mods().size(),
+			GameData.darts().size(), GameData.consumables().size(),
+			GameData.fixtures().size(), GameData.modifiers().size()]
 	for t in COL_TABS.size():
-		_btn(_col_tab_rect(t), tabs[t], "", t == collect_tab)
+		_btn(_col_tab_rect(t), "%s %d" % [COL_TABS[t].n, cnt[t]], "",
+			t == collect_tab)
 
 	var base := collect_page * COL_PAGE
 	for i in _col_count():
