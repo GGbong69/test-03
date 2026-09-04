@@ -780,13 +780,17 @@ func _league_unlock_next() -> void:
 # 정산보다 먼저 부른다: 이번 판 일한 값은 이미 점수로 냈고, 골드 정산은
 # 남은 자만 받는 것이 "판 종료 시 파괴" 의 뜻에 맞다.
 func _leg_end_wear() -> void:
-	# 유지비 — 검정 리그. 골드가 없으면 0 에서 멈춘다(빚을 안 만든다).
-	var rent := int(GameData.league_v("rent", 0.0))
+	# 남의 동전 — 검정 리그. **가진 동전 한 장당** 낸다. 총액 고정이던 것을
+	# 장당으로 바꿨다: 고정이면 동전을 몇 장 들든 값이 같아서, 마지막 단이
+	# 빌드에 아무 말도 안 하는 세금이었다. 장당이면 많이 드는 쪽이 많이
+	# 내므로 보라 리그(봉인 — 적게 들수록 아프다)와 정확히 반대로 맞물린다.
+	# 골드가 없으면 0 에서 멈춘다(빚을 안 만든다).
+	var rent := int(GameData.league_v("rent", 0.0)) * owned.size()
 	if rent > 0 and gold > 0:
 		var pay: int = mini(rent, gold)
 		gold -= pay
 		pop(_slot_rect(0).get_center() + Vector2(0.0, -22.0),
-				"유지비 −%d" % pay, C_MULT, 11, 1.0)
+				"남의 동전 −%d" % pay, C_MULT, 11, 1.0)
 	var per := int(GameData.league_v("perish", 0.0))
 	var i := owned.size() - 1
 	while i >= 0:
@@ -8635,6 +8639,12 @@ func _tip_hit(m: Vector2) -> Dictionary:
 			for i in pending_tags.size():
 				if _pend_rect(i).has_point(m):
 					return {"k": "pend", "i": i}
+		S.NEWRUN:
+			# 리그 줄. 이름만으로는 무엇을 미는지 모른다 — 설명이 여기 붙는다.
+			var ll := _league_lines()
+			for i in ll.size():
+				if _league_line_rect(i).has_point(m):
+					return {"k": "lg", "i": i}
 		S.COLLECT:
 			var kk := String(COL_TABS[collect_tab].k)
 			for i in _col_count():
@@ -8789,6 +8799,13 @@ func _tip_build(hit: Dictionary) -> void:
 			var cd: Dictionary = GameData.consumables()[i]
 			tip_title = cd.n
 			_tip_add(cd.d, 10, C_DIM)
+		"lg":
+			var ll2 := _league_lines()
+			if i < ll2.size():
+				_tip_set_tag("리그")
+				tip_mark = _league_line_rect(i)
+				tip_title = String(ll2[i].n)
+				_tip_add(String(ll2[i].d), 10, C_DIM)
 		"cfix":
 			_tip_set_tag("사진")
 			tip_mark = _col_cell(i % COL_PAGE)
@@ -11110,7 +11127,7 @@ func _draw_newrun() -> void:
 	var sl := _league_lines()
 	for li in sl.size():
 		draw_string(font, _league_line_at(li),
-				sl[li], HORIZONTAL_ALIGNMENT_LEFT, 150.0, 10, C_TXT)
+				String(sl[li].n), HORIZONTAL_ALIGNMENT_LEFT, 150.0, 10, C_TXT)
 
 	_btn(_newrun_go(), "시작", "스페이스", open)
 	_btn(_newrun_back(), "뒤로", "ESC", true)
@@ -11197,6 +11214,16 @@ func _league_line_at(li: int) -> Vector2:
 			258.0 + float(li % STAKE_ROWS) * 13.0)
 
 
+# 리그가 미는 값을 줄로 낸다. 이름 옆에 **설명 한 줄**을 같이 들고 나온다 —
+# 줄만 보고는 "주운 동전" 이 무엇을 부수는지 알 수 없고, 그 설명이 들어갈
+# 자리가 툴팁이다(_tip_build 의 "lg").
+# 리그 줄 하나의 사각. 그리는 자리(_league_line_at)와 집는 자리가 같은
+# 식을 써야 눈에 보이는 곳과 커서가 닿는 곳이 안 어긋난다.
+func _league_line_rect(li: int) -> Rect2:
+	var p := _league_line_at(li)
+	return Rect2(p.x - 2.0, p.y - 9.0, 150.0, 12.0)
+
+
 func _league_lines() -> Array:
 	var out := []
 	var r := GameData.league_row()
@@ -11205,22 +11232,33 @@ func _league_lines() -> Array:
 		# 다르므로 첫 판과 마지막 판의 값을 범위로 적는다.
 		var lo := GameData.league_mul(1)
 		var hi := GameData.league_mul(GameData.legs_n())
-		out.append("목표 ×%.2f~%.2f" % [lo, hi] if hi > lo else "목표 ×%.2f" % hi)
-	if String(r.get("reward_small", "")) != "" \
-			and int(GameData.league_v("reward_small", 3.0)) < 3:
-		out.append("작은 판 보상 %d" % int(GameData.league_v("reward_small", 3.0)))
+		out.append({"n": "목표 ×%.2f~%.2f" % [lo, hi] if hi > lo else "목표 ×%.2f" % hi,
+				"d": "판마다 넘어야 할 점수가 그만큼 높아진다."})
+	var rs := int(GameData.league_v("reward_small", 3.0))
+	if String(r.get("reward_small", "")) != "" and rs < 3:
+		out.append({"n": "작은 판 보상 %d" % rs,
+				"d": "작은 판을 넘겨도 골드가 그만큼만 들어온다."})
 	if int(GameData.league_v("seal_items", 0.0)) > 0:
-		out.append("봉인 %d" % int(GameData.league_v("seal_items", 0.0)))
+		out.append({"n": "봉인 %d" % int(GameData.league_v("seal_items", 0.0)),
+				"d": "판이 시작될 때 동전이 무작위로 잠긴다. 그 판 동안 점수도 골드도"
+					+ " 조준 방식도 안 준다. 판마다 다시 뽑는다."})
 	if int(GameData.league_v("darts_add", 0.0)) != 0:
-		out.append("다트 %+d" % int(GameData.league_v("darts_add", 0.0)))
+		out.append({"n": "다트 %+d" % int(GameData.league_v("darts_add", 0.0)),
+				"d": "판마다 던질 수 있는 다트 수가 그만큼 달라진다."})
 	if GameData.league_v("shop_cost_mul", 1.0) != 1.0:
-		out.append("테이블 ×%.2f" % GameData.league_v("shop_cost_mul", 1.0))
+		out.append({"n": "가격 ×%.2f" % GameData.league_v("shop_cost_mul", 1.0),
+				"d": "테이블에 오르는 모든 값에 곱하고 올림한다."})
 	if int(GameData.league_v("perish", 0.0)) > 0:
-		out.append("삭음 %d판" % int(GameData.league_v("perish", 0.0)))
+		out.append({"n": "주운 동전",
+				"d": "여기서 사는 동전은 남이 쓰다 버린 것이다. 산 지 %d판이 지나면"
+					% int(GameData.league_v("perish", 0.0))
+					+ " 부서진다 — 팔 새도 없다."})
 	if int(GameData.league_v("rent", 0.0)) > 0:
-		out.append("유지비 %d" % int(GameData.league_v("rent", 0.0)))
+		out.append({"n": "남의 동전 %d" % int(GameData.league_v("rent", 0.0)),
+				"d": "동전이 내 것이 아니다. 판마다 가진 동전 한 장당 그만큼 낸다 —"
+					+ " 많이 들수록 많이 낸다. 골드가 없으면 0 에서 멈춘다."})
 	if out.is_empty():
-		out.append("기준")
+		out.append({"n": "기준", "d": "미는 값이 없다. 이 단이 곧 기준선이다."})
 	return out
 
 

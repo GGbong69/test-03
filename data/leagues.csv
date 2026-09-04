@@ -1,9 +1,9 @@
-﻿id,name,color,curve,reward_small,seal_items,darts_add,shop_cost_mul,interest_add,perish,rent,prereq,_note
+id,name,color,curve,reward_small,seal_items,darts_add,shop_cost_mul,interest_add,perish,rent,prereq,_note
 white,흰 리그,cfc9bd,base,3,0,0,1.00,0,0,0,,기준선. tuning 의 curve_* 곡선을 그대로 쓴다
 green,초록 리그,479a58,base,0,0,0,1.00,0,0,0,white,작은 판이 골드를 안 준다. 곡선은 그대로 — 첫 단은 난이도가 아니라 여유를 깎는다
 blue,파랑 리그,4a6fa5,curve_a,0,0,0,1.00,0,0,0,green,곡선이 가팔라진다. antes.csv 의 curve_a 열이 그 값이다
 purple,보라 리그,7a4f9e,curve_a,0,1,0,1.00,0,0,0,blue,매 판 동전 하나가 봉인된 채 시작한다. 제약 둔화의 상시판이다
 red,붉은 리그,d8483d,curve_a,0,1,-1,1.00,0,0,0,purple,다트가 하나 줄어 다섯 발이다. 동전 슬롯이 아니라 손을 깎는 유일한 단
 yellow,노랑 리그,d3c341,curve_b,0,1,-1,1.00,0,0,0,red,곡선이 한 번 더 가팔라진다. curve_b 열이다
-orange,주황 리그,d98a3d,curve_b,0,1,-1,1.25,0,5,0,yellow,테이블이 25% 비싸고 산 동전이 다섯 판 뒤 삭는다
-black,검정 리그,3a3450,curve_b,0,1,-1,1.25,0,5,3,orange,판마다 유지비 3골드를 낸다. 마지막 단
+orange,주황 리그,d98a3d,curve_b,0,1,-1,1.25,0,5,0,yellow,"가격이 1.25배이고, 주운 동전이라 다섯 판 뒤 부서진다"
+black,검정 리그,3a3450,curve_b,0,1,-1,1.25,0,5,1,orange,동전이 남의 것이라 판마다 한 장당 1골드를 낸다 — 많이 들수록 많이 낸다. 봉인(보라)이 적게 든 쪽을 때리는 것과 정확히 반대다. 마지막 단
