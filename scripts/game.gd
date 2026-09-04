@@ -6935,28 +6935,62 @@ func _fix_quad(c: Vector2, rot: float, k := 1.0) -> PackedVector2Array:
 # 펠트에 누운 팩 — 봉인된 상자다. 사진(폴라로이드)과 같은 네모 어법을
 # 쓰되 **띠를 두른다** — 그 한 줄이 "아직 안 열었다" 를 말한다.
 # 안에 든 수만큼 상자 위에 눈금을 새겨, 큰 팩과 작은 팩이 그림만으로 갈린다.
+# 찢긴 자리가 있는 네모. 한 변만 톱니로 만든다 — 두 쪽이 갈라졌을 때
+# **맞물리는 이가 서로 반대**여야 "한 장이 찢어졌다" 로 읽힌다. 그래서
+# 위쪽은 위로, 아래쪽은 아래로 같은 위상의 톱니를 쓰고 부호만 뒤집는다.
+#
+#   ey0  성한 쪽 반높이 (부호가 찢긴 방향을 정한다)
+#   ey1  찢긴 쪽 반높이
+func _torn_quad(c: Vector2, rot: float, ex: float, ey0: float, ey1: float,
+		teeth := 7, bite := 2.2) -> PackedVector2Array:
+	var co := cos(rot)
+	var si := sin(rot)
+	var pts := PackedVector2Array()
+	var put := func(x: float, y: float) -> void:
+		pts.append(c + Vector2(x * co - y * si, (x * si + y * co) * TBL.flat))
+	# 성한 세 변
+	put.call(-ex, ey0)
+	put.call(ex, ey0)
+	# 찢긴 변 — 오른쪽에서 왼쪽으로 톱니를 그으며 돌아온다
+	for i in teeth + 1:
+		var t: float = 1.0 - float(i) / float(teeth)
+		var x: float = lerpf(-ex, ex, t)
+		var d: float = bite if (i % 2 == 0) else -bite
+		put.call(x, ey1 + d * signf(ey1 - ey0))
+	return pts
+
+
 func _boost_flat(c: Vector2, bd: Dictionary, rot: float, dim: float) -> void:
 	var w := FIX_W * 1.18
 	var h := FIX_H * 1.18
+	var seam := 1.6                     # 두 블럭이 맞물린 자리의 두께
 	draw_colored_polygon(_quad_at(c + Vector2(0.0, 1.2), rot, w, h),
 			Color(0.0, 0.0, 0.0, 0.35))
-	draw_colored_polygon(_quad_at(c, rot, w, h),
-			Color(C_PANEL.lightened(0.30).darkened(dim), 1.0))
-	# 띠 — 가로로 한 줄. 봉인이라 가운데를 지난다.
-	draw_colored_polygon(_quad_at(c, rot, w, 2.6), Color(C_ACC.darkened(dim), 1.0))
-	# 눈금 — 안에 든 수. 띠 위쪽에 나란히 찍어 큰 팩과 작은 팩을 그림으로 가른다.
+	# **두 블럭**이다. 뜯기 전에도 둘로 보여야, 뜯을 때 그 이음매가 열리는
+	# 것으로 읽힌다 — 한 장으로 그려 놓고 갈라지면 없던 금이 생긴 것이 된다.
+	# 위쪽을 살짝 밝게 둬 두 장이 겹쳐 있음을 그림자 없이 말한다.
+	var lo := (h - seam) * 0.5
+	for k in 2:
+		var sgn: float = -1.0 if k == 0 else 1.0
+		var mid := Vector2(0.0, sgn * (seam + lo))
+		var q := _quad_at(c + Vector2(mid.x, mid.y * TBL.flat), rot, w, lo)
+		draw_colored_polygon(q, Color(
+				C_PANEL.lightened(0.34 if k == 0 else 0.24).darkened(dim), 1.0))
+		draw_polyline(q + PackedVector2Array([q[0]]),
+				Color(C_WIRE.darkened(0.25 + dim), 0.5), 1.0)
+	# 이음매를 지나는 띠. 두 블럭을 묶는 봉인이라 가운데를 덮는다.
+	draw_colored_polygon(_quad_at(c, rot, w, seam + 1.1),
+			Color(C_ACC.darkened(dim), 1.0))
+	# 눈금 — 안에 든 수. 위 블럭에 새겨 큰 팩과 작은 팩을 그림으로 가른다.
 	var n: int = maxi(1, int(bd.get("size", 2)))
 	var co := cos(rot)
 	var si := sin(rot)
-	for i in n:
-		var t: float = 0.0 if n == 1 else (float(i) / float(n - 1) * 2.0 - 1.0)
-		var q := Vector2(t * w * 0.62, -h * 0.55)
-		var e := Vector2(q.x * co - q.y * si, q.x * si + q.y * co)
+	for i2 in n:
+		var t: float = 0.0 if n == 1 else (float(i2) / float(n - 1) * 2.0 - 1.0)
+		var q2 := Vector2(t * w * 0.62, -h * 0.62)
+		var e := Vector2(q2.x * co - q2.y * si, q2.x * si + q2.y * co)
 		draw_circle(c + Vector2(e.x, e.y * TBL.flat), 1.5,
 				Color(C_TXT.darkened(dim), 0.9))
-	var out := _quad_at(c, rot, w, h)
-	draw_polyline(out + PackedVector2Array([out[0]]),
-			Color(C_WIRE.darkened(0.25 + dim), 0.5), 1.0)
 
 
 # 펠트에 누운 사진 — 폴라로이드다. 테두리가 두껍고 아래가 더 두껍다.
@@ -11681,8 +11715,11 @@ func _track_name(tk: int) -> String:
 const BOOST := {
 	"rise": 0.34,      # 눈앞으로 오는 시간(초)
 	"tear": 0.30,      # 찢어져 벌어지는 시간(초)
-	"gap": 62.0,       # 다 벌어졌을 때 두 쪽 사이(px)
-	"big": 5.2,        # 눈앞에서의 크기 배수
+	"gap": 44.0,       # 다 벌어졌을 때 두 쪽 사이(px)
+	# 눈앞에서의 크기 배수. 5.2 로 뒀더니 두 쪽이 화면 폭을 넘어 벽이
+	# 됐다 — 팩이 아니라 판때기로 보인다. 3.0 이면 다 벌어져도 두 쪽이
+	# 화면 안에 남아 "한 장이 둘로 갈라졌다" 가 한눈에 들어온다.
+	"big": 3.0
 }
 
 
@@ -11759,43 +11796,52 @@ func _boost_spill() -> void:
 	_sfx("stage_pick")
 
 
-# 눈앞으로 온 팩. 다 오면 두 쪽으로 갈라진다.
+# 눈앞으로 온 팩. 다 오면 **두 블럭이 갈라진다** — 투명도로 빼지 않는다.
+# 사라지는 것과 찢어지는 것은 다른 일이고, 종이는 찢어져도 안 옅어진다.
+# 갈라진 자리에 톱니를 남겨 "뜯겼다" 를 그림이 말하게 한다.
 func _boost_draw() -> void:
 	if boost_t < 0.0 or boost_card.is_empty():
 		return
 	var rise: float = clampf(boost_t / float(BOOST.rise), 0.0, 1.0)
 	var tear: float = clampf((boost_t - float(BOOST.rise)) / float(BOOST.tear), 0.0, 1.0)
-	# 뒤를 살짝 눌러 시선을 앞으로 당긴다. 다 찢어질수록 다시 걷힌다.
 	draw_rect(Rect2(Vector2.ZERO, VIEW),
-			Color(0.0, 0.0, 0.0, 0.5 * rise * (1.0 - tear * 0.8)))
+			Color(0.0, 0.0, 0.0, 0.5 * rise * (1.0 - tear * 0.55)))
 
 	var c := Vector2(VIEW.x * 0.5, VIEW.y * 0.46)
 	# 뒤에서 앞으로 — 커지면서 온다. 세제곱으로 빼면 마지막에 훅 다가온다.
 	var k: float = 1.0 + (float(BOOST.big) - 1.0) * (1.0 - pow(1.0 - rise, 3.0))
 	var w := FIX_W * 1.18 * k
 	var h := FIX_H * 1.18 * k
-	var gap: float = float(BOOST.gap) * tear * tear
+	var seam: float = 1.6 * k
+	var lo: float = (h - seam) * 0.5
+	# 벌어지는 거리. 처음에 빠르게 뜯기고 끝에서 느려진다 — 손으로 뜯는 결이다.
+	var gap: float = float(BOOST.gap) * (1.0 - pow(1.0 - tear, 2.4))
 
-	# 찢어진 두 쪽. 서로 반대로 밀리며 기운다.
-	for sgn in [-1.0, 1.0]:
-		var off := Vector2(sgn * gap, gap * 0.22)
-		var rot: float = sgn * tear * 0.30
-		var a: float = 1.0 - tear * 0.75
-		var q := _quad_at(c + off, rot, w * 0.5, h)
-		draw_colored_polygon(q, Color(C_PANEL.lightened(0.30), a))
-		# 띠는 갈라진 쪽에만 남는다 — 찢긴 자리가 어디인지 그림이 말한다.
-		draw_colored_polygon(_quad_at(c + off, rot, w * 0.5, 2.6 * k),
-				Color(C_ACC, a))
+	for kk in 2:
+		var sgn: float = -1.0 if kk == 0 else 1.0
+		# 위쪽은 위로, 아래쪽은 아래로. 갈라지면서 서로 반대로 기운다.
+		var cy: float = sgn * ((seam + lo) + gap)
+		var rot: float = sgn * tear * 0.24
+		var cc := c + Vector2(gap * sgn * 0.16, cy * TBL.flat)
+		# 성한 변은 바깥쪽, 찢긴 변은 안쪽(가운데를 보는 쪽)이다.
+		var q := _torn_quad(cc, rot, w, sgn * lo, -sgn * lo,
+				9, 3.4 * k * 0.5 * tear)
+		draw_colored_polygon(q, C_PANEL.lightened(0.34 if kk == 0 else 0.24))
 		draw_polyline(q + PackedVector2Array([q[0]]),
-				Color(C_WIRE.darkened(0.25), a * 0.6), 1.0)
+				Color(C_WIRE.darkened(0.25), 0.55), 1.0)
+		# 띠도 같이 찢긴다 — 봉인이 두 쪽에 나뉘어 붙어 간다.
+		var by: float = -sgn * (lo - seam * 0.5)
+		draw_colored_polygon(
+				_quad_at(cc + Vector2(0.0, by * TBL.flat), rot, w, seam * 0.5),
+				C_ACC)
 
 	# 터지는 빛 — 찢기는 순간에만 잠깐. 안의 것이 나오는 자리를 말한다.
 	if tear > 0.0:
 		var fa: float = (1.0 - tear) * tear * 4.0
-		draw_circle(c, 10.0 + 54.0 * tear, Color(C_ACC, 0.30 * fa))
+		draw_circle(c, 8.0 + 46.0 * tear, Color(C_ACC, 0.34 * fa))
 
-	draw_string(font, Vector2(0.0, c.y + h + 26.0), String(boost_card.get("n", "")),
-			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 12, Color(C_TXT, 1.0 - tear))
+	draw_string(font, Vector2(0.0, c.y + h + 30.0), String(boost_card.get("n", "")),
+			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 12, Color(C_TXT, 1.0 - tear * 0.7))
 
 
 func _runinfo_ok() -> bool:
