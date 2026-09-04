@@ -11254,8 +11254,9 @@ func _league_lines() -> Array:
 					% int(GameData.league_v("perish", 0.0))
 					+ " 부서진다 — 팔 새도 없다."})
 	if int(GameData.league_v("rent", 0.0)) > 0:
-		out.append({"n": "남의 동전 %d" % int(GameData.league_v("rent", 0.0)),
-				"d": "동전이 내 것이 아니다. 판마다 가진 동전 한 장당 그만큼 낸다 —"
+		# 수를 이름에 안 붙인다 — "남의 동전 1" 의 1 이 장수로 읽힌다.
+		out.append({"n": "남의 동전",
+				"d": "동전이 내 것이 아니다. 판마다 가진 동전 한 장당 %d골드를 낸다 —" % int(GameData.league_v("rent", 0.0))
 					+ " 많이 들수록 많이 낸다. 골드가 없으면 0 에서 멈춘다."})
 	if out.is_empty():
 		out.append({"n": "기준", "d": "미는 값이 없다. 이 단이 곧 기준선이다."})
