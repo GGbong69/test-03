@@ -11350,33 +11350,30 @@ func _league_lines() -> Array:
 		var lo := GameData.league_mul(1)
 		var hi := GameData.league_mul(GameData.legs_n())
 		out.append({"n": "목표 ×%.2f~%.2f" % [lo, hi] if hi > lo else "목표 ×%.2f" % hi,
-				"d": "판마다 넘어야 할 점수가 그만큼 높아진다."})
+				"d": "목표 점수가 더 빨리 오른다"})
 	var rs := int(GameData.league_v("reward_small", 3.0))
 	if String(r.get("reward_small", "")) != "" and rs < 3:
 		out.append({"n": "작은 판 보상 %d" % rs,
-				"d": "작은 판을 넘겨도 골드가 그만큼만 들어온다."})
+				"d": "작은 판을 넘겨도 골드가 안 들어온다"})
 	if int(GameData.league_v("seal_items", 0.0)) > 0:
 		out.append({"n": "봉인 %d" % int(GameData.league_v("seal_items", 0.0)),
-				"d": "판이 시작될 때 동전이 무작위로 잠긴다. 그 판 동안 점수도 골드도"
-					+ " 조준 방식도 안 준다. 판마다 다시 뽑는다."})
+				"d": "매 판 동전 하나가 무작위로 잠긴다"})
 	if int(GameData.league_v("darts_add", 0.0)) != 0:
 		out.append({"n": "다트 %+d" % int(GameData.league_v("darts_add", 0.0)),
-				"d": "판마다 던질 수 있는 다트 수가 그만큼 달라진다."})
+				"d": "다트 하나 적게 시작한다"})
 	if GameData.league_v("shop_cost_mul", 1.0) != 1.0:
 		out.append({"n": "가격 ×%.2f" % GameData.league_v("shop_cost_mul", 1.0),
-				"d": "테이블에 오르는 모든 값에 곱하고 올림한다."})
+				"d": "상점 물건이 그만큼 비싸진다"})
 	if int(GameData.league_v("perish", 0.0)) > 0:
 		out.append({"n": "주운 동전",
-				"d": "여기서 사는 동전은 남이 쓰다 버린 것이다. 산 지 %d판이 지나면"
-					% int(GameData.league_v("perish", 0.0))
-					+ " 부서진다 — 팔 새도 없다."})
+				"d": "산 동전이 %d판 뒤 부서진다"
+					% int(GameData.league_v("perish", 0.0))})
 	if int(GameData.league_v("rent", 0.0)) > 0:
 		# 수를 이름에 안 붙인다 — "남의 동전 1" 의 1 이 장수로 읽힌다.
 		out.append({"n": "남의 동전",
-				"d": "동전이 내 것이 아니다. 판마다 가진 동전 한 장당 %d골드를 낸다 —" % int(GameData.league_v("rent", 0.0))
-					+ " 많이 들수록 많이 낸다. 골드가 없으면 0 에서 멈춘다."})
+				"d": "판마다 동전 한 장당 %d골드를 낸다" % int(GameData.league_v("rent", 0.0))})
 	if out.is_empty():
-		out.append({"n": "기준", "d": "미는 값이 없다. 이 단이 곧 기준선이다."})
+		out.append({"n": "기준", "d": "미는 값이 없다"})
 	return out
 
 
