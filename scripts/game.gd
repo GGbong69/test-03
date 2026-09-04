@@ -184,9 +184,11 @@ var mouse_down := false         # 왼쪽 단추를 쥐고 있는가. 당김이 �
 var aim_rng := RandomNumberGenerator.new()
 var shelf := {}                 # 이 상점에 걸린 사진. 비면 없다
 var run_from := S.SHOP           # 런 정보를 열던 자리. 닫으면 그리로 돌아간다
-var boost_open := []             # 지금 펼쳐 놓은 팩의 내용물
-var boost_left := 0              # 앞으로 몇 개 더 고를 수 있나
-var boost_t := 0.0               # 펼친 뒤 흐른 시간(카드 미끄러짐)
+# 팩을 뜯는 연출. 산 자리에서 팩이 눈앞으로 와 찢어지고, 그 안의 것이
+# 테이블로 쏟아진다 — 화면을 갈아 끼우지 않는다.
+var boost_t := -1.0              # 뜯는 중이면 0 부터 흐른다. 음수면 안 뜯는 중
+var boost_card := {}             # 뜯고 있는 팩
+var boost_spill := []            # 아직 안 쏟은 내용물
 var shelf_round := 0             # 그 사진을 굴린 라운드. 라운드가 바뀔 때만 다시 굴린다
 var dead_col := -1              # 값을 죽이는 칸 색 번호. -1 이면 안 걸렸다
 var dead_ring := 0              # 무효가 되는 배수(2 더블 · 3 트리플). 0 이면 없다
@@ -1839,8 +1841,7 @@ func card_pos() -> Vector2:
 func _process(d: float) -> void:
 	_fill_audio()
 	_mus_update(d)
-	if state == S.BOOST:
-		boost_t += d
+	_boost_tick(d)
 
 	if not beep_q.is_empty():
 		beep_t -= d
@@ -2523,8 +2524,8 @@ func _click(m: Vector2) -> void:
 					_pick_stage(i)
 					return
 		S.SHOP:
-			if sweep_live:
-				return          # 쓸기는 중단 불가다. 클릭을 통째로 삼킨다
+			if sweep_live or boost_t >= 0.0:
+				return          # 쓸기·팩 뜯기는 중단 불가다. 클릭을 통째로 삼킨다
 			# 창구가 먼저다. 자리가 고정이라 낙하 검사보다 앞이고, _sell_hit
 			# 보다도 앞이어야 한다 — 뒤에 두면 _sell_hit 이 sell_sel 을 지운 뒤
 			# 창구가 "먼저 판에서 팔 동전을 고른다" 로 거절해 2클릭 판매가 통째로
@@ -2630,15 +2631,6 @@ func _click(m: Vector2) -> void:
 						_settings_back()
 				_sfx("menu_back")
 				return
-		S.BOOST:
-			for i in boost_open.size():
-				if _boost_rect(i).has_point(m):
-					_boost_take(i)
-					return
-			if _boost_skip_rect().has_point(m):
-				_boost_close()
-				_sfx("menu_back")
-			return
 		S.RUNINFO:
 			for t in RI_TABS.size():
 				if _ri_tab_rect(t).has_point(m):
@@ -3632,8 +3624,6 @@ func _draw_screen(scr: int) -> void:
 		_draw_collect()
 	elif scr == S.RUNINFO:
 		_draw_runinfo()
-	elif scr == S.BOOST:
-		_draw_boost()
 	elif scr == S.NEWRUN:
 		_draw_newrun()
 	else:
@@ -3704,8 +3694,7 @@ func _is_play() -> bool:
 
 func _hud_draw() -> void:
 	if state == S.OVER or state == S.TITLE or state == S.SETTINGS \
-			or state == S.COLLECT or state == S.NEWRUN or state == S.RUNINFO \
-			or state == S.BOOST:
+			or state == S.COLLECT or state == S.NEWRUN or state == S.RUNINFO:
 		return
 	if not _bar_hidden():
 		_draw_topbar()
@@ -6223,6 +6212,60 @@ func _lane_w(n: int) -> float:
 	return (float(DROP.u_hi) - float(DROP.u_lo) - _lane_pad(n) * 2.0) / float(n)
 
 
+# 낙하 항목 하나. 팩이 뜯기면 여기로 한 개씩 더 얹으므로 따로 뺐다 —
+# 두 곳이 각자 사전을 지으면 열쇠가 하나만 빠져도 조용히 다르게 논다.
+func _drop_one(i: int, n: int) -> Dictionary:
+	var r: float = DROP.r_item
+	var nb := 1
+	var e: float = DROP.e_item
+	var hw: float = DROP.hw_item
+	match stock[i].type:
+		"mod":
+			r = DROP.r_mod
+			e = DROP.e_mod
+			hw = DROP.hw_mod
+		"dart":
+			r = DROP.r_dart
+			nb = 3
+			e = DROP.e_dart
+			hw = DROP.hw_dart
+		"boost":
+			# 상자다. 동전만 하고 반발도 그 사이 — 종이보다 튀고
+			# 캐비닛보다 덜 튄다.
+			r = DROP.r_item
+			e = DROP.e_mod
+			hw = DROP.hw_item
+		"fix":
+			# 종이는 안 튄다 — 반발을 동전의 절반으로 둔다. 떨어져
+			# 찰싹 붙는 것이 "사진" 의 무게다.
+			r = DROP.r_fix
+			e = DROP.e_item * 0.5
+			hw = DROP.hw_fix
+	# 완전 난수면 넷 중 둘이 같은 지점에 쏟아지는 판이 잦고, 그 둘이 같이
+	# 벽으로 밀린다. 레인은 출발만 벌려 둘 뿐 정착 위치를 통제하지 않는다.
+	#
+	# 레인 수가 늘면 여백을 줄여 폭을 벌린다 — 창구 빗변까지는 안 간다.
+	var lane: float = lerpf(DROP.u_lo + _lane_pad(n), DROP.u_hi - _lane_pad(n),
+			(float(i) + 0.5) / float(maxi(n, 1)))
+	var u0 := randf_range(DROP.u_lo + hw, DROP.u_hi - hw)
+	return {
+		"u": lerpf(u0, lane, DROP.lane), "w": DROP.w0,
+		"h": randf_range(DROP.h0_lo, DROP.h0_hi),
+		"vu": randf_range(-DROP.vu_amp, DROP.vu_amp),
+		"vw": randf_range(DROP.vw_lo, DROP.vw_hi),
+		"vh": randf_range(0.0, DROP.vh_hi),
+		"psi": randf() * TAU,
+		"om": randf_range(-DROP.om_amp, DROP.om_amp),
+		"r": r, "nb": nb, "e": e, "hw": hw, "t0": 0.0,
+		"held": false, "slot": -1, "mark": Vector2.ZERO, "scuff": [],
+		"air": true, "into": false, "sleep": false, "rest": 0.0,
+		"wob": 0.0, "wv": 0.0, "lift": 0.0, "lv": 0.0,
+		"sold": 0.0, "to": Vector2.ZERO, "gone": false,
+		"roll": 0.0,      # 3D 로 세워 그리는 물체가 구른 각(사탕·다트)
+		"handled": false, # 손이 실제로 던진 적이 있는가 — roll 을 그 뒤부터만 쌓는다
+	}
+
+
 func _drop_roll() -> void:
 	_hand_abort()
 	drop.clear()
@@ -6231,58 +6274,9 @@ func _drop_roll() -> void:
 	drop_toss = false
 	var n := stock.size()
 	for i in n:
-		var r: float = DROP.r_item
-		var nb := 1
-		var e: float = DROP.e_item
-		var hw: float = DROP.hw_item
-		match stock[i].type:
-			"mod":
-				r = DROP.r_mod
-				e = DROP.e_mod
-				hw = DROP.hw_mod
-			"dart":
-				r = DROP.r_dart
-				nb = 3
-				e = DROP.e_dart
-				hw = DROP.hw_dart
-			"boost":
-				# 상자다. 동전만 하고 반발도 그 사이 — 종이보다 튀고
-				# 캐비닛보다 덜 튄다.
-				r = DROP.r_item
-				e = DROP.e_mod
-				hw = DROP.hw_item
-			"fix":
-				# 종이는 안 튄다 — 반발을 동전의 절반으로 둔다. 떨어져
-				# 찰싹 붙는 것이 "사진" 의 무게다.
-				r = DROP.r_fix
-				e = DROP.e_item * 0.5
-				hw = DROP.hw_fix
-		# 완전 난수면 넷 중 둘이 같은 지점에 쏟아지는 판이 잦고, 그 둘이 같이
-		# 벽으로 밀린다. 레인은 출발만 벌려 둘 뿐 정착 위치를 통제하지 않는다.
-		#
-		# 안쪽 여백이 90 으로 고정이라 레인이 몇 개든 폭이 228px 이었다.
-		# 넷일 때는 57px 씩이라 넉넉한데, "넓은 테이블" 뱃지로 여섯이 되면
-		# 38px 씩이 되어 동전(지름 38)가 서로를 밀고 값뱃지가 겹친다.
-		# 레인 수가 늘면 여백을 줄여 폭을 벌린다 — 창구 빗변까지는 안 간다.
-		var lane: float = lerpf(DROP.u_lo + _lane_pad(n), DROP.u_hi - _lane_pad(n),
-				(float(i) + 0.5) / float(n))
-		var u0 := randf_range(DROP.u_lo + hw, DROP.u_hi - hw)
-		drop.append({
-			"u": lerpf(u0, lane, DROP.lane), "w": DROP.w0,
-			"h": randf_range(DROP.h0_lo, DROP.h0_hi),
-			"vu": randf_range(-DROP.vu_amp, DROP.vu_amp),
-			"vw": randf_range(DROP.vw_lo, DROP.vw_hi),
-			"vh": randf_range(0.0, DROP.vh_hi),
-			"psi": randf() * TAU,
-			"om": randf_range(-DROP.om_amp, DROP.om_amp),
-			"r": r, "nb": nb, "e": e, "hw": hw, "t0": float(i) * DROP.stag,
-			"held": false, "slot": -1, "mark": Vector2.ZERO, "scuff": [],
-			"air": true, "into": false, "sleep": false, "rest": 0.0,
-			"wob": 0.0, "wv": 0.0, "lift": 0.0, "lv": 0.0,
-			"sold": 0.0, "to": Vector2.ZERO, "gone": false,
-			"roll": 0.0,      # 3D 로 세워 그리는 물체가 구른 각(사탕·다트)
-			"handled": false, # 손이 실제로 던진 적이 있는가 — roll 을 그 뒤부터만 쌓는다
-		})
+		var e := _drop_one(i, n)
+		e.t0 = float(i) * DROP.stag      # 입장 시차는 첫 낙하에서만 뜻이 있다
+		drop.append(e)
 	drop_awake = true
 	if drop_fast:
 		_drop_settle()
@@ -9418,6 +9412,8 @@ func _draw_shop() -> void:
 	_btn(_next_rect(), "다음 판 →", "", true)
 	_hold_draw()
 	_fly_draw()
+	# 팩을 뜯는 중이면 모든 것 위에 얹는다 — 눈앞으로 오는 물건이다.
+	_boost_draw()
 
 	# 거절 사유. 창구가 좌우로 갔으므로 앞치마 가운데가 비었다 — 거기 쓴다.
 	# 문구는 _buy_block 이 만든다.
@@ -11674,31 +11670,43 @@ func _track_name(tk: int) -> String:
 # ══════════════════════════════════════════════════════════
 #  팩 (기획서 16쪽)
 #
-#  상점에 물건으로 뜨고, 사면 그 자리에서 안을 펼친다. 펼친 것 중
-#  pick 개를 고르고 나머지는 사라진다 — 발라트로의 부스터 팩 자리다.
+#  상점에 물건으로 뜬다. 사면 그 자리에서 **눈앞으로 와 찢어지고**, 안의
+#  것이 테이블로 쏟아진다 — 화면을 갈아 끼우지 않는다. 테이블이 이미
+#  물건을 떨어뜨리는 곳이므로 쏟아진 것은 다른 매물과 똑같이 논다:
+#  집어 옮기고, 툴팁이 붙고, 창구로 밀어 산다. 값이 0 인 것만 다르다.
 #
-#  칸을 안 먹으므로 _buy_block 에 막을 조건이 없다. 대신 **고를 때**
-#  칸을 본다: 동전 칸이 찼으면 동전을 못 고르고, 사탕 칸이 찼으면
-#  사탕을 못 고른다. 그래야 "샀는데 넣을 데가 없다" 가 안 생긴다.
-const BOOST_KINDS := ["item", "cons", "fix"]
+#  값을 0 으로 두는 것이 이 설계의 전부다. 팩 값을 이미 냈으므로 안의
+#  것은 공짜이고, "몇 개를 가질 수 있나" 는 동전 칸이 이미 정한다 —
+#  따로 세는 장치를 안 만든다.
+const BOOST := {
+	"rise": 0.34,      # 눈앞으로 오는 시간(초)
+	"tear": 0.30,      # 찢어져 벌어지는 시간(초)
+	"gap": 62.0,       # 다 벌어졌을 때 두 쪽 사이(px)
+	"big": 5.2,        # 눈앞에서의 크기 배수
+}
 
 
 func _boost_deal(bd: Dictionary) -> void:
-	boost_open.clear()
-	boost_left = maxi(1, int(bd.get("pick", 1)))
+	boost_card = bd
 	boost_t = 0.0
-	var pool: Array = bd.get("pool", BOOST_KINDS)
-	var n: int = maxi(1, int(bd.get("size", 2)))
-	for i in n:
-		var kind := String(pool[randi() % pool.size()])
-		var e := _boost_one(kind)
-		if not e.is_empty():
-			boost_open.append(e)
-	if boost_open.is_empty():
-		return              # 낼 것이 하나도 없다 — 화면을 안 연다
-	run_from = state
-	state = S.BOOST
-	_sfx("stage_pick")
+	boost_spill.clear()
+	var pool: Array = bd.get("pool", ["item", "cons", "fix"])
+	# 같은 것이 두 번 나오지 않는다. 상점 재고가 이미 그 규약이고(pool.erase),
+	# 팩만 다르면 "넷을 열었는데 셋이 같은 사탕" 이 나온다 — 실제로 그랬다.
+	var seen := {}
+	for i in maxi(1, int(bd.get("size", 2))):
+		# 한 갈래가 바닥나도 다른 갈래로 채운다. 몇 번 더 뽑아 보고 접는다.
+		for t in 6:
+			var e := _boost_one(String(pool[randi() % pool.size()]))
+			if e.is_empty():
+				continue
+			var key := String(e.d.get("id", ""))
+			if seen.has(key):
+				continue
+			seen[key] = true
+			boost_spill.append(e)
+			break
+	_sfx("stage_open")
 
 
 # 갈래 하나를 뽑는다. 이미 가진 동전과 이미 산 사진은 뺀다 —
@@ -11712,121 +11720,82 @@ func _boost_one(kind: String) -> Dictionary:
 					continue
 				pool.append(it)
 			var d := _draw_weighted(pool)
-			return {} if d.is_empty() else {"k": "item", "d": d}
+			return {} if d.is_empty() else {"type": "item", "d": d}
 		"cons":
 			var cp := GameData.consumables()
 			if cp.is_empty():
 				return {}
-			return {"k": "cons", "d": cp[randi() % cp.size()]}
+			return {"type": "cons", "d": cp[randi() % cp.size()]}
 		"fix":
 			var f := GameData.fixture_roll(GameData.round_of(leg_no))
-			return {} if f.is_empty() else {"k": "fix", "d": f}
+			return {} if f.is_empty() else {"type": "fix", "d": f}
 	return {}
 
 
-# 고른 것을 칸에 넣는다. 넣을 데가 없으면 거절하고 화면을 안 닫는다.
-func _boost_take(i: int) -> void:
-	if i < 0 or i >= boost_open.size():
+func _boost_tick(d: float) -> void:
+	if boost_t < 0.0:
 		return
-	var e: Dictionary = boost_open[i]
-	if bool(e.get("gone", false)):
+	boost_t += d
+	if boost_t >= BOOST.rise + BOOST.tear:
+		_boost_spill()
+
+
+# 쏟는다. stock 에 값 0 으로 얹고 drop 에 짝을 지어 떨어뜨린다 —
+# 둘은 인덱스를 공유하므로 **같이** 늘려야 한다.
+func _boost_spill() -> void:
+	boost_t = -1.0
+	boost_card = {}
+	if boost_spill.is_empty():
 		return
-	match String(e.k):
-		"item":
-			if owned.size() >= GameData.max_items():
-				pay_msg = "동전 판이 꽉 찼다 (%d/%d)" % [owned.size(), GameData.max_items()]
-				pay_msg_t = HAND.msg_t
-				_deny()
-				return
-			owned.append(e.d)
-			_panel_ensure()
-		"cons":
-			if cons.size() >= GameData.cons_slots():
-				pay_msg = "사탕 칸이 꽉 찼다 (%d/%d)" % [cons.size(), GameData.cons_slots()]
-				pay_msg_t = HAND.msg_t
-				_deny()
-				return
-			cons.append(e.d)
-		"fix":
-			GameData.fixture_add(String(e.d.id))
-			reroll_cost = _reroll_price()
-	e["gone"] = true
-	boost_left -= 1
-	_sfx("buy")
-	if boost_left <= 0:
-		_boost_close()
+	var n := stock.size() + boost_spill.size()
+	for e in boost_spill:
+		stock.append({"type": String(e.type), "d": e.d, "cost": 0, "sold": false})
+		drop.append(_drop_one(stock.size() - 1, n))
+	boost_spill.clear()
+	drop_awake = true
+	drop_toss = true          # 새 낙하로 센다 — 첫 낙하의 시차 예산을 안 물려받는다
+	drop_t = 0.0
+	drop_acc = 0.0
+	_sfx("stage_pick")
 
 
-func _boost_close() -> void:
-	boost_open.clear()
-	boost_left = 0
-	state = run_from if run_from != S.BOOST else S.SHOP
-	_panel_reset()
+# 눈앞으로 온 팩. 다 오면 두 쪽으로 갈라진다.
+func _boost_draw() -> void:
+	if boost_t < 0.0 or boost_card.is_empty():
+		return
+	var rise: float = clampf(boost_t / float(BOOST.rise), 0.0, 1.0)
+	var tear: float = clampf((boost_t - float(BOOST.rise)) / float(BOOST.tear), 0.0, 1.0)
+	# 뒤를 살짝 눌러 시선을 앞으로 당긴다. 다 찢어질수록 다시 걷힌다.
+	draw_rect(Rect2(Vector2.ZERO, VIEW),
+			Color(0.0, 0.0, 0.0, 0.5 * rise * (1.0 - tear * 0.8)))
 
+	var c := Vector2(VIEW.x * 0.5, VIEW.y * 0.46)
+	# 뒤에서 앞으로 — 커지면서 온다. 세제곱으로 빼면 마지막에 훅 다가온다.
+	var k: float = 1.0 + (float(BOOST.big) - 1.0) * (1.0 - pow(1.0 - rise, 3.0))
+	var w := FIX_W * 1.18 * k
+	var h := FIX_H * 1.18 * k
+	var gap: float = float(BOOST.gap) * tear * tear
 
-# 펼친 팩. 뒤에 상점을 그대로 두고 그 위에 얹는다 — 런 정보와 같은
-# 어법이다. 산 자리에서 여는 것이지 다른 화면으로 넘어가는 것이 아니다.
-func _draw_boost() -> void:
-	draw_rect(Rect2(Vector2.ZERO, VIEW), Color(0.0, 0.0, 0.0, 0.62))
-	draw_string(font, Vector2(0, 104), "고르세요", HORIZONTAL_ALIGNMENT_CENTER,
-			VIEW.x, 16, C_TXT)
-	if boost_left > 1:
-		draw_string(font, Vector2(0, 120), "%d개 더" % boost_left,
-				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 10, C_ACC)
+	# 찢어진 두 쪽. 서로 반대로 밀리며 기운다.
+	for sgn in [-1.0, 1.0]:
+		var off := Vector2(sgn * gap, gap * 0.22)
+		var rot: float = sgn * tear * 0.30
+		var a: float = 1.0 - tear * 0.75
+		var q := _quad_at(c + off, rot, w * 0.5, h)
+		draw_colored_polygon(q, Color(C_PANEL.lightened(0.30), a))
+		# 띠는 갈라진 쪽에만 남는다 — 찢긴 자리가 어디인지 그림이 말한다.
+		draw_colored_polygon(_quad_at(c + off, rot, w * 0.5, 2.6 * k),
+				Color(C_ACC, a))
+		draw_polyline(q + PackedVector2Array([q[0]]),
+				Color(C_WIRE.darkened(0.25), a * 0.6), 1.0)
 
-	for i in boost_open.size():
-		var e: Dictionary = boost_open[i]
-		var r := _boost_rect(i)
-		# 미끄러져 들어온다 — 제약 카드와 같은 등장이라 같은 물건으로 읽힌다.
-		var t: float = clampf(boost_t * 3.4 - float(i) * 0.16, 0.0, 1.0)
-		r.position.y += (1.0 - t) * 26.0
-		var a: float = t
-		if bool(e.get("gone", false)):
-			a *= 0.22
+	# 터지는 빛 — 찢기는 순간에만 잠깐. 안의 것이 나오는 자리를 말한다.
+	if tear > 0.0:
+		var fa: float = (1.0 - tear) * tear * 4.0
+		draw_circle(c, 10.0 + 54.0 * tear, Color(C_ACC, 0.30 * fa))
 
-		draw_rect(Rect2(r.position + Vector2(2.0, 3.0), r.size), Color(0.0, 0.0, 0.0, 0.35 * a))
-		draw_rect(r, Color(C_PANEL.lightened(0.08), a))
-		draw_rect(Rect2(r.position, Vector2(r.size.x, 2.0)), Color(C_ACC, a))
-
-		var kind := String(e.k)
-		var tag: String = {"item": "동전", "cons": "사탕", "fix": "사진"}.get(kind, "?")
-		draw_string(font, r.position + Vector2(0.0, 15.0), tag,
-				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, Color(C_DIM, a))
-
-		var c := r.get_center() + Vector2(0.0, -8.0)
-		match kind:
-			"item":
-				draw_item_sticker(c, 15.0, e.d, 0.0, 0.0, 0.0, 10)
-			"cons":
-				_icon_cons(c, 13.0, String(e.d.id), a)
-			"fix":
-				_fix_flat(c, {}, 0.0, 0.0)
-
-		draw_string(font, r.position + Vector2(0.0, r.size.y - 20.0), String(e.d.n),
-				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, Color(C_TXT, a))
-		# 효과 한 줄. 동전은 조건과 효과가 따로라 얼굴이 이미 말하므로 값만 쓴다.
-		var sub := String(e.d.get("d", ""))
-		if kind == "item":
-			sub = GameData.eff_line(e.d)
-		draw_string(font, r.position + Vector2(3.0, r.size.y - 7.0), sub,
-				HORIZONTAL_ALIGNMENT_CENTER, r.size.x - 6.0, 8, Color(C_DIM, a))
-
-	# 안 고르고 닫을 수 있다. 칸이 다 찼을 때 갇히지 않게 하는 문이다 —
-	# 발라트로도 부스터 팩을 건너뛸 수 있다.
-	_btn(_boost_skip_rect(), "건너뛰기", "", true)
-
-
-func _boost_rect(i: int) -> Rect2:
-	var n: int = maxi(1, boost_open.size())
-	var w := 84.0
-	var gap := 12.0
-	var total: float = float(n) * w + float(n - 1) * gap
-	var x0: float = (VIEW.x - total) * 0.5
-	return Rect2(x0 + float(i) * (w + gap), 130.0, w, 104.0)
-
-
-func _boost_skip_rect() -> Rect2:
-	return Rect2(Vector2(VIEW.x * 0.5 - 60.0, 262.0), Vector2(120.0, 24.0))
+	draw_string(font, Vector2(0.0, c.y + h + 26.0), String(boost_card.get("n", "")),
+			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 12, Color(C_TXT, 1.0 - tear))
 
 
 func _runinfo_ok() -> bool:

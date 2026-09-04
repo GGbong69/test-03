@@ -1,5 +1,5 @@
 extends SceneTree
-# 팩이 상점에 뜨고, 사면 펼쳐지고, 고르면 칸에 들어가는가.
+# 팩을 사면 뜯기고, 뜯기면 테이블에 값 0 으로 쏟아지는가.
 #     godot --headless --script scripts/tools/probe_boost.gd
 var g = null
 var n := 0
@@ -17,39 +17,36 @@ func _process(_d: float) -> bool:
 
 func _go() -> void:
 	var gd = load("res://scripts/data.gd")
-	print("팩 표: %d종" % gd.boosters().size())
-	for b in gd.boosters():
-		print("  %-8s %-8s 펼침 %d · 고름 %d · 값 %d" % [b.id, b.n, b.size, b.pick, b.cost])
-
 	g.gold = 60
 	g._open_shop()
 	g._drop_settle()
-	var types := []
-	for st in g.stock: types.append(st.type)
-	print("\n재고: %s" % str(types))
-
 	var bi := -1
 	for i in g.stock.size():
 		if g.stock[i].type == "boost":
 			bi = i
 			break
 	if bi < 0:
-		print("팩이 안 떴다 — 실패")
-		quit(); return
+		print("팩이 안 떴다 — 실패"); quit(); return
 
-	print("팩 자리 %d · %s · %d골드" % [bi, g.stock[bi].d.n, g.stock[bi].cost])
-	var g0: int = g.gold
+	var s0: int = g.stock.size()
+	var d0: int = g.drop.size()
+	print("사기 전: 재고 %d · 낙하 %d · 골드 %d" % [s0, d0, g.gold])
+	print("팩: %s %d골드" % [g.stock[bi].d.n, g.stock[bi].cost])
 	g._buy(bi)
-	print("사고 나서 state=%s (BOOST=%d) · 펼친 수 %d · 고를 수 %d · 골드 %d→%d"
-			% [g.state, g.S.BOOST, g.boost_open.size(), g.boost_left, g0, g.gold])
-	for e in g.boost_open:
-		print("   %-5s %s" % [e.k, e.d.n])
+	print("산 직후: 뜯는 시간 %.2f · 쏟을 것 %d · 골드 %d" % [g.boost_t, g.boost_spill.size(), g.gold])
 
-	var o0: int = g.owned.size()
-	var c0: int = g.cons.size()
-	var f0: int = gd.fixtures_own.size()
-	g._boost_take(0)
-	print("첫 장을 골랐다 -> 동전 %d→%d · 사탕 %d→%d · 사진 %d→%d · state=%s"
-			% [o0, g.owned.size(), c0, g.cons.size(), f0, gd.fixtures_own.size(), g.state])
-	print("성공" if g.state != g.S.BOOST else "아직 고르는 중")
+	# 연출이 끝날 때까지 돌린다
+	for k in 200:
+		g._boost_tick(1.0 / 60.0)
+		if g.boost_t < 0.0:
+			break
+	print("뜯긴 뒤: 재고 %d(+%d) · 낙하 %d(+%d)"
+			% [g.stock.size(), g.stock.size() - s0, g.drop.size(), g.drop.size() - d0])
+	var free := 0
+	for i in range(s0, g.stock.size()):
+		print("   %-5s %-14s 값 %d" % [g.stock[i].type, g.stock[i].d.n, g.stock[i].cost])
+		if int(g.stock[i].cost) == 0:
+			free += 1
+	var ok: bool = g.stock.size() == g.drop.size() and free == g.stock.size() - s0
+	print("재고와 낙하가 짝이 맞고 전부 공짜인가: %s" % ("성공" if ok else "실패"))
 	quit()
