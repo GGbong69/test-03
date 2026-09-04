@@ -398,11 +398,15 @@ func _new_run() -> void:
 	throw6 = 0
 	zone_hist.clear()
 	won = false
-	_pack_grants()
 	leg_tags.clear()
 	leg_tags_round = 0
 	leg_skipped.clear()
 	GameData.fixture_clear()     # 사진은 런 스코프다. 지우는 자리는 여기 하나
+	# **지운 뒤에** 쥐여 준다. 반대였다 — 사진을 주는 다트통이 지금까지
+	# 하나도 없어서 아무도 안 밟은 자리였고, 선물 다트통을 만들자마자
+	# 드러났다. 다른 세 갈래(보드 확장·사탕·동전)는 각자의 clear 가
+	# 이 줄보다 위에 있어 안 걸렸다.
+	_pack_grants()
 	spin_cur = 0
 	dead_col = -1
 	dead_ring = 0
