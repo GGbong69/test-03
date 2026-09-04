@@ -59,6 +59,7 @@ const FILES := {
 	"colors": "colors.csv",
 	"tags": "tags.csv",
 	"fixtures": "fixtures.csv",
+	"boosters": "boosters.csv",
 	"tuning": "tuning.csv",
 	# ── HIGHTONE 스펙(2026-08-23 통합 컨텍스트)에서 온 표 ──
 	# areas 는 전부 확정이라 게임이 직접 읽는다. 나머지는 상태 열이 문이다 —
@@ -127,6 +128,7 @@ const Save_STATS := [
 	"runs", "wins", "darts", "triples", "doubles", "bulls", "misses",
 	"items_bought", "mods_bought", "darts_bought", "cons_used",
 	"rerolls", "sold", "gold_earned", "skips", "fixtures_bought",
+	"boosters_bought",
 	"best_leg", "best_score", "best_gold", "best_track",
 ]
 const PACK_KINDS := ["base", "hidden"]
@@ -426,6 +428,36 @@ static func areas_all() -> Array:
 	var out := []
 	for r in _raw.get("areas", []):
 		out.append(area(String(r.get("key", ""))))
+	return out
+
+
+# ── 팩 (boosters.csv) ────────────────────────────────────
+#  상점에 물건으로 뜨고, 사면 안에 든 것 몇 개를 펼쳐 그중 하나를 고른다.
+#  발라트로의 부스터 팩 자리다.
+#
+#  size 는 펼치는 수, pick 은 그중 고르는 수다. 둘을 나눠 두는 것은
+#  "넷을 펼쳐 둘을 고른다" 같은 팩을 표만 고쳐 만들 수 있게 하려는 것이다.
+#  pool 은 무엇이 나올 수 있는가 — 세미콜론으로 여럿, 다트통의 grant 와
+#  같은 규약이다.
+static func boosters() -> Array:
+	boot()
+	if _cache.has("boosters"):
+		return _cache["boosters"]
+	var out := []
+	for r in _raw.get("boosters", []):
+		if float(_f(r, "weight", "boosters", 0.0)) <= 0.0:
+			continue
+		out.append({
+			"id": String(r.get("id", "")),
+			"n": String(r.get("name", "")),
+			"size": _i(r, "size", "boosters", 2),
+			"pick": _i(r, "pick", "boosters", 1),
+			"cost": _i(r, "cost", "boosters", 4),
+			"pool": String(r.get("pool", "")).split(";", false),
+			"w": _f(r, "weight", "boosters", 1.0),
+			"d": String(r.get("desc", "")),
+		})
+	_cache["boosters"] = out
 	return out
 
 

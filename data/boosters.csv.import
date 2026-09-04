@@ -1,0 +1,19 @@
+[remap]
+
+importer="csv_translation"
+type="Translation"
+uid="uid://bqtwm2k4yhkgx"
+
+[deps]
+
+files=["res://data/boosters.name.translation", "res://data/boosters.size.translation", "res://data/boosters.pick.translation", "res://data/boosters.cost.translation", "res://data/boosters.pool.translation", "res://data/boosters.weight.translation", "res://data/boosters.desc.translation"]
+
+source_file="res://data/boosters.csv"
+dest_files=["res://data/boosters.name.translation", "res://data/boosters.size.translation", "res://data/boosters.pick.translation", "res://data/boosters.cost.translation", "res://data/boosters.pool.translation", "res://data/boosters.weight.translation", "res://data/boosters.desc.translation"]
+
+[params]
+
+compress=1
+delimiter=0
+unescape_keys=false
+unescape_translations=true
