@@ -31,3 +31,9 @@ __pycache__/
 
 # Meshy 플러그인이 받아 오는 모델 — 게임에 들일 것만 따로 옮긴다
 /imported_models/
+
+# 표 만들기 부산물 — 만드는 도구(dump_items.gd · make_item_xlsx.py)만 들이고
+# 그것이 뱉는 표는 안 들인다. 표가 아직 모양을 잡는 중이라 매번 바뀐다.
+/shots/*.csv
+/shots/*.tsv
+/shots/표/
