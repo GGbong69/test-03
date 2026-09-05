@@ -1,19 +1,4 @@
 [remap]
 
-importer="csv_translation"
-type="Translation"
+importer="keep"
 uid="uid://c5xdoy6nabm1y"
-
-[deps]
-
-files=["res://data/legs.name.translation", "res://data/legs.mult.translation", "res://data/legs.reward.translation", "res://data/legs.skippable.translation", "res://data/legs.boss.translation"]
-
-source_file="res://data/legs.csv"
-dest_files=["res://data/legs.name.translation", "res://data/legs.mult.translation", "res://data/legs.reward.translation", "res://data/legs.skippable.translation", "res://data/legs.boss.translation"]
-
-[params]
-
-compress=1
-delimiter=0
-unescape_keys=false
-unescape_translations=true

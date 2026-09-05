@@ -1,19 +1,4 @@
 [remap]
 
-importer="csv_translation"
-type="Translation"
+importer="keep"
 uid="uid://jx55pgtex70g"
-
-[deps]
-
-files=["res://data/fixtures.name.translation", "res://data/fixtures.key.translation", "res://data/fixtures.v.translation", "res://data/fixtures.op.translation", "res://data/fixtures.cost.translation", "res://data/fixtures.prereq.translation", "res://data/fixtures.min.translation", "res://data/fixtures.weight.translation", "res://data/fixtures.desc.translation"]
-
-source_file="res://data/fixtures.csv"
-dest_files=["res://data/fixtures.name.translation", "res://data/fixtures.key.translation", "res://data/fixtures.v.translation", "res://data/fixtures.op.translation", "res://data/fixtures.cost.translation", "res://data/fixtures.prereq.translation", "res://data/fixtures.min.translation", "res://data/fixtures.weight.translation", "res://data/fixtures.desc.translation"]
-
-[params]
-
-compress=1
-delimiter=0
-unescape_keys=false
-unescape_translations=true

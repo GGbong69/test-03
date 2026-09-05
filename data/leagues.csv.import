@@ -1,19 +1,4 @@
 [remap]
 
-importer="csv_translation"
-type="Translation"
+importer="keep"
 uid="uid://buks81sq4lkc7"
-
-[deps]
-
-files=["res://data/leagues.name.translation", "res://data/leagues.color.translation", "res://data/leagues.curve.translation", "res://data/leagues.reward.translation", "res://data/leagues.seal.translation", "res://data/leagues.darts.translation", "res://data/leagues.shop.translation", "res://data/leagues.interest.translation", "res://data/leagues.perish.translation", "res://data/leagues.rent.translation", "res://data/leagues.prereq.translation"]
-
-source_file="res://data/leagues.csv"
-dest_files=["res://data/leagues.name.translation", "res://data/leagues.color.translation", "res://data/leagues.curve.translation", "res://data/leagues.reward.translation", "res://data/leagues.seal.translation", "res://data/leagues.darts.translation", "res://data/leagues.shop.translation", "res://data/leagues.interest.translation", "res://data/leagues.perish.translation", "res://data/leagues.rent.translation", "res://data/leagues.prereq.translation"]
-
-[params]
-
-compress=1
-delimiter=0
-unescape_keys=false
-unescape_translations=true

@@ -1,19 +1,4 @@
 [remap]
 
-importer="csv_translation"
-type="Translation"
+importer="keep"
 uid="uid://rgb50lr7kdql"
-
-[deps]
-
-files=["res://data/rounds.curve.translation", "res://data/rounds.curve.translation", "res://data/rounds.shop.translation", "res://data/rounds.shop.translation", "res://data/rounds.shop.translation", "res://data/rounds.darts.translation"]
-
-source_file="res://data/rounds.csv"
-dest_files=["res://data/rounds.curve.translation", "res://data/rounds.curve.translation", "res://data/rounds.shop.translation", "res://data/rounds.shop.translation", "res://data/rounds.shop.translation", "res://data/rounds.darts.translation"]
-
-[params]
-
-compress=1
-delimiter=0
-unescape_keys=false
-unescape_translations=true
