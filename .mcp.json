@@ -4,7 +4,7 @@
 	  "command": "npx",
 	  "args": ["-y", "@coding-solo/godot-mcp"],
 	  "env": {
-		"GODOT_PATH": "D:/Godot/Godot_v4.7.2-stable_win64.exe"
+		"GODOT_PATH": "D:/steam/steamapps/common/Godot Engine/godot.windows.opt.tools.64.exe"
 	  }
 	}
   }
