@@ -826,6 +826,30 @@ func _leg_end_wear() -> void:
 		i -= 1
 
 
+
+# 다 쓴 동전을 치운다. tdec 은 던질 때마다 닳다가 0 에서 끝나는데, 0 이 된
+# 뒤에도 남아 있으면 아무것도 안 하는 카드가 다섯 칸 중 하나를 계속 먹는다.
+#
+# 지우는 자리는 **그 발의 정산이 끝난 뒤**다. 판 끝(_leg_end_wear)까지 두면
+# 죽은 카드를 한 판 내내 들고 있어야 하고, 반대로 닳는 그 순간(_land)에
+# 지우면 정산 큐가 자리 번호로 잡아 둔 카드가 밀려 엉뚱한 칸이 번쩍인다.
+# 큐가 다 빈 자리라야 둘 다 피한다.
+#
+# rdec 은 여기서 안 본다 — 그쪽은 판마다 닳으므로 판 끝이 제 자리다.
+func _wear_spent() -> void:
+	var i := owned.size() - 1
+	while i >= 0:
+		var it: Dictionary = owned[i]
+		if String(it.get("grow", "")) == "tdec" \
+				and int(it.v) - int(it.gstep) * int(it.get("gs", 0)) <= 0:
+			pop(_slot_rect(mini(i, GameData.max_items() - 1)).get_center()
+					+ Vector2(0.0, 24.0), "%s — 다 썼다" % it.n, C_MULT, 11, 1.1)
+			_seal_drop(i)
+			owned.remove_at(i)
+			_panel_reset()
+		i -= 1
+
+
 func _gold_from_items() -> Array:
 	# 골드가 나오는 곳은 여기 하나뿐이다. 다트 단위로는 절대 지급하지 않는다.
 	var rows := []
@@ -3155,6 +3179,7 @@ func _next_step() -> void:
 			_land(false)
 			return
 		burst_n = 0               # 연발이 다 팔렸다. 이제 보통 걸음이다
+		_wear_spent()             # 다 쓴 동전을 치운다
 		# 목표를 넘긴 순간 판 종료 — 남은 다트는 골드로 환산된다
 		if total >= target or darts_left <= 0:
 			_finish_leg()

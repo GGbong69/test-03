@@ -31,10 +31,44 @@ func _say(ok: bool, name: String, detail := "") -> void:
 		fails += 1
 
 
+# 2026-09-06 에 동전 표가 통째로 갈리면서 여기 박아 둔 id 다섯이 한꺼번에
+# 죽었다. 이 검사가 보는 것은 특정 동전이 아니라 **갈래** 다 — 무작위 배수 ·
+# 판마다 닳는 것 · 목숨 · 평범한 점수. 그래서 id 대신 모양으로 찾는다.
 func _item(id: String) -> Dictionary:
 	for it in GameData.items():
 		if String(it.id) == id:
 			return it.duplicate()
+	push_error("settle_probe: 동전 '%s' 가 표에 없다" % id)
+	return {}
+
+
+func _by_kind(k: String) -> Dictionary:
+	for it in GameData.items():
+		if String(it.get("k", "")) == k:
+			return it.duplicate()
+	push_error("settle_probe: 효과 '%s' 인 동전이 표에 없다" % k)
+	return {}
+
+
+func _by_grow(gw: String) -> Dictionary:
+	for it in GameData.items():
+		if String(it.get("grow", "")) == gw:
+			return it.duplicate()
+	push_error("settle_probe: 성장 '%s' 인 동전이 표에 없다" % gw)
+	return {}
+
+
+# 조건도 성장도 안 걸린 평범한 점수 동전. 봉인이 따라가는지만 보는
+# 자리라 무엇이든 되지만 서로 달라야 한다 — 같은 id 둘이면 "따라갔다" 가
+# 우연히 맞을 수 있다.
+func _plain(nth: int) -> Dictionary:
+	var seen := 0
+	for it in GameData.items():
+		if String(it.get("k", "")) == "chip" and String(it.get("grow", "")) == "" 				and String(it.get("aim", "")) == "" and String(it.get("per", "")) == "":
+			if seen == nth:
+				return it.duplicate()
+			seen += 1
+	push_error("settle_probe: 평범한 점수 동전이 %d장도 없다" % (nth + 1))
 	return {}
 
 
@@ -43,7 +77,7 @@ func _initialize() -> void:
 	root.add_child(g)
 
 	# ① mult_rand 가 배수에 실린다 — 정산 큐에 직접 넣고 한 걸음 돌린다
-	g.owned = [_item("j036")]          # 오차 인쇄 — 배수 +0~23 무작위
+	g.owned = [_by_kind("mult_rand")]  # 무작위 배수
 	g._panel_reset()
 	g.cur_chip = 10
 	g.cur_mult = 1
@@ -60,9 +94,11 @@ func _initialize() -> void:
 	# ② 봉인이 기본 점수를 따라간다 — 헬퍼를 직접 부르면 산술만 재고 끝난다.
 	# 결함이 있던 자리는 호출부(_leg_end_wear · _finish_leg)이므로
 	# 거기를 실제로 밟는다. rdec 이 0 에 닿아 앞자리가 부서지는 판다.
-	var dec: Dictionary = _item("j040")     # 소모성 증폭기 — rdec 4, 값 20
-	dec.gs = 4                              # 다음 걸음에 20 − 4*5 ≤ 0 → 파괴
-	g.owned = [dec, _item("dbl"), _item("bnd")]
+	var dec: Dictionary = _by_grow("rdec")  # 판마다 닳다가 0 이면 부서진다
+	# 다음 한 걸음에 0 에 닿게 맞춘다. 값을 박으면 표가 바뀔 때 또 깨진다 —
+	# 그 동전 제 값에서 걸음 수를 역산한다.
+	dec.gs = maxi(0, int(dec.v / maxi(int(dec.gstep), 1)) - 1)
+	g.owned = [dec, _plain(0), _plain(1)]
 	g._panel_reset()
 	g.sealed = 2
 	var keep: String = String(g.owned[2].id)
@@ -77,7 +113,7 @@ func _initialize() -> void:
 	g.leg_no = 3
 	g.target = 1000
 	g.total = 900
-	g.owned = [_item("j099")]               # 비상 골격
+	g.owned = [_by_kind("save")]            # 목숨
 	g._panel_reset()
 	g.sealed = 0
 	g.won = false
@@ -88,7 +124,7 @@ func _initialize() -> void:
 	# 목숨이 터지면 봉인도 같이 정리된다 — 봉인이 뒷자리일 때
 	g.leg_no = 3
 	g.total = 900
-	g.owned = [_item("j099"), _item("bnd")]
+	g.owned = [_by_kind("save"), _plain(0)]
 	g._panel_reset()
 	g.sealed = 1
 	g._finish_leg()
@@ -100,7 +136,7 @@ func _initialize() -> void:
 	g.leg_no = GameData.legs_n()
 	g.target = 1000
 	g.total = 900
-	g.owned = [_item("j099")]          # 비상 골격 — 목표의 v% 이상이면 실패를 무른다
+	g.owned = [_by_kind("save")]       # 목숨 — 목표의 v% 이상이면 실패를 무른다
 	g._panel_reset()
 	g.won = false
 	g._finish_leg()
@@ -111,7 +147,7 @@ func _initialize() -> void:
 	g.leg_no = 3
 	g.target = 1000
 	g.total = 900
-	g.owned = [_item("j099")]
+	g.owned = [_by_kind("save")]
 	g._panel_reset()
 	g._finish_leg()
 	_say(g.state == g.S.CLEAR, "그 앞 판은 정산으로", "state %d" % g.state)
