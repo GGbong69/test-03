@@ -31,11 +31,26 @@ static var pick := {}            # 목록형 줄의 지금 고른 번호
 static var msg := ""
 static var msg_t := 0.0
 
+# 목록 고르개 — 값 칸을 누르면 열린다. 화살표로 한 장씩 넘기는 것은 동전
+# 95장 앞에서 못 쓴다(끝까지 가려면 아흔네 번을 눌러야 한다). "" 면 닫힘.
+static var open_k := ""
+static var open_n1 := ""     # 머리에 적을 줄 이름
+static var open_page := 0
+
 const PAGES := ["경제·진행", "물건", "판·조준", "해금"]
 const W := 300.0
 const ROW := 15.0
 const ARW := 13.0              # 화살표 칸 너비
 const VALW := 116.0            # 값 칸 너비
+
+# 고르개는 판보다 넓다 — 640 폭에서 480 까지 쓴다. 세 칸 × 열여덟 줄이면
+# 한 쪽에 쉰넷이라 켜진 동전 62장이 두 쪽에 담긴다.
+#
+# 열아홉 줄로 잡았더니 마지막 줄이 바닥 안내 문구와 겹쳤다 — 줄 끝이 343,
+# 문구 윗변이 339 였다. 한 줄을 덜어 그 4px 를 띄운다.
+const PW := 476.0
+const PCOL := 3
+const PROW := 18
 
 
 # ── 바깥과 닿는 셋 ────────────────────────────────────────
@@ -44,12 +59,18 @@ static func key(g: Node, code: int) -> bool:
 	# \ 는 [ ] 옆이라 손이 이미 거기 있다 — 게이지 속도 조절과 같은 자리다.
 	if code == KEY_BACKSLASH:
 		on = not on
+		open_k = ""              # 열어 둔 고르개를 남기면 다음에 열 때 그게 뜬다
 		if on:
 			msg = "\\ 로 닫는다"
 			msg_t = 2.0
 		return true
 	if not on:
 		return false
+	# 고르개가 열려 있으면 ESC 는 그것만 닫는다. 개발자 모드까지 같이 닫으면
+	# 목록을 잘못 열었을 때 되돌아올 자리가 없다.
+	if code == KEY_ESCAPE and open_k != "":
+		open_k = ""
+		return true
 	if code == KEY_TAB:
 		page = (page + 1) % PAGES.size()
 		return true
@@ -59,6 +80,10 @@ static func key(g: Node, code: int) -> bool:
 static func click(g: Node, m: Vector2) -> bool:
 	if not on:
 		return false
+	# 고르개가 위에 떠 있으면 그것이 클릭을 통째로 가진다. 아래 판까지
+	# 같이 판정하면 가려진 줄이 눌린다.
+	if open_k != "":
+		return _pick_click(g, m)
 	for i in PAGES.size():
 		if _tab(i).has_point(m):
 			page = i
@@ -73,6 +98,13 @@ static func click(g: Node, m: Vector2) -> bool:
 			var n: int = int(e.n)
 			if n > 0:
 				var cur: int = int(pick.get(e.k, 0))
+				# 값 칸을 누르면 전체 목록을 편다. 화살표는 옆칸을 볼 때
+				# 그대로 쓰고, 멀리 있는 것은 목록에서 바로 집는다.
+				if _val_box(r).has_point(m):
+					open_k = String(e.k)
+					open_n1 = String(e.get("n1", ""))
+					open_page = cur / _pick_per()
+					return true
 				if _arrow(r, false).has_point(m):
 					pick[e.k] = (cur - 1 + n) % n
 				elif _arrow(r, true).has_point(m):
@@ -128,6 +160,10 @@ static func draw(g: Node) -> void:
 		g.draw_string(g.font, p.position + Vector2(6.0, p.size.y - 6.0), msg,
 				HORIZONTAL_ALIGNMENT_LEFT, p.size.x - 12.0, 11, Color(0.55, 1.0, 0.65))
 
+	# 고르개는 판보다 넓어서 통째로 덮는다 — 맨 나중에 그려야 위로 온다.
+	if open_k != "":
+		_pick_draw(g)
+
 
 static func tick(d: float) -> void:
 	if msg_t > 0.0:
@@ -169,6 +205,134 @@ static func _row(i: int) -> Rect2:
 	var p := _panel()
 	return Rect2(p.position + Vector2(6.0, 40.0 + float(i) * ROW),
 			Vector2(p.size.x - 12.0, ROW - 2.0))
+
+
+# ── 목록 고르개 ───────────────────────────────────────────
+
+static func _pick_panel() -> Rect2:
+	return Rect2(Vector2(4.0, 22.0), Vector2(PW, 330.0))
+
+
+# 한 쪽에 담기는 칸 수. 쪽 나누기와 자리 계산이 같은 수를 봐야 한다 —
+# 따로 적어 두면 한쪽만 고쳤을 때 마지막 줄이 조용히 안 눌린다.
+static func _pick_per() -> int:
+	return PCOL * PROW
+
+
+static func _pick_cell(j: int) -> Rect2:
+	var p := _pick_panel()
+	var cw: float = (p.size.x - 12.0) / float(PCOL)
+	var c: int = j / PROW
+	var r: int = j % PROW
+	return Rect2(p.position + Vector2(6.0 + float(c) * cw, 36.0 + float(r) * ROW),
+			Vector2(cw - 2.0, ROW - 2.0))
+
+
+# 0 이전 쪽 · 1 다음 쪽 · 2 닫기
+static func _pick_btn(which: int) -> Rect2:
+	var p := _pick_panel()
+	var y: float = p.position.y + 4.0
+	var right: float = p.position.x + p.size.x - 6.0
+	match which:
+		2: return Rect2(Vector2(right - 30.0, y), Vector2(30.0, 14.0))
+		1: return Rect2(Vector2(right - 30.0 - 16.0, y), Vector2(14.0, 14.0))
+		_: return Rect2(Vector2(right - 30.0 - 34.0, y), Vector2(14.0, 14.0))
+
+
+# 고르개가 늘어놓을 이름들. aim·score 는 표가 아니라 상수 목록이라
+# _list 를 안 지난다 — _cur_name 이 이미 같은 갈래를 쥐고 있다.
+static func _names(k: String) -> PackedStringArray:
+	var out := PackedStringArray()
+	if k == "aim":
+		for m in GameData.AIM_MODES:
+			out.append(GameData.aim_name(String(m)))
+		return out
+	if k == "score":
+		for m in GameData.SCORE_MODES:
+			out.append(GameData.score_name(String(m)))
+		return out
+	for r in _list(k):
+		out.append(String(r.get("n", r.get("name", r.get("id", "?")))))
+	return out
+
+
+static func _pick_pages(n: int) -> int:
+	return maxi(1, (n + _pick_per() - 1) / _pick_per())
+
+
+static func _pick_click(g: Node, m: Vector2) -> bool:
+	var names := _names(open_k)
+	var pages := _pick_pages(names.size())
+	open_page = clampi(open_page, 0, pages - 1)
+	if _pick_btn(2).has_point(m):
+		open_k = ""
+		return true
+	if _pick_btn(0).has_point(m):
+		open_page = (open_page - 1 + pages) % pages
+		return true
+	if _pick_btn(1).has_point(m):
+		open_page = (open_page + 1) % pages
+		return true
+	for j in _pick_per():
+		var idx: int = open_page * _pick_per() + j
+		if idx >= names.size():
+			break
+		if _pick_cell(j).has_point(m):
+			# 판 위의 줄과 같은 길로 적용한다 — _run 이 pick 를 읽으므로
+			# 여기서 게임 상태를 직접 만지면 두 길이 갈라진다.
+			pick[open_k] = idx
+			_run(g, {"k": open_k})
+			open_k = ""
+			return true
+	# 판 밖을 누르면 닫는다. 안쪽 빈자리는 삼킨다.
+	if not _pick_panel().has_point(m):
+		open_k = ""
+	return true
+
+
+static func _pick_draw(g: Node) -> void:
+	var p := _pick_panel()
+	var names := _names(open_k)
+	var pages := _pick_pages(names.size())
+	open_page = clampi(open_page, 0, pages - 1)
+	var cur: int = int(pick.get(open_k, 0))
+
+	# 판(0.94)과 달리 고르개는 **불투명**이다. 뒤가 비치면 예순두 줄을
+	# 읽는 데 방해가 된다 — 다트판이 밝아서 2% 만 새도 눈에 걸린다.
+	g.draw_rect(p, Color(0.05, 0.04, 0.09))
+	g.draw_rect(Rect2(p.position, Vector2(p.size.x, 2.0)), Color(1.0, 0.80, 0.35))
+	g.draw_string(g.font, p.position + Vector2(8.0, 15.0),
+			"%s — %d개 · %d/%d쪽" % [_pick_title(), names.size(),
+					open_page + 1, pages],
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1.0, 0.80, 0.35))
+	for w in 3:
+		var b := _pick_btn(w)
+		g.draw_rect(b, Color(0.20, 0.17, 0.28))
+		g.draw_string(g.font, b.position + Vector2(0.0, 11.0),
+				["◀", "▶", "닫기"][w], HORIZONTAL_ALIGNMENT_CENTER, b.size.x, 11,
+				Color(0.90, 0.88, 0.95))
+
+	for j in _pick_per():
+		var idx: int = open_page * _pick_per() + j
+		if idx >= names.size():
+			break
+		var c := _pick_cell(j)
+		var sel := idx == cur
+		g.draw_rect(c, Color(0.30, 0.26, 0.40) if sel else Color(0.13, 0.11, 0.18))
+		g.draw_string(g.font, c.position + Vector2(4.0, 11.0),
+				"%d %s" % [idx + 1, names[idx]],
+				HORIZONTAL_ALIGNMENT_LEFT, c.size.x - 8.0, 11,
+				Color(1.0, 0.90, 0.55) if sel else Color(0.86, 0.86, 0.92))
+
+	g.draw_string(g.font, p.position + Vector2(8.0, p.size.y - 5.0),
+			"누르면 바로 적용 · ESC 나 판 밖을 눌러 닫는다",
+			HORIZONTAL_ALIGNMENT_LEFT, p.size.x - 16.0, 11, Color(0.55, 0.52, 0.60))
+
+
+# 고르개 머리에 적을 이름. 열 때 줄 이름을 그대로 받아 둔다 — 여는 순간에는
+# 그 줄을 손에 쥐고 있고, 그릴 때 다시 찾으면 쪽이 바뀌었을 때 못 찾는다.
+static func _pick_title() -> String:
+	return open_n1 if open_n1 != "" else open_k
 
 
 # ── 쪽마다 무엇이 있나 ────────────────────────────────────
