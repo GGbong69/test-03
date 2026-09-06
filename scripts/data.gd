@@ -2127,7 +2127,13 @@ static func _v_items() -> void:
 			var ca: String = a.get("cond", "")
 			var cb: String = b.get("cond", "")
 			var covers: bool = ca == cb or (sub.has(ca) and sub[ca].has(cb))
-			if covers and _i(a, "value", "items") >= _i(b, "value", "items") \
+			# 값이 클수록 센 것이 보통인데 save 는 반대다 — 그 값은 「목표의
+			# 몇 %」 라 낮을수록 일찍 선다. 부등호를 그대로 두면 조건 없는
+			# 목숨(값 1)이 조건 붙은 목숨(값 50)에 밀리는 것으로 읽힌다.
+			var av := _i(a, "value", "items")
+			var bv := _i(b, "value", "items")
+			var beats: bool = av <= bv if String(a.get("kind", "")) == "save" else av >= bv
+			if covers and beats \
 					and _i(a, "cost", "items") <= _i(b, "cost", "items"):
 				_errs.append("items — %s(%s) 가 %s(%s) 의 상위호환이다"
 						% [a.get("name"), a.get("id"), b.get("name"), b.get("id")])
@@ -2159,10 +2165,13 @@ static func _v_items() -> void:
 
 
 static func _rarity_of_cost(cost: int) -> String:
+	# 2026-09-06 기획서가 가격을 4·8·12 로 다시 잡았다. 옛 사다리는
+	# 4·7·11·14 였는데 그 시절 표가 통째로 갈렸다. 쓰는 곳은 아래 등급 대조
+	# 하나뿐이라 여기만 고치면 된다.
 	match cost:
 		4: return "common"
-		7: return "uncommon"
-		11, 14: return "rare"
+		8: return "uncommon"
+		12: return "rare"
 		20: return "legendary"
 	return ""
 
