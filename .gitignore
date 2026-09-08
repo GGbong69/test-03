@@ -37,3 +37,7 @@ __pycache__/
 /shots/*.csv
 /shots/*.tsv
 /shots/표/
+
+# pptx 편집 작업물 — 고닷과 무관한 부산물이고, 안에 node_modules 정션이 있어
+# 그대로 두면 깃이 코덱스 런타임 캐시 320MB 를 통째로 들인다
+/outputs/pptx-edit-work/
