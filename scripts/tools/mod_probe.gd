@@ -81,6 +81,15 @@ func _initialize() -> void:
 	g._swap_skip()
 
 	# ① 표와 코드가 같은 축을 안다
+	#
+	# 모르는 축은 실패다 — 표에 오타가 났거나 코드가 못 읽는 것을 적었다는 뜻이라
+	# 그 카드는 조용히 아무 일도 안 한다.
+	#
+	# 안 쓰는 축은 실패가 아니다. 2026-09-10 기획서가 안개와 헛품을 걷으면서
+	# fog 와 reward_mul 이 주인을 잃었는데, 코드는 그 둘을 여전히 읽을 수 있다
+	# (game.gd 의 fog 렌더와 _settle_clear 의 보상 배수). 카드가 다시 생기면
+	# 표 한 줄로 살아나므로 축을 걷지 않고 남겨 둔다 — 대신 몇이 노는지는
+	# 눈에 보이게 적는다.
 	var unused: Array = GameData.MODIFIER_AXES.duplicate()
 	var unknown := ""
 	for m in GameData.modifiers():
@@ -88,8 +97,9 @@ func _initialize() -> void:
 		if not GameData.MODIFIER_AXES.has(ax):
 			unknown = ax
 		unused.erase(ax)
-	_say(unknown == "" and unused.is_empty(), "표와 코드가 같은 축을 안다",
-			"모르는 축 '%s' · 안 쓰는 축 %s" % [unknown, unused])
+	_say(unknown == "", "표가 코드가 아는 축만 쓴다", "모르는 축 '%s'" % unknown)
+	if not unused.is_empty():
+		print("  알림 %-30s %s" % ["지금 표가 안 쓰는 축", unused])
 
 	# ② 칸 축 — 번호
 	_arm(g, "dead")
@@ -211,21 +221,28 @@ func _initialize() -> void:
 			"회전 %d · 숫자 제자리 %s · 색 제자리 %s" % [g.spin_cur, not mixed, col_ok])
 
 	# ⑥ 판밖 축 — 보상
-	g.leg_no = 2
-	_arm(g, "dry")
-	g.gold = 0
-	g.total = GameData.target_of(2)
-	g.darts_left = 0
-	g._settle_clear()
-	var dry_gold: int = g.gold
-	g.leg_no = 2
-	_arm(g, "")
-	g.gold = 0
-	g.total = GameData.target_of(2)
-	g.darts_left = 0
-	g._settle_clear()
-	_say(dry_gold < g.gold, "보상 축이 정산에 든다",
-			"제약 %d골드 · 없을 때 %d골드" % [dry_gold, g.gold])
+	#
+	# 2026-09-10 기획서가 헛품을 걷으면서 이 축을 쥔 카드가 없어졌다. 카드가
+	# 없으면 잴 것도 없다 — 없는 것을 쥐려 들면 _arm 이 빈 손으로 돌아와
+	# "제약이 안 걸린다" 가 아니라 "보상이 안 깎인다" 로 잘못 읽힌다.
+	if _row("dry").is_empty():
+		print("  알림 %-30s %s" % ["보상 축을 쥔 카드가 없다", "헛품이 표에서 빠졌다"])
+	else:
+		g.leg_no = 2
+		_arm(g, "dry")
+		g.gold = 0
+		g.total = GameData.target_of(2)
+		g.darts_left = 0
+		g._settle_clear()
+		var dry_gold: int = g.gold
+		g.leg_no = 2
+		_arm(g, "")
+		g.gold = 0
+		g.total = GameData.target_of(2)
+		g.darts_left = 0
+		g._settle_clear()
+		_say(dry_gold < g.gold, "보상 축이 정산에 든다",
+				"제약 %d골드 · 없을 때 %d골드" % [dry_gold, g.gold])
 
 	print("
 %s" % ("실패 %d건" % fails if fails > 0 else "열 검사 전부 통과"))
