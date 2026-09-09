@@ -212,6 +212,10 @@ var target := 0
 var total := 0
 var shown := 0.0
 var darts_left := 0
+# 이번 런에 동전을 한 장이라도 샀는가. 「동전을 하나도 안 산 채 라운드 N
+# 도달」 조건이 이것을 읽는다 — items_bought 는 평생 누적이라 못 쓴다.
+# 다트통이 쥐여 준 동전은 산 것이 아니다(맨손의 뜻이 「안 샀다」이다).
+var bought_item := false
 var gold := 0
 var owned := []
 var won := false
@@ -274,6 +278,25 @@ var card_mode := 0
 var card_item := ""
 var last_gain := 0
 var total_flash := 0.0
+
+# 저울이 두 값을 하나로 고른 카드. **셈은 여기 없다** — 걸음이 서는 순간
+# cur_chip·cur_mult 는 이미 고른 값이고, 아래 둘은 「어떤 두 수가 그렇게
+# 됐는가」를 카드에 적기 위해서만 든다.
+#
+# 연출은 **색과 번쩍임 둘뿐이다.** 두 칸이 붙었다 갈라지는 그림을 한 번
+# 만들어 봤는데, 걸음을 1.2초까지 늘리고도 발마다 같은 춤을 다시 보는
+# 것이 되어 걷어냈다. 바뀐 수를 읽는 데 필요한 것은 「바뀌었다」는 표시
+# 하나이고, 그것은 색이 한다.
+var bal_lit := false          # 이 카드가 지금 고른 값을 들고 있는가
+var bal_flash := 0.0          # 바뀐 순간의 번쩍임. total_flash 와 같은 어법
+var bal_c := 0                # 고르기 전 점수
+var bal_m := 0                # 고르기 전 배수
+# 고른 값이 입는 색. 파랑(점수)도 빨강(배수)도 아닌 색이라야 「둘이 하나가
+# 됐다」가 읽히는데, 그 색을 손으로 정하는 대신 **다트통이 제 색을 쓴다** —
+# packs.csv 가 이미 통마다 색을 들고 있고(저울은 보라), 그 색이 새 런 화면의
+# 통 겉과 목록 줄에도 같이 선다. 판 시작에 한 번 읽는 것은 계산 방식과
+# 같은 규약이다.
+var bal_col := Color("7a4f9e")
 
 # ── 이펙트 ────────────────────────────────────────────────
 var darts := []                 # 보드에 꽂힌 것들 {p 착탄점, id 다트 종류, rot 기울기}
@@ -381,6 +404,7 @@ func _ready() -> void:
 
 func _new_run() -> void:
 	Save.bump("runs")
+	bought_item = false
 	mods_own.clear()
 	_board_bake()
 	leg_no = 1
@@ -496,13 +520,27 @@ func _start_leg() -> void:
 	# 변형을 판 시작에 한 번 읽는다. 코드에 갈래가 없는 이름이면
 	# 여기서 한 번 울린다 — 매 프레임 울리면 로그가 못 쓰게 된다.
 	#
-	# 조준은 **든 동전**가 쥔다. 다트통이 직접 들고 있으면 그 방식을 런
-	# 도중에 얻거나 잃을 수 없다 — 동전로 오면 사고 팔고 봉인되는
-	# 것들과 같은 규칙 아래 놓이고, 그 자체가 판단거리가 된다.
-	# 계산 방식은 다트통이 그대로 쥔다. 그것은 이 런이 어떤 판인가에 대한
-	# 약속이라 도중에 바뀌면 안 된다.
+	# 조준도 계산도 **든 동전이 먼저 쥔다.** 다트통이 직접 들고 있으면
+	# 그 방식을 런 도중에 얻거나 잃을 수 없고, 그러면 그 다트통은 처음부터
+	# 끝까지 같은 판이다. 동전으로 오면 사고 팔고 봉인되는 것들과 같은
+	# 규칙 아래 놓이고, 그 자체가 판단거리가 된다.
+	#
+	# **계산 방식이 여기로 온 것은 2026-09-09 이다.** 그전에는 다트통이
+	# 쥐고 「도중에 바뀌면 안 된다」고 적혀 있었는데, 기획서가 저울을
+	# 동전(데칼코마니)으로 내리면서 조준과 같은 규약이 됐다. 판 시작에
+	# 한 번 읽는 것은 그대로라 **판 도중에는 여전히 안 바뀐다** — 바뀌는
+	# 자리는 상점 하나다.
+	#
+	# 동전이 안 쥐면 다트통 표로 떨어진다. 두 길을 다 남겨 두는 것은
+	# 계산 방식을 통째로 쥐는 다트통이 나중에 다시 설 수 있게 하려는 것이다.
 	aim_mode = _aim_from_items()
-	score_mode = GameData.score_mode()
+	var si := _score_item()
+	if si >= 0:
+		score_mode = String(owned[si].get("score", ""))
+		bal_col = GameData.rarity_color(String(owned[si].get("rarity", "common")))
+	else:
+		score_mode = GameData.score_mode()
+		bal_col = Color(String(GameData.pack_row().get("color", "7a4f9e")))
 	if not GameData.AIM_MODES.has(aim_mode):
 		push_error("조준: 모르는 방식 '%s' — AIM_MODES 에 없다" % aim_mode)
 		aim_mode = "std"
@@ -530,6 +568,8 @@ func _start_leg() -> void:
 	low_hit = 0
 	cur_chip = 0
 	cur_mult = 0
+	bal_lit = false
+	bal_flash = 0.0
 	darts.clear()
 	pops.clear()
 	waves.clear()
@@ -594,6 +634,14 @@ func _finish_leg() -> void:
 	Save.peak("best_leg", leg_no)
 	Save.peak("best_score", total)
 	Save.peak("best_gold", gold)
+	# 판을 넘긴 경우에만 남길 것 둘. 실패한 판의 잔탄은 기록이 아니다.
+	if total >= target:
+		# 「다트 N개로 판을 넘겼다」 — 조건은 남은 다트로 적는다.
+		# 여섯 발 중 하나만 쓰면 남은 것이 다섯이다.
+		Save.peak("best_spare", darts_left)
+		# 「동전을 하나도 안 산 채 여기까지 왔다」
+		if not bought_item:
+			Save.peak("best_leg_bare", leg_no)
 	Save.flush()
 	if total < target:
 		# 목숨 아이템(조커 이식 110099) — 총점이 목표의 일정 비율 이상이면
@@ -635,6 +683,7 @@ func _finish_leg() -> void:
 		state = S.OVER
 		won = true
 		Save.bump("wins")
+		_dart_peaks()
 		_pack_unlock_check()
 		Save.flush()
 		_sfx("run_win")
@@ -749,11 +798,31 @@ func _pack_unlock_next() -> void:
 		return
 
 
-# 히든 다트통은 통계 하나가 문이다. 런이 끝날 때와 새 런 화면을 열 때 본다 —
+# 통계 하나가 문인 다트통들. 런이 끝날 때와 새 런 화면을 열 때 본다 —
 # 조건이 채워진 순간이 아니라 런 경계에서 여는 것은 발라트로와 같다.
 # 저장을 읽는 쪽이 여기라 data.gd 는 저장을 모른 채로 남는다(검증기가 순수해야 한다).
+#
+# **히든만 보지 않는다(2026-09-09).** 기본 다트통도 조건으로 열 수 있게
+# 되면서 갈래로 거르면 그 줄들이 영영 안 열린다. 조건이 없는 줄은
+# 아래 st == "" 에서 그냥 빠지므로 체인으로 여는 다트통은 그대로다.
+# 완주한 순간의 다트 구성을 남긴다. 「가벼운 다트 3개 이상 보유한 채
+# 완주」 같은 조건이 이 값을 읽는다.
+#
+# 탄창(magazine)을 센다 — 판마다 뽑아 쓰는 remaining 이 아니라 런 내내
+# 들고 있는 그 구성이다. 「보유한 채」가 가리키는 것이 이쪽이다.
+func _dart_peaks() -> void:
+	var n := {}
+	for d in magazine:
+		var k := String(d.get("id", "std"))
+		n[k] = int(n.get(k, 0)) + 1
+	# 쓰는 다트통이 없는 종류도 센다 — 조건이 나중에 붙어도 값이 이미
+	# 쌓여 있어야 한다는 것이 save.gd 머리말의 규약이다.
+	for k in ["hvy", "lgt", "prc", "mag"]:
+		Save.peak("best_dart_" + k, int(n.get(k, 0)))
+
+
 func _pack_unlock_check() -> void:
-	for r in GameData.packs_of("hidden"):
+	for r in GameData.packs():
 		var id := String(r.get("id", ""))
 		if Save.unlocked("pack:" + id):
 			continue
@@ -965,7 +1034,7 @@ func _roll_stock() -> void:
 			continue
 		# 가중치 0 은 **테이블에 안 뜬다는 뜻**이다. 저울에만 맡기면 마지막
 		# 원소로 떨어지는 폴백(_draw_weighted)에 걸려 아주 가끔 뜬다.
-		# 전설이 그 자리라, 따로 얻는 길로만 오게 하려면 여기서 빼야 한다.
+		# 레전더리가 그 자리라, 따로 얻는 길로만 오게 하려면 여기서 빼야 한다.
 		if GameData.item_weight(it) <= 0.0:
 			continue
 		pool.append(it)
@@ -1104,6 +1173,7 @@ func _buy(i: int) -> void:
 			cp.gs = 0
 			cp.bought = leg_no          # 삭음(주황 리그)이 읽는 나이다
 			owned.append(cp)
+			bought_item = true
 		"mod":
 			_apply_mod(s.d.id)
 		"dart":
@@ -1707,6 +1777,13 @@ const SFX := {
 	"settle_total":   {"f": 196.0, "d": 0.34, "a": 0.26},
 	"target_hit":     {"seq": [392.0, 523.0, 659.0, 784.0], "gap": 0.08, "d": 0.26, "a": 0.26},
 
+	# ── 저울(bal) — 소리가 곧 셈이다 ──────────────
+	#  262 와 523 은 한 옥타브 차인데 그 **산술 평균이 392.5** 라 392 로
+	#  접힌다. 두 값을 더해 반으로 가르는 것이 이 동전의 전부고, 그 셈을
+	#  음으로 한 번 더 적은 것이 이 한 줄이다 — 정산 걸음이 반음씩 오르는
+	#  것과 같은 어법이다.
+	"settle_bal":     {"seq": [262.0, 523.0, 392.0], "gap": 0.07, "d": 0.18, "a": 0.22},
+
 	# ── 판과 런 ───────────────────────────────────
 	"leg_clear":    {"seq": [392.0, 494.0, 587.0], "gap": 0.09, "d": 0.18, "a": 0.22},
 	"save_life":      {"seq": [392.0, 523.0], "gap": 0.09, "d": 0.16, "a": 0.22},
@@ -1894,6 +1971,7 @@ func _process(d: float) -> void:
 	board_punch = maxf(board_punch - d * 3.4, 0.0)
 	hit_flash = maxf(hit_flash - d * 2.6, 0.0)
 	total_flash = maxf(total_flash - d * 3.0, 0.0)
+	bal_flash = maxf(bal_flash - d * 4.0, 0.0)
 	_tick_score(d)
 
 	for w in waves:
@@ -2057,9 +2135,12 @@ func _auto_step() -> void:
 # ══════════════════════════════════════════════════════════
 #  히든 다트통이 갈라지는 두 자리
 # ──────────────────────────────────────────────────────────
-#  기본 다트통들은 값만 바꾼다 — 다트 수, 시작 골드, 칸 수. 히든 다트통은
-#  **조준하는 법**과 **점수 내는 법**이 다르다. 그 둘이 갈라지는 자리가
-#  이 게임에 정확히 두 곳이고, 여기다.
+#  기본 다트통들은 값만 바꾼다 — 다트 수, 시작 골드, 칸 수. 갈라지는 것은
+#  **조준하는 법**과 **점수 내는 법** 둘이고, 그 자리가 여기다.
+#
+#  ⚠ 둘 다 이제 **동전이 먼저 쥔다.** 다트통은 그 동전을 쥐여 주는 것으로
+#  같은 일을 한다(저울 다트통 → 데칼코마니). 다트통이 직접 쥐면 런 도중에
+#  얻거나 잃을 수 없어서 처음부터 끝까지 같은 판이 되기 때문이다.
 #
 #  지금은 std 하나뿐이다. 변형의 내용은 아직 안 정했고 여기는 자리만
 #  세워 둔 것이다. 새 방식을 만들려면
@@ -2084,6 +2165,21 @@ func _aim_from_items() -> String:
 		if am != "":
 			return am
 	return "std"
+
+
+# 계산 방식을 쥔 첫 동전의 자리. 없으면 -1 이고, 그때는 다트통 표가
+# 쥔다. **인덱스를 돌려주는 것**은 카드가 그 동전의 색까지 입기
+# 때문이다 — 저울 걸음이 보라로 물드는 그 색이 여기서 온다.
+#
+# 조준과 같은 규약으로 앞자리가 이긴다. 동전 순서는 손으로 바꿀 수
+# 있으므로 "무엇이 이기나" 가 플레이어 손에 있다.
+func _score_item() -> int:
+	for i in owned.size():
+		if i == sealed:
+			continue
+		if String(owned[i].get("score", "")) != "":
+			return i
+	return -1
 
 
 # 당김 조준. **끌고 온 거리가 아니라 놓는 순간의 속도**가 던지는 벡터다 —
@@ -2343,12 +2439,34 @@ func _score_combine(chip: int, mult: int) -> int:
 		"std":
 			return chip * mult
 		"bal":
-			# 점수와 배수를 평균으로 맞춘 뒤 곱한다. 한쪽에만 쌓는 빌드가
-			# 통째로 죽고 양쪽을 고르게 올린 빌드가 가장 커진다 — 같은
-			# 합에서 곱이 가장 큰 자리가 두 값이 같은 자리이기 때문이다.
-			var x := int(round((float(chip) + float(mult)) * 0.5))
+			# 점수와 배수를 평균으로 맞춘 뒤 곱한다. 같은 합에서 곱이 가장
+			# 큰 자리가 두 값이 같은 자리라, 결과는 **늘 std 이상**이다.
+			#
+			# ⚠ 「고르게 올린 빌드가 이긴다」고 오래 적혀 있었는데 **틀렸다.**
+			# 결과가 합 하나로만 정해지므로 점수 +1 과 배수 +1 의 값이 같아진다.
+			# 점수 카드는 보통 +100 대이고 배수 카드는 +4 대라 — **점수 카드가
+			# 압도적으로 세지고 배수 카드와 xmult 가 죽는다.** 고르게 올릴
+			# 이유가 없다. 빌드를 뒤집는 카드지 균형을 요구하는 카드가 아니다.
+			#
+			# 실측(오토플레이 900발): 판 1~6 에서 std 대비 2.67배, 판 19~24
+			# 에서 1.20배. 배수가 자랄수록 이득이 준다 — 거기까지는 곡선이
+			# 스스로 잡는다. 안 잡히는 자리는 점수만 일부러 쌓았을 때다:
+			# 점수 360·배수 3 이면 30.7배(33,124점)로 라운드 8 보스(8,000)를
+			# 한 발에 넘긴다. **그 구멍은 아직 안 막았다.**
+			var x := _bal_half(chip, mult)
 			return x * x
 	return chip * mult
+
+
+# 두 값이 고르게 나눠 가진 몫. **반올림하는 자리를 여기 하나로 묶는다** —
+# 저울 걸음이 화면에 적는 수와 _score_combine 이 곱하는 수가 각각 반올림하면
+# 합이 홀수인 발마다 카드는 53 을 보여 주고 총점은 54×54 로 오른다. 화면이
+# 거짓말을 하는 것이라 이 파일이 제일 싫어하는 결말이다(작은 다트 주석 참고).
+#
+# 고른 값을 다시 고르면 제자리다(반의 반은 반이다). 그래서 저울 걸음이
+# cur_chip·cur_mult 를 미리 갈아 놓아도 total 걸음의 셈이 안 바뀐다.
+func _bal_half(chip: int, mult: int) -> int:
+	return int(round((float(chip) + float(mult)) * 0.5))
 
 
 func _advance() -> void:
@@ -3032,6 +3150,8 @@ func _land(mark := true) -> void:
 
 	cur_chip = 0
 	cur_mult = 0
+	bal_lit = false
+	bal_flash = 0.0
 	card_item = ""
 	card_mode = 0
 	pitch_step = 0
@@ -3098,6 +3218,12 @@ func _land(mark := true) -> void:
 					and int(info.get("track", 0)) > 0:
 				track_lv[info.track] = int(track_lv.get(info.track, 0)) + 1
 				pop(BC + Vector2(0.0, -52.0), "트랙 강화 +1", C_ACC, 10, 0.9)
+		# 저울은 곱하기 **전에** 걸음이 하나 더 선다. 연출을 정산 밖에서
+		# 따로 돌리지 않고 큐에 세우는 이유는 순서다 — 배속도 박자도
+		# 소리도 다른 걸음과 같은 규약을 타야 한다. 이 걸음이 없으면 두
+		# 수가 화면에서 갑자기 같아지고, 카드가 「왜」를 한 자도 안 말한다.
+		if score_mode == "bal":
+			queue.append({"k": "bal"})
 		queue.append({"k": "total"})
 
 	# 통계는 해금 조건보다 **먼저** 세기 시작한다. 조건을 나중에 달면
@@ -3193,6 +3319,7 @@ func _next_step() -> void:
 	pitch_step += 1
 	var f := 392.0 * pow(2.0, float(pitch_step) / 12.0)
 	var cc := card_pos() + Vector2(CARD_W * 0.5, 12.0)
+	bal_lit = false           # 저울 걸음이 아니면 카드는 보통대로 그린다
 
 	match st.k:
 		"miss":
@@ -3234,10 +3361,40 @@ func _next_step() -> void:
 					col, 17, 0.9)
 			_sfx("settle_item", f)
 			shake = 3.0
+		"bal":
+			# **값은 여기서 확정된다.** cur_chip·cur_mult 가 이 줄에서 이미
+			# 고른 값이 되고, bal_c·bal_m 은 화면이 「어떤 두 수가 그렇게
+			# 됐는가」를 적기 위해서만 든다. 이 순서라야 정산이 중간에
+			# 끊겨도 점수가 안 갈린다 — 연출이 셈을 기다리는 것이 아니라
+			# 이미 난 셈을 뒤따른다.
+			#
+			# 고른 값을 다시 고르면 제자리라(반의 반은 반이다) 뒤에 오는
+			# total 걸음의 _score_combine 이 아무것도 안 바꾼다. 그 멱등함이
+			# 이 걸음을 큐에 끼워 넣을 수 있게 하는 자리다.
+			bal_c = cur_chip
+			bal_m = cur_mult
+			var bh := _bal_half(cur_chip, cur_mult)
+			cur_chip = bh
+			cur_mult = bh
+			bal_lit = true
+			bal_flash = 1.0
+			card_item = ""
+			# 두 수가 한꺼번에 바뀌는 걸음이라 보통 걸음보다는 길게 둔다.
+			# 길이는 표가 쥔다(bal_beats) — 얼마나 읽히는가는 손으로 맞춰
+			# 보는 값이지 코드가 정할 값이 아니다.
+			#
+			# 배속에 바닥을 준다. 긴 정산에서 걸음이 재지는 것은 **세는**
+			# 걸음이 지루하기 때문인데, 이 걸음은 세지 않고 한 번 갈아 낀다.
+			qt = beat * GameData.tune("bal_beats") * maxf(pace, 0.6)
+			_sfx("settle_bal")
+			shake = 6.0
 		"total":
 			var was_short := total < target
 			last_gain = _score_combine(cur_chip, cur_mult)
 			total += last_gain
+			# 「한 번의 투척으로 N점」 조건이 읽는 자리. 판 총점(best_score)과
+			# 다르다 — 저쪽은 여섯 발의 합이고 이쪽은 한 발이다.
+			Save.peak("best_gain", last_gain)
 			card_mode = 1
 			total_flash = 1.0
 			shake = 9.0
@@ -4545,7 +4702,7 @@ const STK_TIERS := [
 	{"rarity": "common", "body": "ded5c0", "fin": 0},
 	{"rarity": "uncommon", "body": "7d5ad0", "fin": 1},
 	{"rarity": "rare", "body": "241e33", "fin": 2},
-	# 전설 — 홀로그램을 부채 셋이 아니라 온 바퀴로 두른다. 같은 어법의
+	# 레전더리 — 홀로그램을 부채 셋이 아니라 온 바퀴로 두른다. 같은 어법의
 	# 한 단 위라 새 표식을 배우지 않아도 "홀로보다 더" 로 읽힌다.
 	{"rarity": "legendary", "body": "3a1030", "fin": 3},
 ]
@@ -4933,7 +5090,7 @@ func draw_sticker(c: Vector2, r: float, tier: Dictionary, rot: float,
 				draw_colored_polygon(annulus_at(c, r * 0.20, r - rw - 0.3,
 						a, a + 0.46, 4), Color(HOLO[k], 0.55 * fa))
 		3:
-			# 전설 — 같은 무지개를 온 바퀴로. 부채가 끊기지 않으므로
+			# 레전더리 — 같은 무지개를 온 바퀴로. 부채가 끊기지 않으므로
 			# 홀로그램 옆에 두면 "다 덮였다" 가 곧 한 단 위로 읽힌다.
 			for k in 6:
 				var a2 := rot + float(k) * (TAU / 6.0)
@@ -9122,6 +9279,18 @@ func _tip_draw(sh: Vector2) -> void:
 
 	draw_set_transform(sh)
 
+
+# 카드의 값 칸 하나. 저울이 색과 글자 크기를 갈아 끼우므로 그 둘이 인자다 —
+# 보통 걸음은 지금까지 쓰던 값을 그대로 넘겨 예전과 똑같은 그림이 난다.
+func _card_box(p: Vector2, x: float, w: float, col: Color,
+		txt: String, label: String, sz := 24) -> void:
+	draw_rect(Rect2(p + Vector2(x, 18.0), Vector2(w, 44.0)), col.darkened(0.55))
+	draw_string(font, p + Vector2(x, 48.0), txt,
+			HORIZONTAL_ALIGNMENT_CENTER, w, sz, col.lightened(0.45))
+	draw_string(font, p + Vector2(x, 60.0), label,
+			HORIZONTAL_ALIGNMENT_CENTER, w, 9, C_DIM)
+
+
 func _draw_card() -> void:
 	if card_p <= 0.004:
 		return
@@ -9131,26 +9300,40 @@ func _draw_card() -> void:
 	draw_rect(Rect2(p, Vector2(CARD_W, 3)), C_ACC)
 
 	if card_mode == 0:
-		draw_rect(Rect2(p + Vector2(12, 18), Vector2(98, 44)), C_CHIP.darkened(0.55))
-		draw_string(font, p + Vector2(12, 48), str(cur_chip),
-				HORIZONTAL_ALIGNMENT_CENTER, 98, 24, C_CHIP.lightened(0.45))
-		draw_string(font, p + Vector2(12, 60), "점수",
-				HORIZONTAL_ALIGNMENT_CENTER, 98, 9, C_DIM)
-		draw_string(font, p + Vector2(110, 46), "×",
-				HORIZONTAL_ALIGNMENT_CENTER, 24, 17, C_DIM)
-		draw_rect(Rect2(p + Vector2(134, 18), Vector2(98, 44)), C_MULT.darkened(0.55))
-		draw_string(font, p + Vector2(134, 48), str(cur_mult),
-				HORIZONTAL_ALIGNMENT_CENTER, 98, 24, C_MULT.lightened(0.45))
-		draw_string(font, p + Vector2(134, 60), "배수",
-				HORIZONTAL_ALIGNMENT_CENTER, 98, 9, C_DIM)
-		if card_item != "":
-			draw_string(font, p + Vector2(10, 84), card_item,
+		if bal_lit:
+			# 저울 — 두 칸이 다트통 색을 입고 두 수가 같아진다. 바뀐 순간만
+			# 희게 달아오르고 글자가 한 번 부푼다. 그 둘이 「방금 바뀌었다」를
+			# 말하는 전부다. × 는 그대로 둔다 — 자리를 지키는 것이 곧
+			# 「달라진 것은 두 수뿐이다」라는 진술이다.
+			var bcol := bal_col.lerp(Color(1.0, 1.0, 1.0), 0.45 * bal_flash)
+			var bsz := int(24.0 * (1.0 + 0.45 * bal_flash))
+			_card_box(p, 12.0, 98.0, bcol, str(cur_chip), "점수", bsz)
+			draw_string(font, p + Vector2(110, 46), "×",
+					HORIZONTAL_ALIGNMENT_CENTER, 24, 17, C_DIM)
+			_card_box(p, 134.0, 98.0, bcol, str(cur_mult), "배수", bsz)
+			# 64 가 어디서 왔는지는 이 한 줄에만 있다. 동전 이름이 서던 자리를
+			# 빌린다 — 저울 걸음에는 발동하는 동전이 없다.
+			draw_string(font, p + Vector2(10, 84), "%d + %d ÷ 2" % [bal_c, bal_m],
 					HORIZONTAL_ALIGNMENT_CENTER, CARD_W - 20, 11, C_TXT)
+		else:
+			_card_box(p, 12.0, 98.0, C_CHIP, str(cur_chip), "점수")
+			draw_string(font, p + Vector2(110, 46), "×",
+					HORIZONTAL_ALIGNMENT_CENTER, 24, 17, C_DIM)
+			_card_box(p, 134.0, 98.0, C_MULT, str(cur_mult), "배수")
+			if card_item != "":
+				draw_string(font, p + Vector2(10, 84), card_item,
+						HORIZONTAL_ALIGNMENT_CENTER, CARD_W - 20, 11, C_TXT)
 	else:
 		var sz := int(34.0 * (1.0 + 0.55 * total_flash))
 		draw_string(font, p + Vector2(0, 58), "+" + str(last_gain),
 				HORIZONTAL_ALIGNMENT_CENTER, CARD_W, sz, C_ACC)
-		draw_string(font, p + Vector2(0, 80), "%d × %d" % [cur_chip, cur_mult],
+		# 저울은 곱한 두 수가 같아서 「53 × 53」만 적으면 어디서 온 값인지가
+		# 사라진다. 방금 지나간 걸음을 한 줄로 되짚어 준다 — 카드가 닫히기
+		# 전 마지막 화면이라 여기 적힌 것이 기억에 남는다.
+		var math := "%d × %d" % [cur_chip, cur_mult]
+		if score_mode == "bal":
+			math = "%d + %d ÷ 2 → %d × %d" % [bal_c, bal_m, cur_chip, cur_mult]
+		draw_string(font, p + Vector2(0, 80), math,
 				HORIZONTAL_ALIGNMENT_CENTER, CARD_W, 11, C_DIM)
 
 

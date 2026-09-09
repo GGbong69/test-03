@@ -60,12 +60,13 @@ func _initialize() -> void:
 			"기본과 히든이 갈려 있다",
 			"기본 %d · 히든 %d · 조건 없는 것 '%s'" % [base_n, hid.size(), no_cond])
 
-	# ③ 계산은 다트통이, 조준은 **든 동전**가 쥔다
+	# ③ 조준도 계산도 **든 동전**이 먼저 쥔다. 안 쥐면 다트통 표로 떨어진다.
 	GameData.pack = "base"
 	g._new_run()
 	g._swap_skip()
 	_say(g.score_mode == GameData.score_mode() and g.aim_mode == "std",
-			"계산은 다트통이 쥔다", "조준 '%s' · 계산 '%s'" % [g.aim_mode, g.score_mode])
+			"동전이 안 쥐면 다트통 표로 떨어진다",
+			"조준 '%s' · 계산 '%s'" % [g.aim_mode, g.score_mode])
 
 	# 조준 방식을 쥔 동전을 손에 넣으면 그 방식으로 던진다.
 	# 봉인되면 그 판은 다시 기본으로 돌아간다 — 동전의 규칙 그대로다.
@@ -77,8 +78,36 @@ func _initialize() -> void:
 			"'%s'" % g._aim_from_items())
 	g.sealed = 0
 	_say(g._aim_from_items() == "std", "봉인된 동전은 조준을 안 쥔다")
+
+	# 계산 방식도 같은 규약이다(2026-09-09). 사본에 심는다 — 원본
+	# 카탈로그를 만지면 뒤의 검사가 그 오염을 물려받는다.
+	var deca: Dictionary = GameData.items()[0].duplicate()
+	deca["score"] = "bal"
+	g.owned = [deca]
+	g.sealed = -1
+	_say(g._score_item() == 0, "동전이 계산 방식을 쥔다",
+			"자리 %d" % g._score_item())
+	g.sealed = 0
+	_say(g._score_item() == -1, "봉인된 동전은 계산 방식을 안 쥔다")
 	g.owned = []
 	g.sealed = -1
+
+	# 저울 다트통이 그 동전을 쥐여 주는가 — 표와 코드가 갈리는 자리다.
+	# 계산 방식은 **판이 설 때** 정해지므로 _start_leg 까지 가야 한다.
+	GameData.pack = "p_x1"
+	g._new_run()
+	g._swap_skip()
+	g._start_leg()
+	var granted := ""
+	for it in g.owned:
+		if String(it.get("score", "")) != "":
+			granted = String(it.id)
+	_say(granted != "" and g.score_mode == "bal",
+			"저울 다트통이 계산 방식을 쥔 동전을 쥐여 준다",
+			"'%s' · 계산 '%s'" % [granted, g.score_mode])
+	GameData.pack = "base"
+	g._new_run()
+	g._swap_skip()
 
 	# ③' 두 갈래가 실제로 그 값을 쓴다
 	var chip := 7
@@ -161,7 +190,49 @@ func _initialize() -> void:
 		_say(Save.unlocked("pack:" + String(bases[1].get("id", ""))),
 				"완주가 다음 기본 다트통을 연다", String(bases[1].get("name", "")))
 
+	# ⑦ 기본 다트통도 통계로 연다(2026-09-09 · 혼합 해금). 앞의 다섯은
+	# 체인, 뒤는 조건 — 기획서 P.21 이 다트통마다 고유 조건을 적어 둔 그
+	# 꼴이다. 히든만 보던 시절의 _pack_unlock_check 로 되돌아가면 걸린다.
+	var cond_base := ""
+	for cr0 in GameData.packs_of("base"):
+		if String(cr0.get("unlock_stat", "")) != "":
+			cond_base = String(cr0.get("id", ""))
+			break
+	if cond_base == "":
+		_say(true, "조건으로 여는 기본 다트통이 아직 없다", "검사 건너뜀")
+	else:
+		var cr := GameData.pack_row(cond_base)
+		var cs := String(cr.get("unlock_stat", ""))
+		var cv := int(String(cr.get("unlock_v", "0")))
+		Save.wipe()
+		g._pack_unlock_check()
+		_say(not Save.unlocked("pack:" + cond_base),
+				"조건 미달인 기본 다트통은 안 열린다",
+				"%s %d/%d" % [cs, Save.stat(cs), cv])
+		Save.peak(cs, cv)
+		g._pack_unlock_check()
+		_say(Save.unlocked("pack:" + cond_base),
+				"기본 다트통도 통계로 열린다",
+				"%s · %s %d/%d" % [cr.get("name", ""), cs, Save.stat(cs), cv])
+
+	# 완주한 순간의 다트 구성이 통계에 남는가 — 위 조건이 읽는 값이다.
+	var lgt := {}
+	for d0 in GameData.darts():
+		if String(d0.id) == "lgt":
+			lgt = d0
+	if lgt.is_empty():
+		_say(true, "가벼운 다트가 표에 없다", "검사 건너뜀")
+	else:
+		Save.wipe()
+		g.magazine = [lgt, lgt]
+		g._dart_peaks()
+		_say(Save.stat("best_dart_lgt") == 2, "다트 구성이 통계에 남는다",
+				"best_dart_lgt %d" % Save.stat("best_dart_lgt"))
+		g.magazine = []
+		g._dart_peaks()
+		_say(Save.stat("best_dart_lgt") == 2, "최댓값이라 안 내려간다")
+
 	Save.wipe()
 	print("
-%s" % ("실패 %d건" % fails if fails > 0 else "열셋 검사 전부 통과"))
+%s" % ("실패 %d건" % fails if fails > 0 else "검사 전부 통과"))
 	quit(mini(fails, 125))

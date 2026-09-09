@@ -48,9 +48,20 @@ const STATS := [
 	"rerolls", "sold", "gold_earned", "skips", "fixtures_bought",
 	"boosters_bought",
 	"best_leg", "best_score", "best_gold", "best_track",
+	# ── 2026-09-09 · 다트통 해금 조건이 읽을 것들 ──────
+	#  기획서 P.21 이 다트통을 「무엇을 들고 완주했나」로 열려고 하는데
+	#  그것을 잴 자가 하나도 없었다. 넷은 다트 구성, 셋은 한 판의 기록이다.
+	#
+	#  **쓰는 다트통이 없어도 넷 다 센다.** 이 파일 머리말이 적어 둔 규약
+	#  그대로다 — 조건을 나중에 달면 그때부터 세기 시작해서 이미 한
+	#  플레이가 증발한다.
+	"best_dart_hvy", "best_dart_lgt", "best_dart_prc", "best_dart_mag",
+	"best_gain", "best_spare", "best_leg_bare",
 ]
 # 최댓값으로 다루는 것들. 나머지는 누적이다.
-const PEAKS := ["best_leg", "best_score", "best_gold", "best_track"]
+const PEAKS := ["best_leg", "best_score", "best_gold", "best_track",
+		"best_dart_hvy", "best_dart_lgt", "best_dart_prc", "best_dart_mag",
+		"best_gain", "best_spare", "best_leg_bare"]
 
 static var _cfg: ConfigFile = null
 static var _loaded := false

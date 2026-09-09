@@ -79,13 +79,14 @@ const TUNE_KEYS := [
 	"free_rerolls", "reroll_base", "reroll_step", "max_items",
 	"darts_base", "stage_picks",
 	"board_r", "aim_swing", "sector_max", "val_max_mul",
-	"gauge_speed", "resolve_beat", "confirm_hold", "fly_time", "aim_click_r",
+	"gauge_speed", "resolve_beat", "bal_beats", "confirm_hold", "fly_time",
+	"aim_click_r",
 	"cons_slots", "shop_cons", "cons_price_tmp",
 	"kick_n", "kick_share",
 	"curve_first", "curve_last", "curve_bow",
 ]
 
-# 등급 네 단. 발라트로의 이름을 따른다 — 일반 · 희귀 · 레어 · 전설.
+# 등급 네 단. 발라트로의 이름을 따른다 — 일반 · 희귀 · 레어 · 레전더리.
 # 속이름(id)은 안 바꿨다. 코드가 그것으로 갈리고 표·저장·CSV 가 전부
 # 같은 낱말을 쓰므로, 한글 이름만 rarity.csv 에서 옮긴다.
 const RARITIES := ["common", "uncommon", "rare", "legendary"]
@@ -130,6 +131,8 @@ const Save_STATS := [
 	"rerolls", "sold", "gold_earned", "skips", "fixtures_bought",
 	"boosters_bought",
 	"best_leg", "best_score", "best_gold", "best_track",
+	"best_dart_hvy", "best_dart_lgt", "best_dart_prc", "best_dart_mag",
+	"best_gain", "best_spare", "best_leg_bare",
 ]
 const PACK_KINDS := ["base", "hidden"]
 const AIM_MODES := ["std", "ring", "tilt", "cross", "drift", "place",
@@ -345,6 +348,10 @@ static func items() -> Array:
 			"side": r.get("side", ""),
 			# 조준 방식. 비면 std 다 — 178장 중 이것을 쥔 장이 몇 없다.
 			"aim": r.get("aim", ""),
+			# 점수 계산 방식. 조준과 **같은 갈래다** — 터지는 효과가 아니라
+			# 한 판 내내 켜져 있는 방법이고, 동전이 쥐므로 사고 팔고 봉인되는
+			# 규칙 아래 놓인다. 비면 다트통 표로 떨어진다.
+			"score": r.get("score", ""),
 			"line": r.get("_line", 0),
 		}
 		if String(r.get("gold", "")) != "":
@@ -1426,6 +1433,12 @@ static func eff_line(it: Dictionary) -> String:
 		if ad != 0:
 			return "%s · 판 시작 다트 %+d" % [am, ad]
 		return am
+	# 계산 방식을 쥔 장도 같다 — 조준과 한 갈래라 같은 자리에서 갈린다.
+	# 이 줄이 없으면 「효과가 한 줄도 안 나온다」 검사에 걸린다. 실제로
+	# 데칼코마니를 넣은 첫 부팅이 거기서 멎었다.
+	var sc := score_text(String(it.get("score", "")))
+	if sc != "":
+		return sc
 	# 점수도 배수도 없는 카드 — 골드·다트·승급이 본업이다
 	if String(it.get("k", "")) == "":
 		var da := int(it.get("dadd", 0))
@@ -1527,10 +1540,14 @@ static func aim_text(m: String) -> String:
 
 
 static func item_desc(it: Dictionary) -> String:
-	# 조준을 쥔 장은 조건·효과 칸이 비어 있다. 그 장은 조준이 곧 효과다.
+	# 조준이나 계산 방식을 쥔 장은 조건·효과 칸이 비어 있다.
+	# 그 장은 **방식이 곧 효과**다.
 	var am := aim_text(String(it.get("aim", "")))
 	if am != "":
 		return am
+	var sc := score_text(String(it.get("score", "")))
+	if sc != "":
+		return sc
 	return "%s %s" % [cond_text(it.c), eff_text(it.k, it.v)]
 
 
@@ -1751,6 +1768,12 @@ static func _v_item_aim() -> void:
 		if am != "" and not AIM_MODES.has(am):
 			_errs.append("items:%d %s — 모르는 조준 방식 '%s'. AIM_MODES 에 먼저 적어라"
 					% [r.get("_line", 0), r.get("name", ""), am])
+		# 조준과 같은 규약이다. 등록 안 된 이름을 표에 적으면 조용히 std 로
+		# 도는데, 그것이 이 시스템에서 가장 나쁜 결말이다(안개가 그랬다).
+		var sm: String = r.get("score", "")
+		if sm != "" and not SCORE_MODES.has(sm):
+			_errs.append("items:%d %s — 모르는 계산 방식 '%s'. SCORE_MODES 에 먼저 적어라"
+					% [r.get("_line", 0), r.get("name", ""), sm])
 
 
 static func _v_packs() -> void:
@@ -1810,8 +1833,14 @@ static func _v_packs() -> void:
 		# 히든은 조건이 있어야 히든이다. 없으면 영영 안 열린다.
 		if pack_kind(r) == "hidden" and String(r.get("unlock_stat", "")) == "" 				and String(r.get("prereq", "")) == "":
 			_errs.append("%s — 히든인데 여는 조건이 없다. 영영 안 열린다" % who)
-		if pack_kind(r) == "base" and String(r.get("unlock_stat", "")) != "":
-			_warns.append("%s — 기본 다트통에 통계 조건이 붙었다. 기본은 완주로 연다" % who)
+		# 기본 다트통도 조건으로 열 수 있다(2026-09-09). 앞의 다섯은 체인
+		# (prereq)으로 열어 처음 켠 사람이 막히지 않게 하고, 뒤는 조건으로
+		# 열어 목표를 만든다 — 기획서 P.21 이 다트통마다 고유 조건을 적어
+		# 둔 그 꼴이다. 둘 다 없는 기본 다트통만 막는다(표 첫 줄은 빼고).
+		if pack_kind(r) == "base" and i > 0 \
+				and String(r.get("unlock_stat", "")) == "" \
+				and String(r.get("prereq", "")) == "":
+			_errs.append("%s — 여는 길이 없다. 체인(prereq)이나 조건(unlock_stat) 하나는 있어야 한다" % who)
 		var us: String = r.get("unlock_stat", "")
 		if us != "" and not Save_STATS.has(us):
 			_errs.append("%s — 모르는 통계 열쇠 '%s'" % [who, us])
@@ -2045,12 +2074,16 @@ static func _v_items() -> void:
 		# 효과 칸이 비어 있다. 켜는 순간부터 아래 전부를 묻는다.
 		if not _b(r, "enabled", "items"):
 			continue
-		# 조준을 쥔 장은 발동 조건이 없다 — 터지는 물건이 아니라 던지는
-		# 방법이라 한 판 내내 켜져 있다. always 를 적으면 "모든 다트마다"
-		# 라는 없는 발동이 얼굴에 뜬다.
-		var aimed := String(r.get("aim", "")) != ""
+		# **방식**을 쥔 장은 발동 조건이 없다 — 터지는 물건이 아니라 던지고
+		# 세는 방법이라 한 판 내내 켜져 있다. always 를 적으면 "모든
+		# 다트마다" 라는 없는 발동이 얼굴에 뜬다.
+		#
+		# 조준(aim)과 계산(score)이 같은 갈래다. 둘 중 하나만 봐서는
+		# 계산 방식만 쥔 장이 「효과도 부가도 없는 빈 카드」로 걸린다.
+		var aimed := String(r.get("aim", "")) != "" \
+				or String(r.get("score", "")) != ""
 		if aimed and String(r.get("cond", "")) != "":
-			_errs.append("%s — 조준 동전에 발동 조건이 붙었다" % who)
+			_errs.append("%s — 방식을 쥔 동전에 발동 조건이 붙었다" % who)
 		if not aimed and not CONDS.has(r.get("cond", "")):
 			_errs.append("%s — 모르는 조건 '%s'" % [who, r.get("cond", "")])
 		# 효과 없는 카드도 있다 — 골드·다트·승급만 하는 조커들. 그때는
@@ -2431,10 +2464,23 @@ static func _v_cross() -> void:
 		if String(it2.get("g", "")) != "" and gtx == "":
 			_errs.append("items — %s(%s) 의 골드가 얼굴에 없다" % [it2.n, it2.id])
 
-	# 가중치가 0 인 동전은 표에 있으나 게임에 없다.
+	# 가중치가 0 인 동전은 테이블에 안 뜬다. 그것 자체는 잘못이 아니다 —
+	# rarity 표가 레전더리를 0.00 으로 두고 「따로 얻는 길로만 온다」고
+	# 적어 뒀다. 잘못은 **그 다른 길이 하나도 없을 때**다. 그때 그 장은
+	# 표에 있으나 게임에 없다.
+	#
+	# 지금 다른 길은 다트통이 쥐여 주는 것 하나뿐이다(grant_item).
+	# 팩에서 뽑는 길이나 해금 조건이 서면 여기에 그 길을 더한다 —
+	# 이 목록이 곧 「레전더리를 어떻게 얻는가」의 계약이다.
+	var granted := {}
+	for p in _raw.get("packs", []):
+		for gid in String(p.get("grant_item", "")).split(";", false):
+			granted[String(gid).strip_edges()] = true
 	for it in items():
-		if item_weight(it) <= 0.0:
-			_errs.append("items — %s(%s) 는 테이블에 안 뜬다" % [it.n, it.id])
+		if item_weight(it) > 0.0 or granted.has(String(it.id)):
+			continue
+		_errs.append("items — %s(%s) 는 테이블에도 안 뜨고 쥐여 주는 다트통도 없다"
+				% [it.n, it.id])
 
 
 # desc 의 중괄호가 실제 열 이름과 안 맞으면 화면에 중괄호가 그대로 나간다.
