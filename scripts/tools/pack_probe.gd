@@ -197,9 +197,11 @@ func _initialize() -> void:
 	g._new_run()
 	g._swap_skip()
 	g._start_leg()
-	_say(g._chip_gain(20) == 32 and g.magazine.size() == 3,
-			"외줄은 다트가 셋이고 칸 값이 1.6배다",
-			"%d발 · 20 → %d" % [g.magazine.size(), g._chip_gain(20)])
+	_say(abs(g.score_mul - 1.6) < 0.001 and g.magazine.size() == 3
+				and g._chip_gain(20) == 20,
+			"외줄은 다트가 셋이고 **최종** 점수가 1.6배다",
+			"%d발 · 배율 %.2f · 칸 값은 그대로 %d"
+			% [g.magazine.size(), g.score_mul, g._chip_gain(20)])
 
 	# 물음표: 굴리는 것은 **걸음**이 하고 _score_combine 은 순수해야 한다.
 	# 안에서 굴리면 같은 발을 두 번 셀 때마다 값이 달라져 화면과 총점이
@@ -224,8 +226,8 @@ func _initialize() -> void:
 	g._new_run()
 	g._swap_skip()
 	g._start_leg()
-	_say(abs(g.chip_mul - 1.0) < 0.001 and g._chip_gain(20) == 20,
-			"다른 다트통은 칸 값을 안 민다", "20 → %d" % g._chip_gain(20))
+	_say(abs(g.score_mul - 1.0) < 0.001,
+			"다른 다트통은 최종 점수를 안 민다", "배율 %.2f" % g.score_mul)
 
 	# ⑦ 기본 다트통도 통계로 연다(2026-09-09 · 혼합 해금). 앞의 다섯은
 	# 체인, 뒤는 조건 — 기획서 P.21 이 다트통마다 고유 조건을 적어 둔 그

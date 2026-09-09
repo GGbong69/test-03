@@ -161,9 +161,8 @@ var dead_idx := -1              # "금지 구역"이 죽이는 칸. -1 이면 �
 #  한 라운드에 하나. 사면 사라지고 그 라운드에는 다시 안 뜬다.
 var aim_mode := "std"           # 이 런의 조준 방식. 다트통이 정한다
 var score_mode := "std"         # 이 런의 점수 계산 방식. 든 동전이 먼저 쥔다
-# 다트통이 미는 기본 점수 배율. 계산 방식과 같이 판 시작에 한 번 읽는다 —
-# _chip_gain 이 한 발에 여러 번 불리므로 매번 표를 뒤지면 안 된다.
-var chip_mul := 1.0
+# 다트통이 미는 최종 점수 배율. 계산 방식과 같이 판 시작에 한 번 읽는다.
+var score_mul := 1.0
 var aim_r := 0.0                # 원·선 조준이 잠근 반지름
 var aim_a := 0.0                # 빗각 조준이 잠근 첫 축의 값
 var aim_ax := 0.0               # 빗각 조준의 축 각도. 다트마다 새로 뽑는다
@@ -300,6 +299,11 @@ var calc_m := 0                # 고르기 전 배수
 # 통 겉과 목록 줄에도 같이 선다. 판 시작에 한 번 읽는 것은 계산 방식과
 # 같은 규약이다.
 var calc_col := Color("7a4f9e")
+# 물음표가 눈을 굴리는 동안의 시계. 음수면 안 구른다. 저울은 값이 한 번에
+# 바뀌면 그만이지만, 물음표는 **굴러서 멈추는 것**이 그 다트통의 얼굴이라
+# 걸음 안에서 도는 시계가 따로 필요하다.
+var roll_t := -1.0
+var roll_d := 0.0
 
 # ── 이펙트 ────────────────────────────────────────────────
 var darts := []                 # 보드에 꽂힌 것들 {p 착탄점, id 다트 종류, rot 기울기}
@@ -544,7 +548,7 @@ func _start_leg() -> void:
 	else:
 		score_mode = GameData.score_mode()
 		calc_col = Color(String(GameData.pack_row().get("color", "7a4f9e")))
-	chip_mul = GameData.chip_mul()
+	score_mul = GameData.score_mul()
 	if not GameData.AIM_MODES.has(aim_mode):
 		push_error("조준: 모르는 방식 '%s' — AIM_MODES 에 없다" % aim_mode)
 		aim_mode = "std"
@@ -574,6 +578,7 @@ func _start_leg() -> void:
 	cur_mult = 0
 	calc_lit = false
 	calc_flash = 0.0
+	roll_t = -1.0
 	darts.clear()
 	pops.clear()
 	waves.clear()
@@ -2101,6 +2106,18 @@ func _process(d: float) -> void:
 					_land(false)
 		S.RESOLVE:
 			qt -= d
+			# 물음표의 눈이 구르는 동안만 걸음 **안**에서 시계가 돈다.
+			# 멎는 순간이 둘이라 그 소리를 걸음이 설 때 미리 못 낸다 —
+			# 조준을 잠그는 그 소리를 그대로 쓴다. 하는 일이 같다.
+			if roll_t >= 0.0:
+				var rw := roll_t
+				roll_t += d
+				if rw < roll_d * float(RND.lock1) and roll_t >= roll_d * float(RND.lock1):
+					_sfx("aim_lock_first")
+					shake = 4.0
+				if rw < roll_d * float(RND.lock2) and roll_t >= roll_d * float(RND.lock2):
+					_sfx("aim_lock_last")
+					shake = 6.0
 			if qt <= 0.0:
 				_next_step()
 		S.NEWRUN:
@@ -3228,6 +3245,7 @@ func _land(mark := true) -> void:
 	cur_mult = 0
 	calc_lit = false
 	calc_flash = 0.0
+	roll_t = -1.0
 	card_item = ""
 	card_mode = 0
 	pitch_step = 0
@@ -3352,16 +3370,9 @@ func _land(mark := true) -> void:
 # 비는 그대로다(다섯 발 x 0.25 = 1.25배). 고리가 준 x3 을 x0.75 로
 # 적으면 그것이 더 큰 거짓말이다.
 func _chip_gain(v: int) -> int:
-	if v <= 0:
+	if not kick_pellet or v <= 0:
 		return v
-	var g := float(v)
-	# 다트통이 미는 값(외줄 1.6배). 연발 몫보다 **먼저** 곱한다 — 순서를
-	# 뒤집으면 작은 다트에서 반올림이 두 번 일어나 1점씩 샌다.
-	if chip_mul != 1.0:
-		g *= chip_mul
-	if kick_pellet:
-		g *= GameData.tune("kick_share")
-	return maxi(1, int(round(g)))
+	return maxi(1, int(round(float(v) * GameData.tune("kick_share"))))
 
 
 # 정산이 길수록 걸음을 재게 한다. 스무 걸음이 줄줄이 서 있는데 한 걸음씩
@@ -3404,7 +3415,8 @@ func _next_step() -> void:
 	pitch_step += 1
 	var f := 392.0 * pow(2.0, float(pitch_step) / 12.0)
 	var cc := card_pos() + Vector2(CARD_W * 0.5, 12.0)
-	calc_lit = false           # 저울 걸음이 아니면 카드는 보통대로 그린다
+	calc_lit = false           # 방식 걸음이 아니면 카드는 보통대로 그린다
+	roll_t = -1.0
 
 	match st.k:
 		"miss":
@@ -3489,11 +3501,19 @@ func _next_step() -> void:
 			calc_flash = 1.0
 			card_item = ""
 			qt = beat * GameData.tune("bal_beats") * maxf(pace, 0.6)
+			roll_d = qt
+			roll_t = 0.0
 			_sfx("settle_bal")
 			shake = 6.0
 		"total":
 			var was_short := total < target
 			last_gain = _score_combine(cur_chip, cur_mult)
+			# 다트통이 마지막에 한 번 민다(외줄 1.6배). **합친 뒤**라서 계산
+			# 방식과 무관하게 같은 비로 오른다 — 칸 값에 곱하면 저울에서
+			# 제곱이 되어 1.6배가 2.56배가 되고 물음표에서는 아무 일도 안
+			# 일어난다(칸 값을 버리므로).
+			if score_mul != 1.0:
+				last_gain = int(round(float(last_gain) * score_mul))
 			total += last_gain
 			# 「한 번의 투척으로 N점」 조건이 읽는 자리. 판 총점(best_score)과
 			# 다르다 — 저쪽은 여섯 발의 합이고 이쪽은 한 발이다.
@@ -4363,8 +4383,10 @@ func _bd3_fly() -> void:
 		return
 	if not is_instance_valid(bd_fly):
 		bd_fly = Node3D.new()
+		# 통과 같은 벌이어야 한다 — 고를 때 본 자루가 판에 꽂힌다.
+		var fid := String(cur_dart.get("id", "std"))
 		_dart3_meshes(bd_fly, float(BD3.len) * 0.5, float(BD3.r), float(BD3.fin),
-				_dart3_col(String(cur_dart.get("id", "std"))))
+				_dart3_col(fid), fid)
 		bd_vp.add_child(bd_fly)
 	bd_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	var end := _bd3_pose({"p": aim, "rot": fly_rot})
@@ -4395,8 +4417,10 @@ func _bd3_sync() -> void:
 		bd_nodes.clear()
 		for e in darts:
 			var n := Node3D.new()
+			# 통과 같은 벌이다.
+			var eid := String(e.get("id", "std"))
 			_dart3_meshes(n, float(BD3.len) * 0.5, float(BD3.r), float(BD3.fin),
-					_dart3_col(String(e.get("id", "std"))))
+					_dart3_col(eid), eid)
 			bd_vp.add_child(n)
 			bd_nodes.append(n)
 	for i in mini(bd_nodes.size(), darts.size()):
@@ -9383,6 +9407,49 @@ func _tip_draw(sh: Vector2) -> void:
 	draw_set_transform(sh)
 
 
+# 눈이 구르는 차례. 걸음의 몇 할인가로 적는다.
+#
+#   0.00~0.18  ? × ?     아직 아무것도 안 정해졌다
+#   0.18~0.60  구른다     두 칸이 같이 빠르게 넘어간다
+#   0.60       점수 멎음   왼쪽이 먼저 잠긴다
+#   0.84       배수 멎음   오른쪽이 뒤따라 잠긴다
+#   0.84~1.00  둘 다 섬    읽을 참
+#
+# **왼쪽이 먼저 멎는다.** 둘이 같이 멎으면 한 번에 다 정해진 것으로 읽혀
+# 구른 뜻이 없어진다. 시차가 있어야 「멎었다」가 두 번 생긴다.
+const RND := {
+	"hold": 0.18,     # 여기까지는 물음표 그대로
+	"lock1": 0.60,    # 점수가 멎는 자리
+	"lock2": 0.84,    # 배수가 멎는 자리
+	"spins": 46.0,    # 멎기까지 넘어가는 눈의 수. 이징이 뒤를 늦춘다
+}
+
+
+# 구르는 눈 하나. lock 에 닿으면 뽑힌 수로 멎고 그전에는 눈이 넘어간다.
+#
+# **무작위로 안 그린다.** 매 프레임 randi 를 부르면 값이 튀어 「구른다」가
+# 아니라 「지직거린다」로 보인다. 이징(뒤로 갈수록 느려지는)을 태운 자리를
+# 눈으로 나눠 읽으므로 처음에는 훅 넘어가고 멎기 직전에는 한 눈씩 간다.
+#
+# off 는 두 칸이 같은 눈을 나란히 보여 주지 않게 어긋내는 몫이다.
+func _roll_face(k: float, lock: float, fin: int, off: float) -> String:
+	if k >= lock:
+		return str(fin)
+	if k < float(RND.hold):
+		return "?"
+	var t := (k - float(RND.hold)) / maxf(lock - float(RND.hold), 0.001)
+	var e := 1.0 - pow(1.0 - t, 3.0)          # 뒤로 갈수록 느려진다
+	return str(int(e * float(RND.spins) + off * float(RND.spins)) % 99 + 1)
+
+
+# 멎은 칸만 한 번 부푼다. 구르는 동안은 기본 크기다 — 같이 부풀면
+# 「멎었다」가 두 번 다 흐려진다.
+func _roll_sz(k: float, lock: float) -> int:
+	if k < lock:
+		return 24
+	return int(24.0 * (1.0 + 0.5 * (1.0 - clampf((k - lock) / 0.12, 0.0, 1.0))))
+
+
 # 카드의 값 칸 하나. 저울이 색과 글자 크기를 갈아 끼우므로 그 둘이 인자다 —
 # 보통 걸음은 지금까지 쓰던 값을 그대로 넘겨 예전과 똑같은 그림이 난다.
 func _card_box(p: Vector2, x: float, w: float, col: Color,
@@ -9410,16 +9477,32 @@ func _draw_card() -> void:
 			# 「달라진 것은 두 수뿐이다」라는 진술이다.
 			var bcol := calc_col.lerp(Color(1.0, 1.0, 1.0), 0.45 * calc_flash)
 			var bsz := int(24.0 * (1.0 + 0.45 * calc_flash))
-			_card_box(p, 12.0, 98.0, bcol, str(cur_chip), "점수", bsz)
+			var f1 := str(cur_chip)
+			var f2 := str(cur_mult)
+			var s1 := bsz
+			var s2 := bsz
+			if roll_t >= 0.0:
+				# 구르는 동안 두 칸이 물음표 → 눈 → 뽑힌 수로 간다.
+				# **시차를 두고 멎는다** — 왼쪽이 먼저다.
+				var rk := clampf(roll_t / maxf(roll_d, 0.001), 0.0, 1.0)
+				f1 = _roll_face(rk, float(RND.lock1), cur_chip, 0.0)
+				f2 = _roll_face(rk, float(RND.lock2), cur_mult, 0.37)
+				s1 = _roll_sz(rk, float(RND.lock1))
+				s2 = _roll_sz(rk, float(RND.lock2))
+			_card_box(p, 12.0, 98.0, bcol, f1, "점수", s1)
 			draw_string(font, p + Vector2(110, 46), "×",
 					HORIZONTAL_ALIGNMENT_CENTER, 24, 17, C_DIM)
-			_card_box(p, 134.0, 98.0, bcol, str(cur_mult), "배수", bsz)
+			_card_box(p, 134.0, 98.0, bcol, f2, "배수", s2)
 			# 이 수가 어디서 왔는지는 이 한 줄에만 있다. 동전 이름이 서던
 			# 자리를 빌린다 — 이 걸음에는 발동하는 동전이 없다.
 			var cl := "%d + %d ÷ 2" % [calc_c, calc_m]
 			if score_mode == "rand":
 				# 버린 값을 적어 봐야 뜻이 없다 — 뽑힌 두 수가 곧 전부다.
-				cl = "%d · %d 을 버리고 새로 뽑았다" % [calc_c, calc_m]
+				# 다 멎기 전에 「뽑았다」고 적으면 아직 구르는 칸의 답을
+				# 미리 말하는 꼴이라, 그때까지는 버린 것만 적는다.
+				cl = "%d · %d 을 버린다" % [calc_c, calc_m]
+				if roll_t < 0.0 or roll_t >= roll_d * float(RND.lock2):
+					cl = "%d · %d 을 버리고 새로 뽑았다" % [calc_c, calc_m]
 			draw_string(font, p + Vector2(10, 84), cl,
 					HORIZONTAL_ALIGNMENT_CENTER, CARD_W - 20, 11, C_TXT)
 		else:
@@ -11042,11 +11125,56 @@ func _mesh_dart3m() -> ArrayMesh:
 	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, a)
 	return m
 
-func _dart3_meshes(b: Node3D, dl: float, dr: float, fin: float, col: Color) -> void:
+# 다트 종류마다 비율이 다르다. **색만 다르면 통 안에서 무엇을 들고 시작하는지가
+# 안 읽힌다** — 새 런 화면에서 다트통을 고르는 그 순간에 눈에 닿는 것이 이 표다.
+#
+# 구운 메시 하나를 축마다 다르게 늘인다. 자루의 축이 +Y 이므로 Y 가 길이고
+# X·Z 가 굵기다. 값은 darts.csv 가 쥔 성격을 그대로 옮긴 것이다.
+#
+#   무거운  게이지 0.55배 · 배수 −1     굵고 짧다
+#   가벼운  게이지 1.90배 · 배수 +3     가늘고 길다
+#   관통    양옆 칸 0.5배 · 배수 고정   길고 얇다. 촉이 주인공이라 몸이 가늘다
+#   자석    중심으로 당김 · 배수 −1     뭉툭하고 두껍다
+#
+# 부피가 아니라 **실루엣**을 가른다. 통 안에서 여섯 자루가 겹쳐 서 있으므로
+# 색은 뒤엉키는데 길이와 굵기는 한눈에 갈린다.
+#
+# 짧은 쪽(무거운·자석)을 0.84·0.90 으로 잡았다가 올렸다. 통 입술이 **고정
+# 높이**를 잘라내므로 길이를 16% 줄이면 통 밖으로 나온 몫은 그보다 훨씬
+# 크게 준다 — 찍어 보니 무쇠 자루가 거의 잠겨 종류가 아니라 고장으로 보였다.
+# 굵기로 「무겁다」를 말하고 길이는 알아볼 만큼만 줄인다.
+const DART3_SHAPE := {
+	"std": {"len": 1.00, "rad": 1.00},
+	"hvy": {"len": 0.93, "rad": 1.40},
+	"lgt": {"len": 1.22, "rad": 0.72},
+	"prc": {"len": 1.14, "rad": 0.78},
+	"mag": {"len": 0.96, "rad": 1.26},
+}
+
+
+static func dart3_shape(id: String) -> Dictionary:
+	return DART3_SHAPE.get(id, DART3_SHAPE["std"])
+
+
+# dl·dr 은 **기준 치수**다. 종류 배율은 여기서 한 번만 먹인다 —
+# 부르는 쪽에서도 곱하면 길이가 제곱으로 들어간다(실제로 그랬다:
+# 통이 CUP3.dl*len 을 넘겨 주고 여기서 또 len 을 곱해 무쇠가 0.93 이
+# 아니라 0.86 으로 섰다).
+func _dart3_meshes(b: Node3D, dl: float, dr: float, fin: float, col: Color,
+		id := "std") -> void:
+	var sh := dart3_shape(id)
+	var el := dl * float(sh.len)          # 이 자루의 실제 반길이
+	var er := dr * float(sh.rad)          # 이 자루의 실제 굵기
 	if DART3_MESHY:
 		var mi := _cup3_mesh(b, _mesh_dart3m(), col, Vector3.ZERO)
-		mi.scale = Vector3.ONE * (dl * 2.0)
+		# 균등 배율이면 종류가 색으로만 갈린다. 축마다 달리 늘여야
+		# 「굵고 짧다 · 가늘고 길다」가 실루엣으로 선다.
+		var k := dl * 2.0
+		mi.scale = Vector3(k * float(sh.rad), k * float(sh.len), k * float(sh.rad))
+		_dart3_parts(b, el, er, col, id)
 		return
+	dl = el
+	dr = er
 
 	var tip := CylinderMesh.new()
 	tip.top_radius = dr
@@ -11074,6 +11202,64 @@ func _dart3_meshes(b: Node3D, dl: float, dr: float, fin: float, col: Color) -> v
 	for q in 2:
 		_cup3_mesh(b, fm, col.darkened(0.18), Vector3(0.0, dl * 0.76, 0.0),
 				Vector3(0.0, PI * 0.5 * float(q), 0.0))
+	_dart3_parts(b, dl, dr, col, id)
+
+
+# 종류마다 붙는 **한 가지 표시**. 비율만 다르면 통 안에서 색깔 놀이로
+# 읽힌다 — 무엇이 달린 자루인지가 눈에 걸려야 종류가 종류로 보인다.
+#
+# 몸통(구운 메시)은 그대로 두고 그 위에 하나씩 얹는다. 메시를 새로 굽지
+# 않고도 실루엣에 걸리는 것이 생긴다. 표는 darts.csv 가 쥔 성격을 물건으로
+# 옮긴 것이다.
+#
+#   무거운  배럴에 추 두 짝      무게가 눈에 보인다
+#   가벼운  꽁지에 큰 날개 넷    바람을 받는 쪽이 주인공이다
+#   관통    촉 앞에 긴 바늘      뚫는 쪽이 길다
+#   자석    배럴에 감긴 고리      감긴 것이 자석이다
+#   표준    없다                 기준선은 덧붙이지 않는다
+func _dart3_parts(b: Node3D, dl: float, dr: float, col: Color, id: String) -> void:
+	match id:
+		"hvy":
+			# 추 둘. 배럴보다 눈에 띄게 굵어야 「무겁다」가 실루엣에 걸린다.
+			var w := CylinderMesh.new()
+			w.top_radius = dr * 1.60
+			w.bottom_radius = dr * 1.60
+			w.height = dl * 0.15
+			w.radial_segments = 10
+			for i in 2:
+				_cup3_mesh(b, w, col.darkened(0.34),
+						Vector3(0.0, -dl * 0.34 + dl * 0.32 * float(i), 0.0))
+		"lgt":
+			# 날개 넷을 45도씩 돌려 꽂는다. 둘이면 옆에서 볼 때 사라진다.
+			#
+			# **꽁지 끝에 얹는다.** 구운 몸통이 이미 날개를 달고 있어서
+			# 가운데에 겹치면 둘이 한 덩어리로 뭉쳐 「깃털」이 아니라
+			# 「뚱뚱한 막대」로 보인다 — 찍어 보고 알았다.
+			var f := BoxMesh.new()
+			f.size = Vector3(dr * 4.0, dl * 0.34, dl * 0.010)
+			for q in 4:
+				_cup3_mesh(b, f, col.lightened(0.26),
+						Vector3(0.0, dl * 0.92, 0.0),
+						Vector3(0.0, PI * 0.25 * float(q), 0.0))
+		"prc":
+			# 바늘. 촉 **앞으로** 더 나간다 — 길이가 곧 뚫는 힘이다.
+			var n := CylinderMesh.new()
+			n.top_radius = dr * 0.34
+			n.bottom_radius = 0.0
+			n.height = dl * 0.66
+			n.radial_segments = 6
+			_cup3_mesh(b, n, C_LIGHT, Vector3(0.0, -dl * 1.15, 0.0))
+		"mag":
+			# 감긴 고리. 도넛의 축이 Y 라 자루를 그대로 두른다.
+			#
+			# **꽁지 쪽에 둔다.** 통에 꽂아 두면 자루의 아래 절반이 통 안에
+			# 잠기므로, 배럴 한가운데에 두른 고리는 고를 때 아예 안 보인다.
+			var t := TorusMesh.new()
+			t.inner_radius = dr * 1.05
+			t.outer_radius = dr * 2.05
+			t.rings = 14
+			t.ring_segments = 8
+			_cup3_mesh(b, t, col.lightened(0.34), Vector3(0.0, dl * 0.30, 0.0))
 
 
 # 자루 색은 **다트 종류가 정한다** — 무거운 회색 · 가벼운 초록 · 관통 파랑 ·
@@ -11082,8 +11268,11 @@ func _dart3_meshes(b: Node3D, dl: float, dr: float, fin: float, col: Color) -> v
 # 특별한 다트를 쥔 다트통에서 덮으면 그 다트가 무엇인지가 그림에서 사라진다 —
 # cup_probe 가 그 짝을 검사한다(주석으로 부탁하지 않는다).
 func _cup3_dart(id: String, tint: String, cup_tint: String) -> RigidBody3D:
-	var dl: float = CUP3.dl
-	var dr: float = CUP3.dr
+	# 종류가 길이와 굵기를 정한다. **충돌체도 같이 간다** — 그림만 늘이면
+	# 가벼운 다트가 안 보이는 짧은 몸으로 부딪혀 통 안에서 겹쳐 선다.
+	var sh := dart3_shape(id)
+	var dl: float = float(CUP3.dl) * float(sh.len)
+	var dr: float = float(CUP3.dr) * float(sh.rad)
 	var col := _dart3_col(id)
 	if tint != "":
 		col = _cup3_tint(tint)
@@ -11117,7 +11306,10 @@ func _cup3_dart(id: String, tint: String, cup_tint: String) -> RigidBody3D:
 
 	# 촉 · 배럴 · 샤프트 · 날개는 _dart3_meshes 가 세운다 — 판에 꽂힌
 	# 다트와 같은 벌이다.
-	_dart3_meshes(b, dl, dr, float(CUP3.fin), col)
+	# **기준 치수**를 넘긴다. dl·dr 은 위에서 이미 종류 배율을 먹었지만
+	# 그건 충돌체와 세우는 자리를 위한 것이고, 그림 쪽 배율은
+	# _dart3_meshes 가 혼자 먹인다.
+	_dart3_meshes(b, float(CUP3.dl), float(CUP3.dr), float(CUP3.fin), col, id)
 	return b
 
 
@@ -11156,8 +11348,11 @@ func _cup3_spawn(pi: int, x: float) -> void:
 		var side := up.cross(Vector3(0.0, 0.0, 1.0))
 		if side.length() < 0.01:
 			side = up.cross(Vector3(1.0, 0.0, 0.0))
+		# 자루 길이가 종류마다 다르므로 촉이 앉는 자리도 같이 본다.
+		# CUP3.dl 을 박아 두면 짧은 자루가 공중에 뜨고 긴 자루가 바닥을 판다.
 		b.transform = Transform3D(Basis(side.normalized().cross(up), up,
-				side.normalized()), tip + up * float(CUP3.dl))
+				side.normalized()),
+				tip + up * (float(CUP3.dl) * float(dart3_shape(id).len)))
 		cup_vp.add_child(b)
 		darts.append(b)
 	# 발치의 골드. 잠긴 다트통에는 안 놓는다 — 무엇을 주는 다트통인지가 그림으로

@@ -834,14 +834,17 @@ static func target_mul() -> float:
 	return _f(pack_row(), "target_mul", "packs", 1.0)
 
 
-# 다트통이 기본 점수를 통째로 민다. **목표가 아니라 값 쪽을 미는 첫 손잡이**다 —
-# 목표를 낮추면 판이 쉬워지기만 하는데, 값을 키우면 한 발의 무게가 달라진다.
-# 외줄 다트통이 그 자리다: 발수를 반으로 줄이고 한 발을 1.6배로 만든다.
+# 다트통이 한 발의 **최종 점수**를 민다. 목표가 아니라 값 쪽을 미는 첫
+# 손잡이다 — 목표를 낮추면 판이 쉬워지기만 하는데, 값을 키우면 한 발의
+# 무게가 달라진다. 외줄 다트통이 그 자리다: 발수를 반으로 줄이고 한 발을
+# 1.6배로 만든다.
 #
-# 곱하는 자리는 game.gd 의 _chip_gain 한 곳이다. 칸 값이든 동전이 얹은
-# 점수든 다 그 문을 지나므로 여기 한 줄이 둘 다 민다.
-static func chip_mul() -> float:
-	var v := _f(pack_row(), "chip_mul", "packs", 1.0)
+# **합친 뒤에 곱한다.** 칸 값에 곱하면 계산 방식마다 비가 달라진다 —
+# 저울은 두 값을 평균 내 제곱하므로 칸 값 1.6배가 최종 2.56배가 되고,
+# 물음표는 칸 값을 버리므로 아예 아무 일도 안 일어난다. 곱하는 자리는
+# game.gd 의 total 걸음 한 곳이다.
+static func score_mul() -> float:
+	var v := _f(pack_row(), "score_mul", "packs", 1.0)
 	return v if v > 0.0 else 1.0
 
 
@@ -1877,9 +1880,9 @@ static func _v_packs() -> void:
 		if _i(r, "item_slots", "packs", 1) <= 0:
 			_errs.append("%s — 동전 칸이 0 이하다" % who)
 		# 값 배율. 0 이하면 점수가 통째로 죽는다 — 빈 칸(=1.0)과 다르다.
-		if String(r.get("chip_mul", "")) != "" \
-				and _f(r, "chip_mul", "packs", 1.0) <= 0.0:
-			_errs.append("%s — chip_mul 이 0 이하다" % who)
+		if String(r.get("score_mul", "")) != "" \
+				and _f(r, "score_mul", "packs", 1.0) <= 0.0:
+			_errs.append("%s — score_mul 이 0 이하다" % who)
 		if _i(r, "darts_add", "packs", 0) <= -int(tune_i("darts_base")):
 			_errs.append("%s — 다트 증감이 탄창을 다 없앤다" % who)
 

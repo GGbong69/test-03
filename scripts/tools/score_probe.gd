@@ -85,10 +85,16 @@ func _arm() -> void:
 
 # 게임의 _score_combine 과 **같은 식**을 따로 쓴다. 부르면 검산이 아니다.
 func _combine(chip: int, mult: int) -> int:
+	var v := chip * mult
 	if String(g.score_mode) == "bal":
 		var x := int(round((float(chip) + float(mult)) * 0.5))
-		return x * x
-	return chip * mult
+		v = x * x
+	# 다트통이 합친 뒤에 한 번 더 민다(외줄 1.6배). 게임이 total 걸음에서
+	# 하는 그 곱을 여기서도 해야 두 셈이 같은 수를 낸다.
+	var m: float = g.score_mul
+	if m != 1.0:
+		v = int(round(float(v) * m))
+	return v
 
 
 func _snap() -> void:
