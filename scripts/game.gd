@@ -160,7 +160,10 @@ var dead_idx := -1              # "금지 구역"이 죽이는 칸. -1 이면 �
 #  것이 코드 0줄로 성립하는 이유가 그것이다(_roll_stock 은 stock 만 지운다).
 #  한 라운드에 하나. 사면 사라지고 그 라운드에는 다시 안 뜬다.
 var aim_mode := "std"           # 이 런의 조준 방식. 다트통이 정한다
-var score_mode := "std"         # 이 런의 점수 계산 방식. 다트통이 정한다
+var score_mode := "std"         # 이 런의 점수 계산 방식. 든 동전이 먼저 쥔다
+# 다트통이 미는 기본 점수 배율. 계산 방식과 같이 판 시작에 한 번 읽는다 —
+# _chip_gain 이 한 발에 여러 번 불리므로 매번 표를 뒤지면 안 된다.
+var chip_mul := 1.0
 var aim_r := 0.0                # 원·선 조준이 잠근 반지름
 var aim_a := 0.0                # 빗각 조준이 잠근 첫 축의 값
 var aim_ax := 0.0               # 빗각 조준의 축 각도. 다트마다 새로 뽑는다
@@ -279,7 +282,7 @@ var card_item := ""
 var last_gain := 0
 var total_flash := 0.0
 
-# 저울이 두 값을 하나로 고른 카드. **셈은 여기 없다** — 걸음이 서는 순간
+# 계산 방식이 두 값을 갈아 끼운 카드. **셈은 여기 없다** — 걸음이 서는 순간
 # cur_chip·cur_mult 는 이미 고른 값이고, 아래 둘은 「어떤 두 수가 그렇게
 # 됐는가」를 카드에 적기 위해서만 든다.
 #
@@ -287,16 +290,16 @@ var total_flash := 0.0
 # 만들어 봤는데, 걸음을 1.2초까지 늘리고도 발마다 같은 춤을 다시 보는
 # 것이 되어 걷어냈다. 바뀐 수를 읽는 데 필요한 것은 「바뀌었다」는 표시
 # 하나이고, 그것은 색이 한다.
-var bal_lit := false          # 이 카드가 지금 고른 값을 들고 있는가
-var bal_flash := 0.0          # 바뀐 순간의 번쩍임. total_flash 와 같은 어법
-var bal_c := 0                # 고르기 전 점수
-var bal_m := 0                # 고르기 전 배수
+var calc_lit := false          # 이 카드가 지금 갈아 끼운 값을 들고 있는가
+var calc_flash := 0.0          # 바뀐 순간의 번쩍임. total_flash 와 같은 어법
+var calc_c := 0                # 고르기 전 점수
+var calc_m := 0                # 고르기 전 배수
 # 고른 값이 입는 색. 파랑(점수)도 빨강(배수)도 아닌 색이라야 「둘이 하나가
 # 됐다」가 읽히는데, 그 색을 손으로 정하는 대신 **다트통이 제 색을 쓴다** —
 # packs.csv 가 이미 통마다 색을 들고 있고(저울은 보라), 그 색이 새 런 화면의
 # 통 겉과 목록 줄에도 같이 선다. 판 시작에 한 번 읽는 것은 계산 방식과
 # 같은 규약이다.
-var bal_col := Color("7a4f9e")
+var calc_col := Color("7a4f9e")
 
 # ── 이펙트 ────────────────────────────────────────────────
 var darts := []                 # 보드에 꽂힌 것들 {p 착탄점, id 다트 종류, rot 기울기}
@@ -537,10 +540,11 @@ func _start_leg() -> void:
 	var si := _score_item()
 	if si >= 0:
 		score_mode = String(owned[si].get("score", ""))
-		bal_col = GameData.rarity_color(String(owned[si].get("rarity", "common")))
+		calc_col = GameData.rarity_color(String(owned[si].get("rarity", "common")))
 	else:
 		score_mode = GameData.score_mode()
-		bal_col = Color(String(GameData.pack_row().get("color", "7a4f9e")))
+		calc_col = Color(String(GameData.pack_row().get("color", "7a4f9e")))
+	chip_mul = GameData.chip_mul()
 	if not GameData.AIM_MODES.has(aim_mode):
 		push_error("조준: 모르는 방식 '%s' — AIM_MODES 에 없다" % aim_mode)
 		aim_mode = "std"
@@ -568,8 +572,8 @@ func _start_leg() -> void:
 	low_hit = 0
 	cur_chip = 0
 	cur_mult = 0
-	bal_lit = false
-	bal_flash = 0.0
+	calc_lit = false
+	calc_flash = 0.0
 	darts.clear()
 	pops.clear()
 	waves.clear()
@@ -2039,7 +2043,7 @@ func _process(d: float) -> void:
 	board_punch = maxf(board_punch - d * 3.4, 0.0)
 	hit_flash = maxf(hit_flash - d * 2.6, 0.0)
 	total_flash = maxf(total_flash - d * 3.0, 0.0)
-	bal_flash = maxf(bal_flash - d * 4.0, 0.0)
+	calc_flash = maxf(calc_flash - d * 4.0, 0.0)
 	_tick_score(d)
 
 	for w in waves:
@@ -2523,6 +2527,10 @@ func _score_combine(chip: int, mult: int) -> int:
 			# 한 발에 넘긴다. **그 구멍은 아직 안 막았다.**
 			var x := _bal_half(chip, mult)
 			return x * x
+		"rand":
+			# 굴리는 것은 rnd **걸음**이 이미 했다. 여기 오는 두 수는 그
+			# 뽑힌 값이라 곱셈만 남는다 — 이 함수가 순수해야 검산기가 산다.
+			return chip * mult
 	return chip * mult
 
 
@@ -3218,8 +3226,8 @@ func _land(mark := true) -> void:
 
 	cur_chip = 0
 	cur_mult = 0
-	bal_lit = false
-	bal_flash = 0.0
+	calc_lit = false
+	calc_flash = 0.0
 	card_item = ""
 	card_mode = 0
 	pitch_step = 0
@@ -3292,6 +3300,8 @@ func _land(mark := true) -> void:
 		# 수가 화면에서 갑자기 같아지고, 카드가 「왜」를 한 자도 안 말한다.
 		if score_mode == "bal":
 			queue.append({"k": "bal"})
+		elif score_mode == "rand":
+			queue.append({"k": "rnd"})
 		queue.append({"k": "total"})
 
 	# 통계는 해금 조건보다 **먼저** 세기 시작한다. 조건을 나중에 달면
@@ -3342,9 +3352,16 @@ func _land(mark := true) -> void:
 # 비는 그대로다(다섯 발 x 0.25 = 1.25배). 고리가 준 x3 을 x0.75 로
 # 적으면 그것이 더 큰 거짓말이다.
 func _chip_gain(v: int) -> int:
-	if not kick_pellet or v <= 0:
+	if v <= 0:
 		return v
-	return maxi(1, int(round(float(v) * GameData.tune("kick_share"))))
+	var g := float(v)
+	# 다트통이 미는 값(외줄 1.6배). 연발 몫보다 **먼저** 곱한다 — 순서를
+	# 뒤집으면 작은 다트에서 반올림이 두 번 일어나 1점씩 샌다.
+	if chip_mul != 1.0:
+		g *= chip_mul
+	if kick_pellet:
+		g *= GameData.tune("kick_share")
+	return maxi(1, int(round(g)))
 
 
 # 정산이 길수록 걸음을 재게 한다. 스무 걸음이 줄줄이 서 있는데 한 걸음씩
@@ -3387,7 +3404,7 @@ func _next_step() -> void:
 	pitch_step += 1
 	var f := 392.0 * pow(2.0, float(pitch_step) / 12.0)
 	var cc := card_pos() + Vector2(CARD_W * 0.5, 12.0)
-	bal_lit = false           # 저울 걸음이 아니면 카드는 보통대로 그린다
+	calc_lit = false           # 저울 걸음이 아니면 카드는 보통대로 그린다
 
 	match st.k:
 		"miss":
@@ -3431,7 +3448,7 @@ func _next_step() -> void:
 			shake = 3.0
 		"bal":
 			# **값은 여기서 확정된다.** cur_chip·cur_mult 가 이 줄에서 이미
-			# 고른 값이 되고, bal_c·bal_m 은 화면이 「어떤 두 수가 그렇게
+			# 고른 값이 되고, calc_c·calc_m 은 화면이 「어떤 두 수가 그렇게
 			# 됐는가」를 적기 위해서만 든다. 이 순서라야 정산이 중간에
 			# 끊겨도 점수가 안 갈린다 — 연출이 셈을 기다리는 것이 아니라
 			# 이미 난 셈을 뒤따른다.
@@ -3439,13 +3456,13 @@ func _next_step() -> void:
 			# 고른 값을 다시 고르면 제자리라(반의 반은 반이다) 뒤에 오는
 			# total 걸음의 _score_combine 이 아무것도 안 바꾼다. 그 멱등함이
 			# 이 걸음을 큐에 끼워 넣을 수 있게 하는 자리다.
-			bal_c = cur_chip
-			bal_m = cur_mult
+			calc_c = cur_chip
+			calc_m = cur_mult
 			var bh := _bal_half(cur_chip, cur_mult)
 			cur_chip = bh
 			cur_mult = bh
-			bal_lit = true
-			bal_flash = 1.0
+			calc_lit = true
+			calc_flash = 1.0
 			card_item = ""
 			# 두 수가 한꺼번에 바뀌는 걸음이라 보통 걸음보다는 길게 둔다.
 			# 길이는 표가 쥔다(bal_beats) — 얼마나 읽히는가는 손으로 맞춰
@@ -3453,6 +3470,24 @@ func _next_step() -> void:
 			#
 			# 배속에 바닥을 준다. 긴 정산에서 걸음이 재지는 것은 **세는**
 			# 걸음이 지루하기 때문인데, 이 걸음은 세지 않고 한 번 갈아 낀다.
+			qt = beat * GameData.tune("bal_beats") * maxf(pace, 0.6)
+			_sfx("settle_bal")
+			shake = 6.0
+		"rnd":
+			# 쌓은 것을 **버리고** 둘 다 새로 뽑는다. 저울과 같은 자리에
+			# 서지만 하는 일이 반대다 — 저울은 쌓은 값을 고르고 이쪽은
+			# 없던 것으로 친다.
+			#
+			# **여기서 굴린다.** _score_combine 안에서 굴리면 같은 발을 두 번
+			# 셀 때마다 값이 달라져서 화면과 총점이 갈리고, 검산기가 따로
+			# 셈한 값과도 영영 안 맞는다. 굴린 뒤로는 std 와 같은 곱셈이다.
+			calc_c = cur_chip
+			calc_m = cur_mult
+			cur_chip = randi_range(1, 99)
+			cur_mult = randi_range(1, 99)
+			calc_lit = true
+			calc_flash = 1.0
+			card_item = ""
 			qt = beat * GameData.tune("bal_beats") * maxf(pace, 0.6)
 			_sfx("settle_bal")
 			shake = 6.0
@@ -9368,20 +9403,24 @@ func _draw_card() -> void:
 	draw_rect(Rect2(p, Vector2(CARD_W, 3)), C_ACC)
 
 	if card_mode == 0:
-		if bal_lit:
+		if calc_lit:
 			# 저울 — 두 칸이 다트통 색을 입고 두 수가 같아진다. 바뀐 순간만
 			# 희게 달아오르고 글자가 한 번 부푼다. 그 둘이 「방금 바뀌었다」를
 			# 말하는 전부다. × 는 그대로 둔다 — 자리를 지키는 것이 곧
 			# 「달라진 것은 두 수뿐이다」라는 진술이다.
-			var bcol := bal_col.lerp(Color(1.0, 1.0, 1.0), 0.45 * bal_flash)
-			var bsz := int(24.0 * (1.0 + 0.45 * bal_flash))
+			var bcol := calc_col.lerp(Color(1.0, 1.0, 1.0), 0.45 * calc_flash)
+			var bsz := int(24.0 * (1.0 + 0.45 * calc_flash))
 			_card_box(p, 12.0, 98.0, bcol, str(cur_chip), "점수", bsz)
 			draw_string(font, p + Vector2(110, 46), "×",
 					HORIZONTAL_ALIGNMENT_CENTER, 24, 17, C_DIM)
 			_card_box(p, 134.0, 98.0, bcol, str(cur_mult), "배수", bsz)
-			# 64 가 어디서 왔는지는 이 한 줄에만 있다. 동전 이름이 서던 자리를
-			# 빌린다 — 저울 걸음에는 발동하는 동전이 없다.
-			draw_string(font, p + Vector2(10, 84), "%d + %d ÷ 2" % [bal_c, bal_m],
+			# 이 수가 어디서 왔는지는 이 한 줄에만 있다. 동전 이름이 서던
+			# 자리를 빌린다 — 이 걸음에는 발동하는 동전이 없다.
+			var cl := "%d + %d ÷ 2" % [calc_c, calc_m]
+			if score_mode == "rand":
+				# 버린 값을 적어 봐야 뜻이 없다 — 뽑힌 두 수가 곧 전부다.
+				cl = "%d · %d 을 버리고 새로 뽑았다" % [calc_c, calc_m]
+			draw_string(font, p + Vector2(10, 84), cl,
 					HORIZONTAL_ALIGNMENT_CENTER, CARD_W - 20, 11, C_TXT)
 		else:
 			_card_box(p, 12.0, 98.0, C_CHIP, str(cur_chip), "점수")
@@ -9400,7 +9439,9 @@ func _draw_card() -> void:
 		# 전 마지막 화면이라 여기 적힌 것이 기억에 남는다.
 		var math := "%d × %d" % [cur_chip, cur_mult]
 		if score_mode == "bal":
-			math = "%d + %d ÷ 2 → %d × %d" % [bal_c, bal_m, cur_chip, cur_mult]
+			math = "%d + %d ÷ 2 → %d × %d" % [calc_c, calc_m, cur_chip, cur_mult]
+		elif score_mode == "rand":
+			math = "무작위 %d × %d" % [cur_chip, cur_mult]
 		draw_string(font, p + Vector2(0, 80), math,
 				HORIZONTAL_ALIGNMENT_CENTER, CARD_W, 11, C_DIM)
 

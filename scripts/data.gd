@@ -160,7 +160,7 @@ const AIM_HINT := {
 	"pull": ["벽의 다트를 잡고 판 쪽으로 튕기세요"],
 	"kick": ["눌러 쏘고 밀리는 조준을 따라 잡으세요"],
 }
-const SCORE_MODES := ["std", "bal"]
+const SCORE_MODES := ["std", "bal", "rand"]
 
 const MODIFIER_AXES := ["band_mul", "gauge_mul", "fog", "darts_add",
 		"sector_kill", "seal_items", "target_mul",
@@ -834,6 +834,17 @@ static func target_mul() -> float:
 	return _f(pack_row(), "target_mul", "packs", 1.0)
 
 
+# 다트통이 기본 점수를 통째로 민다. **목표가 아니라 값 쪽을 미는 첫 손잡이**다 —
+# 목표를 낮추면 판이 쉬워지기만 하는데, 값을 키우면 한 발의 무게가 달라진다.
+# 외줄 다트통이 그 자리다: 발수를 반으로 줄이고 한 발을 1.6배로 만든다.
+#
+# 곱하는 자리는 game.gd 의 _chip_gain 한 곳이다. 칸 값이든 동전이 얹은
+# 점수든 다 그 문을 지나므로 여기 한 줄이 둘 다 민다.
+static func chip_mul() -> float:
+	var v := _f(pack_row(), "chip_mul", "packs", 1.0)
+	return v if v > 0.0 else 1.0
+
+
 # ══════════════════════════════════════════════════════════
 #  목표 곡선 — 표 여덟 줄이 아니라 함수 하나다
 # ──────────────────────────────────────────────────────────
@@ -1505,12 +1516,14 @@ static func score_name(m: String) -> String:
 	match m:
 		"std": return "기본"
 		"bal": return "저울"
+		"rand": return "물음표"
 	return m
 
 
 static func score_text(m: String) -> String:
 	match m:
 		"bal": return "점수와 배수를 평균으로 맞춘 뒤 곱합니다"
+		"rand": return "쌓은 점수와 배수를 버리고 둘 다 1~99 무작위로 다시 뽑습니다"
 	return ""
 
 
@@ -1863,6 +1876,10 @@ static func _v_packs() -> void:
 			_errs.append("%s — 다트 '%s' 가 darts.csv 에 없다" % [who, dd])
 		if _i(r, "item_slots", "packs", 1) <= 0:
 			_errs.append("%s — 동전 칸이 0 이하다" % who)
+		# 값 배율. 0 이하면 점수가 통째로 죽는다 — 빈 칸(=1.0)과 다르다.
+		if String(r.get("chip_mul", "")) != "" \
+				and _f(r, "chip_mul", "packs", 1.0) <= 0.0:
+			_errs.append("%s — chip_mul 이 0 이하다" % who)
 		if _i(r, "darts_add", "packs", 0) <= -int(tune_i("darts_base")):
 			_errs.append("%s — 다트 증감이 탄창을 다 없앤다" % who)
 

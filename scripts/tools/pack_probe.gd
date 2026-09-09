@@ -190,6 +190,43 @@ func _initialize() -> void:
 		_say(Save.unlocked("pack:" + String(bases[1].get("id", ""))),
 				"완주가 다음 기본 다트통을 연다", String(bases[1].get("name", "")))
 
+	# ⑥' 다트통이 미는 값과 굴리는 값 — 계산 쪽 손잡이 둘
+	# 외줄: chip_mul 이 칸 값을 통째로 민다. _chip_gain 한 곳을 지나므로
+	# 칸 값이든 동전이 얹은 점수든 다 받는다.
+	GameData.pack = "p_solo"
+	g._new_run()
+	g._swap_skip()
+	g._start_leg()
+	_say(g._chip_gain(20) == 32 and g.magazine.size() == 3,
+			"외줄은 다트가 셋이고 칸 값이 1.6배다",
+			"%d발 · 20 → %d" % [g.magazine.size(), g._chip_gain(20)])
+
+	# 물음표: 굴리는 것은 **걸음**이 하고 _score_combine 은 순수해야 한다.
+	# 안에서 굴리면 같은 발을 두 번 셀 때마다 값이 달라져 화면과 총점이
+	# 갈리고, 검산기가 따로 셈한 값과 영영 안 맞는다.
+	GameData.pack = "p_rnd"
+	g._new_run()
+	g._swap_skip()
+	g._start_leg()
+	_say(g.score_mode == "rand" and g._score_combine(7, 3) == 21
+				and g._score_combine(7, 3) == 21,
+			"물음표는 rand 로 세고 곱셈은 순수하다",
+			"'%s' · 7×3 = %d" % [g.score_mode, g._score_combine(7, 3)])
+	g.queue.clear()
+	g.aim = g.BC
+	g._land()
+	var has_rnd := false
+	for st0 in g.queue:
+		if String(st0.k) == "rnd":
+			has_rnd = true
+	_say(has_rnd, "물음표는 합산 앞에 굴리는 걸음을 세운다")
+	GameData.pack = "base"
+	g._new_run()
+	g._swap_skip()
+	g._start_leg()
+	_say(abs(g.chip_mul - 1.0) < 0.001 and g._chip_gain(20) == 20,
+			"다른 다트통은 칸 값을 안 민다", "20 → %d" % g._chip_gain(20))
+
 	# ⑦ 기본 다트통도 통계로 연다(2026-09-09 · 혼합 해금). 앞의 다섯은
 	# 체인, 뒤는 조건 — 기획서 P.21 이 다트통마다 고유 조건을 적어 둔 그
 	# 꼴이다. 히든만 보던 시절의 _pack_unlock_check 로 되돌아가면 걸린다.

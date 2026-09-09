@@ -115,19 +115,19 @@ func _run() -> void:
 
 	# ② 바뀜 — 걸음이 서는 그 프레임. 번쩍임이 아직 1 에 가깝다
 	guard = 0
-	while not g.bal_lit and guard < 900:
+	while not g.calc_lit and guard < 900:
 		await process_frame
 		guard += 1
-	if not g.bal_lit:
+	if not g.calc_lit:
 		print("★ 저울 걸음이 안 섰다")
 		quit(1)
 		return
 	print("저울 걸음: 점수 %d · 배수 %d → 합 %d ÷ 2 = %d"
-			% [g.bal_c, g.bal_m, g.bal_c + g.bal_m, g.cur_chip])
+			% [g.calc_c, g.calc_m, g.calc_c + g.calc_m, g.cur_chip])
 	await _shot("2_바뀜")
 
 	# ③ 저울 — 번쩍임만 꺼서 가라앉은 뒤의 색을 본다
-	g.bal_flash = 0.0
+	g.calc_flash = 0.0
 	await _shot("3_저울")
 
 	# ④ 합계 — 되짚는 한 줄이 붙어 있는지가 여기서만 보인다
