@@ -808,7 +808,7 @@ def appendix_stickers(prs, page):
     global TRIM
     TRIM = False
     live = [r for r in tbl("items") if r.get("enabled")]
-    rank = {"일반": 0, "희귀": 1, "레어": 2, "전설": 3}
+    rank = {"일반": 0, "희귀": 1, "레어": 2, "레전더리": 3}
     live.sort(key=lambda r: (rank.get(r.get("rarity_ko"), 9), r.get("cost") or 0, r["name"]))
     rows = []
     for r in live:

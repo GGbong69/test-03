@@ -52,6 +52,7 @@ RENAME = {
     "설비": "사진",
     "딱지": "뱃지",
     "팩": "다트통",
+    "전설": "레전더리",     # 2026-09-09 · 기획서 P.15 이 이미 쓰는 말로 맞춘다
 }
 
 PAT = re.compile("|".join(sorted((re.escape(k) for k in RENAME), key=len, reverse=True)))

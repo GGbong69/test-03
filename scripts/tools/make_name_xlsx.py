@@ -62,7 +62,7 @@ HEAD_ROW = 2
 DATA_ROW = 3
 
 RARS = [("common", "일반"), ("uncommon", "희귀"), ("rare", "레어"),
-        ("legendary", "전설")]
+        ("legendary", "레전더리")]
 
 H_ID = "id"
 H_OLD = "지금 이름"

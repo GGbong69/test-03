@@ -76,7 +76,7 @@ RAR = {"common": 1, "uncommon": 2, "rare": 3, "legendary": 4}
 
 ENUM = {
     "rarity": [("common", "일반 — 등장 60%"), ("uncommon", "희귀 — 등장 35%"),
-               ("rare", "레어 — 등장 5%"), ("legendary", "전설 — 아직 0장")],
+               ("rare", "레어 — 등장 5%"), ("legendary", "레전더리 — 아직 0장")],
     "kind": [("chip", "점수 +value"), ("mult", "배수 +value"),
              ("xmult", "배수 ×value"),
              ("mult_streak", "배수 +value (연속 명중 1회마다)"),
@@ -121,7 +121,7 @@ ENUM = {
 # 잘려 보이느니 여기서 줄이고 온전한 뜻은 Enum 시트에 둔다.
 SHORT = {
     "rarity": {"common": "일반", "uncommon": "희귀", "rare": "레어",
-               "legendary": "전설"},
+               "legendary": "레전더리"},
     "kind_2": {"mult": "배수 +value_2"},
     "grow": {"fire": "발동마다 누적", "hitmiss": "명중 +/ 빗나감 −",
              "tdec": "투척마다 감소", "rdec": "판마다 감소"},
