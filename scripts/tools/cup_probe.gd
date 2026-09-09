@@ -85,6 +85,37 @@ func _run() -> void:
 	_say(g.cup_vp == null, "화면을 뜨면 통이 지워진다", "")
 	_say(g.cup_rigs.is_empty(), "통 목록도 빈다", "%d벌" % g.cup_rigs.size())
 
+
+	# 자루가 통 안에 남는가. 종류마다 굵기와 길이가 다르므로(DART3_SHAPE)
+	# 촉이 앉는 고리가 그 굵기를 안 보면 여섯이 겹친 채로 서고, 솔버가
+	# 그 겹침을 푸느라 첫 프레임에 통 밖으로 터뜨린다 — 실제로 무쇠와
+	# 깃털이 그렇게 샜다. 눈으로는 「좀 기울었네」와 구별이 안 된다.
+	g._open_newrun()
+	await _wait(150)
+	var spill := 0
+	var sunk := 0
+	var seen := 0
+	for pi in GameData.packs().size():
+		if pi > 0:
+			g._pack_step(1)
+			await _wait(200)
+		if g.cup_rigs.is_empty():
+			continue
+		var rig: Dictionary = g.cup_rigs[0]
+		var cx: float = rig.cup.position.x
+		var rr: float = float(rig.r)
+		seen += 1
+		for b in rig.darts:
+			var p: Vector3 = b.global_position
+			# 몸 중심이 안쪽 반지름의 두 배를 넘으면 통 밖에 누운 것이다.
+			if Vector2(p.x - cx, p.z).length() > rr * 2.0:
+				spill += 1
+			if p.y < -0.05:
+				sunk += 1
+	_say(spill == 0 and sunk == 0 and seen > 0,
+			"자루가 통 밖으로 안 샌다",
+			"%d종 · 밖 %d · 바닥아래 %d" % [seen, spill, sunk])
+	g._close_newrun() if g.has_method("_close_newrun") else g._cup3_close()
 	# 다시 열면 다시 선다
 	g._open_newrun()
 	await _wait(30)

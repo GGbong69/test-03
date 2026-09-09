@@ -11125,30 +11125,30 @@ func _mesh_dart3m() -> ArrayMesh:
 	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, a)
 	return m
 
-# 다트 종류마다 비율이 다르다. **색만 다르면 통 안에서 무엇을 들고 시작하는지가
+# 다트 종류마다 굵기가 다르다. **색만 다르면 통 안에서 무엇을 들고 시작하는지가
 # 안 읽힌다** — 새 런 화면에서 다트통을 고르는 그 순간에 눈에 닿는 것이 이 표다.
 #
-# 구운 메시 하나를 축마다 다르게 늘인다. 자루의 축이 +Y 이므로 Y 가 길이고
-# X·Z 가 굵기다. 값은 darts.csv 가 쥔 성격을 그대로 옮긴 것이다.
+# 구운 메시 하나를 X·Z 로만 늘인다. 값은 darts.csv 가 쥔 성격을 옮긴 것이다.
 #
-#   무거운  게이지 0.55배 · 배수 −1     굵고 짧다
-#   가벼운  게이지 1.90배 · 배수 +3     가늘고 길다
-#   관통    양옆 칸 0.5배 · 배수 고정   길고 얇다. 촉이 주인공이라 몸이 가늘다
-#   자석    중심으로 당김 · 배수 −1     뭉툭하고 두껍다
+#   무거운  게이지 0.55배 · 배수 −1     두껍다
+#   가벼운  게이지 1.90배 · 배수 +3     가늘다
+#   관통    양옆 칸 0.5배 · 배수 고정   가늘다. 촉이 주인공이라 몸이 얇다
+#   자석    중심으로 당김 · 배수 −1     뭉툭하다
 #
-# 부피가 아니라 **실루엣**을 가른다. 통 안에서 여섯 자루가 겹쳐 서 있으므로
-# 색은 뒤엉키는데 길이와 굵기는 한눈에 갈린다.
+# ⚠ **길이는 안 건드린다.** 종류마다 0.93~1.22 로 늘였다가 되돌렸다.
+# 통의 기하(테 높이 · 담기는 깊이 · 기대 서는 각)가 자루 길이 하나에 맞춰
+# 잡혀 있어서, 길게 만들면 기대 선 자루의 몸이 통 테를 가로질러 **벽을
+# 뚫고 나온 것처럼 보인다.** 깃털(1.22)과 송곳(1.14)이 실제로 그랬다.
 #
-# 짧은 쪽(무거운·자석)을 0.84·0.90 으로 잡았다가 올렸다. 통 입술이 **고정
-# 높이**를 잘라내므로 길이를 16% 줄이면 통 밖으로 나온 몫은 그보다 훨씬
-# 크게 준다 — 찍어 보니 무쇠 자루가 거의 잠겨 종류가 아니라 고장으로 보였다.
-# 굵기로 「무겁다」를 말하고 길이는 알아볼 만큼만 줄인다.
+# 자루 중심 자리만 재면 이 어긋남이 안 잡힌다 — 중심은 통 안에 있는데
+# 몸이 테를 넘는다. 그래서 길이 축을 아예 없앤다. 종류는 굵기와 부품이
+# 말한다.
 const DART3_SHAPE := {
-	"std": {"len": 1.00, "rad": 1.00},
-	"hvy": {"len": 0.93, "rad": 1.40},
-	"lgt": {"len": 1.22, "rad": 0.72},
-	"prc": {"len": 1.14, "rad": 0.78},
-	"mag": {"len": 0.96, "rad": 1.26},
+	"std": {"rad": 1.00},
+	"hvy": {"rad": 1.40},
+	"lgt": {"rad": 0.72},
+	"prc": {"rad": 0.78},
+	"mag": {"rad": 1.26},
 }
 
 
@@ -11156,24 +11156,22 @@ static func dart3_shape(id: String) -> Dictionary:
 	return DART3_SHAPE.get(id, DART3_SHAPE["std"])
 
 
-# dl·dr 은 **기준 치수**다. 종류 배율은 여기서 한 번만 먹인다 —
-# 부르는 쪽에서도 곱하면 길이가 제곱으로 들어간다(실제로 그랬다:
-# 통이 CUP3.dl*len 을 넘겨 주고 여기서 또 len 을 곱해 무쇠가 0.93 이
-# 아니라 0.86 으로 섰다).
+# dl·dr 은 **기준 치수**다. 굵기 배율은 여기서 한 번만 먹인다 —
+# 부르는 쪽에서도 곱하면 배율이 제곱으로 들어간다.
+#
+# **길이(Y)는 안 건드린다** — DART3_SHAPE 의 ⚠ 를 볼 것.
 func _dart3_meshes(b: Node3D, dl: float, dr: float, fin: float, col: Color,
 		id := "std") -> void:
 	var sh := dart3_shape(id)
-	var el := dl * float(sh.len)          # 이 자루의 실제 반길이
 	var er := dr * float(sh.rad)          # 이 자루의 실제 굵기
 	if DART3_MESHY:
 		var mi := _cup3_mesh(b, _mesh_dart3m(), col, Vector3.ZERO)
-		# 균등 배율이면 종류가 색으로만 갈린다. 축마다 달리 늘여야
-		# 「굵고 짧다 · 가늘고 길다」가 실루엣으로 선다.
+		# 균등 배율이면 종류가 색으로만 갈린다. 옆으로만 늘여야
+		# 「두껍다 · 가늘다」가 실루엣으로 서면서 길이는 그대로 남는다.
 		var k := dl * 2.0
-		mi.scale = Vector3(k * float(sh.rad), k * float(sh.len), k * float(sh.rad))
-		_dart3_parts(b, el, er, col, id)
+		mi.scale = Vector3(k * float(sh.rad), k, k * float(sh.rad))
+		_dart3_parts(b, dl, er, col, id)
 		return
-	dl = el
 	dr = er
 
 	var tip := CylinderMesh.new()
@@ -11221,14 +11219,18 @@ func _dart3_parts(b: Node3D, dl: float, dr: float, col: Color, id: String) -> vo
 	match id:
 		"hvy":
 			# 추 둘. 배럴보다 눈에 띄게 굵어야 「무겁다」가 실루엣에 걸린다.
+			#
+			# **통 아가리 위**에 둔다. 자루의 아래 절반은 통에 잠겨 안 보이고,
+			# 거기는 촉 고리라 이웃과 제일 가까운 자리이기도 하다 — 굵은
+			# 것을 그 높이에 달면 여섯이 서로 밀어내 통 밖으로 튄다.
 			var w := CylinderMesh.new()
-			w.top_radius = dr * 1.60
-			w.bottom_radius = dr * 1.60
+			w.top_radius = dr * 1.30
+			w.bottom_radius = dr * 1.30
 			w.height = dl * 0.15
 			w.radial_segments = 10
 			for i in 2:
 				_cup3_mesh(b, w, col.darkened(0.34),
-						Vector3(0.0, -dl * 0.34 + dl * 0.32 * float(i), 0.0))
+						Vector3(0.0, dl * 0.10 + dl * 0.32 * float(i), 0.0))
 		"lgt":
 			# 날개 넷을 45도씩 돌려 꽂는다. 둘이면 옆에서 볼 때 사라진다.
 			#
@@ -11242,21 +11244,25 @@ func _dart3_parts(b: Node3D, dl: float, dr: float, col: Color, id: String) -> vo
 						Vector3(0.0, dl * 0.92, 0.0),
 						Vector3(0.0, PI * 0.25 * float(q), 0.0))
 		"prc":
-			# 바늘. 촉 **앞으로** 더 나간다 — 길이가 곧 뚫는 힘이다.
+			# 바늘. 촉 쪽을 가늘고 길게 바꾼다.
+			#
+			# **몸통 밖으로 안 나간다.** 촉 끝이 정확히 −dl 에 오도록 잡는다 —
+			# 통에 세울 때 이 −dl 이 바닥에 닿는 자리라, 더 나가면 자루가
+			# 통 바닥을 뚫고 아래로 튀어나온다(실제로 그랬다).
 			var n := CylinderMesh.new()
-			n.top_radius = dr * 0.34
+			n.top_radius = dr * 0.62
 			n.bottom_radius = 0.0
-			n.height = dl * 0.66
+			n.height = dl * 0.46
 			n.radial_segments = 6
-			_cup3_mesh(b, n, C_LIGHT, Vector3(0.0, -dl * 1.15, 0.0))
+			_cup3_mesh(b, n, C_LIGHT, Vector3(0.0, -dl * 0.77, 0.0))
 		"mag":
 			# 감긴 고리. 도넛의 축이 Y 라 자루를 그대로 두른다.
 			#
 			# **꽁지 쪽에 둔다.** 통에 꽂아 두면 자루의 아래 절반이 통 안에
 			# 잠기므로, 배럴 한가운데에 두른 고리는 고를 때 아예 안 보인다.
 			var t := TorusMesh.new()
-			t.inner_radius = dr * 1.05
-			t.outer_radius = dr * 2.05
+			t.inner_radius = dr * 1.00
+			t.outer_radius = dr * 1.55
 			t.rings = 14
 			t.ring_segments = 8
 			_cup3_mesh(b, t, col.lightened(0.34), Vector3(0.0, dl * 0.30, 0.0))
@@ -11271,7 +11277,7 @@ func _cup3_dart(id: String, tint: String, cup_tint: String) -> RigidBody3D:
 	# 종류가 길이와 굵기를 정한다. **충돌체도 같이 간다** — 그림만 늘이면
 	# 가벼운 다트가 안 보이는 짧은 몸으로 부딪혀 통 안에서 겹쳐 선다.
 	var sh := dart3_shape(id)
-	var dl: float = float(CUP3.dl) * float(sh.len)
+	var dl: float = float(CUP3.dl)
 	var dr: float = float(CUP3.dr) * float(sh.rad)
 	var col := _dart3_col(id)
 	if tint != "":
@@ -11336,7 +11342,18 @@ func _cup3_spawn(pi: int, x: float) -> void:
 	# 촉을 작은 고리 위에 **겹치지 않게** 흩어 놓고 꽁지를 바깥으로 벌린다.
 	# 한 점에 모아 놓았더니 솔버가 겹침을 푸느라 첫 프레임에 통 밖으로
 	# 터뜨렸다 — 물리는 겹친 채로 시작하는 것을 제일 싫어한다.
-	var rt: float = float(CUP3.dr) * 2.6            # 촉이 앉는 고리
+	# 촉이 앉는 고리. **자루 굵기를 본다** — 굵은 자루(무쇠 1.40배)를
+	# 기준 굵기로 잰 고리에 여섯 세우면 이웃끼리 겹친 채로 시작하고,
+	# 솔버가 그 겹침을 푸느라 첫 프레임에 통 밖으로 터뜨린다. 위에
+	# 적어 둔 그 실수를 종류 배율을 넣으면서 그대로 다시 냈다.
+	#
+	# 여섯이 도는 고리에서 이웃 사이는 반지름과 같다(2·r·sin30° = r).
+	# 그러니 고리가 지름보다 커야 한다 — 2.6배면 넉넉히 선다.
+	# 벽에 닿지 않게 위도 막는다.
+	var dsh := dart3_shape(id)
+	var ddr: float = float(CUP3.dr) * float(dsh.rad)
+	var ddl: float = float(CUP3.dl)
+	var rt: float = minf(ddr * 2.6, r - ddr * 1.4)  # 촉이 앉는 고리
 	var rc: float = r * 0.62                        # 꽁지가 벌어지는 고리
 	var darts := []
 	for i in n:
@@ -11351,8 +11368,7 @@ func _cup3_spawn(pi: int, x: float) -> void:
 		# 자루 길이가 종류마다 다르므로 촉이 앉는 자리도 같이 본다.
 		# CUP3.dl 을 박아 두면 짧은 자루가 공중에 뜨고 긴 자루가 바닥을 판다.
 		b.transform = Transform3D(Basis(side.normalized().cross(up), up,
-				side.normalized()),
-				tip + up * (float(CUP3.dl) * float(dart3_shape(id).len)))
+				side.normalized()), tip + up * ddl)
 		cup_vp.add_child(b)
 		darts.append(b)
 	# 발치의 골드. 잠긴 다트통에는 안 놓는다 — 무엇을 주는 다트통인지가 그림으로
