@@ -781,6 +781,10 @@ func _pack_grants() -> void:
 			gp.gs = 0
 			gp.bought = 0
 			owned.append(gp)
+			# 다트통이 쥐여 준 것도 손에 넣어 본 것이다 — 저울 다트통으로
+			# 데칼코마니를 써 봤으면 그 뒤로 팩에서도 만난다.
+			if GameData.item_weight(it) <= 0.0:
+				Save.unlock("itemgot:" + String(it.id))
 			break
 	_panel_reset()
 
@@ -819,6 +823,48 @@ func _dart_peaks() -> void:
 	# 쌓여 있어야 한다는 것이 save.gd 머리말의 규약이다.
 	for k in ["hvy", "lgt", "prc", "mag"]:
 		Save.peak("best_dart_" + k, int(n.get(k, 0)))
+
+
+# ══════════════════════════════════════════════════════════
+#  레전더리를 얻는 길 — 기획서 P.16
+# ──────────────────────────────────────────────────────────
+#  세 단이다. 그 셋이 이 아래 함수 셋과 1:1 이다.
+#
+#    ① 조건을 채우면 열린다            _item_unlock_check
+#    ② **바로 다음 상점**에서 공짜로 온다   _roll_stock 의 첫 매물
+#    ③ 한 번 받은 뒤로는 팩에서 확률로     _boost_one 의 풀
+#
+#  열쇠를 둘 쓴다. 「열렸다」와 「받아 봤다」가 다른 상태이기 때문이다 —
+#  열렸는데 슬롯이 꽉 차서 못 받았으면 다음 상점에 또 와야 한다.
+#    item:<id>     조건을 채웠다
+#    itemgot:<id>  한 번 손에 넣어 봤다. 이때부터 팩에 든다
+#
+#  다트통과 달리 **런 경계가 아니라 상점에서 본다.** 기획서가 「바로
+#  다음 상점」이라고 적었고, 런이 끝나야 열리면 그 「바로」가 사라진다.
+# ══════════════════════════════════════════════════════════
+func _item_unlock_check() -> void:
+	for it in GameData.items():
+		var st := String(it.get("ustat", ""))
+		if st == "" or Save.unlocked("item:" + String(it.id)):
+			continue
+		if Save.stat(st) < int(it.get("uv", 0)):
+			continue
+		if Save.unlock("item:" + String(it.id)):
+			pop(Vector2(VIEW.x * 0.5, 232.0),
+					"%s 열렸다" % it.n, GameData.rarity_color(String(it.rarity)), 13, 1.6)
+
+
+# 열렸는데 아직 손에 넣어 본 적이 없는 장. 그 한 장이 다음 상점에
+# 0골드로 선다 — 「무료로 주어지며」가 이 함수다. 이미 들고 있으면
+# 안 준다(상점 재고의 _has_item 규약과 같다).
+func _item_free_pick() -> Dictionary:
+	for it in GameData.items():
+		if not Save.unlocked("item:" + String(it.id)):
+			continue
+		if Save.unlocked("itemgot:" + String(it.id)) or _has_item(it.id):
+			continue
+		return it
+	return {}
 
 
 func _pack_unlock_check() -> void:
@@ -1019,6 +1065,17 @@ func _league_cost(c: int) -> int:
 func _roll_stock() -> void:
 	stock.clear()
 	var nxt := leg_no + 1
+	# 레전더리는 상점을 열 때 판정한다 — 기획서의 「바로 다음 상점」이
+	# 성립하려면 런이 끝나기를 기다리면 안 된다.
+	_item_unlock_check()
+	var freebie := _item_free_pick()
+	if not freebie.is_empty():
+		# free 표를 단다. 뒤에서 재고를 **덮어쓰거나 값을 깎는** 자리가
+		# 둘 있는데(사탕 바꿔치기 · 뱃지 「외상」), 둘 다 이 한 장은
+		# 건너뛰어야 한다. 표가 없으면 조용히 사탕이 되어 사라진다 —
+		# 실제로 첫 판에서 그랬다.
+		stock.append({"type": "item", "d": freebie, "cost": 0,
+				"sold": false, "free": true})
 	var tag_more := _spend_tags("shop")     # 뱃지 — 매물이 는다
 	var tag_free := _spend_tags("free")     # 뱃지 — 몇 개가 공짜다
 	# 상점 칸은 그 판 **뒤**의 상점 폭이다. 판 표를 읽으므로 같은 판
@@ -1084,6 +1141,10 @@ func _roll_stock() -> void:
 		var cp := GameData.consumables()
 		if not cp.is_empty():
 			for k in stock.size():
+				# 공짜로 주기로 한 장은 안 덮는다. 이 줄이 없으면 해금
+				# 보상이 사탕으로 바뀌어 없어진다.
+				if bool(stock[k].get("free", false)):
+					continue
 				if stock[k].type == "item":
 					var cd: Dictionary = cp[randi() % cp.size()]
 					stock[k] = {"type": "cons", "d": cd, "cost": _league_cost(cd.cost),
@@ -1109,7 +1170,9 @@ func _roll_stock() -> void:
 	for k in stock.size():
 		if tag_free <= 0:
 			break
-		if not stock[k].sold:
+		# 이미 0골드인 매물에는 안 쓴다. 안 그러면 해금 보상 위에
+		# 뱃지 한 장을 버리게 된다 — 값이 0 에서 0 이 될 뿐이다.
+		if not stock[k].sold and int(stock[k].cost) > 0:
 			stock[k].cost = 0
 			tag_free -= 1
 
@@ -1174,6 +1237,11 @@ func _buy(i: int) -> void:
 			cp.bought = leg_no          # 삭음(주황 리그)이 읽는 나이다
 			owned.append(cp)
 			bought_item = true
+			# 한 번 손에 넣었으면 이제 팩에서도 온다. 뜬 것이 아니라
+			# **받은 것**을 세는 이유는, 슬롯이 꽉 차 못 산 장이 다음
+			# 상점에 다시 와야 하기 때문이다.
+			if GameData.item_weight(cp) <= 0.0:
+				Save.unlock("itemgot:" + String(cp.id))
 		"mod":
 			_apply_mod(s.d.id)
 		"dart":
@@ -11958,7 +12026,17 @@ func _boost_one(kind: String) -> Dictionary:
 		"item":
 			var pool := []
 			for it in GameData.items():
-				if _has_item(it.id) or GameData.item_weight(it) <= 0.0:
+				if _has_item(it.id):
+					continue
+				if GameData.item_weight(it) <= 0.0:
+					# 등급 가중치가 0 인 장(레전더리)은 테이블에 안 뜬다.
+					# **팩은 다르다** — 한 번 받아 본 장은 여기서 다시 만난다.
+					# 기획서 P.16 의 「다음 런부터는 팩에서 확률적으로」다.
+					if not Save.unlocked("itemgot:" + String(it.id)):
+						continue
+					var lw: Dictionary = it.duplicate()
+					lw["w"] = GameData.tune("legend_pack_w")
+					pool.append(lw)
 					continue
 				pool.append(it)
 			var d := _draw_weighted(pool)

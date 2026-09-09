@@ -80,7 +80,7 @@ const TUNE_KEYS := [
 	"darts_base", "stage_picks",
 	"board_r", "aim_swing", "sector_max", "val_max_mul",
 	"gauge_speed", "resolve_beat", "bal_beats", "confirm_hold", "fly_time",
-	"aim_click_r",
+	"aim_click_r", "legend_pack_w",
 	"cons_slots", "shop_cons", "cons_price_tmp",
 	"kick_n", "kick_share",
 	"curve_first", "curve_last", "curve_bow",
@@ -352,6 +352,10 @@ static func items() -> Array:
 			# 한 판 내내 켜져 있는 방법이고, 동전이 쥐므로 사고 팔고 봉인되는
 			# 규칙 아래 놓인다. 비면 다트통 표로 떨어진다.
 			"score": r.get("score", ""),
+			# 이 동전을 여는 조건. 다트통의 unlock_stat 과 같은 규약이다 —
+			# 통계 하나가 문이고, 비면 다른 길로만 온다(다트통이 쥐여 주기).
+			"ustat": r.get("unlock_stat", ""),
+			"uv": _i(r, "unlock_v", "items", 0),
 			"line": r.get("_line", 0),
 		}
 		if String(r.get("gold", "")) != "":
@@ -1774,6 +1778,14 @@ static func _v_item_aim() -> void:
 		if sm != "" and not SCORE_MODES.has(sm):
 			_errs.append("items:%d %s — 모르는 계산 방식 '%s'. SCORE_MODES 에 먼저 적어라"
 					% [r.get("_line", 0), r.get("name", ""), sm])
+		# 해금 조건. 다트통과 같은 통계 목록을 읽는다.
+		var ust: String = r.get("unlock_stat", "")
+		if ust != "" and not Save_STATS.has(ust):
+			_errs.append("items:%d %s — 모르는 통계 열쇠 '%s'"
+					% [r.get("_line", 0), r.get("name", ""), ust])
+		if ust != "" and _i(r, "unlock_v", "items", 0) <= 0:
+			_errs.append("items:%d %s — 조건은 있는데 문턱(unlock_v)이 0 이다"
+					% [r.get("_line", 0), r.get("name", "")])
 
 
 static func _v_packs() -> void:
@@ -2469,9 +2481,9 @@ static func _v_cross() -> void:
 	# 적어 뒀다. 잘못은 **그 다른 길이 하나도 없을 때**다. 그때 그 장은
 	# 표에 있으나 게임에 없다.
 	#
-	# 지금 다른 길은 다트통이 쥐여 주는 것 하나뿐이다(grant_item).
-	# 팩에서 뽑는 길이나 해금 조건이 서면 여기에 그 길을 더한다 —
-	# 이 목록이 곧 「레전더리를 어떻게 얻는가」의 계약이다.
+	# 길은 둘이다 — 다트통이 쥐여 주거나(grant_item), 통계 조건을 채우면
+	# 다음 상점에 공짜로 오거나(unlock_stat). 이 목록이 곧 「레전더리를
+	# 어떻게 얻는가」의 계약이다.
 	var granted := {}
 	for p in _raw.get("packs", []):
 		for gid in String(p.get("grant_item", "")).split(";", false):
@@ -2479,7 +2491,9 @@ static func _v_cross() -> void:
 	for it in items():
 		if item_weight(it) > 0.0 or granted.has(String(it.id)):
 			continue
-		_errs.append("items — %s(%s) 는 테이블에도 안 뜨고 쥐여 주는 다트통도 없다"
+		if String(it.get("ustat", "")) != "":
+			continue
+		_errs.append("items — %s(%s) 는 얻는 길이 없다. 쥐여 주는 다트통도 해금 조건도 없다"
 				% [it.n, it.id])
 
 
