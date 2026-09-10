@@ -59,7 +59,7 @@ PAT = re.compile("|".join(sorted((re.escape(k) for k in RENAME), key=len, revers
 
 EXT = {".gd", ".csv", ".md", ".json", ".py", ".tscn", ".cfg"}
 # 이 둘은 사전 자체를 들고 있다. 훑으면 사전의 왼쪽까지 바뀌어 뜻이 뒤집힌다.
-SKIP_FILE = {"rename_terms.py", "make_deck.py"}
+SKIP_FILE = {"rename_terms.py"}
 SKIP = {".godot", ".git", "imported_models", "addons", "__pycache__", "shots",
         "export", "테스트버전"}
 
