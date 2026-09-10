@@ -38,7 +38,7 @@ KINDS = ["chip", "mult", "xmult", "mult_streak", "mult_rand", "save"]
 GOLDS = ["clear", "spare", "clean", "blitz", "broke", "leg", "risk50", "hit"]
 GROWS = ["fire", "hitmiss", "tdec", "rdec"]
 BOOMS = ["r6", "r1000"]
-SIDES = ["trackup25"]
+SIDES = ["trackup25", "boardkill", "bigdart"]
 PERS = ["darts_left", "items", "gold", "gold5", "mag_hvy", "missing", "low",
         "zonehist", "rackval", "empty"]
 AIMS = ["ring", "tilt", "cross", "drift", "place", "pull", "kick"]

@@ -1530,6 +1530,10 @@ static func eff_line(it: Dictionary) -> String:
 			return "판 시작 다트 %+d" % da
 		if String(it.get("side", "")) == "trackup25":
 			return "발동 4회 중 1회, 맞은 트랙 강화 +1"
+		if String(it.get("side", "")) == "boardkill":
+			return "판을 넘기면 그 자리에서 런 클리어"
+		if String(it.get("side", "")) == "bigdart":
+			return "던질 때마다 다트가 커진다 · 커진 만큼 양옆 칸도 같이 얻는다"
 		return ""     # 골드 카드 — 효과는 골드 줄이 이미 말한다
 	var g: String = String(it.get("grow", ""))
 	if g == "hitmiss":
@@ -1562,6 +1566,10 @@ static func eff_line(it: Dictionary) -> String:
 		base += " · 판 시작 다트 %+d" % da2
 	if String(it.get("side", "")) == "trackup25":
 		base += " · 4회 중 1회 트랙 강화 +1"
+	if String(it.get("side", "")) == "boardkill":
+		base += " · 판을 넘기면 런 클리어"
+	if String(it.get("side", "")) == "bigdart":
+		base += " · 던질 때마다 커진다"
 	if String(it.get("boom", "")) == "r6":
 		base += " · 판마다 1/6 확률로 파괴"
 	elif String(it.get("boom", "")) == "r1000":
@@ -2558,8 +2566,19 @@ static func _v_cross() -> void:
 			_errs.append("items — %s(%s) 의 효과가 얼굴에 없다" % [it2.n, it2.id])
 		if int(it2.get("dadd", 0)) != 0 and face.find("다트") < 0:
 			_errs.append("items — %s(%s) 의 다트 증감이 얼굴에 없다" % [it2.n, it2.id])
-		if String(it2.get("side", "")) != "" and face.find("강화") < 0:
-			_errs.append("items — %s(%s) 의 영역 승급이 얼굴에 없다" % [it2.n, it2.id])
+		# side 는 이제 갈래가 셋이다(승급 · 보드 처치 · 커지는 다트). 각자
+		# 얼굴에 남기는 말이 달라서 "강화" 하나로는 못 잡는다 — 갈래마다
+		# 무엇이 보여야 하는지를 적어 둔다.
+		var sd := String(it2.get("side", ""))
+		if sd != "":
+			var mark: String = {"trackup25": "강화", "boardkill": "클리어",
+					"bigdart": "커진다"}.get(sd, "")
+			if mark == "":
+				_errs.append("items — %s(%s) 의 모르는 부가 효과 '%s'"
+						% [it2.n, it2.id, sd])
+			elif face.find(mark) < 0:
+				_errs.append("items — %s(%s) 의 부가 효과가 얼굴에 없다"
+						% [it2.n, it2.id])
 		if String(it2.get("boom", "")) != "" and face.find("파괴") < 0:
 			_errs.append("items — %s(%s) 의 파괴 확률이 얼굴에 없다" % [it2.n, it2.id])
 		if String(it2.get("g", "")) != "" and gtx == "":

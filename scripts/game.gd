@@ -746,6 +746,25 @@ func _finish_leg() -> void:
 		_sfx("run_lose")
 		return
 
+	# 「NULL」 — 판을 넘긴 그 순간 런이 끝난다. 몇 번째 판이든 상관없다.
+	# 목표 점수를 보드의 목숨으로 읽는 장이라, 넘긴 것이 곧 처치다.
+	for i in owned.size():
+		if i == sealed:
+			continue          # 봉인은 발동을 막는다
+		if String(owned[i].get("side", "")) != "boardkill":
+			continue
+		_league_unlock_next()
+		_pack_unlock_next()
+		state = S.OVER
+		won = true
+		Save.bump("wins")
+		_dart_peaks()
+		_pack_unlock_check()
+		Save.flush()
+		pop(BC, "%s — 보드 처치" % owned[i].n, C_ACC, 13, 1.8)
+		_sfx("run_win")
+		return
+
 	if leg_no >= GameData.legs_n():
 		_league_unlock_next()
 		_pack_unlock_next()
@@ -3297,6 +3316,23 @@ func _land(mark := true) -> void:
 			var l: int = sectors[(info.idx + n - 1) % n]
 			var r: int = sectors[(info.idx + 1) % n]
 			pierce_gain = int(float(l + r) * float(cur_dart.get("side", 0.5)))
+		# 「잭과 콩나무」 — 던질 때마다 다트가 커진다. 커진 만큼 양옆으로
+		# 더 넓은 칸을 같이 먹는다. 관통과 같은 자리를 쓰되 폭이 자란다 —
+		# 관통은 배수를 1 로 묶는 대가를 내는데 이쪽은 레전더리라 안 묶는다.
+		if info.idx >= 0:
+			for bi2 in owned.size():
+				if bi2 == sealed:
+					continue
+				var bg: Dictionary = owned[bi2]
+				if String(bg.get("side", "")) != "bigdart":
+					continue
+				# 자란 걸음 수만큼 양옆으로 뻗는다. 판을 한 바퀴 다 먹지
+				# 않게 반 바퀴에서 멈춘다.
+				var reach: int = mini(int(bg.get("gs", 0)), sectors.size() / 2)
+				var n2: int = sectors.size()
+				for k in range(1, reach + 1):
+					pierce_gain += sectors[(info.idx + n2 - k) % n2]
+					pierce_gain += sectors[(info.idx + k) % n2]
 
 	# 트랙 강화 — 사탕이 올린 트랙 레벨. 레벨별 수치 행이 전부
 	# 트랙 강화 (= 발라트로의 행성 카드). 사탕이 트랙 레벨을 올리고
