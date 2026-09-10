@@ -1,0 +1,19 @@
+[remap]
+
+importer="csv_translation"
+type="Translation"
+uid="uid://sfe8pqwu41qy"
+
+[deps]
+
+files=["res://data/challenges.name.translation", "res://data/challenges.desc.translation", "res://data/challenges.start.translation", "res://data/challenges.gold.translation", "res://data/challenges.tag.translation", "res://data/challenges.item.translation", "res://data/challenges.item.translation", "res://data/challenges.fog.translation", "res://data/challenges.target.translation", "res://data/challenges.cost.translation", "res://data/challenges.shop.translation", "res://data/challenges.sec.translation", "res://data/challenges.sec.translation", "res://data/challenges.interest.translation", "res://data/challenges.mods.translation", "res://data/challenges.reward.translation", "res://data/challenges.enabled.translation"]
+
+source_file="res://data/challenges.csv"
+dest_files=["res://data/challenges.name.translation", "res://data/challenges.desc.translation", "res://data/challenges.start.translation", "res://data/challenges.gold.translation", "res://data/challenges.tag.translation", "res://data/challenges.item.translation", "res://data/challenges.item.translation", "res://data/challenges.fog.translation", "res://data/challenges.target.translation", "res://data/challenges.cost.translation", "res://data/challenges.shop.translation", "res://data/challenges.sec.translation", "res://data/challenges.sec.translation", "res://data/challenges.interest.translation", "res://data/challenges.mods.translation", "res://data/challenges.reward.translation", "res://data/challenges.enabled.translation"]
+
+[params]
+
+compress=1
+delimiter=0
+unescape_keys=false
+unescape_translations=true

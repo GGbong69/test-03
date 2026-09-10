@@ -47,7 +47,6 @@ func _shoot(name: String, hit: Dictionary) -> void:
 func _run() -> void:
 	for i in 8:
 		g._process(1.0 / 60.0)
-	GameData.fixture_clear()
 	g._new_run()
 	g._swap_skip()
 

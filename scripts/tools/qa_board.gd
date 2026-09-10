@@ -81,6 +81,18 @@ func _process(_d: float) -> bool:
 				bv, (bv / bv0 - 1.0) * 100.0,
 				sh.trp * 100.0, sh.dbl * 100.0, sh.miss * 100.0])
 
+	# 혼자서도 상한을 넘으면 테이블에 아예 안 뜬다 — 살 수 없는 카드다.
+	print("\n혼자서 상한을 넘는 장")
+	var lone := 0
+	for m in GameData.mods():
+		var rr: Array = g._board_of([m.id])
+		if not g._board_ok(rr[0], rr[1]):
+			print("  %-8s 판값 %.2f > 상한 %.2f — 상점에 안 뜬다"
+					% [m.n, GameData.board_val(rr[0], rr[1]), cap])
+			lone += 1
+	if lone == 0:
+		print("  없다")
+
 	rows.sort_custom(func(a, b): return a.bv > b.bv)
 	print("\n판값 순서")
 	for r in rows:

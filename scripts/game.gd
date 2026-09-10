@@ -1461,8 +1461,10 @@ func _mod_step(b: Dictionary, sec: Array, m: Dictionary) -> void:
 			# 지우는 대신 배수를 없앤다 — 기하를 부수면 hit_info 의 if 사슬이
 			# 전제하는 순서가 깨지는데, 배수만 내리면 "띠가 없는 것" 과 같은
 			# 결과이면서 판은 성립한다.
+			# v1 이 비어 있으므로 v 는 배열이 아니라 스칼라다
+			# (mods() 가 "v": [v0, v1] if has1 else v0 로 짓는다).
 			for i in sec.size():
-				sec[i] = int(m.v[0])
+				sec[i] = int(m.v)
 			b["m_trp"] = 1
 			b["m_dbl"] = 1
 		"donut":
@@ -9406,6 +9408,10 @@ var tip_chip := {}              # 제목 옆 미니동전로 그릴 아이템 (�
 # 기본 점수으로 붙이는 그 자리다.
 var tip_tag := ""               # 기본 점수에 적을 낱말. 비면 안 그린다
 var tip_tag_c := Color(1, 1, 1)
+# 둘째 태그 — 희귀도. 갈래 태그 오른쪽에 나란히 붙는다. 색은 rarity.csv 가
+# 쥐므로 표에 등급을 더하면 그 색이 그대로 따라온다.
+var tip_tag2 := ""
+var tip_tag2_c := Color(1, 1, 1)
 var tip_mark := Rect2()         # 대상 사각 (동전 슬롯은 링으로 대신하므로 빈 값)
 # 그 사각에 테두리를 두르는가. tip_mark 를 비우는 것과 다르다 — 제약
 # 카드는 "커서 아래 카드가 선다" 를 tip_mark 로 판정하므로(_drop_update)
@@ -9475,6 +9481,7 @@ func _tip_clear() -> void:
 	tip_lines = []
 	tip_chip = {}
 	tip_tag = ""
+	tip_tag2 = ""
 	tip_mark = Rect2()
 	tip_box = true
 	tip_slot = -1
@@ -9573,6 +9580,7 @@ func _tip_build(hit: Dictionary) -> void:
 			var it: Dictionary = owned[i]
 			tip_title = it.n
 			tip_chip = it
+			_tip_set_rar(String(it.get("rarity", "")))
 			_tip_add(GameData.cond_text(it.c), 10, C_DIM)
 			_tip_add(GameData.eff_line(it), 11,
 					C_CHIP.lightened(0.35) if it.k == "chip" else C_MULT.lightened(0.3))
@@ -9580,8 +9588,9 @@ func _tip_build(hit: Dictionary) -> void:
 				_tip_add(GameData.gold_text(it.g, it.gv), 9, C_GOLD)
 			if i == sealed:
 				_tip_add("이번 판 봉인", 9, C_MULT.lightened(0.25))
-			if _can_sell():
-				_tip_add("판매가", 10, C_GOLD, "", "", str(GameData.sell_value(it)))
+			# 값은 설명창에 안 적는다(2026-09-11 지시). 파는 값은 상점 창구가,
+			# 사는 값은 테이블의 물건이 이미 말한다 — 같은 수를 두 곳에서
+			# 말하면 어느 쪽이 진짜인지 물어보게 된다.
 		"stock":
 			var s: Dictionary = stock[i]
 			# 테이블은 한 자리에 네 갈래가 섞여 뜬다 — 그림만으로는 동전과
@@ -9604,6 +9613,7 @@ func _tip_build(hit: Dictionary) -> void:
 			tip_title = s.d.n
 			if s.type == "item":
 				tip_chip = s.d
+				_tip_set_rar(String(s.d.get("rarity", "")))
 				_tip_add(GameData.cond_text(s.d.c), 10, C_DIM)
 				_tip_add(GameData.eff_line(s.d), 11,
 						C_CHIP.lightened(0.35) if s.d.k == "chip" else C_MULT.lightened(0.3))
@@ -9724,6 +9734,14 @@ func _tip_build(hit: Dictionary) -> void:
 
 
 # 갈래 기본 점수 하나. 이름 · 색을 같이 정한다 — 색이 갈래를 절반쯤 말한다.
+# 희귀도 태그. 동전에만 단다 — 사탕·다트·보드 확장에는 등급이 없다.
+func _tip_set_rar(rar: String) -> void:
+	if rar == "":
+		return
+	tip_tag2 = GameData.rarity_name(rar)
+	tip_tag2_c = GameData.rarity_color(rar)
+
+
 func _tip_set_tag(k: String) -> void:
 	tip_tag = k
 	match k:
@@ -9871,6 +9889,18 @@ func _tip_draw(sh: Vector2) -> void:
 				Color(tip_tag_c, tip_a * 0.85))
 		draw_string(font, tr.position + Vector2(5.0, 9.0), tip_tag,
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(tip_tag_c, tip_a))
+		# 희귀도는 갈래 바로 오른쪽이다. 같은 꼴로 그려야 "같은 종류의
+		# 표지" 로 읽힌다 — 색만 등급이 쥔다.
+		if tip_tag2 != "":
+			var tw3: float = font.get_string_size(tip_tag2,
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 9).x + 10.0
+			var tr2 := Rect2(tr.position + Vector2(tr.size.x + 4.0, 0.0),
+					Vector2(tw3, TIP.chip_h))
+			draw_rect(tr2, Color(tip_tag2_c, tip_a * 0.22))
+			draw_rect(Rect2(tr2.position, Vector2(tr2.size.x, 1.0)),
+					Color(tip_tag2_c, tip_a * 0.85))
+			draw_string(font, tr2.position + Vector2(5.0, 9.0), tip_tag2,
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(tip_tag2_c, tip_a))
 
 	draw_set_transform(sh)
 

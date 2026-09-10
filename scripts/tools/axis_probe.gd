@@ -64,7 +64,8 @@ func _snap(n: int) -> void:
 		tl += int(g.track_lv[k])
 	r.trk += float(tl)
 	r.mods += float(g.mods_own.size())
-	r.vou += float(GameData.fixtures_own.size())
+	# 사진은 1회성이 되어 런 내내 남는 목록이 없다. 지금 손에 든 것을 센다.
+	r.vou += float(g.cons.size())
 	var nonstd := 0
 	for d in g.magazine:
 		if String(d.get("id", "std")) != "std":

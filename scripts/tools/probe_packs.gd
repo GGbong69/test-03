@@ -29,7 +29,7 @@ func _go() -> void:
 		var carry := []
 		if g.owned.size() > 0: carry.append("동전%d" % g.owned.size())
 		if g.cons.size() > 0: carry.append("사탕%d" % g.cons.size())
-		if gd.fixtures_own.size() > 0: carry.append("사진%d" % gd.fixtures_own.size())
+		if g.cons.size() > 0: carry.append("사탕칸%d" % g.cons.size())
 		print("%-8s %-12s %-6s %-5s %-4d %-4d %-4d %-5s %s"
 				% [r.get("id","?"), r.get("name", r.get("n","?")), r.get("kind", "base"), str(mag), g.magazine.size(),
 					g.gold, gd.max_items(), gd.score_mode(),

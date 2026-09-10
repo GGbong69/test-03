@@ -34,7 +34,6 @@ func _initialize() -> void:
 	Save.wipe()
 	var g: Node = load("res://scenes/main.tscn").instantiate()
 	root.add_child(g)
-	GameData.fixture_clear()
 
 	# ① 표와 코드가 같은 이름을 안다
 	var bad := ""
