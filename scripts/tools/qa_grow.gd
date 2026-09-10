@@ -6,8 +6,14 @@ const Save = preload("res://scripts/save.gd")
 # ══════════════════════════════════════════════════════════
 #  성장형 동전 QA — "자란 값이 그 정산에 실리는가"
 #
-#  실행:  godot --path . --headless --script scripts/tools/qa_grow.gd -- autoplay
+#  실행:  godot --path . --headless --quit-after 540000 \
+#             --script scripts/tools/qa_grow.gd -- autoplay
 #  종료 코드 = 실패 개수
+#
+#  **창을 넉넉히 줘야 한다.** 한 장을 phase_len(8000)프레임씩 붙잡고 보므로
+#  성장형 여섯이면 48000프레임이다. 3분짜리 창에서는 중간에 잘리는데, 판정을
+#  끝에 몰아 찍는 구조라 잘리면 **아무것도 안 나온다** — 통과와 구별이 안 된다.
+#  짧게 보려면 frames=2000 처럼 걸음을 줄여서 부른다.
 #
 #  qa_items 는 "값이 0 에서 움직였다" 까지만 본다. 그것만으로는 방향도 폭도
 #  모르고, 무엇보다 **자란 값이 점수에 실리는지**를 못 본다. 여기서는 정산
