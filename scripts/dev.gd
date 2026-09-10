@@ -362,12 +362,15 @@ static func _rows(g: Node) -> Array:
 				{"n1": "동전 무작위", "t": "act", "a": "item_rand"},
 				{"n1": "동전 슬롯 비우기", "t": "act", "a": "item_clear"},
 				{"n1": "사탕 주기", "t": "list", "k": "cons",
-						"n": GameData.consumables().size()},
+						"n": _list("cons").size()},
+				{"n1": "사진 주기", "t": "list", "k": "photo",
+						"n": _list("photo").size()},
+				{"n1": "손에 든 것 쓰기", "t": "act", "a": "cons_use"},
 				{"n1": "보드 확장 달기", "t": "list", "k": "mod",
 						"n": GameData.mods().size()},
 				{"n1": "다트 바꾸기", "t": "list", "k": "dart",
 						"n": GameData.darts().size()},
-				{"n1": "사진 주기", "t": "list", "k": "vou",
+				{"n1": "바우처 주기 (옛 사진)", "t": "list", "k": "vou",
 						"n": GameData.fixtures().size()},
 				{"n1": "뱃지 주기", "t": "list", "k": "tag",
 						"n": GameData.tags().size()},
@@ -400,7 +403,13 @@ static func _rows(g: Node) -> Array:
 static func _list(k: String) -> Array:
 	match k:
 		"item": return GameData.items()
-		"cons": return GameData.consumables()
+		# 사탕과 사진이 한 표에 산다(둘 다 "골라서 쓰는" 물건이라 길이 같다).
+		# 개발자 판에서는 갈라 보여야 한다 — 섞어 놓으면 사진 여덟이 사탕
+		# 틈에 묻혀 "왜 없지" 가 된다.
+		"cons": return GameData.consumables().filter(
+				func(c): return String(c.get("cat", "")) == "area")
+		"photo": return GameData.consumables().filter(
+				func(c): return String(c.get("cat", "")) != "area")
 		"mod": return GameData.mods()
 		"dart": return GameData.darts()
 		"vou": return GameData.fixtures()
@@ -506,6 +515,16 @@ static func _run(g: Node, e: Dictionary) -> void:
 			if not pool.is_empty():
 				_give_item(g, pool[randi() % pool.size()])
 			return
+		"cons_use":
+			# 사진은 쓰는 순간 화면이 하나 더 열린다. 주기만 해서는 그 화면을
+			# 못 보므로 여기서 바로 눌러 준다 — 슬롯을 클릭하는 것과 같은 길이다.
+			if g.cons.is_empty():
+				_say("손이 비었다")
+				return
+			var nm := String(g.cons[0].get("n", ""))
+			g._cons_use(0)
+			_say("%s 사용" % nm)
+			return
 		"item_clear":
 			g.owned.clear()
 			g.sealed = -1
@@ -566,7 +585,7 @@ static func _run(g: Node, e: Dictionary) -> void:
 		"item":
 			if not rows.is_empty():
 				_give_item(g, rows[i % rows.size()])
-		"cons":
+		"photo", "cons":
 			if not rows.is_empty() and g.cons.size() < GameData.cons_slots():
 				g.cons.append(rows[i % rows.size()])
 				_say("사탕 %d/%d" % [g.cons.size(), GameData.cons_slots()])
