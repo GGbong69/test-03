@@ -485,7 +485,6 @@ func _new_run() -> void:
 	leg_tags.clear()
 	leg_tags_round = 0
 	leg_skipped.clear()
-	GameData.fixture_clear()     # 사진은 런 스코프다. 지우는 자리는 여기 하나
 	# **지운 뒤에** 쥐여 준다. 반대였다 — 사진을 주는 다트통이 지금까지
 	# 하나도 없어서 아무도 안 밟은 자리였고, 선물 다트통을 만들자마자
 	# 드러났다. 다른 세 갈래(보드 확장·사탕·동전)는 각자의 clear 가
@@ -555,7 +554,6 @@ func _start_leg() -> void:
 	var dadd := int(mod_v("darts_add", 0.0))
 	dadd += int(GameData.league_v("darts_add", 0.0))
 	dadd += _spend_tags("dart")          # 뱃지 — 다음 판 한 번만 산다
-	dadd += GameData.fixture_i("darts_add", 0)   # 사진 — 런 내내 산다
 	# 순서: 제약 → 리그 → 뱃지 → 사진 → 동전. 전부 더하기라 지금은 수가
 	# 같지만, 이 줄들 중 하나라도 곱이 되면 순서가 값을 바꾼다. 그때 고칠
 	# 자리가 여기 하나다.
@@ -863,8 +861,12 @@ func _pack_grants() -> void:
 			mods_own.append(String(id))
 	if not mods_own.is_empty():
 		_board_bake()
+	# 다트통이 쥐여 주는 사진. 1회성이 되면서 영구 목록이 아니라 사탕 칸으로
+	# 들어간다 — 선물 다트통이 그 길을 쓴다.
 	for id in GameData.pack_grants("grant_fixture"):
-		GameData.fixture_add(String(id))
+		for f in GameData.fixtures():
+			if String(f.id) == String(id) and cons.size() < GameData.cons_slots():
+				cons.append(f.duplicate())
 	for id in GameData.pack_grants("grant_cons"):
 		for c in GameData.consumables():
 			if String(c.id) == String(id) and cons.size() < GameData.cons_slots():
@@ -1086,14 +1088,14 @@ func _gold_from_items() -> Array:
 # rerolls_used 를 음수로 밀어 좌변에 붙는다. 같은 축이 아니라 같은 비교의
 # 반대편이라, 둘을 한 수로 합치면 안 된다.
 func _free_rerolls() -> int:
-	return GameData.free_rerolls() + GameData.fixture_i("free_rerolls", 0)
+	return GameData.free_rerolls()
 
 
 # 이자 상한 = 표 + 리그 + 사진. 정산(_settle_clear)과 자금판 미리보기가
 # 같은 식을 읽어야 한다 — 갈려 있으면 화면에 적힌 수와 실제로 들어오는
 # 골드가 다르고, 그건 플레이어가 못 고치는 종류의 거짓말이다.
 func _interest_cap() -> int:
-	return GameData.interest_max() + int(GameData.league_v("interest_add", 0.0)) 			+ GameData.fixture_i("interest_add", 0)
+	return GameData.interest_max() + int(GameData.league_v("interest_add", 0.0))
 
 
 # 벽에 걸린 사진 한 장. 매물과 다른 어휘로 그린다 — 매물은 펠트 위에
@@ -1332,7 +1334,7 @@ func _buy(i: int) -> void:
 		"item": Save.bump("items_bought")
 		"mod": Save.bump("mods_bought")
 		"dart": Save.bump("darts_bought")
-		"fix": Save.bump("fixtures_bought")
+		"fix": Save.bump("cons_used")
 		"boost": Save.bump("boosters_bought")
 	match s.type:
 		"item":
@@ -1361,13 +1363,16 @@ func _buy(i: int) -> void:
 			# 막을 조건이 없다 — 골드만 있으면 늘 살 수 있다.
 			_boost_deal(s.d)
 		"fix":
-			# 사면 사라지고 효과만 런 끝까지 남는다. 동전 슬롯에도 사탕
-			# 칸에도 안 들어간다. shelf 를 비워 리롤에도 다시 안 온다.
-			GameData.fixture_add(String(s.d.id))
+			# 사진은 이제 1회성이다(2026-09-10 기획서). 사면 사탕 칸에
+			# 들어가고 쓸 때 효과가 난다 — 사서 그 자리에서 사라지던
+			# 옛 바우처와 다른 물건이다. shelf 를 비워 리롤에도 다시 안 온다.
+			if cons.size() >= GameData.cons_slots():
+				pay_msg = "사탕 칸이 꽉 찼다"
+				pay_msg_t = HAND.msg_t
+				_deny()
+				return
+			cons.append(s.d.duplicate())
 			shelf = {}
-			# 테이블 폭·무료 리롤이 이 순간 바뀔 수 있다. 이번 판은 이미
-			# 굴린 뒤라 폭은 다음 리롤부터 넓어지고, 값은 지금 다시 매긴다.
-			reroll_cost = _reroll_price()
 			_panel_reset()
 	_sfx("fixture_buy" if s.type == "fix" else "buy")
 
@@ -2176,7 +2181,7 @@ func add_sparks(n: int, r0: float, r1: float, ln: float, c: Color, life: float) 
 func gs() -> float:
 	# 이 게임 고유의 축. 제약이 미는 그 줄에 사진이 나란히 얹힌다 —
 	# 둘 다 곱이라 순서가 값을 안 바꾼다.
-	var g := gauge_speed * mod_v("gauge_mul", 1.0) 			* GameData.fixture_v("gauge_mul", 1.0)
+	var g := gauge_speed * mod_v("gauge_mul", 1.0)
 	return g * (cur_dart.gauge if cur_dart.has("gauge") else 1.0)
 
 
@@ -13161,11 +13166,12 @@ func _ri_photos(p: Rect2) -> void:
 	var x: float = p.position.x + 16.0
 	var w: float = p.size.x - 32.0
 	var y: float = p.position.y + 36.0
+	# 사진은 1회성이라 "산 것" 이 안 남는다. 지금 손에 든 것을 보여준다.
 	var own := []
-	for f in GameData.fixtures():
-		if GameData.fixtures_own.has(String(f.id)):
-			own.append(f)
-	draw_string(font, Vector2(x, y + 9.0), "이번 런에서 산 사진 %d" % own.size(),
+	for c in cons:
+		if String(c.get("cat", "")) != "area":
+			own.append(c)
+	draw_string(font, Vector2(x, y + 9.0), "지금 든 사진 %d" % own.size(),
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_ACC)
 	draw_rect(Rect2(x, y + 13.0, w, 1.0), Color(C_WIRE.darkened(0.3), 0.5))
 	y += 24.0

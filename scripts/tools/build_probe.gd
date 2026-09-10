@@ -20,7 +20,9 @@ var g: Node = null
 var frames := 0
 var runs := 0
 var RUNS := 8
-var RACK: PackedStringArray = PackedStringArray(["j024", "j046", "j006"])
+# 기본 동전 슬롯. id 를 박아 두었더니 표가 갈리면서 셋이 한꺼번에 죽었다 —
+# 표에서 앞의 셋을 집는다. 특정 조합을 보려면 rack= 인자로 준다.
+var RACK: PackedStringArray = PackedStringArray()
 const FRAME_CAP := 400000
 
 var last_round := 1
@@ -42,6 +44,11 @@ func _initialize() -> void:
 			RUNS = maxi(1, int(t.substr(5)))
 		elif t.begins_with("rack="):
 			RACK = t.substr(5).split(",")
+	if RACK.is_empty():
+		for it in GameData.items():
+			if RACK.size() >= 3:
+				break
+			RACK.append(String(it.id))
 	print("동전 슬롯: %s · 런 %d회" % [", ".join(RACK), RUNS])
 
 

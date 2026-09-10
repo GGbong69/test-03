@@ -370,8 +370,6 @@ static func _rows(g: Node) -> Array:
 						"n": GameData.mods().size()},
 				{"n1": "다트 바꾸기", "t": "list", "k": "dart",
 						"n": GameData.darts().size()},
-				{"n1": "바우처 주기 (옛 사진)", "t": "list", "k": "vou",
-						"n": GameData.fixtures().size()},
 				{"n1": "뱃지 주기", "t": "list", "k": "tag",
 						"n": GameData.tags().size()},
 				{"n1": "테이블 다시 굴리기", "t": "act", "a": "restock"},
@@ -609,8 +607,12 @@ static func _run(g: Node, e: Dictionary) -> void:
 				_say("다트 %s" % dd.get("n", dd.get("name", "")))
 		"vou":
 			if not rows.is_empty():
-				GameData.fixture_add(String(rows[i % rows.size()].id))
-				_say("사진 %d개" % GameData.fixtures_own.size())
+				# 사진은 1회성이라 사탕 칸으로 들어간다
+				if g.cons.size() < GameData.cons_slots():
+					g.cons.append(rows[i % rows.size()].duplicate())
+					_say("사진 %s" % rows[i % rows.size()].get("n", ""))
+				else:
+					_say("사탕 칸이 꽉 찼다")
 		"tag":
 			if not rows.is_empty():
 				g._take_tag(rows[i % rows.size()])

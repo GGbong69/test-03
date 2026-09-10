@@ -59,7 +59,6 @@ const FILES := {
 	"chal": "challenges.csv",
 	"colors": "colors.csv",
 	"tags": "tags.csv",
-	"fixtures": "fixtures.csv",
 	"boosters": "boosters.csv",
 	"tuning": "tuning.csv",
 	# ── HIGHTONE 스펙(2026-08-23 통합 컨텍스트)에서 온 표 ──
@@ -68,8 +67,6 @@ const FILES := {
 	"areas": "areas.csv",
 	"area_up": "area_upgrades.csv",
 	"cons": "consumables.csv",
-	"proc": "processing.csv",
-	"spec_map": "spec_map.csv",
 }
 
 # tuning.csv 가 반드시 가져야 하는 열쇠. 목록이 곧 계약이다 —
@@ -1003,36 +1000,19 @@ static func tag_roll(round: int) -> Dictionary:
 
 
 # ── 사진 ──────────────────────────────────────────────────
-#  상점에서 사면 런 내내 남는 영구 업그레이드. 리그(런 시작에 고른다)와
-#  뱃지(한 번 쓰고 사라진다) 사이의 빈 자리다.
-#
-#  산 목록을 여기 static 으로 두는 이유는 하나다 — max_items() 처럼
-#  값을 내는 래퍼가 전부 static 이고, 그것을 읽는 자리가 서른 곳쯤 된다.
-#  노드에 두면 그 서른 곳을 전부 고쳐야 하고 래퍼가 존재할 이유가 없어진다.
-static var fixtures_own: Array = []
-static var _vou := {}            # key → [add, mul]. 아래 셋 말고는 아무도 안 만진다
+#  2026-09-10 기획서에서 사진이 1회성이 됐다. 상시 강화(바우처)이던 시절의
+#  배관 — 산 목록(fixtures_own) · 축별 누적(_vou) · fixture_v/fixture_i —
+#  을 통째로 걷었다. 이제 사진은 사탕과 같은 길로 손에 들어와 쓸 때 한 번
+#  터지고 사라지므로, 런 내내 남는 값이 없다.
 
-
+# 사진 목록. 표는 consumables.csv 로 옮겨 갔고 이 함수만 남겼다 —
+# 읽는 자리가 서른 곳쯤 되는데(선반 · 컬렉션 · 개발자 판) 전부 "사진
+# 목록을 달라" 는 뜻이라 여기 한 곳만 갈아 끼우면 그대로 산다.
 static func fixtures() -> Array:
-	boot()
-	if _cache.has("fixtures"):
-		return _cache["fixtures"]
 	var out := []
-	for r in _raw.get("fixtures", []):
-		var v := _f(r, "v", "fixtures")
-		var op: String = r.get("op", "")
-		out.append({
-			"id": r.get("id", ""), "n": r.get("name", ""),
-			"key": r.get("key", ""), "v": v,
-			"op": op if op != "" else "add",
-			"cost": _i(r, "cost", "fixtures"),
-			"prereq": r.get("prereq", ""),
-			"min_round": _i(r, "min_round", "fixtures", 1),
-			"w": _f(r, "weight", "fixtures", 1.0),
-			"d": fill(r.get("desc", ""), {"v": v}),
-			"line": r.get("_line", 0),
-		})
-	_cache["fixtures"] = out
+	for c in consumables():
+		if String(c.get("cat", "")) != "area":
+			out.append(c)
 	return out
 
 
@@ -1043,76 +1023,26 @@ static func fixture_of(id: String) -> Dictionary:
 	return {}
 
 
-static func fixture_clear() -> void:
-	fixtures_own.clear()
-	_vou.clear()
-
-
-static func fixture_set(ids: Array) -> void:
-	fixtures_own = ids.duplicate()
-	_vou_bake()
-
-
-static func fixture_add(id: String) -> void:
-	if fixtures_own.has(id):
-		return
-	fixtures_own.append(id)
-	_vou_bake()
-
-
-static func _vou_bake() -> void:
-	_vou.clear()
-	for f in fixtures():
-		if not fixtures_own.has(String(f.id)):
-			continue
-		var e: Array = _vou.get(String(f.key), [0.0, 1.0])
-		if String(f.op) == "mul":
-			e[1] = float(e[1]) * float(f.v)
-		else:
-			e[0] = float(e[0]) + float(f.v)
-		_vou[String(f.key)] = e
-
-
-# 사진이 민 값. (기본 + 더한 것) × 곱한 것.
+# 상점 선반에 걸 사진 하나. 2026-09-10 기획서에서 사진이 상시 강화(바우처)
+# 에서 1회성으로 바뀌면서, 표가 fixtures 에서 consumables 로 옮겨 갔다.
+# 선반이라는 자리 자체는 기획서에 그대로 있다 — 「사진은 상점에 0.5% 로
+# 등장한다」 — 그래서 자리는 두고 무엇을 거는지만 바꾼다.
 #
-# 리그·뱃지와의 순서는 축마다 다르고, 그것이 사실이다. shop_items 는
-# 표 → 사진 → 뱃지, darts_add 는 제약 → 리그 → 뱃지 → 사진 → 동전.
-# "사진이 늘 마지막" 같은 규칙을 주석으로 세우면 거짓 불변식이 된다 —
-# 전부 add 라 지금은 수가 같지만, 다음 사람이 그 순서를 근거로 mul 을
-# 얹으면 세 자리가 한꺼번에 틀린다. 축마다 적용부 주석이 순서를 쥔다.
-static func fixture_v(key: String, dflt: float) -> float:
-	var e: Array = _vou.get(key, [0.0, 1.0])
-	return (dflt + float(e[0])) * float(e[1])
-
-
-static func fixture_i(key: String, dflt: int) -> int:
-	return int(round(fixture_v(key, float(dflt))))
-
-
-# 이 상점에 걸 사진 하나. 라운드가 문이고 앞선 단이 열쇠다.
+# 옛 바우처처럼 "이미 산 것" 을 걸러 낼 필요가 없다. 1회성이라 같은 것을
+# 또 사도 뜻이 있다.
 static func fixture_roll(round: int) -> Dictionary:
 	var pool := []
 	var sum := 0.0
-	for f in fixtures():
-		if fixtures_own.has(String(f.id)):
-			continue
-		if int(f.min_round) > round:
-			continue
-		var pq := String(f.prereq)
-		if pq != "" and not fixtures_own.has(pq):
-			continue
-		if float(f.w) <= 0.0:
-			continue
+	for f in consumables():
+		if String(f.get("cat", "")) == "area":
+			continue                       # 사탕은 제 자리로 따로 온다
 		pool.append(f)
-		sum += float(f.w)
+		sum += 1.0
 	if pool.is_empty():
 		return {}
-	var t := randf() * sum
-	for f in pool:
-		t -= float(f.w)
-		if t <= 0.0:
-			return f
-	return pool[pool.size() - 1]
+	# 사진 표에는 가중치 열이 없다. 고르게 뽑는다 — 등장률은 선반이
+	# 라운드마다 하나만 걸리는 것으로 이미 좁혀져 있다.
+	return pool[randi() % pool.size()]
 
 
 static func skippable(n: int) -> bool:
@@ -1132,7 +1062,7 @@ static func shop_of(n: int) -> Dictionary:
 		# 사진이 여기 얹힌다 — 표 → 사진 → 뱃지 순서다(뱃지는 _roll_stock 이
 		# 이 값 뒤에 더한다). 테이블 폭을 읽는 자리가 여기 하나뿐이라 여기가
 		# 유일한 합류점이다.
-		"items": fixture_i("shop_items", _i(r, "shop_items", "rounds", 0)),
+		"items": _i(r, "shop_items", "rounds", 0),
 		"mods": _i(r, "shop_mods", "rounds", 0),
 		"darts": _i(r, "shop_darts", "rounds", 0),
 	}
@@ -1721,7 +1651,6 @@ static func _validate() -> void:
 	_v_packs()
 	_v_colors()
 	_v_tags()
-	_v_vouchers()
 	_v_item_aim()
 
 
@@ -1902,7 +1831,9 @@ static func _v_packs() -> void:
 		# 주는 것들이 실제로 표에 있는가. 없는 id 를 주면 그 다트통은 조용히
 		# 아무것도 안 주고 시작한다 — 히든 다트통이 통째로 죽는 길이다.
 		for gk in [["grant_item", "items"], ["grant_mod", "mods"],
-				["grant_fixture", "fixtures"], ["grant_cons", "cons"]]:
+				# 사진이 1회성이 되면서 표가 cons 로 옮겨 갔다 — 주는 것을
+				# 찾을 자리도 같이 옮긴다.
+				["grant_fixture", "cons"], ["grant_cons", "cons"]]:
 			for gid in String(r.get(gk[0], "")).split(";", false):
 				if not _has_row(gk[1], gid):
 					_errs.append("%s — %s 에 없는 '%s' 를 준다" % [who, gk[1], gid])
@@ -1997,65 +1928,6 @@ static func _v_tags() -> void:
 
 # 사진. 모르는 축·모르는 연산·범위 밖 값이 셋 다 같은 얼굴을 한다 —
 # 표는 멀쩡한데 게임에서 아무 일도 안 일어나거나, 반대로 런이 잠긴다.
-static func _v_vouchers() -> void:
-	var raw: Array = _raw.get("fixtures", [])
-	if raw.is_empty():
-		_errs.append("fixtures — 표가 비었다. 상점 선반이 여덟 라운드 내내 빈다")
-		return
-	var seen := {}
-	var first := false
-	for r in raw:
-		var who := "fixtures:%d %s" % [r.get("_line", 0), r.get("name", "")]
-		var id: String = r.get("id", "")
-		if id == "" or seen.has(id):
-			_errs.append("%s — id 가 비었거나 중복이다" % who)
-		seen[id] = true
-		var key: String = r.get("key", "")
-		if not VOUCHER_KEYS.has(key):
-			_errs.append("%s — 모르는 축 '%s'" % [who, key])
-		var op: String = r.get("op", "")
-		if not VOUCHER_OPS.has(op):
-			_errs.append("%s — 모르는 연산 '%s'" % [who, op])
-		if _i(r, "cost", "fixtures") <= 0:
-			_errs.append("%s — 값이 0 이하다" % who)
-		if _f(r, "weight", "fixtures", 0.0) <= 0.0:
-			_errs.append("%s — 가중치가 0 이하라 영영 안 뜬다" % who)
-		if _i(r, "min_round", "fixtures", 1) <= 1 and String(r.get("prereq", "")) == "":
-			first = true
-		var pq: String = r.get("prereq", "")
-		if pq != "" and not seen.has(pq):
-			_errs.append("%s — 앞선 단 '%s' 가 표에 없거나 아래에 있다" % [who, pq])
-		_v_desc(who, r.get("desc", ""), ["v"])
-	if not first:
-		_errs.append("fixtures — 라운드 1 에 조건 없이 뜰 사진이 없다")
-	# 축마다 쌓을 수 있는 최대를 미리 더해 본다. 표만 보고 계산되는 것을
-	# 게임을 돌려서 알아내면 늦다 — 런이 잠기는 축이 그 안에 있다.
-	var add := {}
-	var mul := {}
-	for r in raw:
-		var key2: String = r.get("key", "")
-		if not VOUCHER_KEYS.has(key2):
-			continue
-		if String(r.get("op", "")) == "mul":
-			mul[key2] = float(mul.get(key2, 1.0)) * _f(r, "v", "fixtures", 1.0)
-		else:
-			add[key2] = float(add.get(key2, 0.0)) + _f(r, "v", "fixtures", 0.0)
-	for key3 in VOUCHER_KEYS:
-		var lim: Array = VOUCHER_KEYS[key3]
-		# 한 축은 add 아니면 mul, 하나만 쓴다. 섞이는 순간 "무엇을 먼저
-		# 하느냐" 가 값을 바꾸고, 그 순서는 축마다 다른 자리에서 정해진다
-		# (shop_items 는 표→사진→뱃지, darts_add 는 리그→뱃지→사진).
-		# 섞지 않으면 그 물음이 아예 안 생긴다.
-		if add.has(key3) and mul.has(key3):
-			_errs.append("fixtures — %s 에 add 와 mul 이 섞였다. 축 하나에 하나만 쓴다"
-					% key3)
-			continue
-		if not add.has(key3) and not mul.has(key3):
-			continue                      # 아직 아무도 안 미는 축이다
-		var got: float = float(add[key3]) if add.has(key3) else float(mul[key3])
-		if got < float(lim[0]) or got > float(lim[1]):
-			_errs.append("fixtures — %s 를 다 모으면 %.2f 다. 허용은 %.2f~%.2f"
-					% [key3, got, lim[0], lim[1]])
 
 
 static func _v_colors() -> void:
@@ -2123,14 +1995,9 @@ static func _v_spec() -> void:
 		ids[String(r.get("id", ""))] = true
 	for r in _raw.get("modifiers", []):
 		ids[String(r.get("id", ""))] = true
-	for r in _raw.get("proc", []):
-		ids[String(r.get("id", ""))] = true
-	for r in _raw.get("areas", []):
-		ids[String(r.get("key", ""))] = true
-	for r in _raw.get("spec_map", []):
-		var g: String = r.get("game_id", "")
-		if g != "" and not ids.has(g):
-			_errs.append("spec_map:%d — game_id '%s' 가 어느 표에도 없다" % [r.get("_line", 0), g])
+	# 2026-09-10 — 스티커(proc)와 스펙 매핑(spec_map) 표를 걷었다. 옛
+	# 통합 컨텍스트에서 온 자리인데 기획서에 없는 것들이라, 게임은 안 읽고
+	# 이 검사만 붙들고 있었다.
 
 
 static func _v_tuning() -> void:

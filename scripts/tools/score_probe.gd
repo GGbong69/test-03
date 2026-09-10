@@ -194,10 +194,13 @@ func _fail(what: String, detail: String) -> void:
 #  소크는 기본 다트통(6발)만 돌아서 「기본에서 줄어든 다트」의 기본이 6 으로
 #  박혀 있어도 안 걸린다. 다트통이 그 수를 바꾸는 두 경우를 손으로 세운다.
 func _per_check() -> void:
+	# per=missing 을 쥔 동전. 2026-09-06 에 동전 표가 갈리면서 그런 장이
+	# 하나도 없어졌다 — id 를 박지 않고 모양으로 찾고, 없으면 조용히 넘어간다.
 	var j079 := {}
 	for it in GameData.items():
-		if String(it.id) == "j079":
+		if String(it.get("per", "")) == "missing":
 			j079 = it
+			break
 	if j079.is_empty():
 		return
 	var v: int = int(j079.v)
