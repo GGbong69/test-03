@@ -92,7 +92,7 @@ const TUNE_KEYS := [
 # 같은 낱말을 쓰므로, 한글 이름만 rarity.csv 에서 옮긴다.
 const RARITIES := ["common", "uncommon", "rare", "legendary"]
 const MOD_AXES := ["band", "slide", "ring", "bull", "out", "swap",
-		"odd", "even", "flat"]
+		"odd", "even", "flat", "target", "pizza", "donut"]
 # 제약의 축. 발라트로의 보스 블라인드가 손패·플레잉 카드를 때리는 자리에
 # 우리는 **판과 조준**이 있다. 그래서 축을 네 갈래로 벌린다 —
 #   칸   sector_kill · color_kill · odd_mul · spin
@@ -1236,7 +1236,9 @@ const BOARD_BASE := {
 const GEO := {
 	"bi_min": 0.02,     # 한복판 최소 반경
 	"bull_gap": 0.02,   # 25 띠의 최소 폭. 0 이면 25 칸이 사라진다
-	"bo_min": 0.08,
+	# 「도넛」이 불을 지우려면 여기가 내려와야 한다. 순서 규칙이 아니라
+	# 넓이 바닥이라 내려도 hit_info 의 if 사슬은 그대로 선다.
+	"bo_min": 0.04,
 	"ti_min": 0.30,     # 띠가 판 한복판까지 기어들어오지 않게
 	"band_min": 0.02,   # 링의 최소 폭
 	"gap": 0.03,        # 띠와 띠 사이 단색의 최소 폭
@@ -1296,9 +1298,16 @@ static func board_val(b: Dictionary, sec: Array) -> float:
 	for v in sec:
 		s += float(v)
 	s /= float(sec.size())
-	return VAL_W.bull_i * b.bi * b.bi \
-			+ VAL_W.bull_o * (b.bo * b.bo - b.bi * b.bi) \
-			+ s * (VAL_W.trp * a_trp + VAL_W.dbl * a_dbl + VAL_W.plain * a_pln)
+	# 띠 배수는 보드 확장이 밀 수 있다(과녁 · 피자). 판이 그 값을 실어
+	# 보내면 그것을 쓰고 아니면 VAL_W 의 기본을 쓴다 — 상수만 보면
+	# 「피자」가 띠 배수를 1 로 내려도 판값이 안 움직여 거짓말이 된다.
+	var w_trp: float = float(b.get("m_trp", VAL_W.trp))
+	var w_dbl: float = float(b.get("m_dbl", VAL_W.dbl))
+	var w_pln: float = float(b.get("m_sgl", VAL_W.plain))
+	var w_bull: float = float(b.get("m_bull", 1.0))
+	return VAL_W.bull_i * w_bull * b.bi * b.bi \
+			+ VAL_W.bull_o * w_bull * (b.bo * b.bo - b.bi * b.bi) \
+			+ s * (w_trp * a_trp + w_dbl * a_dbl + w_pln * a_pln)
 
 
 static func board_val_max() -> float:
@@ -1318,7 +1327,9 @@ static func check(c: String, x: Dictionary) -> bool:
 		"double": return x.mult == 2
 		# 링이면 어디든. 불은 mult 1 이라 정의상 빠진다.
 		"band": return x.mult == 2 or x.mult == 3
-		"bull": return x.sector >= 25
+		# 깃발이 있으면 그것이 답이다. 없으면 옛 규칙으로 떨어진다 —
+		# 프로브가 손으로 지은 문맥에는 깃발이 없다.
+		"bull": return bool(x.get("bull", x.sector >= 25))
 		"odd": return x.sector < 25 and x.sector % 2 == 1
 		"even": return x.sector < 25 and x.sector % 2 == 0
 		"left": return x.left
@@ -2141,8 +2152,11 @@ static func _v_tuning() -> void:
 		var ratio := float(_tune["aim_swing"]) / float(_tune["board_r"])
 		if absf(ratio - 1.1226) > 0.056:
 			_warns.append("tuning — aim_swing/board_r = %.4f 다. 기준 1.1226 에서 5%% 넘게 벗어나면 빗나감 확률이 바뀐다" % ratio)
-	if _tune.has("sector_max") and int(_tune["sector_max"]) >= 25:
-		_errs.append("tuning — sector_max 가 25 이상이다. check(\"bull\") 이 sector >= 25 라 칸이 불로 판정된다")
+	# 2026-09-10 — 이 규칙을 걷었다. check("bull") 이 이제 값이 아니라
+	# hit_info 가 싣는 깃발을 본다(칸 값과 불이 같은 숫자 공간을 쓰던 자리다).
+	# 「피자」가 칸 값을 32 로 눕히므로 상한이 25 를 넘어야 한다.
+	# 깃발 없는 문맥(손으로 지은 프로브)은 옛 규칙으로 떨어지므로,
+	# 그 자리에서는 여전히 25 이상이 불로 읽힌다 — 그건 의도한 폴백이다.
 
 
 static func _v_items() -> void:

@@ -153,6 +153,17 @@ var rt_trp2_in := 0.0
 var rt_trp2_out := 0.0
 var rt_bull_o := 0.14
 var rt_bull_i := 0.06
+# 구간 배수. 기본은 areas.csv 가 쥐는데(싱글1 · 더블2 · 트리플3 · 불1)
+# 보드 확장이 그것을 밀 수 있어야 「과녁」과 「피자」가 선다. 판 모양처럼
+# 구워서 판마다 다시 깐다.
+var m_sgl := 1
+var m_dbl := 2
+var m_trp := 3
+var m_bull := 1
+var rt_m_sgl := 1
+var rt_m_dbl := 2
+var rt_m_trp := 3
+var rt_m_bull := 1
 var dead_idx := -1              # "금지 구역"이 죽이는 칸. -1 이면 안 걸렸다
 # ── 사진 선반 ────────────────────────────────────────────
 #  상점 왼쪽 벽에 걸린다. **테이블(stock)에 안 넣는다** — 테이블은 상인이
@@ -510,6 +521,10 @@ func _start_leg() -> void:
 	rt_trp2_out = trp2_out
 	rt_bull_o = bull_o
 	rt_bull_i = bull_i
+	rt_m_sgl = m_sgl
+	rt_m_dbl = m_dbl
+	rt_m_trp = m_trp
+	rt_m_bull = m_bull
 	var bw := mod_v("band_mul", 1.0)
 	if not is_equal_approx(bw, 1.0):
 		var tc := (trp_in + trp_out) * 0.5
@@ -1391,7 +1406,14 @@ func _mod_step(b: Dictionary, sec: Array, m: Dictionary) -> void:
 				for i in sec.size():
 					if sec[i] < sec[lo]:
 						lo = i
-				sec[lo] = GameData.sector_max()
+				# 판에 실제로 있는 가장 큰 칸으로 올린다. sector_max 는
+				# 표가 허용하는 **상한**이지 판의 큰 칸이 아니다 — 피자를
+				# 위해 상한을 32 로 올렸더니 역지사지가 32 를 심어
+				# 판값이 +41% 로 튀었다.
+				var top := 0
+				for v in GameData.SECTORS_BASE:
+					top = maxi(top, int(v))
+				sec[lo] = top
 		"odd":
 			# {2k-1, 2k} → 2k-1. 결과로 홀수 열 개가 정확히 두 번씩 남는다.
 			for i in sec.size():
@@ -1403,6 +1425,30 @@ func _mod_step(b: Dictionary, sec: Array, m: Dictionary) -> void:
 			for i in sec.size():
 				if sec[i] % 2 == 1:
 					sec[i] += 1
+		"target":
+			# 「과녁」 — 칸 값을 하나로 눕히고 중심 배수를 올린다. 트리플 3 ·
+			# 더블 2 는 areas.csv 가 이미 그 값이라 안 건드린다. 칸을 고르는
+			# 이유가 사라지고 **어느 링이냐** 만 남는다.
+			for i in sec.size():
+				sec[i] = int(m.v[0])
+			b["m_bull"] = int(m.v[1])
+		"pizza":
+			# 「피자」 — 칸 값을 크게 눕히고 띠의 배수를 1 로 내린다. 띠를
+			# 지우는 대신 배수를 없앤다 — 기하를 부수면 hit_info 의 if 사슬이
+			# 전제하는 순서가 깨지는데, 배수만 내리면 "띠가 없는 것" 과 같은
+			# 결과이면서 판은 성립한다.
+			for i in sec.size():
+				sec[i] = int(m.v[0])
+			b["m_trp"] = 1
+			b["m_dbl"] = 1
+		"donut":
+			# 「도넛」 — 불을 최소로 줄여 사실상 없앤다. 0 으로는 못 만든다:
+			# hit_info 가 반지름으로 불을 가리고 GEO 가 최소 폭을 요구한다.
+			# 남는 넓이는 판의 0.1% 라 조준으로는 못 닿는다.
+			b.bi = GameData.GEO.bi_min
+			b.bo = GameData.GEO.bi_min + GameData.GEO.bull_gap
+			for i in sec.size():
+				sec[i] = mini(sec[i] + int(m.v), GameData.sector_max())
 		"flat":
 			# 칸 값을 통째로 하나로 덮는다. 칸을 고르는 이유가 사라지고
 			# 링만 남으므로 링 빌드와 정면으로 맞물린다.
@@ -1414,6 +1460,12 @@ func _mod_step(b: Dictionary, sec: Array, m: Dictionary) -> void:
 # 테이블 필터·거절 문구·실제 적용 셋이 같은 답을 쓴다.
 func _board_of(ids: Array) -> Array:
 	var b: Dictionary = GameData.BOARD_BASE.duplicate()
+	# 배수의 출처는 areas.csv 다. 여기서 씨앗을 받아 보드 확장이 밀게 한다 —
+	# 상수로 박으면 표와 코드가 갈린다.
+	b["m_sgl"] = GameData.area("single").mult
+	b["m_dbl"] = GameData.area("double").mult
+	b["m_trp"] = GameData.area("triple").mult
+	b["m_bull"] = GameData.area("bull_o").mult
 	var sec: Array = GameData.SECTORS_BASE.duplicate()
 	for m in GameData.mods():      # 표 순서가 곧 적용 순서다
 		if ids.has(m.id):
@@ -1521,6 +1573,10 @@ func _board_bake() -> void:
 	trp2_out = b.t2o
 	dbl_in = b.din
 	dbl_out = b.dout
+	m_sgl = int(b.get("m_sgl", 1))
+	m_dbl = int(b.get("m_dbl", 2))
+	m_trp = int(b.get("m_trp", 3))
+	m_bull = int(b.get("m_bull", 1))
 
 
 func _in_stock(id: String) -> bool:
@@ -3043,11 +3099,13 @@ func hit_info(p: Vector2) -> Dictionary:
 				"r0": 0.0, "r1": 0.0, "track": ao.track, "col": -1}
 	if r <= R * rt_bull_i:
 		var bi := GameData.area("bull_i")
-		return {"base": bi.base, "mult": bi.mult, "sector": bi.base, "idx": -1,
+		return {"base": bi.base, "mult": rt_m_bull, "sector": bi.base, "idx": -1,
+				"bull": true,
 				"r0": 0.0, "r1": R * rt_bull_i, "track": bi.track, "col": -1}
 	if r <= R * rt_bull_o:
 		var bo := GameData.area("bull_o")
-		return {"base": bo.base, "mult": bo.mult, "sector": bo.base, "idx": -1,
+		return {"base": bo.base, "mult": rt_m_bull, "sector": bo.base, "idx": -1,
+				"bull": true,
 				"r0": 0.0, "r1": R * rt_bull_o, "track": bo.track, "col": -1}
 
 	var ang := atan2(v.x, -v.y)
@@ -3056,17 +3114,17 @@ func hit_info(p: Vector2) -> Dictionary:
 	var idx := int(floor((ang + PI / 20.0) / (TAU / 20.0))) % 20
 	var val: int = sectors[idx]
 
-	var m: int = GameData.area("single").mult
+	var m: int = rt_m_sgl
 	var trk: int = GameData.area("single").track
 	var r0 := R * rt_bull_o
 	var r1 := R * rt_trp_in
 	if r >= R * rt_dbl_in:
-		m = GameData.area("double").mult
+		m = rt_m_dbl
 		trk = GameData.area("double").track
 		r0 = R * rt_dbl_in
 		r1 = R * rt_dbl_out                                   # ← ① 판벌이
 	elif r >= R * rt_trp_in and r <= R * rt_trp_out:
-		m = GameData.area("triple").mult
+		m = rt_m_trp
 		trk = GameData.area("triple").track
 		r0 = R * rt_trp_in
 		r1 = R * rt_trp_out
@@ -3078,7 +3136,7 @@ func hit_info(p: Vector2) -> Dictionary:
 		# "불 바깥 ~ 첫 트리플 안쪽" 하나뿐이고, 그건 지금까지 마지막 else 가
 		# r0/r1 만 채우고 지나가던 죽은 땅이다. 배수를 바꾸는 새 경로는 하나다.
 		if r >= R * rt_trp2_in and r <= R * rt_trp2_out:
-			m = GameData.area("triple").mult
+			m = rt_m_trp
 			trk = GameData.area("triple").track
 			r0 = R * rt_trp2_in
 			r1 = R * rt_trp2_out
@@ -3341,6 +3399,10 @@ func _land(mark := true) -> void:
 
 	var ctx := {
 		"sector": info.sector,
+		# 불인가를 **값이 아니라 깃발로** 싣는다. 여태 check("bull") 이
+		# sector >= 25 로 갈랐는데, 그러면 칸 값이 25 를 넘는 판(피자)에서
+		# 판 전체가 불로 읽힌다 — 칸 값과 불이 같은 숫자 공간을 쓰던 자리다.
+		"bull": bool(info.get("bull", false)),
 		"mult": info.mult,
 		"miss": info.mult == 0,
 		"missp": last_miss,
