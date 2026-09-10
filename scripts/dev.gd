@@ -372,6 +372,8 @@ static func _rows(g: Node) -> Array:
 						"n": GameData.darts().size()},
 				{"n1": "뱃지 주기", "t": "list", "k": "tag",
 						"n": GameData.tags().size()},
+				{"n1": "팩 열기", "t": "list", "k": "boost",
+						"n": GameData.boosters().size()},
 				{"n1": "테이블 다시 굴리기", "t": "act", "a": "restock"},
 			]
 		2:
@@ -418,6 +420,7 @@ static func _list(k: String) -> Array:
 		"league": return GameData.leagues()
 		"pack": return GameData.packs()
 		"chal": return GameData.challenges()
+		"boost": return GameData.boosters()
 	return []
 
 
@@ -590,6 +593,13 @@ static func _run(g: Node, e: Dictionary) -> void:
 			if not rows.is_empty() and g.cons.size() < GameData.cons_slots():
 				g.cons.append(rows[i % rows.size()])
 				_say("사탕 %d/%d" % [g.cons.size(), GameData.cons_slots()])
+		"boost":
+			# 팩은 상점 테이블을 굴려야만 만나고, 어느 팩인지도 못 골랐다.
+			# 게임과 같은 길(_boost_deal)로 편다 — 여기서 상태를 직접
+			# 만들면 검사한 것이 실제로 도는 것과 갈라진다.
+			if not rows.is_empty():
+				g._boost_deal(rows[i % rows.size()])
+				_say("팩 %s" % String(rows[i % rows.size()].get("n", "?")))
 		"mod":
 			if not rows.is_empty():
 				var mid := String(rows[i % rows.size()].id)
