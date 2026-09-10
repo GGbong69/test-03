@@ -385,6 +385,8 @@ static func _rows(g: Node) -> Array:
 						"n": GameData.AIM_MODES.size()},
 				{"n1": "계산 방식", "t": "list", "k": "score",
 						"n": GameData.SCORE_MODES.size()},
+				{"n1": "챌린지", "t": "list", "k": "chal",
+						"n": GameData.challenges().size()},
 				{"n1": "리그", "t": "list", "k": "league",
 						"n": GameData.leagues().size()},
 				{"n1": "다트통", "t": "list", "k": "pack",
@@ -417,6 +419,7 @@ static func _list(k: String) -> Array:
 		"mf": return GameData.modifiers()
 		"league": return GameData.leagues()
 		"pack": return GameData.packs()
+		"chal": return GameData.challenges()
 	return []
 
 
@@ -616,6 +619,14 @@ static func _run(g: Node, e: Dictionary) -> void:
 				g.active_mods = [rows[i % rows.size()]]
 				g._start_leg()
 				_say("제약 %s" % g.active_mods[0].get("n", ""))
+		"chal":
+			if not rows.is_empty():
+				GameData.challenge = String(rows[i % rows.size()].get("id", ""))
+				# 챌린지는 시작 골드·슬롯 상한처럼 런을 여는 자리를 바꾼다.
+				# 새 런을 열어야 그 값들이 실제로 선다 — 판 도중에 갈면
+				# "골랐는데 아무 일도 안 난다" 로 보인다.
+				g._new_run()
+				_say("챌린지 %s — 새 런" % rows[i % rows.size()].get("n", ""))
 		"league":
 			if not rows.is_empty():
 				GameData.league = String(rows[i % rows.size()].get("id", ""))

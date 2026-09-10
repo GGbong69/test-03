@@ -182,6 +182,7 @@ var photo := ""
 var photo_back := []     # 갈아 끼우기 전의 상점 매물. 나올 때 되돌린다
 var photo_v := 0         # 그 사진의 v (불나방의 곱절 · 페인트의 배수)
 var paint_sec := -1      # 페인트가 고른 칸. sectors 의 자리다
+var mark_sec := -1       # 「목표물」 챌린지가 이 판에 뽑은 칸
 var paint_mul := 1.0
 var peek_pick := []      # 한 수 앞이 미리 읽은 제약 셋
 var peek_leg := -1       # 그 셋이 어느 판의 것인가
@@ -450,6 +451,10 @@ func _new_run() -> void:
 	# 시작 조건은 다트통이 쥔다 — 표가 비면 튜닝 값이 그대로 남는다.
 	var pk := GameData.pack_row()
 	gold = GameData.start_gold() + int(pk.get("gold_add", 0))
+	# 「외상」은 빚으로 시작한다. 더하는 것이 아니라 **덮는다** — 다트통의
+	# 선금(+10)과 겹치면 빚이 아니게 되고 그러면 챌린지가 성립을 안 한다.
+	if GameData.chal_on("start_gold"):
+		gold = GameData.chal_i("start_gold", 0)
 	magazine.clear()
 	var dart_id := String(pk.get("dart_id", "std"))
 	var d0: Dictionary = GameData.darts()[0]
@@ -484,6 +489,10 @@ func _new_run() -> void:
 
 
 func _start_leg() -> void:
+	# 「목표물」은 판마다 칸을 새로 뽑는다. 조준이 통째로 그 한 칸으로 좁아진다.
+	mark_sec = -1
+	if GameData.chal_on("sec_only"):
+		mark_sec = randi() % maxi(sectors.size(), 1)
 	# 페인트는 "이번 판" 짜리다. 판이 새로 서면 지운다 — 재도전(같은 판을
 	# 다시 여는 사진)도 이 길을 지나므로 칠은 거기서도 풀린다.
 	paint_sec = -1
@@ -752,6 +761,11 @@ func _settle_clear() -> void:
 	# 안 읽힌다. 다트통이 끈 것은 다트통 자리에서 끈다.
 	if GameData.pack_v("interest_off", 0.0) > 0.0:
 		interest = 0
+	# 챌린지 — 「외상」은 이자를 곱하고 「빈손」은 버는 길을 통째로 끊는다.
+	interest = int(round(float(interest) * GameData.chal_f("interest_mul", 1.0)))
+	if GameData.chal_on("gold_off"):
+		interest = 0
+		dart_gold = 0
 	# gold 를 더하기 전에 부른다 — "굳은살"과 이자가 같은 잔액을 보게 하려는 것이다.
 	var item_rows := _gold_from_items()
 	var item_gold := 0
@@ -766,6 +780,10 @@ func _settle_clear() -> void:
 	# 제약이 이 판의 보상을 깎는다. 리그 뒤에 온다 — 리그이 정한 값을
 	# 제약이 다시 미는 순서라야 "이 판만" 이 성립한다.
 	clear = int(floor(float(clear) * mod_v("reward_mul", 1.0)))
+	# 챌린지 — 「겹치기」가 보상을 곱하고 「빈손」이 통째로 끊는다.
+	clear = int(floor(float(clear) * GameData.chal_f("reward_mul", 1.0)))
+	if GameData.chal_on("gold_off"):
+		clear = 0
 	clear_gold_detail = [
 		{"n": GameData.leg_name(leg_no), "v": clear},
 		{"n": "남은 다트 %d개" % darts_left, "v": dart_gold},
@@ -1103,6 +1121,11 @@ func _draw_weighted(pool: Array) -> Dictionary:
 #  "마지막 행을 비워 둔다" 는 규약이 없다 — 마지막 판이면 애초에 상점을 안 연다.
 # 리그이 미는 값 — 주황부터 테이블이 비싸다. 올림이라 4골드가 5가 된다.
 func _league_cost(c: int) -> int:
+	# 챌린지가 값을 통째로 누른다(큰손 = 0). 리그 배수보다 앞이다 —
+	# 공짜인데 리그가 1.25 배를 곱하면 여전히 공짜라 순서는 안 중요하지만,
+	# 0 을 먼저 보는 편이 읽힌다.
+	if GameData.chal_on("cost_mul"):
+		return maxi(0, int(round(float(c) * GameData.chal_f("cost_mul", 1.0))))
 	var m := GameData.league_v("shop_cost_mul", 1.0)
 	return c if m == 1.0 else maxi(1, int(ceil(float(c) * m)))
 
@@ -1732,6 +1755,9 @@ func _take_tag(t: Dictionary) -> void:
 		return
 	match kind:
 		"gold":
+			# 「빈손」은 버는 길을 다 끊고 이 한 갈래만 두 배로 남긴다 —
+			# 경제가 건너뛰기 하나로 좁아지는 것이 그 챌린지의 정체다.
+			v = int(round(float(v) * GameData.chal_f("tag_mul", 1.0)))
 			gold += v
 			Save.bump("gold_earned", v)
 		"track":
@@ -1790,6 +1816,11 @@ func _spend_tags(kind: String) -> int:
 # 제약은 이름이 아니라 축으로 읽는다. modifiers.csv 에 band_mul 1.50 "넓은 판"
 # 을 한 줄 더해도 여기는 안 늘어난다 — 그것이 이 표가 데이터인 이유다.
 func mod_v(axis: String, dflt: float) -> float:
+	# 챌린지가 축을 런 내내 거는 자리. 「깜깜이」가 안개를 상시로 켠다 —
+	# 제약 표에서 걷은 축(fog)을 챌린지가 되살려 쓴다. 읽는 곳이 셋이라
+	# 여기 한 자리에서 덮는 편이 안 샌다.
+	if axis == "fog" and GameData.chal_on("fog"):
+		return 1.0
 	for m in active_mods:
 		if m.k == axis:
 			return float(m.v)
@@ -1869,6 +1900,15 @@ func _pick_stage(i: int) -> void:
 	else:
 		active_mods = [sp.d]
 		target = sp.target
+		# 「겹치기」는 고른 것 하나에 옆의 것을 더 얹는다. 안 고른 카드에서
+		# 뽑으므로 둘 다 화면에 있던 것이다 — 못 본 것이 걸리면 고르는
+		# 화면이 거짓말이 된다.
+		var want: int = GameData.chal_i("mods_n", 1)
+		var j := 0
+		while active_mods.size() < want and j < stage_pick.size():
+			if j != i:
+				active_mods.append(stage_pick[j].d)
+			j += 1
 	_sfx("stage_pick")
 	_start_leg()
 
@@ -2822,6 +2862,12 @@ func _click(m: Vector2) -> void:
 			_advance()
 		S.CLEAR:
 			# 좌표를 보지 않는다 — 아무 데나 누르든 스페이스든 상점으로 넘어간다
+			# 「큰손」은 라운드마다 한 번만 연다. 라운드의 마지막 판(보스)을
+			# 넘긴 뒤에만 상점이 서고 나머지는 곧장 다음 판이다 — 값이 0 인
+			# 대신 고를 기회가 셋에서 하나로 준다.
+			if GameData.chal_on("shop_round") and not GameData.is_boss(leg_no):
+				_next_leg()
+				return
 			_open_shop()
 			_swap_begin(false)   # 상점이 선 뒤라야 들어오는 테이블에 그릴 것이 있다
 			return
@@ -3148,6 +3194,15 @@ func _land(mark := true) -> void:
 		info.base = 0
 	if not is_equal_approx(odd_mul, 1.0) and info.idx >= 0 			and int(info.base) % 2 == 1:
 		info.base = int(round(float(info.base) * odd_mul))
+	# 「목표물」 — 뽑힌 칸이 아니면 점수가 안 난다. 맞으면 곱한다.
+	# 칠(페인트)보다 먼저다 — 0 이 된 뒤에 칠하면 0 에 곱해 0 이고,
+	# 그게 "그 칸에서만 난다" 는 말과 맞는다.
+	if mark_sec >= 0:
+		if info.idx == mark_sec:
+			info.base = int(round(float(info.base)
+					* GameData.chal_f("sec_mul", 1.0)))
+		else:
+			info.base = 0
 	# 페인트가 칠한 칸. 죽이는 축을 다 지난 뒤에 곱한다 — 금줄이 죽인 칸을
 	# 칠했으면 0 에 곱해 0 이다. 두 장을 같이 쓴 결과가 그것이 맞다.
 	if paint_sec >= 0 and info.idx == paint_sec:
@@ -3380,6 +3435,9 @@ func _land(mark := true) -> void:
 			# rackval 은 자기 몫을 뺀다 — 자기 판매가로 자기가 커지면 순환이다.
 			ctx.rackval_others = ctx.rackval_all - GameData.sell_value(it)
 			var amt: int = GameData.item_amt(it, ctx)
+			# 「홑장」은 슬롯을 하나로 줄이는 대신 그 한 장을 곱한다.
+			# 수량에 곱하므로 점수든 배수든 같은 자로 커진다.
+			amt = int(round(float(amt) * GameData.chal_f("item_mul", 1.0)))
 			if amt != 0:
 				queue.append({"k": "item", "i": i, "kind": it.k, "v": amt,
 						"lbl": "%s  %s" % [it.n, GameData.eff_text(

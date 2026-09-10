@@ -56,6 +56,7 @@ const FILES := {
 	"legs": "legs.csv",
 	"leagues": "leagues.csv",
 	"packs": "packs.csv",
+	"chal": "challenges.csv",
 	"colors": "colors.csv",
 	"tags": "tags.csv",
 	"fixtures": "fixtures.csv",
@@ -678,6 +679,14 @@ static var league := ""
 # 지금 다트통의 id. 발라트로의 덱 자리다 — 런의 시작 조건을 쥔다.
 static var pack := ""
 
+# 이 런의 챌린지. "" 나 "none" 이면 안 건 것이다.
+#
+# 챌린지는 규칙 자체를 바꾸는 자리다 — 다트통이 "무엇을 들고 시작하는가"
+# 라면 챌린지는 "이 런이 어떤 게임인가" 다. 그래서 표 한 장이 튜닝을
+# 통째로 덮는 꼴로 만들었다. 새 계층을 파지 않고 이미 있는 손잡이를
+# 민다는 것이 요점이다.
+static var challenge := ""
+
 
 static func packs() -> Array:
 	boot()
@@ -813,6 +822,43 @@ static func league_row(id := "") -> Dictionary:
 
 
 # 리그이 미는 값 하나. 표에 없는 열을 물으면 기본값이 돌아온다.
+static func challenges() -> Array:
+	boot()
+	var out := []
+	for r in _raw.get("chal", []):
+		if _b(r, "enabled", "chal"):
+			out.append({"id": r.get("id", ""), "n": r.get("name", ""),
+					"d": r.get("desc", ""), "row": r})
+	return out
+
+
+static func chal_row() -> Dictionary:
+	boot()
+	var want: String = challenge if challenge != "" else "none"
+	for r in _raw.get("chal", []):
+		if String(r.get("id", "")) == want:
+			return r
+	return {}
+
+
+# 챌린지가 이 열을 밀고 있는가. 빈칸이면 기본값 그대로다 —
+# 표에서 "안 건드림" 과 "0 으로 만듦" 이 갈려야 해서 빈칸을 봐야 한다.
+static func chal_f(key: String, dflt: float) -> float:
+	var r := chal_row()
+	if r.is_empty() or String(r.get(key, "")).strip_edges() == "":
+		return dflt
+	return _f(r, key, "chal", dflt)
+
+
+static func chal_i(key: String, dflt: int) -> int:
+	return int(round(chal_f(key, float(dflt))))
+
+
+static func chal_on(key: String) -> bool:
+	var r := chal_row()
+	return not r.is_empty() and String(r.get(key, "")).strip_edges() != ""
+
+
 static func league_v(key: String, dflt: float) -> float:
 	var r := league_row()
 	if r.is_empty() or String(r.get(key, "")) == "":
@@ -899,7 +945,10 @@ static func round_base(a: int) -> float:
 static func target_of(n: int) -> int:
 	var base := round_base(round_of(n))
 	var m := _f(leg_of(n), "mult", "legs", 1.0)
-	return int(round(base * m * league_mul(n) * target_mul()))
+	# 챌린지가 목표를 통째로 민다(깜깜이 0.7배). 여기 한 자리에 두면 판을
+	# 여는 길이 둘이어도(보스는 _open_stage · 나머지는 _open_leg) 같은 수가 나온다.
+	return int(round(base * m * league_mul(n) * target_mul()
+			* chal_f("target_mul", 1.0)))
 
 
 static func darts_of(n: int) -> int:
@@ -1123,6 +1172,10 @@ static func free_rerolls() -> int: return tune_i("free_rerolls")
 static func reroll_base() -> int: return tune_i("reroll_base")
 static func reroll_step() -> int: return tune_i("reroll_step")
 static func max_items() -> int:
+	# 챌린지가 상한을 덮으면 다트통보다 그것이 이긴다 — 「홑장」은 다트통이
+	# 무엇이든 한 칸이라야 그 챌린지가 성립한다.
+	if chal_on("item_cap"):
+		return maxi(1, chal_i("item_cap", 5))
 	return int(pack_v("item_slots", float(tune_i("max_items"))))
 static func stage_picks() -> int: return tune_i("stage_picks")
 static func sector_max() -> int: return tune_i("sector_max")
