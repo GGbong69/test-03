@@ -160,6 +160,11 @@ var dead_idx := -1              # "금지 구역"이 죽이는 칸. -1 이면 �
 #  것이 코드 0줄로 성립하는 이유가 그것이다(_roll_stock 은 stock 만 지운다).
 #  한 라운드에 하나. 사면 사라지고 그 라운드에는 다시 안 뜬다.
 var aim_mode := "std"           # 이 런의 조준 방식. 다트통이 정한다
+# 대상을 안 고르는 사탕·사진의 갈래. 오토플레이가 이것만 자동으로 쓴다.
+const AUTO_CONS := ["area", "gold", "sellsum", "redo", "pardon"]
+
+# 「면죄부」가 세워 둔 깃발. 다음 보스 판에서 고른 제약이 안 걸린다.
+var pardon_next := false
 var score_mode := "std"         # 이 런의 점수 계산 방식. 든 동전이 먼저 쥔다
 # 다트통이 미는 최종 점수 배율. 계산 방식과 같이 판 시작에 한 번 읽는다.
 var score_mul := 1.0
@@ -410,6 +415,7 @@ func _ready() -> void:
 # ══════════════════════════════════════════════════════════
 
 func _new_run() -> void:
+	pardon_next = false          # 런을 넘겨 남으면 안 되는 깃발이다
 	Save.bump("runs")
 	bought_item = false
 	mods_own.clear()
@@ -1334,6 +1340,17 @@ func _mod_step(b: Dictionary, sec: Array, m: Dictionary) -> void:
 			for i in sec.size():
 				if sec[i] % 2 == 0:
 					sec[i] -= 1
+		"even":
+			# 홀의 거울. {2k-1, 2k} → 2k 라 짝수 열 개가 두 번씩 남는다.
+			# 20 이 상한이라 19 → 20 이 되어도 sector_max 를 안 넘는다.
+			for i in sec.size():
+				if sec[i] % 2 == 1:
+					sec[i] += 1
+		"flat":
+			# 칸 값을 통째로 하나로 덮는다. 칸을 고르는 이유가 사라지고
+			# 링만 남으므로 링 빌드와 정면으로 맞물린다.
+			for i in sec.size():
+				sec[i] = int(m.v)
 
 
 # 이 보드 확장 목록이면 판이 어떻게 되는가. 사지 않고 물어볼 수 있어야
@@ -1796,8 +1813,17 @@ func _open_stage() -> void:
 
 func _pick_stage(i: int) -> void:
 	var sp: Dictionary = stage_pick[i]
-	active_mods = [sp.d]
-	target = sp.target
+	# 면죄부를 썼으면 고른 제약이 안 걸린다. 목표도 기본값으로 되돌린다 —
+	# "문턱"은 카드에 오른 목표가 곧 그 판 목표라 제약만 지우면 목표가
+	# 오른 채로 남는다.
+	if pardon_next:
+		pardon_next = false
+		active_mods = []
+		target = GameData.target_of(leg_no)
+		pop(BC + Vector2(0.0, -40.0), "면죄부", C_ACC, 11, 1.1)
+	else:
+		active_mods = [sp.d]
+		target = sp.target
 	_sfx("stage_pick")
 	_start_leg()
 
@@ -2189,8 +2215,10 @@ func _auto_step() -> void:
 			# (트랙 강화 · 보드 확장) 중 하나가 없는 게임을 재게 된다. 그 수치로
 			# 목표 곡선을 잡으면 실제보다 낮게 잡힌다 — curve_probe 를 처음
 			# 돌렸을 때 실제로 그랬다.
+			# 대상을 안 고르는 것만 자동으로 쓴다. 고르는 흐름이 없는 것을
+			# 여기서 부르면 소크가 거절 소리만 내고 판이 안 나간다.
 			for ci in cons.size():
-				if String(cons[ci].get("cat", "")) == "area":
+				if AUTO_CONS.has(String(cons[ci].get("cat", ""))):
 					_cons_use(ci)
 					return
 			# 좌표가 아니라 함수를 직접 부른다. 4단계에서 _stock_rect 가 사라지므로
@@ -5575,19 +5603,48 @@ func _cons_use(i: int) -> void:
 	if i < 0 or i >= cons.size():
 		return
 	var c: Dictionary = cons[i]
-	if c.cat != "area":
-		# 스티커형은 대상 선택 흐름이 아직 없다 — 데이터 스캐폴드 단계다
-		pay_msg = "스티커는 아직 준비 중이다"
-		pay_msg_t = HAND.msg_t
-		_deny()
-		return
-	track_lv[c.track] = int(track_lv.get(c.track, 0)) + 1
-	Save.bump("cons_used")
-	Save.peak("best_track", int(track_lv[c.track]))
 	var at := _cons_rect(i).get_center()
+	var say := ""
+	match String(c.cat):
+		"area":
+			track_lv[c.track] = int(track_lv.get(c.track, 0)) + 1
+			Save.peak("best_track", int(track_lv[c.track]))
+			say = "%s  Lv%d" % [c.n, track_lv[c.track]]
+		# ── 사진 — 1회성이다(2026-09-10 기획서). 대상을 안 고르는 넷만 선다.
+		"gold":
+			# 갑절이되 늘어나는 폭에 상한이 있다. 0 골드면 0 이라 살 때를
+			# 고르는 것 자체가 판단이 된다.
+			var add: int = mini(gold, int(c.get("v", 0)))
+			gold += add
+			say = "골드 +%d" % add
+		"sellsum":
+			var sum := 0
+			for it in owned:
+				sum += GameData.sell_value(it)
+			gold += sum
+			say = "골드 +%d" % sum
+		"redo":
+			# 목표와 제약은 그대로 두고 점수와 다트만 판 시작으로 돌린다.
+			cons.remove_at(i)
+			Save.bump("cons_used")
+			total = 0
+			shown = 0.0
+			_start_leg()
+			_sfx("cons_use")
+			return
+		"pardon":
+			pardon_next = true
+			say = "다음 보스 제약 무효"
+		_:
+			# 대상을 골라야 하는 것들(스티커 · 불나방 · 위조화폐 · 페인트)과
+			# 미리보기는 그 흐름이 아직 없다 — 표에는 enabled=0 으로 눕혀 뒀다.
+			pay_msg = "%s 는 아직 준비 중이다" % c.n
+			pay_msg_t = HAND.msg_t
+			_deny()
+			return
+	Save.bump("cons_used")
 	cons.remove_at(i)
-	pop(at + Vector2(0.0, 26.0), "%s  Lv%d" % [c.n, track_lv[c.track]],
-			C_ACC, 10, 0.9)
+	pop(at + Vector2(0.0, 26.0), say, C_ACC, 10, 0.9)
 	_sfx("cons_use")
 
 

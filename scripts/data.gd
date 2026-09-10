@@ -90,7 +90,8 @@ const TUNE_KEYS := [
 # 속이름(id)은 안 바꿨다. 코드가 그것으로 갈리고 표·저장·CSV 가 전부
 # 같은 낱말을 쓰므로, 한글 이름만 rarity.csv 에서 옮긴다.
 const RARITIES := ["common", "uncommon", "rare", "legendary"]
-const MOD_AXES := ["band", "slide", "ring", "bull", "out", "swap", "odd"]
+const MOD_AXES := ["band", "slide", "ring", "bull", "out", "swap",
+		"odd", "even", "flat"]
 # 제약의 축. 발라트로의 보스 블라인드가 손패·플레잉 카드를 때리는 자리에
 # 우리는 **판과 조준**이 있다. 그래서 축을 네 갈래로 벌린다 —
 #   칸   sector_kill · color_kill · odd_mul · spin
@@ -507,6 +508,7 @@ static func consumables() -> Array:
 			"d": r.get("desc", ""),
 			"cat": r.get("cat", ""),
 			"track": _i(r, "track", "cons", 0),
+			"v": _i(r, "v", "cons", 0),
 			"cost": cost if cost > 0 else tune_i("cons_price_tmp"),
 			"line": r.get("_line", 0),
 		})
