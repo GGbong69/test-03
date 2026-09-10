@@ -409,15 +409,15 @@ func _ready() -> void:
 		add_child(sp)
 		sfx_pool.append(sp)
 
-	# 음악 — 크로스페이드를 하려면 둘이 동시에 울려야 하므로 자리가 둘이다.
-	# 같은 버스(0)에 서므로 _apply_vol 이 효과음과 함께 한 번에 줄인다.
-	for i in 2:
-		var mp := AudioStreamPlayer.new()
-		mp.playback_type = AudioServer.PLAYBACK_TYPE_STREAM
-		mp.volume_db = -80.0
-		mp.bus = "Music"
-		add_child(mp)
-		mus_pl.append(mp)
+	# 음악 — 자리가 **하나**다. 겹쳐 넘기지 않고 나갔다 들어오므로 한 번에
+	# 한 곡만 울린다. 예전에는 겹치려고 둘이었다.
+	# 같은 버스에 서므로 _apply_vol 이 효과음과 함께 한 번에 줄인다.
+	var mp := AudioStreamPlayer.new()
+	mp.playback_type = AudioServer.PLAYBACK_TYPE_STREAM
+	mp.volume_db = -80.0
+	mp.bus = "Music"
+	add_child(mp)
+	mus_pl = mp
 
 	# 저장은 소리 장치를 세운 **뒤**에 읽는다 — _apply_vol 이 버스를 만진다.
 	_load_settings()
@@ -12359,7 +12359,39 @@ const MUS := {
 #  여기서 더 깎으면 안 들린다. 0 으로 두고 큰 조절은 컴프레서가 한다.
 const MUS_DB := 0.0
 
-const MUS_FADE := 1.4     # 겹쳐 넘기는 시간(초)
+#  넘기는 방식 — **겹치지 않고 나갔다 들어온다.**
+#
+#  예전에는 둘을 겹쳐 넘겼다. 플레이어가 둘이었던 이유가 그것 하나다.
+#  겹치는 방식은 네 곡이 **같은 곡의 편곡**일 때 맞다. 그런데 여기 넷은
+#  서로 다른 곡이고 템포도 85.26~85.68 BPM 으로 흩어져 있어서, 겹치는
+#  1.4초 동안 두 곡이 서로 다른 박자로 부딪쳤다. 화음도 서로 남이다.
+#
+#  그래서 나가는 것을 **먼저 끝내고** 들어온다. 한 번에 한 곡만 울리므로
+#  부딪칠 것이 없다.
+#
+#  나가는 쪽이 짧고 들어오는 쪽이 길다 — 떠날 때는 빨리 떠나고 올 때는
+#  천천히 오는 편이 자연스럽다. 셋을 더하면 예전 겹침과 같은 1.4초라,
+#  화면 전환과의 박자는 그대로다.
+const MUS_OUT := 0.55     # 나가는 시간(초)
+const MUS_GAP := 0.10     # 사이의 숨. 0 이면 곧바로 이어 붙는다
+const MUS_IN := 0.75      # 들어오는 시간(초)
+const MUS_FADE := MUS_OUT + MUS_GAP + MUS_IN    # 다 합쳐 걸리는 시간
+
+#  음악을 적응형 관리자(res://audio/music/)에게 넘길 것인가.
+#
+#  **지금은 false 다.** 그쪽은 네 편곡을 한 타임라인에 묶어 게인만 미는
+#  방식이라, 상점에 들어가도 음악이 처음으로 안 돌아간다 — 발라트로가
+#  그렇게 들리는 이유가 그것이다. 그런데 그 방식은 네 파일이 **같은 곡의
+#  편곡**이어야 성립한다. assets/music 의 넷은 그게 아니다:
+#      템포   85.26 ~ 85.68 BPM   (0.42 어긋난다 → 62초에 반 박이 밀린다)
+#      길이   61.574 ~ 61.973초   (명세 허용치는 0.001초)
+#      끝     넷 중 셋이 페이드아웃한다 (루프 자리가 아니다)
+#  그래서 지금 켜면 지금보다 나빠진다. 켜는 조건과 방법은
+#  audio/music/README.md 에 있다.
+#
+#  켜면 아래 mus_* 는 통째로 쉰다 — 둘이 같이 울리면 안 된다.
+const MUS_ADAPTIVE := false
+const MusicAdapter = preload("res://audio/music/music_state_adapter.gd")
 
 #  보스 판의 속도.
 #
@@ -12381,10 +12413,19 @@ const MUS_RUSH_MAX := 0.08    # 마지막 라운드의 보스
 #  툭 바꾸면 계단이 그대로 들리고, 넘김보다 속도가 먼저 눈에 띈다.
 const MUS_PITCH_RATE := 0.06
 
-var mus_pl := []          # AudioStreamPlayer 둘
-var mus_i := 0            # 지금 소리 내는 쪽
-var mus_key := ""         # 그쪽이 물고 있는 곡
-var mus_x := 1.0          # 넘김 진행도 0~1. 1 이면 넘김이 끝난 상태다
+# 넘김의 단계. 쉼 → 나감 → 숨 → 들어옴 → 쉼 으로 돈다.
+enum MP { REST, OUT, GAP, IN }
+
+# **자리가 하나다.** 겹치지 않는다는 규칙을 조심해서 지키는 대신 구조로
+# 지킨다 — 자리가 하나면 두 곡이 같이 울리는 일이 아예 일어날 수 없다.
+var mus_pl: AudioStreamPlayer = null
+var mus_key := ""         # 지금 물고 있는 곡. 아무것도 안 물었으면 ""
+var mus_next := ""        # 끝에 가서 물 곡. 쉴 때는 mus_key 와 같다
+var mus_ph := MP.REST     # 지금 단계
+var mus_t := 0.0          # 숨(GAP)이 얼마나 지났는가. 초
+# 지금 나는 크기(선형 진폭 0~1). **단계가 아니라 이 값이 소리를 쥔다** —
+# 단계가 도중에 뒤집혀도 크기는 있던 자리에서 이어지므로 계단이 안 생긴다.
+var mus_vol := 0.0
 var mus_warned := {}      # 못 읽은 곡을 한 번만 말하려고 기억한다
 var mus_pitch := 1.0      # 지금 나는 속도. 목표로 천천히 걸어간다
 
@@ -12420,47 +12461,107 @@ func _mus_pitch_want() -> float:
 
 
 func _mus_update(d: float) -> void:
-	if mus_pl.size() < 2:
+	if MUS_ADAPTIVE:
+		_mus_adaptive()
 		return
-	var want := _mus_want()
-	if want != mus_key:
-		_mus_to(want)
+	if mus_pl == null:
+		# 자리가 아직 안 섰다(_ready 전). 프로브가 첫 프레임 앞에서 부르는
+		# 경로가 있으므로 여기서 막는다 — 곡을 기억도 하지 않는다.
+		return
 
-	# 속도는 곡보다 느리게 따라간다. **두 쪽 다** 민다 — 넘기는 동안
-	# 한쪽만 빨라지면 두 곡이 서로 다른 박자로 겹쳐서, 급해진 것이 아니라
-	# 어긋난 것으로 들린다.
+	# 속도는 곡보다 느리게 따라간다. 밀 자리도 하나뿐이다.
 	var wp := _mus_pitch_want()
 	if not is_equal_approx(mus_pitch, wp):
 		mus_pitch = move_toward(mus_pitch, wp, MUS_PITCH_RATE * d)
-		for pl in mus_pl:
-			(pl as AudioStreamPlayer).pitch_scale = mus_pitch
+		mus_pl.pitch_scale = mus_pitch
 
-	# 넘기는 중이면 두 쪽을 반대로 민다. 다 넘어가면 뒤쪽을 멈춘다 —
-	# 안 멈추면 곡 넷이 전부 돌면서 CPU 와 배를 같이 먹는다.
-	if mus_x < 1.0:
-		mus_x = minf(mus_x + d / MUS_FADE, 1.0)
-		var cur: AudioStreamPlayer = mus_pl[mus_i]
-		var old: AudioStreamPlayer = mus_pl[1 - mus_i]
-		cur.volume_db = _mus_db(mus_x)
-		old.volume_db = _mus_db(1.0 - mus_x)
-		if mus_x >= 1.0 and old.playing:
-			old.stop()
+	var want := _mus_want()
+	if want != mus_next:
+		_mus_head_to(want)
+	_mus_step(d)
 
 
-# 진행도를 데시벨로. 선형으로 섞으면 가운데가 파인다(두 소리의 에너지가
-# 합이 아니라 제곱합이라서) — 제곱근을 취해 힘을 일정하게 잡는다.
-func _mus_db(x: float) -> float:
-	if x <= 0.001:
-		return -80.0
-	return MUS_DB + linear_to_db(sqrt(clampf(x, 0.0, 1.0)))
-
-
-func _mus_to(key: String) -> void:
-	# 자리가 아직 안 섰다(_ready 전). 프로브가 첫 프레임 앞에서 부르는
-	# 경로가 있으므로 여기서 막는다 — 곡을 기억도 하지 않는다. 자리가
-	# 서고 나면 _mus_update 가 want 와 다름을 보고 다시 부른다.
-	if mus_pl.size() < 2 or not MUS.has(key):
+# 목표를 새로 잡는다. **지금 무엇을 하던 중이었는가**에 따라 갈린다 —
+# 넘기는 도중에 화면이 또 바뀌는 일이 드물지 않아서(상점을 열자마자 닫는
+# 것이 그렇다) 이 갈래가 곧 자연스러움을 쥔다.
+func _mus_head_to(key: String) -> void:
+	if not MUS.has(key):
 		return
+	mus_next = key
+	if mus_key == "" and mus_ph != MP.GAP:
+		# 아무것도 안 울리고 있다 — 나갈 것이 없으니 곧장 들어온다.
+		if _mus_load(key):
+			mus_ph = MP.IN
+		return
+	if key == mus_key and mus_pl.playing:
+		# 나가던 곡으로 되돌아왔다. **다시 틀지 않고** 있던 크기에서 도로
+		# 올린다 — 다시 틀면 잠깐 열었다 닫은 화면 하나 때문에 곡이 처음
+		# 으로 돌아간다.
+		mus_ph = MP.IN
+		return
+	if mus_ph != MP.GAP:
+		mus_ph = MP.OUT
+	# 숨을 쉬는 중이면 그냥 둔다 — 숨이 끝날 때 새 목표를 문다.
+
+
+# 한 걸음. 크기(mus_vol)를 밀고, 다 밀렸으면 다음 단계로 넘긴다.
+func _mus_step(d: float) -> void:
+	match mus_ph:
+		MP.OUT:
+			mus_vol = maxf(mus_vol - d / MUS_OUT, 0.0)
+			if mus_vol <= 0.0:
+				# 다 나갔으면 **멈춘다.** 안 멈추면 안 들리는 곡이 계속
+				# 돌면서 CPU 와 배를 같이 먹는다.
+				mus_pl.stop()
+				mus_key = ""
+				mus_ph = MP.GAP
+				mus_t = 0.0
+		MP.GAP:
+			mus_t += d
+			if mus_t >= MUS_GAP:
+				mus_ph = MP.IN if _mus_load(mus_next) else MP.REST
+		MP.IN:
+			mus_vol = minf(mus_vol + d / MUS_IN, 1.0)
+			if mus_vol >= 1.0:
+				mus_ph = MP.REST
+	mus_pl.volume_db = _mus_db(mus_vol)
+
+
+# 적응형 관리자에게 지금 조건을 넘긴다.
+#
+# 같은 상태를 매 프레임 보내도 관리자가 no-op 으로 받으므로(명세의
+# same_state) 여기서 "바뀌었나"를 따로 세지 않는다. 세는 자리를 두 곳에
+# 만들면 반드시 한쪽이 뒤처진다.
+#
+# Music 버스는 **여기가 계속 쥔다**(_apply_vol). 관리자의 owns_bus 는 false
+# 로 둔다 — 명세가 버스를 한 곳만 만지라고 했고, 이 게임에서 그 한 곳은
+# 설정 화면이다.
+func _mus_adaptive() -> void:
+	var mm := get_node_or_null("/root/MusicManager")
+	if mm == null:
+		return
+	if not mm.running and not mm.start():
+		return          # 준비가 안 됐다. 관리자가 이미 이유를 말했다.
+	mm.set_state(MusicAdapter.from_game(self))
+
+
+# 크기를 데시벨로.
+#
+# 예전에는 여기서 제곱근을 취했다. 두 곡을 겹쳐 넘길 때 가운데가 파이는
+# 것을 막으려던 것인데(두 소리의 에너지가 합이 아니라 제곱합이라서),
+# **겹치지 않게 된 지금은 그 이유가 없어졌다.** 한 곡만 울릴 때 제곱근을
+# 씌우면 절반 지점이 -3dB 라 나갈 때 소리가 오래 남는다 — 크기 그대로 쓴다.
+func _mus_db(a: float) -> float:
+	if a <= 0.001:
+		return -80.0
+	return MUS_DB + linear_to_db(clampf(a, 0.0, 1.0))
+
+
+# 곡을 물리고 튼다. **크기는 안 정한다** — 그건 mus_vol 이 쥐고,
+# _mus_step 이 이 함수 뒤에 곧바로 버스에 반영한다.
+func _mus_load(key: String) -> bool:
+	if mus_pl == null or not MUS.has(key):
+		return false
 	var st: AudioStream = load(String(MUS[key]))
 	if st == null:
 		# 조용히 넘어가면 원인을 못 찾는다. 편집기가 새 파일을 아직 안
@@ -12468,21 +12569,19 @@ func _mus_to(key: String) -> void:
 		if not mus_warned.has(key):
 			mus_warned[key] = true
 			push_warning("음악을 못 읽었다: %s — 임포트가 안 됐을 수 있다" % MUS[key])
-		return
+		return false
 	# mp3 는 임포트 설정이 아니라 자원의 값으로 순환한다. 코드에서 물려야
 	# 어떤 임포트 상태에서도 끊기지 않는다.
 	if st is AudioStreamMP3:
 		(st as AudioStreamMP3).loop = true
 	mus_key = key
-	mus_i = 1 - mus_i
-	mus_x = 0.0
-	var cur: AudioStreamPlayer = mus_pl[mus_i]
-	cur.stream = st
-	cur.volume_db = -80.0
+	mus_pl.stream = st
+	mus_pl.volume_db = _mus_db(mus_vol)
 	# 지금 속도로 **서고 나서** 목표를 향해 걷는다. 1.0 으로 세워 두면
-	# 보스에서 나오는 넘김이 첫 프레임에 원래 속도로 튄다.
-	cur.pitch_scale = mus_pitch
-	cur.play()
+	# 보스로 들어오는 곡이 첫 프레임에 원래 속도로 튄다.
+	mus_pl.pitch_scale = mus_pitch
+	mus_pl.play()
+	return true
 
 
 # 버스 셋을 세운다 — Master 아래에 효과음·음악. 한 번만 만들고, 이름으로
