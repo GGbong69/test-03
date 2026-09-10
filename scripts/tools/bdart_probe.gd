@@ -61,8 +61,19 @@ func _tip_screen(t: Transform3D) -> Vector2:
 	return g.BC + Vector2(tip.x, -tip.y)
 
 
+# 3D 는 렌더러가 있어야 선다. 헤드리스로 부르면 검사가 통째로 거짓 실패를
+# 내므로 여기서 멈춘다 — 「실패」와 「못 쟀다」는 다른 말이라야 한다.
+func _no_screen() -> bool:
+	if DisplayServer.get_name() != "headless":
+		return false
+	print("  건너뜀 — 3D 검사는 화면이 있어야 돈다 (--headless 를 빼고 돌려라)")
+	quit(0)
+	return true
+
 func _run() -> void:
 	await _wait(4)
+	if _no_screen():
+		return
 	g._new_run()
 	g._start_leg()
 	g._swap_skip()

@@ -6,8 +6,12 @@ const Save = preload("res://scripts/save.gd")
 # ══════════════════════════════════════════════════════════
 #  동전 QA — 켜진 동전이 **하나도 빠짐없이 실제로 일한다** 를 본다
 #
-#  실행:  godot --path . --headless --script scripts/tools/qa_items.gd
+#  실행:  godot --path . --headless --script scripts/tools/qa_items.gd -- autoplay
 #  종료 코드 = 실패 개수
+#
+#  ④ 소크는 **오토플레이가 켜져야 돈다** — 게임이 스스로 던지지 않으면
+#  판이 1 에 멈추고 성장형이 한 종도 안 쌓인다("소크 내내 값이 안 쌓였다").
+#  그 스위치는 부팅 때 명령줄에서만 켜지므로 인자 없이 부르면 안 된다.
 #
 #  item_stats 는 균등 조준 36만 발로 "얼마나 버는가" 를 잰다. 그 자는
 #  전제가 넷이라(한 장만 · 균등 조준 · 기본 판 · 표준 다트) 조건이 좁거나

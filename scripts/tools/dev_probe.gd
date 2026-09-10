@@ -141,15 +141,22 @@ func _aim(g: Node) -> void:
 	_say(g.owned.size() <= GameData.max_items(), "동전 슬롯이 안 넘친다",
 			"%d / %d" % [g.owned.size(), GameData.max_items()])
 
-	# std 로 돌아오면 동전도 없어진다
-	Dev.pick["aim"] = 0
+	# std 로 돌아온다. 값 칸은 이제 **전체 목록을 편다** — 화살표는 옆칸을
+	# 볼 때 쓰고 멀리 있는 것은 목록에서 바로 집는 규약이라, 돌아가는 길도
+	# 그 길이다. 여기서 목록을 안 닫으면 뒤따르는 클릭을 고르개가 통째로
+	# 삼켜 다음 검사(계산 방식)가 통으로 죽는다 — 실제로 그랬다.
 	Dev.click(g, Dev._val_box(r).get_center())
+	_say(Dev.open_k == "aim", "값 칸을 누르면 목록이 열린다",
+			"열린 갈래 '%s'" % Dev.open_k)
+	Dev.click(g, Dev._pick_cell(0).get_center())
 	var left := 0
 	for it in g.owned:
 		if String(it.get("aim", "")) != "":
 			left += 1
-	_say(g.aim_mode == "std" and left == 0, "기본으로 돌리면 동전도 떨어진다",
-			"방식 %s · 남은 조준 동전 %d" % [g.aim_mode, left])
+	_say(g.aim_mode == "std" and left == 0 and Dev.open_k == "",
+			"목록에서 기본을 집으면 동전도 떨어진다",
+			"방식 %s · 남은 조준 동전 %d · 고르개 '%s'"
+			% [g.aim_mode, left, Dev.open_k])
 
 
 func _score(g: Node) -> void:

@@ -171,8 +171,20 @@ func _initialize() -> void:
 	g.mods_own = []
 	g._panel_reset()
 	g._roll_stock()
-	_say(g.stock.size() == 4, "마지막 앞 판에도 테이블이 넷",
-			"R%d 뒤 매물 %d칸" % [g.leg_no, g.stock.size()])
+	# 테이블 자리는 정확히 넷이다(_table_draw 의 ax/ay 가 그 수를 전제한다).
+	# 팩·사진·공짜 한 장은 그 넷 **바깥**에 얹히므로 매물 수 전체를 세면
+	# 안 된다 — 팩이 붙은 날 이 검사가 5칸을 보고 졌다.
+	var deck := 0
+	for s in g.stock:
+		var t := String(s.get("type", ""))
+		if t == "boost" or t == "fix" or bool(s.get("free", false)):
+			continue
+		deck += 1
+	var w2: Dictionary = GameData.shop_of(g.leg_no)
+	var want2: int = int(w2.items) + int(w2.mods) + int(w2.darts)
+	_say(deck == want2, "마지막 앞 판에도 테이블이 넷",
+			"R%d 뒤 테이블 %d칸 (표가 말하는 %d) · 매물 전체 %d칸"
+			% [g.leg_no, deck, want2, g.stock.size()])
 
 	# ⑥ 누운 제약 카드 — 칸이 펠트 안이고 서로 안 겹치며, 눌러서 골라진다
 	g.sealed = -1

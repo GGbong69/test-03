@@ -56,8 +56,19 @@ func _wait(n: int) -> void:
 		await process_frame
 
 
+# 3D 는 렌더러가 있어야 선다. 헤드리스로 부르면 검사가 통째로 거짓 실패를
+# 내므로 여기서 멈춘다 — 「실패」와 「못 쟀다」는 다른 말이라야 한다.
+func _no_screen() -> bool:
+	if DisplayServer.get_name() != "headless":
+		return false
+	print("  건너뜀 — 3D 검사는 화면이 있어야 돈다 (--headless 를 빼고 돌려라)")
+	quit(0)
+	return true
+
 func _run() -> void:
 	await _wait(4)
+	if _no_screen():
+		return
 	g._open_newrun()
 	await _wait(60)
 	_say(g.cup_vp != null, "화면을 열면 통이 선다",

@@ -76,6 +76,12 @@ func _process(_d: float) -> bool:
 		g._open_shop()
 		g._drop_settle()
 	if frames == 50:
+		# 화소를 읽는 검사다. 헤드리스에는 텍스처가 없어 널을 집는다 —
+		# 「실패」가 아니라 「못 쟀다」라고 말해야 일괄에서 안 헷갈린다.
+		if DisplayServer.get_name() == "headless":
+			print("  건너뜀 — 실루엣 검사는 화면이 있어야 돈다 (--headless 를 빼고 돌려라)")
+			quit(0)
+			return false
 		_measure()
 		quit(1 if fails > 0 else 0)
 	return false
