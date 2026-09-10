@@ -1,0 +1,24 @@
+검사    결과       근거
+------------------------------------------------------------------------------
+T01   pass     어긋난 구성 넷을 다 거절했다
+T02   pass     start_count=1 · Main one-hot · 재호출이 타임라인을 안 건드렸다
+T03   pass     u=0/0.5/1 이 [1,0,0,0]/[.5,.5,0,0]/[0,1,0,0] · 완료 신호 1회
+T04   pass     합 오차 0.000000000 · 셋 이상 양수 구간 봤다 · Final 수렴
+T05   pass     100번 요청에도 재시작·중복 신호 없음
+T06   pass     음수·NaN·Inf·모르는 상태를 거절하고 페이드 보존 · 0=즉시 · -1=기본
+T07   pass     버스만 움직이고 게인·SFX 는 그대로
+T08   pass     트리 정지·time_scale 0.25 에서도 1.01초에 끝났다
+T09   pass     멈춘 1초 동안 진행률 0.197 고정 · 0초 요청은 즉시
+T10   pass     페이드·일시정지 초기화 · 사용자 설정 보존 · 다음 start 만 재시작
+T11   pass     Shop > Final > Aim > Main · 나갈 때 조건 재평가 · 인스턴스 1개
+T12   not_run  듣기·파형 캡처가 필요하다. 이 자리에서는 못 한다
+T13   not_run  엔진 출력 녹음이 필요하다. 이 자리에서는 못 한다
+T14   pass     1800초 · 전환 8893회 · 루프 78.7회 · 게인 합 오차 0.000000000 · 최신 목표 수렴 · 정적 메모리 +277KB. 오디오 드라이버가 Dummy 라 **underrun 은 못 쟀다**
+T15   not_run  대상 플랫폼 내보내기가 필요하다. export_presets 가 이미 깨져 있다
+------------------------------------------------------------------------------
+pass 12 · fail 0 · not_run 3
+고닷 4.6.3-stable (official) · 플랫폼 Windows · 오디오 드라이버 Dummy
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+   at: cleanup (core/object/object.cpp:2663)
+ERROR: 4 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:810)
