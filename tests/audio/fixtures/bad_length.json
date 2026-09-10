@@ -1,0 +1,28 @@
+{
+  "_note": "T01 용. Final 만 1초 짧다 — 길이 검증에서 걸려야 한다.",
+  "states": [
+    {
+      "id": "Main",
+      "index": 0,
+      "asset": "res://audio/music/tracks/main.wav"
+    },
+    {
+      "id": "Shop",
+      "index": 1,
+      "asset": "res://audio/music/tracks/shop.wav"
+    },
+    {
+      "id": "Aim",
+      "index": 2,
+      "asset": "res://audio/music/tracks/aim.wav"
+    },
+    {
+      "id": "Final",
+      "index": 3,
+      "asset": "res://tests/audio/fixtures/short.wav"
+    }
+  ],
+  "initial_state": "Main",
+  "fade_seconds": 1.0,
+  "bus": "Music"
+}

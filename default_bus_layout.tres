@@ -1,0 +1,19 @@
+[gd_resource type="AudioBusLayout" format=3]
+
+; 버스를 부팅 때부터 세운다. 예전에는 game.gd 의 _bus_setup 이 첫 프레임에
+; 만들었는데, Autoload 는 그보다 먼저 돌아서 그 자리에서는 Music 버스가
+; 아직 없었다. _bus_setup 은 이미 있는 버스를 건너뛰므로 그대로 둬도 된다.
+
+[resource]
+bus/1/name = &"SFX"
+bus/1/solo = false
+bus/1/mute = false
+bus/1/bypass_fx = false
+bus/1/volume_db = 0.0
+bus/1/send = &"Master"
+bus/2/name = &"Music"
+bus/2/solo = false
+bus/2/mute = false
+bus/2/bypass_fx = false
+bus/2/volume_db = 0.0
+bus/2/send = &"Master"
