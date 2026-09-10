@@ -144,12 +144,95 @@ func _process(_d: float) -> bool:
 	else:
 		_ok("면죄부가 표에 있다", false, "못 찾음")
 
-	# ⑤ 눕혀 둔 넷은 거절해야 한다 — 켜 두면 소크가 거절 소리만 낸다
-	var off := 0
-	for r in GameData.rows("cons"):
-		if String(r.get("enabled", "1")) == "0" and String(r.get("id", "")).begins_with("v_"):
-			off += 1
-	_ok("고르는 흐름이 필요한 것은 눕혀 뒀다", off == 4, "눕힌 사진 %d장" % off)
+	# ⑤ 자리 제한 — 쓸 수 없는 자리에서는 손에서 안 없어져야 한다
+	g.state = g.S.SHOP
+	_hold("v_pnt")
+	g._cons_use(0)
+	_ok("페인트 — 상점에서는 못 쓴다", g.cons.size() == 1 and g.photo == "",
+			"손에 %d장 · photo '%s'" % [g.cons.size(), g.photo])
+	g.state = g.S.PICK
+	_hold("v_moth")
+	g._cons_use(0)
+	_ok("불나방 — 판에서는 못 쓴다", g.cons.size() == 1 and g.photo == "",
+			"손에 %d장 · photo '%s'" % [g.cons.size(), g.photo])
+
+	# ⑥ 불나방 — 테이블이 갈리고 판매 창구가 부순다
+	g.state = g.S.SHOP
+	g.owned.clear()
+	var coin: Dictionary = GameData.items()[0].duplicate()
+	coin.gs = 0
+	g.owned.append(coin)
+	var want_g: int = GameData.sell_value(coin) * 2
+	_hold("v_moth")
+	g._cons_use(0)
+	_ok("불나방 — 테이블이 내 동전으로 갈린다",
+			g.photo == "burn" and g.stock.size() == 1,
+			"photo '%s' · 테이블 %d개" % [g.photo, g.stock.size()])
+	g.gold = 0
+	g.buy_sel = 0
+	g._chute_click(g.Z_SELL)
+	_ok("불나방 — 부수고 판매가의 곱절", g.owned.is_empty() and g.gold == want_g,
+			"동전 %d장 · 골드 %d (바라는 값 %d)" % [g.owned.size(), g.gold, want_g])
+	_ok("불나방 — 테이블이 돌아온다", g.photo == "", "photo '%s'" % g.photo)
+
+	# ⑦ 위조화폐 — 복제 창구가 한 장을 더 준다
+	g.owned.clear()
+	g.owned.append(GameData.items()[0].duplicate())
+	_hold("v_fake")
+	g._cons_use(0)
+	_ok("위조화폐 — 테이블이 갈린다", g.photo == "clone", "photo '%s'" % g.photo)
+	g.buy_sel = 0
+	g._chute_click(g.Z_BUY)
+	_ok("위조화폐 — 한 장이 더 생긴다", g.owned.size() == 2,
+			"동전 %d장" % g.owned.size())
+	_ok("위조화폐 — 반대쪽 창구로는 안 된다", g.photo == "", "photo '%s'" % g.photo)
+
+	# ⑧ 페인트 — 고른 칸의 점수가 곱해진다
+	g.state = g.S.PICK
+	g.leg_no = 1
+	g._start_leg()
+	_hold("v_pnt")
+	g._cons_use(0)
+	_ok("페인트 — 고르는 화면이 열린다", g.photo == "paint", "photo '%s'" % g.photo)
+	# 판 위의 한 자리를 눌러 그 칸을 칠한다
+	var pt: Vector2 = g.BC + Vector2(0.0, -g.R * 0.75)
+	var idx: int = g._paint_hit(pt)
+	var raw_v: int = int(g.hit_info(pt).base)
+	g._paint_click(pt)
+	_ok("페인트 — 칸이 칠해진다", g.paint_sec == idx and g.photo == "",
+			"칸 %d · photo '%s'" % [g.paint_sec, g.photo])
+	g.aim = pt
+	g.total = 0
+	g.target = 1 << 30
+	g.darts_left = 9
+	g._land()
+	while not g.queue.is_empty():
+		g._next_step()
+	_ok("페인트 — 점수가 곱해진다", g.total >= raw_v * 2,
+			"칠 안 한 값 %d · 실제 %d" % [raw_v, g.total])
+	g._start_leg()
+	_ok("페인트 — 판이 바뀌면 풀린다", g.paint_sec == -1, "칸 %d" % g.paint_sec)
+
+	# ⑨ 한 수 앞 — 본 셋이 그 판에 그대로 깔린다
+	g.state = g.S.SHOP
+	g.leg_no = 1
+	_hold("v_peek")
+	g._cons_use(0)
+	_ok("한 수 앞 — 셋을 읽는다",
+			g.photo == "peek" and g.peek_pick.size() == GameData.stage_picks(),
+			"photo '%s' · %d장" % [g.photo, g.peek_pick.size()])
+	var seen := []
+	for e in g.peek_pick:
+		seen.append(String(e.d.get("id", "")))
+	var pl: int = int(g.peek_leg)
+	g.photo = ""
+	g.leg_no = pl
+	g._open_stage()
+	var got := []
+	for e in g.stage_pick:
+		got.append(String(e.d.get("id", "")))
+	_ok("한 수 앞 — 본 것이 그대로 뜬다", seen == got,
+			"본 것 %s · 뜬 것 %s" % [str(seen), str(got)])
 
 	print("\n%s" % ("전부 통과" if fails == 0 else "실패 %d건" % fails))
 	quit(mini(fails, 125))

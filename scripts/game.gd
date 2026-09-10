@@ -165,6 +165,26 @@ const AUTO_CONS := ["area", "gold", "sellsum", "redo", "pardon"]
 
 # 「면죄부」가 세워 둔 깃발. 다음 보스 판에서 고른 제약이 안 걸린다.
 var pardon_next := false
+
+# ── 사진이 여는 자리들 ────────────────────────────────────
+#  사진 넷은 쓰는 순간 화면을 하나 더 연다. 그 화면이 무엇인지를 이 한
+#  낱말이 쥔다 — "" 면 아무것도 안 열려 있다.
+#
+#    burn   상점 테이블을 갈아 보유 동전을 떨어뜨린다. 하나를 판매 창구로
+#           보내면 부수고 판매가의 곱절을 받는다
+#    clone  같은 테이블인데 창구가 「복제」다. 보낸 동전이 하나 더 떨어진다
+#    paint  다트판의 칸 하나를 고른다. 이번 판 동안 그 칸 점수가 곱해진다
+#    peek   다음 보스의 제약 셋을 읽기만 한다
+#
+#  자리를 가리는 이유 — 상점 테이블을 쓰는 둘은 판 위에서 열 자리가 없고,
+#  페인트는 던지는 중이라야 "이번 판" 이 뜻을 갖는다.
+var photo := ""
+var photo_back := []     # 갈아 끼우기 전의 상점 매물. 나올 때 되돌린다
+var photo_v := 0         # 그 사진의 v (불나방의 곱절 · 페인트의 배수)
+var paint_sec := -1      # 페인트가 고른 칸. sectors 의 자리다
+var paint_mul := 1.0
+var peek_pick := []      # 한 수 앞이 미리 읽은 제약 셋
+var peek_leg := -1       # 그 셋이 어느 판의 것인가
 var score_mode := "std"         # 이 런의 점수 계산 방식. 든 동전이 먼저 쥔다
 # 다트통이 미는 최종 점수 배율. 계산 방식과 같이 판 시작에 한 번 읽는다.
 var score_mul := 1.0
@@ -416,6 +436,12 @@ func _ready() -> void:
 
 func _new_run() -> void:
 	pardon_next = false          # 런을 넘겨 남으면 안 되는 깃발이다
+	photo = ""
+	photo_back.clear()
+	peek_pick.clear()
+	peek_leg = -1
+	paint_sec = -1
+	paint_mul = 1.0
 	Save.bump("runs")
 	bought_item = false
 	mods_own.clear()
@@ -458,6 +484,10 @@ func _new_run() -> void:
 
 
 func _start_leg() -> void:
+	# 페인트는 "이번 판" 짜리다. 판이 새로 서면 지운다 — 재도전(같은 판을
+	# 다시 여는 사진)도 이 길을 지나므로 칠은 거기서도 풀린다.
+	paint_sec = -1
+	paint_mul = 1.0
 	# 테이블을 빼고 판을 세운다. **데이터보다 먼저** 부른다 — 이 아래가
 	# 판의 링 폭(rt_*)을 다시 잡으므로, 연출을 나중에 열면 올라오는 동안은
 	# 지난 판의 모양이었다가 다 선 순간 툭 바뀐다.
@@ -1216,6 +1246,10 @@ func _buy_block(i: int) -> String:
 	if i < 0 or i >= stock.size():
 		return "없는 매물"
 	var s: Dictionary = stock[i]
+	# 사진이 깐 테이블은 매물이 아니라 **내 동전**이다. 값도 0 이고
+	# 슬롯도 이미 차 있으므로 매물용 판정을 그대로 쓰면 전부 거절된다.
+	if photo == "burn" or photo == "clone":
+		return ""
 	if s.sold:
 		return "이미 구매함"
 	if gold < s.cost:
@@ -1793,6 +1827,17 @@ func _open_stage() -> void:
 		active_mods = []
 		target = base
 		_start_leg()
+		return
+	# 「한 수 앞」으로 이미 읽은 판이면 그때 본 셋을 그대로 깐다. 여기서 다시
+	# 뽑으면 미리보기가 거짓말이 된다 — 본 것과 뜨는 것이 달라진다.
+	if peek_leg == leg_no and not peek_pick.is_empty():
+		for e in peek_pick:
+			stage_pick.append(e)
+			stage_stand.append(0.0)
+		peek_pick.clear()
+		peek_leg = -1
+		state = S.STAGE
+		_sfx("stage_open")
 		return
 	var left := GameData.modifiers().duplicate()
 	for i in GameData.stage_picks() + _spend_tags("picks"):
@@ -2710,6 +2755,17 @@ func _unhandled_input(e: InputEvent) -> void:
 
 
 func _click(m: Vector2) -> void:
+	# 사진이 연 화면은 그 아래를 통째로 가린다. 안 가리면 미리보기를 읽는
+	# 중에 뒤의 매물이 눌리고, 칸을 고르는 중에 다트가 날아간다.
+	if photo == "peek":
+		photo = ""
+		peek_pick.clear()
+		peek_leg = -1
+		_sfx("shop_deselect")
+		return
+	if photo == "paint":
+		_paint_click(m)
+		return
 	if Dev.click(self, m):          # DEV
 		return
 	if swap_live:
@@ -3092,6 +3148,10 @@ func _land(mark := true) -> void:
 		info.base = 0
 	if not is_equal_approx(odd_mul, 1.0) and info.idx >= 0 			and int(info.base) % 2 == 1:
 		info.base = int(round(float(info.base) * odd_mul))
+	# 페인트가 칠한 칸. 죽이는 축을 다 지난 뒤에 곱한다 — 금줄이 죽인 칸을
+	# 칠했으면 0 에 곱해 0 이다. 두 장을 같이 쓴 결과가 그것이 맞다.
+	if paint_sec >= 0 and info.idx == paint_sec:
+		info.base = int(round(float(info.base) * paint_mul))
 	# 링을 죽이는 축. 배수만 1 로 내린다 — 값은 그대로다.
 	if dead_ring > 0 and int(info.mult) == dead_ring:
 		info.mult = 1
@@ -4008,6 +4068,9 @@ func _draw() -> void:
 	if not swap_live:
 		_tip_draw(sh)
 	draw_set_transform(Vector2.ZERO)
+	# 사진이 연 화면은 개발자 판 바로 아래다 — 게임 위, 개발자 아래.
+	if photo != "":
+		_photo_draw()
 	Dev.draw(self)          # DEV
 	draw_set_transform(Vector2.ZERO)
 	if screen_flash > 0.0:
@@ -5635,16 +5698,169 @@ func _cons_use(i: int) -> void:
 		"pardon":
 			pardon_next = true
 			say = "다음 보스 제약 무효"
-		_:
-			# 대상을 골라야 하는 것들(스티커 · 불나방 · 위조화폐 · 페인트)과
-			# 미리보기는 그 흐름이 아직 없다 — 표에는 enabled=0 으로 눕혀 뒀다.
-			pay_msg = "%s 는 아직 준비 중이다" % c.n
-			pay_msg_t = HAND.msg_t
-			_deny()
+		# ── 아래 넷은 화면을 하나 더 연다. 쓸 수 있는 자리가 정해져 있다.
+		"burn", "clone":
+			# 상점 테이블을 갈아 쓰므로 상점에서만 열린다.
+			if state != S.SHOP:
+				return _cons_deny(c, "상점에서만 쓴다")
+			if owned.is_empty():
+				return _cons_deny(c, "손에 동전이 없다")
+			cons.remove_at(i)
+			Save.bump("cons_used")
+			_photo_open(String(c.cat), int(c.get("v", 0)))
 			return
+		"paint":
+			# "이번 판" 이 뜻을 가지려면 던지는 중이라야 한다.
+			if not _is_play():
+				return _cons_deny(c, "판에서만 쓴다")
+			cons.remove_at(i)
+			Save.bump("cons_used")
+			photo = "paint"
+			photo_v = maxi(int(c.get("v", 0)), 2)
+			_sfx("cons_use")
+			return
+		"peek":
+			if state != S.SHOP and state != S.LEG:
+				return _cons_deny(c, "상점이나 판 고르기에서 쓴다")
+			cons.remove_at(i)
+			Save.bump("cons_used")
+			_photo_peek()
+			return
+		_:
+			# 스티커 둘은 아직 대상 선택 흐름이 없다.
+			return _cons_deny(c, "아직 준비 중이다")
 	Save.bump("cons_used")
 	cons.remove_at(i)
 	pop(at + Vector2(0.0, 26.0), say, C_ACC, 10, 0.9)
+	_sfx("cons_use")
+
+
+# 사진을 쓸 자리가 아니다. 손에서 안 없앤다 — 잘못 눌러 잃으면 안 된다.
+func _cons_deny(c: Dictionary, why: String) -> void:
+	pay_msg = "%s — %s" % [c.n, why]
+	pay_msg_t = HAND.msg_t
+	_deny()
+
+
+# ── 불나방 · 위조화폐 — 상점 테이블을 갈아 끼운다 ──────────
+#
+#  매물을 치우고 그 자리에 **보유 동전**을 떨어뜨린다. 물리도 집기도
+#  툴팁도 매물과 똑같이 돈다 — type 을 "item" 그대로 두었기 때문이다.
+#  다른 것은 창구뿐이다. 무엇을 보냈을 때 무슨 일이 나는가가 photo 로 갈린다.
+#
+#  테이블이 바뀌는 것 자체는 나중에 연출로 덮는다(사용자 지시 2026-09-10).
+#  지금은 그 자리에서 즉시 갈린다.
+func _photo_open(kind: String, v: int) -> void:
+	photo = kind
+	photo_v = maxi(v, 2)
+	photo_back = stock.duplicate()
+	stock = []
+	for i in owned.size():
+		# own 은 owned 의 자리다. 판정이 끝나면 이 번호로 원본을 찾는다 —
+		# 사본을 들고 비교하면 같은 동전 둘을 못 가른다.
+		stock.append({"type": "item", "d": owned[i].duplicate(), "cost": 0,
+				"sold": false, "own": i})
+	buy_sel = -1
+	sell_sel = -1
+	_hand_abort()
+	_drop_roll()
+	_sfx("cons_use")
+
+
+func _photo_close() -> void:
+	photo = ""
+	stock = photo_back
+	photo_back = []
+	buy_sel = -1
+	sell_sel = -1
+	_hand_abort()
+	_drop_roll()
+
+
+# 고른 동전을 창구로 보냈다.
+func _photo_take(i: int) -> void:
+	if i < 0 or i >= stock.size():
+		return
+	var oi: int = int(stock[i].get("own", -1))
+	if oi < 0 or oi >= owned.size():
+		_photo_close()
+		return
+	var it: Dictionary = owned[oi]
+	var at := _slot_rect(mini(oi, GameData.max_items() - 1)).get_center()
+	if photo == "burn":
+		var got: int = GameData.sell_value(it) * photo_v
+		gold += got
+		Save.bump("gold_earned", got)
+		Save.bump("sold")
+		_seal_drop(oi)
+		owned.remove_at(oi)
+		_panel_reset()
+		pop(at + Vector2(0.0, 24.0), "%s  +%d" % [it.n, got], C_GOLD, 11, 1.1)
+		_sfx("sell")
+	else:
+		if owned.size() >= GameData.max_items():
+			pay_msg = "동전 슬롯이 꽉 찼다"
+			pay_msg_t = HAND.msg_t
+			_deny()
+			return
+		var cp: Dictionary = it.duplicate()
+		cp.gs = 0                      # 성장값은 안 따라간다. 새 장이다
+		cp.bought = leg_no
+		owned.append(cp)
+		_panel_reset()
+		pop(at + Vector2(0.0, 24.0), "%s  복제" % it.n, C_ACC, 11, 1.1)
+		_sfx("buy")
+	_photo_close()
+
+
+# ── 페인트 — 다트판의 칸 하나를 고른다 ────────────────────
+#
+#  커서 밑의 칸을 hit_info 에게 물어본다. 각도 규약을 여기서 다시 세면
+#  판을 돌리는 제약(딴판)이나 칸을 바꾸는 보드 확장이 걸렸을 때 화면과
+#  판정이 갈린다 — 던질 때 쓰는 그 함수를 그대로 쓴다.
+func _paint_hit(m: Vector2) -> int:
+	return int(hit_info(m).get("idx", -1))
+
+
+func _paint_click(m: Vector2) -> void:
+	var idx := _paint_hit(m)
+	if idx < 0:
+		# 판 밖을 눌러도 안 닫는다. 잘못 눌러 사진을 잃으면 무를 길이 없다.
+		_deny()
+		return
+	paint_sec = idx
+	paint_mul = float(photo_v)
+	photo = ""
+	pop(BC + Vector2(0.0, -40.0), "페인트  x%d" % photo_v, C_ACC, 11, 1.1)
+	_sfx("cons_use")
+
+
+# ── 한 수 앞 — 다음 보스의 제약 셋을 읽기만 한다 ────────────
+func _photo_peek() -> void:
+	var n := leg_no
+	while n <= GameData.legs_n() and not GameData.is_boss(n):
+		n += 1
+	peek_pick.clear()
+	if n > GameData.legs_n():
+		pay_msg = "다음 보스 판이 없다"
+		pay_msg_t = HAND.msg_t
+		_deny()
+		return
+	# _open_stage 와 같은 자를 쓴다 — 여기서 따로 뽑으면 실제로 뜨는 셋과
+	# 다른 것을 보여 주게 되고, 그건 미리보기가 아니라 거짓말이다.
+	var left := GameData.modifiers().duplicate()
+	var base := GameData.target_of(n)
+	for k in GameData.stage_picks():
+		var md := _draw_weighted(left)
+		if md.is_empty():
+			break
+		left.erase(md)
+		var tgt := base
+		if String(md.k) == "target_mul":
+			tgt = int(ceil(float(base) * float(md.v)))
+		peek_pick.append({"d": md, "target": tgt})
+	peek_leg = n
+	photo = "peek"
 	_sfx("cons_use")
 
 
@@ -6052,6 +6268,25 @@ func _chute_draw() -> void:
 # 창구 얼굴. 무엇을 들었는지에 따라 왼쪽이나 오른쪽 하나만 값을 말한다.
 func _chute_label() -> void:
 	var ly: float = TBL.fy + 12.0
+	# 사진이 깐 테이블은 창구가 하는 일이 다르다. 「구매」라고 적힌 자리에
+	# 복제를 시키면 무슨 일이 날지 손이 모른다 — 이름이 곧 계약이다.
+	if photo == "burn" or photo == "clone":
+		var bn: bool = photo == "burn"
+		var lab: String = "판매" if bn else "복제"
+		var live: bool = buy_sel >= 0 and buy_sel < stock.size()
+		if bn:
+			draw_string(font, Vector2(5.0, ly), lab, HORIZONTAL_ALIGNMENT_LEFT,
+					-1, 11, C_TXT if live else C_DIM)
+			if live:
+				var oi: int = int(stock[buy_sel].get("own", -1))
+				if oi >= 0 and oi < owned.size():
+					draw_gold_at(5.0, ly + 17.0,
+							"+%d" % (GameData.sell_value(owned[oi]) * photo_v),
+							11, C_GOLD)
+		else:
+			draw_string(font, Vector2(VIEW.x - 27.0, ly), lab,
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_TXT if live else C_DIM)
+		return
 	var si: int = hand_i if (hand_st == H.CARRY and hand_src == 1) else sell_sel
 	var slive: bool = _can_sell() and si >= 0 and si < owned.size()
 	draw_string(font, Vector2(5.0, ly), "판매", HORIZONTAL_ALIGNMENT_LEFT, -1, 11,
@@ -8871,6 +9106,21 @@ func _panel_gap(i: int) -> void:
 
 # 창구를 눌렀을 때. 방향이 무엇을 뜻하는지는 여기서도 같다.
 func _chute_click(z: int) -> void:
+	if photo == "burn" or photo == "clone":
+		# 불나방은 판매 창구로, 위조화폐는 구매(복제) 창구로 보낸다.
+		var want: int = Z_SELL if photo == "burn" else Z_BUY
+		if z != want:
+			pay_msg = "반대쪽 창구다"
+			pay_msg_t = HAND.msg_t
+			_deny()
+			return
+		if buy_sel < 0:
+			pay_msg = "먼저 테이블에서 동전을 고른다"
+			pay_msg_t = HAND.msg_t
+			_deny()
+			return
+		_photo_take(buy_sel)
+		return
 	if z == Z_SELL:
 		if _can_sell() and sell_sel >= 0 and sell_sel < owned.size():
 			_sell(sell_sel)
@@ -9599,6 +9849,49 @@ func _draw_pops() -> void:
 
 func _scrim() -> void:
 	draw_rect(Rect2(Vector2.ZERO, VIEW), Color(0.04, 0.03, 0.07, 0.94))
+
+
+# ── 사진이 연 화면 ────────────────────────────────────────
+#  맨 나중에 그린다. 아래를 통째로 덮어야 "지금은 이것만 고르는 중" 이
+#  손에 읽힌다.
+func _photo_draw() -> void:
+	match photo:
+		"paint":
+			# 판만 남기고 어둡게 깐다. 스크림을 먼저 치고 판을 다시 그리면
+			# 판이 구멍처럼 밝게 남는다 — 판 그리는 함수를 그대로 다시 쓴다.
+			_scrim()
+			_draw_board()
+			var idx := _paint_hit(mouse_at)
+			if idx >= 0:
+				var sw := 18.0 * PI / 180.0
+				var a0: float = float(idx) * sw - sw * 0.5
+				draw_colored_polygon(annulus(R * rt_dbl_out, R * rt_bull_o,
+						a0, a0 + sw), Color(1.0, 1.0, 1.0, 0.20))
+				draw_string(font, Vector2(0.0, BC.y + R + 28.0),
+						"%d 칸  x%d" % [int(sectors[idx]) if idx < sectors.size() else 0, photo_v],
+						HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 13, C_ACC)
+			draw_string(font, Vector2(0.0, 24.0), "칠할 칸을 고르세요",
+					HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 13, C_TXT)
+		"peek":
+			_scrim()
+			draw_string(font, Vector2(0.0, 34.0), "다음 보스의 제약",
+					HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 13, C_ACC)
+			for i in peek_pick.size():
+				var e: Dictionary = peek_pick[i]
+				var y: float = 74.0 + float(i) * 46.0
+				var r := Rect2(Vector2(74.0, y), Vector2(VIEW.x - 148.0, 38.0))
+				draw_rect(r, C_PANEL.darkened(0.15))
+				draw_string(font, r.position + Vector2(10.0, 15.0),
+						String(e.d.get("n", "")), HORIZONTAL_ALIGNMENT_LEFT,
+						-1, 12, C_TXT)
+				draw_string(font, r.position + Vector2(10.0, 30.0),
+						String(e.d.get("d", "")), HORIZONTAL_ALIGNMENT_LEFT,
+						r.size.x - 20.0, 10, C_DIM)
+				draw_string(font, r.position + Vector2(0.0, 15.0),
+						"목표 %d" % int(e.target), HORIZONTAL_ALIGNMENT_RIGHT,
+						r.size.x - 10.0, 11, C_GOLD)
+			draw_string(font, Vector2(0.0, VIEW.y - 16.0), "아무 데나 눌러 닫는다",
+					HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 11, C_DIM)
 
 
 func _btn(r: Rect2, label: String, sub: String, on: bool,
