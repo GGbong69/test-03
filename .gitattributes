@@ -7,3 +7,7 @@ data/*.csv text eol=crlf
 
 # 글꼴은 바이너리다 — eol 정규화가 파일을 망친다.
 *.ttf binary
+
+# 소리는 바이너리다 — eol 정규화가 파일을 망친다.
+*.wav binary
+*.mp3 binary

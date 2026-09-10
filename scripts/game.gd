@@ -10285,6 +10285,13 @@ func _load_settings() -> void:
 			Save.set_set("fullscreen", false)
 
 
+#  빌려 온 것의 만든이. JDSherbert 의 UI 효과음 팩은 상업적 사용을
+#  허락하지만 **만든이를 적을 것**을 조건으로 단다. 그래서 이 줄은
+#  화면의 장식이 아니라 라이선스의 일부다. 온 목록과 원문은
+#  docs/크레딧.md 에 있다.
+const CREDITS := "소리 JDSherbert — Ultimate UI SFX Pack"
+
+
 func _draw_title() -> void:
 	_scrim()
 	draw_string(font, Vector2(0, 108), "하이톤", HORIZONTAL_ALIGNMENT_CENTER,
@@ -10295,6 +10302,11 @@ func _draw_title() -> void:
 	var subs := ["스페이스", "", "", ""]
 	for i in 4:
 		_btn(_menu_rect(i), names[i], subs[i], true)
+	# 빌려 온 것을 적는 자리. UI 효과음 팩의 라이선스가 만든이를 적으라고
+	# 요구하므로 이 줄은 장식이 아니라 **조건**이다 — 지우면 못 낸다.
+	# 마지막 단추가 342 에서 끝나므로 그 아래 남는 18px 에 앉힌다.
+	draw_string(font, Vector2(0, 354), CREDITS, HORIZONTAL_ALIGNMENT_CENTER,
+			VIEW.x, 8, C_DIM)
 
 
 # ══════════════════════════════════════════════════════════
@@ -12349,11 +12361,32 @@ const MUS_DB := 0.0
 
 const MUS_FADE := 1.4     # 겹쳐 넘기는 시간(초)
 
+#  보스 판의 속도.
+#
+#  보스는 이미 곡이 따로다(boss.mp3). 그러니 여기서 하는 일은 곡을 한 번
+#  더 가르는 것이 아니라, **여덟 보스가 서로 다른 속도로 오게** 하는
+#  것이다. 라운드 1의 보스도 판 위보다는 급하고(BASE), 라운드 8의 보스가
+#  가장 급하다(MAX). 새 파일 없이 곡선이 소리로 생긴다 — 표의 curve_b 가
+#  1.00 에서 4.00 으로 오르는 그 곡선을 귀도 한 번 더 듣는 셈이다.
+#
+#  pitch_scale 은 **속도와 음높이를 같이** 민다. 1.08 은 반음이 채 안 되는
+#  값이라 "급해졌다"로 읽히고, 1.12 를 넘기면 다람쥐 소리가 된다. 상한이
+#  그래서 여기 박혀 있다. 음높이를 붙들고 속도만 밀려면 버스에
+#  AudioEffectPitchShift 를 역수로 걸어야 하는데, 그건 그래뉼러 잡음이
+#  끼고 버스 전체에 걸려서 값이 안 맞았다.
+const MUS_RUSH_BASE := 0.03   # 보스면 일단 이만큼
+const MUS_RUSH_MAX := 0.08    # 마지막 라운드의 보스
+#  속도가 목표를 따라가는 비(초당). 넘김(MUS_FADE)과 비슷하게 잡는다 —
+#  곡이 다 넘어갈 즈음 속도도 다 올라 있어야 둘이 한 사건으로 들린다.
+#  툭 바꾸면 계단이 그대로 들리고, 넘김보다 속도가 먼저 눈에 띈다.
+const MUS_PITCH_RATE := 0.06
+
 var mus_pl := []          # AudioStreamPlayer 둘
 var mus_i := 0            # 지금 소리 내는 쪽
 var mus_key := ""         # 그쪽이 물고 있는 곡
 var mus_x := 1.0          # 넘김 진행도 0~1. 1 이면 넘김이 끝난 상태다
 var mus_warned := {}      # 못 읽은 곡을 한 번만 말하려고 기억한다
+var mus_pitch := 1.0      # 지금 나는 속도. 목표로 천천히 걸어간다
 
 
 # 지금 화면이 원하는 곡. 덮개 화면은 **뒤 화면을 따른다** — 잠깐 여는 판
@@ -12372,12 +12405,36 @@ func _mus_want() -> String:
 	return "boss" if GameData.is_boss(leg_no) else "game"
 
 
+# 지금 화면이 원하는 속도. 보스 판에서만 1 을 넘는다.
+#
+# 라운드를 모르는 자리(로비·상점)는 곡부터 "boss" 가 아니므로 여기 안 든다 —
+# leg_no 를 읽기 전에 _mus_want 로 한 번 거르는 것이 그 뜻이다.
+func _mus_pitch_want() -> float:
+	if _mus_want() != "boss":
+		return 1.0
+	var n := GameData.rounds_n()
+	if n <= 1:
+		return 1.0 + MUS_RUSH_MAX
+	var r := clampi(GameData.round_of(leg_no), 1, n)
+	return 1.0 + lerpf(MUS_RUSH_BASE, MUS_RUSH_MAX, float(r - 1) / float(n - 1))
+
+
 func _mus_update(d: float) -> void:
 	if mus_pl.size() < 2:
 		return
 	var want := _mus_want()
 	if want != mus_key:
 		_mus_to(want)
+
+	# 속도는 곡보다 느리게 따라간다. **두 쪽 다** 민다 — 넘기는 동안
+	# 한쪽만 빨라지면 두 곡이 서로 다른 박자로 겹쳐서, 급해진 것이 아니라
+	# 어긋난 것으로 들린다.
+	var wp := _mus_pitch_want()
+	if not is_equal_approx(mus_pitch, wp):
+		mus_pitch = move_toward(mus_pitch, wp, MUS_PITCH_RATE * d)
+		for pl in mus_pl:
+			(pl as AudioStreamPlayer).pitch_scale = mus_pitch
+
 	# 넘기는 중이면 두 쪽을 반대로 민다. 다 넘어가면 뒤쪽을 멈춘다 —
 	# 안 멈추면 곡 넷이 전부 돌면서 CPU 와 배를 같이 먹는다.
 	if mus_x < 1.0:
@@ -12422,6 +12479,9 @@ func _mus_to(key: String) -> void:
 	var cur: AudioStreamPlayer = mus_pl[mus_i]
 	cur.stream = st
 	cur.volume_db = -80.0
+	# 지금 속도로 **서고 나서** 목표를 향해 걷는다. 1.0 으로 세워 두면
+	# 보스에서 나오는 넘김이 첫 프레임에 원래 속도로 튄다.
+	cur.pitch_scale = mus_pitch
 	cur.play()
 
 

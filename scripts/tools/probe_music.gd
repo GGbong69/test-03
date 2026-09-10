@@ -57,6 +57,48 @@ func _go() -> void:
 	g.pause_from = g.S.PICK
 	print("  판 위 일시정지 -> %s %s" % [g._mus_want(), "ok" if g._mus_want() == "game" else "실패"])
 
+	# ── 보스 속도 ─────────────────────────────────
+	# 라운드마다 보스가 얼마나 급한가. 값이 아니라 **차이**가 요점이라
+	# 라운드 1과 마지막의 간격을 같이 적는다.
+	print("- 보스 속도 -")
+	g.state = g.S.PICK
+	var lo := 0.0
+	var hi := 0.0
+	for k in range(1, gd.legs_n() + 1):
+		if not gd.is_boss(k):
+			continue
+		g.leg_no = k
+		var pv: float = g._mus_pitch_want()
+		if lo == 0.0:
+			lo = pv
+		hi = pv
+		print("  라운드 %d 보스 -> x%.4f" % [gd.round_of(k), pv])
+	g.leg_no = 1
+	print("  판 위(보스 아님) -> x%.4f" % g._mus_pitch_want())
+	g.state = g.S.TITLE
+	print("  로비 -> x%.4f" % g._mus_pitch_want())
+	print("  처음과 끝 차이: %.1f%% (반음 %.2f)"
+			% [(hi / lo - 1.0) * 100.0, 12.0 * log(hi / lo) / log(2.0)])
+
+	# 속도가 툭 안 바뀌고 걸어가는가. 보스에 들어선 뒤 몇 초에 다 오르나.
+	print("- 속도가 걸어가는가 -")
+	g.state = g.S.PICK
+	g.leg_no = 1
+	g.mus_pitch = 1.0
+	for k in range(1, gd.legs_n() + 1):
+		if gd.is_boss(k):
+			g.leg_no = k
+			break
+	var t := 0.0
+	var tgt: float = g._mus_pitch_want()
+	while g.mus_pitch < tgt - 0.0005 and t < 10.0:
+		g._mus_update(0.016)
+		t += 0.016
+		if is_equal_approx(t, 0.48) or is_equal_approx(t, 0.96):
+			print("  %.2f초: x%.4f" % [t, g.mus_pitch])
+	print("  다 오르기까지 %.2f초 (넘김은 %.2f초) · 두 자리 다 x%.4f/%.4f"
+			% [t, g.MUS_FADE, g.mus_pl[0].pitch_scale, g.mus_pl[1].pitch_scale])
+
 	print("- 크로스페이드 -")
 	g.pause_from = -1
 	g.state = g.S.TITLE
