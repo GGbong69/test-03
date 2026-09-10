@@ -110,8 +110,8 @@ func _static_checks() -> void:
 		var nm := String(it.get("n", ""))
 		var c := String(it.get("c", ""))
 		var k := String(it.get("k", ""))
-		if String(it.get("aim", "")) != "":
-			continue                     # 조준은 ②에서 본다
+		if String(it.get("aim", "")) != "" or String(it.get("score", "")) != "":
+			continue                     # 조준·계산 방식은 ②에서 본다
 		var x := _ctx_for(c)
 		if not GameData.check(c, x):
 			_bad(id, nm, "조건 '%s' 가 만족 문맥에서도 안 선다" % c)
@@ -155,6 +155,28 @@ func _static_checks() -> void:
 	g.owned.clear()
 	lines.append("② 조준 — 든 대로 방식이 바뀌는 동전 %d장" % aimed)
 
+	# ②-b 계산 방식 — 2026-09-10 에 저울이 다트통에서 동전으로 내려왔다.
+	# 조준과 같은 규약이다: 든 동전이 먼저 쥐고(game.gd:546) 팔면 기본으로
+	# 돌아간다. 그래서 조준과 나란히 본다.
+	var scored_m := 0
+	for it in items:
+		var sm := String(it.get("score", ""))
+		if sm == "":
+			continue
+		if not GameData.SCORE_MODES.has(sm):
+			_bad(String(it.id), String(it.get("n", "")), "모르는 계산 방식 '%s'" % sm)
+			continue
+		g.owned = [it.duplicate()]
+		g._start_leg()
+		if String(g.score_mode) != sm:
+			_bad(String(it.id), String(it.get("n", "")),
+					"쥐면 계산이 '%s' 여야 하는데 '%s' 다" % [sm, g.score_mode])
+		else:
+			scored_m += 1
+	g.owned.clear()
+	if scored_m > 0:
+		lines.append("②-b 계산 — 든 대로 계산 방식이 바뀌는 동전 %d장" % scored_m)
+
 	# ── ③ 골드 ────────────────────────────────────────────
 	# 정산 골드는 게임의 _gold_from_items 가 유일한 출처다. 그 함수를
 	# 그대로 불러 확인한다 — 여기서 제 셈을 하면 게임과 갈라진다.
@@ -197,6 +219,7 @@ func _static_checks() -> void:
 		var da := int(it.get("dadd", 0))
 		if String(it.get("k", "")) == "" and String(it.get("g", "")) == "" \
 				and String(it.get("aim", "")) == "" and da == 0 \
+				and String(it.get("score", "")) == "" \
 				and String(it.get("side", "")) == "":
 			_bad(String(it.id), String(it.get("n", "")), "효과도 부가도 없다")
 
