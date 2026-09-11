@@ -1539,12 +1539,12 @@ static func aim_name(m: String) -> String:
 	match m:
 		"std": return "기본"
 		"ring": return "원"
-		"tilt": return "빗각"
+		"tilt": return "멀미"
 		"cross": return "겹"
-		"drift": return "흔들"
-		"place": return "놓기"
-		"pull": return "당김"
-		"kick": return "반동"
+		"drift": return "수전증"
+		"place": return "명사수"
+		"pull": return "단검"
+		"kick": return "리볼버"
 	return m
 
 
