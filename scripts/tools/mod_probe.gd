@@ -176,24 +176,30 @@ func _initialize() -> void:
 			"판정 배수 %.0f → 던지면 %.0f · 값 %.0f(그대로 %d)"
 			% [trp, t_hit.y, t_hit.x, raw_t])
 
-	# ④ 판 축 — 자리는 바뀌고 값의 총합은 그대로다
+	# ④ 섞기 축 — 「돌린 판」. 2026-09-11 기획서 「보드칸의 값이 랜덤」.
+	#    예전에는 일곱 칸 회전이었다. 회전은 이웃 관계가 그대로라 한 바퀴
+	#    돌면 원래 판이고, 외운 자리를 미는 것 이상이 안 된다.
 	var base_sum := 0
 	for v in GameData.SECTORS_BASE:
 		base_sum += int(v)
 	_arm(g, "turn")
-	var spun: Array = g.sectors.duplicate()
-	var spun_sum := 0
-	for v in spun:
-		spun_sum += int(v)
-	var moved := 0
-	for i in spun.size():
-		if int(spun[i]) != int(GameData.SECTORS_BASE[i]):
-			moved += 1
-	_say(g.spin_cur == int(_row("turn").v) and spun_sum == base_sum and moved > 0,
-			"판 축은 값을 안 죽이고 자리만 바꾼다",
-			"%d칸 회전 · %d자리 이동 · 합 %d" % [g.spin_cur, moved, spun_sum])
-	_say(g.sec_col.size() == spun.size(),
-			"색도 같이 돈다", "%d칸" % g.sec_col.size())
+	var shuf: Array = g.sectors.duplicate()
+	var shuf_sum := 0
+	for v in shuf:
+		shuf_sum += int(v)
+	var shifted := 0
+	for i in shuf.size():
+		if int(shuf[i]) != int(GameData.SECTORS_BASE[i]):
+			shifted += 1
+	_say(shifted > 0, "섞기 축이 칸 값을 옮긴다", "옮긴 칸 %d개" % shifted)
+	_say(shuf_sum == base_sum, "섞어도 판의 무게는 같다",
+			"합 %d → %d" % [base_sum, shuf_sum])
+	# 색은 안 섞는다 — 그늘·홀대가 색과 값을 따로 읽어야 「값이 랜덤」이 된다.
+	var col_keep := true
+	for i in g.sec_col.size():
+		if int(g.sec_col[i]) != i % 2:
+			col_keep = false
+	_say(col_keep, "색은 제자리에 남는다", "%d칸" % g.sec_col.size())
 
 	# ⑤ 되돌아온다
 	_arm(g, "")
@@ -201,11 +207,11 @@ func _initialize() -> void:
 	for i in g.sectors.size():
 		if int(g.sectors[i]) != int(GameData.SECTORS_BASE[i]):
 			back = false
-	_say(g.spin_cur == 0 and back, "제약이 빠지면 판이 제자리로")
+	_say(back, "제약이 빠지면 판이 제자리로")
 
 	# ⑤' 굽는 사이에도 안 어긋난다. 보드 확장을 사면 _board_bake 가 sectors 를
-	#     밑바닥에서 새로 만드는데 sec_col 은 일부러 안 지운다 — 그대로 두면
-	#     숫자만 제자리로 가고 색만 돌아간 채 남는다.
+	#     밑바닥에서 새로 만드는데, 섞은 차례를 들고 있으면 그 옛 차례로
+	#     되돌려 버린다 — _board_shuffle(false) 를 먼저 부르는 이유다.
 	_arm(g, "turn")
 	g._board_bake()
 	var mixed := false
@@ -216,9 +222,8 @@ func _initialize() -> void:
 	for i in g.sec_col.size():
 		if int(g.sec_col[i]) != i % 2:
 			col_ok = false
-	_say(g.spin_cur == 0 and not mixed and col_ok,
-			"되굽기가 판을 안 어긋나게 한다",
-			"회전 %d · 숫자 제자리 %s · 색 제자리 %s" % [g.spin_cur, not mixed, col_ok])
+	_say(not mixed and col_ok, "되굽기가 판을 안 어긋나게 한다",
+			"숫자 제자리 %s · 색 제자리 %s" % [not mixed, col_ok])
 
 	# ⑥ 판밖 축 — 보상
 	#

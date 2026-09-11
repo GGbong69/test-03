@@ -232,7 +232,7 @@ var shelf_round := 0             # 그 사진을 굴린 라운드. 라운드가 
 var dead_col := -1              # 값을 죽이는 칸 색 번호. -1 이면 안 걸렸다
 var dead_ring := 0              # 무효가 되는 배수(2 더블 · 3 트리플). 0 이면 없다
 var odd_mul := 1.0              # 홀수 칸 값 배수
-var spin_cur := 0               # 판이 지금 몇 칸 돌아가 있는가. 되돌릴 때 쓴다
+var sec_plain := []             # 섞기 전 칸 차례. 제약이 빠지면 이걸로 되돌린다
 
 # ── 스테이지 선택 ─────────────────────────────────────────
 var stage_pick := []            # 이번에 깔린 제약 카드들
@@ -490,7 +490,7 @@ func _new_run() -> void:
 	# 드러났다. 다른 세 갈래(보드 확장·사탕·동전)는 각자의 clear 가
 	# 이 줄보다 위에 있어 안 걸렸다.
 	_pack_grants()
-	spin_cur = 0
+	sec_plain = []
 	dead_col = -1
 	dead_ring = 0
 	odd_mul = 1.0
@@ -616,9 +616,8 @@ func _start_leg() -> void:
 	dead_col = int(mod_v("color_kill", -1.0))
 	dead_ring = int(mod_v("ring_kill", 0.0))
 	odd_mul = mod_v("odd_mul", 1.0)
-	# 돌아간 각도를 지금 값으로 맞춘다. 차이만큼만 돌리므로 제약이 빠진
-	# 판에서는 저절로 제자리로 돌아온다.
-	_board_spin(int(mod_v("spin", 0.0)) - spin_cur)
+	# 판마다 새로 섞는다. 제약이 빠진 판에서는 저절로 제자리로 돌아온다.
+	_board_shuffle(mod_v("shuffle", 0.0) > 0.0)
 	leg_miss = false
 	leg_trp = false
 	total = 0
@@ -1460,22 +1459,31 @@ func _mod_step(b: Dictionary, sec: Array, m: Dictionary) -> void:
 				sec[i] = int(m.v[0])
 			b["m_bull"] = int(m.v[1])
 		"pizza":
-			# 「피자」 — 칸 값을 크게 눕히고 띠의 배수를 1 로 내린다. 띠를
-			# 지우는 대신 배수를 없앤다 — 기하를 부수면 hit_info 의 if 사슬이
-			# 전제하는 순서가 깨지는데, 배수만 내리면 "띠가 없는 것" 과 같은
-			# 결과이면서 판은 성립한다.
+			# 「피자」 — 칸 값을 눕히고 **띠를 진짜로 없앤다**(2026-09-11 기획서).
+			# 폭을 0 으로 만들면 끝이다: hit_info 의 if 사슬은 반지름 구간으로
+			# 갈리므로 구간이 비면 그 가지가 영영 안 걸리고, board_val 도
+			# 넓이를 반지름에서 재니 저절로 0 이 된다. 사슬은 한 글자도 안 건드린다.
+			#
+			# 트리플은 바깥으로 접고 더블은 안쪽으로 접는다 — 판의 끝(dout)과
+			# 링 사이 단색 폭을 그대로 두려는 것이다.
 			# v1 이 비어 있으므로 v 는 배열이 아니라 스칼라다
 			# (mods() 가 "v": [v0, v1] if has1 else v0 로 짓는다).
 			for i in sec.size():
 				sec[i] = int(m.v)
-			b["m_trp"] = 1
-			b["m_dbl"] = 1
+			b.ti = b.to
+			b.din = b.dout
+			b.t2i = 0.0
+			b.t2o = 0.0
+			b["no_band"] = true
 		"donut":
-			# 「도넛」 — 불을 최소로 줄여 사실상 없앤다. 0 으로는 못 만든다:
-			# hit_info 가 반지름으로 불을 가리고 GEO 가 최소 폭을 요구한다.
-			# 남는 넓이는 판의 0.1% 라 조준으로는 못 닿는다.
-			b.bi = GameData.GEO.bi_min
-			b.bo = GameData.GEO.bi_min + GameData.GEO.bull_gap
+			# 「도넛」 — 불을 **진짜로 없앤다**(2026-09-11 기획서). 예전에는
+			# GEO 최소치로 줄여 두었는데, 그건 판의 0.1% 라 안 닿을 뿐 여전히
+			# 거기 있었다. 반지름을 0 으로 접으면 hit_info 의 두 불 가지가
+			# r <= 0 이 되어 한복판 한 점 말고는 안 걸리고, 그 자리는 칸이
+			# 이어받는다. board_val 의 불 항도 반지름 제곱이라 저절로 0 이다.
+			b.bi = 0.0
+			b.bo = 0.0
+			b["no_bull"] = true
 			for i in sec.size():
 				sec[i] = mini(sec[i] + int(m.v), GameData.sector_max())
 		"flat":
@@ -1507,21 +1515,28 @@ func _board_of(ids: Array) -> Array:
 func _board_ok(b: Dictionary, sec: Array) -> bool:
 	var L := GameData.GEO
 	var e: float = L.eps
-	if b.bi < L.bi_min - e or b.bi > b.bo - L.bull_gap + e:
-		return false
-	if b.bo < L.bo_min - e:
-		return false
+	# 최소 폭 규칙은 「띠가 있는 판」의 규칙이다. 2026-09-11 기획서의 피자와
+	# 도넛은 띠와 불을 **없애는** 장이라, 그 판에서는 바닥을 재는 것이 뜻이
+	# 없다 — 없는 것에 최소 폭을 물으면 언제나 진다. 없앤 쪽은 건너뛴다.
+	var no_bull: bool = bool(b.get("no_bull", false))
+	var no_band: bool = bool(b.get("no_band", false))
+	if not no_bull:
+		if b.bi < L.bi_min - e or b.bi > b.bo - L.bull_gap + e:
+			return false
+		if b.bo < L.bo_min - e:
+			return false
 	var inner: float = b.ti
 	if b.t2o > 0.0:
 		if b.t2o - b.t2i < L.band_min - e or b.t2o > b.ti - L.gap + e:
 			return false
 		inner = b.t2i
-	if inner < b.bo + L.gap - e or inner < L.ti_min - e:
-		return false
-	if b.to - b.ti < L.band_min - e or b.to > b.din - L.gap + e:
-		return false
-	if b.dout - b.din < L.band_min - e:
-		return false
+	if not no_band:
+		if inner < b.bo + L.gap - e or inner < L.ti_min - e:
+			return false
+		if b.to - b.ti < L.band_min - e or b.to > b.din - L.gap + e:
+			return false
+		if b.dout - b.din < L.band_min - e:
+			return false
 	for v in sec:
 		if v < 1 or v > GameData.sector_max():
 			return false
@@ -1562,31 +1577,38 @@ func _apply_mod(id: String) -> void:
 	_board_bake()
 
 
-# 판을 n 칸 돌린다. 값과 색이 **같이** 돌아야 한다 — 색만 남으면 판이
-# 뒤집힌 것이 아니라 색칠이 어긋난 것으로 읽힌다.
+# 칸 값을 섞는다(제약 「돌린 판」 · 2026-09-11 기획서 「보드칸의 값이 랜덤」).
 #
-# 배열을 직접 돌리되 지금 각도(spin_cur)를 들고 있어서, 다음 판에서
-# 차이만큼만 되돌린다. _board_bake 로 되굽는 방법은 못 쓴다 — 색은
-# 일부러 되굽기에서 안 지워지기 때문이다(_board_bake 주석).
-func _board_spin(n: int) -> void:
+# **색은 안 섞는다.** 그늘(먹색 칸 0)과 홀대(홀수 칸 반값)가 각각 색과 값을
+# 읽는데, 둘을 같이 섞으면 두 제약이 늘 같은 칸을 가리켜 「값이 랜덤」이
+# 아니라 「판이 통째로 돌았다」가 된다. 값만 섞어야 외운 자리가 깨진다.
+#
+# 섞기 전 차례를 들고 있어서 제약이 빠진 판에서 그대로 되돌린다.
+# _board_bake 로 되굽는 방법은 못 쓴다 — 색은 일부러 되굽기에서 안
+# 지워지기 때문이다(_board_bake 주석).
+func _board_shuffle(on: bool) -> void:
 	var m: int = sectors.size()
 	if m == 0:
 		return
-	var k: int = ((n % m) + m) % m
-	spin_cur = ((spin_cur + k) % m + m) % m
-	if k == 0:
+	if not on:
+		if not sec_plain.is_empty():
+			sectors = sec_plain.duplicate()
+			sec_plain = []
 		return
-	sectors = sectors.slice(k) + sectors.slice(0, k)
-	if sec_col.size() == m:
-		sec_col = sec_col.slice(k) + sec_col.slice(0, k)
+	if sec_plain.is_empty():
+		sec_plain = sectors.duplicate()
+	# 합이 그대로라 판값이 안 변한다 — 섞기는 난이도의 축이 아니라
+	# 기억의 축이다. 자리만 바뀌고 판의 무게는 같다.
+	var sh: Array = sec_plain.duplicate()
+	sh.shuffle()
+	sectors = sh
 
 
 # 판을 굽는다. 보드 확장을 산 뒤와 런 초기화, 두 곳에서만 부른다.
 func _board_bake() -> void:
-	# 되굽기 전에 회전을 푼다. 굽기는 sectors 를 밑바닥에서 새로 만드는데
-	# sec_col 은 일부러 안 지운다(아래 주석). 그대로 두면 보드 확장을 산 순간
-	# 숫자만 제자리로 가고 색은 돌아간 채 남아 판이 어긋난다.
-	_board_spin(-spin_cur)
+	# 되굽기 전에 섞기를 푼다. 굽기는 sectors 를 밑바닥에서 새로 만드는데,
+	# 섞은 차례를 들고 있으면 보드 확장을 산 순간 그 옛 차례로 되돌려 버린다.
+	_board_shuffle(false)
 	var r := _board_of(mods_own)
 	var b: Dictionary = r[0]
 	sectors = r[1]

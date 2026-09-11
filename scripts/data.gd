@@ -81,6 +81,7 @@ const TUNE_KEYS := [
 	"aim_click_r", "legend_pack_w",
 	"cons_slots", "shop_cons", "cons_price_tmp",
 	"kick_n", "kick_share",
+	"track_score", "track_mult",
 	"curve_first", "curve_last", "curve_bow",
 ]
 
@@ -163,7 +164,7 @@ const SCORE_MODES := ["std", "bal", "rand"]
 
 const MODIFIER_AXES := ["band_mul", "gauge_mul", "fog", "darts_add",
 		"sector_kill", "seal_items", "target_mul",
-		"color_kill", "ring_kill", "odd_mul", "spin", "reward_mul"]
+		"color_kill", "ring_kill", "odd_mul", "shuffle", "reward_mul"]
 
 static var _raw := {}                # 표 이름 → Array[Dictionary] (전부 문자열)
 static var _tune := {}               # key → int/float
@@ -2251,11 +2252,15 @@ static func _v_mods() -> void:
 			_errs.append("%s — 모르는 축 '%s'" % [who, r.get("axis", "")])
 		if _i(r, "cost", "mods") <= 0:
 			_errs.append("%s — 가격이 0 이하다" % who)
-		# 링 폭 주고받기는 합이 0 이어야 한다. 아니면 판값이 조용히 오른다.
+		# 링 폭은 예전에 합이 0 이어야 했다 — 판값이 조용히 오르는 것을
+		# 막으려던 규칙인데, 2026-09-11 기획서의 「핵심」은 트리플만 넓힌다고
+		# 적었다. 기획서를 따르기로 했으므로 푼다. 판값이 오르는 것은
+		# board_val_max() 상한이 이미 막고 있어서 문지기가 둘일 필요가 없다.
 		if r.get("axis", "") == "band":
 			var sum := _f(r, "v0", "mods") + _f(r, "v1", "mods")
 			if absf(sum) > 0.0005:
-				_errs.append("%s — band 축은 v0+v1 이 0 이어야 한다 (지금 %.3f)" % [who, sum])
+				_warns.append("%s — band 축의 합이 0 이 아니다 (%.3f) — 링 총 폭이 그만큼 바뀐다"
+						% [who, sum])
 		_v_desc(who, r.get("desc", ""), ["v0", "v1"])
 	# 배타는 대칭이어야 한다. 한쪽만 적으면 사는 순서에 따라 결과가 달라진다.
 	for r in raw:
