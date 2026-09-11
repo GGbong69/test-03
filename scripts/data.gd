@@ -1856,10 +1856,13 @@ static func _v_packs() -> void:
 		var tm := String(r.get("target_mul", ""))
 		if tm != "" and _f(r, "target_mul", "packs", 1.0) <= 0.0:
 			_errs.append("%s — 목표 배수가 0 이하다" % who)
-		# 합치는 법이 바뀌면 rounds 의 곡선이 어긋난다. 값은 사람이 정해야
-		# 하는 것이라 기본값으로 때우지 않고 여기서 막는다.
+		# 합치는 법이 바뀌면 rounds 의 곡선이 어긋난다. 예전에는 오류로
+		# 막았는데, 2026-09-11 기획서가 그 다트통들에 목표 배수를 안 적었다 —
+		# 기획서를 따르기로 했으므로 경고로 내린다. 막는 것이 아니라
+		# 「곡선이 어긋난 채로 간다」를 눈에 보이게 두는 자리다.
 		if sm != "" and sm != "std" and tm == "":
-			_errs.append("%s — 계산 방식이 %s 인데 목표 배수가 비었다" % [who, sm])
+			_warns.append("%s — 계산 방식이 %s 인데 목표 배수가 없다 — 곡선이 어긋난 채로 간다"
+					% [who, sm])
 		if sm != "" and not SCORE_MODES.has(sm):
 			_errs.append("%s — 모르는 계산 방식 '%s'. SCORE_MODES 에 먼저 적어라"
 					% [who, sm])

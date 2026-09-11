@@ -706,8 +706,11 @@ func _finish_leg() -> void:
 		# 「다트 N개로 판을 넘겼다」 — 조건은 남은 다트로 적는다.
 		# 여섯 발 중 하나만 쓰면 남은 것이 다섯이다.
 		Save.peak("best_spare", darts_left)
-		# 「동전을 하나도 안 산 채 여기까지 왔다」
-		if not bought_item:
+		# 「동전을 하나도 **들지 않은** 채 여기까지 왔다」
+		# 기획서는 잭과 콩나무와 0718 둘 다 「소지하지 않은 채」라고 적었다.
+		# 「안 샀다」로 재면 뱃지나 팩으로 공짜로 받은 장이 안 세어져서
+		# 손에 동전을 들고도 조건이 서는 구멍이 생긴다.
+		if owned.is_empty():
 			Save.peak("best_leg_bare", leg_no)
 	Save.flush()
 	if total < target:
