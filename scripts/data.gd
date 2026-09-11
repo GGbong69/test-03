@@ -133,7 +133,11 @@ const Save_STATS := [
 	"best_leg", "best_score", "best_gold", "best_track",
 	"best_dart_hvy", "best_dart_lgt", "best_dart_prc", "best_dart_mag",
 	"best_gain", "best_spare", "best_leg_bare",
+	"win_gold", "win_items", "boss_spare", "win_null",
 ]
+# 「N 이하」로 읽는 열쇠. 크거나 같다 하나로는 「동전 4개 이하로 완주」를
+# 못 적는다 — 적게 든 쪽이 이기는 조건이기 때문이다.
+const UNLOCK_CMPS := ["", "ge", "le"]
 const PACK_KINDS := ["base", "hidden"]
 const AIM_MODES := ["std", "ring", "tilt", "cross", "drift", "place",
 		"pull", "kick"]
@@ -1732,6 +1736,7 @@ static func _v_stakes() -> void:
 			round_cols[String(k)] = true
 	var seen := {}
 	var prev := ""
+	var prev_wins := 0
 	for i in raw.size():
 		var r: Dictionary = raw[i]
 		var who := "leagues:%d %s" % [r.get("_line", 0), r.get("name", "")]
@@ -1749,6 +1754,20 @@ static func _v_stakes() -> void:
 		elif pq != prev:
 			_errs.append("%s — 선행이 바로 앞 단(%s)이 아니다: '%s'" % [who, prev, pq])
 		prev = id
+		# 완주 횟수로 연다(2026-09-11 기획서 P.7). 첫 단은 늘 열려 있어야
+		# 하므로 횟수가 없고, 나머지는 앞 단보다 적게 요구하면 안 된다 —
+		# 적으면 그 단이 앞 단보다 먼저 열려 계단이 뒤집힌다.
+		var uw := _i(r, "unlock_wins", "leagues", 0)
+		if i == 0:
+			if uw != 0:
+				_errs.append("%s — 첫 단은 완주 횟수가 없어야 한다" % who)
+		elif uw <= 0:
+			_errs.append("%s — 완주 횟수가 비었다. 여는 길이 없다" % who)
+		elif uw < prev_wins:
+			_errs.append("%s — 앞 단(%d회)보다 적은 %d회에 열린다" % [who, prev_wins, uw])
+		elif uw == prev_wins:
+			_warns.append("%s — 앞 단과 같은 %d회에 열린다. 둘이 같이 열린다" % [who, uw])
+		prev_wins = uw
 		if _f(r, "shop_cost_mul", "leagues", 1.0) <= 0.0:
 			_errs.append("%s — 테이블 가격 배수가 0 이하다" % who)
 		if _i(r, "darts_add", "leagues", 0) <= -int(tune_i("darts_base")):
@@ -1837,6 +1856,11 @@ static func _v_packs() -> void:
 	for d in _raw.get("darts", []):
 		dids[String(d.get("id", ""))] = true
 	var seen := {}
+	# 앞줄(prereq)은 표 어디든 가리킬 수 있으므로 id 를 먼저 다 모은다.
+	# 한 줄씩 내려가며 보면 아래를 가리킨 줄이 거짓 오류를 낸다.
+	var seen_pack := {}
+	for r0 in raw:
+		seen_pack[String(r0.get("id", ""))] = true
 	for i in raw.size():
 		var r: Dictionary = raw[i]
 		var who := "packs:%d %s" % [r.get("_line", 0), r.get("name", "")]
@@ -1901,6 +1925,16 @@ static func _v_packs() -> void:
 		var us: String = r.get("unlock_stat", "")
 		if us != "" and not Save_STATS.has(us):
 			_errs.append("%s — 모르는 통계 열쇠 '%s'" % [who, us])
+		var uc: String = r.get("unlock_cmp", "")
+		if not UNLOCK_CMPS.has(uc):
+			_errs.append("%s — 모르는 비교자 '%s' (빈칸 · ge · le)" % [who, uc])
+		if uc != "" and us == "":
+			_errs.append("%s — 비교자만 있고 볼 통계가 없다" % who)
+		# 앞줄(prereq)을 가리켰으면 그 줄이 실재해야 한다. 사슬이 곧 규칙이라
+		# 없는 줄을 가리키면 그 다트통은 영영 안 열린다.
+		var ppq: String = r.get("prereq", "")
+		if ppq != "" and not seen_pack.has(ppq):
+			_errs.append("%s — prereq 가 없는 다트통을 가리킨다: '%s'" % [who, ppq])
 		if i == 0 and String(r.get("prereq", "")) != "":
 			_errs.append("%s — 첫 다트통은 늘 열려 있어야 한다" % who)
 		var dd: String = r.get("dart_id", "")

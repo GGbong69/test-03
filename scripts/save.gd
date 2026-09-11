@@ -35,6 +35,10 @@ static var path := PATH
 const S_SET := "설정"
 const S_UNL := "해금"
 const S_STA := "통계"
+# 자유 열쇠 세기. STATS 는 목록이 곧 계약이라 열쇠를 미리 다 적어야 하는데,
+# 「이 다트통으로 몇 번 완주했나」는 다트통 수만큼 열쇠가 생겨서 그 목록에
+# 못 들어간다. 해금(S_UNL)이 자유 열쇠를 쓰는 그 규약을 수로 옮긴 자리다.
+const S_TAL := "세기"
 
 # 통계 키 — 전부 int 누적이거나 최댓값이다.
 #  누적(bump): 던진 다트·트리플·불·빗나감·구매·판매·리롤·사탕·런·완주
@@ -57,11 +61,23 @@ const STATS := [
 	#  플레이가 증발한다.
 	"best_dart_hvy", "best_dart_lgt", "best_dart_prc", "best_dart_mag",
 	"best_gain", "best_spare", "best_leg_bare",
+	# ── 2026-09-11 · 기획서 다트통 표의 해금 조건을 그대로 재는 것들 ──
+	#  앞 넷과 달리 이쪽은 **완주한 그 순간**의 한 장면이다. 판마다 재면
+	#  런 도중에 스쳐 간 값이 걸려서 "완주한 채로" 가 안 된다.
+	#    win_gold    완주 때 들고 있던 골드          (선금: 100 이상)
+	#    win_items   완주 때 들고 있던 동전 수        (넓은 슬롯: 4 이하 · 최솟값)
+	#    boss_spare  보스 판을 넘긴 때 남은 다트      (외줄: 5 이상 = 한 발로)
+	#    win_null    NULL 을 든 채 완주한 횟수        ([?? ???]: 1 이상)
+	"win_gold", "win_items", "boss_spare", "win_null",
 ]
 # 최댓값으로 다루는 것들. 나머지는 누적이다.
 const PEAKS := ["best_leg", "best_score", "best_gold", "best_track",
 		"best_dart_hvy", "best_dart_lgt", "best_dart_prc", "best_dart_mag",
-		"best_gain", "best_spare", "best_leg_bare"]
+		"best_gain", "best_spare", "best_leg_bare",
+		"win_gold", "boss_spare"]
+# 최솟값으로 다루는 것들. 「N 이하로 완주」 조건이 읽는다 —
+# 최댓값으로는 그 말을 못 적는다(적게 든 쪽이 이기는 조건이라 그렇다).
+const DIPS := ["win_items"]
 
 static var _cfg: ConfigFile = null
 static var _loaded := false
@@ -125,6 +141,21 @@ static func unlock(id: String) -> bool:
 	return true
 
 
+# ── 자유 열쇠 세기 ──────────────────────────────────────
+#  "runs:p_mag" 처럼 갈래를 앞에 둔다. 해금 열쇠와 같은 어법이다.
+
+static func tally(key: String) -> int:
+	boot()
+	return int(_cfg.get_value(S_TAL, key, 0))
+
+
+static func tally_up(key: String, n := 1) -> int:
+	boot()
+	var v := tally(key) + n
+	_cfg.set_value(S_TAL, key, v)
+	return v
+
+
 # 해금을 되돌린다. 개발 도구(tools/unlock.gd)만 부른다 — 심는 것만큼
 # 지우는 것이 있어야 해금 흐름을 다시 시험할 수 있다. 게임은 안 부른다.
 static func lock(id: String) -> bool:
@@ -178,6 +209,23 @@ static func peak(key: String, v: int) -> void:
 		return
 	if v > stat(key):
 		_cfg.set_value(S_STA, key, v)
+
+
+# 최솟값. 「N 이하로 완주」를 재는 자리다.
+# **처음 한 번은 무조건 적는다** — 0 으로 시작하면 "아직 한 번도 안 했다" 와
+# "0개로 했다" 가 구별이 안 되고, 뒤엣것이 늘 이겨서 조건이 처음부터 서 있다.
+static func dip(key: String, v: int) -> void:
+	boot()
+	if not DIPS.has(key):
+		push_error("저장: '%s' 는 최솟값 키가 아니다" % key)
+		return
+	if not _cfg.has_section_key(S_STA, key) or v < stat(key):
+		_cfg.set_value(S_STA, key, v)
+
+
+static func has_stat(key: String) -> bool:
+	boot()
+	return _cfg.has_section_key(S_STA, key)
 
 
 static func all_stats() -> Dictionary:

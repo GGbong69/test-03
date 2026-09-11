@@ -119,6 +119,39 @@ func _initialize() -> void:
 			and GameData.league_key("green", "other") == "league:other:green",
 			"리그 해금은 다트통마다 갈린다", GameData.league_key("green", "base"))
 
+	# ── 완주 횟수로 연다 (2026-09-11 기획서 P.7) ────────────────
+	# 사슬이 아니다. **흰 리그으로만** 일곱 번 완주해도 검정까지 열린다 —
+	# 기획서가 「현재 다트통으로 런 N회 클리어」라고만 적었기 때문이다.
+	Save.wipe()
+	GameData.league = "white"
+	GameData.pack = "base"
+	var opened := {}
+	for n in 8:
+		g._league_unlock_next()
+		for r in GameData.leagues():
+			var lid := String(r.get("id", ""))
+			if not opened.has(lid) and Save.unlocked(GameData.league_key(lid, "base")):
+				opened[lid] = n + 1
+	var want := {}
+	for r in GameData.leagues():
+		var need := int(r.get("unlock_wins", 0))
+		if need > 0:
+			want[String(r.get("id", ""))] = need
+	var bad := []
+	for lid in want:
+		if int(opened.get(lid, -1)) != int(want[lid]):
+			bad.append("%s %s회(표 %d회)" % [lid, str(opened.get(lid, "안 열림")), want[lid]])
+	_say(bad.is_empty(), "표에 적은 완주 횟수에 정확히 열린다",
+			"어긋난 단 " + (str(bad) if not bad.is_empty() else "없다"))
+
+	# 흰 리그으로만 쌓았는데 검정까지 열렸다 — 사슬이 아니라 횟수다
+	_say(Save.unlocked(GameData.league_key("black", "base")),
+			"앞 단을 안 거쳐도 횟수만 차면 열린다", "흰 리그으로만 8회")
+
+	# 다른 다트통의 진도는 안 받는다
+	_say(not Save.unlocked(GameData.league_key("green", "p_mag")),
+			"다른 다트통은 그 진도를 못 쓴다", "runs:base 8 · p_mag 는 잠김")
+
 	# 설명 줄이 서로 안 겹친다. 여덟 단을 전부 깔아 자리를 실제로 세어
 	# 본다 — 검정 리그의 일곱째 줄이 오른쪽 칸 첫 줄 위에 찍히던 사고가
 	# 여기 없으면 눈으로만 보이고, 그 단을 열어 보기 전에는 눈에도 안 띈다.

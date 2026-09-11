@@ -247,7 +247,13 @@ func _initialize() -> void:
 		_say(not Save.unlocked("pack:" + cond_base),
 				"조건 미달인 기본 다트통은 안 열린다",
 				"%s %d/%d" % [cs, Save.stat(cs), cv])
-		Save.peak(cs, cv)
+		# 조건을 채우는 법이 비교자마다 다르다. 「N 이하」는 최솟값 열쇠라
+		# peak 로는 한 칸도 안 움직인다 — 그 자리에 peak 를 쓰면 조건이
+		# 영영 안 서고, 프로브는 그것을 "안 열린다" 로만 읽는다.
+		if String(cr.get("unlock_cmp", "")) == "le":
+			Save.dip(cs, cv)
+		else:
+			Save.peak(cs, cv)
 		g._pack_unlock_check()
 		_say(Save.unlocked("pack:" + cond_base),
 				"기본 다트통도 통계로 열린다",

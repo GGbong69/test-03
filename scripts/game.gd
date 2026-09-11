@@ -705,6 +705,10 @@ func _finish_leg() -> void:
 		# 「다트 N개로 판을 넘겼다」 — 조건은 남은 다트로 적는다.
 		# 여섯 발 중 하나만 쓰면 남은 것이 다섯이다.
 		Save.peak("best_spare", darts_left)
+		# 외줄 다트통은 **보스 판**을 그렇게 넘긴 것만 센다. 작은 판은
+		# 목표가 낮아 한 발로 넘기는 일이 흔해서 조건이 서지 않는다.
+		if GameData.is_boss(leg_no):
+			Save.peak("boss_spare", darts_left)
 		# 「동전을 하나도 **들지 않은** 채 여기까지 왔다」
 		# 기획서는 잭과 콩나무와 0718 둘 다 「소지하지 않은 채」라고 적었다.
 		# 「안 샀다」로 재면 뱃지나 팩으로 공짜로 받은 장이 안 세어져서
@@ -759,6 +763,7 @@ func _finish_leg() -> void:
 		won = true
 		Save.bump("wins")
 		_dart_peaks()
+		_win_peaks()
 		_pack_unlock_check()
 		Save.flush()
 		pop(BC, "%s — 보드 처치" % owned[i].n, C_ACC, 13, 1.8)
@@ -772,6 +777,7 @@ func _finish_leg() -> void:
 		won = true
 		Save.bump("wins")
 		_dart_peaks()
+		_win_peaks()
 		_pack_unlock_check()
 		Save.flush()
 		_sfx("run_win")
@@ -890,17 +896,22 @@ func _pack_grants() -> void:
 	_panel_reset()
 
 
+# 지금 다트통으로 완주했다 — 그것을 앞줄로 적어 둔 다트통들을 연다.
+#
+# 예전에는 **표의 줄 순서**로 다음 것을 열었다. 그런데 화면에 적는 글월
+# (_pack_cond)은 prereq 를 읽어서 「여벌 다트통 완주」라고 말했다 — 말과
+# 동작이 갈라져 있었고, 표의 줄을 옮기기만 해도 해금 순서가 조용히 바뀌었다.
+# prereq 하나만 보게 하면 적힌 그대로가 곧 규칙이다.
 func _pack_unlock_next() -> void:
-	var rows := GameData.packs_of("base")
 	var cur := String(GameData.pack_row().get("id", ""))
-	for i in rows.size():
-		if String(rows[i].get("id", "")) != cur or i + 1 >= rows.size():
-			continue
-		var nxt: Dictionary = rows[i + 1]
-		if Save.unlock("pack:" + String(nxt.get("id", ""))):
-			pop(Vector2(VIEW.x * 0.5, 232.0),
-					"%s 열렸다" % nxt.get("name", ""), C_GOLD, 13, 1.6)
+	if cur == "":
 		return
+	for r in GameData.packs():
+		if String(r.get("prereq", "")) != cur:
+			continue
+		if Save.unlock("pack:" + String(r.get("id", ""))):
+			pop(Vector2(VIEW.x * 0.5, 232.0),
+					"%s 열렸다" % r.get("name", ""), C_GOLD, 13, 1.6)
 
 
 # 통계 하나가 문인 다트통들. 런이 끝날 때와 새 런 화면을 열 때 본다 —
@@ -915,6 +926,29 @@ func _pack_unlock_next() -> void:
 #
 # 탄창(magazine)을 센다 — 판마다 뽑아 쓰는 remaining 이 아니라 런 내내
 # 들고 있는 그 구성이다. 「보유한 채」가 가리키는 것이 이쪽이다.
+# 완주한 **그 순간**의 한 장면. 기획서 다트통 표의 해금 조건 넷이 이것을
+# 읽는다. 판마다 재면 런 도중에 스쳐 간 값이 걸려서 「~한 채로 완주」가
+# 아니라 「한 번이라도 ~했다」가 된다 — 그 둘은 다른 조건이다.
+#
+# 완주하는 길이 둘(보드 처치 · 판 24)이라 양쪽에서 같이 부른다.
+func _win_peaks() -> void:
+	Save.peak("win_gold", gold)
+	Save.dip("win_items", owned.size())
+	for it in owned:
+		if String(it.get("side", "")) == "boardkill":
+			Save.bump("win_null")
+			break
+
+
+# 해금 조건 하나가 섰는가. cmp 가 "le" 면 **이하**다 — 「동전 4개 이하로
+# 완주」처럼 적게 든 쪽이 이기는 조건이 기획서에 있어서, 크거나 같다 하나로는
+# 그 말을 못 적는다. 아직 한 번도 안 잰 최솟값은 서지 않는다(0 이 아니다).
+func _stat_meets(key: String, v: int, cmp: String) -> bool:
+	if cmp == "le":
+		return Save.has_stat(key) and Save.stat(key) <= v
+	return Save.stat(key) >= v
+
+
 func _dart_peaks() -> void:
 	var n := {}
 	for d in magazine:
@@ -976,25 +1010,33 @@ func _pack_unlock_check() -> void:
 		var st := String(r.get("unlock_stat", ""))
 		if st == "":
 			continue
-		if Save.stat(st) < int(String(r.get("unlock_v", "0"))):
+		if not _stat_meets(st, int(String(r.get("unlock_v", "0"))),
+				String(r.get("unlock_cmp", ""))):
 			continue
 		if Save.unlock("pack:" + id):
 			pop(Vector2(VIEW.x * 0.5, 232.0),
 					"%s 열렸다" % r.get("name", ""), C_ACC, 13, 1.6)
 
 
+# 리그은 **이 다트통으로 완주한 횟수**로 열린다(2026-09-11 기획서 P.7 —
+# 「현재 다트통으로 런 N회 클리어」). 예전에는 앞 단을 깨야 다음이 열리는
+# 사슬이었다. 사슬이면 초록을 안 거치고 파랑에 갈 수 없는데, 기획서는
+# 횟수만 적었다 — 흰 리그으로만 일곱 번 완주해도 검정이 열린다는 뜻이다.
+#
+# 세는 자리가 다트통마다 갈린다("runs:p_mag"). 리그 진도가 다트통마다 따로
+# 쌓인다는 P.4 의 규약이 이 열쇠 하나로 선다.
 func _league_unlock_next() -> void:
-	var rows := GameData.leagues()
 	var cur := String(GameData.league_row().get("id", ""))
 	Save.unlock(GameData.win_key(cur))      # 이 다트통으로 이 단을 넘겼다
-	for i in rows.size():
-		if String(rows[i].get("id", "")) != cur or i + 1 >= rows.size():
+	var pk := String(GameData.pack_row().get("id", ""))
+	var n := Save.tally_up("runs:" + pk)
+	for r in GameData.leagues():
+		var need := int(r.get("unlock_wins", 0))
+		if need <= 0 or n < need:
 			continue
-		var nxt := String(rows[i + 1].get("id", ""))
-		if Save.unlock(GameData.league_key(nxt)):
+		if Save.unlock(GameData.league_key(String(r.get("id", "")))):
 			pop(Vector2(VIEW.x * 0.5, 210.0),
-					"%s 열렸다" % rows[i + 1].get("name", ""), C_GOLD, 13, 1.6)
-		return
+					"%s 열렸다" % r.get("name", ""), C_GOLD, 13, 1.6)
 
 
 # 판 종료의 마모 — 감쇠(rdec)와 확률 파괴(boom). 조커 이식이 들여왔다.
