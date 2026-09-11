@@ -474,17 +474,37 @@ static func boosters() -> Array:
 # ── 트랙 강화 (area_upgrades.csv · 수치 전부 미정) ────────
 #  트랙의 1..lv 레벨 행을 합쳐 돌려준다. 지금은 모든 행의 수치 칸이 비어
 #  있으므로(미정) 0 이 나온다 — 자리만 세워 둔 표다.
+#  2026-09-11 기획서 P.10 — 「홀수레벨당 점수 짝수레벨당 배수가 오른다」.
+#  표가 아니라 **식**이다. 표로 두면 적어 둔 레벨(8)에서 보너스가 멎는데,
+#  사탕은 몇 번이든 살 수 있으므로 9레벨부터는 올려도 아무 일이 안 일어난다 —
+#  그 벽이 화면 어디에도 안 보여서 "왜 안 오르지" 가 된다. 식이면 상한이 없다.
+#
+#  레벨 n 까지의 누적:  점수 = 올림(n/2) × track_score  ·  배수 = 내림(n/2) × track_mult
+#  (레벨 1 점수 · 2 배수 · 3 점수 · 4 배수 … 순서다)
+#
+#  트랙마다 다른 값을 주고 싶으면 area_upgrades.csv 에 그 트랙 줄을 적는다 —
+#  한 줄이라도 있으면 그 표가 이긴다. 지금은 다섯 트랙이 같은 값을 쓴다.
 static func track_bonus(track: int, lv: int) -> Dictionary:
 	boot()
+	if lv <= 0:
+		return {"s": 0, "m": 0}
 	var out := {"s": 0, "m": 0}
+	var by_table := false
 	for r in _raw.get("area_up", []):
 		if _i(r, "track", "area_up", 0) != track:
 			continue
+		by_table = true
 		if _i(r, "level", "area_up", 0) > lv:
 			continue
 		out.s += _i(r, "add_score", "area_up", 0)
 		out.m += _i(r, "add_mult", "area_up", 0)
-	return out
+	if by_table:
+		return out
+	@warning_ignore("integer_division")
+	var odd: int = (lv + 1) / 2        # 홀수 레벨이 몇 번 지났나
+	@warning_ignore("integer_division")
+	var even: int = lv / 2             # 짝수 레벨이 몇 번 지났나
+	return {"s": odd * tune_i("track_score"), "m": even * tune_i("track_mult")}
 
 
 # ── 사탕 (consumables.csv · 전부 가안) ─────────────
@@ -1978,16 +1998,23 @@ static func _v_spec() -> void:
 	for need in ["single", "double", "triple", "bull_o", "bull_i", "out"]:
 		if not keys.has(need):
 			_errs.append("areas — 코드가 읽는 key '%s' 가 없다" % need)
+	# 강화 트랙은 표에 줄이 **없어도 된다** — track_bonus 가 식으로 낸다.
+	# 예전에는 줄이 없으면 오류였는데, 그때는 표가 유일한 길이어서 빠진
+	# 트랙이 곧 "사탕을 써도 아무 일이 안 난다" 였다. 지금은 표가 **덮어쓰는**
+	# 자리라, 없는 것이 기본이고 있는 것이 예외다.
 	var tracks := {}
 	for r in _raw.get("area_up", []):
 		tracks[_i(r, "track", "area_up", 0)] = true
-	for r in _raw.get("areas", []):
-		var t := _i(r, "track", "areas", 0)
-		if t > 0 and not tracks.has(t):
-			_errs.append("areas:%d — 강화 트랙 %d 가 area_upgrades 에 없다" % [r.get("_line", 0), t])
-	for r in _raw.get("cons", []):
-		if String(r.get("cat", "")) == "area" and not tracks.has(_i(r, "track", "cons", 0)):
-			_errs.append("cons:%d — 강화 트랙 %d 가 area_upgrades 에 없다" % [r.get("_line", 0), _i(r, "track", "cons", 0)])
+	# 한 트랙만 표로 덮으면 다른 트랙과 규칙이 갈린다. 막지는 않되 말은 한다.
+	if not tracks.is_empty():
+		var all_t := {}
+		for r in _raw.get("areas", []):
+			var t2 := _i(r, "track", "areas", 0)
+			if t2 > 0:
+				all_t[t2] = true
+		for t3 in all_t:
+			if not tracks.has(t3):
+				_warns.append("area_upgrades — 트랙 %d 만 표가 없어 식으로 간다. 트랙마다 규칙이 갈린다" % t3)
 	# spec_map 의 game_id 는 실재해야 한다. 빈칸은 "자리만" 이라 넘어간다.
 	var ids := {}
 	for r in _raw.get("items", []):

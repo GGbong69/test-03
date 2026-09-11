@@ -91,11 +91,21 @@ func _initialize() -> void:
 				"점수 %d→%d · 배수 %d→%d (표 s+%d m+%d)"
 				% [a[0], b[0], a[1], b[1], tb.s, tb.m])
 
-	# ③ 누적 — Lv3 은 1·2·3 행의 합이다
+	# ③ 누적 — 2026-09-11 기획서: **홀수 레벨에 점수 · 짝수 레벨에 배수**다.
+	#    예전에는 레벨마다 점수가 올라 Lv3 = Lv1 × 3 이었다. 이제 Lv3 은
+	#    홀수를 두 번(1·3) 지났으므로 점수는 두 배고, 짝수를 한 번(2)
+	#    지났으므로 배수가 처음으로 붙는다.
 	var t1: Dictionary = GameData.track_bonus(610003, 1)
+	var t2: Dictionary = GameData.track_bonus(610003, 2)
 	var t3: Dictionary = GameData.track_bonus(610003, 3)
-	_say(t3.s == t1.s * 3 and t3.m > t1.m, "트리플 레벨이 누적된다",
-			"Lv1 s%d m%d → Lv3 s%d m%d" % [t1.s, t1.m, t3.s, t3.m])
+	_say(t1.m == 0 and t2.m > 0, "배수는 짝수 레벨에 붙는다",
+			"Lv1 m%d → Lv2 m%d" % [t1.m, t2.m])
+	_say(t2.s == t1.s and t3.s == t1.s * 2, "점수는 홀수 레벨에 붙는다",
+			"Lv1 s%d · Lv2 s%d · Lv3 s%d" % [t1.s, t2.s, t3.s])
+	# 상한이 없다 — 표가 아니라 식이라 레벨을 계속 올릴 수 있다.
+	var t99: Dictionary = GameData.track_bonus(610003, 99)
+	_say(t99.s == t1.s * 50 and t99.m == t2.m * 49, "레벨에 상한이 없다",
+			"Lv99 s%d m%d" % [t99.s, t99.m])
 
 	# ④ 보드 아웃 강화가 빗나감에 점수를 준다
 	_fresh(g)
