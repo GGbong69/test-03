@@ -29,8 +29,14 @@ func _go() -> void:
 		var pass_: bool = got == want and g.tip_title != ""
 		if not pass_:
 			ok = false
-		print("  %-8s 열쇠 %-6s 태그 %-6s 첫 항목 %-14s %s"
-				% [g.COL_TABS[t].n, got, g.tip_tag, g.tip_title,
+		# 태그는 이제 여러 장이다(tip_tags) — 2026-09-13 에 설명창이 [동전]
+		# [일반] 처럼 밑줄에 태그를 달면서 tip_tag 한 장이 배열이 됐다.
+		# 이 자는 그 뒤로 조용히 죽어 있었다.
+		var tags := PackedStringArray()
+		for tg in g.tip_tags:
+			tags.append(String(tg.get("t", "")))
+		print("  %-8s 열쇠 %-6s 태그 %-10s 첫 항목 %-14s %s"
+				% [g.COL_TABS[t].n, got, "/".join(tags), g.tip_title,
 					"ok" if pass_ else "실패"])
 	print("전체 %s" % ("통과" if ok else "실패"))
 	quit()

@@ -2360,6 +2360,7 @@ func _process(d: float) -> void:
 	_mus_update(d)
 	_boost_tick(d)
 	_set_tick(d)
+	_title_tick(d)
 
 	if not beep_q.is_empty():
 		beep_t -= d
@@ -10928,14 +10929,24 @@ var set_drag := -1       # 끌고 있는 게이지 행. -1 이면 안 끈다
 var set_hot := -1        # 커서가 얹힌 줄. 없으면 -1
 var set_sel := 0         # 눌러서 고른 줄. 커서가 없을 때 오른쪽 판이 이걸 편다
 var set_t := 0.0         # 밀려 들어온 시간. 0 이면 화면 밖, SET.t 면 제자리
+var ttl_hot := -1        # 제목 메뉴에서 커서가 얹힌 줄
+var ttl_e := []          # 그 줄의 얹힘 짙기
+var ttl_w := []          # 그 줄 띠가 쓸려 든 폭
 var set_row_e := []      # 줄마다의 얹힘 짙기 0~1
 var set_row_w := []      # 그 줄 띠가 쓸려 든 폭 0~1. 짙기와 따로 논다
 						 # 실제 초기값은 _ready 가 저장에서 읽는다.
 var pause_from := -1     # 게임 중 ESC 로 설정을 열면 돌아갈 상태. -1 = 제목
 
 
+#  제목 메뉴. 설정과 **같은 세로선 · 같은 줄 높이**다 — 두 화면이 같은
+#  어휘를 쓰는 것이 눈에 보이려면 자리부터 같아야 한다.
+const TMENU := {"x": 38.0, "y": 150.0, "h": 22.0, "gap": 4.0, "w": 148.0}
+
+
 func _menu_rect(i: int) -> Rect2:
-	return Rect2(Vector2(226.0, 190.0 + float(i) * 40.0), Vector2(188.0, 32.0))
+	return Rect2(Vector2(float(TMENU.x),
+			float(TMENU.y) + float(i) * (float(TMENU.h) + float(TMENU.gap))),
+			Vector2(TMENU.w, TMENU.h))
 
 
 func _menu_back_rect() -> Rect2:
@@ -10978,16 +10989,48 @@ func _load_settings() -> void:
 const CREDITS := ""
 
 
+const TITLE_ROWS := [
+	{"n": "시작", "k": "스페이스"},
+	{"n": "컬렉션", "k": ""},
+	{"n": "설정", "k": ""},
+	{"n": "종료", "k": ""},
+]
+
+
 func _draw_title() -> void:
-	_scrim()
-	draw_string(font, Vector2(0, 108), "하이톤", HORIZONTAL_ALIGNMENT_CENTER,
-			VIEW.x, 40, C_TXT)
-	draw_string(font, Vector2(0, 132), "HIGHTONE", HORIZONTAL_ALIGNMENT_CENTER,
-			VIEW.x, 12, C_DIM)
-	var names := ["시작", "컬렉션", "설정", "종료"]
-	var subs := ["스페이스", "", "", ""]
-	for i in 4:
-		_btn(_menu_rect(i), names[i], subs[i], true)
+	#  다른 화면보다 얕게 덮는다. 0.94 로 덮으면 뒤의 다트판이 유령이 되는데,
+	#  이 게임의 얼굴을 깔아 놓고 지우는 셈이다. 글줄이 왼쪽에 서므로 판과
+	#  자리가 안 겹쳐서, 판을 살려도 글씨를 안 잡아먹는다.
+	draw_rect(Rect2(Vector2.ZERO, VIEW), Color(0.04, 0.03, 0.07, 0.72))
+	#  글줄 쪽만 한 겹 더 — 판의 밝은 칸이 글자 뒤로 오면 읽기가 나빠진다.
+	for k in 8:
+		var f: float = float(k) / 8.0
+		draw_rect(Rect2(0.0, 0.0, 26.0 + f * 190.0, VIEW.y),
+				Color(0.03, 0.02, 0.06, 0.13))
+	#  제목은 머리(_hdr)보다 크다. 이 화면에서는 제목이 곧 그림이라
+	#  다른 화면의 머리와 같은 크기로 두면 시작화면이 아니라 목록이 된다.
+	draw_string(font, Vector2(float(HDR.x), 104.0), "하이톤",
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 34, C_TXT)
+	draw_string(font, Vector2(float(HDR.x) + 2.0, 122.0), "HIGHTONE",
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 10, C_DIM)
+	#  글줄을 꿰는 세로선 — 설정과 같은 어법이다.
+	var y0: float = float(TMENU.y) + 4.0
+	var y1: float = _menu_rect(TITLE_ROWS.size() - 1).end.y - 4.0
+	draw_rect(Rect2(float(TMENU.x) - 10.0, y0, 1.0, y1 - y0),
+			Color(C_WIRE, 0.30))
+	for i in TITLE_ROWS.size():
+		var r := _menu_rect(i)
+		var ee: float = ttl_e[i] if i < ttl_e.size() else 0.0
+		var ew: float = ttl_w[i] if i < ttl_w.size() else 0.0
+		_row_band(self, r, ee, ew, 1.0)
+		draw_string(font, r.position + Vector2(0.0, 15.0),
+				String(TITLE_ROWS[i].n), HORIZONTAL_ALIGNMENT_LEFT, -1, 12,
+				C_DIM.lerp(C_TXT, ee))
+		var kk := String(TITLE_ROWS[i].k)
+		if kk != "":
+			draw_string(font, r.position + Vector2(0.0, 15.0), kk,
+					HORIZONTAL_ALIGNMENT_RIGHT, r.size.x - 6.0, 9,
+					Color(C_GOLD, 0.45 + 0.55 * ee))
 	# 빌려 온 것을 적는 자리. 빌린 것이 있으면 그 라이선스가 이 줄을
 	# **조건으로** 단다 — 그때는 지우면 못 낸다. 비어 있으면 안 그린다.
 	# 마지막 단추가 342 에서 끝나므로 그 아래 남는 18px 에 앉힌다.
@@ -12744,18 +12787,14 @@ func _open_newrun() -> void:
 
 func _draw_newrun() -> void:
 	_scrim()
-	draw_string(font, Vector2(0, 32), "새 런", HORIZONTAL_ALIGNMENT_CENTER,
-			VIEW.x, 18, C_TXT)
+	_hdr(self, "새 런")
 
 	var packs := GameData.packs()
 	var many: bool = packs.size() > 1
 	for right in [false, true]:
 		var ar := _pack_arrow(right)
-		draw_rect(ar, C_PANEL.lightened(0.10) if many else C_PANEL.darkened(0.2))
-		draw_rect(Rect2(ar.position, Vector2(ar.size.x, 2.0)),
-				C_ACC if many else C_DIM.darkened(0.5))
-		draw_string(font, ar.position + Vector2(0.0, 28.0), "▶" if right else "◀",
-				HORIZONTAL_ALIGNMENT_CENTER, ar.size.x, 12, C_TXT if many else C_DIM)
+		_tab_draw(self, ar, "▶" if right else "◀", false,
+				many and ar.has_point(mouse_at))
 
 	# 다트통 패널 — 왼쪽에 통(다트통의 얼굴), 오른쪽에 이름과 값
 	var pr := _pack_rect()
@@ -12823,8 +12862,12 @@ func _draw_newrun() -> void:
 		draw_string(font, _league_line_at(li),
 				String(sl[li].n), HORIZONTAL_ALIGNMENT_LEFT, 150.0, 10, C_TXT)
 
-	_btn(_newrun_go(), "시작", "스페이스", open)
-	_btn(_newrun_back(), "뒤로", "ESC", true)
+	#  「시작」은 던지러 가는 이동이라 글줄로 둔다 — 판 위의 조작 단추와
+	#  무게가 다르다. 못 누르는 동안은 띠가 안 선다.
+	_back_row(self, _newrun_go(), "시작", "스페이스",
+			open and _newrun_go().has_point(mouse_at))
+	_back_row(self, _newrun_back(), "뒤로", "ESC",
+			_newrun_back().has_point(mouse_at))
 
 
 # 다트통이 미는 값만 줄로 낸다 — 해설은 안 쓴다.
@@ -13110,6 +13153,121 @@ func _set_slide_end() -> void:
 	set_drag = -1
 
 
+# ══════════════════════════════════════════════════════════
+#  메뉴의 공통 부품 — 글줄 · 얹힘 띠 · 화면 머리
+# ──────────────────────────────────────────────────────────
+#  메뉴 화면은 **글줄**로 말한다. 상자 단추는 판 위의 조작(던진다 · 리롤 ·
+#  다음 판 · 상점으로)에만 남긴다 — 그쪽은 손으로 누르는 물건이고 이쪽은
+#  어디로 갈지 고르는 자리라, 둘이 같은 모양이면 무게가 안 갈린다.
+#
+#  설정이 이 어휘를 먼저 썼고 나머지 화면이 아직 상자였다. 한 게임이 두
+#  목소리로 말하던 자리다.
+# ══════════════════════════════════════════════════════════
+
+#  줄마다의 얹힘을 민다. **짙기는 오가고 폭은 들어올 때만 쓴다** — 나갈 때
+#  폭까지 줄이면 띠가 왼쪽으로 오므라들어 부스러기처럼 보인다.
+#  es · ws 는 화면이 들고 있는 배열이고, 크기까지 여기서 맞춰 준다.
+func _row_ease(es: Array, ws: Array, n: int, face: int, d: float,
+		v := 9.0) -> void:
+	if es.size() != n:
+		es.resize(n)
+		ws.resize(n)
+		for k in n:
+			es[k] = 0.0
+			ws[k] = 0.0
+	for k in n:
+		es[k] = move_toward(float(es[k]), 1.0 if k == face else 0.0, d * v)
+		if k == face:
+			ws[k] = move_toward(float(ws[k]), 1.0, d * v)
+		elif float(es[k]) <= 0.0:
+			ws[k] = 0.0
+
+
+#  얹힘 띠. 왼쪽에서 쓸려 들어온다 — 밝기만 바뀌면 도트 한 칸에서 눈이 못
+#  따라오고, 글자를 옆으로 밀면 줄이 흔들려 읽는 중에 자리가 달아난다.
+#  띠는 글자를 안 건드리고 자리만 말한다.
+#
+#  한 장으로 그리면 오른쪽에 딱딱한 끝이 생긴다. 세로 조각 열둘을 왼쪽부터
+#  옅어지게 깔아 오른쪽으로 녹인다.
+func _row_band(c: CanvasItem, r: Rect2, ee: float, ew: float, a: float,
+		col := C_ACC, pad := 12.0) -> void:
+	if ee <= 0.004:
+		return
+	var x0: float = r.position.x - pad
+	var full: float = r.size.x + pad * 2.0
+	var bw: float = full * ew
+	for k in SETB.n:
+		var f: float = float(k) / float(SETB.n)
+		var sx: float = x0 + full * f
+		if sx >= x0 + bw:
+			break
+		var sw: float = minf(full / float(SETB.n) + 0.5, x0 + bw - sx)
+		c.draw_rect(Rect2(sx, r.position.y, sw, r.size.y),
+				Color(col, float(SETB.a) * (1.0 - f) * (1.0 - f) * a))
+	#  쓸려 들어오는 끝을 한 획으로 세운다 — 띠가 어디까지 왔는지가 그 한
+	#  줄로 읽힌다. 다 들어오면 오른쪽 끝에 서서 마침표가 된다.
+	c.draw_rect(Rect2(x0 + bw - 1.0, r.position.y, 1.0, r.size.y),
+			Color(col, 0.55 * ee * a))
+
+
+#  화면 머리. **왼쪽 x · 크기 · 색 · 맞춤을 한 곳에서** 낸다 — 전에는
+#  화면마다 달랐다(컬렉션 가운데 24 · 새 런 가운데 자간 · 설정 왼쪽 20 ·
+#  실패 가운데). 왼쪽 맞춤인 것은 글줄이 왼쪽에 서기 때문이다. 머리와
+#  줄이 같은 세로선에 걸려야 "이 화면의 것" 으로 묶인다.
+#
+#  **세로 자리(y)만 화면이 정한다.** 여기까지 못 박았더니 컬렉션이 깨졌다 —
+#  설정은 여섯 줄이 노는 화면이라 78 에서 시작해도 되는데, 컬렉션은 28칸
+#  격자가 72 부터 서서 자리가 없다. 한 목소리로 들리게 하는 것은 y 가
+#  아니라 x·크기·색이다.
+const HDR := {"x": 38.0, "y": 34.0, "sz": 20, "sub_dy": 14.0, "sub_sz": 9}
+
+
+func _hdr(c: CanvasItem, t: String, sub := "", a := 1.0, dx := 0.0,
+		y := -1.0) -> void:
+	var yy: float = float(HDR.y) if y < 0.0 else y
+	c.draw_string(font, Vector2(float(HDR.x) + dx, yy), t,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, int(HDR.sz), Color(C_TXT, a))
+	if sub != "":
+		c.draw_string(font, Vector2(float(HDR.x) + dx, yy + float(HDR.sub_dy)),
+				sub, HORIZONTAL_ALIGNMENT_LEFT, -1, int(HDR.sub_sz),
+				Color(C_DIM, a))
+
+
+#  탭 한 칸. 고른 탭에는 띠가 꽉 차 있고 커서가 얹힌 탭에는 반쯤 찬다 —
+#  글줄의 얹힘 띠와 같은 물건이라, 가로로 누워도 같은 말로 읽힌다.
+#  전에는 상자 단추(_btn)였고, 그래서 컬렉션·런 정보만 다른 목소리였다.
+func _tab_draw(c: CanvasItem, r: Rect2, label: String, on: bool,
+		hot := false) -> void:
+	var e: float = 1.0 if on else (0.45 if hot else 0.0)
+	#  탭은 칸 안에서만 찬다. 글줄처럼 밖으로 삐져나오면 옆 탭을 침범한다.
+	_row_band(c, r, e, e, 1.0, C_ACC, 2.0)
+	c.draw_string(font, r.position + Vector2(0.0, r.size.y * 0.72), label,
+			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 11,
+			C_DIM.lerp(C_TXT, e))
+
+
+#  뒤로 한 줄. 화면마다 다른 상자였던 것을 한 어법으로 모은다.
+func _back_row(c: CanvasItem, r: Rect2, label: String, key: String,
+		hot := false) -> void:
+	var e: float = 1.0 if hot else 0.0
+	_row_band(c, r, e, e, 1.0, C_ACC, 4.0)
+	#  홀로 서는 길잡이라 가운데로 모은다. 왼쪽 맞춤이면 이름과 단축키가
+	#  칸의 양 끝으로 갈라져 한 덩이로 안 읽힌다.
+	var t := label if key == "" else "%s   %s" % [label, key]
+	var w: float = font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT,
+			-1, 11).x if font != null else 0.0
+	var x0: float = r.position.x + (r.size.x - w) * 0.5
+	var y: float = r.position.y + r.size.y * 0.72
+	c.draw_string(font, Vector2(x0, y), label, HORIZONTAL_ALIGNMENT_LEFT,
+			-1, 11, C_DIM.lerp(C_TXT, e))
+	if key != "":
+		var lw: float = font.get_string_size(label + "   ",
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x if font != null else 0.0
+		c.draw_string(font, Vector2(x0 + lw, y), key,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 9,
+				Color(C_GOLD, 0.5 + 0.5 * e))
+
+
 func _draw_settings(c: CanvasItem) -> void:
 	var e := _set_ease()
 	var rows := _set_rows()
@@ -13123,8 +13281,7 @@ func _draw_settings(c: CanvasItem) -> void:
 				Color(0.03, 0.02, 0.06, 0.14 * e))
 
 	var dx: float = -float(SET.slide) * (1.0 - e)
-	c.draw_string(font, Vector2(float(SET.x) + dx, 78.0), "설정",
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(C_TXT, e))
+	_hdr(c, "설정", "", e, dx, 78.0)
 
 	#  글줄을 꿰는 세로선. 무리가 어디서 끊기는지도 이 선이 말한다.
 	var y0: float = float(SET.y) + 4.0
@@ -13138,28 +13295,7 @@ func _draw_settings(c: CanvasItem) -> void:
 		var info := _set_info(key)
 		var ee: float = set_row_e[i] if i < set_row_e.size() else 0.0
 		var ew: float = set_row_w[i] if i < set_row_w.size() else 0.0
-		#  얹힌 줄에는 띠가 **왼쪽에서 쓸려 들어온다.** 밝기만 바뀌면 도트
-		#  한 칸에서 눈이 못 따라오고, 글자를 옆으로 밀면 줄이 흔들려 읽는
-		#  중에 자리가 달아난다. 띠는 글자를 안 건드리고 자리만 말한다.
-		#
-		#  한 장으로 그리면 오른쪽에 딱딱한 끝이 생긴다. 세로 조각 열둘을
-		#  왼쪽부터 옅어지게 깔아 오른쪽으로 녹인다.
-		if ee > 0.004:
-			var x0: float = r.position.x - 12.0
-			var full: float = r.size.x + 24.0
-			var bw: float = full * ew
-			for k in SETB.n:
-				var f: float = float(k) / float(SETB.n)
-				var sx: float = x0 + full * f
-				if sx >= x0 + bw:
-					break
-				var sw: float = minf(full / float(SETB.n) + 0.5, x0 + bw - sx)
-				c.draw_rect(Rect2(sx, r.position.y, sw, r.size.y),
-						Color(C_ACC, float(SETB.a) * (1.0 - f) * (1.0 - f) * e))
-			#  쓸려 들어오는 끝을 한 획으로 세운다 — 띠가 어디까지 왔는지가
-			#  그 한 줄로 읽힌다. 다 들어오면 오른쪽 끝에 서서 마침표가 된다.
-			c.draw_rect(Rect2(x0 + bw - 1.0, r.position.y, 1.0, r.size.y),
-					Color(C_ACC, 0.55 * ee * e))
+		_row_band(c, r, ee, ew, e)
 		var col: Color = C_DIM.lerp(C_TXT, ee)
 		if bool(info.get("warn", false)):
 			col = C_DIM.lerp(C_RED.lightened(0.35), ee)
@@ -13494,6 +13630,25 @@ func _apply_vol() -> void:
 		AudioServer.set_bus_mute(mi, vol_mus <= 0.001)
 
 
+#  제목 메뉴의 얹힘을 민다. 설정과 같은 부품(_row_ease)을 쓰되 배열만
+#  따로다 — 두 화면이 동시에 서는 일은 없지만, 나가는 쪽이 옅어지는
+#  동안 들어오는 쪽이 차면 한 배열로는 두 값을 못 든다.
+func _title_tick(d: float) -> void:
+	var on: bool = state == S.TITLE
+	var was := ttl_hot
+	ttl_hot = -1
+	if on:
+		for i in TITLE_ROWS.size():
+			if _menu_rect(i).has_point(mouse_at):
+				ttl_hot = i
+				break
+	_row_ease(ttl_e, ttl_w, TITLE_ROWS.size(), ttl_hot if on else -1, d)
+	if on:
+		if ttl_hot != was and ttl_hot >= 0:
+			_sfx("menu_pick2")
+		queue_redraw()
+
+
 #  설정이 밀려 들었다 나가는 시간을 민다. 흐림 판의 세기도 여기서 준다 —
 #  게임이 뿌예지는 것과 글줄이 들어오는 것이 **같은 값**을 따라야 둘이 한
 #  동작으로 읽힌다.
@@ -13511,23 +13666,8 @@ func _set_tick(d: float) -> void:
 	#  띠는 줄마다 따로 민다. 얹힌 줄은 차고 떠난 줄은 진다 — 둘이 같이
 	#  움직여야 손이 옮겨 갈 때 띠가 따라오는 것으로 읽힌다.
 	var rows := _set_rows()
-	if set_row_e.size() != rows.size():
-		set_row_e.resize(rows.size())
-		set_row_w.resize(rows.size())
-		for k in set_row_e.size():
-			set_row_e[k] = 0.0
-			set_row_w[k] = 0.0
 	var face: int = _set_face() if set_t > 0.0 else -1
-	for k in set_row_e.size():
-		var to: float = 1.0 if k == face else 0.0
-		set_row_e[k] = move_toward(float(set_row_e[k]), to, d * float(SETB.v))
-		#  폭은 **들어올 때만** 쓴다. 나갈 때 폭까지 줄이면 띠가 왼쪽으로
-		#  오므라들어, 손이 떠난 자리에 부스러기가 남은 것처럼 보인다.
-		#  나갈 때는 제자리에서 옅어지고, 다 옅어진 뒤에 폭을 접는다.
-		if k == face:
-			set_row_w[k] = move_toward(float(set_row_w[k]), 1.0, d * float(SETB.v))
-		elif float(set_row_e[k]) <= 0.0:
-			set_row_w[k] = 0.0
+	_row_ease(set_row_e, set_row_w, rows.size(), face, d, float(SETB.v))
 	var blur := get_node_or_null("Blur")
 	if blur != null:
 		var e: float = _set_ease()
@@ -13849,7 +13989,8 @@ func _draw_runinfo() -> void:
 	draw_rect(p, C_WIRE.darkened(0.25), false, 1.0)
 
 	for t in RI_TABS.size():
-		_btn(_ri_tab_rect(t), RI_TABS[t], "", t == runinfo_tab)
+		_tab_draw(self, _ri_tab_rect(t), RI_TABS[t], t == runinfo_tab,
+				_ri_tab_rect(t).has_point(mouse_at))
 	# 고른 탭을 가리키는 삼각형 — 발라트로가 쓰는 신호다. 버튼 강조만으로는
 	# 넷이 같은 빨강이라 어느 것이 켜졌는지 한눈에 안 온다.
 	var tr := _ri_tab_rect(runinfo_tab)
@@ -13864,7 +14005,8 @@ func _draw_runinfo() -> void:
 		2: _ri_photos(p)
 		3: _ri_carry(p)
 
-	_btn(_runinfo_back_rect(), "뒤로", "탭", false)
+	_back_row(self, _runinfo_back_rect(), "뒤로", "탭",
+			_runinfo_back_rect().has_point(mouse_at))
 
 
 # 한 구획을 세운다. 제목 한 줄 · 밑줄 · 그 아래 줄들. 넷이 같이 쓴다.
@@ -14019,16 +14161,15 @@ const COL_TABS := [
 
 func _draw_collect() -> void:
 	_scrim()
-	draw_string(font, Vector2(0, 30), "컬렉션", HORIZONTAL_ALIGNMENT_CENTER,
-			VIEW.x, 18, C_TXT)
+	_hdr(self, "컬렉션")
 	# 이름은 COL_TABS 가, 개수는 표가 낸다 — 이름을 여기서 또 적으면
 	# 탭이 늘 때 순서가 또 어긋난다.
 	var cnt := [GameData.items().size(), GameData.mods().size(),
 			GameData.darts().size(), GameData.candies().size(),
 			GameData.fixtures().size(), GameData.modifiers().size()]
 	for t in COL_TABS.size():
-		_btn(_col_tab_rect(t), "%s %d" % [COL_TABS[t].n, cnt[t]], "",
-			t == collect_tab)
+		_tab_draw(self, _col_tab_rect(t), "%s %d" % [COL_TABS[t].n, cnt[t]],
+				t == collect_tab, _col_tab_rect(t).has_point(mouse_at))
 
 	var base := collect_page * COL_PAGE
 	for i in _col_count():
@@ -14067,11 +14208,14 @@ func _draw_collect() -> void:
 				8, C_DIM)
 
 	if _col_pages() > 1:
-		_btn(_col_arrow_rect(false), "◀", "", true)
-		_btn(_col_arrow_rect(true), "▶", "", true)
+		_tab_draw(self, _col_arrow_rect(false), "◀", false,
+				_col_arrow_rect(false).has_point(mouse_at))
+		_tab_draw(self, _col_arrow_rect(true), "▶", false,
+				_col_arrow_rect(true).has_point(mouse_at))
 		draw_string(font, Vector2(0, 318), "%d / %d" % [collect_page + 1, _col_pages()],
 				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 9, C_DIM)
-	_btn(_menu_back_rect(), "뒤로", "ESC", true)
+	_back_row(self, _menu_back_rect(), "뒤로", "ESC",
+			_menu_back_rect().has_point(mouse_at))
 
 
 func _draw_hint() -> void:
