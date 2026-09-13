@@ -2,7 +2,7 @@
 
 importer="wav"
 type="AudioStreamWAV"
-uid="uid://rvdwc8w2dtvc"
+uid="uid://dlovv800icrar"
 path="res://.godot/imported/reroll.wav-54db129b972316a432f8310f199065ef.sample"
 
 [deps]
@@ -16,7 +16,7 @@ force/8_bit=false
 force/mono=false
 force/max_rate=false
 force/max_rate_hz=44100
-edit/trim=true
+edit/trim=false
 edit/normalize=false
 edit/loop_mode=0
 edit/loop_begin=0

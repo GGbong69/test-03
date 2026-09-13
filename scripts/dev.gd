@@ -12,7 +12,7 @@ extends RefCounted
 #    ① 이 파일(scripts/dev.gd)을 지운다
 #    ② game.gd 의 `const Dev = preload("res://scripts/dev.gd")` 한 줄
 #    ③ game.gd 가 Dev 를 부르는 네 줄 — 전부 `# DEV` 주석이 달려 있다
-#         _process()         Dev.tick(d)
+#         _process()         Dev.tick(self, d)
 #         _unhandled_input() Dev.key(self, k.keycode)
 #         _click()           Dev.click(self, m)
 #         _draw()            Dev.draw(self)
@@ -37,7 +37,12 @@ static var open_k := ""
 static var open_n1 := ""     # 머리에 적을 줄 이름
 static var open_page := 0
 
-const PAGES := ["경제·진행", "물건", "판·조준", "해금"]
+# 사다리를 차례로 낼 줄. [이름, f, 다음까지 초] 줄들. f 가 0 이면 표의 음이다.
+static var _q := []
+static var _qt := 0.0
+static var _sfx_rows := []       # 소리 이름 목록. 표에서 한 번만 읽는다
+
+const PAGES := ["경제·진행", "물건", "판·조준", "해금", "소리"]
 const W := 300.0
 const ROW := 15.0
 const ARW := 13.0              # 화살표 칸 너비
@@ -165,11 +170,19 @@ static func draw(g: Node) -> void:
 		_pick_draw(g)
 
 
-static func tick(d: float) -> void:
+static func tick(g: Node, d: float) -> void:
 	if msg_t > 0.0:
 		msg_t -= d
 		if msg_t <= 0.0:
 			msg = ""
+	# 사다리는 한 소리가 아니라 **오르는 관계**가 내용이라, 한 번에 하나씩
+	# 내면 들을 수가 없다. 줄을 세워 두고 여기서 한 칸씩 흘린다.
+	if not _q.is_empty():
+		_qt -= d
+		if _qt <= 0.0:
+			var s: Array = _q.pop_front()
+			g._sfx(String(s[0]), float(s[1]))
+			_qt = float(s[2])
 
 
 # ── 자리 ──────────────────────────────────────────────────
@@ -393,12 +406,24 @@ static func _rows(g: Node) -> Array:
 						"n": GameData.packs().size()},
 				{"n1": "판 다시 굽기", "t": "act", "a": "bake"},
 			]
-		_:
+		3:
 			return [
 				{"n1": "해금 전부 열기", "t": "act", "a": "unlock_all"},
 				{"n1": "해금 전부 잠그기", "t": "act", "a": "unlock_none"},
 				{"n1": "통계 지우기", "t": "act", "a": "stat_clear"},
 				{"n1": "저장 통째로 지우기", "t": "act", "a": "wipe"},
+			]
+		_:
+			# 소리는 프로브가 못 본다 — 수치가 맞아도 손에 안 맞는 것이 여기서만
+			# 드러난다. 표 순서 그대로 놓으므로 가족끼리 붙어서 견줘 들린다.
+			return [
+				{"n1": "소리 하나", "t": "list", "k": "sfx",
+						"n": _list("sfx").size()},
+				{"n1": "정산 사다리 12칸", "t": "act", "a": "sfx_lad"},
+				{"n1": "착탄 사다리 여섯", "t": "act", "a": "sfx_hit"},
+				{"n1": "손 짝 넷", "t": "act", "a": "sfx_pair"},
+				{"n1": "표 전부 차례로", "t": "act", "a": "sfx_all"},
+				{"n1": "그치기", "t": "act", "a": "sfx_stop"},
 			]
 
 
@@ -421,6 +446,14 @@ static func _list(k: String) -> Array:
 		"pack": return GameData.packs()
 		"chal": return GameData.challenges()
 		"boost": return GameData.boosters()
+		"sfx":
+			# game.gd 의 SFX 표를 그 순서대로 읽는다. dev.gd 는 game.gd 를
+			# preload 할 수 없다(game.gd 가 이쪽을 preload 한다) — 이미 올라와
+			# 있는 것을 load 로 집는다. probe_sfx.gd 도 같은 길로 본다.
+			if _sfx_rows.is_empty():
+				for k2 in load("res://scripts/game.gd").SFX.keys():
+					_sfx_rows.append({"n": String(k2)})
+			return _sfx_rows
 	return []
 
 
@@ -514,6 +547,41 @@ static func _run(g: Node, e: Dictionary) -> void:
 			g._start_leg()
 			_say("다트 %d발" % g.remaining.size())
 			return
+		"sfx_lad":
+			# 정산이 반음씩 오르는 것이 게임 이름의 유래다. 한 옥타브를 올려 본다.
+			# 파일이 앉은 자리면 pitch_scale 이 같은 비로 밀리는 것까지 들린다.
+			_q.clear()
+			for k3 in 13:
+				_q.append(["settle_step", 392.0 * pow(2.0, float(k3) / 12.0),
+						g.beat * 0.5])
+			_say("정산 사다리")
+			return
+		"sfx_hit":
+			# 등급이 곧 소리다. 여섯을 붙여 들어야 오르는지 안 오르는지 안다.
+			_q.clear()
+			for nm2 in ["hit_miss", "hit_single", "hit_double", "hit_triple",
+					"hit_bull_o", "hit_bull_i"]:
+				_q.append([nm2, 0.0, 0.45])
+			_say("착탄 사다리")
+			return
+		"sfx_pair":
+			# 짝은 하나만 들어서는 못 잡는다 — 집다/놓다, 고르다/풀다를 붙인다.
+			_q.clear()
+			for nm3 in ["hand_take", "hand_drop", "rack_select", "rack_deselect",
+					"shop_select", "shop_deselect", "menu_pick", "menu_back"]:
+				_q.append([nm3, 0.0, 0.32])
+			_say("짝 넷")
+			return
+		"sfx_all":
+			_q.clear()
+			for r2 in _list("sfx"):
+				_q.append([String(r2.n), 0.0, 0.34])
+			_say("표 %d개" % _q.size())
+			return
+		"sfx_stop":
+			_q.clear()
+			_say("그쳤다")
+			return
 		"item_rand":
 			var pool := GameData.items()
 			if not pool.is_empty():
@@ -586,6 +654,14 @@ static func _run(g: Node, e: Dictionary) -> void:
 		"score":
 			g.score_mode = String(GameData.SCORE_MODES[i % GameData.SCORE_MODES.size()])
 			_say("계산 '%s'" % g.score_mode)
+		"sfx":
+			# 고른 것이 곧 소리다. 화살표로 옆칸을 짚으면 바로 난다 —
+			# 따로 "내 보기" 를 눌러야 하면 견줘 듣는 동안 손이 두 배로 든다.
+			if not rows.is_empty():
+				var snm := String(rows[i % rows.size()].n)
+				_q.clear()
+				g._sfx(snm)
+				_say(snm)
 		"item":
 			if not rows.is_empty():
 				_give_item(g, rows[i % rows.size()])

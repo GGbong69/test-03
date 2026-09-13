@@ -2,7 +2,7 @@
 
 importer="wav"
 type="AudioStreamWAV"
-uid="uid://ee5rlojl5ltl"
+uid="uid://by3tcbxylhps0"
 path="res://.godot/imported/hand_drop.wav-5c0a3c031deab4f32138c9aa288a55f5.sample"
 
 [deps]
@@ -16,7 +16,7 @@ force/8_bit=false
 force/mono=false
 force/max_rate=false
 force/max_rate_hz=44100
-edit/trim=true
+edit/trim=false
 edit/normalize=false
 edit/loop_mode=0
 edit/loop_begin=0

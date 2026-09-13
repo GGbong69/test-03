@@ -2,7 +2,7 @@
 
 importer="wav"
 type="AudioStreamWAV"
-uid="uid://cxteg0ooc27e6"
+uid="uid://t4pjtsm48ejs"
 path="res://.godot/imported/rack_deselect.wav-fea4eebbfb26a38c29eaf56db33a3b5e.sample"
 
 [deps]
@@ -16,7 +16,7 @@ force/8_bit=false
 force/mono=false
 force/max_rate=false
 force/max_rate_hz=44100
-edit/trim=true
+edit/trim=false
 edit/normalize=false
 edit/loop_mode=0
 edit/loop_begin=0

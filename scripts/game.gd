@@ -2097,6 +2097,9 @@ const SFX := {
 	"aim_lock_first": {"f": 300.0, "d": 0.05, "a": 0.10},
 	"aim_lock_last":  {"f": 400.0, "d": 0.06, "a": 0.12},
 	"kick_shot":      {"f": 520.0, "d": 0.04, "a": 0.09},
+	# 놓는 순간. 리볼버는 발마다 kick_shot 을 내므로 여기는 **안 난다** —
+	# 그쪽은 여섯 발이 이미 그 자리를 쓴다.
+	"dart_fly":       {"f": 520.0, "d": 0.09, "a": 0.11},
 
 	# ── 착탄 (등급이 곧 소리다) ──────────────────
 	"hit_miss":       {"seq": [150.0], "gap": 0.0, "d": 0.22, "a": 0.11},
@@ -2134,7 +2137,9 @@ const SFX := {
 	# ── 상점 ──────────────────────────────────────
 	"shop_open":      {"f": 440.0, "d": 0.10, "a": 0.18},
 	"buy":            {"seq": [523.0, 659.0], "gap": 0.07, "d": 0.11, "a": 0.20},
-	"sell":           {"seq": [659.0, 880.0], "gap": 0.06, "d": 0.09, "a": 0.18},
+	# 사는 쪽이 올라가므로(523→659) 파는 쪽은 **내려간다.** 둘 다 올라가면
+	# 값을 내는 것과 받는 것이 같은 손짓이 된다 — 실제로 그래서 안 갈렸다.
+	"sell":           {"seq": [880.0, 659.0], "gap": 0.06, "d": 0.09, "a": 0.18},
 	"deny":           {"seq": [200.0, 150.0], "gap": 0.06, "d": 0.10, "a": 0.16},
 	"reroll":         {"f": 392.0, "d": 0.09, "a": 0.18},
 	"fixture_buy":    {"seq": [392.0, 523.0, 659.0], "gap": 0.07, "d": 0.14, "a": 0.18},
@@ -2338,7 +2343,7 @@ func _process(d: float) -> void:
 	# 판 갈이가 도는 동안(swap_live)은 판이 아직 화면에 있으므로 살려 둔다.
 	if bd_vp != null and not _is_play() and not swap_live:
 		_bd3_close()
-	Dev.tick(d)          # DEV
+	Dev.tick(self, d)          # DEV
 	_drop_update(d)
 
 	match state:
@@ -2351,6 +2356,8 @@ func _process(d: float) -> void:
 				if cur_dart.get("magnet", 0.0) > 0.0:
 					aim = aim.lerp(BC, cur_dart.magnet)
 				_grip_consume()
+				if burst_hits.is_empty():
+					_sfx("dart_fly")      # 리볼버는 발마다 kick_shot 이 난다
 				state = S.FLY
 				fly_t = 0.0
 				# 꽂힐 각을 지금 정한다. 나는 동안과 꽂힌 뒤가 같은 각이라야
@@ -3731,7 +3738,11 @@ func _next_step() -> void:
 	var pace := _pace()
 	qt = beat * pace
 	pitch_step += 1
-	var f := 392.0 * pow(2.0, float(pitch_step) / 12.0)
+	# 첫 걸음이 사다리 **바닥**이어야 한다. pitch_step 을 먼저 올리므로
+	# 여기서 하나를 뺀다 — 안 빼면 첫 걸음이 415.31Hz 가 되고 표가
+	# SFX_BASE 로 적어 둔 392 는 한 번도 안 난다(파일이 앉은 뒤로는
+	# pitch_scale 이 1.0 이 아니라 1.0595 로 시작하는 것이기도 하다).
+	var f := 392.0 * pow(2.0, float(pitch_step - 1) / 12.0)
 	var cc := card_pos() + Vector2(CARD_W * 0.5, 12.0)
 	calc_lit = false           # 방식 걸음이 아니면 카드는 보통대로 그린다
 	roll_t = -1.0
@@ -10543,11 +10554,13 @@ func _load_settings() -> void:
 			Save.set_set("fullscreen", false)
 
 
-#  빌려 온 것의 만든이. JDSherbert 의 UI 효과음 팩은 상업적 사용을
-#  허락하지만 **만든이를 적을 것**을 조건으로 단다. 그래서 이 줄은
-#  화면의 장식이 아니라 라이선스의 일부다. 온 목록과 원문은
-#  docs/크레딧.md 에 있다.
-const CREDITS := "소리 JDSherbert — Ultimate UI SFX Pack"
+#  빌려 온 것의 만든이를 적는 자리. **지금은 빈 줄이다** — 효과음은 빌려
+#  오지 않고 scripts/tools/sfx_bake.gd 가 굽고, 그 수치가 저장소 안에 있다.
+#  빌려 온 UI 팩이 여기 한 줄을 요구하던 동안에는 그 줄이 라이선스의
+#  일부였다. 다시 무엇을 빌리면 그 조건이 이 자리로 돌아온다.
+#  음악 넷(assets/music/*.mp3)은 출처가 아직 미결이다 — docs/크레딧.md 를
+#  채우는 사람이 여기에 한 줄을 세워야 한다.
+const CREDITS := ""
 
 
 func _draw_title() -> void:
@@ -10560,11 +10573,12 @@ func _draw_title() -> void:
 	var subs := ["스페이스", "", "", ""]
 	for i in 4:
 		_btn(_menu_rect(i), names[i], subs[i], true)
-	# 빌려 온 것을 적는 자리. UI 효과음 팩의 라이선스가 만든이를 적으라고
-	# 요구하므로 이 줄은 장식이 아니라 **조건**이다 — 지우면 못 낸다.
+	# 빌려 온 것을 적는 자리. 빌린 것이 있으면 그 라이선스가 이 줄을
+	# **조건으로** 단다 — 그때는 지우면 못 낸다. 비어 있으면 안 그린다.
 	# 마지막 단추가 342 에서 끝나므로 그 아래 남는 18px 에 앉힌다.
-	draw_string(font, Vector2(0, 354), CREDITS, HORIZONTAL_ALIGNMENT_CENTER,
-			VIEW.x, 8, C_DIM)
+	if CREDITS != "":
+		draw_string(font, Vector2(0, 354), CREDITS, HORIZONTAL_ALIGNMENT_CENTER,
+				VIEW.x, 8, C_DIM)
 
 
 # ══════════════════════════════════════════════════════════
