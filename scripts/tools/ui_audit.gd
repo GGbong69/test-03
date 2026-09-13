@@ -59,24 +59,41 @@ func _run() -> void:
 		g.collect_page = 0
 		await _shoot("03_collect%d" % t)
 
-	# 판 고르기
+	# 판 고르기 — **런을 실제로 연다.** 전에는 상태를 손으로 세워서 판이
+	# 안 그려진 그림이 나왔고, 그래서 이 아래 두 화면을 못 봤다.
 	g.state = g.S.TITLE
 	g._new_run()
-	await _shoot("04_leg")
-
-	# 판 플레이 — 다트 몇 발 꽂아 둔다
-	g.leg_no = 2
-	g._start_leg()
 	g.owned = []
 	for it in GameData.items():
 		if g.owned.size() < 3:
 			g.owned.append(it.duplicate())
 	g.cons = [GameData.candies()[0], GameData.fixtures()[0]]
+	for k in 30:
+		g._process(1.0 / 60.0)
+	await _shoot("04_leg")
+
+	# 판 플레이 — 게임이 쓰는 문으로 들어가고 실제로 한 발 던진다
+	g._click(g._leg_go().get_center())
+	for k in 60:
+		g._process(1.0 / 60.0)
+	g.state = g.S.CONFIRM
+	g.confirm_t = 99.0
+	g.aim = g.BC + Vector2(18.0, -12.0)
+	for k in 400:
+		g._process(1.0 / 60.0)
+		if g.state != g.S.CONFIRM and g.state != g.S.FLY and g.state != g.S.RESOLVE:
+			break
 	await _shoot("05_play")
 
-	# 정산
-	g.total = 9999
-	g._finish_leg()
+	# 정산 — 목표를 낮춰 넘긴다
+	g.target = 1
+	g.state = g.S.CONFIRM
+	g.confirm_t = 99.0
+	g.aim = g.BC
+	for k in 600:
+		g._process(1.0 / 60.0)
+		if g.state == g.S.CLEAR:
+			break
 	await _shoot("06_clear")
 
 	# 상점

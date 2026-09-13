@@ -1880,8 +1880,11 @@ func _skip_past(r: Rect2, rn: int) -> void:
 
 func _skip_plate(r: Rect2, t: Dictionary, on: bool) -> void:
 	var a: float = 1.0 if on else 0.55
-	draw_rect(r, C_PANEL.lightened(0.10) if on else C_PANEL.darkened(0.34))
-	draw_rect(Rect2(r.position, Vector2(r.size.x, 2.0 if on else 1.0)),
+	#  펠트에 놓인 쪽지다. 상자를 꽉 채우면 카드와 무게가 같아져 "고르는
+	#  것" 이 둘로 보인다 — 고르는 것은 판이고 이쪽은 그 판의 곁말이다.
+	#  바탕을 반투명으로 깔고 왼쪽에 획 하나를 세운다.
+	draw_rect(r, Color(C_PANEL.darkened(0.10), 0.72 if on else 0.45))
+	draw_rect(Rect2(r.position, Vector2(1.0, r.size.y)),
 			C_ACC if on else C_ACC.darkened(0.55))
 	if t.is_empty():
 		draw_string(font, r.position + Vector2(0.0, SKIP.y1), "못 건너뛴다",
@@ -10610,16 +10613,18 @@ func _draw_leg() -> void:
 	_felt_draw()
 	var first := _round_first()
 	var per: int = GameData.legs_per_round()
-	draw_string(font, Vector2(0.0, TBL.fy + 3.0),
-			"라운드 %d / %d" % [GameData.round_of(leg_no), GameData.rounds_n()],
-			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 10,
-			Color(C_TABLE.lightened(0.34), 0.75))
 	# 선 카드만 상인 앞이다 — 제약 카드와 같은 규칙
 	var cur: int = clampi(GameData.leg_idx(leg_no), 0, per - 1)
 	for i in per:
 		if i != cur:
 			_leg_card(i, first + i)
 	_cover_draw()
+	# 라운드 표시는 **덮개 뒤**다. 앞에 그렸더니 카운터 뒤 벽이 그 위를
+	# 덮어 상인 가슴께에 글자가 반쯤 잘려 있었다. 펠트 위로 내린다.
+	draw_string(font, Vector2(0.0, TBL.fy + 13.0),
+			"라운드 %d / %d" % [GameData.round_of(leg_no), GameData.rounds_n()],
+			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 10,
+			Color(C_TABLE.lightened(0.40), 0.85))
 	_leg_card(cur, first + cur)
 
 	_btn(_leg_go(), "던진다", "목표 %d" % GameData.target_of(leg_no), true)
@@ -12787,7 +12792,7 @@ func _open_newrun() -> void:
 
 func _draw_newrun() -> void:
 	_scrim()
-	_hdr(self, "새 런")
+	_hdr(self, "NEW RUN")
 
 	var packs := GameData.packs()
 	var many: bool = packs.size() > 1
@@ -12812,12 +12817,17 @@ func _draw_newrun() -> void:
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 13, C_TXT if open else C_DIM)
 	# 다섯 줄까지 든다. 넷일 때는 아래가 비지만, 다트통마다 칸 높이가
 	# 출렁이면 넘길 때 눈이 자리를 다시 잡아야 한다.
+	#  판 안에 판을 또 깔지 않는다. 이름 밑에 가는 획 하나면 "여기서부터가
+	#  설명" 이 읽힌다 — 어두운 상자를 겹치면 두 겹이 서로를 눌러 탁해진다.
+	#  자리(높이 86)는 그대로 잡아 둔다. 다트통마다 칸이 출렁이면 넘길 때
+	#  눈이 자리를 다시 잡아야 한다.
 	var eb := Rect2(Vector2(230.0, 94.0), Vector2(310.0, 86.0))
-	draw_rect(eb, C_PANEL.darkened(0.2))
+	draw_rect(Rect2(eb.position + Vector2(0.0, -6.0), Vector2(eb.size.x, 1.0)),
+			Color(C_WIRE, 0.35))
 	var lines := _pack_lines(row) if open else [_pack_cond(row)]
 	for li in mini(lines.size(), 5):
-		draw_string(font, Vector2(242, 112 + li * 15), lines[li],
-				HORIZONTAL_ALIGNMENT_LEFT, eb.size.x - 24.0, 11,
+		draw_string(font, Vector2(232, 110 + li * 15), lines[li],
+				HORIZONTAL_ALIGNMENT_LEFT, eb.size.x - 8.0, 11,
 				C_TXT if open else C_DIM)
 	# 이 다트통으로 넘긴 가장 높은 리그 — 한 번도 못 넘겼으면 안 그린다
 	var best := -1
@@ -12852,11 +12862,17 @@ func _draw_newrun() -> void:
 					C_WIRE.darkened(0.3), false, 1.0)
 		if String(st[i].get("id", "")) == String(cur.get("id", "")):
 			draw_rect(r.grow(2.0), C_TXT, false, 1.0)
+	#  이름을 단의 색으로 쓰되, 어두운 단은 밝혀서 쓴다 — 검정 리그가
+	#  제 색(3a3450)으로는 배경에 묻혀 이름이 안 보였다. 색을 버리면
+	#  어느 단인지가 안 읽히므로, 색은 지키고 밝기만 끌어올린다.
+	var lc := Color(String(cur.get("color", "cfc9bd")))
+	if lc.get_luminance() < 0.34:
+		lc = lc.lightened(0.55)
 	draw_string(font, Vector2(0, 238), String(cur.get("name", "")),
-			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 13,
-			Color(String(cur.get("color", "cfc9bd"))))
-	draw_rect(Rect2(Vector2(160.0, 242.0), Vector2(320.0, 61.0)),
-			C_PANEL.darkened(0.2))
+			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 13, lc)
+	#  여기도 상자 대신 획 하나다.
+	draw_rect(Rect2(Vector2(160.0, 244.0), Vector2(320.0, 1.0)),
+			Color(C_WIRE, 0.35))
 	var sl := _league_lines()
 	for li in sl.size():
 		draw_string(font, _league_line_at(li),
