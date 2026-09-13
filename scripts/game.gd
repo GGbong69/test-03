@@ -1968,7 +1968,7 @@ func _skip_past(r: Rect2, rn: int) -> void:
 	draw_rect(Rect2(r.position, Vector2(r.size.x, 1.0)),
 			C_ACC.darkened(0.72) if took else C_WIRE.darkened(0.4))
 	if not took:
-		draw_string(font, r.position + Vector2(0.0, SKIP.y0), "던졌다",
+		draw_string(font_sm, r.position + Vector2(0.0, SKIP.y0), "던졌다",
 				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, C_DIM.darkened(0.42))
 		return
 	var t := _leg_tag(rn)
@@ -1976,9 +1976,9 @@ func _skip_past(r: Rect2, rn: int) -> void:
 			String(t.get("kind", "")), 0.34)
 	var tx: float = r.position.x + SKIP.tx
 	var tw: float = r.size.x - SKIP.pad
-	draw_string(font, Vector2(tx, r.position.y + SKIP.y1), "건너뜀",
-			HORIZONTAL_ALIGNMENT_LEFT, tw, 10, C_DIM.darkened(0.32))
-	draw_string(font, Vector2(tx, r.position.y + SKIP.y2),
+	draw_string(font_sm, Vector2(tx, r.position.y + SKIP.y1), "건너뜀",
+			HORIZONTAL_ALIGNMENT_LEFT, tw, 9, C_DIM.darkened(0.32))
+	draw_string(font_sm, Vector2(tx, r.position.y + SKIP.y2),
 			_elide(_tag_text(t), tw, 9), HORIZONTAL_ALIGNMENT_LEFT, tw, 9,
 			C_GOLD.darkened(0.58))
 
@@ -1992,20 +1992,20 @@ func _skip_plate(r: Rect2, t: Dictionary, on: bool) -> void:
 	draw_rect(Rect2(r.position, Vector2(1.0, r.size.y)),
 			C_ACC if on else C_ACC.darkened(0.55))
 	if t.is_empty():
-		draw_string(font, r.position + Vector2(0.0, SKIP.y1), "못 건너뛴다",
-				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 10, C_DIM)
-		draw_string(font, r.position + Vector2(0.0, SKIP.y2), "보스 판",
+		draw_string(font_sm, r.position + Vector2(0.0, SKIP.y1), "못 건너뛴다",
+				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, C_DIM)
+		draw_string(font_sm, r.position + Vector2(0.0, SKIP.y2), "보스 판",
 				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, C_DIM.darkened(0.3))
 		return
 	_icon_tag(Vector2(r.position.x + SKIP.ix, r.get_center().y), 6.5,
 			String(t.get("kind", "")), a)
 	var tx: float = r.position.x + SKIP.tx
 	var tw: float = r.size.x - SKIP.pad
-	draw_string(font, Vector2(tx, r.position.y + SKIP.y1),
+	draw_string(font_sm, Vector2(tx, r.position.y + SKIP.y1),
 			"건너뛴다" if on else "건너뛰면",
-			HORIZONTAL_ALIGNMENT_LEFT, tw, 10,
+			HORIZONTAL_ALIGNMENT_LEFT, tw, 9,
 			C_TXT if on else C_DIM.darkened(0.1))
-	draw_string(font, Vector2(tx, r.position.y + SKIP.y2),
+	draw_string(font_sm, Vector2(tx, r.position.y + SKIP.y2),
 			_elide(_tag_text(t), tw, 9), HORIZONTAL_ALIGNMENT_LEFT, tw, 9,
 			C_GOLD if on else C_GOLD.darkened(0.34))
 
@@ -4673,7 +4673,7 @@ func _draw_board() -> void:
 			var a := i * sw
 			var p := BC + Vector2(sin(a), -cos(a)) * _board_rim(0.13)
 			draw_string(font, p + Vector2(-14, 5), str(sectors[i]),
-					HORIZONTAL_ALIGNMENT_CENTER, 28, 12, Color(C_DIM, na))
+					HORIZONTAL_ALIGNMENT_CENTER, 28, 11, Color(C_DIM, na))
 
 
 func _draw_fx() -> void:
@@ -5252,7 +5252,7 @@ func _draw_topbar() -> void:
 
 	# 2칸 x[100,584] — 목표. 진행바 좌표는 기존 그대로다.
 	var g: Rect2 = LAY.bar_gauge
-	draw_string(font, Vector2(104, 13), GameData.leg_name(leg_no),
+	draw_string(font_sm, Vector2(104, 13), GameData.leg_name(leg_no),
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 9,
 			C_ACC if GameData.is_boss(leg_no) else C_DIM.darkened(0.2))
 	draw_rect(g, C_BG)
@@ -5263,8 +5263,8 @@ func _draw_topbar() -> void:
 		if state == S.SHOP:
 			msg = "다음 %s  ·  목표 %d" % [GameData.leg_name(leg_no + 1),
 				GameData.target_of(leg_no + 1)]
-		draw_string(font, Vector2(g.position.x, 13.0), msg,
-				HORIZONTAL_ALIGNMENT_CENTER, g.size.x, 10, C_DIM)
+		draw_string(font_sm, Vector2(g.position.x, 13.0), msg,
+				HORIZONTAL_ALIGNMENT_CENTER, g.size.x, 9, C_DIM)
 	else:
 		var k := clampf(shown / float(maxi(target, 1)), 0.0, 1.0)
 		draw_rect(Rect2(g.position, Vector2(g.size.x * k, g.size.y)), C_ACC)
@@ -5296,7 +5296,7 @@ func _bank_draw() -> void:
 	# deny_flash 는 상점 중앙 골드 텍스트가 쓰던 값을 그대로 물려받는다
 	var gc: Color = C_GOLD.lerp(C_MULT, deny_flash)
 	var jx := randf_range(-deny_flash, deny_flash) * 2.0
-	draw_gold(r.get_center().x + jx, r.position.y + 26.0, str(gold), 16, gc)
+	draw_gold(r.get_center().x + jx, r.position.y + 26.0, str(gold), 22, gc)
 
 	# 이자 줄은 판이 늘어난 화면에서만 담긴다.
 	if r.size.y < 46.0:
@@ -5306,12 +5306,12 @@ func _bank_draw() -> void:
 	if state == S.SHOP and leg_no + 1 >= GameData.legs_n():
 		# R8 은 정산이 없다 (_finish_leg 의 leg_no >= ROUNDS 조기 return 이
 		# 골드 지급 블록보다 앞선다). 남긴 골드는 영원히 안 돌아온다.
-		draw_string(font, r.position + Vector2(0.0, 42.0), "마지막 판",
+		draw_string(font_sm, r.position + Vector2(0.0, 42.0), "마지막 판",
 				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, C_MULT.lightened(0.2))
 	else:
 		@warning_ignore("integer_division")  # 위 _finish_leg 와 같은 식이어야 한다
 		var itr: int = mini(gold / GameData.interest_per(), _interest_cap())
-		draw_string(font, r.position + Vector2(0.0, 42.0), "이자 +%d" % itr,
+		draw_string(font_sm, r.position + Vector2(0.0, 42.0), "이자 +%d" % itr,
 				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9,
 				C_GOLD.darkened(0.3) if itr > 0 else C_DIM.darkened(0.35))
 
@@ -5322,11 +5322,11 @@ func _cap_draw() -> void:
 	r.position.y += _hud_dy()
 	draw_rect(r, C_FELT)                                   # 동전 슬롯과 같은 재질
 	draw_rect(Rect2(r.position, Vector2(r.size.x, 1.0)), C_FELT.lightened(0.14))
-	draw_string(font, r.position + Vector2(0.0, 18.0), "동전",
-			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 10, C_DIM.darkened(0.1))
+	draw_string(font_sm, r.position + Vector2(0.0, 18.0), "동전",
+			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, C_DIM.darkened(0.1))
 	draw_string(font, r.position + Vector2(0.0, 36.0),
 			"%d/%d" % [owned.size(), GameData.max_items()],
-			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 13,
+			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 11,
 			C_ACC if owned.size() >= GameData.max_items() else C_TXT)
 
 
@@ -5981,7 +5981,7 @@ func _panel_slot(i: int) -> void:
 		return
 	# 그래도 넘치면 뒤를 자른다 — draw_string 은 폭을 넘으면 가운데를
 	# 잘라 조각을 남기므로, 자를 자리는 우리가 고른다.
-	draw_string(font, cell.position + Vector2(0.0, cell.size.y - 3.0),
+	draw_string(font_sm, cell.position + Vector2(0.0, cell.size.y - 3.0),
 			_elide(label, cell.size.x - 2.0, 9),
 			HORIZONTAL_ALIGNMENT_CENTER, cell.size.x, 9, col)
 
@@ -6430,7 +6430,7 @@ func _cons_draw() -> void:
 	# _draw_fit 으로 글자 크기를 줄여 넣는다.
 	_draw_fit(Vector2(box.position.x, box.end.y + 9.0), box.size.x * 0.5,
 			"사탕·사진", 9, C_DIM.darkened(0.1))
-	draw_string(font, Vector2(box.get_center().x, box.end.y + 9.0),
+	draw_string(font_sm, Vector2(box.get_center().x, box.end.y + 9.0),
 			"%d/%d" % [cons.size(), GameData.cons_slots()],
 			HORIZONTAL_ALIGNMENT_CENTER, box.size.x * 0.5, 9,
 			C_ACC if cons.size() >= GameData.cons_slots() else C_TXT)
@@ -8250,7 +8250,7 @@ func _sticker_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: floa
 	var val := ("×" + str(it.v)) if it.k == "xmult" else str(it.v)
 	var ink: Color = C_CHIP.lightened(0.5) if it.k == "chip" else C_MULT.lightened(0.45)
 	draw_string(font, c + Vector2(-rx, 4.0), val,
-			HORIZONTAL_ALIGNMENT_CENTER, rx * 2.0, 12, ink.darkened(dim))
+			HORIZONTAL_ALIGNMENT_CENTER, rx * 2.0, 11, ink.darkened(dim))
 
 
 # _table_draw 의 맨 끝 (덮개·레일 뒤) — 가격은 절대 안 잘려야 한다.
@@ -8277,7 +8277,7 @@ func _bill_draw() -> void:
 			if s.sold:
 				continue
 			var pt := "고르기" if boost_pick <= 1 else "%d장 고르기" % boost_pick
-			draw_string(font, Vector2(it.u - 30.0,
+			draw_string(font_sm, Vector2(it.u - 30.0,
 					_p2g(it.w) + DROP.bill_dy + 7.0), pt,
 					HORIZONTAL_ALIGNMENT_CENTER, 60.0, 9,
 					C_ACC if boost_pick > 0 else C_DIM.darkened(0.25))
@@ -9855,9 +9855,10 @@ const TIP := {
 	"w": 178.0,          # 판 폭 (고정 — 대상마다 크기가 출렁이면 눈이 다시 초점을 잡는다)
 	"pad": 7.0,
 	"gap": 6.0,          # 대상과 판 사이
-	"title": 15.0,       # 제목 줄 높이
-	"line": 13.0,        # 본문 줄 높이
-	"base": 10.0,        # 본문 블록 윗변에서 첫 줄 베이스라인까지 (10pt 의 오름)
+	"title": 16.0,       # 제목 줄 높이 — 11px 본문에 145%. 한글은 라틴보다
+	                     # 획이 많아 130% 아래면 두 줄이 한 덩어리로 뭉친다
+	"line": 16.0,        # 본문 줄 높이
+	"base": 12.0,        # 본문 블록 윗변에서 첫 줄 베이스라인까지 (11px 의 오름)
 	"chip_gap": 5.0,     # 본문 아래끝과 태그 줄 사이
 	"chip_h": 12.0,      # 태그 한 장의 높이
 	"tag_gap": 4.0,      # 태그와 태그 사이
@@ -10453,7 +10454,7 @@ func _tip_draw(sh: Vector2) -> void:
 		# 그림이므로 낱말 사이보다 넓게 띄워야 따로 읽힌다.
 		tx += 27.0
 	draw_string(font, Vector2(tx, p.y + TIP.pad + 12.0), tip_title,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(C_TXT, tip_a))
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(C_TXT, tip_a))
 
 	# _tip_draw 의 본문 루프. 이 시점에 transform 은 이미 Vector2.ZERO 라
 	# 아이콘도 안 흔들린다. 페이드는 tip_a 를 알파로 넘겨 글자와 같이 뜬다.
@@ -10473,7 +10474,7 @@ func _tip_draw(sh: Vector2) -> void:
 		if l.tl != "":
 			var tw: float = font.get_string_size(l.wr[0], HORIZONTAL_ALIGNMENT_LEFT,
 					-1, l.sz).x + 5.0
-			draw_string(font, Vector2(lx + tw, y), l.tl, HORIZONTAL_ALIGNMENT_LEFT,
+			draw_string(font_sm, Vector2(lx + tw, y), l.tl, HORIZONTAL_ALIGNMENT_LEFT,
 					p.x + sz.x - TIP.pad - lx - tw, 9, Color(C_DIM, tip_a))
 		for wi in l.wr.size():
 			_draw_tinted(lx, y, String(l.wr[wi]), l.sz, l.c)
@@ -10494,7 +10495,7 @@ func _tip_draw(sh: Vector2) -> void:
 			draw_rect(tr, Color(g.c, tip_a * 0.22))
 			draw_rect(Rect2(tr.position, Vector2(tr.size.x, 1.0)),
 					Color(g.c, tip_a * 0.85))
-			draw_string(font, tr.position + Vector2(5.0, 9.0), String(g.t),
+			draw_string(font_sm, tr.position + Vector2(5.0, 9.0), String(g.t),
 					HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(g.c, tip_a))
 			tgx += g.w + TIP.tag_gap
 		ty += TIP.chip_h + TIP.tag_lead
@@ -10552,7 +10553,7 @@ func _card_box(p: Vector2, x: float, w: float, col: Color,
 	draw_rect(Rect2(p + Vector2(x, 18.0), Vector2(w, 44.0)), col.darkened(0.55))
 	draw_string(font, p + Vector2(x, 48.0), txt,
 			HORIZONTAL_ALIGNMENT_CENTER, w, sz, col.lightened(0.45))
-	draw_string(font, p + Vector2(x, 60.0), label,
+	draw_string(font_sm, p + Vector2(x, 60.0), label,
 			HORIZONTAL_ALIGNMENT_CENTER, w, 9, C_DIM)
 
 
@@ -10586,7 +10587,7 @@ func _draw_card() -> void:
 				s2 = _roll_sz(rk, float(RND.lock2))
 			_card_box(p, 12.0, 98.0, bcol, f1, "점수", s1)
 			draw_string(font, p + Vector2(110, 46), "×",
-					HORIZONTAL_ALIGNMENT_CENTER, 24, 17, C_DIM)
+					HORIZONTAL_ALIGNMENT_CENTER, 24, 22, C_DIM)
 			_card_box(p, 134.0, 98.0, bcol, f2, "배수", s2)
 			# 이 수가 어디서 왔는지는 이 한 줄에만 있다. 동전 이름이 서던
 			# 자리를 빌린다 — 이 걸음에는 발동하는 동전이 없다.
@@ -10603,7 +10604,7 @@ func _draw_card() -> void:
 		else:
 			_card_box(p, 12.0, 98.0, C_CHIP, str(cur_chip), "점수")
 			draw_string(font, p + Vector2(110, 46), "×",
-					HORIZONTAL_ALIGNMENT_CENTER, 24, 17, C_DIM)
+					HORIZONTAL_ALIGNMENT_CENTER, 24, 22, C_DIM)
 			_card_box(p, 134.0, 98.0, C_MULT, str(cur_mult), "배수")
 			if card_item != "":
 				draw_string(font, p + Vector2(10, 84), card_item,
@@ -10657,13 +10658,13 @@ func _photo_draw() -> void:
 						a0, a0 + sw), Color(1.0, 1.0, 1.0, 0.20))
 				draw_string(font, Vector2(0.0, BC.y + R + 28.0),
 						"%d 칸  x%d" % [int(sectors[idx]) if idx < sectors.size() else 0, photo_v],
-						HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 13, C_ACC)
+						HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 11, C_ACC)
 			draw_string(font, Vector2(0.0, 24.0), "칠할 칸을 고르세요",
-					HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 13, C_TXT)
+					HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 11, C_TXT)
 		"peek":
 			_scrim()
 			draw_string(font, Vector2(0.0, 34.0), "다음 보스의 제약",
-					HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 13, C_ACC)
+					HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 11, C_ACC)
 			for i in peek_pick.size():
 				var e: Dictionary = peek_pick[i]
 				var y: float = 74.0 + float(i) * 46.0
@@ -10671,10 +10672,10 @@ func _photo_draw() -> void:
 				draw_rect(r, C_PANEL.darkened(0.15))
 				draw_string(font, r.position + Vector2(10.0, 15.0),
 						String(e.d.get("n", "")), HORIZONTAL_ALIGNMENT_LEFT,
-						-1, 12, C_TXT)
-				draw_string(font, r.position + Vector2(10.0, 30.0),
+						-1, 11, C_TXT)
+				draw_string(font_sm, r.position + Vector2(10.0, 30.0),
 						String(e.d.get("d", "")), HORIZONTAL_ALIGNMENT_LEFT,
-						r.size.x - 20.0, 10, C_DIM)
+						r.size.x - 20.0, 9, C_DIM)
 				draw_string(font, r.position + Vector2(0.0, 15.0),
 						"목표 %d" % int(e.target), HORIZONTAL_ALIGNMENT_RIGHT,
 						r.size.x - 10.0, 11, C_GOLD)
@@ -10705,10 +10706,10 @@ func _btn(r: Rect2, label: String, sub: String, on: bool,
 	draw_rect(r, C_PANEL.lightened(0.10) if on else C_PANEL.darkened(0.2))
 	draw_rect(Rect2(r.position, Vector2(r.size.x, 2)), C_ACC if on else C_DIM.darkened(0.5))
 	draw_string(font, r.position + Vector2(0, 20), label,
-			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 13, C_TXT if on else C_DIM)
+			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 11, C_TXT if on else C_DIM)
 	if sub != "":
-		draw_string(font, r.position + Vector2(0, 35), sub,
-				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 10, C_GOLD if on else C_DIM.darkened(0.3))
+		draw_string(font_sm, r.position + Vector2(0, 35), sub,
+				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, C_GOLD if on else C_DIM.darkened(0.3))
 
 
 func _draw_clear() -> void:
@@ -10719,8 +10720,8 @@ func _draw_clear() -> void:
 
 	var y := 74.0
 	for row in clear_gold_detail:
-		draw_string(font, Vector2(210, y), row.n, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, C_DIM)
-		draw_gold_at(340.0, y, "+%d" % row.v, 12, C_GOLD)
+		draw_string(font, Vector2(210, y), row.n, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_DIM)
+		draw_gold_at(340.0, y, "+%d" % row.v, 11, C_GOLD)
 		y += 17.0
 
 	# 내역 아래에 합계선을 긋고 보유액을 크게 — 3택1이 있던 자리다
@@ -10744,9 +10745,9 @@ func _draw_leg() -> void:
 	_cover_draw()
 	# 라운드 표시는 **덮개 뒤**다. 앞에 그렸더니 카운터 뒤 벽이 그 위를
 	# 덮어 상인 가슴께에 글자가 반쯤 잘려 있었다. 펠트 위로 내린다.
-	draw_string(font, Vector2(0.0, TBL.fy + 13.0),
+	draw_string(font_sm, Vector2(0.0, TBL.fy + 13.0),
 			"라운드 %d / %d" % [GameData.round_of(leg_no), GameData.rounds_n()],
-			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 10,
+			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 9,
 			Color(C_TABLE.lightened(0.40), 0.85))
 	_leg_card(cur, first + cur)
 
@@ -10779,9 +10780,9 @@ func _draw_leg() -> void:
 		_icon_tag(Vector2(r.position.x + 9.0, r.get_center().y + 0.5), 5.0,
 				String(pending_tags[i].kind))
 		var pw: float = r.size.x - 24.0
-		draw_string(font, r.position + Vector2(20.0, 11.0),
-				_elide(String(pending_tags[i].n), pw, 8),
-				HORIZONTAL_ALIGNMENT_LEFT, pw, 8, C_TXT)
+		draw_string(font_sm, r.position + Vector2(20.0, 11.0),
+				_elide(String(pending_tags[i].n), pw, 9),
+				HORIZONTAL_ALIGNMENT_LEFT, pw, 9, C_TXT)
 
 
 # 판 한 장. 지금 판이면 서고 나머지는 눕는다.
@@ -10818,7 +10819,7 @@ func _leg_card(i: int, rn: int) -> void:
 			mid - ax * (sz.x * 0.5) - ay * (CARD.h * 0.5) + shake_off))
 	var ink: Color = C_DIM.darkened(0.3) if done else C_TXT
 	draw_string(font, Vector2(0.0, 30.0), GameData.leg_name(rn),
-			HORIZONTAL_ALIGNMENT_CENTER, sz.x, 13,
+			HORIZONTAL_ALIGNMENT_CENTER, sz.x, 11,
 			ink if rn != leg_no else C_ACC)
 	if done:
 		draw_string(font, Vector2(0.0, 56.0), "넘김",
@@ -10846,11 +10847,11 @@ func _draw_stage() -> void:
 	# 진행자 라인(y119) 바로 밑 — 펠트에 규격을 인쇄하는 자리다.
 	# target_of(leg_no) 는 _open_stage 가 base 를 만든 그 식이다(출처 하나).
 	# 카드보다 **먼저** 그린다. 미끄러져 오는 카드가 글자를 덮어야 순서가 맞다.
-	draw_string(font, Vector2(0.0, 131.0),
+	draw_string(font_sm, Vector2(0.0, 131.0),
 			"라운드 %d / %d   ·   %s   ·   목표 %d"
 			% [GameData.round_of(leg_no), GameData.rounds_n(),
 					GameData.leg_name(leg_no), GameData.target_of(leg_no)],
-			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 10,
+			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 9,
 			Color(C_TABLE.lightened(0.34), 0.75))
 	# 선 카드가 맨 위에 온다. 커지면서 이웃을 밀고 들어가는데 그리는 순서가
 	# 고정이면 오른쪽 카드가 그 위를 덮어 든 것이 아래로 보인다.
@@ -10897,7 +10898,7 @@ func _apron_mods() -> void:
 		var mid: String = mods_own[i]
 		var mx: float = x0 + float(i) * step
 		_icon_mod(Vector2(mx, _apron_y()), 13.0, mid, 0.0)
-		draw_string(font, Vector2(mx - step * 0.5, _apron_y() + 28.0),
+		draw_string(font_sm, Vector2(mx - step * 0.5, _apron_y() + 28.0),
 				GameData.mod_of(mid).get("n", ""),
 				HORIZONTAL_ALIGNMENT_CENTER, step, 9, C_DIM.darkened(0.15))
 
@@ -10984,10 +10985,10 @@ func _stage_card(i: int) -> void:
 	draw_set_transform_matrix(Transform2D(ax, ay, org + shake_off))
 	_icon_modifier(Vector2(sz.x * 0.5, CARD.icon), CARD.icon_r, md.id, 0.0)
 	draw_string(font, Vector2(0.0, CARD.name), md.n,
-			HORIZONTAL_ALIGNMENT_CENTER, sz.x, 13, C_MULT.lightened(0.32))
+			HORIZONTAL_ALIGNMENT_CENTER, sz.x, 11, C_MULT.lightened(0.32))
 	# 효과는 일어서야 보인다. 누운 카드에 여덟 글자를 눕혀 두면 못 읽는다.
 	if up > 0.02:
-		draw_string(font, Vector2(6.0, CARD.desc), md.d,
+		draw_string(font_sm, Vector2(6.0, CARD.desc), md.d,
 				HORIZONTAL_ALIGNMENT_CENTER, sz.x - 12.0, 9, Color(C_DIM, up))
 	# 반드시 되돌린다. 남기면 _hud_draw 가 통째로 눌린다.
 	draw_set_transform(shake_off)
@@ -11000,7 +11001,7 @@ func _draw_shop() -> void:
 	if reroll_cost > 0:
 		var rr := _reroll_rect()
 		draw_gold(rr.position.x + rr.size.x * 0.5, rr.position.y + 35.0,
-				str(reroll_cost), 10, C_GOLD if gold >= reroll_cost else C_DIM.darkened(0.3))
+				str(reroll_cost), 9, C_GOLD if gold >= reroll_cost else C_DIM.darkened(0.3))
 	_btn(_next_rect(), "다음 판 →", "", true)
 	_hold_draw()
 	_fly_draw()
@@ -11024,21 +11025,21 @@ func _draw_shop() -> void:
 			msg = "왼쪽은 파는 창구다" if hand_zone == Z_SELL else _buy_block(hand_i)
 		ma = 0.85
 	if msg != "":
-		draw_string(font, Vector2(196.0, 316.0), msg, HORIZONTAL_ALIGNMENT_CENTER,
-				248.0, 10, Color(C_MULT.lightened(0.3), ma))
+		draw_string(font_sm, Vector2(196.0, 316.0), msg, HORIZONTAL_ALIGNMENT_CENTER,
+				248.0, 9, Color(C_MULT.lightened(0.3), ma))
 
 
 func _draw_over() -> void:
 	_scrim()
 	if won:
-		draw_string(font, Vector2(0, 150), "완주!", HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 34, C_ACC)
+		draw_string(font, Vector2(0, 150), "완주!", HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 33, C_ACC)
 		draw_string(font, Vector2(0, 186), "%d개 판을 모두 넘겼다" % GameData.legs_n(),
-				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 13, C_TXT)
+				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 11, C_TXT)
 	else:
-		draw_string(font, Vector2(0, 150), "실패", HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 34, C_MULT)
+		draw_string(font, Vector2(0, 150), "실패", HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 33, C_MULT)
 		draw_string(font, Vector2(0, 186), "라운드 %d %s — %d / %d"
 				% [GameData.round_of(leg_no), GameData.leg_name(leg_no), total, target],
-				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 13, C_TXT)
+				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 11, C_TXT)
 
 
 # ══════════════════════════════════════════════════════════
@@ -11138,9 +11139,9 @@ func _draw_title() -> void:
 	#  제목은 머리(_hdr)보다 크다. 이 화면에서는 제목이 곧 그림이라
 	#  다른 화면의 머리와 같은 크기로 두면 시작화면이 아니라 목록이 된다.
 	draw_string(font, Vector2(float(HDR.x), 104.0), "하이톤",
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 34, C_TXT)
-	draw_string(font, Vector2(float(HDR.x) + 2.0, 122.0), "HIGHTONE",
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 10, C_DIM)
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 33, C_TXT)
+	draw_string(font_sm, Vector2(float(HDR.x) + 2.0, 122.0), "HIGHTONE",
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_DIM)
 	#  글줄을 꿰는 세로선 — 설정과 같은 어법이다.
 	var y0: float = float(TMENU.y) + 4.0
 	var y1: float = _menu_rect(TITLE_ROWS.size() - 1).end.y - 4.0
@@ -11152,19 +11153,19 @@ func _draw_title() -> void:
 		var ew: float = ttl_w[i] if i < ttl_w.size() else 0.0
 		_row_band(self, r, ee, ew, 1.0)
 		draw_string(font, r.position + Vector2(0.0, 15.0),
-				String(TITLE_ROWS[i].n), HORIZONTAL_ALIGNMENT_LEFT, -1, 12,
+				String(TITLE_ROWS[i].n), HORIZONTAL_ALIGNMENT_LEFT, -1, 11,
 				C_DIM.lerp(C_TXT, ee))
 		var kk := String(TITLE_ROWS[i].k)
 		if kk != "":
-			draw_string(font, r.position + Vector2(0.0, 15.0), kk,
+			draw_string(font_sm, r.position + Vector2(0.0, 15.0), kk,
 					HORIZONTAL_ALIGNMENT_RIGHT, r.size.x - 6.0, 9,
 					Color(C_GOLD, 0.45 + 0.55 * ee))
 	# 빌려 온 것을 적는 자리. 빌린 것이 있으면 그 라이선스가 이 줄을
 	# **조건으로** 단다 — 그때는 지우면 못 낸다. 비어 있으면 안 그린다.
 	# 마지막 단추가 342 에서 끝나므로 그 아래 남는 18px 에 앉힌다.
 	if CREDITS != "":
-		draw_string(font, Vector2(0, 354), CREDITS, HORIZONTAL_ALIGNMENT_CENTER,
-				VIEW.x, 8, C_DIM)
+		draw_string(font_sm, Vector2(0, 354), CREDITS, HORIZONTAL_ALIGNMENT_CENTER,
+				VIEW.x, 9, C_DIM)
 
 
 # ══════════════════════════════════════════════════════════
@@ -12937,7 +12938,7 @@ func _draw_newrun() -> void:
 	var hid: bool = not open and GameData.pack_kind(row) == "hidden"
 	draw_string(font, Vector2(230, 84),
 			String(row.get("name", "")) if open else ("???" if hid else "잠김"),
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 13, C_TXT if open else C_DIM)
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_TXT if open else C_DIM)
 	# 다섯 줄까지 든다. 넷일 때는 아래가 비지만, 다트통마다 칸 높이가
 	# 출렁이면 넘길 때 눈이 자리를 다시 잡아야 한다.
 	#  판 안에 판을 또 깔지 않는다. 이름 밑에 가는 획 하나면 "여기서부터가
@@ -12992,14 +12993,14 @@ func _draw_newrun() -> void:
 	if lc.get_luminance() < 0.34:
 		lc = lc.lightened(0.55)
 	draw_string(font, Vector2(0, 238), String(cur.get("name", "")),
-			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 13, lc)
+			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 11, lc)
 	#  여기도 상자 대신 획 하나다.
 	draw_rect(Rect2(Vector2(160.0, 244.0), Vector2(320.0, 1.0)),
 			Color(C_WIRE, 0.35))
 	var sl := _league_lines()
 	for li in sl.size():
-		draw_string(font, _league_line_at(li),
-				String(sl[li].n), HORIZONTAL_ALIGNMENT_LEFT, 150.0, 10, C_TXT)
+		draw_string(font_sm, _league_line_at(li),
+				String(sl[li].n), HORIZONTAL_ALIGNMENT_LEFT, 150.0, 9, C_TXT)
 
 	#  「시작」은 던지러 가는 이동이라 글줄로 둔다 — 판 위의 조작 단추와
 	#  무게가 다르다. 못 누르는 동안은 띠가 안 선다.
@@ -13358,7 +13359,7 @@ func _row_band(c: CanvasItem, r: Rect2, ee: float, ew: float, a: float,
 #  설정은 여섯 줄이 노는 화면이라 78 에서 시작해도 되는데, 컬렉션은 28칸
 #  격자가 72 부터 서서 자리가 없다. 한 목소리로 들리게 하는 것은 y 가
 #  아니라 x·크기·색이다.
-const HDR := {"x": 38.0, "y": 34.0, "sz": 20, "sub_dy": 14.0, "sub_sz": 9}
+const HDR := {"x": 38.0, "y": 34.0, "sz": 22, "sub_dy": 16.0, "sub_sz": 9}
 
 
 func _hdr(c: CanvasItem, t: String, sub := "", a := 1.0, dx := 0.0,
@@ -13402,7 +13403,7 @@ func _back_row(c: CanvasItem, r: Rect2, label: String, key: String,
 	if key != "":
 		var lw: float = font.get_string_size(label + "   ",
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x if font != null else 0.0
-		c.draw_string(font, Vector2(x0 + lw, y), key,
+		c.draw_string(font_sm, Vector2(x0 + lw, y), key,
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 9,
 				Color(C_GOLD, 0.5 + 0.5 * e))
 
@@ -13439,12 +13440,12 @@ func _draw_settings(c: CanvasItem) -> void:
 		if bool(info.get("warn", false)):
 			col = C_DIM.lerp(C_RED.lightened(0.35), ee)
 		c.draw_string(font, r.position + Vector2(0.0, 15.0),
-				String(info.get("n", key)), HORIZONTAL_ALIGNMENT_LEFT, -1, 12,
+				String(info.get("n", key)), HORIZONTAL_ALIGNMENT_LEFT, -1, 11,
 				Color(col, e))
 		#  게이지 줄은 수만 곁들인다. 값을 보려고 오른쪽까지 안 가도 되게.
 		if bool(info.get("g", false)):
 			var vv: float = vol if key == "vol" else vol_mus
-			c.draw_string(font, r.position + Vector2(0.0, 15.0),
+			c.draw_string(font_sm, r.position + Vector2(0.0, 15.0),
 					"%d" % int(round(vv * 100.0)),
 					HORIZONTAL_ALIGNMENT_RIGHT, r.size.x - 6.0, 9,
 					Color(C_DIM.lerp(C_TXT, ee * 0.6), e * 0.8))
@@ -13464,16 +13465,16 @@ func _set_panel(c: CanvasItem, key: String, e: float) -> void:
 			Color(C_RED if bool(info.get("warn", false)) else C_ACC, pe))
 
 	c.draw_string(font, p.position + Vector2(20.0, 44.0),
-			String(info.get("n", key)), HORIZONTAL_ALIGNMENT_LEFT, -1, 18,
+			String(info.get("n", key)), HORIZONTAL_ALIGNMENT_LEFT, -1, 22,
 			Color(C_TXT, pe))
-	c.draw_string(font, p.position + Vector2(20.0, 70.0),
-			String(info.get("d", "")), HORIZONTAL_ALIGNMENT_LEFT, -1, 10,
+	c.draw_string(font_sm, p.position + Vector2(20.0, 70.0),
+			String(info.get("d", "")), HORIZONTAL_ALIGNMENT_LEFT, -1, 9,
 			Color(C_DIM, pe))
 
 	#  지금 값 — 전체화면의 켬/끔
 	if info.has("v"):
 		c.draw_string(font, p.position + Vector2(20.0, 118.0),
-				String(info["v"]), HORIZONTAL_ALIGNMENT_LEFT, -1, 16,
+				String(info["v"]), HORIZONTAL_ALIGNMENT_LEFT, -1, 22,
 				Color(C_ACC, pe))
 	#  게이지
 	if bool(info.get("g", false)):
@@ -13490,11 +13491,11 @@ func _set_panel(c: CanvasItem, key: String, e: float) -> void:
 				Color(C_TXT, pe))
 		c.draw_string(font, Vector2(p.end.x - 20.0 - 44.0, tr.position.y + 8.0),
 				"%d" % int(round(v * 100.0)), HORIZONTAL_ALIGNMENT_RIGHT,
-				44.0, 12, Color(C_TXT if hot else C_DIM, pe))
+				44.0, 11, Color(C_TXT if hot else C_DIM, pe))
 	#  단축키
 	if String(info.get("k", "")) != "":
-		c.draw_string(font, Vector2(p.end.x - 20.0 - 60.0, p.end.y - 16.0),
-				String(info["k"]), HORIZONTAL_ALIGNMENT_RIGHT, 60.0, 10,
+		c.draw_string(font_sm, Vector2(p.end.x - 20.0 - 60.0, p.end.y - 16.0),
+				String(info["k"]), HORIZONTAL_ALIGNMENT_RIGHT, 60.0, 9,
 				Color(C_GOLD, pe))
 
 
@@ -14112,7 +14113,7 @@ func _boost_draw() -> void:
 		draw_circle(c, 8.0 + 46.0 * tear, Color(C_ACC, 0.34 * fa))
 
 	draw_string(font, Vector2(0.0, c.y + h + 30.0), String(boost_card.get("n", "")),
-			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 12, Color(C_TXT, 1.0 - tear * 0.7))
+			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 11, Color(C_TXT, 1.0 - tear * 0.7))
 
 
 func _runinfo_ok() -> bool:
@@ -14154,8 +14155,8 @@ func _ri_block(x: float, y: float, w: float, head: String, rows: Array) -> float
 	draw_rect(Rect2(x, y + 13.0, w, 1.0), Color(C_WIRE.darkened(0.3), 0.5))
 	y += 26.0
 	for ln in rows:
-		draw_string(font, Vector2(x + 4.0, y), String(ln),
-				HORIZONTAL_ALIGNMENT_LEFT, w - 8.0, 10, C_TXT)
+		draw_string(font_sm, Vector2(x + 4.0, y), String(ln),
+				HORIZONTAL_ALIGNMENT_LEFT, w - 8.0, 9, C_TXT)
 		y += 14.0
 	return y + 10.0
 
@@ -14186,13 +14187,13 @@ func _ri_tracks(p: Rect2) -> void:
 	var x: float = p.position.x + 16.0
 	var w: float = p.size.x - 32.0
 	var y: float = p.position.y + 36.0
-	draw_string(font, Vector2(x + 4.0, y + 9.0), "레벨", HORIZONTAL_ALIGNMENT_LEFT,
+	draw_string(font_sm, Vector2(x + 4.0, y + 9.0), "레벨", HORIZONTAL_ALIGNMENT_LEFT,
 			-1, 9, C_DIM)
-	draw_string(font, Vector2(x + 46.0, y + 9.0), "트랙", HORIZONTAL_ALIGNMENT_LEFT,
+	draw_string(font_sm, Vector2(x + 46.0, y + 9.0), "트랙", HORIZONTAL_ALIGNMENT_LEFT,
 			-1, 9, C_DIM)
-	draw_string(font, Vector2(x + w - 96.0, y + 9.0), "점수 x 배수",
+	draw_string(font_sm, Vector2(x + w - 96.0, y + 9.0), "점수 x 배수",
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_DIM)
-	draw_string(font, Vector2(x + w - 24.0, y + 9.0), "맞힘", HORIZONTAL_ALIGNMENT_LEFT,
+	draw_string(font_sm, Vector2(x + w - 24.0, y + 9.0), "맞힘", HORIZONTAL_ALIGNMENT_LEFT,
 			-1, 9, C_DIM)
 	draw_rect(Rect2(x, y + 13.0, w, 1.0), Color(C_WIRE.darkened(0.3), 0.5))
 	y += 22.0
@@ -14210,20 +14211,20 @@ func _ri_tracks(p: Rect2) -> void:
 		var ml: int = int(a.get("mult", 1)) + int(b.m)
 
 		# 화면에는 lv+1 로 쓴다 — 안 올린 트랙이 Lv.1 로 읽히는 편이 익숙하다.
-		draw_string(font, Vector2(x + 4.0, y + 8.0),
+		draw_string(font_sm, Vector2(x + 4.0, y + 8.0),
 				("Lv.%d" % (lv + 1)) if tk != 0 else "—", HORIZONTAL_ALIGNMENT_LEFT,
-				-1, 10, C_GREEN.lightened(0.2) if lv > 0 else C_DIM)
-		draw_string(font, Vector2(x + 46.0, y + 8.0), String(a.get("n", "?")),
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 10, C_TXT)
+				-1, 9, C_GREEN.lightened(0.2) if lv > 0 else C_DIM)
+		draw_string(font_sm, Vector2(x + 46.0, y + 8.0), String(a.get("n", "?")),
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_TXT)
 		# 점수는 판 숫자를 곱하는 자리라 표에 값이 없는 트랙이 있다(싱글).
 		# 그때는 수를 꾸며 내지 않고 "판 숫자" 라고 말한다.
 		var sct := ("판 숫자" if sc == 0 else str(sc))
-		draw_string(font, Vector2(x + w - 96.0, y + 8.0), sct,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 10, C_CHIP.lightened(0.3))
-		draw_string(font, Vector2(x + w - 46.0, y + 8.0), "x%d" % ml,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 10, C_MULT.lightened(0.25))
-		draw_string(font, Vector2(x + w - 24.0, y + 8.0), str(n),
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 10,
+		draw_string(font_sm, Vector2(x + w - 96.0, y + 8.0), sct,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_CHIP.lightened(0.3))
+		draw_string(font_sm, Vector2(x + w - 46.0, y + 8.0), "x%d" % ml,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_MULT.lightened(0.25))
+		draw_string(font_sm, Vector2(x + w - 24.0, y + 8.0), str(n),
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 9,
 				C_GOLD if n > 0 else C_DIM.darkened(0.2))
 		y += 15.0
 
@@ -14244,14 +14245,14 @@ func _ri_photos(p: Rect2) -> void:
 	draw_rect(Rect2(x, y + 13.0, w, 1.0), Color(C_WIRE.darkened(0.3), 0.5))
 	y += 24.0
 	if own.is_empty():
-		draw_string(font, Vector2(x + 4.0, y + 8.0), "아직 없다",
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 10, C_DIM)
+		draw_string(font_sm, Vector2(x + 4.0, y + 8.0), "아직 없다",
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_DIM)
 		return
 	for f in own:
-		draw_string(font, Vector2(x + 4.0, y + 8.0), String(f.n),
-				HORIZONTAL_ALIGNMENT_LEFT, 110.0, 10, C_TXT)
-		draw_string(font, Vector2(x + 120.0, y + 8.0), String(f.d),
-				HORIZONTAL_ALIGNMENT_LEFT, w - 124.0, 10, C_DIM)
+		draw_string(font_sm, Vector2(x + 4.0, y + 8.0), String(f.n),
+				HORIZONTAL_ALIGNMENT_LEFT, 110.0, 9, C_TXT)
+		draw_string(font_sm, Vector2(x + 120.0, y + 8.0), String(f.d),
+				HORIZONTAL_ALIGNMENT_LEFT, w - 124.0, 9, C_DIM)
 		y += 15.0
 
 
@@ -14344,14 +14345,14 @@ func _draw_collect() -> void:
 				_icon_modifier(c, 11.0, mo.id, 0.0)
 				nm = mo.n
 		_draw_fit(Vector2(cell.position.x, cell.end.y - 8.0), cell.size.x, nm,
-				8, C_DIM)
+				9, C_DIM)
 
 	if _col_pages() > 1:
 		_tab_draw(self, _col_arrow_rect(false), "◀", false,
 				_col_arrow_rect(false).has_point(mouse_at))
 		_tab_draw(self, _col_arrow_rect(true), "▶", false,
 				_col_arrow_rect(true).has_point(mouse_at))
-		draw_string(font, Vector2(0, 318), "%d / %d" % [collect_page + 1, _col_pages()],
+		draw_string(font_sm, Vector2(0, 318), "%d / %d" % [collect_page + 1, _col_pages()],
 				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 9, C_DIM)
 	_back_row(self, _menu_back_rect(), "뒤로", "ESC",
 			_menu_back_rect().has_point(mouse_at))
@@ -14370,12 +14371,12 @@ func _draw_hint() -> void:
 			hint = "조준 확인"
 	if hint != "":
 		draw_string(font, Vector2(0, 348), hint,
-				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 12, C_ACC)
+				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 11, C_ACC)
 
 	# 손 부채가 하단 좌측을 쓰므로 오른쪽으로 비킨다.
 	# 조절 값 표시는 개발 빌드 전용이다 — 내보낸 exe 와 문서용 스크린샷에
 	# 이 줄이 찍혀 나가는 것을 한 번 겪었다. 조절 키 자체는 릴리즈에도 산다.
 	if OS.is_debug_build():
-		draw_string(font, Vector2(VIEW.x - 262.0, 356), "[ ] 조준 %.2f    - = 정산 %.2f    ; ' 확인텀 %.2f"
+		draw_string(font_sm, Vector2(VIEW.x - 262.0, 356), "[ ] 조준 %.2f    - = 정산 %.2f    ; ' 확인텀 %.2f"
 				% [gauge_speed, beat, confirm_hold], HORIZONTAL_ALIGNMENT_LEFT, -1, 9,
 				C_DIM.darkened(0.25))
