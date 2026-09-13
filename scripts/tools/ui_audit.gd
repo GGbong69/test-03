@@ -72,10 +72,17 @@ func _run() -> void:
 		g._process(1.0 / 60.0)
 	await _shoot("04_leg")
 
-	# 판 플레이 — 게임이 쓰는 문으로 들어가고 실제로 한 발 던진다
+	# 판 플레이 — 게임이 쓰는 문으로 들어가고 실제로 한 발 던진다.
+	# 목표를 크게 올려 둔다. 안 올리면 첫 발이 판을 넘겨 버려서 이 자리가
+	# 정산 화면을 찍는다 — 조준 화면을 여태 한 번도 못 본 이유가 그것이다.
 	g._click(g._leg_go().get_center())
 	for k in 60:
 		g._process(1.0 / 60.0)
+	g.target = 99999
+	# 조준 중 — 게이지가 반쯤 찬 자리에서 멈춘다
+	for k in 40:
+		g._process(1.0 / 60.0)
+	await _shoot("05a_aim")
 	g.state = g.S.CONFIRM
 	g.confirm_t = 99.0
 	g.aim = g.BC + Vector2(18.0, -12.0)
