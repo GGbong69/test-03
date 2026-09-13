@@ -6315,8 +6315,11 @@ func _cons_draw() -> void:
 			_icon_cons(r.get_center(), minf(r.size.x, r.size.y) * 0.30,
 					String(cons[i].id))
 	# 이름과 수 — 동전 슬롯 밑은 상인 자리라 못 쓰지만 이 자리는 벽이다.
-	draw_string(font, Vector2(box.position.x, box.end.y + 9.0), "사탕",
-			HORIZONTAL_ALIGNMENT_CENTER, box.size.x * 0.5, 9, C_DIM.darkened(0.1))
+	# 「사탕」이라고만 적고 있었는데 이 칸에는 사진도 들어간다 — 사진을
+	# 한 장 들고 있으면 「사탕 1/2」가 거짓말이 된다. 폭이 34px 뿐이라
+	# _draw_fit 으로 글자 크기를 줄여 넣는다.
+	_draw_fit(Vector2(box.position.x, box.end.y + 9.0), box.size.x * 0.5,
+			"사탕·사진", 9, C_DIM.darkened(0.1))
 	draw_string(font, Vector2(box.get_center().x, box.end.y + 9.0),
 			"%d/%d" % [cons.size(), GameData.cons_slots()],
 			HORIZONTAL_ALIGNMENT_CENTER, box.size.x * 0.5, 9,
@@ -8691,7 +8694,38 @@ const CANDY := {
 # 포장 끝 둘이 달린 몸통은 한눈에 사탕이다. 고리는 그 얼굴에 얹는다.
 #
 # r 은 **몸통** 반지름이다. 포장까지 1.5r 이므로 칸 반폭보다 작게 준다.
+#  사진 한 장. 폴라로이드다 — 테두리를 남기고 아래 여백이 더 넓다.
+#  찍힌 것은 판이다. 이 게임의 사진이 무엇을 찍은 것인지 그 한 점이 말한다.
+#  펠트에 눕는 _fix_flat 과 같은 물건의 **다른 자세**다. 저쪽은 TBL.flat 로
+#  눌러 놓은 테이블 그림이고 이쪽은 벽에 붙은 HUD 라 안 누른다.
+func _icon_fix(c: Vector2, r: float, a := 1.0) -> void:
+	var w: float = r * 1.62
+	var h: float = r * 1.92
+	var frame := Rect2(c - Vector2(w, h) * 0.5, Vector2(w, h))
+	draw_rect(Rect2(frame.position + Vector2(0.0, 1.0), frame.size),
+			Color(0.0, 0.0, 0.0, 0.35 * a))
+	draw_rect(frame, Color(C_LIGHT.lightened(0.30), a))
+	#  인화면 — 위로 붙인다. 아래 여백이 넓은 것이 폴라로이드다.
+	var pad: float = maxf(r * 0.18, 1.0)
+	var ph: float = h - pad * 3.4
+	var photo := Rect2(frame.position + Vector2(pad, pad),
+			Vector2(w - pad * 2.0, ph))
+	draw_rect(photo, Color(C_DARK.lightened(0.10), a))
+	#  찍힌 판 — 고리 하나와 붉은 점 하나
+	var ic := photo.get_center()
+	var rr: float = minf(photo.size.x, photo.size.y) * 0.36
+	_ring(ic, rr, 0.62, 1.0, Color(C_WIRE.lightened(0.1), 0.8 * a))
+	draw_circle(ic, maxf(rr * 0.36, 1.0), Color(C_RED, 0.95 * a))
+	draw_rect(frame, Color(C_WIRE.darkened(0.25), 0.55 * a), false, 1.0)
+
+
 func _icon_cons(c: Vector2, r: float, id: String, a := 1.0) -> void:
+	#  사탕과 사진이 한 표에 살고 같은 칸을 쓴다. 여기서 안 가르면 사진이
+	#  사탕 그림을 쓰고, CANDY 표에 그 id 가 없어 **회색 사탕**이 된다 —
+	#  「오리 금고」가 사탕으로 뜨던 자리가 이것이다(2026-09-13 제보).
+	if GameData.is_fixture(id):
+		_icon_fix(c, r, a)
+		return
 	# 모델이 있으면 그것을 쓴다. 없는 자리(헤드리스·프로브)는 아래 손그림이
 	# 그대로 선다 — 프로브가 렌더러 없이 도는 자리가 있다.
 	var t := _candy_tex(id)

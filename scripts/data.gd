@@ -1078,6 +1078,19 @@ static func candies() -> Array:
 	return out
 
 
+#  이 id 가 사진인가. 사탕과 사진이 한 표(consumables)에 살고 **같은 칸**을
+#  쓰므로, 그리는 쪽은 id 만 들고 둘을 갈라야 한다. 이름으로는 못 가른다 —
+#  「구성 VIII」의 id 가 c_again 이라 v_ 로 시작하지도 않는다.
+static func is_fixture(id: String) -> bool:
+	boot()
+	if not _cache.has("isfix"):
+		var m := {}
+		for c in consumables():
+			m[String(c.get("id", ""))] = String(c.get("cat", "")) != "area"
+		_cache["isfix"] = m
+	return bool((_cache["isfix"] as Dictionary).get(id, false))
+
+
 static func fixture_of(id: String) -> Dictionary:
 	for f in fixtures():
 		if String(f.id) == id:
