@@ -260,6 +260,10 @@ var run_from := S.SHOP           # 런 정보를 열던 자리. 닫으면 그리
 var boost_t := -1.0              # 뜯는 중이면 0 부터 흐른다. 음수면 안 뜯는 중
 var boost_card := {}             # 뜯고 있는 팩
 var boost_spill := []            # 아직 안 쏟은 내용물
+# 쏟아 놓은 것 중 **몇 장을 가져갈 수 있나**. 기획서 P.17 —
+# 「작은 팩 아이템 2개 중 1 / 큰 팩 아이템 4개 중 1 선택 획득」.
+# 0 이면 고르기가 끝났고, 남은 것은 쓸려 나간다.
+var boost_pick := 0
 var dead_col := -1              # 값을 죽이는 칸 색 번호. -1 이면 안 걸렸다
 var dead_ring := 0              # 무효가 되는 배수(2 더블 · 3 트리플). 0 이면 없다
 var odd_mul := 1.0              # 홀수 칸 값 배수
@@ -1282,6 +1286,9 @@ func _stock_mods() -> Array:
 
 func _roll_stock() -> void:
 	stock.clear()
+	# 리롤·새 상점이면 팩에서 쏟은 것도 같이 사라진다. 몫을 안 지우면
+	# 다음 팩을 열기 전까지 그 수가 남아 엉뚱한 매물을 공짜로 집는다.
+	boost_pick = 0
 	var nxt := leg_no + 1
 	# 레전더리는 상점을 열 때 판정한다 — 기획서의 「바로 다음 상점」이
 	# 성립하려면 런이 끝나기를 기다리면 안 된다.
@@ -1380,13 +1387,21 @@ func _buy_block(i: int) -> String:
 		return ""
 	if s.sold:
 		return "이미 구매함"
+	# 팩에서 쏟은 것은 몫이 남아 있을 때만 집는다. 값이 0 이라 골드
+	# 검사에 안 걸리므로 여기서 막지 않으면 다 가져갈 수 있다.
+	if bool(s.get("pack", false)) and boost_pick <= 0:
+		return "이 팩에서 고를 몫을 다 썼다"
 	if gold < s.cost:
 		return "골드가 %d 모자란다" % (s.cost - gold)
 	if s.type == "item" and owned.size() >= GameData.max_items():
 		return "동전 판이 꽉 찼다 (%d/%d)" % [owned.size(), GameData.max_items()]
 	if s.type == "dart" and _std_slot() < 0:
 		return "바꿀 표준 다트가 없다"
-	if s.type == "cons" and cons.size() >= GameData.cons_slots():
+	# 사탕과 사진은 **같은 칸**을 쓴다. 여기서 사탕만 보고 있었다 —
+	# 칸이 꽉 찬 채로 사진을 사면 _buy 가 골드를 먼저 깎고 sold 를 세운
+	# **뒤에** 거절해서, 값을 치르고 물건은 사라졌다. 두 갈래를 같이 본다.
+	var slotty: bool = s.type == "cons" or s.type == "fix"
+	if slotty and cons.size() >= GameData.cons_slots():
 		return "사탕 칸이 꽉 찼다 (%d/%d)" % [cons.size(), GameData.cons_slots()]
 	return ""
 
@@ -1444,6 +1459,13 @@ func _buy(i: int) -> void:
 			cons.append(s.d.duplicate())
 			_panel_reset()
 	_sfx("fixture_buy" if s.type == "fix" else "buy")
+	# 팩에서 쏟은 것을 집었다. 몫을 다 쓰면 나머지는 쓸려 나간다 —
+	# stock.sold 를 세우면 낙하가 그 자리에서 파는 연출을 그대로 탄다
+	# (drop 이 stock.sold 를 따라간다).
+	if bool(s.get("pack", false)):
+		boost_pick = maxi(0, boost_pick - 1)
+		if boost_pick <= 0:
+			_boost_sweep()
 
 
 func _std_slot() -> int:
@@ -8136,6 +8158,17 @@ func _bill_draw() -> void:
 		if not it.into:
 			continue        # 아직 레일 뒤다. 물건보다 가격이 먼저 뜨면 안 된다
 		var s: Dictionary = stock[i]
+		# 팩에서 쏟은 것은 값이 0 이다. 0골드라고 적으면 「공짜로 다 가져가라」
+		# 로 읽히는데 실제로는 몇 장만 집는 물건이다 — 값 대신 몫을 적는다.
+		if bool(s.get("pack", false)):
+			if s.sold:
+				continue
+			var pt := "고르기" if boost_pick <= 1 else "%d장 고르기" % boost_pick
+			draw_string(font, Vector2(it.u - 30.0,
+					_p2g(it.w) + DROP.bill_dy + 7.0), pt,
+					HORIZONTAL_ALIGNMENT_CENTER, 60.0, 9,
+					C_ACC if boost_pick > 0 else C_DIM.darkened(0.25))
+			continue
 		var txt := str(s.cost)
 		var bw := gold_w(txt, 9)
 		var col: Color = C_GOLD if (not s.sold and gold >= s.cost) \
@@ -13684,12 +13717,20 @@ func _boost_tick(d: float) -> void:
 # 둘은 인덱스를 공유하므로 **같이** 늘려야 한다.
 func _boost_spill() -> void:
 	boost_t = -1.0
+	# 몇 장을 가져갈 수 있는지는 팩이 쥔다(boosters.csv 의 pick). 카드를
+	# 지우기 **전에** 받아 둔다 — 전에는 그냥 다 쏟아서, 둘 중 하나를
+	# 고르는 물건이 둘 다 공짜로 주는 물건이었다.
+	boost_pick = maxi(1, int(boost_card.get("pick", 1)))
 	boost_card = {}
 	if boost_spill.is_empty():
+		boost_pick = 0
 		return
 	var n := stock.size() + boost_spill.size()
 	for e in boost_spill:
-		stock.append({"type": String(e.type), "d": e.d, "cost": 0, "sold": false})
+		# pack 표가 「이건 고르는 물건이다」를 말한다. 값이 0 이라는 것만으로는
+		# 해금 보상(free)이나 뱃지 「외상」이 깎은 매물과 못 가른다.
+		stock.append({"type": String(e.type), "d": e.d, "cost": 0,
+				"sold": false, "pack": true})
 		drop.append(_drop_one(stock.size() - 1, n))
 	boost_spill.clear()
 	drop_awake = true
@@ -13697,6 +13738,19 @@ func _boost_spill() -> void:
 	drop_t = 0.0
 	drop_acc = 0.0
 	_sfx("stage_pick")
+
+
+# 고르기가 끝났다. 팩에서 쏟은 것 중 안 집은 것을 쓸어 낸다.
+# 지우지 않고 sold 를 세운다 — 낙하(drop)가 stock.sold 를 따라가므로
+# 파는 연출이 그대로 붙고, 두 배열의 인덱스도 안 어긋난다.
+func _boost_sweep() -> void:
+	var n := 0
+	for k in mini(stock.size(), drop.size()):
+		if bool(stock[k].get("pack", false)) and not stock[k].sold:
+			stock[k].sold = true
+			n += 1
+	if n > 0:
+		_sfx("sweep_sink")
 
 
 # 눈앞으로 온 팩. 다 오면 **두 블럭이 갈라진다** — 투명도로 빼지 않는다.
