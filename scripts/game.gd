@@ -174,7 +174,7 @@ var aim_mode := "std"           # 이 런의 조준 방식. 다트통이 정한�
 # 대상을 안 고르는 사탕·사진의 갈래. 오토플레이가 이것만 자동으로 쓴다.
 const AUTO_CONS := ["area", "gold", "sellsum", "redo", "pardon"]
 
-# 「면죄부」가 세워 둔 깃발. 다음 보스 판에서 고른 제약이 안 걸린다.
+# 「GOOD AFTERNOON」이 세워 둔 깃발. 다음 보스 판에서 고른 제약이 안 걸린다.
 var pardon_next := false
 
 # ── 사진이 여는 자리들 ────────────────────────────────────
@@ -188,14 +188,14 @@ var pardon_next := false
 #    peek   다음 보스의 제약 셋을 읽기만 한다
 #
 #  자리를 가리는 이유 — 상점 테이블을 쓰는 둘은 판 위에서 열 자리가 없고,
-#  페인트는 던지는 중이라야 "이번 판" 이 뜻을 갖는다.
+#  「빨강, 파랑, 노랑」은 던지는 중이라야 "이번 판" 이 뜻을 갖는다.
 var photo := ""
 var photo_back := []     # 갈아 끼우기 전의 상점 매물. 나올 때 되돌린다
-var photo_v := 0         # 그 사진의 v (불나방의 곱절 · 페인트의 배수)
-var paint_sec := -1      # 페인트가 고른 칸. sectors 의 자리다
+var photo_v := 0         # 그 사진의 v (It's Not About Money 의 곱절 · 빨강, 파랑, 노랑 의 배수)
+var paint_sec := -1      # 「빨강, 파랑, 노랑」이 고른 칸. sectors 의 자리다
 var mark_sec := -1       # 「목표물」 챌린지가 이 판에 뽑은 칸
 var paint_mul := 1.0
-var peek_pick := []      # 한 수 앞이 미리 읽은 제약 셋
+var peek_pick := []      # 「프리크라임」이 미리 읽은 제약 셋
 var peek_leg := -1       # 그 셋이 어느 판의 것인가
 var score_mode := "std"         # 이 런의 점수 계산 방식. 든 동전이 먼저 쥔다
 # 다트통이 미는 최종 점수 배율. 계산 방식과 같이 판 시작에 한 번 읽는다.
@@ -503,8 +503,9 @@ func _start_leg() -> void:
 	mark_sec = -1
 	if GameData.chal_on("sec_only"):
 		mark_sec = randi() % maxi(sectors.size(), 1)
-	# 페인트는 "이번 판" 짜리다. 판이 새로 서면 지운다 — 재도전(같은 판을
-	# 다시 여는 사진)도 이 길을 지나므로 칠은 거기서도 풀린다.
+	# 「빨강, 파랑, 노랑」은 "이번 판" 짜리다. 판이 새로 서면 지운다 —
+	# 「또 같은 아침」(같은 판을 다시 여는 사진)도 이 길을 지나므로 칠은
+	# 거기서도 풀린다.
 	paint_sec = -1
 	paint_mul = 1.0
 	# 테이블을 빼고 판을 세운다. **데이터보다 먼저** 부른다 — 이 아래가
@@ -806,7 +807,7 @@ func _settle_clear() -> void:
 	if GameData.chal_on("gold_off"):
 		interest = 0
 		dart_gold = 0
-	# gold 를 더하기 전에 부른다 — "굳은살"과 이자가 같은 잔액을 보게 하려는 것이다.
+	# gold 를 더하기 전에 부른다 — "감자 먹는 사람들"과 이자가 같은 잔액을 보게 하려는 것이다.
 	var item_rows := _gold_from_items()
 	var item_gold := 0
 	for r in item_rows:
@@ -1526,8 +1527,21 @@ func _mod_step(b: Dictionary, sec: Array, m: Dictionary) -> void:
 			b.bi = 0.0
 			b.bo = 0.0
 			b["no_bull"] = true
+			# 2026-09-13 기획서가 비대칭으로 갈렸다 — 큰 칸은 조금, 작은 칸은
+			# 많이 올린다. v0 이 11 이상 칸, v1 이 10 이하 칸이라 v 는 이제
+			# 스칼라가 아니라 배열이다(mods() 가 v1 이 비면 스칼라로 짓는다).
+			#
+			# 문턱을 **값이 아니라 표에 자리가 없어서** 여기 둔다. mods.csv 의
+			# 값 열은 v0·v1 둘뿐이고 그 둘을 증분이 이미 쓴다 — 열을 늘리면
+			# 모든 축이 읽는 계약이 바뀌므로 이 한 축을 위해 늘리지 않았다.
+			# mods.csv 의 desc 가 같은 11·10 을 적고 있으니 같이 고쳐야 한다.
+			const DNUT_HI := 11         # 이 값 이상이 v0, 아래가 v1
+			# 값을 읽는 차례가 곧 판단의 차례다 — 먼저 걸린 보드 확장이
+			# 칸을 이미 바꿨으면 **바뀐 값**으로 갈린다. 표 순서가 적용
+			# 순서라 시계(12)·과녁(10) 뒤에 오면 그 값으로 문턱을 넘는다.
 			for i in sec.size():
-				sec[i] = mini(sec[i] + int(m.v), GameData.sector_max())
+				var add: int = int(m.v[0]) if sec[i] >= DNUT_HI else int(m.v[1])
+				sec[i] = mini(sec[i] + add, GameData.sector_max())
 		"flat":
 			# 칸 값을 통째로 하나로 덮는다. 칸을 고르는 이유가 사라지고
 			# 링만 남으므로 링 빌드와 정면으로 맞물린다.
@@ -2008,7 +2022,7 @@ func _open_stage() -> void:
 		target = base
 		_start_leg()
 		return
-	# 「한 수 앞」으로 이미 읽은 판이면 그때 본 셋을 그대로 깐다. 여기서 다시
+	# 「프리크라임」으로 이미 읽은 판이면 그때 본 셋을 그대로 깐다. 여기서 다시
 	# 뽑으면 미리보기가 거짓말이 된다 — 본 것과 뜨는 것이 달라진다.
 	if peek_leg == leg_no and not peek_pick.is_empty():
 		for e in peek_pick:
@@ -2038,14 +2052,17 @@ func _open_stage() -> void:
 
 func _pick_stage(i: int) -> void:
 	var sp: Dictionary = stage_pick[i]
-	# 면죄부를 썼으면 고른 제약이 안 걸린다. 목표도 기본값으로 되돌린다 —
+	# 「GOOD AFTERNOON」을 썼으면 고른 제약이 안 걸린다. 목표도 기본값으로 되돌린다 —
 	# "문턱"은 카드에 오른 목표가 곧 그 판 목표라 제약만 지우면 목표가
 	# 오른 채로 남는다.
 	if pardon_next:
 		pardon_next = false
 		active_mods = []
 		target = GameData.target_of(leg_no)
-		pop(BC + Vector2(0.0, -40.0), "면죄부", C_ACC, 11, 1.1)
+		# ⚠ 이름이 consumables.csv 와 여기 두 곳에 있다. 표가 출처인데 여기
+		# 글자로 박혀 있어 이름이 바뀔 때마다 같이 고쳐야 한다 — 표에서 읽는
+		# 길을 내는 것이 맞지만 그건 이 판의 일이 아니다.
+		pop(BC + Vector2(0.0, -40.0), "GOOD AFTERNOON", C_ACC, 11, 1.1)
 	else:
 		active_mods = [sp.d]
 		target = sp.target
@@ -2797,7 +2814,7 @@ func _score_combine(chip: int, mult: int) -> int:
 		"std":
 			return chip * mult
 		"bal":
-			# 점수와 배수를 평균으로 맞춘 뒤 곱한다. 같은 합에서 곱이 가장
+			# 점수와 배수의 수를 수평 맞춘 뒤 곱한다. 같은 합에서 곱이 가장
 			# 큰 자리가 두 값이 같은 자리라, 결과는 **늘 std 이상**이다.
 			#
 			# ⚠ 「고르게 올린 빌드가 이긴다」고 오래 적혀 있었는데 **틀렸다.**
@@ -3353,7 +3370,7 @@ func _land(mark := true) -> void:
 	if not is_equal_approx(odd_mul, 1.0) and info.idx >= 0 			and int(info.base) % 2 == 1:
 		info.base = int(round(float(info.base) * odd_mul))
 	# 「목표물」 — 뽑힌 칸이 아니면 점수가 안 난다. 맞으면 곱한다.
-	# 칠(페인트)보다 먼저다 — 0 이 된 뒤에 칠하면 0 에 곱해 0 이고,
+	# 칠(「빨강, 파랑, 노랑」)보다 먼저다 — 0 이 된 뒤에 칠하면 0 에 곱해 0 이고,
 	# 그게 "그 칸에서만 난다" 는 말과 맞는다.
 	if mark_sec >= 0:
 		if info.idx == mark_sec:
@@ -3361,7 +3378,7 @@ func _land(mark := true) -> void:
 					* GameData.chal_f("sec_mul", 1.0)))
 		else:
 			info.base = 0
-	# 페인트가 칠한 칸. 죽이는 축을 다 지난 뒤에 곱한다 — 금줄이 죽인 칸을
+	# 「빨강, 파랑, 노랑」이 칠한 칸. 죽이는 축을 다 지난 뒤에 곱한다 — 금줄이 죽인 칸을
 	# 칠했으면 0 에 곱해 0 이다. 두 장을 같이 쓴 결과가 그것이 맞다.
 	if paint_sec >= 0 and info.idx == paint_sec:
 		info.base = int(round(float(info.base) * paint_mul))
@@ -5983,7 +6000,7 @@ func _cons_deny(c: Dictionary, why: String) -> void:
 	_deny()
 
 
-# ── 불나방 · 위조화폐 — 상점 테이블을 갈아 끼운다 ──────────
+# ── It's Not About Money · 마릴린 딥틱 — 상점 테이블을 갈아 끼운다 ──
 #
 #  매물을 치우고 그 자리에 **보유 동전**을 떨어뜨린다. 물리도 집기도
 #  툴팁도 매물과 똑같이 돈다 — type 을 "item" 그대로 두었기 때문이다.
@@ -6054,7 +6071,7 @@ func _photo_take(i: int) -> void:
 	_photo_close()
 
 
-# ── 페인트 — 다트판의 칸 하나를 고른다 ────────────────────
+# ── 빨강, 파랑, 노랑 — 다트판의 칸 하나를 고른다 ──────────────
 #
 #  커서 밑의 칸을 hit_info 에게 물어본다. 각도 규약을 여기서 다시 세면
 #  판을 돌리는 제약(딴판)이나 칸을 바꾸는 보드 확장이 걸렸을 때 화면과
@@ -6072,11 +6089,12 @@ func _paint_click(m: Vector2) -> void:
 	paint_sec = idx
 	paint_mul = float(photo_v)
 	photo = ""
-	pop(BC + Vector2(0.0, -40.0), "페인트  x%d" % photo_v, C_ACC, 11, 1.1)
+	# ⚠ 이름이 consumables.csv 와 여기 두 곳에 있다(GOOD AFTERNOON 의 pop 주석 참고).
+	pop(BC + Vector2(0.0, -40.0), "빨강, 파랑, 노랑  x%d" % photo_v, C_ACC, 11, 1.1)
 	_sfx("cons_use")
 
 
-# ── 한 수 앞 — 다음 보스의 제약 셋을 읽기만 한다 ────────────
+# ── 프리크라임 — 다음 보스의 제약 셋을 읽기만 한다 ──────────
 func _photo_peek() -> void:
 	var n := leg_no
 	while n <= GameData.legs_n() and not GameData.is_boss(n):
@@ -9348,7 +9366,7 @@ func _panel_gap(i: int) -> void:
 # 창구를 눌렀을 때. 방향이 무엇을 뜻하는지는 여기서도 같다.
 func _chute_click(z: int) -> void:
 	if photo == "burn" or photo == "clone":
-		# 불나방은 판매 창구로, 위조화폐는 구매(복제) 창구로 보낸다.
+		# It's Not About Money 는 판매 창구로, 마릴린 딥틱은 구매(복제) 창구로 보낸다.
 		var want: int = Z_SELL if photo == "burn" else Z_BUY
 		if z != want:
 			pay_msg = "반대쪽 창구다"
@@ -9776,7 +9794,7 @@ func _tip_build(hit: Dictionary) -> void:
 		"ccons":
 			_tip_set_tag("사탕")
 			tip_mark = _col_cell(i % COL_PAGE)
-			var cd: Dictionary = GameData.consumables()[i]
+			var cd: Dictionary = GameData.candies()[i]
 			tip_title = cd.n
 			_tip_add(cd.d, 10, C_DIM)
 		"lg":
@@ -12922,7 +12940,7 @@ func _col_total() -> int:
 		0: return GameData.items().size()
 		1: return GameData.mods().size()
 		2: return GameData.darts().size()
-		3: return GameData.consumables().size()
+		3: return GameData.candies().size()
 		4: return GameData.fixtures().size()
 	return GameData.modifiers().size()
 
@@ -13347,7 +13365,7 @@ func _draw_collect() -> void:
 	# 이름은 COL_TABS 가, 개수는 표가 낸다 — 이름을 여기서 또 적으면
 	# 탭이 늘 때 순서가 또 어긋난다.
 	var cnt := [GameData.items().size(), GameData.mods().size(),
-			GameData.darts().size(), GameData.consumables().size(),
+			GameData.darts().size(), GameData.candies().size(),
 			GameData.fixtures().size(), GameData.modifiers().size()]
 	for t in COL_TABS.size():
 		_btn(_col_tab_rect(t), "%s %d" % [COL_TABS[t].n, cnt[t]], "",
@@ -13375,7 +13393,7 @@ func _draw_collect() -> void:
 			3:
 				# 테이블에 뜨는 그림 그대로 쓴다 — 두 글자 상자였을 때는
 				# 컬렉션의 사탕과 판 위의 사탕이 다른 물건으로 보였다.
-				var cs: Array = GameData.consumables()
+				var cs: Array = GameData.candies()
 				_icon_cons(c, 11.0, String(cs[gi].id))
 				nm = cs[gi].n
 			4:

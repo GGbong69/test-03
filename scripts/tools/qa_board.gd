@@ -51,6 +51,33 @@ func _share(b: Dictionary) -> Dictionary:
 	}
 
 
+# mods() 는 v1 이 비면 v 를 스칼라로, 차 있으면 [v0, v1] 로 짓는다.
+# 표의 값 열을 찍는 자리는 그 두 모양을 다 받아야 한다 — v0 를 찾으면
+# 그런 키가 없어 값 열이 늘 빈칸이었다.
+func _vstr(v) -> String:
+	if v is Array:
+		var p := []
+		for x in v:
+			p.append(str(int(x)) if is_equal_approx(x, floor(x)) else "%.2f" % x)
+		return "·".join(p)
+	if v is float:
+		return str(int(v)) if is_equal_approx(v, floor(v)) else "%.2f" % v
+	return str(v)
+
+
+# 기본 칸 값 → 그 장의 칸 값. 자리끼리 맞대고 기본 값 순으로 세운다 —
+# 문턱으로 갈리는 장(도넛)은 그 순서라야 갈리는 자리가 눈에 보인다.
+func _sec_line(base: Array, sec: Array) -> String:
+	var pairs := []
+	for i in base.size():
+		pairs.append([int(base[i]), int(sec[i])])
+	pairs.sort_custom(func(a, b): return a[0] < b[0])
+	var out := []
+	for p in pairs:
+		out.append("%d:%+d" % [p[0], p[1] - p[0]])
+	return " ".join(out)
+
+
 func _process(_d: float) -> bool:
 	if done:
 		return false
@@ -71,15 +98,25 @@ func _process(_d: float) -> bool:
 	print("%-8s %-6s %7s %8s %8s %8s %8s %8s"
 			% ["이름", "축", "값", "판값", "기본대비", "트리플", "더블", "빗나감"])
 	var rows := []
+	var sec_rows := []
 	for m in GameData.mods():
 		var r: Array = g._board_of([m.id])
 		var bv: float = GameData.board_val(r[0], r[1])
 		var sh := _share(r[0])
 		rows.append({"id": String(m.id), "n": String(m.n), "bv": bv})
+		if r[1] != base_r[1]:
+			sec_rows.append({"n": String(m.n), "sec": r[1]})
 		print("%-8s %-6s %7s %8.2f %+7.1f%% %7.2f%% %7.2f%% %7.2f%%"
-				% [m.n, m.get("axis", m.get("k", "")), str(m.get("v0", "")),
+				% [m.n, m.get("axis", m.get("k", "")), _vstr(m.get("v", "")),
 				bv, (bv / bv0 - 1.0) * 100.0,
 				sh.trp * 100.0, sh.dbl * 100.0, sh.miss * 100.0])
+
+	# 칸 값을 건드리는 장은 판값 한 수로는 안 읽힌다 — 비대칭으로 올리는 장이
+	# 어느 칸에 얼마를 얹었는지가 그 한 수 안에서 섞여 버린다. 칸마다 재서 찍는다.
+	if not sec_rows.is_empty():
+		print("\n칸 값 증분 — 기본 칸 번호:증분")
+		for r in sec_rows:
+			print("  %-8s %s" % [r.n, _sec_line(base_r[1], r.sec)])
 
 	# 혼자서도 상한을 넘으면 테이블에 아예 안 뜬다 — 살 수 없는 카드다.
 	print("\n혼자서 상한을 넘는 장")

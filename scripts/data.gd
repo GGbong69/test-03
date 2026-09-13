@@ -553,6 +553,13 @@ static func cons_slots() -> int:
 #    out    판 바깥 경계     v = 새 dbl_out
 #    swap   작은 칸 올리기   v = 올릴 칸 수
 #    odd    짝수 칸 내리기   v = 안 씀
+#    donut  불 지우기        v = [큰 칸 증분, 작은 칸 증분]
+#
+#  v1 이 비면 v 는 배열이 아니라 **스칼라**다(아래 has1). 2026-09-13
+#  기획서에서 donut 이 비대칭으로 갈려 v1 이 찼고, 그래서 그 축만
+#  스칼라에서 배열로 옮겼다 — v1 을 채우거나 비우면 game.gd _mod_step
+#  쪽 읽는 법도 같이 바뀐다. 큰 칸과 작은 칸을 가르는 문턱은 표에 값
+#  열이 v0·v1 둘뿐이라 자리가 없어 그 가지가 쥔다.
 static func mods() -> Array:
 	boot()
 	if _cache.has("mods"):
@@ -1037,6 +1044,17 @@ static func fixtures() -> Array:
 	var out := []
 	for c in consumables():
 		if String(c.get("cat", "")) != "area":
+			out.append(c)
+	return out
+
+
+# 사탕만. consumables() 는 사탕과 사진이 한 표에 살아 둘 다 낸다 — 사탕을
+# 뜻하는 자리에서 그것을 그대로 쓰면 사진이 사탕 행세를 한다. 컬렉션의
+# 「사탕」 탭에 사진 여덟이 사탕 포장지를 쓰고 서 있던 것이 그 자리였다.
+static func candies() -> Array:
+	var out := []
+	for c in consumables():
+		if String(c.get("cat", "")) == "area":
 			out.append(c)
 	return out
 
