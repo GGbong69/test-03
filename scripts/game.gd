@@ -4578,6 +4578,7 @@ func _hud_draw() -> void:
 		_panel_draw()
 		_cap_draw()
 		_rack_hold_draw()   # 판 위다 — 끌고 다니는 동전은 무엇에도 안 덮인다
+		_use_draw()         # 가운데로 끌고 온 사탕·사진과 그 자리
 		# 나가는 전환에서만 같이 들어온다. 돌아오는 쪽은 안 그린다 —
 		# HUD 는 스크림 위라, 벽만 어두운 화면에 홀로 밝게 뜬다.
 		# 스크림이 0.94 로 시작하므로 사라지는 것도 안 보인다.
@@ -6146,21 +6147,33 @@ func _cons_hit(m: Vector2) -> int:
 	return -1
 
 
+#  지금 이것을 쓸 수 있나. 빈 문자열이면 쓸 수 있다는 뜻이다.
+#  사용조건은 표가 쥔다(2026-09-13 기획서 s33) — 전에는 갈래마다 박혀 있어서
+#  표를 고쳐도 안 따라왔다.
+#
+#  _cons_use 안에 있던 것을 문 하나로 뺐다. 끌어다 놓는 길이 생기면서
+#  **고리가 놓기 전에 미리** 이 말을 해야 하기 때문이다 — 손을 놓고 나서
+#  거절당하는 것과 놓기 전에 못 놓는 것이 보이는 것은 다른 조작이다.
+func _cons_block(c: Dictionary) -> String:
+	match String(c.get("use_at", "any")):
+		"rest":
+			if state != S.SHOP and state != S.LEG:
+				return "상점이나 판 고르기에서 쓴다"
+		"play":
+			if not _is_play():
+				return "판에서만 쓴다"
+	return ""
+
+
 func _cons_use(i: int) -> void:
 	if i < 0 or i >= cons.size():
 		return
 	var c: Dictionary = cons[i]
 	var at := _cons_rect(i).get_center()
 	var say := ""
-	# 사용조건 — 표가 쥔다(2026-09-13 기획서 s33). 전에는 갈래마다 박혀
-	# 있어서 표를 고쳐도 안 따라왔다.
-	match String(c.get("use_at", "any")):
-		"rest":
-			if state != S.SHOP and state != S.LEG:
-				return _cons_deny(c, "상점이나 판 고르기에서 쓴다")
-		"play":
-			if not _is_play():
-				return _cons_deny(c, "판에서만 쓴다")
+	var why := _cons_block(c)
+	if why != "":
+		return _cons_deny(c, why)
 	match String(c.cat):
 		"area":
 			track_lv[c.track] = int(track_lv.get(c.track, 0)) + 1
@@ -8189,7 +8202,11 @@ func _fix_flat(c: Vector2, it: Dictionary, rot: float, dim: float) -> void:
 #  일반은 안 그린다. 넷 다 빛나면 아무것도 안 빛나는 것과 같고, 흔한 것이
 #  빛나면 그 빛이 「귀하다」를 못 말한다. 등급 고리(draw_item_sticker)가
 #  같은 규약이다.
-const GLOW := {"n": 5, "step": 2.1, "a": 0.20}
+#  2026-09-14 — 너무 연해서 임팩트가 없었다. 짙기를 0.20 → 0.42 로 올리고
+#  겹을 다섯에서 일곱으로, 걸음을 2.1 → 2.6 으로 벌린다. 그리고 몸통에
+#  바로 붙는 한 겹을 따로 둔다 — 번짐만으로는 「빛난다」가 아니라 「흐리다」로
+#  읽힌다. 가장자리에 닿는 밝은 테 하나가 있어야 빛이 물건에서 나온다.
+const GLOW := {"n": 7, "step": 2.6, "a": 0.42, "rim": 0.55}
 
 
 #  등급 하나가 내는 빛. 알파 0 이면 안 빛난다는 뜻이다 — 규칙을 색 하나로
@@ -8213,6 +8230,10 @@ func _rar_glow(c: Vector2, rx: float, ry: float, rar: String, dim: float) -> voi
 		var f: float = 1.0 - float(k) / float(int(GLOW.n) + 1)
 		draw_colored_polygon(_e_pts(c, rx + g, ry + g * TBL.flat),
 				Color(col, col.a * f * f * fa))
+	# 몸통에 바로 붙는 테. 번짐만 있으면 「흐리다」로 읽힌다 — 물건 가장자리에
+	# 닿는 밝은 한 겹이 있어야 빛이 그 물건에서 나오는 것으로 보인다.
+	draw_colored_polygon(_e_pts(c, rx + 1.4, ry + 1.4 * TBL.flat),
+			Color(col.lightened(0.30), float(GLOW.rim) * fa))
 
 
 func _sticker_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: float) -> void:
@@ -9372,8 +9393,11 @@ func _hand_motion(m: Vector2) -> void:
 		# → 탭 판정이라는 경로를 원천 차단한다.
 		hand_far = maxf(hand_far, m.distance_to(hand_p0))
 		if hand_far > HAND.slip:
-			if hand_src >= 2:
-				_hand_abort()     # 창구·사탕 칸은 버튼이다. 끌면 취소다
+			#  창구(2)와 판매 단추(5)는 단추다 — 끌면 취소다.
+			#  사탕 칸(4)은 **집어서 가운데로 가져다 쓰는** 물건이 됐다.
+			#  누르고 떼는 길은 그대로 산다 — 한 손짓을 두 길로 연다.
+			if hand_src == 2 or hand_src == 5:
+				_hand_abort()
 			else:
 				_hand_take()
 
@@ -9384,8 +9408,9 @@ func _hand_take() -> void:
 	hand_zone = -1
 	buy_sel = -1
 	sell_sel = -1             # 드래그는 _click 을 안 거쳐 _sell_hit 의 낙수가 안 온다
-	if hand_src == 1:
-		# 동전 슬롯 동전은 물리 물체가 아니다. 적분기에 넣을 것이 없어 커서만 따라간다.
+	if hand_src == 1 or hand_src == 4:
+		# 동전 슬롯 동전과 사탕은 물리 물체가 아니다. 적분기에 넣을 것이
+		# 없어 커서만 따라간다.
 		hand_off = Vector2.ZERO
 		peel_t = 0.0              # 떼는 순간. 말림이 여기서부터 잦아든다
 		_sfx("hand_take")
@@ -9437,6 +9462,14 @@ func _hand_release(m: Vector2) -> void:
 			_rack_tap(i)
 		else:
 			_shop_tap(i)
+		return
+
+	# 사탕·사진 — 가운데에 놓으면 쓴다. 그 밖에 놓으면 칸으로 돌아간다.
+	if src == 4:
+		if _use_hit(m) and i >= 0 and i < cons.size():
+			_cons_use(i)
+		else:
+			_sfx("hand_drop")
 		return
 
 	# 동전 슬롯 동전 — 왼쪽 창구는 판매, 다른 동전 슬롯 칸 위는 순서 바꾸기.
@@ -9792,6 +9825,78 @@ func _pay_take(i: int) -> void:
 # 버튼(_btn)이 아니라 판의 어법이다 — 누르는 것이 아니라 놓는 자리다.
 # 손에 든 것 하나만 따로, 앞치마·버튼 다음에 그린다. _goods_draw 는 창구보다
 # 먼저 나가므로 창구까지 밀어 넣은 물건이 거기서는 덮인다.
+# ══════════════════════════════════════════════════════════
+#  가운데에 놓아 쓰기
+# ──────────────────────────────────────────────────────────
+#  사탕 칸의 물건을 집어 화면 가운데로 끌고 오면 쓴다. 자리는 BC —
+#  판에서는 다트판 한가운데고 상점에서는 펠트 한가운데라, 두 화면에서
+#  같은 곳이 "여기다" 가 된다.
+#
+#  누르고 떼는 옛 길도 그대로 산다. 손짓 하나에 길이 둘이어도, 둘 다
+#  **뗄 때** 확정이라는 규약은 같다.
+# ══════════════════════════════════════════════════════════
+const USE := {"r": 42.0, "ring": 3.0}
+
+
+func _use_spot() -> Vector2:
+	return BC
+
+
+func _use_hit(m: Vector2) -> bool:
+	return m.distance_to(_use_spot()) <= float(USE.r)
+
+
+#  들고 있는 사탕·사진과 그것을 놓을 자리. 손에 든 것보다 **자리를 먼저**
+#  그린다 — 물건이 자리 위에 얹혀야 "여기 놓는다" 로 읽힌다.
+func _use_draw() -> void:
+	if hand_st != H.CARRY or hand_src != 4:
+		return
+	if hand_i < 0 or hand_i >= cons.size():
+		return
+	var c: Dictionary = cons[hand_i]
+	var why := _cons_block(c)
+	var on: bool = _use_hit(hand_m) and why == ""
+	var sp := _use_spot()
+	var col: Color = C_ACC if on else (C_OFF if why != "" else C_DIM)
+
+	#  자리 — 점선 고리. 통고리는 판의 칸 하나처럼 읽혀서 조준 표적과
+	#  헷갈린다. 끊어 두면 "놓는 자리" 가 된다.
+	var seg := 28
+	for k in seg:
+		if k % 2 == 1:
+			continue
+		var a0: float = TAU * float(k) / float(seg)
+		var a1: float = TAU * float(k + 1) / float(seg)
+		var r0: float = float(USE.r) + (2.0 if on else 0.0)
+		draw_line(sp + Vector2(cos(a0), sin(a0)) * r0,
+				sp + Vector2(cos(a1), sin(a1)) * r0,
+				Color(col, 0.85), float(USE.ring) if on else 2.0)
+	if on:
+		draw_circle(sp, float(USE.r) - 3.0, Color(col, 0.10))
+
+	#  말 — 놓을 수 있으면 이름, 못 놓으면 이유.
+	#
+	#  **받침을 깐다.** 이 고리는 다트판 한가운데에 서고, 판에는 크림색 칸이
+	#  있어서 글씨만 얹으면 그 칸 위에서 통째로 사라진다. 그림자 한 겹으로는
+	#  부족하다 — 획이 1px 이라 밝은 바탕에서는 그림자도 같이 씻긴다.
+	var t := String(c.get("n", "")) if why == "" else why
+	var two: bool = why == ""
+	var cy: float = sp.y + float(USE.r) + 8.0
+	var ch: float = 26.0 if two else 15.0
+	draw_rect(Rect2(sp.x - 62.0, cy, 124.0, ch), Color(C_BG, 0.82))
+	draw_rect(Rect2(sp.x - 62.0, cy, 124.0, 1.0), Color(col, 0.55))
+	draw_string(font_sm, Vector2(sp.x - 62.0, cy + 11.0), t,
+			HORIZONTAL_ALIGNMENT_CENTER, 124.0, 9, Color(col, 1.0))
+	if two:
+		draw_string(font_sm, Vector2(sp.x - 62.0, cy + 22.0),
+				"놓으면 쓴다", HORIZONTAL_ALIGNMENT_CENTER, 124.0, 9,
+				Color(C_OFF, 1.0))
+
+	#  손에 든 것. 커서 밑에 그림자를 깔아 떠 있는 것으로 읽힌다.
+	draw_circle(hand_m + Vector2(1.0, 3.0), 11.0, Color(0.0, 0.0, 0.0, 0.30))
+	_icon_cons(hand_m, 10.0, String(c.get("id", "")))
+
+
 func _hold_draw() -> void:
 	# 동전 슬롯 동전은 여기서 안 그린다 — _rack_hold_draw 가 판 위에서 맡는다.
 	if hand_st != H.CARRY or hand_src != 0:
