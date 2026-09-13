@@ -115,6 +115,9 @@ const C_PANEL := Color("221d33")
 const C_CHIP := Color("3f8fd8")
 const C_MULT := Color("e2593f")
 const C_GOLD := Color("f2c94c")
+# 확률. 점수(푸름)·배수(붉음)와 나란한 셋째 색이다 — 「1/10 확률로 파괴」의
+# 그 몫이 눈에 먼저 들어와야 살지 말지가 갈린다. 짙은 툴팁 판 위에서 읽힌다.
+const C_ODDS := Color("6fbf73")
 
 enum S { PICK, AIM_V, AIM_H, CONFIRM, FLY, RESOLVE, CLEAR, SHOP, STAGE, OVER,
 		TITLE, SETTINGS, COLLECT, NEWRUN, LEG, RUNINFO, BOOST }
@@ -134,6 +137,15 @@ func _sec_col(i: int) -> int:
 # ── 보드 기하 (보드 확장로 변한다) ──────────────────────────────
 #  판의 유일한 출처는 mods_own 이다. 아래 여덟은 그것을 구운 결과일 뿐이다.
 var mods_own := []
+# 보드 확장은 **한 장만** 낀다(2026-09-13 사용자 지시). 새로 사면 낀 것이
+# 덮이며 사라지고 골드는 안 돌아온다 — 사는 순간이 곧 버리는 결정이다.
+# 배열로 두는 것은 _board_of · _board_bake 가 이미 여럿을 받는 꼴이라서다.
+#
+# 덮인 장은 판 한복판에서 한 번 부풀었다 스러진다. 표만 조용히 갈리면
+# 무엇을 잃었는지가 안 보인다.
+var mod_shed := ""
+var mod_shed_t := 0.0
+const MOD_SHED := 0.70
 var sectors := GameData.SECTORS_BASE.duplicate()
 var dbl_out := 1.00
 var dbl_in := 0.90
@@ -193,6 +205,22 @@ var photo := ""
 var photo_back := []     # 갈아 끼우기 전의 상점 매물. 나올 때 되돌린다
 var photo_v := 0         # 그 사진의 v (It's Not About Money 의 곱절 · 빨강, 파랑, 노랑 의 배수)
 var paint_sec := -1      # 「빨강, 파랑, 노랑」이 고른 칸. sectors 의 자리다
+# 판 위에서 동전 하나를 고르는 중이다. 상점 밖에서 It's Not About Money 와
+# 마릴린 딥틱을 쓰면 테이블이 없어 고를 자리가 없다 — 동전 슬롯이 그 자리를
+# 대신한다(2026-09-13 기획서 s33 「상관없음」). 고르기 전에는 손에서 안 없앤다.
+var photo_rack := ""     # "" · "burn" · "clone"
+var photo_rack_i := -1   # 그 사진이 든 사탕 칸
+# 「구성 VIII」이 되던질 궤적. 던지는 순간의 착탄점과 자루를 그대로 쥐고
+# 있다가 탄창을 안 건드리고 한 발을 더 태운다 — 덤으로 한 발이지 다트를
+# 쓰는 것이 아니다. 판이 새로 서면 지운다(궤적이 없는 자리다).
+var again_aim := Vector2(-1.0, -1.0)
+var again_dart := {}
+# 「녹는 시계」가 다음 판으로 넘기는 다트 수. 판이 끝나는 자리에서 담고
+# 다음 판이 서는 자리에서 푼다 — 다트통·리그·뱃지와 같은 dadd 사슬에
+# 얹어야 순서가 값을 바꾸는 자리가 한 군데로 남는다.
+var carry_darts := 0
+# 보드 확장 「시계」를 낀 채 이어진 보드 아웃 수. 녹는 시계의 해금 조건이다.
+var clok_out := 0
 var mark_sec := -1       # 「목표물」 챌린지가 이 판에 뽑은 칸
 var paint_mul := 1.0
 var peek_pick := []      # 「프리크라임」이 미리 읽은 제약 셋
@@ -507,6 +535,10 @@ func _start_leg() -> void:
 	# 「또 같은 아침」(같은 판을 다시 여는 사진)도 이 길을 지나므로 칠은
 	# 거기서도 풀린다.
 	paint_sec = -1
+	# 판이 새로 서면 되던질 궤적이 없다.
+	again_aim = Vector2(-1.0, -1.0)
+	again_dart = {}
+	clok_out = 0
 	paint_mul = 1.0
 	# 테이블을 빼고 판을 세운다. **데이터보다 먼저** 부른다 — 이 아래가
 	# 판의 링 폭(rt_*)을 다시 잡으므로, 연출을 나중에 열면 올라오는 동안은
@@ -555,6 +587,8 @@ func _start_leg() -> void:
 	var dadd := int(mod_v("darts_add", 0.0))
 	dadd += int(GameData.league_v("darts_add", 0.0))
 	dadd += _spend_tags("dart")          # 뱃지 — 다음 판 한 번만 산다
+	dadd += carry_darts                  # 녹는 시계 — 지난 판의 잔탄
+	carry_darts = 0
 	# 순서: 제약 → 리그 → 뱃지 → 사진 → 동전. 전부 더하기라 지금은 수가
 	# 같지만, 이 줄들 중 하나라도 곱이 되면 순서가 값을 바꾼다. 그때 고칠
 	# 자리가 여기 하나다.
@@ -698,6 +732,12 @@ func _grip_consume() -> void:
 
 
 func _finish_leg() -> void:
+	# 「녹는 시계」 — 판 종료시 남은 다트를 다음 판으로 넘긴다(기획서 s27).
+	carry_darts = 0
+	for o in owned:
+		if String(o.get("side", "")) == "carry":
+			carry_darts = maxi(darts_left, 0)
+			break
 	Save.peak("best_leg", leg_no)
 	Save.peak("best_score", total)
 	Save.peak("best_gold", gold)
@@ -1069,13 +1109,9 @@ func _leg_end_wear() -> void:
 			it.gs = int(it.get("gs", 0)) + 1
 			if int(it.v) - int(it.gstep) * int(it.gs) <= 0:
 				dead = true
-		match String(it.get("boom", "")):
-			"r6":
-				if randf() < 1.0 / 6.0:
-					dead = true
-			"r1000":
-				if randf() < 0.001:
-					dead = true
+		var bn := GameData.boom_n(String(it.get("boom", "")))
+		if bn > 0 and randf() < 1.0 / float(bn):
+			dead = true
 		if dead:
 			pop(_slot_rect(mini(i, GameData.max_items() - 1)).get_center()
 					+ Vector2(0.0, 24.0), "%s — 부서졌다" % it.n, C_MULT, 11, 1.1)
@@ -1615,22 +1651,33 @@ func _mod_room(id: String) -> bool:
 	var m := GameData.mod_of(id)
 	if m.is_empty():
 		return false
-	if m.excl != "" and mods_own.has(m.excl):
-		return false
-	var nx := _board_of(mods_own + [id])
-	if not _board_ok(nx[0], nx[1]):
-		return false
+	# 한 장만 끼므로 짝이 설 수 없다. 짝을 막던 둘 — 판값 상한(_board_ok)과
+	# 배타 열(excl) — 이 여기서 할 일이 없어졌다. 상한은 tuning.csv 와
+	# qa_board 에 남아 누가 넘는지 계속 보고한다(2026-09-13).
+	var nx := _board_of([id])
 	var cur := _board_of(mods_own)
-	# 지금 여덟 종으로는 걸리지 않는다(배타 짝이 유일한 상쇄 경로였다).
-	# 남겨 두는 것은 다음 사람이 보드 확장을 늘릴 때의 계약이다.
 	return not _board_same(cur[0], cur[1], nx[0], nx[1])
 
 
 func _apply_mod(id: String) -> void:
 	if not _mod_room(id):
 		return
-	mods_own.append(id)
+	if not mods_own.is_empty():
+		_mod_shed(String(mods_own[0]))
+	mods_own = [id]
 	_board_bake()
+
+
+# 덮여 사라진다. 무엇이 빠졌는지를 이름으로 한 번 말하고, 판 한복판에서
+# 부풀며 스러지는 그림을 세운다 — 판이 바뀌는 것은 보이는데 무엇이
+# 빠졌는지는 안 보이기 때문이다.
+func _mod_shed(id: String) -> void:
+	mod_shed = id
+	mod_shed_t = MOD_SHED
+	shake = 5.0
+	pop(BC + Vector2(0.0, -46.0),
+			"%s — 덮였다" % String(GameData.mod_of(id).get("n", id)),
+			C_MULT, 11, 1.2)
 
 
 # 칸 값을 섞는다(제약 「돌린 판」 · 2026-09-11 기획서 「보드칸의 값이 랜덤」).
@@ -2327,6 +2374,7 @@ func _process(d: float) -> void:
 	screen_flash = maxf(screen_flash - d * 5.0, 0.0)
 	deny_flash = maxf(deny_flash - d * 2.6, 0.0)
 	shake = maxf(shake - d * 34.0, 0.0)
+	mod_shed_t = maxf(mod_shed_t - d, 0.0)
 	board_punch = maxf(board_punch - d * 3.4, 0.0)
 	hit_flash = maxf(hit_flash - d * 2.6, 0.0)
 	total_flash = maxf(total_flash - d * 3.0, 0.0)
@@ -2372,6 +2420,8 @@ func _process(d: float) -> void:
 			if confirm_t >= ch():
 				if cur_dart.get("magnet", 0.0) > 0.0:
 					aim = aim.lerp(BC, cur_dart.magnet)
+				again_aim = aim
+				again_dart = cur_dart.duplicate()
 				_grip_consume()
 				if burst_hits.is_empty():
 					_sfx("dart_fly")      # 리볼버는 발마다 kick_shot 이 난다
@@ -2979,6 +3029,9 @@ func _click(m: Vector2) -> void:
 	if photo == "paint":
 		_paint_click(m)
 		return
+	if photo_rack != "":
+		_photo_rack_click(m)
+		return
 	if Dev.click(self, m):          # DEV
 		return
 	if swap_live:
@@ -3464,6 +3517,11 @@ func _land(mark := true) -> void:
 
 	var same: bool = info.sector > 0 and info.sector == last_sector
 	streak = streak + 1 if same else 0
+	# 「딱정벌레의 도로」 — 연속으로 맞춘 두 숫자의 합. 칸(1~20)에 둘 다
+	# 꽂혔을 때만 뜻이 있다. 불과 빗나감은 칸이 아니라 0 으로 죽는다.
+	var pair_sum: int = 0
+	if info.sector > 0 and info.sector < 25 and last_sector > 0 			and last_sector < 25:
+		pair_sum = info.sector + last_sector
 
 	# 이번 발의 영역 종류. 패턴 추적의 화폐다.
 	var zone := ""
@@ -3546,6 +3604,7 @@ func _land(mark := true) -> void:
 		# 없는 열을 -1 로 읽고 "칸에 안 꽂혔다" 로 판정한다.
 		"col": int(info.get("col", -1)),
 		"same": same,
+		"pair_sum": pair_sum,
 		"first": dart_index == 0,
 		"last": darts_left == 0,
 		"streak": streak,
@@ -3689,6 +3748,13 @@ func _land(mark := true) -> void:
 				o.gs = int(o.get("gs", 0)) + 1
 
 	last_sector = info.sector
+	# 「녹는 시계」 해금 — 보드 확장 「시계」를 낀 채 보드 아웃이 이어진 수.
+	# 한 장만 끼므로 「장착」이 곧 mods_own 에 들었는가다.
+	if mods_own.has("clok") and info.mult == 0:
+		clok_out += 1
+		Save.peak("clok_out_streak", clok_out)
+	else:
+		clok_out = 0
 	last_miss = info.mult == 0
 	# ctx 를 만든 뒤여야 한다 — 불을 붙인 그 다트에는 손맛이 안 뜬다.
 	# 그게 삼중고(트리플 위에)와 손맛(트리플 뒤에)이 갈리는 지점이다.
@@ -4323,6 +4389,7 @@ func _draw() -> void:
 
 	# 화면이 바뀌어도 같은 자리에 남는 것만 판이다 — 그래서 스크림 뒤에 그린다.
 	_hud_draw()
+	_mod_shed_draw()
 	if not swap_live:
 		_tip_draw(sh)
 	draw_set_transform(Vector2.ZERO)
@@ -5399,6 +5466,12 @@ func _icon_cond(c: Vector2, r: float, cond: String, col: Color) -> void:
 			# 하나는 채우고 하나는 비운다 — 대비가 곧 "다르다"
 			draw_circle(c + Vector2(-u * 0.46, 0.0), u * 0.44, col)
 			draw_arc(c + Vector2(u * 0.46, 0.0), u * 0.44, 0.0, TAU, 12, col, 1.0)
+		"sum11":
+			# 횡단보도 — 이름이 가리키는 그 길이다. 줄이 넷이면 조건이
+			# "둘을 잇는다" 로 읽히지 않아 셋으로 둔다.
+			for k in [-1.0, 0.0, 1.0]:
+				draw_rect(Rect2(c.x + k * u * 0.54 - u * 0.16, c.y - u * 0.72,
+						u * 0.32, u * 1.44), col)
 		"first":
 			draw_line(c + Vector2(-u * 0.8, -u * 0.7), c + Vector2(-u * 0.8, u * 0.7), col, 1.6)
 			draw_circle(c + Vector2(u * 0.3, 0.0), u * 0.38, col)
@@ -5926,6 +5999,15 @@ func _cons_use(i: int) -> void:
 	var c: Dictionary = cons[i]
 	var at := _cons_rect(i).get_center()
 	var say := ""
+	# 사용조건 — 표가 쥔다(2026-09-13 기획서 s33). 전에는 갈래마다 박혀
+	# 있어서 표를 고쳐도 안 따라왔다.
+	match String(c.get("use_at", "any")):
+		"rest":
+			if state != S.SHOP and state != S.LEG:
+				return _cons_deny(c, "상점이나 판 고르기에서 쓴다")
+		"play":
+			if not _is_play():
+				return _cons_deny(c, "판에서만 쓴다")
 	match String(c.cat):
 		"area":
 			track_lv[c.track] = int(track_lv.get(c.track, 0)) + 1
@@ -5958,28 +6040,43 @@ func _cons_use(i: int) -> void:
 			say = "다음 보스 제약 무효"
 		# ── 아래 넷은 화면을 하나 더 연다. 쓸 수 있는 자리가 정해져 있다.
 		"burn", "clone":
-			# 상점 테이블을 갈아 쓰므로 상점에서만 열린다.
-			if state != S.SHOP:
-				return _cons_deny(c, "상점에서만 쓴다")
 			if owned.is_empty():
 				return _cons_deny(c, "손에 동전이 없다")
-			cons.remove_at(i)
-			Save.bump("cons_used")
-			_photo_open(String(c.cat), int(c.get("v", 0)))
+			if state == S.SHOP:
+				cons.remove_at(i)
+				Save.bump("cons_used")
+				_photo_open(String(c.cat), int(c.get("v", 0)))
+				return
+			# 테이블이 없는 자리다. 동전 슬롯에서 직접 고른다 — 고르기
+			# 전에는 손에서 안 없앤다(잘못 눌러 잃으면 안 된다).
+			photo_rack = String(c.cat)
+			photo_rack_i = i
+			photo_v = maxi(int(c.get("v", 0)), 2)
+			pay_msg = "%s — 동전을 고른다" % c.n
+			pay_msg_t = HAND.msg_t
+			_sfx("cons_use")
 			return
 		"paint":
-			# "이번 판" 이 뜻을 가지려면 던지는 중이라야 한다.
-			if not _is_play():
-				return _cons_deny(c, "판에서만 쓴다")
 			cons.remove_at(i)
 			Save.bump("cons_used")
 			photo = "paint"
 			photo_v = maxi(int(c.get("v", 0)), 2)
 			_sfx("cons_use")
 			return
+		"again":
+			# 덤으로 한 발. 탄창을 안 건드린다(_grip_consume 을 안 부른다).
+			if again_aim.x < 0.0:
+				return _cons_deny(c, "첫 다트가 꽂힌 뒤에 쓴다")
+			cons.remove_at(i)
+			Save.bump("cons_used")
+			cur_dart = again_dart.duplicate()
+			aim = again_aim
+			state = S.FLY
+			fly_t = 0.0
+			fly_rot = randf_range(-0.26, 0.26)
+			_sfx("dart_fly")
+			return
 		"peek":
-			if state != S.SHOP and state != S.LEG:
-				return _cons_deny(c, "상점이나 판 고르기에서 쓴다")
 			cons.remove_at(i)
 			Save.bump("cons_used")
 			_photo_peek()
@@ -5991,6 +6088,30 @@ func _cons_use(i: int) -> void:
 	cons.remove_at(i)
 	pop(at + Vector2(0.0, 26.0), say, C_ACC, 10, 0.9)
 	_sfx("cons_use")
+
+
+# 판 위에서 동전 슬롯을 눌러 고른다. 딴 데를 누르면 무른다 — 손에 그대로
+# 남으므로 무르는 것이 손해가 아니다.
+func _photo_rack_click(m: Vector2) -> void:
+	for i in GameData.max_items():
+		if not _slot_rect(i).has_point(m):
+			continue
+		if i >= owned.size():
+			_deny()
+			return
+		var kind := photo_rack
+		var ci := photo_rack_i
+		photo_rack = ""
+		photo_rack_i = -1
+		if not _photo_apply(kind, i):
+			return
+		if ci >= 0 and ci < cons.size():
+			cons.remove_at(ci)
+			Save.bump("cons_used")
+		return
+	photo_rack = ""
+	photo_rack_i = -1
+	_sfx("shop_deselect")
 
 
 # 사진을 쓸 자리가 아니다. 손에서 안 없앤다 — 잘못 눌러 잃으면 안 된다.
@@ -6043,9 +6164,21 @@ func _photo_take(i: int) -> void:
 	if oi < 0 or oi >= owned.size():
 		_photo_close()
 		return
+	if not _photo_apply(String(photo), oi):
+		return
+	_photo_close()
+
+
+# 고른 동전 하나에 사진의 효과를 건다. 상점 테이블에서 고르든(_photo_take)
+# 판 위에서 동전 슬롯을 눌러 고르든(_photo_rack_click) 결과가 같아야 해서
+# 한 자리로 모았다 — 기획서 s33 이 이 둘을 「상관없음」으로 적었다.
+# false 를 내면 못 걸었다는 뜻이다(슬롯이 꽉 찼다).
+func _photo_apply(kind: String, oi: int) -> bool:
+	if oi < 0 or oi >= owned.size():
+		return false
 	var it: Dictionary = owned[oi]
 	var at := _slot_rect(mini(oi, GameData.max_items() - 1)).get_center()
-	if photo == "burn":
+	if kind == "burn":
 		var got: int = GameData.sell_value(it) * photo_v
 		gold += got
 		Save.bump("gold_earned", got)
@@ -6060,7 +6193,7 @@ func _photo_take(i: int) -> void:
 			pay_msg = "동전 슬롯이 꽉 찼다"
 			pay_msg_t = HAND.msg_t
 			_deny()
-			return
+			return false
 		var cp: Dictionary = it.duplicate()
 		cp.gs = 0                      # 성장값은 안 따라간다. 새 장이다
 		cp.bought = leg_no
@@ -6068,7 +6201,7 @@ func _photo_take(i: int) -> void:
 		_panel_reset()
 		pop(at + Vector2(0.0, 24.0), "%s  복제" % it.n, C_ACC, 11, 1.1)
 		_sfx("buy")
-	_photo_close()
+	return true
 
 
 # ── 빨강, 파랑, 노랑 — 다트판의 칸 하나를 고른다 ──────────────
@@ -9489,8 +9622,11 @@ const TIP := {
 	"title": 15.0,       # 제목 줄 높이
 	"line": 13.0,        # 본문 줄 높이
 	"base": 10.0,        # 본문 블록 윗변에서 첫 줄 베이스라인까지 (10pt 의 오름)
-	"chip_gap": 5.0,     # 본문 아래끝과 갈래 기본 점수 사이
-	"chip_h": 12.0,      # 갈래 기본 점수 높이
+	"chip_gap": 5.0,     # 본문 아래끝과 태그 줄 사이
+	"chip_h": 12.0,      # 태그 한 장의 높이
+	"tag_gap": 4.0,      # 태그와 태그 사이
+	"tag_pad": 10.0,     # 태그 낱말의 좌우 여백을 합한 값
+	"tag_lead": 2.0,     # 태그 줄과 줄 사이 (셋 넷이 붙으면 접힌다)
 	"fade": 14.0,        # 페이드 속도
 	"quiet": 6.0,        # shake 가 이보다 크면 아예 안 그린다 (읽을 수 없다)
 }
@@ -9498,16 +9634,14 @@ const TIP := {
 var tip_title := ""
 var tip_lines := []             # [{"s": String, "sz": int, "c": Color}]
 var tip_chip := {}              # 제목 옆 미니동전로 그릴 아이템 (없으면 빈 사전)
-# 갈래 기본 점수 — 툴팁 맨 아래에 한 낱말. "이게 뭐냐" 가 이름만으로는 안 풀린다.
-# 동전과 사탕이 둘 다 둥근 판이고 보드 확장과 사진이 둘 다 네모라,
-# 그림만으로는 갈래가 안 갈린다. 발라트로가 툴팁 밑에 부스터/조커/타로를
-# 기본 점수으로 붙이는 그 자리다.
-var tip_tag := ""               # 기본 점수에 적을 낱말. 비면 안 그린다
-var tip_tag_c := Color(1, 1, 1)
-# 둘째 태그 — 희귀도. 갈래 태그 오른쪽에 나란히 붙는다. 색은 rarity.csv 가
-# 쥐므로 표에 등급을 더하면 그 색이 그대로 따라온다.
-var tip_tag2 := ""
-var tip_tag2_c := Color(1, 1, 1)
+# 태그 줄 — 툴팁 맨 아래. 본문은 제목과 효과 문장만 지고, 그 밖의 것은
+# 전부 여기로 내려온다: 갈래 · 등급 · 발동 조건 · 다트의 게이지와 배수 ·
+# 사진의 사용조건. 본문에 특성이 섞이면 효과 문장이 안 읽힌다.
+#
+# 2026-09-13 사용자 지시. 전에는 갈래 하나와 등급 하나, 둘 고정이었고
+# 조건과 「등급 · N골드」는 본문 줄이었다. 값은 통째로 뺐다 — 상점은
+# 가격표가 따로 말하고, 컬렉션은 값을 말할 자리가 아니다.
+var tip_tags := []              # [{"t": String, "c": Color}] · 비면 안 그린다
 var tip_mark := Rect2()         # 대상 사각 (동전 슬롯은 링으로 대신하므로 빈 값)
 # 그 사각에 테두리를 두르는가. tip_mark 를 비우는 것과 다르다 — 제약
 # 카드는 "커서 아래 카드가 선다" 를 tip_mark 로 판정하므로(_drop_update)
@@ -9576,8 +9710,7 @@ func _tip_clear() -> void:
 	tip_title = ""
 	tip_lines = []
 	tip_chip = {}
-	tip_tag = ""
-	tip_tag2 = ""
+	tip_tags = []
 	tip_mark = Rect2()
 	tip_box = true
 	tip_slot = -1
@@ -9677,16 +9810,14 @@ func _tip_build(hit: Dictionary) -> void:
 			tip_title = it.n
 			tip_chip = it
 			_tip_set_rar(String(it.get("rarity", "")))
-			_tip_add(GameData.cond_text(it.c), 10, C_DIM)
-			_tip_add(GameData.eff_line(it), 11,
-					C_CHIP.lightened(0.35) if it.k == "chip" else C_MULT.lightened(0.3))
-			if it.get("g", "") != "":
-				_tip_add(GameData.gold_text(it.g, it.gv), 9, C_GOLD)
+			_tip_tag(GameData.cond_text(it.c), C_DIM)
 			if i == sealed:
-				_tip_add("이번 판 봉인", 9, C_MULT.lightened(0.25))
-			# 값은 설명창에 안 적는다(2026-09-11 지시). 파는 값은 상점 창구가,
-			# 사는 값은 테이블의 물건이 이미 말한다 — 같은 수를 두 곳에서
-			# 말하면 어느 쪽이 진짜인지 물어보게 된다.
+				_tip_tag("이번 판 봉인", C_MULT.lightened(0.25))
+			_tip_add(GameData.eff_line(it), 11, C_TXT.darkened(0.25))
+			if it.get("g", "") != "":
+				_tip_add(GameData.gold_text(it.g, it.gv), 10, C_TXT.darkened(0.25))
+			# 값은 설명창에 안 적는다(2026-09-11 지시 · 2026-09-13 재확인).
+			# 파는 값은 상점 창구가, 사는 값은 테이블의 물건이 이미 말한다.
 		"stock":
 			var s: Dictionary = stock[i]
 			# 테이블은 한 자리에 네 갈래가 섞여 뜬다 — 그림만으로는 동전과
@@ -9704,20 +9835,27 @@ func _tip_build(hit: Dictionary) -> void:
 					_tip_set_tag("팩")
 				"fix":
 					_tip_set_tag("사진")
+					_tip_tag(GameData.use_at_name(
+							String(s.d.get("use_at", "any"))), C_ACC)
 			tip_mark = Rect2()      # 동전 슬롯과 같은 진영 — 사각 테두리 안 두른다
 			tip_spot = i
 			tip_title = s.d.n
 			if s.type == "item":
 				tip_chip = s.d
 				_tip_set_rar(String(s.d.get("rarity", "")))
-				_tip_add(GameData.cond_text(s.d.c), 10, C_DIM)
-				_tip_add(GameData.eff_line(s.d), 11,
-						C_CHIP.lightened(0.35) if s.d.k == "chip" else C_MULT.lightened(0.3))
+				_tip_tag(GameData.cond_text(s.d.c), C_DIM)
+				_tip_add(GameData.eff_line(s.d), 11, C_TXT.darkened(0.25))
 				if s.d.get("g", "") != "":
-					_tip_add(GameData.gold_text(s.d.g, s.d.gv), 9, C_GOLD)
+					_tip_add(GameData.gold_text(s.d.g, s.d.gv), 10, C_TXT.darkened(0.25))
 			else:
 				# 사탕·보드 확장·다트·사진 — 효과 한 줄이면 된다. 분류 해설은 소음이다.
-				_tip_add(s.d.d, 10, C_DIM)
+				_tip_add(s.d.d, 11, C_TXT.darkened(0.25))
+				# 보드 확장은 한 장만 낀다. 사면 낀 것이 사라지므로 무엇을
+				# 잃는지가 사기 전에 읽혀야 한다.
+				if s.type == "mod" and not mods_own.is_empty():
+					_tip_add("지금 낀 %s 를 덮는다"
+							% String(GameData.mod_of(String(mods_own[0])).get("n", "")),
+							10, C_MULT.lightened(0.25))
 			# 못 사는 이유를 누르기 전에 알려준다. _deny() 는 원인을 한 문장으로 뭉갠다.
 			var blk := _buy_block(i)
 			if blk != "":
@@ -9746,10 +9884,12 @@ func _tip_build(hit: Dictionary) -> void:
 			if i >= cons.size():
 				return
 			var hc: Dictionary = cons[i]
-			_tip_set_tag("사탕")
+			# 사탕과 사진이 같은 칸을 나눠 쓴다 — 갈래는 cat 이 가른다.
+			_tip_set_tag("사탕" if String(hc.get("cat", "")) == "area" else "사진")
+			_tip_tag(GameData.use_at_name(String(hc.get("use_at", "any"))), C_ACC)
 			tip_mark = _cons_rect(i)
 			tip_title = String(hc.n)
-			_tip_add(String(hc.d), 10, C_ACC)
+			_tip_add(String(hc.d), 11, C_TXT.darkened(0.25))
 		"stage":
 			_tip_set_tag("제약")
 			var sp: Dictionary = stage_pick[i]
@@ -9768,35 +9908,31 @@ func _tip_build(hit: Dictionary) -> void:
 			tip_mark = _col_cell(i % COL_PAGE)
 			tip_title = it.n
 			tip_chip = it
-			_tip_add(GameData.cond_text(it.c), 10, C_DIM)
-			_tip_add(GameData.eff_line(it), 11,
-					C_CHIP.lightened(0.35) if it.k == "chip" else C_MULT.lightened(0.3))
+			_tip_set_rar(String(it.get("rarity", "")))
+			_tip_tag(GameData.cond_text(it.c), C_DIM)
+			_tip_add(GameData.eff_line(it), 11, C_TXT.darkened(0.25))
 			if it.get("g", "") != "":
-				_tip_add(GameData.gold_text(it.g, it.gv), 9, C_GOLD)
-			_tip_add("%s · %d골드" % [GameData.rarity_name(it.rarity), it.cost],
-					9, C_DIM.darkened(0.2))
+				_tip_add(GameData.gold_text(it.g, it.gv), 10, C_TXT.darkened(0.25))
 		"cmod":
 			_tip_set_tag("보드 확장")
 			var md: Dictionary = GameData.mods()[i]
 			tip_mark = _col_cell(i % COL_PAGE)
 			tip_title = md.n
-			_tip_add(md.d, 10, C_DIM)
-			_tip_add("보드 확장 · %d골드" % md.cost, 9, C_DIM.darkened(0.2))
+			_tip_add(md.d, 11, C_TXT.darkened(0.25))
 		"cdart":
 			_tip_set_tag("다트")
 			var dt: Dictionary = GameData.darts()[i]
 			tip_mark = _col_cell(i % COL_PAGE)
 			tip_title = dt.n
-			_tip_add(dt.d, 10, C_DIM)
-			_tip_add("게이지 ×%.2f" % dt.gauge, 9, C_DIM.darkened(0.2))
-			if int(dt.get("mult", 0)) != 0:
-				_tip_add("배수 %+d" % int(dt.mult), 9, C_MULT.lightened(0.25))
+			_tip_add(dt.d, 11, C_TXT.darkened(0.25))
+			_tip_dart_tags(dt)
 		"ccons":
-			_tip_set_tag("사탕")
 			tip_mark = _col_cell(i % COL_PAGE)
 			var cd: Dictionary = GameData.candies()[i]
+			_tip_set_tag("사탕" if String(cd.get("cat", "")) == "area" else "사진")
+			_tip_tag(GameData.use_at_name(String(cd.get("use_at", "any"))), C_ACC)
 			tip_title = cd.n
-			_tip_add(cd.d, 10, C_DIM)
+			_tip_add(cd.d, 11, C_TXT.darkened(0.25))
 		"lg":
 			var ll2 := _league_lines()
 			if i < ll2.size():
@@ -9808,38 +9944,50 @@ func _tip_build(hit: Dictionary) -> void:
 			_tip_set_tag("사진")
 			tip_mark = _col_cell(i % COL_PAGE)
 			var fx: Dictionary = GameData.fixtures()[i]
+			_tip_tag(GameData.use_at_name(String(fx.get("use_at", "any"))), C_ACC)
 			tip_title = fx.n
-			_tip_add(fx.d, 10, C_DIM)
+			_tip_add(fx.d, 11, C_TXT.darkened(0.25))
 		"cmodf":
 			_tip_set_tag("제약")
 			tip_mark = _col_cell(i % COL_PAGE)
 			var mo: Dictionary = GameData.modifiers()[i]
 			tip_title = mo.n
-			_tip_add(mo.d, 10, C_DIM)
+			_tip_add(mo.d, 11, C_TXT.darkened(0.25))
 		"mag":
 			_tip_set_tag("다트")
 			var dd: Dictionary = remaining[i]
 			tip_mark = _mag_rect(i)
 			tip_title = dd.n
-			_tip_add(dd.d, 10, C_DIM)
-			_tip_add("게이지 ×%.2f" % dd.gauge, 9, C_DIM.darkened(0.2))
-			if int(dd.get("mult", 0)) != 0:
-				_tip_add("배수 %+d" % int(dd.mult), 9, C_MULT.lightened(0.25))
-			if dd.get("fix1", false):
-				_tip_add("배수를 1로 고정", 9, C_MULT.lightened(0.25))
+			_tip_add(dd.d, 11, C_TXT.darkened(0.25))
+			_tip_dart_tags(dd)
 
 
-# 갈래 기본 점수 하나. 이름 · 색을 같이 정한다 — 색이 갈래를 절반쯤 말한다.
+# 다트의 특성 — 게이지 · 배수 · 배수 고정. 본문이 아니라 태그로 간다.
+func _tip_dart_tags(d: Dictionary) -> void:
+	_tip_tag("게이지 ×%.2f" % float(d.get("gauge", 1.0)), C_DIM)
+	if int(d.get("mult", 0)) != 0:
+		_tip_tag("배수 %+d" % int(d.mult), C_MULT.lightened(0.25))
+	if d.get("fix1", false):
+		_tip_tag("배수 고정", C_MULT.lightened(0.25))
+
+
+# 태그 한 장. 색이 갈래를 절반쯤 말한다.
+func _tip_tag(t: String, c: Color) -> void:
+	if t == "":
+		return
+	tip_tags.append({"t": t, "c": c})
+
+
 # 희귀도 태그. 동전에만 단다 — 사탕·다트·보드 확장에는 등급이 없다.
+# 색은 rarity.csv 가 쥐므로 표에 등급을 더하면 그 색이 그대로 따라온다.
 func _tip_set_rar(rar: String) -> void:
 	if rar == "":
 		return
-	tip_tag2 = GameData.rarity_name(rar)
-	tip_tag2_c = GameData.rarity_color(rar)
+	_tip_tag(GameData.rarity_name(rar), GameData.rarity_color(rar))
 
 
 func _tip_set_tag(k: String) -> void:
-	tip_tag = k
+	var tip_tag_c := C_DIM
 	match k:
 		"동전":
 			tip_tag_c = C_CHIP.lightened(0.15)
@@ -9855,6 +10003,7 @@ func _tip_set_tag(k: String) -> void:
 			tip_tag_c = C_RED.lightened(0.20)
 		_:
 			tip_tag_c = C_DIM
+	_tip_tag(k, tip_tag_c)
 
 
 # 제목 줄과 본문 사이. 픽셀 글꼴은 내림이 2px 뿐이라 줄 높이에만 맡기면
@@ -9881,10 +10030,46 @@ func _tip_body_h() -> float:
 	return h
 
 
+# 태그를 판 폭 안에서 접는다. 크기 재기(_tip_tags_h)와 그리기(_tip_draw)가
+# **같은 배열**을 봐야 판 높이와 태그가 어긋나지 않는다 — 본문 줄이
+# _tip_wrap 으로 간 그 길이다. 다트는 [다트][게이지 ×0.55][배수 -1] 처럼
+# 셋이 붙어 한 줄에 안 들어간다.
+func _tip_tag_rows() -> Array:
+	var rows := []
+	if tip_tags.is_empty():
+		return rows
+	var lim: float = TIP.w - TIP.pad * 2.0
+	var row := []
+	var w := 0.0
+	for g in tip_tags:
+		# 글꼴이 없는 실행(헤드리스 도구)에서는 재는 것 자체가 안 된다.
+		# 어림값으로 접어 둔다 — 툴팁을 세우는 검사가 이 한 줄 때문에
+		# 헤드리스에서 못 도는 것이 더 손해다.
+		var tw: float = TIP.tag_pad + float(String(g.t).length()) * 5.0
+		if font != null:
+			tw = font.get_string_size(String(g.t), HORIZONTAL_ALIGNMENT_LEFT,
+					-1, 9).x + TIP.tag_pad
+		if not row.is_empty() and w + TIP.tag_gap + tw > lim:
+			rows.append(row)
+			row = []
+			w = 0.0
+		row.append({"t": String(g.t), "c": g.c, "w": tw})
+		w += tw + (TIP.tag_gap if row.size() > 1 else 0.0)
+	if not row.is_empty():
+		rows.append(row)
+	return rows
+
+
+func _tip_tags_h() -> float:
+	var n := _tip_tag_rows().size()
+	if n == 0:
+		return 0.0
+	return TIP.chip_gap + float(n) * TIP.chip_h + float(n - 1) * TIP.tag_lead
+
+
 func _tip_size() -> Vector2:
-	var h: float = TIP.pad * 2.0 + TIP.title + _tip_lead() + _tip_body_h()
-	if tip_tag != "":
-		h += TIP.chip_gap + TIP.chip_h
+	var h: float = TIP.pad * 2.0 + TIP.title + _tip_lead()
+	h += _tip_body_h() + _tip_tags_h()
 	return Vector2(TIP.w, h)
 
 
@@ -9915,6 +10100,89 @@ func _tip_update(d: float) -> void:
 		tip_a = maxf(tip_a - d * TIP.fade, 0.0)
 	else:
 		tip_a = minf(tip_a + d * TIP.fade, 1.0)
+
+
+# 문장 안에서 수와 낱말을 갈라 칠한다. 생성기(eff_line · eff_text · cond_text
+# …)를 하나씩 뜯는 대신 **완성된 문장**을 토막내는 것은, CSV 의 desc 열에 새
+# 문구를 적어도 저절로 칠해지게 하려는 것이다 — 색을 아는 곳이 한 군데여야
+# 새 동전을 표에만 적어도 같은 규칙으로 읽힌다.
+#
+#   점수 +40      푸름   C_CHIP
+#   배수 ×4       붉음   C_MULT
+#   1/10 확률로   초록   C_ODDS
+#   나머지         넘겨받은 바탕색
+#
+# 낱말 뒤에 딸린 수도 같은 색으로 끌고 간다 — 「배수」와 「×4」가 다른 색이면
+# 둘이 한 덩어리로 안 읽힌다. 딸림은 수가 아닌 토막을 만나면 끊긴다.
+func _tint(t: String, base: Color) -> Array:
+	var out := []
+	if t == "":
+		return out
+	var parts := t.split(" ")
+	var role := base
+	var carry := false
+	for i in parts.size():
+		var w: String = parts[i]
+		var c := base
+		if _is_odds(w):
+			c = C_ODDS
+			carry = false
+		elif w.begins_with("점수"):
+			c = C_CHIP
+			role = C_CHIP
+			carry = true
+		elif w.begins_with("배수"):
+			c = C_MULT
+			role = C_MULT
+			carry = true
+		elif carry and _is_val(w):
+			c = role
+		else:
+			carry = false
+		# 사이 공백을 토막에 붙여 둔다 — 폭을 따로 더하면 글꼴마다 어긋난다.
+		out.append({"s": w + (" " if i < parts.size() - 1 else ""), "c": c})
+	return out
+
+
+# 수로 시작하는 토막인가. +40 · −1 · ×4 · 15 · 1.6배
+func _is_val(w: String) -> bool:
+	if w == "":
+		return false
+	return "+-−±×x0123456789".find(w[0]) >= 0
+
+
+# 확률을 말하는 토막인가. 1/6 · 1/10 · 절반 · 50% · 「확률로」
+func _is_odds(w: String) -> bool:
+	if w.find("확률") >= 0 or w.find("%") >= 0 or w.begins_with("절반"):
+		return true
+	var sl := w.find("/")
+	if sl <= 0 or sl >= w.length() - 1:
+		return false
+	return w[sl - 1].is_valid_int() and w[sl + 1].is_valid_int()
+
+
+func _draw_tinted(x: float, y: float, t: String, sz: int, base: Color) -> void:
+	if font == null:
+		return
+	var cx := x
+	for g in _tint(t, base):
+		draw_string(font, Vector2(cx, y), String(g.s), HORIZONTAL_ALIGNMENT_LEFT,
+				-1, sz, Color(g.c, tip_a))
+		cx += font.get_string_size(String(g.s), HORIZONTAL_ALIGNMENT_LEFT,
+				-1, sz).x
+
+
+# 덮인 보드 확장이 스러지는 그림. 부풀면서 위로 뜨고 어두워진다 —
+# 판에서 떨어져 나가는 꼴이다. _icon_mod 의 dim 을 걸음으로 밀어 옅게
+# 만든다(그 함수는 알파를 안 받는다).
+func _mod_shed_draw() -> void:
+	if mod_shed_t <= 0.0 or mod_shed == "":
+		return
+	draw_set_transform(Vector2.ZERO)
+	var k: float = 1.0 - mod_shed_t / MOD_SHED
+	var e: float = 1.0 - pow(1.0 - k, 3.0)      # 처음이 빠르고 끝이 느리다
+	_icon_mod(BC + Vector2(0.0, -6.0 - 24.0 * e), 15.0 + 24.0 * e,
+			mod_shed, minf(e, 1.0))
 
 
 func _tip_draw(sh: Vector2) -> void:
@@ -9965,38 +10233,28 @@ func _tip_draw(sh: Vector2) -> void:
 			draw_string(font, Vector2(lx + tw, y), l.tl, HORIZONTAL_ALIGNMENT_LEFT,
 					p.x + sz.x - TIP.pad - lx - tw, 9, Color(C_DIM, tip_a))
 		for wi in l.wr.size():
-			draw_string(font, Vector2(lx, y), l.wr[wi], HORIZONTAL_ALIGNMENT_LEFT,
-					-1, l.sz, Color(l.c, tip_a))
+			_draw_tinted(lx, y, String(l.wr[wi]), l.sz, l.c)
 			y += TIP.line
 		y += 2.0 if l.ic != "" else 0.0
 
-	# 갈래 기본 점수 — 맨 아래 왼쪽에 한 낱말. 이름 위가 아니라 아래에 두는 것은
-	# 읽는 순서가 "무엇이다 → 무슨 효과다 → 어느 갈래다" 이기 때문이다.
-	# 갈래를 먼저 읽히면 이름을 안 읽고 넘긴다.
-	if tip_tag != "":
-		var tw2: float = font.get_string_size(tip_tag, HORIZONTAL_ALIGNMENT_LEFT,
-				-1, 9).x + 10.0
-		# 본문 **블록 아래끝**에서 잰다. y 는 다음 줄의 베이스라인이라
-		# 그것으로 재면 기본 점수가 10px 아래로 밀려 판 밑변에 걸쳐 잘렸다.
-		var tr := Rect2(Vector2(p.x + TIP.pad, top + _tip_body_h() + TIP.chip_gap),
-				Vector2(tw2, TIP.chip_h))
-		draw_rect(tr, Color(tip_tag_c, tip_a * 0.22))
-		draw_rect(Rect2(tr.position, Vector2(tr.size.x, 1.0)),
-				Color(tip_tag_c, tip_a * 0.85))
-		draw_string(font, tr.position + Vector2(5.0, 9.0), tip_tag,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(tip_tag_c, tip_a))
-		# 희귀도는 갈래 바로 오른쪽이다. 같은 꼴로 그려야 "같은 종류의
-		# 표지" 로 읽힌다 — 색만 등급이 쥔다.
-		if tip_tag2 != "":
-			var tw3: float = font.get_string_size(tip_tag2,
-					HORIZONTAL_ALIGNMENT_LEFT, -1, 9).x + 10.0
-			var tr2 := Rect2(tr.position + Vector2(tr.size.x + 4.0, 0.0),
-					Vector2(tw3, TIP.chip_h))
-			draw_rect(tr2, Color(tip_tag2_c, tip_a * 0.22))
-			draw_rect(Rect2(tr2.position, Vector2(tr2.size.x, 1.0)),
-					Color(tip_tag2_c, tip_a * 0.85))
-			draw_string(font, tr2.position + Vector2(5.0, 9.0), tip_tag2,
-					HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(tip_tag2_c, tip_a))
+	# 태그 줄 — 맨 아래. 이름 위가 아니라 아래에 두는 것은 읽는 순서가
+	# "무엇이다 → 무슨 효과다 → 어떤 것이다" 이기 때문이다. 갈래를 먼저
+	# 읽히면 이름을 안 읽고 넘긴다.
+	#
+	# 본문 **블록 아래끝**에서 잰다. y 는 다음 줄의 베이스라인이라 그것으로
+	# 재면 태그가 10px 아래로 밀려 판 밑변에 걸쳐 잘렸다.
+	var ty: float = top + _tip_body_h() + TIP.chip_gap
+	for row in _tip_tag_rows():
+		var tgx: float = p.x + TIP.pad
+		for g in row:
+			var tr := Rect2(Vector2(tgx, ty), Vector2(g.w, TIP.chip_h))
+			draw_rect(tr, Color(g.c, tip_a * 0.22))
+			draw_rect(Rect2(tr.position, Vector2(tr.size.x, 1.0)),
+					Color(g.c, tip_a * 0.85))
+			draw_string(font, tr.position + Vector2(5.0, 9.0), String(g.t),
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(g.c, tip_a))
+			tgx += g.w + TIP.tag_gap
+		ty += TIP.chip_h + TIP.tag_lead
 
 	draw_set_transform(sh)
 
@@ -12954,6 +13212,19 @@ func _col_pages() -> int:
 	return maxi(1, int(ceil(float(_col_total()) / float(COL_PAGE))))
 
 
+# 칸에 안 들어가는 이름은 글자를 한 단씩 줄여 넣는다. 잘라 버리면
+# 「It's Not About Mone」처럼 뜻이 끊긴 채로 남는다 — 기획서가 이름을
+# 영화·음반 제목으로 갈면서 옛 한글 이름보다 길어진 자리다(2026-09-13).
+func _draw_fit(at: Vector2, w: float, t: String, sz: int, c: Color) -> void:
+	if font == null or t == "":
+		return
+	var s := sz
+	while s > 5 and font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT,
+			-1, s).x > w:
+		s -= 1
+	draw_string(font, at, t, HORIZONTAL_ALIGNMENT_CENTER, w, s, c)
+
+
 func _col_tab_rect(t: int) -> Rect2:
 	# 여섯 칸을 화면 안에 고르게 편다. 다섯일 때 쓰던 102px 고정 간격은
 	# 여섯째가 화면(640) 밖으로 나간다 — 폭에서 나눠 쓴다.
@@ -13404,8 +13675,8 @@ func _draw_collect() -> void:
 				var mo: Dictionary = GameData.modifiers()[gi]
 				_icon_modifier(c, 11.0, mo.id, 0.0)
 				nm = mo.n
-		draw_string(font, Vector2(cell.position.x, cell.end.y - 8.0), nm,
-				HORIZONTAL_ALIGNMENT_CENTER, cell.size.x, 8, C_DIM)
+		_draw_fit(Vector2(cell.position.x, cell.end.y - 8.0), cell.size.x, nm,
+				8, C_DIM)
 
 	if _col_pages() > 1:
 		_btn(_col_arrow_rect(false), "◀", "", true)

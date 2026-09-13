@@ -69,12 +69,16 @@ const STATS := [
 	#    boss_spare  보스 판을 넘긴 때 남은 다트      (외줄: 5 이상 = 한 발로)
 	#    win_null    NULL 을 든 채 완주한 횟수        ([?? ???]: 1 이상)
 	"win_gold", "win_items", "boss_spare", "win_null",
+	# ── 2026-09-13 · 기획서 s27 「녹는 시계」의 해금 조건 ──
+	#  보드 확장 「시계」를 낀 채 보드 아웃이 몇 번 이어졌나. 같은 판
+	#  안에서만 이어지고 판이 새로 서면 0 이다.
+	"clok_out_streak",
 ]
 # 최댓값으로 다루는 것들. 나머지는 누적이다.
 const PEAKS := ["best_leg", "best_score", "best_gold", "best_track",
 		"best_dart_hvy", "best_dart_lgt", "best_dart_prc", "best_dart_mag",
 		"best_gain", "best_spare", "best_leg_bare",
-		"win_gold", "boss_spare"]
+		"win_gold", "boss_spare", "clok_out_streak"]
 # 최솟값으로 다루는 것들. 「N 이하로 완주」 조건이 읽는다 —
 # 최댓값으로는 그 말을 못 적는다(적게 든 쪽이 이기는 조건이라 그렇다).
 const DIPS := ["win_items"]

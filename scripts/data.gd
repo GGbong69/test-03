@@ -134,6 +134,7 @@ const Save_STATS := [
 	"best_dart_hvy", "best_dart_lgt", "best_dart_prc", "best_dart_mag",
 	"best_gain", "best_spare", "best_leg_bare",
 	"win_gold", "win_items", "boss_spare", "win_null",
+	"clok_out_streak",
 ]
 # 「N 이하」로 읽는 열쇠. 크거나 같다 하나로는 「동전 4개 이하로 완주」를
 # 못 적는다 — 적게 든 쪽이 이기는 조건이기 때문이다.
@@ -530,6 +531,12 @@ static func consumables() -> Array:
 			"n": r.get("name", ""),
 			"d": r.get("desc", ""),
 			"cat": r.get("cat", ""),
+			# 사용조건 — 기획서 s33 이 표로 낸 열(2026-09-13). 전에는
+			# _cons_use 안에 갈래마다 박혀 있었다.
+			#   any   아무 때나
+			#   rest  상점 · 판 선택중
+			#   play  판 플레이 중
+			"use_at": r.get("use_at", "any"),
 			"track": _i(r, "track", "cons", 0),
 			"v": _i(r, "v", "cons", 0),
 			"cost": cost if cost > 0 else tune_i("cons_price_tmp"),
@@ -537,6 +544,14 @@ static func consumables() -> Array:
 		})
 	_cache["cons"] = out
 	return out
+
+
+# 사용조건의 한국어 이름. 태그에 그대로 적힌다. any 는 붙일 것이 없다.
+static func use_at_name(w: String) -> String:
+	match w:
+		"rest": return "상점 · 판 선택"
+		"play": return "판 플레이 중"
+	return ""
 
 
 static func cons_slots() -> int:
@@ -1230,7 +1245,7 @@ const CONDS := ["always", "triple", "double", "band", "bull", "odd", "even", "le
 		# 예외는 warm 하나다 — 「삼중고」(트리플 위에)와 「손맛」(트리플 뒤에)을
 		# 가르는 것이 그 조건의 정체성이라 다음 발부터를 지킨다.
 		"risk", "risk1", "few", "sixth",
-		"pair", "trip", "quad", "pair2", "spread",
+		"pair", "trip", "quad", "pair2", "spread", "sum11",
 		"zone3", "zones2", "zones4", "rezone", "sec", "col"]
 
 # 조건 포함관계. A 가 B 를 담으면 A 로 뜨는 다트는 B 로도 뜬다.
@@ -1311,6 +1326,8 @@ static func check(c: String, x: Dictionary) -> bool:
 		"mid": return x.sector >= 6 and x.sector <= 14
 		"small": return x.sector >= 1 and x.sector <= 5
 		"same": return x.same
+		# 연속으로 맞춘 두 숫자의 합이 11 — 「딱정벌레의 도로」(기획서 s25)
+		"sum11": return int(x.get("pair_sum", 0)) == 11
 		"diff": return not x.same
 		"first": return x.first
 		"last": return x.last
@@ -1365,6 +1382,7 @@ static func cond_tag(c: String) -> String:
 		"mid": return "6~14"
 		"small": return "5 이하"
 		"same": return "같은 칸"
+		"sum11": return "두 수 합 11"
 		"diff": return "다른 칸"
 		"first": return "첫 발"
 		"last": return "막 발"
@@ -1410,6 +1428,7 @@ static func cond_text(c: String) -> String:
 		"mid": return "6~14 명중 시"
 		"small": return "5 이하 명중 시"
 		"same": return "직전과 같은 숫자면"
+		"sum11": return "직전과 합이 11이면"
 		"diff": return "직전과 다른 숫자면"
 		"first": return "판 첫 다트에"
 		"last": return "판 마지막 다트에"
@@ -1507,6 +1526,8 @@ static func eff_line(it: Dictionary) -> String:
 			return "판을 넘기면 그 자리에서 런 클리어"
 		if String(it.get("side", "")) == "bigdart":
 			return "던질 때마다 다트가 커진다 · 커진 만큼 양옆 칸도 같이 얻는다"
+		if String(it.get("side", "")) == "carry":
+			return "판이 끝나면 남은 다트가 다음 판으로 넘어간다"
 		return ""     # 골드 카드 — 효과는 골드 줄이 이미 말한다
 	var g: String = String(it.get("grow", ""))
 	if g == "hitmiss":
@@ -1543,11 +1564,23 @@ static func eff_line(it: Dictionary) -> String:
 		base += " · 판을 넘기면 런 클리어"
 	if String(it.get("side", "")) == "bigdart":
 		base += " · 던질 때마다 커진다"
-	if String(it.get("boom", "")) == "r6":
-		base += " · 판마다 1/6 확률로 파괴"
-	elif String(it.get("boom", "")) == "r1000":
-		base += " · 판마다 0.1% 확률로 파괴"
+	var bn := boom_n(String(it.get("boom", "")))
+	if bn > 0:
+		base += " · 판마다 1/%d 확률로 파괴" % bn
 	return base
+
+
+# boom 열은 「rN」 = 판마다 1/N 로 부서진다. 전에는 r6 과 r1000 둘만
+# 받아서 기획서의 1/2(유리 대포) · 1/10(아카로스) 을 낼 자리가 없었다 —
+# 꼴이 이미 1/N 이었으므로 N 을 읽기만 하면 옛 값도 그대로 산다.
+# 0 은 「안 부서진다」다.
+static func boom_n(b: String) -> int:
+	if not b.begins_with("r"):
+		return 0
+	var n := b.substr(1)
+	if not n.is_valid_int():
+		return 0
+	return maxi(int(n), 0)
 
 
 static func eff_text(k: String, v: int) -> String:
@@ -2526,7 +2559,7 @@ static func _v_cross() -> void:
 		var sd := String(it2.get("side", ""))
 		if sd != "":
 			var mark: String = {"trackup25": "강화", "boardkill": "클리어",
-					"bigdart": "커진다"}.get(sd, "")
+					"bigdart": "커진다", "carry": "넘어간다"}.get(sd, "")
 			if mark == "":
 				_errs.append("items — %s(%s) 의 모르는 부가 효과 '%s'"
 						% [it2.n, it2.id, sd])

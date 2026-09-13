@@ -121,6 +121,8 @@ func _process(_d: float) -> bool:
 		_ok("또 같은 아침이 표에 있다", false, "못 찾음")
 
 	# ④ GOOD AFTERNOON — 다음 보스 판에서 고른 제약이 안 걸린다
+	# use_at rest 라 상점이나 판 고르기에 서야 쓴다(기획서 s33).
+	g.state = g.S.SHOP
 	if _hold("v_par"):
 		g._cons_use(0)
 		_ok("GOOD AFTERNOON — 깃발이 선다", g.pardon_next, "pardon_next %s" % g.pardon_next)
@@ -150,11 +152,25 @@ func _process(_d: float) -> bool:
 	g._cons_use(0)
 	_ok("빨강, 파랑, 노랑 — 상점에서는 못 쓴다", g.cons.size() == 1 and g.photo == "",
 			"손에 %d장 · photo '%s'" % [g.cons.size(), g.photo])
+	# 기획서 s33 이 It's Not About Money 를 「상관없음」으로 적었다. 판 위에는
+	# 테이블이 없으므로 동전 슬롯에서 고른다 — 고르기 전에는 손에 남는다.
 	g.state = g.S.PICK
+	g.owned.clear()
+	var c0: Dictionary = GameData.items()[0].duplicate()
+	c0.gs = 0
+	g.owned.append(c0)
 	_hold("v_moth")
 	g._cons_use(0)
-	_ok("It's Not About Money — 판에서는 못 쓴다", g.cons.size() == 1 and g.photo == "",
-			"손에 %d장 · photo '%s'" % [g.cons.size(), g.photo])
+	_ok("It's Not About Money — 판에서는 동전 슬롯에서 고른다",
+			g.photo_rack == "burn" and g.cons.size() == 1,
+			"photo_rack '%s' · 손에 %d장" % [g.photo_rack, g.cons.size()])
+	var wg: int = GameData.sell_value(c0) * 2
+	g.gold = 0
+	g._photo_rack_click(g._slot_rect(0).get_center())
+	_ok("It's Not About Money — 고르면 부수고 판매가 2배",
+			g.gold == wg and g.owned.is_empty() and g.cons.is_empty(),
+			"골드 %d/%d · 동전 %d · 손 %d" % [g.gold, wg, g.owned.size(), g.cons.size()])
+	g.photo_rack = ""
 
 	# ⑥ It's Not About Money — 테이블이 갈리고 판매 창구가 부순다
 	g.state = g.S.SHOP

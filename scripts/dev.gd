@@ -433,10 +433,8 @@ static func _list(k: String) -> Array:
 		# 사탕과 사진이 한 표에 산다(둘 다 "골라서 쓰는" 물건이라 길이 같다).
 		# 개발자 판에서는 갈라 보여야 한다 — 섞어 놓으면 사진 여덟이 사탕
 		# 틈에 묻혀 "왜 없지" 가 된다.
-		"cons": return GameData.consumables().filter(
-				func(c): return String(c.get("cat", "")) == "area")
-		"photo": return GameData.consumables().filter(
-				func(c): return String(c.get("cat", "")) != "area")
+		"cons": return GameData.candies()
+		"photo": return GameData.fixtures()
 		"mod": return GameData.mods()
 		"dart": return GameData.darts()
 		"vou": return GameData.fixtures()

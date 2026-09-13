@@ -41,7 +41,10 @@ func _shoot(name: String, hit: Dictionary) -> void:
 	await process_frame
 	await process_frame
 	root.get_texture().get_image().save_png("res://shots/" + name)
-	print("저장: %-18s %-6s %s" % [name, g.tip_tag, g.tip_title])
+	var tg := PackedStringArray()
+	for t in g.tip_tags:
+		tg.append(String(t.t))
+	print("저장: %-18s %-28s %s" % [name, "[" + "][".join(tg) + "]", g.tip_title])
 
 
 func _run() -> void:
