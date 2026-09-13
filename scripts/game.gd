@@ -9927,7 +9927,6 @@ func _tip_build(hit: Dictionary) -> void:
 			tip_mark = _col_cell(i % COL_PAGE)
 			tip_title = dt.n
 			_tip_add(dt.d, 11, C_TXT.darkened(0.25))
-			_tip_dart_lines(dt)
 		"ccons":
 			tip_mark = _col_cell(i % COL_PAGE)
 			var cd: Dictionary = GameData.candies()[i]
@@ -9963,18 +9962,6 @@ func _tip_build(hit: Dictionary) -> void:
 			tip_mark = _mag_rect(i)
 			tip_title = dd.n
 			_tip_add(dd.d, 11, C_TXT.darkened(0.25))
-			_tip_dart_lines(dd)
-
-
-# 다트의 특성. 태그가 아니라 설명이다 — 태그는 종류와 등급 둘뿐이다
-# (2026-09-13 사용자 지시).
-func _tip_dart_lines(d: Dictionary) -> void:
-	_tip_add("게이지 ×%.2f" % float(d.get("gauge", 1.0)), 10,
-			C_TXT.darkened(0.25))
-	if int(d.get("mult", 0)) != 0:
-		_tip_add("배수 %+d" % int(d.mult), 10, C_TXT.darkened(0.25))
-	if d.get("fix1", false):
-		_tip_add("배수를 1로 고정", 10, C_TXT.darkened(0.25))
 
 
 # 조건과 효과를 한 문장으로 잇는다. 조건은 설명이지 태그가 아니다 —
