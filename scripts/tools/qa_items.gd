@@ -91,6 +91,8 @@ func _ctx_for(c: String) -> Dictionary:
 		"miss": x.miss = true
 		"missp": x.missp = true
 		"risk": x.mult = 2
+		# 직전 다트와의 합. 이 자는 착탄 하나만 차리므로 짝을 손으로 놓는다
+		"sum11": x["pair_sum"] = 11
 	# 깃발형 조건은 이름 그대로 켠다
 	for k in ["risk1", "few", "sixth", "pair", "trip", "quad", "pair2",
 			"spread", "zone3", "zones2", "zones4", "rezone"]:

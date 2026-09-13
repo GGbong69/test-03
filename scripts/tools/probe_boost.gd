@@ -20,13 +20,22 @@ func _go() -> void:
 	g.gold = 60
 	g._open_shop()
 	g._drop_settle()
+	# 팩은 이제 상점마다 오는 물건이 아니다 — 여섯 갈래 중 하나로 자리마다
+	# 굴린다(shop.csv). 상점 다섯에 하나꼴이라 뜰 때까지 다시 굴린다.
 	var bi := -1
-	for i in g.stock.size():
-		if g.stock[i].type == "boost":
-			bi = i
-			break
+	var tries := 0
+	while bi < 0 and tries < 400:
+		for i in g.stock.size():
+			if g.stock[i].type == "boost":
+				bi = i
+				break
+		if bi < 0:
+			tries += 1
+			g._roll_stock()
 	if bi < 0:
-		print("팩이 안 떴다 — 실패"); quit(); return
+		print("팩이 %d번 굴려도 안 떴다 — 실패" % tries); quit(); return
+	g._drop_settle()
+	print("팩이 뜨기까지 다시 굴린 횟수: %d" % tries)
 
 	var s0: int = g.stock.size()
 	var d0: int = g.drop.size()

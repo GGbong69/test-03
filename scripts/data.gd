@@ -53,6 +53,7 @@ const FILES := {
 	"darts": "darts.csv",
 	"modifiers": "modifiers.csv",
 	"rounds": "rounds.csv",
+	"shop": "shop.csv",
 	"legs": "legs.csv",
 	"leagues": "leagues.csv",
 	"packs": "packs.csv",
@@ -79,7 +80,7 @@ const TUNE_KEYS := [
 	"board_r", "aim_swing", "sector_max", "val_max_mul",
 	"gauge_speed", "resolve_beat", "bal_beats", "confirm_hold", "fly_time",
 	"aim_click_r", "legend_pack_w",
-	"cons_slots", "shop_cons", "cons_price_tmp",
+	"cons_slots", "cons_price_tmp",
 	"kick_n", "kick_share",
 	"track_score", "track_mult",
 	"curve_first", "curve_last", "curve_bow",
@@ -104,7 +105,7 @@ const MOD_AXES := ["band", "slide", "ring", "bull", "out", "swap",
 # 바닥이 없으면 음수 한 줄이 런을 잠근다. stage_picks 가 0 이 되면 보스
 # 화면에 누를 카드가 없어 영영 안 넘어간다 — 그래서 키마다 범위를 쥔다.
 const VOUCHER_KEYS := {
-	"shop_items":    [0.0, 6.0],    # 표 2 + 여기 + 뱃지 2 ≤ 8칸
+	"shop_slots":    [0.0, 6.0],    # 표 4 + 여기 + 뱃지 2 ≤ 12칸
 	"free_rerolls":  [0.0, 4.0],
 	"interest_add":  [0.0, 10.0],   # 상한 15 = 보유 75. 런 최적 잔고의 세 배다
 	"darts_add":     [0.0, 2.0],    # 동전·뱃지까지 아홉이면 벽 밖으로 나간다
@@ -1117,16 +1118,32 @@ static func leg_name(n: int) -> String:
 # 상점은 판 N 을 클리어한 뒤 N+1 을 위해 열린다. 판 표는 판당 한 줄뿐이라
 # 옛 rounds.csv 처럼 "마지막 행을 비워 둔다" 는 규약이 필요 없다 — 마지막
 # 판이면 호출부가 애초에 상점을 안 연다.
-static func shop_of(n: int) -> Dictionary:
-	var r := _round_row(n)
-	return {
-		# 사진이 여기 얹힌다 — 표 → 사진 → 뱃지 순서다(뱃지는 _roll_stock 이
-		# 이 값 뒤에 더한다). 테이블 폭을 읽는 자리가 여기 하나뿐이라 여기가
-		# 유일한 합류점이다.
-		"items": _i(r, "shop_items", "rounds", 0),
-		"mods": _i(r, "shop_mods", "rounds", 0),
-		"darts": _i(r, "shop_darts", "rounds", 0),
-	}
+static func shop_slots(n: int) -> int:
+	# 테이블에 까는 자리 수다. 무엇이 그 자리에 오는지는 이 표가 안 쥔다 —
+	# shop.csv 의 갈래 저울이 자리마다 따로 굴린다(기획서 P.17 「랜덤 등장」).
+	# 전에는 여기서 동전 2 · 보드 확장 1 · 다트 1 로 갈래마다 칸을 못 박았다.
+	# 뱃지 「매물」은 _roll_stock 이 이 값 뒤에 더한다.
+	return _i(_round_row(n), "shop_slots", "rounds", 0)
+
+
+# 상점 자리 하나에 무엇이 오는지의 저울. rarity.csv 와 같은 어법이다 —
+# 값은 서로의 비일 뿐이라 합이 1 일 필요가 없다.
+static func shop_kinds() -> Array:
+	boot()
+	if _cache.has("shopk"):
+		return _cache["shopk"]
+	var out := []
+	for r in _raw.get("shop", []):
+		var w := _f(r, "weight", "shop", 0.0)
+		if w <= 0.0:
+			continue              # 0 은 "이 갈래는 상점에 안 온다" 는 뜻이다
+		out.append({
+			"id": String(r.get("id", "")),
+			"n": String(r.get("name", "")),
+			"w": w,
+		})
+	_cache["shopk"] = out
+	return out
 
 
 # ── 전역 스칼라 ───────────────────────────────────────────
@@ -1723,6 +1740,7 @@ static func _validate() -> void:
 	_v_darts()
 	_v_modifiers()
 	_v_legs()
+	_v_shop()
 	_v_cross()
 	_v_spec()
 	_v_stats()
@@ -2467,13 +2485,13 @@ static func _v_legs() -> void:
 			_errs.append("%s — round 는 1부터 빠짐없이 이어져야 한다" % who)
 		if _i(r, "darts", "rounds") <= 0:
 			_errs.append("%s — 다트가 0 이하다" % who)
-		# 테이블 자리는 정확히 넷이다(game.gd _table_draw 의 ax/ay).
-		# 판 표에는 "마지막 행을 비운다" 규약이 없다 — 마지막 판이면
-		# 호출부가 애초에 상점을 안 연다.
-		var w := _i(r, "shop_items", "rounds") + _i(r, "shop_mods", "rounds") \
-				+ _i(r, "shop_darts", "rounds")
-		if w != 4:
-			_errs.append("%s — 테이블 폭 합이 %d 다. 자리는 정확히 4개여야 한다" % [who, w])
+		# 테이블 폭. 물건은 낙하 레인으로 자리를 잡으므로(_drop_one 이 n 을 받아
+		# 레인을 벌린다) 넷이 아니어도 그림은 선다. 0 이면 상점이 통째로 비어
+		# 리롤도 뱃지도 아무것도 못 한다 — 거기만 막는다. 판 표에는 "마지막
+		# 행을 비운다" 규약이 없다 — 마지막 판이면 호출부가 애초에 상점을 안 연다.
+		var w := _i(r, "shop_slots", "rounds")
+		if w < 1:
+			_errs.append("%s — 테이블 폭이 %d 다. 상점이 통째로 빈다" % [who, w])
 		# 리그 배수는 1 이상이고 판을 따라 안 내려간다 — 내려가면
 		# "더 어려운 리그인데 목표가 더 낮다" 가 된다.
 		for col in ["curve_a", "curve_b"]:
@@ -2511,6 +2529,53 @@ static func _v_legs() -> void:
 		_errs.append("legs — 보스는 판의 마지막 판이어야 한다")
 
 
+# 상점 갈래 저울. 여기 없는 갈래는 상점에 영영 안 뜨고, 여기 있는데
+# _roll_stock 이 모르는 이름이면 자리를 뽑아 놓고 아무것도 못 담아 테이블이
+# 그만큼 빈다. 그래서 이름을 게임과 같은 목록으로 못 박는다.
+const SHOP_KINDS := ["item", "mod", "dart", "cons", "fix", "boost"]
+
+
+static func _v_shop() -> void:
+	var raw: Array = _raw.get("shop", [])
+	if raw.is_empty():
+		_errs.append("shop — 표가 비었다. 상점이 아무것도 못 뽑는다")
+		return
+	var seen := {}
+	var sum := 0.0
+	for r in raw:
+		var who := "shop:%d" % r.get("_line", 0)
+		var id := String(r.get("id", ""))
+		if not SHOP_KINDS.has(id):
+			_errs.append("%s — 갈래 「%s」를 게임이 모른다. %s 중 하나여야 한다"
+					% [who, id, ", ".join(SHOP_KINDS)])
+		if seen.has(id):
+			_errs.append("%s — 갈래 「%s」가 두 줄이다" % [who, id])
+		seen[id] = true
+		var w := _f(r, "weight", "shop", -1.0)
+		if w < 0.0:
+			_errs.append("%s — 저울이 음수다" % who)
+		sum += maxf(w, 0.0)
+	if sum <= 0.0:
+		_errs.append("shop — 저울 합이 0 이다. 상점이 아무것도 못 뽑는다")
+	for k in SHOP_KINDS:
+		if not seen.has(k):
+			_warns.append("shop — 갈래 「%s」 줄이 없다. 그 물건은 상점에 안 뜬다" % k)
+	# 사진은 기획서 P.30 이 0.5% 라고 못 박은 유일한 갈래다. 자리마다 굴리므로
+	# 상점당 확률은 1-(1-p)^폭 이다. 표를 건드리면 여기서 소리가 난다.
+	if seen.has("fix") and sum > 0.0:
+		var fw := 0.0
+		for r in raw:
+			if String(r.get("id", "")) == "fix":
+				fw = _f(r, "weight", "shop", 0.0)
+		var slots := 0
+		for rr in rows("rounds"):
+			slots = maxi(slots, _i(rr, "shop_slots", "rounds"))
+		var per := 1.0 - pow(1.0 - fw / sum, float(maxi(slots, 1)))
+		if per > 0.02:
+			_warns.append("shop — 사진이 상점당 %.2f%% 다. 기획서 P.30 은 0.5%% 다"
+					% (per * 100.0))
+
+
 static func _v_cross() -> void:
 	# 해금 판이 상점보다 뒤면 그 동전은 영영 안 뜬다. 상점은 판 N 을
 	# 클리어한 뒤 N+1 을 위해 열리므로 볼 수 있는 최소 판은 2 다.
@@ -2530,7 +2595,7 @@ static func _v_cross() -> void:
 	# 테이블 폭보다 넉넉한지 센다 — 소유 동전이 후보에서 빠지므로 여유를 둔다.
 	var need := 0
 	for r in rows("rounds"):
-		need = maxi(need, _i(r, "shop_items", "rounds"))
+		need = maxi(need, _i(r, "shop_slots", "rounds"))
 	need += tune_i("max_items")
 	for rd in range(2, n + 1):
 		var cnt := 0

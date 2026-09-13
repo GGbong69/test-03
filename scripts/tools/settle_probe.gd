@@ -176,13 +176,13 @@ func _initialize() -> void:
 	# 안 된다 — 팩이 붙은 날 이 검사가 5칸을 보고 졌다.
 	var deck := 0
 	for s in g.stock:
-		var t := String(s.get("type", ""))
-		if t == "boost" or t == "fix" or bool(s.get("free", false)):
+		# 갈래는 이제 자리마다 굴린다(shop.csv). 팩도 사진도 그 여섯 중
+		# 하나라 빼면 안 된다 — 공짜 해금 보상 한 장만 폭 밖이다.
+		if bool(s.get("free", false)):
 			continue
 		deck += 1
-	var w2: Dictionary = GameData.shop_of(g.leg_no)
-	var want2: int = int(w2.items) + int(w2.mods) + int(w2.darts)
-	_say(deck == want2, "마지막 앞 판에도 테이블이 넷",
+	var want2: int = GameData.shop_slots(g.leg_no)
+	_say(deck == want2, "마지막 앞 판에도 테이블 폭이 표대로다",
 			"R%d 뒤 테이블 %d칸 (표가 말하는 %d) · 매물 전체 %d칸"
 			% [g.leg_no, deck, want2, g.stock.size()])
 

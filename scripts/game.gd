@@ -249,14 +249,12 @@ var mouse_down := false         # 왼쪽 단추를 쥐고 있는가. 당김이 �
 # 조준의 무작위는 **제 난수통**을 쓴다. 전역 난수를 태우면 다트를 집을
 # 때마다 줄이 밀려 상점·성장 뽑기가 통째로 달라진다.
 var aim_rng := RandomNumberGenerator.new()
-var shelf := {}                 # 이 상점에 걸린 사진. 비면 없다
 var run_from := S.SHOP           # 런 정보를 열던 자리. 닫으면 그리로 돌아간다
 # 팩을 뜯는 연출. 산 자리에서 팩이 눈앞으로 와 찢어지고, 그 안의 것이
 # 테이블로 쏟아진다 — 화면을 갈아 끼우지 않는다.
 var boost_t := -1.0              # 뜯는 중이면 0 부터 흐른다. 음수면 안 뜯는 중
 var boost_card := {}             # 뜯고 있는 팩
 var boost_spill := []            # 아직 안 쏟은 내용물
-var shelf_round := 0             # 그 사진을 굴린 라운드. 라운드가 바뀔 때만 다시 굴린다
 var dead_col := -1              # 값을 죽이는 칸 색 번호. -1 이면 안 걸렸다
 var dead_ring := 0              # 무효가 되는 배수(2 더블 · 3 트리플). 0 이면 없다
 var odd_mul := 1.0              # 홀수 칸 값 배수
@@ -1199,13 +1197,6 @@ func _open_shop() -> void:
 	_sweep_reset()
 	rerolls_used = -_spend_tags("reroll")   # 뱃지 — 무료 리롤을 앞당긴다
 	reroll_cost = _reroll_price()
-	# 사진은 라운드가 바뀔 때만 갈린다. 같은 라운드의 상점 셋이 같은 것을 본다 —
-	# 발라트로가 바우처를 라운드마다 하나 거는 것과 같은 자리다. 안 사면
-	# 다음 상점에도 그대로 걸려 있고, 라운드가 넘어가면 사라진다.
-	var round := GameData.round_of(leg_no)
-	if round != shelf_round:
-		shelf_round = round
-		shelf = GameData.fixture_roll(round)
 	_roll_stock()
 	state = S.SHOP
 	_sfx("shop_open")
@@ -1247,30 +1238,11 @@ func _league_cost(c: int) -> int:
 	return c if m == 1.0 else maxi(1, int(ceil(float(c) * m)))
 
 
-func _roll_stock() -> void:
-	stock.clear()
-	var nxt := leg_no + 1
-	# 레전더리는 상점을 열 때 판정한다 — 기획서의 「바로 다음 상점」이
-	# 성립하려면 런이 끝나기를 기다리면 안 된다.
-	_item_unlock_check()
-	var freebie := _item_free_pick()
-	if not freebie.is_empty():
-		# free 표를 단다. 뒤에서 재고를 **덮어쓰거나 값을 깎는** 자리가
-		# 둘 있는데(사탕 바꿔치기 · 뱃지 「외상」), 둘 다 이 한 장은
-		# 건너뛰어야 한다. 표가 없으면 조용히 사탕이 되어 사라진다 —
-		# 실제로 첫 판에서 그랬다.
-		stock.append({"type": "item", "d": freebie, "cost": 0,
-				"sold": false, "free": true})
-	var tag_more := _spend_tags("shop")     # 뱃지 — 매물이 는다
-	var tag_free := _spend_tags("free")     # 뱃지 — 몇 개가 공짜다
-	# 상점 칸은 그 판 **뒤**의 상점 폭이다. 판 표를 읽으므로 같은 판
-	# 안에서는 세 판이 같은 폭을 본다 — 판이 바뀌는 경계에서만 값이 갈린다.
-	var w := GameData.shop_of(leg_no)
-
-	# 후보를 먼저 거른다 — 이미 가진 동전만 뺀다. 등장 조건은 없앴고
-	# 무엇이 뜨는지는 등급 가중치가 혼자 정한다(min_leg 는 전부 2 —
-	# 첫 상점이 열리는 판이라 아무것도 안 막는다).
-	var pool := []
+# 이 상점에 뜰 수 있는 동전. 이미 가진 장과 아직 이른 장을 뺀다.
+# 등장 조건은 없앴고 무엇이 뜨는지는 등급 가중치가 혼자 정한다
+# (min_leg 는 전부 2 — 첫 상점이 열리는 판이라 아무것도 안 막는다).
+func _stock_items(nxt: int) -> Array:
+	var out := []
 	for it in GameData.items():
 		if _has_item(it.id) or GameData.item_min_leg(it) > nxt:
 			continue
@@ -1279,80 +1251,79 @@ func _roll_stock() -> void:
 		# 레전더리가 그 자리라, 따로 얻는 길로만 오게 하려면 여기서 빼야 한다.
 		if GameData.item_weight(it) <= 0.0:
 			continue
-		pool.append(it)
+		out.append(it)
+	return out
 
-	var n := 0
-	while n < int(w.items) + tag_more:
-		var it := _draw_weighted(pool)
-		if it.is_empty():
-			break
-		pool.erase(it)
-		stock.append({"type": "item", "d": it, "cost": _league_cost(it.cost), "sold": false})
-		n += 1
 
-	# 판이 더는 못 받는 보드 확장과 이미 산 보드 확장을 여기서 뺀다.
-	# 무효 구매가 사라지는 자리는 여기 한 곳이다.
-	var mods := []
+# 판이 더는 못 받는 보드 확장과 이미 산 보드 확장을 여기서 뺀다.
+# 무효 구매가 사라지는 자리는 여기 한 곳이다. 다 걸러져 비면 갈래 자체가
+# 저울에서 빠지고, 그 자리는 다른 갈래가 받는다.
+func _stock_mods() -> Array:
+	var out := []
 	for m in GameData.mods():
 		if _mod_room(m.id):
-			mods.append(m)
-	mods.shuffle()
-	var mn := 0
-	for m in mods:
-		if mn >= int(w.mods):
+			out.append(m)
+	return out
+
+
+func _roll_stock() -> void:
+	stock.clear()
+	var nxt := leg_no + 1
+	# 레전더리는 상점을 열 때 판정한다 — 기획서의 「바로 다음 상점」이
+	# 성립하려면 런이 끝나기를 기다리면 안 된다.
+	_item_unlock_check()
+	var freebie := _item_free_pick()
+	if not freebie.is_empty():
+		# free 표를 단다. 뒤에서 값을 깎는 자리가 하나 있는데(뱃지 「외상」)
+		# 이 한 장은 건너뛰어야 한다 — 0 에서 0 이 될 뿐이라 뱃지를 버린다.
+		stock.append({"type": "item", "d": freebie, "cost": 0,
+				"sold": false, "free": true})
+	var tag_more := _spend_tags("shop")     # 뱃지 — 매물이 는다
+	var tag_free := _spend_tags("free")     # 뱃지 — 몇 개가 공짜다
+	# 테이블 폭이다. 갈래마다 칸을 못 박던 자리(동전 2 · 보드 확장 1 ·
+	# 다트 1)를 걷었다 — 기획서 P.17 은 여섯 갈래가 「랜덤 등장」이라 적었다.
+	var slots := GameData.shop_slots(leg_no) + tag_more
+
+	# 갈래마다 후보를 미리 깐다. 뽑은 것은 빼므로 한 상점에 같은 물건이
+	# 두 번 안 온다. 바닥난 갈래는 저울에서 통째로 빠져, 살 수 있는 보드
+	# 확장이 없는 판에서도 자리가 비지 않고 다른 갈래가 그 자리를 받는다.
+	var pools := {
+		"item": _stock_items(nxt),
+		"mod": _stock_mods(),
+		"dart": GameData.darts().slice(1),
+		"cons": GameData.candies().duplicate(),
+		# 사진은 이제 선반이 아니라 테이블 위 매물이다. 라운드마다 한 장을
+		# 걸어 두던 자리를 걷었다 — 기획서 P.30 의 0.5% 는 shop.csv 의
+		# 저울이 쥔다. 리롤하면 다른 것이 오고, 안 사도 안 남는다.
+		"fix": GameData.fixtures().duplicate(),
+		"boost": GameData.boosters().duplicate(),
+	}
+	var n := 0
+	while n < slots:
+		# 매 자리마다 다시 저울을 단다. 바닥난 갈래를 빼야 하므로
+		# 저울 자체가 자리마다 달라진다.
+		var live := []
+		for k in GameData.shop_kinds():
+			if not (pools[k.id] as Array).is_empty():
+				live.append(k)
+		if live.is_empty():
 			break
-		stock.append({"type": "mod", "d": m, "cost": _league_cost(m.cost), "sold": false})
-		mn += 1
-	# 보드 확장을 다 샀거나 판이 꽉 찼다. 예전 코드는 여기서 mods[i] 로 죽었다.
-	# 자리는 정확히 4개여야 하므로(_table_draw 의 ax/ay 주석) 동전로 메운다.
-	while mn < int(w.mods):
-		var fill := _draw_weighted(pool)
-		if fill.is_empty():
+		var kind := String(_draw_weighted(live).get("id", ""))
+		var pool: Array = pools[kind]
+		# 동전과 팩만 갈래 안에서 또 저울을 탄다 — 등급(rarity.csv)과
+		# 팩 크기(boosters.csv)가 그 저울이다. 나머지 셋은 표에 저울 열이
+		# 없어 고르게 뽑는다.
+		var d: Dictionary = {}
+		if kind == "item" or kind == "boost":
+			d = _draw_weighted(pool)
+		else:
+			d = pool[randi() % pool.size()]
+		if d.is_empty():
 			break
-		pool.erase(fill)
-		stock.append({"type": "item", "d": fill, "cost": _league_cost(fill.cost), "sold": false})
-		mn += 1
-
-	var darts_pool := GameData.darts().slice(1)
-	darts_pool.shuffle()
-	for i in mini(int(w.darts), darts_pool.size()):
-		var dd: Dictionary = darts_pool[i]
-		stock.append({"type": "dart", "d": dd, "cost": _league_cost(dd.cost), "sold": false})
-
-	# 사탕 — 상점 구성이 미정(기획 메모 990006)이라 임시 규칙로 낸다:
-	# shop_cons 가 켜져 있으면 동전 자리 하나를 사탕으로 바꾼다.
-	# 자리 수 4는 안 변한다 — _table_draw 의 ax/ay 전제가 사는 이유다.
-	if GameData.tune_i("shop_cons") == 1:
-		# 사탕 자리다 — 사탕만 뽑는다. 통짜 표(consumables)는 사진도 같이
-		# 내서, 사진이 사탕 값으로 사탕 칸에 떴다. 사진은 벽(fixture_roll)이
-		# 따로 거는 길이 있어 두 길로 두 값에 뜨던 자리다(2026-09-13).
-		var cp := GameData.candies()
-		if not cp.is_empty():
-			for k in stock.size():
-				# 공짜로 주기로 한 장은 안 덮는다. 이 줄이 없으면 해금
-				# 보상이 사탕으로 바뀌어 없어진다.
-				if bool(stock[k].get("free", false)):
-					continue
-				if stock[k].type == "item":
-					var cd: Dictionary = cp[randi() % cp.size()]
-					stock[k] = {"type": "cons", "d": cd, "cost": _league_cost(cd.cost),
-							"sold": false}
-					break
-
-	# 사진 — 라운드마다 하나 걸린다(shelf_round 가 그것을 지킨다). 벽에
-	# 걸린 패널이었는데 다른 매물과 같은 규약을 못 따랐다 — 툴팁도
-	# 창구도 손도 안 닿았다. 테이블에 내려놓으면 그 넷이 공짜로 붙는다.
-	# 리롤해도 같은 사진이 다시 온다. 사면 shelf 가 비어 안 온다.
-	if not shelf.is_empty():
-		stock.append({"type": "fix", "d": shelf, "cost": int(shelf.cost),
-				"sold": false})
-
-	# 팩 — 기획서 16쪽. 상점에 물건으로 뜨고 사면 안을 펼친다.
-	# 매 상점 하나씩 굴린다. 큰 팩은 가중치가 절반이라 덜 온다.
-	var bp := _draw_weighted(GameData.boosters().duplicate())
-	if not bp.is_empty():
-		stock.append({"type": "boost", "d": bp,
-			"cost": _league_cost(int(bp.cost)), "sold": false})
+		pool.erase(d)
+		stock.append({"type": kind, "d": d,
+				"cost": _league_cost(int(d.get("cost", 0))), "sold": false})
+		n += 1
 
 	# 뱃지 "외상" — 앞에서부터 몇 개를 0골드로 만든다. 안 팔린 것만 고른다.
 	for k in stock.size():
@@ -1449,14 +1420,14 @@ func _buy(i: int) -> void:
 		"fix":
 			# 사진은 이제 1회성이다(2026-09-10 기획서). 사면 사탕 칸에
 			# 들어가고 쓸 때 효과가 난다 — 사서 그 자리에서 사라지던
-			# 옛 바우처와 다른 물건이다. shelf 를 비워 리롤에도 다시 안 온다.
+			# 옛 바우처와 다른 물건이다. 테이블 위 매물이라 sold 가 서면
+			# 그걸로 끝이다 — 선반을 따로 비울 것이 없다.
 			if cons.size() >= GameData.cons_slots():
 				pay_msg = "사탕 칸이 꽉 찼다"
 				pay_msg_t = HAND.msg_t
 				_deny()
 				return
 			cons.append(s.d.duplicate())
-			shelf = {}
 			_panel_reset()
 	_sfx("fixture_buy" if s.type == "fix" else "buy")
 
@@ -13374,7 +13345,10 @@ func _boost_one(kind: String) -> Dictionary:
 			var d := _draw_weighted(pool)
 			return {} if d.is_empty() else {"type": "item", "d": d}
 		"cons":
-			var cp := GameData.consumables()
+			# 사탕만. consumables() 는 사탕과 사진이 한 표라 둘 다 낸다 —
+			# 그대로 쓰면 "cons" 갈래가 사진을 뱉어 팩 안에서 사진이
+			# fix 갈래와 두 번 굴려진다. 상점 사탕 자리가 같은 자리였다.
+			var cp := GameData.candies()
 			if cp.is_empty():
 				return {}
 			return {"type": "cons", "d": cp[randi() % cp.size()]}

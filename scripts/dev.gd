@@ -388,6 +388,7 @@ static func _rows(g: Node) -> Array:
 				{"n1": "팩 열기", "t": "list", "k": "boost",
 						"n": GameData.boosters().size()},
 				{"n1": "테이블 다시 굴리기", "t": "act", "a": "restock"},
+				{"n1": "테이블에 사진 깔기", "t": "act", "a": "restock_fix"},
 			]
 		2:
 			return [
@@ -604,6 +605,27 @@ static func _run(g: Node, e: Dictionary) -> void:
 		"restock":
 			g._roll_stock()
 			_say("테이블 다시")
+			return
+		"restock_fix":
+			# 사진은 상점당 0.5% 다(기획서 P.30). 손으로 리롤해서는 이백
+			# 번을 굴려도 한 번 볼까 말까라, 테이블 위의 사진을 눈으로
+			# 보려면 길이 따로 있어야 한다. 굴린 뒤 자리 하나를 바꾼다 —
+			# 게임이 까는 것과 같은 모양이라 툴팁도 창구도 그대로 산다.
+			g._roll_stock()
+			var fp := GameData.fixtures()
+			if fp.is_empty():
+				_say("사진 없음")
+				return
+			var fd: Dictionary = fp[randi() % fp.size()]
+			for si in g.stock.size():
+				if bool(g.stock[si].get("free", false)):
+					continue
+				g.stock[si] = {"type": "fix", "d": fd,
+						"cost": g._league_cost(int(fd.get("cost", 0))),
+						"sold": false}
+				break
+			g._drop_roll()          # 종이는 안 튄다 — 낙하를 갈래대로 다시 잡는다
+			_say("테이블에 사진 %s" % String(fd.get("n", "?")))
 			return
 		"mf_off":
 			g.active_mods = []
