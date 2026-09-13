@@ -140,13 +140,55 @@ func _run() -> void:
 		_ok("설정에서 켜지고 닫으면 꺼진다", on and not blur.visible,
 				"열림 %s → 닫힘 %s" % [on, blur.visible])
 
-	# ⑥ 눈으로
+	# ⑥ 얹힘 띠 — 커서를 올리면 왼쪽에서 쓸려 들어온다
+	print("")
 	g.state = g.S.SETTINGS
 	g.pause_from = 1
 	g.set_t = float(g.SET.t)
+	g.set_sel = 0
+	var mid: Vector2 = g._set_rect(3).get_center()
+	g.mouse_at = mid
+	g._set_tick(1.0 / 60.0)
+	_ok("커서 아래 줄을 집는다", g.set_hot == 3, "set_hot %d" % g.set_hot)
+	_ok("얹힌 줄의 띠가 찬다", float(g.set_row_e[3]) > 0.0,
+			"%.2f" % float(g.set_row_e[3]))
+	for k in 30:
+		g._set_tick(1.0 / 60.0)
+	_ok("끝까지 차면 1", is_equal_approx(float(g.set_row_e[3]), 1.0),
+			"%.2f" % float(g.set_row_e[3]))
+	g.mouse_at = Vector2(-50.0, -50.0)
+	for k in 30:
+		g._set_tick(1.0 / 60.0)
+	_ok("떠나면 진다", float(g.set_row_e[3]) < 0.02
+			and float(g.set_row_e[0]) > 0.9,
+			"떠난 줄 %.2f · 고른 줄 %.2f"
+			% [float(g.set_row_e[3]), float(g.set_row_e[0])])
+	# 나가는 동안 폭이 안 줄어야 한다 — 줄면 띠가 왼쪽으로 오므라든다
+	g.mouse_at = mid
+	for k in 30:
+		g._set_tick(1.0 / 60.0)
+	g.mouse_at = Vector2(-50.0, -50.0)
+	g._set_tick(1.0 / 60.0)
+	g._set_tick(1.0 / 60.0)
+	_ok("질 때 폭은 그대로", float(g.set_row_w[3]) > 0.99
+			and float(g.set_row_e[3]) < 1.0,
+			"폭 %.2f · 짙기 %.2f"
+			% [float(g.set_row_w[3]), float(g.set_row_e[3])])
+	for k in 30:
+		g._set_tick(1.0 / 60.0)
+	_ok("다 진 뒤 폭을 접는다", float(g.set_row_w[3]) == 0.0,
+			"폭 %.2f" % float(g.set_row_w[3]))
+
+	# ⑦ 눈으로 — 띠가 쓸려 드는 중간 한 장, 다 든 한 장
 	g.set_hot = -1
 	g.set_sel = 0
+	for k in 30:
+		g._set_tick(1.0 / 60.0)
 	await _shoot("settings_6")
+	g.mouse_at = g._set_rect(1).get_center()
+	g._set_tick(1.0 / 60.0)
+	g._set_tick(1.0 / 60.0)
+	await _shoot("settings_hover")
 	g.set_sel = 2                 # 효과음 — 오른쪽 판에 게이지가 선다
 	await _shoot("settings_vol")
 	g.set_sel = 5                 # 게임 나가기

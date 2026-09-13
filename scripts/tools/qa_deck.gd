@@ -56,7 +56,7 @@ func _initialize() -> void:
 	print("")
 	var cases := [
 		["교통카드", "common", 4], ["유리 대포", "common", 4],
-		["아카로스", "common", 4], ["빌리의 바지", "rare", 12],
+		["이카로스", "common", 4], ["빌리의 바지", "rare", 12],
 		["딱정벌레의 도로", "uncommon", 8], ["녹는 시계", "legendary", 20],
 	]
 	for c in cases:
@@ -68,10 +68,10 @@ func _initialize() -> void:
 
 	# 확률
 	var gc := _item("유리 대포")
-	var ak := _item("아카로스")
+	var ak := _item("이카로스")
 	_ok("유리 대포 1/2", GameData.boom_n(String(gc.get("boom", ""))) == 2,
 			GameData.eff_line(gc))
-	_ok("아카로스 1/10 · ×4", GameData.boom_n(String(ak.get("boom", ""))) == 10,
+	_ok("이카로스 1/10 · ×4", GameData.boom_n(String(ak.get("boom", ""))) == 10,
 			GameData.eff_line(ak))
 	var bp := _item("빌리의 바지")
 	_ok("빌리의 바지 점수 +40 · 배수 +4",

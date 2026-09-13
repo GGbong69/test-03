@@ -15,6 +15,12 @@ extends SceneTree
 const GameData = preload("res://scripts/data.gd")
 const SPEC := "res://docs/기획서_동전표.csv"
 
+# 기획서 이름을 **일부러 덮은** 자리. 기획서 이름 → 게임 이름.
+# 사용자가 갈라고 한 것만 여기 든다 — 내 판단으로는 못 넣는다.
+const RENAMED := {
+	"아카로스": "이카로스",   # 2026-09-13 사용자 지시. 기획서 s22 는 아직 옛 이름이다
+}
+
 # 표가 든 수가 기획서 글에 안 적힌 자리. **이유가 없으면 여기 못 들어온다** —
 # 목록이 길어지면 그만큼 대조가 안 되는 장이 는다는 뜻이라서다.
 const EXEMPT := {
@@ -99,9 +105,19 @@ func _run() -> void:
 	var raw := {}
 	for r in GameData.rows("items"):
 		raw[String(r.get("name", ""))] = r
+	# 갈아 끼운 이름은 기획서 이름으로도 찾을 수 있게 한 줄 더 건다.
+	# 대조를 통과시키려는 것이 아니라, **어느 장이 갈렸는지 말하려는** 것이다.
+	for k in RENAMED:
+		if raw.has(String(RENAMED[k])):
+			raw[k] = raw[String(RENAMED[k])]
 	var live := {}
 	for x in GameData.items():
 		live[String(x.get("n", ""))] = x
+	# live 에도 같이 걸어야 한다. 안 걸면 갈아 끼운 장이 **수 대조에서
+	# 통째로 빠진다** — 이름만 맞추고 값은 안 보는 구멍이 된다.
+	for k in RENAMED:
+		if live.has(String(RENAMED[k])):
+			live[k] = live[String(RENAMED[k])]
 
 	var RAR := {"일반": "common", "희귀": "uncommon", "레어": "rare",
 			"레전더리": "legendary"}
@@ -113,6 +129,8 @@ func _run() -> void:
 			miss.append(String(s.name))
 	_ok("이름 백 장이 표에 다 있다", miss.is_empty(),
 			"없는 것: %s" % ("없다" if miss.is_empty() else ", ".join(miss)))
+	for k in RENAMED:
+		print("      (갈아 끼움) 기획서 「%s」 → 게임 「%s」" % [k, RENAMED[k]])
 	_ok("표에 기획서 밖 동전이 없다", GameData.rows("items").size() == 100,
 			"%d행" % GameData.rows("items").size())
 

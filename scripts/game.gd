@@ -10860,6 +10860,8 @@ var set_drag := -1       # 끌고 있는 게이지 행. -1 이면 안 끈다
 var set_hot := -1        # 커서가 얹힌 줄. 없으면 -1
 var set_sel := 0         # 눌러서 고른 줄. 커서가 없을 때 오른쪽 판이 이걸 편다
 var set_t := 0.0         # 밀려 들어온 시간. 0 이면 화면 밖, SET.t 면 제자리
+var set_row_e := []      # 줄마다의 얹힘 짙기 0~1
+var set_row_w := []      # 그 줄 띠가 쓸려 든 폭 0~1. 짙기와 따로 논다
 						 # 실제 초기값은 _ready 가 저장에서 읽는다.
 var pause_from := -1     # 게임 중 ESC 로 설정을 열면 돌아갈 상태. -1 = 제목
 
@@ -12921,6 +12923,8 @@ const SET := {
 }
 #  오른쪽 판
 const SETP := Rect2(214.0, 96.0, 386.0, 176.0)
+#  얹힘 띠 — 조각 수 · 왼쪽 끝의 짙기 · 쓸려 드는 빠르기(초당)
+const SETB := {"n": 12, "a": 0.22, "v": 9.0}
 
 
 func _set_exit(k: String) -> bool:
@@ -13064,17 +13068,34 @@ func _draw_settings(c: CanvasItem) -> void:
 		var r := _set_rect(i)
 		var key := String(rows[i])
 		var info := _set_info(key)
-		var on: bool = i == face
-		var col: Color = C_TXT if on else C_DIM
+		var ee: float = set_row_e[i] if i < set_row_e.size() else 0.0
+		var ew: float = set_row_w[i] if i < set_row_w.size() else 0.0
+		#  얹힌 줄에는 띠가 **왼쪽에서 쓸려 들어온다.** 밝기만 바뀌면 도트
+		#  한 칸에서 눈이 못 따라오고, 글자를 옆으로 밀면 줄이 흔들려 읽는
+		#  중에 자리가 달아난다. 띠는 글자를 안 건드리고 자리만 말한다.
+		#
+		#  한 장으로 그리면 오른쪽에 딱딱한 끝이 생긴다. 세로 조각 열둘을
+		#  왼쪽부터 옅어지게 깔아 오른쪽으로 녹인다.
+		if ee > 0.004:
+			var x0: float = r.position.x - 12.0
+			var full: float = r.size.x + 24.0
+			var bw: float = full * ew
+			for k in SETB.n:
+				var f: float = float(k) / float(SETB.n)
+				var sx: float = x0 + full * f
+				if sx >= x0 + bw:
+					break
+				var sw: float = minf(full / float(SETB.n) + 0.5, x0 + bw - sx)
+				c.draw_rect(Rect2(sx, r.position.y, sw, r.size.y),
+						Color(C_ACC, float(SETB.a) * (1.0 - f) * (1.0 - f) * e))
+			#  쓸려 들어오는 끝을 한 획으로 세운다 — 띠가 어디까지 왔는지가
+			#  그 한 줄로 읽힌다. 다 들어오면 오른쪽 끝에 서서 마침표가 된다.
+			c.draw_rect(Rect2(x0 + bw - 1.0, r.position.y, 1.0, r.size.y),
+					Color(C_ACC, 0.55 * ee * e))
+		var col: Color = C_DIM.lerp(C_TXT, ee)
 		if bool(info.get("warn", false)):
-			col = C_RED.lightened(0.35) if on else C_DIM
-		#  얹힌 줄은 오른쪽으로 한 걸음 나온다. 색만으로는 도트 한 칸에서
-		#  눈이 안 따라온다 — 움직임이 붙어야 손이 어디 있는지 읽힌다.
-		var push: float = 6.0 if on else 0.0
-		if on:
-			c.draw_rect(Rect2(r.position.x - 10.0, r.position.y + 5.0,
-					2.0, r.size.y - 10.0), Color(C_ACC, e))
-		c.draw_string(font, r.position + Vector2(push, 15.0),
+			col = C_DIM.lerp(C_RED.lightened(0.35), ee)
+		c.draw_string(font, r.position + Vector2(0.0, 15.0),
 				String(info.get("n", key)), HORIZONTAL_ALIGNMENT_LEFT, -1, 12,
 				Color(col, e))
 		#  게이지 줄은 수만 곁들인다. 값을 보려고 오른쪽까지 안 가도 되게.
@@ -13083,7 +13104,7 @@ func _draw_settings(c: CanvasItem) -> void:
 			c.draw_string(font, r.position + Vector2(0.0, 15.0),
 					"%d" % int(round(vv * 100.0)),
 					HORIZONTAL_ALIGNMENT_RIGHT, r.size.x - 6.0, 9,
-					Color(C_DIM, e * 0.8))
+					Color(C_DIM.lerp(C_TXT, ee * 0.6), e * 0.8))
 
 	_set_panel(c, String(rows[face]), e)
 
@@ -13419,6 +13440,26 @@ func _set_tick(d: float) -> void:
 		set_hot = _set_hit(mouse_at)
 	elif set_t <= 0.0:
 		set_hot = -1
+	#  띠는 줄마다 따로 민다. 얹힌 줄은 차고 떠난 줄은 진다 — 둘이 같이
+	#  움직여야 손이 옮겨 갈 때 띠가 따라오는 것으로 읽힌다.
+	var rows := _set_rows()
+	if set_row_e.size() != rows.size():
+		set_row_e.resize(rows.size())
+		set_row_w.resize(rows.size())
+		for k in set_row_e.size():
+			set_row_e[k] = 0.0
+			set_row_w[k] = 0.0
+	var face: int = _set_face() if set_t > 0.0 else -1
+	for k in set_row_e.size():
+		var to: float = 1.0 if k == face else 0.0
+		set_row_e[k] = move_toward(float(set_row_e[k]), to, d * float(SETB.v))
+		#  폭은 **들어올 때만** 쓴다. 나갈 때 폭까지 줄이면 띠가 왼쪽으로
+		#  오므라들어, 손이 떠난 자리에 부스러기가 남은 것처럼 보인다.
+		#  나갈 때는 제자리에서 옅어지고, 다 옅어진 뒤에 폭을 접는다.
+		if k == face:
+			set_row_w[k] = move_toward(float(set_row_w[k]), 1.0, d * float(SETB.v))
+		elif float(set_row_e[k]) <= 0.0:
+			set_row_w[k] = 0.0
 	var blur := get_node_or_null("Blur")
 	if blur != null:
 		var e: float = _set_ease()

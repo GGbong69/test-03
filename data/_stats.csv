@@ -4,7 +4,7 @@ c02,닌자,common,always,mult,1,4,62.30,0.00,0.00,0.000,0.00,base,uniform_sq,360
 c03,유리 대포,common,always,mult,15,4,62.30,101.44,608.64,25.360,0.00,base,uniform_sq,360000,20260821,b85343dcd84b
 c04,위대한 피자,common,always,mult,8,4,62.30,30.42,182.51,7.604,0.00,base,uniform_sq,360000,20260821,b85343dcd84b
 c05,금요일,common,always,mult_rand,13,4,62.30,43.89,263.32,10.972,0.00,base,uniform_sq,360000,20260821,b85343dcd84b
-c06,아카로스,common,always,xmult,4,4,62.30,28.79,172.76,7.198,0.00,base,uniform_sq,360000,20260821,b85343dcd84b
+c06,이카로스,common,always,xmult,4,4,62.30,28.79,172.76,7.198,0.00,base,uniform_sq,360000,20260821,b85343dcd84b
 c07,BiiiG,common,big,chip,16,4,18.34,4.24,25.41,1.059,0.00,base,uniform_sq,360000,20260821,b85343dcd84b
 c08,천동설,common,bull,chip,20,4,1.18,0.94,5.61,0.234,0.00,base,uniform_sq,360000,20260821,b85343dcd84b
 c09,양,common,col:0,mult,3,4,30.54,9.80,58.82,2.451,0.00,base,uniform_sq,360000,20260821,b85343dcd84b
