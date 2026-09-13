@@ -526,10 +526,13 @@ static func consumables() -> Array:
 		if not _b(r, "enabled", "cons"):
 			continue
 		var cost := _i(r, "cost", "cons", 0)
+		var cv := _i(r, "v", "cons", 0)
 		out.append({
 			"id": r.get("id", ""),
 			"n": r.get("name", ""),
-			"d": r.get("desc", ""),
+			# 다른 표처럼 fill 을 지난다. 안 지나서 설명창에 「상한 {v}」가
+			# 글자 그대로 찍히고 있었다(2026-09-13).
+			"d": fill(r.get("desc", ""), {"v": cv}),
 			"cat": r.get("cat", ""),
 			# 사용조건 — 기획서 s33 이 표로 낸 열(2026-09-13). 전에는
 			# _cons_use 안에 갈래마다 박혀 있었다.
@@ -538,7 +541,7 @@ static func consumables() -> Array:
 			#   play  판 플레이 중
 			"use_at": r.get("use_at", "any"),
 			"track": _i(r, "track", "cons", 0),
-			"v": _i(r, "v", "cons", 0),
+			"v": cv,
 			"cost": cost if cost > 0 else tune_i("cons_price_tmp"),
 			"line": r.get("_line", 0),
 		})
