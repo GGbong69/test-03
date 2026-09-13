@@ -160,7 +160,22 @@ func _run() -> void:
 			"살 수 있는 보드 확장 %d장 · 폭 %d" % [g._stock_mods().size(), w2])
 	g.mods_own = []
 
-	# ⑧ 팩의 「사탕」 갈래가 사진을 안 뱉는다
+	# ⑧ 등급 번짐 — 테이블 동전 둘레의 빛이 등급 색이다 (2026-09-13 지시)
+	print("")
+	_ok("일반은 안 빛난다", g._glow_of("common").a == 0.0,
+			"알파 %.2f" % g._glow_of("common").a)
+	_ok("빈 등급도 안 빛난다", g._glow_of("").a == 0.0, "")
+	for rr in ["uncommon", "rare", "legendary"]:
+		var rc: Color = GameData.rarity_color(rr)
+		var gc: Color = g._glow_of(rr)
+		_ok("%s 는 등급 색으로 빛난다" % rr,
+				gc.a > 0.0 and is_equal_approx(gc.r, rc.r)
+				and is_equal_approx(gc.g, rc.g)
+				and is_equal_approx(gc.b, rc.b),
+				"#%s 알파 %.2f (rarity.csv #%s)"
+				% [gc.to_html(false), gc.a, rc.to_html(false)])
+
+	# ⑨ 팩의 「사탕」 갈래가 사진을 안 뱉는다
 	var leak := 0
 	for i in 2000:
 		var e: Dictionary = g._boost_one("cons")

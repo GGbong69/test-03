@@ -2337,6 +2337,7 @@ func _process(d: float) -> void:
 	_fill_audio()
 	_mus_update(d)
 	_boost_tick(d)
+	_set_tick(d)
 
 	if not beep_q.is_empty():
 		beep_t -= d
@@ -3190,17 +3191,33 @@ func _click(m: Vector2) -> void:
 					return
 		S.SETTINGS:
 			var rows := _set_rows()
+			# ① 오른쪽 판의 홈 — 글줄보다 **먼저** 본다. 고른 줄이 어느
+			#    소리인지 이미 정해 두었으므로 여기서는 끌기만 연다.
+			#    홈은 가늘어서 위아래로 조금 넉넉히 잡는다.
+			var face := _set_face()
+			if bool(_set_info(String(rows[face])).get("g", false)):
+				var tr := _vol_track().grow(7.0)
+				if tr.has_point(m):
+					# 누른 자리로 곧장 가고 뗄 때까지 따라온다. 예전에는 클릭
+					# 한 번만 받고 0.05 로 끊어서 계단처럼 움직였다.
+					set_drag = face
+					set_sel = face
+					_set_slide(face, m)
+					_sfx("menu_pick2")
+					return
+			# ② 왼쪽 글줄
 			for i in rows.size():
 				if not _set_rect(i).has_point(m):
 					continue
+				set_sel = i
 				match rows[i]:
 					"fs":
 						_toggle_fullscreen()
 					"vol", "mus":
-						# 누른 자리로 곧장 가고 뗄 때까지 따라온다. 예전에는 클릭 한 번만
-						# 받고 0.05 로 끊어서 계단처럼 움직였다 — 그게 조작감의 정체다.
-						set_drag = i
-						_set_slide(i, m)
+						# 고르기만 한다. 값은 오른쪽 판의 홈에서 끈다 —
+						# 왼쪽은 글줄이라는 규약을 한 줄도 깨지 않는다.
+						_sfx("menu_pick2")
+						return
 					"lobby":
 						pause_from = -1
 						state = S.TITLE
@@ -4331,7 +4348,10 @@ func _draw_screen(scr: int) -> void:
 	elif scr == S.TITLE:
 		_draw_title()
 	elif scr == S.SETTINGS:
-		_draw_settings()
+		# 설정 글씨는 **흐림 판 위**여야 하므로 앞판(Front)이 그린다.
+		# 여기서는 뒤에 남아 흐려질 화면만 그린다 — 판 중에 열었으면
+		# 그 화면을, 제목에서 열었으면 제목을.
+		_draw_screen(pause_from if pause_from >= 0 else S.TITLE)
 	elif scr == S.COLLECT:
 		_draw_collect()
 	elif scr == S.RUNINFO:
@@ -4340,6 +4360,13 @@ func _draw_screen(scr: int) -> void:
 		_draw_newrun()
 	else:
 		_draw_hint()
+
+
+#  앞판(scenes/main.tscn 의 Front)이 부른다. 흐림 판보다 **나중에** 그려야
+#  하는 것만 여기 있다 — 지금은 설정 하나다.
+func draw_front(c: CanvasItem) -> void:
+	if state == S.SETTINGS or set_t > 0.0:
+		_draw_settings(c)
 
 
 func _draw() -> void:
@@ -8017,6 +8044,42 @@ func _fix_flat(c: Vector2, it: Dictionary, rot: float, dim: float) -> void:
 #  여기서도 갈린 것은 테두리뿐이다: 가장자리 스팟과 인레이 홈(둘 다 동전의
 #  어휘)을 빼고, 다이컷과 마감을 동전 슬롯과 같은 각 규약으로 얹었다. 옆면은
 #  종이 두께라 그림자로만 남는다 — 히트박스(TBL.chip_t)는 안 건드렸다.
+#  등급 번짐. 테이블에 떨어진 동전 둘레로 등급 색이 은은히 퍼진다 —
+#  값을 보기 전에 **무엇이 떨어졌는지**가 먼저 읽히는 자리다.
+#
+#  고리를 하나만 두꺼운 알파로 그리면 도트에 딱딱한 테가 생긴다. 얇은
+#  타원을 밖으로 갈수록 옅게 여러 겹 겹쳐 가장자리를 흐린다 — 화면이
+#  640x360 이라 다섯 겹이면 눈에는 이어진 번짐이다.
+#
+#  일반은 안 그린다. 넷 다 빛나면 아무것도 안 빛나는 것과 같고, 흔한 것이
+#  빛나면 그 빛이 「귀하다」를 못 말한다. 등급 고리(draw_item_sticker)가
+#  같은 규약이다.
+const GLOW := {"n": 5, "step": 2.1, "a": 0.20}
+
+
+#  등급 하나가 내는 빛. 알파 0 이면 안 빛난다는 뜻이다 — 규칙을 색 하나로
+#  옮겨 두어야 자가 그림을 안 보고도 잴 수 있다.
+func _glow_of(rar: String) -> Color:
+	if rar == "" or rar == "common":
+		return Color(0.0, 0.0, 0.0, 0.0)
+	return Color(GameData.rarity_color(rar), float(GLOW.a))
+
+
+func _rar_glow(c: Vector2, rx: float, ry: float, rar: String, dim: float) -> void:
+	var col := _glow_of(rar)
+	if col.a <= 0.0:
+		return
+	var fa: float = 1.0 - dim
+	if fa <= 0.02:
+		return
+	for k in range(int(GLOW.n), 0, -1):
+		var g: float = float(k) * float(GLOW.step)
+		# 밖으로 갈수록 제곱으로 옅어진다. 선형이면 바깥 테가 남는다.
+		var f: float = 1.0 - float(k) / float(int(GLOW.n) + 1)
+		draw_colored_polygon(_e_pts(c, rx + g, ry + g * TBL.flat),
+				Color(col, col.a * f * f * fa))
+
+
 func _sticker_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: float) -> void:
 	var ti := _stk_ti(String(it.get("rarity", "common")))
 	var t: Dictionary = STK_TIERS[ti]
@@ -8028,6 +8091,7 @@ func _sticker_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: floa
 	var sd: float = TBL.chip_t * TBL.tall              # 그림자 낙차 2.77px
 	draw_colored_polygon(_e_pts(c + Vector2(0.0, sd), rx, ry),
 			Color(0.0, 0.0, 0.0, 0.26 * (1.0 - dim)))
+	_rar_glow(c, rx, ry, String(it.get("rarity", "common")), dim)
 	draw_colored_polygon(_e_pts(c, rx, ry), rim)
 	draw_colored_polygon(_e_pts(c, rx - rw, ry - rw * TBL.flat), body)
 	var fa := 1.0 - dim
@@ -10793,6 +10857,9 @@ var collect_tab := 0
 var vol := 1.0           # 효과음. 예전 저장 키("vol")를 그대로 물려받는다
 var vol_mus := 0.8       # 음악. 깔개라 기본값이 효과음보다 한 뼘 낮다
 var set_drag := -1       # 끌고 있는 게이지 행. -1 이면 안 끈다
+var set_hot := -1        # 커서가 얹힌 줄. 없으면 -1
+var set_sel := 0         # 눌러서 고른 줄. 커서가 없을 때 오른쪽 판이 이걸 편다
+var set_t := 0.0         # 밀려 들어온 시간. 0 이면 화면 밖, SET.t 면 제자리
 						 # 실제 초기값은 _ready 가 저장에서 읽는다.
 var pause_from := -1     # 게임 중 ESC 로 설정을 열면 돌아갈 상태. -1 = 제목
 
@@ -12833,20 +12900,34 @@ func _set_rows() -> Array:
 #
 #  나가는 두 줄(로비로 · 게임) 앞에는 틈을 둔다. 소리를 만지다가 손이
 #  미끄러져 런을 버리는 자리가 거기라서, 눈으로 한 번 끊어 준다.
+#  설정 화면 ──────────────────────────────────────────────
+#  ESC 를 누르면 게임이 뿌예지고 왼쪽에서 글줄이 밀려 들어온다. 단추 상자를
+#  세우지 않는다 — 640x360 에 여섯 칸을 넣으면 그 자체로 꽉 차서, 전에는
+#  「게임 나가기」가 화면 밖으로 잘렸다. 글줄은 자리를 덜 먹고 줄 수가
+#  늘어도 안 넘친다.
+#
+#  고른 줄은 오른쪽 판에 펼친다. 왼쪽은 **무엇이 있나**, 오른쪽은 **그게
+#  무엇인가**다. 소리 게이지도 거기 산다 — 왼쪽에 게이지를 같이 놓으면
+#  글줄이라는 규약이 한 줄에서만 깨진다.
 const SET := {
-	"w": 200.0, "h": 32.0,
-	"gap": 6.0,        # 행 사이
-	"split": 12.0,     # 나가는 무리 앞
-	"top": 116.0,      # 제목 아래
-	"bot": 350.0,      # 화면 아래 여백을 남긴 끝
+	"x": 38.0,         # 글줄 왼쪽 끝
+	"y": 106.0,        # 첫 줄
+	"h": 22.0,         # 줄 높이
+	"gap": 4.0,
+	"split": 14.0,     # 나가는 무리 앞에 두는 틈
+	"w": 148.0,        # 누를 수 있는 폭
+	"slide": 52.0,     # 밀려 들어오는 거리
+	"t": 0.16,         # 다 밀려 드는 데 걸리는 시간(초)
 }
+#  오른쪽 판
+const SETP := Rect2(214.0, 96.0, 386.0, 176.0)
 
 
 func _set_exit(k: String) -> bool:
 	return k == "lobby" or k == "quit"
 
 
-#  i 번째 행 위까지 쌓인 높이. 자리를 세는 자는 이 함수 하나다 —
+#  i 번째 줄 위까지 쌓인 높이. 자리를 세는 자는 이 함수 하나다 —
 #  그리는 쪽과 누르는 쪽이 같은 자를 써야 손이 안 어긋난다.
 func _set_off(rows: Array, i: int) -> float:
 	var y := 0.0
@@ -12857,29 +12938,80 @@ func _set_off(rows: Array, i: int) -> float:
 	return y
 
 
+#  밀려 들어온 정도. 0 이면 화면 밖, 1 이면 제자리다.
+func _set_ease() -> float:
+	var t: float = clampf(set_t / float(SET.t), 0.0, 1.0)
+	return 1.0 - pow(1.0 - t, 3.0)      # 빨리 들어와 부드럽게 선다
+
+
 func _set_rect(i: int) -> Rect2:
 	var rows := _set_rows()
 	if i < 0 or i >= rows.size():
 		return Rect2()
-	var tall := _set_off(rows, rows.size() - 1) + SET.h
-	var y0: float = SET.top + (SET.bot - SET.top - tall) * 0.5
-	return Rect2(Vector2((VIEW.x - SET.w) * 0.5, y0 + _set_off(rows, i)),
+	var dx: float = -float(SET.slide) * (1.0 - _set_ease())
+	return Rect2(Vector2(float(SET.x) + dx, float(SET.y) + _set_off(rows, i)),
 			Vector2(SET.w, SET.h))
 
 
-# 게이지의 홈 — 행 안에서 소리 글자 오른쪽부터 끝까지다.
-# 게이지 한 칸을 커서 자리로 민다. 누를 때와 끌 때가 같은 문을 쓴다.
+#  커서 아래 줄. 없으면 -1.
+func _set_hit(m: Vector2) -> int:
+	for i in (_set_rows() as Array).size():
+		if _set_rect(i).has_point(m):
+			return i
+	return -1
+
+
+#  오른쪽 판이 펼치는 줄. 커서가 얹힌 줄이 이기고, 없으면 고른 줄이다 —
+#  손을 떼도 판이 비지 않아야 "고른 것" 이 남는다.
+func _set_face() -> int:
+	var rows := _set_rows()
+	if set_hot >= 0 and set_hot < rows.size():
+		return set_hot
+	return clampi(set_sel, 0, rows.size() - 1)
+
+
+#  줄마다의 이름 · 한 줄 설명 · 오른쪽 판에 무엇을 놓나
+func _set_info(key: String) -> Dictionary:
+	match key:
+		"back":
+			if pause_from >= 0:
+				return {"n": "계속하기", "d": "판으로 돌아간다", "k": "ESC"}
+			return {"n": "뒤로", "d": "제목 화면으로 돌아간다", "k": "ESC"}
+		"fs":
+			return {"n": "전체화면", "d": "창과 전체화면을 오간다", "k": "F11",
+					"v": "켬" if DisplayServer.window_get_mode()
+						== DisplayServer.WINDOW_MODE_FULLSCREEN else "끔"}
+		"vol":
+			return {"n": "효과음", "d": "던지고 맞고 사고파는 소리", "g": true}
+		"mus":
+			return {"n": "음악", "d": "판 밖에서 도는 곡", "g": true}
+		"lobby":
+			return {"n": "로비로 나가기",
+					"d": "이 런을 버리고 제목 화면으로 돌아간다", "warn": true}
+		"quit":
+			return {"n": "게임 나가기", "d": "게임을 끝낸다", "warn": true}
+	return {"n": key, "d": ""}
+
+
+#  오른쪽 판 안의 게이지 홈. 왼쪽 글줄에는 게이지가 없으므로 홈은 여기 하나다.
+func _vol_track(_r: Rect2 = Rect2()) -> Rect2:
+	return Rect2(SETP.position + Vector2(20.0, 118.0),
+			Vector2(SETP.size.x - 20.0 - 74.0, 7.0))
+
+
+#  게이지를 끈다. 홈은 오른쪽 판에 하나뿐이고, **어느 소리인지는 고른
+#  줄이 정한다** — 왼쪽 글줄에서 「음악」을 누르면 그 뒤로는 이 홈이
+#  음악을 만진다. 누를 때와 끌 때가 같은 문을 쓴다.
 #
-# 끊는 단위는 0.01 이다 — 예전 0.05 는 스무 칸이라 끄는 동안 계단이 손에
-# 그대로 느껴졌다. 백 칸이면 게이지 폭(114px)보다 촘촘해 눈에는 이어져
-# 보이고, 그래도 끊어 두는 것은 소수점이 저장에 그대로 들어가지 않게 하려는
-# 것이다.
+#  끊는 단위는 0.01 이다 — 예전 0.05 는 스무 칸이라 끄는 동안 계단이 손에
+#  그대로 느껴졌다. 백 칸이면 홈 폭보다 촘촘해 눈에는 이어져 보이고,
+#  그래도 끊어 두는 것은 소수점이 저장에 그대로 들어가지 않게 하려는 것이다.
 func _set_slide(i: int, m: Vector2) -> void:
 	var rows := _set_rows()
 	if i < 0 or i >= rows.size():
 		return
 	var key := String(rows[i])
-	var tr := _vol_track(_set_rect(i))
+	var tr := _vol_track()
 	var x := snappedf(clampf((m.x - tr.position.x) / tr.size.x, 0.0, 1.0), 0.01)
 	if key == "vol":
 		vol = x
@@ -12888,8 +13020,13 @@ func _set_slide(i: int, m: Vector2) -> void:
 	else:
 		return
 	_apply_vol()
+	queue_redraw()
+	var fr := get_node_or_null("Front")
+	if fr != null:
+		fr.queue_redraw()
 
 
+#  손을 뗀다. 저장은 여기서 한 번 — 끄는 동안 매 프레임 쓰면 파일을 두드린다.
 func _set_slide_end() -> void:
 	var rows := _set_rows()
 	if set_drag >= 0 and set_drag < rows.size():
@@ -12901,52 +13038,101 @@ func _set_slide_end() -> void:
 	set_drag = -1
 
 
-# 게이지 한 줄. 효과음과 음악이 같은 그림을 쓴다 — 둘이 다르게 생기면
-# 같은 종류의 손잡이로 안 읽힌다.
-#  설정의 단추. _btn 과 다른 점 하나 — **단축키를 단추 안 오른쪽에 쓴다.**
-#  _btn 은 그것을 단추 **밑**(y+35)에 쓰는데, 이 화면은 행이 32px 이라
-#  글자가 단추를 넘어 다음 행과의 틈에 떠 있었다.
-#
-#  나가는 두 줄은 띠를 붉게 둔다. 색만으로 "여기서부터는 되돌릴 수 없다" 를
-#  말하는 자리다 — 글자는 그대로 둔다.
-func _set_btn(r: Rect2, label: String, key: String, danger := false) -> void:
-	draw_rect(r, C_PANEL.lightened(0.10))
-	draw_rect(Rect2(r.position, Vector2(r.size.x, 2)),
-			C_RED if danger else C_ACC)
-	draw_string(font, r.position + Vector2(0, 20), label,
-			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 13, C_TXT)
-	if key != "":
-		draw_string(font, r.position + Vector2(0, 20), key,
-				HORIZONTAL_ALIGNMENT_RIGHT, r.size.x - 10.0, 9, C_GOLD)
+func _draw_settings(c: CanvasItem) -> void:
+	var e := _set_ease()
+	var rows := _set_rows()
+	var face := _set_face()
+
+	#  왼쪽 가장자리 그늘 — 흐린 판 위에서도 글씨가 읽히게 한다.
+	#  띠 여덟 장이면 640x360 에서 이음매가 안 보인다.
+	for k in 8:
+		var f: float = float(k) / 8.0
+		c.draw_rect(Rect2(0.0, 0.0, 26.0 + f * 180.0, VIEW.y),
+				Color(0.03, 0.02, 0.06, 0.14 * e))
+
+	var dx: float = -float(SET.slide) * (1.0 - e)
+	c.draw_string(font, Vector2(float(SET.x) + dx, 78.0), "설정",
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(C_TXT, e))
+
+	#  글줄을 꿰는 세로선. 무리가 어디서 끊기는지도 이 선이 말한다.
+	var y0: float = float(SET.y) + 4.0
+	var y1: float = float(SET.y) + _set_off(rows, rows.size() - 1) + float(SET.h) - 4.0
+	c.draw_rect(Rect2(float(SET.x) - 10.0 + dx, y0, 1.0, y1 - y0),
+			Color(C_WIRE, 0.30 * e))
+
+	for i in rows.size():
+		var r := _set_rect(i)
+		var key := String(rows[i])
+		var info := _set_info(key)
+		var on: bool = i == face
+		var col: Color = C_TXT if on else C_DIM
+		if bool(info.get("warn", false)):
+			col = C_RED.lightened(0.35) if on else C_DIM
+		#  얹힌 줄은 오른쪽으로 한 걸음 나온다. 색만으로는 도트 한 칸에서
+		#  눈이 안 따라온다 — 움직임이 붙어야 손이 어디 있는지 읽힌다.
+		var push: float = 6.0 if on else 0.0
+		if on:
+			c.draw_rect(Rect2(r.position.x - 10.0, r.position.y + 5.0,
+					2.0, r.size.y - 10.0), Color(C_ACC, e))
+		c.draw_string(font, r.position + Vector2(push, 15.0),
+				String(info.get("n", key)), HORIZONTAL_ALIGNMENT_LEFT, -1, 12,
+				Color(col, e))
+		#  게이지 줄은 수만 곁들인다. 값을 보려고 오른쪽까지 안 가도 되게.
+		if bool(info.get("g", false)):
+			var vv: float = vol if key == "vol" else vol_mus
+			c.draw_string(font, r.position + Vector2(0.0, 15.0),
+					"%d" % int(round(vv * 100.0)),
+					HORIZONTAL_ALIGNMENT_RIGHT, r.size.x - 6.0, 9,
+					Color(C_DIM, e * 0.8))
+
+	_set_panel(c, String(rows[face]), e)
 
 
-func _vol_row(r: Rect2, i: int, label: String, v: float) -> void:
-	var hot: bool = set_drag == i
-	draw_rect(r, C_PANEL.lightened(0.16 if hot else 0.10))
-	draw_rect(Rect2(r.position, Vector2(r.size.x, 2)), C_ACC)
-	draw_string(font, r.position + Vector2(10, 20), label,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_TXT)
-	var tr := _vol_track(r)
-	draw_rect(tr, C_PANEL.darkened(0.45))
-	if v > 0.0:
-		draw_rect(Rect2(tr.position, Vector2(tr.size.x * v, tr.size.y)),
-				C_GOLD.darkened(0.0 if hot else 0.15))
-	# 손잡이 — 끄는 동안 굵어진다. 잡고 있다는 것을 눈으로도 안다.
-	var kx: float = tr.position.x + tr.size.x * v
-	var kw: float = 5.0 if hot else 3.0
-	draw_rect(Rect2(kx - kw * 0.5, tr.position.y - 4.0, kw, 14.0), C_TXT)
-	# 수를 같이 쓴다. 게이지만 있으면 지금 몇인지를 눈대중해야 한다.
-	# 홈이 끝나는 자리 **뒤**에 쓴다 — 100 에서 손잡이에 깔리던 자리다.
-	draw_string(font, Vector2(r.end.x - 36.0, r.position.y + 20.0),
-			"%d" % int(round(v * 100.0)), HORIZONTAL_ALIGNMENT_RIGHT, 28.0, 10,
-			C_TXT if hot else C_DIM)
+#  오른쪽 판 — 고른 줄이 무엇인가. 손잡이도 여기 산다.
+func _set_panel(c: CanvasItem, key: String, e: float) -> void:
+	var info := _set_info(key)
+	var p := SETP
+	var pe: float = e * e          # 판은 글줄보다 한 박자 늦게 뜬다
+	# 뒤가 비치면 다트판 위에 글씨가 겹쳐 읽기가 나빠진다. 흐림이 이미
+	# 뒤를 뭉갰으므로 판은 거의 불투명해도 "떠 있다" 로 읽힌다.
+	c.draw_rect(p, Color(C_PANEL.darkened(0.25), 0.97 * pe))
+	c.draw_rect(Rect2(p.position, Vector2(p.size.x, 2.0)),
+			Color(C_RED if bool(info.get("warn", false)) else C_ACC, pe))
 
+	c.draw_string(font, p.position + Vector2(20.0, 44.0),
+			String(info.get("n", key)), HORIZONTAL_ALIGNMENT_LEFT, -1, 18,
+			Color(C_TXT, pe))
+	c.draw_string(font, p.position + Vector2(20.0, 70.0),
+			String(info.get("d", "")), HORIZONTAL_ALIGNMENT_LEFT, -1, 10,
+			Color(C_DIM, pe))
 
-#  게이지의 홈. 오른쪽 끝은 수가 앉을 자리를 **비워 둔다** — 전에는 홈이
-#  행 끝까지 가서, 100 일 때 손잡이가 수 위에 겹쳐 「1|0」으로 읽혔다.
-func _vol_track(r: Rect2) -> Rect2:
-	return Rect2(r.position + Vector2(54.0, 13.0),
-			Vector2(r.size.x - 54.0 - 42.0, 6.0))
+	#  지금 값 — 전체화면의 켬/끔
+	if info.has("v"):
+		c.draw_string(font, p.position + Vector2(20.0, 118.0),
+				String(info["v"]), HORIZONTAL_ALIGNMENT_LEFT, -1, 16,
+				Color(C_ACC, pe))
+	#  게이지
+	if bool(info.get("g", false)):
+		var v: float = vol if key == "vol" else vol_mus
+		var hot: bool = set_drag >= 0
+		var tr := _vol_track()
+		c.draw_rect(tr, Color(C_PANEL.darkened(0.5), pe))
+		if v > 0.0:
+			c.draw_rect(Rect2(tr.position, Vector2(tr.size.x * v, tr.size.y)),
+					Color(C_GOLD.darkened(0.0 if hot else 0.15), pe))
+		var kx: float = tr.position.x + tr.size.x * v
+		var kw: float = 6.0 if hot else 4.0
+		c.draw_rect(Rect2(kx - kw * 0.5, tr.position.y - 5.0, kw, 17.0),
+				Color(C_TXT, pe))
+		c.draw_string(font, Vector2(p.end.x - 20.0 - 44.0, tr.position.y + 8.0),
+				"%d" % int(round(v * 100.0)), HORIZONTAL_ALIGNMENT_RIGHT,
+				44.0, 12, Color(C_TXT if hot else C_DIM, pe))
+	#  단축키
+	if String(info.get("k", "")) != "":
+		c.draw_string(font, Vector2(p.end.x - 20.0 - 60.0, p.end.y - 16.0),
+				String(info["k"]), HORIZONTAL_ALIGNMENT_RIGHT, 60.0, 10,
+				Color(C_GOLD, pe))
+
 
 
 # ══════════════════════════════════════════════════════════
@@ -13219,27 +13405,34 @@ func _apply_vol() -> void:
 		AudioServer.set_bus_mute(mi, vol_mus <= 0.001)
 
 
-func _draw_settings() -> void:
-	_scrim()
-	draw_string(font, Vector2(0, 96), "설정", HORIZONTAL_ALIGNMENT_CENTER,
-			VIEW.x, 24, C_TXT)
-	var fs := DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
-	var rows := _set_rows()
-	for i in rows.size():
-		var r := _set_rect(i)
-		match rows[i]:
-			"fs":
-				_set_btn(r, "전체화면  %s" % ("켬" if fs else "끔"), "F11")
-			"vol", "mus":
-				var sfx: bool = String(rows[i]) == "vol"
-				_vol_row(r, i, "효과음" if sfx else "음악", vol if sfx else vol_mus)
-			"lobby":
-				_set_btn(r, "로비로 나가기", "", true)
-			"quit":
-				_set_btn(r, "게임 나가기", "", true)
-			"back":
-				# 판 중이면 "계속하기" 다 — 돌아가는 곳이 판이니까.
-				_set_btn(r, "계속하기" if pause_from >= 0 else "뒤로", "ESC")
+#  설정이 밀려 들었다 나가는 시간을 민다. 흐림 판의 세기도 여기서 준다 —
+#  게임이 뿌예지는 것과 글줄이 들어오는 것이 **같은 값**을 따라야 둘이 한
+#  동작으로 읽힌다.
+#
+#  흐림 판은 세기가 0 이면 꺼 둔다. 화면 전체를 후면 복사해 아홉 번 따는
+#  판이라, 안 쓰는 동안 켜 두면 매 프레임 그 값을 낸다.
+func _set_tick(d: float) -> void:
+	var want: bool = state == S.SETTINGS
+	var was := set_t
+	set_t = clampf(set_t + (d if want else -d), 0.0, float(SET.t))
+	if want:
+		set_hot = _set_hit(mouse_at)
+	elif set_t <= 0.0:
+		set_hot = -1
+	var blur := get_node_or_null("Blur")
+	if blur != null:
+		var e: float = _set_ease()
+		blur.visible = e > 0.001
+		if blur.visible and blur.material != null:
+			blur.material.set_shader_parameter("amount", e)
+	if set_t != was:
+		queue_redraw()
+	# 앞판은 떠 있는 동안 늘 다시 그린다. 커서가 옮겨 다니면 펼칠 줄이
+	# 바뀌는데 set_t 는 안 변하므로, 그 값만 보면 지난 프레임에 멈춘다.
+	if set_t > 0.0 or was > 0.0:
+		var fr := get_node_or_null("Front")
+		if fr != null:
+			fr.queue_redraw()
 
 
 # 설정을 닫는다 — 판 중에 열었으면 그 자리로, 아니면 제목으로.

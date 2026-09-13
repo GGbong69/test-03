@@ -58,6 +58,24 @@ func _run() -> void:
 		print("  %d. %s" % [i + 1, _line()])
 		await _shot("shop_roll%d" % (i + 1))
 
+	# 등급마다 하나씩 깔아 번짐을 눈으로 본다. 일반은 안 빛나는 것이 규약이다.
+	print("\n등급 번짐 — 네 등급을 한 테이블에\n")
+	g.owned = []
+	var pick := {}
+	for it in GameData.items():
+		var rr := String(it.get("rarity", "common"))
+		if not pick.has(rr):
+			pick[rr] = it
+	g.stock.clear()
+	for rr in ["common", "uncommon", "rare", "legendary"]:
+		if pick.has(rr):
+			g.stock.append({"type": "item", "d": pick[rr],
+					"cost": 4, "sold": false})
+	g._drop_roll()
+	g._drop_settle()
+	print("  %s" % _line())
+	await _shot("shop_glow")
+
 	print("\n개발자 모드 — 테이블에 사진 깔기\n")
 	var Dev = load("res://scripts/dev.gd")
 	Dev._run(g, {"t": "act", "a": "restock_fix"})
