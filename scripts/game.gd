@@ -23,6 +23,93 @@ const VIEW := Vector2(640, 360)
 # 매끈한 TTF 를 8~9px 로 래스터화하면 획이 통째로 사라지는 자리가 그 반대다.
 # 갈무리(OFL) — fonts/Galmuri-LICENSE.txt
 const FONT_PATH := "res://fonts/Galmuri11.ttf"
+#  곁말용. Galmuri9 가 프로젝트에 있는데 한 번도 안 불리고 있었다 —
+#  9px 자리를 Galmuri11 로 찍으면 11px 설계를 9 로 줄이는 것이라 획이
+#  반 칸씩 어긋난다. 9 는 9 로 찍는다.
+const FONT_SMALL := "res://fonts/Galmuri9.ttf"
+
+
+# ══════════════════════════════════════════════════════════
+#  UI 체계 — 크기 · 여백 · 색 · 시간
+# ──────────────────────────────────────────────────────────
+#  화면마다 따로 정하던 값을 여기 한 곳으로 내린다. docs/UI개편_설계.md
+#  가 근거다(2026-09-13, 에이전트 열하나의 조사와 종합).
+#
+#  재 본 것 — 이 네 뭉치가 있어야 하는 이유:
+#    · draw_string 크기가 아홉 종이었다(9·10·11·12·13·16·17·18·34).
+#      Galmuri11 은 11px 설계라 11·22·33 에서만 획이 딱 떨어진다. 13·17 은
+#      한글에서 곧바로 드러난다 — ㄹ·ㅃ·ㅌ 의 획 사이 여백이 1px 이라
+#      래스터가 반 칸 밀리면 같은 문장 안에서 세로획이 1px 과 2px 로 섞인다.
+#    · 글자색에 .darkened()/.lightened() 를 그리는 자리에서 74번 불렀다.
+#      밝기를 호출부가 정하는 한 화면끼리 어긋난다.
+#    · 점수(3f8fd8)와 배수(e2593f)의 상호 대비가 **1.07:1** 이었다. 색상만
+#      다르고 명도가 같아서, 실눈을 뜨면 같은 회색이다. 이 게임에서 가장
+#      중요한 두 숫자가 그 단계에서 구별이 안 됐다.
+#    · 판(221d33)과 바닥(14111f)의 대비가 1.14:1 이라 면만으로는 경계가
+#      안 보였고, 그래서 사면 테두리를 두르게 됐다. 2px 테두리는 11px
+#      글줄 하나를 먹는다.
+# ══════════════════════════════════════════════════════════
+
+#  크기 네 단. 11 의 배수여야 획이 격자에 앉는다. 9 가 바닥인 것은
+#  한글 자모 셋이 한 칸에 들어가서 8px 에서 받침이 사라지기 때문이다.
+#  11 과 22 사이는 비워 둔다 — 메우려면 폰트를 하나 더 들여야 하고,
+#  그러면 「그 자리에서 새 크기를 만드는」 습관이 되돌아온다.
+#  위계는 크기가 아니라 색과 여백이 진다.
+const TYPE := {"lead": 33, "head": 22, "body": 11, "sub": 9}
+
+#  여백 4px 격자. 640x360 을 정수 2배로 올리므로 4 논리픽셀 = 8 기기픽셀,
+#  현대 UI 의 8pt 격자가 배달 해상도에서 그대로 성립한다.
+#  행 높이가 145% 인 것은 한글이 라틴보다 획이 많아서다 — 130% 아래로
+#  내리면 두 줄이 한 덩어리로 뭉쳐 「읽을 것」이 아니라 무늬가 된다.
+#
+#  레일 16 인 것: 32 는 640 폭에서 좌우 64px(10%)을 먹어 컬렉션 격자 한
+#  열이 통째로 사라진다. 오버스캔은 TV 전제이고 이 게임은 정수 배율 창이다.
+#  예외 하나 — 상시 HUD 는 x=4 를 지킨다(LAY.bank). 그것은 화면 프레임
+#  크롬이고, _hud_draw 가 메뉴 화면에서 곧장 돌아서므로 레일 16 을 쓰는
+#  화면과 한 번도 같이 서지 않는다. 두 축이 한 화면에 생기지 않는다.
+const PAD := {"u": 4.0, "tight": 4.0, "in": 8.0, "between": 16.0,
+		"row": 16.0, "row_sm": 12.0,
+		"rail": 16.0, "rail_r": 624.0, "top": 16.0, "bot": 344.0}
+
+#  시간. 프레임 수로 적는다 — 60fps 격자에 앉히려면 ms 가 아니라 프레임이
+#  단위여야 한다. 나감은 들어옴의 0.7배다: 닫기는 이미 마음을 정한 뒤라
+#  같은 시간을 쓰면 붙잡힌다.
+const MO := {"tap": 4, "fast": 7, "base": 10, "panel": 14, "screen": 20, "big": 28}
+
+
+func _mo(k: String) -> float:
+	return float(MO[k]) / 60.0
+
+
+#  등장은 감속(빨리 나타나 부드럽게 선다) · 퇴장은 가속(미련 없이 나간다) ·
+#  이동은 대칭.
+#
+#  **곡선 이름이 아니라 역할로 부른다.** 이미 있는 _e_out(전환용, 4300행대)
+#  이 1-(1-k)^3 — 이름은 out 인데 하는 일은 여기 _ease_enter 와 같은
+#  감속이다. 곡선 이름으로 부르면 in 과 out 이 두 뜻으로 섞여, 어느 쪽을
+#  써야 하는지를 매번 본문을 읽어 확인하게 된다.
+func _ease_enter(t: float) -> float:
+	return 1.0 - pow(1.0 - clampf(t, 0.0, 1.0), 4.0)
+
+
+func _ease_exit(t: float) -> float:
+	return pow(clampf(t, 0.0, 1.0), 3.0)
+
+
+func _ease_move(t: float) -> float:
+	var x := clampf(t, 0.0, 1.0)
+	return x * x * (3.0 - 2.0 * x)
+
+
+#  움직이는 값은 float 로 들고 **그리기 직전에만** 격자에 앉힌다. 엔진은
+#  격자를 안 지켜 주므로 이 짝이 canvas_items 스트레치의 필수다.
+func _px(v: float) -> float:
+	return roundf(v)
+
+
+func _pr(r: Rect2) -> Rect2:
+	return Rect2(roundf(r.position.x), roundf(r.position.y),
+			roundf(r.size.x), roundf(r.size.y))
 
 const BC := Vector2(320, 196)
 # 판 반지름과 조준 진폭은 tuning.csv 에 나란히 있다. SWING 은 R 에 비례해야
@@ -109,15 +196,29 @@ const C_RED := Color("d8483d")
 const C_GREEN := Color("479a58")
 const C_WIRE := Color("7a7192")
 const C_TXT := Color("f4efe2")
-const C_DIM := Color("8f86a8")
+#  글 2층. 8f86a8 은 판 위 4.76:1 이었다 — 웹의 4.5 기준은 안티에일리어싱된
+#  라틴 본문 전제라, 획이 1px 이고 안티에일리어싱이 없는 한글에는 모자란다.
+#  한 단 올려 5.55:1.
+const C_DIM := Color("9b92b4")
+#  글 3층 — **꺼진 것 전용**. 2.9:1 이라 본문에 쓰면 안 읽힌다.
+#  이 층이 없어서 여태 C_DIM.darkened(0.3~0.42) 를 그 자리에서 만들어 썼고,
+#  darkened(0.42) 는 2.01:1 이라 9px 글자가 사실상 안 보였다.
+const C_OFF := Color("6b647e")
 const C_ACC := Color("f2b134")
 const C_PANEL := Color("221d33")
-const C_CHIP := Color("3f8fd8")
-const C_MULT := Color("e2593f")
+#  값 셋. 전에는 점수(3f8fd8)와 배수(e2593f)의 **상호 대비가 1.07:1** 이라
+#  색상만 다르고 명도가 같았다 — 실눈을 뜨면 같은 회색이고, 12px 안에 든
+#  숫자는 가장자리 몇 픽셀에만 색상이 남으므로 눈은 명도로 먼저 읽는다.
+#  이 게임에서 가장 중요한 두 숫자가 그 단계에서 안 갈렸다. 새 값은 상호
+#  1.71:1 이고, 배수는 판 위 4.44 → 5.34:1 로 같이 올라간다.
+const C_CHIP := Color("8fc9f2")
+const C_MULT := Color("e8705c")
 const C_GOLD := Color("f2c94c")
 # 확률. 점수(푸름)·배수(붉음)와 나란한 셋째 색이다 — 「1/10 확률로 파괴」의
 # 그 몫이 눈에 먼저 들어와야 살지 말지가 갈린다. 짙은 툴팁 판 위에서 읽힌다.
-const C_ODDS := Color("6fbf73")
+#  확률. 값 셋이 같이 올라간다 — 6fbf73 은 판 위 6.2:1 이었고 8fd694 는
+#  9.5:1 이다. 셋이 한 어휘라 하나만 두고 가면 그 하나가 튄다.
+const C_ODDS := Color("8fd694")
 
 enum S { PICK, AIM_V, AIM_H, CONFIRM, FLY, RESOLVE, CLEAR, SHOP, STAGE, OVER,
 		TITLE, SETTINGS, COLLECT, NEWRUN, LEG, RUNINFO, BOOST }
@@ -401,6 +502,7 @@ var _autoplay := false
 var _auto_t := 0.0
 
 var font: Font
+var font_sm: Font               # 9px 곁말 — Galmuri9. 11 을 9 로 줄이지 않는다
 var pb: AudioStreamGeneratorPlayback
 var ph := 0.0
 var freq := 440.0
@@ -428,6 +530,9 @@ func _ready() -> void:
 		confirm_hold = 0.05
 
 	font = load(FONT_PATH)
+	font_sm = load(FONT_SMALL)
+	if font_sm == null:
+		font_sm = font          # 없으면 조용히 11 로 간다 — 화면이 안 죽는다
 
 	_bus_setup()      # 소리 자리를 세우기 전에 버스가 있어야 한다
 
@@ -10575,6 +10680,24 @@ func _photo_draw() -> void:
 						r.size.x - 10.0, 11, C_GOLD)
 			draw_string(font, Vector2(0.0, VIEW.y - 16.0), "아무 데나 눌러 닫는다",
 					HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 11, C_DIM)
+
+
+#  판 하나. **사면 테두리를 안 두른다.**
+#
+#  판(221d33)과 바닥(14111f)의 대비가 1.14:1 이라 면만으로는 경계가 거의
+#  안 보이고, 그래서 여태 사면 테두리를 둘렀다. 그런데 2px 테두리는 가로
+#  2 + 세로 2 + 안쪽 여백까지 먹어 11px 글줄 하나가 통째로 사라진다.
+#  640x360 에서 2px 은 화면 세로의 0.55% 다.
+#
+#  위 2px(초점)과 아래 1px(바닥색 컷) 두 획이 같은 일을 3px 로 한다.
+#  이 어법은 이미 코드 안에 둘 있었다 — 런 바 아래 컷과 자금판 윗변.
+#  발명이 아니라 승격이다.
+func _panel(r: Rect2, focus := false, a := 1.0) -> void:
+	draw_rect(_pr(r), Color(C_PANEL, a))
+	if focus:
+		draw_rect(_pr(Rect2(r.position, Vector2(r.size.x, 2.0))), Color(C_ACC, a))
+	draw_rect(_pr(Rect2(r.position + Vector2(0.0, r.size.y - 1.0),
+			Vector2(r.size.x, 1.0))), Color(C_BG, a))
 
 
 func _btn(r: Rect2, label: String, sub: String, on: bool,

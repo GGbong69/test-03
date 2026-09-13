@@ -25,11 +25,14 @@ func _ok(n: String, c: bool, d := "") -> void:
 	print("  %s %-30s %s" % ["통과" if c else "실패", n, d])
 
 
+#  색 이름. **게임이 든 상수를 읽는다** — 전에는 hex 앞자리(3f8f·e259·6fbf)를
+#  박아 두었고, 2026-09-13 에 값 셋의 색이 갈리자(점수와 배수의 상호 대비가
+#  1.07:1 이라 실눈에 같은 회색이었다) 이 자가 통째로 눈이 멀었다.
+#  칠이 안 된 것이 아니라 **칠을 못 알아본** 것이었다.
 func _tag_of(c: Color) -> String:
-	var h := c.to_html(false)
-	if h.begins_with("3f8f"): return "푸"
-	if h.begins_with("e259"): return "붉"
-	if h.begins_with("6fbf"): return "초"
+	if c.is_equal_approx(g.C_CHIP): return "푸"
+	if c.is_equal_approx(g.C_MULT): return "붉"
+	if c.is_equal_approx(g.C_ODDS): return "초"
 	return "·"
 
 
