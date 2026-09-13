@@ -73,12 +73,19 @@ const STATS := [
 	#  보드 확장 「시계」를 낀 채 보드 아웃이 몇 번 이어졌나. 같은 판
 	#  안에서만 이어지고 판이 새로 서면 0 이다.
 	"clok_out_streak",
+	# ── 2026-09-13 · 기획서 s27 「정조준」의 해금 조건 ──
+	#  「[리볼버] 조준 상태에서 모든 다트를 볼스아이에 명중」. 조준 방식과
+	#  한 판의 명중 패턴을 **같이** 봐야 해서 기존 열쇠로는 못 적었고,
+	#  그래서 여태 bulls(누적 볼스아이) 150 이 임시로 서 있었다 — 오래
+	#  하기만 하면 열리는 조건이라 기획서와 다른 물건이었다.
+	#  판이 끝날 때 1 을 적는다. 0/1 이라 최댓값으로 다룬다.
+	"revo_bull_leg",
 ]
 # 최댓값으로 다루는 것들. 나머지는 누적이다.
 const PEAKS := ["best_leg", "best_score", "best_gold", "best_track",
 		"best_dart_hvy", "best_dart_lgt", "best_dart_prc", "best_dart_mag",
 		"best_gain", "best_spare", "best_leg_bare",
-		"win_gold", "boss_spare", "clok_out_streak"]
+		"win_gold", "boss_spare", "clok_out_streak", "revo_bull_leg"]
 # 최솟값으로 다루는 것들. 「N 이하로 완주」 조건이 읽는다 —
 # 최댓값으로는 그 말을 못 적는다(적게 든 쪽이 이기는 조건이라 그렇다).
 const DIPS := ["win_items"]

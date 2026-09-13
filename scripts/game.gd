@@ -221,6 +221,11 @@ var again_dart := {}
 var carry_darts := 0
 # 보드 확장 「시계」를 낀 채 이어진 보드 아웃 수. 녹는 시계의 해금 조건이다.
 var clok_out := 0
+# 「정조준」 해금(기획서 s27) — 「[리볼버] 조준 상태에서 모든 다트를
+# 볼스아이에 명중」. 조준 방식과 한 판의 명중 패턴을 같이 봐야 해서
+# 판 안에서 둘을 같이 쥔다. 판이 새로 서면 둘 다 처음으로 돌아간다.
+var revo_bull := true            # 여태 던진 것이 전부 불이었나
+var revo_darts := 0              # 이 판에 던진 수. 0 발짜리 판은 안 센다
 var mark_sec := -1       # 「목표물」 챌린지가 이 판에 뽑은 칸
 var paint_mul := 1.0
 var peek_pick := []      # 「프리크라임」이 미리 읽은 제약 셋
@@ -537,6 +542,10 @@ func _start_leg() -> void:
 	again_aim = Vector2(-1.0, -1.0)
 	again_dart = {}
 	clok_out = 0
+	# 「정조준」 — 판마다 처음부터 다시 센다. 리볼버로 시작해 판을 통째로
+	# 불에 꽂아야 하는 조건이라, 지난 판의 기록이 넘어오면 안 된다.
+	revo_bull = true
+	revo_darts = 0
 	paint_mul = 1.0
 	# 테이블을 빼고 판을 세운다. **데이터보다 먼저** 부른다 — 이 아래가
 	# 판의 링 폭(rt_*)을 다시 잡으므로, 연출을 나중에 열면 올라오는 동안은
@@ -754,6 +763,11 @@ func _finish_leg() -> void:
 		# 손에 동전을 들고도 조건이 서는 구멍이 생긴다.
 		if owned.is_empty():
 			Save.peak("best_leg_bare", leg_no)
+		# 「정조준」 — 리볼버로 던진 것이 전부 불이었고, 그렇게 판을 넘겼다.
+		# 기획서가 「모든 다트를」이라 적었으므로 **넘긴 판**에만 적는다 —
+		# 한 발 던지고 실패한 판을 세면 조건이 너무 헐거워진다.
+		if revo_bull and revo_darts > 0:
+			Save.peak("revo_bull_leg", 1)
 	Save.flush()
 	if total < target:
 		# 목숨 아이템(조커 이식 110099) — 총점이 목표의 일정 비율 이상이면
@@ -3720,6 +3734,13 @@ func _land(mark := true) -> void:
 						+ (int(o.gstep) if info.mult > 0 else -int(o.gstep)))
 			"tdec":
 				o.gs = int(o.get("gs", 0)) + 1
+
+	# 「정조준」 해금 — 리볼버가 아닌 발이 하나라도 있거나 불을 놓친 발이
+	# 하나라도 있으면 이 판은 끝이다. 리볼버는 한 번 쏘면 작은 다트가
+	# 여섯이고 그 여섯이 여기를 따로 지나므로, 여섯 다 불이어야 한다.
+	revo_darts += 1
+	if aim_mode != "kick" or info.idx != -1:
+		revo_bull = false
 
 	last_sector = info.sector
 	# 「녹는 시계」 해금 — 보드 확장 「시계」를 낀 채 보드 아웃이 이어진 수.
@@ -12804,8 +12825,46 @@ func _set_rows() -> Array:
 	return ["back", "fs", "vol", "mus", "quit"]
 
 
+#  설정 화면의 자리 ────────────────────────────────────────
+#  행이 다섯일 때(제목에서 연 설정)와 여섯일 때(판 중에 연 설정)가 다르다.
+#  자리를 y=132 에 40 간격으로 못 박아 두었더니 여섯째 줄 바닥이 364 —
+#  화면(360) 밖이라 「게임 나가기」가 잘려 있었다. 그래서 자리를 세지 않고
+#  **재서** 놓는다: 무리 전체 높이를 구해 제목 아래 남는 칸 한가운데에 앉힌다.
+#
+#  나가는 두 줄(로비로 · 게임) 앞에는 틈을 둔다. 소리를 만지다가 손이
+#  미끄러져 런을 버리는 자리가 거기라서, 눈으로 한 번 끊어 준다.
+const SET := {
+	"w": 200.0, "h": 32.0,
+	"gap": 6.0,        # 행 사이
+	"split": 12.0,     # 나가는 무리 앞
+	"top": 116.0,      # 제목 아래
+	"bot": 350.0,      # 화면 아래 여백을 남긴 끝
+}
+
+
+func _set_exit(k: String) -> bool:
+	return k == "lobby" or k == "quit"
+
+
+#  i 번째 행 위까지 쌓인 높이. 자리를 세는 자는 이 함수 하나다 —
+#  그리는 쪽과 누르는 쪽이 같은 자를 써야 손이 안 어긋난다.
+func _set_off(rows: Array, i: int) -> float:
+	var y := 0.0
+	for k in i:
+		y += SET.h + SET.gap
+		if _set_exit(String(rows[k + 1])) and not _set_exit(String(rows[k])):
+			y += SET.split
+	return y
+
+
 func _set_rect(i: int) -> Rect2:
-	return Rect2(Vector2(226.0, 132.0 + float(i) * 40.0), Vector2(188.0, 32.0))
+	var rows := _set_rows()
+	if i < 0 or i >= rows.size():
+		return Rect2()
+	var tall := _set_off(rows, rows.size() - 1) + SET.h
+	var y0: float = SET.top + (SET.bot - SET.top - tall) * 0.5
+	return Rect2(Vector2((VIEW.x - SET.w) * 0.5, y0 + _set_off(rows, i)),
+			Vector2(SET.w, SET.h))
 
 
 # 게이지의 홈 — 행 안에서 소리 글자 오른쪽부터 끝까지다.
@@ -12844,6 +12903,23 @@ func _set_slide_end() -> void:
 
 # 게이지 한 줄. 효과음과 음악이 같은 그림을 쓴다 — 둘이 다르게 생기면
 # 같은 종류의 손잡이로 안 읽힌다.
+#  설정의 단추. _btn 과 다른 점 하나 — **단축키를 단추 안 오른쪽에 쓴다.**
+#  _btn 은 그것을 단추 **밑**(y+35)에 쓰는데, 이 화면은 행이 32px 이라
+#  글자가 단추를 넘어 다음 행과의 틈에 떠 있었다.
+#
+#  나가는 두 줄은 띠를 붉게 둔다. 색만으로 "여기서부터는 되돌릴 수 없다" 를
+#  말하는 자리다 — 글자는 그대로 둔다.
+func _set_btn(r: Rect2, label: String, key: String, danger := false) -> void:
+	draw_rect(r, C_PANEL.lightened(0.10))
+	draw_rect(Rect2(r.position, Vector2(r.size.x, 2)),
+			C_RED if danger else C_ACC)
+	draw_string(font, r.position + Vector2(0, 20), label,
+			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 13, C_TXT)
+	if key != "":
+		draw_string(font, r.position + Vector2(0, 20), key,
+				HORIZONTAL_ALIGNMENT_RIGHT, r.size.x - 10.0, 9, C_GOLD)
+
+
 func _vol_row(r: Rect2, i: int, label: String, v: float) -> void:
 	var hot: bool = set_drag == i
 	draw_rect(r, C_PANEL.lightened(0.16 if hot else 0.10))
@@ -12860,13 +12936,17 @@ func _vol_row(r: Rect2, i: int, label: String, v: float) -> void:
 	var kw: float = 5.0 if hot else 3.0
 	draw_rect(Rect2(kx - kw * 0.5, tr.position.y - 4.0, kw, 14.0), C_TXT)
 	# 수를 같이 쓴다. 게이지만 있으면 지금 몇인지를 눈대중해야 한다.
-	draw_string(font, Vector2(r.end.x - 32.0, r.position.y + 20.0),
-			"%d" % int(round(v * 100.0)), HORIZONTAL_ALIGNMENT_RIGHT, 26.0, 10,
+	# 홈이 끝나는 자리 **뒤**에 쓴다 — 100 에서 손잡이에 깔리던 자리다.
+	draw_string(font, Vector2(r.end.x - 36.0, r.position.y + 20.0),
+			"%d" % int(round(v * 100.0)), HORIZONTAL_ALIGNMENT_RIGHT, 28.0, 10,
 			C_TXT if hot else C_DIM)
 
 
+#  게이지의 홈. 오른쪽 끝은 수가 앉을 자리를 **비워 둔다** — 전에는 홈이
+#  행 끝까지 가서, 100 일 때 손잡이가 수 위에 겹쳐 「1|0」으로 읽혔다.
 func _vol_track(r: Rect2) -> Rect2:
-	return Rect2(r.position + Vector2(58.0, 13.0), Vector2(r.size.x - 74.0, 6.0))
+	return Rect2(r.position + Vector2(54.0, 13.0),
+			Vector2(r.size.x - 54.0 - 42.0, 6.0))
 
 
 # ══════════════════════════════════════════════════════════
@@ -13149,17 +13229,17 @@ func _draw_settings() -> void:
 		var r := _set_rect(i)
 		match rows[i]:
 			"fs":
-				_btn(r, "전체화면  %s" % ("켬" if fs else "끔"), "F11", true)
+				_set_btn(r, "전체화면  %s" % ("켬" if fs else "끔"), "F11")
 			"vol", "mus":
 				var sfx: bool = String(rows[i]) == "vol"
 				_vol_row(r, i, "효과음" if sfx else "음악", vol if sfx else vol_mus)
 			"lobby":
-				_btn(r, "로비로 나가기", "", true)
+				_set_btn(r, "로비로 나가기", "", true)
 			"quit":
-				_btn(r, "게임 나가기", "", true)
+				_set_btn(r, "게임 나가기", "", true)
 			"back":
 				# 판 중이면 "계속하기" 다 — 돌아가는 곳이 판이니까.
-				_btn(r, "계속하기" if pause_from >= 0 else "뒤로", "ESC", true)
+				_set_btn(r, "계속하기" if pause_from >= 0 else "뒤로", "ESC")
 
 
 # 설정을 닫는다 — 판 중에 열었으면 그 자리로, 아니면 제목으로.

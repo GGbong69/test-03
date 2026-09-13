@@ -135,7 +135,7 @@ const Save_STATS := [
 	"best_dart_hvy", "best_dart_lgt", "best_dart_prc", "best_dart_mag",
 	"best_gain", "best_spare", "best_leg_bare",
 	"win_gold", "win_items", "boss_spare", "win_null",
-	"clok_out_streak",
+	"clok_out_streak", "revo_bull_leg",
 ]
 # 「N 이하」로 읽는 열쇠. 크거나 같다 하나로는 「동전 4개 이하로 완주」를
 # 못 적는다 — 적게 든 쪽이 이기는 조건이기 때문이다.

@@ -1,0 +1,19 @@
+[remap]
+
+importer="csv_translation"
+type="Translation"
+uid="uid://ia31qmhdfguk"
+
+[deps]
+
+files=["res://docs/기획서_동전표.name.translation", "res://docs/기획서_동전표.eff.translation", "res://docs/기획서_동전표.cost.translation", "res://docs/기획서_동전표.rarity.translation"]
+
+source_file="res://docs/기획서_동전표.csv"
+dest_files=["res://docs/기획서_동전표.name.translation", "res://docs/기획서_동전표.eff.translation", "res://docs/기획서_동전표.cost.translation", "res://docs/기획서_동전표.rarity.translation"]
+
+[params]
+
+compress=1
+delimiter=0
+unescape_keys=false
+unescape_translations=true
