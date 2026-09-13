@@ -10131,14 +10131,17 @@ func _tint(t: String, base: Color) -> Array:
 	for i in parts.size():
 		var w: String = parts[i]
 		var c := base
+		# 「목표 점수」의 점수는 물건의 점수가 아니라 그 판을 넘길 수다.
+		# 파랗게 칠하면 이 장이 내 점수를 올린다는 거짓말이 된다.
+		var target: bool = i > 0 and String(parts[i - 1]).begins_with("목표")
 		if _is_odds(w):
 			c = C_ODDS
 			carry = false
-		elif w.begins_with("점수"):
+		elif w.begins_with("점수") and not target:
 			c = C_CHIP
 			role = C_CHIP
 			carry = true
-		elif w.begins_with("배수"):
+		elif w.begins_with("배수") and not target:
 			c = C_MULT
 			role = C_MULT
 			carry = true
