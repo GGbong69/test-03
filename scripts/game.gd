@@ -1323,7 +1323,10 @@ func _roll_stock() -> void:
 	# shop_cons 가 켜져 있으면 동전 자리 하나를 사탕으로 바꾼다.
 	# 자리 수 4는 안 변한다 — _table_draw 의 ax/ay 전제가 사는 이유다.
 	if GameData.tune_i("shop_cons") == 1:
-		var cp := GameData.consumables()
+		# 사탕 자리다 — 사탕만 뽑는다. 통짜 표(consumables)는 사진도 같이
+		# 내서, 사진이 사탕 값으로 사탕 칸에 떴다. 사진은 벽(fixture_roll)이
+		# 따로 거는 길이 있어 두 길로 두 값에 뜨던 자리다(2026-09-13).
+		var cp := GameData.candies()
 		if not cp.is_empty():
 			for k in stock.size():
 				# 공짜로 주기로 한 장은 안 덮는다. 이 줄이 없으면 해금
@@ -9810,10 +9813,9 @@ func _tip_build(hit: Dictionary) -> void:
 			tip_title = it.n
 			tip_chip = it
 			_tip_set_rar(String(it.get("rarity", "")))
-			_tip_tag(GameData.cond_text(it.c), C_DIM)
+			_tip_add(_tip_eff(it), 11, C_TXT.darkened(0.25))
 			if i == sealed:
-				_tip_tag("이번 판 봉인", C_MULT.lightened(0.25))
-			_tip_add(GameData.eff_line(it), 11, C_TXT.darkened(0.25))
+				_tip_add("이번 판 봉인", 10, C_MULT.lightened(0.25))
 			if it.get("g", "") != "":
 				_tip_add(GameData.gold_text(it.g, it.gv), 10, C_TXT.darkened(0.25))
 			# 값은 설명창에 안 적는다(2026-09-11 지시 · 2026-09-13 재확인).
@@ -9835,21 +9837,21 @@ func _tip_build(hit: Dictionary) -> void:
 					_tip_set_tag("팩")
 				"fix":
 					_tip_set_tag("사진")
-					_tip_tag(GameData.use_at_name(
-							String(s.d.get("use_at", "any"))), C_ACC)
 			tip_mark = Rect2()      # 동전 슬롯과 같은 진영 — 사각 테두리 안 두른다
 			tip_spot = i
 			tip_title = s.d.n
 			if s.type == "item":
 				tip_chip = s.d
 				_tip_set_rar(String(s.d.get("rarity", "")))
-				_tip_tag(GameData.cond_text(s.d.c), C_DIM)
-				_tip_add(GameData.eff_line(s.d), 11, C_TXT.darkened(0.25))
+				_tip_add(_tip_eff(s.d), 11, C_TXT.darkened(0.25))
 				if s.d.get("g", "") != "":
 					_tip_add(GameData.gold_text(s.d.g, s.d.gv), 10, C_TXT.darkened(0.25))
 			else:
 				# 사탕·보드 확장·다트·사진 — 효과 한 줄이면 된다. 분류 해설은 소음이다.
 				_tip_add(s.d.d, 11, C_TXT.darkened(0.25))
+				if s.type == "fix":
+					_tip_add(GameData.use_at_name(
+							String(s.d.get("use_at", "any"))), 10, C_ACC)
 				# 보드 확장은 한 장만 낀다. 사면 낀 것이 사라지므로 무엇을
 				# 잃는지가 사기 전에 읽혀야 한다.
 				if s.type == "mod" and not mods_own.is_empty():
@@ -9886,10 +9888,11 @@ func _tip_build(hit: Dictionary) -> void:
 			var hc: Dictionary = cons[i]
 			# 사탕과 사진이 같은 칸을 나눠 쓴다 — 갈래는 cat 이 가른다.
 			_tip_set_tag("사탕" if String(hc.get("cat", "")) == "area" else "사진")
-			_tip_tag(GameData.use_at_name(String(hc.get("use_at", "any"))), C_ACC)
 			tip_mark = _cons_rect(i)
 			tip_title = String(hc.n)
 			_tip_add(String(hc.d), 11, C_TXT.darkened(0.25))
+			_tip_add(GameData.use_at_name(String(hc.get("use_at", "any"))),
+					10, C_ACC)
 		"stage":
 			_tip_set_tag("제약")
 			var sp: Dictionary = stage_pick[i]
@@ -9909,8 +9912,7 @@ func _tip_build(hit: Dictionary) -> void:
 			tip_title = it.n
 			tip_chip = it
 			_tip_set_rar(String(it.get("rarity", "")))
-			_tip_tag(GameData.cond_text(it.c), C_DIM)
-			_tip_add(GameData.eff_line(it), 11, C_TXT.darkened(0.25))
+			_tip_add(_tip_eff(it), 11, C_TXT.darkened(0.25))
 			if it.get("g", "") != "":
 				_tip_add(GameData.gold_text(it.g, it.gv), 10, C_TXT.darkened(0.25))
 		"cmod":
@@ -9925,14 +9927,15 @@ func _tip_build(hit: Dictionary) -> void:
 			tip_mark = _col_cell(i % COL_PAGE)
 			tip_title = dt.n
 			_tip_add(dt.d, 11, C_TXT.darkened(0.25))
-			_tip_dart_tags(dt)
+			_tip_dart_lines(dt)
 		"ccons":
 			tip_mark = _col_cell(i % COL_PAGE)
 			var cd: Dictionary = GameData.candies()[i]
 			_tip_set_tag("사탕" if String(cd.get("cat", "")) == "area" else "사진")
-			_tip_tag(GameData.use_at_name(String(cd.get("use_at", "any"))), C_ACC)
 			tip_title = cd.n
 			_tip_add(cd.d, 11, C_TXT.darkened(0.25))
+			_tip_add(GameData.use_at_name(String(cd.get("use_at", "any"))),
+					10, C_ACC)
 		"lg":
 			var ll2 := _league_lines()
 			if i < ll2.size():
@@ -9944,9 +9947,10 @@ func _tip_build(hit: Dictionary) -> void:
 			_tip_set_tag("사진")
 			tip_mark = _col_cell(i % COL_PAGE)
 			var fx: Dictionary = GameData.fixtures()[i]
-			_tip_tag(GameData.use_at_name(String(fx.get("use_at", "any"))), C_ACC)
 			tip_title = fx.n
 			_tip_add(fx.d, 11, C_TXT.darkened(0.25))
+			_tip_add(GameData.use_at_name(String(fx.get("use_at", "any"))),
+					10, C_ACC)
 		"cmodf":
 			_tip_set_tag("제약")
 			tip_mark = _col_cell(i % COL_PAGE)
@@ -9959,16 +9963,32 @@ func _tip_build(hit: Dictionary) -> void:
 			tip_mark = _mag_rect(i)
 			tip_title = dd.n
 			_tip_add(dd.d, 11, C_TXT.darkened(0.25))
-			_tip_dart_tags(dd)
+			_tip_dart_lines(dd)
 
 
-# 다트의 특성 — 게이지 · 배수 · 배수 고정. 본문이 아니라 태그로 간다.
-func _tip_dart_tags(d: Dictionary) -> void:
-	_tip_tag("게이지 ×%.2f" % float(d.get("gauge", 1.0)), C_DIM)
+# 다트의 특성. 태그가 아니라 설명이다 — 태그는 종류와 등급 둘뿐이다
+# (2026-09-13 사용자 지시).
+func _tip_dart_lines(d: Dictionary) -> void:
+	_tip_add("게이지 ×%.2f" % float(d.get("gauge", 1.0)), 10,
+			C_TXT.darkened(0.25))
 	if int(d.get("mult", 0)) != 0:
-		_tip_tag("배수 %+d" % int(d.mult), C_MULT.lightened(0.25))
+		_tip_add("배수 %+d" % int(d.mult), 10, C_TXT.darkened(0.25))
 	if d.get("fix1", false):
-		_tip_tag("배수 고정", C_MULT.lightened(0.25))
+		_tip_add("배수를 1로 고정", 10, C_TXT.darkened(0.25))
+
+
+# 조건과 효과를 한 문장으로 잇는다. 조건은 설명이지 태그가 아니다 —
+# 「같은 숫자 2회를 맞힌 발부터 점수 +50」이 한 줄로 읽혀야 무엇이
+# 언제 서는지가 끊기지 않는다. 조건 없는 장은 효과만 남는다.
+func _tip_eff(it: Dictionary) -> String:
+	var eff := GameData.eff_line(it)
+	var c := String(it.get("c", ""))
+	if c == "" or c == "always":
+		return eff
+	var ct := GameData.cond_text(c)
+	if ct == "" or eff == "":
+		return ct if eff == "" else eff
+	return ct + " " + eff
 
 
 # 태그 한 장. 색이 갈래를 절반쯤 말한다.
