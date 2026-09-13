@@ -2245,6 +2245,12 @@ static func _v_items() -> void:
 						% [who, r.get("cost"), want, r.get("rarity")])
 	# 상위호환 — 같은 효과이고 조건이 상대를 담는데 값이 크고 가격이 싸면
 	# 상대 카드는 영원히 안 팔린다.
+	#
+	# **경고지 오류가 아니다.** 값은 기획서가 쥔다(P.20~P.25). 이 검사를
+	# 오류로 두었더니 기획서 값을 넣을 때마다 부팅이 막혀, 다섯 장을 내
+	# 판단으로 덮어 두었었다 — 그 자리마다 _note 에 「기획서 값은 …」이
+	# 적혀 있었다. 값을 맞추는 것은 저자의 일이고 이 줄은 그 자리를
+	# 가리키는 일만 한다.
 	for a in raw:
 		if not _b(a, "enabled", "items"):
 			continue
@@ -2281,7 +2287,7 @@ static func _v_items() -> void:
 			var beats: bool = av <= bv if String(a.get("kind", "")) == "save" else av >= bv
 			if covers and beats \
 					and _i(a, "cost", "items") <= _i(b, "cost", "items"):
-				_errs.append("items — %s(%s) 가 %s(%s) 의 상위호환이다"
+				_warns.append("items — %s(%s) 가 %s(%s) 의 상위호환이다 (기획서 값)"
 						% [a.get("name"), a.get("id"), b.get("name"), b.get("id")])
 	# 완전분할 — 같은 효과로 한 분할을 다 덮으면 조건이 사라진 것과 같다.
 	for part in COND_PART:
