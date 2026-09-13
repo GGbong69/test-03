@@ -6310,9 +6310,10 @@ func _cons_draw() -> void:
 		var r := _cons_rect(i).grow(-3.0)
 		var live: bool = i < cons.size()
 		if live:
-			draw_rect(r, C_PANEL.lightened(0.10))
-			draw_rect(r, C_WIRE.darkened(0.15), false, 1.0)
-			_icon_cons(r.get_center(), minf(r.size.x, r.size.y) * 0.30,
+			# 뒤에 회색 네모를 안 깐다. 물건이 곧 칸이다 — 동전 슬롯이
+			# 이미 그 규약이라(_panel_slot 은 스티커만 놓는다) 여기만
+			# 네모를 두면 같은 자리가 두 어법으로 말한다.
+			_icon_cons(r.get_center(), minf(r.size.x, r.size.y) * 0.32,
 					String(cons[i].id))
 	# 이름과 수 — 동전 슬롯 밑은 상인 자리라 못 쓰지만 이 자리는 벽이다.
 	# 「사탕」이라고만 적고 있었는데 이 칸에는 사진도 들어간다 — 사진을
@@ -13993,7 +13994,8 @@ func _ri_carry(p: Rect2) -> void:
 	var xr: float = p.position.x + 24.0 + cw
 	var y := _ri_block(xl, y0, cw, "칸", [
 		"동전  %d / %d" % [owned.size(), GameData.max_items()],
-		"사탕  %d / %d" % [cons.size(), GameData.cons_slots()],
+		# 이 칸에는 사진도 들어간다. HUD 의 칸 이름과 같은 말을 쓴다.
+		"사탕·사진  %d / %d" % [cons.size(), GameData.cons_slots()],
 	])
 	_ri_block(xl, y, cw, "다트통", mag_rows if not mag_rows.is_empty() else ["없음"])
 	_ri_block(xr, y0, cw, "판", mod_rows if not mod_rows.is_empty() else ["기본"])
