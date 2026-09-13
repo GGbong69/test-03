@@ -109,19 +109,31 @@ func _run() -> void:
 				"" if bad_sz.is_empty() else " — " + ", ".join(
 					PackedStringArray(bad_sz.slice(0, 5)))])
 
-	# ② 글자색을 그 자리에서 어둡게/밝게 안 한다
+	# ② 글자색을 그 자리에서 어둡게/밝게 안 한다.
+	#    **글자만 본다.** 도형은 그늘과 깊이를 위해 같은 색의 여러 단이
+	#    있어야 한다 — draw_rect(q, C_ACC.darkened(0.62)) 는 테이블 위의
+	#    그늘이지 글자가 아니다. 처음 이 자를 넓게 잡았더니 그런 자리까지
+	#    잡아서, 규칙이 실제로 무엇을 금하는지가 흐려졌다.
 	var names := ["C_TXT", "C_DIM", "C_OFF", "C_GOLD", "C_ACC",
 			"C_CHIP", "C_MULT", "C_ODDS"]
 	var bad_col := []
 	for i in L.size():
 		if not _live(L[i]):
 			continue
+		if L[i].find("draw_string(") < 0 and L[i].find("_tip_add(") < 0:
+			continue
+		var blob := L[i]
+		for k in range(1, 3):
+			if i + k < L.size():
+				blob += " " + L[i + k].strip_edges()
 		for n in names:
-			if L[i].find(n + ".darkened") >= 0 or L[i].find(n + ".lightened") >= 0:
+			if blob.find(n + ".darkened") >= 0 or blob.find(n + ".lightened") >= 0:
 				bad_col.append(str(i + 1))
 				break
 	_ok("글자색을 그 자리에서 안 만든다", bad_col.is_empty(),
 			"만드는 곳 %d" % bad_col.size())
+	if not bad_col.is_empty():
+		print("      %s" % ", ".join(PackedStringArray(bad_col.slice(0, 24))))
 
 	# ③ 값 셋이 명도로 갈린다 — 이 게임에서 가장 중요한 두 숫자다
 	var ratio := _contrast(Color("8fc9f2"), Color("e8705c"))

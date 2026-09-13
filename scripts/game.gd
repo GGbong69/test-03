@@ -1969,7 +1969,7 @@ func _skip_past(r: Rect2, rn: int) -> void:
 			C_ACC.darkened(0.72) if took else C_WIRE.darkened(0.4))
 	if not took:
 		draw_string(font_sm, r.position + Vector2(0.0, SKIP.y0), "던졌다",
-				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, C_DIM.darkened(0.42))
+				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, C_OFF)
 		return
 	var t := _leg_tag(rn)
 	_icon_tag(Vector2(r.position.x + SKIP.ix, r.get_center().y), 6.5,
@@ -1977,10 +1977,10 @@ func _skip_past(r: Rect2, rn: int) -> void:
 	var tx: float = r.position.x + SKIP.tx
 	var tw: float = r.size.x - SKIP.pad
 	draw_string(font_sm, Vector2(tx, r.position.y + SKIP.y1), "건너뜀",
-			HORIZONTAL_ALIGNMENT_LEFT, tw, 9, C_DIM.darkened(0.32))
+			HORIZONTAL_ALIGNMENT_LEFT, tw, 9, C_OFF)
 	draw_string(font_sm, Vector2(tx, r.position.y + SKIP.y2),
 			_elide(_tag_text(t), tw, 9), HORIZONTAL_ALIGNMENT_LEFT, tw, 9,
-			C_GOLD.darkened(0.58))
+			C_OFF)
 
 
 func _skip_plate(r: Rect2, t: Dictionary, on: bool) -> void:
@@ -1995,7 +1995,7 @@ func _skip_plate(r: Rect2, t: Dictionary, on: bool) -> void:
 		draw_string(font_sm, r.position + Vector2(0.0, SKIP.y1), "못 건너뛴다",
 				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, C_DIM)
 		draw_string(font_sm, r.position + Vector2(0.0, SKIP.y2), "보스 판",
-				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, C_DIM.darkened(0.3))
+				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, C_OFF)
 		return
 	_icon_tag(Vector2(r.position.x + SKIP.ix, r.get_center().y), 6.5,
 			String(t.get("kind", "")), a)
@@ -2004,10 +2004,10 @@ func _skip_plate(r: Rect2, t: Dictionary, on: bool) -> void:
 	draw_string(font_sm, Vector2(tx, r.position.y + SKIP.y1),
 			"건너뛴다" if on else "건너뛰면",
 			HORIZONTAL_ALIGNMENT_LEFT, tw, 9,
-			C_TXT if on else C_DIM.darkened(0.1))
+			C_TXT if on else C_OFF)
 	draw_string(font_sm, Vector2(tx, r.position.y + SKIP.y2),
 			_elide(_tag_text(t), tw, 9), HORIZONTAL_ALIGNMENT_LEFT, tw, 9,
-			C_GOLD if on else C_GOLD.darkened(0.34))
+			C_GOLD if on else C_OFF)
 
 
 func _skip_rect(i: int) -> Rect2:
@@ -5254,7 +5254,7 @@ func _draw_topbar() -> void:
 	var g: Rect2 = LAY.bar_gauge
 	draw_string(font_sm, Vector2(104, 13), GameData.leg_name(leg_no),
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 9,
-			C_ACC if GameData.is_boss(leg_no) else C_DIM.darkened(0.2))
+			C_ACC if GameData.is_boss(leg_no) else C_OFF)
 	draw_rect(g, C_BG)
 	if state == S.SHOP or state == S.STAGE:
 		# STAGE 에서 목표 숫자를 쓰면 안 된다 — 등급 배수(극한 ×1.25)가
@@ -5307,13 +5307,13 @@ func _bank_draw() -> void:
 		# R8 은 정산이 없다 (_finish_leg 의 leg_no >= ROUNDS 조기 return 이
 		# 골드 지급 블록보다 앞선다). 남긴 골드는 영원히 안 돌아온다.
 		draw_string(font_sm, r.position + Vector2(0.0, 42.0), "마지막 판",
-				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, C_MULT.lightened(0.2))
+				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, C_MULT)
 	else:
 		@warning_ignore("integer_division")  # 위 _finish_leg 와 같은 식이어야 한다
 		var itr: int = mini(gold / GameData.interest_per(), _interest_cap())
 		draw_string(font_sm, r.position + Vector2(0.0, 42.0), "이자 +%d" % itr,
 				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9,
-				C_GOLD.darkened(0.3) if itr > 0 else C_DIM.darkened(0.35))
+				C_OFF if itr > 0 else C_OFF)
 
 
 # ── 동전 꼬리표 ─────────────────────────────────────────────
@@ -5323,7 +5323,7 @@ func _cap_draw() -> void:
 	draw_rect(r, C_FELT)                                   # 동전 슬롯과 같은 재질
 	draw_rect(Rect2(r.position, Vector2(r.size.x, 1.0)), C_FELT.lightened(0.14))
 	draw_string(font_sm, r.position + Vector2(0.0, 18.0), "동전",
-			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, C_DIM.darkened(0.1))
+			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, C_OFF)
 	draw_string(font, r.position + Vector2(0.0, 36.0),
 			"%d/%d" % [owned.size(), GameData.max_items()],
 			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 11,
@@ -6847,7 +6847,7 @@ func _chute_label() -> void:
 	var blive: bool = bi >= 0 and bi < stock.size()
 	var ok: bool = blive and _buy_block(bi) == ""
 	draw_string(font, Vector2(VIEW.x - 27.0, ly), "구매", HORIZONTAL_ALIGNMENT_LEFT, -1, 11,
-			(C_TXT if ok else C_MULT.lightened(0.2)) if blive else C_DIM)
+			(C_TXT if ok else C_MULT) if blive else C_DIM)
 	if blive:
 		var cs := str(stock[bi].cost)
 		draw_gold_at(VIEW.x - 5.0 - gold_w(cs, 11), ly + 17.0, cs, 11,
@@ -8280,7 +8280,7 @@ func _bill_draw() -> void:
 			draw_string(font_sm, Vector2(it.u - 30.0,
 					_p2g(it.w) + DROP.bill_dy + 7.0), pt,
 					HORIZONTAL_ALIGNMENT_CENTER, 60.0, 9,
-					C_ACC if boost_pick > 0 else C_DIM.darkened(0.25))
+					C_ACC if boost_pick > 0 else C_OFF)
 			continue
 		var txt := str(s.cost)
 		var bw := gold_w(txt, 9)
@@ -10047,11 +10047,11 @@ func _tip_build(hit: Dictionary) -> void:
 			tip_title = it.n
 			tip_chip = it
 			_tip_set_rar(String(it.get("rarity", "")))
-			_tip_add(_tip_eff(it), 11, C_TXT.darkened(0.25))
+			_tip_add(_tip_eff(it), 11, C_TXT)
 			if i == sealed:
-				_tip_add("이번 판 봉인", 10, C_MULT.lightened(0.25))
+				_tip_add("이번 판 봉인", 10, C_MULT)
 			if it.get("g", "") != "":
-				_tip_add(GameData.gold_text(it.g, it.gv), 10, C_TXT.darkened(0.25))
+				_tip_add(GameData.gold_text(it.g, it.gv), 10, C_TXT)
 			# 값은 설명창에 안 적는다(2026-09-11 지시 · 2026-09-13 재확인).
 			# 파는 값은 상점 창구가, 사는 값은 테이블의 물건이 이미 말한다.
 		"stock":
@@ -10077,12 +10077,12 @@ func _tip_build(hit: Dictionary) -> void:
 			if s.type == "item":
 				tip_chip = s.d
 				_tip_set_rar(String(s.d.get("rarity", "")))
-				_tip_add(_tip_eff(s.d), 11, C_TXT.darkened(0.25))
+				_tip_add(_tip_eff(s.d), 11, C_TXT)
 				if s.d.get("g", "") != "":
-					_tip_add(GameData.gold_text(s.d.g, s.d.gv), 10, C_TXT.darkened(0.25))
+					_tip_add(GameData.gold_text(s.d.g, s.d.gv), 10, C_TXT)
 			else:
 				# 사탕·보드 확장·다트·사진 — 효과 한 줄이면 된다. 분류 해설은 소음이다.
-				_tip_add(s.d.d, 11, C_TXT.darkened(0.25))
+				_tip_add(s.d.d, 11, C_TXT)
 				if s.type == "fix":
 					_tip_add(GameData.use_at_name(
 							String(s.d.get("use_at", "any"))), 10, C_ACC)
@@ -10091,12 +10091,12 @@ func _tip_build(hit: Dictionary) -> void:
 				if s.type == "mod" and not mods_own.is_empty():
 					_tip_add("지금 낀 %s 를 덮는다"
 							% String(GameData.mod_of(String(mods_own[0])).get("n", "")),
-							10, C_MULT.lightened(0.25))
+							10, C_MULT)
 			# 못 사는 이유를 누르기 전에 알려준다. _deny() 는 원인을 한 문장으로 뭉갠다.
 			var blk := _buy_block(i)
 			if blk != "":
 				_tip_add(blk, 9,
-						C_DIM.darkened(0.3) if s.sold else C_RED.lightened(0.2))
+						C_OFF if s.sold else C_RED.lightened(0.2))
 		"tag":
 			# i 는 자리 번호가 아니라 **판 번호**다. 뒤 판의 뱃지도 짚으므로
 			# 어느 판의 것인지가 열쇠여야 한다.
@@ -10124,7 +10124,7 @@ func _tip_build(hit: Dictionary) -> void:
 			_tip_set_tag("사탕" if String(hc.get("cat", "")) == "area" else "사진")
 			tip_mark = _cons_rect(i)
 			tip_title = String(hc.n)
-			_tip_add(String(hc.d), 11, C_TXT.darkened(0.25))
+			_tip_add(String(hc.d), 11, C_TXT)
 			_tip_add(GameData.use_at_name(String(hc.get("use_at", "any"))),
 					10, C_ACC)
 		"stage":
@@ -10137,7 +10137,7 @@ func _tip_build(hit: Dictionary) -> void:
 			tip_mark = _stage_rect(i)
 			tip_box = false
 			tip_title = sp.d.n
-			_tip_add(sp.d.d, 11, C_MULT.lightened(0.25))
+			_tip_add(sp.d.d, 11, C_MULT)
 			_tip_add("목표 %d" % sp.target, 10, C_DIM)
 		"citem":
 			_tip_set_tag("동전")
@@ -10146,27 +10146,27 @@ func _tip_build(hit: Dictionary) -> void:
 			tip_title = it.n
 			tip_chip = it
 			_tip_set_rar(String(it.get("rarity", "")))
-			_tip_add(_tip_eff(it), 11, C_TXT.darkened(0.25))
+			_tip_add(_tip_eff(it), 11, C_TXT)
 			if it.get("g", "") != "":
-				_tip_add(GameData.gold_text(it.g, it.gv), 10, C_TXT.darkened(0.25))
+				_tip_add(GameData.gold_text(it.g, it.gv), 10, C_TXT)
 		"cmod":
 			_tip_set_tag("보드 확장")
 			var md: Dictionary = GameData.mods()[i]
 			tip_mark = _col_cell(i % COL_PAGE)
 			tip_title = md.n
-			_tip_add(md.d, 11, C_TXT.darkened(0.25))
+			_tip_add(md.d, 11, C_TXT)
 		"cdart":
 			_tip_set_tag("다트")
 			var dt: Dictionary = GameData.darts()[i]
 			tip_mark = _col_cell(i % COL_PAGE)
 			tip_title = dt.n
-			_tip_add(dt.d, 11, C_TXT.darkened(0.25))
+			_tip_add(dt.d, 11, C_TXT)
 		"ccons":
 			tip_mark = _col_cell(i % COL_PAGE)
 			var cd: Dictionary = GameData.candies()[i]
 			_tip_set_tag("사탕" if String(cd.get("cat", "")) == "area" else "사진")
 			tip_title = cd.n
-			_tip_add(cd.d, 11, C_TXT.darkened(0.25))
+			_tip_add(cd.d, 11, C_TXT)
 			_tip_add(GameData.use_at_name(String(cd.get("use_at", "any"))),
 					10, C_ACC)
 		"lg":
@@ -10181,7 +10181,7 @@ func _tip_build(hit: Dictionary) -> void:
 			tip_mark = _col_cell(i % COL_PAGE)
 			var fx: Dictionary = GameData.fixtures()[i]
 			tip_title = fx.n
-			_tip_add(fx.d, 11, C_TXT.darkened(0.25))
+			_tip_add(fx.d, 11, C_TXT)
 			_tip_add(GameData.use_at_name(String(fx.get("use_at", "any"))),
 					10, C_ACC)
 		"cmodf":
@@ -10189,13 +10189,13 @@ func _tip_build(hit: Dictionary) -> void:
 			tip_mark = _col_cell(i % COL_PAGE)
 			var mo: Dictionary = GameData.modifiers()[i]
 			tip_title = mo.n
-			_tip_add(mo.d, 11, C_TXT.darkened(0.25))
+			_tip_add(mo.d, 11, C_TXT)
 		"mag":
 			_tip_set_tag("다트")
 			var dd: Dictionary = remaining[i]
 			tip_mark = _mag_rect(i)
 			tip_title = dd.n
-			_tip_add(dd.d, 11, C_TXT.darkened(0.25))
+			_tip_add(dd.d, 11, C_TXT)
 
 
 # 조건과 효과를 한 문장으로 잇는다. 조건은 설명이지 태그가 아니다 —
@@ -10453,8 +10453,11 @@ func _tip_draw(sh: Vector2) -> void:
 		# 안 떨어져 둘이 한 덩어리로 붙어 보였다 — 아이콘은 글자가 아니라
 		# 그림이므로 낱말 사이보다 넓게 띄워야 따로 읽힌다.
 		tx += 27.0
+	#  이름은 2층이고 효과가 1층이다. 뒤집은 것이 맞다 — 무엇에 얹었는지는
+	#  이미 알고 열었고, 읽으려고 연 것은 효과다. 전에는 이름이 C_TXT,
+	#  효과가 C_TXT.darkened(0.25) 라 이름이 더 밝았다.
 	draw_string(font, Vector2(tx, p.y + TIP.pad + 12.0), tip_title,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(C_TXT, tip_a))
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(C_DIM, tip_a))
 
 	# _tip_draw 의 본문 루프. 이 시점에 transform 은 이미 Vector2.ZERO 라
 	# 아이콘도 안 흔들린다. 페이드는 tip_a 를 알파로 넘겨 글자와 같이 뜬다.
@@ -10709,7 +10712,7 @@ func _btn(r: Rect2, label: String, sub: String, on: bool,
 			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 11, C_TXT if on else C_DIM)
 	if sub != "":
 		draw_string(font_sm, r.position + Vector2(0, 35), sub,
-				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, C_GOLD if on else C_DIM.darkened(0.3))
+				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, C_GOLD if on else C_OFF)
 
 
 func _draw_clear() -> void:
@@ -10823,7 +10826,7 @@ func _leg_card(i: int, rn: int) -> void:
 			ink if rn != leg_no else C_ACC)
 	if done:
 		draw_string(font, Vector2(0.0, 56.0), "넘김",
-				HORIZONTAL_ALIGNMENT_CENTER, sz.x, 11, C_DIM.darkened(0.3))
+				HORIZONTAL_ALIGNMENT_CENTER, sz.x, 11, C_OFF)
 	else:
 		draw_string(font, Vector2(0.0, 56.0), "목표 %d" % GameData.target_of(rn),
 				HORIZONTAL_ALIGNMENT_CENTER, sz.x, 11, ink)
@@ -10900,7 +10903,7 @@ func _apron_mods() -> void:
 		_icon_mod(Vector2(mx, _apron_y()), 13.0, mid, 0.0)
 		draw_string(font_sm, Vector2(mx - step * 0.5, _apron_y() + 28.0),
 				GameData.mod_of(mid).get("n", ""),
-				HORIZONTAL_ALIGNMENT_CENTER, step, 9, C_DIM.darkened(0.15))
+				HORIZONTAL_ALIGNMENT_CENTER, step, 9, C_OFF)
 
 
 # 화면 x 를 펠트 폭에 맞춰 좁힌다. 펠트는 y 마다 폭이 다르고(창구 빗변),
@@ -10985,7 +10988,7 @@ func _stage_card(i: int) -> void:
 	draw_set_transform_matrix(Transform2D(ax, ay, org + shake_off))
 	_icon_modifier(Vector2(sz.x * 0.5, CARD.icon), CARD.icon_r, md.id, 0.0)
 	draw_string(font, Vector2(0.0, CARD.name), md.n,
-			HORIZONTAL_ALIGNMENT_CENTER, sz.x, 11, C_MULT.lightened(0.32))
+			HORIZONTAL_ALIGNMENT_CENTER, sz.x, 11, C_MULT)
 	# 효과는 일어서야 보인다. 누운 카드에 여덟 글자를 눕혀 두면 못 읽는다.
 	if up > 0.02:
 		draw_string(font_sm, Vector2(6.0, CARD.desc), md.d,
@@ -11026,7 +11029,7 @@ func _draw_shop() -> void:
 		ma = 0.85
 	if msg != "":
 		draw_string(font_sm, Vector2(196.0, 316.0), msg, HORIZONTAL_ALIGNMENT_CENTER,
-				248.0, 9, Color(C_MULT.lightened(0.3), ma))
+				248.0, 9, Color(C_MULT, ma))
 
 
 func _draw_over() -> void:
@@ -14220,12 +14223,12 @@ func _ri_tracks(p: Rect2) -> void:
 		# 그때는 수를 꾸며 내지 않고 "판 숫자" 라고 말한다.
 		var sct := ("판 숫자" if sc == 0 else str(sc))
 		draw_string(font_sm, Vector2(x + w - 96.0, y + 8.0), sct,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_CHIP.lightened(0.3))
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_CHIP)
 		draw_string(font_sm, Vector2(x + w - 46.0, y + 8.0), "x%d" % ml,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_MULT.lightened(0.25))
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_MULT)
 		draw_string(font_sm, Vector2(x + w - 24.0, y + 8.0), str(n),
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 9,
-				C_GOLD if n > 0 else C_DIM.darkened(0.2))
+				C_GOLD if n > 0 else C_OFF)
 		y += 15.0
 
 
@@ -14379,4 +14382,4 @@ func _draw_hint() -> void:
 	if OS.is_debug_build():
 		draw_string(font_sm, Vector2(VIEW.x - 262.0, 356), "[ ] 조준 %.2f    - = 정산 %.2f    ; ' 확인텀 %.2f"
 				% [gauge_speed, beat, confirm_hold], HORIZONTAL_ALIGNMENT_LEFT, -1, 9,
-				C_DIM.darkened(0.25))
+				C_OFF)
