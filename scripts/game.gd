@@ -9231,6 +9231,58 @@ func _icon_modifier(c: Vector2, r: float, id: String, dim: float,
 			draw_rect(Rect2(c + Vector2(-r * 0.12, r * 0.18),
 					Vector2(r * 0.24, r * 0.38)), cut)
 
+		# ── 그늘 ────────────────────────────────────────
+		# 먹색 칸만 죽는다. 색으로 갈리는 제약이라 기하가 아니라 **칠**이
+		# 그 말을 해야 한다 — 한 칸 걸러 어둡게 칠한다.
+		"shade":
+			draw_arc(c, r * 0.82, 0.0, TAU, 20, grey, w1)
+			for k in 6:
+				var sa0: float = TAU * float(k) / 6.0
+				draw_colored_polygon(annulus_at(c, r * 0.18, r * 0.78,
+						sa0, sa0 + TAU / 12.0, 5),
+						loss if k % 2 == 0 else cut)
+
+		# ── 민짜 ────────────────────────────────────────
+		# 트리플 띠가 죽는다. 「이 링이 없다」는 링을 지우는 것보다
+		# 그어 없애는 쪽이 읽힌다.
+		"flat":
+			draw_arc(c, r * 0.82, 0.0, TAU, 20, grey, w1)
+			draw_arc(c, r * 0.5, 0.0, TAU, 18, loss, w2 * 1.4)
+			draw_line(c + Vector2(-r * 0.86, -r * 0.86),
+					c + Vector2(r * 0.86, r * 0.86), cut, w2 * 1.6)
+
+		# ── 홀대 ────────────────────────────────────────
+		# 홀수 칸만 반값이다. 「절반」을 **크기**로 말한다 — 한 칸 걸러
+		# 짧게 잘린다.
+		"odd":
+			draw_arc(c, r * 0.82, 0.0, TAU, 20, grey, w1)
+			for k in 4:
+				var ob: float = TAU * float(k) / 4.0
+				var oro: float = r * (0.78 if k % 2 == 0 else 0.46)
+				draw_colored_polygon(annulus_at(c, r * 0.18, oro,
+						ob, ob + TAU / 8.0, 5),
+						grey if k % 2 == 0 else loss)
+
+		# ── 돌린 판 ──────────────────────────────────────
+		# 판이 도는 것이 아니라 **값이** 돈다 — 테두리는 그대로 두고
+		# 안쪽만 돌린다.
+		"turn":
+			draw_arc(c, r * 0.82, 0.0, TAU, 20, grey, w1)
+			draw_arc(c, r * 0.48, -PI * 0.75, PI * 0.55, 14, loss, w2 * 1.5)
+			var tp: Vector2 = c + Vector2(cos(PI * 0.55), sin(PI * 0.55)) * r * 0.48
+			draw_colored_polygon(PackedVector2Array([
+					tp + Vector2(-r * 0.2, -r * 0.06),
+					tp + Vector2(r * 0.16, -r * 0.24),
+					tp + Vector2(r * 0.16, r * 0.14)]), loss)
+
+		# ── 모르는 제약 ──────────────────────────────────
+		# 표에 id 가 늘면 여기로 온다. 빈 칸이 아니라 **물음표 원반**이
+		# 서야, 그림이 없다는 것이 화면에서 보인다.
+		_:
+			draw_arc(c, r * 0.82, 0.0, TAU, 20, grey, w1)
+			draw_string(font_sm, c + Vector2(-r, r * 0.42), "?",
+					HORIZONTAL_ALIGNMENT_CENTER, r * 2.0, 9, grey)
+
 # ══════════════════════════════════════════════════════════
 #  손 · 계산대   (끌어 옮기기 · 두 갈래 구매)
 # ──────────────────────────────────────────────────────────

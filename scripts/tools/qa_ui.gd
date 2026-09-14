@@ -150,7 +150,24 @@ func _run() -> void:
 				"%.2f:1 (바라는 값 %.1f)" % [r, pair[2]])
 
 	# ⑤ 뿌리 부품이 다 섰나
-	# ⑥ 모션 끄기가 실제로 시간을 0 으로 만드나
+	# ⑥ 제약마다 그림이 있나 — 표에 있는 열이 다 그려져야 한다
+	var src2 := FileAccess.open(SRC, FileAccess.READ)
+	var whole2 := src2.get_as_text()
+	src2.close()
+	var head := whole2.find("func _icon_modifier")
+	var tail := whole2.find("func _chute_edge")
+	var body := whole2.substr(head, tail - head) if head >= 0 and tail > head else ""
+	var GD = load("res://scripts/data.gd")
+	var noico := PackedStringArray()
+	for mo in GD.modifiers():
+		if body.find("\"%s\":" % String(mo.get("id", ""))) < 0:
+			noico.append(String(mo.get("n", "")))
+	_ok("제약마다 그림이 있다", noico.is_empty(),
+			"그림 없는 것: %s" % ("없다" if noico.is_empty() else ", ".join(noico)))
+	_ok("모르는 id 에도 그림이 선다", body.find("		_:") >= 0,
+			"기본 가지 — 표에 id 가 늘어도 빈 칸이 안 나온다")
+
+	# ⑦ 모션 끄기가 실제로 시간을 0 으로 만드나
 	var gg = load("res://scenes/main.tscn").instantiate()
 	root.add_child(gg)
 	gg.set_process(false)
