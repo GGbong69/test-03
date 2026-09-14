@@ -14337,11 +14337,23 @@ const RI_TABS := ["진행", "트랙", "사진", "보유"]
 var runinfo_tab := 0
 
 
+#  판 높이를 **탭이 정한다.** 전에는 가장 긴 탭에 맞춰 214 로 못 박혀
+#  있었고, 그래서 짧은 탭은 아래가 통째로 비고 「보유」 탭은 동전 줄이
+#  들어오자 판 밖으로 넘쳤다 — 뱃지 줄이 바닥 밖에 그려지고 「뒤로」와
+#  겹쳤다. 세로 가운데 정렬이라 높이가 갈리면 위아래가 같이 움직인다.
+func _ri_h(tab: int) -> float:
+	match tab:
+		0: return 176.0                  # 진행 — 두 칸 네 줄
+		1: return 214.0                  # 트랙 — 여섯 줄. 가장 길다
+		2: return 196.0                  # 사진
+		3:
+			#  보유 — 동전 줄 + 두 칸 세 구획. 동전이 없으면 그만큼 짧다.
+			return 256.0 if not owned.is_empty() else 238.0
+	return 214.0
+
+
 func _ri_panel() -> Rect2:
-	# 트랙 탭이 가장 길다 — 머리 22 + 여섯 줄 x15 = 112. 거기에 탭줄(34)과
-	# 뒤로 버튼(34)과 여백을 더한 값이 이 높이다. 더 키우면 아래가 비고,
-	# 줄이면 트랙이 잘린다.
-	var h := 214.0
+	var h := _ri_h(runinfo_tab)
 	return Rect2(Vector2(74.0, (VIEW.y - h) * 0.5), Vector2(VIEW.x - 148.0, h))
 
 
@@ -14706,16 +14718,50 @@ func _ri_carry(p: Rect2) -> void:
 			mod_rows.append(String(m.n))
 
 	var cw: float = (p.size.x - 40.0) * 0.5
-	var y0: float = p.position.y + 36.0
 	var xl: float = p.position.x + 16.0
 	var xr: float = p.position.x + 24.0 + cw
+	var y0: float = p.position.y + 36.0
+
+	#  **보유 동전을 실제로 그린다.** 탭 이름이 「보유」인데 개수만 세고
+	#  정작 무엇을 들었는지는 한 장도 안 그리고 있었다 — 이 탭을 여는
+	#  이유가 그것인데.
+	y0 = _ri_block(xl, y0, p.size.x - 32.0, "동전 %d / %d"
+			% [owned.size(), GameData.max_items()], [])
+	if owned.is_empty():
+		draw_string(font_sm, Vector2(xl, y0 + 8.0), "없음",
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_OFF)
+		y0 += 20.0
+	else:
+		var step: float = minf(40.0, (p.size.x - 40.0) / float(owned.size()))
+		for i in owned.size():
+			var cx: float = xl + 14.0 + float(i) * step
+			draw_item_sticker(Vector2(cx, y0 + 14.0), 12.0, owned[i],
+					0.0, 0.0, 0.55 if i == sealed else 0.0, 9)
+		y0 += 34.0
+
 	var y := _ri_block(xl, y0, cw, "칸", [
-		"동전  %d / %d" % [owned.size(), GameData.max_items()],
 		# 이 칸에는 사진도 들어간다. HUD 의 칸 이름과 같은 말을 쓴다.
 		"사탕·사진  %d / %d" % [cons.size(), GameData.cons_slots()],
 	])
-	_ri_block(xl, y, cw, "다트통", mag_rows if not mag_rows.is_empty() else ["없음"])
-	_ri_block(xr, y0, cw, "판", mod_rows if not mod_rows.is_empty() else ["기본"])
+	y = _ri_block(xl, y, cw, "다트통",
+			mag_rows if not mag_rows.is_empty() else ["없음"])
+	#  뱃지는 **왼쪽**이다. 오른쪽에 셋을 쌓았더니 판 바닥을 넘어 「뒤로」와
+	#  겹쳤다 — 왼쪽이 두 구획뿐이라 자리가 거기 있었다. 칸을 나눠 담는
+	#  것이 판을 더 키우는 것보다 싸다.
+	var trows := []
+	for tg in pending_tags:
+		trows.append(String(tg.get("n", "")))
+	_ri_block(xl, y, cw, "뱃지", trows if not trows.is_empty() else ["없음"])
+
+	var y2 := _ri_block(xr, y0, cw, "판",
+			mod_rows if not mod_rows.is_empty() else ["기본"])
+	#  이번 판 제약 — 「지금 이 런이 어떤 모양인가」인데 이 탭 어디에도
+	#  없었다.
+	var mrows := []
+	for mo in active_mods:
+		mrows.append(String(mo.get("n", "")))
+	_ri_block(xr, y2, cw, "이번 판 제약",
+			mrows if not mrows.is_empty() else ["없음"])
 
 
 # 컬렉션 탭. 사진이 빠져 있었다 — 산 뒤에 런 정보에서만 보이고 도감에는
