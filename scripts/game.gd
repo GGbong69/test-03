@@ -181,8 +181,13 @@ const LAY := {
 	"bar_cut":    [100.0, 584.0],
 	"bar_pip":    Rect2(44.0, 7.0, 5.0, 5.0),
 	"bar_pip_dx": 7.0,
-	"bar_gauge":  Rect2(146.0, 6.0, 360.0, 7.0),
-	"bar_score":  514.0,
+	#  게이지를 x[146,446] 으로 줄이고 오른쪽 160px 을 수에 준다.
+	#  전에는 게이지가 506 까지 가고 수가 x514 왼쪽 정렬이라, 5자리 점수
+	#  (보스 목표 8000)에서 x594 까지 밀려 제약 아이콘(x596)과 4px 남기고
+	#  붙었다. 오른쪽 정렬이면 자릿수가 바뀌어도 자리가 안 흔들린다.
+	"bar_gauge":  Rect2(146.0, 6.0, 300.0, 7.0),
+	"bar_tgt_r":  506.0,          # 목표 — 오른쪽 끝
+	"bar_score_r": 578.0,         # 점수 — 오른쪽 끝
 	"bar_mod":    588.0,
 
 	# 자금판은 플레이 중 34 높이. 이자/마지막판 줄이 필요한 상점·스테이지에서만
@@ -190,6 +195,11 @@ const LAY := {
 	"bank":       Rect2(4.0, 20.0, 72.0, 34.0),
 	# 옛 판매판 자리(x[80,154])는 사탕 칸(_cons_rect)이 쓴다.
 	"cap":        Rect2(490.0, 20.0, 40.0, 44.0),
+	#  x[534,636] — 여태 통째로 비어 있던 110px. 남은 다트 수가 화면에
+	#  **숫자로 어디에도 없었다** — 정산은 그 수에 직접 골드를 주는데
+	#  플레이 중에는 벽에 꽂힌 자루를 세야 알았다. 목표까지 남은 점수와
+	#  남은 다트가 한 화면에 같이 있어야 「이 판을 넘길 수 있나」가 판단이 된다.
+	"darts":      Rect2(534.0, 20.0, 102.0, 44.0),
 	# 사탕 칸은 자금판 오른쪽. 이름을 안 달았더니 플레이 피드백에서
 	# "어디 있는지 몰랐다" 가 나왔다 — 칸 밑에 이름과 수를 적는다.
 	"cons":       Rect2(84.0, 20.0, 68.0, 44.0),
@@ -4573,6 +4583,12 @@ func _is_play() -> bool:
 			or state == S.CONFIRM or state == S.FLY or state == S.RESOLVE
 
 
+#  조준 단계인가 — 손이 조준선에 가 있는 동안.
+#  던지고 난 뒤(FLY·RESOLVE)는 아니다. 그때는 결과를 봐야 한다.
+func _is_aim_stage() -> bool:
+	return state == S.AIM_V or state == S.AIM_H or state == S.CONFIRM
+
+
 func _hud_draw() -> void:
 	if state == S.OVER or state == S.TITLE or state == S.SETTINGS \
 			or state == S.COLLECT or state == S.NEWRUN or state == S.RUNINFO:
@@ -4584,6 +4600,15 @@ func _hud_draw() -> void:
 		_cons_draw()
 		_panel_draw()
 		_cap_draw()
+		_darts_draw()
+		#  조준 중에는 HUD 를 뒤로 물린다. 여태 지금 다루는 유일한 것
+		#  (1px 조준선)이 화면에서 가장 약했다 — 322px 짜리 동전 슬롯과
+		#  상단 띠가 100% 밝기로 남아 있었기 때문이다.
+		#  색마다 알파를 물리는 대신 띠 한 장으로 덮는다. 여덟 그리기
+		#  함수에 알파를 꿰는 것보다 짧고, 눈에는 같은 일이다.
+		if _is_aim_stage():
+			draw_rect(Rect2(0.0, 0.0, VIEW.x, 64.0 + _hud_dy()),
+					Color(C_BG, 0.45))
 		_rack_hold_draw()   # 판 위다 — 끌고 다니는 동전은 무엇에도 안 덮인다
 		_use_draw()         # 가운데로 끌고 온 사탕·사진과 그 자리
 		# 나가는 전환에서만 같이 들어온다. 돌아오는 쪽은 안 그린다 —
@@ -5073,7 +5098,9 @@ func _draw_aim() -> void:
 # 조준 중의 그림. 방식마다 **무엇이 잠겼고 무엇이 움직이는지**가 다르다 —
 # 잠긴 것은 어둡게, 움직이는 것은 밝게. 이 규칙 하나로 여덟이 다 읽힌다.
 func _draw_aim_live() -> void:
-	var dim := C_ACC.darkened(0.55)
+	#  어둡힌 강조색(#6d4f17)은 판의 붉은 칸과 거의 같은 색이라 판 위에서
+	#  사라진다. 색을 어둡히지 말고 **투명도로** 물린다.
+	var dim := Color(C_ACC, 0.35)
 	var two := state == S.AIM_H
 	match aim_mode:
 		"ring":
@@ -5168,6 +5195,15 @@ func _draw_pull() -> void:
 # 겹치면 아예 안 보인다. 어두운 바닥을 깔아 어느 칸 위에서도 뜨게 한다.
 # 잠근 원은 색을 어둡게 말고 **옅게** 죽인다. 어둡힌 강조색은 판의 붉은
 # 칸과 같은 색이 되어 버린다.
+#  조준 획 하나. **어두운 밑줄 3px 위에 1px 을 얹는다.**
+#  민줄 1px 은 크림색 칸(C_LIGHT e8dfc8) 위에서 그냥 끊긴다 — 판의 밝은
+#  칸과 조준선의 대비가 거기서 1:1 에 가까워서다. 뒷받침은 _aim_circle
+#  에만 있었고 가로·세로·광선·점 넷은 민줄이었다.
+func _aim_stroke(a: Vector2, b: Vector2, col: Color) -> void:
+	draw_line(a, b, Color(C_BG, 0.7 * col.a), 3.0)
+	draw_line(a, b, col, 1.0)
+
+
 func _aim_circle(c: Vector2, r: float, col: Color) -> void:
 	var rr := maxf(r, 1.0)
 	draw_arc(c, rr, 0.0, TAU, 48, Color(C_BG, 0.7), 3.0)
@@ -5204,11 +5240,11 @@ func _aim_h_line(y: float, col: Color) -> void:
 	var dy: float = y - BC.y
 	var rr: float = R + 8.0
 	if not fog or absf(dy) >= rr:
-		draw_line(Vector2(BC.x - 151.0, y), Vector2(BC.x + 151.0, y), col, 1.0)
+		_aim_stroke(Vector2(BC.x - 151.0, y), Vector2(BC.x + 151.0, y), col)
 		return
 	var cut: float = sqrt(maxf(rr * rr - dy * dy, 0.0))
-	draw_line(Vector2(BC.x - 151.0, y), Vector2(BC.x - cut, y), col, 1.0)
-	draw_line(Vector2(BC.x + cut, y), Vector2(BC.x + 151.0, y), col, 1.0)
+	_aim_stroke(Vector2(BC.x - 151.0, y), Vector2(BC.x - cut, y), col)
+	_aim_stroke(Vector2(BC.x + cut, y), Vector2(BC.x + 151.0, y), col)
 
 
 func _aim_v_line(x: float, col: Color) -> void:
@@ -5216,11 +5252,11 @@ func _aim_v_line(x: float, col: Color) -> void:
 	var dx: float = x - BC.x
 	var rr: float = R + 8.0
 	if not fog or absf(dx) >= rr:
-		draw_line(Vector2(x, 68.0), Vector2(x, 334.0), col, 1.0)
+		_aim_stroke(Vector2(x, 68.0), Vector2(x, 334.0), col)
 		return
 	var cut: float = sqrt(maxf(rr * rr - dx * dx, 0.0))
-	draw_line(Vector2(x, 68.0), Vector2(x, BC.y - cut), col, 1.0)
-	draw_line(Vector2(x, BC.y + cut), Vector2(x, 334.0), col, 1.0)
+	_aim_stroke(Vector2(x, 68.0), Vector2(x, BC.y - cut), col)
+	_aim_stroke(Vector2(x, BC.y + cut), Vector2(x, 334.0), col)
 
 
 func _draw_topbar() -> void:
@@ -5275,10 +5311,17 @@ func _draw_topbar() -> void:
 				HORIZONTAL_ALIGNMENT_CENTER, g.size.x, 9, C_DIM)
 	else:
 		var k := clampf(shown / float(maxi(target, 1)), 0.0, 1.0)
-		draw_rect(Rect2(g.position, Vector2(g.size.x * k, g.size.y)), C_ACC)
-		draw_string(font, Vector2(LAY.bar_score, 13.0),
-				"%d / %d" % [int(round(shown)), target],
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_TXT)
+		#  다 차 갈 때 달아오른다. 막판에 눈이 게이지로 돌아오는 값이다.
+		draw_rect(Rect2(g.position, Vector2(g.size.x * k, g.size.y)),
+				C_GOLD if k >= 0.8 else C_ACC)
+		#  **슬래시를 지운다.** 색과 자리가 이미 둘을 갈랐다 — 내 것은
+		#  점수색이고 넘어야 할 것은 흐린 곁말이다. 같은 색 같은 크기로
+		#  나란히 두면 「내 것」과 「넘을 것」이 한 덩어리로 읽힌다.
+		draw_string(font_sm, Vector2(float(LAY.bar_tgt_r) - 60.0, 13.0),
+				str(target), HORIZONTAL_ALIGNMENT_RIGHT, 60.0, 9, C_DIM)
+		draw_string(font, Vector2(float(LAY.bar_score_r) - 64.0, 13.0),
+				str(int(round(shown))), HORIZONTAL_ALIGNMENT_RIGHT, 64.0, 11,
+				C_CHIP)
 
 	# 3칸 x[584,640] — 이번 판 제약 수. 이름 전체는 하단 y341 줄이 갖는다.
 	# active_mods 는 _pick_stage 에서만 갈리므로 SHOP 에는 지난 판 값이 남는다.
@@ -5325,6 +5368,25 @@ func _bank_draw() -> void:
 
 
 # ── 동전 꼬리표 ─────────────────────────────────────────────
+#  이번 판 상태 — 남은 다트. HUD 첫 줄이 좌(자원) · 중(빌드) · 우(이번 판)
+#  세 덩어리로 640 폭을 나눠 쓰게 하는 자리다.
+func _darts_draw() -> void:
+	if not _is_play() and state != S.PICK:
+		return
+	var r: Rect2 = LAY.darts
+	r.position.y += _hud_dy()
+	_panel(r)
+	draw_string(font_sm, r.position + Vector2(10.0, 17.0), "다트",
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_DIM)
+	var left := maxi(darts_left, 0)
+	var all := maxi(GameData.darts_of(leg_no), left)
+	draw_string(font, r.position + Vector2(-10.0, 34.0), str(left),
+			HORIZONTAL_ALIGNMENT_RIGHT, r.size.x - 34.0, 11,
+			C_ACC if left <= 1 else C_TXT)
+	draw_string(font_sm, r.position + Vector2(r.size.x - 30.0, 34.0),
+			"/ %d" % all, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_OFF)
+
+
 func _cap_draw() -> void:
 	var r: Rect2 = LAY.cap
 	r.position.y += _hud_dy()
