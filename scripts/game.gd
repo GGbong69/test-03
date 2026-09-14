@@ -11570,7 +11570,9 @@ var pause_from := -1     # 게임 중 ESC 로 설정을 열면 돌아갈 상태.
 
 #  제목 메뉴. 설정과 **같은 세로선 · 같은 줄 높이**다 — 두 화면이 같은
 #  어휘를 쓰는 것이 눈에 보이려면 자리부터 같아야 한다.
-const TMENU := {"x": SAFE, "y": 150.0, "h": 22.0, "gap": 4.0, "w": 148.0}
+#  메뉴를 아래로 내린다. 제목 내용이 화면의 13% 고 y[250,360] 110px 이
+#  통째로 비어 있었다 — 그 빈 칸을 메뉴가 흡수한다.
+const TMENU := {"x": SAFE, "y": 190.0, "h": 22.0, "gap": 4.0, "w": 148.0}
 
 
 func _menu_rect(i: int) -> Rect2:
@@ -11632,11 +11634,9 @@ func _draw_title() -> void:
 	#  이 게임의 얼굴을 깔아 놓고 지우는 셈이다. 글줄이 왼쪽에 서므로 판과
 	#  자리가 안 겹쳐서, 판을 살려도 글씨를 안 잡아먹는다.
 	draw_rect(Rect2(Vector2.ZERO, VIEW), Color(0.04, 0.03, 0.07, 0.72))
-	#  글줄 쪽만 한 겹 더 — 판의 밝은 칸이 글자 뒤로 오면 읽기가 나빠진다.
-	for k in 8:
-		var f: float = float(k) / 8.0
-		draw_rect(Rect2(0.0, 0.0, 26.0 + f * 190.0, VIEW.y),
-				Color(0.03, 0.02, 0.06, 0.13))
+	#  왼쪽 그늘 여덟 겹을 걷었다. x=216 에서 끝나 판(x209 시작)을 하나도
+	#  안 가리고, 대신 평평한 배경에 **세로 이음매 넷**을 남기고 있었다.
+	#  글줄은 x16 이고 판은 x209 라 애초에 안 겹친다 — 스크림 한 장이면 된다.
 	#  제목은 머리(_hdr)보다 크다. 이 화면에서는 제목이 곧 그림이라
 	#  다른 화면의 머리와 같은 크기로 두면 시작화면이 아니라 목록이 된다.
 	draw_string(font, Vector2(SAFE, 104.0), "하이톤",
@@ -11652,7 +11652,13 @@ func _draw_title() -> void:
 		var r := _menu_rect(i)
 		var ee: float = ttl_e[i] if i < ttl_e.size() else 0.0
 		var ew: float = ttl_w[i] if i < ttl_w.size() else 0.0
-		_row_band(self, r, ee, ew, 1.0)
+		#  띠는 글자만큼만. 설정과 같은 어법이다.
+		var br := r
+		if font != null:
+			br.size.x = minf(r.size.x, font.get_string_size(
+					String(TITLE_ROWS[i].n), HORIZONTAL_ALIGNMENT_LEFT,
+					-1, 11).x + 16.0)
+		_row_band(self, br, ee, ew, 1.0)
 		draw_string(font, r.position + Vector2(0.0, 15.0),
 				String(TITLE_ROWS[i].n), HORIZONTAL_ALIGNMENT_LEFT, -1, 11,
 				C_DIM.lerp(C_TXT, ee))
@@ -13936,6 +13942,15 @@ func _draw_settings(c: CanvasItem) -> void:
 		var r := _set_rect(i)
 		var key := String(rows[i])
 		var info := _set_info(key)
+		#  **띠 폭을 글자에 맞춘다.** 148px 고정이라 「설정」 같은 두 글자
+		#  줄에서는 대부분이 빈 금색 판이었다 — 띠가 자리를 말하는 것이
+		#  아니라 자리를 먹는 것이 됐다.
+		if font != null:
+			var tw: float = font.get_string_size(String(info.get("n", key)),
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x
+			if bool(info.get("g", false)):
+				tw = r.size.x - 16.0        # 게이지 줄은 수까지 덮는다
+			r.size.x = minf(r.size.x, tw + 16.0)
 		var ee: float = set_row_e[i] if i < set_row_e.size() else 0.0
 		var ew: float = set_row_w[i] if i < set_row_w.size() else 0.0
 		_row_band(c, r, ee, ew, e)
