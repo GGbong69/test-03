@@ -237,7 +237,7 @@ const C_GOLD := Color("f2c94c")
 const C_ODDS := Color("8fd694")
 
 enum S { PICK, AIM_V, AIM_H, CONFIRM, FLY, RESOLVE, CLEAR, SHOP, STAGE, OVER,
-		TITLE, SETTINGS, COLLECT, NEWRUN, LEG, RUNINFO, BOOST }
+		TITLE, SETTINGS, COLLECT, NEWRUN, LEG, RUNINFO, BOOST, PROFILE }
 
 # 칸 색 — 길이 20, 값은 colors.csv 의 id. _board_bake 가 굽고
 # 손질·개칠이 고친다. 굽기 전(첫 프레임)에는 비어 있을 수 있으므로
@@ -2617,6 +2617,7 @@ func _process(d: float) -> void:
 	_boost_tick(d)
 	_set_tick(d)
 	_title_tick(d)
+	_prof_tick(d)
 	if state == S.CLEAR:
 		clear_t += d
 		queue_redraw()
@@ -3232,7 +3233,8 @@ func _unhandled_input(e: InputEvent) -> void:
 						state = run_from
 					elif state == S.SETTINGS:
 						_settings_back()
-					elif state == S.COLLECT or state == S.NEWRUN:
+					elif state == S.COLLECT or state == S.NEWRUN \
+							or state == S.PROFILE:
 						state = S.TITLE
 					elif hand_st != H.NONE:
 						_hand_abort()
@@ -3256,7 +3258,7 @@ func _unhandled_input(e: InputEvent) -> void:
 							_deny()
 					elif state == S.SETTINGS:
 						_settings_back()
-					elif state == S.COLLECT:
+					elif state == S.COLLECT or state == S.PROFILE:
 						state = S.TITLE
 					elif state == S.PICK:
 						_pick_dart(0)
@@ -3444,7 +3446,7 @@ func _click(m: Vector2) -> void:
 					_deny()
 					return
 				GameData.league = String(GameData.leagues()[i].get("id", ""))
-				Save.set_set("league", GameData.league)
+				Save.set_pick("league", GameData.league)
 				Save.flush()
 				_sfx("league_pick")
 				return
@@ -3466,20 +3468,57 @@ func _click(m: Vector2) -> void:
 				_sfx("back")
 				return
 		S.TITLE:
-			for i in 4:
+			#  **줄 수를 표에서 센다.** 4 를 박아 두었더니 줄을 하나 늘렸을 때
+			#  마지막 줄이 그려지기만 하고 안 눌렸다.
+			for i in TITLE_ROWS.size():
 				if _menu_rect(i).has_point(m):
-					match i:
-						0:
+					match String(TITLE_ROWS[i].n):
+						"시작":
 							_open_newrun()
-						1:
+						"컬렉션":
 							collect_tab = 0
 							state = S.COLLECT
-						2:
+						"프로필":
+							_open_profile()
+							return
+						"설정":
 							state = S.SETTINGS
-						3:
+						"종료":
 							get_tree().quit()
 					_sfx("menu_pick")
 					return
+		S.PROFILE:
+			if _menu_back_rect().has_point(m):
+				state = S.TITLE
+				_sfx("back")
+				return
+			#  지우기를 **글줄보다 먼저** 본다. 겨눈 뒤 딴 데를 누르면 풀리는데,
+			#  글줄을 먼저 보면 그 "딴 데" 에 지우기 단추가 들어간다.
+			var dsel := clampi(prof_sel, 1, Save.SLOTS)
+			if Save.slot_used(dsel) and _prof_del_rect().has_point(m):
+				if prof_arm == dsel:
+					Save.erase_slot(dsel)
+					prof_arm = -1
+					#  쓰던 프로필을 지웠으면 그 자리를 다시 연다 — 안 열면
+					#  지워진 파일을 계속 쓰다가 다음 저장에서 되살아난다.
+					if dsel == Save.slot():
+						_use_profile(dsel)
+					_sfx("sell")
+				else:
+					prof_arm = dsel
+					_sfx("menu_pick2")
+				return
+			for i in Save.SLOTS:
+				if not _prof_rect(i).has_point(m):
+					continue
+				var sl := i + 1
+				prof_arm = -1
+				if sl == prof_sel:
+					_use_profile(sl)      # 고른 줄을 또 누르면 그 프로필로 간다
+				else:
+					prof_sel = sl
+					_sfx("menu_pick2")
+				return
 		S.SETTINGS:
 			var rows := _set_rows()
 			# ① 오른쪽 판의 홈 — 글줄보다 **먼저** 본다. 고른 줄이 어느
@@ -4635,6 +4674,8 @@ func _draw_screen(scr: int) -> void:
 		# 여기서는 뒤에 남아 흐려질 화면만 그린다 — 판 중에 열었으면
 		# 그 화면을, 제목에서 열었으면 제목을.
 		_draw_screen(pause_from if pause_from >= 0 else S.TITLE)
+	elif scr == S.PROFILE:
+		_draw_profile()
 	elif scr == S.COLLECT:
 		_draw_collect()
 	elif scr == S.RUNINFO:
@@ -4727,7 +4768,8 @@ func _is_aim_stage() -> bool:
 
 func _hud_draw() -> void:
 	if state == S.OVER or state == S.TITLE or state == S.SETTINGS \
-			or state == S.COLLECT or state == S.NEWRUN or state == S.RUNINFO:
+			or state == S.COLLECT or state == S.NEWRUN or state == S.RUNINFO \
+			or state == S.PROFILE:
 		return
 	if not _bar_hidden():
 		_draw_topbar()
@@ -11714,6 +11756,124 @@ func _menu_back_rect() -> Rect2:
 	return Rect2(Vector2(226.0, 322.0), Vector2(188.0, 30.0))
 
 
+# ══════════════════════════════════════════════════════════
+#  프로필 — 진도를 담는 자리
+# ──────────────────────────────────────────────────────────
+#  발라트로·슬더스의 프로필이다. 해금과 통계가 프로필마다 따로 쌓인다.
+#  음량·전체화면은 안 따라온다 — 그것은 기계의 설정이지 진도가 아니다.
+#
+#  설정 화면과 **같은 어법**을 쓴다. 왼쪽에 글줄 셋, 오른쪽에 그 줄의
+#  속. 화면마다 다른 문법을 만들면 배울 것이 하나 더 는다.
+#
+#  이름을 못 짓는다. 글자를 받으려면 입력 칸·커서·한글 조합이 같이
+#  와야 하는데 이 게임에는 그 배관이 한 줄도 없다. 대신 **그 프로필이
+#  쌓은 것**을 적는다 — 「완주 3회 · 최고 라운드 6」이 「민수」보다
+#  어느 자리인지를 더 잘 말한다. 이름은 입력 배관이 서는 날 온다.
+# ══════════════════════════════════════════════════════════
+const PROW := {"x": 16.0, "y": 96.0, "w": 176.0, "h": 34.0, "gap": 8.0}
+
+
+func _prof_rect(i: int) -> Rect2:
+	return Rect2(Vector2(PROW.x, PROW.y + float(i) * (PROW.h + PROW.gap)),
+			Vector2(PROW.w, PROW.h))
+
+
+#  지우기는 두 걸음이다. 한 번 누르면 겨누고, 다시 누르면 지운다 —
+#  되돌릴 수 없는 것에 클릭 하나를 두지 않는다. 딴 줄을 누르면 풀린다.
+func _prof_del_rect() -> Rect2:
+	return Rect2(Vector2(232.0, 276.0), Vector2(120.0, 26.0))
+
+
+func _open_profile() -> void:
+	prof_sel = Save.slot()
+	prof_arm = -1
+	state = S.PROFILE
+	_sfx("menu_pick")
+
+
+#  프로필을 갈아탄다. 갈아탄 뒤에는 **그 프로필의 다트통·리그을 다시 읽는다** —
+#  안 읽으면 앞 프로필이 고른 다트통이 그대로 남아, 새 프로필이 잠긴
+#  다트통으로 시작한다.
+func _use_profile(i: int) -> void:
+	Save.use_slot(i)
+	prof_sel = i
+	prof_arm = -1
+	GameData.league = String(Save.get_pick("league", ""))
+	GameData.pack = String(Save.get_pick("pack", ""))
+	_sfx("menu_pick")
+
+
+func _draw_profile() -> void:
+	_scrim()
+	_hdr(self, "프로필")
+	var cur := Save.slot()
+	for i in Save.SLOTS:
+		var sl := i + 1
+		var r := _prof_rect(i)
+		var on: bool = sl == cur
+		var hot: bool = sl == prof_sel
+		var ee: float = float(prof_e[i]) if i < prof_e.size() else 0.0
+		var ew: float = float(prof_w[i]) if i < prof_w.size() else 0.0
+		#  띠는 **이름 줄만** 덮는다. 칸 높이를 다 덮으면 밑줄(완주·라운드)이
+		#  금빛에 잠겨 안 읽힌다 — 띠는 자리를 말하는 것이지 자리를 먹는 것이
+		#  아니다(제목 메뉴에서 같은 것을 한 번 고쳤다).
+		_row_band(self, Rect2(r.position, Vector2(r.size.x, 18.0)), ee, ew, 1.0)
+		draw_string(font, r.position + Vector2(0.0, 14.0), "프로필 %d" % sl,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 11,
+				C_DIM.lerp(C_TXT, ee))
+		var inf := Save.slot_info(sl)
+		var line := "빈 자리"
+		if bool(inf.get("used", false)):
+			line = "완주 %d · 최고 라운드 %d" % [int(inf.get("wins", 0)),
+					GameData.round_of(maxi(int(inf.get("best_leg", 1)), 1))]
+		draw_string(font_sm, r.position + Vector2(0.0, 27.0), line,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_OFF.lerp(C_DIM, ee))
+		#  지금 쓰는 프로필에만 표식. 고른 줄과 쓰는 줄은 다른 말이다 —
+		#  훑는 동안 쓰는 자리가 어디인지가 안 흔들려야 한다.
+		if on:
+			draw_rect(Rect2(r.end.x - 6.0, r.position.y + 2.0, 3.0,
+					r.size.y - 4.0), C_ACC)
+
+	#  오른쪽 — 고른 줄의 속
+	var sel := clampi(prof_sel, 1, Save.SLOTS)
+	var inf2 := Save.slot_info(sel)
+	var px := 232.0
+	draw_string(font, Vector2(px, 110.0), "프로필 %d" % sel,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_TXT)
+	draw_rect(Rect2(px, 118.0, 300.0, 1.0), Color(C_WIRE, 0.35))
+	if not bool(inf2.get("used", false)):
+		draw_string(font, Vector2(px, 140.0), "아직 아무것도 없다",
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_DIM)
+		draw_string(font_sm, Vector2(px, 158.0), "고르면 여기서부터 쌓인다",
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_OFF)
+	else:
+		var rows := [
+			["런", "%d회" % int(inf2.get("runs", 0))],
+			["완주", "%d회" % int(inf2.get("wins", 0))],
+			["최고 라운드", "%d" % GameData.round_of(
+					maxi(int(inf2.get("best_leg", 1)), 1))],
+			["한 판 최고 점수", "%d" % int(inf2.get("best_score", 0))],
+			["해금", "%d개" % int(inf2.get("unlocks", 0))],
+		]
+		for k in rows.size():
+			var y := 140.0 + float(k) * 17.0
+			draw_string(font, Vector2(px, y), String(rows[k][0]),
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_DIM)
+			draw_string(font, Vector2(px, y), String(rows[k][1]),
+					HORIZONTAL_ALIGNMENT_RIGHT, 300.0, 11, C_TXT)
+		#  지우기 — 겨눈 동안에만 붉다
+		var dr := _prof_del_rect()
+		var armed: bool = prof_arm == sel
+		draw_rect(dr, Color(C_MULT if armed else C_PANEL.lightened(0.10),
+				0.9 if armed else 1.0))
+		draw_string(font, dr.position + Vector2(0.0, 17.0),
+				"정말 지운다" if armed else "지우기",
+				HORIZONTAL_ALIGNMENT_CENTER, dr.size.x, 11,
+				C_TXT if armed else C_DIM)
+	_back_row(self, _menu_back_rect(), "뒤로", "ESC",
+			_menu_back_rect().has_point(mouse_at))
+
+
 func _toggle_fullscreen() -> void:
 	# 에디터에 내장된 실행에서는 창 모드를 못 바꾼다 — 내장 해제나
 	# 내보낸 빌드에서만 실제로 커진다.
@@ -11729,8 +11889,8 @@ func _toggle_fullscreen() -> void:
 # 저장해야 다음 실행에서 안 어긋난다.
 func _load_settings() -> void:
 	# 리그도 저장에서 되살린다. 모르는 id 면 league_row 가 첫 단으로 떨군다.
-	GameData.league = String(Save.get_set("league", ""))
-	GameData.pack = String(Save.get_set("pack", ""))
+	GameData.league = String(Save.get_pick("league", ""))
+	GameData.pack = String(Save.get_pick("pack", ""))
 	vol = clampf(float(Save.get_set("vol", 1.0)), 0.0, 1.0)
 	vol_mus = clampf(float(Save.get_set("vol_mus", 0.8)), 0.0, 1.0)
 	_apply_vol()
@@ -11753,6 +11913,7 @@ const CREDITS := ""
 const TITLE_ROWS := [
 	{"n": "시작", "k": "스페이스"},
 	{"n": "컬렉션", "k": ""},
+	{"n": "프로필", "k": ""},
 	{"n": "설정", "k": ""},
 	{"n": "종료", "k": ""},
 ]
@@ -11822,6 +11983,10 @@ func _draw_title() -> void:
 # ══════════════════════════════════════════════════════════
 
 var newrun_pip := 0             # 지금 보고 있는 다트통 번호
+var prof_sel := 1               # 프로필 화면에서 **고른** 줄 (쓰는 줄과 다르다)
+var prof_arm := -1              # 지우기를 겨눈 슬롯. -1 이면 안 겨눔
+var prof_e := []                # 그 줄의 얹힘 짙기 — 제목·설정과 같은 어법
+var prof_w := []                # 그 줄 띠가 쓸려 든 폭
 
 
 # ══════════════════════════════════════════════════════════
@@ -14031,14 +14196,14 @@ func _pack_view(i: int) -> void:
 		return
 	newrun_pip = posmod(i, rows.size())
 	GameData.pack = String(rows[newrun_pip].get("id", ""))
-	Save.set_set("pack", GameData.pack)
+	Save.set_pick("pack", GameData.pack)
 	var top := 0
 	for k in GameData.leagues().size():
 		if _league_open(k):
 			top = k
 	if GameData.league_idx() > top:
 		GameData.league = String(GameData.leagues()[top].get("id", ""))
-		Save.set_set("league", GameData.league)
+		Save.set_pick("league", GameData.league)
 	Save.flush()
 
 
@@ -14788,7 +14953,7 @@ func _mus_want() -> String:
 	elif st == S.SETTINGS and pause_from >= 0:
 		st = pause_from
 	match st:
-		S.TITLE, S.SETTINGS, S.COLLECT, S.NEWRUN, S.OVER:
+		S.TITLE, S.SETTINGS, S.COLLECT, S.NEWRUN, S.OVER, S.PROFILE:
 			return "lobby"
 		S.STAGE, S.SHOP, S.LEG, S.CLEAR:
 			return "select"
@@ -14957,6 +15122,23 @@ func _apply_vol() -> void:
 	if mi >= 0:
 		AudioServer.set_bus_volume_db(mi, linear_to_db(maxf(vol_mus, 0.0001)))
 		AudioServer.set_bus_mute(mi, vol_mus <= 0.001)
+
+
+#  프로필 줄의 얹힘. 제목과 같은 부품을 쓰되 **고른 줄**이 있어서 조금
+#  다르다 — 커서가 없을 때도 고른 줄은 켜져 있어야 한다. 커서가 얹히면
+#  그 줄이 이기고, 떠나면 고른 줄로 돌아온다.
+func _prof_tick(d: float) -> void:
+	var on: bool = state == S.PROFILE
+	var face := -1
+	if on:
+		face = clampi(prof_sel, 1, Save.SLOTS) - 1
+		for i in Save.SLOTS:
+			if _prof_rect(i).has_point(mouse_at):
+				face = i
+				break
+	_row_ease(prof_e, prof_w, Save.SLOTS, face, d)
+	if on:
+		queue_redraw()
 
 
 #  제목 메뉴의 얹힘을 민다. 설정과 같은 부품(_row_ease)을 쓰되 배열만

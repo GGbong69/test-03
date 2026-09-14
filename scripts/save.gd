@@ -29,10 +29,33 @@ extends RefCounted
 # 검사가 진짜 저장을 지우고 해금까지 심고 있었다 — 리그이 해금을 읽기
 # 시작하면서 드러났다. 경로를 상수가 아니라 변수로 두어 프로브가 제 자리를
 # 쓰게 한다. 게임은 이 값을 절대 안 바꾼다.
+#  ── 프로필 ────────────────────────────────────────────
+#  발라트로·슬더스처럼 진도가 프로필마다 따로다. 파일을 둘로 가른다.
+#
+#    user://hightone.cfg     **전역** — 음량·전체화면, 그리고 어느
+#                            프로필을 쓰는가. 프로필을 갈아도 안 바뀐다.
+#    user://profile_N.cfg    **프로필** — 해금 · 통계 · 세기 · 마지막에
+#                            고른 다트통과 리그.
+#
+#  가르는 선은 「기계의 설정인가, 이 사람의 진도인가」다. 음량은 모니터
+#  앞에 앉은 사람의 것이라 프로필을 갈아도 그대로여야 하고, 해금은
+#  그 프로필이 쌓은 것이라 같이 가면 안 된다.
+#
+#  마지막에 고른 다트통·리그(league · pack)도 **진도 쪽**이다. 전에는
+#  설정에 섞여 있었는데, 프로필 A 가 열어 둔 다트통을 프로필 B 가
+#  물려받으면 새 프로필이 잠긴 다트통으로 시작한다.
 const PATH := "user://hightone.cfg"
-static var path := PATH
+const PROF := "user://profile_%d.cfg"
+const SLOTS := 3
+
+static var gpath := PATH
+#  비어 있으면 슬롯에서 낸다. 검사·프로브가 여기에 제 자리를 박으면
+#  그것이 이긴다 — 슬롯이 생겨도 그 규약은 안 바뀐다.
+static var path := ""
+static var _slot := 0            # 1..SLOTS. 0 이면 아직 전역에서 안 읽었다
 
 const S_SET := "설정"
+const S_PIK := "고름"    # 프로필 — 마지막에 고른 다트통·리그
 const S_UNL := "해금"
 const S_STA := "통계"
 # 자유 열쇠 세기. STATS 는 목록이 곧 계약이라 열쇠를 미리 다 적어야 하는데,
@@ -91,31 +114,156 @@ const PEAKS := ["best_leg", "best_score", "best_gold", "best_track",
 const DIPS := ["win_items"]
 
 static var _cfg: ConfigFile = null
-static var _loaded := false
+static var _at := ""             # 지금 _cfg 에 올라와 있는 파일
+static var _gcfg: ConfigFile = null
+static var _gloaded := false
 static var _err := ""            # 마지막 실패 사유. 비어 있으면 정상이다
 
 
-# 처음 쓰는 순간 읽는다. 실패해도 빈 설정으로 계속 간다.
-static func boot() -> void:
-	if _loaded:
-		return
-	_loaded = true
-	_cfg = ConfigFile.new()
-	if not FileAccess.file_exists(path):
-		return
-	var e := _cfg.load(path)
+static func _read(fp: String) -> ConfigFile:
+	var c := ConfigFile.new()
+	if not FileAccess.file_exists(fp):
+		return c
+	var e := c.load(fp)
 	if e != OK:
 		_err = "저장 파일을 못 읽었다 (%d) — 기본값으로 시작한다" % e
 		push_warning(_err)
-		_cfg = ConfigFile.new()
+		return ConfigFile.new()
+	return c
+
+
+# 전역(음량·전체화면·어느 프로필인가). 프로필을 갈아도 안 다시 읽는다.
+static func gboot() -> void:
+	if _gloaded:
+		return
+	_gloaded = true
+	_gcfg = _read(gpath)
+	_migrate()
+
+
+#  프로필이 생기기 전의 저장을 1번으로 옮긴다.
+#
+#  2026-09-15 전에는 해금·통계가 전역 파일 안에 같이 살았다. 가르기만
+#  하고 두면 그 사람의 해금이 **하루아침에 다 잠긴다** — 파일은 멀쩡히
+#  있는데 아무도 안 읽는 자리에 있는 것이라 더 나쁘다.
+#
+#  옮기는 것은 **한 번뿐**이다. 1번 프로필 파일이 이미 있으면 손대지
+#  않는다 — 그쪽이 이미 쌓고 있는 자리다. 옮긴 뒤 전역 파일의 옛 칸은
+#  지운다. 안 지우면 1번을 지운 다음 실행에서 되살아난다.
+static func _migrate() -> void:
+	var old: bool = _gcfg.has_section(S_UNL) or _gcfg.has_section(S_STA)
+	if _gcfg.has_section(S_TAL):
+		old = true
+	if not old or FileAccess.file_exists(slot_path(1)):
+		return
+	var c := ConfigFile.new()
+	for sec in [S_UNL, S_STA, S_TAL]:
+		if not _gcfg.has_section(sec):
+			continue
+		for k in _gcfg.get_section_keys(sec):
+			c.set_value(sec, k, _gcfg.get_value(sec, k))
+		_gcfg.erase_section(sec)
+	#  마지막에 고른 다트통·리그도 설정에서 진도로 옮긴다.
+	for k2 in ["pack", "league"]:
+		if _gcfg.has_section_key(S_SET, k2):
+			c.set_value(S_PIK, k2, _gcfg.get_value(S_SET, k2))
+			_gcfg.erase_section_key(S_SET, k2)
+	c.save(slot_path(1))
+	_gcfg.set_value(S_SET, "slot", 1)
+	_gcfg.save(gpath)
+	print("저장: 옛 저장을 프로필 1 로 옮겼다")
+
+
+static func slot() -> int:
+	gboot()
+	if _slot <= 0:
+		_slot = clampi(int(_gcfg.get_value(S_SET, "slot", 1)), 1, SLOTS)
+	return _slot
+
+
+static func slot_path(i: int) -> String:
+	return PROF % clampi(i, 1, SLOTS)
+
+
+# 지금 읽고 쓸 프로필 파일. path 가 박혀 있으면 그것이 이긴다.
+static func _pp() -> String:
+	return path if path != "" else slot_path(slot())
+
+
+# 처음 쓰는 순간 읽는다. 실패해도 빈 설정으로 계속 간다.
+#
+# **올라와 있는 파일이 바뀌면 다시 읽는다.** 전에는 한 번 읽었나(_loaded)
+# 만 봤는데, 프로필을 갈면 경로가 바뀌므로 그것으로는 옛 프로필이 그대로
+# 남는다 — 갈아탄 줄 알고 남의 해금을 쓰게 된다.
+static func boot() -> void:
+	var want := _pp()
+	if _cfg != null and _at == want:
+		return
+	_at = want
+	_cfg = _read(want)
 
 
 static func flush() -> void:
 	boot()
-	var e := _cfg.save(path)
+	var e := _cfg.save(_at)
 	if e != OK:
 		_err = "저장 실패 (%d)" % e
 		push_warning(_err)
+
+
+static func gflush() -> void:
+	gboot()
+	var e := _gcfg.save(gpath)
+	if e != OK:
+		_err = "저장 실패 (%d)" % e
+		push_warning(_err)
+
+
+# ── 프로필 ──────────────────────────────────────────────
+# 슬롯을 갈아탄다. 다음에 읽을 때 저절로 새 파일이 올라온다(boot 의 _at).
+static func use_slot(i: int) -> void:
+	gboot()
+	_slot = clampi(i, 1, SLOTS)
+	_gcfg.set_value(S_SET, "slot", _slot)
+	gflush()
+	path = ""          # 슬롯을 골랐으면 박아 둔 자리는 놓는다
+
+
+static func slot_used(i: int) -> bool:
+	return FileAccess.file_exists(slot_path(i))
+
+
+# 그 슬롯을 **올리지 않고** 훑는다. 고르는 화면이 셋을 같이 보여 줘야
+# 하는데, 보여 주려고 올렸다가 안 고르고 나가면 남의 프로필이 올라온 채로
+# 남는다 — 읽는 것과 갈아타는 것을 가른다.
+static func slot_info(i: int) -> Dictionary:
+	var fp := slot_path(i)
+	if not FileAccess.file_exists(fp):
+		return {"used": false}
+	var c := _read(fp)
+	var unl := 0
+	if c.has_section(S_UNL):
+		for k in c.get_section_keys(S_UNL):
+			if bool(c.get_value(S_UNL, k, false)):
+				unl += 1
+	return {
+		"used": true,
+		"runs": int(c.get_value(S_STA, "runs", 0)),
+		"wins": int(c.get_value(S_STA, "wins", 0)),
+		"best_leg": int(c.get_value(S_STA, "best_leg", 0)),
+		"best_score": int(c.get_value(S_STA, "best_score", 0)),
+		"unlocks": unl,
+	}
+
+
+# 되돌릴 수 없다. 부르는 쪽이 확인을 받는다.
+static func erase_slot(i: int) -> void:
+	var fp := slot_path(i)
+	if FileAccess.file_exists(fp):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(fp))
+	if _at == fp:
+		_cfg = ConfigFile.new()
+		_at = ""
 
 
 static func last_error() -> String:
@@ -123,15 +271,30 @@ static func last_error() -> String:
 
 
 # ── 설정 ────────────────────────────────────────────────
+#  **전역이다.** 음량과 전체화면은 모니터 앞에 앉은 사람의 것이라
+#  프로필을 갈아도 그대로여야 한다.
 static func get_set(key: String, dflt: Variant) -> Variant:
-	boot()
-	return _cfg.get_value(S_SET, key, dflt)
+	gboot()
+	return _gcfg.get_value(S_SET, key, dflt)
 
 
 static func set_set(key: String, v: Variant) -> void:
+	gboot()
+	_gcfg.set_value(S_SET, key, v)
+	gflush()         # 설정은 드물게 바뀐다. 바뀔 때마다 바로 쓴다
+
+
+#  마지막에 고른 다트통·리그. **프로필 쪽이다** — 전역에 두면 프로필 A 가
+#  열어 둔 다트통을 B 가 물려받아 잠긴 다트통으로 시작한다.
+static func get_pick(key: String, dflt: Variant) -> Variant:
 	boot()
-	_cfg.set_value(S_SET, key, v)
-	flush()          # 설정은 드물게 바뀐다. 바뀔 때마다 바로 쓴다
+	return _cfg.get_value(S_PIK, key, dflt)
+
+
+static func set_pick(key: String, v: Variant) -> void:
+	boot()
+	_cfg.set_value(S_PIK, key, v)
+	flush()
 
 
 # ── 해금 ────────────────────────────────────────────────
@@ -248,6 +411,7 @@ static func all_stats() -> Dictionary:
 
 
 # 검사와 "처음부터 다시" 용. 되돌릴 수 없으므로 부르는 쪽이 확인을 받는다.
+# **프로필만 지운다** — 음량까지 날아가면 검사 한 번에 사람 설정이 사라진다.
 static func wipe() -> void:
 	boot()
 	_cfg = ConfigFile.new()
