@@ -2032,7 +2032,7 @@ func _skip_past(r: Rect2, rn: int) -> void:
 		return
 	var t := _leg_tag(rn)
 	_icon_tag(Vector2(r.position.x + SKIP.ix, r.get_center().y), 6.5,
-			String(t.get("kind", "")), 0.34)
+			String(t.get("kind", "")), 0.34, String(t.get("rarity", "")))
 	var tx: float = r.position.x + SKIP.tx
 	var tw: float = r.size.x - SKIP.pad
 	draw_string(font_sm, Vector2(tx, r.position.y + SKIP.y1), "건너뜀",
@@ -2057,7 +2057,7 @@ func _skip_plate(r: Rect2, t: Dictionary, on: bool) -> void:
 				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, C_OFF)
 		return
 	_icon_tag(Vector2(r.position.x + SKIP.ix, r.get_center().y), 6.5,
-			String(t.get("kind", "")), a)
+			String(t.get("kind", "")), a, String(t.get("rarity", "")))
 	var tx: float = r.position.x + SKIP.tx
 	var tw: float = r.size.x - SKIP.pad
 	draw_string(font_sm, Vector2(tx, r.position.y + SKIP.y1),
@@ -2158,7 +2158,8 @@ func _take_tag_once(t: Dictionary) -> void:
 		# 효과 줄과 때를 같이 싣는다 — 쌓인 뱃지에 커서를 올렸을 때
 		# 이름만 있으면 무엇이 기다리는지가 이름 그대로 수수께끼다.
 		pending_tags.append({"kind": kind, "v": v, "n": String(t.get("name", "")),
-				"d": _tag_text(t), "w": _tag_when(t)})
+				"d": _tag_text(t), "w": _tag_when(t),
+				"rar": String(t.get("rarity", ""))})
 		pop(at, "%s" % t.get("name", ""), C_ACC, 13, 1.4)
 		return
 	match kind:
@@ -9221,7 +9222,12 @@ func _icon_area(c: Vector2, r: float, id: String, a := 1.0) -> void:
 
 
 # 뱃지 — 받는 것의 모양. 칸이 작아 획 셋을 안 넘긴다.
-func _icon_tag(c: Vector2, r: float, kind: String, a := 1.0) -> void:
+#  rar 는 **동전 뱃지에만** 쓴다. 견본 셋(일반·희귀·레어)은 갈래가 같아서
+#  그림도 같은데, 등급이 그 셋을 쪼갠 이유 전부다 — 같은 파란 원반 셋이
+#  나란히 서면 무엇이 귀한지가 화면에서 사라진다. 등급색은 상점 칩·툴팁이
+#  쓰는 그 색이라(rarity.csv) 세 자리가 같은 말을 한다.
+func _icon_tag(c: Vector2, r: float, kind: String, a := 1.0,
+		rar := "") -> void:
 	var col := Color(C_GOLD, a)
 	var w := maxf(r * 0.26, 1.0)
 	match kind:
@@ -9246,15 +9252,63 @@ func _icon_tag(c: Vector2, r: float, kind: String, a := 1.0) -> void:
 			draw_colored_polygon(PackedVector2Array([
 					c + Vector2(0.0, -r * 1.15), c + Vector2(-r * 0.46, -r * 0.52),
 					c + Vector2(r * 0.46, -r * 0.52)]), col)
-		"cons":
-			# 꾸러미 — 상점 테이블 위의 사탕과 같은 네모다.
-			draw_rect(Rect2(c - Vector2(r * 0.74, r * 0.74),
-					Vector2(r * 1.48, r * 1.48)), Color(C_ACC, a))
-			draw_rect(Rect2(c - Vector2(r * 0.74, r * 0.16),
-					Vector2(r * 1.48, r * 0.32)), Color(C_DARK.darkened(0.3), a))
+		"candy":
+			# 포장 사탕 — 몸통 하나에 집힌 끝 둘. 13px 에서 「사탕」이 서는
+			# 가장 짧은 실루엣이다(_icon_cons 의 손그림과 같은 어법).
+			for sd in [-1.0, 1.0]:
+				draw_colored_polygon(PackedVector2Array([
+						c + Vector2(sd * r * 0.42, 0.0),
+						c + Vector2(sd * r * 1.12, -r * 0.52),
+						c + Vector2(sd * r * 1.12, r * 0.52)]),
+						Color(C_ACC.darkened(0.25), a))
+			draw_colored_polygon(_e_pts(c, r * 0.60, r * 0.52, 14), Color(C_ACC, a))
+		"photo":
+			# 폴라로이드. 사탕 칸의 사진과 **같은 물건**이라 같은 그림을 쓴다 —
+			# 여기서 따로 빚으면 같은 것이 두 모양이 된다.
+			_icon_fix(c, r * 0.92, a)
+		"boss_gold":
+			# 판 뒤에 동전 — 「보스를 넘기면 돈」이다. 판이 뒤에 서야 조건이
+			# 먼저 읽히고 동전이 결과로 읽힌다.
+			draw_circle(c + Vector2(-r * 0.22, -r * 0.18), r * 0.78,
+					Color(C_WIRE.darkened(0.30), a))
+			draw_circle(c + Vector2(-r * 0.22, -r * 0.18), r * 0.26,
+					Color(C_MULT.darkened(0.10), a))
+			draw_colored_polygon(_e_pts(c + Vector2(r * 0.40, r * 0.34),
+					r * 0.62, r * 0.46, 12), col)
+		"skip_gold":
+			# 동전 셋이 계단으로 — 건너뛴 판이 쌓일수록 는다는 말이다.
+			for i in 3:
+				draw_colored_polygon(_e_pts(
+						c + Vector2(-r * 0.78 + float(i) * r * 0.72,
+								r * 0.52 - float(i) * r * 0.40),
+						r * 0.42, r * 0.30, 10),
+						Color(col.lerp(C_TXT, 0.18 * float(i))))
+		"track_top":
+			# 판과 화살 **둘** — 영역 승급과 같은 실루엣에 화살만 겹쳐 둔다.
+			# 딴 그림을 쓰면 둘이 같은 축이라는 것이 안 읽힌다.
+			draw_circle(c + Vector2(0.0, r * 0.30), r * 0.60,
+					Color(C_WIRE.darkened(0.18), a))
+			draw_circle(c + Vector2(0.0, r * 0.30), r * 0.22, col)
+			for i in 2:
+				var yy: float = -r * 0.52 - float(i) * r * 0.46
+				draw_colored_polygon(PackedVector2Array([
+						c + Vector2(0.0, yy - r * 0.44),
+						c + Vector2(-r * 0.44, yy),
+						c + Vector2(r * 0.44, yy)]), col)
+		"copy":
+			# 같은 것이 둘. 뒤엣것을 어둡게 두어 **하나가 겹쳐 있다**로 읽힌다 —
+			# 나란히 두면 「둘 준다」가 되고 겹쳐야 「한 번 더」가 된다.
+			var sz2: float = r * 1.06
+			draw_rect(Rect2(c + Vector2(-r * 0.10, -r * 0.86),
+					Vector2(sz2, sz2)), Color(C_WIRE.darkened(0.18), a))
+			draw_rect(Rect2(c + Vector2(-r * 0.92, -r * 0.24),
+					Vector2(sz2, sz2)), col)
 		"item":
-			# 동전 원반. 동전 슬롯에 붙는 그것이다.
-			draw_circle(c, r * 0.84, Color(C_CHIP.lightened(0.10), a))
+			# 동전 원반. 동전 슬롯에 붙는 그것이다. 등급이 적혀 있으면 그 색.
+			var ic := C_CHIP.lightened(0.10)
+			if rar != "":
+				ic = GameData.rarity_color(rar).lightened(0.10)
+			draw_circle(c, r * 0.84, Color(ic, a))
 			draw_circle(c, r * 0.40, Color(C_DARK.darkened(0.3), a))
 		"reroll":
 			# 한 바퀴 돌아오는 화살. 리롤 관례 그대로다.
@@ -11362,7 +11416,8 @@ func _draw_leg() -> void:
 		draw_rect(r, C_PANEL.lightened(0.10))
 		draw_rect(Rect2(r.position, Vector2(r.size.x, 1.0)), C_ACC)
 		_icon_tag(Vector2(r.position.x + 9.0, r.get_center().y + 0.5), 5.0,
-				String(pending_tags[i].kind))
+				String(pending_tags[i].kind), 1.0,
+				String(pending_tags[i].get("rar", "")))
 		var pw: float = r.size.x - 24.0
 		draw_string(font_sm, r.position + Vector2(20.0, 11.0),
 				_elide(String(pending_tags[i].n), pw, 9),
@@ -14517,7 +14572,10 @@ const SET := {
 #  오른쪽 판
 const SETP := Rect2(214.0, 96.0, 386.0, 176.0)
 #  얹힘 띠 — 조각 수 · 왼쪽 끝의 짙기 · 쓸려 드는 빠르기(초당)
-const SETB := {"n": 12, "a": 0.22}
+#  얹힘 띠. n 은 **더 안 쓴다** — 칸을 세는 대신 픽셀마다 한 줄씩 긋는다
+#  (_row_band 의 머리말). 열둘로 나눴을 때는 200px 짜리 줄이 17px 짜리
+#  계단 열둘로 보였다.
+const SETB := {"a": 0.22}
 
 
 func _set_exit(k: String) -> bool:
@@ -14674,21 +14732,35 @@ func _row_band(c: CanvasItem, r: Rect2, ee: float, ew: float, a: float,
 		col := C_ACC, pad := 12.0) -> void:
 	if ee <= 0.004:
 		return
-	var x0: float = r.position.x - pad
+	#  ── 조각은 **겹치지도 벌어지지도 않는다** ───────────────
+	#  전에는 조각 폭에 0.5 를 더해 이음매를 메우려 했다. 그런데 조각이
+	#  반투명이라 겹친 자리는 알파가 **두 배**로 깔린다 — 이음매를 막으려던
+	#  0.5 가 16px 마다 밝은 세로 줄을 하나씩 세웠고, 띠가 금빛 그러데이션이
+	#  아니라 **금빛 창살**로 보였다(2026-09-15 제보).
+	#
+	#  조각 k 는 [round(k/n), round((k+1)/n)) 을 갖는다. 앞 조각의 끝이
+	#  뒤 조각의 시작과 **정확히 같은 정수**라 틈도 겹침도 없다.
+	#  정수로 반올림하는 것은 640x360 을 정수배로 늘이는 화면이라 반 픽셀이
+	#  늘 흐릿한 한 줄로 남기 때문이다.
+	var y0: float = roundf(r.position.y)
+	var hh: float = roundf(r.size.y)
+	var x0: float = roundf(r.position.x - pad)
 	var full: float = r.size.x + pad * 2.0
-	var bw: float = full * ew
-	for k in SETB.n:
-		var f: float = float(k) / float(SETB.n)
-		var sx: float = x0 + full * f
-		if sx >= x0 + bw:
-			break
-		var sw: float = minf(full / float(SETB.n) + 0.5, x0 + bw - sx)
-		c.draw_rect(Rect2(sx, r.position.y, sw, r.size.y),
+	var edge: float = roundf(x0 + full * ew)
+	#  **한 칸이 한 픽셀이다.** 이 게임은 640x360 을 정수배로 늘이므로
+	#  그러데이션이란 결국 1px 세로줄의 연속이고, 그보다 굵게 나누면 무슨
+	#  수를 써도 계단이 남는다. 열둘로 나눴을 때 200px 짜리 띠가 17px
+	#  계단 열둘이었다(2026-09-15 제보).
+	#  그리는 것은 **보이는 폭까지**다 — 띠가 쓸려 드는 동안은 그만큼만 돈다.
+	var px := int(maxf(edge - x0, 0.0))
+	var span: float = maxf(full, 1.0)
+	for k in px:
+		var f: float = float(k) / span
+		c.draw_rect(Rect2(x0 + float(k), y0, 1.0, hh),
 				Color(col, float(SETB.a) * (1.0 - f) * (1.0 - f) * a))
 	#  쓸려 들어오는 끝을 한 획으로 세운다 — 띠가 어디까지 왔는지가 그 한
 	#  줄로 읽힌다. 다 들어오면 오른쪽 끝에 서서 마침표가 된다.
-	c.draw_rect(Rect2(x0 + bw - 1.0, r.position.y, 1.0, r.size.y),
-			Color(col, 0.55 * ee * a))
+	c.draw_rect(Rect2(edge - 1.0, y0, 1.0, hh), Color(col, 0.55 * ee * a))
 
 
 #  화면 머리. **왼쪽 x · 크기 · 색 · 맞춤을 한 곳에서** 낸다 — 전에는
