@@ -132,7 +132,17 @@ func _run() -> void:
 	g.set_t = 1.0
 	await _shoot("10_settings")
 
-	# 런 끝
+	# 런 끝 — 해금 줄이 서는 모양도 같이 본다.
+	# **설정을 먼저 완전히 닫는다.** 앞에서 설정을 열어 둔 채로 상태만
+	# 갈아 끼우면 set_t 가 안 잦아들어 흐림 판과 글줄이 이 화면 위에 남는다.
+	g.pause_from = -1
+	g.state = g.S.TITLE
+	for k in 60:
+		g._process(1.0 / 60.0)
+	g.won = false
+	g.run_unlocked = [{"k": "리그", "n": "초록 리그"},
+			{"k": "다트통", "n": "여벌 다트통"}]
+	g.over_t = 9.0
 	g.state = g.S.OVER
 	await _shoot("11_over")
 

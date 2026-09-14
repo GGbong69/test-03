@@ -603,6 +603,9 @@ func _ready() -> void:
 # ══════════════════════════════════════════════════════════
 
 func _new_run() -> void:
+	#  지난 런에 열린 것을 새 런까지 끌고 가면 안 된다.
+	run_unlocked.clear()
+	over_t = 0.0
 	pardon_next = false          # 런을 넘겨 남으면 안 되는 깃발이다
 	photo = ""
 	photo_back.clear()
@@ -1094,6 +1097,7 @@ func _pack_unlock_next() -> void:
 		if String(r.get("prereq", "")) != cur:
 			continue
 		if Save.unlock("pack:" + String(r.get("id", ""))):
+			run_unlocked.append({"k": "다트통", "n": String(r.get("name", ""))})
 			pop(Vector2(VIEW.x * 0.5, 232.0),
 					"%s 열렸다" % r.get("name", ""), C_GOLD, 13, 1.6)
 
@@ -1219,6 +1223,7 @@ func _league_unlock_next() -> void:
 		if need <= 0 or n < need:
 			continue
 		if Save.unlock(GameData.league_key(String(r.get("id", "")))):
+			run_unlocked.append({"k": "리그", "n": String(r.get("name", ""))})
 			pop(Vector2(VIEW.x * 0.5, 210.0),
 					"%s 열렸다" % r.get("name", ""), C_GOLD, 13, 1.6)
 
@@ -2493,6 +2498,9 @@ func _process(d: float) -> void:
 	_title_tick(d)
 	if state == S.CLEAR:
 		clear_t += d
+		queue_redraw()
+	if state == S.OVER:
+		over_t += d
 		queue_redraw()
 
 	if not beep_q.is_empty():
@@ -11075,6 +11083,11 @@ func _btn(r: Rect2, label: String, sub: String, on: bool,
 #  정산 표의 자리. 제목 · 합계선 · 총액이 화면 한가운데(320)에 서는데
 #  표만 x[210,384] 중심 297 이라 24px 어긋나 있었다. 한 축으로 모은다.
 var clear_t := 0.0              # 정산이 흐른 시간(초). 0 이면 막 열렸다
+#  이번 런에 새로 열린 것들의 이름. 해금은 여태 **잠깐 뜨는 토스트로만**
+#  말하고 런 종료 화면에는 한 글자도 안 남았다 — 새 리그가 열려도 그것을
+#  본 사람이 없을 수 있다. 런이 끝날 때 이 줄을 화면에 남긴다.
+var run_unlocked := []
+var over_t := 0.0               # 런 종료 화면이 흐른 시간
 
 
 #  총액 굴림. 내역이 다 든 뒤부터 0 에서 실제 골드까지 오른다.
@@ -11455,15 +11468,79 @@ func _draw_shop() -> void:
 
 func _draw_over() -> void:
 	_scrim()
-	if won:
-		draw_string(font, Vector2(0, 150), "완주!", HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 33, C_ACC)
-		draw_string(font, Vector2(0, 186), "%d개 판을 모두 넘겼다" % GameData.legs_n(),
-				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 11, C_TXT)
+	var e: float = _ease_enter(over_t / maxf(_mo("panel"), 0.001)) 			if _mo("panel") > 0.0 else 1.0
+	var p := Rect2(74.0, 68.0, VIEW.x - 148.0, 218.0)
+	_panel(p, true, e)
+
+	var x0: float = p.position.x + 20.0
+	#  결과는 이 화면의 주인공이다. 하나만 크고 나머지는 다 곁말이다.
+	draw_string(font, Vector2(x0, p.position.y + 46.0),
+			"완주" if won else "실패", HORIZONTAL_ALIGNMENT_LEFT, -1, 33,
+			Color(C_ACC if won else C_MULT, e))
+	draw_string(font_sm, Vector2(x0, p.position.y + 64.0),
+			"라운드 %d · %d판째" % [GameData.round_of(leg_no), leg_no],
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(C_DIM, e))
+
+	#  이번 런이 어땠나. 왼쪽은 수, 오른쪽은 마지막까지 든 것.
+	var cw: float = (p.size.x - 56.0) * 0.5
+	var xr: float = x0 + cw + 16.0
+	var y: float = p.position.y + 92.0
+	var rows := [
+		["넘긴 판", "%d / %d" % [maxi(leg_no - (0 if won else 1), 0),
+				GameData.legs_n()]],
+		["최고 판 점수", str(Save.stat("best_score"))],
+		["던진 다트", str(Save.stat("darts"))],
+	]
+	if not won:
+		rows.append(["마지막 판", "%d / %d" % [total, target]])
+	for i in rows.size():
+		draw_string(font_sm, Vector2(x0, y + float(i) * 16.0),
+				String(rows[i][0]), HORIZONTAL_ALIGNMENT_LEFT, -1, 9,
+				Color(C_DIM, e))
+		draw_string(font, Vector2(x0, y + float(i) * 16.0),
+				String(rows[i][1]), HORIZONTAL_ALIGNMENT_RIGHT, cw - 8.0, 11,
+				Color(C_TXT, e))
+
+	draw_string(font_sm, Vector2(xr, y), "마지막까지 든 것",
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(C_DIM, e))
+	if owned.is_empty():
+		draw_string(font_sm, Vector2(xr, y + 18.0), "없음",
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(C_OFF, e))
 	else:
-		draw_string(font, Vector2(0, 150), "실패", HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 33, C_MULT)
-		draw_string(font, Vector2(0, 186), "라운드 %d %s — %d / %d"
-				% [GameData.round_of(leg_no), GameData.leg_name(leg_no), total, target],
-				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 11, C_TXT)
+		var step: float = minf(30.0, (cw - 8.0) / float(owned.size()))
+		for i in owned.size():
+			draw_item_sticker(Vector2(xr + 11.0 + float(i) * step, y + 22.0),
+					10.0, owned[i], 0.0, 0.0, 0.0, 9)
+	draw_string(font_sm, Vector2(xr, y + 48.0),
+			GameData.pack_row().get("name", ""), HORIZONTAL_ALIGNMENT_LEFT,
+			-1, 9, Color(C_DIM, e))
+
+	#  이번 런에 열린 것. **아무것도 안 열렸으면 줄 자체가 없다** —
+	#  「없음」이라고 적으면 못 연 것이 화면의 한 자리를 차지한다.
+	if not run_unlocked.is_empty():
+		var uy: float = p.end.y - 54.0
+		draw_rect(Rect2(x0, uy - 12.0, p.size.x - 40.0, 1.0),
+				Color(C_WIRE, 0.4 * e))
+		var ux: float = x0
+		for i in run_unlocked.size():
+			var u: Dictionary = run_unlocked[i]
+			var ua: float = e
+			if _mo("fast") > 0.0:
+				ua *= clampf((over_t - _mo("panel") - float(i) * _mo("fast"))
+						/ _mo("fast"), 0.0, 1.0)
+			if ua <= 0.0:
+				break
+			var t := "%s  %s" % [u.get("k", ""), u.get("n", "")]
+			var tw: float = font_sm.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT,
+					-1, 9).x + 12.0 if font_sm != null else 60.0
+			draw_rect(Rect2(ux, uy, tw, 14.0), Color(C_PANEL.darkened(0.3), ua))
+			draw_rect(Rect2(ux, uy, 2.0, 14.0), Color(C_GOLD, ua))
+			draw_string(font_sm, Vector2(ux + 6.0, uy + 10.0), t,
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(C_GOLD, ua))
+			ux += tw + 8.0
+
+	_back_row(self, Rect2(x0, p.end.y - 26.0, p.size.x - 40.0, 18.0),
+			"새 런", "스페이스", true)
 
 
 # ══════════════════════════════════════════════════════════
