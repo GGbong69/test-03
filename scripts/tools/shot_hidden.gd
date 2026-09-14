@@ -51,9 +51,11 @@ func _run() -> void:
 		g._cup3_open()
 		await _wait(70)
 		print("  잠김 %-6s open=%s" % [id, g._pack_open(_idx(id))])
-		await _shot("hid_shut_%s" % id)
-		await _wait(9)                       # 걸음 하나 뒤 — 조각이 다시 뽑힌다
-		await _shot("hid_shut_%s_b" % id)
+		#  한바탕(GLITCH.burst)은 여섯 걸음에 한 번쯤이라 한두 장으로는
+		#  못 잡는다. 걸음 간격으로 여섯 장 찍어 그 안에 들게 한다.
+		for k in 6:
+			await _shot("hid_shut_%s_%d" % [id, k])
+			await _wait(7)
 	# ── 열린 히든 — 후광 ──
 	for r in GameData.packs():
 		Save.unlock("pack:" + String(r.get("id", "")))

@@ -13601,6 +13601,13 @@ const GLITCH := {
 					  # 깨지고 통은 멀쩡해 보였다. 빠진 줄 하나가 몸을 끊는다
 	"fringe": 0.22,   # 어긋난 조각에 덧대는 색수차의 알파
 	"scan":  46.0,    # 훑고 지나가는 줄의 속도(px/s)
+	#  한바탕. 여섯 걸음에 한 번쯤 크게 깨진다 — 늘 같은 세기로 지지직거리면
+	#  0.5초 만에 무늬가 되고, 무늬는 고장으로 안 읽힌다. 리듬이 있어야
+	#  "무엇이 신호를 방해하고 있다" 가 된다.
+	"burst":  0.17,   # 한바탕이 되는 걸음의 비율
+	"b_amp":  2.8,    # 한바탕에서 어긋남 배율
+	"b_drop": 2.2,    # 한바탕에서 빠진 줄 배율
+	"tear":  16.0,    # 한바탕에 한 줄만 크게 찢는 폭(px)
 	"halo":  0.075,   # 후광 한 겹의 알파. **겹쳐 쌓는다** — 겹마다 알파를
 					  # 달리하면 겹의 경계가 테로 보여 물결무늬가 된다.
 					  # 같은 알파를 열두 겹 쌓으면 가운데가 저절로 진해진다
@@ -13608,6 +13615,19 @@ const GLITCH := {
 	"halo_r0":  22.0, # 안쪽 반지름
 	"halo_r1":  60.0, # 바깥 반지름
 	"mote":  6,       # 도는 티끌 수
+	"rise":  4,       # 피어오르는 티끌 수
+	#  윤. **연 다트통이면 다 받는다** — 히든만 이펙트가 있으면 나머지 열은
+	#  죽은 그림이 된다. 히든과 갈리는 것은 세기가 아니라 **갈래**다:
+	#  윤은 쇠붙이가 빛을 받는 일이고, 후광은 물건이 빛을 내는 일이다.
+	#  잠긴 다트통에는 안 준다 — 아직 내 것이 아닌 물건은 안 빛난다.
+	"sheen_w":  15.0, # 지나가는 빛띠의 폭(px)
+	"sheen_t":   3.4, # 한 바퀴에 걸리는 시간(초)
+	"sheen_a":  0.15, # 빛띠의 알파. 0.26 은 셌다 — 띠가 지나가는 것이 아니라
+					  # 통 색이 변하는 것으로 읽혔다. 윤은 알아채기 전에
+					  # 지나가야 윤이다
+	"sheen_k":   1.9, # 빛띠 안에서 색을 얼마나 띄우는가(1 이면 그대로)
+	"sheen_n":     5, # 띠를 몇 조각으로 갈라 겹치는가. 셋으로는 조각 모서리가
+					  # 세로 선으로 보여 「빛」이 아니라 「테이프」가 됐다
 }
 
 
@@ -13617,6 +13637,52 @@ func _gl_rand(a: int, b: int) -> float:
 	var h: int = (a * 73856093) ^ (b * 19349663)
 	h = (h ^ (h >> 13)) * 1274126177
 	return float(absi(h) % 1000) * 0.001
+
+
+#  이 걸음이 한바탕인가. 걸음 하나를 통째로 보므로 한 프레임만 튀지 않는다.
+func _gl_burst(step: int) -> bool:
+	return _gl_rand(step, 4242) < float(GLITCH.burst)
+
+
+#  깨진 글자. 한바탕에는 아예 딴 글자로 바뀐다 — 길이를 지켜서 자리가
+#  안 흔들린다. 글자가 말짱한 채로 통만 깨지면 "통 그림이 고장났다" 로
+#  읽힌다. 깨진 것은 신호고, 신호에는 글자도 들어 있다.
+const GL_SOUP := "?#%&@*/|=+-_~^:;<>[]{}"
+
+
+func _gl_soup(t: String, step: int) -> String:
+	var out := ""
+	for i in t.length():
+		var k := int(_gl_rand(i * 31 + 7, step) * float(GL_SOUP.length()))
+		out += GL_SOUP.substr(clampi(k, 0, GL_SOUP.length() - 1), 1)
+	return out
+
+
+#  잠긴 히든의 글줄. 걸음마다 한 칸 떨고, 한바탕에는 글자가 무너지고
+#  좌우로 색이 번진다.
+func _gl_string(at: Vector2, t: String, sz: int, col: Color) -> void:
+	var step := int(cup_gl / float(GLITCH.rate))
+	var burst := _gl_burst(step)
+	var dx := roundf((_gl_rand(int(at.y), step) * 2.0 - 1.0)
+			* (3.0 if burst else 1.0))
+	var shown := _gl_soup(t, step) if burst else t
+	var p2 := at + Vector2(dx, 0.0)
+	if burst:
+		draw_string(font, p2 - Vector2(2.0, 0.0), shown,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, sz, Color(C_MULT, 0.45))
+		draw_string(font, p2 + Vector2(2.0, 0.0), shown,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, sz, Color(C_CHIP, 0.45))
+	draw_string(font, p2, shown, HORIZONTAL_ALIGNMENT_LEFT, -1, sz, col)
+
+
+#  잠긴 히든인가 / 열린 히든인가. **두 자리(통과 글줄)가 같은 답을 봐야**
+#  통은 깨졌는데 글자는 멀쩡한 짝이 안 난다.
+func _cup_shut(pi: int) -> bool:
+	return _cup_hidden(pi) and not _pack_open(pi)
+
+
+func _cup_glow(pi: int) -> bool:
+	return _cup_hidden(pi) and _pack_open(pi)
 
 
 func _cup_hidden(pi: int) -> bool:
@@ -13630,11 +13696,20 @@ func _cup_hidden(pi: int) -> bool:
 #  무대 바탕이 드러나고, 넘친 쪽은 _cup_mask 가 잘라 준다.
 func _cup_glitch(tex: Texture2D, stage: Rect2) -> void:
 	var step := int(cup_gl / float(GLITCH.rate))
+	var burst := _gl_burst(step)
+	var amp: float = float(GLITCH.amp) * (float(GLITCH.b_amp) if burst else 1.0)
+	var drop: float = float(GLITCH.drop) * (float(GLITCH.b_drop) if burst else 1.0)
+	#  한바탕에 **한 줄만** 크게 찢는다. 여러 줄을 찢으면 통이 흩어져
+	#  어디가 통인지 모르게 되고, 그러면 잠긴 것이 아니라 없는 것이 된다.
+	var tear_i := int(_gl_rand(step, 909) * (stage.size.y / float(GLITCH.band)))
 	var y := 0.0
 	var i := 0
 	while y < stage.size.y:
 		var bh: float = minf(float(GLITCH.band), stage.size.y - y)
-		var dx := roundf((_gl_rand(i, step) * 2.0 - 1.0) * float(GLITCH.amp))
+		var dx := roundf((_gl_rand(i, step) * 2.0 - 1.0) * amp)
+		if burst and i == tear_i:
+			dx = roundf(float(GLITCH.tear)
+					* (1.0 if _gl_rand(step, 77) < 0.5 else -1.0))
 		#  열에 하나쯤은 안 어긋난다. 다 흔들면 통이 통째로 떨리는 것이라
 		#  「깨졌다」가 아니라 「흔들린다」로 읽힌다.
 		var roll := _gl_rand(i + 977, step)
@@ -13642,7 +13717,7 @@ func _cup_glitch(tex: Texture2D, stage: Rect2) -> void:
 			dx = 0.0
 		#  빠진 줄. 통 몸은 단색이라 밀어도 안 보이는데, 줄 하나가 통째로
 		#  없으면 몸이 끊겨서 보인다 — 깨짐이 자루에만 걸리던 자리다.
-		if roll > 1.0 - float(GLITCH.drop):
+		if roll > 1.0 - drop:
 			y += bh
 			i += 1
 			continue
@@ -13662,12 +13737,50 @@ func _cup_glitch(tex: Texture2D, stage: Rect2) -> void:
 		draw_texture_rect_region(tex, dst, src)
 		y += bh
 		i += 1
-	draw_rect(stage, Color(C_BG, float(GLITCH.veil)))
+	#  한바탕에는 덮은 어둠이 걷힌다 — 깨질 때 밝아지는 것이 브라운관의
+	#  버릇이다. 어둠만 흔들어도 화면이 번쩍인 것으로 읽힌다.
+	draw_rect(stage, Color(C_BG, float(GLITCH.veil) * (0.45 if burst else 1.0)))
 	#  훑고 지나가는 줄 하나. 이것 하나가 정지 화면을 「살아 있는 잡음」으로
 	#  만든다 — 조각은 0.11초마다만 움직이므로 그 사이가 죽어 있다.
 	var sy := fposmod(cup_gl * float(GLITCH.scan), stage.size.y + 24.0) - 12.0
 	draw_rect(Rect2(stage.position.x, stage.position.y + roundf(sy),
 			stage.size.x, 2.0), Color(C_TXT, 0.12))
+
+
+#  윤 — 빛띠 하나가 통 위를 지나간다.
+#
+#  **통 그림을 제 위에 한 번 더 그린다.** 띠 자리만 잘라 밝은 색으로
+#  겹치므로, 바탕이 비치는 자리(무대 여백)는 알파가 0 이라 그대로 있고
+#  통과 자루에만 빛이 얹힌다 — 무대에 사각 빛띠가 지나가는 것이 아니라
+#  물건이 빛을 받는 것으로 보이는 이유가 이것이다.
+#
+#  넘기는 동안은 빨라진다. 움직이는 물건에 빛이 그만큼 빨리 훑고 지나가는
+#  것이 맞고, 넘겼다는 사실이 통에서도 한 번 더 읽힌다.
+func _cup_sheen(tex: Texture2D, stage: Rect2) -> void:
+	var sp: float = float(GLITCH.sheen_t) * (0.34 if cup_t < 1.0 else 1.0)
+	var w: float = float(GLITCH.sheen_w)
+	var span: float = stage.size.x + w * 2.0
+	var x: float = roundf(fposmod(cup_gl / sp, 1.0) * span - w)
+	var lo: float = maxf(x, 0.0)
+	var hi: float = minf(x + w, stage.size.x)
+	if hi <= lo:
+		return
+	#  가운데가 제일 밝고 끝이 스민다. 한 덩이로 그리면 띠의 두 모서리가
+	#  선으로 보여 「빛」이 아니라 「테이프」가 된다.
+	var k: float = float(GLITCH.sheen_k)
+	var qn := int(GLITCH.sheen_n)
+	for q in qn:
+		var t: float = (float(q) + 0.5) / float(qn)
+		var q0: float = lerpf(lo, hi, float(q) / float(qn))
+		var q1: float = lerpf(lo, hi, float(q + 1) / float(qn))
+		if q1 - q0 < 0.5:
+			continue
+		var fade: float = sin(t * PI)
+		draw_texture_rect_region(tex,
+				Rect2(stage.position + Vector2(q0, 0.0),
+						Vector2(q1 - q0, stage.size.y)),
+				Rect2(q0, 0.0, q1 - q0, stage.size.y),
+				Color(k, k, k, float(GLITCH.sheen_a) * fade))
 
 
 #  열린 히든의 후광. 통 뒤에 깔고 티끌은 앞에 띄운다 — 뒤에만 두면
@@ -13696,6 +13809,18 @@ func _cup_halo(stage: Rect2, col: Color, front: bool) -> void:
 		#  안 갈린다 — 도는 것이 보여야 살아 있는 빛이 된다.
 		var aa: float = 0.30 + 0.45 * (0.5 + 0.5 * sin(cup_gl * 1.6 + float(k) * 2.3))
 		draw_rect(Rect2(p, Vector2(2.0, 2.0)), Color(col.lightened(0.62), aa))
+	#  피어오르는 티끌. 도는 것만 있으면 **후광이 도는 장식**으로 읽힌다 —
+	#  위로 올라가 사라지는 것이 하나 섞여야 통에서 무엇이 새어 나온다는
+	#  말이 된다. 수명 2.6초를 인원 수로 나눠 어긋나게 띄운다.
+	var rise := int(GLITCH.rise)
+	for k2 in rise:
+		var life: float = fposmod(cup_gl * 0.38 + float(k2) / float(rise), 1.0)
+		var rx: float = (_gl_rand(k2, int(cup_gl * 0.38 + float(k2)) ) * 2.0 - 1.0) * 26.0
+		var p2 := Vector2(roundf(c.x + rx),
+				roundf(c.y + 18.0 - life * 52.0))
+		#  뜨면서 잦아든다. 끝에서 뚝 끊기면 사라진 것이 아니라 지워진 것이다.
+		var a2: float = 0.55 * sin(life * PI)
+		draw_rect(Rect2(p2, Vector2(1.0, 2.0)), Color(col.lightened(0.70), a2))
 
 
 func _cup_draw(pr: Rect2) -> void:
@@ -13703,9 +13828,9 @@ func _cup_draw(pr: Rect2) -> void:
 	draw_rect(stage, C_PANEL.darkened(0.20))
 	#  히든인가. 넘기는 동안은 **가는 통**을 따른다 — 겉이 무대 하나에
 	#  걸리므로 둘을 따로 못 칠한다.
-	var hid: bool = _cup_hidden(newrun_pip)
-	var shut: bool = hid and not _pack_open(newrun_pip)
-	if hid and not shut:
+	var shut: bool = _cup_shut(newrun_pip)
+	var glow: bool = _cup_glow(newrun_pip)
+	if glow:
 		_cup_halo(stage, _cup3_skin(newrun_pip).body, false)
 	# 통 밑 그림자. 3D 쪽 그림자맵은 껐다 — 138x118 에서 그림자맵은 계단만
 	# 남기고, 통이 놓인 자리를 말하는 데는 눌린 타원 하나면 된다.
@@ -13718,10 +13843,14 @@ func _cup_draw(pr: Rect2) -> void:
 			_cup_glitch(tex, stage)
 		else:
 			draw_texture_rect(tex, stage, false)
+			#  연 다트통은 윤이 지나간다. 잠긴 것은 안 빛난다 —
+			#  아직 내 것이 아닌 물건이다.
+			if _pack_open(newrun_pip):
+				_cup_sheen(tex, stage)
 	else:
 		for sl in _cup_slides():
 			_cup_one(int(sl.pi), float(sl.dx))
-	if hid and not shut:
+	if glow:
 		_cup_halo(stage, _cup3_skin(newrun_pip).body, true)
 	_cup_mask(stage, pr)
 	draw_rect(stage, C_PANEL.darkened(0.42), false, 1.0)
@@ -13806,6 +13935,33 @@ func _open_newrun() -> void:
 	_sfx("newrun_open")
 
 
+#  판 머리띠. 히든이면 띠도 같이 말한다 —
+#    잠김   토막토막 끊겨 흐른다. 신호가 안 닿는 띠다
+#    열림   그 다트통 제 색으로 물든다. 후광과 같은 색이라 판 하나가 된다
+#  띠 하나가 통·글줄과 같은 말을 해야 화면이 한 덩어리로 읽힌다.
+func _newrun_crown(pr: Rect2) -> void:
+	var bar := Rect2(pr.position, Vector2(pr.size.x, 2.0))
+	if _cup_glow(newrun_pip):
+		var gc: Color = _cup3_skin(newrun_pip).body.lightened(0.45)
+		draw_rect(bar, gc.lerp(C_ACC, 0.25))
+		return
+	if not _cup_shut(newrun_pip):
+		draw_rect(bar, C_ACC)
+		return
+	var step := int(cup_gl / float(GLITCH.rate))
+	draw_rect(bar, Color(C_ACC, 0.18))
+	#  토막 길이는 고르되 어디가 켜지는지는 걸음마다 다시 뽑는다.
+	var seg := 14.0
+	var k := 0
+	var x := bar.position.x
+	while x < bar.end.x:
+		var w: float = minf(seg, bar.end.x - x)
+		if _gl_rand(k, step) > 0.38:
+			draw_rect(Rect2(x, bar.position.y, w, bar.size.y), C_ACC)
+		x += seg
+		k += 1
+
+
 func _draw_newrun() -> void:
 	_scrim()
 	_hdr(self, "NEW RUN")
@@ -13824,13 +13980,18 @@ func _draw_newrun() -> void:
 	var row: Dictionary = packs[newrun_pip] if newrun_pip < packs.size() else {}
 	# 통이 먼저다. 마스크가 판 바탕을 다시 깔므로 머리띠와 글은 그 뒤에 온다.
 	_cup_draw(pr)
-	draw_rect(Rect2(pr.position, Vector2(pr.size.x, 2.0)), C_ACC)
+	_newrun_crown(pr)
 	# 잠긴 히든은 이름도 안 보인다 — 그게 히든이다. 기본은 "잠김" 으로
 	# 무엇이 남았는지는 보인다(다음에 무엇이 열리는지가 완주의 값이다).
 	var hid: bool = not open and GameData.pack_kind(row) == "hidden"
-	draw_string(font, Vector2(230, 84),
-			String(row.get("name", "")) if open else ("???" if hid else "잠김"),
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_TXT if open else C_DIM)
+	var nm := String(row.get("name", "")) if open else ("???" if hid else "잠김")
+	if hid:
+		#  통만 깨지고 글자는 말짱하면 「그림이 고장났다」로 읽힌다.
+		#  깨진 것은 신호고, 신호에는 글자도 들어 있다.
+		_gl_string(Vector2(230, 84), nm, 11, C_DIM)
+	else:
+		draw_string(font, Vector2(230, 84), nm,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_TXT if open else C_DIM)
 	# 다섯 줄까지 든다. 넷일 때는 아래가 비지만, 다트통마다 칸 높이가
 	# 출렁이면 넘길 때 눈이 자리를 다시 잡아야 한다.
 	#  판 안에 판을 또 깔지 않는다. 이름 밑에 가는 획 하나면 "여기서부터가
@@ -13842,6 +14003,9 @@ func _draw_newrun() -> void:
 			Color(C_WIRE, 0.35))
 	var lines := _pack_lines(row) if open else [_pack_cond(row)]
 	for li in mini(lines.size(), 5):
+		if hid:
+			_gl_string(Vector2(232, 110 + li * 15), lines[li], 11, C_DIM)
+			continue
 		draw_string(font, Vector2(232, 110 + li * 15), lines[li],
 				HORIZONTAL_ALIGNMENT_LEFT, eb.size.x - 8.0, 11,
 				C_TXT if open else C_DIM)
