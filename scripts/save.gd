@@ -59,7 +59,7 @@ const STATS := [
 	#  **쓰는 다트통이 없어도 넷 다 센다.** 이 파일 머리말이 적어 둔 규약
 	#  그대로다 — 조건을 나중에 달면 그때부터 세기 시작해서 이미 한
 	#  플레이가 증발한다.
-	"best_dart_hvy", "best_dart_lgt", "best_dart_prc", "best_dart_mag",
+	"best_dart_hvy", "best_dart_lgt", "best_dart_mag",
 	"best_gain", "best_spare", "best_leg_bare",
 	# ── 2026-09-11 · 기획서 다트통 표의 해금 조건을 그대로 재는 것들 ──
 	#  앞 넷과 달리 이쪽은 **완주한 그 순간**의 한 장면이다. 판마다 재면
@@ -83,7 +83,7 @@ const STATS := [
 ]
 # 최댓값으로 다루는 것들. 나머지는 누적이다.
 const PEAKS := ["best_leg", "best_score", "best_gold", "best_track",
-		"best_dart_hvy", "best_dart_lgt", "best_dart_prc", "best_dart_mag",
+		"best_dart_hvy", "best_dart_lgt", "best_dart_mag",
 		"best_gain", "best_spare", "best_leg_bare",
 		"win_gold", "boss_spare", "clok_out_streak", "revo_bull_leg"]
 # 최솟값으로 다루는 것들. 「N 이하로 완주」 조건이 읽는다 —

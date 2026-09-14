@@ -132,7 +132,7 @@ const Save_STATS := [
 	"rerolls", "sold", "gold_earned", "skips", "fixtures_bought",
 	"boosters_bought",
 	"best_leg", "best_score", "best_gold", "best_track",
-	"best_dart_hvy", "best_dart_lgt", "best_dart_prc", "best_dart_mag",
+	"best_dart_hvy", "best_dart_lgt", "best_dart_mag",
 	"best_gain", "best_spare", "best_leg_bare",
 	"win_gold", "win_items", "boss_spare", "win_null",
 	"clok_out_streak", "revo_bull_leg",
@@ -619,20 +619,16 @@ static func darts() -> Array:
 	for r in _raw.get("darts", []):
 		var g := _f(r, "gauge", "darts", 1.0)
 		var mu := _i(r, "mult", "darts")
-		var ps := _f(r, "pierce_side", "darts")
 		var mg := _f(r, "magnet", "darts")
 		out.append({
 			"id": r.get("id", ""),
 			"n": r.get("name", ""),
 			"gauge": g,
 			"mult": mu,
-			"fix1": _b(r, "fix1", "darts"),
-			"pierce": ps > 0.0,
-			"side": ps,
 			"magnet": mg,
 			"cost": _i(r, "cost", "darts"),
 			"d": fill(r.get("desc", ""),
-					{"gauge": g, "mult": mu, "pierce_side": ps, "magnet": mg}),
+					{"gauge": g, "mult": mu, "magnet": mg}),
 			"line": r.get("_line", 0),
 		})
 	_cache["darts"] = out
@@ -2414,7 +2410,7 @@ static func _v_darts() -> void:
 			_errs.append("%s — magnet 은 0 이상 1 미만이어야 한다 (지금 %s)" % [who, mg])
 		if _i(r, "cost", "darts") < 0:
 			_errs.append("%s — 가격이 음수다" % who)
-		_v_desc(who, r.get("desc", ""), ["gauge", "mult", "pierce_side", "magnet"])
+		_v_desc(who, r.get("desc", ""), ["gauge", "mult", "magnet"])
 	# 첫 행은 기본 다트다. dart_of() 의 폴백이 여기에 걸려 있다.
 	var d: Array = _raw.get("darts", [])
 	if d.is_empty():

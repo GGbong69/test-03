@@ -85,7 +85,10 @@ func _run() -> void:
 	_ok("누적 볼스아이로 여는 장이 없다", bad.is_empty(),
 			"쓰는 장: %s" % ("없다" if bad.is_empty() else ", ".join(bad)))
 
-	# ── 다트통 열넷 (s8) ───────────────────────────────
+	# ── 다트통 열셋 (s8 은 열넷) ────────────────────────
+	#  기획서 s8 은 열넷인데 **송곳을 뺐다**(2026-09-15 기획자 판단).
+	#  관통 다트가 배수를 1 에 묶어 덱의 절반을 죽이는 다트라 같이 나갔다.
+	#  docs/대조.md 에 어긋남으로 적혀 있다.
 	print("\n  다트통 (s8)")
 	var pw := {
 		"여벌 다트통": ["prereq", "base"],
@@ -94,7 +97,6 @@ func _run() -> void:
 		"넓은 동전 슬롯": ["win_items", "4"],
 		"선금 다트통": ["win_gold", "100"],
 		"깃털 다트통": ["best_dart_lgt", "3"],
-		"송곳 다트통": ["best_dart_prc", "3"],
 		"무쇠 다트통": ["best_dart_hvy", "3"],
 		"자석 다트통": ["best_dart_mag", "3"],
 		"외줄 다트통": ["boss_spare", "5"],
@@ -119,7 +121,46 @@ func _run() -> void:
 		var wnt := String(w[1]) if String(w[0]) == "prereq" \
 				else "%s %s" % [w[0], w[1]]
 		_ok(nm, got == wnt, "%s (기획서 %s)" % [got, wnt])
-	_ok("다트통 열넷 줄", n == 14, "%d줄" % n)
+	_ok("다트통 열셋 줄 (송곳 뺌)", n == 13, "%d줄" % n)
+
+	#  ── 줄 순서 ─────────────────────────────────────
+	#  packs.csv 의 줄 순서가 곧 새 런 화면의 순서다. 세 층으로 간다 —
+	#  1층 체인(prereq) → 2층 조건(unlock_stat) → 3층 히든.
+	#  히든을 끝에 몰아 둔 것은 잠긴 히든이 깨진 신호로 뜨기 때문이다.
+	#  가운데에 두면 훑는 길에 잡음이 끼어든다.
+	#
+	#  **기본은 반드시 첫 줄이다** — _pack_open 이 인덱스 0 을 무조건 연다.
+	#  다른 줄을 위로 올리면 그 줄이 해금 없이 열리고 기본이 잠긴다.
+	var rows2 := GameData.packs()
+	_ok("기본이 첫 줄", not rows2.is_empty()
+			and String(rows2[0].get("id", "")) == "base",
+			"%s" % (rows2[0].get("id", "") if not rows2.is_empty() else "빈 표"))
+	var tier := PackedInt32Array()
+	var seen2 := PackedStringArray()
+	for i in rows2.size():
+		var rr: Dictionary = rows2[i]
+		var tv := 1
+		if String(rr.get("kind", "base")) == "hidden":
+			tv = 3
+		elif String(rr.get("prereq", "")) == "" and i > 0:
+			tv = 2
+		tier.append(tv)
+		seen2.append("%s%d" % [rr.get("id", ""), tv])
+	var climbs := true
+	for i in range(1, tier.size()):
+		if tier[i] < tier[i - 1]:
+			climbs = false
+	_ok("층이 안 거꾸로 간다 (체인 → 조건 → 히든)", climbs,
+			" ".join(seen2))
+	var hid_tail := true
+	for i in rows2.size():
+		var is_hid: bool = String(rows2[i].get("kind", "base")) == "hidden"
+		if is_hid and i < rows2.size() - 3:
+			hid_tail = false
+	_ok("히든 셋이 맨 끝", hid_tail, "끝 셋: %s" % ", ".join([
+			String(rows2[rows2.size() - 3].get("id", "")),
+			String(rows2[rows2.size() - 2].get("id", "")),
+			String(rows2[rows2.size() - 1].get("id", ""))]))
 
 	# ── 리그 여덟 (s9) — 「현재 다트통으로 런 N회 클리어」 ──
 	print("\n  리그 (s9)")

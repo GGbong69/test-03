@@ -154,9 +154,6 @@ func _dart_box(it: Dictionary, id: String) -> Rect2:
 		"lgt":
 			bw = 1.5 * k
 			fin = 4.6 * k
-		"prc":
-			bw = 2.2 * k
-			fin = 2.8 * k
 		"mag":
 			bw = 3.0 * k
 			fin = 3.4 * k
@@ -181,8 +178,6 @@ func _dart_box(it: Dictionary, id: String) -> Rect2:
 			for sd in [-1.0, 1.0]:
 				r = r.expand(tail + nrm * sd * 2.5 * k - dir * 2.0 * k)
 				r = r.expand(tail + nrm * sd * 2.5 * k - dir * 6.0 * k)
-		"prc":
-			r = r.merge(_seg_box(tip, tip + dir * 5.0 * k, 1.0))
 		"mag":
 			# draw_arc(tip + dir*4k, 4.5k, 0.15π → 0.85π). y 는 아래쪽 반만 쓴다.
 			var mc := tip + dir * 4.0 * k

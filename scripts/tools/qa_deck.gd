@@ -113,12 +113,18 @@ func _initialize() -> void:
 			GameData.fixtures().size() == 9 and fbad.is_empty(),
 			"%d장 · %s" % [GameData.fixtures().size(), ", ".join(fbad)])
 	# 기획서 다트 표는 여섯 줄이지만 마지막 「?」는 다트가 아니라 다트통이
-	# 쥔 계산 방식이다(packs.csv 의 score rand). 표에는 다섯이 맞다.
-	_ok("다트 다섯 줄 (표준 포함)", GameData.darts().size() == 5,
+	# 쥔 계산 방식이다(packs.csv 의 score rand). 표에는 다섯이 맞았다.
+	#
+	# **2026-09-15 에 관통을 뺐다** — 기획자 판단("좀 잘못 기획한 다트").
+	# fix1 로 배수를 1 에 묶어서 트리플·더블·링 조건 동전이 전부 죽는 다트라,
+	# 그 다트를 쥔 런은 덱의 절반을 못 쓴다. 기획서와 어긋나는 자리이므로
+	# docs/대조.md 에 적혀 있다. 그래서 여기는 **넷**이고, 이 줄이 기획서를
+	# 따라 다섯으로 돌아가려면 그 결정이 먼저 뒤집혀야 한다.
+	_ok("다트 넷 줄 (표준 포함 · 관통 뺌)", GameData.darts().size() == 4,
 			"%d줄" % GameData.darts().size())
-	_ok("제약 10 · 챌린지 7 · 리그 8 · 다트통 14",
+	_ok("제약 10 · 리그 8 · 다트통 13 (송곳 뺌)",
 			GameData.modifiers().size() == 10 and GameData.leagues().size() == 8
-			and GameData.packs().size() == 14,
+			and GameData.packs().size() == 13,
 			"제약 %d · 리그 %d · 다트통 %d" % [GameData.modifiers().size(),
 					GameData.leagues().size(), GameData.packs().size()])
 

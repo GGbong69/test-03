@@ -22,7 +22,7 @@ const Save = preload("res://scripts/save.gd")
 #    ③ 연타해도 통이 쌓이지 않는다
 #    ④ 화면을 뜨면(제목 · 런 시작) 뷰포트가 지워진다
 #    ⑤ 다트통별 통 겉(CUP_SKIN) 표에 없는 다트통·없는 벽·없는 속성이 없다
-#    ⑥ **열넷의 겉이 서로 다르다** — 2026-09-14 사용자 지시:
+#    ⑥ **다트통마다 겉이 서로 다르다** — 2026-09-14 사용자 지시:
 #       "기본 다트통이랑 같은 다트통 외형이 너무 많아"
 # ══════════════════════════════════════════════════════════
 var g = null
@@ -247,7 +247,7 @@ func _run() -> void:
 					% [GameData.packs()[g.newrun_pip].get("id", ""), wi, wt])
 	_say(esc.is_empty(), "넘긴 뒤에도 자루가 통 안에 남는다",
 			", ".join(esc) if not esc.is_empty()
-			else "열넷 전부 · 가장 기운 자루 %.0f도" % lean_max)
+			else "다트통 전부 · 가장 기운 자루 %.0f도" % lean_max)
 
 	# 발치에 놓인 것. 표가 적은 수만큼 서고, 안 적은 다트통에는 하나도 없어야 한다 —
 	# 잠긴 다트통에도 없어야 한다(무엇을 주는 다트통인지가 그림으로 새면 안 된다).
@@ -268,9 +268,9 @@ func _run() -> void:
 		if got != want:
 			gbad.append("%s %d/%d" % [GameData.packs()[pi].get("id", ""), got, want])
 	_say(gbad.is_empty(), "발치 골드가 표대로 선다",
-			", ".join(gbad) if not gbad.is_empty() else "열넷 전부")
+			", ".join(gbad) if not gbad.is_empty() else "다트통 전부")
 
-	# ── 열넷의 겉이 서로 다른가 ────────────────────────
+	# ── 겉이 서로 다른가 ──────────────────────────────
 	# 2026-09-14 제보: "기본 다트통이랑 같은 다트통 외형이 너무 많아".
 	# 그때 열넷 중 아홉이 **글자 하나 안 다른** 민 원통이었다. 색조차
 	# 같았다 — packs.csv 가 다트통마다 제 색을 적어 두었는데 통이 안 읽었다.
@@ -283,16 +283,16 @@ func _run() -> void:
 	for pi in GameData.packs().size():
 		var row: Dictionary = GameData.packs()[pi]
 		var sk3: Dictionary = g._cup3_skin(pi)
-		var sig := "%s|%.2f|%.2f|%d|%d|%s|%s|%s|%s|%s|%d" % [
+		var sig := "%s|%.2f|%.2f|%d|%s|%s|%s|%s|%s|%d" % [
 				String(sk3.wall), float(sk3.wide), float(sk3.tall),
-				int(sk3.hoop), int(sk3.spike), str(bool(sk3.pole)),
+				int(sk3.hoop), str(bool(sk3.pole)),
 				String(sk3.foot), str(bool(sk3.sticker)),
 				Color(sk3.body).to_html(false), Color(sk3.dart_col).to_html(),
 				g._cup_dart_n(row)]
 		if face.has(sig):
 			same.append("%s = %s" % [face[sig], row.get("id", "")])
 		face[sig] = String(row.get("id", ""))
-	_say(same.is_empty(), "열넷의 겉이 저마다 다르다",
+	_say(same.is_empty(), "겉이 저마다 다르다",
 			", ".join(same) if not same.is_empty()
 			else "%d가지" % face.size())
 

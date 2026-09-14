@@ -1,5 +1,5 @@
 extends SceneTree
-# 열넷의 통을 한 장에 모아 붙인다. 통은 다트통의 얼굴이라 **나란히 놓고**
+# 다트통마다의 통을 한 장에 모아 붙인다. 통은 다트통의 얼굴이라 **나란히 놓고**
 # 봐야 "저건 아까 그 통" 이 서는지 알 수 있다 — 한 장씩 보면 다 달라 보인다.
 #   godot --path . --quit-after 4000 --script scripts/tools/shot_cups.gd
 const GameData = preload("res://scripts/data.gd")

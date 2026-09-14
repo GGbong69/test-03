@@ -1144,7 +1144,7 @@ func _dart_peaks() -> void:
 		n[k] = int(n.get(k, 0)) + 1
 	# 쓰는 다트통이 없는 종류도 센다 — 조건이 나중에 붙어도 값이 이미
 	# 쌓여 있어야 한다는 것이 save.gd 머리말의 규약이다.
-	for k in ["hvy", "lgt", "prc", "mag"]:
+	for k in ["hvy", "lgt", "mag"]:
 		Save.peak("best_dart_" + k, int(n.get(k, 0)))
 
 
@@ -3629,22 +3629,14 @@ func _land(mark := true) -> void:
 	# 다트 특성
 	var pierce_gain := 0
 	if info.mult > 0:
-		if cur_dart.get("fix1", false):
-			info.mult = 1
 		if cur_dart.get("mult", 0) != 0:
 			info.mult = maxi(1, info.mult + cur_dart.mult)
-		if cur_dart.get("pierce", false) and info.idx >= 0:
-			# 양옆 칸의 몫은 darts.csv 의 pierce_side 가 정한다 — 카드 문장이
-			# 그 수를 그대로 찍는다. 여기 0.5 를 박아 두면 표를 고쳐도 안 따라온다.
-			# 칸 수도 sectors 에서 읽는다. 20 을 박으면 보드 확장이 칸을 늘리는 날
-			# 배열 밖을 짚는다.
-			var n: int = sectors.size()
-			var l: int = sectors[(info.idx + n - 1) % n]
-			var r: int = sectors[(info.idx + 1) % n]
-			pierce_gain = int(float(l + r) * float(cur_dart.get("side", 0.5)))
 		# 「잭과 콩나무」 — 던질 때마다 다트가 커진다. 커진 만큼 양옆으로
-		# 더 넓은 칸을 같이 먹는다. 관통과 같은 자리를 쓰되 폭이 자란다 —
-		# 관통은 배수를 1 로 묶는 대가를 내는데 이쪽은 레전더리라 안 묶는다.
+		# 더 넓은 칸을 같이 먹는다.
+		#
+		# 2026-09-15 까지 이 자리를 관통 다트와 나눠 썼다. 그 다트가 빠지면서
+		# **양옆 칸을 먹는 것은 이 동전 하나뿐**이 됐다 — pierce_gain 과 정산
+		# 큐의 "pierce" 갈래가 남아 있는 이유가 이것이다.
 		if info.idx >= 0:
 			for bi2 in owned.size():
 				if bi2 == sealed:
@@ -4023,7 +4015,7 @@ func _next_step() -> void:
 		"pierce":
 			var pg := _chip_gain(st.v)
 			cur_chip += pg
-			card_item = "관통  점수 +%d" % pg
+			card_item = "양옆 칸  점수 +%d" % pg
 			pop(cc, "+%d" % pg, C_CHIP, 17, 0.9)
 			_sfx("settle_pierce", f)
 		"mult":
@@ -8661,10 +8653,6 @@ func _icon_dart(c: Vector2, dl: float, id: String, dim := 0.0,
 			bw = 1.5 * k
 			fin = 4.6 * k
 			col = C_GREEN.lightened(0.35)
-		"prc":
-			bw = 2.2 * k
-			fin = 2.8 * k
-			col = C_CHIP.lightened(0.25)
 		"mag":
 			bw = 3.0 * k
 			fin = 3.4 * k
@@ -8715,8 +8703,6 @@ func _icon_dart(c: Vector2, dl: float, id: String, dim := 0.0,
 			for side in [-1.0, 1.0]:
 				draw_line(tail + nrm * side * 2.5 * k - dir * 2.0 * k,
 						tail + nrm * side * 2.5 * k - dir * 6.0 * k, col, 1.0)
-		"prc":
-			draw_line(tip, tip + dir * 5.0 * k, Color(C_CHIP.lightened(0.4).darkened(dim), a), 1.0)
 		"mag":
 			draw_arc(tip + dir * 4.0 * k, 4.5 * k, PI * 0.15, PI * 0.85,
 					10, Color(C_MULT.lightened(0.4).darkened(dim), a), 1.0)
@@ -11782,6 +11768,8 @@ var cup_dir := 1        # +1 다음 다트통(통은 왼쪽으로 나간다) · 
 var cup_prev := 0       # 미끄러지는 동안 나가는 다트통 번호
 # 통이 지금까지 간 거리. **끊기지 않는 값**이라야 관성이 안 튄다 —
 # 화면 오프셋은 넘길 때마다 0 으로 되돌아가므로 그것으로는 못 잰다.
+var cup_gl := 0.0      # 히든 겉(깨짐·후광)이 읽는 시계. 넘기기와 따로 간다 —
+					   # 멈춰 있어도 깨짐은 계속 지지직거려야 한다
 var cup_run := 0.0
 var cup_m := 0.0        # 다트 뭉치가 실제로 있는 자리
 var cup_mv := 0.0       # 그 속도
@@ -11824,6 +11812,7 @@ func _cup_ease(t: float) -> float:
 
 
 func _cup_update(d: float) -> void:
+	cup_gl += d
 	var e0 := _cup_ease(cup_t)
 	cup_t = minf(cup_t + d / float(CUP.dur), 1.0)
 	cup_run += -float(cup_dir) * float(CUP.span) * (_cup_ease(cup_t) - e0)
@@ -12073,7 +12062,7 @@ const CUP3 := {
 	"lid":    26.0,    # 아가리 위로 통째로 떠오를 때 눌러 내리는 가속도
 }
 
-# 다트통마다 통이 다르다. 통은 다트통의 얼굴이라 열넷을 훑을 때 눈이 먼저
+# 다트통마다 통이 다르다. 통은 다트통의 얼굴이라 목록을 훑을 때 눈이 먼저
 # 잡는 것이 이것이다 — 글줄을 읽기 전에 "아까 그 통" 으로 다트통이 갈린다.
 #
 # 2026-09-14 까지 이 표에 넉 줄뿐이었고, 나머지 아홉이 전부 같은 민 원통으로
@@ -12092,7 +12081,6 @@ const CUP3 := {
 #   tall     통 높이 배율. 이것도 물리가 같이 본다(rig 의 h) — 낮은 통은
 #            자루가 덜 잠겨 쏟기 쉽다. 0.9 아래로는 안 내린다
 #   hoop     몸을 두르는 쇠테 개수
-#   spike    벽을 뚫고 나온 촉 개수
 #   pole     위쪽을 딴 색으로 — 자석의 극
 #   foot     발치에 놓는 물건. CUP_FEET 에 있는 이름만 쓴다
 #   sticker  아가리 아래에 동전 한 장. "동전이 딸려 온다" 를 통이 대신 한다
@@ -12120,9 +12108,6 @@ const CUP_SKIN := {
 	# 깃털 다트통. 무쇠의 정반대로 세운다 — 가늘고 키 크다. 둘을 나란히
 	# 놓았을 때 실루엣만으로 갈리는 것이 이 표의 값이다.
 	"p_lgt":  {"tall": 1.26, "wide": 0.88},
-	# 송곳 다트통. 관통 자루를 담아 둔 통은 벽이 성할 리가 없다 —
-	# 「양옆 칸」이 무엇인지를 통이 미리 말한다.
-	"p_prc":  {"spike": 5},
 	# 자석 다트통. 자석은 늘 두 색으로 칠해져 있고, 그 두 색이 곧 "자석"
 	# 이라는 글자다.
 	"p_mgn":  {"pole": true},
@@ -12154,7 +12139,7 @@ const CUP_SKIN := {
 # 겉 하나가 안 적은 값. 표는 다른 것만 적는다.
 #   dart  자루 색을 덮는다. 빈 값이면 다트 종류가 정하는 색 그대로다.
 const CUP_SKIN0 := {"wall": "solid", "wide": 1.0, "tall": 1.0,
-		"sticker": false, "hoop": 0, "spike": 0, "pole": false, "foot": "",
+		"sticker": false, "hoop": 0, "pole": false, "foot": "",
 		"tint": "own", "gold": 0, "dart": ""}
 
 # 있는 색의 온 목록. 벽 갈래와 독립이라 금빛 철망도 설 수 있다.
@@ -12351,32 +12336,6 @@ func _cup3_hoops(b: Node3D, r: float, w: float, h: float, col: Color,
 		hp.rings = 26
 		hp.ring_segments = 6
 		_cup3_mesh(b, hp, col.lightened(0.12), Vector3(0.0, y, 0.0))
-
-
-# ── 촉 ──────────────────────────────────────────────
-# 벽을 뚫고 나온 촉들. 관통 다트를 담아 둔 통은 벽이 성할 리가 없다 —
-# 「양옆 칸」이 무엇인지를 통이 미리 말한다.
-# 색은 **그 다트의 색**이다. 통에 박힌 것이 딴 물건으로 안 읽힌다.
-# 물리에는 안 넣는다 — 벽 바깥이라 자루가 닿을 자리가 아니다.
-func _cup3_spikes(b: Node3D, r: float, w: float, h: float, n: int) -> void:
-	var face: float = r + w
-	for i in n:
-		# **앞쪽 절반에만 세운다.** 한 바퀴 고르게 두르면 다섯 중 둘만
-		# 카메라를 보고 나머지는 실루엣 가장자리에서 1px 로 죽는다 —
-		# 통 하나를 보는 화면이라 뒤통수에 그린 것은 없는 것과 같다.
-		# 높이는 어긋나게 — 한 줄로 서면 무늬가 되고, 무늬는 뚫린 자국으로
-		# 안 읽힌다.
-		var a: float = -1.15 + 2.30 * float(i) / maxf(float(n) - 1.0, 1.0)
-		var y: float = h * (0.26 + 0.46 * fmod(float(i) * 0.618, 1.0))
-		var sp := CylinderMesh.new()
-		sp.top_radius = 0.0
-		sp.bottom_radius = w * 1.45
-		sp.height = w * 5.4
-		sp.radial_segments = 8
-		# 촉은 옆으로 뻗는다 — 원통의 축(+Y)을 벽 밖 방향으로 눕힌다.
-		_cup3_mesh(b, sp, _dart3_col("prc"),
-				Vector3(sin(a) * (face + w * 2.4), y, cos(a) * (face + w * 2.4)),
-				Vector3(PI * 0.5, -a, 0.0))
 
 
 # ── 극 ──────────────────────────────────────────────
@@ -12697,8 +12656,6 @@ func _cup3_cup(skin: Dictionary) -> AnimatableBody3D:
 			_cup3_wall_solid(b, r, w, h, col)
 	if int(skin.hoop) > 0:
 		_cup3_hoops(b, r, w, h, col, int(skin.hoop))
-	if int(skin.spike) > 0:
-		_cup3_spikes(b, r, w, h, int(skin.spike))
 	if bool(skin.pole):
 		_cup3_pole(b, r, w, h)
 	if bool(skin.sticker):
@@ -12817,7 +12774,6 @@ func _dart3_col(id: String) -> Color:
 	match id:
 		"hvy": return C_WIRE.lightened(0.30)
 		"lgt": return C_GREEN.lightened(0.35)
-		"prc": return C_CHIP.lightened(0.25)
 		"mag": return C_MULT.lightened(0.25)
 	return C_TXT
 
@@ -13154,13 +13110,12 @@ func _mesh_dart3m() -> ArrayMesh:
 #
 #   무거운  게이지 0.55배 · 배수 −1     두껍다
 #   가벼운  게이지 1.90배 · 배수 +3     가늘다
-#   관통    양옆 칸 0.5배 · 배수 고정   가늘다. 촉이 주인공이라 몸이 얇다
 #   자석    중심으로 당김 · 배수 −1     뭉툭하다
 #
 # ⚠ **길이는 안 건드린다.** 종류마다 0.93~1.22 로 늘였다가 되돌렸다.
 # 통의 기하(테 높이 · 담기는 깊이 · 기대 서는 각)가 자루 길이 하나에 맞춰
 # 잡혀 있어서, 길게 만들면 기대 선 자루의 몸이 통 테를 가로질러 **벽을
-# 뚫고 나온 것처럼 보인다.** 깃털(1.22)과 송곳(1.14)이 실제로 그랬다.
+# 뚫고 나온 것처럼 보인다.** 깃털(1.22)과 관통(1.14)이 실제로 그랬다.
 #
 # 자루 중심 자리만 재면 이 어긋남이 안 잡힌다 — 중심은 통 안에 있는데
 # 몸이 테를 넘는다. 그래서 길이 축을 아예 없앤다. 종류는 굵기와 부품이
@@ -13169,7 +13124,6 @@ const DART3_SHAPE := {
 	"std": {"rad": 1.00},
 	"hvy": {"rad": 1.40},
 	"lgt": {"rad": 0.72},
-	"prc": {"rad": 0.78},
 	"mag": {"rad": 1.26},
 }
 
@@ -13234,7 +13188,6 @@ func _dart3_meshes(b: Node3D, dl: float, dr: float, fin: float, col: Color,
 #
 #   무거운  배럴에 추 두 짝      무게가 눈에 보인다
 #   가벼운  꽁지에 큰 날개 넷    바람을 받는 쪽이 주인공이다
-#   관통    촉 앞에 긴 바늘      뚫는 쪽이 길다
 #   자석    배럴에 감긴 고리      감긴 것이 자석이다
 #   표준    없다                 기준선은 덧붙이지 않는다
 func _dart3_parts(b: Node3D, dl: float, dr: float, col: Color, id: String) -> void:
@@ -13265,18 +13218,6 @@ func _dart3_parts(b: Node3D, dl: float, dr: float, col: Color, id: String) -> vo
 				_cup3_mesh(b, f, col.lightened(0.26),
 						Vector3(0.0, dl * 0.92, 0.0),
 						Vector3(0.0, PI * 0.25 * float(q), 0.0))
-		"prc":
-			# 바늘. 촉 쪽을 가늘고 길게 바꾼다.
-			#
-			# **몸통 밖으로 안 나간다.** 촉 끝이 정확히 −dl 에 오도록 잡는다 —
-			# 통에 세울 때 이 −dl 이 바닥에 닿는 자리라, 더 나가면 자루가
-			# 통 바닥을 뚫고 아래로 튀어나온다(실제로 그랬다).
-			var n := CylinderMesh.new()
-			n.top_radius = dr * 0.62
-			n.bottom_radius = 0.0
-			n.height = dl * 0.46
-			n.radial_segments = 6
-			_cup3_mesh(b, n, C_LIGHT, Vector3(0.0, -dl * 0.77, 0.0))
 		"mag":
 			# 감긴 고리. 도넛의 축이 Y 라 자루를 그대로 두른다.
 			#
@@ -13290,8 +13231,7 @@ func _dart3_parts(b: Node3D, dl: float, dr: float, col: Color, id: String) -> vo
 			_cup3_mesh(b, t, col.lightened(0.34), Vector3(0.0, dl * 0.30, 0.0))
 
 
-# 자루 색은 **다트 종류가 정한다** — 무거운 회색 · 가벼운 초록 · 관통 파랑 ·
-# 자석 빨강. 그 축을 다트통이 덮을 수 있게 하되, 덮어도 되는 자리는 하나뿐이다:
+# 자루 색은 **다트 종류가 정한다** — 무거운 회색 · 가벼운 초록 · 자석 빨강. 그 축을 다트통이 덮을 수 있게 하되, 덮어도 되는 자리는 하나뿐이다:
 # 탄창이 전부 표준인 다트통. 표준은 색이 하나뿐이라 덮어도 가릴 정보가 없다.
 # 특별한 다트를 쥔 다트통에서 덮으면 그 다트가 무엇인지가 그림에서 사라진다 —
 # cup_probe 가 그 짝을 검사한다(주석으로 부탁하지 않는다).
@@ -13632,9 +13572,141 @@ func _cup_slides() -> Array:
 			{"pi": newrun_pip, "dx": s + float(cup_dir) * float(CUP.span)}]
 
 
+# ══════════════════════════════════════════════════════════
+#  히든 다트통
+# ──────────────────────────────────────────────────────────
+#  히든과 그냥 잠긴 다트통은 **다른 종류의 모름**이다.
+#    잠김   있는 줄 알고, 무엇을 해야 하는지도 안다 → 조건을 적어 준다
+#    히든   있는 줄도 모른다                      → 이름이 「???」다
+#  그런데 통은 둘 다 이름 없는 강철 원통이라 화면에서 안 갈렸다. 글자
+#  석 자만 달랐고, 그 글자는 통 옆 칸에 있다.
+#
+#  그래서 잠긴 히든은 **신호가 깨져 온다.** 조각으로 어긋나고 어둠이
+#  덮인다 — 통이 거기 있기는 한데 제대로 안 보인다는 말이다.
+#  열고 나면 깨짐이 멎고 **후광**이 남는다. 다 열어 놓고 목록을 훑을 때
+#  「이건 숨어 있던 것」이 계속 읽혀야 한다.
+#
+#  둘 다 2D 다. 3D 를 건드리면 넘기는 동안 통이 둘인데 겉이 하나라
+#  나가는 통까지 같이 깨진다 — 여기서는 그리는 자리만 만진다.
+# ══════════════════════════════════════════════════════════
+const GLITCH := {
+	"band":  7.0,     # 조각 높이(px). 통 높이 50px 이 일곱 조각으로 갈린다
+	"amp":   5.0,     # 어긋나는 최대 폭(px). **정수로 반올림한다** — 이 게임은
+					  # 640x360 을 정수배로 늘이므로 반 픽셀은 늘 흐릿해진다
+	"rate":  0.11,    # 자리를 다시 뽑는 주기(초). 매 프레임 뽑으면 지지직이
+					  # 아니라 아지랑이가 된다 — 도트에서는 끊겨야 깨져 보인다
+	"veil":  0.30,    # 덮는 어둠
+	"drop":  0.09,    # 아예 안 그리는 조각의 비율. **이것이 없으면 통 몸이
+					  # 단색이라 가로로 밀어도 티가 안 난다** — 자루에서만
+					  # 깨지고 통은 멀쩡해 보였다. 빠진 줄 하나가 몸을 끊는다
+	"fringe": 0.22,   # 어긋난 조각에 덧대는 색수차의 알파
+	"scan":  46.0,    # 훑고 지나가는 줄의 속도(px/s)
+	"halo":  0.075,   # 후광 한 겹의 알파. **겹쳐 쌓는다** — 겹마다 알파를
+					  # 달리하면 겹의 경계가 테로 보여 물결무늬가 된다.
+					  # 같은 알파를 열두 겹 쌓으면 가운데가 저절로 진해진다
+	"halo_n":   12,   # 겹 수
+	"halo_r0":  22.0, # 안쪽 반지름
+	"halo_r1":  60.0, # 바깥 반지름
+	"mote":  6,       # 도는 티끌 수
+}
+
+
+#  걸음마다 같은 값을 내는 난수. 프레임이 아니라 **걸음**을 seed 로 쓰므로
+#  같은 조각이 한 걸음 내내 같은 자리에 머문다.
+func _gl_rand(a: int, b: int) -> float:
+	var h: int = (a * 73856093) ^ (b * 19349663)
+	h = (h ^ (h >> 13)) * 1274126177
+	return float(absi(h) % 1000) * 0.001
+
+
+func _cup_hidden(pi: int) -> bool:
+	var packs := GameData.packs()
+	if pi < 0 or pi >= packs.size():
+		return false
+	return GameData.pack_kind(packs[pi]) == "hidden"
+
+
+#  깨진 신호. 가로 조각마다 어긋나게 그린다 — 조각이 밀려난 자리는
+#  무대 바탕이 드러나고, 넘친 쪽은 _cup_mask 가 잘라 준다.
+func _cup_glitch(tex: Texture2D, stage: Rect2) -> void:
+	var step := int(cup_gl / float(GLITCH.rate))
+	var y := 0.0
+	var i := 0
+	while y < stage.size.y:
+		var bh: float = minf(float(GLITCH.band), stage.size.y - y)
+		var dx := roundf((_gl_rand(i, step) * 2.0 - 1.0) * float(GLITCH.amp))
+		#  열에 하나쯤은 안 어긋난다. 다 흔들면 통이 통째로 떨리는 것이라
+		#  「깨졌다」가 아니라 「흔들린다」로 읽힌다.
+		var roll := _gl_rand(i + 977, step)
+		if roll < 0.45:
+			dx = 0.0
+		#  빠진 줄. 통 몸은 단색이라 밀어도 안 보이는데, 줄 하나가 통째로
+		#  없으면 몸이 끊겨서 보인다 — 깨짐이 자루에만 걸리던 자리다.
+		if roll > 1.0 - float(GLITCH.drop):
+			y += bh
+			i += 1
+			continue
+		var dst := Rect2(stage.position + Vector2(dx, y),
+				Vector2(stage.size.x, bh))
+		var src := Rect2(0.0, y, stage.size.x, bh)
+		#  색수차. 어긋난 줄에만 붉은·푸른 겹을 한 칸씩 어긋나게 덧댄다 —
+		#  안 어긋난 줄에까지 덧대면 화면 전체가 물든다.
+		if absf(dx) > 0.5:
+			var fa: float = float(GLITCH.fringe)
+			draw_texture_rect_region(tex,
+					Rect2(dst.position - Vector2(2.0, 0.0), dst.size), src,
+					Color(C_MULT, fa))
+			draw_texture_rect_region(tex,
+					Rect2(dst.position + Vector2(2.0, 0.0), dst.size), src,
+					Color(C_CHIP, fa))
+		draw_texture_rect_region(tex, dst, src)
+		y += bh
+		i += 1
+	draw_rect(stage, Color(C_BG, float(GLITCH.veil)))
+	#  훑고 지나가는 줄 하나. 이것 하나가 정지 화면을 「살아 있는 잡음」으로
+	#  만든다 — 조각은 0.11초마다만 움직이므로 그 사이가 죽어 있다.
+	var sy := fposmod(cup_gl * float(GLITCH.scan), stage.size.y + 24.0) - 12.0
+	draw_rect(Rect2(stage.position.x, stage.position.y + roundf(sy),
+			stage.size.x, 2.0), Color(C_TXT, 0.12))
+
+
+#  열린 히든의 후광. 통 뒤에 깔고 티끌은 앞에 띄운다 — 뒤에만 두면
+#  실루엣에 가려 거의 안 보이고, 앞에만 두면 통과 상관없는 장식이 된다.
+func _cup_halo(stage: Rect2, col: Color, front: bool) -> void:
+	var c := Vector2(stage.get_center().x, _cup_foot() - 26.0)
+	#  느리게 숨 쉰다. 가만히 있는 빛은 칠이고, 움직이는 빛이라야 「무엇이
+	#  깃들어 있다」로 읽힌다. 주기 6.3초 — 눈에 걸리지 않을 만큼 느리다.
+	var breathe: float = 0.80 + 0.20 * sin(cup_gl)
+	if not front:
+		#  **바깥부터 안으로** 같은 알파를 쌓는다. 겹칠수록 진해지므로
+		#  가운데가 밝고 끝이 스미는 번짐이 저절로 나온다.
+		var nn := int(GLITCH.halo_n)
+		for k in nn:
+			var t: float = 1.0 - float(k) / float(nn - 1)
+			var rr: float = lerpf(float(GLITCH.halo_r0), float(GLITCH.halo_r1), t)
+			draw_colored_polygon(_e_pts(c, rr, rr * 0.82, 24),
+					Color(col, float(GLITCH.halo) * breathe))
+		return
+	for k in int(GLITCH.mote):
+		var a: float = cup_gl * 0.42 + TAU * float(k) / float(GLITCH.mote)
+		var rr: float = 40.0 + 8.0 * sin(cup_gl * 0.7 + float(k) * 1.7)
+		var p := Vector2(roundf(c.x + cos(a) * rr),
+				roundf(c.y + sin(a) * rr * 0.50))
+		#  2px 이다. 1px 티끌은 무대가 138x118 이라 먼지인지 죽은 픽셀인지
+		#  안 갈린다 — 도는 것이 보여야 살아 있는 빛이 된다.
+		var aa: float = 0.30 + 0.45 * (0.5 + 0.5 * sin(cup_gl * 1.6 + float(k) * 2.3))
+		draw_rect(Rect2(p, Vector2(2.0, 2.0)), Color(col.lightened(0.62), aa))
+
+
 func _cup_draw(pr: Rect2) -> void:
 	var stage := _cup_stage()
 	draw_rect(stage, C_PANEL.darkened(0.20))
+	#  히든인가. 넘기는 동안은 **가는 통**을 따른다 — 겉이 무대 하나에
+	#  걸리므로 둘을 따로 못 칠한다.
+	var hid: bool = _cup_hidden(newrun_pip)
+	var shut: bool = hid and not _pack_open(newrun_pip)
+	if hid and not shut:
+		_cup_halo(stage, _cup3_skin(newrun_pip).body, false)
 	# 통 밑 그림자. 3D 쪽 그림자맵은 껐다 — 138x118 에서 그림자맵은 계단만
 	# 남기고, 통이 놓인 자리를 말하는 데는 눌린 타원 하나면 된다.
 	for sl in _cup_slides():
@@ -13642,10 +13714,15 @@ func _cup_draw(pr: Rect2) -> void:
 				_cup_foot() + 4.0), 24.0, 6.0, 18), Color(0.0, 0.0, 0.0, 0.28))
 	var tex: Texture2D = cup_vp.get_texture() if _cup3_live() else null
 	if tex != null:
-		draw_texture_rect(tex, stage, false)
+		if shut:
+			_cup_glitch(tex, stage)
+		else:
+			draw_texture_rect(tex, stage, false)
 	else:
 		for sl in _cup_slides():
 			_cup_one(int(sl.pi), float(sl.dx))
+	if hid and not shut:
+		_cup_halo(stage, _cup3_skin(newrun_pip).body, true)
 	_cup_mask(stage, pr)
 	draw_rect(stage, C_PANEL.darkened(0.42), false, 1.0)
 
