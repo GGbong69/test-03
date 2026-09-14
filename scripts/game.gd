@@ -13,6 +13,64 @@ const Dev = preload("res://scripts/dev.gd")
 
 const VIEW := Vector2(640, 360)
 
+# ══════════════════════════════════════════════════════════
+#  화면 여백 — 16:9 가 아닌 화면에서 남는 자리
+# ──────────────────────────────────────────────────────────
+#  640x360 을 **정수배**로 늘인다(project.godot 의 integer). 16:9 화면에서는
+#  딱 나눠떨어져 꽉 찬다 — 1280x720 은 2배 · 1920x1080 은 3배 · 2560x1440 은
+#  4배 · 3840x2160 은 6배. 문제는 16:9 가 아닌 화면뿐이다:
+#    1920x1200 (16:10)  3배 · 위아래 60px
+#    3440x1440 (21:9)   4배 · 좌우 440px
+#
+#  검은 띠를 두는 대신 **방을 더 보여준다**(stretch/aspect = expand).
+#
+#  ── 어떻게 ──────────────────────────────────────────────
+#  레이아웃은 640x360 그대로 둔다. 화면 곳곳이 절대 좌표로 짜여 있고
+#  (_pack_rect 의 Rect2(76,52,488,132) 같은 것들), 그것을 늘리는 것은
+#  판·펠트·상인의 기하를 통째로 다시 잡는 일이다.
+#
+#  대신 **Game 노드를 통째로 민다.** draw_set_transform 은 노드 **안쪽**
+#  좌표를 세우므로 노드를 밀면 서른 곳이 공짜로 따라온다 — 그 서른 곳을
+#  하나씩 고치려 들면 draw_set_transform(Vector2.ZERO) 같은 자리에서
+#  반드시 어긋난다.
+#
+#  남는 자리에는 방 색을 깐다. 커서는 노드 좌표로 받아야 하므로 들어오는
+#  자리에서 이 값을 뺀다(_unhandled_input · _cursor 는 이미 지역 좌표다).
+var view_pad := Vector2.ZERO
+
+
+#  화면 **전체**를 덮는 사각. 여백까지 간다.
+func _full() -> Rect2:
+	return Rect2(-view_pad, VIEW + view_pad * 2.0)
+
+
+#  여백까지 뻗는 가로 띠. 방을 이루는 띠가 640 에서 끊기면 방이 이어지는
+#  것이 아니라 **액자 안에 든 그림**이 된다 — 여백이 검은 테로 읽힌다.
+#  위나 아래로 붙는 띠는 그쪽으로도 뻗어야 하므로 up·dn 을 받는다.
+func _wide(y: float, h: float, up := false, dn := false) -> Rect2:
+	var y0: float = y - (view_pad.y if up else 0.0)
+	var hh: float = h + (view_pad.y if up else 0.0) + (view_pad.y if dn else 0.0)
+	return Rect2(-view_pad.x, y0, VIEW.x + view_pad.x * 2.0, hh)
+
+
+#  창 크기가 바뀔 때마다 여백을 다시 잰다. 값이 그대로면 아무것도 안 한다.
+func _view_fit() -> void:
+	var vs: Vector2 = get_viewport_rect().size
+	#  **정수로 내린다.** 반 픽셀을 밀면 정수배 확대에서 온 화면이 흐려진다.
+	var p := ((vs - VIEW) * 0.5).floor()
+	p.x = maxf(p.x, 0.0)
+	p.y = maxf(p.y, 0.0)
+	if p.is_equal_approx(view_pad):
+		return
+	view_pad = p
+	position = p
+	#  흐림 판은 **온 화면**을 덮어야 한다. 노드와 같이 밀리므로 그만큼
+	#  되밀고 키운다 — 안 그러면 여백만 또렷하게 남아 판이 액자가 된다.
+	var bl := get_node_or_null("Blur")
+	if bl != null:
+		bl.position = -p
+		bl.size = VIEW + p * 2.0
+
 #  글꼴 — 프로젝트에 실어 둔다.
 #  OS 글꼴(SystemFont)은 웹에서 빈손으로 돌아와 한글이 전부 네모가 되고,
 #  데스크톱에서도 기기에 뭐가 깔렸느냐에 따라 다른 글꼴이 잡힌다. 실어 두면
@@ -2613,6 +2671,8 @@ func card_pos() -> Vector2:
 # ══════════════════════════════════════════════════════════
 
 func _process(d: float) -> void:
+	_view_fit()      # 창이 바뀌면 여백을 다시 잰다. 그대로면 아무것도 안 한다
+
 	_fill_audio()
 	_mus_update(d)
 	_boost_tick(d)
@@ -3271,22 +3331,26 @@ func _unhandled_input(e: InputEvent) -> void:
 		var mb := e as InputEventMouseButton
 		if mb.button_index != MOUSE_BUTTON_LEFT:
 			return
-		mouse_at = mb.position
+		#  들어오는 자리는 뷰포트 좌표다. 화면이 16:9 가 아니면 Game 노드가
+		#  여백만큼 밀려 있으므로 여기서 빼서 **노드 좌표**로 바꾼다 —
+		#  안 빼면 21:9 에서 커서와 판정이 220px 어긋난다.
+		var mp: Vector2 = mb.position - view_pad
+		mouse_at = mp
 		mouse_down = mb.pressed
 		if mb.pressed:
-			if _hand_press(mb.position):
+			if _hand_press(mp):
 				return                    # 삼킨다 — 탭인지 드래그인지 아직 모른다
-			_click(mb.position)
+			_click(mp)
 		else:
 			if set_drag >= 0:
 				# 저장은 뗄 때 한 번. 끄는 동안 매 프레임 쓰면 파일을 두드린다.
 				_set_slide_end()
 				return
-			_hand_release(mb.position)
+			_hand_release(mp)
 	elif e is InputEventMouseMotion:
 		# 손 상태와 무관하게 받아 둔다 — _hand_motion 은 쥐고 있을 때만
 		# 갱신하는데, 놓기·당김 조준은 아무것도 안 쥔 채로 자리를 읽는다.
-		mouse_at = (e as InputEventMouseMotion).position
+		mouse_at = (e as InputEventMouseMotion).position - view_pad
 		# 게이지를 끌고 있으면 손보다 먼저 본다 — 설정 화면에는 손이 없다.
 		if set_drag >= 0:
 			_set_slide(set_drag, mouse_at)
@@ -4695,7 +4759,8 @@ func draw_front(c: CanvasItem) -> void:
 
 
 func _draw() -> void:
-	draw_rect(Rect2(Vector2.ZERO, VIEW), C_BG)
+	#  여백까지 덮는다. 노드가 밀려 있으므로 왼쪽 위로 그만큼 되밀어 시작한다.
+	draw_rect(Rect2(-view_pad, VIEW + view_pad * 2.0), C_BG)
 	# 툴팁이 대상 테두리만 같이 흔들고 판은 고정하려면 이 값을 알아야 한다
 	var sh := Vector2.ZERO if motion_off else Vector2(
 			randf_range(-shake, shake), randf_range(-shake, shake))
@@ -4705,7 +4770,7 @@ func _draw() -> void:
 	if swap_live:
 		# 방이 맨 밑이다. 카운터만 옆으로 빠지고 방은 그대로 있는 것이
 		# 실제로 일어나는 일이다. _felt_draw 의 전면 사각은 이때 쉰다.
-		draw_rect(Rect2(Vector2.ZERO, VIEW), _swap_wall(C_WOOD))
+		draw_rect(_full(), _swap_wall(C_WOOD))
 		# 테이블이 다 빠진 **뒤에** 판이 뜬다. 그래서 두 층이 안 겹치고,
 		# 나가는 쪽만 테이블을 먼저 그리면 된다.
 		if swap_in:
@@ -4721,7 +4786,7 @@ func _draw() -> void:
 			# 정산 화면의 스크림(0.94)을 이어받아 푼다. 안 풀면 눌러 넘긴
 			# 첫 프레임이 전환에서 가장 밝은 프레임이 된다 — 이음새가
 			# 아니라 번쩍임이다. 나가는 쪽은 밝은 테이블에서 오므로 안 건다.
-			draw_rect(Rect2(Vector2.ZERO, VIEW),
+			draw_rect(_full(),
 					Color(C_BG, 0.94 * _swap_rise()))
 			# 들어오는 테이블이 나중이다 — 다 누운 판을 덮으며 자리를 잡는다.
 			_swap_screen(sh)
@@ -4747,7 +4812,7 @@ func _draw() -> void:
 	Dev.draw(self)          # DEV
 	draw_set_transform(Vector2.ZERO)
 	if screen_flash > 0.0:
-		draw_rect(Rect2(Vector2.ZERO, VIEW), Color(1.0, 1.0, 1.0, screen_flash * 0.34))
+		draw_rect(_full(), Color(1.0, 1.0, 1.0, screen_flash * 0.34))
 
 
 # ══════════════════════════════════════════════════════════
@@ -4786,7 +4851,7 @@ func _hud_draw() -> void:
 		#  색마다 알파를 물리는 대신 띠 한 장으로 덮는다. 여덟 그리기
 		#  함수에 알파를 꿰는 것보다 짧고, 눈에는 같은 일이다.
 		if _is_aim_stage():
-			draw_rect(Rect2(0.0, 0.0, VIEW.x, 64.0 + _hud_dy()),
+			draw_rect(_wide(0.0, 64.0 + _hud_dy(), true),
 					Color(C_BG, 0.45))
 		_rack_hold_draw()   # 판 위다 — 끌고 다니는 동전은 무엇에도 안 덮인다
 		_use_draw()         # 가운데로 끌고 온 사탕·사진과 그 자리
@@ -4926,7 +4991,10 @@ func _grip_draw() -> void:
 
 	# 왼쪽 벽. 꽂힐 면이 없으면 다트가 그냥 떠 있는 것으로 읽힌다.
 	var w: float = GRIP.wall
-	draw_rect(Rect2(0.0, 18.0, w, VIEW.y - 18.0), C_DARK.lightened(0.06))
+	#  왼쪽 벽은 **여백 쪽으로도** 두껍다. 안 그러면 넓은 화면에서 벽이
+	#  허공에 떠 있는 판때기가 된다.
+	draw_rect(Rect2(-view_pad.x, 18.0, w + view_pad.x,
+			VIEW.y - 18.0 + view_pad.y), C_DARK.lightened(0.06))
 	draw_line(Vector2(w, 18.0), Vector2(w, VIEW.y), C_WIRE.darkened(0.25), 1.0)
 	# 결 — 벽이 면이라는 것만 알리면 된다
 	for gy in range(30, 356, 14):
@@ -5440,8 +5508,10 @@ func _aim_v_line(x: float, col: Color) -> void:
 
 func _draw_topbar() -> void:
 	var r: Rect2 = LAY.bar
-	draw_rect(r, C_PANEL)
-	draw_rect(Rect2(Vector2(0.0, r.size.y - 1.0), Vector2(r.size.x, 1.0)), C_BG)
+	#  띠는 여백까지 간다. 640 에서 끊으면 넓은 화면에서 상단 바가
+	#  화면 가운데에 뜬 판때기가 된다 — 칸의 자리(LAY.bar_cut)는 그대로다.
+	draw_rect(_wide(r.position.y, r.size.y, true), C_PANEL)
+	draw_rect(_wide(r.size.y - 1.0, 1.0), C_BG)
 	# 1px 두 줄이 "칸이 나뉘어 있다"를 만드는 전부다. 640x360 에서 테두리는 사치다.
 	for cx in LAY.bar_cut:
 		draw_line(Vector2(cx, 3.0), Vector2(cx, 15.0), C_BG, 1.0)
@@ -7029,7 +7099,7 @@ func _felt_draw() -> void:
 	# 판 갈이 때는 _draw 가 이 사각을 **안 밀고** 맨 밑에 미리 깔았다.
 	# 여기서 또 그리면 벽이 테이블을 따라 옮겨진다.
 	if not swap_live:
-		draw_rect(Rect2(0.0, 0.0, VIEW.x, VIEW.y), C_WOOD)
+		draw_rect(_full(), C_WOOD)
 	# 펠트는 사다리꼴이다. 좌우 빗변이 그대로 창구라 모양이 곧 규칙이다.
 	var felt := PackedVector2Array([
 			Vector2(CHUTE.back, TBL.fy), Vector2(VIEW.x - CHUTE.back, TBL.fy),
@@ -7068,7 +7138,7 @@ func _cover_draw() -> void:
 	# 이 띠는 카운터가 벽에 드리운 그늘이다 — 카운터가 나가면 같이 옅어져
 	# 벽에 녹는다. 안 그러면 테이블이 다 빠진 뒤에도 y=128 에 가로 이음선
 	# 하나가 화면을 가로질러 남는다.
-	draw_rect(Rect2(0.0, 0.0, VIEW.x, TBL.fy),
+	draw_rect(_wide(0.0, TBL.fy, true),
 			_swap_wall(C_WOOD.darkened(0.30).lerp(C_WOOD, _swap_gone())))
 	if swap_live:
 		draw_set_transform(shake_off)
@@ -7084,16 +7154,16 @@ func _cover_draw() -> void:
 	_npc_body()
 	if nd > 0.01:
 		draw_set_transform(shake_off)
-	draw_rect(Rect2(0.0, TBL.fy - 3.0, VIEW.x, 3.0), C_WOOD)
-	draw_rect(Rect2(0.0, TBL.fy - 1.0, VIEW.x, 1.0), C_WOOD.lightened(0.18))
+	draw_rect(_wide(TBL.fy - 3.0, 3.0), C_WOOD)
+	draw_rect(_wide(TBL.fy - 1.0, 1.0), C_WOOD.lightened(0.18))
 	if nd > 0.01:
 		draw_set_transform(shake_off - Vector2(0.0, nd))
 	_npc_arms()
 	if nd > 0.01:
 		draw_set_transform(shake_off)
 	# 가까운 쪽 레일 — 리롤·다음 버튼이 그 아래 앞치마에 얹힌다
-	draw_rect(Rect2(0.0, TBL.ny, VIEW.x, 2.0), C_WOOD.lightened(0.24))
-	draw_rect(Rect2(0.0, TBL.ny + 6.0, VIEW.x, VIEW.y - TBL.ny - 6.0),
+	draw_rect(_wide(TBL.ny, 2.0), C_WOOD.lightened(0.24))
+	draw_rect(_wide(TBL.ny + 6.0, VIEW.y - TBL.ny - 6.0, false, true),
 			C_WOOD.darkened(0.35))
 
 
@@ -11293,7 +11363,7 @@ func _draw_pops() -> void:
 
 
 func _scrim() -> void:
-	draw_rect(Rect2(Vector2.ZERO, VIEW), Color(0.04, 0.03, 0.07, 0.94))
+	draw_rect(_full(), Color(0.04, 0.03, 0.07, 0.94))
 
 
 # ── 사진이 연 화면 ────────────────────────────────────────
@@ -11407,7 +11477,7 @@ const CLR := {"x": 233.0, "w": 174.0, "y": 78.0, "row": 16.0, "name_w": 120.0}
 func _draw_clear() -> void:
 	#  스크림을 1.0 으로. 0.94 라 뒤 다트판의 「20」이 내역 둘째 줄 위에
 	#  앉아 있었다 — 정산은 읽는 화면이지 비치는 화면이 아니다.
-	draw_rect(Rect2(Vector2.ZERO, VIEW), C_BG)
+	draw_rect(_full(), C_BG)
 	draw_string(font, Vector2(0, 46), "라운드 %d  %s 클리어"
 			% [GameData.round_of(leg_no), GameData.leg_name(leg_no)],
 			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 22, C_ACC)
@@ -12057,7 +12127,7 @@ func _draw_title() -> void:
 	#  다른 화면보다 얕게 덮는다. 0.94 로 덮으면 뒤의 다트판이 유령이 되는데,
 	#  이 게임의 얼굴을 깔아 놓고 지우는 셈이다. 글줄이 왼쪽에 서므로 판과
 	#  자리가 안 겹쳐서, 판을 살려도 글씨를 안 잡아먹는다.
-	draw_rect(Rect2(Vector2.ZERO, VIEW), Color(0.04, 0.03, 0.07, 0.72))
+	draw_rect(_full(), Color(0.04, 0.03, 0.07, 0.72))
 	#  왼쪽 그늘 여덟 겹을 걷었다. x=216 에서 끝나 판(x209 시작)을 하나도
 	#  안 가리고, 대신 평평한 배경에 **세로 이음매 넷**을 남기고 있었다.
 	#  글줄은 x16 이고 판은 x209 라 애초에 안 겹친다 — 스크림 한 장이면 된다.
@@ -15637,7 +15707,7 @@ func _boost_draw() -> void:
 		return
 	var rise: float = clampf(boost_t / float(BOOST.rise), 0.0, 1.0)
 	var tear: float = clampf((boost_t - float(BOOST.rise)) / float(BOOST.tear), 0.0, 1.0)
-	draw_rect(Rect2(Vector2.ZERO, VIEW),
+	draw_rect(_full(),
 			Color(0.0, 0.0, 0.0, 0.5 * rise * (1.0 - tear * 0.55)))
 
 	var c := Vector2(VIEW.x * 0.5, VIEW.y * 0.46)
@@ -15683,7 +15753,7 @@ func _runinfo_ok() -> bool:
 
 func _draw_runinfo() -> void:
 	# 뒤를 통째로 가리지 않는다. 게임이 비쳐야 "잠깐 여는 판" 이다.
-	draw_rect(Rect2(Vector2.ZERO, VIEW), Color(0.0, 0.0, 0.0, 0.55))
+	draw_rect(_full(), Color(0.0, 0.0, 0.0, 0.55))
 	var p := _ri_panel()
 	#  전에는 「그림자 + 어두운 면 + 1px 사면 테두리, 띠 없음」이었고 툴팁은
 	#  「그림자 + 밝은 면 + 금색 띠, 테두리 없음」이었다. 같은 층이 두 문법으로
