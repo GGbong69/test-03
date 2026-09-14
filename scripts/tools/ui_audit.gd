@@ -109,10 +109,13 @@ func _run() -> void:
 	g._drop_settle()
 	await _shoot("07_shop")
 
-	# 보스 제약 고르기
+	# 보스 제약 고르기 — **게임이 쓰는 문으로 연다.** 상태만 세우면
+	# 카드가 안 깔려서 빈 펠트를 찍는다.
 	g.leg_no = 3
-	g.state = g.S.STAGE
-	g._stage_open() if g.has_method("_stage_open") else null
+	if g.has_method("_open_stage"):
+		g._open_stage()
+	for k in 60:
+		g._process(1.0 / 60.0)
 	await _shoot("08_stage")
 
 	# 런 정보

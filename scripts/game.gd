@@ -6816,7 +6816,8 @@ func _table_draw() -> void:
 	_goods_draw()
 	_waste_draw()
 	_cover_draw()
-	_bill_draw()
+	#  값은 이제 _goods_draw 안에서 물건마다 그린다(_bill_one) — 여기서
+	#  따로 한 바퀴 돌면 뒤 물건의 값이 앞 동전 위에 얹힌다.
 
 
 
@@ -7478,8 +7479,13 @@ func _dart_e(it: Dictionary) -> Vector2:
 # ══ 던지기 — 난수를 쓰는 유일한 곳 (물체당 7뽑기) ══
 # 레인 안쪽 여백. 매물이 늘면 줄여서 폭을 벌린다 — 그리기와 검사가 같은
 # 식을 써야 "여섯이 뭉친다" 를 눈이 아니라 수로 잡는다.
+#  레인 바깥 여백. 전에는 n<=4 에서 90 이라 레인이 u[206,434] 로만 깔려
+#  트레이 u[116,524] 의 **56% 만** 썼다 — 640 폭 테이블을 깔아 놓고 3분의
+#  1 을 쓰고 있었다. 창구로 새는 것은 u_lo/u_hi 벽이 이미 막으므로
+#  (_drop_one 이 hw 를 빼고 뽑는다) 여백 90 이 할 일이 없었다.
+#  물건 반폭에 8 만 더해 벽에서 떼어 놓는다.
 func _lane_pad(n: int) -> float:
-	return maxf(90.0 - maxf(float(n) - 4.0, 0.0) * 22.0, 26.0)
+	return 34.0 if n <= 4 else 26.0
 
 
 # 매물 하나가 받는 레인 폭(면 px). 동전 지름이 38 이라 이보다 좁아지면
@@ -8061,6 +8067,12 @@ func _goods_draw() -> void:
 	var hov: int = tip_spot if tip_a > 0.004 else -1
 	for i in z:
 		_obj_draw(i, 0.0 if (hov < 0 or hov == i) else DROP.dim_off)
+		#  값은 **제 물건 바로 뒤**다. 전에는 물건을 다 그린 뒤에 값만
+		#  따로 한 바퀴 돌아서, 뒤 물건의 값이 앞 동전의 반지름 19 원
+		#  안에 그대로 얹혔다(동전-동전 최소 면거리 38 을 Δu 25 · Δw 29
+		#  로 쓰면 정확히 그렇게 된다). 여기서 그리면 앞 물건이 뒤 물건의
+		#  값을 가려 깊이 순서가 맞고 소속이 저절로 읽힌다.
+		_bill_one(i)
 
 
 # 그림자가 없으면 높이 h 와 깊이 w 가 화면 y 하나로 뭉개져 구분이 안 된다.
@@ -8399,30 +8411,35 @@ func _sticker_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: floa
 #     24.4 < 28 이므로 겹침이 불가능하다. 실측 1500롤 겹침 0, 최소 y차 16.2px.
 #   · 전제: 가격 문자열이 2자리 이내(bw ≤ 25). 지금 최대 가격은 14 다.
 #     세 자리가 생기면 이 정리부터 다시 세워야 한다.
-func _bill_draw() -> void:
+#  값 한 장. **_goods_draw 의 z 순서 루프 안에서** 제 물건 바로 뒤에 불린다 —
+#  그래야 앞 물건이 뒤 물건의 값을 가려 깊이가 맞는다.
+func _bill_one(i: int) -> void:
 	if _sweep_wipe():
 		return              # 쓸려 나가는 물건에 가격을 안 붙인다
-	for i in mini(drop.size(), stock.size()):
-		var it: Dictionary = drop[i]
-		if not it.into:
-			continue        # 아직 레일 뒤다. 물건보다 가격이 먼저 뜨면 안 된다
-		var s: Dictionary = stock[i]
-		# 팩에서 쏟은 것은 값이 0 이다. 0골드라고 적으면 「공짜로 다 가져가라」
-		# 로 읽히는데 실제로는 몇 장만 집는 물건이다 — 값 대신 몫을 적는다.
-		if bool(s.get("pack", false)):
-			if s.sold:
-				continue
-			var pt := "고르기" if boost_pick <= 1 else "%d장 고르기" % boost_pick
-			draw_string(font_sm, Vector2(it.u - 30.0,
-					_p2g(it.w) + DROP.bill_dy + 7.0), pt,
-					HORIZONTAL_ALIGNMENT_CENTER, 60.0, 9,
-					C_ACC if boost_pick > 0 else C_OFF)
-			continue
-		var txt := str(s.cost)
-		var bw := gold_w(txt, 9)
-		var col: Color = C_GOLD if (not s.sold and gold >= s.cost) \
-				else C_DIM.darkened(0.25)
-		draw_gold_at(it.u - bw * 0.5, _p2g(it.w) + DROP.bill_dy, txt, 9, col)
+	if i < 0 or i >= mini(drop.size(), stock.size()):
+		return
+	var it: Dictionary = drop[i]
+	if not it.into:
+		return              # 아직 레일 뒤다. 물건보다 가격이 먼저 뜨면 안 된다
+	var s: Dictionary = stock[i]
+	# 팩에서 쏟은 것은 값이 0 이다. 0골드라고 적으면 「공짜로 다 가져가라」
+	# 로 읽히는데 실제로는 몇 장만 집는 물건이다 — 값 대신 몫을 적는다.
+	if bool(s.get("pack", false)):
+		if s.sold:
+			return
+		var pt := "고르기" if boost_pick <= 1 else "%d장 고르기" % boost_pick
+		draw_string(font_sm, Vector2(it.u - 30.0,
+				_p2g(it.w) + DROP.bill_dy + 7.0), pt,
+				HORIZONTAL_ALIGNMENT_CENTER, 60.0, 9,
+				C_ACC if boost_pick > 0 else C_OFF)
+		return
+	var txt := str(s.cost)
+	var bw := gold_w(txt, 9)
+	#  못 사는 것은 꺼진 색이다 — 잔액이 모자라면 값만 남기고 물러난다.
+	var can: bool = not s.sold and gold >= s.cost
+	draw_gold_at(it.u - bw * 0.5, _p2g(it.w) + DROP.bill_dy, txt, 9,
+			C_GOLD if can else C_OFF)
+
 
 
 # 헤드리스 전용 자가검사. "정착 = 겹침 없고 · 트레이 안이고 · 넷 다 잡힌다" 를
@@ -11064,8 +11081,10 @@ func _draw_leg() -> void:
 			_skip_plate(_leg_skip(), leg_tag, true)
 			continue
 		var pt := _leg_tag(srn)
-		if not pt.is_empty():
-			_skip_plate(_skip_rect(i), pt, false)
+		#  빈 사전이면 「못 건너뛴다 · 보스 판」이 선다. 전에는 이 가지
+		#  밖이라 보스 판 칸이 통째로 비었다 — 자리가 비면 그 판이 건너뛸
+		#  수 있는지 없는지를 화면이 말한 적이 없는 게 된다.
+		_skip_plate(_skip_rect(i), pt, false)
 	# 쌓아 둔 뱃지 — 언제 쓰이는지는 이름이 말한다
 	for i in pending_tags.size():
 		var r := _pend_rect(i)
@@ -11137,16 +11156,20 @@ func _draw_stage() -> void:
 	# 상점과 같은 테이블이다. 매물이 있던 자리에 제약 카드가 놓이고,
 	# 창구는 좌우 다 셔터가 내려가 있다 — 그 화면에서는 아무것도 안 판다.
 	_felt_draw()
-	# 런 바가 들고 있던 것과 카드에서 뺀 것이 여기서 만난다.
-	# 진행자 라인(y119) 바로 밑 — 펠트에 규격을 인쇄하는 자리다.
-	# target_of(leg_no) 는 _open_stage 가 base 를 만든 그 식이다(출처 하나).
-	# 카드보다 **먼저** 그린다. 미끄러져 오는 카드가 글자를 덮어야 순서가 맞다.
-	draw_string(font_sm, Vector2(0.0, 131.0),
-			"라운드 %d / %d   ·   %s   ·   목표 %d"
-			% [GameData.round_of(leg_no), GameData.rounds_n(),
-					GameData.leg_name(leg_no), GameData.target_of(leg_no)],
+	#  인쇄 줄은 **덮개 뒤**에 온다. 베이스라인 y131 에 그리고 그다음
+	#  _cover_draw 가 y[0,128] 을 덮어서, 9px 한글 몸통 y[122,131] 중
+	#  y[122,128] 이 통째로 지워지고 있었다 — 읽을 수가 없었다.
+	#  같은 일을 하는 _draw_leg 는 덮개 뒤 y141 에 그려 멀쩡하다.
+	#
+	#  덮개를 여기서 또 부를 일은 없다 — 덮개는 y[0,128] 만 덮고 이 줄은
+	#  그 아래다. 카드보다 먼저 그리는 것은 그대로 둔다(미끄러져 오는
+	#  카드가 글자를 덮어야 순서가 맞다).
+	#
+	#  **「목표 n」 하나로 줄인다.** 라운드와 판 이름은 상단 바가 이미 든다.
+	draw_string(font_sm, Vector2(0.0, TBL.fy + 13.0),
+			"목표 %d" % GameData.target_of(leg_no),
 			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 9,
-			Color(C_TABLE.lightened(0.34), 0.75))
+			Color(C_TABLE.lightened(0.40), 0.85))
 	# 선 카드가 맨 위에 온다. 커지면서 이웃을 밀고 들어가는데 그리는 순서가
 	# 고정이면 오른쪽 카드가 그 위를 덮어 든 것이 아래로 보인다.
 	var front := -1
@@ -11210,10 +11233,16 @@ func _card_quad(px: float, w: float, foot: float, up: float,
 		hs := 1.0) -> PackedVector2Array:
 	var hh: float = CARD.h * lerpf(TBL.flat, 1.0, up) * hs
 	var top: float = foot - hh
+	#  **밑변 두 점은 up 을 안 본다.** 네 귀퉁이에 같은 up 을 먹이면 다 선
+	#  카드(up=1)에서 밑변의 펠트 좁힘까지 풀려, 카드 0 의 밑변 왼끝이
+	#  27.5px 뛰고 폭이 21% 는다 — 자리에서 미끄러진다. 바로 위 주석이
+	#  「밑변이 축이라 자리에서 안 미끄러진다」고 적고 있는데 코드가
+	#  그걸 안 지키고 있었다. 윗변만 서고 밑변은 펠트에 붙어 있는다.
 	var q := PackedVector2Array()
-	for c in [Vector2(px, top), Vector2(px + w, top),
-			Vector2(px + w, foot), Vector2(px, foot)]:
-		q.append(Vector2(_felt_x(c.x, c.y, up), c.y))
+	q.append(Vector2(_felt_x(px, top, up), top))
+	q.append(Vector2(_felt_x(px + w, top, up), top))
+	q.append(Vector2(_felt_x(px + w, foot, 0.0), foot))
+	q.append(Vector2(_felt_x(px, foot, 0.0), foot))
 	return q
 
 
