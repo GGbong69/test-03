@@ -10253,6 +10253,15 @@ func _tip_clear() -> void:
 
 # 지금 커서 아래에 무엇이 있는가. 없으면 빈 사전.
 func _tip_hit(m: Vector2) -> Dictionary:
+	#  **드는 동안은 통째로 끈다.** 손에 무엇이 들려 있으면 커서는 그것을
+	#  옮기는 중이지 무엇을 가리키는 중이 아니다. 전에는 이 규칙이 상점
+	#  가지 안에만 있었는데, 사탕을 집어 가운데로 끌고 가 쓰는 길이 나면서
+	#  판 선택·제약 선택에서도 손이 살게 됐다(_hand_live). 그 두 화면에서는
+	#  커서가 지나가는 카드가 툴팁을 띄우고 **같이 일어서기까지 했다** —
+	#  제약 카드는 tip_mark 로 "선다" 를 판정하기 때문이다(_drop_update).
+	#  쓰려고 끌고 가는 길 위의 카드가 차례로 일어섰다.
+	if hand_st == H.CARRY:
+		return {}
 	#  상단 띠의 제약 아이콘. 판의 규칙을 바꾸는 것이 **이름 없는 반지름 6
 	#  아이콘 하나**였고 아무 데서도 그 이름을 안 말했다 — 5170행 주석은
 	#  「이름 전체는 하단 y341 줄이 갖는다」고 했는데 그런 줄이 없다.
@@ -10262,8 +10271,6 @@ func _tip_hit(m: Vector2) -> Dictionary:
 			return {"k": "onmod", "i": 0}
 	match state:
 		S.SHOP:
-			if hand_st == H.CARRY:
-				return {}                 # 드는 동안 툴팁은 끈다
 			# 든 사탕 — 칸에 이름 세 글자만 적혀 있어 무슨 효과인지
 			# 알 길이 없었다. 살 때는 테이블 툴팁이 말해 주는데 산 뒤로는
 			# 아무 데서도 안 말한다. 쓰는 자리가 곧 모르는 자리였다.
@@ -11225,8 +11232,8 @@ func _leg_card(i: int, rn: int) -> void:
 	var px: float = lerpf(VIEW.x * 0.5 - sz.x * 0.5, r.position.x, e)
 	var gs: float = 1.0 + 0.12 * up
 	var w2: float = sz.x * gs
-	var foot: float = r.end.y - 7.0 * up
-	var q := _card_quad(px - (w2 - sz.x) * 0.5, w2, foot, up, gs)
+	var foot: float = r.end.y
+	var q := _card_quad(px - (w2 - sz.x) * 0.5, w2, foot, up, gs, 7.0 * up)
 
 	var sh := PackedVector2Array()
 	for c in q:
@@ -11336,27 +11343,41 @@ func _apron_mods() -> void:
 
 # 화면 x 를 펠트 폭에 맞춰 좁힌다. 펠트는 y 마다 폭이 다르고(창구 빗변),
 # 그 비를 그대로 곱하면 면에 놓인 것이 판과 같이 모인다.
-func _felt_x(x: float, y: float, up: float) -> float:
-	var sc: float = (VIEW.x - _chute_edge(y) * 2.0) / VIEW.x
-	return VIEW.x * 0.5 + (x - VIEW.x * 0.5) * lerpf(sc, 1.0, up)
+# 카드 말고는 아무도 안 쓴다 — 매물은 u·w 면 좌표로 따로 산다.
+func _felt_sc(y: float) -> float:
+	return (VIEW.x - _chute_edge(y) * 2.0) / VIEW.x
+
+
+func _felt_x(x: float, sc: float) -> float:
+	return VIEW.x * 0.5 + (x - VIEW.x * 0.5) * sc
 
 
 # 카드 한 장의 네 귀퉁이. up 0 이면 면에 누워 사다리꼴이고, 1 이면 화면에
 # 세워져 직사각형이다. 밑변(가까운 모서리)이 축이라 자리에서 안 미끄러진다.
 func _card_quad(px: float, w: float, foot: float, up: float,
-		hs := 1.0) -> PackedVector2Array:
+		hs := 1.0, lift := 0.0) -> PackedVector2Array:
 	var hh: float = CARD.h * lerpf(TBL.flat, 1.0, up) * hs
 	var top: float = foot - hh
-	#  **밑변 두 점은 up 을 안 본다.** 네 귀퉁이에 같은 up 을 먹이면 다 선
-	#  카드(up=1)에서 밑변의 펠트 좁힘까지 풀려, 카드 0 의 밑변 왼끝이
-	#  27.5px 뛰고 폭이 21% 는다 — 자리에서 미끄러진다. 바로 위 주석이
-	#  「밑변이 축이라 자리에서 안 미끄러진다」고 적고 있는데 코드가
-	#  그걸 안 지키고 있었다. 윗변만 서고 밑변은 펠트에 붙어 있는다.
+	#  좁힘 비가 **둘**이다. 밑변은 언제나 발치의 비를 써서 자리에서 안
+	#  미끄러지고, 윗변은 누웠을 때만 제 y 의 비로 물러난다. 서면 윗변이
+	#  발치 비로 모여 네 귀퉁이가 직사각형이 된다.
+	#
+	#  전에는 윗변이 up 을 따라 **1.0**(안 좁힘)으로 갔다. 그래서 선 카드가
+	#  위가 넓고 아래가 좁은 **뒤집힌 사다리꼴**이 됐다 — 이 시점에서 절대
+	#  안 나오는 모양이라 찌그러져 보였다. 밑변만 보고 고쳤더니 윗변이
+	#  따로 놀았다. 바로 위 주석이 「직사각형」이라고 적고 있는데 코드가
+	#  그걸 안 지키고 있었다.
+	#  들린 만큼은 **비를 고른 뒤에** 뺀다. 발치를 들린 y 로 재면 그 y 의
+	#  펠트가 더 좁아, 카드가 서는 동안 옆으로 2.1px 미끄러진다. 카드가 뜨는
+	#  것은 면을 떠나는 일이지 면 위에서 뒤로 물러나는 일이 아니다 —
+	#  가까워진 만큼은 hs 가 이미 키워서 말한다.
+	var sf: float = _felt_sc(foot)
+	var st: float = lerpf(_felt_sc(top), sf, up)
 	var q := PackedVector2Array()
-	q.append(Vector2(_felt_x(px, top, up), top))
-	q.append(Vector2(_felt_x(px + w, top, up), top))
-	q.append(Vector2(_felt_x(px + w, foot, 0.0), foot))
-	q.append(Vector2(_felt_x(px, foot, 0.0), foot))
+	q.append(Vector2(_felt_x(px, st), top - lift))
+	q.append(Vector2(_felt_x(px + w, st), top - lift))
+	q.append(Vector2(_felt_x(px + w, sf), foot - lift))
+	q.append(Vector2(_felt_x(px, sf), foot - lift))
 	return q
 
 
@@ -11382,8 +11403,8 @@ func _stage_card(i: int) -> void:
 	var gs: float = 1.0 + 0.12 * up
 	var w2: float = sz.x * gs
 	var px2: float = p.x - (w2 - sz.x) * 0.5
-	var foot: float = p.y + sz.y - 7.0 * up
-	var q := _card_quad(px2, w2, foot, up, gs)
+	var foot: float = p.y + sz.y
+	var q := _card_quad(px2, w2, foot, up, gs, 7.0 * up)
 
 	# 그림자는 매물과 같은 빛 벡터다. 서면 카드가 멀어지므로 그림자도 진다.
 	var sh := PackedVector2Array()

@@ -112,6 +112,53 @@ func _run() -> void:
 	_ok("빈 칸은 안 집힌다", g.hand_st == g.H.NONE,
 			"hand_st %d" % g.hand_st)
 
+	# (7) 드는 동안은 아무것도 안 가리킨다 — 2026-09-14 사용자 지시
+	#    "아이템 사용할때 판 선택이나 제약 선택이면 마우스 오버가 같이 일어나네"
+	#
+	#  _tip_update 는 _cursor() 로 **진짜 창**을 읽어서 헤드리스에서 커서를
+	#  못 옮긴다. 그래서 판정(_tip_hit)만 직접 먹이고 tip_a 를 세워 둔다 —
+	#  검사하려는 것이 바로 그 판정이라 이쪽이 오히려 곧다.
+	print("")
+	g.leg_no = 1
+	g._open_leg()          # 라운드 뱃지를 굴린다 — 쪽지가 이걸 읽는다
+	g.cons = [candy.duplicate()]
+	#  판 카드 자체는 LEG 에서 툴팁 대상이 아니다(효과는 쪽지가 든다).
+	#  커서가 지나가며 뜨는 것은 **건너뛰기 쪽지**다 — 사용자 화면의 그것이다.
+	var leg_at: Vector2 = g._skip_rect(0).get_center()
+	_ok("안 들면 건너뛰기 쪽지를 가리킨다", not g._tip_hit(leg_at).is_empty(),
+			"%s" % g._tip_hit(leg_at))
+	g._hand_press(g._cons_rect(0).get_center())
+	for k in range(1, 9):
+		g._hand_motion(g._cons_rect(0).get_center().lerp(leg_at, float(k) / 8.0))
+	_ok("들면 손에 들려 있다", g.hand_st == g.H.CARRY, "hand_st %d" % g.hand_st)
+	_ok("드는 동안 쪽지를 안 가리킨다", g._tip_hit(leg_at).is_empty(),
+			"%s" % g._tip_hit(leg_at))
+	g._hand_abort()
+
+	#  제약 카드는 tip_mark 로 "선다" 를 판정한다(_drop_update). 툴팁이 꺼지면
+	#  카드도 안 서야 한다 — 두 가지가 아니라 한 가지다.
+	g.leg_no = GameData.legs_per_round()
+	g._open_stage()
+	g.cons = [candy.duplicate()]
+	var st_at: Vector2 = g._stage_rect(0).get_center()
+	g._tip_build(g._tip_hit(st_at))
+	g.tip_a = 1.0
+	for k in 30:
+		g._drop_update(1.0 / 60.0)
+	var up_free: float = float(g.stage_stand[0])
+	_ok("안 들면 커서 아래 제약 카드가 선다", up_free > 0.9, "up %.3f" % up_free)
+	g._hand_press(g._cons_rect(0).get_center())
+	for k in range(1, 9):
+		g._hand_motion(g._cons_rect(0).get_center().lerp(st_at, float(k) / 8.0))
+	g._tip_build(g._tip_hit(st_at))
+	for k in 30:
+		g._drop_update(1.0 / 60.0)
+	var up_held: float = float(g.stage_stand[0])
+	_ok("드는 동안 제약 카드가 안 선다", up_held < 0.01, "up %.3f" % up_held)
+	g._hand_abort()
+
+
+
 	print("\n%s\n" % ("전부 통과" if fail == 0 else "실패 %d건" % fail))
 	print("통과 %d · 실패 %d" % [okn, fail])
 	quit(0 if fail == 0 else 1)
