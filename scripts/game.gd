@@ -77,8 +77,14 @@ const PAD := {"u": 4.0, "tight": 4.0, "in": 8.0, "between": 16.0,
 const MO := {"tap": 4, "fast": 7, "base": 10, "panel": 14, "screen": 20, "big": 28}
 
 
+#  모션을 끄면 모든 시간이 0 이 된다 — 값은 그대로 최종값으로 간다.
+#  스크린샷 자가 흔들림 없는 화면을 잡을 길이 필요하고, 도트가 떨리는 것을
+#  못 견디는 사람이 실제로 있다.
+var motion_off := false
+
+
 func _mo(k: String) -> float:
-	return float(MO[k]) / 60.0
+	return 0.0 if motion_off else float(MO[k]) / 60.0
 
 
 #  등장은 감속(빨리 나타나 부드럽게 선다) · 퇴장은 가속(미련 없이 나간다) ·
@@ -4503,7 +4509,8 @@ func draw_front(c: CanvasItem) -> void:
 func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, VIEW), C_BG)
 	# 툴팁이 대상 테두리만 같이 흔들고 판은 고정하려면 이 값을 알아야 한다
-	var sh := Vector2(randf_range(-shake, shake), randf_range(-shake, shake))
+	var sh := Vector2.ZERO if motion_off else Vector2(
+			randf_range(-shake, shake), randf_range(-shake, shake))
 	shake_off = sh
 	draw_set_transform(sh)
 
@@ -10546,9 +10553,10 @@ func _tip_draw(sh: Vector2) -> void:
 	draw_set_transform(Vector2.ZERO)
 	var sz := _tip_size()
 	var p := _tip_pos(sz)
+	#  판 면은 한 색이다. 여기만 lightened(0.06) 이라 그 위의 배수 붉음이
+	#  3.7:1 까지 떨어져 있었다 — 판이 밝아진 만큼 글자 대비가 깎였다.
 	draw_rect(Rect2(p + Vector2(2.0, 3.0), sz), Color(0.0, 0.0, 0.0, tip_a * 0.4))
-	draw_rect(Rect2(p, sz), Color(C_PANEL.lightened(0.06), tip_a))
-	draw_rect(Rect2(p, Vector2(sz.x, 2.0)), Color(C_ACC, tip_a))
+	_panel(Rect2(p, sz), true, tip_a)
 
 	var tx: float = p.x + TIP.pad
 	if not tip_chip.is_empty():
@@ -10811,8 +10819,10 @@ func _panel(r: Rect2, focus := false, a := 1.0) -> void:
 
 func _btn(r: Rect2, label: String, sub: String, on: bool,
 		sub_col: Color = C_GOLD) -> void:
-	draw_rect(r, C_PANEL.lightened(0.10) if on else C_PANEL.darkened(0.2))
-	draw_rect(Rect2(r.position, Vector2(r.size.x, 2)), C_ACC if on else C_DIM.darkened(0.5))
+	#  판 위 조작 넷(던진다 · 상점으로 · 리롤 · 다음 판). 면 색을 호출부마다
+	#  만들지 않는다 — 못 누르는 동안은 면은 그대로 두고 **띠를 끈다.**
+	#  면을 어둡게 하면 그 위 글자 대비가 같이 깎인다.
+	_panel(r, on)
 	draw_string(font, r.position + Vector2(0, 20), label,
 			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 11, C_TXT if on else C_DIM)
 	if sub != "":
@@ -11165,7 +11175,7 @@ var vol_mus := 0.8       # 음악. 깔개라 기본값이 효과음보다 한 �
 var set_drag := -1       # 끌고 있는 게이지 행. -1 이면 안 끈다
 var set_hot := -1        # 커서가 얹힌 줄. 없으면 -1
 var set_sel := 0         # 눌러서 고른 줄. 커서가 없을 때 오른쪽 판이 이걸 편다
-var set_t := 0.0         # 밀려 들어온 시간. 0 이면 화면 밖, SET.t 면 제자리
+var set_t := 0.0         # 밀려 들어온 정도 0~1. 0 이면 화면 밖
 var ttl_hot := -1        # 제목 메뉴에서 커서가 얹힌 줄
 var ttl_e := []          # 그 줄의 얹힘 짙기
 var ttl_w := []          # 그 줄 띠가 쓸려 든 폭
@@ -11177,7 +11187,7 @@ var pause_from := -1     # 게임 중 ESC 로 설정을 열면 돌아갈 상태.
 
 #  제목 메뉴. 설정과 **같은 세로선 · 같은 줄 높이**다 — 두 화면이 같은
 #  어휘를 쓰는 것이 눈에 보이려면 자리부터 같아야 한다.
-const TMENU := {"x": 38.0, "y": 150.0, "h": 22.0, "gap": 4.0, "w": 148.0}
+const TMENU := {"x": SAFE, "y": 150.0, "h": 22.0, "gap": 4.0, "w": 148.0}
 
 
 func _menu_rect(i: int) -> Rect2:
@@ -11246,9 +11256,9 @@ func _draw_title() -> void:
 				Color(0.03, 0.02, 0.06, 0.13))
 	#  제목은 머리(_hdr)보다 크다. 이 화면에서는 제목이 곧 그림이라
 	#  다른 화면의 머리와 같은 크기로 두면 시작화면이 아니라 목록이 된다.
-	draw_string(font, Vector2(float(HDR.x), 104.0), "하이톤",
+	draw_string(font, Vector2(SAFE, 104.0), "하이톤",
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 33, C_TXT)
-	draw_string(font_sm, Vector2(float(HDR.x) + 2.0, 122.0), "HIGHTONE",
+	draw_string(font_sm, Vector2(SAFE + 2.0, 122.0), "HIGHTONE",
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_DIM)
 	#  글줄을 꿰는 세로선 — 설정과 같은 어법이다.
 	var y0: float = float(TMENU.y) + 4.0
@@ -13271,19 +13281,18 @@ func _set_rows() -> Array:
 #  무엇인가**다. 소리 게이지도 거기 산다 — 왼쪽에 게이지를 같이 놓으면
 #  글줄이라는 규약이 한 줄에서만 깨진다.
 const SET := {
-	"x": 38.0,         # 글줄 왼쪽 끝
+	"x": SAFE,         # 글줄 왼쪽 끝 — 머리와 같은 세로선
 	"y": 106.0,        # 첫 줄
 	"h": 22.0,         # 줄 높이
 	"gap": 4.0,
 	"split": 14.0,     # 나가는 무리 앞에 두는 틈
 	"w": 148.0,        # 누를 수 있는 폭
 	"slide": 52.0,     # 밀려 들어오는 거리
-	"t": 0.16,         # 다 밀려 드는 데 걸리는 시간(초)
 }
 #  오른쪽 판
 const SETP := Rect2(214.0, 96.0, 386.0, 176.0)
 #  얹힘 띠 — 조각 수 · 왼쪽 끝의 짙기 · 쓸려 드는 빠르기(초당)
-const SETB := {"n": 12, "a": 0.22, "v": 9.0}
+const SETB := {"n": 12, "a": 0.22}
 
 
 func _set_exit(k: String) -> bool:
@@ -13303,8 +13312,7 @@ func _set_off(rows: Array, i: int) -> float:
 
 #  밀려 들어온 정도. 0 이면 화면 밖, 1 이면 제자리다.
 func _set_ease() -> float:
-	var t: float = clampf(set_t / float(SET.t), 0.0, 1.0)
-	return 1.0 - pow(1.0 - t, 3.0)      # 빨리 들어와 부드럽게 선다
+	return _ease_enter(set_t)
 
 
 func _set_rect(i: int) -> Rect2:
@@ -13467,7 +13475,11 @@ func _row_band(c: CanvasItem, r: Rect2, ee: float, ew: float, a: float,
 #  설정은 여섯 줄이 노는 화면이라 78 에서 시작해도 되는데, 컬렉션은 28칸
 #  격자가 72 부터 서서 자리가 없다. 한 목소리로 들리게 하는 것은 y 가
 #  아니라 x·크기·색이다.
-const HDR := {"x": 38.0, "y": 34.0, "sz": 22, "sub_dy": 16.0, "sub_sz": 9}
+#  레일. 32 는 640 폭에서 좌우 64px(10%)을 먹어 컬렉션 격자 한 열이
+#  통째로 사라진다. 오버스캔은 TV 전제이고 이 게임은 정수 배율 창이다.
+#  16 = 4x4 이고, 22px 머리가 x16 에 서면 왼쪽 여백이 글자 높이의 0.7배다.
+const SAFE := 16.0
+const HDR := {"x": SAFE, "y": 34.0, "sz": 22, "sub_dy": 16.0, "sub_sz": 9}
 
 
 func _hdr(c: CanvasItem, t: String, sub := "", a := 1.0, dx := 0.0,
@@ -13906,7 +13918,13 @@ func _title_tick(d: float) -> void:
 func _set_tick(d: float) -> void:
 	var want: bool = state == S.SETTINGS
 	var was := set_t
-	set_t = clampf(set_t + (d if want else -d), 0.0, float(SET.t))
+	#  열림과 닫힘의 시간이 다르다. 닫기는 이미 마음을 정한 뒤라 같은
+	#  시간을 쓰면 붙잡힌다 — 나감은 들어옴의 0.7배(panel 14f · base 10f).
+	var span: float = _mo("panel") if want else _mo("base")
+	if span <= 0.0:
+		set_t = 1.0 if want else 0.0        # 모션 끄기 — 곧장 최종값
+	else:
+		set_t = clampf(set_t + (d if want else -d) / span, 0.0, 1.0)
 	if want:
 		set_hot = _set_hit(mouse_at)
 	elif set_t <= 0.0:
@@ -13915,7 +13933,7 @@ func _set_tick(d: float) -> void:
 	#  움직여야 손이 옮겨 갈 때 띠가 따라오는 것으로 읽힌다.
 	var rows := _set_rows()
 	var face: int = _set_face() if set_t > 0.0 else -1
-	_row_ease(set_row_e, set_row_w, rows.size(), face, d, float(SETB.v))
+	_row_ease(set_row_e, set_row_w, rows.size(), face, d, 60.0 / float(MO.fast))
 	var blur := get_node_or_null("Blur")
 	if blur != null:
 		var e: float = _set_ease()
@@ -13980,12 +13998,13 @@ func _col_tab_rect(t: int) -> Rect2:
 	# 여섯 칸을 화면 안에 고르게 편다. 다섯일 때 쓰던 102px 고정 간격은
 	# 여섯째가 화면(640) 밖으로 나간다 — 폭에서 나눠 쓴다.
 	var n := float(COL_TABS.size())
-	var w: float = (VIEW.x - 44.0) / n
-	return Rect2(Vector2(22.0 + w * float(t), 42.0), Vector2(w - 6.0, 24.0))
+	var w: float = (VIEW.x - SAFE * 2.0) / n
+	return Rect2(Vector2(SAFE + w * float(t), 46.0), Vector2(w - 6.0, 22.0))
 
 
 func _col_arrow_rect(right: bool) -> Rect2:
-	return Rect2(Vector2(560.0 if right else 44.0, 322.0), Vector2(36.0, 30.0))
+	return Rect2(Vector2(VIEW.x - SAFE - 36.0 if right else SAFE, 322.0),
+			Vector2(36.0, 30.0))
 
 
 func _col_cell(i: int) -> Rect2:
@@ -14232,9 +14251,11 @@ func _draw_runinfo() -> void:
 	# 뒤를 통째로 가리지 않는다. 게임이 비쳐야 "잠깐 여는 판" 이다.
 	draw_rect(Rect2(Vector2.ZERO, VIEW), Color(0.0, 0.0, 0.0, 0.55))
 	var p := _ri_panel()
+	#  전에는 「그림자 + 어두운 면 + 1px 사면 테두리, 띠 없음」이었고 툴팁은
+	#  「그림자 + 밝은 면 + 금색 띠, 테두리 없음」이었다. 같은 층이 두 문법으로
+	#  서 있었다. 테두리를 걷고 _panel 로 모은다.
 	draw_rect(Rect2(p.position + Vector2(2.0, 3.0), p.size), Color(0.0, 0.0, 0.0, 0.4))
-	draw_rect(p, C_PANEL.darkened(0.10))
-	draw_rect(p, C_WIRE.darkened(0.25), false, 1.0)
+	_panel(p, true)
 
 	for t in RI_TABS.size():
 		_tab_draw(self, _ri_tab_rect(t), RI_TABS[t], t == runinfo_tab,

@@ -389,6 +389,7 @@ static func _rows(g: Node) -> Array:
 						"n": GameData.boosters().size()},
 				{"n1": "테이블 다시 굴리기", "t": "act", "a": "restock"},
 				{"n1": "테이블에 사진 깔기", "t": "act", "a": "restock_fix"},
+				{"n1": "모션 끄기/켜기", "t": "act", "a": "motion"},
 			]
 		2:
 			return [
@@ -605,6 +606,13 @@ static func _run(g: Node, e: Dictionary) -> void:
 		"restock":
 			g._roll_stock()
 			_say("테이블 다시")
+			return
+		"motion":
+			# 흔들림·밀려 듦·굴림을 통째로 끈다. 값은 그대로 최종값으로 간다 —
+			# 스크린샷 자가 떨림 없는 화면을 잡을 길이고, 도트가 흔들리는
+			# 것을 못 견디는 사람도 있다.
+			g.motion_off = not g.motion_off
+			_say("모션 %s" % ("끔" if g.motion_off else "켬"))
 			return
 		"restock_fix":
 			# 사진은 상점당 0.5% 다(기획서 P.30). 손으로 리롤해서는 이백

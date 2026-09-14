@@ -47,7 +47,7 @@ func _shoot(nm: String) -> void:
 
 
 func _check(tag: String) -> void:
-	g.set_t = g.SET.t          # 다 밀려 든 상태로 잰다
+	g.set_t = 1.0              # 다 밀려 든 상태로 잰다
 	var rows: Array = g._set_rows()
 	var v: Vector2 = g.VIEW
 	var top := 9999.0
@@ -111,11 +111,11 @@ func _run() -> void:
 	# ④ 밀려 들어오는 중 — 반쯤 들어온 자리가 화면 밖으로 안 나간다
 	print("")
 	g.pause_from = 1
-	g.set_t = float(g.SET.t) * 0.5
+	g.set_t = 0.5
 	var half: Rect2 = g._set_rect(0)
 	g.set_t = 0.0
 	var out0: Rect2 = g._set_rect(0)
-	g.set_t = float(g.SET.t)
+	g.set_t = 1.0
 	var done: Rect2 = g._set_rect(0)
 	_ok("밀려 들어온다", out0.position.x < half.position.x
 			and half.position.x < done.position.x,
@@ -144,7 +144,7 @@ func _run() -> void:
 	print("")
 	g.state = g.S.SETTINGS
 	g.pause_from = 1
-	g.set_t = float(g.SET.t)
+	g.set_t = 1.0
 	g.set_sel = 0
 	var mid: Vector2 = g._set_rect(3).get_center()
 	g.mouse_at = mid

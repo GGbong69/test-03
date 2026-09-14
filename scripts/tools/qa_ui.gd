@@ -150,16 +150,28 @@ func _run() -> void:
 				"%.2f:1 (바라는 값 %.1f)" % [r, pair[2]])
 
 	# ⑤ 뿌리 부품이 다 섰나
+	# ⑥ 모션 끄기가 실제로 시간을 0 으로 만드나
+	var gg = load("res://scenes/main.tscn").instantiate()
+	root.add_child(gg)
+	gg.set_process(false)
+	var on_t: float = gg._mo("panel")
+	gg.motion_off = true
+	var off_t: float = gg._mo("panel")
+	_ok("모션 끄기가 시간을 0 으로", on_t > 0.0 and off_t == 0.0,
+			"켬 %.3f초 → 끔 %.3f초" % [on_t, off_t])
+	gg.queue_free()
+
 	var need := ["const TYPE :=", "const PAD :=", "const MO :=",
 			"func _ease_enter", "func _ease_exit", "func _ease_move",
 			"func _px(", "func _pr(", "func _panel(",
-			"const C_OFF :=", "const FONT_SMALL :="]
+			"const C_OFF :=", "const FONT_SMALL :=", "const SAFE :=",
+			"var motion_off"]
 	var miss := PackedStringArray()
 	var whole := "\n".join(L)
 	for n in need:
 		if whole.find(n) < 0:
 			miss.append(n)
-	_ok("뿌리 부품 열하나가 섰다", miss.is_empty(),
+	_ok("뿌리 부품이 다 섰다", miss.is_empty(),
 			"없는 것: %s" % ("없다" if miss.is_empty() else ", ".join(miss)))
 
 	print("\n%s\n" % ("전부 통과" if fail == 0 else "실패 %d건" % fail))

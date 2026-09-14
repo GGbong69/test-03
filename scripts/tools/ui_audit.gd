@@ -126,7 +126,7 @@ func _run() -> void:
 	# 설정
 	g.pause_from = g.S.SHOP
 	g.state = g.S.SETTINGS
-	g.set_t = float(g.SET.t)
+	g.set_t = 1.0
 	await _shoot("10_settings")
 
 	# 런 끝
