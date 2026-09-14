@@ -168,6 +168,11 @@ func _run() -> void:
 		# 낮은 통은 자루가 덜 잠겨 쏟긴다. 표가 직접 막는다.
 		if sk.has("tall") and float(sk["tall"]) < 0.9:
 			bad.append("너무 낮다 %s=%s" % [k, sk["tall"]])
+		# 좁은 통은 자루가 **설 데가 없어** 아가리에 걸쳐 눕는다.
+		# 자루 길이(2×dl = 1.62)는 고정인데 통만 좁히면 그렇게 된다 —
+		# 0.62 로 조였던 외줄이 35·37도로 누웠다(멀쩡한 통 7~28도).
+		if sk.has("wide") and float(sk["wide"]) < 0.85:
+			bad.append("너무 좁다 %s=%s" % [k, sk["wide"]])
 		if sk.has("dart"):
 			if not g.CUP_TINTS.has(String(sk["dart"])):
 				bad.append("자루색 없음 %s=%s" % [k, sk["dart"]])

@@ -42,11 +42,15 @@ func _run() -> void:
 	var rows: int = int(ceil(float(packs.size()) / float(cols)))
 	var sheet := Image.create(cw * cols, ch * rows, false, Image.FORMAT_RGBA8)
 	sheet.fill(Color("221d33"))
+	#  **화살표로 민다.** 통을 다시 세워서(_cup3_close+_cup3_open) 찍으면
+	#  자루가 처음 놓인 자리 그대로라 늘 얌전하다 — 플레이어는 그 그림을
+	#  한 번도 못 본다. 미는 동안 벽이 자루를 밀어 나르고, 그때 기운
+	#  자루가 그대로 선다. cup_probe 주석이 경고해 둔 그 함정에
+	#  촬영 쪽이 빠져 있었다.
 	for pi in packs.size():
-		g._pack_view(pi)
-		g._cup3_close()
-		g._cup3_open()
-		await _wait(90)
+		if pi > 0:
+			g._pack_step(1)
+		await _wait(150)
 		var img: Image = root.get_texture().get_image()
 		img.convert(Image.FORMAT_RGBA8)
 		var src := Rect2i(int(st.position.x) * sc, int(st.position.y) * sc, cw, ch)
