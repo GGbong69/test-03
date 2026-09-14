@@ -22,10 +22,16 @@ const Save = preload("res://scripts/save.gd")
 #    ③ 연타해도 통이 쌓이지 않는다
 #    ④ 화면을 뜨면(제목 · 런 시작) 뷰포트가 지워진다
 #    ⑤ 다트통별 통 겉(CUP_SKIN) 표에 없는 다트통·없는 벽·없는 속성이 없다
+#    ⑥ **열넷의 겉이 서로 다르다** — 2026-09-14 사용자 지시:
+#       "기본 다트통이랑 같은 다트통 외형이 너무 많아"
 # ══════════════════════════════════════════════════════════
 var g = null
 var busy := false
 var fails := 0
+
+# 발치 이름마다 물건 몇 개가 서는가. 자가 아는 것이 맞다 — 게임이 몇
+# 개를 세웠는지를 게임에게 물으면 "세운 만큼 섰다" 밖에 안 나온다.
+const FEET_N := {"gift": 2}
 
 
 func _say(ok: bool, name: String, detail := "") -> void:
@@ -156,6 +162,12 @@ func _run() -> void:
 		# 색도 벽과 같은 규약이다 — 오타를 내면 잠자코 강철빛으로 떨어진다.
 		if sk.has("tint") and not g.CUP_TINTS.has(String(sk["tint"])):
 			bad.append("색 없음 %s=%s" % [k, sk["tint"]])
+		# 발치도 같은 규약이다 — 오타는 잠자코 빈 발치로 떨어진다.
+		if sk.has("foot") and not g.CUP_FEET.has(String(sk["foot"])):
+			bad.append("발치 없음 %s=%s" % [k, sk["foot"]])
+		# 낮은 통은 자루가 덜 잠겨 쏟긴다. 표가 직접 막는다.
+		if sk.has("tall") and float(sk["tall"]) < 0.9:
+			bad.append("너무 낮다 %s=%s" % [k, sk["tall"]])
 		if sk.has("dart"):
 			if not g.CUP_TINTS.has(String(sk["dart"])):
 				bad.append("자루색 없음 %s=%s" % [k, sk["dart"]])
@@ -185,6 +197,7 @@ func _run() -> void:
 	g._open_newrun()
 	await _wait(60)
 	var esc := []
+	var lean_max := 0.0
 	for pi in GameData.packs().size():
 		if pi > 0:
 			g._pack_step(1)
@@ -203,27 +216,35 @@ func _run() -> void:
 				var tip: Vector3 = t.origin - t.basis.y * float(g.CUP3.dl)
 				var tl: Vector3 = t.origin + t.basis.y * float(g.CUP3.dl)
 				wi = maxf(wi, Vector2(tip.x - cx, tip.z).length() / rr)
-				wt = maxf(wt, Vector2(tl.x - cx, tl.z).length() / rr)
+				# 꽁지는 **각으로** 잰다. 반지름으로 나누면 좁은 통일수록
+				# 같은 기울기가 큰 값으로 나온다 — 실제로 깃털(0.80)과
+				# 외줄(0.62)이 넉넉한 선(2.1×r)에 걸렸는데, 각으로 풀어 보니
+				# 둘 다 넓은 통과 같은 29도였다. 통이 샌 것이 아니라 자가
+				# 통 굵기를 재고 있었다.
+				var flat: float = Vector2(tl.x - tip.x, tl.z - tip.z).length()
+				wt = maxf(wt, rad_to_deg(asin(clampf(
+						flat / (2.0 * float(g.CUP3.dl)), 0.0, 1.0))))
 		# **촉이 이 검사의 전부다.** 촉이 벽(1.0×r) 안에 있으면 자루는 통
 		# 안에 있고, 꽁지가 아무리 기울어도 쏟아진 것이 아니다 — 촉을 두고
 		# 꽁지만 나갈 수는 없다.
 		#
-		# 그래서 꽁지 선은 불변식이 아니라 넉넉한 그물이다. 2.1×r 은 자루가
-		# 30도쯤 기운 자리이고, 거기까지 가면 통에 걸쳐 누운 것으로 보인다.
-		# 1.45(20도)로 잡았더니 자루를 느슨하게 푼 뒤로 세 번에 한 번씩
-		# 걸렸다 — 기대 눕는 각의 자연스러운 폭 안이었다. 회귀 검사가
-		# 멀쩡한 값을 두고 우는 것이 안 우는 것보다 나쁘다.
+		# 그래서 꽁지 선은 불변식이 아니라 넉넉한 그물이고, 단위는 **도**다.
+		# 38도면 자루가 통에 걸쳐 누운 자리다. 20도로 잡았더니 자루를
+		# 느슨하게 푼 뒤로 세 번에 한 번씩 걸렸다 — 기대 눕는 각의 자연스러운
+		# 폭 안이었다. 회귀 검사가 멀쩡한 값을 두고 우는 것이 안 우는 것보다 나쁘다.
 		# 촉 선에 여유 한 톨을 둔다. 벽 지키기가 촉을 **정확히** 벽에 붙여
 		# 놓으므로(넘어간 만큼만 밀어 넣는다) 값이 1.0 에 딱 서고, 그러면
 		# 부동소수 끝자리가 어느 쪽으로 떨어지느냐로 통과·실패가 갈린다.
 		# 재는 자리가 아니라 세는 자리의 문제다.
-		if wi > 1.001 or wt > 2.1:
-			esc.append("%s(촉 %.2f 꽁지 %.2f)"
+		lean_max = maxf(lean_max, wt)
+		if wi > 1.001 or wt > 38.0:
+			esc.append("%s(촉 %.2f 꽁지 %.0f도)"
 					% [GameData.packs()[g.newrun_pip].get("id", ""), wi, wt])
 	_say(esc.is_empty(), "넘긴 뒤에도 자루가 통 안에 남는다",
-			", ".join(esc) if not esc.is_empty() else "여섯 다트통 전부")
+			", ".join(esc) if not esc.is_empty()
+			else "열넷 전부 · 가장 기운 자루 %.0f도" % lean_max)
 
-	# 발치의 골드. 표가 적은 수만큼 서고, 안 적은 다트통에는 하나도 없어야 한다 —
+	# 발치에 놓인 것. 표가 적은 수만큼 서고, 안 적은 다트통에는 하나도 없어야 한다 —
 	# 잠긴 다트통에도 없어야 한다(무엇을 주는 다트통인지가 그림으로 새면 안 된다).
 	var gbad := []
 	for pi in GameData.packs().size():
@@ -234,14 +255,41 @@ func _run() -> void:
 		var want := 0
 		var sk2: Dictionary = g._cup3_skin(pi)
 		if g._pack_open(pi):
-			want = int(sk2.gold)
+			# 발치에는 플라크와 "통에 못 드는 물건" 이 같이 앉는다.
+			want = int(sk2.gold) + int(FEET_N.get(String(sk2.foot), 0))
 		var got := 0
 		for rig in g.cup_rigs:
 			got += rig.get("gold", []).size()
 		if got != want:
 			gbad.append("%s %d/%d" % [GameData.packs()[pi].get("id", ""), got, want])
 	_say(gbad.is_empty(), "발치 골드가 표대로 선다",
-			", ".join(gbad) if not gbad.is_empty() else "여섯 다트통 전부")
+			", ".join(gbad) if not gbad.is_empty() else "열넷 전부")
 
-	print("열두 검사 · 실패 %d" % fails)
+	# ── 열넷의 겉이 서로 다른가 ────────────────────────
+	# 2026-09-14 제보: "기본 다트통이랑 같은 다트통 외형이 너무 많아".
+	# 그때 열넷 중 아홉이 **글자 하나 안 다른** 민 원통이었다. 색조차
+	# 같았다 — packs.csv 가 다트통마다 제 색을 적어 두었는데 통이 안 읽었다.
+	#
+	# 겉을 한 줄로 찍어 견준다. 두 다트통이 같은 줄을 내면 화면에서도
+	# 같아 보인다 — 자루 수까지 넣는 것은 통이 같아도 담긴 것이 다르면
+	# 갈리기 때문이다(실제로 그것 하나로 갈리는 다트통이 있다).
+	var face := {}
+	var same := []
+	for pi in GameData.packs().size():
+		var row: Dictionary = GameData.packs()[pi]
+		var sk3: Dictionary = g._cup3_skin(pi)
+		var sig := "%s|%.2f|%.2f|%d|%d|%s|%s|%s|%s|%s|%d" % [
+				String(sk3.wall), float(sk3.wide), float(sk3.tall),
+				int(sk3.hoop), int(sk3.spike), str(bool(sk3.pole)),
+				String(sk3.foot), str(bool(sk3.sticker)),
+				Color(sk3.body).to_html(false), Color(sk3.dart_col).to_html(),
+				g._cup_dart_n(row)]
+		if face.has(sig):
+			same.append("%s = %s" % [face[sig], row.get("id", "")])
+		face[sig] = String(row.get("id", ""))
+	_say(same.is_empty(), "열넷의 겉이 저마다 다르다",
+			", ".join(same) if not same.is_empty()
+			else "%d가지" % face.size())
+
+	print("열셋 검사 · 실패 %d" % fails)
 	quit(fails)

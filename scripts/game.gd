@@ -11861,13 +11861,13 @@ func _cup_wall(c: Vector2, g: Vector2, rx: float, ry: float,
 # 통 몸통. 다트를 사이에 끼우려고 두 번에 나눠 그린다 — 뒤(그림자·실루엣·
 # 아가리 안쪽·뒤 테)를 깔고, 다트를 얹고, 앞(앞벽·앞 테)으로 덮는다.
 # "통 안에 들어 있다" 는 이 덮기 한 번으로 선다.
-func _cup_body(cx: float, dim: float, front: bool) -> void:
+func _cup_body(cx: float, dim: float, front: bool, tone := C_WIRE) -> void:
 	var rx: float = CUP.rx
 	var ry: float = CUP.ry
 	var c := Vector2(cx, CUP.rim)
 	var g := Vector2(cx, _cup_foot())
-	var body: Color = C_WIRE.darkened(0.44 + dim * 0.22)
-	var lip: Color = C_WIRE.lightened(0.18).darkened(dim)
+	var body: Color = tone.darkened(0.44 + dim * 0.22)
+	var lip: Color = tone.lightened(0.18).darkened(dim)
 	if not front:
 		draw_colored_polygon(_e_pts(g + Vector2(2.0, 2.0), rx * 1.05, ry * 1.05, 18),
 				Color(0.0, 0.0, 0.0, 0.30))
@@ -11932,7 +11932,12 @@ func _cup_one(pi: int, dx: float) -> void:
 	var cx: float = _cup_stage().get_center().x + dx
 	var lean := _cup_lean()
 
-	_cup_body(cx, dim, false)
+	# 몸 색은 3D 와 같은 자리에서 뽑는다(_cup3_skin). 받침이라도 다트통이
+	# 갈리는 축은 같아야 한다 — 색이 다른 것은 여기서도 색이 달라야 한다.
+	# 겉의 나머지(테·촉·극·발치)는 3D 몫이다. 받침이 거기까지 흉내 내면
+	# 두 벌을 나란히 고쳐야 하고, 그러면 언젠가 둘이 갈린다.
+	var tone: Color = _cup3_skin(pi).body
+	_cup_body(cx, dim, false, tone)
 	# 잠긴 다트통은 **기준선 탄창**을 세운다. 그 다트통의 수와 종류를 그리면 효과 줄을
 	# 안 적어 둔 뜻이 없어진다 — 히든의 다트가 그림으로 새는 자리였다.
 	if open:
@@ -11940,7 +11945,7 @@ func _cup_one(pi: int, dx: float) -> void:
 				_cup_dart_n(row), dim, lean)
 	else:
 		_cup_darts(cx, "std", GameData.tune_i("darts_base"), dim, lean)
-	_cup_body(cx, dim, true)
+	_cup_body(cx, dim, true, tone)
 
 
 # 무대 밖으로 나간 몫을 판 바탕으로 덮어 자른다. 그리기 API 에 클립이
@@ -12068,15 +12073,32 @@ const CUP3 := {
 	"lid":    26.0,    # 아가리 위로 통째로 떠오를 때 눌러 내리는 가속도
 }
 
-# 다트통마다 통이 다르다. 통은 다트통의 얼굴이라 여섯 다트통을 훑을 때 눈이 먼저
+# 다트통마다 통이 다르다. 통은 다트통의 얼굴이라 열넷을 훑을 때 눈이 먼저
 # 잡는 것이 이것이다 — 글줄을 읽기 전에 "아까 그 통" 으로 다트통이 갈린다.
-# 표에 없는 다트통은 기본 통을 쓴다. 나머지 셋은 아직 안 정했다.
+#
+# 2026-09-14 까지 이 표에 넉 줄뿐이었고, 나머지 아홉이 전부 같은 민 원통으로
+# 서 있었다. 색조차 안 갈렸다 — packs.csv 가 다트통마다 제 색을 이미 적어
+# 두었는데(런 안에서 계산 칸이 쓰는 그 색이다) 통이 그것을 안 읽었다.
+#
+#   ── 무엇을 적는가 ──────────────────────────────────
+#   통이 말하는 것은 **그 다트통의 효과**지 이름이 아니다. 「무쇠」라서 테를
+#   두르는 것이 아니라 무거운 것을 담는 통이라 테를 두른다. 이름을 그리면
+#   이름을 두 번 적는 것이고, 이름은 바로 옆 글줄이 이미 들고 있다.
 #
 #   wall     벽을 어떻게 두르는가. CUP_WALLS 에 있는 이름만 쓴다
 #   wide     통 반지름 배율. **물리도 같이 넓어진다** — 벽 충돌·자루가
 #            앉는 고리·줄이 전부 이 값을 곱한 반지름을 본다. 그림만 늘리면
 #            자루가 안 보이는 벽에 막혀 통 한가운데 몰린다
-#   sticker  아가리 아래에 동전 한 장. 동전 슬롯이 넓다는 말을 통이 대신 한다
+#   tall     통 높이 배율. 이것도 물리가 같이 본다(rig 의 h) — 낮은 통은
+#            자루가 덜 잠겨 쏟기 쉽다. 0.9 아래로는 안 내린다
+#   hoop     몸을 두르는 쇠테 개수
+#   spike    벽을 뚫고 나온 촉 개수
+#   pole     위쪽을 딴 색으로 — 자석의 극
+#   foot     발치에 놓는 물건. CUP_FEET 에 있는 이름만 쓴다
+#   sticker  아가리 아래에 동전 한 장. "동전이 딸려 온다" 를 통이 대신 한다
+#   tint     몸 색. 기본값 own = packs.csv 의 제 색
+#   gold     발치에 흩어 놓는 플라크 수
+#   dart     자루 색을 덮는다. 표준 탄창인 다트통에서만 쓴다(cup_probe 가 막는다)
 #
 # **잠긴 다트통은 이 표를 안 본다**(_cup3_skin). 겉이 새면 히든이 히든이 아니다 —
 # 자루 수와 종류를 기준선으로 세우는 것과 같은 규칙이다.
@@ -12090,20 +12112,56 @@ const CUP_SKIN := {
 	# 일당 다트통. 이자를 끄고 **남은 다트 1개당** 골드를 두 배로 주는 다트통이라,
 	# 자루 자체가 돈이다. 그래서 통이 아니라 자루가 금빛이다.
 	"p_wage": {"dart": "gold"},
+
+	# 무쇠 다트통. 무거운 자루를 담는 통은 테를 두른다 — 통 하나로 "이 안에
+	# 무거운 것이 들었다" 를 말하는 가장 오래된 어법이다. 낮고 굵게 앉힌다.
+	"p_iron": {"hoop": 3, "tall": 0.92, "wide": 1.06},
+	# 깃털 다트통. 무쇠의 정반대로 세운다 — 가늘고 키 크다. 둘을 나란히
+	# 놓았을 때 실루엣만으로 갈리는 것이 이 표의 값이다.
+	"p_lgt":  {"tall": 1.26, "wide": 0.80},
+	# 송곳 다트통. 관통 자루를 담아 둔 통은 벽이 성할 리가 없다 —
+	# 「양옆 칸」이 무엇인지를 통이 미리 말한다.
+	"p_prc":  {"spike": 5},
+	# 자석 다트통. 자석은 늘 두 색으로 칠해져 있고, 그 두 색이 곧 "자석"
+	# 이라는 글자다.
+	"p_mgn":  {"pole": true},
+	# 외줄 다트통. 자루를 셋 덜 주고 한 발을 1.6배로 친다. 통이 좁아서
+	# 몇 자루 안 들어간다 — 수를 세기 전에 통이 먼저 말한다.
+	"p_solo": {"wide": 0.62},
+	# 선물 다트통. 들려 보내는 둘(사진·사탕)은 자루가 아니라 통 **안**에
+	# 못 든다. 그래서 발치에 놓는다 — 선금이 플라크를 흩는 그 자리다.
+	# 리본을 둘렀던 적이 있는데 그것은 **이름**을 그린 것이었다. 이 표가
+	# 그리는 것은 효과다.
+	"p_gift": {"foot": "gift"},
+	# 저울 다트통. 동전 하나를 끼고 시작한다. 넓은 동전 슬롯이 "칸이 넓다"
+	# 를 동전으로 말하는 그 어법을 "한 장 딸려 온다" 에 그대로 쓴다.
+	"p_x1":   {"sticker": true},
+	# [?? ???]. 쌓은 것을 버리고 다시 뽑는 다트통이라 자루가 무엇인지를
+	# 통이 말하지 않는다 — 이름 없는 강철빛으로 덮는다. 통은 제 색으로
+	# 선명한데 그 안의 자루만 무표정한 것이 이 다트통의 그림이다.
+	"p_rnd":  {"dart": "steel"},
+	# 0718. 개발자 모드다. **일부러 아무것도 안 준다** — 이 다트통에 얼굴을
+	# 달면 고를 만한 것으로 보이고, 고를 만한 것이 아니다.
+	"p_dev":  {},
 }
 
 # 겉 하나가 안 적은 값. 표는 다른 것만 적는다.
 #   dart  자루 색을 덮는다. 빈 값이면 다트 종류가 정하는 색 그대로다.
-const CUP_SKIN0 := {"wall": "solid", "wide": 1.0, "sticker": false,
-		"tint": "steel", "gold": 0, "dart": ""}
+const CUP_SKIN0 := {"wall": "solid", "wide": 1.0, "tall": 1.0,
+		"sticker": false, "hoop": 0, "spike": 0, "pole": false, "foot": "",
+		"tint": "own", "gold": 0, "dart": ""}
 
 # 있는 색의 온 목록. 벽 갈래와 독립이라 금빛 철망도 설 수 있다.
-const CUP_TINTS := ["steel", "gold"]
+const CUP_TINTS := ["own", "steel", "gold"]
 
 # 있는 벽의 온 목록. _cup3_cup 의 match 와 짝이다 — 표에 오타를 내면
 # 잠자코 민 통이 서므로(match 의 기본 갈래) 눈으로는 못 잡는다.
 # cup_probe 가 이 목록으로 표를 검사한다.
 const CUP_WALLS := ["solid", "net"]
+
+# 있는 발치의 온 목록. 벽·색과 같은 규약이다 — 오타를 내면 잠자코 빈
+# 발치가 되므로(_cup3_feet 의 기본 갈래) 눈으로는 못 잡는다.
+const CUP_FEET := ["gift"]
 
 var cup_vp: SubViewport = null
 var cup_rigs := []      # [{"cup": AnimatableBody3D, "darts": Array, "pi": int}]
@@ -12196,7 +12254,7 @@ func _cup3_mesh(parent: Node3D, mesh: Mesh, col: Color, at: Vector3,
 
 # ── 벽: 민 통 ────────────────────────────────────────
 # 기준선. 벽 두 겹에 굵은 테 하나다.
-func _cup3_wall_solid(b: Node3D, r: float, w: float, h: float, tint: String) -> void:
+func _cup3_wall_solid(b: Node3D, r: float, w: float, h: float, col: Color) -> void:
 	var face := _cup3_face("solid", r, w)
 	var outer := CylinderMesh.new()
 	outer.top_radius = face
@@ -12205,7 +12263,7 @@ func _cup3_wall_solid(b: Node3D, r: float, w: float, h: float, tint: String) -> 
 	outer.cap_top = false
 	outer.cap_bottom = false
 	outer.radial_segments = 26
-	_cup3_mesh(b, outer, _cup3_wall_col("solid", tint), Vector3(0.0, h * 0.5, 0.0))
+	_cup3_mesh(b, outer, _cup3_wall_col("solid", col), Vector3(0.0, h * 0.5, 0.0))
 	# 안쪽 벽은 법선을 뒤집어야 안이 보인다. 양면 재질로 두면 안쪽이
 	# 바깥 빛을 받아 통이 유리로 보인다.
 	var inner := CylinderMesh.new()
@@ -12222,7 +12280,7 @@ func _cup3_wall_solid(b: Node3D, r: float, w: float, h: float, tint: String) -> 
 	lip.outer_radius = r + w
 	lip.rings = 26
 	lip.ring_segments = 6
-	_cup3_mesh(b, lip, _cup3_tint(tint).lightened(0.18), Vector3(0.0, h, 0.0))
+	_cup3_mesh(b, lip, col.lightened(0.18), Vector3(0.0, h, 0.0))
 
 
 # ── 벽: 철망 ─────────────────────────────────────────
@@ -12234,7 +12292,7 @@ func _cup3_wall_solid(b: Node3D, r: float, w: float, h: float, tint: String) -> 
 #          자루가 출렁일 때마다 그 얼룩이 같이 끓는다. 실물 철망 통도
 #          안이 어두우면 구멍은 그냥 검다.
 # 속통은 양면이다. 아가리로 들여다본 뒷벽 안쪽이 그 뒷면이다.
-func _cup3_wall_net(b: Node3D, r: float, w: float, h: float, tint: String) -> void:
+func _cup3_wall_net(b: Node3D, r: float, w: float, h: float, col: Color) -> void:
 	var face := _cup3_face("net", r, w)
 	var wall := CylinderMesh.new()
 	wall.top_radius = face
@@ -12243,7 +12301,7 @@ func _cup3_wall_net(b: Node3D, r: float, w: float, h: float, tint: String) -> vo
 	wall.cap_top = false
 	wall.cap_bottom = false
 	wall.radial_segments = 26
-	_cup3_mesh(b, wall, _cup3_wall_col("net", tint), Vector3(0.0, h * 0.5, 0.0),
+	_cup3_mesh(b, wall, _cup3_wall_col("net", col), Vector3(0.0, h * 0.5, 0.0),
 			Vector3.ZERO, true)
 	var drum := CylinderMesh.new()
 	drum.top_radius = face - 0.01
@@ -12262,7 +12320,170 @@ func _cup3_wall_net(b: Node3D, r: float, w: float, h: float, tint: String) -> vo
 	lip.outer_radius = face + 0.012
 	lip.rings = 26
 	lip.ring_segments = 6
-	_cup3_mesh(b, lip, _cup3_tint(tint).lightened(0.18), Vector3(0.0, h, 0.0))
+	_cup3_mesh(b, lip, col.lightened(0.18), Vector3(0.0, h, 0.0))
+
+
+# ── 테 ──────────────────────────────────────────────
+# 통 몸을 두르는 쇠테. 무거운 것을 담는 통은 테를 두른다 — 통 하나로
+# "이 안에 무거운 것이 들었다" 를 말하는 가장 오래된 어법이다.
+# 발치와 아가리는 이미 제 테가 있으므로 그 사이만 나눠 두른다.
+func _cup3_hoops(b: Node3D, r: float, w: float, h: float, col: Color,
+		n: int) -> void:
+	# 아래쪽에 몰아 두른다. 고르게 나누면 아가리 바로 밑에도 한 줄이
+	# 서서 아가리 테와 겹쳐 읽히고, 통이 테만 남는다.
+	# 테는 벽보다 **밝다.** 처음에 어둡게(0.52~0.62) 칠했더니 벽도 이미
+	# 0.44 어두운 색이라 둘이 붙어, 테 셋이 골함석 주름으로 뭉쳤다 —
+	# 테가 있다는 것이 아니라 통이 우글거린다는 것으로 보였다.
+	# 밝게 두르면 어두운 몸에 쇠테 셋이 얹힌 그림이 된다.
+	for i in n:
+		var y: float = h * (0.17 + 0.24 * float(i))
+		var hp := TorusMesh.new()
+		hp.inner_radius = r + w * 0.9
+		hp.outer_radius = r + w * 1.8
+		hp.rings = 26
+		hp.ring_segments = 6
+		_cup3_mesh(b, hp, col.lightened(0.12), Vector3(0.0, y, 0.0))
+
+
+# ── 촉 ──────────────────────────────────────────────
+# 벽을 뚫고 나온 촉들. 관통 다트를 담아 둔 통은 벽이 성할 리가 없다 —
+# 「양옆 칸」이 무엇인지를 통이 미리 말한다.
+# 색은 **그 다트의 색**이다. 통에 박힌 것이 딴 물건으로 안 읽힌다.
+# 물리에는 안 넣는다 — 벽 바깥이라 자루가 닿을 자리가 아니다.
+func _cup3_spikes(b: Node3D, r: float, w: float, h: float, n: int) -> void:
+	var face: float = r + w
+	for i in n:
+		# **앞쪽 절반에만 세운다.** 한 바퀴 고르게 두르면 다섯 중 둘만
+		# 카메라를 보고 나머지는 실루엣 가장자리에서 1px 로 죽는다 —
+		# 통 하나를 보는 화면이라 뒤통수에 그린 것은 없는 것과 같다.
+		# 높이는 어긋나게 — 한 줄로 서면 무늬가 되고, 무늬는 뚫린 자국으로
+		# 안 읽힌다.
+		var a: float = -1.15 + 2.30 * float(i) / maxf(float(n) - 1.0, 1.0)
+		var y: float = h * (0.26 + 0.46 * fmod(float(i) * 0.618, 1.0))
+		var sp := CylinderMesh.new()
+		sp.top_radius = 0.0
+		sp.bottom_radius = w * 1.45
+		sp.height = w * 5.4
+		sp.radial_segments = 8
+		# 촉은 옆으로 뻗는다 — 원통의 축(+Y)을 벽 밖 방향으로 눕힌다.
+		_cup3_mesh(b, sp, _dart3_col("prc"),
+				Vector3(sin(a) * (face + w * 2.4), y, cos(a) * (face + w * 2.4)),
+				Vector3(PI * 0.5, -a, 0.0))
+
+
+# ── 극 ──────────────────────────────────────────────
+# 위 절반이 딴 색인 통. 자석의 극이다 — 말굽이든 막대든 자석은 늘
+# 두 색으로 칠해져 있고, 그 두 색이 곧 "자석" 이라는 글자다.
+func _cup3_pole(b: Node3D, r: float, w: float, h: float) -> void:
+	var pl := CylinderMesh.new()
+	pl.top_radius = r + w * 1.04
+	pl.bottom_radius = r + w * 1.04
+	pl.height = h * 0.34
+	pl.cap_top = false
+	pl.cap_bottom = false
+	pl.radial_segments = 26
+	# 위 3분의 1. 절반으로 두면 붉은 통 위에 보랏빛 통을 얹은 것으로 읽혀
+	# 제 색(packs.csv)이 어느 쪽인지가 안 갈린다.
+	_cup3_mesh(b, pl, C_MULT.darkened(0.30), Vector3(0.0, h * 0.83, 0.0))
+
+
+# ── 발치에 놓는 물건 ────────────────────────────────
+# 통 **안**에 못 드는 것을 놓는 자리다. 사진과 사탕은 자루가 아니라
+# 통에 안 들어가는데, 그 둘을 들려 보내는 것이 그 다트통의 전부다.
+# 선금이 플라크를 발치에 흩는 그 자리, 그 어법이다.
+#
+# 사진 한 장. 폴라로이드다 — 테두리를 남기고 아래 여백이 더 넓다.
+# 비율과 색은 _icon_fix(2D HUD)를 그대로 따른다. 같은 물건이 두 화면에서
+# 다른 모양이면 "이게 그거였구나" 가 안 선다.
+func _cup3_photo() -> RigidBody3D:
+	var w: float = float(GOLD3.w) * 1.20
+	var d: float = w * 1.18
+	var t: float = float(GOLD3.t) * 0.7
+	var b := _cup3_prop(Vector3(w, t, d))
+	_cup3_mesh(b, _cup3_box(Vector3(w, t, d)), C_LIGHT.lightened(0.30),
+			Vector3.ZERO)
+	# 인화면은 위로 붙는다 — 아래 여백이 넓은 것이 폴라로이드다.
+	var pad: float = w * 0.11
+	_cup3_mesh(b, _cup3_box(Vector3(w - pad * 2.0, t * 0.5,
+			d - pad * 3.4)), C_DARK.lightened(0.10),
+			Vector3(0.0, t * 0.42, -pad * 0.7))
+	# 찍힌 것은 판이다. 그 붉은 점 하나가 이 사진이 무엇을 찍은 것인지를 말한다.
+	_cup3_mesh(b, _cup3_box(Vector3(w * 0.17, t * 0.5, w * 0.17)), C_RED,
+			Vector3(0.0, t * 0.62, -pad * 0.7))
+	return b
+
+
+# 사탕 한 알. **HUD 가 쓰는 그 모델 그대로다**(assets/candy) — 여기서만
+# 손으로 빚으면 같은 사탕이 화면마다 다른 물건이 된다.
+# 모델이 없으면(헤드리스·에셋 빠짐) 아무것도 안 세운다. 네모 한 알로
+# 대신 세우면 그것이 무슨 사탕인지를 틀리게 말한다.
+func _cup3_candy(nm: String) -> RigidBody3D:
+	var mesh: Mesh = load("res://assets/candy/%s.obj" % nm)
+	if mesh == null:
+		return null
+	var ab := mesh.get_aabb()
+	var big: float = maxf(maxf(ab.size.x, ab.size.y), ab.size.z)
+	if big <= 0.0:
+		return null
+	var k: float = float(GOLD3.w) * 1.15 / big
+	var b := _cup3_prop(ab.size * k)
+	var mi := MeshInstance3D.new()
+	mi.mesh = mesh
+	var mat := StandardMaterial3D.new()
+	var tex: Texture2D = load("res://assets/candy/%s.jpg" % nm)
+	if tex != null:
+		mat.albedo_texture = tex
+	mat.roughness = 0.55
+	mat.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+	mi.material_override = mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.scale = Vector3.ONE * k
+	mi.position = -ab.get_center() * k
+	b.add_child(mi)
+	return b
+
+
+# 발치 물건의 몸. 플라크와 같은 물성이다 — 한 무대에 중력이 둘이면 안 된다.
+func _cup3_prop(size: Vector3) -> RigidBody3D:
+	var b := RigidBody3D.new()
+	b.mass = GOLD3.mass
+	b.gravity_scale = GOLD3.grav
+	b.linear_damp = GOLD3.ldamp
+	b.angular_damp = GOLD3.adamp
+	b.continuous_cd = true
+	var pm := PhysicsMaterial.new()
+	pm.friction = GOLD3.fric
+	pm.bounce = GOLD3.bounce
+	b.physics_material_override = pm
+	var cs := CollisionShape3D.new()
+	var bx := BoxShape3D.new()
+	bx.size = size
+	cs.shape = bx
+	b.add_child(cs)
+	return b
+
+
+func _cup3_box(size: Vector3) -> BoxMesh:
+	var m := BoxMesh.new()
+	m.size = size
+	return m
+
+
+# 그 발치에 서는 물건들. 빈 이름이면 빈 배열이다.
+func _cup3_feet(foot: String) -> Array:
+	match foot:
+		"gift":
+			# 선물 다트통이 들려 보내는 둘 — 사진 한 장과 젤리 한 알.
+			# 표(packs.csv)의 grant_fixture · grant_cons 가 가리키는 그것이다.
+			var ps := []
+			var ph := _cup3_photo()
+			if ph != null:
+				ps.append(ph)
+			var cd := _cup3_candy(String(CANDY3.get("c_sg", "gummy")))
+			if cd != null:
+				ps.append(cd)
+			return ps
+	return []
 
 
 # 그 다트통의 통 겉. 안 적은 값은 기본값으로 채워 낸다 — 부르는 쪽이
@@ -12270,12 +12491,21 @@ func _cup3_wall_net(b: Node3D, r: float, w: float, h: float, tint: String) -> vo
 # 잠긴 다트통은 표를 안 보고 기준선 통을 세운다.
 func _cup3_skin(pi: int) -> Dictionary:
 	var out := CUP_SKIN0.duplicate()
+	out["dart_col"] = Color(0.0, 0.0, 0.0, 0.0)
 	var packs := GameData.packs()
 	if pi < 0 or pi >= packs.size() or not _pack_open(pi):
+		#  잠긴 다트통은 이름 없는 강철이다. 제 색이 새도 겉이 새는 것이다.
+		out["body"] = _cup3_tint("steel", {})
 		return out
 	var row: Dictionary = CUP_SKIN.get(String(packs[pi].get("id", "")), {})
 	for k in row:
 		out[k] = row[k]
+	#  이름을 **색으로 풀어 둔다.** 여기서 안 풀면 부르는 쪽마다 다트통 번호를
+	#  같이 들고 다녀야 하고, 넘기는 동안은 통이 둘이라 "지금 다트통" 하나로는
+	#  둘 다 같은 색이 된다.
+	out["body"] = _cup3_tint(String(out.tint), packs[pi])
+	if String(out.dart) != "":
+		out["dart_col"] = _cup3_tint(String(out.dart), packs[pi])
 	return out
 
 
@@ -12288,15 +12518,24 @@ func _cup3_face(wall: String, r: float, w: float) -> float:
 
 # 벽 바깥면의 색. 동전 그늘이 이것을 보고 제 벽보다 한 단 어두워진다 —
 # 고정색으로 적어 두면 벽이 어두운 겉에서는 그늘이 벽보다 밝아진다.
-func _cup3_wall_col(wall: String, tint: String) -> Color:
-	return _cup3_tint(tint).darkened(0.30 if wall == "net" else 0.44)
+func _cup3_wall_col(wall: String, col: Color) -> Color:
+	return col.darkened(0.30 if wall == "net" else 0.44)
 
 
 # 통 몸의 바탕색. 겉 표의 tint 가 고른다. 벽 갈래(민·철망)와 **독립**이라
 # 둘을 곱해 쓸 수 있다 — 금빛 철망을 만들 때 표에 한 칸만 적으면 된다.
-func _cup3_tint(tint: String) -> Color:
-	match tint:
+#
+#   own    그 다트통이 packs.csv 에 적어 둔 **제 색**. 기본값이다.
+#          그 색은 이미 런 안에서 계산 칸이 쓰는 그 다트통의 색이다(calc_col) —
+#          같은 다트통이 두 화면에서 같은 색으로 보인다. 열넷이 저마다
+#          다른 색을 이미 갖고 있었는데 통이 그것을 안 읽고 있었다.
+#   steel  이름 없는 강철. **잠긴 다트통**이 이 색으로 선다 — 겉이 새면
+#          히든이 히든이 아니라는 그 규칙이 색에도 걸린다.
+#   gold   돈으로 만든 통. 선금처럼 "이 다트통은 돈이다" 를 말할 때.
+func _cup3_tint(name: String, row: Dictionary) -> Color:
+	match name:
 		"gold": return C_GOLD
+		"own": return Color(String(row.get("color", "cfc9bd")))
 	return C_WIRE
 
 
@@ -12388,7 +12627,7 @@ func _cup3_leaf(rad: float, at: float, sr: float, y0: float, fy: float,
 # 반지름 10px 에 인쇄까지 넣으면 조건 아이콘이 두 픽셀로 뭉개지므로
 # 여기서는 테·얼굴·말린 자락까지만 낸다.
 func _cup3_sticker(b: Node3D, rad: float, r: float, h: float, wall: String,
-		tint: String) -> void:
+		col: Color) -> void:
 	var sr: float = r * float(CUP_STK.r)
 	var y0: float = h * float(CUP_STK.y)
 	var at: float = CUP_STK.at
@@ -12399,7 +12638,7 @@ func _cup3_sticker(b: Node3D, rad: float, r: float, h: float, wall: String,
 	# 꺼 두었으므로(_cup3_open) 이 어두운 활꼴 하나가 그림자를 대신한다.
 	# 없으면 자락이 벽에 뜬 게 아니라 벽에 그려진 무늬로 읽힌다.
 	_cup3_mesh(b, _cup3_leaf(rad, at, sr, y0, fy, 2, 0.0, 0.002),
-			_cup3_wall_col(wall, tint).darkened(0.16), Vector3.ZERO)
+			_cup3_wall_col(wall, col).darkened(0.16), Vector3.ZERO)
 	_cup3_mesh(b, _cup3_leaf(rad, at, sr, y0, fy, 0, 0.0, 0.004),
 			C_DIECUT, Vector3.ZERO)
 	_cup3_mesh(b, _cup3_leaf(rad, at, sr * float(CUP_STK.face), y0, fy,
@@ -12418,25 +12657,31 @@ func _cup3_sticker(b: Node3D, rad: float, r: float, h: float, wall: String,
 func _cup3_cup(skin: Dictionary) -> AnimatableBody3D:
 	var r: float = float(CUP3.r) * float(skin.wide)
 	var w: float = CUP3.wall
-	var h: float = CUP3.h
+	var h: float = float(CUP3.h) * float(skin.tall)
 	var b := AnimatableBody3D.new()
 	b.sync_to_physics = true
 
-	var tint := String(skin.tint)
+	var col: Color = skin.body
 	match String(skin.wall):
 		"net":
-			_cup3_wall_net(b, r, w, h, tint)
+			_cup3_wall_net(b, r, w, h, col)
 		_:
-			_cup3_wall_solid(b, r, w, h, tint)
+			_cup3_wall_solid(b, r, w, h, col)
+	if int(skin.hoop) > 0:
+		_cup3_hoops(b, r, w, h, col, int(skin.hoop))
+	if int(skin.spike) > 0:
+		_cup3_spikes(b, r, w, h, int(skin.spike))
+	if bool(skin.pole):
+		_cup3_pole(b, r, w, h)
 	if bool(skin.sticker):
 		_cup3_sticker(b, _cup3_face(String(skin.wall), r, w), r, h,
-				String(skin.wall), tint)
+				String(skin.wall), col)
 	var base := CylinderMesh.new()
 	base.top_radius = r + w
 	base.bottom_radius = r + w
 	base.height = w * 1.6
 	base.radial_segments = 26
-	_cup3_mesh(b, base, _cup3_tint(tint).darkened(0.52), Vector3(0.0, w * 0.8, 0.0))
+	_cup3_mesh(b, base, col.darkened(0.52), Vector3(0.0, w * 0.8, 0.0))
 
 	var fl := CollisionShape3D.new()
 	var fs := CylinderShape3D.new()
@@ -12448,9 +12693,9 @@ func _cup3_cup(skin: Dictionary) -> AnimatableBody3D:
 	# 발치 바닥. **통 몸에 붙인다** — 통이 미끄러질 때 바닥도 같이 가야
 	# 발치에 놓인 것이 통을 따라간다. 따로 세우면 통만 나가고 골드는
 	# 무대 한가운데 남는다.
-	# 골드가 없는 다트통에는 안 붙인다. 아무것도 안 놓이는 바닥은 물리에
+	# 놓을 것이 없는 다트통에는 안 붙인다. 아무것도 안 놓이는 바닥은 물리에
 	# 몸 하나를 더 얹을 뿐이다.
-	if int(skin.gold) > 0:
+	if int(skin.gold) > 0 or String(skin.foot) != "":
 		var gd := CollisionShape3D.new()
 		var gb := BoxShape3D.new()
 		gb.size = Vector3(r * 7.0, w * 2.0, r * 4.0)
@@ -13022,20 +13267,20 @@ func _dart3_parts(b: Node3D, dl: float, dr: float, col: Color, id: String) -> vo
 # 탄창이 전부 표준인 다트통. 표준은 색이 하나뿐이라 덮어도 가릴 정보가 없다.
 # 특별한 다트를 쥔 다트통에서 덮으면 그 다트가 무엇인지가 그림에서 사라진다 —
 # cup_probe 가 그 짝을 검사한다(주석으로 부탁하지 않는다).
-func _cup3_dart(id: String, tint: String, cup_tint: String) -> RigidBody3D:
+func _cup3_dart(id: String, dcol: Color, cup_col: Color) -> RigidBody3D:
 	# 종류가 길이와 굵기를 정한다. **충돌체도 같이 간다** — 그림만 늘이면
 	# 가벼운 다트가 안 보이는 짧은 몸으로 부딪혀 통 안에서 겹쳐 선다.
 	var sh := dart3_shape(id)
 	var dl: float = float(CUP3.dl)
 	var dr: float = float(CUP3.dr) * float(sh.rad)
 	var col := _dart3_col(id)
-	if tint != "":
-		col = _cup3_tint(tint)
+	if dcol.a > 0.0:
+		col = dcol
 		# 통과 **같은 색일 때만** 한 단 밝힌다. 통 벽이 그 색을 0.44 어둡게
 		# 쓰는데 자루가 원색이면 금빛 통 안의 금빛 자루가 한 덩어리로
 		# 뭉갠다(찍어 보고 알았다) — 색이 같아도 값이 갈리면 형태가 산다.
 		# 통이 다른 색이면 원색 그대로가 낫다. 밝히면 금이 바래 보인다.
-		if tint == cup_tint:
+		if dcol.is_equal_approx(cup_col):
 			col = col.lightened(0.34)
 
 	var b := RigidBody3D.new()
@@ -13106,7 +13351,7 @@ func _cup3_spawn(pi: int, x: float) -> void:
 	var rc: float = r * 0.62                        # 꽁지가 벌어지는 고리
 	var darts := []
 	for i in n:
-		var b := _cup3_dart(id, String(skin.dart), String(skin.tint))
+		var b := _cup3_dart(id, skin.dart_col, skin.body)
 		var a := TAU * float(i) / float(n) + 0.4
 		var out := Vector3(sin(a), 0.0, cos(a))
 		var tip := Vector3(x, 0.0, 0.0) + out * rt + Vector3(0.0, float(CUP3.wall) * 2.2, 0.0)
@@ -13138,7 +13383,20 @@ func _cup3_spawn(pi: int, x: float) -> void:
 			gb.rotation = Vector3(0.0, t * TAU * 0.83, 0.0)
 			cup_vp.add_child(gb)
 			gold3.append(gb)
+		# 통 안에 못 드는 물건들. 좌우로 갈라 놓는다 — 플라크와 같은 규약이다.
+		var ft := _cup3_feet(String(skin.foot))
+		for i in ft.size():
+			var sd := 1.0 if i % 2 == 0 else -1.0
+			ft[i].position = Vector3(x + sd * r * 1.86,
+					float(GOLD3.drop) * 0.7, r * (0.30 - 0.60 * float(i)))
+			ft[i].rotation = Vector3(0.0, -0.5 + 1.1 * float(i), 0.0)
+			cup_vp.add_child(ft[i])
+			gold3.append(ft[i])
+	#  통 높이도 rig 에 적는다. 통마다 다르므로(겉 표의 tall) 물리가
+	#  CUP3.h 를 박아 보면 키 큰 통에서는 아가리 한참 아래를 뚜껑으로
+	#  치고, 낮은 통에서는 이미 쏟아진 자루를 아직 안 쏟아졌다고 센다.
 	cup_rigs.append({"cup": cup, "darts": darts, "pi": pi, "r": r,
+			"h": float(CUP3.h) * float(skin.tall),
 			"gold": gold3})
 
 
@@ -13255,7 +13513,7 @@ func _cup3_step_rig(rig: Dictionary, x: float, moving: bool, dt: float) -> void:
 			var pull := Vector3(-off.x, 0.0, -off.y).normalized()
 			b.apply_central_force(pull * float(CUP3.pull) * b.mass
 					* minf(off.length() - lea, r))
-		if tip.y > float(CUP3.h) * 0.85:
+		if tip.y > float(rig.get("h", CUP3.h)) * 0.85:
 			b.apply_central_force(Vector3(0.0, -float(CUP3.lid) * b.mass, 0.0))
 		# 꽁지 줄 — 촉과 같은 규약을 자루 반대끝에 건다. 아가리 반지름을
 		# 넘어간 몫에만 걸리므로, 통 안에서 출렁이는 동안은 아무 일도 안 한다.
@@ -13291,7 +13549,8 @@ func _cup3_step_rig(rig: Dictionary, x: float, moving: bool, dt: float) -> void:
 				b.linear_velocity -= rad * outv
 		# 마지막 그물. 힘으로도 못 돌아온 자루는 통 한가운데에 도로 세운다 —
 		# 물리는 언젠가 새고, 새면 자루가 화면 밖 허공에 남아 눈에 띈다.
-		if off.length() > r * 1.8 or tip.y < -0.25 or tip.y > float(CUP3.h) * 2.0:
+		var hh2: float = float(rig.get("h", CUP3.h))
+		if off.length() > r * 1.8 or tip.y < -0.25 or tip.y > hh2 * 2.0:
 			b.linear_velocity = Vector3.ZERO
 			b.angular_velocity = Vector3.ZERO
 			b.transform = Transform3D(Basis(), Vector3(x, float(CUP3.dl) * 0.8, 0.0))
