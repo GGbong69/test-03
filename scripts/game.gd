@@ -6822,6 +6822,16 @@ const NPC := {
 	"vee_w": 27.0,       # 셔츠 V 반폭 (y=top)
 	"vee_y": 84.0,       # V 꼭짓점. 상점 동전 슬롯 밑변(48)보다 36px 아래라 V 가 산다
 	"btn_y": 94.0, "btn_dy": 11.0, "btn_r": 2.9,
+	#  깃. 조끼(0.84 어둠)가 벽과 32/255 밖에 안 갈려서 **검은 판때기**로
+	#  서 있었다 — 옆선 획 하나가 실루엣의 전부였다. 몸 색은 그대로 두고
+	#  (그 대비가 이 화면의 설계다) 깃 둘을 한 단 밝게 얹어 옷으로 만든다.
+	#  0.72 는 벽(41)보다 아직 어두워서 실루엣이 벽에 안 뜬다.
+	"lap_w": 21.0,       # 깃 바깥 반폭 (y=top)
+	"lap_y": 99.0,       # 깃 끝. V 꼭짓점(84)보다 15 아래라 깃이 V 를 지나 내려온다
+	"lap_in": 5.0,       # 깃 안쪽 반폭 — 여기서 만나 셔츠 골이 선다
+	#  빛은 왼쪽 위에서 온다(TBL.light 의 반대). 오른쪽을 한 단 눌러 몸이
+	#  판때기가 아니라 원기둥이 된다. 좌우 획 알파도 같이 갈린다.
+	"shade": 34.0,       # 오른쪽 그늘 반폭 (y=top)
 	"belt": 5.0,
 	# 팔은 **판 위에 누운 상자**다. 몸통은 서 있고 팔은 누워 있으므로 같은
 	# 도형으로 그리면 안 된다 — 누운 것은 화면 좌표가 아니라 면 좌표(u,w)로
@@ -6892,6 +6902,31 @@ const NPC := {
 # 손가락은 하나씩 안 그린다. 1px 획을 넷 넣으면 서로 붙어 얼룩이 된다.
 # 대신 p6 의 베벨과 p8 의 너클이 손끝과 손등을 대신한다.
 # 손목폭 11 → 너클폭 18 = 1.66배. 손목이 팔 전체의 최소폭이다.
+#  손등에 새기는 획들. PALM 과 **같은 손 좌표**라 손이 커지거나 뒤집혀도
+#  같이 간다.
+#
+#  손가락을 실루엣에서 파내지 않는 이유 — 화면에서 손이 30px 이라 네
+#  손가락을 윤곽으로 가르면 하나가 3px 이고, 거기에 정사영(52°)과 두께
+#  세 겹이 겹치면 홈이 래스터에서 사라진다. 그 크기의 도트는 **윤곽이
+#  아니라 면 위의 획**으로 손가락을 말한다. 엄지만 윤곽으로 남긴 것은
+#  엄지가 실제로 실루엣 밖으로 나오는 유일한 손가락이기 때문이다.
+#
+#   groove  손가락 사이 골 셋. 넷을 가르는 데 셋이면 된다
+#   knuck   너클 능선 — 손등에서 제일 높은 자리. 여기만 한 단 밝다
+#   cuff    손목 이음. **어둡게** 긋는다 — 밝은 띠로 갈라 봤다가 옷이
+#           아니라 띠 자체로 읽혀서 진 자리다(_npc_limb 의 주석)
+const HAND_INK := {
+	"groove": [
+		[Vector2(29.0, -1.5), Vector2(41.5, -1.0)],
+		[Vector2(28.0, 3.5), Vector2(40.0, 3.5)],
+		[Vector2(26.5, 8.0), Vector2(36.5, 8.5)],
+	],
+	"knuck": [Vector2(24.0, -6.0), Vector2(38.0, -5.0), Vector2(33.0, 11.0),
+			Vector2(22.0, 11.0)],
+	"cuff": [Vector2(3.0, -5.0), Vector2(3.0, 5.0)],
+}
+
+
 const PALM := [
 	Vector2(0.0, -5.5), Vector2(11.0, -8.0),
 	Vector2(17.0, -16.0), Vector2(24.0, -12.0),   # 엄지
@@ -7170,6 +7205,24 @@ func _npc_body() -> void:
 			_npc_tl(Vector2(cx - NPC.vee_w, NPC.top)),
 			_npc_tl(Vector2(cx + NPC.vee_w, NPC.top)),
 			_npc_tl(Vector2(cx, NPC.vee_y + br))]), C_LIGHT.darkened(0.60))
+	#  오른쪽 그늘. 몸통 안쪽에만 깔아 실루엣을 안 넓힌다 — 빛이 왼쪽 위에서
+	#  오므로 오른 어깨가 돌아가는 쪽이다. 이 한 조각이 사다리꼴을 원기둥으로 만든다.
+	draw_colored_polygon(PackedVector2Array([
+			_npc_tl(Vector2(cx + NPC.hc - NPC.shade, NPC.top)),
+			_npc_tl(Vector2(cx + NPC.hc, NPC.top)),
+			Vector2(cx + NPC.hw, NPC.cut),
+			Vector2(cx + NPC.hw - NPC.shade * 0.82, NPC.cut)]),
+			C_WOOD.darkened(0.90))
+	#  깃 둘. 어깨에서 나와 V 를 지나 내려와 가운데에서 만난다. 좌우를
+	#  **정확히 같게 안 둔다** — 완전대칭은 옷걸이의 냄새다(NPC 머리말).
+	for sd in [-1.0, 1.0]:
+		var tipy: float = NPC.lap_y + (0.0 if sd < 0.0 else 4.0)
+		draw_colored_polygon(PackedVector2Array([
+				_npc_tl(Vector2(cx + sd * NPC.lap_w, NPC.top)),
+				_npc_tl(Vector2(cx + sd * NPC.vee_w * 1.34, NPC.top)),
+				_npc_tl(Vector2(cx + sd * NPC.lap_in, tipy + br)),
+				_npc_tl(Vector2(cx + sd * NPC.lap_in * 0.25, tipy + br))]),
+				C_WOOD.darkened(0.72))
 	# 단추 셋. 세로 한 줄이 가운데를 잡아 좌우 대칭을 몸으로 읽게 한다.
 	for k in 3:
 		draw_colored_polygon(_e_pts(
@@ -7180,9 +7233,12 @@ func _npc_body() -> void:
 			(NPC.hw + 1.0) * 2.0, NPC.belt), C_WOOD.darkened(0.90))
 	# 옆선 빛. 벽과 100/255 갈리는 유일한 고대비 획이고, 이게 없으면
 	# 조끼(9)와 벽(41)의 32 차이만 남아 실루엣이 벽에 잠긴다.
+	#  빛이 왼쪽 위에서 오므로 **왼쪽 획이 더 밝다.** 둘을 같은 알파로 두면
+	#  몸이 어느 쪽에서 빛을 받는지가 화면에서 사라진다.
 	for s in [-1.0, 1.0]:
 		draw_line(_npc_tl(Vector2(cx + s * NPC.hc, NPC.top)),
-				Vector2(cx + s * NPC.hw, NPC.cut), Color(rim, 0.55), 1.0)
+				Vector2(cx + s * NPC.hw, NPC.cut),
+				Color(rim, 0.62 if s < 0.0 else 0.34), 1.0)
 
 
 # 팔 — 먼 레일 다음이라 "카운터에 얹혔다" 가 된다.
@@ -7277,6 +7333,29 @@ func _npc_limb(el: Vector2, wr: Vector2, ang: float, sc: float,
 	# 어두운 획은 반대로 잇는다. 여기서는 손 옆면(84)이 그 역할을 한다.
 	_npc_flat(hand, NPC.hand_t, C_WOOD.lightened(0.13),
 			C_WOOD.lightened(0.38))
+	_npc_ink(wr, ex, ey, sc)
+
+
+#  손등의 획. 손 좌표(q)를 면 좌표로 옮기고 **손 윗면 높이**에 그린다 —
+#  h 를 0 으로 두면 획이 옆면에 찍혀 손 아래로 미끄러진다.
+func _npc_ink(wr: Vector2, ex: Vector2, ey: Vector2, sc: float) -> void:
+	var to := func(q: Vector2) -> Vector2:
+		var f := wr + ex * (q.x * sc) + ey * (q.y * sc)
+		return _p2s(f.x, f.y, NPC.hand_t)
+	#  너클 능선을 한 단 밝게 — 손등이 평평한 판이 아니라 **솟은 면**이 된다.
+	#  이것이 없으면 골 셋이 판때기에 그은 줄로 보인다.
+	var kn := PackedVector2Array()
+	for q in HAND_INK.knuck:
+		kn.append(to.call(q))
+	draw_colored_polygon(kn, C_WOOD.lightened(0.52))
+	#  손가락 사이 골. 어둡고 가늘다 — 굵으면 손가락이 아니라 갈퀴가 된다.
+	var gc := Color(C_WOOD.darkened(0.30), 0.85)
+	for seg in HAND_INK.groove:
+		draw_line(to.call(seg[0]), to.call(seg[1]), gc, 1.0)
+	#  손목 이음 — 소매와 손을 가른다. 어두운 획은 형태를 **잇고**
+	#  밝은 획은 자른다. 여기서는 잇는 쪽이 맞다.
+	draw_line(to.call(HAND_INK.cuff[0]), to.call(HAND_INK.cuff[1]),
+			Color(C_WOOD.darkened(0.55), 0.7), 1.0)
 
 
 # 면 위에 누운 다각형 하나. 옆면(h=0)을 먼저 깔고 윗면(h=t)을 얹는다 —
