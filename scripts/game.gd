@@ -654,6 +654,7 @@ func _new_run() -> void:
 	dead_ring = 0
 	odd_mul = 1.0
 	pending_tags.clear()
+	tag_copy = 0
 	_open_leg()
 
 
@@ -938,6 +939,13 @@ func _finish_leg() -> void:
 			continue          # 봉인은 발동을 막는다
 		if String(owned[i].get("side", "")) != "boardkill":
 			continue
+		#  완주 갈래는 정산 화면을 안 거친다 — 현상금을 여기서 치른다.
+		#  안 치르면 마지막 판에서 받은 현상금이 통째로 사라지고, 그 골드가
+		#  「100골드 소지 완주」(선금 다트통 해금)를 가른다.
+		var bnt := _bounty_take()
+		if bnt > 0:
+			gold += bnt
+			Save.bump("gold_earned", bnt)
 		_league_unlock_next()
 		_pack_unlock_next()
 		state = S.OVER
@@ -952,6 +960,11 @@ func _finish_leg() -> void:
 		return
 
 	if leg_no >= GameData.legs_n():
+		#  마지막 판은 보스 판이다 — 여기가 현상금의 마지막 지급 자리다.
+		var bnt2 := _bounty_take()
+		if bnt2 > 0:
+			gold += bnt2
+			Save.bump("gold_earned", bnt2)
 		_league_unlock_next()
 		_pack_unlock_next()
 		state = S.OVER
@@ -966,6 +979,21 @@ func _finish_leg() -> void:
 
 	_leg_end_wear()
 	_settle_clear()
+
+
+#  「현상금」 — 이번 라운드 보스를 넘기면 받는다. 꺼내면 사라진다.
+#
+#  **정산이 이자를 센 뒤에 얹는다.** 처음에 _finish_leg 에서 바로 넣었더니
+#  같은 정산의 이자가 이 25 를 보고 5 를 더 얹었다 — 한 푼도 안 들고
+#  들어간 판에서 이자가 5 나왔다는 뜻이다. 이자는 **가지고 들어간 것**에
+#  붙는 값이고, 현상금은 그 판에서 번 것이다.
+func _bounty_take() -> int:
+	if not GameData.is_boss(leg_no):
+		return 0
+	var b := _spend_tags("boss_gold")
+	if b <= 0:
+		return 0
+	return int(round(float(b) * GameData.chal_f("tag_mul", 1.0)))
 
 
 # 정산 — 실패 방지로 넘어온 판도 같은 길을 걷는다.
@@ -1005,6 +1033,8 @@ func _settle_clear() -> void:
 	clear = int(floor(float(clear) * GameData.chal_f("reward_mul", 1.0)))
 	if GameData.chal_on("gold_off"):
 		clear = 0
+	#  건너뛰기 뱃지 「현상금」. 이자를 센 **뒤**라 제 몫에 이자가 안 붙는다.
+	var bounty := _bounty_take()
 	clear_gold_detail = [
 		#  판 이름은 **제목이 이미 말했다**("라운드 1  작은 판 클리어").
 		#  같은 말을 두 줄 아래에 또 적으면 내역 첫 줄이 정보가 아니다.
@@ -1012,9 +1042,11 @@ func _settle_clear() -> void:
 		{"n": "남은 다트 %d개" % darts_left, "v": dart_gold},
 		{"n": "이자", "v": interest},
 	]
+	if bounty > 0:
+		clear_gold_detail.append({"n": "현상금", "v": bounty})
 	for r in item_rows:
 		clear_gold_detail.append(r)
-	gold += clear + dart_gold + interest + item_gold
+	gold += clear + dart_gold + interest + item_gold + bounty
 	# 여태 판매분만 세고 있었다 — 클리어·잔탄·이자·아이템 골드가 통째로
 	# 빠져서 통계의 번 돈이 실제의 일부였다. 해금 조건이 이 키를 읽기
 	# 전에 고친다. 이미 쌓인 저장은 못 되살리므로 임계값을 그 위에서 잡는다.
@@ -2075,6 +2107,8 @@ func _tag_when(t: Dictionary) -> String:
 			return "다음 상점에서"
 		"stage":
 			return "다음 보스 판에"
+		"boss":
+			return "보스를 넘기면"
 	return "바로"
 
 
@@ -2096,7 +2130,26 @@ func _tag_text(t: Dictionary) -> String:
 
 
 # 뱃지 하나를 받는다. 지금 쓰는 것은 바로 쓰고, 나중 것은 쌓아 둔다.
+#
+# 「쌍둥이」가 쌓여 있으면 **이 뱃지가 그 수만큼 더 걸린다.** 쌍둥이 자신을
+# 받으면 쌓이기만 한다 — 발라트로의 더블 태그와 같은 규약이고, 한 런에
+# 건너뛸 자리가 열여섯이라 상한이 저절로 선다.
+#
+# 쌓인 것은 **쓰는 순간 비운다.** 안 비우면 다음 뱃지도 같이 두 번 걸려
+# 「다음 하나」가 「그 뒤로 전부」가 된다.
 func _take_tag(t: Dictionary) -> void:
+	if String(t.get("kind", "")) == "copy":
+		tag_copy += int(t.get("v", 1))
+		pop(Vector2(VIEW.x * 0.5, TBL.fy + 40.0),
+				"%s x%d" % [t.get("name", ""), tag_copy + 1], C_ACC, 13, 1.4)
+		return
+	var times: int = 1 + tag_copy
+	tag_copy = 0
+	for _c in times:
+		_take_tag_once(t)
+
+
+func _take_tag_once(t: Dictionary) -> void:
 	var kind := String(t.get("kind", ""))
 	var v := int(t.get("v", 0))
 	var when := String(t.get("when", "now"))
@@ -2116,14 +2169,12 @@ func _take_tag(t: Dictionary) -> void:
 			gold += v
 			Save.bump("gold_earned", v)
 		"track":
-			# 트랙을 고르는 것이지 강화 줄을 고르는 것이 아니다. 표는 트랙당
-			# 여덟 줄이라 줄에서 뽑아도 지금은 고르게 나오지만, 트랙마다
-			# 줄 수가 달라지는 순간 조용히 치우친다. 트랙에서 뽑는다.
-			var tks := {}
-			for r in GameData.rows("area_up"):
-				tks[int(r.get("track", 0))] = true
-			var tkl := tks.keys()
-			if not tkl.is_empty():
+			# 트랙을 고르는 것이지 강화 줄을 고르는 것이 아니다.
+			# 목록은 areas.csv 가 낸다 — _track_ids 의 머리말을 볼 것.
+			var tkl := _track_ids()
+			if tkl.is_empty():
+				_tag_void("올릴 트랙이 없다")
+			else:
 				# v 만큼 올린다. 표에는 +1 뿐이지만 값을 무시하고 있었다.
 				for _k in maxi(v, 1):
 					var tk: int = tkl[randi() % tkl.size()]
@@ -2134,24 +2185,94 @@ func _take_tag(t: Dictionary) -> void:
 					# 없으면 "안 걸렸다" 와 구별이 안 된다.
 					pop(at, "%s 강화 Lv.%d" % [_track_name(tk),
 							int(track_lv[tk]) + 1], C_GREEN.lightened(0.2), 12, 1.3)
-		"cons":
-			var cp := GameData.consumables()
-			for i in v:
-				if cons.size() < GameData.cons_slots() and not cp.is_empty():
-					cons.append(cp[randi() % cp.size()])
+		"candy":
+			_take_cons(GameData.candies(), v, "사탕 칸이 꽉 찼다")
+		"photo":
+			_take_cons(GameData.fixtures(), v, "사탕 칸이 꽉 찼다")
 		"item":
+			# 등급 칸이 비어 있으면 안 거른다. 표가 비운 적은 없지만,
+			# 비웠을 때 아무것도 안 주는 것보다 아무거나 주는 쪽이 맞다.
+			var want := String(t.get("rarity", ""))
 			var pool := []
 			for it in GameData.items():
-				if not _has_item(it.id) and GameData.item_min_leg(it) <= leg_no:
-					pool.append(it)
+				if _has_item(it.id) or GameData.item_min_leg(it) > leg_no:
+					continue
+				if want != "" and String(it.get("rarity", "common")) != want:
+					continue
+				pool.append(it)
 			for i in v:
-				if owned.size() < GameData.max_items() and not pool.is_empty():
-					var pick: Dictionary = pool[randi() % pool.size()].duplicate()
-					pick.gs = 0
-					pick.bought = leg_no
-					owned.append(pick)
-					_panel_reset()
+				if owned.size() >= GameData.max_items():
+					_tag_void("동전 슬롯이 꽉 찼다")
+					break
+				if pool.is_empty():
+					_tag_void("남은 동전이 없다")
+					break
+				var pick: Dictionary = pool[randi() % pool.size()].duplicate()
+				pick.gs = 0
+				pick.bought = leg_no
+				owned.append(pick)
+				_panel_reset()
+		#  건너뛴 판마다. **이 뱃지를 준 건너뛰기까지 센다** — _skip_leg 이
+		#  leg_skipped 를 먼저 적고 나서 이 함수를 부른다. 그래서 최소 한 판,
+		#  즉 빈손으로 끝나는 경우가 없다.
+		"skip_gold":
+			var sn: int = maxi(leg_skipped.size(), 1)
+			var sg: int = v * sn
+			sg = int(round(float(sg) * GameData.chal_f("tag_mul", 1.0)))
+			gold += sg
+			Save.bump("gold_earned", sg)
+			pop(at, "건너뛴 판 %d x %d" % [sn, v], C_GOLD, 12, 1.3)
+		#  이 런에서 가장 많이 맞힌 트랙. 동점이면 그중 무작위고, 한 발도
+		#  안 맞혔으면(첫 판을 바로 건너뛴 경우) 무작위 트랙이다 —
+		#  "없다" 로 빠지면 뱃지가 잠자코 빈손이 된다.
+		"track_top":
+			var tk2 := _track_top()
+			if tk2 != 0:
+				for _k in maxi(v, 1):
+					track_lv[tk2] = int(track_lv.get(tk2, 0)) + 1
+					Save.peak("best_track", int(track_lv[tk2]))
+				pop(at, "%s 강화 Lv.%d" % [_track_name(tk2),
+						int(track_lv[tk2]) + 1], C_GREEN.lightened(0.2), 12, 1.3)
 	pop(at, "%s" % t.get("name", ""), C_ACC, 13, 1.4)
+
+
+#  사탕 칸에 넣는다. 사탕과 사진이 같은 칸을 쓰므로 자리 판정도 하나다.
+func _take_cons(pool: Array, v: int, full: String) -> void:
+	for i in v:
+		if cons.size() >= GameData.cons_slots():
+			_tag_void(full)
+			return
+		if pool.is_empty():
+			_tag_void("줄 것이 없다")
+			return
+		cons.append(pool[randi() % pool.size()].duplicate())
+
+
+#  **빈손으로 끝난 뱃지는 말한다.** 칸이 꽉 차 있으면 뱃지를 쓰고도
+#  아무 일도 안 나는데, 그때 화면이 잠자코 있으면 플레이어는 "안 걸렸다"
+#  와 "자리가 없었다" 를 구별할 길이 없다. 열다섯 중 다섯이 이 길을 탄다.
+func _tag_void(why: String) -> void:
+	pop(Vector2(VIEW.x * 0.5, TBL.fy + 62.0), why, C_DIM, 11, 1.5)
+	_sfx("deny")
+
+
+#  이 런에서 가장 많이 맞힌 트랙. 동점이면 그중 하나를 무작위로,
+#  한 발도 안 맞혔으면 표에 있는 트랙 중 하나를 무작위로 돌려준다.
+func _track_top() -> int:
+	var best := 0
+	var tie := []
+	for tk in track_hits:
+		var c := int(track_hits[tk])
+		if c > best:
+			best = c
+			tie = [int(tk)]
+		elif c == best and best > 0:
+			tie.append(int(tk))
+	if tie.is_empty():
+		tie = _track_ids()
+	if tie.is_empty():
+		return 0
+	return int(tie[randi() % tie.size()])
 
 
 # 쌓아 둔 뱃지에서 한 갈래를 꺼내 값을 합친다. 꺼내면 사라진다.
@@ -6155,6 +6276,7 @@ var leg_tags_round := 0
 # 사라진다 — 셋을 비교해 고르는 화면인데 고른 흔적만 없어지는 셈이다.
 var leg_skipped := {}
 var pending_tags := []          # 나중에 쓸 뱃지들 [{kind, v, when, n}]
+var tag_copy := 0               # 쌓인 「쌍둥이」. 다음 뱃지가 이 수만큼 더 걸린다
 var leg_t := 0.0              # 화면이 열린 뒤 흐른 시간(카드 미끄러짐)            # 스테이지 화면에 들어설 때의 동전 개수
 var stage_t := 0.0              # 카드가 깔리는 경과. _open_stage 에서 0 으로 선다
 
@@ -15018,6 +15140,26 @@ func _runinfo_back_rect() -> Rect2:
 # 덮을 이유가 없다.
 # 트랙 ID 를 사람이 읽는 이름으로. areas.csv 가 이미 이름을 들고 있다 —
 # 불은 아우터·이너가 트랙을 나눠 쓰므로 먼저 만나는 이름으로 답한다.
+#  이 게임에 있는 트랙의 온 목록.
+#
+#  **areas.csv 에서 낸다.** 전에는 area_upgrades.csv 를 세고 있었는데
+#  그 표는 2026-09-13 에 「트랙 강화를 표에서 식으로 내린다」로 **비워졌다**
+#  (track_bonus 가 표가 비면 식으로 떨어진다). 그 뒤로 「영역 승급」 뱃지가
+#  빈 목록에서 트랙을 뽑아 **아무 일도 안 하고 있었다** — 가중치 0.90 으로
+#  가장 흔하게 뜨는 뱃지 중 하나인데 화면에는 이름만 떴다.
+#  강화 값은 식이 내고 트랙이 무엇무엇인지는 areas 가 낸다. 두 표의 몫이 다르다.
+#
+#  아우터 불과 이너 불이 같은 트랙(610004)을 쓰므로 중복을 접는다 — 안 접으면
+#  불 트랙이 두 배로 뽑힌다.
+func _track_ids() -> Array:
+	var seen := {}
+	for a in GameData.areas_all():
+		var tk := int(a.get("track", 0))
+		if tk != 0:
+			seen[tk] = true
+	return seen.keys()
+
+
 func _track_name(tk: int) -> String:
 	for a in GameData.areas_all():
 		if int(a.get("track", 0)) == tk:

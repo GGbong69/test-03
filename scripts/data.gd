@@ -1014,9 +1014,24 @@ static func is_boss(n: int) -> bool:
 # 뱃지 — 판을 건너뛴 값이다. 건너뛰면 점수도 골드도 없으므로 이것이
 # 없으면 건너뛰기는 순손실이고 아무도 안 누른다.
 #   when  now(즉시) · round(다음 판) · shop(다음 상점) · stage(다음 보스 판)
-const TAG_WHEN := ["now", "leg", "shop", "stage"]
-const TAG_KINDS := ["gold", "dart", "track", "cons", "item",
-		"reroll", "shop", "picks", "free"]
+#  뱃지가 언제 값을 내는가.
+#    now    건너뛰는 그 자리에서
+#    leg    다음에 **던지는** 판에서 (지금 표에는 쓰는 줄이 없다)
+#    shop   다음 상점에서
+#    stage  다음 보스 판의 제약 고르는 자리에서 (지금 표에는 쓰는 줄이 없다)
+#    boss   이번 라운드 보스를 **넘겼을 때**. 못 넘기면 런이 끝나므로 0 이다
+const TAG_WHEN := ["now", "leg", "shop", "stage", "boss"]
+
+#  갈래. 새 갈래를 만들면 game.gd 의 _take_tag 나 그 갈래를 꺼내 쓰는
+#  자리(_spend_tags)를 같이 내야 한다 — 표에만 적으면 잠자코 아무 일도 안 난다.
+#
+#  dart · picks 는 **지금 표에 쓰는 줄이 없다.** 2026-09-15 기획에서
+#  「여벌 다트」와 「여유로운 선택」이 빠졌다. 갈래와 꺼내는 자리는 남겨 둔다 —
+#  되살리는 것이 표에 한 줄이어야 하고, 이 둘이 판과 보스 판을 건드리는
+#  유일한 통로였다.
+const TAG_KINDS := ["gold", "dart", "track", "candy", "photo", "item",
+		"reroll", "shop", "picks", "free",
+		"boss_gold", "skip_gold", "track_top", "copy"]
 
 
 static func tags() -> Array:
@@ -2056,6 +2071,19 @@ static func _v_tags() -> void:
 			_errs.append("%s — 모르는 때 '%s'" % [who, r.get("when", "")])
 		if _i(r, "v", "tags", 0) <= 0:
 			_errs.append("%s — 값이 0 이하다" % who)
+		#  등급 칸. 비어 있으면 안 거른다. 오타를 내면 그 등급 동전이 하나도
+		#  없는 것이 되어 **뱃지가 잠자코 빈손이 된다** — 눈으로는 못 잡는다.
+		var rr := String(r.get("rarity", ""))
+		if rr != "":
+			if String(r.get("kind", "")) != "item":
+				_errs.append("%s — 등급은 item 갈래만 쓴다 (지금 '%s')"
+						% [who, r.get("kind", "")])
+			var known := false
+			for rw in _raw.get("rarity", []):
+				if String(rw.get("id", "")) == rr:
+					known = true
+			if not known:
+				_errs.append("%s — 모르는 등급 '%s'" % [who, rr])
 		if _f(r, "weight", "tags", 0.0) <= 0.0:
 			_errs.append("%s — 가중치가 0 이하라 영영 안 뜬다" % who)
 		if _i(r, "min_round", "tags", 1) <= 1:
