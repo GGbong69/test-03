@@ -367,6 +367,7 @@ static func _rows(g: Node) -> Array:
 				{"n1": "상점 열기", "t": "act", "a": "shop"},
 				{"n1": "판 선택 열기", "t": "act", "a": "leg"},
 				{"n1": "다트 다시 채우기", "t": "act", "a": "refill"},
+				{"n1": "최악의 상태", "t": "act", "a": "worst"},
 			]
 		1:
 			return [
@@ -602,6 +603,28 @@ static func _run(g: Node, e: Dictionary) -> void:
 			g.sealed = -1
 			g._panel_reset()
 			_say("동전 슬롯 비움")
+			return
+		"worst":
+			# 제약 넷 · 동전 최대 · 사탕 칸 최대 · 보드 확장. 640x360 에서
+			# 이 상태를 못 그리면 레이아웃이 틀린 것이고, **지금 고치는 게
+			# 나중보다 싸다.** 화면이 가장 붐비는 순간을 한 줄로 부른다.
+			g.active_mods = []
+			for mo in GameData.modifiers():
+				if g.active_mods.size() < 4:
+					g.active_mods.append(mo)
+			g.owned = []
+			for it in GameData.items():
+				if g.owned.size() < GameData.max_items():
+					g.owned.append(it.duplicate())
+			g.cons = []
+			for c in GameData.consumables():
+				if g.cons.size() < GameData.cons_slots():
+					g.cons.append(c)
+			if g.mods_own.is_empty():
+				g._apply_mod(String(GameData.mods()[0].id))
+			g.gold = 99999
+			g.sealed = 0
+			_say("최악의 상태")
 			return
 		"restock":
 			g._roll_stock()

@@ -5328,9 +5328,16 @@ func _draw_topbar() -> void:
 	if _is_play() and not active_mods.is_empty():
 		# 숫자 대신 아이콘. 하단의 제약 줄을 지웠으므로 여기가 유일한 상시 표기다.
 		# 무엇이 걸렸는지까지 보이므로 "제약 2" 보다 담는 정보가 오히려 많다.
-		for k in mini(active_mods.size(), 3):
+		#  자리는 셋뿐이다. 넷째부터는 **자른 것을 말한다** — 전에는
+		#  mini(size, 3) 으로 조용히 사라졌고, 그러면 화면이 판을 속인다.
+		var shown_n: int = mini(active_mods.size(), 3 if active_mods.size() <= 3 else 2)
+		for k in shown_n:
 			_icon_modifier(Vector2(LAY.bar_mod + 8.0 + float(k) * 16.0, 9.0),
 					6.0, active_mods[k].id, 0.0)
+		if active_mods.size() > 3:
+			draw_string(font_sm, Vector2(LAY.bar_mod + 2.0 + 2.0 * 16.0, 13.0),
+					"+%d" % (active_mods.size() - 2),
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_DIM)
 
 
 # ── 자금 ──────────────────────────────────────────────────
@@ -5345,9 +5352,19 @@ func _bank_draw() -> void:
 		draw_rect(Rect2(r.position, Vector2(r.size.x * k, 2.0)), C_ACC)
 	draw_rect(Rect2(r.position, Vector2(r.size.x, 2.0)), C_GOLD.darkened(0.35))
 	# deny_flash 는 상점 중앙 골드 텍스트가 쓰던 값을 그대로 물려받는다
-	var gc: Color = C_GOLD.lerp(C_MULT, deny_flash)
+	#  거절은 **흔들림**이 진다. 전에는 금색을 배수 붉음으로 물들였는데,
+	#  붉음은 배수다 — 이 게임에 위험색은 없다. 색을 빌려 오면 그 색이
+	#  숫자에서 뜻하던 것이 흐려진다.
+	var gc: Color = C_GOLD
 	var jx := randf_range(-deny_flash, deny_flash) * 2.0
-	draw_gold(r.get_center().x + jx, r.position.y + 26.0, str(gold), 22, gc)
+	#  **판에 맞춰 줄인다.** 22px 로 고정이라 다섯 자리(큰손 챌린지 · 오리
+	#  금고)에서 72px 짜리 자금판을 통째로 넘어갔다 — 「최악의 상태」를
+	#  만들자마자 나온 자리다.
+	var gt := str(gold)
+	var gsz := 22
+	while gsz > 11 and gold_w(gt, gsz) > r.size.x - 10.0:
+		gsz -= 11
+	draw_gold(r.get_center().x + jx, r.position.y + 26.0, gt, gsz, gc)
 
 	# 이자 줄은 판이 늘어난 화면에서만 담긴다.
 	if r.size.y < 46.0:
@@ -5390,8 +5407,7 @@ func _darts_draw() -> void:
 func _cap_draw() -> void:
 	var r: Rect2 = LAY.cap
 	r.position.y += _hud_dy()
-	draw_rect(r, C_FELT)                                   # 동전 슬롯과 같은 재질
-	draw_rect(Rect2(r.position, Vector2(r.size.x, 1.0)), C_FELT.lightened(0.14))
+	_panel(r)
 	draw_string(font_sm, r.position + Vector2(0.0, 18.0), "동전",
 			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, C_OFF)
 	draw_string(font, r.position + Vector2(0.0, 36.0),
@@ -5957,8 +5973,7 @@ func draw_gold(cx: float, y: float, n: String, size: int, c: Color) -> void:
 func _panel_draw() -> void:
 	_panel_ensure()
 	var pr := _panel_rect()
-	draw_rect(pr, C_FELT)
-	draw_rect(Rect2(pr.position, Vector2(pr.size.x, 1.0)), C_FELT.lightened(0.14))
+	_panel(pr)
 
 	for i in GameData.max_items():
 		if i < owned.size():
@@ -5967,10 +5982,15 @@ func _panel_draw() -> void:
 			else:
 				_panel_slot(i)
 		else:
-			# 빈 자리는 비워 둔다. 동그란 홈을 파 두었더니 "여기 뭔가 있다"
-			# 로 읽혔다 — 발라트로도 빈 조커 칸에 아무것도 안 그린다.
-			# 칸이 몇인지는 카운터가 이미 말한다.
-			pass
+			#  유령 홈. 전에는 통째로 비워 뒀는데, 동전 셋이면 x[351,475]
+			#  124px 이 빈 펠트로 남아 **화면에서 가장 큰 덩어리가 구멍**
+			#  이었다. 형태가 「여기에 무엇이 들어가는가」를 가르치므로
+			#  판 폭이 곧 수용량으로 읽힌다 — 앞치마의 보드 확장 홈이
+			#  이미 같은 어법이다.
+			#
+			#  전에 "여기 뭔가 있다" 로 읽혔던 것은 홈이 **동전과 같은
+			#  밝기**여서였다. 판보다 어둡게 파면 구멍으로 읽힌다.
+			_slot_ghost(i)
 	_sell_btn_draw()
 
 
@@ -5994,6 +6014,15 @@ func _sell_btn_draw() -> void:
 # 3단계에서 PANEL.tilt 를 곱해 쓴다. (지금은 미사용)
 func _panel_tilt(i: int) -> float:
 	return sin(float(i) * 2.399963) * 0.5
+
+
+#  빈 동전 칸. 판에 판 홈이다 — 물건이 아니라 자리다.
+func _slot_ghost(i: int) -> void:
+	var c := _slot_rect(i).get_center() + Vector2(0.0, PANEL.chip_dy)
+	var r: float = PANEL.r - 2.0
+	draw_circle(c, r, C_PANEL.darkened(0.45))
+	#  윗변 한 획 — 파인 것으로 읽히려면 위쪽이 더 어두워야 한다.
+	draw_arc(c, r - 0.5, PI, TAU, 14, C_BG, 1.0)
 
 
 func _panel_slot(i: int) -> void:
@@ -6495,8 +6524,10 @@ func _cons_draw() -> void:
 	# 동전 슬롯과 같은 재질로 깐다 — 같은 재질이 "여기도 물건 두는 자리다" 를 말한다.
 	var box: Rect2 = LAY.cons
 	box.position.y += _hud_dy()
-	draw_rect(box, C_FELT)
-	draw_rect(Rect2(box.position, Vector2(box.size.x, 1.0)), C_FELT.lightened(0.14))
+	#  판 위에서는 펠트를 안 쓴다. 재질이 곧 장소다 — 테이블이 없는 화면에
+	#  초록 덩어리가 있으면 상단에서 그것이 제일 먼저 눈에 든다.
+	#  역할 구분은 재질이 아니라 9px 라벨이 진다.
+	_panel(box)
 	for i in GameData.cons_slots():
 		var r := _cons_rect(i).grow(-3.0)
 		var live: bool = i < cons.size()
@@ -6504,7 +6535,7 @@ func _cons_draw() -> void:
 			# 뒤에 회색 네모를 안 깐다. 물건이 곧 칸이다 — 동전 슬롯이
 			# 이미 그 규약이라(_panel_slot 은 스티커만 놓는다) 여기만
 			# 네모를 두면 같은 자리가 두 어법으로 말한다.
-			_icon_cons(r.get_center(), minf(r.size.x, r.size.y) * 0.32,
+			_icon_cons(r.get_center(), minf(r.size.x, r.size.y) * 0.42,
 					String(cons[i].id))
 	# 이름과 수 — 동전 슬롯 밑은 상인 자리라 못 쓰지만 이 자리는 벽이다.
 	# 「사탕」이라고만 적고 있었는데 이 칸에는 사진도 들어간다 — 사진을
@@ -10130,6 +10161,13 @@ func _tip_clear() -> void:
 
 # 지금 커서 아래에 무엇이 있는가. 없으면 빈 사전.
 func _tip_hit(m: Vector2) -> Dictionary:
+	#  상단 띠의 제약 아이콘. 판의 규칙을 바꾸는 것이 **이름 없는 반지름 6
+	#  아이콘 하나**였고 아무 데서도 그 이름을 안 말했다 — 5170행 주석은
+	#  「이름 전체는 하단 y341 줄이 갖는다」고 했는데 그런 줄이 없다.
+	#  상태를 안 가린다. 띠가 떠 있으면 언제나 읽을 수 있어야 한다.
+	if not active_mods.is_empty() and not _bar_hidden():
+		if Rect2(float(LAY.bar_mod) - 4.0, 0.0, 60.0, 18.0).has_point(m):
+			return {"k": "onmod", "i": 0}
 	match state:
 		S.SHOP:
 			if hand_st == H.CARRY:
@@ -10358,6 +10396,15 @@ func _tip_build(hit: Dictionary) -> void:
 			_tip_add(fx.d, 11, C_TXT)
 			_tip_add(GameData.use_at_name(String(fx.get("use_at", "any"))),
 					10, C_ACC)
+		"onmod":
+			#  걸린 것을 **전부** 낸다. 셋만 그리고 넷째부터 조용히 자르던
+			#  자리가 여기다 — 자른 것은 화면에서 사라졌지 판에서 사라진
+			#  것이 아니다.
+			_tip_set_tag("이번 판 제약")
+			tip_title = "제약 %d" % active_mods.size()
+			for mo in active_mods:
+				_tip_add("%s — %s" % [mo.get("n", ""), mo.get("d", "")],
+						11, C_TXT)
 		"cmodf":
 			_tip_set_tag("제약")
 			tip_mark = _col_cell(i % COL_PAGE)
