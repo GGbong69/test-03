@@ -119,7 +119,39 @@ func _run() -> void:
 	for f in flat:
 		print("      안 칠해짐: %s" % f)
 
-	# ③ 지나치게 칠한 자리 — 「목표 점수」처럼 물건의 점수가 아닌 곳
+	# ③ 이어감이 값 아닌 토막에서 안 끊긴다 (2026-09-14)
+	print("")
+	for c2 in [
+		["명중마다 배수 +1 · 빗나가면 −1", "−1", "붉"],
+		["점수 +100 에서 시작 · 던질 때마다 −5", "−5", "푸"],
+		["배수 +8 에서 시작 · 판마다 −1 · 0이면 파괴", "−1", "붉"],
+	]:
+		var t2 := String(c2[0])
+		var want2 := String(c2[1])
+		var got2 := ""
+		for sg in g._tint(t2, Color("8f86a8")):
+			if String(sg.s).strip_edges() == want2:
+				got2 = _tag_of(sg.c)
+		_ok("이어감 · %s" % want2, got2 == String(c2[2]),
+				"%s → '%s' 가 %s (바라는 값 %s)"
+				% [_paint(t2), want2, got2 if got2 != "" else "없음", c2[2]])
+
+	# ④ 접힌 줄에서 색이 안 끊긴다 — 원문을 통째로 칠하고 조각을 잘라 쓴다
+	print("")
+	var long := "명중마다 배수 +1 · 빗나가면 −1"
+	var seg_all: Array = g._tint(long, Color("8f86a8"))
+	var joined := ""
+	for sg2 in seg_all:
+		joined += String(sg2.s)
+	_ok("원문 한 줄을 통째로 칠한다", joined == long, "%d토막" % seg_all.size())
+	#  조각으로 잘라도 자리가 원문과 맞나
+	var l2 := {"t": long, "wr": PackedStringArray(["명중마다 배수 +1 ·",
+			"빗나가면 −1"])}
+	var off1: int = g._wr_off(l2, 1)
+	_ok("둘째 조각의 자리를 안다", long.substr(off1).begins_with("빗나가면"),
+			"off %d → '%s'" % [off1, long.substr(off1)])
+
+	# ⑤ 지나치게 칠한 자리 — 「목표 점수」처럼 물건의 점수가 아닌 곳
 	print("")
 	var over := PackedStringArray()
 	for t in ["목표 점수 1.25배", "목표 점수 0.7배", "판 시작 다트 +1"]:

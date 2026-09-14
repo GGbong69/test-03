@@ -10138,8 +10138,8 @@ func _tip_add(t: String, sz: int, c: Color, ic := "", tl := "", gd := "") -> voi
 		w -= 18.0                       # 아이콘 자리
 	if gd != "":
 		w -= gold_w(gd, sz) + 6.0       # 오른쪽에 붙는 값 자리
-	tip_lines.append({"s": t, "sz": sz, "c": c, "ic": ic, "tl": tl, "gd": gd,
-			"wr": _tip_wrap(t, w, sz)})
+	tip_lines.append({"s": t, "t": t, "sz": sz, "c": c, "ic": ic, "tl": tl,
+			"gd": gd, "wr": _tip_wrap(t, w, sz)})
 
 
 # 한 줄을 판 폭에 맞게 접는다. 낱말 경계를 먼저 보고, 낱말 하나가 폭보다
@@ -10634,8 +10634,10 @@ func _tint(t: String, base: Color) -> Array:
 			carry = true
 		elif carry and _is_val(w):
 			c = role
-		else:
-			carry = false
+		#  **이어감은 값이 아닌 토막에서 안 끊긴다.** 전에는 여기서
+		#  carry 를 껐고, 그래서 「명중마다 배수 +1 · 빗나가면 −1」의
+		#  −1 이 흰 글자였다 — 그 −1 은 배수인데 배수색이 아니었다.
+		#  다음 점수/배수 낱말을 만날 때까지 이어간다.
 		# 사이 공백을 토막에 붙여 둔다 — 폭을 따로 더하면 글꼴마다 어긋난다.
 		out.append({"s": w + (" " if i < parts.size() - 1 else ""), "c": c})
 	return out
@@ -10656,6 +10658,48 @@ func _is_odds(w: String) -> bool:
 	if sl <= 0 or sl >= w.length() - 1:
 		return false
 	return w[sl - 1].is_valid_int() and w[sl + 1].is_valid_int()
+
+
+#  접힌 조각이 원문 어디서 시작하나. 조각은 낱말 경계나 글자 단위로
+#  잘리므로 앞 조각들의 길이를 더하면 그 자리가 나온다.
+func _wr_off(l: Dictionary, wi: int) -> int:
+	var n := 0
+	for k in wi:
+		n += String(l.wr[k]).length()
+	#  접을 때 낱말 사이 공백이 한 칸 먹힌다. 원문과 자리를 맞추려면
+	#  그만큼 밀어 준다.
+	var full := String(l.t)
+	while n < full.length() and full[n] == " ":
+		n += 1
+	return n
+
+
+#  원문을 통째로 칠한 뒤 **그중 한 조각만** 그린다. 조각마다 따로 칠하면
+#  이어감(carry)이 줄마다 초기화되어, 「배수」와 그 값이 다른 줄로 갈릴 때
+#  값이 색을 잃는다.
+func _draw_tinted_part(x: float, y: float, full: String, part: String,
+		off: int, sz: int, base: Color) -> void:
+	if font == null or part == "":
+		return
+	var want := off + part.length()
+	var cx := x
+	var at := 0
+	for g in _tint(full, base):
+		var seg := String(g.s)
+		var a := at
+		var b := at + seg.length()
+		at = b
+		if b <= off or a >= want:
+			continue
+		#  조각에 걸친 부분만 잘라 낸다.
+		var lo: int = maxi(a, off) - a
+		var hi: int = mini(b, want) - a
+		var piece := seg.substr(lo, hi - lo)
+		if piece == "":
+			continue
+		draw_string(font, Vector2(cx, y), piece, HORIZONTAL_ALIGNMENT_LEFT,
+				-1, sz, Color(g.c, tip_a))
+		cx += font.get_string_size(piece, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x
 
 
 func _draw_tinted(x: float, y: float, t: String, sz: int, base: Color) -> void:
@@ -10734,7 +10778,12 @@ func _tip_draw(sh: Vector2) -> void:
 			draw_string(font_sm, Vector2(lx + tw, y), l.tl, HORIZONTAL_ALIGNMENT_LEFT,
 					p.x + sz.x - TIP.pad - lx - tw, 9, Color(C_DIM, tip_a))
 		for wi in l.wr.size():
-			_draw_tinted(lx, y, String(l.wr[wi]), l.sz, l.c)
+			#  **접힌 조각마다 _tint 를 부르면 이어감이 줄마다 초기화된다.**
+			#  폭이 164px 이라 한 줄에 14자, 접힘은 흔한 일이고 「배수」와
+			#  그 값이 다른 줄로 갈리면 값이 색을 잃는다. 원문 한 줄을
+			#  통째로 칠해 두고 **조각의 글자 수만큼 잘라** 쓴다.
+			_draw_tinted_part(lx, y, String(l.t), String(l.wr[wi]),
+					_wr_off(l, wi), l.sz, l.c)
 			y += TIP.line
 		y += 2.0 if l.ic != "" else 0.0
 
