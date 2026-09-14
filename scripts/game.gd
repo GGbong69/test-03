@@ -1003,7 +1003,9 @@ func _settle_clear() -> void:
 	if GameData.chal_on("gold_off"):
 		clear = 0
 	clear_gold_detail = [
-		{"n": GameData.leg_name(leg_no), "v": clear},
+		#  판 이름은 **제목이 이미 말했다**("라운드 1  작은 판 클리어").
+		#  같은 말을 두 줄 아래에 또 적으면 내역 첫 줄이 정보가 아니다.
+		{"n": "클리어 보상", "v": clear},
 		{"n": "남은 다트 %d개" % darts_left, "v": dart_gold},
 		{"n": "이자", "v": interest},
 	]
@@ -1015,6 +1017,10 @@ func _settle_clear() -> void:
 	# 전에 고친다. 이미 쌓인 저장은 못 되살리므로 임계값을 그 위에서 잡는다.
 	Save.bump("gold_earned", clear + dart_gold + interest + item_gold)
 
+	#  판 위 팝업은 판 위에서 끝난다. 여태 정산 화면까지 따라와 제목을
+	#  가로질렀고, 폭이 120 고정이라 「유리 대포 — 부서졌」까지만 찍혔다.
+	pops.clear()
+	clear_t = 0.0
 	state = S.CLEAR
 	_sfx("leg_clear")
 
@@ -2485,6 +2491,9 @@ func _process(d: float) -> void:
 	_boost_tick(d)
 	_set_tick(d)
 	_title_tick(d)
+	if state == S.CLEAR:
+		clear_t += d
+		queue_redraw()
 
 	if not beep_q.is_empty():
 		beep_t -= d
@@ -3223,6 +3232,12 @@ func _click(m: Vector2) -> void:
 				return
 			_advance()
 		S.CLEAR:
+			#  아직 구르는 중이면 **누름이 굴림을 끝낸다.** 연출이 입력을
+			#  삼키면 안 된다 — 두 번째부터는 이미 아는 것을 기다리는 시간이다.
+			if not _clear_done():
+				clear_t = 99.0
+				_sfx("menu_pick")
+				return
 			# 좌표를 보지 않는다 — 아무 데나 누르든 스페이스든 상점으로 넘어간다
 			# 「큰손」은 라운드마다 한 번만 연다. 라운드의 마지막 판(보스)을
 			# 넘긴 뒤에만 상점이 서고 나머지는 곧장 다음 판이다 — 값이 0 인
@@ -10939,21 +10954,73 @@ func _btn(r: Rect2, label: String, sub: String, on: bool,
 				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, C_GOLD if on else C_OFF)
 
 
+#  정산 표의 자리. 제목 · 합계선 · 총액이 화면 한가운데(320)에 서는데
+#  표만 x[210,384] 중심 297 이라 24px 어긋나 있었다. 한 축으로 모은다.
+var clear_t := 0.0              # 정산이 흐른 시간(초). 0 이면 막 열렸다
+
+
+#  총액 굴림. 내역이 다 든 뒤부터 0 에서 실제 골드까지 오른다.
+#  자릿수가 많을수록 조금 더 오래 — 세 자리와 다섯 자리가 같은 시간에
+#  멎으면 큰 수가 순간이동한 것처럼 보인다.
+#
+#  릴 굴림과 칩 소리는 판 **밖**의 어휘라 여기서는 써도 된다(판 위는
+#  다트 그대로다 — 던지기와 착탄에는 카지노 소리를 안 올린다).
+#  연출이 다 끝났나. 굴림이 멎고 총액이 제값에 닿았으면 참이다.
+func _clear_done() -> bool:
+	return _mo("fast") <= 0.0 or _clear_roll() >= gold
+
+
+func _clear_roll() -> int:
+	if _mo("fast") <= 0.0:
+		return gold                              # 모션 끄기
+	var from: float = float(clear_gold_detail.size()) * _mo("fast")
+	var span: float = clampf(0.25 + 0.12 * log(maxf(float(gold), 1.0)) / log(10.0),
+			0.25, 0.8)
+	var k: float = clampf((clear_t - from) / span, 0.0, 1.0)
+	return int(round(float(gold) * _ease_enter(k)))
+
+
+const CLR := {"x": 233.0, "w": 174.0, "y": 78.0, "row": 16.0, "name_w": 120.0}
+
+
 func _draw_clear() -> void:
-	_scrim()
+	#  스크림을 1.0 으로. 0.94 라 뒤 다트판의 「20」이 내역 둘째 줄 위에
+	#  앉아 있었다 — 정산은 읽는 화면이지 비치는 화면이 아니다.
+	draw_rect(Rect2(Vector2.ZERO, VIEW), C_BG)
 	draw_string(font, Vector2(0, 46), "라운드 %d  %s 클리어"
 			% [GameData.round_of(leg_no), GameData.leg_name(leg_no)],
 			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 22, C_ACC)
 
-	var y := 74.0
-	for row in clear_gold_detail:
-		draw_string(font, Vector2(210, y), row.n, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_DIM)
-		draw_gold_at(340.0, y, "+%d" % row.v, 11, C_GOLD)
-		y += 17.0
+	var x0: float = float(CLR.x)
+	var x1: float = x0 + float(CLR.w)
+	var y: float = float(CLR.y)
+	var step: float = _mo("fast")
+	for i in clear_gold_detail.size():
+		var row: Dictionary = clear_gold_detail[i]
+		#  줄마다 차례로 든다. 4px 을 7프레임에 옮기면 프레임당 0.6px —
+		#  서브픽셀이 없으니 부드러움이 아니라 딱딱거림이다. **알파로만** 든다.
+		var a: float = 1.0
+		if step > 0.0:
+			a = clampf((clear_t - float(i) * step) / step, 0.0, 1.0)
+		if a <= 0.0:
+			break
+		var got: bool = int(row.v) > 0
+		draw_string(font, Vector2(x0, y), _elide(String(row.n),
+				float(CLR.name_w), 11), HORIZONTAL_ALIGNMENT_LEFT,
+				float(CLR.name_w), 11, Color(C_DIM if got else C_OFF, a))
+		#  못 받은 줄은 눌러 둔다 — 「받은 것」과 「0 인 것」이 같은 무게로
+		#  서면 내역이 목록이 아니라 벽지가 된다.
+		var gw := gold_w("+%d" % int(row.v), 11)
+		draw_gold_at(x1 - gw, y, "+%d" % int(row.v), 11,
+				Color(C_GOLD if got else C_OFF, a))
+		y += float(CLR.row)
 
-	# 내역 아래에 합계선을 긋고 보유액을 크게 — 3택1이 있던 자리다
-	draw_rect(Rect2(Vector2(210, y + 4), Vector2(174, 1)), C_WIRE.darkened(0.4))
-	draw_gold(VIEW.x * 0.5, y + 36.0, str(gold), 22, C_GOLD)
+	#  합계선 — 내역이 다 든 뒤에 그어진다
+	var all_in: float = float(clear_gold_detail.size()) * step
+	if step <= 0.0 or clear_t >= all_in:
+		draw_rect(Rect2(Vector2(x0, y + 4.0), Vector2(float(CLR.w), 1.0)),
+				Color(C_WIRE, 0.5))
+		draw_gold(VIEW.x * 0.5, y + 36.0, str(_clear_roll()), 22, C_GOLD)
 
 	_btn(Rect2(Vector2(232, 258), Vector2(176, 42)), "상점으로", "아무 키", true)
 

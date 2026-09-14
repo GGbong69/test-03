@@ -368,6 +368,7 @@ static func _rows(g: Node) -> Array:
 				{"n1": "판 선택 열기", "t": "act", "a": "leg"},
 				{"n1": "다트 다시 채우기", "t": "act", "a": "refill"},
 				{"n1": "최악의 상태", "t": "act", "a": "worst"},
+				{"n1": "정산 다시 재생", "t": "act", "a": "replay"},
 			]
 		1:
 			return [
@@ -603,6 +604,12 @@ static func _run(g: Node, e: Dictionary) -> void:
 			g.sealed = -1
 			g._panel_reset()
 			_say("동전 슬롯 비움")
+			return
+		"replay":
+			# 정산 연출은 한 번 지나가면 다시 못 본다. 고치는 동안 매번
+			# 판을 넘길 수는 없다.
+			g.clear_t = 0.0
+			_say("정산 처음부터")
 			return
 		"worst":
 			# 제약 넷 · 동전 최대 · 사탕 칸 최대 · 보드 확장. 640x360 에서
