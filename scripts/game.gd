@@ -6033,6 +6033,22 @@ func _stk_ti(rarity: String) -> int:
 	return 0
 
 
+#  구운 얼굴 하나. **없는 것도 기억한다** — 없는 id 마다 매 프레임 파일
+#  시스템에 묻는 것을 막는다(소리표 _sfx_file 과 같은 규약).
+var _coin_tex := {}
+
+
+func _coin_art(id: String) -> Texture2D:
+	if _coin_tex.has(id):
+		return _coin_tex[id]
+	var t: Texture2D = null
+	var path := "res://assets/coin/%s.png" % id
+	if id != "" and ResourceLoader.exists(path):
+		t = load(path)
+	_coin_tex[id] = t
+	return t
+
+
 #  얼굴을 짓는 잔손. **정규 좌표**를 받는다 — x·y 가 -1~1 이고 얼굴의
 #  반지름으로 곱해진다. 누운 자세에서는 ry 가 눌려 있으므로 같은 수가
 #  저절로 원근을 탄다. 그림을 두 벌 적지 않는 유일한 길이다.
@@ -6088,7 +6104,20 @@ func _fbg(c: Vector2, rx: float, ry: float, col: Color) -> void:
 #
 #  재질(MATS)이 이미 말하는 장은 여기 없다. 유리 대포는 유리인 것으로
 #  충분하고, 그 위에 대포를 또 그리면 한 얼굴이 두 번 말한다.
-func _icon_item(c: Vector2, rx: float, ry: float, id: String) -> void:
+func _icon_item(c: Vector2, rx: float, ry: float, id: String,
+		dim := 0.0) -> void:
+	#  ── 구운 얼굴이 있으면 그것이 이긴다 ──────────────────
+	#  도형으로 지은 실루엣은 38px 에서 "무엇인지 모르겠다" 는 말을 들었다.
+	#  사진은 뭉개져도 색과 덩어리가 남아서 오히려 알아보기 쉽다 — 알아보는
+	#  것이 먼저다. scripts/tools/make_coin_art.py 가 굽고, 원형 알파를
+	#  같이 구우므로 누운 자세의 타원 사각에 그리면 저절로 눌린다.
+	#  레퍼런스가 없는 열 장은 아래 손그림이 그대로 맡는다.
+	var tx := _coin_art(id)
+	if tx != null:
+		draw_texture_rect(tx, Rect2(c - Vector2(rx, ry),
+				Vector2(rx * 2.0, ry * 2.0)), false,
+				Color(1.0, 1.0, 1.0).darkened(dim))
+		return
 	match id:
 		"c01":
 			#  광대 — 파란 깃에 붉은 모자. 38px 에서 얼굴은 점 둘로
@@ -6517,7 +6546,7 @@ func draw_item_sticker(c: Vector2, r: float, it: Dictionary, rot: float, lift: f
 		#  인쇄면 반지름. draw_sticker 의 rw 와 **같은 식이어야** 얼굴이
 		#  테두리 밑으로 기어들지 않는다 — 거기 지역 변수라 여기서 다시 잰다.
 		var fr: float = r - clampf(r * 0.16, 1.0, 2.2) - 1.0
-		_icon_item(c, fr, fr, String(it.get("id", "")))
+		_icon_item(c, fr, fr, String(it.get("id", "")), dim)
 	var ink: Color = C_CHIP.lightened(0.5) if it.k == "chip" else C_MULT.lightened(0.45)
 	var meth := String(it.get("aim", ""))
 	if String(it.k) == "" and String(it.c) == "":
@@ -10993,7 +11022,8 @@ func _sticker_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: floa
 	#  되는데, 그러면 원형 얼굴이 타원이 되어 두 자세가 딴 그림이 된다.
 	#  **안 누른다** — 면에 새겨진 그림이 아니라 위에서 본 도장으로 둔다.
 	if not hollow:
-		_icon_item(c, rx - 1.5, ry - 1.5 * TBL.flat, String(it.get("id", "")))
+		_icon_item(c, rx - 1.5, ry - 1.5 * TBL.flat,
+				String(it.get("id", "")), dim)
 	#  선 자세와 같은 규칙이다(draw_item_sticker 의 값 주석). 두 자세가
 	#  갈리면 테이블에서는 0 이 있고 동전 슬롯에서는 없는 동전이 된다.
 	if String(it.k) != "":
