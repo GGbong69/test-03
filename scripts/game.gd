@@ -10318,6 +10318,35 @@ func _hand_release(m: Vector2) -> void:
 	var it: Dictionary = drop[i]
 	it.held = false
 	if z >= 0:
+		#  ── 사진이 테이블을 갈아 끼운 동안 ────────────────────
+		#  「It's Not About Money」·「마릴린 딥틱」이 열려 있으면 창구가 딴
+		#  일을 한다 — 사는 것이 아니라 부수거나 복제한다.
+		#
+		#  **탭 길(_chute_click)은 그것을 아는데 끌기 길은 몰랐다.** 끌어다
+		#  놓으면 곧장 _pay_take 로 가서 값 0 짜리 「구매」가 됐고, 복사본은
+		#  들어오는데 _photo_close 가 영영 안 불렸다 — photo 가 "clone" 인 채로
+		#  남고 stock 은 보유 동전 목록 그대로라, **상점 매물이 다시 안 나타났다**
+		#  (2026-09-15 제보). 창구가 두 길로 열려 있는데 한 길에만 갈래를
+		#  달아 둔 자리였다.
+		if photo == "burn" or photo == "clone":
+			var want: int = Z_SELL if photo == "burn" else Z_BUY
+			if z == want:
+				buy_sel = i
+				var was := photo
+				_photo_take(i)
+				if photo == was:
+					#  못 걸었다(동전 슬롯이 꽉 찼다). 물건을 자리로 돌려보낸다 —
+					#  성공했으면 _photo_close 가 테이블을 다시 깔았으므로 이
+					#  it 은 이미 없는 자리다.
+					it.u = clampf(it.u, DROP.u_lo + it.hw, DROP.u_hi - it.hw)
+					_hand_land(it)
+				return
+			it.u = clampf(it.u, DROP.u_lo + it.hw, DROP.u_hi - it.hw)
+			pay_msg = "반대쪽 창구다"
+			pay_msg_t = HAND.msg_t
+			_deny()
+			_hand_land(it)
+			return
 		var blk := "왼쪽은 파는 창구다" if z == Z_SELL else _buy_block(i)
 		if blk == "":
 			_pay_take(i)
