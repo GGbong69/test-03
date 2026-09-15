@@ -126,6 +126,11 @@ func _run() -> void:
 	g.gold = 40
 	g.leg_no = 2
 	g._open_shop()
+	#  상점을 열면 배움이 한 걸음 뜨고, 그동안 게임 시간이 0.3 배로
+	#  느려진다(_tutor_slow). 팔을 재는 검사라 그것부터 걷는다 —
+	#  안 걷으면 열네 프레임 뒤에도 쓸기가 거의 시작조차 안 한다.
+	g._tutor_close()
+	g.tutor_q.clear()
 	await _wait(30)
 	g._sweep_begin()
 	await _wait(14)
