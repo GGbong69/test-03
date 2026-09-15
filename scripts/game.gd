@@ -9168,7 +9168,7 @@ func _ease_io(t: float) -> float:
 
 # ══ 쓸기 타임라인 ════════════════════════════════════════
 
-# 훑는 중인가. 가격판·코스터 자국·안내 문구가 이걸 읽는다 —
+# 훑는 중인가. 가격판과 안내 문구가 이걸 읽는다 —
 # 복귀 구간은 이미 새 판이 떨어지는 중이라 평소처럼 굴어야 한다.
 func _sweep_wipe() -> bool:
 	return sweep_live and not sweep_dealt
@@ -10058,12 +10058,11 @@ func _shop_hit(m: Vector2) -> int:
 
 # _table_draw 의 "물건은 여기에" 자리 (덮개 앞 — 낙하 중 위로 삐져나온 건 잘린다)
 func _goods_draw() -> void:
-	# 팔려 나간 자리에 남는 코스터 자국. 개수를 보존하고 "여긴 이제 빈 자리" 를 말한다.
-	for i in mini(drop.size(), stock.size()):
-		var g: Dictionary = drop[i]
-		if g.gone and not _sweep_wipe():
-			_e_ring_w(Vector2(g.u, _p2g(g.w)), 13.0, 13.0 * TBL.flat, 1.0,
-					C_TABLE.darkened(0.35))
+	#  팔려 나간 자리에 코스터 자국을 깔았었다 — "여긴 이제 빈 자리" 를
+	#  말하려던 것인데 그렇게 안 읽혔다. 물건이 물리로 앉아 자리가 제각각
+	#  이라 빈 칸으로 안 보이고, 나간 순간부터 방문이 끝날 때까지 같은
+	#  진하기로 남아 얼룩이 됐다. 매물이 아홉까지 늘면 자국도 아홉이다.
+	#  "뭔데 이것들은?" 이라는 물음이 그 자국의 성적표다(2026-09-16 제보).
 	var z := _z_order()
 	for i in z:                     # 그림자 먼저 전부 — 어떤 몸통보다도 밑이다
 		_obj_shadow(i)
@@ -12226,7 +12225,9 @@ func _hold_draw() -> void:
 		return
 	var it: Dictionary = drop[hand_i]
 	# 자리 링. h ≡ 0 이라 몸통 중심이 곧 지면점이고, 링과 몸통이 안 갈린다.
-	# 팔려나간 자리의 코스터 자국과 같은 함수·같은 어법 — "링 = 자리".
+	# "링 = 자리" 는 이제 여기 하나뿐이다 — 팔려 나간 자리에도 같은 어법으로
+	# 자국을 깔았었는데, 빈 칸으로 안 읽히고 얼룩으로 읽혀 걷어냈다.
+	# 링이 드물어야 링이 자리를 말한다.
 	_e_ring_w(Vector2(it.u, _p2g(it.w)), it.r + 3.0, (it.r + 3.0) * TBL.flat, 1.0,
 			Color(C_ACC if hand_zone >= 0 else C_TXT, 0.55))
 	_obj_shadow(hand_i)
