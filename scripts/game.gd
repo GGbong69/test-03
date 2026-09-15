@@ -5838,7 +5838,28 @@ const STK_TIERS := [
 	# 한 단 위라 새 표식을 배우지 않아도 "홀로보다 더" 로 읽힌다.
 	{"rarity": "legendary", "body": "3a1030", "fin": 3},
 ]
-const C_DIECUT := Color("f4f0e6")   # 다이컷 테두리. 이 흰 띠 하나가 "동전"를 말한다
+#  다트통에 붙은 스티커의 다이컷 테두리. **동전은 이제 안 쓴다** — 동전은
+#  오려 낸 종이가 아니라 찍어 낸 쇠라 거기 있어야 하는 것이 옆면이다(EDGE).
+#  통에 붙은 것은 진짜 스티커이므로 그쪽에는 그대로 남는다.
+const C_DIECUT := Color("f4f0e6")
+
+#  ── 동전의 두께 ───────────────────────────────────────────
+#  "종이라 옆면이 없다" 를 걷는다. 물건은 **진작부터 두께 4.5 를 갖고
+#  있었다** — 히트박스(_obj_box)도 그림자 낙차도 TBL.chip_t 로 서 있었고
+#  그림만 종이였다. 흰 다이컷 띠는 오려 낸 스티커의 어휘라, 동전이라면
+#  거기 있어야 하는 것은 **옆면**이다.
+#
+#  빗살(reeding)이 동전을 동전으로 만든다. 매끈한 원반은 접시고, 테두리에
+#  홈이 있으면 주화다 — 실제 주화의 빗살이 깎아 낸 금을 막으려던 것이라
+#  "값이 있는 쇠" 의 표식으로 읽힌다.
+#
+#  금박 규약은 **옆면이 이어받는다.** 흰 띠가 금색이 되던 자리(골드를 버는
+#  동전 다섯)가 이제 금테 옆면이다 — 같은 정보를 같은 자리에서 나른다.
+const EDGE := {
+	"lo":   0.46,      # 옆면은 윗면보다 이만큼 어둡다
+	"reed": 13,        # 앞쪽 호에 새기는 빗살 수
+	"bev":  0.30,      # 윗면 가장자리 한 줄. 빛 받는 모서리다
+}
 
 #  ── 동전의 재질 ────────────────────────────────────────────
 #  등급이 이미 몸 색과 마감을 쥔다(STK_TIERS). 재질은 그 위에 **한 겹**만
@@ -6240,8 +6261,14 @@ func draw_sticker(c: Vector2, r: float, tier: Dictionary, rot: float,
 	var glass: bool = mat == "glass"
 	if glass:
 		body = Color(body, 0.26)
-	var rim: Color = (C_GOLD if gold_rim else C_DIECUT).darkened(dim)
-	var rw: float = clampf(r * 0.16, 1.0, 2.2)      # 다이컷 폭. r=8 툴팁에서도 안 뭉갠다
+	#  선 자세는 정면이라 두께가 안 보인다. 그래서 두께를 **베벨**로 말한다 —
+	#  바깥 한 겹이 옆면 색, 그 안 한 겹이 빛 받는 모서리다. 찍어 낸 쇠의
+	#  어법이고, 누운 자세의 옆면과 같은 색을 쓰므로 둘이 같은 물건으로 읽힌다.
+	var bb2 := Color(tier.body)
+	var rim: Color = (C_GOLD.darkened(0.22) if gold_rim
+			else (bb2.lightened(0.30) if bb2.v < 0.32
+			else bb2.darkened(float(EDGE.lo)))).darkened(dim)
+	var rw: float = clampf(r * 0.16, 1.0, 2.2)      # 테두리 폭. r=8 툴팁에서도 안 뭉갠다
 	var y := _peel_y(r, peel)
 
 	# 종이라 옆면이 없다. 들리면 두께 대신 그림자만 자란다 — 기본 점수의 원기둥
@@ -6260,11 +6287,10 @@ func draw_sticker(c: Vector2, r: float, tier: Dictionary, rot: float,
 			draw_colored_polygon(annulus_at(c, r - rw, r,
 					float(q) * (TAU / 4.0), float(q + 1) * (TAU / 4.0), 7), rim)
 	else:
-		_disc_seg(c, r, y, rim)                     # 다이컷 테두리
-		# 인쇄 가장자리 1px. 흔함(크림 ded5c0)과 다이컷(f4f0e6)은 명도차가 9% 뿐이라
-		# 이 줄이 없으면 둘이 한 덩어리 흰 원으로 뭉개진다. 나머지 두 등급은 대비가
-		# 충분하지만 같은 그림을 쓰는 편이 어법이 안 갈린다.
-		_disc_seg(c, r - rw, y, body.darkened(0.34))
+		_disc_seg(c, r, y, rim)                     # 옆면(테두리)
+		#  베벨 한 줄. 테두리와 얼굴이 맞붙으면 두 면이 한 덩어리로 뭉쳐
+		#  두께가 안 읽힌다 — 누운 자세의 _e_ring_w 와 같은 일을 한다.
+		_disc_seg(c, r - rw, y, body.lightened(float(EDGE.bev)))
 	_disc_seg(c, r - rw - 1.0, y, body)             # 인쇄면
 
 	# 마감. 각 규약은 annulus_at 그대로다(0 = 12시, 시계 방향) — 둘 다 왼쪽
@@ -10486,17 +10512,49 @@ func _sticker_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: floa
 	var glass: bool = _mat_of(it) == "glass"
 	if glass:
 		body = Color(body, 0.26)
-	var rim: Color = (C_GOLD if it.get("g", "") != "" else C_DIECUT).darkened(dim)
+	var gold: bool = it.get("g", "") != ""
+	#  마감(유광·홀로)이 면 가장자리에서 들어가는 여백. 다이컷 폭이던 값을
+	#  그대로 쓴다 — 홀로 부채가 모서리까지 닿으면 베벨 한 줄을 덮어 두께가
+	#  다시 안 읽힌다.
 	var rw := 2.2
-	var sd: float = TBL.chip_t * TBL.tall              # 그림자 낙차 2.77px
-	draw_colored_polygon(_e_pts(c + Vector2(0.0, sd), rx, ry),
+	#  옆면 색. 몸 색에서 낸다 — 같은 쇠를 찍은 물건이므로.
+	#  다만 **어두운 몸은 밝혀서 낸다.** 레어(241e33)를 더 어둡게 하면
+	#  펠트(16281f)에 묻혀 두께가 통째로 사라진다. 실제로도 옆면은 빛을
+	#  스치듯 받아 윗면보다 밝을 수 있으니 물리를 어기는 것도 아니다.
+	var bb := Color(t.body)
+	var side: Color = (C_GOLD.darkened(0.22) if gold
+			else (bb.lightened(0.30) if bb.v < 0.32
+			else bb.darkened(float(EDGE.lo)))).darkened(dim)
+	var sd: float = TBL.chip_t * TBL.tall              # 옆면 높이 2.77px
+	#  그림자는 옆면 **밑**에서 진다. 전에는 낙차가 곧 그림자였는데 이제
+	#  그 자리에 옆면이 서므로, 그림자를 한 겹 더 내려야 바닥에 닿는다.
+	draw_colored_polygon(_e_pts(c + Vector2(0.0, sd + 2.0), rx, ry),
 			Color(0.0, 0.0, 0.0, 0.26 * (1.0 - dim)))
 	_rar_glow(c, rx, ry, String(it.get("rarity", "common")), dim)
+	#  옆면 — 아래로 sd 민 같은 타원. 윗면과의 합집합이 원기둥이다.
+	#  유리도 옆면은 있다(유리에도 두께가 있다). 비치는 것은 윗면뿐이다.
 	if glass:
-		_e_ring_w(c, rx, ry, rw, rim)               # 속을 비운다(선 자세와 같은 까닭)
+		#  유리는 옆면을 **앞쪽 띠로만** 두른다. 타원을 통째로 깔면 비치는
+		#  것이 펠트가 아니라 제 옆면이라 투명이 죽는다 — 속을 비우려고
+		#  다이컷을 걷어낸 것과 같은 함정을 두께가 다시 판다.
+		var strip := PackedVector2Array()
+		for k in 15:
+			var sa: float = PI * float(k) / 14.0
+			strip.append(c + Vector2(cos(sa) * rx, sin(sa) * ry))
+		for k in range(14, -1, -1):
+			var sa2: float = PI * float(k) / 14.0
+			strip.append(c + Vector2(cos(sa2) * rx, sin(sa2) * ry)
+					+ Vector2(0.0, sd))
+		draw_colored_polygon(strip, side)
 	else:
-		draw_colored_polygon(_e_pts(c, rx, ry), rim)
-	draw_colored_polygon(_e_pts(c, rx - rw, ry - rw * TBL.flat), body)
+		draw_colored_polygon(_e_pts(c + Vector2(0.0, sd), rx, ry), side)
+	#  빗살 — 앞쪽 호에만 새긴다. 뒤쪽은 윗면에 가려 안 보인다.
+	var rf := side.darkened(0.30)
+	for k in int(EDGE.reed):
+		var ra: float = PI * (float(k) + 0.5) / float(int(EDGE.reed))
+		var rp := c + Vector2(cos(ra) * rx, sin(ra) * ry)
+		draw_line(rp, rp + Vector2(0.0, sd), rf, 1.0)
+	draw_colored_polygon(_e_pts(c, rx, ry), body)
 	var fa := 1.0 - dim
 	match int(t.fin):
 		1:
@@ -10515,6 +10573,9 @@ func _sticker_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: floa
 				draw_colored_polygon(_e_band(c, rx - rw - 0.3, ry - rw * TBL.flat - 0.3,
 						rx * 0.20, ry * 0.20, a2, a2 + TAU / 6.0, 4),
 						Color(HOLO[k % 3], 0.26 * fa))
+	#  윗면 가장자리 한 줄. 옆면과 윗면이 같은 색이면 두 면이 한 덩어리로
+	#  뭉쳐 두께가 안 읽힌다 — 모서리에 빛 한 줄이 있어야 면이 갈린다.
+	_e_ring_w(c, rx, ry, 1.0, body.lightened(float(EDGE.bev)))
 	if glass:
 		#  누운 자세의 값들은 선 자세보다 한 단 낮다(fin 1 이 0.32 → 0.22).
 		#  펠트가 어두워 같은 알파면 더 세게 보이기 때문이다. 굴절도 그 비로 낮춘다.
