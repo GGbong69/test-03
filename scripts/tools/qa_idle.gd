@@ -149,6 +149,39 @@ func _run() -> void:
 			"돌림 폭 %.1f°" % rad_to_deg(hi - lo))
 	_ok("한 주기가 20초 안", 1.0 / float(g.IDLE.sway_hz) < 20.0,
 			"%.1f초" % (1.0 / float(g.IDLE.sway_hz)))
+
+	# 커서를 따라본다 — 늘 도는 층이라 몸짓이 없어도 돈다
+	g.idle_act = -1
+	g.npc_eye = 0.0
+	g.npc_clock = 0.0
+	var mid: float = float(g._idle_body().yaw)
+	g.mouse_at = Vector2(g.VIEW.x - 10.0, 200.0)
+	for k2 in 120:
+		g._eye_tick(1.0 / 60.0)
+	var right: float = float(g._idle_body().yaw)
+	g.mouse_at = Vector2(10.0, 200.0)
+	for k3 in 120:
+		g._eye_tick(1.0 / 60.0)
+	var left: float = float(g._idle_body().yaw)
+	_ok("커서를 따라 돈다", right > mid and left < mid,
+			"왼 %.3f · 가운데 %.3f · 오른 %.3f" % [left, mid, right])
+	_ok("끝까지 따라봐도 몸짓보다 작다",
+			absf(right - mid) < 0.09 and absf(left - mid) < 0.09,
+			"%.1f°" % rad_to_deg(maxf(absf(right - mid), absf(left - mid))))
+	#  커서보다 한 박자 늦는다 — 한 프레임에 다 돌면 홱 돌아 불안하다
+	g.npc_eye = 0.0
+	g.mouse_at = Vector2(g.VIEW.x - 10.0, 200.0)
+	g._eye_tick(1.0 / 60.0)
+	_ok("한 프레임에 다 안 돈다", g.npc_eye < 0.2, "%.3f" % g.npc_eye)
+	#  쓸는 중에는 안 본다 — 그때 몸은 쓸기가 쥔다
+	g.npc_eye = 1.0
+	g.sweep_live = true
+	for k4 in 120:
+		g._eye_tick(1.0 / 60.0)
+	_ok("쓸 때는 안 따라본다", absf(g.npc_eye) < 0.05, "%.3f" % g.npc_eye)
+	g.sweep_live = false
+	g.npc_eye = 0.0
+	g.mouse_at = Vector2(g.VIEW.x * 0.5, 200.0)
 	# ⑫ 몸이 돌면 팔뿌리가 따라 돈다. 팔꿈치(축 뒤)와 손목(축 앞)은 반대다
 	var te: float = g._idle_twist(g.NPC.el_l.y, 0.05)
 	var tw: float = g._idle_twist(g.NPC.wr_l.y, 0.05)

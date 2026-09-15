@@ -6133,9 +6133,27 @@ func draw_item_sticker(c: Vector2, r: float, it: Dictionary, rot: float, lift: f
 		var t2: float = asin(clampf(y / rr, -1.0, 1.0)) if y < rr else PI * 0.5
 		draw_arc(c, rr, PI - t2, TAU + t2, 24,
 				Color(GameData.rarity_color(String(it.rarity)), 1.0 - dim), 1.0)
+	#  ── 방식이 곧 효과인 장 ────────────────────────
+	#  조준·계산을 쥔 장은 조건 칸도 값 칸도 비어 있다(item_desc 의 주석).
+	#  그런데 얼굴은 그것을 모르고 빈 아이콘을 찍고 값 자리에 **0** 을
+	#  그려 왔다 — 0점짜리 동전으로 읽힌다(2026-09-15 제보).
+	#  그 장은 아래위로 가를 것이 없으므로 **가운데 한 줄**로 방식을 적는다.
+	#  글자 두셋이라 r 10 아래(툴팁)에서는 안 그린다 — 그 크기에서는 곁에
+	#  이름이 같이 서므로 비워 두는 편이 낫다.
+	var ink: Color = C_CHIP.lightened(0.5) if it.k == "chip" else C_MULT.lightened(0.45)
+	var meth := String(it.get("aim", ""))
+	if String(it.k) == "" and String(it.c) == "":
+		if meth != "" and r >= 10.0:
+			var ms: int = maxi(8, int(float(num_sz) * 0.78))
+			var my: float = float(ms) * 0.36
+			if my + 2.0 < y:
+				draw_string(font, c + Vector2(-r, my), GameData.aim_name(meth),
+						HORIZONTAL_ALIGNMENT_CENTER, r * 2.0, ms,
+						ink.darkened(dim))
+		_peel_fold(c, r, peel, dim)
+		return
 	# 얼굴을 위아래로 가른다 — 위는 조건(언제 터지는가), 아래는 값(얼마나).
 	# 값만 있으면 조건이 정반대인 짝이 똑같이 보인다.
-	var ink: Color = C_CHIP.lightened(0.5) if it.k == "chip" else C_MULT.lightened(0.45)
 	_icon_cond(c + Vector2(0.0, -r * 0.33), r * 0.42, String(it.c), ink.darkened(dim + 0.08))
 	var val := ("×" + str(it.v)) if it.k == "xmult" else str(it.v)
 	var vs: int = maxi(7, int(float(num_sz) * 0.84))
@@ -8225,6 +8243,19 @@ const IDLE := {
 	"in": 0.26, "out": 0.34,     # 몸짓 봉투의 들머리·날머리
 	"snap": 0.12,                # 들머리가 이보다 짧으면 "때리는" 응수다
 	"axis": -41.0,               # 몸이 도는 축의 w. 팔뿌리가 이 축을 탄다
+	#  ── 커서를 따라본다 ────────────────────────────
+	#  2026-09-15 제보: "딜러가 좀 플레이어 마우스를 따라가는 움직임".
+	#  무게 옮기기와 같은 **늘 도는 층**이다. 몸짓은 가끔 나고 이것은 안
+	#  쉰다 — 화면 어디를 만지든 상인이 거기를 보고 있으면, 가만히 있는
+	#  순간에도 살아 있는 것으로 읽힌다.
+	#
+	#  돌림만 쓴다. 손까지 커서를 따라가게 했다가 걷었다 — 물건을 끌면
+	#  손이 같이 따라와서 상인이 그 물건을 뺏으려는 것처럼 보인다.
+	#  고개가 없으므로 **몸통 돌림이 눈이다.**
+	"eye": 0.055,                # 끝까지 따라봤을 때의 돌림(3.2°)
+	"eye_tip": 0.020,            # 같이 도는 좌우 기울임
+	"eye_lag": 3.4,              # 따라붙는 빠르기. 커서보다 늘 한 박자 늦다
+	"eye_x": 260.0,              # 이만큼 벗어나면 다 돌아본다(화면 중앙 기준)
 	#  n 이름 · t 초 · auto 제비로 뽑히는가
 	"acts": [
 		{"n": "털기", "t": 1.0, "auto": true},
@@ -8257,11 +8288,25 @@ var idle_t := 0.0
 var idle_wait := 1.6
 var idle_side := 1         # 한 손 몸짓이 쓰는 손. 0 화면 왼손 · 1 오른손
 var idle_rng := RandomNumberGenerator.new()
+#  따라보는 정도. −1(왼쪽 끝) ~ +1(오른쪽 끝). 커서로 곧장 안 가고
+#  천천히 붙는다 — 커서를 그대로 따르면 홱홱 돌아 불안해 보인다.
+var npc_eye := 0.0
 
 
 #  몸짓 시계. **한 곳에서만** 민다 — _npc_arms(그리기)와 _body3_sync(루프)가
 #  같은 값을 읽어야 하므로, 그리기 안에서 밀면 팔과 몸이 한 프레임 어긋난다.
+#  커서를 따라보는 것은 **몸짓이 아니다.** 쓸는 중에도 몸짓이 걷혀도
+#  계속 돈다 — 쉼과 같은 층이라 여기서 따로 민다.
+func _eye_tick(d: float) -> void:
+	var want := 0.0
+	if _npc_on() and not sweep_live:
+		want = clampf((mouse_at.x - VIEW.x * 0.5) / float(IDLE.eye_x),
+				-1.0, 1.0)
+	npc_eye = move_toward(npc_eye, want, d * float(IDLE.eye_lag))
+
+
 func _idle_tick(d: float) -> void:
+	_eye_tick(d)
 	if not _npc_on() or _sweep_amt() > 0.004:
 		idle_act = -1
 		idle_t = 0.0
@@ -8402,7 +8447,10 @@ func _idle_jolt(b: float) -> float:
 #  몸에 얹을 값. yaw·roll 은 라디안, rise 는 높이(h), lean 은 깊이(w) 다.
 func _idle_body() -> Dictionary:
 	var s: float = sin(npc_clock * TAU * float(IDLE.sway_hz))
-	var out := {"yaw": s * float(IDLE.sway), "roll": -s * float(IDLE.tip),
+	#  무게 옮기기(늘 도는 층) 위에 따라보기를 **더한다.** 둘 다 늘
+	#  돌지만 주기가 달라서(11.8초 / 커서) 겹쳐도 한 박자로 안 뭉친다.
+	var out := {"yaw": s * float(IDLE.sway) + npc_eye * float(IDLE.eye),
+			"roll": -s * float(IDLE.tip) - npc_eye * float(IDLE.eye_tip),
 			"rise": 0.0, "lean": 0.0}
 	var k := _idle_env()
 	if k <= 0.0:
