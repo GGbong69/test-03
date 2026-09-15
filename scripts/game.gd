@@ -2934,8 +2934,16 @@ func _auto_step() -> void:
 			# 돌렸을 때 실제로 그랬다.
 			# 대상을 안 고르는 것만 자동으로 쓴다. 고르는 흐름이 없는 것을
 			# 여기서 부르면 소크가 거절 소리만 내고 판이 안 나간다.
+			#  **쓸 수 있는지는 게임에 물어본다.** 범주만 보고 고르면
+			#  「또 같은 아침」(cat redo · use_at play)처럼 상점에서 거절
+			#  당하는 사탕이 걸리고, 그러면 거절 → return 을 매 걸음 되풀이
+			#  해 상점을 영영 못 나간다. 곡선을 재다 그 자리에서 멈췄다
+			#  (2026-09-15 · 판 14 상점에서 14562프레임). 오래된 갈래고
+			#  사탕을 언제 사느냐에 따라 걸려서 측정이 들쭉날쭉했다.
 			for ci in cons.size():
-				if AUTO_CONS.has(String(cons[ci].get("cat", ""))):
+				var cc: Dictionary = cons[ci]
+				if AUTO_CONS.has(String(cc.get("cat", ""))) \
+						and _cons_block(cc) == "":
 					_cons_use(ci)
 					return
 			# 좌표가 아니라 함수를 직접 부른다. 4단계에서 _stock_rect 가 사라지므로

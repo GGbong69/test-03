@@ -94,6 +94,17 @@ func _enter(n: int) -> void:
 
 func _process(_d: float) -> bool:
 	frames += 1
+	#  시계를 빨리 감는다 — soak 과 같은 규약이다. 셋 다 **연출 박자**이지
+	#  점수가 아니다(beat 는 정산 한 걸음의 길이, gauge 와 confirm 은 조준
+	#  UI 인데 오토플레이는 _advance 로 축을 바로 잠근다). 그래서 재는 값은
+	#  안 바뀌고 벽시계만 줄어든다.
+	#  안 감으면 목표가 오를수록 느려진다 — 판당 다트가 2~3발에서 5~6발로
+	#  늘면 정산 걸음도 그만큼 늘어서, 곡선을 올린 뒤 16런이 900초를 넘겼다
+	#  (2026-09-15). 어려운 곡선일수록 못 재는 계기는 계기가 아니다.
+	if frames == 2:
+		g.beat = 0.015
+		g.gauge_speed = 8.0
+		g.confirm_hold = 0.0
 	if frames > FRAME_CAP:
 		print("!! 프레임 상한 — 런 %d 에서 멈췄다" % runs)
 		_finish()
