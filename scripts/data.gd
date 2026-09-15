@@ -1041,24 +1041,54 @@ static func tags() -> Array:
 
 
 # ── 배움 ────────────────────────────────────────────────
-#  처음 만난 것을 한 줄로 가르친다. 표 하나에 한 줄씩이고, id 가 곧
-#  게임이 부르는 이름이다(game.gd 의 _tutor).
+#  처음 만난 것을 **걸음으로 나눠** 가르친다. 한 줄이 한 걸음이고
+#  id 가 갈래, step 이 그 안의 차례다. id 를 게임이 부른다(_tutor).
 #
-#  **문구는 동작이나 규칙 한 마디다.** 왜 그런지는 안 적는다 — 한 줄짜리
-#  띠에 설명을 넣으면 읽히기 전에 사라지고, 읽혀도 안 외워진다.
-#  던지기·조준은 여기 없다. 하단 안내(AIM_HINT)가 이미 잠금마다 가르치므로
-#  같은 말을 두 곳에서 하면 둘 다 안 읽힌다.
+#  ── 레퍼런스에서 가져온 규칙 넷 ──────────────────────
+#  ① 한 걸음에 **하나만** 밝힌다(mark). 둘을 밝히면 어느 쪽을 보라는
+#     말인지가 사라지고, 많이 밝히면 통제당하는 느낌이 난다.
+#  ② 말하는 동안 시간을 **늦춘다**(slow). 느린 시간이 인지부하를 낮추고
+#     조작 학습을 돕는다는 실험이 있다(I3D 2024). 득점처럼 한 번에
+#     여러 수가 움직이는 자리일수록 더 늦춘다.
+#  ③ 손님이 눌러서 넘긴다(wait tap). 시간으로 넘기면 읽는 속도가
+#     사람마다 다른 것을 무시하게 된다.
+#  ④ 몰아 넣지 않는다. 걸음은 **처음 만나는 그 자리**에서만 난다.
+#
+#  ── 문구 ────────────────────────────────────────────
+#  동작이나 규칙 한 마디다. 왜 그런지는 안 적는다.
+#  던지기·조준은 여기 없다 — 하단 안내(AIM_HINT)가 이미 잠금마다
+#  가르치므로 같은 말을 두 곳에서 하면 둘 다 안 읽힌다.
 static func tutor() -> Array:
 	boot()
 	return _raw.get("tutor", [])
 
 
-#  id 로 한 줄. 없거나 꺼져 있으면 빈 사전이다 — 부르는 쪽이 조용히 넘어간다.
-static func tutor_of(id: String) -> Dictionary:
+#  한 갈래의 걸음 전부. step 차례로 준다. 없거나 다 꺼져 있으면 빈 배열이다.
+static func tutor_steps(id: String) -> Array:
+	var pool := []
 	for r in tutor():
 		if String(r.get("id", "")) == id and _b(r, "enabled", "tutor"):
-			return r
-	return {}
+			pool.append(r)
+	#  step 차례로 세운다 — 표에서 줄 순서가 뒤바뀌어도 화면 차례는 안 바뀐다.
+	var out := []
+	for k in range(1, pool.size() + 1):
+		for r in pool:
+			if _i(r, "step", "tutor", 0) == k:
+				out.append(r)
+				break
+	#  번호가 비면(검증기가 막지만) 표 순서 그대로 내준다. 데이터가
+	#  틀어져도 걸음이 통째로 사라지지는 않게.
+	if out.size() != pool.size():
+		return pool
+	return out
+
+
+#  밝힐 수 있는 과녁. 게임이 이 이름을 화면 사각으로 옮긴다(_mark_rect).
+#  빈 이름은 "아무 데도 안 밝힌다" 다 — 화면 전체가 주제일 때 쓴다.
+const TUTOR_MARKS := ["", "leg_go", "leg_skip", "stage", "board", "rack",
+		"score", "chute_buy", "chute_sell", "goods", "dealer", "reroll",
+		"cons"]
+const TUTOR_WAITS := ["tap", "time"]
 
 
 # 이 판에 걸 수 있는 뱃지 하나. 라운드가 문이고 가중치가 저울이다.
@@ -1941,30 +1971,53 @@ static func _has_row(table: String, id: String) -> bool:
 
 # 동전이 쥔 조준 방식. 등록 안 된 이름이면 조용히 std 로 도는 동전이
 # 된다 — 히든 다트통이 통째로 아무 일도 안 하는 다트통이 되는 길이다.
-#  배움 표. 빈 문구 하나가 화면에 빈 띠로 뜨므로 여기서 막는다.
+#  배움 표. 빈 문구 하나가 화면에 빈 말상자로 뜨고, 모르는 과녁 하나가
+#  아무 데도 안 밝히는 걸음이 된다 — 둘 다 화면에서는 "고장" 으로 읽힌다.
 static func _v_tutor() -> void:
-	var seen := {}
+	var seen := {}          # id → 본 step 들
 	for r in _raw.get("tutor", []):
 		var ln: int = r.get("_line", 0)
 		var id: String = String(r.get("id", "")).strip_edges()
 		if id == "":
 			_errs.append("tutor:%d — id 가 비었다. 게임이 부를 이름이 없다" % ln)
 			continue
-		if seen.has(id):
-			_errs.append("tutor:%d %s — id 가 겹친다. 먼저 것만 뜬다" % [ln, id])
-		seen[id] = true
+		var st: int = _i(r, "step", "tutor", 0)
+		if st < 1:
+			_errs.append("tutor:%d %s — step 이 %d 다. 1 부터 센다" % [ln, id, st])
+		if not seen.has(id):
+			seen[id] = {}
+		if (seen[id] as Dictionary).has(st):
+			_errs.append("tutor:%d %s — step %d 이 겹친다. 차례가 갈린다"
+					% [ln, id, st])
+		(seen[id] as Dictionary)[st] = true
 		var tx: String = String(r.get("text", "")).strip_edges()
 		if tx == "":
-			_errs.append("tutor:%d %s — 문구가 비었다. 빈 띠가 뜬다" % [ln, id])
-			continue
-		#  한 줄 띠다. 11px 글씨로 640 폭에 드는 길이가 여기까지다 —
-		#  넘으면 잘리는 것이 아니라 가운데 정렬이 무너져 좌우가 삐져나간다.
-		if tx.length() > 26:
-			_errs.append("tutor:%d %s — 문구가 %d자다. 한 줄 띠에 26자까지 든다"
+			_errs.append("tutor:%d %s — 문구가 비었다. 빈 말상자가 뜬다" % [ln, id])
+		#  말상자는 두 줄까지 접는다. 40 자를 넘으면 세 줄이 되어 상자가
+		#  버튼 줄을 먹는다(실측).
+		elif tx.length() > 40:
+			_errs.append("tutor:%d %s — 문구가 %d자다. 말상자에 40자까지 든다"
 					% [ln, id, tx.length()])
-		if tx.ends_with("."):
-			_warns.append("tutor:%d %s — 마침표로 끝난다. 다른 표는 안 찍는다"
-					% [ln, id])
+		var mk: String = String(r.get("mark", ""))
+		if not TUTOR_MARKS.has(mk):
+			_errs.append("tutor:%d %s — 모르는 과녁 '%s'. 아무 데도 안 밝힌다"
+					% [ln, id, mk])
+		var wt: String = String(r.get("wait", "tap"))
+		if not TUTOR_WAITS.has(wt):
+			_errs.append("tutor:%d %s — 모르는 넘김 '%s'" % [ln, id, wt])
+		var sl := _f(r, "slow", "tutor", 1.0)
+		#  0 은 완전 정지다. 멈추면 배경 연출(상인·숨)까지 얼어 화면이
+		#  죽은 것으로 보인다 — 늦추되 세우지는 않는다.
+		if sl < 0.05 or sl > 1.0:
+			_errs.append("tutor:%d %s — slow %.2f. 0.05~1.00 안이어야 한다"
+					% [ln, id, sl])
+	#  걸음이 1 부터 빈틈없이 이어지는가. 2 가 빠지면 3 이 영영 안 뜬다.
+	for id2 in seen:
+		var ss: Dictionary = seen[id2]
+		for k in range(1, ss.size() + 1):
+			if not ss.has(k):
+				_errs.append("tutor %s — step %d 이 없다. 거기서 끊긴다"
+						% [id2, k])
 
 
 static func _v_item_aim() -> void:

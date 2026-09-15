@@ -668,7 +668,9 @@ func _new_run() -> void:
 	shop_seen = 0
 	tutor_q.clear()
 	tutor_id = ""
+	tutor_i = 0
 	tutor_t = 0.0
+	tutor_out = 0.0
 	over_t = 0.0
 	pardon_next = false          # 런을 넘겨 남으면 안 되는 깃발이다
 	photo = ""
@@ -2706,11 +2708,16 @@ func card_pos() -> Vector2:
 
 func _process(d: float) -> void:
 	_view_fit()      # 창이 바뀌면 여백을 다시 잰다. 그대로면 아무것도 안 한다
-	#  손은 상인이 서는 화면에서만 산다. 통(_cup3_)과 같은 규약이다 —
-	#  안 보이는 뷰포트가 런 내내 뒤에서 돌면 눈으로는 영영 못 잡는다.
+	#  배움 시계는 **실시간**이다. 늦춘 시간으로 제 봉투를 재면 늦출수록
+	#  말상자가 늦게 뜨고, 0.18 배 자리에서는 다섯 배 느리게 뜬다.
+	_tutor_tick(d)
+	#  여기서부터가 게임 시간이다. 설명하는 동안 늦춘다 —
+	#  느린 시간이 인지부하를 낮춘다는 실험을 따른 것이다(TUTOR 머리말).
+	#  **상인과 커서 따라보기는 늦추기 전에 민다.** 저 둘까지 늦추면
+	#  화면이 느려진 것이 아니라 멈춘 것으로 보인다.
 	_idle_tick(d)
 	_give_tick(d)
-	_tutor_tick(d)
+	d *= _tutor_slow()
 	if _npc_on():
 		_hand3_open()
 		_hand3_sync()
@@ -3337,7 +3344,12 @@ func _unhandled_input(e: InputEvent) -> void:
 				KEY_F11:
 					_toggle_fullscreen()
 				KEY_ESCAPE:
-					if state == S.RUNINFO:
+					#  설명이 떠 있으면 그 갈래를 통째로 건너뛴다. 아는 사람이
+					#  열아홉 번 눌러야 하면 그것은 튜토리얼이 아니라 통행료다.
+					if _tutor_live():
+						_tutor_close()
+						_sfx("menu_back")
+					elif state == S.RUNINFO:
 						state = run_from
 					elif state == S.SETTINGS:
 						_settings_back()
@@ -3385,6 +3397,10 @@ func _unhandled_input(e: InputEvent) -> void:
 		mouse_at = mp
 		mouse_down = mb.pressed
 		if mb.pressed:
+			#  설명 중이면 클릭이 **넘기기**다. 게임에 안 보낸다 — 배우다 말고
+			#  실수로 물건을 사면 설명이 손해로 끝난다.
+			if _tutor_click():
+				return
 			if _hand_press(mp):
 				return                    # 삼킨다 — 탭인지 드래그인지 아직 모른다
 			_click(mp)
@@ -17759,109 +17775,269 @@ func _draw_collect() -> void:
 
 
 # ══════════════════════════════════════════════════════════
-#  배움 — 처음 만난 것을 한 줄로
+#  배움 — 처음 만난 것을 걸음으로 가르친다
 # ──────────────────────────────────────────────────────────
 #  프로필마다 각각 한 번씩이다(Save.teach). 새 프로필은 처음부터 다시
-#  배우고, 이미 아는 사람은 두 번 다시 안 본다.
+#  배우고, 아는 사람은 두 번 다시 안 본다.
 #
-#  ── 안 막는다 ────────────────────────────────────────
-#  띠 하나가 뜰 뿐 입력을 안 삼킨다. 막는 튜토리얼은 아는 사람에게
-#  벌이 되고, 이 게임은 첫 판이 이미 쉽게 잡혀 있어(curve_first) 막을
-#  이유가 없다. 놓쳐도 게임이 안 멈춘다.
+#  ── 레퍼런스가 시킨 것 ───────────────────────────────
+#  ① **한 번에 하나만 밝힌다.** 화면 전체에 어둠 한 장을 깔고 과녁
+#     자리에만 구멍을 판다(_mark_rect). 둘을 밝히면 어느 쪽을 보라는
+#     말인지가 사라진다.
+#  ② **말하는 동안 시간을 늦춘다.** 느린 시간이 인지부하를 낮추고 조작
+#     학습을 돕는다는 실험이 있다(I3D 2024). 득점처럼 한 번에 여러 수가
+#     움직이는 자리는 0.18 까지 내린다.
+#     **세우지는 않는다** — 0 으로 두면 상인의 숨까지 얼어서 화면이
+#     죽은 것으로 보인다.
+#  ③ **손님이 눌러 넘긴다.** 시간으로 넘기면 읽는 속도가 사람마다 다른
+#     것을 무시하게 된다. 구멍 밖을 눌러도 넘어가고, 그 클릭은 게임에
+#     안 간다 — 설명 중에 실수로 물건을 사면 배우다 말고 손해를 본다.
+#  ④ **몰아 넣지 않는다.** 걸음은 처음 만나는 그 자리에서만 난다.
 #
-#  ── 줄을 세운다 ──────────────────────────────────────
-#  한 순간에 둘이 맞을 수 있다(첫 상점에서 팔 것도 처음 생기는 판).
-#  겹쳐 그리면 둘 다 못 읽으므로 줄을 세워 차례로 낸다. 세운 순간
-#  배운 것으로 적으므로 같은 것이 두 번 줄에 안 선다.
-#
-#  ── 상인이 짚는다 ────────────────────────────────────
-#  상인이 서 있는 화면이면 같이 짚어 보인다 — 띠만 뜨면 어디를 보라는
-#  말인지가 안 붙는다.
+#  ── 안 가두는 자리 ───────────────────────────────────
+#  ESC 로 그 갈래를 통째로 건너뛴다. 이미 아는 사람이 열아홉 번 눌러야
+#  하면 그것은 튜토리얼이 아니라 통행료다.
 # ══════════════════════════════════════════════════════════
 const TUTOR := {
-	"hold": 4.2,         # 다 보인 채 머무는 시간(초)
-	"fade": 0.55,        # 들고 나는 시간
-	"y": 344.0,          # 띠의 밑선. 하단 안내(_draw_hint)와 같은 자리다
-	"h": 17.0,           # 띠 높이
+	"fade": 0.22,        # 말상자가 들고 나는 시간(실시간 초)
+	"lead": 0.30,        # 뜨자마자는 못 넘긴다 — 누르던 클릭이 곧장 먹는다
+	"pad": 7.0,          # 과녁 구멍의 여백
+	"dim": 0.62,         # 구멍 밖을 덮는 어둠
+	"pulse": 2.6,        # 과녁 테두리가 뛰는 빠르기(rad/s)
+	"box_w": 300.0,      # 말상자 폭. 40자가 두 줄로 든다
+	"box_pad": 8.0,
 }
-var tutor_q := []          # 아직 못 보여 준 줄
-var tutor_id := ""         # 지금 띠에 뜬 것
-var tutor_t := 0.0         # 그 줄의 경과
+var tutor_q := []          # 아직 못 보여 준 갈래
+var tutor_id := ""         # 지금 도는 갈래
+var tutor_i := 0           # 그 갈래의 몇째 걸음
+var tutor_t := 0.0         # 이 걸음의 경과(실시간)
+var tutor_out := 0.0       # 갈래가 끝나며 지는 중
 
 
-#  처음 만났다 — 가르친다. 이미 배웠거나 표에 없으면 조용히 넘어간다.
 func _tutor(id: String) -> void:
 	if tutor_id == id or tutor_q.has(id):
 		return
-	if GameData.tutor_of(id).is_empty():
+	if GameData.tutor_steps(id).is_empty():
 		return
 	if not Save.teach(id):
 		return
 	tutor_q.append(id)
 
 
-func _tutor_text() -> String:
-	if tutor_id == "":
-		return ""
-	return String(GameData.tutor_of(tutor_id).get("text", ""))
-
-
-#  띠가 지금 화면을 쓰고 있는가. 하단 안내가 이것을 보고 비킨다.
 func _tutor_live() -> bool:
 	return tutor_id != ""
 
 
+#  지금 걸음. 없으면 빈 사전이다.
+func _tutor_step() -> Dictionary:
+	if tutor_id == "":
+		return {}
+	var ss := GameData.tutor_steps(tutor_id)
+	if tutor_i < 0 or tutor_i >= ss.size():
+		return {}
+	return ss[tutor_i]
+
+
+func _tutor_text() -> String:
+	return String(_tutor_step().get("text", ""))
+
+
+#  게임 시간에 곱하는 값. 말상자가 들고 나는 동안에도 같이 오간다 —
+#  느려지는 것이 **문장과 함께** 와야 "이것 때문에 늦췄다" 로 읽힌다.
+func _tutor_slow() -> float:
+	if tutor_id == "" and tutor_out <= 0.0:
+		return 1.0
+	var sl := float(_tutor_step().get("slow", 1.0))
+	if sl <= 0.0:
+		sl = 1.0
+	return lerpf(1.0, sl, _tutor_a())
+
+
+#  0 에서 1 로 들고 머물고 진다. 걸음이 넘어갈 때는 안 진다 —
+#  갈래가 끝날 때만 진다(tutor_out).
+func _tutor_a() -> float:
+	var f: float = float(TUTOR.fade)
+	if tutor_out > 0.0:
+		return clampf(tutor_out / f, 0.0, 1.0)
+	if tutor_id == "":
+		return 0.0
+	return clampf(tutor_t / f, 0.0, 1.0)
+
+
 func _tutor_tick(d: float) -> void:
+	if tutor_out > 0.0:
+		tutor_out = maxf(tutor_out - d, 0.0)
+		return
 	if tutor_id != "":
 		tutor_t += d
-		if tutor_t < float(TUTOR.hold) + float(TUTOR.fade) * 2.0:
-			return
-		tutor_id = ""
-		tutor_t = 0.0
+		#  시간으로 넘기는 걸음. 기본은 눌러 넘기기다.
+		if String(_tutor_step().get("wait", "tap")) == "time" \
+				and tutor_t > float(TUTOR.lead) + 2.6:
+			_tutor_next()
+		return
 	if tutor_q.is_empty():
 		return
 	tutor_id = String(tutor_q.pop_front())
+	tutor_i = 0
 	tutor_t = 0.0
-	_sfx("page")        # 있는 소리 중 제일 조용한 것. 새 소리를 안 만든다
-	#  상인이 서 있으면 같이 짚는다. 쓸는 중이면 _npc_react 가 알아서 문다.
+	_sfx("page")
 	if _npc_on():
 		_npc_react("짚기", 1)
 
 
-#  0 에서 1 로 들고, 머물고, 0 으로 진다.
-func _tutor_a() -> float:
+#  다음 걸음으로. 마지막이면 갈래를 닫는다.
+func _tutor_next() -> void:
 	if tutor_id == "":
-		return 0.0
-	var f: float = float(TUTOR.fade)
-	if tutor_t < f:
-		return _ease_io(tutor_t / f)
-	var back: float = tutor_t - f - float(TUTOR.hold)
-	if back <= 0.0:
-		return 1.0
-	return 1.0 - _ease_io(back / f)
+		return
+	var n := GameData.tutor_steps(tutor_id).size()
+	if tutor_i + 1 < n:
+		tutor_i += 1
+		tutor_t = 0.0
+		_sfx("page")
+		if _npc_on():
+			_npc_react("짚기", 1)
+		return
+	_tutor_close()
+
+
+#  갈래를 통째로 닫는다. ESC 도 여기로 온다.
+func _tutor_close() -> void:
+	if tutor_id == "":
+		return
+	tutor_out = float(TUTOR.fade)
+	tutor_id = ""
+	tutor_i = 0
+	tutor_t = 0.0
+
+
+#  설명 중의 클릭은 게임에 안 간다 — 넘기기로만 쓴다. true 면 삼켰다.
+#  lead 전에는 아무 일도 안 한다: 무엇을 누르던 손이 그대로 이어져서
+#  첫 걸음이 뜨자마자 사라지는 것을 막는다.
+func _tutor_click() -> bool:
+	if tutor_id == "":
+		return false
+	if tutor_t < float(TUTOR.lead):
+		return true
+	_tutor_next()
+	return true
+
+
+#  밝힐 자리. 없는 이름이거나 지금 화면에 없으면 빈 사각이다 —
+#  그러면 어둠만 깔고 구멍은 안 판다.
+func _mark_rect(k: String) -> Rect2:
+	match k:
+		"leg_go": return _leg_go()
+		"leg_skip": return _leg_skip()
+		"stage":
+			if stage_pick.is_empty():
+				return Rect2()
+			var r0 := _stage_rect(0)
+			for i in range(1, stage_pick.size()):
+				r0 = r0.merge(_stage_rect(i))
+			return r0
+		"board": return Rect2(BC.x - 104.0, BC.y - 104.0, 208.0, 208.0)
+		"rack": return _panel_rect()
+		"score": return _bank_rect()
+		"chute_buy": return Rect2(VIEW.x - 86.0, TBL.fy, 86.0, TBL.ny - TBL.fy)
+		"chute_sell": return Rect2(0.0, TBL.fy, 86.0, TBL.ny - TBL.fy)
+		"goods": return Rect2(96.0, TBL.fy + 6.0, VIEW.x - 192.0,
+				TBL.ny - TBL.fy - 6.0)
+		"dealer": return Rect2(NPC.cx - 78.0, 46.0, 156.0, TBL.fy - 46.0)
+		"reroll": return _reroll_rect()
+		"cons":
+			if cons.is_empty():
+				return Rect2(_use_spot() - Vector2(44.0, 44.0),
+						Vector2(88.0, 88.0))
+			return _cons_rect(0)
+	return Rect2()
 
 
 func _tutor_draw() -> void:
 	var a := _tutor_a()
 	if a <= 0.004:
 		return
-	var tx := _tutor_text()
+	var st := _tutor_step()
+	var tx := String(st.get("text", ""))
 	if tx == "":
 		return
-	var w: float = font.get_string_size(tx, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x
-	var h: float = float(TUTOR.h)
-	var y: float = float(TUTOR.y) - h + 4.0
-	#  띠는 글씨폭에 맞춘다. 화면 폭짜리 판을 깔면 한 줄짜리 말이
-	#  경고문처럼 읽힌다.
-	var bx: float = (VIEW.x - w) * 0.5 - 9.0
-	draw_rect(Rect2(bx, y, w + 18.0, h), Color(C_BG, 0.82 * a))
-	draw_rect(Rect2(bx, y + h - 1.0, w + 18.0, 1.0), Color(C_ACC, 0.55 * a))
-	draw_string(font, Vector2(0.0, float(TUTOR.y)), tx,
-			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 11, Color(C_ACC, a))
+	var pd: float = float(TUTOR.pad)
+	var mk := _mark_rect(String(st.get("mark", "")))
+	var hole := Rect2()
+	if mk.size.x > 1.0 and mk.size.y > 1.0:
+		hole = mk.grow(pd)
+	#  ── 어둠 한 장에 구멍 하나 ──────────────────────
+	#  사각 넷으로 두른다. 구멍 자리에 아무것도 안 그리는 것이 곧 구멍이라
+	#  마스크나 셰이더가 필요 없다.
+	var dm := Color(0.0, 0.0, 0.0, float(TUTOR.dim) * a)
+	var f := _full()
+	if hole.size.x <= 0.0:
+		draw_rect(f, dm)
+	else:
+		var l: float = maxf(hole.position.x, f.position.x)
+		var r: float = minf(hole.end.x, f.end.x)
+		var t: float = maxf(hole.position.y, f.position.y)
+		var b: float = minf(hole.end.y, f.end.y)
+		draw_rect(Rect2(f.position.x, f.position.y, f.size.x, t - f.position.y), dm)
+		draw_rect(Rect2(f.position.x, b, f.size.x, f.end.y - b), dm)
+		draw_rect(Rect2(f.position.x, t, l - f.position.x, b - t), dm)
+		draw_rect(Rect2(r, t, f.end.x - r, b - t), dm)
+		#  테두리가 뛴다. 어둠만으로는 "여기까지가 그것" 이 안 서고,
+		#  뛰지 않으면 화면에 원래 있던 테두리와 안 갈린다.
+		var pl: float = 0.5 + 0.5 * sin(npc_clock * float(TUTOR.pulse))
+		draw_rect(hole, Color(C_ACC, (0.45 + 0.45 * pl) * a), false, 1.0)
+	#  ── 말상자 ──────────────────────────────────────
+	var bw: float = float(TUTOR.box_w)
+	var bp: float = float(TUTOR.box_pad)
+	var lines := _tutor_wrap(tx, bw - bp * 2.0)
+	var bh: float = bp * 2.0 + float(lines.size()) * 14.0 + 10.0
+	var bx: float = (VIEW.x - bw) * 0.5
+	#  구멍을 안 가리는 쪽에 선다. 과녁이 아래쪽이면 위로 올라간다.
+	var by: float = VIEW.y - bh - 12.0
+	if hole.size.y > 0.0 and hole.end.y > by - 6.0:
+		by = 14.0
+	draw_rect(Rect2(bx, by, bw, bh), Color(C_BG, 0.94 * a))
+	draw_rect(Rect2(bx, by, bw, bh), Color(C_ACC, 0.7 * a), false, 1.0)
+	for i in lines.size():
+		draw_string(font, Vector2(bx + bp, by + bp + 11.0 + float(i) * 14.0),
+				String(lines[i]), HORIZONTAL_ALIGNMENT_CENTER, bw - bp * 2.0,
+				11, Color(C_TXT, a))
+	#  걸음 세기와 넘기는 법. 몇 걸음 남았는지가 안 보이면 언제 끝나는지를
+	#  모르는 채로 눌러야 한다.
+	var n := GameData.tutor_steps(tutor_id).size() if tutor_id != "" else 0
+	if n > 1:
+		draw_string(font_sm, Vector2(bx + bp, by + bh - 4.0),
+				"%d / %d" % [tutor_i + 1, n], HORIZONTAL_ALIGNMENT_LEFT, -1, 9,
+				Color(C_DIM, a))
+	draw_string(font_sm, Vector2(bx, by + bh - 4.0), "눌러서 계속  ·  ESC 건너뛰기",
+			HORIZONTAL_ALIGNMENT_RIGHT, bw - bp, 9, Color(C_DIM, a))
+
+
+#  폭에 맞춰 접는다. 낱말 사이에서만 자른다 — 한글도 띄어쓰기가 있으므로
+#  글자 단위로 자르면 어절이 두 줄로 찢어진다.
+func _tutor_wrap(tx: String, w: float) -> PackedStringArray:
+	var out := PackedStringArray()
+	var cur := ""
+	for word in tx.split(" ", false):
+		var try_s: String = word if cur == "" else cur + " " + word
+		#  글꼴이 없는 판(헤드리스 프로브)에서는 글자 수로 센다. 한글이
+		#  11px 에서 대략 한 글자 11px 이라 그 값을 쓴다 — 재는 자리가
+		#  없다고 검사가 **조용히 통과해 버리는** 것을 막는 쪽이 낫다.
+		var tw: float = float(try_s.length()) * 11.0
+		if font != null:
+			tw = font.get_string_size(try_s, HORIZONTAL_ALIGNMENT_LEFT,
+					-1, 11).x
+		if tw > w and cur != "":
+			out.append(cur)
+			cur = word
+		else:
+			cur = try_s
+	if cur != "":
+		out.append(cur)
+	return out
 
 
 func _draw_hint() -> void:
-	#  배움 띠가 같은 자리를 쓴다. 둘이 겹치면 둘 다 못 읽는다.
+	#  배움 말상자가 아래를 쓴다. 둘이 겹치면 둘 다 못 읽는다.
 	if _tutor_live():
 		return
 	var hint := ""

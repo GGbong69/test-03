@@ -1,6 +1,6 @@
 extends SceneTree
-# 배움 띠가 화면에서 어떻게 보이는가 — 상점과 제약 두 장.
-#   godot --path . --quit-after 2500 --script scripts/tools/shot_tutor.gd
+# 배움 걸음이 화면에서 어떻게 보이는가 — 조명·말상자·느린 시간.
+#   godot --path . --quit-after 3000 --script scripts/tools/shot_tutor.gd
 const GameData = preload("res://scripts/data.gd")
 const Save = preload("res://scripts/save.gd")
 var g = null
@@ -29,6 +29,16 @@ func _shot(nm: String) -> void:
 	await process_frame
 	root.get_texture().get_image().save_png("res://shots/%s.png" % nm)
 
+func _step(id: String, k: int, nm: String) -> void:
+	g.tutor_q.clear()
+	g.tutor_id = id
+	g.tutor_i = k
+	g.tutor_t = 9.0          # 다 떠 있는 상태
+	g.tutor_out = 0.0
+	await _wait(3)
+	await _shot(nm)
+	print("%s %d · 배율 ×%.2f · %s" % [id, k + 1, g._tutor_slow(), g._tutor_text()])
+
 func _run() -> void:
 	await _wait(10)
 	if DisplayServer.get_name() == "headless":
@@ -39,21 +49,11 @@ func _run() -> void:
 	g.leg_no = 2
 	g._open_shop()
 	await _wait(70)
-	# 줄에 선 것을 비우고 상점 줄만 다시 세운다
-	g.tutor_q.clear()
-	g.tutor_id = ""
-	g.tutor_t = 0.0
+	g._drop_settle()
 	Save.forget_all()
-	g._tutor("u_shop")
-	await _wait(70)
-	await _shot("tutor_shop")
-	print("상점 · %s · 알파 %.2f" % [g.tutor_id, g._tutor_a()])
-	g.tutor_q.clear()
-	g.tutor_id = ""
-	g.tutor_t = 0.0
-	g._tutor("u_rack")
-	await _wait(70)
-	await _shot("tutor_rack")
-	print("동전 · %s · 알파 %.2f" % [g.tutor_id, g._tutor_a()])
+	await _step("u_shop", 1, "tut_buy")      # 오른쪽 창구
+	await _step("u_sell", 0, "tut_sell")     # 왼쪽 창구
+	await _step("u_rack", 1, "tut_rack")     # 동전 슬롯
+	await _step("u_give", 0, "tut_give")     # 상인
 	print("끝")
 	quit(0)
