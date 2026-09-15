@@ -21,9 +21,8 @@ u"""동전 얼굴 굽기 — 레퍼런스 사진을 잘라 assets/coin/<id>.png 
      그대로 줄이면 피사체가 8px 이 된다.
   ② 남은 것의 가운데를 정사각으로 딴다.
   ③ 채도와 대비를 올린다. 줄이면 평균이 나면서 둘 다 죽는다.
-  ④ **도트로 접는다.** 20x20 으로 줄이고 색을 열로 접은 뒤 정수배로 되늘린다
-     — 도트 하나가 화면에서 두 픽셀이다. 640x360 픽셀 게임에 사진이 얹혀
-     있는 것이 지금 제일 안 어울리는 자리였다.
+  ④ **도트로 접는다.** DOT 으로 줄이고 색을 열로 접은 뒤 되늘린다. 640x360
+     픽셀 게임에 사진이 얹혀 있는 것이 지금 제일 안 어울리는 자리였다.
   ⑤ **원형 알파를 굽는다.** 동전은 원반이라 네모 그림이 올라가면 안 맞고,
      누운 자세에서 타원 사각에 그리면 이 알파가 같이 눌려 저절로 맞는다.
 """
@@ -37,8 +36,13 @@ from PIL import Image, ImageEnhance, ImageDraw, ImageChops
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 OUT = os.path.join(ROOT, "assets", "coin")
-GRID = 20           # 그림의 **실제 해상도**. 도트 하나가 화면에서 두 픽셀이다
-SZ = GRID * 2       # 파일 크기. 정수배라야 도트가 고르게 선다
+#  게임 안에서 동전 얼굴은 **35px** 이다(테이블 rx 19 에서 테두리를 뺀 값).
+#  파일을 거기 맞춰 굽는다 — 더 크게 구우면 줄이면서 뭉개지고, 더 작게
+#  구우면 쓸 수 있는 해상도를 버린다.
+SZ = 36
+#  사진에서 구울 때만 쓰는 도트 해상도. 손으로 찍은 격자는 제 줄 수가
+#  곧 해상도라 이 값을 안 본다 — 스무 줄이면 스물, 서른여섯 줄이면 서른여섯.
+DOT = 20
 COLORS = 10         # 색 수. 사진의 그러데이션을 면으로 접는다
 EDGE = 0.965        # 원형 알파의 바깥. 1.0 이면 테두리에 톱니가 남는다
 
@@ -128,7 +132,7 @@ def dots(im):
     ② 색을 COLORS 로 접는다. 디더는 안 쓴다 — 20px 에서 오차확산은 결이
        아니라 먼지로 보인다. 면으로 접는 편이 이 크기에서 읽힌다.
     ③ 정수배로 되늘린다. NEAREST 라야 도트가 도트로 남는다."""
-    sm = im.resize((GRID, GRID), Image.LANCZOS)
+    sm = im.resize((DOT, DOT), Image.LANCZOS)
     sm = sm.quantize(colors=COLORS, method=Image.MEDIANCUT,
                      dither=Image.Dither.NONE).convert("RGB")
     return sm.resize((SZ, SZ), Image.NEAREST)
@@ -157,6 +161,11 @@ def bake(src, dst, fix=None):
 #  그 뒤 GRID 줄이 그림이다. 마침표는 비운다(동전 바탕이 비친다).
 FACES = os.path.join(ROOT, "assets", "coin_src", "faces.txt")
 
+#  얼굴을 아예 안 붙이는 장. **재질이 이미 그 동전을 말한다.**
+#  유리 대포는 유리인 것이 전부고(속이 비쳐야 하는데 그림을 얹으면 막힌다),
+#  NULL 은 아무것도 안 찍힌 것이 뜻이다. 그림을 얹으면 둘 다 제 말을 잃는다.
+NOART = {"c03", "l03"}
+
 
 def read_faces():
     if not os.path.exists(FACES):
@@ -179,11 +188,15 @@ def read_faces():
 
 
 def draw_face(pal, rows_):
-    im = Image.new("RGBA", (GRID, GRID), (0, 0, 0, 0))
+    #  격자의 **줄 수가 곧 해상도**다. 스무 줄짜리 옛 장과 서른여섯 줄짜리
+    #  새 장이 한 파일에 섞여 있어도 각자 제 크기로 읽힌 뒤 같은 크기로
+    #  늘어난다 — 해상도를 올리면서 옛 장을 한꺼번에 다시 그릴 필요가 없다.
+    n = max(len(rows_), 1)
+    im = Image.new("RGBA", (n, n), (0, 0, 0, 0))
     px = im.load()
-    for y in range(min(GRID, len(rows_))):
+    for y in range(min(n, len(rows_))):
         ln = rows_[y]
-        for x in range(min(GRID, len(ln))):
+        for x in range(min(n, len(ln))):
             ch = ln[x]
             if ch == "." or ch not in pal:
                 continue
@@ -209,6 +222,14 @@ def main():
     miss = []
     for i, r in enumerate(rs, 1):
         dst = os.path.join(OUT, "%s.png" % r["id"])
+        if r["id"] in NOART:
+            #  .import 도 같이 지운다. 원본만 지우면 고닷은 이미 구워 둔
+            #  리소스를 보고 ResourceLoader.exists 에 **있다**고 답한다 —
+            #  유리 대포가 얼굴을 계속 달고 있던 것이 그래서였다.
+            for q in (dst, dst + ".import"):
+                if os.path.exists(q):
+                    os.remove(q)
+            continue
         if r["id"] in faces:
             pal, g = faces[r["id"]]
             im = draw_face(pal, g)
