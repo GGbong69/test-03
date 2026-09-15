@@ -7408,11 +7408,12 @@ func _npc_arms() -> void:
 			float(HAND3.h_el) + float(g0.dh) * 0.5, float(g0.roll)))
 	#  손바닥 자리를 적어 둔다 — 상인이 든 물건이 이 값을 따라간다(_give_tick).
 	#  두 곳이 따로 셈하면 물건이 손에서 떨어져 난다.
+	var a0: float = deg_to_rad(NPC.ang_l) + float(g0.ang)
 	npc_palm[0] = _palm_of(Vector2(cx + NPC.wr_l.x + _npc_sway(NPC.wr_l.y)
 			+ _idle_twist(NPC.wr_l.y, yw) + float(g0.du),
 			NPC.wr_l.y + br * 0.2 + float(g0.dw)),
-			deg_to_rad(NPC.ang_l) + float(g0.ang), NPC.sc_l,
-			float(HAND3.h_wr) + float(g0.dh))
+			a0, NPC.sc_l, float(HAND3.h_wr) + float(g0.dh))
+	npc_grip[0] = Vector2(a0, float(g0.roll))
 	# 쓸는 팔 — 어깨부터 **쭉 편 채** 휩쓴다. 몸이 +5° 기울며 뻗고,
 	# −5° 로 넘어가는 동안 팔이 부채꼴로 판을 쓴다. 팔꿈치는 어깨-손목
 	# 직선 위라 안 굽고, 손으로 갈수록 굵어지다 손이 1.55배가 된다 —
@@ -7439,6 +7440,7 @@ func _npc_arms() -> void:
 		he = lerpf(he, float(HAND3.h_wr) + 3.0, a)
 	var hs := lerpf(1.0, SWEEP.hand_up, a)
 	npc_palm[1] = _palm_of(wr, ang, hs, hw)
+	npc_grip[1] = Vector2(ang, float(g1.roll) * (1.0 - a))
 	# 위팔은 **쓸 때만** 그린다. 쉬는 자세에서는 어깨와 팔꿈치가 거의
 	# 같은 높이라 토막이 몸통 옆구리에 붙어 팔–몸통 골을 4px 로 좁힌다
 	# (프로브가 잡았다). 원래 설계도 "팔은 상자 하나" 였고 위팔은 쓸기가
@@ -8470,7 +8472,14 @@ func _idle_hand(i: int) -> Dictionary:
 			out.dh = 4.0 * k
 			#  굴림은 **살피는 박자에만** 든다. 뻗는 동안 이미 돌아 있으면
 			#  받기 전부터 뒤집어 놓고 기다리는 손이 된다.
-			out.roll = deg_to_rad(58.0) * k * _idle_win(b, 0.22, 0.76, 0.10)
+			#
+			#  한 번 넘겼다 마는 것이 아니라 **이쪽저쪽 뒤척인다** —
+			#  sin(2π·q) 라 한쪽으로 넘겼다가 반대쪽으로 넘기고 제자리로
+			#  돌아온다. 손각도 1.5 바퀴 흔들어 둔다. 둘 다 q 0 과 1 에서
+			#  정확히 0 이라 손이 쉬는 자세로 되돌아온다.
+			var q := clampf((b - 0.20) / 0.56, 0.0, 1.0)
+			out.roll = deg_to_rad(70.0) * k * sin(q * TAU)
+			out.ang = -sd * 0.17 * k * sin(q * PI * 3.0)
 			out.el = 0.85
 	return out
 
@@ -8538,7 +8547,7 @@ const GIVE := {
 	#  자리를 비틀 이유가 없어져서, 손목 옆이 아니라 손바닥 한가운데에
 	#  6 띄워 얹는다 — 원래 두려던 자리다.
 	"hold": 6.0,         # 손바닥 윗면에서 띄우는 높이
-	"spin": 2.6,         # 살피는 동안 물건이 도는 속도(라디안/초)
+	"tip": 1.0,          # 손 굴림이 물건 기울임(wob)으로 옮겨지는 비
 	"toss": 0.34,        # 이 확률로 던진다. 아니면 내려놓는다
 	"toss_v": 210.0,     # 던지는 속도(면px/초)
 	"reach": 4.0,        # 손 내미는 예고가 붙고 떨어지는 속도
@@ -8548,12 +8557,17 @@ var give_t := 0.0
 var give_side := 1
 var give_toss := false
 var give_from := Vector3.ZERO    # 받기 전 자리 (u, w, h)
+var give_ang := 0.0        # 지난 프레임의 손각. 차이만큼 물건을 돌린다
 var npc_reach := 0.0       # 손을 내미는 정도 0..1 — 건넬 수 있다는 예고다
 var npc_reach_side := 1
 #  손바닥 한가운데와 그 윗면 높이. _npc_arms 가 적고 _give_tick 이 읽는다.
 #  손목이 아니라 **손바닥**이라야 물건이 손 안에 들린다 — 손목에 얹으면
 #  소매에 올려 놓은 것이 된다. 손은 손목에서 앞으로 palm_l 만큼 나간다.
 var npc_palm := [Vector3.ZERO, Vector3.ZERO]
+#  그 손의 (손각, 굴림). 상인이 든 물건이 이 값을 따라 돈다 —
+#  손은 뒤척이는데 물건은 가만히 있으면 물건이 손에 붙은 것이 아니라
+#  손 위에 떠 있는 것으로 읽힌다.
+var npc_grip := [Vector2.ZERO, Vector2.ZERO]
 
 
 #  여기서 떼면 건네는 것인가. 창구(좌우)와 안 겹치는 위쪽 띠다.
@@ -8575,6 +8589,7 @@ func _give_begin(i: int, m: Vector2) -> void:
 	give_side = _npc_side(m.x)
 	give_toss = idle_rng.randf() < float(GIVE.toss)
 	give_from = Vector3(it.u, it.w, it.h)
+	give_ang = float((npc_grip[give_side] as Vector2).x)
 	it.held = true            # 물리에서 뺀다. 자리는 _give_tick 이 준다
 	it.sleep = true
 	it.air = false
@@ -8583,6 +8598,10 @@ func _give_begin(i: int, m: Vector2) -> void:
 	it.vh = 0.0
 	it.om = 0.0
 	it.scuff = []
+	#  들어올림도 끈다. _drop_extras 가 이 물건을 건너뛰므로 얹혀 있던
+	#  호버 값이 0 으로 안 돌아온다 — 상인 손 위에서 3.7px 떠 있게 된다.
+	it.lift = 0.0
+	it.lv = 0.0
 	_npc_react("살핌", give_side)
 	_sfx("hand_take")
 
@@ -8632,8 +8651,6 @@ func _give_tick(d: float) -> void:
 		it.u = au
 		it.w = aw
 		it.h = ah
-		#  돌려 본다. psi 는 면 위 방위각이라 물건이 손 위에서 돈다.
-		it.psi = fmod(float(it.psi) + d * float(GIVE.spin), TAU)
 	else:
 		if give_toss:
 			#  던진다 — 관객 쪽으로 민다. 물리가 그대로 받는다.
@@ -8645,6 +8662,19 @@ func _give_tick(d: float) -> void:
 				DROP.u_hi - it.hw), k2)
 		it.w = lerpf(aw, clampf(give_from.y, DROP.w_lo, DROP.w_hi), k2)
 		it.h = lerpf(ah, 0.0, k2)
+	#  ── 손을 따라 돈다 ────────────────────────────────
+	#  옛 값은 상수 회전이었다(초당 2.6 라디안). 손이 어느 쪽으로 뒤척이든
+	#  물건은 제 속도로 빙빙 돌아서, 손에 들린 것이 아니라 손 위에 떠서
+	#  따로 도는 것으로 읽혔다(2026-09-15 제보).
+	#  이제 **손각의 변화분**을 물건에 그대로 얹는다 — 자리에서 안 튀고
+	#  손이 멈추면 물건도 멈춘다. 기울임(wob)은 손 굴림의 사인이다.
+	#  roll 은 3D 로 세워 그리는 것(사탕·다트)이 읽는 축이다.
+	var gp: Vector2 = npc_grip[give_side]
+	var da: float = angle_difference(give_ang, gp.x)
+	give_ang = gp.x
+	it.psi = fposmod(float(it.psi) + da, TAU)
+	it.wob = clampf(sin(gp.y) * float(GIVE.tip), -1.0, 1.0)
+	it.roll = gp.y
 	if give_t >= tot:
 		_give_end()
 
@@ -9449,6 +9479,11 @@ func _drop_extras(d: float) -> void:
 				it.gone = true
 				_drop_arrive(i)
 			continue
+		#  상인이 든 물건은 판에 앉는 중이 아니라 손 안에 있다. 흔들림
+		#  스프링을 여기서 감쇠시키면 _give_tick 이 손 굴림으로 준 기울임을
+		#  프레임마다 도로 0 으로 끌어내린다 — 두 곳이 같은 값을 쓴다.
+		if i == give_i:
+			continue
 		it.wv -= it.wob * DROP.wob_k * d
 		it.wv *= exp(-DROP.wob_c * d)
 		it.wob = clampf(it.wob + it.wv * d, -1.0, 1.0)
@@ -9761,10 +9796,16 @@ func _obj_paint(it: Dictionary, s: Dictionary, dim: float) -> void:
 		"mod":
 			# 동전과 같은 어법으로 눕는다 — 옆면을 깔고 윗면을 얹는다.
 			# 정면 원반은 컬렉션의 것이고, 테이블 위의 것은 누워야 한다.
-			draw_colored_polygon(_e_pts(c, TBL.mod_r, TBL.mod_r * TBL.flat),
+			#  기울임(wob)도 동전과 같은 식으로 탄다. 이것 하나 없어서 보드
+			#  확장만 상인 손 위에서 꿈쩍도 안 했다 — 돌 축(psi)이 없는 물건이라
+			#  기울임이 유일하게 남은 축이다.
+			var mw: float = float(it.get("wob", 0.0))
+			var mr: float = TBL.mod_r * (1.0 + mw * 0.05)
+			var mf: float = TBL.flat * (1.0 - mw * 0.12)
+			draw_colored_polygon(_e_pts(c, mr, mr * mf),
 					C_DARK.darkened(0.72 + dim * 0.2))
 			_icon_mod(c - Vector2(0.0, TBL.chip_t * TBL.tall),
-					TBL.mod_r, s.d.id, dim, TBL.flat)
+					mr, s.d.id, dim, mf)
 		_:
 			# sh=false — 내장 그림자는 고정 오프셋이라 낙하 중 하늘을 같이 난다
 			var de := _dart_e(it)

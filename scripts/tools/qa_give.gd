@@ -74,10 +74,37 @@ func _run() -> void:
 	_ok("받는 동안 물건이 떠 있다", float(it.h) > 4.0, "h %.1f" % float(it.h))
 
 	# ⑤ 살피는 동안 손 위에 머물고 돈다
-	var psi0: float = float(it.psi)
 	_step(int(float(g.GIVE.look) * 40.0))
-	_ok("살피는 동안 돈다", absf(float(it.psi) - psi0) > 0.5,
-			"psi %+.2f" % (float(it.psi) - psi0))
+	var side: int = g.give_side
+	g.npc_grip[side] = Vector2(0.0, 0.0)
+	g._give_tick(1.0 / 60.0)
+	var psi0: float = float(it.psi)
+	g.npc_grip[side] = Vector2(0.6, 0.0)
+	g._give_tick(1.0 / 60.0)
+	_ok("손각만큼 물건이 돈다",
+			absf(angle_difference(psi0 + 0.6, float(it.psi))) < 0.001,
+			"psi %+.3f (손각 +0.600)" % angle_difference(psi0, float(it.psi)))
+	var psi1: float = float(it.psi)
+	g._give_tick(1.0 / 60.0)
+	_ok("손이 멈추면 물건도 멈춘다", absf(float(it.psi) - psi1) < 0.0001,
+			"psi %+.4f" % (float(it.psi) - psi1))
+	g.npc_grip[side] = Vector2(0.6, deg_to_rad(70.0))
+	g._give_tick(1.0 / 60.0)
+	_ok("손을 굴리면 물건이 기운다",
+			absf(float(it.wob) - sin(deg_to_rad(70.0))) < 0.001
+			and absf(float(it.roll) - deg_to_rad(70.0)) < 0.001,
+			"wob %.2f · roll %.2f" % [float(it.wob), float(it.roll)])
+	g.npc_grip[side] = Vector2(0.6, -deg_to_rad(70.0))
+	g._give_tick(1.0 / 60.0)
+	_ok("반대로 굴리면 반대로 기운다", float(it.wob) < -0.9,
+			"wob %.2f" % float(it.wob))
+	#  기울임은 표가 정한 칸(−1..1)을 안 넘는다 — 넘으면 그리기가 터진다
+	g.npc_grip[side] = Vector2(0.6, deg_to_rad(90.0))
+	g._give_tick(1.0 / 60.0)
+	_ok("기울임이 칸을 안 넘는다", absf(float(it.wob)) <= 1.0,
+			"wob %.3f" % float(it.wob))
+	g.npc_grip[side] = Vector2(0.0, 0.0)
+	g._give_tick(1.0 / 60.0)
 	var pm: Vector3 = g.npc_palm[g.give_side]
 	_ok("손바닥 위에 얹혔다",
 			absf(float(it.h) - (pm.z + float(g.GIVE.hold))) < 0.01,
@@ -115,6 +142,28 @@ func _run() -> void:
 			laid += 1
 	_ok("두 갈래가 다 나온다", laid > 0 and tossed > 0,
 			"내려놓기 %d · 던지기 %d" % [laid, tossed])
+
+	# 손이 이쪽저쪽 뒤척이는가 — 한 방향으로만 가면 "뒤척였다" 가 아니다
+	var li2: int = g._idle_index("살핌")
+	g.idle_act = li2
+	g.idle_side = 1
+	var rlo := 9.0
+	var rhi := -9.0
+	var alo := 9.0
+	var ahi := -9.0
+	for st in 81:
+		g.idle_t = float((g.IDLE.acts[li2] as Dictionary).t) * float(st) / 80.0
+		var hh: Dictionary = g._idle_hand(1)
+		rlo = minf(rlo, float(hh.roll))
+		rhi = maxf(rhi, float(hh.roll))
+		alo = minf(alo, float(hh.ang))
+		ahi = maxf(ahi, float(hh.ang))
+	_ok("손이 양쪽으로 굴린다", rlo < -0.3 and rhi > 0.3,
+			"굴림 %.0f° ~ %+.0f°" % [rad_to_deg(rlo), rad_to_deg(rhi)])
+	_ok("손각도 양쪽으로 흔든다", alo < -0.05 and ahi > 0.05,
+			"손각 %.0f° ~ %+.0f°" % [rad_to_deg(alo), rad_to_deg(ahi)])
+	g.idle_act = -1
+
 
 	# ⑧ 내미는 예고 — 들고 카운터 위로 올라가면 그쪽 손이 마중 나온다
 	g.npc_reach = 0.0

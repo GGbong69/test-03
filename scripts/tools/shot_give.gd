@@ -62,7 +62,7 @@ func _run() -> void:
 	# ② 건넨다
 	g._give_begin(pick, Vector2(it.u, g.TBL.fy))
 	var tot: float = float(g.GIVE.take) + float(g.GIVE.look) + float(g.GIVE.back)
-	var marks := [0.22, 0.42, 0.62, 0.82, 0.96]
+	var marks := [0.26, 0.38, 0.50, 0.62, 0.74]
 	var done := 0
 	var t := 0.0
 	while t < tot and done < marks.size():
