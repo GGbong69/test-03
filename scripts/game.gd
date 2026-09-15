@@ -2679,6 +2679,7 @@ func _process(d: float) -> void:
 	#  손은 상인이 서는 화면에서만 산다. 통(_cup3_)과 같은 규약이다 —
 	#  안 보이는 뷰포트가 런 내내 뒤에서 돌면 눈으로는 영영 못 잡는다.
 	_idle_tick(d)
+	_give_tick(d)
 	if _npc_on():
 		_hand3_open()
 		_hand3_sync()
@@ -7380,6 +7381,15 @@ func _npc_arms() -> void:
 	#  몸이 돌면 팔뿌리도 돈다. 깊이에 따라 밀리는 양이 달라서
 	#  팔꿈치(축 뒤)와 손목(축 앞)이 **반대로** 간다.
 	var yw: float = float(_idle_body().yaw)
+	#  내미는 예고 — 건넬 수 있을 때 그쪽 손이 마중 나온다. 몸짓 위에
+	#  **더한다**(몸짓과 다투지 않는다). 가로로 가므로 el 을 끌어올린다.
+	if npc_reach > 0.002:
+		var gr: Dictionary = g0 if npc_reach_side == 0 else g1
+		var rs: float = -1.0 if npc_reach_side == 0 else 1.0
+		gr.du += -rs * 14.0 * npc_reach
+		gr.dw += 16.0 * npc_reach
+		gr.dh += 6.0 * npc_reach
+		gr.el = maxf(float(gr.el), 0.8)
 	var e0: float = float(g0.el)
 	var e1: float = float(g1.el)
 	# 쉬는 팔. 숨은 팔꿈치를 손목보다 크게 흔든다 — 뿌리가 동전 슬롯 뒤라
@@ -7394,6 +7404,12 @@ func _npc_arms() -> void:
 			deg_to_rad(NPC.ang_l) + float(g0.ang), NPC.sc_l, false, -1.0,
 			Vector3(float(HAND3.h_wr) + float(g0.dh),
 			float(HAND3.h_el) + float(g0.dh) * 0.5, float(g0.roll)))
+	#  손목 자리를 적어 둔다 — 상인이 든 물건이 이 값을 따라간다(_give_tick).
+	#  두 곳이 따로 셈하면 물건이 손에서 떨어져 난다.
+	npc_wrist[0] = Vector3(cx + NPC.wr_l.x + _npc_sway(NPC.wr_l.y)
+			+ _idle_twist(NPC.wr_l.y, yw) + float(g0.du),
+			NPC.wr_l.y + br * 0.2 + float(g0.dw),
+			float(HAND3.h_wr) + float(g0.dh))
 	# 쓸는 팔 — 어깨부터 **쭉 편 채** 휩쓴다. 몸이 +5° 기울며 뻗고,
 	# −5° 로 넘어가는 동안 팔이 부채꼴로 판을 쓴다. 팔꿈치는 어깨-손목
 	# 직선 위라 안 굽고, 손으로 갈수록 굵어지다 손이 1.55배가 된다 —
@@ -7418,6 +7434,7 @@ func _npc_arms() -> void:
 		#  훑는 동안은 팔꿈치도 판으로 내려온다 — 쓸기는 판을 미는 짓이라
 		#  팔이 떠 있으면 미는 선과 그려지는 팔이 높이에서 갈린다.
 		he = lerpf(he, float(HAND3.h_wr) + 3.0, a)
+	npc_wrist[1] = Vector3(wr.x, wr.y, hw)
 	var hs := lerpf(1.0, SWEEP.hand_up, a)
 	# 위팔은 **쓸 때만** 그린다. 쉬는 자세에서는 어깨와 팔꿈치가 거의
 	# 같은 높이라 토막이 몸통 옆구리에 붙어 팔–몸통 골을 4px 로 좁힌다
@@ -8141,6 +8158,9 @@ const IDLE := {
 		{"n": "끄덕", "t": 0.6, "auto": false},
 		{"n": "손짓", "t": 0.8, "auto": false},
 		{"n": "저음", "t": 0.8, "auto": false},
+		#  건네받은 물건을 살핀다. 길이는 GIVE 의 세 박자 합이어야 한다 —
+		#  어긋나면 손이 먼저 내려오고 물건만 허공에 남는다.
+		{"n": "살핌", "t": 2.30, "auto": false},
 	],
 }
 var idle_act := -1
@@ -8158,6 +8178,8 @@ func _idle_tick(d: float) -> void:
 		idle_t = 0.0
 		idle_wait = maxf(idle_wait, 1.2)
 		return
+	if _give_live():
+		return                  # 시계는 _give_tick 이 민다
 	if idle_act >= 0:
 		idle_t += d
 		if idle_t < _idle_len():
@@ -8190,6 +8212,10 @@ func _idle_pick() -> void:
 #  side 는 어느 쪽 일이었는가(0 화면 왼쪽 · 1 오른쪽). −1 이면 그대로 둔다.
 func _npc_react(nm: String, side := -1) -> void:
 	if not _npc_on() or sweep_live:
+		return
+	#  살피는 동안은 다른 응수가 못 들어온다. 들어오면 손은 딴 짓을 하는데
+	#  물건은 그 손을 따라가서 허공에 뜬다.
+	if _give_live() and nm != "살핌":
 		return
 	for i in IDLE.acts.size():
 		if String((IDLE.acts[i] as Dictionary).n) == nm:
@@ -8245,6 +8271,12 @@ func _idle_hit(b: float) -> float:
 	if b < 0.66:
 		return 1.0 - (b - 0.56) / 0.10
 	return 0.16 * sin((b - 0.66) / 0.34 * PI)
+
+
+#  b 가 [a,z] 안이면 1, 밖이면 0. 가장자리 f 만큼 부드럽다.
+#  한 몸짓 안에서 **한 박자에만** 걸리는 움직임이 쓴다.
+func _idle_win(b: float, a: float, z: float, f: float) -> float:
+	return clampf((b - a) / f, 0.0, 1.0) * clampf((z - b) / f, 0.0, 1.0)
 
 
 #  내리치기의 충격 — 닿는 순간 한 번만 1 에 가깝고 곧 0 이다.
@@ -8315,6 +8347,12 @@ func _idle_body() -> Dictionary:
 			#  "아니다" 를 만든다 — 한 번이면 그냥 돌아본 것이다.
 			out.yaw += k * 0.046 * sin(b * TAU * 2.0)
 			out.rise -= k * 0.6
+		"살핌":
+			#  팔을 뻗는 동안 몸이 따라 기운다. 팔만 나가면 팔이 늘어난 것으로
+			#  보이지 손을 뻗은 것으로 안 보인다.
+			out.yaw += k * 0.034 * sd
+			out.lean += k * 4.0
+			out.rise -= k * 1.6
 	return out
 
 
@@ -8417,6 +8455,20 @@ func _idle_hand(i: int) -> Dictionary:
 		"저음":
 			out.dh = 2.0 * k
 			out.el = 0.5
+		"살핌":
+			#  판 위로 손을 **뻗는다.** 앞으로 34 는 손목이 카운터 뒤(w −2)에서
+			#  쟁반 안(w 32)까지 나오는 거리다 — 물건을 제 쪽으로 끌어오면
+			#  카운터 뒤라 벽 사각(_cover_draw)이 물건을 덮어 버린다.
+			#  el 0.85 — 가로·세로로 크게 가므로 팔이 통째로 따라간다.
+			if not mine:
+				return out
+			out.du = -sd * 10.0 * k
+			out.dw = 34.0 * k
+			out.dh = 4.0 * k
+			#  굴림은 **살피는 박자에만** 든다. 뻗는 동안 이미 돌아 있으면
+			#  받기 전부터 뒤집어 놓고 기다리는 손이 된다.
+			out.roll = deg_to_rad(58.0) * k * _idle_win(b, 0.22, 0.76, 0.10)
+			out.el = 0.85
 	return out
 
 
@@ -8431,6 +8483,169 @@ func _npc_side(x: float) -> int:
 #  이것이 없으면 몸만 돌고 팔은 허공에 박혀 있어서, 돌림이 옷장 문이 된다.
 func _idle_twist(w: float, yaw: float) -> float:
 	return (w - float(IDLE.axis)) * sin(yaw)
+
+
+# ══════════════════════════════════════════════════════════
+#  건네기 — 물건을 상인에게 주면 살펴보고 돌려준다
+# ──────────────────────────────────────────────────────────
+#  쟁반 맨 위(w 24)까지 밀어 올려 **카운터 위에서 떼면** 건네는 것이다.
+#  창구 둘은 좌우 빗변이고 여기는 위쪽이라 셋이 안 겹친다 — 새 과녁을
+#  안 그리고도 "위로 밀면 상인에게" 가 나온다.
+#
+#  ── 세 박자 ──────────────────────────────────────────
+#  받기 · 살피기 · 돌려주기. 돌려주기는 두 갈래인데 **받을 때 정한다** —
+#  살피는 동안 갈래가 바뀌면 마무리가 두 번 흔들린다.
+#    내려놓기  있던 자리로 되돌려 살며시 놓는다
+#    던지기    면 위로 밀어 보낸다. 물리(_hand_land)가 그대로 받는다
+#
+#  ── 물건은 판 **위**에서 든다 ─────────────────────────
+#  상인 쪽으로 끌어당기면 안 된다. 카운터 뒤는 벽 사각(_cover_draw)이
+#  나중에 덮으므로 거기 든 물건은 통째로 지워진다. 그래서 손이 반대로
+#  **쟁반 안까지 나온다**(살핌의 dw 34). 손을 뻗는 그림이 덤으로 붙는다.
+#
+#  ── 시계가 하나다 ────────────────────────────────────
+#  _give_tick 이 몸짓 시계(idle_t)까지 민다. 둘을 따로 두면 손이 먼저
+#  내려오고 물건만 허공에 남는다 — 몸짓 길이와 GIVE 세 박자의 합이
+#  같아야 하는 이유이기도 하다(IDLE.acts 의 「살핌」 2.30).
+# ══════════════════════════════════════════════════════════
+const GIVE := {
+	"band": 12.0,        # 카운터 위 이 안에서 떼면 건네는 것이다
+	"take": 0.45,        # 받는다
+	"look": 1.30,        # 살핀다
+	"back": 0.55,        # 돌려준다.  셋의 합 = 「살핌」의 길이
+	"hop": 15.0,         # 받을 때 물건이 그리는 포물선의 높이
+	#  손 **위로** 들어야 한다. 20 으로 뒀더니 물건이 손 뒤에 숨었다 —
+	#  물건은 굿즈 층(_goods_draw)이라 상인(_cover_draw)보다 **먼저** 그려져서
+	#  손이 위에 얹힌다. 34 면 화면에서 손보다 17px 위라 온전히 보인다.
+	#  카운터 선은 _give_tick 의 밀기가 지킨다.
+	"hold": 34.0,        # 손 위에 든 높이(h)
+	"out": 11.0,         # 몸 바깥쪽으로 비켜 드는 거리 — 손과 안 겹치게 한다
+	"spin": 2.6,         # 살피는 동안 물건이 도는 속도(라디안/초)
+	"toss": 0.34,        # 이 확률로 던진다. 아니면 내려놓는다
+	"toss_v": 210.0,     # 던지는 속도(면px/초)
+	"reach": 4.0,        # 손 내미는 예고가 붙고 떨어지는 속도
+}
+var give_i := -1           # 상인이 든 물건. drop 의 색인
+var give_t := 0.0
+var give_side := 1
+var give_toss := false
+var give_from := Vector3.ZERO    # 받기 전 자리 (u, w, h)
+var npc_reach := 0.0       # 손을 내미는 정도 0..1 — 건넬 수 있다는 예고다
+var npc_reach_side := 1
+var npc_wrist := [Vector3.ZERO, Vector3.ZERO]   # _npc_arms 가 적는다 (u, w, h)
+
+
+#  여기서 떼면 건네는 것인가. 창구(좌우)와 안 겹치는 위쪽 띠다.
+func _give_at(m: Vector2) -> bool:
+	return state == S.SHOP and photo == "" and not sweep_live \
+			and m.y <= TBL.fy + float(GIVE.band)
+
+
+func _give_live() -> bool:
+	return give_i >= 0
+
+
+func _give_begin(i: int, m: Vector2) -> void:
+	if i < 0 or i >= drop.size():
+		return
+	var it: Dictionary = drop[i]
+	give_i = i
+	give_t = 0.0
+	give_side = _npc_side(m.x)
+	give_toss = idle_rng.randf() < float(GIVE.toss)
+	give_from = Vector3(it.u, it.w, it.h)
+	it.held = true            # 물리에서 뺀다. 자리는 _give_tick 이 준다
+	it.sleep = true
+	it.air = false
+	it.vu = 0.0
+	it.vw = 0.0
+	it.vh = 0.0
+	it.om = 0.0
+	it.scuff = []
+	_npc_react("살핌", give_side)
+	_sfx("hand_take")
+
+
+func _give_tick(d: float) -> void:
+	#  내미는 예고 — 들고 카운터 위로 올라오면 그쪽 손이 마중 나온다.
+	#  새 과녁을 안 그리고 "여기 놓으면 된다" 를 말하는 자리다.
+	var want := 0.0
+	if hand_st == H.CARRY and hand_src != 1 and hand_src != 4 \
+			and _give_at(hand_m):
+		want = 1.0
+		npc_reach_side = _npc_side(hand_m.x)
+	if _give_live():
+		want = 0.0
+	npc_reach = move_toward(npc_reach, want, d * float(GIVE.reach))
+	if not _give_live():
+		return
+	if give_i >= drop.size() or state != S.SHOP or sweep_live:
+		_give_end()
+		return
+	give_t += d
+	var t1: float = float(GIVE.take)
+	var t2: float = t1 + float(GIVE.look)
+	var tot: float = t2 + float(GIVE.back)
+	#  몸짓 시계를 여기서 민다 — 손과 물건이 **한 시계**를 봐야 안 갈라진다.
+	var ai := _idle_index("살핌")
+	if ai >= 0:
+		idle_act = ai
+		idle_t = minf(give_t, tot - 0.0005)
+		idle_side = give_side
+	var it: Dictionary = drop[give_i]
+	var hd: Vector3 = npc_wrist[give_side]
+	var sd: float = -1.0 if give_side == 0 else 1.0
+	var au: float = hd.x + sd * float(GIVE.out)
+	var aw: float = hd.y + 4.0
+	var ah: float = float(GIVE.hold)
+	#  카운터 선을 **절대 안 넘게** 민다. 넘으면 벽 사각(_cover_draw)이
+	#  나중에 덮어서 물건이 통째로 사라진다 — 손이 어디 있든 이 줄이 막는다.
+	#  머리말이 "판 위에서 든다" 라고 적은 그 규칙을 여기서 못 박는다.
+	aw = maxf(aw, (ah * float(TBL.tall) + 6.0) / float(TBL.flat))
+	if give_t < t1:
+		#  받는다. 곧게 가면 빨려 들어간 것이라 포물선으로 띄운다.
+		var k := _ease_io(give_t / t1)
+		it.u = lerpf(give_from.x, au, k)
+		it.w = lerpf(give_from.y, aw, k)
+		it.h = lerpf(give_from.z, ah, k) + sin(k * PI) * float(GIVE.hop)
+	elif give_t < t2:
+		it.u = au
+		it.w = aw
+		it.h = ah
+		#  돌려 본다. psi 는 면 위 방위각이라 물건이 손 위에서 돈다.
+		it.psi = fmod(float(it.psi) + d * float(GIVE.spin), TAU)
+	else:
+		if give_toss:
+			#  던진다 — 관객 쪽으로 민다. 물리가 그대로 받는다.
+			_give_end(Vector2((give_from.x - au) * 0.9, float(GIVE.toss_v)))
+			return
+		#  내려놓는다 — 있던 자리로.
+		var k2 := _ease_io((give_t - t2) / float(GIVE.back))
+		it.u = lerpf(au, clampf(give_from.x, DROP.u_lo + it.hw,
+				DROP.u_hi - it.hw), k2)
+		it.w = lerpf(aw, clampf(give_from.y, DROP.w_lo, DROP.w_hi), k2)
+		it.h = lerpf(ah, 0.0, k2)
+	if give_t >= tot:
+		_give_end()
+
+
+func _give_end(v := Vector2.ZERO) -> void:
+	var i := give_i
+	give_i = -1
+	give_t = 0.0
+	if i < 0 or i >= drop.size():
+		return
+	var it: Dictionary = drop[i]
+	it.held = false
+	_hand_land(it, v)
+	_sfx("hand_drop")
+
+
+func _idle_index(nm: String) -> int:
+	for i in IDLE.acts.size():
+		if String((IDLE.acts[i] as Dictionary).n) == nm:
+			return i
+	return -1
 
 
 
@@ -8874,6 +9089,10 @@ func _drop_one(i: int, n: int) -> Dictionary:
 
 func _drop_roll() -> void:
 	_hand_abort()
+	#  상인 손도 비운다. drop 을 갈아 끼우는데 give_i 가 옛 색인을 들고
+	#  있으면, 새로 떨어지는 딴 물건이 그 자리에서 상인 손으로 순간이동한다.
+	#  쓸기는 sweep_live 로 이미 막히지만 이 길은 그것 말고도 열려 있다.
+	_give_end()
 	drop.clear()
 	drop_t = 0.0
 	drop_acc = 0.0
@@ -9362,6 +9581,10 @@ func _shop_hit(m: Vector2) -> int:
 	for k in range(z.size() - 1, -1, -1):
 		var i: int = z[k]
 		if drop[i].sold > 0.0:
+			continue
+		#  상인이 든 것은 못 집는다. 집으면 손 둘이 같은 물건을 끌어
+		#  자리가 프레임마다 두 곳으로 튄다.
+		if i == give_i:
 			continue
 		if not _obj_box(i).grow_individual(2.0, 2.0 + lz, 2.0, 2.0).has_point(m):
 			continue
@@ -11100,6 +11323,11 @@ func _hand_release(m: Vector2) -> void:
 		pay_msg_t = HAND.msg_t
 		_deny()
 		_hand_land(it)
+		return
+	#  카운터 위에서 떼면 상인에게 건네는 것이다. 창구 둘은 좌우 빗변이고
+	#  여기는 위쪽 띠라 셋이 안 겹친다(GIVE 머리말).
+	if _give_at(m) and not _give_live():
+		_give_begin(i, m)
 		return
 	_sfx("hand_drop")
 	_hand_land(it, _toss_of(hand_v))
