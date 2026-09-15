@@ -6033,6 +6033,207 @@ func _stk_ti(rarity: String) -> int:
 	return 0
 
 
+#  얼굴을 짓는 잔손 셋. 모두 **중심 기준 상대 좌표**를 받는다 — 같은 얼굴이
+#  누운 자세(타원)와 선 자세(정원)에 같은 수로 앉아야 하기 때문이다.
+func _poly_i(pts: Array, c: Vector2, col: Color) -> void:
+	var out := PackedVector2Array()
+	for p in pts:
+		out.append(c + (p as Vector2))
+	draw_colored_polygon(out, col)
+
+
+func _ell_i(rx: float, ry: float, n: int) -> Array:
+	var out := []
+	for k in n:
+		var a := TAU * float(k) / float(n)
+		out.append(Vector2(cos(a) * rx, sin(a) * ry))
+	return out
+
+
+#  속이 빈 타원 한 겹. 온 고리를 한 폴리곤으로 넘기면 비볼록이라 삼각분할이
+#  튄다(annulus 주석) — 선분 스물넷으로 두른다.
+func _ring_i(c: Vector2, rx: float, ry: float, col: Color) -> void:
+	var prev := c + Vector2(rx, 0.0)
+	for k in range(1, 25):
+		var a := TAU * float(k) / 24.0
+		var p := c + Vector2(cos(a) * rx, sin(a) * ry)
+		draw_line(prev, p, col, 1.0)
+		prev = p
+
+
+#  동전의 얼굴 — 그 동전이 **무엇인가**를 새긴다.
+#
+#  조건 그림(_icon_cond)이 "언제" 를, 값이 "얼마나" 를 말하고, 이것이
+#  "무엇" 을 말한다. 셋이 같은 얼굴을 나눠 쓰므로 이것은 **바탕**이다 —
+#  인쇄면을 덮되 잉크보다 연해서, 조건과 값이 그 위에 그대로 읽혀야 한다.
+#  그래서 색을 밖에서 받는다(몸 색에서 낸 워터마크 톤과 구멍용 몸 색).
+#
+#  레퍼런스를 줄여 붙이지 않는다. 지름 38px 에서 사진은 뭉개지고, 뭉개지지
+#  않아도 "그 영화를 아는가" 만 묻는 그림이 된다. 남는 것은 **실루엣**뿐이라
+#  처음부터 실루엣으로 짓는다 — 원시 도형만 쓰고 글자는 안 쓴다(_icon_cond
+#  와 같은 규약).
+#
+#  재질(MATS)이 이미 말하는 장은 여기 없다. 유리 대포는 유리인 것으로
+#  충분하고, 그 위에 대포를 또 그리면 한 얼굴이 두 번 말한다.
+func _icon_item(c: Vector2, r: float, id: String, col: Color, bg: Color) -> void:
+	var u := r
+	match id:
+		"c01":
+			#  광대 모자 — 세 뿔과 방울. 조커를 조커로 만드는 것은 얼굴이
+			#  아니라 모자다(38px 에서 사람 얼굴은 점 두 개로 뭉개진다).
+			_poly_i([Vector2(-u * 0.72, u * 0.28), Vector2(0.0, -u * 0.30),
+					Vector2(u * 0.72, u * 0.28)], c, col)
+			for k in 3:
+				var a1: float = -u * 0.62 + u * 0.62 * float(k)
+				draw_circle(c + Vector2(a1, -u * 0.34 + absf(a1) * 0.34),
+						u * 0.17, col)
+			draw_rect(Rect2(c.x - u * 0.62, c.y + u * 0.28, u * 1.24, u * 0.20), col)
+		"c02":
+			#  수리검 — 네 날. 가운데 구멍이 있어야 별이 아니라 날붙이다.
+			var pts := []
+			for k in 8:
+				var a2 := TAU * float(k) / 8.0 - PI * 0.5
+				var rr: float = u * (0.96 if k % 2 == 0 else 0.30)
+				pts.append(Vector2(cos(a2), sin(a2)) * rr)
+			_poly_i(pts, c, col)
+			draw_circle(c, u * 0.17, bg)
+		"c04":
+			#  피자 한 조각 — 꼭지가 가운데, 호가 바깥. 동전이 원이라
+			#  조각이 원의 부채꼴로 그대로 앉는다.
+			var pz := [Vector2.ZERO]
+			for k in 9:
+				var a3 := -PI * 0.78 + PI * 0.56 * float(k) / 8.0
+				pz.append(Vector2(cos(a3), sin(a3)) * u * 0.92)
+			_poly_i(pz, c, col)
+			for k in 3:
+				draw_circle(c + Vector2(-u * 0.24 + u * 0.24 * float(k),
+						-u * 0.40 - u * 0.10 * float(k % 2)), u * 0.11, bg)
+		"c05":
+			#  하키 마스크 — 달걀에 눈 둘과 입술 틈. 숨구멍 점이 마스크를
+			#  마스크로 만든다.
+			_poly_i(_ell_i(u * 0.68, u * 0.92, 16), c, col)
+			draw_circle(c + Vector2(-u * 0.26, -u * 0.18), u * 0.16, bg)
+			draw_circle(c + Vector2(u * 0.26, -u * 0.18), u * 0.16, bg)
+			draw_rect(Rect2(c.x - u * 0.24, c.y + u * 0.34, u * 0.48, u * 0.12), bg)
+			for k in 4:
+				draw_circle(c + Vector2(-u * 0.30 + u * 0.20 * float(k),
+						-u * 0.62), u * 0.07, bg)
+		"c09", "c10":
+			#  음양 — 같은 그림을 뒤집어 쓴다. 표에서 양은 크림 칸, 음은
+			#  먹 칸이라 어느 쪽이 큰가가 곧 그 동전이 보는 칸이다.
+			var sg: float = 1.0 if id == "c09" else -1.0
+			draw_circle(c, u * 0.92, col)
+			var hf := []
+			for k in 13:
+				var a4 := -PI * 0.5 + PI * float(k) / 12.0
+				hf.append(Vector2(cos(a4) * sg, sin(a4)) * u * 0.92)
+			_poly_i(hf, c, bg)
+			draw_circle(c + Vector2(0.0, -u * 0.46), u * 0.46, bg)
+			draw_circle(c + Vector2(0.0, u * 0.46), u * 0.46, col)
+			draw_circle(c + Vector2(0.0, -u * 0.46), u * 0.15, col)
+			draw_circle(c + Vector2(0.0, u * 0.46), u * 0.15, bg)
+		"c14":
+			#  라코니아의 람다. 스파르타 방패의 그 글자 하나다.
+			var w2: float = maxf(u * 0.22, 1.5)
+			draw_line(c + Vector2(-u * 0.62, u * 0.80),
+					c + Vector2(0.0, -u * 0.80), col, w2)
+			draw_line(c + Vector2(u * 0.62, u * 0.80),
+					c + Vector2(u * 0.10, -u * 0.34), col, w2)
+		"c29":
+			#  황금 우상 — 이마가 넓고 턱이 좁은 머리에 어깨 받침.
+			_poly_i([Vector2(-u * 0.50, -u * 0.34), Vector2(-u * 0.38, u * 0.22),
+					Vector2(0.0, u * 0.46), Vector2(u * 0.38, u * 0.22),
+					Vector2(u * 0.50, -u * 0.34), Vector2(0.0, -u * 0.72)], c, col)
+			draw_rect(Rect2(c.x - u * 0.74, c.y + u * 0.46, u * 1.48, u * 0.26), col)
+			draw_circle(c + Vector2(-u * 0.20, -u * 0.18), u * 0.09, bg)
+			draw_circle(c + Vector2(u * 0.20, -u * 0.18), u * 0.09, bg)
+		"c33":
+			#  푸른 구슬 — 구름 낀 행성. 대륙 셋이면 지구로 읽힌다.
+			draw_circle(c, u * 0.88, col)
+			draw_circle(c + Vector2(-u * 0.30, -u * 0.26), u * 0.26, bg)
+			draw_circle(c + Vector2(u * 0.24, u * 0.10), u * 0.30, bg)
+			draw_circle(c + Vector2(-u * 0.10, u * 0.52), u * 0.18, bg)
+		"c37":
+			#  진열된 수프 — 통조림. 가운데 띠가 라벨이다.
+			draw_rect(Rect2(c.x - u * 0.46, c.y - u * 0.76, u * 0.92, u * 1.52), col)
+			draw_rect(Rect2(c.x - u * 0.46, c.y - u * 0.16, u * 0.92, u * 0.42), bg)
+			_poly_i(_ell_i(u * 0.46, u * 0.16, 12), c + Vector2(0.0, -u * 0.76), col)
+		"c46":
+			#  프리즘 — 삼각형에 줄 하나가 들어가 셋으로 갈린다.
+			_poly_i([Vector2(0.0, -u * 0.78), Vector2(-u * 0.72, u * 0.58),
+					Vector2(u * 0.72, u * 0.58)], c, col)
+			draw_line(c + Vector2(-u * 0.96, -u * 0.10),
+					c + Vector2(-u * 0.24, u * 0.10), bg, 1.0)
+			for k in 3:
+				draw_line(c + Vector2(u * 0.24, u * 0.12),
+						c + Vector2(u * 0.98, u * 0.02 + u * 0.22 * float(k)),
+						bg, 1.0)
+		"c49":
+			#  큰 파도 — 마루가 왼쪽으로 말리고 발톱 셋이 선다.
+			var wv := []
+			for k in 13:
+				var a5 := PI * 0.10 + PI * 1.05 * float(k) / 12.0
+				wv.append(Vector2(cos(a5), sin(a5) * 0.72) * u * 0.92)
+			for k in range(12, -1, -1):
+				var a6 := PI * 0.10 + PI * 1.05 * float(k) / 12.0
+				wv.append(Vector2(cos(a6), sin(a6) * 0.72) * u * 0.52)
+			_poly_i(wv, c + Vector2(0.0, u * 0.18), col)
+			for k in 3:
+				draw_circle(c + Vector2(-u * 0.72 + u * 0.16 * float(k),
+						-u * 0.30 - u * 0.12 * float(k)), u * 0.12, col)
+		"u19":
+			#  데스 이터스 — 해골에서 뱀이 흘러나온다. 눈 둘이 먼저 읽힌다.
+			draw_circle(c + Vector2(0.0, -u * 0.34), u * 0.48, col)
+			draw_rect(Rect2(c.x - u * 0.26, c.y - u * 0.02, u * 0.52, u * 0.26), col)
+			draw_circle(c + Vector2(-u * 0.18, -u * 0.40), u * 0.13, bg)
+			draw_circle(c + Vector2(u * 0.18, -u * 0.40), u * 0.13, bg)
+			for k in 3:
+				draw_circle(c + Vector2(-u * 0.34 + u * 0.34 * float(k),
+						u * 0.46 + u * 0.16 * float(k % 2)), u * 0.15, col)
+		"u21":
+			#  스포트라이트 — 좁은 꼭지에서 퍼지는 빛과 바닥 웅덩이.
+			_poly_i([Vector2(-u * 0.16, -u * 0.86), Vector2(u * 0.16, -u * 0.86),
+					Vector2(u * 0.80, u * 0.46), Vector2(-u * 0.80, u * 0.46)],
+					c, col)
+			_poly_i(_ell_i(u * 0.80, u * 0.22, 14), c + Vector2(0.0, u * 0.46), col)
+		"u26":
+			#  SAFETY LAST! — 시계판에 매달린 사람. 바늘 둘이 시계를 만든다.
+			draw_arc(c, u * 0.82, 0.0, TAU, 20, col, maxf(u * 0.12, 1.0))
+			draw_line(c, c + Vector2(u * 0.02, -u * 0.58), col, maxf(u * 0.10, 1.0))
+			draw_line(c, c + Vector2(u * 0.52, u * 0.16), col, maxf(u * 0.10, 1.0))
+			draw_circle(c + Vector2(u * 0.52, u * 0.34), u * 0.15, col)
+		"u28":
+			#  피보나치 — 사분호 넷이 커지며 이어진다. 나선 자체가 뜻이다.
+			var q := [0.22, 0.36, 0.58, 0.92]
+			for k in 4:
+				var a7 := PI * 0.5 * float(k)
+				draw_arc(c + Vector2(-u * 0.20, u * 0.20), u * float(q[k]),
+						a7, a7 + PI * 0.5, 10, col, maxf(u * 0.11, 1.0))
+		"r01":
+			#  태양계 — 가운데 별과 궤도 셋. 궤도는 눕는다(면이 기울어 있다).
+			draw_circle(c, u * 0.22, col)
+			for k in 3:
+				var rr2: float = u * (0.42 + 0.24 * float(k))
+				_ring_i(c, rr2, rr2 * 0.52, col)
+			draw_circle(c + Vector2(u * 0.64, -u * 0.12), u * 0.11, col)
+		"r04":
+			#  카우보이 모자 — 챙이 넓고 크라운이 눌렸다.
+			_poly_i([Vector2(-u * 0.40, u * 0.10), Vector2(-u * 0.30, -u * 0.52),
+					Vector2(0.0, -u * 0.66), Vector2(u * 0.30, -u * 0.52),
+					Vector2(u * 0.40, u * 0.10)], c, col)
+			_poly_i(_ell_i(u * 0.94, u * 0.26, 16), c + Vector2(0.0, u * 0.14), col)
+		"l04":
+			#  잭과 콩나무 — 줄기 하나에 잎 셋. 위로 뻗는 것이 전부다.
+			for k in 7:
+				var yy: float = -u * 0.86 + u * 0.28 * float(k)
+				draw_rect(Rect2(c.x - u * 0.09 + sin(float(k) * 1.1) * u * 0.16,
+						c.y + yy, u * 0.18, u * 0.30), col)
+			for k in 3:
+				var sgn: float = 1.0 if k % 2 == 0 else -1.0
+				draw_circle(c + Vector2(sgn * u * 0.40,
+						-u * 0.52 + u * 0.42 * float(k)), u * 0.20, col)
+
+
 # 조건 그림 — 동전이 "언제" 터지는가를 얼굴에 새긴다.
 #
 # 지금까지 동전은 값(얼마나)만 보였다. 그래서 등급·잉크·숫자가 같으면
@@ -6228,6 +6429,13 @@ func draw_item_sticker(c: Vector2, r: float, it: Dictionary, rot: float, lift: f
 	#  그 장은 아래위로 가를 것이 없으므로 **가운데 한 줄**로 방식을 적는다.
 	#  글자 두셋이라 r 10 아래(툴팁)에서는 안 그린다 — 그 크기에서는 곁에
 	#  이름이 같이 서므로 비워 두는 편이 낫다.
+	#  얼굴은 **바탕**이다. 몸 색에서 한 단만 옮겨 낸 워터마크라, 그 위에
+	#  조건과 값이 그대로 읽힌다. 어두운 몸은 밝혀서 낸다(옆면과 같은 규칙).
+	var bd := Color(STK_TIERS[ti].body)
+	if _mat_of(it) != "hollow":
+		_icon_item(c, r * 0.80, String(it.get("id", "")),
+				(bd.lightened(0.34) if bd.v < 0.32
+				else bd.darkened(0.30)).darkened(dim), bd.darkened(dim))
 	var ink: Color = C_CHIP.lightened(0.5) if it.k == "chip" else C_MULT.lightened(0.45)
 	var meth := String(it.get("aim", ""))
 	if String(it.k) == "" and String(it.c) == "":
@@ -10691,6 +10899,13 @@ func _sticker_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: floa
 					c + Vector2(cos(a3 + 0.55) * rx * 0.34,
 					sin(a3 + 0.55) * ry * 0.34),
 					Color(1.0, 1.0, 1.0, 0.32 * fa), 1.0)
+	#  얼굴 — 선 자세와 같은 수로 앉는다. 누운 자세는 y 를 flat 으로 누르면
+	#  되는데, 그러면 원형 얼굴이 타원이 되어 두 자세가 딴 그림이 된다.
+	#  **안 누른다** — 면에 새겨진 그림이 아니라 위에서 본 도장으로 둔다.
+	if not hollow:
+		_icon_item(c, rx * 0.74, String(it.get("id", "")),
+				(bb.lightened(0.34) if bb.v < 0.32
+				else bb.darkened(0.30)).darkened(dim), bb.darkened(dim))
 	#  선 자세와 같은 규칙이다(draw_item_sticker 의 값 주석). 두 자세가
 	#  갈리면 테이블에서는 0 이 있고 동전 슬롯에서는 없는 동전이 된다.
 	if String(it.k) != "":
