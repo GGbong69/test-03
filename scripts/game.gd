@@ -7080,7 +7080,15 @@ const TBL := {
 	"chip_r": 19.0,      # 38 x 29.9 타원. 동전 슬롯 동전은 30 x 30 정원이다 (일부러 다르다)
 	"chip_t": 4.5,       # 옆면 = 4.5 * tall = 2.77px
 	"mod_r": 19.0,       # 캐비닛 실폭 2r+6 = 44, 화면 높이 2*r*flat+6 = 35.9
-	"dart_l": 24.0,      # 반길이. 최대 도달은 dl+8.5 ("mag" 자기장 호)
+	#  ── 테이블 위 물건의 크기를 한 자로 모은다 ──────────
+	#  2026-09-15 제보: "어떤건 너무 크고 어떤건 너무 작아".
+	#  재 보니 그려지는 크기가 이랬다 —
+	#    동전 38x30 · 보드 확장 38x30 · 다트 48 길이 · 사탕 22x30 ·
+	#    사진 26x17 · 팩 31x20
+	#  **동전이 기준이다.** 상점에서 제일 자주 뜨고 이 게임의 통화라,
+	#  나머지가 동전 곁에 놓였을 때 한 식구로 읽혀야 한다.
+	#  다트만 길고(길이가 다트의 성격이다) 나머지를 38 언저리로 모은다.
+	"dart_l": 20.0,      # 반길이. 24 는 48 이라 다른 것의 1.3배였다
 	"light": Vector2(0.447, 0.894),   # 기존 그림자 벡터 (1.5,3.0) 의 정규화
 }
 
@@ -7432,8 +7440,7 @@ func _npc_limb(el: Vector2, wr: Vector2, ang: float, sc: float,
 	#  자세(손목·각·배율)는 여기가 이미 셈했으므로 그것만 넘긴다.
 	#  두 곳이 따로 셈하면 쓸기 도중에 팔과 손이 갈라진다.
 	if _hand3_live():
-		hand3_pose.append({"wr": wr, "ang": ang, "sc": sc, "mir": mir,
-				"el": el, "w0": NPC.el_w, "w1": wrr})
+		hand3_pose.append({"wr": wr, "ang": ang, "sc": sc, "mir": mir, "el": el})
 		return
 	_npc_flat(hand, NPC.hand_t, C_WOOD.lightened(0.13),
 			C_WOOD.lightened(0.38))
@@ -7508,14 +7515,26 @@ const HAND3 := {
 	#  앞면)의 넓이가 원근대로 바뀐다 — 2D 다각형을 돌리던 때는 그 일이
 	#  안 일어났다. 제보가 짚은 것이 바로 그것이다.
 	"gain": 1.0,
-	"palm_l": 21.0,      # 손 길이(손목→끝). 17 은 손이 아니라 혹으로 보였다
-	"palm_w": 16.0,      # 손 폭. 소매(arm_w1 x2 = 17)보다 조금 좁다
-	"palm_t": 9.0,       # 두께. 소매(11)보다 얇아 손목이 한 단 진다
+	"palm_l": 25.0,      # 손 길이(손목→끝). 17 은 손이 아니라 혹으로 보였다
+	"palm_w": 26.0,      # 손 폭. 소매(30)보다 조금 좁아 손목이 한 단 진다
+	"palm_t": 14.0,      # 두께. 소매(16)보다 얇아 손목이 한 단 진다
 	#  팔뚝도 3D 다. 손만 3D 면 이음새에서 재질이 갈린다 —
 	#  2D 팔의 납작한 윗면과 3D 손의 모난 면이 한 자리에서 만난다.
-	"arm_t": 11.0,       # 팔뚝 두께
-	"arm_w0": 13.0,      # 팔꿈치 쪽 폭
-	"arm_w1": 8.5,       # 손목 쪽 폭
+	#  ── 팔뚝 굵기 ──────────────────────────────────
+	#  **반지름과 폭을 헷갈려 팔을 절반으로 만들었다**(2026-09-15 제보:
+	#  "몸이 저렇게 큰데 어떻게 팔이 이렇게 얇아?"). NPC.el_w 13 · wr_w 6.5 는
+	#  2D 테이퍼가 쓰던 **반지름**이라 실폭이 26 → 13 이었는데, 그것을
+	#  BoxMesh.size 의 **전체 폭**으로 그대로 옮겨서 팔이 통째로 13 —
+	#  즉 옛 팔의 **가는 쪽 끝** 굵기가 팔 전체가 됐다.
+	#
+	#  몸통은 가슴 반폭 72, 실폭 144 다. 팔 13 이면 11:1 이라 옷걸이에
+	#  걸린 소매다 — 사람은 4~5:1 이다. 30 으로 올려 4.8:1 로 둔다.
+	#
+	#  **안 좁아진다.** 블록 팔은 원래 테이퍼가 없다(마크·로블록스 둘 다).
+	#  좁히려면 상자를 둘로 쪼개야 하는데, 그 이음매가 30px 에서 금 하나로
+	#  남을 뿐이라 얻는 것이 없다.
+	"arm_t": 16.0,       # 팔뚝 두께
+	"arm_w0": 30.0,      # 팔뚝 폭 (전체. 반지름이 아니다)
 }
 
 var hand3_vp: SubViewport = null
@@ -7677,14 +7696,13 @@ func _hand3_sync() -> void:
 		var am: Node3D = rg.arm
 		am.position = apos
 		am.rotation = arot
-		#  z 배율로 소매가 손목 쪽으로 좁아지는 것을 흉내낸다 — 상자 하나라
-		#  테이퍼가 없으므로 평균 폭으로 둔다(블록은 원래 안 좁아진다).
-		am.scale = Vector3(ln, 1.0, float(ps.w1) * 2.0 / float(HAND3.arm_w0))
+		#  길이만 민다. 굵기는 표가 정한 그대로다 — 블록 팔은 안 좁아진다.
+		am.scale = Vector3(ln, 1.0, 1.0)
 		am.visible = true
 		var ash: Node3D = rg.armsh
 		ash.position = apos + Vector3(1.4, -apos.y - 0.6, 2.4)
 		ash.rotation = arot
-		ash.scale = Vector3(ln, 0.05, am.scale.z)
+		ash.scale = Vector3(ln, 0.05, 1.0)
 		ash.visible = true
 	for i in range(hand3_pose.size(), hand3_rig.size()):
 		var rg2: Dictionary = hand3_rig[i]
@@ -8027,12 +8045,13 @@ const DROP := {
 	#  다트에 가운데 원이 있어 동전-다트 최소 중심거리가 방위와 무관하게 28 이다.
 	#  이 28 이 가격판 겹침 불가 정리의 전제다 (아래 _bill_draw 주석).
 	"r_item": 19.0, "r_mod": 21.0, "r_dart": 9.0, "d_dart": 16.0,
-	#  사진은 폴라로이드다 — 동전보다 조금 작은 네모라 반지름도 그만큼 작다.
-	"r_fix": 16.0,
+	#  사진은 폴라로이드다. **그림을 따라간다** — 그림만 키우고 반지름을
+	#  두면 물건이 서로 파고들어 겹쳐 눕는다.
+	"r_fix": 19.0,
 
 	# ── 화면 반폭 (좌우 벽 전용 — 충돌 반지름과 다르다) ──
 	#  벽은 "그려지는 것" 을 가두고 충돌은 "형상" 이라 두 일에 각각 맞는 값이다.
-	"hw_item": 19.0, "hw_mod": 22.0, "hw_dart": 37.5, "hw_fix": 17.0,
+	"hw_item": 19.0, "hw_mod": 22.0, "hw_dart": 32.0, "hw_fix": 20.0,
 
 	# ── 연출 (전부 그리기 전용. 물리에 한 방울도 안 흘린다) ──
 	"lift_hov": 6.0, "lift_k": 260.0, "lift_c": 22.0,
@@ -8554,7 +8573,7 @@ func _obj_box(i: int) -> Rect2:
 			var ed := Vector2(absf(dn.x) * dl + 5.0, absf(dn.y) * dl + 5.0)
 			return Rect2(c - ed, ed * 2.0)
 		"boost":
-			var br: float = maxf(FIX_W, FIX_H) * 1.18 + 3.0
+			var br: float = maxf(FIX_W, FIX_H) * 1.06 + 3.0
 			var eb := Vector2(br, br * TBL.flat + 3.0)
 			return Rect2(c - eb, eb * 2.0)
 		"fix":
@@ -8705,7 +8724,7 @@ func _obj_shadow(i: int) -> void:
 			draw_colored_polygon(fq, col)
 		"boost":
 			# 상자도 네모다. 사진보다 한 뼘 크다.
-			draw_colored_polygon(_fix_quad(g, it.psi, k * 1.18), col)
+			draw_colored_polygon(_fix_quad(g, it.psi, k * 1.06), col)
 		_:
 			draw_colored_polygon(_e_pts(g, it.r * k, it.r * k * TBL.flat, 14), col)
 
@@ -8747,7 +8766,9 @@ func _obj_paint(it: Dictionary, s: Dictionary, dim: float) -> void:
 			var ctex := _candy_tex_live(String(s.d.id), float(it.get("roll", 0.0)),
 					float(it.get("wob", 0.0)), not still)
 			if ctex != null:
-				var ch := 30.0
+				#  사탕은 서 있는 물건이라 세로로 길다 — 그것은 그대로 두되
+				#  크기를 동전에 맞춰 올린다(22x30 → 27x36).
+				var ch := 36.0
 				var cw := ch * float(CANDY_VP.x) / float(CANDY_VP.y)
 				draw_texture_rect(ctex, Rect2(c - Vector2(cw, ch) * 0.5, Vector2(cw, ch)),
 						false, Color(1.0 - dim * 0.3, 1.0 - dim * 0.3, 1.0 - dim * 0.3,
@@ -8783,8 +8804,9 @@ func _obj_paint(it: Dictionary, s: Dictionary, dim: float) -> void:
 # 펠트에 누운 사진의 네 귀퉁이. 그림자와 몸통이 같은 식을 써야 둘이 안 어긋난다.
 # 세로는 TBL.flat 으로 누른다 — 면에 누운 것의 규약이다. psi 로 살짝 돌려
 # 두면 넉 장이 쏟아져도 판박이로 겹쳐 보이지 않는다.
-const FIX_W := 13.0      # 반폭
-const FIX_H := 11.0      # 반높이(누르기 전)
+#  사진이 제일 작았다(26x17). 동전(38x30) 곁에서 딴 물건으로 보였다.
+const FIX_W := 17.0      # 반폭
+const FIX_H := 14.0      # 반높이(누르기 전)
 
 
 # 면에 누운 네모의 네 귀퉁이. 크기를 받는 쪽이다 — _fix_quad 는 사진의
@@ -8839,8 +8861,11 @@ func _torn_quad(c: Vector2, rot: float, ex: float, ey0: float, ey1: float,
 
 
 func _boost_flat(c: Vector2, bd: Dictionary, rot: float, dim: float) -> void:
-	var w := FIX_W * 1.18
-	var h := FIX_H * 1.18
+	#  사진보다 한 뼘 크다. 1.18 이었는데 사진을 키우자(13→17) 팩이 같이
+	#  자라 테이블에서 제일 큰 물건이 됐다 — 배율은 그대로인데 밑값이
+	#  바뀌면 이런 일이 난다.
+	var w := FIX_W * 1.06
+	var h := FIX_H * 1.06
 	var seam := 1.6                     # 두 블럭이 맞물린 자리의 두께
 	draw_colored_polygon(_quad_at(c + Vector2(0.0, 1.2), rot, w, h),
 			Color(0.0, 0.0, 0.0, 0.35))
