@@ -6033,21 +6033,276 @@ func _stk_ti(rarity: String) -> int:
 	return 0
 
 
-#  얼굴을 짓는 잔손 셋. 모두 **중심 기준 상대 좌표**를 받는다 — 같은 얼굴이
-#  누운 자세(타원)와 선 자세(정원)에 같은 수로 앉아야 하기 때문이다.
-func _poly_i(pts: Array, c: Vector2, col: Color) -> void:
+#  얼굴을 짓는 잔손. **정규 좌표**를 받는다 — x·y 가 -1~1 이고 얼굴의
+#  반지름으로 곱해진다. 누운 자세에서는 ry 가 눌려 있으므로 같은 수가
+#  저절로 원근을 탄다. 그림을 두 벌 적지 않는 유일한 길이다.
+func _fp(pts: Array, c: Vector2, rx: float, ry: float, col: Color) -> void:
 	var out := PackedVector2Array()
 	for p in pts:
-		out.append(c + (p as Vector2))
+		var q := p as Vector2
+		out.append(c + Vector2(q.x * rx, q.y * ry))
 	draw_colored_polygon(out, col)
 
 
-func _ell_i(rx: float, ry: float, n: int) -> Array:
-	var out := []
-	for k in n:
-		var a := TAU * float(k) / float(n)
-		out.append(Vector2(cos(a) * rx, sin(a) * ry))
-	return out
+func _fc(x: float, y: float, rad: float, c: Vector2, rx: float, ry: float,
+		col: Color) -> void:
+	var pts := []
+	for k in 14:
+		var a := TAU * float(k) / 14.0
+		pts.append(Vector2(x + cos(a) * rad, y + sin(a) * rad))
+	_fp(pts, c, rx, ry, col)
+
+
+func _fr(x0: float, y0: float, x1: float, y1: float, c: Vector2,
+		rx: float, ry: float, col: Color) -> void:
+	_fp([Vector2(x0, y0), Vector2(x1, y0), Vector2(x1, y1), Vector2(x0, y1)],
+			c, rx, ry, col)
+
+
+func _fl(x0: float, y0: float, x1: float, y1: float, w: float, c: Vector2,
+		rx: float, ry: float, col: Color) -> void:
+	draw_line(c + Vector2(x0 * rx, y0 * ry), c + Vector2(x1 * rx, y1 * ry),
+			col, maxf(w * rx, 1.0))
+
+
+#  얼굴 바탕 한 장. 인쇄면을 **꽉 채운다** — 조커 카드의 그림이 카드를
+#  꽉 채우듯이. 등급은 여전히 테두리·고리·번짐·마감이 쥐므로 바탕을
+#  내줘도 등급이 안 흐려진다.
+func _fbg(c: Vector2, rx: float, ry: float, col: Color) -> void:
+	_fc(0.0, 0.0, 1.0, c, rx, ry, col)
+
+
+#  동전의 얼굴 — 그 동전이 **무엇인가**.
+#
+#  조건 그림(_icon_cond)이 "언제" 를, 값이 "얼마나" 를, 이것이 "무엇" 을
+#  말한다. 값은 이 위에 그려지므로 어두운 받침을 깔고 나온다(draw_item_sticker).
+#
+#  **색은 지어내지 않는다.** 레퍼런스에서 뽑은 값을 쓴다 — 스파르타의
+#  b50e0e/eba64c 는 그 깃발 그대로고, 잭과 콩나무의 f3c424 는 그 책 표지
+#  그대로다. 뽑을 때 배경 흰·검은 걷었다(채도 0.14 아래에 명도 0.88 위나
+#  0.12 아래인 색). 안 걷으면 사진 배경이 1위로 올라와 온 동전이 흰색이 된다.
+#
+#  레퍼런스를 줄여 붙이지는 않는다. 지름 38px 에서 사진은 뭉개지고, 뭉개지지
+#  않아도 "그 영화를 아는가" 만 묻는 그림이 된다. 남는 것은 실루엣과 색이라
+#  그 둘로만 짓는다 — 원시 도형만, 글자는 안 쓴다.
+#
+#  재질(MATS)이 이미 말하는 장은 여기 없다. 유리 대포는 유리인 것으로
+#  충분하고, 그 위에 대포를 또 그리면 한 얼굴이 두 번 말한다.
+func _icon_item(c: Vector2, rx: float, ry: float, id: String) -> void:
+	match id:
+		"c01":
+			#  광대 — 파란 깃에 붉은 모자. 38px 에서 얼굴은 점 둘로
+			#  뭉개지므로 모자가 조커를 말한다.
+			_fbg(c, rx, ry, Color("e8e2d4"))
+			_fp([Vector2(-0.78, 0.34), Vector2(0.0, -0.30), Vector2(0.78, 0.34)],
+					c, rx, ry, Color("bd4a42"))
+			for k in 3:
+				var a1: float = -0.66 + 0.66 * float(k)
+				_fc(a1, -0.36 + absf(a1) * 0.36, 0.19, c, rx, ry, Color("d8b24a"))
+			_fr(-0.70, 0.34, 0.70, 0.62, c, rx, ry, Color("3c7495"))
+		"c02":
+			#  수리검 — 검은 쇠. 가운데 구멍이 있어야 별이 아니라 날붙이다.
+			_fbg(c, rx, ry, Color("c9ccd2"))
+			var pts := []
+			for k in 8:
+				var a2 := TAU * float(k) / 8.0 - PI * 0.5
+				var rr: float = 0.98 if k % 2 == 0 else 0.30
+				pts.append(Vector2(cos(a2) * rr, sin(a2) * rr))
+			_fp(pts, c, rx, ry, Color("333439"))
+			_fc(0.0, 0.0, 0.17, c, rx, ry, Color("c9ccd2"))
+		"c04":
+			#  피자 — 구운 테두리, 치즈, 페퍼로니 셋.
+			_fbg(c, rx, ry, Color("916f53"))
+			var pz := [Vector2.ZERO]
+			for k in 9:
+				var a3 := -PI * 0.80 + PI * 0.60 * float(k) / 8.0
+				pz.append(Vector2(cos(a3), sin(a3)) * 0.94)
+			_fp(pz, c, rx, ry, Color("c4875f"))
+			for k in 3:
+				_fc(-0.26 + 0.26 * float(k), -0.42 - 0.10 * float(k % 2),
+						0.12, c, rx, ry, Color("b64228"))
+		"c05":
+			#  하키 마스크 — 흰 판에 검은 구멍, 눈 위에 붉은 갈매기.
+			_fbg(c, rx, ry, Color("6b615d"))
+			_fc(0.0, 0.0, 0.92, c, rx, ry, Color("e9e7e0"))
+			_fc(-0.28, -0.14, 0.17, c, rx, ry, Color("2a2622"))
+			_fc(0.28, -0.14, 0.17, c, rx, ry, Color("2a2622"))
+			_fr(-0.26, 0.38, 0.26, 0.52, c, rx, ry, Color("2a2622"))
+			for k in 4:
+				_fc(-0.32 + 0.21 * float(k), -0.62, 0.075, c, rx, ry,
+						Color("2a2622"))
+			_fl(-0.44, -0.40, -0.10, -0.30, 0.10, c, rx, ry, Color("c04a5a"))
+			_fl(0.44, -0.40, 0.10, -0.30, 0.10, c, rx, ry, Color("c04a5a"))
+		"c07":
+			#  BiiiG — 크림 바탕에 굵은 글자꼴 셋. 기둥 셋이 이름이다.
+			_fbg(c, rx, ry, Color("fbf3de"))
+			_fr(-0.62, -0.30, -0.22, 0.72, c, rx, ry, Color("2b56b0"))
+			_fr(-0.14, -0.30, 0.20, 0.72, c, rx, ry, Color("c8452c"))
+			_fr(0.28, -0.30, 0.66, 0.72, c, rx, ry, Color("e0a92a"))
+			_fc(-0.42, -0.52, 0.22, c, rx, ry, Color("12130f"))
+			_fc(0.03, -0.52, 0.22, c, rx, ry, Color("12130f"))
+			_fc(0.47, -0.52, 0.22, c, rx, ry, Color("12130f"))
+		"c08":
+			#  천동설 — 가운데 땅에 겹겹의 하늘. 옛 성도의 동심원이다.
+			_fbg(c, rx, ry, Color("e6e1d2"))
+			for k in 4:
+				_ring_i(c, rx * (0.30 + 0.22 * float(k)),
+						ry * (0.30 + 0.22 * float(k)), Color("6b6353"))
+			_fc(0.0, 0.0, 0.16, c, rx, ry, Color("3a3428"))
+		"c09", "c10":
+			#  음양 — 표에서 양은 크림 칸, 음은 먹 칸이다. 어느 쪽이 큰가가
+			#  곧 그 동전이 보는 칸이다.
+			var sg: float = 1.0 if id == "c09" else -1.0
+			var lo := Color("efece2")
+			var hi := Color("241f28")
+			_fbg(c, rx, ry, lo)
+			var hf := []
+			for k in 13:
+				var a4 := -PI * 0.5 + PI * float(k) / 12.0
+				hf.append(Vector2(cos(a4) * sg, sin(a4)))
+			_fp(hf, c, rx, ry, hi)
+			_fc(0.0, -0.50 * sg, 0.50, c, rx, ry, hi)
+			_fc(0.0, 0.50 * sg, 0.50, c, rx, ry, lo)
+			_fc(0.0, -0.50 * sg, 0.17, c, rx, ry, lo)
+			_fc(0.0, 0.50 * sg, 0.17, c, rx, ry, hi)
+		"c12", "c13":
+			#  쌍둥이와 외동 — 같은 밤하늘에 별을 둘 놓느냐 하나 놓느냐.
+			#  표에서 쌍둥이는 음과 같은 칸을, 외동은 양과 같은 칸을 본다.
+			_fbg(c, rx, ry, Color("02205b"))
+			var tw: bool = id == "c12"
+			var xs := [-0.34, 0.34] if tw else [0.0]
+			for x0 in xs:
+				var xx := float(x0)
+				_fc(xx, -0.46, 0.13, c, rx, ry, Color("f2f4ff"))
+				_fc(xx - 0.10, 0.02, 0.09, c, rx, ry, Color("cdd6ee"))
+				_fc(xx + 0.06, 0.50, 0.09, c, rx, ry, Color("cdd6ee"))
+				_fl(xx, -0.46, xx - 0.10, 0.02, 0.05, c, rx, ry, Color("8fa4cc"))
+				_fl(xx - 0.10, 0.02, xx + 0.06, 0.50, 0.05, c, rx, ry,
+						Color("8fa4cc"))
+		"c14":
+			#  스파르타 — 라코니아의 람다. 색은 그 깃발 그대로다.
+			_fbg(c, rx, ry, Color("b50e0e"))
+			#  람다는 **꼭지에서 만나는 두 획**이다. 오른쪽 획을 꼭지 아래에서
+			#  끝냈더니 가로대가 생겨 A 로 읽혔다 — 두 획이 같은 점에서 만나야
+			#  Λ 다. 왼쪽 획만 꼭지 위로 조금 넘긴다(그 글자의 생김새다).
+			_fl(-0.52, 0.74, 0.06, -0.76, 0.22, c, rx, ry, Color("eba64c"))
+			_fl(0.54, 0.74, 0.02, -0.70, 0.22, c, rx, ry, Color("eba64c"))
+		"c29":
+			#  황금 우상 — 이마가 넓고 턱이 좁은 머리에 어깨 받침.
+			_fbg(c, rx, ry, Color("3b3128"))
+			_fp([Vector2(-0.52, -0.30), Vector2(-0.40, 0.24), Vector2(0.0, 0.50),
+					Vector2(0.40, 0.24), Vector2(0.52, -0.30), Vector2(0.0, -0.76)],
+					c, rx, ry, Color("d9b36e"))
+			_fr(-0.78, 0.50, 0.78, 0.80, c, rx, ry, Color("a67428"))
+			_fc(-0.21, -0.16, 0.10, c, rx, ry, Color("5b4520"))
+			_fc(0.21, -0.16, 0.10, c, rx, ry, Color("5b4520"))
+		"c33":
+			#  푸른 구슬 — 바다와 구름과 땅. 검은 우주 위에 뜬다.
+			_fbg(c, rx, ry, Color("0a0d18"))
+			_fc(0.0, 0.0, 0.90, c, rx, ry, Color("3d6ea8"))
+			_fc(-0.30, -0.28, 0.28, c, rx, ry, Color("e6ecf4"))
+			_fc(0.26, 0.12, 0.30, c, rx, ry, Color("8a7a52"))
+			_fc(-0.12, 0.54, 0.20, c, rx, ry, Color("e6ecf4"))
+		"c37":
+			#  진열된 수프 — 붉은 위통과 흰 아래통, 가운데 금띠.
+			_fr(-0.52, -0.82, 0.52, 0.82, c, rx, ry, Color("b84347"))
+			_fr(-0.52, 0.04, 0.52, 0.82, c, rx, ry, Color("e7e3d6"))
+			_fr(-0.52, -0.06, 0.52, 0.06, c, rx, ry, Color("d0a93e"))
+			_fc(0.0, -0.82, 0.52, c, rx, ry, Color("9aa0a6"))
+		"c46":
+			#  프리즘 — 검은 바탕, 들어가는 흰 줄, 갈라져 나오는 무지개.
+			_fbg(c, rx, ry, Color("0b0b0e"))
+			_fp([Vector2(0.0, -0.76), Vector2(-0.70, 0.56), Vector2(0.70, 0.56)],
+					c, rx, ry, Color("1b1b22"))
+			_fl(-1.0, -0.08, -0.22, 0.12, 0.06, c, rx, ry, Color("f2f2ef"))
+			var spec := [Color("ef4b4b"), Color("e7b13a"), Color("5ec26a"),
+					Color("4a86d8"), Color("9a5bd0")]
+			for k in 5:
+				_fl(0.22, 0.14, 1.0, -0.06 + 0.24 * float(k), 0.05,
+						c, rx, ry, spec[k])
+		"c49":
+			#  큰 파도 — 크림 하늘에 남색 마루, 흰 발톱.
+			_fbg(c, rx, ry, Color("f0e4c8"))
+			var wv := []
+			for k in 13:
+				var a5 := PI * 0.06 + PI * 1.02 * float(k) / 12.0
+				wv.append(Vector2(cos(a5), sin(a5) * 0.78) * 0.98)
+			for k in range(12, -1, -1):
+				var a6 := PI * 0.06 + PI * 1.02 * float(k) / 12.0
+				wv.append(Vector2(cos(a6), sin(a6) * 0.78) * 0.44)
+			_fp(wv, c, rx, ry, Color("304e6a"))
+			for k in 4:
+				_fc(-0.86 + 0.20 * float(k), -0.16 - 0.16 * float(k), 0.13,
+						c, rx, ry, Color("f3f1e8"))
+		"u19":
+			#  데스 이터스 — 해골에서 뱀이 흘러나온다. 눈 둘이 먼저 읽힌다.
+			_fbg(c, rx, ry, Color("e8e8e6"))
+			_fc(0.0, -0.36, 0.50, c, rx, ry, Color("15151a"))
+			_fr(-0.28, -0.04, 0.28, 0.24, c, rx, ry, Color("15151a"))
+			_fc(-0.19, -0.42, 0.14, c, rx, ry, Color("e8e8e6"))
+			_fc(0.19, -0.42, 0.14, c, rx, ry, Color("e8e8e6"))
+			for k in 3:
+				_fc(-0.36 + 0.36 * float(k), 0.48 + 0.16 * float(k % 2), 0.16,
+						c, rx, ry, Color("15151a"))
+		"u21":
+			#  스포트라이트 — 어둠에서 좁은 꼭지로 퍼지는 빛과 바닥 웅덩이.
+			_fbg(c, rx, ry, Color("14171a"))
+			_fp([Vector2(-0.17, -0.88), Vector2(0.17, -0.88), Vector2(0.82, 0.48),
+					Vector2(-0.82, 0.48)], c, rx, ry, Color("8896a0"))
+			_fc(0.0, 0.48, 0.82, c, rx, ry, Color("cfd8dd"))
+		"u25":
+			#  퍼스트블러드 — 흰 바탕에 붉은 한 방울. 판마다 한 번이다.
+			_fbg(c, rx, ry, Color("f2f2f2"))
+			_fc(0.0, 0.26, 0.52, c, rx, ry, Color("e41f28"))
+			_fp([Vector2(-0.34, 0.30), Vector2(0.0, -0.78), Vector2(0.34, 0.30)],
+					c, rx, ry, Color("e41f28"))
+			_fc(-0.16, 0.12, 0.13, c, rx, ry, Color("f27a80"))
+		"u26":
+			#  SAFETY LAST! — 흑백 필름. 시계판에 매달린 사람.
+			_fbg(c, rx, ry, Color("d6d6d6"))
+			draw_arc(c, rx * 0.82, 0.0, TAU, 20, Color("313131"),
+					maxf(rx * 0.13, 1.0))
+			_fl(0.0, 0.0, 0.02, -0.58, 0.10, c, rx, ry, Color("313131"))
+			_fl(0.0, 0.0, 0.54, 0.16, 0.10, c, rx, ry, Color("313131"))
+			_fc(0.56, 0.38, 0.16, c, rx, ry, Color("1a1a1a"))
+		"u28":
+			#  피보나치 — 사분호 넷이 커지며 이어진다. 나선 자체가 뜻이다.
+			_fbg(c, rx, ry, Color("f4f2ea"))
+			var q := [0.24, 0.38, 0.60, 0.94]
+			for k in 4:
+				var a7 := PI * 0.5 * float(k)
+				draw_arc(c + Vector2(-rx * 0.20, ry * 0.20), rx * float(q[k]),
+						a7, a7 + PI * 0.5, 10, Color("2b2b2b"),
+						maxf(rx * 0.11, 1.0))
+		"r01":
+			#  태양계 — 가운데 별과 궤도 셋. 검은 하늘에 색이 돈다.
+			_fbg(c, rx, ry, Color("0d0a0a"))
+			var orb := [Color("6f5bd0"), Color("3f9f8f"), Color("c9873a")]
+			for k in 3:
+				var rr2: float = 0.40 + 0.26 * float(k)
+				_ring_i(c, rx * rr2, ry * rr2 * 0.62, orb[k])
+			_fc(0.0, 0.0, 0.20, c, rx, ry, Color("f0d27a"))
+			_fc(0.66, -0.10, 0.11, c, rx, ry, Color("c9873a"))
+		"r04":
+			#  카우보이 모자 — 챙이 넓고 크라운이 눌렸다. 검은 펠트다.
+			_fbg(c, rx, ry, Color("dedad2"))
+			_fp([Vector2(-0.42, 0.08), Vector2(-0.32, -0.54), Vector2(0.0, -0.68),
+					Vector2(0.32, -0.54), Vector2(0.42, 0.08)], c, rx, ry,
+					Color("111415"))
+			_fc(0.0, 0.16, 0.96, c, rx, ry, Color("111415"))
+			_fc(0.0, 0.16, 0.70, c, rx, ry, Color("1e2224"))
+		"l04":
+			#  잭과 콩나무 — 노란 표지에 검은 덩굴. 그 책 그대로다.
+			_fbg(c, rx, ry, Color("f3c424"))
+			for k in 7:
+				var yy: float = -0.90 + 0.28 * float(k)
+				_fr(-0.10 + sin(float(k) * 1.1) * 0.17, yy,
+						0.10 + sin(float(k) * 1.1) * 0.17, yy + 0.30,
+						c, rx, ry, Color("090403"))
+			for k in 3:
+				var sgn: float = 1.0 if k % 2 == 0 else -1.0
+				_fc(sgn * 0.42, -0.54 + 0.44 * float(k), 0.21, c, rx, ry,
+						Color("090403"))
 
 
 #  속이 빈 타원 한 겹. 온 고리를 한 폴리곤으로 넘기면 비볼록이라 삼각분할이
@@ -6059,179 +6314,6 @@ func _ring_i(c: Vector2, rx: float, ry: float, col: Color) -> void:
 		var p := c + Vector2(cos(a) * rx, sin(a) * ry)
 		draw_line(prev, p, col, 1.0)
 		prev = p
-
-
-#  동전의 얼굴 — 그 동전이 **무엇인가**를 새긴다.
-#
-#  조건 그림(_icon_cond)이 "언제" 를, 값이 "얼마나" 를 말하고, 이것이
-#  "무엇" 을 말한다. 셋이 같은 얼굴을 나눠 쓰므로 이것은 **바탕**이다 —
-#  인쇄면을 덮되 잉크보다 연해서, 조건과 값이 그 위에 그대로 읽혀야 한다.
-#  그래서 색을 밖에서 받는다(몸 색에서 낸 워터마크 톤과 구멍용 몸 색).
-#
-#  레퍼런스를 줄여 붙이지 않는다. 지름 38px 에서 사진은 뭉개지고, 뭉개지지
-#  않아도 "그 영화를 아는가" 만 묻는 그림이 된다. 남는 것은 **실루엣**뿐이라
-#  처음부터 실루엣으로 짓는다 — 원시 도형만 쓰고 글자는 안 쓴다(_icon_cond
-#  와 같은 규약).
-#
-#  재질(MATS)이 이미 말하는 장은 여기 없다. 유리 대포는 유리인 것으로
-#  충분하고, 그 위에 대포를 또 그리면 한 얼굴이 두 번 말한다.
-func _icon_item(c: Vector2, r: float, id: String, col: Color, bg: Color) -> void:
-	var u := r
-	match id:
-		"c01":
-			#  광대 모자 — 세 뿔과 방울. 조커를 조커로 만드는 것은 얼굴이
-			#  아니라 모자다(38px 에서 사람 얼굴은 점 두 개로 뭉개진다).
-			_poly_i([Vector2(-u * 0.72, u * 0.28), Vector2(0.0, -u * 0.30),
-					Vector2(u * 0.72, u * 0.28)], c, col)
-			for k in 3:
-				var a1: float = -u * 0.62 + u * 0.62 * float(k)
-				draw_circle(c + Vector2(a1, -u * 0.34 + absf(a1) * 0.34),
-						u * 0.17, col)
-			draw_rect(Rect2(c.x - u * 0.62, c.y + u * 0.28, u * 1.24, u * 0.20), col)
-		"c02":
-			#  수리검 — 네 날. 가운데 구멍이 있어야 별이 아니라 날붙이다.
-			var pts := []
-			for k in 8:
-				var a2 := TAU * float(k) / 8.0 - PI * 0.5
-				var rr: float = u * (0.96 if k % 2 == 0 else 0.30)
-				pts.append(Vector2(cos(a2), sin(a2)) * rr)
-			_poly_i(pts, c, col)
-			draw_circle(c, u * 0.17, bg)
-		"c04":
-			#  피자 한 조각 — 꼭지가 가운데, 호가 바깥. 동전이 원이라
-			#  조각이 원의 부채꼴로 그대로 앉는다.
-			var pz := [Vector2.ZERO]
-			for k in 9:
-				var a3 := -PI * 0.78 + PI * 0.56 * float(k) / 8.0
-				pz.append(Vector2(cos(a3), sin(a3)) * u * 0.92)
-			_poly_i(pz, c, col)
-			for k in 3:
-				draw_circle(c + Vector2(-u * 0.24 + u * 0.24 * float(k),
-						-u * 0.40 - u * 0.10 * float(k % 2)), u * 0.11, bg)
-		"c05":
-			#  하키 마스크 — 달걀에 눈 둘과 입술 틈. 숨구멍 점이 마스크를
-			#  마스크로 만든다.
-			_poly_i(_ell_i(u * 0.68, u * 0.92, 16), c, col)
-			draw_circle(c + Vector2(-u * 0.26, -u * 0.18), u * 0.16, bg)
-			draw_circle(c + Vector2(u * 0.26, -u * 0.18), u * 0.16, bg)
-			draw_rect(Rect2(c.x - u * 0.24, c.y + u * 0.34, u * 0.48, u * 0.12), bg)
-			for k in 4:
-				draw_circle(c + Vector2(-u * 0.30 + u * 0.20 * float(k),
-						-u * 0.62), u * 0.07, bg)
-		"c09", "c10":
-			#  음양 — 같은 그림을 뒤집어 쓴다. 표에서 양은 크림 칸, 음은
-			#  먹 칸이라 어느 쪽이 큰가가 곧 그 동전이 보는 칸이다.
-			var sg: float = 1.0 if id == "c09" else -1.0
-			draw_circle(c, u * 0.92, col)
-			var hf := []
-			for k in 13:
-				var a4 := -PI * 0.5 + PI * float(k) / 12.0
-				hf.append(Vector2(cos(a4) * sg, sin(a4)) * u * 0.92)
-			_poly_i(hf, c, bg)
-			draw_circle(c + Vector2(0.0, -u * 0.46), u * 0.46, bg)
-			draw_circle(c + Vector2(0.0, u * 0.46), u * 0.46, col)
-			draw_circle(c + Vector2(0.0, -u * 0.46), u * 0.15, col)
-			draw_circle(c + Vector2(0.0, u * 0.46), u * 0.15, bg)
-		"c14":
-			#  라코니아의 람다. 스파르타 방패의 그 글자 하나다.
-			var w2: float = maxf(u * 0.22, 1.5)
-			draw_line(c + Vector2(-u * 0.62, u * 0.80),
-					c + Vector2(0.0, -u * 0.80), col, w2)
-			draw_line(c + Vector2(u * 0.62, u * 0.80),
-					c + Vector2(u * 0.10, -u * 0.34), col, w2)
-		"c29":
-			#  황금 우상 — 이마가 넓고 턱이 좁은 머리에 어깨 받침.
-			_poly_i([Vector2(-u * 0.50, -u * 0.34), Vector2(-u * 0.38, u * 0.22),
-					Vector2(0.0, u * 0.46), Vector2(u * 0.38, u * 0.22),
-					Vector2(u * 0.50, -u * 0.34), Vector2(0.0, -u * 0.72)], c, col)
-			draw_rect(Rect2(c.x - u * 0.74, c.y + u * 0.46, u * 1.48, u * 0.26), col)
-			draw_circle(c + Vector2(-u * 0.20, -u * 0.18), u * 0.09, bg)
-			draw_circle(c + Vector2(u * 0.20, -u * 0.18), u * 0.09, bg)
-		"c33":
-			#  푸른 구슬 — 구름 낀 행성. 대륙 셋이면 지구로 읽힌다.
-			draw_circle(c, u * 0.88, col)
-			draw_circle(c + Vector2(-u * 0.30, -u * 0.26), u * 0.26, bg)
-			draw_circle(c + Vector2(u * 0.24, u * 0.10), u * 0.30, bg)
-			draw_circle(c + Vector2(-u * 0.10, u * 0.52), u * 0.18, bg)
-		"c37":
-			#  진열된 수프 — 통조림. 가운데 띠가 라벨이다.
-			draw_rect(Rect2(c.x - u * 0.46, c.y - u * 0.76, u * 0.92, u * 1.52), col)
-			draw_rect(Rect2(c.x - u * 0.46, c.y - u * 0.16, u * 0.92, u * 0.42), bg)
-			_poly_i(_ell_i(u * 0.46, u * 0.16, 12), c + Vector2(0.0, -u * 0.76), col)
-		"c46":
-			#  프리즘 — 삼각형에 줄 하나가 들어가 셋으로 갈린다.
-			_poly_i([Vector2(0.0, -u * 0.78), Vector2(-u * 0.72, u * 0.58),
-					Vector2(u * 0.72, u * 0.58)], c, col)
-			draw_line(c + Vector2(-u * 0.96, -u * 0.10),
-					c + Vector2(-u * 0.24, u * 0.10), bg, 1.0)
-			for k in 3:
-				draw_line(c + Vector2(u * 0.24, u * 0.12),
-						c + Vector2(u * 0.98, u * 0.02 + u * 0.22 * float(k)),
-						bg, 1.0)
-		"c49":
-			#  큰 파도 — 마루가 왼쪽으로 말리고 발톱 셋이 선다.
-			var wv := []
-			for k in 13:
-				var a5 := PI * 0.10 + PI * 1.05 * float(k) / 12.0
-				wv.append(Vector2(cos(a5), sin(a5) * 0.72) * u * 0.92)
-			for k in range(12, -1, -1):
-				var a6 := PI * 0.10 + PI * 1.05 * float(k) / 12.0
-				wv.append(Vector2(cos(a6), sin(a6) * 0.72) * u * 0.52)
-			_poly_i(wv, c + Vector2(0.0, u * 0.18), col)
-			for k in 3:
-				draw_circle(c + Vector2(-u * 0.72 + u * 0.16 * float(k),
-						-u * 0.30 - u * 0.12 * float(k)), u * 0.12, col)
-		"u19":
-			#  데스 이터스 — 해골에서 뱀이 흘러나온다. 눈 둘이 먼저 읽힌다.
-			draw_circle(c + Vector2(0.0, -u * 0.34), u * 0.48, col)
-			draw_rect(Rect2(c.x - u * 0.26, c.y - u * 0.02, u * 0.52, u * 0.26), col)
-			draw_circle(c + Vector2(-u * 0.18, -u * 0.40), u * 0.13, bg)
-			draw_circle(c + Vector2(u * 0.18, -u * 0.40), u * 0.13, bg)
-			for k in 3:
-				draw_circle(c + Vector2(-u * 0.34 + u * 0.34 * float(k),
-						u * 0.46 + u * 0.16 * float(k % 2)), u * 0.15, col)
-		"u21":
-			#  스포트라이트 — 좁은 꼭지에서 퍼지는 빛과 바닥 웅덩이.
-			_poly_i([Vector2(-u * 0.16, -u * 0.86), Vector2(u * 0.16, -u * 0.86),
-					Vector2(u * 0.80, u * 0.46), Vector2(-u * 0.80, u * 0.46)],
-					c, col)
-			_poly_i(_ell_i(u * 0.80, u * 0.22, 14), c + Vector2(0.0, u * 0.46), col)
-		"u26":
-			#  SAFETY LAST! — 시계판에 매달린 사람. 바늘 둘이 시계를 만든다.
-			draw_arc(c, u * 0.82, 0.0, TAU, 20, col, maxf(u * 0.12, 1.0))
-			draw_line(c, c + Vector2(u * 0.02, -u * 0.58), col, maxf(u * 0.10, 1.0))
-			draw_line(c, c + Vector2(u * 0.52, u * 0.16), col, maxf(u * 0.10, 1.0))
-			draw_circle(c + Vector2(u * 0.52, u * 0.34), u * 0.15, col)
-		"u28":
-			#  피보나치 — 사분호 넷이 커지며 이어진다. 나선 자체가 뜻이다.
-			var q := [0.22, 0.36, 0.58, 0.92]
-			for k in 4:
-				var a7 := PI * 0.5 * float(k)
-				draw_arc(c + Vector2(-u * 0.20, u * 0.20), u * float(q[k]),
-						a7, a7 + PI * 0.5, 10, col, maxf(u * 0.11, 1.0))
-		"r01":
-			#  태양계 — 가운데 별과 궤도 셋. 궤도는 눕는다(면이 기울어 있다).
-			draw_circle(c, u * 0.22, col)
-			for k in 3:
-				var rr2: float = u * (0.42 + 0.24 * float(k))
-				_ring_i(c, rr2, rr2 * 0.52, col)
-			draw_circle(c + Vector2(u * 0.64, -u * 0.12), u * 0.11, col)
-		"r04":
-			#  카우보이 모자 — 챙이 넓고 크라운이 눌렸다.
-			_poly_i([Vector2(-u * 0.40, u * 0.10), Vector2(-u * 0.30, -u * 0.52),
-					Vector2(0.0, -u * 0.66), Vector2(u * 0.30, -u * 0.52),
-					Vector2(u * 0.40, u * 0.10)], c, col)
-			_poly_i(_ell_i(u * 0.94, u * 0.26, 16), c + Vector2(0.0, u * 0.14), col)
-		"l04":
-			#  잭과 콩나무 — 줄기 하나에 잎 셋. 위로 뻗는 것이 전부다.
-			for k in 7:
-				var yy: float = -u * 0.86 + u * 0.28 * float(k)
-				draw_rect(Rect2(c.x - u * 0.09 + sin(float(k) * 1.1) * u * 0.16,
-						c.y + yy, u * 0.18, u * 0.30), col)
-			for k in 3:
-				var sgn: float = 1.0 if k % 2 == 0 else -1.0
-				draw_circle(c + Vector2(sgn * u * 0.40,
-						-u * 0.52 + u * 0.42 * float(k)), u * 0.20, col)
 
 
 # 조건 그림 — 동전이 "언제" 터지는가를 얼굴에 새긴다.
@@ -6431,11 +6513,11 @@ func draw_item_sticker(c: Vector2, r: float, it: Dictionary, rot: float, lift: f
 	#  이름이 같이 서므로 비워 두는 편이 낫다.
 	#  얼굴은 **바탕**이다. 몸 색에서 한 단만 옮겨 낸 워터마크라, 그 위에
 	#  조건과 값이 그대로 읽힌다. 어두운 몸은 밝혀서 낸다(옆면과 같은 규칙).
-	var bd := Color(STK_TIERS[ti].body)
 	if _mat_of(it) != "hollow":
-		_icon_item(c, r * 0.80, String(it.get("id", "")),
-				(bd.lightened(0.34) if bd.v < 0.32
-				else bd.darkened(0.30)).darkened(dim), bd.darkened(dim))
+		#  인쇄면 반지름. draw_sticker 의 rw 와 **같은 식이어야** 얼굴이
+		#  테두리 밑으로 기어들지 않는다 — 거기 지역 변수라 여기서 다시 잰다.
+		var fr: float = r - clampf(r * 0.16, 1.0, 2.2) - 1.0
+		_icon_item(c, fr, fr, String(it.get("id", "")))
 	var ink: Color = C_CHIP.lightened(0.5) if it.k == "chip" else C_MULT.lightened(0.45)
 	var meth := String(it.get("aim", ""))
 	if String(it.k) == "" and String(it.c) == "":
@@ -6450,7 +6532,10 @@ func draw_item_sticker(c: Vector2, r: float, it: Dictionary, rot: float, lift: f
 		return
 	# 얼굴을 위아래로 가른다 — 위는 조건(언제 터지는가), 아래는 값(얼마나).
 	# 값만 있으면 조건이 정반대인 짝이 똑같이 보인다.
-	_icon_cond(c + Vector2(0.0, -r * 0.33), r * 0.42, String(it.c), ink.darkened(dim + 0.08))
+	_icon_cond(c + Vector2(1.0, -r * 0.33 + 1.0), r * 0.42, String(it.c),
+			Color(0.0, 0.0, 0.0, 0.45 * (1.0 - dim)))
+	_icon_cond(c + Vector2(0.0, -r * 0.33), r * 0.42, String(it.c),
+			ink.darkened(dim + 0.08))
 	#  **값은 kind 가 있을 때만 있다.** 조건만 있고 kind 가 없는 여덟 장
 	#  (황금우상·윅 존·알 낳는 거위·1-UP·WHITE ALBUM·잭과 콩나무·NULL·
 	#  녹는 시계)은 점수로 말하지 않는다 — 골드를 주거나, 다트를 바꾸거나,
@@ -6461,6 +6546,11 @@ func draw_item_sticker(c: Vector2, r: float, it: Dictionary, rot: float, lift: f
 	var vs: int = maxi(7, int(float(num_sz) * 0.84))
 	var vy := r * 0.34 + float(vs) * 0.34
 	if String(it.k) != "" and vy + 2.0 < y:
+		#  얼굴이 색을 갖게 된 뒤로 값이 그림 위에 선다. 받침 한 겹이
+		#  없으면 밝은 얼굴(잭과 콩나무의 노랑) 위에서 분홍 숫자가 사라진다.
+		draw_string(font, c + Vector2(-r + 1.0, vy + 1.0), val,
+				HORIZONTAL_ALIGNMENT_CENTER, r * 2.0, vs,
+				Color(0.0, 0.0, 0.0, 0.55 * (1.0 - dim)))
 		draw_string(font, c + Vector2(-r, vy), val,
 				HORIZONTAL_ALIGNMENT_CENTER, r * 2.0, vs, ink.darkened(dim))
 	# 말린 끝은 인쇄를 덮는다. 그래서 맨 마지막이다 — 순서가 곧 물리다.
@@ -10903,15 +10993,16 @@ func _sticker_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: floa
 	#  되는데, 그러면 원형 얼굴이 타원이 되어 두 자세가 딴 그림이 된다.
 	#  **안 누른다** — 면에 새겨진 그림이 아니라 위에서 본 도장으로 둔다.
 	if not hollow:
-		_icon_item(c, rx * 0.74, String(it.get("id", "")),
-				(bb.lightened(0.34) if bb.v < 0.32
-				else bb.darkened(0.30)).darkened(dim), bb.darkened(dim))
+		_icon_item(c, rx - 1.5, ry - 1.5 * TBL.flat, String(it.get("id", "")))
 	#  선 자세와 같은 규칙이다(draw_item_sticker 의 값 주석). 두 자세가
 	#  갈리면 테이블에서는 0 이 있고 동전 슬롯에서는 없는 동전이 된다.
 	if String(it.k) != "":
 		var val := ("×" + str(it.v)) if it.k == "xmult" else str(it.v)
 		var ink: Color = (C_CHIP.lightened(0.5) if it.k == "chip"
 				else C_MULT.lightened(0.45))
+		draw_string(font, c + Vector2(-rx + 1.0, 5.0), val,
+				HORIZONTAL_ALIGNMENT_CENTER, rx * 2.0, 11,
+				Color(0.0, 0.0, 0.0, 0.55 * (1.0 - dim)))
 		draw_string(font, c + Vector2(-rx, 4.0), val,
 				HORIZONTAL_ALIGNMENT_CENTER, rx * 2.0, 11, ink.darkened(dim))
 
