@@ -2674,11 +2674,15 @@ func _process(d: float) -> void:
 	_view_fit()      # 창이 바뀌면 여백을 다시 잰다. 그대로면 아무것도 안 한다
 	#  손은 상인이 서는 화면에서만 산다. 통(_cup3_)과 같은 규약이다 —
 	#  안 보이는 뷰포트가 런 내내 뒤에서 돌면 눈으로는 영영 못 잡는다.
+	_idle_tick(d)
 	if _npc_on():
 		_hand3_open()
 		_hand3_sync()
-	elif _hand3_live():
+		_body3_open()
+		_body3_sync()
+	elif _hand3_live() or _body3_live():
 		_hand3_close()
+		_body3_close()
 
 	_fill_audio()
 	_mus_update(d)
@@ -7280,6 +7284,12 @@ func _npc_on() -> bool:
 
 
 func _npc_body() -> void:
+	#  3D 몸통이 서면 2D 는 통째로 물러난다. 둘을 겹치면 실루엣이 두 겹이
+	#  되고, 조끼(9)와 벽(41)의 32 차이 안에서 그 어긋남이 다 보인다.
+	#  아래는 화면 없는 판(헤드리스 프로브)에서만 도는 길이다.
+	if _body3_live():
+		_body3_draw()
+		return
 	var br: float = sin(npc_clock * 1.5) * float(NPC.breathe)
 	var cx: float = NPC.cx
 	# 141 에서 내렸다. 손 윗면(133)보다 밝은 것이 화면에 있으면 안 된다 —
@@ -7344,47 +7354,66 @@ func _npc_arms() -> void:
 	var br: float = sin(npc_clock * 1.5) * float(NPC.breathe)
 	var cx: float = NPC.cx
 	var a := _sweep_amt()
+	#  몸짓이 손을 미는 양. 면 좌표(du, dw)와 높이 dh 다 — 팔꿈치는 손의
+	#  0.35 만 따라간다. 1.0 으로 두면 팔이 통째로 평행이동해서 관절이
+	#  없는 것으로 읽히고, 0 으로 두면 팔이 고무처럼 늘어난다.
+	var g0 := _idle_hand(0)
+	var g1 := _idle_hand(1)
 	# 쉬는 팔. 숨은 팔꿈치를 손목보다 크게 흔든다 — 뿌리가 동전 슬롯 뒤라
 	# 팔꿈치 쪽 진폭은 안 보이고 팔 전체의 기울기로만 나온다.
 	# 몸이 기울면 뿌리도 그만큼 밀린다.
-	_npc_limb(Vector2(cx + NPC.el_l.x + _npc_sway(NPC.el_l.y),
-			NPC.el_l.y + br * 0.5),
-			Vector2(cx + NPC.wr_l.x + _npc_sway(NPC.wr_l.y),
-			NPC.wr_l.y + br * 0.2),
-			deg_to_rad(NPC.ang_l), NPC.sc_l)
+	_npc_limb(Vector2(cx + NPC.el_l.x + _npc_sway(NPC.el_l.y) + g0.x * 0.35,
+			NPC.el_l.y + br * 0.5 + g0.y * 0.35),
+			Vector2(cx + NPC.wr_l.x + _npc_sway(NPC.wr_l.y) + g0.x,
+			NPC.wr_l.y + br * 0.2 + g0.y),
+			deg_to_rad(NPC.ang_l), NPC.sc_l, false, -1.0,
+			Vector2(float(HAND3.h_wr) + g0.z,
+			float(HAND3.h_el) + g0.z * 0.5))
 	# 쓸는 팔 — 어깨부터 **쭉 편 채** 휩쓴다. 몸이 +5° 기울며 뻗고,
 	# −5° 로 넘어가는 동안 팔이 부채꼴로 판을 쓴다. 팔꿈치는 어깨-손목
 	# 직선 위라 안 굽고, 손으로 갈수록 굵어지다 손이 1.55배가 된다 —
 	# 관객 쪽으로 내려온 것은 크게 보이는 것이 원근이다.
-	var el := Vector2(cx + NPC.el_r.x + _npc_sway(NPC.el_r.y),
-			NPC.el_r.y + br * 0.5)
-	var wr := Vector2(cx + NPC.wr_r.x + _npc_sway(NPC.wr_r.y),
-			NPC.wr_r.y + br * 0.2)
+	var el := Vector2(cx + NPC.el_r.x + _npc_sway(NPC.el_r.y) + g1.x * 0.35,
+			NPC.el_r.y + br * 0.5 + g1.y * 0.35)
+	var wr := Vector2(cx + NPC.wr_r.x + _npc_sway(NPC.wr_r.y) + g1.x,
+			NPC.wr_r.y + br * 0.2 + g1.y)
 	var ang: float = deg_to_rad(NPC.ang_r)
 	var sh := Vector2(cx + NPC.sh_r.x + _npc_sway(NPC.sh_r.y), NPC.sh_r.y)
+	var hw: float = float(HAND3.h_wr) + g1.z
+	var he: float = float(HAND3.h_el) + g1.z * 0.5
 	if a > 0.004:
 		var wt := Vector2(_sweep_line(SWEEP.w_wr), SWEEP.w_wr)
 		wr = wr.lerp(wt, a)
 		el = el.lerp(sh + (wr - sh) * 0.55, a)
 		# 손도 팔의 연장이다 — 쭉 편 팔은 손까지 한 방향이다.
 		ang = lerp_angle(ang, (wr - sh).angle(), a)
+		#  훑는 동안은 팔꿈치도 판으로 내려온다 — 쓸기는 판을 미는 짓이라
+		#  팔이 떠 있으면 미는 선과 그려지는 팔이 높이에서 갈린다.
+		he = lerpf(he, float(HAND3.h_wr) + 3.0, a)
 	var hs := lerpf(1.0, SWEEP.hand_up, a)
 	# 위팔은 **쓸 때만** 그린다. 쉬는 자세에서는 어깨와 팔꿈치가 거의
 	# 같은 높이라 토막이 몸통 옆구리에 붙어 팔–몸통 골을 4px 로 좁힌다
 	# (프로브가 잡았다). 원래 설계도 "팔은 상자 하나" 였고 위팔은 쓸기가
 	# 어깨까지 뻗을 때 몸에 매다는 줄로만 필요하다.
 	# 어깨 쪽이 가늘어지는 것은 원근이다 — 먼 것이 가늘다.
-	if a > 0.004:
+	hand3_up = {"sh": sh, "el": el, "hh": Vector2(float(HAND3.h_sh), he),
+			"on": a > 0.004}
+	if a > 0.004 and not _hand3_live():
 		_npc_taper(sh, el, lerpf(11.5, 8.0, a), NPC.el_w, NPC.arm_t,
 				C_WOOD.darkened(0.84), C_WOOD.lightened(0.04))
 	# 관절 원판 — 쉬는 자세로 오갈 때 굽는 모서리의 틈을 밑에서 메운다.
-	var jd := PackedVector2Array()
-	for k in 8:
-		var ka := TAU * (float(k) + 0.5) / 8.0
-		jd.append(el + Vector2(cos(ka), sin(ka)) * (NPC.el_w - 1.0))
-	_npc_flat(jd, NPC.arm_t, C_WOOD.darkened(0.84), C_WOOD.lightened(0.04))
+	#  3D 팔이 서면 안 깐다. 그 원판은 h 0 에 눕는데 3D 팔꿈치는 26 에
+	#  떠 있어서, 같이 그리면 팔 밑에 뗀 자국 같은 원판 하나가 남는다.
+	if not _hand3_live():
+		var jd := PackedVector2Array()
+		for k in 8:
+			var ka := TAU * (float(k) + 0.5) / 8.0
+			jd.append(el + Vector2(cos(ka), sin(ka)) * (NPC.el_w - 1.0))
+		_npc_flat(jd, NPC.arm_t, C_WOOD.darkened(0.84),
+				C_WOOD.lightened(0.04))
 	# 이 팔이 상인의 왼팔이다 — 손은 거울상으로 붙는다.
-	_npc_limb(el, wr, ang, hs, true, lerpf(NPC.wr_w, 13.5, a))
+	_npc_limb(el, wr, ang, hs, true, lerpf(NPC.wr_w, 13.5, a),
+			Vector2(hw, he))
 
 
 # 팔 하나 + 손 하나. 면 좌표(u,w) 로 받는다.
@@ -7392,9 +7421,12 @@ func _npc_arms() -> void:
 # 옛 소매 24 는 벽보다 어두워서 팔이 벽에 잠겨 있었다. 손 윗면 133 은
 # 화면에서 가장 밝은 덩어리이고, 그래서 눈이 손부터 본다.
 func _npc_limb(el: Vector2, wr: Vector2, ang: float, sc: float,
-		mir: bool = false, wrr: float = -1.0) -> void:
+		mir: bool = false, wrr: float = -1.0,
+		hh: Vector2 = Vector2(-1.0, -1.0)) -> void:
 	if wrr < 0.0:
 		wrr = NPC.wr_w
+	if hh.x < 0.0:
+		hh = Vector2(float(HAND3.h_wr), float(HAND3.h_el))
 	var ex := Vector2(cos(ang), sin(ang))
 	# 손대칭이 문제였다. 같은 다각형을 두 팔에 평행이동만 해서 붙이면
 	# 상인이 오른손을 두 개 단다 — 마주 본 사람의 두 손은 거울상이다.
@@ -7440,7 +7472,8 @@ func _npc_limb(el: Vector2, wr: Vector2, ang: float, sc: float,
 	#  자세(손목·각·배율)는 여기가 이미 셈했으므로 그것만 넘긴다.
 	#  두 곳이 따로 셈하면 쓸기 도중에 팔과 손이 갈라진다.
 	if _hand3_live():
-		hand3_pose.append({"wr": wr, "ang": ang, "sc": sc, "mir": mir, "el": el})
+		hand3_pose.append({"wr": wr, "ang": ang, "sc": sc, "mir": mir,
+				"el": el, "hw": hh.x, "eh": hh.y})
 		return
 	_npc_flat(hand, NPC.hand_t, C_WOOD.lightened(0.13),
 			C_WOOD.lightened(0.38))
@@ -7535,11 +7568,26 @@ const HAND3 := {
 	#  남을 뿐이라 얻는 것이 없다.
 	"arm_t": 16.0,       # 팔뚝 두께
 	"arm_w0": 30.0,      # 팔뚝 폭 (전체. 반지름이 아니다)
+	#  ── 팔꿈치를 살짝 든다 ────────────────────────
+	#  팔이 통째로 판에 누워 있었다 — 팔꿈치도 손목도 h 가 같은 상자다.
+	#  11 들어 팔을 눕혀 둔다. 손이 판에 닿고 팔꿈치가 그보다 높은 것이
+	#  카운터에 팔을 얹은 사람의 자세다.
+	#  **그림자로는 못 판다.** 팔은 손목(w −2)까지라 통째로 카운터 위,
+	#  곧 펠트가 아니라 벽 앞이다. 거기 그림자를 깔면 바닥에 지는 것이
+	#  아니라 팔 옆에 나란히 선 검은 띠가 된다(굽고 나서 알았다).
+	#  입체는 _aim3 의 굴림이 판다.
+	#  판을 미는 선은 면 좌표(u,w)라 물리는 이 값을 안 탄다.
+	"h_wr": 1.0,         # 손목 높이. 손 두께의 반이 여기에 더 얹힌다
+	"h_el": 12.0,        # 팔꿈치 높이
+	"h_sh": 30.0,        # 어깨 높이 — 팔꿈치(12)보다 위여야 팔이 굽는다
+	"roll": 22.0,        # 팔뚝을 제 축으로 굴리는 각. _aim3 의 주석이 이유다
 }
 
 var hand3_vp: SubViewport = null
 var hand3_rig := []        # [{root: Node3D}] — 왼손·오른손
 var hand3_pose := []       # _npc_limb 이 채운다 [{wr, ang, sc, mir}]
+var hand3_upper: Node3D = null   # 위팔 — 쓸 때만 선다
+var hand3_up := {}         # _npc_arms 가 채운다 {sh, el, hh, on}
 
 
 func _hand3_live() -> bool:
@@ -7576,8 +7624,6 @@ func _arm3_build(col: Color) -> MeshInstance3D:
 	mi.mesh = m
 	mi.material_override = _cup3_mat(col)
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var pivot := MeshInstance3D.new()
-	pivot.mesh = null
 	#  상자를 앞으로 반 칸 밀어 뿌리를 원점에 맞춘다.
 	mi.position = Vector3(0.5, 0.0, 0.0)
 	var root := MeshInstance3D.new()
@@ -7586,18 +7632,20 @@ func _arm3_build(col: Color) -> MeshInstance3D:
 	return root
 
 
-func _hand3_open() -> void:
-	if _hand3_live() or not _has_renderer():
-		return
-	var r: Rect2 = HAND3.rect
-	hand3_vp = SubViewport.new()
-	hand3_vp.size = Vector2i(int(r.size.x), int(r.size.y))
-	hand3_vp.own_world_3d = true
-	hand3_vp.transparent_bg = true
-	hand3_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-	hand3_vp.msaa_3d = Viewport.MSAA_DISABLED
-	hand3_vp.gui_disable_input = true
-	add_child(hand3_vp)
+#  상인 무대 하나 — 뷰포트 · 직교 카메라 · 빛 · 환경.
+#  몸통과 손이 **같은 값**을 써야 음영이 안 갈린다. 두 곳에 따로 적으면
+#  반드시 갈린다 — 빛을 한 번 만지고 한쪽만 고치면 그날로 두 재질이 된다.
+#  카메라는 −52° 직교다. 그 각에서 화면 y = 0.788·w − 0.616·h 가 나오고,
+#  그것이 곧 _p2s 다(근사가 아니라 같은 식이다). 1 월드 단위 = 화면 1px.
+func _stage3_make(r: Rect2) -> SubViewport:
+	var vp := SubViewport.new()
+	vp.size = Vector2i(int(r.size.x), int(r.size.y))
+	vp.own_world_3d = true
+	vp.transparent_bg = true
+	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	vp.msaa_3d = Viewport.MSAA_DISABLED
+	vp.gui_disable_input = true
+	add_child(vp)
 
 	var cam := Camera3D.new()
 	cam.projection = Camera3D.PROJECTION_ORTHOGONAL
@@ -7613,14 +7661,14 @@ func _hand3_open() -> void:
 	#  직교라 거리는 그림에 안 나온다 — 잘림면만 피하면 된다.
 	#  카메라 뒤축(basis.z)은 (0, −sin p, cos p) 다.
 	cam.position = mid + Vector3(0.0, -sin(pit), cos(pit)) * 900.0
-	hand3_vp.add_child(cam)
+	vp.add_child(cam)
 
 	var lt := DirectionalLight3D.new()
 	#  빛은 왼쪽 위에서. 상인 몸통의 그늘(NPC.shade)과 같은 방향이다.
 	lt.rotation_degrees = Vector3(-46.0, -38.0, 0.0)
 	lt.light_energy = 1.15
 	lt.shadow_enabled = false
-	hand3_vp.add_child(lt)
+	vp.add_child(lt)
 
 	var we := WorldEnvironment.new()
 	var env := Environment.new()
@@ -7629,7 +7677,63 @@ func _hand3_open() -> void:
 	env.ambient_light_color = C_WOOD.lightened(0.30)
 	env.ambient_light_energy = 1.0
 	we.environment = env
-	hand3_vp.add_child(we)
+	vp.add_child(we)
+	return vp
+
+
+#  면 좌표로 상자 하나. u·h·w 의 [lo,hi] 를 받는다 — 면 좌표로 적어야
+#  표를 읽고 화면 자리를 _p2s 로 바로 셈할 수 있다.
+func _blk3(uu: Vector2, hh: Vector2, ww: Vector2, col: Color) -> MeshInstance3D:
+	var m := BoxMesh.new()
+	m.size = Vector3(uu.y - uu.x, hh.y - hh.x, ww.y - ww.x)
+	var mi := MeshInstance3D.new()
+	mi.mesh = m
+	mi.material_override = _cup3_mat(col)
+	mi.position = Vector3((uu.x + uu.y) * 0.5, (hh.x + hh.y) * 0.5,
+			(ww.x + ww.y) * 0.5)
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return mi
+
+
+#  그림자가 지는 자리. 높이에 **비례**한다 — 이것이 3D 의 전부다.
+#  높이를 안 타고 상수로 두면(옛 값 (1.4, 2.4)) 무엇이 얼마나 떠 있는지가
+#  화면에서 사라져서, 판에 붙은 손과 든 손이 똑같아 보인다.
+#  방향은 TBL.light (0.447, 0.894) 그대로이고 길이만 0.35·h 다.
+func _sh3_off(h: float) -> Vector3:
+	return Vector3(float(TBL.light.x) * 0.35 * h, 0.0,
+			float(TBL.light.y) * 0.35 * h)
+
+
+#  a 에서 b 로 뻗는 단위 상자 하나의 변환. 길이는 x 축에 실어 보내므로
+#  메시는 x 0..1 짜리 단위 상자여야 한다(_arm3_build). 세로 배율 ty 는
+#  그림자를 납작하게 눕히는 자리다.
+func _aim3(a: Vector3, b: Vector3, ty: float, roll := 0.0) -> Transform3D:
+	var dv := b - a
+	var ln: float = maxf(dv.length(), 1.0)
+	var fx := dv / ln
+	var fz := fx.cross(Vector3.UP)
+	if fz.length_squared() < 0.0001:
+		fz = Vector3.BACK
+	fz = fz.normalized()
+	var fy := fz.cross(fx).normalized()
+	#  제 축을 따라 굴린다. **팔이 종이로 보이던 진짜 이유가 여기 있었다** —
+	#  깊이로만 뻗은 상자는 52° 위에서 윗면 하나밖에 안 내주고, 면이 하나면
+	#  조명이 아무리 세도 단색이다. 22° 굴리면 옆면 하나가 화면 면적의
+	#  3할을 얻고 그 면은 빛을 등져서 어둡다 — 밝은 윗면과 어두운 옆면,
+	#  마크 팔이 입체로 읽히는 이유가 정확히 그 두 면이다.
+	if absf(roll) > 0.0005:
+		var cr := cos(roll)
+		var sr := sin(roll)
+		var ny := fy * cr + fz * sr
+		fz = fz * cr - fy * sr
+		fy = ny
+	return Transform3D(Basis(fx * ln, fy * ty, fz), a)
+
+
+func _hand3_open() -> void:
+	if _hand3_live() or not _has_renderer():
+		return
+	hand3_vp = _stage3_make(HAND3.rect)
 
 	hand3_rig.clear()
 	for i in 2:
@@ -7650,13 +7754,28 @@ func _hand3_open() -> void:
 		#  팔뚝. 손보다 **먼저** 넣어 손이 위에 오게 한다.
 		var am3 := _arm3_build(C_WOOD.lightened(0.04))
 		hand3_vp.add_child(am3)
+		#  팔 그림자는 **펠트를 밟는 토막에만** 깐다. 쉬는 자세에서 팔은
+		#  손목(w −2)까지라 통째로 카운터 위 — 곧 펠트가 아니라 벽 앞이고,
+		#  거기 깐 그림자는 바닥에 지는 것이 아니라 팔 옆에 나란히 선
+		#  검은 띠가 된다(굽고 나서 알았다. 팔을 모으면 그 띠가 팔만 해진다).
+		#  쓸 때는 반대로 팔이 통째로 판 위라 그림자가 있어야 한다.
+		#  자르는 자리는 _hand3_sync 가 잰다.
 		var as3 := _arm3_build(C_WOOD.darkened(0.84))
 		hand3_vp.add_child(as3)
 		hand3_rig.append({"hand": hd3, "shad": sh3, "arm": am3, "armsh": as3})
+	#  위팔 하나. 쓸는 팔에만 붙으므로 한 벌이면 된다.
+	#  **2D 로 두면 팔이 팔꿈치에서 끊긴다** — 납작한 2D 토막과 굴린 3D
+	#  상자가 한 관절에서 만나면 폭도 밝기도 안 맞아서, 팔이 이어진 것이
+	#  아니라 두 동강이 겹쳐 놓인 것으로 읽힌다(2026-09-15 제보).
+	#  어깨 쪽이 가늘어지는 것은 원근이다 — 먼 것이 가늘다.
+	hand3_upper = _arm3_build(C_WOOD.lightened(0.04))
+	hand3_upper.visible = false
+	hand3_vp.add_child(hand3_upper)
 
 
 func _hand3_close() -> void:
 	hand3_rig.clear()
+	hand3_upper = null
 	if _hand3_live():
 		hand3_vp.queue_free()
 	hand3_vp = null
@@ -7673,7 +7792,9 @@ func _hand3_sync() -> void:
 		var sd: Node3D = rg.shad
 		var wr: Vector2 = ps.wr
 		var sc: float = float(ps.sc) * float(HAND3.gain)
-		var at := Vector3(wr.x, float(HAND3.palm_t) * 0.5 + 1.0, wr.y)
+		var hw: float = float(ps.hw)
+		var he: float = float(ps.eh)
+		var at := Vector3(wr.x, hw + float(HAND3.palm_t) * 0.5, wr.y)
 		#  면 위 각을 월드 y 축 회전으로. 면의 +w 가 월드 +z 라 부호가 같다.
 		var rot := Vector3(0.0, -float(ps.ang), 0.0)
 		nd.position = at
@@ -7682,28 +7803,47 @@ func _hand3_sync() -> void:
 		nd.visible = true
 		#  빛은 왼쪽 위에 고정이다(빛 방향 −46°/−38°). 어긋남은 **월드**라
 		#  손이 어느 쪽을 보든 그림자는 늘 오른쪽 아래로 진다.
-		#  어긋남이 크면 그림자가 손에서 떨어져 딴 물건으로 보인다.
-		sd.position = at + Vector3(1.4, -at.y - 0.6, 2.4)
+		#  길이는 **높이에 비례한다**(_sh3_off) — 상수로 두면 든 손과
+		#  놓은 손의 그림자가 똑같아서 높이가 화면에서 사라진다.
+		sd.position = Vector3(at.x, -0.6, at.z) + _sh3_off(at.y)
 		sd.rotation = rot
 		sd.scale = Vector3(sc, 0.05, sc)
 		sd.visible = true
-		#  팔뚝 — 팔꿈치에서 손목까지. 길이는 배율로 민다.
+		#  팔뚝 — 팔꿈치에서 손목까지. 두 끝의 높이가 다르므로 상자가
+		#  **기운다**. 기운 상자는 윗면 말고 옆면도 내주고, 그 두 면이
+		#  팔을 종이에서 덩어리로 바꾼다. 오일러로는 못 준다(요·피치가
+		#  섞여 팔이 축을 따라 돈다) — 축 셋을 직접 세운다.
 		var el: Vector2 = ps.el
-		var dv: Vector2 = wr - el
-		var ln: float = maxf(dv.length(), 1.0)
-		var arot := Vector3(0.0, -dv.angle(), 0.0)
-		var apos := Vector3(el.x, float(HAND3.arm_t) * 0.5 + 0.5, el.y)
+		var ap := Vector3(el.x, he + float(HAND3.arm_t) * 0.5, el.y)
+		var wp := Vector3(wr.x, hw + float(HAND3.arm_t) * 0.5, wr.y)
 		var am: Node3D = rg.arm
-		am.position = apos
-		am.rotation = arot
-		#  길이만 민다. 굵기는 표가 정한 그대로다 — 블록 팔은 안 좁아진다.
-		am.scale = Vector3(ln, 1.0, 1.0)
+		am.transform = _aim3(ap, wp, 1.0, deg_to_rad(float(HAND3.roll)))
 		am.visible = true
+		#  팔 그림자 — 카운터 선(w 0)에서 자른다. 손목이 아직 카운터 뒤면
+		#  통째로 걷고, 넘어오는 순간에는 잘린 토막의 길이가 0 이라
+		#  켜지는 자리에서 안 튄다.
 		var ash: Node3D = rg.armsh
-		ash.position = apos + Vector3(1.4, -apos.y - 0.6, 2.4)
-		ash.rotation = arot
-		ash.scale = Vector3(ln, 0.05, 1.0)
-		ash.visible = true
+		ash.visible = wp.z > 1.0
+		if ash.visible:
+			var t0: float = 0.0
+			if ap.z < 0.0:
+				t0 = clampf(-ap.z / maxf(wp.z - ap.z, 0.001), 0.0, 1.0)
+			var a0 := ap.lerp(wp, t0)
+			ash.transform = _aim3(Vector3(a0.x, -0.6, a0.z) + _sh3_off(a0.y),
+					Vector3(wp.x, -0.6, wp.z) + _sh3_off(wp.y), 0.05)
+
+	#  위팔 — 어깨에서 팔꿈치까지. 굵기는 아래팔의 0.8 이다(먼 쪽이 가늘다).
+	if hand3_upper != null:
+		var on: bool = bool(hand3_up.get("on", false))
+		hand3_upper.visible = on
+		if on:
+			var uh: Vector2 = hand3_up.hh
+			var sp: Vector2 = hand3_up.sh
+			var ep: Vector2 = hand3_up.el
+			hand3_upper.transform = _aim3(
+					Vector3(sp.x, uh.x + float(HAND3.arm_t) * 0.4, sp.y),
+					Vector3(ep.x, uh.y + float(HAND3.arm_t) * 0.5, ep.y),
+					0.8, deg_to_rad(float(HAND3.roll)))
 	for i in range(hand3_pose.size(), hand3_rig.size()):
 		var rg2: Dictionary = hand3_rig[i]
 		(rg2.hand as Node3D).visible = false
@@ -7718,6 +7858,318 @@ func _hand3_draw() -> void:
 	var tex: Texture2D = hand3_vp.get_texture()
 	if tex != null:
 		draw_texture_rect(tex, HAND3.rect, false)
+
+
+
+# ══════════════════════════════════════════════════════════
+#  상인 몸통 — 3D
+# ────────────────────────────────────────────────────────
+#  2026-09-15 제보: "딜러 팔이나 몸에는 원근감이 없잖아 거의 종이네".
+#
+#  ── 왜 종이였는가 ────────────────────────
+#  팔은 이미 3D 상자였는데도 종이로 읽혔다. 그것이 답이다 —
+#  **상자가 한 면만 보이면 상자가 아니라 종이다.** 누운 상자를
+#  52° 위에서 보면 윗면만 보이고, 윗면은 법선이 하나라 조명이
+#  균일하게 칠한다. 방향이 하나면 면이 하나고, 면이 하나면 종이다.
+#
+#  ── 그래서 뚝뚝한 몸통을 못 넣는다 ────────────
+#  상자 하나로 세워도 보이는 것은 앞면 하나라 같은 종이가 된다.
+#  몸통을 세로 세 조각으로 가르고 양쪽을 바깥으로 14° 틀었다 —
+#  세 법선이 가는 세 밝기가 기둥이다. 옵은 2D 가 그리던 그대로지만
+#  (깃·V·단추·띄) 이제 그것들이 **돋운다** — 깃이 6 앞으로
+#  나오면 그 옆면과 윗면이 생기고, 그 두 면이 옵걸이와 사람을 가른다.
+#
+#  ── 무대가 둘인 이유 ─────────────────────
+#  그리는 차례가 몸통 → 카운터 날 → 팔·손이다. 한 무대에 다 넣으면
+#  한 번밖에 못 그리므로 몸통이 카운터 날 위로 올라온다.
+#  무대 사각이 y[0,128] 이라 **잘림이 공짜다** — 카운터 밑으로
+#  내린 조끼 밑단은 텐스처 밖이라 펠트에 안 묻는다.
+# ══════════════════════════════════════════════════════════
+const BODY3 := {
+	"rect": Rect2(0.0, 0.0, 640.0, 128.0),   # 카운터 선에서 끊긴다
+	"mid": 26.0,         # 가운데 조각 반폭
+	"side": 44.0,        # 옆 조각 폭. 틀면 반폭 26+40.8 = 66.8 (2D hc 72)
+	"yaw": 22.0,         # 옆 조각을 바깥으로 트는 각. 이것이 원기둥을 만든다
+	"hi": 210.0,         # 위끝. h 172 위는 동전 슬롯 뒤라 넘치게 올린다
+	"lo": -50.0,         # 아랫끝. 카운터 밑이라 무대 사각이 잘라 먹는다
+	"d": 42.0,           # 몸 두께
+	"face": -20.0,       # 가운데 조각 앞면의 w. 여기서부터 앞으로 쌓는다
+	"vee": 71.0,         # V 꼭짓점의 h (2D vee_y 84 → (128−84)/0.616)
+	"vee_a": 15.0,       # 앞자락 기울기. tan15 = 0.268 — 2D 의 27/101 과 같다
+	#  ── 셔츠는 네모다. 그래서 앞자락이 덮어야 한다 ─────
+	#  2026-09-15 제보: "딜러 옷이 왜 이래?" — 셔츠를 네모 상자로 두고
+	#  좁은 깃 둘로만 가렸다. 깃의 안쪽 모서리가 V 꼭짓점을 지나므로 위로
+	#  갈수록 깃이 바깥으로 물러나는데, 깃 폭이 22 뿐이라 **아래로 내려올수록
+	#  덮는 자리가 모자랐다** — 덮다 만 자리로 셔츠가 옆으로 삐져나와서
+	#  상인이 V 셔츠가 아니라 어깨에 흰 날개를 단 옷을 입었다.
+	#
+	#  덮는 조건은 한 줄이다:  앞자락 폭 ≥ 셔츠 반폭 + 셔츠 밑단의 V 반폭.
+	#  지금은 30 ≥ 26 + 0.268·(71−64) = 26 + 1.9 라 넉넉하다.
+	#  **셋 중 하나를 만지면 이 줄을 다시 재라.**
+	"sh_w": 26.0,        # 셔츠 반폭
+	"sh_lo": 64.0,       # 셔츠 밑단. V 꼭짓점(71) 바로 밑이다
+	"pan_w": 30.0,       # 앞자락 폭 — 셔츠를 덮는 것이 이것의 일이다
+	"lap_w": 11.0,       # 깃 폭. 앞자락 위에 한 단 밝게 얹는 띠다
+	"btn": [55.0, 37.0, 19.5],   # 단추 셋의 h (2D btn_y 94/105/116)
+	"btn_r": 3.4,
+	"belt": 6.0,         # 띠 윗면의 h. 카운터 선(앞면 h −24.5)보다 위여야 보인다
+	"belt_d": 14.0,      # 띠가 앞으로 나오는 깊이 — 윗면이 카운터 립이 된다
+}
+
+var body3_vp: SubViewport = null
+var body3_root: Node3D = null
+
+
+func _body3_live() -> bool:
+	return body3_vp != null and is_instance_valid(body3_vp)
+
+
+func _body3_open() -> void:
+	if _body3_live() or not _has_renderer():
+		return
+	body3_vp = _stage3_make(BODY3.rect)
+	var rt := Node3D.new()
+	#  허리가 축이다 — 기울임도 돌림도 카운터 선(h 0)에서 시작한다.
+	rt.position = Vector3(float(NPC.cx), 0.0, 0.0)
+	body3_vp.add_child(rt)
+	body3_root = rt
+
+	var vest: Color = C_WOOD.darkened(0.46)
+	var hi: float = float(BODY3.hi)
+	var lo: float = float(BODY3.lo)
+	var fw: float = float(BODY3.face)
+	var md: float = float(BODY3.mid)
+	#  가운데 조각. 정면을 마주 보는 면이다.
+	rt.add_child(_blk3(Vector2(-md, md), Vector2(lo, hi),
+			Vector2(fw - float(BODY3.d), fw), vest))
+	#  옆 조각 둘. 안쪽 모서리를 축으로 바깥으로 틀어 법선을 갈라 놓는다 —
+	#  깊이만 물리면(계단) 두 면의 법선이 같아서 밝기가 같고, 그러면
+	#  상자를 늘려도 종이 두 장이 된다.
+	for s in [-1.0, 1.0]:
+		var pv := Node3D.new()
+		pv.position = Vector3(s * md, 0.0, fw)
+		pv.rotation_degrees = Vector3(0.0, s * float(BODY3.yaw), 0.0)
+		var sw: float = float(BODY3.side)
+		pv.add_child(_blk3(Vector2(0.0, sw) if s > 0.0 else Vector2(-sw, 0.0),
+				Vector2(lo, hi), Vector2(-float(BODY3.d), 0.0), vest))
+		rt.add_child(pv)
+	#  셔츠. 앞자락 둘 사이로만 보이고 그 사이가 곧 V 다 — 셔츠 자체는
+	#  네모라서 덮이는 자리가 모양을 정한다(BODY3 의 덮는 조건).
+	var shw: float = float(BODY3.sh_w)
+	rt.add_child(_blk3(Vector2(-shw, shw), Vector2(float(BODY3.sh_lo), hi),
+			Vector2(fw, fw + 4.0), C_LIGHT.darkened(0.60)))
+	#  앞자락 둘 — 조끼 앞판이다. 안쪽 모서리가 V 꼭짓점을 지나고 그 아래에서
+	#  서로 엇갈린다(윗지 조끼가 원래 그렇게 생겼다). 조끼와 같은 색이라
+	#  화면에서는 안 보이고, 셔츠를 덮는 일만 한다.
+	#  깃은 그 위에 한 단 밝게 얹는 좁은 띠다 — 2D 가 하던 그대로.
+	for s in [-1.0, 1.0]:
+		_body3_vee(rt, s, float(BODY3.pan_w), fw + 4.0, fw + 10.0, vest)
+		_body3_vee(rt, s, float(BODY3.lap_w), fw + 10.0, fw + 15.0,
+				C_WOOD.darkened(0.36))
+	#  단추 셋. 깃보다 더 나와야 보인다 — 깃 둘이 가운데에서 엇갈리는
+	#  자리라, 깃 앞면보다 뒤에 두면 상자 안으로 들어간다.
+	var br: float = float(BODY3.btn_r)
+	var bf: float = fw + 15.0
+	for bh in BODY3.btn:
+		rt.add_child(_blk3(Vector2(-br, br),
+				Vector2(float(bh) - br, float(bh) + br),
+				Vector2(bf, bf + 4.0), C_WOOD.lightened(0.13)))
+	#  허리띠. 앞으로 더 나와 **윗면이 보이는** 유일한 조각이다 —
+	#  카운터 바로 위에 밝은 가로 띠가 드러나고, 그것이 상인을
+	#  카운터 **뒤에** 세운다.
+	rt.add_child(_blk3(Vector2(-70.0, 70.0),
+			Vector2(lo, float(BODY3.belt)),
+			Vector2(fw - float(BODY3.d), fw + float(BODY3.belt_d)),
+			C_WOOD.darkened(0.52)))
+
+
+#  V 를 만드는 조각 하나. 안쪽 모서리가 꼭짓점을 지나 vee_a 로 기울고,
+#  거기서 바깥으로 wd 만큼 뻗는다. s −1 이 화면 왼쪽이다.
+func _body3_vee(rt: Node3D, s: float, wd: float, w0: float, w1: float,
+		col: Color) -> void:
+	var pv := Node3D.new()
+	pv.position = Vector3(0.0, float(BODY3.vee), (w0 + w1) * 0.5)
+	pv.rotation_degrees = Vector3(0.0, 0.0, -s * float(BODY3.vee_a))
+	var hd: float = (w1 - w0) * 0.5
+	pv.add_child(_blk3(Vector2(0.0, wd) if s > 0.0 else Vector2(-wd, 0.0),
+			Vector2(-25.0, 135.0), Vector2(-hd, hd), col))
+	rt.add_child(pv)
+
+
+
+func _body3_close() -> void:
+	body3_root = null
+	if _body3_live():
+		body3_vp.queue_free()
+	body3_vp = null
+
+
+#  숫·기울임·몸짓을 몸에 올린다. 2D 가 쌀던 것과 **같은 값**을 읽는다.
+func _body3_sync() -> void:
+	if not _body3_live() or body3_root == null:
+		return
+	var ps := _idle_body()
+	#  2D 의 화면 회전(th)과 같은 양을 월드 롤로 바꿈다. 높이 h 는
+	#  화면에서 0.616·h 라, 같은 가로 밀림을 내려면 각이 0.616 배여야 한다.
+	var roll: float = -_sweep_tilt() * float(TBL.tall) + float(ps.roll)
+	body3_root.rotation = Vector3(0.0, float(ps.yaw), roll)
+	body3_root.position = Vector3(float(NPC.cx), float(ps.rise), float(ps.lean))
+
+
+func _body3_draw() -> void:
+	if not _body3_live():
+		return
+	var tex: Texture2D = body3_vp.get_texture()
+	if tex != null:
+		draw_texture_rect(tex, BODY3.rect, false)
+
+
+# ══════════════════════════════════════════════════════════
+#  상인 연출 — 가만히 서 있지 않는다
+# ──────────────────────────────────────────────────────────
+#  2026-09-15 제보: "딜러가 너무 서서 가만히 있는거 같아".
+#  숨(NPC.breathe)은 있었다. 그런데 진폭이 1.4px 짜리 사인 **하나**라
+#  화면에서 정지와 안 갈린다 — 움직이는 것이 하나뿐이면 그것은 정지다.
+#
+#  ── 두 층 ────────────────────────────────────────────
+#  늘 도는 것(무게 옮기기)과 가끔 하는 것(몸짓)을 갈라 둔다.
+#  늘 도는 쪽은 주기가 길고 진폭이 작아 배경으로 깔리고, 가끔 하는 쪽이
+#  눈을 끈다. 둘 다 가끔이면 상인이 경련하고, 둘 다 늘이면 다시 정지다.
+#
+#  ── 무게 옮기기가 3D 를 판다 ─────────────────────────
+#  몸통 돌림(yaw)은 연출이자 **입체의 증거**다. 정면만 보이던 몸이 3° 돌면
+#  옆 조각의 면적이 프레임마다 바뀐다 — 정지 화면 열 장으로는 못 만드는
+#  정보이고, 이것 하나로 몸통이 판때기에서 덩어리가 된다.
+#
+#  ── 쓸기가 이긴다 ────────────────────────────────────
+#  리롤(_sweep_amt)이 돌면 몸짓을 걷고 쉼을 다시 채운다. 두 연출이 같은
+#  팔을 두고 다투면 팔이 두 곳으로 간다.
+# ══════════════════════════════════════════════════════════
+const IDLE := {
+	"gap": Vector2(2.6, 6.4),    # 몸짓 사이 쉼(초)
+	"sway": 0.052,               # 무게 옮기기 — 몸통 돌림 3°
+	"sway_hz": 0.085,            # 그 주기. 11.8 초에 한 번이라 배경으로 깔린다
+	"tip": 0.030,                # 같이 도는 좌우 기울임 1.7°
+	"in": 0.26, "out": 0.34,     # 몸짓 봉투의 들머리·날머리
+	#  이름과 길이는 자리를 맞춰 읽는다. 늘리면 둘 다 늘린다.
+	"acts": ["모으기", "털기", "두드리기", "기대기"],
+	"len": [2.6, 1.0, 1.8, 3.0],
+}
+var idle_act := -1
+var idle_t := 0.0
+var idle_wait := 1.6
+var idle_rng := RandomNumberGenerator.new()
+
+
+#  몸짓 시계. **한 곳에서만** 민다 — _npc_arms(그리기)와 _body3_sync(루프)가
+#  같은 값을 읽어야 하므로, 그리기 안에서 밀면 팔과 몸이 한 프레임 어긋난다.
+func _idle_tick(d: float) -> void:
+	if not _npc_on() or _sweep_amt() > 0.004:
+		idle_act = -1
+		idle_t = 0.0
+		idle_wait = maxf(idle_wait, 1.2)
+		return
+	if idle_act >= 0:
+		idle_t += d
+		if idle_t < float(IDLE.len[idle_act]):
+			return
+		idle_act = -1
+		idle_t = 0.0
+		idle_wait = idle_rng.randf_range(IDLE.gap.x, IDLE.gap.y)
+		return
+	idle_wait -= d
+	if idle_wait <= 0.0:
+		idle_act = idle_rng.randi() % IDLE.acts.size()
+		idle_t = 0.0
+
+
+func _idle_name() -> String:
+	return "" if idle_act < 0 else String(IDLE.acts[idle_act])
+
+
+#  몸짓 하나의 봉투 — 사다리꼴이다. 양끝이 정확히 0 이라 몸짓이 끝나면
+#  쉬는 자세로 **되돌아온다**. 끝을 0 이 아닌 값으로 두면 몸짓을 할 때마다
+#  자세가 조금씩 떠내려가서, 한 판 뒤에 상인이 딴 데 서 있다.
+func _idle_env() -> float:
+	if idle_act < 0:
+		return 0.0
+	var dur: float = float(IDLE.len[idle_act])
+	var fi: float = float(IDLE["in"])
+	var fo: float = float(IDLE.out)
+	if idle_t < fi:
+		return _ease_io(idle_t / fi)
+	if idle_t > dur - fo:
+		return 1.0 - _ease_io((idle_t - (dur - fo)) / fo)
+	return 1.0
+
+
+#  몸짓 안에서의 진행 0..1. 박자를 셈하는 자리다.
+func _idle_beat() -> float:
+	if idle_act < 0:
+		return 0.0
+	return clampf(idle_t / maxf(float(IDLE.len[idle_act]), 0.001), 0.0, 1.0)
+
+
+#  몸에 얹을 값. yaw·roll 은 라디안, rise 는 높이(h), lean 은 깊이(w) 다.
+func _idle_body() -> Dictionary:
+	var s: float = sin(npc_clock * TAU * float(IDLE.sway_hz))
+	var out := {"yaw": s * float(IDLE.sway), "roll": -s * float(IDLE.tip),
+			"rise": 0.0, "lean": 0.0}
+	var k := _idle_env()
+	if k <= 0.0:
+		return out
+	var b := _idle_beat()
+	match _idle_name():
+		"모으기":
+			#  손을 모으면 어깨가 안으로 말린다 — 몸이 조금 숙고 내려앉는다.
+			out.rise -= 2.2 * k
+			out.lean += 3.0 * k
+		"털기":
+			#  어깨를 턴다. 한 번 쑥 올라갔다 잘게 떤다 — 떨림이 없으면
+			#  그냥 위아래로 움직인 것이라 "털었다" 로 안 읽힌다.
+			out.rise += k * (5.0 * sin(b * PI) + 1.6 * sin(b * PI * 6.0))
+			out.roll += k * 0.026 * sin(b * PI * 3.0)
+		"두드리기":
+			out.yaw -= k * 0.030
+			out.rise -= 1.0 * k
+		"기대기":
+			#  카운터에 기댄다 — 앞으로 나오고 내려앉는다. 밑단은 무대
+			#  사각이 잘라 먹으므로 카운터 뒤로 사라지는 것으로 보인다.
+			out.lean += 7.0 * k
+			out.rise -= 4.5 * k
+	return out
+
+
+#  손 하나에 얹을 값. (du, dw, dh) 다 — 앞의 둘은 면 좌표라 2D 도 같이 타고,
+#  dh 만 3D 전용이다. i 0 이 화면 왼손, 1 이 오른손(쓸는 팔)이다.
+func _idle_hand(i: int) -> Vector3:
+	var k := _idle_env()
+	if k <= 0.0:
+		return Vector3.ZERO
+	var sd: float = -1.0 if i == 0 else 1.0
+	var b := _idle_beat()
+	match _idle_name():
+		"모으기":
+			#  가운데로 모은다. 좌우를 **다르게** 당긴다 — 완전대칭은
+			#  옷걸이의 냄새다(NPC 머리말). 오른손이 왼손 쪽으로 더 간다.
+			var pull: float = (46.0 if i == 0 else 64.0) * k
+			return Vector3(-sd * pull, 3.0 * k, 5.0 * k)
+		"털기":
+			return Vector3(0.0, 0.0,
+					k * (7.0 * sin(b * PI) + 2.2 * sin(b * PI * 6.0)))
+		"두드리기":
+			#  오른손만 판을 두드린다. 셋 치고 만다 — 넷을 넘기면 초조해
+			#  보이고, 둘이면 박자로 안 읽힌다.
+			if i != 1:
+				return Vector3.ZERO
+			return Vector3(0.0, -2.0 * k,
+					k * (2.0 + 9.0 * absf(sin(b * PI * 3.0))))
+		"기대기":
+			#  기대면 손이 앞으로 나온다. 팔꿈치가 따라 내려와 팔이 눕는다.
+			return Vector3(-sd * 7.0 * k, 13.0 * k, -2.5 * k)
+	return Vector3.ZERO
+
+
 
 
 # 면 위에 누운 다각형 하나. 옆면(h=0)을 먼저 깔고 윗면(h=t)을 얹는다 —

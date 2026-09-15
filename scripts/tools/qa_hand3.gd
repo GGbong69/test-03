@@ -90,11 +90,65 @@ func _run() -> void:
 	_ok("그림자가 빛 반대쪽으로 진다", dx > 0.0 and dz > 0.0,
 			"x +%.1f · z +%.1f" % [dx, dz])
 
-	# ⑤ 화면을 뜨면 지워진다 — 안 보이는 뷰포트가 런 내내 돌면 안 된다
+	# ⑤ 팔 그림자는 펠트를 밟는 토막에만 — 쉬는 팔은 통째로 카운터 위다
+	_ok("쉴 때 팔 그림자는 없다", not (rg.armsh as Node3D).visible, "")
+
+	# ⑥ 몸통도 같은 각으로 선다. 무대가 둘이면 값이 갈리기 쉬운 자리다
+	_ok("몸통 무대가 섰다", g._body3_live(), "")
+	if g._body3_live():
+		var bcam: Camera3D = null
+		for c in g.body3_vp.get_children():
+			if c is Camera3D:
+				bcam = c
+		var hcam: Camera3D = null
+		for c in g.hand3_vp.get_children():
+			if c is Camera3D:
+				hcam = c
+		_ok("몸통 카메라 각이 손과 같다",
+				bcam != null and hcam != null
+				and absf(bcam.rotation.x - hcam.rotation.x) < 0.0001,
+				"%.4f" % (bcam.rotation.x if bcam != null else 0.0))
+		_ok("몸통이 카운터에서 잘린다",
+				g.BODY3.rect.position.y + g.BODY3.rect.size.y == g.TBL.fy,
+				"밑변 %.0f (fy %.0f)" % [g.BODY3.rect.position.y
+				+ g.BODY3.rect.size.y, g.TBL.fy])
+		#  셔츠가 앞자락에 덮이는가 — BODY3 머리말의 그 한 줄을 여기서 잰다.
+		var need: float = float(g.BODY3.sh_w) + tan(deg_to_rad(
+				float(g.BODY3.vee_a))) * (float(g.BODY3.vee)
+				- float(g.BODY3.sh_lo))
+		_ok("앞자락이 셔츠를 덮는다", float(g.BODY3.pan_w) >= need,
+				"앞자락 %.0f ≥ %.1f" % [float(g.BODY3.pan_w), need])
+
+	# ⑦ 위팔은 쓸 때만 선다 — 쉬는 자세에서는 몸통 옆구리에 붙는다
+	_ok("쉴 때 위팔은 없다",
+			g.hand3_upper == null or not g.hand3_upper.visible, "")
+	#  쓸기는 상점의 일이다 — 시계(_sweep_update)가 거기서만 돈다.
+	g.gold = 40
+	g.leg_no = 2
+	g._open_shop()
+	await _wait(30)
+	g._sweep_begin()
+	await _wait(14)
+	_ok("쓸면 위팔이 선다",
+			g.hand3_upper != null and g.hand3_upper.visible, "")
+	var utf: Transform3D = g.hand3_upper.transform
+	var el3: Vector3 = utf.origin + utf.basis.x
+	var arm3: Node3D = (g.hand3_rig[1] as Dictionary).arm
+	var gap: float = (el3 - arm3.transform.origin).length()
+	#  위팔 끝과 아래팔 뿌리가 같은 점이어야 한다. 벌어지면 팔이 끊긴다.
+	_ok("위팔과 아래팔이 한 점에서 만난다", gap < 1.0, "틈 %.2f" % gap)
+	_ok("쓸면 팔 그림자가 진다",
+			((g.hand3_rig[1] as Dictionary).armsh as Node3D).visible, "")
+	while g.sweep_live:
+		await _wait(8)
+	await _wait(6)
+
+	# ⑧ 화면을 뜨면 지워진다 — 안 보이는 뷰포트가 런 내내 돌면 안 된다
 	g.state = g.S.TITLE
 	await _wait(6)
 	_ok("화면을 뜨면 지워진다", not g._hand3_live(), "")
 	_ok("손 목록도 빈다", g.hand3_rig.is_empty(), "%d벌" % g.hand3_rig.size())
+	_ok("몸통 무대도 지워진다", not g._body3_live(), "")
 
 	print("\n%s\n" % ("전부 통과" if fail == 0 else "실패 %d건" % fail))
 	print("통과 %d · 실패 %d" % [okn, fail])
