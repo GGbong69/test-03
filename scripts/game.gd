@@ -5873,6 +5873,11 @@ const EDGE := {
 #  뭉개지지 않아도 "그 영화를 아는가" 만 묻는 그림이 된다.
 const MATS := {
 	"c03": "glass",      # 유리 대포 — 판마다 1/6 로 부서진다(boom r2)
+	"c06": "wax",        # 이카로스 — 배수 x4, 판마다 1/10 로 녹는다(boom r10)
+	"l05": "wax",        # 녹는 시계 — 남은 다트가 다음 판으로 흘러간다(side carry)
+	"c30": "cast",       # 윅 존 — 한 발도 안 빗나가야 한다. 무를 데가 없다
+	"r09": "pixel",      # 불사의 토템 — 실패 1회 방지(k save). 규격 밖의 물건이다
+	"l03": "hollow",     # NULL — 목표가 HP 가 되고 판을 부수면 끝난다. 값이 없다
 }
 
 
@@ -6238,10 +6243,16 @@ func draw_item_sticker(c: Vector2, r: float, it: Dictionary, rot: float, lift: f
 	# 얼굴을 위아래로 가른다 — 위는 조건(언제 터지는가), 아래는 값(얼마나).
 	# 값만 있으면 조건이 정반대인 짝이 똑같이 보인다.
 	_icon_cond(c + Vector2(0.0, -r * 0.33), r * 0.42, String(it.c), ink.darkened(dim + 0.08))
+	#  **값은 kind 가 있을 때만 있다.** 조건만 있고 kind 가 없는 여덟 장
+	#  (황금우상·윅 존·알 낳는 거위·1-UP·WHITE ALBUM·잭과 콩나무·NULL·
+	#  녹는 시계)은 점수로 말하지 않는다 — 골드를 주거나, 다트를 바꾸거나,
+	#  판을 부순다. 그것들이 값 자리에 **0** 을 찍고 있었다: 0점짜리
+	#  동전으로 읽힌다(방식 장에서 한 번 고친 것과 같은 병이고, 그때는
+	#  조건까지 빈 장만 막아서 조건이 있는 여덟은 그대로 남았다).
 	var val := ("×" + str(it.v)) if it.k == "xmult" else str(it.v)
 	var vs: int = maxi(7, int(float(num_sz) * 0.84))
 	var vy := r * 0.34 + float(vs) * 0.34
-	if vy + 2.0 < y:
+	if String(it.k) != "" and vy + 2.0 < y:
 		draw_string(font, c + Vector2(-r, vy), val,
 				HORIZONTAL_ALIGNMENT_CENTER, r * 2.0, vs, ink.darkened(dim))
 	# 말린 끝은 인쇄를 덮는다. 그래서 맨 마지막이다 — 순서가 곧 물리다.
@@ -6259,6 +6270,10 @@ func draw_sticker(c: Vector2, r: float, tier: Dictionary, rot: float,
 	#  유리는 **인쇄면만** 비친다. 다이컷 흰 띠는 그대로 둔다 — 그 띠 하나가
 	#  "동전" 을 말하므로(이 함수 머리말) 거기까지 비치면 동전이 아니게 된다.
 	var glass: bool = mat == "glass"
+	var hollow: bool = mat == "hollow"
+	var pixel: bool = mat == "pixel"
+	var wax: bool = mat == "wax"
+	var struck: bool = mat == "cast"
 	if glass:
 		body = Color(body, 0.26)
 	#  선 자세는 정면이라 두께가 안 보인다. 그래서 두께를 **베벨**로 말한다 —
@@ -6291,7 +6306,26 @@ func draw_sticker(c: Vector2, r: float, tier: Dictionary, rot: float,
 		#  베벨 한 줄. 테두리와 얼굴이 맞붙으면 두 면이 한 덩어리로 뭉쳐
 		#  두께가 안 읽힌다 — 누운 자세의 _e_ring_w 와 같은 일을 한다.
 		_disc_seg(c, r - rw, y, body.lightened(float(EDGE.bev)))
-	_disc_seg(c, r - rw - 1.0, y, body)             # 인쇄면
+	#  인쇄면. 누운 자세와 **같은 규칙으로** 갈린다 — 두 자세가 어긋나면
+	#  집어 드는 순간 딴 물건이 된다.
+	if hollow:
+		pass
+	elif pixel:
+		_pix_disc(c, r - rw - 1.0, r - rw - 1.0, body)
+	else:
+		_disc_seg(c, r - rw - 1.0, y, body)
+	if wax:
+		#  정면이라 흘러내릴 아래가 곧 원의 밑이다. 세 방울.
+		for k in 3:
+			var wa: float = PI * (0.26 + 0.24 * float(k))
+			var wp := c + Vector2(cos(wa) * r, sin(wa) * r)
+			var wl: float = r * 0.20 + float(k % 2) * 3.0
+			draw_rect(Rect2(wp.x - 1.0, wp.y, 2.0, wl), rim)
+			draw_circle(wp + Vector2(0.0, wl), 1.7, rim)
+	if struck:
+		draw_line(c + Vector2(-r * 0.58, -r * 0.28),
+				c + Vector2(r * 0.28, -r * 0.58),
+				Color(1.0, 1.0, 1.0, 0.34 * (1.0 - dim)), 1.0)
 
 	# 마감. 각 규약은 annulus_at 그대로다(0 = 12시, 시계 방향) — 둘 다 왼쪽
 	# 위를 향하므로 접는 선(아래) 아래로 새지 않는다. peel 을 안 봐도 된다.
@@ -10481,7 +10515,12 @@ func _glow_of(rar: String) -> Color:
 	return Color(GameData.rarity_color(rar), float(GLOW.a))
 
 
-func _rar_glow(c: Vector2, rx: float, ry: float, rar: String, dim: float) -> void:
+#  ring — 속이 비치는 재질(유리·빈 인쇄)은 번짐도 **고리**여야 한다.
+#  번짐은 물건보다 큰 타원을 겹쳐 깐 것이라 속이 차 있다. 뚫린 구멍으로
+#  그것이 비치면 "아무것도 안 찍힌 동전" 이 "분홍 동전" 이 된다 —
+#  NULL 이 정확히 그렇게 보였다.
+func _rar_glow(c: Vector2, rx: float, ry: float, rar: String, dim: float,
+		ring := false) -> void:
 	var col := _glow_of(rar)
 	if col.a <= 0.0:
 		return
@@ -10492,12 +10531,34 @@ func _rar_glow(c: Vector2, rx: float, ry: float, rar: String, dim: float) -> voi
 		var g: float = float(k) * float(GLOW.step)
 		# 밖으로 갈수록 제곱으로 옅어진다. 선형이면 바깥 테가 남는다.
 		var f: float = 1.0 - float(k) / float(int(GLOW.n) + 1)
-		draw_colored_polygon(_e_pts(c, rx + g, ry + g * TBL.flat),
-				Color(col, col.a * f * f * fa))
+		if ring:
+			_e_ring_w(c, rx + g, ry + g * TBL.flat, g + 1.0,
+					Color(col, col.a * f * f * fa))
+		else:
+			draw_colored_polygon(_e_pts(c, rx + g, ry + g * TBL.flat),
+					Color(col, col.a * f * f * fa))
 	# 몸통에 바로 붙는 테. 번짐만 있으면 「흐리다」로 읽힌다 — 물건 가장자리에
 	# 닿는 밝은 한 겹이 있어야 빛이 그 물건에서 나오는 것으로 보인다.
-	draw_colored_polygon(_e_pts(c, rx + 1.4, ry + 1.4 * TBL.flat),
+	_e_ring_w(c, rx + 1.4, ry + 1.4 * TBL.flat, 2.4,
 			Color(col.lightened(0.30), float(GLOW.rim) * fa))
+
+
+#  도트로 찍은 원반. 행마다 폭을 재서 3px 막대를 쌓는다 — 매끈한 타원들
+#  사이에서 **해상도가 다른 물건**으로 읽힌다. 불사의 토템은 원본이
+#  마인크래프트 아이템이라, 레퍼런스와 규칙이 같은 곳을 가리킨다:
+#  이 판의 규격 밖에서 온 물건이라 한 번은 죽음을 무른다.
+func _pix_disc(c: Vector2, rx: float, ry: float, col: Color) -> void:
+	var q := 3.0
+	var n := int(ceil(ry / q))
+	for k in range(-n, n + 1):
+		var y0 := float(k) * q
+		var t: float = 1.0 - (y0 / ry) * (y0 / ry)
+		if t <= 0.0:
+			continue
+		var w: float = roundf(rx * sqrt(t) / q) * q
+		if w < q:
+			continue
+		draw_rect(Rect2(c.x - w, c.y + y0 - q * 0.5, w * 2.0, q), col)
 
 
 func _sticker_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: float) -> void:
@@ -10509,7 +10570,12 @@ func _sticker_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: floa
 	#  재질은 **두 자세 다** 입어야 한다. 이 함수와 draw_sticker 는 같은
 	#  물건의 다른 자세이고(이 함수 머리말), 한쪽만 유리면 테이블에서 집어
 	#  동전 슬롯에 꽂는 순간 재질이 바뀐다.
-	var glass: bool = _mat_of(it) == "glass"
+	var mat := _mat_of(it)
+	var glass: bool = mat == "glass"
+	var hollow: bool = mat == "hollow"
+	var pixel: bool = mat == "pixel"
+	var wax: bool = mat == "wax"
+	var struck: bool = mat == "cast"
 	if glass:
 		body = Color(body, 0.26)
 	var gold: bool = it.get("g", "") != ""
@@ -10525,18 +10591,22 @@ func _sticker_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: floa
 	var side: Color = (C_GOLD.darkened(0.22) if gold
 			else (bb.lightened(0.30) if bb.v < 0.32
 			else bb.darkened(float(EDGE.lo)))).darkened(dim)
+	#  주조는 빗살이 촘촘하다. 같은 어법 안에서 "더 깊이 찍혔다" 로 읽힌다
+	var reed: int = int(EDGE.reed) * (2 if struck else 1)
 	var sd: float = TBL.chip_t * TBL.tall              # 옆면 높이 2.77px
 	#  그림자는 옆면 **밑**에서 진다. 전에는 낙차가 곧 그림자였는데 이제
 	#  그 자리에 옆면이 서므로, 그림자를 한 겹 더 내려야 바닥에 닿는다.
 	draw_colored_polygon(_e_pts(c + Vector2(0.0, sd + 2.0), rx, ry),
 			Color(0.0, 0.0, 0.0, 0.26 * (1.0 - dim)))
-	_rar_glow(c, rx, ry, String(it.get("rarity", "common")), dim)
+	_rar_glow(c, rx, ry, String(it.get("rarity", "common")), dim,
+			glass or hollow)
 	#  옆면 — 아래로 sd 민 같은 타원. 윗면과의 합집합이 원기둥이다.
 	#  유리도 옆면은 있다(유리에도 두께가 있다). 비치는 것은 윗면뿐이다.
-	if glass:
-		#  유리는 옆면을 **앞쪽 띠로만** 두른다. 타원을 통째로 깔면 비치는
-		#  것이 펠트가 아니라 제 옆면이라 투명이 죽는다 — 속을 비우려고
-		#  다이컷을 걷어낸 것과 같은 함정을 두께가 다시 판다.
+	#  **속이 비치는 재질은 옆면도 앞쪽 띠로만 두른다.** 타원을 통째로 깔면
+	#  비치는 것이 펠트가 아니라 제 옆면이라 투명이 죽는다 — 속을 비우려고
+	#  다이컷을 걷어낸 것과 같은 함정을 두께가 다시 판다. 유리에서 한 번
+	#  밟고 빈 인쇄에서 또 밟았다.
+	if glass or hollow:
 		var strip := PackedVector2Array()
 		for k in 15:
 			var sa: float = PI * float(k) / 14.0
@@ -10546,15 +10616,41 @@ func _sticker_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: floa
 			strip.append(c + Vector2(cos(sa2) * rx, sin(sa2) * ry)
 					+ Vector2(0.0, sd))
 		draw_colored_polygon(strip, side)
+	elif pixel:
+		#  옆면도 계단이어야 한다. 매끈한 타원 위에 도트 윗면을 얹으면
+		#  실루엣의 절반만 도트라 "덜 그려진 것" 으로 읽힌다.
+		_pix_disc(c + Vector2(0.0, sd), rx, ry, side)
 	else:
 		draw_colored_polygon(_e_pts(c + Vector2(0.0, sd), rx, ry), side)
 	#  빗살 — 앞쪽 호에만 새긴다. 뒤쪽은 윗면에 가려 안 보인다.
+	#  도트 재질에는 안 새긴다. 3px 격자 위에 1px 빗살을 얹으면 두 해상도가
+	#  한 물건에 섞여 도트로도 매끈한 것으로도 안 읽힌다.
 	var rf := side.darkened(0.30)
-	for k in int(EDGE.reed):
-		var ra: float = PI * (float(k) + 0.5) / float(int(EDGE.reed))
+	if pixel:
+		reed = 0
+	for k in reed:
+		var ra: float = PI * (float(k) + 0.5) / float(reed)
 		var rp := c + Vector2(cos(ra) * rx, sin(ra) * ry)
 		draw_line(rp, rp + Vector2(0.0, sd), rf, 1.0)
-	draw_colored_polygon(_e_pts(c, rx, ry), body)
+	#  윗면. 재질마다 다르게 찍힌다 — 없거나(인쇄가 없다), 도트거나, 매끈하거나.
+	if hollow:
+		pass                                       # NULL — 찍힌 것이 없다
+	elif pixel:
+		_pix_disc(c, rx, ry, body)
+	else:
+		draw_colored_polygon(_e_pts(c, rx, ry), body)
+	if wax:
+		#  녹아 흐른다. 방울은 옆면 **밑**에서 시작해야 흘러내린 것으로
+		#  읽힌다 — 윗면에서 시작하면 그냥 무늬다.
+		#  **테두리에서** 시작한다. 0.88 자리에서 시작했더니 방울이 윗면
+		#  위에 얹혀 흘러내린 것이 아니라 붙은 무늬로 보였다 — 흐르는 것은
+		#  물건의 끝에서 떨어져야 흐르는 것이다.
+		for k in 3:
+			var wa: float = PI * (0.26 + 0.24 * float(k))
+			var wp := c + Vector2(cos(wa) * rx, sin(wa) * ry)
+			var wl: float = sd + 3.0 + float(k % 2) * 3.5
+			draw_rect(Rect2(wp.x - 1.0, wp.y, 2.0, wl), side)
+			draw_circle(wp + Vector2(0.0, wl), 1.7, side)
 	var fa := 1.0 - dim
 	match int(t.fin):
 		1:
@@ -10575,7 +10671,14 @@ func _sticker_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: floa
 						Color(HOLO[k % 3], 0.26 * fa))
 	#  윗면 가장자리 한 줄. 옆면과 윗면이 같은 색이면 두 면이 한 덩어리로
 	#  뭉쳐 두께가 안 읽힌다 — 모서리에 빛 한 줄이 있어야 면이 갈린다.
-	_e_ring_w(c, rx, ry, 1.0, body.lightened(float(EDGE.bev)))
+	if not hollow and not pixel:
+		_e_ring_w(c, rx, ry, 1.0, body.lightened(float(EDGE.bev)))
+	if struck:
+		#  주조면의 하이라이트 한 줄. 종이에는 없는 것이라 이 한 줄이
+		#  "쇠" 를 말한다. 유광 마감(fin 1)과 달리 **면을 가로지른다.**
+		draw_line(c + Vector2(-rx * 0.62, -ry * 0.30),
+				c + Vector2(rx * 0.30, -ry * 0.62),
+				Color(1.0, 1.0, 1.0, 0.34 * (1.0 - dim)), 1.0)
 	if glass:
 		#  누운 자세의 값들은 선 자세보다 한 단 낮다(fin 1 이 0.32 → 0.22).
 		#  펠트가 어두워 같은 알파면 더 세게 보이기 때문이다. 굴절도 그 비로 낮춘다.
@@ -10588,10 +10691,14 @@ func _sticker_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: floa
 					c + Vector2(cos(a3 + 0.55) * rx * 0.34,
 					sin(a3 + 0.55) * ry * 0.34),
 					Color(1.0, 1.0, 1.0, 0.32 * fa), 1.0)
-	var val := ("×" + str(it.v)) if it.k == "xmult" else str(it.v)
-	var ink: Color = C_CHIP.lightened(0.5) if it.k == "chip" else C_MULT.lightened(0.45)
-	draw_string(font, c + Vector2(-rx, 4.0), val,
-			HORIZONTAL_ALIGNMENT_CENTER, rx * 2.0, 11, ink.darkened(dim))
+	#  선 자세와 같은 규칙이다(draw_item_sticker 의 값 주석). 두 자세가
+	#  갈리면 테이블에서는 0 이 있고 동전 슬롯에서는 없는 동전이 된다.
+	if String(it.k) != "":
+		var val := ("×" + str(it.v)) if it.k == "xmult" else str(it.v)
+		var ink: Color = (C_CHIP.lightened(0.5) if it.k == "chip"
+				else C_MULT.lightened(0.45))
+		draw_string(font, c + Vector2(-rx, 4.0), val,
+				HORIZONTAL_ALIGNMENT_CENTER, rx * 2.0, 11, ink.darkened(dim))
 
 
 # _table_draw 의 맨 끝 (덮개·레일 뒤) — 가격은 절대 안 잘려야 한다.
