@@ -56,6 +56,11 @@ func _run() -> void:
 	_ok("건네는 띠에 창구가 없다", g._chute_at(top, 0.0) < 0,
 			"창구 %d" % g._chute_at(top, 0.0))
 
+	#  헤드리스라 _npc_arms(그리기)가 안 돌아서 손바닥이 비어 있다.
+	#  살핌 때 손이 서는 자리를 그대로 세워 둔다.
+	g.npc_palm[1] = Vector3(430.0, 36.0, 15.0)
+	g.npc_palm[0] = Vector3(214.0, 36.0, 15.0)
+
 	# ③ 건네면 상인이 든다
 	_ok("매물이 있다", g.drop.size() > 0, "%d개" % g.drop.size())
 	var it: Dictionary = g.drop[0]
@@ -73,8 +78,14 @@ func _run() -> void:
 	_step(int(float(g.GIVE.look) * 40.0))
 	_ok("살피는 동안 돈다", absf(float(it.psi) - psi0) > 0.5,
 			"psi %+.2f" % (float(it.psi) - psi0))
-	_ok("손 위에 든 채다", absf(float(it.h) - float(g.GIVE.hold)) < 0.01,
-			"h %.1f" % float(it.h))
+	var pm: Vector3 = g.npc_palm[g.give_side]
+	_ok("손바닥 위에 얹혔다",
+			absf(float(it.h) - (pm.z + float(g.GIVE.hold))) < 0.01,
+			"h %.1f = 손바닥 %.1f + %.1f" % [float(it.h), pm.z,
+			float(g.GIVE.hold)])
+	_ok("손바닥 한가운데다", absf(float(it.u) - pm.x) < 0.01
+			and absf(float(it.w) - pm.y) < 0.01,
+			"u %.1f/%.1f · w %.1f/%.1f" % [float(it.u), pm.x, float(it.w), pm.y])
 	#  카운터 선을 안 넘어야 한다 — 넘으면 벽 사각이 물건을 지운다
 	var sy: float = g.TBL.fy + float(it.w) * g.TBL.flat - float(it.h) * g.TBL.tall
 	_ok("든 물건이 카운터 밑에 있다", sy > g.TBL.fy,

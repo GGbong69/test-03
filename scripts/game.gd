@@ -7203,6 +7203,8 @@ func _cover_draw() -> void:
 	#  3D 손은 **두 팔 다음**이다. 팔 사이에 끼우면 한쪽 손이 반대편
 	#  팔 밑으로 들어간다.
 	_hand3_draw()
+	#  상인이 든 물건은 손 **다음**이다.
+	_give_draw()
 	# 가까운 쪽 레일 — 리롤·다음 버튼이 그 아래 앞치마에 얹힌다
 	draw_rect(_wide(TBL.ny, 2.0), C_WOOD.lightened(0.24))
 	draw_rect(_wide(TBL.ny + 6.0, VIEW.y - TBL.ny - 6.0, false, true),
@@ -7404,11 +7406,12 @@ func _npc_arms() -> void:
 			deg_to_rad(NPC.ang_l) + float(g0.ang), NPC.sc_l, false, -1.0,
 			Vector3(float(HAND3.h_wr) + float(g0.dh),
 			float(HAND3.h_el) + float(g0.dh) * 0.5, float(g0.roll)))
-	#  손목 자리를 적어 둔다 — 상인이 든 물건이 이 값을 따라간다(_give_tick).
+	#  손바닥 자리를 적어 둔다 — 상인이 든 물건이 이 값을 따라간다(_give_tick).
 	#  두 곳이 따로 셈하면 물건이 손에서 떨어져 난다.
-	npc_wrist[0] = Vector3(cx + NPC.wr_l.x + _npc_sway(NPC.wr_l.y)
+	npc_palm[0] = _palm_of(Vector2(cx + NPC.wr_l.x + _npc_sway(NPC.wr_l.y)
 			+ _idle_twist(NPC.wr_l.y, yw) + float(g0.du),
-			NPC.wr_l.y + br * 0.2 + float(g0.dw),
+			NPC.wr_l.y + br * 0.2 + float(g0.dw)),
+			deg_to_rad(NPC.ang_l) + float(g0.ang), NPC.sc_l,
 			float(HAND3.h_wr) + float(g0.dh))
 	# 쓸는 팔 — 어깨부터 **쭉 편 채** 휩쓴다. 몸이 +5° 기울며 뻗고,
 	# −5° 로 넘어가는 동안 팔이 부채꼴로 판을 쓴다. 팔꿈치는 어깨-손목
@@ -7434,8 +7437,8 @@ func _npc_arms() -> void:
 		#  훑는 동안은 팔꿈치도 판으로 내려온다 — 쓸기는 판을 미는 짓이라
 		#  팔이 떠 있으면 미는 선과 그려지는 팔이 높이에서 갈린다.
 		he = lerpf(he, float(HAND3.h_wr) + 3.0, a)
-	npc_wrist[1] = Vector3(wr.x, wr.y, hw)
 	var hs := lerpf(1.0, SWEEP.hand_up, a)
+	npc_palm[1] = _palm_of(wr, ang, hs, hw)
 	# 위팔은 **쓸 때만** 그린다. 쉬는 자세에서는 어깨와 팔꿈치가 거의
 	# 같은 높이라 토막이 몸통 옆구리에 붙어 팔–몸통 골을 4px 로 좁힌다
 	# (프로브가 잡았다). 원래 설계도 "팔은 상자 하나" 였고 위팔은 쓸기가
@@ -8472,6 +8475,14 @@ func _idle_hand(i: int) -> Dictionary:
 	return out
 
 
+#  손목·손각·배율에서 손바닥 한가운데를 낸다. 손은 손목이 원점이고
+#  +x 가 손끝 방향이라, 반 칸 앞이 손바닥이다. z 는 손 **윗면**의 높이다.
+func _palm_of(wr: Vector2, ang: float, sc: float, hw: float) -> Vector3:
+	var ex := Vector2(cos(ang), sin(ang)) * (float(HAND3.palm_l) * 0.5 * sc)
+	return Vector3(wr.x + ex.x, wr.y + ex.y,
+			hw + float(HAND3.palm_t) * sc)
+
+
 #  손님이 만진 자리에 **가까운 손**을 고른다. 왼쪽 일을 오른손으로
 #  받으면 상인이 제 몸을 가로질러 손을 뻗어서, 응수가 응수로 안 읽힌다.
 func _npc_side(x: float) -> int:
@@ -8514,12 +8525,19 @@ const GIVE := {
 	"look": 1.30,        # 살핀다
 	"back": 0.55,        # 돌려준다.  셋의 합 = 「살핌」의 길이
 	"hop": 15.0,         # 받을 때 물건이 그리는 포물선의 높이
-	#  손 **위로** 들어야 한다. 20 으로 뒀더니 물건이 손 뒤에 숨었다 —
-	#  물건은 굿즈 층(_goods_draw)이라 상인(_cover_draw)보다 **먼저** 그려져서
-	#  손이 위에 얹힌다. 34 면 화면에서 손보다 17px 위라 온전히 보인다.
-	#  카운터 선은 _give_tick 의 밀기가 지킨다.
-	"hold": 34.0,        # 손 위에 든 높이(h)
-	"out": 11.0,         # 몸 바깥쪽으로 비켜 드는 거리 — 손과 안 겹치게 한다
+	#  ── 물건은 손바닥 **위**에 얹힌다 ──────────────
+	#  처음엔 높이로 풀려고 했다. 20 에서 물건이 손 뒤에 숨길래 34 로 올리고
+	#  옆으로 11 비켜 들었는데, 그건 증상을 피한 것이지 원인이 아니었다
+	#  (2026-09-15 제보: "물건이 손위에는 있어야 하지 않겠어?").
+	#
+	#  원인은 **그리는 차례**다. 물건은 굿즈 층(_goods_draw)이고 상인은
+	#  덮개 층(_cover_draw)이라, 물건이 어디에 있든 손이 나중에 그려져
+	#  위에 얹힌다. 높이로는 못 이긴다.
+	#
+	#  그래서 상인이 든 물건만 **손 다음에** 그린다(_give_draw). 그러면
+	#  자리를 비틀 이유가 없어져서, 손목 옆이 아니라 손바닥 한가운데에
+	#  6 띄워 얹는다 — 원래 두려던 자리다.
+	"hold": 6.0,         # 손바닥 윗면에서 띄우는 높이
 	"spin": 2.6,         # 살피는 동안 물건이 도는 속도(라디안/초)
 	"toss": 0.34,        # 이 확률로 던진다. 아니면 내려놓는다
 	"toss_v": 210.0,     # 던지는 속도(면px/초)
@@ -8532,7 +8550,10 @@ var give_toss := false
 var give_from := Vector3.ZERO    # 받기 전 자리 (u, w, h)
 var npc_reach := 0.0       # 손을 내미는 정도 0..1 — 건넬 수 있다는 예고다
 var npc_reach_side := 1
-var npc_wrist := [Vector3.ZERO, Vector3.ZERO]   # _npc_arms 가 적는다 (u, w, h)
+#  손바닥 한가운데와 그 윗면 높이. _npc_arms 가 적고 _give_tick 이 읽는다.
+#  손목이 아니라 **손바닥**이라야 물건이 손 안에 들린다 — 손목에 얹으면
+#  소매에 올려 놓은 것이 된다. 손은 손목에서 앞으로 palm_l 만큼 나간다.
+var npc_palm := [Vector3.ZERO, Vector3.ZERO]
 
 
 #  여기서 떼면 건네는 것인가. 창구(좌우)와 안 겹치는 위쪽 띠다.
@@ -8593,11 +8614,10 @@ func _give_tick(d: float) -> void:
 		idle_t = minf(give_t, tot - 0.0005)
 		idle_side = give_side
 	var it: Dictionary = drop[give_i]
-	var hd: Vector3 = npc_wrist[give_side]
-	var sd: float = -1.0 if give_side == 0 else 1.0
-	var au: float = hd.x + sd * float(GIVE.out)
-	var aw: float = hd.y + 4.0
-	var ah: float = float(GIVE.hold)
+	var pm: Vector3 = npc_palm[give_side]
+	var au: float = pm.x
+	var aw: float = pm.y
+	var ah: float = pm.z + float(GIVE.hold)
 	#  카운터 선을 **절대 안 넘게** 민다. 넘으면 벽 사각(_cover_draw)이
 	#  나중에 덮어서 물건이 통째로 사라진다 — 손이 어디 있든 이 줄이 막는다.
 	#  머리말이 "판 위에서 든다" 라고 적은 그 규칙을 여기서 못 박는다.
@@ -9611,6 +9631,11 @@ func _goods_draw() -> void:
 		_obj_shadow(i)
 	var hov: int = tip_spot if tip_a > 0.004 else -1
 	for i in z:
+		#  상인이 든 것은 여기서 **안 그린다.** 손보다 먼저 나가는 층이라
+		#  여기 그리면 손이 위에 얹혀 물건이 손 뒤로 숨는다(_give_draw).
+		#  그림자는 위에서 이미 깔았다 — 그것은 펠트 위라 자리가 맞다.
+		if i == give_i:
+			continue
 		_obj_draw(i, 0.0 if (hov < 0 or hov == i) else DROP.dim_off)
 		#  값은 **제 물건 바로 뒤**다. 전에는 물건을 다 그린 뒤에 값만
 		#  따로 한 바퀴 돌아서, 뒤 물건의 값이 앞 동전의 반지름 19 원
@@ -9618,6 +9643,15 @@ func _goods_draw() -> void:
 		#  로 쓰면 정확히 그렇게 된다). 여기서 그리면 앞 물건이 뒤 물건의
 		#  값을 가려 깊이 순서가 맞고 소속이 저절로 읽힌다.
 		_bill_one(i)
+
+
+#  상인이 든 물건 하나. **손 다음에** 그린다 — 이 한 줄이 "손 위에 있다" 를
+#  만든다. 높이로는 못 만든다(GIVE.hold 의 주석).
+func _give_draw() -> void:
+	if give_i < 0 or give_i >= drop.size() or give_i >= stock.size():
+		return
+	_obj_draw(give_i, 0.0)
+	_bill_one(give_i)
 
 
 # 그림자가 없으면 높이 h 와 깊이 w 가 화면 y 하나로 뭉개져 구분이 안 된다.

@@ -41,9 +41,14 @@ func _run() -> void:
 	await _wait(70)
 	# ① 내미는 예고 — 들고 카운터 위로 올라간 상태를 손으로 만든다
 	#  제일 큰 물건을 고른다 — 작은 것은 사진에서 손에 묻혀 안 보인다.
+	#  보드 확장·동전을 먼저 고른다 — 제일 크게 그려져서
+	#  손과 겹치는 정도가 제일 잘 보이는 것들이다.
 	var pick := 0
-	for q in g.drop.size():
-		if float(g.drop[q].hw) > float(g.drop[pick].hw):
+	for q in g.stock.size():
+		if String(g.stock[q].type) == "mod":
+			pick = q
+			break
+		if String(g.stock[q].type) == "item":
 			pick = q
 	var it: Dictionary = g.drop[pick]
 	#  _hand_update 가 진짜 마우스 단추를 보고 손을 놓아 버려서
