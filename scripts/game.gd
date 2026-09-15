@@ -7420,6 +7420,9 @@ func _npc_arms() -> void:
 			NPC.wr_l.y + br * 0.2 + float(g0.dw)),
 			a0, NPC.sc_l, float(HAND3.h_wr) + float(g0.dh))
 	npc_grip[0] = Vector2(a0, float(g0.roll))
+	npc_elbow[0] = Vector2(cx + NPC.el_l.x + _npc_sway(NPC.el_l.y)
+			+ _idle_twist(NPC.el_l.y, yw) + float(g0.du) * e0,
+			NPC.el_l.y + br * 0.5 + float(g0.dw) * e0)
 	# 쓸는 팔 — 어깨부터 **쭉 편 채** 휩쓴다. 몸이 +5° 기울며 뻗고,
 	# −5° 로 넘어가는 동안 팔이 부채꼴로 판을 쓴다. 팔꿈치는 어깨-손목
 	# 직선 위라 안 굽고, 손으로 갈수록 굵어지다 손이 1.55배가 된다 —
@@ -7447,6 +7450,7 @@ func _npc_arms() -> void:
 	var hs := lerpf(1.0, SWEEP.hand_up, a)
 	npc_palm[1] = _palm_of(wr, ang, hs, hw)
 	npc_grip[1] = Vector2(ang, float(g1.roll) * (1.0 - a))
+	npc_elbow[1] = el
 	# 위팔은 **쓸 때만** 그린다. 쉬는 자세에서는 어깨와 팔꿈치가 거의
 	# 같은 높이라 토막이 몸통 옆구리에 붙어 팔–몸통 골을 4px 로 좁힌다
 	# (프로브가 잡았다). 원래 설계도 "팔은 상자 하나" 였고 위팔은 쓸기가
@@ -8175,6 +8179,11 @@ const IDLE := {
 		{"n": "끄덕", "t": 0.46, "auto": false, "in": 0.05, "out": 0.32},
 		{"n": "손짓", "t": 0.62, "auto": false, "in": 0.06, "out": 0.36},
 		{"n": "짚기", "t": 0.56, "auto": false, "in": 0.06, "out": 0.34},
+		#  상인을 직접 누르면 나는 것들. 몸을 누르면 셋이 돌아가며 나고
+		#  손을 누르면 그 손을 뺀다.
+		{"n": "움찔", "t": 0.50, "auto": false, "in": 0.04, "out": 0.32},
+		{"n": "손사래", "t": 0.72, "auto": false, "in": 0.05, "out": 0.34},
+		{"n": "빼기", "t": 0.46, "auto": false, "in": 0.04, "out": 0.30},
 		{"n": "저음", "t": 0.62, "auto": false, "in": 0.05, "out": 0.34},
 		#  건네받은 물건을 살핀다. 길이는 GIVE 의 세 박자 합이어야 한다 —
 		#  어긋나면 손이 먼저 내려오고 물건만 허공에 남는다.
@@ -8391,6 +8400,18 @@ func _idle_body() -> Dictionary:
 			out.yaw += k * 0.040 * sd
 			out.lean += k * 3.0
 			out.rise -= k * 1.4
+		"움찔":
+			#  찔린 쪽에서 **물러난다.** 뒤로 빠지고 반대로 돌아선다.
+			out.yaw -= k * 0.090 * sd
+			out.roll += k * 0.032 * sd
+			out.lean -= k * 5.0
+			out.rise += k * 2.0
+		"손사래":
+			out.yaw -= k * 0.040 * sd
+			out.rise += k * 1.2
+		"빼기":
+			out.yaw -= k * 0.050 * sd
+			out.rise += k * 1.2
 		"저음":
 			#  고개가 없으므로 **몸통이 두 번 젓는다.** 진폭보다 횟수가
 			#  "아니다" 를 만든다 — 한 번이면 그냥 돌아본 것이다.
@@ -8511,6 +8532,30 @@ func _idle_hand(i: int) -> Dictionary:
 			out.dh = 3.0 * k
 			out.ang = -sd * 0.22 * k
 			out.el = 0.8
+		"움찔":
+			#  두 손이 같이 뒤로 빠진다. 한 손만 빼면 찔린 쪽이 아니라
+			#  그 손만 놀란 것으로 읽힌다.
+			out.dw = -5.0 * k
+			out.dh = 5.0 * k
+			out.el = 0.6
+		"손사래":
+			#  "됐다" 하고 손을 두 번 젓는다. 가로로 20 을 오가므로 팔이
+			#  통째로 따라가야 한다 — el 0.88.
+			if not mine:
+				return out
+			out.du = -sd * 20.0 * k * sin(b * TAU * 2.0)
+			out.dw = 4.0 * k
+			out.dh = 12.0 * k
+			out.ang = -sd * 0.20 * k * sin(b * TAU * 2.0)
+			out.el = 0.88
+		"빼기":
+			#  찔린 손만 뒤로 뺀다. 카운터 뒤로 물러나므로 화면에서 위로 간다.
+			if not mine:
+				return out
+			out.du = -sd * 6.0 * k
+			out.dw = -14.0 * k
+			out.dh = 9.0 * k
+			out.el = 0.75
 		"저음":
 			out.dh = 2.0 * k
 			out.el = 0.5
@@ -8554,6 +8599,80 @@ func _palm_of(wr: Vector2, ang: float, sc: float, hw: float) -> Vector3:
 	var ex := Vector2(cos(ang), sin(ang)) * (float(HAND3.palm_l) * 0.5 * sc)
 	return Vector3(wr.x + ex.x, wr.y + ex.y,
 			hw + float(HAND3.palm_t) * sc)
+
+
+# ══════════════════════════════════════════════════════════
+#  상인을 누른다
+# ──────────────────────────────────────────────────────────
+#  2026-09-15 제보: "딜러를 클릭하면 딜러랑 상호작용 할 수 있는거".
+#  상인이 선 자리는 여태 **죽은 자리**였다 — _hand_press_at 이 잡는 다섯
+#  갈래(사탕·판매 버튼·동전 슬롯·창구·매물)가 다 카운터 아래고, 상인은
+#  그 위라 어느 갈래도 거기를 본 적이 없다.
+#
+#  ── 삼키지 않는다 ────────────────────────────────────
+#  응수만 내고 **false 를 돌려준다.** 삼키면 상인과 겹치는 무엇(판 고르기의
+#  카드·빈 동전 슬롯 칸)의 클릭을 훔치게 되는데, 이 응수는 덤이지 기능이
+#  아니라서 무엇도 뺏으면 안 된다. 덤이므로 겹쳐도 둘 다 나면 된다.
+#
+#  ── 세 자리 ──────────────────────────────────────────
+#  손 · 팔 · 몸. 앞의 둘이 먼저다 — 팔은 몸 앞에 있고, 화면에서도
+#  몸통 위에 겹쳐 그려진다.
+# ══════════════════════════════════════════════════════════
+const POKE := {
+	"hand_r": 20.0,      # 손을 맞히는 반지름(화면px)
+	"arm_r": 15.0,       # 팔을 맞히는 반반폭
+	"body_w": 66.0,      # 몸통 반폭. 실루엣이 69→62 로 좁아지므로 그 사이다
+	"body_y": 50.0,      # 몸통 윗끝. 동전 슬롯(y 48)에 안 물리게 두 칸 내린다
+	#  몸을 누르면 이 셋이 돌아가며 난다. 같은 짓을 세 번 해서 같은 답이
+	#  세 번 나오면 그건 응수가 아니라 소리다.
+	"body": ["움찔", "손사래", "저음"],
+}
+var npc_poke := 0          # 몸을 누른 횟수. 응수를 돌려 가며 내는 자리다
+
+
+#  상인의 어디를 눌렀는가. −1 아무 데도 · 0·1 그쪽 손(팔 포함) · 2 몸통.
+func _npc_hit(m: Vector2) -> int:
+	if not _npc_on():
+		return -1
+	for i in 2:
+		var pm: Vector3 = npc_palm[i]
+		if pm == Vector3.ZERO:
+			continue
+		var hp := _p2s(pm.x, pm.y, pm.z)
+		if m.distance_to(hp) <= float(POKE.hand_r):
+			return i
+		var eb: Vector2 = npc_elbow[i]
+		var ep := _p2s(eb.x, eb.y, float(HAND3.h_el))
+		if _seg_near(m, ep, hp) <= float(POKE.arm_r):
+			return i
+	if absf(m.x - float(NPC.cx)) <= float(POKE.body_w) \
+			and m.y >= float(POKE.body_y) and m.y <= float(TBL.fy):
+		return 2
+	return -1
+
+
+#  점에서 선분까지의 거리.
+func _seg_near(pt: Vector2, a: Vector2, b: Vector2) -> float:
+	var ab := b - a
+	var ll := ab.length_squared()
+	if ll < 0.0001:
+		return pt.distance_to(a)
+	var t := clampf((pt - a).dot(ab) / ll, 0.0, 1.0)
+	return pt.distance_to(a + ab * t)
+
+
+#  눌렀다. 맞았으면 응수를 내고 true — 부르는 쪽은 그래도 안 삼킨다.
+func _npc_press(m: Vector2) -> bool:
+	var h := _npc_hit(m)
+	if h < 0:
+		return false
+	if h < 2:
+		_npc_react("빼기", h)
+		return true
+	_npc_react(String(POKE.body[npc_poke % POKE.body.size()]),
+			_npc_side(m.x))
+	npc_poke += 1
+	return true
 
 
 #  누른 것이 **툭** 한다. 상인만 응수하고 만진 물건은 꿈쩍도 안 하면
@@ -8662,6 +8781,8 @@ var npc_palm := [Vector3.ZERO, Vector3.ZERO]
 #  손은 뒤척이는데 물건은 가만히 있으면 물건이 손에 붙은 것이 아니라
 #  손 위에 떠 있는 것으로 읽힌다.
 var npc_grip := [Vector2.ZERO, Vector2.ZERO]
+#  팔꿈치의 면 자리. 상인을 누를 때 팔을 맞히는 데 쓴다(_npc_hit).
+var npc_elbow := [Vector2.ZERO, Vector2.ZERO]
 
 
 #  여기서 떼면 건네는 것인가. 창구(좌우)와 안 겹치는 위쪽 띠다.
@@ -11306,6 +11427,9 @@ func _rack_grab(m: Vector2) -> bool:
 #  성공하면 true 를 내므로, 여기 한 자리에서 잡는다.
 func _hand_press(m: Vector2) -> bool:
 	if not _hand_press_at(m):
+		#  아무것도 안 잡혔다 — 상인을 누른 것일 수 있다. 응수만 내고
+		#  **안 삼킨다**(POKE 머리말).
+		_npc_press(m)
 		return false
 	_npc_react("눈길", _npc_side(m.x))
 	if hand_src == 0:
