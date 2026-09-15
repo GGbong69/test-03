@@ -1,0 +1,268 @@
+#  동전 얼굴 — 손으로 찍은 도트. 글 하나가 도트 하나다.
+#
+#  == <id>  <이름>      새 장이 시작된다
+#  = <글> <색>          팔레트 한 줄
+#  그 뒤 스무 줄        그림. 마침표는 비운다(동전 바탕이 비친다)
+#
+#  레퍼런스는 **구도와 색만** 본다. 사진을 도트로 접으면 접힌 사진일 뿐이고,
+#  "누가 봐도 패러디" 로 가려면 직접 찍어야 한다(2026-09-16).
+#  색은 레퍼런스에서 뽑은 값을 쓴다 — 스파르타의 b50e0e/eba64c 는 그 깃발
+#  그대로다. 형태만 우리 손으로 다시 짓는다.
+#
+#  스물이 그림의 실제 해상도다. 원형 알파가 모서리를 깎으므로 네 귀퉁이
+#  두어 칸은 안 보인다 — 거기에 뜻을 두지 마라.
+
+== c14  스파르타
+= r b50e0e
+= g eba64c
+= d 8a0a0a
+rrrrrrrrrrrrrrrrrrrr
+rrrrrrrrrrrrrrrrrrrr
+rrrrrrrrggrrrrrrrrrr
+rrrrrrrggggrrrrrrrrr
+rrrrrrrggggrrrrrrrrr
+rrrrrrggdgggrrrrrrrr
+rrrrrrggrdggrrrrrrrr
+rrrrrggrrrdggrrrrrrr
+rrrrrggrrrrdggrrrrrr
+rrrrggrrrrrrdggrrrrr
+rrrrggrrrrrrrdggrrrr
+rrrgggrrrrrrrrggrrrr
+rrrggrrrrrrrrrrggrrr
+rrggrrrrrrrrrrrggrrr
+rrggrrrrrrrrrrrrggrr
+rggrrrrrrrrrrrrrrggr
+rggrrrrrrrrrrrrrrggr
+rrrrrrrrrrrrrrrrrrrr
+rrrrrrrrrrrrrrrrrrrr
+rrrrrrrrrrrrrrrrrrrr
+
+== c02  닌자
+= w c9ccd2
+= k 2b2c31
+wwwwwwwwwkkwwwwwwwww
+wwwwwwwwkkkkwwwwwwww
+wwwwwwwwkkkkwwwwwwww
+wwwwwwwkkkkkkwwwwwww
+wwwwwwwkkkkkkwwwwwww
+wwwwwwwkkkkkkwwwwwww
+wwwwwwkkkkkkkkwwwwww
+wwwkkkkkkwwkkkkkkwww
+wkkkkkkkwwwwkkkkkkkw
+kkkkkkkwwwwwwkkkkkkk
+kkkkkkkwwwwwwkkkkkkk
+wkkkkkkkwwwwkkkkkkkw
+wwwkkkkkkwwkkkkkkwww
+wwwwwwkkkkkkkkwwwwww
+wwwwwwwkkkkkkwwwwwww
+wwwwwwwkkkkkkwwwwwww
+wwwwwwwkkkkkkwwwwwww
+wwwwwwwwkkkkwwwwwwww
+wwwwwwwwkkkkwwwwwwww
+wwwwwwwwwkkwwwwwwwww
+== c09  양
+= w efece2
+= k 241f28
+wwwwwwwwwwkkkwwwwwww
+wwwwwwwwwwwwwkkwwwww
+wwwwwwwwwwwwwwkkkwww
+wwwwwwwwwkkwwwkkkkww
+wwwwwwwwkkkkwwwkkkww
+wwwwwwwwkkkkwwwkkkkw
+wwwwwwwwwkkwwwwkkkkw
+wwwwwwwwwwwwwwkkkkkk
+wwwwwwwwwwwwwkkkkkkk
+wwwwwwwwwwwwkkkkkkkk
+wwwwwwwwkkkkkkkkkkkk
+wwwwwwwkkkkkkkkkkkkk
+wwwwwwkkkkkkkkkkkkkk
+wwwwwkkkkwwkkkkkkkkw
+wwwwwkkkwwwwkkkkkkkw
+wwwwwkkkwwwwkkkkkkww
+wwwwwwkkkwwkkkkkkkww
+wwwwwwkkkkkkkkkkkwww
+wwwwwwwkkkkkkkkwwwww
+wwwwwwwwwwkkkwwwwwww
+== c10  음
+= w efece2
+= k 241f28
+kkkkkkkkkkwwwkkkkkkk
+kkkkkkkkkkkkkwwkkkkk
+kkkkkkkkkkkkkkwwwkkk
+kkkkkkkkkwwkkkwwwwkk
+kkkkkkkkwwwwkkkwwwkk
+kkkkkkkkwwwwkkkwwwwk
+kkkkkkkkkwwkkkkwwwwk
+kkkkkkkkkkkkkkwwwwww
+kkkkkkkkkkkkkwwwwwww
+kkkkkkkkkkkkwwwwwwww
+kkkkkkkkwwwwwwwwwwww
+kkkkkkkwwwwwwwwwwwww
+kkkkkkwwwwwwwwwwwwww
+kkkkkwwwwkkwwwwwwwwk
+kkkkkwwwkkkkwwwwwwwk
+kkkkkwwwkkkkwwwwwwkk
+kkkkkkwwwkkwwwwwwwkk
+kkkkkkwwwwwwwwwwwkkk
+kkkkkkkwwwwwwwwkkkkk
+kkkkkkkkkkwwwkkkkkkk
+== u25  퍼스트블러드
+= w f2f2f2
+= r e41f28
+= d 8b191c
+= h f27a80
+wwwwwwwwwwwwwwwwwwww
+wwwwwwwwwwwwwwwwwwww
+wwwwwwwwwrwwwwwwwwww
+wwwwwwwwwrrwwwwwwwww
+wwwwwwwwwrrwwwwwwwww
+wwwwwwwwrrrrwwwwwwww
+wwwwwwwwrrrrwwwwwwww
+wwwwwwwrrrrrrwwwwwww
+wwwwwwrrhrrrrrwwwwww
+wwwwwwrrhrrrrrwwwwww
+wwwwwrrhhrrrrrrwwwww
+wwwwwrhhrrrrrrdwwwww
+wwwwrrhhrrrrrrddwwww
+wwwwrrhrrrrrrrddwwww
+wwwwrrrrrrrrrrddwwww
+wwwwwrrrrrrrrddwwwww
+wwwwwrrrrrrrddwwwwww
+wwwwwwddrrddwwwwwwww
+wwwwwwwwddwwwwwwwwww
+wwwwwwwwwwwwwwwwwwww
+
+== l04  잭과 콩나무
+= y f3c424
+= k 090403
+= g 2d6b2f
+yyyyyyyyyyyyyyyyyyyy
+yyyykyyyyyyyyykyyyyy
+yyykkkyyyykyykkkyyyy
+yyykkkyyykkkykkkyyyy
+yyyykyyyykkkyyykyyyy
+yyyyyyggkkkkggyyyyyy
+yyyyyggkkkkkkggyyyyy
+yyyyggkkkkkkkkggyyyy
+yyyyyggkkkkkkggyyyyy
+yyyyyyykkkkkkyyyyyyy
+yyyyyggkkkkkggyyyyyy
+yyyyggkkkkkkkggyyyyy
+yyyyyggkkkkkggyyyyyy
+yyyyyyykkkkkyyyyyyyy
+yyyyyggkkkkkggyyyyyy
+yyyyggkkkkkkkggyyyyy
+yyyyyyykkkkkyyyyyyyy
+yyyyyyykkkkkyyyyyyyy
+yyyyyykkkkkkkyyyyyyy
+yyyyykkkkkkkkkyyyyyy
+
+== c46  프리즘
+= k 0b0b0e
+= d 1e1e26
+= w f2f2ef
+= r ef4b4b
+= o e7b13a
+= g 5ec26a
+= b 4a86d8
+= v 9a5bd0
+kkkkkkkkkkkkkkkkkkkk
+kkkkkkkkkkkkkkkkkkkk
+kkkkkkkkkwkkkkkkkkkk
+kkkkkkkkkddkkkkkkkkk
+kkkkkkkkdddkkkkkkkkk
+kkkkkkkkddddkkkkkkkk
+kkkkkkkddddwkkkkkkkk
+wwwwwwwddddwwrrrrrrr
+kkkkkkddddwwwooooookk
+kkkkkddddwwwwggggkkkk
+kkkkddddwwwwwbbbkkkkk
+kkkddddwwwwwwvvkkkkkk
+kkddddwwwwwwwkkkkkkkk
+kdddddddddddkkkkkkkkk
+kkkkkkkkkkkkkkkkkkkkk
+kkkkkkkkkkkkkkkkkkkk
+kkkkkkkkkkkkkkkkkkkk
+kkkkkkkkkkkkkkkkkkkk
+kkkkkkkkkkkkkkkkkkkk
+kkkkkkkkkkkkkkkkkkkk
+
+== c32  1-UP
+= y f2c21e
+= d a8800f
+= w fbe88a
+= k 6b4f05
+dddddddddddddddddddd
+dddddddyyyyyydddddddd
+ddddyyyyyyyyyyyydddd
+dddyyyyyyyyyyyyyyddd
+ddyyyywwwwwwyyyyyydd
+dyyyywwwwwwwwyyyyyyd
+dyyywwwkkkkwwwyyyyyd
+dyyywwkkkkkkwwyyyyyd
+dyywwwkkkkkkwwwyyyyd
+dyywwwkkkkkkwwwyyyyd
+dyywwwkkkkkkwwwyyyyd
+dyywwwkkkkkkwwwyyyyd
+dyyywwkkkkkkwwyyyyyd
+dyyywwwkkkkwwwyyyyyd
+dyyyywwwwwwwwyyyyyyd
+ddyyyywwwwwwyyyyyydd
+dddyyyyyyyyyyyyyyddd
+ddddyyyyyyyyyyyydddd
+dddddddyyyyyydddddddd
+dddddddddddddddddddd
+
+== c05  금요일
+= b 4a4340
+= w e9e7e0
+= s c9c5ba
+= k 22201d
+= r c04a5a
+bbbbbbbbwwwwbbbbbbbb
+bbbbbwwwwwwwwwwbbbbb
+bbbwwwwwkwwkwwwwwbbb
+bbwwwwwwwwwwwwwwwwbb
+bwwwkwwwwwwwwwwkwwwb
+bwwwwwrwwwwwwrwwwwwb
+bwwwwrrrwwwwrrrwwwwb
+bwwwkkkkwwwwkkkkwwwb
+bwwkkkkkkwwkkkkkkwwb
+bwwkkkkkkwwkkkkkkwwb
+bwwwkkkkwwwwkkkkwwwb
+bwwwwwwwwkwwwwwwwwwb
+bwwwkwwwwwwwwwwkwwwb
+bbwwwwwwkkkkwwwwwwbb
+bbwwwwkkkkkkkkwwwwbb
+bbbwwwwkkkkkkwwwwbbb
+bbbbwwwwwkkwwwwwbbbb
+bbbbbwwwwwwwwwwbbbbb
+bbbbbbbwwwwwwbbbbbbb
+bbbbbbbbbbbbbbbbbbbb
+
+== c33  푸른 구슬
+= k 0a0d18
+= b 2f5f9c
+= d 1d4374
+= w e6ecf4
+= g 7a8a4a
+kkkkkkkbbbbbbkkkkkkk
+kkkkkbbbbwwwbbbkkkkk
+kkkkbbbwwwwwwbbbkkkk
+kkkbbwwwwwbbbbbbbkkk
+kkbbbwwwwbbbbggbbbkk
+kbbbbwwwbbbggggbbbbk
+kbbbbbbbbbgggggbbbbk
+bbbbbbbbbbgggbbbbbbb
+bbwwwbbbbbggbbbbbbbb
+bbwwwwbbbbbbbbbggbbb
+bbwwwbbbbbbbbbgggbbb
+bbbbbbbbbggbbbgggbbb
+kbbbbbbbggggbbbbbbbk
+kbbbbbbggggggbbwwbbk
+kkbbbbbgggggbbwwwbkk
+kkkbbbbbgggbbwwwbkkk
+kkkkbbbbbbbbbwwbkkkk
+kkkkkbbbbbbbbbbkkkkk
+kkkkkkkbbbbbbkkkkkkk
+kkkkkkkkkkkkkkkkkkkk
