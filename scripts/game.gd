@@ -5839,6 +5839,24 @@ const STK_TIERS := [
 	{"rarity": "legendary", "body": "3a1030", "fin": 3},
 ]
 const C_DIECUT := Color("f4f0e6")   # 다이컷 테두리. 이 흰 띠 하나가 "동전"를 말한다
+
+#  ── 동전의 재질 ────────────────────────────────────────────
+#  등급이 이미 몸 색과 마감을 쥔다(STK_TIERS). 재질은 그 위에 **한 겹**만
+#  얹는다 — 등급을 덮지 않으므로 "한눈에 등급을 읽는다" 는 계약이 산다.
+#  덮어쓰기로 갔다가는 흔함 하나가 스물다섯 가지 얼굴을 갖게 되고, 그러면
+#  등급이 아니라 동전마다를 외워야 한다.
+#
+#  **재질은 레퍼런스가 아니라 규칙을 말한다.** 유리 대포가 유리인 것은
+#  대포가 유리라서가 아니라 **판마다 부서지기** 때문이다 — 깨질 물건이라는
+#  것이 손에 들기 전에 보여야 한다. 그림을 줄여 붙이면 38px 에서 뭉개지고,
+#  뭉개지지 않아도 "그 영화를 아는가" 만 묻는 그림이 된다.
+const MATS := {
+	"c03": "glass",      # 유리 대포 — 판마다 1/6 로 부서진다(boom r2)
+}
+
+
+static func _mat_of(it: Dictionary) -> String:
+	return String(MATS.get(String(it.get("id", "")), ""))
 const C_LINER := Color("efe9db")    # 이형지 뒷면 — 말릴 때만 보인다. 인쇄가 없다
 const HOLO := [Color("74d6ea"), Color("ef86c6"), Color("ffd873")]
 const C_FELT := Color("16281f")
@@ -6165,7 +6183,8 @@ func _half_disc(c: Vector2, u: float, left: bool) -> PackedVector2Array:
 func draw_item_sticker(c: Vector2, r: float, it: Dictionary, rot: float, lift: float,
 		dim: float, num_sz: int, peel := 0.0) -> void:
 	var ti := _stk_ti(String(it.get("rarity", "common")))
-	draw_sticker(c, r, STK_TIERS[ti], rot, lift, it.get("g", "") != "", dim, peel)
+	draw_sticker(c, r, STK_TIERS[ti], rot, lift, it.get("g", "") != "", dim,
+			peel, _mat_of(it))
 	var y := _peel_y(r, peel)
 	# 등급 고리. 색은 rarity.csv 가 정한다 — 정의만 있고 아무도 안 부르던
 	# rarity_color() 가 이 한 줄로 산다. 흔함은 안 그린다(고리가 곧 "귀하다").
@@ -6213,8 +6232,14 @@ func draw_item_sticker(c: Vector2, r: float, it: Dictionary, rot: float, lift: f
 #  두르지 않는 이유는 반지름 13px 에 고리 셋(다이컷·등급·골드)이 들어가면
 #  1.5px 간격으로 뭉개져 셋 다 안 읽히기 때문이다. 테두리 색은 공짜다.
 func draw_sticker(c: Vector2, r: float, tier: Dictionary, rot: float,
-		lift: float, gold_rim: bool, dim: float, peel := 0.0) -> void:
+		lift: float, gold_rim: bool, dim: float, peel := 0.0,
+		mat := "") -> void:
 	var body := Color(tier.body).darkened(dim)
+	#  유리는 **인쇄면만** 비친다. 다이컷 흰 띠는 그대로 둔다 — 그 띠 하나가
+	#  "동전" 을 말하므로(이 함수 머리말) 거기까지 비치면 동전이 아니게 된다.
+	var glass: bool = mat == "glass"
+	if glass:
+		body = Color(body, 0.26)
 	var rim: Color = (C_GOLD if gold_rim else C_DIECUT).darkened(dim)
 	var rw: float = clampf(r * 0.16, 1.0, 2.2)      # 다이컷 폭. r=8 툴팁에서도 안 뭉갠다
 	var y := _peel_y(r, peel)
@@ -6224,11 +6249,22 @@ func draw_sticker(c: Vector2, r: float, tier: Dictionary, rot: float,
 	if lift > 0.05:
 		draw_circle(c + Vector2(0.0, lift), r, Color(0.0, 0.0, 0.0, 0.22))
 
-	_disc_seg(c, r, y, rim)                         # 다이컷 테두리
-	# 인쇄 가장자리 1px. 흔함(크림 ded5c0)과 다이컷(f4f0e6)은 명도차가 9% 뿐이라
-	# 이 줄이 없으면 둘이 한 덩어리 흰 원으로 뭉개진다. 나머지 두 등급은 대비가
-	# 충분하지만 같은 그림을 쓰는 편이 어법이 안 갈린다.
-	_disc_seg(c, r - rw, y, body.darkened(0.34))
+	if glass:
+		#  **속을 비운다.** 다이컷을 꽉 찬 원반으로 깔고 그 위에 반투명
+		#  인쇄를 얹으면, 비치는 것이 펠트가 아니라 제 테두리다 — 처음에
+		#  그렇게 그려 놓고 "왜 안 비치지" 했다. 유리는 가장자리가 가장
+		#  두꺼우므로 다이컷만 고리로 남는 것이 물리로도 맞다.
+		#  온 고리를 한 폴리곤으로 넘기면 비볼록이라 삼각분할이 튄다
+		#  (annulus 주석) — 넷으로 갈라 넘긴다.
+		for q in 4:
+			draw_colored_polygon(annulus_at(c, r - rw, r,
+					float(q) * (TAU / 4.0), float(q + 1) * (TAU / 4.0), 7), rim)
+	else:
+		_disc_seg(c, r, y, rim)                     # 다이컷 테두리
+		# 인쇄 가장자리 1px. 흔함(크림 ded5c0)과 다이컷(f4f0e6)은 명도차가 9% 뿐이라
+		# 이 줄이 없으면 둘이 한 덩어리 흰 원으로 뭉개진다. 나머지 두 등급은 대비가
+		# 충분하지만 같은 그림을 쓰는 편이 어법이 안 갈린다.
+		_disc_seg(c, r - rw, y, body.darkened(0.34))
 	_disc_seg(c, r - rw - 1.0, y, body)             # 인쇄면
 
 	# 마감. 각 규약은 annulus_at 그대로다(0 = 12시, 시계 방향) — 둘 다 왼쪽
@@ -6253,6 +6289,21 @@ func draw_sticker(c: Vector2, r: float, tier: Dictionary, rot: float,
 				draw_colored_polygon(annulus_at(c, r * 0.20, r - rw - 0.3,
 						a2, a2 + TAU / 6.0, 4),
 						Color(HOLO[k % 3], 0.42 * fa))
+	if glass:
+		#  굴절 — 유광 초승달(fin 1)보다 **좁고 밝다.** 유리는 종이처럼
+		#  넓게 번지지 않는다. 둘을 같은 폭으로 두면 "유광 흔함" 과 안 갈린다.
+		draw_colored_polygon(annulus_at(c, r * 0.62, r - rw - 0.3,
+				rot - 1.15, rot - 0.62, 5), Color(1.0, 1.0, 1.0, 0.55 * fa))
+		#  간 금 둘. 테두리에서 안으로 뻗다 만다 — **이미 간 금**이지 깨진
+		#  자국이 아니다. 끝까지 그으면 조각난 것으로 읽혀서, 아직 쓸 수 있는
+		#  동전이 못 쓰는 것으로 보인다.
+		#  말린 상태에서는 접는 선 위에 있는 금만 긋는다(등급 고리와 같은 규약).
+		for k in 2:
+			var a3: float = rot + 0.75 + float(k) * 2.30
+			var p0 := c + Vector2(cos(a3), sin(a3)) * (r - rw)
+			var p1 := c + Vector2(cos(a3 + 0.55), sin(a3 + 0.55)) * (r * 0.34)
+			if p0.y - c.y <= y and p1.y - c.y <= y:
+				draw_line(p0, p1, Color(1.0, 1.0, 1.0, 0.42 * fa), 1.0)
 
 
 # 접는 선의 높이(중심 기준 아래 방향). peel 1 이면 거의 다 말린다.
@@ -10429,13 +10480,22 @@ func _sticker_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: floa
 	var rx: float = TBL.chip_r * (1.0 + wob * 0.05)
 	var ry: float = TBL.chip_r * TBL.flat * (1.0 - wob * 0.12)
 	var body := Color(t.body).darkened(dim)
+	#  재질은 **두 자세 다** 입어야 한다. 이 함수와 draw_sticker 는 같은
+	#  물건의 다른 자세이고(이 함수 머리말), 한쪽만 유리면 테이블에서 집어
+	#  동전 슬롯에 꽂는 순간 재질이 바뀐다.
+	var glass: bool = _mat_of(it) == "glass"
+	if glass:
+		body = Color(body, 0.26)
 	var rim: Color = (C_GOLD if it.get("g", "") != "" else C_DIECUT).darkened(dim)
 	var rw := 2.2
 	var sd: float = TBL.chip_t * TBL.tall              # 그림자 낙차 2.77px
 	draw_colored_polygon(_e_pts(c + Vector2(0.0, sd), rx, ry),
 			Color(0.0, 0.0, 0.0, 0.26 * (1.0 - dim)))
 	_rar_glow(c, rx, ry, String(it.get("rarity", "common")), dim)
-	draw_colored_polygon(_e_pts(c, rx, ry), rim)
+	if glass:
+		_e_ring_w(c, rx, ry, rw, rim)               # 속을 비운다(선 자세와 같은 까닭)
+	else:
+		draw_colored_polygon(_e_pts(c, rx, ry), rim)
 	draw_colored_polygon(_e_pts(c, rx - rw, ry - rw * TBL.flat), body)
 	var fa := 1.0 - dim
 	match int(t.fin):
@@ -10455,6 +10515,18 @@ func _sticker_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: floa
 				draw_colored_polygon(_e_band(c, rx - rw - 0.3, ry - rw * TBL.flat - 0.3,
 						rx * 0.20, ry * 0.20, a2, a2 + TAU / 6.0, 4),
 						Color(HOLO[k % 3], 0.26 * fa))
+	if glass:
+		#  누운 자세의 값들은 선 자세보다 한 단 낮다(fin 1 이 0.32 → 0.22).
+		#  펠트가 어두워 같은 알파면 더 세게 보이기 때문이다. 굴절도 그 비로 낮춘다.
+		draw_colored_polygon(_e_band(c, rx - rw - 0.3, ry - rw * TBL.flat - 0.3,
+				rx * 0.62, ry * 0.62, rot - 1.15, rot - 0.62, 5),
+				Color(1.0, 1.0, 1.0, 0.40 * fa))
+		for k in 2:
+			var a3: float = rot + 0.75 + float(k) * 2.30
+			draw_line(c + Vector2(cos(a3) * (rx - rw), sin(a3) * (ry - rw * TBL.flat)),
+					c + Vector2(cos(a3 + 0.55) * rx * 0.34,
+					sin(a3 + 0.55) * ry * 0.34),
+					Color(1.0, 1.0, 1.0, 0.32 * fa), 1.0)
 	var val := ("×" + str(it.v)) if it.k == "xmult" else str(it.v)
 	var ink: Color = C_CHIP.lightened(0.5) if it.k == "chip" else C_MULT.lightened(0.45)
 	draw_string(font, c + Vector2(-rx, 4.0), val,
