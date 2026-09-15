@@ -13811,8 +13811,11 @@ func _draw_profile() -> void:
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_OFF.lerp(C_DIM, ee))
 		#  지금 쓰는 프로필에만 표식. 고른 줄과 쓰는 줄은 다른 말이다 —
 		#  훑는 동안 쓰는 자리가 어디인지가 안 흔들려야 한다.
+		#  **띠의 마침표와 같은 자리에 선다.** 전에는 r.end.x-6 이라 띠가 다
+		#  들어온 줄에서는 금빛 세로획이 186 과 203 에 둘 섰다 — 하나는
+		#  "쓰는 줄", 하나는 "띠 끝" 인데 보는 쪽에서는 그냥 바가 둘이다.
 		if on:
-			draw_rect(Rect2(r.end.x - 6.0, r.position.y + 2.0, 3.0,
+			draw_rect(Rect2(_band_end_x(r) - 3.0, r.position.y + 2.0, 3.0,
 					r.size.y - 4.0), C_ACC)
 
 	#  오른쪽 — 고른 줄의 속
@@ -16238,8 +16241,7 @@ func _draw_newrun() -> void:
 	var many: bool = packs.size() > 1
 	for right in [false, true]:
 		var ar := _pack_arrow(right)
-		_tab_draw(self, ar, "▶" if right else "◀", false,
-				many and ar.has_point(mouse_at))
+		_arrow_btn(self, ar, right, many and ar.has_point(mouse_at))
 
 	# 다트통 패널 — 왼쪽에 통(다트통의 얼굴), 오른쪽에 이름과 값
 	var pr := _pack_rect()
@@ -16689,6 +16691,13 @@ func _row_band(c: CanvasItem, r: Rect2, ee: float, ew: float, a: float,
 	c.draw_rect(Rect2(edge - 1.0, y0, 1.0, hh), Color(col, 0.55 * ee * a))
 
 
+#  띠가 다 들어왔을 때 마침표가 서는 x. 같은 줄에 제 표식을 세우는 쪽은
+#  **이 자리에 겹쳐 세운다** — 금빛 세로획이 한 줄에 둘이면 보는 사람은
+#  둘이 다른 말을 한다고 읽는다. 프로필 줄이 그래서 노란 바가 둘이었다.
+static func _band_end_x(r: Rect2, pad := 12.0) -> float:
+	return roundf(r.position.x - pad) + r.size.x + pad * 2.0
+
+
 #  화면 머리. **왼쪽 x · 크기 · 색 · 맞춤을 한 곳에서** 낸다 — 전에는
 #  화면마다 달랐다(컬렉션 가운데 24 · 새 런 가운데 자간 · 설정 왼쪽 20 ·
 #  실패 가운데). 왼쪽 맞춤인 것은 글줄이 왼쪽에 서기 때문이다. 머리와
@@ -16727,6 +16736,30 @@ func _tab_draw(c: CanvasItem, r: Rect2, label: String, on: bool,
 	c.draw_string(font, r.position + Vector2(0.0, r.size.y * 0.72), label,
 			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 11,
 			C_DIM.lerp(C_TXT, e))
+
+
+#  넘김 단추 하나. 탭이 아니라 **단추**라 제 어법을 쓴다.
+#
+#  전에는 _tab_draw 에 "◀"·"▶" 를 글자로 넘겼는데 둘이 어긋났다.
+#    ① 얹힘 띠가 45%만 찬다. 넓은 탭에서는 "쓸려 들어온다" 로 읽히지만
+#       26px 단추에서는 **띠의 밝은 끝선이 세모 한가운데를 가른다**.
+#       쓸릴 자리가 없는 칸에서 쓸기를 흉내 내면 그냥 어긋나 보인다.
+#    ② 글줄 기준선이 칸 높이의 0.72 다. 글자에는 맞는 자리지만 도형에는
+#       아니라 세모가 칸 가운데보다 4px 아래에 앉았다.
+#    ③ ◀ 는 잉크 12px(왼쪽 베어링 −1)이고 ▶ 는 11px(0)이다. 같은 칸에
+#       넣어도 둘이 1px 어긋난다 — 좌우 대칭이어야 할 한 쌍인데.
+#  셋 다 "글자로 그린 도형" 에서 온다. 도형으로 그리면 셋이 같이 없어진다.
+#  칸 가운데가 넷 다 정수라(53,118 · 34,337 · 606,337) 반 픽셀이 안 남는다.
+func _arrow_btn(c: CanvasItem, r: Rect2, right: bool, hot: bool) -> void:
+	var e: float = 1.0 if hot else 0.0
+	#  ew 를 1.0 으로 박는다 — 칸을 꽉 채운 띠만 이 크기에서 읽힌다.
+	_row_band(c, r, e, 1.0, 1.0, C_ACC, 2.0)
+	var m := r.get_center()
+	var sx: float = 1.0 if right else -1.0
+	c.draw_colored_polygon(PackedVector2Array([
+			Vector2(m.x - 5.0 * sx, m.y - 6.0),
+			Vector2(m.x - 5.0 * sx, m.y + 6.0),
+			Vector2(m.x + 5.0 * sx, m.y)]), C_DIM.lerp(C_TXT, e))
 
 
 #  뒤로 한 줄. 화면마다 다른 상자였던 것을 한 어법으로 모은다.
@@ -17792,10 +17825,9 @@ func _draw_collect() -> void:
 				9, C_DIM)
 
 	if _col_pages() > 1:
-		_tab_draw(self, _col_arrow_rect(false), "◀", false,
-				_col_arrow_rect(false).has_point(mouse_at))
-		_tab_draw(self, _col_arrow_rect(true), "▶", false,
-				_col_arrow_rect(true).has_point(mouse_at))
+		for right in [false, true]:
+			var ca := _col_arrow_rect(right)
+			_arrow_btn(self, ca, right, ca.has_point(mouse_at))
 		draw_string(font_sm, Vector2(0, 318), "%d / %d" % [collect_page + 1, _col_pages()],
 				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 9, C_DIM)
 	_back_row(self, _menu_back_rect(), "뒤로", "ESC",
