@@ -143,6 +143,22 @@ func _run() -> void:
 		await _wait(8)
 	await _wait(6)
 
+	# 팔뿌리의 마구리가 동전 슬롯(밑변 48) 밑으로 나오면 안 된다.
+	#  손을 앞으로 뻗는 몸짓이 팔꿈치까지 끌고 나오는데, 팔은 거기서
+	#  끝나는 상자라 잘린 단면이 그대로 보인다(HAND3.back 의 주석).
+	#  제일 멀리 뻗는 「살핌」으로 잰다.
+	g._npc_react("살핌", 1)
+	g.idle_t = g._idle_len() * 0.5
+	await _wait(3)
+	var ab: Node3D = (g.hand3_rig[1] as Dictionary).arm
+	var ao: Vector3 = ab.transform.origin
+	var asy: float = g.TBL.fy + ao.z * g.TBL.flat - ao.y * g.TBL.tall
+	_ok("팔뿌리가 동전 슬롯 뒤에 있다", asy <= 44.0, "화면 y %.1f (슬롯 48)" % asy)
+	g.idle_act = -1
+	g.idle_t = 0.0
+	await _wait(3)
+
+
 	# ⑧ 화면을 뜨면 지워진다 — 안 보이는 뷰포트가 런 내내 돌면 안 된다
 	g.state = g.S.TITLE
 	await _wait(6)
