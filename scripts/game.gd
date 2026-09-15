@@ -8151,7 +8151,13 @@ const IDLE := {
 	"sway": 0.052,               # 무게 옮기기 — 몸통 돌림 3°
 	"sway_hz": 0.085,            # 그 주기. 11.8 초에 한 번이라 배경으로 깔린다
 	"tip": 0.030,                # 같이 도는 좌우 기울임 1.7°
+	#  봉투의 기본값. 몸짓이 제 값을 적으면 그쪽이 이긴다.
+	#  **응수는 훨씬 빨라야 한다** — 0.26 이면 눌러 놓고 열여섯 프레임
+	#  뒤에야 자세가 다 선다. 그건 두드림이 아니라 기울임이다
+	#  (2026-09-15 제보: "클릭하면 툭툭 상호작용이 되야지").
+	#  응수는 들머리 0.05(세 프레임)로 때리고 날머리로 흘린다.
 	"in": 0.26, "out": 0.34,     # 몸짓 봉투의 들머리·날머리
+	"snap": 0.12,                # 들머리가 이보다 짧으면 "때리는" 응수다
 	"axis": -41.0,               # 몸이 도는 축의 w. 팔뿌리가 이 축을 탄다
 	#  n 이름 · t 초 · auto 제비로 뽑히는가
 	"acts": [
@@ -8165,11 +8171,11 @@ const IDLE := {
 		{"n": "훑기", "t": 2.2, "auto": true},
 		{"n": "고쳐서기", "t": 1.6, "auto": true},
 		#  응수 — 제비에 안 든다. _npc_react 가 이름으로 부른다.
-		{"n": "눈길", "t": 0.7, "auto": false},
-		{"n": "끄덕", "t": 0.6, "auto": false},
-		{"n": "손짓", "t": 0.8, "auto": false},
-		{"n": "짚기", "t": 0.8, "auto": false},
-		{"n": "저음", "t": 0.8, "auto": false},
+		{"n": "눈길", "t": 0.44, "auto": false, "in": 0.05, "out": 0.30},
+		{"n": "끄덕", "t": 0.46, "auto": false, "in": 0.05, "out": 0.32},
+		{"n": "손짓", "t": 0.62, "auto": false, "in": 0.06, "out": 0.36},
+		{"n": "짚기", "t": 0.56, "auto": false, "in": 0.06, "out": 0.34},
+		{"n": "저음", "t": 0.62, "auto": false, "in": 0.05, "out": 0.34},
 		#  건네받은 물건을 살핀다. 길이는 GIVE 의 세 박자 합이어야 한다 —
 		#  어긋나면 손이 먼저 내려오고 물건만 허공에 남는다.
 		{"n": "살핌", "t": 2.30, "auto": false},
@@ -8231,12 +8237,17 @@ func _npc_react(nm: String, side := -1) -> void:
 		return
 	for i in IDLE.acts.size():
 		if String((IDLE.acts[i] as Dictionary).n) == nm:
-			#  **같은 응수를 다시 부르면 시계를 0 으로 안 되돌린다.**
-			#  봉투가 1 에 있는데 0 으로 떨어뜨리면 자세가 한 프레임에 쉬는
-			#  자리로 튕겼다가 다시 올라온다 — 연타하면 손이 떤다.
-			#  들머리 끝까지만 되감아 "다시 붙든다".
-			if idle_act == i:
-				idle_t = minf(idle_t, float(IDLE["in"]))
+			#  같은 응수를 다시 부를 때 시계를 어떻게 하는가 — **들머리
+			#  길이가 정한다.**
+			#  느린 응수(들머리 0.26)를 0 으로 되돌리면 봉투가 1 에서 0 으로
+			#  떨어져 자세가 한 프레임에 쉬는 자리로 튕긴다. 그래서 되감지
+			#  않고 붙들어 둔다.
+			#  때리는 응수(들머리 0.05)는 **반대다.** 되감아야 한 번 더 때린다 —
+			#  붙들어 두면 연타해도 처음 한 번만 툭 하고 나머지는 그냥
+			#  들러붙어 있는다. 세 프레임이라 되돌리는 것이 안 보인다.
+			var fast: bool = _act_in(i) <= float(IDLE.snap)
+			if idle_act == i and not fast:
+				idle_t = minf(idle_t, _idle_in())
 			else:
 				idle_act = i
 				idle_t = 0.0
@@ -8249,6 +8260,17 @@ func _idle_len() -> float:
 	if idle_act < 0:
 		return 0.0
 	return float((IDLE.acts[idle_act] as Dictionary).t)
+
+
+#  i 번째 몸짓의 들머리. 짧을수록 "때리는" 쪽이다(IDLE.snap).
+func _act_in(i: int) -> float:
+	if i < 0 or i >= IDLE.acts.size():
+		return float(IDLE["in"])
+	return float((IDLE.acts[i] as Dictionary).get("in", IDLE["in"]))
+
+
+func _idle_in() -> float:
+	return _act_in(idle_act)
 
 
 func _idle_name() -> String:
@@ -8266,8 +8288,9 @@ func _idle_env() -> float:
 	if idle_act < 0:
 		return 0.0
 	var dur: float = _idle_len()
-	var fi: float = minf(float(IDLE["in"]), dur * 0.4)
-	var fo: float = minf(float(IDLE.out), dur * 0.45)
+	var fi: float = minf(_idle_in(), dur * 0.4)
+	var fo: float = minf(float((IDLE.acts[idle_act] as Dictionary).get(
+			"out", IDLE.out)), dur * 0.45)
 	if idle_t < fi:
 		return _ease_io(idle_t / fi)
 	if idle_t > dur - fo:
@@ -8354,8 +8377,9 @@ func _idle_body() -> Dictionary:
 			out.roll -= k * 0.030 * sd
 			out.rise -= k * 1.5 * sin(b * PI)
 		"눈길":
-			out.yaw += k * 0.058 * sd
-			out.rise += k * 1.0
+			#  0.7초에서 0.44 로 줄었다. 짧아진 만큼 커야 같은 세기로 읽힌다.
+			out.yaw += k * 0.072 * sd
+			out.rise += k * 1.8
 		"끄덕":
 			out.rise -= k * 3.0 * sin(b * PI)
 			out.lean += k * 3.2 * sin(b * PI)
@@ -8462,8 +8486,8 @@ func _idle_hand(i: int) -> Dictionary:
 		"눈길":
 			if not mine:
 				return out
-			out.dh = 4.0 * k
-			out.dw = 3.0 * k
+			out.dh = 7.0 * k
+			out.dw = 4.0 * k
 			out.el = 0.5
 		"끄덕":
 			out.dw = 4.0 * k * sin(b * PI)
@@ -8530,6 +8554,26 @@ func _palm_of(wr: Vector2, ang: float, sc: float, hw: float) -> Vector3:
 	var ex := Vector2(cos(ang), sin(ang)) * (float(HAND3.palm_l) * 0.5 * sc)
 	return Vector3(wr.x + ex.x, wr.y + ex.y,
 			hw + float(HAND3.palm_t) * sc)
+
+
+#  누른 것이 **툭** 한다. 상인만 응수하고 만진 물건은 꿈쩍도 안 하면
+#  누름이 어디에 닿았는지가 화면에서 안 보인다 — 응수는 상인의 것이고
+#  이것은 **그 물건의 것**이다.
+#
+#  둘을 같이 민다. 튀어오름(lift)은 _obj_paint 가 h 에 더해 그리므로
+#  물건 종류를 **안 가리고**, 눌림(wob)은 동전·사탕·보드 확장이 받는다
+#  (팩·다트는 눌림을 안 그려서 튀어오름만 남는다).
+#  둘 다 스프링이라 밀기만 하면 제자리로 돌아온다 — 되돌릴 것이 없다.
+#  maxf 로 미는 것은 이미 흔들리는 중인 물건을 **약하게 덮어쓰지** 않기
+#  위해서다. 연타하면 흔들림이 겹쳐 쌓인다.
+func _knock(i: int, amt := 1.0) -> void:
+	if i < 0 or i >= drop.size():
+		return
+	if i == give_i:
+		return                  # 상인이 든 것은 _give_tick 이 값을 쥐고 있다
+	var it: Dictionary = drop[i]
+	it.lv = maxf(float(it.lv), float(DROP.knock_v) * amt)
+	it.wob = maxf(float(it.wob), float(DROP.knock_w) * amt)
 
 
 #  손님이 만진 자리에 **가까운 손**을 고른다. 왼쪽 일을 오른손으로
@@ -9094,6 +9138,24 @@ const DROP := {
 	# ── 연출 (전부 그리기 전용. 물리에 한 방울도 안 흘린다) ──
 	"lift_hov": 6.0, "lift_k": 260.0, "lift_c": 22.0,
 	"wob_k": 150.0, "wob_c": 11.0,
+	#  ── 누를 때 물건을 미는 세기(_knock) ──────────────
+	#  둘 다 **재서** 잡았다. 셈으로는 안 나온다 — 감쇠(lift_c 22 · wob_c 11)가
+	#  꼭짓점을 예상의 절반 밑으로 깎는다.
+	#
+	#  튀어오름은 속도로 민다. 120 은 3.0 면px(화면 1.8px)라 안 보였고,
+	#  270 이 7.0 면px(화면 4.3px)다.
+	#
+	#  눌림은 **속도가 아니라 값으로** 민다. _drop_wob 은 속도를 [0,1] 로
+	#  자르는데 그 속도가 낼 수 있는 wob 꼭짓점이 v/ω = 1/12.25 = 0.08 뿐이라,
+	#  아무리 세게 불러도 화면에서 0.6% 눌린다 — 즉 안 보인다. 착지 흔들림이
+	#  원래 그만큼 작은 것이고(HAND.land_wob 90 → 0.03), 그 채널로는
+	#  "툭" 을 못 만든다. 그래서 여기서는 wob 을 직접 0.5 로 눌러 놓고
+	#  스프링이 되밀게 둔다.
+	"knock_v": 270.0, "knock_w": 0.5,
+	#  누른 것이 튀는 동안의 여유 높이. 얹혀 있는 들어올림(lift_hov 6) 위로
+	#  이만큼 더 오를 수 있다 — 3 으로 두면 얹힌 물건을 눌렀을 때 꼭짓점이
+	#  덮개에 잘려 1.8px 만 튄다(실측).
+	"knock_h": 10.0,
 	"sold_t": 0.46, "dim_off": 0.30, "sh_a": 0.34, "sh_grow": 0.030,
 	"bill_dy": 30.0,
 }
@@ -9562,7 +9624,9 @@ func _drop_extras(d: float) -> void:
 		var tgt: float = -HAND.dip if it.held else (DROP.lift_hov if i == hov else 0.0)
 		it.lv += (tgt - it.lift) * DROP.lift_k * d
 		it.lv *= exp(-DROP.lift_c * d)
-		it.lift = clampf(it.lift + it.lv * d, -2.0, DROP.lift_hov + 3.0)
+		#  덮개가 knock_h 만큼 넉넉하다 — 누른 물건이 튀는 자리다(DROP 주석).
+		it.lift = clampf(it.lift + it.lv * d, -2.0,
+				DROP.lift_hov + DROP.knock_h)
 
 
 func _drop_leave(i: int) -> void:
@@ -9689,7 +9753,11 @@ func _seg_d(p: Vector2, a: Vector2, b: Vector2) -> float:
 # 실측 — 정착 배치 300판을 1px 격자로 전수 조사해 못 잡는 물체 0/1200,
 # 최소 표적 면적 667px²(다트) · 1158(동전) · 1719(보드 확장).
 func _shop_hit(m: Vector2) -> int:
-	var lz: float = DROP.lift_hov * TBL.tall             # 3.70 — 들린 위치까지 덮는다
+	#  들린 위치까지 덮는다. 덮개를 튀는 높이(knock_h)까지 넓혔다 —
+	#  누른 직후 물건이 화면에서 4px 더 올라가 있는 동안에도 같은 자리를
+	#  다시 누를 수 있어야 **툭툭** 이 된다. 넓히면 판정이 헐거워질 뿐
+	#  빡빡해지지 않으므로 못 누르게 되는 경우가 안 생긴다.
+	var lz: float = (DROP.lift_hov + DROP.knock_h) * TBL.tall
 	var z := _z_order()
 	for k in range(z.size() - 1, -1, -1):
 		var i: int = z[k]
@@ -11240,6 +11308,8 @@ func _hand_press(m: Vector2) -> bool:
 	if not _hand_press_at(m):
 		return false
 	_npc_react("눈길", _npc_side(m.x))
+	if hand_src == 0:
+		_knock(hand_i)
 	return true
 
 
@@ -11643,9 +11713,11 @@ func _hand_scuff(it: Dictionary, d: float) -> void:
 
 # ══ 구매 두 갈래 — 둘 다 계산대에서 끝난다 ═══════════
 func _shop_tap(i: int) -> void:
-	#  눌렀다 그대로 뗀 것 — 고른 것이다. 상인이 그 물건을 짚어 보인다.
+	#  눌렀다 그대로 뗀 것 — 고른 것이다. 상인이 그 물건을 짚어 보이고
+	#  물건은 한 번 더 툭 한다(누를 때 한 번, 뗄 때 한 번 = 툭툭).
 	if i >= 0 and i < drop.size():
 		_npc_react("짚기", _npc_side(float((drop[i] as Dictionary).u)))
+		_knock(i, 0.7)
 	sell_sel = -1
 	buy_sel = -1 if buy_sel == i else i
 	_sfx("shop_select" if buy_sel >= 0 else "shop_deselect")

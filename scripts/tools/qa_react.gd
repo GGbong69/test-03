@@ -92,6 +92,85 @@ func _run() -> void:
 	_ok("다른 응수는 처음부터", g._idle_name() == "끄덕" and g.idle_t == 0.0,
 			"%s · t %.2f" % [g._idle_name(), g.idle_t])
 
+	# 응수는 **때린다** — 세 프레임 안에 봉투가 다 선다
+	var slow := ""
+	for nm3 in ["눈길", "끄덕", "손짓", "짚기", "저음"]:
+		_clear()
+		g._npc_react(nm3, 1)
+		g.idle_t = 4.0 / 60.0
+		if g._idle_env() < 0.98:
+			slow = "%s %.2f" % [nm3, g._idle_env()]
+	_ok("응수는 네 프레임에 다 선다", slow == "", slow)
+	#  제비로 뽑는 몸짓은 반대로 **느려야** 한다 — 그것까지 때리면 경련이다
+	_clear()
+	g.idle_act = 0
+	g.idle_t = 3.0 / 60.0
+	_ok("제비 몸짓은 천천히 든다", g._idle_env() < 0.5,
+			"봉투 %.2f" % g._idle_env())
+
+	# 때리는 응수는 연타하면 **다시 때린다**
+	_clear()
+	g._npc_react("눈길", 1)
+	g.idle_t = 0.30
+	g._npc_react("눈길", 1)
+	_ok("때리는 응수는 되감는다", g.idle_t == 0.0, "t %.2f" % g.idle_t)
+	#  느린 몸짓은 되감으면 안 된다 — 봉투가 1 에서 0 으로 튄다
+	_clear()
+	g.idle_act = 0
+	g.idle_t = 0.55
+	g._npc_react(String((g.IDLE.acts[0] as Dictionary).n))
+	_ok("느린 몸짓은 안 되감는다", g.idle_t > 0.2, "t %.2f" % g.idle_t)
+
+	# 누른 물건이 툭 한다 — 튀어올랐다 제자리로 돌아온다
+	var it1: Dictionary = g.drop[0]
+	it1.lift = 0.0
+	it1.lv = 0.0
+	it1.wob = 0.0
+	it1.wv = 0.0
+	g._knock(0)
+	var top := 0.0
+	var wtop := 0.0
+	for f in 12:
+		g._drop_extras(1.0 / 60.0)
+		top = maxf(top, float(it1.lift))
+		wtop = maxf(wtop, absf(float(it1.wob)))
+	_ok("누르면 물건이 튄다", top >= 5.0,
+			"%.1f 면px = 화면 %.1fpx" % [top, top * g.TBL.tall])
+	var cap: float = float(g.DROP.lift_hov) + float(g.DROP.knock_h)
+	_ok("덮개에 안 걸린다", top <= cap, "%.1f ≤ %.1f" % [top, cap])
+	_ok("눌림도 같이 든다", wtop >= 0.35, "wob %.2f" % wtop)
+	for f in 90:
+		g._drop_extras(1.0 / 60.0)
+	#  얹혀 있는 물건(호버)을 눌렀을 때도 튀어야 한다 — 덮개에 잘리던 자리다
+	for f in 90:
+		g._drop_extras(1.0 / 60.0)
+	g.tip_spot = 0
+	g.tip_a = 1.0
+	for f in 40:
+		g._drop_extras(1.0 / 60.0)
+	var base: float = float(it1.lift)
+	g._knock(0)
+	var htop := base
+	for f in 12:
+		g._drop_extras(1.0 / 60.0)
+		htop = maxf(htop, float(it1.lift))
+	_ok("얹힌 물건도 그만큼 튄다", htop - base >= 5.0,
+			"%.1f → %.1f (+%.1f)" % [base, htop, htop - base])
+	g.tip_a = 0.0
+	g.tip_spot = -1
+	for f in 90:
+		g._drop_extras(1.0 / 60.0)
+	_ok("한 뒤에는 제자리로",
+			absf(float(it1.lift)) < 0.5 and absf(float(it1.wob)) < 0.05,
+			"lift %.2f · wob %.3f" % [float(it1.lift), float(it1.wob)])
+	#  상인이 든 것은 안 민다 — _give_tick 이 그 값을 쥐고 있다
+	g.give_i = 0
+	it1.lv = 0.0
+	g._knock(0)
+	_ok("상인이 든 것은 안 민다", float(it1.lv) == 0.0, "lv %.1f" % float(it1.lv))
+	g.give_i = -1
+
+
 	# ⑤ 눌렀다 그대로 떼면(탭) 그 물건을 짚어 보인다
 	_clear()
 	g._shop_tap(0)
