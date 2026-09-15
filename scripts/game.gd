@@ -11757,7 +11757,7 @@ func _hand_release(m: Vector2) -> void:
 		if z == Z_SELL and _can_sell() and i >= 0 and i < owned.size():
 			_sell(i)
 		elif z == Z_BUY:
-			pay_msg = "오른쪽은 사는 창구다"
+			pay_msg = "테이블 물건만 살 수 있다"
 			pay_msg_t = HAND.msg_t
 			_deny()
 		else:
@@ -11808,7 +11808,7 @@ func _hand_release(m: Vector2) -> void:
 			_deny()
 			_hand_land(it)
 			return
-		var blk := "왼쪽은 파는 창구다" if z == Z_SELL else _buy_block(i)
+		var blk := "가진 것만 팔 수 있다" if z == Z_SELL else _buy_block(i)
 		if blk == "":
 			_pay_take(i)
 			return                            # 이미 떠났다. 자리로 안 돌려보낸다
@@ -11940,7 +11940,7 @@ func _hand_update(d: float) -> void:
 
 	# 래치는 히스테리시스로 건다 — 경계에서 소리와 창구 얼굴이 연타되지 않는다.
 	# 창구는 상점에만 있다. 판 중에 동전 슬롯 동전을 끌 때 이것을 걸면 없는 창구의
-	# 소리가 나고, 뗄 때 "오른쪽은 사는 창구다" 가 뜬다.
+	# 소리가 나고, 뗄 때 거절 사유가 뜬다.
 	var pad: float = HAND.latch_gap if hand_zone >= 0 else 0.0
 	var z := -1
 	if _can_sell():
@@ -13599,6 +13599,10 @@ func _draw_shop() -> void:
 
 	# 거절 사유. 창구가 좌우로 갔으므로 앞치마 가운데가 비었다 — 거기 쓴다.
 	# 문구는 _buy_block 이 만든다.
+	#  **창구가 무엇인지가 아니라 왜 안 되는지를 적는다.** 전에는 "왼쪽은
+	#  파는 창구다" 였는데, 그것은 손님이 방금 한 일에 대한 답이 아니라
+	#  간판을 읽어 주는 말이다 — 왜 거절당했는지는 그대로 안 알려 준다
+	#  (2026-09-16 제보).
 	var msg := ""
 	var ma := 0.0
 	if pay_msg_t > 0.0:
@@ -13609,9 +13613,9 @@ func _draw_shop() -> void:
 		ma = deny_flash
 	elif hand_st == H.CARRY and hand_zone >= 0:
 		if hand_src == 1:
-			msg = "" if hand_zone == Z_SELL else "오른쪽은 사는 창구다"
+			msg = "" if hand_zone == Z_SELL else "테이블 물건만 살 수 있다"
 		else:
-			msg = "왼쪽은 파는 창구다" if hand_zone == Z_SELL else _buy_block(hand_i)
+			msg = "가진 것만 팔 수 있다" if hand_zone == Z_SELL else _buy_block(hand_i)
 		ma = 0.85
 	if msg != "":
 		draw_string(font_sm, Vector2(196.0, 316.0), msg, HORIZONTAL_ALIGNMENT_CENTER,
