@@ -8467,9 +8467,19 @@ func _idle_hand(i: int) -> Dictionary:
 			#  el 0.85 — 가로·세로로 크게 가므로 팔이 통째로 따라간다.
 			if not mine:
 				return out
-			out.du = -sd * 10.0 * k
+			#  b 0.76 에서 내리기가, 0.86 에서 뿌리기가 시작한다
+			#  (GIVE 의 네 박자를 「살핌」 길이로 나눈 값이다).
+			var dn := clampf((b - 0.72) / 0.14, 0.0, 1.0)
+			var fl := clampf((b - 0.86) / 0.14, 0.0, 1.0)
+			#  뿌리는 뒤끝 — 손이 준 쪽의 **반대**로 쓸어 나갔다 돌아온다.
+			#  이것이 없으면 물건만 미끄러지고 손은 제자리라, 물건이 저 혼자
+			#  움직인 것으로 읽힌다(상수 회전 때와 같은 실수다).
+			#  46 은 커 보이지만 뒤끝이 봉투의 날머리와 겹쳐서 k 가 이미
+			#  0.45 언저리다 — 화면에 나오는 것은 그 절반이다.
+			out.du = k * (-sd * 10.0 - sd * 46.0 * sin(fl * PI))
 			out.dw = 34.0 * k
-			out.dh = 4.0 * k
+			#  내리기 — 손이 판까지 내려온다. 물건은 그 손을 따라 0 으로 간다.
+			out.dh = k * lerpf(4.0, -9.0, dn)
 			#  굴림은 **살피는 박자에만** 든다. 뻗는 동안 이미 돌아 있으면
 			#  받기 전부터 뒤집어 놓고 기다리는 손이 된다.
 			#
@@ -8477,7 +8487,7 @@ func _idle_hand(i: int) -> Dictionary:
 			#  sin(2π·q) 라 한쪽으로 넘겼다가 반대쪽으로 넘기고 제자리로
 			#  돌아온다. 손각도 1.5 바퀴 흔들어 둔다. 둘 다 q 0 과 1 에서
 			#  정확히 0 이라 손이 쉬는 자세로 되돌아온다.
-			var q := clampf((b - 0.20) / 0.56, 0.0, 1.0)
+			var q := clampf((b - 0.20) / 0.52, 0.0, 1.0)
 			out.roll = deg_to_rad(70.0) * k * sin(q * TAU)
 			out.ang = -sd * 0.17 * k * sin(q * PI * 3.0)
 			out.el = 0.85
@@ -8512,11 +8522,19 @@ func _idle_twist(w: float, yaw: float) -> float:
 #  창구 둘은 좌우 빗변이고 여기는 위쪽이라 셋이 안 겹친다 — 새 과녁을
 #  안 그리고도 "위로 밀면 상인에게" 가 나온다.
 #
-#  ── 세 박자 ──────────────────────────────────────────
-#  받기 · 살피기 · 돌려주기. 돌려주기는 두 갈래인데 **받을 때 정한다** —
-#  살피는 동안 갈래가 바뀌면 마무리가 두 번 흔들린다.
-#    내려놓기  있던 자리로 되돌려 살며시 놓는다
-#    던지기    면 위로 밀어 보낸다. 물리(_hand_land)가 그대로 받는다
+#  ── 네 박자 ──────────────────────────────────────────
+#  받기 · 살피기 · 내리기 · 뿌리기.
+#
+#  마무리는 **가로지르는 뿌리기 하나**다(2026-09-15 제보). 왼손에 준 것은
+#  오른쪽으로, 오른손에 준 것은 왼쪽으로 — 제 몸 앞을 가로질러 민다.
+#  갈래를 둘(내려놓기·던지기)로 두고 제비를 뽑던 것을 걷었다. 같은 짓을
+#  했는데 어떤 날은 놓고 어떤 날은 던지면, 그건 성격이 아니라 잡음이다.
+#
+#  ── 내리기가 있는 이유 ───────────────────────────────
+#  물건은 손바닥 위 25 에 떠 있는데 던지기 길(_hand_land)은 h 를 0 에
+#  **못 박는다**(낙하 구획의 불변식이다). 그 자리에서 그냥 놓으면 물건이
+#  한 프레임에 15px 내려앉아 툭 떨어진다. 그래서 뿌리기 전에 손이 먼저
+#  내려오고 물건도 같이 0 으로 내려온 뒤에 민다.
 #
 #  ── 물건은 판 **위**에서 든다 ─────────────────────────
 #  상인 쪽으로 끌어당기면 안 된다. 카운터 뒤는 벽 사각(_cover_draw)이
@@ -8532,7 +8550,8 @@ const GIVE := {
 	"band": 12.0,        # 카운터 위 이 안에서 떼면 건네는 것이다
 	"take": 0.45,        # 받는다
 	"look": 1.30,        # 살핀다
-	"back": 0.55,        # 돌려준다.  셋의 합 = 「살핌」의 길이
+	"set": 0.22,         # 내린다 — 손과 물건이 판까지 같이 내려온다
+	"fling": 0.33,       # 뿌린다.  네 박자의 합 = 「살핌」의 길이
 	"hop": 15.0,         # 받을 때 물건이 그리는 포물선의 높이
 	#  ── 물건은 손바닥 **위**에 얹힌다 ──────────────
 	#  처음엔 높이로 풀려고 했다. 20 에서 물건이 손 뒤에 숨길래 34 로 올리고
@@ -8548,14 +8567,15 @@ const GIVE := {
 	#  6 띄워 얹는다 — 원래 두려던 자리다.
 	"hold": 6.0,         # 손바닥 윗면에서 띄우는 높이
 	"tip": 1.0,          # 손 굴림이 물건 기울임(wob)으로 옮겨지는 비
-	"toss": 0.34,        # 이 확률로 던진다. 아니면 내려놓는다
-	"toss_v": 210.0,     # 던지는 속도(면px/초)
+	#  뿌리는 속도. 가로가 주고 세로는 거드는 정도다 — 길이가
+	#  HAND.toss_cap(260) 안이라 손이 던질 때와 같은 무게로 읽힌다.
+	"toss_u": 240.0,     # 가로. 준 손의 **반대쪽**으로 간다
+	"toss_w": 60.0,      # 관객 쪽. 쟁반 안으로 들어오게 거든다
 	"reach": 4.0,        # 손 내미는 예고가 붙고 떨어지는 속도
 }
 var give_i := -1           # 상인이 든 물건. drop 의 색인
 var give_t := 0.0
 var give_side := 1
-var give_toss := false
 var give_from := Vector3.ZERO    # 받기 전 자리 (u, w, h)
 var give_ang := 0.0        # 지난 프레임의 손각. 차이만큼 물건을 돌린다
 var npc_reach := 0.0       # 손을 내미는 정도 0..1 — 건넬 수 있다는 예고다
@@ -8580,6 +8600,12 @@ func _give_live() -> bool:
 	return give_i >= 0
 
 
+#  든 손의 부호. 화면 왼손이 −1, 오른손이 +1 이다.
+#  뿌리는 방향이 이것의 **반대**라 손이 제 몸 앞을 가로지른다.
+func _give_sd() -> float:
+	return -1.0 if give_side == 0 else 1.0
+
+
 func _give_begin(i: int, m: Vector2) -> void:
 	if i < 0 or i >= drop.size():
 		return
@@ -8587,7 +8613,6 @@ func _give_begin(i: int, m: Vector2) -> void:
 	give_i = i
 	give_t = 0.0
 	give_side = _npc_side(m.x)
-	give_toss = idle_rng.randf() < float(GIVE.toss)
 	give_from = Vector3(it.u, it.w, it.h)
 	give_ang = float((npc_grip[give_side] as Vector2).x)
 	it.held = true            # 물리에서 뺀다. 자리는 _give_tick 이 준다
@@ -8625,7 +8650,8 @@ func _give_tick(d: float) -> void:
 	give_t += d
 	var t1: float = float(GIVE.take)
 	var t2: float = t1 + float(GIVE.look)
-	var tot: float = t2 + float(GIVE.back)
+	var t3: float = t2 + float(GIVE.set)
+	var tot: float = t3 + float(GIVE.fling)
 	#  몸짓 시계를 여기서 민다 — 손과 물건이 **한 시계**를 봐야 안 갈라진다.
 	var ai := _idle_index("살핌")
 	if ai >= 0:
@@ -8634,6 +8660,7 @@ func _give_tick(d: float) -> void:
 		idle_side = give_side
 	var it: Dictionary = drop[give_i]
 	var pm: Vector3 = npc_palm[give_side]
+	#  ah 는 내리기 구간에서 이 값에서 0 으로 내려간다.
 	var au: float = pm.x
 	var aw: float = pm.y
 	var ah: float = pm.z + float(GIVE.hold)
@@ -8652,16 +8679,17 @@ func _give_tick(d: float) -> void:
 		it.w = aw
 		it.h = ah
 	else:
-		if give_toss:
-			#  던진다 — 관객 쪽으로 민다. 물리가 그대로 받는다.
-			_give_end(Vector2((give_from.x - au) * 0.9, float(GIVE.toss_v)))
-			return
-		#  내려놓는다 — 있던 자리로.
-		var k2 := _ease_io((give_t - t2) / float(GIVE.back))
-		it.u = lerpf(au, clampf(give_from.x, DROP.u_lo + it.hw,
-				DROP.u_hi - it.hw), k2)
-		it.w = lerpf(aw, clampf(give_from.y, DROP.w_lo, DROP.w_hi), k2)
+		#  내린다 — 손을 따라 내려오면서 높이만 0 으로 간다.
+		#  여기서 0 을 만들어 두어야 뿌릴 때 안 튄다(머리말).
+		var k2 := _ease_io((give_t - t2) / float(GIVE.set))
+		it.u = au
+		it.w = aw
 		it.h = lerpf(ah, 0.0, k2)
+		if give_t >= t3:
+			#  뿌린다 — 준 손의 **반대쪽**으로 가로지른다.
+			_give_end(Vector2(-_give_sd() * float(GIVE.toss_u),
+					float(GIVE.toss_w)))
+			return
 	#  ── 손을 따라 돈다 ────────────────────────────────
 	#  옛 값은 상수 회전이었다(초당 2.6 라디안). 손이 어느 쪽으로 뒤척이든
 	#  물건은 제 속도로 빙빙 돌아서, 손에 들린 것이 아니라 손 위에 떠서

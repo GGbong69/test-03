@@ -61,18 +61,25 @@ func _run() -> void:
 	g.npc_reach = 0.0
 	# ② 건넨다
 	g._give_begin(pick, Vector2(it.u, g.TBL.fy))
-	var tot: float = float(g.GIVE.take) + float(g.GIVE.look) + float(g.GIVE.back)
-	var marks := [0.26, 0.38, 0.50, 0.62, 0.74]
+	var gv: Dictionary = g.GIVE
+	var tot: float = float(gv.take) + float(gv.look) + float(gv.set) + float(gv.fling)
+	#  give_t 로 잰다. 내 프레임 수로 세면 렌더가 늦는 만큼 앞서 나가서
+	#  마지막 두 장을 놓친다(실측). 끝나면 give_t 가 0 이 되므로 그 뒤는
+	#  _give_live 로 가른다 — 뿌리고 난 뒤가 이 연출의 절반이다.
+	var marks := [0.30, 0.58, 0.80, 0.93]
 	var done := 0
-	var t := 0.0
-	while t < tot and done < marks.size():
+	while g._give_live() and done < marks.size():
 		await process_frame
-		t = g.give_t
-		if t >= tot * float(marks[done]):
+		if g.give_t >= tot * float(marks[done]):
 			await _shot("give_%d" % (done + 1))
-			print("%d  t %.2f  h %.1f  w %.1f" % [done + 1, t, it.h, it.w])
+			print("%d  t %.2f  h %.1f  u %.0f" % [done + 1, g.give_t, it.h, it.u])
 			done += 1
-	await _wait(20)
+	while g._give_live():
+		await process_frame
+	await _shot("give_5")
+	print("5  뿌린 직후  u %.0f  vu %+.0f vw %+.0f" % [it.u, it.vu, it.vw])
+	for k in 30:
+		await process_frame
 	await _shot("give_6")
-	print("끝 · 던졌나 %s · vu %.0f vw %.0f" % [g.give_toss, it.vu, it.vw])
+	print("끝 · 손 %d · u %.0f (준 자리 %.0f)" % [g.give_side, it.u, g.give_from.x])
 	quit(0)

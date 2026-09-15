@@ -39,12 +39,13 @@ func _run() -> void:
 	g.state = g.S.TITLE
 	g._new_run()
 	_shop()
-	var tot: float = float(g.GIVE.take) + float(g.GIVE.look) + float(g.GIVE.back)
+	var tot: float = float(g.GIVE.take) + float(g.GIVE.look) \
+			+ float(g.GIVE.set) + float(g.GIVE.fling)
 
 	# ① 몸짓 길이와 세 박자의 합이 같아야 한다 — 어긋나면 손이 먼저 내려온다
 	var li: int = g._idle_index("살핌")
 	_ok("살핌이 표에 있다", li >= 0, "%d번" % li)
-	_ok("몸짓 길이가 세 박자와 같다",
+	_ok("몸짓 길이가 네 박자와 같다",
 			absf(float((g.IDLE.acts[li] as Dictionary).t) - tot) < 0.001,
 			"몸짓 %.2f · 박자 %.2f" % [float((g.IDLE.acts[li] as Dictionary).t), tot])
 
@@ -126,22 +127,49 @@ func _run() -> void:
 			float(it.w) >= g.DROP.w_lo - 0.01 and float(it.w) <= g.DROP.w_hi + 0.01,
 			"w %.1f" % float(it.w))
 
-	# ⑦ 내려놓기는 있던 자리로, 던지기는 속도를 실어 보낸다
-	var laid := 0
-	var tossed := 0
-	for trial in 40:
-		var jt: Dictionary = g.drop[0]
-		jt.u = from.x
-		jt.w = from.y
-		jt.h = 0.0
-		g._give_begin(0, Vector2(from.x, g.TBL.fy))
-		_step(int((tot + 0.2) * 60.0))
-		if absf(float(jt.vu)) + absf(float(jt.vw)) > 1.0:
-			tossed += 1
-		else:
-			laid += 1
-	_ok("두 갈래가 다 나온다", laid > 0 and tossed > 0,
-			"내려놓기 %d · 던지기 %d" % [laid, tossed])
+	# 마무리는 **가로지르는 뿌리기 하나**다 — 준 손의 반대쪽으로 간다
+	for sd2 in 2:
+		g.npc_palm[sd2] = Vector3(214.0 if sd2 == 0 else 430.0, 36.0, 15.0)
+		var mx: float = 120.0 if sd2 == 0 else 520.0
+		var slow := 0
+		var wrong := 0
+		for trial in 12:
+			var jt: Dictionary = g.drop[0]
+			jt.u = from.x
+			jt.w = from.y
+			jt.h = 0.0
+			jt.vu = 0.0
+			jt.vw = 0.0
+			g._give_begin(0, Vector2(mx, g.TBL.fy))
+			_step(int((tot + 0.2) * 60.0))
+			#  왼손(0)에 주면 오른쪽(+u), 오른손(1)에 주면 왼쪽(−u)
+			var want: float = 1.0 if sd2 == 0 else -1.0
+			if signf(float(jt.vu)) != want:
+				wrong += 1
+			if absf(float(jt.vu)) < 100.0:
+				slow += 1
+		var nm: String = "왼손" if sd2 == 0 else "오른손"
+		var dir: String = "오른쪽" if sd2 == 0 else "왼쪽"
+		_ok("%s에 주면 %s으로 뿌린다" % [nm, dir], wrong == 0,
+				"어긋남 %d/12" % wrong)
+		_ok("%s — 열두 번 다 뿌린다" % nm, slow == 0,
+				"느린 것 %d/12" % slow)
+	#  속도가 손이 던질 때의 상한 안이라야 같은 무게로 읽힌다
+	var tv := Vector2(float(g.GIVE.toss_u), float(g.GIVE.toss_w)).length()
+	_ok("뿌리는 속도가 상한 안", tv <= float(g.HAND.toss_cap),
+			"%.0f ≤ %.0f" % [tv, float(g.HAND.toss_cap)])
+	#  뿌리는 순간 높이가 0 이어야 한다 — 아니면 물건이 한 프레임에 툭 떨어진다
+	g.npc_palm[1] = Vector3(430.0, 36.0, 15.0)
+	g._give_begin(0, Vector2(520.0, g.TBL.fy))
+	var t3: float = float(g.GIVE.take) + float(g.GIVE.look) + float(g.GIVE.set)
+	var hi_h := 0.0
+	while g._give_live():
+		g._give_tick(1.0 / 60.0)
+		if g.give_t < t3 - 0.02:
+			continue
+		if g._give_live():
+			hi_h = float((g.drop[0] as Dictionary).h)
+	_ok("뿌리기 직전 높이가 0", hi_h < 1.0, "h %.2f" % hi_h)
 
 	# 손이 이쪽저쪽 뒤척이는가 — 한 방향으로만 가면 "뒤척였다" 가 아니다
 	var li2: int = g._idle_index("살핌")
