@@ -2405,7 +2405,6 @@ func has_axis(axis: String) -> bool:
 
 
 func _open_stage() -> void:
-	_tutor("u_stage")
 	# 봉인은 _start_leg 에서만 다시 뽑힌다. 지우지 않으면 스테이지 선택
 	# 화면의 동전 슬롯이 지난 판 봉인을 그대로 보여준다.
 	sealed = -1
@@ -2438,6 +2437,12 @@ func _open_stage() -> void:
 			stage_stand.append(0.0)
 		peek_pick.clear()
 		peek_leg = -1
+		#  제약은 **보스 판에만** 깔린다. 여태 _open_stage 맨 위에서
+		#  불렀는데, 보통 판은 거기서 곧장 _start_leg 로 빠지므로
+		#  다트판 앞에서 "제약 하나를 골라야" 가 떴다 — 없는 것을
+		#  찾으라는 말이 된다(2026-09-15 제보).
+		#  카드가 선 **뒤**에, 화면이 서는 그 자리에서 부른다.
+		_tutor("u_stage")
 		state = S.STAGE
 		_sfx("stage_open")
 		return
@@ -2454,6 +2459,12 @@ func _open_stage() -> void:
 			tgt = int(ceil(float(base) * float(md.v)))
 		stage_pick.append({"d": md, "target": tgt})
 		stage_stand.append(0.0)
+	#  제약은 **보스 판에만** 깔린다. 여태 _open_stage 맨 위에서
+	#  불렀는데, 보통 판은 거기서 곧장 _start_leg 로 빠지므로
+	#  다트판 앞에서 "제약 하나를 골라야" 가 떴다 — 없는 것을
+	#  찾으라는 말이 된다(2026-09-15 제보).
+	#  카드가 선 **뒤**에, 화면이 서는 그 자리에서 부른다.
+	_tutor("u_stage")
 	state = S.STAGE
 	_sfx("stage_open")
 
@@ -17817,7 +17828,17 @@ var tutor_out := 0.0       # 갈래가 끝나며 지는 중
 func _tutor(id: String) -> void:
 	if tutor_id == id or tutor_q.has(id):
 		return
-	if GameData.tutor_steps(id).is_empty():
+	var ss := GameData.tutor_steps(id)
+	if ss.is_empty():
+		return
+	#  ── 못 보여 줄 것은 안 가르친다 ────────────────
+	#  첫 걸음의 과녁이 지금 화면에 없으면 통째로 접는다. 없는 것을 두고
+	#  "저것을 보세요" 라고 하면 손님은 화면을 뒤지다 만다 — 제약을 보통
+	#  판에서 말하던 자리가 정확히 그것이었다.
+	#  **배운 것으로도 안 적는다.** 그래야 그것이 실제로 서는 화면에서
+	#  다시 걸린다. 부르는 자리를 잘못 잡아도 영영 못 배우지는 않는다.
+	var mk := String((ss[0] as Dictionary).get("mark", ""))
+	if mk != "" and _mark_rect(mk).size.x < 2.0:
 		return
 	if not Save.teach(id):
 		return

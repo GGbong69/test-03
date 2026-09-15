@@ -98,6 +98,37 @@ func _run() -> void:
 	g.state = g.S.SHOP
 	_ok("모르는 과녁은 빈 사각", g._mark_rect("없는것").size.x < 1.0, "")
 
+	# 못 보여 줄 것은 안 가르친다 — 제약을 보통 판에서 말하던 자리다
+	Save.wipe()
+	_reset()
+	g.leg_no = 1
+	for lv in range(1, 40):
+		if not GameData.is_boss(lv):
+			g.leg_no = lv
+			break
+	g.stage_pick.clear()
+	g.state = g.S.PICK
+	g._tutor("u_stage")
+	_ok("보통 판에서는 제약을 안 가르친다",
+			g.tutor_q.is_empty() and not Save.taught("u_stage"),
+			"%d판 · 줄 %d" % [g.leg_no, g.tutor_q.size()])
+	#  **배운 것으로도 안 적혔어야** 보스 판에서 다시 걸린다
+	for lv2 in range(1, 40):
+		if GameData.is_boss(lv2):
+			g.leg_no = lv2
+			break
+	g._open_stage()
+	_ok("보스 판에서는 가르친다",
+			Save.taught("u_stage") and g.state == g.S.STAGE,
+			"%d판 · 상태 %d" % [g.leg_no, g.state])
+	#  그 자리에서 과녁이 진짜로 선다 — 구멍 없는 어둠만 깔리면 안 된다
+	var mr: Rect2 = g._mark_rect("stage")
+	_ok("가르칠 때 과녁이 서 있다", mr.size.x > 2.0 and mr.size.y > 2.0,
+			"%.0fx%.0f" % [mr.size.x, mr.size.y])
+	_reset()
+	Save.wipe()
+
+
 	# ③ 걸음이 차례로 간다
 	Save.wipe()
 	g._new_run()
