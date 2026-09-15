@@ -13818,9 +13818,13 @@ func _draw_profile() -> void:
 		#  **띠의 마침표와 같은 자리에 선다.** 전에는 r.end.x-6 이라 띠가 다
 		#  들어온 줄에서는 금빛 세로획이 186 과 203 에 둘 섰다 — 하나는
 		#  "쓰는 줄", 하나는 "띠 끝" 인데 보는 쪽에서는 그냥 바가 둘이다.
+		#  위아래를 **띠보다 넓게** 잡는다. 안쪽으로 2px 들여 놓았더니 띠의
+		#  마침표(줄 맨 위 y 부터 18px)가 표식 위로 2px 삐져나와 꼭지가
+		#  달렸다 — 겹쳐 세운 두 획은 한쪽이 다른 쪽을 **완전히 덮어야**
+		#  하나로 읽힌다(2026-09-16 제보).
 		if on:
-			draw_rect(Rect2(_band_end_x(r) - 3.0, r.position.y + 2.0, 3.0,
-					r.size.y - 4.0), C_ACC)
+			draw_rect(Rect2(_band_end_x(r) - 3.0, r.position.y, 3.0,
+					r.size.y), C_ACC)
 
 	#  오른쪽 — 고른 줄의 속
 	var sel := clampi(prof_sel, 1, Save.SLOTS)
