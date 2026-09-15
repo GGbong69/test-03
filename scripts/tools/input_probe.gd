@@ -30,12 +30,25 @@ const Save = preload("res://scripts/save.gd")
 #    검사하는 _hand_update 가 그 사이에 끼어들기 때문이다. 핸들러만 직접
 #    부르면 그 관문을 통째로 건너뛰고, 안 되는 것이 되는 것으로 보인다.
 #    Input.is_mouse_button_pressed 도 _hand_update 가 읽으므로(창 밖 안전망)
-#    버튼 상태가 진짜여야 한다.
+#    버튼 상태가 진짜여야 한다 — parse_input_event 가 그 상태까지 세운다.
+#
+#  자리는 뷰포트 좌표로 넣는다 (_vp)
+#    _unhandled_input 첫 줄이 mb.position 에서 view_pad 를 뺀다 — 창이 16:9 가
+#    아니면 Game 노드가 여백만큼 밀려 있어서다. 그런데 검사가 자리를 재는
+#    _cons_rect·_slot_rect 는 **노드 좌표**를 돌려준다. 그대로 밀어 넣으면
+#    게임이 한 번 더 빼서 엉뚱한 자리를 누른다.
+#    헤드리스는 창이 없어 뷰포트가 640x640 으로 서는데 VIEW 는 640x360 이라
+#    view_pad 가 (0,140) 이다. 사탕 칸 y[20,64] 가 화면 밖 y[-120,-76] 으로
+#    가서 누름이 아무것도 안 집고, 뗌도 아무것도 안 쓴다. 여섯 줄이 한꺼번에
+#    "안 먹는다" 로 보이던 것이 이것이다 — 게임이 아니라 검사가 틀렸다.
 # ══════════════════════════════════════════════════════════
 
 var g = null
 var busy := false
 var fails := 0
+# 밀어 넣은 이벤트가 _unhandled_input 까지 갔나. 안 가면 여섯 줄이 통째로
+# 빨개지는데 그것은 게임이 아니라 배달이 끊긴 것이다. 둘을 갈라서 말한다.
+var wired := true
 
 # 판 중으로 세는 화면들. RESOLVE 는 뺀다 — 정산 중에는 손이 안 산다.
 const PLAY := ["PICK", "AIM_V", "AIM_H", "CONFIRM", "FLY"]
@@ -57,22 +70,31 @@ func _initialize() -> void:
 	root.add_child(g)
 
 
+# 노드 좌표 → 뷰포트 좌표. _unhandled_input 이 도로 뺀다.
+# 이벤트마다 그때의 view_pad 를 읽는다 — 누름과 뗌 사이에 창이 바뀌어도
+# 둘 다 제 노드 자리를 가리킨다.
+func _vp(p: Vector2) -> Vector2:
+	return p + g.view_pad
+
+
 func _btn(p: Vector2, down: bool) -> void:
 	var e := InputEventMouseButton.new()
 	e.button_index = MOUSE_BUTTON_LEFT
 	e.pressed = down
-	e.position = p
+	e.position = _vp(p)
 	Input.parse_input_event(e)
 	Input.flush_buffered_events()
-	g._unhandled_input(e)
+	# flush 가 노드까지 배달한다. 여기서 _unhandled_input 을 또 부르면 한
+	# 손짓이 두 번 들어가서, 사람이 안 하는 입력으로 게임을 재게 된다.
+	if g.mouse_down != down:
+		wired = false
 
 
 func _move(p: Vector2) -> void:
 	var e := InputEventMouseMotion.new()
-	e.position = p
+	e.position = _vp(p)
 	Input.parse_input_event(e)
 	Input.flush_buffered_events()
-	g._unhandled_input(e)
 
 
 func _tick() -> void:
@@ -187,6 +209,11 @@ func _run() -> void:
 			rpdead.append(s)
 	_say(rpdead.is_empty(), "고르는 화면에서 순서를 바꾼다",
 			"안 먹는 화면: %s" % ("없음" if rpdead.is_empty() else ", ".join(rpdead)))
+
+	if not wired:
+		fails += 1
+		print("\n  실패 이벤트가 _unhandled_input 까지 안 갔다 —"
+				+ " 위 여섯 줄은 게임이 아니라 배달을 잰 것이다")
 
 	print("\n%s" % ("전부 통과" if fails == 0 else "실패 %d" % fails))
 	quit(fails)
