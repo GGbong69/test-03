@@ -60,6 +60,7 @@ const FILES := {
 	"chal": "challenges.csv",
 	"colors": "colors.csv",
 	"tags": "tags.csv",
+	"tutor": "tutor.csv",
 	"boosters": "boosters.csv",
 	"tuning": "tuning.csv",
 	# ── HIGHTONE 스펙(2026-08-23 통합 컨텍스트)에서 온 표 ──
@@ -1039,6 +1040,27 @@ static func tags() -> Array:
 	return _raw.get("tags", [])
 
 
+# ── 배움 ────────────────────────────────────────────────
+#  처음 만난 것을 한 줄로 가르친다. 표 하나에 한 줄씩이고, id 가 곧
+#  게임이 부르는 이름이다(game.gd 의 _tutor).
+#
+#  **문구는 동작이나 규칙 한 마디다.** 왜 그런지는 안 적는다 — 한 줄짜리
+#  띠에 설명을 넣으면 읽히기 전에 사라지고, 읽혀도 안 외워진다.
+#  던지기·조준은 여기 없다. 하단 안내(AIM_HINT)가 이미 잠금마다 가르치므로
+#  같은 말을 두 곳에서 하면 둘 다 안 읽힌다.
+static func tutor() -> Array:
+	boot()
+	return _raw.get("tutor", [])
+
+
+#  id 로 한 줄. 없거나 꺼져 있으면 빈 사전이다 — 부르는 쪽이 조용히 넘어간다.
+static func tutor_of(id: String) -> Dictionary:
+	for r in tutor():
+		if String(r.get("id", "")) == id and _b(r, "enabled", "tutor"):
+			return r
+	return {}
+
+
 # 이 판에 걸 수 있는 뱃지 하나. 라운드가 문이고 가중치가 저울이다.
 static func tag_roll(round: int) -> Dictionary:
 	var pool := []
@@ -1772,6 +1794,7 @@ static func _validate() -> void:
 	_v_packs()
 	_v_colors()
 	_v_tags()
+	_v_tutor()
 	_v_item_aim()
 
 
@@ -1906,6 +1929,32 @@ static func _has_row(table: String, id: String) -> bool:
 
 # 동전이 쥔 조준 방식. 등록 안 된 이름이면 조용히 std 로 도는 동전이
 # 된다 — 히든 다트통이 통째로 아무 일도 안 하는 다트통이 되는 길이다.
+#  배움 표. 빈 문구 하나가 화면에 빈 띠로 뜨므로 여기서 막는다.
+static func _v_tutor() -> void:
+	var seen := {}
+	for r in _raw.get("tutor", []):
+		var ln: int = r.get("_line", 0)
+		var id: String = String(r.get("id", "")).strip_edges()
+		if id == "":
+			_errs.append("tutor:%d — id 가 비었다. 게임이 부를 이름이 없다" % ln)
+			continue
+		if seen.has(id):
+			_errs.append("tutor:%d %s — id 가 겹친다. 먼저 것만 뜬다" % [ln, id])
+		seen[id] = true
+		var tx: String = String(r.get("text", "")).strip_edges()
+		if tx == "":
+			_errs.append("tutor:%d %s — 문구가 비었다. 빈 띠가 뜬다" % [ln, id])
+			continue
+		#  한 줄 띠다. 11px 글씨로 640 폭에 드는 길이가 여기까지다 —
+		#  넘으면 잘리는 것이 아니라 가운데 정렬이 무너져 좌우가 삐져나간다.
+		if tx.length() > 26:
+			_errs.append("tutor:%d %s — 문구가 %d자다. 한 줄 띠에 26자까지 든다"
+					% [ln, id, tx.length()])
+		if tx.ends_with("."):
+			_warns.append("tutor:%d %s — 마침표로 끝난다. 다른 표는 안 찍는다"
+					% [ln, id])
+
+
 static func _v_item_aim() -> void:
 	for m in AIM_MODES:
 		var st: int = AIM_STAGES.get(m, 0)

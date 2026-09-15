@@ -1,0 +1,19 @@
+[remap]
+
+importer="csv_translation"
+type="Translation"
+uid="uid://bq5mi6ttv05og"
+
+[deps]
+
+files=["res://data/tutor.name.translation", "res://data/tutor.text.translation", "res://data/tutor.order.translation", "res://data/tutor.enabled.translation"]
+
+source_file="res://data/tutor.csv"
+dest_files=["res://data/tutor.name.translation", "res://data/tutor.text.translation", "res://data/tutor.order.translation", "res://data/tutor.enabled.translation"]
+
+[params]
+
+compress=1
+delimiter=0
+unescape_keys=false
+unescape_translations=true

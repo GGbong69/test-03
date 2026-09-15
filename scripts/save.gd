@@ -62,6 +62,10 @@ const S_STA := "통계"
 # 「이 다트통으로 몇 번 완주했나」는 다트통 수만큼 열쇠가 생겨서 그 목록에
 # 못 들어간다. 해금(S_UNL)이 자유 열쇠를 쓰는 그 규약을 수로 옮긴 자리다.
 const S_TAL := "세기"
+#  배움 — 처음 만난 것을 한 번만 가르치려고 세는 자리.
+#  해금(S_UNL)과 모양이 같지만 **칸을 가른다.** unlock_keys() 는 컬렉션
+#  화면의 계약이라, 거기에 가르친 기록이 섞이면 컬렉션이 배움을 센다.
+const S_TUT := "배움"
 
 # 통계 키 — 전부 int 누적이거나 최댓값이다.
 #  누적(bump): 던진 다트·트리플·불·빗나감·구매·판매·리롤·사탕·런·완주
@@ -342,6 +346,33 @@ static func lock(id: String) -> bool:
 
 
 # 심어 둔 해금 키 전부. unlocked_of 와 달리 갈래 접두사를 안 떼고 준다.
+# ── 배움 ────────────────────────────────────────────────
+#  프로필마다 따로다 — 새 프로필은 처음부터 다시 배운다. 프로필을 지우면
+#  파일째 없어지므로 따로 지울 것이 없다.
+static func taught(id: String) -> bool:
+	boot()
+	return bool(_cfg.get_value(S_TUT, id, false))
+
+
+#  처음이면 true 를 돌려주고 적어 둔다. 부르는 쪽은 이 한 줄로
+#  "가르칠까" 를 정한다 — unlock() 과 같은 규약이다.
+static func teach(id: String) -> bool:
+	boot()
+	if taught(id):
+		return false
+	_cfg.set_value(S_TUT, id, true)
+	flush()
+	return true
+
+
+#  다시 배우게 한다. 설정에서 끄고 켜는 자리가 이것을 부른다.
+static func forget_all() -> void:
+	boot()
+	if _cfg.has_section(S_TUT):
+		_cfg.erase_section(S_TUT)
+		flush()
+
+
 static func unlock_keys() -> PackedStringArray:
 	boot()
 	if not _cfg.has_section(S_UNL):

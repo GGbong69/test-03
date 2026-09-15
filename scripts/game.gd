@@ -663,6 +663,12 @@ func _ready() -> void:
 func _new_run() -> void:
 	#  지난 런에 열린 것을 새 런까지 끌고 가면 안 된다.
 	run_unlocked.clear()
+	#  배움도 런 단위로 센다. 줄에 남은 것을 새 런까지 끌고 가면 엉뚱한
+	#  화면에서 뜬다 — 이미 배운 것으로 적혀 있으므로 다시는 안 뜬다.
+	shop_seen = 0
+	tutor_q.clear()
+	tutor_id = ""
+	tutor_t = 0.0
 	over_t = 0.0
 	pardon_next = false          # 런을 넘겨 남으면 안 되는 깃발이다
 	photo = ""
@@ -1115,6 +1121,7 @@ func _settle_clear() -> void:
 	pops.clear()
 	clear_t = 0.0
 	state = S.CLEAR
+	_tutor("u_clear")
 	_sfx("leg_clear")
 
 
@@ -1427,6 +1434,17 @@ func _reroll_price() -> int:
 
 
 func _open_shop() -> void:
+	_tutor("u_shop")
+	#  팔 것이 생긴 뒤에야 판매를 말한다 — 동전 슬롯이 비었는데 파는 법을
+	#  가르치면 가리킬 물건이 없다.
+	if not owned.is_empty():
+		_tutor("u_sell")
+	#  건네기·리롤은 **두 번째** 상점부터다. 첫 상점은 사는 법부터
+	#  말해야 하는데, 한 화면에서 셋을 줄 세우면 마지막 것은 안 읽힌다.
+	if shop_seen >= 1:
+		_tutor("u_reroll")
+		_tutor("u_give")
+	shop_seen += 1
 	# 판이 끝났다. 상점에 동전 슬롯이 서므로 안 지우면 지난 판 "봉인" 뱃지가
 	# 유령으로 남는다. _gold_from_items() 가 sealed 를 읽으므로
 	# _finish_leg 안에서는 지우면 안 된다 — 여기가 유일하게 안전한 지점이다.
@@ -1654,6 +1672,9 @@ func _buy(i: int) -> void:
 			cp.gs = 0
 			cp.bought = leg_no          # 삭음(주황 리그)이 읽는 나이다
 			owned.append(cp)
+			#  동전이 처음 손에 들어온 자리. 순서가 값을 바꾸는 게임이라
+			#  슬롯을 보기 전에 말해 둬야 한다.
+			_tutor("u_rack")
 			bought_item = true
 			# 한 번 손에 넣었으면 이제 팩에서도 온다. 뜬 것이 아니라
 			# **받은 것**을 세는 이유는, 슬롯이 꽉 차 못 산 장이 다음
@@ -1668,9 +1689,11 @@ func _buy(i: int) -> void:
 			# 칸으로 들어간다. 상점 즉시 사용은 칸에서 바로 누르면 되므로
 			# 별도 경로가 없다 — 확인 버튼을 만들지 않는 규칙과도 맞는다.
 			cons.append(s.d)
+			_tutor("u_cons")
 		"boost":
 			# 산 자리에서 바로 펼친다. 칸을 안 먹으므로 _buy_block 에
 			# 막을 조건이 없다 — 골드만 있으면 늘 살 수 있다.
+			_tutor("u_pack")
 			_boost_deal(s.d)
 		"fix":
 			# 사진은 이제 1회성이다(2026-09-10 기획서). 사면 사탕 칸에
@@ -1683,6 +1706,7 @@ func _buy(i: int) -> void:
 				_deny()
 				return
 			cons.append(s.d.duplicate())
+			_tutor("u_cons")
 			_panel_reset()
 	_sfx("fixture_buy" if s.type == "fix" else "buy")
 	# 팩에서 쏟은 것을 집었다. 몫을 다 쓰면 나머지는 쓸려 나간다 —
@@ -2006,6 +2030,11 @@ func _next_leg() -> void:
 # ══════════════════════════════════════════════════════════
 
 func _open_leg() -> void:
+	_tutor("u_leg")
+	#  건너뛸 수 있는 첫 판에서만. 못 건너뛰는 판에서 말하면 없는 단추를
+	#  가리키는 셈이다.
+	if GameData.skippable(leg_no):
+		_tutor("u_skip")
 	sealed = -1
 	sell_sel = -1
 	buy_sel = -1
@@ -2374,6 +2403,7 @@ func has_axis(axis: String) -> bool:
 
 
 func _open_stage() -> void:
+	_tutor("u_stage")
 	# 봉인은 _start_leg 에서만 다시 뽑힌다. 지우지 않으면 스테이지 선택
 	# 화면의 동전 슬롯이 지난 판 봉인을 그대로 보여준다.
 	sealed = -1
@@ -2680,6 +2710,7 @@ func _process(d: float) -> void:
 	#  안 보이는 뷰포트가 런 내내 뒤에서 돌면 눈으로는 영영 못 잡는다.
 	_idle_tick(d)
 	_give_tick(d)
+	_tutor_tick(d)
 	if _npc_on():
 		_hand3_open()
 		_hand3_sync()
@@ -4184,6 +4215,7 @@ func _land(mark := true) -> void:
 	dart_index += 1
 	# 큐를 다 세운 뒤라야 이 정산이 얼마나 긴지 알 수 있다.
 	settle_n = queue.size()
+	_tutor("u_score")
 	state = S.RESOLVE
 	qt = beat * 1.1
 
@@ -4825,6 +4857,10 @@ func _draw() -> void:
 	# 화면이 바뀌어도 같은 자리에 남는 것만 판이다 — 그래서 스크림 뒤에 그린다.
 	_hud_draw()
 	_mod_shed_draw()
+	#  배움 띠 — HUD 위, 툴팁 밑이다. 툴팁은 커서를 따라다니므로
+	#  띠를 덮어도 그 순간 손님이 보는 것은 툴팁 쪽이다.
+	if not swap_live:
+		_tutor_draw()
 	if not swap_live:
 		_tip_draw(sh)
 	draw_set_transform(Vector2.ZERO)
@@ -8797,6 +8833,9 @@ var give_t := 0.0
 var give_side := 1
 var give_from := Vector3.ZERO    # 받기 전 자리 (u, w, h)
 var give_ang := 0.0        # 지난 프레임의 손각. 차이만큼 물건을 돌린다
+#  이 런에서 상점을 몇 번 열었나. 배움이 "두 번째 상점" 을 가리는 데 쓴다 —
+#  저장에 안 남긴다. 한 런 안에서만 뜻이 있는 수다.
+var shop_seen := 0
 var npc_reach := 0.0       # 손을 내미는 정도 0..1 — 건넬 수 있다는 예고다
 var npc_reach_side := 1
 #  손바닥 한가운데와 그 윗면 높이. _npc_arms 가 적고 _give_tick 이 읽는다.
@@ -17671,7 +17710,112 @@ func _draw_collect() -> void:
 			_menu_back_rect().has_point(mouse_at))
 
 
+# ══════════════════════════════════════════════════════════
+#  배움 — 처음 만난 것을 한 줄로
+# ──────────────────────────────────────────────────────────
+#  프로필마다 각각 한 번씩이다(Save.teach). 새 프로필은 처음부터 다시
+#  배우고, 이미 아는 사람은 두 번 다시 안 본다.
+#
+#  ── 안 막는다 ────────────────────────────────────────
+#  띠 하나가 뜰 뿐 입력을 안 삼킨다. 막는 튜토리얼은 아는 사람에게
+#  벌이 되고, 이 게임은 첫 판이 이미 쉽게 잡혀 있어(curve_first) 막을
+#  이유가 없다. 놓쳐도 게임이 안 멈춘다.
+#
+#  ── 줄을 세운다 ──────────────────────────────────────
+#  한 순간에 둘이 맞을 수 있다(첫 상점에서 팔 것도 처음 생기는 판).
+#  겹쳐 그리면 둘 다 못 읽으므로 줄을 세워 차례로 낸다. 세운 순간
+#  배운 것으로 적으므로 같은 것이 두 번 줄에 안 선다.
+#
+#  ── 상인이 짚는다 ────────────────────────────────────
+#  상인이 서 있는 화면이면 같이 짚어 보인다 — 띠만 뜨면 어디를 보라는
+#  말인지가 안 붙는다.
+# ══════════════════════════════════════════════════════════
+const TUTOR := {
+	"hold": 4.2,         # 다 보인 채 머무는 시간(초)
+	"fade": 0.55,        # 들고 나는 시간
+	"y": 344.0,          # 띠의 밑선. 하단 안내(_draw_hint)와 같은 자리다
+	"h": 17.0,           # 띠 높이
+}
+var tutor_q := []          # 아직 못 보여 준 줄
+var tutor_id := ""         # 지금 띠에 뜬 것
+var tutor_t := 0.0         # 그 줄의 경과
+
+
+#  처음 만났다 — 가르친다. 이미 배웠거나 표에 없으면 조용히 넘어간다.
+func _tutor(id: String) -> void:
+	if tutor_id == id or tutor_q.has(id):
+		return
+	if GameData.tutor_of(id).is_empty():
+		return
+	if not Save.teach(id):
+		return
+	tutor_q.append(id)
+
+
+func _tutor_text() -> String:
+	if tutor_id == "":
+		return ""
+	return String(GameData.tutor_of(tutor_id).get("text", ""))
+
+
+#  띠가 지금 화면을 쓰고 있는가. 하단 안내가 이것을 보고 비킨다.
+func _tutor_live() -> bool:
+	return tutor_id != ""
+
+
+func _tutor_tick(d: float) -> void:
+	if tutor_id != "":
+		tutor_t += d
+		if tutor_t < float(TUTOR.hold) + float(TUTOR.fade) * 2.0:
+			return
+		tutor_id = ""
+		tutor_t = 0.0
+	if tutor_q.is_empty():
+		return
+	tutor_id = String(tutor_q.pop_front())
+	tutor_t = 0.0
+	_sfx("page")        # 있는 소리 중 제일 조용한 것. 새 소리를 안 만든다
+	#  상인이 서 있으면 같이 짚는다. 쓸는 중이면 _npc_react 가 알아서 문다.
+	if _npc_on():
+		_npc_react("짚기", 1)
+
+
+#  0 에서 1 로 들고, 머물고, 0 으로 진다.
+func _tutor_a() -> float:
+	if tutor_id == "":
+		return 0.0
+	var f: float = float(TUTOR.fade)
+	if tutor_t < f:
+		return _ease_io(tutor_t / f)
+	var back: float = tutor_t - f - float(TUTOR.hold)
+	if back <= 0.0:
+		return 1.0
+	return 1.0 - _ease_io(back / f)
+
+
+func _tutor_draw() -> void:
+	var a := _tutor_a()
+	if a <= 0.004:
+		return
+	var tx := _tutor_text()
+	if tx == "":
+		return
+	var w: float = font.get_string_size(tx, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x
+	var h: float = float(TUTOR.h)
+	var y: float = float(TUTOR.y) - h + 4.0
+	#  띠는 글씨폭에 맞춘다. 화면 폭짜리 판을 깔면 한 줄짜리 말이
+	#  경고문처럼 읽힌다.
+	var bx: float = (VIEW.x - w) * 0.5 - 9.0
+	draw_rect(Rect2(bx, y, w + 18.0, h), Color(C_BG, 0.82 * a))
+	draw_rect(Rect2(bx, y + h - 1.0, w + 18.0, 1.0), Color(C_ACC, 0.55 * a))
+	draw_string(font, Vector2(0.0, float(TUTOR.y)), tx,
+			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 11, Color(C_ACC, a))
+
+
 func _draw_hint() -> void:
+	#  배움 띠가 같은 자리를 쓴다. 둘이 겹치면 둘 다 못 읽는다.
+	if _tutor_live():
+		return
 	var hint := ""
 	match state:
 		S.PICK:
