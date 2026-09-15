@@ -7410,8 +7410,11 @@ func _npc_limb(el: Vector2, wr: Vector2, ang: float, sc: float,
 		for q in hand:
 			sh.append(_p2s(q.x, q.y + 3.0, 0.0))
 		draw_colored_polygon(sh, C_WOOD.darkened(0.84))
-	_npc_taper(el, wr, NPC.el_w, wrr, NPC.arm_t,
-			C_WOOD.darkened(0.84), C_WOOD.lightened(0.04))
+	#  3D 가 서면 팔뚝도 3D 가 갖는다. 손만 3D 로 두면 이음새에서 재질이
+	#  갈린다 — 2D 팔의 납작한 윗면과 3D 손의 모난 면이 한 자리에서 만난다.
+	if not _hand3_live():
+		_npc_taper(el, wr, NPC.el_w, wrr, NPC.arm_t,
+				C_WOOD.darkened(0.84), C_WOOD.lightened(0.04))
 	#  3D 손에는 제 손목 덩어리가 있다 — 여기서 또 덮으면 이음새에
 	#  밝은 원판이 하나 뜬다.
 	if not _hand3_live():
@@ -7429,7 +7432,8 @@ func _npc_limb(el: Vector2, wr: Vector2, ang: float, sc: float,
 	#  자세(손목·각·배율)는 여기가 이미 셈했으므로 그것만 넘긴다.
 	#  두 곳이 따로 셈하면 쓸기 도중에 팔과 손이 갈라진다.
 	if _hand3_live():
-		hand3_pose.append({"wr": wr, "ang": ang, "sc": sc, "mir": mir})
+		hand3_pose.append({"wr": wr, "ang": ang, "sc": sc, "mir": mir,
+				"el": el, "w0": NPC.el_w, "w1": wrr})
 		return
 	_npc_flat(hand, NPC.hand_t, C_WOOD.lightened(0.13),
 			C_WOOD.lightened(0.38))
@@ -7485,17 +7489,43 @@ func _npc_ink(wr: Vector2, ex: Vector2, ey: Vector2, sc: float) -> void:
 #  팔과 손이 갈라진다.
 # ══════════════════════════════════════════════════════════
 const HAND3 := {
-	"rect": Rect2(0.0, 96.0, 640.0, 168.0),   # 손이 갈 수 있는 화면 자리
+	#  손**과 팔뚝**이 갈 수 있는 화면 자리. 팔꿈치가 면 w −104 라
+	#  화면 y 46 이고, 쓸기 끝에서 손목이 w 126 → y 227 까지 간다.
+	#  96 에서 시작했다가 팔뚝 윗동강이 잘렸다 — 위는 동전 슬롯이
+	#  덮으므로(HUD 가 나중에 그린다) 넉넉히 위로 연다.
+	"rect": Rect2(0.0, 36.0, 640.0, 228.0),
 	"pitch": -52.0,      # TBL.flat = sin52 · TBL.tall = cos52 와 같은 각
-	"palm_l": 21.0,      # 손바닥 길이(손목→너클)
-	"palm_w": 20.0,      # 손바닥 폭
-	"palm_t": 6.4,       # 두께
+	#  ── 블록 ────────────────────────────────────────
+	#  마인크래프트·로블록스의 어법이다. 캡슐로 빚었다가 상자로 바꿨다 —
+	#  화면에서 손이 30px 이라 둥근 것은 그 크기에서 뭉개지는데, 모난 것은
+	#  면이 셋(윗면·옆면·앞면)으로 딱 갈려 **작을수록 오히려 또렷하다.**
+	#  도트 화면과 같은 어법이기도 하다 — 이 게임은 원래 모난 그림이다.
+	#
+	#  모양만 모나고 **움직임은 진짜 3D 다.** 손이 돌면 세 면의 넓이가
+	#  원근대로 바뀐다 — 2D 다각형을 돌리던 때는 그 일이 안 일어났다.
+	#  손 전체 배율. 30px 짜리 손은 무엇을 그려도 「모양」으로만 읽히고
+	#  손가락이 서지 않는다 — 레퍼런스의 손은 화면 폭의 10% 인데 이쪽은
+	#  4.7% 였다. 이 한 값이 그 차이를 쥔다.
+	"gain": 1.45,
+	"palm_l": 19.0,      # 손바닥 길이(손목→너클)
+	"palm_w": 19.0,      # 손바닥 폭
+	"palm_t": 7.0,       # 두께
 	"fin_n": 4,
-	"fin_r": 2.5,        # 손가락 반지름
-	"fin_seg": [8.5, 6.5, 5.0],   # 마디 셋. 끝으로 갈수록 짧다
-	"fin_fan": 0.21,     # 손가락이 벌어지는 각(rad)
-	"thumb": [8.0, 6.5],
-	"thumb_a": -0.95,    # 엄지가 벌어진 각
+	"fin_r": 2.3,        # 손가락 반두께
+	"fin_seg": [9.0, 7.0],        # 마디 둘. 블록은 마디를 덜 쪼갠다
+	"fin_fan": 0.17,     # 손가락이 벌어지는 각(rad)
+	#  손가락 사이 틈. **이 틈이 손가락을 가르는 전부다.** 0.9 로 뒀더니
+	#  화면에서 한 픽셀이 안 되어 손이 통째로 한 덩이였다 — 블록에서는
+	#  조명이 아니라 빈자리가 손가락을 가른다. 1.8 이면 틈 자리에 두 상자의
+	#  **옆면**이 드러나고, 옆면은 윗면보다 어두우므로 검은 줄이 선다.
+	"fin_gap": 1.8,
+	"thumb": [8.0, 6.0],
+	"thumb_a": -0.90,    # 엄지가 벌어진 각
+	#  팔뚝도 3D 다. 손만 3D 면 이음새에서 재질이 갈린다 —
+	#  2D 팔의 납작한 윗면과 3D 손의 모난 면이 한 자리에서 만난다.
+	"arm_t": 11.0,       # 팔뚝 두께
+	"arm_w0": 13.0,      # 팔꿈치 쪽 폭
+	"arm_w1": 8.5,       # 손목 쪽 폭
 }
 
 var hand3_vp: SubViewport = null
@@ -7507,23 +7537,20 @@ func _hand3_live() -> bool:
 	return hand3_vp != null and is_instance_valid(hand3_vp)
 
 
-#  마디 하나. 캡슐이라 끝이 둥글고, 그래서 마디 사이가 조명으로 갈린다.
+#  마디 하나 — **상자**다. 끝 노드를 돌려주므로 다음 마디를 거기 매단다.
+#  두께(h)를 따로 받는 것은 손가락이 손바닥보다 얇기 때문이다 — 같은
+#  두께로 두면 손이 벽돌 다발이 된다.
 func _hand3_bone(parent: Node3D, at: Vector3, dir: float, len: float,
-		rad: float, col: Color) -> Node3D:
+		rad: float, col: Color, h := -1.0) -> Node3D:
 	var pivot := Node3D.new()
 	pivot.position = at
 	pivot.rotation = Vector3(0.0, dir, 0.0)
 	parent.add_child(pivot)
-	var m := CapsuleMesh.new()
-	m.radius = rad
-	m.height = len + rad * 2.0
-	m.radial_segments = 8
-	m.rings = 4
+	var m := BoxMesh.new()
+	m.size = Vector3(len, rad * 2.0 if h < 0.0 else h, rad * 2.0)
 	var mi := MeshInstance3D.new()
 	mi.mesh = m
 	mi.material_override = _cup3_mat(col)
-	#  캡슐 축이 +Y 라 눕힌다 — 손가락은 손바닥 면 위에 눕는다.
-	mi.rotation = Vector3(0.0, 0.0, -PI * 0.5)
 	mi.position = Vector3(len * 0.5, 0.0, 0.0)
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	pivot.add_child(mi)
@@ -7566,9 +7593,14 @@ func _hand3_build(col: Color, mir: bool) -> Node3D:
 	#  지역 좌표라 뿌리에서는 뜻이 없다.
 	var kx: float = pl + 2.0
 	var segs: Array = HAND3.fin_seg
+	#  손가락 넷을 **틈으로** 가른다. 블록에서 손가락이 갈리는 것은 조명이
+	#  아니라 사이의 빈자리다 — 네 상자를 붙여 놓으면 한 덩이가 된다.
+	#  한 손가락이 차지하는 폭 = 손바닥 폭 / 4, 거기서 틈을 뺀 만큼이 살이다.
+	var slot: float = pw / float(int(HAND3.fin_n))
+	var fr: float = (slot - float(HAND3.fin_gap)) * 0.5
 	for i in int(HAND3.fin_n):
 		var t: float = float(i) / float(int(HAND3.fin_n) - 1)     # 0..1
-		var z: float = lerpf(-pw * 0.40, pw * 0.40, t) * mz
+		var z: float = (-pw * 0.5 + slot * (float(i) + 0.5)) * mz
 		var fan: float = lerpf(-1.0, 1.0, t) * float(HAND3.fin_fan) * mz
 		#  가운뎃손가락이 가장 길다. 끝 둘은 짧다 — 이 길이 차가 손을
 		#  「빗」이 아니라 손으로 만든다.
@@ -7577,8 +7609,8 @@ func _hand3_build(col: Color, mir: bool) -> Node3D:
 		var at := Vector3(kx, 0.0, z)
 		for sg in segs.size():
 			par = _hand3_bone(par, at, fan if sg == 0 else fan * 0.45,
-					float(segs[sg]) * k,
-					float(HAND3.fin_r) * (1.0 - 0.13 * float(sg)), col)
+					float(segs[sg]) * k, fr * (1.0 - 0.10 * float(sg)), col,
+					float(HAND3.palm_t) * (0.74 - 0.10 * float(sg)))
 			at = Vector3.ZERO      # 다음 마디는 앞 마디 **끝**에서 시작한다
 	#  엄지. 손바닥 아래쪽 옆에서 크게 벌어져 나온다 — 실루엣 밖으로
 	#  나오는 유일한 손가락이라 이것 하나로 손의 방향이 읽힌다.
@@ -7588,8 +7620,30 @@ func _hand3_build(col: Color, mir: bool) -> Node3D:
 	for sg2 in tb.size():
 		tp = _hand3_bone(tp, tat,
 				(float(HAND3.thumb_a) * mz) if sg2 == 0 else (0.30 * mz),
-				float(tb[sg2]), float(HAND3.fin_r) * (1.16 - 0.16 * float(sg2)), col)
+				float(tb[sg2]), fr * (1.22 - 0.14 * float(sg2)), col,
+				float(HAND3.palm_t) * 0.90)
 		tat = Vector3.ZERO
+	return root
+
+
+#  팔뚝 — 상자 하나. 길이는 팔꿈치와 손목 사이라 프레임마다 달라지므로
+#  **x 배율로** 민다(쓸기 동안 팔이 뻗는다). 옷소매라 손과 색이 다르다.
+func _arm3_build(col: Color) -> MeshInstance3D:
+	var m := BoxMesh.new()
+	#  길이 1 짜리 단위 상자. 뿌리(팔꿈치)가 x=0, 끝(손목)이 x=1 이라
+	#  배율 하나로 늘어난다 — 가운데가 원점이면 늘릴 때 뿌리가 같이 밀린다.
+	m.size = Vector3(1.0, float(HAND3.arm_t), float(HAND3.arm_w0))
+	var mi := MeshInstance3D.new()
+	mi.mesh = m
+	mi.material_override = _cup3_mat(col)
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var pivot := MeshInstance3D.new()
+	pivot.mesh = null
+	#  상자를 앞으로 반 칸 밀어 뿌리를 원점에 맞춘다.
+	mi.position = Vector3(0.5, 0.0, 0.0)
+	var root := MeshInstance3D.new()
+	root.mesh = null
+	root.add_child(mi)
 	return root
 
 
@@ -7654,7 +7708,12 @@ func _hand3_open() -> void:
 		hand3_vp.add_child(sh3)
 		var hd3 := _hand3_build(C_WOOD.lightened(0.40), i == 1)
 		hand3_vp.add_child(hd3)
-		hand3_rig.append({"hand": hd3, "shad": sh3})
+		#  팔뚝. 손보다 **먼저** 넣어 손이 위에 오게 한다.
+		var am3 := _arm3_build(C_WOOD.lightened(0.04))
+		hand3_vp.add_child(am3)
+		var as3 := _arm3_build(C_WOOD.darkened(0.84))
+		hand3_vp.add_child(as3)
+		hand3_rig.append({"hand": hd3, "shad": sh3, "arm": am3, "armsh": as3})
 
 
 func _hand3_close() -> void:
@@ -7674,7 +7733,7 @@ func _hand3_sync() -> void:
 		var nd: Node3D = rg.hand
 		var sd: Node3D = rg.shad
 		var wr: Vector2 = ps.wr
-		var sc: float = float(ps.sc)
+		var sc: float = float(ps.sc) * float(HAND3.gain)
 		var at := Vector3(wr.x, float(HAND3.palm_t) * 0.5 + 1.0, wr.y)
 		#  면 위 각을 월드 y 축 회전으로. 면의 +w 가 월드 +z 라 부호가 같다.
 		var rot := Vector3(0.0, -float(ps.ang), 0.0)
@@ -7688,10 +7747,30 @@ func _hand3_sync() -> void:
 		sd.rotation = rot
 		sd.scale = Vector3(sc, 0.05, sc)
 		sd.visible = true
+		#  팔뚝 — 팔꿈치에서 손목까지. 길이는 배율로 민다.
+		var el: Vector2 = ps.el
+		var dv: Vector2 = wr - el
+		var ln: float = maxf(dv.length(), 1.0)
+		var arot := Vector3(0.0, -dv.angle(), 0.0)
+		var apos := Vector3(el.x, float(HAND3.arm_t) * 0.5 + 0.5, el.y)
+		var am: Node3D = rg.arm
+		am.position = apos
+		am.rotation = arot
+		#  z 배율로 소매가 손목 쪽으로 좁아지는 것을 흉내낸다 — 상자 하나라
+		#  테이퍼가 없으므로 평균 폭으로 둔다(블록은 원래 안 좁아진다).
+		am.scale = Vector3(ln, 1.0, float(ps.w1) * 2.0 / float(HAND3.arm_w0))
+		am.visible = true
+		var ash: Node3D = rg.armsh
+		ash.position = apos + Vector3(2.0, -apos.y - 0.6, 3.4)
+		ash.rotation = arot
+		ash.scale = Vector3(ln, 0.05, am.scale.z)
+		ash.visible = true
 	for i in range(hand3_pose.size(), hand3_rig.size()):
 		var rg2: Dictionary = hand3_rig[i]
 		(rg2.hand as Node3D).visible = false
 		(rg2.shad as Node3D).visible = false
+		(rg2.arm as Node3D).visible = false
+		(rg2.armsh as Node3D).visible = false
 
 
 func _hand3_draw() -> void:
