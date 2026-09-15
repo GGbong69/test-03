@@ -37,6 +37,9 @@ func _run() -> void:
 	g.drop_fast = true
 	for k in 200:
 		g._drop_step(1.0 / 60.0)
+	#  낙하가 안 끝나면 _hand_press 가 _drop_busy 로 통째로 거절한다 —
+	#  누름 검사가 아니라 낙하 검사가 되어 버린다.
+	g._drop_settle()
 	print("매물 %d · 금화 %d" % [g.stock.size(), g.gold])
 
 	# ① 응수 이름이 표에 다 있는가 — 없는 이름을 부르면 조용히 아무 일도 없다
@@ -54,21 +57,62 @@ func _run() -> void:
 	_ok("왼쪽 일은 왼손", g._npc_side(80.0) == 0, "%d" % g._npc_side(80.0))
 	_ok("오른쪽 일은 오른손", g._npc_side(560.0) == 1, "%d" % g._npc_side(560.0))
 
-	# ③ 집으면 그쪽을 본다 — 진짜 _hand_take 를 밟는다
+	# ③ **누르는 순간** 그쪽을 본다 — 끌기가 시작되기 전이다
 	_clear()
-	g.hand_src = 0
-	g.hand_i = 0
-	g.hand_p0 = Vector2(120.0, 200.0)
-	g.hand_m = g.hand_p0
-	g._hand_take()
-	_ok("집으면 눈길", g._idle_name() == "눈길" and g.idle_side == 0,
-			"%s · 손 %d" % [g._idle_name(), g.idle_side])
+	_ok("빈 자리를 누르면 아무 일도 없다",
+			not g._hand_press(Vector2(8.0, 350.0)) and g.idle_act < 0,
+			"act %d" % g.idle_act)
+	var it0: Dictionary = g.drop[0]
+	var at: Vector2 = (g._obj_box(0) as Rect2).get_center()
 	_clear()
-	g.hand_p0 = Vector2(520.0, 200.0)
-	g.hand_i = 0
+	var got: bool = g._hand_press(at)
+	_ok("매물을 누르면 눈길",
+			got and g._idle_name() == "눈길"
+			and g.idle_side == g._npc_side(at.x),
+			"%s · 손 %d (자리 x %.0f)" % [g._idle_name(), g.idle_side, at.x])
+	_ok("누른 것만으로는 아직 안 쥔다", g.hand_st == g.H.ARMED,
+			"손 %d" % g.hand_st)
+	#  끌기가 시작될 때 같은 응수가 **또** 걸리면 안 된다 — 봉투가 튄다
+	g.idle_t = 0.42
 	g._hand_take()
-	_ok("오른쪽을 집으면 오른손", g.idle_side == 1, "손 %d" % g.idle_side)
+	_ok("끌기 시작에 응수가 겹치지 않는다", absf(g.idle_t - 0.42) < 0.0001,
+			"t %.2f" % g.idle_t)
 	g._hand_abort()
+
+	# ④ 연타해도 봉투가 안 튄다 — 같은 응수는 시계를 0 으로 안 되돌린다
+	_clear()
+	g._npc_react("눈길", 1)
+	g.idle_t = 0.55
+	var e0: float = g._idle_env()
+	g._npc_react("눈길", 1)
+	_ok("같은 응수를 다시 불러도 안 튄다",
+			g.idle_t <= float(g.IDLE["in"]) + 0.0001 and g._idle_env() >= e0 - 0.001,
+			"t %.2f · 봉투 %.2f→%.2f" % [g.idle_t, e0, g._idle_env()])
+	g._npc_react("끄덕")
+	_ok("다른 응수는 처음부터", g._idle_name() == "끄덕" and g.idle_t == 0.0,
+			"%s · t %.2f" % [g._idle_name(), g.idle_t])
+
+	# ⑤ 눌렀다 그대로 떼면(탭) 그 물건을 짚어 보인다
+	_clear()
+	g._shop_tap(0)
+	_ok("탭하면 짚는다",
+			g._idle_name() == "짚기"
+			and g.idle_side == g._npc_side(float(it0.u)),
+			"%s · 손 %d" % [g._idle_name(), g.idle_side])
+	#  짚기는 눈길보다 한 발 더 나가야 한다 — 같으면 둘일 이유가 없다
+	var pk := 0.0
+	var lk := 0.0
+	for nm2 in ["짚기", "눈길"]:
+		_clear()
+		g._npc_react(nm2, 1)
+		g.idle_t = g._idle_len() * 0.5
+		var hh: Dictionary = g._idle_hand(1)
+		if nm2 == "짚기":
+			pk = float(hh.dw)
+		else:
+			lk = float(hh.dw)
+	_ok("짚기가 눈길보다 멀리 나간다", pk > lk * 2.0,
+			"짚기 %.0f · 눈길 %.0f" % [pk, lk])
 
 	# ④ 물리면 젓는다
 	_clear()

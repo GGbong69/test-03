@@ -3461,11 +3461,16 @@ func _click(m: Vector2) -> void:
 			_swap_begin(false)   # 상점이 선 뒤라야 들어오는 테이블에 그릴 것이 있다
 			return
 		S.LEG:
+			#  누름은 상점에만 있는 것이 아니다. 판·제약 고르기에서도 상인이
+			#  서 있으므로(_npc_on) 손님이 고른 것에 응수한다. 상태를 바꾸기
+			#  **전에** 부른다 — 바꾼 뒤면 상인이 이미 없는 화면일 수 있다.
 			if _leg_go().has_point(m):
+				_npc_react("끄덕")
 				_open_stage()
 				_sfx("leg_go")
 				return
 			if _leg_skip().has_point(m):
+				_npc_react("끄덕")
 				_skip_leg()
 				return
 		S.STAGE:
@@ -3475,6 +3480,7 @@ func _click(m: Vector2) -> void:
 				return
 			for i in stage_pick.size():
 				if _stage_rect(i).has_point(m):
+					_npc_react("끄덕", _npc_side(_stage_rect(i).get_center().x))
 					_pick_stage(i)
 					return
 		S.SHOP:
@@ -8162,6 +8168,7 @@ const IDLE := {
 		{"n": "눈길", "t": 0.7, "auto": false},
 		{"n": "끄덕", "t": 0.6, "auto": false},
 		{"n": "손짓", "t": 0.8, "auto": false},
+		{"n": "짚기", "t": 0.8, "auto": false},
 		{"n": "저음", "t": 0.8, "auto": false},
 		#  건네받은 물건을 살핀다. 길이는 GIVE 의 세 박자 합이어야 한다 —
 		#  어긋나면 손이 먼저 내려오고 물건만 허공에 남는다.
@@ -8224,8 +8231,15 @@ func _npc_react(nm: String, side := -1) -> void:
 		return
 	for i in IDLE.acts.size():
 		if String((IDLE.acts[i] as Dictionary).n) == nm:
-			idle_act = i
-			idle_t = 0.0
+			#  **같은 응수를 다시 부르면 시계를 0 으로 안 되돌린다.**
+			#  봉투가 1 에 있는데 0 으로 떨어뜨리면 자세가 한 프레임에 쉬는
+			#  자리로 튕겼다가 다시 올라온다 — 연타하면 손이 떤다.
+			#  들머리 끝까지만 되감아 "다시 붙든다".
+			if idle_act == i:
+				idle_t = minf(idle_t, float(IDLE["in"]))
+			else:
+				idle_act = i
+				idle_t = 0.0
 			if side >= 0:
 				idle_side = side
 			return
@@ -8347,6 +8361,12 @@ func _idle_body() -> Dictionary:
 			out.lean += k * 3.2 * sin(b * PI)
 		"손짓":
 			out.yaw += k * 0.042 * sd
+		"짚기":
+			#  손님이 고른 것을 짚어 보인다. 눈길보다 한 발 더 나간다 —
+			#  눈길은 "봤다" 고 짚기는 "그것 말이지" 다.
+			out.yaw += k * 0.040 * sd
+			out.lean += k * 3.0
+			out.rise -= k * 1.4
 		"저음":
 			#  고개가 없으므로 **몸통이 두 번 젓는다.** 진폭보다 횟수가
 			#  "아니다" 를 만든다 — 한 번이면 그냥 돌아본 것이다.
@@ -8456,6 +8476,16 @@ func _idle_hand(i: int) -> Dictionary:
 			out.du = -sd * 18.0 * k * sin(b * PI)
 			out.dw = 6.0 * k
 			out.ang = -sd * 0.25 * k * sin(b * PI)
+			out.el = 0.8
+		"짚기":
+			#  판 쪽으로 손을 뻗어 짚는다. 손끝이 그쪽을 향하게 각도 돌린다 —
+			#  손만 나가고 방향이 그대로면 짚은 것이 아니라 내민 것이다.
+			if not mine:
+				return out
+			out.du = -sd * 8.0 * k
+			out.dw = 17.0 * k
+			out.dh = 3.0 * k
+			out.ang = -sd * 0.22 * k
 			out.el = 0.8
 		"저음":
 			out.dh = 2.0 * k
@@ -11199,7 +11229,21 @@ func _rack_grab(m: Vector2) -> bool:
 
 
 # true 를 돌려주면 _click 을 안 부른다(삼킨다).
+#
+#  ── 누르는 **순간** 상인이 본다 ──────────────────────────
+#  응수가 _hand_take(끌기가 실제로 시작될 때)에 붙어 있었다. 그러면 눌러
+#  놓고 안 움직이는 동안은 아무 일도 안 일어나서, 누른 것이 먹혔는지가
+#  화면에서 안 보인다 — 탭(누르고 그대로 떼기)은 영영 응수가 없었다.
+#  잡는 갈래가 다섯인데(사탕·판매 버튼·동전 슬롯·창구·매물) 다섯이 다
+#  성공하면 true 를 내므로, 여기 한 자리에서 잡는다.
 func _hand_press(m: Vector2) -> bool:
+	if not _hand_press_at(m):
+		return false
+	_npc_react("눈길", _npc_side(m.x))
+	return true
+
+
+func _hand_press_at(m: Vector2) -> bool:
 	if swap_live:
 		return false
 	if _autoplay:
@@ -11288,9 +11332,8 @@ func _hand_motion(m: Vector2) -> void:
 
 
 func _hand_take() -> void:
-	#  손님이 무엇을 집으면 상인이 그쪽을 본다. 응수는 **집는 순간**에
-	#  붙어야 한다 — 놓을 때 붙이면 이미 끝난 일에 대한 반응이 된다.
-	_npc_react("눈길", _npc_side(hand_p0.x))
+	#  눈길은 여기가 아니라 **누르는 순간**에 난다(_hand_press). 여기에
+	#  또 두면 끌기가 시작되는 자리에서 같은 응수가 한 번 더 걸린다.
 	hand_st = H.CARRY
 	hand_v = Vector2.ZERO
 	hand_zone = -1
@@ -11600,6 +11643,9 @@ func _hand_scuff(it: Dictionary, d: float) -> void:
 
 # ══ 구매 두 갈래 — 둘 다 계산대에서 끝난다 ═══════════
 func _shop_tap(i: int) -> void:
+	#  눌렀다 그대로 뗀 것 — 고른 것이다. 상인이 그 물건을 짚어 보인다.
+	if i >= 0 and i < drop.size():
+		_npc_react("짚기", _npc_side(float((drop[i] as Dictionary).u)))
 	sell_sel = -1
 	buy_sel = -1 if buy_sel == i else i
 	_sfx("shop_select" if buy_sel >= 0 else "shop_deselect")
