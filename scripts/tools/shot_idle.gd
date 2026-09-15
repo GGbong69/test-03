@@ -1,6 +1,6 @@
 extends SceneTree
-# 상인 연출을 한 장씩 굽는다 — 몸짓 넷 × 세 박자.
-#   godot --path . --quit-after 4000 --script scripts/tools/shot_idle.gd
+# 상인 연출을 한 장씩 굽는다 — 몸짓마다 세 박자.
+#   godot --path . --quit-after 9000 --script scripts/tools/shot_idle.gd
 const GameData = preload("res://scripts/data.gd")
 const Save = preload("res://scripts/save.gd")
 var g = null
@@ -39,19 +39,20 @@ func _run() -> void:
 	g.leg_no = 2
 	g._open_shop()
 	await _wait(40)
-	# 몸짓을 하나씩 강제로 걸고 박자마다 찍는다
+	# 몸짓을 하나씩 강제로 걸고 박자마다 찍는다. 한 손 몸짓은 오른손으로.
 	for i in g.IDLE.acts.size():
-		var nm: String = String(g.IDLE.acts[i])
-		var dur: float = float(g.IDLE.len[i])
+		var nm: String = String((g.IDLE.acts[i] as Dictionary).n)
 		for k in 3:
 			g.idle_act = i
-			g.idle_t = dur * (0.3 + 0.25 * float(k))
+			g.idle_side = 1
+			g.idle_t = float((g.IDLE.acts[i] as Dictionary).t) \
+					* (0.30 + 0.24 * float(k))
 			g._body3_sync()
-			await _shot("idle_%d_%d" % [i, k])
-		print("%s 찍었다" % nm)
+			await _shot("idle_%02d_%d" % [i, k])
+		print("%d %s" % [i, nm])
 	g.idle_act = -1
 	g.idle_t = 0.0
 	g._body3_sync()
 	await _shot("idle_rest")
-	print("끝")
+	print("끝 %d종" % g.IDLE.acts.size())
 	quit(0)

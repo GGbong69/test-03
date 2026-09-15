@@ -1586,6 +1586,10 @@ func _roll_stock() -> void:
 func _deny() -> void:
 	deny_flash = 1.0
 	shake = 4.0
+	#  거절은 소리·번쩍임·흔들림 셋으로만 말하고 있었다. 상인이 앞에
+	#  서 있는 화면에서 **정작 상인만 가만히 있으면** 누가 물린 것인지가
+	#  안 보인다. 고개가 없으니 몸통이 두 번 젓는다.
+	_npc_react("저음")
 	_sfx("deny")
 
 
@@ -6454,6 +6458,8 @@ func _sell_hit(m: Vector2) -> bool:
 func _sell(i: int) -> void:
 	if i < 0 or i >= owned.size():
 		return
+	#  판매 창구는 화면 왼쪽이라 그쪽 손이 민다.
+	_npc_react("손짓", 0)
 	var v := GameData.sell_value(owned[i])
 	var at := _slot_rect(i).get_center()
 	gold += v
@@ -6936,11 +6942,22 @@ const NPC := {
 	# 동전 슬롯에, 아래는 카운터(cut 112)에 열려 있어서 닫히지가 않는다. 대신
 	# 더 센 것이 나왔다: 팔이 검사 칸 안에서 몸통과 **아예 다른 덩어리**가
 	# 된다. 실루엣을 단색으로 칠하면 셋으로 갈린다(몸통 · 팔 · 팔).
-	"el_l": Vector2(-94.0, -104.0), "wr_l": Vector2(-78.0, -2.0),
+	#  ── 팔을 몸에서 떼어 놓는다 ────────────────────
+	#  2026-09-15 제보: "오른쪽 손이 너무 몸이랑 붙어 있는거 아니야?"
+	#  상인은 마주 본다 — 상인의 오른손이 화면 **왼쪽**이고, 재 보니
+	#  그쪽 손목 안쪽 모서리가 |u| 63 인데 3D 몸통 반폭이 66.8 이라
+	#  **3.8px 겹쳐** 있었다. 옛 2D 몸통은 사다리꼴(위 72 → 아래 60)이라
+	#  손이 서는 높이에서 60 이었고, 그래서 골이 있었다. 상자로 바꾸며
+	#  그 사다리꼴을 잃은 것이다(BODY3.lean 이 되돌린다).
+	#
+	#  둘 다 **밖으로 벌어지게** 둔다 — 팔꿈치보다 손목이 더 바깥이다.
+	#  닫히는 팔(옛 왼팔: 94 → 78)은 옆구리로 들어가서 매달린 것으로 읽힌다.
+	#  좌우 벌어짐을 다르게 둔 것은 일부러다(완전대칭은 옷걸이의 냄새다).
+	"el_l": Vector2(-98.0, -104.0), "wr_l": Vector2(-106.0, -2.0),
 	# 오른쪽 손목 −6 은 왼쪽 −2 와 4w 차다 — 손이 거울짝이 된 뒤에도
 	# 정확히 같은 높이에 두지는 않는다(완전대칭은 옷걸이의 냄새다).
 	# u 88 에 두면 손끝이 몸통 위로 올라타 한 덩어리로 붙는다(실측).
-	"el_r": Vector2(96.0, -103.0), "wr_r": Vector2(104.0, -6.0),
+	"el_r": Vector2(100.0, -103.0), "wr_r": Vector2(114.0, -6.0),
 	# 쓸기 팔의 뿌리. 어깨 u +62 는 몸통 윗반폭(72) 안이라, 몸이 어디를
 	# 걷든 소매가 조끼에서 나온다. w −115(화면 y 21)는 쉴 때 동전 슬롯 뒤다.
 	"sh_r": Vector2(62.0, -115.0),
@@ -6962,8 +6979,10 @@ const NPC := {
 	# 것으로 읽혔다. 사람 손목의 좌우 꺾임 한계가 20~30° 다.
 	# 손끝을 관객 쪽(+w)으로 돌리면 정사영이 길이를 0.788 로 누르지만,
 	# 엄지 노치는 ey 축이라 가로로 남아 실루엣 정보가 안 준다.
-	"ang_l": 112.0, "sc_l": 0.95,
-	"ang_r": 68.0,       # 쓸 때의 손각은 상수가 아니라 팔 방향이 정한다
+	#  팔을 벌리면서 다시 잡았다. 옛 112° 는 팔 방향(81°)에서 31° 꺾인
+	#  손목이라 한계에 붙어 있었는데, 벌어진 팔(94.5°)에 100° 면 5.5° 다.
+	"ang_l": 100.0, "sc_l": 0.95,
+	"ang_r": 80.0,       # 쓸 때의 손각은 상수가 아니라 팔 방향이 정한다
 	# 위팔은 따로 안 그린다. 팔은 상자 **하나**다 — 팔꿈치에서 손목까지 한
 	# 덩어리로 누워 있고, 팔꿈치를 꺾으면 서 있는 도형과 누운 도형이
 	# 한 팔 안에서 섞여 이음매가 부러져 보인다(그려서 확인했다).
@@ -7354,33 +7373,42 @@ func _npc_arms() -> void:
 	var br: float = sin(npc_clock * 1.5) * float(NPC.breathe)
 	var cx: float = NPC.cx
 	var a := _sweep_amt()
-	#  몸짓이 손을 미는 양. 면 좌표(du, dw)와 높이 dh 다 — 팔꿈치는 손의
-	#  0.35 만 따라간다. 1.0 으로 두면 팔이 통째로 평행이동해서 관절이
-	#  없는 것으로 읽히고, 0 으로 두면 팔이 고무처럼 늘어난다.
+	#  몸짓이 손을 미는 양. 팔꿈치가 얼마나 따라오는가(el)는 몸짓마다
+	#  다르다 — IDLE 머리말의 "손만 미끄러지면 마술이 된다" 가 그 이유다.
 	var g0 := _idle_hand(0)
 	var g1 := _idle_hand(1)
+	#  몸이 돌면 팔뿌리도 돈다. 깊이에 따라 밀리는 양이 달라서
+	#  팔꿈치(축 뒤)와 손목(축 앞)이 **반대로** 간다.
+	var yw: float = float(_idle_body().yaw)
+	var e0: float = float(g0.el)
+	var e1: float = float(g1.el)
 	# 쉬는 팔. 숨은 팔꿈치를 손목보다 크게 흔든다 — 뿌리가 동전 슬롯 뒤라
 	# 팔꿈치 쪽 진폭은 안 보이고 팔 전체의 기울기로만 나온다.
 	# 몸이 기울면 뿌리도 그만큼 밀린다.
-	_npc_limb(Vector2(cx + NPC.el_l.x + _npc_sway(NPC.el_l.y) + g0.x * 0.35,
-			NPC.el_l.y + br * 0.5 + g0.y * 0.35),
-			Vector2(cx + NPC.wr_l.x + _npc_sway(NPC.wr_l.y) + g0.x,
-			NPC.wr_l.y + br * 0.2 + g0.y),
-			deg_to_rad(NPC.ang_l), NPC.sc_l, false, -1.0,
-			Vector2(float(HAND3.h_wr) + g0.z,
-			float(HAND3.h_el) + g0.z * 0.5))
+	_npc_limb(Vector2(cx + NPC.el_l.x + _npc_sway(NPC.el_l.y)
+			+ _idle_twist(NPC.el_l.y, yw) + float(g0.du) * e0,
+			NPC.el_l.y + br * 0.5 + float(g0.dw) * e0),
+			Vector2(cx + NPC.wr_l.x + _npc_sway(NPC.wr_l.y)
+			+ _idle_twist(NPC.wr_l.y, yw) + float(g0.du),
+			NPC.wr_l.y + br * 0.2 + float(g0.dw)),
+			deg_to_rad(NPC.ang_l) + float(g0.ang), NPC.sc_l, false, -1.0,
+			Vector3(float(HAND3.h_wr) + float(g0.dh),
+			float(HAND3.h_el) + float(g0.dh) * 0.5, float(g0.roll)))
 	# 쓸는 팔 — 어깨부터 **쭉 편 채** 휩쓴다. 몸이 +5° 기울며 뻗고,
 	# −5° 로 넘어가는 동안 팔이 부채꼴로 판을 쓴다. 팔꿈치는 어깨-손목
 	# 직선 위라 안 굽고, 손으로 갈수록 굵어지다 손이 1.55배가 된다 —
 	# 관객 쪽으로 내려온 것은 크게 보이는 것이 원근이다.
-	var el := Vector2(cx + NPC.el_r.x + _npc_sway(NPC.el_r.y) + g1.x * 0.35,
-			NPC.el_r.y + br * 0.5 + g1.y * 0.35)
-	var wr := Vector2(cx + NPC.wr_r.x + _npc_sway(NPC.wr_r.y) + g1.x,
-			NPC.wr_r.y + br * 0.2 + g1.y)
-	var ang: float = deg_to_rad(NPC.ang_r)
-	var sh := Vector2(cx + NPC.sh_r.x + _npc_sway(NPC.sh_r.y), NPC.sh_r.y)
-	var hw: float = float(HAND3.h_wr) + g1.z
-	var he: float = float(HAND3.h_el) + g1.z * 0.5
+	var el := Vector2(cx + NPC.el_r.x + _npc_sway(NPC.el_r.y)
+			+ _idle_twist(NPC.el_r.y, yw) + float(g1.du) * e1,
+			NPC.el_r.y + br * 0.5 + float(g1.dw) * e1)
+	var wr := Vector2(cx + NPC.wr_r.x + _npc_sway(NPC.wr_r.y)
+			+ _idle_twist(NPC.wr_r.y, yw) + float(g1.du),
+			NPC.wr_r.y + br * 0.2 + float(g1.dw))
+	var ang: float = deg_to_rad(NPC.ang_r) + float(g1.ang)
+	var sh := Vector2(cx + NPC.sh_r.x + _npc_sway(NPC.sh_r.y)
+			+ _idle_twist(NPC.sh_r.y, yw), NPC.sh_r.y)
+	var hw: float = float(HAND3.h_wr) + float(g1.dh)
+	var he: float = float(HAND3.h_el) + float(g1.dh) * 0.5
 	if a > 0.004:
 		var wt := Vector2(_sweep_line(SWEEP.w_wr), SWEEP.w_wr)
 		wr = wr.lerp(wt, a)
@@ -7413,7 +7441,7 @@ func _npc_arms() -> void:
 				C_WOOD.lightened(0.04))
 	# 이 팔이 상인의 왼팔이다 — 손은 거울상으로 붙는다.
 	_npc_limb(el, wr, ang, hs, true, lerpf(NPC.wr_w, 13.5, a),
-			Vector2(hw, he))
+			Vector3(hw, he, float(g1.roll) * (1.0 - a)))
 
 
 # 팔 하나 + 손 하나. 면 좌표(u,w) 로 받는다.
@@ -7422,11 +7450,11 @@ func _npc_arms() -> void:
 # 화면에서 가장 밝은 덩어리이고, 그래서 눈이 손부터 본다.
 func _npc_limb(el: Vector2, wr: Vector2, ang: float, sc: float,
 		mir: bool = false, wrr: float = -1.0,
-		hh: Vector2 = Vector2(-1.0, -1.0)) -> void:
+		hh: Vector3 = Vector3(-1.0, -1.0, 0.0)) -> void:
 	if wrr < 0.0:
 		wrr = NPC.wr_w
 	if hh.x < 0.0:
-		hh = Vector2(float(HAND3.h_wr), float(HAND3.h_el))
+		hh = Vector3(float(HAND3.h_wr), float(HAND3.h_el), 0.0)
 	var ex := Vector2(cos(ang), sin(ang))
 	# 손대칭이 문제였다. 같은 다각형을 두 팔에 평행이동만 해서 붙이면
 	# 상인이 오른손을 두 개 단다 — 마주 본 사람의 두 손은 거울상이다.
@@ -7473,7 +7501,7 @@ func _npc_limb(el: Vector2, wr: Vector2, ang: float, sc: float,
 	#  두 곳이 따로 셈하면 쓸기 도중에 팔과 손이 갈라진다.
 	if _hand3_live():
 		hand3_pose.append({"wr": wr, "ang": ang, "sc": sc, "mir": mir,
-				"el": el, "hw": hh.x, "eh": hh.y})
+				"el": el, "hw": hh.x, "eh": hh.y, "roll": hh.z})
 		return
 	_npc_flat(hand, NPC.hand_t, C_WOOD.lightened(0.13),
 			C_WOOD.lightened(0.38))
@@ -7797,9 +7825,14 @@ func _hand3_sync() -> void:
 		var at := Vector3(wr.x, hw + float(HAND3.palm_t) * 0.5, wr.y)
 		#  면 위 각을 월드 y 축 회전으로. 면의 +w 가 월드 +z 라 부호가 같다.
 		var rot := Vector3(0.0, -float(ps.ang), 0.0)
-		nd.position = at
-		nd.rotation = rot
-		nd.scale = Vector3.ONE * sc
+		#  손 굴림 — 「뒤집기」가 쓴다. 자리를 안 옮기고 도는 것이라
+		#  미끄러질 수가 없다. 오일러로는 못 준다(요와 굴림이 섞여 손이
+		#  딴 축으로 돈다) — 요를 먼저 세우고 제 x 축으로 굴린다.
+		var hrl: float = float(ps.get("roll", 0.0))
+		var hb := Basis(Vector3.UP, -float(ps.ang))
+		if absf(hrl) > 0.0005:
+			hb = hb * Basis(Vector3.RIGHT, hrl)
+		nd.transform = Transform3D(hb.scaled(Vector3.ONE * sc), at)
 		nd.visible = true
 		#  빛은 왼쪽 위에 고정이다(빛 방향 −46°/−38°). 어긋남은 **월드**라
 		#  손이 어느 쪽을 보든 그림자는 늘 오른쪽 아래로 진다.
@@ -7817,7 +7850,10 @@ func _hand3_sync() -> void:
 		var ap := Vector3(el.x, he + float(HAND3.arm_t) * 0.5, el.y)
 		var wp := Vector3(wr.x, hw + float(HAND3.arm_t) * 0.5, wr.y)
 		var am: Node3D = rg.arm
-		am.transform = _aim3(ap, wp, 1.0, deg_to_rad(float(HAND3.roll)))
+		#  팔뚝은 손 굴림의 절반을 따라 돈다 — 사람 아래팔이 그렇다.
+		#  0 으로 두면 손목에서 재질이 끊기고, 1 로 두면 어깨까지 비틀린다.
+		am.transform = _aim3(ap, wp, 1.0,
+				deg_to_rad(float(HAND3.roll)) + hrl * 0.5)
 		am.visible = true
 		#  팔 그림자 — 카운터 선(w 0)에서 자른다. 손목이 아직 카운터 뒤면
 		#  통째로 걷고, 넘어오는 순간에는 잘린 토막의 길이가 0 이라
@@ -7887,9 +7923,22 @@ func _hand3_draw() -> void:
 # ══════════════════════════════════════════════════════════
 const BODY3 := {
 	"rect": Rect2(0.0, 0.0, 640.0, 128.0),   # 카운터 선에서 끊긴다
-	"mid": 26.0,         # 가운데 조각 반폭
-	"side": 44.0,        # 옆 조각 폭. 틀면 반폭 26+40.8 = 66.8 (2D hc 72)
+	#  가운데 조각은 **돌쩌귀보다 넓다.** 옆 조각이 lean 으로 기울면 그
+	#  안쪽 모서리도 같이 기울어, 돌쩌귀와 같은 폭으로 두면 그 틈으로
+	#  배경이 4px 뚫린다. 8 을 겹쳐 둔다.
+	"mid": 34.0,         # 가운데 조각 반폭
+	"hinge": 26.0,       # 옆 조각이 물리는 자리
+	"side": 44.0,        # 옆 조각 폭
 	"yaw": 22.0,         # 옆 조각을 바깥으로 트는 각. 이것이 원기둥을 만든다
+	#  ── 잃어버린 사다리꼴 ──────────────────────────
+	#  2D 몸통은 위 72 → 아래 60 짜리 사다리꼴이었다. 상자로 옮기면서
+	#  66.8 로 **일정해졌고**, 그래서 손이 서는 높이(y 126)에서 몸이 6.6
+	#  넓어져 팔과 옆구리 사이 골을 먹었다 — 팔이 몸에 붙어 보인 절반이
+	#  이것이다(나머지 절반은 NPC.el_l 주석).
+	#  상자는 안 좁아지지만 **기울일 수는 있다.** 옆 조각을 보이는 띠의
+	#  한가운데(h 40)를 축으로 5.5° 눕히면 위 72.5 · 아래 63.1 이 나온다.
+	"lean": 5.5,         # 옆 조각을 안쪽으로 눕히는 각 — 허리가 여기서 좁아진다
+	"lean_y": 40.0,      # 그 축의 h. 보이는 띠(h −23~107)의 한가운데다
 	"hi": 210.0,         # 위끝. h 172 위는 동전 슬롯 뒤라 넘치게 올린다
 	"lo": -50.0,         # 아랫끝. 카운터 밑이라 무대 사각이 잘라 먹는다
 	"d": 42.0,           # 몸 두께
@@ -7947,11 +7996,18 @@ func _body3_open() -> void:
 	#  상자를 늘려도 종이 두 장이 된다.
 	for s in [-1.0, 1.0]:
 		var pv := Node3D.new()
-		pv.position = Vector3(s * md, 0.0, fw)
-		pv.rotation_degrees = Vector3(0.0, s * float(BODY3.yaw), 0.0)
+		var ly: float = float(BODY3.lean_y)
+		pv.position = Vector3(s * float(BODY3.hinge), ly, fw)
+		#  오일러 차례가 YXZ 라 눕히기(z)가 **먼저** 제 자리에서 돌고
+		#  그다음 통째로 틀린다(y). 그 차례라야 사다리꼴이 나온다.
+		#  부호가 −s 다. +s 로 두면 허리가 **넓어진다** — 사다리꼴이
+		#  거꾸로 서서 상인이 팽이가 된다(깃의 −s 와 같은 이유다).
+		pv.rotation_degrees = Vector3(0.0, s * float(BODY3.yaw),
+				-s * float(BODY3.lean))
 		var sw: float = float(BODY3.side)
 		pv.add_child(_blk3(Vector2(0.0, sw) if s > 0.0 else Vector2(-sw, 0.0),
-				Vector2(lo, hi), Vector2(-float(BODY3.d), 0.0), vest))
+				Vector2(lo - ly, hi - ly), Vector2(-float(BODY3.d), 0.0),
+				vest))
 		rt.add_child(pv)
 	#  셔츠. 앞자락 둘 사이로만 보이고 그 사이가 곧 V 다 — 셔츠 자체는
 	#  네모라서 덮이는 자리가 모양을 정한다(BODY3 의 덮는 조건).
@@ -7977,7 +8033,10 @@ func _body3_open() -> void:
 	#  허리띠. 앞으로 더 나와 **윗면이 보이는** 유일한 조각이다 —
 	#  카운터 바로 위에 밝은 가로 띠가 드러나고, 그것이 상인을
 	#  카운터 **뒤에** 세운다.
-	rt.add_child(_blk3(Vector2(-70.0, 70.0),
+	#  폭은 그 높이의 몸통을 따라간다(lean 이 좁힌 61 언저리). 70 으로
+	#  두면 띠가 **몸보다 넓어** 사다리꼴을 도로 지운다 — 팔과의 골이
+	#  다시 먹히는 자리가 정확히 여기다.
+	rt.add_child(_blk3(Vector2(-62.0, 62.0),
 			Vector2(lo, float(BODY3.belt)),
 			Vector2(fw - float(BODY3.d), fw + float(BODY3.belt_d)),
 			C_WOOD.darkened(0.52)))
@@ -8041,23 +8100,53 @@ func _body3_draw() -> void:
 #  옆 조각의 면적이 프레임마다 바뀐다 — 정지 화면 열 장으로는 못 만드는
 #  정보이고, 이것 하나로 몸통이 판때기에서 덩어리가 된다.
 #
+#  ── 손만 미끄러지면 마술이 된다 ──────────────────────
+#  「모으기」를 걷었다(2026-09-15 제보: "갑자기 마법손녀도 아니고").
+#  손목을 60px 끌면서 팔꿈치를 그 0.35 만 따라오게 했더니, 팔은 제자리에
+#  선 채 손만 판 위를 미끄러졌다. **팔꿈치가 동전 슬롯 뒤에 박혀 있어서**
+#  아무리 당겨도 와이퍼가 된다. 그래서 몸짓마다 el(팔꿈치가 따라오는 비)을
+#  따로 둔다 — 손이 옆으로 많이 갈수록 el 이 1 에 가까워야 한다.
+#  가로로 크게 가는 몸짓(훑기·손짓)은 0.8 이상이고, 위아래·앞뒤로만 가는
+#  몸짓은 팔이 관절로 도는 것이라 낮아도 된다.
+#
+#  ── 두 갈래 ──────────────────────────────────────────
+#  auto 가 켜진 것만 제비로 뽑는다. 꺼진 것은 손님이 뭘 했을 때
+#  _npc_react 가 불러 쓰는 **응수**다 — 같은 봉투·같은 코드를 타므로
+#  연출이 두 벌이 되지 않는다.
+#
 #  ── 쓸기가 이긴다 ────────────────────────────────────
 #  리롤(_sweep_amt)이 돌면 몸짓을 걷고 쉼을 다시 채운다. 두 연출이 같은
 #  팔을 두고 다투면 팔이 두 곳으로 간다.
 # ══════════════════════════════════════════════════════════
 const IDLE := {
-	"gap": Vector2(2.6, 6.4),    # 몸짓 사이 쉼(초)
+	"gap": Vector2(2.2, 5.4),    # 몸짓 사이 쉼(초)
 	"sway": 0.052,               # 무게 옮기기 — 몸통 돌림 3°
 	"sway_hz": 0.085,            # 그 주기. 11.8 초에 한 번이라 배경으로 깔린다
 	"tip": 0.030,                # 같이 도는 좌우 기울임 1.7°
 	"in": 0.26, "out": 0.34,     # 몸짓 봉투의 들머리·날머리
-	#  이름과 길이는 자리를 맞춰 읽는다. 늘리면 둘 다 늘린다.
-	"acts": ["모으기", "털기", "두드리기", "기대기"],
-	"len": [2.6, 1.0, 1.8, 3.0],
+	"axis": -41.0,               # 몸이 도는 축의 w. 팔뿌리가 이 축을 탄다
+	#  n 이름 · t 초 · auto 제비로 뽑히는가
+	"acts": [
+		{"n": "털기", "t": 1.0, "auto": true},
+		{"n": "두드리기", "t": 1.8, "auto": true},
+		{"n": "기대기", "t": 3.0, "auto": true},
+		{"n": "뒤집기", "t": 1.7, "auto": true},
+		{"n": "내리치기", "t": 1.2, "auto": true},
+		{"n": "기지개", "t": 2.4, "auto": true},
+		{"n": "어깨돌리기", "t": 1.9, "auto": true},
+		{"n": "훑기", "t": 2.2, "auto": true},
+		{"n": "고쳐서기", "t": 1.6, "auto": true},
+		#  응수 — 제비에 안 든다. _npc_react 가 이름으로 부른다.
+		{"n": "눈길", "t": 0.7, "auto": false},
+		{"n": "끄덕", "t": 0.6, "auto": false},
+		{"n": "손짓", "t": 0.8, "auto": false},
+		{"n": "저음", "t": 0.8, "auto": false},
+	],
 }
 var idle_act := -1
 var idle_t := 0.0
 var idle_wait := 1.6
+var idle_side := 1         # 한 손 몸짓이 쓰는 손. 0 화면 왼손 · 1 오른손
 var idle_rng := RandomNumberGenerator.new()
 
 
@@ -8071,7 +8160,7 @@ func _idle_tick(d: float) -> void:
 		return
 	if idle_act >= 0:
 		idle_t += d
-		if idle_t < float(IDLE.len[idle_act]):
+		if idle_t < _idle_len():
 			return
 		idle_act = -1
 		idle_t = 0.0
@@ -8079,23 +8168,61 @@ func _idle_tick(d: float) -> void:
 		return
 	idle_wait -= d
 	if idle_wait <= 0.0:
-		idle_act = idle_rng.randi() % IDLE.acts.size()
-		idle_t = 0.0
+		_idle_pick()
+
+
+#  제비. auto 가 켜진 것 중에서만 뽑고, 손도 같이 뒤집는다 —
+#  한 손 몸짓이 늘 같은 손이면 그 손만 사는 상인이 된다.
+func _idle_pick() -> void:
+	var pool := PackedInt32Array()
+	for i in IDLE.acts.size():
+		if bool((IDLE.acts[i] as Dictionary).get("auto", false)):
+			pool.append(i)
+	if pool.is_empty():
+		return
+	idle_act = pool[idle_rng.randi() % pool.size()]
+	idle_t = 0.0
+	idle_side = idle_rng.randi() % 2
+
+
+#  손님이 뭘 했을 때의 응수. 몸짓을 **밀어낸다** — 응수는 방금 일어난 일에
+#  붙는 것이라, 하던 몸짓이 끝나기를 기다리면 딴 일에 대한 반응으로 읽힌다.
+#  side 는 어느 쪽 일이었는가(0 화면 왼쪽 · 1 오른쪽). −1 이면 그대로 둔다.
+func _npc_react(nm: String, side := -1) -> void:
+	if not _npc_on() or sweep_live:
+		return
+	for i in IDLE.acts.size():
+		if String((IDLE.acts[i] as Dictionary).n) == nm:
+			idle_act = i
+			idle_t = 0.0
+			if side >= 0:
+				idle_side = side
+			return
+
+
+func _idle_len() -> float:
+	if idle_act < 0:
+		return 0.0
+	return float((IDLE.acts[idle_act] as Dictionary).t)
 
 
 func _idle_name() -> String:
-	return "" if idle_act < 0 else String(IDLE.acts[idle_act])
+	if idle_act < 0:
+		return ""
+	return String((IDLE.acts[idle_act] as Dictionary).n)
 
 
 #  몸짓 하나의 봉투 — 사다리꼴이다. 양끝이 정확히 0 이라 몸짓이 끝나면
 #  쉬는 자세로 **되돌아온다**. 끝을 0 이 아닌 값으로 두면 몸짓을 할 때마다
 #  자세가 조금씩 떠내려가서, 한 판 뒤에 상인이 딴 데 서 있다.
+#  들머리·날머리를 길이로 조이는 것은 짧은 응수(0.6초) 때문이다 —
+#  0.26+0.34 를 그대로 쓰면 봉투가 1 에 못 닿고 잘린다.
 func _idle_env() -> float:
 	if idle_act < 0:
 		return 0.0
-	var dur: float = float(IDLE.len[idle_act])
-	var fi: float = float(IDLE["in"])
-	var fo: float = float(IDLE.out)
+	var dur: float = _idle_len()
+	var fi: float = minf(float(IDLE["in"]), dur * 0.4)
+	var fo: float = minf(float(IDLE.out), dur * 0.45)
 	if idle_t < fi:
 		return _ease_io(idle_t / fi)
 	if idle_t > dur - fo:
@@ -8107,7 +8234,24 @@ func _idle_env() -> float:
 func _idle_beat() -> float:
 	if idle_act < 0:
 		return 0.0
-	return clampf(idle_t / maxf(float(IDLE.len[idle_act]), 0.001), 0.0, 1.0)
+	return clampf(idle_t / maxf(_idle_len(), 0.001), 0.0, 1.0)
+
+
+#  내리치기의 높이 — 든다 · 친다 · 튄다. 셋을 한 곡선으로 두면 손이
+#  그냥 오르내리는 것이라 "쳤다" 로 안 읽힌다. 치는 구간이 짧아야 한다.
+func _idle_hit(b: float) -> float:
+	if b < 0.56:
+		return _ease_io(b / 0.56)
+	if b < 0.66:
+		return 1.0 - (b - 0.56) / 0.10
+	return 0.16 * sin((b - 0.66) / 0.34 * PI)
+
+
+#  내리치기의 충격 — 닿는 순간 한 번만 1 에 가깝고 곧 0 이다.
+func _idle_jolt(b: float) -> float:
+	if b < 0.64 or b > 0.86:
+		return 0.0
+	return sin((b - 0.64) / 0.22 * PI)
 
 
 #  몸에 얹을 값. yaw·roll 은 라디안, rise 는 높이(h), lean 은 깊이(w) 다.
@@ -8119,55 +8263,174 @@ func _idle_body() -> Dictionary:
 	if k <= 0.0:
 		return out
 	var b := _idle_beat()
+	var sd: float = -1.0 if idle_side == 0 else 1.0
 	match _idle_name():
-		"모으기":
-			#  손을 모으면 어깨가 안으로 말린다 — 몸이 조금 숙고 내려앉는다.
-			out.rise -= 2.2 * k
-			out.lean += 3.0 * k
 		"털기":
 			#  어깨를 턴다. 한 번 쑥 올라갔다 잘게 떤다 — 떨림이 없으면
 			#  그냥 위아래로 움직인 것이라 "털었다" 로 안 읽힌다.
 			out.rise += k * (5.0 * sin(b * PI) + 1.6 * sin(b * PI * 6.0))
 			out.roll += k * 0.026 * sin(b * PI * 3.0)
 		"두드리기":
-			out.yaw -= k * 0.030
-			out.rise -= 1.0 * k
+			out.yaw += k * 0.030 * sd
+			out.rise -= k * 1.0
 		"기대기":
 			#  카운터에 기댄다 — 앞으로 나오고 내려앉는다. 밑단은 무대
 			#  사각이 잘라 먹으므로 카운터 뒤로 사라지는 것으로 보인다.
 			out.lean += 7.0 * k
 			out.rise -= 4.5 * k
+		"뒤집기":
+			out.yaw += k * 0.026 * sd
+			out.rise += k * 1.2
+		"내리치기":
+			#  칠 때 몸이 같이 내려앉는다. 손만 떨어지면 판이 무거운 것이
+			#  아니라 손이 가벼운 것으로 읽힌다.
+			out.rise += k * (3.2 * _idle_hit(b) - 2.6 * _idle_jolt(b))
+			out.lean += k * 2.0 * _idle_jolt(b)
+		"기지개":
+			#  기지개는 **뒤로** 젖히며 편다. 앞으로 나오면 기대기와 같아진다.
+			out.rise += 4.5 * k
+			out.lean -= 4.0 * k
+		"어깨돌리기":
+			out.yaw += k * 0.034 * sd * sin(b * TAU)
+			out.rise += k * 2.5 * (1.0 - cos(b * TAU)) * 0.5
+		"훑기":
+			out.yaw -= k * 0.048 * sd * sin(b * PI)
+			out.lean += 3.0 * k
+		"고쳐서기":
+			#  무게를 한 발에서 다른 발로 옮겨 딛는다. 돌림이 크고
+			#  기울임이 반대라 "고쳐 섰다" 가 된다.
+			out.yaw += k * 0.075 * sd
+			out.roll -= k * 0.030 * sd
+			out.rise -= k * 1.5 * sin(b * PI)
+		"눈길":
+			out.yaw += k * 0.058 * sd
+			out.rise += k * 1.0
+		"끄덕":
+			out.rise -= k * 3.0 * sin(b * PI)
+			out.lean += k * 3.2 * sin(b * PI)
+		"손짓":
+			out.yaw += k * 0.042 * sd
+		"저음":
+			#  고개가 없으므로 **몸통이 두 번 젓는다.** 진폭보다 횟수가
+			#  "아니다" 를 만든다 — 한 번이면 그냥 돌아본 것이다.
+			out.yaw += k * 0.046 * sin(b * TAU * 2.0)
+			out.rise -= k * 0.6
 	return out
 
 
-#  손 하나에 얹을 값. (du, dw, dh) 다 — 앞의 둘은 면 좌표라 2D 도 같이 타고,
-#  dh 만 3D 전용이다. i 0 이 화면 왼손, 1 이 오른손(쓸는 팔)이다.
-func _idle_hand(i: int) -> Vector3:
+#  손 하나에 얹을 값.
+#    du · dw  면 좌표. 2D 도 같이 탄다
+#    dh       높이. 3D 전용이다
+#    ang      손을 면 위에서 더 돌리는 각(라디안)
+#    roll     손을 제 축으로 굴리는 각(라디안). 팔뚝이 절반 따라 돈다
+#    el       팔꿈치가 du·dw 를 따라오는 비. 머리말의 그 값이다
+#  i 0 이 화면 왼손, 1 이 오른손(쓸는 팔)이다.
+func _idle_hand(i: int) -> Dictionary:
+	var out := {"du": 0.0, "dw": 0.0, "dh": 0.0, "ang": 0.0, "roll": 0.0,
+			"el": 0.35}
 	var k := _idle_env()
 	if k <= 0.0:
-		return Vector3.ZERO
+		return out
 	var sd: float = -1.0 if i == 0 else 1.0
+	var mine: bool = idle_side == i
 	var b := _idle_beat()
 	match _idle_name():
-		"모으기":
-			#  가운데로 모은다. 좌우를 **다르게** 당긴다 — 완전대칭은
-			#  옷걸이의 냄새다(NPC 머리말). 오른손이 왼손 쪽으로 더 간다.
-			var pull: float = (46.0 if i == 0 else 64.0) * k
-			return Vector3(-sd * pull, 3.0 * k, 5.0 * k)
 		"털기":
-			return Vector3(0.0, 0.0,
-					k * (7.0 * sin(b * PI) + 2.2 * sin(b * PI * 6.0)))
+			out.dh = k * (7.0 * sin(b * PI) + 2.2 * sin(b * PI * 6.0))
+			out.el = 0.5
 		"두드리기":
-			#  오른손만 판을 두드린다. 셋 치고 만다 — 넷을 넘기면 초조해
+			#  한 손만 판을 두드린다. 셋 치고 만다 — 넷을 넘기면 초조해
 			#  보이고, 둘이면 박자로 안 읽힌다.
-			if i != 1:
-				return Vector3.ZERO
-			return Vector3(0.0, -2.0 * k,
-					k * (2.0 + 9.0 * absf(sin(b * PI * 3.0))))
+			if not mine:
+				return out
+			out.dw = k * 2.0
+			out.dh = k * (2.0 + 9.0 * absf(sin(b * PI * 3.0)))
+			out.el = 0.45
 		"기대기":
-			#  기대면 손이 앞으로 나온다. 팔꿈치가 따라 내려와 팔이 눕는다.
-			return Vector3(-sd * 7.0 * k, 13.0 * k, -2.5 * k)
-	return Vector3.ZERO
+			#  기대면 손이 앞으로 나오고 팔이 바깥으로 벌어진다.
+			out.du = sd * 5.0 * k
+			out.dw = 13.0 * k
+			out.dh = -2.0 * k
+			out.el = 0.6
+		"뒤집기":
+			#  손바닥을 뒤집어 본다. **도는 것은 미끄러지지 않는다** —
+			#  자리를 안 옮기므로 마술손이 될 수가 없다.
+			#  상자는 180° 돌리면 제자리라 82° 만 돈다. 폭 26 이 두께 14 로
+			#  바뀌는 그 각이 화면에서 "뒤집었다" 로 읽힌다.
+			if not mine:
+				return out
+			out.dh = 8.0 * k
+			out.dw = 4.0 * k
+			out.roll = deg_to_rad(82.0) * k
+			out.ang = -sd * 0.12 * k
+			out.el = 0.5
+		"내리치기":
+			if not mine:
+				return out
+			out.dh = 16.0 * k * _idle_hit(b)
+			out.el = 0.4
+		"기지개":
+			out.du = sd * 11.0 * k
+			out.dw = 18.0 * k
+			out.dh = 5.0 * k
+			out.el = 0.65
+		"어깨돌리기":
+			#  어깨가 도는 것이므로 팔이 통째로 작은 원을 그린다.
+			if not mine:
+				return out
+			out.du = 7.0 * k * sin(b * TAU)
+			out.dw = -5.0 * k * sin(b * TAU)
+			out.dh = 4.0 * k * (1.0 - cos(b * TAU))
+			out.el = 0.85
+		"훑기":
+			#  카운터를 한 번 훑는다. 가로로 30 을 가므로 el 이 0.92 다 —
+			#  팔이 통째로 옮겨 가야 뻗은 것이지, 안 그러면 미끄러진다.
+			if not mine:
+				return out
+			out.du = -sd * 30.0 * k * sin(b * PI)
+			out.dw = 10.0 * k
+			out.ang = -sd * 0.20 * k * sin(b * PI)
+			out.el = 0.92
+		"고쳐서기":
+			#  몸이 도는 만큼 팔이 통째로 따라간다. el 1 이라 팔 모양은
+			#  안 바뀌고 자리만 옮긴다 — 그것이 "딛고 섰다" 이다.
+			out.du = sd * 7.0 * k
+			out.el = 1.0
+		"눈길":
+			if not mine:
+				return out
+			out.dh = 4.0 * k
+			out.dw = 3.0 * k
+			out.el = 0.5
+		"끄덕":
+			out.dw = 4.0 * k * sin(b * PI)
+			out.dh = 2.0 * k * sin(b * PI)
+			out.el = 0.6
+		"손짓":
+			#  창구 쪽으로 손을 민다. 가로로 가므로 el 이 높다.
+			if not mine:
+				return out
+			out.du = -sd * 18.0 * k * sin(b * PI)
+			out.dw = 6.0 * k
+			out.ang = -sd * 0.25 * k * sin(b * PI)
+			out.el = 0.8
+		"저음":
+			out.dh = 2.0 * k
+			out.el = 0.5
+	return out
+
+
+#  손님이 만진 자리에 **가까운 손**을 고른다. 왼쪽 일을 오른손으로
+#  받으면 상인이 제 몸을 가로질러 손을 뻗어서, 응수가 응수로 안 읽힌다.
+func _npc_side(x: float) -> int:
+	return 0 if x < VIEW.x * 0.5 else 1
+
+
+#  몸이 돌면 팔뿌리도 따라 돈다. 몸통 축(w = IDLE.axis)에서 얼마나
+#  떨어졌느냐가 밀리는 양이다 — 팔꿈치는 축 뒤라 반대로 간다.
+#  이것이 없으면 몸만 돌고 팔은 허공에 박혀 있어서, 돌림이 옷장 문이 된다.
+func _idle_twist(w: float, yaw: float) -> float:
+	return (w - float(IDLE.axis)) * sin(yaw)
 
 
 
@@ -10699,6 +10962,9 @@ func _hand_motion(m: Vector2) -> void:
 
 
 func _hand_take() -> void:
+	#  손님이 무엇을 집으면 상인이 그쪽을 본다. 응수는 **집는 순간**에
+	#  붙어야 한다 — 놓을 때 붙이면 이미 끝난 일에 대한 반응이 된다.
+	_npc_react("눈길", _npc_side(hand_p0.x))
 	hand_st = H.CARRY
 	hand_v = Vector2.ZERO
 	hand_zone = -1
@@ -11138,6 +11404,7 @@ func _pay_click() -> void:
 # 두 경로가 만나는 한 점. _buy 는 한 글자도 안 고친다 —
 # stock[i].sold 를 _drop_extras 가 폴링해 _drop_leave 를 띄운다.
 func _pay_take(i: int) -> void:
+	_npc_react("끄덕")
 	var cost: int = stock[i].cost
 	_buy(i)
 	pay_flash = 1.0
