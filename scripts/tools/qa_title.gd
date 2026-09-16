@@ -330,33 +330,94 @@ func _run() -> void:
 	g._ttl_throw(outer)
 	_tick(land)
 	_ok("바깥 불도 센다", g.egg_streak == 2, "%d" % g.egg_streak)
-	_tick(60)
-	_ok("금이 잇단 수를 따라간다", absf(g.egg_crack - 2.0 / float(need)) < 0.005,
-			"%.3f (바란 것 %.3f)" % [g.egg_crack, 2.0 / float(need)])
+	var from: int = int(g.EGG.from)
+	var ns: int = g._egg_stages()
+	g.egg_streak = from - 2
+	g._ttl_throw(g.BC)
+	_tick(land + 30)
+	_ok("일곱 번째 앞까지는 금이 안 간다", g.egg_streak == from - 1 and g.egg_stage == 0,
+			"잇단 %d · 단 %d" % [g.egg_streak, g.egg_stage])
+	g.egg_bits.clear()
+	g._ttl_throw(g.BC)
+	_tick(land)
+	_ok("일곱 번째에 금이 간다", g.egg_stage == 1, "단 %d" % g.egg_stage)
+	var n1 := 0
+	var last := 0.0
+	for sg in g.egg_segs:
+		if int(sg.s) == 1:
+			n1 += 1
+			last = maxf(last, float(sg.o) + float(g.EGG.snap))
+	_ok("첫 금은 한 번에 튄다", n1 >= int(g.EGG.first) and last <= 0.3,
+			"마디 %d · 끝까지 %.2f초" % [n1, last])
+	_ok("금이 날 때 부스러기가 튄다", g.egg_bits.size() > 0, "%d" % g.egg_bits.size())
+	#  바깥 불로 문다 — 안쪽 불은 제 등급만으로도 판을 흔든다
+	g.shake = 0.0
+	g._ttl_throw(outer)
+	_tick(land)
+	_ok("한 발에 한 단", g.egg_stage == 2, "단 %d" % g.egg_stage)
+	_ok("금이 나면 판이 움찔한다", g.shake > 3.0, "흔들림 %.1f" % g.shake)
 	g._ttl_throw(single)
 	_tick(land)
 	_ok("불이 아니면 처음부터", g.egg_streak == 0, "%d" % g.egg_streak)
-	var c0: float = g.egg_crack
 	_tick(3)
-	_ok("금은 한 번에 안 지워지고 아문다", g.egg_crack > 0.0 and g.egg_crack < c0,
-			"%.4f → %.4f" % [c0, g.egg_crack])
-	_tick(240)
-	_ok("다 아문다", g.egg_crack == 0.0, "%.4f" % g.egg_crack)
+	_ok("금은 한 번에 안 지워지고 걷힌다",
+			g.egg_stage > 0 and g.egg_fade > 0.0 and g.egg_fade < 1.0,
+			"단 %d · 짙기 %.3f" % [g.egg_stage, g.egg_fade])
+	_tick(int(float(g.EGG.heal) / D) + 5)
+	_ok("다 걷힌다", g.egg_stage == 0, "단 %d" % g.egg_stage)
 
-	#  금 무늬 — 같은 씨면 같고, 판 밖으로 안 나간다
-	g._egg_make_paths()
-	var pa: Array = g.egg_paths.duplicate(true)
-	g._egg_make_paths()
-	var same: bool = pa.size() == g.egg_paths.size()
+	#  금 무늬 — 같은 씨면 같고, 판 밖으로 안 나가고, 이어져 있다
+	g._egg_make_web()
+	var pa: Array = g.egg_segs.duplicate(true)
+	g._egg_make_web()
+	var same: bool = pa.size() == g.egg_segs.size()
 	var far := 0.0
 	for i in pa.size():
-		for j in (pa[i].pts as Array).size():
-			if not (pa[i].pts[j] as Vector2).is_equal_approx(g.egg_paths[i].pts[j]):
-				same = false
-			far = maxf(far, (pa[i].pts[j] as Vector2).length())
-	_ok("같은 씨면 같은 금 무늬", same, "%d가닥" % pa.size())
+		if not same:
+			break
+		var x: Dictionary = pa[i]
+		var y: Dictionary = g.egg_segs[i]
+		if not ((x.a as Vector2).is_equal_approx(y.a) and (x.b as Vector2).is_equal_approx(y.b)
+				and int(x.s) == int(y.s)):
+			same = false
+		far = maxf(far, maxf((x.a as Vector2).length(), (x.b as Vector2).length()))
+	_ok("같은 씨면 같은 금 무늬", same, "%d마디" % pa.size())
 	_ok("금이 판 밖으로 안 나간다", far <= g.R * g.rt_dbl_out + 0.01,
 			"가장 먼 %.1f · 판 %.1f" % [far, g.R * g.rt_dbl_out])
+	var per := []
+	per.resize(ns + 1)
+	per.fill(0)
+	for sg in g.egg_segs:
+		per[int(sg.s)] = int(per[int(sg.s)]) + 1
+	var hollow := 0
+	for st in range(1, ns + 1):
+		if int(per[st]) == 0:
+			hollow += 1
+	_ok("단마다 새 금이 난다 — 헛발이 없다", hollow == 0 and int(per[0]) == 0,
+			"단 %d · 빈 단 %d" % [ns, hollow])
+	#  허공에서 시작하는 금이 없다 — 시작점이 맞은 자리거나, 같은 단 이하의
+	#  다른 금이 끝나는 자리다.
+	var orphan := 0
+	var order_bad := 0
+	for k in g.egg_segs.size():
+		var sg: Dictionary = g.egg_segs[k]
+		var a: Vector2 = sg.a
+		if a.length() > 3.0:
+			var hit := false
+			for x in g.egg_segs.size():
+				var o: Dictionary = g.egg_segs[x]
+				if x != k and int(o.s) <= int(sg.s) and (o.b as Vector2).distance_to(a) < 0.01:
+					hit = true
+					break
+			if not hit:
+				orphan += 1
+		for x in sg.after:
+			var pseg: Dictionary = g.egg_segs[x]
+			if int(pseg.s) > int(sg.s) or (int(pseg.s) == int(sg.s) and float(pseg.o) >= float(sg.o)):
+				order_bad += 1
+	_ok("허공에서 시작하는 금이 없다", orphan == 0, "%d" % orphan)
+	_ok("이어진 마디는 차례로 난다(지직)", order_bad == 0, "%d" % order_bad)
+	_ok("금이 가른 유리 면이 있다", g.egg_facets.size() >= 10, "%d면" % g.egg_facets.size())
 
 	#  서른 번째에 깨진다
 	_title()
@@ -383,7 +444,7 @@ func _run() -> void:
 	_ok("새 판이 밑에서 오른다", not is_inf(dy_rise) and dy_rise > 100.0, "%.0f" % dy_rise)
 	_tick(int((float(g.EGG.rise) + 0.1) / D))
 	_ok("다 오르면 제자리", g._egg_board_dy() == 0.0 and g.egg_t < 0.0)
-	_ok("다 오르면 잇단 수가 처음부터", g.egg_streak == 0 and g.egg_crack == 0.0)
+	_ok("다 오르면 잇단 수가 처음부터", g.egg_streak == 0 and g.egg_stage == 0)
 	_ok("새 판은 다른 금 무늬(씨 +1)", g.egg_seed == seed0 + 1, "%d → %d" % [seed0, g.egg_seed])
 	g._click(g.BC)
 	_ok("새 판에 다시 던질 수 있다", g.ttl_fly.size() == 1)

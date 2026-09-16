@@ -2,6 +2,7 @@ extends SceneTree
 # ══════════════════════════════════════════════════════════
 #  소리를 짓는다
 #     godot --headless --script scripts/tools/sfx_bake.gd
+#     godot --headless --script scripts/tools/sfx_bake.gd -- egg_crack   ← 이름만
 #     godot --headless --import          ← 구운 뒤 한 번. .import 를 세운다
 #
 #  res://sfx/<이름>.wav 를 여기서 **굽는다.** 빌려 온 팩이 아니라 이 게임의
@@ -559,6 +560,48 @@ func _b_hit(nm: String) -> PackedFloat32Array:
 			_drive(x, 2.2)
 			_lp(x, 6500.0)
 			return _fade(x, 24.0)
+		"egg_crack":
+			# 제목 판이 쪼개진다. 「콰득 지직」 — 판이 한 번에 갈라지는 두꺼운
+			# 딱 몇이 30ms 안에 몰리고(콰득), 그 뒤로 결이 찢어지며 잔 딱이
+			# 점점 성기고 여려진다(지직). 유리가 아니라 판이다: 속은 나무처럼
+			# 빨리 죽는 비배음이고, 같은 98Hz 판 모드가 밑에서 둔하게 운다.
+			# 위를 5kHz 로 덮어 반려된 유리 딸깍 대역을 비운다.
+			var x := _blank(_n(260.0))
+			# 콰득 — 갈라지는 딱. 넓은 대역 둘에 좁은 것 둘이 겹쳐 두껍다
+			#  딱의 중심을 1~2kHz 에 둔다. 3kHz 위로 올리면 나무가 아니라
+			#  유리·플라스틱 딸깍으로 들린다(스펙트럼 무게중심으로 쟀다)
+			var crunch := [[0.0, 1500.0, 1.00], [3.5, 900.0, 0.85],
+					[11.0, 2000.0, 0.55], [24.0, 1200.0, 0.50]]
+			for i in crunch.size():
+				var c: Array = crunch[i]
+				_lay(x, _clk(40.0, 3.5, float(c[1]), float(c[1]) * 0.5, 0.7,
+						0.012, 7101 + i, 0.2), float(c[2]), float(c[0]))
+			# 나무 속 — 짧은 비배음. 금속보다 훨씬 빨리 죽는다
+			_addat(x, _pt(140.0, 185.0, [[1.0, 1.30, 0.026], [2.31, 0.65, 0.013],
+					[3.92, 0.32, 0.007]], 0.5), 1.0)
+			# 판자가 속 빈 소리로 한 번 노크된다
+			_addat(x, _pt(80.0, 620.0, [[1.0, 0.55, 0.012], [1.9, 0.28, 0.006]], 0.4), 2.0)
+			# 같은 판이 둔하게 운다
+			_addat(x, _pt(170.0, 98.0, [[1.0, 0.50, 0.050], [2.755, 0.16, 0.018]], 1.5))
+			# 지직 — 결이 찢어진다. 흩는 값을 먼저 뽑는다: _clk 가 제 씨로
+			# 잡음 상태를 덮으므로 도중에 뽑으면 딱마다 같은 값이 나온다
+			_seed(7110)
+			var us := []
+			for i in 12:
+				us.append((_rnd() + 1.0) * 0.5)
+			var t := 30.0
+			var g := 0.50
+			for i in 12:
+				var u: float = us[i]
+				var fc: float = 1000.0 + 1800.0 * u
+				_lay(x, _clk(16.0, 1.4, fc, fc * 0.6, 1.1, 0.0040, 7120 + i, 0.1), g, t)
+				t += 5.0 + 10.0 * u + float(i) * 1.2
+				g *= 0.85
+			# 찢어지는 결 밑의 거친 잡음 — 짧게 깔고 빨리 뺀다
+			_lay(x, _nz(160.0, 1800.0, 700.0, 0.9, 7130, 0.045, 5.0), 0.20, 20.0)
+			_drive(x, 1.8)
+			_lp(x, 5000.0)
+			return _fade(x, 20.0)
 		_:
 			return PackedFloat32Array()
 
@@ -589,6 +632,10 @@ func _init() -> void:
 	var g = load("res://scripts/game.gd")
 	SFX = g.SFX
 	var names: Array = SFX.keys()
+	#  -- 뒤에 이름을 주면 그것만 굽는다. 다른 파일은 손대지 않는다.
+	var only := OS.get_cmdline_user_args()
+	if not only.is_empty():
+		names = names.filter(func(nm): return only.has(String(nm)))
 	var done := 0
 	var skip := []
 	var made := {}          # 구운 것을 들고 있는다 — 이어 붙일 때 다시 읽지

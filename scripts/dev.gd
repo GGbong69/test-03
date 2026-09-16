@@ -409,6 +409,7 @@ static func _rows(g: Node) -> Array:
 				{"n1": "다트통", "t": "list", "k": "pack",
 						"n": GameData.packs().size()},
 				{"n1": "판 다시 굽기", "t": "act", "a": "bake"},
+				{"n1": "제목 판 금 가기 직전", "t": "act", "a": "egg_crack"},
 				{"n1": "제목 판 깨기 직전", "t": "act", "a": "egg"},
 			]
 		3:
@@ -674,6 +675,14 @@ static func _run(g: Node, e: Dictionary) -> void:
 		"bake":
 			g._board_bake()
 			_say("판 다시 구움")
+			return
+		"egg_crack":
+			# 불 여섯에 세워 두고 제목으로 간다 — 한 번 더 물면 첫 금이 튄다.
+			g._egg_reset()
+			g.state = g.S.TITLE
+			g.pause_from = -1
+			g.egg_streak = int(g.EGG.from) - 1
+			_say("제목 판 — 불 한 번이면 금이 간다")
 			return
 		"egg":
 			# 불 서른 번을 매번 던질 수는 없다. 스물아홉에 세워 두고 제목으로

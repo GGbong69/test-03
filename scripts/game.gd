@@ -2568,6 +2568,9 @@ const SFX := {
 	"hit_triple":     {"seq": [330.0, 415.0, 494.0], "gap": 0.07, "d": 0.12, "a": 0.22},
 	"hit_bull_o":     {"seq": [262.0, 392.0, 523.0], "gap": 0.07, "d": 0.15, "a": 0.24},
 	"hit_bull_i":     {"seq": [262.0, 392.0, 523.0, 659.0], "gap": 0.07, "d": 0.17, "a": 0.26},
+	# 제목 판 이스터에그 — 불을 잇달아 물면 판이 쪼개진다. 판 위 소리라
+	# 유리가 아니라 판이다(사용자, 2026-09-17). f 는 단이 오를수록 내려 민다.
+	"egg_crack":      {"f": SFX_BASE, "d": 0.20, "a": 0.20},
 
 	# ── 정산 (반음씩 오른다 — 게임 이름이 여기서 왔다) ──
 	"settle_miss":    {"f": 180.0, "d": 0.20, "a": 0.14},
@@ -14645,30 +14648,45 @@ var ttl_t := 0.0         # 제목이 선 뒤로 흐른 시간. 겨눔점이 이�
 # ══════════════════════════════════════════════════════════
 #  이스터에그 — 불을 서른 번 잇달아 물면 판이 깨진다
 # ──────────────────────────────────────────────────────────
-#  사용자 기획(2026-09-17). 제목 판에서 불을 물 때마다 판에 금이 조금씩
-#  간다. 서른 번을 **잇달아** 물면 판이 산산이 깨지고 새 판이 밑에서 오른다.
+#  사용자 기획(2026-09-17). 제목 판에서 불을 잇달아 물면 **일곱 번째부터**
+#  판에 금이 간다. 서른 번을 **잇달아** 물면 판이 산산이 깨지고 새 판이
+#  밑에서 오른다.
+#
+#  ── 금은 자라지 않고 튄다 ───────────────────────────
+#  처음에는 잇단 수를 따라 금이 스르르 자랐는데 「밋밋하다 — 콰득 지직
+#  생기면 좋겠다, 유리 같은 느낌」 이라는 말을 들었다(2026-09-17). 그래서
+#  불 한 번이 금 한 단이고, 그 단은 한 번에 튄다: 맞은 자리에서 고리가
+#  퍼지고(콰득), 새 금이 하얗게 달아 마디마다 짧게 끊기며 뻗고(지직),
+#  부스러기가 튄다.
+#  유리로 읽히게 하는 것은 셋이다 — 곧게 뻗는 살과 그 살을 잇는 테(거미줄),
+#  하얀 금, 그리고 금이 가른 면마다 빛을 조금씩 달리 받는 것. 나뭇가지처럼
+#  휘는 금은 유리가 아니라 번개다.
 #
 #  ── 금이 곧 계기판이다 ──────────────────────────────
-#  몇 번째인지 글로 안 적는다. 금의 양이 잇단 수를 그대로 따라가고, 하나
-#  빗나가면 금이 스르르 아문다. 그래서 규칙이 글 없이 읽힌다 —
-#  「불을 물면 금이 가고, 놓치면 아문다」. 아무는 쪽이 자라는 쪽보다 느리다.
-#  같은 빠르기면 아문 것이 아니라 지워진 것으로 보인다.
+#  몇 번째인지 글로 안 적는다. 금의 양이 잇단 수를 따라가고, 하나 빗나가면
+#  금이 걷힌다. 그래서 규칙이 글 없이 읽힌다 — 「불을 물면 금이 가고,
+#  놓치면 걷힌다」.
 #
 #  ── 불은 안쪽·바깥쪽 둘 다 센다 ─────────────────────
 #  제목에서는 누른 자리로 그대로 날아가므로 안쪽 불(지름 12px)만 세면
 #  마우스로는 쉽고 손가락(모바일)으로는 거의 못 한다.
 #
 #  ── 금 무늬는 씨에서 난다 ───────────────────────────
-#  같은 판이면 몇 번 금이 가도 같은 무늬로 자란다 — 자랄 때마다 무늬가
-#  바뀌면 금이 「가는」 것이 아니라 깜빡이는 것이다. 새 판이 오르면 씨가
-#  하나 늘어 다른 무늬가 된다.
+#  같은 판이면 몇 번 금이 가도 같은 무늬로 난다 — 날 때마다 무늬가 바뀌면
+#  금이 「가는」 것이 아니라 깜빡이는 것이다. 새 판이 오르면 씨가 하나 늘어
+#  다른 무늬가 된다.
 # ══════════════════════════════════════════════════════════
 const EGG := {
 	"need": 30,
-	"grow": 14.0,         # 금이 따라가는 빠르기(1/초, 지수)
-	"heal": 2.2,          # 아무는 빠르기 — 자라는 쪽보다 느리다
-	"stems": 7,           # 줄기 수
-	"steps": 9,           # 줄기 한 가닥의 마디 수
+	"from": 7,            # 이 번째 불부터 금이 간다
+	"spokes": 12,         # 불에서 곧게 뻗는 살
+	"knots": 6,           # 살 한 줄의 마디
+	"first": 12,          # 첫 금(1 단)이 한 번에 내는 마디 수 — 앞장선 살 넷 × 세 마디
+	"snap": 0.03,         # 마디 하나가 끝까지 그어지는 시간(초)
+	"stutter": 0.035,     # 마디와 마디 사이에 끊기는 틈의 최대 — 지직
+	"hot": 0.45,          # 갓 난 금이 하얗게 달았다 식는 시간
+	"heal": 0.7,          # 잇단 수가 끊기면 금이 걷히는 시간
+	"chip_grav": 520.0,   # 부스러기에 거는 중력(px/초²)
 	"fly": 0.95,          # 조각이 날아가는 시간(초)
 	"hold": 0.45,         # 판이 없는 숨
 	"rise": 1.0,          # 새 판이 오르는 시간
@@ -14677,10 +14695,16 @@ const EGG := {
 }
 
 var egg_streak := 0       # 잇달아 불을 문 수
-var egg_crack := 0.0      # 보이는 금의 양 0~1. 잇단 수를 따라간다
+var egg_stage := 0        # 보이는 금의 단. 일곱 번째 불이 1 단이다
+var egg_fade := 1.0       # 끊긴 뒤 걷히는 금의 짙기
+var egg_clock := 0.0      # 금의 시계 — 단마다 난 때를 이것으로 적는다
+var egg_born := []        # 단마다 난 때(egg_clock). 0 번 칸은 안 쓴다
 var egg_seed := 1         # 금 무늬의 씨
 var egg_t := -1.0         # 깨진 뒤 흐른 시간. 음수면 깨지는 중이 아니다
-var egg_paths := []       # 금 무늬 [{pts, from}]
+var egg_segs := []        # 금 마디 {a, b, pr, after, st, gl, s, o}
+var egg_facets := []      # 금이 가른 유리 면 {pts, segs, tone, s, o}
+var egg_pit := []         # 맞은 자리 테의 들쭉날쭉(씨에서)
+var egg_bits := []        # 튀는 유리 부스러기 {p, v, t, life, rot, w, sz}
 var egg_shards := []      # 날아가는 조각 {c, pts, v, rot, w, col}
 var set_row_e := []      # 줄마다의 얹힘 짙기 0~1
 var set_row_w := []      # 그 줄 띠가 쓸려 든 폭 0~1. 짙기와 따로 논다
@@ -18322,7 +18346,7 @@ func _title_tick(d: float) -> void:
 		ttl_fly.clear()
 	#  제목을 뜨면 이스터에그도 처음부터다. 「잇달아」 는 한 자리에 앉아서
 	#  하는 일이다 — 컬렉션을 보고 와서 이어지면 잇단 것이 아니다.
-	if not bg and (egg_streak != 0 or egg_t >= 0.0 or egg_crack > 0.0):
+	if not bg and (egg_streak != 0 or egg_t >= 0.0 or egg_stage > 0):
 		_egg_reset()
 	if on:
 		if ttl_hot != was and ttl_hot >= 0:
@@ -18440,7 +18464,9 @@ func _ttl_hit(m: Vector2) -> int:
 	return best
 
 
-#  꽂힌 한 자루를 센다. 불이면 하나 늘고, 아니면 처음부터다.
+#  꽂힌 한 자루를 센다. 불이면 하나 늘고, 아니면 처음부터다. 금은 여기서
+#  안 긋는다 — _egg_tick 이 잇단 수를 보고 모자란 단을 낸다. 그래야 개발자
+#  판처럼 잇단 수를 바로 세워도 같은 길로 금이 난다.
 func _egg_count(bull: bool) -> void:
 	if egg_t >= 0.0:
 		return
@@ -18448,62 +18474,197 @@ func _egg_count(bull: bool) -> void:
 		egg_streak = 0
 		return
 	egg_streak += 1
-	#  금 가는 소리 대신 판이 한 번 더 움찔한다. 잇단 수가 클수록 세다 —
-	#  서른에 가까워질수록 판이 버티기 힘들어 보여야 한다.
-	var k: float = float(egg_streak) / float(EGG.need)
-	shake = maxf(shake, 1.5 + 5.0 * k)
 	if egg_streak >= int(EGG.need):
 		_egg_shatter()
 
 
 func _egg_reset() -> void:
 	egg_streak = 0
-	egg_crack = 0.0
+	egg_stage = 0
+	egg_fade = 1.0
 	egg_t = -1.0
 	egg_shards.clear()
+	egg_bits.clear()
 
 
-#  금 무늬를 씨로 짓는다. 판 가운데(불)에서 뻗어 나가는 줄기 몇에 곁가지.
-func _egg_make_paths() -> void:
-	egg_paths.clear()
+#  금이 나는 단의 수. 일곱 번째 불이 1 단, 스물아홉 번째가 끝 단이고
+#  서른 번째는 금이 아니라 깨짐이다.
+func _egg_stages() -> int:
+	return int(EGG.need) - int(EGG.from)
+
+
+func _egg_want() -> int:
+	return clampi(egg_streak - int(EGG.from) + 1, 0, _egg_stages())
+
+
+func _egg_seg(a: Vector2, b: Vector2, pr: float, after: Array,
+		rng: RandomNumberGenerator) -> int:
+	egg_segs.append({"a": a, "b": b, "pr": pr, "after": after,
+			"st": rng.randf_range(0.0, float(EGG.stutter)), "gl": rng.randf() < 0.3,
+			"s": 0, "o": 0.0})
+	return egg_segs.size() - 1
+
+
+#  금 무늬를 씨로 짓는다 — 유리가 맞은 자리에서 갈리는 모양이다. 불에서
+#  곧게 뻗는 살 열둘에, 이웃한 살을 잇는 테가 겹겹이 난다(거미줄).
+#
+#  마디마다 「언제 나는가」(pr)를 매겨 줄 세운 뒤 단으로 가른다. 마디는 제
+#  안쪽 마디보다, 테는 양쪽 살이 거기 닿은 뒤에 난다 — 그래서 어느 단에서
+#  끊어 봐도 허공에서 시작하는 금이 없다. 단은 **줄 세운 순번**으로 가른다.
+#  pr 값으로 가르면 어떤 단은 비어서 불을 물었는데 금이 안 는다.
+func _egg_make_web() -> void:
+	egg_segs.clear()
+	egg_facets.clear()
+	egg_pit.clear()
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 7919 * egg_seed + 13
-	var n: int = int(EGG.stems)
-	var steps: int = int(EGG.steps)
-	var rim: float = R * rt_dbl_out
-	for k in n:
-		var a: float = TAU * (float(k) + rng.randf_range(-0.3, 0.3)) / float(n)
-		var p := Vector2.ZERO
-		var pts := [p]
-		for i in steps:
-			a += rng.randf_range(-0.45, 0.45)
-			var ln: float = rim / float(steps) * rng.randf_range(0.85, 1.2)
-			p += Vector2(cos(a), sin(a)) * ln
-			if p.length() > rim:
-				p = p.normalized() * rim
-				pts.append(p)
-				break
-			pts.append(p)
-			#  곁가지 — 줄기 가운데쯤에서. 줄기가 그 자리까지 자란 뒤에 난다.
-			if (i == 3 or i == 5) and rng.randf() < 0.65:
-				var ba: float = a + rng.randf_range(0.6, 1.1) \
-						* (1.0 if rng.randf() < 0.5 else -1.0)
-				var b := p
-				var br := [b]
-				for j in 3:
-					ba += rng.randf_range(-0.3, 0.3)
-					b += Vector2(cos(ba), sin(ba)) * ln * 0.7
-					if b.length() > rim:
-						break
-					br.append(b)
-				if br.size() > 1:
-					egg_paths.append({"pts": br, "from": float(i + 1) / float(steps)})
-		egg_paths.append({"pts": pts, "from": 0.0})
+	var n: int = int(EGG.spokes)
+	var kn: int = int(EGG.knots)
+	var rim: float = R * rt_dbl_out - 1.0
+	var r0 := 2.5
+	var spokes := []
+	var base: float = rng.randf_range(0.0, TAU)
+	for i in n:
+		var a0: float = base + TAU * (float(i) + rng.randf_range(-0.22, 0.22)) / float(n)
+		var late: float = rng.randf_range(0.0, 2.6)
+		#  앞장선 살 — 셋에 하나. 첫 금이 이 넷으로 세 마디씩 한 번에 튄다.
+		#  마디 여덟을 고루 나눠 주면 첫 금이 맞은 자리에만 붙어 꽂힌 자루와
+		#  뜬 값에 가려 안 보였다(찍어 보고 안 것이다).
+		if i % 3 == 0:
+			late = rng.randf_range(-2.6, -2.3)
+		#  몇은 가장자리까지 못 간다
+		var reach: int = kn if rng.randf() < 0.7 else rng.randi_range(3, kn - 1)
+		var aa := a0
+		var pts := [Vector2.from_angle(a0) * r0]
+		var pr := [late]
+		var idx := [-1]
+		for j in range(1, reach + 1):
+			#  마디마다 조금만 꺾이고, 제 길에서 멀리 못 벗어난다 — 이웃 살과
+			#  엇갈리면 유리 면이 꼬인다.
+			aa = clampf(aa + rng.randf_range(-0.045, 0.045), a0 - 0.12, a0 + 0.12)
+			#  안쪽이 촘촘하다. 유리는 맞은 자리 가까이서 잘게 갈린다.
+			var rr: float = lerpf(r0, rim, pow(float(j) / float(kn), 1.25))
+			if j < kn:
+				rr *= rng.randf_range(0.92, 1.06)
+			pts.append(Vector2.from_angle(aa) * minf(rr, rim))
+			pr.append(float(j) + late + rng.randf_range(0.0, 0.3))
+			var prev: int = idx[j - 1]
+			idx.append(_egg_seg(pts[j - 1], pts[j], float(pr[j]),
+					[prev] if prev >= 0 else [], rng))
+		#  곁가지 — 바깥 마디에서 비스듬히 갈라져 가장자리 쪽으로
+		for j in range(3, reach):
+			if rng.randf() >= 0.28:
+				continue
+			var p: Vector2 = pts[j]
+			var fa: float = p.angle() + rng.randf_range(0.15, 0.3) \
+					* (1.0 if rng.randf() < 0.5 else -1.0)
+			var ln: float = (rim - p.length()) * 0.5 * rng.randf_range(0.8, 1.1)
+			if ln < 5.0:
+				continue
+			var at: int = idx[j]
+			var fpr: float = float(pr[j]) + rng.randf_range(0.5, 2.0)
+			for m in 2:
+				fa += rng.randf_range(-0.06, 0.06)
+				var q: Vector2 = p + Vector2.from_angle(fa) * ln
+				if q.length() > rim:
+					q = q.normalized() * rim
+				at = _egg_seg(p, q, fpr + float(m), [at], rng)
+				p = q
+				if p.length() >= rim - 0.01:
+					break
+		spokes.append({"pts": pts, "pr": pr, "idx": idx})
+
+	#  테 — 이웃한 두 살의 같은 마디를 잇는다. 가운데 한 번 꺾여 원이 아니라
+	#  각진 고리가 된다. 바깥으로 갈수록 드물다.
+	var ring := []
+	for i in n:
+		ring.append({})
+	for j in range(1, kn):
+		var chance: float = lerpf(0.85, 0.35, float(j - 1) / float(maxi(kn - 2, 1)))
+		for i in n:
+			var sa: Dictionary = spokes[i]
+			var sb: Dictionary = spokes[(i + 1) % n]
+			if (sa.pts as Array).size() <= j or (sb.pts as Array).size() <= j:
+				continue
+			if rng.randf() >= chance:
+				continue
+			var pa: Vector2 = sa.pts[j]
+			var pb: Vector2 = sb.pts[j]
+			var mid: Vector2 = (pa + pb) * 0.5
+			mid = mid.normalized() * lerpf(mid.length(),
+					(pa.length() + pb.length()) * 0.5, rng.randf_range(0.2, 0.8))
+			var rpr: float = maxf(float(sa.pr[j]), float(sb.pr[j])) \
+					+ rng.randf_range(0.4, 2.2)
+			var from_a := rng.randf() < 0.5
+			var h0: int = _egg_seg(pa if from_a else pb, mid, rpr,
+					[int(sa.idx[j]), int(sb.idx[j])], rng)
+			var h1: int = _egg_seg(mid, pb if from_a else pa, rpr + 0.01, [h0], rng)
+			ring[i][j] = {"m": mid, "h": [h0, h1]}
+
+	#  단 가르기
+	var ns := _egg_stages()
+	var order: Array = range(egg_segs.size())
+	order.sort_custom(func(x: int, y: int) -> bool:
+		return float(egg_segs[x].pr) < float(egg_segs[y].pr))
+	var tot := order.size()
+	var first: int = mini(int(EGG.first), tot)
+	for r in tot:
+		var st := 1
+		if r >= first:
+			st = 2 + int(float(r - first) * float(ns - 1) / float(maxi(tot - first, 1)))
+		var sg: Dictionary = egg_segs[order[r]]
+		sg.s = mini(st, ns)
+	#  단 안의 늦음 — 이어진 앞 마디가 같은 단이면 그것이 다 그어진 뒤에,
+	#  짧은 틈(st)을 두고 난다. 이 끊김이 「지직」 이다.
+	var snap: float = float(EGG.snap)
+	for sg in egg_segs:
+		var o := -1.0
+		for x in sg.after:
+			var pv: Dictionary = egg_segs[x]
+			if int(pv.s) == int(sg.s):
+				o = maxf(o, float(pv.o) + snap)
+		sg.o = float(sg.st) * 0.3 if o < 0.0 else o + float(sg.st)
+
+	#  유리 면 — 두 살과 안팎 테가 두른 칸. 테가 둘 다 난 뒤에 보인다.
+	for i in n:
+		var sa: Dictionary = spokes[i]
+		var sb: Dictionary = spokes[(i + 1) % n]
+		var levels: Array = (ring[i] as Dictionary).keys()
+		levels.sort()
+		var j0 := 0
+		for j1 in levels:
+			var poly := PackedVector2Array()
+			for j in range(j0, int(j1) + 1):
+				poly.append(sa.pts[j])
+			poly.append(ring[i][j1].m)
+			for j in range(int(j1), j0 - 1, -1):
+				poly.append(sb.pts[j])
+			var segs: Array = (ring[i][j1].h as Array).duplicate()
+			if j0 > 0:
+				poly.append(ring[i][j0].m)
+				segs.append_array(ring[i][j0].h)
+			var tone: float = rng.randf_range(-1.0, 1.0)
+			if not Geometry2D.triangulate_polygon(poly).is_empty():
+				var fs := 1
+				for x in segs:
+					fs = maxi(fs, int(egg_segs[x].s))
+				var fo := 0.0
+				for x in segs:
+					if int(egg_segs[x].s) == fs:
+						fo = maxf(fo, float(egg_segs[x].o) + snap)
+				egg_facets.append({"pts": poly, "segs": segs, "tone": tone,
+						"s": fs, "o": fo})
+			j0 = int(j1)
+
+	for i in 9:
+		egg_pit.append(rng.randf_range(0.7, 1.25))
 
 
 func _egg_tick(d: float) -> void:
-	if egg_paths.is_empty():
-		_egg_make_paths()
+	if egg_segs.is_empty():
+		_egg_make_web()
+	egg_clock += d
+	_egg_bits_tick(d)
 	if egg_t >= 0.0:
 		egg_t += d
 		var gv: float = float(EGG.grav)
@@ -18518,16 +18679,71 @@ func _egg_tick(d: float) -> void:
 			#  새 판이 앉았다. 씨가 하나 늘어 다음 금은 다른 무늬다.
 			_egg_reset()
 			egg_seed += 1
-			_egg_make_paths()
+			_egg_make_web()
 			board_punch = 1.0
 			shake = maxf(shake, 5.0)
 			_sfx("hit_single")
 		return
-	var want: float = float(egg_streak) / float(EGG.need)
-	var rate: float = float(EGG.grow) if want > egg_crack else float(EGG.heal)
-	egg_crack = lerpf(egg_crack, want, 1.0 - exp(-rate * d))
-	if absf(egg_crack - want) < 0.001:
-		egg_crack = want
+	var want := _egg_want()
+	if want > egg_stage:
+		var ns := _egg_stages()
+		if egg_born.size() != ns + 1:
+			egg_born.resize(ns + 1)
+			egg_born.fill(0.0)
+		for st in range(egg_stage + 1, want + 1):
+			egg_born[st] = egg_clock
+		egg_stage = want
+		egg_fade = 1.0
+		_egg_crunch()
+	elif want < egg_stage:
+		egg_fade -= d / float(EGG.heal)
+		if egg_fade <= 0.0:
+			egg_stage = 0
+			egg_fade = 1.0
+
+
+#  콰득 — 한 단이 났다. 판이 움찔하고, 맞은 자리와 새 금 끝에서 부스러기가
+#  튄다. 서른에 가까울수록 세다 — 판이 버티기 힘들어 보여야 한다.
+func _egg_crunch() -> void:
+	var k: float = float(egg_stage) / float(_egg_stages())
+	#  판이 약해질수록 소리가 굵어진다 — 같은 파일을 반음 넷쯤 내려 민다.
+	_sfx("egg_crack", SFX_BASE * lerpf(1.08, 0.84, k) * randf_range(0.98, 1.02))
+	shake = maxf(shake, 3.5 + 5.0 * k)
+	board_punch = maxf(board_punch, 0.45 + 0.45 * k)
+	if motion_off:
+		return
+	for i in 4 + int(6.0 * k):
+		var u := Vector2.from_angle(randf() * TAU)
+		_egg_bit(u * randf_range(1.0, 5.0), u * randf_range(30.0, 100.0)
+				+ Vector2(0.0, randf_range(-140.0, -50.0)), 0.0)
+	for sg in egg_segs:
+		if int(sg.s) == egg_stage and randf() < 0.45:
+			var u: Vector2 = ((sg.b as Vector2) - (sg.a as Vector2)).normalized()
+			_egg_bit(sg.b, u * randf_range(20.0, 60.0)
+					+ Vector2(0.0, randf_range(-90.0, -30.0)),
+					float(sg.o) + float(EGG.snap))
+
+
+func _egg_bit(p: Vector2, v: Vector2, wait: float) -> void:
+	egg_bits.append({"p": p, "v": v, "t": -wait, "life": randf_range(0.35, 0.65),
+			"rot": randf() * TAU, "w": randf_range(-14.0, 14.0),
+			"sz": randf_range(1.0, 2.2)})
+
+
+func _egg_bits_tick(d: float) -> void:
+	if egg_bits.is_empty():
+		return
+	var gv: float = float(EGG.chip_grav)
+	for b in egg_bits:
+		b.t = float(b.t) + d
+		if float(b.t) < 0.0:
+			continue
+		var v: Vector2 = b.v
+		v.y += gv * d
+		b.v = v
+		b.p = (b.p as Vector2) + v * d
+		b.rot = float(b.rot) + float(b.w) * d
+	egg_bits = egg_bits.filter(func(b): return float(b.t) < float(b.life))
 
 
 #  서른 번째. 판을 조각으로 가르고 날린다.
@@ -18542,11 +18758,11 @@ func _egg_shatter() -> void:
 		#  움직임을 끈 손님에게는 날리지 않는다. 바로 새 판이다.
 		_egg_reset()
 		egg_seed += 1
-		_egg_make_paths()
+		_egg_make_web()
 		return
 	egg_t = 0.0
-	egg_crack = 1.0
 	egg_shards.clear()
+	egg_bits.clear()
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 104729 * egg_seed + 1
 	var sw := TAU / 20.0
@@ -18582,6 +18798,13 @@ func _egg_shatter() -> void:
 	egg_shards.append({"c": Vector2.ZERO, "pts": bull,
 			"v": Vector2(rng.randf_range(-40.0, 40.0), -260.0),
 			"rot": 0.0, "w": rng.randf_range(-5.0, 5.0), "col": C_GREEN})
+	#  유리 가루 — 조각은 스크림 밑이라 어둡고, 가루는 금과 같은 층이라
+	#  밝다. 어두운 조각 사이에서 반짝이는 것이 유리가 깨진 것이다.
+	for i in 36:
+		var u := Vector2.from_angle(randf() * TAU)
+		var at: Vector2 = u * R * sqrt(randf()) * 0.95
+		_egg_bit(at, u * randf_range(60.0, 200.0)
+				+ Vector2(0.0, randf_range(-220.0, -80.0)), randf_range(0.0, 0.08))
 
 
 #  판의 높이. 깨져서 없으면 INF(안 그린다), 오르는 중이면 아래로 밀린 양.
@@ -18615,42 +18838,99 @@ func _egg_shards_draw() -> void:
 		draw_colored_polygon(pts, Color(sh.col, a))
 
 
-#  금. 잇단 수만큼 줄기가 자라고, 곁가지는 줄기가 그 자리에 닿은 뒤에 난다.
+#  금. 난 단까지 그린다. 마디 하나는 snap 동안 끝까지 그어지고, 갓 난 금은
+#  하얗게 달았다 식는다 — 자라는 것이 아니라 튀는 것이다.
 func _egg_crack_draw() -> void:
-	if egg_crack <= 0.003 or egg_t >= 0.0:
+	_egg_bits_draw()
+	if egg_stage <= 0 or egg_t >= 0.0 or egg_born.size() <= egg_stage:
 		return
-	#  불 자리가 먼저 패인다 — 금이 어디서 시작했는지를 말한다.
-	draw_circle(BC, 1.5 + 2.0 * egg_crack, Color(0.03, 0.02, 0.05, 0.85))
-	for path in egg_paths:
-		var from: float = float(path.from)
-		var f: float = egg_crack if from <= 0.0 else \
-				clampf((egg_crack - from) / 0.35, 0.0, 1.0)
-		if f > 0.0:
-			_egg_polyline(path.pts, f)
-
-
-func _egg_polyline(pts: Array, f: float) -> void:
-	var total := 0.0
-	for i in range(1, pts.size()):
-		total += (pts[i] as Vector2).distance_to(pts[i - 1])
-	var left: float = total * f
-	for i in range(1, pts.size()):
-		var a: Vector2 = pts[i - 1]
-		var b: Vector2 = pts[i]
-		var ln := a.distance_to(b)
-		if ln <= 0.0:
+	var al: float = egg_fade
+	var snap: float = float(EGG.snap)
+	var hot: float = float(EGG.hot)
+	var k: float = float(egg_stage) / float(_egg_stages())
+	#  유리 면. 금이 가른 칸마다 빛을 조금씩 달리 받는다 — 금이 선을 그은
+	#  것이 아니라 면을 가른 것으로 읽힌다.
+	for fc in egg_facets:
+		var fs: int = fc.s
+		if fs > egg_stage:
 			continue
-		if left < ln:
-			b = a.lerp(b, left / ln)
-		#  밝은 결 한 줄을 오른아래에, 짙은 속을 위에 — 금은 파인 것이라
-		#  빛(왼쪽 위)을 받는 쪽 가장자리가 밝다. 짙은 줄 하나로는 어두운
-		#  판(스크림 밑)에서 안 보인다.
-		draw_line(BC + a + Vector2(1.0, 1.0), BC + b + Vector2(1.0, 1.0),
-				Color(C_TXT, 0.38), 1.0)
-		draw_line(BC + a, BC + b, Color(0.03, 0.02, 0.05, 0.92), 1.0)
-		left -= ln
-		if left <= 0.0:
-			break
+		var fa: float = clampf((egg_clock - float(egg_born[fs]) - float(fc.o)) / 0.12,
+				0.0, 1.0) * al
+		if fa <= 0.0:
+			continue
+		var tone: float = fc.tone
+		var pts := PackedVector2Array()
+		for q in fc.pts:
+			pts.append(BC + (q as Vector2))
+		if tone >= 0.0:
+			draw_colored_polygon(pts, Color(0.78, 0.90, 1.0, 0.13 * tone * fa))
+		else:
+			draw_colored_polygon(pts, Color(0.0, 0.0, 0.03, -0.26 * tone * fa))
+	#  맞은 자리 — 잘게 부서져 뿌옇다. 단이 오를수록 넓어진다.
+	var hb: float = 1.0 - clampf((egg_clock - float(egg_born[egg_stage])) / hot, 0.0, 1.0)
+	var pr: float = 2.5 + 4.5 * k
+	var pit := PackedVector2Array()
+	for i in egg_pit.size():
+		pit.append(BC + Vector2.from_angle(TAU * float(i) / float(egg_pit.size()))
+				* pr * float(egg_pit[i]))
+	if pit.size() >= 3:
+		draw_colored_polygon(pit, Color(0.82, 0.92, 1.0, (0.20 + 0.5 * hb) * al))
+	#  금 마디. 한 칸 아래 짙은 줄이 두께를, 하얀 줄이 유리 결을 말한다.
+	for sg in egg_segs:
+		var s: int = sg.s
+		if s > egg_stage:
+			continue
+		var age: float = egg_clock - float(egg_born[s]) - float(sg.o)
+		if age < 0.0:
+			continue
+		var a: Vector2 = BC + (sg.a as Vector2)
+		var b: Vector2 = BC + (sg.b as Vector2)
+		if age < snap:
+			b = a.lerp(b, age / snap)
+		var heat: float = 1.0 - clampf(age / hot, 0.0, 1.0)
+		draw_line(a + Vector2(0.0, 1.0), b + Vector2(0.0, 1.0),
+				Color(0.0, 0.0, 0.03, 0.6 * al), 1.0)
+		if heat > 0.0:
+			draw_line(a, b, Color(0.72, 0.88, 1.0, 0.30 * heat * al), 3.0)
+		draw_line(a, b, Color(0.78, 0.88, 0.98, 0.78 * al).lerp(
+				Color(1.0, 1.0, 1.0, al), heat), 1.0)
+	#  반짝 — 갓 그어진 금 끝 몇에서
+	for sg in egg_segs:
+		var gs: int = sg.s
+		if gs > egg_stage or not bool(sg.gl):
+			continue
+		var age2: float = egg_clock - float(egg_born[gs]) - float(sg.o) - snap
+		if age2 < 0.0 or age2 > 0.3:
+			continue
+		var tw: float = 1.0 - age2 / 0.3
+		var c: Vector2 = BC + (sg.b as Vector2)
+		var ln: float = 1.0 + 3.0 * tw
+		var col := Color(1.0, 1.0, 1.0, tw * al)
+		draw_line(c - Vector2(ln, 0.0), c + Vector2(ln, 0.0), col, 1.0)
+		draw_line(c - Vector2(0.0, ln), c + Vector2(0.0, ln), col, 1.0)
+	#  콰득 — 맞은 자리에서 고리가 한 번 퍼진다
+	if hb > 0.0:
+		draw_arc(BC, pr + 16.0 * (1.0 - hb), 0.0, TAU, 24,
+				Color(1.0, 1.0, 1.0, 0.55 * hb * al), 1.0)
+	draw_circle(BC, 1.2, Color(0.02, 0.02, 0.05, 0.9 * al))
+
+
+#  유리 부스러기. 세모 하나가 돌면서 한쪽 면만 빛을 받아 반짝인다.
+func _egg_bits_draw() -> void:
+	for b in egg_bits:
+		var t: float = b.t
+		if t < 0.0:
+			continue
+		var al: float = clampf(1.0 - t / float(b.life), 0.0, 1.0)
+		var c: Vector2 = BC + (b.p as Vector2)
+		var sz: float = b.sz
+		var r: float = b.rot
+		var tri := PackedVector2Array([c + Vector2.from_angle(r) * sz,
+				c + Vector2.from_angle(r + 2.3) * sz,
+				c + Vector2.from_angle(r + 4.1) * sz * 0.7])
+		var lit: float = 0.5 + 0.5 * sin(r * 2.0)
+		draw_colored_polygon(tri, Color(0.72, 0.86, 1.0, al).lerp(
+				Color(1.0, 1.0, 1.0, al), lit))
 
 
 #  판 안의 한 점을 고르게 고른다. 저절로 던지던 시절의 자리였고, 지금은
