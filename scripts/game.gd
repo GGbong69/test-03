@@ -14365,17 +14365,24 @@ const TTL := {
 	"dl0": 30.0, "dl1": 16.0,        # 손끝의 반길이 → 꽂힌 반길이
 	"bx": 292.0, "by": 402.0,        # 출발점. 글줄(x16~164) 오른쪽이라 안 스친다
 	"spread": 34.0,                  # 출발점이 좌우로 흔들리는 폭
-	"keep": 6,                       # 이만큼 차면 걷는다
-	"sweep": 0.5,                    # 걷는 시간(초)
-	"drop": 44.0,                    # 걷힐 때 떨어지는 거리
+	#  ── 자루마다 제 시계를 가진다 ────────────────────────
+	#  여섯이 차면 **통째로** 걷던 것을 걷었다. 그 방식은 판이 꽉 찼다가
+	#  한 번에 비어서 화면이 깜빡이는 것처럼 보이고, 언제 비는지가 손과
+	#  아무 상관이 없다. 제 시계를 가지면 늘 서넛이 떠 있고 들고 나는
+	#  것이 끊이지 않는다.
+	#  평균 간격 2.15초 · 사는 시간 7.2 · 지는 시간 1.4 이므로 화면에
+	#  평균 (7.2+0.7)/2.15 ≈ 3.7 자루다 — 여섯보다 적으니 그리는 값도
+	#  같이 내려간다.
+	"life": 7.2, "gone": 1.4,        # 사는 시간 · 지는 시간(초)
+	"drop": 22.0,                    # 지면서 흘러내리는 거리
+	"max": 12,                       # 이보다 많으면 오래된 것부터 재운다
 	"ring": 0.34,                    # 착탄 고리가 사는 시간(초)
 	"ids": ["std", "hvy", "lgt", "mag"],
 }
 
-var ttl_stuck := []      # 제목 판에 꽂힌 자루 {p, u, rot, id, t}
+var ttl_stuck := []      # 제목 판에 꽂힌 자루 {p, u, rot, id, t}. t 가 제 나이다
 var ttl_fly := []        # 나는 중인 자루 {a, b, u, rot, id, t}
 var ttl_wait := 1.2      # 다음 자루가 저절로 올 때까지 남은 시간
-var ttl_sweep := 0.0     # 걷는 중이면 남은 시간. 0 이면 안 걷는다
 var ttl_t := 0.0         # 제목이 선 뒤로 흐른 시간. 겨눔점이 이걸로 숨쉰다
 var set_row_e := []      # 줄마다의 얹힘 짙기 0~1
 var set_row_w := []      # 그 줄 띠가 쓸려 든 폭 0~1. 짙기와 따로 논다
@@ -14575,24 +14582,25 @@ const TITLE_ROWS := [
 #  일어나는 일이라 두 층의 밝기가 달라야 한다.
 #  글줄(x16~164)과 판(x222~418)이 안 겹치므로 이 층이 메뉴를 안 먹는다.
 func _ttl_draw() -> void:
-	#  걷는 중이면 아래로 빠지며 옅어진다 — 판에서 뽑아 내리는 손짓이다.
-	var sk := 0.0
-	if ttl_sweep > 0.0:
-		sk = 1.0 - ttl_sweep / float(TTL.sweep)
 	for s in ttl_stuck:
 		var sp: Vector2 = s.p
 		var su: Vector2 = s.u
 		var dl := float(TTL.dl1)
-		_icon_dart(sp - su * dl + Vector2(0.0, sk * sk * float(TTL.drop)),
-				dl, String(s.id), 0.0, float(s.rot), 1.0 - sk)
+		#  제 나이가 사는 시간을 넘기면 흘러내리며 진다. 자루마다 따로
+		#  세는 값이라 여럿이 같은 순간에 사라지는 일이 없다.
+		var gk: float = clampf((float(s.t) - float(TTL.life))
+				/ float(TTL.gone), 0.0, 1.0)
+		var dy: float = 0.0 if motion_off else gk * gk * float(TTL.drop)
+		_icon_dart(sp - su * dl + Vector2(0.0, dy), dl, String(s.id), 0.0,
+				float(s.rot), 1.0 - gk)
 		#  착탄 고리. waves 를 안 빌린다 — 저쪽은 스크림 **밑**에서 그려져
 		#  여기서는 28% 로 깔린다.
-		#  걷는 중에는 고리도 같이 진다. 안 그러면 고리(0.34초)가 걷기
-		#  (0.5초)보다 짧아서 자루는 다 빠졌는데 고리만 밝게 남는다.
+		#  고리는 착탄 직후(0.34초)뿐이고 자루가 지는 것은 7.2초 뒤라,
+		#  둘이 겹칠 일이 없다. 지는 값을 안 곱하는 이유가 그것이다.
 		var kt: float = float(s.t) / float(TTL.ring)
 		if kt < 1.0 and not motion_off:
 			draw_arc(sp, lerpf(3.0, 27.0, 1.0 - pow(1.0 - kt, 2.6)), 0.0, TAU,
-					24, Color(C_ACC, (1.0 - kt) * (1.0 - sk) * 0.5), 1.0)
+					24, Color(C_ACC, (1.0 - kt) * 0.5), 1.0)
 	for f in ttl_fly:
 		var t: float = clampf(float(f.t) / float(TTL.fly), 0.0, 1.0)
 		#  끝에서 붙는다. 등속이면 착탄이 언제인지가 안 보인다.
@@ -17916,19 +17924,19 @@ func _title_tick(d: float) -> void:
 		#  지난번 자국이 그대로 남아, 제목이 이어지는 화면으로 읽힌다.
 		ttl_stuck.clear()
 		ttl_fly.clear()
-		ttl_sweep = 0.0
 	if on:
 		if ttl_hot != was and ttl_hot >= 0:
 			_sfx("menu_pick2")
 		queue_redraw()
 
 
-#  제목 판에 아직 움직이는 것이 있는가.
+#  제목 판에 아직 움직이는 것이 있는가 — 나는 자루 · 퍼지는 고리 ·
+#  지는 중인 자루.
 func _ttl_busy() -> bool:
-	if not ttl_fly.is_empty() or ttl_sweep > 0.0:
+	if not ttl_fly.is_empty():
 		return true
 	for s in ttl_stuck:
-		if float(s.t) < float(TTL.ring):
+		if float(s.t) < float(TTL.ring) or float(s.t) >= float(TTL.life):
 			return true
 	return false
 
@@ -17947,22 +17955,23 @@ func _ttl_board(d: float, live: bool) -> void:
 		ttl_fly = ttl_fly.filter(func(f): return float(f.t) < span)
 		for f in done:
 			_ttl_stick(f)
-	#  여섯이 차면 걷는다. 더 꽂으면 판이 안 보이고, 걷는 것 자체가 볼
-	#  거리다 — 다트판은 원래 한 차례가 끝나면 비운다.
-	if ttl_sweep > 0.0:
-		ttl_sweep = maxf(ttl_sweep - d, 0.0)
-		if ttl_sweep <= 0.0:
-			ttl_stuck.clear()
-	elif ttl_stuck.size() >= int(TTL.keep):
-		_sfx("sweep_sink")
-		if motion_off:
-			ttl_stuck.clear()
-		else:
-			ttl_sweep = float(TTL.sweep)
+	if not ttl_stuck.is_empty():
+		#  손이 마구 누르면 수가 는다. 그래도 **통째로 걷지는 않는다** —
+		#  가장 오래된 **하나**의 시계만 빨리 돌린다.
+		#  둘을 조심했다. ① 여럿을 같이 밀면 같은 프레임에 여럿이 사라져
+		#  걷어 낸 그 「한꺼번에」 가 된다. ② 지는 자리로 밀어만 놓으면
+		#  다 지는 데 1.4초가 걸리는데 그동안 손이 또 눌러서 한도를 계속
+		#  넘는다 — **넘친 수가 곧 속도**라야 손보다 빠르다.
+		var over: int = ttl_stuck.size() - int(TTL.max)
+		if over > 0:
+			var old: Dictionary = ttl_stuck[0]
+			old.t = maxf(float(old.t), float(TTL.life)) 					+ d * float(over) * 6.0
+		var span := float(TTL.life) + float(TTL.gone)
+		ttl_stuck = ttl_stuck.filter(func(e): return float(e.t) < span)
 	#  움직임을 끈 손님에게는 저절로 오는 자루를 안 보낸다 — 가만히 둔
 	#  화면이 저 혼자 움직이는 것이 그 설정이 끄려는 바로 그것이다.
 	#  누르면 여전히 날아간다. 손이 부른 것은 움직임이 아니라 응답이다.
-	if live and not motion_off and ttl_sweep <= 0.0:
+	if live and not motion_off:
 		ttl_wait -= d
 		if ttl_wait <= 0.0:
 			_ttl_throw(_ttl_spot())
@@ -17971,11 +17980,6 @@ func _ttl_board(d: float, live: bool) -> void:
 #  한 자루 던진다. p 는 판 좌표의 착탄점이다.
 func _ttl_throw(p: Vector2) -> void:
 	ttl_wait = randf_range(float(TTL.gap0), float(TTL.gap1))
-	#  걷는 중이면 먼저 치운다. 사라지는 무리에 섞이면 방금 누른 자루가
-	#  같이 걷혀서, 누른 것이 안 꽂힌 것으로 보인다.
-	if ttl_sweep > 0.0:
-		ttl_sweep = 0.0
-		ttl_stuck.clear()
 	var a := Vector2(float(TTL.bx) + randf_range(-float(TTL.spread),
 			float(TTL.spread)), float(TTL.by))
 	var u := (p - a)

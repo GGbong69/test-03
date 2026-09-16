@@ -64,12 +64,17 @@ func _run() -> void:
 		await _wait(20)
 	await _shot("ttl_3_full")
 
-	#  걷히는 중 — 여기도 시간을 손으로 놓는다
+	#  지는 중 — 자루마다 나이를 손으로 놓는다. 앞의 것일수록 늙었다.
 	for k in [0.3, 0.7]:
-		g.ttl_sweep = float(g.TTL.sweep) * (1.0 - k)
-		await _shot("ttl_4_sweep_%d" % int(k * 100.0))
-	await _wait(60)
-	await _shot("ttl_5_clean")
+		for i in g.ttl_stuck.size():
+			var age: float = float(g.TTL.life) + float(g.TTL.gone) 					* (k - float(i) * 0.16)
+			g.ttl_stuck[i].t = maxf(age, 0.2)
+		await _shot("ttl_4_fade_%d" % int(k * 100.0))
+	#  다 지고 나면 저절로 다시 찬다
+	g.ttl_stuck.clear()
+	g.ttl_wait = 0.1
+	await _wait(200)
+	await _shot("ttl_5_again")
 
 	#  커서가 판 위 — 겨눔점
 	g._ttl_throw(g.BC + Vector2(60.0, 20.0))
