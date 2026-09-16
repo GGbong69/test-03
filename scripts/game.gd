@@ -11297,9 +11297,11 @@ func _icon_dart(c: Vector2, dl: float, id: String, dim := 0.0,
 			fin = 4.6 * k
 			col = C_GREEN.lightened(0.35)
 		"mag":
-			bw = 3.0 * k
-			fin = 3.4 * k
-			col = C_MULT.lightened(0.25)
+			#  배럴이 굵다 — 두 극이 색으로 갈리려면 나눌 폭이 있어야 한다.
+			#  무거운 것(4.0)보다는 가늘다. 색도 연어빛에서 원색으로 올렸다.
+			bw = 3.6 * k
+			fin = 3.0 * k
+			col = C_MULT
 	col = Color(col.darkened(dim), a)
 
 	var tip := c + dir * dl
@@ -11347,8 +11349,24 @@ func _icon_dart(c: Vector2, dl: float, id: String, dim := 0.0,
 				draw_line(tail + nrm * side * 2.5 * k - dir * 2.0 * k,
 						tail + nrm * side * 2.5 * k - dir * 6.0 * k, col, 1.0)
 		"mag":
-			draw_arc(tip + dir * 4.0 * k, 4.5 * k, PI * 0.15, PI * 0.85,
-					10, Color(C_MULT.lightened(0.4).darkened(dim), a), 1.0)
+			#  ── 두 극 ──────────────────────────────────────
+			#  전에는 촉 **앞**에 반원 하나를 띄웠다. 자루에 안 붙어 있어서
+			#  자석이 아니라 떠다니는 부스러기로 읽혔고(찍어서 봤다),
+			#  꽂히면 판 위에 그 반원만 남았다.
+			#
+			#  자석은 **색이 둘인 막대**다. 32px 짜리 자루에서 살아남는
+			#  표시는 3px 짜리 모양이 아니라 색의 경계다 — 무거운 것의
+			#  추 둘도 굵기가 아니라 값으로 걸리는 것과 같은 이유다.
+			#  강철 쪽을 **꽁지 쪽**에 둔다. 통에 꽂으면 자루의 촉 절반이
+			#  잠기므로 촉 쪽에 두면 고를 때 안 보인다.
+			var p0 := c + dir * dl * 0.14
+			var p1 := c - dir * dl * 0.44
+			var pm := p0.lerp(p1, 0.52)
+			draw_line(p0, pm, Color(C_MULT.darkened(dim), a), bw)
+			draw_line(pm, p1, Color(C_WIRE.lightened(0.62).darkened(dim), a), bw)
+			#  두 극 사이의 금. 색만 갈리면 얼룩이고, 금이 있어야 두 토막이다.
+			draw_line(pm + nrm * bw * 0.5, pm - nrm * bw * 0.5,
+					Color(C_BG, a), 1.0)
 
 
 # ══════════════════════════════════════════════════════════
@@ -16173,7 +16191,7 @@ func _dart3_meshes(b: Node3D, dl: float, dr: float, fin: float, col: Color,
 #
 #   무거운  배럴에 추 두 짝      무게가 눈에 보인다
 #   가벼운  꽁지에 큰 날개 넷    바람을 받는 쪽이 주인공이다
-#   자석    배럴에 감긴 고리      감긴 것이 자석이다
+#   자석    두 토막 난 배럴      극이 둘인 것이 자석이다
 #   표준    없다                 기준선은 덧붙이지 않는다
 func _dart3_parts(b: Node3D, dl: float, dr: float, col: Color, id: String) -> void:
 	match id:
@@ -16206,14 +16224,20 @@ func _dart3_parts(b: Node3D, dl: float, dr: float, col: Color, id: String) -> vo
 		"mag":
 			# 감긴 고리. 도넛의 축이 Y 라 자루를 그대로 두른다.
 			#
-			# **꽁지 쪽에 둔다.** 통에 꽂아 두면 자루의 아래 절반이 통 안에
-			# 잠기므로, 배럴 한가운데에 두른 고리는 고를 때 아예 안 보인다.
-			var t := TorusMesh.new()
-			t.inner_radius = dr * 1.00
-			t.outer_radius = dr * 1.55
-			t.rings = 14
-			t.ring_segments = 8
-			_cup3_mesh(b, t, col.lightened(0.34), Vector3(0.0, dl * 0.30, 0.0))
+			# 두 극. 2D 아이콘(_icon_dart)과 **같은 진술**이다 — 자석은
+			# 색이 둘인 막대다. 고리 하나를 둘렀던 자리인데, 고리는 3D 에서
+			# 빛을 같이 받아 배럴과 한 덩어리로 뭉쳤다.
+			#
+			# **꽁지 쪽을 강철로 둔다.** 통에 꽂아 두면 자루의 촉 절반이
+			# 통 안에 잠기므로, 촉 쪽에 두면 고를 때 아예 안 보인다.
+			# (배럴은 y −0.64dl ~ +0.20dl 이고 촉이 음의 y 다.)
+			var pole := CylinderMesh.new()
+			pole.top_radius = dr * 1.03
+			pole.bottom_radius = dr * 1.03
+			pole.height = dl * 0.42
+			pole.radial_segments = 10
+			_cup3_mesh(b, pole, C_WIRE.lightened(0.62),
+					Vector3(0.0, -dl * 0.01, 0.0))
 
 
 # 자루 색은 **다트 종류가 정한다** — 무거운 회색 · 가벼운 초록 · 자석 빨강. 그 축을 다트통이 덮을 수 있게 하되, 덮어도 되는 자리는 하나뿐이다:
