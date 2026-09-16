@@ -185,9 +185,6 @@ func _t01() -> void:
 		["bad_missing_asset.json", &"missing_asset"],
 		["bad_dup_index.json", &"bad_config"],
 		["bad_bus.json", &"missing_bus"],
-		# 지금 게임 음악 넷을 그대로 먹인다. 루프가 리소스에 안 걸려 있어
-		# 거기서 먼저 걸리는데, **먼저 걸리는 것도 거절**이라 통과하면 안 된다.
-		["real_music.json", &"loop_mismatch"],
 	]
 	var bad := []
 	for c in cases:
@@ -200,8 +197,17 @@ func _t01() -> void:
 		if n.start():
 			bad.append("%s 가 준비 실패인데 start 가 true 였다" % c[0])
 		n.queue_free()
+	#  거꾸로도 잰다 — **맞는 구성은 받아야 한다.** 거절만 재면 전부
+	#  거절하는 관리자도 통과한다. 여기 먹이는 것은 게임이 실제로 쓰는
+	#  편곡 넷(assets/music)이고, mus_bake.py 가 그 계약에 맞춰 굽는다.
+	#  전에는 이 넷이 빌려 온 곡이라 loop_mismatch 로 걸렸다.
+	var real := _fresh_manager("res://tests/audio/fixtures/real_music.json")
+	if not real.ready_ok:
+		bad.append("게임 음악 넷이 거절당했다 → %s" % real.last_error_code)
+	real.queue_free()
 	_note("T01", bad.is_empty(),
-			"어긋난 구성 넷을 다 거절했다" if bad.is_empty() else "; ".join(bad))
+			"어긋난 구성 넷을 거절하고 실제 넷은 받았다" if bad.is_empty()
+			else "; ".join(bad))
 
 
 # T02 — 첫 시작과 재호출.
