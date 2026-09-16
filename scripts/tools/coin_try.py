@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 u"""동전 얼굴 한 장을 미리 본다 — faces.txt 조각을 받아 그림으로 낸다.
 
-    python scripts/tools/coin_try.py <조각.txt> <낼 곳.png> [배율]
+    python scripts/tools/coin_try.py <조각.txt> <낼 곳.png> [배율] [한 줄 장수]
 
 조각은 assets/coin_src/faces.txt 와 같은 형식이다(== id / = 글 색 / 격자).
 여러 장이 들어 있으면 가로로 이어 붙인다. 기본 배율 10 이면 36 도트가
@@ -18,6 +18,7 @@ from PIL import Image, ImageChops, ImageDraw
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import make_coin_art as M   # noqa: E402
+import coin_paint as P      # noqa: E402
 
 for _s in (sys.stdout, sys.stderr):
     try:
@@ -63,17 +64,22 @@ def main():
         print("조각에 == 로 시작하는 장이 없다")
         return 1
     z = int(sys.argv[3]) if len(sys.argv) > 3 else 10
+    cols = int(sys.argv[4]) if len(sys.argv) > 4 else len(cards)
+    cols = max(1, min(cols, len(cards)))
     w = M.SZ * z
-    sheet = Image.new("RGB", (w * len(cards), w + 14), (26, 23, 36))
+    lines = (len(cards) + cols - 1) // cols
+    sheet = Image.new("RGB", (w * cols, w * lines), (26, 23, 36))
     for k, (cid, pal, rows_) in enumerate(cards):
         bad = [i for i, r in enumerate(rows_) if len(r) != len(rows_)]
-        print("%-5s %d줄 · 색 %d가지%s"
+        off = P.off_palette(pal)
+        print("%-5s %d줄 · 색 %d가지%s%s"
               % (cid, len(rows_), len(pal),
-                 "" if not bad else "  ← 줄 길이가 줄 수와 다르다: %s" % bad[:6]))
+                 "" if not bad else "  ← 줄 길이가 줄 수와 다르다: %s" % bad[:6],
+                 "" if not off else "  ← 팔레트 밖의 색: %s" % " ".join(off)))
         im = one(pal, rows_).resize((w, w), Image.NEAREST)
         bg = Image.new("RGBA", (w, w), (26, 23, 36, 255))
         bg.alpha_composite(im)
-        sheet.paste(bg.convert("RGB"), (k * w, 0))
+        sheet.paste(bg.convert("RGB"), ((k % cols) * w, (k // cols) * w))
     sheet.save(sys.argv[2])
     print("→ %s" % sys.argv[2])
     return 0

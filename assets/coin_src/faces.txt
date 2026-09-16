@@ -1,673 +1,125 @@
-#  동전 얼굴 — 손으로 찍은 도트. 글 하나가 도트 하나다.
+#  동전 얼굴 — 도트 격자. 글 하나가 도트 하나다.
 #
 #  == <id>  <이름>      새 장이 시작된다
 #  = <글> <색>          팔레트 한 줄
-#  그 뒤 스무 줄        그림. 마침표는 비운다(동전 바탕이 비친다)
+#  그 뒤 서른여섯 줄    그림. 마침표는 비운다(동전 바탕이 비친다)
 #
-#  레퍼런스는 **구도와 색만** 본다. 사진을 도트로 접으면 접힌 사진일 뿐이고,
-#  "누가 봐도 패러디" 로 가려면 직접 찍어야 한다(2026-09-16).
-#  색은 레퍼런스에서 뽑은 값을 쓴다 — 스파르타의 b50e0e/eba64c 는 그 깃발
-#  그대로다. 형태만 우리 손으로 다시 짓는다.
+#  ── 한 벌의 말투 ─────────────────────────────────────────
+#  쉰일곱 장을 한 판에 놓았을 때 **장마다 솜씨가 아니라 말투가 달랐다** —
+#  외곽선이 있다 없다, 빛이 왼쪽에서 왔다 오른쪽에서 왔다, 바탕이 흰색·검정·
+#  분홍·회색. 한 장씩은 괜찮은데 한 판으로는 남의 그림 쉰일곱 장이었다.
+#  그래서 규칙을 넷으로 못박았다(scripts/tools/coin_paint.py 가 지킨다).
+#    ① 팔레트가 하나다      coin_paint.PAL 의 램프 열넷 × 네 단
+#    ② 빛이 하나다          왼쪽 위
+#    ③ 테두리선이 없다      물건끼리는 선이 아니라 밝기 차로 가른다
+#    ④ 바탕이 하나의 꼴이다  가운데가 밝고 가장자리가 한 단 가라앉는다
 #
-#  스물이 그림의 실제 해상도다. 원형 알파가 모서리를 깎으므로 네 귀퉁이
-#  두어 칸은 안 보인다 — 거기에 뜻을 두지 마라.
-
-== c14  스파르타
-= r b50e0e
-= g eba64c
-= d 8a0a0a
-= l f6d08a
-rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr
-rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr
-rrrrrrrrrrrrrrddddddddrrrrrrrrrrrrrr
-rrrrrrrrrrrddddddllgdddddrrrrrrrrrrr
-rrrrrrrrrrdrddrrrllgrrddrdrrrrrrrrrr
-rrrrrrrrddddrrrrllgggrrrddddrrrrrrrr
-rrrrrrrdrdrrrrrrllgggrrrrrdrdrrrrrrr
-rrrrrrdrdrrrrrrlllggggrrrrrdrdrrrrrr
-rrrrrdrdrrrrrrrllgrgggrrrrrrdrdrrrrr
-rrrrrddrrrrrrrgllgrgggrrrrrrrddrrrrr
-rrrrddrrrrrrrrlllgrllggrrrrrrrddrrrr
-rrrdrdrrrrrrrgllgrrllggrrrrrrrdrdrrr
-rrrddrrrrrrrrgllgrrrllggrrrrrrrddrrr
-rrrddrrrrrrrrlllgrrrllggrrrrrrrddrrr
-rrddrrrrrrrrgllgrrrrllgggrrrrrrrddrr
-rrddrrrrrrrrlllgrrrrlllggrrrrrrrddrr
-rrddrrrrrrrglllgrrrrrllggrrrrrrrddrr
-rrddrrrrrrrgllgrrrrrrllgggrrrrrrddrr
-rrddrrrrrrglllgrrrrrrlllggrrrrrrddrr
-rrddrrrrrrgllgrrrrrrrlllgggrrrrrddrr
-rrddrrrrrggllgrrrrrrrrllgggrrrrrddrr
-rrddrrrrrglllgrrrrrrrrllgggrrrrrddrr
-rrrddrrrggllgrrrrrrrrrlllgggrrrddrrr
-rrrddrrrglllgrrrrrrrrrrllgggrrrddrrr
-rrrdrdrrglllgrrrrrrrrrrllggggrdrdrrr
-rrrrddrggllgrrrrrrrrrrrlllgggrddrrrr
-rrrrrddglllgrrrrrrrrrrrlllggggdrrrrr
-rrrrrdgglllgrrrrrrrrrrrrllggggdrrrrr
-rrrrrrggllgrrrrrrrrrrrrrlllgggrrrrrr
-rrrrrgglllgrrrrrrrrrrrrrlllggggrrrrr
-rrrrrgglllgdrrrrrrrrrrrrlllggggrrrrr
-rrrrgglllgdrddrrrrrrrrddrlllggggrrrr
-rrrrgglllgrddddddddddddddlllggggrrrr
-rrrrrrrrrrrrrrddddddddrrrrrrrrrrrrrr
-rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr
-rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr
-
-== c02  닌자
-= w c9ccd2
-= k 2b2c31
-wwwwwwwwwkkwwwwwwwww
-wwwwwwwwkkkkwwwwwwww
-wwwwwwwwkkkkwwwwwwww
-wwwwwwwkkkkkkwwwwwww
-wwwwwwwkkkkkkwwwwwww
-wwwwwwwkkkkkkwwwwwww
-wwwwwwkkkkkkkkwwwwww
-wwwkkkkkkwwkkkkkkwww
-wkkkkkkkwwwwkkkkkkkw
-kkkkkkkwwwwwwkkkkkkk
-kkkkkkkwwwwwwkkkkkkk
-wkkkkkkkwwwwkkkkkkkw
-wwwkkkkkkwwkkkkkkwww
-wwwwwwkkkkkkkkwwwwww
-wwwwwwwkkkkkkwwwwwww
-wwwwwwwkkkkkkwwwwwww
-wwwwwwwkkkkkkwwwwwww
-wwwwwwwwkkkkwwwwwwww
-wwwwwwwwkkkkwwwwwwww
-wwwwwwwwwkkwwwwwwwww
-== c09  양
-= w efece2
-= k 241f28
-wwwwwwwwwwkkkwwwwwww
-wwwwwwwwwwwwwkkwwwww
-wwwwwwwwwwwwwwkkkwww
-wwwwwwwwwkkwwwkkkkww
-wwwwwwwwkkkkwwwkkkww
-wwwwwwwwkkkkwwwkkkkw
-wwwwwwwwwkkwwwwkkkkw
-wwwwwwwwwwwwwwkkkkkk
-wwwwwwwwwwwwwkkkkkkk
-wwwwwwwwwwwwkkkkkkkk
-wwwwwwwwkkkkkkkkkkkk
-wwwwwwwkkkkkkkkkkkkk
-wwwwwwkkkkkkkkkkkkkk
-wwwwwkkkkwwkkkkkkkkw
-wwwwwkkkwwwwkkkkkkkw
-wwwwwkkkwwwwkkkkkkww
-wwwwwwkkkwwkkkkkkkww
-wwwwwwkkkkkkkkkkkwww
-wwwwwwwkkkkkkkkwwwww
-wwwwwwwwwwkkkwwwwwww
-== c10  음
-= w efece2
-= k 241f28
-kkkkkkkkkkwwwkkkkkkk
-kkkkkkkkkkkkkwwkkkkk
-kkkkkkkkkkkkkkwwwkkk
-kkkkkkkkkwwkkkwwwwkk
-kkkkkkkkwwwwkkkwwwkk
-kkkkkkkkwwwwkkkwwwwk
-kkkkkkkkkwwkkkkwwwwk
-kkkkkkkkkkkkkkwwwwww
-kkkkkkkkkkkkkwwwwwww
-kkkkkkkkkkkkwwwwwwww
-kkkkkkkkwwwwwwwwwwww
-kkkkkkkwwwwwwwwwwwww
-kkkkkkwwwwwwwwwwwwww
-kkkkkwwwwkkwwwwwwwwk
-kkkkkwwwkkkkwwwwwwwk
-kkkkkwwwkkkkwwwwwwkk
-kkkkkkwwwkkwwwwwwwkk
-kkkkkkwwwwwwwwwwwkkk
-kkkkkkkwwwwwwwwkkkkk
-kkkkkkkkkkwwwkkkkkkk
-== u25  퍼스트블러드
-= w f2f2f2
-= r e41f28
-= d 8b191c
-= h f27a80
-wwwwwwwwwwwwwwwwwwww
-wwwwwwwwwwwwwwwwwwww
-wwwwwwwwwrwwwwwwwwww
-wwwwwwwwwrrwwwwwwwww
-wwwwwwwwwrrwwwwwwwww
-wwwwwwwwrrrrwwwwwwww
-wwwwwwwwrrrrwwwwwwww
-wwwwwwwrrrrrrwwwwwww
-wwwwwwrrhrrrrrwwwwww
-wwwwwwrrhrrrrrwwwwww
-wwwwwrrhhrrrrrrwwwww
-wwwwwrhhrrrrrrdwwwww
-wwwwrrhhrrrrrrddwwww
-wwwwrrhrrrrrrrddwwww
-wwwwrrrrrrrrrrddwwww
-wwwwwrrrrrrrrddwwwww
-wwwwwrrrrrrrddwwwwww
-wwwwwwddrrddwwwwwwww
-wwwwwwwwddwwwwwwwwww
-wwwwwwwwwwwwwwwwwwww
-
-== l04  잭과 콩나무
-= y f3c424
-= k 090403
-= g 2d6b2f
-yyyyyyyyyyyyyyyyyyyy
-yyyykyyyyyyyyykyyyyy
-yyykkkyyyykyykkkyyyy
-yyykkkyyykkkykkkyyyy
-yyyykyyyykkkyyykyyyy
-yyyyyyggkkkkggyyyyyy
-yyyyyggkkkkkkggyyyyy
-yyyyggkkkkkkkkggyyyy
-yyyyyggkkkkkkggyyyyy
-yyyyyyykkkkkkyyyyyyy
-yyyyyggkkkkkggyyyyyy
-yyyyggkkkkkkkggyyyyy
-yyyyyggkkkkkggyyyyyy
-yyyyyyykkkkkyyyyyyyy
-yyyyyggkkkkkggyyyyyy
-yyyyggkkkkkkkggyyyyy
-yyyyyyykkkkkyyyyyyyy
-yyyyyyykkkkkyyyyyyyy
-yyyyyykkkkkkkyyyyyyy
-yyyyykkkkkkkkkyyyyyy
-
-== c46  프리즘
-= k 0b0b0e
-= d 1e1e26
-= w f2f2ef
-= r ef4b4b
-= o e7b13a
-= g 5ec26a
-= b 4a86d8
-= v 9a5bd0
-kkkkkkkkkkkkkkkkkkkk
-kkkkkkkkkkkkkkkkkkkk
-kkkkkkkkkwkkkkkkkkkk
-kkkkkkkkkddkkkkkkkkk
-kkkkkkkkdddkkkkkkkkk
-kkkkkkkkddddkkkkkkkk
-kkkkkkkddddwkkkkkkkk
-wwwwwwwddddwwrrrrrrr
-kkkkkkddddwwwooooookk
-kkkkkddddwwwwggggkkkk
-kkkkddddwwwwwbbbkkkkk
-kkkddddwwwwwwvvkkkkkk
-kkddddwwwwwwwkkkkkkkk
-kdddddddddddkkkkkkkkk
-kkkkkkkkkkkkkkkkkkkkk
-kkkkkkkkkkkkkkkkkkkk
-kkkkkkkkkkkkkkkkkkkk
-kkkkkkkkkkkkkkkkkkkk
-kkkkkkkkkkkkkkkkkkkk
-kkkkkkkkkkkkkkkkkkkk
-
-== c32  1-UP
-= y f2c21e
-= d a8800f
-= w fbe88a
-= k 6b4f05
-dddddddddddddddddddd
-dddddddyyyyyydddddddd
-ddddyyyyyyyyyyyydddd
-dddyyyyyyyyyyyyyyddd
-ddyyyywwwwwwyyyyyydd
-dyyyywwwwwwwwyyyyyyd
-dyyywwwkkkkwwwyyyyyd
-dyyywwkkkkkkwwyyyyyd
-dyywwwkkkkkkwwwyyyyd
-dyywwwkkkkkkwwwyyyyd
-dyywwwkkkkkkwwwyyyyd
-dyywwwkkkkkkwwwyyyyd
-dyyywwkkkkkkwwyyyyyd
-dyyywwwkkkkwwwyyyyyd
-dyyyywwwwwwwwyyyyyyd
-ddyyyywwwwwwyyyyyydd
-dddyyyyyyyyyyyyyyddd
-ddddyyyyyyyyyyyydddd
-dddddddyyyyyydddddddd
-dddddddddddddddddddd
-
-== c05  금요일
-= b 3a3532
-= w e9e7e0
-= s c6c2b6
-= k 1d1b18
-= r b83f4f
-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-bbbbbbbbbbbbbbbssssssbbbbbbbbbbbbbbb
-bbbbbbbbbbbbbsswwwwwwssbbbbbbbbbbbbb
-bbbbbbbbbbbbswwwwwkkwwwsbbbbbbbbbbbb
-bbbbbbbbbbbswwkkwwkkwwkksbbbbbbbbbbb
-bbbbbbbbbbswwwkkwwwwwwkkwsbbbbbbbbbb
-bbbbbbbbbswwwwwwwwwwwwwwwwsbbbbbbbbb
-bbbbbbbbswwwrrrrrrrrrrrrrwwsbbbbbbbb
-bbbbbbbbswwwrrrrrrrrrrrrrwwsbbbbbbbb
-bbbbbbbswkkwrrrrrrrrrrrrrwkksbbbbbbb
-bbbbbbbswkkrrrrrrrrrrrrrrrkksbbbbbbb
-bbbbbbbswwrrrrrrrrrrrrrrrrwwsbbbbbbb
-bbbbbbbswwrrrrrrrwwrrrrrrrwwsbbbbbbb
-bbbbbbswwwrrrrrrrwwrrrrrrrwwwsbbbbbb
-bbbbbbswwwrkkkkkkwwkkkkkkrwwwsbbbbbb
-bbbbbbswwwkkkkkkkwwkkkkkkkwwwsbbbbbb
-bbbbbbswkkkkkkkkkwwkkkkkkkwkksbbbbbb
-bbbbbbswkkwkkkkkwwwwkkkkkwwkksbbbbbb
-bbbbbbswwwwwkkkwwwwwwkkkwwwwwsbbbbbb
-bbbbbbswwwwwwwkkkkkkkkwwwwwwwsbbbbbb
-bbbbbbswwkkwwwkkkkkkkkwwwwkkwsbbbbbb
-bbbbbbbswkkwwkkkkkkkkkkwwwkksbbbbbbb
-bbbbbbbswwwwwwwwwwwwwwwwwwwwsbbbbbbb
-bbbbbbbswwwkkwwwwwwwwwwkkwwwsbbbbbbb
-bbbbbbbswwwkkwwwwwwwwwwkkwwwsbbbbbbb
-bbbbbbbbswwwwwwwwkkwwwwwwwwsbbbbbbbb
-bbbbbbbbswwwwwwwwkkwwwwwwwwsbbbbbbbb
-bbbbbbbbbswwwwwwwwwwwwwwwwsbbbbbbbbb
-bbbbbbbbbbswwkkwwwwwwkkwwsbbbbbbbbbb
-bbbbbbbbbbbswkkwsssswkkwsbbbbbbbbbbb
-bbbbbbbbbbbbswwwsssswwwsbbbbbbbbbbbb
-bbbbbbbbbbbbbsswsssswssbbbbbbbbbbbbb
-bbbbbbbbbbbbbbbssssssbbbbbbbbbbbbbbb
-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-
-== c33  푸른 구슬
-= k 0a0d18
-= b 2f5f9c
-= d 1d4374
-= w e6ecf4
-= g 7a8a4a
-kkkkkkkbbbbbbkkkkkkk
-kkkkkbbbbwwwbbbkkkkk
-kkkkbbbwwwwwwbbbkkkk
-kkkbbwwwwwbbbbbbbkkk
-kkbbbwwwwbbbbggbbbkk
-kbbbbwwwbbbggggbbbbk
-kbbbbbbbbbgggggbbbbk
-bbbbbbbbbbgggbbbbbbb
-bbwwwbbbbbggbbbbbbbb
-bbwwwwbbbbbbbbbggbbb
-bbwwwbbbbbbbbbgggbbb
-bbbbbbbbbggbbbgggbbb
-kbbbbbbbggggbbbbbbbk
-kbbbbbbggggggbbwwbbk
-kkbbbbbgggggbbwwwbkk
-kkkbbbbbgggbbwwwbkkk
-kkkkbbbbbbbbbwwbkkkk
-kkkkkbbbbbbbbbbkkkkk
-kkkkkkkbbbbbbkkkkkkk
-kkkkkkkkkkkkkkkkkkkk
-== c08  천동설
-= c e6e1d2
-= l 8b8266
-= d 3a3428
-ccccccclllllcccccccc
-cccccllcccccllcccccc
-cccllcclllllccllcccc
-cclccllcccccllcclccc
-cclclcclllllcclclccc
-clclcclccccclcclclcc
-clclclccccccclclclcc
-lclclcccdddccclclclc
-lclclccdddddcclclclc
-lclclccdddddcclclclc
-lclclccdddddcclclclc
-lclclcccdddccclclclc
-clclclccccccclclclcc
-clclcclccccclcclclcc
-cclclcclllllcclclccc
-cclccllcccccllcclccc
-cccllcclllllccllcccc
-cccccllcccccllcccccc
-ccccccclllllcccccccc
-cccccccccccccccccccc
-
-== l02  정조준
-= w eceae2
-= k 22201d
-wwwwwwwwwkwwwwwwwwww
-wwwwwwwwwkwwwwwwwwww
-wwwwwwwkkkkkkwwwwwww
-wwwwwwkwwkwwwkwwwwww
-wwwwkkwwwkwwwwkkwwww
-wwwwkwwwkkkwwwwkwwww
-wwwkwwkkwkwkkwwwkwww
-wwkwwwkwwkwwkwwwwkww
-wwkwwkwwkkkwwkwwwkww
-kkkkkkkkkkkkkkkkkkkw
-wwkwwkwwkkkwwkwwwkww
-wwkwwwkwwkwwkwwwwkww
-wwkwwwkkwkwkkwwwwkww
-wwwkwwwwkkkwwwwwkwww
-wwwwkwwwwkwwwwwkwwww
-wwwwkkwwwkwwwwkkwwww
-wwwwwwkwwkwwwkwwwwww
-wwwwwwwkkkkkkwwwwwww
-wwwwwwwwwkwwwwwwwwww
-wwwwwwwwwwwwwwwwwwww
-
-== u28  피보나치
-= w f4f2ea
-= k 2b2b2b
-= g b9b4a4
-wwwwwwwwwwwwwwwwwwww
-wwwwwwwwwwwwwwwwwwww
-wwwwwwwwwwwwwwwwwwww
-wwwgggggkkkkkggggwww
-wwwgwwkkwwgwwkkwgwww
-wwwgwkwwwwgwwwwkgwww
-wwwgkwwwwwgwwwwwkwww
-wwwgkwwwwwgwwwwwkwww
-wwwkwwwwwwgwwwwwgkww
-wwwkwwwwwwgggggggkww
-wwwkwwwwwwgwwwwwgkww
-wwwgwwwwwwgwwwwwgwww
-wwwgwwwwwwkwwwwwgwww
-wwwgwwwwwwkwwwwwgwww
-wwwgwwwwwkgkwwwwgwww
-wwwgwwwkkwgwkkwwgwww
-wwwggggggggggggggwww
-wwwwwwwwwwwwwwwwwwww
-wwwwwwwwwwwwwwwwwwww
-wwwwwwwwwwwwwwwwwwww
-
-== u21  스포트라이트
-= k 14171a
-= b 8896a0
-= w e6edf1
-kkkkkkkkkkkkkkkkkkkk
-kkkkkkkkkkkkkkkkkkkk
-kkkkkkkkbwwbkkkkkkkk
-kkkkkkkkbwwbkkkkkkkk
-kkkkkkkbbwwbbkkkkkkk
-kkkkkkkbwwwwbkkkkkkk
-kkkkkkbbwwwwbbkkkkkk
-kkkkkkbbwwwwbbkkkkkk
-kkkkkkbbwwwwbbkkkkkk
-kkkkkbbwwwwwwbbkkkkk
-kkkkkbbwwwwwwbbkkkkk
-kkkkbbbwwwwwwbbbkkkk
-kkkkbbwwwwwwwwbbkkkk
-kkkbwwwwwwwwwwwwbkkk
-kkkwwwwwwwwwwwwwwkkk
-kkkwwwwwwwwwwwwwwkkk
-kkkkwwwwwwwwwwwwkkkk
-kkkkkkwwwwwwwwkkkkkk
-kkkkkkkkkkkkkkkkkkkk
-kkkkkkkkkkkkkkkkkkkk
-
-== c29  황금우상
-= d 241d16
-= g d9b36e
-= l f0d79c
-= s a67428
-= k 4a3618
-dddddddddddddddddddddddddddddddddddd
-dddddddddddddddddddddddddddddddddddd
-dddddddddddddddddddddddddddddddddddd
-dddddddddddddddddddddddddddddddddddd
-dddddddddddddddddddddddddddddddddddd
-ddddddddlllllllllllllllllllldddddddd
-ddddddddlllllllllllllllllllldddddddd
-ddddddddlllllllllllllllllllldddddddd
-dddddddllllllllllllllllllllllddddddd
-dddddddllllllllllllllllllllllddddddd
-dddddddllllllllllllllllllllllddddddd
-dddddddggggggggggggggggggggggddddddd
-ddddssssggkkkkkkkggkkkkkkkggssssdddd
-ddddssssggkklllkkggkklllkkggssssdddd
-ddddssssggkklllkkggkklllkkggssssdddd
-ddddssssggkklllkkggkklllkkggssssdddd
-ddddssssggkkkkkkksskkkkkkkggssssdddd
-ddddssssgggggggggssgggggggggssssdddd
-ddddssssgggggggggssgggggggggssssdddd
-ddddssssggggggggssssggggggggssssdddd
-dddddddddgggggggssssgggggggddddddddd
-dddddddddgggggggssssgggggggddddddddd
-dddddddddggkllkllkllkllkkggddddddddd
-ddddddddddgkllkllkllkllkkgdddddddddd
-ddddddddddgkkkkkkkkkkkkkkgdddddddddd
-dddddddddddkllkllkllkllkkddddddddddd
-dddddddddddkllkllkllkllkkddddddddddd
-ddddddddddddggggggggggggdddddddddddd
-dddddddddddddggggggggggddddddddddddd
-ddddddssssssssssssssssssssssssdddddd
-ddddddssssssssssssssssssssssssdddddd
-ddddddssssssssssssssssssssssssdddddd
-ddddddssssssssssssssssssssssssdddddd
-ddddddssssssssssssssssssssssssdddddd
-dddddddddddddddddddddddddddddddddddd
-dddddddddddddddddddddddddddddddddddd
-
-== c37  진열된 수프
-= c e7e3d6
-= r b84347
-= d 8e2f36
-= g d0a93e
-= s 9aa0a6
-= w f4f2ea
-= k 3a2a2c
-cccccccccccccccccccccccccccccccccccc
-cccccccccccccccccccccccccccccccccccc
-cccccccccccccssssssssssccccccccccccc
-ccccccccccsssccccccccccssscccccccccc
-cccccccccssccccccccccccccssccccccccc
-ccccccccssccccccccccccccccddcccccccc
-ccccccccrssccccccccccccccsddcccccccc
-ccccccccrrsssccccccccccsssddcccccccc
-ccccccccrrrwwwwwwwwwwwwwwrddcccccccc
-ccccccccrrrwrrrrrrrrrrrrwrddcccccccc
-ccccccccrrrwwwwwwwwwwwwwwrddcccccccc
-ccccccccrrrwrrrrrrrrrrrrwrddcccccccc
-ccccccccrrrwwwwwwwwwwwwwwrddcccccccc
-ccccccccrrrwrrrrrrrrrrrrwrddcccccccc
-ccccccccrrrwwwwwwwwwwwwwwrddcccccccc
-ccccccccggggggggggggggggggddcccccccc
-ccccccccggggggggggggggggggddcccccccc
-ccccccccggggggggggggggggggddcccccccc
-ccccccccggggggggggggggggggddcccccccc
-ccccccccwwwwwwwwwwwwwwwwwwddcccccccc
-ccccccccwwwwwwwwwkkkwwwwwwddcccccccc
-ccccccccwwwwwwwwkkkkkwwwwwddcccccccc
-ccccccccwwwwwwwkkkkkkkwwwwddcccccccc
-ccccccccwwwwwwwkkkkkkkwwwwddcccccccc
-ccccccccwwwwwwwkkkkkkkwwwwddcccccccc
-ccccccccwwwwwwwwkkkkkwwwwwddcccccccc
-ccccccccwwwwwwwwwkkkwwwwwwddcccccccc
-ccccccccwwwwwwwwwwwwwwwwwwddcccccccc
-ccccccccwwwwwddddddddddwwwddcccccccc
-ccccccccwwddddddddddddddddddcccccccc
-ccccccccwdddddddddddddddddddcccccccc
-ccccccccddddddddddddddddddddcccccccc
-cccccccccddddddddddddddddddccccccccc
-ccccccccccddddddddddddddddcccccccccc
-cccccccccccccddddddddddccccccccccccc
-cccccccccccccccccccccccccccccccccccc
-
-== c44  어린 왕자
-= g 5f7a4a
-= r c6303a
-= d 8c1a24
-= l e2565c
-= s 3d5230
-= t 2a3a22
-gggggggggggggggggggggggggggggggggggg
-gggggggggggggggggggggggggggggggggggg
-gggggggggggggggggggggggggggggggggggg
-ggggggggggggggrrrrrrrdgggggggggggggg
-ggggggggggggrrrrrrrrrrrdgggggggggggg
-ggggggggggdrrrrrrrrrrrrrddgggggggggg
-gggggggggdrrrrrdddddrrrrrddggggggggg
-ggggggggdrrrrrrddddddrrrrrddgggggggg
-ggggggggrrrrrrrdlllldrrrrrrdgggggggg
-gggggggdrrrrrrrrddddrrrrrrrddggggggg
-gggggggrrrrrrrrddddddrrrrrrrdggggggg
-ggggggdrrrrrrrdddlldddrrrrrrddgggggg
-ggggggdrrrrrrrddllllddrrrrrrrdgggggg
-ggggggdrrrrrrrddllllddrrrrrrddgggggg
-ggggggdrrrrrrrdddlldddrrrrrrddgggggg
-ggggggddrrrrrrrddddddrrrrrrdddgggggg
-gggggggdrrrrrrddddddddrrrrrddggggggg
-gggggggddrrrrdddddddddrrrrdddggggggg
-ggggggggddrrrrtdddddrrrrrdddgggggggg
-ggggggggdddrrrrtrrrrrrrrddddgggggggg
-gggggggggdddrrrrtrrrrrrddddggggggggg
-ggggggggggddddrrrtrrrdddddgggggggggg
-ggggggggggggdddddsssddddgggggggggggg
-ggggggggggggggdddsssddgggggggggggggg
-ggggggtttggggggggsssgggggggggggggggg
-gggggggsstttttssssssgggggggggggggggg
-gggggggssssssstttsssgggggggggggggggg
-ggggggggssssssssssssgggggggggttggggg
-ggggggggssssssssssssgggggstttsgggggg
-gggggggggsgggggggsssssttttssssgggggg
-gggggggggggggggggsssttsssssssggggggg
-gggggggggggggggggssssssssssssggggggg
-gggggggggggggggggsssssssssssgggggggg
-gggggggggggggggggsssgggggggggggggggg
-gggggggggggggggggsssgggggggggggggggg
-gggggggggggggggggggggggggggggggggggg
-
-== r04  카우보이
-= c ded9cd
-= k 15181a
-= s 2d3336
-= b 0c0e10
-= g b9903f
-cccccccccccccccccccccccccccccccccccc
-cccccccccccccccccccccccccccccccccccc
-cccccccccccccccccccccccccccccccccccc
-cccccccccccccccccccccccccccccccccccc
-cccccccccccccccccccccccccccccccccccc
-ccccccccccccccccckcccccccccccccccccc
-ccccccccccccccckbbbbkkkccccccccccccc
-ccccccccccccckkkbbbbkkkccccccccccccc
-ccccccccccccckkkbbbbkkkkcccccccccccc
-cccccccccccckkkkbbbbkkkkcccccccccccc
-cccccccccccckkkkbbbbkkkkkccccccccccc
-ccccccccccckkkkkbbbbkkkkkccccccccccc
-ccccccccccckkkkkbbbbkkkkkccccccccccc
-ccccccccccckkkkkbbbbkkkkkccccccccccc
-ccccccccccckkkkkkkkkkkkkkccccccccccc
-ccccccccccckkkkkkkkkkkkkkccccccccccc
-ccccccccccckkkkkkkkkkkkkkccccccccccc
-cccccccccccbbbbbgggggbbbbbcccccccccc
-cccccccccccbbbbbgkkkgbbbbbcccccccccc
-cccccccccckbbbbbgkkkgbbbbbcccccccccc
-ccccckkkkkkbbbbbgggggbbbbbkkkkkccccc
-ccckkkkkkkkkkkkkkkkkkkkkkkkkkkkkkccc
-cckkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkcc
-ckkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkc
-ckkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkc
-ckkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkc
-cckkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkcc
-ccckkkkssskkkkkkkkkkkkkkkkssskkkkccc
-cccckkkkkkksssssssssssssskkkkkkkcccc
-ccccccckkkkkkkkkkkkkkkkkkkkkkccccccc
-ccccccccccckkkkkkkkkkkkkkccccccccccc
-cccccccccccccccccccccccccccccccccccc
-cccccccccccccccccccccccccccccccccccc
-cccccccccccccccccccccccccccccccccccc
-cccccccccccccccccccccccccccccccccccc
-cccccccccccccccccccccccccccccccccccc
-
-== c12  쌍둥이
-= n 02205b
-= w f2f4ff
-= l 7d92c4
-nnnnnnnnnnnnnnnnnnnn
-nnnnnnnnnnnnnnnnnnnn
-nnnnnwwnnnnnwwnnnnnn
-nnnnwwwwnnnwwwwnnnnn
-nnnnwwwwnnnwwwwnnnnn
-nnnnnwwnnnnnwwnnnnnn
-nnnnnlnnnnnnlnnnnnnn
-nnnnnlnnnnnnlnnnnnnn
-nnnwwlnnnnwwlnnnnnnn
-nnwwwwnnnwwwwnnnnnnn
-nnwwwwnnnwwwwnnnnnnn
-nnnwwlnnnnwwlnnnnnnn
-nnnnnlnnnnnnlnnnnnnn
-nnnnnnlnnnnnnlnnnnnn
-nnnnnnwwnnnnnwwnnnnn
-nnnnnwwwwnnnwwwwnnnn
-nnnnnwwwwnnnwwwwnnnn
-nnnnnnwwnnnnnwwnnnnn
-nnnnnnnnnnnnnnnnnnnn
-nnnnnnnnnnnnnnnnnnnn
-
-== c13  외동
-= n 02205b
-= w f2f4ff
-= l 7d92c4
-nnnnnnnnnnnnnnnnnnnn
-nnnnnnnnnnnnnnnnnnnn
-nnnnnnnnwwnnnnnnnnnn
-nnnnnnnwwwwnnnnnnnnn
-nnnnnnnwwwwnnnnnnnnn
-nnnnnnnnwwnnnnnnnnnn
-nnnnnnnnlnnnnnnnnnnn
-nnnnnnnnlnnnnnnnnnnn
-nnnnnnwwlnnnnnnnnnnn
-nnnnnwwwwnnnnnnnnnnn
-nnnnnwwwwnnnnnnnnnnn
-nnnnnnwwlnnnnnnnnnnn
-nnnnnnnnlnnnnnnnnnnn
-nnnnnnnnnlnnnnnnnnnn
-nnnnnnnnnwwnnnnnnnnn
-nnnnnnnnwwwwnnnnnnnn
-nnnnnnnnwwwwnnnnnnnn
-nnnnnnnnnwwnnnnnnnnn
-nnnnnnnnnnnnnnnnnnnn
-nnnnnnnnnnnnnnnnnnnn
+#  ③ 은 사용자가 정했다(2026-09-16). 외곽선·어두운 바탕·조각선을 넣은 시범
+#  피자보다 **선 없이 밝고 큰 덩어리였던 첫 피자**가 낫다고 했다. 그 피자(c04)
+#  는 그대로 두고 나머지 쉰여섯 장을 그 느낌 쪽으로 다시 그렸다.
+#
+#  새 장을 그릴 때는 붓으로 밑그림을 지은 뒤 이 격자를 손으로 다듬는다.
+#  고친 장은 scripts/tools/coin_try.py 로 크게 보고(팔레트 밖 색도 거기서
+#  잡힌다), scripts/tools/coin_sheet.py 로 한 판에 놓고 튀는지 본다.
+#
+#  원형 알파가 네 귀퉁이를 깎는다 — 뜻은 가운데 28x28 안에 둔다.
+#  레퍼런스는 구도와 색의 분위기만 봤다. 받아 둔 원본은 저장소에 없다.
 
 == c01  발라트로의 조커
-= b 4fa8e4
-= d 8f2621
-= f faf7ef
-= k 1b1a22
-= n 2d6cb5
-= r d8423a
-= w ece5d3
-= y e8a91f
-wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
-wwwwwwwwwwwwwwwkkkkkkwwwwwwwwwwwwwww
-wwwwwwwwwwwwwwkkrrrrkkwwwwwwwwwwwwww
-wwwwwwwwwwwwwwkrrrrrrkwwwwwwwwwwwwww
-wwwwwwwwwwwwwkkrrrrrrkkwwwwwwwwwwwww
-wwwwkkkkkkkkkkrrrrrrrrkkkkkkkkkkwwww
-wwwkkyyyyyyykrrrrrrrrrrkyyyyyyykkwww
-wwkkyyyyyyykkrrrrrrrrrrkkyyyyyyykkww
-wwkyyyyyyykkrrrrrrrrrrrrkkyyyyyyykww
-wwkyyyyyykkrrrrrrrrrrrrrrkkyyyyyykww
-wwkyyyyykkrrrrrrrrrrrrrrrrkkyyyyykww
-wwkyyyyykrrrrrrrrrrrrrrrrrrkyyyyykww
-wwkyyyyykkkkkkkkkkkkkkkkkkkkyyyyykww
-wwkyyyyykddddddddddddddddddkyyyyykww
-wwkyyyyykddddddddddddddddddkyyyyykww
-wwkkyyyykddkkkkkkkkkkkkkkddkyyyykkww
-wwwkkyyykkkkffffffffffffkkkkyyykkwww
-wwwwkkyyyykffffffffffffffkyyyykkwwww
-wwwwwkkkkkkffffffffffffffkkkkkkwwwww
-wwwwwwwwwkffffffffffffffffkwwwwwwwww
-wwwwwwwwwkffffffffffffffffkwwwwwwwww
-wwwwwwwwwkffffffffffffffffkwwwwwwwww
-wwwwwwwwwkffffffffffffffffkwwwwwwwww
-wwwwwwwwwkffffffffffffffffkwwwwwwwww
-wwwwwwwkkkkffffffffffffffkkkkwwwwwww
-wwwwkkkkbbkffffffffffffffkbbkkkkwwww
-wwwkkbbbbbkkffffffffffffkkbbbbbkkwww
-wwkkbbbbbbbkkkffffffffkkkbbbbbbbkkww
-wwkbbbbbbbbnnkkkkkkkkkknnbbbbbbbbkww
-wwkbbbbbbbbnnbbbbbbbbbbnnbbbbbbbbkww
-wwkkbbbbbbbnnbbbbbbbbbbnnbbbbbbbkkww
-wwwkkkbbbbbnnbnnnnnnnnbnnbbbbbkkkwww
-wwwwwkkkkkbnnnnnnnnnnnnnnbkkkkkwwwww
-wwwwwwwwwkkkkkkkkkkkkkkkkkkwwwwwwwww
-wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
-wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
+= a 14343f
+= b f27d63
+= c fbf6ea
+= d d8483d
+= e e8dfc8
+= f 1f6570
+= g 8c2233
+= h f7ba70
+= i e8873a
+= j b0512a
+= k 14111f
+= l 91cbf5
+= m 3f7fd8
+= n 2b4a95
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaabbaccaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaabdddceaaaaaaaaaaaa
+aaaaaaaaaaaaaafffbdddgaaaaaaaaaaaaaa
+aaaaaaaaaahhhfffbddddgfhhhaaaaaaaaaa
+aaaaaaaahhiiiiibdddddghiiihhaaaaaaaa
+aaaaaahhiiiiiiibdddddgiiiiiihiaaaaaa
+aaaaahiiiiiiiibdddddddgiiiiiiiiaaaaa
+aaaaahiiiijiiibdddddddgiijiiiijaaaaa
+aaaaahiiijfjjbddddddddgjjfiiiijaaaaa
+aaaaahiijffffbdddddddddgfffiiijaaaaa
+aaaaahijffffbddddddddddgffffiijaaaaa
+aaaaaiijffffddggggggggggffffiijaaaaa
+aaaaffjjffffffccccccccffffffijffaaaa
+aaaaffccfffffccccccccccfffffccffaaaa
+aaaaffceffffccccccccccccffffceffaaaa
+aaaaffffffffccckcccckcceffffffffaaaa
+aaaafffffffcccckcccckcccefffffffaaaa
+aaaafffffffcccccccccccccefffffffaaaa
+aaaafffffffccbccccccccbcefffffffaaaa
+aaaafffffffccccggggggcccefffffffaaaa
+aaaaaffffllmccccgbbgcccemllffffaaaaa
+aaaaaffllmmmcccccccccccemmmlmffaaaaa
+aaaaaflmmmmmlcccccccccelmmmmmmfaaaaa
+aaaaalmmmmmlllcecccceelllmmmmmmaaaaa
+aaaalmmmmmlllllleeeenllllmmmmmmmaaaa
+aaalmmmmnnllllllmmmmnllllmnnmmmmnaaa
+aaalmmnnffllllllmmmmnllllmffnnmmnaaa
+aaaannaaaallllmlmmmmnllllmaaaannaaaa
+aaaaaaaaallllmfflmmnffllllmaaaaaaaaa
+aaaaaaaaalllmafflmmnffalllmaaaaaaaaa
+aaaaaaaaaammaaaammmnaaaammaaaaaaaaaa
+aaaaaaaaaaaaaaaaannaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+== c02  닌자
+= a 8c2233
+= b dde3ec
+= c d8483d
+= d 3a3f52
+= e a3abbb
+= f 687085
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaabcccccccaaaaaaaaaaaaaa
+aaaaaaaaaaacccbdcccccccccaaaaaaaaaaa
+aaaaaaaaaaccccbddcccccccccaaaaaaaaaa
+aaaaaaaaccccccbddaccccccccccaaaaaaaa
+aaaaaaaccccccbbbddaccccccccccaaaaaaa
+aaaaaaaccccccbbbdddccccccccccaaaaaaa
+aaaaaacccccccbbbddddccccccccccaaaaaa
+aaaaaccccccccbbbddddaccccccccccaaaaa
+aaaaacccccccbbbbdddddbbccccccccaaaaa
+aaaaacccccccbbbbbbbbbbbbbbbccccaaaaa
+aaaaccccccccbbbeeeeeebbbbbbbbbbcaaaa
+aaaaccccccbbbbeeaaceefbbbbbdddccaaaa
+aaaacccccbbbbbeaacccefdddddddaaaaaaa
+aaaaccccbbbbbbeaccccefdddddaaaacaaaa
+aaaaccbbbbbbbbecccccefddddaaaaccaaaa
+aaaacbbbdddddbeeccceefdddaaaccccaaaa
+aaaaddddddddddeeeeeefddaaaacccccaaaa
+aaaaccaadddddddfffffdddaaaccccccaaaa
+aaaaaccaaaaaddbbbbbddddaaccccccaaaaa
+aaaaacccccccaaabbbbdddaacccccccaaaaa
+aaaaaccccccccccbbbbdddaacccccccaaaaa
+aaaaaaccccccccccbbbdddaaccccccaaaaaa
+aaaaaaaccccccccccbbdddaacccccaaaaaaa
+aaaaaaacccccccccccbbdaaccccccaaaaaaa
+aaaaaaaaccccccccccbbdaacccccaaaaaaaa
+aaaaaaaaaacccccccccbdaacccaaaaaaaaaa
+aaaaaaaaaaacccccccccdaaccaaaaaaaaaaa
+aaaaaaaaaaaaaacccccccaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 == c04  위대한 피자
 = b a05f28
@@ -714,1551 +166,2601 @@ wwwwwwwwwccccccccccccccccccwwwwwwwww
 wwwwwwwwwwwccccccccccccccwwwwwwwwwww
 wwwwwwwwwwwwwwccccccccwwwwwwwwwwwwww
 
+== c05  금요일
+= a 221c33
+= b fbf6ea
+= c e8dfc8
+= d 352d4d
+= e c9bfae
+= f f27d63
+= g d8483d
+= h 14111f
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaabbbbbbbbaaaaaaaaaaaaaa
+aaaaaaaaaaaabbcccaacccbcaaaaaaaaaaaa
+aaaaaaaaaaabcccccaaccccccaaaaaaaaaaa
+aaaaaaaaaabccaaccccccaacccaaaaaaaaaa
+aaaaaaaadbcccaaccccccaaccccdaaaaaaaa
+aaaaaaadbccccccccccccccccceedaaaaaaa
+aaaaaaadbffccccccccccccccffedaaaaaaa
+aaaaaadbcggfffccccccccfffggeedaaaaaa
+aaaaaddbcccggggggccggggggcceeddaaaaa
+aaaaaddbccccccggggggggccccceeddaaaaa
+aaaaaddbccceeeecccccceeeecceeddaaaaa
+aaaaddbcccchhhheccccehhhhccceeddaaaa
+aaaaddbccchhhhhhcbcehhhhhhcceeddaaaa
+aaaaddbccchhhhhhcbcehhhhhhcceeddaaaa
+aaaadddbccchhhhccbcechhhhcceedddaaaa
+aaaadddbcccccccccbceccccccceedddaaaa
+aaaadddbcccccccccbceccccccceedddaaaa
+aaaadddbccccgccccbcecccgccceedddaaaa
+aaaaddddbccggccccbcecccggceeddddaaaa
+aaaaadddbcggcccceeeeccccggeedddaaaaa
+aaaaaddddggccccccccccccccggddddaaaaa
+aaaaaddddbcccaaccaaccaacceeddddaaaaa
+aaaaaaddddeccaaccaaccaaceeddddaaaaaa
+aaaaaaadddeecccccccccccceedddaaaaaaa
+aaaaaaaddddecccaaccaacceeddddaaaaaaa
+aaaaaaaaddddeccaaccaaceeddddaaaaaaaa
+aaaaaaaaaaddeeecccccceeeddaaaaaaaaaa
+aaaaaaaaaaaddeeeeeeeeeeddaaaaaaaaaaa
+aaaaaaaaaaaaaadeeeeeedaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
 == c06  이카로스
-= b 2f3bb5
-= k 0d0b1c
-= r e01a2b
-= y f2cd1e
-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-bbbbbbbbkkbbbbbbbbbbbbbbbbbbbbbbbbbb
-bbbbbbbkkkbbbbbbbkkkbbbbbbybbbbbbbbb
-bbbbbbbkkkkbbbbbkkkkkbbbybybybbbbbbb
-bbbbbbbbbkkkbbbbkkkkkbbbbyyybbbbbbbb
-bbbbbbbbbbkkkbbbkkkkkbbyyyyyyybbbbbb
-bbbbbbbbbbbkkkbbbkkkbbbbbyyybbbbbbbb
-bbbbbbbbbbbbkkkbbkkkbbbbybybybbbbbbb
-bbbbbbbbbbbbbkkkkkkkkbbbbbybbbbbbbbb
-bbbbbbbbbbbbbbkkkkkkkkkkbbbbbbbbbbbb
-bbbbbbbbbbbbbbkkkrrrkbkkkkbbbbbbbbbb
-bbbbbbbbbbbbbbkkkrrrkbbkkkkbbbbbbbbb
-bbbbbbbbbbbbbbkkkrrrkbbbkkkkbbbbbbbb
-bbbbbbbbbbbbbbkkkkkkkbbbbkkkkbbbbbbb
-bbbbbybbbbbbbkkkkkkkkbbbbbkkkbbbbbbb
-bbbybybybbbbbkkkkkkkkbbbbbkkkbbbbbbb
-bbbbyyybbbbbkkkkkkkkkbbbbbbkkbbbbbbb
-bbyyyyyyybbbkkkkkkkkkbbbbbbbbbbbbbbb
-bbbbyyybbbbkkkkkkkkkkkbbbbbbbbbbbbbb
-bbbybybybbbbkkkbbbbbkkkbbbbbbbybbbbb
-bbbbbybbbbbkkkkbbbbbkkkbbbbbybybybbb
-bbbbbbbbbbbkkkkbbbbbkkkkbbbbbyyybbbb
-bbbbbbbbbbkkkkbbbbbbkkkkbbbyyyyyyybb
-bbbbbbbbbbkkkkbbbbbbbkkkkbbbbyyybbbb
-bbbbbbbbbbkkkkbbbbbbbkkkkbbbybybybbb
-bbbbbbbbbkkkkbbbbbbbbkkkkbbbbbybbbbb
-bbbbbbbbbkkkkbbbbbbbbbkkkkbbbbbbbbbb
-bbbbbbbbbkkkkbbbbbbbbbkkkkbbbbbbbbbb
-bbbbbbbbbbkkkkbbbbbbbbkkkkbbbbbbbbbb
-bbbbbbbbbbbkkkkkbbbbbbkkkkbbbbbbbbbb
-bbbbbbbbbbbbkkkkkbbbbkkkkkbbbbbbbbbb
-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+= a 3f7fd8
+= b 91cbf5
+= c 352d4d
+= d 221c33
+= e 14111f
+= f f27d63
+= g d8483d
+= h f2c94c
+= i fdeaa0
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaabbbbbbbbaaaaaaaaaaaaaa
+aaaaaaaccdabbbbbbbccdbbbbaaaaaaaaaaa
+aaaaaacddddbbbbbbcddddbbbbaaaaaaaaaa
+aaaaaacdddebbbbbbcdddebbbbbbaccaaaaa
+aaaaaaadddebbbbbbcdddebbbbbbcddeaaaa
+aaaaaaabcdebbbbbbcdddebbbbbbcddeaaaa
+aaaaaabbcdddbbbbbbcdebbbbbbbcdeaaaaa
+aaaaabbbcddddbbbbbcdebbbbbbcddeaaaaa
+aaaaabbbbddddcccccddddccbbcddebaaaaa
+aaaaabbbbbddddddddddddddccddebbaaaaa
+aaaabbbbbbbbdddddddddddddeeebbbbaaaa
+aaaabbbbbbbbbddddfdgddddebbbbbbbaaaa
+aaaabhbbbbbbbddddgggddddebbbbbbbaaaa
+aaaabhbbbbbbbbddddgddddebbbbbbhbaaaa
+aaahhihhbbbbbbbcddddddebbbbbbbhbaaaa
+aaaahihbbbbbbbbcddddddebbbbbhhihhaaa
+aaaahbhbbbbbbbbcddddddebbbbbbhihaaaa
+aaaabbbbbbbbbbcddddddddebbbbbhbhaaaa
+aaaaabbbbbbbbbcdddeddddebbbbbbbaaaaa
+aaaaabbbbbbbbcdddebddddebbbbbbbaaaaa
+aaaaabbbbbbbcdddebbbddddebbbbbbaaaaa
+aaaaaabbbbbbcddebbbbcdddebbbbbaaaaaa
+aaaaaaahbbbcdddebbbbbcddebbbhaaaaaaa
+aaaaaahihbbcddebbbbbbcdddebhihaaaaaa
+aaaaaaahbbcddebbbbbbbbcddebbhaaaaaaa
+aaaaaaaaaacddebbbbbbbbcdebaaaaaaaaaa
+aaaaaaaaaacdebbbbbbbbbbddeaaaaaaaaaa
+aaaaaaaacddeeabbbbbbbbadeeeaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 == c07  BiiiG
-= b 2f5cc4
-= c f1e9da
-= k 17150f
-= r e5431c
-= y f2a814
-cccccccccccccccccccccccccccccccccccc
-cccccccccccccccccccccccccccccccccccc
-cccccccccccccccccccccccccccccccccccc
-cccccckkkkkkccckkkkkkccckkkkkkcccccc
-ccccckkkkkkkkckkkkkkkkckkkkkkkkccccc
-cccckkkkkkkkkckkkkkkkkckkkkkkkkkcccc
-cccckkkkkkkkcckkkkkkkkcckkkkkkkkcccc
-cccckkkkkkkkccckkkkkkccckkkkkkkkcccc
-cccckkkkkkkcccckkkkkkcccckkkkkkkcccc
-cccckkkkkkkccccckkkkccccckkkkkkkcccc
-cccckkkkkkkccccckkkkccccckkkkkkkcccc
-cccckkkkkkkccccckkkkccccckkkkkkkcccc
-ccccckkkkkkccccckkkkccccckkkkkkccccc
-ccccckkkkkkccccckkkkccccckkkkkkccccc
-cccccckkkkkccccckkkkccccckkkkkcccccc
-cccccccccccccccccccccccccccccccccccc
-cccccccccccccccccccccccccccccccccccc
-ccccbbbbbbbbcrrrrrrrrrrcyyyyyyyccccc
-ccccbbcccbbbcrrrrrrrrrryyyccccyycccc
-ccccbbccccbbcrrrrrrrrrryyccccccccccc
-ccccbbcccbbbcccrrrrrrccyyccccccccccc
-ccccbbbbbbbccccrrrrrrccyyccccccccccc
-ccccbbcccbbbcccrrrrrrccyycccyyyycccc
-ccccbbccccbbcccrrrrrrccyycccccyycccc
-ccccbbccccbbcccrrrrrrccyyyccccyycccc
-ccccbbccccbbcrrrrrrrrrryyyccccyycccc
-ccccbbcccbbbcrrrrrrrrrryyyyccyyycccc
-ccccbbbbbbbbcrrrrrrrrrrcyyyyyyyccccc
-cccccccccccckkkkkkkkkkkkcccccccccccc
-cccccckkkkkkkkkkkkkkkkkkkkkkkkcccccc
-ccccckkkkkkkkkkkkkkkkkkkkkkkkkkccccc
-cccccckkkkkkkkkkkkkkkkkkkkkkkkcccccc
-cccccccckkkkkkkkkkkkkkkkkkkkcccccccc
-cccccccccccccccccccccccccccccccccccc
-cccccccccccccccccccccccccccccccccccc
-cccccccccccccccccccccccccccccccccccc
+= a e8dfc8
+= b fbf6ea
+= c d8483d
+= d f27d63
+= e 8c2233
+= f f2c94c
+= g fdeaa0
+= h a8762a
+= i 3f7fd8
+= j 91cbf5
+= k 2b4a95
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaabbbbbbbbaaaaaaaaaaaaaa
+aaaaaaaaaaabbbbbbbbbbbbbbaaaaaaaaaaa
+aaaaaaaaaabbbbbbbbbccccccbaaaaaaaaaa
+aaaaaaaabbbbbbbbbccccccccccbaaaaaaaa
+aaaaaaabbbbbbbbccccccccccccccaaaaaaa
+aaaaaaabbbbbbbccccccccccccccccaaaaaa
+aaaaaabbbbbbbccddccccccccccccceaaaaa
+aaaaabbbbbbbbcdddccccccccccccccaaaaa
+aaaaabbbbbbbcccdccccccccccccccceaaaa
+aaaaabbbbbbbccccccccccccccccccceaaaa
+aaaabbbbbbbcccccccccccccccccccceeaaa
+aaaabbbbbbbcccccccccccccccccccceeaaa
+aaaabbbbbbbcccccccccccccccccccceeaaa
+aaaabbbbbbfffcccccccccccccccccceeaaa
+aaaabbbbfffffffccccccccccccccceeeaaa
+aaaabbbfggffffffcccccccccccccceeeaaa
+aaaabbbfgfffffffccccccccccccceeeaaaa
+aaaabbffffffffffhcccccccccccceeeaaaa
+aaaaabffffffffffhccccccccccceeeaaaaa
+aaaaaiiifffffffhhccccccccceeeeeaaaaa
+aaaaijiikffffffhccccccccceeeeebaaaaa
+aaaaiiiikffffhhheeeeeeeeeeeeebaaaaaa
+aaaakiikkhhhhhhbbeeeeeeeeeebbaaaaaaa
+aaaaakkkbbhhhbbbbbbeeeeeebbbbaaaaaaa
+aaaaaaaabbbbbbbbbbbbbbbbbbbbaaaaaaaa
+aaaaaaaaaabbbbbbbbbbbbbbbbaaaaaaaaaa
+aaaaaaaaaaabbbbbbbbbbbbbbaaaaaaaaaaa
+aaaaaaaaaaaaaabbbbbbbbaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+== c08  천동설
+= a 2b1d4f
+= b fdeaa0
+= c 523a8f
+= d 8161c9
+= e f2c94c
+= f e8873a
+= g 91cbf5
+= h 94d68e
+= i 3f7fd8
+= j 2b4a95
+= k 479a58
+= l fbf6ea
+= m e8dfc8
+= n c9bfae
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaabbbaaaaccccccccaaaaaaaaaaaaaa
+aaaaabbbbbbbdddddddddddccaaaaaaaaaaa
+aaaaabbbeeefdcccccccccdddcaaaaaaaaaa
+aaaabbbeeeeffcccccccccccddccaaaaaaaa
+aaaabbeeeeeffccccccccccccddccaaaaaaa
+aaaabbeeeefffccgggggccccccddcaaaaaaa
+aaaaabeeefffcgghhhiigicccccddcaaaaaa
+aaaaabffffffgghhhhhhiiicccccdccaaaaa
+aaaaaddfffcghhhhhhhhiiijccccddcaaaaa
+aaaaadccccghhhhhhhhhhiijjccccdcaaaaa
+aaaacdccccghhhhhhhhhiiijjccccdccaaaa
+aaaacdcccgiihhhhhhhiiiijjjcccdccaaaa
+aaaacdcccgiiihhhhhiiiihkjjcccdccaaaa
+aaaacdcccgiiiihhhhiiihhkkjcccddcaaaa
+aaaacdcccgiiiihhhiiihhhkkjcccdccaaaa
+aaaacdcccgiiiiihhiiihhkkkjcccdccaaaa
+aaaacdccccgiiiiiiiiihkkkjccccdccaaaa
+aaaacdcccciiiiiiiiihkkkjjccccdccaaaa
+aaaaaddcccciiiiiiiikkkjjccccddcaaaaa
+aaaaacdcccccjjjjjjjjkjjcccccdccaaaaa
+aaaaacddcccccjjjjjjjjjcccllmdccaaaaa
+aaaaaacddccccccjjjjjcccclmmmmcaaaaaa
+aaaaaaacddcccccccccccccclmmmnaaaaaaa
+aaaaaaaccddcccccccccccccmmmmnaaaaaaa
+aaaaaaaaccdddcccccccccdddmnnaaaaaaaa
+aaaaaaaaaaccdddddddddddcccaaaaaaaaaa
+aaaaaaaaaaaccccccdcccccccaaaaaaaaaaa
+aaaaaaaaaaaaaaccccccccaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+== c09  양
+= a e8dfc8
+= b fbf6ea
+= c 221c33
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaabbbbbbbbaaaaaaaaaaaaaa
+aaaaaaaaaaabbbbbbbbbbbbccaaaaaaaaaaa
+aaaaaaaaaabbbbbbbbbbbbbbccaaaaaaaaaa
+aaaaaaaabbbbbbbbbbbbbbbbbcccaaaaaaaa
+aaaaaaabbbbbbbbbbbbbbbbbbbcccaaaaaaa
+aaaaaaabbbbbbbbbbbbbbbbbbbcccaaaaaaa
+aaaaaabbbbbbbbbbbccbbbbbbbccccaaaaaa
+aaaaabbbbbbbbbbbccccbbbbbbcccccaaaaa
+aaaaabbbbbbbbbbbccccbbbbbbcccccaaaaa
+aaaaabbbbbbbbbbbbccbbbbbbbcccccaaaaa
+aaaabbbbbbbbbbbbbbbbbbbbbbccccccaaaa
+aaaabbbbbbbbbbbbbbbbbbbbbbccccccaaaa
+aaaabbbbbbbbbbbbbbbbbbbbbcccccccaaaa
+aaaabbbbbbbbbbbbbbbbbbbbbcccccccaaaa
+aaaabbbbbbbbbbbbbbbbbbbbccccccccaaaa
+aaaabbbbbbbbbbbbbbbbbbbcccccccccaaaa
+aaaabbbbbbbbbbbbbbbbccccccccccccaaaa
+aaaabbbbbbbbbbbcccccccccccccccccaaaa
+aaaaabbbbbbbbbcccccccccccccccccaaaaa
+aaaaabbbbbbbbccccccccccccccccccaaaaa
+aaaaabbbbbbbbccccbbccccccccccccaaaaa
+aaaaaabbbbbbccccbbbbccccccccccaaaaaa
+aaaaaaabbbbbccccbbbbcccccccccaaaaaaa
+aaaaaaabbbbbcccccbbccccccccccaaaaaaa
+aaaaaaaabbbbbcccccccccccccccaaaaaaaa
+aaaaaaaaaabbbcccccccccccccaaaaaaaaaa
+aaaaaaaaaaabbbcccccccccccaaaaaaaaaaa
+aaaaaaaaaaaaaabcccccccaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+== c10  음
+= a 14111f
+= b 221c33
+= c fbf6ea
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaabbbbbbbbaaaaaaaaaaaaaa
+aaaaaaaaaaabbbbbbbbbbccccaaaaaaaaaaa
+aaaaaaaaaabbbbbbbbbcccccccaaaaaaaaaa
+aaaaaaaabbbbbbbbbbccccccccccaaaaaaaa
+aaaaaaabbbbbbbbbbbcccccccccccaaaaaaa
+aaaaaaabbbbbbbbbbcccccbbcccccaaaaaaa
+aaaaaabbbbbbbbbbbccccbbbbcccccaaaaaa
+aaaaabbbbbbbbbbbbccccbbbbccccccaaaaa
+aaaaabbbbbbbbbbbbcccccbbcccccccaaaaa
+aaaaabbbbbbbbbbbbbcccccccccccccaaaaa
+aaaabbbbbbbbbbbbbbccccccccccccccaaaa
+aaaabbbbbbbbbbbbbbbcccccccccccccaaaa
+aaaabbbbbbbbbbbbbbbbbcccccccccccaaaa
+aaaabbbbbbbbbbbbbbbbbbccccccccccaaaa
+aaaabbbbbbbbbbbbbbbbbbccccccccccaaaa
+aaaabbbbbbbbbbbbbbbbbbbcccccccccaaaa
+aaaabbbbbbbbbbbbbbbbbbbcccccccccaaaa
+aaaabbbbbbbbbbccbbbbbbbcccccccccaaaa
+aaaaabbbbbbbbccccbbbbbbccccccccaaaaa
+aaaaabbbbbbbbccccbbbbbbccccccccaaaaa
+aaaaabbbbbbbbbccbbbbbbbccccccccaaaaa
+aaaaaabbbbbbbbbbbbbbbbbcccccccaaaaaa
+aaaaaaabbbbbbbbbbbbbbbcccccccaaaaaaa
+aaaaaaabbbbbbbbbbbbbbbcccccccaaaaaaa
+aaaaaaaabbbbbbbbbbbbbcccccccaaaaaaaa
+aaaaaaaaaabbbbbbbbbbccccccaaaaaaaaaa
+aaaaaaaaaaabbbbbbbcccccccaaaaaaaaaaa
+aaaaaaaaaaaaaaccccccccaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+== c12  쌍둥이
+= a 1a2150
+= b f7ba70
+= c 2b4a95
+= d e8873a
+= e b0512a
+= f f2c94c
+= g f5cda3
+= h fdeaa0
+= i dc9a73
+= j 2a1812
+= k f27d63
+= l d8483d
+= m 8c2233
+= n fbf6ea
+= o e8dfc8
+= p c9bfae
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaabbbbbaccccccccabbbbbaaaaaaaa
+aaaaaaabddddddccccccccbddddddaaaaaaa
+aaaaaabdddddddeccccccbdddddddeaaaaaa
+aaaaaabddddeeeeccffccbdeeddddeaaaaaa
+aaaaaadeeeegggecfhhfcdgggeeeeeaaaaaa
+aaaaaadggggggiecfhhfcegggggggeaaaaaa
+aaaaaaegjgggjieccffccegjgggjieaaaaaa
+aaaaaccggggggiccccccccggggggiccaaaaa
+aaaaacccgigiiccccccccccgigiicccaaaaa
+aaaaaccccciccccccccccccccicccccaaaaa
+aaaacccckkkkkcccccccccckkkkkccccaaaa
+aaaaccckllllllcccccccckllllllcccaaaa
+aaaaccklllllllmccccccklllllllmccaaaa
+aaaaccgklllllmgccccccgklllllmgccaaaa
+aaaacggcklllmcggccccgicklllmcggcaaaa
+aaaacgicklllmccgiccgiccklllmcgicaaaa
+aaaacgicklllmccciigicccklllmcgicaaaa
+aaaaccicklllmccccigccccklllmciccaaaa
+aaaaacckllmllmcccccccckllmllmccaaaaa
+aaaaacclmmcmmmcccccccclmmcmmmccaaaaa
+aaaaacccggcggccccccccccggcggcccaaaaa
+aaaaaaccggcggccccccccccggcggccaaaaaa
+aaaaaaacgiciiccccccccccgiciicaaaaaaa
+aaaaaaacgiciiccccccccccgiciicaaaaaaa
+aaaaaaanopcnopccccccccnopcnopaaaaaaa
+aaaaaaaaaaccccccccccccccccaaaaaaaaaa
+aaaaaaaaaaaccccccccccccccaaaaaaaaaaa
+aaaaaaaaaaaaaaccccccccaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+== c13  외동
+= a 1a2150
+= b fdeaa0
+= c 2b4a95
+= d f2c94c
+= e 91cbf5
+= f 3f7fd8
+= g fbf6ea
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaabaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaabaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaacccbccccaaaaaaaaaaaaaa
+aaaaaaaaaaaccccccbcccccccaaaaaaaaaaa
+aaaaaaaaaaccccccbbbcccccccaaaaaaaaaa
+aaaaaaaaccccccccbbdcccccccccaaaaaaaa
+aaaaaaacccccccccbbdccccccccecaaaaaaa
+aaaaaaacccccccccbbdccccccccccaaaaaaa
+aaaaaacecccccccbbbbdfcccccccccaaaaaa
+aaaaaccccccccffbbbbdfffccccccccaaaaa
+aaaaacccccccfffbbbbdffffcccccccaaaaa
+aaaaaccccccffffbbbbdfffffccccccaaaaa
+aaaacccccccfffbbbbbbbffffcccccccaaaa
+aaaaccccccfbbbbbggggbbbbffccccccaaaa
+aaaacccbbbbbbbbggggggbbbbbbbccccaaaa
+aaaabbbbbbbbbbbggggggbbbbbbbdddcaaaa
+aaaacccbdddbbbbggggggbbbddddccccaaaa
+aaaaccccccfdddbggggggdddffccccccaaaa
+aaaaccccccffffbbggggdfffffccccccaaaa
+aaaacccccccffffbbbbdfffffcccccccaaaa
+aaaaaccccccffffbbbbdfffffccccccaaaaa
+aaaaacccccccfffbbbbdffffcccccccaaaaa
+aaaaaccccccccffbbbbdfffccccccccaaaaa
+aaaaaacccccccccfbbdffcccccccccaaaaaa
+aaaaaaacccccccccbbdccccccccecaaaaaaa
+aaaaaaacceccccccbbdccccccccccaaaaaaa
+aaaaaaaaccccccccbbdcccccccccaaaaaaaa
+aaaaaaaaaacccccccdccccccccaaaaaaaaaa
+aaaaaaaaaaaccccccdcccccccaaaaaaaaaaa
+aaaaaaaaaaaaaacccdccccaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+== c14  스파르타
+= a 4a1426
+= b f2c94c
+= c a8762a
+= d 5c3a1a
+= e 8c2233
+= f fdeaa0
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaabbbbaaaaaaaaaaaaaaaa
+aaaaaaaaaaaabbbbccccbbbbaaaaaaaaaaaa
+aaaaaaaaaabbcccddddddcccbcaaaaaaaaaa
+aaaaaaaaabccdddefffbedddcccaaaaaaaaa
+aaaaaaaabccdeeeefbbbeeeeccccaaaaaaaa
+aaaaaaabccdeeeeefbbceeeeeccccaaaaaaa
+aaaaaabccdeeeeeefbbbceeeeeccccaaaaaa
+aaaaabccdeeeeeefbbbbceeeeeeccccaaaaa
+aaaaabcdeeeeeeefbbbbceeeeeeeccdaaaaa
+aaaabcdeeeeeeeefbbbbbceeeeeeebcdaaaa
+aaaabcdeeeeeeefbbbbbbceeeeeeebcdaaaa
+aaaabcdeeeeeeefbbccbbceeeeeeebcdaaaa
+aaaabdeeeeeeeefbceebbbceeeeeeebdaaaa
+aaabcdeeeeeeefbbceefbbceeeeeeebcdaaa
+aaabcdeeeeeeefbbceefbbbceeeeeebcdaaa
+aaabcdeeeeeeefbceeeefbbceeeeeebcdaaa
+aaabcdeeeeeefbbceeeefbbceeeeeebcdaaa
+aaaabdeeeeeefbbceeeefbbbceeeeebdaaaa
+aaaabcdeeeeefbceeeeeefbbceeeebcdaaaa
+aaaabcdeeeefbbceeeeeebbbceeeebcdaaaa
+aaaabcdeeeebbcceeeeeebcccceeebcdaaaa
+aaaaabcceeffffbbeeeefffffbbebcdaaaaa
+aaaaaccccebbcccceeeebbcccccbccdaaaaa
+aaaaaacccceeeeeeeeeeeeeeeebccdaaaaaa
+aaaaaaacccceeeeeeeeeeeeeebccdaaaaaaa
+aaaaaaaacccceeeeeeeeeeeebccdaaaaaaaa
+aaaaaaaaacccbbbeeeeeebbbccdaaaaaaaaa
+aaaaaaaaaacdcccbbbbbbcccddaaaaaaaaaa
+aaaaaaaaaaaaddddccccddddaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaddddaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 == c15  HOPE
-= a 413d36
-= g 7c8075
-= k 18190f
-= w efecdd
+= a 4a4160
+= b 7a7192
+= c c9bfae
+= d 8f8577
+= e b3abc8
+= f 14111f
+= g fbf6ea
+= h 221c33
+= i 687085
+= j 3a3f52
 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-aakkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkaa
-aakkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkaa
-aakkgggggggggggggggggggggggggggwkkaa
-aakkggggggggggggggggggggggggwwwwkkaa
-aakkggggggggggggggggggggwwwwwwwwkkaa
-aakkgggggggggggggggggwwwwwwwwwwwkkaa
-aakkggggggggggggggwwkwwwwwwwwwwwkkaa
-aakkggggggggggwwwwwwkkwwwwwwwwwwkkaa
-aakkgggggggwwwwwwwwwkkkwwwwwwwwwkkaa
-aakkggggwwwwwwwwwwwwkkkkwwwwwwwwkkaa
-aakkwwwwwwwwwwwwwwwwkkkkkwwwwwwwkkaa
-aakkwwwwwwwwwwwwwwwwkkkkkkwwwwwwkkaa
-aakkwkkkkkkkkkkkkkkkkkkkkkkwwwwwkkaa
-aakkwkkkkkkkkkkkkkkkkkkkkkkkwwwwkkaa
-aakkwkkkkkkkkkkkkkkkkkkkkkkkkwwwkkaa
-aakkwkkkkkkkkkkkkkkkkkkkkkkkkkkwkkaa
-aakkwkkkkkkkkkkkkkkkkkkkkkkkkkkwkkaa
-aakkwkkkkkkkkkkkkkkkkkkkkkkkkwwwkkaa
-aakkwkkkkkkkkkkkkkkkkkkkkkkkwwwwkkaa
-aakkwkkkkkkkkkkkkkkkkkkkkkkwwwwwkkaa
-aakkwwwwwwwwwwwwwwwwkkkkkkwwwwwwkkaa
-aakkwwwwwwwwwwwwwwwwkkkkkwwwwwwwkkaa
-aakkwwwwwwwwwwwwwwwwkkkkwwwwwwwwkkaa
-aakkwwwwwwwwwwwwwwwwkkkwwwwwwwwwkkaa
-aakkwwwwwwwwwwwwwwwwkkwwwwwwwwwwkkaa
-aakkwwwwwwwwwwwwwwwwkwwwwwwwwwwwkkaa
-aakkwwwwwwwwwwwwwwwwwwwwwwwwwwwwkkaa
-aakkwwwwwwwwwwwwwwwwwwwwwwwwwwwwkkaa
-aakkwwwwwwwwwwwwwwwwwwwwwwwwwwwwkkaa
-aakkwwwwwwwwwwwwwwwwwwwwwwwwwwwwkkaa
-aakkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkaa
-aakkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaabbbbbbbbaaaaaaaaaaaaaa
+aaaaaaccccccccccccccccccccccccaaaaaa
+aaaaacccccccccccccccccccccccccdaaaee
+aaaaacccccccccccccccccccccccccdaeeee
+aaaaaccccccccccccccfffcccccccccaaeee
+aaaaaccccccccccccccffffcccccggcaaeee
+aaaaaccccccccccccccfffffccggggcaaeee
+aaaaaccccccccccccccffffhhgggggcaaeee
+aaaaacccfffffffffffffhhhhhggggcaaeee
+aaaaacccfffffffffffhhhhhhhhgggcaaeee
+aaaabcccfffffffffhhhhhhhhhhgggcaaeee
+aaaabcccffffffhhhhhhhhhhhhggggcaaeee
+aaaabcccccccggggggghhhhhhgggggcaaeee
+aaaabcccccggggggggghhhhhggggggcaaeee
+aaaabcccggggggggggghhhhgggggggcaaeee
+aaaabcggggggggggggghhhggggggggcaaeee
+aaaeegggggggggggggggggggggggggcaaeee
+aeeeegggggggggggggggggggggggggcaaeaa
+eeeeeggggggggggggggggggggggggccaaaaa
+eeeeeeccccccccccccccccccccccccaaaaaa
+eeeeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+eeeeeeeeaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+eeeeeeeeeeeeeeeeiiiaaeebbbbbbaaaaaaa
+eeeeeeeeeeeeeeeeiiiaabbbbbbbbaaaaaaa
+eeeeeeeeeeeeeeeeiiiaabbbbbbbaaaaaaaa
+eeeeeeeeeeeeeeeeijjaabbbbbaaaaaaaaaa
+eeeeeeeeeeeeeebbjjjaabbbbaaaaaaaaaaa
+eeeeeeeeeeeeaabbjjjaabaaaaaaaaaaaaaa
+eeeeeeeeeeaaaaaajjjaaaaaaaaaaaaaaaaa
+eeeeeeeeaaaaaaaajjjaaaaaaaaaaaaaaaaa
+eeeeeeaaaaaaaaaajjjaaaaaaaaaaaaaaaaa
+eeeaaaaaaaaaaaaajjjaaaaaaaaaaaaaaaaa
+
+== c29  황금우상
+= a 221c33
+= b fdeaa0
+= c f2c94c
+= d 352d4d
+= e a8762a
+= f 5c3a1a
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaabbbbbbaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaabcccccccaaaaaaaaaaaaaa
+aaaaaaaaaaadbbbccccccbbcdaaaaaaaaaaa
+aaaaaaaaaaddbbccccccccbbddaaaaaaaaaa
+aaaaaaaadddbccccccccccccbdddaaaaaaaa
+aaaaaaaddddbcccccccccccceddddaaaaaaa
+aaaaaaadddbccccccccccccccedddaaaaaaa
+aaaaaaddccbceeeecbcceeeececeddaaaaaa
+aaaaadddcebfbbccfbceccbbfecedddaaaaa
+aaaaadddcebfbcecfbcececbfeefdddaaaaa
+aaaaadddcebceeeecbceeeeeceefdddaaaaa
+aaaaddddefbccccccbceccccceefddddaaaa
+aaaaddddefbccccbbcccccccceffddddaaaa
+aaaaddddddbcccccccceecccceddddddaaaa
+aaaaddddddbccccfeeeefcccceddddddaaaa
+aaaaddddddbccceeeeeeeeccceddddddaaaa
+aaaadddddddccfbbbbbbbbfcedddddddaaaa
+aaaadddddddccffffffffffeedddddddaaaa
+aaaadddddddddefccccccfedddddddddaaaa
+aaaaaddddddddddeeeeeeddddddddddaaaaa
+aaaaaddddddddfffccccfffddddddddaaaaa
+aaaaaddddddcceeeffffeeeceddddddaaaaa
+aaaaaaddddceebeeeeeeeebeeeddddaaaaaa
+aaaaaaaddcebbcbceeeebbcbceeddaaaaaaa
+aaaaaaaddcbcccccceebccccccfddaaaaaaa
+aaaaaaaacebccccceffbccccceefaaaaaaaa
+aaaaaaaaacbccccceffbcccccefaaaaaaaaa
+aaaaaaaaaecccccceffccccccefaaaaaaaaa
+aaaaaaaaaaececeeeffececeefaaaaaaaaaa
+aaaaaaaaabbbbcceeeeeebbbbccaaaaaaaaa
+aaaaaaaaacceeeeffffffcceeeeaaaaaaaaa
 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 == c30  윅 존
-= d 3f4746
-= g a9a58e
-= k 1b1f1f
-= l c6ccc6
-= m 79827f
-= w efece0
-mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm
-mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm
-mmddddddddddddddddddddddddddddddddmm
-mmdddddddddddddddlldddddddddddddddmm
-mmddddddddddddddllllddddddddddddddmm
-mmdddddddlldddddlllldddddlldddddddmm
-mmdddddddllldddlllllldddllldddddddmm
-mmddddddlllllddllllllddlllllddddddmm
-mmddddddlllllldlllllldllllllddddddmm
-mmdddddllllllldlllllldllllllldddddmm
-mmdddddlllllllllllllllllllllldddddmm
-mmdddddkkkkkkkkkkkkkkkkkkkkkkdddddmm
-mmdddddlllllllllllllllllllllldddddmm
-mmdddddkkkkkkkkkkkkkkkkkkkkkkdddddmm
-mmddddddddddwwwwwwwwwgggddddddddddmm
-mmddddddddwwwwwwwwwwwwwgggddddddddmm
-mmdddddddwwwwwwwwwwwwwwwgggdddddddmm
-mmddddddwwwwwwwwwwwwwwwwwwggddddddmm
-mmddddddwwwwwwwwwwwwwwwwwwggddddddmm
-mmddddddwwwkkkkkwwwwkkkkkwggddddddmm
-mmddddddwwwkkkkkwwwwkkkkkwggddddddmm
-mmddddddwwwkkkkkwwwwkkkkkwggddddddmm
-mmddddddwwwkkkkkwwwwkkkkkwggddddddmm
-mmddddddwwwwkkkkwwwwkkkkwwggddddddmm
-mmddddddwwwwwwwwwkkwwwwwwgggddddddmm
-mmddddddwwwwwwwwkkkkwwwwwgggddddddmm
-mmdddddddwwwwwwwkkkkwwwwgggdddddddmm
-mmdddddddwwwwwwwwwwwwwwwgggdddddddmm
-mmddddddddkkkkkkkkkkkkkkkkddddddddmm
-mmdddddddddwwwkwwwkwwwkggdddddddddmm
-mmdddddddddwwwkwwwkwwwkggdddddddddmm
-mmddddddddddwwwwwwwwwgggddddddddddmm
-mmddddddddddddwwwwwwggddddddddddddmm
-mmddddddddddddddddddddddddddddddddmm
-mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm
-mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm
+= a 3a3f52
+= b fdeaa0
+= c 687085
+= d f2c94c
+= e a8762a
+= f f27d63
+= g d8483d
+= h fbf6ea
+= i e8dfc8
+= j c9bfae
+= k 221c33
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaabaaacccbccccaabaaaaaaaaaaa
+aaaaaaaaaabbccccbddccccbdaaaaaaaaaaa
+aaaaaaaaaabddccbddddccbdecaaaaaaaaaa
+aaaaaaaaccbddbbdddddbbddecccaaaaaaaa
+aaaaaaacccbdddddfggdddddeccccaaaaaaa
+aaaaaaacccbdddddgggdddddeccccaaaaaaa
+aaaaaaccccdeeeeeeeeeeeeeecccccaaaaaa
+aaaaaccccchiiiiiiiiiiiiiiccccccaaaaa
+aaaaacccchiiiiiiiiiiiiiiijcccccaaaaa
+aaaaacccchiiiiiiiiiiiiiiijcccccaaaaa
+aaaaccccchiiiiiiiiiiiiiiijccccccaaaa
+aaaaccccchiikkkiiiiikkkiijccccccaaaa
+aaaaccccchikkkkiiiiikkkkijccccccaaaa
+aaaaccccchikkkkiiiiikkkkijccccccaaaa
+aaaaccccchiikkiiiiiiikkiijccccccaaaa
+aaaacccccchiiiiiiiiiiiiijcccccccaaaa
+aaaaccccchiiiiiikkkiiiiiijccccccaaaa
+aaaaccccchiiiiiiikiiiiiiijccccccaaaa
+aaaaaccccciiiiiiiiiiiiiijccccccaaaaa
+aaaaacccccciiiiiiiiiiiijcccccccaaaaa
+aaaaaccccccchiiiiiiiiijccccccccaaaaa
+aaaaaacccccchikiikiikijcccccccaaaaaa
+aaaaaaaccccchikiikiikijccccccaaaaaaa
+aaaaaaaccccchkkkkkkkkkjccccccaaaaaaa
+aaaaaaaaccccchiiiiiiijccccccaaaaaaaa
+aaaaaaaaaaccciiiiiiiijccccaaaaaaaaaa
+aaaaaaaaaaaccciiiiiijccccaaaaaaaaaaa
+aaaaaaaaaaaaaacjjjjjccaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+== c32  1-UP
+= a 1d3326
+= b fdeaa0
+= c f2c94c
+= d fbf6ea
+= e 2f6340
+= f a8762a
+= g 5c3a1a
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaabbbbbbbbcccaaaaaaaaaaaa
+aaaaaaaaaadebcccccccccfffaaaaaaaaaaa
+aaaaaaaaadddcccccccccccfffaaaaaaaaaa
+aaaaaaaaeedccccffffcccccfffeaaaaaaaa
+aaaaaaaeebcccffccccccccccfffeaaaaaaa
+aaaaaaaeebcccfccccccccccfffgeaaaaaaa
+aaaaaaeebcccfccgffcccccccfffgeaaaaaa
+aaaaaeeebccfcccgffbcccbccfffgeeaaaaa
+aaaaaeeebccfcccgffbcccbccfffgeeaaaaa
+aaaaaeebcccfcccgffbcccbcccfffgeaaaaa
+aaaaeeebccfccccgffbccccbccfffgeeaaaa
+aaaaeeebccfccccgffbccccbccfffgeeaaaa
+aaaaeeebccfccccgffbccccbccfffgeeaaaa
+aaaaeeebccfccccgffbccccbccfffgeeaaaa
+aaaaeeebccfccccgffbccccbccfffgeeaaaa
+aaaaeeebccfccccgffbccccbccfffgeeaaaa
+aaaaeeebccfccccgffbccccbccfffgeeaaaa
+aaaaeeebccfccccgffbccccbccfffgeeaaaa
+aaaaaeebcccfcccgffbcccbcccfffgeaaaaa
+aaaaaeeebccfcccgffbcccbccfffgeeaaaaa
+aaaaaeeebccfcccgbbbcccbccfffgeeaaaaa
+aaaaaaeebccccccccccccbcccfffgeaaaaaa
+aaaaaaaeebccccccccccbcccfffgeaaaaaaa
+aaaaaaaeeccccccccccbbcccfffgeaaaaaaa
+aaaaaaaaeecccccbbbbccccfffgeaaaaaaaa
+aaaaaaaaaaecccccccccccfffgaaaaaaaaaa
+aaaaaaaaaaaecccccccccfffgaaaaaaaaaaa
+aaaaaaaaaaaaaffffffffgggaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+== c33  푸른 구슬
+= a 14111f
+= b 91cbf5
+= c 221c33
+= d 3f7fd8
+= e f7ba70
+= f c48b5a
+= g dde3ec
+= h 2b4a95
+= i a3abbb
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaabbbbbbbcaaaaaaaaaaaaaa
+aaaaaaaaaaacbbdddddddbbccaaaaaaaaaaa
+aaaaaaaaaabbeeeeddffdddbdcaaaaaaaaaa
+aaaaaaaacbeeeeeeeddfffddddccaaaaaaaa
+aaaaaaacbeeeeeeeeeddfffddddccaaaaaaa
+aaaaaaabgeeeeeeeeeeddfddddddcaaaaaaa
+aaaaaabgggffffffffffddddddddhcaaaaaa
+aaaaacggggbdfffffffffdddddddhccaaaaa
+aaaaabgggbdddfffffffffddddddbicaaaaa
+aaaaabbbbdddddfffffffddddddbgicaaaaa
+aaaabdddddddddfffffffdddddbggiicaaaa
+aaaabdddbbbbdddffffffddddbgggiicaaaa
+aaaabdbbggggbddfffffdffddbgggihcaaaa
+aaaabbgggggggbddffffddddbgggghhcaaaa
+aaaabggggbbgggbdfffddddbggggbhhcaaaa
+aaaabgggbggbggbddffdddddbbbbhhhcaaaa
+aaaabgggbgggggbddfddddddddddhhhcaaaa
+aaaacggggbgggbddddddbbbddddhhhccaaaa
+aaaaabggggbbbbddddbbgggbdddhhhcaaaaa
+aaaaacbgggggggbbbbgggggbddhhhccaaaaa
+aaaaacdbbgggggggggggggbddhhhhccaaaaa
+aaaaaacddbbbbbbbbbbbbbddhhhhccaaaaaa
+aaaaaaacdbbbbbddddddbbbhhhhccaaaaaaa
+aaaaaaaccgggggbbbbbbgiiiiicccaaaaaaa
+aaaaaaaacciggggggggiiiiiicccaaaaaaaa
+aaaaaaaaaacciiiiiiiiiiicccaaaaaaaaaa
+aaaaaaaaaaaccciiiiiiiccccaaaaaaaaaaa
+aaaaaaaaaaaaaaccccccccaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 == c34  아이스그림
-= c f2d98f
-= k 5a1030
-= p e8467e
-= q a0621f
-= r c8324c
-= t e0a95e
-= v 9c3f96
-= w fdf6e6
-pppppppppppppppppppppppppppppppppppp
-pppppppppppppppppppppppppppppppppppp
-pppppppppppppppppppppppppppppppppppp
-pppppppppppppppppppppppppppppppppppp
-ppppppppppppppkkkkkkkkpppppppppppppp
-ppppppppppppkkcccccvvvkkpppppppppppp
-ppppppppppkkwwwwwcccvvvvkkpppppppppp
-pppppppppkwrrrwwwwcccvvvvckppppppppp
-pppppppppkwrrrrwwwwcccvvvckppppppppp
-ppppppppkwwwrrrrwwwcccvvvvckpppppppp
-ppppppppkwwwwrrrwwwwccvvvvckpppppppp
-pppppppkwwwwwrrrwwwcccvvvvcckppppppp
-pppppppkwwwwwwrrrwwcccvvvvcckppppppp
-pppppppkcwwwwwrrrwccccvvvccckppppppp
-pppppppkccwwwwrrrccccvvvvccckppppppp
-pppppppkcccccrrrccccvvvvcccckppppppp
-pppppppkcccccrrrcccvvvvvrccckppppppp
-ppppppkcccccrrrcccvvvvvrrrccckpppppp
-ppppppkccccrrrrccvvvvvccrrccckpppppp
-ppppppkcccrrrrcccvvvvcccrrccckpppppp
-ppppppkcccrrrcccccvvcccrrrccckpppppp
-pppppppkccccccccccccccrrrrcckppppppp
-ppppppppkkkcccccccccccrrckkkpppppppp
-pppppppppppkcccttttttccckppppppppppp
-ppppppppppppkcqttttttqckpppppppppppp
-pppppppppppppkqqttttqqkppppppppppppp
-pppppppppppppkqqttttqqkppppppppppppp
-ppppppppppppppkqqttqqkpppppppppppppp
-ppppppppppppppkqqqqqqkpppppppppppppp
-pppppppppppppppkqqqqkppppppppppppppp
-pppppppppppppppkqqqqkppppppppppppppp
-ppppppppppppppppkqqkpppppppppppppppp
-ppppppppppppppppkqqkpppppppppppppppp
-pppppppppppppppppkkppppppppppppppppp
-pppppppppppppppppppppppppppppppppppp
-pppppppppppppppppppppppppppppppppppp
+= a 2b4a95
+= b fdeaa0
+= c 3f7fd8
+= d fbf6ea
+= e d8483d
+= f f2c94c
+= g a8762a
+= h d45a9e
+= i f5a3cb
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaabbbbbbbbaaaaaaaaaaaaaa
+aaaaaaaaaaacbbbbbbbbbbbbcaaaaaaaaaaa
+aaaaaaaaaacbddbbbeebbbbbbcaaaaaaaaaa
+aaaaaaaaccbbdbbeeeeeeebbbbccaaaaaaaa
+aaaaaaaccbbbbeeeeeeeeeebbbfccaaaaaaa
+aaaaaaaccbbbbeeebbbbbeeebbfccaaaaaaa
+aaaaaacccbbbeeebbbbbbbeebbfcccaaaaaa
+aaaaaccccbbbeebbbbbbbbeebbfccccaaaaa
+aaaaacccbbbeeebbbbbbbbeebbbfcccaaaaa
+aaaaaccbfbbeeebbbbbbbbeebbfffccaaaaa
+aaaaccbffbbeeebbbbbeeeeebbfffgccaaaa
+aaaaccbffbbeeebbbbbeeebbbbfffgccaaaa
+aaaaccbffbbbeebbbbbbbbbbbbfffgccaaaa
+aaaacccbffbbeeebbbbbbbbbbfffgcccaaaa
+aaaacccbfffbeeebbbbbbbbbffffgcccaaaa
+aaaacccbffffbeeebbbbbbffffffgcccaaaa
+aaaaccccffffffeffffffhhhhffgccccaaaa
+aaaacccccffffffffffffhhhffgcccccaaaa
+aaaaacccccgggffffffffhhhggcccccaaaaa
+aaaaaccccccciggffggfhhhccccccccaaaaa
+aaaaacccccccciiggiighhhccccccccaaaaa
+aaaaaaccccccciiiiiiihhccccccccaaaaaa
+aaaaaaaccccccciiiiiihhcccccccaaaaaaa
+aaaaaaaccccccciiiiihhhcccccccaaaaaaa
+aaaaaaaaccccccciiiihhcccccccaaaaaaaa
+aaaaaaaaaaccccciiiihhcccccaaaaaaaaaa
+aaaaaaaaaaaccccciiihcccccaaaaaaaaaaa
+aaaaaaaaaaaaaacciihhccaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaihaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaihaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 == c35  quite my tempo
-= d 2a1a16
-= g b9b1a0
-= h ece6d8
-= m b6bcc2
-= n 8a6436
-= r b81c12
-= s 3f4347
-= w d9ae70
-ddddddddddddssssssssssssdddddddddddd
-ddddddddddsssmmmmmmmmmmsssdddddddddd
-ddddddddsssmmmmmmmmmmmmmmsssdddddddd
-dddddddssmmmmmmssssssmmmmmmssddddddd
-ddnnnssmmmmmsshhhhhhhhssmmmmmssnnndd
-dnnnnnmmmmshhhhhhhhhhhhhhsmmmmnnnnnd
-nnwwwnnmmshhhhrrrhhhhhhhhhsmmnnwwwnn
-nnwwwwwnnhhrrrrrrhhhhhhhhhhnnwwwwwnn
-nnwwwwwwnnrrrrrhhhhhhhhhhrrrwwwwwwnn
-dnnwwwwwwrrrrrrrhhhhhhhhhrrrwwwwwnnd
-dsnnwwwwwrrrrrrrhhhhhhhhnrrrwwwwnnsd
-dsmnnwwwwrrrrrrrhhhhhhnnwwwwwwwnnmsd
-ssmmsnnwwwrrrrrrrrhhhnnwwwwwwnnsmmss
-smmmshnnrrrrrrnrrrhhnnwwwwwwnngsmmms
-smmmhhhnrrrwwwwrrrhnnwwwwwwnngggmmms
-smmshhhhrrrwwwwwwnnwwwwwwnnnhgggsmms
-smmshhhhhhnrrwwwwwwwwwwwnnhhhgggsmms
-smmshhhhhhhrrwwwwwwwwwwnnhhhhgggsmms
-smmshhhhhhhrrnwwwwwwwwnnhhhhhgggsmms
-smmshhhhhhhhnnwwwwwwwwnnhhhhrrggsmms
-smmshhhhhhhnnwwwwwwwwrrrrrrhrrggsmms
-smmmhhhhhhnnwwwwwwwwwrrrrrrrrrggmmms
-smmmshhhnnnwwwwwwnnwwrrrrrrrrggsmmms
-ssmmshhrrrwwwwwnnhhnnwrrrrrrrggsmmss
-dsmmmhnrrrwwwwnnhhhhnnrrrrrrrngmmmsd
-dssmmnnrrrwwwnnhhhhhhnnrrrrrwnnmmssd
-ddsnnwwwwwwwnnhhhhhhhhnnrrrwwwwnnsdd
-ddnnwwwwwwnnhhhhhhhhhhhrrnwrrrwwnndd
-dnnwwwwwwnnggghhhhhhhhgrrnnrrrwwwnnd
-nnwwwwwwnngggggggggggggrrgnrrrwwwwnn
-nnwwwwwnnmsggggggggggggggsmnnwwwwwnn
-nnwwwnnmmmmmssggggggggssmmmmmnnwwwnn
-dnnnnndssmmmmmmssssssmmmmmmssdnnnnnd
-ddnnndddsssmmmmmmmmmmmmmmsssdddnnndd
-ddddddddddsssmmmmmmmmmmsssdddddddddd
-ddddddddddddssssssssssssdddddddddddd
+= a 14343f
+= b 1f6570
+= c c48b5a
+= d a3abbb
+= e fbf6ea
+= f e8dfc8
+= g dde3ec
+= h 687085
+= i f27d63
+= j d8483d
+= k 8c2233
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaabbbbbbbbaaaaaaaaaaaaaa
+aaaaaaaaccabbbbbbbbbbbbbbaccaaaaaaaa
+aaaaaaaaaccbbbbbbbbbbbbbbccaaaaaaaaa
+aaaaaaaabbccbbbbbbbbbbbbccbbaaaaaaaa
+aaaaaaabbbbccbbbbbbbbbbccbbbbaaaaaaa
+aaaaaaabbbbbccbbbbbbbbccbbbbbaaaaaaa
+aaaaaabbbbbbbccbbbbbbccbbbbbbbaaaaaa
+aaaaabbbbbbbbbccbbbbccbbbbbbbbbaaaaa
+aaaaabbbbbbbbbbccccccbbbbbbbbbbaaaaa
+aaaaabbbbbbbbbbbbccbbbbbbbbbbbbaaaaa
+aaaabbbbbbbbbbbbccccbbbbbbbbbbbbaaaa
+aaaabbbbbbbddddccddccddddbbbbbbbaaaa
+aaaabbbbdddddecceeeeccedddddbbbbaaaa
+aaaabbdddeeeecceeeeeecceeeedddbbaaaa
+aaaabddeeeeecceeeeeeeecceeeeeddbaaaa
+aaaabdeeeeeeffeeeeeeeeffeeeeeedbaaaa
+aaaaggeeeeeeeeeeeeeeeeeeeeeeeehhaaaa
+aaaaigeeeeeeejjjjeeeeeeeeeeeeehjaaaa
+aaaaiggeeeejjjjjjjjeeeeeeeeeehhjaaaa
+aaaaiigggejjjjjjjjjeeeeeeeehhhjjaaaa
+aaaaiiiigggjjjjjjjeeeeeddhhhjjjjaaaa
+aaaaiiiiiiigjjddjjdddddddjjjjjjjaaaa
+aaaagiiiiiiikkiikkiiiijjjjjjjjjgaaaa
+aaaagiigdiiikkiikkiiiijjjjdhjjjgaaaa
+aaaaagigdiikkkkiiiiiiijjjjdhjjgaaaaa
+aaaaagggdiikkkkiiiiiiijjjjdhgggaaaaa
+aaaaaagggggikkiiiiiiiijjjgggggaaaaaa
+aaaaaaaaggggggggggggggggggggaaaaaaaa
+aaaaaaaaaaaggggggggggggggaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 == c36  연속사진
-= b a9a59a
-= g 87816f
-= k 15120e
-= l dcd9cf
-= w f5f2e8
-llllllllllllllllllllllllllllllllllll
-llllllllllllllllllllllllllllllllllll
-llllllllllllllllllllllllllllllllllll
-llllllllllllllllllllllllllllllllllll
-llllllllllllllllllllllllllllllllllll
-llllllllllllllllllllllllllllllllllll
-llllllllllllllllllllllllllllllllllll
-llllllllllllllllllllllllllllllllllll
-lllllllllllllllllllllllllllkkkllllll
-lllllllllllllllllllllllllkkkkkkkllll
-lllllllllllllllwwwwllllllkkkkkkkkkll
-lllllllllllllkkwwwwkllllllkkkkkkklll
-lllkkkkkllllkkkkkkkkklllkkkkklllllll
-lkkkkkkkkllkkkkkkkkkkllkkkkkklllllll
-lkkkkkkkklllkkkkkkkkllkkkkkkllllllll
-llllllllkkkkkkkkkkkkkkkkkkklllllllll
-lllllllkkkkkkkkkkkkkkkkkllllllllllll
-lllllllkkkkkkkkkkkkkkkkkklllllllllll
-lllllllkkkkkkkkkkkkkkkkkklllllllllll
-llllllllkkkkkkkkkkkkkkkkllllllllllll
-lllllllllkkkkkkkkkkkkkklllllllllllll
-lllllllllllkkkkkkkkkklllllllllllllll
-llllllllkkllkkklllkkllkkllllllllllll
-llllllkkkllkkklllkklllllkkllllllllll
-lllllkkkllkkklllkkllllllllkkllllllll
-llllkkkllkkklllkkklllllllllkkkllllll
-lllkkkllkkkkllkkkllllllllllllkkkllll
-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-gggggggggggggggggggggggggggggggggggg
-gggggggggggggggggggggggggggggggggggg
-gggggggggggggggggggggggggggggggggggg
-gggggggggggggggggggggggggggggggggggg
-gggggggggggggggggggggggggggggggggggg
-gggggggggggggggggggggggggggggggggggg
-gggggggggggggggggggggggggggggggggggg
+= a 553222
+= b e8dfc8
+= c c9bfae
+= d c48b5a
+= e 8a5636
+= f 2a1812
+= g fbf6ea
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaabbaabbaabbaabbaabbaabbaabbaabbaa
+aaaabbaabbaabbaabbaabbaabbaabbaabbaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+ccccccccbbbbbbbbbbbbbbbbbbbbcccccccc
+cccccccbbbbbbbbbbbbbbbbbbbbbbccccccc
+cccccccbbbbbbbbbbbbbbbdebbbbbccccccc
+ccccccbbbbbbbbbbbbbbbdeeabbbbbcccccc
+cccccbbbbbbbbbbbbbdddeeabbabbbbccccc
+cccccbbbbbbbbbbbddeaeeabbbaabbbccccc
+cccccbbbbbbbbbbdeaabbeeabafffbbccccc
+ccccbbbbbbbbbbggggbbbbaaafffffbbcccc
+ccccbbbbbbbbbbbggggbbbaafffffffbcccc
+ccaabbbbbbaaaaaaabbbaaffffbbffffcccc
+cccfaaabbaffffffffdaafffffbbbffffccc
+ccccbfaaafffffffffaaffffffbbbbbffccc
+ccccbbbfffffffffffffffffffbbbbbbcccc
+ccccbbbbffffffffffffffffffbbbbbbcccc
+ccccbbbbafffffffffffffffffbbbbbbcccc
+cccccbbbbafffffffffffffffbbbbbbccccc
+cccccbbbbfffbfffbbbbffbfffbbbbbccccc
+cccccbbbaffbbbffbbbbffbbbffbbbbccccc
+ccccccbafbbbbbfbbbbafbbbbbffbbcccccc
+ccccccafbbbbbffbbbafbbbbbbbfbccccccc
+cccccffbbbbbbbbbbbbfbbbbbbbbbccccccc
+ccccccccbbbbbbbbbbbbbbbbbbbbcccccccc
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaabbaabbaabbaabbaabbaabbaabbaabbaa
+aaaabbaabbaabbaabbaabbaabbaabbaabbaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+== c37  진열된 수프
+= a 14343f
+= b a3abbb
+= c dde3ec
+= d 1f6570
+= e d8483d
+= f f27d63
+= g 8c2233
+= h f2c94c
+= i fdeaa0
+= j fbf6ea
+= k a8762a
+= l e8dfc8
+= m c9bfae
+= n c48b5a
+= o 8a5636
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaabbbbbbbbbbbbaaaaaaaaaaaa
+aaaaaaaaabbbccccccccccccbbbaaaaaaaaa
+aaaaaaaabbccccccccccccccccbbaaaaaaaa
+aaaaaaaadbbbccccccccccccbbbdaaaaaaaa
+aaaaaaaddeefbbbbbbbbbbbbgggddaaaaaaa
+aaaaaaaddeeffeeeeeeeeeeggggddaaaaaaa
+aaaaaadddeeffeeeeeeeeeeggggdddaaaaaa
+aaaaaddddeeffeeeeeeeeeeggggddddaaaaa
+aaaaaddddeeffeeeeeeeeeeggggddddaaaaa
+aaaaaddddeeffeeeeeeeeeeggggddddaaaaa
+aaaadddddeeffeeeeeeeeeeggggdddddaaaa
+aaaadddddeeffeeehhhheeeggggdddddaaaa
+aaaadddddeeffeehiihhheeggggdddddaaaa
+aaaadddddeeeeeehihhhheeggggdddddaaaa
+aaaadddddjjjjjjhhhhhkjjlllmdddddaaaa
+aaaadddddjjjjjjhhhhkhjjlllmdddddaaaa
+aaaadddddjjjjjjjhhkkjjjlllmdddddaaaa
+aaaadddddjjjjjjjjjjjjjjlllmdddddaaaa
+aaaaaddddjjjjjjjjjjjjjjlllmddddaaaaa
+aaaaaddddjjjjjjjjjjjjjjlllmddddaaaaa
+aaaaaddddjjjjjjjjjjjjjjlllmddddaaaaa
+aaaaaadddjjjjjjjjjjjjjjlllmdddaaaaaa
+aaaaaaaddjjjjjjjjjjjjjjlllmddaaaaaaa
+aaaaaaadjjjjjjjjjjjjjjjlllljdaaaaaaa
+aaaaaaaadbbbbbjjjjjjjjbbbbbdaaaaaaaa
+nnnnnnnnnnnbbbbbbbbbbbbbbnnnnnnnnnnn
+oooooooooooooooooooooooooooooooooooo
+oooooooooooooooooooooooooooooooooooo
+oooooooooooooooooooooooooooooooooooo
+oooooooooooooooooooooooooooooooooooo
+oooooooooooooooooooooooooooooooooooo
+oooooooooooooooooooooooooooooooooooo
 
 == c38  베르툼누스
-= g a9b268
-= k 2e1e12
-= l e8e6d2
-= n 4f7a26
-= o dd8f5e
-= p 6b3f7e
-= r b8352a
-= y c69430
-kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
-kkkkkkkkkkkkkkkkyyyyykkkkkkkkkkkkkkk
-kkkkkkkkkkkkkkyyyyyyyyykkkkkkkkkkkkk
-kkkkkkkpppppkkyyyyyyyyykkrrrrrkkkkkk
-kkkkkkppllpppkyyyyyyyyykrrrllrrkkkkk
-kkkkkpppllpppyyyyyyyyyyrrrrllrrkkkkk
-kkkkkppppppppyyyyyyyyyyrrrrrrrrkkkkk
-kkkkyypppppppgggggggggggrrrrrrryykkk
-kkkkyyppppggggggggggggggggggrrrryykk
-kkkkyyggggggggggggggggggggggggyykkkk
-kkkkyyggggggggggggggggggggggggyykkkk
-kkkkkggggggggggggggggggggggggggkkkkk
-kkkkkggggkkkkkggggggggkkkkkggggkkkkk
-kkkkkggggkoookggggggggkoookggggkkkkk
-kkkkkggrrrrrggooooooooggrrrrrggkkkkk
-kkkkkgrllrrrrgoooooooogrllrrrrgkkkkk
-kkkkkgrllrrrrgoooooooogrllrrrrgkkkkk
-kkkkkgrrrrrrrgoooooooogrrrrrrrgkkkkk
-kkkkkgrrrrrrrgoooooooogrrrrrrrgkkkkk
-kkkkkggrrrrroooooooooooorrrrrggkkkkk
-kkkkkgrrrrryyyyyyyyyyyyyyrrrrrgkkkkk
-kkkkkgrrrryyyyyyyyyyyyyyyyrrrrgkkkkk
-kkkkkgyyyyyyyyrrrrrrrryyyyyyyygkkkkk
-kkkkkgyyyyyyyyyrrrrrryyyyyyyyygkkkkk
-kkkkkkyyyyyyyyyyyyyyyyyyyyyyyykkkkkk
-kkkkkkyyyyyyyyyyyyyyyyyyyyyyyykkkkkk
-kkkkkkkyyyyyyyyyyyyyyyyyyyyyykkkkkkk
-kkkkkkknnnnnggggggggggggnnnnnkkkkkkk
-kkkknnnnnnnnggggggggggggnnnnnnnnkkkk
-kknnnllllllnggggggggggggnrrrrrrnnnkk
-kknnnllrrllnggggggggggggnrrllrrnnnkk
-kknnnllrrllnggggggggggggnrrllrrnnnkk
-kkknnnlllllnggggggggggggnrrrrrnnnkkk
-kkkknnnnnnnnllllrrrrllllnnnnnnnnkkkk
-kkkkknnnnnnnnnnrrrrrrnnnnnnnnnnkkkkk
-kkkkkkknnnnnnnnnnnnnnnnnnnnnnkkkkkkk
+= a 2b2438
+= b bca1ed
+= c 8161c9
+= d f7ba70
+= e fdeaa0
+= f f2c94c
+= g e8873a
+= h a8762a
+= i b0512a
+= j 4a4160
+= k f5a3cb
+= l d45a9e
+= m 94d68e
+= n 8e2f6e
+= o 479a58
+= p 523a8f
+= q 2f6340
+= r 1d3326
+= s f27d63
+= t fbf6ea
+= u 14111f
+= v d8483d
+= w 8c2233
+= x c48b5a
+= y 8a5636
+= z e8dfc8
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaabbbbaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaabcbbbbaadaaaaaaaaaaaa
+aaeaaaaaaaaeeefbbbbbcddgdgaaaaaaaeaa
+aefeaaaaaaeffffbbbcbcggggggaaaaaefha
+aaeffaaaaaeffffbbbbbcgggggiaaaaefhaa
+aaefffaajjeffffhbcccdgggggikaaeffhaa
+aaaefffbbbfffffhjjjjggggggilklffhaaa
+aaafffbcccbfhmmmmmmmmmmgiilllllfhaaa
+aaaaffbbcccmmmmmmmmmmmmmmlllllnhaaaa
+aaaaafbccccmmmmmmmmmmmmmolllllnaaaaa
+aaaaajcccbcmmmmmmmmmmmmmolllllnaaaaa
+aaaaajjcppoooooqqeeooooooonlnnjaaaaa
+aaaajjjjooqqrrrreeeeqrrqqqqqjjjjaaaa
+aaaajjjjoqqrjjjjeeefjjjjqqqrjjjjaaaa
+aaaajjjjqssstujjeeefjjtusssrjjjjaaaa
+aaaajjjjsvvvuuvjeeefjsuuvvvvjjjjaaaa
+aaaajjjsvvvvvvveeeeefvvvvvvvwjjjaaaa
+aaaajjjsvvvvvvveeeeefvvvvvvvwjjjaaaa
+aaaajjjsvvvvvvveeeeefvvvvvvvwjjjaaaa
+aaaajjjsvvvvvvveeeeefvvvvvvvwjjjaaaa
+aaaaajjjvvvvvmmeeeeffmmvvvvwjjjaaaaa
+aaaaajjjjwwmmmmmmffmmmmmmwwjjjjaaaaa
+aaaaajjjjmmmmooosmosooommmmjjjjaaaaa
+aaaaaajjmmooojjssssssjjooomojjaaaaaa
+aaaaaaajjojjjjjssvssvjjjjjojjaaaaaaa
+aaaaaaajjjjjjjxxvxxvxxjjjjjjjaaaaaaa
+aaaaaaaajjjjjxxxxxxxxxyjjjjjaaaaaaaa
+aaaaaaaaatjjmxxxxxxxxxymjjaaaaaaaaaa
+aaaaaaatttttooxxxxxxxyoomkkkkaaaaaaa
+aaaaaaattttzoooyyyyyyoookkkkklaaaaaa
+aaaaammtttzzoooooooooooooklllmoaaaaa
+aaaamoooozooooooooooooooooooooooaaaa
+aaaamooooooooooooooooooooooooooqaaaa
+aaaooqqqqqqqqqqqqqqqqqqqqqqqqqqqqaaa
 
 == c42  무전기
-= a d7dade
-= b 23242a
-= c 6d727d
-= d afbd9e
-= e 39472f
-= f e2521c
-= g 0e0f12
+= a 1f6570
+= b 352d4d
+= c 221c33
+= d 14111f
+= e 36a3a0
+= f 4f4670
+= g 479a58
+= h 94d68e
+= i fbf6ea
+= j f7ba70
+= k e8873a
+= l b0512a
+= m a3abbb
 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-aaaaaaaaaaaaaggaaaaaaaaaaaaaaaaaaaaa
-aaaaaaaaaaaaaggaaaaaaaaaaaaaaaaaaaaa
-aaaaaaaaaaaaaggaaaaaaaaaaaaaaaaaaaaa
-aaaaaaaaaaaaaggaaaaaaaaaaaaaaaaaaaaa
-aaaaaaaaaaaaaggaaaaaaaaaaaaaaaaaaaaa
-aaaaaaaaaaaaggggaaaaaaaaaaaaaaaaaaaa
-aaaaaaaaaaaaggggaaaaaaaaaaaaaaaaaaaa
-aaaaaaaaaaabggggbbbbbbbbbaaaaaaaaaaa
-aaaaaaaaaabbggggbbbbbbbbbbaaaaaaaaaa
-aaaaaaaaabbbbbbbbccccccccbgaaaaaaaaa
-aaaaaaaaabbbbbbbbccccccccbgaaaaaaaaa
-aaaaaaaaabbbbbbbbbbbbbbbbbgaaaaaaaaa
-aaaaaaaaabbbddddddddddddbbgaaaaaaaaa
-aaaaaaaaabbbddddddddddddbbgaaaaaaaaa
-aaaaaaaaabbbddeedeedeeddbbgaaaaaaaaa
-aaaaaaaaabbbddeedeedeeddbbgaaaaaaaaa
-aaaaaaaaabbbddeedeedeeddbbgaaaaaaaaa
-aaaaaaaaabbbddddddddddddbbgaaaaaaaaa
-aaaaaaaaabbbddddddddddddbbgaaaaaaaaa
-aaaaaaaaabbbbbbbbbbbbbbbbbgaaaaaaaaa
-aaaaaaaaabbfffffffbbbbbbbbgaaaaaaaaa
-aaaaaaaaabbfffffffbbbbbbbbgaaaaaaaaa
-aaaaaaaaabbbbbbbbbbbbbbbbbgaaaaaaaaa
-aaaaaaaaabbfffffffbbbbbbbbgaaaaaaaaa
-aaaaaaaaabbfffffffbbbbbbbbgaaaaaaaaa
-aaaaaaaaabbbbbbbbbbbbbbbbbgaaaaaaaaa
-aaaaaaaaabbccccbccccbccccbgaaaaaaaaa
-aaaaaaaaabbccccbccccbccccbgaaaaaaaaa
-aaaaaaaaabbbbbbbbbbbbbbbbbgaaaaaaaaa
-aaaaaaaaabbccccbccccbccccbgaaaaaaaaa
-aaaaaaaaabbccccbccccbccccbgaaaaaaaaa
-aaaaaaaaabbbbbbbbbbbbbbbbbgaaaaaaaaa
-aaaaaaaaaabccccbccccbccccbaaaaaaaaaa
-aaaaaaaaaaabbbbbbbbbbbbbbaaaaaaaaaaa
+aaaaaaaaaaaabcaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaabcaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaabdaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaabdeeeeeeeeaaaaaaaaaaaaaa
+aaaaaaaaaaaebdeeeeeeeeeeeaaaaaaaaaaa
+aaaaaaaaaaeebdeeeeeeeeeeeeaaaaaaaaaa
+aaaaaaaaeeeebdeeeeeeebeeeeeeaaaaaaaa
+aaaaaaaeeeebbbceeeeebcceeeeeeaaaaaaa
+aaaaaaaeeeebccdeeeeeccdeeeeeeaaaaaaa
+aaaaaaeeeeecbbbbbbbbbbbeeeeeeeaaaaaa
+aaaaaeeeeeebcccccccccccceeeeeeeaaaaa
+aaaaaeeeeefcccccccccccccdeeeeeeaaaaa
+aaaaaeeeeefcgggggggggggcdeeeeeeaaaaa
+aaaaeeeeebfcghhhhhhhhihcdeeeeeeeaaaa
+aaaaeeeeebfcghhhhhhhihhcdeeeeeeeaaaa
+aaaaeeeeebfcghhhhhhhhhhcdeeeeeeeaaaa
+aaaaeeeeebfcghhhhhhhhhhcdeeeeeeeaaaa
+aaaaeeeeebfcghhhhhhhhhhcdeeeeeeeaaaa
+aaaaeeeeebfcccccccccccccdeeeeeeeaaaa
+aaaaeeeeeefcccccccccccccdeeeeeeeaaaa
+aaaaeeeeeefcjjkcccccjjkcdeeeeeeeaaaa
+aaaaaeeeeefckllccccckllcdeeeeeeaaaaa
+aaaaaeeeeefcccccccccccccdeeeeeeaaaaa
+aaaaaeeeeefcccccccccccccdeeeeeeaaaaa
+aaaaaaeeeefcmmmcmmmcmmmcdeeeeeaaaaaa
+aaaaaaaeeefcccccccccccccdeeeeaaaaaaa
+aaaaaaaeeefcmmmcmmmcmmmcdeeeeaaaaaaa
+aaaaaaaaeefcccccccccccccdeeeaaaaaaaa
+aaaaaaaaaafcmmmcmmmcmmmcdeaaaaaaaaaa
+aaaaaaaaaafcccccccccccccdaaaaaaaaaaa
+aaaaaaaaaaaccccccccccccdaaaaaaaaaaaa
+aaaaaaaaaaaadddddddddddaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 == c43  감자 먹는 사람들
-= b 6d5226
-= d 41321c
-= k 120e07
-= l ffe294
-= w caa361
-= y c9973a
-kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
-kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
-kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
-kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
-kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
-kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
-kkkkkkkkkkkkyyyyyyyyyyyykkkkkkkkkkkk
-kkkkkkkkkkkkyyyyyyyyyyyyykkkkkkkkkkk
-kkkkkkkkkkkyyyyyyyyyyyyyykkkkkkkkkkk
-kkkkkkkkkkyyyyyyyyyyyyyyykkkkkkkkkkk
-ddddddddddyyyyyyyyyyyyyyyydddddddddd
-ddddddddddyyyyyyylyyyyyyyyyddddddddd
-dddddddddbbbbbbbbbbbbbbbbbbddddddddd
-dddddddddbbbbbbbbbbbbbbbbbbddwdddddd
-kdddddddbbbbbbbbbbbbbbbbbbwwwwwwwddd
-kkkkkkkdbbbbwwwwwwwwwwwwbwwwwwwwwwdd
-kkkkkkkkkkkkwwwwwwwwwwwwwwwwwwwwwwwd
-kkkkkkkkkkkkwwwwwwwwwwwwwwwwwwwwwwdd
-kkkkkkkkkkkkwwwwwwwwwwwwwkwwwwwwwkdd
-kkkkkkkkkkkkwwwwwwwwwwwwkkkkkwkkkkkd
-dkkkkkkkkkkkwwwwwwwwwwwwwkkkkkkkkkdd
-ddkkkkkkkkkwwwwwwwwwwwwwwkkkkkkkkkdd
-ddkkkkkkkkkwwwwwwwwwwwwwwkkkkkkkkkdd
-ddkkkkkkkkkwwwwwwwwwwwwwwwkkkkkkkddd
-dddkkkkkkkwwwwwwwwwwwwwwwwwwbkbbdddk
-ddddbbkbwwwwwwwwwwwwwwwwwwwwkkkkkkkk
-kdddbbbwwwwwwwwwwwwwwkkkkkkkkkkkkkkk
-kkkkkbbwwwwwwwwwwwwwwkkkkkkkkkkkkkkk
-kkkkkkkkkkwwwwwwwlwwwkkkkkkkkkkkkkkk
-kkkkkkkkkkkkkklllllllkkkkkkkkkkkkkkk
-kkkkkkkkkkkkkklllllllkkkkkkkkkkkkkkk
-kkkkkkkkkkkkkkklllllllkkkkkkkkkkkkkk
-kkkkkkkkkkkkkkkyylyyyykkkkkkkkkkkkkk
-kkkkkkkkkkkkkkkyyyyyyykkkkkkkkkkkkkk
-kkkkkkkkkkkkkkkkyyyyyykkkkkkkkkkkkkk
-dddddddddddddddddddddddddddddddddddd
+= a 2a1812
+= b 553222
+= c fbf6ea
+= d e8dfc8
+= e c9bfae
+= f fdeaa0
+= g 352d4d
+= h 221c33
+= i 14111f
+= j f5cda3
+= k dc9a73
+= l a8634f
+= m f7ba70
+= n 479a58
+= o e8873a
+= p 7a7192
+= q 2f6340
+= r 4a4160
+= s 2b2438
+= t c48b5a
+= u 8a5636
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaabbbaabbbaaaaaaaaaaaaaa
+aaaaaaaaaaabbbbbaaaabbbbbaaaaaaaaaaa
+aaaaaaaaaabbbbbbaaaabbbbbbaaaaaaaaaa
+aaaaaaaabbbbcccccccccccdbbbbaaaaaaaa
+aaaaaaabbbbcddddddddddddebbbbaaaaaaa
+aaaaaaabbbbbdeeeeffeeeeebbbbbaaaaaaa
+aaaaaabbbbbbbbbbffffbbbbbbbbbbaaaaaa
+aaaaabccccdbbbbbfccfbbbbgggggghaaaaa
+aaaaacddddddbbbbffffbbbghhhhhhhiaaaa
+aaaaacdddddebbbbbffbbbbghhhhhhhiaaaa
+aaaacdddjjjkebbbbbbbbbbbhiiiiiibaaaa
+aaaacdddjkkkkbbbbbbbbbbbjkkkkbbbaaaa
+aaaabcdjkkaklbbbbbbbbbbjkakklbbbaaaa
+aaaabddjkkkkjbbbbbbbbbbjkkkklbbbaaaa
+aaaabbdekkkklbbbmmmmbbblkkkklbbbaaaa
+aaaabbbnklllbbbbmmmobbbbllllppbbaaaa
+aaaabnnqqqqnqbbbmmmobbbpprrrrrpraaaa
+aaaanqqqqqqqqqmmmooommprrrrrrrrrraaa
+aaanqqqqqqqqqmmmmmmmmmorrrrrrrrrsaaa
+aaanqqqqqqqqmmmooomooommrrrrrrrrsaaa
+aaanqqqqqqqqmmmommmmmmmorrrrrrrrrsaa
+aaanqqqqqqqcmmmmmmmmommodrrrrrrrsaaa
+tttttttttttttttttttttttttttttttttttt
+tuuuuuuuuuuddddddddddddeeuuuuuuuuuub
+tuuuuuuuuuuuueeeeeeeeeeuuuuuuuuuuuub
+tuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuub
+tuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuub
+tuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuub
+tuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuub
+tuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuub
+tuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuub
+ubbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+== c44  어린 왕자
+= a 479a58
+= b d8483d
+= c 94d68e
+= d 8c2233
+= e f27d63
+= f 4a1426
+= g 1d3326
+= h 2f6340
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaabbbbbbbcaaaaaaaaaaaaaa
+aaaaaaaaaaacbbdddddddbbccaaaaaaaaaaa
+aaaaaaaaaabbeddffffffddbdcaaaaaaaaaa
+aaaaaaaacbeedffeeebffffdddccaaaaaaaa
+aaaaaaacbebbffebbbbbfffddddccaaaaaaa
+aaaaaaabebbdffbbbddbfffdddddcaaaaaaa
+aaaaaacebbbddffbbbdfffdddddfccaaaaaa
+aaaaaccebbbdddddddddddddddddfccaaaaa
+aaaaaccebbeeeeeedddeeeeeddddfccaaaaa
+aaaaaccbeebbbbbbeeebbbbbbddfcccaaaaa
+aaaaccccbbbbbbbbbbbbbbbbbddfccccaaaa
+aaaaccccbbbbbbbbbbbbbbbbbddfccccaaaa
+aaaaccccbbbbbbbbbbbbbbbbbddfccccaaaa
+aaaacccccdbbbbbbbbbbbbbbddfcccccaaaa
+aaaaccccccdbbbbbbbbbbbbddfccccccaaaa
+aaaacccccccdbbbbbbbbbbdffcccccccaaaa
+aaaacccccccdfffbbbbdfffcccccccccaaaa
+aaaacccccccccccfffffgcccccccccccaaaa
+aaaaacccccaaccchggggcccccccccccaaaaa
+aaaaaccaaahhaaaccahgcccccccccccaaaaa
+aaaaacccahhhhhhhcchgcccccccccccaaaaa
+aaaaaaccchhhhhhhhcagccccccccccaaaaaa
+aaaaaaaccchghhhhhgagcccaaaahhaaaaaaa
+aaaaaaacccccgggggghgcaahhhhhgaaaaaaa
+aaaaaaaacccccccccagcahhhhhhgaaaaaaaa
+aaaaaaaaaacccccccagahhhhhhgaaaaaaaaa
+aaaaaaaaaaaccccccaahhhhgggaaaaaaaaaa
+aaaaaaaaaaaaaacccagcgggaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaagaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaagaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaahgaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaahgaaaaaaaaaaaaaaaaaa
 
 == c45  삼미신
-= h c6a97f
-= m f2e7d2
-= o 9e7f5c
-= p 4a3a28
-= s d3bd9c
-= t 6f5940
-tttttttttttttttttttttttttttttttttttt
-tttttttttttttttttttttttttttttttttttt
-tttttttttttttttthhhhhttttttttttttttt
-ttttttttttttttthhhhhootttttttttttttt
-tttttthhhhhttthhhhhhoottthhhhhtttttt
-ttttthhhhhhhtthhhhhhootthhhhhhhttttt
-ttttthhhmmsstthhhhhhoottmmmmhssttttt
-tttttmmmmmsstthhhhhhoottmmmmmssttttt
-tttttmmmmmsstthhhhhhoottmmmmmssttttt
-tttttmmmmmssttthhhhhoottmmmmmssttttt
-ttttttmmmmstttthhhhhhttttmmmmstttttt
-tttttttmmmmtttttmmmmmttttmmmmttttttt
-tttttsmmmssotttsmmmssotttsmmmssotttt
-ttmmsmmmmmssomsmmmmmssomsmmmmmssomtt
-ttmmsmmmmmssomsmmmmmssomsmmmmmssomtt
-ttmssmmmmmssotsmmmmmssotsmmmmmssostt
-ttmssmmmmmssotsmmmmmssotsmmmmmssostt
-ttmmsmmmmmssotsmmmmmssotsmmmmmssomtt
-ttmmsmmmmmssotsmmmmmssotsmmmmmssomtt
-tttmsmmmmmssotsmmmmmssotsmmmmmssottt
-tttttsmmmssotttsmmmssotttsmmmssotttt
-tttttsmmmssotttsmmmssotttsmmmssotttt
-tttttsmmmssotttsmmmssotttsmmmssotttt
-ttttsmmmmmssotsmmmmmssotsmmmmmssottt
-ttttsmmmomssotsmmmomssotsmmmomssottt
-ttttsmmmomssotsmmmomssotsmmmomssottt
-ttttsmmmomssotsmmmomssotsmmmomssottt
-ttttsmmmomssotsmmmomssotsmmmomssottt
-ttttsmmmomssotsmmmomssotsmmmomssottt
-ttttsmmmomssotsmmmomssotsmmmomssottt
-ttttsmmmomssotsmmmomssotsmmmomssottt
-tttssssssssssssssssssssssssssssssttt
-tttppppppppppppppppppppppppppppppttt
-tttttppppppppppppppppppppppppppttttt
-tttttttttttttttttttttttttttttttttttt
-tttttttttttttttttttttttttttttttttttt
+= a 2a1812
+= b 553222
+= c e8dfc8
+= d c9bfae
+= e 8f8577
+= f fbf6ea
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaabbbbbbbbaaaaaaaaaaaaaa
+aaaaaaaccdabbbbbbddbbbbbbaccdaaaaaaa
+aaaaaacceeebbbbbdeeebbbbbcddeeaaaaaa
+aaaaaadffffbbbbbdeeebbbbbffffeaaaaaa
+aaaaaaefffcbbbbbeeeebbbbbfffceaaaaaa
+aaaaaaabffcbbbbbbeebbbbbbffcbaaaaaaa
+aaaaaabbbffbbbbbbccbbbbbbffbbbaaaaaa
+aaaaabbffffffffccddccfffcffffbbaaaaa
+aaaaafffffffffffddddffccfffffffaaaaa
+aaaaaffbffffffcfcddffcfffffcbccaaaaa
+aaaabffbfffffffccddfcffffffcbccbaaaa
+aaaabfcbffffffffcddefffffffcbccbaaaa
+aaaabfbbfffffffcddddeffffffcbbfbaaaa
+aaaafcbbffffffcddddddefffffcbbfcaaaa
+aaaafcbbffffffcddddddefffffcbbfcaaaa
+aaaacbbbffffffcddddddefffffcbbbcaaaa
+aaaabbbbfffffffcdddddefffffcbbbbaaaa
+aaaabbbbffffffccddddeffffffcbbbbaaaa
+aaaaabbbbffffcbcddedebffffcbbbbaaaaa
+aaaaabbbbfffcbbcdebeebbfffcbbbbaaaaa
+aaaaabbbbbffcbbbdebeebbffcbbbbbaaaaa
+aaaaaabbbfffcbbbdebdebbffccbbbaaaaaa
+aaaaaaabffbccbbcebbdebbfcbcfbaaaaaaa
+aaaaaaabfcbccbbcebbdebbfcbccbaaaaaaa
+aaaaaaafcbbbcbbebbbdbbbfbbbfcaaaaaaa
+aaaaaafcaabfccdebbbdebfccbaaccaaaaaa
+aaaadddddddddddddddddddddddddddeaaaa
+aaaadeeeeeeeeeeeeeeeeeeeeeeeeeeeaaaa
+aaaadeeeeeeeeeeeeeeeeeeeeeeeeeeeaaaa
+aaaadeeeeeeeeeeeeeeeeeeeeeeeeeeeaaaa
+aaaadeeeeeeeeeeeeeeeeeeeeeeeeeeeaaaa
+aaaaeeeeeeeeeeeeeeeeeeeeeeeeeeeeaaaa
+
+== c46  프리즘
+= a 14111f
+= b 221c33
+= c b3abc8
+= d 7a7192
+= e 4a4160
+= f d8483d
+= g e8873a
+= h f2c94c
+= i fbf6ea
+= j 94d68e
+= k 3f7fd8
+= l 8161c9
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaabbbbbbbbaaaaaaaaaaaaaa
+aaaaaaaaaaabbbbbbbbbbbbbbaaaaaaaaaaa
+aaaaaaaaaabbbbbbbbbbbbbbbbaaaaaaaaaa
+aaaaaaaabbbbbbbbbbbbbbbbbbbbaaaaaaaa
+aaaaaaabbbbbbbbcdbbbbbbbbbbbbaaaaaaa
+aaaaaaabbbbbbbbcdbbbbbbbbbbbbaaaaaaa
+aaaaaabbbbbbbbcddebbbbbbbbbbbbaaaaaa
+aaaaabbbbbbbbbcddebbbbbbbbbbbbbaaaaa
+aaaaabbbbbbbbcddddebbbbbbbbbbbbaaaaa
+aaaaabbbbbbbbcddddecfffbbbbbbbbaaaaa
+aaaabbbbbbbbcddddcccggffffffffffaaaa
+aaaabbbbbbbbcddccccchggggggfffffffff
+aaaabbbbbbbcdcccccccchhhggggggggffff
+aaaabbbbbbiccccccccccjjhhhhhgggggggg
+aaaabbbbbicdddddddcccejjjjhhhhhhgggg
+aaaabbbiiicddddddddddekkkjjjjhhhhhhg
+aaaabiiiicddddddddddddelkkkjjjjjhhhh
+aaaiiiibbcddddddddddddelllkkkjjjjjjh
+aiiiibbbcddddddddddddddeblllkkkkjjjj
+iiiaabbbcddddddddddddddebbblllkkkkjj
+iiaaabbddeeeeeeeeeeeeeeeebbbllllkkkk
+aaaaaabbbbbbbbbbbbbbbbbbbbbbbbllllkk
+aaaaaaabbbbbbbbbbbbbbbbbbbbbbaaallll
+aaaaaaabbbbbbbbbbbbbbbbbbbbbbaaaalll
+aaaaaaaabbbbbbbbbbbbbbbbbbbbaaaaaaal
+aaaaaaaaaabbbbbbbbbbbbbbbbaaaaaaaaaa
+aaaaaaaaaaabbbbbbbbbbbbbbaaaaaaaaaaa
+aaaaaaaaaaaaaabbbbbbbbaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 == c48  더 굿 더 베드 더 트리플
-= f d19a61
-= k 1d140d
-= n 6d2b1a
-= r bc2a18
-= s 8f6238
-= w ece3cd
-wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
-wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
-wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
-wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
-wwwwwwwwwwwwwwkkkkkkkkwwwwwwwwwwwwww
-wwwwwwwwwwwwwkkkkkkkkkkwwwwwwwwwwwww
-wwwwwwwwwwwwwkkkkkkkkkkwwwwwwwwwwwww
-wwwwwwwwwwwwkkkkkkkkkkkkwwwwwwwwwwww
-wwwwwwwwwwwwkkkkkkkkkkkkwwwwwwwwwwww
-wwwwwwwwwwwkkkkkkkkkkkkkkwwwwwwwwwww
-wwwwwkkkkkkkkkkkkkkkkkkkkkkkkkkwwwww
-wwwwwwwkkkkkkkkkkkkkkkkkkkkkkwwwwwww
-wwwwwwwwwwwwkkkkkkkkkkkkwwwwwwwwwwww
-wwwwwwwwwwwwwffffffffffwwwwwwwwwwwww
-wwwwwwwwwwwwwfkkffffkkfwwwwwwwwwwwww
-wwwwwwwwwwwwwffffffffffwwwwwwwwwwwww
-wwwwwwwwwwwwwfffkkkkfffwwwwwwwwwwwww
-wwwwwwwwwwwwwwsssssssswwwwwwwwwwwwww
-wwwwwwwwwwwwkkksssssskkkwwwwwwwwwwww
-wwwwwwwwwwkkkrrrrrrrrnnkkkwwwwwwwwww
-wwwwwwwwwkkrrrrrrrrrnnkkkkkwwwwwwwww
-wwwwwwwwrrrrrrrrrrrrnnkkkkkkwwwwwwww
-wwwwwwwwrrrrrrrrrrrrnnkkkkkkwwwwwwww
-wwwwwwwrrrrrrrrrrrrnnkkkkkkkkwwwwwww
-wwwwwwwrrrrrrrrrrrnnkkkkkkkkkwwwwwww
-wwwwwwrrrrrrrrrrrrnnkkkkkkkkkkwwwwww
-wwwwwwrrrrrrrrrrrrnnkkkkkkkkkkwwwwww
-wwwwwrrrrrrrrrrrrnnkkkkkkkkkkkkwwwww
-wwwwwrrrrrrrrrrrnnkkkkkkkkkkkkkwwwww
-wwwwwrrrrrrrrrrrnnkkkkkkkkkkkkkwwwww
-wwwwwrrrrrrrrrrrnnkkkkkkkkkkkkkwwwww
-wwwwrrrrrrrrrrrnnkkkkkkkkkkkkkkkwwww
-wwwwrrrrrrrrrrnnkkkkkkkkkkkkkkkkwwww
-wwwwrrrrrrrrrrnnkkkkkkkkkkkkkkkkwwww
-wwwwrrrrrrrrrrnnkkkkkkkkkkkkkkkkwwww
-wwwwrrrrrrrrrnnkkkkkkkkkkkkkkkkkwwww
+= a c9bfae
+= b 8a5636
+= c 553222
+= d 2a1812
+= e e8dfc8
+= f a8634f
+= g dc9a73
+= h f5cda3
+= i c48b5a
+= j f27d63
+= k e8873a
+= l 6b2a1c
+= m b0512a
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaabbbbbbaaaaaaaaaaaaaaa
+aaaaaaaaaaaaabbccddccbcaaaaaaaaaaaaa
+aaaaaaaaaaaebccccccccccceaaaaaaaaaaa
+aaaaaaaaaaeebccccccccccdeeaaaaaaaaaa
+aaaaaaaaeeeebccccccccccdeeeeaaaaaaaa
+aaabbaaeeeeecdddddddddddeeeeeaabcaaa
+aaacccbbbbbbbbbbbbbbbbbbbbbbbbcddaaa
+aaaaaadddddddffffffffffdddddddaaaaaa
+aaaaaeeeeeeeecffffffffceeeeeeeeaaaaa
+aaaaaeeeeeeeecddghgddfceeeeeeeeaaaaa
+aaaaaeeeeeeeeghhghfgggfeeeeeeeeaaaaa
+aaaaeeeeeeeeeghgghfggffeeeeeeeeeaaaa
+aaaaeeeeeeeeeebgggfggfeeeeeeeeeeaaaa
+aaaaeeeeeeeeeebccccccbeeeeeeeeeeaaaa
+aaaaeeeeeeeeeeebbbbiiiiijeeeeeeeaaaa
+aaaaeeeeeeeeeeefbbbbfeeeeeeeeeeeaaaa
+aaaaeeeeeeeekkllllllllkkeeeeeeeeaaaa
+aaaaeeeeeeekmmmllllllmmlleeeeeeeaaaa
+aaaaeeeeeekmmmmmmmmmmmmllleeeeeeaaaa
+aaaaaeeeekmmmmmmmmmmmmllllleeeeaaaaa
+aaaaaeeekmmmmmmmmmmmmmlllllleeeaaaaa
+aaaaaeekmmmmmmmmmmmmmlllllllleeaaaaa
+aaaaaaekmmmmmmmmmmmmmlllllllleaaaaaa
+aaaaaakmmmmmmmmmmmmmllllllllllaaaaaa
+aaaaakmmmmmmmmmmmmmmlllllllllllaaaaa
+aaaaakmmmmmmmmmmmmmllllllllllllaaaaa
+aaaakmmmmmmmmmmmmmmlllllllllllllaaaa
+aaaakmmmmmmmmmmmmmllllllllllllllaaaa
+aaaakmmmmmmmmmmmmlllllllllllllllaaaa
+aaaakmmmmmmmmmmmmlllllllllllllllaaaa
+aaakmmmmmmmmmmmmlllllllllllllllllaaa
+aaakmmmmmmmmmmmmlllllllllllllllllaaa
+aaamlllllllllllllllllllllllllllllaaa
 
 == c49  큰 파도
-= b 4d8ab8
-= d 0c2846
-= n 1b4874
-= s d8c49c
-= w f7f4ea
-ssssssssssssssssssssssssssssssssssss
-ssssssssssssssssssssssssssssssssssss
-ssssssssssssssssssssssssssssssssssss
-ssssssssssssssssssssssssssssssssssss
-sssssssssdddddssssssssssssssssssssss
-sssssssddwwwwwddddssssssssssssssssss
-ssssssdwwnnnnnnnwwddddssssssssssssss
-sssssdwwnnddddddddnnwwddddssssssssss
-ssssdwwnndddddddddddddnnwwdddsssssss
-sssdwwnndddddddddddddddddnnwwddsssss
-ssdwwnnddddddddddddddddddddnnwwdssss
-sdwwnnddddddddddddddddddddddnnwwdsss
-dwwnnddddddddddnnwdsssssdwwnnnwwdsss
-dddddddddddddnnnwwdsssssdwwnnnnwwdss
-ddddddddddddnnnwwdsssssdwwnnnnwwdsss
-ddddddddddddnnnwwdsssssdwwnnnwddssss
-dddddddddddnnnwwdssssssdwwwwddssssss
-dddddddddddnnnwwdsssssssddddssssssss
-ddddddddddnnnwwdssssssssssssssssssss
-ddddddddddnnnwwdssssssssssddssssssss
-dddddddddnnnwwdssssssssssdwwdsssssss
-dddddddddnnnwwdsssssssssdwwwwdssssss
-dddddddddnnnwwdssssssssdwwwwwwdsssss
-dddddddddnnnwwdsssssssdwwwwwwwwdssss
-dddddddddnnnwwdssssssdnnnnnnnnnndsss
-ddddddddddnnnwwdssssdnnnnnnnnnnnndss
-dddddddddddnnnwwdddddnnnnnnnnnnnnnds
-ddddddddddddddddbbbbbbbbbbbbbbbbbbdd
-ddddddddddnnnnnnnnnnnnnnnnnnnnnnnnnn
-ddddddnnnnnnnnnnnnnnnnnnnnnddddddddd
-ddddddddddddddnnwwwwwwwwwnnnnnnddddd
-ddddddddddddddddddddnnnnnnnnnnnnnnnn
-dddddddddddddddddddddddddddddddddddd
-dddddddddddddddddddddddddddddddddddd
-dddddddddddddddddddddddddddddddddddd
-dddddddddddddddddddddddddddddddddddd
+= a 8f8577
+= b fbf6ea
+= c 2b4a95
+= d c9bfae
+= e 3f7fd8
+= f 1a2150
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaabbbbaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaabbbbbbbbbaaaaaaaaaaaaaa
+aaaaaaaaaaabbbbbbbbbbbbbbaaaaaaaaaaa
+aaaaaaaaaabbbbcccccccbbbbbbaaaaaaaaa
+aaaaaaaadbbccccccccccccccbbbaaaaaaaa
+aaaaaaadeccceeeeeeeeeeeccccbbaaaaaaa
+aaaaaaaccceeccccccccccceecccbbaaaaaa
+aaaaaacccecccccddddddccccecccfaaaaaa
+aaaaadcceccccddddddddddcccecccfaaaaa
+aaaaaccecccdddddddddddddccecccfaaaaa
+aaaaacceccdddddddddddddddcecccfaaaaa
+aaaaccecccdddddddddddddddcecccfdaaaa
+aaaaccecccdddddddddddddddcecccfdaaaa
+aaaaccecccdddddddddddddddbbbbfddaaaa
+aaacccecccddddddddddddddbbbbbdddaaaa
+aaacccecccddddddddddddbbbbbbddddaaaa
+aaacccecccdddddddddddbbddbbdddddaaaa
+aaccccecccddddddddddddddddddddddaaaa
+aacccceccccdddddddddddddddddddddaaaa
+aacccceccccddddddddbbddddddddddaaaaa
+aacccccecccdddddddbbbbddddddddbbaaaa
+aaccccceccccdddddfbfbbfdddddbbbbbbaa
+aaccccccecccddddffffffffddbbeeeeebba
+aacccccceccccddffffffffffbeeeeeeeeee
+aacccccccceeeeeeeeeeeeeeeeeeeeeeeeee
+accccccccccceeeeeeeeeeeeeeeeeeeeeeee
+acccccccccccccceeeeeeeeeeeeeeeeeeecc
+cccccccccccccccccceeeeeeeeeeeeecccca
+fcccccccccccccccccccccccccccccccccca
+fffccccccccccccccccccccccccccccccffa
+ffffffccccccccccccccccccccccccffffff
+ffffffffffffffffffffffffffffffffffff
+ffffffffffffffffffffffffffffffffffff
 
 == c50  트리플 엘비스
-= d 767d89
-= k 20222a
-= m a7adb7
-= s d5d8de
-= w f4f4f6
-ssssssssssssssssssssssssssssssssssss
-ssssssssssssssssssssssssssssssssssss
-ssssssssssssssssssssssssssssssssssss
-ssssssssssssssssssssssssssssssssssss
-ssssssssssssssssssssssssssssssssssss
-ssssssssssssssssssssssssssssssssssss
-ssssssssssssssssssssssssssssssssssss
-sssskkkkkkkkkkkkkkkkkkkkkkkkkkkkkkss
-sssskkkkkkkkkkkkkkkkkkkkkkkkkkkkkkss
-ssskkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkks
-sskkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkks
-sssssdddddddsssmmmmmmmsssdddddddssss
-ssssdddddddddsmmmmmmmmmsdddddddddsss
-ssssdddddddddsmmmmmmmmmsdddddddddsss
-ssssdddddddddsmmmmmmmmmsdddddddddsss
-sssddddddddddmmmmmmmmmmdddddddddddss
-ssssdddddddddsmmmmmmmmmsdddddddddsss
-ssssdddddddddsmmmmmmmmmsdddddddddsss
-ssssdddddddddsmmmmmmmmmsdddddddddsss
-sssssdddddddsssmmmmmmmsssdddddddssss
-ssssssdddddsssssmmmmmsssssdddddsssss
-ssssssssdsssssssssmsssssssssdsssssss
-ssddddwwwwwdmmmmwwwwwmkkkkwwwwwkkkks
-ssddddwwwwwdmmmmwwwwwmkkkkwwwwwkkkks
-ssddddwwwwwdmmmmwwwwwmkkkkwwwwwkkkks
-ssdddddwwwddmmmmmwwwmmkkkkkwwwkkkkks
-ssdddddwwwddmmmmmwwwmmkkkkkwwwkkkkks
-ssdddddwwwddmmmmmwwwmmkkkkkwwwkkkkks
-ssddddddwdddmmmmmmwmmmkkkkkkwkkkkkks
-sdddddddwddmmmmmmmwmmkkkkkkkwkkkkkkk
-sddddddddddmmmmmmmmmmkkkkkkkkkkkkkkk
-sddddddddddmmmmmmmmmmkkkkkkkkkkkkkkk
-sddddddddddmmmmmmmmmmkkkkkkkkkkkkkkk
-sddddddddddmmmmmmmmmmkkkkkkkkkkkkkkk
-sddddddddddmmmmmmmmmmkkkkkkkkkkkkkkk
-ssssssssssssssssssssssssssssssssssss
-
-== l01  데칼코마니
-= b 2734c4
-= c 3fc3e6
-= m e12f96
-= o e08a2a
-= p f1efe8
-= r d4243c
-= y f4c452
-pppppppppppppppppppppppppppppppppppp
-pppppppppppppppppppppppppppppppppppp
-pppppppppppppppppppppppppppppppppppp
-ppppppppppopppoppppppopppopppppppppp
-ppppppppppoooppppppppppooopppppppppp
-ppppppppooooooppppppppoooooopppppppp
-ppppppoooooooooppppppooooooooopppppp
-pppppoooooooooooppppoooooooooooppppp
-ppppoooooooooooooyyooooooooooooopppp
-pppooooooooooooooyyooooooooooooooppp
-pppooooooooooooooyyooooooooooooooppp
-pppooooooooooooooyyooooooooooooooppp
-pppooooooooorrrrryyrrrrroooooooooppp
-ppppooooorrrrrrrryyrrrrrrrrooooopppp
-ppppprrrrrrrrrrrryyrrrrrrrrrrrrppppp
-ppppppprrrrrrrrrryyrrrrrrrrrrppppppp
-pppppppppprrrrrrryyrrrrrrrpppppppppp
-ppppppppppppprrrryyrrrrppppppppppppp
-pppppppppppppmmmmyymmmmppppppppppppp
-pppppppppppppmmmmyymmmmppppppppppppp
-pppppppppppmmmmmmyymmmmmmppppppppppp
-ppppppppmmmmmmmmmyymmmmmmmmmpppppppp
-ppppppmmmmmmmmmmmyymmmmmmmmmmmpppppp
-pppppmmmmmmmmmmmmyymmmmmmmmmmmmppppp
-ppppmmmmmmbbbbbbbyybbbbbbbmmmmmmpppp
-ppppmmmmbbbbbbbbbbbbbbbbbbbbmmmmpppp
-ppppcccbbbbbbbbbppppbbbbbbbbbcccpppp
-pppppccccbbbbbbbppppbbbbbbbccccppppp
-ppppppcccccbbbbppppppbbbbcccccpppppp
-pppppppcccccbbbppppppbbbcccccppppppp
-pppppppppcccccppppppppcccccppppppppp
-pppppppppppcccppppppppcccppppppppppp
-pppppppppppppcppppppppcppppppppppppp
-ppppppppppppcppppppppppcpppppppppppp
-pppppppppppppppppppppppppppppppppppp
-pppppppppppppppppppppppppppppppppppp
-
-== l05  녹는 시계
-= b 4a2c19
-= c dccca6
-= e 8d7a55
-= f f1ece0
-= g cdc5b2
-= k 1b1913
-= w 7d4d29
-= x 2a1a12
-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-xxxxxxxxxxxxxxxxcccexxxxxxxxxxxxxxxx
-xxxxxxxxxxxxxxxxcccexxxxxxxxxxxxxxxx
-xxxxxxxxxxxxxxccccccxxxxxxxxxxxxxxxx
-xxxxxxxxxxxccccccccccccxxxxxxxxxxxxx
-xxxxxxxxxxcccccckkcccccccxxxxxxxxxxx
-wwwwwwwwcccccfffkkkkfccccewwwwwwwwww
-wwwwwwwwccccffffkkkkfffceeewwwwwwwww
-wwwwwwwccckkffffkkkkfffkeeeewwwwwwww
-wwwwwwccccfkkfffffffffkkfeeeewwwwwww
-wwwwwwcccfffkkfffffffkkfffeeewwwwwww
-wwwwwcccfffffkkfffffkkfffffeewwwwwww
-wwwwwccckkffffkkfffkkffffkkeeewwwwww
-wwwwwcckkkfffffkkkkkfffffkkeeewwwwww
-wwwwwccckkffffffkkkffffffkkeeewwwwww
-wwwwwccckkffffffkkkffffffkkeewwwwwww
-wwwwwwcccffffffffffffffffgeeewwwwwww
-wwwwwwcccfffffffffffffffgeeeewwwwwww
-wwwwwwwcccfffffffffffffggeeewwwwwwww
-wwwwwwwcccffffffffffffgeeeewwwwwwwww
-wwwwwwwwccfffffkkkkffgeeeeewwwwwwwww
-wwwwwwwwccfffffkkkkfeeeeewwwwwwwwwww
-wwwwwwwwcefffffkkkkeeeeewwwwwwwwwwww
-wwwwwwwweefffffkkkkeeewwwwwwwwwwwwww
-wwwwwwwweeeffffffgeeewwwwwwwwwwwwwww
-bbbbbbbbeeefffffgeeeebbbbbbbbbbbbbbb
-bbbbbbbbbeeefffggeeebbbbbbbbbbbbbbbb
-bbbbbbbbbeeeffggeeebbbbbbbbbbbbbbbbb
-bbbbbbbbbbeeeggeeeebbbbbbbbbbbbbbbbb
-bbbbbbbbbbeeegeeeebbbbbbbbbbbbbbbbbb
-bbbbbbbbbbbeeeeeebbbbbbbbbbbbbbbbbbb
-bbbbbbbbbbbeeeeebbbbbbbbbbbbbbbbbbbb
-bbbbbbbbbbbbeeebbbbbbbbbbbbbbbbbbbbb
-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-
-== r01  태양계
-= b 49a3d6
-= k 05040d
-= l fff4b8
-= o ef8c17
-= r c05a40
-= u 8159bd
-= w e6ebfa
-= y f5c024
-kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
-kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
-kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
-kkkkkkkkkkkkkkwwwwwwwwkkkkkkkkkkkkkk
-kkkkkkkkkkkwwwkkkkkkkkwwwkkkkkkkkkkk
-kkkkkkkkkwwwkkkkkkkkkkkkwwwkkkkkkkkk
-kkkkkkkkwwkkkkkkkkkuuuukkkwwkkkkkkkk
-kkkkkkkwwkkkkkkwwwwuuuukkkkwwkkkkkkk
-kkkkkkwwkkkkwwwkkkkuuuuwkkkkwwkkkkkk
-kkkkkwwkkkkwwkkkkkkuuuuwwkkkkwwkkkkk
-kkkkkwkkkkwkkkkkkkkkkkkkkwkkkkwkkkkk
-kkrrrrkkkwkkkkkkkwwkkkkkkkwkkkwwkkkk
-kkrrrrkkwwkkkkwwwwwwwwkkkkwwkkkwkkkk
-kkrrrrkkwkkkkwwkkkkkkwwkkkkwkkkwkkkk
-kkrrrrkkwkkkwwkkkkkkkkwwkkkwkkkkwkkk
-kkkwkkkwkkkkwkkkyyyykkkwkkkkwkkkwkkk
-kkkwkkkwkkkkwkkyyllyykkwkkkkwkkkwkkk
-kkkwkkkwkkkwwkkyllllykkwwkkkwkkkwkkk
-kkkwkkkwkkkwwkkyllllykbbbkkkwkkkwkkk
-kkkwkkkwkkkkwkkyyllyykbbbkkkwkkkwkkk
-kkkwkkkwkkkkwkkkyyyykkbbbkkkwkkkwkkk
-kkkwkkkkwkkkwwkkkkkkkkwwkkkwkkkkwkkk
-kkkkwkkkwkkkkwwkkkkkkwwkkkkwkkkwkkkk
-kkkkwkkkooookkwwwwwwwwkkkkwwkkkwkkkk
-kkkkwwkkooookkkkkwwkkkkkkkwkkkwwkkkk
-kkkkkwkkooookkkkkkkkkkkkkwkkkkwkkkkk
-kkkkkwwkoooowkkkkkkkkkkwwkkkkwwkkkkk
-kkkkkkwwkkkkwwwkkkkkkwwwkkkkwwkkkkkk
-kkkkkkkwwkkkkkkwwwwwwkkkkkkwwkkkkkkk
-kkkkkkkkwwkkkkkkkkkkkkkkkkwwkkkkkkkk
-kkkkkkkkkwwwkkkkkkkkkkkkwwwkkkkkkkkk
-kkkkkkkkkkkwwwkkkkkkkkwwwkkkkkkkkkkk
-kkkkkkkkkkkkkkwwwwwwwwkkkkkkkkkkkkkk
-kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
-kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
-kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
-
-== r02  수전증
-= b ead6bf
-= d c07f4e
-= e f4fbfe
-= g dcecf6
-= k 8d5733
-= m cfe8f5
-= s e7ab7b
-= w 6fb3d8
-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-bbbbbbbbbmbgggggggggggggggbmbbbbbbbb
-bbbbbbbbbbbgggggggggggggggbbbbbbbbbb
-bbbbbbbmbbbggeeeeeeeeeeeggbbbbbbbbbb
-bbbbbbbbbbbggeeeeeeeeeeeggbbmbbbbbbb
-bbbbbbbbmbbggeeeeeeeeeeeggbbbbbbbbbb
-bbbbbbbbbbbggeeeeeeeeeeeggbbbbbbbbbb
-bbbbbbbbbbbggeeeeeeeeeeeggbbbmbbbbbb
-bbbbbbbbbbbggeeeeeeeeeewggbbbbbbbbbb
-bbbbbbbbbbbggeeeeeeewwwwggbbbbbbbbbb
-bbbbbbbbbbbggeeeeewwwwwwggddssssssbb
-bbbbbbbbbbbggeeebbssssssssddssssssbb
-bbbbbbbbbbbggwwwskksssssssddssssssbb
-bbbbbbbbbbbggwwwbbssssssssddssssssbb
-bbbbbbbbbbbggwwwddddddddddddssssssbb
-bbbbbbbbbbbggwwwwwwwwwwwggddssssssbb
-bbbbbbbbbbbggwwbbsssssssssddssssssbb
-bbbbbbbbbbbggwwskkssssssssddssssssbb
-bbbbbbbbbbbggwwbbsssssssssddssssssbb
-bbbbbbbbbbbggwwdddddddddddddssssssbb
-bbbbbbbbbbbggwwwwwwwwwwwggddssssssbb
-bbbbbbbbbbbggwwwbbssssssssddssssssbb
-bbbbbbbbbbbggwwwskksssssssddssssssbb
-bbbbbbbbbbbggwwwbbssssssssddssssssbb
-bbbbbbbbbbbggwwwddddddddddddssssssbb
-bbbbbbbbbbbggwwwwwwwwwwwggddssssssbb
-bbbbbbbbbbbggwwwwwwwdddsssddssssssbb
-bbbbbbbbbbbgggggggggdddsssddssssssbb
-bbbbbbbbbbbgggggggggdddsssddssssssbb
-bbbbbbbbbbbbbbbbbbbsdddsssddssssssbb
-bbbbbbbbbbbbbbbbbbbsdddsssddssssssbb
-bbbbbbbbbbbbbbbbbbbsdddsssddssssssbb
-bbbbbbbbbbbbbbbbbbbbbbbbbbddssssssbb
-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-
-== r03  더 사일런트
-= b e5dbc2
-= c 6fd2e6
-= d 5c4630
-= e c9e84f
-= g 2f5c46
-= l d8dad4
-= m 6aa081
-= w eafbff
-lllllllllldddlllllllllldddllllllllll
-lllllllllldbgllllllllllgbdllllllllll
-lllllllllldbgllllllllllgbdllllllllll
-lllllllllldbbdlllllllldbbdllllllllll
-llllllllllddbbddggggddbbddllllllllll
-llllllllllldbbbbdmmdbbbbdlllllllllll
-llllllllllllddbbdbbdbbddllllllllllll
-llllllllllllgmddbbbbddggllllllllllll
-llllllllllllgmbdddbdddggllllllllllcl
-lllllllllllgmbbeedbdeebgglllllllcccc
-lllllllllllgmbbeedbdeebgglllllccwwwc
-lllllllllllgmmbdddbdddgggllllccwwwcl
-lllllllllllgmmbbbbbbbbgggllccwwwccll
-llllllllllgmmmmbbbbbbggggdccwwwcllll
-lllllllllgmmbbmmbdddbgbbbdcwwcclllll
-llllllllgmmbbbbmbdddbbbbbdccclllllll
-llllllllgmbbbbbgbbbbbbbbbddddlllllll
-lllllllgmbbbbbggbbbbbgbbggggglllllll
-lllllllgmbbbbmggggggggggggggglllllll
-lllllllgddddmgggggggggggggggglllllll
-llllllgcccddmdddddddddddggggggllllll
-lllllccwwcddgdddddddddddggggggllllll
-llllcwwwccddgggbbbbbbgggggggggllllll
-llccwwwccmmggggbbbbbbgggggggggglllll
-lcwwwccmmmgggggbbbbbbdggggggggglllll
-cwwwccmmmmgggggbbbbbbdggggggggglllll
-cccclgmmmgggggbbbbbbbdggggggggglllll
-lcllllgmggggggbbbbbbbbdgggggggllllll
-lllllllgggggggbbbbbbbbdgggggglllllll
-llllllllggggggbbbbbbbbdggggbglllllll
-llllllllgbbbglgbbbbbbbdlgbbbglllllll
-llllllggbbbbbglggggggglgbbbbbgglllll
-llllllgbbbbbbglllllllllgbbbbbbglllll
-llllllgbbbbbbglllllllllgbbbbbbglllll
-llllllgggggggglllllllllgggggggglllll
-llllllllllllllllllllllllllllllllllll
-
-== r05  석양이 진다
-= a ff8a1e
-= k 230309
-= o e8481f
-= r d4142c
-= w fff4cf
-= x 8c0a1e
-= y ffd24a
-xxxrrrrrrrroooooooooooooorrrrrrrrxxx
-xxrrrrrrrooooaaaaaaaaaaoooorrrrrrrxx
-xxrrrrrroooaaaaaaaaaaaaaaooorrrrrrxx
-xrrrrrroooaaaaayyyyyyaaaaaooorrrrrrx
-rrrrrroooaaayyyyyyyyyyyyaaaooorrrrrr
-rrrrroooaaayyyyyyyyyyyyyyaaaooorrrrr
-rrrrrooaaayyyyywwwwwwyyyyyaaaoorrrrr
-rrrrooaaayyyywwwwwwwwwwyyyyaaaoorrrr
-rrrrooaayyyywwwwwwwwwwwwyyyyaaoorrrr
-rrrooaaayyywwwwwwwwwwwwwwyyyaaaoorrr
-rrrooaaayyywwwwwwwwwwwwwwyyyaaaoorrr
-rrrooaayyywwwwwwwwwwwwwwwwyyyaaoorrr
-rrrooaayyywwwwwwwwwwwwwwwwyyyaaoorrr
-rrrooaayyywwwwwwwwwwwwwwwwyyyaaoorrr
-rrrooaayyywwwwwwwwwwwwwwwwyyyaaoorrr
-rrrooaayyywwwwwwwwwwwwwwwwyyyaaoorrr
-rrrooaayyywwwwwwwwwwwwwwwwyyyaaoorrr
-rrrooaaayyywwwwwwwwwwwwwwyyyaaaoorrr
-rrrooaaayyywwwwkkkwwwwwwwyyyaaaoorrr
-rrrrooaayyyywwwkkkwwwkkkyyyyaaoorrrr
-rrrrooaaayykkkwwkwwwwkkkyyykkkoorrrr
-rrrrrkkkaaykkkykkkwwwykyyyakkkorrrrr
-rrrrrkkkaaaykyykkkyyykkkyaaakoorrrrr
-rrrrrrkooaakkkykkkyyykkkaaakkkrrrrrr
-xrrrrkkkooakkkakkkyyykkkaaokkkrrrrrx
-xxrrrkkkoookkkakkkaaakkkaookkkrrrrxx
-xxrrrkkkrookkkkkkkkkkkaooookkkrrrrxx
-xxxrrkkkrrkkkkkkkkkkkkkkkrrkkkrrrxxx
-xxxxrkkkkkkkkkkkkkkkkkkkkkkkrrrrxxxx
-xxxkkkkkkkkkkkkkkkkkkkkkkkkkkkkkxxxx
-kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
-kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
-kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
-kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
-kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
-kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
-
-== r09  불사의 토템
-= b 8a5a24
-= c e7dca8
-= d 1b1208
-= g 36c24a
-= n 46290f
-= o c68a2e
-= w f7f0d0
-dddddddddddddddddddddddddddddddddddd
-dddddddddddddddddddddddddddddddddddd
-dddddddddddddddddddddddddddddddddddd
-dddddddddddddddooooooddddddddddddddd
-dddddddddddddooooooooooddddddddddddd
-ddddddddddddoooooooooooodddddddddddd
-dddddddddddbbbbbbbbbbbbbbddddddddddd
-dddddddddddnnnnnnnnnnnnnnddddddddddd
-dddddddddddbccccccccccccbddddddddddd
-dddddddddddbnnnncbbcnnnnbddddddddddd
-dddddddddddbgggncbbcgggnbddddddddddd
-dddddoobbbdbgggncbbcgggnbdoobbbddddd
-dddddoobbbdbgggncbbcgggnbdoobbbddddd
-ddddddobbddbgggncbbcgggnbddobbdddddd
-ddddddobbddbnnnncbbcnnnnbddobbdddddd
-ddddddobbddbccccbbbbccccbddobbdddddd
-ddddddobbdddcccnnnnnncccdddobbdddddd
-ddddddobbddddcccnnnncccddddobbdddddd
-ddddddobbddddccccccccccddddobbdddddd
-ddddddobbdddddccccccccdddddobbdddddd
-ddddddobbddddbbccccccbbddddobbdddddd
-ddddddobbddddbbcoooocbbddddobbdddddd
-dddddddbbbbddbboooooobbddbbbbddddddd
-dddddddddbbbbbbcoooocbbbbbbddddddddd
-dddddddddddnnbbccccccbbnnddddddddddd
-dddddddddddddbbccccccbbddddddddddddd
-ddddddddddddddbbccccbbdddddddddddddd
-ddddddddddddddbbccccbbdddddddddddddd
-ddddddddddddddbbbbbbbbdddddddddddddd
-ddddddddddddddbbbbbbbbdddddddddddddd
-dddddddddddddddnnnnnnddddddddddddddd
-ddddddddddddddddnnnndddddddddddddddd
-dddddddddddddddddddddddddddddddddddd
-dddddddddddddddddddddddddddddddddddd
-dddddddddddddddddddddddddddddddddddd
-dddddddddddddddddddddddddddddddddddd
-
-== r13  88날어
-= a 9b9ca6
-= h f4604a
-= k 1d1a26
-= m 4d0a10
-= q 8e0f13
-= r d81f1f
-= s ececf0
-kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
-kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
-kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
-kkkkkkkkkkkkkkksssssskkkkkkkkkkkkkkk
-kkkkkkkkkkkkkksssssssskkkkkkkkkkkkkk
-kkkkkkkkkkkkksshhhhhhsskkkkkkkkkkkkk
-kkkkkkkkkkkkkssrrrrrrsskkkkkkkkkkkkk
-kkkkkkkkkkkkkssqqqqqqsskkkkkkkkkkkkk
-kkkkkkkkkkkkkksssssssskkkkkkkkkkkkkk
-kkkkkkkkkkkkkkksssssskkkkkkkkkkkkkkk
-kkkkkkkkkkkkkkkhhrrqqkkkkkkkkkkkkkkk
-kkkkkkkkassskkkhhrrqqkkksssakkkkkkkk
-kkkkkkkksssskkkhhrrqqkkksssskkkkkkkk
-kkkkkkkkhhrqkkhhrrrrqqkkhhrqkkkkkkkk
-kkkaaakkhhrqkkhhrrrrqqkkhhrqkkaaakkk
-kkkhrqkhhrrqkkrrhhhhrrkkhhrrqkhrqkkk
-kkkhrqkhhrrqkkrhhhhhhrkkhhrrqkhrqkkk
-kkhrrqkhhrrqkkrrqqqqrrkkhhrrqkhrrqkk
-kkhrrqahhrrqaahhrrrrqqaahhrrqahrrqkk
-kkhhrrrrrrrrrrrrrrrrrrrrrrrrrrrrqqkk
-kkhhrrraaaarrraaaaaaaarrraaaarrrqqkk
-kkhhrrraaaarraahhhhhhaarraaaarrrqqkk
-kkhhrrrraaarrahhhhhhhharraaarrrrqqkk
-kkhhrrrrraarraarrrrrraarraarrrrrqqkk
-kkhhrrrrrraarraaaaaaaarraarrrrrrqqkk
-kkkhhrrrrraaaarrrrrrrraaaarrrrrqqkkk
-kkkhhrrrrrrrrrrrrrrrrrrrrrrrrrrqqkkk
-kkkkhhrrrrmmmmmmmmmmmmmmmmrrrrqqkkkk
-kkkkhhrrmmmmmmmmmmmmmmmmmmmmrrqqkkkk
-kkkkkhhrmmmmmmmmmmmmmmmmmmmmrqqkkkkk
-kkkkkkaammmmmmmmmmmmmmmmmmmmaakkkkkk
-kkkkkkkaammmmmmmmmmmmmmmmmmaakkkkkkk
-kkkkkkkkkaaammmmmmmmmmmmaaakkkkkkkkk
-kkkkkkkkkkkkaaammmmmmaaakkkkkkkkkkkk
-kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
-kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
-
-== r14  빌리의 바지
-= d 463d73
-= k 100e18
-= l f1efe9
-= m 6b63a8
-= n 241f3e
-= r a02a26
-nnnnnnnnnnnnnnnndddddmmmmmmmmmmmmmmm
-nnnnnnnnnnnnnnnndddddmmmmmmmmmmmmmmm
-nnnnnnnnnnnnkkkllllllllllmmmmmmmmmmm
-nnnnnnnnnnnkkkkllllllllllkkmmmmmmmmm
-nnnnnnnnnnkkkkkllllllllllkkkmmmmmmmm
-nnnnnnnnnnkkkkklllllllllkkkkmmmmmmmm
-nnnnnnnnnnkkkkklllllllllkkkkmmmmmmmm
-nnnnnnnnnnkkkkkkllllllllkkkkmmmmmmmm
-nnnnnnnnnnkkkkkkkkkkkkkkkkmmmmmmmmmm
-nnnnnnnnnnkkkkkkkkkkkkkkkkmmmmmmmmmm
-nnnnnnnnnnkkkkkkkkkkkkkkkkmmmmmmmmmm
-nnnnnnnnnnkkkkkkkkkkkkkkkkmmmmmmmmmm
-nnnnnnnnnnkkkkkkkkkkkkkkkkmmmmmmmmmm
-nnnnnnnnnnkkllkkkdkkkkllkkkmmmmmmmmm
-nnnnnnnnnnkkllkkkdkkkkllkkkmmmmmmmmm
-nnnnnnnnnnkkllkkkdkkkkllkkkmmmmmmmmm
-nnnnnnnnnnkkllkkkddkkkkllkkkmmmmmmmm
-nnnnnnnnnnkkllkkkddkkkkllkkkmmmmmmmm
-nnnnnnnnnnkkllkkdddkkkkllkkkmmmmmmmm
-nnnnnnnnnnkkllkkddddkkkkllkkmmmmmmmm
-nnnnnnnnnnkkllkkddddkkkkllkkmmmmmmmm
-nnnnnnnnnnkkllkkddddkkkkllkkmmmmmmmm
-nnnnnnnnnnkkllkkdddddkkkkllkmmmmmmmm
-nnnnnnnnnnnkkkkknnnnnkkkkkkknnnnnnnn
-nnnnnnnnnnnkkkkknnnnnkkkkkknnnnnnnnn
-nnnnnnnnnnnlllllnnnnnllllllnnnnnnnnn
-nnnnnnnnnnnlllllnnnnnllllllnnnnnnnnn
-nnnnnnnnnnnlllllnnnnnkkkkkknnnnnnnnn
-nnnnnnnnnkkkkkkkknnnnkkkkkkknnnnnnnn
-rrrrrrrrkkkkkkkkkrrrrrkkkkkkrrrrrrrr
-rrrrrrrrkkkkkkkkrrrrrrrkkkkkrrrrrrrr
-rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr
-rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr
-rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr
-rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr
-rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr
+= a a3abbb
+= b dde3ec
+= c 221c33
+= d 4f4670
+= e 14111f
+= f f5cda3
+= g dc9a73
+= h a8634f
+= i 7a7192
+= j 4a4160
+= k fbf6ea
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaabbbbbbbbaaaaaaaaaaaaaa
+aaaaaaccccabbbbbbbbbbbccccaaaaaaaaaa
+aaaaaccddcccbbbbbbbbbccddcccaaaaaaaa
+aaaaacdcccccccbbbbbbbcdcccccccaaaaaa
+aaaaaccccccccceeeebbbcccccccccaaaaaa
+aaaaacccccccceeddeeebcccccccccaaaaaa
+aaaaacffffffgedeeeeeeeffffffgcaaaaaa
+aaaaacfccfccgeeeeeeeeefccfccgcbaaaaa
+aaaaacffffffgeeeeeeeeeffffffgcbaaaaa
+aaaaacffefefgeffffffgeffefefgcbaaaaa
+aaaabcfffgffgefeefeegefffgffgcbbaaaa
+aaaabbffffffgeffffffgeffffffgbbbaaaa
+aaaabbfffhhfgeffefefgefffhhfgbbbaaaa
+aaaabbbffffgbefffgffgebffffgbbbbaaaa
+aaaabbbbgggbbbffffffgbbbgggbbbbbaaaa
+aaaabbijkgkjjbfffhhfgbijkgkjjbbbaaaa
+aaaaiijjkgkjjjjffffgiijjkgkjjjjbaaaa
+aaaijjjjjkjjjjjjgggijjjjjkjjjjjjaaaa
+aaaijjjjjjjjjjjckgkccjjjjjjjjjjjaaaa
+aaaijjjjjjjjjjcckgkccccjjjjjjjjjaaaa
+aaaijjjjjjjjccccckccccccjjjjjjjjaaaa
+aaaijjjjjjjjccccccccccccjjjjjjjjaaaa
+aaaijjjjjjjjccccccccccccjjjjjjjjaaaa
+aaaijjjjjjjjccccccccccccjjjjjjjjaaaa
+aaaijjjjjjjjccccccccccccjjjjjjjjaaaa
+aaaijjjjjjjjccccccccccccjjjjjjjjaaaa
+aaaijjjjjjjjccccccccccccjjjjjjjjaaaa
+aaaijjjjjjjjccccccccccccjjjjjjjjaaaa
+aaaijjjjjjjjccccccccccccjjjjjjjjaaaa
+aaaijjjjjjjjccccccccccccjjjjjjjjaaaa
+aaaaaaaaaaajccccccccccccaaaaaaaaaaaa
+aaaaaaaaaaajccccccccccccaaaaaaaaaaaa
 
 == r15  교통카드
-= b e2e0e6
-= d 2c0a31
-= l c6c5cf
-= o f5821f
-= p 8b2d92
-= w fbfbfd
-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-bbwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwbb
-bbwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwbb
-bbwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwbb
-bbwwwwwwwppppppppppppppppppwwwwwwwbb
-bbwwwwwppppppppppppppppppppppwwwwwbb
-bbwwwwppppppppppppppppppppppppwwwwbb
-bbwwwwpppppwwwwwwwwwwwwwwpppppwwwwbb
-bbwwwwpppppwwwwwwwwwwwwwwpppppwwwwbb
-bbwwwwppppppppppppppppppppppppwwwwbb
-bbwwwwppppppppppppppppppppppppwwwwbb
-bbwwwwpppwwwwwwwwwwwwwwwwwwpppwwwwbb
-bbwwwwpppwwwwwwwwwwwwwwwwwwpppwwwwbb
-bbwwwwpppwwwwwwwwwwwwwwwwwwpppwwwwbb
-bbwwwwpppwwwwwwwwwwwwwwwwwwpppwwwwbb
-bbwwwwpppwwwwwwwwwwwwwwwwwwpppwwwwbb
-bbwwwwpppwwwwwwwwwwwwwwwwwwpppwwwwbb
-bbwwwwpppwwwwwwwwwwwwwwwwwwpppwwwwbb
-bbwwwwppppppppppppppppppppppppwwwwbb
-bbwwwwppppppppppppppppppppppppwwwwbb
-bbwwwwppooooooppppppppooooooppwwwwbb
-bbwwwwppooooooppppppppooooooppwwwwbb
-bbwwwwppooooooppppppppooooooppwwwwbb
-bbwwwwppppppppppppppppppppppppwwwwbb
-bbwwwwpllllllllllllllllllllllpwwwwbb
-bbwwwwpllllllllllllllllllllllpwwwwbb
-bbwwwwppppppppppppppppppppppppwwwwbb
-bbwwwwwwddddddwwwwwwwwddddddwwwwwwbb
-bbwwwwwwddddddwwwwwwwwddddddwwwwwwbb
-bbwwwwwwddddddwwwwwwwwddddddwwwwwwbb
-bbwwwwwwddddddwwwwwwwwddddddwwwwwwbb
-bbwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwbb
-bbwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwbb
-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-
-== u11  BULLET TIME
-= b 31343d
-= d 5e5d58
-= g 8b8a84
-= h a9a8a2
-= k 121316
-= s c79a74
-= w f6f1db
-hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
-hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
-hhhhhhhhhhhhhhhhhhhssshhhhhhhhhhhhhh
-hhhhhhhhhhhhhhhhhhkssskhhhhhhhhhhhhh
-hhhhhhhhhhhhhhhhhhksskkhhhhhhhhhhhhh
-hhhhhhhhhhhhhhhhhhkkkkkhhhhhhhhhhhhh
-hhhhhhhhhhhhhhhhhkkkkkhhhhhhhhhhhhhh
-hhhhhhhhhhhhhhhhhkkkkhhhhhhhhhhhhhhh
-hhhhhhhhhhhhhhhhkkkkhhhhhhhhhhhhhhhh
-hhhhhhhhhhhhhhhkkkkkhhhhhhhhhhhhhhhh
-hhhhhhhhhhhhhhhkkkkhhhhhhhhhhhhhhhhh
-ddddddddddddddkkkkdddddddddddddddddd
-dddddddddddkkkkkkkdddddddddddddddddd
-ggggggggggkkkkkkkkgggggggggggggggggg
-ggggggggggkkkkkkkkkkkggggggggggggggg
-ggggggggggkkkkkbkkkkkkkggggggggggggg
-gggggggggkkkkkbbwwkkwwkkkggggggggggg
-ggggggggwwkkwwkbbbbbbkkkwwggwwgggggg
-wwggwwgkssskkkkkkbbbbbkkkkkgggggwwgg
-gggggggsssskkkkkkkkkbbkkkkkggggggggg
-gggggggkbsskkkkkkkkkkkkkbkkggggggggg
-gggggggbbbkkkkkkggkkkkkbbbkkgggggggg
-gggggggbbkkkkkkgggggkkkkbbbkkggggggg
-ggggggkbbkkkkkkggggggkkkkbbbkkgggggg
-ggggggbbbkkkkkkgggggggggkkbbkkkggggg
-gggggkbbkkkkkkgggggggggggkkbbkkggggg
-gggggkbbkkkkkkggggggggggggkkkkgggggg
-gggggkbkkkkkkkgggggggggggkkkkkgggggg
-ggggkkkkkkkkkkkggggggggggkkkkkgggggg
-gggkkkkkkkkkkkkkggggggggkkkkkkkkgggg
-ggggkkkkkkkkkkkgggggggggkkkkkkkkgggg
-gggggkkkkkkkkkggggggggggkkkkkkkkgggg
-ddddddddddddddddddddddddkkkkkkkkdddd
-dddddddddddddddddddddddddddddddddddd
-dddddddddddddddddddddddddddddddddddd
-dddddddddddddddddddddddddddddddddddd
-
-== u18  머니건
-= b d8d0c0
-= d 960a12
-= g 2d6b46
-= k 26252a
-= l e4ecdc
-= r e0181f
-= w ffffff
-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-bbbbbbbbbbbbkkkkkkkkkkbbbbbbbbbbbbbb
-bbbbbbbbbbbbkllllllllkbbbbbbbbbbbbbb
-bbbbbbbbbbbbklggllgglkbbbbbbbbbbbbbb
-bbbbbbbbbbbbklggllgglkbbbbbbbbbbbbbb
-bbbbbbbbbbbbkllllllllkbbbbbbbbbbbbbb
-bbbbbbbbbbbbkkkkkkkkkkbbbbbbbbbbbbbb
-bbbkkkkkkkbbbbbbbbbbbbbbbbbbbbbbbbbb
-bbbkrrrrrrkkkkkkkkkkkkkbbbbbbbbbbbbb
-bbbkrrrrrrrrrrrrrrrrrrrkkkkkkkbbbbbb
-bbbkrrwwwwrrrrrrrrrrrrrrrrrrrkbbbbbb
-bbbkrrwwwwwwwwwwwwwwwwwrrrrrrkbbbbbb
-bbbkrrwwwwwwwwwwwwwwwwwwwrrrrkbbbbbb
-bbbkrrrrrrwwwwwwwwwwwwwwwrrrrkbbbbbb
-bbbkrrrrrrrrrrrrrrrrrrrwwrrrrkbbbbbb
-bbbkddddddrrrrrrrrrrrrrrrrrrrkbbbbbb
-bbbkdddddddddddddddddddrrrrrrkbbbbbb
-bbbkkkkkkkdddddddddddddddddddkbbbbbb
-bbbkkkkkkkkkkkrrrrrrrrrrrddkdkbbbbbb
-bbbkllllllllkkrrrrrrrrrrrddkkkbbbbbb
-bbbklggllgglkkrkbkkbrrrrrddkbbbbbbbb
-bbbklggllgglkkrkbkkbrrrrrddkbbbbbbbb
-bbbklgggggglkkrkbkkbrrrrrrddkbbbbbbb
-bbbkllllllllkkrkkkkkrrrrrrddkbbbbbbb
-bbbkkkkkkkkkkkrrrrrrrkrrrrddkbbbbbbb
-bbbbbbbbbbbbbkkkkkkkkkrrrrrddkbbbbbb
-bbbbbbbbkkkkkkkkkkkbbbkrrrrddkbbbbbb
-bbbbbbbbklllllllllkbbbkrrrrddkbbbbbb
-bbbbbbbbklggllggglkbbbkrrrrrddkbbbbb
-bbbbbbbbklggllggglkbbbbkrrrrddkbbbbb
-bbbbbbbbklggggggglkbbbbkrrrrddkbbbbb
-bbbbbbbbklllllllllkbbbbbkkkkkkkkbbbb
-bbbbbbbbkkkkkkkkkkkbbbbbbbbbbbbbbbbb
-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-
-== u19  데스 이터스
-= g c6c3b8
-= k 0d0d0f
-= w f1efe7
-kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
-kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
-kkkkkkkkkkkkwwwwwwwwwwwwkkkkkkkkkkkk
-kkkkkkkkkkkwwwwwwwwwwwwwwkkkkkkkkkkk
-kkkkkkkkkkwwwwwwwwwwwwwwwwkkkkkkkkkk
-kkkkkkkkkkwkkkkkwwwwkkkkkwkkkkkkkkkk
-kkkkkkkkkwwkkkkkkwwkkkkkkwwkkkkkkkkk
-kkkkkkkkkwwkkkkkkwwkkkkkkwwkkkkkkkkk
-kkkkkkkkkwwwkkkkwwwwkkkkwwwkkkkkkkkk
-kkkkkkkkkkwwwwwwwwwwwwwwwwkkkkkkkkkk
-kkkkkkkkkkwwwwwwwkkwwwwwwwkkkkkkkkkk
-kkkkkkkkkkkwwwwwggkkwwwwwkkkkkkkkkkk
-kkkkkkkkkkkkkkkggggggkkkkkkkkkkkkkkk
-kkkkkkkkkkkkkkkgggggkkkkkkkkkkkkkkkk
-kkkkkkkkkkkkkkwggggggggggkkkkkkkkkkk
-kkkkkkkkkkkkkkkgggggggggggkkkkkkkkkk
-kkkkkkkkkkkkkkkkgggggggggggkkkkkkkkk
-kkkkkkkkkkkkkkkkkkkggggggggkkkkkkkkk
-kkkkkkkkkkkkkkkkkkkkgggggggkkkkkkkkk
-kkkkkkkkkkkkkkkkkkgggggggggkkkkkkkkk
-kkkkkkkkkkkkkkkgggggggggggkkkkkkkkkk
-kkkkkkkkkkkkggggggggggggkkkkkkkkkkkk
-kkkkkkkkkkggggggggggggkkkkkkkkkkkkkk
-kkkkkkkkkgggggggggkkkkkkkkkkkkkkkkkk
-kkkkkkkkgggggggkkkkkkkkkkkkkkkkkkkkk
-kkkkkkkkggggkkkkkkkkkkkkkkkkkkkkkkkk
-kkkkkkkkgggggkkkkkkkkkkkkkkkkkkkkkkk
-kkkkkkkkkggggggkkkkkkkkkkkkkkkkkkkkk
-kkkkkkkkkkggggggggkkkkkkkkkkkkkkkkkk
-kkkkkkkkkkkkkgggggggkkkkkkkkkkkkkkkk
-kkkkkkkkkkkkkkkkgggggggkkkkkkkkkkkkk
-kkkkkkkkkkkkkkkkkkkgggggkkkkkkkkkkkk
-kkkkkkkkkkkkkkkkkkkkkkggkkkkkkkkkkkk
-kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
-kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
-kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
-
-== u20  그 탑을 잡아라
-= d 1c1828
-= m 8e3a68
-= n 2f2c4a
-= o ef6f2e
-= p 4c3d63
-= r cf3a2c
-= w fff2c0
-= y ffc64a
-oooooooyyyywwwwwwwwwwwwwwyyyyooooooo
-ooooooyyyywwwwwwwwwwwwwwwwyyyyoooooo
-oooooooyyyywwwwwwwwwwwwwwyyyyooooooo
-oooooooyyyyywwwwwwwwwwwwyyyyyooooooo
-ooooooooyyyywwwwwddwwwwwyyyyoooooooo
-roooooooyyyyyywwwddwwwyyyyyyooooooor
-rooooooooyyyyyyyyddyyyyyyyyoooooooor
-rroooooooooyyyyyyddyyyyyyooooooooorr
-rrrooooooooooyyyyddyyyyoooooooooorrr
-rrrrooooooooooooddddoooooooooooorrrr
-rrrrroooooooooooddddooooooooooorrrrr
-rrrrrrooooooooooddddoooooooooorrrrrr
-rrrrrrrrooooooooddddoooooooorrrrrrrr
-mrrrrrrrrrroooooddddooooorrrrrrrrrrm
-mmmrrrrrrrrrrrrddddddrrrrrrrrrrrrmmm
-mmmmmrrrrrrrrrrddddddrrrrrrrrrrmmmmm
-mmmmmmmrrrrrrrrddddddrrrrrrrrmmmmmmm
-mmmmmmmmmmrrrrrddddddrrrrrmmmmmmmmmm
-pmmmmmmmmmmmmmmddddddmmmmmmmmmmmmmmp
-pppmmmmmmmmmmmmddddddmmmmmmmmmmmmppp
-ppppppmmmmmmmmddddddddmmmmmmmmpppppp
-pppppppppmmmmmddddddddmmmmmppppppppp
-ppppppppppppppddddddddpppppppppppppp
-ppppppppppppppddddddddpppppppppppppp
-pppppppdddppppddddddddppppdddppppppp
-nnnnpppdddppppddddddddppppdddpppnnnn
-nnnnnppddddpppddddddddpppddddppnnnnn
-nnnnnpdddddpppddddddddpppdddddpnnnnn
-nnnnnndddddppddddddddddppdddddnnnnnn
-nnnnnndddddpddddddddddddpdddddnnnnnn
-nnnnnnddddddddddddddddddddddddnnnnnn
-nnnnnddddddddddddddddddddddddddnnnnn
-nnnnddddddddddddddddddddddddddddnnnn
-nnnddddddddddddddddddddddddddddddnnn
-nnddddddddddddddddddddddddddddddddnn
-nddddddddddddddddddddddddddddddddddn
-
-== u22  WHITE ALBUM
-= p 28332c
-= q 5a6c60
-= s 8a9a8d
-= t bdc7ba
-= v 4e5f53
-= w f0f1ec
-wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
-wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
-wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
-wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
-wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
-wwwwwqqppppppppqqwwqqqppppppqqqwwwww
-wwwwwppppppppppppwwqppppppppppqwwwww
-wwwwwpppttttttpppwwppppppppppppwwwww
-wwwwwppttttttttppwwppppttttppppwwwww
-wwwwwppvvvttvvvppwwpptvvttvvtppwwwww
-wwwwwppvvvttvvvppwwppttttttttppwwwww
-wwwwwppttssssttppwwppttssssttppwwwww
-wwwwwppssssssssppwwppssssssssppwwwww
-wwwwwppsssvvsssppwwppsssvvsssppwwwww
-wwwwwppssssssssppwwppssssssssppwwwww
-wwwwwpppsssssspppwwpppsssssspppwwwww
-wwwwwppppssssppppwwppppssssppppwwwww
-wwwwwppppppppppppwwppppppppppppwwwww
-wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
-wwwwwqqppppppppqqwwppppppppppppwwwww
-wwwwwppppppppppppwwppppppppppppwwwww
-wwwwwpppttttttpppwwpppttttttpppwwwww
-wwwwwppptttttttppwwppttttttttppwwwww
-wwwwwpptvvttvvtppwwpptvvttvvtppwwwww
-wwwwwppttttttttppwwppttttttttppwwwww
-wwwwwppttssssttppwwppttssssttppwwwww
-wwwwwppssssssssppwwppssssssssppwwwww
-wwwwwppsvvvvvvsppwwpvvvvvvvvvppwwwww
-wwwwwppsssvvsssppwwppsssvvsssppwwwww
-wwwwwpppsssssspppwwpppsssssspppwwwww
-wwwwwppppssssppppwwppppssssppppwwwww
-wwwwwppppppppppppwwppppppppppppwwwww
-wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
-wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
-wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
-wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
-
-== u23  심장의 색깔은
-= d 1d1b19
-= g 8e8b84
-= k 0b0a0a
-= w f4f2ec
-kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
-kkkkkkkkkkkkkdddddddddkkkkkkkkkkkkkk
-kkkkkkkkkkdddddddddddddddkkkkkkkkkkk
-kkkkkkkkddddwwwwwwwwwwddddkkkkkkkkkk
-kkkkkkkdddwwwwwwwwwwwwwwwdddkkkkkkkk
-kkkkkkdddwwwwwwwwwwwwwwwwwdddkkkkkkk
-kkkkkddwwwwwwwwwwwwwwwwwwwwdddkkkkkk
-kkkkddwwwwwwwgdwwwwddwwwwwwwdddkkkkk
-kkkdddwwwwwgdddwwwwddddwwwwwdddkkkkk
-kkkddwwwwwgddddwwwwdddddwwwwwwddkkkk
-kkddgdwwwgdddddwwwwddddddwwwwwddkkkk
-kkdddwwwgddddddwwwwdddddddwwwwwddkkk
-kkdwwwwwdddddddwwwwddddddddwwwwddkkk
-kddwwwwgdddddddwwwwddddddddwwwwwddkk
-kddwwwwddddddddwwwwddddddddwwwwwddkk
-kddwwwwddddddddwwwwdddddddddwwwwddkk
-kddwwwwddddddddwwwwdddddddddwwwwddkk
-kddwwwwdddddddwwwwwwddddddddwwwwddkk
-kddwwwwddddddwwwwwwwwdddddddwwwwddkk
-kddwwwwdddddwwwwwwwwwwddddddwwwwddkk
-kddwwwwddddwwwwwwwwwwwwddddwwwwwddkk
-kddwwwwwddwwwwwwwwwwwwwwdddwwwwgdkkk
-kkddwwwwdwwwwwwwwwwdwwwwwdwwwwgddkkk
-kkddwwwwwwwwwgdwwwwddwwwwwwwwwdddkkk
-kkddwwwwwwwwgddwwwwdddwwwwwwwwddkkkk
-kkkddwwwdwwwdddwwwwddddwwwwwwgddkkkk
-kkkkddwwwwwwdddwwwwdddwwwwwwgddkkkkk
-kkkkdddwwwwwwwwwwwwdwwwwwwwgdddkkkkk
-kkkkkdddwwwwwwwwwwwwwwwwwwgdddkkkkkk
-kkkkkkdddwwwwwwwwwwwwwwwwgdddkkkkkkk
-kkkkkkkddddwwwwwwwwwwwwgddddkkkkkkkk
-kkkkkkkkkdddddwwwwwwwgddddkkkkkkkkkk
-kkkkkkkkkkkdddddddddddddkkkkkkkkkkkk
-kkkkkkkkkkkkkddddddddkkkkkkkkkkkkkkk
-kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
-kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
-
-== u24  비포 선라이즈
-= d 4a3a6b
-= h 9d99c8
-= o f0b79a
-= p edc9c9
-= q f3e0e4
-= s f8eff0
-= t 9c85b8
-= v 7d7ab0
-ssssssssssssssssssssssssssssssssssss
-ssssssssssssssssssssssssssssssssssss
-sssssssssssssssssssssssddsssssssssss
-sssssssssssssssssssssssddsssssssssss
-sssssssssssssssssssssssddsssssssssss
-sssssssssssssssssssssssddsssssssssss
-sssssssssssssssssssssssddsssssssssss
-ssssssssssssssssssssssttddssssssssss
-qqqqqqqqqqqqqqqqqqqqqqttddqqqqqqqqqq
-qqqqqqqqqqqqqqqqqqqqqqttddqqqqqqqqqq
-qqqqqqqqqqqqqqqqqqqqqqttddqqqqqqqqqq
-qqqqqqqqqqqqqqqqqqqqqttttddqqqqqqqqq
-qqqqqqqqqqqqqqqqqqqqqttttddqqqqqqqqq
-qqqqqqqqqqqqqqqqqqqqqttttddqqqqqqqqq
-qqqqqqqqqqqqqqqqqqqqqttttddqqqqqqqqq
-ppppppppppppppppppppttttttddpppppppp
-ppppppppppppppppppppttttttddpppppppp
-ppppppddddddddddppppttttttddpppppppp
-ppppppddddddddddppppttttttddpppppppp
-ppppppttttttttddpppttttttttddppppppp
-oooooottttttttddooottttttttddooooooo
-oooooottttttttddooottttttttddooooooo
-oooooottddtddtddooottttttttddooooooo
-hhhhhhttddtddtddoottttttttttddhhhhhh
-hhhhhhttddtddtddhhttttttttttddhhhhhh
-hhhhhhttddtddtddhhttttttttttddhhhhhh
-hhhhhhttddtddtddhhttttttttttddhhhhhh
-hhhhhhttddtddtddhhttddtttddtddhhhhhh
-vvvvvvttddtddtddvvttddtttddtddvvvvvv
-vvvvvvttddtddtddvvttddtttddtddvvvvvv
-vvvvvvttddtddtddvvttddtttddtddvvvvvv
-vvvvvvttttttttddvvttddtttddtddvvvvvv
-vvvvvvttttttttddvvttddtttddtddvvvvvv
-vvvvvvttttttttddvvttttttttttddvvvvvv
-dddddddddddddddddddddddddddddddddddd
-dddddddddddddddddddddddddddddddddddd
-
-== u26  SAFETY LAST!
-= d 3a3e44
-= k 141519
-= l cfd5da
-= s 9aa1a8
-= w f4f1e8
-dddddddddsssssssssssssssssssssssssss
-dddddddddsssssssssssssssssssssssssss
-dddddddddssssssssskkksssssssssssssss
-dddddddddsssssskkkkkkkkkssssssssssss
-dddddddddssssskkwwwwwwwkksssssssssss
-dddddddddsssskkwwwkkwwwwkkssssssssss
-dddddddddssskkwwwwkkwwwwwkksssssssss
-dddddddddsskkwwwwwkkwwwwwwkkssssssss
-dddddddddddkwwwwwwkkwwwwwwwkssssssss
-dddddddddddkwwwwwwkkwwwwwwwkssssssss
-ddddddddddkkwwwwwwkkkwwwwwwkksssssss
-ddddddddddkkwwwwwwkkkwwwwwwkksssssss
-ddllldddddkkwwwwwwkkkkwwwwwkksssssss
-ddlllddddddkwwwwwwwwkkwwwwwkssssssss
-ddlllddddddkwwwwwwwwwkkwwwwkssssssss
-ddlllddddddkkwwwwwwwwwkkwwkkssssssss
-ddlllllddssskkwwwwwwwwkkwkksssssssss
-ddlllllddsssskkwwwwwwwwkkkssssssssss
-ddlllllddssssskkwwwwwwwkksssssssssss
-dddddddddsssssskkkkkkkkkkkssssssssss
-dddddddddssssssssskkkssskkssssssssss
-dddddddddsssssssssssssskkkksssssssss
-ddlllldddsssssssssssssskkkksssssssss
-ddlllldddsssssssssssssskkkksssssssss
-ddlllldddsssssssssssskkkkkkkssssssss
-ddlllldddsssssssssssskkkkkkkssssssss
-ddlllldddsssssssssssskkkkkkkssssssss
-ddlllldddsssssssssssskkkkkkkssssssss
-ddlllldddssssssssssskkkkskkkksssssss
-dddddddddsssssssssskkkksskkkksssssss
-dddddddddssssssssskkkkssskkkksssssss
-dddddddddssssssssskkksssskkkssssssss
-dddddddddsssssssssssssssskksssssssss
-dddddddddsssssssssssssssssssssssssss
-dddddddddsssssssssssssssssssssssssss
-dddddddddsssssssssssssssssssssssssss
-
-== u27  Mistake
-= d 9b171d
-= r cc2127
-= w fbf9f4
-wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
-wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
-wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
-wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
-wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
-wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
-wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
-wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwrwwwww
-wwwwwwwwwwwwwwwwwwwwwwwwwwwrrrrrwwww
-wwwwwwwwwwwwwwwwwwwwwwwwwrrrrrrrwwww
-wwwwwwwwwwwwwwwwwwwwwwrrrrrwwrrrwwww
-wwwwwwwwwwwwwwwwwwwrrrrrrwwrwrrrwwww
-wwwwwwwwwwwwwwwwwrrrrrwwwrrrwrrrwwww
-wwwwwwwwwwwwwwwwrrrwwwrrrrrrwrrrwwww
-wwwwwwwwwwwrrrrrrwwrwwrrrwrrwrrrwwww
-wwwwwwwwwrrrrrwwwwrrwwrrrwrrwrrrwwww
-wwwwwwrrrrrwwwrrrwrrwwrrrwrwwrrrwwww
-wwwwwrrrrwwrrwrrrwrrwwrrrwwrrrdwwwww
-wwwwrrrwwrrrrwrrrrrrwwwwwrrdddwwwwww
-wwwwrrrrrrrrrwrrrrrwwwrrrwwwwwwwwwww
-wwwwrrrrrrrrrwrrrwwrrrdddwwwwwwwwwww
-wwwwrrrrrrrrrwwwwrrdddwwwwwwwwwwwwww
-wwwwrrrrrrrwwwrrrddwwwwwwwwwwwwwwwww
-wwwwrrrrrwwrrrdddwwwwwwwwwwwwwwwwwww
-wwwwrrrwwrrdddwwwwwwwwwwwwwwwwwwwwww
-wwwwrrrrrddwwwwwwwwwwwwwwwwwwwwwwwww
-wwwwrrdddwwwwwwwwwwwwwwwwwwwwwwwwwww
-wwwwwdwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
-wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
-wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
-wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
-wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
-wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
-wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
-wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
-wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
-
-== u29  프로선수
-= d 8a8e8b
-= k 26282a
-= l d9dbd6
-= s b0b4b1
-= w f2f3f0
-llllllllllllllllllllllssssssssssssss
-llllllllllllllllllllssssssssssssssss
-lllllllllllllllllllsssssssssssssssss
-llllllllllllllllllssssssssssssssssss
-lllllllllllllllllskkssssssssssssssss
-lllllllllllllllsskkkksssssssssssssss
-llllllllllllllsskkkkkkssskkkssssssss
-lllllllllllllssskkkkkksskkkkssssssss
-llllllllllllssssskkkksskkkkkssssssss
-llllllllllsssssssskkkkkkkkksssssssss
-lllllllllssssssssskkkkkkkkssssssssss
-llllllllsskkkkkkskkkkkkkksssssssssss
-lllllllssskkkkkkkkkkkkkkssssssssssss
-lllllssssskkkkkkkkkkkkkkssssssssssss
-llllsssssssssssskkkkkkkkssssssssssss
-lllssssssssssssssskkkkkkssssssssssss
-llsssssssssssssssskkkkkkssssssssssss
-ssssssssssssssssssskkkkkksssssssssss
-ssssssssssssssssssskkkkkksssssssssss
-sssssssssssssssssskkkkkkksssssssssdd
-sssssssssssssssskkkkkkkkkssssssssddd
-ssssssssssssssskkkkkkkkkkkssssssdddd
-sssssssssssssskkkkkkkkkkkksssssddddd
-sssssssssssskkkkkkkssskkkkkssddddddd
-sssssssssskkkkkkkkssssskkkkkdddddddd
-sssssssskkkkkkkksssssssskkkkdddddddd
-sssssssswwkkkssssssssssskkkkdddddddd
-sssssswwwwwwsssssssssssskkkddddddddd
-sssssswkwwwwssssssssssskkkdddddddddd
-ssssswwwwwwkwsssssssssdkkkdddddddddd
-ssssswwwwwwwwssssssssdkkkkdddddddddd
-sssssswwwkwwsssssssdddkkkddddddddddd
-sssssswwwwwwssssssddddkkkddddddddddd
-sssssssswwsssssssddddddddddddddddddd
-ssssssssssssssssdddddddddddddddddddd
-ssssssssssssssdddddddddddddddddddddd
+= a 523a8f
+= b 8161c9
+= c fbf6ea
+= d bca1ed
+= e e8dfc8
+= f f7ba70
+= g 91cbf5
+= h fdeaa0
+= i f2c94c
+= j a8762a
+= k 7a7192
+= l 2b1d4f
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaabbbbbbbbaaaaaaaaaaaaaa
+aaaaaaaaaaabbbbbbbbbbbbbbaaaaaaaaaaa
+aaaaaaaaaabbbbbbbbbbbbbbbbaaaaaaaaaa
+aaaaaaaabbbbbbbbbbbbbbbbbbbbaaaaaaaa
+aaaaaccccccccccccccccccccccccccaaaaa
+aaaaccccccccccccccccccccccccccccaaaa
+aaaaccccddddddddccccccccccccccceaaaa
+aaaacccdbaffffdbbcccccccccccccceaaaa
+aaaaccdbaaaaaaaaaaccccccccccccceaaaa
+aaaaccbggggggggggaccccccccccccceaaaa
+aaaaccbggggggggggaccchhhhhhhicceaaaa
+aaaaccbggggggggggbccchiiiiiijcceaaaa
+aaaaccdggggggggggbccchiiiiiijcceaaaa
+aaaaccdggggggggggbccchjjjjjjjcceaaaa
+aaaaccdddddddddddaccchiiiiiijcceaaaa
+aaaaccdddbbbbbbdaaccchiiiiiijcceaaaa
+aaaaccbhhbbbbbahhacccijjjjjjjcceaaaa
+aaaaccbaaaaaaaaaaaccccccccccccceaaaa
+aaaacckkkkkkkkkkkkccccccccccccceaaaa
+aaaacccllccccccllcccccccccccccceaaaa
+aaaacccllccccccllcccccccccccccceaaaa
+aaaaccccccccccccccccccccccccccceaaaa
+aaaaccccccccccccccccccccccccccceaaaa
+aaaaaceeeeeeeeeeeeeeeeeeeeeeeeeaaaaa
+aaaaaaaabbbbbbbbbbbbbbbbbbbbaaaaaaaa
+aaaaaaaaaabbbbbbbbbbbbbbbbaaaaaaaaaa
+aaaaaaaaaaabbbbbbbbbbbbbbaaaaaaaaaaa
+aaaaaaaaaaaaaabbbbbbbbaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 == u31  딱정벌레의 도로
-= a 5f6360
-= b 5d7f9c
-= e 32552a
-= f d6a67f
-= g 4e7a3e
-= k 1e2027
-= s a9bccb
-= w e8e6dc
-ssssssssssssssssssssssssssssssssssss
-ssssssssssssssssssssssssssssssssssss
-ssssssssssssssssssssssssssssssssssss
-gggggggggggggsssssssssgggggggggggggg
-eeeeeeeeggggggggggggggggggeeeeeeeeee
-eeeeeeeeggggggggggggggggggeeeeeeeeee
-eeeeekkkggggkkkggggkkkggggkkkeeeeeee
-aaaaakkkaaaakkkaaaakkkaaaakkkaaaaaaa
-aaaaakfkaaaakfkaaaakfkaaaakfkaaaaaaa
-aaakwwwwwkakkkkkaakkkkkaabbbbbaaaaaa
-aaakwwwwwkakkkkkaakkkkkaabbbbbaaaaaa
-aaakwwwwwkakkkkkaakkkkkaabbbbbaaaaaa
-aaakwwwwwkakkkkkaakkkkkaabbbbbaaaaaa
-aaakwwwwwkakkkkkaakkkkkaabbbbbaaaaaa
-aaakwwwwwkakkkkkaakkkkkaabbbbbaaaaaa
-aaakwwwwwkakkkkkaakkkkkaabbbbbaaaaaa
-aaakwwwwwkakkkkkaakkkkkaabbbbbaaaaaa
-aaakwwwwwkakkkkkaakkkkkaabbbbbwwwwww
-aaakwwwwwkakkkkkaakkkkkawbbbbbwwwwww
-aaakwwwwwkakkkkkaakkkkkwwbbbbbaaaaaa
-aaakwwkwwkakkwkkwwkkwkkwabbabbaaaaaa
-aaakwwkwwkwkkwkkwwkkakkaabbabbwwwwww
-wwwkwwkwwkwkkakkaakkakkawbbwbbwwwwww
-wwwkwwkwwkakkakkaakkwkkwwbbwbbwwwwww
-aaakwwkwwkakkwwkkwkkwwkkwbbwwbbaaaaa
-aaakwwkwwkwkkwwkkwkkwwkkabbaabbaaaaa
-wwwkwwkwwkwkkwwkkwkkaakkabbaabbaaaaa
-wwwwwwwwwwwwaaaaaaaaaaaaaaaaaawwwwww
-wwwwwwaaaaaaaaaaaaaaaaaawwwwwwwwwwww
-aaaaaaaaaaaaaaaaaawwwwwwwwwwwwwwwwww
-aaaaaaaaaaaawwwwwwwwwwwwwwwwwwwwwwww
-aaaaaawwwwwwwwwwwwwwwwwwwwwwwwaaaaaa
-wwwwwwwwwwwwwwwwwwwwwwwwaaaaaaaaaaaa
-wwwwwwwwwwwwwwwwwwaaaaaaaaaaaaaaaaaa
-wwwwwwwwwwwwaaaaaaaaaaaaaaaaaaaaaaaa
-wwwwwwaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+= a 1d3326
+= b 2f6340
+= c 553222
+= d 221c33
+= e f5cda3
+= f 3f7fd8
+= g a3abbb
+= h fbf6ea
+= i 2b4a95
+= j 687085
+= k 14111f
+= l e8dfc8
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaabbbbbbbbaaaaaaaaaaaaaa
+aaaaaaaaaaabbbbbbbbbbbbbbaaaaaaaaaaa
+aaaaaaaccabbbbddbbbbbddbbbaaccaaaaaa
+aaaaaacccebbbdddebbbdddebbbccceaaaaa
+aaaaaacceeebbddeeebbddeeebbcceeeaaaa
+aaaaaaceeeebbdeeeebbdeeeebbceeeeaaaa
+aaaaaabeeebbbbeeebbbbeeebbbbeeeaaaaa
+aaaaabbeebbbbbeebbbbbeebbbbbeebaaaaa
+aaaaabfffbbbbgggbbbbdddbbbbhhhbaaaaa
+aaaaafffffbbgggggbbdddddbbhhhhhaaaaa
+aaaabfffffbbgggggbbdddddbbhhhhhbaaaa
+aaaabfffffbbgggggbbdddddbbhhhhhbaaaa
+aaaabfffffebgggggebdddddebhhhhheaaaa
+aaaabfffffbbgggggbbdddddbbhhhhhbaaaa
+aaaabbiffbbbbjggbbbbkddbbbblhhbbaaaa
+aaaabbifffbbjjgggbbkkdddbbllhhbbaaaa
+aaaabbibffbbjjbggbbkkbddbbllbhbbaaaa
+aaaabiibffbbjjbggbbkkbddbbllbhhbaaaa
+aaaaaiibffbbjjbggbbkkbddbbllbhhaaaaa
+aaaaaiibbfbbjbbbgbbkbbbdbblbbhhaaaaa
+aaaaaibbbffjjbbbggkkbbbddllbbbhaaaaa
+aaaaaibbbbfjbbbbbgkbbbbbdlbbbbhaaaaa
+aaaaaiabbbfjbbbbbgkbbbbbdlbbbahaaaaa
+aaaaaiabbbfjbbbbbgkbbbbbdlbbbahaaaaa
+aaaaakkhhkkkkbhhkkkkbbhkkkkhakkaaaaa
+aaaaaahhhhhhbbhhhhhhbbhhhhhhaaaaaaaa
+aaaaaahhhhhhbbhhhhhhbbhhhhhhaaaaaaaa
+aaaaaahhhhhhaahhhhhhbbhhhhhhaaaaaaaa
+aaaaaahhhhhhaahhhhhhaahhhhhhaaaaaaaa
+aaaaaahhhhhhaahhhhhhaahhhhhhaaaaaaaa
+aaaaaahhhhhhaahhhhhhaahhhhhhaaaaaaaa
+aaaaaahhhhhhaahhhhhhaahhhhhhaaaaaaaa
+
+== u11  BULLET TIME
+= a 479a58
+= b f5cda3
+= c dc9a73
+= d 94d68e
+= e a8634f
+= f 221c33
+= g 14111f
+= h dde3ec
+= i a3abbb
+= j 1a1424
+= k 6e3b39
+= l 352d4d
+= m 4f4670
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaabcaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaadddcedddaaaaaaaaaaaaaa
+aaaaaaaaaaadddddfgdddddddaaaaaaaaaaa
+aaaaaaaaaadddddfgdddddddddaaaaaaaaaa
+aaaabeaaddddddfggdddddddddddaaaaaaaa
+aaabeffffddddfggdddddddddddddaaaaaaa
+aaaaaaaggggffgggdddhhhiiiddddaaaaaaa
+aaaaaadddfgggfffddhhhiiiiiiiidaaaaaa
+aaaabbccefgggggggddhiiiiiddddddaaaaa
+aaagjjccklggggggggdddddddddddddaaaaa
+aaagcccelllggggggggddddddddddddaaaaa
+aaaggccellllggggggggddddddddddddaaaa
+aaaageemlllllgggggggddddddddddddaaaa
+aaaaddmllllllfgggggggffdddddddddaaaa
+aaaaddmllllllfdggggggggffdddddddaaaa
+aaaaddmllllllfddgglllllggfgdddddaaaa
+aaaaddmllllllfdddglfffffggggddddaaaa
+aaaaddmllllllfdddddffffffggggdddaaaa
+aaaaddmllllllfddddddffffffgggdddaaaa
+aaaaamlllllllfdddddddfffffgggddaaaaa
+aaaaamlllllllfddddddddlfffggdddaaaaa
+aaaaamllllllllfdddddddlfffggdddaaaaa
+aaaaamllllllllfddddddlfffgggddaaaaaa
+aaaamlllllllllfddddddlffgfggdaaaaaaa
+aaaamllllfllllfdddddlffgdfggdaaaaaaa
+aaaalffffdfffffdddddlfgddfggaaaaaaaa
+aaaaaaaaaadddddddddffgggdgggggaaaaaa
+aaaaaaaaaaaddddddddddddddaaaaaaaaaaa
+aaaaaaaaaaaaaaddddddddaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+== u18  머니건
+= a c9bfae
+= b 94d68e
+= c 479a58
+= d 2f6340
+= e e8dfc8
+= f f27d63
+= g 8c2233
+= h d8483d
+= i 4a1426
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaabbbbbbbbbbcaaaaaaaaaaa
+aaaaaaaaaaaaaabcccccccccdaaaaaaaaaaa
+aaaaaaaaaaaeeebccccddcccdaaaaaaaaaaa
+aaaaaaaaaaeeeebccccddcccdeaaaaaaaaaa
+aaaaaaaaeeeeeebcccccccccdeeeaaaaaaaa
+aaaaaaaeeeeeeecddddddddddeeeeaaaaaaa
+aaaaaaaeeeeeeeeeeeeeeeeeeeeeeaaaaaaa
+aaaaaaeeeeeeeeeeeeeeeeeeeeeeeeaaaaaa
+aaaaffffffffffffffffffffffeeeeeaaaaa
+aaaffffffffffffffffffffffgeeeeeaaaaa
+aaafffffffffffffffffffffggeeeeeaaaaa
+aaafhhhhhhhhhhhhhhhhhhhgggbbbbbbcaaa
+aaafhffffffffffffffhhhhgggccccccdaaa
+aaafhhhhhhhhhhhhhhhhhhhgggcddcccdaaa
+aaafhhhhhhhhhhhhhhhhhhhgggcddcccdaaa
+aaafhhhhhhhhhhhhhhhhhhhgggccccccdaaa
+aaafhhhhhhhhhhhhhhhhhhhgggdddddddaaa
+aaahhhhhhhhhhhhhhhhhhhhggeeeeeeeaaaa
+aaaahgggggggggggggggggggeeeeeeeeaaaa
+aaaaaeefhhhhhggiieeggeeeeeeeeeeaaaaa
+aaaaaeefhhhhhggeieeggeeeeeeeeeeaaaaa
+aaaaaeefhhhhhggeeeeggeeeeeeeeeeaaaaa
+aaaaaaefhhhhhggeeeeggebbbbbbbbcaaaaa
+aaaaaaafhhhhgggggggggebcccccccdaaaaa
+aaaaaaafhhhhggggggggeebcccddccdaaaaa
+aaaaaaafhhhhgeeeeeeeeebcccddccdaaaaa
+aaaaaaafhhhhgeeeeeeeeecddddddddaaaaa
+aaaaaahhgggggeeeeeeeeeeeeaaaaaaaaaaa
+aaaaaaaaaaaaaaeeeeeeeeaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+== u19  데스 이터스
+= a 221c33
+= b fbf6ea
+= c e8dfc8
+= d 352d4d
+= e 14111f
+= f 94d68e
+= g 479a58
+= h 2f6340
+= i d8483d
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaabbbbbbbbbbaaaaaaaaaaaaa
+aaaaaaaaaaabbbbbbbbbbbbbbaaaaaaaaaaa
+aaaaaaaaaabbbbbbbbbbbbbbbbaaaaaaaaaa
+aaaaaaaaabbbbbbbbbbbbbbbbbcaaaaaaaaa
+aaaaaaaaabbbbbbbbbbbbbbbbbcaaaaaaaaa
+aaaaaaaadbbbbbbbbbbbbbbbbbcdaaaaaaaa
+aaaaaaaddbbbbbbbbbbbbbbbbbcddaaaaaaa
+aaaaaaaddbbeeebbbbbbbbeeebcddaaaaaaa
+aaaaaaddddbeeeeebbbbeeeeecddddaaaaaa
+aaaaadddddbbeeeeebbeeeeebcdddddaaaaa
+aaaaaddddddbbeeebeebeeebcddddddaaaaa
+aaaaadddddddbbbbbeebbbbcdddddddaaaaa
+aaaadddddddddbbcffgbcbcdddddddddaaaa
+aaaaddddddddddbefggeecddddddddddaaaa
+aaaaddddddddddbefgghecddddddddddaaaa
+aaaadddddddddddbcfghcddfffddddddaaaa
+aaaadddddddddddddfghddfgggfgddddaaaa
+aaaadddddddddddddfgghfggggeghdidaaaa
+aaaaddddddddddddfffffggggggghiddaaaa
+aaaadddddddddfffgggggghhhhhhddidaaaa
+aaaaaddddddffgfggghhhhdddddddddaaaaa
+aaaaaddddddfggghhhfgghdddddddddaaaaa
+aaaaadddddfgghddddfggghddddddddaaaaa
+aaaaaaddddfghddddddfgghdddddddaaaaaa
+aaaaaaaddfgghddddddfgghddddddaaaaaaa
+aaaaaaadddfghddddddfgghddddddaaaaaaa
+aaaaaaaaddfghddddddfgghdddddaaaaaaaa
+aaaaaaaaaafgggddddfggghdddaaaaaaaaaa
+aaaaaaaaaafgggffffggghdddaaaaaaaaaaa
+aaaaaaaaaaagggggggggghaaaaaaaaaaaaaa
+aaaaaaaaaaaaghggggghhaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaahhhhhaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+== u20  그 탑을 잡아라
+= a 8e2f6e
+= b 8c2233
+= c d8483d
+= d e8873a
+= e f2c94c
+= f fdeaa0
+= g fbf6ea
+= h 352d4d
+= i 221c33
+= j 2b1d4f
+= k 14111f
+= l 4a4160
+= m 523a8f
+aaaabbccdddeeeeeeeeeeeeddddddddcdbab
+aaaabbccdddeeeeffffeeeeddddddddccbaa
+aaaabbccddeeeffffffffeeeeddddddccbaa
+aaaabccddeeeffffffffffeeeeedddddcbaa
+aaabbcddeeeefffffgggfffeeeeeedddcbaa
+aaabccddeeeeefffgggggffeeeeeedddcbaa
+aaabccddeeeeefffgggggfffeeeeedddcbaa
+aaabcdddeeeeefffghiggfffeeeeeddccbaa
+jaabcdddeeeeeeffghiggfffeeeeeddccbaa
+jaabcdddeeeeeefffhkgfffffeeeeddcbbaa
+jaabcdddddeeeeeffhkffffffeeeddccbaaa
+jaabccddddddeeeefhkfffffeeeddccbbaaa
+jjabccddddddddeeehkfffeeeedddccbbaaa
+jjabbcddddddddddehieeeeeedddccbbaaaa
+jjaabccdddddddddllikeeddddcccbbaaaaa
+jjjabbccddddddddhilkddddcccbbbbaaaaa
+jjjabbccddddddcchiikccccccbbbbbaaabb
+jjjjmbbcccdddccchiikccccbbbbbbbbbbbb
+jjjjmbbbcccccccchiikccbbbbbbbbbbbbbb
+jjjjmaabbcccccccllikccbbbbbbbbbbbbbb
+jjjjmaabbbcccccchilkccbbbbbbbbbbbbaa
+jjjjmmmbbbbbccchiiiikcccbbbbbbbbbaaa
+jjjjjmmmmabbbbchiiiikcccbbbbbbbaaaaa
+jjjjjmmmmmabbbbhiiiikbbbbbbbbaaaajjj
+jjjjjmmmmhmmmmbhiiiikbbbbbhaaaaajjjj
+jjjjjjmmhimmmmmhlliikaaaaahimmjjjjjj
+jjjjjjjmhkmmmmmhiillkmmmmmhimjjjjjjj
+jjjjjjjmhkmmmmmhiiiikmmmmmhimjjjjjjj
+jjjjjjjhikmmmmmhiiiikmmmmmhikjjjjjjj
+jjjjjjjhikmmmmhiiiiiikmmmmhikjjjjjjj
+jjjjjjjhikjmmmhiiiiiikmmmjhikjjjjjjj
+jjjjjjhiikjjjjhlliiiikjjjjhiikjjjjjj
+jjjjjjhiikjjjjhiilliikjjjjhiikjjjjjj
+jjjjjjhiikjjjjhiiiilikjjjjhiikjjjjjj
+jjjjjhiiikjjjjhiiiiiikjjjjhiiikjjjjj
+jjjjjiikkkjjjjikkkkkkkjjjjikkkkjjjjj
+
+== u21  스포트라이트
+= a 14111f
+= b a3abbb
+= c 687085
+= d 3a3f52
+= e dde3ec
+= f 221c33
+= g fbf6ea
+= h 4a4160
+= i 7a7192
+= j 352d4d
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaabbbbbbcaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaabccccccaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaabcccccdaaaaaaaaaaaaaaa
+aaaaaaaaaaaaabceeeeecdaaaaaaaaaaaaaa
+aaaaaaaaaaaffegggggggefffaaaaaaaaaaa
+aaaaaaaaaafffegggggggeffffaaaaaaaaaa
+aaaaaaaafffffhbeeeeebhffffffaaaaaaaa
+aaaaaaafffffhhibeeebihhffffffaaaaaaa
+aaaaaaafffffhiibeeebiihffffffaaaaaaa
+aaaaaaffffffhiibeeebiihfffffffaaaaaa
+aaaaaffffffhhiibbebbiihhfffffffaaaaa
+aaaaaffffffhhiibbbbbiihhfffffffaaaaa
+aaaaafffffhhiiibbbbbiiihhffffffaaaaa
+aaaaffffffhhiiiibbbiiiihhfffffffaaaa
+aaaaffffffhhiiiibbbiiiihhfffffffaaaa
+aaaafffffhhhiiiibbbiiiihhhffffffaaaa
+aaaafffffhhiiiiibbbiiiiihhffffffaaaa
+aaaafffffhhiiiiibbbiiiiihhffffffaaaa
+aaaaffffhhhiiiiibbbiiiiihhhfffffaaaa
+aaaaffffhhhiiiiibbbiiiiihhhfffffaaaa
+aaaafffhhhhiiiiiibiiiiiihhhhffffaaaa
+aaaaaffhhhiiiiiiiiiiiiiiihhhfffaaaaa
+aaaaaffhhhiiiiiiiiiiiiiiihhhfffaaaaa
+aaaaafhhhhiiiiiiiiiiiiiiihhhhffaaaaa
+aaaaaahhhbbbbbbbbbbbbbbbbbhhhfaaaaaa
+aaaaaabbbbeeeeeeeeeeeeeeebbbbaaaaaaa
+jjjjjbbbeeeegggggggggggeeeebbbjjjjjj
+jjjjjbbbeeeegggggggggggeeeebbbjjjjjj
+jjjjjjbbbbeeeeeeeeeeeeeeebbbbjjjjjjj
+jjjjjjjjjbbbbbbbbbbbbbbbbbjjjjjjjjjj
+jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj
+jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj
+jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj
+jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj
+jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj
+
+== u22  WHITE ALBUM
+= a e8dfc8
+= b fbf6ea
+= c 687085
+= d 221c33
+= e 14111f
+= f 8f8577
+= g c9bfae
+= h 352d4d
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaabbbbbbbbaaaaaaaaaaaaaa
+aaaaaccdddddddccbbccdddddddccaaaaaaa
+aaaaacddddaddddcbbcdddddddddcaaaaaaa
+aaaaacdddaaadddcbbcddadddddddaaaaaaa
+aaaaadddaaaaadddbbcdaaaadddddaaaaaaa
+aaaaaddaeaaaeaddbbcdaeaaaeaddaaaaaaa
+aaaaaddaaafaagddbbccaaafaagddbaaaaaa
+aaaaaddaaaaaagddbbccaaaaaagddbbaaaaa
+aaaaaddaafffagddbbccaafffagdcbbaaaaa
+aaaaaddcaaaagcddbbcccaaaagcccbbaaaaa
+aaaabddccaagccddbbccccaagccccbbbaaaa
+aaaabddhhhaghhddbbcchhhaghhccbbbaaaa
+aaaabbbbbbbbbbbbbbbbbbbbbbbbbbbbaaaa
+aaaabbbbbbbbbbbbbbbbbbbbbbbbbbbbaaaa
+aaaabcdddddddddcbbcccdddddcccbbbaaaa
+aaaabdddddddddddbbccdddddddccbbbaaaa
+aaaabdddddddddddbbcdddddddddcbbbaaaa
+aaaabddddaaaddddbbcdddddddddcbbbaaaa
+aaaaaddaeaaaeaddbbcdaeaaaeadcbbaaaaa
+aaaaaddaaafaagddbbccaaafaagccbbaaaaa
+aaaaaddaaaaaagddbbccaaaaaagccbbaaaaa
+aaaaaddaadddagddbbccaadddagccbaaaaaa
+aaaaacddaaaagddcbbcccaaaagcccaaaaaaa
+aaaaaccccaagccccbbccccaagccccaaaaaaa
+aaaaacchhhaghhccbbcchhhaghhccaaaaaaa
+aaaaaaaaaabbbbbbbbbbbbbbbbaaaaaaaaaa
+aaaaaaaaaaabbbbbbbbbbbbbbaaaaaaaaaaa
+aaaaaaaaaaaaaabbbbbbbbaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+== u23  심장의 색깔은
+= a 221c33
+= b 352d4d
+= c fbf6ea
+= d e8dfc8
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaabbbbbbbbaaaaaaaaaaaaaa
+aaaaaaaaaaabbbcccccccbbbbaaaaaaaaaaa
+aaaaaaaaaabbccccccccccccbbaaaaaaaaaa
+aaaaaaaabbccccccccccccccccbbaaaaaaaa
+aaaaaaabbccccccdccccddcccccbbaaaaaaa
+aaaaaaabcccccddbcccdbbdcccccbaaaaaaa
+aaaaaabcccccdbbbcccdbbbbccccbbaaaaaa
+aaaaabcccccdbbbbcccdbbbbbccccbbaaaaa
+aaaaabccccdbbbbbcccdbbbbbbcccdbaaaaa
+aaaaaccccdbbbbbbcccdbbbbbbcccdbaaaaa
+aaaabccccdbbbbbbcccdbbbbbbbccdbbaaaa
+aaaabcccdbbbbbbbcccdbbbbbbbcccdbaaaa
+aaaabcccdbbbbbbbcccdbbbbbbbcccdbaaaa
+aaaabcccdbbbbbbccccdbbbbbbbcccdbaaaa
+aaaabcccdbbbbbcccccdbbbbbbbcccdbaaaa
+aaaabcccdbbbbccccccdbbbbbbbcccdbaaaa
+aaaabcccccbbcccccccdbbbbbbbcccdbaaaa
+aaaabcccccbccccdcccdbbbbbbbcccdbaaaa
+aaaaacccccccccdbcccdbbbbbbcccdbaaaaa
+aaaaabcccccccdbbcccdbbbbbccccdbaaaaa
+aaaaabccccccdbbbcccdbbbbccccdbbaaaaa
+aaaaaabcccccdbbbcccdbbbcccccdbaaaaaa
+aaaaaaabccccccccccccbccccccdbaaaaaaa
+aaaaaaabccccccccccccccccccdbbaaaaaaa
+aaaaaaaabbcccccccccccccccdbbaaaaaaaa
+aaaaaaaaaabcdccccccccccddbaaaaaaaaaa
+aaaaaaaaaaabbddddddddddbbaaaaaaaaaaa
+aaaaaaaaaaaaaabbbbbbbbaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+== u24  비포 선라이즈
+= a e8dfc8
+= b bca1ed
+= c fbf6ea
+= d 8161c9
+= e 523a8f
+= f f5a3cb
+= g 2b1d4f
+= h b3abc8
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaabaaaaaaaaaaaa
+aaaaaaaaaaaaaaccccccccabaaaaaaaaaaaa
+aaaaaaaaaaaccccccccccccbdaaaaaaaaaaa
+aaaaaaaaaacccccccccccccbecaaaaaaaaaa
+aaaaaaaaccccccccccccccbdecccaaaaaaaa
+aaaaaaacccccccccccccccbdeccccaaaaaaa
+aaaaaaacccccccccccccccbddecccaaaaaaa
+aaaaaacccdccccccccccccbddeccccaaaaaa
+aaaaaccccdcccccccccccbdddecccccaaaaa
+aaaaaccccdcccccccccccbdddecccccaaaaa
+aaaaabbbbbbdeeeccccccbddddeccccaaaaa
+aaaacbdddddeeeeffffffbddddecccccaaaa
+aaaacbdddddeeeefffffbdddddefffccaaaa
+aaaffbdgdgdeeeefffffbdddddeffffffaaa
+fffffbdgdgdeeeefffffdeeeeeeeffffffff
+fffffbdgdgdeeeeffffbbbbbdeeeefffffff
+fffffbdgdgdeeeeffffbddddeeeeefffffff
+fffffbdgdgdeeeeffffbddddeeeeefffffff
+fffhhbdgdgdeeeeffffbdgdgeeeeehhfffff
+fhhhhbdddddeeeeffffbdgdgeeeeehhhhhff
+hhhhhbdddddeeeehhhhbdgdgeeeeehhhhhhf
+hhhhhbdddddeeeehhhhbdgdgeeeeehhhhhhh
+hhhhhbdddddeeeehhhhbdgdgeeeeehhhhhhh
+hhhhhbdddddeeeehhhhbdgdgeeeeehhhhhhh
+hhheebdddddeeeehhhhbddddeeeeehheehhh
+heeggeedddeeeeehhhhbdeeeeeeeeeeggegh
+eggggggeeeggggeehheeeggggeeeeggggggg
+egggggggggggggggeegggggggggggggggggg
+eggggggggggggggggggggggggggggggggggg
+eggggggggggggggggggggggggggggggggggg
+eggggggggggggggggggggggggggggggggggg
+eggggggggggggggggggggggggggggggggggg
+gggggggggggggggggggggggggggggggggggg
+
+== u25  퍼스트블러드
+= a c9bfae
+= b e8dfc8
+= c d8483d
+= d 8c2233
+= e f27d63
+= f fbf6ea
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaabbbcdbbbaaaaaaaaaaaaaa
+aaaaaaaaaaabbbbbcccdbbbbbaaaaaaaaaaa
+aaaaaaaaaabbbbbbccccbbbbbbaaaaaaaaaa
+aaaaaaaabbbbbbbccccccbbbbbbbaaaaaaaa
+aaaaaaabbbbbbbcccccccdbbbbbbbaaaaaaa
+aaaaaaabbbbbbcccccccccdbbbbbbaaaaaaa
+aaaaaabbbbbbbccccccccccbbbbbbbaaaaaa
+aaaaabbbbbbbccccccccccccbbbbbbbaaaaa
+aaaaabbbbbbcccccccccccccdbbbbbbaaaaa
+aaaaabbbbbccefcccccccccccdbbbbbaaaaa
+aaaabbbbbbcefeeccccccccccdbbbbbbaaaa
+aaaabbbbbccefeecccccccccccdbbbbbaaaa
+aaaabbbbbccefeecccccccccccdbbbbbaaaa
+aaaabbbbccceeeecccccccccccddbbbbaaaa
+aaaabbbbccceeeecccccccccccddbbbbaaaa
+aaaabbbbccceeeecccccccccccddbbbbaaaa
+aaaabbbbccceeeecccccccccccddbbbbaaaa
+aaaabbbbcccceecccccccccccdddbbbbaaaa
+aaaaabbbcccccccccccccccccdddbbbaaaaa
+aaaaabbbbcccccccccccccccdddbbbbaaaaa
+aaaaabbbbcccccccccccccccdddbbbbaaaaa
+aaaaaabbbbcccccccccccccdddbbbbaaaaaa
+aaaaaaabbbdccccccccccdddddbbbaaaaaaa
+aaaaaaabbbbddccccccddddddbbbbaaaaaaa
+aaaaaaaabbbbbddddddddddbbbbbaaaaaaaa
+aaaaaaaaaabbbbbddddddbbbbbaaaaaaaaaa
+aaaaaaaaaaabbbbbbbbbbbbbbaaaaaaaaaaa
+aaaaaaaaaaaaaabbbbbbbbaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+== u26  SAFETY LAST!
+= a 8a5636
+= b a3abbb
+= c dde3ec
+= d 352d4d
+= e 221c33
+= f fbf6ea
+= g 14111f
+= h e8dfc8
+= i f5cda3
+= j dc9a73
+= k a8634f
+aaaaaabbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+aaaaaabbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+aaaaaabbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+aaaaaabbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+aaaaaabbbbbbbbccdddddcbbbbbbbbbbbbbb
+aaaaaabbbbbcccddeeeeedeccbbbbbbbbbbb
+aaaaaabbbbcccdeefffffeeeccbbbbbbbbbb
+aaaaaabbccccdeefffbfffeeecccbbbbbbbb
+aaaaaabcccccdeffffeffffegccccbbbbbbb
+aaaaaabccccdeeffffefffheegcccbbbbbbb
+aaaaaacccccdefffffeffffhegccccbbbbbb
+aaaaaacccccdebffffeeeefbegcccccbbbbb
+aaaaaacccccdeffffffffffhegcccccbbbbb
+aaaaaacccccdeeffffffffheegcccccbbbbb
+aaaaaaccccccdeffffffffhegcccccccbbbb
+aaaaaacccccceeeffffffheegcccccccbbbb
+aaaaaaccccccceeijhhhiiegccccccccbbbb
+aaaaaaccccccccijkeeeijkcccccccccbbbb
+aaaaaaccccccccjkgggggkkcccccccccbbbb
+aaaaaaccccccccdecccccddcccccccccbbbb
+aaaaaacccccccdegcccccdeeccccccccbbbb
+aaaaaacccccccdegcdddcdegccccccccbbbb
+aaaaaaccccccdegcdddddcdegccccccbbbbb
+aaaaaaccccccdegciiiiicdegccccccbbbbb
+aaaaaaccccccdegcggcggcdegccccccbbbbb
+aaaaaaccccccdeeeiiiiideegcccccbbbbbb
+aaaaaabccccceeeeeiiideeegccccbbbbbbb
+aaaaaabcccccceeeefffdeggcccccbbbbbbb
+aaaaaabbccccccceeeddegccccccbbbbbbbb
+aaaaaabbbbcccccdegcdegccccbbbbbbbbbb
+aaaaaabbbbbccccdegceegcccbbbbbbbbbbb
+aaaaaabbbbbbbbceegcceegbbbbbbbbbbbbb
+aaaaaabbbbbbbbbegbbbbggbbbbbbbbbbbbb
+aaaaaabbbbbbbbgggbbbbgggbbbbbbbbbbbb
+aaaaaabbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+aaaaaabbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+== u27  Mistake
+= a e8dfc8
+= b fbf6ea
+= c d8483d
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaabbbbbbbbaaaaaaaaaaaaaa
+aaaaaaaaaaabbbbbbbbcccccccaaaaaaaaaa
+aaaaaaaaaabbbbcccccccccccccaaaaaaaaa
+aaaaaaaabcccccccccccccccccccaaaaaaaa
+aaaaaaaccccccccccccbbbbbbcccbaaaaaaa
+aaaaaaccccccccbbbbbbbbbbbbcccaaaaaaa
+aaaaaccccbbbbbbbbbbbbcccbbcccbaaaaaa
+aaaaacccbbbbbbbbbbbbccccbbcccbbaaaaa
+aaaaacccbbcccbbbbbbbccccbbcccbbaaaaa
+aaaaacccbbccccbbbbbccccbbbcccbbaaaaa
+aaaabcccbbccccccbbccccbbbbbcccbbaaaa
+aaaabcccbbbccccccbccccbbbbbcccbbaaaa
+aaaabcccbbbbbccccccccbbbbbbcccbbaaaa
+aaaabbcccbbbbbccccccbbbbbbbcccbbaaaa
+aaaabbcccbbbbbbbccccccbbbbbcccbbaaaa
+aaaabbcccbbbbbbccccccccbbbbbcccbaaaa
+aaaabbcccbbbbbccccbccccccbbbcccbaaaa
+aaaabbcccbbbbbccccbbccccccbbcccbaaaa
+aaaaabbcccbbbccccbbbbbccccbbcccaaaaa
+aaaaabbcccbbccccbbbbbbbcccbbcccaaaaa
+aaaaabbcccbbccccbbbbbbbbbbbbcccaaaaa
+aaaaaabcccbbcccbbbbbbbbbbbbccccaaaaa
+aaaaaaacccbbbbbbbbbbbbccccccccaaaaaa
+aaaaaaabcccbbbbbbccccccccccccaaaaaaa
+aaaaaaaacccccccccccccccccccbaaaaaaaa
+aaaaaaaaacccccccccccccbbbbaaaaaaaaaa
+aaaaaaaaaacccccccbbbbbbbbaaaaaaaaaaa
+aaaaaaaaaaaaaabbbbbbbbaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+== u28  피보나치
+= a 8161c9
+= b bca1ed
+= c fbf6ea
+= d f2c94c
+= e c9bfae
+= f a8762a
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaabbbbbbbbaaaaaaaaaaaaaa
+aaaaaaaaaaabbbbbbbbbbbbbbaaaaaaaaaaa
+aaaaaaaaaabbbbbbbbbbbbbbbbaaaaaaaaaa
+accccccccccccccccdddddddddeeeeeeeeea
+acccccccccccccddddfffffffdddeeeeeeea
+acccccccccccddffffcccceeefffddeeeeea
+acccccccccddfffccccccceeeeeefddeeeea
+accccccccddffccccccccceeeeeeefddeeea
+acccccccdffccccccccccceeeeeeeefddeea
+accccccdffcccccccccccceeeeeeeeefdeea
+acccccdffccccccccccccceeeeeeeeeefdea
+accccdffcccccccccccccceeeeeeeeeefdea
+acccddfccccccccccccccceeeeeeeeeefdda
+acccdfcccccccccccccccceeeeeeeeeeefda
+accdffcccccccccccccccceeeeeeeeeeefda
+accdfccccccccccccccccceeeeeeeeeeefda
+acdffccccccccccccccccccdddeccccccfda
+acdfccccccccccccccccccddffdccccccfda
+acdfccccccccccccccccccdffddcccccffda
+addfccccccccccccccccccdfffdcccccfdca
+adfcccccccccccccccccccdfeeeccccfddca
+adfcccccccccccccccccccedfeeccffddcca
+adfccccccccccccccccccceddfffffddccca
+adfccccccccccccccccccceeedddddccccca
+aaaaaaaabbbbbbbbbbbbbbbbbbbbaaaaaaaa
+aaaaaaaaaabbbbbbbbbbbbbbbbaaaaaaaaaa
+aaaaaaaaaaabbbbbbbbbbbbbbaaaaaaaaaaa
+aaaaaaaaaaaaaabbbbbbbbaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+== u29  프로선수
+= a 687085
+= b 352d4d
+= c 221c33
+= d a3abbb
+= e 14111f
+= f fbf6ea
+= g e8dfc8
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaabbcaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaddbccccdaaaaaaaaaaaaaa
+aaaaaaaaaaaddddbcccceddddaaaaaaaaaaa
+aaaaaaaaaadddddbccccedddddaaaaaaaaaa
+aaaaaaaaddddddddccccedddddbbbaaaaaaa
+aaaaaaaddddddddddccedddbbbcccbcaaaaa
+aaaaaaaddddddddddddbcbbcccceecccaaaa
+aaaaaaddddddddddbbbccccccceddcceaaaa
+aaaaadddbbbbbbbbccccccccceddddeeaaaa
+aaaaadbbcccccccccccccccccedddddaaaaa
+aaaaadcceeeeeeeeeccccccccedddddaaaaa
+aaaaddddddddddddddccccccedddddddaaaa
+aaaaddddddddddddddbcccccedddddddaaaa
+aaaaddddddddddddddbcccccedddddddaaaa
+aaaadddddddddddddddbccccedddddddaaaa
+aaaadddddddddddddddbccccedddddddaaaa
+aaaaddddddddddddddbcccccceddddddaaaa
+aaaadddddddddddddbccccccceddddddaaaa
+aaaadfcfddddddddbcccccccceddddddaaaa
+aaaafffffddddddbcccccccccedddddaaaaa
+aaacfcccfcddddbccccceccccedddddaaaaa
+aaaffcccffdddbcccceedccceddddddaaaaa
+aaaffffffgddbccceedddcccedddddaaaaaa
+aaaacfffcddbcccedddddcccccdddaaaaaaa
+aaaaafggddbcceedddddddcccccddaaaaaaa
+aaaaaaaabbceeddddddddddcecccaaaaaaaa
+aaaaaaaacceddddddddddddddeeceaaaaaaa
+aaaaaaaaaaaddddddddddddddaaeeaaaaaaa
+aaaaaaaaaaaaaaddddddddaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+== r01  태양계
+= a 14111f
+= b 4a4160
+= c 221c33
+= d 3f7fd8
+= e 91cbf5
+= f 2b4a95
+= g d8483d
+= h f27d63
+= i f7ba70
+= j e8873a
+= k 8c2233
+= l fbf6ea
+= m fdeaa0
+= n f2c94c
+= o b0512a
+= p a8762a
+= q 36a3a0
+= r 8fe0cf
+= s 8161c9
+= t 1f6570
+= u bca1ed
+= v 523a8f
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaabbbbbbbbbbaaaaaaaaaaaaa
+aaaaaaaaaaabbccccccccccbbaaaaaaaaaaa
+aaaaaaaaabbccccccccccccccbbaaaaaaaaa
+aaaaaaaabbccccccccccccccccbbaaaaaaaa
+aaaaaaabcccccccbbbbbbcddccccbaaaaaaa
+aaaaaabbcccccbbccccccdeedcccbbaaaaaa
+aaaaaabccccbbccccccccdddfccccbaaaaaa
+aaagggccccbbccccccccccffbbccccbaaaaa
+aaghhggcccbccccciiiicccccbccccbaaaaa
+aaghgggccbcccciijjjjijccccbccccbaaaa
+aaggggkccbcccijlmmmmnjjcccbccccbaaaa
+aaagkkccbccccillmnnnnnoccccbcccbaaaa
+aaaabcccbcccijmmnnnnnpjocccbcccbaaaa
+aaaabcccbcccijmnnnnnnpjocccbcccbaaaa
+aaaabcccbcccijmnnnnnnpjocccbcccbaaaa
+aaaabcccbcccijmnnnnnnpjocccbcccbaaaa
+aaaabcccbccccinnnnnnnpoccccbcccbaaaa
+aaaabccccbcccjjnpppppjocccbccccbaaaa
+aaaabccccbccccjojjjjooccccbccccbaaaa
+aaaaabccccbcccccoooocccccbccccbaaaaa
+aaaaabccccbbqqccccccccccbbccccbaaaaa
+aaaaaabccccqrrqccccccccbbcccssaaaaaa
+aaaaaabbcccqqqtccccccbbccccsuusaaaaa
+aaaaaaabccccttcbbbbbbccccccsssvaaaaa
+aaaaaaaabbccccccccccccccccbbvvaaaaaa
+aaaaaaaaabbccccccccccccccbbaaaaaaaaa
+aaaaaaaaaaabbccccccccccbbaaaaaaaaaaa
+aaaaaaaaaaaaabbbbbbbbbbaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+== r02  수전증
+= a 7a7192
+= b 91cbf5
+= c b3abc8
+= d dde3ec
+= e f5cda3
+= f dc9a73
+= g a8634f
+= h a3abbb
+= i 3f7fd8
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaabaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaabaabbaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaabbaaaaaabaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaccbbccccaaaaaaaaaaaaaa
+aaaaaaaaddddddddcceeeccccaaaaaaaaaaa
+aaaaaaddaacccccceefffeecccaaaaaaaaaa
+aaaaaaddddddddeeffgggffefcccaaaaaaaa
+aaaaaadbbbbbbeffggcccffffecccaaaaaaa
+aaaaaadbbbbbfffgbhccggfeeeeccaaaaaaa
+aaaaaadiiiiiiggiihccgffeeeeeccaaaaaa
+aaaaaceeeeeeeefffffffefeeeeecccaaaaa
+aaaaaeeffffffffffffffffeeeeeeccaaaaa
+aaaagfffffffffffffffgffeeeeeeccaaaaa
+aaaacggggggggggggffffffffeeeeeccaaaa
+aaaacceeeeeeeeeffffffeffffeeeeccaaaa
+aaaaeeffffffffffffffffffffffeeccaaaa
+aaagffffffffffffffffgfffffffffecaaaa
+aaaagggggggggggggffffffffffffffcaaaa
+aaaacccdiieeeeeefffffefffffffffcaaaa
+aaaacccdeeffffffffffgfffffffffffaaaa
+aaaacccdigggggggggffffffffffffffaaaa
+aaaaaccdiiiiiiieeefffefffffffffffaaa
+aaaaaccdiiiieeefffffgffffffffffffaaa
+aaaaaccdiiiffffggggggfffffffffffffaa
+aaaaaacdiiiigggihccccggfffffffffffaa
+aaaaaaaddddddddddcccccggfffffffffffa
+aaaaaaachhhhhhhhcccccccggfffffffffff
+aaaaaaaaccccccccccccccccggffffffffff
+aaaaaaaaaacccccccccccccccggfffffffff
+aaaaaaaaaaaccccccccccccccaggffffffff
+aaaaaaaaaaaaaaccccccccaaaaaggfffffff
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaggffffff
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaggfffff
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaggffff
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaggfff
+
+== r03  더 사일런트
+= a 221c33
+= b fbf6ea
+= c 352d4d
+= d e8dfc8
+= e c9bfae
+= f 94d68e
+= g 479a58
+= h 2f6340
+= i 14111f
+= j 1d3326
+= k 1f6570
+= l 8fe0cf
+= m 36a3a0
+= n 8a5636
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaabaaaaccccccccaaaabaaaaaaaaa
+aaaaaaaaabdccccccccccccccbdaaaaaaaaa
+aaaaaaaaaabecccccfccccccbeaaaaaaaaaa
+aaaaaaaaccbdeccffgffcccbdeccaaaaaaaa
+aaaaaaaccccbdefgggggfgbdeccccaaaaaaa
+aaaaaaaccccddeggggggggddeccccaaaaaaa
+aaaaaacccccfggffffffffggccccccaaaaaa
+aaaaaccccccfgffbbbbbbffhcccccccaaaaa
+aaaaacccccfgffbdddddddgghccccccaaaaa
+aaaaacccccfgfbddddddddehhccccccaaaaa
+aaaacccccfgffbiiiddiiiehhhccccccaaaa
+aaaacccccfgfjbffiddiiiejhhccccccaaaa
+aaaacccccfgfjbigiddiiiejhhccccccaaaa
+aaaaccccfggfjbddddddddejghhcccccaaaa
+aaaaccccfggfjjddddeddejjghhcccccaaaa
+aaaaccccfggfjjjbddedejjjgghcccccaaaa
+aaaaccccfggfjjjbddedejjjgghcccccaaaa
+aaaacccfgggffjjbddddejjgggghccccaaaa
+aaaaaccfggggfjjjaddajjjgggghcccaaaaa
+aaaaaccfggggffjjdeeejjggggghcccaaaaa
+aaaaacfggggggffjjjjjjggggggghccaaaaa
+aaaaafgggggbbgbbgbgggggggggghhaaaaaa
+aaaafgggggbddeddedbkggggggggghhaaaaa
+aaaafgggggdddddbbbbkggggggggghhaaaaa
+aaafggggkkddddbddddklllllllllllhaaaa
+aafgggggkkdddddeeeekmmmmmmmmmghhhaaa
+aafgggggggeddddddegkghhhhhhhhgghhaaa
+aafggggggggeeeeeeggkggggggggggghhaaa
+aafgggggggggnnnngggggggggggggggghaaa
+afgggggggggdeeeeeggggggggggggggghhaa
+afgggggggggdeeeeeggggggggggggggghhaa
+aghhhhhhhheeeeeeeehhhhhhhhhhhhhhhhaa
+
+== r04  카우보이
+= a c9bfae
+= b e8dfc8
+= c 7a7192
+= d 4a4160
+= e 2b2438
+= f b3abc8
+= g 14111f
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaabbbbbbbbaaaaaaaaaaaaaa
+aaaaaaaaaaabbbbbbbbbbbbbbaaaaaaaaaaa
+aaaaaaaaaabbbbbbbbbbbbbbbbaaaaaaaaaa
+aaaaaaaabbbbbbbbbbbbbbbbbbbbaaaaaaaa
+aaaaaaabbbbbbbbbbbbbbbbbbbbbbaaaaaaa
+aaaaaaabbbbbbbcddbbddebbbbbbbaaaaaaa
+aaaaaabbbbbbbcdddeedddebbbbbbbaaaaaa
+aaaaabbbbbbbbcddddedddebbbbbbbbaaaaa
+aaaaabbbbbbbbcddddddddebbbbbbbbaaaaa
+aaaaabbbbbbbcddddddddddebbbbbbbaaaaa
+aaaabfbbbbbbcddddddddddebbbbbbfbaaaa
+aaaabfcbbbbbcddddddddddebbbbbfcbaaaa
+aaaabecfbbbbcddddddddddebbbbfcebaaaa
+aaaabbecfbbcddddddddddddebbfccebaaaa
+aaaabbeccffcddddddddddddeffccebbaaaa
+aaaabbbeccccddddddddddddeccceebbaaaa
+aaaabbbecccggggggggggggggcccebbbaaaa
+aaaabbbecccggggggggggggggcccebbbaaaa
+aaaaabbbeccccccccccccccccccebbbaaaaa
+aaaaabbbeecccccccccccccccceebbbaaaaa
+aaaaabbbbbeecccccccccccceebbbbbaaaaa
+aaaaaabbbbbbeeeeeeeeeeeebbbbbbaaaaaa
+aaaaaaabbbbbbbbbbbbbbbbbbbbbbaaaaaaa
+aaaaaaabbbbbbbbbbbbbbbbbbbbbbaaaaaaa
+aaaaaaaabbbbbbbbbbbbbbbbbbbbaaaaaaaa
+aaaaaaaaaabbbbbbbbbbbbbbbbaaaaaaaaaa
+aaaaaaaaaaabbbbbbbbbbbbbbaaaaaaaaaaa
+aaaaaaaaaaaaaabbbbbbbbaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+== r05  석양이 진다
+= a 8c2233
+= b d8483d
+= c 4a1426
+= d f7ba70
+= e fdeaa0
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaabbbbbbbbaaaaaaaaaaaaaa
+aaaaaaaaaaabcccbbbbbbbbbbaaaaaaaaaaa
+aaaaaaaaaabcccccddddddbbbbaaaaaaaaaa
+aaaaaaaccbbcccccddccddddbbbbaaaaaaaa
+aaaaaaabccccccccccceeeedddbbbaaaaaaa
+aaaaaaabbddcccceeeeeeeeedddbbaaaaaaa
+aaaaaabbddeccccceeeeeeeeeeddbbaaaaaa
+aaaaabbbddeeccceeeeeeeeeeeddbbbaaaaa
+aaaaabbddeeccccceeeeeeeeeccddbbaaaaa
+aaaaabbdeeccccccccccccccccccccbaaaaa
+aaaabbddecccccccccccccccccceddbbaaaa
+aaaabbdeeccccccccccccceecceeedbbaaaa
+aaaabbdeecccccccccccceeeeeeeedbbaaaa
+aaaabbdecccccccccccceeeeeeeeedbbaaaa
+aaaabddecccccccccccceeeeeeeeeddbaaaa
+aaaabbdeecccccccccceeeeeeeeeedbbaaaa
+aaaabbdeeeccceeccceeeeeeeeeeedbbaaaa
+aaaabbdeeeccceeccceeeeeeeeeeedbbaaaa
+aaaaabddeccceeeeccceeeeeeeeeddbaaaaa
+aaaaabbdecceeeeeecceeeeeeeeedbbaaaaa
+aaaaabbddcceeeeeecceeeeeeeeddbbaaaaa
+aaaaaabbcceeeeeeeecceeeeeeddbbaaaaaa
+aaaaaaabcceeeeeeeecceeeeeeddbaaaaaaa
+aaaaaaaccdddeeeeeeecceeedddbbaaaaaaa
+aaaaaaaccbdddeeeeeecceedddbbaaaaaaaa
+aaaaaacccabbdddddddcccddbbaaaaaaaaaa
+aaaccccccccccccccccccccccccccaaaaaaa
+cccccccccccccccccccccccccccccccccccc
+cccccccccccccccccccccccccccccccccccc
+cccccccccccccccccccccccccccccccccccc
+cccccccccccccccccccccccccccccccccccc
+cccccccccccccccccccccccccccccccccccc
+
+== r09  불사의 토템
+= a 2b1d4f
+= b fdeaa0
+= c f2c94c
+= d 523a8f
+= e 94d68e
+= f 479a58
+= g a8762a
+= h 5c3a1a
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaabbbbbbbbbbaaaaaaaaaaaaa
+aaaaaaaaaaaabbbbbbbbbbbcaaaaaaaaaaaa
+aaaaaaaaaaadbbbbbbbbbbbcdaaaaaaaaaaa
+aaaaaaaaaaddbbbbbbbbbbbcddaaaaaaaaaa
+aaaaaaaaddddbbbbbbbbbbbcddddaaaaaaaa
+aaaaaaadddddbbeffbbeffbcdddddaaaaaaa
+aaaaaaadddddbbfffccfffbcdddddaaaaaaa
+aaaaaaddddddbbbbbccbbbbcddddddaaaaaa
+aaaaadddddddbbbbbccbbbbcdddddddaaaaa
+aaaaaddddddddbcccccccccddddddddaaaaa
+aaaaadddddbbbcbbbbbbccbbbbdddddaaaaa
+aaaaddddbbcccgbbbbbbccbcccbcddddaaaa
+aaaadddbcccccgbbbbbbccbccccccdddaaaa
+aaaaddbccccccgbbbbbbccbcccccccddaaaa
+aaaadbccccccgdbbbbbbccdccccccccdaaaa
+aaaabccccccgddbbbbbbccddcccccccgaaaa
+aaaabcccccgdddbbbbbbccdddccccccgaaaa
+aaaacgggggddddbbbbbbccddddggggggaaaa
+aaaacccghdddddbbbbbbccdddddcccghaaaa
+aaaaaghhddddddbbbbbbccddddddghhaaaaa
+aaaaadddddddddbbbbbbccdddddddddaaaaa
+aaaaadddddddddbbbbbbccdddddddddaaaaa
+aaaaaaddddddddbbbbbbccddddddddaaaaaa
+aaaaaaaddddddbbbbbbbcccddddddaaaaaaa
+aaaaaaaddddddbbccccccccddddddaaaaaaa
+aaaaaaaaddddddccccccggddddddaaaaaaaa
+aaaaaaaaaaddddgghhhhhhddddaaaaaaaaaa
+aaaaaaaaaaaddddddddddddddaaaaaaaaaaa
+aaaaaaaaaaaaaaddddddddaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+== r13  88날어
+= a 2b1d4f
+= b dde3ec
+= c a3abbb
+= d 523a8f
+= e f27d63
+= f d8483d
+= g 8c2233
+= h 687085
+= i 4a1426
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaabbaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaabbbcaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaddbbbcddaaaaaaaaaaaaaa
+aaaaaaaaaaaddddddccddddddaaaaaaaaaaa
+aaaaabbaaadddddddefdddddddaaabbaaaaa
+aaaabbbcddddddddeffgddddddddbbbcaaaa
+aaaabbbcddddddddefffddddddddbbbcaaaa
+aaaaaccddddddddefffffddddddddccaaaaa
+aaaaaaeeddddddefffffffddddddefaaaaaa
+aaaaadeffdddddeffffffgdddddefgdaaaaa
+aaaaadeffedddefffffffffdddeffgdaaaaa
+aaaaadeffeeddefffffffffddggffgdaaaaa
+aaaaddeffeeeeffffffffffeeggffgddaaaa
+aaaaddeffeeffffffbbffffffggffgddaaaa
+aaaadddefeefffffbbbbfffffggfgdddaaaa
+aaaadddefebbfffbbeebcfffbbgfgdddaaaa
+aaaadddefbbbcffbbeebcffbbbcfgdddaaaa
+aaaadddefbbbcfffbbbcfffbbbcfgdddaaaa
+aaaadddefeccfffffccfffffccgfgdddaaaa
+aaaadddefeeffffffffffffffggfgdddaaaa
+aaaaaddefeeffffffffffffffggfgddaaaaa
+aaaaadddeeeffffffffffffffgggdddaaaaa
+aaaaadddbeeffffffffffffffggcdddaaaaa
+aaaaaaddbbbffffffffffffffbbcddaaaaaa
+aaaaaaadbccbbbffffffffbbbcchdaaaaaaa
+aaaaaaaddchcccbbbbbbbbccchhddaaaaaaa
+aaaaaaaaiiehhhcccccccchhhgiiaaaaaaaa
+aaaaaaaaiiiiighhhhhhhhgiiiiiaaaaaaaa
+aaaaaaaaiiiiiiiiiiiiiiiiiiiiaaaaaaaa
+aaaaaaaaaaiiiiiiiiiiiiiiiiaaaaaaaaaa
+aaaaaaaaaaaaaiiiiiiiiiiaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+== r14  빌리의 바지
+= a 523a8f
+= b 8161c9
+= c 4f4670
+= d 352d4d
+= e fbf6ea
+= f 221c33
+= g e8dfc8
+= h 14111f
+= i f27d63
+= j 8c2233
+= k d8483d
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaabbbbbbbbaaaaaaaaaaaaaa
+aaaaaaaaaaabbbbbbbbbbbbbbaaaaaaaaaaa
+aaaaaaaaaaccdeeeeeeebbbbbbaaaaaaaaaa
+aaaaaaaabcddfeeeeeeeeebbbbbbaaaaaaaa
+aaaaaaabbcddfeeeeeeeeegbbbbbbaaaaaaa
+aaaaaaabbbdffegggggggggbbbbbbaaaaaaa
+aaaaaabbbbbfffffhddddddbbbbbbbaaaaaa
+aaaaabbbbbbfhhhhhbdfffffbbbbbbbaaaaa
+aaaaabbbbbbbfhhhhhfffffffbbbbbbaaaaa
+aaaaabbbbbbbfhhhhhbfffffffbbbbbaaaaa
+aaaabbbbbbbbbfhhhhhbdfffffhbbbbbaaaa
+aaaabbbbbbbbbfhhhhhbdfffffhbbbbbaaaa
+aaaabbbbbbbbbfhhhhhbdfffffhbbbbbaaaa
+aaaabbbbbbbbfhhhhhbbdffffhbbbbbbaaaa
+aaaabbbbbbbbfhhhhbbdffffhbbbbbbbaaaa
+aaaabbbbbbbfhhhhbbbdfhhhbbbbbbbbaaaa
+aaaabbbbbbbhhhbbbbffhbbbbbbbbbbbaaaa
+aaaabbbbbbeeeebbbeeeebbbbbbbbbbbaaaa
+aaaaabbbbbeeegbbbeeegbbbbbbbbbbaaaaa
+aaaaabbbbbeeegbbbeeegbbbbbbbbbbaaaaa
+aaaaabbbbbegggbbbegggbbbbbbbbbbaaaaa
+aaaaaabbbffffhbbffffhbbbbbbbbbaaaaaa
+aaaaaaabbbfhhhhbbfhhhhbbbbbbbaaaaaaa
+aaaaaaabbbbhhhhbbbhhhhbbbbbbbaaaaaaa
+aaaaaaaabbbhhhhhbbhhhhhbbbbbaaaaaaaa
+aaaaaaaaaabbhhhhbbbhhhhbbbaaaaaaaaaa
+iiiiiiiiiiijjjjjjijjjjjjiiiiiiiiiiik
+ikkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkj
+ikkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkj
+ikkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkj
+ikkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkj
+kjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj
+
+== l02  정조준
+= a 221c33
+= b a3abbb
+= c 687085
+= d 8fe0cf
+= e 36a3a0
+= f 1f6570
+= g 3a3f52
+= h f27d63
+= i d8483d
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaabbbbbbbbaaaaaaaaaaaaaa
+aaaaaaaaaaabbbccccccccbbbaaaaaaaaaaa
+aaaaaaaaaabcccdddaadddccccaaaaaaaaaa
+aaaaaaaabbccddeeeaaeeeddccccaaaaaaaa
+aaaaaaabccddedddeaaeeeeedecccaaaaaaa
+aaaaaaabcdeeddddeaaeeeeeeeeccaaaaaaa
+aaaaaabcdeedddeeeaaeeeeeeeeeccaaaaaa
+aaaaabccdedddeeeeaaeeeeeeeefccgaaaaa
+aaaaabcdedddeeaaaaaaaaeeeeeefcgaaaaa
+aaaaabcddddeeaaaeaaeaaaeeeeefcgaaaaa
+aaaabcdeddeeaaeeeeeeeeaaeeeeefcgaaaa
+aaaabcdeddeeaaeeeeeeeeaaeeeeefcgaaaa
+aaaabcdeeeeeaeeeeeeeeeeaeeeeefcgaaaa
+aaaabcaaaaaaaaeeehieeeaaaaaaaacgaaaa
+aaaabcaaaaaaaaeeeiieeeaaaaaaaacgaaaa
+aaaabcdeeeeeaeeeeeeeeeeaeeeeefcgaaaa
+aaaabcdeeeeeaaeeeeeeeeaaeeeeefcgaaaa
+aaaabcdeeeeeaaeeeeeeeeaaeeeeefcgaaaa
+aaaaabcdeeeeeaaaeaaeaaaeeeeefcgaaaaa
+aaaaabcdeeeeeeaaaaaaaaeeeeeefcgaaaaa
+aaaaabccdeeeeeeeeaaeeeeeeeefccgaaaaa
+aaaaaacceeeeeeeeeaaeeeeeeeefcgaaaaaa
+aaaaaaacceeeeeeeeaaeeeeeeefcgaaaaaaa
+aaaaaaacccefeeeeeaaeeeeeffccgaaaaaaa
+aaaaaaaaccccffeeeaaeeeffccggaaaaaaaa
+aaaaaaaaaaccccfffaafffcccgaaaaaaaaaa
+aaaaaaaaaaagggccccccccgggaaaaaaaaaaa
+aaaaaaaaaaaaaaggggggggaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+== l04  잭과 콩나무
+= a a8762a
+= b 2f6340
+= c 1d3326
+= d f2c94c
+= e 479a58
+= f f5cda3
+= g dc9a73
+= h 553222
+= i d8483d
+= j 8c2233
+= k 2b4a95
+= l 2a1812
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaabcaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaddddbbbccaaaaaaaaaaaaa
+aaaaaaaaaaaddddddbccddcddaaaaaaaaaaa
+aaaaaaaaaadddddddbcddcddddaaaaaaaaaa
+aaaaaaaadeeeeedddbcdddddddddaaaaaaaa
+aaaaaaadbbeeeeeebccddddddddddaaaaaaa
+aaaaaaaddbbbeeeebcdddddddddddaaaaaaa
+aaaaaaddddbbbbebccddddddddddddaaaaaa
+aaaaadddddbbbbbbbccddddddddddddaaaaa
+aaaaaddddddbbbbffccddddddddddddaaaaa
+aaaaadddddddddfgbcccdddddddddddaaaaa
+aaaaddddddhhhdfddbccddddddddddddaaaa
+aaaadddddhhhhfiddbccceeeeeeeeeddaaaa
+aaaadddddhhfffiddbccceeeeeeebdddaaaa
+aaaaddddddfffiiddbccceeeebbbbdddaaaa
+aaaadddddddiiiijbccceebbbbbbddddaaaa
+aaaadddddddiiiijbcccbbbbbbbdddddaaaa
+aaaadddddddiiijbccccbbbbbbddddddaaaa
+aaaadddddddkkkkkkccdddddddddddddaaaa
+aaaaaddddddkkdbkkccddddddddddddaaaaa
+aaaaaddddddkkdbckccddddddddddddaaaaa
+aaaaaddddddkkdbclccddddddddddddaaaaa
+aaaaaadeeeelleebccccddddddddddaaaaaa
+aaaaaabbeeeeeeebccccdddddddddaaaaaaa
+aaaaaaabbbbbeeeebcccceeeeeeeeaaaaaaa
+aaaaaaaabbbbbbbbbcccceeeeeebbaaaaaaa
+aaaaaaaaabbbbbbbbccccceebbbbaaaaaaaa
+aaaaaaaaaaabbbddbcccccbbbbbaaaaaaaaa
+aaaaaaaaaaaaaaddbccccbbbbbaaaaaaaaaa
+aaaaaaaaaaaaaaabcccccaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaabcccccaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaabcccccaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaccccccaaaaaaaaaaaaaaaa
+
+== l01  데칼코마니
+= a e8dfc8
+= b c9bfae
+= c fdeaa0
+= d f2c94c
+= e fbf6ea
+= f f7ba70
+= g e8873a
+= h a8762a
+= i b0512a
+= j d8483d
+= k 8c2233
+= l f5a3cb
+= m f27d63
+= n d45a9e
+= o 8e2f6e
+= p 3f7fd8
+= q 91cbf5
+= r 2b4a95
+= s 1f6570
+= t 36a3a0
+aaaaaaaaaaaaaaaaaabbbbbbbbbbbbbbbbbb
+aaaaaaaaaaaaaaaaaabbbbbbbbbbbbbbbbbb
+aaaaaaaaaaaaaaaaaabbbbbbbbbbbbbbbbbb
+aaaaaaacccccaaaaaabbbbbbcccccbbbbbbb
+aaaaaacdddddcaeeeeaaaabcdddddcbbbbbb
+aaaaafdddddddceeeeaaaacdddddddfbbbbb
+aaaafggggdddddceeeaaacdddddggggfbbbb
+aaaagggggggggddceeaacddgggggggggbbbb
+aaaaggggggggggggchhcggggggggggggbbbb
+aaaagggggggggggggiigggggggggggggbbbb
+aaaajjjjgggggggggiigggggggggjjjjbbbb
+aaaajjjjjjjggggggiiggggggjjjjjjjbbbb
+aaaakjjjjjjjjjgggiigggjjjjjjjjjkbbbb
+aaaaakjjjjjjjjjjjkkjjjjjjjjjjjkbbbbb
+aaaaeekjjjjjjjjjjkkjjjjjjjjjjkaabbbb
+aaaaeeekkkkkkkkkkkkkkkkkkkkkkaaabbbb
+aaaaeeeeeeeeeeeeekkaaaaaaaaaaaaabbbb
+aaaaeeeeeeeelmmmmkkmmmmlaaaaaaaabbbb
+aaaaeeeeeellnnnnjkkjnnnnllaaaaaabbbb
+aaaaeeeellnnnnnnnoonnnnnnnllaaaabbbb
+aaaaeeeennnnnnnnnoonnnnnnnnnaaaabbbb
+aaaaeeeepnnnnnnnnoonnnnnnnnpaaaabbbb
+aaaaaeeqpppppnnnnoonnnnpppppqaabbbbb
+aaaaaeepppppppppnoonpppppppppaabbbbb
+aaaaaeepppppppppprrppppppppppaabbbbb
+aaaaaaeppppppppprrrrpppppppppabbbbbb
+aaaaaaastppppppperrappppppptsbbbbbbb
+aaaaaaaetttttppreeaarpptttttabbbbbbb
+aaaaaaaastttttteeeaaattttttsbbbbbbbb
+aaaaaaaaassttsseeeaaassttssbbbbbbbbb
+aaaaaaaaaaasseeeeeaaaaassbbbbbbbbbbb
+aaaaaaaaaaaaaaeeeeaaaabbbbbbbbbbbbbb
+aaaaaaaaaaaaaaaaaabbbbbbbbbbbbbbbbbb
+aaaaaaaaaaaaaaaaaabbbbbbbbbbbbbbbbbb
+aaaaaaaaaaaaaaaaaabbbbbbbbbbbbbbbbbb
+aaaaaaaaaaaaaaaaaabbbbbbbbbbbbbbbbbb
+
+== l05  녹는 시계
+= a 1f6570
+= b fdeaa0
+= c f2c94c
+= d a8762a
+= e 36a3a0
+= f fbf6ea
+= g c9bfae
+= h 221c33
+= i 8a5636
+= j 553222
+= k e8dfc8
+= l 2a1812
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaabccaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaadaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaabbbbbbbeeaaaaaaaaaaaaaa
+aaaaaaaaaaabcccccccccdeeeaaaaaaaaaaa
+aaaaaaaaabcfffffffffffcdeeaaaaaaaaaa
+aaaaaaaabcffffffgffffffcdeeeaaaaaaaa
+aaaaaaabcfffffffffffffffcdeeeaaaaaaa
+aaaaaaabcfffffffffffffffcdeeeaaaaaaa
+aaaaaabcfffffffffffffffffcdeeeaaaaaa
+aaaaaebcfgffhhhffffffffgfcdeeeeaaaaa
+aaaaaebcffffffhhhffffffffcdeeeeaaaaa
+aaaaaebcffffffffhffffffffcdeeeeaaaaa
+iiiiiiibcfffffffhffffffffcdiieeeaaaa
+jjjjjjjjbckkkkkkhkkkkkkkkcdjjeeeaaaa
+jjjjjjjjjbcffffffhkkkkkkkcdjjeeeaaaa
+jjjjjjjjjjbcfffffhfffffkcdjjjeeeaaaa
+jjjjjjjjjjjbcfffffhffffkcdjjjeeeaaaa
+jjjjjjjjjjjjbcffffhffffkcdjjjeeeaaaa
+jjjjjjjjjjjjjbcffffhffkcdjjjjeeeaaaa
+llllllllllllllbcffffffkcdlllleeeaaaa
+aaaaaeeeeeeeeeebcfffffkcdeeeeeeaaaaa
+aaaaaeeeeeeeeeeebcfffkcdeeeeeeeaaaaa
+aaaaaeeeeeeeeeeeebcgfkcdeeeeeeeaaaaa
+aaaaaaeeeeeeeeeeeebcgkcdeeeeeeaaaaaa
+aaaaaaaeeeeeeeeeeebckcdeeeeeeaaaaaaa
+aaaaaaaeeeeeeeeeeeebccdeeeeeeaaaaaaa
+aaaaaaaaeeeeeeeeeeebcdeeeeeeaaaaaaaa
+aaaaaaaaaaeeeeeeeeeeddeeeeaaaaaaaaaa
+aaaaaaaaaaaeeeeeeeeeeeeeeaaaaaaaaaaa
+aaaaaaaaaaaaaaeeeeeeecaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaadaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
