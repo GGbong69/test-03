@@ -34,7 +34,6 @@ func _run() -> void:
 		quit(0)
 		return
 	g.state = g.S.TITLE
-	g.ttl_wait = 99.0
 	g.mouse_at = Vector2(4.0, 4.0)
 	await _wait(20)
 	#  판 위에 네 줄로 나란히. 같은 각·같은 자리라 종류만 다르다.
