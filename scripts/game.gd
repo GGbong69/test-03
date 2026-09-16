@@ -3674,6 +3674,10 @@ func _click(m: Vector2) -> void:
 							get_tree().quit()
 					_sfx("menu_pick")
 					return
+			#  줄을 다 보고 남은 것이 판이다. 글줄(x16~164)과 판(x222~418)은
+			#  안 겹치므로 이 순서가 서로를 안 가린다.
+			if m.distance_to(BC) <= R * rt_dbl_out:
+				_ttl_throw(m)
 		S.PROFILE:
 			if _menu_back_rect().has_point(m):
 				state = S.TITLE
@@ -3857,39 +3861,48 @@ func hit_info(p: Vector2) -> Dictionary:
 # 링을 죽이는 제약(민짜)은 그대로 반영한다 — 죽은 띠는 죽은 것으로 보여야
 # 한다는 규칙이 이미 판 그리기에 있고(_draw_board 의 dead), 그 축은 "꽂힌
 # 자리가 무엇인가" 를 실제로 바꾼다. 다트와 트랙은 점수를 바꿀 뿐이다.
+#  착탄의 등급 0~5. 흔들림·소리·고리가 전부 이 하나를 본다. 제목 화면에
+#  꽂히는 자루도 같은 사다리를 쓴다 — 갈라 두면 같은 자리를 물고 다른
+#  소리가 난다.
+func _hit_grade(info: Dictionary, hit_mult: int) -> int:
+	if hit_mult == 0:
+		return 0
+	if int(info.sector) == 50:
+		return 5
+	if int(info.sector) == 25:
+		return 4
+	if hit_mult == 3:
+		return 3
+	if hit_mult == 2:
+		return 2
+	return 1
+
+
+#  등급마다의 소리. 사다리와 한 자리에 둔다.
+const HIT_SFX := ["hit_miss", "hit_single", "hit_double", "hit_triple",
+		"hit_bull_o", "hit_bull_i"]
+
+
 func _impact(info: Dictionary, hit_mult: int) -> void:
 	var lbl := Vector2(0.0, 26.0) if aim.y < BC.y else Vector2(0.0, -24.0)
-
-	var grade := 1
-	if hit_mult == 0:
-		grade = 0
-	elif info.sector == 50:
-		grade = 5
-	elif info.sector == 25:
-		grade = 4
-	elif hit_mult == 3:
-		grade = 3
-	elif hit_mult == 2:
-		grade = 2
+	var grade := _hit_grade(info, hit_mult)
+	_sfx(HIT_SFX[grade])
 
 	match grade:
 		0:
 			shake = 1.5
 			board_punch = 0.15
 			hit_flash_amt = 0.25
-			_sfx("hit_miss")
 		1:
 			shake = 3.0
 			board_punch = 0.45
 			hit_flash_amt = 0.4
-			_sfx("hit_single")
 			add_wave(aim, 3.0, 24.0, C_TXT, 0.35, 1.0, 0.28)
 		2:
 			shake = 6.5
 			board_punch = 0.8
 			hitstop = 0.05
 			hit_flash_amt = 0.7
-			_sfx("hit_double")
 			add_wave(aim, 3.0, 42.0, C_ACC, 0.75, 1.5, 0.40)
 			add_ring_fx(R * rt_dbl_in, R * rt_dbl_out, C_ACC, 0.50)
 			pop(aim + lbl, "더블", C_ACC, 15, 0.8)
@@ -3898,7 +3911,6 @@ func _impact(info: Dictionary, hit_mult: int) -> void:
 			board_punch = 1.0
 			hitstop = 0.09
 			hit_flash_amt = 0.9
-			_sfx("hit_triple")
 			add_wave(aim, 3.0, 54.0, C_ACC, 0.85, 2.0, 0.45)
 			add_wave(aim, 3.0, 32.0, C_TXT, 0.60, 1.0, 0.32)
 			add_ring_fx(R * rt_trp_in, R * rt_trp_out, C_ACC, 0.55)
@@ -3908,7 +3920,6 @@ func _impact(info: Dictionary, hit_mult: int) -> void:
 			board_punch = 1.0
 			hitstop = 0.11
 			hit_flash_amt = 0.9
-			_sfx("hit_bull_o")
 			add_wave(BC, R * rt_bull_o, R * 1.15, C_GREEN.lightened(0.45), 0.80, 2.0, 0.50)
 			add_wave(BC, 4.0, 46.0, C_TXT, 0.70, 1.5, 0.35)
 			add_sparks(10, R * rt_bull_o, R * 0.95, 12.0, C_GREEN.lightened(0.5), 0.42)
@@ -3919,7 +3930,6 @@ func _impact(info: Dictionary, hit_mult: int) -> void:
 			hitstop = 0.15
 			hit_flash_amt = 1.0
 			screen_flash = 1.0
-			_sfx("hit_bull_i")
 			add_wave(BC, R * rt_bull_i, R * 1.35, C_RED.lightened(0.45), 0.90, 2.5, 0.60)
 			add_wave(BC, R * rt_bull_i, R * 0.90, C_ACC, 0.80, 2.0, 0.45)
 			add_wave(BC, 3.0, 52.0, C_TXT, 0.80, 1.5, 0.32)
@@ -14323,6 +14333,50 @@ var set_t := 0.0         # 밀려 들어온 정도 0~1. 0 이면 화면 밖
 var ttl_hot := -1        # 제목 메뉴에서 커서가 얹힌 줄
 var ttl_e := []          # 그 줄의 얹힘 짙기
 var ttl_w := []          # 그 줄 띠가 쓸려 든 폭
+
+# ══════════════════════════════════════════════════════════
+#  제목 판 — 저절로 날아와 꽂히고, 눌러서 던진다
+# ──────────────────────────────────────────────────────────
+#  제목 화면에는 이미 이 게임의 얼굴(다트판)이 깔려 있었는데 **가만히**
+#  있었다. 움직이는 것이 하나도 없으면 목록이지 시작 화면이 아니다.
+#
+#  두 겹이다. ① 몇 초에 한 번 자루가 저절로 날아와 꽂힌다 — 손을 안 대도
+#  화면이 살아 있다. ② 판을 누르면 그 자리로 날아간다 — 첫 클릭이 곧
+#  이 게임이 무엇인지에 대한 답이다. 눌러 본 손님은 메뉴를 읽기 전에
+#  「던지는 게임」을 이미 안다.
+#
+#  ── 판의 자루(darts)를 안 빌린다 ──────────────────────
+#  저쪽은 런의 상태다. 제목에서 건드리면 새 런이 지난 자국을 물려받고,
+#  3D 무대(_bd3_*)까지 같이 깨어난다. 여기 것은 제목에서만 살고
+#  화면을 뜨는 순간 없어지는 별개의 배열이다.
+#
+#  ── 왜 방사 자세가 아닌가 ─────────────────────────────
+#  _draw_darts_2d 는 꽂힌 자루를 **판 가운데에서 바깥으로** 눕힌다.
+#  카메라가 판 한가운데 있으니 그게 맞다. 그런데 그 규칙을 제목에 그대로
+#  쓰면 판 위쪽에 꽂힌 자루가 아래를 보게 되고, 화면 아래에서 날아온
+#  자루가 착탄 순간 180° 돈다. 제목에서는 자루가 **온 길**을 보게 둔다 —
+#  날 때와 꽂혔을 때가 같은 각이라 이음매가 없고, 여섯 자루가 다 같은
+#  쪽에서 온 그림이 된다.
+# ══════════════════════════════════════════════════════════
+
+const TTL := {
+	"gap0": 1.5, "gap1": 2.8,        # 저절로 오는 사이(초)
+	"fly": 0.26,                     # 나는 시간(초)
+	"dl0": 30.0, "dl1": 16.0,        # 손끝의 반길이 → 꽂힌 반길이
+	"bx": 292.0, "by": 402.0,        # 출발점. 글줄(x16~164) 오른쪽이라 안 스친다
+	"spread": 34.0,                  # 출발점이 좌우로 흔들리는 폭
+	"keep": 6,                       # 이만큼 차면 걷는다
+	"sweep": 0.5,                    # 걷는 시간(초)
+	"drop": 44.0,                    # 걷힐 때 떨어지는 거리
+	"ring": 0.34,                    # 착탄 고리가 사는 시간(초)
+	"ids": ["std", "hvy", "lgt", "mag"],
+}
+
+var ttl_stuck := []      # 제목 판에 꽂힌 자루 {p, u, rot, id, t}
+var ttl_fly := []        # 나는 중인 자루 {a, b, u, rot, id, t}
+var ttl_wait := 1.2      # 다음 자루가 저절로 올 때까지 남은 시간
+var ttl_sweep := 0.0     # 걷는 중이면 남은 시간. 0 이면 안 걷는다
+var ttl_t := 0.0         # 제목이 선 뒤로 흐른 시간. 겨눔점이 이걸로 숨쉰다
 var set_row_e := []      # 줄마다의 얹힘 짙기 0~1
 var set_row_w := []      # 그 줄 띠가 쓸려 든 폭 0~1. 짙기와 따로 논다
 						 # 실제 초기값은 _ready 가 저장에서 읽는다.
@@ -14516,6 +14570,44 @@ const TITLE_ROWS := [
 ]
 
 
+#  제목 판 위의 자루들. **스크림 위**에 그린다 — 밑에 두면 유령이 된 판과
+#  같은 28% 가 되어 날아온 것이 안 읽힌다. 판은 배경이고 자루는 지금
+#  일어나는 일이라 두 층의 밝기가 달라야 한다.
+#  글줄(x16~164)과 판(x222~418)이 안 겹치므로 이 층이 메뉴를 안 먹는다.
+func _ttl_draw() -> void:
+	#  걷는 중이면 아래로 빠지며 옅어진다 — 판에서 뽑아 내리는 손짓이다.
+	var sk := 0.0
+	if ttl_sweep > 0.0:
+		sk = 1.0 - ttl_sweep / float(TTL.sweep)
+	for s in ttl_stuck:
+		var sp: Vector2 = s.p
+		var su: Vector2 = s.u
+		var dl := float(TTL.dl1)
+		_icon_dart(sp - su * dl + Vector2(0.0, sk * sk * float(TTL.drop)),
+				dl, String(s.id), 0.0, float(s.rot), 1.0 - sk)
+		#  착탄 고리. waves 를 안 빌린다 — 저쪽은 스크림 **밑**에서 그려져
+		#  여기서는 28% 로 깔린다.
+		#  걷는 중에는 고리도 같이 진다. 안 그러면 고리(0.34초)가 걷기
+		#  (0.5초)보다 짧아서 자루는 다 빠졌는데 고리만 밝게 남는다.
+		var kt: float = float(s.t) / float(TTL.ring)
+		if kt < 1.0 and not motion_off:
+			draw_arc(sp, lerpf(3.0, 27.0, 1.0 - pow(1.0 - kt, 2.6)), 0.0, TAU,
+					24, Color(C_ACC, (1.0 - kt) * (1.0 - sk) * 0.5), 1.0)
+	for f in ttl_fly:
+		var t: float = clampf(float(f.t) / float(TTL.fly), 0.0, 1.0)
+		#  끝에서 붙는다. 등속이면 착탄이 언제인지가 안 보인다.
+		var e := t * t * (3.0 - 2.0 * t)
+		var fu: Vector2 = f.u
+		var fp: Vector2 = (f.a as Vector2).lerp(f.b, e)
+		#  손끝에서는 길고 판에서는 짧다. 멀어지는 것이 길이로 읽힌다.
+		var fl := lerpf(float(TTL.dl0), float(TTL.dl1), e)
+		_icon_dart(fp - fu * fl, fl, String(f.id), 0.0, float(f.rot), 1.0)
+	#  누를 수 있다고 말하는 것은 이 겨눔점 하나다. 판 위에서만 뜬다 —
+	#  화면 아무 데나 떠 있으면 그것은 커서지 과녁이 아니다.
+	if state == S.TITLE and mouse_at.distance_to(BC) <= R * rt_dbl_out:
+		_aim_dot(mouse_at, Color(C_ACC, 0.40 + 0.20 * sin(ttl_t * 5.0)))
+
+
 func _draw_title() -> void:
 	#  다른 화면보다 얕게 덮는다. 0.94 로 덮으면 뒤의 다트판이 유령이 되는데,
 	#  이 게임의 얼굴을 깔아 놓고 지우는 셈이다. 글줄이 왼쪽에 서므로 판과
@@ -14524,6 +14616,7 @@ func _draw_title() -> void:
 	#  왼쪽 그늘 여덟 겹을 걷었다. x=216 에서 끝나 판(x209 시작)을 하나도
 	#  안 가리고, 대신 평평한 배경에 **세로 이음매 넷**을 남기고 있었다.
 	#  글줄은 x16 이고 판은 x209 라 애초에 안 겹친다 — 스크림 한 장이면 된다.
+	_ttl_draw()
 	#  제목은 머리(_hdr)보다 크다. 이 화면에서는 제목이 곧 그림이라
 	#  다른 화면의 머리와 같은 크기로 두면 시작화면이 아니라 목록이 된다.
 	draw_string(font, Vector2(SAFE, 104.0), "하이톤",
@@ -17798,10 +17891,138 @@ func _title_tick(d: float) -> void:
 				ttl_hot = i
 				break
 	_row_ease(ttl_e, ttl_w, TITLE_ROWS.size(), ttl_hot if on else -1, d)
+	#  설정을 제목 위에 열면 뒤에 남는 것은 여전히 제목이다. 그동안에도
+	#  판은 살아 있어야 한다 — 멈추면 흐림 판 뒤에서 얼어붙은 그림이 된다.
+	#  다만 **새 자루는 안 보낸다**(live). 설정을 만지는 중에 소리가 끼는
+	#  것은 배경이 아니라 방해다.
+	var bg: bool = on or (state == S.SETTINGS and pause_from < 0)
+	if bg:
+		_ttl_board(d, on)
+		#  설정 밑에서는 움직이는 것이 있을 때만 다시 그린다. 저쪽은 매
+		#  프레임 화면을 후면 복사해 아홉 번 따는 흐림 판을 지나간다.
+		if on or _ttl_busy():
+			queue_redraw()
+	elif not ttl_stuck.is_empty() or not ttl_fly.is_empty():
+		#  화면을 뜨면 판을 비운다. 안 비우면 한 판 다 돌고 돌아왔을 때
+		#  지난번 자국이 그대로 남아, 제목이 이어지는 화면으로 읽힌다.
+		ttl_stuck.clear()
+		ttl_fly.clear()
+		ttl_sweep = 0.0
 	if on:
 		if ttl_hot != was and ttl_hot >= 0:
 			_sfx("menu_pick2")
 		queue_redraw()
+
+
+#  제목 판에 아직 움직이는 것이 있는가.
+func _ttl_busy() -> bool:
+	if not ttl_fly.is_empty() or ttl_sweep > 0.0:
+		return true
+	for s in ttl_stuck:
+		if float(s.t) < float(TTL.ring):
+			return true
+	return false
+
+
+#  live 면 새 자루를 보낸다. 나는 것과 걷는 것은 live 와 무관하게 끝까지
+#  간다 — 중간에 멈추면 자루가 허공에 선다.
+func _ttl_board(d: float, live: bool) -> void:
+	ttl_t += d
+	for f in ttl_fly:
+		f.t += d
+	for s in ttl_stuck:
+		s.t += d
+	if not ttl_fly.is_empty():
+		var span := float(TTL.fly)
+		var done := ttl_fly.filter(func(f): return float(f.t) >= span)
+		ttl_fly = ttl_fly.filter(func(f): return float(f.t) < span)
+		for f in done:
+			_ttl_stick(f)
+	#  여섯이 차면 걷는다. 더 꽂으면 판이 안 보이고, 걷는 것 자체가 볼
+	#  거리다 — 다트판은 원래 한 차례가 끝나면 비운다.
+	if ttl_sweep > 0.0:
+		ttl_sweep = maxf(ttl_sweep - d, 0.0)
+		if ttl_sweep <= 0.0:
+			ttl_stuck.clear()
+	elif ttl_stuck.size() >= int(TTL.keep):
+		_sfx("sweep_sink")
+		if motion_off:
+			ttl_stuck.clear()
+		else:
+			ttl_sweep = float(TTL.sweep)
+	#  움직임을 끈 손님에게는 저절로 오는 자루를 안 보낸다 — 가만히 둔
+	#  화면이 저 혼자 움직이는 것이 그 설정이 끄려는 바로 그것이다.
+	#  누르면 여전히 날아간다. 손이 부른 것은 움직임이 아니라 응답이다.
+	if live and not motion_off and ttl_sweep <= 0.0:
+		ttl_wait -= d
+		if ttl_wait <= 0.0:
+			_ttl_throw(_ttl_spot())
+
+
+#  한 자루 던진다. p 는 판 좌표의 착탄점이다.
+func _ttl_throw(p: Vector2) -> void:
+	ttl_wait = randf_range(float(TTL.gap0), float(TTL.gap1))
+	#  걷는 중이면 먼저 치운다. 사라지는 무리에 섞이면 방금 누른 자루가
+	#  같이 걷혀서, 누른 것이 안 꽂힌 것으로 보인다.
+	if ttl_sweep > 0.0:
+		ttl_sweep = 0.0
+		ttl_stuck.clear()
+	var a := Vector2(float(TTL.bx) + randf_range(-float(TTL.spread),
+			float(TTL.spread)), float(TTL.by))
+	var u := (p - a)
+	u = u.normalized() if u.length() > 0.001 else Vector2(0.0, -1.0)
+	var ids: Array = TTL.ids
+	var e := {"a": a, "b": p, "u": u, "id": String(ids[randi() % ids.size()]),
+			"rot": _ttl_rot(u) + randf_range(-0.14, 0.14), "t": 0.0}
+	if motion_off:
+		_ttl_stick(e)
+	else:
+		ttl_fly.append(e)
+		_sfx("dart_fly")
+
+
+#  자루가 u 를 보게 하는 회전값. _icon_dart 는 각 없이 부르면 Vector2(6,-10)
+#  쪽으로 눕으므로 그만큼을 빼 준다 — _draw_darts_2d 와 같은 셈이다.
+func _ttl_rot(u: Vector2) -> float:
+	return u.angle() - Vector2(6.0, -10.0).angle()
+
+
+#  꽂는다. 소리는 판과 같은 사다리(_hit_grade)에서 온다 — 제목에서 불을
+#  물면 판에서 불을 문 소리가 나야 그 소리가 무엇인지 배워진다.
+func _ttl_stick(e: Dictionary) -> void:
+	ttl_stuck.append({"p": e.b, "u": e.u, "id": e.id, "rot": e.rot, "t": 0.0})
+	var info := hit_info(e.b)
+	var g := _hit_grade(info, int(info.mult))
+	_sfx(HIT_SFX[g])
+	#  판이 움찔한다. 스크림(0.72) 밑이라 옅게 읽히는데 그게 맞다 —
+	#  판은 배경이고 소리와 자루가 앞이다.
+	board_punch = maxf(board_punch, 0.15 + 0.17 * float(g))
+	if g >= 5:
+		shake = maxf(shake, 4.0)
+	#  물린 칸이 하얗게 뜬다. 판을 그리는 쪽(_draw_board)이 이미 하는 일이라
+	#  값만 놓으면 된다 — 제목에서는 스크림 밑이라 옅게 읽히는데, 그 옅음이
+	#  「뒤에 있는 것이 반응했다」 로는 충분하다.
+	hit_flash = 1.0
+	hit_flash_amt = 0.25 + 0.15 * float(g)
+	hit_idx = int(info.idx)
+	hit_r0 = float(info.r0)
+	hit_r1 = float(info.r1)
+	hit_bull = int(info.idx) == -1 and int(info.mult) > 0
+
+
+#  저절로 오는 자루가 노리는 자리. 늘 가운데면 자랑이 되고 늘 바깥이면
+#  못 던지는 판이 된다 — 열둘에 하나가 안쪽 불이다.
+func _ttl_spot() -> Vector2:
+	var k := randf()
+	var rr: float
+	if k < 0.08:
+		rr = R * rt_bull_i * randf()
+	elif k < 0.20:
+		rr = R * lerpf(rt_bull_i, rt_bull_o, randf())
+	else:
+		rr = R * randf_range(0.20, 0.95)
+	var a := randf() * TAU
+	return BC + Vector2(sin(a), -cos(a)) * rr
 
 
 #  설정이 밀려 들었다 나가는 시간을 민다. 흐림 판의 세기도 여기서 준다 —
