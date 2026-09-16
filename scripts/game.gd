@@ -2123,9 +2123,8 @@ const SKIP := {
 # 지나간 판의 자리. 고른 것이 무엇이었는지만 남긴다.
 func _skip_past(r: Rect2, rn: int) -> void:
 	var took: bool = bool(leg_skipped.get(rn, false))
-	draw_rect(r, C_PANEL.darkened(0.52))
-	draw_rect(Rect2(r.position, Vector2(r.size.x, 1.0)),
-			C_ACC.darkened(0.72) if took else C_WIRE.darkened(0.4))
+	_rr(self, r, C_PANEL.darkened(0.52))
+	_rr_top(self, r, 1, C_ACC.darkened(0.72) if took else C_WIRE.darkened(0.4))
 	if not took:
 		draw_string(font_sm, r.position + Vector2(0.0, SKIP.y0), "던졌다",
 				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, C_OFF)
@@ -2147,9 +2146,8 @@ func _skip_plate(r: Rect2, t: Dictionary, on: bool) -> void:
 	#  펠트에 놓인 쪽지다. 상자를 꽉 채우면 카드와 무게가 같아져 "고르는
 	#  것" 이 둘로 보인다 — 고르는 것은 판이고 이쪽은 그 판의 곁말이다.
 	#  바탕을 반투명으로 깔고 왼쪽에 획 하나를 세운다.
-	draw_rect(r, Color(C_PANEL.darkened(0.10), 0.72 if on else 0.45))
-	draw_rect(Rect2(r.position, Vector2(1.0, r.size.y)),
-			C_ACC if on else C_ACC.darkened(0.55))
+	_rr(self, r, Color(C_PANEL.darkened(0.10), 0.72 if on else 0.45))
+	_rr_left(self, r, C_ACC if on else C_ACC.darkened(0.55))
 	if t.is_empty():
 		draw_string(font_sm, r.position + Vector2(0.0, SKIP.y1), "못 건너뛴다",
 				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, C_DIM)
@@ -5751,12 +5749,14 @@ func _bank_draw() -> void:
 	# 이자 줄은 상점·스테이지에서만 의미가 있다. 그때만 판을 늘려 담는다.
 	# 플레이 중에는 짧게 끝나야 그 아래 탄창 헤더가 들어갈 자리가 난다.
 	var r := _bank_rect()
-	draw_rect(r, C_PANEL)
+	_rr(self, r, C_PANEL)
+	#  어두운 띠를 **먼저** 깔고 진행을 그 위에 얹는다. 전에는 차례가 거꾸로라
+	#  진행 띠가 늘 어두운 띠에 덮여 안 보였다.
+	_rr_top(self, r, 2, C_GOLD.darkened(0.35))
 	# 런 바가 없는 화면에서는 머리띠가 진행바다. 몇 판째인지가 안 사라진다.
 	if _bar_hidden():
 		var k := clampf(float(_run_done()) / float(GameData.legs_n()), 0.0, 1.0)
-		draw_rect(Rect2(r.position, Vector2(r.size.x * k, 2.0)), C_ACC)
-	draw_rect(Rect2(r.position, Vector2(r.size.x, 2.0)), C_GOLD.darkened(0.35))
+		_rr_top(self, r, 2, C_ACC, -1, k)
 	# deny_flash 는 상점 중앙 골드 텍스트가 쓰던 값을 그대로 물려받는다
 	#  거절은 **흔들림**이 진다. 전에는 금색을 배수 붉음으로 물들였는데,
 	#  붉음은 배수다 — 이 게임에 위험색은 없다. 색을 빌려 오면 그 색이
@@ -6843,10 +6843,10 @@ func _sell_btn_draw() -> void:
 		return
 	var hot: bool = hand_st == H.ARMED and hand_src == 5
 	var v := GameData.sell_value(owned[sell_sel])
-	draw_rect(Rect2(r.position + Vector2(1.0, 2.0), r.size), Color(0.0, 0.0, 0.0, 0.35))
-	draw_rect(r, C_PANEL.lightened(0.12 if hot else 0.02))
+	_rr(self, Rect2(r.position + Vector2(1.0, 2.0), r.size), Color(0.0, 0.0, 0.0, 0.35))
+	_rr(self, r, C_PANEL.lightened(0.12 if hot else 0.02))
 	# 위쪽 한 획 — 리롤·다음 판 버튼과 같은 어법이라 "버튼"으로 읽힌다.
-	draw_rect(Rect2(r.position, Vector2(r.size.x, 1.0)), C_ACC if hot else C_GOLD)
+	_rr_top(self, r, 1, C_ACC if hot else C_GOLD)
 	draw_gold(r.position.x + r.size.x * 0.5, r.position.y + r.size.y - 3.0,
 			"+%d" % v, 9, C_GOLD)
 
@@ -13582,7 +13582,7 @@ func _tip_draw(sh: Vector2) -> void:
 
 	# 테두리는 대상과 같이 흔들려야 어긋나 보이지 않는다 — 현재 transform 그대로.
 	if tip_box and tip_mark.size.x > 0.0:
-		draw_rect(tip_mark, Color(C_TXT, tip_a * 0.9), false, 1.0)
+		_rr_line(self, tip_mark, Color(C_TXT, tip_a * 0.9))
 
 	# 판과 글자는 흔들리면 못 읽는다 — 흔들림 밖에서 그린다.
 	draw_set_transform(Vector2.ZERO)
@@ -13717,9 +13717,9 @@ func _draw_card() -> void:
 	if card_p <= 0.004:
 		return
 	var p := card_pos()
-	draw_rect(Rect2(p + Vector2(3, 4), Vector2(CARD_W, CARD_H)), Color(0, 0, 0, 0.35))
-	draw_rect(Rect2(p, Vector2(CARD_W, CARD_H)), C_PANEL)
-	draw_rect(Rect2(p, Vector2(CARD_W, 3)), C_ACC)
+	_rr(self, Rect2(p + Vector2(3, 4), Vector2(CARD_W, CARD_H)), Color(0, 0, 0, 0.35))
+	_rr(self, Rect2(p, Vector2(CARD_W, CARD_H)), C_PANEL)
+	_rr_top(self, Rect2(p, Vector2(CARD_W, CARD_H)), 3, C_ACC)
 
 	if card_mode == 0:
 		if calc_lit:
@@ -13825,7 +13825,7 @@ func _photo_draw() -> void:
 				var e: Dictionary = peek_pick[i]
 				var y: float = 74.0 + float(i) * 46.0
 				var r := Rect2(Vector2(74.0, y), Vector2(VIEW.x - 148.0, 38.0))
-				draw_rect(r, C_PANEL.darkened(0.15))
+				_rr(self, r, C_PANEL.darkened(0.15))
 				draw_string(font, r.position + Vector2(10.0, 15.0),
 						String(e.d.get("n", "")), HORIZONTAL_ALIGNMENT_LEFT,
 						-1, 11, C_TXT)
@@ -13850,11 +13850,231 @@ func _photo_draw() -> void:
 #  이 어법은 이미 코드 안에 둘 있었다 — 런 바 아래 컷과 자금판 윗변.
 #  발명이 아니라 승격이다.
 func _panel(r: Rect2, focus := false, a := 1.0) -> void:
-	draw_rect(_pr(r), Color(C_PANEL, a))
+	_rr(self, r, Color(C_PANEL, a))
 	if focus:
-		draw_rect(_pr(Rect2(r.position, Vector2(r.size.x, 2.0))), Color(C_ACC, a))
-	draw_rect(_pr(Rect2(r.position + Vector2(0.0, r.size.y - 1.0),
-			Vector2(r.size.x, 1.0))), Color(C_BG, a))
+		_rr_top(self, r, 2, Color(C_ACC, a))
+	_rr_bottom(self, r, Color(C_BG, a))
+
+
+# ══════════════════════════════════════════════════════════
+#  둥근 판 — 모서리를 도트 계단으로 깎는다
+# ──────────────────────────────────────────────────────────
+#  판이 전부 네모 모서리였다. 사용자 평(2026-09-17): 「테두리가 네모나서
+#  AI 가 만든 느낌이 난다 — 게임 UI 처럼 모서리를 둥글게」.
+#
+#  원을 그려 깎지 않는다. 640x360 에서 곡선 안티에일리어싱은 흐린 가장자리가
+#  되어 도트 사이에서 혼자 뿌옇다. **줄마다 몇 칸 들이는가**를 표로 둔다 —
+#  도트 게임의 둥근 단추는 전부 그렇게 생겼다.
+#
+#  반지름은 판 크기가 고른다(_rad_for). 작은 단추에 큰 반지름을 주면 알약이
+#  되고, 큰 판에 작은 반지름을 주면 모서리만 이 빠진 네모로 보인다.
+#
+#  그리는 쪽 넷이 **같은 표**를 본다 — 면(_rr) · 윗띠(_rr_top) · 바닥줄
+#  (_rr_bottom) · 테두리(_rr_line). 따로 셈하면 금빛 띠가 둥근 면 밖으로
+#  한 칸씩 삐져나온다(프로필 줄에서 한 번 겪은 그 꼭지다).
+# ══════════════════════════════════════════════════════════
+const ROUND := {
+	2: [2, 1],
+	3: [3, 1, 1],
+	4: [4, 2, 1, 1],
+	5: [5, 3, 2, 1, 1],
+}
+
+
+static func _rad_for(r: Rect2) -> int:
+	#  한 단 크게 잡았다. 3~4px 은 640x360 을 실제 크기로 보면 모서리만 살짝
+	#  깎인 네모라, 「게임 UI 처럼 둥글다」 로는 안 읽혔다.
+	var m := minf(r.size.x, r.size.y)
+	if m >= 40.0:
+		return 5
+	if m >= 24.0:
+		return 4
+	if m >= 14.0:
+		return 3
+	if m >= 8.0:
+		return 2
+	return 0
+
+
+static func _rad(r: Rect2, rad: int) -> int:
+	var k: int = _rad_for(r) if rad < 0 else rad
+	#  높이가 모서리 둘을 못 담으면 반지름을 줄인다
+	while k > 0 and (not ROUND.has(k) or r.size.y < float(2 * k) or r.size.x < float(2 * k + 2)):
+		k -= 1
+	return k
+
+
+#  둥근 면.
+func _rr(c: CanvasItem, r: Rect2, col: Color, rad := -1) -> void:
+	r = _pr(r)
+	var k := _rad(r, rad)
+	if k <= 0:
+		c.draw_rect(r, col)
+		return
+	var ins: Array = ROUND[k]
+	var x := r.position.x
+	var y := r.position.y
+	var w := r.size.x
+	var h := r.size.y
+	c.draw_rect(Rect2(x, y + float(k), w, h - float(2 * k)), col)
+	for i in k:
+		var d := float(ins[i])
+		c.draw_rect(Rect2(x + d, y + float(i), w - 2.0 * d, 1.0), col)
+		c.draw_rect(Rect2(x + d, y + h - 1.0 - float(i), w - 2.0 * d, 1.0), col)
+
+
+#  윗띠 hb 줄. 모서리 곡선을 따라 들어간다. frac < 1 이면 왼쪽부터 그만큼만
+#  (진행 막대) — 오른쪽 끝은 곧게 끊는다.
+func _rr_top(c: CanvasItem, r: Rect2, hb: int, col: Color, rad := -1,
+		frac := 1.0) -> void:
+	r = _pr(r)
+	var k := _rad(r, rad)
+	var ins: Array = ROUND[k] if k > 0 else []
+	for i in hb:
+		var d: float = float(ins[i]) if i < ins.size() else 0.0
+		var x0: float = r.position.x + d
+		var x1: float = minf(r.position.x + r.size.x * frac, r.end.x - d)
+		if x1 > x0:
+			c.draw_rect(Rect2(x0, r.position.y + float(i), x1 - x0, 1.0), col)
+
+
+#  바닥 한 줄.
+func _rr_bottom(c: CanvasItem, r: Rect2, col: Color, rad := -1) -> void:
+	r = _pr(r)
+	var k := _rad(r, rad)
+	var d: float = float(ROUND[k][0]) if k > 0 else 0.0
+	c.draw_rect(Rect2(r.position.x + d, r.end.y - 1.0, r.size.x - 2.0 * d, 1.0), col)
+
+
+#  왼쪽 한 획. 모서리에서는 계단을 따라 돈다.
+func _rr_left(c: CanvasItem, r: Rect2, col: Color, rad := -1) -> void:
+	r = _pr(r)
+	var k := _rad(r, rad)
+	if k <= 0:
+		c.draw_rect(Rect2(r.position, Vector2(1.0, r.size.y)), col)
+		return
+	var ins: Array = ROUND[k]
+	c.draw_rect(Rect2(r.position.x, r.position.y + float(k), 1.0,
+			r.size.y - float(2 * k)), col)
+	for i in k:
+		var d := float(ins[i])
+		c.draw_rect(Rect2(r.position.x + d, r.position.y + float(i), 1.0, 1.0), col)
+		c.draw_rect(Rect2(r.position.x + d, r.end.y - 1.0 - float(i), 1.0, 1.0), col)
+
+
+#  ── 누운 카드 ─────────────────────────────────────────
+#  판 고르기·제약 카드는 펠트에 누우면 사다리꼴이라 화면 좌표로 모서리를
+#  못 깎는다. **카드 제 좌표**(폭 w · 높이 h)에서 계단 테를 짓고 네 점으로
+#  옮긴다 — 누우면 계단도 같이 눌리고 서면 같이 선다.
+func _quad_uv(q: PackedVector2Array, w: float, h: float, u: float,
+		v: float) -> Vector2:
+	var sx := u / w
+	var ty := v / h
+	return q[0] + (q[1] - q[0]) * sx + (q[3] - q[0]) * ty \
+			+ (q[0] - q[1] + q[2] - q[3]) * sx * ty
+
+
+#  제 좌표의 둥근 테(시계 방향). 같은 점과 한 줄 위의 가운데 점을 걷는다 —
+#  남기면 고닷의 다각형 쪼개기가 실패해 카드가 통째로 안 그려진다.
+func _round_ring(w: float, h: float, k: int) -> PackedVector2Array:
+	var raw: Array = []
+	if k <= 0:
+		raw = [Vector2(0, 0), Vector2(w, 0), Vector2(w, h), Vector2(0, h)]
+	else:
+		var ins: Array = ROUND[k]
+		#  위 → 오른 위 계단
+		raw.append(Vector2(float(ins[0]), 0.0))
+		for i in k:
+			raw.append(Vector2(w - float(ins[i]), float(i)))
+			raw.append(Vector2(w - float(ins[i]), float(i + 1)))
+		raw.append(Vector2(w, float(k)))
+		#  오른 아래 계단
+		for i in range(k - 1, -1, -1):
+			raw.append(Vector2(w, h - float(i + 1)) if i == k - 1 else
+					Vector2(w - float(ins[i + 1]), h - float(i + 1)))
+			raw.append(Vector2(w - float(ins[i]), h - float(i + 1)))
+			raw.append(Vector2(w - float(ins[i]), h - float(i)))
+		#  왼 아래 계단
+		for i in k:
+			raw.append(Vector2(float(ins[i]), h - float(i)))
+			raw.append(Vector2(float(ins[i]), h - float(i + 1)))
+		raw.append(Vector2(0.0, h - float(k)))
+		#  왼 위 계단
+		for i in range(k - 1, -1, -1):
+			raw.append(Vector2(0.0, float(i + 1)) if i == k - 1 else
+					Vector2(float(ins[i + 1]), float(i + 1)))
+			raw.append(Vector2(float(ins[i]), float(i + 1)))
+			raw.append(Vector2(float(ins[i]), float(i)))
+	var out := PackedVector2Array()
+	for pt in raw:
+		if out.is_empty() or not (out[out.size() - 1] as Vector2).is_equal_approx(pt):
+			out.append(pt)
+	if out.size() > 1 and out[0].is_equal_approx(out[out.size() - 1]):
+		out.remove_at(out.size() - 1)
+	var i := 0
+	while out.size() > 3 and i < out.size():
+		var a: Vector2 = out[(i - 1 + out.size()) % out.size()]
+		var b: Vector2 = out[i]
+		var c: Vector2 = out[(i + 1) % out.size()]
+		if absf((b - a).cross(c - b)) < 0.0001:
+			out.remove_at(i)
+		else:
+			i += 1
+	return out
+
+
+func _quad_round(q: PackedVector2Array, w: float, h: float,
+		off := Vector2.ZERO) -> PackedVector2Array:
+	var k := _rad(Rect2(0.0, 0.0, w, h), -1)
+	var out := PackedVector2Array()
+	for pt in _round_ring(w, h, k):
+		out.append(_quad_uv(q, w, h, pt.x, pt.y) + off)
+	return out
+
+
+#  카드 먼 모서리의 띠(제 좌표 hb 줄). 위 모서리 곡선을 따라 들어간다.
+func _quad_top_band(q: PackedVector2Array, w: float, h: float,
+		hb: float) -> PackedVector2Array:
+	var k := _rad(Rect2(0.0, 0.0, w, h), -1)
+	var d0: float = float(ROUND[k][0]) if k > 0 else 0.0
+	var d1: float = float(ROUND[k][mini(1, k - 1)]) if k > 0 else 0.0
+	return PackedVector2Array([_quad_uv(q, w, h, d0, 0.0), _quad_uv(q, w, h, w - d0, 0.0),
+			_quad_uv(q, w, h, w - d1, hb), _quad_uv(q, w, h, d1, hb)])
+
+
+#  카드 가까운 모서리의 두께 — 아래 모서리 곡선 안쪽에서만 내려온다.
+func _quad_side(q: PackedVector2Array, w: float, h: float,
+		th: float) -> PackedVector2Array:
+	var k := _rad(Rect2(0.0, 0.0, w, h), -1)
+	var d0: float = float(ROUND[k][0]) if k > 0 else 0.0
+	var a := _quad_uv(q, w, h, d0, h)
+	var b := _quad_uv(q, w, h, w - d0, h)
+	return PackedVector2Array([a, b, b + Vector2(0.0, th), a + Vector2(0.0, th)])
+
+
+#  한 칸 테두리. 계단은 앞 줄이 들어간 만큼 가로로 이어 그려 틈이 안 난다.
+func _rr_line(c: CanvasItem, r: Rect2, col: Color, rad := -1) -> void:
+	r = _pr(r)
+	var k := _rad(r, rad)
+	if k <= 0:
+		c.draw_rect(r, col, false, 1.0)
+		return
+	var ins: Array = ROUND[k]
+	var x := r.position.x
+	var y := r.position.y
+	var w := r.size.x
+	var h := r.size.y
+	var d0 := float(ins[0])
+	c.draw_rect(Rect2(x + d0, y, w - 2.0 * d0, 1.0), col)
+	c.draw_rect(Rect2(x + d0, y + h - 1.0, w - 2.0 * d0, 1.0), col)
+	c.draw_rect(Rect2(x, y + float(k), 1.0, h - float(2 * k)), col)
+	c.draw_rect(Rect2(x + w - 1.0, y + float(k), 1.0, h - float(2 * k)), col)
+	for i in range(1, k):
+		var a := float(ins[i])
+		var run := maxf(float(ins[i - 1]) - a, 1.0)
+		for yy in [y + float(i), y + h - 1.0 - float(i)]:
+			c.draw_rect(Rect2(x + a, yy, run, 1.0), col)
+			c.draw_rect(Rect2(x + w - a - run, yy, run, 1.0), col)
 
 
 func _btn(r: Rect2, label: String, sub: String, on: bool,
@@ -13992,8 +14212,8 @@ func _draw_leg() -> void:
 	# 쌓아 둔 뱃지 — 언제 쓰이는지는 이름이 말한다
 	for i in pending_tags.size():
 		var r := _pend_rect(i)
-		draw_rect(r, C_PANEL.lightened(0.10))
-		draw_rect(Rect2(r.position, Vector2(r.size.x, 1.0)), C_ACC)
+		_rr(self, r, C_PANEL.lightened(0.10))
+		_rr_top(self, r, 1, C_ACC)
 		_icon_tag(Vector2(r.position.x + 9.0, r.get_center().y + 0.5), 5.0,
 				String(pending_tags[i].kind), 1.0,
 				String(pending_tags[i].get("rar", "")))
@@ -14018,16 +14238,14 @@ func _leg_card(i: int, rn: int) -> void:
 	var w2: float = sz.x * gs
 	var foot: float = r.end.y
 	var q := _card_quad(px - (w2 - sz.x) * 0.5, w2, foot, up, gs, 7.0 * up)
+	var ch: float = float(CARD.h)
 
-	var sh := PackedVector2Array()
-	for c in q:
-		sh.append(c + TBL.light * (2.0 + 5.0 * up))
-	draw_colored_polygon(sh, Color(0.0, 0.0, 0.0, 0.22 + 0.14 * up))
+	draw_colored_polygon(_quad_round(q, sz.x, ch, TBL.light * (2.0 + 5.0 * up)),
+			Color(0.0, 0.0, 0.0, 0.22 + 0.14 * up))
 	var body: Color = C_PANEL.darkened(0.30) if done \
 			else C_PANEL.lightened(0.10 + 0.08 * up)
-	draw_colored_polygon(q, body)
-	draw_colored_polygon(PackedVector2Array([q[0], q[1],
-			q[1] + Vector2(0.0, 2.0), q[0] + Vector2(0.0, 2.0)]),
+	draw_colored_polygon(_quad_round(q, sz.x, ch), body)
+	draw_colored_polygon(_quad_top_band(q, sz.x, ch, 2.0),
 			C_ACC if rn == leg_no else C_MULT.darkened(0.4))
 
 	var ax: Vector2 = ((q[1] - q[0]) + (q[2] - q[3])) * 0.5 / sz.x
@@ -14111,8 +14329,8 @@ func _apron_mods() -> void:
 		# 실제 캐비닛(2r+6 = 32)과 같다. "보드 확장 없음" 이라고 쓰는 것보다
 		# R1 플레이어에게 더 많이 가르친다 — 비었다가 아니라 여기에 걸린다.
 		var e := Rect2(VIEW.x * 0.5 - 16.0, _apron_y() - 16.0, 32.0, 32.0)
-		draw_rect(e, C_WOOD.darkened(0.55))
-		draw_rect(e, C_WOOD.lightened(0.10), false, 1.0)
+		_rr(self, e, C_WOOD.darkened(0.55))
+		_rr_line(self, e, C_WOOD.lightened(0.10))
 		return
 	var step: float = minf(52.0, 560.0 / float(n))
 	var x0: float = VIEW.x * 0.5 - (float(n) - 1.0) * step * 0.5
@@ -14191,24 +14409,20 @@ func _stage_card(i: int) -> void:
 	var q := _card_quad(px2, w2, foot, up, gs, 7.0 * up)
 
 	# 그림자는 매물과 같은 빛 벡터다. 서면 카드가 멀어지므로 그림자도 진다.
-	var sh := PackedVector2Array()
-	for c in q:
-		sh.append(c + TBL.light * (2.0 + 5.0 * up))
-	draw_colored_polygon(sh, Color(0.0, 0.0, 0.0, 0.22 + 0.14 * up))
+	var ch: float = float(CARD.h)
+	draw_colored_polygon(_quad_round(q, sz.x, ch, TBL.light * (2.0 + 5.0 * up)),
+			Color(0.0, 0.0, 0.0, 0.22 + 0.14 * up))
 
 	var body: Color = C_PANEL.lightened(0.10 + 0.08 * up)
 	# 가까운 모서리의 두께 — 물건이지 인쇄가 아니라고 말한다. 누웠을 때는
 	# 카드 옆면이 거의 안 보이고, 서면 두꺼워진다.
 	var th: float = CARD.th * (0.5 + up)
-	draw_colored_polygon(PackedVector2Array([q[3], q[2],
-			q[2] + Vector2(0.0, th), q[3] + Vector2(0.0, th)]), body.darkened(0.45))
-	draw_colored_polygon(q, body)
+	draw_colored_polygon(_quad_side(q, sz.x, ch, th), body.darkened(0.45))
+	draw_colored_polygon(_quad_round(q, sz.x, ch), body)
 	# 먼 모서리의 띠 — 카드가 서면 켜진다
-	draw_colored_polygon(PackedVector2Array([q[0], q[1],
-			q[1] + Vector2(0.0, 2.0), q[0] + Vector2(0.0, 2.0)]),
+	draw_colored_polygon(_quad_top_band(q, sz.x, ch, 2.0),
 			C_MULT.lightened(0.20 * up))
-	draw_colored_polygon(PackedVector2Array([q[3] - Vector2(0.0, 1.0),
-			q[2] - Vector2(0.0, 1.0), q[2], q[3]]), Color(C_BG, 0.55))
+	draw_colored_polygon(_quad_side(q, sz.x, ch, -1.0), Color(C_BG, 0.55))
 
 	# 얼굴은 그림이 먼저다. 훑는 채널은 글자가 아니라 실루엣이다.
 	# 아이콘이 축("링이 나빠진다")을 말하고 설명이 양("0.5배")을 말한다.
@@ -14342,8 +14556,8 @@ func _draw_over() -> void:
 			var t := "%s  %s" % [u.get("k", ""), u.get("n", "")]
 			var tw: float = font_sm.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT,
 					-1, 9).x + 12.0 if font_sm != null else 60.0
-			draw_rect(Rect2(ux, uy, tw, 14.0), Color(C_PANEL.darkened(0.3), ua))
-			draw_rect(Rect2(ux, uy, 2.0, 14.0), Color(C_GOLD, ua))
+			_rr(self, Rect2(ux, uy, tw, 14.0), Color(C_PANEL.darkened(0.3), ua))
+			_rr_left(self, Rect2(ux, uy, tw, 14.0), Color(C_GOLD, ua))
 			draw_string(font_sm, Vector2(ux + 6.0, uy + 10.0), t,
 					HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(C_GOLD, ua))
 			ux += tw + 8.0
@@ -14606,7 +14820,7 @@ func _draw_profile() -> void:
 		#  지우기 — 겨눈 동안에만 붉다
 		var dr := _prof_del_rect()
 		var armed: bool = prof_arm == sel
-		draw_rect(dr, Color(C_MULT if armed else C_PANEL.lightened(0.10),
+		_rr(self, dr, Color(C_MULT if armed else C_PANEL.lightened(0.10),
 				0.9 if armed else 1.0))
 		draw_string(font, dr.position + Vector2(0.0, 17.0),
 				"정말 지운다" if armed else "지우기",
@@ -16998,7 +17212,7 @@ func _cup_halo(stage: Rect2, col: Color, front: bool) -> void:
 
 func _cup_draw(pr: Rect2) -> void:
 	var stage := _cup_stage()
-	draw_rect(stage, C_PANEL.darkened(0.20))
+	_rr(self, stage, C_PANEL.darkened(0.20))
 	#  히든인가. 넘기는 동안은 **가는 통**을 따른다 — 겉이 무대 하나에
 	#  걸리므로 둘을 따로 못 칠한다.
 	var shut: bool = _cup_shut(newrun_pip)
@@ -17026,7 +17240,7 @@ func _cup_draw(pr: Rect2) -> void:
 	if glow:
 		_cup_halo(stage, _cup3_skin(newrun_pip).body, true)
 	_cup_mask(stage, pr)
-	draw_rect(stage, C_PANEL.darkened(0.42), false, 1.0)
+	_rr_line(self, stage, C_PANEL.darkened(0.42))
 
 
 
@@ -17147,7 +17361,7 @@ func _draw_newrun() -> void:
 
 	# 다트통 패널 — 왼쪽에 통(다트통의 얼굴), 오른쪽에 이름과 값
 	var pr := _pack_rect()
-	draw_rect(pr, C_PANEL.lightened(0.10))
+	_rr(self, pr, C_PANEL.lightened(0.10))
 	var open: bool = _pack_open(newrun_pip)
 	var row: Dictionary = packs[newrun_pip] if newrun_pip < packs.size() else {}
 	# 통이 먼저다. 마스크가 판 바탕을 다시 깔므로 머리띠와 글은 그 뒤에 온다.
@@ -17208,12 +17422,12 @@ func _draw_newrun() -> void:
 				draw_rect(Rect2(r.position.x, r.end.y, r.size.x, 2.0), C_GOLD)
 		else:
 			# 못 여는 단은 좁은 토막으로 — 자리는 지키되 값은 안 보인다
-			draw_rect(Rect2(r.position.x + 10.0, r.position.y, 13.0, r.size.y),
+			_rr(self, Rect2(r.position.x + 10.0, r.position.y, 13.0, r.size.y),
 					C_PANEL.lightened(0.06))
-			draw_rect(Rect2(r.position.x + 10.0, r.position.y, 13.0, r.size.y),
-					C_WIRE.darkened(0.3), false, 1.0)
+			_rr_line(self, Rect2(r.position.x + 10.0, r.position.y, 13.0, r.size.y),
+					C_WIRE.darkened(0.3))
 		if String(st[i].get("id", "")) == String(cur.get("id", "")):
-			draw_rect(r.grow(2.0), C_TXT, false, 1.0)
+			_rr_line(self, r.grow(2.0), C_TXT)
 	#  이름을 단의 색으로 쓰되, 어두운 단은 밝혀서 쓴다 — 검정 리그가
 	#  제 색(3a3450)으로는 배경에 묻혀 이름이 안 보였다. 색을 버리면
 	#  어느 단인지가 안 읽히므로, 색은 지키고 밝기만 끌어올린다.
@@ -17747,9 +17961,8 @@ func _set_panel(c: CanvasItem, key: String, e: float) -> void:
 	var pe: float = e * e          # 판은 글줄보다 한 박자 늦게 뜬다
 	# 뒤가 비치면 다트판 위에 글씨가 겹쳐 읽기가 나빠진다. 흐림이 이미
 	# 뒤를 뭉갰으므로 판은 거의 불투명해도 "떠 있다" 로 읽힌다.
-	c.draw_rect(p, Color(C_PANEL.darkened(0.25), 0.97 * pe))
-	c.draw_rect(Rect2(p.position, Vector2(p.size.x, 2.0)),
-			Color(C_RED if bool(info.get("warn", false)) else C_ACC, pe))
+	_rr(c, p, Color(C_PANEL.darkened(0.25), 0.97 * pe))
+	_rr_top(c, p, 2, Color(C_RED if bool(info.get("warn", false)) else C_ACC, pe))
 
 	c.draw_string(font, p.position + Vector2(20.0, 44.0),
 			String(info.get("n", key)), HORIZONTAL_ALIGNMENT_LEFT, -1, 22,
@@ -19432,7 +19645,7 @@ func _tutor_draw() -> void:
 		#  테두리가 뛴다. 어둠만으로는 "여기까지가 그것" 이 안 서고,
 		#  뛰지 않으면 화면에 원래 있던 테두리와 안 갈린다.
 		var pl: float = 0.5 + 0.5 * sin(npc_clock * float(TUTOR.pulse))
-		draw_rect(hole, Color(C_ACC, (0.45 + 0.45 * pl) * a), false, 1.0)
+		_rr_line(self, hole, Color(C_ACC, (0.45 + 0.45 * pl) * a))
 	#  ── 말상자 ──────────────────────────────────────
 	var bw: float = float(TUTOR.box_w)
 	var bp: float = float(TUTOR.box_pad)
@@ -19441,8 +19654,8 @@ func _tutor_draw() -> void:
 	var bh: float = box.size.y
 	var bx: float = box.position.x
 	var by: float = box.position.y
-	draw_rect(Rect2(bx, by, bw, bh), Color(C_BG, 0.94 * a))
-	draw_rect(Rect2(bx, by, bw, bh), Color(C_ACC, 0.7 * a), false, 1.0)
+	_rr(self, Rect2(bx, by, bw, bh), Color(C_BG, 0.94 * a))
+	_rr_line(self, Rect2(bx, by, bw, bh), Color(C_ACC, 0.7 * a))
 	for i in lines.size():
 		draw_string(font, Vector2(bx + bp, by + bp + 11.0 + float(i) * 14.0),
 				String(lines[i]), HORIZONTAL_ALIGNMENT_CENTER, bw - bp * 2.0,
@@ -19458,8 +19671,8 @@ func _tutor_draw() -> void:
 	#  키가 없는 손(모바일)에게는 건너뛸 길이 없었다.
 	var sk := _tutor_skip_rect()
 	var hot: bool = sk.has_point(mouse_at)
-	draw_rect(sk, Color(C_PANEL if not hot else C_PANEL.lightened(0.12), a))
-	draw_rect(Rect2(sk.position, Vector2(sk.size.x, 1.0)), Color(C_ACC, 0.8 * a))
+	_rr(self, sk, Color(C_PANEL if not hot else C_PANEL.lightened(0.12), a))
+	_rr_top(self, sk, 1, Color(C_ACC, 0.8 * a))
 	draw_string(font_sm, Vector2(sk.position.x, sk.end.y - 4.0), "건너뛰기  ESC",
 			HORIZONTAL_ALIGNMENT_CENTER, sk.size.x, 9, Color(C_TXT if hot else C_DIM, a))
 	draw_string(font_sm, Vector2(bx, by + bh - 4.0), "눌러서 계속",

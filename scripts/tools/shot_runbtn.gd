@@ -46,12 +46,20 @@ func _run() -> void:
 		return
 	g._new_run()
 	await _wait(30)
-	for st in [["rb_leg", "_open_leg"], ["rb_stage", "_open_stage"],
-			["rb_shop", "_open_shop"]]:
+	for st in [["rb_leg", "_open_leg"], ["rb_shop", "_open_shop"]]:
 		g.call(st[1])
 		g.swap_live = false
 		await _wait(40)
 		await _shot(st[0])
+	#  제약 카드는 보스 판에서만 깔린다
+	for lv in range(1, 30):
+		if GameData.is_boss(lv):
+			g.leg_no = lv
+			break
+	g._open_stage()
+	g.swap_live = false
+	await _wait(60)
+	await _shot("rb_stage")
 	g.swap_live = false
 	g.state = g.S.AIM_V
 	await _wait(30)
