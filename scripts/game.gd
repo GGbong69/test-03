@@ -3665,15 +3665,15 @@ func _click(m: Vector2) -> void:
 						"컬렉션":
 							collect_tab = 0
 							state = S.COLLECT
-						"프로필":
-							_open_profile()
-							return
 						"설정":
 							state = S.SETTINGS
 						"종료":
 							get_tree().quit()
 					_sfx("menu_pick")
 					return
+			if _prof_badge_rect().has_point(m):
+				_open_profile()
+				return
 			#  줄을 다 보고 남은 것이 판이다. 글줄(x16~164)과 판(x222~418)은
 			#  안 겹치므로 이 순서가 서로를 안 가린다.
 			#
@@ -14359,6 +14359,7 @@ var set_hot := -1        # 커서가 얹힌 줄. 없으면 -1
 var set_sel := 0         # 눌러서 고른 줄. 커서가 없을 때 오른쪽 판이 이걸 편다
 var set_t := 0.0         # 밀려 들어온 정도 0~1. 0 이면 화면 밖
 var ttl_hot := -1        # 제목 메뉴에서 커서가 얹힌 줄
+var ttl_prof_hot := false  # 커서가 프로필 패에 얹혔나
 var ttl_e := []          # 그 줄의 얹힘 짙기
 var ttl_w := []          # 그 줄 띠가 쓸려 든 폭
 
@@ -14603,7 +14604,6 @@ const CREDITS := ""
 const TITLE_ROWS := [
 	{"n": "시작", "k": "스페이스"},
 	{"n": "컬렉션", "k": ""},
-	{"n": "프로필", "k": ""},
 	{"n": "설정", "k": ""},
 	{"n": "종료", "k": ""},
 ]
@@ -14688,6 +14688,58 @@ func _ttl_draw() -> void:
 	_aim_dot(mouse_at, Color(C_ACC, 0.40 + 0.20 * sin(ttl_t * 5.0)))
 
 
+# ══════════════════════════════════════════════════════════
+#  프로필 패 — 제목 글줄 밖, 왼쪽 아래
+# ──────────────────────────────────────────────────────────
+#  프로필은 시작·컬렉션·설정·종료와 한 줄에 서 있었다. 사용자가 그리던
+#  것은 발라트로처럼 **따로 선 패**였다(2026-09-17). 넷은 「무엇을 한다」
+#  이고 프로필은 「누구로 하는가」 라 층이 다르다 — 한 목록에 섞으면
+#  지금 누구로 하고 있는지가 목록 속 한 줄로 묻힌다.
+#
+#  패가 늘 **지금 프로필을 말한다.** 자리 셋을 점으로 늘어놓아 쓰는
+#  자리는 금빛, 쌓인 것이 있는 자리는 옅게, 빈 자리는 테두리만 —
+#  「다른 프로필도 있다」 가 글 없이 선다.
+#
+#  글줄(4줄, y 190~290)과 판(x 222~418) 어디와도 안 겹친다.
+# ══════════════════════════════════════════════════════════
+const PROFB := {"w": 148.0, "h": 30.0, "pip": 6.0, "pip_gap": 5.0}
+
+
+func _prof_badge_rect() -> Rect2:
+	var h: float = float(PROFB.h)
+	return Rect2(SAFE, VIEW.y - 12.0 - h, float(PROFB.w), h)
+
+
+func _prof_badge_draw() -> void:
+	var r := _prof_badge_rect()
+	var hot := ttl_prof_hot and state == S.TITLE
+	_panel(r, hot)
+	#  사람 한 명 — 머리와 어깨. 「프로필」 이 무엇의 자리인지를 글 앞에서 먼저 말한다.
+	var ic := Vector2(r.position.x + 13.0, r.position.y + r.size.y * 0.5)
+	var icol: Color = C_TXT if hot else C_DIM
+	draw_circle(ic + Vector2(0.0, -4.0), 3.2, icol)
+	draw_rect(Rect2(ic.x - 5.0, ic.y + 1.0, 10.0, 5.0), icol)
+	var cur := Save.slot()
+	draw_string(font, Vector2(r.position.x + 25.0, r.position.y + 20.0),
+			"프로필 %d" % cur, HORIZONTAL_ALIGNMENT_LEFT, -1, 11,
+			C_TXT if hot else C_DIM.lerp(C_TXT, 0.5))
+	#  자리 셋. 오른쪽 끝에 붙는다.
+	var pw: float = float(PROFB.pip)
+	var pg: float = float(PROFB.pip_gap)
+	var n := Save.SLOTS
+	var x0: float = r.end.x - 10.0 - float(n) * pw - float(n - 1) * pg
+	var py: float = r.position.y + (r.size.y - pw) * 0.5
+	for i in n:
+		var sl := i + 1
+		var pr := Rect2(x0 + float(i) * (pw + pg), py, pw, pw)
+		if sl == cur:
+			draw_rect(pr, C_ACC)
+		elif Save.slot_used(sl):
+			draw_rect(pr, Color(C_DIM, 0.55))
+		else:
+			draw_rect(pr, Color(C_OFF, 0.9), false, 1.0)
+
+
 func _draw_title() -> void:
 	#  다른 화면보다 얕게 덮는다. 0.94 로 덮으면 뒤의 다트판이 유령이 되는데,
 	#  이 게임의 얼굴을 깔아 놓고 지우는 셈이다. 글줄이 왼쪽에 서므로 판과
@@ -14727,6 +14779,7 @@ func _draw_title() -> void:
 			draw_string(font_sm, r.position + Vector2(0.0, 15.0), kk,
 					HORIZONTAL_ALIGNMENT_RIGHT, r.size.x - 6.0, 9,
 					Color(C_GOLD, 0.45 + 0.55 * ee))
+	_prof_badge_draw()
 	# 빌려 온 것을 적는 자리. 빌린 것이 있으면 그 라이선스가 이 줄을
 	# **조건으로** 단다 — 그때는 지우면 못 낸다. 비어 있으면 안 그린다.
 	# 마지막 단추가 342 에서 끝나므로 그 아래 남는 18px 에 앉힌다.
@@ -17977,6 +18030,10 @@ func _title_tick(d: float) -> void:
 				ttl_hot = i
 				break
 	_row_ease(ttl_e, ttl_w, TITLE_ROWS.size(), ttl_hot if on else -1, d)
+	var pw := ttl_prof_hot
+	ttl_prof_hot = on and _prof_badge_rect().has_point(mouse_at)
+	if ttl_prof_hot and not pw:
+		_sfx("menu_pick2")
 	#  설정을 제목 위에 열면 뒤에 남는 것은 여전히 제목이다. 그동안에도
 	#  판은 살아 있어야 한다 — 멈추면 흐림 판 뒤에서 얼어붙은 그림이 된다.
 	#  다만 **새 자루는 안 보낸다**(live). 설정을 만지는 중에 소리가 끼는

@@ -171,6 +171,27 @@ func _run() -> void:
 	_ok("글줄은 여전히 글줄이다", g.state == g.S.COLLECT and g.ttl_fly.is_empty(),
 			"state=%d" % g.state)
 
+	# ── 프로필은 글줄 밖의 따로 선 패다 ─────────────────
+	#  시작·컬렉션·설정·종료는 「무엇을 한다」 이고 프로필은 「누구로 하는가」 라
+	#  발라트로처럼 패로 따로 선다(2026-09-17 사용자).
+	var names := []
+	for row in g.TITLE_ROWS:
+		names.append(String(row.n))
+	_ok("글줄에 프로필이 없다", not names.has("프로필"), " · ".join(names))
+	var pb: Rect2 = g._prof_badge_rect()
+	var rows_box: Rect2 = g._menu_rect(0).merge(g._menu_rect(g.TITLE_ROWS.size() - 1))
+	_ok("프로필 패가 글줄과 안 겹친다", not pb.intersects(rows_box), "%s · %s" % [pb, rows_box])
+	_ok("프로필 패가 판과 안 겹친다",
+			pb.end.x < g.BC.x - g.R * g.rt_dbl_out - 20.0, "%s" % pb)
+	_ok("프로필 패가 화면 안이다", pb.end.y <= 360.0 and pb.position.x >= 0.0)
+	_ok("프로필 패가 손가락 크기다", pb.size.y >= 26.0 and pb.size.x >= 100.0, "%s" % pb.size)
+	_title()
+	g._click(pb.get_center())
+	_ok("프로필 패를 누르면 프로필 화면", g.state == g.S.PROFILE, "state=%d" % g.state)
+	_title()
+	g._click(pb.get_center())
+	_ok("패를 눌러도 자루가 안 난다", g.ttl_fly.is_empty())
+
 	# ── 화면을 뜨면 비운다 ──────────────────────────────
 	_title()
 	g._click(aim)
