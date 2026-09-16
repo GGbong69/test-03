@@ -3676,6 +3676,14 @@ func _click(m: Vector2) -> void:
 					return
 			#  줄을 다 보고 남은 것이 판이다. 글줄(x16~164)과 판(x222~418)은
 			#  안 겹치므로 이 순서가 서로를 안 가린다.
+			#
+			#  꽂힌 자루를 **판보다 먼저** 본다. 위에 있는 것이 먼저라야
+			#  자루를 누른 손이 그 자리에 또 하나를 꽂는 일이 없다.
+			var pick := _ttl_hit(m)
+			if pick >= 0:
+				ttl_stuck.remove_at(pick)
+				_sfx("dart_pick")
+				return
 			if m.distance_to(BC) <= R * rt_dbl_out:
 				_ttl_throw(m)
 		S.PROFILE:
@@ -14358,10 +14366,16 @@ var ttl_w := []          # 그 줄 띠가 쓸려 든 폭
 #  제목 화면에는 이미 이 게임의 얼굴(다트판)이 깔려 있었는데 **가만히**
 #  있었다. 움직이는 것이 하나도 없으면 목록이지 시작 화면이 아니다.
 #
-#  두 겹이다. ① 몇 초에 한 번 자루가 저절로 날아와 꽂힌다 — 손을 안 대도
-#  화면이 살아 있다. ② 판을 누르면 그 자리로 날아간다 — 첫 클릭이 곧
-#  이 게임이 무엇인지에 대한 답이다. 눌러 본 손님은 메뉴를 읽기 전에
-#  「던지는 게임」을 이미 안다.
+#  **손이 없으면 아무 일도 안 일어난다.** 저절로 날아오는 자루를 걷었다 —
+#  가만히 두면 저 혼자 던지는 화면은 시연 영상이지 손님의 판이 아니고,
+#  「내가 던졌다」 가 「원래 날아온다」 에 묻힌다.
+#
+#  대신 손이 닿을 자리를 셋 놓는다.
+#    ① 커서가 얹힌 칸이 밝아지고 그 숫자가 뜬다 — 누를 수 있다는 말이자
+#       판을 읽는 법을 알려 주는 자리다. 글로 안 적는다.
+#    ② 판을 누르면 그 자리로 날아가 꽂히고, 문 값이 그 자리에 뜬다.
+#    ③ 꽂힌 자루를 누르면 뽑힌다. 놓은 것을 도로 걷을 수 있어야 만지는
+#       맛이 난다 — 못 무르는 장난감은 한 번 누르고 만다.
 #
 #  ── 판의 자루(darts)를 안 빌린다 ──────────────────────
 #  저쪽은 런의 상태다. 제목에서 건드리면 새 런이 지난 자국을 물려받고,
@@ -14378,7 +14392,6 @@ var ttl_w := []          # 그 줄 띠가 쓸려 든 폭
 # ══════════════════════════════════════════════════════════
 
 const TTL := {
-	"gap0": 1.5, "gap1": 2.8,        # 저절로 오는 사이(초)
 	"fly": 0.26,                     # 나는 시간(초)
 	"dl0": 30.0, "dl1": 16.0,        # 손끝의 반길이 → 꽂힌 반길이
 	"bx": 292.0, "by": 402.0,        # 출발점. 글줄(x16~164) 오른쪽이라 안 스친다
@@ -14388,10 +14401,10 @@ const TTL := {
 	#  한 번에 비어서 화면이 깜빡이는 것처럼 보이고, 언제 비는지가 손과
 	#  아무 상관이 없다. 제 시계를 가지면 늘 서넛이 떠 있고 들고 나는
 	#  것이 끊이지 않는다.
-	#  평균 간격 2.15초 · 사는 시간 7.2 · 지는 시간 1.4 이므로 화면에
-	#  평균 (7.2+0.7)/2.15 ≈ 3.7 자루다 — 여섯보다 적으니 그리는 값도
-	#  같이 내려간다.
-	"life": 7.2, "gone": 1.4,        # 사는 시간 · 지는 시간(초)
+	#  저절로 오는 자루를 걷은 뒤로는 화면의 자루가 전부 손이 놓은 것이다.
+	#  그래서 사는 시간을 늘렸다 — 내가 던진 것이 일곱 초에 사라지면
+	#  치워진 것이 아니라 뺏긴 것으로 읽힌다.
+	"life": 11.0, "gone": 1.4,       # 사는 시간 · 지는 시간(초)
 	"drop": 22.0,                    # 지면서 흘러내리는 거리
 	"max": 12,                       # 이보다 많으면 오래된 것부터 재운다
 	"ring": 0.34,                    # 착탄 고리가 사는 시간(초)
@@ -14400,7 +14413,6 @@ const TTL := {
 
 var ttl_stuck := []      # 제목 판에 꽂힌 자루 {p, u, rot, id, t}. t 가 제 나이다
 var ttl_fly := []        # 나는 중인 자루 {a, b, u, rot, id, t}
-var ttl_wait := 1.2      # 다음 자루가 저절로 올 때까지 남은 시간
 var ttl_t := 0.0         # 제목이 선 뒤로 흐른 시간. 겨눔점이 이걸로 숨쉰다
 var set_row_e := []      # 줄마다의 얹힘 짙기 0~1
 var set_row_w := []      # 그 줄 띠가 쓸려 든 폭 0~1. 짙기와 따로 논다
@@ -14600,7 +14612,12 @@ const TITLE_ROWS := [
 #  일어나는 일이라 두 층의 밝기가 달라야 한다.
 #  글줄(x16~164)과 판(x222~418)이 안 겹치므로 이 층이 메뉴를 안 먹는다.
 func _ttl_draw() -> void:
-	for s in ttl_stuck:
+	#  커서 밑의 자루. 살짝 들어 올리고 테를 두른다 — 「이걸 집는다」 를
+	#  말하는 것이 이 둘이고, 커서 자리에 점만 찍으면 무엇을 집는지가
+	#  자루 여럿 사이에서 안 갈린다.
+	var hov: int = _ttl_hit(mouse_at) if state == S.TITLE else -1
+	for i in ttl_stuck.size():
+		var s: Dictionary = ttl_stuck[i]
 		var sp: Vector2 = s.p
 		var su: Vector2 = s.u
 		var dl := float(TTL.dl1)
@@ -14609,11 +14626,15 @@ func _ttl_draw() -> void:
 		var gk: float = clampf((float(s.t) - float(TTL.life))
 				/ float(TTL.gone), 0.0, 1.0)
 		var dy: float = 0.0 if motion_off else gk * gk * float(TTL.drop)
+		if i == hov:
+			dy -= 2.0
+			draw_arc(sp - su * dl + Vector2(0.0, dy), 11.0, 0.0, TAU, 20,
+					Color(C_TXT, 0.42 + 0.26 * sin(ttl_t * 5.0)), 1.0)
 		_icon_dart(sp - su * dl + Vector2(0.0, dy), dl, String(s.id), 0.0,
 				float(s.rot), 1.0 - gk)
 		#  착탄 고리. waves 를 안 빌린다 — 저쪽은 스크림 **밑**에서 그려져
 		#  여기서는 28% 로 깔린다.
-		#  고리는 착탄 직후(0.34초)뿐이고 자루가 지는 것은 7.2초 뒤라,
+		#  고리는 착탄 직후(0.34초)뿐이고 자루가 지는 것은 11초 뒤라,
 		#  둘이 겹칠 일이 없다. 지는 값을 안 곱하는 이유가 그것이다.
 		var kt: float = float(s.t) / float(TTL.ring)
 		if kt < 1.0 and not motion_off:
@@ -14628,10 +14649,41 @@ func _ttl_draw() -> void:
 		#  손끝에서는 길고 판에서는 짧다. 멀어지는 것이 길이로 읽힌다.
 		var fl := lerpf(float(TTL.dl0), float(TTL.dl1), e)
 		_icon_dart(fp - fu * fl, fl, String(f.id), 0.0, float(f.rot), 1.0)
-	#  누를 수 있다고 말하는 것은 이 겨눔점 하나다. 판 위에서만 뜬다 —
-	#  화면 아무 데나 떠 있으면 그것은 커서지 과녁이 아니다.
-	if state == S.TITLE and mouse_at.distance_to(BC) <= R * rt_dbl_out:
-		_aim_dot(mouse_at, Color(C_ACC, 0.40 + 0.20 * sin(ttl_t * 5.0)))
+	#  뜬 값(_ttl_stick 이 띄운다). 판은 HUD 를 안 그리므로 여기서 부른다.
+	_draw_pops()
+	#  커서가 얹힌 자리. 판 위에서만 뜬다 — 화면 아무 데나 떠 있으면
+	#  그것은 커서지 과녁이 아니다.
+	if state != S.TITLE or mouse_at.distance_to(BC) > R * rt_dbl_out:
+		return
+	#  꽂힌 자루 위에 있으면 **뽑는 손**이다(테는 위에서 둘렀다). 과녁을
+	#  같이 띄우면 누르면 꽂히는 것으로 읽힌다 — 한 자리에 두 뜻을 실을
+	#  수 없다.
+	if hov >= 0:
+		return
+	#  얹힌 칸을 밝히고 그 숫자를 띄운다. 「누를 수 있다」 와 「여기는
+	#  몇 점이다」 를 한 번에 말한다 — 글줄을 하나도 안 보태고 판 읽는
+	#  법이 손에 붙는 자리다.
+	var hi := hit_info(mouse_at)
+	var sw := 18.0 * PI / 180.0
+	var hx: int = int(hi.idx)
+	if hx >= 0 and hx < sectors.size():
+		var a0: float = float(hx) * sw - sw * 0.5
+		#  두 겹이다. 칸 전체가 옅게(어느 숫자인가) · 커서가 든 띠가
+		#  한 단 진하게(단·더블·트리플 중 어디인가). 한 겹으로 두면
+		#  띠만 밝히면 너무 좁아 안 보이고, 칸만 밝히면 배수가 안 보인다.
+		draw_colored_polygon(annulus(R * rt_bull_o, R * rt_dbl_out,
+				a0, a0 + sw), Color(C_TXT, 0.10))
+		draw_colored_polygon(annulus(float(hi.r0), float(hi.r1), a0, a0 + sw),
+				Color(C_TXT, 0.16))
+		#  판이 그린 그 자리에 한 번 더, 밝게. 판은 스크림 밑이라 C_DIM 이
+		#  28% 로 깔려 있어서 얹혔다는 것이 안 읽힌다.
+		var na := float(hx) * sw
+		var np := BC + Vector2(sin(na), -cos(na)) * _board_rim(0.13)
+		draw_string(font, np + Vector2(-14.0, 5.0), str(sectors[hx]),
+				HORIZONTAL_ALIGNMENT_CENTER, 28, 11, C_TXT)
+	elif int(hi.mult) > 0:
+		draw_circle(BC, float(hi.r1), Color(C_TXT, 0.22))
+	_aim_dot(mouse_at, Color(C_ACC, 0.40 + 0.20 * sin(ttl_t * 5.0)))
 
 
 func _draw_title() -> void:
@@ -17938,7 +17990,7 @@ func _title_tick(d: float) -> void:
 	#  것은 배경이 아니라 방해다.
 	var bg: bool = on or (state == S.SETTINGS and pause_from < 0)
 	if bg:
-		_ttl_board(d, on)
+		_ttl_board(d)
 		#  설정 밑에서는 움직이는 것이 있을 때만 다시 그린다. 저쪽은 매
 		#  프레임 화면을 후면 복사해 아홉 번 따는 흐림 판을 지나간다.
 		if on or _ttl_busy():
@@ -17965,9 +18017,9 @@ func _ttl_busy() -> bool:
 	return false
 
 
-#  live 면 새 자루를 보낸다. 나는 것과 걷는 것은 live 와 무관하게 끝까지
-#  간다 — 중간에 멈추면 자루가 허공에 선다.
-func _ttl_board(d: float, live: bool) -> void:
+#  나는 것과 지는 것을 민다. 새 자루를 만드는 자리는 여기가 아니라
+#  손(_click)뿐이다.
+func _ttl_board(d: float) -> void:
 	ttl_t += d
 	for f in ttl_fly:
 		f.t += d
@@ -17992,18 +18044,10 @@ func _ttl_board(d: float, live: bool) -> void:
 			old.t = maxf(float(old.t), float(TTL.life)) 					+ d * float(over) * 6.0
 		var span := float(TTL.life) + float(TTL.gone)
 		ttl_stuck = ttl_stuck.filter(func(e): return float(e.t) < span)
-	#  움직임을 끈 손님에게는 저절로 오는 자루를 안 보낸다 — 가만히 둔
-	#  화면이 저 혼자 움직이는 것이 그 설정이 끄려는 바로 그것이다.
-	#  누르면 여전히 날아간다. 손이 부른 것은 움직임이 아니라 응답이다.
-	if live and not motion_off:
-		ttl_wait -= d
-		if ttl_wait <= 0.0:
-			_ttl_throw(_ttl_spot())
 
 
 #  한 자루 던진다. p 는 판 좌표의 착탄점이다.
 func _ttl_throw(p: Vector2) -> void:
-	ttl_wait = randf_range(float(TTL.gap0), float(TTL.gap1))
 	var a := Vector2(float(TTL.bx) + randf_range(-float(TTL.spread),
 			float(TTL.spread)), float(TTL.by))
 	var u := (p - a)
@@ -18036,6 +18080,12 @@ func _ttl_stick(e: Dictionary) -> void:
 	board_punch = maxf(board_punch, 0.15 + 0.17 * float(g))
 	if g >= 5:
 		shake = maxf(shake, 4.0)
+	#  문 값. 글이 아니라 수 하나다 — 판을 읽는 법이 이 한 번으로 붙고,
+	#  시작 화면에 설명 줄을 하나도 안 보탠다.
+	var bp: Vector2 = e.b
+	var val: int = int(info.base) * maxi(int(info.mult), 0)
+	pop(bp + Vector2(0.0, -17.0 if bp.y > BC.y else 19.0), str(val),
+			C_CHIP if val > 0 else C_OFF, 13, 0.7)
 	#  물린 칸이 하얗게 뜬다. 판을 그리는 쪽(_draw_board)이 이미 하는 일이라
 	#  값만 놓으면 된다 — 제목에서는 스크림 밑이라 옅게 읽히는데, 그 옅음이
 	#  「뒤에 있는 것이 반응했다」 로는 충분하다.
@@ -18047,8 +18097,25 @@ func _ttl_stick(e: Dictionary) -> void:
 	hit_bull = int(info.idx) == -1 and int(info.mult) > 0
 
 
-#  저절로 오는 자루가 노리는 자리. 늘 가운데면 자랑이 되고 늘 바깥이면
-#  못 던지는 판이 된다 — 열둘에 하나가 안쪽 불이다.
+#  커서 밑의 꽂힌 자루. 없으면 −1. 촉이 아니라 **몸통 한가운데**를
+#  기준으로 잰다 — 촉만 보면 눌러야 할 자리가 자루 끝의 한 점이 된다.
+#  뒤에서부터 본다. 나중에 꽂힌 것이 위에 그려지므로 겹친 자리는 위엣것이
+#  잡혀야 눈과 손이 같은 것을 가리킨다.
+func _ttl_hit(m: Vector2) -> int:
+	var best := -1
+	var bd := 12.0
+	for i in range(ttl_stuck.size() - 1, -1, -1):
+		var e: Dictionary = ttl_stuck[i]
+		var c: Vector2 = (e.p as Vector2) - (e.u as Vector2) * float(TTL.dl1)
+		var dd := c.distance_to(m)
+		if dd < bd:
+			bd = dd
+			best = i
+	return best
+
+
+#  판 안의 한 점을 고르게 고른다. 저절로 던지던 시절의 자리였고, 지금은
+#  검사(qa_title)가 「판 안이면 다 받는가」를 물을 때 쓴다.
 func _ttl_spot() -> Vector2:
 	var k := randf()
 	var rr: float

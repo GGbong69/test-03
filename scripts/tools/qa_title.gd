@@ -40,7 +40,7 @@ func _title() -> void:
 	g.motion_off = false
 	g.ttl_stuck.clear()
 	g.ttl_fly.clear()
-	g.ttl_wait = 99.0
+	g.pops.clear()
 	g.mouse_at = Vector2(4.0, 4.0)      # 판에서도 글줄에서도 먼 자리
 
 
@@ -72,11 +72,17 @@ func _run() -> void:
 	_ok("안쪽 불이 드물게 난다", bull > 40 and bull < 600,
 			"%d/4000 (%.1f%%)" % [bull, 100.0 * float(bull) / 4000.0])
 
-	# ── 저절로 온다 ─────────────────────────────────────
+	# ── 손이 없으면 아무 일도 안 난다 ───────────────────
 	_title()
-	g.ttl_wait = 0.005
-	_tick(1)
-	_ok("때가 되면 한 자루 난다", g.ttl_fly.size() == 1,
+	_tick(1800)                         # 30초
+	_ok("저절로는 한 자루도 안 난다",
+			g.ttl_stuck.is_empty() and g.ttl_fly.is_empty(),
+			"꽂힘 %d · 나는 중 %d" % [g.ttl_stuck.size(), g.ttl_fly.size()])
+
+	# ── 누르면 난다 ─────────────────────────────────────
+	_title()
+	g._ttl_throw(g.BC + Vector2(-40.0, 30.0))
+	_ok("누르면 한 자루 난다", g.ttl_fly.size() == 1,
 			"나는 중 %d" % g.ttl_fly.size())
 	var fx0: float = 999.0
 	var fx1: float = -999.0
@@ -100,7 +106,6 @@ func _run() -> void:
 	var gone: float = float(g.TTL.gone)
 	_title()
 	g._ttl_throw(g.BC)
-	g.ttl_wait = 999.0                  # _ttl_throw 가 다음 자루를 예약한다
 	_tick(int(g.TTL.fly / D) + 2)
 	_ok("꽂히고 바로는 안 진다", g.ttl_stuck.size() == 1)
 	_tick(int((life - 0.3) / D))
@@ -120,8 +125,12 @@ func _run() -> void:
 	var drop_max := 0
 	var seen := false
 	var prev: int = 0
-	g.ttl_wait = 0.1                    # 첫 자루만 당긴다. 뒤는 제 간격대로
-	for i in 5400:                      # 90초
+	var beat := 0
+	for i in 5400:                      # 90초 — 2.1초마다 한 자루씩 놓는다
+		beat += 1
+		if beat >= 126:
+			beat = 0
+			g._ttl_throw(g._ttl_spot())
 		_tick(1)
 		var now: int = g.ttl_stuck.size()
 		if now > 0:
@@ -174,20 +183,19 @@ func _run() -> void:
 
 	# ── 설정이 위에 떠도 판은 산다 ──────────────────────
 	_title()
-	g.ttl_wait = 0.005
-	_tick(1)
+	g._ttl_throw(g.BC + Vector2(20.0, 20.0))
 	g.state = g.S.SETTINGS
 	g.pause_from = -1
 	_tick(30)
 	_ok("설정 밑에서도 나던 자루는 꽂힌다",
 			g.ttl_stuck.size() == 1 and g.ttl_fly.is_empty(),
 			"꽂힘 %d" % g.ttl_stuck.size())
-	#  **수가 는 적이 있는가**를 본다. 사는 시간이 7.2초라 10초를 밀면
-	#  있던 자루가 제 시간에 지는데, 그것은 「새로 왔다」 가 아니다.
+	#  **수가 는 적이 있는가**를 본다. 제 시간에 지는 것은 「새로 왔다」
+	#  가 아니다.
 	var n0: int = g.ttl_stuck.size()
 	var grew := false
 	var pn: int = n0
-	for i in 600:                       # 10초 — 저절로 오는 사이보다 길다
+	for i in 600:                       # 10초
 		_tick(1)
 		if g.ttl_stuck.size() > pn or not g.ttl_fly.is_empty():
 			grew = true
@@ -203,7 +211,6 @@ func _run() -> void:
 	# ── 움직임 끄기 ─────────────────────────────────────
 	_title()
 	g.motion_off = true
-	g.ttl_wait = 0.005
 	_tick(600)
 	_ok("움직임을 끄면 저절로 안 온다", g.ttl_stuck.is_empty() and g.ttl_fly.is_empty(),
 			"꽂힘 %d" % g.ttl_stuck.size())
@@ -216,8 +223,11 @@ func _run() -> void:
 
 	# ── 마구 눌러도 안 넘친다 ───────────────────────────
 	_title()
+	#  _click 이 아니라 _ttl_throw 로 쌓는다. 같은 자리를 다시 누르면
+	#  이제 **뽑히므로**, 클릭으로는 한도까지 못 쌓는다 — 여기서 재려는
+	#  것은 손이 아니라 「자루가 많을 때」 다.
 	for i in 40:
-		g._click(g.BC + Vector2(float(i % 7) * 9.0 - 27.0, float(i % 5) * 11.0 - 22.0))
+		g._ttl_throw(g._ttl_spot())
 		_tick(int(g.TTL.fly / D) + 2)
 	_ok("마구 눌러도 한도를 크게 안 넘는다",
 			g.ttl_stuck.size() <= int(g.TTL.max) + 2,
@@ -234,6 +244,57 @@ func _run() -> void:
 	#  수는 있다. 둘까지는 「한꺼번에」 가 아니다 — 여섯이 한 번에 비던
 	#  것이 걷어 낸 그 방식이다.
 	_ok("넘친 것도 하나씩 진다", w2 <= 2, "가장 많이 준 수 %d" % w2)
+
+	# ── 꽂힌 자루를 집는다 ──────────────────────────────
+	_title()
+	g._click(aim)
+	_tick(30)
+	_ok("한 자루 꽂혀 있다", g.ttl_stuck.size() == 1)
+	#  자루 한가운데를 누른다. 촉이 아니라 몸통이 잡히는 자리다.
+	var body: Vector2 = (g.ttl_stuck[0].p as Vector2) 			- (g.ttl_stuck[0].u as Vector2) * float(g.TTL.dl1)
+	g._click(body)
+	_ok("자루를 누르면 뽑힌다", g.ttl_stuck.is_empty() and g.ttl_fly.is_empty(),
+			"꽂힘 %d · 나는 중 %d" % [g.ttl_stuck.size(), g.ttl_fly.size()])
+	#  뽑는 손이 꽂는 손을 겸하면 안 된다 — 누른 자리에 또 하나가 꽂히면
+	#  자루가 안 없어진 것으로 보인다.
+	_title()
+	g._click(aim)
+	_tick(30)
+	var b2: Vector2 = (g.ttl_stuck[0].p as Vector2) 			- (g.ttl_stuck[0].u as Vector2) * float(g.TTL.dl1)
+	g._click(b2)
+	_tick(30)
+	_ok("뽑은 자리에 새로 안 꽂힌다", g.ttl_stuck.is_empty())
+	#  겹친 자리는 **위엣것**이 잡힌다. 나중에 꽂힌 것이 위에 그려진다.
+	_title()
+	g._ttl_throw(aim)
+	_tick(int(g.TTL.fly / D) + 2)
+	g._ttl_throw(aim + Vector2(2.0, 2.0))
+	_tick(int(g.TTL.fly / D) + 2)
+	_ok("겹쳐도 둘이다", g.ttl_stuck.size() == 2)
+	var keep_p: Vector2 = g.ttl_stuck[0].p
+	g._click((g.ttl_stuck[1].p as Vector2)
+			- (g.ttl_stuck[1].u as Vector2) * float(g.TTL.dl1))
+	_ok("겹친 자리는 위엣것이 잡힌다",
+			g.ttl_stuck.size() == 1
+			and (g.ttl_stuck[0].p as Vector2).is_equal_approx(keep_p),
+			"남은 자리 %s" % g.ttl_stuck[0].p)
+
+	# ── 문 값이 뜬다 ────────────────────────────────────
+	_title()
+	var spots := {"안쪽 불": g.BC, "바깥 칸": g.BC + Vector2(0.0, -g.R * 0.55)}
+	for nm in spots:
+		var sp: Vector2 = spots[nm]
+		g.pops.clear()
+		g.ttl_stuck.clear()
+		g._ttl_throw(sp)
+		_tick(int(g.TTL.fly / D) + 2)
+		var inf: Dictionary = g.hit_info(sp)
+		var want := str(int(inf.base) * maxi(int(inf.mult), 0))
+		var got := ""
+		for q in g.pops:
+			got = String(q.txt)
+		_ok("문 값이 뜬다 — %s" % nm, got == want,
+				"「%s」 (바란 것 %s)" % [got, want])
 
 	# ── 소리 사다리 ─────────────────────────────────────
 	#  제목과 판이 **같은 사다리**를 본다. 갈라지면 같은 자리를 물고
