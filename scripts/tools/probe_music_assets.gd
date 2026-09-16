@@ -1,7 +1,7 @@
 extends SceneTree
 # 음악 파일 넷이 명세의 에셋 계약을 맞추는가.
 #     godot --headless --script scripts/tools/probe_music_assets.gd
-#     godot --headless --script scripts/tools/probe_music_assets.gd -- audio/music/tracks
+#     godot --headless --script scripts/tools/probe_music_assets.gd -- assets/music
 #
 # 실제 편곡을 새로 받았을 때 **켜도 되는지 먼저 재는 자리**다. 길이가
 # 0.001초를 넘어 어긋나면 MusicManager 가 시작을 통째로 거절하므로, 그걸
@@ -13,16 +13,13 @@ extends SceneTree
 const TOL := 0.001
 
 func _init() -> void:
-	#  기본 자리가 **실제 음악**이다. 적응형 관리자가 이제 이 넷을 본다
-	#  (audio/music/music_config.json) — 시험음 자리를 기본으로 두면 통과해도
-	#  게임이 쓰는 파일에 대해서는 아무 말도 안 한 것이 된다.
-	var dir := "assets/music"
-	var names := ["lobby", "select", "game", "boss"]
+	var dir := "audio/music/tracks"
+	var names := ["main", "shop", "aim", "final"]
 	var args := OS.get_cmdline_user_args()
 	if args.size() > 0:
 		dir = args[0]
-		if dir.find("tracks") >= 0:
-			names = ["main", "shop", "aim", "final"]
+		if dir.find("assets/music") >= 0:
+			names = ["lobby", "select", "game", "boss"]
 
 	print("고닷 %s · AudioStreamSynchronized %s"
 			% [Engine.get_version_info().string,

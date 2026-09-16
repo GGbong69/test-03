@@ -1,25 +1,25 @@
 {
-  "_note": "T01 용. assets/music 의 실제 편곡 넷 — mus_bake.py 가 굽고 명세의 에셋 계약을 맞춘다. 여기서는 **통과해야** 한다.",
+  "_note": "T01 용. assets/music 의 실제 곡 넷 — 명세의 에셋 계약을 못 맞춘다.",
   "states": [
     {
       "id": "Main",
       "index": 0,
-      "asset": "res://assets/music/lobby.wav"
+      "asset": "res://assets/music/lobby.mp3"
     },
     {
       "id": "Shop",
       "index": 1,
-      "asset": "res://assets/music/select.wav"
+      "asset": "res://assets/music/select.mp3"
     },
     {
       "id": "Aim",
       "index": 2,
-      "asset": "res://assets/music/game.wav"
+      "asset": "res://assets/music/game.mp3"
     },
     {
       "id": "Final",
       "index": 3,
-      "asset": "res://assets/music/boss.wav"
+      "asset": "res://assets/music/boss.mp3"
     }
   ],
   "initial_state": "Main",

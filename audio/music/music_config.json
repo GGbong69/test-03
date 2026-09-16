@@ -1,27 +1,11 @@
 {
   "_note": "MusicManager 가 실제로 읽는 값만 둔다. 명세 JSON 전체를 여기 넣지 않는다.",
-  "_assets": "scripts/tools/mus_bake.py 가 굽는 실제 편곡 넷이다. game.gd 의 MUS 와 **같은 파일**을 본다 — 두 벌로 두면 한쪽만 다시 굽는 날이 온다.",
+  "_assets": "지금 들어 있는 넷은 scripts/tools/make_music_test.py 가 만든 시험용 편곡이다. 실제 음악이 준비되면 같은 이름으로 갈아 끼운다 — 코드는 안 고친다.",
   "states": [
-    {
-      "id": "Main",
-      "index": 0,
-      "asset": "res://assets/music/lobby.wav"
-    },
-    {
-      "id": "Shop",
-      "index": 1,
-      "asset": "res://assets/music/select.wav"
-    },
-    {
-      "id": "Aim",
-      "index": 2,
-      "asset": "res://assets/music/game.wav"
-    },
-    {
-      "id": "Final",
-      "index": 3,
-      "asset": "res://assets/music/boss.wav"
-    }
+    { "id": "Main",  "index": 0, "asset": "res://audio/music/tracks/main.wav" },
+    { "id": "Shop",  "index": 1, "asset": "res://audio/music/tracks/shop.wav" },
+    { "id": "Aim",   "index": 2, "asset": "res://audio/music/tracks/aim.wav" },
+    { "id": "Final", "index": 3, "asset": "res://audio/music/tracks/final.wav" }
   ],
   "initial_state": "Main",
   "fade_seconds": 1.0,
@@ -31,20 +15,17 @@
   "owns_bus": false,
   "resource_length_tolerance_seconds": 0.001,
   "music_meta": {
-    "_measured": "mus_bake.py 가 낸 값이며 실제 파일에서 확인된다.",
-    "bpm": 86.0,
-    "time_signature": [
-      4,
-      4
-    ],
+    "_measured": "make_music_test.py 가 낸 값이며 실제 파일에서 확인된다.",
+    "bpm": 84.0,
+    "time_signature": [4, 4],
     "beats_per_bar": 4,
-    "bars": 16,
-    "total_beats": 64,
-    "duration_seconds": 44.651156462585035,
+    "bars": 8,
+    "total_beats": 32,
+    "duration_seconds": 22.857142857142858,
     "sample_rate_hz": 44100,
     "channels": 1,
-    "decoded_frame_count": 1969116,
+    "decoded_frame_count": 1008000,
     "loop_start_frame": 0,
-    "loop_end_frame_exclusive": 1969116
+    "loop_end_frame_exclusive": 1008000
   }
 }
