@@ -6548,15 +6548,12 @@ func draw_item_sticker(c: Vector2, r: float, it: Dictionary, rot: float, lift: f
 		var fr: float = r - clampf(r * 0.16, 1.0, 2.2) - 1.0
 		_icon_item(c, fr, fr, String(it.get("id", "")), dim)
 	var ink: Color = C_CHIP.lightened(0.5) if it.k == "chip" else C_MULT.lightened(0.45)
-	var meth := String(it.get("aim", ""))
+	#  ── 얼굴에는 글자를 안 쓴다 ────────────────────────
+	#  그림이 생기기 전에는 값과 방식 이름이 얼굴의 전부였다. 이제 그림이
+	#  "무엇인가" 를 말하므로 그 위에 숫자를 얹으면 그림을 가리기만 한다.
+	#  값·조건·방식의 온전한 말은 툴팁이 갖는다 — 지름 38px 에서 두 번
+	#  말할 자리가 없다(2026-09-16).
 	if String(it.k) == "" and String(it.c) == "":
-		if meth != "" and r >= 10.0:
-			var ms: int = maxi(8, int(float(num_sz) * 0.78))
-			var my: float = float(ms) * 0.36
-			if my + 2.0 < y:
-				draw_string(font, c + Vector2(-r, my), GameData.aim_name(meth),
-						HORIZONTAL_ALIGNMENT_CENTER, r * 2.0, ms,
-						ink.darkened(dim))
 		_peel_fold(c, r, peel, dim)
 		return
 	# 얼굴을 위아래로 가른다 — 위는 조건(언제 터지는가), 아래는 값(얼마나).
@@ -6565,23 +6562,6 @@ func draw_item_sticker(c: Vector2, r: float, it: Dictionary, rot: float, lift: f
 			Color(0.0, 0.0, 0.0, 0.45 * (1.0 - dim)))
 	_icon_cond(c + Vector2(0.0, -r * 0.33), r * 0.42, String(it.c),
 			ink.darkened(dim + 0.08))
-	#  **값은 kind 가 있을 때만 있다.** 조건만 있고 kind 가 없는 여덟 장
-	#  (황금우상·윅 존·알 낳는 거위·1-UP·WHITE ALBUM·잭과 콩나무·NULL·
-	#  녹는 시계)은 점수로 말하지 않는다 — 골드를 주거나, 다트를 바꾸거나,
-	#  판을 부순다. 그것들이 값 자리에 **0** 을 찍고 있었다: 0점짜리
-	#  동전으로 읽힌다(방식 장에서 한 번 고친 것과 같은 병이고, 그때는
-	#  조건까지 빈 장만 막아서 조건이 있는 여덟은 그대로 남았다).
-	var val := ("×" + str(it.v)) if it.k == "xmult" else str(it.v)
-	var vs: int = maxi(7, int(float(num_sz) * 0.84))
-	var vy := r * 0.34 + float(vs) * 0.34
-	if String(it.k) != "" and vy + 2.0 < y:
-		#  얼굴이 색을 갖게 된 뒤로 값이 그림 위에 선다. 받침 한 겹이
-		#  없으면 밝은 얼굴(잭과 콩나무의 노랑) 위에서 분홍 숫자가 사라진다.
-		draw_string(font, c + Vector2(-r + 1.0, vy + 1.0), val,
-				HORIZONTAL_ALIGNMENT_CENTER, r * 2.0, vs,
-				Color(0.0, 0.0, 0.0, 0.55 * (1.0 - dim)))
-		draw_string(font, c + Vector2(-r, vy), val,
-				HORIZONTAL_ALIGNMENT_CENTER, r * 2.0, vs, ink.darkened(dim))
 	# 말린 끝은 인쇄를 덮는다. 그래서 맨 마지막이다 — 순서가 곧 물리다.
 	_peel_fold(c, r, peel, dim)
 
@@ -11024,17 +11004,8 @@ func _sticker_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: floa
 	if not hollow:
 		_icon_item(c, rx - 1.5, ry - 1.5 * TBL.flat,
 				String(it.get("id", "")), dim)
-	#  선 자세와 같은 규칙이다(draw_item_sticker 의 값 주석). 두 자세가
-	#  갈리면 테이블에서는 0 이 있고 동전 슬롯에서는 없는 동전이 된다.
-	if String(it.k) != "":
-		var val := ("×" + str(it.v)) if it.k == "xmult" else str(it.v)
-		var ink: Color = (C_CHIP.lightened(0.5) if it.k == "chip"
-				else C_MULT.lightened(0.45))
-		draw_string(font, c + Vector2(-rx + 1.0, 5.0), val,
-				HORIZONTAL_ALIGNMENT_CENTER, rx * 2.0, 11,
-				Color(0.0, 0.0, 0.0, 0.55 * (1.0 - dim)))
-		draw_string(font, c + Vector2(-rx, 4.0), val,
-				HORIZONTAL_ALIGNMENT_CENTER, rx * 2.0, 11, ink.darkened(dim))
+	#  누운 자세에도 글자를 안 쓴다. 두 자세가 갈리면 테이블에서는 숫자가
+	#  있고 동전 슬롯에는 없는 동전이 된다(draw_item_sticker 의 얼굴 주석).
 
 
 # _table_draw 의 맨 끝 (덮개·레일 뒤) — 가격은 절대 안 잘려야 한다.
