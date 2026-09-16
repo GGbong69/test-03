@@ -317,6 +317,96 @@ func _run() -> void:
 		_ok("문 값이 뜬다 — %s" % nm, got == want,
 				"「%s」 (바란 것 %s)" % [got, want])
 
+	# ── 이스터에그 — 불 서른 번 잇달아 ───────────────────
+	var need: int = int(g.EGG.need)
+	var land := int(g.TTL.fly / D) + 2
+	var outer: Vector2 = g.BC + Vector2(0.0, -g.R * (g.rt_bull_i + g.rt_bull_o) * 0.5)
+	var single: Vector2 = g.BC + Vector2(0.0, -g.R * 0.55)
+	_title()
+	g._egg_reset()
+	g._ttl_throw(g.BC)
+	_tick(land)
+	_ok("안쪽 불 → 하나 는다", g.egg_streak == 1, "%d" % g.egg_streak)
+	g._ttl_throw(outer)
+	_tick(land)
+	_ok("바깥 불도 센다", g.egg_streak == 2, "%d" % g.egg_streak)
+	_tick(60)
+	_ok("금이 잇단 수를 따라간다", absf(g.egg_crack - 2.0 / float(need)) < 0.005,
+			"%.3f (바란 것 %.3f)" % [g.egg_crack, 2.0 / float(need)])
+	g._ttl_throw(single)
+	_tick(land)
+	_ok("불이 아니면 처음부터", g.egg_streak == 0, "%d" % g.egg_streak)
+	var c0: float = g.egg_crack
+	_tick(3)
+	_ok("금은 한 번에 안 지워지고 아문다", g.egg_crack > 0.0 and g.egg_crack < c0,
+			"%.4f → %.4f" % [c0, g.egg_crack])
+	_tick(240)
+	_ok("다 아문다", g.egg_crack == 0.0, "%.4f" % g.egg_crack)
+
+	#  금 무늬 — 같은 씨면 같고, 판 밖으로 안 나간다
+	g._egg_make_paths()
+	var pa: Array = g.egg_paths.duplicate(true)
+	g._egg_make_paths()
+	var same: bool = pa.size() == g.egg_paths.size()
+	var far := 0.0
+	for i in pa.size():
+		for j in (pa[i].pts as Array).size():
+			if not (pa[i].pts[j] as Vector2).is_equal_approx(g.egg_paths[i].pts[j]):
+				same = false
+			far = maxf(far, (pa[i].pts[j] as Vector2).length())
+	_ok("같은 씨면 같은 금 무늬", same, "%d가닥" % pa.size())
+	_ok("금이 판 밖으로 안 나간다", far <= g.R * g.rt_dbl_out + 0.01,
+			"가장 먼 %.1f · 판 %.1f" % [far, g.R * g.rt_dbl_out])
+
+	#  서른 번째에 깨진다
+	_title()
+	g._egg_reset()
+	var seed0: int = g.egg_seed
+	#  판에 자루 하나 — 깨질 때 같이 날아가야 한다. 불이 아닌 자리라 잇단 수를
+	#  지우므로 **먼저** 꽂고 나서 잇단 수를 세운다.
+	g._ttl_throw(g.BC + Vector2(20.0, 20.0))
+	_tick(land)
+	g.egg_streak = need - 2
+	g._ttl_throw(g.BC)
+	_tick(land)
+	_ok("스물아홉 — 아직 안 깨진다", g.egg_t < 0.0 and g.egg_streak == need - 1)
+	g._ttl_throw(g.BC)
+	_tick(land)
+	_ok("서른 — 깨진다", g.egg_t >= 0.0, "t %.2f" % g.egg_t)
+	_ok("조각이 난다", g.egg_shards.size() == 61, "%d" % g.egg_shards.size())
+	_ok("꽂혀 있던 자루도 날아간다", g.ttl_stuck.is_empty())
+	_ok("깨진 동안 판은 안 그린다", is_inf(g._egg_board_dy()))
+	g._click(g.BC)
+	_ok("판이 없으면 눌러도 안 던진다", g.ttl_fly.is_empty())
+	_tick(int((float(g.EGG.fly) + float(g.EGG.hold) + 0.05) / D))
+	var dy_rise: float = g._egg_board_dy()
+	_ok("새 판이 밑에서 오른다", not is_inf(dy_rise) and dy_rise > 100.0, "%.0f" % dy_rise)
+	_tick(int((float(g.EGG.rise) + 0.1) / D))
+	_ok("다 오르면 제자리", g._egg_board_dy() == 0.0 and g.egg_t < 0.0)
+	_ok("다 오르면 잇단 수가 처음부터", g.egg_streak == 0 and g.egg_crack == 0.0)
+	_ok("새 판은 다른 금 무늬(씨 +1)", g.egg_seed == seed0 + 1, "%d → %d" % [seed0, g.egg_seed])
+	g._click(g.BC)
+	_ok("새 판에 다시 던질 수 있다", g.ttl_fly.size() == 1)
+
+	#  제목을 뜨면 처음부터
+	_title()
+	g._egg_reset()
+	g.egg_streak = 12
+	g.state = g.S.COLLECT
+	_tick(1)
+	_ok("제목을 뜨면 잇단 수가 처음부터", g.egg_streak == 0)
+
+	#  움직임 끄기 — 날리지 않고 바로 새 판
+	_title()
+	g._egg_reset()
+	g.motion_off = true
+	var seed1: int = g.egg_seed
+	g.egg_streak = need - 1
+	g._ttl_throw(g.BC)
+	_ok("움직임을 끄면 바로 새 판", g.egg_t < 0.0 and g.egg_seed == seed1 + 1
+			and g.egg_streak == 0, "t %.2f · 씨 %d" % [g.egg_t, g.egg_seed])
+	g.motion_off = false
+
 	# ── 소리 사다리 ─────────────────────────────────────
 	#  제목과 판이 **같은 사다리**를 본다. 갈라지면 같은 자리를 물고
 	#  다른 소리가 난다.

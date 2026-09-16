@@ -3679,6 +3679,8 @@ func _click(m: Vector2) -> void:
 			#
 			#  꽂힌 자루를 **판보다 먼저** 본다. 위에 있는 것이 먼저라야
 			#  자루를 누른 손이 그 자리에 또 하나를 꽂는 일이 없다.
+			if egg_t >= 0.0:
+				return
 			var pick := _ttl_hit(m)
 			if pick >= 0:
 				ttl_stuck.remove_at(pick)
@@ -4918,7 +4920,15 @@ func _draw() -> void:
 			_swap_screen(sh)
 
 	_swap_board(sh)
-	_draw_board()
+	#  제목의 이스터에그(EGG) — 판이 깨져 없는 동안은 안 그리고, 새 판이
+	#  오르는 동안은 아래로 밀어 그린다. 그 밖에는 0 이라 아무 일도 없다.
+	var edy := _egg_board_dy()
+	if not is_inf(edy):
+		if edy != 0.0:
+			draw_set_transform(sh + Vector2(0.0, edy))
+		_draw_board()
+		if edy != 0.0:
+			draw_set_transform(sh)
 	_draw_fx()
 	_draw_darts()
 	draw_set_transform(sh)          # 눕힘을 반드시 되돌린다
@@ -14417,6 +14427,47 @@ const TTL := {
 var ttl_stuck := []      # 제목 판에 꽂힌 자루 {p, u, rot, id, t}. t 가 제 나이다
 var ttl_fly := []        # 나는 중인 자루 {a, b, u, rot, id, t}
 var ttl_t := 0.0         # 제목이 선 뒤로 흐른 시간. 겨눔점이 이걸로 숨쉰다
+
+# ══════════════════════════════════════════════════════════
+#  이스터에그 — 불을 서른 번 잇달아 물면 판이 깨진다
+# ──────────────────────────────────────────────────────────
+#  사용자 기획(2026-09-17). 제목 판에서 불을 물 때마다 판에 금이 조금씩
+#  간다. 서른 번을 **잇달아** 물면 판이 산산이 깨지고 새 판이 밑에서 오른다.
+#
+#  ── 금이 곧 계기판이다 ──────────────────────────────
+#  몇 번째인지 글로 안 적는다. 금의 양이 잇단 수를 그대로 따라가고, 하나
+#  빗나가면 금이 스르르 아문다. 그래서 규칙이 글 없이 읽힌다 —
+#  「불을 물면 금이 가고, 놓치면 아문다」. 아무는 쪽이 자라는 쪽보다 느리다.
+#  같은 빠르기면 아문 것이 아니라 지워진 것으로 보인다.
+#
+#  ── 불은 안쪽·바깥쪽 둘 다 센다 ─────────────────────
+#  제목에서는 누른 자리로 그대로 날아가므로 안쪽 불(지름 12px)만 세면
+#  마우스로는 쉽고 손가락(모바일)으로는 거의 못 한다.
+#
+#  ── 금 무늬는 씨에서 난다 ───────────────────────────
+#  같은 판이면 몇 번 금이 가도 같은 무늬로 자란다 — 자랄 때마다 무늬가
+#  바뀌면 금이 「가는」 것이 아니라 깜빡이는 것이다. 새 판이 오르면 씨가
+#  하나 늘어 다른 무늬가 된다.
+# ══════════════════════════════════════════════════════════
+const EGG := {
+	"need": 30,
+	"grow": 14.0,         # 금이 따라가는 빠르기(1/초, 지수)
+	"heal": 2.2,          # 아무는 빠르기 — 자라는 쪽보다 느리다
+	"stems": 7,           # 줄기 수
+	"steps": 9,           # 줄기 한 가닥의 마디 수
+	"fly": 0.95,          # 조각이 날아가는 시간(초)
+	"hold": 0.45,         # 판이 없는 숨
+	"rise": 1.0,          # 새 판이 오르는 시간
+	"drop": 330.0,        # 새 판이 오르기 시작하는 깊이
+	"grav": 950.0,        # 조각에 거는 중력(px/초²)
+}
+
+var egg_streak := 0       # 잇달아 불을 문 수
+var egg_crack := 0.0      # 보이는 금의 양 0~1. 잇단 수를 따라간다
+var egg_seed := 1         # 금 무늬의 씨
+var egg_t := -1.0         # 깨진 뒤 흐른 시간. 음수면 깨지는 중이 아니다
+var egg_paths := []       # 금 무늬 [{pts, from}]
+var egg_shards := []      # 날아가는 조각 {c, pts, v, rot, w, col}
 var set_row_e := []      # 줄마다의 얹힘 짙기 0~1
 var set_row_w := []      # 그 줄 띠가 쓸려 든 폭 0~1. 짙기와 따로 논다
 						 # 실제 초기값은 _ready 가 저장에서 읽는다.
@@ -14614,6 +14665,8 @@ const TITLE_ROWS := [
 #  일어나는 일이라 두 층의 밝기가 달라야 한다.
 #  글줄(x16~164)과 판(x222~418)이 안 겹치므로 이 층이 메뉴를 안 먹는다.
 func _ttl_draw() -> void:
+	#  금은 스크림 **위**다. 밑에 두면 어두운 판 위의 어두운 선이라 안 보인다.
+	_egg_crack_draw()
 	#  커서 밑의 자루. 살짝 들어 올리고 테를 두른다 — 「이걸 집는다」 를
 	#  말하는 것이 이 둘이고, 커서 자리에 점만 찍으면 무엇을 집는지가
 	#  자루 여럿 사이에서 안 갈린다.
@@ -14655,7 +14708,8 @@ func _ttl_draw() -> void:
 	_draw_pops()
 	#  커서가 얹힌 자리. 판 위에서만 뜬다 — 화면 아무 데나 떠 있으면
 	#  그것은 커서지 과녁이 아니다.
-	if state != S.TITLE or mouse_at.distance_to(BC) > R * rt_dbl_out:
+	if state != S.TITLE or egg_t >= 0.0 \
+			or mouse_at.distance_to(BC) > R * rt_dbl_out:
 		return
 	#  꽂힌 자루 위에 있으면 **뽑는 손**이다(테는 위에서 둘렀다). 과녁을
 	#  같이 띄우면 누르면 꽂히는 것으로 읽힌다 — 한 자리에 두 뜻을 실을
@@ -14741,6 +14795,9 @@ func _prof_badge_draw() -> void:
 
 
 func _draw_title() -> void:
+	#  조각은 **스크림 밑**이다. 판도 스크림 밑에 있으니 같은 층이어야 깨진
+	#  판의 조각으로 읽힌다 — 위에 그리면 판보다 밝은 딴 물건이 튀어나온다.
+	_egg_shards_draw()
 	#  다른 화면보다 얕게 덮는다. 0.94 로 덮으면 뒤의 다트판이 유령이 되는데,
 	#  이 게임의 얼굴을 깔아 놓고 지우는 셈이다. 글줄이 왼쪽에 서므로 판과
 	#  자리가 안 겹쳐서, 판을 살려도 글씨를 안 잡아먹는다.
@@ -18050,6 +18107,10 @@ func _title_tick(d: float) -> void:
 		#  지난번 자국이 그대로 남아, 제목이 이어지는 화면으로 읽힌다.
 		ttl_stuck.clear()
 		ttl_fly.clear()
+	#  제목을 뜨면 이스터에그도 처음부터다. 「잇달아」 는 한 자리에 앉아서
+	#  하는 일이다 — 컬렉션을 보고 와서 이어지면 잇단 것이 아니다.
+	if not bg and (egg_streak != 0 or egg_t >= 0.0 or egg_crack > 0.0):
+		_egg_reset()
 	if on:
 		if ttl_hot != was and ttl_hot >= 0:
 			_sfx("menu_pick2")
@@ -18071,6 +18132,7 @@ func _ttl_busy() -> bool:
 #  손(_click)뿐이다.
 func _ttl_board(d: float) -> void:
 	ttl_t += d
+	_egg_tick(d)
 	for f in ttl_fly:
 		f.t += d
 	for s in ttl_stuck:
@@ -18130,6 +18192,7 @@ func _ttl_stick(e: Dictionary) -> void:
 	board_punch = maxf(board_punch, 0.15 + 0.17 * float(g))
 	if g >= 5:
 		shake = maxf(shake, 4.0)
+	_egg_count(bool(info.get("bull", false)))
 	#  문 값. 글이 아니라 수 하나다 — 판을 읽는 법이 이 한 번으로 붙고,
 	#  시작 화면에 설명 줄을 하나도 안 보탠다.
 	var bp: Vector2 = e.b
@@ -18162,6 +18225,219 @@ func _ttl_hit(m: Vector2) -> int:
 			bd = dd
 			best = i
 	return best
+
+
+#  꽂힌 한 자루를 센다. 불이면 하나 늘고, 아니면 처음부터다.
+func _egg_count(bull: bool) -> void:
+	if egg_t >= 0.0:
+		return
+	if not bull:
+		egg_streak = 0
+		return
+	egg_streak += 1
+	#  금 가는 소리 대신 판이 한 번 더 움찔한다. 잇단 수가 클수록 세다 —
+	#  서른에 가까워질수록 판이 버티기 힘들어 보여야 한다.
+	var k: float = float(egg_streak) / float(EGG.need)
+	shake = maxf(shake, 1.5 + 5.0 * k)
+	if egg_streak >= int(EGG.need):
+		_egg_shatter()
+
+
+func _egg_reset() -> void:
+	egg_streak = 0
+	egg_crack = 0.0
+	egg_t = -1.0
+	egg_shards.clear()
+
+
+#  금 무늬를 씨로 짓는다. 판 가운데(불)에서 뻗어 나가는 줄기 몇에 곁가지.
+func _egg_make_paths() -> void:
+	egg_paths.clear()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7919 * egg_seed + 13
+	var n: int = int(EGG.stems)
+	var steps: int = int(EGG.steps)
+	var rim: float = R * rt_dbl_out
+	for k in n:
+		var a: float = TAU * (float(k) + rng.randf_range(-0.3, 0.3)) / float(n)
+		var p := Vector2.ZERO
+		var pts := [p]
+		for i in steps:
+			a += rng.randf_range(-0.45, 0.45)
+			var ln: float = rim / float(steps) * rng.randf_range(0.85, 1.2)
+			p += Vector2(cos(a), sin(a)) * ln
+			if p.length() > rim:
+				p = p.normalized() * rim
+				pts.append(p)
+				break
+			pts.append(p)
+			#  곁가지 — 줄기 가운데쯤에서. 줄기가 그 자리까지 자란 뒤에 난다.
+			if (i == 3 or i == 5) and rng.randf() < 0.65:
+				var ba: float = a + rng.randf_range(0.6, 1.1) \
+						* (1.0 if rng.randf() < 0.5 else -1.0)
+				var b := p
+				var br := [b]
+				for j in 3:
+					ba += rng.randf_range(-0.3, 0.3)
+					b += Vector2(cos(ba), sin(ba)) * ln * 0.7
+					if b.length() > rim:
+						break
+					br.append(b)
+				if br.size() > 1:
+					egg_paths.append({"pts": br, "from": float(i + 1) / float(steps)})
+		egg_paths.append({"pts": pts, "from": 0.0})
+
+
+func _egg_tick(d: float) -> void:
+	if egg_paths.is_empty():
+		_egg_make_paths()
+	if egg_t >= 0.0:
+		egg_t += d
+		var gv: float = float(EGG.grav)
+		for sh in egg_shards:
+			var v: Vector2 = sh.v
+			v.y += gv * d
+			sh.v = v
+			sh.c = (sh.c as Vector2) + v * d
+			sh.rot = float(sh.rot) + float(sh.w) * d
+		var end: float = float(EGG.fly) + float(EGG.hold) + float(EGG.rise)
+		if egg_t >= end:
+			#  새 판이 앉았다. 씨가 하나 늘어 다음 금은 다른 무늬다.
+			_egg_reset()
+			egg_seed += 1
+			_egg_make_paths()
+			board_punch = 1.0
+			shake = maxf(shake, 5.0)
+			_sfx("hit_single")
+		return
+	var want: float = float(egg_streak) / float(EGG.need)
+	var rate: float = float(EGG.grow) if want > egg_crack else float(EGG.heal)
+	egg_crack = lerpf(egg_crack, want, 1.0 - exp(-rate * d))
+	if absf(egg_crack - want) < 0.001:
+		egg_crack = want
+
+
+#  서른 번째. 판을 조각으로 가르고 날린다.
+func _egg_shatter() -> void:
+	_sfx("target_hit")
+	screen_flash = maxf(screen_flash, 0.9)
+	shake = maxf(shake, 14.0)
+	#  꽂혀 있던 자루는 판과 같이 날아간다 — 판 없이 허공에 남으면 안 된다.
+	ttl_stuck.clear()
+	ttl_fly.clear()
+	if motion_off:
+		#  움직임을 끈 손님에게는 날리지 않는다. 바로 새 판이다.
+		_egg_reset()
+		egg_seed += 1
+		_egg_make_paths()
+		return
+	egg_t = 0.0
+	egg_crack = 1.0
+	egg_shards.clear()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 104729 * egg_seed + 1
+	var sw := TAU / 20.0
+	#  판을 조각 예순하나로 가른다 — 칸 스물 × 띠 셋 + 불. 띠 셋의 색은
+	#  판 그리기(_draw_board)와 같은 규칙에서 뽑는다: 안쪽 둘은 칸 색,
+	#  바깥은 빨강·초록이 번갈아 도는 띠 색.
+	var bands := [[rt_bull_o, 0.44], [0.44, 0.76], [0.76, rt_dbl_out]]
+	for i in 20:
+		var a0: float = float(i) * sw - sw * 0.5
+		var base := Color(GameData.color_hex(_sec_col(i)))
+		var ring: Color = C_RED if i % 2 == 0 else C_GREEN
+		for bi in bands.size():
+			var r0: float = R * float(bands[bi][0])
+			var r1: float = R * float(bands[bi][1])
+			var ma: float = a0 + sw * 0.5
+			var c := Vector2(sin(ma), -cos(ma)) * (r0 + r1) * 0.5
+			var pts := PackedVector2Array()
+			for q in annulus_at(Vector2.ZERO, r0, r1, a0, a0 + sw, 3):
+				pts.append(q - c)
+			#  바깥 조각일수록 세게 튄다. 위로 한 번 솟았다 떨어져야 「깨졌다」 다 —
+			#  곧게 바깥으로만 가면 터진 것이 아니라 흩어진 것이다.
+			var dir := c.normalized()
+			var sp: float = rng.randf_range(90.0, 180.0) + 90.0 * float(bi)
+			egg_shards.append({"c": c, "pts": pts,
+					"v": dir * sp + Vector2(rng.randf_range(-30.0, 30.0),
+							rng.randf_range(-230.0, -110.0)),
+					"rot": 0.0, "w": rng.randf_range(-8.0, 8.0),
+					"col": ring if bi == 2 else base})
+	var bull := PackedVector2Array()
+	for k in 12:
+		var a := TAU * float(k) / 12.0
+		bull.append(Vector2(cos(a), sin(a)) * R * rt_bull_o)
+	egg_shards.append({"c": Vector2.ZERO, "pts": bull,
+			"v": Vector2(rng.randf_range(-40.0, 40.0), -260.0),
+			"rot": 0.0, "w": rng.randf_range(-5.0, 5.0), "col": C_GREEN})
+
+
+#  판의 높이. 깨져서 없으면 INF(안 그린다), 오르는 중이면 아래로 밀린 양.
+func _egg_board_dy() -> float:
+	if egg_t < 0.0:
+		return 0.0
+	var gone: float = float(EGG.fly) + float(EGG.hold)
+	if egg_t < gone:
+		return INF
+	var k: float = clampf((egg_t - gone) / float(EGG.rise), 0.0, 1.0)
+	#  살짝 넘쳤다 앉는다 — 곧게 서면 오른 것이 아니라 나타난 것이다.
+	var c1 := 1.4
+	var e: float = 1.0 + (c1 + 1.0) * pow(k - 1.0, 3.0) + c1 * pow(k - 1.0, 2.0)
+	return (1.0 - e) * float(EGG.drop)
+
+
+func _egg_shards_draw() -> void:
+	if egg_t < 0.0 or egg_shards.is_empty():
+		return
+	var fly: float = float(EGG.fly)
+	var a: float = clampf(1.0 - (egg_t - fly * 0.55) / (fly * 0.45), 0.0, 1.0)
+	if a <= 0.0:
+		return
+	for sh in egg_shards:
+		var c: Vector2 = sh.c
+		var cr := cos(float(sh.rot))
+		var sr := sin(float(sh.rot))
+		var pts := PackedVector2Array()
+		for q in sh.pts:
+			pts.append(BC + c + Vector2(q.x * cr - q.y * sr, q.x * sr + q.y * cr))
+		draw_colored_polygon(pts, Color(sh.col, a))
+
+
+#  금. 잇단 수만큼 줄기가 자라고, 곁가지는 줄기가 그 자리에 닿은 뒤에 난다.
+func _egg_crack_draw() -> void:
+	if egg_crack <= 0.003 or egg_t >= 0.0:
+		return
+	#  불 자리가 먼저 패인다 — 금이 어디서 시작했는지를 말한다.
+	draw_circle(BC, 1.5 + 2.0 * egg_crack, Color(0.03, 0.02, 0.05, 0.85))
+	for path in egg_paths:
+		var from: float = float(path.from)
+		var f: float = egg_crack if from <= 0.0 else \
+				clampf((egg_crack - from) / 0.35, 0.0, 1.0)
+		if f > 0.0:
+			_egg_polyline(path.pts, f)
+
+
+func _egg_polyline(pts: Array, f: float) -> void:
+	var total := 0.0
+	for i in range(1, pts.size()):
+		total += (pts[i] as Vector2).distance_to(pts[i - 1])
+	var left: float = total * f
+	for i in range(1, pts.size()):
+		var a: Vector2 = pts[i - 1]
+		var b: Vector2 = pts[i]
+		var ln := a.distance_to(b)
+		if ln <= 0.0:
+			continue
+		if left < ln:
+			b = a.lerp(b, left / ln)
+		#  밝은 결 한 줄을 오른아래에, 짙은 속을 위에 — 금은 파인 것이라
+		#  빛(왼쪽 위)을 받는 쪽 가장자리가 밝다. 짙은 줄 하나로는 어두운
+		#  판(스크림 밑)에서 안 보인다.
+		draw_line(BC + a + Vector2(1.0, 1.0), BC + b + Vector2(1.0, 1.0),
+				Color(C_TXT, 0.38), 1.0)
+		draw_line(BC + a, BC + b, Color(0.03, 0.02, 0.05, 0.92), 1.0)
+		left -= ln
+		if left <= 0.0:
+			break
 
 
 #  판 안의 한 점을 고르게 고른다. 저절로 던지던 시절의 자리였고, 지금은
