@@ -3387,13 +3387,8 @@ func _unhandled_input(e: InputEvent) -> void:
 				KEY_TAB:
 					# 런 정보 — 런 안에서만 뜻이 있다. 타이틀·설정·컬렉션에서는
 					# 볼 런이 없고, 연출 중(RESOLVE·전환)에는 입력을 안 받는다.
-					if state == S.RUNINFO:
-						state = run_from
-						_sfx("menu_back")
-					elif _runinfo_ok():
-						run_from = state
-						state = S.RUNINFO
-						_sfx("menu_pick")
+					# 화면의 「정보」 단추와 같은 길이다(_runinfo_toggle).
+					_runinfo_toggle()
 				KEY_F11:
 					_toggle_fullscreen()
 				KEY_ESCAPE:
@@ -3417,8 +3412,8 @@ func _unhandled_input(e: InputEvent) -> void:
 					elif state != S.TITLE and state != S.OVER:
 						# 판 중의 ESC 는 일시정지다 — 설정을 열고, 닫으면
 						# 열던 자리로 돌아간다. 진행 상태는 전부 그대로다.
-						pause_from = state
-						state = S.SETTINGS
+						# 화면의 「설정」 단추와 같은 길이다(_pause_open).
+						_pause_open()
 				KEY_SPACE:
 					if hand_st != H.NONE:
 						_hand_abort()
@@ -3452,7 +3447,7 @@ func _unhandled_input(e: InputEvent) -> void:
 		if mb.pressed:
 			#  설명 중이면 클릭이 **넘기기**다. 게임에 안 보낸다 — 배우다 말고
 			#  실수로 물건을 사면 설명이 손해로 끝난다.
-			if _tutor_click():
+			if _tutor_click(mp):
 				return
 			if _hand_press(mp):
 				return                    # 삼킨다 — 탭인지 드래그인지 아직 모른다
@@ -3493,6 +3488,11 @@ func _click(m: Vector2) -> void:
 		return
 	if swap_live:
 		return          # 갈아 끼우는 동안은 아무것도 안 받는다
+	#  런 정보 · 설정 단추. 화면마다의 판별보다 **먼저** 본다 — 조준 중의
+	#  클릭은 판 밖이어도 무언가를 하려 드는데, 단추를 누른 손이 조준을
+	#  잠그면 안 된다.
+	if _hud_btn_click(m):
+		return
 	match state:
 		S.PICK:
 			for i in remaining.size():
@@ -5012,6 +5012,8 @@ func _hud_draw() -> void:
 			_grip_draw()
 			if gx < -0.01:
 				draw_set_transform(shake_off)
+	#  벽(_grip_draw) 다음이다 — 벽이 왼쪽 몇 칸을 덮으면 글자가 가운데를 잃는다.
+	_hud_btns_draw()
 	# 판매 팝업이 스크림(알파 0.94) 밑에 깔리면 안 보인다 — 판 다음에 그린다.
 	_draw_pops()
 
@@ -18490,6 +18492,115 @@ func _runinfo_ok() -> bool:
 	return _can_rack_move() or state == S.CLEAR
 
 
+# ══════════════════════════════════════════════════════════
+#  런 정보 · 설정 단추 — 키 둘(TAB · ESC)의 화면 쪽 짝
+# ──────────────────────────────────────────────────────────
+#  TAB 과 ESC 는 키로만 열렸다. 모니터 앞에서는 됐지만 **모바일에는 키가
+#  없다**(2026-09-17 — 모바일판을 낸다). 그래서 키가 하던 일을 누를 수 있는
+#  자리로 둔다. 발라트로의 Run Info · Options 가 그 자리다.
+#
+#  ── 자리: 자금판 바로 밑 ───────────────────────────
+#  런 안의 화면은 넷(조준·상점/스테이지·판 고르기·정산)이고 비는 자리가
+#  화면마다 다르다. 넷 다에서 비는 곳이 자금판 밑이다.
+#    조준      벽에 꽂힌 자루의 잡기 판정이 맨 위 y 88 까지 온다(자루가 많아
+#              간격이 줄 때 224 − 118 − 18). 단추는 y 58~84 라 4px 남는다
+#    상점      자금판이 46 으로 자라고 16 올라가 y 4~50. 단추는 54~80, 벽이다
+#    판 고르기 · 정산  자금판 밑이 벽이다
+#  오른쪽 아래는 상점·판 고르기의 「다음 판」·「던진다」 바로 밑이라 손가락이
+#  빗나가면 판이 넘어간다. 왼쪽 아래는 조준 중 벽의 자루와 겹친다.
+#
+#  ── 키와 한 길 ─────────────────────────────────────
+#  단추와 키가 같은 함수를 부른다(_runinfo_toggle · _pause_open). 갈라 두면
+#  한쪽만 고쳐지는 날이 온다.
+# ══════════════════════════════════════════════════════════
+const HUDBTN := {"dy": 4.0, "h": 26.0, "gap": 4.0}
+
+
+#  단추가 서는 화면인가. 런 밖(제목·설정·컬렉션·새 런)은 각자 「뒤로」가 있고,
+#  런 정보는 제 판 안에 「뒤로」가 있다. 갈아 끼우는 동안과 사진이 연 화면은
+#  입력을 안 받으므로 안 세운다 — 못 누르는 단추를 보이면 고장으로 읽힌다.
+func _hud_btns_on() -> bool:
+	if swap_live or photo != "" or photo_rack != "":
+		return false
+	return _is_play() or state == S.CLEAR or state == S.SHOP \
+			or state == S.STAGE or state == S.LEG
+
+
+#  0 = 런 정보, 1 = 설정. 자금판 폭을 반씩 나눈다.
+func _hud_btn_rect(i: int) -> Rect2:
+	var b: Rect2 = _bank_rect()
+	if state == S.CLEAR:
+		#  정산에는 자금판이 안 서고 _bank_rect 는 상점 높이(46)를 준다.
+		#  조준 때의 자리에 둔다 — 화면이 바뀌어도 단추가 안 뛴다.
+		b.size.y = float(LAY.bank.size.y)
+	var x0: float = b.position.x
+	#  조준 중에는 왼쪽 벽(GRIP.wall)이 자금판 왼쪽 몇 칸을 덮는다. **보이는**
+	#  가장자리에 맞춘다 — 벽 밑에서 시작하면 글자가 한쪽으로 쏠린다.
+	if _is_play():
+		x0 = maxf(x0, float(GRIP.wall) + 1.0)
+	var gap: float = float(HUDBTN.gap)
+	var w: float = (b.end.x - x0 - gap) * 0.5
+	return Rect2(x0 + float(i) * (w + gap), b.end.y + float(HUDBTN.dy),
+			w, float(HUDBTN.h))
+
+
+#  TAB 과 「정보」 단추가 같이 부른다. 열거나 닫았으면 참.
+func _runinfo_toggle() -> bool:
+	if state == S.RUNINFO:
+		state = run_from
+		_sfx("menu_back")
+		return true
+	if _runinfo_ok():
+		run_from = state
+		state = S.RUNINFO
+		_sfx("menu_pick")
+		return true
+	return false
+
+
+#  판 중의 ESC 와 「설정」 단추가 같이 부른다. 설정을 열고, 닫으면 열던
+#  자리로 돌아간다. 진행 상태는 전부 그대로다.
+func _pause_open() -> void:
+	if hand_st != H.NONE:
+		_hand_abort()
+	pause_from = state
+	state = S.SETTINGS
+	_sfx("menu_pick")
+
+
+func _hud_btn_click(m: Vector2) -> bool:
+	if not _hud_btns_on():
+		return false
+	if _hud_btn_rect(0).has_point(m):
+		if not _runinfo_toggle():
+			_deny()             # 연출 중에는 못 연다 — 눌렀다는 대답은 한다
+		return true
+	if _hud_btn_rect(1).has_point(m):
+		_pause_open()
+		return true
+	return false
+
+
+func _hud_btns_draw() -> void:
+	if not _hud_btns_on():
+		return
+	#  조준 중에는 HUD 가 물러난다(_hud_draw 의 띠). 단추도 같이 물러나야
+	#  조준선이 화면에서 가장 센 것으로 남는다.
+	var a: float = 0.55 if _is_aim_stage() else 1.0
+	var rows := [["정보", "TAB", _runinfo_ok()], ["설정", "ESC", true]]
+	for i in rows.size():
+		var r := _hud_btn_rect(i)
+		var on: bool = rows[i][2]
+		#  _btn 과 같은 어법 — 못 누르는 동안은 면을 두고 띠만 끈다.
+		_panel(r, on, a)
+		draw_string(font, r.position + Vector2(0.0, 13.0), String(rows[i][0]),
+				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 11,
+				Color(C_TXT if on else C_DIM, a))
+		draw_string(font_sm, r.position + Vector2(0.0, 23.0), String(rows[i][1]),
+				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9,
+				Color(C_GOLD if on else C_OFF, a))
+
+
 func _draw_runinfo() -> void:
 	# 뒤를 통째로 가리지 않는다. 게임이 비쳐야 "잠깐 여는 판" 이다.
 	draw_rect(_full(), Color(0.0, 0.0, 0.0, 0.55))
@@ -18912,10 +19023,15 @@ func _tutor_close() -> void:
 #  설명 중의 클릭은 게임에 안 간다 — 넘기기로만 쓴다. true 면 삼켰다.
 #  lead 전에는 아무 일도 안 한다: 무엇을 누르던 손이 그대로 이어져서
 #  첫 걸음이 뜨자마자 사라지는 것을 막는다.
-func _tutor_click() -> bool:
+func _tutor_click(m := Vector2(-1.0, -1.0)) -> bool:
 	if tutor_id == "":
 		return false
 	if tutor_t < float(TUTOR.lead):
+		return true
+	#  건너뛰기 단추 — ESC 와 같은 일이다(그 갈래를 통째로 닫는다).
+	if _tutor_skip_rect().has_point(m):
+		_tutor_close()
+		_sfx("menu_back")
 		return true
 	_tutor_next()
 	return true
@@ -18988,12 +19104,10 @@ func _tutor_draw() -> void:
 	var bw: float = float(TUTOR.box_w)
 	var bp: float = float(TUTOR.box_pad)
 	var lines := _tutor_wrap(tx, bw - bp * 2.0)
-	var bh: float = bp * 2.0 + float(lines.size()) * 14.0 + 10.0
-	var bx: float = (VIEW.x - bw) * 0.5
-	#  구멍을 안 가리는 쪽에 선다. 과녁이 아래쪽이면 위로 올라간다.
-	var by: float = VIEW.y - bh - 12.0
-	if hole.size.y > 0.0 and hole.end.y > by - 6.0:
-		by = 14.0
+	var box := _tutor_box()
+	var bh: float = box.size.y
+	var bx: float = box.position.x
+	var by: float = box.position.y
 	draw_rect(Rect2(bx, by, bw, bh), Color(C_BG, 0.94 * a))
 	draw_rect(Rect2(bx, by, bw, bh), Color(C_ACC, 0.7 * a), false, 1.0)
 	for i in lines.size():
@@ -19007,8 +19121,44 @@ func _tutor_draw() -> void:
 		draw_string(font_sm, Vector2(bx + bp, by + bh - 4.0),
 				"%d / %d" % [tutor_i + 1, n], HORIZONTAL_ALIGNMENT_LEFT, -1, 9,
 				Color(C_DIM, a))
-	draw_string(font_sm, Vector2(bx, by + bh - 4.0), "눌러서 계속  ·  ESC 건너뛰기",
-			HORIZONTAL_ALIGNMENT_RIGHT, bw - bp, 9, Color(C_DIM, a))
+	#  건너뛰기는 **누를 수 있는 단추**다. 전에는 「ESC 건너뛰기」 글줄이라
+	#  키가 없는 손(모바일)에게는 건너뛸 길이 없었다.
+	var sk := _tutor_skip_rect()
+	var hot: bool = sk.has_point(mouse_at)
+	draw_rect(sk, Color(C_PANEL if not hot else C_PANEL.lightened(0.12), a))
+	draw_rect(Rect2(sk.position, Vector2(sk.size.x, 1.0)), Color(C_ACC, 0.8 * a))
+	draw_string(font_sm, Vector2(sk.position.x, sk.end.y - 4.0), "건너뛰기  ESC",
+			HORIZONTAL_ALIGNMENT_CENTER, sk.size.x, 9, Color(C_TXT if hot else C_DIM, a))
+	draw_string(font_sm, Vector2(bx, by + bh - 4.0), "눌러서 계속",
+			HORIZONTAL_ALIGNMENT_RIGHT, sk.position.x - bx - 8.0, 9, Color(C_DIM, a))
+
+
+#  말상자의 자리. 그리기와 누르기가 **같은 사각**을 봐야 한다 — 따로 셈하면
+#  줄 수가 바뀌는 걸음에서 건너뛰기 단추가 그림과 판정이 어긋난다.
+func _tutor_box() -> Rect2:
+	var tx := String(_tutor_step().get("text", ""))
+	var bw: float = float(TUTOR.box_w)
+	var bp: float = float(TUTOR.box_pad)
+	var lines := _tutor_wrap(tx, bw - bp * 2.0)
+	var bh: float = bp * 2.0 + float(lines.size()) * 14.0 + 10.0
+	var bx: float = (VIEW.x - bw) * 0.5
+	var mk := _mark_rect(String(_tutor_step().get("mark", "")))
+	var hole := Rect2()
+	if mk.size.x > 1.0 and mk.size.y > 1.0:
+		hole = mk.grow(float(TUTOR.pad))
+	#  구멍을 안 가리는 쪽에 선다. 과녁이 아래쪽이면 위로 올라간다.
+	var by: float = VIEW.y - bh - 12.0
+	if hole.size.y > 0.0 and hole.end.y > by - 6.0:
+		by = 14.0
+	return Rect2(bx, by, bw, bh)
+
+
+#  말상자 오른쪽 아래의 건너뛰기 단추.
+func _tutor_skip_rect() -> Rect2:
+	var b := _tutor_box()
+	var w := 64.0
+	var h := 15.0
+	return Rect2(b.end.x - float(TUTOR.box_pad) - w, b.end.y - h - 2.0, w, h)
 
 
 #  폭에 맞춰 접는다. 낱말 사이에서만 자른다 — 한글도 띄어쓰기가 있으므로
