@@ -2756,16 +2756,8 @@ func _process(d: float) -> void:
 	_give_tick(d)
 	d *= _tutor_slow()
 	if _npc_on():
-		var ttl_npc := _ttl_npc()
-		_body3_mode(ttl_npc)
-		#  카운터에 얹을 팔은 카운터가 있을 때만이다. 시작 화면에서는
-		#  팔이 몸에 붙어 있다(_body3_arms).
-		if ttl_npc:
-			if _hand3_live():
-				_hand3_close()
-		else:
-			_hand3_open()
-			_hand3_sync()
+		_hand3_open()
+		_hand3_sync()
 		_body3_open()
 		_body3_sync()
 	elif _hand3_live() or _body3_live():
@@ -7887,39 +7879,8 @@ func _chute_label() -> void:
 # 상인 몸통 — 카운터 위로 올라온 부분만. 동전 슬롯이 이 위에 얹혀 트레이로 읽힌다.
 #  상인이 서는 화면인가. 방(_felt_draw)이 서는 자리와 같다 —
 #  판 고르기 · 제약 고르기 · 상점, 그리고 그 사이의 판 갈이.
-#  시작 화면이 넷째다. 거기서는 카운터가 없어서 **다른 벌**로 선다.
 func _npc_on() -> bool:
-	return state == S.LEG or state == S.STAGE or state == S.SHOP or swap_live 			or _ttl_npc()
-
-
-#  시작 화면(과 그 위에 뜬 설정)인가.
-func _ttl_npc() -> bool:
-	return state == S.TITLE or (state == S.SETTINGS and pause_from < 0)
-
-
-#  무대를 어느 벌로 열 것인가. 바뀌면 먼저 닫는다 — 열린 채로 값만
-#  바꾸면 아무 일도 안 일어난다.
-func _body3_mode(ttl: bool) -> void:
-	if ttl == body3_ttl and (_body3_live() or not _has_renderer()):
-		return
-	body3_ttl = ttl
-	_body3_close()
-	if ttl:
-		body3_rect = NPC_TTL.rect
-		body3_at = float(NPC_TTL.at)
-		body3_scale = float(NPC_TTL.scale)
-		#  카메라가 보는 h 를 **정수리 자리에서 거꾸로 뽑는다.** 배율을
-		#  만지면 키가 바뀌는데, aim 을 손으로 적어 두면 그때마다 머리가
-		#  화면 밖으로 나가거나 어깨까지만 남는다.
-		var r: Rect2 = NPC_TTL.rect
-		var crown: float = float(HEAD3.crn_hi2) * body3_scale
-		body3_front = crown - (r.position.y + r.size.y * 0.5
-				- float(NPC_TTL.top))
-	else:
-		body3_rect = BODY3.rect
-		body3_at = float(NPC.cx)
-		body3_scale = 1.0
-		body3_front = 0.0
+	return state == S.LEG or state == S.STAGE or state == S.SHOP or swap_live
 
 
 func _npc_body() -> void:
@@ -8210,11 +8171,6 @@ func _npc_ink(wr: Vector2, ex: Vector2, ey: Vector2, sc: float) -> void:
 #  3D 는 그 값을 **받아 쓰기만** 한다 — 두 곳이 따로 셈하면 쓸기 도중에
 #  팔과 손이 갈라진다.
 # ══════════════════════════════════════════════════════════
-#  눈높이 카메라의 각. 0 이면 완전 정면이라 어깨의 윗면이 한 줄도 안 보여
-#  사람이 종이가 된다(BODY3 머리말의 그 실패다). 10° 는 정수리를 안 열면서
-#  어깨와 챙의 윗면만 한 줄씩 내주는 각이다.
-const STAGE3_EYE := -10.0
-
 const HAND3 := {
 	#  손**과 팔뚝**이 갈 수 있는 화면 자리. 팔꿈치가 면 w −104 라
 	#  화면 y 46 이고, 쓸기 끝에서 손목이 w 126 → y 227 까지 간다.
@@ -8340,14 +8296,7 @@ func _arm3_build(col: Color) -> MeshInstance3D:
 #  반드시 갈린다 — 빛을 한 번 만지고 한쪽만 고치면 그날로 두 재질이 된다.
 #  카메라는 −52° 직교다. 그 각에서 화면 y = 0.788·w − 0.616·h 가 나오고,
 #  그것이 곧 _p2s 다(근사가 아니라 같은 식이다). 1 월드 단위 = 화면 1px.
-#  front 가 0 이면 테이블 투영이다 — 판을 52° 위에서 내려다보는 그 각.
-#  0 이 아니면 **눈높이 카메라**이고 그 값이 무대 한가운데가 가리키는 h 다.
-#
-#  왜 카메라가 둘이어야 하는가. 52° 투영에서 세운 상자는 윗면이 앞면의
-#  0.788/0.616 = 1.28 배로 보인다. 테이블 위에 **누운** 것에는 그것이 맞는
-#  그림이지만, 서 있는 사람의 머리에 그 각을 주면 화면에 얼굴이 아니라
-#  정수리가 뜬다. 카운터가 목 위를 잘라 주던 동안에는 안 드러났던 값이다.
-func _stage3_make(r: Rect2, front := 0.0) -> SubViewport:
+func _stage3_make(r: Rect2) -> SubViewport:
 	var vp := SubViewport.new()
 	vp.size = Vector2i(int(r.size.x), int(r.size.y))
 	vp.own_world_3d = true
@@ -8363,14 +8312,11 @@ func _stage3_make(r: Rect2, front := 0.0) -> SubViewport:
 	cam.size = r.size.y            # 1 월드 단위 = 화면 1px
 	cam.near = 1.0
 	cam.far = 4000.0
-	var pit: float = deg_to_rad(float(HAND3.pitch) if front == 0.0 else STAGE3_EYE)
+	var pit: float = deg_to_rad(float(HAND3.pitch))
 	cam.rotation = Vector3(pit, 0.0, 0.0)
-	#  무대 한가운데가 가리키는 점. 테이블 투영에서는 면 위(h = 0)의 한
-	#  점이고, 눈높이에서는 서 있는 몸의 h = front 다.
+	#  무대 한가운데가 가리키는 면 위의 점. h = 0 으로 잡는다.
 	var mid := Vector3(r.position.x + r.size.x * 0.5, 0.0,
 			(r.position.y + r.size.y * 0.5 - float(TBL.fy)) / float(TBL.flat))
-	if front != 0.0:
-		mid = Vector3(r.position.x + r.size.x * 0.5, front, 0.0)
 	#  직교라 거리는 그림에 안 나온다 — 잘림면만 피하면 된다.
 	#  카메라 뒤축(basis.z)은 (0, −sin p, cos p) 다.
 	cam.position = mid + Vector3(0.0, -sin(pit), cos(pit)) * 900.0
@@ -8382,18 +8328,6 @@ func _stage3_make(r: Rect2, front := 0.0) -> SubViewport:
 	lt.light_energy = 1.15
 	lt.shadow_enabled = false
 	vp.add_child(lt)
-	if front != 0.0:
-		#  뒷빛 하나. 시작 화면의 바탕(C_BG)은 조끼(#1f1613)와 밝기가
-		#  거의 같아서, 앞빛만으로는 어깨선이 배경에 잠긴다. 오른뒤에서
-		#  약하게 걸어 **가장자리만** 뜨게 한다 — 앞면을 밝히면 그늘
-		#  사다리가 통째로 흔들린다.
-		#  테이블 무대에는 안 건다. 저쪽은 벽(C_WOOD)이 이미 갈라 준다.
-		var rim := DirectionalLight3D.new()
-		rim.rotation_degrees = Vector3(-8.0, 214.0, 0.0)
-		rim.light_energy = 0.85
-		rim.light_color = C_WIRE.lightened(0.20)
-		rim.shadow_enabled = false
-		vp.add_child(rim)
 
 	var we := WorldEnvironment.new()
 	var env := Environment.new()
@@ -8672,123 +8606,8 @@ const BODY3 := {
 	"belt_d": 14.0,      # 띠가 앞으로 나오는 깊이 — 윗면이 카운터 립이 된다
 }
 
-# ══════════════════════════════════════════════════════════
-#  상인의 윗도리 — 어깨 · 목 · 머리 · 챙
-# ──────────────────────────────────────────────────────────
-#  **상점에서는 한 픽셀도 안 보인다.** 몸통 위끝(BODY3.hi 210)이 이미
-#  화면 y −1 이고 무대 사각이 y[0,128] 이라, 여기 것은 전부 텍스처 밖이다.
-#  그래도 만드는 이유는 시작 화면이 같은 상인을 **카메라를 물려서** 쓰기
-#  때문이다 — 잘린 상반신은 카운터가 잘라 줄 때만 사람이고, 카운터가 없는
-#  자리에 그대로 세우면 머리 없는 사다리꼴이 된다(NPC 머리말의 그 구멍).
-#
-#  ── 얼굴을 안 그린다는 결론은 그대로다 ──────────────────
-#  640x360 에서 사람 얼굴은 어떤 각도로도 뭉개진다. 그래서 이목구비 대신
-#  **챙**을 쓴다. 챙이 앞으로 나오면 그 밑이 그늘이고, 그 그늘이 눈자리를
-#  맡는다 — 눈을 한 점도 안 찍고 고개 각도 하나로 어디를 보는지가 읽힌다.
-#  딜러가 챙을 쓰는 것은 빌려 온 어법이 아니라 그 직업의 옷이다.
-#
-#  ── 값 사다리를 안 깬다 ────────────────────────────────
-#  조끼 9 < 소매 24 < 벽 41 < 셔츠 93 < 커프 111 < 림 141 (NPC 머리말).
-#  살은 커프와 같은 칸(C_WOOD.lightened 0.40)이다 — 같은 사람이니 손과
-#  얼굴이 같은 값이어야 한다. 머리카락·챙 띠는 조끼 쪽에 붙여 실루엣
-#  위끝이 벽에 안 뜨게 둔다.
-#
-#  ── h 자리 ─────────────────────────────────────────────
-#  어깨 210~236 · 목 232~252 · 얼굴 250~290 · 머리 288~310.
-#  카운터(h 0)에서 정수리까지 310 이고 화면으로는 0.616 배인 191px 이다.
-# ══════════════════════════════════════════════════════════
-const HEAD3 := {
-	#  어깨. 가슴 위끝(72.5)보다 넓어야 어깨가 어깨다 — 같은 폭이면
-	#  몸통이 그냥 위로 더 자란 것이라 목이 어디서 나오는지가 없다.
-	"sh_h": 224.0,       # 돌쩌귀의 h. 조각은 이 위아래로 걸린다
-	"sh_hi": 12.0, "sh_lo": -14.0,
-	"sh_hinge": 24.0,    # 돌쩌귀 u. 목보다 바깥이라 목이 그 사이에서 난다
-	"sh_len": 50.0,      # 돌쩌귀에서 어깨끝까지 — 반폭 24+50·cos22 = 70.4
-	"sh_drop": 11.0,     # 어깨가 바깥으로 내려앉는 각. 0 이면 옷걸이다
-	#  목은 **깃 위로 나와야** 목이다. 깃(234~252)이 턱(264)보다 낮아야
-	#  그 사이 12 가 맨 목으로 남는다 — 깃을 턱 위로 올렸더니 머리가
-	#  어깨에 바로 얹혀서 목 없는 인형이 됐다.
-	"nk_w": 17.0, "nk_lo": 236.0, "nk_hi": 268.0,
-	"nk_w0": -50.0, "nk_w1": -28.0,     # 목의 깊이. 몸통 앞면(−20)보다 뒤다
-	#  셔츠 깃 — 조끼가 끝나는 자리에서 셔츠가 목을 감는다. 이 한 조각이
-	#  없으면 조끼가 목에 바로 붙어 사람이 아니라 인형이 된다.
-	"col_w": 15.0, "col_lo": 236.0, "col_hi": 252.0,
-	#  나비넥타이. 턱(264)에서 24 아래다 — 붙여 두었더니 화면에서
-	#  **입으로 읽혔다**. 깃 한가운데에 앉아야 넥타이다.
-	"tie_w": 9.0, "tie_h": 6.0, "tie_lo": 239.0,
-	#  ── 머리 크기는 몸이 정한다 ──────────────────────────
-	#  상점의 상인은 **잘린 클로즈업**이라 73px 만 보인다. 그 몸을 통째로
-	#  세우면 카운터에서 정수리까지 358 인데, 머리를 실비례(높이 ~60)로
-	#  두면 6 등신이 되어 화면에서 머리가 점이 된다. 반신은 3.5~4 등신이
-	#  읽히는 자리다 — 머리+머리카락 94 로 3.8 을 잡는다.
-	#  폭 48 대 어깨 141 = 2.9 머리. 사람이 그쯤이다.
-	"hd_w": 24.0, "hd_lo": 264.0, "hd_hi": 338.0,
-	"hd_w0": -58.0, "hd_w1": -12.0,
-	"jaw_hi": 273.0,                    # 턱 밑 그늘의 위끝
-	"nose_w": 4.0, "nose_lo": 296.0, "nose_hi": 306.0, "nose_out": 7.0,
-	"mo_w": 8.0, "mo_lo": 284.0, "mo_hi": 287.0,          # 입 — 획 하나
-	"cheek_w0": 18.5,                   # 이 바깥이 볼 그늘이다
-	"eye_lo": 298.0, "eye_hi": 310.0,   # 챙 그늘이 지는 띠. 여기가 눈자리다
-	#  ── 챙만 씌우려다 모자가 됐다 ────────────────────────
-	#  녹색 챙(딜러 바이저)만 앞으로 내고 그 위를 머리카락으로 덮어 봤다.
-	#  −10° 카메라에서는 앞으로 나온 챙이 **가로 띠**로 보이고, 그 위의
-	#  머리 상자는 평평한 윗면 때문에 실크햇으로 읽혔다. 둘을 합치면
-	#  화면에 이미 있던 그림이 모자였다는 뜻이다 — 그래서 모자로 짓는다.
-	#  테를 한 바퀴 두르고 녹색은 모자띠로 돌린다. 딜러의 녹색은 그대로
-	#  남고, 챙이 눈자리에 그늘을 지우는 일도 그대로다.
-	"brim_w": 40.0, "brim_lo": 310.0, "brim_hi": 316.0,
-	"brim_f": 15.0, "brim_b": -66.0,      # 테가 앞뒤로 나가는 깊이
-	"crn_w": 27.0, "crn_lo": 315.0, "crn_hi": 342.0,
-	"crn_w2": 25.0, "crn_hi2": 352.0,     # 정수리 한 단 — 평평한 윗면을 깬다
-	"band_w": 28.5, "band_lo": 317.0, "band_hi": 325.0,   # 모자띠. 녹색이다
-	#  옆머리. 테 밑으로 한 줄 나온다 — 모자만 있고 머리가 없으면
-	#  모자를 쓴 것이 아니라 모자가 놓인 것이다.
-	"side_lo": 292.0, "side_hi": 312.0,
-	"hair_w": 25.0,
-	#  ── 팔은 시작 화면에서만 짓는다 ──────────────────────
-	#  상점에는 이미 팔이 있다 — 카운터에 얹힌 3D 팔(HAND3)이다. 여기
-	#  것을 같이 지으면 한 사람에게 팔이 넷이 된다. 시작 화면에는 카운터가
-	#  없어서 저쪽 팔이 갈 자리가 없으므로, 그 자리에만 어깨에서 내린
-	#  팔 한 벌을 붙인다. 화면 밑동이 손을 잘라 주므로 손은 안 짓는다.
-	"arm_u": 54.0,       # 어깨 소켓의 u
-	"arm_h": 226.0,      # 소켓의 h
-	"arm_w": 17.0,       # 위팔 반폭
-	"arm_len": 104.0,    # 위팔 길이
-	"arm_out": 9.0,      # 위팔이 바깥으로 벌어지는 각
-	"fore_w": 15.0, "fore_len": 112.0, "fore_in": 15.0,
-	"cuff_h": 10.0,      # 소매 끝동. 이 밑은 화면 밖이다
-}
-
 var body3_vp: SubViewport = null
 var body3_root: Node3D = null
-#  무대를 어디에 얼마나 크게 여는가. 상점은 카운터 뒤 제자리이고,
-#  시작 화면은 같은 상인을 물러서서 작게 세운다 — 조각을 두 벌 만들지
-#  않으려면 자리와 배율이 값이어야 한다. 바꾼 뒤에는 _body3_close 로
-#  한 번 닫아야 새 사각으로 다시 연다.
-var body3_rect := BODY3.rect
-var body3_scale := 1.0
-var body3_at := float(NPC.cx)
-var body3_lift := 0.0    # 상인을 h 로 얼마나 올리는가. 음수면 내려간다
-#  0 이 아니면 눈높이 카메라로 열고 그 h 를 무대 한가운데에 둔다.
-var body3_front := 0.0
-#  지금 열린 무대가 시작 화면 벌인가. 벌이 바뀌면 다시 열어야 한다 —
-#  사각도 카메라도 여는 순간에 굳는다.
-var body3_ttl := false
-
-
-#  시작 화면의 상인. 카운터가 없으므로 통째로 서고, 화면 밑동이 허리
-#  아래를 잘라 준다 — 잘린 상반신은 무언가가 잘라 줄 때만 사람이다.
-#  자리는 오른쪽 셋째다. 제목(왼쪽 위) · 글줄(왼쪽 아래) · 판(가운데)이
-#  왼쪽 둘을 채우고 오른쪽이 비어 있었다.
-const NPC_TTL := {
-	"rect": Rect2(410.0, 100.0, 230.0, 260.0),
-	"at": 534.0,         # 서는 화면 x. 어깨가 판 숫자(x≤442)를 안 스친다
-	#  배율. 0.70 으로 두었더니 보이는 몸이 98 × 264 라 허수아비였다 —
-	#  반신은 가로가 세로의 절반은 되어야 사람으로 앉는다. 키워서 더 많이
-	#  잘리게 두면 둘 다 잡힌다(133 × 248).
-	"scale": 0.88,
-	"top": 112.0,        # 정수리가 앉는 화면 y. aim 은 여기서 역산한다
-}
 
 
 func _body3_live() -> bool:
@@ -8798,11 +8617,10 @@ func _body3_live() -> bool:
 func _body3_open() -> void:
 	if _body3_live() or not _has_renderer():
 		return
-	body3_vp = _stage3_make(body3_rect, body3_front)
+	body3_vp = _stage3_make(BODY3.rect)
 	var rt := Node3D.new()
 	#  허리가 축이다 — 기울임도 돌림도 카운터 선(h 0)에서 시작한다.
-	rt.position = Vector3(body3_at, 0.0, 0.0)
-	rt.scale = Vector3.ONE * body3_scale
+	rt.position = Vector3(float(NPC.cx), 0.0, 0.0)
 	body3_vp.add_child(rt)
 	body3_root = rt
 
@@ -8863,158 +8681,6 @@ func _body3_open() -> void:
 			Vector2(lo, float(BODY3.belt)),
 			Vector2(fw - float(BODY3.d), fw + float(BODY3.belt_d)),
 			C_WOOD.darkened(0.52)))
-	_body3_head(rt, vest, body3_ttl)
-
-
-#  어깨 위. 상점 무대(y[0,128])에서는 통째로 텍스처 밖이라 공짜로 잘린다 —
-#  잘라 내는 가드를 안 두는 이유가 그것이다. 시작 화면이 카메라를 물리면
-#  같은 조각들이 그대로 화면에 든다.
-func _body3_head(rt: Node3D, vest: Color, arms: bool) -> void:
-	var skin: Color = C_WOOD.lightened(0.40)      # 손과 같은 칸이다
-	var fw: float = float(BODY3.face)
-	var bk: float = fw - float(BODY3.d)
-	#  어깨 둘. 몸통 옆 조각과 같은 어법이다 — 돌쩌귀에서 바깥으로 틀고
-	#  (yaw) 바깥아래로 눕힌다(drop). 눕히는 각이 어깨의 전부다.
-	for s in [-1.0, 1.0]:
-		var pv := Node3D.new()
-		pv.position = Vector3(s * float(HEAD3.sh_hinge), float(HEAD3.sh_h), fw)
-		pv.rotation_degrees = Vector3(0.0, s * float(BODY3.yaw),
-				-s * float(HEAD3.sh_drop))
-		var sl: float = float(HEAD3.sh_len)
-		pv.add_child(_blk3(Vector2(0.0, sl) if s > 0.0 else Vector2(-sl, 0.0),
-				Vector2(float(HEAD3.sh_lo), float(HEAD3.sh_hi)),
-				Vector2(-float(BODY3.d), 0.0), vest))
-		rt.add_child(pv)
-	#  어깨 가운데 — 목이 나오는 자리. 돌쩌귀 둘 사이의 틈을 메운다.
-	var sh: float = float(HEAD3.sh_hinge)
-	rt.add_child(_blk3(Vector2(-sh - 8.0, sh + 8.0),
-			Vector2(float(BODY3.hi) - 2.0,
-			float(HEAD3.sh_h) + float(HEAD3.sh_hi) + 4.0),
-			Vector2(bk, fw), vest))
-	#  목. 몸통 앞면보다 뒤에 둔다 — 앞으로 나오면 턱이 가슴에 얹힌다.
-	var nw: float = float(HEAD3.nk_w)
-	rt.add_child(_blk3(Vector2(-nw, nw),
-			Vector2(float(HEAD3.nk_lo), float(HEAD3.nk_hi)),
-			Vector2(float(HEAD3.nk_w0), float(HEAD3.nk_w1)), skin.darkened(0.44)))
-	#  셔츠 깃. 목을 감고 조끼 위로 한 단 밝게 올라온다.
-	var cw: float = float(HEAD3.col_w)
-	rt.add_child(_blk3(Vector2(-cw, cw),
-			Vector2(float(HEAD3.col_lo), float(HEAD3.col_hi)),
-			Vector2(float(HEAD3.nk_w0) - 2.0, fw + 2.0), C_LIGHT.darkened(0.42)))
-	#  나비넥타이 둘과 매듭. 셔츠(93)와 조끼(9) 사이에서 가장 어두운 점이라
-	#  깃 한가운데가 여기로 못박힌다.
-	var tw: float = float(HEAD3.tie_w)
-	var th: float = float(HEAD3.tie_h)
-	var tl: float = float(HEAD3.tie_lo)
-	var knot: Color = C_WOOD.darkened(0.88)
-	for s in [-1.0, 1.0]:
-		rt.add_child(_blk3(Vector2(s * 2.5, s * tw) if s > 0.0
-				else Vector2(s * tw, s * 2.5),
-				Vector2(tl, tl + th), Vector2(fw + 3.0, fw + 6.0), knot))
-	rt.add_child(_blk3(Vector2(-2.6, 2.6), Vector2(tl + 0.6, tl + th - 0.6),
-			Vector2(fw + 3.0, fw + 7.0), knot))
-	#  얼굴. 턱에서 이마까지 한 덩어리로 두고, 그 앞에 두 줄만 덧댄다 —
-	#  챙이 드리운 그늘과 턱 밑 그늘이다. 빛에 그림자가 없으므로(무대
-	#  조명은 shadow_enabled = false) 지는 자리를 칠한다.
-	var hw: float = float(HEAD3.hd_w)
-	var fz: float = float(HEAD3.hd_w1)
-	rt.add_child(_blk3(Vector2(-hw, hw),
-			Vector2(float(HEAD3.hd_lo), float(HEAD3.hd_hi)),
-			Vector2(float(HEAD3.hd_w0), fz), skin))
-	rt.add_child(_blk3(Vector2(-hw - 0.4, hw + 0.4),
-			Vector2(float(HEAD3.eye_lo), float(HEAD3.eye_hi)),
-			Vector2(fz - 1.0, fz + 1.2), skin.darkened(0.52)))
-	rt.add_child(_blk3(Vector2(-hw - 0.4, hw + 0.4),
-			Vector2(float(HEAD3.hd_lo), float(HEAD3.jaw_hi)),
-			Vector2(fz - 1.0, fz + 1.0), skin.darkened(0.26)))
-	#  볼 그늘 둘. 얼굴이 한 상자면 법선이 하나라 평평한 판때기가 된다 —
-	#  BODY3 머리말이 몸통에 대해 말한 그것이 얼굴에도 그대로다.
-	var kw: float = float(HEAD3.cheek_w0)
-	for sd in [-1.0, 1.0]:
-		rt.add_child(_blk3(Vector2(sd * kw, sd * (hw + 0.4)) if sd > 0.0
-				else Vector2(sd * (hw + 0.4), sd * kw),
-				Vector2(float(HEAD3.hd_lo), float(HEAD3.eye_lo)),
-				Vector2(fz - 1.0, fz + 0.8), skin.darkened(0.16)))
-	#  입 — 획 하나. 코 밑에 어두운 가로선이 하나 있으면 얼굴이고,
-	#  없으면 아직 덩어리다.
-	var mw: float = float(HEAD3.mo_w)
-	rt.add_child(_blk3(Vector2(-mw, mw),
-			Vector2(float(HEAD3.mo_lo), float(HEAD3.mo_hi)),
-			Vector2(fz, fz + 1.4), skin.darkened(0.46)))
-	#  코. 앞으로 6 나온 막대 하나다. 정면에서는 밝은 세로 획이고 고개가
-	#  돌면 그 획이 한쪽으로 쏠린다 — 눈을 안 찍고 얼굴이 어디를 보는지를
-	#  말하는 것이 이 획과 챙 둘이다.
-	var ow: float = float(HEAD3.nose_w)
-	rt.add_child(_blk3(Vector2(-ow, ow),
-			Vector2(float(HEAD3.nose_lo), float(HEAD3.nose_hi)),
-			Vector2(fz, fz + float(HEAD3.nose_out)), skin.lightened(0.10)))
-	#  옆머리 — 테 밑으로 나오는 한 줄. 모자보다 **먼저** 그려도 상관없다
-	#  (3D 는 깊이가 정한다). 얼굴보다 넓어서 턱선을 만든다.
-	var hair: Color = C_WOOD.lightened(0.06)
-	var aw: float = float(HEAD3.hair_w)
-	for sd in [-1.0, 1.0]:
-		rt.add_child(_blk3(Vector2(sd * hw, sd * aw) if sd > 0.0
-				else Vector2(sd * aw, sd * hw),
-				Vector2(float(HEAD3.side_lo), float(HEAD3.side_hi)),
-				Vector2(float(HEAD3.hd_w0) - 1.0, fz + 0.4), hair))
-	#  모자 테. 한 바퀴 두른다 — 앞으로만 내면 −10° 카메라에서 얼굴에
-	#  붙은 가로 띠가 되고, 그러면 챙이 아니라 반창고다.
-	var felt: Color = C_WOOD.darkened(0.30)
-	var rw: float = float(HEAD3.brim_w)
-	rt.add_child(_blk3(Vector2(-rw, rw),
-			Vector2(float(HEAD3.brim_lo), float(HEAD3.brim_hi)),
-			Vector2(float(HEAD3.brim_b), fz + float(HEAD3.brim_f)), felt))
-	#  통. 두 단으로 나눠 윗면이 평평해지는 것을 깬다.
-	var cw2: float = float(HEAD3.crn_w)
-	rt.add_child(_blk3(Vector2(-cw2, cw2),
-			Vector2(float(HEAD3.crn_lo), float(HEAD3.crn_hi)),
-			Vector2(float(HEAD3.hd_w0) - 3.0, fz + 3.0), felt))
-	var cw3: float = float(HEAD3.crn_w2)
-	rt.add_child(_blk3(Vector2(-cw3, cw3),
-			Vector2(float(HEAD3.crn_hi) - 1.0, float(HEAD3.crn_hi2)),
-			Vector2(float(HEAD3.hd_w0) + 1.0, fz + 1.0), felt))
-	#  모자띠. 이 게임에서 상인만 쓰는 색이고, 판의 초록과 같은 족보라
-	#  화면에 이물이 안 된다. 통보다 살짝 나와야 띠로 읽힌다.
-	var bw: float = float(HEAD3.band_w)
-	rt.add_child(_blk3(Vector2(-bw, bw),
-			Vector2(float(HEAD3.band_lo), float(HEAD3.band_hi)),
-			Vector2(float(HEAD3.hd_w0) - 4.0, fz + 4.0),
-			C_GREEN.darkened(0.34)))
-	if arms:
-		_body3_arms(rt)
-
-
-#  어깨에서 내린 팔 한 벌. 위팔은 바깥으로 벌고 아래팔은 안으로 모은다 —
-#  둘이 같은 각이면 막대 하나이고, 막대 둘은 팔이 아니다(NPC 머리말의
-#  옷걸이 판별식이 여기에도 그대로 선다).
-func _body3_arms(rt: Node3D) -> void:
-	var sleeve: Color = C_WOOD.lightened(0.04)
-	var bk: float = float(BODY3.face) - float(BODY3.d)
-	var fw: float = float(BODY3.face)
-	var aw: float = float(HEAD3.arm_w)
-	var al: float = float(HEAD3.arm_len)
-	var fwid: float = float(HEAD3.fore_w)
-	var fl: float = float(HEAD3.fore_len)
-	for s in [-1.0, 1.0]:
-		var up := Node3D.new()
-		up.position = Vector3(s * float(HEAD3.arm_u), float(HEAD3.arm_h),
-				(bk + fw) * 0.5 + 4.0)
-		up.rotation_degrees = Vector3(0.0, 0.0, s * float(HEAD3.arm_out))
-		up.add_child(_blk3(Vector2(-aw, aw), Vector2(-al, 0.0),
-				Vector2(-16.0, 16.0), sleeve))
-		#  팔꿈치. 위팔 끝에 물려 반대로 꺾인다.
-		var lo := Node3D.new()
-		lo.position = Vector3(0.0, -al + 4.0, 0.0)
-		lo.rotation_degrees = Vector3(0.0, 0.0, -s * float(HEAD3.fore_in))
-		lo.add_child(_blk3(Vector2(-fwid, fwid), Vector2(-fl, 0.0),
-				Vector2(-14.0, 14.0), sleeve))
-		#  끝동. 셔츠가 소매 밖으로 나온 한 줄이다 — 이 밝은 띠가 없으면
-		#  팔이 어디서 끝나는지가 화면 밑동에서만 정해진다.
-		lo.add_child(_blk3(Vector2(-fwid - 1.0, fwid + 1.0),
-				Vector2(-fl - float(HEAD3.cuff_h), -fl),
-				Vector2(-15.0, 15.0), C_LIGHT.darkened(0.35)))
-		up.add_child(lo)
-		rt.add_child(up)
 
 
 #  V 를 만드는 조각 하나. 안쪽 모서리가 꼭짓점을 지나 vee_a 로 기울고,
@@ -9047,9 +8713,7 @@ func _body3_sync() -> void:
 	#  화면에서 0.616·h 라, 같은 가로 밀림을 내려면 각이 0.616 배여야 한다.
 	var roll: float = -_sweep_tilt() * float(TBL.tall) + float(ps.roll)
 	body3_root.rotation = Vector3(0.0, float(ps.yaw), roll)
-	body3_root.position = Vector3(body3_at,
-			(float(ps.rise) + body3_lift) * body3_scale,
-			float(ps.lean) * body3_scale)
+	body3_root.position = Vector3(float(NPC.cx), float(ps.rise), float(ps.lean))
 
 
 func _body3_draw() -> void:
@@ -9057,7 +8721,7 @@ func _body3_draw() -> void:
 		return
 	var tex: Texture2D = body3_vp.get_texture()
 	if tex != null:
-		draw_texture_rect(tex, body3_rect, false)
+		draw_texture_rect(tex, BODY3.rect, false)
 
 
 # ══════════════════════════════════════════════════════════
@@ -14952,11 +14616,6 @@ func _draw_title() -> void:
 	#  왼쪽 그늘 여덟 겹을 걷었다. x=216 에서 끝나 판(x209 시작)을 하나도
 	#  안 가리고, 대신 평평한 배경에 **세로 이음매 넷**을 남기고 있었다.
 	#  글줄은 x16 이고 판은 x209 라 애초에 안 겹친다 — 스크림 한 장이면 된다.
-	#  상인. 스크림 **위**다 — 밑에 두면 유령이 된 판과 같은 28% 가 되어
-	#  사람이 아니라 벽지가 된다. 자루와 같은 층이고, 자루보다 먼저 그려
-	#  자루가 상인 앞을 지나간다.
-	if _body3_live() and body3_ttl:
-		_body3_draw()
 	_ttl_draw()
 	#  제목은 머리(_hdr)보다 크다. 이 화면에서는 제목이 곧 그림이라
 	#  다른 화면의 머리와 같은 크기로 두면 시작화면이 아니라 목록이 된다.
