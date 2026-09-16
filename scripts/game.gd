@@ -446,6 +446,10 @@ var sec_plain := []             # 섞기 전 칸 차례. 제약이 빠지면 이
 
 # ── 스테이지 선택 ─────────────────────────────────────────
 var stage_pick := []            # 이번에 깔린 제약 카드들
+#  지난 보스가 깔았던 제약의 id. 이번 보스는 이 셋을 안 깐다 —
+#  매번 **새 제약에 대응해야** 재미가 있고, 같은 것이 연달아 나오면
+#  고르는 것이 아니라 외운 것을 다시 쓰는 일이 된다(2026-09-16).
+var stage_seen := []
 var active_mods := []           # 이번 판에 걸린 제약 (지금은 언제나 한 장)
 var sealed := -1                # "둔화"로 봉인된 아이템 인덱스
 
@@ -666,6 +670,9 @@ func _new_run() -> void:
 	#  배움도 런 단위로 센다. 줄에 남은 것을 새 런까지 끌고 가면 엉뚱한
 	#  화면에서 뜬다 — 이미 배운 것으로 적혀 있으므로 다시는 안 뜬다.
 	shop_seen = 0
+	#  제약도 런 단위다. 지난 런이 깐 것을 새 런까지 끌고 가면 첫 보스가
+	#  까닭 없이 좁은 표에서 뽑는다.
+	stage_seen.clear()
 	tutor_q.clear()
 	tutor_id = ""
 	tutor_i = 0
@@ -2447,7 +2454,21 @@ func _open_stage() -> void:
 		_sfx("stage_open")
 		return
 	var left := GameData.modifiers().duplicate()
-	for i in GameData.stage_picks() + _spend_tags("picks"):
+	#  ── 지난 보스가 깐 셋은 빼 둔다 ────────────────────────
+	#  빼는 것이 아니라 **뒤로 미룬다.** 표가 열 종이고 셋을 까므로 보통은
+	#  일곱이 남지만, 뱃지가 까는 장수를 늘리면(_spend_tags("picks")) 모자랄
+	#  수 있다. 그때 카드가 두 장만 깔리면 "이 중 하나를 반드시 고른다"
+	#  (tuning 의 stage_picks 주석)가 깨진다 — 새것만 고집하다 규칙을
+	#  깨느니 지난 것을 도로 넣는다.
+	var held := []
+	for m in left.duplicate():
+		if stage_seen.has(String(m.id)):
+			held.append(m)
+			left.erase(m)
+	var want: int = GameData.stage_picks() + _spend_tags("picks")
+	while left.size() < want and not held.is_empty():
+		left.append(held.pop_front())
+	for i in want:
 		var md := _draw_weighted(left)
 		if md.is_empty():
 			break
@@ -2459,6 +2480,11 @@ func _open_stage() -> void:
 			tgt = int(ceil(float(base) * float(md.v)))
 		stage_pick.append({"d": md, "target": tgt})
 		stage_stand.append(0.0)
+	#  이번에 깐 것을 적어 둔다. **고른 것이 아니라 깐 것 전부**다 —
+	#  안 고른 둘도 이미 본 카드라, 다음 판에 또 나오면 새 판이 아니다.
+	stage_seen.clear()
+	for e in stage_pick:
+		stage_seen.append(String((e.d as Dictionary).id))
 	#  제약은 **보스 판에만** 깔린다. 여태 _open_stage 맨 위에서
 	#  불렀는데, 보통 판은 거기서 곧장 _start_leg 로 빠지므로
 	#  다트판 앞에서 "제약 하나를 골라야" 가 떴다 — 없는 것을
