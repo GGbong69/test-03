@@ -15766,7 +15766,10 @@ func _draw_shop() -> void:
 func _draw_over() -> void:
 	_scrim()
 	var e: float = _ease_enter(over_t / maxf(_mo("panel"), 0.001)) 			if _mo("panel") > 0.0 else 1.0
-	var p := Rect2(74.0, 68.0, VIEW.x - 148.0, 218.0)
+	#  판 높이 218 → 262. 글자를 키우며(2026-09-17 「UI 에 비해 글자가 작다」)
+	#  수 줄이 16 → 22 간격이 되어, 실패 화면의 넷째 줄(마지막 판)이 해금 줄과
+	#  겹칠 자리였다. 화면 세로 가운데(49~311)에 선다.
+	var p := Rect2(74.0, 49.0, VIEW.x - 148.0, 262.0)
 	_panel(p, true, e)
 
 	var x0: float = p.position.x + 20.0
@@ -15774,14 +15777,17 @@ func _draw_over() -> void:
 	draw_string(font, Vector2(x0, p.position.y + 46.0),
 			"완주" if won else "실패", HORIZONTAL_ALIGNMENT_LEFT, -1, 33,
 			Color(C_ACC if won else C_MULT, e))
-	draw_string(font_sm, Vector2(x0, p.position.y + 64.0),
+	#  곁말 9 → 18(갈무리9 두 배). 결과(33) 밑 한 줄이라 자리가 넉넉하다.
+	draw_string(font_sm, Vector2(x0, p.position.y + 72.0),
 			"라운드 %d · %d판째" % [GameData.round_of(leg_no), leg_no],
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(C_DIM, e))
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(C_DIM, e))
 
 	#  이번 런이 어땠나. 왼쪽은 수, 오른쪽은 마지막까지 든 것.
+	#  이름 9 → 11(갈무리11) · 수 11 → 18(갈무리9 두 배). 가장 긴 줄 「마지막 판 ·
+	#  99999 / 99999」 가 이름 50 + 수 129px 라 칸 폭(210)에 든다.
 	var cw: float = (p.size.x - 56.0) * 0.5
 	var xr: float = x0 + cw + 16.0
-	var y: float = p.position.y + 92.0
+	var y: float = p.position.y + 104.0
 	var rows := [
 		["넘긴 판", "%d / %d" % [maxi(leg_no - (0 if won else 1), 0),
 				GameData.legs_n()]],
@@ -15791,31 +15797,35 @@ func _draw_over() -> void:
 	if not won:
 		rows.append(["마지막 판", "%d / %d" % [total, target]])
 	for i in rows.size():
-		draw_string(font_sm, Vector2(x0, y + float(i) * 16.0),
-				String(rows[i][0]), HORIZONTAL_ALIGNMENT_LEFT, -1, 9,
+		draw_string(font, Vector2(x0, y + float(i) * 22.0),
+				String(rows[i][0]), HORIZONTAL_ALIGNMENT_LEFT, -1, 11,
 				Color(C_DIM, e))
-		draw_string(font, Vector2(x0, y + float(i) * 16.0),
-				String(rows[i][1]), HORIZONTAL_ALIGNMENT_RIGHT, cw - 8.0, 11,
+		draw_string(font_sm, Vector2(x0, y + float(i) * 22.0),
+				String(rows[i][1]), HORIZONTAL_ALIGNMENT_RIGHT, cw - 8.0, 18,
 				Color(C_TXT, e))
 
-	draw_string(font_sm, Vector2(xr, y), "마지막까지 든 것",
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(C_DIM, e))
+	#  오른쪽도 같은 단이다 — 이름 11 · 값(없음) 18 · 다트통 이름 11.
+	draw_string(font, Vector2(xr, y), "마지막까지 든 것",
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(C_DIM, e))
 	if owned.is_empty():
-		draw_string(font_sm, Vector2(xr, y + 18.0), "없음",
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(C_OFF, e))
+		draw_string(font_sm, Vector2(xr, y + 28.0), "없음",
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(C_OFF, e))
 	else:
 		var step: float = minf(30.0, (cw - 8.0) / float(owned.size()))
 		for i in owned.size():
-			draw_item_sticker(Vector2(xr + 11.0 + float(i) * step, y + 22.0),
+			draw_item_sticker(Vector2(xr + 11.0 + float(i) * step, y + 24.0),
 					10.0, owned[i], 0.0, 0.0, 0.0, 9)
-	draw_string(font_sm, Vector2(xr, y + 48.0),
+	draw_string(font, Vector2(xr, y + 54.0),
 			GameData.pack_row().get("name", ""), HORIZONTAL_ALIGNMENT_LEFT,
-			-1, 9, Color(C_DIM, e))
+			-1, 11, Color(C_DIM, e))
 
 	#  이번 런에 열린 것. **아무것도 안 열렸으면 줄 자체가 없다** —
 	#  「없음」이라고 적으면 못 연 것이 화면의 한 자리를 차지한다.
+	#  쪽지 글자 9 → 11(갈무리11), 쪽지 높이 14 → 18. 판 윗변에서 재어 수 넷째 줄
+	#  (기준선 170) 아래 180 에 선을 긋고 그 밑(192~210)에 앉는다 — 「새 런」
+	#  줄(222~)과 12px 떨어진다.
 	if not run_unlocked.is_empty():
-		var uy: float = p.end.y - 54.0
+		var uy: float = p.end.y - 70.0
 		draw_rect(Rect2(x0, uy - 12.0, p.size.x - 40.0, 1.0),
 				Color(C_WIRE, 0.4 * e))
 		var ux: float = x0
@@ -15828,15 +15838,17 @@ func _draw_over() -> void:
 			if ua <= 0.0:
 				break
 			var t := "%s  %s" % [u.get("k", ""), u.get("n", "")]
-			var tw: float = font_sm.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT,
-					-1, 9).x + 12.0 if font_sm != null else 60.0
-			_rr(self, Rect2(ux, uy, tw, 14.0), Color(C_PANEL.darkened(0.3), ua))
-			_rr_left(self, Rect2(ux, uy, tw, 14.0), Color(C_GOLD, ua))
-			draw_string(font_sm, Vector2(ux + 6.0, uy + 10.0), t,
-					HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(C_GOLD, ua))
+			var tw: float = font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT,
+					-1, 11).x + 12.0 if font != null else 60.0
+			_rr(self, Rect2(ux, uy, tw, 18.0), Color(C_PANEL.darkened(0.3), ua))
+			_rr_left(self, Rect2(ux, uy, tw, 18.0), Color(C_GOLD, ua))
+			draw_string(font, Vector2(ux + 6.0, uy + 13.0), t,
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(C_GOLD, ua))
 			ux += tw + 8.0
 
-	_back_row(self, Rect2(x0, p.end.y - 26.0, p.size.x - 40.0, 18.0),
+	#  「새 런」 줄 18 → 26px — 이름이 18 이 되어 잉크 16 이 칸 한가운데 선다.
+	#  판의 턱(PANEL_LIP) 위로 11px 뜬다.
+	_back_row(self, Rect2(x0, p.end.y - 40.0, p.size.x - 40.0, 26.0),
 			"새 런", "", true)
 
 
@@ -15987,7 +15999,10 @@ var pause_from := -1     # 게임 중 ESC 로 설정을 열면 돌아갈 상태.
 #  어휘를 쓰는 것이 눈에 보이려면 자리부터 같아야 한다.
 #  메뉴를 아래로 내린다. 제목 내용이 화면의 13% 고 y[250,360] 110px 이
 #  통째로 비어 있었다 — 그 빈 칸을 메뉴가 흡수한다.
-const TMENU := {"x": SAFE, "y": 190.0, "h": 22.0, "gap": 4.0, "w": 148.0}
+#  줄 높이 22 → 24. 글자를 11 에서 18(갈무리9 두 배)로 키우며(2026-09-17 「UI 에
+#  비해 글자가 작다」) 잉크 16px 이 22px 띠에 위아래 3px 만 남기고 꽉 찼다.
+#  넷이 y 190~298 이고 프로필 패(318~)와 20px 떨어진다.
+const TMENU := {"x": SAFE, "y": 190.0, "h": 24.0, "gap": 4.0, "w": 148.0}
 
 
 func _menu_rect(i: int) -> Rect2:
@@ -16013,8 +16028,11 @@ func _menu_back_rect() -> Rect2:
 #  와야 하는데 이 게임에는 그 배관이 한 줄도 없다. 대신 **그 프로필이
 #  쌓은 것**을 적는다 — 「완주 3회 · 최고 라운드 6」이 「민수」보다
 #  어느 자리인지를 더 잘 말한다. 이름은 입력 배관이 서는 날 온다.
+#
+#  줄 높이 34 → 42. 이름 11 → 18 · 밑줄 9 → 11 로 키웠다(2026-09-17 「UI 에 비해
+#  글자가 작다」). 이름 띠 22px(잉크 16) + 밑줄 한 줄이 든다. 셋이 y 96~238 이다.
 # ══════════════════════════════════════════════════════════
-const PROW := {"x": 16.0, "y": 96.0, "w": 176.0, "h": 34.0, "gap": 8.0}
+const PROW := {"x": 16.0, "y": 96.0, "w": 176.0, "h": 42.0, "gap": 8.0}
 
 
 func _prof_rect(i: int) -> Rect2:
@@ -16024,8 +16042,37 @@ func _prof_rect(i: int) -> Rect2:
 
 #  지우기는 두 걸음이다. 한 번 누르면 겨누고, 다시 누르면 지운다 —
 #  되돌릴 수 없는 것에 클릭 하나를 두지 않는다. 딴 줄을 누르면 풀린다.
+#  120x26 → 140x32. 이름을 18 로 키우니 「정말 지운다」(97px)가 120 폭에 11px 씩만
+#  남았고, 턱(3px)을 빼면 몸이 23px 라 잉크 16 이 꽉 찼다. 턱까지 넣은 자리다.
 func _prof_del_rect() -> Rect2:
-	return Rect2(Vector2(232.0, 276.0), Vector2(120.0, 26.0))
+	return Rect2(Vector2(232.0, 266.0), Vector2(140.0, 32.0))
+
+
+#  지우기 단추의 몸. 안 겨눴을 때는 짙은 보라 덩어리(_ui_face 의 hud 역할 —
+#  제목의 프로필 패와 같은 칠)이고, 겨눈 동안은 **붉은 덩어리**다.
+#  전에는 판 색 면에 얹히면 금빛 윗띠가 스몄는데, 단추의 금색 띠를 걷고 칠한
+#  덩어리 + 턱으로 옮기며(2026-09-17) 같이 걷었다.
+#  _ui_face 는 역할 색 셋(금 · 파랑 · 보라)만 알므로 붉은 몸은 **같은 치수**(턱 3 ·
+#  얹히면 한 칸 뜸 · 누르면 앉음)로 여기서 칠한다. 열쇠가 같아 겨누는 순간에도
+#  얹힘 짙기와 딸깍이 끊기지 않는다 — 첫 누름이 겨눔이라 앉는 그림이 붉은 면이다.
+func _prof_del_face(r: Rect2, armed: bool) -> Rect2:
+	var key := "hud:지우기"
+	if not armed:
+		return _ui_face(self, key, r, true)
+	var hot: bool = state == S.PROFILE and _ui_can_hover() and r.has_point(mouse_at)
+	if hot:
+		ui_hot = key
+	var h: float = _ui_hov(key)
+	var press: bool = hot and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
+	var lip: float = float(UIHOV.lip_hud)
+	var up: float = float(UIHOV.lift) if hot and not press else 0.0
+	var down: float = lip - 1.0 if press else 0.0
+	var body := Rect2(r.position + Vector2(0.0, down - up), r.size - Vector2(0.0, lip))
+	_rr(self, Rect2(r.position + Vector2(0.0, lip - up),
+			r.size - Vector2(0.0, lip - up)), C_MULT.darkened(0.5))
+	_rr(self, body, C_MULT.lightened(float(UIHOV.lit) * h))
+	_rr_top(self, body, 1, C_MULT.lightened(0.25))
+	return body
 
 
 func _open_profile() -> void:
@@ -16066,17 +16113,20 @@ func _draw_profile() -> void:
 		#  띠는 **이름 줄만** 덮는다. 칸 높이를 다 덮으면 밑줄(완주·라운드)이
 		#  금빛에 잠겨 안 읽힌다 — 띠는 자리를 말하는 것이지 자리를 먹는 것이
 		#  아니다(제목 메뉴에서 같은 것을 한 번 고쳤다).
-		_row_band(self, Rect2(r.position, Vector2(r.size.x, 18.0)), ee, ew, 1.0)
-		draw_string(font, r.position + Vector2(0.0, 14.0), "프로필 %d" % sl,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 11,
+		#  이름 18(갈무리9 두 배) · 밑줄 11(갈무리11). 11 · 9 였을 때 「UI 에 비해
+		#  글자가 작다」 는 말을 들었다(2026-09-17). 띠 22px 에 잉크 16 이 3px 씩 남기고
+		#  서고, 밑줄은 띠 아래 한 칸을 띄워 앉는다(기준선 36 · 칸 높이 42).
+		_row_band(self, Rect2(r.position, Vector2(r.size.x, 22.0)), ee, ew, 1.0)
+		draw_string(font_sm, r.position + Vector2(0.0, 19.0), "프로필 %d" % sl,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 18,
 				C_DIM.lerp(C_TXT, ee))
 		var inf := Save.slot_info(sl)
 		var line := "빈 자리"
 		if bool(inf.get("used", false)):
 			line = "완주 %d · 최고 라운드 %d" % [int(inf.get("wins", 0)),
 					GameData.round_of(maxi(int(inf.get("best_leg", 1)), 1))]
-		draw_string(font_sm, r.position + Vector2(0.0, 27.0), line,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_OFF.lerp(C_DIM, ee))
+		draw_string(font, r.position + Vector2(0.0, 36.0), line,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_OFF.lerp(C_DIM, ee))
 		#  지금 쓰는 프로필에만 표식. 고른 줄과 쓰는 줄은 다른 말이다 —
 		#  훑는 동안 쓰는 자리가 어디인지가 안 흔들려야 한다.
 		#  **띠의 마침표와 같은 자리에 선다.** 전에는 r.end.x-6 이라 띠가 다
@@ -16090,18 +16140,20 @@ func _draw_profile() -> void:
 			draw_rect(Rect2(_band_end_x(r) - 3.0, r.position.y, 3.0,
 					r.size.y), C_ACC)
 
-	#  오른쪽 — 고른 줄의 속
+	#  오른쪽 — 고른 줄의 속. 머리와 줄을 18(갈무리9 두 배)로 — 11 일 때 판 폭 300 에
+	#  가장 긴 줄(「한 판 최고 점수 · 99999」)이 절반도 안 찼다. 머리 기준선은 왼쪽
+	#  첫 줄 이름(96 + 19)과 같은 높이라 두 쪽이 한 줄에서 시작한다.
 	var sel := clampi(prof_sel, 1, Save.SLOTS)
 	var inf2 := Save.slot_info(sel)
 	var px := 232.0
-	draw_string(font, Vector2(px, 110.0), "프로필 %d" % sel,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_TXT)
-	draw_rect(Rect2(px, 118.0, 300.0, 1.0), Color(C_WIRE, 0.35))
+	draw_string(font_sm, Vector2(px, 115.0), "프로필 %d" % sel,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 18, C_TXT)
+	draw_rect(Rect2(px, 122.0, 300.0, 1.0), Color(C_WIRE, 0.35))
 	if not bool(inf2.get("used", false)):
-		draw_string(font, Vector2(px, 140.0), "아직 아무것도 없다",
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_DIM)
-		draw_string(font_sm, Vector2(px, 158.0), "고르면 여기서부터 쌓인다",
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_OFF)
+		draw_string(font_sm, Vector2(px, 148.0), "아직 아무것도 없다",
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 18, C_DIM)
+		draw_string(font, Vector2(px, 170.0), "고르면 여기서부터 쌓인다",
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_OFF)
 	else:
 		var rows := [
 			["런", "%d회" % int(inf2.get("runs", 0))],
@@ -16111,34 +16163,22 @@ func _draw_profile() -> void:
 			["한 판 최고 점수", "%d" % int(inf2.get("best_score", 0))],
 			["해금", "%d개" % int(inf2.get("unlocks", 0))],
 		]
+		#  줄 간격 17 → 24 — 잉크 16 에 8 을 띄운다. 다섯 줄이 148~246 이고
+		#  지우기(266~)와 20px 떨어진다.
 		for k in rows.size():
-			var y := 140.0 + float(k) * 17.0
-			draw_string(font, Vector2(px, y), String(rows[k][0]),
-					HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_DIM)
-			draw_string(font, Vector2(px, y), String(rows[k][1]),
-					HORIZONTAL_ALIGNMENT_RIGHT, 300.0, 11, C_TXT)
-		#  지우기 — 겨눈 동안에만 붉다. 얹히면 판 위 단추처럼 뜨고 밝아지며,
-		#  누르고 있으면 앉는다(첫 누름이 겨눔이라 앉는 그림이 겨눈 붉은 면이다).
-		#  금빛 윗띠는 **안 겨눴을 때만** 스민다 — 붉은 경고 위에 금빛을 얹으면
-		#  「눌러도 된다」 가 「지운다」 를 덮는다. 겨눈 면은 밝기만 오른다.
+			var y := 148.0 + float(k) * 24.0
+			draw_string(font_sm, Vector2(px, y), String(rows[k][0]),
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 18, C_DIM)
+			draw_string(font_sm, Vector2(px, y), String(rows[k][1]),
+					HORIZONTAL_ALIGNMENT_RIGHT, 300.0, 18, C_TXT)
+		#  지우기 — 겨눈 동안에만 붉다. 몸은 _prof_del_face 가 칠한다(칠한 덩어리 +
+		#  턱). 이름은 18 로 몸 한가운데에 선다 — 몸 29px 에 잉크 16.
 		var dr := _prof_del_rect()
 		var armed: bool = prof_arm == sel
-		var dkey := "prof:del"
-		var db := _menu_lift(dkey, dr,
-				state == S.PROFILE and _ui_can_hover() and dr.has_point(mouse_at))
-		var dh: float = _ui_hov(dkey)
-		if db.position.y < dr.position.y:
-			_rr(self, dr, C_BG)               # 턱
-		_rr(self, db, Color(C_MULT if armed else C_PANEL.lightened(0.10),
-				0.9 if armed else 1.0))
-		if dh > 0.0:
-			_rr(self, db, Color(C_TXT, float(UIHOV.lit) * dh))
-			if not armed:
-				_rr_top(self, db, 1, Color(C_ACC, dh))
-		draw_string(font, db.position + Vector2(0.0, 17.0),
+		var db := _prof_del_face(dr, armed)
+		draw_string(font_sm, db.position + Vector2(0.0, roundf(db.size.y * 0.5 + 8.0)),
 				"정말 지운다" if armed else "지우기",
-				HORIZONTAL_ALIGNMENT_CENTER, db.size.x, 11,
-				C_TXT if armed else C_DIM.lerp(C_TXT, dh))
+				HORIZONTAL_ALIGNMENT_CENTER, db.size.x, 18, C_TXT)
 	_back_row(self, _menu_back_rect(), "뒤로", "",
 			_menu_back_rect().has_point(mouse_at))
 
@@ -16291,7 +16331,7 @@ func _cell_glow(p: Vector2, col := C_TXT, k := 1.0) -> void:
 #  자리는 금빛, 쌓인 것이 있는 자리는 옅게, 빈 자리는 테두리만 —
 #  「다른 프로필도 있다」 가 글 없이 선다.
 #
-#  글줄(4줄, y 190~290)과 판(x 222~418) 어디와도 안 겹친다.
+#  글줄(4줄, y 190~298)과 판(x 222~418) 어디와도 안 겹친다.
 # ══════════════════════════════════════════════════════════
 const PROFB := {"w": 148.0, "h": 30.0, "pip": 6.0, "pip_gap": 5.0}
 
@@ -16303,8 +16343,8 @@ func _prof_badge_rect() -> Rect2:
 
 #  판 밖 메뉴의 누르는 물건이 **설 자리**. 판 위 단추(_ui_face)와 같은 어법 —
 #  얹히면 몸이 한 칸 떠 밑의 턱이 드러나고, 누르고 있으면 도로 앉는다.
-#  면 · 턱 · 띠의 색은 물건마다 달라서(프로필 패 · 지우기 · 리그 칩) 몸이 설
-#  자리만 내고 칠은 부르는 쪽이 한다.
+#  면 · 턱의 색이 물건마다 달라서(리그 칩은 제 단의 색) 몸이 설 자리만 내고
+#  칠은 부르는 쪽이 한다. 프로필 패 · 지우기는 칠한 덩어리(_ui_face)로 옮겼다.
 #  히트 사각(r)은 안 움직인다. 뜬 몸으로 판정하면 아래 가장자리 1px 에서
 #  커서가 나갔다 들어왔다 하며 칩이 떨고 딸깍이 되풀이된다.
 func _menu_lift(key: String, r: Rect2, hot: bool) -> Rect2:
@@ -16317,31 +16357,26 @@ func _menu_lift(key: String, r: Rect2, hot: bool) -> Rect2:
 
 func _prof_badge_draw() -> void:
 	var r := _prof_badge_rect()
-	#  얹힘은 판 위 단추와 같은 말을 한다 — 뜨고, 면이 밝아지고, 금빛 윗띠가
-	#  짙기를 따라 스민다. 전에는 띠가 켜졌다 꺼졌다만 하고 뜨지도 앉지도
-	#  않아서, 같은 제목 화면에서 이 패 혼자 딱딱했다.
-	#  **제목일 때만** 얹힌다. 설정을 제목 위에 열면 이 패가 흐림 판 밑에
-	#  그대로 그려지는데, 거기서 커서를 따라 뜨면 가려진 것이 대답한다.
-	var key := "title:prof"
-	var on: bool = state == S.TITLE
-	var b := _menu_lift(key, r, on and _ui_can_hover() and r.has_point(mouse_at))
-	var h: float = _ui_hov(key) if on else 0.0
-	if b.position.y < r.position.y:
-		_rr(self, r, C_BG)                  # 턱 — 떠오른 만큼 드러난다
-	_rr(self, b, C_PANEL)
-	if h > 0.0:
-		_rr(self, b, Color(C_TXT, float(UIHOV.lit) * h))
-		_rr_top(self, b, 2, Color(C_ACC, h))
-	_rr_bottom(self, b, C_BG)
+	#  몸은 판 위 단추와 같다 — 짙은 보라로 칠한 덩어리에 두꺼운 턱(_ui_face 의
+	#  hud 역할, 정보 · 설정 단추와 같은 칠). 얹히면 뜨고 밝아지며 누르면 앉는다.
+	#  전에는 판 색 면에 얹히면 금빛 윗띠가 스몄다. 「버튼 위에 금색 띠는 왜 넣은
+	#  거야?」(사용자, 2026-09-17) 뒤로 단추에서 띠를 걷었고 이 패도 같은 말씨로 옮겼다.
+	#  설정을 제목 위에 열면 이 패가 흐림 판 밑에 그대로 그려진다 — 그때는
+	#  ui_under 가 얹힘을 막아(_ui_can_hover) 가려진 것이 대답하지 않는다.
+	var key := "hud:프로필"
+	var b := _ui_face(self, key, r, true)
+	var h: float = _ui_hov(key)
 	#  사람 한 명 — 머리와 어깨. 「프로필」 이 무엇의 자리인지를 글 앞에서 먼저 말한다.
 	var ic := Vector2(b.position.x + 13.0, b.position.y + b.size.y * 0.5)
 	var icol: Color = C_DIM.lerp(C_TXT, h)
 	draw_circle(ic + Vector2(0.0, -4.0), 3.2, icol)
 	draw_rect(Rect2(ic.x - 5.0, ic.y + 1.0, 10.0, 5.0), icol)
 	var cur := Save.slot()
-	draw_string(font, Vector2(b.position.x + 25.0, b.position.y + 20.0),
-			"프로필 %d" % cur, HORIZONTAL_ALIGNMENT_LEFT, -1, 11,
-			C_DIM.lerp(C_TXT, 0.5 + 0.5 * h))
+	#  이름 11 → 18(갈무리9 두 배). 몸 27px 에 잉크 16 이 한가운데 선다.
+	#  68px 이라 x 25~93 이고 자리 점(110~)과 17px 떨어진다.
+	draw_string(font_sm, Vector2(b.position.x + 25.0,
+			b.position.y + roundf(b.size.y * 0.5 + 8.0)),
+			"프로필 %d" % cur, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, C_TXT)
 	#  자리 셋. 오른쪽 끝에 붙는다 — 몸을 따라 같이 뜬다.
 	var pw: float = float(PROFB.pip)
 	var pg: float = float(PROFB.pip_gap)
@@ -16375,8 +16410,9 @@ func _draw_title() -> void:
 	#  다른 화면의 머리와 같은 크기로 두면 시작화면이 아니라 목록이 된다.
 	draw_string(font, Vector2(SAFE, 104.0), "하이톤",
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 33, C_TXT)
-	draw_string(font_sm, Vector2(SAFE + 2.0, 122.0), "HIGHTONE",
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_DIM)
+	#  영문 이름 9 → 11(갈무리11). 제목(33)의 곁말이라 한 단만 올린다.
+	draw_string(font, Vector2(SAFE + 2.0, 123.0), "HIGHTONE",
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_DIM)
 	#  글줄을 꿰는 세로선 — 설정과 같은 어법이다.
 	var y0: float = float(TMENU.y) + 4.0
 	var y1: float = _menu_rect(TITLE_ROWS.size() - 1).end.y - 4.0
@@ -16387,22 +16423,25 @@ func _draw_title() -> void:
 		var ee: float = ttl_e[i] if i < ttl_e.size() else 0.0
 		var ew: float = ttl_w[i] if i < ttl_w.size() else 0.0
 		#  띠는 글자만큼만. 설정과 같은 어법이다.
+		#  글줄 11 → 18(갈무리9 두 배) — 판 위 단추 이름과 같은 크기다. 줄 24px 에
+		#  잉크 16 이 기준선 20 으로 한가운데 선다.
 		var br := r
-		if font != null:
-			br.size.x = minf(r.size.x, font.get_string_size(
+		if font_sm != null:
+			br.size.x = minf(r.size.x, font_sm.get_string_size(
 					String(TITLE_ROWS[i].n), HORIZONTAL_ALIGNMENT_LEFT,
-					-1, 11).x + 16.0)
+					-1, 18).x + 16.0)
 		_row_band(self, br, ee, ew, 1.0)
-		draw_string(font, r.position + Vector2(0.0, 15.0),
-				String(TITLE_ROWS[i].n), HORIZONTAL_ALIGNMENT_LEFT, -1, 11,
+		draw_string(font_sm, r.position + Vector2(0.0, 20.0),
+				String(TITLE_ROWS[i].n), HORIZONTAL_ALIGNMENT_LEFT, -1, 18,
 				C_DIM.lerp(C_TXT, ee))
 	_prof_badge_draw()
 	# 빌려 온 것을 적는 자리. 빌린 것이 있으면 그 라이선스가 이 줄을
 	# **조건으로** 단다 — 그때는 지우면 못 낸다. 비어 있으면 안 그린다.
 	# 마지막 단추가 342 에서 끝나므로 그 아래 남는 18px 에 앉힌다.
+	# 9 → 11(갈무리11) — 다른 곁말과 같은 단이다.
 	if CREDITS != "":
-		draw_string(font_sm, Vector2(0, 354), CREDITS, HORIZONTAL_ALIGNMENT_CENTER,
-				VIEW.x, 9, C_DIM)
+		draw_string(font, Vector2(0, 355), CREDITS, HORIZONTAL_ALIGNMENT_CENTER,
+				VIEW.x, 11, C_DIM)
 
 
 # ══════════════════════════════════════════════════════════
@@ -18603,12 +18642,14 @@ func _league_rect(i: int) -> Rect2:
 	return Rect2(Vector2(167.0 + float(i) * 39.0, 198.0), Vector2(33.0, 22.0))
 
 
+#  「시작」 · 「뒤로」 줄. 리그 설명을 11 로 키우며(14px 간격, 마지막 줄 바닥 ~306)
+#  6px 내렸다 — 줄 사각(293~307)과 안 닿는다. 둘 다 화면 바닥(352) 안이다.
 func _newrun_go() -> Rect2:
-	return Rect2(Vector2(236.0, 306.0), Vector2(168.0, 34.0))
+	return Rect2(Vector2(236.0, 312.0), Vector2(168.0, 34.0))
 
 
 func _newrun_back() -> Rect2:
-	return Rect2(Vector2(44.0, 312.0), Vector2(88.0, 28.0))
+	return Rect2(Vector2(44.0, 314.0), Vector2(88.0, 30.0))
 
 
 # 다트통은 첫 행이 늘 열려 있고, 나머지는 해금 키를 읽는다.
@@ -18668,31 +18709,23 @@ func _open_newrun() -> void:
 	_sfx("newrun_open")
 
 
-#  판 머리띠. 히든이면 띠도 같이 말한다 —
-#    잠김   토막토막 끊겨 흐른다. 신호가 안 닿는 띠다
-#    열림   그 다트통 제 색으로 물든다. 후광과 같은 색이라 판 하나가 된다
-#  띠 하나가 통·글줄과 같은 말을 해야 화면이 한 덩어리로 읽힌다.
-func _newrun_crown(pr: Rect2) -> void:
-	var bar := Rect2(pr.position, Vector2(pr.size.x, 2.0))
-	if _cup_glow(newrun_pip):
-		var gc: Color = _cup3_skin(newrun_pip).body.lightened(0.45)
-		draw_rect(bar, gc.lerp(C_ACC, 0.25))
-		return
-	if not _cup_shut(newrun_pip):
-		draw_rect(bar, C_ACC)
-		return
-	var step := int(cup_gl / float(GLITCH.rate))
-	draw_rect(bar, Color(C_ACC, 0.18))
-	#  토막 길이는 고르되 어디가 켜지는지는 걸음마다 다시 뽑는다.
-	var seg := 14.0
-	var k := 0
-	var x := bar.position.x
-	while x < bar.end.x:
-		var w: float = minf(seg, bar.end.x - x)
-		if _gl_rand(k, step) > 0.38:
-			draw_rect(Rect2(x, bar.position.y, w, bar.size.y), C_ACC)
-		x += seg
-		k += 1
+#  판의 테두리 — 떠 있는 판(_panel 의 focus)과 같은 말씨다. 밑에 짙은 턱 · 윗모서리
+#  한 줄 빛.
+#
+#  전에는 판 윗변에 머리띠(2px)를 둘렀다. 보통 다트통은 금빛, 잠긴 히든은 토막토막
+#  끊겨 흐르고, 열린 히든은 제 색으로 물들었다. 「버튼 위에 금색 띠는 왜 넣은
+#  거야?」(사용자, 2026-09-17) 뒤로 단추와 떠 있는 판에서 금색 띠를 걷었고 이 띠도
+#  같이 걷는다. 히든의 두 말은 띠가 없어도 선다 — 잠긴 통은 깨져 흐르고 이름 ·
+#  글줄도 같이 깨지며(_gl_string), 열린 통은 제 색 후광(_cup_halo)을 두른다.
+#
+#  통의 마스크(_cup_mask)가 판 바탕을 네모로 다시 깔므로 **통 뒤에** 칠한다.
+#  마스크는 윗변 두 줄을 비워 두는데(띠 자리였다) 그 두 줄은 둥근 면(_rr)의
+#  모서리가 들어가 있어 네모인 아래와 이가 안 맞는다 — 판 색으로 곧게 편다.
+func _newrun_rim(pr: Rect2) -> void:
+	draw_rect(Rect2(pr.position, Vector2(pr.size.x, 2.0)), C_PANEL.lightened(0.10))
+	draw_rect(Rect2(pr.position, Vector2(pr.size.x, 1.0)), C_PANEL.lightened(0.28))
+	draw_rect(Rect2(pr.position.x, pr.end.y - PANEL_LIP, pr.size.x, PANEL_LIP),
+			C_PANEL.darkened(0.3))
 
 
 func _draw_newrun() -> void:
@@ -18710,20 +18743,23 @@ func _draw_newrun() -> void:
 	_rr(self, pr, C_PANEL.lightened(0.10))
 	var open: bool = _pack_open(newrun_pip)
 	var row: Dictionary = packs[newrun_pip] if newrun_pip < packs.size() else {}
-	# 통이 먼저다. 마스크가 판 바탕을 다시 깔므로 머리띠와 글은 그 뒤에 온다.
+	# 통이 먼저다. 마스크가 판 바탕을 다시 깔므로 테두리와 글은 그 뒤에 온다.
 	_cup_draw(pr)
-	_newrun_crown(pr)
+	_newrun_rim(pr)
 	# 잠긴 히든은 이름도 안 보인다 — 그게 히든이다. 기본은 "잠김" 으로
 	# 무엇이 남았는지는 보인다(다음에 무엇이 열리는지가 완주의 값이다).
 	var hid: bool = not open and GameData.pack_kind(row) == "hidden"
 	var nm := String(row.get("name", "")) if open else ("???" if hid else "잠김")
+	#  이름 11 → 22(갈무리11 두 배). 판의 머리라 한 단을 건너 올린다 — 18 은
+	#  갈무리9 라 깨진 글자(_gl_string, 갈무리11)와 글꼴이 갈린다. 가장 긴
+	#  「넓은 동전 슬롯」 이 150px 라 글 칸(230~540)에 들고, 밑획(88)과 안 닿는다.
 	if hid:
 		#  통만 깨지고 글자는 말짱하면 「그림이 고장났다」로 읽힌다.
 		#  깨진 것은 신호고, 신호에는 글자도 들어 있다.
-		_gl_string(Vector2(230, 84), nm, 11, C_DIM)
+		_gl_string(Vector2(230, 83), nm, 22, C_DIM)
 	else:
-		draw_string(font, Vector2(230, 84), nm,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_TXT if open else C_DIM)
+		draw_string(font, Vector2(230, 83), nm,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 22, C_TXT if open else C_DIM)
 	# 다섯 줄까지 든다. 넷일 때는 아래가 비지만, 다트통마다 칸 높이가
 	# 출렁이면 넘길 때 눈이 자리를 다시 잡아야 한다.
 	#  판 안에 판을 또 깔지 않는다. 이름 밑에 가는 획 하나면 "여기서부터가
@@ -18800,10 +18836,12 @@ func _draw_newrun() -> void:
 	var lc := Color(String(cur.get("color", "cfc9bd")))
 	if lc.get_luminance() < 0.34:
 		lc = lc.lightened(0.55)
-	draw_string(font, Vector2(0, 238), String(cur.get("name", "")),
-			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 11, lc)
+	#  리그 이름 11 → 18(갈무리9 두 배). 칩 밑의 완주 금줄(221~223)과 고른 칩의
+	#  테(~222)에서 4px 띄워 잉크가 227~243 에 선다.
+	draw_string(font_sm, Vector2(0, 243), String(cur.get("name", "")),
+			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 18, lc)
 	#  여기도 상자 대신 획 하나다.
-	draw_rect(Rect2(Vector2(160.0, 244.0), Vector2(320.0, 1.0)),
+	draw_rect(Rect2(Vector2(160.0, 248.0), Vector2(320.0, 1.0)),
 			Color(C_WIRE, 0.35))
 	var sl := _league_lines()
 	for li in sl.size():
@@ -18819,8 +18857,8 @@ func _draw_newrun() -> void:
 		if llh > 0.0:
 			draw_rect(Rect2(llr.position.x - 3.0, llr.position.y + 2.0, 1.0,
 					llr.size.y - 4.0), Color(C_ACC, llh))
-		draw_string(font_sm, _league_line_at(li),
-				String(sl[li].n), HORIZONTAL_ALIGNMENT_LEFT, 150.0, 9, C_TXT)
+		draw_string(font, _league_line_at(li),
+				String(sl[li].n), HORIZONTAL_ALIGNMENT_LEFT, 150.0, 11, C_TXT)
 
 	#  「시작」은 던지러 가는 이동이라 글줄로 둔다 — 판 위의 조작 단추와
 	#  무게가 다르다. 못 누르는 동안은 띠가 안 선다.
@@ -18906,9 +18944,11 @@ const STAKE_ROWS := 4
 
 # 리그 설명 한 줄이 앉는 자리. 그리기와 검사가 같은 식을 쓴다 — 글자
 # 겹침은 눈으로만 보이는 사고라, 자리를 함수로 내놔야 프로브가 잴 수 있다.
+# 글자 9 → 11(갈무리11)이라 간격 13 → 14. 첫 줄 잉크가 밑획(248) 4px 아래에서
+# 서고, 넷째 줄 기준선이 304 다.
 func _league_line_at(li: int) -> Vector2:
 	return Vector2(172.0 + (0.0 if li < STAKE_ROWS else 158.0),
-			258.0 + float(li % STAKE_ROWS) * 13.0)
+			262.0 + float(li % STAKE_ROWS) * 14.0)
 
 
 # 리그가 미는 값을 줄로 낸다. 이름 옆에 **설명 한 줄**을 같이 들고 나온다 —
@@ -18918,7 +18958,7 @@ func _league_line_at(li: int) -> Vector2:
 # 식을 써야 눈에 보이는 곳과 커서가 닿는 곳이 안 어긋난다.
 func _league_line_rect(li: int) -> Rect2:
 	var p := _league_line_at(li)
-	return Rect2(p.x - 2.0, p.y - 9.0, 150.0, 12.0)
+	return Rect2(p.x - 2.0, p.y - 11.0, 150.0, 14.0)
 
 
 func _league_lines() -> Array:
@@ -18985,7 +19025,9 @@ func _set_rows() -> Array:
 const SET := {
 	"x": SAFE,         # 글줄 왼쪽 끝 — 머리와 같은 세로선
 	"y": 106.0,        # 첫 줄
-	"h": 22.0,         # 줄 높이
+	#  줄 높이 22 → 24 — 글줄을 18(갈무리9 두 배)로 키우며 잉크 16 이 22px 띠에
+	#  꽉 찼다. 제목 메뉴(TMENU)와 같은 높이다. 여섯 줄이 106~284 에 든다.
+	"h": 24.0,         # 줄 높이
 	"gap": 4.0,
 	"split": 14.0,     # 나가는 무리 앞에 두는 틈
 	"w": 148.0,        # 누를 수 있는 폭
@@ -19234,8 +19276,11 @@ func _hdr(c: CanvasItem, t: String, sub := "", a := 1.0, dx := 0.0,
 const TABB := {"lip": 2.0, "lift": 1.0}
 
 
+#  sz — 글자 크기. 11 이면 갈무리11 을 몸 높이의 0.74 에, 18 이면 갈무리9 두 배를
+#  몸 한가운데(잉크 16)에 세운다. 부르는 쪽이 고른다: 런 정보 탭(두 글자)은 18 이
+#  들고, 컬렉션 탭은 「보드 확장 12」 가 18 에서 104px 라 95px 칸을 넘어 11 이다.
 func _tab_draw(c: CanvasItem, r: Rect2, label: String, on: bool,
-		hot := false) -> void:
+		hot := false, sz := 11) -> void:
 	#  들어설 때의 딸깍만 공용 얹힘에 맡긴다(그림은 이 자리의 것 그대로).
 	#  **뜨는 탭에만** 적는다 — 고른 탭은 얹혀도 안 뜨는데 소리만 나면 무엇이
 	#  대답했는지가 안 보인다. r 도 같이 본다: hot 을 부르는 쪽이 늘 켜 둬도
@@ -19250,8 +19295,10 @@ func _tab_draw(c: CanvasItem, r: Rect2, label: String, on: bool,
 	var bc: Color = C_ACC.darkened(0.08) if on 			else C_PANEL.lightened(0.16 if hot else 0.07)
 	_rr(c, base, bc.darkened(0.45))
 	_rr(c, body, bc)
-	c.draw_string(font, body.position + Vector2(0.0, body.size.y * 0.74), label,
-			HORIZONTAL_ALIGNMENT_CENTER, body.size.x, 11,
+	var big: bool = sz == 18
+	var ly: float = roundf(body.size.y * 0.5 + 8.0) if big else body.size.y * 0.74
+	c.draw_string(font_sm if big else font, body.position + Vector2(0.0, ly), label,
+			HORIZONTAL_ALIGNMENT_CENTER, body.size.x, sz,
 			C_BG if on else C_DIM.lerp(C_TXT, 0.8 if hot else 0.0))
 
 
@@ -19295,18 +19342,21 @@ func _back_row(c: CanvasItem, r: Rect2, label: String, key: String,
 	_row_band(c, r, e, e, 1.0, C_ACC, 4.0)
 	#  홀로 서는 길잡이라 가운데로 모은다. 왼쪽 맞춤이면 이름과 단축키가
 	#  칸의 양 끝으로 갈라져 한 덩이로 안 읽힌다.
-	var t := label if key == "" else "%s   %s" % [label, key]
-	var w: float = font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT,
-			-1, 11).x if font != null else 0.0
-	var x0: float = r.position.x + (r.size.x - w) * 0.5
-	var y: float = r.position.y + r.size.y * 0.72
-	c.draw_string(font, Vector2(x0, y), label, HORIZONTAL_ALIGNMENT_LEFT,
-			-1, 11, C_DIM.lerp(C_TXT, e))
+	#  이름 11 → 18(갈무리9 두 배) · 곁말 9 → 11(갈무리11). 판 위 단추 이름과
+	#  같은 크기다(2026-09-17 「UI 에 비해 글자가 작다」). 잉크 16 을 칸 한가운데에
+	#  세우므로 **칸이 24px 이상**이어야 띠 밖으로 안 샌다 — 부르는 자리(새 런 ·
+	#  프로필 · 컬렉션 · 런 정보 · 런 끝)가 다 26px 이상이다.
+	var lw: float = font_sm.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT,
+			-1, 18).x if font_sm != null else 0.0
+	var kw: float = font.get_string_size("   " + key, HORIZONTAL_ALIGNMENT_LEFT,
+			-1, 11).x if font != null and key != "" else 0.0
+	var x0: float = r.position.x + (r.size.x - lw - kw) * 0.5
+	var y: float = r.position.y + roundf(r.size.y * 0.5 + 8.0)
+	c.draw_string(font_sm, Vector2(x0, y), label, HORIZONTAL_ALIGNMENT_LEFT,
+			-1, 18, C_DIM.lerp(C_TXT, e))
 	if key != "":
-		var lw: float = font.get_string_size(label + "   ",
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x if font != null else 0.0
-		c.draw_string(font_sm, Vector2(x0 + lw, y), key,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 9,
+		c.draw_string(font, Vector2(x0 + lw, y), "   " + key,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 11,
 				Color(C_GOLD, 0.5 + 0.5 * e))
 
 
@@ -19338,9 +19388,9 @@ func _draw_settings(c: CanvasItem) -> void:
 		#  **띠 폭을 글자에 맞춘다.** 148px 고정이라 「설정」 같은 두 글자
 		#  줄에서는 대부분이 빈 금색 판이었다 — 띠가 자리를 말하는 것이
 		#  아니라 자리를 먹는 것이 됐다.
-		if font != null:
-			var tw: float = font.get_string_size(String(info.get("n", key)),
-					HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x
+		if font_sm != null:
+			var tw: float = font_sm.get_string_size(String(info.get("n", key)),
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 18).x
 			if bool(info.get("g", false)):
 				tw = r.size.x - 16.0        # 게이지 줄은 수까지 덮는다
 			r.size.x = minf(r.size.x, tw + 16.0)
@@ -19350,15 +19400,18 @@ func _draw_settings(c: CanvasItem) -> void:
 		var col: Color = C_DIM.lerp(C_TXT, ee)
 		if bool(info.get("warn", false)):
 			col = C_DIM.lerp(C_RED.lightened(0.35), ee)
-		c.draw_string(font, r.position + Vector2(0.0, 15.0),
-				String(info.get("n", key)), HORIZONTAL_ALIGNMENT_LEFT, -1, 11,
+		#  글줄 11 → 18(갈무리9 두 배) · 게이지 수 9 → 11(갈무리11). 「UI 에 비해
+		#  글자가 작다」(2026-09-17). 가장 긴 「로비로 나가기」가 115px 라 148 폭에
+		#  들고, 수(100 = 20px)와도 안 닿는다(「효과음」 54px).
+		c.draw_string(font_sm, r.position + Vector2(0.0, 20.0),
+				String(info.get("n", key)), HORIZONTAL_ALIGNMENT_LEFT, -1, 18,
 				Color(col, e))
 		#  게이지 줄은 수만 곁들인다. 값을 보려고 오른쪽까지 안 가도 되게.
 		if bool(info.get("g", false)):
 			var vv: float = vol if key == "vol" else vol_mus
-			c.draw_string(font_sm, r.position + Vector2(0.0, 15.0),
+			c.draw_string(font, r.position + Vector2(0.0, 18.0),
 					"%d" % int(round(vv * 100.0)),
-					HORIZONTAL_ALIGNMENT_RIGHT, r.size.x - 6.0, 9,
+					HORIZONTAL_ALIGNMENT_RIGHT, r.size.x - 6.0, 11,
 					Color(C_DIM.lerp(C_TXT, ee * 0.6), e * 0.8))
 
 	_set_panel(c, String(rows[face]), e)
@@ -19371,14 +19424,25 @@ func _set_panel(c: CanvasItem, key: String, e: float) -> void:
 	var pe: float = e * e          # 판은 글줄보다 한 박자 늦게 뜬다
 	# 뒤가 비치면 다트판 위에 글씨가 겹쳐 읽기가 나빠진다. 흐림이 이미
 	# 뒤를 뭉갰으므로 판은 거의 불투명해도 "떠 있다" 로 읽힌다.
-	_rr(c, p, Color(C_PANEL.darkened(0.25), 0.97 * pe))
-	_rr_top(c, p, 2, Color(C_RED if bool(info.get("warn", false)) else C_ACC, pe))
+	#
+	# 윗띠를 걷었다. 금빛(나가는 줄은 붉은빛) 두 줄이 판 윗변에 서 있었는데,
+	# 단추에서 금색 띠를 걷고 칠한 덩어리 + 턱으로 옮기며(2026-09-17) 떠 있는
+	# 판도 같은 말씨가 됐다(_panel 의 focus) — 밑에 짙은 턱 · 윗모서리 한 줄 빛.
+	# 이 판은 앞판(c)에 그려서 _panel 을 못 부르므로 같은 치수로 여기서 칠한다.
+	# 「나가는 줄이다」 는 띠 대신 **이름이 붉게** 말한다.
+	var warn: bool = bool(info.get("warn", false))
+	var body := Rect2(p.position, p.size - Vector2(0.0, PANEL_LIP))
+	_rr(c, p, Color(C_PANEL.darkened(0.6), 0.97 * pe))
+	_rr(c, body, Color(C_PANEL.darkened(0.25), 0.97 * pe))
+	_rr_top(c, body, 1, Color(C_PANEL.lightened(0.12), pe))
 
 	c.draw_string(font, p.position + Vector2(20.0, 44.0),
 			String(info.get("n", key)), HORIZONTAL_ALIGNMENT_LEFT, -1, 22,
-			Color(C_TXT, pe))
-	c.draw_string(font_sm, p.position + Vector2(20.0, 70.0),
-			String(info.get("d", "")), HORIZONTAL_ALIGNMENT_LEFT, -1, 9,
+			Color(C_MULT if warn else C_TXT, pe))
+	#  한 줄 설명 9 → 11(갈무리11). 가장 긴 「이 런을 버리고 제목 화면으로
+	#  돌아간다」 가 201px 라 판 안 폭(346)에 든다.
+	c.draw_string(font, p.position + Vector2(20.0, 72.0),
+			String(info.get("d", "")), HORIZONTAL_ALIGNMENT_LEFT, -1, 11,
 			Color(C_DIM, pe))
 
 	#  지금 값 — 전체화면의 켬/끔
@@ -19410,9 +19474,11 @@ func _set_panel(c: CanvasItem, key: String, e: float) -> void:
 		c.draw_rect(Rect2(kx - kw * 0.5, tr.position.y - 5.0, kw, 17.0),
 				Color(C_TXT, pe))
 		var vcol: Color = C_DIM.lerp(C_TXT, k)
-		c.draw_string(font, Vector2(p.end.x - 20.0 - 44.0, tr.position.y + 8.0),
+		#  수 11 → 18(갈무리9 두 배). 「100」 이 29px 라 오른쪽 44px 칸에 든다.
+		#  홈(7px)의 한가운데(+4)에 잉크 16 의 한가운데(기준선 −8)를 맞춘다.
+		c.draw_string(font_sm, Vector2(p.end.x - 20.0 - 44.0, tr.position.y + 12.0),
 				"%d" % int(round(v * 100.0)), HORIZONTAL_ALIGNMENT_RIGHT,
-				44.0, 11, Color(vcol, pe))
+				44.0, 18, Color(vcol, pe))
 
 
 
@@ -20476,19 +20542,55 @@ func _col_cell(i: int) -> Rect2:
 #  남아 있어야 "잠깐 확인하고 닫는다" 로 읽힌다.
 const RI_TABS := ["진행", "트랙", "사진", "보유"]
 
+#  런 정보 판의 자. 그리는 쪽(_ri_*)과 판 높이를 재는 쪽(_ri_h)이 **같은 자**를
+#  써야 탭이 늘어도 넘치지 않는다 — 전에는 높이를 손으로 적은 수(176 · 214 · 256)로
+#  들고 있어서, 글자를 키우면 그 수를 따로 다시 세야 했다.
+#
+#  글자는 18(갈무리9 두 배)이다. 구획 머리가 11 · 줄이 9 였을 때 「라운드 1 / 8」
+#  같은 줄이 빈 판 한가운데 작게 떠 있었다 — 「UI 에 비해 글자가 작다」
+#  (사용자, 2026-09-17). 트랙 표의 열 이름만 11 이다 — 열 이름은 그 밑의 줄과
+#  갈려야 한다.
+const RI := {
+	"tab_h": 24.0,     # 탭 높이(턱 2 포함). 18 글자의 잉크 16 이 몸 22 에 든다
+	"top": 42.0,       # 판 윗변 → 첫 구획. 탭(8~32) 아래 10px
+	"foot": 40.0,      # 판 아랫변 위로 비워 둘 몫 — 「뒤로」 줄 26 + 아래 8 + 틈 6
+	"head": 32.0,      # 구획 머리(18) + 밑줄 → 첫 줄 자리
+	"row": 22.0,       # 18 글줄 간격. 줄 기준선은 제 자리 + 10
+	"photo": 50.0,     # 사진 한 장 — 이름(18) + 효과(18) 두 줄
+	"coins": 36.0,     # 동전 머리 줄 — 머리 오른쪽에 그림이 같이 선다
+	"coin_x": 120.0,   # 그 줄에서 그림이 시작하는 자리(「동전 5 / 5」 82px 오른쪽)
+	"trk": 28.0,       # 트랙 표 — 열 이름(11) + 밑줄 → 첫 줄 자리
+}
+
 var runinfo_tab := 0
 
 
-#  탭마다 내용이 차지하는 높이. full 이면 동전이 있다고 치고 잰다.
-func _ri_h(tab: int, full := false) -> float:
+#  구획 하나(_ri_block)의 높이 — 머리 + 줄 n.
+func _ri_block_h(n: int) -> float:
+	return float(RI.head) + float(RI.row) * float(n)
+
+
+#  탭마다 판이 가져야 할 높이(탭 줄 · 「뒤로」 줄까지).
+#  full 은 동전이 있다고 치고 재라는 뜻이었다 — 동전 그림이 머리 줄로 올라간 뒤로는
+#  있든 없든 같아 안 쓴다. 부르는 쪽(_ri_panel · 검사)의 모양은 그대로 둔다.
+func _ri_h(tab: int, _full := false) -> float:
+	var top: float = float(RI.top)
+	var foot: float = float(RI.foot)
 	match tab:
-		0: return 176.0                  # 진행 — 두 칸 네 줄
-		1: return 214.0                  # 트랙 — 여섯 줄
-		2: return 196.0                  # 사진
+		0: return top + _ri_block_h(4) + foot          # 진행 — 두 칸, 긴 쪽 네 줄
+		1:                                             # 트랙 — 온 트랙 한 줄씩
+			return top + float(RI.trk) \
+					+ float(RI.row) * float(GameData.areas_all().size()) + foot
+		2:                                             # 사진 — 칸 수만큼
+			return top + _ri_block_h(0) \
+					+ float(RI.photo) * float(maxi(GameData.cons_slots(), 1)) + foot
 		3:
-			#  보유 — 동전 줄 + 두 칸 세 구획. 동전이 없으면 그만큼 짧다.
-			return 256.0 if full or not owned.is_empty() else 238.0
-	return 214.0
+			#  보유 — 동전 줄 + 두 칸. 긴 칸이 세 구획에 줄 넷(한 구획이 두 줄)까지
+			#  든다 — 다트 두 종류나 뱃지 둘은 흔하다. 동전이 없어도 줄 높이는 같다
+			#  (「없음」 이 그림 자리에 선다).
+			return top + float(RI.coins) + float(RI.head) * 3.0 \
+					+ float(RI.row) * 4.0 + foot
+	return top + _ri_block_h(4) + foot
 
 
 #  판 높이는 **탭을 갈아도 안 바뀐다** — 가장 긴 탭(동전이 든 「보유」)에 맞춘다.
@@ -20510,14 +20612,14 @@ func _ri_tab_rect(t: int) -> Rect2:
 	var p := _ri_panel()
 	var w: float = (p.size.x - 24.0) / float(RI_TABS.size())
 	return Rect2(p.position.x + 12.0 + w * float(t), p.position.y + 8.0,
-			w - 4.0, 18.0)
+			w - 4.0, float(RI.tab_h))
 
 
+#  「뒤로」 줄. 26px — 18 글자가 칸 한가운데 서고(_back_row), 판의 턱(PANEL_LIP)
+#  위로 5px 뜬다.
 func _runinfo_back_rect() -> Rect2:
-	# 힌트 글자가 버튼 아래에 붙으므로(_btn) 판 안에 들어오게 띄운다.
 	var p := _ri_panel()
-	return Rect2(p.position.x + 12.0, p.position.y + p.size.y - 38.0,
-			p.size.x - 24.0, 17.0)
+	return Rect2(p.position.x + 12.0, p.end.y - 34.0, p.size.x - 24.0, 26.0)
 
 
 # 런 정보를 열 수 있는가. 런 밖(타이틀·컬렉션·설정·새 런)에는 볼 런이
@@ -20849,7 +20951,7 @@ func _draw_runinfo() -> void:
 
 	for t in RI_TABS.size():
 		_tab_draw(self, _ri_tab_rect(t), RI_TABS[t], t == runinfo_tab,
-				_ri_tab_rect(t).has_point(mouse_at))
+				_ri_tab_rect(t).has_point(mouse_at), 18)
 	# 고른 탭을 가리키는 삼각형 — 발라트로가 쓰는 신호다. 버튼 강조만으로는
 	# 넷이 같은 빨강이라 어느 것이 켜졌는지 한눈에 안 온다.
 	var tr := _ri_tab_rect(runinfo_tab)
@@ -20869,15 +20971,16 @@ func _draw_runinfo() -> void:
 
 
 # 한 구획을 세운다. 제목 한 줄 · 밑줄 · 그 아래 줄들. 넷이 같이 쓴다.
+# 머리 · 줄 다 18(갈무리9 두 배). 높이는 _ri_block_h 와 같은 자다 — 머리 32 + 줄마다 22.
 func _ri_block(x: float, y: float, w: float, head: String, rows: Array) -> float:
-	draw_string(font, Vector2(x, y + 9.0), head, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_ACC)
-	draw_rect(Rect2(x, y + 13.0, w, 1.0), Color(C_WIRE.darkened(0.3), 0.5))
-	y += 26.0
+	draw_string(font_sm, Vector2(x, y + 16.0), head, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, C_ACC)
+	draw_rect(Rect2(x, y + 20.0, w, 1.0), Color(C_WIRE.darkened(0.3), 0.5))
+	y += float(RI.head)
 	for ln in rows:
-		draw_string(font_sm, Vector2(x + 4.0, y), String(ln),
-				HORIZONTAL_ALIGNMENT_LEFT, w - 8.0, 9, C_TXT)
-		y += 14.0
-	return y + 10.0
+		draw_string(font_sm, Vector2(x + 4.0, y + 10.0), String(ln),
+				HORIZONTAL_ALIGNMENT_LEFT, w - 8.0, 18, C_TXT)
+		y += float(RI.row)
+	return y
 
 
 func _ri_progress(p: Rect2) -> void:
@@ -20885,7 +20988,7 @@ func _ri_progress(p: Rect2) -> void:
 	@warning_ignore("integer_division")  # 상단바와 같은 식이어야 한다
 	var itr: int = mini(gold / GameData.interest_per(), _interest_cap())
 	var cw: float = (p.size.x - 40.0) * 0.5
-	var y0: float = p.position.y + 36.0
+	var y0: float = p.position.y + float(RI.top)
 	_ri_block(p.position.x + 16.0, y0, cw, "진행", [
 		"라운드  %d / %d" % [rd, GameData.rounds_n()],
 		"판  %d / %d" % [leg_no, GameData.legs_n()],
@@ -20902,20 +21005,30 @@ func _ri_progress(p: Rect2) -> void:
 # 발라트로의 포커 핸드 표와 같은 자리다 — 레벨 · 이름 · 점수 x 배수 ·
 # 이 런에서 맞힌 횟수. 트랙이 0 인 영역(보드 아웃)은 강화를 못 받으므로
 # 레벨 칸을 비운다.
+#
+# 줄은 18(갈무리9 두 배) · 열 이름은 11(갈무리11). 열 자리는 18 의 가장 긴 값에
+# 맞춰 다시 쟀다 — 트랙 이름 「아우터 불」 79px · 점수 「판 숫자」 61px ·
+# 배수 「x3」 · 맞힘 세 자리 29px. 판 안 폭 460 에서 왼쪽 두 열과 오른쪽 세 열 사이가 넉넉하다.
+const RI_TRK := {"lv": 4.0, "name": 56.0, "score": -176.0, "mult": -96.0, "hits": -40.0}
+
+
 func _ri_tracks(p: Rect2) -> void:
 	var x: float = p.position.x + 16.0
 	var w: float = p.size.x - 32.0
-	var y: float = p.position.y + 36.0
-	draw_string(font_sm, Vector2(x + 4.0, y + 9.0), "레벨", HORIZONTAL_ALIGNMENT_LEFT,
-			-1, 9, C_DIM)
-	draw_string(font_sm, Vector2(x + 46.0, y + 9.0), "트랙", HORIZONTAL_ALIGNMENT_LEFT,
-			-1, 9, C_DIM)
-	draw_string(font_sm, Vector2(x + w - 96.0, y + 9.0), "점수 x 배수",
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_DIM)
-	draw_string(font_sm, Vector2(x + w - 24.0, y + 9.0), "맞힘", HORIZONTAL_ALIGNMENT_LEFT,
-			-1, 9, C_DIM)
-	draw_rect(Rect2(x, y + 13.0, w, 1.0), Color(C_WIRE.darkened(0.3), 0.5))
-	y += 22.0
+	var y: float = p.position.y + float(RI.top)
+	var xs: float = x + w + float(RI_TRK.score)
+	var xm: float = x + w + float(RI_TRK.mult)
+	var xh: float = x + w + float(RI_TRK.hits)
+	draw_string(font, Vector2(x + float(RI_TRK.lv), y + 11.0), "레벨",
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_DIM)
+	draw_string(font, Vector2(x + float(RI_TRK.name), y + 11.0), "트랙",
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_DIM)
+	draw_string(font, Vector2(xs, y + 11.0), "점수 x 배수",
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_DIM)
+	draw_string(font, Vector2(xh, y + 11.0), "맞힘",
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_DIM)
+	draw_rect(Rect2(x, y + 15.0, w, 1.0), Color(C_WIRE.darkened(0.3), 0.5))
+	y += float(RI.trk)
 
 	for a in GameData.areas_all():
 		var tk: int = int(a.get("track", 0))
@@ -20930,49 +21043,51 @@ func _ri_tracks(p: Rect2) -> void:
 		var ml: int = int(a.get("mult", 1)) + int(b.m)
 
 		# 화면에는 lv+1 로 쓴다 — 안 올린 트랙이 Lv.1 로 읽히는 편이 익숙하다.
-		draw_string(font_sm, Vector2(x + 4.0, y + 8.0),
+		var by: float = y + 10.0
+		draw_string(font_sm, Vector2(x + float(RI_TRK.lv), by),
 				("Lv.%d" % (lv + 1)) if tk != 0 else "—", HORIZONTAL_ALIGNMENT_LEFT,
-				-1, 9, C_GREEN.lightened(0.2) if lv > 0 else C_DIM)
-		draw_string(font_sm, Vector2(x + 46.0, y + 8.0), String(a.get("n", "?")),
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_TXT)
+				-1, 18, C_GREEN.lightened(0.2) if lv > 0 else C_DIM)
+		draw_string(font_sm, Vector2(x + float(RI_TRK.name), by), String(a.get("n", "?")),
+				HORIZONTAL_ALIGNMENT_LEFT, xs - x - float(RI_TRK.name) - 8.0, 18, C_TXT)
 		# 점수는 판 숫자를 곱하는 자리라 표에 값이 없는 트랙이 있다(싱글).
 		# 그때는 수를 꾸며 내지 않고 "판 숫자" 라고 말한다.
 		var sct := ("판 숫자" if sc == 0 else str(sc))
-		draw_string(font_sm, Vector2(x + w - 96.0, y + 8.0), sct,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_CHIP)
-		draw_string(font_sm, Vector2(x + w - 46.0, y + 8.0), "x%d" % ml,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_MULT)
-		draw_string(font_sm, Vector2(x + w - 24.0, y + 8.0), str(n),
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 9,
+		draw_string(font_sm, Vector2(xs, by), sct,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 18, C_CHIP)
+		draw_string(font_sm, Vector2(xm, by), "x%d" % ml,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 18, C_MULT)
+		draw_string(font_sm, Vector2(xh, by), str(n),
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 18,
 				C_GOLD if n > 0 else C_OFF)
-		y += 15.0
+		y += float(RI.row)
 
 
 # 발라트로의 바우처 탭과 같은 자리. 효과 한 줄까지 같이 세운다 — 이름만
 # 있으면 왜 산 것인지 다시 알 수 없다.
+#
+# 한 장이 두 줄이다 — 이름 위, 효과 아래(툴팁과 같은 차례). 한 줄에 이름(110px 칸) ·
+# 효과를 나란히 9 로 적던 것을 18 로 키우니 이름(「It's Not About Money」 183px)과
+# 가장 긴 효과(384px)가 판 안 폭(452)에 나란히 안 들었다 — 따로 세우면 둘 다 든다.
 func _ri_photos(p: Rect2) -> void:
 	var x: float = p.position.x + 16.0
 	var w: float = p.size.x - 32.0
-	var y: float = p.position.y + 36.0
 	# 사진은 1회성이라 "산 것" 이 안 남는다. 지금 손에 든 것을 보여준다.
 	var own := []
 	for c in cons:
 		if String(c.get("cat", "")) != "area":
 			own.append(c)
-	draw_string(font, Vector2(x, y + 9.0), "지금 든 사진 %d" % own.size(),
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_ACC)
-	draw_rect(Rect2(x, y + 13.0, w, 1.0), Color(C_WIRE.darkened(0.3), 0.5))
-	y += 24.0
+	var y: float = _ri_block(x, p.position.y + float(RI.top), w,
+			"지금 든 사진 %d" % own.size(), [])
 	if own.is_empty():
-		draw_string(font_sm, Vector2(x + 4.0, y + 8.0), "아직 없다",
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_DIM)
+		draw_string(font_sm, Vector2(x + 4.0, y + 10.0), "아직 없다",
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 18, C_DIM)
 		return
 	for f in own:
-		draw_string(font_sm, Vector2(x + 4.0, y + 8.0), String(f.n),
-				HORIZONTAL_ALIGNMENT_LEFT, 110.0, 9, C_TXT)
-		draw_string(font_sm, Vector2(x + 120.0, y + 8.0), String(f.d),
-				HORIZONTAL_ALIGNMENT_LEFT, w - 124.0, 9, C_DIM)
-		y += 15.0
+		draw_string(font_sm, Vector2(x + 4.0, y + 10.0), String(f.n),
+				HORIZONTAL_ALIGNMENT_LEFT, w - 8.0, 18, C_TXT)
+		draw_string(font_sm, Vector2(x + 4.0, y + 32.0), String(f.d),
+				HORIZONTAL_ALIGNMENT_LEFT, w - 8.0, 18, C_DIM)
+		y += float(RI.photo)
 
 
 func _ri_carry(p: Rect2) -> void:
@@ -20992,48 +21107,70 @@ func _ri_carry(p: Rect2) -> void:
 	var cw: float = (p.size.x - 40.0) * 0.5
 	var xl: float = p.position.x + 16.0
 	var xr: float = p.position.x + 24.0 + cw
-	var y0: float = p.position.y + 36.0
+	var y0: float = p.position.y + float(RI.top)
 
 	#  **보유 동전을 실제로 그린다.** 탭 이름이 「보유」인데 개수만 세고
 	#  정작 무엇을 들었는지는 한 장도 안 그리고 있었다 — 이 탭을 여는
 	#  이유가 그것인데.
-	y0 = _ri_block(xl, y0, p.size.x - 32.0, "동전 %d / %d"
-			% [owned.size(), GameData.max_items()], [])
+	#  그림은 **머리와 한 줄**이다. 머리 밑에 그림 줄(34px)을 따로 두었더니 글자를
+	#  18 로 키운 구획 다섯이 판 안에 안 들었다 — 머리 줄의 오른쪽 70% 가 늘 비어
+	#  있던 자리다. 그림(반지름 12)의 한가운데를 머리 잉크의 한가운데(기준선 −8)에 맞춘다.
+	var cxw: float = xl + float(RI.coin_x)
+	draw_string(font_sm, Vector2(xl, y0 + 18.0), "동전 %d / %d"
+			% [owned.size(), GameData.max_items()], HORIZONTAL_ALIGNMENT_LEFT,
+			-1, 18, C_ACC)
+	draw_rect(Rect2(xl, y0 + 26.0, p.size.x - 32.0, 1.0),
+			Color(C_WIRE.darkened(0.3), 0.5))
 	if owned.is_empty():
-		draw_string(font_sm, Vector2(xl, y0 + 8.0), "없음",
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_OFF)
-		y0 += 20.0
+		draw_string(font_sm, Vector2(cxw, y0 + 18.0), "없음",
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 18, C_OFF)
 	else:
-		var step: float = minf(40.0, (p.size.x - 40.0) / float(owned.size()))
+		var step: float = minf(34.0, (xl + p.size.x - 32.0 - cxw - 24.0)
+				/ float(owned.size()))
 		for i in owned.size():
-			var cx: float = xl + 14.0 + float(i) * step
-			draw_item_sticker(Vector2(cx, y0 + 14.0), 12.0, owned[i],
-					0.0, 0.0, 0.55 if i == sealed else 0.0, 9)
-		y0 += 34.0
+			draw_item_sticker(Vector2(cxw + 12.0 + float(i) * step, y0 + 10.0), 12.0,
+					owned[i], 0.0, 0.0, 0.55 if i == sealed else 0.0, 9)
+	y0 += float(RI.coins)
 
-	var y := _ri_block(xl, y0, cw, "칸", [
-		# 이 칸에는 사진도 들어간다. HUD 의 칸 이름과 같은 말을 쓴다.
-		"사탕·사진  %d / %d" % [cons.size(), GameData.cons_slots()],
-	])
-	y = _ri_block(xl, y, cw, "다트통",
-			mag_rows if not mag_rows.is_empty() else ["없음"])
-	#  뱃지는 **왼쪽**이다. 오른쪽에 셋을 쌓았더니 판 바닥을 넘어 「뒤로」와
-	#  겹쳤다 — 왼쪽이 두 구획뿐이라 자리가 거기 있었다. 칸을 나눠 담는
-	#  것이 판을 더 키우는 것보다 싸다.
+	#  구획 다섯을 두 칸에 나눈다. 칸 · 다트통은 왼쪽, 판 · 이번 판 제약은 오른쪽이고
+	#  **뱃지는 짧은 칸으로** 간다. 한때 오른쪽에 셋을 쌓았더니 판 바닥을 넘어
+	#  「뒤로」와 겹쳐 왼쪽으로 옮겼는데, 글자를 18 로 키우니 다트통이 두 종류만
+	#  되어도 왼쪽이 넘쳤다 — 어느 쪽이 긴지는 그때그때 달라서 재서 놓는다.
+	#  판 높이(_ri_h)는 긴 칸이 세 구획에 줄 넷인 경우까지 든다(다트 세 종류 · 뱃지 둘).
 	var trows := []
 	for tg in pending_tags:
 		trows.append(String(tg.get("n", "")))
-	_ri_block(xl, y, cw, "뱃지", trows if not trows.is_empty() else ["없음"])
-
-	var y2 := _ri_block(xr, y0, cw, "판",
-			mod_rows if not mod_rows.is_empty() else ["기본"])
 	#  이번 판 제약 — 「지금 이 런이 어떤 모양인가」인데 이 탭 어디에도
 	#  없었다.
 	var mrows := []
 	for mo in active_mods:
 		mrows.append(String(mo.get("n", "")))
-	_ri_block(xr, y2, cw, "이번 판 제약",
-			mrows if not mrows.is_empty() else ["없음"])
+	var left := [
+		# 이 칸에는 사진도 들어간다. HUD 의 칸 이름과 같은 말을 쓴다.
+		["칸", ["사탕·사진  %d / %d" % [cons.size(), GameData.cons_slots()]]],
+		["다트통", mag_rows if not mag_rows.is_empty() else ["없음"]],
+	]
+	var right := [
+		["판", mod_rows if not mod_rows.is_empty() else ["기본"]],
+		["이번 판 제약", mrows if not mrows.is_empty() else ["없음"]],
+	]
+	var badge := ["뱃지", trows if not trows.is_empty() else ["없음"]]
+	var hl := 0.0
+	for b in left:
+		hl += _ri_block_h((b[1] as Array).size())
+	var hr := 0.0
+	for b in right:
+		hr += _ri_block_h((b[1] as Array).size())
+	if hl <= hr:
+		left.append(badge)
+	else:
+		right.append(badge)
+	var y := y0
+	for b in left:
+		y = _ri_block(xl, y, cw, String(b[0]), b[1])
+	y = y0
+	for b in right:
+		y = _ri_block(xr, y, cw, String(b[0]), b[1])
 
 
 # 컬렉션 탭. 사진이 빠져 있었다 — 산 뒤에 런 정보에서만 보이고 도감에는
@@ -21109,15 +21246,31 @@ func _draw_collect() -> void:
 				var mo: Dictionary = GameData.modifiers()[gi]
 				_icon_modifier(c, 11.0, mo.id, 0.0)
 				nm = mo.n
-		_draw_fit(Vector2(cell.position.x, cell.end.y - 8.0), cell.size.x, nm,
-				9, C_DIM.lerp(C_TXT, chv))
+		#  이름 9 → 11(갈무리11). 칸(86px)에 안 드는 긴 이름만 한 단 내린다 —
+		#  갈무리9 의 9(「LIVE. DIE. REPEAT.」 75px), 그래도 안 들면 예전처럼
+		#  _draw_fit 이 줄여 넣는다(「It's Not About Money」 93px). 자르면 뜻이
+		#  끊기고, 이웃 칸으로 넘치면 두 이름이 한 줄로 붙는다.
+		var ncol: Color = C_DIM.lerp(C_TXT, chv)
+		var nw: float = cell.size.x - 4.0
+		if font != null and font.get_string_size(nm, HORIZONTAL_ALIGNMENT_LEFT,
+				-1, 11).x <= nw:
+			draw_string(font, Vector2(cell.position.x, cell.end.y - 7.0), nm,
+					HORIZONTAL_ALIGNMENT_CENTER, cell.size.x, 11, ncol)
+		elif font_sm != null and font_sm.get_string_size(nm,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 9).x <= nw:
+			draw_string(font_sm, Vector2(cell.position.x, cell.end.y - 8.0), nm,
+					HORIZONTAL_ALIGNMENT_CENTER, cell.size.x, 9, ncol)
+		else:
+			_draw_fit(Vector2(cell.position.x, cell.end.y - 8.0), cell.size.x, nm,
+					9, ncol)
 
 	if _col_pages() > 1:
 		for right in [false, true]:
 			var ca := _col_arrow_rect(right)
 			_arrow_btn(self, ca, right, ca.has_point(mouse_at))
-		draw_string(font_sm, Vector2(0, 318), "%d / %d" % [collect_page + 1, _col_pages()],
-				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 9, C_DIM)
+		#  쪽 번호 9 → 11(갈무리11). 격자 끝(304)과 화살표 · 뒤로(322~) 사이다.
+		draw_string(font, Vector2(0, 318), "%d / %d" % [collect_page + 1, _col_pages()],
+				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 11, C_DIM)
 	_back_row(self, _menu_back_rect(), "뒤로", "",
 			_menu_back_rect().has_point(mouse_at))
 
