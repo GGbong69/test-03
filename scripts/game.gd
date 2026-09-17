@@ -5090,6 +5090,18 @@ func annulus(ri: float, ro: float, a0: float, a1: float) -> PackedVector2Array:
 	return annulus_at(BC, ri, ro, a0, a1)
 
 
+# 판 띠 한 조각. **폭이 없는 띠는 안 그린다.** 「피자」가 트리플·더블 띠를
+# 일부러 폭 0 으로 접는데(_mod_step), 넓이 없는 폴리곤은 삼각분할이 튀어
+# 칸 스물 × 띠 둘이 매 프레임 오류를 뱉었다 — 오토플레이 한 번에 440줄.
+# 판을 고칠 일이 아니다: 없앤 띠는 hit_info 에서도 반지름 한 점이라
+# 안 그리는 것이 곧 맞는 그림이다. 뒤집힌 띠(안 > 밖)도 같이 거르지만
+# 그건 GEO 순서 규칙이 막는 자리라 qa_board 가 먼저 잡는다.
+func _band_draw(ri: float, ro: float, a0: float, a1: float, col: Color) -> void:
+	if ro <= ri:
+		return
+	draw_colored_polygon(annulus(ri, ro, a0, a1), col)
+
+
 # 판 바깥선에서 gap(R 배수)만큼 바깥. 뒤판과 숫자 고리가 같은 식을 본다 —
 # 갈라 두면 보드 확장로 판이 커질 때 하나만 안 따라간다.
 func _board_rim(gap: float) -> float:
@@ -5124,10 +5136,10 @@ func _draw_board() -> void:
 			# 원래 색이 무엇이든 같은 곳으로 가야 한다. 구멍처럼 읽힌다.
 			base_c = base_c.lerp(C_BG, 0.72)
 			ring_c = ring_c.lerp(C_BG, 0.72)
-		draw_colored_polygon(annulus(R * rt_bull_o * push, R * rt_trp_in * push, a0, a1), base_c)
-		draw_colored_polygon(annulus(R * rt_trp_out * push, R * rt_dbl_in * push, a0, a1), base_c)
-		draw_colored_polygon(annulus(R * rt_trp_in * push, R * rt_trp_out * push, a0, a1), ring_c)
-		draw_colored_polygon(annulus(R * rt_dbl_in * push, R * rt_dbl_out * push, a0, a1), ring_c)
+		_band_draw(R * rt_bull_o * push, R * rt_trp_in * push, a0, a1, base_c)
+		_band_draw(R * rt_trp_out * push, R * rt_dbl_in * push, a0, a1, base_c)
+		_band_draw(R * rt_trp_in * push, R * rt_trp_out * push, a0, a1, ring_c)
+		_band_draw(R * rt_dbl_in * push, R * rt_dbl_out * push, a0, a1, ring_c)
 
 	for i in 20:
 		var a := i * sw - sw * 0.5
@@ -5143,7 +5155,7 @@ func _draw_board() -> void:
 			draw_circle(BC, hit_r1 * push, fc)
 		elif hit_idx >= 0:
 			var a0 := hit_idx * sw - sw * 0.5
-			draw_colored_polygon(annulus(hit_r0 * push, hit_r1 * push, a0, a0 + sw), fc)
+			_band_draw(hit_r0 * push, hit_r1 * push, a0, a0 + sw, fc)
 
 	# 칸 숫자는 누우면 지운다. 비균일 배율이 글자를 세로로만 눌러
 	# 12px 글자가 3.6px 얼룩이 된다 — 글자는 눌러서 눕힐 수 없다.
@@ -15367,8 +15379,7 @@ func _ttl_draw() -> void:
 		#  띠만 밝히면 너무 좁아 안 보이고, 칸만 밝히면 배수가 안 보인다.
 		draw_colored_polygon(annulus(R * rt_bull_o, R * rt_dbl_out,
 				a0, a0 + sw), Color(C_TXT, 0.10))
-		draw_colored_polygon(annulus(float(hi.r0), float(hi.r1), a0, a0 + sw),
-				Color(C_TXT, 0.16))
+		_band_draw(float(hi.r0), float(hi.r1), a0, a0 + sw, Color(C_TXT, 0.16))
 		#  판이 그린 그 자리에 한 번 더, 밝게. 판은 스크림 밑이라 C_DIM 이
 		#  28% 로 깔려 있어서 얹혔다는 것이 안 읽힌다.
 		var na := float(hx) * sw
