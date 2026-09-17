@@ -2741,6 +2741,11 @@ func _process(d: float) -> void:
 		_bd3_close()
 	Dev.tick(self, d)          # DEV
 	_drop_update(d)
+	#  조준 어둠의 짙기. 꽂힐 칸이 정해지면 오르고, 날아가는 순간부터 걷힌다.
+	var dim_to: float = 1.0 if _aim_glow_at().x > -9000.0 else 0.0
+	if aim_dim != dim_to:
+		aim_dim = move_toward(aim_dim, dim_to, d / float(AIMDIM.fade))
+		queue_redraw()
 
 	match state:
 		S.AIM_V, S.AIM_H:
@@ -5454,11 +5459,15 @@ func _draw_darts_2d() -> void:
 
 
 func _draw_aim() -> void:
-	#  지금 꽂힐 칸을 밝힌다 — 제목 판에서 커서가 든 칸이 밝아지는 그것을
-	#  판 위로 가져왔다(사용자, 2026-09-17). 조준선보다 먼저 그려 선이 위에 선다.
+	#  지금 꽂힐 칸을 밝히고 판의 나머지를 가라앉힌다 — 제목 판에서 커서가 든
+	#  칸이 밝아지는 그것을 판 위로 가져왔다(사용자, 2026-09-17). 조준선보다
+	#  먼저 그려 선이 위에 선다. 걷히는 동안(날아가는 중)은 마지막 칸을 쓴다.
 	var gp := _aim_glow_at()
 	if gp.x > -9000.0:
-		_cell_glow(gp, C_ACC, 1.8)
+		aim_glow_last = gp
+	if aim_dim > 0.0:
+		_board_dim_except(aim_glow_last, float(AIMDIM.a) * aim_dim)
+		_cell_glow(aim_glow_last, Color(C_ACC, aim_dim), 1.8 * aim_dim)
 	if state == S.AIM_V or state == S.AIM_H:
 		_draw_aim_live()
 	elif state == S.CONFIRM:
@@ -5471,6 +5480,43 @@ func _draw_aim() -> void:
 	elif state == S.FLY:
 		var k := 1.0 - fly_t / 0.2
 		draw_circle(aim, 3.0 + k * 26.0, Color(C_TXT, 0.2 + k * 0.55))
+
+
+#  조준 어둠 — 맞출 칸 하나만 남기고 판 면을 칸째 어둡게 깐다.
+#  「조준될 때 맞춘 칸 빼고 약간 어두워지는 것도 좋았다」(사용자, 2026-09-17).
+#  a 는 깔리는 검정의 짙기다. 0.28 이면 크림 칸이 회갈색으로 가라앉되
+#  숫자와 색은 그대로 읽힌다 — 판을 지우는 것이 아니라 한 칸에 눈을 모은다.
+#  켜고 끄는 것은 fade 초로 민다. 첫 칸을 잠그는 순간 판이 한 번에 꺼지면
+#  깜빡임으로 읽힌다.
+const AIMDIM := {"a": 0.28, "fade": 0.12}
+var aim_dim := 0.0
+var aim_glow_last := Vector2(-9999.0, -9999.0)
+
+
+func _board_dim_except(p: Vector2, a: float) -> void:
+	var hi := hit_info(p)
+	var hx: int = int(hi.idx)
+	var col := Color(0.0, 0.0, 0.0, a)
+	var sw := 18.0 * PI / 180.0
+	var bands := [[rt_bull_o, rt_trp_in], [rt_trp_in, rt_trp_out],
+			[rt_trp_out, rt_dbl_in], [rt_dbl_in, rt_dbl_out]]
+	var hr0: float = float(hi.r0)
+	for i in 20:
+		var a0: float = float(i) * sw - sw * 0.5
+		for b in bands:
+			var r0: float = R * float(b[0])
+			if i == hx and absf(r0 - hr0) < 0.01:
+				continue
+			_band_draw(r0, R * float(b[1]), a0, a0 + sw, col)
+	#  불 — 안쪽 불은 원, 바깥 불은 고리. 온 고리를 한 다각형으로 그리면
+	#  이음매가 겹쳐 쪼개기가 실패하므로 반으로 나눠 긋는다.
+	var bull: bool = hx < 0 and int(hi.mult) > 0
+	var in_bull: bool = bull and float(hi.r1) <= R * rt_bull_i + 0.01
+	if not (bull and not in_bull):
+		_band_draw(R * rt_bull_i, R * rt_bull_o, 0.0, PI, col)
+		_band_draw(R * rt_bull_i, R * rt_bull_o, PI, TAU, col)
+	if not in_bull:
+		draw_circle(BC, R * rt_bull_i, col)
 
 
 #  밝힐 자리. 꽂힐 점이 **정해져 있을 때만** 낸다(없으면 x -9999).

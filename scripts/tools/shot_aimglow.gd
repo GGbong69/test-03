@@ -1,5 +1,5 @@
 extends SceneTree
-# 판 위 조준이 가리키는 칸이 밝아지는가 — 기본(둘째 칸) · 십자 · 확인 · 불.
+# 판 위 조준이 가리키는 칸이 밝아지고 나머지가 가라앉는가 — 기본(둘째 칸) · 십자 · 확인 · 불.
 #   godot --path . --quit-after 900 --script scripts/tools/shot_aimglow.gd
 const Save = preload("res://scripts/save.gd")
 var g = null
@@ -37,6 +37,8 @@ func _shot(nm: String, mode: String, st: int, at: Vector2) -> void:
 		g.swap_live = false
 		g.grip_t = 9.0
 		g.aim = at
+		#  _process 를 껐으므로 어둠의 짙기를 게임이 밀 때처럼 세워 둔다
+		g.aim_dim = 1.0 if g._aim_glow_at().x > -9000.0 else 0.0
 		g.queue_redraw()
 		await process_frame
 	root.get_texture().get_image().save_png("res://shots/%s.png" % nm)
