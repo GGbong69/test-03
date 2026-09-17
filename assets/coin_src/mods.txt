@@ -16,39 +16,40 @@
 = b d8483d
 = c 8c2233
 = d 4a1426
-= e f7ba70
-= f 7a7192
-= g 221c33
-= h 14111f
+= e 7a7192
+= f 352d4d
+= g f7ba70
+= h 221c33
 = i e8873a
 = j fdeaa0
-= k fbf6ea
+= k f2c94c
+= l fbf6ea
 ....................................
 ...aabaabaabaabaabaabaabaabaabaac...
 ..aabaabaabaabaabaabaabaabaabaabbb..
 .aabaabaabaabaabaabaabaabaabaabbbcb.
-.abadddddddddddddddddddddddddeddccc.
+.abaddddddddddddddddddddddddddddccc.
 .baaddddddddddddddddddddddddddddccd.
-.aabddcccccccffffffffffcccccccddcdc.
-.abaddccccccfffffgbbbggfccccccdedcc.
-.baaddccccffffggggbbbbbgghccccddccd.
-.aabddccccfffgggggeeeebbggccccddcdc.
-.abaddcccfffggggggiiiiebbghcccdddcc.
-.baaddccfffgggggggiiiiiebbghccddccd.
-.aabddccffggggggggiiiiiiebbhccddcdc.
-.abaddcfffggggggggiiiiiiebbhhcdddcc.
-.baaddcffgggggggggjjiiiiiebhhcddccd.
-.aabddcffgggggggggkkjiiiiebhhcddcdc.
-.abaddcffgggggggggkkjiiiiebbhcdddcc.
-.baaddcffgggggggggggggggggghhcddccd.
-.aabddcffgggggggggggggggggghhcddcdc.
-.abaddcffggggggggggggggggghhhcdddcc.
-.baaddccfggggggggggggggggghhccddccd.
-.aabdddcfgggggggggggggggghhhcdddcdc.
-..babddccfgggggggggggggghhhccddcdc..
-..bbcdddccggggggggggggghhhccddddcc..
-...cbbdddchggggggggggghhhhcddddcc...
-...bbcbdddcchgggggghhhhhccddddccd...
+.aabddccccccceeeeeeeeeecccccccddcdc.
+.abaddcccccceeeeeaaaafeeccccccdddcc.
+.baaddcccceeeeeffgggaaaffeccccddccd.
+.aabddcccceeeffffgggggaaafccccddcdc.
+.abaddccceeefffffgggggggaffcccdddcc.
+.baaddcceeeffffffgggggggbbfhccddccd.
+.aabddcceefffffffggggggiibbhccddcdc.
+.abaddceeeffffffjjkkggiiiibhhcdddcc.
+.baaddceeffffffjjjjkkiiiiibfhcddccd.
+.aabddceefffffkjjlljkkiiiibbhcddcdc.
+.abaddceefffffkjjljkkkiiiibbhcdddcc.
+.baaddceefffffkkjjjkkkiiiibbhcddccd.
+.aabddceeffffffkkkkkkfffiibhhcddcdc.
+.abaddceefffffffkkkkfffffffhhcdddcc.
+.baaddccefffffffffffffffffhhccddccd.
+.aabdddcefffffffffffffffffhhcdddcdc.
+..babddccefffffffffffffffhhccddcdc..
+..bbcdddccffffffffffffffhhccddddcc..
+...cbbdddcefffffffffffhhhhcddddcc...
+...bbcbdddcchfffffffhhhhccddddccd...
 ....cbbcddddchhhhhhhhhhcdddddccd....
 .....bcbbddddccccccccccdddddccd.....
 ......bbcbbddddccccccddddcdccd......
@@ -263,39 +264,40 @@
 = b d45a9e
 = c 8e2f6e
 = d 4d1840
-= e f2c94c
-= f fdeaa0
-= g fbf6ea
-= h 221c33
-= i 14111f
+= e fdeaa0
+= f 7a7192
+= g 4a4160
+= h f2c94c
+= i 2b2438
+= j a8762a
 ....................................
 ...aabaabaabaabaabaabaabaabaabaac...
 ..aabaabaabaabaabaabaabaabaabaabbb..
 .aabaabaabaabaabaabaabaabaabaabbbcb.
 .abaddddddddddddddddddddddddddddccc.
-.baaddddddddddeffffffeddddddddddccd.
-.aabddcccccceeeeffffeeeeccccccddcdc.
-.abaddccccceeeeeffffeeeeecccccdddcc.
-.baaddcccccceeeeffffeeeeccccccddccd.
-.aabddcccccceeeeffffeeeeccccccddcdc.
-.abaddccccccceeeffffeeecccccccdddcc.
-.baaddccccccceeeeffeeeecccccccddccd.
-.aabddggcccccceeeffeeeccccccggddcdc.
-.abadggggcccccceeffeeccccccggggddcc.
-.baaggggggccccceeffeecccccggggggccd.
-.aabddggcccccccceffeccccccccggddcdc.
-.abaddggccccccccceecccccccccggdddcc.
-.baaddggcccccccccggcccccccccggddccd.
-.aabddggcccccccccggcccccccccggddcdc.
-.abaddggccccccccccccccccccccggdddcc.
-.baaddggccccccccchhcccccccccggddccd.
-.aabddggcccccccchiihccccccccggddcdc.
-..babdggccccccchhiihhcccccccggdcdc..
-..bbcdddccccccchhiihhcccccccddddcc..
-...cbbdddccccchhhiihhhcccccddddcc...
-...bbcbdddccccccccccccccccddddccd...
-....cbbcddddccccccccccccdddddccd....
-.....bcbbddddccccccccccdddddccd.....
+.baadddddddeedddddddddfffgddddddccd.
+.aabddccccehhhccccccccfggiccccddcdc.
+.abaddcccehhhhhcccccccfggiccccdddcc.
+.baaddccehhhhhhhccccccfggiccccddccd.
+.aabddcehhhhhhhhhcccccfggiccccddcdc.
+.abaddehhhhhhhhhhjccccfggiccccdddcc.
+.baaddhhjhhhhhjjjjccccfggiccccddccd.
+.aabddcccchhhjccccccccfggiccccddcdc.
+.abaddccccehhjccccccccfggiccccdddcc.
+.baaddccccehhjccccccccfggiccccddccd.
+.aabddccccehhjccccccccfggiccccddcdc.
+.abaddccccehhjccccccccfggiccccdddcc.
+.baaddccccehhjccccccccfggiccccddccd.
+.aabddccccehhjccccccccfggiccccddcdc.
+.abaddccccehhjccccccccfgggccccdddcc.
+.baaddccccehhjccccffffgggggfggddccd.
+.aabdddcccehhjccccfggggggggggiddcdc.
+..babddcccehhjcccccgggggggggiddcdc..
+..bbcdddccehhjccccccgggggggiddddcc..
+...cbbdddcehhjcccccccgggggiddddcc...
+...bbcbdddehhjccccccccgggiddddccd...
+....cbbcddehhjccccccccciiddddccd....
+.....bcbbdhjjjcccccccccdddddccd.....
 ......bbcbbddddccccccddddcdccd......
 .......cbbcbdddddccdddddcdccd.......
 .........cbbcbddddddddccdcc.........
@@ -309,48 +311,47 @@
 = a b3abc8
 = b 7a7192
 = c 4a4160
-= d c9bfae
-= e 352d4d
-= f 2b2438
-= g e8dfc8
-= h 4f4670
-= i 221c33
-= j 14111f
+= d 8a5636
+= e 2b2438
+= f c48b5a
+= g 352d4d
+= h 221c33
+= i 14111f
 ....................................
 ...aabaabaabaabaabaabaabaabaabaac...
 ..aabaabaabaabaabaabaabaabaabaabbb..
 .aabaabaabaabaabaabaabaabaabaabbbcb.
 .abaddddddddddddddddddddddddddddccc.
-.baadddddddddddddddddddeeeedddddccf.
-.aabddggggggggggggggggehiiiiggddcfc.
-.abaddgggggggggggggggehbiiiijgddfcc.
-.baaddgggggggggggggggeiiiiiijdddccf.
-.aabddgggggggggggggggeiiiiiijdddcfc.
-.abaddgggggggggggggggeiiiiiijdddfcc.
-.baaddggggggggggggggggiiiiijddddccf.
-.aabddggggggggggeeeegggjjjjddgddcfc.
-.abaddgggggggggehiiiigggddddggddfcc.
-.baaddggggggggehbiiiijggggggggddccf.
-.aabddggggggggeiiiiiijdgggggggddcfc.
-.abaddggggggggeiiiiiijdgggggggddfcc.
-.baaddggggggggeiiiiiijdgggggggddccf.
-.aabddgggggggggiiiiijddgggggggddcfc.
-.abaddgggeeeegggjjjjddggggggggddfcc.
-.baaddggehiiiigggddddgggggggggddccf.
-.aabdddehbiiiijggggggggggggggdddcfc.
-..babddeiiiiiijdgggggggggggggddcfc..
-..bbcddeiiiiiijdggggggggggggdddfcc..
-...cbbdeiiiiiijdgggggggggggdddfcc...
-...bbcbdiiiiijddggggggggggdddfccf...
-....cbbcdjjjjddgggggggggddddfccf....
-.....bcbbdddddgggggggggddddfccf.....
-......bbcbbddddggggggddddcfccf......
-.......cbbcbdddddggdddddcfccf.......
-.........cbbcbddddddddccfcc.........
-..........bcbbcbddddfccfcc..........
-............bcbbfccfccfc............
-..............bcccfccf..............
-................bfcc................
+.baaddddddddddddddddddddddddddddcce.
+.aabddffffffffffffffffffffffffddcec.
+.abaddffffffffffffffffffffffffddecc.
+.baaddffffffffffffffffffffffffddcce.
+.aabddffffffffffffffffffffffffddcec.
+.abaddfffffaggggfffaggggffffffddecc.
+.baaddfffffgchhhhffgchhhhfffffddcce.
+.aabddffffghchhhhighchhhhiffffddcec.
+.abaddffffghhhhhhighhhhhhidfffddecc.
+.baaddffffghhhhhhighhhhhhidfffddcce.
+.aabddfffffhhhhhiddhhhhhiddfffddcec.
+.abaddffffffiiiiddffiiiiddffffddecc.
+.baaddfaggggfddaggggfddaggggffddcce.
+.aabddfgchhhhffgchhhhffgchhhhfddcec.
+.abaddghchhhhighchhhhighchhhhiddecc.
+.baaddghhhhhhighhhhhhighhhhhhiddcce.
+.aabddghhhhhhighhhhhhighhhhhhiddcec.
+..babddhhhhhiddhhhhhiddhhhhhiddcec..
+..bbcdddiiiiddffiiiiddffiiiidddecc..
+...cbbdddddddffffddddffffdddddecc...
+...bbcbdddffffffffffffffffdddecce...
+....cbbcddddffffffffffffddddecce....
+.....bcbbddddffffffffffddddecce.....
+......bbcbbddddffffffddddcecce......
+.......cbbcbdddddffdddddcecce.......
+.........cbbcbddddddddccecc.........
+..........bcbbcbddddeccecc..........
+............bcbbecceccec............
+..............bcccecce..............
+................becc................
 .................cc.................
 
 == jjak  짝  [테 cream]
@@ -360,34 +361,33 @@
 = d 221c33
 = e 8f8577
 = f 352d4d
-= g dde3ec
-= h 14111f
+= g 14111f
 ....................................
 ...aabaabaabaabaabaabaabaabaabaac...
 ..aabaabaabaabaabaabaabaabaabaabbb..
 .aabaabaabaabaabaabaabaabaabaabbbcb.
-.abaddddddddddddddddddddddddddddccc.
-.baaddddddddddddddddddddddddddddcce.
-.aabddffffffffffffffffffffffffddcec.
-.abaddfffffaaaaffffffaaaafffffddecc.
-.baaddffffaaaaaaffffaaaaaaffffddcce.
-.aabddfffaggggaabffaggggaabfffddcec.
-.abaddfffaaaaaaabhfaaaaaaabhffddecc.
-.baaddfffaaaaaabbhfaaaaaabbhffddcce.
-.aabddfffaaaaaabbhfaaaaaabbhffddcec.
-.abaddffffaaabbbhhffaaabbbhhffddecc.
-.baaddfffffbbbbhhffffbbbbhhfffddcce.
-.aabddffffffhhhhffffffhhhhffffddcec.
-.abaddffffffffffffffffffffffffddecc.
-.baaddfffffaaaaffffffaaaafffffddcce.
-.aabddffffaaaaaaffffaaaaaaffffddcec.
-.abaddfffaggggaabffaggggaabfffddecc.
-.baaddfffaaaaaaabhfaaaaaaabhffddcce.
-.aabdddffaaaaaabbhfaaaaaabbhfdddcec.
-..babddffaaaaaabbhfaaaaaabbhfddcec..
-..bbcdddffaaabbbhhffaaabbbhhdddecc..
-...cbbdddffbbbbhhffffbbbbhhdddecc...
-...bbcbdddffhhhhffffffhhhhdddecce...
+.abaddddddddddddaaabddddddddddddccc.
+.baadddddddddddaabbbbdddddddddddcce.
+.aabddfffffffffaabbbcgffffffffddcec.
+.abaddffffffffabbbbbbcffffffffddecc.
+.baaddfffffffffabbbbcggfffffffddcce.
+.aabddfffffffffbbbbbcgffffffffddcec.
+.abaddffffffffffbcccggffffffffddecc.
+.baaddfffffaaaabfggaaaabffffffddcce.
+.aabddfffffaabbbbffaabbbbfffffddcec.
+.abaddfffffabbbbcgfabbbbcgffffddecc.
+.baaddfffffabbbbcgfabbbbcgffffddcce.
+.aabddfffffbbbbbcgfbbbbbcgffffddcec.
+.abaddffffffbcccggffbcccggffffddecc.
+.baaddffaaabfgggaaabfgggaaabffddcce.
+.aabddfaabbbbffaabbbbffaabbbbfddcec.
+.abaddfaabbbcgfaabbbcgfaabbbcgddecc.
+.baaddabbbbbbcabbbbbbcabbbbbbcddcce.
+.aabdddabbbbcggabbbbcggabbbbcggdcec.
+..babddbbbbbcgfbbbbbcgfbbbbbcgdcec..
+..bbcdddbcccggffbcccggffbcccggdecc..
+...cbbdddggggffffggggffffggggdecc...
+...bbcbdddffffffffffffffffdddecce...
 ....cbbcddddffffffffffffddddecce....
 .....bcbbddddffffffffffddddecce.....
 ......bbcbbddddffffffddddcecce......
@@ -502,49 +502,51 @@
 = b 8a5636
 = c 553222
 = d 14111f
-= e f7ba70
-= f 2a1812
-= g 221c33
-= h d8483d
-= i e8dfc8
-= j 8c2233
-= k 479a58
-= l 4a1426
+= e 2a1812
+= f 221c33
+= g f7ba70
+= h fdeaa0
+= i fbf6ea
+= j f2c94c
+= k d8483d
+= l 8c2233
+= m 94d68e
+= n 479a58
 ....................................
 ...aabaabaabaabaabaabaabaabaabaac...
 ..aabaabaabaabaabaabaabaabaabaabbb..
 .aabaabaabaabaabaabaabaabaabaabbbcb.
 .abaddddddddddddddddddddddddddddccc.
-.baadddddddddaeaaaaaaaadddddddddccf.
-.aabddgggggaaaaaaaaaaaaaagggggddcfc.
-.abaddggggaaaahhhhhhhhaaaaggggddfcc.
-.baaddgggaaahhbiiiiiibhhaaagggddccf.
-.aabddggaaahbbbihjjiibbbhaaaggddcfc.
-.abaddggaahbbbbbjjjibbbkkhaaggddfcc.
-.baaddgaehhbhjjbjjlihjjbbhhaagddccf.
-.aabddgaahbbjjjbiiiijjjbbbhaagddcfc.
-.abaddaaahibjjlbbiibjjlbbihaacddfcc.
-.baaddaahiiiibbbkkkkbbbiiiihabddccf.
-.aabddaahihjjiiikkkkiihjjiihabddcfc.
-.abaddaahijjjiikkhkkkijjjiihabddfcc.
-.baaddaahijjliiikkkkiijjliihabddccf.
-.aabddaahiiihjjbkkkkhjjiiiihabddcfc.
-.abaddaaahibjjjbbffbjjjbbihaabddfcc.
-.baaddgaahbbjjlbfiifjjlbbbhabgddccf.
-.aabdddaahhbbbbbiiiibbbbbhhabdddcfc.
-..babddgaahkkbbbhjjibbbbbhabgddcfc..
-..bbcdddaaahbbbfjjjifbbbhabbdddfcc..
-...cbbdddaaahhbijjliibhhaabdddfcc...
-...bbcbdddaaaafiiiiiifaabbcddfccf...
-....cbbcdddaaahhhhhhhhabbdddfccf....
-.....bcbbddddfaaaaaaaafddddfccf.....
-......bbcbbddaabbbbbbbbddcfccf......
-.......cbbcbdddddggdddddcfccf.......
-.........cbbcbddddddddccfcc.........
-..........bcbbcbddddfccfcc..........
-............bcbbfccfccfc............
-..............bcccfccf..............
-................bfcc................
+.baaddddddddddddddddddddddddddddcce.
+.aabddfffffggggggggggaaabfffffddcec.
+.abaddffggggaaaaaaaaaaaabbbbffddecc.
+.baaddffgaaaaabbbbbbbbabbbbbffddcce.
+.aabddffaabbbhhhhhhhhhhbbbbbffddcec.
+.abaddfffbihhhhhhhhhhhhhhjbfffddecc.
+.baaddfffiihhkklhhhhhhhhhjjfffddcce.
+.aabddffffihkklllhhhhklhhjffffddcec.
+.abaddffffiikllllhhhkllljjffffddecc.
+.baaddfffffihlllhhhhlllljfffffddcce.
+.aabddfffffiihhhhhhhhlljjfffffddcec.
+.abaddffffffihmhhhhhhhhjffffffddecc.
+.baaddffffffinhhhhhhhhnjffffffddcce.
+.aabddfffffffihhhhhhhnjfffffffddcec.
+.abaddfffffffihhhklhhhjfffffffddecc.
+.baaddffffffffhhklllhhffffffffddcce.
+.aabdddfffffffihllllhjfffffffdddcec.
+..babddffffffffhhllhhffffffffddcec..
+..bbcdddfffffffihhhhjfffffffdddecc..
+...cbbdddffffffihhhhjffffffdddecc...
+...bbcbdddffffffhhhhffffffdddecce...
+....cbbcddddffffihhjffffddddecce....
+.....bcbbddddffffhhffffddddecce.....
+......bbcbbddddffhhffddddcecce......
+.......cbbcbdddddffdddddcecce.......
+.........cbbcbddddddddccecc.........
+..........bcbbcbddddeccecc..........
+............bcbbecceccec............
+..............bcccecce..............
+................becc................
 .................cc.................
 
 == dnut  도넛  [테 skin]
@@ -554,41 +556,42 @@
 = d 221c33
 = e 6e3b39
 = f 352d4d
-= g d8483d
-= h 479a58
-= i fbf6ea
-= j f2c94c
+= g d45a9e
+= h fbf6ea
+= i 94d68e
+= j f5a3cb
 = k 14111f
-= l 8a5636
-= m 91cbf5
+= l 8e2f6e
+= m fdeaa0
+= n 91cbf5
 ....................................
 ...aabaabaabaabaabaabaabaabaabaac...
 ..aabaabaabaabaabaabaabaabaabaabbb..
 .aabaabaabaabaabaabaabaabaabaabbbcb.
 .abaddddddddddddddddddddddddddddccc.
-.baadddddddddaaaaaaaaaadddddddddcce.
-.aabddfffffaaaaaaaaaaagbbfffffddcec.
-.abaddffffaaaahaaaaaagbbbbffffddecc.
-.baaddfffaaaiihahhgggggbbbbfffddcce.
-.aabddffaaaahhhhhhgggggjgbbbffddcec.
-.abaddffaagghhhhhhgggggjhbbbffddecc.
-.baaddfaaaggghhhbbbbggghhbbbbfddcce.
-.aabddfaggggggbbkkkkbbhhhhhhlfddcec.
-.abaddaaaggggbbkkkkkkbbhhhhlllddecc.
-.baaddaaaggggbkkkkkkkabhhhhlllddcce.
-.aabddaaaigggbkkkkkkkkbhhhhlllddcec.
-.abaddaaaiggbkkkkkkkkaabggglllddecc.
-.baaddaaahhhhbkkkkkkkabgggglllddcce.
-.aabddaaahhhhbkkkkkkaabgmgglllddcec.
-.abaddaaahhhhbbkkkkaabbggmglllddecc.
-.baaddfahhhhhhbbaaaabbgggggglfddcce.
-.aabdddbbbbhhgggbbbbhhhgggllldddcec.
-..babddfbbbhgmmggghhhhhhggllfddcec..
-..bbcdddbbbggggggghjjhhhlllldddecc..
-...cbbdddbbbbggggghhlhllllldddecc...
-...bbcbdddbbbbgllllllhlllldddecce...
-....cbbcdddbbgllllllllllldddecce....
-.....bcbbddddllllllllllddddecce.....
+.baadddddddddaaaaaaaaabdddddddddcce.
+.aabddfffffaaaaaaaaaabbbbfffffddcec.
+.abaddffffaaaaaaagghhbbbbbffffddecc.
+.baaddfffaaaaaaaggggabbggbbfffddcce.
+.aabddffaaaagiijjjjjgggggbbbffddcec.
+.abaddffaaaagjjggggggggggbbbffddecc.
+.baaddfaaaaajjgccccbbgggbbbbbfddcce.
+.aabddfagggjjgccckkbbbgggibbbfddcec.
+.abaddaagggjgcckkkkkkbbggigcccddecc.
+.baaddaahgjjgckkkkkkkkaggggcccddcce.
+.aabddaahajgcckkkkkkkkaaglccccddcec.
+.abaddaaaajgcckkkkkkkkaaggccccddecc.
+.baaddaaaajgcckkkkkkkkaaglmcccddcce.
+.aabddaaagjggbkkkkkkkkagglmcccddcec.
+.abaddaaaggggbbkkkkkkaaggllcccddecc.
+.baaddfbbbbgggbbakkaaagnllcccfddcce.
+.aabdddbbbbbmmgaaaaaagggnllccdddcec.
+..babddfbbbbgggggggggggllllcfddcec..
+..bbcdddbbbbgggggnngglllccccdddecc..
+...cbbdddbbbbgggglllcccccccdddecc...
+...bbcbdddbbbbggcllcccccccdddecce...
+....cbbcdddbbbgccccccccccdddecce....
+.....bcbbddddbcccccccccddddecce.....
 ......bbcbbddddffffffddddcecce......
 .......cbbcbdddddffdddddcecce.......
 .........cbbcbddddddddccecc.........

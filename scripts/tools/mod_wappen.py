@@ -16,13 +16,22 @@ u"""보드 확장 와펜 열두 장의 밑그림 — 붓으로 짓고 assets/coi
   테 램프가 서로 안 겹친다. 천은 가운데/가장자리 단.
     핵심 red · red-1/0        테두리 teal · teal-1/0     천체 고리 violet · violet-1/0
     대기권 blue · night-1/0   라지 green · green-1/0     역지사지 pink · pink-1/0
-    홀 dusk · cream-2/1       짝 cream · night-2/1       시계 gold · wood-1/0
+    홀 dusk · wood-3/2        짝 cream · night-2/1       시계 gold · wood-1/0
     과녁 steel · steel-1/0    피자 wood · night-1/0      도넛 skin · night-2/1
-  엠블럼의 명암 구조도 안 겹친다 — 어두운 공에 켜진 쐐기(핵심) · 밝은 쇠고리에
-  검은 눈(테두리) · 대각 타원 고리(천체 고리) · 밝은 공과 번지는 후광(대기권) ·
-  방패를 뚫는 손잡이(라지) · 위는 크고 아래는 작은 부채(역지사지) · 대각 검은
-  점 셋(홀) · 네모 흰 점 넷(짝) · 흰 판에 세로 바늘(시계) · 오색 동심원(과녁) ·
-  번갈아 도는 조각과 V 틈(피자) · 빨강·초록 고리에 검은 구멍(도넛).
+  엠블럼의 명암 구조도 안 겹친다 — 어두운 공 속에서 빛나는 둥근 핵(핵심) · 밝은
+  쇠고리에 검은 눈(테두리) · 대각 타원 고리(천체 고리) · 밝은 공과 번지는
+  후광(대기권) · 방패를 뚫는 손잡이(라지) · 금 화살과 어두운 화살 ⇅(역지사지) ·
+  밝은 천에 쌓인 흑돌 사다리꼴(홀) · 어두운 천에 쌓인 흰 돌 피라미드(짝) · 흰 판에
+  세로 바늘(시계) · 오색 동심원(과녁) · 유일한 삼각 한 조각(피자) · 분홍 고리에
+  검은 구멍(도넛).
+
+── 두 번째 눈(2026-09-17 검토) ──────────────────────────────
+  만든 사람이 아닌 눈으로 게임 크기(컬렉션 26px · 명판 18px)에서 다시 봤다.
+  여섯 장이 뜻과 다른 것으로 읽혀 고쳤다 — 핵심 원그래프 · 역지사지 금
+  트로피 · 홀 주사위 3 · 짝 주사위 4 · 피자 십자와 꽃 · 도넛 크리스마스 리스.
+  **주사위와 트럼프 무늬(♣)는 동전이 걷어낸 노름 기호**라 가장 먼저 걷었다.
+  장마다 무엇이 무엇으로 읽혔고 무엇으로 갈랐는지는 그 장의 「두 번째 눈」에.
+  나머지 여섯(테두리 · 천체 고리 · 대기권 · 라지 · 시계 · 과녁)은 그대로다.
 
 ── 효과 암시 ──────────────────────────────────────────────
   판에서 바뀌는 부분을 엠블럼의 가장 굵은 덩어리로 과장한다. 트리플 띠 →
@@ -102,42 +111,50 @@ def put(f, cells, ramp, step):
 
 #  ══════════════════════════════════════════════════════════
 #  1. 핵심 — 트리플 띠 +0.06
-#  물건: 쐐기 하나를 도려낸 뜨거운 행성 단면. 미션 패치에 수놓인 천체 하나.
+#  물건: 쐐기를 도려낸 행성 속에서 **둥근 핵이 빛난다.**
 #  트리플 띠는 판의 가운데 고리다 — 행성의 가운데 층(외핵)을 실제보다 확
 #  두껍게 달군다. 배타 짝인 테두리는 바깥 쇠고리가 두꺼워 무게중심이 반대다.
 #  NASA 의 지구 절개도(구에서 쐐기 하나를 도려내 속 층을 보인다) 구도,
 #  USGS 의 「축척을 무시하고 속을 키운 그림」 관례, 껍질은 어둡고 속은 뜨거운
 #  색(calacademy)으로 가는 명암 방향을 가져왔다.
+#
+#  ── 두 번째 눈(2026-09-17 검토) ──
+#  첫 판은 12~3시 사분면을 평평한 층 무늬로 채웠는데, 26px 에서 **원그래프**
+#  (어두운 원에 주황 4분의 1)로 읽혔다. 원그래프와 가르는 것은 셋이다 —
+#    ① 핵을 쐐기 안에 가두지 않고 **온 원**으로 한복판에 둔다(원그래프 한복판에는
+#       공이 없다). gold-3 가 공 전체에서 가장 밝은 칸이다 — 이름이 「핵심」이다
+#    ② 쐐기를 사분면보다 넓게(−8°~108°) 벌려 칼선이 수직 · 수평에 안 붙는다
+#    ③ 두 절단면의 값을 한 단 가른다 — 빛 쪽(왼) 면은 orange-3 · red-3, 먼 면은
+#       orange-2 · red-2. 평면 둘이 접힌 입체로 읽힌다
+#  NASA Cut-away Diagram of Earth's Interior 는 속 공(내핵)이 가장 밝고 둥글게
+#  남는 구도를, 절개도 검색 요약(「glowing heat」)에서는 핵만 스스로 빛나고
+#  껍질은 어둡게 남는 관례를 봤다. 공의 왼위 초승달은 dusk-2 로 남긴다 — 붉은 천과
+#  어두운 공의 값을 가르는 쪽이다.
 def soks():
     f = Wappen("soks", u"핵심", rim="red", cloth="red", cloth_base=1)
     R = 11.0
     ball = disc(CX, CY, R)
-    put(f, ball, "night", 1)
-    #  왼위 초승달은 dusk-2 — 붉은 천과 공의 값을 가르는 쪽이다
-    lo = set(disc(CX + 1.6, CY + 1.6, R))
+    put(f, ball, "night", 2)
+    hi = set(disc(CX - 1.4, CY - 1.4, R))
+    put(f, [p for p in ball if p not in hi], "night", 1)
+    lo = set(disc(CX + 1.8, CY + 1.8, R))
     put(f, [p for p in ball if p not in lo], "dusk", 2)
-    hi = set(disc(CX - 1.6, CY - 1.6, R))
-    put(f, [p for p in ball if p not in hi], "night", 0)
-    #  절개 — 12시~3시 사분면을 중심까지. 단면은 스스로 빛나 빛을 안 탄다
+    A0, A1, FOLD = -8.0, 108.0, 50.0
     for (x, y) in ball:
-        if x < 18 or y > 16:
-            continue
         d = dist(x, y)
-        if d > 9.5:
-            continue                        # 껍질은 그대로 — 얇은 검은 테
-        if d > 8.0:
-            f.dot(x, y, "red", 2)           # 맨틀
-        elif d > 7.0:
-            f.dot(x, y, "orange", 3)        # 외핵 바깥 한 칸
-        elif d > 3.0:
-            f.dot(x, y, "orange", 2)        # 외핵 — 가장 두꺼운 층
-        else:
-            f.dot(x, y, "gold", 3)          # 내핵
-    for (x, y) in ((18, 15), (19, 15), (18, 16), (19, 16)):
+        s = (ang(x, y) + 180.0) % 360.0 - 180.0
+        if not (A0 <= s <= A1) or d > 9.6:
+            continue                        # 껍질(r 9.6 밖)은 그대로 — 얇은 검은 테
+        far = s > FOLD                      # 오른아래 절단면은 빛을 덜 받는다
+        if d > 8.2:
+            f.dot(x, y, "red", 2 if far else 3)        # 맨틀
+        elif d > 3.8:
+            f.dot(x, y, "orange", 2 if far else 3)     # 외핵 — 가장 두꺼운 층
+    for (x, y) in disc(CX, CY, 3.8):
+        #  내핵 — 온 원. 왼위가 한 단 더 밝다
+        f.dot(x, y, "gold", 3 if dist(x, y, CX - 0.8, CY - 0.8) < 2.4 else 2)
+    for (x, y) in ((17, 15), (18, 15), (17, 16)):
         f.dot(x, y, "cream", 3)             # 한복판
-    #  불티 둘 — 절개 모서리 바깥 천
-    f.dot(29, 4, "orange", 3)
-    f.dot(31, 7, "orange", 3)
     return f
 
 
@@ -320,84 +337,103 @@ def panb():
 
 #  ══════════════════════════════════════════════════════════
 #  6. 역지사지 — 가장 작은 3 칸이 20이 된다
-#  물건: 가운데 축을 두고 아래의 작고 어두운 부채 셋이 위의 크고 금빛인 부채
-#  셋으로 올라가는 그림. 양옆에 위로 가는 화살.
-#  판에서 3 은 20 의 정반대인 맨 아래다(위키백과 Darts 의 숫자 차례). 易地 —
-#  자리를 서로 바꾼다(한국경제 생글생글). 원형 화살(새로고침 · 리롤 기호로
-#  읽힌다)은 뺐다 — 작은 그림은 특징 하나만 남긴다(slynyrd Pixelblog 47).
+#  물건: 나란히 선 두 화살 ⇅ — 위로 오르는 굵은 금 화살과 내려가는 어두운 화살.
+#  易地 — 자리를 서로 바꾼다(한국경제 생글생글). 바닥의 작은 칸이 판 꼭대기
+#  값(20)으로 올라가니, 오르는 쪽을 금빛에 굵고 길게, 내려가는 쪽을 dusk 에
+#  짧게 둔다.
+#
+#  ── 두 번째 눈(2026-09-17 검토) ──
+#  첫 판은 가운데 축에 아래 작은 검은 부채와 위 큰 금 부채를 맞대고 양옆에 위
+#  화살을 세웠다. 크게 보면 뜻이 서는데, 26px 에서는 **금 트로피**(잔 · 받침 ·
+#  양옆 손잡이)나 모래시계로 읽혔다 — 두 부채가 한 점에서 맞닿으면 잔 모양이
+#  된다. 부채를 버리고 교환 기호 하나만 남긴다. 원형 화살은 계속 뺀다(리롤 ·
+#  새로고침으로 읽힌다). 작은 그림은 특징 하나만(slynyrd Pixelblog 47), 자수
+#  패치는 작을수록 굵은 한 덩어리로(americanpatch 디자인 글: 작은 패치는 잔
+#  무늬를 버리고 주 이미지에 집중하고, 보색 대비가 또렷하다 — 분홍 천에 금).
 def pang():
     f = Wappen("pang", u"역지사지", rim="pink", cloth="pink", cloth_base=1)
-    #  축을 한 칸 내려(y 18) 위 부채를 길게, 폭은 ±33°. 가운데 쐐기를 가장
-    #  밝게(gold-3) 둔다 — 20 은 그 한가운데다.
-    ax, ay = 17.5, 18.0
-    for (x, y) in _all():
-        d = dist(x, y, ax, ay)
-        a = ang(x, y, ax, ay)
-        s = (a + 180.0) % 360.0 - 180.0      # 12시 기준 −180~180
-        if 1.5 <= d <= 13.5 and -33.0 <= s < 33.0:
-            f.dot(x, y, "gold", 3 if -11.0 <= s < 11.0 else 2)
-        b = (a % 360.0) - 180.0              # 6시 기준
-        if 1.5 <= d <= 7.0 and -33.0 <= b < 33.0:
-            f.dot(x, y, "night", 0 if -11.0 <= b < 11.0 else 1)
-    for (x, y) in ((17, 17), (18, 17), (17, 18), (18, 18)):
-        f.dot(x, y, "cream", 3)
-    #  화살 — 샤프트 2px 에 머리 세 줄(2 · 4 · 6). 머리를 한 줄(4px)로 두었더니
-    #  26px 에서 화살이 아니라 T 자 기둥 둘로 읽혔고, 기둥이 부채보다 먼저 보였다.
-    for x0 in (6, 28):
-        for y in range(15, 23):
-            f.dot(x0, y, "cream", 3)
-            f.dot(x0 + 1, y, "cream", 3)
-        for r in range(3):
-            for x in range(x0 - r, x0 + 2 + r):
-                f.dot(x, 12 + r, "cream", 3)
+    #  오르는 화살 — 자루 4칸(x 10~13, y 11~27) · 머리 y 4~11 에서 넓어진다
+    up = [(x, y) for (x, y) in _all() if 10 <= x <= 13 and 11 <= y <= 27]
+    up += [(x, y) for (x, y) in _all()
+           if 4 <= y <= 11 and abs(x + 0.5 - 12.0) <= (y - 3.5) * 0.85]
+    f.cells(up, "gold", 2)
+    #  내려가는 화살 — 한 칸 낮게 시작해 머리가 방패 끝 쪽(y 27)을 가리킨다
+    dn = [(x, y) for (x, y) in _all() if 22 <= x <= 25 and 5 <= y <= 20]
+    dn += [(x, y) for (x, y) in _all()
+           if 20 <= y <= 27 and abs(x + 0.5 - 24.0) <= (27.5 - y) * 0.85]
+    f.cells(dn, "dusk", 1)
     return f
 
 
 #  ══════════════════════════════════════════════════════════
 #  7. 홀 — 칸마다 짝이 생긴다 · 짝수 칸 −1
-#  물건: 밝은 천 위의 검은 바둑돌 셋, 대각으로 선다.
-#  돌가리기에서 흑돌 하나는 홀, 둘은 짝이다(polgote) — 홀은 흑돌. 아이들
-#  홀짝 놀이는 손에 쥔 알 개수를 맞힌다(브런치). 흑돌 가장자리의 푸르스름한
-#  빛(ymimports)은 회보라 night-3 하이라이트로, 양볼록 돌의 볼록에 모이는 빛
-#  (gafferongames)은 돌마다 왼위 점 하나로. 테는 dusk — night 테는 게임
-#  바탕에 실루엣이 묻힌다.
+#  물건: 바둑판 빛 천 위에 쌓인 흑돌 다섯 — 아래 셋, 위 둘.
+#  돌가리기에서 한 사람이 흰 돌을 한 줌 쥐고, 다른 사람이 흑돌 하나(홀) ·
+#  둘(짝)을 올려 맞힌다(polgote · gomagic Nigiri) — 홀 · 짝은 흑과 백의 일이다.
+#  돌은 두 구가 겹친 볼록 렌즈 꼴이라 빛이 한 점에 모인다(gafferongames Shape
+#  of the Go Stone) — 돌마다 왼위에 반짝임 하나. 흑돌 가장자리의 푸르스름한
+#  빛(ymimports)은 dusk 로.
+#
+#  ── 두 번째 눈(2026-09-17 검토) ──
+#  첫 판은 크림 천에 떨어진 검은 돌 셋을 대각으로 놓았다. 돌을 키워도 26px 에서
+#  흰 네모에 검은 점 셋 — **주사위 3** 이었다. 주사위는 동전이 걷어낸 노름
+#  기호다. 가르는 것은 둘이다 —
+#    ① 천을 크림에서 바둑판 빛(wood-3, 가장자리 wood-2)으로. 흰 바탕이 아니면
+#       주사위 면이 안 된다
+#    ② 돌을 **떨어뜨려 늘어놓지 않고 맞닿게 쌓는다.** 주사위 눈은 서로 안 닿는다
+#  셋을 삼각으로 쌓으면 이번에는 **트럼프 클럽(♣)** 이 된다(원 셋이 삼각으로
+#  맞닿은 꼴이 곧 클럽이다) — 이것도 노름 기호라, 다섯(아래 셋 · 위 둘)으로
+#  쌓아 사다리꼴 무더기로 둔다. 다섯은 홀이고, 짝(여섯)의 꼭대기 한 알이 빠진
+#  꼴이라 두 장이 한 쌍으로 읽힌다.
+STONE_HI = 0.25     # 반짝임 반지름 — 돌 반지름의 배수
+
+
+def stone(f, sx, sy, r, ramp, base, glint, spark):
+    u"""바둑돌 하나. 몸은 빛을 타는 물건(가장자리 ±1), 반짝임은 왼위 한 덩어리 +
+    가장 밝은 한 칸. glint · spark 는 (램프, 단)."""
+    f.cells(disc(sx, sy, r), ramp, base)
+    for (x, y) in disc(sx - r * 0.4, sy - r * 0.4, r * STONE_HI):
+        f.dot(x, y, glint[0], glint[1])
+    f.dot(int(math.floor(sx - r * 0.55)), int(math.floor(sy - r * 0.55)), spark[0], spark[1])
+
+
+def pile(f, stones, r, ramp, base, glint, spark, shadow):
+    u"""맞닿게 쌓은 돌 무더기. 그림자는 오른아래로 한 칸씩 민 한 덩어리다 —
+    돌마다 그림자를 따로 찍으면 돌 사이 틈이 얼룩진다."""
+    sh = set()
+    for (sx, sy) in stones:
+        sh |= set(disc(sx + 1.0, sy + 1.0, r))
+    f.cells(sh, shadow[0], shadow[1], shade=False)
+    for (sx, sy) in stones:
+        stone(f, sx, sy, r, ramp, base, glint, spark)
+
+
 def holl():
-    f = Wappen("holl", u"홀", rim="dusk", cloth="cream", cloth_base=2)
-    #  돌은 반지름 4.2 — 서로 한 칸 남짓 떨어질 만큼 크다. 3.5 로 두었더니
-    #  밝은 네모 천 위의 작은 검은 점 셋이 **주사위 3** 으로 읽혔다. 주사위는
-    #  동전이 걷어낸 노름 기호라, 점이 아니라 돌이 되게 키우고 윤을 낸다.
-    stones = ((24.5, 8.5), (17.5, 15.5), (10.5, 22.5))
-    #  그림자와 돌을 둘 다 **물건**으로 쌓는다. 점(dot)은 늘 물건 위라
-    #  그림자를 점으로 찍으면 돌을 덮는다.
-    for (sx, sy) in stones:
-        f.cells(disc(sx + 1.0, sy + 1.0, 4.2), "cream", 1, shade=False)
-    for (sx, sy) in stones:
-        f.cells(disc(sx, sy, 4.2), "night", 1)
-        f.dot(int(sx - 2.0), int(sy - 1.5), "night", 3)
-        f.dot(int(sx - 1.0), int(sy - 2.5), "night", 3)
-        f.dot(int(sx - 1.0), int(sy - 1.5), "dusk", 2)
+    f = Wappen("holl", u"홀", rim="dusk", cloth="wood", cloth_base=3)
+    R = 3.8
+    stones = ((13.5, 13.0), (21.5, 13.0),                 # 위 둘
+              (9.5, 20.0), (17.5, 20.0), (25.5, 20.0))    # 아래 셋
+    pile(f, stones, R, "night", 1, ("dusk", 1), ("dusk", 3), ("wood", 2))
     return f
 
 
 #  ══════════════════════════════════════════════════════════
 #  8. 짝 — 칸마다 짝이 생긴다 · 홀수 칸 +1
-#  물건: 어두운 슬레이트 천 위의 흰 바둑돌 넷, 두 쌍으로 네모지게.
-#  홀의 거울 — 천 명암 · 돌 색 · 개수(셋 대 넷)가 전부 뒤집힌다. 흰 돌을
-#  둘씩 짝지어 센다(polgote), 조개 흰 돌 윗면의 가는 결(ymimports), 둥근
-#  볼록면의 반달 음영(gafferongames).
+#  물건: 어두운 천 위에 피라미드로 쌓인 흰 돌 여섯 — 아래 셋 · 가운데 둘 · 위 하나.
+#  홀의 거울 — 천 명암 · 돌 색이 뒤집히고, 홀 무더기에 꼭대기 한 알을 얹어
+#  여섯(짝)이 된다. 흰 돌은 조개로 깎아 윗면이 곱게 희다(ymimports 바둑돌 안내).
+#
+#  ── 두 번째 눈(2026-09-17 검토) ──
+#  첫 판의 네모로 떨어진 흰 돌 넷은 26px 에서 **주사위 4** 였다. 넷을 벽돌처럼
+#  엇갈려 붙이면 발자국 · 구름, 둘만 두면 땅콩 · 두 눈으로 읽혔다. 맞닿게 쌓은
+#  피라미드가 주사위 · 트럼프 어느 쪽도 아니고, 홀과 한 벌로 가장 또렷했다.
 def jjak():
     f = Wappen("jjak", u"짝", rim="cream", cloth="night", cloth_base=2)
-    #  홀과 같은 까닭으로 돌을 키웠다 — 네모로 떨어진 작은 흰 점 넷은 주사위 4 다.
-    stones = ((12.5, 10.5), (22.5, 10.5), (12.5, 20.5), (22.5, 20.5))
-    for (sx, sy) in stones:
-        put(f, disc(sx + 1.0, sy + 1.0, 4.0), "night", 0)
-    for (sx, sy) in stones:
-        st = disc(sx, sy, 4.0)
-        put(f, st, "cream", 3)
-        hi = set(disc(sx - 1.2, sy - 1.2, 4.0))
-        put(f, [p for p in st if p not in hi], "cream", 2)
-        for x in range(int(sx - 2.5), int(sx + 1.5)):
-            f.dot(x, int(sy - 1.5), "steel", 3)
+    R = 3.5
+    stones = ((17.5, 7.0),
+              (13.5, 13.5), (21.5, 13.5),
+              (9.5, 20.0), (17.5, 20.0), (25.5, 20.0))
+    pile(f, stones, R, "cream", 2, ("cream", 3), ("cream", 3), ("night", 0))
     return f
 
 
@@ -463,70 +499,63 @@ def aimb():
 
 #  ══════════════════════════════════════════════════════════
 #  11. 피자 — 모든 칸 값 32 · 더블·트리플 띠가 사라진다
-#  물건: 여덟 조각 피자, 아래 조각 하나가 살짝 빠져나와 있다.
-#  띠 없이 똑같은 조각 여덟 개 — 판 테마(PIZZAART, shots/btheme_pizz.png)의
-#  크러스트 테 · 소스 선 · 번갈아 도는 크림/어두운 조각 · 페퍼로니 · 바질 ·
-#  초록 불과 재료가 같다(PAL 최근접: crust wood-3 · sauce red-2 · pep red-1).
-#  크러스트의 탄 물집(housegardenhobby cornicione) · 가장자리가 말려 그을린
-#  페퍼로니(위키백과 Pepperoni) · 음식끼리 색 돌려쓰기(slynyrd Pixelblog 30)를
-#  봤다. 올리브는 26px 에서 뭉개져 뺐다.
+#  물건: 끝이 방패 끝을 가리키는 피자 **한 조각.**
+#  띠가 사라진 판은 칸이 곧 조각이다 — 다트판의 한 칸(부채꼴)을 피자 한 조각으로
+#  그린다. 재료는 판 테마(PIZZAART, shots/btheme_pizz.png)와 같다 — 크러스트
+#  wood-3(c98a45) · 크러스트 빛 orange-3(ecb86e) · 페퍼로니 red-1/2(a8322a ·
+#  d0604f) · 바질 green-2(3f8a3a) · 녹은 치즈 gold-3 · cream-3. 크러스트의 탄
+#  물집(housegardenhobby cornicione) · 음식끼리 색 돌려쓰기(slynyrd Pixelblog 30).
+#
+#  ── 두 번째 눈(2026-09-17 검토) ──
+#  첫 판은 판 테마를 그대로 옮겨 여덟 조각이 번갈아 도는 온 피자였다. 26px 에서
+#  크림 조각 넷이 **십자**, 페퍼로니 고리가 **꽃**으로 읽혔고(3x3 페퍼로니는
+#  「+」 모양이었다), 조각 하나 빠진 V 틈은 한 칸이라 사라졌다. 게다가 온 피자는
+#  동전 「위대한 피자」(c04)의 얼굴과 같은 꼴이다. 한 조각은 —
+#    · 열두 장 중 원이 아홉인 판에서 유일한 **삼각** 실루엣이다
+#    · 페퍼로니 셋이 둥근 4x4 로 커도 자리가 남는다
+#    · 동전 피자(온 원)와 틀 밖에서도 갈린다
+#  작은 도트 피자 조각은 치즈 삼각 + 윗변 크러스트 + 둥근 페퍼로니 셋이 기본
+#  구도다(megavoxels How to Make a Pixel Art Pizza — 32x32, 페퍼로니 원 셋).
+#  그 강의의 검은 외곽선은 규칙 ③ 에 따라 안 쓰고, 치즈 왼변을 한 단 밝게 ·
+#  오른변을 한 단 어둡게 가른다.
 def pizz():
     f = Wappen("pizz", u"피자", rim="wood", cloth="night", cloth_base=1)
+    ax, ay = 17.5, 29.5          # 조각 끝 — 방패 끝 쪽
+    HA = 25.0                    # 반각
+    L = 24.5                     # 끝에서 크러스트 바깥까지
     pix = {}
-    for (x, y) in disc(CX, CY, 12.0):
-        d = dist(x, y)
-        a = ang(x, y)
-        if d > 9.9:
-            k = lit(x, y)
-            pix[(x, y)] = col("wood", 2 if k < -0.5 and d > 11.0 else 3)
-        elif d > 9.0:
-            pix[(x, y)] = col("red", 2)
+    for (x, y) in _all():
+        dx, dy = x - ax, y - ay
+        d = math.hypot(dx, dy)
+        s = math.degrees(math.atan2(dx, -dy))
+        if d < 0.5 or d > L or abs(s) > HA:
+            continue
+        if d > L - 3.4:
+            #  크러스트 — 윗면 왼쪽이 빛, 오른끝과 치즈에 닿는 안쪽 줄이 그늘
+            if d > L - 1.3 and s < 8.0:
+                c = col("orange", 3)
+            elif s > 14.0 or d < L - 2.6:
+                c = col("wood", 2)
+            else:
+                c = col("wood", 3)
+        elif s < -HA + 4.5:
+            c = col("cream", 3)          # 빛 받는 왼변
+        elif s > HA - 4.5:
+            c = col("gold", 2)           # 그늘진 오른변
         else:
-            sl = int(((a + 22.5) % 360.0) // 45.0)
-            #  어두운 조각은 wood **2** 다. 판 테마의 치즈 틴트 먹은 칸(wood-1)을
-            #  그대로 썼더니 크림 조각 넷만 떠서 피자가 아니라 **십자**로 읽혔다
-            #  (페퍼로니가 크림 조각에만 앉아 더 그랬다). 한 단 올려 조각이
-            #  번갈아 도는 것은 남기고 십자를 깬다.
-            pix[(x, y)] = col("cream", 2) if sl % 2 == 0 else col("wood", 2)
-    for (x, y) in ((8, 11), (14, 5)):
-        pix[(x, y)] = col("orange", 3)      # 부푼 크러스트
-    for (x, y) in ((29, 13), (26, 25)):
-        pix[(x, y)] = col("wood", 1)        # 탄 물집
+            c = col("gold", 3)
+        pix[(x, y)] = c
 
-    def pep(px, py):
-        u"""페퍼로니 3x3 — 왼위 한 칸이 밝고 오아래 한 칸이 그을렸다."""
-        for dx in (-1, 0, 1):
-            for dy in (-1, 0, 1):
-                s_ = 2 if (dx, dy) == (-1, -1) else (0 if dx + dy >= 2 else 1)
-                pix[(px + dx, py + dy)] = col("red", s_)
-
-    #  페퍼로니는 여덟 조각 전부에 — 크림 조각은 바깥(r 6), 어두운 조각은
-    #  안쪽(r 5)으로 엇갈려 앉혀 한 줄 고리로 안 읽히게 한다
-    for k in range(8):
-        a = math.radians(45 * k)
-        rr = 6.0 if k % 2 == 0 else 5.0
-        pep(int(round(CX + rr * math.sin(a) - 0.5)), int(round(CY - rr * math.cos(a) - 0.5)))
-    for a0 in (45, 225):
-        a = math.radians(a0)
-        bx = int(round(CX + 7.8 * math.sin(a) - 0.5))
-        by = int(round(CY - 7.8 * math.cos(a)))
-        pix[(bx, by)] = col("green", 2)     # 바질
-        pix[(bx + 1, by)] = col("green", 2)
-    for (x, y) in disc(CX, CY, 2.5):
-        pix[(x, y)] = col("green", 2)
-    pix[(17, 16)] = col("red", 2)
-    #  빠진 조각 — 6시 크림 조각을 아래로 민다. 두 칼선에 V 틈이 난다
-    moved = {}
-    gap = []
-    for (x, y), c in list(pix.items()):
-        d = dist(x, y)
-        a = ang(x, y)
-        if 157.5 <= a < 202.5 and d > 2.5:
-            moved[(x, y + 1)] = c
-            gap.append((x, y))
-    for p in gap:
-        pix[p] = col("wood", 0)
-    pix.update(moved)
+    def pep(cx, cy):
+        u"""페퍼로니 — 반지름 2.1 원(4x4 에 모서리가 깎인다). 왼위 칸들이 한 단 밝다."""
+        for (x, y) in disc(cx, cy, 2.1):
+            if (x, y) in pix:
+                pix[(x, y)] = col("red", 2 if (x - cx) + (y - cy) < -1.2 else 1)
+    pep(14.0, 12.5)
+    pep(21.5, 13.5)
+    pep(17.5, 20.5)
+    for (x, y, st) in ((13, 17, 2), (14, 16, 3), (21, 18, 2), (22, 17, 2)):
+        pix[(x, y)] = col("green", st)   # 바질 두 잎
     for (x, y), c in pix.items():
         f.dots[(x, y)] = c
     return f
@@ -534,46 +563,58 @@ def pizz():
 
 #  ══════════════════════════════════════════════════════════
 #  12. 도넛 — 불이 사라진다 · 칸 값 올림
-#  물건: 빨강·초록 물결 글레이즈를 얹은 도넛, 가운데 구멍이 크고 새까맣다.
+#  물건: 분홍 글레이즈가 흘러내린 링 도넛, 가운데 구멍이 크고 새까맣다.
 #  판의 한복판이 뻥 뚫렸고 그것이 가장 큰 명암 덩어리다. 칸 값 올림은 달게
-#  얹힌 글레이즈와 스프링클로 말한다. 판 테마(DONUTART, shots/btheme_dnut.png)의
-#  반죽 · 더블 링 자리의 빨강·초록 글레이즈 · 스프링클 · 검은 구멍과 재료가
-#  같다(dough skin-2 · dough_dk wood-2 · hole night-0). 스프링클(위키백과:
-#  지미는 가느다란 막대) · 링 도넛(윗면만 글레이즈가 덮고 가운데가 뚫렸다)을 봤다.
+#  얹힌 글레이즈와 스프링클로 말한다. 판 테마(DONUTART, shots/btheme_dnut.png)와
+#  재료가 같다 — 반죽 skin-2(d99a52) · 반죽 그늘 skin-1 · 반죽 빛 skin-3 ·
+#  구멍 night-0 · 스프링클 다섯 색(cream · gold · blue · pink · green)에서 넷.
+#  스프링클(위키백과: 지미는 가느다란 막대) · 링 도넛(윗면만 글레이즈가 덮고
+#  가운데가 뚫렸다) · 도트 도넛 강의(megavoxels How to Make a Pixel Art Donut —
+#  반죽과 윗면 글레이즈를 두 덩어리로 가르고 스프링클을 네 색으로 흩는다)를 봤고,
+#  drawcentral 의 작은 도넛 글은 막혀 검색 요약(녹아 흐른 방울 · 가장자리에서
+#  떨어진 곡선 반짝임)만 봤다.
+#
+#  ── 두 번째 눈(2026-09-17 검토) ──
+#  첫 판은 판의 더블 띠처럼 글레이즈를 빨강 · 초록으로 번갈아 칠했는데, 26px 에서
+#  **크리스마스 리스**(초록 잎에 빨간 열매)로 읽혔다. 조각 경계를 곧게 다듬어도
+#  빨강 · 초록 고리는 리스였고, 빨강 한 색은 반죽(skin-2)과 값이 붙어 케첩이
+#  됐다. 분홍(pink-2, 판 스프링클 ff7ab8 의 램프)은 반죽과 색상이 멀어 한눈에
+#  「글레이즈 도넛」이다. 글레이즈 가장자리는 물결(10 마루) + 방울 넷으로 흐르고,
+#  왼위 한 줄을 pink-3 로 올려 윤을 낸다.
 def dnut():
     f = Wappen("dnut", u"도넛", rim="skin", cloth="night", cloth_base=2)
-    wave = [0, 1, 0, 0, 0, 1, 0, -1, 0, 1, 0, 0, 0, 1, 0, -1]
+    drips = {200: 2.4, 125: 1.8, 290: 2.0, 40: 1.4}     # 방울 — 각도: 길이
     for (x, y) in disc(CX, CY, 12.0):
         d = dist(x, y)
         a = ang(x, y)
         k = lit(x, y)
-        wv = wave[int(a // 22.5) % 16]
-        mid = (a % 45.0) - 22.5
-        lim = 9.0 + 0.7 * wv + (1.5 if abs(mid) < 4.0 else 0.0)
+        lim = 8.6 + 0.55 * math.cos(math.radians(a * 10.0))
+        for da, ln in drips.items():
+            off = abs(((a - da) + 180.0) % 360.0 - 180.0)
+            if off < 10.0:
+                lim = max(lim, 8.6 + ln * (1.0 - off / 10.0) + 0.5)
         if d > lim:
-            f.dot(x, y, "skin" if k > -0.35 else "wood",
-                  3 if k > 0.35 else 2)
-        elif d > 5.5:
-            red = int(a // 45.0) % 2 == 0
-            f.dot(x, y, "red" if red else "green", 2)
-        elif d > 4.5:
-            f.dot(x, y, "skin", 2)
+            f.dot(x, y, "skin", 3 if k > 0.45 else (1 if k < -0.45 else 2))   # 반죽
+        elif d > 5.8:
+            st = 2
+            if 6.6 <= d <= 8.0 and k > 0.5:
+                st = 3                      # 윤
+            if k < -0.6 and d > 7.5:
+                st = 1
+            f.dot(x, y, "pink", st)
+        elif d > 4.2:
+            #  구멍 안벽 — 빛은 맞은편(오른아래) 벽에 닿는다
+            f.dot(x, y, "skin", 3 if k < -0.3 else (1 if k > 0.5 else 2))
         else:
             f.dot(x, y, "night", 0)
-    #  스프링클 — 1x2 막대. 빨강 호 위에는 빨강 계열을 안 놓는다
-    bars = ((12, 8, 13, 8), (23, 9, 23, 10), (24, 18, 25, 19),
-            (13, 22, 14, 22), (9, 15, 9, 16), (19, 23, 20, 23))
-    hues = (("cream", 3), ("gold", 2), ("blue", 3), ("pink", 3))
+    #  스프링클 — 1x2 막대. 분홍 위라 판의 pink 는 뺀다
+    bars = ((19, 7, 20, 7), (25, 12, 25, 13), (23, 20, 24, 21), (12, 21, 13, 21),
+            (8, 14, 8, 15), (13, 9, 14, 9), (17, 23, 18, 23), (26, 17, 26, 18))
+    hues = (("cream", 3), ("green", 3), ("blue", 3), ("gold", 3))
     for i, (x0, y0, x1, y1) in enumerate(bars):
-        red = int(ang(x0, y0) // 45.0) % 2 == 0
         ramp, st = hues[i % 4]
-        if red and ramp == "pink":
-            ramp, st = "blue", 3
         f.dot(x0, y0, ramp, st)
         f.dot(x1, y1, ramp, st)
-    for (x, y) in disc(CX, CY, 4.5):
-        if dist(x + 1, y + 1) > 4.5:
-            f.dot(x, y, "skin", 3)          # 빛 받는 안쪽 벽
     return f
 
 

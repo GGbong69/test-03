@@ -13019,10 +13019,14 @@ func _mod_art(id: String) -> Texture2D:
 #  윗면을 세로로 누르고 그 밑에 옆면을 1 · 2px 밀어 깐다. 옆면 두께는 누름을
 #  안 탄다(보는 각이 아니라 천 두께라서). 동전 옆면(2.77px, 민무늬)보다 얇고
 #  땀이 나 있어 누운 자세에서도 둘이 갈린다. dim 은 동전 얼굴과 같이 modulate
-#  를 어둡게 해서 받는다.
-func _mod_art_draw(tx: Texture2D, c: Vector2, r: float, dim: float, fl: float) -> void:
+#  를 어둡게 해서 받는다. a 는 알파 — 옛 도식은 알파를 못 받아 스러지는 그림
+#  (_mod_shed_draw)이 dim 을 1 까지 밀었는데, 텍스처에 dim 1 은 modulate 검정이라
+#  78px 짜리 **새까만 방패**가 테이블 위에 떴다(shots/art_mods_shed.png). 와펜은
+#  a 로 옅게 스러진다.
+func _mod_art_draw(tx: Texture2D, c: Vector2, r: float, dim: float, fl: float,
+		a: float = 1.0) -> void:
 	var sz := Vector2(r * 2.0, r * 2.0 * fl)
-	var m := Color(1.0, 1.0, 1.0).darkened(dim)
+	var m := Color(Color(1.0, 1.0, 1.0).darkened(dim), a)
 	if fl < 0.999:
 		var sp: float = MOD_ART.side_px
 		var k := sp
@@ -15850,14 +15854,22 @@ func _draw_tinted(x: float, y: float, t: String, sz: int, base: Color) -> void:
 # 덮인 보드 확장이 스러지는 그림. 부풀면서 위로 뜨고 어두워진다 —
 # 판에서 떨어져 나가는 꼴이다. _icon_mod 의 dim 을 걸음으로 밀어 옅게
 # 만든다(그 함수는 알파를 안 받는다).
+#  와펜이 있으면 알파로 스러진다 — dim 을 1 까지 밀면 텍스처는 새까만 방패가
+#  된다(_mod_art_draw 주석). 어둠은 반쯤만(e·0.4) 먹이고 알파 1−e² 로 빼서,
+#  걸음 0.35 에 반쯤 · 0.65 에 거의 다 비친다. 옛 도식(그림 없는 id)은 그대로다.
 func _mod_shed_draw() -> void:
 	if mod_shed_t <= 0.0 or mod_shed == "":
 		return
 	draw_set_transform(Vector2.ZERO)
 	var k: float = 1.0 - mod_shed_t / MOD_SHED
 	var e: float = 1.0 - pow(1.0 - k, 3.0)      # 처음이 빠르고 끝이 느리다
-	_icon_mod(BC + Vector2(0.0, -6.0 - 24.0 * e), 15.0 + 24.0 * e,
-			mod_shed, minf(e, 1.0))
+	var sc := BC + Vector2(0.0, -6.0 - 24.0 * e)
+	var sr := 15.0 + 24.0 * e
+	var stx := _mod_art(mod_shed)
+	if stx != null:
+		_mod_art_draw(stx, sc, sr, e * 0.4, 1.0, clampf(1.0 - e * e, 0.0, 1.0))
+		return
+	_icon_mod(sc, sr, mod_shed, minf(e, 1.0))
 
 
 func _tip_draw(sh: Vector2) -> void:
