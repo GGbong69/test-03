@@ -5519,6 +5519,11 @@ func _draw_darts_2d() -> void:
 
 
 func _draw_aim() -> void:
+	#  지금 꽂힐 칸을 밝힌다 — 제목 판에서 커서가 든 칸이 밝아지는 그것을
+	#  판 위로 가져왔다(사용자, 2026-09-17). 조준선보다 먼저 그려 선이 위에 선다.
+	var gp := _aim_glow_at()
+	if gp.x > -9000.0:
+		_cell_glow(gp, C_ACC, 1.8)
 	if state == S.AIM_V or state == S.AIM_H:
 		_draw_aim_live()
 	elif state == S.CONFIRM:
@@ -5531,6 +5536,26 @@ func _draw_aim() -> void:
 	elif state == S.FLY:
 		var k := 1.0 - fly_t / 0.2
 		draw_circle(aim, 3.0 + k * 26.0, Color(C_TXT, 0.2 + k * 0.55))
+
+
+#  밝힐 자리. 꽂힐 점이 **정해져 있을 때만** 낸다(없으면 x -9999).
+#    · 두 칸으로 잠그는 방식(기본 · 빗각 · 원)의 첫 칸은 한 축만 움직여서
+#      점이 없다 — 판 가운데 줄의 칸을 밝히면 거기 꽂힌다고 읽힌다
+#    · 당김은 쥐기 전에는 점이 벽(자루 자리)이라 판 밖이고 저절로 안 밝힌다
+#    · 안개(fog)는 판 안의 조준선을 지우는 제약이다. 칸을 밝히면 지운 것을
+#      칸으로 다시 알려 주는 셈이라 안 밝힌다
+func _aim_glow_at() -> Vector2:
+	var none := Vector2(-9999.0, -9999.0)
+	if mod_v("fog", 0.0) > 0.0:
+		return none
+	match state:
+		S.CONFIRM:
+			return aim
+		S.AIM_V, S.AIM_H:
+			if state == S.AIM_V and _aim_stages() >= 2:
+				return none
+			return aim
+	return none
 
 
 # 조준 중의 그림. 방식마다 **무엇이 잠겼고 무엇이 움직이는지**가 다르다 —
@@ -15432,26 +15457,38 @@ func _ttl_draw() -> void:
 	#  얹힌 칸을 밝히고 그 숫자를 띄운다. 「누를 수 있다」 와 「여기는
 	#  몇 점이다」 를 한 번에 말한다 — 글줄을 하나도 안 보태고 판 읽는
 	#  법이 손에 붙는 자리다.
-	var hi := hit_info(mouse_at)
+	_cell_glow(mouse_at)
+	_aim_dot(mouse_at, Color(C_ACC, 0.40 + 0.20 * sin(ttl_t * 5.0)))
+
+
+#  칸 밝히기 — 점 p 가 든 칸을 밝히고 그 숫자를 띄운다. 제목 판(커서)과
+#  판 위의 조준(지금 꽂힐 자리)이 같이 쓴다.
+#
+#  두 겹이다. 칸 전체가 옅게(어느 숫자인가) · 점이 든 띠가 한 단 진하게
+#  (단·더블·트리플 중 어디인가). 한 겹으로 두면 띠만 밝히면 너무 좁아 안
+#  보이고, 칸만 밝히면 배수가 안 보인다. 불이면 불 원 하나.
+#  숫자는 판이 그린 그 자리에 한 번 더, 밝게 — 제목에서는 판이 스크림 밑이라
+#  C_DIM 이 28% 로 깔려 얹혔다는 것이 안 읽히고, 판 위에서는 조준선이
+#  가리키는 숫자가 고리에서 튀어나온다.
+#
+#  col · k 는 판의 밝기가 정한다. 제목 판은 스크림(0.72) 밑이라 흰빛 옅게로
+#  충분한데, 판 위는 크림 칸이 밝아서 흰빛이 안 보인다 — 조준선과 같은 금빛을
+#  한 단 진하게(k 1.8) 물들인다. 숫자도 그 색이다.
+func _cell_glow(p: Vector2, col := C_TXT, k := 1.0) -> void:
+	var hi := hit_info(p)
 	var sw := 18.0 * PI / 180.0
 	var hx: int = int(hi.idx)
 	if hx >= 0 and hx < sectors.size():
 		var a0: float = float(hx) * sw - sw * 0.5
-		#  두 겹이다. 칸 전체가 옅게(어느 숫자인가) · 커서가 든 띠가
-		#  한 단 진하게(단·더블·트리플 중 어디인가). 한 겹으로 두면
-		#  띠만 밝히면 너무 좁아 안 보이고, 칸만 밝히면 배수가 안 보인다.
 		draw_colored_polygon(annulus(R * rt_bull_o, R * rt_dbl_out,
-				a0, a0 + sw), Color(C_TXT, 0.10))
-		_band_draw(float(hi.r0), float(hi.r1), a0, a0 + sw, Color(C_TXT, 0.16))
-		#  판이 그린 그 자리에 한 번 더, 밝게. 판은 스크림 밑이라 C_DIM 이
-		#  28% 로 깔려 있어서 얹혔다는 것이 안 읽힌다.
+				a0, a0 + sw), Color(col, 0.10 * k))
+		_band_draw(float(hi.r0), float(hi.r1), a0, a0 + sw, Color(col, 0.16 * k))
 		var na := float(hx) * sw
 		var np := BC + Vector2(sin(na), -cos(na)) * _board_rim(0.13)
 		draw_string(font, np + Vector2(-14.0, 5.0), str(sectors[hx]),
-				HORIZONTAL_ALIGNMENT_CENTER, 28, 11, C_TXT)
+				HORIZONTAL_ALIGNMENT_CENTER, 28, 11, col)
 	elif int(hi.mult) > 0:
-		draw_circle(BC, float(hi.r1), Color(C_TXT, 0.22))
-	_aim_dot(mouse_at, Color(C_ACC, 0.40 + 0.20 * sin(ttl_t * 5.0)))
+		draw_circle(BC, float(hi.r1), Color(col, 0.22 * k))
 
 
 # ══════════════════════════════════════════════════════════
