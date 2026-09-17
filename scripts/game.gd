@@ -615,6 +615,11 @@ var beep_gap := 0.07
 
 
 func _ready() -> void:
+	#  창 제목은 게임 이름 HIGHTON 이다. project.godot 의 config/name(HIGHTONE)은
+	#  user:// 저장 폴더의 이름이기도 해서, 고치면 프로필 · 해금이 새 빈 폴더로
+	#  갈라진다 — 그래서 창에 뜨는 글자만 여기서 고친다.
+	if _has_renderer():
+		get_window().title = "HIGHTON"
 	_autoplay = OS.get_cmdline_user_args().has("autoplay")
 	drop_fast = _autoplay          # 헤드리스는 낙하를 안 기다린다
 	if _autoplay:
@@ -697,7 +702,9 @@ func _ready() -> void:
 #    ① 어둠 · 램프가 딸깍 켜지며 형광등처럼 몇 번 끊긴다 → 판이 드러난다
 #    ② 세 발이 트리플 20 에 꽂히며 밑의 수가 60 · 120 · 180 으로 오른다
 #    ③ 램프가 딸깍 꺼지고, 네온이 한 글자씩 「HIGH TON」 을 켜며 판을 분홍으로
-#       비춘다 → 금빛 E 가 떨어져 붙으며 빈칸이 닫혀 HIGHTONE 이 된다(금빛 번쩍)
+#       비춘다 → 빈칸이 쾅 닫혀 HIGHTON 이 되고(금빛 번쩍) TON 이 금빛으로 남는다.
+#       게임 이름은 HIGHTON 이다 — 처음에는 제목 글줄의 영문 「HIGHTONE」 을 따라
+#       E 를 떨어뜨렸는데, 사용자가 이름에 E 가 없다고 짚었다(2026-09-17).
 #    ④ 어둠이 제목의 스크림으로 가라앉고 제목 글줄이 떠오른다
 #  판 · 꽂힌 세 발 · 스크림이 제목 화면의 것 그대로라 이음매가 없다 — 던지고
 #  꽂는 것은 제목 판의 자루(_ttl_throw · _ttl_stick)를 쓴다. 소리 규칙도 같다:
@@ -718,8 +725,8 @@ const INTRO := {
 	"neon_lit": 0.46,                # 네온이 다 켜졌을 때 남는 어둠
 	"letter": 0.075,                 # 글자 사이
 	"buzz": 0.12,                    # 막 켜진 글자가 떠는 시간
-	"e_drop": 3.80,                  # E 가 떨어지기 시작
-	"e_fall": 0.20,                  # 떨어지는 시간 · 빈칸이 닫히는 시간
+	"snap": 3.80,                    # 두 낱말이 붙기 시작
+	"snap_t": 0.16,                  # 붙는 시간 — 점점 빨라지다 쾅
 	"flash": 0.35,                   # E 가 붙을 때 금빛 번쩍
 	"settle": 4.75,                  # 어둠이 스크림으로 가라앉기 시작
 	"end": 5.35,                     # 제목으로 넘긴다
@@ -786,10 +793,10 @@ func _intro_tick(d: float) -> void:
 		intro_fired += 1
 	if t >= float(INTRO.sign):
 		_intro_once("sign", "leg_open")
-	if t >= float(INTRO.e_drop) + float(INTRO.e_fall):
-		_intro_once("e", "settle_total")
-		if not intro_rang.has("e_shake"):
-			intro_rang["e_shake"] = true
+	if t >= float(INTRO.snap) + float(INTRO.snap_t):
+		_intro_once("snap", "settle_total")
+		if not intro_rang.has("snap_shake"):
+			intro_rang["snap_shake"] = true
 			shake = maxf(shake, 3.0)
 	if t >= float(INTRO.end):
 		_intro_end()
@@ -881,8 +888,8 @@ func _draw_intro() -> void:
 	_intro_lamp(light, st)
 	_intro_sign(t, 1.0 - st)
 	_intro_count(t, 1.0 - st)
-	#  E 가 붙는 순간 금빛 번쩍
-	var ft: float = t - float(INTRO.e_drop) - float(INTRO.e_fall)
+	#  두 낱말이 붙는 순간 금빛 번쩍
+	var ft: float = t - float(INTRO.snap) - float(INTRO.snap_t)
 	if ft >= 0.0 and ft < float(INTRO.flash):
 		var fk: float = 1.0 - ft / float(INTRO.flash)
 		draw_rect(_full(), Color(C_ACC, 0.16 * fk * fk))
@@ -902,21 +909,22 @@ func _intro_lamp(light: float, st: float) -> void:
 	draw_rect(Rect2(cx - 12.0, 23.0, 24.0, 2.0), Color(bulb, a * maxf(light, 0.15)))
 
 
-#  네온 간판. 글자마다 켜지는 때가 다르고, 막 켜진 동안은 떤다. E 는 금빛으로
-#  떨어져 붙고 그동안 빈칸이 닫힌다.
+#  네온 간판. 글자마다 켜지는 때가 다르고, 막 켜진 동안은 떤다. 다 켜지면
+#  두 낱말이 점점 빨라지며 모여 쾅 붙고, 붙은 뒤로 TON 은 금빛이다
+#  (세 발 180 — 톤 에이티).
 func _intro_sign(t: float, a: float) -> void:
 	#  꺼진 관은 램프가 꺼져야 보인다 — 램프가 켠 동안에는 갓과 겹친다
 	if a <= 0.0 or t < float(INTRO.off):
 		return
 	var sz := 36
 	var base := "HIGH TON"
-	var tight := "HIGHTON"
-	var ew: float = font.get_string_size("E", HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x
 	var w0: float = font.get_string_size(base, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x
-	var w1: float = font.get_string_size(tight + "E", HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x
-	var ke: float = clampf((t - float(INTRO.e_drop)) / float(INTRO.e_fall), 0.0, 1.0)
-	var close: float = 1.0 - pow(1.0 - ke, 3.0)
+	var w1: float = font.get_string_size("HIGHTON", HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x
+	var ks: float = clampf((t - float(INTRO.snap)) / float(INTRO.snap_t), 0.0, 1.0)
+	var close: float = ks * ks
+	var snapped: bool = ks >= 1.0
 	var y: float = float(INTRO.sign_y)
+	#  두 낱말이 가운데로 모인다 — 빈칸만큼 TON 이 더 온다
 	var x0: float = lerpf(BC.x - w0 * 0.5, BC.x - w1 * 0.5, close)
 	var neon: Color = INTRO.neon
 	var core: Color = INTRO.neon_core
@@ -926,7 +934,6 @@ func _intro_sign(t: float, a: float) -> void:
 		var ch := base.substr(j, 1)
 		if ch == " ":
 			continue
-		#  빈칸 뒤 글자(TON)는 빈칸 폭만큼 당겨진다
 		var pre := base.substr(0, j)
 		var xa: float = font.get_string_size(pre, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x
 		var xb: float = font.get_string_size(pre.replace(" ", ""), HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x
@@ -936,14 +943,11 @@ func _intro_sign(t: float, a: float) -> void:
 		var lit: bool = t >= on_t
 		if lit and t < on_t + float(INTRO.buzz):
 			lit = int((t - on_t) * 60.0) % 3 != 1
-		_intro_glyph(Vector2(x, y), ch, sz, neon, core, dead, lit, a)
-	#  E — 위에서 떨어져 붙는다
-	if ke > 0.0:
-		var ex: float = x0 + w1 - ew
-		var ey: float = lerpf(y - 26.0, y, 1.0 - pow(1.0 - ke, 2.0))
-		if ke >= 1.0:
-			ey = y
-		_intro_glyph(Vector2(ex, ey), "E", sz, C_ACC, C_GOLD, dead, true, a * ke)
+		var ton: bool = j > base.find(" ")
+		if snapped and ton:
+			_intro_glyph(Vector2(x, y), ch, sz, C_ACC, C_GOLD, dead, true, a)
+		else:
+			_intro_glyph(Vector2(x, y), ch, sz, neon, core, dead, lit, a)
 
 
 func _intro_glyph(at: Vector2, ch: String, sz: int, halo: Color, core: Color,
@@ -17129,7 +17133,7 @@ func _draw_title() -> void:
 	draw_string(font, Vector2(SAFE, 104.0), "하이톤",
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 33, C_TXT)
 	#  영문 이름 9 → 11(갈무리11). 제목(33)의 곁말이라 한 단만 올린다.
-	draw_string(font, Vector2(SAFE + 2.0, 123.0), "HIGHTONE",
+	draw_string(font, Vector2(SAFE + 2.0, 123.0), "HIGHTON",
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_DIM)
 	#  글줄을 꿰는 세로선 — 설정과 같은 어법이다.
 	var y0: float = float(TMENU.y) + 4.0
