@@ -2,7 +2,8 @@ extends SceneTree
 # 과녁 판(보드 확장 「과녁」 aimb)이 입는 옷을 찍는다 — 기본 · 칠 · 조준 밝힘(트리플 · 더블 ·
 # 불 · 싱글) · 죽은 색 · 죽은 칸 · 띠 폭이 바뀐 판.
 #   godot --path . --quit-after 9000 --script scripts/tools/shot_board_target.gd -- [접두사]
-# 접두사를 안 주면 tg. 옛 판과 나란히 보려면 고치기 전에 `-- tgold` 로 한 번 찍는다.
+# 접두사를 안 주면 tg. 옛 판과 나란히 보려면 고치기 전에 `-- tgold`(옷 입기 전) ·
+# `-- tgprev`(고치기 전 벌) 로 한 번씩 찍는다.
 # 조각 비교판은 scripts/tools/shot_board_target_sheet.py 가 만든다.
 const Save = preload("res://scripts/save.gd")
 var g = null
