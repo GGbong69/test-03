@@ -10639,12 +10639,17 @@ func _goods_draw() -> void:
 		if i == give_i:
 			continue
 		_obj_draw(i, 0.0 if (hov < 0 or hov == i) else DROP.dim_off)
-		#  값은 **제 물건 바로 뒤**다. 전에는 물건을 다 그린 뒤에 값만
-		#  따로 한 바퀴 돌아서, 뒤 물건의 값이 앞 동전의 반지름 19 원
-		#  안에 그대로 얹혔다(동전-동전 최소 면거리 38 을 Δu 25 · Δw 29
-		#  로 쓰면 정확히 그렇게 된다). 여기서 그리면 앞 물건이 뒤 물건의
-		#  값을 가려 깊이 순서가 맞고 소속이 저절로 읽힌다.
-		_bill_one(i)
+	#  값은 물건을 **다 그린 뒤** 한 바퀴 돈다. 앞 물건이 뒤 물건의 값을
+	#  가리면 그 물건은 값을 모르는 채로 산다(2026-09-17 제보) — 그래서
+	#  값이 가려질 자리면 비어 있는 곁(위 · 오른쪽 · 왼쪽)으로 옮긴다
+	#  (_bill_place). 옮긴 값은 어느 물건의 것인지가 자리로 읽혀야 하므로
+	#  늘 제 물건에 붙어 선다.
+	#
+	#  전에는 제 물건 바로 뒤에 그려 앞 물건이 뒤 값을 **가리게** 두었다.
+	#  그보다 먼저 물건을 다 그린 뒤 값을 돌았을 때는 뒤 물건의 값이 앞
+	#  동전 위에 그대로 얹혀 소속이 헷갈렸다. 지금은 둘 다 안 한다 —
+	#  값은 늘 보이고, 어떤 물건의 몸통 위에도 안 얹힌다.
+	_bills_draw(z)
 
 
 #  상인이 든 물건 하나. **손 다음에** 그린다 — 이 한 줄이 "손 위에 있다" 를
@@ -11121,6 +11126,141 @@ func _sticker_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: floa
 				String(it.get("id", "")), dim)
 	#  누운 자세에도 글자를 안 쓴다. 두 자세가 갈리면 테이블에서는 숫자가
 	#  있고 동전 슬롯에는 없는 동전이 된다(draw_item_sticker 의 얼굴 주석).
+
+
+# ── 값표 자리 ───────────────────────────────────────────
+#  밑(0)이 기본이다 — 물건들이 떨어져 앉는 규칙(분리 솔버)이 밑 자리끼리는
+#  안 겹치게 해 두었다(아래 정리). 그런데 **값과 앞 물건의 몸통**은 그
+#  정리 밖이라, 뒤 물건의 값을 앞 동전이 덮을 수 있었다.
+#  그래서 자리마다 **다른 물건의 몸통**(_obj_shape)과 **먼저 앉힌 값**에
+#  닿는지 재고, 닿으면 위(1) → 오른쪽(2) → 왼쪽(3) 차례로 옮긴다. 넷 다
+#  막히면 가장 덜 막힌 자리다 — 그래도 값은 물건 위에 그리므로 안 가려진다.
+#
+#  **떨지 않게** 지난 자리를 기억한다. 밑이 막힌 동안 옆자리 둘이 다 비면
+#  매 프레임 새로 고를 때 둘 사이를 오간다 — 지난 옆자리가 비어 있으면 그대로
+#  둔다. 밑이 비면 기억과 상관없이 밑으로 돌아온다.
+#  들어올림(lift)은 안 본다. _obj_box · _obj_shape 가 h 만 쓰므로 커서를
+#  얹어 물건이 떠도 값은 안 움직인다.
+var bill_side := {}            # 물건 번호 → 지난 프레임의 자리
+
+
+func _bill_size(i: int) -> Vector2:
+	var s: Dictionary = stock[i]
+	if bool(s.get("pack", false)):
+		var pt := "고르기" if boost_pick <= 1 else "%d장 고르기" % boost_pick
+		return Vector2(font_sm.get_string_size(pt, HORIZONTAL_ALIGNMENT_LEFT, -1, 9).x
+				if font_sm != null else 30.0, 10.0)
+	return Vector2(gold_w(str(s.cost), 9), 10.0)
+
+
+#  side 자리의 값표 사각(화면). 밑 자리의 글줄은 옛 자리 그대로다.
+func _bill_rect(i: int, side: int, sz: Vector2) -> Rect2:
+	var it: Dictionary = drop[i]
+	var box := _obj_box(i)
+	var u: float = it.u
+	match side:
+		1:
+			return Rect2(u - sz.x * 0.5, box.position.y - sz.y - 2.0, sz.x, sz.y)
+		2:
+			return Rect2(box.end.x + 3.0, box.get_center().y - sz.y * 0.5, sz.x, sz.y)
+		3:
+			return Rect2(box.position.x - 3.0 - sz.x, box.get_center().y - sz.y * 0.5,
+					sz.x, sz.y)
+	#  팩 몫(「고르기」)은 옛 자리가 값보다 7 아래였다 — 그대로 둔다.
+	var pack_dy: float = 7.0 if bool(stock[i].get("pack", false)) else 0.0
+	var base: float = _p2g(it.w) + DROP.bill_dy + pack_dy
+	return Rect2(u - sz.x * 0.5, base - 8.0, sz.x, sz.y)
+
+
+#  이 사각이 얼마나 막혔나 — 다른 물건 몸통에 닿는 표본 점 수 + 먼저 앉은
+#  값과의 겹침 + 테이블 밖. 0 이면 빈 자리다.
+func _bill_block(i: int, r: Rect2, z: Array, placed: Array) -> int:
+	var n := 0
+	if r.position.y < TBL.fy + 1.0 or r.position.x < 4.0 or r.end.x > VIEW.x - 4.0:
+		n += 20                    # 덮개 밑이거나 화면 밖 — 잘린다
+	for pr in placed:
+		if (pr as Rect2).grow(1.0).intersects(r):
+			n += 10
+	var pts := [r.position, Vector2(r.end.x, r.position.y), r.end,
+			Vector2(r.position.x, r.end.y), r.get_center(),
+			Vector2(r.get_center().x, r.position.y), Vector2(r.get_center().x, r.end.y),
+			Vector2(r.position.x, r.get_center().y), Vector2(r.end.x, r.get_center().y)]
+	for j in z:
+		if j == i:
+			continue
+		for pt in pts:
+			if _obj_shape(j, pt):
+				n += 1
+	return n
+
+
+func _bill_place(i: int, z: Array, placed: Array) -> Rect2:
+	var sz := _bill_size(i)
+	#  밑이 비면 늘 밑이다 — 가리던 물건을 사 가면 값이 제자리로 돌아온다.
+	var r0 := _bill_rect(i, 0, sz)
+	var n0 := _bill_block(i, r0, z, placed)
+	if n0 == 0:
+		bill_side[i] = 0
+		return r0
+	#  밑이 막혔으면 지난번 옆자리가 아직 비었는지부터 — 떨지 않게.
+	var prev: int = int(bill_side.get(i, 0))
+	if prev != 0:
+		var rp := _bill_rect(i, prev, sz)
+		if _bill_block(i, rp, z, placed) == 0:
+			return rp
+	var best := r0
+	var best_n := n0
+	var best_side := 0
+	for side in [1, 2, 3]:
+		var r := _bill_rect(i, side, sz)
+		var bn := _bill_block(i, r, z, placed)
+		if bn < best_n:
+			best_n = bn
+			best = r
+			best_side = side
+		if bn == 0:
+			break
+	bill_side[i] = best_side
+	return best
+
+
+func _bills_draw(z: Array) -> void:
+	if _sweep_wipe():
+		return
+	#  앞에 앉은 물건부터 자리를 잡는다 — 앞 물건의 값은 밑이 늘 비어 있을
+	#  확률이 높고, 뒤 물건의 값이 그걸 피해 옮기는 쪽이 자연스럽다.
+	var order := z.duplicate()
+	order.reverse()
+	var placed := []
+	for i in order:
+		if i == give_i or i >= mini(drop.size(), stock.size()):
+			continue
+		if not drop[i].into:
+			continue
+		var s: Dictionary = stock[i]
+		if s.sold:
+			continue
+		var r := _bill_place(i, z, placed)
+		placed.append(r)
+		_bill_at(i, r)
+	#  떠난 물건의 기억은 버린다
+	for key in bill_side.keys():
+		if int(key) >= drop.size() or drop[int(key)].gone:
+			bill_side.erase(key)
+
+
+#  값표 한 장을 사각 r 에 그린다. 밑 자리면 옛 글줄과 같은 줄에 선다.
+func _bill_at(i: int, r: Rect2) -> void:
+	var s: Dictionary = stock[i]
+	var y: float = r.position.y + 8.0
+	if bool(s.get("pack", false)):
+		var pt := "고르기" if boost_pick <= 1 else "%d장 고르기" % boost_pick
+		draw_string(font_sm, Vector2(r.get_center().x - 30.0, y), pt,
+				HORIZONTAL_ALIGNMENT_CENTER, 60.0, 9,
+				C_ACC if boost_pick > 0 else C_OFF)
+		return
+	var can: bool = not s.sold and gold >= s.cost
+	draw_gold_at(r.position.x, y, str(s.cost), 9, C_GOLD if can else C_OFF)
 
 
 # _table_draw 의 맨 끝 (덮개·레일 뒤) — 가격은 절대 안 잘려야 한다.
