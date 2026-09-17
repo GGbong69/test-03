@@ -21258,6 +21258,9 @@ func _cup_foot() -> float:
 
 
 func _cup_reset() -> void:
+	#  해금이 여기 직전에 바뀐다(_open_newrun 의 _pack_unlock_check) —
+	#  풀어 둔 겉을 버리지 않으면 방금 연 다트통이 잠긴 강철로 남는다.
+	cup_skin_c.clear()
 	cup_t = 1.0
 	cup_run = 0.0
 	cup_m = 0.0
@@ -22095,6 +22098,12 @@ const CUP_ROLE := {
 
 var cup_toon := {}      # (램프|role|cull|질감|둘째램프) → ShaderMaterial
 var cup_pat := {}       # 질감 이름 → ImageTexture. 크기까지 이름에 든다
+#  선반 메시. **프로필마다 한 번만 짠다** — 통 하나에 선반이 넷쯤이고
+#  하나가 SurfaceTool 로 육천 번쯤 점을 찍으므로, 넘길 때마다 다시 짜면
+#  그 프레임이 스무 밀리초쯤 길어진다. 물리는 그 긴 프레임에 통을 한
+#  걸음으로 멀리 옮기고, 그러면 자루가 벽으로 밀린다(qa_cupspill 이 운다).
+var cup_lathe := {}
+var cup_skin_c := {}    # 다트통 번호 → 풀어 둔 겉. 화면을 열 때 버린다
 var cup_sh := []        # [뒷면 자름, 안 자름]
 var cup_lamp := 1.0     # 무대 램프 세기 0~1. 2D 원뿔·웅덩이와 같은 값이다
 
@@ -22182,6 +22191,11 @@ func _cup3_toon(ramp: String, role: String, cull_off := false,
 #  무대 램프 세기를 구워 둔 재질 전부에 넣는다. global uniform 을 쓰면
 #  project.godot 을 고쳐야 하므로(도구가 매번 그 파일을 되돌린다) 안 쓴다.
 func _cup3_lamp(k: float) -> void:
+	#  안 바뀌었으면 아무것도 안 한다. 구워 둔 재질이 통 하나에 스무 벌쯤
+	#  이라 매 프레임 그 전부에 uniform 을 밀어 넣으면 값이 그대로일 때도
+	#  프레임이 길어진다 — 세기는 넘기는 0.45초 동안만 움직인다.
+	if is_equal_approx(k, cup_lamp):
+		return
 	cup_lamp = k
 	for m in cup_toon.values():
 		m.set_shader_parameter("lamp", k)
@@ -22229,6 +22243,9 @@ func _cup3_tmesh(parent: Node3D, mesh: Mesh, ramp: String, role: String,
 #  읽힌다. 네모(가방)는 조각 4 에 flat 으로 돌린다 — 면마다 한 단이다.
 func _cup3_lathe(prof: PackedVector2Array, h: float, seg := 48,
 		flip := false, flat := true) -> ArrayMesh:
+	var key := "%s|%.4f|%d|%d|%d" % [str(prof), h, seg, int(flip), int(flat)]
+	if cup_lathe.has(key):
+		return cup_lathe[key]
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var hh: float = maxf(h, 0.0001)
@@ -22266,7 +22283,9 @@ func _cup3_lathe(prof: PackedVector2Array, h: float, seg := 48,
 						cos(an) * nn.x).normalized())
 				st.set_uv(Vector2(float(e[3]), 1.0 - pp.y / hh))
 				st.add_vertex(Vector3(sin(aa) * pp.x, pp.y, cos(aa) * pp.x))
-	return st.commit()
+	var m := st.commit()
+	cup_lathe[key] = m
+	return m
 
 
 #  램프가 다른 띠 하나(목 띠 · 황동 띠 · 극 띠 · 쇠테). 몸보다 살짝 띄운다 —
@@ -22459,6 +22478,9 @@ func _cup3_pole(b: Node3D, r: float, w: float, h: float) -> void:
 #  XY 평면의 반원(y ≥ 0)을 따라 관을 쓴다. 관이 얇아 양면으로 두는 편이
 #  감는 방향을 따지는 것보다 싸다.
 func _cup3_arch(rad: float, tube: float, seg := 16, ring := 6) -> ArrayMesh:
+	var key := "arch|%.4f|%.4f|%d|%d" % [rad, tube, seg, ring]
+	if cup_lathe.has(key):
+		return cup_lathe[key]
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	for i in seg:
@@ -22476,7 +22498,9 @@ func _cup3_arch(rad: float, tube: float, seg := 16, ring := 6) -> ArrayMesh:
 			for kk in [0, 1, 2, 0, 2, 3]:
 				st.set_normal(pts[kk][1])
 				st.add_vertex(pts[kk][0])
-	return st.commit()
+	var m := st.commit()
+	cup_lathe[key] = m
+	return m
 
 
 #  3px 을 이 통의 높이 비로. 띠 두께를 월드로 적으면 키 큰 통에서 얇아진다.
@@ -22947,6 +22971,15 @@ func _cup3_feet(foot: String) -> Array:
 # get(키, 기본값) 을 흩어 두면 기본값이 파일 여러 곳에 눌러앉는다.
 # 잠긴 다트통은 표를 안 보고 기준선 통을 세운다.
 func _cup3_skin(pi: int) -> Dictionary:
+	#  한 프레임에 여럿이 묻는다 — 무대 그림자 · 램프 색 · 후광 · 2D 받침이
+	#  저마다 부른다. 안쪽이 packs() 와 Save.unlocked() 와 램프 고르기까지
+	#  거치므로 프레임마다 다섯 벌이면 그리기 쪽 값이 눈에 보이게 는다.
+	#  **다트통 번호로 한 벌만 굽는다.** 해금은 화면을 여는 자리에서만
+	#  바뀌므로(_open_newrun 의 _pack_unlock_check) 그때 캐시를 버린다.
+	#  **베껴서 돌려준다.** 캐시를 그대로 넘기면 부르는 쪽이 한 칸만
+	#  고쳐도 다음 프레임의 통이 그것을 물려받는다.
+	if cup_skin_c.has(pi):
+		return cup_skin_c[pi].duplicate()
 	var out := CUP_SKIN0.duplicate()
 	out["dart_col"] = Color(0.0, 0.0, 0.0, 0.0)
 	var packs := GameData.packs()
@@ -22954,6 +22987,8 @@ func _cup3_skin(pi: int) -> Dictionary:
 		#  잠긴 다트통은 이름 없는 강철이다. 제 색이 새도 겉이 새는 것이다.
 		out["ramp"] = "steel"
 		out["body"] = Color(ART_PAL["steel"][2])
+		if pi >= 0 and pi < packs.size():
+			cup_skin_c[pi] = out
 		return out
 	var row: Dictionary = CUP_SKIN.get(String(packs[pi].get("id", "")), {})
 	for k in row:
@@ -22973,6 +23008,7 @@ func _cup3_skin(pi: int) -> Dictionary:
 	out["slots"] = int(packs[pi].get("item_slots", 6))
 	if String(out.dart) != "":
 		out["dart_col"] = _cup3_tint(String(out.dart), packs[pi])
+	cup_skin_c[pi] = out
 	return out
 
 
