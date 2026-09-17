@@ -14139,17 +14139,32 @@ func _photo_draw() -> void:
 #  「던지기 버튼도 마우스 오버 효과 있어야지 — 웬만한 UI 에 효과를 넣어야
 #  게임이 완성돼 보인다」(사용자, 2026-09-17).
 #
-#  얹히면 몸이 한 칸 떠오르고(밑에 짙은 턱이 드러난다) 면이 밝아지며 윗띠가
-#  한 줄 두꺼워진다. 들어서는 순간 짧게 딸깍(menu_pick2 — 제목 글줄과 같은
-#  소리). 누르고 있으면 떠오른 만큼 내려앉는다 — 턱이 사라지는 것이 「눌렸다」
-#  이고, 손가락(모바일)에는 얹힘이 없으므로 이 누름이 유일한 대답이다.
+#  ── 단추의 몸: 칠한 덩어리 + 두꺼운 턱(발라트로식) ────────
+#  처음에는 짙은 판 위에 **금색 윗띠**를 둘러 「누를 수 있다」 를 말했다.
+#  640x360 에서 테두리 없이 단추와 정보 판을 가르려던 규칙이었는데, 사용자가
+#  「버튼 위에 금색 띠는 왜 넣은 거야? 더 좋은 UI 없어?」 라고 물었다
+#  (2026-09-17). 색 띠를 얹은 카드는 흔한 틀이라 게임 UI 로 안 읽힌다.
+#  시안 넷(금색 윗띠 · 역할 색 칠 + 턱 · 테두리 · 도트 베벨)을 나란히 찍어
+#  사용자가 **역할 색으로 칠한 덩어리에 두꺼운 턱**을 골랐다 — 이미 바꾼
+#  탭(_tab_draw)과 한 벌이다.
+#    main  판을 한 걸음 넘기는 단추(던진다 · 다음 판 · 상점으로) — 금빛, 짙은 글자
+#    sub   곁 행동(건너뛴다 · 리롤) — 파랑
+#    hud   늘 떠 있는 작은 단추(정보 · 설정) — 짙은 보라
+#  못 누르는 동안은 칠이 빠진 회보라가 된다.
+#
+#  얹히면 몸이 한 칸 떠오르고(턱이 두꺼워진다) 칠이 밝아진다. 들어서는 순간
+#  짧게 딸깍(menu_pick2 — 제목 글줄과 같은 소리). 누르고 있으면 턱 위로
+#  내려앉는다 — 턱이 사라지는 것이 「눌렸다」 이고, 손가락(모바일)에는 얹힘이
+#  없으므로 이 누름이 유일한 대답이다.
 #
 #  짙기는 단추마다 fade 초로 민다(ui_hov). 열쇠는 부르는 쪽이 준다 —
 #  같은 화면에 이름이 같은 단추가 둘이면 열쇠를 갈라야 한다.
 #  그리기가 이번 프레임에 커서가 든 단추를 적고(ui_hot), _process 가 그것을
 #  보고 짙기를 밀고 소리를 낸다. 그리기에서 소리를 내면 한 프레임에 여러 번
 #  그려질 때 겹쳐 난다.
-const UIHOV := {"fade": 0.08, "lift": 1.0, "lit": 0.08}
+const UIHOV := {"fade": 0.08, "lift": 1.0, "lit": 0.10, "lip": 4.0, "lip_hud": 3.0,
+		"main": Color("e8a82f"), "sub": Color("3f5f96"), "hud": Color("3a3452"),
+		"off": Color("2e2a40")}
 var ui_hov := {}          # 열쇠 → 짙기 0~1
 var ui_hot := ""          # 이번 프레임에 커서가 든 단추(그리기가 적는다)
 var ui_hot_was := ""      # 지난 프레임의 그것 — 새로 들어서면 딸깍
@@ -14165,24 +14180,44 @@ func _ui_can_hover() -> bool:
 
 
 #  단추 몸을 그리고 **몸이 선 자리**를 돌려준다(글자는 거기에 얹는다).
+#  단추의 역할 — 열쇠에서 읽는다(부르는 쪽이 따로 안 넘기게).
+func _ui_role(key: String) -> String:
+	if key.begins_with("hud:"):
+		return "hud"
+	if key in ["btn:던진다", "btn:다음 판 →", "btn:상점으로"]:
+		return "main"
+	return "sub"
+
+
+#  단추 위 글자색. 금빛 칠(main) 위에는 짙은 글자가 선다.
+func _ui_ink(key: String, on: bool, sub := false) -> Color:
+	if not on:
+		return C_OFF if sub else C_DIM
+	if _ui_role(key) == "main":
+		return C_BG
+	return C_GOLD if sub else C_TXT
+
+
+#  단추 몸을 그리고 **몸이 선 자리**를 돌려준다(글자는 거기에 얹는다).
+#  r 은 턱까지 포함한 자리다 — 히트 판정은 r 그대로라 뜨고 앉아도 안 흔들린다.
 func _ui_face(c: CanvasItem, key: String, r: Rect2, on: bool, a := 1.0) -> Rect2:
 	var hot: bool = on and _ui_can_hover() and r.has_point(mouse_at)
 	if hot:
 		ui_hot = key
 	var h: float = _ui_hov(key) if on else 0.0
 	var press: bool = hot and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
-	var lift: float = float(UIHOV.lift) if hot and not press else 0.0
-	var body := Rect2(r.position - Vector2(0.0, lift), r.size)
-	if lift > 0.0:
-		_rr(c, r, Color(C_BG, a))                 # 턱 — 떠오른 만큼 드러난다
-	_rr(c, body, Color(C_PANEL, a))
-	if h > 0.0:
-		_rr(c, body, Color(C_TXT, float(UIHOV.lit) * h * a))
-	if on:
-		_rr_top(c, body, 2, Color(C_ACC, a))
-		if h > 0.0:
-			_rr_top(c, body, 3, Color(C_ACC.lightened(0.2), h * a))
-	_rr_bottom(c, body, Color(C_BG, a))
+	var role := _ui_role(key)
+	var fill: Color = UIHOV[role] if on else UIHOV.off
+	var lip: float = float(UIHOV.lip_hud) if role == "hud" else float(UIHOV.lip)
+	var up: float = float(UIHOV.lift) if hot and not press else 0.0
+	var down: float = lip - 1.0 if press else 0.0
+	var body := Rect2(r.position + Vector2(0.0, down - up), r.size - Vector2(0.0, lip))
+	#  턱 — 몸보다 뒤, 몸이 뜬 만큼 위로 늘어 두꺼워진다
+	_rr(c, Rect2(r.position + Vector2(0.0, lip - up), r.size - Vector2(0.0, lip - up)),
+			Color(fill.darkened(0.5), a))
+	_rr(c, body, Color(fill.lightened(float(UIHOV.lit) * h), a))
+	#  윗모서리 한 줄 빛 — 칠한 면이 판판한 종이가 아니라 두께 있는 물건이다
+	_rr_top(c, body, 1, Color(fill.lightened(0.25), a))
 	return body
 
 
@@ -14406,20 +14441,21 @@ func _rr_line(c: CanvasItem, r: Rect2, col: Color, rad := -1) -> void:
 
 
 func _btn(r: Rect2, label: String, sub: String, on: bool,
-		sub_col: Color = C_GOLD, mid := false) -> void:
-	#  판 위 조작 넷(던진다 · 상점으로 · 리롤 · 다음 판). 면 색을 호출부마다
-	#  만들지 않는다 — 못 누르는 동안은 면은 그대로 두고 **띠를 끈다.**
-	#  면을 어둡게 하면 그 위 글자 대비가 같이 깎인다.
+		sub_col: Color = C_GOLD, mid := false) -> Rect2:
+	#  판 위 조작(던진다 · 건너뛴다 · 상점으로 · 리롤 · 다음 판). 몸은 _ui_face 가
+	#  역할 색으로 칠한다. 돌려주는 것은 몸이 선 자리 — 값을 따로 얹는 쪽(리롤)이
+	#  몸을 따라 뜨고 앉게 한다.
 	#  mid 면 둘째 줄이 없는 단추라 이름을 세로 가운데에 앉힌다. 리롤은 값이
 	#  이름 밑에 따로 그려지므로 안 쓴다.
 	var b := _ui_face(self, "btn:" + label, r, on)
-	var ly: float = roundf(r.size.y * 0.5 + 5.0) if mid else 20.0
+	var ly: float = roundf(b.size.y * 0.5 + 5.0) if mid else 20.0
 	draw_string(font, b.position + Vector2(0, ly), label,
-			HORIZONTAL_ALIGNMENT_CENTER, b.size.x, 11, C_TXT if on else C_DIM)
+			HORIZONTAL_ALIGNMENT_CENTER, b.size.x, 11, _ui_ink("btn:" + label, on))
 	if sub != "":
 		draw_string(font_sm, b.position + Vector2(0, 35), sub,
 				HORIZONTAL_ALIGNMENT_CENTER, b.size.x, 9,
-				C_GOLD if on else C_OFF)
+				_ui_ink("btn:" + label, on, true))
+	return b
 
 
 #  정산 표의 자리. 제목 · 합계선 · 총액이 화면 한가운데(320)에 서는데
@@ -15036,9 +15072,9 @@ func _stage_card(i: int) -> void:
 func _draw_shop() -> void:
 	_scrim()
 	_table_draw()
-	_btn(_reroll_rect(), "리롤", "무료" if reroll_cost == 0 else "", gold >= reroll_cost)
+	var rr := _btn(_reroll_rect(), "리롤", "무료" if reroll_cost == 0 else "",
+			gold >= reroll_cost)
 	if reroll_cost > 0:
-		var rr := _reroll_rect()
 		draw_gold(rr.position.x + rr.size.x * 0.5, rr.position.y + 35.0,
 				str(reroll_cost), 9, C_GOLD if gold >= reroll_cost else C_DIM.darkened(0.3))
 	_btn(_next_rect(), "다음 판 →", "", true, C_GOLD, true)
