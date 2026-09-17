@@ -14448,12 +14448,17 @@ func _btn(r: Rect2, label: String, sub: String, on: bool,
 	#  mid 면 둘째 줄이 없는 단추라 이름을 세로 가운데에 앉힌다. 리롤은 값이
 	#  이름 밑에 따로 그려지므로 안 쓴다.
 	var b := _ui_face(self, "btn:" + label, r, on)
-	var ly: float = roundf(b.size.y * 0.5 + 5.0) if mid else 20.0
-	draw_string(font, b.position + Vector2(0, ly), label,
-			HORIZONTAL_ALIGNMENT_CENTER, b.size.x, 11, _ui_ink("btn:" + label, on))
+	#  글자 — 이름 18(갈무리9 두 배) · 부제 11(갈무리11). 이름 11 · 부제 9 였을 때
+	#  「UI 크기에 비해 텍스트가 너무 작다」 는 말을 듣고(2026-09-17) 11 · 18 · 22 를
+	#  나란히 찍어 사용자가 18 을 골랐다 — 획이 두툼해 칠한 단추 위에서 덩어리로
+	#  읽힌다(22 는 갈무리11 의 가는 획이 두 배로 늘어 오히려 얇아 보였다).
+	#  도트 글꼴이라 제 설계 크기의 정수배에서만 획이 딱 떨어진다(qa_ui ①).
+	var ly: float = roundf(b.size.y * 0.5 + 8.0) if mid else 22.0
+	draw_string(font_sm, b.position + Vector2(0, ly), label,
+			HORIZONTAL_ALIGNMENT_CENTER, b.size.x, 18, _ui_ink("btn:" + label, on))
 	if sub != "":
-		draw_string(font_sm, b.position + Vector2(0, 35), sub,
-				HORIZONTAL_ALIGNMENT_CENTER, b.size.x, 9,
+		draw_string(font, b.position + Vector2(0, 36), sub,
+				HORIZONTAL_ALIGNMENT_CENTER, b.size.x, 11,
 				_ui_ink("btn:" + label, on, true))
 	return b
 
@@ -15075,8 +15080,8 @@ func _draw_shop() -> void:
 	var rr := _btn(_reroll_rect(), "리롤", "무료" if reroll_cost == 0 else "",
 			gold >= reroll_cost)
 	if reroll_cost > 0:
-		draw_gold(rr.position.x + rr.size.x * 0.5, rr.position.y + 35.0,
-				str(reroll_cost), 9, C_GOLD if gold >= reroll_cost else C_DIM.darkened(0.3))
+		draw_gold(rr.position.x + rr.size.x * 0.5, rr.position.y + 36.0,
+				str(reroll_cost), 11, C_GOLD if gold >= reroll_cost else C_DIM.darkened(0.3))
 	_btn(_next_rect(), "다음 판 →", "", true, C_GOLD, true)
 	_hold_draw()
 	_fly_draw()

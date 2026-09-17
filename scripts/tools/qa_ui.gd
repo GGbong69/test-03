@@ -66,10 +66,11 @@ func _run() -> void:
 	print("\nUI 체계 검사 — game.gd %d줄\n" % L.size())
 	_ok("소스를 읽는다", L.size() > 100, "%d줄" % L.size())
 
-	# ① 글자 크기는 네 단뿐이다.
+	# ① 글자 크기는 다섯 단뿐이다(갈무리11 의 1 · 2 · 3 배, 갈무리9 의 1 · 2 배).
 	#    정규식을 안 쓴다 — GDScript 문자열의 이스케이프와 싸우느라 자가
 	#    죽는 것보다, 쉼표로 끊어 읽는 편이 짧고 안 깨진다.
-	var allow := [9, 11, 22, 33]
+	#    18 은 갈무리9 의 두 배다 — 칠한 단추의 이름(_btn)이 쓴다(2026-09-17).
+	var allow := [9, 11, 18, 22, 33]
 	var sizes := {}
 	var bad_sz := []
 	for i in L.size():
@@ -104,7 +105,7 @@ func _run() -> void:
 	for k in ks:
 		tally.append("%d×%d" % [k, sizes[k]])
 	print("      쓰이는 크기: %s" % ", ".join(tally))
-	_ok("글자 크기가 네 단뿐", bad_sz.is_empty(),
+	_ok("글자 크기가 다섯 단뿐", bad_sz.is_empty(),
 			"밖의 것 %d곳%s" % [bad_sz.size(),
 				"" if bad_sz.is_empty() else " — " + ", ".join(
 					PackedStringArray(bad_sz.slice(0, 5)))])
