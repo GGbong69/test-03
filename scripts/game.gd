@@ -2741,6 +2741,7 @@ func _process(d: float) -> void:
 		_bd3_close()
 	Dev.tick(self, d)          # DEV
 	_drop_update(d)
+	_ui_hover_tick(d)
 	#  조준 어둠의 짙기. 꽂힐 칸이 정해지면 오르고, 날아가는 순간부터 걷힌다.
 	var dim_to: float = 1.0 if _aim_glow_at().x > -9000.0 else 0.0
 	if aim_dim != dim_to:
@@ -4864,6 +4865,7 @@ func draw_front(c: CanvasItem) -> void:
 
 
 func _draw() -> void:
+	ui_hot = ""      # 단추가 그려지며 다시 적는다(_ui_face)
 	#  여백까지 덮는다. 노드가 밀려 있으므로 왼쪽 위로 그만큼 되밀어 시작한다.
 	draw_rect(Rect2(-view_pad, VIEW + view_pad * 2.0), C_BG)
 	# 툴팁이 대상 테두리만 같이 흔들고 판은 고정하려면 이 값을 알아야 한다
@@ -14131,6 +14133,79 @@ func _photo_draw() -> void:
 #  위 2px(초점)과 아래 1px(바닥색 컷) 두 획이 같은 일을 3px 로 한다.
 #  이 어법은 이미 코드 안에 둘 있었다 — 런 바 아래 컷과 자금판 윗변.
 #  발명이 아니라 승격이다.
+# ══════════════════════════════════════════════════════════
+#  단추 얹힘 · 누름
+# ──────────────────────────────────────────────────────────
+#  「던지기 버튼도 마우스 오버 효과 있어야지 — 웬만한 UI 에 효과를 넣어야
+#  게임이 완성돼 보인다」(사용자, 2026-09-17).
+#
+#  얹히면 몸이 한 칸 떠오르고(밑에 짙은 턱이 드러난다) 면이 밝아지며 윗띠가
+#  한 줄 두꺼워진다. 들어서는 순간 짧게 딸깍(menu_pick2 — 제목 글줄과 같은
+#  소리). 누르고 있으면 떠오른 만큼 내려앉는다 — 턱이 사라지는 것이 「눌렸다」
+#  이고, 손가락(모바일)에는 얹힘이 없으므로 이 누름이 유일한 대답이다.
+#
+#  짙기는 단추마다 fade 초로 민다(ui_hov). 열쇠는 부르는 쪽이 준다 —
+#  같은 화면에 이름이 같은 단추가 둘이면 열쇠를 갈라야 한다.
+#  그리기가 이번 프레임에 커서가 든 단추를 적고(ui_hot), _process 가 그것을
+#  보고 짙기를 밀고 소리를 낸다. 그리기에서 소리를 내면 한 프레임에 여러 번
+#  그려질 때 겹쳐 난다.
+const UIHOV := {"fade": 0.08, "lift": 1.0, "lit": 0.08}
+var ui_hov := {}          # 열쇠 → 짙기 0~1
+var ui_hot := ""          # 이번 프레임에 커서가 든 단추(그리기가 적는다)
+var ui_hot_was := ""      # 지난 프레임의 그것 — 새로 들어서면 딸깍
+
+
+func _ui_hov(key: String) -> float:
+	return float(ui_hov.get(key, 0.0))
+
+
+#  얹힐 수 있는 때 — 무엇을 끌고 있거나 화면을 갈아 끼우는 동안은 아니다.
+func _ui_can_hover() -> bool:
+	return not swap_live and hand_st != H.CARRY
+
+
+#  단추 몸을 그리고 **몸이 선 자리**를 돌려준다(글자는 거기에 얹는다).
+func _ui_face(c: CanvasItem, key: String, r: Rect2, on: bool, a := 1.0) -> Rect2:
+	var hot: bool = on and _ui_can_hover() and r.has_point(mouse_at)
+	if hot:
+		ui_hot = key
+	var h: float = _ui_hov(key) if on else 0.0
+	var press: bool = hot and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
+	var lift: float = float(UIHOV.lift) if hot and not press else 0.0
+	var body := Rect2(r.position - Vector2(0.0, lift), r.size)
+	if lift > 0.0:
+		_rr(c, r, Color(C_BG, a))                 # 턱 — 떠오른 만큼 드러난다
+	_rr(c, body, Color(C_PANEL, a))
+	if h > 0.0:
+		_rr(c, body, Color(C_TXT, float(UIHOV.lit) * h * a))
+	if on:
+		_rr_top(c, body, 2, Color(C_ACC, a))
+		if h > 0.0:
+			_rr_top(c, body, 3, Color(C_ACC.lightened(0.2), h * a))
+	_rr_bottom(c, body, Color(C_BG, a))
+	return body
+
+
+func _ui_hover_tick(d: float) -> void:
+	if ui_hot != ui_hot_was:
+		if ui_hot != "":
+			_sfx("menu_pick2")
+		ui_hot_was = ui_hot
+	if ui_hot != "" and not ui_hov.has(ui_hot):
+		ui_hov[ui_hot] = 0.0
+	var moved := false
+	for key in ui_hov.keys():
+		var to: float = 1.0 if key == ui_hot else 0.0
+		var v: float = ui_hov[key]
+		if v != to:
+			ui_hov[key] = move_toward(v, to, d / float(UIHOV.fade))
+			moved = true
+		elif to == 0.0:
+			ui_hov.erase(key)
+	if moved:
+		queue_redraw()
+
+
 func _panel(r: Rect2, focus := false, a := 1.0) -> void:
 	_rr(self, r, Color(C_PANEL, a))
 	if focus:
@@ -14337,13 +14412,14 @@ func _btn(r: Rect2, label: String, sub: String, on: bool,
 	#  면을 어둡게 하면 그 위 글자 대비가 같이 깎인다.
 	#  mid 면 둘째 줄이 없는 단추라 이름을 세로 가운데에 앉힌다. 리롤은 값이
 	#  이름 밑에 따로 그려지므로 안 쓴다.
-	_panel(r, on)
+	var b := _ui_face(self, "btn:" + label, r, on)
 	var ly: float = roundf(r.size.y * 0.5 + 5.0) if mid else 20.0
-	draw_string(font, r.position + Vector2(0, ly), label,
-			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 11, C_TXT if on else C_DIM)
+	draw_string(font, b.position + Vector2(0, ly), label,
+			HORIZONTAL_ALIGNMENT_CENTER, b.size.x, 11, C_TXT if on else C_DIM)
 	if sub != "":
-		draw_string(font_sm, r.position + Vector2(0, 35), sub,
-				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, C_GOLD if on else C_OFF)
+		draw_string(font_sm, b.position + Vector2(0, 35), sub,
+				HORIZONTAL_ALIGNMENT_CENTER, b.size.x, 9,
+				C_GOLD.lightened(0.25 * _ui_hov("btn:" + label)) if on else C_OFF)
 
 
 #  정산 표의 자리. 제목 · 합계선 · 총액이 화면 한가운데(320)에 서는데
@@ -19947,13 +20023,11 @@ func _hud_btns_draw() -> void:
 	for i in rows.size():
 		var r := _hud_btn_rect(i)
 		var on: bool = rows[i][1]
-		#  _btn 과 같은 어법 — 못 누르는 동안은 면을 두고 띠만 끈다.
-		_panel(r, on, a)
-		if on and r.has_point(mouse_at):
-			_rr(self, r, Color(C_TXT, 0.08 * a))
+		#  _btn 과 같은 몸 — 얹히면 뜨고 누르면 앉는다. 못 누르는 동안은 띠만 끈다.
+		var b := _ui_face(self, "hud:" + String(rows[i][0]), r, on, a)
 		#  이름만 가운데에. 키 이름(TAB · ESC)은 안 적는다 — 키는 그대로 산다.
-		draw_string(font, r.position + Vector2(0.0, 15.0), String(rows[i][0]),
-				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 11,
+		draw_string(font, b.position + Vector2(0.0, 15.0), String(rows[i][0]),
+				HORIZONTAL_ALIGNMENT_CENTER, b.size.x, 11,
 				Color(C_TXT if on else C_DIM, a))
 
 
