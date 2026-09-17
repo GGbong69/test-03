@@ -5490,8 +5490,10 @@ func _board_rim(gap: float) -> float:
 func _num_draw(i: int, col: Color, push := 1.0, off := Vector2.ZERO) -> void:
 	var a := float(i) * _sec_w()
 	var q := (BC + Vector2(sin(a), -cos(a)) * _board_rim(float(BOARDART.ring) * 0.5) * push).round()
-	draw_string(font_sm, q + off + Vector2(-18.0, 7.0), _num_text(i),
-			HORIZONTAL_ALIGNMENT_CENTER, 36, 18, col)
+	#  18 → 20(갈무리9 두 배) — 18 은 도트가 격자에 안 떨어져 획이 3 · 4칸으로 섞였다.
+	#  숫자 잉크는 기준선 위 18px 이다 — 기준선을 +9 에 두면 잉크 한가운데가 고리 한가운데에 선다.
+	draw_string(font_sm, q + off + Vector2(-20.0, 9.0), _num_text(i),
+			HORIZONTAL_ALIGNMENT_CENTER, 40, 20, col)
 
 
 #  칸마다 [칸 색, 띠 색]. 죽은 칸은 여기서 한 번 가라앉힌다 — 칸 · 구멍이 같은 값을 쓴다.
@@ -21342,19 +21344,6 @@ func _col_count() -> int:
 
 func _col_pages() -> int:
 	return maxi(1, int(ceil(float(_col_total()) / float(COL_PAGE))))
-
-
-# 칸에 안 들어가는 이름은 글자를 한 단씩 줄여 넣는다. 잘라 버리면
-# 「It's Not About Mone」처럼 뜻이 끊긴 채로 남는다 — 기획서가 이름을
-# 영화·음반 제목으로 갈면서 옛 한글 이름보다 길어진 자리다(2026-09-13).
-func _draw_fit(at: Vector2, w: float, t: String, sz: int, c: Color) -> void:
-	if font == null or t == "":
-		return
-	var s := sz
-	while s > 5 and font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT,
-			-1, s).x > w:
-		s -= 1
-	draw_string(font, at, t, HORIZONTAL_ALIGNMENT_CENTER, w, s, c)
 
 
 func _col_tab_rect(t: int) -> Rect2:
