@@ -12223,6 +12223,13 @@ func _obj_shadow(i: int) -> void:
 		"boost":
 			# 상자도 네모다. 사진보다 한 뼘 크다.
 			draw_colored_polygon(_fix_quad(g, it.psi, k * 1.06 * GOODS_K), col)
+		"mod":
+			#  와펜은 방패 모양 그림자. 그림이 없으면 옛 타원이다.
+			var mtx := _mod_art(String(stock[i].d.id))
+			if mtx != null:
+				_mod_art_shadow(mtx, g, TBL.mod_r * k, col)
+			else:
+				draw_colored_polygon(_e_pts(g, it.r * k, it.r * k * TBL.flat, 14), col)
 		_:
 			draw_colored_polygon(_e_pts(g, it.r * k, it.r * k * TBL.flat, 14), col)
 
@@ -12293,10 +12300,15 @@ func _obj_paint(it: Dictionary, s: Dictionary, dim: float) -> void:
 			var mw: float = float(it.get("wob", 0.0))
 			var mr: float = TBL.mod_r * (1.0 + mw * 0.05)
 			var mf: float = TBL.flat * (1.0 - mw * 0.12)
-			draw_colored_polygon(_e_pts(c, mr, mr * mf),
-					C_DARK.darkened(0.72 + dim * 0.2))
-			_icon_mod(c - Vector2(0.0, TBL.chip_t * TBL.tall),
-					mr, s.d.id, dim, mf)
+			if _mod_art(String(s.d.id)) != null:
+				#  와펜은 옆면을 제가 깐다(_mod_art_draw). 천 패치라 옆면이
+				#  2px 뿐이고, 윗면을 그만큼만 띄워 옆면 밑이 c 에 닿는다.
+				_icon_mod(c - Vector2(0.0, float(MOD_ART.side_px)), mr, s.d.id, dim, mf)
+			else:
+				draw_colored_polygon(_e_pts(c, mr, mr * mf),
+						C_DARK.darkened(0.72 + dim * 0.2))
+				_icon_mod(c - Vector2(0.0, TBL.chip_t * TBL.tall),
+						mr, s.d.id, dim, mf)
 		_:
 			# sh=false — 내장 그림자는 고정 오프셋이라 낙하 중 하늘을 같이 난다
 			var de := _dart_e(it)
@@ -12929,7 +12941,7 @@ func _drop_verify() -> void:
 #  상점에 세 종류가 나란히 선다. 실루엣이 서로 갈려야 글자를
 #  안 읽고도 무엇인지 안다.
 #    아이템 → 원반 (draw_item_sticker)
-#    보드 확장   → 미니 보드 — 상점에선 눕고(fl=TBL.flat) 컬렉션에선 정면(fl 1)
+#    보드 확장   → 와펜(방패꼴 자수 패치) — 상점에선 눕고(fl=TBL.flat) 컬렉션에선 정면(fl 1)
 #    다트   → 대각선
 #  _icon_mod / _icon_dart 만 바깥에서 부른다.
 # ══════════════════════════════════════════════════════════
@@ -12947,6 +12959,88 @@ const DART_DL := 16.0
 const MB_SEG := 10              # 20 칸이면 한 칸 호가 5px 라 뭉갠다
 
 
+# ══════════════════════════════════════════════════════════
+#  보드 확장 와펜
+# ──────────────────────────────────────────────────────────
+#  「보드 확장 아이템이 디자인이 안 되어 있거든? … 다 디자인 하자. 레퍼런스
+#  많이 찾으면서 해」(사용자, 2026-09-17). 그때까지 열두 장이 전부 아래의 미니
+#  다트판 도식이라 컬렉션에서 같은 판 열두 개로 보였다(shots/colall_1_0.png).
+#
+#  ── 왜 와펜인가 ──
+#  칩(가장자리 스팟 박힌 원판)은 동전이 사행성 기호를 걷어낼 때 버린 꼴이라
+#  안 쓴다(docs/게임내용.md 동전 절). 와펜(Wappen)은 기사 방패의 문장에서 온
+#  방패꼴 자수 패치이고, 다트 리그가 Ton 80 · Hat Trick 기록에 주어 셔츠에 다는
+#  물건이다 — 술집 다트 문화 안에 있다. 테마 판을 「옷 입은 판」이라 부르니
+#  보드 확장은 그 판의 옷에 다는 와펜이다. 동전(원 · 금속 테 · 얼굴이 원을 가득
+#  채움 · 두꺼운 민무늬 옆면)과는 **틀만** 다르다 — 방패 · 장마다 다른 색 실밥
+#  테 · 가운데 엠블럼 하나와 빈 방패 끝 · 얇게 땀이 난 옆면. 격자 · 팔레트 ·
+#  빛(왼쪽 위) · 외곽선 없음은 동전 얼굴과 한 벌이다.
+#
+#  ── 어디서 오나 ──
+#  assets/coin_src/mods.txt(36x36 격자, 밑그림은 scripts/tools/mod_wappen.py)를
+#  make_coin_art.py 가 assets/mod/<id>.png 로 굽는다. 한 장이 36x72 다 —
+#  위 36 줄이 윗면, 아래 36 줄이 옆면(테 램프 base−1 에 base−2 사선 땀)이다.
+#  옆면을 윗면에서 어둡게 곱해 뽑지 않는 것은 그러면 팔레트 밖 색이 되어서다.
+#  크기는 부르는 쪽의 r 이 정한다 — 방패가 2r 정사각에 든다.
+#    상점 테이블  TBL.mod_r 22 → 44px(격자 1.22 배), 누워서 세로 TBL.flat
+#    컬렉션 · 앞치마  r 13 → 26px(0.72 배)
+#    던지는 중 명판  r 9 → 18px(딱 0.5 배 — 창 1280 에서는 물리 1:1)
+#    교체 애니  r 15~39
+#  그림이 없는 id(새 장을 표에 넣고 아직 안 그린 것)는 아래 옛 도식이 맡는다.
+const MOD_ART := {"face": Rect2(0.0, 0.0, 36.0, 36.0), "side": Rect2(0.0, 36.0, 36.0, 36.0),
+		"side_px": 2.0}
+var _mod_tex := {}
+
+
+#  구운 와펜 한 장. 없는 것도 기억한다(_coin_art 와 같은 규약).
+#  임포트가 아직 안 돈 자리 — 편집기를 안 띄우고 구운 직후나 새 작업 폴더 —
+#  에서는 .import 가 가리키는 ctex 가 없다. 거기서 load() 를 부르면 오류를 뱉고
+#  null 을 주므로 **ctex 가 있을 때만** load 하고, 없으면 png 를 직접 읽는다.
+#  내보낸 게임에는 png 원본이 없고 ctex 가 있으므로 앞 갈래를 탄다.
+func _mod_art(id: String) -> Texture2D:
+	if _mod_tex.has(id):
+		return _mod_tex[id]
+	var t: Texture2D = null
+	var path := "res://assets/mod/%s.png" % id
+	if id != "":
+		var imp := ConfigFile.new()
+		if imp.load(path + ".import") == OK \
+				and FileAccess.file_exists(String(imp.get_value("remap", "path", ""))):
+			t = load(path)
+		if t == null and FileAccess.file_exists(path):
+			var img := Image.load_from_file(ProjectSettings.globalize_path(path))
+			if img != null and not img.is_empty():
+				t = ImageTexture.create_from_image(img)
+	_mod_tex[id] = t
+	return t
+
+
+#  와펜 한 장을 c 에 2r 정사각으로. fl < 1 이면 테이블에 누운 자세다 —
+#  윗면을 세로로 누르고 그 밑에 옆면을 1 · 2px 밀어 깐다. 옆면 두께는 누름을
+#  안 탄다(보는 각이 아니라 천 두께라서). 동전 옆면(2.77px, 민무늬)보다 얇고
+#  땀이 나 있어 누운 자세에서도 둘이 갈린다. dim 은 동전 얼굴과 같이 modulate
+#  를 어둡게 해서 받는다.
+func _mod_art_draw(tx: Texture2D, c: Vector2, r: float, dim: float, fl: float) -> void:
+	var sz := Vector2(r * 2.0, r * 2.0 * fl)
+	var m := Color(1.0, 1.0, 1.0).darkened(dim)
+	if fl < 0.999:
+		var sp: float = MOD_ART.side_px
+		var k := sp
+		while k >= 1.0:
+			draw_texture_rect_region(tx, Rect2(c - sz * 0.5 + Vector2(0.0, k), sz),
+					MOD_ART.side, m)
+			k -= 1.0
+	draw_texture_rect_region(tx, Rect2(c - sz * 0.5, sz), MOD_ART.face, m)
+
+
+#  와펜의 그림자 — 옆면 칸을 검게 물들여 실루엣 모양으로 깐다. 동전 반지름
+#  타원을 깔면 방패 밑에 원반 그림자가 져 두 물건이 겹쳐 보인다.
+func _mod_art_shadow(tx: Texture2D, g: Vector2, r: float, col: Color) -> void:
+	var sz := Vector2(r * 2.0, r * 2.0 * TBL.flat)
+	draw_texture_rect_region(tx, Rect2(g - sz * 0.5, sz), MOD_ART.side,
+			Color(0.0, 0.0, 0.0, col.a))
+
+
 # 보드 확장 아이콘은 id 가 아니라 효과 축(k)으로 갈린다.
 # data.gd 가 "k 는 _mod_step 의 match 가 읽는 유일한 열쇠" 라고 못박았으므로
 # 여기도 같은 열쇠를 쓴다. 같은 축의 보드 확장이 새로 생기면 아이콘이 저절로 맞는다.
@@ -12958,6 +13052,12 @@ const MB_SEG := 10              # 20 칸이면 한 칸 호가 5px 라 뭉갠다
 # 그래서 방향과 대소만 살리고 폭은 읽히도록 과장한다.
 func _icon_mod(c: Vector2, r: float, id: String, dim: float,
 		fl: float = 1.0) -> void:
+	#  구운 와펜이 있으면 그것이 이긴다(위 「보드 확장 와펜」 절). 아래 도식은
+	#  그림이 아직 없는 id 의 자리다.
+	var mtx := _mod_art(id)
+	if mtx != null:
+		_mod_art_draw(mtx, c, r, dim, fl)
+		return
 	var m := GameData.mod_of(id)
 	var k := String(m.get("k", ""))
 

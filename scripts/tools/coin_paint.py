@@ -244,3 +244,156 @@ def _facing(cells, x, y):
 def off_palette(pal):
     u"""팔레트 밖의 색. faces.txt 의 한 장({글: hex})을 받는다."""
     return sorted(h.lower() for h in pal.values() if h.lower() not in ALL)
+
+
+#  ══════════════════════════════════════════════════════════
+#   와펜 — 보드 확장의 틀
+#  ──────────────────────────────────────────────────────────
+#  「보드 확장 아이템이 디자인이 안 되어 있거든? … 다 디자인 하자. 레퍼런스
+#  많이 찾으면서 해」(사용자, 2026-09-17). 보드 확장 열두 장은 그때까지 미니
+#  다트판 도식(game.gd 의 _icon_mod)이라 열두 장이 전부 같은 판으로 보였다.
+#
+#  ── 왜 칩이 아니라 와펜인가 ──
+#  칩(가장자리 스팟 박힌 원판)은 동전이 사행성 기호를 걷어낼 때 버린 꼴이다
+#  (docs/게임내용.md). 되살리면 걷어낸 기호가 돌아온다. 와펜(Wappen)은 기사
+#  방패의 문장에서 온 말이고(어원이 옛 독일어 wâfen, 무기) 지금도 방패꼴 천에
+#  가운데 무늬 하나를 수놓는다. 다트 리그가 Ton 80 · Hat Trick 기록에 주는
+#  패치도 이 꼴이라 술집 다트 문화 안의 물건이다. 코드가 테마 판을 「옷 입은
+#  판」이라 부르니, 보드 확장은 그 판의 옷에 다는 와펜이다.
+#
+#  ── 동전과 같은 것 · 다른 것 ──
+#  같은 36x36 격자, 같은 PAL, 같은 빛(왼쪽 위), 외곽선 없음, 바탕 한 덩어리.
+#  다른 것은 **틀뿐**이다 — 원 대신 방패, 금속 테 대신 실밥 테(메로 테).
+#    ① 실루엣   위 y 1 · 좌우 x 1~34 · 위 두 귀 반지름 3 · y 19 까지 곧은 옆선,
+#               그 아래는 반폭 16.5·(1−((y−19)/16)²) 로 좁아져 (17.5, 35) 끝
+#    ② 실밥 테  실루엣 안쪽 3칸. 윗·왼 +1, 아랫·오른 −1 로 도드라지고
+#               (x+y)%3==0 칸을 한 단 내려 사선 오버록 땀을 낸다
+#    ③ 천       테 안쪽. 가운데 base, 테에 닿는 두 칸은 base−1(규칙 ④)
+#    ④ 엠블럼   중심 (17.5, 16) 반지름 ≤ 12. 방패 끝(y 29~34)은 빈 천
+#  레퍼런스(구도만 봤다): 메로 테는 도드라진 자수 테이고 원 · 사각 같은 단순한
+#  꼴에 쓴다(montereycompany.com 의 merrowed edge 글), 패치 가장자리는 서지
+#  (오버록) 땀으로 막는다(위키백과 Embroidered patch).
+SH_CX = 17.5        # 방패 가운데 x
+SH_TOP = 1          # 윗변 y
+SH_HW = 16.5        # 곧은 옆선의 반폭 — x 1~34
+SH_KNEE = 19        # 곧은 옆선이 끝나는 y
+SH_TIP = 35         # 뾰족한 끝 y
+SH_EAR = 3          # 위 두 귀의 반지름
+RIM_W = 3.0         # 실밥 테 두께
+CLOTH_EDGE = 5.0    # 테 안쪽 두 칸까지 천이 한 단 가라앉는다
+EMB = (17.5, 16.0)  # 엠블럼 중심
+
+
+def shield_hw(y):
+    if y < SH_TOP or y > SH_TIP:
+        return -1.0
+    if y <= SH_KNEE:
+        return SH_HW
+    t = (y - SH_KNEE) / float(SH_TIP - SH_KNEE)
+    return SH_HW * (1.0 - t * t)
+
+
+def in_shield(x, y):
+    hw = shield_hw(y)
+    if hw < 0.0 or abs(x - SH_CX) > hw + 0.5:
+        return False
+    ey = SH_TOP + SH_EAR
+    if y < ey:
+        for ex, left in ((1 + SH_EAR, True), (34 - SH_EAR, False)):
+            if (left and x < ex) or (not left and x > ex):
+                if math.hypot(x - ex, y - ey) > SH_EAR + 0.3:
+                    return False
+    return True
+
+
+SHIELD = frozenset((x, y) for y in range(N) for x in range(N) if in_shield(x, y))
+
+
+def _depth():
+    u"""방패 안 칸마다 **바깥까지의 거리**와 **바깥을 보는 방향**.
+    테 두께 · 천 가장자리 · 테의 빛이 전부 이 둘에서 나온다. 테는 세 칸
+    두께라 브러시의 _facing(반경 2)으로는 안쪽 칸이 바깥을 못 본다."""
+    dep, nrm = {}, {}
+    for (x, y) in SHIELD:
+        best = 99.0
+        nx = ny = 0.0
+        for dy in range(-6, 7):
+            for dx in range(-6, 7):
+                if (dx or dy) and (x + dx, y + dy) not in SHIELD:
+                    d = math.hypot(dx, dy)
+                    best = min(best, d)
+                    if d <= 4.5:
+                        nx += dx / (d * d)
+                        ny += dy / (d * d)
+        dep[(x, y)] = best
+        ln = math.hypot(nx, ny)
+        nrm[(x, y)] = (nx / ln, ny / ln) if ln > 1e-6 else (0.0, 0.0)
+    return dep, nrm
+
+
+DEPTH, NORMAL = _depth()
+
+
+class Wappen(Face):
+    u"""보드 확장 한 장. rim 은 실밥 테 램프, cloth 는 천 램프.
+    extra 는 방패 밖이라도 칠해도 되는 칸(라지의 손잡이 하나뿐)."""
+
+    def __init__(s, mid, name, rim, cloth, cloth_base=1, rim_base=2, extra=()):
+        Face.__init__(s, mid, name, bg=cloth, bg_base=cloth_base)
+        s.rim, s.rim_base = rim, rim_base
+        s.extra = frozenset(extra)
+
+    def mask(s):
+        return SHIELD | s.extra
+
+    def grid(s):
+        m = s.mask()
+        top = {}
+        for o in sorted(s.objs, key=lambda o: o.z):
+            for p in o.cells:
+                top[p] = o
+        g = [[None] * N for _ in range(N)]
+        for (x, y) in SHIELD:
+            d = DEPTH[(x, y)]
+            if d <= RIM_W:
+                nx, ny = NORMAL[(x, y)]
+                k = nx * _L[0] + ny * _L[1]
+                st = s.rim_base + (1 if k > 0.35 else (-1 if k < -0.35 else 0))
+                if (x + y) % 3 == 0:
+                    st -= 1                     # 사선 오버록 땀
+                g[y][x] = col(s.rim, st)
+            else:
+                st = s.bg_base - 1 if d <= CLOTH_EDGE else s.bg_base
+                g[y][x] = col(s.bg, st)
+        for (x, y), o in top.items():
+            if (x, y) not in m:
+                continue
+            st = o.base
+            if o.shade and _on_edge(o.cells, x, y):
+                k = _facing(o.cells, x, y)
+                if k > 0.35:
+                    st = o.base + 1
+                elif k < -0.35:
+                    st = o.base - 1
+            g[y][x] = col(o.ramp, st)
+        for (x, y), c in s.dots.items():
+            if (x, y) in m:
+                g[y][x] = c
+        return g
+
+    def text(s):
+        u"""mods.txt 에 넣을 한 장. 방패 밖은 마침표다(알파 0)."""
+        g = s.grid()
+        used = []
+        for row in g:
+            for c in row:
+                if c is not None and c not in used:
+                    used.append(c)
+        keys = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        if len(used) > len(keys):
+            raise ValueError("%s: 색이 %d 가지다" % (s.cid, len(used)))
+        mp = {c: keys[i] for i, c in enumerate(used)}
+        out = ["== %s  %s  [테 %s]" % (s.cid, s.name, s.rim)]
+        out += ["= %s %s" % (mp[c], c) for c in used]
+        out += ["".join("." if c is None else mp[c] for c in row) for row in g]
+        return "\n".join(out) + "\n"

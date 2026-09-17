@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 u"""동전 얼굴 굽기 — assets/coin_src/faces.txt 를 assets/coin/<id>.png 로 낸다.
+보드 확장 와펜도 여기서 굽는다 — assets/coin_src/mods.txt 를 assets/mod/<id>.png 로.
 
-    python scripts/tools/make_coin_art.py
+    python scripts/tools/make_coin_art.py           동전 · 와펜 둘 다
+    python scripts/tools/make_coin_art.py --mods    와펜만(아래 「보드 확장 와펜」 절)
     godot --headless --path . --import      ← 구운 뒤 한 번. .import 를 세운다
 
 원본은 파일이 아니라 **faces.txt 의 격자**다. 글 하나가 도트 하나이고,
@@ -114,7 +116,196 @@ def disc():
     return m.resize((SZ, SZ), Image.LANCZOS)
 
 
+#  ══════════════════════════════════════════════════════════
+#   보드 확장 와펜 — assets/coin_src/mods.txt → assets/mod/<id>.png
+#  ──────────────────────────────────────────────────────────
+#  동전과 같은 격자 · 같은 팔레트로 그리고 틀만 방패다(coin_paint.Wappen).
+#  한 장이 **36x72** 다 — 위 36 줄이 윗면, 아래 36 줄이 옆면이다.
+#    윗면  격자 그대로. 알파는 원형이 아니라 **방패 마스크**다 — 격자의 마침표가
+#          곧 방패 밖이고, 굽는 동안 마스크(coin_paint.SHIELD) 밖에 칠이 샌 칸은
+#          지우고 알린다. 라지만 손잡이 칸(MASK_EXTRA)을 더 허용한다.
+#          알파는 0 · 255 둘뿐이다. 동전처럼 네 배로 그려 줄이면 방패 끝이
+#          반투명 톱니가 되어 도트가 번진다.
+#    옆면  같은 실루엣을 테 램프 base−1 로 채우고 (x−y)%3==0 칸에 base−2 사선
+#          땀을 넣는다. 게임은 이것을 윗면 밑으로 1 · 2px 밀어 깔아 **얇게 땀이
+#          난 옆면**을 만들고(동전 옆면은 두껍고 민무늬), 검게 물들여 실루엣
+#          모양 그림자로도 쓴다(game.gd 의 _mod_art_draw).
+#  옆면을 게임이 윗면에서 뽑지 않는 것은 팔레트 때문이다 — 윗면을 어둡게 곱하면
+#  PAL 밖의 색이 된다.
+MOD_OUT = os.path.join(ROOT, "assets", "mod")
+MODS = os.path.join(ROOT, "assets", "coin_src", "mods.txt")
+
+
+def mod_rows():
+    p = os.path.join(ROOT, "data", "mods.csv")
+    return list(csv.DictReader(io.open(p, encoding="utf-8-sig", newline="")))
+
+
+def read_mods(path=MODS):
+    u"""mods.txt 를 읽는다. {id: (이름, 테 램프, 팔레트, 격자)}"""
+    import re
+    if not os.path.exists(path):
+        return {}
+    out, cur, pal, rows_, head = {}, None, {}, [], ("", "")
+    for ln in io.open(path, encoding="utf-8").read().splitlines():
+        if ln.startswith("#"):
+            continue
+        if ln.startswith("=="):
+            if cur:
+                out[cur] = (head[0], head[1], pal, rows_)
+            m = re.match(r"==\s+(\S+)\s+(.*?)\s*\[테\s+(\w+)\]\s*$", ln)
+            if not m:
+                raise SystemExit(u"mods.txt: 머리 줄 꼴이 다르다 — %s" % ln)
+            cur = m.group(1)
+            head = (m.group(2), m.group(3))
+            pal, rows_ = {}, []
+        elif ln.startswith("= "):
+            t = ln.split()
+            pal[t[1]] = t[2]
+        elif ln.strip() and cur:
+            rows_.append(ln.rstrip())
+    if cur:
+        out[cur] = (head[0], head[1], pal, rows_)
+    return out
+
+
+def mod_mask(mid):
+    import coin_paint as P
+    m = set(P.SHIELD)
+    if mid in MASK_EXTRA:
+        m |= MASK_EXTRA[mid]()
+    return m
+
+
+def _panb_extra():
+    import coin_paint as P
+    import mod_wappen as W
+    return {p for p in W.HANDLE if p not in P.SHIELD}
+
+
+MASK_EXTRA = {"panb": _panb_extra}
+
+
+def draw_mod(mid, rim, pal, rows_, warn=None):
+    u"""와펜 한 장 → 36x72 RGBA(윗면 · 옆면)."""
+    import coin_paint as P
+    n = P.N
+    mask = mod_mask(mid)
+    im = Image.new("RGBA", (n, n * 2), (0, 0, 0, 0))
+    px = im.load()
+    leak = 0
+    for y in range(min(n, len(rows_))):
+        ln = rows_[y]
+        for x in range(min(n, len(ln))):
+            ch = ln[x]
+            if ch == "." or ch not in pal:
+                continue
+            if (x, y) not in mask:
+                leak += 1
+                continue
+            h = pal[ch]
+            px[x, y] = (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16), 255)
+    if leak and warn is not None:
+        warn.append(u"%s: 방패 밖 %d칸을 지웠다" % (mid, leak))
+    side = P.PAL[rim]
+    for (x, y) in mask:
+        if px[x, y][3] == 0:
+            continue
+        h = side[0] if (x - y) % 3 == 0 else side[1]
+        px[x, y + n] = (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16), 255)
+    return im
+
+
+#  .import 한 장. 편집기가 새 png 를 보면 이것을 쓰는데, 이 저장소는 편집기를
+#  안 띄우고 굽는 일이 잦아 **굽는 쪽이 같이 세운다.** 값은 assets/photo ·
+#  assets/coin 의 것(무손실 · 밉맵 없음)과 같고, 임포트 경로의 꼬리는 고닷이
+#  쓰는 대로 res:// 경로의 md5 다. uid 는 비워 둔다 — 첫 임포트가 채운다.
+#  임포트가 아직 안 돈 자리(.godot/imported 에 ctex 가 없다)에서는 게임이
+#  png 를 직접 읽는다(game.gd 의 _mod_art).
+IMPORT = u"""[remap]
+
+importer="texture"
+type="CompressedTexture2D"
+path="res://.godot/imported/{name}-{h}.ctex"
+metadata={{
+"vram_texture": false
+}}
+
+[deps]
+
+source_file="{res}"
+dest_files=["res://.godot/imported/{name}-{h}.ctex"]
+
+[params]
+
+compress/mode=0
+compress/high_quality=false
+compress/lossy_quality=0.7
+compress/uastc_level=0
+compress/rdo_quality_loss=0.0
+compress/hdr_compression=1
+compress/normal_map=0
+compress/channel_pack=0
+mipmaps/generate=false
+mipmaps/limit=-1
+roughness/mode=0
+roughness/src_normal=""
+process/channel_remap/red=0
+process/channel_remap/green=1
+process/channel_remap/blue=2
+process/channel_remap/alpha=3
+process/fix_alpha_border=true
+process/premult_alpha=false
+process/normal_map_invert_y=false
+process/hdr_as_srgb=false
+process/hdr_clamp_exposure=false
+process/size_limit=0
+detect_3d/compress_to=1
+"""
+
+
+def write_import(dst):
+    import hashlib
+    q = dst + ".import"
+    if os.path.exists(q):
+        return
+    rel = os.path.relpath(dst, ROOT).replace(os.sep, "/")
+    res = "res://" + rel
+    h = hashlib.md5(res.encode("utf-8")).hexdigest()
+    with io.open(q, "w", encoding="utf-8", newline="\n") as fp:
+        fp.write(IMPORT.format(name=os.path.basename(dst), h=h, res=res))
+
+
+def bake_mods():
+    os.makedirs(MOD_OUT, exist_ok=True)
+    cards = read_mods()
+    warn, miss, n = [], [], 0
+    for r in mod_rows():
+        mid = r["id"]
+        dst = os.path.join(MOD_OUT, "%s.png" % mid)
+        if mid not in cards:
+            for q in (dst, dst + ".import"):
+                if os.path.exists(q):
+                    os.remove(q)
+            miss.append(r["name"])
+            continue
+        _nm, rim, pal, g = cards[mid]
+        draw_mod(mid, rim, pal, g, warn).save(dst)
+        write_import(dst)
+        n += 1
+    print(u"와펜 %d장 → %s" % (n, os.path.relpath(MOD_OUT, ROOT)))
+    for w in warn:
+        print(u"  " + w)
+    if miss:
+        print(u"아직 빈 %d장: %s" % (len(miss), u" · ".join(miss)))
+
+
 def main():
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    if "--mods" in sys.argv:
+        bake_mods()
+        return
+    bake_mods()
     os.makedirs(OUT, exist_ok=True)
     faces = read_faces()
     mask = disc()

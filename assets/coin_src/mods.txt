@@ -1,0 +1,599 @@
+#  보드 확장 와펜 — 도트 격자. 글 하나가 도트 하나다.
+#
+#  == <id>  <이름>  [테 <램프>]   새 장이 시작된다. 테 램프는 누운 자세의
+#                                  옆면(base−1 · 땀 base−2)을 굽는 데 쓴다
+#  = <글> <색>                    팔레트 한 줄(coin_paint.PAL 안에서)
+#  그 뒤 서른여섯 줄              그림. 마침표는 방패 밖이다(알파 0)
+#
+#  동전 얼굴(faces.txt)과 같은 격자 · 같은 팔레트 · 같은 빛 · 외곽선 없음.
+#  다른 것은 틀뿐이다 — 방패 실루엣과 실밥 테(coin_paint.Wappen).
+#  밑그림은 scripts/tools/mod_wappen.py 가 짓는다. 굽기는 make_coin_art.py,
+#  크게 보기는 scripts/tools/mod_try.py.
+#  레퍼런스는 구도와 색의 분위기만 봤다. 받아 둔 원본은 저장소에 없다.
+
+== soks  핵심  [테 red]
+= a f27d63
+= b d8483d
+= c 8c2233
+= d 4a1426
+= e f7ba70
+= f 7a7192
+= g 221c33
+= h 14111f
+= i e8873a
+= j fdeaa0
+= k fbf6ea
+....................................
+...aabaabaabaabaabaabaabaabaabaac...
+..aabaabaabaabaabaabaabaabaabaabbb..
+.aabaabaabaabaabaabaabaabaabaabbbcb.
+.abadddddddddddddddddddddddddeddccc.
+.baaddddddddddddddddddddddddddddccd.
+.aabddcccccccffffffffffcccccccddcdc.
+.abaddccccccfffffgbbbggfccccccdedcc.
+.baaddccccffffggggbbbbbgghccccddccd.
+.aabddccccfffgggggeeeebbggccccddcdc.
+.abaddcccfffggggggiiiiebbghcccdddcc.
+.baaddccfffgggggggiiiiiebbghccddccd.
+.aabddccffggggggggiiiiiiebbhccddcdc.
+.abaddcfffggggggggiiiiiiebbhhcdddcc.
+.baaddcffgggggggggjjiiiiiebhhcddccd.
+.aabddcffgggggggggkkjiiiiebhhcddcdc.
+.abaddcffgggggggggkkjiiiiebbhcdddcc.
+.baaddcffgggggggggggggggggghhcddccd.
+.aabddcffgggggggggggggggggghhcddcdc.
+.abaddcffggggggggggggggggghhhcdddcc.
+.baaddccfggggggggggggggggghhccddccd.
+.aabdddcfgggggggggggggggghhhcdddcdc.
+..babddccfgggggggggggggghhhccddcdc..
+..bbcdddccggggggggggggghhhccddddcc..
+...cbbdddchggggggggggghhhhcddddcc...
+...bbcbdddcchgggggghhhhhccddddccd...
+....cbbcddddchhhhhhhhhhcdddddccd....
+.....bcbbddddccccccccccdddddccd.....
+......bbcbbddddccccccddddcdccd......
+.......cbbcbdddddccdddddcdccd.......
+.........cbbcbddddddddccdcc.........
+..........bcbbcbdddddccdcc..........
+............bcbbdccdccdc............
+..............bcccdccd..............
+................bdcc................
+.................cc.................
+
+== guts  테두리  [테 teal]
+= a 8fe0cf
+= b 36a3a0
+= c 1f6570
+= d 14343f
+= e dde3ec
+= f a3abbb
+= g 3a3f52
+= h 687085
+= i 352d4d
+= j 1a2150
+= k 91cbf5
+= l fbf6ea
+= m 221c33
+....................................
+...aabaabaabaabaabaabaabaabaabaac...
+..aabaabaabaabaabaabaabaabaabaabbb..
+.aabaabaabaabaabaabaabaabaabaabbbcb.
+.abaddddddddddddddddddddddddddddccc.
+.baadddddddddeeeeeeeeeedddddddddccd.
+.aabddccccceeffffffffffefcccccddcdc.
+.abaddccccefeefffffffeefffccccdddcc.
+.baaddccceffeegffffffeegfffcccddccd.
+.aabddcceffffghhhhhhhhgfffffccddcdc.
+.abaddcceffffhiiiiiiiifffffhccdddcc.
+.baaddceffffhiijkjjjjiifffffhcddccd.
+.aabddcefffhiijljjjjjjiiffffhcddcdc.
+.abaddeffffhijljjjjjjjmieffffhdddcc.
+.baaddefffhijjjjjjjjjmmmiefffhddccd.
+.aabddeeefhijjjjjjjjmmmmieeefhddcdc.
+.abaddeeeghijjjjjjjmmmmmieeeghdddcc.
+.baaddefgfhijjjjjjmmmmmmiefgfhddccd.
+.aabddefffhijjjjjmmmmmmmiefffhddcdc.
+.abaddeffffhijjjmmmmmmmieffffhdddcc.
+.baaddceffffiijmmmmmmmiiefffhcddccd.
+.aabdddefffffiimmmmmmiieffffhdddcdc.
+..babddcefffffiiiiiiiieffffhcddcdc..
+..bbcdddffffeeeeeeeeeeeffffhddddcc..
+...cbbdddfffeegffffffeegffhddddcc...
+...bbcbdddfffgffffffffgffhddddccd...
+....cbbcdddfhffffffffffhhddddccd....
+.....bcbbddddhhhhhhhhhhdddddccd.....
+......bbcbbddddccccccddddcdccd......
+.......cbbcbdddddccdddddcdccd.......
+.........cbbcbddddddddccdcc.........
+..........bcbbcbdddddccdcc..........
+............bcbbdccdccdc............
+..............bcccdccd..............
+................bdcc................
+.................cc.................
+
+== arst  천체 고리  [테 violet]
+= a bca1ed
+= b 8161c9
+= c 523a8f
+= d 2b1d4f
+= e fdeaa0
+= f fbf6ea
+= g e8dfc8
+= h f2c94c
+= i e8873a
+= j a8762a
+= k 5c3a1a
+....................................
+...aabaabaabaabaabaabaabaabaabaac...
+..aabaabaabaabaabaabaabaabaabaabbb..
+.aabaabaabaabaabaabaabaabaabaabbbcb.
+.abaddddddddddddddddddddddddddddccc.
+.baaddddeddddddddddddddddfddddddccd.
+.aabddceeeccccccccccccccccccccddcdc.
+.abaddccecccccccccccccccccccccdddcc.
+.baaddcccccccccccccggggggggggcddccd.
+.aabddcccfccccccggggggggggggggddcdc.
+.abaddcccccccghhhhhhhhdddddgggdddcc.
+.baaddcccccgghhhhhhhiiheeeddggddccd.
+.aabddcccggghhhhhiiihhhjeeedggddcdc.
+.abaddccgggghhhiihhhhhijceedgggddcc.
+.baaddcgggdhiiihhhhhiiijjeeddgggccd.
+.aabdggggddhhhhhhiiihhhjkeeddgggcdc.
+.abadgggdeehhhiiihhhhhkkeeedgggddcc.
+.baagggddeehiihhhhhhkkeeeddggggdccd.
+.aabgggddeehhhhhhkkkeeeejdgggcddcdc.
+.abadgggdeeckkkkkeeeeejjggggccdddcc.
+.baaddggdeeeeeeeeeeejjgggggcccddccd.
+.aabddggddeeeeeejjjjgggggccccdddcdc.
+..babdgggdddddjjjggggggccccccddcdc..
+..bbcdggggggggggggggcccccccfddddcc..
+...cbbdggggggggggccccccccccddddcc...
+...bbcbdddccccccccccccccccddddccd...
+....cbbcddddccccccccccccdddddccd....
+.....bcbbddddccccccccccdddddccd.....
+......bbcbbddddccccccddddcdccd......
+.......cbbcbdddddccdddddcdccd.......
+.........cbbcbddddddddccdcc.........
+..........bcbbcbdgdddccdcc..........
+............bcbbdccdccdc............
+..............bcccdccd..............
+................bdcc................
+.................cc.................
+
+== mung  대기권  [테 blue]
+= a 91cbf5
+= b 3f7fd8
+= c 2b4a95
+= d 14111f
+= e 1a2150
+= f 221c33
+= g 1f6570
+= h 36a3a0
+= i 8fe0cf
+= j 14343f
+....................................
+...aabaabaabaabaabaabaabaabaabaac...
+..aabaabaabaabaabaabaabaabaabaabbb..
+.aabaabaabaabaabaabaabaabaabaabbbcb.
+.abaddddddddddddddddddddddddddddccc.
+.baaddddddddddddddddddddddddddddcce.
+.aabddfffffffggggggggggfffffffddcec.
+.abaddffffffggggggggggggffffffddecc.
+.baaddffffggggghhhhhhgggggffffddcce.
+.aabddffffggghiiiiiiiihgggffffddcec.
+.abaddfffggghiiiiiiiiihhgggfffddecc.
+.baaddffggghiiiaaaaaaiihhgggffddcce.
+.aabddffgghiiiaabbbbbbiihhjjffddcec.
+.abaddfggghiiaabbbbbbbciggjjjfddecc.
+.baaddfgggiiaaaaaabbbbbchgjjjfddcce.
+.aabddfgggiiaabbbbbbbbbchgjjjfddcec.
+.abaddfgghiiabbbbbbbbbbchggjjfddecc.
+.baaddfgggiiabbbbbaaaacchgjjjfddcce.
+.aabddfgggiiabbbbbbbbbcchgjjjfddcec.
+.abaddfggghiiabbbbbbbcchggjjjfddecc.
+.baaddffgghhiibbbbbbcchhggjjffddcce.
+.aabdddfggghhiicccccchhggjjjfdddcec.
+..babddffggghhihhhhhhhggjjjffddcec..
+..bbcdddffggghgggggggggjjjffdddecc..
+...cbbdddfggggjggggggjjjjjfdddecc...
+...bbcbdddffgjjjjjjjjjjjffdddecce...
+....cbbcddddfjjjjjjjjjjfddddecce....
+.....bcbbddddffffffffffddddecce.....
+......bbcbbddddffffffddddcecce......
+.......cbbcbdddddffdddddcecce.......
+.........cbbcbddddddddccecc.........
+..........bcbbcbddddeccecc..........
+............bcbbecceccec............
+..............bcccecce..............
+................becc................
+.................cc.................
+
+== panb  라지  [테 green]
+= a 94d68e
+= b 479a58
+= c 2f6340
+= d c48b5a
+= e 1d3326
+= f e8dfc8
+= g 352d4d
+= h 8a5636
+= i fbf6ea
+= j 553222
+= k d8483d
+= l f2c94c
+....................................
+...aabaabaabaabaabaabaabaabaabaac...
+..aabaabaabaabaabaabaabaabaabaabbb..
+.aabaabaabaabdddddddabaabaabaabbbcb.
+.abaeeeeeeedddddddddddeeeeeeeeeeccc.
+.baaeeeeeddddfffggggdhhheeeeeeeecce.
+.aabeeccdddfffffgggggghhhccccceecec.
+.abaeecdddffffffggggggghhhcccceeecc.
+.baaeedddffiffffgggggggghhhccceecce.
+.aabeeddffifffffggggggggghhccceecec.
+.abaeddffiffffffgggggggggghjcceeecc.
+.baaeddfffffffffggggggggggjjcceecce.
+.aabddffffffffffgggggggggggjjceecec.
+.abaddffffffffffgggggggggggjjceeecc.
+.baaddffffffffffgggggggggggjjceecce.
+.aabddffffffffffgggggggggggjjceecec.
+.abaddffffffffffgggggggggggjjceeecc.
+.baaddffffffffffgggggggggggjjceecce.
+.aabddffffffffffgggggggggggjjceecec.
+.abaeddfffffffffbgggggggggjjcceeecc.
+.baaedhffkkkkkkkbbbbbbbbggjjcceecce.
+.aabeehhkkkkkkkkbbbbbbbbbjjcceeecec.
+..babehhhkkkkkkkbbbbbbbbjjjcceecec..
+..bbceehhhffffffgggggggjjjlceeeecc..
+...cbbeehhhfffffggggggjjjllleeecc...
+...bbcbeehhhjfffggggjjjjlllddecce...
+....cbbceeejjjjjjjjjjjcceljhdcce....
+.....bcbbeeeejjjjjjjccceeejjhde.....
+......bbcbbeeeecccccceeeecejjhd.....
+.......cbbcbeeeeecceeeeececcjjhd....
+.........cbbcbeeeeeeeeccecc..jjhd...
+..........bcbbcbeeeeeccecc....jjhd..
+............bcbbecceccec.......jjhd.
+..............bcccecce.........jjjhd
+................becc............jjjh
+.................cc..............jj.
+
+== pang  역지사지  [테 pink]
+= a f5a3cb
+= b d45a9e
+= c 8e2f6e
+= d 4d1840
+= e f2c94c
+= f fdeaa0
+= g fbf6ea
+= h 221c33
+= i 14111f
+....................................
+...aabaabaabaabaabaabaabaabaabaac...
+..aabaabaabaabaabaabaabaabaabaabbb..
+.aabaabaabaabaabaabaabaabaabaabbbcb.
+.abaddddddddddddddddddddddddddddccc.
+.baaddddddddddeffffffeddddddddddccd.
+.aabddcccccceeeeffffeeeeccccccddcdc.
+.abaddccccceeeeeffffeeeeecccccdddcc.
+.baaddcccccceeeeffffeeeeccccccddccd.
+.aabddcccccceeeeffffeeeeccccccddcdc.
+.abaddccccccceeeffffeeecccccccdddcc.
+.baaddccccccceeeeffeeeecccccccddccd.
+.aabddggcccccceeeffeeeccccccggddcdc.
+.abadggggcccccceeffeeccccccggggddcc.
+.baaggggggccccceeffeecccccggggggccd.
+.aabddggcccccccceffeccccccccggddcdc.
+.abaddggccccccccceecccccccccggdddcc.
+.baaddggcccccccccggcccccccccggddccd.
+.aabddggcccccccccggcccccccccggddcdc.
+.abaddggccccccccccccccccccccggdddcc.
+.baaddggccccccccchhcccccccccggddccd.
+.aabddggcccccccchiihccccccccggddcdc.
+..babdggccccccchhiihhcccccccggdcdc..
+..bbcdddccccccchhiihhcccccccddddcc..
+...cbbdddccccchhhiihhhcccccddddcc...
+...bbcbdddccccccccccccccccddddccd...
+....cbbcddddccccccccccccdddddccd....
+.....bcbbddddccccccccccdddddccd.....
+......bbcbbddddccccccddddcdccd......
+.......cbbcbdddddccdddddcdccd.......
+.........cbbcbddddddddccdcc.........
+..........bcbbcbdddddccdcc..........
+............bcbbdccdccdc............
+..............bcccdccd..............
+................bdcc................
+.................cc.................
+
+== holl  홀  [테 dusk]
+= a b3abc8
+= b 7a7192
+= c 4a4160
+= d c9bfae
+= e 352d4d
+= f 2b2438
+= g e8dfc8
+= h 4f4670
+= i 221c33
+= j 14111f
+....................................
+...aabaabaabaabaabaabaabaabaabaac...
+..aabaabaabaabaabaabaabaabaabaabbb..
+.aabaabaabaabaabaabaabaabaabaabbbcb.
+.abaddddddddddddddddddddddddddddccc.
+.baadddddddddddddddddddeeeedddddccf.
+.aabddggggggggggggggggehiiiiggddcfc.
+.abaddgggggggggggggggehbiiiijgddfcc.
+.baaddgggggggggggggggeiiiiiijdddccf.
+.aabddgggggggggggggggeiiiiiijdddcfc.
+.abaddgggggggggggggggeiiiiiijdddfcc.
+.baaddggggggggggggggggiiiiijddddccf.
+.aabddggggggggggeeeegggjjjjddgddcfc.
+.abaddgggggggggehiiiigggddddggddfcc.
+.baaddggggggggehbiiiijggggggggddccf.
+.aabddggggggggeiiiiiijdgggggggddcfc.
+.abaddggggggggeiiiiiijdgggggggddfcc.
+.baaddggggggggeiiiiiijdgggggggddccf.
+.aabddgggggggggiiiiijddgggggggddcfc.
+.abaddgggeeeegggjjjjddggggggggddfcc.
+.baaddggehiiiigggddddgggggggggddccf.
+.aabdddehbiiiijggggggggggggggdddcfc.
+..babddeiiiiiijdgggggggggggggddcfc..
+..bbcddeiiiiiijdggggggggggggdddfcc..
+...cbbdeiiiiiijdgggggggggggdddfcc...
+...bbcbdiiiiijddggggggggggdddfccf...
+....cbbcdjjjjddgggggggggddddfccf....
+.....bcbbdddddgggggggggddddfccf.....
+......bbcbbddddggggggddddcfccf......
+.......cbbcbdddddggdddddcfccf.......
+.........cbbcbddddddddccfcc.........
+..........bcbbcbddddfccfcc..........
+............bcbbfccfccfc............
+..............bcccfccf..............
+................bfcc................
+.................cc.................
+
+== jjak  짝  [테 cream]
+= a fbf6ea
+= b e8dfc8
+= c c9bfae
+= d 221c33
+= e 8f8577
+= f 352d4d
+= g dde3ec
+= h 14111f
+....................................
+...aabaabaabaabaabaabaabaabaabaac...
+..aabaabaabaabaabaabaabaabaabaabbb..
+.aabaabaabaabaabaabaabaabaabaabbbcb.
+.abaddddddddddddddddddddddddddddccc.
+.baaddddddddddddddddddddddddddddcce.
+.aabddffffffffffffffffffffffffddcec.
+.abaddfffffaaaaffffffaaaafffffddecc.
+.baaddffffaaaaaaffffaaaaaaffffddcce.
+.aabddfffaggggaabffaggggaabfffddcec.
+.abaddfffaaaaaaabhfaaaaaaabhffddecc.
+.baaddfffaaaaaabbhfaaaaaabbhffddcce.
+.aabddfffaaaaaabbhfaaaaaabbhffddcec.
+.abaddffffaaabbbhhffaaabbbhhffddecc.
+.baaddfffffbbbbhhffffbbbbhhfffddcce.
+.aabddffffffhhhhffffffhhhhffffddcec.
+.abaddffffffffffffffffffffffffddecc.
+.baaddfffffaaaaffffffaaaafffffddcce.
+.aabddffffaaaaaaffffaaaaaaffffddcec.
+.abaddfffaggggaabffaggggaabfffddecc.
+.baaddfffaaaaaaabhfaaaaaaabhffddcce.
+.aabdddffaaaaaabbhfaaaaaabbhfdddcec.
+..babddffaaaaaabbhfaaaaaabbhfddcec..
+..bbcdddffaaabbbhhffaaabbbhhdddecc..
+...cbbdddffbbbbhhffffbbbbhhdddecc...
+...bbcbdddffhhhhffffffhhhhdddecce...
+....cbbcddddffffffffffffddddecce....
+.....bcbbddddffffffffffddddecce.....
+......bbcbbddddffffffddddcecce......
+.......cbbcbdddddffdddddcecce.......
+.........cbbcbddddddddccecc.........
+..........bcbbcbddddeccecc..........
+............bcbbecceccec............
+..............bcccecce..............
+................becc................
+.................cc.................
+
+== clok  시계  [테 gold]
+= a fdeaa0
+= b f2c94c
+= c a8762a
+= d 2a1812
+= e 5c3a1a
+= f 553222
+= g e8dfc8
+= h 14111f
+= i fbf6ea
+= j d8483d
+....................................
+...aabaabaabaabaabaabaabaabaabaac...
+..aabaabaabaabaabaabaabaabaabaabbb..
+.aabaabaabaabaabaabaabaabaabaabbbcb.
+.abaddddddddddddddddddddddddddddccc.
+.baadddddddddbbbbbbbbbbdddddddddcce.
+.aabddfffffbbbbbbbbbbbbccfffffddcec.
+.abaddffffbbbbggghhgggccccffffddecc.
+.baaddfffbbbgfgiihhiifggcccfffddcce.
+.aabddffbbbggiiiihhiiiiggcccffddcec.
+.abaddffbbggiiiiihiiiiiiggccffddecc.
+.baaddfbbgfiiiiiihhiiiiifggccfddcce.
+.aabddfbbggiiiiiihhiiiiiiggeefddcec.
+.abaddbbggiiiiiiihhiiiiiiiggeeddecc.
+.baaddbbggiiiiiiihhiiiiiiiggeeddcce.
+.aabddbbggiiiiijjbbiiiiiiiggeeddcec.
+.abaddbbffiiiiiiibbiiiiiiffgeeddecc.
+.baaddbbggiiiiiiiiijjiiiiiggeeddcce.
+.aabddbbggiiiiiiiiiiijiiiiggeeddcec.
+.abaddbbggiiiiiiiiiiiijjiiggeeddecc.
+.baaddfbbgfiiiiiiiiiiiiijggeefddcce.
+.aabdddccggiiiiiiiiiiiiiiggeedddcec.
+..babddfccggiiiiiiiiiiiiggeefddcec..
+..bbcdddcccggfiiiiiiifiggeeedddecc..
+...cbbdddcccgggiifiiigggeeedddecc...
+...bbcbdddccccgggfggggeeeedddecce...
+....cbbcdddcceeeeeeeeeeeedddecce....
+.....bcbbddddeeeeeeeeeeddddecce.....
+......bbcbbddddffffffddddcecce......
+.......cbbcbdddddffdddddcecce.......
+.........cbbcbddddddddccecc.........
+..........bcbbcbddddeccecc..........
+............bcbbecceccec............
+..............bcccecce..............
+................becc................
+.................cc.................
+
+== aimb  과녁  [테 steel]
+= a dde3ec
+= b a3abbb
+= c 687085
+= d 3a3f52
+= e fbf6ea
+= f 221c33
+= g 91cbf5
+= h e8dfc8
+= i d8483d
+= j fdeaa0
+= k f2c94c
+= l a8762a
+....................................
+...aabaabaabaabaabaabaabaabaabaac...
+..aabaabaabaabaabaabaabaabaabaabbb..
+.aabaabaabaabaabaabaabaabaabaabbbcb.
+.abaddddddddddddddddddddddddddddccc.
+.baadddddddddeeeeeeeeeedddddddddccd.
+.aabddccccceeeeeeeeeeeeeecccccddcdc.
+.abaddcccceeeeffffffffeeeeccccdddcc.
+.baaddccceeeffffffffffffeeecccddccd.
+.aabddcceeefffggggggggfffeeeccddcdc.
+.abaddcceefffggggggggggfffehccdddcc.
+.baaddceefffeggiiiiiigggfffehcddccd.
+.aabddceeffeeeiiiiiiiigggffehcddcdc.
+.abaddeefffgeiijjjjjkiiggfffehdddcc.
+.baaddeeffggiiijkkkkkiiiggffehddccd.
+.aabddeeffggiijkkkkkkliiggffehddcdc.
+.abaddeeffggiijkklkkkliiggffehdddcc.
+.baaddeeffggiijkkkkkkliiggffehddccd.
+.aabddeeffggiiikkkkkliiiggffehddcdc.
+.abaddeefffggiikllllliiggfffehdddcc.
+.baaddceeffgggiiiiiiiigggffehcddccd.
+.aabdddeefffgggiiiiiigggfffehdddcdc.
+..babddceefffggggggggggfffehcddcdc..
+..bbcdddeeefffggggggggfffeehddddcc..
+...cbbdddeeeffffffffffffeehddddcc...
+...bbcbdddeeeeffffffffeeehddddccd...
+....cbbcdddeheeeeeeeeeehhddddccd....
+.....bcbbddddhhhhhhhhhhdddddccd.....
+......bbcbbddddccccccddddcdccd......
+.......cbbcbdddddccdddddcdccd.......
+.........cbbcbddddddddccdcc.........
+..........bcbbcbdddddccdcc..........
+............bcbbdccdccdc............
+..............bcccdccd..............
+................bdcc................
+.................cc.................
+
+== pizz  피자  [테 wood]
+= a c48b5a
+= b 8a5636
+= c 553222
+= d 14111f
+= e f7ba70
+= f 2a1812
+= g 221c33
+= h d8483d
+= i e8dfc8
+= j 8c2233
+= k 479a58
+= l 4a1426
+....................................
+...aabaabaabaabaabaabaabaabaabaac...
+..aabaabaabaabaabaabaabaabaabaabbb..
+.aabaabaabaabaabaabaabaabaabaabbbcb.
+.abaddddddddddddddddddddddddddddccc.
+.baadddddddddaeaaaaaaaadddddddddccf.
+.aabddgggggaaaaaaaaaaaaaagggggddcfc.
+.abaddggggaaaahhhhhhhhaaaaggggddfcc.
+.baaddgggaaahhbiiiiiibhhaaagggddccf.
+.aabddggaaahbbbihjjiibbbhaaaggddcfc.
+.abaddggaahbbbbbjjjibbbkkhaaggddfcc.
+.baaddgaehhbhjjbjjlihjjbbhhaagddccf.
+.aabddgaahbbjjjbiiiijjjbbbhaagddcfc.
+.abaddaaahibjjlbbiibjjlbbihaacddfcc.
+.baaddaahiiiibbbkkkkbbbiiiihabddccf.
+.aabddaahihjjiiikkkkiihjjiihabddcfc.
+.abaddaahijjjiikkhkkkijjjiihabddfcc.
+.baaddaahijjliiikkkkiijjliihabddccf.
+.aabddaahiiihjjbkkkkhjjiiiihabddcfc.
+.abaddaaahibjjjbbffbjjjbbihaabddfcc.
+.baaddgaahbbjjlbfiifjjlbbbhabgddccf.
+.aabdddaahhbbbbbiiiibbbbbhhabdddcfc.
+..babddgaahkkbbbhjjibbbbbhabgddcfc..
+..bbcdddaaahbbbfjjjifbbbhabbdddfcc..
+...cbbdddaaahhbijjliibhhaabdddfcc...
+...bbcbdddaaaafiiiiiifaabbcddfccf...
+....cbbcdddaaahhhhhhhhabbdddfccf....
+.....bcbbddddfaaaaaaaafddddfccf.....
+......bbcbbddaabbbbbbbbddcfccf......
+.......cbbcbdddddggdddddcfccf.......
+.........cbbcbddddddddccfcc.........
+..........bcbbcbddddfccfcc..........
+............bcbbfccfccfc............
+..............bcccfccf..............
+................bfcc................
+.................cc.................
+
+== dnut  도넛  [테 skin]
+= a f5cda3
+= b dc9a73
+= c a8634f
+= d 221c33
+= e 6e3b39
+= f 352d4d
+= g d8483d
+= h 479a58
+= i fbf6ea
+= j f2c94c
+= k 14111f
+= l 8a5636
+= m 91cbf5
+....................................
+...aabaabaabaabaabaabaabaabaabaac...
+..aabaabaabaabaabaabaabaabaabaabbb..
+.aabaabaabaabaabaabaabaabaabaabbbcb.
+.abaddddddddddddddddddddddddddddccc.
+.baadddddddddaaaaaaaaaadddddddddcce.
+.aabddfffffaaaaaaaaaaagbbfffffddcec.
+.abaddffffaaaahaaaaaagbbbbffffddecc.
+.baaddfffaaaiihahhgggggbbbbfffddcce.
+.aabddffaaaahhhhhhgggggjgbbbffddcec.
+.abaddffaagghhhhhhgggggjhbbbffddecc.
+.baaddfaaaggghhhbbbbggghhbbbbfddcce.
+.aabddfaggggggbbkkkkbbhhhhhhlfddcec.
+.abaddaaaggggbbkkkkkkbbhhhhlllddecc.
+.baaddaaaggggbkkkkkkkabhhhhlllddcce.
+.aabddaaaigggbkkkkkkkkbhhhhlllddcec.
+.abaddaaaiggbkkkkkkkkaabggglllddecc.
+.baaddaaahhhhbkkkkkkkabgggglllddcce.
+.aabddaaahhhhbkkkkkkaabgmgglllddcec.
+.abaddaaahhhhbbkkkkaabbggmglllddecc.
+.baaddfahhhhhhbbaaaabbgggggglfddcce.
+.aabdddbbbbhhgggbbbbhhhgggllldddcec.
+..babddfbbbhgmmggghhhhhhggllfddcec..
+..bbcdddbbbggggggghjjhhhlllldddecc..
+...cbbdddbbbbggggghhlhllllldddecc...
+...bbcbdddbbbbgllllllhlllldddecce...
+....cbbcdddbbgllllllllllldddecce....
+.....bcbbddddllllllllllddddecce.....
+......bbcbbddddffffffddddcecce......
+.......cbbcbdddddffdddddcecce.......
+.........cbbcbddddddddccecc.........
+..........bcbbcbddddeccecc..........
+............bcbbecceccec............
+..............bcccecce..............
+................becc................
+.................cc.................
