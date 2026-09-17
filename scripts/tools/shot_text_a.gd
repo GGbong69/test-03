@@ -165,6 +165,27 @@ func _run() -> void:
 	await _shot("use_on")
 	keep["hand_i"] = 1
 	await _shot("use_block")
+
+	# ── 5-1. 떠오르는 글자 — 크기 다섯 단(10 · 12 · 20 · 24) ─────
+	#  t 0.4 면 튀어 오름(exp(-12t))이 끝나 멎은 크기로 선다. 태그가 before 로
+	#  시작하면 격자 옮김 전의 크기(20 · 22 · 17 · 16 · 15 · 17 · 9 · 11)로 찍는다.
+	var old: bool = tag.begins_with("before")
+	var pp := []
+	for e in [[g.BC + Vector2(0.0, -38.0), "불스아이", g.C_ACC, 24, 20],
+			[g.BC + Vector2(0.0, 40.0), "목표 달성", g.C_ACC, 24, 22],
+			[g.BC + Vector2(-110.0, -10.0), "트리플", g.C_ACC, 20, 17],
+			[g.BC + Vector2(110.0, -10.0), "아우터 불", g.C_GREEN.lightened(0.55), 20, 16],
+			[g.BC + Vector2(-110.0, 90.0), "더블", g.C_ACC, 12, 15],
+			[g.BC + Vector2(110.0, 90.0), "배수 +12", g.C_MULT, 20, 17],
+			[g._slot_rect(0).get_center() + Vector2(0.0, 22.0), "순서 변경", g.C_TXT, 10, 9],
+			[g._slot_rect(3).get_center() + Vector2(0.0, 24.0),
+					"%s — 실패를 막았다" % String(_item("c48").n), g.C_ACC, 12, 11]]:
+		pp.append({"p": e[0], "txt": e[1], "c": e[2], "sz": e[4] if old else e[3],
+				"t": 0.4, "life": 4.0})
+	keep = {"state": g.S.PICK, "shown": 120.0, "card_p": 0.0, "hand_st": g.H.NONE,
+			"hand_i": -1, "pops": pp}
+	await _shot("pops")
+	g.pops = []
 	keep = {"state": g.S.PICK, "shown": 120.0, "hand_st": g.H.NONE, "hand_i": -1,
 			"card_p": 0.0}
 	await _tick(3)
