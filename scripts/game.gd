@@ -835,34 +835,8 @@ func _start_leg() -> void:
 	# 변형을 판 시작에 한 번 읽는다. 코드에 갈래가 없는 이름이면
 	# 여기서 한 번 울린다 — 매 프레임 울리면 로그가 못 쓰게 된다.
 	#
-	# 조준도 계산도 **든 동전이 먼저 쥔다.** 다트통이 직접 들고 있으면
-	# 그 방식을 런 도중에 얻거나 잃을 수 없고, 그러면 그 다트통은 처음부터
-	# 끝까지 같은 판이다. 동전으로 오면 사고 팔고 봉인되는 것들과 같은
-	# 규칙 아래 놓이고, 그 자체가 판단거리가 된다.
-	#
-	# **계산 방식이 여기로 온 것은 2026-09-09 이다.** 그전에는 다트통이
-	# 쥐고 「도중에 바뀌면 안 된다」고 적혀 있었는데, 기획서가 저울을
-	# 동전(데칼코마니)으로 내리면서 조준과 같은 규약이 됐다. 판 시작에
-	# 한 번 읽는 것은 그대로라 **판 도중에는 여전히 안 바뀐다** — 바뀌는
-	# 자리는 상점 하나다.
-	#
-	# 동전이 안 쥐면 다트통 표로 떨어진다. 두 길을 다 남겨 두는 것은
-	# 계산 방식을 통째로 쥐는 다트통이 나중에 다시 설 수 있게 하려는 것이다.
-	aim_mode = _aim_from_items()
-	var si := _score_item()
-	if si >= 0:
-		score_mode = String(owned[si].get("score", ""))
-		calc_col = GameData.rarity_color(String(owned[si].get("rarity", "common")))
-	else:
-		score_mode = GameData.score_mode()
-		calc_col = Color(String(GameData.pack_row().get("color", "7a4f9e")))
+	_modes_refresh(false)
 	score_mul = GameData.score_mul()
-	if not GameData.AIM_MODES.has(aim_mode):
-		push_error("조준: 모르는 방식 '%s' — AIM_MODES 에 없다" % aim_mode)
-		aim_mode = "std"
-	if not GameData.SCORE_MODES.has(score_mode):
-		push_error("점수: 모르는 방식 '%s' — SCORE_MODES 에 없다" % score_mode)
-		score_mode = "std"
 	dead_col = int(mod_v("color_kill", -1.0))
 	dead_ring = int(mod_v("ring_kill", 0.0))
 	odd_mul = mod_v("odd_mul", 1.0)
@@ -3025,9 +2999,58 @@ func _auto_step() -> void:
 #  ①을 빼먹으면 검증기가 막는다. ②를 빼먹으면 판 시작에 오류가 뜬다.
 #  둘 다 조용히 std 로 도는 것을 막으려고 있다 — 안개가 그렇게 죽었었다.
 #
-#  방식은 **판 시작에 한 번** 읽어 둔다. 매 프레임 표를 뒤지지 않고,
-#  판 도중에 다트통이 바뀔 일도 없다. 제약 축들과 같은 규약이다.
+#  방식은 판 시작과 동전 슬롯이 바뀐 자리에서 읽어 둔다(_modes_refresh).
+#  매 프레임 표를 뒤지지 않는다.
 # ══════════════════════════════════════════════════════════
+
+# 조준도 계산도 **든 동전이 먼저 쥔다.** 다트통이 직접 들고 있으면
+# 그 방식을 런 도중에 얻거나 잃을 수 없고, 그러면 그 다트통은 처음부터
+# 끝까지 같은 판이다. 동전으로 오면 사고 팔고 봉인되는 것들과 같은
+# 규칙 아래 놓이고, 그 자체가 판단거리가 된다.
+#
+# 동전이 안 쥐면 다트통 표로 떨어진다. 두 길을 다 남겨 두는 것은
+# 계산 방식을 통째로 쥐는 다트통이 나중에 다시 설 수 있게 하려는 것이다.
+#
+# ── 언제 읽나 ────────────────────────────────────────────
+# 판 시작, 그리고 **판 도중에 손이 동전 슬롯을 바꾼 자리**(팔기 · 순서
+# 바꾸기 · 사진으로 태우기/복제). 전에는 판 시작에만 읽어서 카우보이를
+# 판 도중에 팔아도 그 판 끝까지 십자 조준이 남았다 — 「판매 즉시 효력을
+# 잃으면 좋겠다」(사용자, 2026-09-17). 동전은 아무 때나 팔고 순서를 바꾸는
+# 물건이라(_can_rack_move) 그 손이 한 일이 바로 판에 닿아야 맞다.
+#
+# 다트가 날아가는 동안(FLY)이나 정산 중(RESOLVE — 애초에 슬롯을 못 만진다)에
+# 바뀌면 그 발은 제 방식대로 끝나고 다음 발부터 새 방식이다. 조준 중
+# (AIM_V · AIM_H · CONFIRM)이면 **잠근 것을 풀고 첫 칸부터** 새 방식으로 다시
+# 선다 — 십자로 반쯤 잠근 자리를 세로·가로 조준이 이어받으면 어느 방식의
+# 잠금인지가 없어진다. 자루는 그대로 쥐고 있다.
+#
+# 개발자 판과 검사는 aim_mode 를 직접 박기도 한다. 그 값은 다음에 슬롯이
+# 바뀔 때까지 남는다 — 매 발마다 다시 읽지 않는 것은 그래서다.
+# 판 시작(restart=false)은 조준을 다시 세우지 않는다 — 판을 여는 쪽이
+# 자루를 고를 때 _aim_begin 을 부르고, 여기서 한 번 더 부르면 빗각이
+# 전역 난수를 한 칸 더 밀어 같은 씨의 런이 갈라진다.
+func _modes_refresh(restart := true) -> void:
+	var was := aim_mode
+	aim_mode = _aim_from_items()
+	var si := _score_item()
+	if si >= 0:
+		score_mode = String(owned[si].get("score", ""))
+		calc_col = GameData.rarity_color(String(owned[si].get("rarity", "common")))
+	else:
+		score_mode = GameData.score_mode()
+		calc_col = Color(String(GameData.pack_row().get("color", "7a4f9e")))
+	if not GameData.AIM_MODES.has(aim_mode):
+		push_error("조준: 모르는 방식 '%s' — AIM_MODES 에 없다" % aim_mode)
+		aim_mode = "std"
+	if not GameData.SCORE_MODES.has(score_mode):
+		push_error("점수: 모르는 방식 '%s' — SCORE_MODES 에 없다" % score_mode)
+		score_mode = "std"
+	if restart and aim_mode != was:
+		if state == S.AIM_H or state == S.CONFIRM:
+			state = S.AIM_V
+		if state == S.AIM_V:
+			_aim_begin()
+
 
 # 든 동전 중 조준 방식을 쥔 첫 장. 둘을 같이 들면 동전 슬롯 앞자리가
 # 이긴다 — 동전 순서는 플레이어가 끌어서 바꿀 수 있으므로 "무엇이
@@ -7075,6 +7098,7 @@ func _sell(i: int) -> void:
 	_panel_pull(i)
 	pop(at + Vector2(0.0, -14.0), "+%d" % v, C_GOLD, 15, 0.8)
 	_sfx("sell")
+	_modes_refresh()            # 판 동전의 효력은 파는 그 순간 끝난다
 
 
 # ══════════════════════════════════════════════════════════
@@ -7328,6 +7352,7 @@ func _photo_apply(kind: String, oi: int) -> bool:
 		_panel_reset()
 		pop(at + Vector2(0.0, 24.0), "%s  복제" % it.n, C_ACC, 11, 1.1)
 		_sfx("buy")
+	_modes_refresh()
 	return true
 
 
@@ -12709,6 +12734,7 @@ func _rack_reorder(i: int, j: int) -> void:
 	_panel_reset()
 	_sfx("rack_move")
 	pop(_slot_rect(j).get_center() + Vector2(0.0, 22.0), "순서 변경", C_TXT, 9, 0.8)
+	_modes_refresh()            # 앞자리가 이긴다 — 순서가 곧 어느 동전이 쥐나다
 
 
 # 든 동전의 말림. 뗄 때 크게 젖혔다가 0.11초 만에 잦아들어 손 안에서
