@@ -2432,16 +2432,19 @@ func _skip_leg() -> void:
 # 언제 쓰이는가. 즉시 받는 것과 다음 상점까지 쥐고 있는 것이 화면에서
 # 안 갈렸다 — "무료 리롤" 을 지금 받는지 다음 상점에서 받는지가
 # 건너뛸지 말지를 바꾼다.
+#  **태그 칩에 앉는 말이라 조사를 뗀다**(2026-09-17 — 툴팁 본문에서 태그 줄로 옮겼다).
+#  boss 의 「보스를 넘기면」 은 현상금 본문(「보스 판을 넘기면 골드 +25」)과 같은 조건을
+#  다른 말로 한 번 더 한 것이었다 — 받는 판만 말한다.
 func _tag_when(t: Dictionary) -> String:
 	match String(t.get("when", "now")):
 		"leg":
-			return "다음 판에"
+			return "다음 판"
 		"shop":
-			return "다음 상점에서"
+			return "다음 상점"
 		"stage":
-			return "다음 보스 판에"
+			return "다음 보스 판"
 		"boss":
-			return "보스를 넘기면"
+			return "다음 보스 판"
 	return "바로"
 
 
@@ -11462,7 +11465,7 @@ func _cons_block(c: Dictionary) -> String:
 	match String(c.get("use_at", "any")):
 		"rest":
 			if state != S.SHOP and state != S.LEG:
-				return "상점이나 판 고르기에서 쓴다"
+				return "상점이나 판 선택에서 쓴다"
 		"play":
 			if not _is_play():
 				return "판에서만 쓴다"
@@ -11482,7 +11485,9 @@ func _cons_use(i: int) -> void:
 		"area":
 			track_lv[c.track] = int(track_lv.get(c.track, 0)) + 1
 			Save.peak("best_track", int(track_lv[c.track]))
-			say = "%s  Lv%d" % [c.n, track_lv[c.track]]
+			#  뱃지 팝업 · 런 정보와 같은 꼴(트랙 이름 · Lv.N+1). 사탕 이름에 Lv1 을 붙이던
+			#  때는 같은 트랙 레벨이 자리마다 한 칸씩 다르게 찍혔다.
+			say = "%s 강화 Lv.%d" % [_track_name(int(c.track)), int(track_lv[c.track]) + 1]
 		# ── 사진 — 1회성이다(2026-09-10 기획서). 대상을 안 고르는 넷만 선다.
 		"gold":
 			# 갑절이되 늘어나는 폭에 상한이 있다. 0 골드면 0 이라 살 때를
@@ -17950,7 +17955,7 @@ func _use_draw() -> void:
 	#  세운다(_ink_stack · 사이 4) — 페이퍼로지 잉크가 y[4.5,15] · y[19,29.5] 라 위 4.5 ·
 	#  사이 4 · 밑 4.5px 다. 한 줄은 y[4,14.5] 다.
 	#  받침 폭은 **긴 줄 + 양옆 8px** 로 잰다(짝수로 올림). 164 로 못 박아 두면 12 에서
-	#  가장 긴 말 「상점이나 판 고르기에서 쓴다」(159px)가 받침 끝에 붙고, 그만큼 넓혀
+	#  가장 긴 말 「상점이나 판 선택에서 쓴다」(159px)가 받침 끝에 붙고, 그만큼 넓혀
 	#  176 으로 못 박으면 이름일 때도 받침이 판의 「16」 · 「15」 를 덮었다. 페이퍼로지에서
 	#  이름(「It's Not About Money」 131px)은 148 · 가장 긴 말(135px)은 152 다.
 	var t := String(c.get("n", "")) if why == "" else why
@@ -18173,11 +18178,27 @@ func _tip_wrap(t: String, w: float, sz: int) -> PackedStringArray:
 		#  줄 끝에 남고 토막은 점 앞 말과 한 줄에 선다. 데려간 토막은 이미 이 줄 안에
 		#  들던 것이라 「 ·」 를 붙여도 이 줄보다 짧다. 조각은 여전히 원문을 빈칸 하나씩
 		#  건너 이은 것이라 _wr_off 가 그대로 선다.
+		#
+		#  **넘치는 낱말이 무엇이든 「 · 」 뒤에서 끊는다.** 전에는 넘친 낱말이 「·」 일 때만
+		#  섰다 — 「+0.06」「+6」「파괴」 앞에서는 그냥 끊겨 「배수 +15 · 판마다 1/2 확률로 / 파괴」
+		#  처럼 값 하나가 홀로 내려갔고, 앞에 점이 없으면 줄이 「·」 로 열렸다. 점 앞에 두
+		#  낱말 이상이 남고, 줄이 이미 「 ·」 로 끝나지 않고(그러면 여기서 끊는 것이 곧 점 뒤다),
+		#  데려간 줄이 폭 안일 때만 한다. 「·」 가 넘친 옛 경우를 그대로 품는다.
 		var dot := line.rfind(" · ")
-		if word == "·" and dot > 0 and dot + 3 < line.length():
-			out.append(line.substr(0, dot + 2))
-			line = line.substr(dot + 3) + " ·"
-			continue
+		if dot > 0 and dot + 3 < line.length() and not line.ends_with(" ·") \
+				and line.substr(0, dot).find(" ") > 0:
+			var nxt := line.substr(dot + 3) + " " + word
+			if f.get_string_size(nxt, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x <= w:
+				out.append(line.substr(0, dot + 2))
+				line = nxt
+				continue
+		#  「·」 로 줄을 열지 않는다. 앞에 점이 없으면 줄 끝 낱말을 데려간다.
+		if word == "·":
+			var sp := line.rfind(" ")
+			if sp > 0:
+				out.append(line.substr(0, sp))
+				line = line.substr(sp + 1) + " ·"
+				continue
 		if line != "":
 			out.append(line)
 			line = ""
@@ -18194,6 +18215,23 @@ func _tip_wrap(t: String, w: float, sz: int) -> PackedStringArray:
 				line = ch
 	if line != "":
 		out.append(line)
+	#  **끝줄에 낱말 하나를 홀로 두지 않는다**(「+1」「파괴」「20)」). 짝 칸의 「칸마다 짝이
+	#  생긴다 · 홀수 칸 / +1」 이 사용자 제보다. 앞 줄 끝 낱말(「·」 면 그 앞 낱말까지)을
+	#  내린다. 앞 줄에 두 낱말 이상이 남고 합친 줄이 폭 안일 때만 한다 — 문구로 못 줄이는
+	#  줄(「1·2·3·5·8·13번 명중 시 배수 +8」)도 「… 명중 시 / 배수 +8」 로 선다. 글자 단위로
+	#  자른 조각은 빈칸이 없어 앞 줄 조건에서 걸러진다. 조각은 원문 낱말을 빈칸 하나씩 이은
+	#  그대로라 _wr_off 가 선다.
+	var n := out.size()
+	if n >= 2 and out[n - 1].find(" ") < 0:
+		var prev: String = out[n - 2]
+		var cut := prev.rfind(" ")
+		if cut > 0 and prev.substr(cut + 1) == "·":
+			cut = prev.rfind(" ", cut - 1)
+		if cut > 0 and prev.substr(0, cut).find(" ") > 0:
+			var joined := prev.substr(cut + 1) + " " + out[n - 1]
+			if f.get_string_size(joined, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x <= w:
+				out[n - 2] = prev.substr(0, cut)
+				out[n - 1] = joined
 	return out
 
 
@@ -18317,7 +18355,8 @@ func _tip_build(hit: Dictionary) -> void:
 			_tip_add(_tip_eff(it), 20, C_TXT)
 			if i == sealed:
 				_tip_add("이번 판 봉인", 12, C_MULT)
-			if it.get("g", "") != "":
+			#  골드 곁줄은 따로 효과가 있는 동전에만 — 골드만 주면 _tip_eff 가 본문으로 올렸다.
+			if it.get("g", "") != "" and GameData.eff_line(it) != "":
 				_tip_add(GameData.gold_text(it.g, it.gv), 12, C_TXT)
 			# 값은 설명창에 안 적는다(2026-09-11 지시 · 2026-09-13 재확인).
 			# 파는 값은 상점 창구가, 사는 값은 테이블의 물건이 이미 말한다.
@@ -18345,18 +18384,20 @@ func _tip_build(hit: Dictionary) -> void:
 				tip_chip = s.d
 				_tip_set_rar(String(s.d.get("rarity", "")))
 				_tip_add(_tip_eff(s.d), 20, C_TXT)
-				if s.d.get("g", "") != "":
+				if s.d.get("g", "") != "" and GameData.eff_line(s.d) != "":
 					_tip_add(GameData.gold_text(s.d.g, s.d.gv), 12, C_TXT)
 			else:
 				# 사탕·보드 확장·다트·사진 — 효과 한 줄이면 된다. 분류 해설은 소음이다.
 				_tip_add(s.d.d, 20, C_TXT)
+				#  사진의 쓰는 때는 태그다(any 는 빈 글이라 _tip_tag 가 안 단다).
 				if s.type == "fix":
-					_tip_add(GameData.use_at_name(
-							String(s.d.get("use_at", "any"))), 12, C_ACC)
+					_tip_tag(GameData.use_at_name(
+							String(s.d.get("use_at", "any"))), C_ACC)
 				# 보드 확장은 한 장만 낀다. 사면 낀 것이 사라지므로 무엇을
 				# 잃는지가 사기 전에 읽혀야 한다.
 				if s.type == "mod" and not mods_own.is_empty():
-					_tip_add("지금 낀 %s 를 덮는다"
+					#  「대신 낀다」 — 「를」 은 받침 있는 이름(핵심 · 대기권 · 도넛)에서 틀렸다.
+					_tip_add("지금 낀 %s 대신 낀다"
 							% String(GameData.mod_of(String(mods_own[0])).get("n", "")),
 							12, C_MULT)
 			# 못 사는 이유를 누르기 전에 알려준다. _deny() 는 원인을 한 문장으로 뭉갠다.
@@ -18378,7 +18419,8 @@ func _tip_build(hit: Dictionary) -> void:
 			tip_box = false
 			tip_title = String(bt.get("name", ""))
 			_tip_add(_tag_text(bt), 20, C_ACC)
-			_tip_add(_tag_when(bt), 12, C_DIM)
+			#  받는 때도 시점이라 태그 줄로 보낸다 — 본문은 효과만 진다.
+			_tip_tag(_tag_when(bt), C_DIM)
 		"pend":
 			if i >= pending_tags.size():
 				return
@@ -18388,7 +18430,7 @@ func _tip_build(hit: Dictionary) -> void:
 			tip_box = false
 			tip_title = String(pending_tags[i].n)
 			_tip_add(String(pending_tags[i].get("d", "")), 20, C_ACC)
-			_tip_add(String(pending_tags[i].get("w", "")), 12, C_DIM)
+			_tip_tag(String(pending_tags[i].get("w", "")), C_DIM)
 		"held":
 			if i >= cons.size():
 				return
@@ -18398,8 +18440,7 @@ func _tip_build(hit: Dictionary) -> void:
 			tip_mark = _cons_rect(i)
 			tip_title = String(hc.n)
 			_tip_add(String(hc.d), 20, C_TXT)
-			_tip_add(GameData.use_at_name(String(hc.get("use_at", "any"))),
-					12, C_ACC)
+			_tip_tag(GameData.use_at_name(String(hc.get("use_at", "any"))), C_ACC)
 		"stage":
 			_tip_set_tag("제약")
 			var sp: Dictionary = stage_pick[i]
@@ -18420,7 +18461,7 @@ func _tip_build(hit: Dictionary) -> void:
 			tip_chip = it
 			_tip_set_rar(String(it.get("rarity", "")))
 			_tip_add(_tip_eff(it), 20, C_TXT)
-			if it.get("g", "") != "":
+			if it.get("g", "") != "" and GameData.eff_line(it) != "":
 				_tip_add(GameData.gold_text(it.g, it.gv), 12, C_TXT)
 		"ownmod":
 			_tip_set_tag("보드 확장")
@@ -18446,8 +18487,7 @@ func _tip_build(hit: Dictionary) -> void:
 			_tip_set_tag("사탕" if String(cd.get("cat", "")) == "area" else "사진")
 			tip_title = cd.n
 			_tip_add(cd.d, 20, C_TXT)
-			_tip_add(GameData.use_at_name(String(cd.get("use_at", "any"))),
-					12, C_ACC)
+			_tip_tag(GameData.use_at_name(String(cd.get("use_at", "any"))), C_ACC)
 		"lg":
 			var ll2 := _league_lines()
 			if i < ll2.size():
@@ -18461,8 +18501,7 @@ func _tip_build(hit: Dictionary) -> void:
 			var fx: Dictionary = GameData.fixtures()[i]
 			tip_title = fx.n
 			_tip_add(fx.d, 20, C_TXT)
-			_tip_add(GameData.use_at_name(String(fx.get("use_at", "any"))),
-					12, C_ACC)
+			_tip_tag(GameData.use_at_name(String(fx.get("use_at", "any"))), C_ACC)
 		"onmod":
 			#  걸린 것을 **전부** 낸다. 셋만 그리고 넷째부터 조용히 자르던
 			#  자리가 여기다 — 자른 것은 화면에서 사라졌지 판에서 사라진
@@ -18491,6 +18530,15 @@ func _tip_build(hit: Dictionary) -> void:
 # 언제 서는지가 끊기지 않는다. 조건 없는 장은 효과만 남는다.
 func _tip_eff(it: Dictionary) -> String:
 	var eff := GameData.eff_line(it)
+	var g := String(it.get("g", ""))
+	#  **골드만 주는 동전은 골드 문장이 곧 효과다.** 황금우상 · 윅 존 · 알 낳는 거위는 20pt
+	#  본문이 비고 12pt 곁줄만 떴고, WHITE ALBUM 은 「크림 칸 명중 시」 와 골드 곁줄로 반쪽
+	#  문장 둘이 되었다. hit 은 조건이 곧 골드의 문이라 조건 뒤에 잇고, 나머지 골드 문장은
+	#  받는 때를 제 안에 품었다(「판마다 골드 +N」). 곁줄은 _tip_build 가 이때 안 붙인다.
+	if eff == "" and g != "":
+		eff = GameData.gold_text(g, int(it.get("gv", 0)))
+		if g != "hit":
+			return eff
 	var c := String(it.get("c", ""))
 	if c == "" or c == "always":
 		return eff
@@ -18685,6 +18733,10 @@ func _tint(t: String, base: Color) -> Array:
 			c = C_MULT
 			role = C_MULT
 			carry = true
+		#  「다트」·「골드」 는 제 수를 따로 갖는다 — 「점수 +100 · 판 시작 다트 −2」 의 −2 가
+		#  점수 파랑으로 칠해졌다. 여기서만 이어감을 끊고, 값 아닌 다른 토막에서는 안 끊는다.
+		elif w.begins_with("다트") or w.begins_with("골드"):
+			carry = false
 		elif carry and _is_val(w):
 			c = role
 		#  **이어감은 값이 아닌 토막에서 안 끊긴다.** 전에는 여기서
@@ -23591,7 +23643,7 @@ func _draw_newrun() -> void:
 # 시작한다. 사탕 칸은 1개다" 는 한 번 읽는다.
 #
 # 줄글이 없으면 아래처럼 **기준선과 다른 것만** 낸다. 그것이 없는
-# 다트통(기준선 그대로)은 "기준" 한 줄이고, 그게 그 다트통의 정직한 설명이다.
+# 다트통(기준선 그대로)은 "추가 효과 없음" 한 줄이고, 그게 그 다트통의 정직한 설명이다.
 # 줄글 없이 기준선과 다르기만 한 다트통은 검증기가 막는다.
 #
 # 넷을 늘 적던 때는 일당 다트통이 기본 다트통과 글자 하나 안 다르게 보였다 —
@@ -23599,7 +23651,7 @@ func _draw_newrun() -> void:
 # 때문이다. 표에 열이 늘 때마다 이 함수를 같이 늘려야 하는 구조였고,
 # 늘리는 것을 잊으면 그 열은 화면에서 없는 것이 된다.
 #
-# 다른 것만 적으면 기준선(기본 다트통)은 "기준" 한 줄이 되는데, 그게
+# 다른 것만 적으면 기준선(기본 다트통)은 "추가 효과 없음" 한 줄이 되는데, 그게
 # 그 다트통의 정직한 설명이다 — 아무것도 안 주고 아무것도 안 뺀다.
 func _pack_lines(row: Dictionary) -> Array:
 	var out := []
@@ -23608,15 +23660,17 @@ func _pack_lines(row: Dictionary) -> Array:
 		for w in _tip_wrap(d, 286.0, 12):
 			out.append(w)
 		return out
+	#  빼기표는 − (U+2212)다 — %+d 는 ASCII 「-」 를 찍는다. 말은 용어 사전을 따른다
+	#  (동전 슬롯 · 남은 다트 · 「기준」 대신 「추가 효과 없음」).
 	var da := int(row.get("darts_add", 0))
 	if da != 0:
-		out.append("다트 %+d" % da)
+		out.append(("다트 %+d" % da).replace("-", "−"))
 	var ga := int(row.get("gold_add", 0))
 	if ga != 0:
-		out.append("시작 골드 %+d" % ga)
+		out.append(("시작 골드 %+d" % ga).replace("-", "−"))
 	var isl := int(row.get("item_slots", GameData.tune_i("max_items")))
 	if isl != GameData.tune_i("max_items"):
-		out.append("동전 칸 %d" % isl)
+		out.append("동전 슬롯 %d칸" % isl)
 	var csl := int(row.get("cons_slots", GameData.tune_i("cons_slots")))
 	if csl != GameData.tune_i("cons_slots"):
 		out.append("사탕 칸 %d" % csl)
@@ -23626,17 +23680,18 @@ func _pack_lines(row: Dictionary) -> Array:
 	if String(row.get("dart_gold", "")) != "":
 		var dg := int(row.get("dart_gold", 0))
 		if dg != GameData.gold_per_dart():
-			out.append("잔탄 1개당 %d골드" % dg)
+			out.append("남은 다트 1개당 %d골드" % dg)
 	var did := String(row.get("dart_id", ""))
 	if did != "" and did != "std":
 		out.append("%s 다트로 시작" % GameData.dart_name(did))
 	# 쥐여 주는 것들 — 이름으로 낸다. id 는 표의 말이지 사람의 말이 아니다.
+	#  사진은 cons 표(consumables.csv)에 산다 — _raw 에 fixtures 표가 없어 id(v_cash)가 찍혔다.
 	for gk in [["grant_item", "items"], ["grant_mod", "mods"],
-			["grant_fixture", "fixtures"], ["grant_cons", "cons"]]:
+			["grant_fixture", "cons"], ["grant_cons", "cons"]]:
 		for gid in String(row.get(gk[0], "")).split(";", false):
 			out.append("%s 들고 시작" % GameData.row_name(gk[1], String(gid)))
 	if out.is_empty():
-		out.append("기준")
+		out.append("추가 효과 없음")
 	return out
 
 
@@ -23693,27 +23748,32 @@ func _league_lines() -> Array:
 				"d": "목표 점수가 더 빨리 오른다"})
 	var rs := int(GameData.league_v("reward_small", 3.0))
 	if String(r.get("reward_small", "")) != "" and rs < 3:
+		#  클리어 보상만 0 이 된다(_settle_clear). 잔탄 · 이자 · 동전 골드는 그대로 들어오므로
+		#  「골드가 안 들어온다」 는 틀린 말이었다.
 		out.append({"n": "작은 판 보상 %d" % rs,
-				"d": "작은 판을 넘겨도 골드가 안 들어온다"})
+				"d": "작은 판 클리어 보상 %d골드" % rs})
 	if int(GameData.league_v("seal_items", 0.0)) > 0:
 		out.append({"n": "봉인 %d" % int(GameData.league_v("seal_items", 0.0)),
-				"d": "매 판 동전 하나가 무작위로 잠긴다"})
-	if int(GameData.league_v("darts_add", 0.0)) != 0:
-		out.append({"n": "다트 %+d" % int(GameData.league_v("darts_add", 0.0)),
-				"d": "다트 하나 적게 시작한다"})
+				"d": "판마다 동전 하나 무작위 봉인"})
+	#  「하나 적게」 는 표 값과 따로 놀았다 — 표의 수를 그대로 찍고 빼기표는 − 로 쓴다.
+	var da := int(GameData.league_v("darts_add", 0.0))
+	if da != 0:
+		out.append({"n": ("다트 %+d" % da).replace("-", "−"),
+				"d": ("판 시작 다트 %+d" % da).replace("-", "−")})
 	if GameData.league_v("shop_cost_mul", 1.0) != 1.0:
 		out.append({"n": "가격 ×%.2f" % GameData.league_v("shop_cost_mul", 1.0),
-				"d": "상점 물건이 그만큼 비싸진다"})
+				"d": "매물 값 %s배" % GameData._num(GameData.league_v("shop_cost_mul", 1.0))})
+	#  bought 는 뱃지 · 복제로 얻은 동전에도 적힌다 — 「산 동전」 이 아니라 얻은 동전이다.
 	if int(GameData.league_v("perish", 0.0)) > 0:
 		out.append({"n": "주운 동전",
-				"d": "산 동전이 %d판 뒤 부서진다"
+				"d": "동전은 얻은 지 %d판 뒤 파괴"
 					% int(GameData.league_v("perish", 0.0))})
 	if int(GameData.league_v("rent", 0.0)) > 0:
 		# 수를 이름에 안 붙인다 — "남의 동전 1" 의 1 이 장수로 읽힌다.
 		out.append({"n": "남의 동전",
-				"d": "판마다 동전 한 장당 %d골드를 낸다" % int(GameData.league_v("rent", 0.0))})
+				"d": "판마다 동전 1장당 골드 −%d" % int(GameData.league_v("rent", 0.0))})
 	if out.is_empty():
-		out.append({"n": "기준", "d": "미는 값이 없다"})
+		out.append({"n": "기준", "d": "추가 효과 없음"})
 	return out
 
 
@@ -25411,10 +25471,22 @@ func _track_ids() -> Array:
 
 
 func _track_name(tk: int) -> String:
+	var names := PackedStringArray()
 	for a in GameData.areas_all():
 		if int(a.get("track", 0)) == tk:
-			return String(a.get("n", "?"))
-	return "트랙"
+			names.append(String(a.get("n", "?")))
+	if names.is_empty():
+		return "트랙"
+	#  **여러 영역이 한 트랙을 나눠 쓰면(아우터 불 · 이너 불) 공통 끝말(「불」)로 부른다.**
+	#  첫 영역 이름만 내던 때는 610004 를 올리면 이너 불도 같이 오르는데 팝업은 「아우터 불
+	#  강화」 라고 했다. 사탕 「불 트랙 강화 +1」 과 같은 말이다. 끝말이 안 맞으면 첫 이름.
+	if names.size() > 1:
+		var last := names[0].get_slice(" ", names[0].get_slice_count(" ") - 1)
+		for nm in names:
+			if not nm.ends_with(last):
+				return names[0]
+		return last
+	return names[0]
 
 
 # ══════════════════════════════════════════════════════════

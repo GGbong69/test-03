@@ -55,10 +55,10 @@ func _run() -> void:
 	_col("ccons", GameData.candies())
 	_col("cfix", GameData.fixtures())
 	_col("cmodf", GameData.modifiers())
-	#  뱃지 — 건너뛴 판의 보상. 툴팁과 같은 두 줄(효과 · 받는 때)
+	#  뱃지 — 건너뛴 판의 보상. 툴팁과 같은 모양(본문은 효과 한 줄 · 받는 때는 태그)
 	for bt in GameData.tags():
 		out.append({"kind": "tag", "id": String(bt.get("id", "")), "title": String(bt.get("name", "")),
-				"lines": [g._tag_text(bt), g._tag_when(bt)], "tags": ["뱃지"]})
+				"lines": [g._tag_text(bt)], "tags": ["뱃지", g._tag_when(bt)]})
 	#  다트통 — 새 런 화면의 설명 줄
 	for pk in GameData.packs():
 		var pl: Array = g._pack_lines(pk) if g.has_method("_pack_lines") else []

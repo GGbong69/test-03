@@ -2,7 +2,8 @@ extends SceneTree
 
 # 설명창 검사. 2026-09-13 사용자 지시 둘을 잰다.
 #   · 태그는 **아이템의 종류와 등급 둘**뿐이다
-#   · 조건 · 특성 · 사용조건은 설명(본문)으로 적는다. 가격은 안 적는다
+#   · 조건 · 특성은 설명(본문)으로 적는다. 가격은 안 적는다
+#   · 쓰는 때(사진 · 사탕) · 받는 때(뱃지)는 시점이라 태그다(2026-09-17)
 #
 #   godot --path . --headless --script scripts/tools/qa_tip.gd
 
@@ -47,9 +48,17 @@ func _tags() -> PackedStringArray:
 
 
 # 태그 한 장이 종류이거나 등급인가
+#  사진·사탕의 쓰는 때(use_at_name)와 뱃지를 받는 때(_tag_when)도 태그다(2026-09-17 — 본문
+#  둘째 줄에서 태그 줄로 옮겼다). 둘 다 시점이지 효과가 아니다.
 func _legit(t: String) -> bool:
 	if KINDS.has(t):
 		return true
+	for w in ["rest", "play"]:
+		if GameData.use_at_name(w) == t:
+			return true
+	for w in ["now", "leg", "shop", "stage", "boss"]:
+		if g._tag_when({"when": w}) == t:
+			return true
 	for r in ["common", "uncommon", "rare", "legendary"]:
 		if GameData.rarity_name(r) == t:
 			return true
