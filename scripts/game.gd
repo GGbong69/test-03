@@ -253,11 +253,17 @@ const LAY := {
 	"bank":       Rect2(4.0, 20.0, 72.0, 34.0),
 	# 옛 판매판 자리(x[80,154])는 사탕 칸(_cons_rect)이 쓴다.
 	"cap":        Rect2(490.0, 20.0, 40.0, 44.0),
-	#  x[534,636] — 여태 통째로 비어 있던 110px. 남은 다트 수가 화면에
-	#  **숫자로 어디에도 없었다** — 정산은 그 수에 직접 골드를 주는데
-	#  플레이 중에는 벽에 꽂힌 자루를 세야 알았다. 목표까지 남은 점수와
-	#  남은 다트가 한 화면에 같이 있어야 「이 판을 넘길 수 있나」가 판단이 된다.
-	"darts":      Rect2(534.0, 20.0, 102.0, 44.0),
+	#  남은 다트. 남은 다트 수가 화면에 **숫자로 어디에도 없었다** — 정산은
+	#  그 수에 직접 골드를 주는데 플레이 중에는 벽에 꽂힌 자루를 세야 알았다.
+	#  목표까지 남은 점수와 남은 다트가 한 화면에 같이 있어야 「이 판을 넘길
+	#  수 있나」가 판단이 된다.
+	#  처음에는 x[534,636] 을 통째로 썼는데, 런 정보 · 설정 단추를 첫 줄
+	#  오른쪽 끝으로 올리면서(2026-09-17) 동전 꼬리표와 같은 꼴(40x44)로 줄였다.
+	#  「동전 0/5 · 다트 0/6」 이 한 벌로 나란히 선다.
+	"darts":      Rect2(534.0, 20.0, 40.0, 44.0),
+	#  런 정보 · 설정 단추 둘을 위아래로 쌓는 칸. 오른쪽 여백 4 는 자금판의
+	#  왼쪽 여백(x4)과 같다 — 첫 줄이 화면 양 끝에서 같은 거리에 선다.
+	"menu":       Rect2(578.0, 20.0, 58.0, 44.0),
 	# 사탕 칸은 자금판 오른쪽. 이름을 안 달았더니 플레이 피드백에서
 	# "어디 있는지 몰랐다" 가 나왔다 — 칸 밑에 이름과 수를 적는다.
 	"cons":       Rect2(84.0, 20.0, 68.0, 44.0),
@@ -5802,15 +5808,24 @@ func _darts_draw() -> void:
 	var r: Rect2 = LAY.darts
 	r.position.y += _hud_dy()
 	_panel(r)
-	draw_string(font_sm, r.position + Vector2(10.0, 17.0), "다트",
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_DIM)
+	#  동전 꼬리표(_cap_draw)와 같은 꼴 — 이름 위 · 수 아래, 둘 다 가운데.
+	#  둘이 나란히 서므로 한 벌로 읽혀야 한다.
+	draw_string(font_sm, r.position + Vector2(0.0, 18.0), "다트",
+			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, C_OFF)
 	var left := maxi(darts_left, 0)
 	var all := maxi(GameData.darts_of(leg_no), left)
-	draw_string(font, r.position + Vector2(-10.0, 34.0), str(left),
-			HORIZONTAL_ALIGNMENT_RIGHT, r.size.x - 34.0, 11,
-			C_ACC if left <= 1 else C_TXT)
-	draw_string(font_sm, r.position + Vector2(r.size.x - 30.0, 34.0),
-			"/ %d" % all, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_OFF)
+	#  남은 수만 밝게, 「/전체」 는 한 층 낮춰 — 눈이 먼저 닿을 것은 남은 수다.
+	var ls := str(left)
+	var ts := "/%d" % all
+	var lw: float = font.get_string_size(ls, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x \
+			if font != null else 7.0
+	var tw: float = font.get_string_size(ts, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x \
+			if font != null else 14.0
+	var x0: float = roundf(r.get_center().x - (lw + tw) * 0.5)
+	draw_string(font, Vector2(x0, r.position.y + 36.0), ls,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_ACC if left <= 1 else C_TXT)
+	draw_string(font, Vector2(x0 + lw, r.position.y + 36.0), ts,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_DIM)
 
 
 func _cap_draw() -> void:
@@ -19342,13 +19357,17 @@ func _runinfo_ok() -> bool:
 #  없다**(2026-09-17 — 모바일판을 낸다). 그래서 키가 하던 일을 누를 수 있는
 #  자리로 둔다. 발라트로의 Run Info · Options 가 그 자리다.
 #
-#  ── 자리: 자금판 바로 밑 ───────────────────────────
-#  런 안의 화면은 넷(조준·상점/스테이지·판 고르기·정산)이고 비는 자리가
-#  화면마다 다르다. 넷 다에서 비는 곳이 자금판 밑이다.
-#    조준      벽에 꽂힌 자루의 잡기 판정이 맨 위 y 88 까지 온다(자루가 많아
-#              간격이 줄 때 224 − 118 − 18). 단추는 y 58~84 라 4px 남는다
-#    상점      자금판이 46 으로 자라고 16 올라가 y 4~50. 단추는 54~80, 벽이다
-#    판 고르기 · 정산  자금판 밑이 벽이다
+#  ── 자리: HUD 첫 줄 오른쪽 끝 ───────────────────────
+#  처음에는 자금판 바로 밑이었다 — 런 안의 화면 넷(조준·상점/스테이지·판
+#  고르기·정산)에서 다 비는 곳이 거기였다. 그런데 자금판에 매달린 작은
+#  단추 둘이 어색하다는 말을 듣고(2026-09-17, 「동전 0/5 옆 자리가 비지
+#  않냐」) 첫 줄 오른쪽 끝(LAY.menu)으로 올렸다.
+#    그 자리는 상점·스테이지·판 고르기·정산에서 원래 비어 있었고, 조준·
+#    고르기에서만 남은 다트 꼬리표(102px)가 쓰고 있었다. 꼬리표를 동전
+#    꼬리표와 같은 40px 로 줄여 58px 를 냈다.
+#    화면마다 단추가 **같은 자리**다. 첫 줄은 상점·스테이지에서 16 올라가는데
+#    (_hud_dy) 단추도 그 줄의 일부라 같이 오른다.
+#    오른쪽 위 구석은 모바일에서 일시정지 · 메뉴를 찾는 자리이기도 하다.
 #  오른쪽 아래는 상점·판 고르기의 「다음 판」·「던진다」 바로 밑이라 손가락이
 #  빗나가면 판이 넘어간다. 왼쪽 아래는 조준 중 벽의 자루와 겹친다.
 #
@@ -19356,7 +19375,7 @@ func _runinfo_ok() -> bool:
 #  단추와 키가 같은 함수를 부른다(_runinfo_toggle · _pause_open). 갈라 두면
 #  한쪽만 고쳐지는 날이 온다.
 # ══════════════════════════════════════════════════════════
-const HUDBTN := {"dy": 4.0, "h": 26.0, "gap": 4.0}
+const HUDBTN := {"gap": 4.0}
 
 
 #  단추가 서는 화면인가. 런 밖(제목·설정·컬렉션·새 런)은 각자 「뒤로」가 있고,
@@ -19369,22 +19388,13 @@ func _hud_btns_on() -> bool:
 			or state == S.STAGE or state == S.LEG
 
 
-#  0 = 런 정보, 1 = 설정. 자금판 폭을 반씩 나눈다.
+#  0 = 런 정보(위), 1 = 설정(아래). LAY.menu 칸을 위아래로 반씩 나눈다.
 func _hud_btn_rect(i: int) -> Rect2:
-	var b: Rect2 = _bank_rect()
-	if state == S.CLEAR:
-		#  정산에는 자금판이 안 서고 _bank_rect 는 상점 높이(46)를 준다.
-		#  조준 때의 자리에 둔다 — 화면이 바뀌어도 단추가 안 뛴다.
-		b.size.y = float(LAY.bank.size.y)
-	var x0: float = b.position.x
-	#  조준 중에는 왼쪽 벽(GRIP.wall)이 자금판 왼쪽 몇 칸을 덮는다. **보이는**
-	#  가장자리에 맞춘다 — 벽 밑에서 시작하면 글자가 한쪽으로 쏠린다.
-	if _is_play():
-		x0 = maxf(x0, float(GRIP.wall) + 1.0)
+	var m: Rect2 = LAY.menu
+	m.position.y += _hud_dy()
 	var gap: float = float(HUDBTN.gap)
-	var w: float = (b.end.x - x0 - gap) * 0.5
-	return Rect2(x0 + float(i) * (w + gap), b.end.y + float(HUDBTN.dy),
-			w, float(HUDBTN.h))
+	var h: float = (m.size.y - gap) * 0.5
+	return Rect2(m.position.x, m.position.y + float(i) * (h + gap), m.size.x, h)
 
 
 #  TAB 과 「정보」 단추가 같이 부른다. 열거나 닫았으면 참.
@@ -19436,12 +19446,22 @@ func _hud_btns_draw() -> void:
 		var on: bool = rows[i][2]
 		#  _btn 과 같은 어법 — 못 누르는 동안은 면을 두고 띠만 끈다.
 		_panel(r, on, a)
-		draw_string(font, r.position + Vector2(0.0, 13.0), String(rows[i][0]),
-				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 11,
+		if on and r.has_point(mouse_at):
+			_rr(self, r, Color(C_TXT, 0.08 * a))
+		#  이름과 키를 한 줄에 — 칸이 20 높이라 두 줄이 안 들어간다.
+		#  둘을 한 덩이로 가운데 모은다.
+		var nm := String(rows[i][0])
+		var key := String(rows[i][1])
+		var nw: float = font.get_string_size(nm, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x \
+				if font != null else 22.0
+		var kw: float = font_sm.get_string_size(key, HORIZONTAL_ALIGNMENT_LEFT, -1, 9).x \
+				if font_sm != null else 16.0
+		var x0: float = roundf(r.get_center().x - (nw + 4.0 + kw) * 0.5)
+		var by: float = r.position.y + 15.0
+		draw_string(font, Vector2(x0, by), nm, HORIZONTAL_ALIGNMENT_LEFT, -1, 11,
 				Color(C_TXT if on else C_DIM, a))
-		draw_string(font_sm, r.position + Vector2(0.0, 23.0), String(rows[i][1]),
-				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9,
-				Color(C_GOLD if on else C_OFF, a))
+		draw_string(font_sm, Vector2(x0 + nw + 4.0, by), key,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(C_GOLD if on else C_OFF, a))
 
 
 func _draw_runinfo() -> void:

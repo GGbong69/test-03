@@ -64,18 +64,36 @@ func _run() -> void:
 		_ok("둘이 안 겹친다 — %s" % nm, not r0.intersects(r1), "%s · %s" % [r0, r1])
 		_ok("화면 안이다 — %s" % nm,
 				r0.position.x >= 0.0 and r1.end.x <= 640.0 and r0.position.y >= 0.0)
+		var pair0: Rect2 = r0.merge(r1)
 		if g.state != g.S.CLEAR:
-			_ok("자금판과 안 겹친다 — %s" % nm, not g._bank_rect().intersects(r0.merge(r1)))
-		if g._is_play():
-			#  벽이 자금판 왼쪽을 덮는다 — 단추는 보이는 자리에서 시작한다
-			_ok("벽 밑으로 안 들어간다 — %s" % nm, r0.position.x > float(g.GRIP.wall))
+			_ok("자금판과 안 겹친다 — %s" % nm, not g._bank_rect().intersects(pair0))
+		#  첫 줄의 이웃 — 동전 꼬리표 · 다트 꼬리표와 안 겹치고, 같은 높이에 선다
+		var dy: float = g._hud_dy()
+		var cap: Rect2 = g.LAY.cap
+		cap.position.y += dy
+		var dts: Rect2 = g.LAY.darts
+		dts.position.y += dy
+		_ok("동전 · 다트 꼬리표와 안 겹친다 — %s" % nm,
+				not cap.intersects(pair0) and not dts.intersects(pair0),
+				"단추 %s · 다트 %s" % [pair0, dts])
+		_ok("첫 줄과 위아래가 맞는다 — %s" % nm,
+				is_equal_approx(pair0.position.y, cap.position.y)
+				and is_equal_approx(pair0.end.y, cap.end.y),
+				"단추 y%.0f~%.0f · 동전 y%.0f~%.0f"
+				% [pair0.position.y, pair0.end.y, cap.position.y, cap.end.y])
+		_ok("오른쪽 여백이 자금판 왼쪽 여백과 같다 — %s" % nm,
+				is_equal_approx(640.0 - pair0.end.x, float(g.LAY.bank.position.x)),
+				"%.0f · %.0f" % [640.0 - pair0.end.x, g.LAY.bank.position.x])
+		_ok("손가락 크기다 — %s" % nm, r0.size.x >= 56.0 and r0.size.y >= 20.0,
+				"%s" % r0.size)
 	#  조준 중 벽의 자루 — 자루가 가장 많아 간격이 가장 좁을 때를 잰다
 	g.state = g.S.AIM_V
 	var pair: Rect2 = g._hud_btn_rect(0).merge(g._hud_btn_rect(1))
 	var top_hit: float = float(g.GRIP.cy) - 118.0 - float(g.GRIP.hit)
 	_ok("벽의 자루 잡기 판정과 안 겹친다", pair.end.y < top_hit,
 			"단추 밑 %.0f · 자루 판정 위 %.0f" % [pair.end.y, top_hit])
-	#  정산에서도 조준 때와 같은 높이 — 화면이 바뀌어도 단추가 안 뛴다
+	#  정산에서도 조준 때와 같은 높이 — 화면이 바뀌어도 단추가 안 뛴다.
+	#  (상점·스테이지는 첫 줄이 통째로 16 오르고 단추도 그 줄의 일부다)
 	var y_aim: float = g._hud_btn_rect(0).position.y
 	g.state = g.S.CLEAR
 	_ok("정산에서도 같은 높이다", is_equal_approx(g._hud_btn_rect(0).position.y, y_aim),
