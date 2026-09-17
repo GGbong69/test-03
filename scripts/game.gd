@@ -2060,10 +2060,20 @@ func _leg_go() -> Rect2:
 	return _next_rect()
 
 
-# 건너뛰기는 **건너뛸 판 바로 아래**에 붙는다. 앞치마 왼쪽에 두었을 때는
-# 그 버튼이 어느 판을 건너뛰는지가 화면에 안 적혀 있었다 — 판이 셋이고
-# 버튼은 하나인데 둘이 멀리 떨어져 있으면 잇는 것은 플레이어의 추측이다.
-# 건너뛰기 판 한 장. 지금 판이든 뒤 판이든 **같은 모양**이고 밝기만
+# 건너뛰기 **단추**는 왼쪽 아래, 「던진다」(오른쪽 아래)의 거울 자리다
+# (_leg_skip). 상점의 「리롤 | 다음 판」 과 같은 좌우 한 쌍이라 두 화면이
+# 같은 손 모양으로 읽히고, 모바일에서는 두 엄지가 각자 하나씩 맡는다.
+#
+# 한때 판 바로 아래에 붙여 둔 것은 앞치마 왼쪽에 있던 옛 버튼이 **어느 판을
+# 건너뛰는지** 안 적고 있었기 때문이다. 지금은 건너뛸 수 있는 판이 늘 선
+# 카드 하나뿐이고(「던진다」 도 그 판을 말하는데 카드 밑에 안 붙는다),
+# 단추가 받을 것을 제 입으로 적는다. 사용자가 왼쪽 아래를 골랐다(2026-09-17).
+#
+# 카드 밑 쪽지(_skip_plate)는 남긴다 — 이제 누르는 자리가 아니라 **판마다
+# 건너뛰면 무엇을 받는가**를 늘어놓는 줄이다. 지금 판을 건너뛸지는 뒤 판이
+# 무엇을 주는지를 봐야 정해진다.
+#
+# 건너뛰기 쪽지 한 장. 지금 판이든 뒤 판이든 **같은 모양**이고 밝기만
 # 다르다 — 다른 모양으로 그리면 "이건 뭐고 저건 뭔가" 를 한 번 더
 # 배워야 한다. 셋을 나란히 놓고 비교하는 화면이라 특히 그렇다.
 #
@@ -2138,8 +2148,7 @@ func _skip_plate(r: Rect2, t: Dictionary, on: bool) -> void:
 			String(t.get("kind", "")), a, String(t.get("rarity", "")))
 	var tx: float = r.position.x + SKIP.tx
 	var tw: float = r.size.x - SKIP.pad
-	draw_string(font_sm, Vector2(tx, r.position.y + SKIP.y1),
-			"건너뛴다" if on else "건너뛰면",
+	draw_string(font_sm, Vector2(tx, r.position.y + SKIP.y1), "건너뛰면",
 			HORIZONTAL_ALIGNMENT_LEFT, tw, 9,
 			C_TXT if on else C_OFF)
 	draw_string(font_sm, Vector2(tx, r.position.y + SKIP.y2),
@@ -2153,7 +2162,14 @@ func _skip_rect(i: int) -> Rect2:
 			Vector2(r.size.x - 12.0, SKIP.h))
 
 
+#  「던진다」 를 화면 가운데 세로선에 비춘 자리.
 func _leg_skip() -> Rect2:
+	var go := _leg_go()
+	return Rect2(Vector2(VIEW.x - go.end.x, go.position.y), go.size)
+
+
+#  지금 판의 쪽지 자리 — 툴팁이 가리킬 곳.
+func _leg_skip_plate() -> Rect2:
 	return _skip_rect(clampi(GameData.leg_idx(leg_no), 0,
 			GameData.legs_per_round() - 1))
 
@@ -13131,6 +13147,8 @@ func _tip_hit(m: Vector2) -> Dictionary:
 					return {"k": "rack", "i": i}
 			# 버튼에는 효과 한 줄만 들어간다(폭이 141px 이다). 뱃지의 이름과
 			# 언제 쓰이는지는 툴팁이 맡는다.
+			if _leg_skip().has_point(m) and not _leg_tag(leg_no).is_empty():
+				return {"k": "tag", "i": leg_no, "btn": true}
 			for bi in GameData.legs_per_round():
 				var brn2: int = _round_first() + bi
 				if brn2 < leg_no or _leg_tag(brn2).is_empty():
@@ -13242,7 +13260,8 @@ func _tip_build(hit: Dictionary) -> void:
 			if bt.is_empty():
 				return
 			_tip_set_tag("뱃지")
-			tip_mark = _skip_rect(GameData.leg_idx(i))
+			tip_mark = _leg_skip() if bool(hit.get("btn", false)) \
+					else _skip_rect(GameData.leg_idx(i))
 			tip_title = String(bt.get("name", ""))
 			_tip_add(_tag_text(bt), 10, C_ACC)
 			_tip_add(_tag_when(bt), 9, C_DIM)
@@ -14231,6 +14250,13 @@ func _draw_leg() -> void:
 	_leg_card(cur, first + cur)
 
 	_btn(_leg_go(), "던진다", "목표 %d" % GameData.target_of(leg_no), true)
+	#  보스 판은 못 건너뛴다. 단추를 걷지 않고 띠를 끈다 — 자리가 비면
+	#  「이 판은 왜 건너뛰기가 없지」 를 화면이 말해 주지 않는다.
+	if GameData.skippable(leg_no):
+		_btn(_leg_skip(), "건너뛴다", _elide(_tag_text(leg_tag),
+				_leg_skip().size.x - 16.0, 9), true)
+	else:
+		_btn(_leg_skip(), "못 건너뛴다", "보스 판", false)
 	# 판마다 건너뛰기 자리를 깐다. **뒤 판의 보상도 같이 보인다** —
 	# 지금 판을 건너뛸지는 뒤에 무엇이 기다리는지를 봐야 정해진다.
 	# 지난 판은 안 그린다(이미 지나갔다), 지금 판만 누를 수 있다.
@@ -14246,7 +14272,7 @@ func _draw_leg() -> void:
 			# 이름이 아니라 **효과**를 적는다. "여벌 다트" 는 이름이고,
 			# 건너뛸지 말지를 정하는 데 필요한 것은 "다트 +1개" 다. 이름은
 			# 툴팁에 있다 — 고르는 자리에 필요한 것과 알아 두면 좋은 것이 다르다.
-			_skip_plate(_leg_skip(), leg_tag, true)
+			_skip_plate(_leg_skip_plate(), leg_tag, true)
 			continue
 		var pt := _leg_tag(srn)
 		#  빈 사전이면 「못 건너뛴다 · 보스 판」이 선다. 전에는 이 가지
