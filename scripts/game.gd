@@ -22003,10 +22003,13 @@ func _cup3_bake(img: Image, nm: String, tw: int, th: int, arg := 0) -> void:
 				yy6 += 8
 			#  녹은 **높이를 흩는다.** 발치 다섯 줄 안에 셋을 몰아 두었더니
 			#  어두운 강철 밑단에 주황 점 셋이 나란히 켜져 등불로 보였다.
-			#  위아래로 흩으면 흘러내린 녹이 된다.
+			#  난수로 흩어 봤는데 셋 중 둘이 같은 줄(37/59)에 떨어져 그대로
+			#  한 줄이었다 — 셋뿐인 것을 난수에 맡기면 안 흩어진다.
+			#  자리를 적어 둔다: 둘레는 앞면 좌·중·우, 높이는 셋 다 다르다.
+			var rus := [[0.86, 0.52], [0.06, 0.15], [0.20, 0.34]]
 			for k6 in 3:
-				var rx6: int = int(_pat_rnd(k6, 61) * float(tw))
-				var ry6: int = th - 8 - int(_pat_rnd(k6, 67) * 20.0)
+				var rx6: int = _pat_u(tw, float(rus[k6][0]))
+				var ry6: int = _pat_y(th, float(rus[k6][1]))
 				_pat_box(img, rx6, ry6, 3, 2, 0, true)
 				_pat_box(img, rx6 + 1, ry6 + 2, 2, 1, -1, true)
 
