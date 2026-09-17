@@ -180,6 +180,11 @@ func _run() -> void:
 	_save("shop")
 
 	# ── 새 런 · 3D 통 ───────────────────────────────────
+	#  넘기기(_pack_step)로 옮겨 가며 찍으면 통이 미끄러진 끝에 자루가 한 뭉치로 쏠린
+	#  채 찍혀서, 몇 자루는 앞 자루 뒤에 숨는다(깃털 통에 깃이 한 장만 보였다).
+	#  2026-09-17 검토에서 쟀다 — 옛 코드도 쏠림 0.2~0.3 으로 같다. 물리 탓이지 그림
+	#  탓이 아니다. 여기는 그림을 보는 판이라 cup_probe 처럼 그 다트통을 보인 채
+	#  통을 다시 세우고 가만히 가라앉힌 뒤 찍는다.
 	g._open_newrun()
 	await _wait(60)
 	var st: Rect2 = g._cup_stage()
@@ -190,18 +195,16 @@ func _run() -> void:
 	var packs := GameData.packs()
 	var sheet := Image.create(cw * want.size(), ch, false, Image.FORMAT_RGBA8)
 	sheet.fill(Color("221d33"))
-	var cur := 0
 	for wi in want.size():
 		var pi := -1
 		for k in packs.size():
 			if String(packs[k].get("dart_id", "std")) == want[wi]:
 				pi = k
 				break
-		while cur < pi:
-			g._pack_step(1)
-			cur += 1
-			await _wait(4)
-		await _wait(150)
+		g._pack_view(pi)
+		g._cup3_close()
+		g._cup3_open()
+		await _wait(200)
 		var img: Image = root.get_texture().get_image()
 		img.convert(Image.FORMAT_RGBA8)
 		sheet.blit_rect(img, Rect2i(int(st.position.x) * sc, int(st.position.y) * sc, cw, ch),
