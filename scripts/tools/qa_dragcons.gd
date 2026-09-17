@@ -122,16 +122,17 @@ func _run() -> void:
 	g.leg_no = 1
 	g._open_leg()          # 라운드 뱃지를 굴린다 — 쪽지가 이걸 읽는다
 	g.cons = [candy.duplicate()]
-	#  판 카드 자체는 LEG 에서 툴팁 대상이 아니다(효과는 쪽지가 든다).
-	#  커서가 지나가며 뜨는 것은 **건너뛰기 쪽지**다 — 사용자 화면의 그것이다.
-	var leg_at: Vector2 = g._skip_rect(0).get_center()
-	_ok("안 들면 건너뛰기 쪽지를 가리킨다", not g._tip_hit(leg_at).is_empty(),
+	#  판 카드 자체는 LEG 에서 툴팁 대상이 아니다(효과는 쪽지와 단추가 든다).
+	#  지금 판의 뱃지는 왼쪽 아래 **건너뛰기 단추**가 든다(2026-09-17 — 카드 밑
+	#  쪽지는 뒤 판에만 남았다). 커서가 지나가며 뜨는 것이 그 툴팁이다.
+	var leg_at: Vector2 = g._leg_skip().get_center()
+	_ok("안 들면 건너뛰기 단추를 가리킨다", not g._tip_hit(leg_at).is_empty(),
 			"%s" % g._tip_hit(leg_at))
 	g._hand_press(g._cons_rect(0).get_center())
 	for k in range(1, 9):
 		g._hand_motion(g._cons_rect(0).get_center().lerp(leg_at, float(k) / 8.0))
 	_ok("들면 손에 들려 있다", g.hand_st == g.H.CARRY, "hand_st %d" % g.hand_st)
-	_ok("드는 동안 쪽지를 안 가리킨다", g._tip_hit(leg_at).is_empty(),
+	_ok("드는 동안 단추를 안 가리킨다", g._tip_hit(leg_at).is_empty(),
 			"%s" % g._tip_hit(leg_at))
 	g._hand_abort()
 
