@@ -11,7 +11,7 @@ const Save = preload("res://scripts/save.gd")
 #  보기:  ... -- list
 #
 #  **게임은 이 파일을 안 부른다.** tools/ 안의 다른 것들처럼 --script 로만
-#  돈다. 진짜 저장(user://hightone.cfg)을 건드리므로 프로브처럼 Save.path
+#  돈다. 진짜 저장(user://highton.cfg)을 건드리므로 프로브처럼 Save.path
 #  를 옮기지 않는다 — 옮기면 아무 일도 안 일어난다.
 #
 #  win: 키는 안 심는다. 그것은 "이 단을 완주했다" 는 기록이라, 열어 주는

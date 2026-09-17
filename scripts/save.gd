@@ -32,7 +32,7 @@ extends RefCounted
 #  ── 프로필 ────────────────────────────────────────────
 #  발라트로·슬더스처럼 진도가 프로필마다 따로다. 파일을 둘로 가른다.
 #
-#    user://hightone.cfg     **전역** — 음량·전체화면, 그리고 어느
+#    user://highton.cfg      **전역** — 음량·전체화면, 그리고 어느
 #                            프로필을 쓰는가. 프로필을 갈아도 안 바뀐다.
 #    user://profile_N.cfg    **프로필** — 해금 · 통계 · 세기 · 마지막에
 #                            고른 다트통과 리그.
@@ -44,7 +44,37 @@ extends RefCounted
 #  마지막에 고른 다트통·리그(league · pack)도 **진도 쪽**이다. 전에는
 #  설정에 섞여 있었는데, 프로필 A 가 열어 둔 다트통을 프로필 B 가
 #  물려받으면 새 프로필이 잠긴 다트통으로 시작한다.
-const PATH := "user://hightone.cfg"
+const PATH := "user://highton.cfg"
+
+
+#  ── 이름을 옮긴 저장 ─────────────────────────────────────
+#  게임 이름은 HIGHTON 이다(2026-09-17 사용자). 예전 프로젝트 이름이 HIGHTONE 이라
+#  user:// 가 app_userdata/HIGHTONE 이었고 전역 파일도 hightone.cfg 였다. 이름을
+#  고치면 user:// 가 app_userdata/HIGHTON 으로 옮겨 가 프로필 · 해금 · 통계가 빈
+#  새 폴더에서 시작한다 — 그래서 **새 전역 파일이 없고 옛 폴더가 있으면 한 번**
+#  옛 .cfg 를 옮겨 담는다. 옛 폴더는 안 지운다(되돌아갈 길). 검사 · 도구의 자리
+#  (밑줄로 시작하는 파일)는 안 옮긴다.
+const OLD_DIR := "HIGHTONE"
+const OLD_GLOBAL := "hightone.cfg"
+
+
+static func migrate_name() -> void:
+	if FileAccess.file_exists(PATH):
+		return
+	var here := OS.get_user_data_dir()
+	var old := here.get_base_dir().path_join(OLD_DIR)
+	if old == here or not DirAccess.dir_exists_absolute(old):
+		return
+	var d := DirAccess.open(old)
+	if d == null:
+		return
+	DirAccess.make_dir_recursive_absolute(here)
+	for f in d.get_files():
+		if not f.ends_with(".cfg") or f.begins_with("_"):
+			continue
+		var to: String = PATH.get_file() if f == OLD_GLOBAL else f
+		if not FileAccess.file_exists(here.path_join(to)):
+			DirAccess.copy_absolute(old.path_join(f), here.path_join(to))
 const PROF := "user://profile_%d.cfg"
 const SLOTS := 3
 

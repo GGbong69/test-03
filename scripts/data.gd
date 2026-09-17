@@ -63,7 +63,7 @@ const FILES := {
 	"tutor": "tutor.csv",
 	"boosters": "boosters.csv",
 	"tuning": "tuning.csv",
-	# ── HIGHTONE 스펙(2026-08-23 통합 컨텍스트)에서 온 표 ──
+	# ── HIGHTON 스펙(2026-08-23 통합 컨텍스트)에서 온 표 ──
 	# areas 는 전부 확정이라 게임이 직접 읽는다. 나머지는 상태 열이 문이다 —
 	# 가안·제안·미정 행은 자리(스캐폴드)이고, 검증기가 집계만 한다.
 	"areas": "areas.csv",

@@ -615,11 +615,8 @@ var beep_gap := 0.07
 
 
 func _ready() -> void:
-	#  창 제목은 게임 이름 HIGHTON 이다. project.godot 의 config/name(HIGHTONE)은
-	#  user:// 저장 폴더의 이름이기도 해서, 고치면 프로필 · 해금이 새 빈 폴더로
-	#  갈라진다 — 그래서 창에 뜨는 글자만 여기서 고친다.
-	if _has_renderer():
-		get_window().title = "HIGHTON"
+	#  이름을 HIGHTON 으로 옮기며 갈라진 저장 폴더를 한 번 잇는다 — 무엇보다 먼저다.
+	Save.migrate_name()
 	_autoplay = OS.get_cmdline_user_args().has("autoplay")
 	drop_fast = _autoplay          # 헤드리스는 낙하를 안 기다린다
 	if _autoplay:

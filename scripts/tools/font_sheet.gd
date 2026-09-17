@@ -72,7 +72,7 @@ func _paint(cv: Node2D) -> void:
 		# 제목 크기 40
 		cv.draw_string(f, Vector2(180, y + 52), "하이톤",
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 40, C_TXT)
-		cv.draw_string(f, Vector2(320, y + 52), "HIGHTONE",
+		cv.draw_string(f, Vector2(320, y + 52), "HIGHTON",
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 20, C_DIM)
 
 		# 본문 — 게임에서 실제로 나오는 문자열 그대로
