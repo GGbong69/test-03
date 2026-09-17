@@ -304,7 +304,7 @@ const C_GOLD := Color("f2c94c")
 const C_ODDS := Color("8fd694")
 
 enum S { PICK, AIM_V, AIM_H, CONFIRM, FLY, RESOLVE, CLEAR, SHOP, STAGE, OVER,
-		TITLE, SETTINGS, COLLECT, NEWRUN, LEG, RUNINFO, BOOST, PROFILE }
+		TITLE, SETTINGS, COLLECT, NEWRUN, LEG, RUNINFO, BOOST, PROFILE, INTRO }
 
 # 칸 색 — 길이 20, 값은 colors.csv 의 id. _board_bake 가 굽고
 # 손질·개칠이 고친다. 굽기 전(첫 프레임)에는 비어 있을 수 있으므로
@@ -680,6 +680,302 @@ func _ready() -> void:
 		# 제목 화면. 판을 배경으로 깔아야 하므로 기본 판만 먼저 굽는다.
 		_board_bake()
 		state = S.TITLE
+		if _intro_wanted():
+			_intro_begin()
+
+
+# ══════════════════════════════════════════════════════════
+#  인트로 — 켜면 제목 앞에 한 번
+# ──────────────────────────────────────────────────────────
+#  「게임들을 보면 실행하고 바로 시작화면이 안 나오고 연출이 나오잖아 —
+#  우리 게임도 그런 게 있으면 좋겠다」(사용자, 2026-09-17).
+#
+#  레퍼런스(구도 · 분위기만): 어두운 벽에 램프 하나로 비춘 다트판 사진들 ·
+#  스포트라이트를 받은 다트판 · 한 글자씩 붙었다 떨어지는 도트 네온 간판 ·
+#  이름의 뜻. **하이톤(High Ton)** 은 다트에서 세 발 합이 151~180 인 것이다.
+#  그래서 인트로는 이름을 그대로 보여 준다 —
+#    ① 어둠 · 램프가 딸깍 켜지며 형광등처럼 몇 번 끊긴다 → 판이 드러난다
+#    ② 세 발이 트리플 20 에 꽂히며 밑의 수가 60 · 120 · 180 으로 오른다
+#    ③ 램프가 딸깍 꺼지고, 네온이 한 글자씩 「HIGH TON」 을 켜며 판을 분홍으로
+#       비춘다 → 금빛 E 가 떨어져 붙으며 빈칸이 닫혀 HIGHTONE 이 된다(금빛 번쩍)
+#    ④ 어둠이 제목의 스크림으로 가라앉고 제목 글줄이 떠오른다
+#  판 · 꽂힌 세 발 · 스크림이 제목 화면의 것 그대로라 이음매가 없다 — 던지고
+#  꽂는 것은 제목 판의 자루(_ttl_throw · _ttl_stick)를 쓴다. 소리 규칙도 같다:
+#  판 위(나는 소리 · 착탄)는 다트, 판 밖(램프 · 간판 · 합계)은 카지노다.
+#
+#  아무 키 · 클릭(모바일은 탭)이면 곧장 제목이다. 아직 안 던진 자루는 소리 없이
+#  꽂아 두어 건너뛰어도 판에 세 발이 서 있다.
+#  검사 · 촬영 도구(--script 로 돈다)와 화면 없는 실행에서는 안 튼다.
+# ══════════════════════════════════════════════════════════
+const INTRO := {
+	"lamp": 0.45,                    # 램프 딸깍
+	"flick": [0.0, 0.06, 0.13, 0.17, 0.31, 0.37, 0.55],   # 켜짐 ↔ 꺼짐이 뒤바뀌는 때
+	"darts": [1.45, 1.90, 2.35],     # 세 발을 던지는 때
+	"aim_x": [-4.0, 3.0, 0.0],       # 트리플 20 안에서 조금씩 벗어난다
+	"off": 2.85,                     # 램프가 꺼진다
+	"off_fade": 0.10,
+	"sign": 3.00,                    # 네온이 켜지기 시작
+	"neon_lit": 0.46,                # 네온이 다 켜졌을 때 남는 어둠
+	"letter": 0.075,                 # 글자 사이
+	"buzz": 0.12,                    # 막 켜진 글자가 떠는 시간
+	"e_drop": 3.80,                  # E 가 떨어지기 시작
+	"e_fall": 0.20,                  # 떨어지는 시간 · 빈칸이 닫히는 시간
+	"flash": 0.35,                   # E 가 붙을 때 금빛 번쩍
+	"settle": 4.75,                  # 어둠이 스크림으로 가라앉기 시작
+	"end": 5.35,                     # 제목으로 넘긴다
+	"out": 0.55,                     # 제목 글줄이 떠오르는 시간
+	"dark": Color(0.04, 0.03, 0.07), # 어둠 = 제목 스크림의 색
+	"lit": 0.20,                     # 램프가 다 켜졌을 때 남는 어둠
+	"scrim": 0.72,                   # 제목 스크림(_draw_title)
+	"warm": Color("ffd9a0"),
+	"neon": Color("ff5ca8"), "neon_core": Color("ffe0ef"), "neon_dead": Color("4a2238"),
+	"sign_y": 58.0,
+}
+var intro_t := -1.0        # 흐른 시간. 인트로가 아니면 −1
+var intro_out := 0.0       # 제목으로 넘긴 뒤 글줄을 덮은 막(1 → 0)
+var intro_fired := 0       # 던진 자루 수
+var intro_rang := {}       # 한 번만 울리는 소리
+
+
+func _intro_wanted() -> bool:
+	return _has_renderer() and get_tree().get_script() == null
+
+
+func _intro_begin() -> void:
+	ttl_stuck.clear()
+	ttl_fly.clear()
+	_egg_reset()
+	intro_t = 0.0
+	intro_out = 0.0
+	intro_fired = 0
+	intro_rang.clear()
+	pause_from = -1
+	state = S.INTRO
+	queue_redraw()
+
+
+func _intro_once(key: String, sfx: String) -> void:
+	if intro_rang.has(key):
+		return
+	intro_rang[key] = true
+	_sfx(sfx)
+
+
+#  트리플 20 의 한 점. 판 좌표다.
+func _intro_aim(i: int) -> Vector2:
+	var xs: Array = INTRO.aim_x
+	var r := R * (rt_trp_in + rt_trp_out) * 0.5
+	return BC + Vector2(float(xs[i % xs.size()]), -r)
+
+
+func _intro_tick(d: float) -> void:
+	if intro_out > 0.0:
+		intro_out = maxf(intro_out - d / float(INTRO.out), 0.0)
+		queue_redraw()
+	if state != S.INTRO:
+		return
+	intro_t += d
+	var t := intro_t
+	if t >= float(INTRO.lamp):
+		_intro_once("lamp", "menu_pick")
+	if t >= float(INTRO.off):
+		_intro_once("off", "menu_back")
+	var ds: Array = INTRO.darts
+	while intro_fired < ds.size() and t >= float(ds[intro_fired]):
+		_ttl_throw(_intro_aim(intro_fired))
+		intro_fired += 1
+	if t >= float(INTRO.sign):
+		_intro_once("sign", "leg_open")
+	if t >= float(INTRO.e_drop) + float(INTRO.e_fall):
+		_intro_once("e", "settle_total")
+		if not intro_rang.has("e_shake"):
+			intro_rang["e_shake"] = true
+			shake = maxf(shake, 3.0)
+	if t >= float(INTRO.end):
+		_intro_end()
+		return
+	queue_redraw()
+
+
+#  제목으로. 건너뛸 때도 이 길이다.
+func _intro_end() -> void:
+	if state != S.INTRO:
+		return
+	var ds: Array = INTRO.darts
+	while intro_fired < ds.size():
+		var p := _intro_aim(intro_fired)
+		var a := Vector2(float(TTL.bx), float(TTL.by))
+		var u := (p - a).normalized()
+		var ids: Array = TTL.ids
+		ttl_stuck.append({"p": p, "u": u, "id": String(ids[intro_fired % ids.size()]),
+				"rot": _ttl_rot(u), "t": float(TTL.ring)})
+		intro_fired += 1
+	state = S.TITLE
+	intro_t = -1.0
+	intro_out = 1.0
+	queue_redraw()
+
+
+#  램프 밝기 0~1. 켜지는 동안은 정해진 박자로 붙었다 떨어진다.
+func _intro_light(t: float) -> float:
+	var k := t - float(INTRO.lamp)
+	if k < 0.0:
+		return 0.0
+	var fl: Array = INTRO.flick
+	if t >= float(INTRO.off):
+		return maxf(1.0 - (t - float(INTRO.off)) / float(INTRO.off_fade), 0.0)
+	if k >= float(fl[fl.size() - 1]):
+		return 1.0
+	var on := false
+	for b in fl:
+		if k >= float(b):
+			on = not on
+	return 0.85 if on else 0.10
+
+
+#  네온 밝기 0~1 — 켜진 글자 몫.
+func _intro_neon(t: float) -> float:
+	var n := 7.0
+	return clampf((t - float(INTRO.sign)) / (float(INTRO.letter) * n), 0.0, 1.0)
+
+
+func _intro_total() -> int:
+	var n := 0
+	for sd in ttl_stuck:
+		var hi := hit_info(sd.p)
+		n += int(hi.base) * maxi(int(hi.mult), 0)
+	return n
+
+
+func _draw_intro() -> void:
+	var t := intro_t
+	var light := _intro_light(t)
+	var st: float = clampf((t - float(INTRO.settle)) / (float(INTRO.end) - float(INTRO.settle)), 0.0, 1.0)
+	st = st * st * (3.0 - 2.0 * st)
+	var glow: float = light * (1.0 - st)
+	var neon := _intro_neon(t)
+	#  어둠 — 램프가 다 켜지면 lit, 네온만 켜지면 neon_lit 만 남는다. 끝에서
+	#  제목 스크림의 짙기로 가라앉는다.
+	var da: float = minf(lerpf(1.0, float(INTRO.lit), light),
+			lerpf(1.0, float(INTRO.neon_lit), neon))
+	da = lerpf(da, float(INTRO.scrim), st)
+	draw_rect(_full(), Color(INTRO.dark, da))
+	#  네온 빛 — 간판 쪽(위)에서 판으로 번진다
+	if neon > 0.0 and st < 1.0:
+		var pk: Color = INTRO.neon
+		for k in 6:
+			draw_circle(Vector2(BC.x, 70.0), 190.0 - float(k) * 24.0,
+					Color(pk, 0.018 * neon * (1.0 - st)))
+	#  벽에 고인 빛 · 원뿔
+	var warm: Color = INTRO.warm
+	if glow > 0.0:
+		for k in 7:
+			draw_circle(BC, 170.0 - float(k) * 16.0, Color(warm, 0.022 * glow))
+		var top := Vector2(BC.x, 22.0)
+		draw_polygon(PackedVector2Array([top + Vector2(-18.0, 0.0), top + Vector2(18.0, 0.0),
+				Vector2(BC.x + 150.0, 350.0), Vector2(BC.x - 150.0, 350.0)]),
+				PackedColorArray([Color(warm, 0.16 * glow), Color(warm, 0.16 * glow),
+				Color(warm, 0.0), Color(warm, 0.0)]))
+	#  자루 — 제목 판의 것
+	_ttl_draw()
+	_intro_lamp(light, st)
+	_intro_sign(t, 1.0 - st)
+	_intro_count(t, 1.0 - st)
+	#  E 가 붙는 순간 금빛 번쩍
+	var ft: float = t - float(INTRO.e_drop) - float(INTRO.e_fall)
+	if ft >= 0.0 and ft < float(INTRO.flash):
+		var fk: float = 1.0 - ft / float(INTRO.flash)
+		draw_rect(_full(), Color(C_ACC, 0.16 * fk * fk))
+
+
+func _intro_lamp(light: float, st: float) -> void:
+	#  갓은 램프가 꺼지면 같이 어둠에 묻힌다 — 네온 간판이 그 자리에 선다
+	var a: float = (1.0 - st) * (maxf(light, 0.35) if intro_t < float(INTRO.off) else light)
+	if a <= 0.0:
+		return
+	var cx: float = BC.x
+	draw_line(Vector2(cx, -view_pad.y), Vector2(cx, 12.0), Color("3a3350", a), 1.0)
+	draw_colored_polygon(PackedVector2Array([Vector2(cx - 8.0, 11.0), Vector2(cx + 8.0, 11.0),
+			Vector2(cx + 19.0, 23.0), Vector2(cx - 19.0, 23.0)]), Color("2a2436", a))
+	draw_line(Vector2(cx - 7.0, 12.0), Vector2(cx - 17.0, 22.0), Color("5b536e", a), 1.0)
+	var bulb := Color(INTRO.warm).lerp(Color.WHITE, 0.5)
+	draw_rect(Rect2(cx - 12.0, 23.0, 24.0, 2.0), Color(bulb, a * maxf(light, 0.15)))
+
+
+#  네온 간판. 글자마다 켜지는 때가 다르고, 막 켜진 동안은 떤다. E 는 금빛으로
+#  떨어져 붙고 그동안 빈칸이 닫힌다.
+func _intro_sign(t: float, a: float) -> void:
+	#  꺼진 관은 램프가 꺼져야 보인다 — 램프가 켠 동안에는 갓과 겹친다
+	if a <= 0.0 or t < float(INTRO.off):
+		return
+	var sz := 36
+	var base := "HIGH TON"
+	var tight := "HIGHTON"
+	var ew: float = font.get_string_size("E", HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x
+	var w0: float = font.get_string_size(base, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x
+	var w1: float = font.get_string_size(tight + "E", HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x
+	var ke: float = clampf((t - float(INTRO.e_drop)) / float(INTRO.e_fall), 0.0, 1.0)
+	var close: float = 1.0 - pow(1.0 - ke, 3.0)
+	var y: float = float(INTRO.sign_y)
+	var x0: float = lerpf(BC.x - w0 * 0.5, BC.x - w1 * 0.5, close)
+	var neon: Color = INTRO.neon
+	var core: Color = INTRO.neon_core
+	var dead: Color = INTRO.neon_dead
+	var shown := 0
+	for j in base.length():
+		var ch := base.substr(j, 1)
+		if ch == " ":
+			continue
+		#  빈칸 뒤 글자(TON)는 빈칸 폭만큼 당겨진다
+		var pre := base.substr(0, j)
+		var xa: float = font.get_string_size(pre, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x
+		var xb: float = font.get_string_size(pre.replace(" ", ""), HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x
+		var x: float = x0 + lerpf(xa, xb, close)
+		var on_t: float = float(INTRO.sign) + float(shown) * float(INTRO.letter)
+		shown += 1
+		var lit: bool = t >= on_t
+		if lit and t < on_t + float(INTRO.buzz):
+			lit = int((t - on_t) * 60.0) % 3 != 1
+		_intro_glyph(Vector2(x, y), ch, sz, neon, core, dead, lit, a)
+	#  E — 위에서 떨어져 붙는다
+	if ke > 0.0:
+		var ex: float = x0 + w1 - ew
+		var ey: float = lerpf(y - 26.0, y, 1.0 - pow(1.0 - ke, 2.0))
+		if ke >= 1.0:
+			ey = y
+		_intro_glyph(Vector2(ex, ey), "E", sz, C_ACC, C_GOLD, dead, true, a * ke)
+
+
+func _intro_glyph(at: Vector2, ch: String, sz: int, halo: Color, core: Color,
+		dead: Color, lit: bool, a: float) -> void:
+	if not lit:
+		draw_string(font, at, ch, HORIZONTAL_ALIGNMENT_LEFT, -1, sz, Color(dead, a))
+		return
+	for o in [Vector2(-2.0, 0.0), Vector2(2.0, 0.0), Vector2(0.0, -2.0), Vector2(0.0, 2.0),
+			Vector2(-1.0, -1.0), Vector2(1.0, 1.0), Vector2(1.0, -1.0), Vector2(-1.0, 1.0)]:
+		draw_string(font, at + o, ch, HORIZONTAL_ALIGNMENT_LEFT, -1, sz, Color(halo, 0.22 * a))
+	draw_string(font, at, ch, HORIZONTAL_ALIGNMENT_LEFT, -1, sz, Color(halo, a))
+	draw_string(font, at + Vector2(0.0, -1.0), ch, HORIZONTAL_ALIGNMENT_LEFT, -1, sz, Color(core, 0.55 * a))
+
+
+#  판 밑의 합계 — 꽂힐 때마다 오른다. 180 이 되면 금빛으로 한 번 깜빡인다.
+func _intro_count(t: float, a: float) -> void:
+	var n := _intro_total()
+	if n <= 0 or a <= 0.0:
+		return
+	var col: Color = C_TXT
+	if n >= 180:
+		col = C_ACC if int(t * 8.0) % 2 == 0 or t > float(INTRO.sign) else C_TXT
+	draw_string(font, Vector2(0.0, 350.0), str(n), HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 24,
+			Color(col, a))
+
+
+#  제목으로 넘긴 뒤 — 왼쪽 글줄 기둥을 제목 바탕색 막으로 덮었다가 걷는다.
+#  판은 인트로 끝에 이미 스크림 짙기라 안 덮는다.
+func _intro_over(k: float) -> void:
+	var under: Color = C_BG.lerp(Color(INTRO.dark), float(INTRO.scrim))
+	draw_rect(Rect2(-view_pad.x, -view_pad.y, 196.0 + view_pad.x, VIEW.y + view_pad.y * 2.0),
+			Color(under, k))
 
 
 # ══════════════════════════════════════════════════════════
@@ -2749,6 +3045,7 @@ func _process(d: float) -> void:
 	_boost_tick(d)
 	_set_tick(d)
 	_title_tick(d)
+	_intro_tick(d)
 	_prof_tick(d)
 	if state == S.CLEAR:
 		clear_t += d
@@ -3405,6 +3702,9 @@ func _unhandled_input(e: InputEvent) -> void:
 		if k.pressed and not k.echo:
 			if Dev.key(self, k.keycode):          # DEV
 				return
+			if state == S.INTRO:
+				_intro_end()
+				return
 			if swap_live:
 				# 연출은 아무 키로나 건너뛴다. 잠긴 채로 못 빠져나가는
 				# 자리를 안 만드는 것이 ESC(일시정지)보다 앞선다.
@@ -3483,6 +3783,9 @@ func _unhandled_input(e: InputEvent) -> void:
 		var mp: Vector2 = mb.position - view_pad
 		mouse_at = mp
 		mouse_down = mb.pressed
+		if mb.pressed and state == S.INTRO:
+			_intro_end()
+			return
 		if mb.pressed:
 			#  설명 중이면 클릭이 **넘기기**다. 게임에 안 보낸다 — 배우다 말고
 			#  실수로 물건을 사면 설명이 손해로 끝난다.
@@ -4934,6 +5237,8 @@ func _draw_screen(scr: int) -> void:
 		_draw_over()
 	elif scr == S.TITLE:
 		_draw_title()
+	elif scr == S.INTRO:
+		_draw_intro()
 	elif scr == S.SETTINGS:
 		# 설정 글씨는 **흐림 판 위**여야 하므로 앞판(Front)이 그린다.
 		# 여기서는 뒤에 남아 흐려질 화면만 그린다 — 판 중에 열었으면
@@ -5014,6 +5319,8 @@ func _draw() -> void:
 			_draw_screen(run_from)
 			ui_under = false
 		_draw_screen(state)
+		if intro_out > 0.0 and state == S.TITLE:
+			_intro_over(intro_out)
 
 	# 화면이 바뀌어도 같은 자리에 남는 것만 판이다 — 그래서 스크림 뒤에 그린다.
 	_hud_draw()
@@ -5054,7 +5361,7 @@ func _is_aim_stage() -> bool:
 func _hud_draw() -> void:
 	if state == S.OVER or state == S.TITLE or state == S.SETTINGS \
 			or state == S.COLLECT or state == S.NEWRUN or state == S.RUNINFO \
-			or state == S.PROFILE:
+			or state == S.PROFILE or state == S.INTRO:
 		return
 	if not _bar_hidden():
 		_draw_topbar()
@@ -19992,6 +20299,8 @@ func _mus_want() -> String:
 	elif st == S.SETTINGS and pause_from >= 0:
 		st = pause_from
 	match st:
+		S.INTRO:
+			return ""
 		S.TITLE, S.SETTINGS, S.COLLECT, S.NEWRUN, S.OVER, S.PROFILE:
 			return "lobby"
 		S.STAGE, S.SHOP, S.LEG, S.CLEAR:
@@ -20188,7 +20497,8 @@ func _title_tick(d: float) -> void:
 	#  판이 제목에 남았다 — 판을 비우고 되굽는다(런은 제목에서 새로 시작한다).
 	#  칸 수가 기본과 다를 때만 — 제목 상태에서 판을 만지는 검사(qa_modslot)가 낀 장을
 	#  잃지 않게 좁힌다.
-	if state == S.TITLE and not mods_own.is_empty() 			and sectors.size() != GameData.SECTORS_BASE.size():
+	if state == S.TITLE and not mods_own.is_empty() \
+			and sectors.size() != GameData.SECTORS_BASE.size():
 		mods_own.clear()
 		_board_bake()
 	var on: bool = state == S.TITLE
@@ -20207,7 +20517,7 @@ func _title_tick(d: float) -> void:
 	#  판은 살아 있어야 한다 — 멈추면 흐림 판 뒤에서 얼어붙은 그림이 된다.
 	#  다만 **새 자루는 안 보낸다**(live). 설정을 만지는 중에 소리가 끼는
 	#  것은 배경이 아니라 방해다.
-	var bg: bool = on or (state == S.SETTINGS and pause_from < 0)
+	var bg: bool = on or (state == S.SETTINGS and pause_from < 0) or state == S.INTRO
 	if bg:
 		_ttl_board(d)
 		#  설정 밑에서는 움직이는 것이 있을 때만 다시 그린다. 저쪽은 매

@@ -411,6 +411,7 @@ static func _rows(g: Node) -> Array:
 				{"n1": "판 다시 굽기", "t": "act", "a": "bake"},
 				{"n1": "제목 판 금 가기 직전", "t": "act", "a": "egg_crack"},
 				{"n1": "제목 판 깨기 직전", "t": "act", "a": "egg"},
+				{"n1": "인트로 다시 보기", "t": "act", "a": "intro"},
 			]
 		3:
 			return [
@@ -675,6 +676,10 @@ static func _run(g: Node, e: Dictionary) -> void:
 		"bake":
 			g._board_bake()
 			_say("판 다시 구움")
+			return
+		"intro":
+			g._intro_begin()
+			_say("인트로")
 			return
 		"egg_crack":
 			# 불 여섯에 세워 두고 제목으로 간다 — 한 번 더 물면 첫 금이 튄다.
