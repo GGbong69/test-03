@@ -14293,11 +14293,42 @@ func _draw_leg() -> void:
 				HORIZONTAL_ALIGNMENT_LEFT, pw, 9, C_TXT)
 
 
-# 판 한 장. 지금 판이면 서고 나머지는 눕는다.
+#  판 한 장 — **나무 간판.** 널빤지 셋을 가로로 대고 양 끝에 못을 박았다.
+#
+#  전에는 둥근 모서리의 판(C_PANEL) 한 장이었는데 「그냥 생성한 종이
+#  같다 · 판자같이」 「클리어한 판은 간판이 깨져 있다거나」 라는 말을
+#  들었다(2026-09-17). 이 게임의 판 밖은 나무 카운터와 펠트라, 판도 그
+#  나무로 짠 물건이어야 한 테이블에 놓인다.
+#
+#  지금 판이면 서고 나머지는 눕는다. **이긴 판은 간판이 두 동강 나 있다** —
+#  오른쪽 조각이 떨어져 비틀어지고, 갈라진 자리는 속살이 밝게 드러난다.
+#  건너뛴 판은 안 깨진다(던져서 이긴 것이 아니다). 어둡게 가라앉기만 한다.
+#  보스 판은 붉고 짙은 나무에 쇠띠 둘을 둘렀다.
+#
+#  무늬는 판 번호를 씨로 뽑는다 — 매 프레임 같은 결이어야 나무다.
+const SIGN := {
+	"planks": 3,
+	"wood": Color("7a5236"),
+	"wood_now": Color("936641"),
+	"wood_boss": Color("6a3b2e"),
+	"wood_done": Color("4a372b"),
+	"paint": Color("f1e3c2"),
+	"iron": Color("37353d"),
+	"nail": Color("2a2320"),
+	"th": 3.0,                    # 널 두께(아래로 비치는 옆면)
+	"chamfer": 2,                 # 모서리 깎기(_round_ring 단계)
+	"gap": Vector2(6.0, 3.0),     # 떨어진 조각이 밀려난 거리(화면 px)
+	"tilt": 0.11,                 # 떨어진 조각이 비틀린 각(라디안)
+}
+
+
 func _leg_card(i: int, rn: int) -> void:
 	var r := _row_rect(i, GameData.legs_per_round())
 	var sz: Vector2 = r.size
 	var done: bool = rn < leg_no
+	var skipped: bool = done and bool(leg_skipped.get(rn, false))
+	var broken: bool = done and not skipped
+	var boss: bool = not GameData.skippable(rn)
 	var up: float = 1.0 if rn == leg_no else 0.0
 	# 미끄러져 들어온다 — 제약 카드와 같은 딜 어법
 	var k: float = clampf((leg_t - float(i) * float(DEAL.stag))
@@ -14308,41 +14339,265 @@ func _leg_card(i: int, rn: int) -> void:
 	var w2: float = sz.x * gs
 	var foot: float = r.end.y
 	var q := _card_quad(px - (w2 - sz.x) * 0.5, w2, foot, up, gs, 7.0 * up)
+	var w: float = sz.x
 	var ch: float = float(CARD.h)
 
-	draw_colored_polygon(_quad_round(q, sz.x, ch, TBL.light * (2.0 + 5.0 * up)),
-			Color(0.0, 0.0, 0.0, 0.22 + 0.14 * up))
-	var body: Color = C_PANEL.darkened(0.30) if done \
-			else C_PANEL.lightened(0.10 + 0.08 * up)
-	draw_colored_polygon(_quad_round(q, sz.x, ch), body)
-	draw_colored_polygon(_quad_top_band(q, sz.x, ch, 2.0),
-			C_ACC if rn == leg_no else C_MULT.darkened(0.4))
-
-	var ax: Vector2 = ((q[1] - q[0]) + (q[2] - q[3])) * 0.5 / sz.x
-	var ay: Vector2 = ((q[3] - q[0]) + (q[2] - q[1])) * 0.5 / CARD.h
-	var mid: Vector2 = (q[0] + q[1] + q[2] + q[3]) * 0.25
-	draw_set_transform_matrix(Transform2D(ax, ay,
-			mid - ax * (sz.x * 0.5) - ay * (CARD.h * 0.5) + shake_off))
-	var ink: Color = C_DIM.darkened(0.3) if done else C_TXT
-	draw_string(font, Vector2(0.0, 30.0), GameData.leg_name(rn),
-			HORIZONTAL_ALIGNMENT_CENTER, sz.x, 11,
-			ink if rn != leg_no else C_ACC)
+	var wood: Color = SIGN.wood
 	if done:
-		draw_string(font, Vector2(0.0, 56.0), "넘김",
-				HORIZONTAL_ALIGNMENT_CENTER, sz.x, 11, C_OFF)
+		wood = SIGN.wood_done
+	elif boss:
+		wood = SIGN.wood_boss
+	elif rn == leg_no:
+		wood = SIGN.wood_now
+
+	var board := _round_ring(w, ch, int(SIGN.chamfer))
+	#  조각들 — 안 깨졌으면 판 하나, 깨졌으면 왼쪽 몸통과 떨어져 나간 오른쪽.
+	var pieces := []                 # [{poly(제 좌표), xf(화면)}]
+	var crack := PackedVector2Array()
+	if broken:
+		crack = _sign_crack(w, ch, rn)
+		var left := PackedVector2Array([Vector2(-2.0, -2.0)])
+		var right := PackedVector2Array()
+		for c in crack:
+			left.append(c)
+		left.append(Vector2(-2.0, ch + 2.0))
+		right.append(Vector2(w + 2.0, -2.0))
+		right.append(Vector2(w + 2.0, ch + 2.0))
+		for ci in range(crack.size() - 1, -1, -1):
+			right.append(crack[ci])
+		var lp: Array = Geometry2D.intersect_polygons(board, left)
+		var rp: Array = Geometry2D.intersect_polygons(board, right)
+		if not lp.is_empty():
+			pieces.append({"poly": lp[0], "xf": _sign_xf(q, w, ch, lp[0],
+					Vector2(-1.0, 0.0), -0.02)})
+		if not rp.is_empty():
+			pieces.append({"poly": rp[0], "xf": _sign_xf(q, w, ch, rp[0],
+					SIGN.gap, float(SIGN.tilt))})
 	else:
-		draw_string(font, Vector2(0.0, 56.0), "목표 %d" % GameData.target_of(rn),
-				HORIZONTAL_ALIGNMENT_CENTER, sz.x, 11, ink)
+		pieces.append({"poly": board, "xf": Transform2D.IDENTITY})
+
+	#  그림자 · 옆면 · 얼굴 — 조각마다
+	for pc in pieces:
+		var sp := _sign_map(q, w, ch, pc.poly, pc.xf)
+		var shv: Vector2 = TBL.light * (2.0 + 5.0 * up)
+		var sh := PackedVector2Array()
+		for pt in sp:
+			sh.append(pt + shv)
+		draw_colored_polygon(sh, Color(0.0, 0.0, 0.0, 0.26 + 0.14 * up))
+	if broken:
+		_sign_chips(q, w, ch, rn, crack)
+	for pc in pieces:
+		var sp := _sign_map(q, w, ch, pc.poly, pc.xf)
+		var th: float = float(SIGN.th) * (0.6 + 0.6 * up)
+		var side := PackedVector2Array()
+		for pt in sp:
+			side.append(pt + Vector2(0.0, th))
+		draw_colored_polygon(side, wood.darkened(0.55))
+		_sign_face(q, w, ch, pc.poly, pc.xf, wood, rn, boss)
+		if rn == leg_no:
+			#  지금 판 — 윗널 머리에 금빛 페인트 한 줄
+			var band := PackedVector2Array([Vector2(0.0, 0.0), Vector2(w, 0.0),
+					Vector2(w, 2.0), Vector2(0.0, 2.0)])
+			for bp in Geometry2D.intersect_polygons(band, pc.poly):
+				draw_colored_polygon(_sign_map(q, w, ch, bp, pc.xf), C_ACC)
+	if broken:
+		#  갈라진 자리 — 속살이 밝게 드러나고 결이 삐죽 나온다
+		for pi in pieces.size():
+			var pc: Dictionary = pieces[pi]
+			var seg: Array = Geometry2D.intersect_polyline_with_polygon(
+					_sign_grow(crack, -0.6 if pi == 0 else 0.6), pc.poly)
+			for sg in seg:
+				draw_polyline(_sign_map(q, w, ch, sg, pc.xf), wood.lightened(0.42), 1.0)
+		_sign_splinters(q, w, ch, crack, pieces, wood)
+
+	#  글씨 — 판에 칠한 페인트. 깨진 판은 몸통(왼쪽 조각)에 이름만 남는다.
+	var ax: Vector2 = ((q[1] - q[0]) + (q[2] - q[3])) * 0.5 / w
+	var ay: Vector2 = ((q[3] - q[0]) + (q[2] - q[1])) * 0.5 / ch
+	var mid: Vector2 = (q[0] + q[1] + q[2] + q[3]) * 0.25
+	var a0 := Transform2D(ax, ay, mid - ax * (w * 0.5) - ay * (ch * 0.5))
+	var paint: Color = SIGN.paint
+	if broken:
+		var bxf: Transform2D = pieces[0].xf
+		draw_set_transform_matrix(Transform2D(0.0, shake_off) * bxf * a0)
+		var cx: float = crack[0].x * 0.5
+		_sign_text(Vector2(cx - 40.0, 34.0), 80.0, GameData.leg_name(rn), 11,
+				Color(paint.darkened(0.35), 0.9))
+		_sign_text(Vector2(cx - 40.0, 56.0), 80.0, "넘김", 9,
+				Color(paint.darkened(0.45), 0.8))
+		draw_set_transform(shake_off)
+		return
+	draw_set_transform_matrix(Transform2D(0.0, shake_off) * a0)
+	var ink: Color = paint.darkened(0.40) if done else paint
+	_sign_text(Vector2(0.0, 30.0), w, GameData.leg_name(rn), 11,
+			C_ACC if rn == leg_no else ink)
+	if skipped:
+		_sign_text(Vector2(0.0, 56.0), w, "건너뜀", 11, Color(paint.darkened(0.5), 0.85))
+	else:
+		_sign_text(Vector2(0.0, 56.0), w, "목표 %d" % GameData.target_of(rn), 11, ink)
 		# 보상은 수가 아니라 **금화 개수**로 낸다. 3 과 5 의 차이는 읽어야
 		# 알지만 금화 셋과 다섯은 안 읽고도 보인다. 카드가 누워 있을 때
 		# 특히 그렇다 — 눌린 글자는 못 읽어도 개수는 세인다.
 		var rw: int = GameData.reward_of(rn)
 		var cw: float = 7.0
-		var cx0: float = sz.x * 0.5 - float(rw) * cw * 0.5
+		var cx0: float = w * 0.5 - float(rw) * cw * 0.5
 		for ci in mini(rw, 8):
-			draw_plaque(Vector2(cx0 + float(ci) * cw, 70.0), 5.5, 3.6,
-					C_GOLD if not done else C_DIM.darkened(0.3))
+			draw_plaque(Vector2(cx0 + float(ci) * cw, 70.0), 5.5, 3.6, C_GOLD)
 	draw_set_transform(shake_off)
+
+
+#  글씨 한 줄. 한 칸 아래에 짙은 자국을 깔아 나무에 칠한 것처럼 앉힌다 —
+#  맨 글자는 결 위에 뜬 스티커로 읽힌다.
+func _sign_text(at: Vector2, w: float, t: String, sz: int, col: Color) -> void:
+	draw_string(font, at + Vector2(0.0, 1.0), t, HORIZONTAL_ALIGNMENT_CENTER, w, sz,
+			Color(0.08, 0.04, 0.02, 0.55 * col.a))
+	draw_string(font, at, t, HORIZONTAL_ALIGNMENT_CENTER, w, sz, col)
+
+
+func _sign_map(q: PackedVector2Array, w: float, h: float, pts: PackedVector2Array,
+		xf: Transform2D) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	for pt in pts:
+		out.append(xf * _quad_uv(q, w, h, pt.x, pt.y))
+	return out
+
+
+#  조각을 제 무게중심(화면)에서 ang 만큼 돌리고 off 만큼 민다.
+func _sign_xf(q: PackedVector2Array, w: float, h: float, poly: PackedVector2Array,
+		off: Vector2, ang: float) -> Transform2D:
+	var c := Vector2.ZERO
+	for pt in poly:
+		c += _quad_uv(q, w, h, pt.x, pt.y)
+	c /= float(maxi(poly.size(), 1))
+	return Transform2D(ang, c + off) * Transform2D(0.0, -c)
+
+
+#  갈라진 금 — 윗모서리에서 아랫모서리까지 지그재그. 판 번호가 씨다.
+func _sign_crack(w: float, h: float, rn: int) -> PackedVector2Array:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = rn * 7717 + 3
+	var x0: float = w * rng.randf_range(0.58, 0.64)
+	var x1: float = w * rng.randf_range(0.68, 0.76)
+	var out := PackedVector2Array([Vector2(x0, -2.0)])
+	var n := 6
+	for s in range(1, n):
+		var t: float = float(s) / float(n)
+		out.append(Vector2(lerpf(x0, x1, t) + rng.randf_range(-6.0, 6.0) * (1.0 if s % 2 == 0 else -1.0),
+				h * t))
+	out.append(Vector2(x1, h + 2.0))
+	return out
+
+
+#  금선을 옆으로 조금 민 것 — 조각 안쪽으로 들어온 테두리를 긋는 데 쓴다.
+func _sign_grow(line: PackedVector2Array, dx: float) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	for pt in line:
+		out.append(pt + Vector2(dx, 0.0))
+	return out
+
+
+func _sign_face(q: PackedVector2Array, w: float, h: float, piece: PackedVector2Array,
+		xf: Transform2D, wood: Color, rn: int, boss: bool) -> void:
+	var pl: int = int(SIGN.planks)
+	var ph: float = h / float(pl)
+	var tones := [0.0, -0.07, 0.05]
+	for k in pl:
+		var y0: float = ph * float(k)
+		var y1: float = y0 + ph
+		var tn: float = tones[k % tones.size()]
+		var col: Color = wood.lightened(tn) if tn > 0.0 else wood.darkened(-tn)
+		var rect := PackedVector2Array([Vector2(-2.0, y0), Vector2(w + 2.0, y0),
+				Vector2(w + 2.0, y1), Vector2(-2.0, y1)])
+		for poly in Geometry2D.intersect_polygons(rect, piece):
+			draw_colored_polygon(_sign_map(q, w, h, poly, xf), col)
+		#  결 — 널마다 둘. 널 번호와 판 번호로 씨를 뽑아 늘 같은 결이다.
+		var rng := RandomNumberGenerator.new()
+		rng.seed = rn * 131 + k * 17 + 5
+		for g in 2:
+			var gy: float = y0 + ph * rng.randf_range(0.28, 0.82)
+			var gx0: float = rng.randf_range(3.0, w * 0.35)
+			var gx1: float = gx0 + rng.randf_range(w * 0.30, w * 0.60)
+			var wav: float = rng.randf_range(0.6, 1.4)
+			var gl := PackedVector2Array()
+			for sidx in 7:
+				var t: float = float(sidx) / 6.0
+				gl.append(Vector2(lerpf(gx0, gx1, t), gy + sin(t * TAU * wav) * 0.9))
+			_sign_poly(q, w, h, piece, xf, gl, col.darkened(0.20))
+		#  옹이 하나 — 가운데 널에만, 판마다 자리가 다르다
+		if k == 1:
+			var kx: float = w * rng.randf_range(0.15, 0.85)
+			var ky: float = y0 + ph * 0.5
+			var kp := PackedVector2Array()
+			for a in 8:
+				var an := TAU * float(a) / 8.0
+				kp.append(Vector2(kx + cos(an) * 3.0, ky + sin(an) * 1.6))
+			for poly in Geometry2D.intersect_polygons(kp, piece):
+				draw_colored_polygon(_sign_map(q, w, h, poly, xf), col.darkened(0.28))
+		#  널 머리 빛 · 이음매 그늘
+		_sign_poly(q, w, h, piece, xf, PackedVector2Array([Vector2(0.0, y0 + 1.0),
+				Vector2(w, y0 + 1.0)]), col.lightened(0.16))
+		if k > 0:
+			_sign_poly(q, w, h, piece, xf, PackedVector2Array([Vector2(0.0, y0),
+					Vector2(w, y0)]), wood.darkened(0.55))
+	#  보스 판 쇠띠 — 널 셋을 세로로 묶는다
+	if boss:
+		for bx in [w * 0.18, w * 0.82]:
+			var strap := PackedVector2Array([Vector2(bx - 3.0, -2.0), Vector2(bx + 3.0, -2.0),
+					Vector2(bx + 3.0, h + 2.0), Vector2(bx - 3.0, h + 2.0)])
+			for poly in Geometry2D.intersect_polygons(strap, piece):
+				draw_colored_polygon(_sign_map(q, w, h, poly, xf), SIGN.iron)
+			_sign_poly(q, w, h, piece, xf, PackedVector2Array([Vector2(bx - 2.0, 0.0),
+					Vector2(bx - 2.0, h)]), Color(SIGN.iron).lightened(0.25))
+	#  못 — 널마다 양 끝(보스 판은 쇠띠 위)
+	for k in pl:
+		var ny: float = ph * (float(k) + 0.5)
+		var nxs: Array = [w * 0.18, w * 0.82] if boss else [6.0, w - 6.0]
+		for nx in nxs:
+			var np := Vector2(nx, ny)
+			if not Geometry2D.is_point_in_polygon(np, piece):
+				continue
+			var sp: Vector2 = (xf * _quad_uv(q, w, h, np.x, np.y)).round()
+			draw_rect(Rect2(sp - Vector2(1.0, 1.0), Vector2(2.0, 2.0)), SIGN.nail)
+			draw_rect(Rect2(sp - Vector2(1.0, 1.0), Vector2(1.0, 1.0)),
+					Color(SIGN.nail).lightened(0.45))
+
+
+func _sign_poly(q: PackedVector2Array, w: float, h: float, piece: PackedVector2Array,
+		xf: Transform2D, line: PackedVector2Array, col: Color) -> void:
+	for seg in Geometry2D.intersect_polyline_with_polygon(line, piece):
+		draw_polyline(_sign_map(q, w, h, seg, xf), col, 1.0)
+
+
+#  결이 삐죽 — 금의 꺾인 자리마다 짧은 가시가 몸통 쪽에서 틈으로 나온다.
+func _sign_splinters(q: PackedVector2Array, w: float, h: float,
+		crack: PackedVector2Array, pieces: Array, wood: Color) -> void:
+	if pieces.is_empty():
+		return
+	var bxf: Transform2D = pieces[0].xf
+	for ci in range(1, crack.size() - 1):
+		var c: Vector2 = crack[ci]
+		var ln: float = 2.5 + float(ci % 3)
+		var a := _sign_pt(q, w, h, bxf, c + Vector2(-1.0, 0.0))
+		var b := _sign_pt(q, w, h, bxf, c + Vector2(ln, -1.0 if ci % 2 == 0 else 1.0))
+		draw_line(a, b, wood.lightened(0.30), 1.0)
+
+
+func _sign_pt(q: PackedVector2Array, w: float, h: float, xf: Transform2D, pt: Vector2) -> Vector2:
+	return xf * _quad_uv(q, w, h, pt.x, pt.y)
+
+
+#  틈 아래 펠트에 떨어진 부스러기 셋.
+func _sign_chips(q: PackedVector2Array, w: float, h: float, rn: int,
+		crack: PackedVector2Array) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = rn * 3301 + 11
+	var base: Vector2 = _sign_pt(q, w, h, Transform2D.IDENTITY, crack[crack.size() - 1])
+	for n in 3:
+		var c: Vector2 = base + Vector2(rng.randf_range(-6.0, 10.0), rng.randf_range(2.0, 7.0))
+		var sz: float = rng.randf_range(1.2, 2.2)
+		var an: float = rng.randf() * TAU
+		draw_colored_polygon(PackedVector2Array([c + Vector2.from_angle(an) * sz,
+				c + Vector2.from_angle(an + 2.2) * sz,
+				c + Vector2.from_angle(an + 4.0) * sz * 0.7]), Color(SIGN.wood_done).lightened(0.2))
 
 
 func _draw_stage() -> void:
