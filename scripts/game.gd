@@ -5392,6 +5392,7 @@ func _hud_draw() -> void:
 		if _is_aim_stage():
 			draw_rect(_wide(0.0, 64.0 + _hud_dy(), true),
 					Color(C_BG, 0.45))
+		_modplate_draw()    # 낀 보드 확장 명판(던지는 동안만)
 		_rack_hold_draw()   # 판 위다 — 끌고 다니는 동전은 무엇에도 안 덮인다
 		_use_draw()         # 가운데로 끌고 온 사탕·사진과 그 자리
 		# 나가는 전환에서만 같이 들어온다. 돌아오는 쪽은 안 그린다 —
@@ -5679,7 +5680,10 @@ func _theme_bits(key: String) -> Array:
 		"donut_drip":
 			for i in _sec_n():
 				for n in 2 + rng.randi() % 2:
-					out.append([i, rng.randf_range(-0.38, 0.38), rng.randf_range(0.5, 3.5),
+					#  방울은 칸 경계 쪽으로만 — 칸 한가운데는 숫자(20)가 선 자리라
+					#  거기로 흘러내리면 숫자를 덮는다.
+					var side: float = -1.0 if rng.randf() < 0.5 else 1.0
+					out.append([i, side * rng.randf_range(0.30, 0.46), rng.randf_range(0.5, 3.5),
 							rng.randf_range(3.0, 4.5)])
 		"donut_pore":
 			for k in 90:
@@ -5872,7 +5876,8 @@ func _dn_face(cols: Array, push: float) -> void:
 	#  부풀고(작은 원을 둘레에 잇는다), 몇 군데는 방울로 늘어진다.
 	for i in _sec_n():
 		var c0: Color = cols[i][1]
-		for k in 4:
+		#  물결은 칸 경계 쪽 둘만 — 가운데 둘은 숫자 밑으로 부풀었다
+		for k in [0, 3]:
 			var a := float(i) * sw - sw * 0.5 + (float(k) + 0.5) * sw / 4.0
 			draw_circle(BC + _theme_dir(a) * rim, 2.6, c0)
 	for e in _theme_bits("donut_drip"):
@@ -6038,6 +6043,46 @@ func _draw_fx() -> void:
 		var cs: Color = s.col
 		cs.a = 1.0 - ks
 		draw_line(BC + dir * dist, BC + dir * (dist + s.len), cs, 1.5)
+
+
+# ══════════════════════════════════════════════════════════
+#  낀 보드 확장 명판 — 판을 던지는 동안 오른쪽 아래
+# ──────────────────────────────────────────────────────────
+#  「보드 확장은 어디에 표시해 놓는 게 좋겠다」(사용자, 2026-09-17). 테이블 화면은
+#  앞치마(_apron_mods)가 산 장을 걸어 두는데, 정작 그 장이 일하는 판 위에서는
+#  아무 데도 안 떴다. 피자 · 시계 · 도넛은 판이 옷을 입어 보이지만 핵심 · 테두리 ·
+#  역지사지 같은 장은 판만 봐서는 무엇을 꼈는지 모른다.
+#
+#  자리는 오른쪽 아래 모서리다. 판(x199~441) · 가운데 안내 줄 · 점수 카드(오른쪽은
+#  y206~302 까지) · 왼쪽 벽 어디와도 안 겹치고, 판이 라지로 커져도 안 밀린다.
+#  명판에는 그림과 이름만 — 효과는 올리면 툴팁이 말한다(효과만, 해설 금지).
+const MODPLATE := {"y": 322.0, "h": 26.0, "pad": 6.0, "icon_r": 9.0, "gap": 5.0, "right": 8.0}
+
+
+func _modplate_on() -> bool:
+	return _is_play() and not mods_own.is_empty() and not swap_live
+
+
+func _modplate_rect() -> Rect2:
+	var nm := String(GameData.mod_of(String(mods_own[0])).get("n", "")) if not mods_own.is_empty() else ""
+	var nw: float = font.get_string_size(nm, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x if font != null else 40.0
+	var w: float = float(MODPLATE.pad) * 2.0 + float(MODPLATE.icon_r) * 2.0 + float(MODPLATE.gap) + nw
+	return Rect2(VIEW.x - float(MODPLATE.right) - w, float(MODPLATE.y), w, float(MODPLATE.h))
+
+
+func _modplate_draw() -> void:
+	if not _modplate_on():
+		return
+	var r := _modplate_rect()
+	var mid := String(mods_own[0])
+	_panel(r, true)
+	var body_h: float = r.size.y - PANEL_LIP
+	var ic := Vector2(r.position.x + float(MODPLATE.pad) + float(MODPLATE.icon_r),
+			r.position.y + body_h * 0.5)
+	_icon_mod(ic, float(MODPLATE.icon_r), mid, 0.0)
+	draw_string(font, Vector2(ic.x + float(MODPLATE.icon_r) + float(MODPLATE.gap),
+			r.position.y + body_h * 0.5 + 5.0),
+			String(GameData.mod_of(mid).get("n", "")), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, C_TXT)
 
 
 # 벽을 언제 그리는가는 부르는 쪽(_hud_draw)이 정한다. 여기 있던 조기
@@ -14609,6 +14654,9 @@ func _tip_hit(m: Vector2) -> Dictionary:
 	if not active_mods.is_empty() and not _bar_hidden():
 		if Rect2(float(LAY.bar_mod) - 4.0, 0.0, 60.0, 18.0).has_point(m):
 			return {"k": "onmod", "i": 0}
+	#  낀 보드 확장 명판 — 던지는 동안 오른쪽 아래
+	if _modplate_on() and _modplate_rect().has_point(m):
+		return {"k": "ownmod", "i": 0}
 	match state:
 		S.SHOP:
 			# 든 사탕 — 칸에 이름 세 글자만 적혀 있어 무슨 효과인지
@@ -14802,6 +14850,12 @@ func _tip_build(hit: Dictionary) -> void:
 			_tip_add(_tip_eff(it), 20, C_TXT)
 			if it.get("g", "") != "":
 				_tip_add(GameData.gold_text(it.g, it.gv), 12, C_TXT)
+		"ownmod":
+			_tip_set_tag("보드 확장")
+			var om: Dictionary = GameData.mod_of(String(mods_own[0])) if not mods_own.is_empty() else {}
+			tip_mark = _modplate_rect()
+			tip_title = String(om.get("n", ""))
+			_tip_add(String(om.get("d", "")), 20, C_TXT)
 		"cmod":
 			_tip_set_tag("보드 확장")
 			var md: Dictionary = GameData.mods()[i]
