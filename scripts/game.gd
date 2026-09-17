@@ -13056,6 +13056,125 @@ func _icon_mod(c: Vector2, r: float, id: String, dim: float,
 						a0, a0 + step * 2.0, 8), acc)
 
 
+# ══════════════════════════════════════════════════════════
+#  다트 네 자루 — 2D 그림 (_icon_dart)
+# ──────────────────────────────────────────────────────────
+#  사용자 요청(2026-09-17): 「디자인 안 되어 있는 아이템들이 많은데 다 디자인
+#  하자. 레퍼런스 많이 찾으면서 해」. 다트 넷은 굵기(2.6 · 4.0 · 1.5 · 3.6k)만
+#  다른 가는 막대라 컬렉션에서 서로 안 갈렸다 — 가벼운 것 꼬리 뒤 두 줄은
+#  「ll」 부스러기로 읽혔다.
+#
+#  ── 형태: 색이 아니라 「질량이 어디 있나」로 가른다 ──
+#  다트는 이 게임 실루엣 체계의 「긴 대각 획」이다(동전 = 금속 테 원반,
+#  보드 확장 = 방패, 사진 = 가로 네모). 다른 무리와는 안 섞이니 넷끼리만 가르면
+#  된다. 회색조로 바꿔도 갈리게 무게중심을 넷으로 나눈다.
+#    표준   균형      곧은 배럴 + 뒤끝이 평평한 방패 날개(T 자). 덧댐이 없는 것이 정체다
+#    무거운 가운데     봄 배럴 + 링 홈 둘. 배럴이 날개보다 넓은 유일한 자루(볼링핀)
+#    가벼운 뒤로 쏠림  바늘 몸 + 자루 절반 길이의 깃(화살 · 깃펜). 끝이 둥글게 닫힌 잎
+#    자석   꼬리가 열림 말굽 U + 은색 극 두 점. 가운데가 빈 꼬리는 이것 하나(소리굽쇠)
+#  종류 표식은 전부 s ≥ 0.47(꽁지 쪽)에 둔다. 통에 꽂히면 촉 쪽 절반이 잠긴다
+#  (CUP.dip 36/76 ≈ 0.47, 3D 도 「절반이 밖」). 촉 쪽 표식(자석 극면 띠)은 덤이다.
+#  길이는 안 바꾼다 — DART3_SHAPE 의 ⚠(통 벽 뚫림)와 같은 이유다.
+#
+#  ── 그리는 법: 절차적이되 도트 말투 ──
+#  어느 각 · 크기로도 불리므로(벽 26 · 제목 16~30 · 테이블 ≈23 · 컬렉션 15 · 통 38 ·
+#  판 받침 4~) 돌린 스프라이트가 아니라 **프로파일 폴리곤**이다. 축을 따라
+#  s(촉 0 → 꼬리 1)마다 반폭을 준 줄(DK_PARTS)을 사각 띠로 편다. 부품(촉 · 배럴 ·
+#  샤프트 · 날개)마다 램프 하나.
+#    빛     동전 · 와펜과 같은 화면 왼쪽 위 하나. 회전과 상관없이 nrm·(−1,−1) 의
+#           부호로 밝은 가장자리를 골라 1px 띠(한 단 위)를 깐다.
+#    그늘   반대쪽 1px 띠(한 단 아래)는 반폭 ≥ 2.2px 인 부품에만. 가는 부품에 양쪽
+#           띠를 다 깔면 전부 가장자리가 된다.
+#    외곽선 없다. 가장자리를 일괄로 어둡게 하는 필로 셰이딩도 없다 — 형태끼리는
+#           값의 차로 가른다.
+#  내장 그림자는 선 하나가 아니라 **실루엣 합집합**을 (1.5, 3) 밀어 찍는다. 부품마다
+#  찍으면 겹친 자리(샤프트 × 날개)만 진해지고, 막대 하나로 찍으면 봄 · U 꼬리가
+#  막대 그림자를 끈다.
+#
+#  ── 크기별 LOD (DART_MIN 4 ~ CUP.dl 38) ──
+#    dl < 10     실루엣 + 바탕색. 자석 강철 두 점 · 가벼운 깃대는 남긴다
+#    10 ~ 16     빛 띠 · 무거운 홈 · 자석 극면 띠와 다리 음영 · 표준 솔기
+#    dl ≥ 16     그늘 띠 · 가벼운 깃 홈
+#
+#  ── 팔레트: coin_paint.PAL 의 램프만 ──
+#  촉은 넷 다 steel, 샤프트(표준 · 무거운 · 자석)는 dusk 1단 — 어느 칸 위에서도
+#  어두운 점이 하나 있다. 몸 램프만 종류가 쥔다(cream · dusk · green · red).
+#  2D 바탕 = 램프 2단, 2D 빛 띠 = 3단 = 3D 알베도(_dart3_col). 옛 2D 자석은
+#  C_MULT(e8705c) 원색 하나라 3D(C_MULT.lightened 0.25)와 어긋나 있었다.
+#
+#  ── 레퍼런스(구도 · 색 · 분위기만 보고 옮겨 그리지 않았다. 원본은 저장소 밖) ──
+#    en.wikipedia.org/wiki/Darts — 촉 · 배럴 · 샤프트 · 날개 넷의 차례
+#    premierdarts.co.uk「dart barrel shapes explained」— 스트레이트는 앞뒤 굵기가
+#        같은 기준형, 봄은 짧고 통통한 몸. 토피도(앞이 굵음)는 통에 잠기는 자리라 버렸다
+#    arrowheadz.co.uk 배럴 모양 안내 — 봄은 가운데가 가장 넓다(최대폭 s 0.50)
+#    cleverdarts.com「dart grip styles」— 링 그립은 배럴을 둘러 판 기계 홈(짙은 띠 둘)
+#    target-darts.co.uk「dart flights」— 넓은 날개는 안정, 슬림은 빠름(꼬리 면적으로
+#        성격을 말하는 축 · 무거운 것의 작은 날개)
+#    darts501.com History · Flights — 초기 다트는 나무 몸에 칠면조 깃, 종이 날개는
+#        나중이다(깃 꼬리 = 옛날식 · 가벼움). 십자 날개의 옆으로 선 한 장 = 솔기 한 줄
+#    fws.gov Feather Atlas glossary — 깃대(rachis) · 깃판(vane) · 뒷깃판의 홈(notch)
+#    en.wikipedia.org/wiki/Horseshoe_magnet — 말굽자석은 자석의 가장 널리 알려진
+#        상징. 교구용은 빨간 칠에 칠 안 한 은색 극(검색 목록 설명)
+#    saint11.art pixel art article 4 — 광원 하나, 곡면은 램프 방향으로만, 필로 셰이딩 금지
+#    lospec.com「pixel art outlines」— 대비가 서면 외곽선을 뺀다. 얇은 형태 사이는
+#        선 대신 틈으로(U 갈래 사이를 2px 이상 비운다)
+#    sprite-ai.art 16x16 안내 — 실루엣 먼저 · 회색조 시험 · 작을수록 암시(LOD 근거)
+#    blakecrosley.com Balatro 디자인 글 — 색이 곧 정보(파랑 = 칩, 빨강 = 배수). 다트
+#        몸에 파랑을 안 쓰고, 빨강은 자석 관습으로만 쓴다
+# ══════════════════════════════════════════════════════════
+
+#  coin_paint.PAL 에서 다트가 쓰는 램프 여섯만 옮겼다. 0 어둠 → 3 밝음.
+const DK_PAL := {
+	"night": [Color("14111f"), Color("221c33"), Color("352d4d"), Color("4f4670")],
+	"dusk":  [Color("2b2438"), Color("4a4160"), Color("7a7192"), Color("b3abc8")],
+	"cream": [Color("8f8577"), Color("c9bfae"), Color("e8dfc8"), Color("fbf6ea")],
+	"steel": [Color("3a3f52"), Color("687085"), Color("a3abbb"), Color("dde3ec")],
+	"red":   [Color("4a1426"), Color("8c2233"), Color("d8483d"), Color("f27d63")],
+	"green": [Color("1d3326"), Color("2f6340"), Color("479a58"), Color("94d68e")],
+}
+
+#  부품 한 줄 = [램프, 바탕 단, 구름(spin)을 타는가, 프로파일]
+#  프로파일은 [s, 반폭] 의 줄이다. s 는 촉 0 → 꼬리 1, 반폭은 k = 1(dl 19) 에서의 px.
+#  셋째 값이 있는 점은 그 LOD 부터만 쓴다(가벼운 깃 홈).
+#  부르는 차례가 쌓는 차례다. 종류마다 덧붙는 것(솔기 · 홈 · 깃대 · U)은
+#  _icon_dart 의 match 가 이 위에 얹는다.
+const DK_PARTS := {
+	#  표준 — 곧은 크림 배럴(양끝 0.02 모따기) · 어두운 목 · 뒤끝이 평평한 방패 날개
+	"std": [
+		["steel", 2, false, [[0.0, 0.0], [0.30, 0.9]]],
+		["cream", 2, false, [[0.30, 1.0], [0.32, 1.5], [0.54, 1.5], [0.56, 1.0]]],
+		["dusk", 1, false, [[0.56, 0.8], [0.68, 0.8]]],
+		["cream", 1, true, [[0.64, 0.8], [0.90, 4.2], [1.0, 4.2]]],
+	],
+	#  무거운 — 짧고 뭉툭한 촉 · 봄 배럴(최대폭 s 0.50 이 통 아가리 바로 위) ·
+	#  작고 빳빳한 슬림 날개. 날개를 배럴보다 한 단 어둡게 두어 질량이 앞몸에 있다.
+	#  날개 빛 띠(7a7192)가 C_BG · 어두운 칸 위에서 꼬리를 붙잡는다 — dusk 0단으로
+	#  두었더니 날개가 떨어져 떠 보였다(목업 1차).
+	"hvy": [
+		["steel", 2, false, [[0.0, 0.0], [0.26, 1.2]]],
+		["dusk", 2, false, [[0.26, 1.3], [0.31, 2.0], [0.36, 2.6], [0.43, 3.05],
+				[0.50, 3.2], [0.55, 2.95], [0.60, 2.4], [0.63, 1.9], [0.66, 1.2]]],
+		["dusk", 1, false, [[0.65, 0.9], [0.80, 0.9]]],
+		["dusk", 1, true, [[0.78, 0.9], [0.93, 2.2], [1.0, 1.6]]],
+	],
+	#  가벼운 — 가장 가는 바늘 촉 · 실오라기 초록 몸 · 자루 절반 길이의 깃판.
+	#  깃판은 밝은 94d68e 바탕에 그늘 쪽 가장자리만 479a58 이다. 빛 띠가 없는 것은
+	#  가운데 깃대(크림)가 하이라이트라서다. 홈(0.78)은 dl ≥ 16 에서만 판다.
+	"lgt": [
+		["steel", 2, false, [[0.0, 0.0], [0.32, 0.6]]],
+		["green", 2, false, [[0.32, 0.7], [0.50, 0.7]]],
+		["green", 3, true, [[0.50, 0.5], [0.70, 2.6], [0.76, 3.4], [0.78, 2.4, 2],
+				[0.90, 4.2], [0.95, 3.8], [0.98, 3.0], [1.0, 2.0]]],
+	],
+	#  자석 — 각진 어깨의 빨간 막대자석 배럴 · 어두운 목. 말굽 U 는 match 가 얹는다.
+	"mag": [
+		["steel", 2, false, [[0.0, 0.0], [0.28, 0.9]]],
+		["red", 2, false, [[0.28, 1.9], [0.58, 1.9]]],
+		["dusk", 1, false, [[0.57, 0.8], [0.68, 0.8]]],
+	],
+}
+
+
 # rot 은 기본 각도에서 더 돌릴 양(레일 정렬 · 탁자 위 흩뿌림), a 는 알파(focus 감쇠).
 # 회전 인자 이름은 draw_item_sticker 이 이미 쓰는 rot 에 맞췄고,
 # 알파 인자를 뒤에 덧붙인 것은 _icon_modifier 가 a 를 받아들인 선례와 같은 방식이다.
@@ -13071,94 +13190,195 @@ func _icon_dart(c: Vector2, dl: float, id: String, dim := 0.0,
 	# 기준은 테이블 크기 dl 19. 바닥을 둬 짧게 부르는 자리가 실오라기가
 	# 되는 것을 막는다. 보드에 꽂힌 다트가 그 바닥에 걸려 있었는데
 	# (dl 7 → 10 → 지금 16), 굵기가 안 늘어 길이만 긴 막대로 보였다.
-	# 지금은 16/19 = 0.84 라 처음으로 바닥 위에 선다 — 바닥이 걸리는
-	# 자리는 이제 다트 아이콘을 아주 작게 부르는 곳뿐이다.
 	# 19 는 배율(GOODS_K) 전 테이블 크기다. 기준을 안 옮겨서 테이블 다트는
 	# 길이와 같은 1.16 배로 굵어진다 — 키운 것이 길기만 한 막대가 안 된다.
 	var k: float = maxf(0.75, dl / 19.0)
-	var bw := 2.6 * k
-	var fin := 3.2 * k
-	var col := C_TXT
-	match id:
-		"hvy":
-			bw = 4.0 * k
-			fin = 2.4 * k
-			col = C_WIRE.lightened(0.30)
-		"lgt":
-			bw = 1.5 * k
-			fin = 4.6 * k
-			col = C_GREEN.lightened(0.35)
-		"mag":
-			#  배럴이 굵다 — 두 극이 색으로 갈리려면 나눌 폭이 있어야 한다.
-			#  무거운 것(4.0)보다는 가늘다. 색도 연어빛에서 원색으로 올렸다.
-			bw = 3.6 * k
-			fin = 3.0 * k
-			col = C_MULT
-	col = Color(col.darkened(dim), a)
-
+	# 날개는 십자로 세운 두 장이다. 자루가 제 축으로 구르면 넓은 쪽 폭이
+	# |cos| · |sin| 중 큰 것(0.707~1.0)을 오간다 — 완전히 사라지는 순간이 없다.
+	# **길이는 안 건드린다.** 날개 · 깃 · U 벌림이 모두 이 가로 배율만 탄다.
+	var fa: float = maxf(absf(cos(spin)), absf(sin(spin)))
 	var tip := c + dir * dl
-	var tail := c - dir * dl
-	var brl := c + dir * dl * 0.1
+	var ax := -dir * (dl * 2.0)          # s 가 0 → 1 로 갈 때 걷는 벡터(촉 → 꼬리)
+	# 밝은 가장자리. 화면 왼쪽 위(−1, −1)를 보는 쪽이다 — 자루를 돌려도 빛은 안 돈다.
+	var lit: float = 1.0 if nrm.dot(Vector2(-1.0, -1.0)) >= 0.0 else -1.0
+	var lod: int = 0 if dl < 10.0 else (1 if dl < 16.0 else 2)
+	if not DK_PARTS.has(id):
+		id = "std"
+	var parts: Array = DK_PARTS[id]
+	# 부품 프로파일을 이 크기의 px 로 편다.
+	var profs := []
+	for p in parts:
+		var sc: float = k * (fa if bool(p[2]) else 1.0)
+		var rows := []
+		for r in p[3]:
+			if r.size() > 2 and lod < int(r[2]):
+				continue
+			rows.append([float(r[0]), float(r[1]) * sc])
+		profs.append(rows)
+	# 자석 꼬리의 가로 치수. 갈래 사이 틈은 k=1 에서 4px, 아무리 작아도 2px —
+	# 틈이 메워지면 「빨간 주걱」이 된다(lospec: 얇은 형태 사이는 선 대신 틈).
+	var mg: float = maxf(2.0 * k * fa, 1.0)            # 축 → 갈래 안쪽
+	var mo: float = mg + maxf(1.4 * k * fa, 1.0)       # 축 → 갈래 바깥쪽(= 다리 반폭)
 
+	# ── 그림자 ─────────────────────────────────────────
 	# 내장 그림자는 고정 오프셋이라 낙하 중 하늘을 같이 난다.
 	# 테이블에서는 끄고 _goods_draw 가 높이에 맞는 그림자 하나만 그린다.
 	if sh:
-		draw_line(tip + Vector2(1.5, 3.0), tail + Vector2(1.5, 3.0),
-				Color(0.0, 0.0, 0.0, 0.28 * a), bw)
-	# 촉
-	draw_colored_polygon(PackedVector2Array([tip,
-			brl + nrm * bw * 0.5, brl - nrm * bw * 0.5]), Color(C_LIGHT.darkened(dim), a))
-	# 배럴
-	draw_line(brl, c - dir * dl * 0.35, col, bw)
-	# 샤프트
-	draw_line(c - dir * dl * 0.35, c - dir * dl * 0.6,
-			Color(C_DARK.lightened(0.25).darkened(dim), a), 1.6)
-	# 날개 — 실제 깃은 십자로 세운 두 장이다. 자루가 자기 축으로 구르면
-	# 한 쌍은 정면(넓게), 나머지 한 쌍은 옆면(얇게)으로 돌아간다. 그
-	# 폭 둘을 spin 의 cos·sin 으로 갈라 그리면 구름이 폭 변화로 읽히고,
-	# **길이는 안 건드린다** — 막대는 굴러도 늘지 않는다.
-	# 넓은 쪽은 |cos|·|sin| 중 큰 것이라 0.707~1.0 사이를 오간다. 십자
-	# 깃이 실제로 그렇다 — 완전히 사라지는 순간이 없다.
-	var w0 := c - dir * dl * 0.6
-	var fa: float = fin * maxf(absf(cos(spin)), absf(sin(spin)))
-	var fb: float = fin * minf(absf(cos(spin)), absf(sin(spin)))
-	draw_colored_polygon(PackedVector2Array([w0, w0 + nrm * fa - dir * dl * 0.2,
-			tail, w0 - nrm * fa - dir * dl * 0.2]), col)
-	# 옆면으로 선 나머지 한 장. 이 얇은 선이 구르는 것을 읽히게 한다.
-	if fb > 0.5:
-		var fm := w0.lerp(tail, 0.45)
-		draw_line(fm + nrm * fb, fm - nrm * fb,
-				Color(col.darkened(0.4), a), maxf(1.0, k * 0.9))
+		var shd := Color(0.0, 0.0, 0.0, 0.28 * a)
+		var so := tip + Vector2(1.5, 3.0)
+		var uni := profs.duplicate()
+		if id == "mag":
+			uni.append([[0.66, mo], [0.73, mo]])
+		_dk_quads(so, ax, nrm, _dk_sym(_dk_union(uni)), shd)
+		if id == "mag":
+			for sd in [-1.0, 1.0]:
+				_dk_quads(so, ax, nrm, _dk_lat(0.73, 1.0, mg * sd, mo * sd), shd)
 
+	# ── 부품 ───────────────────────────────────────────
+	for i in parts.size():
+		var ramp: String = parts[i][0]
+		var st: int = int(parts[i][1])
+		var rows: Array = profs[i]
+		var wmax := 0.0
+		for r in rows:
+			wmax = maxf(wmax, float(r[1]))
+		_dk_quads(tip, ax, nrm, _dk_sym(rows), _dk_c(ramp, st, dim, a))
+		# 빛 띠. 1px 보다 가는 부품(샤프트 · 작은 촉)은 띠가 몸을 다 먹으므로 뺀다.
+		if lod >= 1 and st < 3 and wmax >= 1.2:
+			_dk_quads(tip, ax, nrm, _dk_band(rows, lit), _dk_c(ramp, st + 1, dim, a))
+		if lod >= 2 and wmax >= 2.2:
+			_dk_quads(tip, ax, nrm, _dk_band(rows, -lit), _dk_c(ramp, st - 1, dim, a))
+
+	# ── 종류마다 얹는 것 ───────────────────────────────
 	match id:
+		"std":
+			# 솔기 — 옆으로 선 두 번째 날개 한 장. 예전 spin 얇은 선을 축 위로
+			# 옮겨 늘 1px 이상으로 둔 것이다. 크림 칸 위에서 배럴이 바탕에
+			# 묻혀도 이 줄과 샤프트가 형태를 붙잡는다.
+			if lod >= 1:
+				var hw: float = 0.5 * maxf(1.0, floorf(k))
+				_dk_quads(tip, ax, nrm, _dk_lat(0.62, 1.0, -hw, hw),
+						_dk_c("dusk", 1, dim, a))
 		"hvy":
-			for t in [0.55, 0.75]:
-				var q := brl.lerp(c - dir * dl * 0.35, t)
-				draw_line(q + nrm * bw * 0.6, q - nrm * bw * 0.6,
-						Color(C_DARK.darkened(dim), a), 2.0)
+			# 링 홈 둘 — 배럴을 둘러 판 기계 홈. 둘 다 통 아가리(≈ s 0.47) 위라
+			# 부채 속에서 볼링핀 윗몸의 띠로 읽힌다. k ≥ 1.5 면 2px.
+			if lod >= 1:
+				var t: float = (1.0 if k >= 1.5 else 0.5) / (dl * 2.0)
+				for sg in [0.47, 0.56]:
+					var w0: float = _dk_w(profs[1], sg - t) + 0.05
+					var w1: float = _dk_w(profs[1], sg + t) + 0.05
+					_dk_quads(tip, ax, nrm, [[sg - t, -w0, w0], [sg + t, -w1, w1]],
+							_dk_c("night", 2, dim, a))
 		"lgt":
-			for side in [-1.0, 1.0]:
-				draw_line(tail + nrm * side * 2.5 * k - dir * 2.0 * k,
-						tail + nrm * side * 2.5 * k - dir * 6.0 * k, col, 1.0)
+			# 깃대 — 샤프트 자리를 밝은 깃대가 대신한다. 크기와 상관없이 남긴다
+			# (dl < 10 에서는 초록 쐐기 가운데의 밝은 줄 한 픽셀이 곧 깃이다).
+			_dk_quads(tip, ax, nrm, _dk_lat(0.50, 1.0, -0.5, 0.5),
+					_dk_c("cream", 3, dim, a))
 		"mag":
-			#  ── 두 극 ──────────────────────────────────────
-			#  전에는 촉 **앞**에 반원 하나를 띄웠다. 자루에 안 붙어 있어서
-			#  자석이 아니라 떠다니는 부스러기로 읽혔고(찍어서 봤다),
-			#  꽂히면 판 위에 그 반원만 남았다.
-			#
-			#  자석은 **색이 둘인 막대**다. 32px 짜리 자루에서 살아남는
-			#  표시는 3px 짜리 모양이 아니라 색의 경계다 — 무거운 것의
-			#  추 둘도 굵기가 아니라 값으로 걸리는 것과 같은 이유다.
-			#  강철 쪽을 **꽁지 쪽**에 둔다. 통에 꽂으면 자루의 촉 절반이
-			#  잠기므로 촉 쪽에 두면 고를 때 안 보인다.
-			var p0 := c + dir * dl * 0.14
-			var p1 := c - dir * dl * 0.44
-			var pm := p0.lerp(p1, 0.52)
-			draw_line(p0, pm, Color(C_MULT.darkened(dim), a), bw)
-			draw_line(pm, p1, Color(C_WIRE.lightened(0.62).darkened(dim), a), bw)
-			#  두 극 사이의 금. 색만 갈리면 얼룩이고, 금이 있어야 두 토막이다.
-			draw_line(pm + nrm * bw * 0.5, pm - nrm * bw * 0.5,
-					Color(C_BG, a), 1.0)
+			# 극면 띠 — 막대자석 앞 끝의 칠 안 한 쇠. 통에서는 잠기는 덤 표식이다.
+			if lod >= 1:
+				var bw: float = 1.9 * k
+				_dk_quads(tip, ax, nrm, _dk_lat(0.28, 0.34, -bw, bw),
+						_dk_c("steel", 2, dim, a))
+				_dk_quads(tip, ax, nrm, _dk_band([[0.28, bw], [0.34, bw]], lit),
+						_dk_c("steel", 3, dim, a))
+			# 말굽 다리 — 샤프트 끝에 붙어 두 갈래를 잇는다. 빛 반대쪽 절반은 한 단 아래.
+			_dk_quads(tip, ax, nrm, _dk_lat(0.66, 0.73, -mo, mo), _dk_c("red", 2, dim, a))
+			if lod >= 1:
+				_dk_quads(tip, ax, nrm, _dk_lat(0.66, 0.73, minf(0.0, -lit * mo),
+						maxf(0.0, -lit * mo)), _dk_c("red", 1, dim, a))
+			# 두 갈래와 극 끝. 예전 촉 앞 반원은 자루에서 떨어져 부스러기로 읽혔다 —
+			# 이 U 는 샤프트에 붙은 꼬리라 판 · 벽 · 통 어디서나 남는다.
+			# 강철 끝 두 점은 어느 크기에서도 지우지 않는다.
+			for sd in [-1.0, 1.0]:
+				_dk_quads(tip, ax, nrm, _dk_lat(0.70, 1.0, minf(mg * sd, mo * sd),
+						maxf(mg * sd, mo * sd)), _dk_c("red", 2, dim, a))
+				if lod >= 1 and sd == lit:
+					_dk_quads(tip, ax, nrm, _dk_lat(0.70, 0.90,
+							minf((mo - 1.0) * sd, mo * sd), maxf((mo - 1.0) * sd, mo * sd)),
+							_dk_c("red", 3, dim, a))
+				_dk_quads(tip, ax, nrm, _dk_lat(0.90, 1.0, minf(mg * sd, mo * sd),
+						maxf(mg * sd, mo * sd)), _dk_c("steel", 3, dim, a))
+
+
+func _dk_c(ramp: String, st: int, dim: float, a: float) -> Color:
+	var col: Color = DK_PAL[ramp][clampi(st, 0, 3)]
+	return Color(col.darkened(dim), a)
+
+
+# 프로파일 [s, 반폭] 의 s 자리 반폭. 범위 밖이면 0 이다.
+func _dk_w(rows: Array, s: float) -> float:
+	if rows.is_empty() or s < float(rows[0][0]) or s > float(rows[rows.size() - 1][0]):
+		return 0.0
+	for i in rows.size() - 1:
+		var s0: float = rows[i][0]
+		var s1: float = rows[i + 1][0]
+		if s <= s1:
+			if s1 - s0 < 0.00001:
+				return maxf(float(rows[i][1]), float(rows[i + 1][1]))
+			return lerpf(float(rows[i][1]), float(rows[i + 1][1]), (s - s0) / (s1 - s0))
+	return float(rows[rows.size() - 1][1])
+
+
+# 여러 부품의 반폭 합집합 — 그림자 한 장. 부품 경계마다 앞뒤를 같이 잰다.
+func _dk_union(profs: Array) -> Array:
+	var ss := []
+	for pr in profs:
+		for r in pr:
+			ss.append(float(r[0]) - 0.0005)
+			ss.append(float(r[0]) + 0.0005)
+	ss.sort()
+	var out := []
+	var last := -1.0
+	for s in ss:
+		if s < 0.0 or s > 1.0 or s - last < 0.0002:
+			continue
+		last = s
+		var w := 0.0
+		for pr in profs:
+			w = maxf(w, _dk_w(pr, s))
+		out.append([s, w])
+	return out
+
+
+# [s, 반폭] → [s, 아래, 위] (축 기준 가로 자리, nrm 쪽이 +)
+func _dk_sym(rows: Array) -> Array:
+	var out := []
+	for r in rows:
+		out.append([float(r[0]), -float(r[1]), float(r[1])])
+	return out
+
+
+# s0~s1 을 가로 lo~hi 로 덮는 곧은 띠
+func _dk_lat(s0: float, s1: float, lo: float, hi: float) -> Array:
+	return [[s0, lo, hi], [s1, lo, hi]]
+
+
+# 가장자리 1px 띠. sd 쪽 가장자리에서 안으로 1px, 축을 넘지 않는다.
+func _dk_band(rows: Array, sd: float) -> Array:
+	var out := []
+	for r in rows:
+		var w: float = r[1]
+		if sd > 0.0:
+			out.append([float(r[0]), maxf(w - 1.0, 0.0), w])
+		else:
+			out.append([float(r[0]), -w, minf(-w + 1.0, 0.0)])
+	return out
+
+
+# [s, 아래, 위] 줄을 이웃끼리 사각으로 칠한다. 삼각분할을 안 거치므로
+# 폭 0 인 점(촉 끝)이나 한 점에서 만나는 띠에서도 안 깨진다.
+func _dk_quads(tip: Vector2, ax: Vector2, nrm: Vector2, rows: Array, col: Color) -> void:
+	if col.a <= 0.0:
+		return
+	var cols := PackedColorArray([col, col, col, col])
+	for i in rows.size() - 1:
+		var p0: Vector2 = tip + ax * float(rows[i][0])
+		var p1: Vector2 = tip + ax * float(rows[i + 1][0])
+		draw_primitive(PackedVector2Array([
+				p0 + nrm * float(rows[i][2]), p1 + nrm * float(rows[i + 1][2]),
+				p1 + nrm * float(rows[i + 1][1]), p0 + nrm * float(rows[i][1])]),
+				cols, PackedVector2Array())
 
 
 # ══════════════════════════════════════════════════════════
@@ -18792,14 +19012,20 @@ func _cup3_gold() -> RigidBody3D:
 
 
 # 자루 하나. 축은 +Y 가 꽁지다 — 캡슐 충돌과 같은 축이라 둘이 안 어긋난다.
-# 자루 색. _icon_dart 의 그것과 같은 값이라야 2D 받침과 3D 가 같은
-# 다트로 읽힌다 — 다섯 종을 색으로 가르는 규약이 화면마다 갈리면 안 된다.
+# 자루 몸 색(배럴 · 날개 · 봄 · 깃 · U). _icon_dart 와 같은 램프라야 2D 받침과 3D 가
+# 같은 다트로 읽힌다 — 종류를 색으로 가르는 규약이 화면마다 갈리면 안 된다.
+#
+# 규칙은 「2D 빛 띠 = 램프 3단 = 3D 알베도」다(2D 바탕은 2단). 3D 는 빛을 받아
+# 한 단쯤 가라앉으므로 3단을 칠해야 2D 바탕과 같은 값으로 보인다. 예전 값
+# (C_TXT · C_WIRE.lightened 0.30 · C_GREEN.lightened 0.35 · C_MULT.lightened 0.25)도
+# 거의 3단이었고, 어긋난 것은 2D 자석(C_MULT 원색)뿐이었다 — 램프로 맞췄다.
+# 촉(steel 3단)과 샤프트(dusk 1단)는 종류와 상관없이 _dart3_meshes 가 칠한다.
 func _dart3_col(id: String) -> Color:
 	match id:
-		"hvy": return C_WIRE.lightened(0.30)
-		"lgt": return C_GREEN.lightened(0.35)
-		"mag": return C_MULT.lightened(0.25)
-	return C_TXT
+		"hvy": return DK_PAL["dusk"][3]       # b3abc8
+		"lgt": return DK_PAL["green"][3]      # 94d68e
+		"mag": return DK_PAL["red"][3]        # f27d63
+	return DK_PAL["cream"][3]                 # fbf6ea
 
 
 # 자루 한 벌의 메시. **두 무대가 같이 쓴다** — 통(새 런 화면)과 판에
@@ -19127,6 +19353,45 @@ func _mesh_dart3m() -> ArrayMesh:
 	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, a)
 	return m
 
+
+# 구운 자루를 **네 토막**으로 가른다 — 0 촉 · 1 배럴 · 2 샤프트 · 3 날개.
+# 한 메시 한 색으로 칠하면 촉 · 샤프트까지 몸 색이 되어 2D(강철 촉 · 어두운 목 ·
+# 종류별 꼬리)와 다른 말을 한다. 날개 토막을 따로 쥐어야 종류마다 꼬리를 갈아
+# 끼울 수 있다(표준 그대로 · 무거운 0.7배 · 가벼운 깃 · 자석 U).
+#
+# 자리는 메시 반지름을 축을 따라 재서 잡았다(s = y + 0.5, 촉 0 → 꽁지 1).
+#   촉 s 0~0.06 (끝이 0.011 까지 벌어진다) · 배럴 ~0.35 (r 0.013) ·
+#   샤프트 ~0.69 (r 0.006~0.009) · 날개 0.69~1.0 (r 0.042)
+# 삼각형은 무게중심의 s 로 한 토막에 넣는다. 정점 배열은 넷이 같이 쓴다.
+const DART3M_CUT := [0.055, 0.355, 0.69]
+var dart3m_part := []
+
+
+func _mesh_dart3m_part(part: int) -> ArrayMesh:
+	if dart3m_part.is_empty():
+		var idx := [PackedInt32Array(), PackedInt32Array(), PackedInt32Array(),
+				PackedInt32Array()]
+		for t in range(0, DART3M_I.size(), 3):
+			var s: float = (DART3M_V[DART3M_I[t]].y + DART3M_V[DART3M_I[t + 1]].y
+					+ DART3M_V[DART3M_I[t + 2]].y) / 3.0 + 0.5
+			var q := 3
+			for j in DART3M_CUT.size():
+				if s < float(DART3M_CUT[j]):
+					q = j
+					break
+			for o in 3:
+				idx[q].append(DART3M_I[t + o])
+		for q in 4:
+			var a := []
+			a.resize(Mesh.ARRAY_MAX)
+			a[Mesh.ARRAY_VERTEX] = DART3M_V
+			a[Mesh.ARRAY_NORMAL] = DART3M_N
+			a[Mesh.ARRAY_INDEX] = idx[q]
+			var m := ArrayMesh.new()
+			m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, a)
+			dart3m_part.append(m)
+	return dart3m_part[part]
+
 # 다트 종류마다 굵기가 다르다. **색만 다르면 통 안에서 무엇을 들고 시작하는지가
 # 안 읽힌다** — 새 런 화면에서 다트통을 고르는 그 순간에 눈에 닿는 것이 이 표다.
 #
@@ -19144,11 +19409,17 @@ func _mesh_dart3m() -> ArrayMesh:
 # 자루 중심 자리만 재면 이 어긋남이 안 잡힌다 — 중심은 통 안에 있는데
 # 몸이 테를 넘는다. 그래서 길이 축을 아예 없앤다. 종류는 굵기와 부품이
 # 말한다.
+#
+# rad 는 **충돌 캡슐**과 통 안 자리 잡기의 굵기다. 그림은 vis 를 따로 쓴다
+# (2026-09-17). rad 로 구운 메시를 통째로 늘였더니 날개까지 같이 넓어져
+# 무거운 것(1.40)의 날개가 넷 중 제일 큰 역설이 났다 — 무거운 다트는 몸이
+# 무겁지 꼬리가 크지 않다. 보이는 몸은 1.0 근처에 두고 굵기는 부품(봄 · U)이
+# 말한다. 가벼운 것만 0.72 로 둔다 — 여기서는 가는 몸이 맞다.
 const DART3_SHAPE := {
-	"std": {"rad": 1.00},
-	"hvy": {"rad": 1.40},
-	"lgt": {"rad": 0.72},
-	"mag": {"rad": 1.26},
+	"std": {"rad": 1.00, "vis": 1.00},
+	"hvy": {"rad": 1.40, "vis": 1.00},
+	"lgt": {"rad": 0.72, "vis": 0.72},
+	"mag": {"rad": 1.26, "vis": 1.00},
 }
 
 
@@ -19160,17 +19431,44 @@ static func dart3_shape(id: String) -> Dictionary:
 # 부르는 쪽에서도 곱하면 배율이 제곱으로 들어간다.
 #
 # **길이(Y)는 안 건드린다** — DART3_SHAPE 의 ⚠ 를 볼 것.
+#
+# u_yaw 는 자석 U 를 자루 축 둘레로 돌리는 각이다. U 는 판때기라 옆에서 보면
+# 한 줄로 접힌다. 판에 꽂힌 자루는 로컬 X 가 화면 가로라 0 이고, 통의 자루는
+# 로컬 Z 가 화면 가로라(_cup3_spawn 의 Basis) 부르는 쪽이 PI/2 를 준다.
 func _dart3_meshes(b: Node3D, dl: float, dr: float, fin: float, col: Color,
-		id := "std") -> void:
+		id := "std", u_yaw := 0.0) -> void:
 	var sh := dart3_shape(id)
 	var er := dr * float(sh.rad)          # 이 자루의 실제 굵기
 	if DART3_MESHY:
-		var mi := _cup3_mesh(b, _mesh_dart3m(), col, Vector3.ZERO)
-		# 균등 배율이면 종류가 색으로만 갈린다. 옆으로만 늘여야
-		# 「두껍다 · 가늘다」가 실루엣으로 서면서 길이는 그대로 남는다.
+		# 구운 메시를 네 토막으로 세운다. 옆으로만 늘인다 — 길이는 그대로.
+		# 촉은 강철, 샤프트는 어두운 목(가벼운 것만 크림 깃대)이고 몸 램프만
+		# 종류가 쥔다. 다트통 skin 의 dart_col 은 col 로 들어오므로 배럴 · 날개만
+		# 바뀌고 촉 · 샤프트는 그대로 남는다(금빛 표준도 표준 실루엣이다).
 		var k := dl * 2.0
-		mi.scale = Vector3(k * float(sh.rad), k, k * float(sh.rad))
-		_dart3_parts(b, dl, er, col, id)
+		var v: float = float(sh.get("vis", 1.0))
+		var body := Vector3(k * v, k, k * v)
+		_cup3_mesh(b, _mesh_dart3m_part(0), DK_PAL["steel"][3], Vector3.ZERO).scale = body
+		_cup3_mesh(b, _mesh_dart3m_part(1), col, Vector3.ZERO).scale = body
+		_cup3_mesh(b, _mesh_dart3m_part(2),
+				DK_PAL["cream"][3] if id == "lgt" else DK_PAL["dusk"][1],
+				Vector3.ZERO).scale = body
+		# 날개 토막. 표준은 몸보다 한 단 어둡게(둘이 같은 흰색이면 머리 큰 흰
+		# 막대 하나로 뭉친다). 무거운 것은 0.7배 슬림 날개에 한 단 어두운
+		# dusk — 질량이 앞몸에 있게 보인다. 가벼운 · 자석은 날개를 빼고
+		# _dart3_parts 가 깃 · U 를 세운다 — 구운 날개가 U 사이를 메우면 「빨간
+		# 줄무늬 주걱」이 되고, 깃과 겹치면 「뚱뚱한 막대」가 된다.
+		match id:
+			"std":
+				_cup3_mesh(b, _mesh_dart3m_part(3), col.darkened(0.18),
+						Vector3.ZERO).scale = body
+			"hvy":
+				# 0.7배로 줄이되 꽁지 끝(+dl)은 제자리다 — 세로도 0.7배라 날개가
+				# s 0.69~1.0 에서 0.78~1.0 으로 짧아진다(2D 날개 자리와 같다).
+				# 비는 목(0.71~0.78)은 _dart3_parts 의 샤프트 토막이 잇는다.
+				_cup3_mesh(b, _mesh_dart3m_part(3), DK_PAL["dusk"][2],
+						Vector3(0.0, 0.15 * k, 0.0)).scale = Vector3(k * v * 0.7,
+						k * 0.7, k * v * 0.7)
+		_dart3_parts(b, dl, er, col, id, u_yaw)
 		return
 	dr = er
 
@@ -19200,65 +19498,113 @@ func _dart3_meshes(b: Node3D, dl: float, dr: float, fin: float, col: Color,
 	for q in 2:
 		_cup3_mesh(b, fm, col.darkened(0.18), Vector3(0.0, dl * 0.76, 0.0),
 				Vector3(0.0, PI * 0.5 * float(q), 0.0))
-	_dart3_parts(b, dl, dr, col, id)
+	_dart3_parts(b, dl, dr, col, id, u_yaw)
 
 
 # 종류마다 붙는 **한 가지 표시**. 비율만 다르면 통 안에서 색깔 놀이로
 # 읽힌다 — 무엇이 달린 자루인지가 눈에 걸려야 종류가 종류로 보인다.
 #
-# 몸통(구운 메시)은 그대로 두고 그 위에 하나씩 얹는다. 메시를 새로 굽지
-# 않고도 실루엣에 걸리는 것이 생긴다. 표는 darts.csv 가 쥔 성격을 물건으로
-# 옮긴 것이다.
+# 2D(_icon_dart)와 같은 진술이다 — 넷을 「질량이 어디 있나」로 가른다.
 #
-#   무거운  배럴에 추 두 짝      무게가 눈에 보인다
-#   가벼운  꽁지에 큰 날개 넷    바람을 받는 쪽이 주인공이다
-#   자석    두 토막 난 배럴      극이 둘인 것이 자석이다
-#   표준    없다                 기준선은 덧붙이지 않는다
-func _dart3_parts(b: Node3D, dl: float, dr: float, col: Color, id: String) -> void:
+#   무거운  봄 배럴 + 링 홈 둘    몸이 추처럼 불룩하다(볼링핀)
+#   가벼운  깃 넷 + 크림 깃대     바람을 받는 깃이 주인공이다(화살 · 깃펜)
+#   자석    말굽 U + 강철 극 둘   꼬리가 열려 있다(소리굽쇠)
+#   표준    없다                  기준선은 덧붙이지 않는다
+#
+# 치수는 dr 이 아니라 **구운 메시 배율 k = dl·2** 에 건다. dr 은 무대마다 메시와의
+# 비가 달라서(통 0.055 는 메시 배럴의 2.6배, 판 1.5 는 1.4배) dr 로 잡으면 같은
+# 부품이 통에서만 두 배로 뚱뚱해진다 — 옛 추 둘이 통에서 널빤지로 보였던 까닭이다.
+# 비교 눈금: 메시 배럴 반지름 0.013k · 날개 반폭 0.042k.
+#
+# **통에 꽂히면 s ≈ 0.6 아래는 잠긴다**(아가리 y 1.02, 촉 y 0.11, 자루 1.62 —
+# 위에서 내려다보는 카메라라 조금 더 보인다). 종류 표식은 그 위에 걸려야 한다.
+# 전부 y ≤ +dl 이라 길이는 안 변한다(DART3_SHAPE 의 ⚠).
+func _dart3_parts(b: Node3D, dl: float, _dr: float, col: Color, id: String,
+		u_yaw := 0.0) -> void:
+	var k := dl * 2.0
 	match id:
 		"hvy":
-			# 추 둘. 배럴보다 눈에 띄게 굵어야 「무겁다」가 실루엣에 걸린다.
-			#
-			# **통 아가리 위**에 둔다. 자루의 아래 절반은 통에 잠겨 안 보이고,
-			# 거기는 촉 고리라 이웃과 제일 가까운 자리이기도 하다 — 굵은
-			# 것을 그 높이에 달면 여섯이 서로 밀어내 통 밖으로 튄다.
-			var w := CylinderMesh.new()
-			w.top_radius = dr * 1.30
-			w.bottom_radius = dr * 1.30
-			w.height = dl * 0.15
-			w.radial_segments = 10
-			for i in 2:
-				_cup3_mesh(b, w, col.darkened(0.34),
-						Vector3(0.0, dl * 0.10 + dl * 0.32 * float(i), 0.0))
+			# 봄 — 구운 배럴 끝(s 0.35)에서 0.71 까지 이어진 달걀꼴. 가장 넓은
+			# 자리(s 0.53)가 통 아가리 언저리라 윗몸과 홈이 테 위로 선다.
+			# 반지름 0.048k 는 0.7배 날개(0.029k)보다 크다 — 날개보다 넓은 배럴은
+			# 넷 중 이것 하나다.
+			var br := 0.048 * k
+			var bh := 0.36 * k
+			var bc := (0.53 - 0.5) * k
+			var bomb := SphereMesh.new()
+			bomb.radius = br
+			bomb.height = bh
+			bomb.radial_segments = 14
+			bomb.rings = 8
+			_cup3_mesh(b, bomb, col, Vector3(0.0, bc, 0.0))
+			# 링 홈 둘 — 봄을 둘러 판 짙은 띠. 그 높이의 봄 반지름보다 살짝 크게.
+			for sg in [0.55, 0.63]:
+				var y: float = (float(sg) - 0.5) * k
+				var e: float = clampf((y - bc) / (bh * 0.5), -1.0, 1.0)
+				var gr := CylinderMesh.new()
+				gr.top_radius = br * sqrt(1.0 - e * e) + 0.003 * k
+				gr.bottom_radius = gr.top_radius
+				gr.height = 0.016 * k
+				gr.radial_segments = 14
+				_cup3_mesh(b, gr, DK_PAL["dusk"][1], Vector3(0.0, y, 0.0))
+			# 봄 끝에서 줄인 날개 머리까지 잇는 어두운 목(s 0.66~0.80)
+			var nk := CylinderMesh.new()
+			nk.top_radius = 0.0075 * k
+			nk.bottom_radius = 0.0075 * k
+			nk.height = 0.14 * k
+			nk.radial_segments = 6
+			_cup3_mesh(b, nk, DK_PAL["dusk"][1], Vector3(0.0, (0.73 - 0.5) * k, 0.0))
 		"lgt":
-			# 날개 넷을 45도씩 돌려 꽂는다. 둘이면 옆에서 볼 때 사라진다.
-			#
-			# **꽁지 끝에 얹는다.** 구운 몸통이 이미 날개를 달고 있어서
-			# 가운데에 겹치면 둘이 한 덩어리로 뭉쳐 「깃털」이 아니라
-			# 「뚱뚱한 막대」로 보인다 — 찍어 보고 알았다.
-			var f := BoxMesh.new()
-			f.size = Vector3(dr * 4.0, dl * 0.34, dl * 0.010)
-			for q in 4:
-				_cup3_mesh(b, f, col.lightened(0.26),
-						Vector3(0.0, dl * 0.92, 0.0),
-						Vector3(0.0, PI * 0.25 * float(q), 0.0))
+			# 깃대 — 샤프트 자리에서 꽁지 끝까지 한 줄. 크림이라 깃의 가운데 밝은 줄이 된다.
+			var q := CylinderMesh.new()
+			q.top_radius = 0.006 * k
+			q.bottom_radius = 0.006 * k
+			q.height = 0.50 * k
+			q.radial_segments = 6
+			_cup3_mesh(b, q, DK_PAL["cream"][3], Vector3(0.0, 0.25 * k, 0.0))
+			# 깃 넷을 45도씩. 한 장 = 앞 쐐기(촉 쪽이 뾰족, s 0.50~0.88) + 뒤 짧은 쐐기
+			# (0.88~1.0) — 가장 넓은 곳이 꽁지 가까이 있는 잎꼴이다. 둘이면 옆에서
+			# 볼 때 사라진다. 폭은 표준 날개와 같다(2D 도 최대 반폭 4.2 로 같다).
+			var fw := 0.090 * k
+			var fr := PrismMesh.new()
+			fr.left_to_right = 0.5
+			fr.size = Vector3(fw, 0.38 * k, 0.006 * k)
+			var bk := PrismMesh.new()
+			bk.left_to_right = 0.5
+			bk.size = Vector3(fw, 0.12 * k, 0.006 * k)
+			for n in 4:
+				var yaw := PI * 0.25 * float(n)
+				_cup3_mesh(b, fr, col, Vector3(0.0, (0.69 - 0.5) * k, 0.0),
+						Vector3(0.0, yaw, PI))
+				_cup3_mesh(b, bk, col, Vector3(0.0, (0.94 - 0.5) * k, 0.0),
+						Vector3(0.0, yaw, 0.0))
 		"mag":
-			# 감긴 고리. 도넛의 축이 Y 라 자루를 그대로 두른다.
-			#
-			# 두 극. 2D 아이콘(_icon_dart)과 **같은 진술**이다 — 자석은
-			# 색이 둘인 막대다. 고리 하나를 둘렀던 자리인데, 고리는 3D 에서
-			# 빛을 같이 받아 배럴과 한 덩어리로 뭉쳤다.
-			#
-			# **꽁지 쪽을 강철로 둔다.** 통에 꽂아 두면 자루의 촉 절반이
-			# 통 안에 잠기므로, 촉 쪽에 두면 고를 때 아예 안 보인다.
-			# (배럴은 y −0.64dl ~ +0.20dl 이고 촉이 음의 y 다.)
+			# 극면 띠 — 막대자석 앞 끝의 칠 안 한 쇠. 통에서는 잠기는 덤이다.
 			var pole := CylinderMesh.new()
-			pole.top_radius = dr * 1.03
-			pole.bottom_radius = dr * 1.03
-			pole.height = dl * 0.42
+			pole.top_radius = 0.016 * k
+			pole.bottom_radius = 0.016 * k
+			pole.height = 0.05 * k
 			pole.radial_segments = 10
-			_cup3_mesh(b, pole, C_WIRE.lightened(0.62),
-					Vector3(0.0, -dl * 0.01, 0.0))
+			_cup3_mesh(b, pole, DK_PAL["steel"][3], Vector3(0.0, (0.105 - 0.5) * k, 0.0))
+			# 말굽 U — 샤프트 끝에 붙은 다리 하나와 두 갈래, 갈래 끝의 강철 극.
+			# 2D 와 같은 비(갈래 폭 : 바깥 반폭 = 1.4 : 3.4). 판때기라 화면을 보게
+			# 돌린다(u_yaw).
+			var u := Node3D.new()
+			u.rotation = Vector3(0.0, u_yaw, 0.0)
+			b.add_child(u)
+			var po := 0.046 * k
+			var pw := 0.019 * k
+			var px := po - pw * 0.5
+			var arm := BoxMesh.new()
+			arm.size = Vector3(pw, 0.22 * k, pw)
+			var cap := BoxMesh.new()
+			cap.size = Vector3(pw * 1.06, 0.10 * k, pw * 1.06)
+			for sd in [-1.0, 1.0]:
+				_cup3_mesh(u, arm, col, Vector3(px * sd, (0.79 - 0.5) * k, 0.0))
+				_cup3_mesh(u, cap, DK_PAL["steel"][3], Vector3(px * sd, (0.95 - 0.5) * k, 0.0))
+			var bridge := BoxMesh.new()
+			bridge.size = Vector3(po * 2.0, 0.07 * k, pw)
+			_cup3_mesh(u, bridge, col, Vector3(0.0, (0.695 - 0.5) * k, 0.0))
 
 
 # 자루 색은 **다트 종류가 정한다** — 무거운 회색 · 가벼운 초록 · 자석 빨강. 그 축을 다트통이 덮을 수 있게 하되, 덮어도 되는 자리는 하나뿐이다:
@@ -19307,7 +19653,7 @@ func _cup3_dart(id: String, dcol: Color, cup_col: Color) -> RigidBody3D:
 	# **기준 치수**를 넘긴다. dl·dr 은 위에서 이미 종류 배율을 먹었지만
 	# 그건 충돌체와 세우는 자리를 위한 것이고, 그림 쪽 배율은
 	# _dart3_meshes 가 혼자 먹인다.
-	_dart3_meshes(b, float(CUP3.dl), float(CUP3.dr), float(CUP3.fin), col, id)
+	_dart3_meshes(b, float(CUP3.dl), float(CUP3.dr), float(CUP3.fin), col, id, PI * 0.5)
 	return b
 
 

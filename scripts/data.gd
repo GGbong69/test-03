@@ -31,7 +31,7 @@ extends RefCounted
 #
 #  표를 늘려도 코드가 안 느는 것과 느는 것
 #    안 는다 — items 한 줄, rounds 한 줄, tuning 한 줄, 기존 축을 쓰는 mods 한 줄
-#    는다   — 새 cond(check + cond_text + _icon_cond 셋), 새 다트(_icon_dart),
+#    는다   — 새 cond(check + cond_text + _icon_cond 셋), 새 다트(DK_PARTS 한 줄 · _icon_dart 의 match · _dart3_parts),
 #            새 축(mods 또는 modifiers 의 match 한 가지),
 #            새 제약(_icon_modifier 한 가지 — 카드 얼굴에 그림이 있어야 한다)
 # ══════════════════════════════════════════════════════════
