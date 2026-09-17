@@ -1,7 +1,7 @@
 extends SceneTree
 # 「피자」 판 한 벌 — 기본(다트 셋) · 조각 밝힘(안 · 밖) · 불 밝힘 · 칠한 조각(주홍 · 쪽빛) ·
-# 죽은 색(먹) · 죽은 조각 하나를 찍는다. 사진 하나마다 판 둘레만 잘라 보려면
-# scripts/tools/pizza_sheet.py 를 돌린다.
+# 죽은 색(먹) · 죽은 조각 하나 · 네 재료가 다 선 판(mix) · 그 위의 탄 크림 · 탄 먹(dead_mix) ·
+# 칠한 조각 밝힘(aim_paint)을 찍고, 무게(구운 한 장 · 직접 그리는 프레임)를 잰다.
 #   godot --path . --quit-after 9000 --script scripts/tools/shot_board_pizza.gd [-- 꼬리표]
 #   꼬리표를 주면 파일 이름 앞에 붙는다(기본 pz) — 고치기 전 판을 pz_old 로 찍어 둔다.
 const Save = preload("res://scripts/save.gd")
@@ -64,6 +64,11 @@ func _plain() -> void:
 	g.state = g.S.PICK
 	g.aim_dim = 0.0
 	g._bd3_close()
+
+
+func _dir_of(i: int, n: int) -> Vector2:
+	var a := TAU * float(i) / float(n)
+	return Vector2(sin(a), -cos(a))
 
 
 func _aim_at(p: Vector2) -> void:
@@ -136,7 +141,25 @@ func _run() -> void:
 	g.dead_idx = -1
 	g.darts = []
 	g._bd3_close()
-	# ⑦ 무게 — 한 프레임 그리기 호출 · 그리는 데 든 시간(토너먼트 판과 견준다)
+	# ⑦ 네 재료가 다 선 판 — 크림 · 먹 · 주홍 · 쪽빛이 두 번씩. 이어서 탄 먹(그늘) · 탄 크림 하나
+	if nsc >= 8:
+		for k in nsc:
+			g.sec_col[k] = k % 4
+	_plain()
+	await _hold(6)
+	await _snap("mix")
+	_aim_at(bc + _dir_of(3, nsc) * r * 0.80)
+	await _hold(6)
+	await _snap("aim_paint")
+	_plain()
+	g.dead_col = 1
+	g.dead_idx = 4
+	await _hold(6)
+	await _snap("dead_mix")
+	g.dead_col = -1
+	g.dead_idx = -1
+	g.sec_col = base_col.duplicate()
+	# ⑧ 무게 — 한 프레임 그리기 호출 · 그리는 데 든 시간(토너먼트 판과 견준다)
 	_plain()
 	for pass_mods in [[], ["pizz"]]:
 		await _leg(pass_mods)
@@ -150,5 +173,36 @@ func _run() -> void:
 			dc = maxi(dc, int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)))
 		print("  무게 %s — 그리기 호출 %d · 프레임 %.2fms" % ["피자" if not pass_mods.is_empty() else "토너먼트",
 				dc, float(Time.get_ticks_usec() - t0) / 1000.0 / float(fr)])
+	#  판 전체를 다시 굽는 프레임(판이 설 때) · 조각 하나만 다시 굽는 프레임(사진이 칠할 때)
+	if "pz_keys" in g:
+		for pass_k in 2:
+			if pass_k == 0:
+				g.pz_keys = {}
+			else:
+				g.sec_col[0] = 2 if int(g.sec_col[0]) != 2 else 3
+			var worst := 0.0
+			for k in 3:
+				var t1 := Time.get_ticks_usec()
+				await _hold(1)
+				worst = maxf(worst, float(Time.get_ticks_usec() - t1) / 1000.0)
+			print("  무게 피자(%s) — 가장 무거운 프레임 %.2fms" % ["판 전체 굽기" if pass_k == 0 else "조각 하나 칠",
+					worst])
+		#  판이 서는 전환 — 화판을 비우고 전환을 안 건너뛴 채 새 판을 연다(lead 동안 흩어 굽는다)
+		for pass_mods in [[], ["pizz"]]:
+			g.set_process(true)
+			g.mods_own = pass_mods
+			g._board_bake()
+			g.pz_keys = {}
+			g.state = g.S.LEG
+			g._start_leg()
+			var seen: bool = g.swap_live
+			var worst3 := 0.0
+			for k in 30:
+				var t3 := Time.get_ticks_usec()
+				await process_frame
+				worst3 = maxf(worst3, float(Time.get_ticks_usec() - t3) / 1000.0)
+			g.set_process(false)
+			print("  무게 %s(판이 서는 전환 %s) — 가장 무거운 프레임 %.2fms" % [
+					"피자" if not pass_mods.is_empty() else "토너먼트", "있음" if seen else "없음", worst3])
 	print("  찍음 %s" % tag)
 	quit(0)
