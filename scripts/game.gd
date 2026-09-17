@@ -7988,15 +7988,42 @@ func _cover_draw() -> void:
 
 
 # 창구 둘. 펠트 빗변 바깥의 삼각형이 몸통이고, 결이 미끄럼틀이라고 말한다.
+#
+#  ── 얹힘 · 누름 ────────────────────────────────────────
+#  창구는 두 길로 쓴다 — 물건을 **끌고** 들어가거나(hand_zone 이 켠다),
+#  테이블에서 톡 고른 뒤 창구를 **톡** 누르거나. 끌기 쪽만 밝아지고 톡 쪽은
+#  커서를 올려도 아무 대답이 없어서, 두 번째 톡의 표적이 표적으로 안 보였다.
+#  단추와 같은 얹힘을 준다(_ui_hov · 들어설 때 딸깍). 몸이 한 단 밝아지고
+#  빗변 선이 금빛으로 달아오른다. 지금 누를 것이 없는 창구(_chute_act 가
+#  거짓)는 같은 길을 반도 안 간다 — 눌러도 「먼저 고른다」 는 말만 돌아오는
+#  자리라, 누를 것이 있는 창구와 밝기로 갈려야 한다.
+#  누르고 있으면 몸이 한 단 가라앉는다. 확정은 뗄 때라(_hand_release) 누르는
+#  동안이 보여야 탭이 먹혔는지 안다.
+#  판정은 _chute_at 그대로다 — 모양이 안 바뀌므로 흔들릴 것이 없다.
+#  끄는 동안은 _ui_can_hover 가 거짓이라 hand_zone 밝힘이 그대로 이긴다.
+#
+#  산 순간의 번쩍임(pay_flash)은 끌어 넣던 창구에만 걸려 있었는데, 놓는
+#  순간 hand_zone 이 비므로 실제로는 한 번도 안 보였다. 톡으로 산 뒤 커서가
+#  구매 창구 위에 남아 있으면 거기서 번쩍인다.
 func _chute_draw() -> void:
 	var open: bool = state == S.SHOP
 	for z in 2:
 		var lit: bool = open and hand_zone == z
+		var key := "chute:%d" % z
+		var hot: bool = _table_hover() and _chute_at(mouse_at, 0.0) == z
+		if hot:
+			ui_hot = key
+		var hk: float = _ui_hov(key) * (1.0 if _chute_act(z) else 0.4) if open else 0.0
+		var press: bool = hot and hand_st == H.ARMED and hand_src == 2 and hand_i == z
 		var body: Color = C_WOOD.darkened(0.46)
-		if pay_flash > 0.0 and lit:
+		if pay_flash > 0.0 and (lit or (z == Z_BUY and hk > 0.0)):
 			body = body.lerp(C_ACC, pay_flash * 0.5)
 		elif lit:
 			body = C_WOOD.darkened(0.22)
+		elif press:
+			body = C_WOOD.darkened(0.55)
+		elif hk > 0.0:
+			body = body.lerp(C_WOOD.darkened(0.22), hk)
 		var p := PackedVector2Array()
 		if z == Z_SELL:
 			p.append(Vector2(0.0, TBL.fy))
@@ -8007,7 +8034,7 @@ func _chute_draw() -> void:
 			p.append(Vector2(VIEW.x - CHUTE.back, TBL.fy))
 			p.append(Vector2(VIEW.x, TBL.ny))
 		draw_colored_polygon(p, body)
-		var gr := Color(C_WOOD.lightened(0.55), 0.16 if lit else 0.10)
+		var gr := Color(C_WOOD.lightened(0.55), 0.16 if lit else lerpf(0.10, 0.16, hk))
 		var yy: float = TBL.fy + 4.0
 		while yy < TBL.ny:
 			var e := _chute_edge(yy)
@@ -8017,8 +8044,8 @@ func _chute_draw() -> void:
 				else:
 					draw_line(Vector2(VIEW.x - e, yy), Vector2(VIEW.x, yy), gr, 1.0)
 			yy += 5.0
-		draw_line(p[1], p[2], Color(C_ACC if lit else C_WOOD.lightened(0.34),
-				0.95 if lit else 0.50), 1.0)
+		var eg: Color = C_ACC if lit else C_WOOD.lightened(0.34).lerp(C_ACC, hk)
+		draw_line(p[1], p[2], Color(eg, 0.95 if lit else lerpf(0.50, 0.95, hk)), 1.0)
 		if not open:
 			# 닫힌 창구 — 셔터 두 줄. 스테이지 화면에서는 사고팔 것이 없다.
 			for k in 2:
@@ -8031,6 +8058,26 @@ func _chute_draw() -> void:
 						Color(C_WOOD.darkened(0.70), 0.85))
 	if open:
 		_chute_label()
+
+
+#  상점 테이블(창구 · 물건)이 얹힘을 받는 때. 쓸기 · 팩 뜯기, 그리고 사진이
+#  연 판(미리보기 · 칠하기)이 덮은 동안은 아래 테이블이 안 눌리므로(_click)
+#  대답도 안 한다 — 가려진 창구가 딸깍거리면 누를 수 있다는 거짓말이다.
+func _table_hover() -> bool:
+	return state == S.SHOP and not sweep_live and boost_t < 0.0 \
+			and photo != "peek" and photo != "paint" and _ui_can_hover()
+
+
+#  창구를 지금 누르면 일이 되는가 — 고른 것이 이 창구로 가는가.
+#  _chute_click 의 갈래를 그대로 따른다. 골드가 모자란 구매도 참이다 —
+#  표적은 표적이고, 왜 안 되는지는 이름 글자(C_MULT)와 거절이 말한다.
+func _chute_act(z: int) -> bool:
+	var picked: bool = buy_sel >= 0 and buy_sel < stock.size()
+	if photo == "burn" or photo == "clone":
+		return picked and z == (Z_SELL if photo == "burn" else Z_BUY)
+	if z == Z_SELL:
+		return _can_sell() and sell_sel >= 0 and sell_sel < owned.size()
+	return picked
 
 
 # 창구 얼굴. 무엇을 들었는지에 따라 왼쪽이나 오른쪽 하나만 값을 말한다.
@@ -10762,6 +10809,12 @@ func _goods_draw() -> void:
 	for i in z:                     # 그림자 먼저 전부 — 어떤 몸통보다도 밑이다
 		_obj_shadow(i)
 	var hov: int = tip_spot if tip_a > 0.004 else -1
+	#  얹힌 물건이 뜨고(lift_hov) 나머지가 가라앉는 것은 이미 있다. 들어서는
+	#  딸깍만 단추와 맞춘다 — 그림은 안 바꾼다. 떨어지는 동안은 툴팁이 안
+	#  떠(tip_spot -1) 소리도 저절로 안 난다. 창구가 먼저 적었으면 그대로 둔다 —
+	#  누르면 창구가 먼저 잡는다(_hand_press_at).
+	if hov >= 0 and ui_hot == "" and _table_hover():
+		ui_hot = "good:%d" % hov
 	for i in z:
 		#  상인이 든 것은 여기서 **안 그린다.** 손보다 먼저 나가는 층이라
 		#  여기 그리면 손이 위에 얹혀 물건이 손 뒤로 숨는다(_give_draw).
@@ -13582,7 +13635,12 @@ func _tip_build(hit: Dictionary) -> void:
 			if bt.is_empty():
 				return
 			_tip_set_tag("뱃지")
+			#  사각은 툴팁 앵커로 남기고 테만 끈다. 단추가 얹히면 한 칸 떠오르는데
+			#  테는 **안 뜬 자리**에 그려져, 금빛 윗띠 아래를 흰 선이 가로지르고
+			#  드러난 턱 위에 겹쳤다. 뜨고 밝아지는 것이 이미 표시다 — 제약
+			#  카드("stage")가 같은 까닭으로 먼저 간 길이다.
 			tip_mark = _leg_skip()
+			tip_box = false
 			tip_title = String(bt.get("name", ""))
 			_tip_add(_tag_text(bt), 10, C_ACC)
 			_tip_add(_tag_when(bt), 9, C_DIM)
@@ -13590,7 +13648,9 @@ func _tip_build(hit: Dictionary) -> void:
 			if i >= pending_tags.size():
 				return
 			_tip_set_tag("뱃지")
+			#  테는 끈다 — 딱지가 얹혀 뜨는 것이 표시다(_draw_leg). 사각은 앵커다.
 			tip_mark = _pend_rect(i)
+			tip_box = false
 			tip_title = String(pending_tags[i].n)
 			_tip_add(String(pending_tags[i].get("d", "")), 10, C_ACC)
 			_tip_add(String(pending_tags[i].get("w", "")), 9, C_DIM)
@@ -14685,15 +14745,34 @@ func _draw_leg() -> void:
 	else:
 		_btn(_leg_skip(), "못 건너뛴다", "보스 판", false)
 	# 쌓아 둔 뱃지 — 언제 쓰이는지는 이름이 말한다
+	#
+	#  누르는 것이 아니라 읽는 것이다(툴팁만 뜬다). 그래도 커서를 올리면
+	#  딱지가 대답한다 — 단추(_ui_face)와 같은 말투로 한 칸 떠오르고(밑에 짙은
+	#  턱) 면이 밝아지며 금빛 윗띠가 달아오른다. 전에는 툴팁의 흰 테가 표시를
+	#  맡았는데, 몸이 뜨면 테는 안 뜬 자리에 남아 1px 어긋나므로 테는
+	#  끈다(_tip_build "pend"). 모바일은 톡 = 커서 이동이라 똑같이 선다.
+	#  판정 사각(_pend_rect)은 안 움직인다 — 뜨는 것은 그리기뿐이다.
 	for i in pending_tags.size():
 		var r := _pend_rect(i)
-		_rr(self, r, C_PANEL.lightened(0.10))
-		_rr_top(self, r, 1, C_ACC)
-		_icon_tag(Vector2(r.position.x + 9.0, r.get_center().y + 0.5), 5.0,
+		var key := "pend:%d" % i
+		var hot: bool = state == S.LEG and _ui_can_hover() and r.has_point(mouse_at)
+		if hot:
+			ui_hot = key
+		var h: float = _ui_hov(key)
+		var body := Rect2(r.position - Vector2(0.0, float(UIHOV.lift) if hot else 0.0), r.size)
+		if hot:
+			_rr(self, r, C_BG)                    # 턱 — 떠오른 만큼 드러난다
+		_rr(self, body, C_PANEL.lightened(0.10))
+		if h > 0.0:
+			_rr(self, body, Color(C_TXT, float(UIHOV.lit) * h))
+		_rr_top(self, body, 1, C_ACC)
+		if h > 0.0:
+			_rr_top(self, body, 2, Color(C_ACC.lightened(0.2), h))   # 단추처럼 한 줄 두꺼워진다
+		_icon_tag(Vector2(body.position.x + 9.0, body.get_center().y + 0.5), 5.0,
 				String(pending_tags[i].kind), 1.0,
 				String(pending_tags[i].get("rar", "")))
 		var pw: float = r.size.x - 24.0
-		draw_string(font_sm, r.position + Vector2(20.0, 11.0),
+		draw_string(font_sm, body.position + Vector2(20.0, 11.0),
 				_elide(String(pending_tags[i].n), pw, 9),
 				HORIZONTAL_ALIGNMENT_LEFT, pw, 9, C_TXT)
 
@@ -15042,6 +15121,13 @@ func _draw_stage() -> void:
 	# 고정이면 오른쪽 카드가 그 위를 덮어 든 것이 아래로 보인다.
 	var front := -1
 	for i in stage_pick.size():
+		#  얹힌 카드가 서며 커지는 것은 이미 있다(_drop_update 가 tip_mark 로
+		#  민다). 들어서는 딸깍만 단추와 맞춘다. 판정도 서는 것과 같은 줄이라
+		#  「선 카드」 와 「소리 난 카드」 가 안 갈린다. 깔리는 중에는 아직 못
+		#  고르므로(_click S.STAGE) 안 적는다.
+		if state == S.STAGE and stage_t >= _deal_time() and tip_a > 0.004 \
+				and tip_mark == _stage_rect(i) and _ui_can_hover():
+			ui_hot = "stage:%d" % i
 		if float(stage_stand[i] if i < stage_stand.size() else 0.0) > 0.004:
 			front = i
 		else:
