@@ -5500,10 +5500,14 @@ func _board_rim(gap: float) -> float:
 func _num_draw(i: int, col: Color, push := 1.0, off := Vector2.ZERO) -> void:
 	var a := float(i) * _sec_w()
 	var q := (BC + Vector2(sin(a), -cos(a)) * _board_rim(_theme_ring_w(_board_theme()) * 0.5) * push).round()
-	#  18 → 20(갈무리9 두 배) — 18 은 도트가 격자에 안 떨어져 획이 3 · 4칸으로 섞였다.
-	#  숫자 잉크는 기준선 위 18px 이다 — 기준선을 +9 에 두면 잉크 한가운데가 고리 한가운데에 선다.
-	draw_string(font_sm, q + off + Vector2(-20.0, 9.0), _num_text(i),
-			HORIZONTAL_ALIGNMENT_CENTER, 40, 20, col)
+	#  판 숫자는 18 이다 — 크기 다섯 단 밖의 유일한 자리로, 고리 폭(23.5px)이 정한다.
+	#  페이퍼로지 숫자는 갈무리보다 넓어 20 에서는 「10 · 14 · 11」 이 고리 가장자리에
+	#  닿았다(2026-09-17). 숫자 잉크는 바닥선 위 ascent × INK.num 이라 그 절반만큼
+	#  바닥선을 내리면 잉크 한가운데가 고리 한가운데에 선다.
+	var sz := 18
+	var asc: float = font_sm.get_ascent(sz) if font_sm != null else float(sz)
+	draw_string(font_sm, q + off + Vector2(-20.0, _ink_half(asc * float(INK.num) * 0.5)),
+			_num_text(i), HORIZONTAL_ALIGNMENT_CENTER, 40, sz, col)
 
 
 #  칸마다 [칸 색, 띠 색]. 죽은 칸은 여기서 한 번 가라앉힌다 — 칸 · 구멍이 같은 값을 쓴다.
