@@ -5622,13 +5622,64 @@ func _board_light(push: float) -> void:
 # ══════════════════════════════════════════════════════════
 #  판마다 제 상수 · 제 함수를 든다(_pz_ · _ck_ · _dn_ · _tg_). 넷을 따로 고쳐도
 #  서로의 줄을 안 밟게 하려는 것이다 — 공용은 아래 분기(_theme_*)와 도우미뿐이다.
+#  피자 한 판의 재료 색. 보드 확장 아이콘(카지노 칩)이 이 색을 따라 맞춘다 —
+#  크러스트 d09150 · 소스 a4301f · 모차렐라 f6dc96 · 불고기 6e3c2a · 페퍼로니 b2382a ·
+#  고르곤졸라 4e84a4 · 바질 4e9a42 · 방울토마토 d8402c.
+#  그늘은 검정이 아니라 보랏빛 갈색으로 민다(판 밖 UI 의 짙은 보라와 한 집안).
 const PIZZAART := {
-	"crust": Color("c98a45"), "crust_dk": Color("7a4a22"), "crust_hi": Color("ecb86e"),
-	"burn": Color("5a3418"), "sauce": Color("b8412e"),
-	"cut": Color(0.16, 0.09, 0.05, 0.60),
-	"pep": Color("a8322a"), "pep_dk": Color("6e1c17"), "pep_hi": Color("d0604f"),
-	"olive": Color("241e1c"), "basil": Color("3f8a3a"), "basil_dk": Color("24582a"),
-	"tint": Color(0.95, 0.70, 0.29, 0.16),    # 녹은 치즈 — 칸 색을 따뜻하게만 민다
+	"crust_w": 0.15,                     # 크러스트 폭(R 배수). 나폴리 피자의 테 1~2cm / 반지름 16cm ≈ 0.1 — 숫자가 없어 0.24 를 다 안 쓴다
+	"crust": Color("d09150"),            # 크러스트 윗면 — 구운 황금빛
+	"crust_hi": Color("f2c67e"),         # 부푼 등성이가 받는 빛
+	"crust_lo": Color("a8643a"),         # 바깥 비탈 · 짙게 구운 얼룩
+	"crust_dk": Color("6e3a2c"),         # 바깥 가장자리
+	"crust_side": Color("4a2426"),       # 크러스트 옆면 — 판 두께 자리를 덮는다
+	"crust_sh": Color("3a1a2a"),         # 크러스트 그늘(보랏빛)
+	"crumb": Color("f4dcaa"),            # 칼이 드러낸 빵 속살
+	"char": Color("34191c"),             # 표범 무늬 탄 점
+	"char_halo": Color("7a4430"),        # 탄 점 둘레의 짙은 갈색
+	"flour": Color("f8ecd0"),            # 덧가루
+	"sauce": Color("a4301f"),            # 토마토 소스 — 치즈 가장자리로 비친다
+	"sauce_dk": Color("5a1618"),
+	"sauce_hi": Color("cc4e32"),
+	"cheese": Color("f6dc96"),           # 모차렐라 — 크림(0) 조각이 이리로 끌린다
+	"cheese_hi": Color("fff4d4"),        # 막 녹은 흰 웅덩이
+	"cheese_oil": Color("e0aa58"),       # 기름 밴 자리
+	"blister": Color("c98446"),          # 치즈 거품이 그을린 자리
+	"blister_dk": Color("7c4224"),
+	"herb": Color("58582c"),             # 오레가노 부스러기
+	"dark_base": Color("583626"),        # 먹(1) 조각 바탕 — 불고기 즙에 졸아든 치즈
+	"beef": Color("45241c"),             # 불고기
+	"beef_dk": Color("24121a"),
+	"beef_hi": Color("9a5c3a"),          # 양념이 번들거리는 모서리
+	"onion": Color("ecd2b0"),            # 볶은 양파 가닥
+	"olive": Color("16121c"),            # 블랙올리브
+	"olive_hi": Color("8e86a0"),
+	"mush": Color("98795a"),             # 양송이 단면 — 구워져 누르스름
+	"mush_dk": Color("4c3628"),
+	"sesame": Color("ecdcb2"),
+	"scallion": Color("6aa24a"),         # 쪽파
+	"pep_base": Color("cc6436"),         # 주홍(2) 조각 바탕 — 페퍼로니 기름이 밴 치즈
+	"pep": Color("b2382a"),              # 페퍼로니
+	"pep_dk": Color("5c1a18"),           # 말려 올라가 탄 가장자리
+	"pep_pool": Color("de6c36"),         # 컵에 고인 기름
+	"pep_hi": Color("f0a07a"),
+	"bleu_base": Color("4e84a4"),        # 쪽빛(3) 조각 바탕 — 녹아 번진 고르곤졸라
+	"bleu": Color("e4eef0"),             # 고르곤졸라 부스러기
+	"vein": Color("22485e"),             # 푸른 곰팡이 결
+	"mold": Color("3a6e6c"),             # 부스러기 속 청록 곰팡이
+	"berry": Color("20284e"),            # 블루베리
+	"berry_hi": Color("9aaee0"),
+	"basil": Color("4e9a42"),            # 바깥 불 — 바질 잎
+	"basil_md": Color("3a7c36"),
+	"basil_dk": Color("22502a"),         # 바질 페스토
+	"basil_hi": Color("94cc6c"),
+	"tomato": Color("d8402c"),           # 안쪽 불 — 반 가른 방울토마토
+	"tomato_dk": Color("861c1a"),
+	"tomato_in": Color("f27e5c"),
+	"seed": Color("f2d27a"),
+	"burnt": Color("1c1416"),            # 죽은 조각 — 숯
+	"ash": Color("75686c"),              # 재
+	"cut": Color(0.22, 0.06, 0.07, 0.85),   # 칼자국 홈
 }
 const CLOCKART := {
 	#  시계 판의 물감 — 보드 확장 아이콘(카지노 칩)이 나중에 이 표에 맞춘다.
@@ -5777,23 +5828,161 @@ func _theme_bits(key: String) -> Array:
 #  판마다 흩뿌릴 점 목록을 굽는다(_theme_bits 가 칸 수와 함께 한 번만 부른다).
 func _pz_bake(key: String, rng: RandomNumberGenerator, sw: float) -> Array:
 	var out := []
+	var n := _sec_n()
 	match key:
+		"pizza_rim":
+			#  꼭짓점마다 [크러스트 바깥 들쭉날쭉(px), 치즈가 소스를 남기는 폭(px), 등성이 자리(폭 배수),
+			#  등성이 부풂 0~1]. 꼭짓점은 조각마다 열둘이라 칼자국(조각 경계 = 12k+6)이 꼭짓점에
+			#  떨어진다. 사인 몇 겹이라 이웃끼리 이어진다 — 손으로 늘린 반죽은 둥글게 울퉁불퉁하다.
+			var nv := n * 12
+			var ph := PackedFloat64Array()
+			for k in 8:
+				ph.append(rng.randf() * TAU)
+			var bump := []
+			var inset := []
+			var ridge := []
+			var puff := []
+			for k in nv:
+				var a := TAU * float(k) / float(nv)
+				var b: float = 0.9 + 0.6 * sin(3.0 * a + ph[0]) + 0.4 * sin(7.0 * a + ph[1]) \
+						+ 0.3 * sin(17.0 * a + ph[2]) + rng.randf_range(-0.15, 0.15)
+				if k % 12 == 6:
+					b -= 1.2                     # 칼이 지난 자리는 크러스트가 한 칸 파인다
+				bump.append(clampf(b, -0.5, 2.2))
+				var s: float = 3.2 + 1.2 * sin(5.0 * a + ph[3]) + 0.8 * sin(11.0 * a + ph[4]) \
+						+ rng.randf_range(-0.5, 0.5)
+				inset.append(clampf(s, 1.5, 5.5))
+				ridge.append(0.42 + 0.06 * sin(4.0 * a + ph[5]) + 0.04 * sin(13.0 * a + ph[6]))
+				puff.append(clampf(0.5 + 0.35 * sin(9.0 * a + ph[7]) + 0.3 * sin(23.0 * a + ph[5])
+						+ rng.randf_range(-0.2, 0.2), 0.0, 1.0))
+			out = [bump, inset, ridge, puff]
 		"pizza_crust":
-			for k in 110:
-				out.append([rng.randf(), rng.randf() * TAU, rng.randi() % 3])
-		"pizza_cheese":
-			for k in 360:
-				out.append([sqrt(rng.randf()), rng.randf() * TAU, rng.randi() % 3])
+			#  [폭 안 자리 0~1, 각, 종류, 흔들, 크기]
+			#    0 탄 점 1px · 1 탄 점 2px + 갈색 둘레 · 2 거품(윗줄 빛 · 아랫줄 그늘) · 3 덧가루
+			#    4 짙게 구운 얼룩 · 5 밝게 부푼 얼룩
+			#  얼룩을 먼저 깔고 점을 얹는다. 표범 무늬는 **뭉쳐** 난다 — 반죽 거품 하나가 부풀어
+			#  오른 등성이에 탄 점 여럿이 모인다.
+			for k in 70:
+				out.append([clampf(rng.randfn(0.45, 0.2), 0.1, 0.9), rng.randf() * TAU,
+						4 if rng.randf() < 0.55 else 5, rng.randi() % 4, rng.randf_range(1.5, 3.2)])
+			for c in 52:
+				var ca := rng.randf() * TAU
+				var ct := clampf(rng.randfn(0.45, 0.14), 0.18, 0.8)
+				for k in 1 + rng.randi() % 6:
+					out.append([clampf(ct + rng.randfn(0.0, 0.09), 0.1, 0.9),
+							ca + rng.randfn(0.0, 0.024), 0 if rng.randf() < 0.5 else 1, rng.randi() % 4, 1.0])
+			for k in 44:
+				out.append([clampf(rng.randfn(0.45, 0.16), 0.12, 0.85), rng.randf() * TAU, 2, rng.randi() % 4, 1.0])
+			for k in 60:
+				out.append([rng.randf_range(0.55, 0.97), rng.randf() * TAU, 3, rng.randi() % 4, 1.0])
+		"pizza_sauce":
+			#  치즈 가장자리로 비치는 소스의 결 — [반지름 안쪽 거리(px), 각, 밝/어둠]
+			for k in 150:
+				out.append([rng.randf_range(0.5, 5.5), rng.randf() * TAU, rng.randi() % 3])
 		"pizza_top":
-			#  조각마다 같은 차림 — 페퍼로니 셋, 올리브 하나, 바질 하나. 조각 안에서
-			#  자리만 조금씩 흔든다(조각 폭 배수로 적어 칸 수가 바뀌어도 조각 안에 든다).
-			for i in _sec_n():
-				var c := float(i) * sw
-				out.append(["pep", rng.randf_range(0.70, 0.78), c + rng.randf_range(-0.26, -0.16) * sw])
-				out.append(["pep", rng.randf_range(0.66, 0.74), c + rng.randf_range(0.16, 0.26) * sw])
-				out.append(["pep", rng.randf_range(0.38, 0.46), c + rng.randf_range(-0.06, 0.06) * sw])
-				out.append(["olive", rng.randf_range(0.54, 0.60), c + rng.randf_range(-0.30, -0.22) * sw])
-				out.append(["basil", rng.randf_range(0.52, 0.58), c + rng.randf_range(0.18, 0.26) * sw])
+			#  조각마다 **네 벌을 다** 굽는다 — 칠(사진 · 개칠)이 칸 색을 바꾸면 그 자리에서
+			#  재료가 갈린다. out[i][재료] = [[이름, u, v, 크기, 흔들 0~3, 각, 덩이], …]
+			#  u 는 조각 폭(-1 ~ 1), v 는 불 끝 ~ 치즈 끝(0 ~ 1). 덩이는 원 두셋을 겹친 모양
+			#  [[dx, dy, r], …] — 치즈 거품 · 부스러기가 동그라미 도장으로 안 보이게 한다.
+			#  큰 토핑을 먼저 자리 잡고, 그리는 순서는 작은 것 → 큰 것.
+			for i in n:
+				var sl := {}
+				# 0 크림 — 모차렐라: 흰 웅덩이 · 기름 · 그을린 거품 · 오레가노 · 바질 한 잎
+				var big := []
+				var tk := []
+				#  토핑 크기는 실물 비율로 — 지름 35cm 피자에 페퍼로니 4cm 면 판 지름의 1/9 이다.
+				#  판 반지름 98px 에 페퍼로니 반지름 7px. 작게 흩으면 무늬로 읽힌다.
+				if rng.randf() < 0.6:
+					_pz_put(big, "leaf", rng, sw, tk, 4.5, 2.0, 0.25, 0.8)
+				var small := []
+				for k in 5:
+					_pz_put(small, "melt", rng, sw, [], rng.randf_range(3.5, 7.0), -1.0)
+				for k in 4:
+					_pz_put(small, "oil", rng, sw, [], rng.randf_range(1.5, 3.0), -1.0)
+				for k in 14:
+					_pz_put(small, "pore", rng, sw, [], 1.0, -1.0)
+				var tb := tk.duplicate()
+				for k in 16:
+					_pz_put(small, "blister", rng, sw, tb, rng.randf_range(1.5, 3.4), 1.4)
+				for k in 10:
+					_pz_put(small, "herb", rng, sw, [], 1.0, -1.0)
+				sl[0] = small + big
+				# 1 먹 — 불고기: 즙 밴 치즈 · 볶은 양파 · 고기 · 양송이 · 올리브 · 쪽파 · 깨
+				big = []
+				tk = []
+				for k in 3:
+					_pz_put(big, "olive", rng, sw, tk, 3.5, 1.5)
+				for k in 2:
+					_pz_put(big, "mush", rng, sw, tk, 4.5, 1.5, 0.35, 1.0)
+				var beef := []
+				for k in 14:
+					_pz_put(beef, "beef", rng, sw, tk, rng.randf_range(3.0, 4.4), 0.2)
+				small = []
+				for k in 6:
+					_pz_put(small, "patch", rng, sw, [], rng.randf_range(2.5, 4.0), -1.0)
+				for k in 4:
+					_pz_put(small, "onion", rng, sw, [], 3.5, -1.0)
+				for k in 12:
+					_pz_put(small, "pore", rng, sw, [], 1.0, -1.0)
+				var over := []
+				for k in 6:
+					_pz_put(over, "scallion", rng, sw, [], 1.5, -1.0)
+				for k in 8:
+					_pz_put(over, "sesame", rng, sw, [], 1.0, -1.0)
+				sl[1] = small + beef + big + over
+				# 2 주홍 — 페퍼로니 가득: 기름 번진 치즈 · 그을린 거품 · 오레가노
+				big = []
+				tk = []
+				for k in 8:
+					_pz_put(big, "pep", rng, sw, tk, 7.0, 0.6)
+				small = []
+				for k in 5:
+					_pz_put(small, "oil", rng, sw, [], rng.randf_range(2.0, 3.5), -1.0)
+				tb = tk.duplicate()
+				for k in 6:
+					_pz_put(small, "blister", rng, sw, tb, rng.randf_range(1.5, 2.4), 1.0)
+				for k in 8:
+					_pz_put(small, "herb", rng, sw, [], 1.0, -1.0)
+				sl[2] = small + big
+				# 3 쪽빛 — 고르곤졸라: 녹아 번진 흰 결 · 푸른 곰팡이 결 · 부스러기 · 블루베리
+				big = []
+				tk = []
+				for k in 4:
+					_pz_put(big, "berry", rng, sw, tk, 3.5, 2.0)
+				var crumb := []
+				for k in 10:
+					_pz_put(crumb, "crumb", rng, sw, tk, rng.randf_range(2.8, 4.2), 1.0)
+				small = []
+				for k in 5:
+					_pz_put(small, "marble", rng, sw, [], rng.randf_range(4.0, 7.0), -1.0)
+				for k in 9:
+					_pz_put(small, "vein", rng, sw, [], 3.0, -1.0)
+				for k in 4:
+					_pz_put(small, "herb", rng, sw, [], 1.0, -1.0)
+				sl[3] = small + crumb + big
+				# 탄 조각 — 그을음 · 갈라진 숯 · 재
+				small = []
+				for k in 7:
+					_pz_put(small, "soot", rng, sw, [], rng.randf_range(2.5, 5.0), -1.0)
+				for k in 8:
+					_pz_put(small, "crack", rng, sw, [], 4.0, -1.0)
+				for k in 22:
+					_pz_put(small, "ash", rng, sw, [], 1.0, -1.0)
+				sl["burn"] = small
+				out.append(sl)
+		"pizza_cut":
+			#  칼자국을 건너는 치즈 가닥 — 칼자국마다 [홈 안 자리 0~1, 길이]
+			for i in n:
+				var st := []
+				for k in 2 + rng.randi() % 2:
+					st.append([rng.randf_range(0.08, 0.92), rng.randf_range(2.0, 3.5)])
+				out.append(st)
+		"pizza_bull":
+			#  바질 잎 — [각, 길이 배수, 폭 배수, 음영]. 여섯 잎이 방사로 겹친다.
+			var a0 := rng.randf() * TAU
+			for k in 6:
+				out.append([a0 + TAU * float(k) / 6.0 + rng.randf_range(-0.25, 0.25),
+						rng.randf_range(0.86, 0.98), rng.randf_range(0.30, 0.38), rng.randi() % 3])
 	return out
 
 
@@ -6084,18 +6273,45 @@ func _board_ring(ro: float) -> void:
 
 
 # ── 피자 한 벌 ──
+var pz_vp: SubViewport = null        # 피자 한 판을 굽는 화판(_pz_board)
+var pz_cv: Node2D = null             # 그 화판의 붓
+var pz_ci: CanvasItem = null         # _pz_* 가 그리는 곳 — 화판 붓 또는 self
+var pz_key := ""                     # 지금 구운 판의 열쇠
+var pz_ro := 0.0                     # 구운 판의 테 반지름(push 1)
+var pz_cols := []                    # 구운 판의 칸 색
+var pz_wait := 0                     # 굽는 동안 직접 그릴 프레임 수
+
+
 func _pz_ring_w() -> float:
-	return float(BOARDART.ring)
+	return float(PIZZAART.crust_w)
 
 
+#  피자 한 판은 도트 수천 칸이다 — 프레임마다 그리면 그것만 9ms 가 들었다(편집기 실행 ·
+#  토너먼트 판과 견줘 프레임이 10.5 → 16.9ms). 그래서 판이 **바뀔 때만** 판 한 장 크기의
+#  화판(SubViewport, 1배율)에 한 번 굽고, 프레임마다 그 한 장을 붙인다. 열쇠는 칸 수 ·
+#  칸마다 색 id · 죽음 · 칸 색 · 반지름(_pz_key) — 칠 · 그늘 · 라지가 바뀌면 다시 굽는다.
+#  1배율로 구우니 원 · 칼자국 · 잎이 도트 격자에 떨어진다(판 전체가 진짜 도트 그림이다).
+#  굽는 동안(두어 프레임)은 직접 그린다. 명중 때 판이 부푸는 것(push)은 그 한 장을 키운다.
 func _pz_board(ro: float, push: float, cols: Array) -> void:
-	_pz_rim(ro, push)
-	_board_cells(cols, push)
-	_pz_face(cols, push)
+	var ro1 := ro / push
+	var key := _pz_key(ro1, cols)
+	if key != pz_key:
+		pz_key = key
+		pz_ro = ro1
+		pz_cols = cols.duplicate(true)
+		_pz_tex_bake()
+	if pz_wait > 0:
+		pz_wait -= 1
+		pz_ci = self
+		_pz_paint(ro, push, cols)
+		return
+	var half := Vector2(pz_vp.size) * 0.5
+	draw_texture_rect(pz_vp.get_texture(), Rect2(BC - half * push, half * 2.0 * push), false)
 
 
-func _pz_over(_push: float) -> void:
-	pass
+#  빛 위 — 기름 · 토마토 · 올리브의 반짝임(빛 그늘에 안 묻히게)
+func _pz_over(push: float) -> void:
+	_pz_gloss(push)
 
 
 #  값이 하나뿐인 판(32)은 숫자를 안 적는다 — 같은 수 여덟이 둘레를 도는 것이 징그럽다.
@@ -6105,6 +6321,49 @@ func _pz_num() -> Color:
 
 func _pz_top(_push: float) -> void:
 	pass
+
+
+#  크러스트 · 면 · 칼자국 · 불 — 화판에 구울 때(pz_ci = 화판 붓)와 직접 그릴 때(pz_ci = self)가
+#  같은 줄을 지난다.
+func _pz_paint(ro: float, push: float, cols: Array) -> void:
+	_pz_crust(ro, push)
+	_pz_face(push, cols)
+	_pz_cuts(ro, push)
+	_pz_bull(push)
+
+
+func _pz_key(ro1: float, cols: Array) -> String:
+	var k := "%d|%.2f|%.4f|%.4f|%.4f|%.2f" % [_sec_n(), R, rt_bull_i, rt_bull_o, rt_dbl_out, ro1]
+	for i in _sec_n():
+		k += "|%d%s%s" % [_sec_col(i), "x" if _pz_dead(i) else "", (cols[i][0] as Color).to_html(false)]
+	return k
+
+
+#  화판을 (처음이면 만들고) 이번 판 크기로 맞춰 한 번 굽게 건다. 화판의 한가운데가 BC 에
+#  오도록 붓을 옮긴다 — 정수 칸이라 도트가 그대로 옮겨진다.
+func _pz_tex_bake() -> void:
+	if pz_vp == null:
+		pz_vp = SubViewport.new()
+		pz_vp.transparent_bg = true
+		pz_vp.disable_3d = true
+		pz_vp.gui_disable_input = true
+		pz_vp.canvas_item_default_texture_filter = Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_NEAREST
+		add_child(pz_vp)
+		pz_cv = Node2D.new()
+		pz_cv.draw.connect(_pz_tex_draw)
+		pz_vp.add_child(pz_cv)
+	var s := 2 * int(ceilf(pz_ro + 3.0 + float(BOARDART.side) + 3.0))
+	pz_vp.size = Vector2i(s, s)
+	pz_cv.position = Vector2(float(s), float(s)) * 0.5 - BC
+	pz_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+	pz_cv.queue_redraw()
+	pz_wait = 3
+
+
+func _pz_tex_draw() -> void:
+	pz_ci = pz_cv
+	_pz_paint(pz_ro, 1.0, pz_cols)
+	pz_ci = self
 
 
 # ── 시계 한 벌 ──
@@ -6603,81 +6862,561 @@ func _tg_pins(push: float) -> void:
 
 
 # ── 피자 ─────────────────────────────────────────────
-func _pz_rim(ro: float, push: float) -> void:
+#  「피자는 진짜 피자같이 보이도록 해줘. 다트 보드의 테두리만 피자로 만들지 말고」
+#  (사용자, 2026-09-17). 옛 옷은 다트판 쐐기(크림 · 먹)를 그대로 깔고 테만 크러스트로
+#  두른 뒤 페퍼로니를 흩었다 — 다트판에 피자 스티커를 붙인 꼴이었다. 이제 판 전체가
+#  위에서 내려다본 피자 한 판이다.
+#
+#  레퍼런스(구도 · 색만 봤다 — 사진을 따라 그리지 않았다):
+#    나폴리 피자 코르니초네 · 표범 무늬(vaiolatura) — 1~2cm 부푼 테, 등성이에 뭉쳐 난 탄 점
+#    NY 피자 치즈 — 모차렐라 거품이 터진 자리만 갈색으로 그을린다 · 기름 번들
+#    컵 앤 차 페퍼로니 — 가장자리가 말려 올라 타고, 가운데 기름이 고인다
+#    마르게리타 — 소스(빨강) · 모차렐라(하양) · 바질(초록), 치즈 틈으로 소스가 비친다
+#    반반 · 네 가지 맛 피자, 한국 불고기 피자 — 조각마다 토핑이 다르다 · 짙은 고기 · 올리브 · 버섯
+#    고르곤졸라 피자 — 흰 살에 푸른 결 · 과일
+#    도트 피자(메가복셀 강좌 · 픽셀 음식 팩 · 피자 타워) — 크러스트 윗면을 밝히고 토핑 밑에 그늘 한 칸
+#
+#  **자리는 판정 그대로다.** hit_info 의 반지름이 곧 재료의 경계다 —
+#    판 밖(rt_dbl_out ~ 테 끝)      크러스트. 빗나감 자리라 빵이다(점수 없는 곳 = 먹는 데 아닌 곳)
+#    조각(rt_bull_o ~ rt_dbl_out)   소스 + 치즈 + 토핑. 칼자국이 조각 경계(i·sw ± sw/2)에 선다
+#    바깥 불(rt_bull_i ~ rt_bull_o) 바질 페스토 한 숟갈과 잎 — 토너먼트 판의 초록 불 자리
+#    안쪽 불(~ rt_bull_i)           반 가른 방울토마토 — 빨강 불 자리
+#  트리플 · 더블 띠는 피자가 폭 0 으로 접어 없앴으므로 그릴 것이 없다. 조준 밝힘이 조각을
+#  안(불 ~ 접힌 트리플) · 밖으로 나눠 밝히는 것은 hit_info 의 r0 · r1 이 그렇게 갈라서다.
+#
+#  **칸 색 = 조각의 재료.** 양 · 음 · WHITE ALBUM · 그늘 · 사진이 칸 색 id 를 읽으므로
+#  색이 재료를 고르고, 바탕은 칸 색을 재료 쪽으로 반쯤만 끈다 —
+#    0 크림 → 모차렐라 치즈 조각             밝다
+#    1 먹   → 불고기 · 블랙올리브 · 양송이    어둡다
+#    2 주홍 → 페퍼로니가 덮은 조각            붉은 주황
+#    3 쪽빛 → 고르곤졸라 · 블루베리            푸르다
+#  칠이 바뀌면 그 자리에서 토핑이 갈린다(조각마다 네 벌을 다 구워 둔다). 표에 새 색이
+#  붙으면 치즈에 그 색을 물들인다. 죽은 조각은 까맣게 탄다 — 바탕은 숯, 큰 토핑은
+#  숯덩이, 크러스트도 그 폭만큼 그을린다.
+#
+#  도트 — 토핑은 정수 좌표의 한 줄 사각(_pz_disc)으로 찍고, 그늘은 오른쪽 아래 한 칸,
+#  빛은 왼쪽 위(_board_light 와 같은 쪽). 윤곽선은 안 두른다.
+
+#  죽은 조각 — _board_cols 가 가라앉히는 조건 그대로.
+func _pz_dead(i: int) -> bool:
+	return i == dead_idx or (dead_col >= 0 and _sec_col(i) == dead_col)
+
+
+#  칸 색 id → 재료(0 ~ 3). 표에 없는 색은 -1 — 치즈에 그 색을 물들인다.
+func _pz_kind(i: int) -> int:
+	var c := _sec_col(i)
+	return c if c >= 0 and c <= 3 else -1
+
+
+#  조각 바탕 — 칸 색을 재료 쪽으로 끈다. 밝고 어두움과 두 칠의 색상이 남는 만큼만 끈다.
+func _pz_base(i: int, cols: Array) -> Color:
 	var pz: Dictionary = PIZZAART
-	var ri := R * rt_dbl_out * push
-	draw_circle(BC, ro, pz.crust_dk)
-	draw_circle(BC, ro - 2.0, pz.crust)
-	#  빛 받는 쪽이 부푼다
-	draw_arc(BC, ro - 4.0, PI * 0.95, PI * 1.55, 48, pz.crust_hi, 3.0)
-	draw_arc(BC, ro - 3.0, PI * -0.05, PI * 0.55, 48, Color(pz.crust_dk, 0.45), 2.0)
-	#  구운 자국 — 탄 점 · 부푼 거품 · 갈색 점
-	for e in _theme_bits("pizza_crust"):
-		var r := lerpf(ri + 3.0, ro - 4.0, float(e[0]))
-		var q := (BC + _theme_dir(e[1]) * r).floor()
-		match int(e[2]):
-			0:
-				draw_rect(Rect2(q, Vector2(2.0, 1.0)), pz.burn)
-			1:
-				draw_rect(Rect2(q, Vector2(2.0, 2.0)), pz.crust_hi)
-			_:
-				draw_rect(Rect2(q, Vector2.ONE), pz.crust_dk)
-	#  크러스트 안쪽으로 비치는 소스
-	draw_arc(BC, ri + 1.0, 0.0, TAU, 140, pz.sauce, 2.0)
+	var c: Color = cols[i][0]
+	if _pz_dead(i):
+		return c.lerp(pz.burnt, 0.45)
+	match _pz_kind(i):
+		0:
+			return c.lerp(pz.cheese, 0.62)
+		1:
+			return c.lerp(pz.dark_base, 0.7)
+		2:
+			return c.lerp(pz.pep_base, 0.35)
+		3:
+			return c.lerp(pz.bleu_base, 0.25)
+	return c.lerp(pz.cheese, 0.2)
 
 
-func _pz_face(cols: Array, push: float) -> void:
+#  조각 i 안의 [u, v] 자리(정수 좌표). u 는 조각 폭 -1 ~ 1, v 는 불 끝 ~ 판 끝 0 ~ 1.
+func _pz_at(i: int, u: float, v: float, push: float) -> Vector2:
+	var bo := R * rt_bull_o * push
+	var rim := R * rt_dbl_out * push
+	var sw := _sec_w()
+	return (BC + _theme_dir(float(i) * sw + u * sw * 0.5) * (bo + v * (rim - bo))).floor()
+
+
+#  조각 안 한 자리 [u, v] — 칼자국 · 불 · 치즈 끝에서 제 크기만큼 떨어지고, 이미 놓인 것
+#  (taken, 조각 좌표 Vector3(x, y, 크기))과 gap 이상 벌어진다. gap < 0 이면 겹침을 안 본다.
+#  반지름은 지금 판(R · rt_*)으로 잰다 — 라지로 판이 커지면 v 가 비례로 따라간다.
+func _pz_spot(rng: RandomNumberGenerator, sw: float, taken: Array, size: float, gap: float,
+		v0: float, v1: float) -> Array:
+	var bo := R * rt_bull_o
+	var rim := R * rt_dbl_out
+	for t in 60:
+		var v := rng.randf_range(v0, v1)
+		var r := bo + v * (rim - bo)
+		var u := rng.randf_range(-1.0, 1.0)
+		if r * sin((1.0 - absf(u)) * sw * 0.5) < size + 2.0:
+			continue
+		if r - size < bo + 3.0 or r + size > rim - 6.0:
+			continue
+		if gap >= 0.0:
+			var p := Vector2(sin(u * sw * 0.5), -cos(u * sw * 0.5)) * r
+			var ok := true
+			for q in taken:
+				if p.distance_to(Vector2(q.x, q.y)) < size + float(q.z) + gap:
+					ok = false
+					break
+			if not ok:
+				continue
+			taken.append(Vector3(p.x, p.y, size))
+		return [u, v]
+	return []
+
+
+#  한 자리를 잡아 목록에 붙인다 — [이름, u, v, 크기, 흔들, 각, 덩이]. 덩이는 크기 안에 드는
+#  원 두셋(가운데 하나 + 옆으로 비어져 나온 작은 것).
+func _pz_put(list: Array, nm: String, rng: RandomNumberGenerator, sw: float, taken: Array,
+		size: float, gap: float, v0 := 0.0, v1 := 1.0) -> void:
+	var s := _pz_spot(rng, sw, taken, size, gap, v0, v1)
+	if s.is_empty():
+		return
+	var lump := [[0.0, 0.0, size * 0.75]]
+	for k in 1 + rng.randi() % 2:
+		var a := rng.randf() * TAU
+		var rr := size * rng.randf_range(0.35, 0.6)
+		lump.append([roundf(cos(a) * (size - rr)), roundf(sin(a) * (size - rr)), rr])
+	list.append([nm, float(s[0]), float(s[1]), size, rng.randi() % 4, rng.randf() * TAU, lump])
+
+
+#  도트 원판 — 한 줄에 사각 하나. q 는 정수 좌표(원의 가운데는 그 칸의 한가운데).
+func _pz_disc(q: Vector2, r: float, col: Color) -> void:
+	var n := int(floorf(r))
+	for dy in range(-n, n + 1):
+		var hw := floorf(sqrt(maxf(r * r - float(dy * dy), 0.0)))
+		pz_ci.draw_rect(Rect2(q.x - hw, q.y + float(dy), hw * 2.0 + 1.0, 1.0), col)
+
+
+#  덩이 — 도트 원판 두셋을 겹친 울퉁불퉁한 모양(_pz_put 이 굽는다). grow 만큼 둘레를 키운다.
+#  반투명 색이면 겹친 자리가 짙어진다 — 녹은 치즈 · 기름 웅덩이가 그렇게 얼룩진다.
+func _pz_lump(q: Vector2, lump: Array, grow: float, col: Color) -> void:
+	for b in lump:
+		_pz_disc(q + Vector2(float(b[0]), float(b[1])), float(b[2]) + grow, col)
+
+
+#  네모 한 칸에 빛 · 그늘을 꼭짓점 색으로 번지게 한다. tv 는 꼭짓점마다 빛 받는 정도(-1 ~ 1).
+func _pz_shade(pts: PackedVector2Array, tv: Array, hi: Color, lo: Color) -> void:
+	var ch := PackedColorArray()
+	var cl := PackedColorArray()
+	for k in 4:
+		ch.append(Color(hi, maxf(float(tv[k]), 0.0) * hi.a))
+		cl.append(Color(lo, maxf(-float(tv[k]), 0.0) * lo.a))
+	pz_ci.draw_primitive(pts, ch, PackedVector2Array())
+	pz_ci.draw_primitive(pts, cl, PackedVector2Array())
+
+
+#  크러스트 — 부푼 테. 옆면 · 가장자리 · 비탈 · 등성이를 겹으로 깔고, 빛(왼쪽 위)이 바깥
+#  비탈은 왼쪽 위에, 안쪽 비탈은 오른쪽 아래에 닿게 한다 — 둥근 빵 고리의 입체다.
+#  _board_light 는 판 면(rt_dbl_out 안)에만 얹히므로 테의 빛은 여기서 준다.
+#  바깥선은 반죽을 손으로 늘린 만큼 울퉁불퉁하다(pizza_rim). 옆면을 그 모양으로 깔아
+#  판 두께(검정 원)를 덮는다 — 피자의 옆은 구운 빵 색이다.
+func _pz_crust(ro: float, push: float) -> void:
 	var pz: Dictionary = PIZZAART
 	var rim := R * rt_dbl_out * push
-	var bull := R * rt_bull_o * push
-	draw_circle(BC, rim, pz.tint)
-	#  녹은 치즈 — 밝은 거품 · 늘어진 줄 · 그을린 점. 칸 색에서 뽑는다.
-	for e in _theme_bits("pizza_cheese"):
-		var r: float = float(e[0]) * rim
-		if r < bull + 2.0 or r > rim - 3.0:
-			continue
-		var c: Color = cols[_theme_sec(e[1])][0]
-		var q := (BC + _theme_dir(e[1]) * r).floor()
+	var rb: Array = _theme_bits("pizza_rim")
+	var bump: Array = rb[0]
+	var ridge: Array = rb[2]
+	var puff: Array = rb[3]
+	var nv := bump.size()
+	var sd := Vector2(0.0, float(BOARDART.side))
+	var side := PackedVector2Array()
+	var o0 := PackedVector2Array()
+	var o1 := PackedVector2Array()
+	for k in nv:
+		var d := _theme_dir(TAU * float(k) / float(nv))
+		var rr := ro + float(bump[k]) * push
+		side.append(BC + sd + d * maxf(rr, ro))
+		o0.append(BC + d * rr)
+		o1.append(BC + d * (rr - 1.0))
+	pz_ci.draw_colored_polygon(side, pz.crust_side)
+	pz_ci.draw_colored_polygon(o0, pz.crust_dk)
+	pz_ci.draw_colored_polygon(o1, pz.crust)
+	#  비탈의 빛 · 그늘 — 바깥 비탈 끝은 빛 쪽이 아니면 늘 조금 그늘(둥글게 떨어지는 빵),
+	#  안쪽 비탈 밑(소스와 만나는 골)도 조금 그늘. 등성이는 부푼 만큼 밝다.
+	var lt := Vector2(-0.6, -0.8)
+	var hi := Color(pz.crust_hi, 0.8)
+	var lo := Color(pz.crust_sh, 0.5)
+	var w_c := ro - rim
+	for k0 in range(0, nv, 2):
+		var k1 := (k0 + 2) % nv
+		var d0 := _theme_dir(TAU * float(k0) / float(nv))
+		var d1 := _theme_dir(TAU * float(k0 + 2) / float(nv))
+		var t0 := d0.dot(lt)
+		var t1 := d1.dot(lt)
+		var e0 := ro + float(bump[k0]) * push - 0.5
+		var e1 := ro + float(bump[k1]) * push - 0.5
+		var g0 := rim + w_c * float(ridge[k0])
+		var g1 := rim + w_c * float(ridge[k1])
+		_pz_shade(PackedVector2Array([BC + d0 * g0, BC + d1 * g1, BC + d1 * e1, BC + d0 * e0]),
+				[0.0, 0.0, minf(t1 - 0.45, 1.0), minf(t0 - 0.45, 1.0)], hi, lo)
+		_pz_shade(PackedVector2Array([BC + d0 * rim, BC + d1 * rim, BC + d1 * g1, BC + d0 * g0]),
+				[-t0 - 0.3, -t1 - 0.3, 0.0, 0.0], hi, lo)
+		var p0 := float(puff[k0])
+		var p1 := float(puff[k1])
+		var c0 := Color(pz.crust_hi, 0.10 + p0 * 0.30 + maxf(t0, 0.0) * 0.35)
+		var c1 := Color(pz.crust_hi, 0.10 + p1 * 0.30 + maxf(t1, 0.0) * 0.35)
+		var h0 := 1.0 + p0 * 1.5
+		var h1 := 1.0 + p1 * 1.5
+		pz_ci.draw_polygon(PackedVector2Array([BC + d0 * (g0 - h0), BC + d1 * (g1 - h1),
+				BC + d1 * (g1 + h1), BC + d0 * (g0 + h0)]), PackedColorArray([c0, c1, c1, c0]))
+	#  구운 얼룩 · 표범 무늬 · 거품 · 덧가루
+	for e in _theme_bits("pizza_crust"):
+		var q := (BC + _theme_dir(e[1]) * lerpf(rim + 1.5, ro - 1.5, float(e[0]))).floor()
+		var w: int = int(e[3])
 		match int(e[2]):
+			4:
+				_pz_disc(q, float(e[4]), Color(pz.crust_lo, 0.4))
+			5:
+				_pz_disc(q, float(e[4]), Color(pz.crust_hi, 0.35))
 			0:
-				draw_rect(Rect2(q, Vector2(2.0, 2.0)), c.lightened(0.16))
+				pz_ci.draw_rect(Rect2(q, Vector2.ONE), pz.char)
+				if w == 0:
+					pz_ci.draw_rect(Rect2(q + Vector2(1.0, 0.0), Vector2.ONE), pz.char_halo)
 			1:
-				draw_rect(Rect2(q, Vector2(3.0, 1.0)), c.lightened(0.10))
+				var sz := Vector2(2.0, 1.0) if w % 2 == 0 else Vector2(1.0, 2.0)
+				pz_ci.draw_rect(Rect2(q + Vector2(-1.0, 0.0), sz + Vector2(2.0, 0.0)), Color(pz.char_halo, 0.75))
+				pz_ci.draw_rect(Rect2(q + Vector2(0.0, -1.0), sz + Vector2(0.0, 2.0)), Color(pz.char_halo, 0.75))
+				pz_ci.draw_rect(Rect2(q, sz), pz.char)
+			2:
+				pz_ci.draw_rect(Rect2(q, Vector2(2.0, 1.0)), Color(pz.crust_hi, 0.9))
+				pz_ci.draw_rect(Rect2(q + Vector2(1.0, 1.0), Vector2(2.0, 1.0)), Color(pz.crust_sh, 0.4))
 			_:
-				draw_rect(Rect2(q, Vector2.ONE), c.darkened(0.30))
-	#  칼자국 — 크러스트까지 조금 파고든다
-	var sw := _sec_w()
+				pz_ci.draw_rect(Rect2(q, Vector2.ONE), Color(pz.flour, 0.45))
+	#  탄 조각은 제 폭의 크러스트도 그을린다
 	for i in _sec_n():
-		var d := _theme_dir(float(i) * sw - sw * 0.5)
-		draw_line(BC + d * bull, BC + d * (rim + 4.0), pz.cut, 1.0)
-	draw_arc(BC, bull, 0.0, TAU, 60, pz.cut, 1.0)
-	#  토핑
-	for e in _theme_bits("pizza_top"):
-		var q := (BC + _theme_dir(e[2]) * float(e[1]) * rim).floor() + Vector2(0.5, 0.5)
+		if not _pz_dead(i):
+			continue
+		var pts := PackedVector2Array()
+		for j in range(-6, 7):
+			var k := posmod(i * 12 + j, nv)
+			pts.append(BC + _theme_dir(TAU * float(i * 12 + j) / float(nv)) * (ro + float(bump[k]) * push))
+		for j in range(6, -7, -1):
+			pts.append(BC + _theme_dir(TAU * float(i * 12 + j) / float(nv)) * rim)
+		pz_ci.draw_colored_polygon(pts, Color(pz.burnt, 0.8))
+
+
+#  판 면 — 소스를 깔고 조각마다 치즈 · 토핑을 얹는다. 치즈는 가장자리에서 들쭉날쭉
+#  물러나 테 안쪽으로 소스가 붉게 비친다. 치즈의 그늘은 오른쪽 아래로 한 칸 떨어진다.
+func _pz_face(push: float, cols: Array) -> void:
+	var pz: Dictionary = PIZZAART
+	var rim := R * rt_dbl_out * push
+	var inset: Array = _theme_bits("pizza_rim")[1]
+	var nv := inset.size()
+	var n := _sec_n()
+	pz_ci.draw_circle(BC, rim, pz.sauce)
+	for e in _theme_bits("pizza_sauce"):
+		var q := (BC + _theme_dir(e[1]) * (rim - float(e[0]) * push)).floor()
+		pz_ci.draw_rect(Rect2(q, Vector2.ONE), Color(pz.sauce_dk if int(e[2]) == 0 else pz.sauce_hi, 0.7))
+	var polys := []
+	for i in n:
+		#  탄 조각은 소스 고리까지 통째로 탄다 — 붉은 테가 남으면 산 조각으로 읽힌다
+		var dead := _pz_dead(i)
+		var pts := PackedVector2Array([BC])
+		for j in range(-6, 7):
+			var k := posmod(i * 12 + j, nv)
+			var ins: float = 0.0 if dead else float(inset[k])
+			pts.append(BC + _theme_dir(TAU * float(i * 12 + j) / float(nv)) * (rim - ins * push))
+		polys.append(pts)
+		var shp := PackedVector2Array()
+		for p in pts:
+			shp.append(p + Vector2(1.0, 1.0))
+		pz_ci.draw_colored_polygon(shp, Color(pz.sauce_dk, 0.6))
+	var top: Array = _theme_bits("pizza_top")
+	for i in n:
+		var base := _pz_base(i, cols)
+		var pts: PackedVector2Array = polys[i]
+		pz_ci.draw_colored_polygon(pts, base)
+		if _pz_dead(i):
+			_pz_burnt(i, base, top[i], push)
+			continue
+		#  치즈는 크러스트 가까이서 더 굽는다 — 가장자리로 갈수록 황갈색이 짙어진다(치즈 · 페퍼로니)
+		var kind := _pz_kind(i)
+		if kind == 0 or kind == 2 or kind == -1:
+			var bc: Color = base.lerp(pz.blister, 0.55)
+			for j in range(1, pts.size() - 1):
+				var q0: Vector2 = pts[j]
+				var q1: Vector2 = pts[j + 1]
+				pz_ci.draw_polygon(PackedVector2Array([BC + (q0 - BC) * 0.62, BC + (q1 - BC) * 0.62, q1, q0]),
+						PackedColorArray([Color(bc, 0.0), Color(bc, 0.0), Color(bc, 0.45), Color(bc, 0.45)]))
+		_pz_toppings(i, base, top[i], push)
+	#  테의 안쪽 비탈이 왼쪽 위 가장자리에 그늘을 떨군다
+	var lt := Vector2(-0.6, -0.8)
+	var sh: Color = pz.crust_sh
+	for s in 48:
+		var d0 := _theme_dir(TAU * float(s) / 48.0)
+		var d1 := _theme_dir(TAU * float(s + 1) / 48.0)
+		var a0 := maxf(d0.dot(lt), 0.0) * 0.5
+		var a1 := maxf(d1.dot(lt), 0.0) * 0.5
+		pz_ci.draw_polygon(PackedVector2Array([BC + d0 * (rim - 5.0 * push), BC + d1 * (rim - 5.0 * push),
+				BC + d1 * rim, BC + d0 * rim]),
+				PackedColorArray([Color(sh, 0.0), Color(sh, 0.0), Color(sh, a1), Color(sh, a0)]))
+
+
+#  조각 하나의 토핑 — 재료는 칸 색 id 가 고른다. 치즈 거품 · 기름은 바탕색에서 뽑는다.
+func _pz_toppings(i: int, base: Color, sl: Dictionary, push: float) -> void:
+	var pz: Dictionary = PIZZAART
+	var kind := _pz_kind(i)
+	for e in sl[kind if kind >= 0 else 0]:
+		var q := _pz_at(i, e[1], e[2], push)
+		var sz: float = float(e[3])
+		var w: int = int(e[4])
+		var lump: Array = e[6]
 		match String(e[0]):
-			"pep":
-				draw_circle(q + Vector2(1.0, 2.0), 6.5, Color(0.0, 0.0, 0.0, 0.25))
-				draw_circle(q, 6.5, pz.pep_dk)
-				draw_circle(q, 5.5, pz.pep)
-				draw_rect(Rect2(q + Vector2(-4.0, -4.0), Vector2(3.0, 1.0)), pz.pep_hi)
-				draw_rect(Rect2(q + Vector2(-4.0, -3.0), Vector2(1.0, 1.0)), pz.pep_hi)
-				draw_rect(Rect2(q + Vector2(1.0, -2.0), Vector2(2.0, 1.0)), pz.pep_dk)
-				draw_rect(Rect2(q + Vector2(-3.0, 1.0), Vector2.ONE), pz.pep_dk)
-				draw_rect(Rect2(q + Vector2(2.0, 2.0), Vector2(1.0, 2.0)), pz.pep_dk)
-				draw_rect(Rect2(q + Vector2(-1.0, 3.0), Vector2.ONE), pz.pep_hi)
+			"melt":
+				_pz_lump(q, lump, 0.0, Color(base.lightened(0.5), 0.35))
+			"oil":
+				_pz_lump(q, lump, 0.0, Color(pz.pep_pool if kind == 2 else pz.cheese_oil, 0.35))
+			"blister":
+				#  그을린 거품 — 옅은 갈색 둘레 · 짙은 속 · 가운데 탄 점 · 왼쪽 위 가장자리 빛
+				if sz <= 2.0:
+					#  작은 거품은 두 칸 — 도트 원판(더하기 꼴)은 반짝이로 읽힌다
+					pz_ci.draw_rect(Rect2(q, Vector2(2.0, 2.0) if w % 2 == 0 else Vector2(2.0, 1.0)),
+							base.lerp(pz.blister, 0.55))
+				else:
+					_pz_lump(q, lump, 1.0, base.lerp(pz.blister, 0.3))
+					_pz_lump(q, lump, 0.0, base.lerp(pz.blister, 0.75))
+				if sz > 2.2 and w != 3:
+					pz_ci.draw_rect(Rect2(q + Vector2(float(w % 2), 0.0), Vector2.ONE), base.lerp(pz.blister_dk, 0.75))
+			"herb":
+				pz_ci.draw_rect(Rect2(q, Vector2(2.0, 1.0) if w == 0 else Vector2.ONE), Color(pz.herb, 0.85))
+			"leaf":
+				_pz_leaf(Vector2(q) + Vector2(0.5, 0.5), float(e[5]), sz * 2.2, sz * 0.8, w % 2)
+			"patch":
+				_pz_lump(q, lump, 0.0, base.lerp(pz.cheese_oil, 0.35))
+			"onion":
+				var ao: float = float(e[5])
+				for k in 5:
+					var po := (Vector2(q) + Vector2(cos(ao + float(k) * 0.4), sin(ao + float(k) * 0.4)) * 3.5).floor()
+					pz_ci.draw_rect(Rect2(po, Vector2.ONE), Color(pz.onion, 0.5))
+			"beef":
+				#  불고기 — 결대로 찢긴 납작한 조각 둘이 엇갈려 겹친다. 윗가장자리가 양념에
+				#  번들거리고 아래로 그늘 한 칸.
+				var bw := maxf(roundf(sz * 1.8), 4.0)
+				var bh := maxf(roundf(sz * 0.9), 2.0)
+				var bs := Vector2(bw, bh) if w < 2 else Vector2(bh, bw)
+				var r1 := Rect2(q - (bs * 0.5).floor(), bs)
+				var s2 := (bs * 0.7).floor().max(Vector2(2.0, 2.0))
+				var off := Vector2(2.0 if w == 0 else -1.0, bs.y - 1.0) if w < 2 \
+						else Vector2(bs.x - 1.0, 2.0 if w == 2 else -1.0)
+				var r2 := Rect2(r1.position + off, s2)
+				pz_ci.draw_rect(Rect2(r1.position + Vector2(1.0, 1.0), bs), Color(pz.beef_dk, 0.6))
+				pz_ci.draw_rect(Rect2(r2.position + Vector2(1.0, 1.0), s2), Color(pz.beef_dk, 0.6))
+				pz_ci.draw_rect(r1, pz.beef)
+				pz_ci.draw_rect(r2, Color(pz.beef).darkened(0.12))
+				pz_ci.draw_rect(Rect2(r1.position, Vector2(r1.size.x - 1.0, 1.0)), pz.beef_hi)
+				pz_ci.draw_rect(Rect2(r1.position + Vector2(1.0, r1.size.y - 1.0), Vector2(1.0, 1.0)), pz.beef_dk)
 			"olive":
-				draw_circle(q, 4.0, pz.olive)
-				draw_circle(q, 1.8, cols[_theme_sec(e[2])][0].lerp(Color(pz.crust_hi), 0.3))
-				draw_rect(Rect2(q + Vector2(-3.0, -3.0), Vector2(2.0, 1.0)), Color(1.0, 1.0, 1.0, 0.35))
-			"basil":
-				draw_colored_polygon(PackedVector2Array([q + Vector2(-5.0, 2.0), q + Vector2(-1.0, -3.0),
-						q + Vector2(5.0, -2.0), q + Vector2(1.0, 3.0)]), pz.basil)
-				draw_line(q + Vector2(-5.0, 2.0), q + Vector2(5.0, -2.0), pz.basil_dk, 1.0)
-	#  불 — 바깥은 바질 잎맥, 안쪽은 페퍼로니 한 점
+				#  블랙올리브 고리 — 가운데 구멍으로 바탕이 비치고 왼쪽 위 테에 빛 한 점
+				_pz_disc(q + Vector2(1.0, 1.0), sz, Color(0.0, 0.0, 0.0, 0.3))
+				_pz_disc(q, sz, pz.olive)
+				_pz_disc(q, sz * 0.4, base.lerp(pz.beef_dk, 0.25))
+				pz_ci.draw_rect(Rect2(q + Vector2(-2.0, -floorf(sz) + 1.0), Vector2(2.0, 1.0)), Color(pz.olive_hi, 0.7))
+			"mush":
+				#  양송이 단면 — 둥근 갓 · 주름 한 줄 · 줄기(w 짝수는 아래로, 홀수는 오른쪽으로)
+				var down := w % 2 == 0
+				var cr := sz - 1.0
+				var gy := floorf(cr * 0.55)
+				var gw := floorf(sqrt(maxf(cr * cr - gy * gy, 0.0)))
+				var gill := Rect2(q + Vector2(-gw, gy), Vector2(gw * 2.0 + 1.0, 1.0)) if down \
+						else Rect2(q + Vector2(gy, -gw), Vector2(1.0, gw * 2.0 + 1.0))
+				var stem := Rect2(q + Vector2(-1.0, gy + 1.0), Vector2(3.0, cr - gy + 1.0)) if down \
+						else Rect2(q + Vector2(gy + 1.0, -1.0), Vector2(cr - gy + 1.0, 3.0))
+				_pz_disc(q + Vector2(1.0, 1.0), sz, Color(0.0, 0.0, 0.0, 0.25))
+				pz_ci.draw_rect(stem.grow(1.0), pz.mush_dk)
+				_pz_disc(q, sz, pz.mush_dk)
+				_pz_disc(q, cr, pz.mush)
+				pz_ci.draw_rect(stem, pz.mush)
+				pz_ci.draw_rect(gill, Color(pz.mush_dk, 0.8))
+				pz_ci.draw_rect(Rect2(q + Vector2(-2.0, -floorf(cr) + 1.0), Vector2(2.0, 1.0)), Color(pz.mush).lightened(0.25))
+			"scallion":
+				#  쪽파 송송 — 비스듬한 초록 두 칸에 짙은 한 칸
+				var sd := Vector2(1.0, 1.0) if w % 2 == 0 else Vector2(1.0, -1.0)
+				pz_ci.draw_rect(Rect2(q, Vector2.ONE), pz.scallion)
+				pz_ci.draw_rect(Rect2(q + sd, Vector2.ONE), Color(pz.scallion).lightened(0.2))
+				pz_ci.draw_rect(Rect2(q - sd, Vector2.ONE), Color(pz.scallion).darkened(0.35))
+			"pore":
+				pz_ci.draw_rect(Rect2(q, Vector2.ONE), Color(base.darkened(0.12), 0.7))
+			"sesame":
+				pz_ci.draw_rect(Rect2(q, Vector2(2.0, 1.0) if w == 0 else Vector2.ONE), Color(pz.sesame, 0.9))
+			"pep":
+				#  컵 앤 차 페퍼로니 — 말려 올라 탄 테(짙은 고리) · 컵 안쪽 벽은 왼쪽 위가 그늘 ·
+				#  바닥에 고인 기름. 빛 받는 테 윗가장자리에 밝은 점 몇, 지방 점 둘.
+				var pr := floorf(sz) + 0.5
+				_pz_disc(q + Vector2(1.0, 1.0), pr, Color(0.0, 0.0, 0.0, 0.3))
+				_pz_disc(q, pr, pz.pep_dk)
+				_pz_disc(q, pr - 1.0, pz.pep)
+				_pz_disc(q + Vector2(1.0, 1.0), pr - 3.0, Color(pz.pep_hi, 0.4))
+				_pz_disc(q + Vector2(-1.0, -1.0), pr - 3.0, Color(pz.pep).darkened(0.28))
+				_pz_disc(q, pr - 4.0, pz.pep_pool)
+				for ah in [-2.6, -2.25, -1.9]:
+					pz_ci.draw_rect(Rect2((q + Vector2(cos(ah), sin(ah)) * (pr - 1.0)).floor(), Vector2.ONE), Color(pz.pep_hi, 0.8))
+				for ad in [0.4, 1.1]:
+					pz_ci.draw_rect(Rect2((q + Vector2(cos(ad + float(w) * 0.3), sin(ad + float(w) * 0.3)) * (pr - 1.0)).floor(),
+							Vector2.ONE), Color(pz.pep_dk).darkened(0.4))
+				pz_ci.draw_rect(Rect2(q + Vector2(2.0 - float(w), -3.0), Vector2.ONE), Color(pz.pep_hi, 0.5))
+				pz_ci.draw_rect(Rect2(q + Vector2(-3.0, 1.0 + float(w % 2)), Vector2.ONE), Color(pz.pep_hi, 0.4))
+			"marble":
+				_pz_lump(q, lump, 0.0, Color(pz.bleu, 0.16))
+				_pz_lump(q + Vector2(1.0, 0.0), lump, -0.8, Color(pz.bleu, 0.14))
+			"vein":
+				var p := Vector2(q) + Vector2(0.5, 0.5)
+				var a: float = float(e[5])
+				for s in 4:
+					var p2 := p + Vector2(cos(a), sin(a)) * 2.5
+					pz_ci.draw_line(p, p2, Color(pz.vein, 0.5), 1.0)
+					p = p2
+					a += 0.9 if (w + s) % 2 == 0 else -0.9
+			"crumb":
+				#  고르곤졸라 부스러기 — 울퉁불퉁한 흰 덩이 속에 청록 곰팡이 점, 밑으로 그늘 한 칸
+				#  곰팡이 결은 가운데가 아니라 한쪽으로 비껴 금처럼 긋는다 — 가운데 점이면 꽃으로 읽힌다
+				_pz_lump(q + Vector2(1.0, 1.0), lump, 0.5, Color(pz.vein, 0.55))
+				_pz_lump(q, lump, 0.5, base.lerp(pz.bleu, 0.64))
+				var vd := Vector2(1.0, 0.0) if w % 2 == 0 else Vector2(0.0, 1.0)
+				var vp := q + Vector2(-1.0 if w < 2 else 1.0, 1.0 if w % 2 == 0 else -1.0)
+				pz_ci.draw_rect(Rect2(vp, Vector2.ONE + vd), Color(pz.mold, 0.8))
+				if sz > 3.2:
+					pz_ci.draw_rect(Rect2(q - vp + q + vd, Vector2.ONE), Color(pz.vein, 0.7))
+			"berry":
+				#  블루베리 — 뽀얀 분(왼쪽 위) · 꼭지 자리의 별 모양 홈
+				_pz_disc(q + Vector2(1.0, 1.0), sz, Color(0.0, 0.0, 0.0, 0.3))
+				_pz_disc(q, sz, pz.berry)
+				_pz_disc(q + Vector2(-1.0, -1.0), sz * 0.5, Color(pz.berry_hi, 0.3))
+				pz_ci.draw_rect(Rect2(q + Vector2(-1.0, 0.0), Vector2(3.0, 1.0)), Color(pz.berry).darkened(0.5))
+				pz_ci.draw_rect(Rect2(q + Vector2(0.0, -1.0), Vector2(1.0, 3.0)), Color(pz.berry).darkened(0.5))
+
+
+#  죽은 조각 — 까맣게 탄다. 그을음 · 갈라진 숯 · 재를 깔고, 제 재료의 큰 토핑은 숯덩이로
+#  남아 무엇이 탔는지만 비친다.
+func _pz_burnt(i: int, base: Color, sl: Dictionary, push: float) -> void:
+	var pz: Dictionary = PIZZAART
+	var kind := _pz_kind(i)
+	var lump := base.darkened(0.55)
+	var ash := Color(base.lerp(pz.ash, 0.55), 0.8)
+	for e in sl["burn"]:
+		var q := _pz_at(i, e[1], e[2], push)
+		match String(e[0]):
+			"soot":
+				_pz_disc(q, float(e[3]), Color(pz.burnt, 0.35))
+			"crack":
+				var p := Vector2(q) + Vector2(0.5, 0.5)
+				var a: float = float(e[5])
+				for s in 3:
+					var p2 := p + Vector2(cos(a), sin(a)) * 3.0
+					pz_ci.draw_line(p, p2, Color(0.0, 0.0, 0.0, 0.55), 1.0)
+					p = p2
+					a += 0.7 if (int(e[4]) + s) % 2 == 0 else -0.7
+			"ash":
+				pz_ci.draw_rect(Rect2(q, Vector2.ONE), ash)
+	for e in sl[kind if kind >= 0 else 0]:
+		if not (String(e[0]) in ["pep", "olive", "mush", "beef", "berry", "crumb", "leaf"]):
+			continue
+		var q := _pz_at(i, e[1], e[2], push)
+		var sz: float = minf(float(e[3]), 4.5)
+		_pz_disc(q, sz, lump)
+		pz_ci.draw_rect(Rect2(q + Vector2(-1.0, -floorf(sz)), Vector2.ONE), ash)
+
+
+#  잎 하나 — p0 에서 a 쪽으로 ln 만큼, 반폭 wd. 빛 받는 반쪽이 밝고 잎맥이 한 줄 선다.
+func _pz_leaf(p0: Vector2, a: float, ln: float, wd: float, shade: int) -> void:
+	var pz: Dictionary = PIZZAART
+	var d := _theme_dir(a)
+	var nn := Vector2(-d.y, d.x)
+	var tip := p0 + d * ln
+	var m1 := p0 + d * ln * 0.25
+	var m2 := p0 + d * ln * 0.55
+	var pts := PackedVector2Array([p0, m1 + nn * wd * 0.8, m2 + nn * wd, tip, m2 - nn * wd, m1 - nn * wd * 0.8])
+	var shp := PackedVector2Array()
+	for p in pts:
+		shp.append(p + Vector2(1.0, 1.0))
+	pz_ci.draw_colored_polygon(shp, Color(0.0, 0.0, 0.0, 0.25))
+	pz_ci.draw_colored_polygon(pts, pz.basil_md if shade == 1 else pz.basil)
+	var ls := nn if nn.dot(Vector2(-0.6, -0.8)) > 0.0 else -nn
+	pz_ci.draw_colored_polygon(PackedVector2Array([p0, m1 + ls * wd * 0.8, m2 + ls * wd, tip]),
+			Color(pz.basil_hi, 0.35))
+	pz_ci.draw_line(p0 + d * ln * 0.1, p0 + d * ln * 0.85, Color(pz.basil_dk, 0.8), 1.0)
+
+
+#  칼자국 — 조각 경계(i·sw - sw/2)마다 홈 하나. 홈의 빛 받는 벽 쪽 치즈가 한 줄 밝고,
+#  이웃 두 조각이 살아 있으면 치즈 가닥 몇이 홈을 건넌다. 크러스트에서는 칼이 빵 속살(밝은
+#  줄)을 드러낸다. 불(페스토) 밑으로는 안 들어간다 — 바질은 썬 뒤에 올린다.
+func _pz_cuts(ro: float, push: float) -> void:
+	var pz: Dictionary = PIZZAART
+	var sw := _sec_w()
+	var n := _sec_n()
 	var bo := R * rt_bull_o * push
-	draw_line(BC + Vector2(-bo + 2.0, 1.0), BC + Vector2(bo - 2.0, -1.0), pz.basil_dk, 1.0)
+	var rim := R * rt_dbl_out * push
+	var bump: Array = _theme_bits("pizza_rim")[0]
+	var nv := bump.size()
+	var st: Array = _theme_bits("pizza_cut")
+	var lt := Vector2(-0.6, -0.8)
+	for i in n:
+		var d := _theme_dir(float(i) * sw - sw * 0.5)
+		var nn := Vector2(-d.y, d.x)
+		var ls := nn if nn.dot(lt) > 0.0 else -nn
+		var rr := ro + float(bump[posmod(i * 12 - 6, nv)]) * push
+		var p0 := BC + d * (bo + 1.0)
+		pz_ci.draw_line(p0 + ls, BC + d * (rim - 2.0) + ls, Color(1.0, 0.97, 0.88, 0.16), 1.0)
+		pz_ci.draw_line(p0, BC + d * rim, pz.cut, 1.0)
+		pz_ci.draw_line(BC + d * (rim + 1.0) + ls, BC + d * (rr - 1.0) + ls, Color(pz.crumb, 0.7), 1.0)
+		pz_ci.draw_line(BC + d * rim, BC + d * (rr + 0.5), Color(pz.crust_sh, 0.9), 1.0)
+		if _pz_dead(i) or _pz_dead(posmod(i - 1, n)):
+			continue
+		for s in st[i]:
+			var p := BC + d * lerpf(bo + 5.0, rim - 7.0, float(s[0]))
+			var h: float = float(s[1]) * 0.5
+			pz_ci.draw_line(p - nn * h, p + nn * h, Color(pz.cheese_hi, 0.8), 1.0)
+
+
+#  불 — 바깥 불은 바질 페스토 한 숟갈에 잎 여섯, 안쪽 불은 반 가른 방울토마토. 토너먼트
+#  판의 초록 · 빨강 불 자리 그대로라 과녁으로 읽힌다. 바깥 불의 경계는 페스토 원판 가장자리다.
+func _pz_bull(push: float) -> void:
+	var pz: Dictionary = PIZZAART
+	var bo := R * rt_bull_o * push
 	var bi := R * rt_bull_i * push
-	draw_rect(Rect2((BC + Vector2(-bi * 0.4, -bi * 0.5)).floor(), Vector2(2.0, 1.0)), pz.pep_hi)
+	var c := BC.floor()
+	if bo > 0.5:
+		_pz_disc(c + Vector2(1.0, 2.0), bo, Color(pz.crust_sh, 0.45))
+		_pz_disc(c, bo, pz.basil_dk)
+		for e in _theme_bits("pizza_bull"):
+			var a: float = float(e[0])
+			var ln: float = bo * float(e[1])
+			_pz_leaf(BC + _theme_dir(a) * bo * 0.1, a, ln - bo * 0.1, ln * float(e[2]), int(e[3]))
+	if bi > 0.5:
+		_pz_disc(c + Vector2(1.0, 1.0), bi + 0.5, Color(0.0, 0.0, 0.0, 0.35))
+		_pz_disc(c, bi + 0.5, pz.tomato_dk)
+		_pz_disc(c, bi - 0.5, pz.tomato)
+		if bi >= 4.0:
+			_pz_disc(c, bi - 2.0, pz.tomato_in)
+			for k in 3:
+				var q := (c + _theme_dir(TAU * float(k) / 3.0 + 0.5) * bi * 0.42).floor()
+				pz_ci.draw_rect(Rect2(q - Vector2(1.0, 0.0), Vector2(2.0, 2.0)), pz.tomato)
+				pz_ci.draw_rect(Rect2(q, Vector2.ONE), pz.seed)
+			pz_ci.draw_rect(Rect2(c, Vector2.ONE), Color(pz.tomato_in).lightened(0.3))
+
+
+#  반짝임 — 빛 위에 한 점씩. 페퍼로니 기름 · 올리브 · 블루베리 · 치즈 웅덩이 · 토마토 · 페스토.
+func _pz_gloss(push: float) -> void:
+	var top: Array = _theme_bits("pizza_top")
+	for i in _sec_n():
+		if _pz_dead(i):
+			continue
+		var kind := _pz_kind(i)
+		for e in top[i][kind if kind >= 0 else 0]:
+			var q := _pz_at(i, e[1], e[2], push)
+			match String(e[0]):
+				"pep":
+					draw_rect(Rect2(q + Vector2(-1.0, -1.0), Vector2.ONE), Color(1.0, 1.0, 1.0, 0.6))
+				"olive", "berry":
+					draw_rect(Rect2(q + Vector2(-1.0, -2.0), Vector2.ONE), Color(1.0, 1.0, 1.0, 0.45))
+				"melt":
+					if int(e[4]) == 0:
+						draw_rect(Rect2(q, Vector2.ONE), Color(1.0, 1.0, 1.0, 0.35))
+	var bo := R * rt_bull_o * push
+	var bi := R * rt_bull_i * push
+	var c := BC.floor()
+	if bi > 2.0:
+		draw_rect(Rect2(c + Vector2(-floorf(bi * 0.5), -floorf(bi * 0.6)), Vector2(2.0, 1.0)), Color(1.0, 1.0, 1.0, 0.7))
+	if bo > 4.0:
+		draw_rect(Rect2(c + Vector2(-floorf(bo * 0.62), -floorf(bo * 0.4)), Vector2.ONE), Color(1.0, 1.0, 1.0, 0.4))
 
 
 # ── 시계 ─────────────────────────────────────────────
