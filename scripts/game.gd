@@ -16157,7 +16157,45 @@ func _icon_mod(c: Vector2, r: float, id: String, dim: float,
 #        몸에 파랑을 안 쓰고, 빨강은 자석 관습으로만 쓴다
 # ══════════════════════════════════════════════════════════
 
+#  ══════════════════════════════════════════════════════════
+#   ART_PAL — 이 게임 그림의 온 팔레트
+#  ──────────────────────────────────────────────────────────
+#   scripts/tools/coin_paint.py 의 PAL 을 **값 그대로** 옮겼다. 동전 얼굴 ·
+#   와펜 · 판 얼굴이 그 파일에서 구워지므로, 게임이 런타임에 칠하는 것과
+#   파이썬이 구워 두는 것이 같은 색이려면 두 곳이 같은 표를 봐야 한다.
+#
+#   램프마다 네 단(0 어둠 → 3 밝음). 어둠은 보라 쪽으로, 밝음은 크림 쪽으로
+#   색상을 민다 — 명도만 내리면 그늘이 탁해지고 게임 바탕(C_BG · C_DARK)과
+#   같은 식구로 안 보인다.
+#
+#   **새 색은 짓지 않는다.** 통을 칠할 때 여기 없는 색이 필요해 보이면
+#   그것은 색이 모자란 것이 아니라 단을 잘못 고른 것이다.
+const ART_PAL := {
+	"night":  [Color("14111f"), Color("221c33"), Color("352d4d"), Color("4f4670")],
+	"dusk":   [Color("2b2438"), Color("4a4160"), Color("7a7192"), Color("b3abc8")],
+	"cream":  [Color("8f8577"), Color("c9bfae"), Color("e8dfc8"), Color("fbf6ea")],
+	"steel":  [Color("3a3f52"), Color("687085"), Color("a3abbb"), Color("dde3ec")],
+	"skin":   [Color("6e3b39"), Color("a8634f"), Color("dc9a73"), Color("f5cda3")],
+	"red":    [Color("4a1426"), Color("8c2233"), Color("d8483d"), Color("f27d63")],
+	"orange": [Color("6b2a1c"), Color("b0512a"), Color("e8873a"), Color("f7ba70")],
+	"gold":   [Color("5c3a1a"), Color("a8762a"), Color("f2c94c"), Color("fdeaa0")],
+	"green":  [Color("1d3326"), Color("2f6340"), Color("479a58"), Color("94d68e")],
+	"teal":   [Color("14343f"), Color("1f6570"), Color("36a3a0"), Color("8fe0cf")],
+	"blue":   [Color("1a2150"), Color("2b4a95"), Color("3f7fd8"), Color("91cbf5")],
+	"violet": [Color("2b1d4f"), Color("523a8f"), Color("8161c9"), Color("bca1ed")],
+	"pink":   [Color("4d1840"), Color("8e2f6e"), Color("d45a9e"), Color("f5a3cb")],
+	"wood":   [Color("2a1812"), Color("553222"), Color("8a5636"), Color("c48b5a")],
+}
+
+#  색상으로 고를 수 있는 램프. 무채색 둘(cream · steel)과 바탕 셋(night ·
+#  dusk · wood)과 살색은 여기 없다 — 제 색이 「붉다」일 때 살색으로 떨어지면
+#  통이 살덩이가 된다.
+const ART_HUES := ["red", "orange", "gold", "green", "teal", "blue",
+		"violet", "pink"]
+
 #  coin_paint.PAL 에서 다트가 쓰는 램프 여섯만 옮겼다. 0 어둠 → 3 밝음.
+#  **ART_PAL 의 부분집합이다** — 값이 갈리면 2D 다트와 3D 통이 다른 팔레트로
+#  칠해진다. cup_probe 가 두 표가 같은지를 지킨다.
 const DK_PAL := {
 	"night": [Color("14111f"), Color("221c33"), Color("352d4d"), Color("4f4670")],
 	"dusk":  [Color("2b2438"), Color("4a4160"), Color("7a7192"), Color("b3abc8")],
@@ -21413,6 +21451,14 @@ const CUP3 := {
 	"size":   2.05,    # 직교 카메라 세로 범위(월드). 무대 세로 118 / 이 값 = 배율
 	"pitch": -18.0,    # 내려다보는 각(도). sin 18° = 0.309 가 아가리 타원의 눌림비다
 	"eye_z":  6.00,    # 직교라 거리는 그림에 안 나온다 — 잘림면만 피하면 된다
+	#  빛의 방향(회전, 도). **2D 무대의 램프와 3D 의 키 라이트와 통 셰이더가
+	#  같은 이 한 줄을 본다** — 셋이 갈리면 통의 빛 띠와 카운터의 빛 웅덩이가
+	#  다른 데서 온 빛이 된다.
+	#  전에는 (-52, -34) 였는데 옆 성분(sin 34° = 0.56)이 작아 빛 띠가 앞면의
+	#  58% 를 먹었다. 원통이 「왼쪽이 밝은 원통」이 아니라 「거의 다 밝은
+	#  원통」으로 보이던 이유다. -50 으로 돌리면 띠가 40% 로 줄어 빛 · 몸 ·
+	#  그늘 셋이 앞면에 다 선다(lospec 원통 규칙).
+	"light": Vector3(-45.0, -50.0, 0.0),
 
 	# ── 통 ───────────────────────────────────────────
 	#  실물 다트 통은 자루가 서로 닿을 만큼 좁다 — 그래서 흔들면 한 뭉치로
@@ -21518,6 +21564,9 @@ const CUP3 := {
 #   pole     위쪽을 딴 색으로 — 자석의 극
 #   foot     발치에 놓는 물건. CUP_FEET 에 있는 이름만 쓴다
 #   sticker  아가리 아래에 동전 한 장. "동전이 딸려 온다" 를 통이 대신 한다
+#   ramp     몸의 PAL 램프 이름. 빈 값이면 packs.csv 의 제 색에서 고른다
+#   role     몸의 재질 갈래(CUP_ROLE). 명도가 곧 무게다 — dark 가 가장
+#            어둡고 pale 이 가장 밝다
 #   tint     몸 색. 기본값 own = packs.csv 의 제 색
 #   gold     발치에 흩어 놓는 플라크 수
 #   dart     자루 색을 덮는다. 표준 탄창인 다트통에서만 쓴다(cup_probe 가 막는다)
@@ -21533,15 +21582,20 @@ const CUP_SKIN := {
 	"p_adv":  {"tint": "gold", "gold": 5},
 	# 일당 다트통. 이자를 끄고 **남은 다트 1개당** 골드를 두 배로 주는 다트통이라,
 	# 자루 자체가 돈이다. 그래서 통이 아니라 자루가 금빛이다.
-	"p_wage": {"dart": "gold"},
+	# 몸은 **어두운 유리**다(steel 램프). 제 색 빨강은 목 띠가 든다 —
+	# 몸까지 빨갛게 칠하면 자석 다트통의 붉은 극과 섞인다.
+	"p_wage": {"dart": "gold", "ramp": "steel", "role": "glass"},
 
 	# 무쇠 다트통. 무거운 자루를 담는 통은 테를 두른다 — 통 하나로 "이 안에
 	# 무거운 것이 들었다" 를 말하는 가장 오래된 어법이다. 낮고 굵게 앉힌다.
 	# 테는 **둘**이다. 셋이면 발치 테까지 넉 줄이라 골함석이 된다.
-	"p_iron": {"hoop": 2, "tall": 0.92, "wide": 1.06},
+	# **가장 어둡다.** 무게는 명도로 가른다 — 무쇠 0·1단, 깃털 1·2·3단.
+	"p_iron": {"hoop": 2, "tall": 0.92, "wide": 1.06, "role": "dark"},
 	# 깃털 다트통. 무쇠의 정반대로 세운다 — 가늘고 키 크다. 둘을 나란히
 	# 놓았을 때 실루엣만으로 갈리는 것이 이 표의 값이다.
-	"p_lgt":  {"tall": 1.26, "wide": 0.88},
+	# **가장 밝다.** 무쇠와 정반대로 세운다 — 발이 퍼진 어둠 ↔ 아가리가
+	# 퍼진 밝음. 둘을 나란히 놓으면 실루엣과 명도 둘 다로 갈린다.
+	"p_lgt":  {"tall": 1.26, "wide": 0.88, "role": "pale"},
 	# 자석 다트통. 자석은 늘 두 색으로 칠해져 있고, 그 두 색이 곧 "자석"
 	# 이라는 글자다.
 	"p_mgn":  {"pole": true},
@@ -21567,14 +21621,22 @@ const CUP_SKIN := {
 	"p_rnd":  {"dart": "steel"},
 	# 0718. 개발자 모드다. **일부러 아무것도 안 준다** — 이 다트통에 얼굴을
 	# 달면 고를 만한 것으로 보이고, 고를 만한 것이 아니다.
-	"p_dev":  {},
+	"p_dev":  {"shape": "proto"},
 }
+
+#  있는 모양의 온 목록. 벽·색·발치와 같은 규약이다 — 오타를 내면 잠자코
+#  기준선 깡통이 서므로(_cup3_bake 의 기본 갈래) 눈으로는 못 잡는다.
+#  cup_probe 가 이 목록으로 표를 검사하고, ⑥ 서명에도 이것이 든다 —
+#  무쇠·깃털·0718 이 다 steel 2단이라 색만으로는 셋이 안 갈린다.
+const CUP_SHAPES := ["tin", "stein", "jar", "bag", "slots", "sack", "pail",
+		"vase", "tube", "loving", "dice", "proto"]
 
 # 겉 하나가 안 적은 값. 표는 다른 것만 적는다.
 #   dart  자루 색을 덮는다. 빈 값이면 다트 종류가 정하는 색 그대로다.
 const CUP_SKIN0 := {"wall": "solid", "wide": 1.0, "tall": 1.0,
 		"sticker": false, "hoop": 0, "pole": false, "foot": "",
-		"tint": "own", "gold": 0, "dart": ""}
+		"tint": "own", "gold": 0, "dart": "", "ramp": "", "role": "body",
+		"shape": "tin"}
 
 # 있는 색의 온 목록. 벽 갈래와 독립이라 금빛 철망도 설 수 있다.
 const CUP_TINTS := ["own", "steel", "gold"]
@@ -21591,6 +21653,7 @@ const CUP_FEET := ["gift"]
 var cup_vp: SubViewport = null
 var cup_rigs := []      # [{"cup": AnimatableBody3D, "darts": Array, "pi": int}]
 var cup_net: ImageTexture = null    # 벽 그물. 한 번 떠서 계속 쓴다
+var cup_key: DirectionalLight3D = null   # 키 라이트. 무대 램프 세기를 같이 먹는다
 
 
 # 1 월드 단위가 몇 px 인가. 무대와 카메라가 같은 식을 봐야 2D 소품이
@@ -21620,6 +21683,11 @@ func _cup3_eye() -> float:
 # 벽에 두르는 그물 무늬. 알파 0 인 자리가 구멍이다. 마름모 두 갈래를
 # 겹쳐 짠다 — 격자로 두면 벽이 창틀로 읽히고, 마름모라야 철망이 된다.
 # 한 벌만 떠서 두 통이 나눠 쓴다(넘길 때 통이 둘이다).
+#
+# 값은 톤 셰이더의 인코딩이다 — R 이 단 오프셋, A 가 뚫림이다.
+# **한쪽 대각만 한 단 올린다**(0.75 = +1). 두 갈래가 같은 단이면 마름모가
+# 평평한 무늬로 읽히는데, 한쪽 결만 올리면 위로 지나간 철사와 밑으로
+# 지나간 철사가 갈려 「짠 것」이 된다. 실물 철망이 그래서 반짝인다.
 func _cup3_net() -> ImageTexture:
 	if cup_net != null:
 		return cup_net
@@ -21634,12 +21702,117 @@ func _cup3_net() -> ImageTexture:
 			var v := (float(y) + 0.5) / float(th) * float(CUP3.net_y)
 			var a := fposmod(u + v, 1.0)
 			var b := fposmod(u - v, 1.0)
-			var on := minf(a, 1.0 - a) < t or minf(b, 1.0 - b) < t
+			var wa := minf(a, 1.0 - a) < t
+			var wb := minf(b, 1.0 - b) < t
+			var on := wa or wb
 			if y < hem or y >= th - hem:
 				on = true
-			img.set_pixel(x, y, Color(1.0, 1.0, 1.0, 1.0 if on else 0.0))
+				wb = false
+			img.set_pixel(x, y, Color(0.75 if wb else 0.5, 0.0, 0.0,
+					1.0 if on else 0.0))
 	cup_net = ImageTexture.create_from_image(img)
 	return cup_net
+
+
+# ══════════════════════════════════════════════════════════
+#  통 질감
+# ──────────────────────────────────────────────────────────
+#  한 번 떠서 (모양, 크기) 별로 캐시하고 NEAREST 로 샘플한다. **텍셀 하나가
+#  화면 1px** 이라야 무늬가 도트로 읽힌다 — 가로는 둘레 한 바퀴를 화면
+#  픽셀로 잰 수(기준 약 156), 세로는 통 높이를 그렇게 잰 수(약 59)다.
+#  더 잘게 뜨면 한 픽셀 안에 무늬와 바탕이 같이 들어와 통이 얼룩진다.
+#
+#  인코딩은 셰이더와 같다: R = 단 오프셋 · G = 두 번째 램프 · A = 뚫림.
+#
+#  규칙(Slynyrd pixelblog — shading · texture)
+#    · 2px 이 기본 단위다. 1px 짜리 반복 줄은 화면에서 지지직거린다
+#    · 고아 픽셀(사방이 다 다른 단)은 안 쓴다
+#    · 넓은 몸은 비워 둔다. 무늬가 몸을 다 덮으면 형태가 안 보인다
+#    · 덩어리 무늬는 통 하나에 2~3가지까지
+#    · 글자·숫자·$·?·로고는 안 넣는다. 그것은 이름을 그리는 것이다
+#
+#  이름이 곧 캐시 열쇠다: "모양|가로|세로" 로 적는다.
+func _cup3_pat(key: String) -> ImageTexture:
+	if cup_pat.has(key):
+		return cup_pat[key]
+	var a := key.split("|")
+	var nm := String(a[0])
+	if nm == "net":
+		cup_pat[key] = _cup3_net()
+		return cup_pat[key]
+	var tw: int = maxi(int(a[1]) if a.size() > 1 else 8, 2)
+	var th: int = maxi(int(a[2]) if a.size() > 2 else 8, 2)
+	var img := Image.create(tw, th, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0.5, 0.0, 0.0, 1.0))     # 오프셋 0 · 안 뚫림 · 첫 램프
+	_cup3_bake(img, nm, tw, th)
+	var t := ImageTexture.create_from_image(img)
+	cup_pat[key] = t
+	return t
+
+
+#  단 오프셋 한 칸. 0.5 가 0 이고 한 단마다 0.25 다.
+func _pat_st(img: Image, x: int, y: int, d: int, alt := false) -> void:
+	if x < 0 or y < 0 or x >= img.get_width() or y >= img.get_height():
+		return
+	img.set_pixel(x, y, Color(0.5 + 0.25 * float(clampi(d, -2, 2)),
+			1.0 if alt else 0.0, 0.0, 1.0))
+
+
+#  가로 띠 한 줄(둘레를 한 바퀴 돈다).
+func _pat_row(img: Image, y: int, d: int, alt := false) -> void:
+	for x in img.get_width():
+		_pat_st(img, x, y, d, alt)
+
+
+#  겹치지 않게 흩는 난수. 같은 통은 늘 같은 무늬로 구워져야 한다 —
+#  프레임마다 다시 뽑으면 넘길 때마다 통 표면이 끓는다.
+func _pat_rnd(a: int, b: int) -> float:
+	return _gl_rand(a * 7 + 3, b * 13 + 11)
+
+
+#  발치에서 잰 높이 비(0 바닥 → 1 아가리)를 그림의 줄 번호로 옮긴다.
+#  원기둥 메시의 UV 는 **위가 0** 이라 뒤집힌다 — 한곳에서만 뒤집어
+#  무늬 짜는 쪽은 늘 "발치에서 몇 할" 로 적는다.
+func _pat_y(th: int, f: float) -> int:
+	return int(round((1.0 - clampf(f, 0.0, 1.0)) * float(th - 1)))
+
+
+#  질감 한 장의 이름. **텍셀 하나가 화면 1px** 이 되는 크기를 여기서 잰다 —
+#  통마다 둘레와 키가 다르므로(wide · tall) 손으로 적으면 넓은 통에서
+#  무늬가 늘어난다. 기준 통은 156x59, 넓은 동전 슬롯 176x59, 깃털 139x74 다.
+func _cup3_pat_key(nm: String, face: float, h: float) -> String:
+	var ppu := _cup3_ppu()
+	return "%s|%d|%d" % [nm, maxi(int(round(TAU * face * ppu)), 8),
+			maxi(int(round(h * ppu)), 8)]
+
+
+#  모양마다의 무늬. 이름이 없으면 빈 몸이다 — 무늬가 없는 것도 한 갈래다
+#  (0718 의 체커와 기준선 깡통을 가르는 것이 그것이다).
+func _cup3_bake(img: Image, nm: String, tw: int, th: int) -> void:
+	match nm:
+		#  기준선 깡통. 음각선 둘만 판다 — 잠긴 다트통과 0718 이 이 얼굴로
+		#  서므로 **고를 만한 얼굴이면 안 된다.** 그래도 민 원통 한 덩이는
+		#  판이 되므로, 위아래에 한 줄씩 그어 통의 키를 읽히게 한다.
+		"tin":
+			_pat_row(img, _pat_y(th, 0.82), -1)
+			_pat_row(img, _pat_y(th, 0.18), -1)
+		#  0718. 8텍셀 체커뿐이다. **개발 중인 회색 박스의 문법**이고,
+		#  열둘 사이에서 고를 만한 얼굴을 여전히 안 준다 — 톤 셰이더에서
+		#  빼서 옛 램버트로 남기는 안은 기각했다. 그러면 농담이 아니라
+		#  렌더 버그로 읽힌다.
+		"proto":
+			for y in th:
+				for x in tw:
+					if (int(x / 8) + int(y / 8)) % 2 == 0:
+						_pat_st(img, x, y, -1)
+
+
+#  네모 한 덩이.
+func _pat_box(img: Image, x0: int, y0: int, w: int, h: int, d: int,
+		alt := false) -> void:
+	for j in h:
+		for i in w:
+			_pat_st(img, posmod(x0 + i, img.get_width()), y0 + j, d, alt)
 
 
 # 납작하게 굳힌다 — 반사와 광택이 들어오면 이 화면만 다른 게임이 된다.
@@ -21677,9 +21850,165 @@ func _cup3_mesh(parent: Node3D, mesh: Mesh, col: Color, at: Vector3,
 	return mi
 
 
+# ══════════════════════════════════════════════════════════
+#  통 겉 — 네 단 램프
+# ──────────────────────────────────────────────────────────
+#  통만 매끈한 램버트였다. 판 얼굴(shots/boards_real_sheet) · 확장 와펜 ·
+#  동전이 전부 **네 단 램프에 왼쪽 위 빛**으로 칠해져 있는데, 그 옆에
+#  선 통은 채도가 눌린 중간 명도의 민 원통이라 배치 그림(placeholder)으로
+#  읽혔다. 사용자 제보: "다트통의 퀄리티가 좀 아쉬운데".
+#
+#  **_cup3_mat 은 안 건드린다.** 팔·손·상인·판에 꽂힌 다트가 그것을 같이
+#  쓰므로, 여기서 고치면 통을 고치려다 게임의 나머지 3D 가 다 바뀐다.
+#  통 쪽은 셰이더 재질을 따로 굽는다.
+# ══════════════════════════════════════════════════════════
+
+#  role 마다의 시작값. **이것이 통의 무게를 말한다** — 무쇠가 가장 어둡고
+#  (0.4 → 램프 0·1단) 깃털이 가장 밝다(1.6 → 1·2·3단). 명도 하나로
+#  "무거운 통 · 가벼운 통" 이 40x50px 에서 갈린다.
+#
+#    base   빛도 그늘도 아닌 자리의 단
+#    spec   광택이 서는 반각 문턱(0 이면 광택 없음). 쇠붙이와 유약만 받는다
+#    t_hi   빛 띠가 서는 문턱. 9 면 띠가 없다(발치 테는 띠가 없어야 한다 —
+#           통 밑동에 띠가 서면 테가 몸에서 떨어져 굴렁쇠로 보인다)
+#    ao     속 어둠. 아가리에서 바닥으로 갈수록 깊어진다
+#    keep   무대 램프가 꺼져도 실루엣을 남긴다(아가리·테)
+const CUP_ROLE := {
+	"body":   {"base": 1.0},                             # 칠한 몸
+	"metal":  {"base": 1.0, "spec": 0.86},               # 쇠붙이 몸
+	"dark":   {"base": 0.4},                             # 어두운 몸 — 무쇠
+	"pale":   {"base": 1.6},                             # 옅은 몸 — 깃털
+	"glass":  {"base": 0.5, "spec": 0.88},               # 어두운 유리 — 일당 병
+	"lip":    {"base": 2.0, "spec": 0.84, "keep": true}, # 말린 아가리
+	"foot":   {"base": 1.0, "t_hi": 9.0},                # 발치 테. 빛 띠 없음
+	"inner":  {"base": 1.25, "ao": 1.4},                 # 속벽
+	"wire":   {"base": 2.0, "spec": 0.84},               # 철망 철사
+	"band":   {"base": 1.6, "spec": 0.84},               # 쇠테 · 황동 띠
+	"ring":   {"base": 1.0, "spec": 0.84},               # 극 띠 · 목 띠
+	"plaque": {"base": 2.0, "spec": 0.80},               # 금 플라크
+	"sunk":   {"base": 0.0},                             # 플라크의 파인 판
+	"prop":   {"base": 2.0},                             # 발치 소품 — 주사위
+}
+
+var cup_toon := {}      # (램프|role|cull|질감|둘째램프) → ShaderMaterial
+var cup_pat := {}       # 질감 이름 → ImageTexture. 크기까지 이름에 든다
+var cup_sh := []        # [뒷면 자름, 안 자름]
+var cup_lamp := 1.0     # 무대 램프 세기 0~1. 2D 원뿔·웅덩이와 같은 값이다
+
+
+#  빛으로 **가는** 방향. CUP3.light 의 회전에서 뽑는다 — 회전 하나를
+#  고치면 2D 무대와 3D 키 라이트와 셰이더가 같이 돈다.
+#  회전 차례는 Node3D 기본(YXZ)이다. (-45, -50) 에서 약 (-0.54, 0.71, 0.46).
+func _cup3_light_dir() -> Vector3:
+	var d: Vector3 = CUP3.light
+	return Basis.from_euler(Vector3(deg_to_rad(d.x), deg_to_rad(d.y),
+			deg_to_rad(d.z)), EULER_ORDER_YXZ).z
+
+
+#  cull 은 uniform 이 못 된다. 철망·속통·가방 안벽은 양면이라야 아가리
+#  너머로 뒷벽 안쪽이 보이므로, 소스 한 글자를 갈아 끼운 벌을 하나 더 굽는다.
+func _cup3_shader(cull_off: bool) -> Shader:
+	if cup_sh.is_empty():
+		var s0: Shader = load("res://shaders/cup_ramp.gdshader")
+		var s1 := Shader.new()
+		s1.code = String(s0.code).replace("cull_back", "cull_disabled")
+		cup_sh = [s0, s1]
+	return cup_sh[1] if cull_off else cup_sh[0]
+
+
+#  어떤 색이든 PAL 램프 이름 하나로 옮긴다.
+#
+#  **제 색 규칙**: 통 몸은 packs.csv 의 제 색(런 안에서 계산 칸이 쓰는 그
+#  색, calc_col)에 가장 가까운 램프로 칠한다. 같은 다트통이 두 화면에서
+#  같은 색으로 보이는 그 약속을, 색을 누르는 대신 **램프로 반올림해서**
+#  지킨다 — 전에는 채도를 0.6배로 눌러 [0.46, 0.74] 띠에 몰아넣었고
+#  (_cup3_metal), 그래서 열셋이 다 같은 진흙빛 중간 명도로 붙었다.
+func _cup3_ramp(c: Color) -> String:
+	if c.s >= 0.16:
+		var best := "red"
+		var bd := 9.0
+		for nm in ART_HUES:
+			var d: float = absf(c.h - float(Color(ART_PAL[nm][2]).h))
+			d = minf(d, 1.0 - d)
+			if d < bd:
+				bd = d
+				best = String(nm)
+		return best
+	#  무채색은 둘뿐이다. 따뜻한 쪽은 크림빛 도기, 차가운 쪽은 이름 없는
+	#  강철이다. 순 회색은 색상이 0 으로 떨어지므로 채도로 먼저 거른다 —
+	#  안 거르면 0718 의 6a6a6a 가 붉은 쪽으로 읽혀 크림이 된다.
+	return "cream" if c.s > 0.02 and c.h >= 0.02 and c.h <= 0.19 else "steel"
+
+
+#  통 부품 하나의 재질. (램프, role, cull, 질감, 둘째 램프) 마다 **한 벌만**
+#  굽는다 — 무대 램프 세기를 매 프레임 넣어야 하는데(넘길 때 보간한다),
+#  부품마다 따로 구우면 그 순회가 통 하나에 스무 벌씩 늘어난다.
+func _cup3_toon(ramp: String, role: String, cull_off := false,
+		pat := "", alt := "", base_b := -1.0) -> ShaderMaterial:
+	var key := "%s|%s|%d|%s|%s|%.2f" % [ramp, role, int(cull_off), pat, alt, base_b]
+	if cup_toon.has(key):
+		return cup_toon[key]
+	var rl: Dictionary = CUP_ROLE.get(role, CUP_ROLE["body"])
+	var m := ShaderMaterial.new()
+	m.shader = _cup3_shader(cull_off)
+	var pa: Array = ART_PAL.get(ramp, ART_PAL["steel"])
+	var pb: Array = ART_PAL.get(alt, pa)
+	var bs: float = float(rl.get("base", 1.0))
+	for i in 4:
+		m.set_shader_parameter("r%d" % i, pa[i])
+		m.set_shader_parameter("b%d" % i, pb[i])
+	m.set_shader_parameter("base", bs)
+	m.set_shader_parameter("base_b", bs if base_b < 0.0 else base_b)
+	m.set_shader_parameter("t_hi", float(rl.get("t_hi", 0.55)))
+	m.set_shader_parameter("t_lo", float(rl.get("t_lo", 0.0)))
+	m.set_shader_parameter("bounce_on", 0.0 if rl.get("flat", false) else 1.0)
+	m.set_shader_parameter("spec_th", float(rl.get("spec", 0.0)))
+	m.set_shader_parameter("spec_s", float(rl.get("spec_s", 3.0)))
+	m.set_shader_parameter("ao_inner", float(rl.get("ao", 0.0)))
+	m.set_shader_parameter("keep_lit", 1.0 if rl.get("keep", false) else 0.0)
+	m.set_shader_parameter("lamp", cup_lamp)
+	m.set_shader_parameter("to_light", _cup3_light_dir())
+	if pat != "":
+		m.set_shader_parameter("pat", _cup3_pat(pat))
+		m.set_shader_parameter("use_pat", 1.0)
+		m.set_shader_parameter("use_mask", 1.0 if alt != "" else 0.0)
+	cup_toon[key] = m
+	return m
+
+
+#  무대 램프 세기를 구워 둔 재질 전부에 넣는다. global uniform 을 쓰면
+#  project.godot 을 고쳐야 하므로(도구가 매번 그 파일을 되돌린다) 안 쓴다.
+func _cup3_lamp(k: float) -> void:
+	cup_lamp = k
+	for m in cup_toon.values():
+		m.set_shader_parameter("lamp", k)
+	#  키 라이트도 같은 값을 먹는다. 통은 셰이더가, 자루·사진·사탕은 이 빛이
+	#  받으므로 둘이 갈리면 불 꺼진 무대에 자루만 환하게 선다.
+	if cup_key != null and is_instance_valid(cup_key):
+		cup_key.light_energy = lerpf(0.7, 1.75, k)
+
+
+#  톤 셰이더를 입힌 메시 하나. rim 은 이 통의 아가리 높이다 — 속 어둠이
+#  그것을 보고 깊어지므로 통마다 달라야 해서 **인스턴스 uniform** 으로 넣는다.
+func _cup3_tmesh(parent: Node3D, mesh: Mesh, ramp: String, role: String,
+		at: Vector3, rot := Vector3.ZERO, cull_off := false,
+		pat := "", alt := "", base_b := -1.0, rim := 0.0) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	mi.mesh = mesh
+	mi.material_override = _cup3_toon(ramp, role, cull_off, pat, alt, base_b)
+	mi.position = at
+	mi.rotation = rot
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	if rim > 0.0:
+		mi.set_instance_shader_parameter("rim_h", rim)
+	parent.add_child(mi)
+	return mi
+
+
 # ── 벽: 민 통 ────────────────────────────────────────
 # 기준선. 벽 두 겹에 굵은 테 하나다.
-func _cup3_wall_solid(b: Node3D, r: float, w: float, h: float, col: Color) -> void:
+func _cup3_wall_solid(b: Node3D, r: float, w: float, h: float,
+		ramp: String, role: String, pat := "", inner_ramp := "night") -> void:
 	var face := _cup3_face("solid", r, w)
 	var outer := CylinderMesh.new()
 	outer.top_radius = face
@@ -21687,25 +22016,44 @@ func _cup3_wall_solid(b: Node3D, r: float, w: float, h: float, col: Color) -> vo
 	outer.height = h
 	outer.cap_top = false
 	outer.cap_bottom = false
-	outer.radial_segments = 26
-	_cup3_mesh(b, outer, _cup3_wall_col("solid", col), Vector3(0.0, h * 0.5, 0.0))
+	# 26 에서 48 로 올렸다. 아가리 타원이 26조각이면 앞호에 계단이 넷 서고,
+	# 그 계단이 화면에서 각진 다각형으로 읽힌다 — 통은 원통이어야 한다.
+	outer.radial_segments = 48
+	_cup3_tmesh(b, outer, ramp, role, Vector3(0.0, h * 0.5, 0.0),
+			Vector3.ZERO, false,
+			_cup3_pat_key(pat, face, h) if pat != "" else "")
 	# 안쪽 벽은 법선을 뒤집어야 안이 보인다. 양면 재질로 두면 안쪽이
 	# 바깥 빛을 받아 통이 유리로 보인다.
+	_cup3_inner(b, r, h, inner_ramp)
+	_cup3_lip(b, r, r + w, h, ramp)
+
+
+# 말린 아가리. 실물 통은 여기가 철사를 말아 넣어 굵고, 그 굵기 하나가
+# 「깡통」과 「도구」를 가른다. 가장 밝은 단이라 어두운 무대에서 통의
+# 윗선이 늘 살아 있다 — 램프가 꺼져도(잠긴 다트통) 한 단은 남긴다(keep).
+func _cup3_lip(b: Node3D, ri: float, ro: float, h: float, ramp: String) -> void:
+	var lip := TorusMesh.new()
+	lip.inner_radius = ri
+	lip.outer_radius = ro
+	lip.rings = 48
+	lip.ring_segments = 8
+	_cup3_tmesh(b, lip, ramp, "lip", Vector3(0.0, h, 0.0))
+
+
+# 속벽. 아가리로 들여다보이는 어둠이다. 그림자맵은 꺼 두었으므로
+# (138x118 에서 그림자맵은 계단만 남긴다) 셰이더의 속 어둠이 그 일을 한다 —
+# 아가리에서 바닥으로 갈수록 한 단 반이 내려간다.
+func _cup3_inner(b: Node3D, r: float, h: float, ramp := "night") -> void:
 	var inner := CylinderMesh.new()
 	inner.top_radius = r
 	inner.bottom_radius = r
 	inner.height = h
 	inner.cap_top = false
 	inner.cap_bottom = false
-	inner.radial_segments = 26
+	inner.radial_segments = 48
 	inner.flip_faces = true
-	_cup3_mesh(b, inner, C_DARK.darkened(0.28), Vector3(0.0, h * 0.5, 0.0))
-	var lip := TorusMesh.new()
-	lip.inner_radius = r
-	lip.outer_radius = r + w
-	lip.rings = 26
-	lip.ring_segments = 6
-	_cup3_mesh(b, lip, col.lightened(0.18), Vector3(0.0, h, 0.0))
+	_cup3_tmesh(b, inner, ramp, "inner", Vector3(0.0, h * 0.5, 0.0),
+			Vector3.ZERO, false, "", "", -1.0, h)
 
 
 # ── 벽: 철망 ─────────────────────────────────────────
@@ -21717,7 +22065,8 @@ func _cup3_wall_solid(b: Node3D, r: float, w: float, h: float, col: Color) -> vo
 #          자루가 출렁일 때마다 그 얼룩이 같이 끓는다. 실물 철망 통도
 #          안이 어두우면 구멍은 그냥 검다.
 # 속통은 양면이다. 아가리로 들여다본 뒷벽 안쪽이 그 뒷면이다.
-func _cup3_wall_net(b: Node3D, r: float, w: float, h: float, col: Color) -> void:
+func _cup3_wall_net(b: Node3D, r: float, w: float, h: float,
+		ramp: String, _role: String) -> void:
 	var face := _cup3_face("net", r, w)
 	var wall := CylinderMesh.new()
 	wall.top_radius = face
@@ -21725,34 +22074,40 @@ func _cup3_wall_net(b: Node3D, r: float, w: float, h: float, col: Color) -> void
 	wall.height = h
 	wall.cap_top = false
 	wall.cap_bottom = false
-	wall.radial_segments = 26
-	_cup3_mesh(b, wall, _cup3_wall_col("net", col), Vector3(0.0, h * 0.5, 0.0),
-			Vector3.ZERO, true)
+	wall.radial_segments = 48
+	# 철사는 가장 밝은 쪽이다. 가늘어서 통이 묽어지는 만큼 단을 올려 둔다 —
+	# 한 단 아래로는 벽이 실루엣만 남고 짠 결이 안 보인다.
+	_cup3_tmesh(b, wall, ramp, "wire", Vector3(0.0, h * 0.5, 0.0),
+			Vector3.ZERO, true, "net")
 	var drum := CylinderMesh.new()
 	drum.top_radius = face - 0.01
 	drum.bottom_radius = face - 0.01
 	drum.height = h
 	drum.cap_top = false
 	drum.cap_bottom = false
-	drum.radial_segments = 26
-	var dm := _cup3_mesh(b, drum, C_DARK.darkened(0.29), Vector3(0.0, h * 0.5, 0.0))
-	dm.material_override.cull_mode = BaseMaterial3D.CULL_DISABLED
+	drum.radial_segments = 48
+	_cup3_tmesh(b, drum, "night", "inner", Vector3(0.0, h * 0.5, 0.0),
+			Vector3.ZERO, true, "", "", -1.0, h)
 	# 아가리 테. 실물 철망 통은 여기가 굵게 말려 있지만 그 굵기는 안 따라간다 —
-	# 50px 짜리 통에서 굵은 테는 통을 뚜껑 덮은 깡통으로 만든다. 그물이 위에서
-	# 톱니로 끊기지만 않으면 되므로 1.4px 짜리 실선 한 줄이면 족하다.
-	var lip := TorusMesh.new()
-	lip.inner_radius = face - 0.012
-	lip.outer_radius = face + 0.012
-	lip.rings = 26
-	lip.ring_segments = 6
-	_cup3_mesh(b, lip, col.lightened(0.18), Vector3(0.0, h, 0.0))
+	# 관 두께는 **2px 이 상한**이다. 더 굵으면 통이 뚜껑 덮은 깡통이 된다.
+	_cup3_lip(b, face - 0.018, face + 0.018, h, ramp)
+	# 밑띠. 막힌 4px 이 그물을 바닥에서 끊어 준다 — 구멍이 발치 테를 물면
+	# 통이 바닥 없는 그물 자루로 보인다.
+	var hemm := CylinderMesh.new()
+	hemm.top_radius = face + 0.015
+	hemm.bottom_radius = face + 0.015
+	hemm.height = w * 1.7
+	hemm.cap_top = false
+	hemm.cap_bottom = false
+	hemm.radial_segments = 48
+	_cup3_tmesh(b, hemm, ramp, "band", Vector3(0.0, w * 0.85, 0.0))
 
 
 # ── 테 ──────────────────────────────────────────────
 # 통 몸을 두르는 쇠테. 무거운 것을 담는 통은 테를 두른다 — 통 하나로
 # "이 안에 무거운 것이 들었다" 를 말하는 가장 오래된 어법이다.
 # 발치와 아가리는 이미 제 테가 있으므로 그 사이만 나눠 두른다.
-func _cup3_hoops(b: Node3D, r: float, w: float, h: float, col: Color,
+func _cup3_hoops(b: Node3D, r: float, w: float, h: float, ramp: String,
 		n: int) -> void:
 	# 아래쪽에 **둘**만 두른다. 셋을 두르면 발치 테까지 넉 줄이 되고,
 	# 몸이 90px 밖에 안 되는 화면에서 그 넷 사이의 몸은 얇은 띠로만 남아
@@ -21767,9 +22122,9 @@ func _cup3_hoops(b: Node3D, r: float, w: float, h: float, col: Color,
 		var hp := TorusMesh.new()
 		hp.inner_radius = r + w * 0.9
 		hp.outer_radius = r + w * 1.8
-		hp.rings = 26
-		hp.ring_segments = 6
-		_cup3_mesh(b, hp, col.lightened(0.12), Vector3(0.0, y, 0.0))
+		hp.rings = 48
+		hp.ring_segments = 8
+		_cup3_tmesh(b, hp, ramp, "band", Vector3(0.0, y, 0.0))
 
 
 # ── 극 ──────────────────────────────────────────────
@@ -21782,10 +22137,12 @@ func _cup3_pole(b: Node3D, r: float, w: float, h: float) -> void:
 	pl.height = h * 0.34
 	pl.cap_top = false
 	pl.cap_bottom = false
-	pl.radial_segments = 26
+	pl.radial_segments = 48
 	# 위 3분의 1. 절반으로 두면 붉은 통 위에 보랏빛 통을 얹은 것으로 읽혀
 	# 제 색(packs.csv)이 어느 쪽인지가 안 갈린다.
-	_cup3_mesh(b, pl, C_MULT.darkened(0.30), Vector3(0.0, h * 0.83, 0.0))
+	# 빨강은 **자석의 관습**이다 — 말굽이든 막대든 극은 붉게 칠해져 있고
+	# 칠 안 한 쪽이 은색이다. 그래서 극 띠는 red 램프, 아가리는 steel 이다.
+	_cup3_tmesh(b, pl, "red", "ring", Vector3(0.0, h * 0.83, 0.0))
 
 
 # ── 발치에 놓는 물건 ────────────────────────────────
@@ -21896,7 +22253,8 @@ func _cup3_skin(pi: int) -> Dictionary:
 	var packs := GameData.packs()
 	if pi < 0 or pi >= packs.size() or not _pack_open(pi):
 		#  잠긴 다트통은 이름 없는 강철이다. 제 색이 새도 겉이 새는 것이다.
-		out["body"] = _cup3_tint("steel", {})
+		out["ramp"] = "steel"
+		out["body"] = Color(ART_PAL["steel"][2])
 		return out
 	var row: Dictionary = CUP_SKIN.get(String(packs[pi].get("id", "")), {})
 	for k in row:
@@ -21904,7 +22262,12 @@ func _cup3_skin(pi: int) -> Dictionary:
 	#  이름을 **색으로 풀어 둔다.** 여기서 안 풀면 부르는 쪽마다 다트통 번호를
 	#  같이 들고 다녀야 하고, 넘기는 동안은 통이 둘이라 "지금 다트통" 하나로는
 	#  둘 다 같은 색이 된다.
-	out["body"] = _cup3_tint(String(out.tint), packs[pi])
+	#  표가 램프를 안 적었으면 제 색(packs.csv)에서 가장 가까운 램프로 고른다.
+	if String(out.ramp) == "":
+		out["ramp"] = _cup3_ramp(Color(String(packs[pi].get("color", "cfc9bd"))))
+	#  몸 색 한 점. 2D 받침(_cup_one) · 후광(_cup_halo) · cup_probe 의 서명이
+	#  이것을 본다 — 3D 는 램프 넷을 통째로 쓰지만 그 대표값은 2단이다.
+	out["body"] = Color(ART_PAL[String(out.ramp)][2])
 	if String(out.dart) != "":
 		out["dart_col"] = _cup3_tint(String(out.dart), packs[pi])
 	return out
@@ -21928,36 +22291,23 @@ func _cup3_wall_col(wall: String, col: Color) -> Color:
 #
 #   own    그 다트통이 packs.csv 에 적어 둔 **제 색**. 기본값이다.
 #          그 색은 이미 런 안에서 계산 칸이 쓰는 그 다트통의 색이다(calc_col) —
-#          같은 다트통이 두 화면에서 같은 색으로 보인다. 열넷이 저마다
-#          다른 색을 이미 갖고 있었는데 통이 그것을 안 읽고 있었다.
-#
-#          **색상만 가져온다.** 표의 색은 글자와 4x11 짜리 조각에 쓰라고
-#          고른 것이라 짙기가 세다(호박 0.71 · 벽돌 0.70). 그것을 통
-#          한 덩이에 그대로 부으니 갈색 진흙과 벽돌이 됐다 — 이 게임의
-#          판은 어두운 보랏빛이고 거기서 채도 높은 흙색은 때로 보인다.
-#          짙기는 0.6배로 눌러 0.45 에서 자르고, 밝기는 [0.46, 0.74]
-#          띠 안으로 몬다. 그러면 열넷이 **같은 재질의 다른 색**이 된다 —
-#          통은 다 같은 쇠붙이여야 하고 다른 것은 칠뿐이다.
+#          같은 다트통이 두 화면에서 같은 색으로 보인다.
 #   steel  이름 없는 강철. **잠긴 다트통**이 이 색으로 선다 — 겉이 새면
 #          히든이 히든이 아니라는 그 규칙이 색에도 걸린다.
-#   gold   돈으로 만든 통. 선금처럼 "이 다트통은 돈이다" 를 말할 때.
+#   gold   돈으로 만든 통. 일당처럼 "자루 자체가 돈이다" 를 말할 때.
+#
+# **램프 2단을 그대로 쓴다.** 전에는 셋이 다 _cup3_metal 을 지나 짙기가
+# 0.6배로 눌리고 밝기가 [0.46, 0.74] 띠로 몰렸다 — 열셋이 같은 진흙빛
+# 중간 명도로 붙었고, 금은 올리브로 바랬다. 지금은 팔레트가 그 일을 한다:
+# 색을 누르는 대신 **가장 가까운 램프로 반올림**하므로, 열셋이 다른 색이면서
+# 같은 팔레트의 식구로 남는다.
 func _cup3_tint(name: String, row: Dictionary) -> Color:
 	match name:
-		"gold": return _cup3_metal(C_GOLD)
-		"own": return _cup3_metal(Color(String(row.get("color", "cfc9bd"))))
-	return _cup3_metal(C_WIRE)
-
-
-# 어떤 색이든 **통의 재질**로 옮긴다. 짙기를 0.6배로 눌러 0.45 에서 자르고
-# 밝기를 [0.46, 0.74] 띠 안으로 몬다.
-#
-# 셋(own·gold·steel)이 다 이 문을 지나야 한다. 금빛만 원색으로 빼 두었더니
-# 열넷 중 그 하나만 쨍해서, 다른 재질로 만든 통 하나가 섞인 것으로 보였다.
-# 발치의 플라크는 원색 C_GOLD 그대로다 — 통은 금빛으로 **칠한** 것이고
-# 플라크는 진짜 금이라, 둘이 갈리는 것이 오히려 맞다.
-func _cup3_metal(c: Color) -> Color:
-	return Color.from_hsv(c.h, minf(c.s * 0.60, 0.45),
-			clampf(c.v, 0.46, 0.74))
+		"gold": return Color(ART_PAL["gold"][2])       # f2c94c
+		"own":
+			return Color(ART_PAL[_cup3_ramp(Color(String(
+					row.get("color", "cfc9bd"))))][2])
+	return Color(ART_PAL["steel"][2])                  # a3abbb
 
 
 # 통에 붙는 동전 한 장. 값은 전부 통 크기에 대한 비라 넓은 통에 붙어도
@@ -22083,13 +22433,15 @@ func _cup3_cup(skin: Dictionary) -> AnimatableBody3D:
 	b.sync_to_physics = true
 
 	var col: Color = skin.body
+	var ramp := String(skin.ramp)
+	var role := String(skin.role)
 	match String(skin.wall):
 		"net":
-			_cup3_wall_net(b, r, w, h, col)
+			_cup3_wall_net(b, r, w, h, ramp, role)
 		_:
-			_cup3_wall_solid(b, r, w, h, col)
+			_cup3_wall_solid(b, r, w, h, ramp, role, String(skin.shape))
 	if int(skin.hoop) > 0:
-		_cup3_hoops(b, r, w, h, col, int(skin.hoop))
+		_cup3_hoops(b, r, w, h, ramp, int(skin.hoop))
 	if bool(skin.pole):
 		_cup3_pole(b, r, w, h)
 	if bool(skin.sticker):
@@ -22099,8 +22451,11 @@ func _cup3_cup(skin: Dictionary) -> AnimatableBody3D:
 	base.top_radius = r + w
 	base.bottom_radius = r + w
 	base.height = w * 1.6
-	base.radial_segments = 26
-	_cup3_mesh(b, base, col.darkened(0.52), Vector3(0.0, w * 0.8, 0.0))
+	base.radial_segments = 48
+	# 발치 테. **빛 띠가 없다**(role foot 의 t_hi 9) — 통 밑동에 띠가 서면
+	# 테가 몸에서 떨어져 굴렁쇠로 보인다. 몸보다 한 단 아래라 통이 바닥에
+	# 닿은 자리가 어두워지고, 그것이 곧 무게다.
+	_cup3_tmesh(b, base, ramp, "foot", Vector3(0.0, w * 0.8, 0.0))
 
 	var fl := CollisionShape3D.new()
 	var fs := CylinderShape3D.new()
@@ -22193,11 +22548,14 @@ func _cup3_gold() -> RigidBody3D:
 
 	var body := BoxMesh.new()
 	body.size = Vector3(gw, gt, gd)
-	_cup3_mesh(b, body, C_GOLD, Vector3.ZERO)
+	# 금 램프. 네모라 면마다 단이 갈린다 — 윗면은 빛 띠로 한 단 올라가고
+	# 옆면은 몸, 그늘 쪽 옆면은 한 단 내려간다. 2D 플라크가 손으로 찍는
+	# 그 세 값이 여기서는 빛에서 저절로 나온다.
+	_cup3_tmesh(b, body, "gold", "plaque", Vector3.ZERO)
 	# 파인 판. 2D 가 가운데를 어둡게 찍는 그 자리다 — 윗면에서 살짝 들어간다.
 	var inl := BoxMesh.new()
 	inl.size = Vector3(gw * 0.44, gt * 0.5, gd * 0.30)
-	_cup3_mesh(b, inl, C_GOLD.darkened(0.40), Vector3(0.0, gt * 0.42, 0.0))
+	_cup3_tmesh(b, inl, "gold", "sunk", Vector3(0.0, gt * 0.42, 0.0))
 	return b
 
 
@@ -22996,18 +23354,29 @@ func _cup3_open() -> void:
 	cam.rotation = Vector3(pit, 0.0, 0.0)
 	cup_vp.add_child(cam)
 
+	# 이 빛은 이제 **자루·사진·사탕·스티커 몫**이다. 통은 unshaded 톤
+	# 셰이더라 빛을 안 받는다 — 대신 같은 CUP3.light 방향을 셰이더가 읽어
+	# 단을 가르므로, 통의 빛 띠와 자루의 하이라이트가 같은 데서 온다.
+	#
+	# **림 라이트는 안 쓴다.** 뒤에서 한 벌 더 비춰 보았더니 표준 자루의
+	# 크림 날개가 보랏빛으로 물들어 다트 종류를 색으로 가르던 규약이
+	# 깨졌고, 통은 unshaded 라 받을 곳도 없었다.
 	var lt := DirectionalLight3D.new()
-	lt.rotation_degrees = Vector3(-52.0, -34.0, 0.0)
-	lt.light_energy = 1.05
+	lt.rotation_degrees = CUP3.light
+	lt.light_color = Color(ART_PAL["cream"][3])
+	lt.light_energy = lerpf(0.7, 1.75, cup_lamp)
 	lt.shadow_enabled = false
 	cup_vp.add_child(lt)
+	cup_key = lt
 
 	var we := WorldEnvironment.new()
 	var env := Environment.new()
 	env.background_mode = Environment.BG_CANVAS
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = C_PANEL.lightened(0.55)
-	env.ambient_light_energy = 1.15
+	# 바 안의 어스름. dusk 1단이라 그늘이 검정이 아니라 회보라로 떨어진다 —
+	# 게임 바탕(C_BG · C_DARK)과 같은 식구다.
+	env.ambient_light_color = Color(ART_PAL["dusk"][1])
+	env.ambient_light_energy = 0.55
 	we.environment = env
 	cup_vp.add_child(we)
 
@@ -23016,6 +23385,7 @@ func _cup3_open() -> void:
 
 func _cup3_close() -> void:
 	cup_rigs.clear()
+	cup_key = null
 	if _cup3_live():
 		cup_vp.queue_free()
 	cup_vp = null
