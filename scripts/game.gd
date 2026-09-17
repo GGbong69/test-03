@@ -7478,6 +7478,14 @@ func _coin_art(id: String) -> Texture2D:
 	var path := "res://assets/coin/%s.png" % id
 	if id != "" and ResourceLoader.exists(path):
 		t = load(path)
+	#  갓 구운 장은 편집기가 아직 .ctex 를 안 만들었을 수 있다(.import 만 있고
+	#  가져오기 전 — 워크트리·헤드리스 갈무리가 그렇다). 그때는 원본 PNG 를
+	#  직접 읽는다. 내보낸 판에는 PNG 가 안 실리므로 이 길은 개발 중에만 탄다 —
+	#  편집기를 한 번 열면 load 가 이긴다.
+	if t == null and id != "" and FileAccess.file_exists(path):
+		var im := Image.load_from_file(path)
+		if im != null and not im.is_empty():
+			t = ImageTexture.create_from_image(im)
 	_coin_tex[id] = t
 	return t
 
@@ -7544,7 +7552,12 @@ func _icon_item(c: Vector2, rx: float, ry: float, id: String,
 	#  사진은 뭉개져도 색과 덩어리가 남아서 오히려 알아보기 쉽다 — 알아보는
 	#  것이 먼저다. scripts/tools/make_coin_art.py 가 굽고, 원형 알파를
 	#  같이 구우므로 누운 자세의 타원 사각에 그리면 저절로 눌린다.
-	#  레퍼런스가 없는 열 장은 아래 손그림이 그대로 맡는다.
+	#  얼굴이 없던 열 장(가장자리 · 좌익수 · 우익수 · PART I · PART II ·
+	#  알 낳는 거위 · 2300 · 0023 · 첫 만남 · ADHD)도 2026-09-17 에 같은 격자
+	#  (faces.txt)로 지었다 — 「디자인 안 된 아이템 다 디자인하자」. 그 열 장은
+	#  아래 match 에 갈래가 원래 없어서 걷을 것도 없었다. 이제 구운 얼굴이 없는
+	#  장은 재질이 곧 얼굴인 둘(유리 대포 c03 · NULL l03, make_coin_art.NOART)뿐이고,
+	#  아래 손그림은 PNG 를 못 읽는 경우의 마지막 받침으로만 남는다.
 	var tx := _coin_art(id)
 	if tx != null:
 		draw_texture_rect(tx, Rect2(c - Vector2(rx, ry),

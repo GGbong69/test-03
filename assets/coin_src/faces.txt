@@ -24,6 +24,32 @@
 #
 #  원형 알파가 네 귀퉁이를 깎는다 — 뜻은 가운데 28x28 안에 둔다.
 #  레퍼런스는 구도와 색의 분위기만 봤다. 받아 둔 원본은 저장소에 없다.
+#
+#  ── 얼굴이 없던 열 장 (2026-09-17) ─────────────────────────
+#  「디자인 안 되어 있는 아이템들 다 디자인하자. 레퍼런스 많이 찾으면서」.
+#  새 틀을 만들지 않고 쉰일곱 장과 같은 붓 · 같은 네 규칙으로 지었다.
+#  **소재가 효과를 말한다** — 글자 · 숫자 · 로마 숫자는 없고(막대 하나 · 둘도
+#  I · II 로 읽혀 뺐다), 조건 기호 대신 이 세트의 말투(영화 · 그림 · 설화 ·
+#  말장난)로 간다. 선이 없으니 장마다 **바탕 밝기와 주인공 밝기를 60 넘게**
+#  벌려 26px 에서 덩어리로 읽히게 했다(괄호 안이 바탕 램프 · 단).
+#    c11 가장자리    세상의 끝 폭포 — 납작한 원판의 앞 테만 밝고 거기서 흰 커튼이
+#                    떨어진다 = 판의 맨 바깥 띠(더블). 구체 음영 없음(night 2)
+#    c16 좌익수      左翼手의 翼 — 왼 날개 돋은 글러브, 공은 포켓 속(green 1)
+#    c17 우익수      거울 자리를 **다시 그렸다**(뒤집지 않음 — 빛은 여전히 왼쪽 위).
+#                    공이 막 떠난 순간 — 어깨가 센 자리 +3(green 1)
+#    c18 PART I      열린 슬레이트 — 같은 장면 한 번 더 직전. 파랑 = 점수(blue 2)
+#    c19 PART II     닫힌 슬레이트 + 딱 불꽃. 빨강 = 배수(red 2)
+#    c31 알 낳는 거위 둥지 위 흰 거위 + 얼굴에서 하나뿐인 금빛 알 = 판마다 골드(teal 2)
+#    c39 2300        자정 전 — 금빛 호박 마차 · 초승달 왼쪽(violet 1)
+#    c40 0023        자정 뒤 — 돌아간 주황 호박 + 남은 유리 구두 · 달이 오른쪽으로
+#                    옮겼다(night 2). 두 장 다 시계는 안 쓴다(SAFETY LAST! · 녹는
+#                    시계 · 보드 확장 「시계」 자리)
+#    c41 첫 만남     아담의 창조 — 두 검지 사이 틈의 불꽃. 손 둘 = ×2(pink 1)
+#    c47 ADHD        세 색 스피너 — 날개 색이 셋 다 다르다 = 서로 다른 세 곳.
+#                    곡선 궤적 = 회전(orange 1)
+#  짝(좌·우익수 · PART I·II · 2300·0023)은 구도 · 주인공을 같게 두고 상태 하나와
+#  바탕 램프만 바꿨다. 사행성 기호(주사위 · 카드 · 칩 · 룰렛)와 상표성 이미지
+#  (흰 마차 · 영화 캐릭터 · 아이돌 곡)는 쓰지 않았다. 출처는 docs/크레딧.md.
 
 == c01  발라트로의 조커
 = a 14343f
@@ -442,6 +468,58 @@ aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
+== c11  가장자리
+= a 221c33
+= b 352d4d
+= c fdeaa0
+= d fbf6ea
+= e 8fe0cf
+= f 36a3a0
+= g 94d68e
+= h 479a58
+= i 2f6340
+= j 1f6570
+= k e8dfc8
+= l c48b5a
+= m 8a5636
+= n 553222
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaabbbbbbbbaaaaaaaaaaaaaa
+aaaaaaaaaaabbbbbbbbbbbbbbaaacaaaaaaa
+aaaaaaaaaabbbbbbbbbbbbbbbbaaaaaaaaaa
+aaaaaaadbbeeeeeeeeeeeeeeeebbaaaaaaaa
+aaaaaaabeeffffffffffffghffefbaaaaaaa
+aaaaaaaeffggggffffffgghifffffaaaaaaa
+aaaaaaeffghhhhhhfffffhifffffffaaaaaa
+aaaaaeffghhhhhiiffffffffffffffjaaaaa
+aaaaabfffhiiiifffffffffffffffjbkaaaa
+aaaaalmdffffffffffffffffffffdmnaaaaa
+aaaabbmdddffffffffffffffffdddnbbaaaa
+aaaakbbdmdddddddddddddddddmddbbbaaaa
+aaaabbbkmddmddmddmddmddmddndkbbbaaaa
+aaaabbbkbddnddnddnddnddnddbkebbbaaaa
+aaaabbbebkkbddbddbddbddbdkbkebbbaaaa
+aaaabbbebkkbkkbkdbddbkdbkkbkfbbbaaaa
+aaaabbbfbekbkkbkkbkkbkkbkkbebbbbaaaa
+aaaabbbbbeebkkbkkbkkbkkbkebebbbbaaaa
+aaaaabbbbeebkkbkkbkkbkkbeebfbbbaaaaa
+aaaaabbbbffbeebekbkkbekbefbfbbbaaaaa
+aaaaabbbbffbeebekbkkbeebefbbbbbaaaaa
+aaaaaabbbbbbeebeebeebeebfbbfbbaaaaaa
+aaaaaaabbfbbeebeebeebfebfbbbbaaaaaaa
+aaaaaaabbbbbffbfebeebfebbbbbbaaaaaaa
+aaaaaaaabbbbffbfebeebbfbfbbbaaaaaaaa
+aaaaaaaaaabbbbbbfbfebffbbbaaaaaaaaaa
+aaaaaaaaaaabfbbffbffbbbbbaaaaaaaaaaa
+aaaaaaaaaaaaaabbfbffbbaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaafaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
 == c12  쌍둥이
 = a 1a2150
 = b f7ba70
@@ -633,6 +711,206 @@ eeeeeeeeaaaaaaaajjjaaaaaaaaaaaaaaaaa
 eeeeeeaaaaaaaaaajjjaaaaaaaaaaaaaaaaa
 eeeaaaaaaaaaaaaajjjaaaaaaaaaaaaaaaaa
 
+== c16  좌익수
+= a 1d3326
+= b 2f6340
+= c fbf6ea
+= d e8dfc8
+= e c48b5a
+= f 8a5636
+= g c9bfae
+= h 553222
+= i d8483d
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaabbbbbbbbaaaaaaaaaaaaaa
+aaaaaaaaaaabbbbbbbbbbbbbbaaaaaaaaaaa
+aaaaaaaaaabbbbbbbbbbbbbbbbaaaaaaaaaa
+aaaaaaaabbbbbbbbbbbbbbbbbbbbaaaaaaaa
+aaaaaaabbbbbbbbbbbbbbbbbbbbbbaaaaaaa
+aaaaaaabbbbbbbbbbbbbbbbbbbbbbaaaaaaa
+aaaacccbbbbbbbbbbbbbbbbbbbbbbbaaaaaa
+aaaaacddbbbbbbbbbbbbbeebbbbbbbbaaaaa
+aaaaaddddbbbbbbbbbbeeefebbbbbbbaaaaa
+aaaaagdddcbbbbbbbbefeefeebbbbbbaaaaa
+aaacccgddccbbbbbbbefeefeefbbbbbbaaaa
+aaacdddgdcccbbbbbeeefeefefbbbbbbaaaa
+aaacddddddcccbbbbeeefeefeefbbbbbaaaa
+aaaaddddddccccbbbeeeeeeeeefhebbbaaaa
+aaaagdddddcccccbbeeeeccceeebeebbaaaa
+aaaacccddddcccccbeeeciccceeehfbbaaaa
+aaaacdddddddcccccbefccccdfeefbbbaaaa
+aaaacdddddddccccccefcccidfeefbbbaaaa
+aaaaaddddddddcccccefccccdfeefbbaaaaa
+aaaaabddddddddcccccefcddfeefbbbaaaaa
+aaaaabbddddddgdcccceefffeeefbbbaaaaa
+aaaaaabccddddddgcccceeeeeefbbbaaaaaa
+aaaaaaacdccgddddgbddbfffffbbbaaaaaaa
+aaaaaaabddddcggdgbbdbbbbbbbbbaaaaaaa
+aaaaaaaabggggccdgbbbbbbbbbbbaaaaaaaa
+aaaaaaaaaabbbggggbbbbbbbbbaaaaaaaaaa
+aaaaaaaaaaabbbbbbbbbbbbbbaaaaaaaaaaa
+aaaaaaaaaaaaaabbbbbbbbaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+== c17  우익수
+= a 1d3326
+= b fbf6ea
+= c 2f6340
+= d d8483d
+= e e8dfc8
+= f 94d68e
+= g 479a58
+= h c48b5a
+= i c9bfae
+= j 8a5636
+= k 553222
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaabaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaabbbbbaaaaaaaaaaaa
+aaaaaaaaaaaaaacccccbdbbeaaaaaaaaaaaa
+aaaaaaaaaaacccccccbbbbbbeaaaaaaaaaaa
+aaaaaaaaaacccccccccbbbdeccaaaaaaaaaa
+aaaaaaaacccccccccccbebeeccccaaaaaaaa
+aaaaaaaccccccccccccccecccccccaaaaaaa
+aaaaaaacccccccccccfccccccccccaaaaaaa
+aaaaaacccccccccccgcccccccccccbeeaaaa
+aaaaacccccccchhcccccccccccccbeiaaaaa
+aaaaaccccccchjhhhccccccccccbeeiaaaaa
+aaaaacccccchhjhhjhccccccccbeeiiaaaaa
+aaaaccccccjhhjhhjjcccccccbbeiibbeaaa
+aaaaccccccjhjhhjhhjcccccbbeiibeeiaaa
+aaaacccccjhhjhhjhhjccccbbeeibeeeiaaa
+aaaaccchkjhhhhhhhhjcccbbbeibeeeiaaaa
+aaaacchhchhhjjjhhhjccbbbbebeeeiiaaaa
+aaaacchkhhhjjjjjhhjcbbbbebeeebbeaaaa
+aaaaccchhhjjjjjjjjcbbbbebeeebeeiaaaa
+aaaaccchhhjkjjjjjjbbbbbeeeebeeeiaaaa
+aaaaacchhhjjkjjjjjbbbbeeeebeeeiaaaaa
+aaaaaccchhhjjjjjjbbbbeeebbeeeicaaaaa
+aaaaaccchhhhjjjhjbbbeeibeeeeiccaaaaa
+aaaaaaccchhhhhhjbbeeibbeeeebecaaaaaa
+aaaaaaacccjjjjjcbecibeeeibbeiaaaaaaa
+aaaaaaaccccccccceccbeiibbeeicaaaaaaa
+aaaaaaaacccccccccccebbbiiiicaaaaaaaa
+aaaaaaaaaacccccccccbeiicccaaaaaaaaaa
+aaaaaaaaaaaccccccccccccccaaaaaaaaaaa
+aaaaaaaaaaaaaaccccccccaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+== c18  PART I
+= a 2b4a95
+= b 3f7fd8
+= c fbf6ea
+= d 14111f
+= e e8dfc8
+= f dde3ec
+= g a3abbb
+= h 687085
+= i 352d4d
+= j 221c33
+= k 4a4160
+= l b3abc8
+= m 7a7192
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaabbbbbbbbaaccaaaaaaaaaa
+aaaaaaaaaaabbbbbbbbbbdddcceaaaaaaaaa
+aaaaaaaaaabbbbbbbbcccdddddeaaaaaaaaa
+aaaaaaaabbbbbbbddddccceddbbbaaaaaaaa
+aaaaaaabbbbbccccddddeebbbbbbbaaaaaaa
+aaaaaaabbddddccceedbbbbbbbbbbaaaaaaa
+aaaaaaffgccddddebbbbbbbbbbbbbbaaaaaa
+aaaaabfghceedbbbbbbbbbbbbbbbbbbaaaaa
+aaaaabfghdccdddcccdddcccdddccbbaaaaa
+aaaaabghhccdddcccdddcccdddccebbaaaaa
+aaaabbbceedddeeedddeeedddeeedbbbaaaa
+aaaabbbbbbbbbbbbbbbbbbbbbbbbbbbbaaaa
+aaaabbbiiiiiiiiiiiiiiiiiiiiijbbbaaaa
+aaaabbbijjjjjjjjjjjjjjjjjjjjdbbbaaaa
+aaaabbbijjjjjjjjjjjjjjjjjjjjdbbbaaaa
+aaaabbbijjjjjjjjjjjjjjjjjjjjdbbbaaaa
+aaaabbbijkkkkkkkkkkkkkkkkkkjdbbbaaaa
+aaaabbbijjjjjjjjjjjjjjjjjjjjdbbbaaaa
+aaaaabbijjlllllljjjmmmmjjjjjdbbaaaaa
+aaaaabbijjjjjjjjjjjjjjjjjjjjdbbaaaaa
+aaaaabbijjjjjjjjjjjjjjjjjjjjdbbaaaaa
+aaaaaabijkkkkkkkkkkkkkkkkkkjdbaaaaaa
+aaaaaaaijjjjjjjjjjjjjjjjjjjjdaaaaaaa
+aaaaaaaijjlllllljjjmmmmjjjjjdaaaaaaa
+aaaaaaaijjjjjjjjjjjjjjjjjjjjdaaaaaaa
+aaaaaaajdddddddddddddddddddddaaaaaaa
+aaaaaaaaaaabbbbbbbbbbbbbbaaaaaaaaaaa
+aaaaaaaaaaaaaabbbbbbbbaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+== c19  PART II
+= a 8c2233
+= b d8483d
+= c f2c94c
+= d 14111f
+= e fbf6ea
+= f fdeaa0
+= g dde3ec
+= h a3abbb
+= i e8dfc8
+= j 687085
+= k 352d4d
+= l 221c33
+= m 4a4160
+= n b3abc8
+= o 7a7192
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaabbbbbbbbaaaaaaaaaaaaaa
+aaaaaaaaaaabbbbbbbbbbbbbbaaaaaaaaaaa
+aaaaaaaaaabbbbbbbbbbbbbbbbaaaaaaaaaa
+aaaaaaaabbbbbbbbbbbbbbbbbbbbaaaacaaa
+aaaaaaabbbbbbbbbbbbbbbbbbbbbbaaaaaaa
+aaaaaaaddeeedddeeedddeeedddeeafaaaaa
+aaaaaagghdeeedddeeedddeeedddifffaaaa
+aaaaabghjddiiidddiiidddiiidddbfaaaaa
+aaaaabghjeeedddeeedddeeedddeebbaaaaa
+aaaaabhjjeedddeeedddeeedddeeibbacaaa
+aaaabbbeiidddiiidddiiidddiiidbbbaaaa
+aaaabbbbbbbbbbbbbbbbbbbbbbbbbbbbaaaa
+aaaabbbkkkkkkkkkkkkkkkkkkkkklbbbaaaa
+aaaabbbklllllllllllllllllllldbbbaaaa
+aaaabbbklllllllllllllllllllldbbbaaaa
+aaaabbbklllllllllllllllllllldbbbaaaa
+aaaabbbklmmmmmmmmmmmmmmmmmmldbbbaaaa
+aaaabbbklllllllllllllllllllldbbbaaaa
+aaaaabbkllnnnnnnllloooollllldbbaaaaa
+aaaaabbklllllllllllllllllllldbbaaaaa
+aaaaabbklllllllllllllllllllldbbaaaaa
+aaaaaabklmmmmmmmmmmmmmmmmmmldbaaaaaa
+aaaaaaaklllllllllllllllllllldaaaaaaa
+aaaaaaakllnnnnnnllloooollllldaaaaaaa
+aaaaaaaklllllllllllllllllllldaaaaaaa
+aaaaaaaldddddddddddddddddddddaaaaaaa
+aaaaaaaaaaabbbbbbbbbbbbbbaaaaaaaaaaa
+aaaaaaaaaaaaaabbbbbbbbaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
 == c29  황금우상
 = a 221c33
 = b fdeaa0
@@ -722,6 +1000,57 @@ aaaaaaaaaaccciiiiiiiijccccaaaaaaaaaa
 aaaaaaaaaaaccciiiiiijccccaaaaaaaaaaa
 aaaaaaaaaaaaaacjjjjjccaaaaaaaaaaaaaa
 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+== c31  알 낳는 거위
+= a 1f6570
+= b 36a3a0
+= c fbf6ea
+= d 14111f
+= e e8873a
+= f e8dfc8
+= g b0512a
+= h c9bfae
+= i fdeaa0
+= j f2c94c
+= k a8762a
+= l c48b5a
+= m 8a5636
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaabbbbbbbbaaaaaaaaaaaaaa
+aaaaaaaaaaabbbbbbbbbbbbbcaaaaaaaaaaa
+aaaaaaaaaabbbbbbbbbbbbcccccaaaaaaaaa
+aaaaaaaabbbbbbbbbbbbbcccdcccaaaaaaaa
+aaaaaaabbbbbbbbbbbbbbccccceeeaaaaaaa
+aaaaaaabbbbbbbbbbbbbbccccceeeaaaaaaa
+aaaaaabbbbbbbbbbbbbbcfcfcffggbaaaaaa
+aaaaabbbbbbbbbbbbbbbcfhbfbbbbbbaaaaa
+aaaaabbbbbbbbbbbbbbbcfhbbbbbbbbaaaaa
+aaaaabbbbbbbbbbbbbbbcfhbbbbbbbbaaaaa
+aaaabbbbbbbbbbbbbbbbcfhbbbbbbbbbaaaa
+aaaabbbbbbbbbbbbbbbcffhbbbbbbbbbaaaa
+aaaabbbbbbbcccccccbcffhbbbbbbbbbaaaa
+aaaabbcccccfffffffccffhbbbbbbbbbaaaa
+aaacccfcffffffffffcffhbbbbbbbbbbaaaa
+aaaacfcfffcccccccfffhhfbbbbbbbfbaaaa
+aaaabcffccfffffffffffffhbbbbbfcfaaaa
+aaaabcfcfffffffffhhhfffhbibbbbfbaaaa
+aaaaacfffffffffhhffffffiijijbbbaaaaa
+aaaaacffffhhhhhfffffffiiijjjjbbaaaaa
+aaaaacffffffffffffffffiijjjjkbbaaaaa
+aaaaaaffffffffffffffffijjjjjkbaaaaaa
+aaaaallffffffffffffffijjjjjjjkaaaaaa
+aaaalllmhhhfffffffhhhlijjjjjkaaaaaaa
+aaaalllllllhhhhhhhllllijjjjjkaaaaaaa
+aaaalllllllllllllllllmjjjjjjkaaaaaaa
+aaaaalmllilllillllllllljkjkkaaaaaaaa
+aaaaaaammmmllllllmllllmmmkmaaaaaaaaa
+aaaaaaaaaaammmmmmmmmmmaaaaaaaaaaaaaa
 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
@@ -1076,6 +1405,156 @@ aaaamoooozooooooooooooooooooooooaaaa
 aaaamooooooooooooooooooooooooooqaaaa
 aaaooqqqqqqqqqqqqqqqqqqqqqqqqqqqqaaa
 
+== c39  2300
+= a 2b1d4f
+= b 523a8f
+= c fbf6ea
+= d fdeaa0
+= e e8dfc8
+= f 479a58
+= g a8762a
+= h f2c94c
+= i 91cbf5
+= j bca1ed
+= k 5c3a1a
+= l 2a1812
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaabbbbbbbbaaaaaaaaaaaaaa
+aaaaaaaaaaabbbbbbbbbbbbbbaaaaaaaaaaa
+aaaaaaacaabbbbbbbbbbbbbbbbaaaaaaaaaa
+aaaaaacabbbbbbbbbbbbbbbbbbbdaaaaaaaa
+aaaaaaccbbbbbbbbbbbbbbbbbbbbbaaaaaaa
+aaaaaaccbbbbbbbbbbbbbbbbbbbbbaaaaaaa
+aaaaaabcebbbbbbbbbbffbbbbbbbbbaaaaaa
+aaaaabbbeeebbbbbbbfbbbbbbbbbbbbaaaaa
+aaaaabbbbbbbbbbdddgdddbbbbbbbbbaaaaa
+aaaaabbbbbbbbdghhhghhhgdbbbbbbbaaaaa
+aaaabbbbbbbddghhhhhhhhhgdhbbbbbbaaaa
+aaaabbbbbbdhghhhhiihhhhhghhbbbjbaaaa
+aaaabbhbbbdhghhhciiihhhhghgbbbbbaaaa
+aaaabbbbbdhhghhhiiiihhhhghhgbbbbaaaa
+aaaabbbbbdhhghhhiiiihhhhghhgbbbbaaaa
+aaaabbbbbdhhghhhhiihhhhhghhgbbbbaaaa
+aaaabbbbbdhhghhhhhhhhhhhghhgbbbbaaaa
+aaaabbbbbdhhghhhhhhhhhhhghhgbbbbaaaa
+aaaaabbbbbdhhghhhhghhhhghhgbbbbaaaaa
+aaaaabbbbbhhhghhhhghhhhghhgbbbbaaaaa
+aaaaabbbbbbhghghhhghhhghggbbbbbaaaaa
+aaaaaabbbbhhhgghhhghhhgghhhbbbaaaaaa
+aaaaaaabbhghggggggggggghghggbaaaaaaa
+aaaaaaabhgghggkbbbbbbbhgghggkaaaaaaa
+aaaaaaaahhhlhhkbbbbbbbhhhlhhkaaaaaaa
+aaaaaaaahgghggkbbbbbbbhgghggkaaaaaaa
+aaaaaaaaagghgkbbbbbbbbbgghgkaaaaaaaa
+aaaaaaaaaakkkabbbbbbbbaakkkaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+== c40  0023
+= a 221c33
+= b 352d4d
+= c fbf6ea
+= d e8dfc8
+= e 94d68e
+= f 479a58
+= g f7ba70
+= h b0512a
+= i e8873a
+= j b3abc8
+= k dde3ec
+= l 687085
+= m a3abbb
+= n 4a4160
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaabbbbbbbbaaaaaaaaaaaaaa
+aaaaaaaaaaabbbbbbbbbbbbcbaaaaaaaaaaa
+aaaaaaaaaabbbbbbbbbbbbcbbbaaaaaaaaaa
+aaaaaaadbbbbbbbbbbbbbbccbbbbaaaaaaaa
+aaaaaaabbbbbbbbbbbbbbbccbbbbbaaaaaaa
+aaaaaaabbbbbbbbbbbbbbbbcdbbbbaaaaaaa
+aaaaaabbbbbbbbbbbbbbbbbbdddbbbaaaaaa
+aaaaabbbbbbbeffbbbbbbbbbbbbbbbbaaaaa
+aaaaabbbbbbbfbbbbbbbbbbbbbbbbbbaaaaa
+aaaaabbbbggggggggbbbbbbbbbbbbbbaaaaa
+aaaabbbgghiihiiihgibbbbbbbbbbbbbaaaa
+aaaabbgihiiihiiiihiibbbbbbbbbbbjaaaa
+aaaabgiihiiihiiiihiiibbbbbdbbbbbaaaa
+aaaabgihiiiihiiiiihihbbbbdcdbbbbaaaa
+aaaagiihiiiihiiiiihiihbbbbdbbbbbaaaa
+aaaagiihiiiihiiiiihiihbbbbbbbbbbaaaa
+aaaagiihiiiihiiiiihiihbbbbbkkbbbaaaa
+aaaagiihiiiihiiiiihiihbbbbkkkbbbaaaa
+aaaaagihiiiihiiiiihihbkkllkkmbbaaaaa
+aaaaaiiihiiihiiiihiikkklllkkmbbaaaaa
+aaaaabiihiiihiiiihkckkkmmmmmmbbaaaaa
+aaaaaabihhiihiiihkkkmmmbbbbmbbaaaaaa
+aaaaaaabbhhhhhhhmmmmbbbbbbbmbaaaaaaa
+aaaaaaabbbbbbbbbbbbbbbbbbbbmnnnnnnnn
+aaaaaaaabnnnnnnnnnnnnnnnnnnnnnnnnnnn
+nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn
+nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn
+nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn
+nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn
+nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn
+nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn
+nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn
+
+== c41  첫 만남
+= a 4d1840
+= b b3abc8
+= c 8e2f6e
+= d 7a7192
+= e f5cda3
+= f dc9a73
+= g f2c94c
+= h fdeaa0
+= i a8634f
+= j fbf6ea
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabb
+aaaaaaaaaaaaaaccccccccaaaaaaaaaaabbd
+aaaaaaaaaaaccccccccccccccaaaaaaabbbd
+aaaaaaaaaaccccccccccccccccaaaaabbbbd
+aaaaaaaaccccccccccccccccccccaabbbbbd
+aaaaaaaccccccccccccccccccccccbbbbbbd
+aaaaaaacccccccccccccccccccccbbbbbbbd
+aaaaaacccccccccccccccccccccbbbbdbbbd
+aaaaaccccccccccccccccccccccbbbbbdbbd
+aaaaaccccccccccccccccccccccbbbbbbdbd
+aaaaacccccccccccccccccceeeebbbbbbbdd
+aaaacccccccccccccccceeeffffbbbbbbbbd
+aaaacccccccccccccgcccfeffffbbbbbbbbd
+aaaaccceeeecccccchccccciiifbbbbbbbbd
+eeeeeeefffffcccghjhgcccffffbbbbbbbbd
+effffffffffffffcchcccccciiibbbbbbbbd
+efffffffffffiiiicgcccccccccbbdbbbbbd
+effffffffiiiccccccccccccccccccdddddd
+efffffffffficcccccccccccccccccccaaaa
+efffffiiiiiccccccccccccccccccccaaaaa
+efffficccccccccccccccccccccccccaaaaa
+effficcccccccccccccccccccccccccaaaaa
+effiaaccccccccccccccccccccccccaaaaaa
+efiaaaaccccccccccccccccccccccaaaaaaa
+fiaaaaaccccccccccccccccccccccaaaaaaa
+iaaaaaaaccccccccccccccccccccaaaaaaaa
+aaaaaaaaaaccccccccccccccccaaaaaaaaaa
+aaaaaaaaaaaccccccccccccccaaaaaaaaaaa
+aaaaaaaaaaaaaaccccccccaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
 == c42  무전기
 = a 1f6570
 = b 352d4d
@@ -1321,6 +1800,59 @@ aaaaaaaabbbbbbbbbbbbbbbbbbbbaaaaaaal
 aaaaaaaaaabbbbbbbbbbbbbbbbaaaaaaaaaa
 aaaaaaaaaaabbbbbbbbbbbbbbaaaaaaaaaaa
 aaaaaaaaaaaaaabbbbbbbbaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+== c47  ADHD
+= a 6b2a1c
+= b f7ba70
+= c b0512a
+= d dde3ec
+= e a3abbb
+= f 91cbf5
+= g 687085
+= h 3f7fd8
+= i 8fe0cf
+= j fbf6ea
+= k 36a3a0
+= l 3a3f52
+= m fdeaa0
+= n f2c94c
+= o a8762a
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaabbcddddddaaaaaaaaaaaaa
+aaaaaaaaaaabbbccdeefffeecaaaaaaaaaaa
+aaaaaaaaaabbcccdeffffffeecaaaaaaaaaa
+aaaaaaaacbcccccdffffffffegccaaaaaaaa
+aaaaaaacbcccccdeffffhfffhgcccaaaaaaa
+aaaaaaacccccccdefffhhhffhgcccaaaaaaa
+aaaaaaccccccccdefffhhfffhgccccaaaaaa
+aaaaacccccccccdefffffffhegcccccaaaaa
+aaaaaccccccccccdeffffffhegcccccaaaaa
+aaaaaccccccccccdeehhhhhegccccccaaaaa
+aaaaccccddddccdeeeeeeeegcccccccbaaaa
+aaaaccddeeeeddeeddddeegccccccccbaaaa
+aaaacdeiiiiieeeddddddegccccccccbaaaa
+aaaadeiiiiiiieeddjddeeeccccccccbaaaa
+aaaadeiiiiiiikedddldeeeeddcccccbaaaa
+aaaadiiiikkiikedddddeeeeeedecccbaaaa
+aaaadiiikkkiikeedeeeemmmmmneeccbaaaa
+aaaadiiiikiiikeeeeeemnnnnnnngccbaaaa
+aaaadeiiiiiiikeggeeemnnnnnnoegbaaaaa
+aaaaaeeiiiikkegccceemnnoonnoegcaaaaa
+aaaaaceekkkeegccccdemnnoonnoegcaaaaa
+aaaaaacggggggcccccdemnnnnnnoegaaaaaa
+aaaaaaabcccccccccccdnnnnnnnogaaaaaaa
+aaaaaaacbcccccccccceenoooooegaaaaaaa
+aaaaaaaacbccccccccccegeeeeggaaaaaaaa
+aaaaaaaaaabbccccccccccggggaaaaaaaaaa
+aaaaaaaaaaacbbbccccccccccaaaaaaaaaaa
+aaaaaaaaaaaaaaccccccccaaaaaaaaaaaaaa
 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
