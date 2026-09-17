@@ -5656,12 +5656,38 @@ const CLOCKART := {
 	"crack": Color(0.04, 0.02, 0.05, 0.75),   # 밝은 칸 법랑의 금 — 때가 끼어 어둡다
 	"dust": Color(0.84, 0.80, 0.72, 0.55),    # 어두운 칸 법랑의 금 — 먼지가 끼어 밝다
 }
+#  도넛 판의 물감 — 판 전체가 **위에서 내려다본 글레이즈 링 도넛**이다(아래 「도넛」 절).
+#  아이콘(보드 확장 칩)을 맞출 때 이 표를 본다: 반죽 셋 · 글레이즈 넷 · 아이싱 · 스프링클.
 const DONUTART := {
-	"dough": Color("d99a52"), "dough_dk": Color("8f5a26"), "dough_hi": Color("f2c386"),
-	"hole": 0.12, "hole_col": Color("0c0a10"), "seam": Color(0.0, 0.0, 0.0, 0.30),
-	"num": Color("3c2412"),
-	"sprinkle": [Color("fff6e8"), Color("ffd84a"), Color("6ec6ff"), Color("ff7ab8"),
-			Color("8be07a")],
+	#  반죽 — 판 밖 테(판벌이)와 구멍 입술. 튀긴 링의 둥근 몸통을 바깥으로 갈수록
+	#  어깨 → 바탕 → 비탈 → 허리 흰 띠 → 바닥 순으로 깐다. 그늘은 보라 바닥 쪽으로 기운다.
+	"dough_hi": Color("f3c47a"),     # 빛 받는 어깨(왼쪽 위)
+	"dough": Color("d18c47"),        # 반죽 바탕 — 칩 아이콘의 테 색
+	"dough_md": Color("a8612f"),     # 아래로 굽는 비탈
+	"dough_dk": Color("6c3821"),     # 비탈 끝 · 글레이즈가 드리운 그늘
+	"dough_lo": Color("3a2127"),     # 구멍 속 벽
+	"line": Color("f1d6a0"),         # 허리의 흰 띠 — 기름에 안 닿은 자리(링 도넛의 표식)
+	"hole": 0.14,                    # 구멍 반지름(R 배수) — 옛 불 바깥(0.14) 그 자리. 구멍도 칸이다
+	"lip": 6.0,                      # 구멍 입술(px) — 글레이즈가 못 덮은 반죽
+	"hole_lit": Color("1d1828"),     # 구멍으로 보이는 탁자(오른쪽 아래 — 빛이 든다)
+	"hole_col": Color("08060d"),     # 구멍 왼쪽 위 — 도넛이 드리운 그늘
+	"num": Color("3a1d12"),          # 반죽에 박힌 숫자
+	#  글레이즈 — 칸 색 번호 → [바탕, 그늘, 빛]. 밝음 · 어두움은 칸 색 그대로 간다
+	"glaze": {
+		0: [Color("f2e5c9"), Color("cdb898"), Color("fffaf0")],   # 크림 → 바닐라
+		1: [Color("4b2a21"), Color("2f1915"), Color("86553f")],   # 먹 → 초콜릿
+		2: [Color("d4554a"), Color("9c3634"), Color("f59a88")],   # 주홍 → 딸기
+		3: [Color("5b6db3"), Color("3c4883"), Color("9aaae4")],   # 쪽빛 → 블루베리
+	},
+	#  딸기 프로스팅 띠(트리플 · 더블) — 분홍. 밑 글레이즈 맛이 이만큼 비친다
+	"icing": Color("f288b0"), "icing_dk": Color("a8436f"), "icing_hi": Color("ffe3ee"),
+	"icing_tint": 0.22,
+	"stale": 0.72,                   # 죽은 칸이 배경 쪽으로 가라앉는 몫(_board_cols 와 같은 값)
+	"crack": Color(0.02, 0.01, 0.04, 0.80),
+	"gloss": Color("fffaf2"),
+	#  무지개 지미(막대 스프링클) — 분홍 · 노랑 · 하늘 · 연두 · 흰 · 주황 · 라벤더
+	"sprinkle": [Color("ff6fa8"), Color("ffd447"), Color("5cc8f2"), Color("7ed86a"),
+			Color("fff4e6"), Color("ff9448"), Color("b48cff")],
 }
 #  과녁(모든 칸 10 · 불 배수 5) — 짚 과녁대에 핀으로 꽂은 양궁 과녁지. 짜임은 _tg_ 머리말.
 #  보드 확장 아이콘(카지노 칩)이 나중에 이 색에 맞춘다 — 윗줄 다섯이 과녁지의 얼굴색이다.
@@ -5822,21 +5848,49 @@ func _ck_bake(key: String, rng: RandomNumberGenerator, _sw: float) -> Array:
 
 func _dn_bake(key: String, rng: RandomNumberGenerator, sw: float) -> Array:
 	var out := []
+	var n := _sec_n()
 	match key:
-		"donut_drip":
-			for i in _sec_n():
-				for n in 2 + rng.randi() % 2:
-					#  방울은 칸 경계 쪽으로만 — 칸 한가운데는 숫자(20)가 선 자리라
-					#  거기로 흘러내리면 숫자를 덮는다.
-					var side: float = -1.0 if rng.randf() < 0.5 else 1.0
-					out.append([i, side * rng.randf_range(0.30, 0.46), rng.randf_range(0.5, 3.5),
-							rng.randf_range(3.0, 4.5)])
 		"donut_pore":
-			for k in 90:
-				out.append([rng.randf(), rng.randf() * TAU, rng.randi() % 2])
+			#  튀긴 결 — [테 안의 자리(0 글레이즈 쪽 ~ 1 바깥), 각, 모양]
+			for k in 120:
+				out.append([rng.randf(), rng.randf() * TAU, rng.randi() % 4])
+		"donut_drip":
+			#  [칸, 칸 한가운데에서 벗어난 각(칸 폭 배수), 길이 px, 폭 px]
+			#  긴 방울은 칸 경계 쪽으로만 — 칸 한가운데는 숫자(20)가 선 자리라 덮는다.
+			#  짧은 물결(길이 2px 밑)은 어디든 — 숫자 잉크(글레이즈 끝 +5px 부터)에 못 닿는다.
+			for i in n:
+				if rng.randf() < 0.75:
+					var side: float = -1.0 if rng.randf() < 0.5 else 1.0
+					out.append([i, side * rng.randf_range(0.41, 0.47), rng.randf_range(4.5, 8.0),
+							rng.randf_range(5.0, 7.0)])
+				for k in 3:
+					out.append([i, rng.randf_range(-0.46, 0.46), rng.randf_range(0.8, 1.8),
+							rng.randf_range(4.0, 7.0)])
 		"donut_sprinkle":
-			for k in 380:
-				out.append([sqrt(rng.randf()), rng.randf() * TAU, rng.randi() % 4, rng.randi() % 5])
+			#  [반지름(판 바깥선 배수 · 넓이 고르게), 각, 모양, 색]
+			for k in 230:
+				out.append([sqrt(rng.randf()), rng.randf() * TAU, rng.randi() % 8, rng.randi() % 7])
+		"donut_crack":
+			#  죽은 칸의 마른 금 — [칸, [[반지름 배수, 칸 가운데 줄에서 옆으로 px], ...]]
+			for i in n:
+				for c in 3:
+					var r0 := rng.randf_range(0.22, 0.86)
+					var t0 := rng.randf_range(-0.30, 0.30) * sw * r0 * float(R)
+					var pts := [[r0, t0]]
+					var rr := r0
+					var tt := t0
+					for s in 3 + rng.randi() % 3:
+						rr += rng.randf_range(-0.05, 0.05)
+						tt += rng.randf_range(-4.0, 4.0)
+						pts.append([clampf(rr, 0.20, 0.97), tt])
+					out.append([i, pts])
+		"donut_flake":
+			#  글레이즈가 떨어져 반죽이 드러난 자리 — [칸, 반지름 배수, 옆 px, 폭, 높이]
+			for i in n:
+				for c in 3:
+					var r1 := rng.randf_range(0.25, 0.85)
+					out.append([i, r1, rng.randf_range(-0.28, 0.28) * sw * r1 * float(R),
+							2 + rng.randi() % 3, 1 + rng.randi() % 2])
 	return out
 
 
@@ -6042,18 +6096,31 @@ func _ck_top(push: float) -> void:
 
 
 # ── 도넛 한 벌 ──
+#  반죽 테는 토너먼트 판의 숫자 고리와 같은 폭이다 — 숫자(칸마다 값이 달라 남는다)가
+#  반죽에 박히고, 더 넓히면 슬롯 밑 동전 이름에 테 윗끝이 닿는다.
 func _dn_ring_w() -> float:
 	return float(BOARDART.ring)
 
 
+#  밑에서 위로 — 반죽 · 글레이즈 · 흘러내린 방울(뿌리는 띠 턱 밑에 묻힌다) · 프로스팅 띠 ·
+#  지미 · 마른 칸 · 몸통 명암.
 func _dn_board(ro: float, push: float, cols: Array) -> void:
-	_dn_rim(ro, push)
-	_board_cells(cols, push)
-	_dn_face(cols, push)
+	var dead := _dn_deads(cols)
+	_dn_dough(ro, push)
+	_dn_glaze(push, cols, dead)
+	_dn_drips(push, cols, dead)
+	_dn_frost(push, cols, dead)
+	_dn_sprinkles(push, dead)
+	_dn_stale(push, dead)
+	_dn_torus(ro, push)
 
 
+#  빛 위 — 구멍(구멍은 안 밝아진다)과 젖은 반짝임(빛이 뭉개면 안 된다)
 func _dn_over(push: float) -> void:
+	var cols := _board_cols()
+	var dead := _dn_deads(cols)
 	_dn_hole(push)
+	_dn_gloss(push, dead)
 
 
 #  도넛은 칸마다 값이 달라 숫자가 정보다 — 남긴다.
@@ -7092,86 +7159,454 @@ func _ck_hand(a: float, tail: float, ln: float, w: float, moon: float, mr: float
 
 
 # ── 도넛 ─────────────────────────────────────────────
-func _dn_rim(ro: float, push: float) -> void:
+#  「피자는 진짜 피자같이 보이도록 해줘. 다트 보드의 테두리만 피자로 만들지 말고」
+#  「마찬가지고 시계랑 과녁 도넛도」(사용자, 2026-09-17). 옛 도넛은 크림 · 먹 칸에 빨강 ·
+#  초록 띠를 그대로 두고 테만 반죽으로 칠한 다트판이었다. 이제 판 전체가 위에서
+#  내려다본 **글레이즈 링 도넛** 한 개다.
+#
+#  레퍼런스(구도 · 색만 봤다. 사진을 옮기지 않는다):
+#    · 링 도넛 레시피 사진(Sally's Baking 도넛 프로스팅 · Natasha's Kitchen 글레이즈드) —
+#      글레이즈가 윗면을 덮고 끝이 물결치며 옆으로 흘러내린다. 구멍 둘레는 반죽이 드러난다
+#    · The Fresh Loaf 「흰 띠」 — 잘 부푼 도넛은 기름에 떠서 허리에 연한 띠가 남는다
+#    · Blender 도넛 튜토리얼(prolificstudio) — 글레이즈 두께 · 흘러내린 끝 · 제각각 누운
+#      스프링클 · 반짝임은 글레이즈 어깨에
+#    · 도넛 사진 가이드(foodshot) — 젖은 글레이즈의 거울 반짝임이 「갓 만든」 표시, 마르면 무광
+#    · Mega Voxels 도트 도넛 — 반죽 · 프로스팅 두 덩어리, 그늘은 아래 · 빛은 위, 원색 지미
+#    · Derek Yu 도트 기초 — 빛은 한 방향, 검은 외곽선 대신 제 색의 어두운 단
+#    · 스프링클 종류(Webstaurant · Bakell) — 막대(지미) · 동그란 넌파레일 · 납작 콘페티.
+#      지미는 도넛 지름의 1/15 쯤이라 1px 점이 아니라 2px 굵기 막대다
+#    · 심슨 도넛 — 분홍 프로스팅 + 무지개 지미가 한눈에 「도넛」 이다
+#    · 지브라 도넛(H-E-B · Kyra's) — 두 글레이즈가 만나는 경계는 곧은 줄이 아니라 물결이다
+#    · 글레이즈 갈라짐(Voyo Eats · Bake Magazine) — 두껍게 마르면 금이 가고 광이 죽는다
+#    · 색 표(schemecolor Glazed Donut · Chocolate Donut, color-hex 초코 프로스팅)
+#
+#  판의 자리 → 도넛의 자리:
+#    판 밖 테(판벌이)   튀긴 반죽의 바깥 비탈 — 숫자가 박힌다. 맨 끝에 허리 흰 띠 한 줄
+#    칸(싱글)           글레이즈. **칸 색 번호가 맛이다** — 크림 바닐라 · 먹 초콜릿 ·
+#                      주홍 딸기 · 쪽빛 블루베리. 양 · 음 · 그늘 · 칠이 읽는 밝음 · 어두움 ·
+#                      두 칠 색이 그대로 선다. 이웃 맛과 만나는 경계는 부은 글레이즈처럼
+#                      1px 안쪽으로만 물결친다(칸 판정선에서 안 벗어난다)
+#    트리플 · 더블 띠    딸기 프로스팅 띠 — 글레이즈 위에 한 겹 더 얹힌 납작하고 윤나는 층.
+#                      두께가 테두리에 명암으로 서고, 밑 글레이즈 맛이 조금 비쳐 칸마다
+#                      결이 갈린다. 빨강 · 초록 띠가 하던 「여기가 배수 띠」 를 색 하나로 한다
+#    더블 바깥선        프로스팅이 반죽 비탈로 흘러내린 방울 — 긴 것은 칸 경계 쪽에만(숫자 자리)
+#    옛 불 자리          구멍. **불이 없는 판이라 구멍도 칸이다**(hit_info). 옛 불 바깥
+#                      (0.14R) 그 자리만큼만 작게 파고 둘레는 반죽 입술. 실물 링 도넛의
+#                      구멍(지름의 1/3)을 따르면 안쪽 싱글이 통째로 빈다
+#    반죽 윤곽          울퉁불퉁 0~1.2px — 판 밖(빗나감)이라 판정과 무관하다
+#    결                 무지개 지미 — 띠 턱 · 구멍 입술 · 죽은 칸에는 안 뿌리고 띠 안에는
+#                      셋에 하나만(띠가 제 분홍으로 읽혀야 한다)
+#    빛                 토러스 — 바깥 비탈은 공용 빛(_board_light), 구멍 쪽 안 비탈은
+#                      여기서 반대로(왼쪽 위가 그늘). 젖은 반짝임은 왼쪽 위 어깨 한 줄 ·
+#                      구멍 오른쪽 아래 한 줄 · 프로스팅 띠마다 한 줄
+#    죽은 칸            마른 글레이즈 — 배경 쪽으로 가라앉고 금이 가고 조각이 떨어져 반죽이
+#                      드러난다. 스프링클 · 반짝임 · 방울이 없다
+#  조준 어둠 · 밝힘(_board_dim_except · _cell_glow)은 판 위에 칸째 깔린다 — 프로스팅의
+#  분홍이 금빛에 물들어 살구색으로 서므로 밝힌 띠가 따로 읽힌다.
+
+#  죽은 칸 — 공용 규칙(_board_cols)이 가라앉힌 칸을 그대로 읽는다. 규칙을 여기 다시
+#  적지 않는다: 원래 칸 색과 달라졌으면 죽은 칸이다.
+func _dn_deads(cols: Array) -> Array:
+	var out := []
+	for i in _sec_n():
+		var raw := Color(GameData.color_hex(_sec_col(i)))
+		var c: Color = cols[i][0] if i < cols.size() else raw
+		out.append(absf(c.r - raw.r) + absf(c.g - raw.g) + absf(c.b - raw.b) > 0.02)
+	return out
+
+
+#  칸 i 의 글레이즈 [바탕, 그늘, 빛]. 표에 없는 색 번호는 칸 색에서 만든다.
+func _dn_taste(i: int, cols: Array) -> Array:
+	var gl: Dictionary = DONUTART.glaze
+	var id := _sec_col(i)
+	if gl.has(id):
+		return gl[id]
+	var c: Color = cols[i][0]
+	return [c, c.darkened(0.30), c.lightened(0.30)]
+
+
+#  죽은 칸은 배경 쪽으로 — 원래 맛이 무엇이든 같은 곳으로 간다(공용 규칙과 같은 몫).
+func _dn_flavor(i: int, cols: Array, dead: Array) -> Array:
+	var f := _dn_taste(i, cols)
+	if not dead[i]:
+		return f
+	var k: float = float(DONUTART.stale)
+	return [Color(f[0]).lerp(C_BG, k), Color(f[1]).lerp(C_BG, k), Color(f[0]).lerp(C_BG, k * 0.9)]
+
+
+#  칸 i 의 프로스팅 — 분홍에 밑 글레이즈가 비친다.
+func _dn_icing(i: int, cols: Array, dead: Array) -> Color:
 	var dn: Dictionary = DONUTART
-	var ri := R * rt_dbl_out * push
-	draw_circle(BC, ro, dn.dough_dk)
-	draw_circle(BC, ro - 2.0, dn.dough)
-	draw_arc(BC, ro - 4.0, PI * 0.95, PI * 1.55, 48, dn.dough_hi, 3.0)
-	draw_arc(BC, ro - 3.0, PI * -0.05, PI * 0.55, 48, Color(dn.dough_dk, 0.45), 2.0)
-	#  튀긴 결
-	for e in _theme_bits("donut_pore"):
-		var r := lerpf(ri + 3.0, ro - 4.0, float(e[0]))
-		var q := (BC + _theme_dir(e[1]) * r).floor()
-		draw_rect(Rect2(q, Vector2.ONE), dn.dough_dk if int(e[2]) == 0 else dn.dough_hi)
+	var c := Color(dn.icing).lerp(Color(_dn_taste(i, cols)[0]), float(dn.icing_tint))
+	return c.lerp(C_BG, float(dn.stale)) if dead[i] else c
 
 
-func _dn_face(cols: Array, push: float) -> void:
+#  빛을 받는 둥근 띠 한 바퀴. 방위가 빛(왼쪽 위)을 볼수록 c_lit, 등질수록 c_dark.
+#  pw 가 크면 밝은 쪽이 좁게 모인다. flip 은 안쪽을 보는 면(구멍 벽 · 띠 안쪽 턱) —
+#  빛을 받는 쪽이 반대다.
+#  lump 이 1 이면 두 반지름이 반죽 윤곽의 울퉁불퉁(_dn_lump)을 따라 안으로 들어간다.
+func _dn_ring(r0: float, r1: float, c_lit: Color, c_dark: Color, pw := 1.0, n := 48,
+		flip := false, lump := 0.0) -> void:
+	if r1 <= r0:
+		return
+	var lt := Vector2(-0.6, -0.8)
+	var s: float = -1.0 if flip else 1.0
+	var d0 := _theme_dir(0.0)
+	var k0 := pow(clampf((d0.dot(lt) * s + 1.0) * 0.5, 0.0, 1.0), pw)
+	var l0 := _dn_lump(0.0) * lump
+	for k in n:
+		var a1 := TAU * float(k + 1) / float(n)
+		var d1 := _theme_dir(a1)
+		var k1 := pow(clampf((d1.dot(lt) * s + 1.0) * 0.5, 0.0, 1.0), pw)
+		var l1 := _dn_lump(a1) * lump
+		var e0 := c_dark.lerp(c_lit, k0)
+		var e1 := c_dark.lerp(c_lit, k1)
+		draw_primitive(PackedVector2Array([BC + d0 * (r1 + l0), BC + d1 * (r1 + l1),
+				BC + d1 * (r0 + l1), BC + d0 * (r0 + l0)]),
+				PackedColorArray([e0, e1, e1, e0]), PackedVector2Array())
+		d0 = d1
+		k0 = k1
+		l0 = l1
+
+
+#  반죽 윤곽 — 손으로 빚어 튀긴 링은 동그라미가 아니다. 판 밖 테는 판벌이(빗나감)라
+#  울퉁불퉁해도 판정이 안 바뀐다. 안으로만 0~1.2px(밖으로 나가면 판 두께 원판이 비친다).
+func _dn_lump(a: float) -> float:
+	return -0.6 - 0.35 * sin(a * 3.0 + 1.3) - 0.25 * sin(a * 7.0 + 0.4)
+
+
+#  반죽 — 판 밖 테. 글레이즈 끝(판 바깥선)에서 바깥으로 어깨 · 바탕 · 비탈 · 흰 띠 · 바닥.
+func _dn_dough(ro: float, push: float) -> void:
 	var dn: Dictionary = DONUTART
 	var rim := R * rt_dbl_out * push
-	var hole := R * float(dn.hole) * push
-	var sw := _sec_w()
-	#  글레이즈가 반죽 위로 흘러내린다 — 칸마다 제 더블 띠 색. 가장자리는 물결로
-	#  부풀고(작은 원을 둘레에 잇는다), 몇 군데는 방울로 늘어진다.
-	for i in _sec_n():
-		var c0: Color = cols[i][1]
-		#  물결은 칸 경계 쪽 둘만 — 가운데 둘은 숫자 밑으로 부풀었다
-		for k in [0, 3]:
-			var a := float(i) * sw - sw * 0.5 + (float(k) + 0.5) * sw / 4.0
-			draw_circle(BC + _theme_dir(a) * rim, 2.6, c0)
-	for e in _theme_bits("donut_drip"):
-		var i: int = int(e[0])
-		var c: Color = cols[i][1]
-		var d := _theme_dir(float(i) * sw + float(e[1]) * sw)
-		var w: float = float(e[3])
-		var ln: float = float(e[2])
-		var p1 := BC + d * (rim + ln)
-		draw_line(BC + d * rim, p1, c, w * 0.8)
-		draw_circle(p1, w * 0.5, c)
-		draw_circle(p1 + d * 1.0, w * 0.35, c)
-		draw_rect(Rect2((p1 - d * 1.0 + Vector2(-1.0, -1.0)).floor(), Vector2.ONE),
-				Color(1.0, 1.0, 1.0, 0.45))
-	#  이음 — 칸 경계는 옅게만
-	for i in _sec_n():
-		var d2 := _theme_dir(float(i) * sw - sw * 0.5)
-		draw_line(BC + d2 * hole, BC + d2 * rim, dn.seam, 1.0)
-	for rr in [rt_trp2_in, rt_trp2_out, rt_trp_in, rt_trp_out, rt_dbl_in]:
-		if float(rr) * R > 0.5:
-			draw_arc(BC, R * float(rr) * push, 0.0, TAU, 120, dn.seam, 1.0)
-	#  스프링클
-	var spr: Array = dn.sprinkle
-	for e in _theme_bits("donut_sprinkle"):
-		var r: float = float(e[0]) * rim
-		if r < hole + 4.0 or r > rim - 3.0:
-			continue
-		var q := (BC + _theme_dir(e[1]) * r).floor()
-		var c2: Color = spr[int(e[3])]
+	var dough := Color(dn.dough)
+	var md := Color(dn.dough_md)
+	var dk := Color(dn.dough_dk)
+	var hi := Color(dn.dough_hi)
+	#  바닥 한 줄 — 검은 외곽선 대신 제 색의 가장 어두운 단
+	_dn_ring(ro - 12.0, ro, dk, dk, 1.0, 72, false, 1.0)
+	_dn_ring(ro - 3.0, ro - 1.0, Color(dn.line), md.lerp(Color(dn.line), 0.35), 1.4, 72, false, 1.0)
+	_dn_ring(ro - 7.0, ro - 3.0, dough.darkened(0.04), md.darkened(0.18), 1.0, 72, false, 1.0)
+	draw_circle(BC, ro - 11.0, dk)
+	_dn_ring(rim + 7.0, ro - 7.0, dough.lerp(hi, 0.18), md)
+	_dn_ring(rim - 2.0, rim + 7.0, dough.lerp(hi, 0.55), dough.darkened(0.06))
+	#  빛 받는 어깨 — 왼쪽 위로만 모인다
+	_dn_ring(rim + 2.0, rim + 6.0, Color(hi, 0.95), Color(hi, 0.0), 3.0)
+	#  튀긴 결 — 기공 · 부푼 점
+	for e in _theme_bits("donut_pore"):
+		var r := lerpf(rim + 3.0, ro - 3.0, float(e[0]))
+		var q := (BC + _theme_dir(float(e[1])) * r).floor()
 		match int(e[2]):
 			0:
-				draw_rect(Rect2(q, Vector2(3.0, 1.0)), c2)
+				draw_rect(Rect2(q, Vector2.ONE), Color(dk, 0.55))
 			1:
-				draw_rect(Rect2(q, Vector2(1.0, 3.0)), c2)
+				draw_rect(Rect2(q, Vector2(2.0, 1.0)), Color(md, 0.60))
 			2:
-				draw_rect(Rect2(q, Vector2.ONE), c2)
-				draw_rect(Rect2(q + Vector2(1.0, 1.0), Vector2.ONE), c2)
-				draw_rect(Rect2(q + Vector2(2.0, 2.0), Vector2.ONE), c2)
+				draw_rect(Rect2(q, Vector2.ONE), Color(hi, 0.70))
 			_:
-				draw_rect(Rect2(q + Vector2(2.0, 0.0), Vector2.ONE), c2)
-				draw_rect(Rect2(q + Vector2(1.0, 1.0), Vector2.ONE), c2)
-				draw_rect(Rect2(q + Vector2(0.0, 2.0), Vector2.ONE), c2)
+				draw_rect(Rect2(q, Vector2.ONE), Color(md, 0.45))
 
 
-#  가운데 구멍 — 빛 위에 판다(구멍은 안 밝아진다). 안쪽 테는 빛이 반대편에 닿는다.
+#  글레이즈 — 칸마다 제 맛 한 조각. 조각의 옆 변은 부은 글레이즈가 만난 물결이다 —
+#  이웃 조각도 같은 경계 함수(_dn_wave)를 쓰므로 틈도 겹침도 없다.
+func _dn_glaze(push: float, cols: Array, dead: Array) -> void:
+	var dn: Dictionary = DONUTART
+	var sw := _sec_w()
+	var rim := R * rt_dbl_out * push
+	var r0 := R * float(dn.hole) * push * 0.5
+	var m := 14
+	for i in _sec_n():
+		var a0 := float(i) * sw - sw * 0.5
+		var a1 := a0 + sw
+		var pts := PackedVector2Array()
+		for k in m + 1:
+			var r := lerpf(r0, rim, float(k) / float(m))
+			pts.append(BC + _theme_dir(a0) * r + _dn_wave(i, r))
+		for k in 8:
+			pts.append(BC + _theme_dir(lerpf(a0, a1, float(k + 1) / 8.0)) * rim)
+		for k in range(m - 1, -1, -1):
+			var r := lerpf(r0, rim, float(k) / float(m))
+			pts.append(BC + _theme_dir(a1) * r + _dn_wave((i + 1) % _sec_n(), r))
+		draw_colored_polygon(pts, _dn_flavor(i, cols, dead)[0])
+	#  글레이즈 두께가 반죽에 드리운 그늘 — 오른쪽 아래가 짙다
+	_dn_ring(rim - 0.5, rim + 2.0, Color(dn.dough_dk, 0.20), Color(dn.dough_dk, 0.80))
+
+
+#  칸 경계 s 의 물결 — 경계선에서 옆으로 1px 안쪽. 구멍 입술 곁과 판 끝에서는 잦아든다.
+func _dn_wave(s: int, r: float) -> Vector2:
+	var sw := _sec_w()
+	var a := float(s) * sw - sw * 0.5
+	var amp := 1.1 * clampf((r - R * 0.22) / 10.0, 0.0, 1.0)
+	return Vector2(cos(a), sin(a)) * amp * sin(r * 0.21 + float(s) * 2.3)
+
+
+#  폭이 있는 띠(천체 고리 안쪽 트리플 · 트리플 · 더블)만.
+func _dn_bands() -> Array:
+	var out := []
+	for b in [[rt_trp2_in, rt_trp2_out], [rt_trp_in, rt_trp_out], [rt_dbl_in, rt_dbl_out]]:
+		if float(b[1]) - float(b[0]) > 0.004 and float(b[1]) > 0.0:
+			out.append(b)
+	return out
+
+
+#  딸기 프로스팅 띠 — 트리플 · 더블. 한 겹 더 얹힌 층이라 오른쪽 아래로 그늘을 떨구고,
+#  바깥 턱은 왼쪽 위가 밝고 안쪽 턱은 오른쪽 아래가 밝다.
+func _dn_frost(push: float, cols: Array, dead: Array) -> void:
+	var dn: Dictionary = DONUTART
+	var sw := _sec_w()
+	var lt := Vector2(-0.6, -0.8)
+	for b in _dn_bands():
+		var ri := R * float(b[0]) * push
+		var rr := R * float(b[1]) * push
+		var hw := (rr - ri) * 0.5
+		var rm := ri + hw
+		var seg := int(clampf(rm * 0.8, 40.0, 120.0))
+		if hw >= 1.5:
+			draw_arc(BC - lt * 1.5, rm, 0.0, TAU, seg, Color(0.0, 0.0, 0.0, 0.24), hw * 2.0)
+		for i in _sec_n():
+			var a0 := float(i) * sw - sw * 0.5
+			_band_draw(ri, rr, a0, a0 + sw, _dn_icing(i, cols, dead))
+		if hw >= 1.5:
+			_dn_ring(rr - 1.5, rr, Color(dn.icing_hi, 0.70), Color(dn.icing_dk, 0.60), 1.0, 48)
+			_dn_ring(ri, ri + 1.5, Color(dn.icing_hi, 0.55), Color(dn.icing_dk, 0.60), 1.0, 48, true)
+		#  죽은 칸 — 말라서 턱의 윤이 없다
+		for i in _sec_n():
+			if dead[i]:
+				var a1 := float(i) * sw - sw * 0.5
+				_band_draw(ri, rr, a1, a1 + sw, _dn_icing(i, cols, dead))
+
+
+#  흘러내린 프로스팅 — 더블 띠 바깥 턱에서 반죽 비탈로. 띠보다 먼저 그려 뿌리가 턱 밑에
+#  묻힌다(턱 위에 얹으면 띠 안쪽까지 얼룩이 번졌다). 방울 끝은 반죽에 그늘을 떨군다.
+#  더블 띠가 없는 판이면 글레이즈가 흘러내린다.
+func _dn_drips(push: float, cols: Array, dead: Array) -> void:
+	var dn: Dictionary = DONUTART
+	var sw := _sec_w()
+	var rim := R * rt_dbl_out * push
+	var no_band := rt_dbl_out - rt_dbl_in < 0.004
+	for e in _theme_bits("donut_drip"):
+		var i: int = int(e[0])
+		if i >= _sec_n() or dead[i]:
+			continue
+		var d := _theme_dir(float(i) * sw + float(e[1]) * sw)
+		var ln: float = float(e[2])
+		var rad: float = float(e[3]) * 0.5 + (0.6 if ln > 3.0 else 0.0)
+		var c: Color = Color(_dn_flavor(i, cols, dead)[0]) if no_band else _dn_icing(i, cols, dead)
+		#  비탈로 넘어간 자리라 한 단 어둡다 — 따로 윤곽 · 반짝임을 달면 띠에 박힌 구슬로 읽힌다
+		c = c.darkened(0.08)
+		var tip := BC + d * (rim + ln - rad)
+		if ln > 3.0:
+			draw_circle(tip + Vector2(0.6, 1.4), rad, Color(dn.dough_dk, 0.45))
+		if ln > rad:
+			draw_line(BC + d * (rim - 1.8), tip, c, rad * 2.0)
+		draw_circle(tip, rad, c)
+
+
+#  무지개 지미 — 싱글 글레이즈에 뿌리고 띠 안에는 셋에 하나. 알마다 오른쪽 아래로 한 칸
+#  그늘, 위 끝에 빛 한 칸.
+func _dn_sprinkles(push: float, dead: Array) -> void:
+	var dn: Dictionary = DONUTART
+	var spr: Array = dn.sprinkle
+	var face := R * rt_dbl_out * push
+	var inner := R * float(dn.hole) * push + float(dn.lip) * push + 3.0
+	var keep := []
+	for b in _dn_bands():
+		keep.append([R * float(b[0]) * push, R * float(b[1]) * push])
+	var sh := Color(0.0, 0.0, 0.0, 0.34)
+	var nth := 0
+	for e in _theme_bits("donut_sprinkle"):
+		var r: float = float(e[0]) * face
+		if r < inner or r > face - 5.0:
+			continue
+		#  띠 턱에 걸친 알은 안 뿌린다(턱이 판정선이다). 띠 안에 온전히 든 알은 셋에 하나만 —
+		#  프로스팅도 도넛 윗면이라 지미가 앉지만, 띠가 제 색으로 읽혀야 한다.
+		var skip := false
+		for k in keep:
+			if r > float(k[0]) - 6.0 and r < float(k[1]) + 1.0:
+				nth += 1
+				skip = r < float(k[0]) + 1.0 or r > float(k[1]) - 6.0 or nth % 3 != 0
+				break
+		if skip:
+			continue
+		if dead[_theme_sec(float(e[1]))]:
+			continue
+		var q := (BC + _theme_dir(float(e[1])) * r).floor()
+		var c: Color = spr[int(e[3])]
+		var sq: Array = DN_JIMMY[int(e[2])]
+		for p in sq:
+			draw_rect(Rect2(q + Vector2(p) + Vector2(1.0, 1.0), Vector2(2.0, 2.0)), sh)
+		for p in sq:
+			draw_rect(Rect2(q + Vector2(p), Vector2(2.0, 2.0)), c)
+		draw_rect(Rect2(q + Vector2(sq[0]), Vector2.ONE), c.lightened(0.45))
+
+
+#  지미 한 알 — 2px 네모를 이어 붙인 막대. 가로 · 세로 · 두 빗각 · 완만한 둘 · 가파른 둘.
+#  첫 네모가 위쪽 끝이다 — 그 왼쪽 위 한 칸이 빛.
+const DN_JIMMY := [
+	[Vector2i(0, 0), Vector2i(2, 0), Vector2i(3, 0)],
+	[Vector2i(0, 0), Vector2i(0, 2), Vector2i(0, 3)],
+	[Vector2i(0, 0), Vector2i(1, 1), Vector2i(2, 2), Vector2i(3, 3)],
+	[Vector2i(3, 0), Vector2i(2, 1), Vector2i(1, 2), Vector2i(0, 3)],
+	[Vector2i(0, 0), Vector2i(2, 1), Vector2i(4, 2)],
+	[Vector2i(4, 0), Vector2i(2, 1), Vector2i(0, 2)],
+	[Vector2i(0, 0), Vector2i(1, 2), Vector2i(2, 4)],
+	[Vector2i(2, 0), Vector2i(1, 2), Vector2i(0, 4)],
+]
+
+
+#  죽은 칸 — 마른 글레이즈. 떨어져 나간 조각(반죽이 드러난다)과 금.
+func _dn_stale(push: float, dead: Array) -> void:
+	if not dead.has(true):
+		return
+	var dn: Dictionary = DONUTART
+	var sw := _sec_w()
+	var face := R * rt_dbl_out * push
+	var bare := Color(dn.dough).lerp(C_BG, 0.58)
+	for e in _theme_bits("donut_flake"):
+		var i: int = int(e[0])
+		if i >= _sec_n() or not dead[i]:
+			continue
+		var d := _theme_dir(float(i) * sw)
+		var q := (BC + d * float(e[1]) * face + Vector2(-d.y, d.x) * float(e[2])).floor()
+		var sz := Vector2(float(e[3]), float(e[4]))
+		draw_rect(Rect2(q, sz), bare)
+		draw_rect(Rect2(q + Vector2(0.0, sz.y), Vector2(sz.x, 1.0)), Color(0.0, 0.0, 0.0, 0.35))
+	for e in _theme_bits("donut_crack"):
+		var i: int = int(e[0])
+		if i >= _sec_n() or not dead[i]:
+			continue
+		var d := _theme_dir(float(i) * sw)
+		var tn := Vector2(-d.y, d.x)
+		var pts := PackedVector2Array()
+		for p in e[1]:
+			var rf: float = float(p[0])
+			var t: float = clampf(float(p[1]), -0.40 * sw * rf * face, 0.40 * sw * rf * face)
+			pts.append((BC + d * rf * face + tn * t).floor() + Vector2(0.5, 0.5))
+		var lo := PackedVector2Array()
+		for p in pts:
+			lo.append(p + Vector2(0.0, 1.0))
+		draw_polyline(lo, Color(1.0, 1.0, 1.0, 0.10), 1.0)
+		draw_polyline(pts, dn.crack, 1.0)
+
+
+#  토러스 명암 — 도넛 몸통은 가운데(구멍과 바깥 끝의 한가운데)가 꼭대기다. 반지름마다
+#  면이 얼마나 기울었는지(nr)와 빛(왼쪽 위) 쪽을 보는지로 짙기를 매긴다.
+#    · 안 비탈(nr<0) — 왼쪽 위가 그늘, 오른쪽 아래가 빛. 구멍 둘레는 사방이 조금 어둡다
+#    · 바깥 비탈(nr>0) — 방향 빛은 공용 빛(_board_light)이 이미 준다. 여기서는 옅게만
+#  부채꼴 마흔 조각 × 반지름 여덟 단을 꼭짓점 색으로 번지게 한다.
+func _dn_torus(ro: float, push: float) -> void:
+	var dn: Dictionary = DONUTART
+	var rim := R * rt_dbl_out * push
+	var h := R * float(dn.hole) * push
+	var r0 := h + float(dn.lip) * push
+	var rc := (h + ro) * 0.5
+	var ra := (ro - h) * 0.5
+	var lt := Vector2(-0.6, -0.8)
+	var n := 40
+	var rs := []
+	for j in 9:
+		rs.append(lerpf(r0, rim, pow(float(j) / 8.0, 1.3)))
+	var dirs := []
+	var dots := []
+	for k in n + 1:
+		var d := _theme_dir(TAU * float(k) / float(n))
+		dirs.append(d)
+		dots.append(d.dot(lt))
+	var prev := []
+	for k in n + 1:
+		prev.append(_dn_shade(float(rs[0]), rc, ra, float(dots[k])))
+	for j in range(1, rs.size()):
+		var cur := []
+		for k in n + 1:
+			cur.append(_dn_shade(float(rs[j]), rc, ra, float(dots[k])))
+		for k in n:
+			var d0: Vector2 = dirs[k]
+			var d1: Vector2 = dirs[k + 1]
+			draw_primitive(PackedVector2Array([BC + d0 * float(rs[j]), BC + d1 * float(rs[j]),
+					BC + d1 * float(rs[j - 1]), BC + d0 * float(rs[j - 1])]),
+					PackedColorArray([cur[k], cur[k + 1], prev[k + 1], prev[k]]), PackedVector2Array())
+		prev = cur
+
+
+func _dn_shade(r: float, rc: float, ra: float, t: float) -> Color:
+	var nr := clampf((r - rc) / ra, -0.96, 0.96)
+	var nz := sqrt(1.0 - nr * nr)
+	var v := (nz - 1.0) * 0.45 + nr * t * (0.85 if nr < 0.0 else 0.25)
+	if v >= 0.0:
+		return Color(1.0, 1.0, 1.0, minf(v * 0.45, 0.30))
+	return Color(0.0, 0.0, 0.0, minf(-v * 0.55, 0.55))
+
+
+#  구멍 — 빛 위에 판다. 탁자가 보이고(왼쪽 위는 도넛 몸의 그늘), 둘레는 반죽 입술.
+#  입술은 안쪽 벽이라 빛을 받는 쪽이 오른쪽 아래다. 글레이즈 끝이 입술 위로 조금씩 흘러든다.
 func _dn_hole(push: float) -> void:
 	var dn: Dictionary = DONUTART
-	var hole := R * float(dn.hole) * push
-	draw_circle(BC, hole + 3.0, dn.dough_dk)
-	draw_circle(BC, hole + 2.0, dn.dough)
-	draw_arc(BC, hole + 1.5, PI * -0.05, PI * 0.55, 24, dn.dough_hi, 1.0)
-	draw_circle(BC, hole, dn.hole_col)
-	draw_arc(BC, hole - 1.0, PI * 1.0, PI * 1.5, 16, Color(0.0, 0.0, 0.0, 0.5), 2.0)
-	var rim := R * rt_dbl_out * push
-	draw_arc(BC, rim * 0.80, PI * 1.08, PI * 1.40, 32, Color(1.0, 1.0, 1.0, 0.12), 6.0)
+	var sw := _sec_w()
+	var h := R * float(dn.hole) * push
+	var lip := float(dn.lip) * push
+	draw_circle(BC, h + 1.0, Color(dn.hole_lit))
+	draw_circle(BC + Vector2(-1.5, -2.0), h, Color(dn.hole_col))
+	#  입술 — 바깥 가장자리가 글레이즈 끝이라 물결친다(칸마다 한 번 부풀었다 들어간다)
+	var lt := Vector2(-0.6, -0.8)
+	var n := 120
+	var hi := Color(dn.dough_hi)
+	var dk := Color(dn.dough_dk)
+	var d0 := _theme_dir(0.0)
+	var w0 := h + lip + _dn_lipwave(0.0, sw)
+	for k in n:
+		var a1 := TAU * float(k + 1) / float(n)
+		var d1 := _theme_dir(a1)
+		var w1 := h + lip + _dn_lipwave(a1, sw)
+		var e0 := dk.lerp(hi, clampf((1.0 - d0.dot(lt)) * 0.5, 0.0, 1.0))
+		var e1 := dk.lerp(hi, clampf((1.0 - d1.dot(lt)) * 0.5, 0.0, 1.0))
+		draw_primitive(PackedVector2Array([BC + d0 * w0, BC + d1 * w1, BC + d1 * h, BC + d0 * h]),
+				PackedColorArray([e0, e1, e1, e0]), PackedVector2Array())
+		d0 = d1
+		w0 = w1
+	_dn_ring(h, h + 1.0, Color(dn.dough), Color(dn.dough_lo), 1.0, 40, true)
+
+
+#  구멍 입술 바깥 가장자리의 물결 — 칸 폭마다 한 번, ±1px 안팎.
+func _dn_lipwave(a: float, sw: float) -> float:
+	return 1.0 * sin(a / sw * TAU + 0.7) * (0.6 + 0.4 * sin(a * 3.0))
+
+
+#  젖은 반짝임 — 토러스의 빛 받는 어깨(왼쪽 위 바깥 싱글)에 휜 줄 하나, 구멍 오른쪽 아래
+#  안 비탈에 짧은 줄 하나, 프로스팅 띠마다 한 줄. 거울 반사는 면이 빛과 눈의 한가운데를
+#  볼 때 선다 — 바깥 비탈은 왼쪽 위, 안 비탈은 오른쪽 아래다. 죽은(마른) 칸에는 광이 없다.
+func _dn_gloss(push: float, dead: Array) -> void:
+	var dn: Dictionary = DONUTART
+	var g := Color(dn.gloss)
+	var ro := R * lerpf(rt_trp_out, rt_dbl_in, 0.50) * push
+	_dn_arc_live(ro, -1.42, -0.18, Color(g, 0.16), 8.0, dead)
+	_dn_arc_live(ro - 1.0, -1.16, -0.50, Color(g, 0.55), 2.0, dead)
+	_dn_arc_live(ro + 2.0, -0.40, -0.30, Color(g, 0.75), 1.0, dead)
+	var ri := R * float(dn.hole) * push + float(dn.lip) * push + 6.0
+	_dn_arc_live(ri, 2.00, 2.80, Color(g, 0.14), 4.0, dead)
+	_dn_arc_live(ri, 2.15, 2.60, Color(g, 0.45), 1.5, dead)
+	for b in _dn_bands():
+		var r0 := R * float(b[0]) * push
+		var r1 := R * float(b[1]) * push
+		if r1 - r0 < 3.0:
+			continue
+		var rm := lerpf(r0, r1, 0.62)
+		_dn_arc_live(rm, -1.30, -0.35, Color(g, 0.50), 1.5, dead)
+		_dn_arc_live(rm, -0.20, -0.08, Color(g, 0.40), 1.5, dead)
+		_dn_arc_live(lerpf(r0, r1, 0.35), 2.20, 2.55, Color(g, 0.30), 1.0, dead)
+
+
+#  판 각(0 = 위 · 시계 방향) a0~a1 의 호를 살아 있는 칸 위에만 긋는다.
+func _dn_arc_live(r: float, a0: float, a1: float, col: Color, w: float, dead: Array) -> void:
+	var sw := _sec_w()
+	for i in _sec_n():
+		if dead[i]:
+			continue
+		var s0 := float(i) * sw - sw * 0.5
+		for m in [-1.0, 0.0, 1.0]:
+			var lo := maxf(a0, s0 + TAU * m)
+			var hi := minf(a1, s0 + sw + TAU * m)
+			if hi > lo + 0.001:
+				draw_arc(BC, r, lo - PI * 0.5, hi - PI * 0.5, maxi(2, int((hi - lo) * r / 3.0)), col, w)
 
 
 func _draw_board() -> void:
