@@ -21562,7 +21562,8 @@ const CUP3 := {
 	#  통째로 밀려 이번엔 촉이 반대로 샌다. 꽁지에 걸어야 세우는 토크가 된다.
 	"fold":   1.00,    # 아가리 반지름의 몇 배부터 당길지
 	"tuck":   90.0,    # 당기는 세기
-	#  끌기 — 통이 제 자루를 데려가는 몫.
+	#  끌기 — **들어오는** 통이 제 자루를 데려가는 몫. 나가는 통은 이 값을
+	#  안 본다(자루를 통에 실어 보낸다 — _cup3_hold).
 	#  벽이 자루를 밀어 나르는 것은 물리로는 접촉이고, 미끄러지는 속도에서는
 	#  솔버가 그 접촉을 놓친다. 놓치면 통만 가고 자루는 제자리에 남아
 	#  **벽을 뚫고 나온다** — 실측 촉 1.6×r 이었다(벽은 1.0×r).
@@ -24353,24 +24354,80 @@ func _cup3_step(dir: int) -> void:
 	# 셋이 겹쳐 서면 어느 것이 지금 다트통인지가 화면에서 안 갈린다.
 	while cup_rigs.size() > 1:
 		_cup3_kill(cup_rigs[0])
-	if not cup_rigs.is_empty() and is_instance_valid(cup_rigs[0].cup):
-		cup_rigs[0].cup.position.x = 0.0
+	# 남은 한 벌이 지금 나가는 통이 된다. **싣고 나서 옮긴다** — 실어 두면
+	# 통을 한가운데로 되돌릴 때 자루도 같이 온다. 안 실으면 자루는 있던
+	# 자리에 남는데, 미끄러지는 도중에 눌렀다면 그 자리가 통 한 벌 반쯤
+	# 떨어진 데라, 자루가 통 없는 허공에서 시작해 그대로 카운터에 눕는다.
+	# stage_7 왼쪽에 크림색 자루 하나가 납작하게 누워 있던 그림이 이것이었다.
+	# 넘기기는 필름이고 여기는 컷이다 — 컷에서 서로의 자리가 바뀌는 것은
+	# 아무것도 없고, 한 벌이 든 채로 옮겨 앉을 뿐이다.
+	#
+	# 새 통을 먼저 세우고 **선 것을 보고** 싣는다. 실은 통은 슬라이드가
+	# 끝나면 지워지는 것이 전제라, 새 통이 안 서면 실은 통이 혼자 남아
+	# 굳은 채로 무대에 서게 된다.
 	_cup3_spawn(newrun_pip, float(dir) * _cup3_span())
+	if cup_rigs.size() > 1 and is_instance_valid(cup_rigs[0].cup):
+		var stay: Dictionary = cup_rigs[0]
+		_cup3_hold(stay)
+		stay.cup.position.x = 0.0
+		# 지난 자리도 같이 고친다. 안 고치면 다음 프레임의 통 속도가
+		# 「컷 거리 ÷ dt」로 튀고, 끌기가 그 거짓 속도로 자루를 후려친다.
+		stay["px"] = 0.0
 
 
-# 통 한 벌 몫의 물리. **통만 옮긴다** — 자루를 같이 옮기면 통에 붙은
-# 그림이 되고, 벽이 밀어 나르게 두어야 그것이 곧 관성이다.
+# 나가는 통에 제 자루와 골드를 싣는다. 물리를 멈추고 선 자세 그대로
+# **통 밑으로 옮겨 붙인다** — 통이 가면 자루도 간다는 것이 장면 나무에
+# 적히므로, 어느 틱에 누가 먼저 움직이든 한 벌로 그려진다.
+#
+# 힘으로 끌어서는 안 되는 까닭은 CUP3.drag 주석에 이미 있다 — 벽이 밀어
+# 나르는 것은 접촉이고, 미끄러지는 속도에서는 솔버가 그 접촉을 놓친다.
+# 놓친 몫을 힘으로 메우면 힘이 늦는 만큼 자루가 뒤처지고, 뒤처진 자루는
+# 벽에 눌려 눕는다. 한번 누우면 세우는 토크로는 슬라이드 안에 못 일어나서,
+# 통이 무대 밖으로 나간 뒤에도 자루만 카운터에 남아 눕는다.
+#
+# 붙이지 않고 자리만 맞춰 주는 길도 걸어 봤는데 끝까지 안 맞았다. 통은
+# sync_to_physics 를 켠 AnimatableBody3D 라 노드 자리가 물리 틱에 맞춰
+# 따로 움직이는데 자루는 강체라 옮기는 즉시 그 자리에 선다 — 프레임마다
+# 어느 쪽이 앞서는지가 갈려 한 프레임씩 7px 에서 통 한 벌 몫까지
+# 어긋났다. 물리를 살려 둔 채 자리만 옮기면 더 나빴다: 벽이 제 속도로
+# 밀고 자리까지 옮기니 자루가 통보다 두 배로 가서 벽을 앞질렀고, 가로를
+# 잠가 미는 몫을 없애면 기운 자루가 촉을 옆으로 미끄러뜨려 일어설 길이
+# 막혀 선 자리에서 엎어졌다(둘 다 실측 90도).
+#
+# 그래서 아예 멈추고 붙인다. 나가는 리그는 슬라이드가 끝나면 지워지므로
+# 그동안의 물리 충실도를 따질 까닭이 없고, 무대에서 나가는 통에 달그락이
+# 남아 있을 까닭도 없다 — 달그락은 눈이 따라가는 **들어오는** 통의 몫이다.
+#
+# 붙이는 일은 그리기 틱에서 해도 된다. 강체를 **미는** 일만
+# _physics_process 몫이고, 여기서는 아무것도 안 민다.
+func _cup3_hold(rig: Dictionary) -> void:
+	for b in rig.get("darts", []) + rig.get("gold", []):
+		if not is_instance_valid(b) or b.get_parent() == rig.cup:
+			continue
+		b.freeze = true
+		b.reparent(rig.cup, true)
+
+
+# 통 한 벌 몫의 물리. **들어오는 통은 통만 옮긴다** — 자루를 같이 옮기면
+# 통에 붙은 그림이 되고, 벽이 밀어 나르게 두어야 그것이 곧 관성이다.
+# 달그락은 거기서 난다. 나가는 통(leaving)은 그 반대로 실어 보낸다
+# (_cup3_hold).
 #
 # 강체 자리를 _process 에서 건드리면 물리 서버가 그 프레임에 덮어써서
 # 아무 일도 안 일어난다. 처음에 그렇게 짰다가 자루가 통을 안 따라가고
 # 허공에 굳어 남았다 — 강체를 만지는 자리는 _physics_process 하나다.
-func _cup3_step_rig(rig: Dictionary, x: float, moving: bool, dt: float) -> void:
+func _cup3_step_rig(rig: Dictionary, x: float, moving: bool, leaving: bool,
+		dt: float) -> void:
 	if not is_instance_valid(rig.cup):
 		return
 	# 통이 이 걸음에 간 속도. 자루와 골드를 끌 때 이것을 맞춘다.
 	var vx: float = (x - float(rig.get("px", x))) / maxf(dt, 0.0001)
 	rig["px"] = x
 	rig.cup.position.x = x
+	# 나가는 통은 통만 옮기면 끝이다. 자루도 골드도 통 밑에 붙어 있어
+	# 딸려 간다(_cup3_hold) — 줄도 뚜껑도 벽 지키기도 시늉할 물리가 없다.
+	if leaving:
+		return
 	var r: float = float(rig.get("r", CUP3.r))
 	var lea: float = r * float(CUP3.leash)
 	for b in rig.darts:
@@ -24463,12 +24520,16 @@ func _cup3_phys(dt: float) -> void:
 		while cup_rigs.size() > 1:
 			_cup3_kill(cup_rigs[0])
 		if not cup_rigs.is_empty():
-			_cup3_step_rig(cup_rigs[0], 0.0, false, dt)
+			_cup3_step_rig(cup_rigs[0], 0.0, false, false, dt)
 		return
 	var sl := _cup_slides()
 	var ppu := _cup3_ppu()
-	for i in mini(cup_rigs.size(), sl.size()):
-		_cup3_step_rig(cup_rigs[i], float(sl[i].dx) / ppu, true, dt)
+	# 앞자리가 나가는 통이다(_cup_slides 가 그 차례로 돌려준다). 한 벌뿐인
+	# 프레임에서는 나가는 통이 없으므로 아무도 데려가지 않는다.
+	var out_n: int = mini(cup_rigs.size(), sl.size())
+	for i in out_n:
+		_cup3_step_rig(cup_rigs[i], float(sl[i].dx) / ppu, true,
+				i == 0 and out_n > 1, dt)
 
 
 # 지금 화면에 선 통들과 그 가로 오프셋(px). **자리를 아는 곳은 여기 하나**다 —
