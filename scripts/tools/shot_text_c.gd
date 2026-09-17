@@ -39,7 +39,8 @@ func _initialize() -> void:
 	var ua := OS.get_cmdline_user_args()
 	if ua.size() > 0:
 		pre = String(ua[0])
-	#  진짜 프로필을 떠 둔다
+	#  제 슬롯 자리를 박는다 — 진짜 프로필은 이제 아예 안 건드린다(아래 떠 두기는 옛 규약의 흔적).
+	Save.prof_fmt = "user://_shot_txtc_%d.cfg"
 	for i in range(1, Save.SLOTS + 1):
 		var fp := Save.slot_path(i)
 		if FileAccess.file_exists(fp):

@@ -8,6 +8,7 @@ var busy := false
 
 func _initialize() -> void:
 	Save.gpath = "user://_shot_prof_g.cfg"
+	Save.prof_fmt = "user://_shot_prof_%d.cfg"
 	for i in range(1, Save.SLOTS + 1):
 		Save.erase_slot(i)
 	Save.use_slot(1)

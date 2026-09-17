@@ -79,6 +79,23 @@ const PROF := "user://profile_%d.cfg"
 const SLOTS := 3
 
 static var gpath := PATH
+#  ── 도구가 사람의 저장을 못 건드리게 ─────────────────────────
+#  프로필 검사(qa_profile)가 슬롯 파일(user://profile_N.cfg)을 **진짜 자리에서**
+#  지우고 새로 쓰고 있었다 — 슬롯 경로가 상수라 검사가 제 자리를 박을 수 없었다
+#  (2026-09-17 발견). 이제 틀을 변수로 두고, --script 로 도는 도구가 틀(prof_fmt)이나
+#  전역 파일(gpath)을 안 박았으면 **저절로** 도구 자리로 돌린다. 진짜 저장을 일부러
+#  고치는 도구(unlock.gd)만 allow_real 을 켠다.
+const TOOL_GPATH := "user://_tool_global.cfg"
+const TOOL_PROF := "user://_tool_profile_%d.cfg"
+static var prof_fmt := PROF
+static var allow_real := false
+
+
+static func _tool_run() -> bool:
+	if allow_real:
+		return false
+	var ml := Engine.get_main_loop()
+	return ml != null and ml.get_script() != null
 #  비어 있으면 슬롯에서 낸다. 검사·프로브가 여기에 제 자리를 박으면
 #  그것이 이긴다 — 슬롯이 생겨도 그 규약은 안 바뀐다.
 static var path := ""
@@ -171,6 +188,8 @@ static func gboot() -> void:
 	if _gloaded:
 		return
 	_gloaded = true
+	if gpath == PATH and _tool_run():
+		gpath = TOOL_GPATH
 	_gcfg = _read(gpath)
 	_migrate()
 
@@ -216,7 +235,10 @@ static func slot() -> int:
 
 
 static func slot_path(i: int) -> String:
-	return PROF % clampi(i, 1, SLOTS)
+	var fmt := prof_fmt
+	if fmt == PROF and _tool_run():
+		fmt = TOOL_PROF
+	return fmt % clampi(i, 1, SLOTS)
 
 
 # 지금 읽고 쓸 프로필 파일. path 가 박혀 있으면 그것이 이긴다.

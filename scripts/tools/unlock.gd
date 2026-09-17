@@ -48,6 +48,8 @@ func _list() -> void:
 
 
 func _initialize() -> void:
+	#  진짜 저장을 고치는 유일한 도구다 — 도구 실행을 도구 자리로 돌리는 막(Save._tool_run)을 연다.
+	Save.allow_real = true
 	var args := OS.get_cmdline_user_args()
 	if args.has("list"):
 		_list()

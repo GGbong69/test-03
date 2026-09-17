@@ -23,6 +23,7 @@ func _initialize() -> void:
 	if OS.get_cmdline_user_args().has("before"):
 		pre = "hova0_"
 	Save.gpath = "user://_shot_hova_g.cfg"
+	Save.prof_fmt = "user://_shot_hova_%d.cfg"
 	Save.path = "user://_shot_hova.cfg"
 	Save.wipe()
 	var ls := GameData.leagues()

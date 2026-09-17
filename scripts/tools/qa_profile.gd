@@ -39,6 +39,7 @@ func _run() -> void:
 	#  검사용 전역 파일. 슬롯 파일은 Save.PROF 가 정하므로 검사가 끝나면
 	#  지운다(아래 ⑦).
 	Save.gpath = "user://_qa_prof_g.cfg"
+	Save.prof_fmt = "user://_qa_prof_%d.cfg"
 	Save._gloaded = false
 	Save._gcfg = null
 	Save.path = ""
