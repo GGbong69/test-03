@@ -15525,6 +15525,11 @@ func _draw_profile() -> void:
 		var hot: bool = sl == prof_sel
 		var ee: float = float(prof_e[i]) if i < prof_e.size() else 0.0
 		var ew: float = float(prof_w[i]) if i < prof_w.size() else 0.0
+		#  들어서는 줄에 딸깍 — 제목 글줄과 같은 소리다. 띠는 _prof_tick 이
+		#  이미 쓸어 들이므로 여기서는 열쇠만 적는다. 커서가 줄 밖으로 나가
+		#  띠가 고른 줄로 되돌아가는 것에는 소리가 없다 — 손이 한 일이 아니다.
+		if state == S.PROFILE and _ui_can_hover() and r.has_point(mouse_at):
+			ui_hot = "prof:%d" % sl
 		#  띠는 **이름 줄만** 덮는다. 칸 높이를 다 덮으면 밑줄(완주·라운드)이
 		#  금빛에 잠겨 안 읽힌다 — 띠는 자리를 말하는 것이지 자리를 먹는 것이
 		#  아니다(제목 메뉴에서 같은 것을 한 번 고쳤다).
@@ -15579,15 +15584,28 @@ func _draw_profile() -> void:
 					HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_DIM)
 			draw_string(font, Vector2(px, y), String(rows[k][1]),
 					HORIZONTAL_ALIGNMENT_RIGHT, 300.0, 11, C_TXT)
-		#  지우기 — 겨눈 동안에만 붉다
+		#  지우기 — 겨눈 동안에만 붉다. 얹히면 판 위 단추처럼 뜨고 밝아지며,
+		#  누르고 있으면 앉는다(첫 누름이 겨눔이라 앉는 그림이 겨눈 붉은 면이다).
+		#  금빛 윗띠는 **안 겨눴을 때만** 스민다 — 붉은 경고 위에 금빛을 얹으면
+		#  「눌러도 된다」 가 「지운다」 를 덮는다. 겨눈 면은 밝기만 오른다.
 		var dr := _prof_del_rect()
 		var armed: bool = prof_arm == sel
-		_rr(self, dr, Color(C_MULT if armed else C_PANEL.lightened(0.10),
+		var dkey := "prof:del"
+		var db := _menu_lift(dkey, dr,
+				state == S.PROFILE and _ui_can_hover() and dr.has_point(mouse_at))
+		var dh: float = _ui_hov(dkey)
+		if db.position.y < dr.position.y:
+			_rr(self, dr, C_BG)               # 턱
+		_rr(self, db, Color(C_MULT if armed else C_PANEL.lightened(0.10),
 				0.9 if armed else 1.0))
-		draw_string(font, dr.position + Vector2(0.0, 17.0),
+		if dh > 0.0:
+			_rr(self, db, Color(C_TXT, float(UIHOV.lit) * dh))
+			if not armed:
+				_rr_top(self, db, 1, Color(C_ACC, dh))
+		draw_string(font, db.position + Vector2(0.0, 17.0),
 				"정말 지운다" if armed else "지우기",
-				HORIZONTAL_ALIGNMENT_CENTER, dr.size.x, 11,
-				C_TXT if armed else C_DIM)
+				HORIZONTAL_ALIGNMENT_CENTER, db.size.x, 11,
+				C_TXT if armed else C_DIM.lerp(C_TXT, dh))
 	_back_row(self, _menu_back_rect(), "뒤로", "",
 			_menu_back_rect().has_point(mouse_at))
 
@@ -15753,25 +15771,53 @@ func _prof_badge_rect() -> Rect2:
 	return Rect2(SAFE, VIEW.y - 12.0 - h, float(PROFB.w), h)
 
 
+#  판 밖 메뉴의 누르는 물건이 **설 자리**. 판 위 단추(_ui_face)와 같은 어법 —
+#  얹히면 몸이 한 칸 떠 밑의 턱이 드러나고, 누르고 있으면 도로 앉는다.
+#  면 · 턱 · 띠의 색은 물건마다 달라서(프로필 패 · 지우기 · 리그 칩) 몸이 설
+#  자리만 내고 칠은 부르는 쪽이 한다.
+#  히트 사각(r)은 안 움직인다. 뜬 몸으로 판정하면 아래 가장자리 1px 에서
+#  커서가 나갔다 들어왔다 하며 칩이 떨고 딸깍이 되풀이된다.
+func _menu_lift(key: String, r: Rect2, hot: bool) -> Rect2:
+	if hot:
+		ui_hot = key
+	var press: bool = hot and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
+	var lift: float = float(UIHOV.lift) if hot and not press else 0.0
+	return Rect2(r.position - Vector2(0.0, lift), r.size)
+
+
 func _prof_badge_draw() -> void:
 	var r := _prof_badge_rect()
-	var hot := ttl_prof_hot and state == S.TITLE
-	_panel(r, hot)
+	#  얹힘은 판 위 단추와 같은 말을 한다 — 뜨고, 면이 밝아지고, 금빛 윗띠가
+	#  짙기를 따라 스민다. 전에는 띠가 켜졌다 꺼졌다만 하고 뜨지도 앉지도
+	#  않아서, 같은 제목 화면에서 이 패 혼자 딱딱했다.
+	#  **제목일 때만** 얹힌다. 설정을 제목 위에 열면 이 패가 흐림 판 밑에
+	#  그대로 그려지는데, 거기서 커서를 따라 뜨면 가려진 것이 대답한다.
+	var key := "title:prof"
+	var on: bool = state == S.TITLE
+	var b := _menu_lift(key, r, on and _ui_can_hover() and r.has_point(mouse_at))
+	var h: float = _ui_hov(key) if on else 0.0
+	if b.position.y < r.position.y:
+		_rr(self, r, C_BG)                  # 턱 — 떠오른 만큼 드러난다
+	_rr(self, b, C_PANEL)
+	if h > 0.0:
+		_rr(self, b, Color(C_TXT, float(UIHOV.lit) * h))
+		_rr_top(self, b, 2, Color(C_ACC, h))
+	_rr_bottom(self, b, C_BG)
 	#  사람 한 명 — 머리와 어깨. 「프로필」 이 무엇의 자리인지를 글 앞에서 먼저 말한다.
-	var ic := Vector2(r.position.x + 13.0, r.position.y + r.size.y * 0.5)
-	var icol: Color = C_TXT if hot else C_DIM
+	var ic := Vector2(b.position.x + 13.0, b.position.y + b.size.y * 0.5)
+	var icol: Color = C_DIM.lerp(C_TXT, h)
 	draw_circle(ic + Vector2(0.0, -4.0), 3.2, icol)
 	draw_rect(Rect2(ic.x - 5.0, ic.y + 1.0, 10.0, 5.0), icol)
 	var cur := Save.slot()
-	draw_string(font, Vector2(r.position.x + 25.0, r.position.y + 20.0),
+	draw_string(font, Vector2(b.position.x + 25.0, b.position.y + 20.0),
 			"프로필 %d" % cur, HORIZONTAL_ALIGNMENT_LEFT, -1, 11,
-			C_TXT if hot else C_DIM.lerp(C_TXT, 0.5))
-	#  자리 셋. 오른쪽 끝에 붙는다.
+			C_DIM.lerp(C_TXT, 0.5 + 0.5 * h))
+	#  자리 셋. 오른쪽 끝에 붙는다 — 몸을 따라 같이 뜬다.
 	var pw: float = float(PROFB.pip)
 	var pg: float = float(PROFB.pip_gap)
 	var n := Save.SLOTS
-	var x0: float = r.end.x - 10.0 - float(n) * pw - float(n - 1) * pg
-	var py: float = r.position.y + (r.size.y - pw) * 0.5
+	var x0: float = b.end.x - 10.0 - float(n) * pw - float(n - 1) * pg
+	var py: float = b.position.y + (b.size.y - pw) * 0.5
 	for i in n:
 		var sl := i + 1
 		var pr := Rect2(x0 + float(i) * (pw + pg), py, pw, pw)
@@ -18187,21 +18233,37 @@ func _draw_newrun() -> void:
 	for i in st.size():
 		var r := _league_rect(i)
 		var col := Color(String(st[i].get("color", "cfc9bd")))
+		#  얹힘 — 칩마다 열쇠가 따로다. 판정은 늘 r 이고 뜨는 것은 몸(b)뿐이다.
+		var lkey := "lgc:%d" % i
+		var lhot: bool = _ui_can_hover() and r.has_point(mouse_at)
+		var lh: float = _ui_hov(lkey)
+		var b := r
 		if _league_open(i):
 			#  둥근 칩 — 판·단추가 다 둥글어진 뒤로 리그 칩만 뾰족해서 이상했다
 			#  (사용자, 2026-09-17). 아랫단 한 줄을 눌러 칩이 얹힌 물건으로 읽힌다.
-			_rr(self, r, col)
-			_rr_bottom(self, r, col.darkened(0.3))
+			#  얹히면 한 칸 떠 제 색의 그늘(턱)이 드러나고 면이 밝아진다. 누르고
+			#  있으면 앉는다. 턱이 C_BG 면 어두운 스크림에 묻혀 안 보인다 —
+			#  탭(_tab_draw)의 받침과 같은 단(0.45)으로 칩 제 색을 눌러 쓴다.
+			b = _menu_lift(lkey, r, lhot)
+			if b.position.y < r.position.y:
+				_rr(self, r, col.darkened(0.45))
+			_rr(self, b, col.lightened(0.12 * lh))
+			_rr_bottom(self, b, col.darkened(0.3))
+			#  완주 금줄은 바닥에 남는다 — 칩이 선 자리의 표시라 칩과 같이 뜨면
+			#  턱과 붙어 한 덩이가 된다.
 			if _league_won(i):
 				_rr(self, Rect2(r.position.x + 4.0, r.end.y + 1.0, r.size.x - 8.0, 2.0), C_GOLD)
 		else:
-			# 못 여는 단은 좁은 토막으로 — 자리는 지키되 값은 안 보인다
-			_rr(self, Rect2(r.position.x + 10.0, r.position.y, 13.0, r.size.y),
-					C_PANEL.lightened(0.06))
-			_rr_line(self, Rect2(r.position.x + 10.0, r.position.y, 13.0, r.size.y),
-					C_WIRE.darkened(0.3))
+			#  못 여는 단은 좁은 토막으로 — 자리는 지키되 값은 안 보인다.
+			#  얹혀도 안 뜬다(누르면 거절이다). 테만 밝아져 「여기도 단이 있다」
+			#  까지만 말하고, 안 된다는 말은 누를 때 _deny 가 한다.
+			if lhot:
+				ui_hot = lkey
+			var lr := Rect2(r.position.x + 10.0, r.position.y, 13.0, r.size.y)
+			_rr(self, lr, C_PANEL.lightened(0.06))
+			_rr_line(self, lr, C_WIRE.darkened(0.3).lerp(C_DIM, lh))
 		if String(st[i].get("id", "")) == String(cur.get("id", "")):
-			_rr_line(self, r.grow(2.0), C_TXT)
+			_rr_line(self, b.grow(2.0), C_TXT)
 	#  이름을 단의 색으로 쓰되, 어두운 단은 밝혀서 쓴다 — 검정 리그가
 	#  제 색(3a3450)으로는 배경에 묻혀 이름이 안 보였다. 색을 버리면
 	#  어느 단인지가 안 읽히므로, 색은 지키고 밝기만 끌어올린다.
@@ -18215,6 +18277,18 @@ func _draw_newrun() -> void:
 			Color(C_WIRE, 0.35))
 	var sl := _league_lines()
 	for li in sl.size():
+		#  줄에 들어서면 딸깍하고 왼쪽에 금빛 한 획이 선다. 글자는 이미 C_TXT
+		#  라 더 밝힐 수 없고, 흰 테는 툴팁(_tip_build)이 제 박자로 두른다 —
+		#  획은 툴팁이 뜨기 전의 첫 대답이다. 테(줄 사각의 왼쪽 변) 밖으로
+		#  두 칸 떼어 세워 테와 안 겹친다.
+		var llr := _league_line_rect(li)
+		var llk := "lgl:%d" % li
+		if _ui_can_hover() and llr.has_point(mouse_at):
+			ui_hot = llk
+		var llh: float = _ui_hov(llk)
+		if llh > 0.0:
+			draw_rect(Rect2(llr.position.x - 3.0, llr.position.y + 2.0, 1.0,
+					llr.size.y - 4.0), Color(C_ACC, llh))
 		draw_string(font_sm, _league_line_at(li),
 				String(sl[li].n), HORIZONTAL_ALIGNMENT_LEFT, 150.0, 9, C_TXT)
 
@@ -18632,6 +18706,12 @@ const TABB := {"lip": 2.0, "lift": 1.0}
 
 func _tab_draw(c: CanvasItem, r: Rect2, label: String, on: bool,
 		hot := false) -> void:
+	#  들어설 때의 딸깍만 공용 얹힘에 맡긴다(그림은 이 자리의 것 그대로).
+	#  **뜨는 탭에만** 적는다 — 고른 탭은 얹혀도 안 뜨는데 소리만 나면 무엇이
+	#  대답했는지가 안 보인다. r 도 같이 본다: hot 을 부르는 쪽이 늘 켜 둬도
+	#  커서가 없는 자리에서 소리가 나면 안 된다.
+	if hot and not on and _ui_can_hover() and r.has_point(mouse_at):
+		ui_hot = "tab:" + label
 	var lip: float = float(TABB.lip)
 	var lift: float = float(TABB.lift) if hot and not on else 0.0
 	var body := Rect2(r.position - Vector2(0.0, lift), r.size - Vector2(0.0, lip))
@@ -18658,6 +18738,10 @@ func _tab_draw(c: CanvasItem, r: Rect2, label: String, on: bool,
 #  셋 다 "글자로 그린 도형" 에서 온다. 도형으로 그리면 셋이 같이 없어진다.
 #  칸 가운데가 넷 다 정수라(53,118 · 34,337 · 606,337) 반 픽셀이 안 남는다.
 func _arrow_btn(c: CanvasItem, r: Rect2, right: bool, hot: bool) -> void:
+	#  들어설 때의 딸깍 — 열쇠는 방향과 자리로 가른다(새 런 · 컬렉션이 같은
+	#  단추 한 쌍을 따로 세운다).
+	if hot and _ui_can_hover() and r.has_point(mouse_at):
+		ui_hot = "arr:%s:%d" % [right, int(r.position.x)]
 	var e: float = 1.0 if hot else 0.0
 	#  ew 를 1.0 으로 박는다 — 칸을 꽉 채운 띠만 이 크기에서 읽힌다.
 	_row_band(c, r, e, 1.0, 1.0, C_ACC, 2.0)
@@ -18672,6 +18756,11 @@ func _arrow_btn(c: CanvasItem, r: Rect2, right: bool, hot: bool) -> void:
 #  뒤로 한 줄. 화면마다 다른 상자였던 것을 한 어법으로 모은다.
 func _back_row(c: CanvasItem, r: Rect2, label: String, key: String,
 		hot := false) -> void:
+	#  들어설 때의 딸깍. **r 을 꼭 같이 본다** — 런 끝 화면은 「새 런」 을
+	#  hot 으로 늘 켜 두므로(아무 데나 누르면 간다) hot 만 보면 화면이 열리는
+	#  순간 커서가 어디 있든 딸깍이 난다.
+	if hot and _ui_can_hover() and r.has_point(mouse_at):
+		ui_hot = "row:%s:%d" % [label, int(r.position.y)]
 	var e: float = 1.0 if hot else 0.0
 	_row_band(c, r, e, e, 1.0, C_ACC, 4.0)
 	#  홀로 서는 길잡이라 가운데로 모은다. 왼쪽 맞춤이면 이름과 단축키가
@@ -18770,19 +18859,30 @@ func _set_panel(c: CanvasItem, key: String, e: float) -> void:
 	#  게이지
 	if bool(info.get("g", false)):
 		var v: float = vol if key == "vol" else vol_mus
-		var hot: bool = set_drag >= 0
 		var tr := _vol_track()
+		#  짙기 — 올려만 둬도 끄는 때의 그림(넓은 손잡이 · 밝은 채움 · 흰 값)으로
+		#  스민다. 전에는 끄는 동안에만 그랬어서, 누르기 전에는 이 홈이 잡히는
+		#  물건인지가 안 보였다. 열쇠는 _set_tick 이 적는다 — 앞판과 Game 의
+		#  _draw(ui_hot 을 비운다) 중 누가 먼저 불릴지가 안 정해져 있다.
+		#  끄는 동안은 커서가 홈 밖으로 나가도 다 켠 채다 — 쥔 것이 풀려 보이면
+		#  안 된다.
+		var k: float = maxf(_ui_hov("set:track"), 1.0 if set_drag >= 0 else 0.0)
 		c.draw_rect(tr, Color(C_PANEL.darkened(0.5), pe))
+		if k > 0.0:
+			c.draw_rect(tr, Color(C_TXT, 0.06 * k * pe))
+		var fill: Color = C_GOLD.darkened(0.15).lerp(C_GOLD, k)
 		if v > 0.0:
 			c.draw_rect(Rect2(tr.position, Vector2(tr.size.x * v, tr.size.y)),
-					Color(C_GOLD.darkened(0.0 if hot else 0.15), pe))
+					Color(fill, pe))
 		var kx: float = tr.position.x + tr.size.x * v
-		var kw: float = 6.0 if hot else 4.0
+		#  폭은 두 단뿐이다 — 4 와 6 사이(5)는 가운데가 반 픽셀에 걸려 번진다.
+		var kw: float = 4.0 + 2.0 * roundf(k)
 		c.draw_rect(Rect2(kx - kw * 0.5, tr.position.y - 5.0, kw, 17.0),
 				Color(C_TXT, pe))
+		var vcol: Color = C_DIM.lerp(C_TXT, k)
 		c.draw_string(font, Vector2(p.end.x - 20.0 - 44.0, tr.position.y + 8.0),
 				"%d" % int(round(v * 100.0)), HORIZONTAL_ALIGNMENT_RIGHT,
-				44.0, 11, Color(C_TXT if hot else C_DIM, pe))
+				44.0, 11, Color(vcol, pe))
 
 
 
@@ -19086,10 +19186,9 @@ func _title_tick(d: float) -> void:
 				ttl_hot = i
 				break
 	_row_ease(ttl_e, ttl_w, TITLE_ROWS.size(), ttl_hot if on else -1, d)
-	var pw := ttl_prof_hot
+	#  프로필 패에 들어설 때의 딸깍은 공용 얹힘(_ui_hover_tick)이 낸다 —
+	#  패가 그리면서 ui_hot 을 적는다. 여기서도 내면 한 번 들어서는데 두 번 난다.
 	ttl_prof_hot = on and _prof_badge_rect().has_point(mouse_at)
-	if ttl_prof_hot and not pw:
-		_sfx("menu_pick2")
 	#  설정을 제목 위에 열면 뒤에 남는 것은 여전히 제목이다. 그동안에도
 	#  판은 살아 있어야 한다 — 멈추면 흐림 판 뒤에서 얼어붙은 그림이 된다.
 	#  다만 **새 자루는 안 보낸다**(live). 설정을 만지는 중에 소리가 끼는
@@ -19727,13 +19826,31 @@ func _set_tick(d: float) -> void:
 	else:
 		set_t = clampf(set_t + (d if want else -d) / span, 0.0, 1.0)
 	if want:
+		var hw := set_hot
 		set_hot = _set_hit(mouse_at)
+		#  들어서는 줄에 딸깍 — 제목 글줄과 같은 소리. **자리를 다 잡은 뒤에만**
+		#  낸다(지난 프레임에도 set_t 가 1). 밀려 드는 동안은 줄이 커서 밑을
+		#  지나가므로 손이 가만히 있어도 줄이 바뀌고, 다 들어온 첫 프레임에
+		#  내면 연 소리 바로 뒤에 까닭 없는 딸깍이 붙는다.
+		if set_hot >= 0 and set_hot != hw and was >= 1.0 and _ui_can_hover():
+			_sfx("menu_pick2")
 	elif set_t <= 0.0:
 		set_hot = -1
 	#  띠는 줄마다 따로 민다. 얹힌 줄은 차고 떠난 줄은 진다 — 둘이 같이
 	#  움직여야 손이 옮겨 갈 때 띠가 따라오는 것으로 읽힌다.
 	var rows := _set_rows()
 	var face: int = _set_face() if set_t > 0.0 else -1
+	#  게이지 홈의 얹힘 열쇠. 그리기(_set_panel)가 아니라 여기서 적는다 —
+	#  홈은 앞판(Front)이 그리는데, 앞판과 Game 의 _draw(ui_hot 을 비운다)는
+	#  어느 쪽이 먼저 불릴지가 queue_redraw 를 부른 순서에 달려 있다. 여기는
+	#  _ui_hover_tick 보다 앞서 도는 _process 안이라 순서가 늘 같다.
+	#  자리는 누를 때와 같은 사각이다(_click 의 grow 7). 끄는 동안은 커서가
+	#  어디 있든 붙들어 둔다 — 안 그러면 홈 밖으로 끌고 나갔다 들어올 때마다
+	#  딸깍이 나고, 뗀 자리가 홈 위면 뗄 때 또 난다.
+	if want and set_t >= 1.0 and face >= 0 and _ui_can_hover() \
+			and bool(_set_info(String(rows[face])).get("g", false)) \
+			and (set_drag >= 0 or _vol_track().grow(7.0).has_point(mouse_at)):
+		ui_hot = "set:track"
 	_row_ease(set_row_e, set_row_w, rows.size(), face, d, 60.0 / float(MO.fast))
 	var blur := get_node_or_null("Blur")
 	if blur != null:
@@ -20419,7 +20536,18 @@ func _draw_collect() -> void:
 	var base := collect_page * COL_PAGE
 	for i in _col_count():
 		var cell := _col_cell(i)
-		var c := cell.get_center() + Vector2(0.0, -8.0)
+		#  얹힌 칸 — 그림 뒤에 옅은 받침이 깔리고 그림이 한 칸 뜨며 이름이
+		#  밝아진다. 흰 테는 툴팁이 칸 사각 그대로 두르므로(tip_mark) 받침을
+		#  네 칸 들여 테 안에 앉힌다. 누르는 물건이 아니라 앉지는 않는다.
+		#  열쇠는 쪽 안의 자리다 — 탭·쪽을 넘겨도 커서가 같은 칸이면 다시
+		#  딸깍하지 않는다.
+		var ckey := "col:%d" % i
+		if _ui_can_hover() and cell.has_point(mouse_at):
+			ui_hot = ckey
+		var chv: float = _ui_hov(ckey)
+		if chv > 0.0:
+			_rr(self, cell.grow(-4.0), Color(C_PANEL, 0.6 * chv))
+		var c := cell.get_center() + Vector2(0.0, -8.0 - roundf(chv))
 		var gi := base + i
 		var nm := ""
 		match collect_tab:
@@ -20451,7 +20579,7 @@ func _draw_collect() -> void:
 				_icon_modifier(c, 11.0, mo.id, 0.0)
 				nm = mo.n
 		_draw_fit(Vector2(cell.position.x, cell.end.y - 8.0), cell.size.x, nm,
-				9, C_DIM)
+				9, C_DIM.lerp(C_TXT, chv))
 
 	if _col_pages() > 1:
 		for right in [false, true]:
