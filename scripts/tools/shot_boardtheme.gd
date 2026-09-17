@@ -65,9 +65,10 @@ func _run() -> void:
 	var r: float = g.R
 	for id in ["pizz", "clok", "dnut"]:
 		await _leg([id])
-		if g.sec_col.size() >= 20:
+		var nsc: int = g.sec_col.size()
+		if nsc >= 8:
 			g.sec_col[3] = 2
-			g.sec_col[14] = 3
+			g.sec_col[nsc - 2] = 3
 		g.darts = [
 			{"p": bc + Vector2(3.0, -r * 0.61), "id": "std", "rot": 0.10},
 			{"p": bc + Vector2(r * 0.50, r * 0.42), "id": "std", "rot": 0.30},

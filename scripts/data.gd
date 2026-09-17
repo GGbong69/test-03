@@ -1300,9 +1300,10 @@ static func color_name(i: int) -> String:
 	return String(c[i].get("name", ""))
 
 
-static func colors_base() -> Array:
+#  기본 칸 색 — 크림 · 먹이 번갈아 선다. 칸 수를 받는다(피자는 여덟 조각).
+static func colors_base(n: int = SECTORS_BASE.size()) -> Array:
 	var out := []
-	for i in SECTORS_BASE.size():
+	for i in n:
 		out.append(i % 2)
 	return out
 

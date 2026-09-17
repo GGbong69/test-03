@@ -310,6 +310,19 @@ enum S { PICK, AIM_V, AIM_H, CONFIRM, FLY, RESOLVE, CLEAR, SHOP, STAGE, OVER,
 # 손질·개칠이 고친다. 굽기 전(첫 프레임)에는 비어 있을 수 있으므로
 # 읽는 쪽은 반드시 _sec_col 을 지난다.
 var sec_col := []
+var sec_col_keep := {}      # 칸 수 → 그 판에서 쓰던 칸 색(피자를 끼었다 빼도 산다)
+
+
+#  판의 칸 수와 한 칸의 각. **sectors 의 길이가 유일한 출처다** — 기본 판은 20,
+#  피자는 8 조각이다(2026-09-17 사용자: 「피자면 8조각이어야지 다트보드로 돼 있으면
+#  안 되지」 · 판정도 8칸으로). 스물을 박아 둔 자리가 판정 · 그림 · 어둠 · 밝힘에
+#  흩어져 있었고, 이제 전부 여기를 본다.
+func _sec_n() -> int:
+	return maxi(sectors.size(), 1)
+
+
+func _sec_w() -> float:
+	return TAU / float(_sec_n())
 
 
 func _sec_col(i: int) -> int:
@@ -835,6 +848,9 @@ func _start_leg() -> void:
 			+ int(GameData.league_v("seal_items", 0.0))
 	sealed = randi() % owned.size() if seal > 0 and not owned.is_empty() else -1
 	dead_idx = int(mod_v("sector_kill", -1.0))
+	#  표의 번호는 스무 칸 판의 것이다. 칸 수가 다르면(피자 여덟) 같은 방위의 칸으로 옮긴다.
+	if dead_idx >= 0 and _sec_n() != GameData.SECTORS_BASE.size():
+		dead_idx = dead_idx * _sec_n() / GameData.SECTORS_BASE.size()
 	# 변형을 판 시작에 한 번 읽는다. 코드에 갈래가 없는 이름이면
 	# 여기서 한 번 울린다 — 매 프레임 울리면 로그가 못 쓰게 된다.
 	#
@@ -1799,6 +1815,9 @@ func _mod_step(b: Dictionary, sec: Array, m: Dictionary) -> void:
 			# 링 사이 단색 폭을 그대로 두려는 것이다.
 			# v1 이 비어 있으므로 v 는 배열이 아니라 스칼라다
 			# (mods() 가 "v": [v0, v1] if has1 else v0 로 짓는다).
+			#  조각은 여덟이다. 칸 값 표를 그 길이로 새로 깐다 — 판의 칸 수는
+			#  sectors 의 길이가 말하므로 hit_info · 그림이 저절로 여덟을 본다.
+			sec.resize(PIZZA_SLICES)
 			for i in sec.size():
 				sec[i] = int(m.v)
 			b.ti = b.to
@@ -1839,6 +1858,9 @@ func _mod_step(b: Dictionary, sec: Array, m: Dictionary) -> void:
 
 # 이 보드 확장 목록이면 판이 어떻게 되는가. 사지 않고 물어볼 수 있어야
 # 테이블 필터·거절 문구·실제 적용 셋이 같은 답을 쓴다.
+const PIZZA_SLICES := 8
+
+
 func _board_of(ids: Array) -> Array:
 	var b: Dictionary = GameData.BOARD_BASE.duplicate()
 	# 배수의 출처는 areas.csv 다. 여기서 씨앗을 받아 보드 확장이 밀게 한다 —
@@ -1969,8 +1991,13 @@ func _board_bake() -> void:
 	sectors = r[1]
 	# 칸 색 — 굽는 자리가 여기 하나뿐이라 손질·개칠이 색을 바꿔도
 	# 다시 구우면 그대로 산다. 길이가 어긋나면 통째로 다시 깐다.
+	#  칸 수가 바뀌면(피자 ↔ 다른 판) 지금 색을 그 칸 수 자리에 맡기고, 새 칸 수의
+	#  색을 찾아 쓴다. 손질 · 개칠로 바꾼 스무 칸의 색이 피자를 끼었다 뺀다고
+	#  사라지면 안 된다.
 	if sec_col.size() != sectors.size():
-		sec_col = GameData.colors_base()
+		if not sec_col.is_empty():
+			sec_col_keep[sec_col.size()] = sec_col.duplicate()
+		sec_col = (sec_col_keep.get(sectors.size(), GameData.colors_base(sectors.size())) as Array).duplicate()
 	bull_i = b.bi
 	bull_o = b.bo
 	trp_in = b.ti
@@ -3829,7 +3856,7 @@ func hit_info(p: Vector2) -> Dictionary:
 	var ang := atan2(v.x, -v.y)
 	if ang < 0.0:
 		ang += TAU
-	var idx := int(floor((ang + PI / 20.0) / (TAU / 20.0))) % 20
+	var idx := int(floor((ang + _sec_w() * 0.5) / _sec_w())) % _sec_n()
 	var val: int = sectors[idx]
 
 	var m: int = rt_m_sgl
@@ -5141,7 +5168,7 @@ func _board_rim(gap: float) -> float:
 
 #  칸 i 의 숫자. 판과 조준 밝힘(_cell_glow)이 같은 자리에 같은 글자를 쓴다.
 func _num_draw(i: int, col: Color, push := 1.0, off := Vector2.ZERO) -> void:
-	var a := float(i) * TAU / 20.0
+	var a := float(i) * _sec_w()
 	var q := (BC + Vector2(sin(a), -cos(a)) * _board_rim(float(BOARDART.ring) * 0.5) * push).round()
 	draw_string(font_sm, q + off + Vector2(-18.0, 7.0), _num_text(i),
 			HORIZONTAL_ALIGNMENT_CENTER, 36, 18, col)
@@ -5150,7 +5177,7 @@ func _num_draw(i: int, col: Color, push := 1.0, off := Vector2.ZERO) -> void:
 #  칸마다 [칸 색, 띠 색]. 죽은 칸은 여기서 한 번 가라앉힌다 — 칸 · 구멍이 같은 값을 쓴다.
 func _board_cols() -> Array:
 	var out := []
-	for i in 20:
+	for i in _sec_n():
 		var base_c := Color(GameData.color_hex(_sec_col(i)))
 		var ring_c: Color = C_RED if i % 2 == 0 else C_GREEN
 		# 죽은 칸은 죽은 것으로 보여야 한다. 값이 0 인데 판이 멀쩡해 보이면
@@ -5182,7 +5209,7 @@ func _board_holes(cols: Array, push: float) -> void:
 				x += st
 			y += st
 			row += 1
-	var sw := TAU / 20.0
+	var sw := _sec_w()
 	for e in board_holes:
 		var r: float = e[0]
 		if r >= R * rt_dbl_out or r < R * rt_bull_i * 0.9:
@@ -5193,7 +5220,7 @@ func _board_holes(cols: Array, push: float) -> void:
 		elif r < R * rt_bull_o:
 			c = C_GREEN
 		else:
-			var i := int(floor(fposmod(float(e[1]) + sw * 0.5, TAU) / sw)) % 20
+			var i := int(floor(fposmod(float(e[1]) + sw * 0.5, TAU) / sw)) % _sec_n()
 			var ring: bool = (r >= R * rt_trp_in and r < R * rt_trp_out) \
 					or r >= R * rt_dbl_in \
 					or (r >= R * rt_trp2_in and r < R * rt_trp2_out)
@@ -5205,8 +5232,8 @@ func _board_holes(cols: Array, push: float) -> void:
 #  철사 — 방사선 스물과 띠 경계마다 한 바퀴. 폭이 0 인 띠(피자) · 없는 불(도넛)은
 #  반지름이 겹치거나 0 이라 그어도 티가 안 난다.
 func _board_wires(push: float, col: Color = BOARDART.wire) -> void:
-	var sw := TAU / 20.0
-	for i in 20:
+	var sw := _sec_w()
+	for i in _sec_n():
 		var a := float(i) * sw - sw * 0.5
 		var dir := Vector2(sin(a), -cos(a))
 		draw_line(BC + dir * R * rt_bull_o * push, BC + dir * R * rt_dbl_out * push, col, 1.0)
@@ -5302,11 +5329,13 @@ func _board_theme() -> String:
 
 
 func _theme_bits(key: String) -> Array:
-	if theme_bits.has(key):
-		return theme_bits[key]
+	#  칸 수가 자리를 정하는 목록이 있다 — 칸 수를 열쇠에 붙여 따로 굽는다.
+	var ck := "%s/%d" % [key, _sec_n()]
+	if theme_bits.has(ck):
+		return theme_bits[ck]
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(key)
-	var sw := TAU / 20.0
+	var sw := _sec_w()
 	var out := []
 	match key:
 		"pizza_crust":
@@ -5316,15 +5345,17 @@ func _theme_bits(key: String) -> Array:
 			for k in 360:
 				out.append([sqrt(rng.randf()), rng.randf() * TAU, rng.randi() % 3])
 		"pizza_top":
-			for i in 20:
-				var r0: float = rng.randf_range(0.72, 0.80) if i % 2 == 0 else rng.randf_range(0.38, 0.48)
-				out.append(["pep", r0, float(i) * sw + rng.randf_range(-0.15, 0.15) * sw])
-				if i % 5 == 2:
-					out.append(["olive", rng.randf_range(0.56, 0.62), float(i) * sw + 0.28 * sw])
-				if i % 5 == 4:
-					out.append(["basil", rng.randf_range(0.58, 0.64), float(i) * sw - 0.25 * sw])
+			#  조각마다 같은 차림 — 페퍼로니 셋, 올리브 하나, 바질 하나. 조각 안에서
+			#  자리만 조금씩 흔든다(조각 폭 배수로 적어 칸 수가 바뀌어도 조각 안에 든다).
+			for i in _sec_n():
+				var c := float(i) * sw
+				out.append(["pep", rng.randf_range(0.70, 0.78), c + rng.randf_range(-0.26, -0.16) * sw])
+				out.append(["pep", rng.randf_range(0.66, 0.74), c + rng.randf_range(0.16, 0.26) * sw])
+				out.append(["pep", rng.randf_range(0.38, 0.46), c + rng.randf_range(-0.06, 0.06) * sw])
+				out.append(["olive", rng.randf_range(0.54, 0.60), c + rng.randf_range(-0.30, -0.22) * sw])
+				out.append(["basil", rng.randf_range(0.52, 0.58), c + rng.randf_range(0.18, 0.26) * sw])
 		"donut_drip":
-			for i in 20:
+			for i in _sec_n():
 				for n in 2 + rng.randi() % 2:
 					out.append([i, rng.randf_range(-0.38, 0.38), rng.randf_range(0.5, 3.5),
 							rng.randf_range(3.0, 4.5)])
@@ -5334,7 +5365,7 @@ func _theme_bits(key: String) -> Array:
 		"donut_sprinkle":
 			for k in 380:
 				out.append([sqrt(rng.randf()), rng.randf() * TAU, rng.randi() % 4, rng.randi() % 5])
-	theme_bits[key] = out
+	theme_bits[ck] = out
 	return out
 
 
@@ -5343,8 +5374,8 @@ func _theme_dir(a: float) -> Vector2:
 
 
 func _theme_sec(a: float) -> int:
-	var sw := TAU / 20.0
-	return int(floor(fposmod(a + sw * 0.5, TAU) / sw)) % 20
+	var sw := _sec_w()
+	return int(floor(fposmod(a + sw * 0.5, TAU) / sw)) % _sec_n()
 
 
 func _num_text(i: int) -> String:
@@ -5395,8 +5426,8 @@ func _pz_face(cols: Array, push: float) -> void:
 			_:
 				draw_rect(Rect2(q, Vector2.ONE), c.darkened(0.30))
 	#  칼자국 — 크러스트까지 조금 파고든다
-	var sw := TAU / 20.0
-	for i in 20:
+	var sw := _sec_w()
+	for i in _sec_n():
 		var d := _theme_dir(float(i) * sw - sw * 0.5)
 		draw_line(BC + d * bull, BC + d * (rim + 4.0), pz.cut, 1.0)
 	draw_arc(BC, bull, 0.0, TAU, 60, pz.cut, 1.0)
@@ -5514,10 +5545,10 @@ func _dn_face(cols: Array, push: float) -> void:
 	var dn: Dictionary = THEMEART.donut
 	var rim := R * rt_dbl_out * push
 	var hole := R * float(dn.hole) * push
-	var sw := TAU / 20.0
+	var sw := _sec_w()
 	#  글레이즈가 반죽 위로 흘러내린다 — 칸마다 제 더블 띠 색. 가장자리는 물결로
 	#  부풀고(작은 원을 둘레에 잇는다), 몇 군데는 방울로 늘어진다.
-	for i in 20:
+	for i in _sec_n():
 		var c0: Color = cols[i][1]
 		for k in 4:
 			var a := float(i) * sw - sw * 0.5 + (float(k) + 0.5) * sw / 4.0
@@ -5535,7 +5566,7 @@ func _dn_face(cols: Array, push: float) -> void:
 		draw_rect(Rect2((p1 - d * 1.0 + Vector2(-1.0, -1.0)).floor(), Vector2.ONE),
 				Color(1.0, 1.0, 1.0, 0.45))
 	#  이음 — 칸 경계는 옅게만
-	for i in 20:
+	for i in _sec_n():
 		var d2 := _theme_dir(float(i) * sw - sw * 0.5)
 		draw_line(BC + d2 * hole, BC + d2 * rim, dn.seam, 1.0)
 	for rr in [rt_trp2_in, rt_trp2_out, rt_trp_in, rt_trp_out, rt_dbl_in]:
@@ -5578,7 +5609,7 @@ func _dn_hole(push: float) -> void:
 
 
 func _draw_board() -> void:
-	var sw := 18.0 * PI / 180.0
+	var sw := _sec_w()
 	var push := 1.0 + board_punch * 0.028
 	var ro := _board_rim(float(BOARDART.ring)) * push
 	var th := _board_theme()
@@ -5602,7 +5633,7 @@ func _draw_board() -> void:
 	# 칸 색은 표가 정한다. 띠 색은 지금 규칙(i%2 → 빨강/초록)을 유지한다 —
 	# 띠까지 데이터로 보내면 칸 색과 띠 색이 겹쳐 읽힘이 무너진다.
 	var cols := _board_cols()
-	for i in 20:
+	for i in _sec_n():
 		var a0 := i * sw - sw * 0.5
 		var a1 := a0 + sw
 		var base_c: Color = cols[i][0]
@@ -5651,7 +5682,7 @@ func _draw_board() -> void:
 	if th == "pizza" or th == "clock":
 		na = 0.0
 	if na > 0.01:
-		for i in 20:
+		for i in _sec_n():
 			_num_draw(i, Color(ncol, na), push)
 	#  바늘은 숫자 위 — 시곗바늘이 문자판 글자를 가리는 것이 시계다
 	if th == "clock":
@@ -6095,7 +6126,7 @@ func _board_dim_except(p: Vector2, a: float) -> void:
 	var hi := hit_info(p)
 	var hx: int = int(hi.idx)
 	var col := Color(0.0, 0.0, 0.0, a)
-	var sw := 18.0 * PI / 180.0
+	var sw := _sec_w()
 	var bands := [[rt_bull_o, rt_trp_in], [rt_trp_in, rt_trp_out],
 			[rt_trp_out, rt_dbl_in], [rt_dbl_in, rt_dbl_out]]
 	#  천체 고리가 있으면 싱글 안쪽이 셋으로 갈린다 — hit_info 의 r0 와 맞춘다.
@@ -6104,7 +6135,7 @@ func _board_dim_except(p: Vector2, a: float) -> void:
 		bands.append([rt_trp2_in, rt_trp2_out])
 		bands.append([rt_trp2_out, rt_trp_in])
 	var hr0: float = float(hi.r0)
-	for i in 20:
+	for i in _sec_n():
 		var a0: float = float(i) * sw - sw * 0.5
 		for b in bands:
 			var r0: float = R * float(b[0])
@@ -15019,7 +15050,7 @@ func _photo_draw() -> void:
 			_draw_board()
 			var idx := _paint_hit(mouse_at)
 			if idx >= 0:
-				var sw := 18.0 * PI / 180.0
+				var sw := _sec_w()
 				var a0: float = float(idx) * sw - sw * 0.5
 				draw_colored_polygon(annulus(R * rt_dbl_out, R * rt_bull_o,
 						a0, a0 + sw), Color(1.0, 1.0, 1.0, 0.20))
@@ -16679,7 +16710,7 @@ func _ttl_draw() -> void:
 #  한 단 진하게(k 1.8) 물들인다. 숫자도 그 색이다.
 func _cell_glow(p: Vector2, col := C_TXT, k := 1.0) -> void:
 	var hi := hit_info(p)
-	var sw := 18.0 * PI / 180.0
+	var sw := _sec_w()
 	var hx: int = int(hi.idx)
 	if hx >= 0 and hx < sectors.size():
 		var a0: float = float(hx) * sw - sw * 0.5
@@ -20153,6 +20184,13 @@ func _prof_tick(d: float) -> void:
 #  따로다 — 두 화면이 동시에 서는 일은 없지만, 나가는 쪽이 옅어지는
 #  동안 들어오는 쪽이 차면 한 배열로는 두 값을 못 든다.
 func _title_tick(d: float) -> void:
+	#  제목 판은 런 밖이라 늘 기본 판이다. 피자를 낀 채 로비로 나오면 여덟 조각
+	#  판이 제목에 남았다 — 판을 비우고 되굽는다(런은 제목에서 새로 시작한다).
+	#  칸 수가 기본과 다를 때만 — 제목 상태에서 판을 만지는 검사(qa_modslot)가 낀 장을
+	#  잃지 않게 좁힌다.
+	if state == S.TITLE and not mods_own.is_empty() 			and sectors.size() != GameData.SECTORS_BASE.size():
+		mods_own.clear()
+		_board_bake()
 	var on: bool = state == S.TITLE
 	var was := ttl_hot
 	ttl_hot = -1

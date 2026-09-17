@@ -68,6 +68,12 @@ func _vstr(v) -> String:
 # 기본 칸 값 → 그 장의 칸 값. 자리끼리 맞대고 기본 값 순으로 세운다 —
 # 문턱으로 갈리는 장(도넛)은 그 순서라야 갈리는 자리가 눈에 보인다.
 func _sec_line(base: Array, sec: Array) -> String:
+	#  칸 수가 다른 판(피자 여덟 조각)은 자리끼리 맞댈 수 없다 — 칸 수와 값만 적는다.
+	if sec.size() != base.size():
+		var vs := []
+		for v in sec:
+			vs.append(str(int(v)))
+		return "칸 %d개 · %s" % [sec.size(), " ".join(vs)]
 	var pairs := []
 	for i in base.size():
 		pairs.append([int(base[i]), int(sec[i])])
