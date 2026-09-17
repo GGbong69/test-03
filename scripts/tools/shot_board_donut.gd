@@ -2,8 +2,9 @@ extends SceneTree
 # 도넛 판(보드 확장 「도넛」)이 입는 옷을 한 벌씩 찍는다.
 #   godot --path . --quit-after 9000 --script scripts/tools/shot_board_donut.gd
 #   DN_TAG=old 를 주면 이름 앞에 old_ 가 붙는다(고치기 전 판을 같은 구도로 남길 때).
-# 찍는 것 — 기본(다트 셋) · 트리플 조준 · 더블 조준 · 구멍 곁 조준(불이 없는 판) ·
-# 칠한 칸(주홍 · 쪽빛) · 죽은 색(먹) · 죽은 칸(크림 자리) · 라지(판 바깥선 1.10).
+# 찍는 것 — 기본(다트 셋) · 부푼 판(명중) · 누운 판(전환) · 트리플 조준 · 더블 조준 ·
+# 구멍 곁 조준(불이 없는 판) · 칠한 칸(주홍 · 쪽빛) · 죽은 색(먹) · 죽은 칸(크림 자리) ·
+# 라지(판 바깥선 1.10).
 const Save = preload("res://scripts/save.gd")
 var g = null
 var busy := false
@@ -97,6 +98,21 @@ func _run() -> void:
 	_plain()
 	await _hold(8)
 	_snap("plain")
+	#  (검토 추가) 판은 구워 둔 삼각형 묶음을 내민다 — 명중해 부푼 판(push)과 전환 중
+	#  누운 판(세로 배율 변환)에서도 묶음이 판 자리 · 눕힘을 따라가는지 본다.
+	g.board_punch = 1.0
+	await _hold(4)
+	_snap("punch")
+	g.board_punch = 0.0
+	for i in 4:
+		g.swap_live = true
+		g.swap_in = true
+		g.swap_t = float(g.SWAP.lead) + float(g.SWAP.rise) * 0.55
+		g.grip_t = 9.0
+		g.queue_redraw()
+		await process_frame
+	_snap("lie")
+	g.swap_live = false
 	g.darts = []
 	_aim(_at(4, 0.61))
 	await _hold(6)
