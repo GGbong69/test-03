@@ -24,7 +24,8 @@ const Save = preload("res://scripts/save.gd")
 #                  큐에 있는데 조건이 안 섰으면 남의 발에 얹힌 것이다.
 #    ② 큐 → 점수   큐를 따로 굴려 나온 수가 게임이 적은 last_gain 과 같은가.
 #                  걸음 하나가 조용히 빠지면 여기서 갈린다.
-#    ③ 효과 갈래   큐에 오른 kind 가 정산이 아는 다섯 중 하나인가.
+#    ③ 효과 갈래   큐에 오른 kind 가 게임이 싣는 갈래인가 — 셈하는 다섯과
+#                  성장만 쥔 동전의 빈 갈래. 나머지는 모르는 것이다.
 #    ④ 치역        점수·배수가 음수로 안 떨어지는가.
 #
 #  동전을 쥐여 주는 법
@@ -47,6 +48,7 @@ var frames := 0
 var last_n := 0
 var seen := 0                 # 검산한 발
 var skipped := 0              # 연발이라 건너뛴 발
+var bare := 0                 # 점수 없이 오른 빈 갈래 걸음(성장만 쥔 동전)
 var bad := 0
 var logs := []                # 어긋난 자리. 앞의 몇 개만 찍는다
 var items := []
@@ -119,10 +121,24 @@ func _snap() -> void:
 			"item":
 				if st.has("i"):
 					in_q[int(st.i)] = true
+				# 게임이 싣는 kind 는 동전의 효과 열(k)과 보조 열(k2) 둘이고,
+				# 효과 열은 수량이 0 이 아닐 때만 오른다.
+				#   chip · mult · mult_streak · mult_rand · xmult — 정산이 셈한다
+				#   ""   — 효과 열이 빈 동전(골드 · 조준 · 계산 방식 따위). 수량이
+				#          v 라 0 이어서 안 오르는데, 성장(grow)만 쥔 장은 수량이
+				#          자란 수(gs)라 오른다(잭과 콩나무). 점수도 배수도 안
+				#          건드린다 — 본업인 양옆 칸은 pierce 걸음이 따로 싣는다.
+				#   save — 큐에 싣기 전에 게임이 거른다. 오르면 그게 어긋난 것이다.
 				match String(st.kind):
 					"chip": chip += int(st.v)
 					"mult", "mult_streak", "mult_rand": mult += int(st.v)
 					"xmult": mult *= int(st.v)
+					"":
+						# 성장 없이 빈 갈래가 오르면 표가 효과 열을 빠뜨린 것이다
+						if st.has("i") and String(g.owned[int(st.i)].get("grow", "")) != "":
+							bare += 1
+						else:
+							kinds_ok = false
 					_: kinds_ok = false
 
 	# 봉인은 발동을 막는다 — 게임의 fired 루프가 이 인덱스를 건너뛴다.
@@ -232,6 +248,11 @@ func _report() -> void:
 			print("    %s" % l)
 	print("  점수 최소 %d · 배수 최소 %d (둘 다 0 이상이어야 한다)"
 			% [min_chip, min_mult])
+	# 게임 정산의 match 는 빈 갈래를 모른다 — 이 걸음마다 push_error 가 난다.
+	# 셈은 안 갈리므로 실패로 안 세고, 수만 적어 둔다.
+	if bare > 0:
+		print("  빈 갈래 걸음 %d — 점수 없이 오른 성장 동전. 게임 정산은 push_error 를 낸다"
+				% bare)
 
 	var never := []
 	var nofire := []

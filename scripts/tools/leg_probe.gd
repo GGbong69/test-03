@@ -6,7 +6,7 @@ const Save = preload("res://scripts/save.gd")
 # ══════════════════════════════════════════════════════════
 #  판 선택 · 건너뛰기 · 뱃지 회귀 검사
 #
-#  실행:  godot --path . --headless --quit-after 2000 --script scripts/tools/blind_probe.gd
+#  실행:  godot --path . --headless --quit-after 2000 -s scripts/tools/leg_probe.gd
 #  종료 코드 = 실패 개수
 #
 #  legs.csv 의 skippable 열도 GameData.skippable() 도 검증기도 오래
@@ -19,6 +19,12 @@ const Save = preload("res://scripts/save.gd")
 #    ③ 건너뛰면 점수도 골드도 없이 다음 판으로 간다
 #    ④ 뱃지가 실제로 값을 낸다 — 즉시 것과 쌓아 두는 것 둘 다
 #    ⑤ 쌓아 둔 뱃지는 한 번 쓰이고 사라진다
+#
+#  뱃지는 id 가 아니라 **갈래로** 고른다
+#    2026-09-15 에 tags.csv 를 갈아엎으면서 t_dart 가 빠졌고, 그 id 를 박아
+#    둔 이 검사가 「나중 뱃지는 쌓인다 0장」으로 멎었다. 뒤의 두 검사는 빈
+#    뱃지의 값 0 끼리 대 보며 **헛통과**하고 있었다 — 값이 0 인 뱃지는
+#    고르지 않는다.
 # ══════════════════════════════════════════════════════════
 
 var fails := 0
@@ -30,9 +36,19 @@ func _say(ok: bool, name: String, detail := "") -> void:
 		fails += 1
 
 
-func _tag(id: String) -> Dictionary:
+# 이 갈래의 첫 뱃지. 값이 0 이면 뒤의 검사가 0 끼리 맞아떨어지므로 뺀다.
+func _tag_kind(kind: String) -> Dictionary:
 	for t in GameData.tags():
-		if String(t.get("id", "")) == id:
+		if String(t.get("kind", "")) == kind and int(t.get("v", 0)) > 0:
+			return t
+	return {}
+
+
+# 나중에 쓰는 첫 뱃지 — 받는 자리가 now 가 아닌 줄. 쌍둥이(copy)는 when 이
+# now 라 여기 안 걸린다(쌓이긴 해도 pending_tags 가 아니라 tag_copy 에 쌓인다).
+func _tag_later() -> Dictionary:
+	for t in GameData.tags():
+		if String(t.get("when", "now")) != "now" and int(t.get("v", 0)) > 0:
 			return t
 	return {}
 
@@ -80,31 +96,46 @@ func _initialize() -> void:
 			"건너뛰면 값 없이 다음 판으로", "판 %d · 골드 %d" % [g.leg_no, g.gold])
 
 	# ④ 즉시 뱃지 — 골드가 실제로 는다
+	var gold_t := _tag_kind("gold")
 	g.gold = 10
-	g._take_tag(_tag("t_gold"))
-	_say(g.gold == 10 + int(_tag("t_gold").get("v", 0)),
-			"즉시 뱃지가 값을 낸다", "골드 10 → %d" % g.gold)
+	g._take_tag(gold_t)
+	_say(not gold_t.is_empty() and g.gold == 10 + int(gold_t.get("v", 0)),
+			"즉시 뱃지가 값을 낸다",
+			"%s · 골드 10 → %d" % [gold_t.get("id", "표에 없음"), g.gold])
 
 	# 쌓는 뱃지 — 지금은 아무 일도 안 하고 목록에 남는다
+	var later := _tag_later()
+	var lk := String(later.get("kind", ""))
 	g.pending_tags.clear()
-	g._take_tag(_tag("t_dart"))
-	_say(g.pending_tags.size() == 1 and String(g.pending_tags[0].kind) == "dart",
-			"나중 뱃지는 쌓인다", "%d장" % g.pending_tags.size())
+	g._take_tag(later)
+	_say(not later.is_empty() and g.pending_tags.size() == 1
+			and String(g.pending_tags[0].kind) == lk,
+			"나중 뱃지는 쌓인다",
+			"%s · %d장" % [later.get("id", "표에 없음"), g.pending_tags.size()])
 
 	# ⑤ 쌓인 뱃지는 한 번 쓰이고 사라진다
-	var got: int = g._spend_tags("dart")
-	_say(got == int(_tag("t_dart").get("v", 0)) and g.pending_tags.is_empty(),
+	var got: int = g._spend_tags(lk)
+	_say(not later.is_empty() and got == int(later.get("v", 0))
+			and g.pending_tags.is_empty(),
 			"쌓인 뱃지는 한 번 쓰고 사라진다",
 			"값 %d · 남은 %d장" % [got, g.pending_tags.size()])
-	_say(g._spend_tags("dart") == 0, "두 번째로는 아무것도 안 나온다")
+	_say(g._spend_tags(lk) == 0, "두 번째로는 아무것도 안 나온다")
 
 	# 다트 뱃지가 실제로 탄창을 늘린다
+	#  2026-09-15 표에서 「여벌 다트」가 빠졌다. 갈래와 꺼내는 자리
+	#  (_start_leg 의 _spend_tags("dart"))는 남겨 뒀다 — 되살리는 것이 표에
+	#  한 줄이라는 약속이다. 표에 없으면 빠진 그 줄을 그대로 세워 약속을 잰다.
+	var dart_t := _tag_kind("dart")
+	if dart_t.is_empty():
+		dart_t = {"id": "t_dart(표에 없음 · 옛 줄)", "name": "여벌 다트",
+				"kind": "dart", "v": "1", "when": "leg"}
 	g.leg_no = 1
 	g.pending_tags.clear()
-	g._take_tag(_tag("t_dart"))
+	g._take_tag(dart_t)
 	g._start_leg()
-	_say(g.remaining.size() == GameData.darts_of(1) + int(_tag("t_dart").get("v", 0)),
-			"다트 뱃지가 탄창을 늘린다", "%d발" % g.remaining.size())
+	_say(g.remaining.size() == GameData.darts_of(1) + int(dart_t.get("v", 0)),
+			"다트 뱃지가 탄창을 늘린다",
+			"%s · %d발" % [dart_t.id, g.remaining.size()])
 
 	print("\n%s" % ("실패 %d건" % fails if fails > 0 else "열한 검사 전부 통과"))
 	quit(mini(fails, 125))
