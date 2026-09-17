@@ -1678,7 +1678,8 @@ static func eff_line(it: Dictionary) -> String:
 		# zone_hist 는 런 단위이고 맞힌 영역을 따른다
 		"zonehist": return "맞힌 영역의 이번 런 명중 1회당 " + base
 		# 값이 v × 다른 동전 판매가 합이다 — 「배수 추가」로만 찍으면 v 가 얼굴에서 사라진다
-		"rackval": return "다른 동전 판매가 합 1당 " + base
+		#  「판매가 합 1당」 은 말이 걸렸다 — 판매가는 골드라 「1골드당」 이면 합까지 읽힌다
+		"rackval": return "다른 동전 판매가 1골드당 " + base
 		"empty": return "배수 × 빈 동전 슬롯 수 (최소 ×1)"
 	if String(it.get("k2", "")) != "":
 		base += " · " + eff_text(it.k2, it.v2)

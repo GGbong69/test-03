@@ -1939,8 +1939,9 @@ func _buy_block(i: int) -> String:
 	# 슬롯도 이미 차 있으므로 매물용 판정을 그대로 쓰면 전부 거절된다.
 	if photo == "burn" or photo == "clone":
 		return ""
+	#  거절 말은 툴팁 곁줄에 그대로 앉는다 — 다른 거절(「~다」)과 같은 말투 · 용어 사전의 「동전 슬롯」.
 	if s.sold:
-		return "이미 구매함"
+		return "이미 샀다"
 	# 팩에서 쏟은 것은 몫이 남아 있을 때만 집는다. 값이 0 이라 골드
 	# 검사에 안 걸리므로 여기서 막지 않으면 다 가져갈 수 있다.
 	if bool(s.get("pack", false)) and boost_pick <= 0:
@@ -1948,7 +1949,7 @@ func _buy_block(i: int) -> String:
 	if gold < s.cost:
 		return "골드가 %d 모자란다" % (s.cost - gold)
 	if s.type == "item" and owned.size() >= GameData.max_items():
-		return "동전 판이 꽉 찼다 (%d/%d)" % [owned.size(), GameData.max_items()]
+		return "동전 슬롯이 꽉 찼다 (%d/%d)" % [owned.size(), GameData.max_items()]
 	if s.type == "dart" and _std_slot() < 0:
 		return "바꿀 표준 다트가 없다"
 	# 사탕과 사진은 **같은 칸**을 쓴다. 여기서 사탕만 보고 있었다 —
@@ -18167,7 +18168,9 @@ func _tip_wrap(t: String, w: float, sz: int) -> PackedStringArray:
 		out.append(t)
 		return out
 	var line := ""
-	for word in t.split(" "):
+	var words := t.split(" ")
+	for wx in words.size():
+		var word: String = words[wx]
 		var cand: String = word if line == "" else line + " " + word
 		if f.get_string_size(cand, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x <= w:
 			line = cand
@@ -18184,6 +18187,22 @@ func _tip_wrap(t: String, w: float, sz: int) -> PackedStringArray:
 		#  처럼 값 하나가 홀로 내려갔고, 앞에 점이 없으면 줄이 「·」 로 열렸다. 점 앞에 두
 		#  낱말 이상이 남고, 줄이 이미 「 ·」 로 끝나지 않고(그러면 여기서 끊는 것이 곧 점 뒤다),
 		#  데려간 줄이 폭 안일 때만 한다. 「·」 가 넘친 옛 경우를 그대로 품는다.
+		#
+		#  **점보다 먼저 조건의 끝에서 끊는다**(2026-09-17 새 눈 검토). 욕심껏 채우면
+		#  「더블·트리플·불 명중 시 1/2 / 확률로 골드 +2」 「남은 다트 1개당 다음 판 시작 /
+		#  다트 +1」 「…사탕을 들고, 4골드 감소된 / 채 시작합니다」 처럼 한 덩어리가 갈렸다.
+		#  조건이 끝나는 낱말(_wrap_stop — 「시」「뒤」「~면」「~부터」「~당」「~고」「~,」) 뒤에서
+		#  끊으면 조건 / 효과로 선다. 점 규칙과 같은 둑이다: 남는 앞 줄이 두 낱말 이상이고
+		#  그 낱말이 줄 끝 낱말이 아니다. 하나 더 — **남은 글 전부가 한 줄에 들 때만**(마지막
+		#  접힘일 때만) 한다. 중간 접힘에 쓰면 「8번 명중 시 / 점수 +8에서 시작 · / 발동마다 +8」
+		#  처럼 두 줄이 세 줄이 됐다. 마지막 접힘이면 줄 수는 욕심 채우기와 같다.
+		var stop := _wrap_stop_at(line)
+		if stop > 0:
+			var rest := line.substr(stop + 1) + " " + " ".join(words.slice(wx))
+			if f.get_string_size(rest, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x <= w:
+				out.append(line.substr(0, stop))
+				line = line.substr(stop + 1) + " " + word
+				continue
 		var dot := line.rfind(" · ")
 		if dot > 0 and dot + 3 < line.length() and not line.ends_with(" ·") \
 				and line.substr(0, dot).find(" ") > 0:
@@ -18233,6 +18252,31 @@ func _tip_wrap(t: String, w: float, sz: int) -> PackedStringArray:
 				out[n - 2] = prev.substr(0, cut)
 				out[n - 1] = joined
 	return out
+
+
+#  줄에서 마지막 「조건 끝」 낱말 뒤 빈칸의 자리. 없으면 −1. 첫 낱말(앞에 끊을 것이
+#  없다)과 끝 낱말(끊어도 데려갈 것이 없다 — 욕심 채우기가 이미 거기서 끊는다)은 안 본다.
+#  「면」은 받침 끝이라 「이하면 · 넘기면 · 0이면」을 다 잡는다. 지금 표에 「면」으로 끝나는
+#  이름씨(화면 · 표면)가 없어서 서는 규칙이다 — 그런 말이 들면 여기서 거른다.
+func _wrap_stop_at(line: String) -> int:
+	var ws := line.split(" ")
+	if ws.size() < 3:
+		return -1
+	var at := line.length()
+	for k in range(ws.size() - 1, 0, -1):
+		at -= ws[k].length() + 1          # ws[k] 앞 빈칸의 자리
+		if k == ws.size() - 1 or ws[k + 1] == "·":      # 줄을 「·」 로 열지 않는다
+			continue
+		if _wrap_stop(ws[k]):
+			return at + ws[k].length() + 1
+	return -1
+
+
+#  「~고」 는 이어지는 동작의 끝이다(「빗나가고 / 판을 넘기면」 「파괴하고 / 판매가의」
+#  「잠그고 / 원 위를」). 「금고」 는 표에서 늘 「」 에 싸여 「금고」」 로 끝나 안 걸린다.
+func _wrap_stop(wd: String) -> bool:
+	return wd == "시" or wd == "뒤" or wd.ends_with("면") or wd.ends_with("부터") \
+			or wd.ends_with("당") or wd.ends_with("고") or wd.ends_with(",")
 
 
 func _tip_clear() -> void:
@@ -18755,12 +18799,17 @@ func _is_val(w: String) -> bool:
 	return "+-−±×x0123456789".find(w[0]) >= 0
 
 
-# 확률을 말하는 토막인가. 1/6 · 1/10 · 절반 · 50% · 「확률로」
+# 확률을 말하는 토막인가. 1/6 · 1/10 · 절반 · 「확률로」
+#  「%」 는 뺐다(2026-09-17) — 확률은 이제 전부 1/N 으로 적고, 남은 % 는 몫이다:
+#  「총점이 목표의 50% 이상이면」 「발마다 점수의 25%를 받는다」 가 확률 초록으로 칠해졌다.
 func _is_odds(w: String) -> bool:
-	if w.find("확률") >= 0 or w.find("%") >= 0 or w.begins_with("절반"):
+	if w.find("확률") >= 0 or w.begins_with("절반"):
 		return true
 	var sl := w.find("/")
 	if sl <= 0 or sl >= w.length() - 1:
+		return false
+	#  수로 시작해야 확률이다 — 거절 곁줄의 「(5/5)」 칸 수가 초록으로 칠해졌다.
+	if not w[0].is_valid_int():
 		return false
 	return w[sl - 1].is_valid_int() and w[sl + 1].is_valid_int()
 
@@ -23744,8 +23793,9 @@ func _league_lines() -> Array:
 		# 다르므로 첫 판과 마지막 판의 값을 범위로 적는다.
 		var lo := GameData.league_mul(1)
 		var hi := GameData.league_mul(GameData.legs_n())
-		out.append({"n": "목표 ×%.2f~%.2f" % [lo, hi] if hi > lo else "목표 ×%.2f" % hi,
-				"d": "목표 점수가 더 빨리 오른다"})
+		#  「×」 는 배수에만 쓴다 — 그 밖의 곱은 「N배」(툴팁 문체). 용어 사전은 「목표」 한 말이다.
+		out.append({"n": "목표 %.2f~%.2f배" % [lo, hi] if hi > lo else "목표 %.2f배" % hi,
+				"d": "목표가 더 빨리 오른다"})
 	var rs := int(GameData.league_v("reward_small", 3.0))
 	if String(r.get("reward_small", "")) != "" and rs < 3:
 		#  클리어 보상만 0 이 된다(_settle_clear). 잔탄 · 이자 · 동전 골드는 그대로 들어오므로
@@ -23761,7 +23811,9 @@ func _league_lines() -> Array:
 		out.append({"n": ("다트 %+d" % da).replace("-", "−"),
 				"d": ("판 시작 다트 %+d" % da).replace("-", "−")})
 	if GameData.league_v("shop_cost_mul", 1.0) != 1.0:
-		out.append({"n": "가격 ×%.2f" % GameData.league_v("shop_cost_mul", 1.0),
+		#  제목과 본문이 한 말(「매물」)을 쓴다 — 「가격 ×1.25」 제목 밑에 「매물 값 1.25배」 였다.
+		#  제목은 줄여 쓴다(「다트 −1」 → 「판 시작 다트 −1」 과 같은 짝) — 같은 글이 두 번 서지 않게.
+		out.append({"n": "매물 %.2f배" % GameData.league_v("shop_cost_mul", 1.0),
 				"d": "매물 값 %s배" % GameData._num(GameData.league_v("shop_cost_mul", 1.0))})
 	#  bought 는 뱃지 · 복제로 얻은 동전에도 적힌다 — 「산 동전」 이 아니라 얻은 동전이다.
 	if int(GameData.league_v("perish", 0.0)) > 0:
