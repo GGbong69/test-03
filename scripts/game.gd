@@ -4887,8 +4887,8 @@ func pop(p: Vector2, txt: String, c: Color, sz: int, life: float) -> void:
 #  x 최대 64.2/56.4)에도 안 닿는다.
 #    n=3 → w 153.3 ✔   n=4 → w 111.5 ✔   n=5 → w 86.4 ✘
 #  n=5 가 죽는 이유는 폭이 아니라 글자다. 설명 최장 "트리플·더블 링 폭
-#  0.5배" 가 크기 12 에서 135px(10 에서 112)이고, 지금 n=3 의 안쪽 폭 141 에
-#  든다. n=4(안쪽 99.5)면 12 가 안 들어가 그 카드만 10 으로 물러난다(_stage_card).
+#  0.5배" 가 크기 12 에서 116px(페이퍼로지 Bold — 갈무리11 때 135)이고, 지금 n=3 의
+#  안쪽 폭 141 에 든다. n=4(안쪽 99.5)면 12 가 안 들어가 그 카드만 10 으로 물러난다(_stage_card).
 #  stage_picks 를 5 이상으로 올리려면 설명을 툴팁으로 내리는 별개 결정이 먼저다.
 # ══════════════════════════════════════════════════════════
 #  얼굴 자리(제 좌표)는 간판 테(SIGN.rim 4) 안쪽에 맞췄다. 설명 밑줄이
@@ -4903,12 +4903,17 @@ func pop(p: Vector2, txt: String, c: Color, sz: int, life: float) -> void:
 #  줄며 올라가 설명 자리를 낸다(_up 값). 선 카드는 1.12 배로 커지므로 화면에서
 #  받침이 누운 것보다 작아 보이지 않는다. 20 · 12 로 옮기며 선 받침을 반지름
 #  15 → 14 로 한 칸 줄였다 — 이름 · 설명이 각각 한 칸씩 키가 컸다.
-#    누움  받침 y[10,46] · 이름 잉크 [50,68]
-#    섬    받침 y[10,38] · 이름 잉크 [42,60] · 설명 잉크 [64,75] · 그늘 80
+#  페이퍼로지로 옮기며(2026-09-17) 잉크를 다시 쟀다 — 20 은 바닥선 위 16.5 · 밑 1,
+#  12 는 위 10 · 밑 0.5 다. 글자도 카드와 같이 눌리므로(_sign_basis) 제 좌표로 잰다.
+#  누운 이름이 바닥선 68 이면 잉크 [51.5,69] 가 받침 밑(46)에 붙고 그늘(80)과는 11 이
+#  떠(화면에서 받침과 글자 사이 2px) 받침 사이 한가운데인 71 로 내렸다. 선 이름은 60 이면
+#  받침 5.5 · 설명 4 로 기울어 59 로 한 칸 올렸다.
+#    누움  받침 y[10,46] · 이름 잉크 [54.5,72] · 그늘 80        — 위 8.5 · 아래 8
+#    섬    받침 y[10,38] · 이름 잉크 [42.5,60] · 설명 잉크 [65,75.5] · 그늘 80 — 4.5 · 5 · 4.5
 const CARD := {
 	"x0": 76.0, "y": 140.0, "h": 86.0, "gap": 14.0,
-	"icon": 28.0, "icon_r": 17.0, "plate": 18.0, "name": 68.0,
-	"icon_up": 24.0, "icon_r_up": 13.0, "plate_up": 14.0, "name_up": 60.0,
+	"icon": 28.0, "icon_r": 17.0, "plate": 18.0, "name": 71.0,
+	"icon_up": 24.0, "icon_r_up": 13.0, "plate_up": 14.0, "name_up": 59.0,
 	"desc": 75.0,
 }
 
@@ -8349,6 +8354,8 @@ func _panel_slot(i: int) -> void:
 
 
 # 폭에 맞게 뒤를 자른다. 자른 티를 내야 "짧은 이름" 과 안 헷갈린다.
+#  자른 끝의 빈칸은 걷는다 — 낱말 사이에서 잘리면 「넓은 …」 처럼 점이 떨어져 선다.
+#  페이퍼로지의 「…」 는 12 에서 11px 라 빈칸(3)까지 붙으면 한 글자 자리를 더 먹는다.
 func _elide(t: String, w: float, sz: int) -> String:
 	if font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x <= w:
 		return t
@@ -8358,7 +8365,7 @@ func _elide(t: String, w: float, sz: int) -> String:
 		if font.get_string_size(cand, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x > w:
 			break
 		out += t[i]
-	return out + "…"
+	return out.strip_edges(false, true) + "…"
 
 
 
@@ -9374,10 +9381,11 @@ func _chute_act(z: int) -> bool:
 #  이름은 20(갈무리9 두 배 — 단추 이름과 같은 단), 값은 12(갈무리11 제 크기).
 #  이름 11 이던 때 「UI 에 비해 글자가 작다」 는 말을 들었다(2026-09-17). 18 · 11 로
 #  올렸다가 획이 격자에 안 떨어져(shot_fontgrid) 20 · 12 로 옮겼다. 창구는 빗변
-#  삼각형이라 아래로 갈수록 좁다 — 이름 잉크 y[130,147] 에서 빗변 x 69 · 이름 폭 40,
-#  값 줄(베이스라인 167 · 잉크 [156,166])에서 빗변 57 · 「+12」 가 x[5,43] 에 든다.
-#  이름 잉크가 한 칸 커진 만큼 이름 줄을 한 칸 내려 윗끝(130)이 펠트 모서리(128)에
-#  안 붙게 둔다. 값을 24 로 올리면 76px 이라 빗변을 넘어 펠트에 올라앉으므로 12 에 둔다.
+#  삼각형이라 아래로 갈수록 좁다 — 이름 잉크 y[131.5,149] 에서 빗변 x 69 · 이름 폭 36,
+#  값 줄(베이스라인 167 · 수 잉크 [157.5,167])에서 빗변 57 · 「+12」 가 x[5,43] 에 든다
+#  (페이퍼로지 SemiBold 20 · Bold 12 로 잰 값 — 갈무리 때는 이름 [130,147] · 폭 40).
+#  윗끝(131.5)이 펠트 모서리(128)에서 3.5px 떨어지고 이름 → 값이 8.5px 라 자리는 그대로다.
+#  값을 24 로 올리면 빗변을 넘어 펠트에 올라앉으므로 12 에 둔다.
 #  오른쪽 이름은 오른끝 맞춤이다 — 전에는 「구매」 폭(22)을 손으로 빼 x 613 에 섰다.
 #  크기(20 · 12)는 그리는 줄에 숫자로 적는다 — qa_ui 가 줄에서 읽는다.
 const CHUTE_TXT := {"ly": 20.0, "vdy": 19.0, "x": 5.0}
@@ -12670,11 +12678,14 @@ func _sticker_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: floa
 var bill_side := {}            # 물건 번호 → 지난 프레임의 자리
 
 
-#  값표 글자는 12(갈무리11 제 크기 — 설계 격자가 12 다). 9 였을 때는 값 플라크가
+#  값표 글자는 12(갈무리11 제 크기 — 설계 격자가 12 였다). 9 였을 때는 값 플라크가
 #  갈무리11 을 9 로 줄여 그려 획이 흐렸고, 「UI 에 비해 글자가 작다」 는 말도 들었다
 #  (2026-09-17). 11 로 올렸다가 획이 격자에 안 떨어져(shot_fontgrid) 12 로 옮겼다.
-#  높이 14 = 오름 12 + 내림 2. dy 는 밑 자리 글줄을 한 칸 더 내린다 — 잉크가 한 칸
-#  커져 윗끝이 동전 아래끝에 붙으므로, 그 틈(4.4px, DROP.bill_dy 머리말)을 지킨다.
+#  높이 14 = 바닥선 위 12 + 밑 2 — 페이퍼로지 Bold 12 의 수 잉크 [−9.5,0] 와 플라크
+#  [−7.4,+0.6] 가 다 든다. dy 는 밑 자리 글줄을 한 칸 더 내린다 — 갈무리 수(잉크 11)의
+#  윗끝이 동전 아래끝에 붙어, 그 틈(4.4px, DROP.bill_dy 머리말)을 지키려던 몫이다.
+#  페이퍼로지 수는 1.5px 낮아 틈이 6px 쯤으로 넓어졌지만 값은 물건 발치에 붙어 읽히므로
+#  자리는 그대로 둔다(겹침 정리의 수치가 이 자리를 전제한다).
 const BILL := {"sz": 12, "h": 14.0, "dy": 1.0}
 
 
@@ -14712,25 +14723,35 @@ func _drop_arrive(i: int) -> void:
 #  같은 단으로 맞췄다. 18 · 11 로 올렸다가 「커지니까 조금 깨진다」 를 듣고
 #  격자를 찍어 보니(shot_fontgrid) 갈무리9 는 10 배수, 갈무리11 은 12 배수에서만
 #  도트가 격자에 떨어졌다 — 18 은 획이 3 · 4칸으로 섞였다. 20 · 12 로 옮긴다.
-#  판 폭은 178 → 240 → 264. 제목 20 에서 가장 긴 「더 굿 더 베드 더 트리플」(220)이
-#  미니동전 자리(27)와 함께 안쪽 250 에 든다(240 이면 199 라 12 로 물러났다).
-#  본문은 20 에서 한 줄 12자쯤이라 18 · 240 일 때와 접히는 자리가 같다 —
-#  긴 효과는 네 줄로 접히고 판이 아래로 자란다(폭은 고정이다).
+#  판 폭은 178 → 240 → 264. 제목 20 에서 가장 긴 사진 이름 「It's Not About Money」
+#  (215)가 안쪽 250 에, 가장 긴 동전 이름 「더 굿 더 베드 더 트리플」(181)이 미니동전
+#  자리(27) 뒤 223 에 든다(페이퍼로지 SemiBold — 갈무리 때는 220 이라 240 에서 12 로 물러났다).
+#  본문은 20 에서 한 줄 14자쯤이다 — 긴 효과는 세 줄로 접히고 판이 아래로 자란다(폭은 고정).
+#
+#  ── 줄 자리는 잉크로 잰다(페이퍼로지, 2026-09-17) ──────────────
+#  페이퍼로지 한글 잉크는 바닥선 위 0.83em · 밑 0.04em 이다(20 에서 [−16.5, +1] ·
+#  12 에서 [−10, +0.5], 창에서 찍어 잰 값). get_ascent(sz) 는 1em 이라 잉크보다 0.17em
+#  높다. 갈무리(20 에서 [−18, 0])에 맞춘 자리를 그대로 두었더니 글자가 1.5px 씩 아래로
+#  앉아, 판 윗변 → 제목 잉크가 10.5px · 태그 → 턱이 4px 로 판이 위로 뜬 듯 보였다.
+#  지금 잉크 사이 — 판 윗변 → 제목 8.5 · 제목 → 효과 8 · 효과 → 곁줄 6 · 줄 사이 6.5(20) ·
+#  4.5(12) · 마지막 줄 → 태그 8 · 태그 → 턱 7(옆 여백 pad 와 같다).
 const TIP := {
 	"w": 264.0,          # 판 폭 (고정 — 대상마다 크기가 출렁이면 눈이 다시 초점을 잡는다)
 	"pad": 7.0,
 	"gap": 6.0,          # 대상과 판 사이
-	"title": 24.0,       # 제목 줄 높이 — 20px 제목(잉크 18)에 사이 6
-	"title_base": 20.0,  # 판 안쪽 윗변에서 제목 베이스라인까지 — 잉크 [2,19]
-	"line": 24.0,        # 20px 본문 줄 높이. 한글은 라틴보다 획이 많아
-	                     # 130% 아래면 두 줄이 한 덩어리로 뭉친다
-	"base": 19.0,        # 20px 줄의 윗변에서 베이스라인까지 — 잉크 [1,18] · 사이 6
-	"line_sm": 17.0,     # 12px 곁줄 높이 — 12px(잉크 11)에 사이 6
-	"base_sm": 13.0,     # 12px 줄의 윗변에서 베이스라인까지 — 잉크 [2,12]
-	"chip_gap": 6.0,     # 본문 아래끝과 태그 줄 사이
-	"chip_h": 16.0,      # 태그 한 장의 높이 — 12px 낱말(잉크 11)에 위 2 · 아래 3
+	"ink_up": 0.83,      # 한글 잉크가 바닥선 위로 서는 몫(em)
+	"ink_dn": 0.04,      # 바닥선 밑으로 내리는 몫(em) — 「롤」 의 ㄹ 밑획 같은 것
+	"title": 22.0,       # 제목 줄 높이 — 20px 제목(잉크 17.5)
+	"title_base": 18.0,  # 판 안쪽 윗변에서 제목 바닥선까지 — 잉크 [1.5,19]
+	"line": 24.0,        # 20px 본문 줄 높이 — 잉크 17.5 에 사이 6.5. 한글은 라틴보다
+	                     # 획이 많아 잉크 130% 아래면 두 줄이 한 덩어리로 뭉친다
+	"base": 18.5,        # 20px 줄의 윗변에서 바닥선까지 — 잉크 [2,19.5]
+	"line_sm": 15.0,     # 12px 곁줄 높이 — 잉크 10.5 에 사이 4.5
+	"base_sm": 11.5,     # 12px 줄의 윗변에서 바닥선까지 — 잉크 [1.5,12]
+	"chip_gap": 8.0,     # 본문 마지막 줄의 **잉크** 아래끝과 태그 줄 사이(_tip_tail)
+	"chip_h": 16.0,      # 태그 한 장의 높이 — 12px 낱말(잉크 10.5)에 위 3 · 아래 2.5
 	"tag_sz": 12,        # 태그 낱말 크기
-	"tag_base": 13.0,    # 태그 윗변에서 낱말 베이스라인까지
+	"tag_base": 13.0,    # 태그 윗변에서 낱말 바닥선까지
 	"tag_gap": 4.0,      # 태그와 태그 사이
 	"tag_pad": 12.0,     # 태그 낱말의 좌우 여백을 합한 값
 	"tag_lead": 3.0,     # 태그 줄과 줄 사이 (셋 넷이 붙으면 접힌다)
@@ -14739,8 +14760,9 @@ const TIP := {
 }
 
 
-#  크기에 맞는 글꼴 — 10 · 20 은 갈무리9, 12 · 24 는 갈무리11. 제 설계 크기의
-#  정수배에서만 획이 딱 떨어진다(qa_ui ① · shot_fontgrid).
+#  크기에 맞는 글꼴 — 10 · 20 은 SemiBold(font_sm), 12 · 24 는 Bold(font). 갈무리 때
+#  (10 · 20 갈무리9 · 12 · 24 갈무리11)의 갈래를 그대로 잇는다 — 짙은 판 위에 찍어 보니
+#  20 SemiBold 효과 문장도 12 Bold 곁줄 · 태그도 뭉치거나 흐리지 않았다(shot_text_b).
 func _tip_font(sz: int) -> Font:
 	return font_sm if sz == 10 or sz == 20 else font
 
@@ -14753,7 +14775,13 @@ func _tip_base(sz: int) -> float:
 	return float(TIP.base) if sz >= 20 else float(TIP.base_sm)
 
 
-#  툴팁 줄에 붙는 값(골드)의 크기. 플라크 숫자는 갈무리11 이라 12 · 24 만 곧다.
+#  잉크 가운데가 바닥선에서 얼마나 위인가 — 제목 옆 미니동전 · 줄 앞 아이콘을 글자의
+#  **잉크** 가운데에 앉힌다(칸 가운데는 잉크보다 아래다).
+func _tip_mid(sz: int) -> float:
+	return float(sz) * (float(TIP.ink_up) - float(TIP.ink_dn)) * 0.5
+
+
+#  툴팁 줄에 붙는 값(골드)의 크기. 플라크 숫자는 font(Bold)로 12 · 24 두 단만 쓴다.
 func _tip_gsz(sz: int) -> int:
 	return 24 if sz >= 24 else 12
 
@@ -14805,8 +14833,8 @@ func _tip_wrap(t: String, w: float, sz: int) -> PackedStringArray:
 	if font == null:
 		out.append(t)
 		return out
-	#  재는 글꼴은 그리는 글꼴이다 — 20 은 갈무리9 로 그리므로 갈무리11 로 재면
-	#  줄 끝이 판 밖으로 샌다.
+	#  재는 글꼴은 그리는 글꼴이다 — 20 은 SemiBold 로 그리므로 Bold 로 재면 폭이
+	#  어긋난다(갈무리 때는 20 을 갈무리9 로 그려 갈무리11 로 재면 줄 끝이 판 밖으로 샜다).
 	var f := _tip_font(sz)
 	if w <= 1.0 or f.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x <= w:
 		out.append(t)
@@ -14816,6 +14844,17 @@ func _tip_wrap(t: String, w: float, sz: int) -> PackedStringArray:
 		var cand: String = word if line == "" else line + " " + word
 		if f.get_string_size(cand, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x <= w:
 			line = cand
+			continue
+		#  **「·」 로 줄을 열지 않는다.** 페이퍼로지가 갈무리보다 좁아 접히는 자리가 옮겨
+		#  「배수 +8 에서 시작 · 판마다 −1 / · 0이면 파괴」 처럼 둘째 줄이 가운뎃점으로
+		#  시작했다. 이 줄의 마지막 「 · 」 뒤에서 끊고 그 뒤 토막을 데려간다 — 점은 앞
+		#  줄 끝에 남고 토막은 점 앞 말과 한 줄에 선다. 데려간 토막은 이미 이 줄 안에
+		#  들던 것이라 「 ·」 를 붙여도 이 줄보다 짧다. 조각은 여전히 원문을 빈칸 하나씩
+		#  건너 이은 것이라 _wr_off 가 그대로 선다.
+		var dot := line.rfind(" · ")
+		if word == "·" and dot > 0 and dot + 3 < line.length():
+			out.append(line.substr(0, dot + 2))
+			line = line.substr(dot + 3) + " ·"
 			continue
 		if line != "":
 			out.append(line)
@@ -15180,8 +15219,9 @@ func _tip_set_tag(k: String) -> void:
 # 미니동전가 붙은 툴팁은 전에 8 을 벌렸다. 원반(반지름 8, 중심 pad+9)의
 # 아래끝 pad+17 이 제목 칸 끝(pad+15)을 넘어 첫 줄이 원반 밑동을 물었기
 # 때문이다. 제목이 20 으로 커지며(글자 키우기) 제목 칸이 pad+24 까지 늘었고
-# 원반은 제목 잉크 가운데(pad+11)에 앉아 아래끝이 pad+19 다 — 칸 안에
-# 들므로 따로 안 벌린다. 원반과 첫 줄 잉크(pad+28) 사이는 8px 이다.
+# 원반은 제목 잉크 가운데에 앉아 아래끝이 제목 칸 안이다 — 따로 안 벌린다.
+# 페이퍼로지(제목 칸 22 · 바닥선 18)에서 원반 중심 pad+10 · 아래끝 pad+18 이고
+# 첫 줄 잉크(pad+27)와 9px 떨어진다. 제목 잉크 → 첫 줄 잉크는 8px 이다.
 func _tip_lead() -> float:
 	return 3.0
 
@@ -15195,10 +15235,22 @@ func _tip_body_h() -> float:
 	for l in tip_lines:
 		# 아이콘 줄만 14px 아이콘이 들어가게 2px 키운다.
 		# 접힌 줄은 그만큼 아래로 쌓는다 — 폭은 안 늘린다.
-		# 줄 높이는 크기마다 다르다 — 20 은 24, 12 는 17(_tip_lh).
+		# 줄 높이는 크기마다 다르다 — 20 은 24, 12 는 15(_tip_lh).
 		h += _tip_lh(int(l.sz)) * float(maxi(1, l.wr.size())) \
 				+ (2.0 if l.ic != "" else 0.0)
 	return h
+
+
+#  본문 블록 아래끝에서 마지막 줄 잉크 아래끝까지 거슬러 오르는 몫. 태그 줄은 칸이
+#  아니라 **잉크**에서 잰다 — 20 줄(칸 밑이 4.5 빈다)로 끝나든 12 줄(3 빈다)로 끝나든
+#  태그까지가 같은 chip_gap 이다. 줄이 없으면 제목 잉크에서 잰다.
+func _tip_tail() -> float:
+	if tip_lines.is_empty():
+		return TIP.title + _tip_lead() - TIP.title_base - 20.0 * TIP.ink_dn
+	var l: Dictionary = tip_lines[tip_lines.size() - 1]
+	var lsz: int = int(l.sz)
+	return _tip_lh(lsz) - _tip_base(lsz) - float(lsz) * TIP.ink_dn \
+			+ (2.0 if l.ic != "" else 0.0)
 
 
 # 태그를 판 폭 안에서 접는다. 크기 재기(_tip_tags_h)와 그리기(_tip_draw)가
@@ -15235,11 +15287,13 @@ func _tip_tags_h() -> float:
 	var n := _tip_tag_rows().size()
 	if n == 0:
 		return 0.0
-	return TIP.chip_gap + float(n) * TIP.chip_h + float(n - 1) * TIP.tag_lead
+	return TIP.chip_gap - _tip_tail() + float(n) * TIP.chip_h + float(n - 1) * TIP.tag_lead
 
 
+#  판 높이. 밑에 턱(PANEL_LIP)을 더한다 — 턱은 판 사각 안에 그려지므로(_panel) 안
+#  더하면 태그 밑 여백이 pad 7 에서 턱 3 을 뺀 4px 만 남아 옆 여백보다 좁았다.
 func _tip_size() -> Vector2:
-	var h: float = TIP.pad * 2.0 + TIP.title + _tip_lead()
+	var h: float = TIP.pad * 2.0 + PANEL_LIP + TIP.title + _tip_lead()
 	h += _tip_body_h() + _tip_tags_h()
 	return Vector2(TIP.w, h)
 
@@ -15427,9 +15481,9 @@ func _tip_draw(sh: Vector2) -> void:
 
 	var tx: float = p.x + TIP.pad
 	if not tip_chip.is_empty():
-		#  원반은 제목 잉크(pad+2 ~ pad+19)의 가운데에 앉는다.
-		draw_item_sticker(p + Vector2(TIP.pad + 8.0, TIP.pad + 11.0), 8.0, tip_chip,
-				0.42, 0.0, 0.0, 8)
+		#  원반은 제목 잉크(pad+1.5 ~ pad+19)의 가운데에 앉는다 — 칸(22) 가운데가 아니다.
+		draw_item_sticker(p + Vector2(TIP.pad + 8.0, TIP.pad + TIP.title_base - _tip_mid(20)),
+				8.0, tip_chip, 0.42, 0.0, 0.0, 8)
 		# 원반 지름이 16 이라 pad+16 에서 끝난다. 20 이면 글자와 4px 밖에
 		# 안 떨어져 둘이 한 덩어리로 붙어 보였다 — 아이콘은 글자가 아니라
 		# 그림이므로 낱말 사이보다 넓게 띄워야 따로 읽힌다.
@@ -15439,7 +15493,7 @@ func _tip_draw(sh: Vector2) -> void:
 	#  효과가 C_TXT.darkened(0.25) 라 이름이 더 밝았다.
 	#  크기는 효과와 같은 20 이다 — 층은 색이 가른다. 판 안에 안 들 만큼 긴
 	#  이름만 12 로 물러난다 — 자르면 이름이 다른 이름이 된다. 판 폭 264 에서
-	#  지금 표의 이름은 전부 20 으로 든다(가장 긴 것 220 · 동전 자리 뒤 223).
+	#  지금 표의 이름은 전부 20 으로 든다(가장 긴 사진 215 · 동전 181, 동전 자리 뒤 223).
 	var tsz := 20
 	if font_sm.get_string_size(tip_title, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x \
 			> p.x + sz.x - TIP.pad - tx:
@@ -15451,7 +15505,7 @@ func _tip_draw(sh: Vector2) -> void:
 	# 아이콘도 안 흔들린다. 페이드는 tip_a 를 알파로 넘겨 글자와 같이 뜬다.
 	# 아이콘 없는 줄은 ic == "" 로 예전 경로 그대로 간다.
 	#  y 는 **줄 칸의 윗변**이다. 베이스라인은 줄 크기마다 다르게 내린다 —
-	#  20 은 19 · 12 는 13(_tip_base). 20 줄과 12 줄이 섞여도 칸이 안 겹친다.
+	#  20 은 18.5 · 12 는 11.5(_tip_base). 20 줄과 12 줄이 섞여도 칸이 안 겹친다.
 	var top: float = p.y + TIP.pad + TIP.title + _tip_lead()   # 본문 블록 윗변
 	var y: float = top
 	for l in tip_lines:
@@ -15460,7 +15514,8 @@ func _tip_draw(sh: Vector2) -> void:
 		var bl: float = y + _tip_base(lsz)                     # 이 줄의 베이스라인
 		var lx: float = p.x + TIP.pad
 		if l.ic != "":
-			_icon_modifier(Vector2(lx + 7.0, y + lh * 0.5), 7.0, l.ic, 0.0, tip_a)
+			#  아이콘은 첫 줄 잉크 가운데에 — 칸 가운데(y + lh/2)는 잉크보다 1px 아래다.
+			_icon_modifier(Vector2(lx + 7.0, bl - _tip_mid(lsz)), 7.0, l.ic, 0.0, tip_a)
 			lx += 18.0
 		# 붙는 값(오른쪽 정렬)과 꼬리표는 첫 줄에 선다 — 접힌 아랫줄로
 		# 내려가면 무엇에 붙은 값인지가 안 읽힌다.
@@ -15494,7 +15549,8 @@ func _tip_draw(sh: Vector2) -> void:
 	#  태그 한 장은 갈래 색을 옅게 칠한 둥근 조각이다. 전에는 네모 위에 갈래
 	#  색 윗줄(1px)을 그었다 — 단추와 떠 있는 판이 윗띠를 걷고(2026-09-17)
 	#  칠한 덩어리가 된 뒤라, 태그만 띠를 이고 있었다. 낱말은 12(전에는 9 · 11).
-	var ty: float = top + _tip_body_h() + TIP.chip_gap
+	#  태그 줄의 윗변은 마지막 줄 **잉크** 아래끝에서 chip_gap 이다(_tip_tail).
+	var ty: float = top + _tip_body_h() - _tip_tail() + TIP.chip_gap
 	for row in _tip_tag_rows():
 		var tgx: float = p.x + TIP.pad
 		for g in row:
@@ -15704,11 +15760,14 @@ func _scrim() -> void:
 #  맨 나중에 그린다. 아래를 통째로 덮어야 "지금은 이것만 고르는 중" 이
 #  손에 읽힌다.
 #
-#  글자는 20(갈무리9 두 배) · 곁말 12(갈무리11 제 크기). 전에는 11 · 9 였다 — 스크림
+#  글자는 20(font_sm) · 곁말 12(font). 갈무리 때 크기(20 갈무리9 두 배 · 12 갈무리11 제
+#  크기)를 페이퍼로지 SemiBold · Bold 가 그대로 잇는다. 전에는 11 · 9 였다 — 스크림
 #  한 장에 글 몇 줄뿐인 화면이라 자리가 넉넉한데 글이 작았다(글자 키우기, 2026-09-17).
 #  18 · 11 로 올렸다가 획이 격자에 안 떨어져(shot_fontgrid) 20 · 12 로 옮겼다.
-#  미리보기 한 줄은 높이 38 → 46 · 간격 46 → 54 — 이름 잉크 [5,22] · 설명 잉크
-#  [29,39] 가 들고 밑에 6칸이 빈다. 세 줄이 y[74,228] 이다.
+#  미리보기 한 줄은 높이 38 → 46 · 간격 46 → 54. 세 줄이 y[74,228] 이다.
+#  페이퍼로지(20 은 바닥선 위 16.5 · 밑 1, 12 는 위 10 · 밑 0.5)로 옮기며 바닥선을 이름 ·
+#  목표 23 → 22.5 · 설명 40 → 39.5 로 반 칸씩 올렸다 — 이름 잉크 [6,23.5] · 설명 잉크
+#  [29.5,40] 이라 위 6 · 사이 6 · 밑 6 이다(그대로 두면 위 6.5 · 밑 5.5 로 아래로 기울었다).
 #  칠하기의 칸 글줄은 맨 위 안내(바닥선 28) 바로 밑 바닥선 52 에 선다 — 판 밑은
 #  숫자 고리(바깥 y318)가 차지한다.
 func _photo_draw() -> void:
@@ -15740,13 +15799,13 @@ func _photo_draw() -> void:
 				var y: float = 74.0 + float(i) * 54.0
 				var r := Rect2(Vector2(74.0, y), Vector2(VIEW.x - 148.0, 46.0))
 				_rr(self, r, C_PANEL.darkened(0.15))
-				draw_string(font_sm, r.position + Vector2(10.0, 23.0),
+				draw_string(font_sm, r.position + Vector2(10.0, 22.5),
 						String(e.d.get("n", "")), HORIZONTAL_ALIGNMENT_LEFT,
 						-1, 20, C_TXT)
-				draw_string(font, r.position + Vector2(10.0, 40.0),
+				draw_string(font, r.position + Vector2(10.0, 39.5),
 						String(e.d.get("d", "")), HORIZONTAL_ALIGNMENT_LEFT,
 						r.size.x - 20.0, 12, C_DIM)
-				draw_string(font_sm, r.position + Vector2(0.0, 23.0),
+				draw_string(font_sm, r.position + Vector2(0.0, 22.5),
 						"목표 %d" % int(e.target), HORIZONTAL_ALIGNMENT_RIGHT,
 						r.size.x - 10.0, 20, C_GOLD)
 			draw_string(font_sm, Vector2(0.0, VIEW.y - 14.0), "아무 데나 눌러 닫는다",
@@ -16297,9 +16356,11 @@ func _draw_leg() -> void:
 	# 라운드 표시는 **덮개 뒤**다. 앞에 그렸더니 카운터 뒤 벽이 그 위를
 	# 덮어 상인 가슴께에 글자가 반쯤 잘려 있었다. 펠트 위로 내린다.
 	#  9 → 11 → 12(글자 키우기, 2026-09-17 — 11 은 갈무리11 의 격자에 안 떨어졌다).
-	#  12 의 잉크 [-11,-1] 윗끝 y130 이 덮개(y128) 밑이라 베이스라인은 그대로다.
 	#  20 은 펠트 인쇄가 판 이름과 같은 무게가 되어 안 올린다.
-	draw_string(font, Vector2(0.0, TBL.fy + 13.0),
+	#  바닥선 fy+13 → fy+23. 그 자리면 잉크(갈무리 [130,140] · 페이퍼로지 [131,141.5])의 윗단을
+	#  상인 라인(fy+7 = y135, _felt_draw)이 가로질러 낱말에 줄이 그어져 읽혔다. 라인과 누운
+	#  카드 윗변(y158) 사이 띠의 가운데로 내린다 — 잉크 [141,151.5] 로 위 5.5 · 아래 6.7.
+	draw_string(font, Vector2(0.0, TBL.fy + 23.0),
 			"라운드 %d / %d" % [GameData.round_of(leg_no), GameData.rounds_n()],
 			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 12,
 			Color(C_TABLE.lightened(0.40), 0.85))
@@ -16309,11 +16370,12 @@ func _draw_leg() -> void:
 	#  보스 판은 못 건너뛴다. 단추를 걷지 않고 띠를 끈다 — 자리가 비면
 	#  「이 판은 왜 건너뛰기가 없지」 를 화면이 말해 주지 않는다.
 	#  부제는 _btn 이 12 로 그린다 — 자르는 자도 12 로 잰다(작게 재면 긴 효과가
-	#  단추 밖으로 샌다). 가장 긴 「가장 많이 맞힌 트랙 강화 +2」 가 12 에서 161 이라
-	#  양옆을 7 씩만 비운다 — 8 씩(160)이면 한 칸 모자라 「…」 로 잘렸다.
+	#  단추 밖으로 샌다). 갈무리 때는 가장 긴 「가장 많이 맞힌 트랙 강화 +2」 가 161 이라
+	#  양옆을 7 씩만 비웠다. 페이퍼로지 Bold 로 135 라 _btn 과 같은 8 씩(160)에 25px 이
+	#  남는다 — 자르는 자리를 _btn 과 한 줄로 되돌린다.
 	if GameData.skippable(leg_no):
 		_btn(_leg_skip(), "건너뛴다", _elide(_tag_text(leg_tag),
-				_leg_skip().size.x - 14.0, 12), true)
+				_leg_skip().size.x - 16.0, 12), true)
 	else:
 		_btn(_leg_skip(), "못 건너뛴다", "보스 판", false)
 	# 쌓아 둔 뱃지 — 언제 쓰이는지는 이름이 말한다
@@ -16326,7 +16388,8 @@ func _draw_leg() -> void:
 	#  툴팁의 흰 테는 끈다 — 몸이 뜨면 테는 안 뜬 자리에 남아 1px 어긋난다
 	#  (_tip_build "pend"). 모바일은 톡 = 커서 이동이라 똑같이 선다.
 	#  판정 사각(_pend_rect)은 안 움직인다 — 뜨는 것은 그리기뿐이다.
-	#  이름은 12(글자 키우기) — 턱 위 몸(17px)에서 잉크 [3,13] 으로 가운데에 앉는다.
+	#  이름은 12(글자 키우기) — 턱 위 몸(17px)에서 바닥선 14 면 페이퍼로지 잉크가 [3,14.5]
+	#  (「료」 · 「롤」 같은 높은 · 내린 획까지)라 윗모서리 빛 한 줄을 빼면 위 2 · 아래 2.5 다.
 	for i in pending_tags.size():
 		var r := _pend_rect(i)
 		var key := "hud:pend:%d" % i
@@ -16453,18 +16516,22 @@ func _leg_card(i: int, rn: int) -> void:
 	#  글자는 20(갈무리9 두 배 — 단추 이름과 같은 단). 11 · 9 였을 때 「UI 에 비해
 	#  글자가 작다」 는 말을 들었다(2026-09-17). 18 로 올렸다가 획이 격자에 안
 	#  떨어져 20 으로 옮겼다(shot_fontgrid). 카드 제 좌표(높이 86)에서
-	#    윗단 띠 끝 9 · 이름 잉크 [18,36] · 목표 잉크 [43,61] · 금화 [70,74] · 그늘 80
-	#  (잉크는 _sign_text 의 한 칸 자국까지). 가장 긴 「목표 20000」 이 108px < 카드 153.
-	#  깨진 판의 몸통 폭 80 에도 「작은 판」(68)이 든다 — 금은 x 89 보다 오른쪽이다.
+	#    윗단 띠 끝 9 · 이름 잉크 [18,35.5] · 목표 잉크 [43,60.5] · 금화 [66.5,71] · 그늘 80
+	#  — 띠 밑 9 와 그늘 위 9 가 같다. 갈무리 때(이름 36 · 목표 61 · 금화 70)는 잉크가 바닥선
+	#  위로 18 이었는데 페이퍼로지 20 은 16.5 · 밑 1 이라, 같은 자리면 글 덩어리가 2.5px 아래로
+	#  앉았다(판 가운데 44.5 에 덩어리 가운데 47). 셋을 1.5 · 1.5 · 3.5 올렸다.
+	#  (잉크는 _sign_text 의 한 칸 자국까지). 가장 긴 「목표 20000」 이 107px < 카드 153.
+	#  깨진 판의 몸통 폭 80 에도 「작은 판」 이 든다 — 금은 x 89 보다 오른쪽이다.
+	#  깨진 판 · 건너뛴 판도 같은 줄에 쓴다 — 나란한 세 장의 이름이 한 줄에 서야 한다.
 	var a0 := _sign_basis(q, w, ch)
 	var paint: Color = sc.ink
 	if broken:
 		var bxf: Transform2D = pieces[0].xf
 		draw_set_transform_matrix(Transform2D(0.0, shake_off) * bxf * a0)
 		var cx: float = crack[0].x * 0.5
-		_sign_text(Vector2(cx - 40.0, 36.0), 80.0, GameData.leg_name(rn), 20,
+		_sign_text(Vector2(cx - 40.0, 34.5), 80.0, GameData.leg_name(rn), 20,
 				Color(paint.darkened(0.35), 0.9), font_sm)
-		_sign_text(Vector2(cx - 40.0, 61.0), 80.0, "넘김", 20,
+		_sign_text(Vector2(cx - 40.0, 59.5), 80.0, "넘김", 20,
 				Color(paint.darkened(0.45), 0.8), font_sm)
 		draw_set_transform(shake_off)
 		return
@@ -16472,12 +16539,12 @@ func _leg_card(i: int, rn: int) -> void:
 	var ink: Color = paint.darkened(0.40) if done else paint
 	#  지금 판의 이름도 크림색이다. 금빛 이름은 호박색 칠(큰 판) 위에서
 	#  묻힌다 — 지금 판은 금빛 테가 이미 말한다.
-	_sign_text(Vector2(0.0, 36.0), w, GameData.leg_name(rn), 20, ink, font_sm)
+	_sign_text(Vector2(0.0, 34.5), w, GameData.leg_name(rn), 20, ink, font_sm)
 	if skipped:
-		_sign_text(Vector2(0.0, 61.0), w, "건너뜀", 20, Color(paint.darkened(0.5), 0.85),
+		_sign_text(Vector2(0.0, 59.5), w, "건너뜀", 20, Color(paint.darkened(0.5), 0.85),
 				font_sm)
 	else:
-		_sign_text(Vector2(0.0, 61.0), w, "목표 %d" % GameData.target_of(rn), 20, ink,
+		_sign_text(Vector2(0.0, 59.5), w, "목표 %d" % GameData.target_of(rn), 20, ink,
 				font_sm)
 		# 보상은 수가 아니라 **금화 개수**로 낸다. 3 과 5 의 차이는 읽어야
 		# 알지만 금화 셋과 다섯은 안 읽고도 보인다. 카드가 누워 있을 때
@@ -16486,7 +16553,7 @@ func _leg_card(i: int, rn: int) -> void:
 		var cw: float = 7.0
 		var cx0: float = w * 0.5 - float(rw) * cw * 0.5
 		for ci in mini(rw, 8):
-			draw_plaque(Vector2(cx0 + float(ci) * cw, 70.0), 5.5, 3.6, C_GOLD)
+			draw_plaque(Vector2(cx0 + float(ci) * cw, 66.5), 5.5, 3.6, C_GOLD)
 	draw_set_transform(shake_off)
 
 
@@ -16684,8 +16751,9 @@ func _draw_stage() -> void:
 	#  카드가 글자를 덮어야 순서가 맞다).
 	#
 	#  **「목표 n」 하나로 줄인다.** 라운드와 판 이름은 상단 바가 이미 든다.
-	#  9 → 11 → 12(글자 키우기) — _draw_leg 의 「라운드」 줄과 같은 단 · 같은 자리다.
-	draw_string(font, Vector2(0.0, TBL.fy + 13.0),
+	#  9 → 11 → 12(글자 키우기) — _draw_leg 의 「라운드」 줄과 같은 단 · 같은 자리다
+	#  (상인 라인 밑 fy+23 — 그 머리말).
+	draw_string(font, Vector2(0.0, TBL.fy + 23.0),
 			"목표 %d" % GameData.target_of(leg_no),
 			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 12,
 			Color(C_TABLE.lightened(0.40), 0.85))
@@ -16719,8 +16787,8 @@ func _draw_stage() -> void:
 # 내렸을 때 선반만 옛 자리에 남아 펠트 위에 검은 네모가 떴다.
 # 보드 확장(mods.csv)는 _icon_mod, 제약(modifiers.csv)은 _icon_modifier 다.
 # 캐비닛과 획으로 형태가 갈려 있어 아래(내가 산 것)와 위(내가 고를 것)가
-# 안 섞인다. 이름은 12(글자 키우기 — 전에는 9 · 11). 최장 「천체 고리」 53px 이
-# 칸 56 의 안쪽 54 에 든다(칸 52 였을 때는 12 에서 「천체 …」 로 잘렸다).
+# 안 섞인다. 이름은 12(글자 키우기 — 전에는 9 · 11). 최장 「천체 고리」 45px(페이퍼로지
+# Bold — 갈무리11 때 53)이 칸 56 의 안쪽 54 에 든다(칸 52 · 갈무리 때는 「천체 …」 로 잘렸다).
 # 앞치마 줄의 중심. 버튼 띠와 같은 줄이다.
 func _apron_y() -> float:
 	return _reroll_rect().get_center().y
@@ -16848,7 +16916,7 @@ func _stage_card(i: int) -> void:
 	_sign_text(Vector2(0.0, roundf(lerpf(float(CARD.name), float(CARD.name_up), up))),
 			sz.x, md.n, 20, ink, font_sm)
 	# 효과는 일어서야 보인다. 누운 카드에 여덟 글자를 눕혀 두면 못 읽는다.
-	#  카드가 좁아 12 가 안 들면(stage_picks 4 이상) 그 줄만 10(갈무리9)으로 물러난다.
+	#  카드가 좁아 12 가 안 들면(stage_picks 4 이상) 그 줄만 10(font_sm)으로 물러난다.
 	if up > 0.02:
 		var dw: float = sz.x - 12.0
 		if font.get_string_size(String(md.d), HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x <= dw:
@@ -16866,8 +16934,12 @@ func _draw_shop() -> void:
 	_table_draw()
 	var rr := _btn(_reroll_rect(), "리롤", "무료" if reroll_cost == 0 else "",
 			gold >= reroll_cost)
+	#  값은 「무료」 부제와 **같은 바닥선**(_btn 의 37)에 선다. 페이퍼로지는 숫자 잉크
+	#  (바닥선 위 0.79em)와 한글 잉크(위 0.83em · 밑 0.04em)의 가운데가 같은 바닥선에서
+	#  겹친다 — 수 [27.5,37] · 「무료」 [27,37.5]. 옛 바닥선 36 그대로면 수가 「리롤」 잉크
+	#  밑에 2.5px 로 붙고 몸 밑이 6px 비었다.
 	if reroll_cost > 0:
-		draw_gold(rr.position.x + rr.size.x * 0.5, rr.position.y + 36.0,
+		draw_gold(rr.position.x + rr.size.x * 0.5, rr.position.y + 37.0,
 				str(reroll_cost), 12, C_GOLD if gold >= reroll_cost else C_DIM.darkened(0.3))
 	_btn(_next_rect(), "다음 판 →", "", true, C_GOLD, true)
 	_hold_draw()
@@ -16898,10 +16970,13 @@ func _draw_shop() -> void:
 	#  9 → 11 → 12(글자 키우기, 2026-09-17 — 11 은 갈무리11 의 격자에 안 떨어졌다).
 	#  리롤(끝 184)과 다음 판(432) 사이 x[188,428] 의 가운데에 선다 — 화면
 	#  가운데(320)에 두면 오른쪽 여유가 112 뿐이라 긴 문구가 「다음 판」 에 닿는다.
-	#  가장 긴 「It's Not About Money — 동전을 고른다」 가 12 에서 233px 로 든다.
-	#  20 은 이 자리에 안 든다. 넘치면 뒤를 자른다.
+	#  가장 긴 「It's Not About Money — 동전을 고른다」 가 12 에서 215px 로 든다(페이퍼로지
+	#  Bold — 갈무리11 때 233). 20 은 이 자리에 안 든다. 넘치면 뒤를 자른다.
+	#  세로는 두 단추 몸(턱 위 y[288,330]) 가운데 309 에 잉크 가운데를 맞춘다 — 바닥선
+	#  314 면 페이퍼로지 12 의 잉크가 [304,314.5] 다. 갈무리 때 바닥선 316 은 잉크
+	#  [305,316] 이었고, 페이퍼로지로 그대로 두면 [306,316.5] 라 몸 가운데보다 2px 아래였다.
 	if msg != "":
-		draw_string(font, Vector2(188.0, 316.0), _elide(msg, 240.0, 12),
+		draw_string(font, Vector2(188.0, 314.0), _elide(msg, 240.0, 12),
 				HORIZONTAL_ALIGNMENT_CENTER, 240.0, 12, Color(C_MULT, ma))
 
 
@@ -22527,13 +22602,17 @@ const TUTOR := {
 	#  말상자 글은 20(갈무리9 두 배) · 발치(걸음 · 계속 · 건너뛰기)는 12(갈무리11).
 	#  전에는 11 · 9 에 폭 300 이었다 — 「UI 에 비해 글자가 작다」(2026-09-17).
 	#  18 · 11 에 폭 440 이었다가 획이 격자에 안 떨어져(shot_fontgrid) 20 · 12 로 옮겼다.
-	#  폭을 488 로 넓혀 가장 긴 문구(u_rack 둘째, 20 에서 468px)가 한 줄에 든다 —
-	#  안쪽 472 라 양옆이 10px 씩 빈다(440 · 18 일 때와 같은 숨).
-	"box_w": 488.0,      # 말상자 폭. 20 에서 23자가 한 줄로 든다
+	#  폭을 488 로 넓혀 가장 긴 문구(u_rack 둘째, 갈무리9 20 에서 468px)가 한 줄에 들었다.
+	#  페이퍼로지 SemiBold 는 한글이 한 칸 좁아 같은 문구가 397px 다 — 488 이면 양옆이
+	#  37px 씩 비어 글이 상자 가운데 떠 보였다. 440 으로 되돌린다: 안쪽 424 에 양옆 13px
+	#  (갈무리 440 · 18 일 때와 같은 숨). 두 줄 안에 드는지는 qa_tutor ⑦ 이 잰다.
+	#  글 바닥선은 상자 윗변 + pad + 19 — 잉크 [10.5,28] 이라 상자 위 10.5 가 발치 글줄
+	#  밑(10.5)과 같다.
+	"box_w": 440.0,      # 말상자 폭. 20 에서 23자가 한 줄로 든다
 	"box_pad": 8.0,
-	"line": 24.0,        # 글 한 줄 높이 — 20px 잉크 18 + 사이 6
+	"line": 24.0,        # 글 한 줄 높이 — 20px 잉크 17.5 + 사이 6.5
 	"foot": 28.0,        # 발치 줄 — 건너뛰기 단추(20)와 위아래 4
-	"skip": Vector2(72.0, 20.0),   # 건너뛰기 단추(턱 4 포함). 12px 낱말 48 + 여백
+	"skip": Vector2(72.0, 20.0),   # 건너뛰기 단추(턱 4 포함). 12px 낱말 43 + 여백
 }
 var tutor_q := []          # 아직 못 보여 준 갈래
 var tutor_id := ""         # 지금 도는 갈래
@@ -22744,9 +22823,11 @@ func _tutor_draw() -> void:
 				String(lines[i]), HORIZONTAL_ALIGNMENT_CENTER, bw - bp * 2.0,
 				20, Color(C_TXT, a))
 	#  발치 줄의 베이스라인 — 건너뛰기 단추 몸(턱 위 16px)의 글자와 같은 줄.
-	#  12px 잉크가 몸 안에서 [3,13] 이라 윗모서리 빛 한 줄을 빼면 위아래가 고르다.
+	#  바닥선 13 이면 페이퍼로지 12 잉크가 몸 안에서 [3,13.5] 라 윗모서리 빛 한 줄을 빼면
+	#  위 2 · 아래 2.5 로 고르다. 갈무리 때의 14 그대로면 [4,14.5] 로 낱말 밑이 턱에 1.5px
+	#  까지 내려앉았다(몸 [324,340] 에 잉크 [328,338.5]).
 	var sk := _tutor_skip_rect()
-	var fy: float = sk.position.y + 14.0
+	var fy: float = sk.position.y + 13.0
 	#  걸음 세기와 넘기는 법. 몇 걸음 남았는지가 안 보이면 언제 끝나는지를
 	#  모르는 채로 눌러야 한다.
 	var n := GameData.tutor_steps(tutor_id).size() if tutor_id != "" else 0
@@ -22764,7 +22845,7 @@ func _tutor_draw() -> void:
 	if sk.has_point(mouse_at) and tutor_t >= float(TUTOR.lead):
 		ui_hot = "tutor:skip"
 	var sb := _ui_face(self, "tutor:skip", sk, true, a)
-	draw_string(font, Vector2(sb.position.x, sb.position.y + 14.0), "건너뛰기",
+	draw_string(font, Vector2(sb.position.x, sb.position.y + 13.0), "건너뛰기",
 			HORIZONTAL_ALIGNMENT_CENTER, sb.size.x, 12,
 			Color(_ui_ink("tutor:skip", true), a))
 	draw_string(font, Vector2(bx, fy), "눌러서 계속",
@@ -22806,8 +22887,8 @@ func _tutor_wrap(tx: String, w: float) -> PackedStringArray:
 	var cur := ""
 	for word in tx.split(" ", false):
 		var try_s: String = word if cur == "" else cur + " " + word
-		#  글꼴이 없는 판(헤드리스 프로브)에서는 글자 수로 센다. 한글이
-		#  20px(갈무리9 두 배)에서 한 글자 20px 이라 그 값을 쓴다 — 재는 자리가
+		#  글꼴이 없는 판(헤드리스 프로브)에서는 글자 수로 센다. 한 글자 20px 로
+		#  넉넉히 잡는다(페이퍼로지 SemiBold 20 의 한글은 18px 안팎) — 재는 자리가
 		#  없다고 검사가 **조용히 통과해 버리는** 것을 막는 쪽이 낫다.
 		#  재는 글꼴 · 크기는 그리는 것(_tutor_draw 의 20)과 같아야 한다.
 		var tw: float = float(try_s.length()) * 20.0
