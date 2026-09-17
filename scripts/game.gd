@@ -14418,11 +14418,22 @@ func _ui_hover_tick(d: float) -> void:
 		queue_redraw()
 
 
+#  focus — 떠 있는 판(툴팁 · 런 정보 · 끝난 판). 전에는 금색 윗띠로 갈랐는데
+#  단추가 칠한 덩어리 + 턱으로 바뀌며 띠를 걷었다(2026-09-17). 같은 말씨로
+#  밑에 짙은 턱을 두고 윗모서리에 한 줄 빛을 준다 — 띠 없이도 판이 떠 있다.
+#  턱은 r 안에 든다(판이 아래로 안 자란다). 글자는 턱 위 PANEL_LIP 만큼 비워 둔다.
+const PANEL_LIP := 3.0
+
+
 func _panel(r: Rect2, focus := false, a := 1.0) -> void:
-	_rr(self, r, Color(C_PANEL, a))
-	if focus:
-		_rr_top(self, r, 2, Color(C_ACC, a))
-	_rr_bottom(self, r, Color(C_BG, a))
+	if not focus:
+		_rr(self, r, Color(C_PANEL, a))
+		_rr_bottom(self, r, Color(C_BG, a))
+		return
+	_rr(self, r, Color(C_PANEL.darkened(0.5), a))
+	var body := Rect2(r.position, r.size - Vector2(0.0, PANEL_LIP))
+	_rr(self, body, Color(C_PANEL, a))
+	_rr_top(self, body, 1, Color(C_PANEL.lightened(0.18), a))
 
 
 # ══════════════════════════════════════════════════════════
