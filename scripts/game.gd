@@ -4843,8 +4843,11 @@ func _draw_screen(scr: int) -> void:
 	elif scr == S.SETTINGS:
 		# 설정 글씨는 **흐림 판 위**여야 하므로 앞판(Front)이 그린다.
 		# 여기서는 뒤에 남아 흐려질 화면만 그린다 — 판 중에 열었으면
-		# 그 화면을, 제목에서 열었으면 제목을.
+		# 그 화면을, 제목에서 열었으면 제목을. 흐림 판 밑이라 그 안의 단추는
+		# 얹힘에 안 뜬다(ui_under) — 클릭은 설정이 받는다.
+		ui_under = true
 		_draw_screen(pause_from if pause_from >= 0 else S.TITLE)
+		ui_under = false
 	elif scr == S.PROFILE:
 		_draw_profile()
 	elif scr == S.COLLECT:
@@ -4911,8 +4914,11 @@ func _draw() -> void:
 		# 런 정보는 화면을 갈아 끼우는 것이 아니라 **판 위에 뜨는 판**이다.
 		# 열던 화면을 먼저 그리고 그 위에 얹어야 "잠깐 확인하고 닫는다" 로
 		# 읽힌다 — 뒤가 검으면 다른 화면으로 넘어간 것처럼 보인다.
+		# 밑에 깔린 화면의 단추는 얹힘에 안 뜬다(ui_under) — 클릭은 런 정보가 받는다.
 		if state == S.RUNINFO:
+			ui_under = true
 			_draw_screen(run_from)
+			ui_under = false
 		_draw_screen(state)
 
 	# 화면이 바뀌어도 같은 자리에 남는 것만 판이다 — 그래서 스크림 뒤에 그린다.
@@ -5143,6 +5149,14 @@ func _grip_draw() -> void:
 	for i in n:
 		if i < grip_hov.size() and grip_hov[i] > 0.5:
 			hov = i
+	#  들어설 때 딸깍 — **고르는 화면(PICK)에서만**이다. 조준 중에도 갈아탈
+	#  수 있지만 그때 벽은 판 위 손놀림이라 다트 소리 규칙을 지킨다(판 위는
+	#  카지노 소리를 안 올린다). 판정은 뽑히기 전 자리(_mag_rect)로 한다 —
+	#  뽑힘(grip_hov)이 0.5 를 넘기를 기다리면 소리가 반 박자 늦다.
+	if picking and _ui_can_hover():
+		for i in n:
+			if _mag_rect(i).has_point(mouse_at):
+				ui_hot = "grip:%d" % i
 
 	# 고른 자루와 커서가 얹힌 자루를 맨 나중에 그려 위로 올린다.
 	var top: int = hov if hov >= 0 else grip_pick
@@ -5166,9 +5180,25 @@ func _grip_one(i: int, picking: bool) -> void:
 	# 나는 동안은 진행 방향으로 눕고, 꽂히면서 제 기울기로 선다.
 	var rr: float = lerpf(GRIP.tilt - 0.16, ps.rot, e)
 	# 고른 자루는 뽑혀 나와 밝게 선다 — 지금 던질 것이 무엇인지가 벽 위에서 읽힌다.
-	var dim: float = 0.0 if (picking or i == grip_pick) else 0.26
+	#  조준 중 안 고른 자루는 어둡게 물러나 있다. 커서가 얹혀 뽑혀 나오는
+	#  만큼 밝아진다 — 전에는 어두운 채로 뽑혀 나와 「못 고른다」 로 읽혔다.
+	#  갈아탈 수 없는 때(_grip_swap_ok)에는 어두운 채다. 그때 밝히면 누를
+	#  수 있다는 거짓말이 된다.
+	var dim: float = 0.0
+	if not (picking or i == grip_pick):
+		var gh: float = grip_hov[i] if i < grip_hov.size() and _grip_swap_ok() else 0.0
+		dim = lerpf(0.26, 0.0, gh)
 	_icon_dart(from.lerp(ps.c, e), GRIP.dl + (3.0 if i == grip_pick else 0.0),
 			remaining[i].id, dim, rr, 1.0)
+
+
+#  벽의 자루를 지금 눌러 갈아탈 수 있나. _click 의 PICK · AIM_V 가지와 같은
+#  조건이다 — 첫 축을 잠그기 전, 당김이 아니고, 연발이 안 도는 동안.
+func _grip_swap_ok() -> bool:
+	if state == S.PICK:
+		return true
+	return state == S.AIM_V and aim_mode != "pull" and burst_left <= 0 \
+			and burst_hits.is_empty()
 
 
 # ══════════════════════════════════════════════════════════
@@ -5778,6 +5808,21 @@ func _draw_topbar() -> void:
 		# 무엇이 걸렸는지까지 보이므로 "제약 2" 보다 담는 정보가 오히려 많다.
 		#  자리는 셋뿐이다. 넷째부터는 **자른 것을 말한다** — 전에는
 		#  mini(size, 3) 으로 조용히 사라졌고, 그러면 화면이 판을 속인다.
+		#
+		#  얹힘 — 툴팁(_tip_hit 의 "onmod")과 같은 사각이다. 툴팁은 흰 테를
+		#  안 두르므로 커서가 무엇에 얹혔는지가 띠 위에 안 보였다. 아이콘들
+		#  뒤에 옅은 받침 한 장과 밑줄 한 획을 깐다. 18px 띠라 아이콘은 안 뜬다.
+		#  받침은 화면 오른끝(640)에서 끊는다 — 사각이 4px 넘어가 있어 그대로
+		#  깎으면 오른쪽 모서리만 잘린다.
+		var hr := Rect2(float(LAY.bar_mod) - 4.0, 0.0, 60.0, 18.0)
+		if _ui_can_hover() and hr.has_point(mouse_at):
+			ui_hot = "onmod"
+		var mh := _ui_hov("onmod")
+		if mh > 0.0:
+			var back := Rect2(hr.position.x + 2.0, 2.0,
+					minf(hr.end.x, VIEW.x) - hr.position.x - 4.0, 14.0)
+			_rr(self, back, Color(C_TXT, 0.08 * mh))
+			_rr_bottom(self, back, Color(C_ACC, mh))
 		var shown_n: int = mini(active_mods.size(), 3 if active_mods.size() <= 3 else 2)
 		for k in shown_n:
 			_icon_modifier(Vector2(LAY.bar_mod + 8.0 + float(k) * 16.0, 9.0),
@@ -6901,17 +6946,34 @@ func _panel_draw() -> void:
 
 
 # 상점 밖의 판매 버튼. 창구가 하는 말("판매 +N")을 그대로 한다.
+#
+#  얹히면 판 위 단추(_ui_face)와 같은 어법이다 — 몸이 한 칸 떠오르고(제자리에
+#  짙은 턱이 드러난다) 면이 옅게 밝아지며 윗띠가 금빛에서 주황으로 옮는다.
+#  누르고 있는 동안(ARMED)은 안 뜬다. 제자리에 앉아 가장 밝다 — 확정은 뗄
+#  때라 이 순간이 「눌렸다」 는 유일한 대답이다. 그림자는 r 에 붙어 안 움직이고,
+#  히트는 _sell_btn_rect 그대로라 뜨고 앉아도 판정이 안 흔들린다.
+#  13px 짜리라 윗띠는 한 줄을 지킨다 — 둘이면 금괴 글자 머리를 먹는다.
 func _sell_btn_draw() -> void:
 	var r := _sell_btn_rect()
 	if r.size.x <= 0.0:
 		return
-	var hot: bool = hand_st == H.ARMED and hand_src == 5
+	var press: bool = hand_st == H.ARMED and hand_src == 5
+	var hot: bool = _ui_can_hover() and r.has_point(mouse_at)
+	if hot:
+		ui_hot = "sellbtn"
+	var h: float = 0.0 if press else _ui_hov("sellbtn")
+	var lift: float = float(UIHOV.lift) if hot and not press else 0.0
+	var body := Rect2(r.position - Vector2(0.0, lift), r.size)
 	var v := GameData.sell_value(owned[sell_sel])
 	_rr(self, Rect2(r.position + Vector2(1.0, 2.0), r.size), Color(0.0, 0.0, 0.0, 0.35))
-	_rr(self, r, C_PANEL.lightened(0.12 if hot else 0.02))
+	if lift > 0.0:
+		_rr(self, r, C_BG)                  # 턱 — 떠오른 만큼 드러난다
+	_rr(self, body, C_PANEL.lightened(0.12 if press else 0.02))
+	if h > 0.0:
+		_rr(self, body, Color(C_TXT, 0.08 * h))
 	# 위쪽 한 획 — 리롤·다음 판 버튼과 같은 어법이라 "버튼"으로 읽힌다.
-	_rr_top(self, r, 1, C_ACC if hot else C_GOLD)
-	draw_gold(r.position.x + r.size.x * 0.5, r.position.y + r.size.y - 3.0,
+	_rr_top(self, body, 1, C_ACC if press else C_GOLD.lerp(C_ACC, h))
+	draw_gold(body.position.x + body.size.x * 0.5, body.position.y + body.size.y - 3.0,
 			"+%d" % v, 9, C_GOLD)
 
 
@@ -6953,12 +7015,33 @@ func _panel_slot(i: int) -> void:
 	# 호버 링 — 리프트는 안 쓴다. 발동 스프링의 실제 최대 리프트가 3px 뿐이라
 	# 호버까지 들어올리면 두 어휘가 뒤집힌다. 링은 하나만 그린다 — 폭 1.0 짜리
 	# 둘을 겹치면 nearest 에서 한 덩어리 띠로 뭉개져 상태가 안 갈린다.
-	if sel:
+	#
+	#  링이 뜻하는 것은 차례대로 하나다.
+	#    고르기    사진으로 동전을 고르는 중(photo_rack) 커서 밑 동전 — 꽉 찬 고리.
+	#              태우기는 판매 선택과 같은 붉은빛(없어진다), 복제는 주황
+	#    누름      눌러 놓고 아직 안 끈 동전(ARMED) — 흰 고리
+	#    판매 선택  맥동하는 붉은 고리
+	#    얹힘      주황 고리. 툴팁 짙기(tip_a)와 얹힘 짙기(ui_hov) 중 큰 쪽이라
+	#              툴팁을 쉬는 때(점수 카드가 떠 있을 때)에도 무엇에 얹혔는지 보인다
+	#  들어설 때 딸깍은 ui_hot 이 낸다 — 동전을 실제로 집을 수 있을 때만이다.
+	var key := "rack:%d" % i
+	var over: bool = _slot_rect(i).has_point(mouse_at)
+	var choosing: bool = photo_rack != "" and not swap_live and not _tutor_live()
+	if over and (choosing or (_ui_can_hover() and _can_rack_move())):
+		ui_hot = key
+	var press: bool = hand_st == H.ARMED and hand_src == 1 and hand_i == i
+	var hv: float = maxf(tip_a if i == tip_slot else 0.0, _ui_hov(key))
+	if choosing and over:
+		draw_arc(c, r + 2.0, 0.0, TAU, 24,
+				C_MULT.lightened(0.25) if photo_rack == "burn" else C_ACC, 1.0)
+	elif press:
+		draw_arc(c, r + 2.0, 0.0, TAU, 24, C_TXT, 1.0)
+	elif sel:
 		var k := 0.5 + 0.5 * sin(sell_t * 9.0)
 		draw_arc(c, r + 2.0, 0.0, TAU, 24,
 				Color(C_MULT.lightened(0.25), 0.45 + 0.55 * k), 1.0)
-	elif i == tip_slot and tip_a > 0.004:
-		draw_arc(c, r + 2.0, 0.0, TAU, 24, Color(C_ACC, tip_a), 1.0)
+	elif hv > 0.004 and not choosing:     # 고르는 중에 떠난 동전은 바로 끈다
+		draw_arc(c, r + 2.0, 0.0, TAU, 24, Color(C_ACC, hv), 1.0)
 
 	# 상점에서는 동전 슬롯이 매물대가 된다 — 태그 자리에 회수액을 건다.
 	# 상점 밖에서는 안 쓴다. 파는 값은 판매 버튼이 이미 말하고(_sell_btn_draw),
@@ -7446,8 +7529,25 @@ func _cons_draw() -> void:
 			# 뒤에 회색 네모를 안 깐다. 물건이 곧 칸이다 — 동전 슬롯이
 			# 이미 그 규약이라(_panel_slot 은 스티커만 놓는다) 여기만
 			# 네모를 두면 같은 자리가 두 어법으로 말한다.
-			_icon_cons(r.get_center(), minf(r.size.x, r.size.y) * 0.42,
-					String(cons[i].id))
+			#
+			#  얹힘은 예외다 — 그동안만 옅은 받침이 깔리고 아이콘이 한 칸 뜬다.
+			#  누른 순간(ARMED, 아직 안 끔)은 뜨지 않고 받침이 어둡게 눌려
+			#  앉는다. 받침은 칸 사각(_cons_rect)보다 한 칸 안이라 툴팁의 흰
+			#  테와 안 겹치고, 사각은 그대로라 히트가 안 흔들린다.
+			#  빈 칸은 반응이 없다 — 누를 것이 없다.
+			var key := "cons:%d" % i
+			if _ui_can_hover() and _hand_live() and _cons_rect(i).has_point(mouse_at):
+				ui_hot = key
+			var press: bool = hand_st == H.ARMED and hand_src == 4 and hand_i == i
+			var h := _ui_hov(key)
+			var up := 0.0
+			if press:
+				_rr(self, _cons_rect(i).grow(-2.0), Color(C_BG, 0.35))
+			elif h > 0.0:
+				_rr(self, _cons_rect(i).grow(-2.0), Color(C_TXT, 0.07 * h))
+				up = roundf(h)
+			_icon_cons(r.get_center() - Vector2(0.0, up),
+					minf(r.size.x, r.size.y) * 0.42, String(cons[i].id))
 	# 이름과 수 — 동전 슬롯 밑은 상인 자리라 못 쓰지만 이 자리는 벽이다.
 	# 「사탕」이라고만 적고 있었는데 이 칸에는 사진도 들어간다 — 사진을
 	# 한 장 들고 있으면 「사탕 1/2」가 거짓말이 된다. 폭이 34px 뿐이라
@@ -14174,9 +14274,26 @@ func _ui_hov(key: String) -> float:
 	return float(ui_hov.get(key, 0.0))
 
 
+#  덮인 화면을 그리는 중인가. 런 정보는 열던 화면을, 일시정지 설정은 멈춘
+#  화면을 **밑에 한 번 더 그린다**(_draw · _draw_screen). 그 안의 단추도
+#  같은 그리기를 지나므로 이 깃발이 없으면 흐림 판 뒤의 「리롤」이 떠오르고
+#  딸깍한다 — 눌러도 아무 일이 없으니 고장으로 읽힌다.
+var ui_under := false
+
+
 #  얹힐 수 있는 때 — 무엇을 끌고 있거나 화면을 갈아 끼우는 동안은 아니다.
+#  덮인 화면(ui_under)과, 클릭을 통째로 가로채는 층 셋도 아니다.
+#    사진이 덮은 화면(칠하기 · 미리보기)   _click 이 먼저 받는다
+#    사진으로 동전 고르기(photo_rack)      딴 데를 누르면 무르기다
+#    배움 설명(_tutor_live)                클릭이 넘기기다(_tutor_click)
+#  상점의 태우기 · 복제(photo "burn" · "clone")는 덮는 층이 아니다 — 테이블만
+#  내 동전으로 갈아 끼우고 창구 · 리롤 · 다음 판은 그대로 눌린다.
+#  층 위에서 실제로 받는 것(배움 건너뛰기 · 칠할 칸 · 고를 동전)은 이 문을
+#  안 거치고 제 조건으로 밝힌다.
 func _ui_can_hover() -> bool:
-	return not swap_live and hand_st != H.CARRY
+	return not swap_live and hand_st != H.CARRY and not ui_under \
+			and photo != "paint" and photo != "peek" and photo_rack == "" \
+			and not _tutor_live()
 
 
 #  단추 몸을 그리고 **몸이 선 자리**를 돌려준다(글자는 거기에 얹는다).
