@@ -14419,7 +14419,7 @@ func _btn(r: Rect2, label: String, sub: String, on: bool,
 	if sub != "":
 		draw_string(font_sm, b.position + Vector2(0, 35), sub,
 				HORIZONTAL_ALIGNMENT_CENTER, b.size.x, 9,
-				C_GOLD.lightened(0.25 * _ui_hov("btn:" + label)) if on else C_OFF)
+				C_GOLD if on else C_OFF)
 
 
 #  정산 표의 자리. 제목 · 합계선 · 총액이 화면 한가운데(320)에 서는데
