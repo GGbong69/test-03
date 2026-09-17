@@ -31,7 +31,7 @@ var fails := 0
 
 # 발치 이름마다 물건 몇 개가 서는가. 자가 아는 것이 맞다 — 게임이 몇
 # 개를 세웠는지를 게임에게 물으면 "세운 만큼 섰다" 밖에 안 나온다.
-const FEET_N := {"gift": 2}
+const FEET_N := {"gift": 2, "dice": 2}
 
 
 func _say(ok: bool, name: String, detail := "") -> void:
@@ -165,6 +165,15 @@ func _run() -> void:
 		# 발치도 같은 규약이다 — 오타는 잠자코 빈 발치로 떨어진다.
 		if sk.has("foot") and not g.CUP_FEET.has(String(sk["foot"])):
 			bad.append("발치 없음 %s=%s" % [k, sk["foot"]])
+		# 모양도 벽·색·발치와 같은 규약이다 — 오타를 내면 잠자코 기준선
+		# 깡통이 선다(_cup3_body 의 기본 갈래). 눈으로는 「이 다트통 얼굴이
+		# 안 바뀌었네」로만 보이고 왜인지는 안 보인다.
+		if sk.has("shape") and not g.CUP_SHAPES.has(String(sk["shape"])):
+			bad.append("모양 없음 %s=%s" % [k, sk["shape"]])
+		if sk.has("role") and not g.CUP_ROLE.has(String(sk["role"])):
+			bad.append("재질 없음 %s=%s" % [k, sk["role"]])
+		if sk.has("ramp") and not g.ART_PAL.has(String(sk["ramp"])):
+			bad.append("램프 없음 %s=%s" % [k, sk["ramp"]])
 		# 낮은 통은 자루가 덜 잠겨 쏟긴다. 표가 직접 막는다.
 		if sk.has("tall") and float(sk["tall"]) < 0.9:
 			bad.append("너무 낮다 %s=%s" % [k, sk["tall"]])
@@ -278,13 +287,16 @@ func _run() -> void:
 	# 겉을 한 줄로 찍어 견준다. 두 다트통이 같은 줄을 내면 화면에서도
 	# 같아 보인다 — 자루 수까지 넣는 것은 통이 같아도 담긴 것이 다르면
 	# 갈리기 때문이다(실제로 그것 하나로 갈리는 다트통이 있다).
+	# 서명에 **모양**이 든다. 무쇠·깃털·0718·일당이 다 steel 2단이라
+	# 색만으로는 넷이 안 갈린다 — 갈리는 것은 실루엣이다.
 	var face := {}
 	var same := []
 	for pi in GameData.packs().size():
 		var row: Dictionary = GameData.packs()[pi]
 		var sk3: Dictionary = g._cup3_skin(pi)
-		var sig := "%s|%.2f|%.2f|%d|%s|%s|%s|%s|%s|%d" % [
-				String(sk3.wall), float(sk3.wide), float(sk3.tall),
+		var sig := "%s|%s|%.2f|%.2f|%d|%s|%s|%s|%s|%s|%d" % [
+				String(sk3.wall), String(sk3.shape),
+				float(sk3.wide), float(sk3.tall),
 				int(sk3.hoop), str(bool(sk3.pole)),
 				String(sk3.foot), str(bool(sk3.sticker)),
 				Color(sk3.body).to_html(false), Color(sk3.dart_col).to_html(),
@@ -295,6 +307,33 @@ func _run() -> void:
 	_say(same.is_empty(), "겉이 저마다 다르다",
 			", ".join(same) if not same.is_empty()
 			else "%d가지" % face.size())
+
+	# ── 팔레트 ────────────────────────────────────────
+	# DK_PAL 은 ART_PAL 의 **부분집합**이다. 둘이 갈리면 2D 다트와 3D 통이
+	# 다른 팔레트로 칠해지는데, 그 어긋남은 한 단 차이라 눈으로는 못 잡는다.
+	# coin_paint.PAL 이 원본이고 두 상수가 그것을 옮겨 적은 것이다.
+	var pbad := []
+	for k4 in g.DK_PAL:
+		if not g.ART_PAL.has(String(k4)):
+			pbad.append("램프 없음 " + String(k4))
+			continue
+		for i4 in 4:
+			var a4: Color = g.DK_PAL[k4][i4]
+			var b4: Color = g.ART_PAL[k4][i4]
+			if not a4.is_equal_approx(b4):
+				pbad.append("%s%d %s≠%s" % [k4, i4, a4.to_html(false),
+						b4.to_html(false)])
+	_say(pbad.is_empty(), "DK_PAL 이 ART_PAL 의 부분집합이다",
+			", ".join(pbad) if not pbad.is_empty()
+			else "램프 %d벌 · 단 %d" % [g.DK_PAL.size(), g.DK_PAL.size() * 4])
+
+	# 모양 목록과 표가 맞물리는가. 목록에만 있고 아무도 안 쓰는 모양은
+	# 괜찮지만(기준선 tin 처럼), 쓰는데 목록에 없으면 잠자코 깡통이 된다.
+	var used := {}
+	for pi5 in GameData.packs().size():
+		used[String(g._cup3_skin(pi5).shape)] = true
+	_say(true, "쓰이는 모양", "%d가지 / 목록 %d가지"
+			% [used.size(), g.CUP_SHAPES.size()])
 
 	print("열셋 검사 · 실패 %d" % fails)
 	quit(fails)

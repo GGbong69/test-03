@@ -21578,28 +21578,31 @@ const CUP3 := {
 # **잠긴 다트통은 이 표를 안 본다**(_cup3_skin). 겉이 새면 히든이 히든이 아니다 —
 # 자루 수와 종류를 기준선으로 세우는 것과 같은 규칙이다.
 const CUP_SKIN := {
-	"base":   {},                                  # 기준선. 민 원통
+	"base":   {"shape": "stein"},                  # 바의 기본 잔
 	"p_mag":  {"wall": "net"},                     # 여벌 다트통. 철망
-	"p_rack": {"wide": 1.15, "sticker": true},     # 넓은 동전 슬롯. 넓은 통에 동전 한 장
+	"p_rack": {"wide": 1.15, "sticker": true,      # 넓은 동전 슬롯
+			"shape": "slots"},
 	# 선금 다트통. 선금을 받았으니 통이 금빛이고 발치에 플라크가 흩어져 있다 —
 	# 다트통이 미는 것(시작 골드)이 글줄이 아니라 물건으로 보인다.
-	"p_adv":  {"tint": "gold", "gold": 5},
+	"p_adv":  {"tint": "gold", "gold": 5, "ramp": "gold", "shape": "sack"},
 	# 일당 다트통. 이자를 끄고 **남은 다트 1개당** 골드를 두 배로 주는 다트통이라,
 	# 자루 자체가 돈이다. 그래서 통이 아니라 자루가 금빛이다.
 	# 몸은 **어두운 유리**다(steel 램프). 제 색 빨강은 목 띠가 든다 —
 	# 몸까지 빨갛게 칠하면 자석 다트통의 붉은 극과 섞인다.
-	"p_wage": {"dart": "gold", "ramp": "steel", "role": "glass"},
+	"p_wage": {"dart": "gold", "ramp": "steel", "role": "glass",
+			"shape": "jar"},
 
 	# 무쇠 다트통. 무거운 자루를 담는 통은 테를 두른다 — 통 하나로 "이 안에
 	# 무거운 것이 들었다" 를 말하는 가장 오래된 어법이다. 낮고 굵게 앉힌다.
 	# 테는 **둘**이다. 셋이면 발치 테까지 넉 줄이라 골함석이 된다.
 	# **가장 어둡다.** 무게는 명도로 가른다 — 무쇠 0·1단, 깃털 1·2·3단.
-	"p_iron": {"hoop": 2, "tall": 0.92, "wide": 1.06, "role": "dark"},
+	"p_iron": {"hoop": 2, "tall": 0.92, "wide": 1.06, "role": "dark",
+			"shape": "pail"},
 	# 깃털 다트통. 무쇠의 정반대로 세운다 — 가늘고 키 크다. 둘을 나란히
 	# 놓았을 때 실루엣만으로 갈리는 것이 이 표의 값이다.
 	# **가장 밝다.** 무쇠와 정반대로 세운다 — 발이 퍼진 어둠 ↔ 아가리가
 	# 퍼진 밝음. 둘을 나란히 놓으면 실루엣과 명도 둘 다로 갈린다.
-	"p_lgt":  {"tall": 1.26, "wide": 0.88, "role": "pale"},
+	"p_lgt":  {"tall": 1.26, "wide": 0.88, "role": "pale", "shape": "vase"},
 	# 자석 다트통. 자석은 늘 두 색으로 칠해져 있고, 그 두 색이 곧 "자석"
 	# 이라는 글자다.
 	"p_mgn":  {"pole": true},
@@ -21610,19 +21613,19 @@ const CUP_SKIN := {
 	# 자루가 설 데가 없어 **아가리에 걸쳐 눕는다** — 촉이 벽에 밀리고
 	# 꽁지가 통 밖으로 나간다(실측 35·37도, 멀쩡한 통은 7~28도).
 	# 통 굵기의 바닥은 0.85 다. cup_probe 가 그 밑을 막는다.
-	"p_solo": {"wide": 0.86},
+	"p_solo": {"wide": 0.86, "shape": "tube"},
 	# 선물 다트통. 들려 보내는 둘(사진·사탕)은 자루가 아니라 통 **안**에
 	# 못 든다. 그래서 발치에 놓는다 — 선금이 플라크를 흩는 그 자리다.
 	# 리본을 둘렀던 적이 있는데 그것은 **이름**을 그린 것이었다. 이 표가
 	# 그리는 것은 효과다.
-	"p_gift": {"foot": "gift"},
+	"p_gift": {"foot": "gift", "shape": "bag"},
 	# 저울 다트통. 동전 하나를 끼고 시작한다. 넓은 동전 슬롯이 "칸이 넓다"
 	# 를 동전으로 말하는 그 어법을 "한 장 딸려 온다" 에 그대로 쓴다.
-	"p_x1":   {"sticker": true},
+	"p_x1":   {"sticker": true, "shape": "loving"},
 	# [?? ???]. 쌓은 것을 버리고 다시 뽑는 다트통이라 자루가 무엇인지를
 	# 통이 말하지 않는다 — 이름 없는 강철빛으로 덮는다. 통은 제 색으로
 	# 선명한데 그 안의 자루만 무표정한 것이 이 다트통의 그림이다.
-	"p_rnd":  {"dart": "steel"},
+	"p_rnd":  {"dart": "steel", "foot": "dice", "shape": "dice"},
 	# 0718. 개발자 모드다. **일부러 아무것도 안 준다** — 이 다트통에 얼굴을
 	# 달면 고를 만한 것으로 보이고, 고를 만한 것이 아니다.
 	"p_dev":  {"shape": "proto"},
@@ -21652,7 +21655,7 @@ const CUP_WALLS := ["solid", "net"]
 
 # 있는 발치의 온 목록. 벽·색과 같은 규약이다 — 오타를 내면 잠자코 빈
 # 발치가 되므로(_cup3_feet 의 기본 갈래) 눈으로는 못 잡는다.
-const CUP_FEET := ["gift"]
+const CUP_FEET := ["gift", "dice"]
 
 var cup_vp: SubViewport = null
 var cup_rigs := []      # [{"cup": AnimatableBody3D, "darts": Array, "pi": int}]
@@ -21746,9 +21749,10 @@ func _cup3_pat(key: String) -> ImageTexture:
 		return cup_pat[key]
 	var tw: int = maxi(int(a[1]) if a.size() > 1 else 8, 2)
 	var th: int = maxi(int(a[2]) if a.size() > 2 else 8, 2)
+	var arg: int = int(a[3]) if a.size() > 3 else 0
 	var img := Image.create(tw, th, false, Image.FORMAT_RGBA8)
 	img.fill(Color(0.5, 0.0, 0.0, 1.0))     # 오프셋 0 · 안 뚫림 · 첫 램프
-	_cup3_bake(img, nm, tw, th)
+	_cup3_bake(img, nm, tw, th, arg)
 	var t := ImageTexture.create_from_image(img)
 	cup_pat[key] = t
 	return t
@@ -21792,7 +21796,7 @@ func _cup3_pat_key(nm: String, face: float, h: float) -> String:
 
 #  모양마다의 무늬. 이름이 없으면 빈 몸이다 — 무늬가 없는 것도 한 갈래다
 #  (0718 의 체커와 기준선 깡통을 가르는 것이 그것이다).
-func _cup3_bake(img: Image, nm: String, tw: int, th: int) -> void:
+func _cup3_bake(img: Image, nm: String, tw: int, th: int, arg := 0) -> void:
 	match nm:
 		#  기준선 깡통. 음각선 둘만 판다 — 잠긴 다트통과 0718 이 이 얼굴로
 		#  서므로 **고를 만한 얼굴이면 안 된다.** 그래도 민 원통 한 덩이는
@@ -21810,6 +21814,164 @@ func _cup3_bake(img: Image, nm: String, tw: int, th: int) -> void:
 					if (int(x / 8) + int(y / 8)) % 2 == 0:
 						_pat_st(img, x, y, -1)
 
+		#  기본 — 크림색 도기 맥주잔. 바의 기본 잔이다. 윗테 3px 평평한
+		#  띠 · 음각선 둘 · 소금유약 점. 유약 도기라 몸 광택은 없다.
+		"stein":
+			for k in 3:
+				_pat_row(img, k, 1)
+			_pat_row(img, _pat_y(th, 0.82), -1)
+			_pat_row(img, _pat_y(th, 0.18), -1)
+			for k2 in 7:
+				_pat_box(img, int(_pat_rnd(k2, 11) * float(tw)),
+						_pat_y(th, 0.28 + _pat_rnd(k2, 23) * 0.46), 2, 1, -1)
+
+		#  일당 — 바 팁 병. 남은 다트 하나하나가 병에 쌓이는 돈이다.
+		#  **불투명하다.** 투명 유리(디더 시저로 금 자루를 비치게 하는 안)는
+		#  기각했다 — 철망 속통 주석 그대로 1px 구멍마다 자루가 비쳐 끓는다.
+		"jar":
+			#  왼쪽 세로 반사 줄. 2px · 2px 띄우고 1px — 유리의 관습이다.
+			for y2 in th:
+				_pat_st(img, _pat_u(tw, 0.80), y2, 2)
+				_pat_st(img, _pat_u(tw, 0.80) + 1, y2, 2)
+				_pat_st(img, _pat_u(tw, 0.86), y2, 2)
+			_pat_box(img, _pat_u(tw, 0.83), _pat_y(th, 0.76), 2, 1, 3)
+			#  바닥 7px 의 금 동전층. 윗선을 계단으로 썰어야 「쌓인 것」이
+			#  된다 — 곧게 끊으면 병에 액체를 채운 것으로 보인다.
+			for x2 in tw:
+				var top2: int = th - 7 - (2 if int(_pat_rnd(int(x2 / 6), 5)
+						* 2.0) == 0 else 0)
+				for y3 in range(top2, th):
+					_pat_st(img, x2, y3, 0, true)
+			for k3 in 3:
+				_pat_box(img, int(_pat_rnd(k3, 31) * float(tw)), th - 5,
+						2, 2, 1, true)
+
+		#  일당 목 띠 — 윗줄 한 단 밝고 가운데 홈 한 단 어둡다.
+		"neck":
+			_pat_row(img, _pat_y(th, 0.99), 1)
+			_pat_row(img, _pat_y(th, 0.93), -1)
+
+		#  선물 — 크라프트 쇼핑백. 4골드를 써서 산 물건을 들고 온다.
+		#  **리본·나비·속지는 없다** — 그것들은 이름을 그린다.
+		"bag":
+			#  윗단 2px 톱니. 위 두 줄만 뚫는다 — 객체 공간이라 통이
+			#  미끄러져도 톱니가 안 헤엄친다.
+			for x3 in tw:
+				if x3 % 4 < 2:
+					_pat_hole(img, x3, 0)
+				if x3 % 8 < 2:
+					_pat_hole(img, x3, 1)
+			_pat_col(img, _pat_u(tw, 0.16), 0.02, 0.96, -1)
+			for k4 in 9:
+				_pat_box(img, int(_pat_rnd(k4, 41) * float(tw)),
+						_pat_y(th, 0.15 + _pat_rnd(k4, 47) * 0.70), 2, 1, -1)
+
+		#  넓은 동전 슬롯 — 파랑 법랑 통에 둥근 소켓의 줄. **수는 그 행의
+		#  동전 칸 수다**(item_slots) — 칸이 하나 더 있다는 말을 통이 세어서
+		#  한다. 앞면에 셋쯤 보인다.
+		#  칩 캐러셀 기둥 여섯은 기각했다: 이 게임의 「칩」(점수)·금 플라크와
+		#  헷갈리고, 앞 기둥이 자루를 가리고 뒤 셋은 셀 수 없다.
+		"slots":
+			var n5: int = maxi(arg, 1)
+			var cy5: int = _pat_y(th, float(CUP_STK.y))
+			#  12 로 굽자 소켓 하나가 통 폭의 절반을 먹어 「큰 고리 셋」이
+			#  됐다. 10 이면 앞면에 셋이 들어오고 사이에 몸이 남는다.
+			var rad5 := 10
+			for k5 in n5:
+				#  스티커가 앉은 자리(CUP_STK.at)를 소켓 0 으로 삼는다 —
+				#  안 맞추면 동전이 소켓 사이의 몸에 붙는다.
+				var cx5: int = _pat_u(tw, float(CUP_STK.at) / TAU
+						+ float(k5) / float(n5))
+				for dy in range(-rad5, rad5 + 1):
+					for dx in range(-rad5, rad5 + 1):
+						var dd := sqrt(float(dx * dx + dy * dy))
+						if dd > float(rad5):
+							continue
+						#  파인 자리는 빛이 뒤집힌다 — 왼쪽 위 안벽이
+						#  그늘이고 오른쪽 아래가 빛이다. 그 뒤집힘이
+						#  곧 「팠다」다. 바닥은 몸과 같은 단이라 얕다.
+						var d5 := 0
+						if dd > float(rad5) - 2.0:
+							d5 = -1 if dx + dy < 0 else 1
+						_pat_st(img, posmod(cx5 + dx, tw), cy5 + dy, d5)
+
+		#  선금 — 은행 돈자루. 목돈을 미리 받는다. 캔버스 4텍셀 격자에
+		#  2x1 · 목 주름. 금 램프 **아래 단**이라 캔버스지 금덩이가 아니다.
+		"sack":
+			for gy in range(0, th, 4):
+				for gx in range(0, tw, 4):
+					if _pat_rnd(gx + gy * 7, 3) < 0.34:
+						_pat_box(img, gx, gy, 2, 1, -1)
+			#  목 주름. 골과 두덩이 짝이라야 주름이다 — 골만 파면 줄무늬다.
+			for x4 in range(0, tw, 6):
+				_pat_col(img, x4, 0.72, 1.0, -1)
+				_pat_col(img, x4 + 1, 0.72, 1.0, -1)
+				_pat_col(img, x4 + 2, 0.72, 1.0, 1)
+				_pat_col(img, x4 + 3, 0.72, 1.0, 1)
+
+		#  무쇠 — 리벳 박은 들통. 무거운 것을 담는다. 세로 이음선 하나에
+		#  8px 리벳 · 발치 녹 덩어리(G 플래그로 orange).
+		#  나무 통널은 기각했다: 나무 카운터에 묻히고 제 색(steel)을 잃는다.
+		"pail":
+			var sx6: int = _pat_u(tw, 0.80)
+			_pat_col(img, sx6, 0.02, 0.98, -1)
+			var yy6 := 6
+			while yy6 < th - 4:
+				_pat_box(img, sx6 - 1, yy6, 2, 2, 1)
+				yy6 += 8
+			for k6 in 3:
+				var rx6: int = int(_pat_rnd(k6, 61) * float(tw))
+				var ry6: int = th - 7 - int(_pat_rnd(k6, 67) * 5.0)
+				_pat_box(img, rx6, ry6, 3, 2, 0, true)
+				_pat_box(img, rx6 + 1, ry6 + 2, 2, 1, -1, true)
+
+		#  깃털 — 옅은 강철 나팔 꽃병. 가볍다. 세로 골 두 줄씩.
+		#  **빛 쪽 2/3 에만** 넣는다 — 온 둘레에 두르면 골이 무늬가 되고,
+		#  무늬는 형태를 가린다. 화살통은 기각했다: 바 밖의 물건이고
+		#  멜빵·박음질이 40px 에서 잡음이 된다.
+		"vase":
+			var x7 := 0
+			while x7 < tw:
+				var u7: float = float(x7) / float(tw)
+				if u7 >= 0.66 or u7 <= 0.08:
+					_pat_col(img, x7, 0.10, 0.84, -1)
+					_pat_col(img, x7 + 1, 0.10, 0.84, -1)
+					_pat_col(img, x7 + 2, 0.10, 0.84, 1)
+					_pat_col(img, x7 + 3, 0.10, 0.84, 1)
+				x7 += 8
+
+		#  [?? ???] — 가죽 주사위 컵. 발마다 무작위다. 가죽 점 ·
+		#  박음질(G 플래그로 cream). **물음표 같은 글자는 없다.**
+		"dice":
+			for k8 in 26:
+				_pat_box(img, int(_pat_rnd(k8, 71) * float(tw)),
+						_pat_y(th, 0.12 + _pat_rnd(k8, 73) * 0.76), 2, 1, -1)
+			for yb in [_pat_y(th, 0.93), _pat_y(th, 0.07)]:
+				var x8 := 0
+				while x8 < tw:
+					_pat_box(img, x8, int(yb), 2, 1, 1, true)
+					x8 += 4
+			#  앞 왼쪽 세로 솔기. 4px 마다 X 한 자 — 꿰맨 자리다.
+			var sx8: int = _pat_u(tw, 0.78)
+			var y8: int = _pat_y(th, 0.88)
+			while y8 < _pat_y(th, 0.12):
+				_pat_st(img, sx8, y8, 1, true)
+				_pat_st(img, sx8 + 2, y8, 1, true)
+				_pat_st(img, sx8 + 1, y8 + 1, 1, true)
+				_pat_st(img, sx8, y8 + 2, 1, true)
+				_pat_st(img, sx8 + 2, y8 + 2, 1, true)
+				y8 += 4
+
+		#  쇠테 — 12텍셀마다 리벳 두 줄과 그 오른쪽의 그늘 한 줄.
+		#  띠가 3px 뿐이라 세로 줄 하나가 곧 2x3 리벳으로 보인다.
+		"hoop":
+			var x9 := 0
+			while x9 < tw:
+				_pat_col(img, x9, 0.0, 1.0, 1)
+				_pat_col(img, x9 + 1, 0.0, 1.0, 1)
+				_pat_col(img, x9 + 2, 0.0, 1.0, -1)
+				x9 += 12
+
 
 #  네모 한 덩이.
 func _pat_box(img: Image, x0: int, y0: int, w: int, h: int, d: int,
@@ -21817,6 +21979,29 @@ func _pat_box(img: Image, x0: int, y0: int, w: int, h: int, d: int,
 	for j in h:
 		for i in w:
 			_pat_st(img, posmod(x0 + i, img.get_width()), y0 + j, d, alt)
+
+
+#  세로 줄 한 획. y 는 발치에서 잰 높이 비다.
+func _pat_col(img: Image, x: int, f0: float, f1: float, d: int,
+		alt := false) -> void:
+	var th := img.get_height()
+	var a := _pat_y(th, maxf(f0, f1))
+	var b := _pat_y(th, minf(f0, f1))
+	for y in range(a, b + 1):
+		_pat_st(img, posmod(x, img.get_width()), y, d, alt)
+
+
+#  둘레의 어느 자리인가. 0 이 앞면 한가운데고 0.25 가 오른쪽, 0.75 가
+#  왼쪽이다(자리 = sin(각)). 빛이 왼쪽 위에서 오므로 **빛 쪽은 0.75~1.0** 이다.
+func _pat_u(tw: int, u: float) -> int:
+	return posmod(int(round(u * float(tw))), tw)
+
+
+#  뚫는다. 알파 0 이 곧 구멍이다 — 반투명이 아니라 없는 자리다.
+func _pat_hole(img: Image, x: int, y: int) -> void:
+	if x < 0 or y < 0 or x >= img.get_width() or y >= img.get_height():
+		return
+	img.set_pixel(x, y, Color(0.5, 0.0, 0.0, 0.0))
 
 
 # 납작하게 굳힌다 — 반사와 광택이 들어오면 이 화면만 다른 게임이 된다.
@@ -21883,6 +22068,9 @@ const CUP_ROLE := {
 	"dark":   {"base": 0.4},                             # 어두운 몸 — 무쇠
 	"pale":   {"base": 1.6},                             # 옅은 몸 — 깃털
 	"glass":  {"base": 0.5, "spec": 0.88},               # 어두운 유리 — 일당 병
+	"lacq":   {"base": 0.6, "spec": 0.90, "spec_s": 2.0},# 옻칠 — 외줄 튜브
+	"glaze":  {"base": 1.0, "spec": 0.88, "spec_s": 2.0},# 유약 — 저울 러빙컵
+	"ear":    {"base": 2.0, "spec": 0.84},               # 손잡이 · 귀
 	"lip":    {"base": 2.0, "spec": 0.84, "keep": true}, # 말린 아가리
 	"foot":   {"base": 1.0, "t_hi": 9.0},                # 발치 테. 빛 띠 없음
 	"inner":  {"base": 1.25, "ao": 1.4},                 # 속벽
@@ -21892,6 +22080,17 @@ const CUP_ROLE := {
 	"plaque": {"base": 2.0, "spec": 0.80},               # 금 플라크
 	"sunk":   {"base": 0.0},                             # 플라크의 파인 판
 	"prop":   {"base": 2.0},                             # 발치 소품 — 주사위
+	#  자루. **알베도 단이 그대로 몸 단**이다 — 빛 띠가 한 단 위, 그늘이
+	#  한 단 아래다. 한 단 내려 깔아 봤더니(빛 띠를 옛 알베도에 맞추려고)
+	#  표준 날개가 cream 0단으로 떨어져 큰 판이 통째로 진흙색이 됐다:
+	#  날개는 넓적한 판이라 법선이 거의 한 값이고, 그러면 그 한 단이
+	#  날개 전부가 된다. 얇고 매끈한 물건에서는 몸 단을 살려 둬야 한다.
+	#  ao 1.6 은 아가리 밑으로 들어간 몫을 어둡게 한다 — 통 안에 잠긴
+	#  자루가 밖에 선 자루와 같은 밝기면 통이 유리로 보인다.
+	"dk0":    {"base": 0.0, "ao": 1.6},
+	"dk1":    {"base": 1.0, "ao": 1.6},
+	"dk2":    {"base": 2.0, "ao": 1.6},
+	"dk3":    {"base": 3.0, "ao": 1.6},
 }
 
 var cup_toon := {}      # (램프|role|cull|질감|둘째램프) → ShaderMaterial
@@ -22009,6 +22208,86 @@ func _cup3_tmesh(parent: Node3D, mesh: Mesh, ramp: String, role: String,
 	return mi
 
 
+# ══════════════════════════════════════════════════════════
+#  선반(lathe) 메시
+# ──────────────────────────────────────────────────────────
+#  통 겉이 원기둥 한 통뿐이었다. 원기둥으로 낼 수 있는 실루엣은 하나라
+#  열셋이 굵기와 키만 다른 같은 통으로 섰다 — 물리(반지름·높이·벽 조각)는
+#  한 값도 못 바꾸므로, 실루엣 차이는 **충돌 없는 겉** 으로만 낼 수 있다.
+#
+#  프로필은 [반지름, 높이] 의 줄이다(발치 y0 → 아가리 yh). 돌리면 통이 된다.
+#
+#  법선은 **프로필 마디마다 평평하게** 준다. 마디를 부드럽게 이으면 어깨가
+#  매끈한 그라데이션으로 굴러가는데, 네 단 램프에서 그것은 단이 갈리는
+#  자리를 흐리는 일이다 — 마디마다 평평하면 단이 마디에서 딱 갈려 도트로
+#  읽힌다. 덩어리 질감(chunky)이 이 게임 그림의 어법이다.
+#
+#  UV 는 u = 각/TAU, v = 1 − 높이/h 다. 그림의 0번 줄이 아가리라야
+#  (원기둥 메시가 그렇다) 질감 한 장을 몸과 띠가 같이 쓸 수 있다.
+#
+#  조각은 48 이다. 26 이면 아가리 앞호에 계단이 넷 서서 통이 다각형으로
+#  읽힌다. 네모(가방)는 조각 4 에 flat 으로 돌린다 — 면마다 한 단이다.
+func _cup3_lathe(prof: PackedVector2Array, h: float, seg := 48,
+		flip := false, flat := true) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var hh: float = maxf(h, 0.0001)
+	for j in maxi(prof.size() - 1, 0):
+		var p0: Vector2 = prof[j]
+		var p1: Vector2 = prof[j + 1]
+		var d := p1 - p0
+		if d.length() < 0.00001:
+			continue
+		#  마디의 법선. 접선 (dr, dy) 의 왼쪽 법선이 바깥을 본다 —
+		#  곧은 통(dr 0, dy +1)에서 (1, 0) 이니 반지름 방향이다.
+		var nn := Vector2(d.y, -d.x).normalized()
+		if flip:
+			nn = -nn
+		for i in seg:
+			var a0 := TAU * float(i) / float(seg)
+			var a1 := TAU * float(i + 1) / float(seg)
+			#  평면 면은 두 꼭짓점이 **같은** 법선을 봐야 한 단으로 칠해진다.
+			var na0 := a0 if not flat else (a0 + a1) * 0.5
+			var na1 := a1 if not flat else (a0 + a1) * 0.5
+			var u0 := float(i) / float(seg)
+			var u1 := float(i + 1) / float(seg)
+			var q: Array = [[a0, na0, p0, u0], [a0, na0, p1, u0],
+					[a1, na1, p1, u1], [a1, na1, p0, u1]]
+			#  고닷의 앞면은 **시계 방향**이다(_cup3_leaf 주석). 아래 → 위 →
+			#  오른쪽 → 아래가 화면에서 시계 방향이다. 반시계로 감으면
+			#  통이 화면에서 통째로 사라진다.
+			var ord: Array = [0, 1, 2, 0, 2, 3] if not flip else [0, 2, 1, 0, 3, 2]
+			for kk in ord:
+				var e: Array = q[kk]
+				var aa: float = e[0]
+				var an: float = e[1]
+				var pp: Vector2 = e[2]
+				st.set_normal(Vector3(sin(an) * nn.x, nn.y,
+						cos(an) * nn.x).normalized())
+				st.set_uv(Vector2(float(e[3]), 1.0 - pp.y / hh))
+				st.add_vertex(Vector3(sin(aa) * pp.x, pp.y, cos(aa) * pp.x))
+	return st.commit()
+
+
+#  램프가 다른 띠 하나(목 띠 · 황동 띠 · 극 띠 · 쇠테). 몸보다 살짝 띄운다 —
+#  같은 반지름에 겹쳐 두면 z-fight 로 두 색이 프레임마다 번갈아 깜빡인다.
+func _cup3_band(b: Node3D, rad: float, f0: float, f1: float, h: float,
+		ramp: String, role: String, lift := 0.004, pat := "",
+		alt := "") -> MeshInstance3D:
+	var pr := PackedVector2Array([Vector2(rad + lift, h * f0),
+			Vector2(rad + lift, h * f1)])
+	return _cup3_tmesh(b, _cup3_lathe(pr, h), ramp, role, Vector3.ZERO,
+			Vector3.ZERO, false, pat, alt)
+
+
+#  발치 테. 통 밑동이 바닥에 닿은 자리다 — 빛 띠가 없어(role foot) 몸보다
+#  한 단 아래로 앉고, 그 한 단이 곧 무게다.
+func _cup3_footring(b: Node3D, rad: float, w: float, h: float,
+		ramp: String) -> void:
+	var pr := PackedVector2Array([Vector2(rad, 0.0), Vector2(rad, w * 1.6)])
+	_cup3_tmesh(b, _cup3_lathe(pr, h), ramp, "foot", Vector3.ZERO)
+
+
 # ── 벽: 민 통 ────────────────────────────────────────
 # 기준선. 벽 두 겹에 굵은 테 하나다.
 func _cup3_wall_solid(b: Node3D, r: float, w: float, h: float,
@@ -22030,6 +22309,7 @@ func _cup3_wall_solid(b: Node3D, r: float, w: float, h: float,
 	# 바깥 빛을 받아 통이 유리로 보인다.
 	_cup3_inner(b, r, h, inner_ramp)
 	_cup3_lip(b, r, r + w, h, ramp)
+	_cup3_footring(b, face, w, h, ramp)
 
 
 # 말린 아가리. 실물 통은 여기가 철사를 말아 넣어 굵고, 그 굵기 하나가
@@ -22105,6 +22385,7 @@ func _cup3_wall_net(b: Node3D, r: float, w: float, h: float,
 	hemm.cap_bottom = false
 	hemm.radial_segments = 48
 	_cup3_tmesh(b, hemm, ramp, "band", Vector3(0.0, w * 0.85, 0.0))
+	_cup3_footring(b, face + 0.015, w, h, ramp)
 
 
 # ── 테 ──────────────────────────────────────────────
@@ -22121,14 +22402,16 @@ func _cup3_hoops(b: Node3D, r: float, w: float, h: float, ramp: String,
 	# 0.44 어두운 색이라 둘이 붙어, 테 셋이 골함석 주름으로 뭉쳤다 —
 	# 테가 있다는 것이 아니라 통이 우글거린다는 것으로 보였다.
 	# 밝게 두르면 어두운 몸에 쇠테 셋이 얹힌 그림이 된다.
+	# 테는 이제 **선반 링**이다. 도넛(torus)으로 두르면 관이 둥글어 앞에서
+	# 1px 짜리 밝은 줄 하나로만 남았다 — 3px 짜리 곧은 띠가 face+0.03 으로
+	# 튀어나와야 쇠를 두른 것으로 보인다. 12텍셀마다 리벳 한 점을 박는다.
+	var face := r + w
+	var pk := _cup3_pat_key("hoop", face + 0.03, h)
 	for i in n:
-		var y: float = h * (0.22 + 0.38 * float(i) / maxf(float(n) - 1.0, 1.0))
-		var hp := TorusMesh.new()
-		hp.inner_radius = r + w * 0.9
-		hp.outer_radius = r + w * 1.8
-		hp.rings = 48
-		hp.ring_segments = 8
-		_cup3_tmesh(b, hp, ramp, "band", Vector3(0.0, y, 0.0))
+		var f: float = 0.22 + 0.38 * float(i) / maxf(float(n) - 1.0, 1.0)
+		var hf: float = 3.0 / (h * _cup3_ppu())      # 3px 을 높이 비로
+		_cup3_band(b, face, f - hf * 0.5, f + hf * 0.5, h, ramp, "band",
+				0.03, pk)
 
 
 # ── 극 ──────────────────────────────────────────────
@@ -22147,6 +22430,414 @@ func _cup3_pole(b: Node3D, r: float, w: float, h: float) -> void:
 	# 빨강은 **자석의 관습**이다 — 말굽이든 막대든 극은 붉게 칠해져 있고
 	# 칠 안 한 쪽이 은색이다. 그래서 극 띠는 red 램프, 아가리는 steel 이다.
 	_cup3_tmesh(b, pl, "red", "ring", Vector3(0.0, h * 0.83, 0.0))
+
+
+
+# ══════════════════════════════════════════════════════════
+#  모양 — 다트통마다 효과를 말하는 용기 하나
+# ──────────────────────────────────────────────────────────
+#  통이 말하는 것은 **그 다트통의 효과**지 이름이 아니다. 「무쇠」라서 테를
+#  두르는 것이 아니라 무거운 것을 담는 통이라 테를 두른다.
+#
+#  실루엣은 **충돌 없는 겉으로만** 낸다. CUP3 의 반지름·높이·벽 조각과
+#  힘 값은 한 줄도 안 건드렸고, CUP_SKIN 의 wide·tall 도 오늘 값 그대로다 —
+#  물리는 프로브가 지키는 튜닝이고, 아트가 그것을 흔들 이유는 없다.
+#
+#  바깥 반지름은 y 0~h 전 구간에서 face 이상이고 불룩한 데의 최대는
+#  face+0.05 다(손잡이만 예외). 그 안에 있으면 자루 촉이 벽을 뚫고
+#  보이지 않고, 발치 플라크(x ≒ r·1.44)와도 안 부딪힌다.
+#
+#  한눈에 갈리는 것 — 기본 손잡이 · 여벌 격자 · 일당 어깨와 붉은 목 ·
+#  선물 네모와 끈 · 넓은 동전 슬롯 소켓 줄 · 선금 양파와 졸린 목 ·
+#  무쇠 퍼진 발과 어둠 · 깃털 나팔과 밝음 · 자석 두 색과 압정 ·
+#  외줄 가는 튜브와 금띠 · 저울 두 귀 · [?? ???] 벌어진 컵과 주사위 ·
+#  0718 체커. 무게는 명도로 가른다.
+# ══════════════════════════════════════════════════════════
+
+#  반원 아치 하나(가방의 꼰 끈). 도넛을 그대로 쓰면 아랫반이 통 안에
+#  남아 아가리로 들여다보인다 — 실물 가방 끈은 테에서 끝난다.
+#  XY 평면의 반원(y ≥ 0)을 따라 관을 쓴다. 관이 얇아 양면으로 두는 편이
+#  감는 방향을 따지는 것보다 싸다.
+func _cup3_arch(rad: float, tube: float, seg := 16, ring := 6) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for i in seg:
+		for j in ring:
+			var pts := []
+			for q in 4:
+				var ii: int = i + (1 if q == 1 or q == 2 else 0)
+				var jj: int = j + (1 if q >= 2 else 0)
+				var a: float = PI * float(ii) / float(seg)
+				var t: float = TAU * float(jj) / float(ring)
+				var dir := Vector2(cos(a), sin(a))
+				var nn := Vector3(dir.x * cos(t), dir.y * cos(t), sin(t))
+				pts.append([Vector3(dir.x * rad, dir.y * rad, 0.0)
+						+ nn * tube, nn])
+			for kk in [0, 1, 2, 0, 2, 3]:
+				st.set_normal(pts[kk][1])
+				st.add_vertex(pts[kk][0])
+	return st.commit()
+
+
+#  3px 을 이 통의 높이 비로. 띠 두께를 월드로 적으면 키 큰 통에서 얇아진다.
+func _cup3_px(h: float, px: float) -> float:
+	return px / maxf(h * _cup3_ppu(), 1.0)
+
+
+#  모양 하나. 안 적은 모양은 기준선 깡통이다(민 원통 + tin 음각선).
+func _cup3_body(b: Node3D, r: float, w: float, h: float,
+		skin: Dictionary) -> void:
+	var ramp := String(skin.ramp)
+	match String(skin.shape):
+		"stein":  _cup3_stein(b, r, w, h, ramp)
+		"jar":    _cup3_jar(b, r, w, h)
+		"bag":    _cup3_bag(b, r, w, h, ramp)
+		"slots":  _cup3_slots(b, r, w, h, ramp, int(skin.get("slots", 6)))
+		"sack":   _cup3_sack(b, r, w, h)
+		"pail":   _cup3_pail(b, r, w, h)
+		"vase":   _cup3_vase(b, r, w, h)
+		"tube":   _cup3_tube(b, r, w, h)
+		"loving": _cup3_loving(b, r, w, h, ramp)
+		"dice":   _cup3_dicecup(b, r, w, h, ramp)
+		_:
+			_cup3_wall_solid(b, r, w, h, ramp, String(skin.role),
+					String(skin.shape))
+
+
+# ── 1. 기본 → 크림색 도기 맥주잔 ────────────────────────
+#  덧붙인 효과가 없는 바의 기본 잔이다. 잠긴 강철 깡통과는 색·손잡이·
+#  램프 불빛으로 갈린다.
+func _cup3_stein(b: Node3D, r: float, w: float, h: float, ramp: String) -> void:
+	var face := r + w
+	var mf := _cup3_px(h, 3.0)
+	#  발 몰딩 3px 이 face+0.03 으로 퍼진다 — 잔은 바닥이 넓다.
+	var pr := PackedVector2Array([
+			Vector2(face + 0.03, 0.0), Vector2(face + 0.03, h * mf),
+			Vector2(face, h * mf * 1.6), Vector2(face, h)])
+	_cup3_tmesh(b, _cup3_lathe(pr, h), ramp, "body", Vector3.ZERO,
+			Vector3.ZERO, false, _cup3_pat_key("stein", face, h))
+	_cup3_inner(b, r, h)
+	_cup3_lip(b, r, face, h, ramp)
+	#  손잡이 하나. **절반은 몸에 묻힌다** — 온 고리를 밖에 두면 40px 짜리
+	#  통에서 손잡이가 통만큼 커져 주전자가 된다.
+	#  도넛을 세워 XY 평면에 둔다. Rx 90° 뒤 로컬 z 가 세계 y 이므로
+	#  세로로 늘일 때 z 를 늘인다 — y 를 늘이면 관만 굵어진다.
+	var hd := TorusMesh.new()
+	hd.inner_radius = 0.06
+	hd.outer_radius = 0.105
+	hd.rings = 22
+	hd.ring_segments = 8
+	var mi := _cup3_tmesh(b, hd, ramp, "body",
+			Vector3(face + 0.02, h * 0.55, 0.0), Vector3(PI * 0.5, 0.0, 0.0))
+	mi.scale = Vector3(1.0, 1.0, 1.25)
+
+
+# ── 3. 일당 → 바 팁 병(메이슨 병) ───────────────────────
+#  남은 다트 하나하나가 병에 쌓이는 돈이다. 몸은 **어두운 유리**(steel)고
+#  제 색 빨강은 목 띠가 든다 — 몸까지 빨갛게 칠하면 자석의 붉은 극과 섞인다.
+#  선물 가방(네모)과는 둥근 어깨로, 여벌 철망과는 불투명으로 갈린다.
+func _cup3_jar(b: Node3D, r: float, w: float, h: float) -> void:
+	var face := r + w
+	var pr := PackedVector2Array([
+			Vector2(face, 0.0),
+			Vector2(face + 0.02, h * 0.06),
+			Vector2(face + 0.03, h * 0.14),
+			Vector2(face + 0.03, h * 0.66),
+			Vector2(face + 0.026, h * 0.72),
+			Vector2(face + 0.014, h * 0.79),
+			Vector2(face, h * 0.84),
+			Vector2(face, h)])
+	#  둘째 램프가 금이다 — 바닥 7px 의 동전층만 그 램프로 간다.
+	#  base_b 1.4 라 금이 유리보다 한 단 위에서 시작한다.
+	_cup3_tmesh(b, _cup3_lathe(pr, h), "steel", "glass", Vector3.ZERO,
+			Vector3.ZERO, false, _cup3_pat_key("jar", face + 0.03, h),
+			"gold", 1.4)
+	_cup3_inner(b, r, h)
+	_cup3_lip(b, r, face, h, "steel")
+	_cup3_footring(b, face, w, h, "steel")
+	_cup3_band(b, face, 0.86, 1.0, h, "red", "ring", 0.012,
+			_cup3_pat_key("neck", face, h))
+
+
+# ── 4. 선물 → 크라프트 쇼핑백 ───────────────────────────
+#  4골드를 써서 산 물건(사진·사탕)을 들고 온다. 발치가 그 둘의 자리다.
+#  조각 **4** 에 평면 법선이라 면마다 단이 하나다 — 평면이 원통과 갈리는
+#  것이 이 실루엣의 전부다.
+func _cup3_bag(b: Node3D, r: float, w: float, h: float, ramp: String) -> void:
+	var face := r + w
+	var rr := face * sqrt(2.0)      # 네모 반폭이 face 가 되는 외접 반지름
+	var pk := _cup3_pat_key("bag", face, h)
+	#  yaw 45° 로 면을 앞으로 돌리고 10° 더 돌린다 — 빛 받는 왼 옆면이
+	#  4~6px 드러나야 네모가 판때기로 안 읽힌다.
+	var yaw := PI * 0.25 + deg_to_rad(10.0)
+	var pr := PackedVector2Array([Vector2(rr, 0.0), Vector2(rr, h)])
+	_cup3_tmesh(b, _cup3_lathe(pr, h, 4), ramp, "body", Vector3.ZERO,
+			Vector3(0.0, yaw, 0.0), false, pk)
+	#  안벽. 네모 안쪽이라 뒤집어 세우고 속 어둠을 준다.
+	var pin := PackedVector2Array([Vector2(rr - 0.014, 0.0),
+			Vector2(rr - 0.014, h)])
+	_cup3_tmesh(b, _cup3_lathe(pin, h, 4, true), "night", "inner",
+			Vector3.ZERO, Vector3(0.0, yaw, 0.0), false, pk, "", -1.0, h)
+	#  꼰 끈 아치 둘. **도넛이 아니라 반원**이다 — 도넛으로 두면 아랫반이
+	#  통 안에 남아 톱니 아가리로 들여다보인다(실물 가방 끈은 테에서 끝난다).
+	#  앞 끈은 **앞벽 테 위**다(z = 0.41 — 그 x 에서 벽면이 0.411 이다).
+	#  가운데(0.30)에 두면 끈이 가방 속에서 자란 것으로 보였다.
+	for i in 2:
+		var z: float = 0.41 if i == 0 else -(face + 0.02)
+		_cup3_tmesh(b, _cup3_arch(0.145, 0.016), ramp, "ear",
+				Vector3(0.0, h - 0.01, z), Vector3.ZERO, true)
+
+
+# ── 5. 넓은 동전 슬롯 → 파랑 법랑 통 + 동전 소켓 띠 ─────
+#  동전 칸이 하나 더 있다. 소켓 수가 곧 그 칸 수다(item_slots).
+func _cup3_slots(b: Node3D, r: float, w: float, h: float, ramp: String,
+		n: int) -> void:
+	var face := r + w
+	var pk := "%s|%d" % [_cup3_pat_key("slots", face, h), maxi(n, 1)]
+	var pr := PackedVector2Array([Vector2(face, 0.0), Vector2(face, h)])
+	_cup3_tmesh(b, _cup3_lathe(pr, h), ramp, "body", Vector3.ZERO,
+			Vector3.ZERO, false, pk)
+	_cup3_inner(b, r, h)
+	_cup3_lip(b, r, face, h, ramp)
+	_cup3_footring(b, face, w, h, ramp)
+
+
+# ── 6. 선금 → 은행 돈자루 ───────────────────────────────
+#  목돈을 미리 받는다. 양파 모양에 졸라맨 목이고 발치에 플라크가 흩어진다.
+#  금 램프 **아래 단**이라(gold[1] 몸) 캔버스지 금덩이가 아니다 —
+#  gold[3] 은 플라크 몫이다. 불룩한 데의 최대가 face+0.03(0.46)인 것은
+#  앞쪽 플라크가 x ≒ r·1.44 에 떨어지기 때문이다.
+func _cup3_sack(b: Node3D, r: float, w: float, h: float) -> void:
+	var face := r + w
+	var pr := PackedVector2Array([
+			Vector2(face - 0.01, 0.0),
+			Vector2(face + 0.015, h * 0.10),
+			Vector2(face + 0.03, h * 0.30),
+			Vector2(face + 0.024, h * 0.50),
+			Vector2(face + 0.008, h * 0.68),
+			Vector2(face, h * 0.78),
+			Vector2(face + 0.008, h * 0.90),
+			Vector2(face + 0.02, h)])
+	_cup3_tmesh(b, _cup3_lathe(pr, h), "gold", "body", Vector3.ZERO,
+			Vector3.ZERO, false, _cup3_pat_key("sack", face + 0.03, h))
+	_cup3_inner(b, r, h)
+	#  조임 끈. 매듭과 늘어진 끝 둘이 「졸라맸다」를 말한다. 끈에 매단
+	#  플라크 태그는 기각했다 — 40px 에서 서브픽셀 잡음이다.
+	var ty := h * 0.80
+	var tk := TorusMesh.new()
+	tk.inner_radius = face - 0.005
+	tk.outer_radius = face + 0.031
+	tk.rings = 40
+	tk.ring_segments = 8
+	_cup3_tmesh(b, tk, "cream", "body", Vector3(0.0, ty, 0.0))
+	#  매듭은 앞 왼쪽이다 — 빛을 받는 쪽에 둬야 매듭으로 보인다.
+	var ka := -0.85
+	var kp := Vector3(sin(ka) * (face + 0.02), ty, cos(ka) * (face + 0.02))
+	_cup3_tmesh(b, _cup3_box(Vector3(0.05, 0.045, 0.05)), "cream", "lip", kp)
+	for i in 2:
+		var cl := CylinderMesh.new()
+		cl.top_radius = 0.011
+		cl.bottom_radius = 0.009
+		cl.height = 0.12
+		cl.radial_segments = 6
+		_cup3_tmesh(b, cl, "cream", "body",
+				kp + Vector3(-0.02 + 0.04 * float(i), -0.07, 0.01),
+				Vector3(0.0, 0.0, 0.32 - 0.64 * float(i)))
+		_cup3_tmesh(b, _cup3_box(Vector3(0.033, 0.033, 0.033)), "wood", "body",
+				kp + Vector3(-0.045 + 0.09 * float(i), -0.135, 0.01))
+
+
+# ── 7. 무쇠 → 리벳 박은 무쇠 들통 ───────────────────────
+#  무거운 것을 담는다. 발이 넓은 사다리꼴에 튀어나온 테 둘이고 **가장
+#  어둡다**(steel 0·1단). 깃털과 정반대다 — 발이 퍼진 어둠 ↔ 아가리가
+#  퍼진 밝음.
+func _cup3_pail(b: Node3D, r: float, w: float, h: float) -> void:
+	var face := r + w
+	var pr := PackedVector2Array([
+			Vector2(face + 0.05, 0.0),
+			Vector2(face + 0.03, h * 0.06),
+			Vector2(face + 0.01, h * 0.12),
+			Vector2(face + 0.01, h)])
+	#  녹 덩어리만 둘째 램프(orange)로 간다. 쇠가 삭은 자리는 색이
+	#  갈리고 단은 그대로다.
+	_cup3_tmesh(b, _cup3_lathe(pr, h), "steel", "dark", Vector3.ZERO,
+			Vector3.ZERO, false, _cup3_pat_key("pail", face + 0.05, h),
+			"orange", 0.4)
+	_cup3_inner(b, r, h)
+	#  철사로 만 굵은 아가리 테. 관 0.022 — 들통은 여기가 굵다.
+	_cup3_lip(b, face - 0.012, face + 0.032, h, "steel")
+
+
+# ── 8. 깃털 → 옅은 강철 나팔 꽃병 ───────────────────────
+#  가볍다. 가늘고 긴 막대에 위 18% 가 나팔로 벌어진다. **가장 밝다.**
+#  벌어진 아가리 +0.03 은 허용 안이다(안벽이 그만큼만 열린다).
+func _cup3_vase(b: Node3D, r: float, w: float, h: float) -> void:
+	var face := r + w
+	var pr := PackedVector2Array([
+			Vector2(face + 0.02, 0.0),
+			Vector2(face + 0.02, h * 0.05),
+			Vector2(face, h * 0.09),
+			Vector2(face, h * 0.82),
+			Vector2(face + 0.012, h * 0.90),
+			Vector2(face + 0.03, h)])
+	_cup3_tmesh(b, _cup3_lathe(pr, h), "steel", "pale", Vector3.ZERO,
+			Vector3.ZERO, false, _cup3_pat_key("vase", face + 0.03, h))
+	#  안벽도 같이 벌어진다. 몸만 벌리면 아가리 안이 곧은 통으로 보여
+	#  나팔이 벽에 붙인 테로 읽힌다.
+	var pin := PackedVector2Array([
+			Vector2(r, 0.0), Vector2(r, h * 0.82),
+			Vector2(r + 0.012, h * 0.90), Vector2(r + 0.03, h)])
+	_cup3_tmesh(b, _cup3_lathe(pin, h, 48, true), "night", "inner",
+			Vector3.ZERO, Vector3.ZERO, false, "", "", -1.0, h)
+	#  1px 얇은 입술. 나팔은 끝이 얇아야 나팔이다.
+	_cup3_lip(b, r + 0.03, face + 0.03, h, "steel")
+
+
+# ── 10. 외줄 → 칠한 선물 튜브 ───────────────────────────
+#  몇 안 되는 귀한 한 발을 담는다. 가는 튜브에 위아래 금띠고, **안감이
+#  벨벳**이다 — 아가리로 들여다보이는 안감이 곧 케이스다.
+#  누운 뚜껑은 기각했다: 튜브 지름이면 45px 짜리 물건이 되어 과하다.
+func _cup3_tube(b: Node3D, r: float, w: float, h: float) -> void:
+	var face := r + w
+	var pr := PackedVector2Array([Vector2(face, 0.0), Vector2(face, h)])
+	_cup3_tmesh(b, _cup3_lathe(pr, h), "pink", "lacq", Vector3.ZERO)
+	_cup3_inner(b, r, h, "pink")
+	_cup3_lip(b, r, face, h, "pink")
+	#  황동 띠 위아래 4px. 위 띠에는 1px 홈이 있다.
+	var bf := _cup3_px(h, 4.0)
+	_cup3_band(b, face, 1.0 - bf, 1.0, h, "gold", "band", 0.006,
+			_cup3_pat_key("neck", face, h))
+	_cup3_band(b, face, 0.0, bf, h, "gold", "band", 0.006)
+
+
+# ── 11. 저울(히든) → 러빙 컵 ────────────────────────────
+#  칩·배수를 맞대는 동전 하나를 쥐고 온다. 대칭인 두 귀가 그 둘이다 —
+#  **왼쪽은 파랑(칩), 오른쪽은 빨강(배수)**. 발라트로가 색으로 뜻을
+#  적는 그 어법이다.
+func _cup3_loving(b: Node3D, r: float, w: float, h: float,
+		ramp: String) -> void:
+	var face := r + w
+	#  원판 발. 줄기처럼 좁히지 않는다 — 좁히면 자루 촉이 벽을 뚫고 보인다.
+	var pr := PackedVector2Array([
+			Vector2(face + 0.06, 0.0),
+			Vector2(face + 0.06, h * 0.045),
+			Vector2(face + 0.01, h * 0.10),
+			Vector2(face + 0.01, h * 0.88),
+			Vector2(face + 0.03, h)])
+	_cup3_tmesh(b, _cup3_lathe(pr, h), ramp, "glaze", Vector3.ZERO)
+	_cup3_inner(b, r, h)
+	_cup3_lip(b, r, face + 0.03, h, ramp)
+	for i in 2:
+		var sd := -1.0 if i == 0 else 1.0
+		var er := TorusMesh.new()
+		er.inner_radius = 0.07
+		er.outer_radius = 0.11
+		er.rings = 20
+		er.ring_segments = 6
+		var mi := _cup3_tmesh(b, er, "blue" if i == 0 else "red", "ear",
+				Vector3(sd * (face + 0.02), h * 0.60, 0.0),
+				Vector3(PI * 0.5, 0.0, 0.0))
+		mi.scale = Vector3(1.0, 1.0, 1.3)
+
+
+# ── 12. [?? ???](히든) → 가죽 주사위 컵 ─────────────────
+#  발마다 무작위다. 아가리가 곧게 벌어진 가죽 컵과 발치의 주사위 둘.
+#  자루는 이름 없는 강철 그대로고, 물음표 같은 글자는 안 넣는다.
+func _cup3_dicecup(b: Node3D, r: float, w: float, h: float,
+		ramp: String) -> void:
+	var face := r + w
+	var pr := PackedVector2Array([
+			Vector2(face, 0.0),
+			Vector2(face + 0.008, h * 0.05),
+			Vector2(face, h * 0.10),
+			Vector2(face, h * 0.88),
+			Vector2(face + 0.03, h)])
+	#  박음질만 둘째 램프(cream)로 간다 — 실은 가죽과 색이 달라야 실이다.
+	_cup3_tmesh(b, _cup3_lathe(pr, h), ramp, "body", Vector3.ZERO,
+			Vector3.ZERO, false, _cup3_pat_key("dice", face + 0.03, h),
+			"cream", 1.8)
+	_cup3_inner(b, r, h)
+	_cup3_lip(b, r, face + 0.03, h, ramp)
+	#  트립 림 — 안쪽 1px 밝은 링. 실물 주사위 컵은 여기에 턱이 있어
+	#  주사위가 굴러 나온다. 그 턱 하나가 「굴리는 컵」을 말한다.
+	var tr := TorusMesh.new()
+	tr.inner_radius = r - 0.017
+	tr.outer_radius = r + 0.007
+	tr.rings = 40
+	tr.ring_segments = 6
+	_cup3_tmesh(b, tr, ramp, "lip", Vector3(0.0, h * 0.93, 0.0))
+
+
+#  주사위 한 알. 발마다 무작위라는 말을 발치의 물건이 한 번 더 한다.
+#  플라크·선물과 같은 keep/spill 규약을 따른다(_cup3_prop).
+func _cup3_die(seed_i: int) -> RigidBody3D:
+	var s := 0.13
+	var bd := _cup3_prop(Vector3(s, s, s))
+	_cup3_tmesh(bd, _cup3_box(Vector3(s, s, s)), "cream", "prop", Vector3.ZERO)
+	#  눈. 윗면에만 찍는다 — 옆면 눈은 7.5px 짜리 알에서 얼룩이 된다.
+	var n := 1 + int(_gl_rand(seed_i * 3 + 1, 5) * 3.0)
+	var sp := s * 0.26
+	for k in n:
+		var off := Vector3(0.0, 0.0, 0.0)
+		if n > 1:
+			off = Vector3(sp * (-1.0 + 2.0 * float(k) / float(n - 1)), 0.0,
+					sp * (1.0 - 2.0 * float(k) / float(n - 1)))
+		_cup3_tmesh(bd, _cup3_box(Vector3(s * 0.15, s * 0.1, s * 0.15)),
+				"night", "body", off + Vector3(0.0, s * 0.5, 0.0))
+	return bd
+
+#  축을 d 방향으로 세우는 바탕. 원기둥·원판은 로컬 +Y 가 축이므로
+#  오일러로 적으면 자리마다 손으로 풀어야 한다.
+func _cup3_aim(d: Vector3) -> Basis:
+	var yy := d.normalized()
+	var xx := yy.cross(Vector3(0.0, 1.0, 0.0))
+	if xx.length() < 0.01:
+		xx = yy.cross(Vector3(1.0, 0.0, 0.0))
+	xx = xx.normalized()
+	return Basis(xx, yy, xx.cross(yy))
+
+
+# ── 9. 자석 → 달라붙은 압정 ─────────────────────────────
+#  빗나감이 끌려온다. 극 띠(_cup3_pole)가 자석이라는 **글자**를 쓰고,
+#  이 압정들이 그 자석이 **하는 일**을 그린다 — 붙어서 끌려가는 것이
+#  곧 자석이다. 전부 통의 자식이라 통을 따라 미끄러진다.
+func _cup3_tacks(b: Node3D, r: float, w: float, h: float) -> void:
+	var face := r + w
+	#  띠 위 셋. 표면 법선에서 30° 기울여 촉이 띠에 닿게 한다 —
+	#  법선 그대로 꽂으면 통에 박은 못이 되고, 붙은 것으로 안 읽힌다.
+	var at := [-1.05, -0.17, 0.70]
+	var ys := [0.90, 0.78, 0.72]
+	for i in 3:
+		var a: float = at[i]
+		var y: float = h * float(ys[i])
+		var nn := Vector3(sin(a), 0.0, cos(a))
+		var d := (nn * cos(deg_to_rad(30.0))
+				+ Vector3(0.0, 1.0, 0.0) * sin(deg_to_rad(30.0))).normalized()
+		var p := nn * (face + 0.008) + Vector3(0.0, y, 0.0)
+		_cup3_tack(b, p, d)
+	#  카운터 위 둘. 통을 향해 눕는다 — 아직 끌려오는 중인 것들이다.
+	for sd in [-1.0, 1.0]:
+		var p2 := Vector3(sd * (face + 0.12), 0.012, 0.06)
+		_cup3_tack(b, p2, Vector3(sd, 0.10, 0.12))
+
+
+#  압정 하나. 자루와 머리 원판이다. 촉이 p 에 오고 머리가 d 쪽이다.
+func _cup3_tack(b: Node3D, p: Vector3, d: Vector3) -> void:
+	var dd := d.normalized()
+	var sh := CylinderMesh.new()
+	sh.top_radius = 0.014
+	sh.bottom_radius = 0.008
+	sh.height = 0.10
+	sh.radial_segments = 6
+	var m0 := _cup3_tmesh(b, sh, "steel", "band", Vector3.ZERO)
+	m0.transform = Transform3D(_cup3_aim(dd), p + dd * 0.05)
+	var hd := CylinderMesh.new()
+	hd.top_radius = 0.03
+	hd.bottom_radius = 0.03
+	hd.height = 0.014
+	hd.radial_segments = 10
+	var m1 := _cup3_tmesh(b, hd, "steel", "lip", Vector3.ZERO)
+	m1.transform = Transform3D(_cup3_aim(dd), p + dd * 0.104)
 
 
 # ── 발치에 놓는 물건 ────────────────────────────────
@@ -22245,6 +22936,10 @@ func _cup3_feet(foot: String) -> Array:
 			if cd != null:
 				ps.append(cd)
 			return ps
+		"dice":
+			# 가죽 컵 발치의 주사위 둘. 「발마다 무작위」를 통 밖의 물건이
+			# 한 번 더 말한다 — 통 안에는 자루가 들었으므로 여기 놓는다.
+			return [_cup3_die(0), _cup3_die(1)]
 	return []
 
 
@@ -22272,6 +22967,10 @@ func _cup3_skin(pi: int) -> Dictionary:
 	#  몸 색 한 점. 2D 받침(_cup_one) · 후광(_cup_halo) · cup_probe 의 서명이
 	#  이것을 본다 — 3D 는 램프 넷을 통째로 쓰지만 그 대표값은 2단이다.
 	out["body"] = Color(ART_PAL[String(out.ramp)][2])
+	#  동전 칸 수. 소켓 띠(넓은 동전 슬롯)가 이 수만큼 소켓을 판다 —
+	#  「칸이 하나 더 있다」를 통이 세어서 말한다. body·dart_col 과 같은
+	#  규약이다(표에 없고 여기서 풀어 둔다).
+	out["slots"] = int(packs[pi].get("item_slots", 6))
 	if String(out.dart) != "":
 		out["dart_col"] = _cup3_tint(String(out.dart), packs[pi])
 	return out
@@ -22401,6 +23100,20 @@ func _cup3_leaf(rad: float, at: float, sr: float, y0: float, fy: float,
 # 한 겹에 크림색 얼굴, 아래 끝은 말려 이형지가 보인다(draw_sticker).
 # 반지름 10px 에 인쇄까지 넣으면 조건 아이콘이 두 픽셀로 뭉개지므로
 # 여기서는 테·얼굴·말린 자락까지만 낸다.
+#  동전이 앉을 반지름. **모양마다 몸이 face 보다 불룩할 수 있다** —
+#  러빙 컵은 face+0.01 이라 face 에 붙인 동전이 몸 속에 파묻혀 통째로
+#  사라졌다(찍어 보고 알았다). 벽 바깥면에 얼마를 더 띄울지를 모양이 안다.
+func _cup3_stk_lift(shape: String) -> float:
+	match shape:
+		"loving": return 0.014
+		"jar":    return 0.034
+		"sack":   return 0.034
+		"dice":   return 0.010
+		"pail":   return 0.014
+		"vase":   return 0.006
+	return 0.0
+
+
 func _cup3_sticker(b: Node3D, rad: float, r: float, h: float, wall: String,
 		col: Color) -> void:
 	var sr: float = r * float(CUP_STK.r)
@@ -22443,24 +23156,16 @@ func _cup3_cup(skin: Dictionary) -> AnimatableBody3D:
 		"net":
 			_cup3_wall_net(b, r, w, h, ramp, role)
 		_:
-			_cup3_wall_solid(b, r, w, h, ramp, role, String(skin.shape))
+			_cup3_body(b, r, w, h, skin)
 	if int(skin.hoop) > 0:
 		_cup3_hoops(b, r, w, h, ramp, int(skin.hoop))
 	if bool(skin.pole):
 		_cup3_pole(b, r, w, h)
+		_cup3_tacks(b, r, w, h)
 	if bool(skin.sticker):
-		_cup3_sticker(b, _cup3_face(String(skin.wall), r, w), r, h,
+		_cup3_sticker(b, _cup3_face(String(skin.wall), r, w)
+				+ _cup3_stk_lift(String(skin.shape)), r, h,
 				String(skin.wall), col)
-	var base := CylinderMesh.new()
-	base.top_radius = r + w
-	base.bottom_radius = r + w
-	base.height = w * 1.6
-	base.radial_segments = 48
-	# 발치 테. **빛 띠가 없다**(role foot 의 t_hi 9) — 통 밑동에 띠가 서면
-	# 테가 몸에서 떨어져 굴렁쇠로 보인다. 몸보다 한 단 아래라 통이 바닥에
-	# 닿은 자리가 어두워지고, 그것이 곧 무게다.
-	_cup3_tmesh(b, base, ramp, "foot", Vector3(0.0, w * 0.8, 0.0))
-
 	var fl := CollisionShape3D.new()
 	var fs := CylinderShape3D.new()
 	fs.radius = r
@@ -22561,6 +23266,47 @@ func _cup3_gold() -> RigidBody3D:
 	inl.size = Vector3(gw * 0.44, gt * 0.5, gd * 0.30)
 	_cup3_tmesh(b, inl, "gold", "sunk", Vector3(0.0, gt * 0.42, 0.0))
 	return b
+
+
+#  이 색이 팔레트의 어느 램프 몇 단인가. **알베도에서 되짚는다** —
+#  자루 색은 _dart3_col · DK_PARTS · CUP_SKIN 의 dart 가 저마다 정하므로,
+#  그 세 곳을 여기서 다시 읽는 대신 세워 놓은 색 하나로 거꾸로 찾는다.
+#  세 곳이 다 DK_PAL(= ART_PAL 의 부분집합)에서 골랐으므로 정확히 맞는다.
+func _cup3_step_of(c: Color) -> Array:
+	var bn := "cream"
+	var bi := 3
+	var bd := 9.0
+	for nm in ART_PAL:
+		for i in 4:
+			var q: Color = ART_PAL[nm][i]
+			var d := Vector3(q.r - c.r, q.g - c.g, q.b - c.b).length()
+			if d < bd:
+				bd = d
+				bn = String(nm)
+				bi = i
+	return [bn, bi]
+
+
+#  세워 둔 자루의 재질만 톤 셰이더로 갈아 끼운다.
+#
+#  **_dart3_meshes 는 안 건드린다.** 판에 꽂힌 다트(bd_vp)가 같은 함수를
+#  쓰므로 거기서 고치면 판까지 바뀐다 — 판과 상인의 빛 통일은 이번 범위
+#  밖이다. 그래서 여기서는 세운 뒤에 이 벌의 자식만 훑는다.
+func _cup3_dart_toon(n: Node3D, rim: float) -> void:
+	for c in n.get_children():
+		var mi := c as MeshInstance3D
+		if mi != null and mi.material_override is StandardMaterial3D:
+			var sm: StandardMaterial3D = mi.material_override
+			#  질감을 쥔 재질은 그대로 둔다(사탕의 사진). 램프가 없다.
+			if sm.albedo_texture == null:
+				var rs := _cup3_step_of(sm.albedo_color)
+				mi.material_override = _cup3_toon(String(rs[0]),
+						"dk%d" % int(rs[1]), sm.cull_mode
+								== BaseMaterial3D.CULL_DISABLED)
+				mi.set_instance_shader_parameter("rim_h", rim)
+		var nd := c as Node3D
+		if nd != null:
+			_cup3_dart_toon(nd, rim)
 
 
 # 자루 하나. 축은 +Y 가 꽁지다 — 캡슐 충돌과 같은 축이라 둘이 안 어긋난다.
@@ -23183,7 +23929,8 @@ func _dart3_face_u(n: Node3D, eye: Vector3) -> void:
 # 탄창이 전부 표준인 다트통. 표준은 색이 하나뿐이라 덮어도 가릴 정보가 없다.
 # 특별한 다트를 쥔 다트통에서 덮으면 그 다트가 무엇인지가 그림에서 사라진다 —
 # cup_probe 가 그 짝을 검사한다(주석으로 부탁하지 않는다).
-func _cup3_dart(id: String, dcol: Color, cup_col: Color) -> RigidBody3D:
+func _cup3_dart(id: String, dcol: Color, cup_col: Color,
+		rim := 0.0) -> RigidBody3D:
 	# 종류가 길이와 굵기를 정한다. **충돌체도 같이 간다** — 그림만 늘이면
 	# 가벼운 다트가 안 보이는 짧은 몸으로 부딪혀 통 안에서 겹쳐 선다.
 	var sh := dart3_shape(id)
@@ -23226,6 +23973,10 @@ func _cup3_dart(id: String, dcol: Color, cup_col: Color) -> RigidBody3D:
 	# 그건 충돌체와 세우는 자리를 위한 것이고, 그림 쪽 배율은
 	# _dart3_meshes 가 혼자 먹인다.
 	_dart3_meshes(b, float(CUP3.dl), float(CUP3.dr), float(CUP3.fin), col, id, PI * 0.5)
+	#  통 안의 자루는 통과 **같은 램프**로 칠한다. 통을 네 단으로 올려
+	#  놓고 자루만 램버트로 두었더니, 불을 줄인 무대에서 자루가 검은
+	#  실루엣으로 가라앉았다(찍어 보고 알았다).
+	_cup3_dart_toon(b, rim if rim > 0.0 else float(CUP3.h))
 	return b
 
 
@@ -23267,7 +24018,8 @@ func _cup3_spawn(pi: int, x: float) -> void:
 	var rc: float = r * 0.62                        # 꽁지가 벌어지는 고리
 	var darts := []
 	for i in n:
-		var b := _cup3_dart(id, skin.dart_col, skin.body)
+		var b := _cup3_dart(id, skin.dart_col, skin.body,
+				float(CUP3.h) * float(skin.tall))
 		var a := TAU * float(i) / float(n) + 0.4
 		var out := Vector3(sin(a), 0.0, cos(a))
 		var tip := Vector3(x, 0.0, 0.0) + out * rt + Vector3(0.0, float(CUP3.wall) * 2.2, 0.0)
