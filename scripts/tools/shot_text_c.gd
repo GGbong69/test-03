@@ -141,13 +141,19 @@ func _run() -> void:
 	g.state = g.S.TITLE
 	await _wait(4)
 	g._open_newrun()
-	#  설명이 가장 긴 다트통
+	#  설명이 가장 긴 다트통 — 줄 수가 먼저, 같으면 **그린 폭**이 긴 쪽. 줄글이 다 한 줄로
+	#  접히면 줄 수로는 첫 다트통(「기준」 한 줄)을 집어 긴 줄을 못 봤다.
 	var best := 0
-	var bl := -1
+	var bl := -1.0
 	for i in GameData.packs().size():
-		var n: int = (g._pack_lines(GameData.packs()[i]) as Array).size()
-		if n > bl:
-			bl = n
+		var ls: Array = g._pack_lines(GameData.packs()[i])
+		var lw0 := 0.0
+		for l in ls:
+			lw0 = maxf(lw0, g.font.get_string_size(String(l),
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x)
+		var sc: float = float(ls.size()) * 1000.0 + lw0
+		if sc > bl:
+			bl = sc
 			best = i
 	g._pack_view(best)
 	GameData.league = String(GameData.leagues()[0].get("id", ""))
