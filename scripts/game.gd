@@ -5026,52 +5026,186 @@ func _band_draw(ri: float, ro: float, a0: float, a1: float, col: Color) -> void:
 	draw_colored_polygon(annulus(ri, ro, a0, a1), col)
 
 
-# 판 바깥선에서 gap(R 배수)만큼 바깥. 뒤판과 숫자 고리가 같은 식을 본다 —
+# ══════════════════════════════════════════════════════════
+#  판의 얼굴 — 토너먼트 판에 전자판의 구멍 결
+# ──────────────────────────────────────────────────────────
+#  사용자 평(2026-09-17): 「다트보드가 너무 못생겼어 — 레퍼런스도 많이 찾고
+#  디자인해 봐」. 옛 판은 칸 색을 평평하게 칠하고 1px 보라 철사를 방사선으로만
+#  그은 뒤, 숫자를 배경 위에 뜬 회색 11 로 두었다 — 클립아트였다.
+#
+#  실물 토너먼트 판(Winmau Blade 계열) · 도트 다트판 · 소프트 다트판(다트라이브 ·
+#  그란보드) · LED 링 캐비닛을 보고 시안 넷을 게임 안에서 찍었다. 사용자가
+#  **토너먼트**(빛이 있어 셰이더처럼 보인다)를 고르고, 소프트 다트판의
+#  **점 찍힌 결**도 좋다며 둘을 합치자고 했다. 그래서 이 판은
+#    숫자 고리   더블 띠 바깥의 넓은 검은 고리에 숫자가 **박혀** 있다.
+#               판의 윤곽이 거기서 선다 — 숫자가 허공에 안 뜬다.
+#    두께 · 빛   아래로 판 두께와 그림자, 왼쪽 위에서 비치는 빛.
+#               화면의 다른 입체(동전 · 3D 자루)와 같은 방향이다.
+#    철사       방사선만이 아니라 띠 경계마다 둥근 은빛 철사가 돈다.
+#    구멍 결    소프트 다트판의 벌집 구멍 — 엇갈린 4px 격자의 한 점씩.
+#
+#  색은 표(colors.csv)의 것 그대로다. 칠 · 그늘 같은 규칙이 칸 색을 읽으므로
+#  재질은 색 위에 **얹기만** 한다 — 구멍도 그 칸 색을 어둡힌 점이다.
+#
+#  숫자 고리는 판 바깥선(rt_dbl_out)을 따라간다. 라지(1.10)를 사면 고리째 커진다.
+# ══════════════════════════════════════════════════════════
+const BOARDART := {
+	"ring": 0.30,                    # 숫자 고리 폭(R 배수) — 18 글자가 위아래 여유를 둔다
+	"ring_col": Color("211d2b"),
+	"edge": Color("4a4558"),         # 고리 바깥 한 줄
+	"edge_hi": Color("8a8498"),      # 그 줄의 왼쪽 위 — 빛을 받는 모서리
+	"side": 4.0,                     # 판 두께(아래로)
+	"side_col": Color("08070c"),
+	"shadow": Color(0.0, 0.0, 0.0, 0.40),
+	"wire": Color("c9c4d4"),
+	"hole": 4.0,                     # 구멍 간격(px). 한 줄씩 반 칸 엇갈린다
+	"hole_dark": 0.42,               # 구멍 = 칸 색을 이만큼 어둡힌 한 점
+	"light_hi": 0.10,                # 왼쪽 위 밝힘
+	"light_lo": 0.22,                # 오른쪽 아래 그늘
+}
+var board_holes := []                # [반지름(px) · 각] — 처음 그릴 때 한 번 굽는다
+
+
+# 판 바깥선에서 gap(R 배수)만큼 바깥. 숫자 고리와 그 아래 글이 같은 식을 본다 —
 # 갈라 두면 보드 확장로 판이 커질 때 하나만 안 따라간다.
 func _board_rim(gap: float) -> float:
 	return R * (rt_dbl_out + gap)
 
 
+#  칸 i 의 숫자. 판과 조준 밝힘(_cell_glow)이 같은 자리에 같은 글자를 쓴다.
+func _num_draw(i: int, col: Color, push := 1.0) -> void:
+	var a := float(i) * TAU / 20.0
+	var q := (BC + Vector2(sin(a), -cos(a)) * _board_rim(float(BOARDART.ring) * 0.5) * push).round()
+	draw_string(font_sm, q + Vector2(-18.0, 7.0), str(sectors[i]),
+			HORIZONTAL_ALIGNMENT_CENTER, 36, 18, col)
+
+
+#  칸마다 [칸 색, 띠 색]. 죽은 칸은 여기서 한 번 가라앉힌다 — 칸 · 구멍이 같은 값을 쓴다.
+func _board_cols() -> Array:
+	var out := []
+	for i in 20:
+		var base_c := Color(GameData.color_hex(_sec_col(i)))
+		var ring_c: Color = C_RED if i % 2 == 0 else C_GREEN
+		# 죽은 칸은 죽은 것으로 보여야 한다. 값이 0 인데 판이 멀쩡해 보이면
+		# 제약이 아니라 버그로 읽힌다 — "금지 구역"이 여태 그랬다.
+		# **배경 쪽으로** 뺀다. C_DARK 로 낮추면 먹색 칸(2b2438)이 그 색과
+		# 같아서 "그늘"이 아무것도 안 바꾼 것처럼 보였다 — 죽은 표시는
+		# 원래 색이 무엇이든 같은 곳으로 가야 한다. 구멍처럼 읽힌다.
+		if i == dead_idx or (dead_col >= 0 and _sec_col(i) == dead_col):
+			base_c = base_c.lerp(C_BG, 0.72)
+			ring_c = ring_c.lerp(C_BG, 0.72)
+		out.append([base_c, ring_c])
+	return out
+
+
+#  구멍 결. 격자는 판 한가운데(정수 좌표)에서 시작해 픽셀에 딱 떨어진다.
+#  라지를 사도 모자라지 않게 넉넉히(1.5R) 굽고 그릴 때 판 바깥을 거른다.
+func _board_holes(cols: Array, push: float) -> void:
+	if board_holes.is_empty():
+		var st: float = float(BOARDART.hole)
+		var lim: float = R * 1.5
+		var row := 0
+		var y := -lim
+		while y <= lim:
+			var x := -lim + (st * 0.5 if row % 2 == 1 else 0.0)
+			while x <= lim:
+				var v := Vector2(x, y)
+				if v.length() <= lim:
+					board_holes.append([v.length(), fposmod(atan2(v.x, -v.y), TAU)])
+				x += st
+			y += st
+			row += 1
+	var sw := TAU / 20.0
+	for e in board_holes:
+		var r: float = e[0]
+		if r >= R * rt_dbl_out or r < R * rt_bull_i * 0.9:
+			continue
+		var c: Color
+		if r < R * rt_bull_i:
+			c = C_RED
+		elif r < R * rt_bull_o:
+			c = C_GREEN
+		else:
+			var i := int(floor(fposmod(float(e[1]) + sw * 0.5, TAU) / sw)) % 20
+			var ring: bool = (r >= R * rt_trp_in and r < R * rt_trp_out) \
+					or r >= R * rt_dbl_in \
+					or (r >= R * rt_trp2_in and r < R * rt_trp2_out)
+			c = cols[i][1] if ring else cols[i][0]
+		var q := (BC + Vector2(sin(e[1]), -cos(e[1])) * r * push).floor()
+		draw_rect(Rect2(q, Vector2.ONE), c.darkened(float(BOARDART.hole_dark)))
+
+
+#  철사 — 방사선 스물과 띠 경계마다 한 바퀴. 폭이 0 인 띠(피자) · 없는 불(도넛)은
+#  반지름이 겹치거나 0 이라 그어도 티가 안 난다.
+func _board_wires(push: float) -> void:
+	var sw := TAU / 20.0
+	var col: Color = BOARDART.wire
+	for i in 20:
+		var a := float(i) * sw - sw * 0.5
+		var dir := Vector2(sin(a), -cos(a))
+		draw_line(BC + dir * R * rt_bull_o * push, BC + dir * R * rt_dbl_out * push, col, 1.0)
+	for rr in [rt_bull_i, rt_bull_o, rt_trp2_in, rt_trp2_out, rt_trp_in, rt_trp_out,
+			rt_dbl_in, rt_dbl_out]:
+		if float(rr) * R > 0.5:
+			draw_arc(BC, R * float(rr) * push, 0.0, TAU, 120, col, 1.0)
+
+
+#  빛 — 한가운데는 그대로, 둘레로 갈수록 왼쪽 위는 밝고 오른쪽 아래는 어둡다.
+#  부채꼴 마흔여덟 조각을 꼭짓점 색으로 번지게 한다(판 면 위에만 얹힌다).
+func _board_light(push: float) -> void:
+	var lt := Vector2(-0.6, -0.8)
+	var n := 48
+	var rim := R * rt_dbl_out * push
+	var hi: float = float(BOARDART.light_hi)
+	var lo: float = float(BOARDART.light_lo)
+	for k in n:
+		var d0 := Vector2(sin(TAU * float(k) / float(n)), -cos(TAU * float(k) / float(n)))
+		var d1 := Vector2(sin(TAU * float(k + 1) / float(n)), -cos(TAU * float(k + 1) / float(n)))
+		var t0 := d0.dot(lt)
+		var t1 := d1.dot(lt)
+		var pts := PackedVector2Array([BC, BC + d0 * rim, BC + d1 * rim])
+		draw_primitive(pts, PackedColorArray([Color(1, 1, 1, 0.0),
+				Color(1, 1, 1, maxf(t0, 0.0) * hi), Color(1, 1, 1, maxf(t1, 0.0) * hi)]),
+				PackedVector2Array())
+		draw_primitive(pts, PackedColorArray([Color(0, 0, 0, 0.0),
+				Color(0, 0, 0, maxf(-t0, 0.0) * lo), Color(0, 0, 0, maxf(-t1, 0.0) * lo)]),
+				PackedVector2Array())
+
+
 func _draw_board() -> void:
 	var sw := 18.0 * PI / 180.0
 	var push := 1.0 + board_punch * 0.028
+	var ro := _board_rim(float(BOARDART.ring)) * push
 
-	# 판 뒤판과 숫자 고리는 **판 바깥선을 따라간다.** 1.07 · 1.13 을
-	# 박아 두었더니 보드 확장 "판벌이"(바깥선 1.10)를 사는 순간 뒤판이 판보다
-	# 안쪽으로 들어가고 숫자가 띠 위에 겹쳐 앉았다 — 판 모양은 데이터인데
-	# 그 둘레만 상수였던 자리다. 간격은 그대로라 기본 판에서는 한 픽셀도
-	# 안 달라진다.
-	draw_circle(BC, _board_rim(0.07) * push, C_DARK.darkened(0.4))
+	# ── 뒤 — 그림자 · 두께 · 숫자 고리 ─────────────────
+	draw_circle(BC + Vector2(3.0, 6.0), ro + 1.0, BOARDART.shadow)
+	draw_circle(BC + Vector2(0.0, float(BOARDART.side)), ro, BOARDART.side_col)
+	draw_circle(BC, ro, BOARDART.ring_col)
+	draw_arc(BC, ro - 1.0, 0.0, TAU, 140, BOARDART.edge, 1.0)
+	draw_arc(BC, ro - 1.0, PI, PI * 1.5, 40, BOARDART.edge_hi, 1.0)
 
+	# ── 칸 ────────────────────────────────────────
+	# 칸 색은 표가 정한다. 띠 색은 지금 규칙(i%2 → 빨강/초록)을 유지한다 —
+	# 띠까지 데이터로 보내면 칸 색과 띠 색이 겹쳐 읽힘이 무너진다.
+	var cols := _board_cols()
 	for i in 20:
 		var a0 := i * sw - sw * 0.5
 		var a1 := a0 + sw
-		# 칸 색은 표가 정한다. 띠 색은 지금 규칙(i%2 → 빨강/초록)을 유지한다 —
-		# 띠까지 데이터로 보내면 칸 색과 띠 색이 겹쳐 읽힘이 무너진다.
-		var base_c := Color(GameData.color_hex(_sec_col(i)))
-		# 죽은 칸은 죽은 것으로 보여야 한다. 값이 0 인데 판이 멀쩡해 보이면
-		# 제약이 아니라 버그로 읽힌다 — "금지 구역"이 여태 그랬다.
-		# 색 축(그늘)은 색 자체가 표시지만, 죽었다는 것까지는 색이 안 말한다.
-		var dead: bool = i == dead_idx or (dead_col >= 0 and _sec_col(i) == dead_col)
-		var ring_c: Color = C_RED if i % 2 == 0 else C_GREEN
-		if dead:
-			# **배경 쪽으로** 뺀다. C_DARK 로 낮추면 먹색 칸(2b2438)이 그 색과
-			# 같아서 "그늘"이 아무것도 안 바꾼 것처럼 보였다 — 죽은 표시는
-			# 원래 색이 무엇이든 같은 곳으로 가야 한다. 구멍처럼 읽힌다.
-			base_c = base_c.lerp(C_BG, 0.72)
-			ring_c = ring_c.lerp(C_BG, 0.72)
+		var base_c: Color = cols[i][0]
+		var ring_c: Color = cols[i][1]
 		_band_draw(R * rt_bull_o * push, R * rt_trp_in * push, a0, a1, base_c)
 		_band_draw(R * rt_trp_out * push, R * rt_dbl_in * push, a0, a1, base_c)
 		_band_draw(R * rt_trp_in * push, R * rt_trp_out * push, a0, a1, ring_c)
 		_band_draw(R * rt_dbl_in * push, R * rt_dbl_out * push, a0, a1, ring_c)
-
-	for i in 20:
-		var a := i * sw - sw * 0.5
-		var dir := Vector2(sin(a), -cos(a))
-		draw_line(BC + dir * R * rt_bull_o * push, BC + dir * R * push, C_WIRE, 1.0)
-
+		#  천체 고리의 안쪽 트리플. 점수(hit_info)는 매기는데 판에 안 그려져
+		#  보이지 않는 띠였다. 없으면 폭이 0 이라 _band_draw 가 거른다.
+		_band_draw(R * rt_trp2_in * push, R * rt_trp2_out * push, a0, a1, ring_c)
 	draw_circle(BC, R * rt_bull_o * push, C_GREEN)
 	draw_circle(BC, R * rt_bull_i * push, C_RED)
+
+	_board_holes(cols, push)
+	_board_wires(push)
+	_board_light(push)
 
 	if hit_flash > 0.0:
 		var fc := Color(1.0, 1.0, 1.0, hit_flash * hit_flash_amt)
@@ -5082,14 +5216,11 @@ func _draw_board() -> void:
 			_band_draw(hit_r0 * push, hit_r1 * push, a0, a0 + sw, fc)
 
 	# 칸 숫자는 누우면 지운다. 비균일 배율이 글자를 세로로만 눌러
-	# 12px 글자가 3.6px 얼룩이 된다 — 글자는 눌러서 눕힐 수 없다.
+	# 글자가 얼룩이 된다 — 글자는 눌러서 눕힐 수 없다.
 	var na: float = clampf((_swap_rise() - 0.45) / 0.35, 0.0, 1.0)
 	if na > 0.01:
 		for i in 20:
-			var a := i * sw
-			var p := BC + Vector2(sin(a), -cos(a)) * _board_rim(0.13)
-			draw_string(font, p + Vector2(-14, 5), str(sectors[i]),
-					HORIZONTAL_ALIGNMENT_CENTER, 28, 11, Color(C_DIM, na))
+			_num_draw(i, Color(C_TXT, na), push)
 
 
 func _draw_fx() -> void:
@@ -5532,6 +5663,11 @@ func _board_dim_except(p: Vector2, a: float) -> void:
 	var sw := 18.0 * PI / 180.0
 	var bands := [[rt_bull_o, rt_trp_in], [rt_trp_in, rt_trp_out],
 			[rt_trp_out, rt_dbl_in], [rt_dbl_in, rt_dbl_out]]
+	#  천체 고리가 있으면 싱글 안쪽이 셋으로 갈린다 — hit_info 의 r0 와 맞춘다.
+	if rt_trp2_out > 0.0:
+		bands[0] = [rt_bull_o, rt_trp2_in]
+		bands.append([rt_trp2_in, rt_trp2_out])
+		bands.append([rt_trp2_out, rt_trp_in])
 	var hr0: float = float(hi.r0)
 	for i in 20:
 		var a0: float = float(i) * sw - sw * 0.5
@@ -14256,7 +14392,9 @@ func _photo_draw() -> void:
 				var a0: float = float(idx) * sw - sw * 0.5
 				draw_colored_polygon(annulus(R * rt_dbl_out, R * rt_bull_o,
 						a0, a0 + sw), Color(1.0, 1.0, 1.0, 0.20))
-				draw_string(font, Vector2(0.0, BC.y + R + 28.0),
+				#  고른 칸은 맨 위 안내 바로 밑에 적는다. 판 밑은 숫자 고리가 차지하고,
+				#  그 아래 줄은 스크림 밑에 깔린 조작 안내와 겹친다.
+				draw_string(font, Vector2(0.0, 44.0),
 						"%d 칸  x%d" % [int(sectors[idx]) if idx < sectors.size() else 0, photo_v],
 						HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 11, C_ACC)
 			draw_string(font, Vector2(0.0, 24.0), "칠할 칸을 고르세요",
@@ -15838,10 +15976,7 @@ func _cell_glow(p: Vector2, col := C_TXT, k := 1.0) -> void:
 		draw_colored_polygon(annulus(R * rt_bull_o, R * rt_dbl_out,
 				a0, a0 + sw), Color(col, 0.10 * k))
 		_band_draw(float(hi.r0), float(hi.r1), a0, a0 + sw, Color(col, 0.16 * k))
-		var na := float(hx) * sw
-		var np := BC + Vector2(sin(na), -cos(na)) * _board_rim(0.13)
-		draw_string(font, np + Vector2(-14.0, 5.0), str(sectors[hx]),
-				HORIZONTAL_ALIGNMENT_CENTER, 28, 11, col)
+		_num_draw(hx, col)
 	elif int(hi.mult) > 0:
 		draw_circle(BC, float(hi.r1), Color(col, 0.22 * k))
 
