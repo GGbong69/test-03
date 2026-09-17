@@ -5642,8 +5642,39 @@ const DONUTART := {
 	"sprinkle": [Color("fff6e8"), Color("ffd84a"), Color("6ec6ff"), Color("ff7ab8"),
 			Color("8be07a")],
 }
-#  과녁(모든 칸 10 · 불 배수 5) — 아직 제 옷이 없어 토너먼트 판을 입는다.
-const TARGETART := {}
+#  과녁(모든 칸 10 · 불 배수 5) — 짚 과녁대에 핀으로 꽂은 양궁 과녁지. 짜임은 _tg_ 머리말.
+#  보드 확장 아이콘(카지노 칩)이 나중에 이 색에 맞춘다 — 윗줄 다섯이 과녁지의 얼굴색이다.
+const TARGETART := {
+	"ring": 0.24,                    # 짚 과녁대가 과녁지 밖으로 드러나는 폭(R 배수) — 토너먼트 숫자 고리와 같은 크기
+	"gold": Color("f2c23a"),         # 금 — 불(10 링)
+	"gold_x": Color("f9d866"),       # 금 — X 링(안쪽 불). 한 단 밝다
+	"red": Color("d9473d"),          # 빨강 — 안쪽 싱글 · 크림 칸
+	"blue": Color("45a4d2"),         # 하늘 — 트리플 띠(실물 과녁의 밝은 청록)
+	"black": Color("403849"),        # 검정 — 바깥 싱글 · 크림 칸(숯빛)
+	"white": Color("f0e9db"),        # 흰 — 더블 띠
+	"red_dk": Color("8a2a36"),       # 빨강 — 안쪽 싱글 · 먹 칸(검붉게 가라앉힌 인쇄)
+	"black_dk": Color("16121c"),     # 검정 — 바깥 싱글 · 먹 칸
+	#  칠(사진 · 규칙이 칸을 칠한다) — [빨강 자리, 검정 자리]. 과녁 빨강과 같은 색상이면
+	#  주홍 칠이 안 보이므로 주홍은 한 단 밝은 주황 쪽으로, 쪽빛은 하늘 띠보다 짙게 민다.
+	"paint_red": [Color("ec7d34"), Color("a8522c")],     # 주홍 칠
+	"paint_blue": [Color("3b6f97"), Color("2a4f6e")],    # 쪽빛 칠
+	"line": Color("1b1622"),         # 구분선 — 금 · 빨강 · 하늘 · 흰 위(실물은 검은 줄)
+	"line_bk": Color("d8d0c2"),      # 구분선 — 검정 안의 가운데 줄(실물은 흰 줄)
+	"sub_a": 0.34,                   # 한 색을 두 링으로 가르는 가운데 줄의 진하기
+	"dead_to": Color("241f2c"),      # 죽은 칸 — 빛바래 젖은 종이 쪽으로
+	"dead_k": 0.64,
+	"paper": Color("cfc5b2"),        # 과녁지 가장자리(판 밖 = 빗나감). 흰 더블보다 한 단 어둡다
+	"paper_hi": Color("e6ddca"),
+	"paper_w": 3.0,                  # 그 가장자리 폭(px)
+	"straw": Color("c4984f"),        # 짚 과녁대
+	"straw_hi": Color("e8c880"),     # 꼰 짚의 빛 받는 결
+	"straw_dk": Color("8a6532"),     # 꼰 짚의 그늘 · 감긴 골
+	"straw_lo": Color("553b20"),     # 과녁대 옆면 · 찢긴 자리로 드러난 짚
+	"cord": Color("6b5c48"),         # 감은 짚을 꿰맨 끈
+	"coil": 6.0,                     # 감긴 짚 한 바퀴의 굵기(px)
+	"pin": Color("ebe5d8"), "pin_dk": Color("8f887b"),   # 과녁지 핀 머리
+	"hole": Color("1a1520"),         # 화살 구멍
+}
 var theme_bits := {}         # 열쇠 → 한 번 구운 점 목록(반지름은 판 바깥선 배수)
 var ck_sec := -1             # 시계 판 초침이 마지막으로 그려진 초
 
@@ -5735,8 +5766,33 @@ func _dn_bake(key: String, rng: RandomNumberGenerator, sw: float) -> Array:
 	return out
 
 
-func _tg_bake(_key: String, _rng: RandomNumberGenerator, _sw: float) -> Array:
-	return []
+func _tg_bake(key: String, rng: RandomNumberGenerator, _sw: float) -> Array:
+	var out := []
+	match key:
+		"target_straw":
+			#  꼰 짚의 결 — 바퀴(0 이 바깥)마다 150 가닥. [바퀴 · 각 · 반지름 흔들림 · 갈래]
+			for k in 4:
+				for j in 150:
+					out.append([k, (float(j) + rng.randf_range(-0.3, 0.3)) / 150.0 * TAU,
+							rng.randf_range(-0.7, 0.7), rng.randi() % 5])
+		"target_fuzz":
+			#  과녁대 테에 삐져나온 짚 끝. [각 · 길이 · 갈래]
+			for k in 46:
+				out.append([rng.randf() * TAU, rng.randf_range(1.0, 3.0), rng.randi() % 2])
+		"target_hole":
+			#  화살 구멍 — 모두가 한가운데를 노리니 금 · 빨강에 몰린다. [반지름(판 바깥선 배수) · 각 · 갈래]
+			while out.size() < 44:
+				var r := absf(rng.randfn(0.0, 0.34))
+				if r < 0.10 or r > 0.96:
+					continue
+				out.append([r, rng.randf() * TAU, rng.randi() % 3])
+		"target_tear":
+			#  죽은 칸에서만 드러나는 찢긴 자리. 칸 폭 배수로 적어 칸 안에 든다. [칸 · 반지름 · 각 · 너비 · 높이]
+			for i in _sec_n():
+				for n in 3:
+					out.append([i, rng.randf_range(0.22, 0.92), rng.randf_range(-0.22, 0.22),
+							2.0 + float(rng.randi() % 3), 1.0 + float(rng.randi() % 2)])
+	return out
 
 
 func _theme_dir(a: float) -> Vector2:
@@ -5923,28 +5979,314 @@ func _dn_top(_push: float) -> void:
 	pass
 
 
-# ── 과녁 한 벌 — 아직 토너먼트 판을 빌린다 ──
+# ── 과녁 한 벌 ──
+#  「피자는 진짜 피자같이 보이도록 해줘. 다트 보드의 테두리만 피자로 만들지 말고」
+#  「마찬가지고 시계랑 과녁 도넛도」(사용자, 2026-09-17). 과녁은 여태 제 옷이 없어
+#  토너먼트 판에 「10」 스무 개를 둘렀다. 이제 판 전체가 **양궁 과녁**이다 —
+#  짚을 꼬아 감은 과녁대에 둥근 과녁지를 핀 넷으로 꽂았다.
+#
+#  레퍼런스(구도 · 색만 봤다, 사진을 따라 그리지 않았다):
+#    세계양궁 규정 · 122cm 과녁지 — 가운데부터 금 · 빨강 · 하늘 · 검정 · 흰 다섯 색, 색마다
+#      가는 줄로 두 링을 갈라 열 링이 **같은 폭**이다. 10 링 안의 X 링이 한가운데다.
+#    Archery Geekery 의 정밀 SVG 과녁 — 색(금 FFE552 · 빨강 F65058 · 하늘 00B4E4) · 색 사이
+#      줄은 굵게 · 한 색 안의 줄은 가늘게 · 한가운데의 작은 십자(핀홀).
+#    짚 과녁대(Egertec 128cm · 옛 코일 짚 매트) — 꼰 짚 밧줄을 납작한 나선으로 감고 바퀴마다
+#      끈으로 꿰맨다(벌집 짚 바구니와 같은 짜임). 테에 짚 끝이 삐져나온다.
+#    과녁지 핀 — 둥근 머리 핀으로 종이 가장자리를 짚에 꽂는다.
+#    폼 과녁 마모 글 — 모두가 가운데를 노려 구멍이 금 · 빨강에 몰리고 종이가 먼저 찢긴다.
+#    옛 과녁(Toxophilite 전통 · Brave 에 쓴 과녁의 역사) — 짚 매트에 둥근 얼굴 · 이젤.
+#    도트 과녁 스프라이트(8비트 명중 아이콘들) — 링을 가르는 것은 색 덩어리, 선은 한 칸으로만 거든다.
+#
+#  **판의 구역이 곧 과녁의 색 띠다.** 실물 과녁의 색 순서를 그대로 두고 한 구역에 한 색씩 —
+#    불(안 · 밖)     금. 안쪽 불이 X 링(한 단 밝은 금 + 핀홀 십자), 바깥 불이 10 링
+#    안쪽 싱글       빨강
+#    트리플 띠       하늘
+#    바깥 싱글       검정
+#    더블 띠         흰
+#    판 밖(빗나감)   과녁지 가장자리 한 줄 + 짚 과녁대
+#  기본 판에서 그 경계가 0.06 · 0.14 · 0.35 · 0.56 · 0.66 · 0.78 · 0.90 · 1.00 이라, 넓은 두
+#  싱글에 가운데 줄을 하나씩 그으면 링 폭이 거의 고르게 선다(실물 과녁의 열 링 리듬).
+#  색이 바뀌는 자리만 짙은 줄이고, 가운데 줄은 옅다 — 구역을 가르는 것은 색이다.
+#
+#  **칸 색은 싱글 두 띠에 싣는다**(토너먼트 판도 칸 색은 칸에, 띠는 띠 색이다) —
+#    크림  제 색 그대로(빨강 · 숯빛 검정)
+#    먹    검붉게 · 새까맣게 가라앉힌 인쇄 — 밝고 어두움이 칸마다 갈린다
+#    주홍  주황 칠(과녁 빨강과 색상이 겹치지 않게 한 단 밝게)
+#    쪽빛  짙은 청 칠(하늘 띠보다 짙게)
+#  띠(하늘 · 흰)와 불(금)은 칸 색을 안 탄다 — 조준하는 과녁 링이 끊기지 않고 돈다.
+#  죽은 칸은 칸 전체(띠까지)가 젖은 종이처럼 빛바래고 종이가 찢겨 짚이 드러난다.
+#  숫자는 안 적는다 — 모든 칸이 10 이다.
 func _tg_ring_w() -> float:
-	return float(BOARDART.ring)
+	return float(TARGETART.ring)
 
 
-func _tg_board(ro: float, push: float, cols: Array) -> void:
-	_board_ring(ro)
-	_board_cells(cols, push)
-	_board_holes(cols, push)
-	_board_wires(push)
+#  cols 는 안 쓴다 — 과녁은 칸 색 id 로 과녁 재질(_tg_single)을 고르고, 죽은 칸도 제 식(_tg_fade)으로 바랜다.
+func _tg_board(ro: float, push: float, _cols: Array) -> void:
+	_tg_boss(ro, push)
+	_tg_paper(push)
+	_tg_face(push)
+	_tg_marks(push)
 
 
-func _tg_over(_push: float) -> void:
-	pass
+#  핀은 빛 위 — 종이 위에 꽂힌 물건이다
+func _tg_over(push: float) -> void:
+	_tg_pins(push)
 
 
+#  값이 하나뿐인 판(10)은 숫자를 안 적는다
 func _tg_num() -> Color:
-	return C_TXT
+	return Color(0.0, 0.0, 0.0, 0.0)
 
 
 func _tg_top(_push: float) -> void:
 	pass
+
+
+# ── 과녁 ─────────────────────────────────────────────
+var tg_straw_key := ""       # 짚 결 선분을 구운 크기(ro · 과녁지 가장자리)
+var tg_straw := []           # [밝은 결, 그늘 결, 끈] — draw_multiline 세 번으로 그린다
+
+
+#  칸 i 가 죽었는가 — _board_cols 와 같은 식이다.
+func _tg_dead(i: int) -> bool:
+	return i == dead_idx or (dead_col >= 0 and _sec_col(i) == dead_col)
+
+
+#  죽은 칸은 띠까지 통째로 빛바랜다 — 색을 빼고(젖은 신문지 잿빛) 어둠 쪽으로 민다.
+#  어둡히기만 하면 먹 칸(검붉은 인쇄)과 죽은 칸이 같은 어둠이 되어 안 갈린다.
+func _tg_fade(c: Color, i: int) -> Color:
+	if _tg_dead(i):
+		var g := c.get_luminance()
+		return c.lerp(Color(g, g, g), 0.85).lerp(TARGETART.dead_to, float(TARGETART.dead_k))
+	return c
+
+
+#  칸 i 의 싱글 색. outer = false 안쪽(빨강) · true 바깥(검정)
+func _tg_single(i: int, outer: bool) -> Color:
+	var tg: Dictionary = TARGETART
+	var k := 1 if outer else 0
+	var id := _sec_col(i)
+	match id:
+		0:
+			return tg.black if outer else tg.red
+		1:
+			return tg.black_dk if outer else tg.red_dk
+		2:
+			return tg.paint_red[k]
+		3:
+			return tg.paint_blue[k]
+	#  표에 새 색이 늘면 과녁 색을 그 색 쪽으로 민다
+	var base: Color = tg.black if outer else tg.red
+	return base.lerp(Color(GameData.color_hex(id)), 0.7)
+
+
+#  짚 과녁대 — 꼰 짚을 나선으로 감아 꿰맨 둥근 매트. 과녁지 밑까지 이어진다.
+func _tg_boss(ro: float, push: float) -> void:
+	var tg: Dictionary = TARGETART
+	var rp := R * rt_dbl_out * push + float(tg.paper_w)
+	var pitch: float = float(tg.coil)
+	#  옆면 — 공용 두께(먹빛)를 짚 옆면으로 덮는다. 그림자는 그대로 둔다.
+	var side: float = float(BOARDART.side)
+	draw_circle(BC + Vector2(0.0, side), ro, Color(tg.straw_lo).darkened(0.35))
+	draw_circle(BC + Vector2(0.0, side * 0.5), ro, tg.straw_lo)
+	#  삐져나온 짚 끝 — 테 바깥으로 한두 칸
+	for e in _theme_bits("target_fuzz"):
+		var d := _theme_dir(float(e[0]))
+		var q0 := (BC + d * (ro - 1.0)).floor() + Vector2(0.5, 0.5)
+		var q1 := (BC + d * (ro + float(e[1]))).floor() + Vector2(0.5, 0.5)
+		draw_line(q0, q1, tg.straw_dk if int(e[2]) == 0 else tg.straw, 1.0)
+	draw_circle(BC, ro, tg.straw_lo)
+	draw_circle(BC, ro - 1.0, tg.straw)
+	#  감긴 골 — 바퀴 사이. 바퀴마다 둥근 밧줄이라 왼쪽 위에서는 바깥 어깨가,
+	#  오른쪽 아래에서는 안쪽 어깨가 빛을 받는다.
+	var r := ro - 1.0 - pitch
+	while r > rp - pitch:
+		draw_arc(BC, r, 0.0, TAU, 160, tg.straw_dk, 1.0)
+		draw_arc(BC, r + pitch - 1.5, PI * 0.95, PI * 1.55, 40, Color(tg.straw_hi, 0.55), 1.0)
+		draw_arc(BC, r + 1.5, PI * -0.05, PI * 0.55, 40, Color(tg.straw_hi, 0.30), 1.0)
+		r -= pitch
+	#  꼰 결 · 꿰맨 끈 — 크기가 바뀔 때만 다시 굽는다(맞으면 판이 잠깐 부푼다)
+	var key := "%d/%d" % [int(ro * 64.0), int(rp * 64.0)]
+	if key != tg_straw_key:
+		tg_straw_key = key
+		tg_straw = _tg_straw_lines(ro, rp)
+	for j in [1, 0, 2]:
+		if (tg_straw[j] as PackedVector2Array).size() >= 2:
+			draw_multiline(tg_straw[j], [tg.straw_hi, tg.straw_dk, tg.cord][j], 1.0)
+	#  빛 — 왼쪽 위 테가 밝고 오른쪽 아래가 어둡다(_board_light 와 같은 방향)
+	var lt := Vector2(-0.6, -0.8)
+	var n := 48
+	for k in n:
+		var d0 := _theme_dir(TAU * float(k) / float(n))
+		var d1 := _theme_dir(TAU * float(k + 1) / float(n))
+		var t0 := d0.dot(lt)
+		var t1 := d1.dot(lt)
+		var pts := PackedVector2Array([BC + d0 * ro, BC + d1 * ro, BC + d1 * rp, BC + d0 * rp])
+		draw_primitive(pts, PackedColorArray([Color(1, 1, 1, maxf(t0, 0.0) * 0.14),
+				Color(1, 1, 1, maxf(t1, 0.0) * 0.14), Color(1, 1, 1, maxf(t1, 0.0) * 0.04),
+				Color(1, 1, 1, maxf(t0, 0.0) * 0.04)]), PackedVector2Array())
+		draw_primitive(pts, PackedColorArray([Color(0, 0, 0, maxf(-t0, 0.0) * 0.34),
+				Color(0, 0, 0, maxf(-t1, 0.0) * 0.34), Color(0, 0, 0, maxf(-t1, 0.0) * 0.10),
+				Color(0, 0, 0, maxf(-t0, 0.0) * 0.10)]), PackedVector2Array())
+	draw_arc(BC, ro - 0.5, PI * 0.95, PI * 1.55, 48, Color(tg.straw_hi, 0.55), 1.0)
+
+
+#  꼰 짚 한 가닥 = 바퀴를 비스듬히 가로지르는 짧은 선. 밝은 결과 그늘 결이 엇갈린다.
+func _tg_straw_lines(ro: float, rp: float) -> Array:
+	var tg: Dictionary = TARGETART
+	var pitch: float = float(tg.coil)
+	var hi := PackedVector2Array()
+	var dk := PackedVector2Array()
+	var cord := PackedVector2Array()
+	for e in _theme_bits("target_straw"):
+		var k: int = int(e[0])
+		var rc: float = ro - 1.0 - pitch * (float(k) + 0.5) + float(e[2])
+		if rc < rp - 1.0 or int(e[3]) == 4:
+			continue
+		var a: float = float(e[1])
+		var d := _theme_dir(a)
+		var t := Vector2(cos(a), sin(a))
+		var p := BC + d * rc
+		#  가닥의 기울기 — 접선에서 40° 쯤 바깥으로 튼다(꼬인 밧줄)
+		var s := (t * 1.3 + d * 1.1)
+		var p0 := (p - s).floor() + Vector2(0.5, 0.5)
+		var p1 := (p + s).floor() + Vector2(0.5, 0.5)
+		if int(e[3]) <= 1:
+			hi.append(p0)
+			hi.append(p1)
+		else:
+			dk.append(p0)
+			dk.append(p1)
+	#  꿰맨 끈 — 골마다 열넷, 이웃 골과 반 칸 엇갈린다(바퀴를 차례로 꿰맨 자국)
+	var gr := ro - 1.0 - pitch
+	var gi := 0
+	while gr > rp - 1.0:
+		for j in 14:
+			var d := _theme_dir((float(j) + 0.25 + 0.5 * float(gi % 2)) / 14.0 * TAU)
+			cord.append((BC + d * (gr - 1.5)).floor() + Vector2(0.5, 0.5))
+			cord.append((BC + d * (gr + 1.5)).floor() + Vector2(0.5, 0.5))
+		gr -= pitch
+		gi += 1
+	return [hi, dk, cord]
+
+
+#  과녁지 — 판 바깥선보다 조금 넓게 오린 둥근 종이. 짚 위에 떠서 오른쪽 아래로 그늘이 진다.
+func _tg_paper(push: float) -> void:
+	var tg: Dictionary = TARGETART
+	var rim := R * rt_dbl_out * push
+	var rp := rim + float(tg.paper_w)
+	draw_circle(BC + Vector2(1.0, 2.0), rp, Color(0.0, 0.0, 0.0, 0.32))
+	draw_circle(BC, rp, tg.paper)
+	draw_arc(BC, rp - 0.5, PI * 0.95, PI * 1.55, 40, tg.paper_hi, 1.0)
+	#  얼굴 밑을 줄 색으로 깐다 — 띠 다각형 사이 틈이 줄로 읽히게
+	draw_circle(BC, rim, tg.line)
+
+
+#  과녁 얼굴 — 칸마다 색 띠 넷, 가운데 금, 구분선
+func _tg_face(push: float) -> void:
+	var tg: Dictionary = TARGETART
+	var sw := _sec_w()
+	var r_bo := R * rt_bull_o * push
+	var r_ti := R * rt_trp_in * push
+	var r_to := R * rt_trp_out * push
+	var r_t2i := R * rt_trp2_in * push
+	var r_t2o := R * rt_trp2_out * push
+	var r_di := R * rt_dbl_in * push
+	var r_do := R * rt_dbl_out * push
+	var two := rt_trp2_out > 0.0
+	for i in _sec_n():
+		var a0 := float(i) * sw - sw * 0.5
+		var a1 := a0 + sw
+		var cin := _tg_fade(_tg_single(i, false), i)
+		var cout := _tg_fade(_tg_single(i, true), i)
+		var cb := _tg_fade(tg.blue, i)
+		if two:
+			#  천체 고리의 안쪽 트리플도 하늘 띠다
+			_band_draw(r_bo, r_t2i, a0, a1, cin)
+			_band_draw(r_t2i, r_t2o, a0, a1, cb)
+			_band_draw(r_t2o, r_ti, a0, a1, cin)
+		else:
+			_band_draw(r_bo, r_ti, a0, a1, cin)
+		_band_draw(r_ti, r_to, a0, a1, cb)
+		_band_draw(r_to, r_di, a0, a1, cout)
+		_band_draw(r_di, r_do, a0, a1, _tg_fade(tg.white, i))
+	if R * rt_bull_o > 0.5:
+		draw_circle(BC, r_bo, tg.gold)
+	if R * rt_bull_i > 0.5:
+		draw_circle(BC, R * rt_bull_i * push, tg.gold_x)
+	#  구분선 — 칸마다 호로 긋는다(죽은 칸에서는 줄도 바랜다)
+	var lines := []           # [반지름, 색]
+	var dark: Color = tg.line
+	var sub: float = float(tg.sub_a)
+	if R * rt_bull_i > 0.5:
+		lines.append([R * rt_bull_i * push, Color(dark, 0.55)])
+	if R * rt_bull_o > 0.5:
+		lines.append([r_bo, dark])
+	if two:
+		lines.append([r_t2i, dark])
+		lines.append([r_t2o, dark])
+		lines.append([(r_bo + r_t2i) * 0.5, Color(dark, sub)])
+	else:
+		lines.append([(r_bo + r_ti) * 0.5, Color(dark, sub)])
+	lines.append([r_ti, dark])
+	lines.append([r_to, dark])
+	lines.append([(r_to + r_di) * 0.5, Color(tg.line_bk, sub)])
+	lines.append([r_do - 0.5, dark])
+	for i in _sec_n():
+		var a0 := float(i) * sw - sw * 0.5 - PI * 0.5
+		for e in lines:
+			var c: Color = e[1]
+			if _tg_dead(i):
+				c = Color(c.lerp(tg.dead_to, float(tg.dead_k)), c.a)
+			draw_arc(BC, float(e[0]), a0, a0 + sw, 6, c, 1.0)
+	#  핀홀 — X 링 한가운데의 작은 십자
+	if R * rt_bull_i > 0.5:
+		draw_rect(Rect2(BC + Vector2(-1.0, 0.0), Vector2(3.0, 1.0)), Color(dark, 0.8))
+		draw_rect(Rect2(BC + Vector2(0.0, -1.0), Vector2(1.0, 3.0)), Color(dark, 0.8))
+
+
+#  쓴 자국 — 화살 구멍, 죽은 칸의 찢긴 종이
+func _tg_marks(push: float) -> void:
+	var tg: Dictionary = TARGETART
+	var rim := R * rt_dbl_out * push
+	var sw := _sec_w()
+	for e in _theme_bits("target_hole"):
+		var r: float = float(e[0]) * rim
+		if r < R * rt_bull_i * push + 2.0:
+			continue
+		var q := (BC + _theme_dir(e[1]) * r).floor()
+		draw_rect(Rect2(q, Vector2.ONE), Color(tg.hole, 0.78))
+		match int(e[2]):
+			0:
+				draw_rect(Rect2(q + Vector2(-1.0, -1.0), Vector2.ONE), Color(tg.paper_hi, 0.40))
+			1:
+				draw_rect(Rect2(q + Vector2(1.0, 0.0), Vector2.ONE), Color(tg.hole, 0.40))
+	for e in _theme_bits("target_tear"):
+		var i: int = int(e[0])
+		if i >= _sec_n() or not _tg_dead(i):
+			continue
+		var q := (BC + _theme_dir(float(i) * sw + float(e[2]) * sw) * float(e[1]) * rim).floor()
+		var w: float = float(e[3])
+		var h: float = float(e[4])
+		draw_rect(Rect2(q, Vector2(w, h)), tg.straw_lo)
+		draw_rect(Rect2(q + Vector2(1.0, 0.0), Vector2(maxf(w - 2.0, 1.0), 1.0)), Color(tg.straw_dk, 0.8))
+		draw_rect(Rect2(q + Vector2(-1.0, -1.0), Vector2(2.0, 1.0)), Color(tg.paper_hi, 0.30))
+
+
+#  과녁지 핀 넷 — 대각선 네 자리, 종이 가장자리에
+func _tg_pins(push: float) -> void:
+	var tg: Dictionary = TARGETART
+	var rp := R * rt_dbl_out * push + float(tg.paper_w) * 0.5
+	for k in 4:
+		var q := (BC + _theme_dir(PI * 0.25 + PI * 0.5 * float(k)) * rp).floor()
+		#  그늘 → 테 → 머리 → 반짝 — 모서리 넷을 깎은 5칸 둥근 머리
+		draw_rect(Rect2(q + Vector2(-1.0, 0.0), Vector2(5.0, 4.0)), Color(0.0, 0.0, 0.0, 0.38))
+		draw_rect(Rect2(q + Vector2(-2.0, -1.0), Vector2(5.0, 3.0)), tg.pin_dk)
+		draw_rect(Rect2(q + Vector2(-1.0, -2.0), Vector2(3.0, 5.0)), tg.pin_dk)
+		draw_rect(Rect2(q + Vector2(-1.0, -1.0), Vector2(3.0, 3.0)), tg.pin)
+		draw_rect(Rect2(q + Vector2(-2.0, -1.0), Vector2(1.0, 2.0)), tg.pin)
+		draw_rect(Rect2(q + Vector2(-1.0, -2.0), Vector2(2.0, 1.0)), tg.pin)
+		draw_rect(Rect2(q + Vector2(-1.0, -1.0), Vector2.ONE), Color(1.0, 1.0, 1.0, 0.95))
 
 
 # ── 피자 ─────────────────────────────────────────────
