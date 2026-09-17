@@ -1140,9 +1140,9 @@ func _seal_drop(i: int) -> void:
 # 칸이 모자라면 안 담는다 — 다트통이 제 칸보다 많이 주면 그건 표의 잘못이고
 # 검증기가 잡을 자리다. 여기서 칸을 늘려 주면 그 잘못이 숨는다.
 func _pack_grants() -> void:
+	#  보드 확장은 한 장만 낀다 — 다트통이 여럿을 줘도 마지막 한 장이 남는다.
 	for id in GameData.pack_grants("grant_mod"):
-		if not mods_own.has(String(id)):
-			mods_own.append(String(id))
+		mods_own = [String(id)]
 	if not mods_own.is_empty():
 		_board_bake()
 	# 다트통이 쥐여 주는 사진. 1회성이 되면서 영구 목록이 아니라 사탕 칸으로
@@ -5347,13 +5347,8 @@ func _theme_sec(a: float) -> int:
 	return int(floor(fposmod(a + sw * 0.5, TAU) / sw)) % 20
 
 
-#  칸 숫자의 글자. 시계 판의 12 는 로마 숫자로 선다 — 다른 값이 되면(다른 규칙이
-#  칸을 밀면) 아라비아 숫자로 돌아간다. 거짓 값을 적지 않는다.
 func _num_text(i: int) -> String:
-	var v: int = int(sectors[i]) if i < sectors.size() else 0
-	if v == 12 and _board_theme() == "clock":
-		return "XII"
-	return str(v)
+	return str(int(sectors[i]) if i < sectors.size() else 0)
 
 
 # ── 피자 ─────────────────────────────────────────────
@@ -5650,6 +5645,11 @@ func _draw_board() -> void:
 	# 글자가 얼룩이 된다 — 글자는 눌러서 눕힐 수 없다.
 	var na: float = clampf((_swap_rise() - 0.45) / 0.35, 0.0, 1.0)
 	var ncol: Color = C_TXT if th == "" else Color(THEMEART[th].num)
+	#  값이 하나뿐인 판(피자 32 · 시계 12)은 숫자를 안 적는다. 같은 수 스무 개가
+	#  둘레를 도는 것이 징그럽다(사용자, 2026-09-17) — 값은 보드 확장 표시가 말한다.
+	#  도넛은 칸마다 값이 달라 숫자가 정보라 남긴다.
+	if th == "pizza" or th == "clock":
+		na = 0.0
 	if na > 0.01:
 		for i in 20:
 			_num_draw(i, Color(ncol, na), push)
@@ -16686,8 +16686,12 @@ func _cell_glow(p: Vector2, col := C_TXT, k := 1.0) -> void:
 		draw_colored_polygon(annulus(R * rt_bull_o, R * rt_dbl_out,
 				a0, a0 + sw), Color(col, 0.10 * k))
 		_band_draw(float(hi.r0), float(hi.r1), a0, a0 + sw, Color(col, 0.16 * k))
-		#  옷 입은 판(크러스트 · 황동 · 반죽)은 고리가 밝아 금빛 글자가 묻힌다 — 짙은 테를 두른다
-		if _board_theme() != "":
+		#  옷 입은 판(크러스트 · 황동 · 반죽)은 고리가 밝아 금빛 글자가 묻힌다 — 짙은 테를 두른다.
+		#  숫자를 안 적는 판(피자 · 시계)은 밝힘에도 숫자가 없다.
+		var th := _board_theme()
+		if th == "pizza" or th == "clock":
+			return
+		if th != "":
 			for o in [Vector2(-1.0, 0.0), Vector2(1.0, 0.0), Vector2(0.0, -1.0), Vector2(0.0, 1.0)]:
 				_num_draw(hx, Color(C_BG, col.a), 1.0, o)
 		_num_draw(hx, col)

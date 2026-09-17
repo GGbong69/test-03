@@ -756,8 +756,10 @@ static func _run(g: Node, e: Dictionary) -> void:
 		"mod":
 			if not rows.is_empty():
 				var mid := String(rows[i % rows.size()].id)
-				if not g.mods_own.has(mid):
-					g.mods_own.append(mid)
+				#  한 장만 낀다 — 게임에서 사는 길(_apply_mod)과 같이 덮는다. 덧붙이던
+				#  시절에는 과녁 · 피자 · 도넛이 한 판에 겹쳐 앉았다(사용자, 2026-09-17).
+				#  같은 판이 되는 장도 거절 없이 끼운다 — 개발자 판은 막지 않는다.
+				g.mods_own = [mid]
 				g._board_bake()
 				_say("보드 확장 %s" % mid)
 		"dart":
