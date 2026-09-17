@@ -21245,6 +21245,10 @@ var cup_gl := 0.0      # 히든 겉(깨짐·후광)이 읽는 시계. 넘기기�
 var cup_run := 0.0
 var cup_m := 0.0        # 다트 뭉치가 실제로 있는 자리
 var cup_mv := 0.0       # 그 속도
+var cup_sk := 0.0       # 매달린 램프가 흔들린 만큼(px). 용수철로 돌아온다
+var cup_skv := 0.0      # 그 속도
+var cup_du := 0.0       # 도착 먼지의 남은 수명(초)
+var cup_dus := 0        # 그 먼지의 씨. 걸음마다 갈려 자리가 안 겹친다
 
 
 # 통이 서는 무대. 통은 이 칸 안에서만 미끄러진다.
@@ -21277,6 +21281,8 @@ func _pack_step(dir: int) -> void:
 	cup_prev = newrun_pip
 	cup_dir = dir
 	cup_t = 0.0
+	#  램프를 툭 민다. 통이 나가는 쪽으로 밀리고 용수철이 되돌린다.
+	cup_skv += float(dir) * float(STAGE.sk_v)
 	_pack_view(newrun_pip + dir)
 	_cup3_step(dir)
 
@@ -21288,12 +21294,26 @@ func _cup_ease(t: float) -> float:
 
 func _cup_update(d: float) -> void:
 	cup_gl += d
+	#  매달린 램프. 통이 지나간 바람에 흔들리고 용수철로 돌아온다 —
+	#  가만히 있을 때는 안 흔들린다(늘 흔들리는 램프는 배경 애니메이션이고,
+	#  그것은 "무엇이 움직였다" 를 못 말한다).
+	cup_skv += (0.0 - cup_sk) * float(STAGE.sk_st) * d
+	cup_skv *= exp(-float(STAGE.sk_dp) * d)
+	cup_sk += cup_skv * d
+	cup_du = maxf(cup_du - d, 0.0)
 	#  무대 램프 한 값을 3D 쪽에도 흘린다. 2D 원뿔·웅덩이와 3D 키 라이트와
 	#  통 셰이더가 같은 값을 봐야 불이 한 번에 들어온다.
 	if _cup3_live():
 		_cup3_lamp(_cup_lamp_k())
 	var e0 := _cup_ease(cup_t)
+	var t0 := cup_t
 	cup_t = minf(cup_t + d / float(CUP.dur), 1.0)
+	#  통이 멎는 그 프레임에 발치에서 먼지가 인다. 도착을 소리 없이
+	#  말하는 한 가지다(효과음은 더하지 않는다 — 판 밖은 카지노 소리고
+	#  넘기기는 이미 제 소리를 갖고 있다).
+	if t0 < float(STAGE.du_at) and cup_t >= float(STAGE.du_at):
+		cup_du = float(STAGE.du_t)
+		cup_dus += 1
 	cup_run += -float(cup_dir) * float(CUP.span) * (_cup_ease(cup_t) - e0)
 	cup_mv += (cup_run - cup_m) * float(CUP.stiff) * d
 	cup_mv *= exp(-float(CUP.damp) * d)
@@ -24629,6 +24649,20 @@ const STAGE := {
 	"p_y":  164.0,
 	"off":    3.0,              # 빔 중심은 통 중심에서 왼쪽으로 이만큼
 	"frame": Color("14111f"),   # 액자 안쪽 그늘 — night[0]
+	#  넘길 때 반응. **매달린 램프가 흔들린다** — 통이 지나가면 공기가
+	#  움직이고, 그 한 가지가 넘기기를 「필름이 넘어갔다」에서 「이 바에서
+	#  무엇이 움직였다」로 바꾼다.
+	#  **정수 ±2px 이다.** 14px 로 흔들어 봤더니 빛 웅덩이가 카운터 위를
+	#  미끄러져 램프가 천장에서 떨어질 것처럼 보였다 — 무대가 138px 이라
+	#  2px 이 벌써 1.5% 다.
+	"sk_st":  30.0,             # 용수철 세기(CUP.stiff 와 같은 식)
+	"sk_dp":   4.0,             # 감쇠
+	"sk_v":   14.0,             # 한 번 넘길 때 주는 속도. 진폭 = v/√세기 ≒ 2.5
+	"sk_max":  2.0,             # 그려지는 최대 어긋남(px)
+	#  도착 먼지. 통이 멎는 프레임에 발치에서 알갱이 셋이 인다.
+	"du_t":    0.25,            # 수명(초)
+	"du_at":   0.85,            # cup_t 가 이 선을 넘는 프레임에 인다
+	"du_n":       3,
 }
 
 
@@ -24679,7 +24713,11 @@ func _cup_backdrop(stage: Rect2, k: float, lcol: Color) -> void:
 	#  위 40px 한 단. 모서리는 _rr 의 계단 규칙을 따라야 액자 안에 들어간다.
 	_rr_top(self, stage, int(STAGE.hi_h), Color(STAGE.hi))
 	var cx: float = stage.get_center().x
-	var bc: float = cx - float(STAGE.off)
+	#  흔들림은 **정수 px** 이다. 640x360 을 정수배로 늘이므로 반 픽셀을
+	#  넣으면 램프 빛이 미끄러질 때마다 흐려진다(깨짐 GLITCH.amp 와 같은 규칙).
+	var sk: float = clampf(roundf(cup_sk), -float(STAGE.sk_max),
+			float(STAGE.sk_max))
+	var bc: float = cx - float(STAGE.off) + sk
 	var top: float = float(STAGE.top)
 	#  카운터 윗면. 뒷모서리 한 줄이 벽과 판을 가른다 — 없으면 카운터가
 	#  벽에서 자란 것으로 보인다.
@@ -24706,7 +24744,7 @@ func _cup_backdrop(stage: Rect2, k: float, lcol: Color) -> void:
 	#  램프 원뿔 두 겹. **램프 몸체는 무대 안에 안 그린다** — 왼쪽 위에
 	#  달아 보니 깃털 다트통의 긴 자루와 겹쳐 서로를 잘랐다. 빛만 들어온다.
 	if k > 0.02:
-		var t0: float = cx - 22.0
+		var t0: float = cx - 22.0 + sk
 		for q in 2:
 			var aw: float = 8.0 if q == 0 else 5.0
 			var bw: float = 46.0 if q == 0 else 28.0
@@ -24732,6 +24770,22 @@ func _cup_shadow(stage: Rect2, dx: float, wide: float) -> void:
 	#  위에 1px 떠 있는 것으로 보인다.
 	draw_colored_polygon(_e_pts(Vector2(cx, _cup_foot() + fpx * 0.309 + 1.0),
 			fpx * 0.92, 2.0, 22), Color(STAGE.ct))
+	#  도착 먼지. 통 발치 **밖**에 선다 — 안에 두면 통에 가려 안 보인다.
+	#  **들어오는 통에만** 인다. 넘기는 동안 통이 둘이고 나가는 통은 이미
+	#  무대 밖 124px 에 있으므로, 가운데 가까운 쪽 하나만 고른다.
+	if cup_du > 0.0 and absf(dx) < 20.0:
+		var a: float = cup_du / float(STAGE.du_t)
+		for i in int(STAGE.du_n):
+			var sd: float = 1.0 if i % 2 == 0 else -1.0
+			var px: float = cx + sd * (fpx + 2.0
+					+ _gl_rand(i, cup_dus) * 5.0)
+			var rise: float = 2.0 + _gl_rand(i + 31, cup_dus) * 3.0
+			var py: float = _cup_foot() + 4.0 - (1.0 - a) * rise
+			#  램프 웅덩이보다 **한참 밝다.** p1 으로 칠했더니 카운터와
+			#  값이 붙어 있는 줄도 몰랐다 — 인 먼지는 빛을 정면으로
+			#  받으므로 나무의 가장 밝은 단에서 시작해 웅덩이로 잦아든다.
+			draw_rect(Rect2(roundf(px), roundf(py), 2.0, 1.0),
+					Color(ART_PAL["wood"][3]).lerp(Color(STAGE.p1), 1.0 - a))
 
 
 func _cup_draw(pr: Rect2) -> void:

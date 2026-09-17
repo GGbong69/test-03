@@ -87,4 +87,11 @@ func _run() -> void:
 	g._pack_step(1)
 	await _wait(14)                   # 0.45초 중 0.23초쯤 — 딱 가운데
 	await _shot("6_mid_slide")
+	# ── ④ 도착 — 램프가 흔들리고 발치에 먼지가 인다 ───
+	#  cup_t 는 프레임마다 (프레임 시간 ÷ 0.45) 오른다. 이 도구는 60fps
+	#  보다 빠르게 돌 수 있으므로(실측 cup_t 0.70 @ 27프레임) 넉넉히
+	#  기다려 0.85 를 넘긴 뒤에 찍는다 — 먼지 수명은 0.25초다.
+	g._pack_step(1)
+	await _wait(38)
+	await _shot("7_arrive_dust")
 	quit(0)
