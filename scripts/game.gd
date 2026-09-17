@@ -5631,9 +5631,27 @@ const PIZZAART := {
 	"tint": Color(0.95, 0.70, 0.29, 0.16),    # 녹은 치즈 — 칸 색을 따뜻하게만 민다
 }
 const CLOCKART := {
-	"brass": Color("b88a3e"), "brass_dk": Color("5e4318"), "brass_hi": Color("f2d27e"),
-	"brass_lo": Color("7a5a24"), "ink": Color(0.10, 0.07, 0.04, 0.70),
-	"guil": Color(0.0, 0.0, 0.0, 0.06), "hand": Color("1a120a"), "sec": Color("c0392b"),
+	#  시계 판의 물감 — 보드 확장 아이콘(카지노 칩)이 나중에 이 표에 맞춘다.
+	#  램프는 어두운 것부터 밝은 것 순서다(_ck_ramp 가 빛 쪽으로 한 칸씩 올린다).
+	"ring": 0.22,                    # 판 밖 테 폭(R 배수) = 문자판 여백 + 황동 케이스
+	"margin": 3.0,                   # 분 트랙 밖 문자판 여백(px) — 빗나감 자리, 케이스 밑으로 들어간다
+	#  황동 케이스 — 그늘은 따뜻한 고동, 빛은 노랑 쪽으로 민다
+	"case": [Color("3b2711"), Color("6a4a1f"), Color("9c7334"), Color("c69a4c"), Color("ebc97e")],
+	"case_edge": Color("1f150a"),    # 케이스 바깥 한 줄 · 유리 자리 홈
+	"case_spec": Color("fff2c6"),    # 케이스 마루의 반짝임
+	#  문자판
+	"paper": Color("efe7d1"),        # 분 트랙 · 여백의 상아 법랑
+	"paper_dk": Color("b9ae95"),     # 케이스 그늘에 든 여백
+	"ink": Color("2a2030"),          # 인쇄 잉크 — 레일 눈금 · 트랙 선
+	#  금박 — 챕터 링 · 아플리케 인덱스 · 가운데 허브
+	"gilt": [Color("4f3714"), Color("8a6429"), Color("c0964a"), Color("e8cc86")],
+	"enamel": Color("1d1826"),       # 가운데 원판(바깥 불)의 검은 법랑
+	"hole": Color("0c0910"),         # 태엽 구멍 속
+	"hand": Color("15101c"),         # 시침 · 분침 — 흑강
+	"hand_hi": Color("a39cb6"),      # 바늘 모서리가 받는 빛
+	"sec": Color("d6392b"),          # 초침 — 역 시계의 신호판 빨강
+	"metal": Color("8a8494"),        # 법랑이 떨어져 드러난 바탕 쇠(죽은 칸)
+	"crack": Color(0.04, 0.02, 0.05, 0.75),   # 죽은 칸 법랑의 금
 }
 const DONUTART := {
 	"dough": Color("d99a52"), "dough_dk": Color("8f5a26"), "dough_hi": Color("f2c386"),
@@ -5748,8 +5766,30 @@ func _pz_bake(key: String, rng: RandomNumberGenerator, sw: float) -> Array:
 	return out
 
 
-func _ck_bake(_key: String, _rng: RandomNumberGenerator, _sw: float) -> Array:
-	return []
+func _ck_bake(key: String, rng: RandomNumberGenerator, _sw: float) -> Array:
+	#  죽은 칸의 법랑 금과 떨어진 조각. 칸마다 같은 수를 굽고 죽은 칸에서만 그린다.
+	#  반지름은 판 바깥선(rt_dbl_out) 배수, 각은 칸 한가운데에서 칸 폭 배수로 적는다 —
+	#  띠 폭 · 칸 수가 바뀌어도 금이 제 칸 안에 머문다.
+	#    ["crack", 칸, [[반지름, 각], …]]   ["chip", 칸, 반지름, 각, 크기]
+	var out := []
+	match key:
+		"clock_crack":
+			for i in _sec_n():
+				for n in 3:
+					var rf := rng.randf_range(0.22, 0.86)
+					var af := rng.randf_range(-0.30, 0.30)
+					var hd := rng.randf() * TAU
+					var pts := [[rf, af]]
+					for s in 3 + rng.randi() % 2:
+						hd += rng.randf_range(-0.6, 0.6)
+						rf = clampf(rf + cos(hd) * 0.045, 0.18, 0.96)
+						af = clampf(af + sin(hd) * 0.22, -0.44, 0.44)
+						pts.append([rf, af])
+					out.append(["crack", i, pts])
+				for n in 3:
+					out.append(["chip", i, rng.randf_range(0.30, 0.84), rng.randf_range(-0.26, 0.26),
+							2 + rng.randi() % 2])
+	return out
 
 
 func _dn_bake(key: String, rng: RandomNumberGenerator, sw: float) -> Array:
@@ -5943,26 +5983,34 @@ func _pz_top(_push: float) -> void:
 
 # ── 시계 한 벌 ──
 func _ck_ring_w() -> float:
-	return float(BOARDART.ring)
+	return float(CLOCKART.ring)
 
 
 func _ck_board(ro: float, push: float, cols: Array) -> void:
-	_ck_rim(ro, push)
-	_board_cells(cols, push)
-	_ck_face(push)
+	_ck_case(ro, push)
+	_ck_dial(cols, push)
+	_ck_chapter(push)
+	_ck_track(push)
+	_ck_dead_draw(push)
+	_ck_index(push)
+	_ck_winding(push)
+	_ck_boss(push)
 
 
+#  빛 위 — 케이스 턱이 문자판 왼쪽 위 가장자리에 떨구는 그늘
 func _ck_over(push: float) -> void:
-	_ck_glass(push)
+	_ck_rehaut(push)
 
 
+#  모든 칸이 12 — 숫자를 안 적는다. 시계의 숫자는 인덱스(금박 막대)가 대신한다.
 func _ck_num() -> Color:
 	return Color(0.0, 0.0, 0.0, 0.0)
 
 
-#  바늘은 숫자 위 — 시곗바늘이 문자판 글자를 가리는 것이 시계다
+#  바늘은 숫자 위, 유리는 바늘 위 — 유리가 바늘까지 덮어야 문자판이 유리 밑에 든다
 func _ck_top(push: float) -> void:
 	_ck_hands(push)
+	_ck_glass(push)
 
 
 # ── 도넛 한 벌 ──
@@ -6493,69 +6541,427 @@ func _pz_face(cols: Array, push: float) -> void:
 
 
 # ── 시계 ─────────────────────────────────────────────
-func _ck_rim(ro: float, push: float) -> void:
+#  「피자는 진짜 피자같이 보이도록 해줘. 다트 보드의 테두리만 피자로 만들지 말고」
+#  「마찬가지고 시계랑 과녁 도넛도」(사용자, 2026-09-17). 전의 시계 판은 토너먼트 판
+#  (크림 · 먹 칸, 빨강 · 초록 띠, 은 철사)에 황동 테와 바늘만 얹은 것이라 다트판으로
+#  읽혔다. 이제 판 전체가 **벽시계 한 대**다.
+#
+#  레퍼런스(구도 · 색만 봤다, 사진을 따지 않았다):
+#    · 스위스 역 시계(힐피커 1944) — 흰 판 · 굵은 검은 막대 인덱스 · 빨간 초침 끝 원판
+#    · IBM 스쿨하우스 시계 — 돌출한 금속 케이스 · 볼록 유리 · 숯빛 바늘 · 빨간 초침
+#    · 세스 토머스 레귤레이터 No.18 — 상아 법랑판 · 닫힌 분 고리 · 황동 테 링
+#    · 독일 황동 베젤 + 볼록 유리 + 흰 법랑 문자판(시계 부품상 설명)
+#    · 섹터 다이얼(1930s 롱진 · 오메가) — 동심 고리 둘(시 · 분) + 칸을 가르는 방사선,
+#      가운데 결 · 바깥 무광의 투톤. 다트판의 기하가 곧 섹터 다이얼의 기하다
+#    · 레일웨이 분 트랙(IWC 포르투기저 · 회중시계) — 두 줄 레일에 침목 같은 눈금, 5분마다 굵게
+#    · 챕터 링(웍 글로서리) — 문자판 가장자리를 두른 고리, 판과 다른 재질로 도드라진다
+#    · 기요셰 · 선버스트 문자판 — 방사 결이 빛 쪽과 맞은편만 밝게 받는다(나비 꼴)
+#    · 옛 벽시계 · 레귤레이터 — 4시 · 8시 태엽 구멍, 브레게(달 고리) 바늘
+#    · 도트 시계 스프라이트(OpenGameArt 16×16 · LPC 시계) · 도트 금속 램프(휴 시프트:
+#      금속 그늘은 따뜻한 고동, 빛은 노랑)
+#
+#  구역 → 시계의 부분(점수 자리는 hit_info 와 한 치도 안 어긋난다 — 모두 rt_* 반지름이다):
+#    판 밖(더블 바깥)   문자판 여백 3px + 황동 케이스(볼록 바깥 경사 · 마루 · 안쪽 경사)
+#    더블 띠           레일웨이 분 트랙 — 상아 법랑 위 두 줄 레일, 예순 침목, 5분마다 굵은 막대
+#    바깥 싱글         법랑 칸 + 금박 아플리케 시 인덱스 열둘(12시는 두 줄)
+#    트리플 띠(+천체)  금박 챕터 링 — 빛을 받는 볼록 고리, 시 자리마다 새긴 홈
+#    안쪽 싱글         법랑 칸 + 선버스트 방사 결(빛 쪽 · 맞은편이 밝은 나비) + 태엽 구멍 둘
+#    바깥 불           검은 법랑 원판에 금 테
+#    안쪽 불           둥근 황동 허브(바늘 축)
+#  띠는 칸 색을 안 입는다 — 토너먼트 판의 빨강 · 초록 띠도 칸 색이 아니었다. 띠는 온 둘레가
+#  한 재질(금박 · 상아)이라 칸 색이 번갈아도 고리로 읽히고, 조준 어둠이 나머지를 깔면
+#  겨눈 한 토막만 밝게 남는다.
+#
+#  칸 색(표의 색 번호) → 법랑:
+#    크림 → 상아 법랑   먹 → 흑칠 법랑   주홍 → 주홍 법랑   쪽빛 → 코발트 법랑
+#  _board_cols 의 색을 그대로 칠하므로 칠 · 새 색이 그대로 선다. 밝고 어두움이 판의 반을
+#  가른다(양 · 음 · WHITE ALBUM · 심장의 색깔은 · 그늘이 그것을 본다).
+#  죽은 칸 — 칸은 이미 배경 쪽으로 가라앉았고, 띠 토막도 같은 비율(0.72)로 가라앉힌다.
+#  그 위에 법랑의 금(crazing)과 떨어져 쇠가 드러난 조각을 얹어 **깨진 칸**으로 읽힌다.
+#
+#  빛은 왼쪽 위다(_board_light 와 같은 방향). 케이스 · 챕터 링 · 인덱스 · 허브는 도트 금속
+#  램프를 계단으로 받는다(_ck_ramp). 바늘은 지금 시각을 가리키고 유리 반사가 그 위를 덮는다.
+func _ck_is_dead(i: int) -> bool:
+	return i == dead_idx or (dead_col >= 0 and _sec_col(i) == dead_col)
+
+
+#  넓이 없는 토막은 안 그린다(_band_draw 와 같은 까닭). 온 둘레는 반으로 나눠 긋는다 —
+#  한 다각형으로 닫으면 이음매가 겹쳐 삼각분할이 실패한다.
+func _ck_band(ri: float, ro: float, a0: float, a1: float, col: Color, seg := 8) -> void:
+	if ro - ri < 0.05:
+		return
+	if a1 - a0 > PI + 0.001:
+		var am := (a0 + a1) * 0.5
+		draw_colored_polygon(annulus_at(BC, ri, ro, a0, am, seg), col)
+		draw_colored_polygon(annulus_at(BC, ri, ro, am, a1, seg), col)
+		return
+	draw_colored_polygon(annulus_at(BC, ri, ro, a0, a1, seg), col)
+
+
+#  빛을 계단으로 받는 고리. 조각마다 왼쪽 위 빛과의 내적으로 램프 한 칸을 고르고,
+#  같은 칸이 이어지는 조각은 한 다각형으로 묶는다(도트 금속의 계단 음영).
+#  inv 면 면이 판 가운데를 본다(케이스 안쪽 경사) — 빛이 반대편(오른쪽 아래)에 든다.
+func _ck_ramp(ri: float, ro: float, ramp: Array, inv: bool, n := 72) -> void:
+	if ro - ri < 0.05 or ramp.is_empty():
+		return
+	var lt := Vector2(-0.6, -0.8)
+	var step := TAU / float(n)
+	var ids := []
+	for k in n:
+		var t: float = _theme_dir((float(k) + 0.5) * step).dot(lt)
+		if inv:
+			t = -t
+		ids.append(clampi(int(floor((t * 0.5 + 0.5) * float(ramp.size()))), 0, ramp.size() - 1))
+	var k0 := 0
+	while k0 < n:
+		var k1 := k0
+		while k1 + 1 < n and int(ids[k1 + 1]) == int(ids[k0]):
+			k1 += 1
+		_ck_band(ri, ro, float(k0) * step, float(k1 + 1) * step, ramp[int(ids[k0])], (k1 - k0 + 1) * 2)
+		k0 = k1 + 1
+
+
+#  황동 케이스 — 바깥 한 줄 · 볼록 바깥 경사 · 마루 · 안쪽 경사 · 유리 자리 홈 · 문자판 여백
+func _ck_case(ro: float, push: float) -> void:
 	var ck: Dictionary = CLOCKART
-	var ri := R * rt_dbl_out * push
-	draw_circle(BC, ro, ck.brass_dk)
-	draw_circle(BC, ro - 2.0, ck.brass)
-	#  금속 결 — 동심 가는 줄
-	var r := ri + 3.0
-	while r < ro - 3.0:
-		draw_arc(BC, r, 0.0, TAU, 120, Color(ck.brass_hi, 0.12), 1.0)
-		r += 3.0
-	draw_arc(BC, ro - 3.0, PI * 0.95, PI * 1.55, 48, ck.brass_hi, 2.0)
-	draw_arc(BC, ro - 3.0, PI * -0.05, PI * 0.55, 48, ck.brass_lo, 2.0)
-	#  눈금 — 예순, 다섯마다 길다
+	var rdo := R * rt_dbl_out * push
+	var rs := rdo + float(ck.margin) * push
+	var w := ro - rs
+	var ramp: Array = ck.case
+	draw_circle(BC, ro, ck.case_edge)
+	var crest := rs + w * 0.48
+	_ck_ramp(crest + 1.0, ro - 1.0, ramp, false)
+	_ck_ramp(rs + 1.0, crest, ramp.slice(0, 4), true)
+	#  마루 — 왼쪽 위는 반짝, 오른쪽 아래는 그늘 한 줄
+	draw_arc(BC, crest + 0.5, PI * 1.00, PI * 1.50, 40, ck.case_spec, 1.0)
+	draw_arc(BC, crest + 0.5, PI * 0.00, PI * 0.50, 40, ramp[0], 1.0)
+	#  바깥 경사의 반짝 한 점 — 왼쪽 위 둘레에 짧게
+	draw_arc(BC, (crest + ro) * 0.5, PI * 1.18, PI * 1.32, 12, Color(ck.case_spec, 0.75), 2.0)
+	draw_arc(BC, rs + 0.5, 0.0, TAU, 160, ck.case_edge, 1.0)
+	#  문자판 여백 — 케이스 밑으로 들어가는 상아 법랑(케이스 그늘에 들어 한 단 어둡다)
+	_ck_band(rdo, rs, 0.0, TAU, ck.paper_dk, 48)
+
+
+#  법랑 칸 — 싱글 두 마당만 칠한다(띠 · 불은 제 재질이 덮는다)
+func _ck_dial(cols: Array, push: float) -> void:
+	var sw := _sec_w()
+	var rbo := R * rt_bull_o * push
+	var rti := R * rt_trp_in * push
+	var rto := R * rt_trp_out * push
+	var rdi := R * rt_dbl_in * push
+	for i in _sec_n():
+		var a0 := float(i) * sw - sw * 0.5
+		var c: Color = cols[i][0]
+		_ck_band(rbo, rti, a0, a0 + sw, c)
+		_ck_band(rto, rdi, a0, a0 + sw, c)
+	#  선버스트 — 가운데 마당에만 방사 결을 새긴다(바깥 마당은 무광 — 섹터 다이얼의 투톤).
+	#  결의 잉크는 칸이 밝으면 그늘, 어두우면 빛이다. 동심 기요셰(3px 간격)도 대 봤는데
+	#  도트 크기에서는 블라인드 줄무늬 · 레코드 홈으로 읽혀 걷었다.
+	for i in _sec_n():
+		var a0 := float(i) * sw - sw * 0.5
+		var c: Color = cols[i][0]
+		var gc := Color(0.0, 0.0, 0.0, 0.07) if c.get_luminance() > 0.35 else Color(1.0, 1.0, 1.0, 0.05)
+		for k in range(1, 4):
+			var d := _theme_dir(a0 + sw * float(k) / 4.0)
+			draw_line(BC + d * (rbo + 3.0), BC + d * (rti - 2.0), gc, 1.0)
+		#  선버스트 나비 — 방사 결은 빛 쪽(왼쪽 위)과 그 맞은편이 밝고 직각 쪽이 어둡다.
+		#  칸을 셋으로 쪼개 다섯 계단으로 얹는다(칸 색의 밝고 어두움은 안 뒤집힌다).
+		for k in 3:
+			var b0 := a0 + sw * float(k) / 3.0
+			var sv := snappedf(cos(2.0 * (b0 + sw / 6.0 - PI * 1.75)), 0.5)
+			if absf(sv) < 0.01:
+				continue
+			_ck_band(rbo, rti, b0, b0 + sw / 3.0,
+					Color(1.0, 1.0, 1.0, 0.08 * sv) if sv > 0.0 else Color(0.0, 0.0, 0.0, -0.10 * sv), 3)
+	#  칸 이음 — 금선이 아니라 옅은 홈. 같은 색 이웃이어도 칸이 갈린다
+	var seam := Color(0.0, 0.0, 0.0, 0.16)
+	for i in _sec_n():
+		var d := _theme_dir(float(i) * sw - sw * 0.5)
+		draw_line(BC + d * rbo, BC + d * rti, seam, 1.0)
+		draw_line(BC + d * rto, BC + d * rdi, seam, 1.0)
+
+
+#  챕터 링(트리플 · 천체 고리의 안쪽 트리플) — 금박 볼록 고리. 시 자리마다 새긴 홈
+func _ck_chapter(push: float) -> void:
+	var ck: Dictionary = CLOCKART
+	var g: Array = ck.gilt
+	for b in [[rt_trp_in, rt_trp_out], [rt_trp2_in, rt_trp2_out]]:
+		var ri := R * float(b[0]) * push
+		var rr := R * float(b[1]) * push
+		if rr - ri < 1.0:
+			continue
+		#  붙인 고리라 그림자를 판에 떨군다 — 왼쪽 위 토막은 안쪽으로, 오른쪽 아래 토막은
+		#  바깥으로(빛을 등진 쪽). 두 칸 폭, 세 계단 짙기.
+		_ck_drop(ri - 2.0, ri, 1.0, 0.26)
+		_ck_drop(rr, rr + 2.0, -1.0, 0.26)
+		_ck_ramp(ri, rr, g, false)
+		draw_arc(BC, ri + 0.5, 0.0, TAU, 120, Color(g[0], 0.9), 1.0)
+		draw_arc(BC, rr - 0.5, 0.0, TAU, 120, Color(g[0], 0.9), 1.0)
+		if rr - ri >= 4.0:
+			#  시 자리 홈 열둘과 그 사이 분 점(새긴 점 한 칸씩)
+			var rm := (ri + rr) * 0.5
+			for m in 60:
+				var d := _theme_dir(TAU * float(m) / 60.0)
+				if m % 5 == 0:
+					draw_line(BC + d * (ri + 1.5), BC + d * (rr - 1.5), g[0], 1.0)
+				else:
+					draw_rect(Rect2((BC + d * rm).floor(), Vector2.ONE), Color(g[0], 0.75))
+
+
+#  빛을 향하거나(side 1) 등진(side -1) 둘레에만 까는 그늘 고리 — 세 계단 짙기(도트)
+func _ck_drop(ri: float, ro: float, side: float, a: float) -> void:
+	var lt := Vector2(-0.6, -0.8)
+	var n := 48
+	var step := TAU / float(n)
+	for k in n:
+		var t: float = _theme_dir((float(k) + 0.5) * step).dot(lt) * side
+		if t <= 0.15:
+			continue
+		_ck_band(ri, ro, float(k) * step, float(k + 1) * step, Color(0.0, 0.0, 0.0, a * ceilf(t * 3.0) / 3.0), 2)
+
+
+#  레일웨이 분 트랙(더블) — 상아 법랑 위 두 줄 레일과 예순 침목, 5분마다 굵은 막대
+func _ck_track(push: float) -> void:
+	var ck: Dictionary = CLOCKART
+	var rdi := R * rt_dbl_in * push
+	var rdo := R * rt_dbl_out * push
+	if rdo - rdi < 1.0:
+		return
+	_ck_band(rdi, rdo, 0.0, TAU, ck.paper, 48)
+	var ink: Color = ck.ink
+	draw_arc(BC, rdo - 0.5, 0.0, TAU, 180, ink, 1.0)
+	draw_arc(BC, rdi + 0.5, 0.0, TAU, 180, ink, 1.0)
+	#  분 눈금은 바깥 레일에 매달린 짧은 빗살(트랙 폭의 반), 5분 눈금만 레일 사이를 채운다 —
+	#  온 폭 침목 예순은 필름 띠처럼 칸칸이 막혀 보였다.
+	var mid := rdo - maxf(2.0, (rdo - rdi) * 0.5)
 	for k in 60:
 		var d := _theme_dir(TAU * float(k) / 60.0)
-		var ln: float = 3.0 if k % 5 == 0 else 2.0
-		draw_line(BC + d * (ri + 1.0), BC + d * (ri + 1.0 + ln), ck.brass_dk, 1.0)
-	draw_arc(BC, ri + 0.5, 0.0, TAU, 140, ck.brass_dk, 1.0)
+		if k % 5 == 0:
+			var n := Vector2(-d.y, d.x) * 1.5
+			draw_colored_polygon(PackedVector2Array([BC + d * rdi - n, BC + d * rdo - n,
+					BC + d * rdo + n, BC + d * rdi + n]), ink)
+		else:
+			draw_line(BC + d * mid, BC + d * (rdo - 1.0), ink, 1.0)
 
 
-func _ck_face(push: float) -> void:
+#  죽은 칸 — 띠 토막을 칸과 같은 비율로 가라앉히고, 칸 전체에 금 · 떨어진 조각
+func _ck_dead_draw(push: float) -> void:
 	var ck: Dictionary = CLOCKART
-	var rim := R * rt_dbl_out * push
-	#  문자판의 동심 결(기요셰)
-	var r := R * rt_bull_o * push + 3.0
-	while r < rim - 1.0:
-		draw_arc(BC, r, 0.0, TAU, 96, ck.guil, 1.0)
-		r += 3.0
-	_board_wires(push, ck.ink)
+	var sw := _sec_w()
+	var any := false
+	for i in _sec_n():
+		if not _ck_is_dead(i):
+			continue
+		any = true
+		var a0 := float(i) * sw - sw * 0.5
+		for b in [[rt_trp_in, rt_trp_out], [rt_trp2_in, rt_trp2_out], [rt_dbl_in, rt_dbl_out]]:
+			_ck_band(R * float(b[0]) * push, R * float(b[1]) * push, a0, a0 + sw, Color(C_BG, 0.72))
+	if not any:
+		return
+	var rdo := R * rt_dbl_out * push
+	var rbo := R * rt_bull_o * push
+	for e in _theme_bits("clock_crack"):
+		var i: int = int(e[1])
+		if not _ck_is_dead(i):
+			continue
+		var c := float(i) * sw
+		if String(e[0]) == "crack":
+			var pl := PackedVector2Array()
+			for p in e[2]:
+				var rr := maxf(float(p[0]) * rdo, rbo + 2.0)
+				pl.append((BC + _theme_dir(c + float(p[1]) * sw) * rr).floor() + Vector2(0.5, 0.5))
+			#  금은 두 줄 — 벌어진 틈(어둠)과 그 아래 깨진 모서리(빛). 어두운 칸에서도 보인다
+			var lo := PackedVector2Array()
+			for v in pl:
+				lo.append(v + Vector2(0.0, 1.0))
+			draw_polyline(lo, Color(1.0, 1.0, 1.0, 0.20), 1.0)
+			draw_polyline(pl, ck.crack, 1.0)
+		else:
+			var q := (BC + _theme_dir(c + float(e[3]) * sw) * maxf(float(e[2]) * rdo, rbo + 3.0)).floor()
+			var s: float = float(e[4])
+			draw_rect(Rect2(q, Vector2(s, s - 1.0)), ck.metal)
+			draw_rect(Rect2(q + Vector2(1.0, s - 1.0), Vector2(s - 1.0, 1.0)), Color(ck.metal, 0.7))
+			draw_rect(Rect2(q - Vector2(0.0, 1.0), Vector2(s, 1.0)), ck.crack)
 
 
+#  아플리케 시 인덱스 — 금박 막대 열둘(12시는 두 줄, 3 · 6 · 9 는 굵게). 법랑 위에 붙은
+#  쇠라 그림자를 오른쪽 아래로 떨구고, 빛 쪽 모서리가 밝다. 죽은 칸 위의 것은 녹슨다.
+func _ck_index(push: float) -> void:
+	var rto := R * rt_trp_out * push
+	var rdi := R * rt_dbl_in * push
+	var gap := maxf(2.0, (rdi - rto) * 0.16)
+	var r0 := rto + gap
+	var r1 := rdi - gap
+	if r1 - r0 < 3.0:
+		return
+	for h in 12:
+		var a := TAU * float(h) / 12.0
+		var dead := _ck_is_dead(_theme_sec(a))
+		if h == 0:
+			_ck_baton(a, r0, r1, 2.0, -2.0, dead)
+			_ck_baton(a, r0, r1, 2.0, 2.0, dead)
+		else:
+			_ck_baton(a, r0, r1, 3.0 if h % 3 != 0 else 4.0, 0.0, dead)
+
+
+func _ck_baton(a: float, r0: float, r1: float, w: float, off: float, dead: bool) -> void:
+	var ck: Dictionary = CLOCKART
+	var g: Array = ck.gilt
+	var d := _theme_dir(a)
+	var n := Vector2(-d.y, d.x)
+	var o := BC + n * off
+	var hw := w * 0.5
+	var p := PackedVector2Array([o + d * r0 - n * hw, o + d * r1 - n * hw,
+			o + d * r1 + n * hw, o + d * r0 + n * hw])
+	var sh := PackedVector2Array()
+	for v in p:
+		sh.append(v + Vector2(1.0, 1.5))
+	draw_colored_polygon(sh, Color(0.0, 0.0, 0.0, 0.40))
+	draw_colored_polygon(p, g[1] if dead else g[2])
+	var s: float = 1.0 if n.dot(Vector2(-0.6, -0.8)) > 0.0 else -1.0
+	var e := n * s * (hw - 0.5)
+	draw_line(o + d * r0 + e, o + d * r1 + e, g[2] if dead else g[3], 1.0)
+	draw_line(o + d * r0 - e, o + d * r1 - e, g[0], 1.0)
+
+
+#  태엽 구멍 둘 — 옛 벽시계의 4시 · 8시 자리(칸 한가운데에 맞춘다). 황동 테 · 깊은 구멍 ·
+#  네모 축 머리. 점수와는 상관없는 장식이라 작다.
+func _ck_winding(push: float) -> void:
+	var ck: Dictionary = CLOCKART
+	var g: Array = ck.gilt
+	var rbo := R * rt_bull_o * push
+	var rti := R * rt_trp_in * push
+	#  천체 고리(안쪽 트리플)가 서면 구멍 자리가 그 고리에 걸린다 — 그때는 안 판다
+	if rti - rbo < 16.0 or rt_trp2_out > 0.0:
+		return
+	var n := _sec_n()
+	var k := int(round(float(n) * 0.35))
+	var rr := (rbo + rti) * 0.5
+	for i in [k, n - k]:
+		var q := (BC + _theme_dir(float(i) * _sec_w()) * rr).round()
+		draw_circle(q + Vector2(1.0, 1.0), 3.5, Color(0.0, 0.0, 0.0, 0.35))
+		draw_circle(q, 3.5, g[1])
+		draw_arc(q, 3.0, PI * 1.0, PI * 1.5, 8, g[3], 1.0)
+		draw_circle(q, 2.2, ck.hole)
+		draw_rect(Rect2(q - Vector2(1.0, 1.0), Vector2(2.0, 2.0)), g[2])
+		draw_rect(Rect2(q - Vector2(1.0, 1.0), Vector2.ONE), g[3])
+
+
+#  가운데 — 바깥 불은 검은 법랑 원판에 금 테, 안쪽 불은 둥근 황동 허브
+func _ck_boss(push: float) -> void:
+	var ck: Dictionary = CLOCKART
+	var g: Array = ck.gilt
+	var rbo := R * rt_bull_o * push
+	var rbi := R * rt_bull_i * push
+	if rbo < 1.0:
+		return
+	draw_circle(BC, rbo, g[1])
+	draw_arc(BC, rbo - 0.5, PI * 1.0, PI * 1.5, 24, g[3], 1.0)
+	draw_circle(BC, rbo - 1.0, ck.enamel)
+	if rbi >= 1.5:
+		draw_circle(BC, rbi, g[0])
+		draw_circle(BC + Vector2(-0.5, -0.5), rbi - 1.0, g[2])
+		draw_circle(BC + Vector2(-rbi * 0.35, -rbi * 0.35), maxf(1.0, rbi * 0.3), g[3])
+
+
+#  케이스 턱의 그늘 — 빛(왼쪽 위)을 막는 턱이 문자판 왼쪽 위 가장자리에 떨어진다.
+#  세 계단으로만 짙기를 바꾼다(도트).
+func _ck_rehaut(push: float) -> void:
+	var ck: Dictionary = CLOCKART
+	var rs := R * rt_dbl_out * push + float(ck.margin) * push
+	_ck_drop(rs - 2.0, rs, 1.0, 0.30)
+	_ck_drop(rs - 4.0, rs - 2.0, 1.0, 0.12)
+
+
+#  볼록 유리 — 왼쪽 위에 넓고 옅은 초승달 하나, 그 안에 날카로운 줄 하나, 오른쪽 아래에
+#  되비침 한 줄. 판을 가리지 않게 옅다.
 func _ck_glass(push: float) -> void:
-	var rim := R * rt_dbl_out * push
-	draw_arc(BC, rim * 0.86, PI * 1.08, PI * 1.42, 32, Color(1.0, 1.0, 1.0, 0.10), 7.0)
-	draw_arc(BC, rim * 0.72, PI * 1.16, PI * 1.30, 20, Color(1.0, 1.0, 1.0, 0.07), 3.0)
+	var ck: Dictionary = CLOCKART
+	var rs := R * rt_dbl_out * push + float(ck.margin) * push
+	_ck_crescent(rs - 2.0, PI * 0.98, PI * 1.56, 16.0, Color(1.0, 1.0, 1.0, 0.09))
+	_ck_crescent(rs - 7.0, PI * 1.08, PI * 1.38, 4.0, Color(1.0, 1.0, 1.0, 0.26))
+	_ck_crescent(rs - 4.0, PI * 0.12, PI * 0.38, 3.0, Color(1.0, 1.0, 1.0, 0.10))
+	#  반짝 한 점 — 초승달 한가운데 바깥
+	var sp := (BC + Vector2(cos(PI * 1.23), sin(PI * 1.23)) * (rs - 8.0)).floor()
+	draw_rect(Rect2(sp, Vector2(2.0, 2.0)), Color(1.0, 1.0, 1.0, 0.55))
 
 
-#  바늘 — 지금 시각을 가리킨다. 그림자가 문자판에 한 칸 떨어진다.
+#  바깥은 원호, 안은 양 끝에서 0 으로 줄어드는 두께 — 초승달 한 조각(각은 draw_arc 식)
+func _ck_crescent(r: float, t0: float, t1: float, th: float, col: Color) -> void:
+	var pts := PackedVector2Array()
+	var n := 16
+	for k in n + 1:
+		var t := lerpf(t0, t1, float(k) / float(n))
+		pts.append(BC + Vector2(cos(t), sin(t)) * r)
+	for k in n + 1:
+		var u := float(n - k) / float(n)
+		var t := lerpf(t0, t1, u)
+		pts.append(BC + Vector2(cos(t), sin(t)) * (r - th * sin(PI * u)))
+	draw_colored_polygon(pts, col)
+
+
+#  바늘 — 지금 시각. 시침 · 분침은 흑강 브레게 바늘(끝 가까이 속 빈 달 고리 — 옛 벽시계의
+#  얼굴), 초침은 역 시계의 빨간 신호판을 단다. 그림자가 문자판 오른쪽 아래로 떨어진다.
 func _ck_hands(push: float) -> void:
 	var ck: Dictionary = CLOCKART
-	var rim := R * rt_dbl_out * push
+	var g: Array = ck.gilt
+	var rdo := R * rt_dbl_out * push
+	var rdi := R * rt_dbl_in * push
 	var t := Time.get_time_dict_from_system()
 	var sec := float(t.second)
 	var mn := float(t.minute) + sec / 60.0
 	var hr := fmod(float(t.hour), 12.0) + mn / 60.0
 	ck_sec = int(t.second)
-	_ck_hand(hr / 12.0 * TAU, rim * 0.50, 3.0, ck.hand, true)
-	_ck_hand(mn / 60.0 * TAU, rim * 0.80, 2.0, ck.hand, false)
-	_ck_hand(sec / 60.0 * TAU, rim * 0.86, 1.0, ck.sec, false)
-	draw_circle(BC, 2.5, ck.brass_hi)
-	draw_circle(BC, 1.0, ck.brass_dk)
+	var shc := Color(0.0, 0.0, 0.0, 0.30)
+	var sh := Vector2(1.5, 2.5)
+	var ha := hr / 12.0 * TAU
+	var ma := mn / 60.0 * TAU
+	_ck_hand(ha, rdo * 0.10, rdo * 0.60, 4.0, 0.70, 5.0, sh, shc, false)
+	_ck_hand(ma, rdo * 0.14, rdi - 1.0, 3.0, 0.80, 4.0, sh, shc, false)
+	_ck_hand(ha, rdo * 0.10, rdo * 0.60, 4.0, 0.70, 5.0, Vector2.ZERO, ck.hand, true)
+	_ck_hand(ma, rdo * 0.14, rdi - 1.0, 3.0, 0.80, 4.0, Vector2.ZERO, ck.hand, true)
+	#  초침
+	var d := _theme_dir(sec / 60.0 * TAU)
+	var col: Color = ck.sec
+	var disc := d * rdo * 0.62
+	draw_line(BC + sh - d * rdo * 0.24, BC + sh + d * rdo * 0.93, Color(0.0, 0.0, 0.0, 0.26), 1.0)
+	draw_circle(BC + sh + disc, 3.0, Color(0.0, 0.0, 0.0, 0.26))
+	draw_line(BC - d * rdo * 0.24, BC + d * rdo * 0.93, col, 1.0)
+	draw_circle(BC + disc, 3.0, col)
+	draw_circle(BC + disc + Vector2(-1.0, -1.0), 1.0, col.lightened(0.35))
+	#  축 — 금박 모자에 빨간 초침 모자
+	draw_circle(BC + sh * 0.5, 3.5, Color(0.0, 0.0, 0.0, 0.30))
+	draw_circle(BC, 3.5, g[1])
+	draw_arc(BC, 3.0, PI * 1.0, PI * 1.5, 8, g[3], 1.0)
+	draw_circle(BC, 2.0, col)
+	draw_rect(Rect2((BC + Vector2(-1.0, -1.0)).floor(), Vector2.ONE), col.lightened(0.45))
 
 
-func _ck_hand(a: float, ln: float, w: float, col: Color, spade: bool) -> void:
+#  브레게 바늘 한 자루 — 꼬리 · 대 · 속 빈 달 고리(대 길이의 moon 배) · 뾰족한 끝.
+#  그림자(off · 반투명)와 몸(bevel 이면 빛 쪽 모서리 한 줄)을 같은 모양으로 두 번 긋는다.
+func _ck_hand(a: float, tail: float, ln: float, w: float, moon: float, mr: float,
+		off: Vector2, col: Color, bevel: bool) -> void:
+	var ck: Dictionary = CLOCKART
 	var d := _theme_dir(a)
-	var sh := Vector2(1.0, 2.0)
-	draw_line(BC + sh - d * ln * 0.14, BC + sh + d * ln, Color(0.0, 0.0, 0.0, 0.28), w)
-	draw_line(BC - d * ln * 0.14, BC + d * ln, col, w)
-	if spade:
-		var n := Vector2(-d.y, d.x)
-		var tip := BC + d * ln
-		draw_colored_polygon(PackedVector2Array([tip + d * 4.0, tip + n * 3.0,
-				tip - d * 3.0, tip - n * 3.0]), col)
+	var n := Vector2(-d.y, d.x)
+	var o := BC + off
+	var hw := w * 0.5
+	var mc := o + d * ln * moon
+	#  대 — 꼬리에서 달 고리 안쪽까지
+	var r0 := ln * moon - mr
+	draw_colored_polygon(PackedVector2Array([o - d * tail - n * hw, o + d * r0 - n * hw,
+			o + d * r0 + n * hw, o - d * tail + n * hw]), col)
+	#  달 고리 — 속이 비어 문자판이 비친다
+	var th := maxf(1.5, w * 0.6)
+	draw_arc(mc, mr - th * 0.5, 0.0, TAU, 16, col, th)
+	#  끝 — 고리 바깥에서 뾰족하게
+	var r1 := ln * moon + mr - 0.5
+	draw_colored_polygon(PackedVector2Array([o + d * r1 - n * hw, o + d * ln, o + d * r1 + n * hw]), col)
+	if bevel:
+		var s: float = 1.0 if n.dot(Vector2(-0.6, -0.8)) > 0.0 else -1.0
+		draw_line(o + d * ln * 0.08 + n * s * (hw - 0.5), o + d * (r0 - 1.0) + n * s * (hw - 0.5),
+				Color(ck.hand_hi, 0.85), 1.0)
+		draw_arc(mc, mr - 0.5, PI * 1.0, PI * 1.5, 6, Color(ck.hand_hi, 0.6), 1.0)
 
 
 # ── 도넛 ─────────────────────────────────────────────
