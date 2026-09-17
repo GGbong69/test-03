@@ -80,11 +80,15 @@ func _run() -> void:
 	g._drop_settle()
 	await _wait(10)
 	g.set_process(false)
+	#  맞닿은 동전의 간격은 동전 크기를 따라간다. 38 은 배율 전 지름이라
+	#  GOODS_K 로 키운 뒤에는 그대로 두면 두 동전이 서로 파고든 채 찍힌다 —
+	#  물리가 절대 안 만드는 배치다.
+	var k: float = g.GOODS_K
 	#  ① 제보 그대로 — 앞 동전이 뒤 동전의 값 자리를 덮는다
-	await _shot("bill_front", [Vector2(260, 30), Vector2(260, 68),
+	await _shot("bill_front", [Vector2(260, 30), Vector2(260, 30 + 38 * k),
 			Vector2(420, 40), Vector2(520, 90), Vector2(120, 100)])
 	#  ② 앞도 위도 막혔다 — 옆으로
-	await _shot("bill_crowd", [Vector2(300, 60), Vector2(300, 98),
+	await _shot("bill_crowd", [Vector2(300, 20 + 40 * k), Vector2(300, 20 + 78 * k),
 			Vector2(300, 20), Vector2(460, 50), Vector2(150, 70)])
 	#  ③ 안 가려지면 그대로 밑
 	await _shot("bill_free", [Vector2(140, 40), Vector2(260, 60),

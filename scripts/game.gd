@@ -7739,6 +7739,18 @@ var sweep_on := false    # 훑기 중 — 물리가 열린 구간
 var sweep_dealt := false # 새 판을 이미 깔았는가
 var waste := []          # 창구로 빠진 물건. stock 사본을 들고 다닌다
 
+#  ── 테이블 위 물건의 배율 ────────────────────────────
+#  2026-09-17 제보: "아이템들 크기 살짝씩 다 키워도 될거 같은데".
+#  동전·보드 확장·다트·사탕·사진·팩을 **한 배율로** 같이 키운다. 하나만
+#  키우면 09-15 에 한 식구로 모아 둔 크기(TBL 머리말)가 다시 갈린다.
+#  그림만 키우면 물건이 서로 파고들어 겹쳐 눕고 히트 칸이 그림보다 작아진다 —
+#  그래서 그림 · 충돌 원 · 벽 반폭 · 히트 칸 · 그림자가 전부 이 수 하나를
+#  곱한다. 1px 짜리 획(테두리·빗살·이음매)과 누르기 여유는 안 곱한다 —
+#  획이 굵어지면 도트가 번지고, 여유는 손가락 크기라 물건을 안 따라간다.
+#  동전 슬롯(PANEL.r)·컬렉션·팩 뜯기 클로즈업은 테이블이 아니라 안 탄다.
+#  1.16 은 동전 반지름 19 → 22 다. 전의 크기를 보려면 1.0 으로 둔다.
+const GOODS_K := 1.16
+
 const TBL := {
 	# ── 시점 ──────────────────────────────────────────
 	"flat": 0.788,       # sin 52°  — 면에 누운 것의 y 압축. w 에만 곱한다
@@ -7753,9 +7765,9 @@ const TBL := {
 	"ny": 268.0,         # 펠트 near 모서리. 레일 6px 뒤가 버튼 줄이다
 
 	# ── 물건 ─────────────────────────────────────────
-	"chip_r": 19.0,      # 38 x 29.9 타원. 동전 슬롯 동전은 30 x 30 정원이다 (일부러 다르다)
-	"chip_t": 4.5,       # 옆면 = 4.5 * tall = 2.77px
-	"mod_r": 19.0,       # 캐비닛 실폭 2r+6 = 44, 화면 높이 2*r*flat+6 = 35.9
+	"chip_r": 19.0 * GOODS_K,   # 44 x 34.7 타원. 동전 슬롯 동전은 30 x 30 정원이다 (일부러 다르다)
+	"chip_t": 4.5 * GOODS_K,    # 옆면 = 5.2 * tall = 3.2px
+	"mod_r": 19.0 * GOODS_K,    # 캐비닛 실폭 2r+6 = 50, 화면 높이 2*r*flat+6 = 40.7
 	#  ── 테이블 위 물건의 크기를 한 자로 모은다 ──────────
 	#  2026-09-15 제보: "어떤건 너무 크고 어떤건 너무 작아".
 	#  재 보니 그려지는 크기가 이랬다 —
@@ -7764,7 +7776,7 @@ const TBL := {
 	#  **동전이 기준이다.** 상점에서 제일 자주 뜨고 이 게임의 통화라,
 	#  나머지가 동전 곁에 놓였을 때 한 식구로 읽혀야 한다.
 	#  다트만 길고(길이가 다트의 성격이다) 나머지를 38 언저리로 모은다.
-	"dart_l": 20.0,      # 반길이. 24 는 48 이라 다른 것의 1.3배였다
+	"dart_l": 20.0 * GOODS_K,   # 반길이 23.2. 24(배율 전)는 48 이라 다른 것의 1.3배였다
 	"light": Vector2(0.447, 0.894),   # 기존 그림자 벡터 (1.5,3.0) 의 정규화
 }
 
@@ -9915,9 +9927,12 @@ const DROP := {
 	#  끌지 않는 한 어떤 물건도 창구에 못 닿는다 — 계산대가 레일 아래였을 때의
 	#  죽은 띠를 세로에서 가로로 옮긴 것이고, 솔버는 여전히 이 사실을 모른다.
 	#
-	#  w 위쪽 24 는 물건 윗모서리가 카운터(112)를 안 넘는 선이고, 아래쪽 126 은
-	#  가격판(지면 +30)이 앞 레일(244)을 안 넘는 선이다. 둘 다 그림이 정한다.
-	"u_lo": 116.0, "u_hi": 524.0, "w_lo": 24.0, "w_hi": 126.0,
+	#  w 위쪽은 물건 윗모서리가 카운터(128)를 안 넘는 선이고, 아래쪽은
+	#  가격판(지면 +bill_dy)이 앞 레일(268)을 안 넘는 선이다. 둘 다 그림이 정한다.
+	#  물건을 GOODS_K 로 키우면서 둘 다 안으로 4 씩 들였다(24 → 28 · 126 → 122) —
+	#  윗끝이 화면 2.9px 올라오고 값이 3px 내려간 만큼이다. 보드 확장 윗끝
+	#  129.5 · 사탕 129.2, 「고르기」 아래끝 266.1 로 전(129.2 · 128.9 · 266.3)과 같다.
+	"u_lo": 116.0, "u_hi": 524.0, "w_lo": 28.0, "w_hi": 122.0,
 	"lane": 0.55,        # 출발 u 의 레인 혼합비. 0=난장 1=정렬. 구석 몰림 손잡이
 
 	# ── 던지기 (먼 레일 뒤 슈트에서 앞으로 던진다) ──
@@ -9929,7 +9944,7 @@ const DROP := {
 
 	# ── 적분 (반음시 오일러 · 고정 서브스텝) ────────
 	#  sub 은 터널링 때문이 아니다 — 실측 최대 상대변위가 1/160 에서 1.45px 이고
-	#  가장 작은 상호작용 현이 2(19+9)=56px 이라 1/60 이어도 안 뚫린다.
+	#  가장 작은 상호작용 현이 2(22+10.4)=65px 이라 1/60 이어도 안 뚫린다.
 	#  sub 이 실제로 사는 이유는 바닥 관통 깊이다: |vh| 최대 575 에서
 	#  1/160 은 3.6면px(화면 2.2), 1/60 은 9.6면px(화면 5.9) — 반발이 펠트 위
 	#  공중에서 일어나기 시작한다.
@@ -9961,16 +9976,19 @@ const DROP := {
 
 	# ── 면 위 충돌 원 ────────────────────────────────
 	#  동전 원 1개(실루엣과 정확히 일치) · 보드 확장 원 1개 · 다트 원 3개(캡슐).
-	#  다트에 가운데 원이 있어 동전-다트 최소 중심거리가 방위와 무관하게 28 이다.
-	#  이 28 이 가격판 겹침 불가 정리의 전제다 (아래 _bill_draw 주석).
-	"r_item": 19.0, "r_mod": 21.0, "r_dart": 9.0, "d_dart": 16.0,
+	#  다트에 가운데 원이 있어 동전-다트 최소 중심거리가 방위와 무관하게 32.5 다.
+	#  이 32.5 가 가격판 겹침 불가 정리의 전제다 (아래 _bill_one 주석).
+	#  전부 GOODS_K 를 곱한다 — 그림만 키우면 충돌 원이 그림 안에 남아 겹쳐 눕는다.
+	"r_item": 19.0 * GOODS_K, "r_mod": 21.0 * GOODS_K,
+	"r_dart": 9.0 * GOODS_K, "d_dart": 16.0 * GOODS_K,
 	#  사진은 폴라로이드다. **그림을 따라간다** — 그림만 키우고 반지름을
 	#  두면 물건이 서로 파고들어 겹쳐 눕는다.
-	"r_fix": 19.0,
+	"r_fix": 19.0 * GOODS_K,
 
 	# ── 화면 반폭 (좌우 벽 전용 — 충돌 반지름과 다르다) ──
 	#  벽은 "그려지는 것" 을 가두고 충돌은 "형상" 이라 두 일에 각각 맞는 값이다.
-	"hw_item": 19.0, "hw_mod": 22.0, "hw_dart": 32.0, "hw_fix": 20.0,
+	"hw_item": 19.0 * GOODS_K, "hw_mod": 22.0 * GOODS_K,
+	"hw_dart": 32.0 * GOODS_K, "hw_fix": 20.0 * GOODS_K,
 
 	# ── 연출 (전부 그리기 전용. 물리에 한 방울도 안 흘린다) ──
 	"lift_hov": 6.0, "lift_k": 260.0, "lift_c": 22.0,
@@ -9994,7 +10012,10 @@ const DROP := {
 	#  덮개에 잘려 1.8px 만 튄다(실측).
 	"knock_h": 10.0,
 	"sold_t": 0.46, "dim_off": 0.30, "sh_a": 0.34, "sh_grow": 0.030,
-	"bill_dy": 30.0,
+	#  값 글줄의 지면 아래 거리. 물건이 GOODS_K 로 자라 동전 아래끝이 2.8px
+	#  내려왔으므로 30 에서 33 으로 같이 내린다 — 동전 아래끝과 글자 윗끝의
+	#  틈이 4.3 → 4.4px 로 전과 같다.
+	"bill_dy": 33.0,
 }
 
 var drop := []          # 물체 하나 = 사전 하나. stock 과 인덱스를 공유한다.
@@ -10027,12 +10048,13 @@ func _dart_e(it: Dictionary) -> Vector2:
 #  트레이 u[116,524] 의 **56% 만** 썼다 — 640 폭 테이블을 깔아 놓고 3분의
 #  1 을 쓰고 있었다. 창구로 새는 것은 u_lo/u_hi 벽이 이미 막으므로
 #  (_drop_one 이 hw 를 빼고 뽑는다) 여백 90 이 할 일이 없었다.
-#  물건 반폭에 8 만 더해 벽에서 떼어 놓는다.
+#  물건 반폭에 8 만 더해 벽에서 떼어 놓는다. 반폭이 GOODS_K 로 3 자라
+#  여백도 4 씩 같이 늘었다(34 · 26 → 38 · 30).
 func _lane_pad(n: int) -> float:
-	return 34.0 if n <= 4 else 26.0
+	return 38.0 if n <= 4 else 30.0
 
 
-# 매물 하나가 받는 레인 폭(면 px). 동전 지름이 38 이라 이보다 좁아지면
+# 매물 하나가 받는 레인 폭(면 px). 동전 지름이 44 라 이보다 좁아지면
 # 서로를 밀고 값뱃지가 겹친다.
 func _lane_w(n: int) -> float:
 	if n <= 0:
@@ -10521,12 +10543,12 @@ func _obj_box(i: int) -> Rect2:
 			var ed := Vector2(absf(dn.x) * dl + 5.0, absf(dn.y) * dl + 5.0)
 			return Rect2(c - ed, ed * 2.0)
 		"boost":
-			var br: float = maxf(FIX_W, FIX_H) * 1.06 + 3.0
+			var br: float = maxf(FIX_W, FIX_H) * 1.06 * GOODS_K + 3.0
 			var eb := Vector2(br, br * TBL.flat + 3.0)
 			return Rect2(c - eb, eb * 2.0)
 		"fix":
 			# 돌아간 네모의 축정렬 덮개. 반폭·반높이의 큰 쪽으로 잡는다.
-			var fr: float = maxf(FIX_W, FIX_H) + 3.0
+			var fr: float = maxf(FIX_W, FIX_H) * GOODS_K + 3.0
 			var ef := Vector2(fr, fr * TBL.flat + 3.0)
 			return Rect2(c - ef, ef * 2.0)
 	var ry: float = TBL.chip_r * TBL.flat + TBL.chip_t * TBL.tall
@@ -10548,10 +10570,11 @@ func _obj_shape(i: int, m: Vector2) -> bool:
 			var dn := de.normalized()
 			return _seg_d(m, c - dn * dl, c + dn * dl) <= 7.0
 		"boost":
-			return _in_poly(m, _quad_at(c, it.psi, FIX_W * 1.34, FIX_H * 1.34))
+			return _in_poly(m, _quad_at(c, it.psi, FIX_W * 1.34 * GOODS_K,
+					FIX_H * 1.34 * GOODS_K))
 		"fix":
 			# 그리는 것과 같은 네 귀퉁이를 쓴다 — 둘이 어긋날 수가 없다.
-			return _in_poly(m, _fix_quad(c, it.psi, 1.14))
+			return _in_poly(m, _fix_quad(c, it.psi, 1.14 * GOODS_K))
 	var lz: float = TBL.chip_t * TBL.tall * 0.5          # 옆면 슬리버를 덮는다
 	var q := (m - c - Vector2(0.0, lz)) / Vector2(TBL.chip_r + 2.0,
 			TBL.chip_r * TBL.flat + lz + 2.0)
@@ -10685,20 +10708,21 @@ func _obj_shadow(i: int) -> void:
 			var pts := PackedVector2Array()
 			for q in 12:
 				var a := TAU * float(q) / 12.0
-				var e := Vector2(cos(a) * L, sin(a) * 2.4 * k)
+				var e := Vector2(cos(a) * L, sin(a) * 2.4 * GOODS_K * k)
 				pts.append(g + Vector2(e.x * dirv.x - e.y * dirv.y,
 						e.x * dirv.y + e.y * dirv.x))
 			draw_colored_polygon(pts, col)
 		"cons":
 			# 꾸러미는 동전보다 작다 — 동전 반지름 그림자를 깔면 빛무리가 된다.
-			draw_colored_polygon(_e_pts(g, 12.5 * k, 12.5 * k * TBL.flat, 12), col)
+			var cr: float = 12.5 * GOODS_K * k
+			draw_colored_polygon(_e_pts(g, cr, cr * TBL.flat, 12), col)
 		"fix":
 			# 사진은 네모라 그림자도 네모다. 타원을 깔면 원반으로 읽힌다.
-			var fq := _fix_quad(g, it.psi, k)
+			var fq := _fix_quad(g, it.psi, k * GOODS_K)
 			draw_colored_polygon(fq, col)
 		"boost":
 			# 상자도 네모다. 사진보다 한 뼘 크다.
-			draw_colored_polygon(_fix_quad(g, it.psi, k * 1.06), col)
+			draw_colored_polygon(_fix_quad(g, it.psi, k * 1.06 * GOODS_K), col)
 		_:
 			draw_colored_polygon(_e_pts(g, it.r * k, it.r * k * TBL.flat, 14), col)
 
@@ -10741,15 +10765,15 @@ func _obj_paint(it: Dictionary, s: Dictionary, dim: float) -> void:
 					float(it.get("wob", 0.0)), not still)
 			if ctex != null:
 				#  사탕은 서 있는 물건이라 세로로 길다 — 그것은 그대로 두되
-				#  크기를 동전에 맞춰 올린다(22x30 → 27x36).
-				var ch := 36.0
+				#  크기를 동전에 맞춰 올린다(22x30 → 27x36 → GOODS_K 로 31x42).
+				var ch: float = 36.0 * GOODS_K
 				var cw := ch * float(CANDY_VP.x) / float(CANDY_VP.y)
 				draw_texture_rect(ctex, Rect2(c - Vector2(cw, ch) * 0.5, Vector2(cw, ch)),
 						false, Color(1.0 - dim * 0.3, 1.0 - dim * 0.3, 1.0 - dim * 0.3,
 								1.0 - dim))
 			else:
 				# 렌더러가 없는 자리(헤드리스 프로브)의 옛 실루엣.
-				var ce := Vector2(11.0, 11.0 * TBL.flat)
+				var ce := Vector2(11.0, 11.0 * TBL.flat) * GOODS_K
 				var body: Color = C_PANEL.lightened(0.22 - dim * 0.2)
 				draw_colored_polygon(PackedVector2Array([
 						c + Vector2(-ce.x, -ce.y), c + Vector2(ce.x, -ce.y),
@@ -10759,7 +10783,7 @@ func _obj_paint(it: Dictionary, s: Dictionary, dim: float) -> void:
 		"boost":
 			_boost_flat(c, s.d, it.psi, dim)
 		"fix":
-			_fix_flat(c, it, it.psi, dim)
+			_fix_flat(c, it, it.psi, dim, GOODS_K)
 		"mod":
 			# 동전과 같은 어법으로 눕는다 — 옆면을 깔고 윗면을 얹는다.
 			# 정면 원반은 컬렉션의 것이고, 테이블 위의 것은 누워야 한다.
@@ -10785,6 +10809,8 @@ func _obj_paint(it: Dictionary, s: Dictionary, dim: float) -> void:
 # 세로는 TBL.flat 으로 누른다 — 면에 누운 것의 규약이다. psi 로 살짝 돌려
 # 두면 넉 장이 쏟아져도 판박이로 겹쳐 보이지 않는다.
 #  사진이 제일 작았다(26x17). 동전(38x30) 곁에서 딴 물건으로 보였다.
+#  이 둘은 **밑값**이다. 테이블은 GOODS_K 를 곱해 쓰고(사진 화면 39x26), 컬렉션과
+#  팩 뜯기 클로즈업은 밑값 그대로 쓴다 — 둘은 테이블이 아니다.
 const FIX_W := 17.0      # 반폭
 const FIX_H := 14.0      # 반높이(누르기 전)
 
@@ -10844,9 +10870,9 @@ func _boost_flat(c: Vector2, bd: Dictionary, rot: float, dim: float) -> void:
 	#  사진보다 한 뼘 크다. 1.18 이었는데 사진을 키우자(13→17) 팩이 같이
 	#  자라 테이블에서 제일 큰 물건이 됐다 — 배율은 그대로인데 밑값이
 	#  바뀌면 이런 일이 난다.
-	var w := FIX_W * 1.06
-	var h := FIX_H * 1.06
-	var seam := 1.6                     # 두 블럭이 맞물린 자리의 두께
+	var w := FIX_W * 1.06 * GOODS_K
+	var h := FIX_H * 1.06 * GOODS_K
+	var seam := 1.6                     # 두 블럭이 맞물린 자리의 두께 — 획이라 안 키운다
 	draw_colored_polygon(_quad_at(c + Vector2(0.0, 1.2), rot, w, h),
 			Color(0.0, 0.0, 0.0, 0.35))
 	# **두 블럭**이다. 뜯기 전에도 둘로 보여야, 뜯을 때 그 이음매가 열리는
@@ -10878,12 +10904,16 @@ func _boost_flat(c: Vector2, bd: Dictionary, rot: float, dim: float) -> void:
 
 # 펠트에 누운 사진 — 폴라로이드다. 테두리가 두껍고 아래가 더 두껍다.
 # 그 한 가지로 동전(원반)·사탕(덩어리)·다트(막대)와 실루엣이 갈린다.
-func _fix_flat(c: Vector2, it: Dictionary, rot: float, dim: float) -> void:
-	var co := cos(rot)
-	var si := sin(rot)
+#  k 는 밑값(FIX_W · FIX_H)에 곱하는 배율이다. 테이블은 GOODS_K 를 넘기고
+#  컬렉션은 안 넘긴다. 회전에 k 를 실어 두면 인화면·판 자리가 같이 자란다
+#  (_fix_quad 와 같은 수법). 획 굵기와 종이 두께(1.2)는 안 탄다.
+func _fix_flat(c: Vector2, it: Dictionary, rot: float, dim: float,
+		k := 1.0) -> void:
+	var co := cos(rot) * k
+	var si := sin(rot) * k
 	# 종이 두께 — 아래로 한 획. 면에 놓인 것이 떠 보이지 않게 한다.
-	var body := _fix_quad(c, rot)
-	draw_colored_polygon(_fix_quad(c + Vector2(0.0, 1.2), rot),
+	var body := _fix_quad(c, rot, k)
+	draw_colored_polygon(_fix_quad(c + Vector2(0.0, 1.2), rot, k),
 			Color(0.0, 0.0, 0.0, 0.35))
 	draw_colored_polygon(body, Color(C_LIGHT.lightened(0.30).darkened(dim), 1.0))
 
@@ -10898,11 +10928,11 @@ func _fix_flat(c: Vector2, it: Dictionary, rot: float, dim: float) -> void:
 	# 찍힌 것 — 판이다. 이 게임의 사진이 무엇을 찍은 것인지 한 점으로 말한다.
 	var ic := c + Vector2((-0.0 * co - -2.5 * si),
 			(-0.0 * si + -2.5 * co) * TBL.flat)
-	_ring(ic, 4.2, 0.62, 1.0, Color(C_WIRE.darkened(0.1 + dim), 0.75))
-	draw_circle(ic, 1.6, Color(C_RED.darkened(dim), 0.9))
+	_ring(ic, 4.2 * k, 0.62, 1.0, Color(C_WIRE.darkened(0.1 + dim), 0.75))
+	draw_circle(ic, 1.6 * k, Color(C_RED.darkened(dim), 0.9))
 
 	# 테두리 한 획 — 종이의 끝을 못 박는다.
-	draw_polyline(_fix_quad(c, rot) + PackedVector2Array([body[0]]),
+	draw_polyline(_fix_quad(c, rot, k) + PackedVector2Array([body[0]]),
 			Color(C_WIRE.darkened(0.25 + dim), 0.5), 1.0)
 
 
@@ -11264,8 +11294,10 @@ func _bill_at(i: int, r: Rect2) -> void:
 #   · 가격판은 지면점 기준 균일 오프셋(bill_dy)이라 화면 y 가 w 의 단조함수다.
 #     → 두 판이 겹치려면 |Δu| < 21.6 이고 |Δw| < 9/0.788 = 11.4,
 #       즉 면 거리 < √(21.6² + 11.4²) = 24.4 여야 한다.
-#   · 분리 솔버가 보장하는 최소 면 거리는 동전-다트 28 · 보드 확장-다트 30 · 동전-동전 38.
-#     24.4 < 28 이므로 겹침이 불가능하다. 실측 1500롤 겹침 0, 최소 y차 16.2px.
+#   · 분리 솔버가 보장하는 최소 면 거리는 동전-다트 32.5 · 보드 확장-다트 34.8 ·
+#     동전-동전 44 (GOODS_K 1.16 뒤 — 전에는 28 · 30 · 38).
+#     24.4 < 32.5 이므로 겹침이 불가능하다. 배율 전 실측 1500롤 겹침 0, 최소 y차 16.2px.
+#   · 다트-다트(20.9)는 이 정리 밖이다 — 거기서 겹치는 값은 _bill_place 가 옮긴다.
 #   · 전제: 가격 문자열이 2자리 이내(bw ≤ 25). 지금 최대 가격은 14 다.
 #     세 자리가 생기면 이 정리부터 다시 세워야 한다.
 #  값 한 장. **_goods_draw 의 z 순서 루프 안에서** 제 물건 바로 뒤에 불린다 —
@@ -11497,6 +11529,8 @@ func _icon_dart(c: Vector2, dl: float, id: String, dim := 0.0,
 	# (dl 7 → 10 → 지금 16), 굵기가 안 늘어 길이만 긴 막대로 보였다.
 	# 지금은 16/19 = 0.84 라 처음으로 바닥 위에 선다 — 바닥이 걸리는
 	# 자리는 이제 다트 아이콘을 아주 작게 부르는 곳뿐이다.
+	# 19 는 배율(GOODS_K) 전 테이블 크기다. 기준을 안 옮겨서 테이블 다트는
+	# 길이와 같은 1.16 배로 굵어진다 — 키운 것이 길기만 한 막대가 안 된다.
 	var k: float = maxf(0.75, dl / 19.0)
 	var bw := 2.6 * k
 	var fin := 3.2 * k
