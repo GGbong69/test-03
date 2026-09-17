@@ -230,6 +230,15 @@ func _run() -> void:
 	await _shot("shop_racktip", g._slot_rect(4).get_center(), {"k": "rack", "i": 4})
 	g.gold = 99
 	await _shot("shop_rich")
+	#  리롤 값이 붙은 단추(못 사는 색) · 거절 한 줄
+	var rc0: int = g.reroll_cost
+	g.reroll_cost = 5
+	g.gold = 3
+	g.deny_flash = 1.0
+	await _shot("shop_reroll")
+	g.deny_flash = 0.0
+	g.reroll_cost = rc0
+	g.gold = 99
 	#  사진이 깐 테이블 — 태우기(판매) · 복제
 	g._photo_open("burn", 2)
 	_tick(90)

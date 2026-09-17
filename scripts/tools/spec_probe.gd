@@ -137,21 +137,21 @@ func _process(_d: float) -> bool:
 	# ⑨ 툴팁이 폭을 안 넘는다 — draw_string 은 폭을 넘으면 자를 뿐이라
 	#    "던질 때마다 −5" 의 −5 가 통째로 사라져 있었다. 폭은 고정이고
 	#    넘치면 아래로 늘어난다.
-	#    효과 줄은 18(갈무리9 두 배)이다 — 글자 키우기(2026-09-17) 뒤로 판 폭
-	#    240 에서 11 로 재면 한 줄에 들어 접힘을 못 본다. 재는 글꼴도 그리는 것이다.
+	#    효과 줄은 20(갈무리9 두 배)이다 — 글자 키우기(2026-09-17) 뒤로 판 폭
+	#    264 에서 12 로 재면 한 줄에 들어 접힘을 못 본다. 재는 글꼴도 그리는 것이다.
 	g._tip_clear()
 	g.tip_title = "긴 설명"
-	g._tip_add("점수 +100 에서 시작 · 던질 때마다 −5", 18, g.C_TXT)
+	g._tip_add("점수 +100 에서 시작 · 던질 때마다 −5", 20, g.C_TXT)
 	var wrapped: int = g.tip_lines[0].wr.size()
 	var over := 0
 	for seg in g.tip_lines[0].wr:
-		if g._tip_font(18).get_string_size(seg, HORIZONTAL_ALIGNMENT_LEFT, -1, 18).x \
+		if g._tip_font(20).get_string_size(seg, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x \
 				> g.TIP.w - g.TIP.pad * 2.0 + 0.5:
 			over += 1
 	var tall: float = g._tip_size().y
 	g._tip_clear()
 	g.tip_title = "짧은 설명"
-	g._tip_add("점수 +5", 18, g.C_TXT)
+	g._tip_add("점수 +5", 20, g.C_TXT)
 	var short: float = g._tip_size().y
 	_ok("툴팁이 폭을 안 넘고 아래로 는다", wrapped >= 2 and over == 0 and tall > short,
 			"%d줄 · 넘친 줄 %d · 높이 %.0f > %.0f" % [wrapped, over, tall, short])
