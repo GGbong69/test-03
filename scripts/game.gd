@@ -5798,11 +5798,22 @@ func _bank_draw() -> void:
 	#  **판에 맞춰 줄인다.** 22px 로 고정이라 다섯 자리(큰손 챌린지 · 오리
 	#  금고)에서 72px 짜리 자금판을 통째로 넘어갔다 — 「최악의 상태」를
 	#  만들자마자 나온 자리다.
+	#
+	#  **보이는 폭**에 맞춘다. 판 위에서는 왼쪽 벽(GRIP.wall, x 0~12)이 자금판
+	#  왼쪽 여덟 칸을 덮는다. 판 가운데(x40)에 앉히면 두 자리 수부터 금괴가 벽
+	#  끝에 붙어 잘린 것처럼 보였다(사용자 제보, 2026-09-17). 벽이 서는 동안은
+	#  벽 오른쪽부터를 판으로 치고 그 가운데에 앉힌다. 폭 63 에서 두 자리
+	#  (54px)가 22px 그대로 들고 양옆이 4px 씩 빈다.
+	var vis := r
+	if _is_play() or (swap_live and swap_in):
+		var cut: float = float(GRIP.wall) + 1.0 - r.position.x
+		if cut > 0.0:
+			vis = Rect2(r.position.x + cut, r.position.y, r.size.x - cut, r.size.y)
 	var gt := str(gold)
 	var gsz := 22
-	while gsz > 11 and gold_w(gt, gsz) > r.size.x - 10.0:
+	while gsz > 11 and gold_w(gt, gsz) > vis.size.x - 8.0:
 		gsz -= 11
-	draw_gold(r.get_center().x + jx, r.position.y + 26.0, gt, gsz, gc)
+	draw_gold(vis.get_center().x + jx, r.position.y + 26.0, gt, gsz, gc)
 
 	# 이자 줄은 판이 늘어난 화면에서만 담긴다.
 	if r.size.y < 46.0:
