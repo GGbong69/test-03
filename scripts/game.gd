@@ -14285,12 +14285,15 @@ func _rr_line(c: CanvasItem, r: Rect2, col: Color, rad := -1) -> void:
 
 
 func _btn(r: Rect2, label: String, sub: String, on: bool,
-		sub_col: Color = C_GOLD) -> void:
+		sub_col: Color = C_GOLD, mid := false) -> void:
 	#  판 위 조작 넷(던진다 · 상점으로 · 리롤 · 다음 판). 면 색을 호출부마다
 	#  만들지 않는다 — 못 누르는 동안은 면은 그대로 두고 **띠를 끈다.**
 	#  면을 어둡게 하면 그 위 글자 대비가 같이 깎인다.
+	#  mid 면 둘째 줄이 없는 단추라 이름을 세로 가운데에 앉힌다. 리롤은 값이
+	#  이름 밑에 따로 그려지므로 안 쓴다.
 	_panel(r, on)
-	draw_string(font, r.position + Vector2(0, 20), label,
+	var ly: float = roundf(r.size.y * 0.5 + 5.0) if mid else 20.0
+	draw_string(font, r.position + Vector2(0, ly), label,
 			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 11, C_TXT if on else C_DIM)
 	if sub != "":
 		draw_string(font_sm, r.position + Vector2(0, 35), sub,
@@ -14370,7 +14373,7 @@ func _draw_clear() -> void:
 				Color(C_WIRE, 0.5))
 		draw_gold(VIEW.x * 0.5, y + 36.0, str(_clear_roll()), 22, C_GOLD)
 
-	_btn(Rect2(Vector2(232, 258), Vector2(176, 42)), "상점으로", "아무 키", true)
+	_btn(Rect2(Vector2(232, 258), Vector2(176, 42)), "상점으로", "", true, C_GOLD, true)
 
 
 # 라운드의 세 판을 테이블에 늘어놓는다. 지난 판은 엎어져 어둡고, 지금 판은
@@ -14931,7 +14934,7 @@ func _draw_shop() -> void:
 		var rr := _reroll_rect()
 		draw_gold(rr.position.x + rr.size.x * 0.5, rr.position.y + 35.0,
 				str(reroll_cost), 9, C_GOLD if gold >= reroll_cost else C_DIM.darkened(0.3))
-	_btn(_next_rect(), "다음 판 →", "", true)
+	_btn(_next_rect(), "다음 판 →", "", true, C_GOLD, true)
 	_hold_draw()
 	_fly_draw()
 	# 팩을 뜯는 중이면 모든 것 위에 얹는다 — 눈앞으로 오는 물건이다.
@@ -15036,7 +15039,7 @@ func _draw_over() -> void:
 			ux += tw + 8.0
 
 	_back_row(self, Rect2(x0, p.end.y - 26.0, p.size.x - 40.0, 18.0),
-			"새 런", "스페이스", true)
+			"새 런", "", true)
 
 
 # ══════════════════════════════════════════════════════════
@@ -15320,7 +15323,7 @@ func _draw_profile() -> void:
 				"정말 지운다" if armed else "지우기",
 				HORIZONTAL_ALIGNMENT_CENTER, dr.size.x, 11,
 				C_TXT if armed else C_DIM)
-	_back_row(self, _menu_back_rect(), "뒤로", "ESC",
+	_back_row(self, _menu_back_rect(), "뒤로", "",
 			_menu_back_rect().has_point(mouse_at))
 
 
@@ -15360,11 +15363,13 @@ func _load_settings() -> void:
 const CREDITS := ""
 
 
+#  글줄에 키 이름을 안 적는다 — 「시작 · 스페이스」 가 짜쳐 보였다(사용자,
+#  2026-09-17). 스페이스로 시작하는 길은 그대로다.
 const TITLE_ROWS := [
-	{"n": "시작", "k": "스페이스"},
-	{"n": "컬렉션", "k": ""},
-	{"n": "설정", "k": ""},
-	{"n": "종료", "k": ""},
+	{"n": "시작"},
+	{"n": "컬렉션"},
+	{"n": "설정"},
+	{"n": "종료"},
 ]
 
 
@@ -15538,11 +15543,6 @@ func _draw_title() -> void:
 		draw_string(font, r.position + Vector2(0.0, 15.0),
 				String(TITLE_ROWS[i].n), HORIZONTAL_ALIGNMENT_LEFT, -1, 11,
 				C_DIM.lerp(C_TXT, ee))
-		var kk := String(TITLE_ROWS[i].k)
-		if kk != "":
-			draw_string(font_sm, r.position + Vector2(0.0, 15.0), kk,
-					HORIZONTAL_ALIGNMENT_RIGHT, r.size.x - 6.0, 9,
-					Color(C_GOLD, 0.45 + 0.55 * ee))
 	_prof_badge_draw()
 	# 빌려 온 것을 적는 자리. 빌린 것이 있으면 그 라이선스가 이 줄을
 	# **조건으로** 단다 — 그때는 지우면 못 낸다. 비어 있으면 안 그린다.
@@ -17939,9 +17939,9 @@ func _draw_newrun() -> void:
 
 	#  「시작」은 던지러 가는 이동이라 글줄로 둔다 — 판 위의 조작 단추와
 	#  무게가 다르다. 못 누르는 동안은 띠가 안 선다.
-	_back_row(self, _newrun_go(), "시작", "스페이스",
+	_back_row(self, _newrun_go(), "시작", "",
 			open and _newrun_go().has_point(mouse_at))
-	_back_row(self, _newrun_back(), "뒤로", "ESC",
+	_back_row(self, _newrun_back(), "뒤로", "",
 			_newrun_back().has_point(mouse_at))
 
 
@@ -18166,10 +18166,10 @@ func _set_info(key: String) -> Dictionary:
 	match key:
 		"back":
 			if pause_from >= 0:
-				return {"n": "계속하기", "d": "판으로 돌아간다", "k": "ESC"}
-			return {"n": "뒤로", "d": "제목 화면으로 돌아간다", "k": "ESC"}
+				return {"n": "계속하기", "d": "판으로 돌아간다"}
+			return {"n": "뒤로", "d": "제목 화면으로 돌아간다"}
 		"fs":
-			return {"n": "전체화면", "d": "창과 전체화면을 오간다", "k": "F11",
+			return {"n": "전체화면", "d": "창과 전체화면을 오간다",
 					"v": "켬" if DisplayServer.window_get_mode()
 						== DisplayServer.WINDOW_MODE_FULLSCREEN else "끔"}
 		"vol":
@@ -18502,11 +18502,6 @@ func _set_panel(c: CanvasItem, key: String, e: float) -> void:
 		c.draw_string(font, Vector2(p.end.x - 20.0 - 44.0, tr.position.y + 8.0),
 				"%d" % int(round(v * 100.0)), HORIZONTAL_ALIGNMENT_RIGHT,
 				44.0, 11, Color(C_TXT if hot else C_DIM, pe))
-	#  단축키
-	if String(info.get("k", "")) != "":
-		c.draw_string(font_sm, Vector2(p.end.x - 20.0 - 60.0, p.end.y - 16.0),
-				String(info["k"]), HORIZONTAL_ALIGNMENT_RIGHT, 60.0, 9,
-				Color(C_GOLD, pe))
 
 
 
@@ -19901,28 +19896,18 @@ func _hud_btns_draw() -> void:
 	#  조준 중에는 HUD 가 물러난다(_hud_draw 의 띠). 단추도 같이 물러나야
 	#  조준선이 화면에서 가장 센 것으로 남는다.
 	var a: float = 0.55 if _is_aim_stage() else 1.0
-	var rows := [["정보", "TAB", _runinfo_ok()], ["설정", "ESC", true]]
+	var rows := [["정보", _runinfo_ok()], ["설정", true]]
 	for i in rows.size():
 		var r := _hud_btn_rect(i)
-		var on: bool = rows[i][2]
+		var on: bool = rows[i][1]
 		#  _btn 과 같은 어법 — 못 누르는 동안은 면을 두고 띠만 끈다.
 		_panel(r, on, a)
 		if on and r.has_point(mouse_at):
 			_rr(self, r, Color(C_TXT, 0.08 * a))
-		#  이름과 키를 한 줄에 — 칸이 20 높이라 두 줄이 안 들어간다.
-		#  둘을 한 덩이로 가운데 모은다.
-		var nm := String(rows[i][0])
-		var key := String(rows[i][1])
-		var nw: float = font.get_string_size(nm, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x \
-				if font != null else 22.0
-		var kw: float = font_sm.get_string_size(key, HORIZONTAL_ALIGNMENT_LEFT, -1, 9).x \
-				if font_sm != null else 16.0
-		var x0: float = roundf(r.get_center().x - (nw + 4.0 + kw) * 0.5)
-		var by: float = r.position.y + 15.0
-		draw_string(font, Vector2(x0, by), nm, HORIZONTAL_ALIGNMENT_LEFT, -1, 11,
+		#  이름만 가운데에. 키 이름(TAB · ESC)은 안 적는다 — 키는 그대로 산다.
+		draw_string(font, r.position + Vector2(0.0, 15.0), String(rows[i][0]),
+				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 11,
 				Color(C_TXT if on else C_DIM, a))
-		draw_string(font_sm, Vector2(x0 + nw + 4.0, by), key,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(C_GOLD if on else C_OFF, a))
 
 
 func _draw_runinfo() -> void:
@@ -19952,7 +19937,7 @@ func _draw_runinfo() -> void:
 		2: _ri_photos(p)
 		3: _ri_carry(p)
 
-	_back_row(self, _runinfo_back_rect(), "뒤로", "탭",
+	_back_row(self, _runinfo_back_rect(), "뒤로", "",
 			_runinfo_back_rect().has_point(mouse_at))
 
 
@@ -20194,7 +20179,7 @@ func _draw_collect() -> void:
 			_arrow_btn(self, ca, right, ca.has_point(mouse_at))
 		draw_string(font_sm, Vector2(0, 318), "%d / %d" % [collect_page + 1, _col_pages()],
 				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 9, C_DIM)
-	_back_row(self, _menu_back_rect(), "뒤로", "ESC",
+	_back_row(self, _menu_back_rect(), "뒤로", "",
 			_menu_back_rect().has_point(mouse_at))
 
 
@@ -20451,7 +20436,7 @@ func _tutor_draw() -> void:
 	var hot: bool = sk.has_point(mouse_at)
 	_rr(self, sk, Color(C_PANEL if not hot else C_PANEL.lightened(0.12), a))
 	_rr_top(self, sk, 1, Color(C_ACC, 0.8 * a))
-	draw_string(font_sm, Vector2(sk.position.x, sk.end.y - 4.0), "건너뛰기  ESC",
+	draw_string(font_sm, Vector2(sk.position.x, sk.end.y - 4.0), "건너뛰기",
 			HORIZONTAL_ALIGNMENT_CENTER, sk.size.x, 9, Color(C_TXT if hot else C_DIM, a))
 	draw_string(font_sm, Vector2(bx, by + bh - 4.0), "눌러서 계속",
 			HORIZONTAL_ALIGNMENT_RIGHT, sk.position.x - bx - 8.0, 9, Color(C_DIM, a))
@@ -20530,7 +20515,9 @@ func _draw_hint() -> void:
 	# 손 부채가 하단 좌측을 쓰므로 오른쪽으로 비킨다.
 	# 조절 값 표시는 개발 빌드 전용이다 — 내보낸 exe 와 문서용 스크린샷에
 	# 이 줄이 찍혀 나가는 것을 한 번 겪었다. 조절 키 자체는 릴리즈에도 산다.
-	if OS.is_debug_build():
+	#  개발자 판(\)이 열렸을 때만 적는다 — 키 이름이 줄 머리라, 판 위에 늘
+	#  떠 있으면 사용자 눈에 「키를 적어 놓은 것」 으로 읽힌다(2026-09-17).
+	if OS.is_debug_build() and Dev.on:
 		draw_string(font_sm, Vector2(VIEW.x - 262.0, 356), "[ ] 조준 %.2f    - = 정산 %.2f    ; ' 확인텀 %.2f"
 				% [gauge_speed, beat, confirm_hold], HORIZONTAL_ALIGNMENT_LEFT, -1, 9,
 				C_OFF)
