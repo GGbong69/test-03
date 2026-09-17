@@ -63,7 +63,7 @@ func _run() -> void:
 	await _wait(20)
 	var bc: Vector2 = g.BC
 	var r: float = g.R
-	for id in ["pizz", "clok", "dnut"]:
+	for id in ["pizz", "clok", "aimb", "dnut"]:
 		await _leg([id])
 		var nsc: int = g.sec_col.size()
 		if nsc >= 8:
