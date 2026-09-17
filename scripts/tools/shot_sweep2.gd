@@ -40,7 +40,7 @@ func _run() -> void:
 	g._open_shop()
 	await _wait(40)
 	g._sweep_begin()
-	for k in 6:
+	for k in 14:
 		await _wait(9)
 		await _shot("sw2_%d" % k)
 		print("%d : t=%.2f amt=%.2f" % [k, g.sweep_t, g._sweep_amt()])

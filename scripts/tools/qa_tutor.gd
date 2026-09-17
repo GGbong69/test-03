@@ -143,9 +143,15 @@ func _run() -> void:
 	_ok("걸음마다 문구가 다르다",
 			String((GameData.tutor_steps("u_score")[0] as Dictionary).text)
 			!= String((GameData.tutor_steps("u_score")[1] as Dictionary).text), "")
+	#  예고 — 갈래의 첫 걸음은 말상자보다 한 박자(pre) 먼저 조여 드는 어둠과 「!」 가 선다
+	#  (「튜토리얼이 갑자기 나와서 좀 그래」, 2026-09-17).
+	_ok("예고가 먼저 선다", g.tutor_pre > 0.0 and g._tutor_a() <= 0.001,
+			"pre %.2f · a %.2f" % [g.tutor_pre, g._tutor_a()])
 	_ok("뜨자마자 눌러도 안 넘어간다",
 			g._tutor_click() and g.tutor_i == 0, "i %d" % g.tutor_i)
-	_tick(int(float(g.TUTOR.lead) * 60.0) + 2)
+	_tick(int((float(g.TUTOR.pre) + float(g.TUTOR.lead)) * 60.0) + 2)
+	_ok("예고가 지나면 말상자가 선다", g.tutor_pre <= 0.0 and g._tutor_a() > 0.0,
+			"a %.2f" % g._tutor_a())
 	g._tutor_click()
 	_ok("누르면 다음 걸음", g.tutor_i == 1, "i %d" % g.tutor_i)
 	_tick(int(float(g.TUTOR.lead) * 60.0) + 2)
@@ -161,20 +167,18 @@ func _run() -> void:
 			"%.2f" % g._tutor_slow())
 	Save.forget_all()
 	_reset()
-	g._tutor("u_score")
-	_tick(60)
+	g._tutor("u_leg")
+	_tick(int((float(g.TUTOR.pre) + float(g.TUTOR.fade)) * 60.0) + 10)
 	var sl: float = g._tutor_slow()
 	_ok("설명 중에는 늦춘다", sl < 0.5, "×%.2f" % sl)
 	_ok("늦추되 안 세운다", sl > 0.0, "×%.2f" % sl)
-	var slow_min := 9.0
-	var slow_id := ""
+	#  득점 설명은 안 늦춘다 — 점수가 느려지는 것이 거슬린다는 평(2026-09-17).
+	#  예전 규칙(「제일 느린 자리가 득점」)을 뒤집었다.
+	var score_slow := 9.0
 	for r in rows:
-		var v := float(r.get("slow", 1.0))
-		if v < slow_min:
-			slow_min = v
-			slow_id = String(r.get("id", ""))
-	_ok("제일 느린 자리가 득점", slow_id == "u_score",
-			"%s ×%.2f" % [slow_id, slow_min])
+		if String(r.get("id", "")) == "u_score":
+			score_slow = minf(score_slow, float(r.get("slow", 1.0)))
+	_ok("득점 설명은 안 늦춘다", score_slow >= 1.0, "×%.2f" % score_slow)
 
 	# ⑤ ESC 로 갈래를 통째로 건너뛴다
 	_ok("건너뛰기 전에는 떠 있다", g._tutor_live(), "")

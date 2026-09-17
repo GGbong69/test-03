@@ -9112,6 +9112,10 @@ var npc_clock := 0.0
 #  물건이 빗변을 넘으면 물리를 떠나 waste 로 간다. drop 은 stock 과 인덱스를
 #  나누므로 거기 남겨 두면 "쓸려 가는 중인데 살 수 있는" 상태가 생긴다.
 const SWEEP := {
+	#  온 연출의 빠르기. 세 박자(뻗기 · 훑기 · 복귀)를 같은 비로 줄인다 — 박자끼리의
+	#  비가 팔의 무게를 정하므로 하나만 줄이면 순간이동으로 읽힌다(아래 reach 주석).
+	#  「딜러 리롤 속도가 조금 높아졌으면」(사용자, 2026-09-17) — 1.08초 → 0.83초.
+	"speed": 1.3,
 	"reach": 0.26,       # 팔을 오른쪽 끝까지 뻗는다. 0.16 은 순간이동으로 읽혔다
 	"rake": 0.52,        # 훑는다. 이 동안만 왼쪽 벽이 열린다
 	"back": 0.30,        # 복귀. 새 매물은 이 동안 이미 떨어지고 있다
@@ -11251,7 +11255,7 @@ func _sweep_begin() -> void:
 func _sweep_update(d: float) -> void:
 	if not sweep_live:
 		return
-	sweep_t += d
+	sweep_t += d * float(SWEEP.speed)
 	var t1: float = SWEEP.reach + SWEEP.rake
 	sweep_on = sweep_t >= SWEEP.reach and sweep_t < t1
 	if not sweep_dealt and sweep_t >= t1:
@@ -22618,12 +22622,24 @@ func _draw_collect() -> void:
 #     안 간다 — 설명 중에 실수로 물건을 사면 배우다 말고 손해를 본다.
 #  ④ **몰아 넣지 않는다.** 걸음은 처음 만나는 그 자리에서만 난다.
 #
+#  ── 예고 — 갑자기 안 뜬다 ───────────────────────────
+#  「튜토리얼이 갑자기 나와서 좀 그래 — 나오기 전에 약간의 연출로 곧 나온다는
+#  걸 암시하는」(사용자, 2026-09-17). 말상자보다 한 박자(pre) 먼저,
+#    ① 딸깍 한 번(카지노 릴 멈춤 — 판 밖 소리)과 상인이 짚는 몸짓
+#    ② 화면 가장자리부터 어둠이 조여 들어 과녁 자리로 좁혀진다(조리개)
+#    ③ 좁혀진 구멍 위에 금빛 「!」 가 통 튄다
+#  그다음 말상자가 뜨고 「!」 는 진다. 예고는 **갈래의 첫 걸음에만** 있다 —
+#  걸음을 넘길 때마다 조이면 누를 때마다 기다린다.
+#
 #  ── 안 가두는 자리 ───────────────────────────────────
 #  ESC 로 그 갈래를 통째로 건너뛴다. 이미 아는 사람이 열아홉 번 눌러야
 #  하면 그것은 튜토리얼이 아니라 통행료다.
 # ══════════════════════════════════════════════════════════
 const TUTOR := {
 	"fade": 0.22,        # 말상자가 들고 나는 시간(실시간 초)
+	"pre": 0.62,         # 예고 — 말상자가 뜨기 전 한 박자
+	"iris": 0.42,        # 그중 어둠이 조여 드는 몫(초)
+	"bang_in": 0.18,     # 「!」 가 튀기 시작하는 때(예고 안의 초)
 	"lead": 0.30,        # 뜨자마자는 못 넘긴다 — 누르던 클릭이 곧장 먹는다
 	"pad": 7.0,          # 과녁 구멍의 여백
 	"dim": 0.62,         # 구멍 밖을 덮는 어둠
@@ -22648,6 +22664,7 @@ var tutor_id := ""         # 지금 도는 갈래
 var tutor_i := 0           # 그 갈래의 몇째 걸음
 var tutor_t := 0.0         # 이 걸음의 경과(실시간)
 var tutor_out := 0.0       # 갈래가 끝나며 지는 중
+var tutor_pre := 0.0       # 예고가 남은 시간(실시간). 0 이면 말상자가 선다
 
 
 func _tutor(id: String) -> void:
@@ -22705,7 +22722,7 @@ func _tutor_a() -> float:
 	var f: float = float(TUTOR.fade)
 	if tutor_out > 0.0:
 		return clampf(tutor_out / f, 0.0, 1.0)
-	if tutor_id == "":
+	if tutor_id == "" or tutor_pre > 0.0:
 		return 0.0
 	return clampf(tutor_t / f, 0.0, 1.0)
 
@@ -22715,6 +22732,11 @@ func _tutor_tick(d: float) -> void:
 		tutor_out = maxf(tutor_out - d, 0.0)
 		return
 	if tutor_id != "":
+		if tutor_pre > 0.0:
+			tutor_pre = maxf(tutor_pre - d, 0.0)
+			if tutor_pre <= 0.0:
+				_sfx("page")
+			return
 		tutor_t += d
 		#  시간으로 넘기는 걸음. 기본은 눌러 넘기기다.
 		if String(_tutor_step().get("wait", "tap")) == "time" \
@@ -22726,7 +22748,9 @@ func _tutor_tick(d: float) -> void:
 	tutor_id = String(tutor_q.pop_front())
 	tutor_i = 0
 	tutor_t = 0.0
-	_sfx("page")
+	#  말상자 대신 예고부터 — 소리 · 짚기도 여기서 먼저 난다
+	tutor_pre = float(TUTOR.pre)
+	_sfx("menu_pick2")
 	if _npc_on():
 		_npc_react("짚기", 1)
 
@@ -22750,7 +22774,9 @@ func _tutor_next() -> void:
 func _tutor_close() -> void:
 	if tutor_id == "":
 		return
-	tutor_out = float(TUTOR.fade)
+	#  예고 중에 닫히면(건너뛰기 · 화면 전환) 말상자가 안 섰으니 질 것도 없다
+	tutor_out = 0.0 if tutor_pre > 0.0 else float(TUTOR.fade)
+	tutor_pre = 0.0
 	tutor_id = ""
 	tutor_i = 0
 	tutor_t = 0.0
@@ -22786,7 +22812,10 @@ func _mark_rect(k: String) -> Rect2:
 			for i in range(1, stage_pick.size()):
 				r0 = r0.merge(_stage_rect(i))
 			return r0
-		"board": return Rect2(BC.x - 104.0, BC.y - 104.0, 208.0, 208.0)
+		#  판은 숫자 고리까지다 — 208 로 박아 두었더니 고리를 단 판(반지름 121.5)의 테가 잘렸다
+		"board":
+			var rr: float = _board_rim(_theme_ring_w(_board_theme()))
+			return Rect2(BC.x - rr, BC.y - rr, rr * 2.0, rr * 2.0)
 		"rack": return _panel_rect()
 		"score": return _bank_rect()
 		"chute_buy": return Rect2(VIEW.x - 86.0, TBL.fy, 86.0, TBL.ny - TBL.fy)
@@ -22804,6 +22833,9 @@ func _mark_rect(k: String) -> Rect2:
 
 
 func _tutor_draw() -> void:
+	if tutor_pre > 0.0 and tutor_id != "":
+		_tutor_pre_draw()
+		return
 	var a := _tutor_a()
 	if a <= 0.004:
 		return
@@ -22819,23 +22851,14 @@ func _tutor_draw() -> void:
 	#  ── 어둠 한 장에 구멍 하나 ──────────────────────
 	#  사각 넷으로 두른다. 구멍 자리에 아무것도 안 그리는 것이 곧 구멍이라
 	#  마스크나 셰이더가 필요 없다.
-	var dm := Color(0.0, 0.0, 0.0, float(TUTOR.dim) * a)
-	var f := _full()
-	if hole.size.x <= 0.0:
-		draw_rect(f, dm)
-	else:
-		var l: float = maxf(hole.position.x, f.position.x)
-		var r: float = minf(hole.end.x, f.end.x)
-		var t: float = maxf(hole.position.y, f.position.y)
-		var b: float = minf(hole.end.y, f.end.y)
-		draw_rect(Rect2(f.position.x, f.position.y, f.size.x, t - f.position.y), dm)
-		draw_rect(Rect2(f.position.x, b, f.size.x, f.end.y - b), dm)
-		draw_rect(Rect2(f.position.x, t, l - f.position.x, b - t), dm)
-		draw_rect(Rect2(r, t, f.end.x - r, b - t), dm)
+	_tutor_shade(hole, a)
+	if hole.size.x > 0.0:
 		#  테두리가 뛴다. 어둠만으로는 "여기까지가 그것" 이 안 서고,
 		#  뛰지 않으면 화면에 원래 있던 테두리와 안 갈린다.
 		var pl: float = 0.5 + 0.5 * sin(npc_clock * float(TUTOR.pulse))
 		_rr_line(self, hole, Color(C_ACC, (0.45 + 0.45 * pl) * a))
+		#  예고의 「!」 가 말상자가 드는 동안 진다
+		_tutor_bang(hole, 1.0 - a)
 	#  ── 말상자 ──────────────────────────────────────
 	var bw: float = float(TUTOR.box_w)
 	var bp: float = float(TUTOR.box_pad)
@@ -22879,6 +22902,68 @@ func _tutor_draw() -> void:
 			Color(_ui_ink("tutor:skip", true), a))
 	draw_string(font, Vector2(bx, fy), "눌러서 계속",
 			HORIZONTAL_ALIGNMENT_RIGHT, sk.position.x - bx - 8.0, 12, Color(C_DIM, a))
+
+
+#  어둠 한 장에 구멍 하나. 사각 넷으로 두른다 — 구멍 자리에 아무것도 안 그리는
+#  것이 곧 구멍이라 마스크나 셰이더가 필요 없다. 구멍이 없으면 온 화면을 덮는다.
+func _tutor_shade(hole: Rect2, a: float) -> void:
+	var dm := Color(0.0, 0.0, 0.0, float(TUTOR.dim) * a)
+	var f := _full()
+	if hole.size.x <= 0.0:
+		draw_rect(f, dm)
+		return
+	var l: float = clampf(hole.position.x, f.position.x, f.end.x)
+	var r: float = clampf(hole.end.x, f.position.x, f.end.x)
+	var t: float = clampf(hole.position.y, f.position.y, f.end.y)
+	var b: float = clampf(hole.end.y, f.position.y, f.end.y)
+	draw_rect(Rect2(f.position.x, f.position.y, f.size.x, t - f.position.y), dm)
+	draw_rect(Rect2(f.position.x, b, f.size.x, f.end.y - b), dm)
+	draw_rect(Rect2(f.position.x, t, l - f.position.x, b - t), dm)
+	draw_rect(Rect2(r, t, f.end.x - r, b - t), dm)
+
+
+#  예고 그림 — 조여 드는 어둠과 튀는 「!」. 과녁이 없는 갈래는 어둠만 서서히 깔린다.
+func _tutor_pre_draw() -> void:
+	var pre: float = float(TUTOR.pre)
+	var el: float = pre - tutor_pre                     # 예고가 흐른 시간
+	var ki: float = clampf(el / float(TUTOR.iris), 0.0, 1.0)
+	ki = 1.0 - pow(1.0 - ki, 3.0)
+	var ss := GameData.tutor_steps(tutor_id)
+	var mk := Rect2()
+	if not ss.is_empty():
+		mk = _mark_rect(String((ss[0] as Dictionary).get("mark", "")))
+	if mk.size.x <= 1.0 or mk.size.y <= 1.0:
+		_tutor_shade(Rect2(), ki)
+		return
+	var target := mk.grow(float(TUTOR.pad))
+	var wide := _full().grow(24.0)
+	var hole := Rect2(wide.position.lerp(target.position, ki), wide.size.lerp(target.size, ki))
+	_tutor_shade(hole, ki)
+	_rr_line(self, hole, Color(C_ACC, 0.9 * ki))
+	_tutor_bang(target, 1.0)
+
+
+#  금빛 「!」 — 구멍 위 가운데(위가 모자라면 밑)에서 통 튄다.
+func _tutor_bang(hole: Rect2, a: float) -> void:
+	if a <= 0.004 or tutor_id == "":
+		return
+	var el: float = float(TUTOR.pre) - tutor_pre if tutor_pre > 0.0 else float(TUTOR.pre) + tutor_t
+	var kb: float = clampf((el - float(TUTOR.bang_in)) / 0.24, 0.0, 1.0)
+	if kb <= 0.0:
+		return
+	#  떨어지며 한 번 튄다 — 위에서 6px 내려와 2px 튀어 오른 뒤 선다
+	var bounce: float = -6.0 * pow(1.0 - kb, 2.0) + (2.0 * sin(kb * PI) if kb > 0.5 else 0.0)
+	var sz := Vector2(18.0, 22.0)
+	var cx: float = clampf(hole.get_center().x, 12.0, VIEW.x - 12.0)
+	var y: float = hole.position.y - sz.y - 6.0
+	if y < 4.0:
+		y = hole.end.y + 6.0
+	var r := Rect2(Vector2(cx - sz.x * 0.5, y - bounce), sz)
+	var al: float = a * minf(kb * 2.0, 1.0)
+	_rr(self, Rect2(r.position + Vector2(0.0, 3.0), r.size), Color(C_ACC.darkened(0.5), al))
+	_rr(self, r, Color(C_ACC, al))
+	draw_string(font, Vector2(r.position.x, _ink_mid_y(r.get_center().y, 20)), "!",
+			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 20, Color(C_BG, al))
 
 
 #  말상자의 자리. 그리기와 누르기가 **같은 사각**을 봐야 한다 — 따로 셈하면
