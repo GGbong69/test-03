@@ -2,8 +2,10 @@ extends SceneTree
 # 시계 판(보드 확장 「시계」)이 입는 옷 — 기본 · 칠 · 조준 밝힘(트리플 · 더블 · 싱글 · 불) ·
 # 죽은 색(그늘) · 죽은 칸(금지 구역). 창이 있어야 찍힌다.
 #   godot --path . --quit-after 9000 --script scripts/tools/shot_board_clock.gd -- <접두>
+# 끝에 죽은 크림 칸(dead_cream) · 실띠 0.5 / 넓은 판 1.5 의 트리플 조준(band_05 · band_15)도 찍는다.
 # 접두를 안 주면 ck_ 로 찍는다(고치기 전 판을 ck_old_ 로 찍어 두고 견준다).
-# 견줌 장: python scripts/tools/sheet_board_clock.py → shots/ck_sheet.png · ck_plain_x2.png
+# 견줌 장: python scripts/tools/sheet_board_clock.py [새 접두] [옛 접두] [사이 접두 …]
+#   → shots/ck_sheet.png(줄마다 접두 하나) · ck_sheet_1x.png(게임 한 배 크기) · ck_plain_x2.png
 const Save = preload("res://scripts/save.gd")
 var g = null
 var busy := false
@@ -140,7 +142,27 @@ func _run() -> void:
 	_aim_at(_pol(8.0, 0.61))
 	await _hold(6)
 	await _snap("dead_aim")
+	#  크림 칸이 죽는다 — 6시 인덱스(굵은 막대)가 선 칸
+	g.dead_idx = 10
+	_plain()
+	await _hold(6)
+	await _snap("dead_cream")
 	g.dead_idx = -1
+
+	#  실띠(band_mul 0.5) · 넓은 판(1.5) — _start_leg 와 같은 식으로 띠를 민다
+	var t0: Array = [g.rt_trp_in, g.rt_trp_out, g.rt_dbl_in]
+	for bw in [0.5, 1.5]:
+		var tc: float = (float(t0[0]) + float(t0[1])) * 0.5
+		var tb: float = (float(t0[1]) - float(t0[0])) * 0.5
+		g.rt_trp_in = tc - tb * bw
+		g.rt_trp_out = tc + tb * bw
+		g.rt_dbl_in = g.rt_dbl_out - (g.rt_dbl_out - float(t0[2])) * bw
+		_aim_at(_pol(2.0, (g.rt_trp_in + g.rt_trp_out) * 0.5))
+		await _hold(6)
+		await _snap("band_%02d" % int(bw * 10.0))
+	g.rt_trp_in = t0[0]
+	g.rt_trp_out = t0[1]
+	g.rt_dbl_in = t0[2]
 	g.darts = []
 	g._bd3_close()
 	print("  찍음 ", pre)
