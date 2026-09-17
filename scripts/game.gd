@@ -21285,6 +21285,10 @@ func _cup_ease(t: float) -> float:
 
 func _cup_update(d: float) -> void:
 	cup_gl += d
+	#  무대 램프 한 값을 3D 쪽에도 흘린다. 2D 원뿔·웅덩이와 3D 키 라이트와
+	#  통 셰이더가 같은 값을 봐야 불이 한 번에 들어온다.
+	if _cup3_live():
+		_cup3_lamp(_cup_lamp_k())
 	var e0 := _cup_ease(cup_t)
 	cup_t = minf(cup_t + d / float(CUP.dur), 1.0)
 	cup_run += -float(cup_dir) * float(CUP.span) * (_cup_ease(cup_t) - e0)
@@ -23779,9 +23783,172 @@ func _cup_halo(stage: Rect2, col: Color, front: bool) -> void:
 		draw_rect(Rect2(p2, Vector2(1.0, 2.0)), Color(col.lightened(0.70), a2))
 
 
+# ══════════════════════════════════════════════════════════
+#  무대 — 바 카운터
+# ──────────────────────────────────────────────────────────
+#  통이 **놓인 데가 없었다.** 무대가 단색 한 장이라 통이 어둠 속에 떠
+#  있었고, 그래서 아무리 통을 잘 칠해도 「그림」이지 「물건」이 아니었다.
+#  판 바꾸는 화면의 판은 벽에 걸려 있고 상점의 물건은 선반에 놓여 있는데,
+#  다트통만 놓인 자리가 없었다.
+#
+#  **전부 2D 다.** 3D 뷰포트에 바닥·벽 메시를 넣으면 윤(_cup_sheen)과
+#  깨짐(_cup_glitch)이 뷰포트 텍스처에 걸리므로 무대까지 같이 번진다 —
+#  통만 반짝여야 하는데 카운터가 같이 반짝이고, 잠긴 히든에서는 카운터가
+#  통과 같이 조각조각 어긋난다.
+#
+#  참고(구성·색·분위기만. 어떤 사진도 베끼지 않았다)
+#    바 카운터의 관습 — 뒷벽은 어둡고, 카운터 윗면만 램프 하나로 밝다.
+#        물건은 그 빛 웅덩이 안에 놓인다
+#    lospec 팔레트 규칙 — 나무색을 밑 색으로 누르지 않으면 어두운 화면에서
+#        나무가 발광체로 떠 보인다(리포트 3 실험에서 핫플레이트가 됐다)
+#
+#  색은 **PAL 두 단을 정해진 비율로 섞은 값**이다. 새 색을 짓는 것이 아니라
+#  있는 두 단 사이를 고르는 것이라, 무대가 통과 같은 팔레트의 식구로 남는다.
+const STAGE := {
+	#  뒷벽 두 단. **그라데이션은 없다** — 40x50 짜리 통 뒤에서 그라데이션은
+	#  띠로 뭉치고, 그 띠가 통의 그늘과 싸운다.
+	"lo":    Color("1b1729"),   # 지금 무대색 (C_PANEL.darkened 0.20)
+	"hi":    Color("171424"),   # mix(무대색, night[0], 0.55). 위 40px
+	"hi_h":  40.0,
+	#  카운터. **나무색을 night 로 누른다.** 누르지 않은 나무색(8a5636)은
+	#  이 화면의 어두운 보랏빛 바탕에서 핫플레이트처럼 떠 보였다.
+	"w0":    Color("1d141a"),   # mix(wood[0], night[0], 0.60) — 뒷모서리·그림자
+	"w1":    Color("432a28"),   # mix(wood[1], night[1], 0.35) — 카운터 윗면
+	"top":   150.0,             # 카운터 윗면 시작
+	#  앞턱 선. **y177 이다.** 발 라인 168 에 통 앞호(+8~9px)와 앞쪽
+	#  플라크(+6px)를 더하면 177 까지 내려오므로, 173 에 두면 통이 턱에
+	#  걸쳐 떠 보인다. 앞면 띠는 두지 않고 무대 테두리선이 모서리 노릇을 한다.
+	"lip":   177.0,
+	#  통 밑 그림자. **검정 알파를 버렸다** — 알파는 무대색과 섞여 팔레트
+	#  밖 색을 만들고, 카운터 위에서 회색 얼룩으로 보였다. 계단색 하나면 된다.
+	"sh_dx":  6.0,              # 빛이 왼쪽 위에서 오므로 그림자는 오른쪽으로
+	"sh_y":  169.0,
+	"sh_ry":  4.0,
+	#  드리운 그늘은 w0 **까지 안 내린다.** 통 옆으로 삐져나온 몫이 w0 면
+	#  40x50 짜리 통 옆에서 그것이 그늘이 아니라 카운터에 뚫린 구멍으로
+	#  보였다(찍어 보고 알았다). 멀리는 옅게, 닿은 데는 가장 어둡게 —
+	#  도트 그림자의 오래된 규칙이다.
+	"sh":    Color("2c1d20"),   # mix(w0, w1, 0.40) — 드리운 그늘
+	"ct":    Color("1d141a"),   # w0 — 통이 닿은 1px. 가장 어둡다
+	#  램프. 원뿔 두 겹과 웅덩이 두 단.
+	"beam":  Color("e8dfc8"),   # cream[2]
+	"b_a0":   0.035,
+	"b_a1":   0.065,
+	"p0":    Color("55352c"),   # mix(w1, wood[2], 0.25)
+	"p1":    Color("633e2e"),   # mix(w1, wood[2], 0.45)
+	"p_rx0": 54.0, "p_rx1": 34.0,
+	"p_ry0": 11.0, "p_ry1":  8.0,
+	"p_y":  164.0,
+	"off":    3.0,              # 빔 중심은 통 중심에서 왼쪽으로 이만큼
+	"frame": Color("14111f"),   # 액자 안쪽 그늘 — night[0]
+}
+
+
+#  이 다트통에 불이 켜져 있는가. 네 갈래(qa_cupfx 규약)를 무대로 넓힌 값이다.
+#
+#    잠긴 보통   0     아직 내 것이 아닌 물건에는 불을 안 켠다
+#    잠긴 히든   0     다만 깨짐의 한바탕에만 찬빛이 한 번 스친다
+#    연 보통     1     따뜻한 크림
+#    연 히든     1     후광 색으로 물든 빛
+func _cup_lamp_of(pi: int) -> float:
+	if not _pack_open(pi):
+		if _cup_shut(pi) and _gl_burst(int(cup_gl / float(GLITCH.rate))):
+			return 0.35
+		return 0.0
+	return 1.0
+
+
+#  무대 램프 세기. **하나뿐이다** — 넘기는 동안 이전 다트통에서 새 다트통으로
+#  보간한다. 같은 값이 2D 원뿔·웅덩이와 3D 키 라이트와 셰이더의 lamp 에
+#  같이 들어가므로, 불이 들어오는 것이 세 곳에서 한 번에 보인다.
+func _cup_lamp_k() -> float:
+	if cup_t >= 1.0:
+		return _cup_lamp_of(newrun_pip)
+	return lerpf(_cup_lamp_of(cup_prev), _cup_lamp_of(newrun_pip),
+			_cup_ease(cup_t))
+
+
+#  램프 빛의 색. 열린 히든만 제 색으로 물든다 — 후광이 하는 말을 램프가
+#  한 번 더 한다. 보통 다트통의 뒷벽에는 색 글로우를 안 쓴다(그것은 후광의 말이다).
+func _cup_lamp_col_of(pi: int) -> Color:
+	if not _pack_open(pi):
+		return C_CHIP
+	if _cup_glow(pi):
+		return Color(_cup3_skin(pi).body).lightened(0.5)
+	return Color(STAGE.beam)
+
+
+func _cup_lamp_col() -> Color:
+	if cup_t >= 1.0:
+		return _cup_lamp_col_of(newrun_pip)
+	return _cup_lamp_col_of(cup_prev).lerp(_cup_lamp_col_of(newrun_pip),
+			_cup_ease(cup_t))
+
+
+#  무대 한 장. 뒷벽 · 카운터 · 램프까지다. 통과 그림자는 부르는 쪽이 얹는다.
+func _cup_backdrop(stage: Rect2, k: float, lcol: Color) -> void:
+	_rr(self, stage, Color(STAGE.lo))
+	#  위 40px 한 단. 모서리는 _rr 의 계단 규칙을 따라야 액자 안에 들어간다.
+	_rr_top(self, stage, int(STAGE.hi_h), Color(STAGE.hi))
+	var cx: float = stage.get_center().x
+	var bc: float = cx - float(STAGE.off)
+	var top: float = float(STAGE.top)
+	#  카운터 윗면. 뒷모서리 한 줄이 벽과 판을 가른다 — 없으면 카운터가
+	#  벽에서 자란 것으로 보인다.
+	draw_rect(Rect2(stage.position.x, top, stage.size.x, stage.end.y - top),
+			Color(STAGE.w1))
+	draw_rect(Rect2(stage.position.x, top, stage.size.x, 1.0), Color(STAGE.w0))
+	#  램프 빛 웅덩이. **알파가 아니라 계단색**이다 — 알파로 깔면 카운터색과
+	#  섞여 팔레트 밖 색이 나오고, 도트에서 그것은 얼룩으로 보인다.
+	if k > 0.02:
+		var py: float = float(STAGE.p_y)
+		draw_colored_polygon(_e_pts(Vector2(bc, py), float(STAGE.p_rx0) * k,
+				float(STAGE.p_ry0), 26), Color(STAGE.p0).lerp(lcol, 0.10))
+		draw_colored_polygon(_e_pts(Vector2(bc, py), float(STAGE.p_rx1) * k,
+				float(STAGE.p_ry1), 26), Color(STAGE.p1).lerp(lcol, 0.14))
+	#  앞턱 한 줄. 웅덩이 폭 안에서만 한 단 밝다 — 온 줄을 밝히면 카운터가
+	#  앞으로 튀어나온 판때기가 된다.
+	draw_rect(Rect2(stage.position.x, float(STAGE.lip), stage.size.x, 1.0),
+			Color(STAGE.w0))
+	if k > 0.02:
+		var lw: float = float(STAGE.p_rx0) * k
+		draw_rect(Rect2(maxf(bc - lw, stage.position.x), float(STAGE.lip),
+				minf(lw * 2.0, stage.end.x - (bc - lw)), 1.0),
+				Color(STAGE.p0))
+	#  램프 원뿔 두 겹. **램프 몸체는 무대 안에 안 그린다** — 왼쪽 위에
+	#  달아 보니 깃털 다트통의 긴 자루와 겹쳐 서로를 잘랐다. 빛만 들어온다.
+	if k > 0.02:
+		var t0: float = cx - 22.0
+		for q in 2:
+			var aw: float = 8.0 if q == 0 else 5.0
+			var bw: float = 46.0 if q == 0 else 28.0
+			draw_colored_polygon(PackedVector2Array([
+					Vector2(t0 - aw, stage.position.y),
+					Vector2(t0 + aw, stage.position.y),
+					Vector2(bc + bw, top), Vector2(bc - bw, top)]),
+					Color(lcol, (float(STAGE.b_a0) if q == 0
+							else float(STAGE.b_a1)) * k))
+	#  액자 안쪽 그늘 2px. 무대가 판에 **파여 있다**는 말이다 — 테두리선
+	#  하나만으로는 얹혀 있는 것으로 보인다.
+	_rr_top(self, stage, 2, Color(STAGE.frame))
+
+
+#  통 밑 그림자 한 벌. 통 폭을 따라간다 — 넓은 통은 그림자도 넓다.
+func _cup_shadow(stage: Rect2, dx: float, wide: float) -> void:
+	var fpx: float = (float(CUP3.r) * wide + float(CUP3.wall)) * _cup3_ppu()
+	var cx: float = stage.get_center().x + dx
+	draw_colored_polygon(_e_pts(Vector2(cx + float(STAGE.sh_dx),
+			float(STAGE.sh_y)), fpx + 3.0, float(STAGE.sh_ry), 22),
+			Color(STAGE.sh))
+	#  닿은 자리 1px. 통 앞호 바로 밑이다 — 이 한 줄이 없으면 통이 그림자
+	#  위에 1px 떠 있는 것으로 보인다.
+	draw_colored_polygon(_e_pts(Vector2(cx, _cup_foot() + fpx * 0.309 + 1.0),
+			fpx * 0.92, 2.0, 22), Color(STAGE.ct))
+
+
 func _cup_draw(pr: Rect2) -> void:
 	var stage := _cup_stage()
-	_rr(self, stage, C_PANEL.darkened(0.20))
+	_cup_backdrop(stage, _cup_lamp_k(), _cup_lamp_col())
 	#  히든인가. 넘기는 동안은 **가는 통**을 따른다 — 겉이 무대 하나에
 	#  걸리므로 둘을 따로 못 칠한다.
 	var shut: bool = _cup_shut(newrun_pip)
@@ -23790,9 +23957,9 @@ func _cup_draw(pr: Rect2) -> void:
 		_cup_halo(stage, _cup3_skin(newrun_pip).body, false)
 	# 통 밑 그림자. 3D 쪽 그림자맵은 껐다 — 138x118 에서 그림자맵은 계단만
 	# 남기고, 통이 놓인 자리를 말하는 데는 눌린 타원 하나면 된다.
+	# 넘기는 동안은 슬라이드마다 그린다 — 통이 둘이면 그림자도 둘이다.
 	for sl in _cup_slides():
-		draw_colored_polygon(_e_pts(Vector2(stage.get_center().x + float(sl.dx) + 2.0,
-				_cup_foot() + 4.0), 24.0, 6.0, 18), Color(0.0, 0.0, 0.0, 0.28))
+		_cup_shadow(stage, float(sl.dx), float(_cup3_skin(int(sl.pi)).wide))
 	var tex: Texture2D = cup_vp.get_texture() if _cup3_live() else null
 	if tex != null:
 		if shut:
