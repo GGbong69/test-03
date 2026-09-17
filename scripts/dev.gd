@@ -583,8 +583,12 @@ static func _run(g: Node, e: Dictionary) -> void:
 		"sfx_hit":
 			# 등급이 곧 소리다. 여섯을 붙여 들어야 오르는지 안 오르는지 안다.
 			_q.clear()
+			#  게임은 등급 밑에 접촉(board_thud)을 같이 깐다. 여기서도 같이
+			#  내야 사다리가 게임에서 나는 그 소리로 들린다 — 0.0 은 다음 틱
+			#  이라 한 프레임 앞선다(판에서도 몸소리가 먼저다).
 			for nm2 in ["hit_miss", "hit_single", "hit_double", "hit_triple",
 					"hit_bull_o", "hit_bull_i"]:
+				_q.append(["board_thud", 0.0, 0.0])
 				_q.append([nm2, 0.0, 0.45])
 			_say("착탄 사다리")
 			return

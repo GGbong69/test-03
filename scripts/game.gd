@@ -2854,6 +2854,10 @@ const SFX := {
 	"hit_triple":     {"seq": [330.0, 415.0, 494.0], "gap": 0.07, "d": 0.12, "a": 0.22},
 	"hit_bull_o":     {"seq": [262.0, 392.0, 523.0], "gap": 0.07, "d": 0.15, "a": 0.24},
 	"hit_bull_i":     {"seq": [262.0, 392.0, 523.0, 659.0], "gap": 0.07, "d": 0.17, "a": 0.26},
+	# 등급 여섯과 **같이** 나는 접촉 한 층. 위 여섯은 점수를 적는 소리라
+	# 자리마다 음이 다른데, 촉이 판에 박히는 몸소리는 어디에 꽂히든 하나다.
+	# 부르는 쪽이 매번 음을 조금 밀어 세 발이 「툭 툭 툭」 으로 갈린다.
+	"board_thud":     {"f": 131.0, "d": 0.08, "a": 0.12},
 	# 제목 판 이스터에그 — 불을 잇달아 물면 판이 쪼개진다. 판 위 소리라
 	# 유리가 아니라 판이다(사용자, 2026-09-17). f 는 단이 오를수록 내려 민다.
 	"egg_crack":      {"f": SFX_BASE, "d": 0.20, "a": 0.20},
@@ -4246,9 +4250,17 @@ const HIT_SFX := ["hit_miss", "hit_single", "hit_double", "hit_triple",
 		"hit_bull_o", "hit_bull_i"]
 
 
+#  등급 소리 밑에 깔리는 접촉 한 번. 등급은 점수를 적고 이것은 물체를 적는다 —
+#  둘을 한 파일에 담으면 같은 자리에 박힌 세 발이 한 음으로 겹쳐 울린다.
+#  음을 ±6% 안에서 밀어 발마다 조금씩 갈라 놓는다(「툭 툭」, 사용자 2026-09-18).
+func _thud() -> void:
+	_sfx("board_thud", SFX_BASE * randf_range(0.94, 1.06))
+
+
 func _impact(info: Dictionary, hit_mult: int) -> void:
 	var lbl := Vector2(0.0, 26.0) if aim.y < BC.y else Vector2(0.0, -24.0)
 	var grade := _hit_grade(info, hit_mult)
+	_thud()
 	_sfx(HIT_SFX[grade])
 
 	match grade:
@@ -26345,6 +26357,7 @@ func _ttl_stick(e: Dictionary) -> void:
 	ttl_stuck.append({"p": e.b, "u": e.u, "id": e.id, "rot": e.rot, "t": 0.0})
 	var info := hit_info(e.b)
 	var g := _hit_grade(info, int(info.mult))
+	_thud()
 	_sfx(HIT_SFX[g])
 	#  판이 움찔한다. 스크림(0.72) 밑이라 옅게 읽히는데 그게 맞다 —
 	#  판은 배경이고 소리와 자루가 앞이다.
