@@ -17865,17 +17865,34 @@ func _hdr(c: CanvasItem, t: String, sub := "", a := 1.0, dx := 0.0,
 				Color(C_DIM, a))
 
 
-#  탭 한 칸. 고른 탭에는 띠가 꽉 차 있고 커서가 얹힌 탭에는 반쯤 찬다 —
-#  글줄의 얹힘 띠와 같은 물건이라, 가로로 누워도 같은 말로 읽힌다.
-#  전에는 상자 단추(_btn)였고, 그래서 컬렉션·런 정보만 다른 목소리였다.
+#  탭 한 칸 — 발라트로식 단추. 칸마다 둥근 단추가 서고, 고른 탭은 금빛으로
+#  차고, 커서가 얹힌 탭은 한 칸 떠오르며 밝아진다.
+#
+#  전에는 글줄의 얹힘 띠를 가로로 눕혀 썼다. 고른 탭은 꽉 차고 얹힌 탭은
+#  45% 만 찼는데, 「반만 차 있는 게 이질적이다」 는 말을 듣고(2026-09-17)
+#  시안 넷(옅은 꽉 찬 띠 · 밑줄 · 둥근 칩 · 단추)을 나란히 찍어 사용자가
+#  단추를 골랐다. 탭은 어디로 갈지 고르는 글줄이 아니라 **누르는 물건**
+#  이라 단추가 맞고, 모바일에서 누를 자리가 글자 없이도 보인다.
+#
+#  뜨는 것은 몸통이다. 턱(아래 어두운 띠)은 바닥에 붙어 있어서, 뜬 만큼
+#  턱이 두꺼워져 「올라왔다」 로 읽힌다 — 칸 전체를 올리면 턱까지 같이
+#  떠서 그냥 자리가 1px 어긋난 것으로 보인다.
+const TABB := {"lip": 2.0, "lift": 1.0}
+
+
 func _tab_draw(c: CanvasItem, r: Rect2, label: String, on: bool,
 		hot := false) -> void:
-	var e: float = 1.0 if on else (0.45 if hot else 0.0)
-	#  탭은 칸 안에서만 찬다. 글줄처럼 밖으로 삐져나오면 옆 탭을 침범한다.
-	_row_band(c, r, e, e, 1.0, C_ACC, 2.0)
-	c.draw_string(font, r.position + Vector2(0.0, r.size.y * 0.72), label,
-			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 11,
-			C_DIM.lerp(C_TXT, e))
+	var lip: float = float(TABB.lip)
+	var lift: float = float(TABB.lift) if hot and not on else 0.0
+	var body := Rect2(r.position - Vector2(0.0, lift), r.size - Vector2(0.0, lip))
+	var base := Rect2(r.position + Vector2(0.0, lip - lift),
+			r.size - Vector2(0.0, lip - lift))
+	var bc: Color = C_ACC.darkened(0.08) if on 			else C_PANEL.lightened(0.16 if hot else 0.07)
+	_rr(c, base, bc.darkened(0.45))
+	_rr(c, body, bc)
+	c.draw_string(font, body.position + Vector2(0.0, body.size.y * 0.74), label,
+			HORIZONTAL_ALIGNMENT_CENTER, body.size.x, 11,
+			C_BG if on else C_DIM.lerp(C_TXT, 0.8 if hot else 0.0))
 
 
 #  넘김 단추 하나. 탭이 아니라 **단추**라 제 어법을 쓴다.
