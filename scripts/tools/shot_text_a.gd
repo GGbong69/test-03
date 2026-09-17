@@ -157,6 +157,21 @@ func _run() -> void:
 	keep["cur_chip"] = 5499
 	keep["cur_mult"] = 5499
 	await _shot("card_total")
+	#  달아오른 순간 — 저울 두 수가 한 번 부푼다(24 × 1.45) · 총점이 부푼다(36 × 1.55)
+	keep = cb.duplicate()
+	keep["calc_lit"] = true
+	keep["score_mode"] = "bal"
+	keep["calc_c"] = 9999
+	keep["calc_m"] = 999
+	keep["cur_chip"] = 5499
+	keep["cur_mult"] = 5499
+	keep["calc_flash"] = 1.0
+	await _shot("card_flash")
+	keep["card_mode"] = 1
+	keep["last_gain"] = 99999
+	keep["calc_flash"] = 0.0
+	keep["total_flash"] = 1.0
+	await _shot("card_total_flash")
 
 	# ── 5. 가운데에 놓아 쓰기 — 이름 · 거절 ──────────────
 	g.cons = [_cons("v_moth"), _cons("v_par")]
@@ -167,20 +182,18 @@ func _run() -> void:
 	await _shot("use_block")
 
 	# ── 5-1. 떠오르는 글자 — 크기 다섯 단(10 · 12 · 20 · 24) ─────
-	#  t 0.4 면 튀어 오름(exp(-12t))이 끝나 멎은 크기로 선다. 태그가 before 로
-	#  시작하면 격자 옮김 전의 크기(20 · 22 · 17 · 16 · 15 · 17 · 9 · 11)로 찍는다.
-	var old: bool = tag.begins_with("before")
+	#  t 0.4 면 튀어 오름(exp(-12t))이 끝나 멎은 크기로 선다.
 	var pp := []
-	for e in [[g.BC + Vector2(0.0, -38.0), "불스아이", g.C_ACC, 24, 20],
-			[g.BC + Vector2(0.0, 40.0), "목표 달성", g.C_ACC, 24, 22],
-			[g.BC + Vector2(-110.0, -10.0), "트리플", g.C_ACC, 20, 17],
-			[g.BC + Vector2(110.0, -10.0), "아우터 불", g.C_GREEN.lightened(0.55), 20, 16],
-			[g.BC + Vector2(-110.0, 90.0), "더블", g.C_ACC, 12, 15],
-			[g.BC + Vector2(110.0, 90.0), "배수 +12", g.C_MULT, 20, 17],
-			[g._slot_rect(0).get_center() + Vector2(0.0, 22.0), "순서 변경", g.C_TXT, 10, 9],
+	for e in [[g.BC + Vector2(0.0, -38.0), "불스아이", g.C_ACC, 24],
+			[g.BC + Vector2(0.0, 40.0), "목표 달성", g.C_ACC, 24],
+			[g.BC + Vector2(-110.0, -10.0), "트리플", g.C_ACC, 20],
+			[g.BC + Vector2(110.0, -10.0), "아우터 불", g.C_GREEN.lightened(0.55), 20],
+			[g.BC + Vector2(-110.0, 90.0), "더블", g.C_ACC, 12],
+			[g.BC + Vector2(110.0, 90.0), "배수 +12", g.C_MULT, 20],
+			[g._slot_rect(0).get_center() + Vector2(0.0, 22.0), "순서 변경", g.C_TXT, 10],
 			[g._slot_rect(3).get_center() + Vector2(0.0, 24.0),
-					"%s — 실패를 막았다" % String(_item("c48").n), g.C_ACC, 12, 11]]:
-		pp.append({"p": e[0], "txt": e[1], "c": e[2], "sz": e[4] if old else e[3],
+					"%s — 실패를 막았다" % String(_item("c48").n), g.C_ACC, 12]]:
+		pp.append({"p": e[0], "txt": e[1], "c": e[2], "sz": e[3],
 				"t": 0.4, "life": 4.0})
 	keep = {"state": g.S.PICK, "shown": 120.0, "card_p": 0.0, "hand_st": g.H.NONE,
 			"hand_i": -1, "pops": pp}
@@ -256,5 +269,43 @@ func _run() -> void:
 		g.clear_gold_detail.append({"n": String(_item("c48").n) if k > 2 else "남은 다트 6개", "v": 99 + k})
 	g.gold = 99999
 	await _shot("clear_many", 20)
+	#  상점으로 단추에 얹힘 — 몸이 한 칸 뜬다
+	pin = Vector2(320.0, 310.0)
+	await _shot("clear_hover", 20)
+	pin = Vector2(-50.0, -50.0)
+
+	# ── 9. 보드 확장 명판 — 가장 긴 이름 · 판 위 ─────────
+	keep = {}
+	g.clear_gold_detail = []
+	g.gold = 12
+	g.mods_own = ["arst"]
+	g.leg_no = 1
+	g._start_leg()
+	g._swap_skip()
+	g.state = g.S.PICK
+	await _tick(20)
+	keep = {"state": g.S.PICK, "shown": 0.0, "card_p": 0.0}
+	await _shot("modplate", 20)
+	g.mods_own = ["pang"]
+	await _shot("modplate2", 20)
+	g.mods_own = []
+	keep = {}
+
+	# ── 10. 인트로 — 180 합계 · 네온 켜지는 중 · 붙은 간판 ──
+	g._intro_begin()
+	var clock := 0.0
+	var at := [[2.70, "intro_180"], [3.55, "intro_sign"], [4.30, "intro_snap"]]
+	var k := 0
+	while k < at.size():
+		g.mouse_at = Vector2(-50.0, -50.0)
+		g._tutor_close()
+		g._process(1.0 / 60.0)
+		clock += 1.0 / 60.0
+		await process_frame
+		if clock >= float(at[k][0]):
+			await process_frame
+			root.get_texture().get_image().save_png("res://shots/txta_%s_%s.png" % [tag, at[k][1]])
+			print("  shot %s" % at[k][1])
+			k += 1
 	print("  찍음")
 	quit(0)
