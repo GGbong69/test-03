@@ -409,6 +409,9 @@ static func _rows(g: Node) -> Array:
 				{"n1": "다트통", "t": "list", "k": "pack",
 						"n": GameData.packs().size()},
 				{"n1": "판 다시 굽기", "t": "act", "a": "bake"},
+				#  임시 — 간판 색 시안(game.gd SIGN_PALS). 사용자가 한 벌을 고르면 걷는다.
+				{"n1": "간판 색 시안", "t": "list", "k": "signpal",
+						"n": _list("signpal").size()},
 				{"n1": "제목 판 금 가기 직전", "t": "act", "a": "egg_crack"},
 				{"n1": "제목 판 깨기 직전", "t": "act", "a": "egg"},
 			]
@@ -448,6 +451,8 @@ static func _list(k: String) -> Array:
 		"mf": return GameData.modifiers()
 		"league": return GameData.leagues()
 		"pack": return GameData.packs()
+		#  판 카드 · 제약 카드의 색 시안. sfx 와 같은 길로 game.gd 의 상수를 집는다.
+		"signpal": return load("res://scripts/game.gd").SIGN_PALS
 		"chal": return GameData.challenges()
 		"boost": return GameData.boosters()
 		"sfx":
@@ -800,6 +805,10 @@ static func _run(g: Node, e: Dictionary) -> void:
 			if not rows.is_empty():
 				GameData.pack = String(rows[i % rows.size()].get("id", ""))
 				_say("다트통 %s — 새 런부터" % GameData.pack)
+		"signpal":
+			if not rows.is_empty():
+				g.sign_pal = i % rows.size()
+				_say("간판 색 %s" % rows[g.sign_pal].get("n", ""))
 
 
 static func _give_item(g: Node, it: Dictionary) -> void:

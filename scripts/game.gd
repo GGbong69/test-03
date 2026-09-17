@@ -4555,9 +4555,13 @@ func pop(p: Vector2, txt: String, c: Color, sz: int, life: float) -> void:
 #  여유다. stage_picks 를 5 이상으로 올리려면 설명을 툴팁으로 내리는
 #  별개 결정이 먼저다.
 # ══════════════════════════════════════════════════════════
+#  얼굴 자리(제 좌표)는 간판 테(SIGN.rim 4) 안쪽에 맞췄다. 설명 밑줄이
+#  81 이면 아랫단 그늘(80~82)에 글자 발이 걸린다 — 75 로 올리고 이름(64→61) ·
+#  아이콘(30→29)도 올렸다. plate 는 아이콘 받침 반지름 — 받침 y[11,47] 이
+#  윗단 띠(y4~9)와 이름 몸통(y52~) 사이에 든다.
 const CARD := {
-	"x0": 76.0, "y": 140.0, "h": 86.0, "gap": 14.0, "th": 2.0,
-	"icon": 30.0, "icon_r": 17.0, "name": 64.0, "desc": 81.0,
+	"x0": 76.0, "y": 140.0, "h": 86.0, "gap": 14.0,
+	"icon": 29.0, "icon_r": 17.0, "plate": 18.0, "name": 61.0, "desc": 75.0,
 }
 
 
@@ -14255,35 +14259,6 @@ func _round_ring(w: float, h: float, k: int) -> PackedVector2Array:
 	return out
 
 
-func _quad_round(q: PackedVector2Array, w: float, h: float,
-		off := Vector2.ZERO) -> PackedVector2Array:
-	var k := _rad(Rect2(0.0, 0.0, w, h), -1)
-	var out := PackedVector2Array()
-	for pt in _round_ring(w, h, k):
-		out.append(_quad_uv(q, w, h, pt.x, pt.y) + off)
-	return out
-
-
-#  카드 먼 모서리의 띠(제 좌표 hb 줄). 위 모서리 곡선을 따라 들어간다.
-func _quad_top_band(q: PackedVector2Array, w: float, h: float,
-		hb: float) -> PackedVector2Array:
-	var k := _rad(Rect2(0.0, 0.0, w, h), -1)
-	var d0: float = float(ROUND[k][0]) if k > 0 else 0.0
-	var d1: float = float(ROUND[k][mini(1, k - 1)]) if k > 0 else 0.0
-	return PackedVector2Array([_quad_uv(q, w, h, d0, 0.0), _quad_uv(q, w, h, w - d0, 0.0),
-			_quad_uv(q, w, h, w - d1, hb), _quad_uv(q, w, h, d1, hb)])
-
-
-#  카드 가까운 모서리의 두께 — 아래 모서리 곡선 안쪽에서만 내려온다.
-func _quad_side(q: PackedVector2Array, w: float, h: float,
-		th: float) -> PackedVector2Array:
-	var k := _rad(Rect2(0.0, 0.0, w, h), -1)
-	var d0: float = float(ROUND[k][0]) if k > 0 else 0.0
-	var a := _quad_uv(q, w, h, d0, h)
-	var b := _quad_uv(q, w, h, w - d0, h)
-	return PackedVector2Array([a, b, b + Vector2(0.0, th), a + Vector2(0.0, th)])
-
-
 #  한 칸 테두리. 계단은 앞 줄이 들어간 만큼 가로로 이어 그려 틈이 안 난다.
 func _rr_line(c: CanvasItem, r: Rect2, col: Color, rad := -1) -> void:
 	r = _pr(r)
@@ -14455,8 +14430,9 @@ func _draw_leg() -> void:
 				HORIZONTAL_ALIGNMENT_LEFT, pw, 9, C_TXT)
 
 
-#  판 한 장 — **칠한 간판.** 판 종류의 색(작은 판 파랑 · 큰 판 호박 · 보스
-#  빨강)으로 칠하고 굵은 테를 둘렀다. 지금 판은 테가 금빛이다.
+#  판 한 장 — **칠한 간판.** 판 종류의 색(작은 판 · 큰 판 · 보스)으로 칠하고
+#  굵은 테를 둘렀다. 지금 판은 테가 금빛이다. 색은 간판 색 시안 한 벌
+#  (SIGN_PALS)에서 온다 — 제약 카드(_stage_card)도 같은 간판이다.
 #
 #  전에는 둥근 모서리의 판(C_PANEL) 한 장이었는데 「그냥 생성한 종이
 #  같다 · 판자같이」 「클리어한 판은 간판이 깨져 있다거나」 라는 말을
@@ -14471,17 +14447,113 @@ func _draw_leg() -> void:
 #  칠 밑이 밝게 드러난다. 건너뛴 판은 안 깨진다(던져서 이긴 것이 아니다).
 #  어둡게 가라앉기만 한다.
 const SIGN := {
-	"small": Color("3a6f8f"),     # 작은 판
-	"big": Color("8f6a2a"),       # 큰 판
-	"boss": Color("8f3a36"),      # 보스 판
-	"done": 0.45,                 # 지나간 판이 가라앉는 만큼(darkened)
-	"paint": Color("f1e3c2"),     # 글씨
 	"rim": 4.0,                   # 테 두께(제 좌표 px)
+	"band": 5.0,                  # 테 밑 윗단 띠 두께 — band 가 있는 시안만 긋는다
 	"th": 3.0,                    # 판 두께(아래로 비치는 옆면)
 	"chamfer": 2,                 # 모서리 깎기(_round_ring 단계)
 	"gap": Vector2(6.0, 3.0),     # 떨어진 조각이 밀려난 거리(화면 px)
 	"tilt": 0.11,                 # 떨어진 조각이 비틀린 각(라디안)
 }
+
+
+#  ── 간판 색 시안 — **임시** ─────────────────────────────
+#  「색감이 좀 너무 안 어울리는데?」(사용자, 2026-09-17). 파랑 · 호박 · 빨강이
+#  명도도 채도도 한 단 높아서, 물 빠지고 어두운 펠트(C_TABLE)와 보라 남색 UI
+#  사이에서 간판만 따로 떴다. 모양(테 · 두께 · 두 동강)은 그대로 두고 색만
+#  네 벌을 한 표에 놓아 sign_pal 로 갈아 끼운다. 개발자 판 「판·조준 › 간판
+#  색 시안」으로 게임 안에서도 바꿔 본다. 나란히 찍는 자: tools/shot_signs.gd.
+#  **사용자가 한 벌을 고르면** sign_pal · SIGN_PALS · 개발자 줄을 걷고 고른
+#  한 벌만 SIGN 에 남긴다.
+#
+#  한 벌의 열쇠
+#    small · big · boss   판 종류의 칠. cons 는 제약 카드 — 보스 판에만 깔리므로
+#                         보스와 한 집안이다
+#        face  면            rim   테(없으면 면을 0.5 어둡게)
+#        side  옆면(없으면 면을 0.62 어둡게)
+#        band  테 밑 윗단 띠(없으면 안 긋는다). 면이 판 종류와 상관없이 같은
+#              시안에서, 지금 판의 테가 금빛으로 바뀌어도 판 종류가 남는 자리다
+#    ink   글씨      now  지금 판의 테(없으면 C_ACC 를 0.15 어둡게)
+#    done  지나간 판이 가라앉는 만큼(darkened)
+#  대비(WCAG) — 크림 글씨 : 면 · 금화 : 면 · 금빛 테 : 면
+#    지금  3.9~5.8 · 3.1~4.7 · 1.9~2.8   (큰 판 호박색에서 금빛 테가 묻힌다)
+#    A     10.4    · 7.5     · 7.5
+#    B     5.7~7.6 · 4.6~6.1 · 3.9~5.1
+#    C     6.7~8.7 · 4.8~6.3 · 4.1~5.3
+var sign_pal := 0
+const SIGN_PALS := [
+	{   #  0 지금 — 칠한 간판을 고른 그날의 색
+		"n": "지금",
+		"small": {"face": Color("3a6f8f")},
+		"big": {"face": Color("8f6a2a")},
+		"boss": {"face": Color("8f3a36")},
+		"cons": {"face": Color("8f3a36")},
+		"ink": Color("f1e3c2"), "done": 0.45,
+	},
+	{   #  A 어두운 판 + 색 테 — 면은 UI 판(C_DARK)의 집안이고 판 종류는 테와
+		#    윗단 띠만 말한다. 화면의 단추(짙은 판 + 금빛 윗단)와 같은 어법이다.
+		"n": "A 어두운 판 + 색 테",
+		"small": {"face": Color("383350"), "rim": Color("5d86a6"),
+				"band": Color("5d86a6"), "side": Color("1f2a3a")},
+		"big": {"face": Color("383350"), "rim": Color("a07a4c"),
+				"band": Color("a07a4c"), "side": Color("33271d")},
+		"boss": {"face": Color("383350"), "rim": Color("a84f4d"),
+				"band": Color("a84f4d"), "side": Color("3a1d20")},
+		"cons": {"face": Color("383350"), "rim": Color("a84f4d"),
+				"band": Color("a84f4d"), "side": Color("3a1d20")},
+		"ink": C_TXT, "now": C_GOLD, "done": 0.30,
+	},
+	{   #  B 눌러 담은 색 — 판 종류의 색은 그대로 두고 명도 · 채도를 한 단씩
+		#    내렸다. 쇠빛 남색 · 흙빛 갈색 · 포도주. 펠트 초록과 부딪치지 않는
+		#    당구장 색이다.
+		"n": "B 눌러 담은 색",
+		"small": {"face": Color("3e5470")},
+		"big": {"face": Color("6b5236")},
+		"boss": {"face": Color("6d3140")},
+		"cons": {"face": Color("6d3140")},
+		"ink": Color("f1e3c2"), "now": C_ACC, "done": 0.40,
+	},
+	{   #  C 보라 집안 — UI 의 보라 남색에서 판 종류를 가른다. 남보라 · 연보라 ·
+		#    자두. 금빛 테가 보라의 맞은편 색이라 지금 판이 또렷하다.
+		"n": "C 보라 집안",
+		"small": {"face": Color("3d4070")},
+		"big": {"face": Color("5e4a7c")},
+		"boss": {"face": Color("66304f")},
+		"cons": {"face": Color("66304f")},
+		"ink": C_TXT, "now": C_ACC, "done": 0.40,
+	},
+]
+
+
+func _sign_pal() -> Dictionary:
+	return SIGN_PALS[clampi(sign_pal, 0, SIGN_PALS.size() - 1)]
+
+
+#  한 벌에서 칠 하나를 푼다 — 면 · 테 · 옆면 · 윗단 띠와 거기서 뽑는 빛(hi) ·
+#  그늘(lo) · 갈라진 자리(crack) · 부스러기(chip). sink 면 지나간 판이라
+#  통째로 가라앉는다.
+func _sign_cols(kind: String, sink: bool) -> Dictionary:
+	var p := _sign_pal()
+	var e: Dictionary = p[kind]
+	var dk: float = float(p.done) if sink else 0.0
+	var base: Color = e.face
+	var face: Color = base.darkened(dk)
+	var out := {
+		"face": face,
+		"rim": Color(e.get("rim", base.darkened(0.5))).darkened(dk),
+		"side": Color(e.get("side", base.darkened(0.62))).darkened(dk),
+		"hi": face.lightened(0.14),
+		"lo": face.darkened(0.18),
+		"crack": face.lightened(0.35),
+		"chip": face.lightened(0.1),
+		"ink": p.ink,
+	}
+	if e.has("band"):
+		out["band"] = Color(e.band).darkened(dk)
+	return out
+
+
+func _sign_now() -> Color:
+	return Color(_sign_pal().get("now", C_ACC.darkened(0.15)))
 
 
 func _leg_card(i: int, rn: int) -> void:
@@ -14503,68 +14575,16 @@ func _leg_card(i: int, rn: int) -> void:
 	var q := _card_quad(px - (w2 - sz.x) * 0.5, w2, foot, up, gs, 7.0 * up)
 	var w: float = sz.x
 	var ch: float = float(CARD.h)
-	var kc := _leg_kind_col(rn)
+	var sc := _sign_cols(_leg_kind(rn), done)
 
-	var board := _round_ring(w, ch, int(SIGN.chamfer))
-	#  조각들 — 안 깨졌으면 판 하나, 깨졌으면 왼쪽 몸통과 떨어져 나간 오른쪽.
-	var pieces := []                 # [{poly(제 좌표), xf(화면)}]
-	var crack := PackedVector2Array()
-	if broken:
-		crack = _sign_crack(w, ch, rn)
-		var left := PackedVector2Array([Vector2(-2.0, -2.0)])
-		var right := PackedVector2Array()
-		for c in crack:
-			left.append(c)
-		left.append(Vector2(-2.0, ch + 2.0))
-		right.append(Vector2(w + 2.0, -2.0))
-		right.append(Vector2(w + 2.0, ch + 2.0))
-		for ci in range(crack.size() - 1, -1, -1):
-			right.append(crack[ci])
-		var lp: Array = Geometry2D.intersect_polygons(board, left)
-		var rp: Array = Geometry2D.intersect_polygons(board, right)
-		if not lp.is_empty():
-			pieces.append({"poly": lp[0], "xf": _sign_xf(q, w, ch, lp[0],
-					Vector2(-1.0, 0.0), -0.02)})
-		if not rp.is_empty():
-			pieces.append({"poly": rp[0], "xf": _sign_xf(q, w, ch, rp[0],
-					SIGN.gap, float(SIGN.tilt))})
-	else:
-		pieces.append({"poly": board, "xf": Transform2D.IDENTITY})
-
-	#  그림자를 조각마다 다 깐 뒤에 판을 얹는다 — 떨어진 조각의 그림자가
-	#  몸통 위로 올라오면 안 된다.
-	for pc in pieces:
-		var sp := _sign_map(q, w, ch, pc.poly, pc.xf)
-		var shv: Vector2 = TBL.light * (2.0 + 5.0 * up)
-		var sh := PackedVector2Array()
-		for pt in sp:
-			sh.append(pt + shv)
-		draw_colored_polygon(sh, Color(0.0, 0.0, 0.0, 0.26 + 0.14 * up))
-	if broken:
-		_sign_chips(q, w, ch, rn, crack, kc)
-	for pc in pieces:
-		var sp := _sign_map(q, w, ch, pc.poly, pc.xf)
-		var th: float = float(SIGN.th) * (0.6 + 0.6 * up)
-		var side := PackedVector2Array()
-		for pt in sp:
-			side.append(pt + Vector2(0.0, th))
-		draw_colored_polygon(side, kc.darkened(0.62))
-		_sign_face(q, w, ch, pc.poly, pc.xf, kc, now)
-	if broken:
-		#  갈라진 자리 — 칠 밑이 밝게 드러난다
-		for pi in pieces.size():
-			var pc: Dictionary = pieces[pi]
-			var seg: Array = Geometry2D.intersect_polyline_with_polygon(
-					_sign_grow(crack, -0.6 if pi == 0 else 0.6), pc.poly)
-			for sg in seg:
-				draw_polyline(_sign_map(q, w, ch, sg, pc.xf), kc.lightened(0.35), 1.0)
+	var crack := _sign_crack(w, ch, rn) if broken else PackedVector2Array()
+	var pieces := _sign_pieces(q, w, ch, crack)
+	_sign_body(q, w, ch, pieces, up, sc, _sign_now() if now else Color(sc.rim),
+			crack, rn)
 
 	#  글씨. 깨진 판은 몸통(왼쪽 조각)에 이름과 「넘김」 만 남는다.
-	var ax: Vector2 = ((q[1] - q[0]) + (q[2] - q[3])) * 0.5 / w
-	var ay: Vector2 = ((q[3] - q[0]) + (q[2] - q[1])) * 0.5 / ch
-	var mid: Vector2 = (q[0] + q[1] + q[2] + q[3]) * 0.25
-	var a0 := Transform2D(ax, ay, mid - ax * (w * 0.5) - ay * (ch * 0.5))
-	var paint: Color = SIGN.paint
+	var a0 := _sign_basis(q, w, ch)
+	var paint: Color = sc.ink
 	if broken:
 		var bxf: Transform2D = pieces[0].xf
 		draw_set_transform_matrix(Transform2D(0.0, shake_off) * bxf * a0)
@@ -14595,31 +14615,104 @@ func _leg_card(i: int, rn: int) -> void:
 	draw_set_transform(shake_off)
 
 
-#  판 종류의 칠 — 작은 판 · 큰 판 · 보스. 지나간 판은 가라앉는다.
-func _leg_kind_col(rn: int) -> Color:
-	var c: Color = SIGN.small
+#  판 종류 — 작은 판 · 큰 판 · 보스. SIGN_PALS 한 벌의 열쇠다.
+func _leg_kind(rn: int) -> String:
 	if not GameData.skippable(rn):
-		c = SIGN.boss
-	elif GameData.leg_idx(rn) == 1:
-		c = SIGN.big
-	return c.darkened(float(SIGN.done)) if rn < leg_no else c
+		return "boss"
+	if GameData.leg_idx(rn) == 1:
+		return "big"
+	return "small"
 
 
-#  간판 얼굴 한 조각 — 테(지금 판은 금빛) · 칠한 면 · 윗단 빛 · 아랫단 그늘.
+#  간판 조각들(제 좌표 다각형 + 화면 변환). 금이 비었으면 판 하나, 있으면
+#  왼쪽 몸통과 떨어져 나간 오른쪽.
+func _sign_pieces(q: PackedVector2Array, w: float, h: float,
+		crack: PackedVector2Array) -> Array:
+	var board := _round_ring(w, h, int(SIGN.chamfer))
+	if crack.is_empty():
+		return [{"poly": board, "xf": Transform2D.IDENTITY}]
+	var pieces := []
+	var left := PackedVector2Array([Vector2(-2.0, -2.0)])
+	var right := PackedVector2Array()
+	for c in crack:
+		left.append(c)
+	left.append(Vector2(-2.0, h + 2.0))
+	right.append(Vector2(w + 2.0, -2.0))
+	right.append(Vector2(w + 2.0, h + 2.0))
+	for ci in range(crack.size() - 1, -1, -1):
+		right.append(crack[ci])
+	var lp: Array = Geometry2D.intersect_polygons(board, left)
+	var rp: Array = Geometry2D.intersect_polygons(board, right)
+	if not lp.is_empty():
+		pieces.append({"poly": lp[0], "xf": _sign_xf(q, w, h, lp[0],
+				Vector2(-1.0, 0.0), -0.02)})
+	if not rp.is_empty():
+		pieces.append({"poly": rp[0], "xf": _sign_xf(q, w, h, rp[0],
+				SIGN.gap, float(SIGN.tilt))})
+	return pieces
+
+
+#  간판 몸 — 그림자 · 부스러기 · 옆면 · 얼굴 · 갈라진 자리. 판 카드와 제약
+#  카드가 같이 쓴다. 금(crack)이 비었으면 안 깨진 간판이다.
+func _sign_body(q: PackedVector2Array, w: float, h: float, pieces: Array, up: float,
+		sc: Dictionary, rim: Color, crack: PackedVector2Array, rn: int) -> void:
+	#  그림자를 조각마다 다 깐 뒤에 판을 얹는다 — 떨어진 조각의 그림자가
+	#  몸통 위로 올라오면 안 된다.
+	for pc in pieces:
+		var sp := _sign_map(q, w, h, pc.poly, pc.xf)
+		var shv: Vector2 = TBL.light * (2.0 + 5.0 * up)
+		var sh := PackedVector2Array()
+		for pt in sp:
+			sh.append(pt + shv)
+		draw_colored_polygon(sh, Color(0.0, 0.0, 0.0, 0.26 + 0.14 * up))
+	if not crack.is_empty():
+		_sign_chips(q, w, h, rn, crack, sc.chip)
+	for pc in pieces:
+		var sp := _sign_map(q, w, h, pc.poly, pc.xf)
+		var th: float = float(SIGN.th) * (0.6 + 0.6 * up)
+		var side := PackedVector2Array()
+		for pt in sp:
+			side.append(pt + Vector2(0.0, th))
+		draw_colored_polygon(side, sc.side)
+		_sign_face(q, w, h, pc.poly, pc.xf, sc, rim)
+	if crack.is_empty():
+		return
+	#  갈라진 자리 — 칠 밑이 밝게 드러난다
+	for pi in pieces.size():
+		var pc: Dictionary = pieces[pi]
+		var seg: Array = Geometry2D.intersect_polyline_with_polygon(
+				_sign_grow(crack, -0.6 if pi == 0 else 0.6), pc.poly)
+		for sg in seg:
+			draw_polyline(_sign_map(q, w, h, sg, pc.xf), sc.crack, 1.0)
+
+
+#  제 좌표 → 화면의 아핀 근사. 얼굴(글씨 · 아이콘)이 카드를 따라 눕는다.
+#  사다리꼴을 위 · 아래 변의 평균으로 근사한다 — 카드 한 장 안에서 위아래
+#  폭 차가 15px 라 눈에 안 걸린다.
+func _sign_basis(q: PackedVector2Array, w: float, h: float) -> Transform2D:
+	var ax: Vector2 = ((q[1] - q[0]) + (q[2] - q[3])) * 0.5 / w
+	var ay: Vector2 = ((q[3] - q[0]) + (q[2] - q[1])) * 0.5 / h
+	var mid: Vector2 = (q[0] + q[1] + q[2] + q[3]) * 0.25
+	return Transform2D(ax, ay, mid - ax * (w * 0.5) - ay * (h * 0.5))
+
+
+#  간판 얼굴 한 조각 — 테 · 칠한 면 · 윗단 빛 · 아랫단 그늘. 시안에 띠(band)가
+#  있으면 테 밑에 판 종류의 띠를 긋는다.
 #  테는 조각 모양을 안으로 SIGN.rim 만큼 줄인 면을 얹어서 낸다. 깨진 조각도
 #  같은 길이라, 갈라진 자리까지 테가 따라 돈다 — 간판이 원래 한 장이었다는
 #  것이 거기서 읽힌다.
 func _sign_face(q: PackedVector2Array, w: float, h: float, piece: PackedVector2Array,
-		xf: Transform2D, kc: Color, now: bool) -> void:
-	var rim: Color = C_ACC.darkened(0.15) if now else kc.darkened(0.5)
+		xf: Transform2D, sc: Dictionary, rim: Color) -> void:
 	draw_colored_polygon(_sign_map(q, w, h, piece, xf), rim)
-	for inner in Geometry2D.offset_polygon(piece, -float(SIGN.rim)):
+	var rw: float = float(SIGN.rim)
+	for inner in Geometry2D.offset_polygon(piece, -rw):
 		var pts: PackedVector2Array = inner
-		draw_colored_polygon(_sign_map(q, w, h, pts, xf), kc)
-		_sign_fill(q, w, h, pts, xf, _sign_rect(-2.0, -2.0, w + 4.0, 5.0),
-				kc.lightened(0.14))
-		_sign_fill(q, w, h, pts, xf, _sign_rect(-2.0, h - 6.0, w + 4.0, 8.0),
-				kc.darkened(0.18))
+		draw_colored_polygon(_sign_map(q, w, h, pts, xf), sc.face)
+		_sign_fill(q, w, h, pts, xf, _sign_rect(-2.0, -2.0, w + 4.0, 5.0), sc.hi)
+		if sc.has("band"):
+			_sign_fill(q, w, h, pts, xf, _sign_rect(-2.0, rw - 1.0, w + 4.0,
+					float(SIGN.band) + 1.0), sc.band)
+		_sign_fill(q, w, h, pts, xf, _sign_rect(-2.0, h - 6.0, w + 4.0, 8.0), sc.lo)
 
 
 func _sign_fill(q: PackedVector2Array, w: float, h: float, piece: PackedVector2Array,
@@ -14635,10 +14728,12 @@ func _sign_rect(x: float, y: float, rw: float, rh: float) -> PackedVector2Array:
 
 #  글씨 한 줄. 한 칸 아래에 짙은 자국을 깔아 판에 칠한 것처럼 앉힌다 —
 #  맨 글자는 칠 위에 뜬 스티커로 읽힌다.
-func _sign_text(at: Vector2, w: float, t: String, sz: int, col: Color) -> void:
-	draw_string(font, at + Vector2(0.0, 1.0), t, HORIZONTAL_ALIGNMENT_CENTER, w, sz,
+func _sign_text(at: Vector2, w: float, t: String, sz: int, col: Color,
+		f: Font = null) -> void:
+	var ft: Font = f if f != null else font
+	draw_string(ft, at + Vector2(0.0, 1.0), t, HORIZONTAL_ALIGNMENT_CENTER, w, sz,
 			Color(0.08, 0.04, 0.02, 0.55 * col.a))
-	draw_string(font, at, t, HORIZONTAL_ALIGNMENT_CENTER, w, sz, col)
+	draw_string(ft, at, t, HORIZONTAL_ALIGNMENT_CENTER, w, sz, col)
 
 
 func _sign_map(q: PackedVector2Array, w: float, h: float, pts: PackedVector2Array,
@@ -14686,7 +14781,7 @@ func _sign_grow(line: PackedVector2Array, dx: float) -> PackedVector2Array:
 
 #  틈 아래 펠트에 떨어진 부스러기 셋.
 func _sign_chips(q: PackedVector2Array, w: float, h: float, rn: int,
-		crack: PackedVector2Array, kc: Color) -> void:
+		crack: PackedVector2Array, col: Color) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = rn * 3301 + 11
 	var last: Vector2 = crack[crack.size() - 1]
@@ -14697,7 +14792,7 @@ func _sign_chips(q: PackedVector2Array, w: float, h: float, rn: int,
 		var an: float = rng.randf() * TAU
 		draw_colored_polygon(PackedVector2Array([c + Vector2.from_angle(an) * cs,
 				c + Vector2.from_angle(an + 2.2) * cs,
-				c + Vector2.from_angle(an + 4.0) * cs * 0.7]), kc.lightened(0.1))
+				c + Vector2.from_angle(an + 4.0) * cs * 0.7]), col)
 
 
 func _draw_stage() -> void:
@@ -14833,21 +14928,17 @@ func _stage_card(i: int) -> void:
 	var foot: float = p.y + sz.y
 	var q := _card_quad(px2, w2, foot, up, gs, 7.0 * up)
 
-	# 그림자는 매물과 같은 빛 벡터다. 서면 카드가 멀어지므로 그림자도 진다.
+	#  **판 카드와 같은 칠한 간판이다**(2026-09-17 「제약은 뭐 안 바뀌는거야?」).
+	#  전에는 C_PANEL 판 + 먼 모서리의 C_MULT 띠였다 — 판 고르기만 간판이
+	#  되자 두 화면이 딴 물건을 늘어놓은 것이 됐다. 그림자 · 옆면 · 테가
+	#  _leg_card 와 한 길(_sign_body)이고 색은 시안의 cons 한 벌이다.
+	#  선 카드는 테가 C_MULT 로 달아오른다(옛 카드의 먼 모서리 띠가 서면
+	#  켜지던 그 색). 금빛은 「지금 판」 의 말이라 안 빌린다.
 	var ch: float = float(CARD.h)
-	draw_colored_polygon(_quad_round(q, sz.x, ch, TBL.light * (2.0 + 5.0 * up)),
-			Color(0.0, 0.0, 0.0, 0.22 + 0.14 * up))
-
-	var body: Color = C_PANEL.lightened(0.10 + 0.08 * up)
-	# 가까운 모서리의 두께 — 물건이지 인쇄가 아니라고 말한다. 누웠을 때는
-	# 카드 옆면이 거의 안 보이고, 서면 두꺼워진다.
-	var th: float = CARD.th * (0.5 + up)
-	draw_colored_polygon(_quad_side(q, sz.x, ch, th), body.darkened(0.45))
-	draw_colored_polygon(_quad_round(q, sz.x, ch), body)
-	# 먼 모서리의 띠 — 카드가 서면 켜진다
-	draw_colored_polygon(_quad_top_band(q, sz.x, ch, 2.0),
-			C_MULT.lightened(0.20 * up))
-	draw_colored_polygon(_quad_side(q, sz.x, ch, -1.0), Color(C_BG, 0.55))
+	var sc := _sign_cols("cons", false)
+	var rim: Color = sc.rim
+	_sign_body(q, sz.x, ch, _sign_pieces(q, sz.x, ch, PackedVector2Array()), up, sc,
+			rim.lerp(C_MULT, up), PackedVector2Array(), 0)
 
 	# 얼굴은 그림이 먼저다. 훑는 채널은 글자가 아니라 실루엣이다.
 	# 아이콘이 축("링이 나빠진다")을 말하고 설명이 양("0.5배")을 말한다.
@@ -14857,20 +14948,20 @@ func _stage_card(i: int) -> void:
 	# 같은 값이고, 셋 중 하나를 고르는 면에서 판별 정보량이 0 비트다.
 	# 얼굴도 카드와 같이 눕는다. 몸통만 눕히고 글자를 화면에 붙여 두면
 	# 카드 위에 동전을 얹은 것으로 읽힌다 — 판에 인쇄된 것이 아니다.
-	# 사다리꼴을 아핀으로 근사한다(위·아래 변의 평균). 정확히는 못 맞지만
-	# 카드 한 장 안에서 위아래 폭 차가 15px 라 눈에 안 걸린다.
-	var ax: Vector2 = ((q[1] - q[0]) + (q[2] - q[3])) * 0.5 / sz.x
-	var ay: Vector2 = ((q[3] - q[0]) + (q[2] - q[1])) * 0.5 / CARD.h
-	var mid: Vector2 = (q[0] + q[1] + q[2] + q[3]) * 0.25
-	var org: Vector2 = mid - ax * (sz.x * 0.5) - ay * (CARD.h * 0.5)
-	draw_set_transform_matrix(Transform2D(ax, ay, org + shake_off))
-	_icon_modifier(Vector2(sz.x * 0.5, CARD.icon), CARD.icon_r, md.id, 0.0)
-	draw_string(font, Vector2(0.0, CARD.name), md.n,
-			HORIZONTAL_ALIGNMENT_CENTER, sz.x, 11, C_MULT)
+	draw_set_transform_matrix(Transform2D(0.0, shake_off) * _sign_basis(q, sz.x, ch))
+	#  아이콘은 짙은 받침 위에 앉는다. 제약 아이콘은 어두운 판(C_PANEL) 위에서
+	#  그린 색이다 — 회색 획과 C_MULT 덩어리가 칠 위에 바로 앉으면 붉은 칠에서
+	#  덩어리가 묻힌다. 받침은 간판에 박은 둥근 명판이다.
+	var ic := Vector2(sz.x * 0.5, float(CARD.icon))
+	draw_circle(ic + Vector2(0.0, 1.0), float(CARD.plate), Color(sc.hi, 0.55))
+	draw_circle(ic, float(CARD.plate), Color(sc.face).darkened(0.55))
+	_icon_modifier(ic, CARD.icon_r, md.id, 0.0)
+	var ink: Color = sc.ink
+	_sign_text(Vector2(0.0, CARD.name), sz.x, md.n, 11, ink)
 	# 효과는 일어서야 보인다. 누운 카드에 여덟 글자를 눕혀 두면 못 읽는다.
 	if up > 0.02:
-		draw_string(font_sm, Vector2(6.0, CARD.desc), md.d,
-				HORIZONTAL_ALIGNMENT_CENTER, sz.x - 12.0, 9, Color(C_DIM, up))
+		_sign_text(Vector2(6.0, CARD.desc), sz.x - 12.0, md.d, 9,
+				Color(ink.darkened(0.12), up), font_sm)
 	# 반드시 되돌린다. 남기면 _hud_draw 가 통째로 눌린다.
 	draw_set_transform(shake_off)
 
