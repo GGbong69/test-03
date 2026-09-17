@@ -43,17 +43,21 @@ static var _qt := 0.0
 static var _sfx_rows := []       # 소리 이름 목록. 표에서 한 번만 읽는다
 
 const PAGES := ["경제·진행", "물건", "판·조준", "해금", "소리"]
+# 글자는 갈무리11 의 12 하나다 — 12 의 배수에서만 도트가 격자에 떨어진다(11 은 획이
+# 섞여 깨졌다). 줄 칸(13px) · 탭 · 단추(14px)에 잉크 11 이 기준선 12 로 위아래 1px 씩
+# 남기고 선다. 11 에서 12 로 한 단(약 9%) 커진 만큼 값 칸 116 → 128 · 고르개 476 → 520
+# 으로 넓혀, 전에 한 줄에 들던 이름(「1/69 발라트로의 조커」 122px)이 그대로 든다.
 const W := 300.0
 const ROW := 15.0
-const ARW := 13.0              # 화살표 칸 너비
-const VALW := 116.0            # 값 칸 너비
+const ARW := 13.0              # 화살표 칸 너비 — ◀ · ▶ 잉크 12px 가 든다
+const VALW := 128.0            # 값 칸 너비
 
-# 고르개는 판보다 넓다 — 640 폭에서 480 까지 쓴다. 세 칸 × 열여덟 줄이면
+# 고르개는 판보다 넓다 — 640 폭에서 524 까지 쓴다. 세 칸 × 열여덟 줄이면
 # 한 쪽에 쉰넷이라 켜진 동전 62장이 두 쪽에 담긴다.
 #
 # 열아홉 줄로 잡았더니 마지막 줄이 바닥 안내 문구와 겹쳤다 — 줄 끝이 343,
 # 문구 윗변이 339 였다. 한 줄을 덜어 그 4px 를 띄운다.
-const PW := 476.0
+const PW := 520.0
 const PCOL := 3
 const PROW := 18
 
@@ -131,15 +135,15 @@ static func draw(g: Node) -> void:
 	g.draw_rect(p, Color(0.04, 0.03, 0.07, 0.94))
 	g.draw_rect(Rect2(p.position, Vector2(p.size.x, 2.0)), Color(1.0, 0.35, 0.35))
 	g.draw_string(g.font, p.position + Vector2(8.0, 15.0), "개발자",
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1.0, 0.35, 0.35))
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1.0, 0.35, 0.35))
 	g.draw_string(g.font, p.position + Vector2(0.0, 15.0), "\\ 닫기 · TAB 다음 쪽",
-			HORIZONTAL_ALIGNMENT_RIGHT, p.size.x - 8.0, 11, Color(0.55, 0.52, 0.60))
+			HORIZONTAL_ALIGNMENT_RIGHT, p.size.x - 8.0, 12, Color(0.55, 0.52, 0.60))
 
 	for i in PAGES.size():
 		var t := _tab(i)
 		g.draw_rect(t, Color(0.16, 0.14, 0.22) if i != page else Color(0.30, 0.26, 0.40))
-		g.draw_string(g.font, t.position + Vector2(0.0, 11.0), PAGES[i],
-				HORIZONTAL_ALIGNMENT_CENTER, t.size.x, 11,
+		g.draw_string(g.font, t.position + Vector2(0.0, 12.0), PAGES[i],
+				HORIZONTAL_ALIGNMENT_CENTER, t.size.x, 12,
 				Color(1, 1, 1) if i == page else Color(0.6, 0.58, 0.66))
 
 	var rows := _rows(g)
@@ -147,23 +151,23 @@ static func draw(g: Node) -> void:
 		var e: Dictionary = rows[i]
 		var r := _row(i)
 		g.draw_rect(r, Color(0.13, 0.11, 0.18))
-		g.draw_string(g.font, r.position + Vector2(6.0, 11.0), String(e.n1),
-				HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 12.0, 11, Color(0.86, 0.86, 0.92))
+		g.draw_string(g.font, r.position + Vector2(6.0, 12.0), String(e.n1),
+				HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 12.0, 12, Color(0.86, 0.86, 0.92))
 		if String(e.t) == "list":
 			var col := Color(1.0, 0.80, 0.35)
 			var la := _arrow(r, false)
 			var ra := _arrow(r, true)
-			g.draw_string(g.font, la.position + Vector2(0.0, 11.0), "◀",
-					HORIZONTAL_ALIGNMENT_CENTER, la.size.x, 11, col)
-			g.draw_string(g.font, ra.position + Vector2(0.0, 11.0), "▶",
-					HORIZONTAL_ALIGNMENT_CENTER, ra.size.x, 11, col)
+			g.draw_string(g.font, la.position + Vector2(0.0, 12.0), "◀",
+					HORIZONTAL_ALIGNMENT_CENTER, la.size.x, 12, col)
+			g.draw_string(g.font, ra.position + Vector2(0.0, 12.0), "▶",
+					HORIZONTAL_ALIGNMENT_CENTER, ra.size.x, 12, col)
 			var vb := _val_box(r)
-			g.draw_string(g.font, vb.position + Vector2(0.0, 11.0), _cur_name(e),
-					HORIZONTAL_ALIGNMENT_CENTER, vb.size.x, 11, col)
+			g.draw_string(g.font, vb.position + Vector2(0.0, 12.0), _cur_name(e),
+					HORIZONTAL_ALIGNMENT_CENTER, vb.size.x, 12, col)
 
 	if msg != "":
 		g.draw_string(g.font, p.position + Vector2(6.0, p.size.y - 6.0), msg,
-				HORIZONTAL_ALIGNMENT_LEFT, p.size.x - 12.0, 11, Color(0.55, 1.0, 0.65))
+				HORIZONTAL_ALIGNMENT_LEFT, p.size.x - 12.0, 12, Color(0.55, 1.0, 0.65))
 
 	# 고르개는 판보다 넓어서 통째로 덮는다 — 맨 나중에 그려야 위로 온다.
 	if open_k != "":
@@ -314,15 +318,16 @@ static func _pick_draw(g: Node) -> void:
 	# 읽는 데 방해가 된다 — 다트판이 밝아서 2% 만 새도 눈에 걸린다.
 	g.draw_rect(p, Color(0.05, 0.04, 0.09))
 	g.draw_rect(Rect2(p.position, Vector2(p.size.x, 2.0)), Color(1.0, 0.80, 0.35))
-	g.draw_string(g.font, p.position + Vector2(8.0, 15.0),
+	#  머리는 단추 이름과 같은 기준선(단추 윗변 4 + 12)에 선다.
+	g.draw_string(g.font, p.position + Vector2(8.0, 16.0),
 			"%s — %d개 · %d/%d쪽" % [_pick_title(), names.size(),
 					open_page + 1, pages],
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1.0, 0.80, 0.35))
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1.0, 0.80, 0.35))
 	for w in 3:
 		var b := _pick_btn(w)
 		g.draw_rect(b, Color(0.20, 0.17, 0.28))
-		g.draw_string(g.font, b.position + Vector2(0.0, 11.0),
-				["◀", "▶", "닫기"][w], HORIZONTAL_ALIGNMENT_CENTER, b.size.x, 11,
+		g.draw_string(g.font, b.position + Vector2(0.0, 12.0),
+				["◀", "▶", "닫기"][w], HORIZONTAL_ALIGNMENT_CENTER, b.size.x, 12,
 				Color(0.90, 0.88, 0.95))
 
 	for j in _pick_per():
@@ -332,14 +337,14 @@ static func _pick_draw(g: Node) -> void:
 		var c := _pick_cell(j)
 		var sel := idx == cur
 		g.draw_rect(c, Color(0.30, 0.26, 0.40) if sel else Color(0.13, 0.11, 0.18))
-		g.draw_string(g.font, c.position + Vector2(4.0, 11.0),
+		g.draw_string(g.font, c.position + Vector2(4.0, 12.0),
 				"%d %s" % [idx + 1, names[idx]],
-				HORIZONTAL_ALIGNMENT_LEFT, c.size.x - 8.0, 11,
+				HORIZONTAL_ALIGNMENT_LEFT, c.size.x - 8.0, 12,
 				Color(1.0, 0.90, 0.55) if sel else Color(0.86, 0.86, 0.92))
 
 	g.draw_string(g.font, p.position + Vector2(8.0, p.size.y - 5.0),
 			"누르면 바로 적용 · ESC 나 판 밖을 눌러 닫는다",
-			HORIZONTAL_ALIGNMENT_LEFT, p.size.x - 16.0, 11, Color(0.55, 0.52, 0.60))
+			HORIZONTAL_ALIGNMENT_LEFT, p.size.x - 16.0, 12, Color(0.55, 0.52, 0.60))
 
 
 # 고르개 머리에 적을 이름. 열 때 줄 이름을 그대로 받아 둔다 — 여는 순간에는

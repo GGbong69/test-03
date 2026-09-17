@@ -2,7 +2,8 @@ extends SceneTree
 # 글자 키우기 C 묶음 — 판 밖 메뉴 · 덮개 화면을 **가장 긴 글줄**로 한 장씩.
 #   제목 · 프로필(큰 수 · 빈 자리 · 지우기) · 새 런(검정 리그 일곱 줄 · 긴 다트통 설명 ·
 #   잠긴 히든) · 설정(제목에서 · 판 중에 · 경고 줄 · 게이지) · 컬렉션(긴 이름 · 툴팁) ·
-#   런 정보 네 탭(꽉 찬 동전 · 긴 사진 효과 · 큰 수) · 런 끝(완주 · 실패 · 해금 줄)
+#   런 정보 네 탭(꽉 찬 동전 · 긴 사진 효과 · 큰 수) · 런 끝(완주 · 실패 · 해금 줄) ·
+#   개발자 판(다섯 쪽 · 목록 고르개 두 쪽)
 #
 #   godot --path . --quit-after 20000 --script scripts/tools/shot_text_c.gd -- txtc_before
 #
@@ -15,6 +16,7 @@ extends SceneTree
 # 되돌린다. 검사 프로브들이 그 자리를 지우고 쓰는 것과 같은 자리라 겹쳐 돌리지 않는다.
 const GameData = preload("res://scripts/data.gd")
 const Save = preload("res://scripts/save.gd")
+const Dev = preload("res://scripts/dev.gd")
 var g = null
 var busy := false
 var pin := Vector2(-50.0, -50.0)
@@ -184,11 +186,14 @@ func _run() -> void:
 	g.collect_tab = 0
 	g.collect_page = 0
 	await _shot("col_items")
-	#  가장 긴 이름이 든 쪽으로 넘긴다
+	#  가장 긴 이름이 든 쪽으로 넘긴다 — 글자 수가 아니라 **그린 폭**으로 잰다.
+	#  「quite my tempo」 와 「더 굿 더 베드 더 트리플」 은 둘 다 열네 자인데 앞의 것만
+	#  한 줄에 들고 뒤의 것은 두 줄로 접힌다.
 	var li := 0
-	var lw := 0
+	var lw := 0.0
 	for i in GameData.items().size():
-		var w: int = String(GameData.items()[i].n).length()
+		var w: float = g.font.get_string_size(String(GameData.items()[i].n),
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
 		if w > lw:
 			lw = w
 			li = i
@@ -286,6 +291,28 @@ func _run() -> void:
 	g.run_unlocked = []
 	g.over_t = 0.0
 	await _shot("over_lost", Vector2(-50.0, -50.0), none, 120)
+	#  실패 + 해금 줄 — 수 넷째 줄(마지막 판)과 해금 줄이 한 판에 같이 선다
+	g.run_unlocked = [
+		{"k": "다트통", "n": "넓은 동전 슬롯"},
+		{"k": "리그", "n": "검정 리그"},
+	]
+	g.over_t = 0.0
+	await _shot("over_lost_unl", Vector2(-50.0, -50.0), none, 120)
+	g.run_unlocked = []
+	#  ── 개발자 판 ──
+	g.state = g.S.PICK
+	Dev.on = true
+	for pg in Dev.PAGES.size():
+		Dev.page = pg
+		await _shot("dev_%d" % pg, Vector2(-50.0, -50.0), none, 8)
+	Dev.page = 1
+	Dev.open_k = "item"
+	Dev.open_n1 = "동전 주기"
+	for op in 2:
+		Dev.open_page = op
+		await _shot("devpick_%d" % op, Vector2(-50.0, -50.0), none, 8)
+	Dev.open_k = ""
+	Dev.on = false
 	#  되돌린다 — 진짜 프로필
 	for i in range(1, Save.SLOTS + 1):
 		Save.erase_slot(i)
