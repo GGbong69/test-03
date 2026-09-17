@@ -2729,6 +2729,10 @@ func _process(d: float) -> void:
 	if state == S.OVER:
 		over_t += d
 		queue_redraw()
+	#  시계 판의 초침 — 초가 바뀌면 한 번 다시 그린다
+	if ck_sec >= 0 and int(Time.get_time_dict_from_system().second) != ck_sec:
+		ck_sec = -1
+		queue_redraw()
 
 	if not beep_q.is_empty():
 		beep_t -= d
@@ -5136,10 +5140,10 @@ func _board_rim(gap: float) -> float:
 
 
 #  칸 i 의 숫자. 판과 조준 밝힘(_cell_glow)이 같은 자리에 같은 글자를 쓴다.
-func _num_draw(i: int, col: Color, push := 1.0) -> void:
+func _num_draw(i: int, col: Color, push := 1.0, off := Vector2.ZERO) -> void:
 	var a := float(i) * TAU / 20.0
 	var q := (BC + Vector2(sin(a), -cos(a)) * _board_rim(float(BOARDART.ring) * 0.5) * push).round()
-	draw_string(font_sm, q + Vector2(-18.0, 7.0), str(sectors[i]),
+	draw_string(font_sm, q + off + Vector2(-18.0, 7.0), _num_text(i),
 			HORIZONTAL_ALIGNMENT_CENTER, 36, 18, col)
 
 
@@ -5200,9 +5204,8 @@ func _board_holes(cols: Array, push: float) -> void:
 
 #  철사 — 방사선 스물과 띠 경계마다 한 바퀴. 폭이 0 인 띠(피자) · 없는 불(도넛)은
 #  반지름이 겹치거나 0 이라 그어도 티가 안 난다.
-func _board_wires(push: float) -> void:
+func _board_wires(push: float, col: Color = BOARDART.wire) -> void:
 	var sw := TAU / 20.0
-	var col: Color = BOARDART.wire
 	for i in 20:
 		var a := float(i) * sw - sw * 0.5
 		var dir := Vector2(sin(a), -cos(a))
@@ -5235,17 +5238,370 @@ func _board_light(push: float) -> void:
 				PackedVector2Array())
 
 
+# ══════════════════════════════════════════════════════════
+#  판을 바꾸는 보드 확장 — 피자 · 시계 · 도넛
+# ──────────────────────────────────────────────────────────
+#  「보드 확장의 피자 · 시계 · 도넛은 다트보드를 바꿔 버리는 것이니 판 그래픽을
+#  따로 만들자」(사용자, 2026-09-17). 셋은 판의 규칙을 통째로 바꾼다 —
+#    피자   모든 칸 32 · 더블·트리플 띠가 사라진다
+#    시계   모든 칸 12 · 띠만 남는다
+#    도넛   불이 사라진다 · 칸 값이 오른다
+#  보드 확장은 한 장만 끼므로 판도 한 번에 한 벌만 입는다.
+#
+#  레퍼런스(구도 · 색만 봤다): 다트판 꼴로 썬 피자 사진 · 도트 피자(크러스트 테 ·
+#  녹은 치즈 거품 · 페퍼로니) · 다트판 벽시계 · 황동 테 로마 숫자 시계(눈금 ·
+#  바늘 · 유리 반짝임) · 도트 도넛(반죽 테 · 흘러내린 글레이즈 · 스프링클).
+#
+#  **칸 색은 그대로다.** 칠 · 그늘 같은 규칙이 칸 색을 읽는다. 옷은 숫자 고리
+#  (크러스트 · 황동 테 · 반죽), 결(치즈 거품 · 문자판 결 · 스프링클), 철사
+#  (칼자국 · 잉크 · 글레이즈 이음), 가운데(바질 · 바늘 · 구멍)에만 입힌다.
+#  제목 화면의 판은 런 밖이라 늘 토너먼트 판이다.
+# ══════════════════════════════════════════════════════════
+const THEMEART := {
+	"pizza": {
+		"crust": Color("c98a45"), "crust_dk": Color("7a4a22"), "crust_hi": Color("ecb86e"),
+		"burn": Color("5a3418"), "sauce": Color("b8412e"),
+		"cut": Color(0.16, 0.09, 0.05, 0.60),
+		"pep": Color("a8322a"), "pep_dk": Color("6e1c17"), "pep_hi": Color("d0604f"),
+		"olive": Color("241e1c"), "basil": Color("3f8a3a"), "basil_dk": Color("24582a"),
+		"num": Color("3c2412"),
+		"tint": Color(0.95, 0.70, 0.29, 0.16),    # 녹은 치즈 — 칸 색을 따뜻하게만 민다
+	},
+	"clock": {
+		"brass": Color("b88a3e"), "brass_dk": Color("5e4318"), "brass_hi": Color("f2d27e"),
+		"brass_lo": Color("7a5a24"), "ink": Color(0.10, 0.07, 0.04, 0.70),
+		"guil": Color(0.0, 0.0, 0.0, 0.06), "hand": Color("1a120a"), "sec": Color("c0392b"),
+		"num": Color("2a1d0a"),
+	},
+	"donut": {
+		"dough": Color("d99a52"), "dough_dk": Color("8f5a26"), "dough_hi": Color("f2c386"),
+		"hole": 0.12, "hole_col": Color("0c0a10"), "seam": Color(0.0, 0.0, 0.0, 0.30),
+		"num": Color("3c2412"),
+		"sprinkle": [Color("fff6e8"), Color("ffd84a"), Color("6ec6ff"), Color("ff7ab8"),
+				Color("8be07a")],
+	},
+}
+var theme_bits := {}         # 열쇠 → 한 번 구운 점 목록(반지름은 판 바깥선 배수)
+var ck_sec := -1             # 시계 판 초침이 마지막으로 그려진 초
+
+
+#  지금 판이 입을 옷. 런 밖(제목 · 설정 · 프로필 · 컬렉션 · 새 런)은 토너먼트 판.
+func _board_theme() -> String:
+	if state == S.TITLE or state == S.SETTINGS or state == S.PROFILE \
+			or state == S.COLLECT or state == S.NEWRUN:
+		return ""
+	for id in mods_own:
+		match String(GameData.mod_of(String(id)).get("k", "")):
+			"pizza":
+				return "pizza"
+			"flat":
+				return "clock"
+			"donut":
+				return "donut"
+	return ""
+
+
+func _theme_bits(key: String) -> Array:
+	if theme_bits.has(key):
+		return theme_bits[key]
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(key)
+	var sw := TAU / 20.0
+	var out := []
+	match key:
+		"pizza_crust":
+			for k in 110:
+				out.append([rng.randf(), rng.randf() * TAU, rng.randi() % 3])
+		"pizza_cheese":
+			for k in 360:
+				out.append([sqrt(rng.randf()), rng.randf() * TAU, rng.randi() % 3])
+		"pizza_top":
+			for i in 20:
+				var r0: float = rng.randf_range(0.72, 0.80) if i % 2 == 0 else rng.randf_range(0.38, 0.48)
+				out.append(["pep", r0, float(i) * sw + rng.randf_range(-0.15, 0.15) * sw])
+				if i % 5 == 2:
+					out.append(["olive", rng.randf_range(0.56, 0.62), float(i) * sw + 0.28 * sw])
+				if i % 5 == 4:
+					out.append(["basil", rng.randf_range(0.58, 0.64), float(i) * sw - 0.25 * sw])
+		"donut_drip":
+			for i in 20:
+				for n in 2 + rng.randi() % 2:
+					out.append([i, rng.randf_range(-0.38, 0.38), rng.randf_range(0.5, 3.5),
+							rng.randf_range(3.0, 4.5)])
+		"donut_pore":
+			for k in 90:
+				out.append([rng.randf(), rng.randf() * TAU, rng.randi() % 2])
+		"donut_sprinkle":
+			for k in 380:
+				out.append([sqrt(rng.randf()), rng.randf() * TAU, rng.randi() % 4, rng.randi() % 5])
+	theme_bits[key] = out
+	return out
+
+
+func _theme_dir(a: float) -> Vector2:
+	return Vector2(sin(a), -cos(a))
+
+
+func _theme_sec(a: float) -> int:
+	var sw := TAU / 20.0
+	return int(floor(fposmod(a + sw * 0.5, TAU) / sw)) % 20
+
+
+#  칸 숫자의 글자. 시계 판의 12 는 로마 숫자로 선다 — 다른 값이 되면(다른 규칙이
+#  칸을 밀면) 아라비아 숫자로 돌아간다. 거짓 값을 적지 않는다.
+func _num_text(i: int) -> String:
+	var v: int = int(sectors[i]) if i < sectors.size() else 0
+	if v == 12 and _board_theme() == "clock":
+		return "XII"
+	return str(v)
+
+
+# ── 피자 ─────────────────────────────────────────────
+func _pz_rim(ro: float, push: float) -> void:
+	var pz: Dictionary = THEMEART.pizza
+	var ri := R * rt_dbl_out * push
+	draw_circle(BC, ro, pz.crust_dk)
+	draw_circle(BC, ro - 2.0, pz.crust)
+	#  빛 받는 쪽이 부푼다
+	draw_arc(BC, ro - 4.0, PI * 0.95, PI * 1.55, 48, pz.crust_hi, 3.0)
+	draw_arc(BC, ro - 3.0, PI * -0.05, PI * 0.55, 48, Color(pz.crust_dk, 0.45), 2.0)
+	#  구운 자국 — 탄 점 · 부푼 거품 · 갈색 점
+	for e in _theme_bits("pizza_crust"):
+		var r := lerpf(ri + 3.0, ro - 4.0, float(e[0]))
+		var q := (BC + _theme_dir(e[1]) * r).floor()
+		match int(e[2]):
+			0:
+				draw_rect(Rect2(q, Vector2(2.0, 1.0)), pz.burn)
+			1:
+				draw_rect(Rect2(q, Vector2(2.0, 2.0)), pz.crust_hi)
+			_:
+				draw_rect(Rect2(q, Vector2.ONE), pz.crust_dk)
+	#  크러스트 안쪽으로 비치는 소스
+	draw_arc(BC, ri + 1.0, 0.0, TAU, 140, pz.sauce, 2.0)
+
+
+func _pz_face(cols: Array, push: float) -> void:
+	var pz: Dictionary = THEMEART.pizza
+	var rim := R * rt_dbl_out * push
+	var bull := R * rt_bull_o * push
+	draw_circle(BC, rim, pz.tint)
+	#  녹은 치즈 — 밝은 거품 · 늘어진 줄 · 그을린 점. 칸 색에서 뽑는다.
+	for e in _theme_bits("pizza_cheese"):
+		var r: float = float(e[0]) * rim
+		if r < bull + 2.0 or r > rim - 3.0:
+			continue
+		var c: Color = cols[_theme_sec(e[1])][0]
+		var q := (BC + _theme_dir(e[1]) * r).floor()
+		match int(e[2]):
+			0:
+				draw_rect(Rect2(q, Vector2(2.0, 2.0)), c.lightened(0.16))
+			1:
+				draw_rect(Rect2(q, Vector2(3.0, 1.0)), c.lightened(0.10))
+			_:
+				draw_rect(Rect2(q, Vector2.ONE), c.darkened(0.30))
+	#  칼자국 — 크러스트까지 조금 파고든다
+	var sw := TAU / 20.0
+	for i in 20:
+		var d := _theme_dir(float(i) * sw - sw * 0.5)
+		draw_line(BC + d * bull, BC + d * (rim + 4.0), pz.cut, 1.0)
+	draw_arc(BC, bull, 0.0, TAU, 60, pz.cut, 1.0)
+	#  토핑
+	for e in _theme_bits("pizza_top"):
+		var q := (BC + _theme_dir(e[2]) * float(e[1]) * rim).floor() + Vector2(0.5, 0.5)
+		match String(e[0]):
+			"pep":
+				draw_circle(q + Vector2(1.0, 2.0), 6.5, Color(0.0, 0.0, 0.0, 0.25))
+				draw_circle(q, 6.5, pz.pep_dk)
+				draw_circle(q, 5.5, pz.pep)
+				draw_rect(Rect2(q + Vector2(-4.0, -4.0), Vector2(3.0, 1.0)), pz.pep_hi)
+				draw_rect(Rect2(q + Vector2(-4.0, -3.0), Vector2(1.0, 1.0)), pz.pep_hi)
+				draw_rect(Rect2(q + Vector2(1.0, -2.0), Vector2(2.0, 1.0)), pz.pep_dk)
+				draw_rect(Rect2(q + Vector2(-3.0, 1.0), Vector2.ONE), pz.pep_dk)
+				draw_rect(Rect2(q + Vector2(2.0, 2.0), Vector2(1.0, 2.0)), pz.pep_dk)
+				draw_rect(Rect2(q + Vector2(-1.0, 3.0), Vector2.ONE), pz.pep_hi)
+			"olive":
+				draw_circle(q, 4.0, pz.olive)
+				draw_circle(q, 1.8, cols[_theme_sec(e[2])][0].lerp(Color(pz.crust_hi), 0.3))
+				draw_rect(Rect2(q + Vector2(-3.0, -3.0), Vector2(2.0, 1.0)), Color(1.0, 1.0, 1.0, 0.35))
+			"basil":
+				draw_colored_polygon(PackedVector2Array([q + Vector2(-5.0, 2.0), q + Vector2(-1.0, -3.0),
+						q + Vector2(5.0, -2.0), q + Vector2(1.0, 3.0)]), pz.basil)
+				draw_line(q + Vector2(-5.0, 2.0), q + Vector2(5.0, -2.0), pz.basil_dk, 1.0)
+	#  불 — 바깥은 바질 잎맥, 안쪽은 페퍼로니 한 점
+	var bo := R * rt_bull_o * push
+	draw_line(BC + Vector2(-bo + 2.0, 1.0), BC + Vector2(bo - 2.0, -1.0), pz.basil_dk, 1.0)
+	var bi := R * rt_bull_i * push
+	draw_rect(Rect2((BC + Vector2(-bi * 0.4, -bi * 0.5)).floor(), Vector2(2.0, 1.0)), pz.pep_hi)
+
+
+# ── 시계 ─────────────────────────────────────────────
+func _ck_rim(ro: float, push: float) -> void:
+	var ck: Dictionary = THEMEART.clock
+	var ri := R * rt_dbl_out * push
+	draw_circle(BC, ro, ck.brass_dk)
+	draw_circle(BC, ro - 2.0, ck.brass)
+	#  금속 결 — 동심 가는 줄
+	var r := ri + 3.0
+	while r < ro - 3.0:
+		draw_arc(BC, r, 0.0, TAU, 120, Color(ck.brass_hi, 0.12), 1.0)
+		r += 3.0
+	draw_arc(BC, ro - 3.0, PI * 0.95, PI * 1.55, 48, ck.brass_hi, 2.0)
+	draw_arc(BC, ro - 3.0, PI * -0.05, PI * 0.55, 48, ck.brass_lo, 2.0)
+	#  눈금 — 예순, 다섯마다 길다
+	for k in 60:
+		var d := _theme_dir(TAU * float(k) / 60.0)
+		var ln: float = 3.0 if k % 5 == 0 else 2.0
+		draw_line(BC + d * (ri + 1.0), BC + d * (ri + 1.0 + ln), ck.brass_dk, 1.0)
+	draw_arc(BC, ri + 0.5, 0.0, TAU, 140, ck.brass_dk, 1.0)
+
+
+func _ck_face(push: float) -> void:
+	var ck: Dictionary = THEMEART.clock
+	var rim := R * rt_dbl_out * push
+	#  문자판의 동심 결(기요셰)
+	var r := R * rt_bull_o * push + 3.0
+	while r < rim - 1.0:
+		draw_arc(BC, r, 0.0, TAU, 96, ck.guil, 1.0)
+		r += 3.0
+	_board_wires(push, ck.ink)
+
+
+func _ck_glass(push: float) -> void:
+	var rim := R * rt_dbl_out * push
+	draw_arc(BC, rim * 0.86, PI * 1.08, PI * 1.42, 32, Color(1.0, 1.0, 1.0, 0.10), 7.0)
+	draw_arc(BC, rim * 0.72, PI * 1.16, PI * 1.30, 20, Color(1.0, 1.0, 1.0, 0.07), 3.0)
+
+
+#  바늘 — 지금 시각을 가리킨다. 그림자가 문자판에 한 칸 떨어진다.
+func _ck_hands(push: float) -> void:
+	var ck: Dictionary = THEMEART.clock
+	var rim := R * rt_dbl_out * push
+	var t := Time.get_time_dict_from_system()
+	var sec := float(t.second)
+	var mn := float(t.minute) + sec / 60.0
+	var hr := fmod(float(t.hour), 12.0) + mn / 60.0
+	ck_sec = int(t.second)
+	_ck_hand(hr / 12.0 * TAU, rim * 0.50, 3.0, ck.hand, true)
+	_ck_hand(mn / 60.0 * TAU, rim * 0.80, 2.0, ck.hand, false)
+	_ck_hand(sec / 60.0 * TAU, rim * 0.86, 1.0, ck.sec, false)
+	draw_circle(BC, 2.5, ck.brass_hi)
+	draw_circle(BC, 1.0, ck.brass_dk)
+
+
+func _ck_hand(a: float, ln: float, w: float, col: Color, spade: bool) -> void:
+	var d := _theme_dir(a)
+	var sh := Vector2(1.0, 2.0)
+	draw_line(BC + sh - d * ln * 0.14, BC + sh + d * ln, Color(0.0, 0.0, 0.0, 0.28), w)
+	draw_line(BC - d * ln * 0.14, BC + d * ln, col, w)
+	if spade:
+		var n := Vector2(-d.y, d.x)
+		var tip := BC + d * ln
+		draw_colored_polygon(PackedVector2Array([tip + d * 4.0, tip + n * 3.0,
+				tip - d * 3.0, tip - n * 3.0]), col)
+
+
+# ── 도넛 ─────────────────────────────────────────────
+func _dn_rim(ro: float, push: float) -> void:
+	var dn: Dictionary = THEMEART.donut
+	var ri := R * rt_dbl_out * push
+	draw_circle(BC, ro, dn.dough_dk)
+	draw_circle(BC, ro - 2.0, dn.dough)
+	draw_arc(BC, ro - 4.0, PI * 0.95, PI * 1.55, 48, dn.dough_hi, 3.0)
+	draw_arc(BC, ro - 3.0, PI * -0.05, PI * 0.55, 48, Color(dn.dough_dk, 0.45), 2.0)
+	#  튀긴 결
+	for e in _theme_bits("donut_pore"):
+		var r := lerpf(ri + 3.0, ro - 4.0, float(e[0]))
+		var q := (BC + _theme_dir(e[1]) * r).floor()
+		draw_rect(Rect2(q, Vector2.ONE), dn.dough_dk if int(e[2]) == 0 else dn.dough_hi)
+
+
+func _dn_face(cols: Array, push: float) -> void:
+	var dn: Dictionary = THEMEART.donut
+	var rim := R * rt_dbl_out * push
+	var hole := R * float(dn.hole) * push
+	var sw := TAU / 20.0
+	#  글레이즈가 반죽 위로 흘러내린다 — 칸마다 제 더블 띠 색. 가장자리는 물결로
+	#  부풀고(작은 원을 둘레에 잇는다), 몇 군데는 방울로 늘어진다.
+	for i in 20:
+		var c0: Color = cols[i][1]
+		for k in 4:
+			var a := float(i) * sw - sw * 0.5 + (float(k) + 0.5) * sw / 4.0
+			draw_circle(BC + _theme_dir(a) * rim, 2.6, c0)
+	for e in _theme_bits("donut_drip"):
+		var i: int = int(e[0])
+		var c: Color = cols[i][1]
+		var d := _theme_dir(float(i) * sw + float(e[1]) * sw)
+		var w: float = float(e[3])
+		var ln: float = float(e[2])
+		var p1 := BC + d * (rim + ln)
+		draw_line(BC + d * rim, p1, c, w * 0.8)
+		draw_circle(p1, w * 0.5, c)
+		draw_circle(p1 + d * 1.0, w * 0.35, c)
+		draw_rect(Rect2((p1 - d * 1.0 + Vector2(-1.0, -1.0)).floor(), Vector2.ONE),
+				Color(1.0, 1.0, 1.0, 0.45))
+	#  이음 — 칸 경계는 옅게만
+	for i in 20:
+		var d2 := _theme_dir(float(i) * sw - sw * 0.5)
+		draw_line(BC + d2 * hole, BC + d2 * rim, dn.seam, 1.0)
+	for rr in [rt_trp2_in, rt_trp2_out, rt_trp_in, rt_trp_out, rt_dbl_in]:
+		if float(rr) * R > 0.5:
+			draw_arc(BC, R * float(rr) * push, 0.0, TAU, 120, dn.seam, 1.0)
+	#  스프링클
+	var spr: Array = dn.sprinkle
+	for e in _theme_bits("donut_sprinkle"):
+		var r: float = float(e[0]) * rim
+		if r < hole + 4.0 or r > rim - 3.0:
+			continue
+		var q := (BC + _theme_dir(e[1]) * r).floor()
+		var c2: Color = spr[int(e[3])]
+		match int(e[2]):
+			0:
+				draw_rect(Rect2(q, Vector2(3.0, 1.0)), c2)
+			1:
+				draw_rect(Rect2(q, Vector2(1.0, 3.0)), c2)
+			2:
+				draw_rect(Rect2(q, Vector2.ONE), c2)
+				draw_rect(Rect2(q + Vector2(1.0, 1.0), Vector2.ONE), c2)
+				draw_rect(Rect2(q + Vector2(2.0, 2.0), Vector2.ONE), c2)
+			_:
+				draw_rect(Rect2(q + Vector2(2.0, 0.0), Vector2.ONE), c2)
+				draw_rect(Rect2(q + Vector2(1.0, 1.0), Vector2.ONE), c2)
+				draw_rect(Rect2(q + Vector2(0.0, 2.0), Vector2.ONE), c2)
+
+
+#  가운데 구멍 — 빛 위에 판다(구멍은 안 밝아진다). 안쪽 테는 빛이 반대편에 닿는다.
+func _dn_hole(push: float) -> void:
+	var dn: Dictionary = THEMEART.donut
+	var hole := R * float(dn.hole) * push
+	draw_circle(BC, hole + 3.0, dn.dough_dk)
+	draw_circle(BC, hole + 2.0, dn.dough)
+	draw_arc(BC, hole + 1.5, PI * -0.05, PI * 0.55, 24, dn.dough_hi, 1.0)
+	draw_circle(BC, hole, dn.hole_col)
+	draw_arc(BC, hole - 1.0, PI * 1.0, PI * 1.5, 16, Color(0.0, 0.0, 0.0, 0.5), 2.0)
+	var rim := R * rt_dbl_out * push
+	draw_arc(BC, rim * 0.80, PI * 1.08, PI * 1.40, 32, Color(1.0, 1.0, 1.0, 0.12), 6.0)
+
+
 func _draw_board() -> void:
 	var sw := 18.0 * PI / 180.0
 	var push := 1.0 + board_punch * 0.028
 	var ro := _board_rim(float(BOARDART.ring)) * push
+	var th := _board_theme()
 
 	# ── 뒤 — 그림자 · 두께 · 숫자 고리 ─────────────────
 	draw_circle(BC + Vector2(3.0, 6.0), ro + 1.0, BOARDART.shadow)
 	draw_circle(BC + Vector2(0.0, float(BOARDART.side)), ro, BOARDART.side_col)
-	draw_circle(BC, ro, BOARDART.ring_col)
-	draw_arc(BC, ro - 1.0, 0.0, TAU, 140, BOARDART.edge, 1.0)
-	draw_arc(BC, ro - 1.0, PI, PI * 1.5, 40, BOARDART.edge_hi, 1.0)
+	match th:
+		"pizza":
+			_pz_rim(ro, push)
+		"clock":
+			_ck_rim(ro, push)
+		"donut":
+			_dn_rim(ro, push)
+		_:
+			draw_circle(BC, ro, BOARDART.ring_col)
+			draw_arc(BC, ro - 1.0, 0.0, TAU, 140, BOARDART.edge, 1.0)
+			draw_arc(BC, ro - 1.0, PI, PI * 1.5, 40, BOARDART.edge_hi, 1.0)
 
 	# ── 칸 ────────────────────────────────────────
 	# 칸 색은 표가 정한다. 띠 색은 지금 규칙(i%2 → 빨강/초록)을 유지한다 —
@@ -5266,9 +5622,21 @@ func _draw_board() -> void:
 	draw_circle(BC, R * rt_bull_o * push, C_GREEN)
 	draw_circle(BC, R * rt_bull_i * push, C_RED)
 
-	_board_holes(cols, push)
-	_board_wires(push)
+	match th:
+		"pizza":
+			_pz_face(cols, push)
+		"clock":
+			_ck_face(push)
+		"donut":
+			_dn_face(cols, push)
+		_:
+			_board_holes(cols, push)
+			_board_wires(push)
 	_board_light(push)
+	if th == "donut":
+		_dn_hole(push)
+	if th == "clock":
+		_ck_glass(push)
 
 	if hit_flash > 0.0:
 		var fc := Color(1.0, 1.0, 1.0, hit_flash * hit_flash_amt)
@@ -5281,9 +5649,13 @@ func _draw_board() -> void:
 	# 칸 숫자는 누우면 지운다. 비균일 배율이 글자를 세로로만 눌러
 	# 글자가 얼룩이 된다 — 글자는 눌러서 눕힐 수 없다.
 	var na: float = clampf((_swap_rise() - 0.45) / 0.35, 0.0, 1.0)
+	var ncol: Color = C_TXT if th == "" else Color(THEMEART[th].num)
 	if na > 0.01:
 		for i in 20:
-			_num_draw(i, Color(C_TXT, na), push)
+			_num_draw(i, Color(ncol, na), push)
+	#  바늘은 숫자 위 — 시곗바늘이 문자판 글자를 가리는 것이 시계다
+	if th == "clock":
+		_ck_hands(push)
 
 
 func _draw_fx() -> void:
@@ -16314,6 +16686,10 @@ func _cell_glow(p: Vector2, col := C_TXT, k := 1.0) -> void:
 		draw_colored_polygon(annulus(R * rt_bull_o, R * rt_dbl_out,
 				a0, a0 + sw), Color(col, 0.10 * k))
 		_band_draw(float(hi.r0), float(hi.r1), a0, a0 + sw, Color(col, 0.16 * k))
+		#  옷 입은 판(크러스트 · 황동 · 반죽)은 고리가 밝아 금빛 글자가 묻힌다 — 짙은 테를 두른다
+		if _board_theme() != "":
+			for o in [Vector2(-1.0, 0.0), Vector2(1.0, 0.0), Vector2(0.0, -1.0), Vector2(0.0, 1.0)]:
+				_num_draw(hx, Color(C_BG, col.a), 1.0, o)
 		_num_draw(hx, col)
 	elif int(hi.mult) > 0:
 		draw_circle(BC, float(hi.r1), Color(col, 0.22 * k))
