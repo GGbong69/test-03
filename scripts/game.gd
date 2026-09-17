@@ -2069,75 +2069,10 @@ func _leg_go() -> Rect2:
 # 카드 하나뿐이고(「던진다」 도 그 판을 말하는데 카드 밑에 안 붙는다),
 # 단추가 받을 것을 제 입으로 적는다. 사용자가 왼쪽 아래를 골랐다(2026-09-17).
 #
-# 카드 밑 쪽지(_skip_plate)는 남긴다 — 이제 누르는 자리가 아니라 **판마다
-# 건너뛰면 무엇을 받는가**를 늘어놓는 줄이다. 지금 판을 건너뛸지는 뒤 판이
-# 무엇을 주는지를 봐야 정해진다.
-#
-# 건너뛰기 쪽지 한 장. 지금 판이든 뒤 판이든 **같은 모양**이고 밝기만
-# 다르다 — 다른 모양으로 그리면 "이건 뭐고 저건 뭔가" 를 한 번 더
-# 배워야 한다. 셋을 나란히 놓고 비교하는 화면이라 특히 그렇다.
-#
-# _btn 을 안 쓴다. 그것은 46px 버튼용이라 부제를 y+35 에 놓는데
-# 이 판은 32px 이고, 그 차이만큼 글자가 판 밖으로 나갔다.
-
-
-# 자리와 글 간격은 여기 한 표에 모은다. 두 함수(_skip_rect · _skip_plate)가
-# 같은 표를 본다.
-#
-# 예전에는 높이 28 에 베이스라인 12·23 이었다. 갈무리는 글자 칸이 곧 잉크
-# 칸이라(오름 = 글자 크기, 한글은 내림을 안 쓴다) 그 배치의 실측은
-#   머리띠 0..2 · 첫 줄 2..12 · 둘째 줄 14..23 · 아래 여백 5
-# 였다. 머리띠가 첫 줄 윗획에 **닿고**, 두 줄 사이가 2px 뿐이라 셋이
-# 한 덩어리로 뭉쳤다 — 줄 높이에 기대면 픽셀 글꼴은 언제나 이렇게 붙는다.
-# 지금은 간격을 손으로 준다:
-#   머리띠 0..2 · 3 · 10pt 5..15 · 4 · 9pt 19..28 · 4 = 32
-#
-# 세로 자리 — 판 카드 아래끝이 226 이고 그림자가 228 까지 온다. 232 에서
-# 시작해 264 에서 끝나므로 펠트 near 모서리(268)에 4px 이 남는다. 레일을
-# 밟으면 판이 테이블 밖으로 흘러내린 것으로 읽힌다.
-const SKIP := {
-	"h":   32.0,     # 판 높이
-	"dy":   6.0,     # 판 카드 아래끝과의 사이
-	"y1":  15.0,     # 첫 줄(10pt) 베이스라인
-	"y2":  28.0,     # 둘째 줄(9pt) 베이스라인
-	"y0":  21.0,     # 한 줄만 있을 때(9pt) — 머리띠 아래 칸의 가운데
-	"ix":  14.0,     # 뱃지 그림 중심 x. 그림 반지름 6.5, 잉크 오른끝이 20.5
-	# 글 왼쪽. 그림에서 7.5px 띄운다 — 그림은 글자가 아니라 그림이므로
-	# 낱말 사이(4px)보다 넓게 벌려야 둘이 한 덩어리로 안 읽힌다.
-	"tx":  28.0,
-	"pad": 32.0,     # 글이 쓰는 폭 = 판 폭 - 이만큼 (왼쪽 tx + 오른쪽 4)
-}
-
-
-func _skip_plate(r: Rect2, t: Dictionary, on: bool) -> void:
-	var a: float = 1.0 if on else 0.55
-	#  펠트에 놓인 쪽지다. 상자를 꽉 채우면 카드와 무게가 같아져 "고르는
-	#  것" 이 둘로 보인다 — 고르는 것은 판이고 이쪽은 그 판의 곁말이다.
-	#  바탕을 반투명으로 깔고 왼쪽에 획 하나를 세운다.
-	_rr(self, r, Color(C_PANEL.darkened(0.10), 0.72 if on else 0.45))
-	_rr_left(self, r, C_ACC if on else C_ACC.darkened(0.55))
-	if t.is_empty():
-		draw_string(font_sm, r.position + Vector2(0.0, SKIP.y1), "못 건너뛴다",
-				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, C_DIM)
-		draw_string(font_sm, r.position + Vector2(0.0, SKIP.y2), "보스 판",
-				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 9, C_OFF)
-		return
-	_icon_tag(Vector2(r.position.x + SKIP.ix, r.get_center().y), 6.5,
-			String(t.get("kind", "")), a, String(t.get("rarity", "")))
-	var tx: float = r.position.x + SKIP.tx
-	var tw: float = r.size.x - SKIP.pad
-	draw_string(font_sm, Vector2(tx, r.position.y + SKIP.y1), "건너뛰면",
-			HORIZONTAL_ALIGNMENT_LEFT, tw, 9,
-			C_TXT if on else C_OFF)
-	draw_string(font_sm, Vector2(tx, r.position.y + SKIP.y2),
-			_elide(_tag_text(t), tw, 9), HORIZONTAL_ALIGNMENT_LEFT, tw, 9,
-			C_GOLD if on else C_OFF)
-
-
-func _skip_rect(i: int) -> Rect2:
-	var r := _row_rect(i, GameData.legs_per_round())
-	return Rect2(Vector2(r.position.x + 6.0, r.end.y + SKIP.dy),
-			Vector2(r.size.x - 12.0, SKIP.h))
+# 카드 밑 쪽지는 없다. 한때 판마다 「건너뛰면 무엇을 받는가」 쪽지를 깔았다가
+# 지금 판 것은 단추와 같은 말이라 「건너뛰기가 두 개」 로 읽혀 걷었고(2026-09-17),
+# 뒤 판 것도 「밑에서 효과를 알려 주니 없애자」 는 말에 마저 걷었다. 받을 것은
+# 단추가 적고, 뱃지의 이름 · 언제 쓰이는지는 단추 툴팁이 든다.
 
 
 #  「던진다」 를 화면 가운데 세로선에 비춘 자리.
@@ -13346,13 +13281,7 @@ func _tip_hit(m: Vector2) -> Dictionary:
 			# 버튼에는 효과 한 줄만 들어간다(폭이 141px 이다). 뱃지의 이름과
 			# 언제 쓰이는지는 툴팁이 맡는다.
 			if _leg_skip().has_point(m) and not _leg_tag(leg_no).is_empty():
-				return {"k": "tag", "i": leg_no, "btn": true}
-			for bi in GameData.legs_per_round():
-				var brn2: int = _round_first() + bi
-				if brn2 <= leg_no or _leg_tag(brn2).is_empty():
-					continue
-				if _skip_rect(bi).has_point(m):
-					return {"k": "tag", "i": brn2}
+				return {"k": "tag", "i": leg_no}
 			for i in pending_tags.size():
 				if _pend_rect(i).has_point(m):
 					return {"k": "pend", "i": i}
@@ -13452,14 +13381,12 @@ func _tip_build(hit: Dictionary) -> void:
 				_tip_add(blk, 9,
 						C_OFF if s.sold else C_RED.lightened(0.2))
 		"tag":
-			# i 는 자리 번호가 아니라 **판 번호**다. 뒤 판의 뱃지도 짚으므로
-			# 어느 판의 것인지가 열쇠여야 한다.
+			# i 는 판 번호다. 짚는 자리는 건너뛰기 단추 하나다.
 			var bt := _leg_tag(i)
 			if bt.is_empty():
 				return
 			_tip_set_tag("뱃지")
-			tip_mark = _leg_skip() if bool(hit.get("btn", false)) \
-					else _skip_rect(GameData.leg_idx(i))
+			tip_mark = _leg_skip()
 			tip_title = String(bt.get("name", ""))
 			_tip_add(_tag_text(bt), 10, C_ACC)
 			_tip_add(_tag_when(bt), 9, C_DIM)
@@ -14429,21 +14356,6 @@ func _draw_leg() -> void:
 				_leg_skip().size.x - 16.0, 9), true)
 	else:
 		_btn(_leg_skip(), "못 건너뛴다", "보스 판", false)
-	# **뒤 판**에만 쪽지를 깐다 — 그 판을 건너뛰면 무엇을 받는가. 지금 판을
-	# 건너뛸지는 뒤에 무엇이 기다리는지를 봐야 정해진다.
-	#   지금 판은 안 깐다. 왼쪽 아래 단추가 같은 말을 하고 있어서 「건너뛰기가
-	#   두 개」 로 읽혔다(사용자, 2026-09-17).
-	#   지나간 판도 안 깐다. 간판이 이미 말한다 — 이긴 판은 두 동강이고
-	#   건너뛴 판에는 「건너뜀」 이 적혀 있다.
-	for i in per:
-		var srn: int = first + i
-		if srn <= leg_no:
-			continue
-		var pt := _leg_tag(srn)
-		#  빈 사전이면 「못 건너뛴다 · 보스 판」이 선다. 전에는 이 가지
-		#  밖이라 보스 판 칸이 통째로 비었다 — 자리가 비면 그 판이 건너뛸
-		#  수 있는지 없는지를 화면이 말한 적이 없는 게 된다.
-		_skip_plate(_skip_rect(i), pt, false)
 	# 쌓아 둔 뱃지 — 언제 쓰이는지는 이름이 말한다
 	for i in pending_tags.size():
 		var r := _pend_rect(i)
