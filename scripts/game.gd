@@ -10793,7 +10793,7 @@ func _obj_paint(it: Dictionary, s: Dictionary, dim: float) -> void:
 		"boost":
 			_boost_flat(c, s.d, it.psi, dim)
 		"fix":
-			_fix_flat(c, it, it.psi, dim, GOODS_K)
+			_fix_flat(c, it, it.psi, dim, GOODS_K, String(s.d.get("id", "")))
 		"mod":
 			# 동전과 같은 어법으로 눕는다 — 옆면을 깔고 윗면을 얹는다.
 			# 정면 원반은 컬렉션의 것이고, 테이블 위의 것은 누워야 한다.
@@ -10837,14 +10837,15 @@ func _quad_at(c: Vector2, rot: float, ex: float, ey: float) -> PackedVector2Arra
 	return pts
 
 
-func _fix_quad(c: Vector2, rot: float, k := 1.0) -> PackedVector2Array:
+func _fix_quad(c: Vector2, rot: float, k := 1.0, fy := -1.0) -> PackedVector2Array:
+	var fl: float = TBL.flat if fy < 0.0 else fy
 	var co := cos(rot) * k
 	var si := sin(rot) * k
 	var pts := PackedVector2Array()
 	for q in [Vector2(-FIX_W, -FIX_H), Vector2(FIX_W, -FIX_H),
 			Vector2(FIX_W, FIX_H), Vector2(-FIX_W, FIX_H)]:
 		var e := Vector2(q.x * co - q.y * si, q.x * si + q.y * co)
-		pts.append(c + Vector2(e.x, e.y * TBL.flat))
+		pts.append(c + Vector2(e.x, e.y * fl))
 	return pts
 
 
@@ -10917,33 +10918,64 @@ func _boost_flat(c: Vector2, bd: Dictionary, rot: float, dim: float) -> void:
 #  k 는 밑값(FIX_W · FIX_H)에 곱하는 배율이다. 테이블은 GOODS_K 를 넘기고
 #  컬렉션은 안 넘긴다. 회전에 k 를 실어 두면 인화면·판 자리가 같이 자란다
 #  (_fix_quad 와 같은 수법). 획 굵기와 종이 두께(1.2)는 안 탄다.
+#  id 가 있으면 인화면에 그 사진의 그림(assets/photo/<id>.png)을 붙인다.
+#  fl 은 세로 눌림 — 테이블에 누우면 TBL.flat, 컬렉션처럼 세워 보이면 1.
 func _fix_flat(c: Vector2, it: Dictionary, rot: float, dim: float,
-		k := 1.0) -> void:
+		k := 1.0, id := "", fl := -1.0) -> void:
+	var fy: float = TBL.flat if fl < 0.0 else fl
 	var co := cos(rot) * k
 	var si := sin(rot) * k
 	# 종이 두께 — 아래로 한 획. 면에 놓인 것이 떠 보이지 않게 한다.
-	var body := _fix_quad(c, rot, k)
-	draw_colored_polygon(_fix_quad(c + Vector2(0.0, 1.2), rot, k),
+	var body := _fix_quad(c, rot, k, fy)
+	draw_colored_polygon(_fix_quad(c + Vector2(0.0, 1.2), rot, k, fy),
 			Color(0.0, 0.0, 0.0, 0.35))
 	draw_colored_polygon(body, Color(C_LIGHT.lightened(0.30).darkened(dim), 1.0))
 
 	# 인화면 — 테두리를 남기고 안쪽에. 아래 여백이 더 넓은 것이 폴라로이드다.
+	#  그림이 32x24 로 구워져 있고(make_photo_art.py), 테이블 배율(GOODS_K)에서
+	#  화면 32x24 가 되도록 제 좌표를 잡는다 — 도트 하나가 화면 한 칸이다.
+	var pw: float = float(PHOTO_ART.w) / GOODS_K * 0.5
+	var ph: float = float(PHOTO_ART.h) / GOODS_K
+	var top: float = -FIX_H + float(PHOTO_ART.top)
 	var inner := PackedVector2Array()
-	for q in [Vector2(-9.0, -8.0), Vector2(9.0, -8.0),
-			Vector2(9.0, 3.0), Vector2(-9.0, 3.0)]:
+	for q in [Vector2(-pw, top), Vector2(pw, top),
+			Vector2(pw, top + ph), Vector2(-pw, top + ph)]:
 		var e := Vector2(q.x * co - q.y * si, q.x * si + q.y * co)
-		inner.append(c + Vector2(e.x, e.y * TBL.flat))
-	draw_colored_polygon(inner, Color(C_DARK.lightened(0.10).darkened(dim), 1.0))
-
-	# 찍힌 것 — 판이다. 이 게임의 사진이 무엇을 찍은 것인지 한 점으로 말한다.
-	var ic := c + Vector2((-0.0 * co - -2.5 * si),
-			(-0.0 * si + -2.5 * co) * TBL.flat)
-	_ring(ic, 4.2 * k, 0.62, 1.0, Color(C_WIRE.darkened(0.1 + dim), 0.75))
-	draw_circle(ic, 1.6 * k, Color(C_RED.darkened(dim), 0.9))
+		inner.append(c + Vector2(e.x, e.y * fy))
+	var tex := _photo_tex(id)
+	if tex != null:
+		draw_colored_polygon(inner, Color(1.0, 1.0, 1.0).darkened(dim),
+				PackedVector2Array([Vector2(0, 0), Vector2(1, 0), Vector2(1, 1),
+				Vector2(0, 1)]), tex)
+	else:
+		draw_colored_polygon(inner, Color(C_DARK.lightened(0.10).darkened(dim), 1.0))
+		# 그림이 없으면 판을 찍는다 — 이 게임의 사진이 무엇을 찍은 것인지 한 점으로.
+		var ic := (inner[0] + inner[1] + inner[2] + inner[3]) * 0.25
+		_ring(ic, 4.2 * k, 0.62, 1.0, Color(C_WIRE.darkened(0.1 + dim), 0.75))
+		draw_circle(ic, 1.6 * k, Color(C_RED.darkened(dim), 0.9))
 
 	# 테두리 한 획 — 종이의 끝을 못 박는다.
-	draw_polyline(_fix_quad(c, rot, k) + PackedVector2Array([body[0]]),
+	draw_polyline(_fix_quad(c, rot, k, fy) + PackedVector2Array([body[0]]),
 			Color(C_WIRE.darkened(0.25 + dim), 0.5), 1.0)
+
+
+#  사진 그림의 크기와 자리. 카드(FIX_W·FIX_H 34x28, 테이블에서 GOODS_K 배)
+#  위 여백 top 만큼 내려 붙인다 — 양옆 · 위가 좁고 아래가 넓은 폴라로이드다.
+const PHOTO_ART := {"w": 32.0, "h": 24.0, "top": 2.0}
+var _photo_tex_cache := {}
+
+
+#  사진 아이템의 인화면 그림. make_photo_art.py 가 격자(assets/photo_src)에서
+#  굽는다. 없으면 null — 그 자리에는 옛 그림(판 한 점)이 선다.
+func _photo_tex(id: String) -> Texture2D:
+	if id == "":
+		return null
+	if _photo_tex_cache.has(id):
+		return _photo_tex_cache[id]
+	var path := "res://assets/photo/%s.png" % id
+	var t: Texture2D = load(path) if ResourceLoader.exists(path) else null
+	_photo_tex_cache[id] = t
+	return t
 
 
 # 펠트에 누운 동전. 동전 슬롯의 draw_sticker(정원)은 안 고친다 — 같은 물건의
@@ -11874,7 +11906,7 @@ const CANDY := {
 #  찍힌 것은 판이다. 이 게임의 사진이 무엇을 찍은 것인지 그 한 점이 말한다.
 #  펠트에 눕는 _fix_flat 과 같은 물건의 **다른 자세**다. 저쪽은 TBL.flat 로
 #  눌러 놓은 테이블 그림이고 이쪽은 벽에 붙은 HUD 라 안 누른다.
-func _icon_fix(c: Vector2, r: float, a := 1.0) -> void:
+func _icon_fix(c: Vector2, r: float, a := 1.0, id := "") -> void:
 	var w: float = r * 1.62
 	var h: float = r * 1.92
 	var frame := Rect2(c - Vector2(w, h) * 0.5, Vector2(w, h))
@@ -11886,6 +11918,22 @@ func _icon_fix(c: Vector2, r: float, a := 1.0) -> void:
 	var ph: float = h - pad * 3.4
 	var photo := Rect2(frame.position + Vector2(pad, pad),
 			Vector2(w - pad * 2.0, ph))
+	var tex := _photo_tex(id)
+	if tex != null:
+		#  인화면이 거의 정사각이라 4:3 그림의 가운데를 잘라 붙인다 — 늘리면
+		#  얼굴이 눌린다.
+		var ts := Vector2(float(PHOTO_ART.w), float(PHOTO_ART.h))
+		var src := Rect2(Vector2.ZERO, ts)
+		var asp: float = photo.size.x / maxf(photo.size.y, 0.001)
+		if asp < ts.x / ts.y:
+			src.size.x = ts.y * asp
+			src.position.x = (ts.x - src.size.x) * 0.5
+		else:
+			src.size.y = ts.x / asp
+			src.position.y = (ts.y - src.size.y) * 0.5
+		draw_texture_rect_region(tex, photo, src, Color(1.0, 1.0, 1.0, a))
+		draw_rect(frame, Color(C_WIRE.darkened(0.25), 0.55 * a), false, 1.0)
+		return
 	draw_rect(photo, Color(C_DARK.lightened(0.10), a))
 	#  찍힌 판 — 고리 하나와 붉은 점 하나
 	var ic := photo.get_center()
@@ -11900,7 +11948,7 @@ func _icon_cons(c: Vector2, r: float, id: String, a := 1.0) -> void:
 	#  사탕 그림을 쓰고, CANDY 표에 그 id 가 없어 **회색 사탕**이 된다 —
 	#  「오리 금고」가 사탕으로 뜨던 자리가 이것이다(2026-09-13 제보).
 	if GameData.is_fixture(id):
-		_icon_fix(c, r, a)
+		_icon_fix(c, r, a, id)
 		return
 	# 모델이 있으면 그것을 쓴다. 없는 자리(헤드리스·프로브)는 아래 손그림이
 	# 그대로 선다 — 프로브가 렌더러 없이 도는 자리가 있다.
@@ -20163,7 +20211,8 @@ func _draw_collect() -> void:
 				nm = cs[gi].n
 			4:
 				var fx: Dictionary = GameData.fixtures()[gi]
-				_fix_flat(c, {}, 0.0, 0.0)
+				#  세워 보인다 — 도감은 그림을 보는 자리라 눕혀 누르면 줄이 빠진다
+				_fix_flat(c, {}, 0.0, 0.0, GOODS_K, String(fx.id), 1.0)
 				nm = fx.n
 			5:
 				var mo: Dictionary = GameData.modifiers()[gi]

@@ -1,0 +1,40 @@
+== v_pick  금고 속 수영
+= G 1d3326
+= g 2f6340
+= v 479a58
+= V 94d68e
+= o 5c3a1a
+= a a8762a
+= y f2c94c
+= Y fdeaa0
+= N 221c33
+= n 352d4d
+= S a8634f
+= s dc9a73
+= h 553222
+= w 8a5636
+= W c48b5a
+GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+VvvvGVvvvGVvvvGVvvvGVvvvGVvvvGVv
+ggggGggggGhhggGggggGggggGggggGgg
+VvvvWVvvvGhssvGVvvvGVvvvGVvvvGvv
+ggggGWggnNNSggGggggGggggGggggGgg
+VvvvGWvnNNNvvvGVvvvGvvvvGvvvvGvv
+ggggGgsnNNNgggGggggGhhhgGggggGgg
+VvvvGVnWNNvvvvGvvvvhhhhhGvvvvGvv
+ggggGgnWNNggggGgggghhsshGggggGgg
+vvvvGvnNsNNvvvGvvvvhssshhvvvvGvv
+ggggGgnNgWNgggGgggghssShhggggGgg
+vvvvGvnNvNWvvvGvvvhhhShhhvvvvGvv
+ggggGgnNgNWgggGgggWwNsNhWggggGgg
+oaayoanNoNNNaaaaaawwnNNNwWaoaaaa
+yyyyyyyyayyNaYyyyywwnNNNwwWyyYyy
+yyyayyayYaYyayaYyyywnNNNwawWyyay
+yyayyyYyyyyYyyYyayywNNNNwaawWyyy
+yyyyyayayYayYoyayyYYNNNNaayawsyy
+yYyyyayYyyayyayyyayYyYyaaayyaSYy
+YaaayyyyYyyyaayyaYyyyaayyYayyyya
+yaYyyaaYyaYyyyyyyYaayaYyyyaYyyaY
+YyyaYyyyayyaYyyaYyayyyyayyyyyayy
+yaayyaayyyaayayyyayyayyyyaYyyaYy
+YaayyyaoYayyYayayayayayyyayYaaya

@@ -1,0 +1,34 @@
+== v_cash  오리 금고
+= . e8dfc8
+= - c9bfae
+= w fbf6ea
+= s dde3ec
+= t a3abbb
+= D 5c3a1a
+= d a8762a
+= g f2c94c
+= h fdeaa0
+..........wwwwwwwwwww.......----
+.........wwsshhhhhssws......----
+.......wwsshhhhhhhggssss.....---
+......wwshhhhgggggggggsss....---
+......wshhhggggggggggggss-...---
+.....wshhhggdddddgggggggss-..---
+....wwshhggdddddddggggggsst..---
+....wshhggDDDDDDDDDggggggtt-.---
+....wshhgggdddddddhhgggggtt-.---
+...wwhhgggddddddDddgggggddtt----
+...wwhhgggddddddDdddddggddtt----
+...wwhhgggddddddddddddhgddtt----
+...wwhhgggdddddddDDDDhhgddtt----
+...wwhhggggdddddddddhhggddtt----
+....wsggggggdddddhhhhggddtt-----
+....wsggggggghhhhhgggggddtt-----
+....wwsggggdddddddggggddttt-----
+.....ssgggdddddddddggdddtt------
+......ssggghhhhhhhhhdddtt-------
+......sssgggggggggddddttt-------
+.......ssssggdddddddtttt--------
+--......-ssttdddddtttt----------
+----------ttttttttttt-----------
+-------------ttttt--------------
