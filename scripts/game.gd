@@ -75,16 +75,19 @@ func _view_fit() -> void:
 #  OS 글꼴(SystemFont)은 웹에서 빈손으로 돌아와 한글이 전부 네모가 되고,
 #  데스크톱에서도 기기에 뭐가 깔렸느냐에 따라 다른 글꼴이 잡힌다. 실어 두면
 #  브라우저와 윈도가 같은 화면을 그린다.
-#  Paperlogy 는 Thin(1) 부터 Black(9) 까지 아홉 단계다. 두께를 바꾸려면
-#  fonts/ 에 그 파일을 넣고 이 줄만 고치면 된다 — 부르는 곳은 _ready 한 곳뿐이다.
-# 픽셀 한글 글꼴. 11px 로 설계돼 있어서 11 · 22 · 33 에서 획이 딱 떨어진다 —
-# 매끈한 TTF 를 8~9px 로 래스터화하면 획이 통째로 사라지는 자리가 그 반대다.
-# 갈무리(OFL) — fonts/Galmuri-LICENSE.txt
-const FONT_PATH := "res://fonts/Galmuri11.ttf"
-#  곁말용. Galmuri9 가 프로젝트에 있는데 한 번도 안 불리고 있었다 —
-#  9px 자리를 Galmuri11 로 찍으면 11px 설계를 9 로 줄이는 것이라 획이
-#  반 칸씩 어긋난다. 9 는 9 로 찍는다.
-const FONT_SMALL := "res://fonts/Galmuri9.ttf"
+#  ── 페이퍼로지 Bold · SemiBold ──────────────────────────
+#  갈무리(픽셀 글꼴)를 썼다가 「커지니까 조금 깨지네」 로 크기를 격자에 맞춰 고쳤고
+#  (10 · 12 · 20 · 24 · 36), 같은 화면을 갈무리 · 페이퍼로지 Medium · Bold 로 나란히
+#  찍어 사용자가 **페이퍼로지 Bold** 를 골랐다(2026-09-17, shots/fontcmp_all.png ·
+#  scripts/tools/shot_fontcmp.gd). 매끈한 글꼴은 2배 캔버스에서 1280 해상도로
+#  래스터화되어 긴 툴팁도 편히 읽히고, 크기가 격자에 안 묶인다. 크기 다섯 단은
+#  그대로 둔다 — 이제는 격자가 아니라 **글자 위계**가 그 다섯이다.
+#  페이퍼로지는 Thin(1) 부터 Black(9) 까지 아홉 단계다. 두께를 바꾸려면 fonts/ 에
+#  그 파일을 넣고 이 두 줄만 고치면 된다 — 부르는 곳은 _ready 한 곳뿐이다.
+#  SIL OFL 1.1 — fonts/Paperlogy-LICENSE.txt
+const FONT_PATH := "res://fonts/Paperlogy-7Bold.ttf"
+#  곁말(font_sm) — 한 단 가벼운 SemiBold. 작은 글자에 Bold 를 쓰면 획이 뭉친다.
+const FONT_SMALL := "res://fonts/Paperlogy-6SemiBold.ttf"
 
 
 # ══════════════════════════════════════════════════════════
