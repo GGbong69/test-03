@@ -1,8 +1,7 @@
 extends SceneTree
-# 판 고르기의 칠한 간판을 본다 — 첫 판 · 하나 깬 뒤 · 깨고 건너뛴 뒤(보스 앞).
-# 이어서 간판 색 시안(sign_pal)마다 판 고르기와 제약 카드 화면을 한 장씩 찍는다.
+# 간판을 본다 — 판 고르기(첫 판 · 하나 깬 뒤 · 깨고 건너뛴 뒤)와 제약 고르기.
 #   godot --path . --quit-after 1800 --script scripts/tools/shot_signs.gd
-#   → shots/sign_1..3.png · shots/signpal_{leg,boss,stage}_<n>.png
+#   → shots/sign_1..3.png · shots/sign_stage.png
 const GameData = preload("res://scripts/data.gd")
 const Save = preload("res://scripts/save.gd")
 var g = null
@@ -64,16 +63,6 @@ func _leg(no: int, skipped: Array) -> void:
 	g._open_leg()
 
 
-#  시안 수. 시안 표가 없던 때의 game.gd 에서도 돈다(하나로 친다).
-func _pal_n() -> int:
-	return g.SIGN_PALS.size() if "sign_pal" in g else 1
-
-
-func _pal(n: int) -> void:
-	if "sign_pal" in g:
-		g.sign_pal = n
-
-
 func _run() -> void:
 	await _wait(10)
 	if DisplayServer.get_name() == "headless":
@@ -82,7 +71,6 @@ func _run() -> void:
 		return
 	g._new_run()
 	await _wait(20)
-	_pal(0)
 	_leg(1, [])
 	await _shot("sign_1")
 	_leg(2, [])
@@ -98,37 +86,23 @@ func _run() -> void:
 			g._tutor_close()
 			g.queue_redraw()
 			await process_frame
-	#  시안마다 판 고르기 — 작은 판 깨짐 · 큰 판 섬 · 보스 누움
-	#  보스 앞 — 작은 판 깨짐 · 큰 판 건너뜀(가라앉음) · 보스 섬
-	for p in _pal_n():
-		_pal(p)
-		_leg(2, [])
-		await _shot("signpal_leg_%d" % p)
-		_leg(3, [2])
-		await _shot("signpal_boss_%d" % p)
-	#  제약 카드는 보스 판에서만 깔린다. 한 번만 깔고 시안만 바꿔 찍는다 —
-	#  다시 깔면 뽑힌 제약이 달라져 나란히 못 본다.
+	#  제약 카드는 보스 판에서만 깔린다.
 	for lv in range(1, 30):
 		if GameData.is_boss(lv):
 			g.leg_no = lv
 			break
-	_pal(0)
 	g._open_stage()
 	await _wait(60)
 	#  가운데 카드를 세운다
 	stand_i = mini(1, g.stage_pick.size() - 1)
 	await _wait(40)
-	for p in _pal_n():
-		_pal(p)
-		await _shot("signpal_stage_%d" % p)
+	await _shot("sign_stage")
 	#  딜 중 — 제약 간판도 미끄러져 오는 동안 안 깨지는가
 	stand_i = -1
-	for p in _pal_n():
-		_pal(p)
-		for t in [0.05, 0.2, 0.4]:
-			g.stage_t = t
-			g.swap_live = false
-			g.queue_redraw()
-			await process_frame
-	print("  찍음 %d" % _pal_n())
+	for t in [0.05, 0.2, 0.4]:
+		g.stage_t = t
+		g.swap_live = false
+		g.queue_redraw()
+		await process_frame
+	print("  찍음")
 	quit(0)

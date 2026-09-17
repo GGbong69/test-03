@@ -14430,9 +14430,9 @@ func _draw_leg() -> void:
 				HORIZONTAL_ALIGNMENT_LEFT, pw, 9, C_TXT)
 
 
-#  판 한 장 — **칠한 간판.** 판 종류의 색(작은 판 · 큰 판 · 보스)으로 칠하고
-#  굵은 테를 둘렀다. 지금 판은 테가 금빛이다. 색은 간판 색 시안 한 벌
-#  (SIGN_PALS)에서 온다 — 제약 카드(_stage_card)도 같은 간판이다.
+#  판 한 장 — **간판.** 짙은 면에 판 종류의 색(작은 판 · 큰 판 · 보스) 테와
+#  윗단 띠를 둘렀다. 지금 판은 테가 금빛이다. 색은 SIGN_COL 한 벌에서
+#  온다 — 제약 카드(_stage_card)도 같은 간판이다.
 #
 #  전에는 둥근 모서리의 판(C_PANEL) 한 장이었는데 「그냥 생성한 종이
 #  같다 · 판자같이」 「클리어한 판은 간판이 깨져 있다거나」 라는 말을
@@ -14448,7 +14448,7 @@ func _draw_leg() -> void:
 #  어둡게 가라앉기만 한다.
 const SIGN := {
 	"rim": 4.0,                   # 테 두께(제 좌표 px)
-	"band": 5.0,                  # 테 밑 윗단 띠 두께 — band 가 있는 시안만 긋는다
+	"band": 5.0,                  # 테 밑 윗단 띠 두께
 	"th": 3.0,                    # 판 두께(아래로 비치는 옆면)
 	"chamfer": 2,                 # 모서리 깎기(_round_ring 단계)
 	"gap": Vector2(6.0, 3.0),     # 떨어진 조각이 밀려난 거리(화면 px)
@@ -14456,83 +14456,40 @@ const SIGN := {
 }
 
 
-#  ── 간판 색 시안 — **임시** ─────────────────────────────
-#  「색감이 좀 너무 안 어울리는데?」(사용자, 2026-09-17). 파랑 · 호박 · 빨강이
-#  명도도 채도도 한 단 높아서, 물 빠지고 어두운 펠트(C_TABLE)와 보라 남색 UI
-#  사이에서 간판만 따로 떴다. 모양(테 · 두께 · 두 동강)은 그대로 두고 색만
-#  네 벌을 한 표에 놓아 sign_pal 로 갈아 끼운다. 개발자 판 「판·조준 › 간판
-#  색 시안」으로 게임 안에서도 바꿔 본다. 나란히 찍는 자: tools/shot_signs.gd.
-#  **사용자가 한 벌을 고르면** sign_pal · SIGN_PALS · 개발자 줄을 걷고 고른
-#  한 벌만 SIGN 에 남긴다.
+#  ── 간판 색 ───────────────────────────────────────────
+#  「색감이 좀 너무 안 어울리는데?」(사용자, 2026-09-17). 처음 칠한 파랑 ·
+#  호박 · 빨강이 명도도 채도도 한 단 높아서, 물 빠지고 어두운 펠트(C_TABLE)와
+#  보라 남색 UI 사이에서 간판만 따로 떴다. 모양(테 · 두께 · 두 동강)은 두고
+#  색만 네 벌(지금 · 어두운 판 + 색 테 · 눌러 담은 색 · 보라 집안)을 판 고르기와
+#  제약 고르기에 나란히 찍었고, 사용자가 **어두운 판 + 색 테**를 골랐다.
 #
-#  한 벌의 열쇠
-#    small · big · boss   판 종류의 칠. cons 는 제약 카드 — 보스 판에만 깔리므로
-#                         보스와 한 집안이다
-#        face  면            rim   테(없으면 면을 0.5 어둡게)
-#        side  옆면(없으면 면을 0.62 어둡게)
-#        band  테 밑 윗단 띠(없으면 안 긋는다). 면이 판 종류와 상관없이 같은
-#              시안에서, 지금 판의 테가 금빛으로 바뀌어도 판 종류가 남는 자리다
-#    ink   글씨      now  지금 판의 테(없으면 C_ACC 를 0.15 어둡게)
-#    done  지나간 판이 가라앉는 만큼(darkened)
-#  대비(WCAG) — 크림 글씨 : 면 · 금화 : 면 · 금빛 테 : 면
-#    지금  3.9~5.8 · 3.1~4.7 · 1.9~2.8   (큰 판 호박색에서 금빛 테가 묻힌다)
-#    A     10.4    · 7.5     · 7.5
-#    B     5.7~7.6 · 4.6~6.1 · 3.9~5.1
-#    C     6.7~8.7 · 4.8~6.3 · 4.1~5.3
-var sign_pal := 0
-const SIGN_PALS := [
-	{   #  0 지금 — 칠한 간판을 고른 그날의 색
-		"n": "지금",
-		"small": {"face": Color("3a6f8f")},
-		"big": {"face": Color("8f6a2a")},
-		"boss": {"face": Color("8f3a36")},
-		"cons": {"face": Color("8f3a36")},
-		"ink": Color("f1e3c2"), "done": 0.45,
-	},
-	{   #  A 어두운 판 + 색 테 — 면은 UI 판(C_DARK)의 집안이고 판 종류는 테와
-		#    윗단 띠만 말한다. 화면의 단추(짙은 판 + 금빛 윗단)와 같은 어법이다.
-		"n": "A 어두운 판 + 색 테",
-		"small": {"face": Color("383350"), "rim": Color("5d86a6"),
-				"band": Color("5d86a6"), "side": Color("1f2a3a")},
-		"big": {"face": Color("383350"), "rim": Color("a07a4c"),
-				"band": Color("a07a4c"), "side": Color("33271d")},
-		"boss": {"face": Color("383350"), "rim": Color("a84f4d"),
-				"band": Color("a84f4d"), "side": Color("3a1d20")},
-		"cons": {"face": Color("383350"), "rim": Color("a84f4d"),
-				"band": Color("a84f4d"), "side": Color("3a1d20")},
-		"ink": C_TXT, "now": C_GOLD, "done": 0.30,
-	},
-	{   #  B 눌러 담은 색 — 판 종류의 색은 그대로 두고 명도 · 채도를 한 단씩
-		#    내렸다. 쇠빛 남색 · 흙빛 갈색 · 포도주. 펠트 초록과 부딪치지 않는
-		#    당구장 색이다.
-		"n": "B 눌러 담은 색",
-		"small": {"face": Color("3e5470")},
-		"big": {"face": Color("6b5236")},
-		"boss": {"face": Color("6d3140")},
-		"cons": {"face": Color("6d3140")},
-		"ink": Color("f1e3c2"), "now": C_ACC, "done": 0.40,
-	},
-	{   #  C 보라 집안 — UI 의 보라 남색에서 판 종류를 가른다. 남보라 · 연보라 ·
-		#    자두. 금빛 테가 보라의 맞은편 색이라 지금 판이 또렷하다.
-		"n": "C 보라 집안",
-		"small": {"face": Color("3d4070")},
-		"big": {"face": Color("5e4a7c")},
-		"boss": {"face": Color("66304f")},
-		"cons": {"face": Color("66304f")},
-		"ink": C_TXT, "now": C_ACC, "done": 0.40,
-	},
-]
-
-
-func _sign_pal() -> Dictionary:
-	return SIGN_PALS[clampi(sign_pal, 0, SIGN_PALS.size() - 1)]
+#  면은 UI 판(C_DARK)의 집안 하나이고 판 종류는 테와 윗단 띠만 말한다 —
+#  화면의 단추(짙은 판 + 금빛 윗단)와 같은 어법이라 간판이 게임 UI 로 읽힌다.
+#  크림 글씨 : 면 10.4 · 금화 : 면 7.5 · 금빛 테 : 면 7.5 (WCAG).
+#  면이 펠트와 밝기가 거의 같아(1.16:1) 누운 판은 테로 가른다.
+#
+#  열쇠 — small · big · boss 는 판 종류, cons 는 제약 카드(보스 판에만 깔리므로
+#  보스와 한 집안이다).
+#    face 면 · rim 테 · band 테 밑 윗단 띠 · side 옆면
+#    ink 글씨 · now 지금 판의 테 · done 지나간 판이 가라앉는 만큼(darkened)
+const SIGN_COL := {
+	"small": {"face": Color("383350"), "rim": Color("5d86a6"),
+			"band": Color("5d86a6"), "side": Color("1f2a3a")},
+	"big": {"face": Color("383350"), "rim": Color("a07a4c"),
+			"band": Color("a07a4c"), "side": Color("33271d")},
+	"boss": {"face": Color("383350"), "rim": Color("a84f4d"),
+			"band": Color("a84f4d"), "side": Color("3a1d20")},
+	"cons": {"face": Color("383350"), "rim": Color("a84f4d"),
+			"band": Color("a84f4d"), "side": Color("3a1d20")},
+	"ink": C_TXT, "now": C_GOLD, "done": 0.30,
+}
 
 
 #  한 벌에서 칠 하나를 푼다 — 면 · 테 · 옆면 · 윗단 띠와 거기서 뽑는 빛(hi) ·
 #  그늘(lo) · 갈라진 자리(crack) · 부스러기(chip). sink 면 지나간 판이라
 #  통째로 가라앉는다.
 func _sign_cols(kind: String, sink: bool) -> Dictionary:
-	var p := _sign_pal()
+	var p := SIGN_COL
 	var e: Dictionary = p[kind]
 	var dk: float = float(p.done) if sink else 0.0
 	var base: Color = e.face
@@ -14553,7 +14510,7 @@ func _sign_cols(kind: String, sink: bool) -> Dictionary:
 
 
 func _sign_now() -> Color:
-	return Color(_sign_pal().get("now", C_ACC.darkened(0.15)))
+	return Color(SIGN_COL.now)
 
 
 func _leg_card(i: int, rn: int) -> void:
@@ -14615,7 +14572,7 @@ func _leg_card(i: int, rn: int) -> void:
 	draw_set_transform(shake_off)
 
 
-#  판 종류 — 작은 판 · 큰 판 · 보스. SIGN_PALS 한 벌의 열쇠다.
+#  판 종류 — 작은 판 · 큰 판 · 보스. SIGN_COL 의 열쇠다.
 func _leg_kind(rn: int) -> String:
 	if not GameData.skippable(rn):
 		return "boss"
