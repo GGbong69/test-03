@@ -1,5 +1,5 @@
 extends SceneTree
-# 판 고르기의 나무 간판을 본다 — 첫 판 · 하나 깬 뒤 · 깨고 건너뛴 뒤(보스 앞).
+# 판 고르기의 칠한 간판을 본다 — 첫 판 · 하나 깬 뒤 · 깨고 건너뛴 뒤(보스 앞).
 #   godot --path . --quit-after 900 --script scripts/tools/shot_signs.gd
 const GameData = preload("res://scripts/data.gd")
 const Save = preload("res://scripts/save.gd")
