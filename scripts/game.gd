@@ -17895,7 +17895,8 @@ func _draw_newrun() -> void:
 	if many:
 		var pw: float = float(packs.size()) * 4.0 + float(packs.size() - 1) * 6.0
 		for k in packs.size():
-			draw_rect(Rect2(VIEW.x * 0.5 - pw * 0.5 + float(k) * 10.0, 190.0, 4.0, 4.0),
+			#  둥근 점 — UI 가 둥글어진 뒤로 네모 점만 뾰족하게 남아 있었다
+			draw_circle(Vector2(VIEW.x * 0.5 - pw * 0.5 + float(k) * 10.0 + 2.0, 192.0), 2.2,
 					C_TXT if k == newrun_pip else C_PANEL.lightened(0.06))
 
 	# 리그 사다리 — 왼쪽이 약한 단이다. 가로로 눕혔으니 읽는 방향을 따른다.
@@ -17905,9 +17906,12 @@ func _draw_newrun() -> void:
 		var r := _league_rect(i)
 		var col := Color(String(st[i].get("color", "cfc9bd")))
 		if _league_open(i):
-			draw_rect(r, col)
+			#  둥근 칩 — 판·단추가 다 둥글어진 뒤로 리그 칩만 뾰족해서 이상했다
+			#  (사용자, 2026-09-17). 아랫단 한 줄을 눌러 칩이 얹힌 물건으로 읽힌다.
+			_rr(self, r, col)
+			_rr_bottom(self, r, col.darkened(0.3))
 			if _league_won(i):
-				draw_rect(Rect2(r.position.x, r.end.y, r.size.x, 2.0), C_GOLD)
+				_rr(self, Rect2(r.position.x + 4.0, r.end.y + 1.0, r.size.x - 8.0, 2.0), C_GOLD)
 		else:
 			# 못 여는 단은 좁은 토막으로 — 자리는 지키되 값은 안 보인다
 			_rr(self, Rect2(r.position.x + 10.0, r.position.y, 13.0, r.size.y),
