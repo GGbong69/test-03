@@ -14,12 +14,12 @@ func _initialize() -> void:
 	g._panel_reset()
 	print("동전 %d 개 · 골드 %d" % [g.owned.size(), g.gold])
 
-	for st in [g.S.PICK, g.S.STAGE, g.S.LEG, g.S.SHOP]:
+	for st in [g.S.PICK, g.S.LEG, g.S.SHOP]:
 		g.state = st
 		g.sell_sel = 1
 		var r = g._sell_btn_rect()
-		var names := ["PICK(판 위)", "STAGE", "LEG", "SHOP"]
-		var nm: String = names[[g.S.PICK, g.S.STAGE, g.S.LEG, g.S.SHOP].find(st)]
+		var names := ["PICK(판 위)", "LEG", "SHOP"]
+		var nm: String = names[[g.S.PICK, g.S.LEG, g.S.SHOP].find(st)]
 		print("%-12s can_sell=%s 버튼=%s"
 				% [nm, g._can_sell(), "없음" if r.size.x <= 0.0 else str(r)])
 

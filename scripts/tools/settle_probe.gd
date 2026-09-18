@@ -186,47 +186,48 @@ func _initialize() -> void:
 			"R%d 뒤 테이블 %d칸 (표가 말하는 %d) · 매물 전체 %d칸"
 			% [g.leg_no, deck, want2, g.stock.size()])
 
-	# ⑥ 누운 제약 카드 — 칸이 펠트 안이고 서로 안 겹치며, 눌러서 골라진다
+	# ⑥ 누운 판 카드 — 칸이 펠트 안이고 서로 안 겹치며, 툴팁이 잡힌다
+	#    제약 카드가 걷히고 그 자리를 판 카드 셋이 물려받았다(2026-09-18).
 	g.sealed = -1
 	g._new_run()
-	g.leg_no = 3                      # 보스 판이라 제약 셋이 깔린다
-	g._open_stage()
+	g.leg_no = 3                      # 보스 판이 든 라운드
+	g._open_leg()
+	var per: int = GameData.legs_per_round()
 	var inside := true
-	for a in g.stage_pick.size():
-		var ra: Rect2 = g._stage_rect(a)
+	for a in per:
+		var ra: Rect2 = g._row_rect(a, per)
 		if ra.position.y < g.TBL.fy or ra.end.y > g.TBL.ny:
 			inside = false
-		for b in g.stage_pick.size():
-			if a != b and ra.intersects(g._stage_rect(b)):
+		for b in per:
+			if a != b and ra.intersects(g._row_rect(b, per)):
 				inside = false
-	_say(inside and g.stage_pick.size() == 3,
-			"누운 카드가 펠트 안에 안 겹치게", "%d장" % g.stage_pick.size())
-	_say(g.stage_stand.size() == g.stage_pick.size()
-			and float(g.stage_stand[0]) == 0.0,
-			"쉬는 카드는 누워 있다", "선 정도 %.2f" % float(g.stage_stand[0]))
-	# 툴팁의 대상 사각은 남고 테두리만 빠진다. 사각이 죽으면 "커서 아래
-	# 카드가 선다" 판정(_drop_update)이 같이 죽고, 테두리가 살면 누웠을
-	# 때의 자리에 흰 상자가 선 카드 위로 어긋나 뜬다 — 둘 다 눈으로만
-	# 보이는 사고라 여기서 못 박는다.
-	g._tip_build({"k": "stage", "i": 1})
-	_say(g.tip_mark == g._stage_rect(1) and not g.tip_box,
-			"선 카드에는 테두리를 안 두른다",
-			"사각 %s · 테두리 %s" % [g.tip_mark == g._stage_rect(1), g.tip_box])
+	_say(inside and per == 3,
+			"누운 카드가 펠트 안에 안 겹치게", "%d장" % per)
+	var bn: int = g._round_boss()
+	_say(bn > 0 and not g.boss_mods.get(bn, PackedStringArray()).is_empty(),
+			"보스 카드가 제약을 든다",
+			"%d번 판 %s" % [bn, g.boss_mods.get(bn, PackedStringArray())])
+	# 툴팁의 대상 사각은 남고 테두리만 빠진다. _row_rect 는 축정렬 사각인데
+	# 카드는 펠트를 따라 좁아진 사다리꼴이라 흰 테가 몇 px 어긋난다 —
+	# 눈으로만 보이는 사고라 여기서 못 박는다.
+	var bi: int = GameData.leg_idx(bn)
+	g._tip_build({"k": "legboss", "i": bn})
+	_say(g.tip_mark == g._row_rect(bi, per) and not g.tip_box,
+			"보스 카드에는 테두리를 안 두른다",
+			"사각 %s · 테두리 %s" % [g.tip_mark == g._row_rect(bi, per), g.tip_box])
 	g._tip_clear()
 	_say(g.tip_box and g.tip_mark == Rect2(),
 			"툴팁이 꺼지면 기본값으로 돌아온다")
 
-	# 마지막 장이 설 때까지는 못 고른다 — 그 규칙을 먼저 확인하고,
-	# 딜을 끝낸 뒤 눌러 본다.
-	g._click(g._stage_rect(1).get_center())
-	_say(g.state == g.S.STAGE and g.active_mods.is_empty(),
-			"딜 중에는 안 골라진다", "state %d" % g.state)
-	g.stage_t = g._deal_time() + 0.1
-	g._click(g._stage_rect(1).get_center())
-	# 여기서도 판 갈이가 낀다. 상태·데이터는 그 프레임에 선다.
-	_say(g.state != g.S.STAGE and g.active_mods.size() == 1,
-			"누운 칸을 눌러 고른다",
-			"state %d · 제약 %d" % [g.state, g.active_mods.size()])
+	# 딜이 끝나기 전에는 카드 툴팁을 안 잡는다 — 움직이는 것을 가리키면
+	# 무엇을 가리켰는지가 커서와 카드 중 어느 쪽 기준인지 갈린다.
+	g.leg_t = 0.0
+	_say(g._tip_hit(g._row_rect(bi, per).get_center()).is_empty(),
+			"딜 중에는 보스 카드를 안 잡는다")
+	g.leg_t = g._deal_time() + 0.1
+	var hit: Dictionary = g._tip_hit(g._row_rect(bi, per).get_center())
+	_say(String(hit.get("k", "")) == "legboss" and int(hit.get("i", 0)) == bn,
+			"딜이 끝나면 누운 칸이 보스 카드를 잡는다", "%s" % hit)
 
 	print("\n%s" % ("실패 %d건" % fails if fails > 0 else "열여섯 검사 전부 통과"))
 	quit(mini(fails, 125))

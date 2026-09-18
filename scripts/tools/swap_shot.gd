@@ -71,16 +71,16 @@ func _run() -> void:
 	g._swap_begin(false)
 	await _shots("swapb")
 
-	# ③ 보스 판의 제약 화면 → 판. 카드 얼굴이 제 눕힘 행렬을 거는데
+	# ③ 보스 판의 판 선택 → 판. 카드 얼굴이 제 눕힘 행렬을 거는데
 	#    그것이 전환 오프셋 **안**에서 돈다 — 카드가 draw_set_transform(shake_off)
 	#    로 복귀하므로 오프셋을 shake_off 자체에 실은 판단이 여기서 증명된다.
 	#    복귀가 어긋나면 카드가 제자리에 남고 테이블만 빠진다.
 	_tick(4)
 	g.leg_no = GameData.legs_per_round()
-	g._open_stage()
-	g.stage_t = 9.0
+	g._open_leg()
+	g.leg_t = 9.0
 	_tick(4)
-	g._click(g._stage_rect(1).get_center())
+	g._begin_leg()
 	await _shots("swaps")
 	quit()
 

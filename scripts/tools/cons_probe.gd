@@ -83,7 +83,7 @@ func _process(_d: float) -> bool:
 	g._autoplay = false
 	var states := {
 		"SHOP": g.S.SHOP, "PICK": g.S.PICK, "AIM_V": g.S.AIM_V,
-		"LEG": g.S.LEG, "STAGE": g.S.STAGE, "CLEAR": g.S.CLEAR,
+		"LEG": g.S.LEG, "CLEAR": g.S.CLEAR,
 	}
 	for k in states:
 		g.state = states[k]

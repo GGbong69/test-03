@@ -79,7 +79,7 @@ func _process(_d: float) -> bool:
 	#      그 사이에 상태 잠금 셋이 있었고, 판에서는 하나도 안 열렸다.
 	for row in [["SHOP", g.S.SHOP, true], ["PICK", g.S.PICK, true],
 			["AIM_V", g.S.AIM_V, true], ["LEG", g.S.LEG, true],
-			["STAGE", g.S.STAGE, true], ["RESOLVE", g.S.RESOLVE, false]]:
+			["RESOLVE", g.S.RESOLVE, false]]:
 		g.state = row[1]
 		g.burst_left = 0
 		g.owned = [GameData.items()[0], GameData.items()[1], GameData.items()[2]]

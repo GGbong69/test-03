@@ -25,7 +25,7 @@ const Save = preload("res://scripts/save.gd")
 #
 #  어떻게 재는가
 #    오토플레이를 안 켠다 — _hand_press_at 은 오토플레이에서 통째로 물러선다.
-#    화면은 게임의 여는 함수로 세운다(_new_run · _open_stage · _open_shop ·
+#    화면은 게임의 여는 함수로 세운다(_new_run · _begin_leg · _open_shop ·
 #    _pick_dart · _advance). 판 중 화면은 사람이 거쳐 가는 차례 그대로 앞
 #    화면에서 이어 간다.
 #    손짓은 **진짜 입력 이벤트**로 Input 에 밀어 넣어 _unhandled_input 을
@@ -71,7 +71,6 @@ var catch: Catch = null
 # 잰다. 새 게임을 켜고 첫 판에서 사탕을 끄는 사람은 빈 테이블 위에 있다.
 const SCREENS := [
 	["LEG", "판 고르기", true],
-	["STAGE", "제약 고르기", true],
 	["PICK", "판 중", true],
 	["AIM_V", "판 중", true],
 	["AIM_H", "판 중", true],
@@ -212,17 +211,13 @@ func _stage(name: String) -> String:
 	match name:
 		"LEG":
 			g._new_run()
-		"STAGE":
-			g._new_run()
-			g.leg_no = _boss_leg()
-			g._open_stage()
 		"SHOP":
 			g._new_run()
 			g._open_shop()
 			_run_until(func(): return not g._drop_busy())     # 물건이 다 앉을 때까지
 		"PICK":
 			g._new_run()
-			g._open_stage()          # 첫 판은 보스가 아니라 곧장 _start_leg 로 간다
+			g._begin_leg()           # 첫 판은 보스가 아니라 곧장 _start_leg 로 간다
 			g._swap_skip()
 			#  탄창이 한 종류면 _to_pick 이 고르기를 건너뛰고 곧장 조준으로 간다.
 			#  고르는 화면 자체를 재려고 한 칸 되돌린다 — 상태를 직접 미는 곳은

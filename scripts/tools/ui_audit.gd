@@ -109,22 +109,50 @@ func _run() -> void:
 	g._drop_settle()
 	await _shoot("07_shop")
 
-	# 보스 제약 고르기 — **게임이 쓰는 문으로 연다.** 상태만 세우면
-	# 카드가 안 깔려서 빈 펠트를 찍는다.
+	# 보스 카드 — **게임이 쓰는 문으로 연다.** 상태만 세우면 제약이 안
+	# 굴려져서 카드에 아무것도 안 앉는다(제약 고르기 화면은 걷혔다).
 	g.leg_no = 3
-	if g.has_method("_open_stage"):
-		g._open_stage()
+	g._open_leg()
 	for k in 60:
 		g._process(1.0 / 60.0)
 	await _shoot("08_stage")
 
 	# 런 정보
-	g.state = g.S.SHOP
+	#  **상점 문으로 한 번 들어갔다 나온다.** 그래야 다음 라운드 보스가
+	#  서고 「보스 제약」 줄이 빈칸이 아니다 — 상태만 세우면 아직 안 굴려진
+	#  판을 집어 「없음」이 찍힌다(2026-09-18).
+	g._open_shop()
 	g.run_from = g.S.SHOP
 	g.state = g.S.RUNINFO
 	for t in 4:
 		g.runinfo_tab = t
 		await _shoot("09_runinfo%d" % t)
+	#  같은 탭을 **판 위에서** 한 장 더. 거기서는 다가올 보스가 아니라
+	#  지금 걸린 제약이 서야 한다 — 탭이 열리면 state 가 S.RUNINFO 로
+	#  갈리므로 밑에 깔린 화면을 물어야 한다. state 만 묻던 때는 보스 판을
+	#  던지는 중에 열어도 「없음」이었다(2026-09-18).
+	#  **게임이 쓰는 문으로 들어간다.** _begin_leg 만 부르고 상태를 손으로
+	#  세우면 판이 미끄러져 들어오는 중간 프레임이 찍힌다.
+	g.state = g.S.LEG
+	g.leg_no = 3
+	g._open_leg()
+	for k in 60:
+		g._process(1.0 / 60.0)
+	g._click(g._leg_go().get_center())
+	for k in 300:
+		g._process(1.0 / 60.0)
+		g.target = 99999          # 첫 발이 판을 넘기지 않게
+		if g._is_play():
+			break
+	#  판이 올라오는 전환을 끝까지 돌린다 — 중간 프레임에서 찍으면 화면이
+	#  반으로 갈린 그림이 나온다.
+	g._swap_skip()
+	for k in 30:
+		g._process(1.0 / 60.0)
+	g.run_from = g.state
+	g.state = g.S.RUNINFO
+	g.runinfo_tab = 3
+	await _shoot("09_runinfo3_play")
 
 	# 설정
 	g.pause_from = g.S.SHOP

@@ -212,7 +212,7 @@ func _run() -> void:
 			g.leg_no = lg
 			break
 	g.mods_own = ids.slice(0, 6)
-	g._open_stage()
+	g._open_leg()
 	await _hold(40)
 	_snap("art_mods_apron")
 	g.mods_own = ids.slice(6, 12)

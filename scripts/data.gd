@@ -12,7 +12,7 @@ extends RefCounted
 #    rarity.csv     등급 3  — 등장 가중치의 유일한 출처
 #    mods.csv       보드 확장 8  — 판 기하를 바꾼다
 #    darts.csv      다트 5  — 탄창에 드는 것
-#    modifiers.csv  제약 6  — 스테이지 선택 그 자체다
+#    modifiers.csv  제약 10 — 보스 판마다 하나(겹치기면 둘)가 미리 걸린다
 #    rounds.csv      판 8 — 목표 곡선 · 리그 배수 · 테이블 폭
 #    legs.csv     블라인드 3 — 판 안의 배수·보상·건너뛰기
 #    tuning.csv     스칼라 24 — 행이 안 느는 값만 모은다
@@ -77,7 +77,7 @@ const TUNE_KEYS := [
 	"start_gold", "clear_gold", "gold_per_dart", "interest_per", "interest_max",
 	"gold_broke", "gold_blitz", "sell_div", "sell_min",
 	"free_rerolls", "reroll_base", "reroll_step", "max_items",
-	"darts_base", "stage_picks",
+	"darts_base",
 	"board_r", "aim_swing", "sector_max", "val_max_mul",
 	"gauge_speed", "resolve_beat", "bal_beats", "confirm_hold", "fly_time",
 	"aim_click_r", "legend_pack_w",
@@ -103,8 +103,7 @@ const MOD_AXES := ["band", "slide", "ring", "bull", "out", "swap",
 # "이 제약이 무엇을 하는가" 가 코드에서 안 읽힌다.
 # 사진이 밀 수 있는 축과 그 바닥·천장. 목록이 곧 계약이다 — 코드가 안 읽는
 # 키를 표에 적으면 조용히 아무 일도 안 하는 사진이 되고(안개가 그랬다),
-# 바닥이 없으면 음수 한 줄이 런을 잠근다. stage_picks 가 0 이 되면 보스
-# 화면에 누를 카드가 없어 영영 안 넘어간다 — 그래서 키마다 범위를 쥔다.
+# 바닥이 없으면 음수 한 줄이 런을 잠근다 — 그래서 키마다 범위를 쥔다.
 const VOUCHER_KEYS := {
 	"shop_slots":    [0.0, 6.0],    # 표 4 + 여기 + 뱃지 2 ≤ 12칸
 	"free_rerolls":  [0.0, 4.0],
@@ -1014,8 +1013,8 @@ static func round_base(a: int) -> float:
 static func target_of(n: int) -> int:
 	var base := round_base(round_of(n))
 	var m := _f(leg_of(n), "mult", "legs", 1.0)
-	# 챌린지가 목표를 통째로 민다(깜깜이 0.7배). 여기 한 자리에 두면 판을
-	# 여는 길이 둘이어도(보스는 _open_stage · 나머지는 _open_leg) 같은 수가 나온다.
+	# 챌린지가 목표를 통째로 민다(깜깜이 0.7배). 여기 한 자리에 둔다 —
+	# 보스 제약의 「문턱」은 이 위에 game.gd 의 _target_at 가 따로 올린다.
 	return int(round(base * m * league_mul(n) * target_mul()
 			* chal_f("target_mul", 1.0)))
 
@@ -1043,19 +1042,24 @@ static func is_boss(n: int) -> bool:
 #    now    건너뛰는 그 자리에서
 #    leg    다음에 **던지는** 판에서 (지금 표에는 쓰는 줄이 없다)
 #    shop   다음 상점에서
-#    stage  다음 보스 판의 제약 고르는 자리에서 (지금 표에는 쓰는 줄이 없다)
 #    boss   이번 라운드 보스를 **넘겼을 때**. 못 넘기면 런이 끝나므로 0 이다
-const TAG_WHEN := ["now", "leg", "shop", "stage", "boss"]
+#
+#  stage 는 걷었다 — 「다음 보스 판의 제약 고르는 자리」가 없어져
+#  boss 와 글자까지 같은 뜻이 됐다(2026-09-18). 쓰는 줄은 0개였다.
+const TAG_WHEN := ["now", "leg", "shop", "boss"]
 
 #  갈래. 새 갈래를 만들면 game.gd 의 _take_tag 나 그 갈래를 꺼내 쓰는
 #  자리(_spend_tags)를 같이 내야 한다 — 표에만 적으면 잠자코 아무 일도 안 난다.
 #
-#  dart · picks 는 **지금 표에 쓰는 줄이 없다.** 2026-09-15 기획에서
-#  「여벌 다트」와 「여유로운 선택」이 빠졌다. 갈래와 꺼내는 자리는 남겨 둔다 —
-#  되살리는 것이 표에 한 줄이어야 하고, 이 둘이 판과 보스 판을 건드리는
-#  유일한 통로였다.
+#  dart 는 **지금 표에 쓰는 줄이 없다.** 2026-09-15 기획에서 「여벌 다트」가
+#  빠졌다. 갈래와 꺼내는 자리는 남겨 둔다 — 되살리는 것이 표에 한 줄이어야
+#  하고, 이것이 판을 건드리는 유일한 통로다.
+#
+#  picks(「여유로운 선택」 — 까는 장수를 늘린다)는 **뜻 자체가 없어져서**
+#  걷었다. 고르는 화면이 사라지고 보스 판에 걸리는 장수는 「겹치기」의
+#  mods_n 이 쥔다(2026-09-18). 쓰는 줄은 0개였다.
 const TAG_KINDS := ["gold", "dart", "track", "candy", "photo", "item",
-		"reroll", "shop", "picks", "free",
+		"reroll", "shop", "free",
 		"boss_gold", "skip_gold", "track_top", "copy"]
 
 
@@ -1109,7 +1113,7 @@ static func tutor_steps(id: String) -> Array:
 
 #  밝힐 수 있는 과녁. 게임이 이 이름을 화면 사각으로 옮긴다(_mark_rect).
 #  빈 이름은 "아무 데도 안 밝힌다" 다 — 화면 전체가 주제일 때 쓴다.
-const TUTOR_MARKS := ["", "leg_go", "leg_skip", "stage", "board", "rack",
+const TUTOR_MARKS := ["", "leg_go", "leg_skip", "leg_boss", "board", "rack",
 		"score", "chute_buy", "chute_sell", "goods", "dealer", "reroll",
 		"cons"]
 const TUTOR_WAITS := ["tap", "time"]
@@ -1285,7 +1289,6 @@ static func max_items() -> int:
 	if chal_on("item_cap"):
 		return maxi(1, chal_i("item_cap", 5))
 	return int(pack_v("item_slots", float(tune_i("max_items"))))
-static func stage_picks() -> int: return tune_i("stage_picks")
 static func sector_max() -> int: return tune_i("sector_max")
 static func val_max_mul() -> float: return tune("val_max_mul")
 
@@ -2639,18 +2642,23 @@ static func _v_modifiers() -> void:
 			if _f(r, "v", "modifiers") < 0.0:
 				_errs.append("%s — %s 의 v 가 음수다" % [who, ax])
 		_v_desc(who, r.get("desc", ""), ["v"])
-	# 한 판에 제약이 하나뿐이라 축 중복이 게임에 안 나타난다. 그래도 세어 둔다 —
-	# 카드를 둘 이상 붙이는 날 이 경고가 먼저 울려야 한다.
+	# **그날이 왔다** — 「겹치기」가 한 보스에 둘을 확정으로 건다(2026-09-18).
+	# 축이 겹친 둘이 같이 걸리면 뒤엣것이 mod_v 에서 안 읽힌다.
 	var reused := []
 	for a in axes:
 		if int(axes[a]) > 1:
 			reused.append(a)
 	if not reused.is_empty():
 		_warns.append("modifiers — 축을 둘 이상이 나눠 쓴다: %s" % [reused])
-	# 스테이지 화면이 까는 장수보다 후보가 적으면 같은 카드가 두 번 뜬다.
-	var need := tune_i("stage_picks")
+	# 한 보스에 거는 장수보다 후보가 적으면 같은 제약이 두 장 걸린다.
+	# 장수는 「겹치기」의 mods_n 이 쥔다 — 표 전체의 최댓값으로 잰다.
+	#  ⚠ 날 표의 열쇠는 "chal" 이다 — challenges() 가 붙인 이름이 아니다.
+	var need := 1
+	for c in _raw.get("chal", []):
+		need = maxi(need, int(_f(c, "mods_n", "chal")))
 	if raw.size() < need:
-		_errs.append("modifiers — 제약이 %d종인데 스테이지가 %d장을 깐다" % [raw.size(), need])
+		_errs.append("modifiers — 제약이 %d종인데 한 보스에 %d장을 건다"
+				% [raw.size(), need])
 
 
 static func _v_legs() -> void:
@@ -2720,8 +2728,8 @@ static func _v_legs() -> void:
 				_errs.append("%s — 보스는 못 건너뛴다" % who2)
 	if boss != 1:
 		_errs.append("legs — 보스가 %d개다. 판마다 정확히 하나여야 한다" % boss)
-	# 보스가 제약을 깔려면 제약이 stage_picks 만큼 있어야 한다 — 그 검사는
-	# _v_modifiers 가 이미 한다. 여기서는 보스가 마지막인지만 본다.
+	# 보스에 걸 제약이 넉넉한지는 _v_modifiers 가 이미 본다.
+	# 여기서는 보스가 마지막인지만 본다.
 	if boss == 1 and not _b(bl[bl.size() - 1], "boss", "legs"):
 		_errs.append("legs — 보스는 판의 마지막 판이어야 한다")
 

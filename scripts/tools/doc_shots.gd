@@ -13,8 +13,10 @@ extends SceneTree
 #  실행:  godot --path . -s scripts/tools/doc_shots.gd -- autoplay
 #         godot --path . -s scripts/tools/doc_shots.gd -- autoplay 5
 
+#  ⚠ 자리가 곧 enum S 의 값이다. 제약 고르기 화면(S.STAGE)이 걷히며
+#  그 자리가 OVER 로 밀렸으므로 마지막 줄을 뺐다(2026-09-18).
 const WANT := ["PICK", "AIM_V", "AIM_H", "CONFIRM", "FLY", "RESOLVE",
-		"CLEAR", "SHOP", "STAGE"]
+		"CLEAR", "SHOP"]
 
 var g = null
 var frames := 0
@@ -84,8 +86,6 @@ func _delay(name: String) -> int:
 			return 24      # 클리어 화면이 다 뜬 뒤
 		"SHOP":
 			return 90      # 매물이 물리로 정착한 뒤
-		"STAGE":
-			return 70      # 카드 세 장이 다 딜링된 뒤
 		_:
 			return 6
 

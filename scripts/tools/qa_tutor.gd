@@ -76,53 +76,61 @@ func _run() -> void:
 		g._drop_step(1.0 / 60.0)
 	var blank := PackedStringArray()
 	for mk in GameData.TUTOR_MARKS:
-		if String(mk) == "" or String(mk) == "stage":
+		if String(mk) == "" or String(mk) == "leg_boss":
 			continue
 		var rr: Rect2 = g._mark_rect(String(mk))
 		if rr.size.x < 2.0 or rr.size.y < 2.0:
 			blank.append(String(mk))
 	_ok("과녁이 다 사각을 낸다", blank.is_empty(),
 			"빈 것: %s" % ", ".join(blank))
-	#  제약 카드는 상점에 없다 — 그 화면에서 따로 잰다. 여기서 같이 재면
+	#  보스 카드는 상점에 없다 — 판 선택에서 따로 잰다. 여기서 같이 재면
 	#  "화면에 없으면 빈 사각" 이라는 올바른 동작이 실패로 잡힌다.
-	#  제약은 **보스 판에만** 깔린다(_open_stage 의 첫 갈래). 보통 판에서
-	#  부르면 그대로 던지러 가 버려서 카드가 없다.
 	for lv in range(1, 40):
 		if GameData.is_boss(lv):
 			g.leg_no = lv
 			break
-	g._open_stage()
-	var sr: Rect2 = g._mark_rect("stage")
-	_ok("제약 과녁은 제약 화면에서 선다", sr.size.x > 2.0 and sr.size.y > 2.0,
+	g._open_leg()
+	var sr: Rect2 = g._mark_rect("leg_boss")
+	_ok("보스 과녁은 판 선택에서 선다", sr.size.x > 2.0 and sr.size.y > 2.0,
 			"%.0fx%.0f" % [sr.size.x, sr.size.y])
 	g.state = g.S.SHOP
 	_ok("모르는 과녁은 빈 사각", g._mark_rect("없는것").size.x < 1.0, "")
 
-	# 못 보여 줄 것은 안 가르친다 — 제약을 보통 판에서 말하던 자리다
+	# 못 보여 줄 것은 안 가르친다 — 2026-09-15 에 보통 판에서 「제약 하나를
+	# 골라야」 가 떠서 없는 것을 찾으라는 말이 된 적이 있다. 화면이 바뀌어도
+	# 같은 사고가 재발할 수 있는 구조라 그 방어를 새 자리에서 그대로 잰다.
 	Save.wipe()
 	_reset()
-	g.leg_no = 1
-	for lv in range(1, 40):
-		if not GameData.is_boss(lv):
-			g.leg_no = lv
-			break
-	g.stage_pick.clear()
+	#  과녁이 빈 사각이면 **통째로 접힌다.** legs.csv 는 라운드마다 보스를
+	#  정확히 하나 두므로(검증기가 강제한다) 「보스 없는 라운드」는 지금
+	#  표에서 못 만든다 — 그래서 없는 이름으로 같은 문을 두드려 그 방어가
+	#  살아 있는지를 잰다. 방어 자체가 2026-09-15 제보의 그 자리다.
 	g.state = g.S.PICK
-	g._tutor("u_stage")
-	_ok("보통 판에서는 제약을 안 가르친다",
-			g.tutor_q.is_empty() and not Save.taught("u_stage"),
-			"%d판 · 줄 %d" % [g.leg_no, g.tutor_q.size()])
-	#  **배운 것으로도 안 적혔어야** 보스 판에서 다시 걸린다
+	_ok("모르는 과녁은 빈 사각이다", g._mark_rect("없는 과녁").size.x < 1.0,
+			"%s" % g._mark_rect("없는 과녁"))
+	g._tutor("u_없는것")
+	_ok("모르는 배움은 줄에 안 선다", g.tutor_q.is_empty(),
+			"줄 %d" % g.tutor_q.size())
+	#  보스 과녁은 라운드마다 실제로 선다 — 접히는 쪽이 아니라 서는 쪽이
+	#  이 표의 기본값이라는 것을 같이 못 박는다.
+	var noboss := PackedStringArray()
+	for lv0 in range(1, GameData.legs_n() + 1):
+		g.leg_no = lv0
+		if g._round_boss() <= 0 or g._mark_rect("leg_boss").size.x < 2.0:
+			noboss.append(str(lv0))
+	_ok("어느 판에서도 보스 과녁이 선다", noboss.is_empty(),
+			"빈 판: %s" % ", ".join(noboss))
+	#  **배운 것으로도 안 적혔어야** 보스가 선 라운드에서 다시 걸린다
 	for lv2 in range(1, 40):
 		if GameData.is_boss(lv2):
 			g.leg_no = lv2
 			break
-	g._open_stage()
-	_ok("보스 판에서는 가르친다",
-			Save.taught("u_stage") and g.state == g.S.STAGE,
+	g._open_leg()
+	_ok("보스가 선 라운드에서는 가르친다",
+			Save.taught("u_boss") and g.state == g.S.LEG,
 			"%d판 · 상태 %d" % [g.leg_no, g.state])
 	#  그 자리에서 과녁이 진짜로 선다 — 구멍 없는 어둠만 깔리면 안 된다
-	var mr: Rect2 = g._mark_rect("stage")
+	var mr: Rect2 = g._mark_rect("leg_boss")
 	_ok("가르칠 때 과녁이 서 있다", mr.size.x > 2.0 and mr.size.y > 2.0,
 			"%.0fx%.0f" % [mr.size.x, mr.size.y])
 	_reset()

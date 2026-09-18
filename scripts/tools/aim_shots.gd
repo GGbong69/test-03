@@ -53,7 +53,7 @@ func _process(_d: float) -> bool:
 func _run() -> void:
 	g._new_run()
 	g._swap_skip()
-	g._open_stage()
+	g._begin_leg()
 	g._swap_skip()
 	for i in 8:
 		g._process(FPS)

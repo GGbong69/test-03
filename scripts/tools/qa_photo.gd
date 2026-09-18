@@ -120,29 +120,41 @@ func _process(_d: float) -> bool:
 	else:
 		_ok("또 같은 아침이 표에 있다", false, "못 찾음")
 
-	# ④ GOOD AFTERNOON — 다음 보스 판에서 고른 제약이 안 걸린다
+	# ④ GOOD AFTERNOON — 다음 보스 판의 제약과 오른 목표가 같이 풀린다
 	# use_at rest 라 상점이나 판 고르기에 서야 쓴다(기획서 s33).
+	#  깃발이 아니라 **판 번호**를 못 박는다 — 읽고 끄는 자리가 하나뿐이면
+	#  그 자리가 사라지는 날 15G 짜리 카드가 조용히 아무 일도 안 한다.
+	#  셋(무효 표시 · 제약 없음 · 목표 원복)을 한 번에 잰다. 하나만 빠져도
+	#  조용히 죽는 자리다 — 「문턱」이 걸린 보스에서 제약만 지우면 목표가
+	#  오른 채 남는다(2026-09-18).
 	g.state = g.S.SHOP
 	if _hold("v_par"):
-		g._cons_use(0)
-		_ok("GOOD AFTERNOON — 깃발이 선다", g.pardon_next, "pardon_next %s" % g.pardon_next)
-		# 보스 판을 열고 하나 고른다. 몇 번째가 보스인지는 표가 정하므로
-		# 숫자를 박지 않고 물어본다 — legs_per_round 가 바뀌어도 안 깨진다.
+		# 몇 번째가 보스인지는 표가 정하므로 숫자를 박지 않고 물어본다.
 		var boss := -1
 		for n in range(1, GameData.legs_n() + 1):
 			if GameData.is_boss(n):
 				boss = n
 				break
+		g.leg_no = 1
+		#  「문턱」을 손으로 꽂아 목표 원복까지 같이 잰다.
+		g._roll_boss_mods(boss, true)
+		g.boss_mods[boss] = PackedStringArray(["tgt"])
+		var bare: int = GameData.target_of(boss)
+		var lifted: int = g._target_at(boss)
+		_ok("문턱이 목표를 민다", lifted > bare, "%d → %d" % [bare, lifted])
+		g._cons_use(0)
+		_ok("GOOD AFTERNOON — 그 판이 무효로 선다", g.boss_void.has(boss),
+				"무효 %s" % str(g.boss_void.keys()))
+		_ok("GOOD AFTERNOON — 목표가 맨 목표로 돌아온다",
+				g._target_at(boss) == bare,
+				"%d (맨 목표 %d)" % [g._target_at(boss), bare])
 		g.leg_no = boss
-		g._open_stage()
-		if g.stage_pick.is_empty():
-			_ok("GOOD AFTERNOON — 보스 판이 열린다", false, "제약 카드가 안 깔렸다")
-		else:
-			g._pick_stage(0)
-			_ok("GOOD AFTERNOON — 제약이 안 걸린다", g.active_mods.is_empty(),
-					"걸린 제약 %d개" % g.active_mods.size())
-			_ok("GOOD AFTERNOON — 한 번만 선다", not g.pardon_next,
-					"pardon_next %s" % g.pardon_next)
+		g._begin_leg()
+		_ok("GOOD AFTERNOON — 제약이 안 걸린다", g.active_mods.is_empty(),
+				"걸린 제약 %d개" % g.active_mods.size())
+		_ok("GOOD AFTERNOON — 판정 목표도 맨 목표다", g.target == bare,
+				"%d (맨 목표 %d)" % [g.target, bare])
+		g.boss_void.clear()
 	else:
 		_ok("GOOD AFTERNOON 이 표에 있다", false, "못 찾음")
 
@@ -229,26 +241,61 @@ func _process(_d: float) -> bool:
 	g._start_leg()
 	_ok("빨강, 파랑, 노랑 — 판이 바뀌면 풀린다", g.paint_sec == -1, "칸 %d" % g.paint_sec)
 
-	# ⑨ 프리크라임 — 본 셋이 그 판에 그대로 깔린다
+	# ⑨ 프리크라임 — 다시 뽑으면 **실제로 달라진다**
+	#  읽기에서 다시 뽑기로 갈아탔다(2026-09-18). 옛 검사는 「본 것이
+	#  그대로 뜬다」를 쟀는데, 제약이 카드에 상시로 보이는 지금 그 검사는
+	#  통과하면서 게임만 죽은 카드를 쥐고 있게 된다.
 	g.state = g.S.SHOP
 	g.leg_no = 1
+	var pboss: int = g._boss_ahead()
+	g._roll_boss_mods(pboss, true)
+	var was: PackedStringArray = g.boss_mods.get(pboss, PackedStringArray())
+	var before := []
+	for mid in was:
+		before.append(String(mid))
+	#  ⚠ 손에 **두 장**을 쥐여 준다. 한 장만 쥐여 주면 「쓰면 사라진다」가
+	#  cons.is_empty() 로 통과하면서, 갈래가 제 안에서 한 번 빼고 꼬리가 또
+	#  빼는 고장을 못 잡는다 — 실제로 옆칸의 15G 짜리가 말없이 날아갔고
+	#  손에 한 장뿐일 때는 remove_at 범위 밖 오류가 통과한 로그 안에
+	#  찍히고 있었다(2026-09-18).
+	var other := _find("v_par")
+	_hold("v_peek")
+	g.cons.append(other)
+	var held: int = g.cons.size()
+	g._cons_use(0)
+	var now := []
+	for mid in g.boss_mods.get(pboss, PackedStringArray()):
+		now.append(String(mid))
+	_ok("프리크라임 — 보스 제약이 달라진다", before != now and not now.is_empty(),
+			"%s → %s" % [str(before), str(now)])
+	_ok("프리크라임 — 딱 한 장만 사라진다", g.cons.size() == held - 1,
+			"%d장 → %d장" % [held, g.cons.size()])
+	_ok("프리크라임 — 옆칸은 그대로 남는다",
+			g.cons.size() == 1 and String(g.cons[0].get("id", "")) == "v_par",
+			"남은 것 %s" % str(g.cons))
+
+	# ⑩ 이미 무효인 보스에는 다시 뽑기가 **안 쓰인다**
+	#  무효를 지우던 때는 15G 두 장을 쓰고 판이 더 나빠졌다 — GOOD
+	#  AFTERNOON 이 말없이 풀리고 살아 있는 제약이 도로 걸렸다. 사탕이
+	#  손에 남는 것까지 같이 잰다(_cons_deny 는 손에서 안 뺀다, 2026-09-18).
+	g.state = g.S.SHOP
+	g.leg_no = 1
+	var vboss: int = g._boss_ahead()
+	g._roll_boss_mods(vboss, true)
+	var kept := []
+	for mid in g.boss_mods.get(vboss, PackedStringArray()):
+		kept.append(String(mid))
+	g.boss_void[vboss] = true
 	_hold("v_peek")
 	g._cons_use(0)
-	_ok("프리크라임 — 셋을 읽는다",
-			g.photo == "peek" and g.peek_pick.size() == GameData.stage_picks(),
-			"photo '%s' · %d장" % [g.photo, g.peek_pick.size()])
-	var seen := []
-	for e in g.peek_pick:
-		seen.append(String(e.d.get("id", "")))
-	var pl: int = int(g.peek_leg)
-	g.photo = ""
-	g.leg_no = pl
-	g._open_stage()
-	var got := []
-	for e in g.stage_pick:
-		got.append(String(e.d.get("id", "")))
-	_ok("프리크라임 — 본 것이 그대로 뜬다", seen == got,
-			"본 것 %s · 뜬 것 %s" % [str(seen), str(got)])
+	_ok("무효인 보스에는 다시 뽑기가 안 쓰인다", g.cons.size() == 1,
+			"손에 %d장" % g.cons.size())
+	_ok("무효가 안 풀린다", g.boss_void.has(vboss), "무효 %s" % str(g.boss_void.keys()))
+	var still := []
+	for mid in g.boss_mods.get(vboss, PackedStringArray()):
+		still.append(String(mid))
+	_ok("제약도 안 굴러간다", still == kept, "%s → %s" % [str(kept), str(still)])
+	g.boss_void.clear()
 
 	print("\n%s" % ("전부 통과" if fails == 0 else "실패 %d건" % fails))
 	quit(mini(fails, 125))

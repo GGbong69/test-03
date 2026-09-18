@@ -42,7 +42,7 @@ func _row(id: String) -> Dictionary:
 # 그 제약 하나만 걸고 판을 연다.
 func _arm(g: Node, id: String) -> void:
 	var r := _row(id)
-	# 표의 행을 통째로 싣는다 — 게임이 그렇게 한다(_pick_stage 의 sp.d).
+	# 표의 행을 통째로 싣는다 — 게임이 그렇게 한다(_leg_mods 가 행을 싣는다).
 	# 손으로 골라 담으면 id 가 빠져 그리기가 터진다.
 	g.active_mods = [] if r.is_empty() else [r]
 	g._start_leg()

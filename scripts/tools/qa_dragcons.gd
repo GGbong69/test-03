@@ -136,26 +136,23 @@ func _run() -> void:
 			"%s" % g._tip_hit(leg_at))
 	g._hand_abort()
 
-	#  제약 카드는 tip_mark 로 "선다" 를 판정한다(_drop_update). 툴팁이 꺼지면
-	#  카드도 안 서야 한다 — 두 가지가 아니라 한 가지다.
+	#  보스 카드는 tip_mark 로 "얹혔다" 를 판정한다(_leg_card 의 hov).
+	#  들고 있는 동안은 툴팁이 꺼지므로 카드도 대답하면 안 된다 —
+	#  두 가지가 아니라 한 가지다(제약 카드가 서던 자리를 물려받았다).
 	g.leg_no = GameData.legs_per_round()
-	g._open_stage()
+	g._open_leg()
+	g.leg_t = g._deal_time() + 1.0
 	g.cons = [candy.duplicate()]
-	var st_at: Vector2 = g._stage_rect(0).get_center()
-	g._tip_build(g._tip_hit(st_at))
-	g.tip_a = 1.0
-	for k in 30:
-		g._drop_update(1.0 / 60.0)
-	var up_free: float = float(g.stage_stand[0])
-	_ok("안 들면 커서 아래 제약 카드가 선다", up_free > 0.9, "up %.3f" % up_free)
+	var st_at: Vector2 = g._row_rect(
+			GameData.leg_idx(g._round_boss()), GameData.legs_per_round()).get_center()
+	_ok("안 들면 커서 아래 보스 카드가 잡힌다",
+			String(g._tip_hit(st_at).get("k", "")) == "legboss",
+			"%s" % g._tip_hit(st_at))
 	g._hand_press(g._cons_rect(0).get_center())
 	for k in range(1, 9):
 		g._hand_motion(g._cons_rect(0).get_center().lerp(st_at, float(k) / 8.0))
-	g._tip_build(g._tip_hit(st_at))
-	for k in 30:
-		g._drop_update(1.0 / 60.0)
-	var up_held: float = float(g.stage_stand[0])
-	_ok("드는 동안 제약 카드가 안 선다", up_held < 0.01, "up %.3f" % up_held)
+	_ok("드는 동안 보스 카드가 안 잡힌다", g._tip_hit(st_at).is_empty(),
+			"%s" % g._tip_hit(st_at))
 	g._hand_abort()
 
 

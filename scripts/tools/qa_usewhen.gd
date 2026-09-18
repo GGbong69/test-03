@@ -78,11 +78,13 @@ func _run() -> void:
 			cbad.append(String(c.n))
 	_ok("사탕 다섯은 아무 때나", cbad.is_empty(), ", ".join(cbad))
 
-	# ② 자리 넷 × 아홉 장 전수
+	# ② 자리 셋 × 아홉 장 전수
 	print("")
+	#  제약 고르기 화면이 없어져 자리가 셋이다 — use_at "rest" 는 원래
+	#  상점·판 고르기만 열었으므로 두 사탕 모두 애초에 그 화면에서 못 썼다.
 	var spots := [["상점", g.S.SHOP], ["판 고르기", g.S.LEG],
-			["판 플레이", g.S.PICK], ["제약 고르기", g.S.STAGE]]
-	print("      %-22s %s" % ["", "상점  판고르기  판플레이  제약"])
+			["판 플레이", g.S.PICK]]
+	print("      %-22s %s" % ["", "상점  판고르기  판플레이"])
 	for id in WANT:
 		var c := _find(id)
 		if c.is_empty(): continue
@@ -95,6 +97,11 @@ func _run() -> void:
 			g.owned = [GameData.items()[0].duplicate()]
 			g.state = sp[1]
 			g.pay_msg = ""
+			#  런 값도 같이 되돌린다. GOOD AFTERNOON 이 이 표에서 프리크라임
+			#  **앞줄**이라, 그것이 남긴 무효를 안 지우면 프리크라임이
+			#  「이미 무효인 보스다」로 막혀 자리 검사가 거짓으로 실패한다
+			#  — 여기서 재는 것은 자리(use_at)지 런 상태가 아니다(2026-09-18).
+			g.boss_void.clear()
 			# 구성 VIII 은 사용조건 위에 「첫 다트 착탄 이후」가 더 붙는다.
 			# 여기서 재는 것은 사용조건이므로 궤적을 미리 심어 둔다 —
 			# 그 추가 조건은 qa_again 이 따로 잰다.

@@ -159,17 +159,20 @@ func _process(_d: float) -> bool:
 			boss = n
 			break
 	g.leg_no = boss
-	g._open_stage()
-	if g.stage_pick.size() < 2:
-		_ok("겹치기 — 보스 판이 열린다", false, "카드 %d장" % g.stage_pick.size())
-	else:
-		g._pick_stage(0)
-		_ok("겹치기 — 제약이 둘 걸린다", g.active_mods.size() == 2,
-				"걸린 제약 %d개" % g.active_mods.size())
-		var seen := {}
-		for m in g.active_mods:
-			seen[String(m.get("id", ""))] = true
-		_ok("겹치기 — 서로 다른 둘이다", seen.size() == 2, "%s" % str(seen.keys()))
+	#  「안 고른 카드에서 하나 더」가 사라졌다 — 이제 _roll_boss_mods 가
+	#  want = mods_n 만큼 **확정으로** 건다. 카드에 둘 다 보이므로 옛
+	#  주석이 걱정하던 「못 본 것이 걸린다」가 통째로 없어졌다(2026-09-18).
+	g._open_leg()
+	var bids: PackedStringArray = g.boss_mods.get(boss, PackedStringArray())
+	_ok("겹치기 — 보스 판에 둘이 정해진다", bids.size() == 2,
+			"정해진 제약 %d개" % bids.size())
+	var seen := {}
+	for mid in bids:
+		seen[String(mid)] = true
+	_ok("겹치기 — 서로 다른 둘이다", seen.size() == 2, "%s" % str(seen.keys()))
+	g._begin_leg()
+	_ok("겹치기 — 판이 서면 둘이 걸린다", g.active_mods.size() == 2,
+			"걸린 제약 %d개" % g.active_mods.size())
 
 	GameData.challenge = ""
 	print("\n%s" % ("전부 통과" if fails == 0 else "실패 %d건" % fails))

@@ -47,7 +47,7 @@ static func from_game(g: Object) -> StringName:
 	var aiming := false
 	match s:
 		g.S.TITLE, g.S.SETTINGS, g.S.COLLECT, g.S.NEWRUN, g.S.OVER, \
-		g.S.STAGE, g.S.SHOP, g.S.LEG, g.S.CLEAR:
+		g.S.SHOP, g.S.LEG, g.S.CLEAR:
 			pass                      # 판 밖 — 조준도 보스도 아니다
 		_:
 			boss = GameData.is_boss(g.leg_no)

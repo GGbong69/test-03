@@ -54,7 +54,7 @@ func _initialize() -> void:
 	g.set_process(false)
 	g._new_run()
 	g._swap_skip()
-	g._open_stage()
+	g._begin_leg()
 	g._swap_skip()
 	Dev.on = true
 	Dev.page = 2
