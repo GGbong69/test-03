@@ -2898,6 +2898,20 @@ const SFX := {
 	"fixture_buy":    {"seq": [392.0, 523.0, 659.0], "gap": 0.07, "d": 0.14, "a": 0.18},
 	"cons_use":       {"seq": [523.0, 659.0], "gap": 0.06, "d": 0.10, "a": 0.18},
 	"sweep_sink":     {"f": 196.0, "d": 0.05, "a": 0.09},
+	#  ── 리롤은 판 밖이다 ─────────────────────────────
+	#  「팔을 휙 휘두르고 물건들이 날아가서 벽에 부딪히고 부서지고」
+	#  (사용자, 2026-09-18). 매물이 창구 턱에 처박히는 소리라 **판 밖**이고,
+	#  그래서 다트가 아니라 카지노 가구 하나 위에서 낸다 — 점토 칩(1:1.73:2.33) ·
+	#  동전 트레이(1:2.41:3.83) · 얇은 금속 원판(1:2.08:3.41:5.06).
+	#  상한 6kHz. 9.7kHz 유리 딸깍 대역은 반려당한 자리라 비워 둔다.
+	#  lo 는 겹칠 때 쓰는 가벼운 판이다. 매물 아홉이면 부딪힘이 7~14ms 간격으로
+	#  오는데 같은 190ms 를 아홉 번 내면 한 덩어리로 뭉친다 — 몸통(원판)을
+	#  뺀 110ms 하나가 그 뭉침을 푸는 전부다.
+	"shop_smash":     {"f": 262.0, "d": 0.16, "a": 0.20},
+	"shop_smash_lo":  {"f": 196.0, "d": 0.09, "a": 0.12},
+	#  팔이 펠트를 가른다. **seq 가 아니다** — 여러 음을 주면 음정이 서고,
+	#  공기 가르는 소리에 음정이 서면 휘파람이 된다.
+	"sweep_whip":     {"f": 147.0, "d": 0.12, "a": 0.10},
 	"drop_skip":      {"f": 330.0, "d": 0.05, "a": 0.10},
 	"chute_enter":    {"f": 523.0, "d": 0.04, "a": 0.10},
 
@@ -5311,6 +5325,14 @@ func _draw() -> void:
 	# 툴팁이 대상 테두리만 같이 흔들고 판은 고정하려면 이 값을 알아야 한다
 	var sh := Vector2.ZERO if motion_off else Vector2(
 			randf_range(-shake, shake), randf_range(-shake, shake))
+	#  **쓸기일 때만** 정수로. 640x360 정수배 확대 · nearest 필터에서
+	#  서브픽셀 흔들림은 아지랑이로 보이는데, 부딪힘이 0.09초에 아홉 번까지
+	#  몰리는 화면에서 그것이 제일 잘 드러난다. 흔들림 전체를 정수로 옮기는
+	#  것은 따로 일감이다 — shake 는 화면 통째의 값 하나라 여기서 규약을
+	#  바꾸면 착탄 · 목표 달성 · 거절이 같이 바뀐다. 그 일감 전까지는 이 한
+	#  화면만 정수인 불일치가 남는다(2026-09-18).
+	if sweep_live:
+		sh = sh.round()
 	shake_off = sh
 	draw_set_transform(sh)
 
@@ -12064,6 +12086,15 @@ const SWEEP := {
 	"speed": 1.3,
 	"reach": 0.26,       # 팔을 오른쪽 끝까지 뻗는다. 0.16 은 순간이동으로 읽혔다
 	"rake": 0.52,        # 훑는다. 이 동안만 왼쪽 벽이 열린다
+	#  훑기의 **가속 구간 비**. 앞 9% 에서 최고속(2555 면px/s)까지 치솟고
+	#  그 뒤로는 끝까지 단조 감속한다 — 이 한 값이 「휙」의 전부다.
+	#  0 으로 두면 시작 속도가 무한이라 60fps 첫 프레임에 손이 42px 을 뛴다
+	#  (reach 0.16 에서 겪은 순간이동과 같은 종류다). 0.09 면 9.9px 이다.
+	#  단조 감속이라는 것이 덤이 아니라 뼈대다: 날린 물건이 영원히 날보다
+	#  빠르므로 **재타격 판정이 필요 없고**, 도착 순서가 오른쪽→왼쪽으로
+	#  절대 안 뒤집힌다. 0.5 로 두면 옛 _ease_io 에 가까워진다(되돌리기 손잡이).
+	#  2026-09-18 요청: 「팔을 휙 휘두르고」.
+	"whip": 0.09,
 	"back": 0.30,        # 복귀. 새 매물은 이 동안 이미 떨어지고 있다
 	"u0": 529.0, "u1": 18.0,
 	"w_el": 24.0, "w_hd": 126.0,
@@ -12092,14 +12123,131 @@ const SWEEP := {
 	#  나가 잘린다. 잘린 자리는 동전 슬롯이 덮는다.
 	"aside": 86.0,       # 쓸는 동안 쉬는 팔이 물러나는 깊이(면 w)
 	"hand_up": 1.55,     # 훑을 때 손 배율 — 가까이 온 것은 커진다. 원근이다
-	"push": 620.0,       # 밀린 물건이 받는 최소 좌향 속도 (면px/s)
+	#  밀린 물건이 받는 최소 좌향 속도 (면px/s). **motion_off 전용으로 남는다** —
+	#  움직임을 끈 손님은 옛 길(구멍으로 미끄러져 사라짐)로 간다. 켜진 쪽은
+	#  SMASH.kick 이 날의 그 순간 속도에서 값을 뽑는다.
+	#  fling 이 이 값으로 내려오면 2026-09-18 전의 「쓸어 담기」가 그대로 돌아온다.
+	"push": 620.0,
 	"fall_g": 900.0, "fall_c": 3.2, "fall_t": 0.44,
 }
+
+#  ══ 턱에 처박힌다 ═══════════════════════════════════════
+#  팔이 물건을 **밀고 따라가던** 것을 「휙 후린다 · 날아간다 · 턱에 처박혀
+#  부서진다」 세 마디로 바꾼 값들이다(2026-09-18 요청). 뼈대는 셋이다 —
+#  ① SWEEP.whip 이 날을 앞으로 몰고 뒤에서 늦춘다 ② 날의 그 순간 속도에
+#  kick 을 곱해 **한 번만** 박고 손을 뗀다 ③ 왼쪽 벽이 빗변에서 hw 만큼
+#  안으로 들어와 「물건 바깥 모서리가 빗변에 닿는 자리」가 된다(_drop_lo).
+#
+#  새 기하도 새 그림도 없다 — _chute_draw 가 이미 긋고 있는 빗변 선이 턱이다.
+const SMASH := {
+	#  ── 날리기 ────────────────────────────────────
+	#  kick 1.40: 날이 단조 감속하므로 1 보다 크면 물건이 영원히 날보다
+	#  빠르다. 1.16 은 도착 간격이 18~22ms 로 좁아 한 덩어리로 들리고,
+	#  2.0 은 최고 4894 면px/s(60fps 한 프레임 82px)라 스미어 두 장으로
+	#  못 덮어 잔상이 끊긴다. 1.40 에서 최고 3426(57px/프레임) · 간격 21~27ms.
+	"kick": 1.40,
+	#  v_lo 1500: k→1 에서 날의 속도가 0 으로 가므로 kick 만으로는 마지막
+	#  물건이 안 날아간다. 실제로 걸리는 자리는 날 속도 1071 밑이고,
+	#  1500 은 거기서도 여전히 날보다 빠르다.
+	"v_lo": 1500.0,
+	#  v_hi 3600: 스미어 두 장(u+9 · u+20)이 덮을 수 있는 한 프레임 이동의
+	#  상한이다. 터널링도 여기서 막힌다 — 3600 × DROP.sub 0.00625 = 22.5
+	#  면px/서브스텝이라 맞붙는 둘의 상대변위 45px 이 최소 상호작용 현 65px 밑이다.
+	"v_hi": 3600.0,
+	#  ── 맞는 순간 (it.flung 으로 한 번만) ─────────
+	#  squash 0.55: **_drop_wob 으로는 못 만든다.** 그쪽은 속도를 [0,1] 로
+	#  자르는데 그 속도가 낼 수 있는 wob 꼭짓점이 1/12.25 = 0.08 뿐이라
+	#  화면에서 0.4% 눌린다 — 즉 안 보인다(DROP.knock_w 주석이 이미 잰 값).
+	#  _knock 처럼 wob 을 **값으로** 직접 누르고 스프링이 되밀게 둔다.
+	#  0.55 면 동전 44.1×34.7 → 45.3×32.4 다.
+	"squash": 0.55,
+	#  pop 150: 정점 h 8.04 면px(화면 4.9px) · 체공 0.214초. 비행(0.058~0.110초)
+	#  보다 길어 **공중에서** 턱에 처박힌다. h > h_touch 0.5 라 쿨롱 마찰이
+	#  안 걸려 속도가 그대로 간다. 더 띄우면 그림자가 커져(sh_grow) 「바닥에
+	#  꽂힌 것처럼 보인다」 제보를 다시 만든다.
+	"pop": 150.0,
+	#  drift/fan: 벽 법선을 그대로 쓰면 vw 가 −0.41v 라 0.11초에 w 가 155 나
+	#  뒤로 밀려 전부 먼 벽에 처박힌다. 비율을 [−0.12, +0.04] 로 가둔다 —
+	#  v0 3426 · 비행 0.110 에서 Δw ∈ [−45, +15] 이고 w 79 출발이 [34, 94]
+	#  에 든다(먼 벽 w_lo 28 에 안 닿는다).
+	"drift": 0.04, "fan": 0.08,
+	"om": 9.0,           # 맞은 것이 더 돈다 — 던지기 om_amp 7 바로 위
+	#  chain 600: **날은 맨 오른쪽 하나만 때린다.** 실측(매물 넷, u 213·218·
+	#  259·352)에서 날이 민 것은 352 하나뿐이고, 그것이 3071 면px/s 로
+	#  나머지를 들이받아 온 무리가 함께 턱으로 간다 — 당구의 브레이크다.
+	#  「날이 민 것」만 flung 으로 두면 넷 중 **하나만** 눌리고 뜨고 잔상이
+	#  붙고, 나머지 셋은 h 0 으로 미끄러져 「날아간다」가 넷 중 하나만 참이 된다.
+	#  600 은 자는 문턱(v_sleep 6)에서 한참 떨어져 있고 날이 직접 박는
+	#  최소(v_lo 1500)의 절반 밑이라 **사슬로만** 열린다.
+	"chain": 600.0,
+	#  ── 그리기 ────────────────────────────────────
+	#  hold 0.045: 조각이 태어난 자리에서 **원물건 모양을 타일링한 채** 흰색으로
+	#  언 시간. 이 한 수로 _obj_shadow 를 _obj_sil 로 쪼개는 리팩터가 통째로
+	#  필요 없어진다(갈래 여섯의 그림자가 한 픽셀도 안 바뀐다).
+	#  **프레임이 아니라 시간이다** — _process(d) 게임이라 프레임으로 세면
+	#  120Hz 에서 사라진다.
+	"hold": 0.045,
+	"smear": 1800.0,     # 이 속도 위에서만 잔상 두 장. 1~3프레임이고 그 이상은 느려 보인다
+	"lip_t": 0.10,       # 턱 강조선이 오르내리는 시간
+	"lip_mark_t": 0.09,  # 부딪힌 자리의 흰 자국 수명
+	#  ── 흔들림 ────────────────────────────────────
+	#  저장소 눈금: 거절 4.0 · 보드 확장 떨굼 5.0 · 목표 근접 9.0 ·
+	#  목표 돌파 13.0 · 제목 판 깨짐 14.0. 리롤은 그 사이에 든다.
+	#  maxf 라 매물이 아홉이어도 꼭짓점이 6.0 을 못 넘는다 — **합산 상한이
+	#  식 안에 이미 있다.** 6.0 이 0.176초에 죽어 부딪힘 열차와 길이가 맞는다.
+	"shake0": 6.0, "shake1": 3.0,
+	#  ── 소리 문 ──────────────────────────────────
+	#  첫 판(shop_smash 190ms) 뒤 40ms · 가벼운 판(shop_smash_lo 110ms) 뒤
+	#  18ms 동안 문이 닫힌다. **간격을 안 두면 문이 하는 일이 없다** — 셋이
+	#  한 서브스텝에 깨지면 소리 셋이 같은 ms 에 겹쳐 한 덩어리가 된다
+	#  (실측으로 한 쓸기에 일곱까지 났다).
+	#  18ms 는 파열 트랜지언트(+12~16ms)가 앞 소리의 그것과 안 붙는 최소다.
+	#  snd_max 4 는 매물이 아홉이어도 귀가 「한바탕」으로 듣게 하는 상한이다.
+	"snd_gap": 0.040, "snd_gap_lo": 0.018, "snd_max": 4,
+	#  ── 조각 ──────────────────────────────────────
+	#  core 0.26: 부채꼴 안쪽 반지름. 0 으로 모으면 안쪽 변이 2px 밑으로
+	#  내려가 물건이 아니라 먼지가 된다(1px 외톨이 금지 — 23017 · 24791).
+	#  동전을 다섯으로 가르면 안쪽 호 6.4px 로 그 바닥의 세 배 위다.
+	"core": 0.26,
+	"jag": 0.35,         # 경계각 흔들기. 안 흔들면 균등 피자 조각으로 읽힌다
+	#  조각 속력 — 원속도의 12%. v_in 3426 이면 411 이 아니라 sp_hi 로 잘린다.
+	"sp_k": 0.12, "sp_lo": 150.0, "sp_hi": 320.0,
+	"vh_lo": 90.0, "vh_hi": 240.0,       # 정점 2.9~20.6 면px · 체공 0.13~0.34초
+	"om_lo": 2.5, "om_hi": 8.5,
+	#  수명 — 상한을 올리면 마지막 조각이 **새 매물 첫 착지 위에 남는다.**
+	#  실측(qa_smash ②): 가장 늦은 부딪힘이 0.488초, 딜링이 0.600초, 새 매물
+	#  첫 착지가 0.978초다. 0.42 로 두면 여유가 0.045초뿐이라 한 프레임만
+	#  어긋나도 겹친다. 0.34 에서 0.12초가 남는다 — SWEEP.fall_t 0.44 보다
+	#  짧은 같은 가족이다.
+	"life_lo": 0.24, "life_hi": 0.34,
+	"sink_t": 0.10,      # 마지막 이 시간 동안 펠트 색으로 가라앉는다
+	"spread": 0.9599,    # 벽 법선 둘레로 흩는 각(rad, 55°). ±90°면 벽을 파고들고 ±25°면 다발로 뭉친다
+	#  ── 부스러기 ──────────────────────────────────
+	"grit_sp_lo": 260.0, "grit_sp_hi": 480.0,
+	"grit_life_lo": 0.20, "grit_life_hi": 0.34,
+	#  ── 먼지 (STAGE.du_* 규격을 수치만 베낀다. 그 코드는 통 전용이라 못 부른다) ──
+	"du_n": 3, "du_t": 0.22, "du_rise_lo": 2.0, "du_rise_hi": 5.0,
+}
+
 var sweep_t := 0.0       # 쓸기 경과(초)
 var sweep_live := false  # 연출 전체가 도는 중 — 입력을 통째로 삼킨다
 var sweep_on := false    # 훑기 중 — 물리가 열린 구간
 var sweep_dealt := false # 새 판을 이미 깔았는가
 var waste := []          # 창구로 빠진 물건. stock 사본을 들고 다닌다
+#  부서짐은 waste 와 **나란히** 산다. waste 에 얹으면 _waste_draw 가
+#  _obj_paint 로 물건을 통째로 다시 그리므로 조각이 그 길을 못 탄다.
+var shards := []         # 큰 조각. pts 는 면(w-평면) 국소 좌표다
+var grit := []           # 2~3px 부스러기. 절반은 왼쪽으로 차 구멍으로 샌다
+#  인 먼지. STAGE 의 것(cup_du)은 값 하나로 세 알갱이를 내지만 여기는
+#  부딪힘이 매물 수만큼 나므로 자리마다 하나씩 들고 있어야 한다.
+var smash_dust := []
+var lip_marks := []      # 턱에 남는 흰 자국. 쓸기 안에서만 산다
+var lip_up := 0.0        # 턱 강조선의 알파
+var smash_seed := 0      # 쓸기마다 하나. _gl_rand 의 두 번째 인자다
+var smash_snd_t := 0.0   # 소리 문. **실시간 d 로 깎는다**(sweep_t 는 x1.3 이라 단위가 다르다)
+var smash_snd_n := 0     # 이번 쓸기에서 낸 소리 수(상한 SMASH.snd_max)
+var smash_n := 0         # 이번 쓸기에서 깨진 수
+var smash_deal_n := 0    # 그중 안전망(_sweep_deal)이 깬 수 — 프로브가 읽는다
 
 #  ── 테이블 위 물건의 배율 ────────────────────────────
 #  2026-09-17 제보: "아이템들 크기 살짝씩 다 키워도 될거 같은데".
@@ -12151,6 +12299,11 @@ func _table_draw() -> void:
 	_goods_draw()
 	_waste_draw()
 	_cover_draw()
+	#  조각은 _cover_draw **다음**이다. _waste_draw 옆에 두면 _cover_draw 가
+	#  그리는 _npc_arms 와 _hand3_draw 가 조각을 덮는다 — 날이 턱에 닿는 것이
+	#  0.512초고 조각은 0.85초까지 사니까, 그 0.34초 동안 마지막 물건의 조각이
+	#  손(hand_up 1.55배) 밑에 통째로 숨는다.
+	_smash_draw()
 	#  값은 이제 _goods_draw 안에서 물건마다 그린다(_bill_one) — 여기서
 	#  따로 한 바퀴 돌면 뒤 물건의 값이 앞 동전 위에 얹힌다.
 
@@ -12296,6 +12449,27 @@ func _chute_draw() -> void:
 			yy += 5.0
 		var eg: Color = C_ACC if lit else C_WOOD.lightened(0.34).lerp(C_ACC, hk)
 		draw_line(p[1], p[2], Color(eg, 0.95 if lit else lerpf(0.50, 0.95, hk)), 1.0)
+		#  ── 턱 ────────────────────────────────────────
+		#  쓸기 동안 이 빗변이 **벽이다**(_drop_lo). 새 도형을 안 그린다 —
+		#  이미 긋고 있는 이 선을 한 겹 굵게 덧그어 「여기 맞는다」를 말한다.
+		#  안쪽 2px 그늘이 없으면 굵어진 선이 그냥 밝아진 것으로만 보인다.
+		if z == Z_SELL and sweep_live and lip_up > 0.004:
+			var ln := (p[2] - p[1]).normalized()
+			var nm := Vector2(ln.y, -ln.x)      # 펠트 쪽(오른쪽) 법선
+			draw_line(p[1] + nm * 2.0, p[2] + nm * 2.0,
+					Color(C_WOOD.darkened(0.62), lip_up * 0.55), 2.0)
+			draw_line(p[1], p[2], Color(C_WOOD.lightened(0.55), lip_up), 2.0)
+			#  부딪힌 자리 — 그 화면 y 둘레 10px. **자국은 쓸기 안에서만 산다**
+			#  (걷어 낸 코스터 자국의 재발을 _sweep_reset 이 막는다).
+			for mk in lip_marks:
+				var my: float = float(mk.y)
+				var ka: float = 1.0 - float(mk.t) / float(SMASH.lip_mark_t)
+				if ka <= 0.0:
+					continue
+				var y0: float = clampf(my - 5.0, TBL.fy, TBL.ny)
+				var y1: float = clampf(my + 5.0, TBL.fy, TBL.ny)
+				draw_line(Vector2(_chute_edge(y0), y0), Vector2(_chute_edge(y1), y1),
+						Color(C_LIGHT, 0.8 * ka), 2.0)
 		if not open:
 			# 닫힌 창구 — 셔터 두 줄. 스테이지 화면에서는 사고팔 것이 없다.
 			for k in 2:
@@ -14118,7 +14292,34 @@ func _sweep_line(w: float) -> float:
 # 손의 u. 훑기 전이면 시작점, 후면 끝점에 머문다 — 복귀는 _sweep_amt 가 한다.
 func _sweep_u() -> float:
 	return lerpf(SWEEP.u0, SWEEP.u1,
-			_ease_io((sweep_t - SWEEP.reach) / SWEEP.rake))
+			_sweep_whip((sweep_t - SWEEP.reach) / SWEEP.rake))
+
+
+#  후리기 곡선. 앞 whip 에서 치솟고 그 뒤 끝까지 **단조 감속**한다 —
+#  가운데가 가장 빠른 _ease_io 와 정반대다. 물건을 밀고 따라가던 팔이
+#  후리고 뒤처지는 팔이 되는 자리이고, 그것이 「휙」의 전부다.
+#
+#  속도는 이 식의 도함수다: e(k) = 2k/whip (k<whip) · 2(1−k)/(1−whip) (그 밖).
+#  ∫e dk = whip + (1−whip) = 1 이라 위치가 정확히 0→1 로 간다 — 손이
+#  u1 에 **정확히** 선다(근사가 아니다). 정점은 k=whip 에서 e=2 다.
+func _sweep_whip(t: float) -> float:
+	var k := clampf(t, 0.0, 1.0)
+	var wp: float = SWEEP.whip
+	if k < wp:
+		return k * k / wp
+	var r := 1.0 - k
+	return 1.0 - r * r / (1.0 - wp)
+
+
+#  날의 **지금** 속도(면px/s, 양수). 위치와 속도가 같은 식의 원함수·도함수라
+#  둘이 절대 못 갈린다. 프레임차(Δu/Δt)로 재면 서브스텝마다 값이 떨고,
+#  그 떨림이 그대로 조각 속도와 소리 게이트에 실린다 — 손으로 적은 도함수를 쓴다.
+#  최고 (529−18)·2·1.3/0.52 = 2555 면px/s.
+func _sweep_vu() -> float:
+	var k := clampf((sweep_t - SWEEP.reach) / SWEEP.rake, 0.0, 1.0)
+	var wp: float = SWEEP.whip
+	var e: float = (2.0 * k / wp) if k < wp else (2.0 * (1.0 - k) / (1.0 - wp))
+	return (SWEEP.u0 - SWEEP.u1) * e * SWEEP.speed / SWEEP.rake
 
 
 # 쉬는 자세와 훑는 자세를 섞는 비율. 뻗기에 0→1, 훑기에 1, 복귀에 1→0.
@@ -14177,6 +14378,19 @@ func _sweep_reset() -> void:
 	sweep_on = false
 	sweep_dealt = false
 	waste.clear()
+	#  **자국이 쓸기 밖으로 안 새는 유일한 자리다.** _open_shop 도 이 함수를
+	#  부르므로 상점 입장마다 저절로 깨끗해진다 — 걷어 낸 코스터 자국
+	#  (「뭔데 이것들은?」 2026-09-16)이 여기서 다시 살아나지 않게.
+	shards.clear()
+	grit.clear()
+	smash_dust.clear()
+	lip_marks.clear()
+	lip_up = 0.0
+	smash_n = 0
+	smash_deal_n = 0
+	smash_snd_t = 0.0
+	smash_snd_n = 0
+	smash_seed += 1
 
 
 # 골드 정산은 _reroll 이 이미 끝냈다. 여기는 연출과 물리만 연다.
@@ -14203,7 +14417,12 @@ func _sweep_update(d: float) -> void:
 		return
 	sweep_t += d * float(SWEEP.speed)
 	var t1: float = SWEEP.reach + SWEEP.rake
+	var was: bool = sweep_on
 	sweep_on = sweep_t >= SWEEP.reach and sweep_t < t1
+	#  후리기가 시작되는 **그 한 프레임**에만 낸다. _reroll 에 붙이면 뻗기
+	#  0.2초 동안 아무 일도 안 일어나는 화면에서 소리부터 나 앞뒤가 갈린다.
+	if sweep_on and not was:
+		_sfx("sweep_whip")
 	if not sweep_dealt and sweep_t >= t1:
 		sweep_dealt = true
 		_sweep_deal()
@@ -14213,17 +14432,30 @@ func _sweep_update(d: float) -> void:
 
 
 # 훑기가 끝났다. 남은 것이 있으면(선이 트레이를 전부 덮으므로 있을 수 없다)
-# 같이 구멍으로 보내고 새 판을 깐다. _roll_stock 은 한 글자도 안 고쳤다 —
+# 제자리에서 깨고 새 판을 깐다. _roll_stock 은 한 글자도 안 고쳤다 —
 # 그것이 상점 입장(_open_shop)에 쓸기가 안 붙는 유일한 무조건 보장이다.
+#
+# 턱까지 못 간 것을 팝 하고 사라지게 두지 않는 것이 요점이다 — 안전망이
+# 일해도 화면이 같은 말을 한다. smash_deal_n 은 그 안전망이 몇 번 일했는지이고
+# sweep_probe 가 「0 이다」를 매 롤 잰다.
 func _sweep_deal() -> void:
 	for i in mini(drop.size(), stock.size()):
-		_sweep_sink(i)
+		if drop[i].gone or drop[i].sold > 0.0:
+			continue
+		smash_deal_n += 1
+		_smash_at(i)
 	_roll_stock()
 
 
-# 팔이 미는 한 번. 다트는 원 3개라 중심만 보면 촉이 팔을 통과한다 —
+# 팔이 후리는 한 번. 다트는 원 3개라 중심만 보면 촉이 팔을 통과한다 —
 # _drop_sub 로 부분원마다 보고 가장 깊이 물린 만큼 중심을 옮긴다.
 # 팔은 무한질량이라 한쪽만 움직이고, h 는 한 번도 안 건드린다.
+#
+# **날의 그 순간 속도에 kick 을 곱해 한 번 박고 손을 뗀다.** 날이 whip 곡선으로
+# 단조 감속하므로 kick > 1 이면 물건이 영원히 날보다 빠르다 — 재타격 판정
+# 자체가 필요 없다. minf 로 갱신하는 것은 남겨 둔다: 사슬 충돌로 느려진
+# 물건을 날이 다시 만나면 **다시 날린다.** 그래야 「팔은 무한질량」 규약도
+# sweep_probe 의 worst_left == 0 도 안 깨진다.
 func _sweep_push(i: int) -> void:
 	var it: Dictionary = drop[i]
 	if it.gone or it.sold > 0.0 or it.held:
@@ -14234,13 +14466,21 @@ func _sweep_push(i: int) -> void:
 		over = maxf(over, sp.x - (_sweep_line(sp.y) - it.r))
 	if over > 0.0:
 		it.u -= over
-		it.vu = minf(it.vu, -SWEEP.push)
+		#  motion_off 는 옛 길이다 — 밀려 나가 구멍으로 미끄러진다.
+		var v0: float = float(SWEEP.push) if motion_off else clampf(
+				float(SMASH.kick) * _sweep_vu(), SMASH.v_lo, SMASH.v_hi)
+		it.vu = minf(it.vu, -v0)
 		it.sleep = false
 		it.rest = 0.0
-	# 빗변을 넘었으면 물리를 떠난다. _drop_lo 가 왼쪽 벽을 여기까지 물렸으므로
-	# _drop_walls 가 정확히 이 값으로 잘라 놓은 뒤다.
-	if it.u <= _chute_dock_u(Z_SELL, it.w) + 0.02:
-		_sweep_sink(i)
+		if not bool(it.get("flung", false)):
+			_smash_fling(i, v0)
+	# 턱에 닿았으면 부서진다. **속도로 안 가른다 — 닿으면 깨진다.**
+	# 속도는 세기만 정한다(_smash_at). 사슬 충돌로 느려진 것도 날이 끝까지
+	# 밀고 온 것도 전부 여기서 깨지므로 「훑기가 판을 비운다」가 그대로 산다.
+	# _drop_lo 가 왼쪽 벽을 여기로 물렸고 _drop_walls 가 정확히 이 값으로
+	# 잘라 놓은 뒤다.
+	if it.u <= _drop_lo(it) + 0.02:
+		_smash_at(i)
 
 
 # 빗변을 넘었다. 물리를 떠나 구멍으로 간다. drop 에서는 gone 이 되고 그림만
@@ -14283,6 +14523,574 @@ func _waste_update(d: float) -> void:
 func _waste_draw() -> void:
 	for it in waste:
 		_obj_paint(it, it.s, minf(float(it.t) * 1.3, 0.94))
+
+
+# ══ 쓸기 — 턱에 처박혀 부서진다 ═══════════════════════════
+#
+#  「팔을 휙 휘두르고 물건들이 날아가서 벽에 부딪히고 부서지고」(2026-09-18).
+#  세 마디다 — 후린다(SWEEP.whip) · 날아간다(_smash_fling) · 처박힌다(_smash_at).
+#
+#  난수는 전부 _gl_rand 다. 조각마다 배열을 안 들고도 같은 값이 나오고,
+#  전역 RNG 스트림을 안 건드리므로 프로브의 씨 고정이 안 흔들린다.
+#  회전은 **점을 직접 돌린다** — draw_set_transform 금지 불변식(SWEEP 머리말)이
+#  여기에도 걸린다. 상점 그리기 경로에서 변환을 걸면 _tip_draw 가 복구할 때
+#  조용히 사라진다.
+
+# 날이 물건을 후린 **첫 한 번**. it.flung 이 두 번째를 막는다 —
+# minf 로 속도만 갱신하는 것과 갈라 둔 자리다(사슬 충돌로 느려진 물건을
+# 날이 다시 만나면 속도는 다시 박되 자세는 한 번만 무너뜨린다).
+func _smash_fling(i: int, v0: float) -> void:
+	if motion_off:
+		return          # 옛 길이다 — 밀려 나가 구멍으로 미끄러진다
+	var it: Dictionary = drop[i]
+	it["flung"] = true
+	#  눌림은 **값으로** 누른다. _drop_wob 은 속도를 [0,1] 로 자르는 통이라
+	#  그 속도가 낼 수 있는 wob 꼭짓점이 1/12.25 = 0.08 뿐이고, 화면에서
+	#  0.4% 눌린다 — 즉 안 보인다(DROP.knock_w 주석이 이미 재 놓은 값).
+	#  _knock 과 같이 직접 누르고 스프링이 되밀게 둔다.
+	it.wob = maxf(float(it.wob), float(SMASH.squash))
+	#  뜬다. h > h_touch 0.5 라 쿨롱 마찰이 안 걸려 속도가 그대로 가고,
+	#  체공 0.214초가 비행(0.058~0.110초)보다 길어 **공중에서** 턱에 닿는다.
+	#  _sweep_begin 의 h ≡ 0 전제는 **시작 전**의 약속이라 안 깨진다 —
+	#  날이 h 를 안 읽어도 물건이 날보다 빠르므로 날이 뜬 물건을 관통할 수 없다.
+	it.vh = maxf(float(it.vh), float(SMASH.pop))
+	it.air = true
+	it.vw += v0 * (-float(SMASH.drift)
+			+ (_gl_rand(i * 11 + 3, smash_seed) - 0.5) * 2.0 * float(SMASH.fan))
+	it.om = clampf(float(it.om)
+			+ (_gl_rand(i * 7 + 5, smash_seed) - 0.5) * 2.0 * float(SMASH.om),
+			-DROP.om_cap, DROP.om_cap)
+
+
+# 사슬로 날아간 것도 날린 것으로 친다. 날이 직접 미는 것은 맨 오른쪽
+# 하나뿐이고 나머지는 그것에 들이받혀 간다(SMASH.chain 주석) — 그 셋에도
+# 같은 눌림 · 뜨기 · 잔상을 얹어야 「물건들이 날아간다」가 전부 참이 된다.
+func _smash_chain(i: int) -> void:
+	var it: Dictionary = drop[i]
+	if it.gone or it.sold > 0.0 or it.held or bool(it.get("flung", false)):
+		return
+	var v := absf(float(it.vu))
+	if v < float(SMASH.chain):
+		return
+	_smash_fling(i, v)
+
+
+# 턱에 닿았다. **속도로 안 가른다 — 닿으면 깨진다.** 속도는 세기만 정한다.
+func _smash_at(i: int) -> void:
+	if i < 0 or i >= drop.size() or i >= stock.size():
+		return
+	var it: Dictionary = drop[i]
+	if it.gone or it.sold > 0.0:
+		return
+	if motion_off:
+		#  움직임을 끈 손님에게는 조각도 먼지도 흔들림도 없다 — 지금 그대로
+		#  구멍으로 흘러 들어간다(_egg_shatter 의 「날리지 않는다」가 선례다).
+		#  되돌리기 문이자 그림 찍는 도구가 떨림 없는 화면을 잡는 길이다.
+		_sweep_sink(i)
+		return
+	#  0.30 바닥은 안전망(_sweep_deal)이 깬 것도 조각이 나게 한다 — vu 가
+	#  0 이면 조각이 제자리에 쌓여 「깨졌다」가 아니라 「멈췄다」로 읽힌다.
+	var k: float = clampf(absf(float(it.vu)) / 3400.0, 0.30, 1.0)
+	#  먼지·자국의 기준점은 물건 중심이 아니라 **왼쪽 모서리**다. hw 는 화면
+	#  반폭이라 충돌 반지름과 다르고(다트 37.12 대 10.44), 중심에 찍으면
+	#  다트가 턱에서 37px 떨어진 자리에 먼지를 피운다.
+	_smash_dust(_p2s(float(it.u) - float(it.hw), float(it.w), float(it.h)))
+	lip_marks.append({"y": _p2g(float(it.w)), "t": 0.0})
+	_shard_burst(it, stock[i], k)
+	_grit_burst(it, k)
+	#  maxf 라 매물이 아홉이어도 꼭짓점이 shake0 을 못 넘는다 — 합산 상한이
+	#  식 안에 이미 있다. 연타도 구조적으로 막혀 있다(_reroll 이 sweep_live 면
+	#  즉시 return).
+	shake = maxf(shake, float(SMASH.shake0 if smash_n == 0 else SMASH.shake1))
+	_smash_sfx(it)
+	smash_n += 1
+	it.gone = true
+	it.vu = 0.0
+	it.vw = 0.0
+	it.om = 0.0
+
+
+# 조각 수는 **매물 수가 정한다**(_lane_pad 가 같은 식의 선례다).
+# 동시 최대 4x6=24 · 6x5=30 · 9x4=36 큰 조각. 전부 40 밑이다.
+# 부딪힘이 0.09초 안에 몰리고 수명이 0.28~0.42초라 이 최대치가 실제로 한
+# 프레임에 다 선다 — 72개(9x8)를 그대로 내면 트레이 408x110 의 16% 가
+# 조각이 되어 개별 물건이 아니라 **국**으로 읽힌다.
+func _shard_n(n: int) -> int:
+	return 5 if n <= 4 else (4 if n <= 6 else 3)
+
+
+func _grit_n(n: int) -> int:
+	return 4 if n <= 4 else 3
+
+
+# 벽 법선(면 좌표). 빗변이 (1, tilt) 방향이라 법선도 그 방향이다 —
+# +u 에서 24.2°. 조각과 가루가 같은 방향에서 흩어져야 「벽에서 튀었다」로 읽힌다.
+func _smash_nv() -> Vector2:
+	return Vector2(1.0, float(SWEEP.tilt)).normalized()
+
+
+func _shard_burst(it: Dictionary, s: Dictionary, k: float) -> void:
+	var sd: int = smash_seed * 131 + smash_n * 17 + 1
+	var cuts := _shard_cut(s, _shard_n(stock.size()), sd)
+	var cl := _shard_cols(s)
+	var nv := _smash_nv()
+	var anc := _p2s(float(it.u), float(it.w), float(it.h))
+	var sp: float = clampf(float(SMASH.sp_k) * absf(float(it.vu)) * k,
+			float(SMASH.sp_lo), float(SMASH.sp_hi))
+	for j in cuts.size():
+		var pts: PackedVector2Array = cuts[j]
+		#  무게중심을 빼 조각의 **제 축**을 돌게 한다. 안 빼면 조각 전부가
+		#  물건 중심을 도는 팔랑개비가 된다.
+		var ctr := Vector2.ZERO
+		for q in pts:
+			ctr += q
+		ctr /= float(maxi(pts.size(), 1))
+		var loc := PackedVector2Array()
+		for q in pts:
+			loc.append(q - ctr)
+		var off := ctr.rotated(float(it.psi))
+		#  ── 왜 벽 법선만으로는 안 되는가 ────────────────
+		#  법선 하나에 ±55° 만 얹으면 조각이 **통째로 같은 쪽으로 옮겨 간다** —
+		#  실측 그림에서 깨진 동전이 흩어지지 않고 우산 펴지듯 열렸다.
+		#  제 자리에서 바깥으로 나가는 성분(rad)을 더해야 서로 벌어진다.
+		#  법선을 더 크게 두어 **총합은 여전히 펠트 쪽**이고(왼쪽 창구로
+		#  큰 조각이 새지 않는다), 벽을 등진 조각은 합벡터가 짧아져 저절로
+		#  느려진다 — 접시가 깨질 때 뒤쪽 조각이 늦게 나오는 것과 같다.
+		var rad: Vector2 = off.normalized() if off.length() > 0.01 else nv
+		var vv: Vector2 = nv + rad * 0.85
+		var a: float = vv.angle() + (_gl_rand(j * 5 + 1, sd) - 0.5) * 2.0 * float(SMASH.spread)
+		var kv: float = (clampf(vv.length() / 1.35, 0.45, 1.25)
+				* lerpf(0.82, 1.18, _gl_rand(j * 5 + 2, sd)))
+		var om: float = lerpf(float(SMASH.om_lo), float(SMASH.om_hi),
+				_gl_rand(j * 3 + 7, sd))
+		if _gl_rand(j * 3 + 8, sd) < 0.5:
+			om = -om
+		shards.append({
+			"u": float(it.u) + off.x, "w": float(it.w) + off.y,
+			"h": maxf(float(it.h), 0.0),
+			"vu": cos(a) * sp * kv,
+			#  w 성분에 0.6 — 트레이가 얕다(w 28~122). 그대로 두면 조각이
+			#  먼 벽과 앞 레일로 곧장 빠져 펠트 위에 아무것도 안 남는다.
+			"vw": sin(a) * sp * kv * 0.6,
+			"vh": lerpf(float(SMASH.vh_lo), float(SMASH.vh_hi),
+					_gl_rand(j * 9 + 3, sd)),
+			"psi": float(it.psi), "om": om, "pts": loc,
+			"col": cl[j % 2],
+			#  **음수에서 시작한다**(_egg_bit 의 wait 어법). 그동안 조각이
+			#  태어난 자리에서 원물건 모양을 빈틈없이 타일링한 채 흰색으로
+			#  언다 — 흰 실루엣을 따로 그릴 필요가 없어지고, _obj_shadow 를
+			#  _obj_sil 로 쪼개는 리팩터가 통째로 사라진다(회귀 하나를
+			#  통째로 없앤 자리다).
+			"t": -float(SMASH.hold),
+			"ax": anc.x, "ay": anc.y,
+			"life": lerpf(float(SMASH.life_lo), float(SMASH.life_hi),
+					_gl_rand(j * 11 + 5, sd)),
+			"bounced": false})
+
+
+# 조각 도형. 입구 하나에서 _obj_paint 의 갈래 지도를 그대로 따라간다.
+# 전부 **면(w-평면) 국소 좌표**다 — 그려질 때 _p2s 를 지나므로 사탕처럼
+# 서 있는 물건도 같은 길을 탄다(8~16px 조각에서 이 차이는 안 보인다).
+func _shard_cut(s: Dictionary, n: int, sd: int) -> Array:
+	match String(s.type):
+		"fix":
+			return _shard_grid(FIX_W * GOODS_K, FIX_H * GOODS_K, 2,
+					clampi(n - 2, 2, 3), sd)
+		"boost":
+			return _shard_grid(FIX_W * 1.06 * GOODS_K, FIX_H * 1.06 * GOODS_K, 2,
+					clampi(n - 2, 2, 3), sd)
+		"dart":
+			return _shard_rod(TBL.dart_l, 2.4 * GOODS_K, maxi(n - 1, 3), sd)
+		"cons":
+			#  사탕은 서 있는 물건이라 **발자국**으로 자른다. 화면 31x42 를
+			#  그대로 부채꼴로 자르면 누운 원반이 되어 서 있던 것이 안 읽힌다.
+			return _shard_fan(15.5, 15.5, n, sd)
+		"mod":
+			return _shard_fan(TBL.mod_r, TBL.mod_r, n, sd)
+	return _shard_fan(TBL.chip_r, TBL.chip_r, n, sd)
+
+
+# 부채꼴 띠 + 속 하나. **반지름은 면 좌표다** — chip_r 22.04 를 넣으면
+# _p2s 가 세로를 flat 으로 눌러 화면에서 44.1x34.7 이 되고, 그것이
+# _sticker_flat 이 그리는 크기와 정확히 같다. 화면값(22.04x17.37)을 그대로
+# 넣으면 세로가 한 번 더 눌려 13.7px 짜리 납작한 조각이 난다.
+#
+# 치수 검산(동전 · 화면 넓이 1202px²): 5등분이면 조각 224px², 바깥 호
+# 24.8px · 안쪽 호 6.4px · 반지름 깊이 14.6px. **가장 짧은 변 6.4px** 로
+# 「1px 외톨이는 물건이 아니라 먼지」 바닥의 세 배 위다.
+#
+# 경계의 반지름은 이웃과 **나눠 쓴다** — 조각마다 따로 흔들면 이음매에
+# 1px 틈이 생겨 언 한 프레임의 실루엣이 갈라진 유리로 보인다.
+func _shard_fan(rx: float, ry: float, n: int, sd: int) -> Array:
+	var ang := []
+	var rad := []
+	var crd := []
+	for j in n:
+		#  안 흔들면 균등 피자 조각으로 읽힌다
+		ang.append(TAU * float(j) / float(n)
+				+ (_gl_rand(j * 7 + 1, sd) - 0.5) * (TAU / float(n)) * float(SMASH.jag))
+		rad.append(1.0 + (_gl_rand(j * 7 + 41, sd) - 0.5) * 0.12)
+		crd.append(float(SMASH.core) * (1.0 + (_gl_rand(j * 7 + 61, sd) - 0.5) * 0.24))
+	var out := []
+	for j in n:
+		var j1: int = (j + 1) % n
+		var a0: float = ang[j]
+		var a1: float = ang[j1] + (TAU if j1 == 0 else 0.0)
+		var p := PackedVector2Array()
+		p.append(Vector2(cos(a0) * rx, sin(a0) * ry) * crd[j])
+		for q in 4:
+			var aa: float = lerpf(a0, a1, float(q) / 3.0)
+			var rr: float = rad[j] if q == 0 else (rad[j1] if q == 3
+					else 1.0 + (_gl_rand(j * 13 + q, sd) - 0.5) * 0.12)
+			p.append(Vector2(cos(aa) * rx * rr, sin(aa) * ry * rr))
+		p.append(Vector2(cos(a1) * rx, sin(a1) * ry) * crd[j1])
+		out.append(p)
+	var cp := PackedVector2Array()
+	for j in n:
+		cp.append(Vector2(cos(ang[j]) * rx, sin(ang[j]) * ry) * crd[j])
+	out.append(cp)
+	return out
+
+
+# 찢긴 종이는 방사로 안 갈린다. 격자점을 흔들어 자르되 **가장자리 점은
+# 안 흔든다** — 흔들면 원물건 윤곽이 삐죽해져 언 한 프레임이 실루엣 구실을
+# 못한다. 이웃 칸이 같은 점을 쓰므로 이음매가 빈틈없이 맞물린다.
+func _shard_grid(ex: float, ey: float, cols: int, rows: int, sd: int) -> Array:
+	var pt := []
+	for r in rows + 1:
+		var row := []
+		for c in cols + 1:
+			var x := lerpf(-ex, ex, float(c) / float(cols))
+			var y := lerpf(-ey, ey, float(r) / float(rows))
+			if c > 0 and c < cols:
+				x += (_gl_rand(r * 31 + c, sd) - 0.5) * 2.0 * ex * 0.12
+			if r > 0 and r < rows:
+				y += (_gl_rand(r * 37 + c * 3 + 11, sd) - 0.5) * 2.0 * ey * 0.12
+			row.append(Vector2(x, y))
+		pt.append(row)
+	var out := []
+	for r in rows:
+		for c in cols:
+			out.append(PackedVector2Array([pt[r][c], pt[r][c + 1],
+					pt[r + 1][c + 1], pt[r + 1][c]]))
+	return out
+
+
+# 막대는 축을 따라 토막 난다. 부채꼴을 먹이면 다트가 원반으로 읽힌다 —
+# 촉 · 배럴 · 샤프트 · 날개로 갈리는 것이 실제로도 맞다.
+# 로컬 +x 가 자루 축이다(psi 로 돌린다 — _dart_e 와 같은 축).
+func _shard_rod(L: float, hw: float, n: int, sd: int) -> Array:
+	var cut := [-L]
+	for j in range(1, n):
+		var t: float = float(j) / float(n)
+		t += (_gl_rand(j * 23 + 5, sd) - 0.5) * 2.0 * 0.18 / float(n)
+		cut.append(lerpf(-L, L, t))
+	cut.append(L)
+	var out := []
+	for j in n:
+		out.append(PackedVector2Array([
+				Vector2(float(cut[j]), -hw), Vector2(float(cut[j + 1]), -hw),
+				Vector2(float(cut[j + 1]), hw), Vector2(float(cut[j]), hw)]))
+	return out
+
+
+# 조각의 두 단. 밑색 출처는 갈래마다 하나뿐이고 _obj_paint 가 그 지도다.
+func _shard_cols(s: Dictionary) -> Array:
+	var d: Dictionary = s.get("d", {})
+	match String(s.type):
+		"item":
+			return _shard_tone(Color(STK_TIERS[_stk_ti(String(
+					d.get("rarity", "common")))].body),
+					String(d.get("g", "")) != "")
+		"mod":
+			return _shard_tone(C_DARK.darkened(0.72), false)
+		"dart":
+			#  _dart3_col 을 그대로 부른다 — 「종류를 색으로 가르는 규약이
+			#  화면마다 갈리면 안 된다」(23532)가 여기에도 걸린다.
+			return _shard_tone(_dart3_col(String(d.get("id", ""))), false)
+		"fix":
+			return _shard_tone(C_LIGHT.lightened(0.30), false)
+		"boost":
+			return _shard_tone(C_PANEL.lightened(0.34), false)
+		"cons":
+			#  사탕만 색 출처가 3D 뷰포트 텍스처(_candy_tex_live)라 _draw 에서
+			#  못 딴다. 헤드리스 대체 실루엣의 이 색이 유일하게 손에 잡히는
+			#  것이다 — **이 한 줄을 빠뜨리면 여섯 갈래 중 사탕만 검은
+			#  조각으로 깨진다.**
+			return _shard_tone(C_PANEL.lightened(0.22), false)
+	return _shard_tone(C_LIGHT, false)
+
+
+# 어두운 갈래를 뒤집는 것은 _sticker_flat 이 레어 몸색(241e33)에 이미 쓰는
+# 예외를 그대로 물려받는 것이다 — 안 물려받으면 레어(v 0.20) · 레전더리
+# (0.227) · 보드 확장(0.062)이 펠트(C_TABLE 1b3126, v 0.192)에 통째로 묻힌다.
+# 옆면을 같은 색에서 안 내고 C_WIRE 에서 빼는 이유는, 같은 색을 두 번 밝히면
+# 두 단이 하나로 붙어 조각에 두께가 안 남기 때문이다.
+func _shard_tone(bb: Color, gold: bool) -> Array:
+	if gold:
+		return [C_GOLD, C_GOLD.darkened(0.30)]
+	if bb.v < 0.32:
+		return [bb.lightened(0.38), C_WIRE.darkened(0.34)]
+	return [bb, bb.darkened(float(EDGE.lo))]
+
+
+# 가루. **절반은 왼쪽으로 찬다** — 턱을 넘어 창구로 샌다.
+# 큰 조각은 판에 떨어지고 가루는 구멍으로 새므로 「버려지는 길」이라는
+# 읽기가 그림으로 유지된다.
+func _grit_burst(it: Dictionary, k: float) -> void:
+	var sd: int = smash_seed * 131 + smash_n * 17 + 997
+	var base := _smash_nv().angle()
+	var col: Color = C_LIGHT.darkened(0.15)
+	for j in _grit_n(stock.size()):
+		#  홀수는 180° 쪽 — 창구로 새는 몫이다. 25° 로 좁게 모아 던져야
+		#  가루가 흩어지지 않고 턱 너머로 **떨어져 들어간다**.
+		var back: bool = j % 2 == 1
+		var a0: float = PI if back else base
+		var sw: float = 0.4363 if back else float(SMASH.spread)
+		var a: float = a0 + (_gl_rand(j * 5 + 13, sd) - 0.5) * 2.0 * sw
+		var sp: float = lerpf(float(SMASH.grit_sp_lo), float(SMASH.grit_sp_hi),
+				_gl_rand(j * 7 + 17, sd)) * k
+		grit.append({
+			"u": float(it.u) - float(it.hw) * 0.5, "w": float(it.w),
+			"h": maxf(float(it.h), 0.0) + 2.0,
+			"vu": cos(a) * sp, "vw": sin(a) * sp * 0.6,
+			"vh": lerpf(60.0, 190.0, _gl_rand(j * 9 + 19, sd)),
+			"t": 0.0, "sink": false,
+			"sz": 2.0 if _gl_rand(j * 11 + 23, sd) < 0.6 else 3.0,
+			"col": col,
+			"life": lerpf(float(SMASH.grit_life_lo), float(SMASH.grit_life_hi),
+					_gl_rand(j * 13 + 29, sd))})
+
+
+# 인 먼지. STAGE.du_* 의 규격을 **수치만** 그대로 베낀다(그 코드는 통 전용이라
+# 못 부른다). 알갱이 셋 · 수명 0.22초 · 2x1px · 2~5px 올라간다.
+# 자리는 충돌점 **바깥**(빗변 왼쪽 창구 몸 위)이다 — 안에 두면 조각에 가려
+# 안 보인다. 색만 무대가 아니라 이 자리의 재질을 따른다: 「인 먼지는 빛을
+# 정면으로 받는다」가 그 주석이 적어 둔 이유다.
+func _smash_dust(at: Vector2) -> void:
+	smash_dust.append({"x": at.x, "y": at.y, "t": 0.0,
+			"sd": smash_seed * 131 + smash_n * 17 + 313})
+
+
+func _smash_sfx(it: Dictionary) -> void:
+	#  큰 물건일수록 낮다 — _egg_crunch 가 단이 오를수록 392x1.08→0.84 로
+	#  내려 미는 것과 같은 어법이다. 동전 0.974 · 사진 0.965 · 보드 확장
+	#  0.947 · 다트 0.860. ±4% 흔들기는 같은 물건 둘이 붙어 깨질 때 한
+	#  소리로 안 들리게. randf 가 아니라 _gl_rand 인 것은 프로브의 씨 고정을
+	#  안 흔들기 위해서다.
+	var f: float = SFX_BASE * lerpf(1.14, 0.86,
+			clampf(float(it.hw) / float(DROP.hw_dart), 0.0, 1.0)
+			) * lerpf(0.96, 1.04, _gl_rand(smash_n * 3 + 1, smash_seed))
+	#  **실시간 d 로 깎는다**(_smash_update — sweep_t 는 x1.3 이라 단위가 다르다).
+	#  문이 닫혀 있거나 상한을 채웠으면 그림만 난다 — 화면에는 여전히 조각이
+	#  나므로 사건이 안 사라진다.
+	if smash_snd_t > 0.0 or smash_snd_n >= int(SMASH.snd_max):
+		return
+	if smash_snd_n == 0:
+		_sfx("shop_smash", f)
+		smash_snd_t = float(SMASH.snd_gap)
+	else:
+		#  둘째부터는 몸통(DISC)이 빠진 가벼운 판이다. 첫 판을 아홉 번 내면
+		#  같은 190ms 가 아홉 겹으로 쌓여 한 덩어리가 된다.
+		_sfx("shop_smash_lo", f)
+		smash_snd_t = float(SMASH.snd_gap_lo)
+	smash_snd_n += 1
+
+
+# 조각의 물리는 **전부 DROP 에서 빌린다** — 조각이 물건과 다른 세계의
+# 물리를 타면 딴 게임의 이펙트를 붙인 것으로 읽힌다.
+func _smash_update(d: float) -> void:
+	smash_snd_t = maxf(smash_snd_t - d, 0.0)
+	lip_up = move_toward(lip_up, 1.0 if sweep_on else 0.0, d / float(SMASH.lip_t))
+	var m := lip_marks.size() - 1
+	while m >= 0:
+		lip_marks[m].t = float(lip_marks[m].t) + d
+		if float(lip_marks[m].t) >= float(SMASH.lip_mark_t):
+			lip_marks.remove_at(m)
+		m -= 1
+	var u := smash_dust.size() - 1
+	while u >= 0:
+		smash_dust[u].t = float(smash_dust[u].t) + d
+		if float(smash_dust[u].t) >= float(SMASH.du_t):
+			smash_dust.remove_at(u)
+		u -= 1
+	var k := shards.size() - 1
+	while k >= 0:
+		var s: Dictionary = shards[k]
+		s.t = float(s.t) + d
+		if float(s.t) >= float(s.life):
+			shards.remove_at(k)
+			k -= 1
+			continue
+		if float(s.t) < 0.0:
+			k -= 1
+			continue      # 언 동안은 한 픽셀도 안 움직인다
+		s.vh = float(s.vh) - DROP.g * d
+		s.h = float(s.h) + float(s.vh) * d
+		s.u = float(s.u) + float(s.vu) * d
+		s.w = float(s.w) + float(s.vw) * d
+		s.psi = float(s.psi) + float(s.om) * d
+		#  조각도 트레이 안에 산다. 안 가두면 뒤로는 레일 뒤(w −13 · 화면
+		#  y 114)로, 앞으로는 앞치마(w 201 · y 286)로 빠져 **리롤 단추 위에
+		#  떨어진다** — qa_smash ⑥ 이 실측으로 잡은 자리다(2026-09-18).
+		#  _drop_walls 와 같은 후조건 클램프 + e_wall 반발이다.
+		if float(s.w) < DROP.w_lo:
+			s.w = DROP.w_lo
+			s.vw = absf(float(s.vw)) * DROP.e_wall
+		elif float(s.w) > DROP.w_hi:
+			s.w = DROP.w_hi
+			s.vw = -absf(float(s.vw)) * DROP.e_wall
+		#  턱도 조각에게는 벽이다. 합벡터(nv + rad)가 법선에서 최대 80° 까지
+		#  기울고 거기에 ±55° 흔들기가 얹히므로, 각도만으로는 왼쪽으로 가는
+		#  조각을 못 막는다 — 실측으로 중심이 화면 x −12 까지 나갔다.
+		#  각을 좁혀 막으면 부채가 접히므로 후조건 클램프로 막는다.
+		#  튕겨 돌아오는 그림이 공짜로 나오고, **큰 조각은 판에 남는다**.
+		#  (가루는 일부러 넘어간다 — _grit_burst 주석)
+		var lip: float = _chute_edge(_p2g(float(s.w)))
+		if float(s.u) < lip:
+			s.u = lip
+			s.vu = absf(float(s.vu)) * DROP.e_wall
+		if float(s.h) <= 0.0:
+			s.h = 0.0
+			if not bool(s.bounced):
+				#  펠트에 **한 번만** 튄다. 두 번째는 원 높이의 9%라 안 보인다.
+				s.bounced = true
+				s.vh = absf(float(s.vh)) * DROP.e_wall
+				s.vu = float(s.vu) * (1.0 - DROP.mu_b)
+				s.vw = float(s.vw) * (1.0 - DROP.mu_b)
+			else:
+				s.vh = 0.0
+				#  쿨롱 등감속 — 유한 시간에 정확히 0 이 된다. 지수감쇠로
+				#  두면 수명 끝까지 미세하게 기어 「멎었다」가 안 보인다.
+				var sp := sqrt(float(s.vu) * float(s.vu) + float(s.vw) * float(s.vw))
+				if sp > 0.0001:
+					var kk: float = maxf(sp - DROP.a_fric * d, 0.0) / sp
+					s.vu = float(s.vu) * kk
+					s.vw = float(s.vw) * kk
+				s.om = signf(float(s.om)) * maxf(absf(float(s.om))
+						- DROP.a_spin * d, 0.0)
+		k -= 1
+	var q := grit.size() - 1
+	while q >= 0:
+		var b: Dictionary = grit[q]
+		b.t = float(b.t) + d
+		if float(b.t) >= float(b.life):
+			grit.remove_at(q)
+			q -= 1
+			continue
+		b.vh = float(b.vh) - DROP.g * d
+		b.h = float(b.h) + float(b.vh) * d
+		b.u = float(b.u) + float(b.vu) * d
+		b.w = float(b.w) + float(b.vw) * d
+		#  턱을 넘은 가루는 바닥 판정을 건너뛰고 h 를 음수로 떨어뜨린다 —
+		#  _p2s 가 알아서 화면 밖으로 보낸다(_waste_update 가 쓰는 바로 그
+		#  수법). 빗면을 미끄러지는 그림이 공짜로 나온다.
+		if not bool(b.sink) and float(b.u) < _chute_edge(_p2g(float(b.w))):
+			b.sink = true
+		if not bool(b.sink):
+			b.w = clampf(float(b.w), DROP.w_lo, DROP.w_hi)
+		if not bool(b.sink) and float(b.h) <= 0.0:
+			b.h = 0.0
+			b.vh = 0.0
+			var gs := sqrt(float(b.vu) * float(b.vu) + float(b.vw) * float(b.vw))
+			if gs > 0.0001:
+				var gk: float = maxf(gs - DROP.a_fric * d, 0.0) / gs
+				b.vu = float(b.vu) * gk
+				b.vw = float(b.vw) * gk
+		q -= 1
+
+
+# 사라지는 법 — 알파도 크기도 깜빡임도 아니다. 640x360 에서 8px 조각의
+# 알파 페이드는 회색 얼룩이 되고, 크기 줄이기는 2px 바닥을 뚫고, 깜빡임은
+# 이 게임의 어휘가 아니다. 펠트 쪽으로 가라앉히는 것은 _obj_paint 의 dim 과
+# 같은 어법이다.
+func _smash_fade(col: Color, t: float, life: float) -> Color:
+	var left := life - t
+	if left >= float(SMASH.sink_t):
+		return col
+	return col.lerp(C_TABLE, (1.0 - left / float(SMASH.sink_t)) * 0.85)
+
+
+func _smash_poly(s: Dictionary) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	var ps: float = float(s.psi)
+	var u: float = float(s.u)
+	var w: float = float(s.w)
+	var h: float = float(s.h)
+	for q in (s.pts as PackedVector2Array):
+		var e := q.rotated(ps)
+		out.append(_p2s(u + e.x, w + e.y, h))
+	return out
+
+
+# _cover_draw **다음**에 그린다(_table_draw 의 주석). 먼지 → 부스러기 →
+# 조각(흰 것이 먼저, 그 위에 색) 차례다.
+func _smash_draw() -> void:
+	var top: float = TBL.fy + 1.0
+	for du in smash_dust:
+		var a: float = 1.0 - float(du.t) / float(SMASH.du_t)
+		for i in int(SMASH.du_n):
+			var sg: float = 1.0 if i % 2 == 0 else -1.0
+			var px: float = float(du.x) - 3.0 - _gl_rand(i, int(du.sd)) * 5.0
+			var rise: float = lerpf(float(SMASH.du_rise_lo),
+					float(SMASH.du_rise_hi), _gl_rand(i + 31, int(du.sd)))
+			var py: float = float(du.y) + sg * 2.0 - (1.0 - a) * rise
+			if py < top:
+				continue
+			#  빗변 결선의 가장 밝은 단에서 시작해 창구 몸으로 잦아든다.
+			draw_rect(Rect2(roundf(px), roundf(py), 2.0, 1.0),
+					C_WOOD.lightened(0.55).lerp(C_WOOD.darkened(0.46), 1.0 - a))
+	for b in grit:
+		var p := _p2s(float(b.u), float(b.w), float(b.h))
+		#  2px 가루는 잘라 그릴 것이 없다 — 건너뛴다. 아래쪽은 구멍으로
+		#  새는 몫이 앞 레일 밑까지 내려가는 자리다(h 를 음수로 떨어뜨리는
+		#  수법의 값). 레일 밖에서 점이 깜빡이면 앞치마에 티가 앉은 것으로
+		#  보이므로 거기서 끊는다.
+		if p.y < top or p.y > TBL.ny:
+			continue
+		var sz: float = float(b.sz)
+		var gc := _smash_fade(b.col, float(b.t), float(b.life))
+		var q0 := Vector2(roundf(p.x - sz * 0.5), roundf(p.y - sz * 0.5))
+		#  _ck_chip 도트 어법 그대로 — 아랫줄 왼쪽 한 칸을 비우면 네모 도장이
+		#  아니라 깨진 조각으로 읽힌다.
+		draw_rect(Rect2(q0, Vector2(sz, sz - 1.0)), gc)
+		draw_rect(Rect2(q0 + Vector2(1.0, sz - 1.0), Vector2(sz - 1.0, 1.0)), gc)
+		draw_rect(Rect2(q0, Vector2(sz, 1.0)), gc.darkened(0.35))
+		#  2px 조각은 그늘을 **윗줄만** — 왼쪽까지 깔면 속이 한 점만 남는다.
+		if sz >= 3.0:
+			draw_rect(Rect2(q0, Vector2(1.0, sz - 1.0)), gc.darkened(0.35))
+		draw_rect(Rect2(q0 + Vector2(1.0, sz), Vector2(sz - 1.0, 1.0)),
+				Color(1.0, 1.0, 1.0, 0.22))
+	for s in shards:
+		var pts := _smash_poly(s)
+		if pts.is_empty():
+			continue
+		#  덮개 선에 대고 **자른다.** 조각을 통째로 건너뛰면 한두 프레임
+		#  깜빡이고, 안 자르면 카운터 위로 새서 상인 몸에 조각이 얹힌다.
+		#  조각 중심은 트레이 안(w_lo~w_hi)에 갇혀 있지만 도형 자체가 면에서
+		#  ±22 를 뻗으므로, 먼 벽에 붙은 조각이 뜨면 윗귀가 레일을 넘는다
+		#  (실측 y 120 — qa_smash ⑥). 레일은 조각보다 앞이므로 잘리는 것이
+		#  곧 맞는 그림이다.
+		for i in pts.size():
+			if pts[i].y < top:
+				pts[i].y = top
+		if float(s.t) < 0.0:
+			#  언 한 프레임 — 충돌 중심 기준으로 가로 1.16배 · 세로 1/1.16.
+			var an := Vector2(float(s.ax), float(s.ay))
+			for i in pts.size():
+				pts[i] = an + Vector2((pts[i].x - an.x) * 1.16,
+						(pts[i].y - an.y) / 1.16)
+			draw_colored_polygon(pts, C_LIGHT)
+			#  **금이 보여야 「깨졌다」로 읽힌다.** 순백을 통째로 깔았더니
+			#  펠트 위에 흰 구름 한 덩어리가 앉은 것으로 보였다(실측) —
+			#  같은 도형인데 속에 아무 선이 없으니 동전인 줄을 모른다.
+			#  조각 경계를 한 줄 그어 두면 언 프레임 그 자체가 「갈라진 자리」다.
+			var ol := PackedVector2Array(pts)
+			ol.append(pts[0])
+			draw_polyline(ol, Color(C_TABLE, 0.9), 1.0)
+		else:
+			draw_colored_polygon(pts,
+					_smash_fade(s.col, float(s.t), float(s.life)))
 
 
 func _e_pts(c: Vector2, rx: float, ry: float, seg := 22) -> PackedVector2Array:
@@ -14538,6 +15346,7 @@ func _drop_one(i: int, n: int) -> Dictionary:
 		"sold": 0.0, "to": Vector2.ZERO, "gone": false,
 		"roll": 0.0,      # 3D 로 세워 그리는 물체가 구른 각(사탕·다트)
 		"handled": false, # 손이 실제로 던진 적이 있는가 — roll 을 그 뒤부터만 쌓는다
+		"flung": false,   # 날이 후렸는가. 눌림·뜨기·회전을 **한 번만** 박는다
 	}
 
 
@@ -14588,6 +15397,9 @@ func _drop_update(d: float) -> void:
 	npc_clock += dd
 	_sweep_update(dd)
 	_waste_update(dd)
+	#  **조건문 밖이다** — 조각은 sweep_live 가 꺼진 뒤(복귀 0.231 + 수명
+	#  0.42)까지 살아야 한다. waste 와 같은 dd 를 쓴다.
+	_smash_update(dd)
 	if drop_awake or sweep_live:
 		# 나머지를 버리지 않고 이월한다. 모든 스텝이 정확히 sub 이라 프레임률이
 		# 배치를 못 흔든다 — 60/144/30/75fps 와 즉시정착의 최대 위치차 0.000000px.
@@ -14670,6 +15482,7 @@ func _drop_step(dt: float) -> void:
 		# 분리 솔버는 위치를 순간이동시키므로 relax 뒤에 팔 오른쪽으로 되밀린
 		# 물건이 남을 수 있다. 팔은 무한질량이라 마지막 말이 팔의 것이다.
 		for i in mini(drop.size(), stock.size()):
+			_smash_chain(i)
 			_sweep_push(i)
 
 	var was := drop_awake
@@ -14705,10 +15518,25 @@ func _drop_wob(it: Dictionary, v: float) -> void:
 
 
 # 스윕이 아니라 위치 클램프다 — 후조건이라 벽 터널링이 구조적으로 불가능하다.
-# 쓸기 중에는 왼쪽 벽이 창구 빗변으로 물러난다. 그 밖은 물리가 아니라 구멍이다.
 # 새 기하를 안 만든다 — _chute_dock_u 는 구매 비행의 무릎이 쓰는 바로 그 수다.
+#
+#  ── 쓸기 중에는 여기가 **턱**이다 ──────────────────────
+#  전에는 중심이 빗변에 얹혔고(도크), 빗변을 넘는 순간 물리를 떠나 구멍으로
+#  흘렀다 — 「쓸어 담기」다. + it.hw 한 항이 그 벽을 「물건 **바깥 모서리**가
+#  빗변에 정확히 닿는 자리」로 옮긴다. 이 한 항이 「벽에 맞는다」는 사건
+#  전부고, 새 도형도 새 그림도 없다 — _chute_draw 가 이미 긋고 있는 빗변
+#  선이 그대로 턱이다(2026-09-18).
+#  중심 정지 u 는 dock(w) = 80 − 0.450286·w 위다: 동전(hw 22.04) w79 에서
+#  66.47, 보드 확장 69.95, 사진 67.63, 다트 81.55. 접촉점은 늘 빗변 위이고
+#  화면 (67.4,150)~(25.1,224) 로 **세로 74px 에 흩어진다** — 도착이 시간으로
+#  21~27ms 밖에 못 벌어지는 것을 공간이 대신 벌어 주는 자리다.
+#
+#  **sweep_on 이지 sweep_live 가 아니다.** 복귀 0.231초 동안에는 새 매물이
+#  이미 떨어지는 중이고, 그때 벽은 평상시(u_lo + hw)여야 한다.
+#  평상시 갈래는 한 글자도 안 바뀌므로 shop_probe._t_geometry(「트레이가
+#  창구에 못 닿는다」)의 전제가 그대로 산다.
 func _drop_lo(it: Dictionary) -> float:
-	return _chute_dock_u(Z_SELL, it.w) if sweep_on else DROP.u_lo + it.hw
+	return (_chute_dock_u(Z_SELL, it.w) + it.hw) if sweep_on else DROP.u_lo + it.hw
 
 
 func _drop_walls(it: Dictionary) -> void:
@@ -15087,6 +15915,19 @@ func _goods_draw() -> void:
 		#  그림자는 위에서 이미 깔았다 — 그것은 펠트 위라 자리가 맞다.
 		if i == give_i:
 			continue
+		#  스미어 — 날아가는 물건 뒤에 제 몸 그림자 둘. 새 함수가 없다:
+		#  u 를 잠깐 밀었다 되돌리는 그리기 전용 손질이고 dim 이
+		#  darkened(dim) 으로 먹으므로 어두운 잔상 둘이 뒤에 붙는다.
+		#  3600 면px/s 에서 20px 은 0.33프레임 뒤의 자리다 — 1~3프레임이고
+		#  그 이상 끌면 빠른 게 아니라 느려 보인다.
+		if (bool(drop[i].get("flung", false))
+				and absf(float(drop[i].vu)) > float(SMASH.smear)):
+			var su: float = float(drop[i].u)
+			drop[i].u = su + 9.0
+			_obj_draw(i, 0.55)
+			drop[i].u = su + 20.0
+			_obj_draw(i, 0.78)
+			drop[i].u = su
 		_obj_draw(i, 0.0 if (hov < 0 or hov == i) else DROP.dim_off)
 	#  값은 물건을 **다 그린 뒤** 한 바퀴 돈다. 앞 물건이 뒤 물건의 값을
 	#  가리면 그 물건은 값을 모르는 채로 산다(2026-09-17 제보) — 그래서
