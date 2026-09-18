@@ -16,7 +16,6 @@ const Save = preload("res://scripts/save.gd")
 var g = null
 var busy := false
 var tip := {}           # 박아 둘 툴팁 대상. 비면 툴팁을 끈다
-var stand := -1         # 세워 둘 제약 카드
 var pre := "tips"
 
 
@@ -52,9 +51,6 @@ func _pin() -> void:
 	g.mouse_at = Vector2(-50.0, -50.0)
 	g.swap_live = false
 	g.shake = 0.0
-	if stand >= 0 and stand < g.stage_stand.size():
-		for k in g.stage_stand.size():
-			g.stage_stand[k] = 1.0 if k == stand else 0.0
 	if tip.is_empty():
 		g.tip_a = 0.0
 		g._tip_clear()
@@ -175,20 +171,19 @@ func _run() -> void:
 	await _shot("badge_skip", {"k": "tag", "i": 1})
 	await _shot("badge_pend", {"k": "pend", "i": 0})
 
-	# ── 제약 카드 ─────────────────────────────────────────
+	# ── 보스 카드 ─────────────────────────────────────────
 	for lv in range(1, 30):
 		if GameData.is_boss(lv):
 			g.leg_no = lv
 			break
-	g._open_stage()
+	g._open_leg()
 	var mfs: Array = GameData.modifiers()
-	for k in mini(g.stage_pick.size(), 3):
-		g.stage_pick[k].d = mfs[_idx(mfs, ["dull", "tgt", "dead"][k])]
+	var bn: int = g._round_boss()
+	#  「문턱」을 꽂는다 — 목표 줄이 C_MULT 로 밀리는 것이 이 사진의 쓸모다.
+	g.boss_mods[bn] = PackedStringArray([String(mfs[_idx(mfs, "tgt")].id)])
 	_tick(40)
-	g.stage_t = 9.0
-	stand = 1
-	await _shot("constraint_tgt", {"k": "stage", "i": 1})
-	stand = -1
+	g.leg_t = 9.0
+	await _shot("constraint_tgt", {"k": "legboss", "i": bn})
 
 	# ── 상점 — 동전 슬롯이 꽉 찬 매물의 거절 곁줄 ──────────
 	g.leg_no = 4

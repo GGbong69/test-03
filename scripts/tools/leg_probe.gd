@@ -19,6 +19,7 @@ const Save = preload("res://scripts/save.gd")
 #    ③ 건너뛰면 점수도 골드도 없이 다음 판으로 간다
 #    ④ 뱃지가 실제로 값을 낸다 — 즉시 것과 쌓아 두는 것 둘 다
 #    ⑤ 쌓아 둔 뱃지는 한 번 쓰이고 사라진다
+#    ⑥ 보스 카드가 제약을 들고, 보통 판은 제약이 없다 (2026-09-18)
 #
 #  뱃지는 id 가 아니라 **갈래로** 고른다
 #    2026-09-15 에 tags.csv 를 갈아엎으면서 t_dart 가 빠졌고, 그 id 를 박아
@@ -65,6 +66,12 @@ func _initialize() -> void:
 			"런은 판 선택으로 시작한다", "state %d · 판 %d" % [g.state, g.leg_no])
 	_say(not g.leg_tag.is_empty(),
 			"건너뛰면 받을 뱃지를 미리 보인다", String(g.leg_tag.get("name", "")))
+	#  ⑥ 판 선택이 열리는 그 자리에서 이 라운드 보스의 제약이 이미 서 있다.
+	#     상점에서 빌드를 짜려면 그때 이미 정해져 있어야 한다(2026-09-18).
+	var bn0: int = g._round_boss()
+	_say(bn0 > 0 and not g.boss_mods.get(bn0, PackedStringArray()).is_empty(),
+			"보스 카드가 제약을 든다",
+			"%d번 판 %s" % [bn0, g.boss_mods.get(bn0, PackedStringArray())])
 
 	# 던지면 판이 선다
 	g._click(g._leg_go().get_center())
@@ -72,6 +79,8 @@ func _initialize() -> void:
 	# 아래 단언은 그대로다 — 그 약속이 깨지면 여기서 먼저 터진다.
 	_say(g.state != g.S.LEG and g.target == GameData.target_of(1),
 			"던지면 판이 선다", "state %d · 목표 %d" % [g.state, g.target])
+	_say(g.active_mods.is_empty(), "보통 판은 제약이 없다",
+			"걸린 제약 %d개" % g.active_mods.size())
 	g._swap_skip()
 
 	# ② 보스는 못 건너뛴다
@@ -137,5 +146,5 @@ func _initialize() -> void:
 			"다트 뱃지가 탄창을 늘린다",
 			"%s · %d발" % [dart_t.id, g.remaining.size()])
 
-	print("\n%s" % ("실패 %d건" % fails if fails > 0 else "열한 검사 전부 통과"))
+	print("\n%s" % ("실패 %d건" % fails if fails > 0 else "열세 검사 전부 통과"))
 	quit(mini(fails, 125))

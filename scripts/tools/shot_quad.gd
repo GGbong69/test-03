@@ -38,14 +38,15 @@ func _run() -> void:
 	await _shoot("quad_leg0")
 	_hover(g._row_rect(2, GameData.legs_per_round()).get_center(), 40)
 	await _shoot("quad_leg2")
-	# ── 제약 선택 ── 보스 판에서만 깔린다
+	# ── 보스 카드 ── 제약은 보스 판에만 걸린다
 	g.leg_no = GameData.legs_per_round()
-	g._open_stage()
+	g._open_leg()
 	for k in 60:
 		g._process(1.0 / 60.0)
-	_hover(g._stage_rect(1).get_center(), 40)
+	var qper: int = GameData.legs_per_round()
+	_hover(g._row_rect(GameData.leg_idx(g._round_boss()), qper).get_center(), 40)
 	await _shoot("quad_stage1")
-	_hover(g._stage_rect(0).get_center(), 40)
+	_hover(g._row_rect(0, qper).get_center(), 40)
 	await _shoot("quad_stage0")
 	print("찍었다")
 	quit(0)

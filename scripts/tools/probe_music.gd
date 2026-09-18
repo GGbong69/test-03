@@ -31,7 +31,7 @@ func _go() -> void:
 	var cases := [
 		[g.S.TITLE, -1, 1, "타이틀"],
 		[g.S.COLLECT, -1, 1, "컬렉션"],
-		[g.S.STAGE, -1, 1, "판 선택"],
+		[g.S.LEG, -1, 1, "판 선택"],
 		[g.S.SHOP, -1, 1, "상점"],
 		[g.S.CLEAR, -1, 1, "정산"],
 		[g.S.PICK, -1, 1, "판 위"],

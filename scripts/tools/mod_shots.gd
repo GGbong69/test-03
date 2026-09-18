@@ -38,7 +38,7 @@ func _run() -> void:
 	for m in GameData.modifiers():
 		# 표가 만든 사전을 그대로 쓴다. 손으로 셋만 골라 담았더니 id 가 빠져
 		# 상단바의 제약 아이콘이 매 프레임 터졌다 — 게임은 modifiers() 의
-		# 행을 통째로 싣는다(_pick_stage 의 sp.d).
+		# 행을 통째로 싣는다(_leg_mods 가 행을 싣는다).
 		g.active_mods = [m]
 		g._start_leg()
 		g._swap_skip()

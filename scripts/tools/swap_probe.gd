@@ -44,7 +44,8 @@ func _wind(g: Node, sec: float) -> void:
 # 누르게 된다 — 그리기와 판정이 갈려 있다는 주장의 유일한 증거다.
 func _rects(g: Node) -> Array:
 	return [g._mag_rect(0), g._slot_rect(0), g._cons_rect(0), g._panel_rect(),
-			g._bank_rect(), g._reroll_rect(), g._next_rect(), g._stage_rect(0)]
+			g._bank_rect(), g._reroll_rect(), g._next_rect(),
+			g._row_rect(0, GameData.legs_per_round())]
 
 
 func _key(g: Node, code: int) -> void:

@@ -62,11 +62,11 @@ func _run() -> void:
 	for k in g.stock.size():
 		await _shoot("tip_stock%d.png" % k, {"k": "stock", "i": k})
 
-	# 보스 제약
+	# 보스 제약 — 판 선택의 보스 카드가 든다
 	g.leg_no = GameData.legs_per_round()
-	g._open_stage()
-	g.stage_t = 9.0
-	await _shoot("tip_stage.png", {"k": "stage", "i": 1})
+	g._open_leg()
+	g.leg_t = 9.0
+	await _shoot("tip_stage.png", {"k": "legboss", "i": g._round_boss()})
 
 	# 든 사탕 — 산 뒤로는 아무 데서도 효과를 안 말하던 자리다
 	g.leg_no = 1

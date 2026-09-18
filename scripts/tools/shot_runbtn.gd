@@ -56,7 +56,7 @@ func _run() -> void:
 		if GameData.is_boss(lv):
 			g.leg_no = lv
 			break
-	g._open_stage()
+	g._open_leg()
 	g.swap_live = false
 	await _wait(60)
 	await _shot("rb_stage")

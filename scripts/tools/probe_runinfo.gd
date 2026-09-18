@@ -10,7 +10,7 @@ func _initialize() -> void:
 	var names := {}
 	names[g.S.PICK] = "PICK(판 위)"
 	names[g.S.SHOP] = "SHOP"
-	names[g.S.STAGE] = "STAGE"
+	names[g.S.LEG] = "LEG(판 선택)"
 	names[g.S.CLEAR] = "CLEAR(정산)"
 	names[g.S.RESOLVE] = "RESOLVE(연출)"
 	names[g.S.TITLE] = "TITLE"

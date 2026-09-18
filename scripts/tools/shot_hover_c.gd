@@ -51,12 +51,9 @@ func _pin() -> void:
 	g.mouse_at = pin
 	g._tip_build(tip)
 	g.tip_a = 1.0 if g.tip_title != "" else 0.0
-	if String(tip.k) == "stage":
-		for i in g.stage_stand.size():
-			g.stage_stand[i] = 1.0 if i == int(tip.i) else 0.0
-	elif g.state == g.S.STAGE:
-		for i in g.stage_stand.size():
-			g.stage_stand[i] = 0.0
+	#  보스 카드는 tip_mark 를 읽어 테가 달아오른다 — _tip_build 가 이미
+	#  세웠으므로 여기서 따로 밀 것이 없다(옛 제약 카드는 stage_stand 를
+	#  손으로 밀어야 섰다).
 	if not hand.is_empty():
 		g.hand_st = hand.st
 		g.hand_src = hand.src
@@ -107,17 +104,19 @@ func _run() -> void:
 	await _shot("hovc_leg_pend", g._pend_rect(1).get_center(), {"k": "pend", "i": 1}, low)
 	await _shot("hovc_leg_skip", g._leg_skip().get_center(),
 			{"k": "tag", "i": g.leg_no}, Rect2(0.0, 180.0, 330.0, 180.0))
-	#  ── 제약 고르기 — 카드(그림은 그대로, 딸깍만) ──
-	#  제약은 보스 판에서만 깐다 — 첫 보스 판으로 옮겨 연다
+	#  ── 보스 카드 — 얹히면 테가 달아오른다 ──
+	#  제약은 보스 판에만 걸린다 — 첫 보스 판으로 옮겨 연다
 	while not GameData.is_boss(g.leg_no) and g.leg_no < 40:
 		g.leg_no += 1
-	g._open_stage()
+	g._open_leg()
 	await _wait(10)
-	g.stage_t = 9.0
+	g.leg_t = 9.0
 	var mid := Rect2(100.0, 110.0, 440.0, 200.0)
+	var bi: int = GameData.leg_idx(g._round_boss())
+	var bper: int = GameData.legs_per_round()
 	await _shot("hovc_stage_none", Vector2(-50.0, -50.0), none, mid)
-	await _shot("hovc_stage_hov", g._stage_rect(1).get_center(),
-			{"k": "stage", "i": 1}, mid)
+	await _shot("hovc_stage_hov", g._row_rect(bi, bper).get_center(),
+			{"k": "legboss", "i": g._round_boss()}, mid)
 	#  ── 상점 — 창구 둘 · 테이블 물건 ──
 	g.gold = 99
 	if g.owned.is_empty():

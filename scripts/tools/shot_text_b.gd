@@ -13,7 +13,6 @@ var g = null
 var busy := false
 var pin := Vector2(-50.0, -50.0)
 var tip := {}           # 박아 둘 툴팁 대상. 비면 툴팁을 끈다
-var stand := -1         # 세워 둘 제약 카드
 var tail := "now"
 
 
@@ -42,9 +41,6 @@ func _pin() -> void:
 		return
 	g.mouse_at = pin
 	g.swap_live = false
-	if stand >= 0 and stand < g.stage_stand.size():
-		for k in g.stage_stand.size():
-			g.stage_stand[k] = 1.0 if k == stand else 0.0
 	if tip.is_empty():
 		g.tip_a = 0.0
 		g._tip_clear()
@@ -176,29 +172,33 @@ func _run() -> void:
 	g.leg_tag = longdesc
 	await _shot("leg_late")
 
-	# ── 제약 고르기 ───────────────────────────────────────
+	# ── 보스 카드가 든 제약 ───────────────────────────────
 	for lv in range(1, 30):
 		if GameData.is_boss(lv):
 			g.leg_no = lv
 			break
-	g._open_stage()
-	#  설명이 가장 긴 제약을 가운데에
+	g._open_leg()
+	#  이름이 가장 긴 제약을 보스 카드에 꽂는다 — 이름 칸(100px)이
+	#  언제 _elide 를 무는지가 이 사진의 쓸모다.
 	var mfs: Array = GameData.modifiers().duplicate()
 	mfs.sort_custom(_by_desc)
-	for k in mini(g.stage_pick.size(), 3):
-		g.stage_pick[k].d = mfs[k]
+	var bn: int = g._round_boss()
+	g.boss_mods[bn] = PackedStringArray([String(mfs[0].id)])
 	g.mods_own = []
 	for md in GameData.mods().slice(0, 1):
 		g.mods_own.append(String(md.id))
-	g.stage_t = 9.0
+	g.leg_t = 9.0
 	_tick(40)
-	g.stage_t = 9.0
-	stand = 1
+	g.leg_t = 9.0
 	await _shot("stage", Vector2(-50.0, -50.0))
-	await _shot("stage_tip", g._stage_rect(1).get_center(), {"k": "stage", "i": 1})
-	stand = 0
+	await _shot("stage_tip",
+			g._row_rect(GameData.leg_idx(bn), GameData.legs_per_round()).get_center(),
+			{"k": "legboss", "i": bn})
+	#  겹치기 — 명판 둘 · 이름 없는 줄
+	g.boss_mods[bn] = PackedStringArray([String(mfs[0].id), String(mfs[1].id)])
+	g.leg_t = 9.0
 	await _shot("stage_left", Vector2(-50.0, -50.0))
-	stand = -1
+	g.boss_mods[bn] = PackedStringArray([String(mfs[0].id)])
 
 	# ── 상점 ─────────────────────────────────────────────
 	g.leg_no = 4
@@ -254,19 +254,12 @@ func _run() -> void:
 	g._photo_close()
 	_tick(10)
 
-	# ── 사진이 연 판 — 칠하기 · 미리보기 ─────────────────────
+	# ── 사진이 연 판 — 칠하기 ───────────────────────────────
+	#  미리보기 판은 걷혔다. 「프리크라임」이 읽기에서 다시 뽑기로 갈아타
+	#  결과가 보스 카드와 상점 명판에 바로 보이므로 띄울 화면이 없다.
 	g.photo = "paint"
 	g.photo_v = 3
 	await _shot("paint", g.BC + Vector2(0.0, -60.0))
-	g.photo = ""
-	g.leg_no = 1
-	g._photo_peek()
-	var mfs2: Array = GameData.modifiers().duplicate()
-	mfs2.sort_custom(_by_desc)
-	for k in g.peek_pick.size():
-		g.peek_pick[k].d = mfs2[k]
-		g.peek_pick[k].target = 99999
-	await _shot("peek")
 	g.photo = ""
 
 	# ── 배움 말상자 ───────────────────────────────────────

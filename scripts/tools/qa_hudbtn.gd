@@ -42,7 +42,7 @@ func _run() -> void:
 
 	# ── 어디에 서는가 ───────────────────────────────────
 	var on_states := {"조준": g.S.AIM_V, "고르기": g.S.PICK, "상점": g.S.SHOP,
-			"스테이지": g.S.STAGE, "판 고르기": g.S.LEG, "정산": g.S.CLEAR}
+			"판 고르기": g.S.LEG, "정산": g.S.CLEAR}
 	for nm in on_states:
 		g.state = on_states[nm]
 		_ok("선다 — %s" % nm, g._hud_btns_on())

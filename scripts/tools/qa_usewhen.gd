@@ -78,11 +78,13 @@ func _run() -> void:
 			cbad.append(String(c.n))
 	_ok("사탕 다섯은 아무 때나", cbad.is_empty(), ", ".join(cbad))
 
-	# ② 자리 넷 × 아홉 장 전수
+	# ② 자리 셋 × 아홉 장 전수
 	print("")
+	#  제약 고르기 화면이 없어져 자리가 셋이다 — use_at "rest" 는 원래
+	#  상점·판 고르기만 열었으므로 두 사탕 모두 애초에 그 화면에서 못 썼다.
 	var spots := [["상점", g.S.SHOP], ["판 고르기", g.S.LEG],
-			["판 플레이", g.S.PICK], ["제약 고르기", g.S.STAGE]]
-	print("      %-22s %s" % ["", "상점  판고르기  판플레이  제약"])
+			["판 플레이", g.S.PICK]]
+	print("      %-22s %s" % ["", "상점  판고르기  판플레이"])
 	for id in WANT:
 		var c := _find(id)
 		if c.is_empty(): continue
