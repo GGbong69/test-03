@@ -195,7 +195,7 @@ const CARD_H := 96.0
 #  줄을 지우고 _hud_draw() 의 호출 한 줄을 지우면 그 판만 사라진다.
 #
 #  주의 — 화면 좌표가 여기에만 있는 것이 아니다. 나머지 소유자는 이렇다.
-#    _stage_rect / _obj_box / _mag_rect / _reroll_rect / _next_rect
+#    _row_rect / _obj_box / _mag_rect / _reroll_rect / _next_rect
 #    PANEL · _panel_rect · _slot_rect        (동전 슬롯)
 #    card_pos                                 (점수 카드)
 #    _draw_hint 의 341 · 348 · 356            (하단 세 줄)
@@ -216,7 +216,7 @@ const HUD_UP := -16.0
 
 
 func _bar_hidden() -> bool:
-	return state == S.SHOP or state == S.STAGE
+	return state == S.SHOP
 
 
 func _hud_dy() -> float:
@@ -308,7 +308,11 @@ const C_GOLD := Color("f2c94c")
 #  9.5:1 이다. 셋이 한 어휘라 하나만 두고 가면 그 하나가 튄다.
 const C_ODDS := Color("8fd694")
 
-enum S { PICK, AIM_V, AIM_H, CONFIRM, FLY, RESOLVE, CLEAR, SHOP, STAGE, OVER,
+#  STAGE(제약 셋을 깔고 하나를 고르던 화면)는 걷었다 — 제약은 라운드가
+#  열릴 때 정해져 판 선택(LEG)의 보스 카드에 보인다(2026-09-18).
+#  ⚠ GDScript enum 은 런타임에 풀린다. 이름 하나를 빼도 컴파일이 통과하고
+#  **돌릴 때** 죽으므로, 도구를 다 훑은 뒤 마지막에 뺐다.
+enum S { PICK, AIM_V, AIM_H, CONFIRM, FLY, RESOLVE, CLEAR, SHOP, OVER,
 		TITLE, SETTINGS, COLLECT, NEWRUN, LEG, RUNINFO, BOOST, PROFILE, INTRO }
 
 # 칸 색 — 길이 20, 값은 colors.csv 의 id. _board_bake 가 굽고
@@ -388,9 +392,6 @@ var aim_mode := "std"           # 이 런의 조준 방식. 다트통이 정한�
 # 대상을 안 고르는 사탕·사진의 갈래. 오토플레이가 이것만 자동으로 쓴다.
 const AUTO_CONS := ["area", "gold", "sellsum", "redo", "pardon"]
 
-# 「GOOD AFTERNOON」이 세워 둔 깃발. 다음 보스 판에서 고른 제약이 안 걸린다.
-var pardon_next := false
-
 # ── 사진이 여는 자리들 ────────────────────────────────────
 #  사진 넷은 쓰는 순간 화면을 하나 더 연다. 그 화면이 무엇인지를 이 한
 #  낱말이 쥔다 — "" 면 아무것도 안 열려 있다.
@@ -399,7 +400,10 @@ var pardon_next := false
 #           보내면 부수고 판매가의 곱절을 받는다
 #    clone  같은 테이블인데 창구가 「복제」다. 보낸 동전이 하나 더 떨어진다
 #    paint  다트판의 칸 하나를 고른다. 이번 판 동안 그 칸 점수가 곱해진다
-#    peek   다음 보스의 제약 셋을 읽기만 한다
+#
+#  「프리크라임」은 여기 없다 — 제약이 보스 카드에 상시로 보이는 지금
+#  읽기만 하는 화면은 뜻이 없다. **다시 뽑기**로 갈아탔고(2026-09-18)
+#  결과가 카드와 상점 명판에 바로 나므로 따로 열 화면이 없다.
 #
 #  자리를 가리는 이유 — 상점 테이블을 쓰는 둘은 판 위에서 열 자리가 없고,
 #  「빨강, 파랑, 노랑」은 던지는 중이라야 "이번 판" 이 뜻을 갖는다.
@@ -430,8 +434,6 @@ var revo_bull := true            # 여태 던진 것이 전부 불이었나
 var revo_darts := 0              # 이 판에 던진 수. 0 발짜리 판은 안 센다
 var mark_sec := -1       # 「목표물」 챌린지가 이 판에 뽑은 칸
 var paint_mul := 1.0
-var peek_pick := []      # 「프리크라임」이 미리 읽은 제약 셋
-var peek_leg := -1       # 그 셋이 어느 판의 것인가
 var score_mode := "std"         # 이 런의 점수 계산 방식. 든 동전이 먼저 쥔다
 # 다트통이 미는 최종 점수 배율. 계산 방식과 같이 판 시작에 한 번 읽는다.
 var score_mul := 1.0
@@ -471,13 +473,29 @@ var dead_ring := 0              # 무효가 되는 배수(2 더블 · 3 트리�
 var odd_mul := 1.0              # 홀수 칸 값 배수
 var sec_plain := []             # 섞기 전 칸 차례. 제약이 빠지면 이걸로 되돌린다
 
-# ── 스테이지 선택 ─────────────────────────────────────────
-var stage_pick := []            # 이번에 깔린 제약 카드들
-#  지난 보스가 깔았던 제약의 id. 이번 보스는 이 셋을 안 깐다 —
-#  매번 **새 제약에 대응해야** 재미가 있고, 같은 것이 연달아 나오면
-#  고르는 것이 아니라 외운 것을 다시 쓰는 일이 된다(2026-09-16).
-var stage_seen := []
-var active_mods := []           # 이번 판에 걸린 제약 (지금은 언제나 한 장)
+# ── 보스 제약 ─────────────────────────────────────────────
+#  보스 판 번호(int) → 그 판에 걸릴 제약 id (PackedStringArray).
+#  **행이 아니라 id 를 쥔다** — modifiers.csv 가 바뀌어도 낡은 행이
+#  안 되살아나고, 셋 다 String/int 라 이어하기가 생기는 날 ConfigFile 에
+#  그대로 적힌다(S_RUN 칸에 세 줄이면 끝난다, 2026-09-18).
+#  문지기가 라운드가 아니라 **이 사전의 열쇠**다. 그래서 _open_leg 가
+#  라운드 안에서 세 번 불리든, 프리크라임이 상점에서 다음 라운드를 먼저
+#  건드리든, dev 가 판을 건너뛰든 한 번 굴린 것이 안 바뀐다.
+var boss_mods := {}
+#  「GOOD AFTERNOON」이 무효로 만든 보스 판 번호 → true.
+#  깃발(pardon_next)이 아니라 **판 번호**다 — 읽고 끄는 자리가 하나뿐이라
+#  그 자리가 사라지면 조용히 죽던 옛 구조를 여기서 없앤다.
+var boss_void := {}
+#  지난 보스가 정한 제약의 id. 이번 보스는 이 셋을 안 깐다 — 매번 새
+#  제약에 대응해야 재미가 있고, 같은 것이 연달아 나오면 고르는 것이
+#  아니라 외운 것을 다시 쓰는 일이 된다(2026-09-16, stage_seen 을 잇는다).
+var boss_seen := []
+#  옛 화면은 셋을 깔았으니 지난 보스가 막던 폭이 3 이었다. 이제 거는 장수가
+#  1~2 로 줄었으므로 창을 3 으로 잡아야 **막는 폭이 옛날과 같다.**
+#  되풀이 방지의 폭이지 밸런스 손잡이가 아니다(표 10종 − 창 3 = 일곱이
+#  남아 want 2 에도 넉넉하다).
+const BOSS_SEEN_N := 3
+var active_mods := []           # 이번 판에 걸린 제약 (겹치기면 둘)
 var sealed := -1                # "둔화"로 봉인된 아이템 인덱스
 
 # ── 탄창 ──────────────────────────────────────────────────
@@ -994,20 +1012,19 @@ func _new_run() -> void:
 	#  배움도 런 단위로 센다. 줄에 남은 것을 새 런까지 끌고 가면 엉뚱한
 	#  화면에서 뜬다 — 이미 배운 것으로 적혀 있으므로 다시는 안 뜬다.
 	shop_seen = 0
-	#  제약도 런 단위다. 지난 런이 깐 것을 새 런까지 끌고 가면 첫 보스가
-	#  까닭 없이 좁은 표에서 뽑는다.
-	stage_seen.clear()
+	#  제약도 런 단위다. 지난 런이 정한 것을 새 런까지 끌고 가면 첫 보스가
+	#  까닭 없이 좁은 표에서 뽑고, 무효 표시가 남으면 새 런의 보스가 공짜다.
+	boss_mods.clear()
+	boss_void.clear()
+	boss_seen.clear()
 	tutor_q.clear()
 	tutor_id = ""
 	tutor_i = 0
 	tutor_t = 0.0
 	tutor_out = 0.0
 	over_t = 0.0
-	pardon_next = false          # 런을 넘겨 남으면 안 되는 깃발이다
 	photo = ""
 	photo_back.clear()
-	peek_pick.clear()
-	peek_leg = -1
 	paint_sec = -1
 	paint_mul = 1.0
 	Save.bump("runs")
@@ -1765,6 +1782,12 @@ func _open_shop() -> void:
 	_sweep_reset()
 	rerolls_used = -_spend_tags("reroll")   # 뱃지 — 무료 리롤을 앞당긴다
 	reroll_cost = _reroll_price()
+	#  **상점이 빌드를 짜는 자리다.** 라운드의 마지막 상점(보스를 막 넘긴
+	#  자리)에서는 _open_leg 가 아직 다음 라운드를 안 열었으므로, 이 한 줄이
+	#  없으면 그 상점에서 보스 명판이 빈다 — 정작 살 것을 고르는 순간에
+	#  무엇에 대비하는지가 안 보인다(2026-09-18).
+	if leg_no + 1 <= GameData.legs_n():
+		_roll_boss_mods(_round_boss(leg_no + 1))
 	_roll_stock()
 	state = S.SHOP
 	_sfx("shop_open")
@@ -2375,13 +2398,22 @@ func _open_leg() -> void:
 			if GameData.skippable(brn):
 				leg_tags[brn] = GameData.tag_roll(bta)
 	leg_tag = _leg_tag(leg_no)
+	#  뱃지와 **같은 이유로** 보스 제약도 여기서 미리 정한다 — 바로 위
+	#  주석의 「안 보이면 도박이지 선택이 아니다」가 그대로 제약에도 든다.
+	#  라운드 안에서 이 함수가 세 번 불려도 사전 열쇠가 문지기라 한 번
+	#  굴린 것이 안 바뀐다(2026-09-18).
+	var sealed_now := _roll_boss_mods(_round_boss())
 	state = S.LEG
-	_sfx("leg_open")
+	#  못 박히는 프레임에만 다른 소리다. 둘을 같이 내면 한 프레임에
+	#  뭉개므로 **갈아 낸다** — 라운드 첫 판 선택에만 무게가 실린다.
+	_sfx("boss_seal" if sealed_now else "leg_open")
+	#  과녁(보스 카드)과 값이 먼저 서야 한다 — 그래서 굴린 뒤다.
+	_tutor("u_boss")
 
 
 # 이 라운드의 첫 판 번호. 세 판을 늘어놓을 때 기준이 된다.
-func _round_first() -> int:
-	return leg_no - GameData.leg_idx(leg_no)
+func _round_first(n := leg_no) -> int:
+	return n - GameData.leg_idx(n)
 
 
 # 그 판을 건너뛰면 받을 뱃지. 없으면 빈 사전이다(보스 판).
@@ -2442,8 +2474,6 @@ func _tag_when(t: Dictionary) -> String:
 			return "다음 판"
 		"shop":
 			return "다음 상점"
-		"stage":
-			return "다음 보스 판"
 		"boss":
 			return "다음 보스 판"
 	return "바로"
@@ -2695,116 +2725,125 @@ func has_axis(axis: String) -> bool:
 	return false
 
 
-func _open_stage() -> void:
-	# 봉인은 _start_leg 에서만 다시 뽑힌다. 지우지 않으면 스테이지 선택
-	# 화면의 동전 슬롯이 지난 판 봉인을 그대로 보여준다.
-	sealed = -1
-	sell_sel = -1
-	buy_sel = -1
-	stage_slots = owned.size()
-	# 등급(정공·도전·극한)이 없다. 제약 셋을 깔고 하나를 고른다 — 고르는
-	# 질문이 "얼마나 무리할까" 에서 "어느 쪽이 내 빌드에 덜 아픈가" 로
-	# 바뀌었다. 보상은 붙지 않는다. 제약은 대가를 치르는 것이 아니라 그냥 판이다.
-	#
-	# **보스 판에서만 깐다.** 발라트로가 보스 블라인드에만 효과를 붙이는 것과
-	# 같은 자리다. 다른 점 하나: 발라트로는 무엇이 나올지 못 고르는데 우리는
-	# 셋 중에 고른다 — 조준 게임이라 "이 제약이 내 손에 얼마나 아픈가" 를
-	# 플레이어가 실제로 안다.
-	var base := GameData.target_of(leg_no)
-	stage_pick.clear()
-	stage_stand.clear()
-	stage_t = 0.0
-	if not GameData.is_boss(leg_no):
-		# 작은 판·큰 판은 제약이 없다. 화면을 띄우지 않고 바로 던지러 간다.
-		active_mods = []
-		target = base
-		_start_leg()
-		return
-	# 「프리크라임」으로 이미 읽은 판이면 그때 본 셋을 그대로 깐다. 여기서 다시
-	# 뽑으면 미리보기가 거짓말이 된다 — 본 것과 뜨는 것이 달라진다.
-	if peek_leg == leg_no and not peek_pick.is_empty():
-		for e in peek_pick:
-			stage_pick.append(e)
-			stage_stand.append(0.0)
-		peek_pick.clear()
-		peek_leg = -1
-		#  제약은 **보스 판에만** 깔린다. 여태 _open_stage 맨 위에서
-		#  불렀는데, 보통 판은 거기서 곧장 _start_leg 로 빠지므로
-		#  다트판 앞에서 "제약 하나를 골라야" 가 떴다 — 없는 것을
-		#  찾으라는 말이 된다(2026-09-15 제보).
-		#  카드가 선 **뒤**에, 화면이 서는 그 자리에서 부른다.
-		_tutor("u_stage")
-		state = S.STAGE
-		_sfx("stage_open")
-		return
+# ── 보스 제약 ─────────────────────────────────────────────
+
+#  그 라운드의 보스 판 번호. 없으면 0.
+func _round_boss(n := leg_no) -> int:
+	var f: int = n - GameData.leg_idx(n)
+	for k in GameData.legs_per_round():
+		if GameData.is_boss(f + k):
+			return f + k
+	return 0
+
+
+#  그 보스 판에 걸릴 제약을 **한 번만** 정한다. 문지기 한 줄이 라운드가
+#  아니라 **사전의 열쇠**라, _open_leg 가 라운드 안에서 세 번 불리든
+#  상점이 다음 라운드를 먼저 건드리든 dev 가 판을 건너뛰든 한 번 굴린
+#  것이 안 바뀐다 — 미리 보여 준 것이 나중에 달라지는 길이 구조에 없다.
+#
+#  등급(정공·도전·극한)이 없다. 제약은 **고르는 것이 아니라 그 보스 판에
+#  이미 붙어 있는 것**이다 — 발라트로가 보스 블라인드에 효과를 붙이는 그
+#  자리다. 옛 화면(S.STAGE)은 셋을 깔고 하나를 고르게 했는데, 고르는
+#  자리는 없어진 것이 아니라 **상점으로 옮겨갔다**: 조준 게임이라 「이
+#  제약이 내 손에 얼마나 아픈가」 를 플레이어가 실제로 알고, 그것을 알고
+#  나서 무엇을 살지 고른다(2026-09-18, 옛 _open_stage 머리말에서 옮김).
+#  보상은 안 붙는다. 제약은 대가를 치르는 것이 아니라 그냥 판이다.
+func _roll_boss_mods(bn: int, force := false,
+		avoid := PackedStringArray()) -> bool:
+	if bn <= 0 or (not force and boss_mods.has(bn)):
+		return false
 	var left := GameData.modifiers().duplicate()
-	#  ── 지난 보스가 깐 셋은 빼 둔다 ────────────────────────
-	#  빼는 것이 아니라 **뒤로 미룬다.** 표가 열 종이고 셋을 까므로 보통은
-	#  일곱이 남지만, 뱃지가 까는 장수를 늘리면(_spend_tags("picks")) 모자랄
-	#  수 있다. 그때 카드가 두 장만 깔리면 "이 중 하나를 반드시 고른다"
-	#  (tuning 의 stage_picks 주석)가 깨진다 — 새것만 고집하다 규칙을
-	#  깨느니 지난 것을 도로 넣는다.
+	#  지난 보스가 정한 것은 **빼는 것이 아니라 뒤로 미룬다.** 표가 열
+	#  종이라 보통은 남지만, 「겹치기」가 둘을 걸면 모자랄 수 있다 —
+	#  새것만 고집하다 뽑을 것이 없어지는 쪽이 더 나쁘다(2026-09-16).
 	var held := []
 	for m in left.duplicate():
-		if stage_seen.has(String(m.id)):
+		var mid := String(m.id)
+		if boss_seen.has(mid) or avoid.has(mid):
 			held.append(m)
 			left.erase(m)
-	var want: int = GameData.stage_picks() + _spend_tags("picks")
+	var want: int = maxi(GameData.chal_i("mods_n", 1), 1)
 	while left.size() < want and not held.is_empty():
 		left.append(held.pop_front())
+	var ids := PackedStringArray()
 	for i in want:
 		var md := _draw_weighted(left)
 		if md.is_empty():
 			break
-		left.erase(md)               # 같은 카드가 두 장 깔리지 않는다
-		# "높은 목표"(스펙 700001 · 확정)는 목표 자체를 올린다. 카드에 오른
-		# 목표가 곧 그 판의 목표다 — 화면과 판정이 같은 수를 읽는다.
-		var tgt := base
-		if String(md.k) == "target_mul":
-			tgt = int(ceil(float(base) * float(md.v)))
-		stage_pick.append({"d": md, "target": tgt})
-		stage_stand.append(0.0)
-	#  이번에 깐 것을 적어 둔다. **고른 것이 아니라 깐 것 전부**다 —
-	#  안 고른 둘도 이미 본 카드라, 다음 판에 또 나오면 새 판이 아니다.
-	stage_seen.clear()
-	for e in stage_pick:
-		stage_seen.append(String((e.d as Dictionary).id))
-	#  제약은 **보스 판에만** 깔린다. 여태 _open_stage 맨 위에서
-	#  불렀는데, 보통 판은 거기서 곧장 _start_leg 로 빠지므로
-	#  다트판 앞에서 "제약 하나를 골라야" 가 떴다 — 없는 것을
-	#  찾으라는 말이 된다(2026-09-15 제보).
-	#  카드가 선 **뒤**에, 화면이 서는 그 자리에서 부른다.
-	_tutor("u_stage")
-	state = S.STAGE
-	_sfx("stage_open")
+		left.erase(md)               # 같은 제약이 두 장 안 걸린다
+		ids.append(String(md.id))
+	if ids.is_empty():
+		return false
+	boss_mods[bn] = ids
+	for mid in ids:
+		boss_seen.append(mid)
+	while boss_seen.size() > BOSS_SEEN_N:
+		boss_seen.pop_front()
+	return true
 
 
-func _pick_stage(i: int) -> void:
-	var sp: Dictionary = stage_pick[i]
-	# 「GOOD AFTERNOON」을 썼으면 고른 제약이 안 걸린다. 목표도 기본값으로 되돌린다 —
-	# "문턱"은 카드에 오른 목표가 곧 그 판 목표라 제약만 지우면 목표가
-	# 오른 채로 남는다.
-	if pardon_next:
-		pardon_next = false
+#  id 하나의 표 행. 없으면 빈 사전이다 — 표에서 줄이 사라져도 런이
+#  안 죽는다(사전이 id 를 쥐는 이유가 그것이다).
+func _mod_row(id: String) -> Dictionary:
+	for m in GameData.modifiers():
+		if String(m.id) == id:
+			return m
+	return {}
+
+
+#  그 판에 걸릴 제약 행들. 무효면 빈 배열이다 — 목표 원복과 제약 무효가
+#  이 한 함수에서 같이 나오므로 따로 깨질 수 없다.
+func _leg_mods(rn: int) -> Array:
+	if boss_void.has(rn):
+		return []
+	var out := []
+	for mid in boss_mods.get(rn, PackedStringArray()):
+		var row := _mod_row(String(mid))
+		if not row.is_empty():
+			out.append(row)
+	return out
+
+
+#  그 판에 실제로 걸리는 목표. **카드 · 「던진다」 부제 · 상점 명판 ·
+#  판정 넷이 이 한 자를 지난다.** 옛 구조에서 target_mul 이 목표에 닿는
+#  길은 _pick_stage 의 「target = sp.target」 한 줄뿐이었다 — 넷이 따로
+#  세면 카드가 「목표 8000」이라 적고 실제로는 10000 이 된다.
+func _target_at(rn: int) -> int:
+	var t := GameData.target_of(rn)
+	for m in _leg_mods(rn):
+		if String(m.k) == "target_mul":
+			t = int(ceil(float(t) * float(m.v)))
+	return t
+
+
+#  판 값을 세운다 — **화면이 아니라 값이다.** 제약은 라운드가 열릴 때
+#  이미 정해졌고(_roll_boss_mods) 여기서는 그것을 이 판에 건다.
+#  옛 _open_stage 는 보통 판에서 active_mods 를 비우고 곧장 _start_leg
+#  으로 빠졌는데, 그 갈래가 새 구조의 몸통 그대로다.
+#
+#  ⚠ active_mods 를 비우는 게임 코드가 사실상 이 함수뿐이다. 이걸 안
+#  지나는 길을 새로 내면 지난 보스 제약이 런 끝까지 살아붙는다.
+#  봉인도 여기서 지운다 — _start_leg 에서만 다시 뽑히므로, 안 지우면
+#  상점·판 선택의 동전 슬롯이 지난 판 봉인을 그대로 보여준다.
+func _begin_leg() -> void:
+	sealed = -1
+	sell_sel = -1
+	buy_sel = -1
+	if not GameData.is_boss(leg_no):
 		active_mods = []
 		target = GameData.target_of(leg_no)
-		# ⚠ 이름이 consumables.csv 와 여기 두 곳에 있다. 표가 출처인데 여기
-		# 글자로 박혀 있어 이름이 바뀔 때마다 같이 고쳐야 한다 — 표에서 읽는
-		# 길을 내는 것이 맞지만 그건 이 판의 일이 아니다.
+		_start_leg()
+		return
+	_roll_boss_mods(_round_boss())      # 안전망. 보통은 이미 서 있다
+	if boss_void.has(leg_no):
+		#  「GOOD AFTERNOON」. **제약 무효와 목표 원복은 한 쌍이다** —
+		#  「문턱」이 걸린 보스에서 제약만 지우면 목표가 오른 채 남는다.
+		#  둘 다 _leg_mods / _target_at 가 boss_void 를 보고 저절로 낸다.
+		#  ⚠ 이름이 consumables.csv 와 여기 두 곳에 있다. 표가 출처인데
+		#  여기 글자로 박혀 있어 이름이 바뀔 때마다 같이 고쳐야 한다.
 		pop(BC + Vector2(0.0, -40.0), "GOOD AFTERNOON", C_ACC, 12, 1.1)
-	else:
-		active_mods = [sp.d]
-		target = sp.target
-		# 「겹치기」는 고른 것 하나에 옆의 것을 더 얹는다. 안 고른 카드에서
-		# 뽑으므로 둘 다 화면에 있던 것이다 — 못 본 것이 걸리면 고르는
-		# 화면이 거짓말이 된다.
-		var want: int = GameData.chal_i("mods_n", 1)
-		var j := 0
-		while active_mods.size() < want and j < stage_pick.size():
-			if j != i:
-				active_mods.append(stage_pick[j].d)
-			j += 1
-	_sfx("stage_pick")
+	active_mods = _leg_mods(leg_no)
+	target = _target_at(leg_no)
 	_start_leg()
 
 
@@ -2884,6 +2923,14 @@ const SFX := {
 	"run_lose":       {"seq": [300.0, 240.0, 180.0], "gap": 0.13, "d": 0.24, "a": 0.22},
 	"leg_open":     {"seq": [392.0, 523.0], "gap": 0.07, "d": 0.12, "a": 0.18},
 	"leg_go":       {"f": 523.0, "d": 0.06, "a": 0.14},
+	#  라운드가 열리며 그 라운드 보스의 제약이 **처음 못 박히는** 프레임.
+	#  leg_open 이 [392,523] **오름**(문이 열린다)이라 봉인은 **내림**이다 —
+	#  무게가 내려앉는 것이지 열리는 것이 아니다. 이 표에서 내려가는 것은
+	#  sell 과 run_lose 뿐이라 올라가는 카드들과 한 줄에 서도 안 섞인다.
+	"boss_seal":      {"seq": [330.0, 247.0], "gap": 0.10, "d": 0.18, "a": 0.20},
+	#  ⚠ 아래 둘은 제약 고르기 화면이 없어진 뒤로 **이름이 화면과 안 맞는다.**
+	#  그래도 지우면 안 된다 — 팩 뜯기(_boost_spill 쏟기 · _boost_pick 담기)가
+	#  같은 이름을 빌려 쓴다. 이름만 낡은 채로 두는 쪽을 골랐다(2026-09-18).
 	"stage_open":     {"seq": [392.0, 494.0], "gap": 0.09, "d": 0.14, "a": 0.18},
 	"stage_pick":     {"seq": [523.0, 659.0, 784.0], "gap": 0.07, "d": 0.12, "a": 0.20},
 
@@ -3257,15 +3304,13 @@ func _auto_step() -> void:
 			if GameData.skippable(leg_no) and randf() < 0.1:
 				_skip_leg()
 			else:
-				_open_stage()
+				_begin_leg()
 		S.PICK:
 			_click(_mag_rect(randi() % maxi(remaining.size(), 1)).get_center())
 		S.AIM_V, S.AIM_H:
 			_advance()
 		S.CLEAR:
 			_click(Vector2(-1, -1))
-		S.STAGE:
-			_click(_stage_rect(randi() % stage_pick.size()).get_center())
 		S.SHOP:
 			# 사탕은 쟁여 둘 이유가 없다 — 들자마자 쓴다.
 			#
@@ -3843,12 +3888,6 @@ func _unhandled_input(e: InputEvent) -> void:
 func _click(m: Vector2) -> void:
 	# 사진이 연 화면은 그 아래를 통째로 가린다. 안 가리면 미리보기를 읽는
 	# 중에 뒤의 매물이 눌리고, 칸을 고르는 중에 다트가 날아간다.
-	if photo == "peek":
-		photo = ""
-		peek_pick.clear()
-		peek_leg = -1
-		_sfx("shop_deselect")
-		return
 	if photo == "paint":
 		_paint_click(m)
 		return
@@ -3937,23 +3976,13 @@ func _click(m: Vector2) -> void:
 			#  **전에** 부른다 — 바꾼 뒤면 상인이 이미 없는 화면일 수 있다.
 			if _leg_go().has_point(m):
 				_npc_react("끄덕")
-				_open_stage()
+				_begin_leg()
 				_sfx("leg_go")
 				return
 			if _leg_skip().has_point(m):
 				_npc_react("끄덕")
 				_skip_leg()
 				return
-		S.STAGE:
-			# 마지막 장이 설 때까지는 못 고른다. 움직이는 것을 누르면
-			# 무엇을 눌렀는지가 커서와 카드 중 어느 쪽 기준인지 갈린다.
-			if stage_t < _deal_time():
-				return
-			for i in stage_pick.size():
-				if _stage_rect(i).has_point(m):
-					_npc_react("끄덕", _npc_side(_stage_rect(i).get_center().x))
-					_pick_stage(i)
-					return
 		S.SHOP:
 			if sweep_live or boost_t >= 0.0:
 				return          # 쓸기·팩 뜯기는 중단 불가다. 클릭을 통째로 삼킨다
@@ -4918,8 +4947,8 @@ func pop(p: Vector2, txt: String, c: Color, sz: int, life: float) -> void:
 #    n=3 → w 153.3 ✔   n=4 → w 111.5 ✔   n=5 → w 86.4 ✘
 #  n=5 가 죽는 이유는 폭이 아니라 글자다. 설명 최장 "트리플·더블 링 폭
 #  0.5배" 가 크기 12 에서 116px(페이퍼로지 Bold — 갈무리11 때 135)이고, 지금 n=3 의
-#  안쪽 폭 141 에 든다. n=4(안쪽 99.5)면 12 가 안 들어가 그 카드만 10 으로 물러난다(_stage_card).
-#  stage_picks 를 5 이상으로 올리려면 설명을 툴팁으로 내리는 별개 결정이 먼저다.
+#  안쪽 폭 141 에 든다. 제약 카드를 깔던 시절의 셈이다 — 지금은 한 줄에
+#  판 셋(n=3)뿐이고, 제약 효과 글은 카드가 아니라 툴팁과 상점 명판이 든다.
 # ══════════════════════════════════════════════════════════
 #  얼굴 자리(제 좌표)는 간판 테(SIGN.rim 4) 안쪽에 맞췄다. 설명 밑줄이
 #  81 이면 아랫단 그늘(80~82)에 글자 발이 걸린다.
@@ -4948,17 +4977,10 @@ const CARD := {
 }
 
 
-# 카드가 **누워 있는** 자리다. 히트 칸과 툴팁 앵커가 이걸 읽으므로
-# 반드시 쉬는 모습이어야 한다 — 선 모습을 주면 아직 안 선 카드의
-# 허공을 눌러도 잡힌다. 서면서 커지는 쪽은 위로만 자라므로, 누운 칸에
-# 커서가 있는 한 계속 서 있다(떨림이 없다).
-func _stage_rect(i: int) -> Rect2:
-	return _row_rect(i, maxi(stage_pick.size(), 1))
-
-
-# 한 줄에 n 장을 늘어놓을 때 i 번째 자리. 제약 카드와 판 카드가 같은 줄을
-# 쓰므로 자리 계산도 하나다 — 개수만 다르다. 제약은 stage_pick 를 세지만
-# 판 선택 화면에서는 그 배열이 비어 있어, 세는 곳을 나눠야 한다.
+# 한 줄에 n 장을 늘어놓을 때 i 번째 자리. 카드가 **누워 있는** 자리다 —
+# 히트 칸과 툴팁 앵커가 이걸 읽으므로 반드시 쉬는 모습이어야 한다.
+# 선 모습을 주면 아직 안 선 카드의 허공을 눌러도 잡힌다. 서면서 커지는
+# 쪽은 위로만 자라므로, 누운 칸에 커서가 있는 한 계속 서 있다(떨림이 없다).
 func _row_rect(i: int, cnt: int) -> Rect2:
 	var n: float = maxf(float(cnt), 1.0)
 	var span: float = VIEW.x - CARD.x0 * 2.0
@@ -4978,22 +5000,12 @@ const DEAL := {
 }
 
 
+#  마지막 장이 자리에 설 때까지. 지워도 되는 함수처럼 보이지만 남긴다 —
+#  S.LEG 의 툴팁과 얹힘 반응을 딜이 끝나기 전에 막는 자다(움직이는 것을
+#  가리키면 무엇을 가리켰는지가 커서와 카드 중 어느 쪽 기준인지 갈린다).
 func _deal_time() -> float:
-	return float(DEAL.dur) + float(DEAL.stag) * maxf(float(stage_pick.size()) - 1.0, 0.0)
-
-
-func _stage_pose(i: int) -> Vector2:
-	var r := _stage_rect(i)
-	var t: float = stage_t - float(i) * float(DEAL.stag)
-	var k: float = clampf(t / float(DEAL.dur), 0.0, 1.0)
-	var e: float = 1.0 - pow(1.0 - k, 3.0)
-	var from := Vector2(VIEW.x * 0.5 - r.size.x * 0.5, TBL.fy - r.size.y - 4.0)
-	var p := from.lerp(r.position, e)
-	if k >= 1.0:
-		var bt: float = t - float(DEAL.dur)
-		if bt < 0.6:
-			p.y -= float(DEAL.hop) * exp(-bt * 11.0) * absf(sin(bt * 19.0))
-	return p
+	var n: float = float(GameData.legs_per_round())
+	return float(DEAL.dur) + float(DEAL.stag) * maxf(n - 1.0, 0.0)
 
 
 # 칸 번호에서 0~1 을 뽑는다.
@@ -5204,7 +5216,7 @@ func _swap_begin(to_board: bool) -> void:
 	if drop_fast:
 		return
 	if to_board:
-		if state != S.LEG and state != S.STAGE:
+		if state != S.LEG:
 			return          # 테이블에서 온 것이 아니면 갈아 끼울 것이 없다
 	elif state != S.SHOP:
 		return
@@ -5264,7 +5276,7 @@ func _swap_pin() -> Vector2:
 
 
 # 나가는(들어오는) 테이블 한 벌. shake_off **자체**를 잠깐 밀었다 되돌린다 —
-# 카드 얼굴(_stage_card · _leg_card)이 draw_set_transform(shake_off) 로
+# 카드 얼굴(_leg_card)이 draw_set_transform(shake_off) 로
 # 복귀하므로, 오프셋을 새 변수에 담으면 그 복귀가 오프셋을 조용히 떨군다.
 func _swap_screen(sh: Vector2) -> void:
 	shake_off = sh + Vector2(float(SWAP.dx) * _swap_gone(), 0.0)
@@ -5281,8 +5293,6 @@ func _draw_screen(scr: int) -> void:
 		_draw_clear()
 	elif scr == S.LEG:
 		_draw_leg()
-	elif scr == S.STAGE:
-		_draw_stage()
 	elif scr == S.SHOP:
 		_draw_shop()
 	elif scr == S.OVER:
@@ -9201,7 +9211,7 @@ func _draw_fx() -> void:
 #  낀 보드 확장 명판 — 판을 던지는 동안 오른쪽 아래
 # ──────────────────────────────────────────────────────────
 #  「보드 확장은 어디에 표시해 놓는 게 좋겠다」(사용자, 2026-09-17). 테이블 화면은
-#  앞치마(_apron_mods)가 산 장을 걸어 두는데, 정작 그 장이 일하는 판 위에서는
+#  옛 제약 화면의 앞치마가 산 장을 걸어 뒀는데, 정작 그 장이 일하는 판 위에서는
 #  아무 데도 안 떴다. 피자 · 시계 · 도넛은 판이 옷을 입어 보이지만 핵심 · 테두리 ·
 #  역지사지 같은 장은 판만 봐서는 무엇을 꼈는지 모른다.
 #
@@ -9894,35 +9904,31 @@ func _draw_topbar() -> void:
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 12,
 			C_ACC if GameData.is_boss(leg_no) else C_OFF)
 	draw_rect(g, C_BG)
-	if state == S.SHOP or state == S.STAGE:
-		# STAGE 에서 목표 숫자를 쓰면 안 된다 — 등급 배수(극한 ×1.25)가
-		# 아직 안 정해졌고 카드 셋이 서로 다른 숫자를 이미 크게 띄운다.
-		var msg := "판을 고르는 중"
-		if state == S.SHOP:
-			msg = "다음 %s  ·  목표 %d" % [GameData.leg_name(leg_no + 1),
-				GameData.target_of(leg_no + 1)]
-		draw_string(font, Vector2(g.position.x, ty), msg,
-				HORIZONTAL_ALIGNMENT_CENTER, g.size.x, 12, C_DIM)
-	else:
-		var k := clampf(shown / float(maxi(target, 1)), 0.0, 1.0)
-		#  다 차 갈 때 달아오른다. 막판에 눈이 게이지로 돌아오는 값이다.
-		draw_rect(Rect2(g.position, Vector2(g.size.x * k, g.size.y)),
-				C_GOLD if k >= 0.8 else C_ACC)
-		#  **슬래시를 지운다.** 색과 자리가 이미 둘을 갈랐다 — 내 것은
-		#  점수색이고 넘어야 할 것은 흐린 곁말이다. 같은 색 같은 크기로
-		#  나란히 두면 「내 것」과 「넘을 것」이 한 덩어리로 읽힌다.
-		#  목표 12 는 다섯 자리가 40px — x[466,506] 이라 게이지 끝(446)과 20px 떨어진다.
-		draw_string(font, Vector2(float(LAY.bar_tgt_r) - 60.0, ty),
-				str(target), HORIZONTAL_ALIGNMENT_RIGHT, 60.0, 12, C_DIM)
-		#  점수는 12 에 둔다. 18(갈무리9 두 배)은 수의 획이 16px 라 18px 띠에서 화면
-		#  윗변(y 0)까지 닿았다 — 찍어 보고 걷었다(2026-09-17). 목표와 크기가 같아졌어도
-		#  점수색(C_CHIP)과 흐린 곁말(C_DIM)이 둘을 가른다.
-		draw_string(font, Vector2(float(LAY.bar_score_r) - 64.0, ty),
-				str(int(round(shown))), HORIZONTAL_ALIGNMENT_RIGHT, 64.0, 12,
-				C_CHIP)
+	#  옛날에는 여기 S.STAGE · S.SHOP 갈래가 있었다. **SHOP 갈래는 한 번도
+	#  안 그려졌다** — _bar_hidden() 이 SHOP 을 포함하고 _hud_draw 가 그때
+	#  _draw_topbar 를 통째로 건너뛴다. 「다음 판 · 목표 n」을 여기 적어도
+	#  화면에 안 나오므로, 상점의 보스 예고는 앞치마 명판(_boss_plaque)이
+	#  낸다. 등급 배수를 말하던 곁말은 등급 시스템과 같이 걷혔다(2026-09-18).
+	var gk := clampf(shown / float(maxi(target, 1)), 0.0, 1.0)
+	#  다 차 갈 때 달아오른다. 막판에 눈이 게이지로 돌아오는 값이다.
+	draw_rect(Rect2(g.position, Vector2(g.size.x * gk, g.size.y)),
+			C_GOLD if gk >= 0.8 else C_ACC)
+	#  **슬래시를 지운다.** 색과 자리가 이미 둘을 갈랐다 — 내 것은
+	#  점수색이고 넘어야 할 것은 흐린 곁말이다. 같은 색 같은 크기로
+	#  나란히 두면 「내 것」과 「넘을 것」이 한 덩어리로 읽힌다.
+	#  목표 12 는 다섯 자리가 40px — x[466,506] 이라 게이지 끝(446)과 20px 떨어진다.
+	draw_string(font, Vector2(float(LAY.bar_tgt_r) - 60.0, ty),
+			str(target), HORIZONTAL_ALIGNMENT_RIGHT, 60.0, 12, C_DIM)
+	#  점수는 12 에 둔다. 18(갈무리9 두 배)은 수의 획이 16px 라 18px 띠에서 화면
+	#  윗변(y 0)까지 닿았다 — 찍어 보고 걷었다(2026-09-17). 목표와 크기가 같아졌어도
+	#  점수색(C_CHIP)과 흐린 곁말(C_DIM)이 둘을 가른다.
+	draw_string(font, Vector2(float(LAY.bar_score_r) - 64.0, ty),
+			str(int(round(shown))), HORIZONTAL_ALIGNMENT_RIGHT, 64.0, 12,
+			C_CHIP)
 
 	# 3칸 x[584,640] — 이번 판 제약 수. 이름 전체는 하단 y341 줄이 갖는다.
-	# active_mods 는 _pick_stage 에서만 갈리므로 SHOP 에는 지난 판 값이 남는다.
+	# active_mods 는 _begin_leg 가 판마다 다시 세운다 — 보통 판이면 비고
+	# 보스 판이면 그 판의 것이 선다. 여기는 _is_play() 갈래라 언제나 맞다.
 	if _is_play() and not active_mods.is_empty():
 		# 숫자 대신 아이콘. 하단의 제약 줄을 지웠으므로 여기가 유일한 상시 표기다.
 		# 무엇이 걸렸는지까지 보이므로 "제약 2" 보다 담는 정보가 오히려 많다.
@@ -10158,7 +10164,7 @@ func _cap_draw() -> void:
 #  바깥과 닿는 곳은 이 넷뿐이다.
 #    _panel_fire(i)    아이템이 발동할 때        (_next_step)
 #    _panel_update(d)  매 프레임 진행           (_process)
-#    _panel_draw()     매 프레임 그리기          (_draw, _draw_stage)
+#    _panel_draw()     매 프레임 그리기          (_draw)
 #    _panel_reset()    판 시작 시 정지        (_start_leg)
 #  owned / sealed 를 읽기만 하고 게임 상태는 건드리지 않는다.
 #  그래서 이 구획만 지우고 다시 써도 나머지는 영향을 안 받는다.
@@ -11358,8 +11364,6 @@ func _elide(t: String, w: float, sz: int) -> String:
 
 var sell_sel := -1
 var sell_t := 0.0               # 선택 링 맥동에만 쓴다
-var stage_slots := 0
-var stage_stand := []           # 카드마다 0(누움) ~ 1(섬)
 # 이번 프레임의 흔들림 이동. 카드 얼굴이 제 변환을 걸 때 여기에 겹치고,
 # 끝나면 이 값으로 되돌린다 — 안 되돌리면 남은 변환이 HUD 를 통째로 민다.
 var shake_off := Vector2.ZERO
@@ -11381,8 +11385,7 @@ var leg_tags_round := 0
 var leg_skipped := {}
 var pending_tags := []          # 나중에 쓸 뱃지들 [{kind, v, when, n}]
 var tag_copy := 0               # 쌓인 「쌍둥이」. 다음 뱃지가 이 수만큼 더 걸린다
-var leg_t := 0.0              # 화면이 열린 뒤 흐른 시간(카드 미끄러짐)            # 스테이지 화면에 들어설 때의 동전 개수
-var stage_t := 0.0              # 카드가 깔리는 경과. _open_stage 에서 0 으로 선다
+var leg_t := 0.0              # 화면이 열린 뒤 흐른 시간(카드 미끄러짐)
 
 
 func _can_sell() -> bool:
@@ -11411,7 +11414,7 @@ func _can_sell() -> bool:
 func _can_rack_move() -> bool:
 	if swap_live or sweep_live or state == S.RESOLVE or burst_left > 0:
 		return false
-	return state == S.SHOP or state == S.STAGE or state == S.LEG or _is_play()
+	return state == S.SHOP or state == S.LEG or _is_play()
 
 
 func _sell_hit(m: Vector2) -> bool:
@@ -11538,6 +11541,9 @@ func _cons_use(i: int) -> void:
 			say = "골드 +%d" % sum
 		"redo":
 			# 목표와 제약은 그대로 두고 점수와 다트만 판 시작으로 돌린다.
+			#  ⚠ **_begin_leg 가 아니라 _start_leg 다.** _begin_leg 를 태우면
+			#  sealed = -1 을 지나 봉인을 다시 뽑아, 「이번 판을 처음부터」가
+			#  「이번 판을 다시 만든다」가 된다(2026-09-18).
 			cons.remove_at(i)
 			Save.bump("cons_used")
 			total = 0
@@ -11546,7 +11552,17 @@ func _cons_use(i: int) -> void:
 			_sfx("cons_use")
 			return
 		"pardon":
-			pardon_next = true
+			#  깃발을 세우지 않는다 — 읽고 끄는 자리가 하나뿐이면 그 자리가
+			#  사라지는 날 15G 짜리 카드가 조용히 아무 일도 안 하게 된다
+			#  (옛 pardon_next 가 _pick_stage 한 곳에서만 꺼졌다).
+			#  쓰는 그 순간 **대상 판 번호를 못 박는다.** 제약 무효와 목표
+			#  원복은 _leg_mods / _target_at 한 쌍이 같이 내므로 따로 깨질
+			#  수 없고, 보스 카드의 문장과 목표 숫자가 눈앞에서 바뀐다.
+			var pbn := _boss_ahead()
+			if pbn <= 0:
+				return _cons_deny(c, "다음 보스 판이 없다")
+			_roll_boss_mods(pbn)        # 아직 안 굴렸으면 여기서 선다
+			boss_void[pbn] = true
 			say = "다음 보스 제약 무효"
 		# ── 아래 넷은 화면을 하나 더 연다. 쓸 수 있는 자리가 정해져 있다.
 		"burn", "clone":
@@ -11587,10 +11603,17 @@ func _cons_use(i: int) -> void:
 			_sfx("dart_fly")
 			return
 		"peek":
+			#  다시 뽑기. 굴리기 전에 지금 든 것을 avoid 로 넘긴다 —
+			#  눌렀는데 같은 것이 나오면 굴린 것인지 아닌지가 화면에서
+			#  안 갈린다. 표 열 종에 want ≤ 2 라 마를 일이 없다.
+			var rbn := _boss_ahead()
+			if rbn <= 0:
+				return _cons_deny(c, "다음 보스 판이 없다")
 			cons.remove_at(i)
 			Save.bump("cons_used")
-			_photo_peek()
-			return
+			_roll_boss_mods(rbn, true, boss_mods.get(rbn, PackedStringArray()))
+			boss_void.erase(rbn)        # 다시 뽑은 것은 무효가 아니다
+			say = "보스 제약 다시 뽑음"
 		_:
 			# 스티커 둘은 아직 대상 선택 흐름이 없다.
 			return _cons_deny(c, "아직 준비 중이다")
@@ -11738,33 +11761,19 @@ func _paint_click(m: Vector2) -> void:
 	_sfx("cons_use")
 
 
-# ── 프리크라임 — 다음 보스의 제약 셋을 읽기만 한다 ──────────
-func _photo_peek() -> void:
-	var n := leg_no
+#  지금 대비해야 할 보스 판. 없으면 0.
+#  판 선택은 **이번 판부터** 센다(아직 안 쳤다). 그 밖(상점·정산)은
+#  **다음 판부터**다 — 막 넘긴 보스를 다시 예고하면 이미 지난 것을
+#  대비하라는 말이 되고, 사탕이 그 판에 무효를 걸면 15G 가 그냥 날아간다
+#  (옛 _photo_peek 이 leg_no 부터 세서 실제로 그랬다, 2026-09-18).
+#  사탕 둘 · 상점 명판 · 런 정보가 **같은 자**를 쓴다. 서로 다른 판을
+#  집으면 예고한 것과 무효가 걸린 것이 갈린다.
+func _boss_ahead() -> int:
+	var scr: int = run_from if state == S.RUNINFO else state
+	var n: int = leg_no if scr == S.LEG else leg_no + 1
 	while n <= GameData.legs_n() and not GameData.is_boss(n):
 		n += 1
-	peek_pick.clear()
-	if n > GameData.legs_n():
-		pay_msg = "다음 보스 판이 없다"
-		pay_msg_t = HAND.msg_t
-		_deny()
-		return
-	# _open_stage 와 같은 자를 쓴다 — 여기서 따로 뽑으면 실제로 뜨는 셋과
-	# 다른 것을 보여 주게 되고, 그건 미리보기가 아니라 거짓말이다.
-	var left := GameData.modifiers().duplicate()
-	var base := GameData.target_of(n)
-	for k in GameData.stage_picks():
-		var md := _draw_weighted(left)
-		if md.is_empty():
-			break
-		left.erase(md)
-		var tgt := base
-		if String(md.k) == "target_mul":
-			tgt = int(ceil(float(base) * float(md.v)))
-		peek_pick.append({"d": md, "target": tgt})
-	peek_leg = n
-	photo = "peek"
-	_sfx("cons_use")
+	return n if n <= GameData.legs_n() else 0
 
 
 func _cons_draw() -> void:
@@ -11844,7 +11853,7 @@ func _cons_draw() -> void:
 #  _hud_draw 가 _draw_shop 다음이라 남은 scale 은 HUD 를 통째로 누른다.
 #  → 이 구획은 draw_set_transform 을 한 번도 부르지 않는다. 불변식이다.
 #
-#  예외 하나 — _stage_card 의 얼굴. 카드가 면에 누우면 그 위의 아이콘과
+#  예외 하나 — _leg_card 의 얼굴. 카드가 면에 누우면 그 위의 아이콘과
 #  글자도 같이 누워야 하는데, 글자는 좌표를 옮겨서는 못 눕힌다. 그래서
 #  거기서만 draw_set_transform_matrix 를 걸고 **같은 함수 안에서**
 #  draw_set_transform(shake_off) 로 되돌린다. 되돌리는 줄이 없으면
@@ -12322,7 +12331,7 @@ func _table_draw() -> void:
 func _felt_draw() -> void:
 	# 화면이 곧 테이블의 크롭이다. 640 폭에 D자 테이블 전체를 넣으면 매물이
 	# 그 안에서 다시 쪼그라든다. 좌우는 화면 밖으로 이어진다.
-	# 0 에서 시작한다. _draw_stage 는 _scrim() 을 안 부르므로 바를 지운
+	# 0 에서 시작한다. 판 선택은 _scrim() 을 안 부르므로 바를 지운
 	# 자리에 다트판이 그대로 비친다.
 	# 판 갈이 때는 _draw 가 이 사각을 **안 밀고** 맨 밑에 미리 깔았다.
 	# 여기서 또 그리면 벽이 테이블을 따라 옮겨진다.
@@ -12373,7 +12382,7 @@ func _cover_draw() -> void:
 	# 상인만 위로 더 뺀다. 실루엣은 동전 슬롯 뒤에 잘리는 것을 전제로 그린
 	# 크롭이라(NPC.top), 가로로만 밀면 평평한 절단면이 드러난다. 동전 슬롯이
 	# 퇴장문이다. 구획 규약(draw_set_transform 금지)의 두 번째 예외이고,
-	# _stage_card 와 같은 규칙으로 **같은 함수 안에서** 되돌린다. 배율이
+	# _leg_card 와 같은 규칙으로 **같은 함수 안에서** 되돌린다. 배율이
 	# 아니라 이동뿐이라 규약이 막는 사고(남은 scale 이 HUD 를 누른다)는
 	# 원리상 못 일어난다.
 	var nd: float = float(SWAP.npc) * _swap_gone()
@@ -12509,7 +12518,7 @@ func _chute_draw() -> void:
 #  대답도 안 한다 — 가려진 창구가 딸깍거리면 누를 수 있다는 거짓말이다.
 func _table_hover() -> bool:
 	return state == S.SHOP and not sweep_live and boost_t < 0.0 \
-			and photo != "peek" and photo != "paint" and _ui_can_hover()
+			and photo != "paint" and _ui_can_hover()
 
 
 #  창구를 지금 누르면 일이 되는가 — 고른 것이 이 창구로 가는가.
@@ -12583,9 +12592,9 @@ func _chute_label() -> void:
 # 상인 몸통 — 카운터 위로 올라온 부분만. 동전 슬롯이 이 위에 얹혀 트레이로 읽힌다.
 # 상인 몸통 — 카운터 위로 올라온 부분만. 동전 슬롯이 이 위에 얹혀 트레이로 읽힌다.
 #  상인이 서는 화면인가. 방(_felt_draw)이 서는 자리와 같다 —
-#  판 고르기 · 제약 고르기 · 상점, 그리고 그 사이의 판 갈이.
+#  판 고르기 · 상점, 그리고 그 사이의 판 갈이.
 func _npc_on() -> bool:
-	return state == S.LEG or state == S.STAGE or state == S.SHOP or swap_live
+	return state == S.LEG or state == S.SHOP or swap_live
 
 
 func _npc_body() -> void:
@@ -15403,14 +15412,6 @@ func _drop_update(d: float) -> void:
 	if state == S.LEG:
 		leg_t += d
 		npc_clock += d
-	if state == S.STAGE:
-		stage_t += d
-		npc_clock += d
-		# 커서 아래 카드만 선다. tip_mark 를 읽으므로 툴팁과 같은 판정이고,
-		# 그래서 "글자가 뜨는 카드" 와 "선 카드" 가 절대 안 갈린다.
-		for i in mini(stage_stand.size(), stage_pick.size()):
-			var on: bool = tip_a > 0.004 and tip_mark == _stage_rect(i)
-			stage_stand[i] = move_toward(stage_stand[i], 1.0 if on else 0.0, d * 7.0)
 	if state != S.SHOP:
 		return
 	var dd: float = minf(d, DROP.max_d)
@@ -17841,17 +17842,6 @@ func _icon_tag(c: Vector2, r: float, kind: String, a := 1.0,
 				var bx := c + Vector2(-r * 0.94 + float(i) * r * 0.72, -r * 0.42)
 				draw_rect(Rect2(bx, Vector2(r * 0.50, r * 0.84)),
 						col if i == 2 else Color(C_WIRE.darkened(0.15), a))
-		"picks":
-			# 부챗살로 벌린 카드 셋 — 제약 선택지가 그 모양으로 깔린다.
-			for i in 3:
-				var rot := deg_to_rad(-22.0 + float(i) * 22.0)
-				var up := Vector2(0.0, -1.0).rotated(rot)
-				var sd := Vector2(1.0, 0.0).rotated(rot) * r * 0.30
-				var bt := c + Vector2(0.0, r * 0.62)
-				draw_colored_polygon(PackedVector2Array([
-						bt - sd, bt + sd, bt + sd + up * r * 1.28,
-						bt - sd + up * r * 1.28]),
-						col if i == 1 else Color(C_WIRE.darkened(0.15), a))
 		_:
 			draw_circle(c, r * 0.7, col)
 
@@ -18210,7 +18200,7 @@ func _g2w(y: float) -> float:
 func _hand_live() -> bool:
 	if state == S.SHOP:
 		return not sweep_live
-	if state == S.LEG or state == S.STAGE:
+	if state == S.LEG:
 		return true
 	return _is_play() and state != S.RESOLVE
 
@@ -19242,13 +19232,6 @@ func _tip_hit(m: Vector2) -> Dictionary:
 			for i in GameData.max_items():
 				if _slot_rect(i).has_point(m):
 					return {"k": "rack", "i": i}
-		S.STAGE:
-			for i in stage_pick.size():
-				if _stage_rect(i).has_point(m):
-					return {"k": "stage", "i": i}
-			for i in GameData.max_items():
-				if _slot_rect(i).has_point(m):
-					return {"k": "rack", "i": i}
 		S.LEG:
 			# 동전 슬롯과 사탕 칸은 판 선택 화면에도 그대로 떠 있는데(_hud_draw)
 			# 여기만 대상에서 빠져 있었다. 무엇을 들고 있는지가 곧 "던질까
@@ -19266,6 +19249,29 @@ func _tip_hit(m: Vector2) -> Dictionary:
 			for i in pending_tags.size():
 				if _pend_rect(i).has_point(m):
 					return {"k": "pend", "i": i}
+			#  보스 카드 — 제약이 거기 앉았으므로 이름을 말할 자리가
+			#  있어야 한다. 이름 없는 문장 하나가 판의 규칙을 바꾸는데
+			#  아무 데서도 이름을 안 말하면 그건 그림이 아니라 수수께끼다.
+			#  히트 칸은 반드시 **누운 모습**이어야 한다 — 선 모습을 주면
+			#  아직 안 선 카드의 허공을 눌러도 잡힌다(_row_rect 의 규약).
+			#  딜이 끝나기 전에는 안 잡는다. 움직이는 것을 가리키면 무엇을
+			#  가리켰는지가 커서와 카드 중 어느 쪽 기준인지 갈린다.
+			#  HUD 가 카드 위에 있으므로 사탕·동전·단추·딱지 **다음**이다.
+			if leg_t >= _deal_time():
+				var lper := GameData.legs_per_round()
+				var lbf := _round_first()
+				for i in lper:
+					#  **앞으로 칠 보스만** 대답한다. 넘긴 간판은 두 동강 난
+					#  채 어느 판이었는지만 말하고 얼굴이 없어서, 툴팁만
+					#  뜨면 어느 카드 이야기인지가 화면에서 안 갈린다.
+					#  지금 표에서는 보스가 라운드의 마지막 판이라(검증기가
+					#  강제한다) 이 줄이 실제로 걸리는 일은 없다 — 그 규칙이
+					#  바뀌는 날을 위한 값싼 문지기다.
+					var brn: int = lbf + i
+					if brn < leg_no or not GameData.is_boss(brn):
+						continue
+					if _row_rect(i, lper).has_point(m):
+						return {"k": "legboss", "i": brn}
 		S.NEWRUN:
 			# 리그 줄. 이름만으로는 무엇을 미는지 모른다 — 설명이 여기 붙는다.
 			var ll := _league_lines()
@@ -19400,18 +19406,31 @@ func _tip_build(hit: Dictionary) -> void:
 			tip_title = String(hc.n)
 			_tip_add(String(hc.d), 20, C_TXT)
 			_tip_tag(GameData.use_at_name(String(hc.get("use_at", "any"))), C_ACC)
-		"stage":
+		"legboss":
 			_tip_set_tag("제약")
-			var sp: Dictionary = stage_pick[i]
-			# 사각은 남기고 테두리만 뺀다. 카드는 서면서 커지고 밝아지는데
-			# 테두리는 **누웠을 때의 자리**에 그려져, 선 카드 위에 어긋난
-			# 흰 상자가 뜬다. 선 것 자체가 이미 표시라 두를 것이 없다 —
-			# 테이블(stock)와 동전 슬롯이 먼저 간 길이다.
-			tip_mark = _stage_rect(i)
+			# 사각은 남기고 테두리만 뺀다. _row_rect 는 축정렬 사각인데 카드는
+			# 펠트를 따라 좁아진 사다리꼴이라 흰 테가 몇 px 어긋난다. 카드
+			# 쪽 반응(테가 달아오른다)이 표시를 대신한다 — 테이블(stock)과
+			# 동전 슬롯이 먼저 간 길이다.
+			tip_mark = _row_rect(GameData.leg_idx(i), GameData.legs_per_round())
 			tip_box = false
-			tip_title = sp.d.n
-			_tip_add(sp.d.d, 20, C_MULT)
-			_tip_add("목표 %d" % sp.target, 12, C_DIM)
+			var braw: PackedStringArray = boss_mods.get(i, PackedStringArray())
+			var bnames := []
+			for bid in braw:
+				bnames.append(String(_mod_row(String(bid)).get("n", "")))
+			tip_title = " · ".join(bnames)
+			#  무효라도 **효과 줄은 남긴다** — 무엇이 무효가 됐는지가 안
+			#  보이면 카드를 쓴 값을 모른다. 잉크만 흐리게 간다.
+			var bvoid: bool = boss_void.has(i)
+			for bid in braw:
+				var brow := _mod_row(String(bid))
+				if brow.is_empty():
+					continue
+				_tip_add(String(brow.get("d", "")), 20,
+						C_DIM if bvoid else C_MULT)
+			_tip_add("목표 %d" % _target_at(i), 12, C_DIM)
+			if bvoid:
+				_tip_tag("무효", C_DIM)
 		"citem":
 			_tip_set_tag("동전")
 			var it: Dictionary = GameData.items()[i]
@@ -20136,26 +20155,6 @@ func _photo_draw() -> void:
 						HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 20, C_ACC)
 			draw_string(font_sm, Vector2(0.0, 28.0), "칠할 칸을 고르세요",
 					HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 20, C_TXT)
-		"peek":
-			_scrim()
-			draw_string(font_sm, Vector2(0.0, 44.0), "다음 보스의 제약",
-					HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 20, C_ACC)
-			for i in peek_pick.size():
-				var e: Dictionary = peek_pick[i]
-				var y: float = 74.0 + float(i) * 54.0
-				var r := Rect2(Vector2(74.0, y), Vector2(VIEW.x - 148.0, 46.0))
-				_rr(self, r, C_PANEL.darkened(0.15))
-				draw_string(font_sm, r.position + Vector2(10.0, 22.5),
-						String(e.d.get("n", "")), HORIZONTAL_ALIGNMENT_LEFT,
-						-1, 20, C_TXT)
-				draw_string(font, r.position + Vector2(10.0, 39.5),
-						String(e.d.get("d", "")), HORIZONTAL_ALIGNMENT_LEFT,
-						r.size.x - 20.0, 12, C_DIM)
-				draw_string(font_sm, r.position + Vector2(0.0, 22.5),
-						"목표 %d" % int(e.target), HORIZONTAL_ALIGNMENT_RIGHT,
-						r.size.x - 10.0, 20, C_GOLD)
-			draw_string(font_sm, Vector2(0.0, VIEW.y - 14.0), "아무 데나 눌러 닫는다",
-					HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 20, C_DIM)
 
 
 #  판 하나. **사면 테두리를 안 두른다.**
@@ -20227,7 +20226,7 @@ var ui_under := false
 #  안 거치고 제 조건으로 밝힌다.
 func _ui_can_hover() -> bool:
 	return not swap_live and hand_st != H.CARRY and not ui_under \
-			and photo != "paint" and photo != "peek" and photo_rack == "" \
+			and photo != "paint" and photo_rack == "" \
 			and not _tutor_live()
 
 
@@ -20712,7 +20711,9 @@ func _draw_leg() -> void:
 			Color(C_TABLE.lightened(0.40), 0.85))
 	_leg_card(cur, first + cur)
 
-	_btn(_leg_go(), "던진다", "목표 %d" % GameData.target_of(leg_no), true)
+	#  **목표는 _target_at 한 자를 지난다** — 카드가 적은 수와 여기 적는
+	#  수와 판정이 쓰는 수가 갈리면 화면이 판을 속인다.
+	_btn(_leg_go(), "던진다", "목표 %d" % _target_at(leg_no), true)
 	#  보스 판은 못 건너뛴다. 단추를 걷지 않고 띠를 끈다 — 자리가 비면
 	#  「이 판은 왜 건너뛰기가 없지」 를 화면이 말해 주지 않는다.
 	#  부제는 _btn 이 12 로 그린다 — 자르는 자도 12 로 잰다(작게 재면 긴 효과가
@@ -20751,7 +20752,7 @@ func _draw_leg() -> void:
 
 #  판 한 장 — **간판.** 짙은 면에 판 종류의 색(작은 판 · 큰 판 · 보스) 테와
 #  윗단 띠를 둘렀다. 지금 판은 테가 금빛이다. 색은 SIGN_COL 한 벌에서
-#  온다 — 제약 카드(_stage_card)도 같은 간판이다.
+#  온다 — 옛 제약 카드도 같은 간판이었다.
 #
 #  전에는 둥근 모서리의 판(C_PANEL) 한 장이었는데 「그냥 생성한 종이
 #  같다 · 판자같이」 「클리어한 판은 간판이 깨져 있다거나」 라는 말을
@@ -20787,19 +20788,32 @@ const SIGN := {
 #  크림 글씨 : 면 10.4 · 금화 : 면 7.5 · 금빛 테 : 면 7.5 (WCAG).
 #  면이 펠트와 밝기가 거의 같아(1.16:1) 누운 판은 테로 가른다.
 #
-#  열쇠 — small · big · boss 는 판 종류, cons 는 제약 카드(보스 판에만 깔리므로
-#  보스와 한 집안이다).
+#  열쇠 — small · big · boss 가 판 종류다.
 #    face 면 · rim 테 · band 테 밑 윗단 띠 · side 옆면
 #    ink 글씨 · now 지금 판의 테 · done 지나간 판이 가라앉는 만큼(darkened)
+#
+#  ── 보스만 무겁다 ────────────────────────────────────
+#  「보스판 판넬은 그래픽적으로 좀 더 작업해도 될 것 같다」(사용자,
+#  2026-09-18). 무게는 **색이 아니라 기하**로 낸다 — 이 게임의 색 어휘는
+#  점수(C_CHIP)·배수(C_MULT)·확률(C_ODDS)·골드로 이미 꽉 찼고, 거기에
+#  「축 갈래」 같은 넷째 뜻을 얹으면 두 어휘가 같이 흐려진다.
+#  그래서 보스만 테가 두껍고(rim_w) 띠가 넓고(band_w) 옆면이 깊고(th)
+#  그림자가 짙다(shadow · shadow_k). 읽는 쪽이 전부 sc.get(열쇠, 기본값)
+#  이라 **덧셈뿐이다** — 작은 판·큰 판 그림은 한 화소도 안 바뀐다.
+#
+#  face 는 **어둡게 하지 않는다.** 어둡게 하면 _sign_cols 의 sink(done
+#  0.30)와 충돌해 「끝난 큰 판」과 「아직 안 친 보스 판」이 같은 톤으로
+#  읽힌다. 같은 밝기의 다른 색조로 반 발짝만 민다 — 상대휘도 0.0375 대
+#  383350 의 0.0383 으로 2.1% 차라, sink 의 절반 어둠과 절대 안 헷갈린다.
 const SIGN_COL := {
 	"small": {"face": Color("383350"), "rim": Color("5d86a6"),
 			"band": Color("5d86a6"), "side": Color("1f2a3a")},
 	"big": {"face": Color("383350"), "rim": Color("a07a4c"),
 			"band": Color("a07a4c"), "side": Color("33271d")},
-	"boss": {"face": Color("383350"), "rim": Color("a84f4d"),
-			"band": Color("a84f4d"), "side": Color("3a1d20")},
-	"cons": {"face": Color("383350"), "rim": Color("a84f4d"),
-			"band": Color("a84f4d"), "side": Color("3a1d20")},
+	"boss": {"face": Color("3f3148"), "rim": Color("a84f4d"),
+			"band": Color("a84f4d"), "side": Color("3a1d20"),
+			"rim_w": 5.5, "band_w": 8.0, "th": 4.2,
+			"shadow": 0.34, "shadow_k": 1.35, "soot": true, "stud": true},
 	"ink": C_TXT, "now": C_GOLD, "done": 0.30,
 }
 
@@ -20825,6 +20839,11 @@ func _sign_cols(kind: String, sink: bool) -> Dictionary:
 	}
 	if e.has("band"):
 		out["band"] = Color(e.band).darkened(dk)
+	#  기하 열쇠는 **어둡게 하지 않고** 그대로 흘린다 — 색이 아니라 두께다.
+	#  없는 열쇠는 읽는 쪽이 기본값으로 받는다(sc.get).
+	for gk in ["rim_w", "band_w", "th", "shadow", "shadow_k", "soot", "stud"]:
+		if e.has(gk):
+			out[gk] = e[gk]
 	return out
 
 
@@ -20840,7 +20859,7 @@ func _leg_card(i: int, rn: int) -> void:
 	var broken: bool = done and not skipped
 	var now: bool = rn == leg_no
 	var up: float = 1.0 if now else 0.0
-	# 미끄러져 들어온다 — 제약 카드와 같은 딜 어법
+	# 미끄러져 들어온다
 	var k: float = clampf((leg_t - float(i) * float(DEAL.stag))
 			/ float(DEAL.dur), 0.0, 1.0)
 	var e: float = 1.0 - pow(1.0 - k, 3.0)
@@ -20851,12 +20870,48 @@ func _leg_card(i: int, rn: int) -> void:
 	var q := _card_quad(px - (w2 - sz.x) * 0.5, w2, foot, up, gs, 7.0 * up)
 	var w: float = sz.x
 	var ch: float = float(CARD.h)
-	var sc := _sign_cols(_leg_kind(rn), done)
+	var kind := _leg_kind(rn)
+	var sc := _sign_cols(kind, done)
+
+	#  ── 보스 카드의 상시 채널 ─────────────────────────
+	#  앞으로 칠 보스만 살아 있다. 이미 친 판(깨진 간판)과 무효가 된 판은
+	#  숨을 안 쉰다 — 상시 맥동은 화면에 **하나**뿐이어야 보스가 무겁다.
+	var mods := _leg_mods(rn) if kind == "boss" else []
+	var mvoid: bool = kind == "boss" and boss_void.has(rn)
+	var mids: PackedStringArray = boss_mods.get(rn, PackedStringArray()) \
+			if kind == "boss" else PackedStringArray()
+	var boss_live: bool = kind == "boss" and not done and not mvoid \
+			and not mids.is_empty()
+	#  2.2 와 3.4 는 서로 약수가 아니다(60fps 로 132·204 프레임, 합성 18.7초)
+	#  — 합성 리듬이 메트로놈으로 안 굳고 숨 쉬는 것처럼 흐른다.
+	#  딜이 끝난 뒤부터 센다. 미끄러져 들어오는 동안 숨 쉬면 딜과 싸운다.
+	var pt: float = maxf(leg_t - _deal_time(), 0.0)
+	var beat := 0.5
+	var soot := 0.5
+	if boss_live and not motion_off:
+		beat = 0.5 + 0.5 * sin(TAU * pt / 2.2)
+		soot = 0.5 + 0.5 * sin(TAU * pt / 3.4)
+	#  얹히면 카드가 대답한다. S.LEG 는 여태 hover 상태가 0개라, 툴팁만
+	#  뜨고 카드가 가만히 있으면 「어느 카드 이야기인지」가 안 보였다.
+	#  tip_box 는 못 쓴다 — _row_rect 는 축정렬 사각인데 카드는 펠트를 따라
+	#  좁아진 사다리꼴이라 흰 테가 몇 px 어긋난다. 모바일은 톡 = 커서
+	#  이동이라 똑같이 얹힌다. **할 말이 있는 카드만 대답한다.**
+	var hov: bool = kind == "boss" and not mids.is_empty() \
+			and tip_a > 0.004 and tip_mark == r and leg_t >= _deal_time()
+	var rim: Color = _sign_now() if now else Color(sc.rim)
+	if boss_live:
+		rim = rim.lightened(0.05 + 0.05 * beat)
+	if hov:
+		rim = rim.lerp(C_ACC, 0.25)
+	if boss_live:
+		#  맥동은 그림자에도 얹는다 — 테만 밝아지면 카드가 아니라 테가
+		#  깜빡이는 것으로 읽힌다. 판 전체가 같이 숨 쉬어야 한다.
+		sc = sc.duplicate()
+		sc["shadow"] = float(sc.get("shadow", 0.26)) + 0.06 * soot
 
 	var crack := _sign_crack(w, ch, rn) if broken else PackedVector2Array()
 	var pieces := _sign_pieces(q, w, ch, crack)
-	_sign_body(q, w, ch, pieces, up, sc, _sign_now() if now else Color(sc.rim),
-			crack, rn)
+	_sign_body(q, w, ch, pieces, up, sc, rim, crack, rn)
 
 	#  글씨. 깨진 판은 몸통(왼쪽 조각)에 이름과 「넘김」 만 남는다.
 	#  글자는 20(갈무리9 두 배 — 단추 이름과 같은 단). 11 · 9 였을 때 「UI 에 비해
@@ -20875,7 +20930,10 @@ func _leg_card(i: int, rn: int) -> void:
 		var bxf: Transform2D = pieces[0].xf
 		draw_set_transform_matrix(Transform2D(0.0, shake_off) * bxf * a0)
 		var cx: float = crack[0].x * 0.5
-		_sign_text(Vector2(cx - 40.0, 34.5), 80.0, GameData.leg_name(rn), 20,
+		#  넘긴 간판은 두 동강 난 채 **어느 판이었는지**만 말한다. 제약
+		#  이름은 「올 것」의 말이라 여기 안 쓴다. 몸통 폭 80 이라 자른다.
+		_sign_text(Vector2(cx - 40.0, 34.5), 80.0,
+				_elide(GameData.leg_name(rn), 80.0, 20), 20,
 				Color(paint.darkened(0.35), 0.9), font_sm)
 		_sign_text(Vector2(cx - 40.0, 59.5), 80.0, "넘김", 20,
 				Color(paint.darkened(0.45), 0.8), font_sm)
@@ -20883,15 +20941,87 @@ func _leg_card(i: int, rn: int) -> void:
 		return
 	draw_set_transform_matrix(Transform2D(0.0, shake_off) * a0)
 	var ink: Color = paint.darkened(0.40) if done else paint
+
+	#  ── 그을음 디더 2px ──────────────────────────────
+	#  640×360 에서 부드러운 글로우·비네트는 밴딩으로 깨진다. 톤이 아니라
+	#  **질감**으로만 쓴다 — 붉은 띠 바로 밑 좁은 한 줄이고 판 전체에는
+	#  안 깐다. 씨가 rn 이라 매 프레임 같은 그을음이다. 매 프레임 다시
+	#  뽑으면 모래가 끓는다. 띠가 면 안에 통째로 드니 _sign_fill 의 다각형
+	#  교차를 안 태운다 — 셀 서른여덟 × 매 프레임은 낼 값이 아니다.
+	if bool(sc.get("soot", false)) and not mids.is_empty():
+		var rg := RandomNumberGenerator.new()
+		rg.seed = rn * 4409 + 7
+		var sx := 9.0
+		while sx < w - 9.0:
+			if rg.randf() < 0.55:
+				draw_rect(Rect2(sx, 13.5, 1.0,
+						2.0 if rg.randf() < 0.4 else 1.0),
+						Color(sc.side, 0.18 + 0.16 * soot))
+			sx += 2.0
+
+	#  ── 문장(紋章) 명판 ──────────────────────────────
+	#  발라트로가 보스 칸에 「Boss Blind」가 아니라 「The Wall」을 적는 그
+	#  자리다. 「보스 판」은 붉은 테 · 셋째 자리 · 「못 건너뛴다 / 보스 판」
+	#  단추 · 상단 바 판 이름 넷이 이미 말한다 — 20pt 한 줄을 공짜로 얻어
+	#  **제약 이름**에 준다. 카드는 그림과 두 줄까지고, 효과 값은 툴팁과
+	#  상점 명판이 든다(효과는 일어서야 보이는데 보스 카드는 라운드 1·2 에
+	#  누워 있다 — 옛 _stage_card 가 이미 판결해 놓은 자리다).
+	var namely := ""
+	if not mids.is_empty():
+		#  명판은 **스케일하지 않는다.** 선 카드가 gs 1.12 로 커질 때
+		#  같이 늘리면 픽셀이 뭉갠다 — 옛 CARD.plate 18→14 가 쓰던 어법이다.
+		var pr: float = lerpf(12.0, 12.0 / 1.12, up)
+		var gr: float = lerpf(8.5, 8.5 / 1.12, up)
+		var n2: int = mini(mids.size(), 2)
+		var ga: float = 1.0 if (hov or done) else 0.92
+		for mi in n2:
+			var cpt := Vector2(19.5, 27.0)
+			if n2 > 1:
+				#  겹치기면 명판 둘, 이름은 걷는다 — 두 이름을 100px 칸에
+				#  잘라 넣느니 글리프 둘이 「축이 둘」을 더 잘 말한다.
+				pr = lerpf(13.0, 13.0 / 1.12, up)
+				gr = lerpf(9.0, 9.0 / 1.12, up)
+				cpt = Vector2(w * 0.5 + (-16.0 if mi == 0 else 16.0), 27.0)
+			draw_circle(cpt + Vector2(0.0, 1.0), pr, Color(sc.hi, 0.55))
+			draw_circle(cpt, pr, Color(sc.rim).lightened(0.25))
+			draw_circle(cpt, pr - 2.0, Color(sc.face).darkened(0.55))
+			_icon_modifier(cpt, gr, String(mids[mi]),
+					0.55 if mvoid else 0.0, ga)
+			if mvoid:
+				#  명판을 **지우지 않는다** — 지우면 보통 판으로 읽혀
+				#  15G 를 쓴 흔적이 사라진다. 한 획만 긋는다.
+				draw_line(cpt + Vector2(-pr, pr), cpt + Vector2(pr, -pr),
+						Color(sc.ink, 0.7), 1.5)
+		if n2 == 1:
+			namely = String(_mod_row(String(mids[0])).get("n", ""))
+
+	#  이름 줄. 보스면 제약 이름이 그 자리를 산다.
+	#  **목표 줄과 같은 축(w*0.5)에 선다** — 명판을 피해 오른쪽 칸에 넣었더니
+	#  두 줄이 17px 어긋난 축에 서서 글 덩어리가 기울어 보였다. 대신 폭을
+	#  84 로 묶는다: 절반 42 라 왼끝이 34.7 이고 명판 오른끝 31.5 와 3.2px
+	#  떨어진다(실측 최장 「금지 구역」 75px 은 안 잘린다).
+	#  표가 늘어 긴 이름이 오면 넘치므로 **_elide 를 반드시 태운다.**
 	#  지금 판의 이름도 크림색이다. 금빛 이름은 호박색 칠(큰 판) 위에서
 	#  묻힌다 — 지금 판은 금빛 테가 이미 말한다.
-	_sign_text(Vector2(0.0, 34.5), w, GameData.leg_name(rn), 20, ink, font_sm)
+	if namely != "":
+		_sign_text(Vector2(0.0, 34.5), w, _elide(namely, 84.0, 20), 20,
+				Color(paint.darkened(0.45), 0.85) if mvoid else ink, font_sm)
+	elif mids.is_empty():
+		_sign_text(Vector2(0.0, 34.5), w,
+				_elide(GameData.leg_name(rn), w, 20), 20, ink, font_sm)
 	if skipped:
 		_sign_text(Vector2(0.0, 59.5), w, "건너뜀", 20, Color(paint.darkened(0.5), 0.85),
 				font_sm)
 	else:
-		_sign_text(Vector2(0.0, 59.5), w, "목표 %d" % GameData.target_of(rn), 20, ink,
-				font_sm)
+		#  **목표는 _target_at 한 자를 지난다.** 「문턱」이 걸리면 이 수가
+		#  밀리고, 색 하나로 「이 수가 밀렸다」가 온다 — 카드를 보고 빌드를
+		#  짜라는 것이 이번 변경의 전부라 카드가 거짓 수를 적으면 안 된다.
+		var tgt := _target_at(rn)
+		var tink: Color = ink
+		for m in mods:
+			if String(m.k) == "target_mul":
+				tink = C_MULT if not done else C_MULT.darkened(0.40)
+		_sign_text(Vector2(0.0, 59.5), w, "목표 %d" % tgt, 20, tink, font_sm)
 		# 보상은 수가 아니라 **금화 개수**로 낸다. 3 과 5 의 차이는 읽어야
 		# 알지만 금화 셋과 다섯은 안 읽고도 보인다. 카드가 누워 있을 때
 		# 특히 그렇다 — 눌린 글자는 못 읽어도 개수는 세인다.
@@ -20901,6 +21031,21 @@ func _leg_card(i: int, rn: int) -> void:
 		for ci in mini(rw, 8):
 			draw_plaque(Vector2(cx0 + float(ci) * cw, 66.5), 5.5, 3.6, C_GOLD)
 	draw_set_transform(shake_off)
+
+	#  ── 모서리 징 넷 ────────────────────────────────
+	#  **화면 좌표 고정 5px.** 제 좌표가 아니라 화면 좌표라 카드가 눕든
+	#  서든 gs 1.12 로 커지든 크기가 안 변한다 — 장식 프레임의 철칙이다.
+	if bool(sc.get("stud", false)) and not mids.is_empty():
+		#  색은 **실제로 그린 테**에서 뽑는다. SIGN_COL 의 붉은 테를 그대로
+		#  쓰면 지금 판(금빛 테)에서 분홍 쐐기가 얹혀 붙인 자국으로 읽힌다.
+		var stc: Color = rim.lightened(0.30)
+		var inn := [Vector2(1.0, 1.0), Vector2(-1.0, 1.0),
+				Vector2(-1.0, -1.0), Vector2(1.0, -1.0)]
+		for si in 4:
+			var cq: Vector2 = q[si]
+			var dv: Vector2 = inn[si] * 5.0
+			draw_colored_polygon(PackedVector2Array([cq,
+					cq + Vector2(dv.x, 0.0), cq + Vector2(0.0, dv.y)]), stc)
 
 
 #  판 종류 — 작은 판 · 큰 판 · 보스. SIGN_COL 의 열쇠다.
@@ -20948,16 +21093,18 @@ func _sign_body(q: PackedVector2Array, w: float, h: float, pieces: Array, up: fl
 	#  몸통 위로 올라오면 안 된다.
 	for pc in pieces:
 		var sp := _sign_map(q, w, h, pc.poly, pc.xf)
-		var shv: Vector2 = TBL.light * (2.0 + 5.0 * up)
+		var shk: float = float(sc.get("shadow_k", 1.0))
+		var shv: Vector2 = TBL.light * (2.0 + 5.0 * up) * shk
 		var sh := PackedVector2Array()
 		for pt in sp:
 			sh.append(pt + shv)
-		draw_colored_polygon(sh, Color(0.0, 0.0, 0.0, 0.26 + 0.14 * up))
+		draw_colored_polygon(sh, Color(0.0, 0.0, 0.0,
+				float(sc.get("shadow", 0.26)) + 0.14 * up))
 	if not crack.is_empty():
 		_sign_chips(q, w, h, rn, crack, sc.chip)
 	for pc in pieces:
 		var sp := _sign_map(q, w, h, pc.poly, pc.xf)
-		var th: float = float(SIGN.th) * (0.6 + 0.6 * up)
+		var th: float = float(sc.get("th", SIGN.th)) * (0.6 + 0.6 * up)
 		var side := PackedVector2Array()
 		for pt in sp:
 			side.append(pt + Vector2(0.0, th))
@@ -20992,15 +21139,20 @@ func _sign_basis(q: PackedVector2Array, w: float, h: float) -> Transform2D:
 func _sign_face(q: PackedVector2Array, w: float, h: float, piece: PackedVector2Array,
 		xf: Transform2D, sc: Dictionary, rim: Color) -> void:
 	draw_colored_polygon(_sign_map(q, w, h, piece, xf), rim)
-	var rw: float = float(SIGN.rim)
+	var rw: float = float(sc.get("rim_w", SIGN.rim))
 	for inner in Geometry2D.offset_polygon(piece, -rw):
 		var pts: PackedVector2Array = inner
 		draw_colored_polygon(_sign_map(q, w, h, pts, xf), sc.face)
 		_sign_fill(q, w, h, pts, xf, _sign_rect(-2.0, -2.0, w + 4.0, 5.0), sc.hi)
 		if sc.has("band"):
 			_sign_fill(q, w, h, pts, xf, _sign_rect(-2.0, rw - 1.0, w + 4.0,
-					float(SIGN.band) + 1.0), sc.band)
-		_sign_fill(q, w, h, pts, xf, _sign_rect(-2.0, h - 6.0, w + 4.0, 8.0), sc.lo)
+					float(sc.get("band_w", SIGN.band)) + 1.0), sc.band)
+		#  아랫단 그늘의 시작을 **테 두께에서 잰다.** 박아 둔 h-6 이면
+		#  rim 4 에서 교차가 2px 인데 rim 5.5 에서 0.5px 로 줄어 그늘이
+		#  사실상 사라진다 — 테를 키우면 카드가 오히려 가벼워졌다.
+		#  rw 4 면 80 으로 옛 값과 같아 작은 판·큰 판은 한 화소도 안 바뀐다.
+		_sign_fill(q, w, h, pts, xf, _sign_rect(-2.0, h - rw - 2.0, w + 4.0, 8.0),
+				sc.lo)
 
 
 func _sign_fill(q: PackedVector2Array, w: float, h: float, piece: PackedVector2Array,
@@ -21083,84 +21235,6 @@ func _sign_chips(q: PackedVector2Array, w: float, h: float, rn: int,
 				c + Vector2.from_angle(an + 4.0) * cs * 0.7]), col)
 
 
-func _draw_stage() -> void:
-	# 상점과 같은 테이블이다. 매물이 있던 자리에 제약 카드가 놓이고,
-	# 창구는 좌우 다 셔터가 내려가 있다 — 그 화면에서는 아무것도 안 판다.
-	_felt_draw()
-	#  인쇄 줄은 **덮개 뒤**에 온다. 베이스라인 y131 에 그리고 그다음
-	#  _cover_draw 가 y[0,128] 을 덮어서, 9px 한글 몸통 y[122,131] 중
-	#  y[122,128] 이 통째로 지워지고 있었다 — 읽을 수가 없었다.
-	#  같은 일을 하는 _draw_leg 는 덮개 뒤 y141 에 그려 멀쩡하다.
-	#
-	#  덮개를 여기서 또 부를 일은 없다 — 덮개는 y[0,128] 만 덮고 이 줄은
-	#  그 아래다. 카드보다 먼저 그리는 것은 그대로 둔다(미끄러져 오는
-	#  카드가 글자를 덮어야 순서가 맞다).
-	#
-	#  **「목표 n」 하나로 줄인다.** 라운드와 판 이름은 상단 바가 이미 든다.
-	#  9 → 11 → 12(글자 키우기) — _draw_leg 의 「라운드」 줄과 같은 단 · 같은 자리다
-	#  (상인 라인 밑 fy+23 — 그 머리말).
-	draw_string(font, Vector2(0.0, TBL.fy + 23.0),
-			"목표 %d" % GameData.target_of(leg_no),
-			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 12,
-			Color(C_TABLE.lightened(0.40), 0.85))
-	# 선 카드가 맨 위에 온다. 커지면서 이웃을 밀고 들어가는데 그리는 순서가
-	# 고정이면 오른쪽 카드가 그 위를 덮어 든 것이 아래로 보인다.
-	var front := -1
-	for i in stage_pick.size():
-		#  얹힌 카드가 서며 커지는 것은 이미 있다(_drop_update 가 tip_mark 로
-		#  민다). 들어서는 딸깍만 단추와 맞춘다. 판정도 서는 것과 같은 줄이라
-		#  「선 카드」 와 「소리 난 카드」 가 안 갈린다. 깔리는 중에는 아직 못
-		#  고르므로(_click S.STAGE) 안 적는다.
-		if state == S.STAGE and stage_t >= _deal_time() and tip_a > 0.004 \
-				and tip_mark == _stage_rect(i) and _ui_can_hover():
-			ui_hot = "stage:%d" % i
-		if float(stage_stand[i] if i < stage_stand.size() else 0.0) > 0.004:
-			front = i
-		else:
-			_stage_card(i)
-	# 누운 카드는 상인 손 **아래**다 — 카운터에 놓인 것이니 그게 맞다. 선
-	# 카드는 그 위다. 카운터보다 앞으로 나와 세운 것을 손이 덮으면 든 것으로
-	# 안 읽힌다. 그래서 덮개를 사이에 끼운다.
-	_cover_draw()
-	if front >= 0:
-		_stage_card(front)
-	_apron_mods()
-
-
-# 앞치마 = 산 보드 확장을 거는 선반. 상점에서 리롤·다음 버튼이 서는 띠와
-# 같은 줄을 쓴다 — 두 화면이 같은 틀이라는 말이 여기서도 지켜진다.
-# 값을 손으로 적지 않고 버튼 사각에서 뽑는다. 손으로 적었더니 버튼을
-# 내렸을 때 선반만 옛 자리에 남아 펠트 위에 검은 네모가 떴다.
-# 보드 확장(mods.csv)는 _icon_mod, 제약(modifiers.csv)은 _icon_modifier 다.
-# 캐비닛과 획으로 형태가 갈려 있어 아래(내가 산 것)와 위(내가 고를 것)가
-# 안 섞인다. 이름은 12(글자 키우기 — 전에는 9 · 11). 최장 「천체 고리」 45px(페이퍼로지
-# Bold — 갈무리11 때 53)이 칸 56 의 안쪽 54 에 든다(칸 52 · 갈무리 때는 「천체 …」 로 잘렸다).
-# 앞치마 줄의 중심. 버튼 띠와 같은 줄이다.
-func _apron_y() -> float:
-	return _reroll_rect().get_center().y
-
-
-func _apron_mods() -> void:
-	var n: int = mods_own.size()
-	if n == 0:
-		# 빈 홈 하나. 동전 슬롯이 빈 칸에 유령 홈을 그리는 어법 그대로이고 크기도
-		# 실제 캐비닛(2r+6 = 32)과 같다. "보드 확장 없음" 이라고 쓰는 것보다
-		# R1 플레이어에게 더 많이 가르친다 — 비었다가 아니라 여기에 걸린다.
-		var e := Rect2(VIEW.x * 0.5 - 16.0, _apron_y() - 16.0, 32.0, 32.0)
-		_rr(self, e, C_WOOD.darkened(0.55))
-		_rr_line(self, e, C_WOOD.lightened(0.10))
-		return
-	var step: float = minf(56.0, 560.0 / float(n))
-	var x0: float = VIEW.x * 0.5 - (float(n) - 1.0) * step * 0.5
-	for i in n:
-		var mid: String = mods_own[i]
-		var mx: float = x0 + float(i) * step
-		_icon_mod(Vector2(mx, _apron_y()), 13.0, mid, 0.0)
-		draw_string(font, Vector2(mx - step * 0.5, _apron_y() + 30.0),
-				_elide(String(GameData.mod_of(mid).get("n", "")), step - 2.0, 12),
-				HORIZONTAL_ALIGNMENT_CENTER, step, 12, C_OFF)
-
-
 # 화면 x 를 펠트 폭에 맞춰 좁힌다. 펠트는 y 마다 폭이 다르고(창구 빗변),
 # 그 비를 그대로 곱하면 면에 놓인 것이 판과 같이 모인다.
 # 카드 말고는 아무도 안 쓴다 — 매물은 u·w 면 좌표로 따로 산다.
@@ -21206,73 +21280,6 @@ func _card_quad(px: float, w: float, foot: float, up: float,
 func _card_row(q: PackedVector2Array, t: float) -> Vector3:
 	return Vector3(lerpf(q[0].x, q[3].x, t), lerpf(q[1].x, q[2].x, t),
 			lerpf(q[0].y, q[3].y, t))
-
-
-func _stage_card(i: int) -> void:
-	var md: Dictionary = stage_pick[i].d
-	var r := _stage_rect(i)
-	var sz: Vector2 = r.size
-	var p := _stage_pose(i)
-	var up: float = stage_stand[i] if i < stage_stand.size() else 0.0
-
-	# 서는 것은 **가까운 모서리를 축으로** 몸을 세우는 일이다. 누운 카드는
-	# 세로가 flat(0.788)배로 눌리고 **폭이 펠트를 따라 좁아진다** — 뒤로 갈수록
-	# 좁아지는 그 사다리꼴이 "판 위에 놓였다" 를 말하는 전부다. 서면 둘 다 풀린다.
-	# 집어 든 카드는 커지고 떠오른다. 같은 자리에서 눌림만 풀면 "조금 길어진
-	# 사각형" 이라 든 것으로 안 읽힌다 — 손에 온 것은 눈에 가까워진 것이다.
-	var gs: float = 1.0 + 0.12 * up
-	var w2: float = sz.x * gs
-	var px2: float = p.x - (w2 - sz.x) * 0.5
-	var foot: float = p.y + sz.y
-	var q := _card_quad(px2, w2, foot, up, gs, 7.0 * up)
-
-	#  **판 카드와 같은 칠한 간판이다**(2026-09-17 「제약은 뭐 안 바뀌는거야?」).
-	#  전에는 C_PANEL 판 + 먼 모서리의 C_MULT 띠였다 — 판 고르기만 간판이
-	#  되자 두 화면이 딴 물건을 늘어놓은 것이 됐다. 그림자 · 옆면 · 테가
-	#  _leg_card 와 한 길(_sign_body)이고 색은 시안의 cons 한 벌이다.
-	#  선 카드는 테가 C_MULT 로 달아오른다(옛 카드의 먼 모서리 띠가 서면
-	#  켜지던 그 색). 금빛은 「지금 판」 의 말이라 안 빌린다.
-	var ch: float = float(CARD.h)
-	var sc := _sign_cols("cons", false)
-	var rim: Color = sc.rim
-	_sign_body(q, sz.x, ch, _sign_pieces(q, sz.x, ch, PackedVector2Array()), up, sc,
-			rim.lerp(C_MULT, up), PackedVector2Array(), 0)
-
-	# 얼굴은 그림이 먼저다. 훑는 채널은 글자가 아니라 실루엣이다.
-	# 아이콘이 축("링이 나빠진다")을 말하고 설명이 양("0.5배")을 말한다.
-	# 글자 자리는 카드가 눌린 만큼 같이 눌린다 — 글자 크기는 못 눌러도
-	# **자리**가 눌리면 얼굴이 카드를 따라간다.
-	# "목표" 는 안 쓴다 — _open_stage 가 base 하나를 n장에 복사하므로 셋이
-	# 같은 값이고, 셋 중 하나를 고르는 면에서 판별 정보량이 0 비트다.
-	# 얼굴도 카드와 같이 눕는다. 몸통만 눕히고 글자를 화면에 붙여 두면
-	# 카드 위에 동전을 얹은 것으로 읽힌다 — 판에 인쇄된 것이 아니다.
-	draw_set_transform_matrix(Transform2D(0.0, shake_off) * _sign_basis(q, sz.x, ch))
-	#  아이콘은 짙은 받침 위에 앉는다. 제약 아이콘은 어두운 판(C_PANEL) 위에서
-	#  그린 색이다 — 회색 획과 C_MULT 덩어리가 칠 위에 바로 앉으면 붉은 칠에서
-	#  덩어리가 묻힌다. 받침은 간판에 박은 둥근 명판이다.
-	#  서는 만큼 받침이 줄며 올라가 설명 자리를 낸다(CARD 머리말).
-	var ic := Vector2(sz.x * 0.5, lerpf(float(CARD.icon), float(CARD.icon_up), up))
-	var plate: float = lerpf(float(CARD.plate), float(CARD.plate_up), up)
-	draw_circle(ic + Vector2(0.0, 1.0), plate, Color(sc.hi, 0.55))
-	draw_circle(ic, plate, Color(sc.face).darkened(0.55))
-	_icon_modifier(ic, lerpf(float(CARD.icon_r), float(CARD.icon_r_up), up), md.id, 0.0)
-	var ink: Color = sc.ink
-	#  이름 20 · 설명 12(글자 키우기, 2026-09-17 — 전에는 11 · 9, 그다음 18 · 11).
-	#  자리는 CARD 가 쥔다.
-	_sign_text(Vector2(0.0, roundf(lerpf(float(CARD.name), float(CARD.name_up), up))),
-			sz.x, md.n, 20, ink, font_sm)
-	# 효과는 일어서야 보인다. 누운 카드에 여덟 글자를 눕혀 두면 못 읽는다.
-	#  카드가 좁아 12 가 안 들면(stage_picks 4 이상) 그 줄만 10(font_sm)으로 물러난다.
-	if up > 0.02:
-		var dw: float = sz.x - 12.0
-		if font.get_string_size(String(md.d), HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x <= dw:
-			_sign_text(Vector2(6.0, CARD.desc), dw, md.d, 12,
-					Color(ink.darkened(0.12), up))
-		else:
-			_sign_text(Vector2(6.0, CARD.desc), dw, md.d, 10,
-					Color(ink.darkened(0.12), up), font_sm)
-	# 반드시 되돌린다. 남기면 _hud_draw 가 통째로 눌린다.
-	draw_set_transform(shake_off)
 
 
 func _draw_shop() -> void:
@@ -21324,6 +21331,48 @@ func _draw_shop() -> void:
 	if msg != "":
 		draw_string(font, Vector2(188.0, 314.0), _elide(msg, 240.0, 12),
 				HORIZONTAL_ALIGNMENT_CENTER, 240.0, 12, Color(C_MULT, ma))
+	else:
+		_boss_plaque()
+
+
+#  이 라운드 보스에 무엇이 걸리는가. **상점이 빌드를 짜는 자리인데
+#  여기서 그것을 읽을 길이 한 군데도 없었다** — 상단 바는 상점에서 통째로
+#  안 뜨고(_bar_hidden 이 SHOP 을 포함한다) 자금판은 골드·이자·칸 여덟로
+#  꽉 차 있다(2026-09-18).
+#  자리는 거절 문구와 같은 x[188,428] 이다. 문구가 뜨는 동안만 내준다 —
+#  그쪽이 방금 한 일에 대한 답이라 더 급하다.
+#  글자는 **효과와 값만** 쓴다: 제약 이름과 「목표 N」. 「보스」·「제약」
+#  같은 분류어는 안 적는다 — 붉은 명판과 제약 글리프가 갈래를 이미 말한다.
+#  폭 예산 240 — 「실띠  목표 25000」 이 12 에서 ≈90px, 겹치기 둘이라도 든다.
+func _boss_plaque() -> void:
+	var bn := _boss_ahead()
+	if bn <= 0:
+		return
+	var ids: PackedStringArray = boss_mods.get(bn, PackedStringArray())
+	if ids.is_empty():
+		return
+	var off: bool = boss_void.has(bn)
+	var names := []
+	for mid in ids:
+		names.append(String(_mod_row(String(mid)).get("n", "")))
+	#  무효면 _target_at 가 맨 목표를 저절로 돌려준다 — 제약 무효와 목표
+	#  원복이 한 자리에서 나오므로 여기서 따로 셀 일이 없다.
+	var txt := "%s  목표 %d" % ["  ".join(names), _target_at(bn)]
+	var gw: float = float(ids.size()) * 16.0
+	var tw: float = font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT,
+			-1, 12).x
+	var x0: float = 308.0 - (gw + 4.0 + minf(tw, 240.0 - gw - 4.0)) * 0.5
+	for k in ids.size():
+		var c := Vector2(x0 + float(k) * 16.0 + 8.0, 309.0)
+		draw_circle(c, 8.0, Color(SIGN_COL.boss.rim).darkened(0.15))
+		draw_circle(c, 6.5, Color(SIGN_COL.boss.face).darkened(0.45))
+		_icon_modifier(c, 5.5, String(ids[k]), 0.55 if off else 0.0)
+		if off:
+			draw_line(c + Vector2(-7.0, 7.0), c + Vector2(7.0, -7.0),
+					Color(C_TXT, 0.7), 1.5)
+	draw_string(font, Vector2(x0 + gw + 4.0, 314.0),
+			_elide(txt, 240.0 - gw - 4.0, 12), HORIZONTAL_ALIGNMENT_LEFT,
+			-1, 12, C_DIM if off else C_TXT)
 
 
 func _draw_over() -> void:
@@ -26917,7 +26966,7 @@ func _mus_want() -> String:
 			return ""
 		S.TITLE, S.SETTINGS, S.COLLECT, S.NEWRUN, S.OVER, S.PROFILE:
 			return "lobby"
-		S.STAGE, S.SHOP, S.LEG, S.CLEAR:
+		S.SHOP, S.LEG, S.CLEAR:
 			return "select"
 	return "boss" if GameData.is_boss(leg_no) else "game"
 
@@ -28247,7 +28296,7 @@ func _hud_btns_on() -> bool:
 	if swap_live or photo != "" or photo_rack != "":
 		return false
 	return _is_play() or state == S.CLEAR or state == S.SHOP \
-			or state == S.STAGE or state == S.LEG
+			or state == S.LEG
 
 
 #  0 = 런 정보(위), 1 = 설정(아래). LAY.menu 칸을 위아래로 반씩 나눈다.
@@ -28525,10 +28574,12 @@ func _ri_carry(p: Rect2) -> void:
 	var trows := []
 	for tg in pending_tags:
 		trows.append(String(tg.get("n", "")))
-	#  이번 판 제약 — 「지금 이 런이 어떤 모양인가」인데 이 탭 어디에도
-	#  없었다.
+	#  보스 제약 — 「지금 이 런이 어떤 모양인가」인데 이 탭 어디에도
+	#  없었다. 판 위에서는 지금 걸린 것이고, 그 밖에서는 **다가올 보스에
+	#  걸릴 것**이다 — 옛날에는 active_mods 만 읽어서 정작 빌드를 짜는
+	#  상점에서 언제나 「없음」이었다(2026-09-18).
 	var mrows := []
-	for mo in active_mods:
+	for mo in (active_mods if _is_play() else _leg_mods(_boss_ahead())):
 		mrows.append(String(mo.get("n", "")))
 	var left := [
 		# 이 칸에는 사진도 들어간다. HUD 의 칸 이름과 같은 말을 쓴다.
@@ -28537,7 +28588,7 @@ func _ri_carry(p: Rect2) -> void:
 	]
 	var right := [
 		["판", mod_rows if not mod_rows.is_empty() else ["기본"]],
-		["이번 판 제약", mrows if not mrows.is_empty() else ["없음"]],
+		["보스 제약", mrows if not mrows.is_empty() else ["없음"]],
 	]
 	var badge := ["뱃지", trows if not trows.is_empty() else ["없음"]]
 	var hl := 0.0
@@ -28874,13 +28925,16 @@ func _mark_rect(k: String) -> Rect2:
 	match k:
 		"leg_go": return _leg_go()
 		"leg_skip": return _leg_skip()
-		"stage":
-			if stage_pick.is_empty():
+		#  보스 카드 한 장. **못 보여 줄 것은 안 가르친다** — 보스가 없는
+		#  라운드에서는 빈 사각이라 _tutor 가 통째로 접는다. 2026-09-15 에
+		#  보통 판에서 「제약 하나를 골라야」 가 떠서 없는 것을 찾으라는
+		#  말이 된 적이 있다. 같은 사고가 재발할 수 있는 구조라 그 방어를
+		#  새 자리에 그대로 옮겨 적는다(2026-09-18).
+		"leg_boss":
+			var bn := _round_boss()
+			if bn <= 0:
 				return Rect2()
-			var r0 := _stage_rect(0)
-			for i in range(1, stage_pick.size()):
-				r0 = r0.merge(_stage_rect(i))
-			return r0
+			return _row_rect(GameData.leg_idx(bn), GameData.legs_per_round())
 		#  판은 숫자 고리까지다 — 208 로 박아 두었더니 고리를 단 판(반지름 121.5)의 테가 잘렸다
 		"board":
 			var rr: float = _board_rim(_theme_ring_w(_board_theme()))

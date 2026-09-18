@@ -420,6 +420,14 @@ static func _rows(g: Node) -> Array:
 				{"n1": "제약 걸기", "t": "list", "k": "mf",
 						"n": GameData.modifiers().size()},
 				{"n1": "제약 풀기", "t": "act", "a": "mf_off"},
+				#  위 둘은 **판 위에** 지금 꽂아 「판이 어떻게 달라지나」를
+				#  재는 길이고, 아래 셋은 **카드가 무엇을 말하나**를 재는
+				#  길이다. 둘이 갈려 있어야 「미리 정한 것」과 「지금 걸린
+				#  것」이 화면에서 갈린다(2026-09-18).
+				{"n1": "보스 제약 정하기", "t": "list", "k": "bmf",
+						"n": GameData.modifiers().size()},
+				{"n1": "보스 제약 다시 굴리기", "t": "act", "a": "boss_roll"},
+				{"n1": "보스 제약 무효 켜기/끄기", "t": "act", "a": "boss_void"},
 				{"n1": "조준 방식", "t": "list", "k": "aim",
 						"n": GameData.AIM_MODES.size()},
 				{"n1": "계산 방식", "t": "list", "k": "score",
@@ -468,7 +476,7 @@ static func _list(k: String) -> Array:
 		"dart": return GameData.darts()
 		"vou": return GameData.fixtures()
 		"tag": return GameData.tags()
-		"mf": return GameData.modifiers()
+		"mf", "bmf": return GameData.modifiers()
 		"league": return GameData.leagues()
 		"pack": return GameData.packs()
 		"chal": return GameData.challenges()
@@ -658,6 +666,15 @@ static func _run(g: Node, e: Dictionary) -> void:
 					g.cons.append(c)
 			if g.mods_own.is_empty():
 				g._apply_mod(String(GameData.mods()[0].id))
+			#  보스 카드가 붐비는 모습 — 명판 둘 + 이름 없는 줄이 실제로
+			#  서는지를 여기서 한 번에 본다(겹치기 챌린지를 안 켜도 볼 수
+			#  있어야 한다). 제 좌표 r 13 명판 둘과 상단 바 아이콘 넷 +
+			#  「+2」 규약이 같이 성립하는지가 이 세 줄로 드러난다.
+			var wbn: int = g._round_boss()
+			if wbn > 0 and GameData.modifiers().size() >= 10:
+				g.boss_mods[wbn] = PackedStringArray([
+						String(GameData.modifiers()[3].id),      # dead 부채꼴
+						String(GameData.modifiers()[9].id)])     # turn 화살표
 			g.gold = 99999
 			g.sealed = 0
 			_say("최악의 상태")
@@ -771,6 +788,31 @@ static func _run(g: Node, e: Dictionary) -> void:
 			g.active_mods = []
 			g._start_leg()
 			_say("제약 없음")
+			return
+		"boss_roll":
+			var rbn: int = g._round_boss()
+			if rbn <= 0:
+				_say("이 라운드에 보스 판이 없다")
+				return
+			#  지금 든 것을 avoid 로 넘긴다 — 눌렀는데 같은 것이 나오면
+			#  굴린 것인지 안 굴린 것인지가 화면에서 안 갈린다.
+			g._roll_boss_mods(rbn, true,
+					g.boss_mods.get(rbn, PackedStringArray()))
+			g.queue_redraw()
+			_say("보스 제약 %s"
+					% ", ".join(g.boss_mods.get(rbn, PackedStringArray())))
+			return
+		"boss_void":
+			var vbn: int = g._round_boss()
+			if vbn <= 0:
+				_say("이 라운드에 보스 판이 없다")
+				return
+			if g.boss_void.has(vbn):
+				g.boss_void.erase(vbn)
+			else:
+				g.boss_void[vbn] = true
+			g.queue_redraw()
+			_say("보스 무효 %s" % ("켬" if g.boss_void.has(vbn) else "끔"))
 			return
 		"bake":
 			g._board_bake()
@@ -890,6 +932,21 @@ static func _run(g: Node, e: Dictionary) -> void:
 				g.active_mods = [rows[i % rows.size()]]
 				g._start_leg()
 				_say("제약 %s" % g.active_mods[0].get("n", ""))
+		"bmf":
+			if not rows.is_empty():
+				#  한 장만 꽂는다. _start_leg 를 **안 부른다** — 지금 보는
+				#  것은 판이 아니라 **카드**다. 열 종을 한 칸씩 넘기며 문장
+				#  열 벌과 이름 줄 폭(_elide 가 언제 무는지)을 눈으로 훑는
+				#  것이 이 줄의 쓸모다.
+				var bn: int = g._round_boss()
+				if bn <= 0:
+					_say("이 라운드에 보스 판이 없다")
+				else:
+					var brow: Dictionary = rows[i % rows.size()]
+					g.boss_mods[bn] = PackedStringArray([String(brow.id)])
+					g.boss_void.erase(bn)
+					g.queue_redraw()
+					_say("보스 제약 %s" % brow.get("n", "?"))
 		"chal":
 			if not rows.is_empty():
 				GameData.challenge = String(rows[i % rows.size()].get("id", ""))
