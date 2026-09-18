@@ -53,6 +53,8 @@ static var card_back := {}       # 되돌릴 자리
 static var _q := []
 static var _qt := 0.0
 static var _sfx_rows := []       # 소리 이름 목록. 표에서 한 번만 읽는다
+static var _aimw_key := ""       # 조준 저울 줄을 마지막에 센 (고른 라운드|든 동전)
+static var _aimw_txt := ""       # 그때 나온 글. 열쇠가 같으면 다시 안 센다
 
 const PAGES := ["경제·진행", "물건", "판·조준", "해금", "소리"]
 # 글자는 페이퍼로지 Bold 12 하나다. 줄 칸(13px) · 탭 · 단추(14px)의 **한가운데**에
@@ -187,7 +189,7 @@ static func draw(g: Node) -> void:
 			g.draw_string(g.font, Vector2(ra.position.x, by), "▶",
 					HORIZONTAL_ALIGNMENT_CENTER, ra.size.x, 12, col)
 			var vb := _val_box(r)
-			g.draw_string(g.font, Vector2(vb.position.x, by), _cur_name(e),
+			g.draw_string(g.font, Vector2(vb.position.x, by), _cur_name(g, e),
 					HORIZONTAL_ALIGNMENT_CENTER, vb.size.x, 12, col)
 
 	if msg != "":
@@ -392,6 +394,16 @@ static func _names(k: String) -> PackedStringArray:
 		for m in GameData.SCORE_MODES:
 			out.append(GameData.score_name(String(m)))
 		return out
+	#  조준 저울도 표가 아니라 라운드 번호라 _list 를 안 지난다. 안 넣으면
+	#  값 칸을 눌렀을 때 고르개가 텅 빈 채로 뜬다. 사다리(aim_w)를 적는다 —
+	#  이미 든 쪽의 바닥은 _cur_name 이 "(든 뒤)" 를 달아 말해 준다.
+	#  n 은 **판 번호**다(라운드 번호가 아니다) — aim_floor 가 shop_slots 와
+	#  같은 어법이라 안에서 round_of 를 돈다. 2026-09-18
+	if k == "aimw":
+		for n in GameData.rounds_n():
+			out.append("R%d %.2f" % [n + 1,
+					GameData.aim_floor(n * GameData.legs_per_round() + 1)])
+		return out
 	for r in _list(k):
 		out.append(String(r.get("n", r.get("name", r.get("id", "?")))))
 	return out
@@ -544,6 +556,15 @@ static func _rows(g: Node) -> Array:
 						"n": GameData.tags().size()},
 				{"n1": "팩 열기", "t": "list", "k": "boost",
 						"n": GameData.boosters().size()},
+				#  **보는 줄이다. 누르는 줄이 아니다.** 다른 list 줄은 click() 의
+				#  「고른 것이 곧 적용」을 따르는데 이 줄만 다르다 — "a" 키가 없고
+				#  _run 의 match k 에도 "aimw" 가 없어 ◀▶ 를 눌러도 게임 상태가
+				#  안 바뀐다. 라운드별 조준 저울을 눈으로 훑기만 한다.
+				#  바로 아래가 「테이블 다시 굴리기」라 라운드를 맞추고 →
+				#  다시 굴리고 → 테이블을 눈으로 본다가 손가락 두 번에 끝난다.
+				#  2026-09-18
+				{"n1": "조준 저울", "t": "list", "k": "aimw",
+						"n": GameData.rounds_n()},
 				{"n1": "테이블 다시 굴리기", "t": "act", "a": "restock"},
 				{"n1": "쓸기 다시 보기", "t": "act", "a": "sweep"},
 				{"n1": "매물 아홉으로 쓸기", "t": "act", "a": "sweep9"},
@@ -655,9 +676,67 @@ static func _list(k: String) -> Array:
 const CARDFX_STEPS := ["담담", "큼", "한 방"]
 
 
-static func _cur_name(e: Dictionary) -> String:
+static func _cur_name(g: Node, e: Dictionary) -> String:
 	var k := String(e.k)
 	var i: int = int(pick.get(k, 0))
+	#  라운드별 조준 저울. **표를 읽어 계산하지 않고 g._stock_items(nxt) 를
+	#  실제로 부른다** — _stock_items 가 바닥을 안에서 고르므로 여기가 보는
+	#  풀은 상점이 굴리는 풀과 글자 그대로 같다. 거짓말할 길이 없다.
+	#  네 칸이 각각 다른 사고를 잡는다: 바닥은 「표가 실제로 읽히는가」(열
+	#  이름을 틀리면 0.00), 후보는 「그 라운드에 살아 있는 조준 동전 수」,
+	#  칸은 자리 하나가 조준일 확률(폭·뱃지·리롤과 안 얽히는 단위라 이것이
+	#  기준이다), 판은 그 폭으로 한 판에 하나라도 뜰 확률. 2026-09-18
+	if k == "aimw":
+		var rn := GameData.rounds_n()
+		var rr: int = i % maxi(rn, 1) + 1
+		#  **프레임마다 다시 세지 않는다.** game.gd 의 _process 는 마지막 줄이
+		#  조건 없는 queue_redraw() 라 판이 떠 있는 동안 이 줄이 매 프레임
+		#  그려진다. 재 보니 _stock_items 한 번이 4.66 ms 고 거기에 돌려받은
+		#  장마다 item_weight 를 한 바퀴 더 돌아 프레임당 6.79 ms 였다 —
+		#  60프레임 예산 16.7 ms 의 절반이라 이 쪽을 보는 동안 판이 끊겼다
+		#  (견줄 값으로 _rows 한 바퀴가 0.01 ms 다). 답이 달라지는 것은 고른
+		#  라운드와 든 동전 둘뿐이라 그 둘을 열쇠로 스티커한다. 2026-09-18
+		var ids := ""
+		for oi in g.owned:
+			ids += String(oi.get("id", "")) + ","
+		var key := "%d|%s" % [rr, ids]
+		if key == _aimw_key:
+			return _aimw_txt
+		#  그 라운드의 **첫 상점**이 보는 판 번호다. R1 은 leg_no=1 뒤라
+		#  nxt=2 인데, 2 로 안 막으면 min_leg(전 등급 2)가 후보를 통째로
+		#  걸러 R1 만 「후보 0장」으로 보인다 — 없는 사고가 보이는 자리다.
+		var nxt: int = maxi(2, (rr - 1) * GameData.legs_per_round() + 1)
+		var own: bool = g._has_aim_item()
+		var fw: float = GameData.aim_floor_own(nxt) if own else GameData.aim_floor(nxt)
+		#  바닥만 찍으면 min_leg 나 소유로 후보가 비어 결과가 조용히 0 이
+		#  되는 사고(하데스에서 Tier 전제가 레전더리 확률을 0 으로 만드는
+		#  그 모양)가 안 보인다. **살아 있는 후보 수를 같이 센다.**
+		var live := 0
+		var sum := 0.0
+		var aws := 0.0
+		for it in g._stock_items(nxt):
+			var w: float = float(it.w) if it.has("w") else GameData.item_weight(it)
+			sum += w
+			if String(it.get("aim", "")) != "":
+				live += 1
+				aws += w
+		#  갈래 저울은 shop_kinds() 가 쥔다. 열 이름은 "w" 다 — shop.csv 의
+		#  weight 를 그 이름으로 옮겨 담는다.
+		var ks := 0.0
+		var iw := 0.0
+		for kk in GameData.shop_kinds():
+			var kw := float(kk.get("w", 0.0))
+			ks += kw
+			if String(kk.id) == "item":
+				iw = kw
+		var per := 0.0
+		if sum > 0.0 and ks > 0.0:
+			per = (iw / ks) * (aws / sum)
+		var shp := 1.0 - pow(1.0 - per, float(GameData.shop_slots(nxt)))
+		_aimw_key = key
+		_aimw_txt = "%d/%d · 바닥 %.2f%s · 후보 %d · 칸 %.2f%% · 판 %.2f%%" % [
+				rr, rn, fw, " (든 뒤)" if own else "", live, per * 100.0, shp * 100.0]
+		return _aimw_txt
 	# 표가 아니라 상수 목록이라 _list 를 안 지난다 — 그래도 화면에서는
 	# 다른 줄과 같은 꼴("3/8 빗각")로 보여야 몇 가지 중 몇 번째인지 안다.
 	if k == "aim":

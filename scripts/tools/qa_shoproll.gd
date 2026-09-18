@@ -7,6 +7,11 @@ extends SceneTree
 # 기획서 P.17 「동전 · 골드 · 다트 · 사탕 · 사진 · 팩 랜덤 등장」
 # 기획서 P.30 「상점에서 등장할 확률은 0.5%」
 #
+# **동전 갈래 안의 저울은 여기가 안 본다.** 조준 동전의 라운드별 바닥
+# (rounds.csv 의 aim_w)은 qa_aimroll.gd 가 본다 — 이 파일의 표본은
+# g.leg_no = 4 = R2 한 라운드뿐이고 R2 의 바닥은 오늘 그대로라, 저울을
+# 바꿔도 아래 단언은 한 줄도 안 운다. 그쪽을 같이 돌려라. 2026-09-18
+#
 #   godot --path . --headless --script scripts/tools/qa_shoproll.gd
 
 const GameData = preload("res://scripts/data.gd")
