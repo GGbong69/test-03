@@ -10719,6 +10719,19 @@ const RANK := {
 	"plq_holo_a": 0.15,
 	"r_mill":    16.0,    # 이 아래(화면 px)로는 실루엣을 안 문다. 골 0.8px 은 흐린 테다
 	"r_spot":    12.0,    # 이 아래로는 박음을 안 찍는다. 점선으로 뭉개느니 밴드만 남긴다
+	#  ── 물림의 바닥 넷 (2026-09-18) ───────────────────
+	#  손으로 적은 r_mill 16.0 이 **식에서 나온 값**이 됐다:
+	#    ceil(max(8.0 / (PI/6), 1.5 / 0.16)) = ceil(max(15.279, 9.375)) = 16
+	#  작은 자리에서 뭉개지는 것은 **간격이 아니라 깊이**다 — 깊이가
+	#  2.2·r/22.04 라 r=13 에서 1.30 · r=10 에서 1.00 이고, 물림 **개수**를
+	#  줄여도 깊이는 안 살아난다. 그래서 바닥을 따로 박고 문턱을 두 식에서
+	#  뽑는다(_coin_mdep). 그 결과 물림 넷 중 `axis` 하나만 10.0 으로 내려와
+	#  컬렉션 13 · 런 정보 12 · 런 끝 10 까지 살고, 나머지 셋은 16.0 그대로라
+	#  **오늘 그림이 한 픽셀도 안 바뀐다**(r>=16 에서 자연값 1.597 > 1.5).
+	"mill_deep_min":   1.5,   # 깊이 바닥(면px). 「골 0.8px 은 흐린 테다」의 반대편 값
+	"mill_deep_ratio": 0.16,  # 깊이/반지름 상한. 넘으면 물린 원반이 원반 가족을 벗어난다
+	"mill_gap_min":    8.0,   # 이웃 물림 사이 둘레 거리 하한(면px)
+	"coin_miter":      1.30,  # 법선 오프셋의 마이터 한계. 뾰족한 꼭짓점이 번짐을 밖으로 못 민다
 }
 
 #  ── 동전의 재질 ────────────────────────────────────────────
@@ -10743,6 +10756,121 @@ const MATS := {
 
 static func _mat_of(it: Dictionary) -> String:
 	return String(MATS.get(String(it.get("id", "")), ""))
+
+
+#  ── 동전 하나의 바깥선 (2026-09-18) ────────────────────────
+#  사용자 지시 — "레전더리 동전은 각각마다 특이한 모양을 가지면 좋겠고,
+#  레어 동전도 조금씩은 변형 되는게 있으면 좋겠어".
+#
+#  **두 층으로 쪼갠다.** 등급표(STK_TIERS)가 **가족**을 쥐고(disc · mill ·
+#  plaque) 여기는 그 가족 안의 **변형**만 쥔다. 표가 둘이고 칸이 안 겹친다.
+#  여기에 **등급 칸이 하나도 없다** — spots·band·pulse·fin·plq_side 를 적을
+#  자리가 아예 없어야 실루엣이 등급을 흉내낼 수가 없다. 모양이 열아홉이 되면
+#  등급이 뒤로 밀리는 것이 기본값이다: 슬레이 더 스파이어는 개체 모양을 밀다
+#  등급 표시를 포기했고, 하데스는 색만 쓰다 개체를 포기했다. 둘 다 잡는
+#  유일한 길이 **축을 완전히 가르는 것**이고, 그것을 주석이 아니라 **표의
+#  구조**로 건다 — qa_rank ⓠ 가 그 **부재**를 잰다.
+#
+#  **열아홉을 다 적는다.** 기본값에 맡기면 빠뜨린 id 를 아무도 못 잡는다.
+const COIN_FORM := {
+	# 레전더리 다섯 — 효과에서 뽑은 고유 실루엣. 전역 비율이 k 로 같이
+	# 줄어드는 축이라 r=8(툴팁 미니, 16x16 칸)까지 안 죽는다.
+	"l01": "sq",   "l02": "dia",  "l03": "slab", "l04": "tall", "l05": "drip",
+	# 레어 열넷 — 12칸 물림 격자 위의 슬롯 집합. **안으로만 판다.**
+	# 주제로 나눈다: 값을 쌓는 장이 가장 촘촘한 빗살(even), 한 번에 잠그는
+	# 조준이 셀 수 있는 넷(axis), 조준이 제자리에 안 있는 셋이 쏠림(lean),
+	# 두 번 잠그는 조준이 3겹 쌍(pair), 규격 밖의 물건 하나가 매끈(bare).
+	"r13": "even", "r14": "even", "r11": "even",
+	"r04": "axis", "r10": "axis",
+	"r02": "lean", "r03": "lean", "r05": "lean", "r08": "lean",
+	"r01": "pair", "r06": "pair", "r07": "pair", "r12": "pair",
+	"r09": "bare",
+}
+#  폼이 없거나 가족이 안 맞을 때 떨어지는 자리. 가족마다 하나씩이다.
+const FORM_BASE := {"disc": "disc", "mill": "even", "plaque": "slab"}
+
+#  폼 하나의 치수. **잰 값이다**(2026-09-18 · qa_rank 가 같은 수를 다시 잰다).
+#  a 반폭 · bt 위 반높이 · bb 아래 반높이 · cut 모서리 깎음 · tilt 기울임 폭(rad) ·
+#  fr 최대 내접원 반지름 · fc 그 중심 y · bs 어깨 반높이(rhomb·drip 만) — 전부 면px.
+#
+#  **옆면이 없다** — 다섯이 RANK.plq_side 1.9(6.109 화면px)를 같이 쓴다. 폼마다
+#  옆면을 가르면 「온 띠 박음」의 두께가 변형마다 달라져 **등급이 변형에 따라
+#  흐려진다.** 그래서 칸을 아예 안 만든다.
+#
+#  **세로가 긴 폼은 안 기운다**: tall 은 ±10° 에서 아래끝 잉크가 20.380 이라
+#  _obj_box 의 ry 20.583 에 0.20px 까지 붙는다(잰 값 — 여유 바닥 1.0 밑이다).
+#  여유를 늘려야 하면 돌릴 손잡이는 **b 하나**다: tilt 를 만지면 아래끝이
+#  치솟고, plq_side 를 줄이면 온 띠가 얇아져 등급이 흐려진다.
+#
+#  **왜 이 값인가** — 전부 표(items.csv)에서 효과를 읽고 정했다.
+#   sq   l01 데칼코마니 `score=bal` 점수와 배수를 **같게** 만든다 → 가로=세로.
+#        15.585 = 22.040/√2 라 어제의 a²+b² = chip_r² 설계식이 정사각에서도 산다.
+#        기울임 0 도 효과다 — 접어 찍어 딱 맞는 것은 기울면 안 맞는다.
+#   dia  l02 정조준 `aim=place` 조준 사다리를 지우고 **누른 한 점**에 꽂는다
+#        → 아래가 한 점. 기울임 0 이라야 그 점이 정확히 아래를 본다.
+#        a 를 22.040 으로 안 둔다 — 누운 자세가 rx=chip_r*(1+wob*0.05) 라
+#        wob +1 에서 23.14 가 되어 **안전선 밖**이다. 좌우를 bs 2.8 만큼
+#        무디게 깎아 폭 39.0 을 쥐면서 외접을 19.70 에 묶었다.
+#        오각 방패는 안 쓴다 — 보드 확장 와펜이 이미 쥔 어휘다.
+#   slab l03 NULL `side=boardkill` · kind·value 칸이 **비어 있다**.
+#        「빈 것」은 재질(MATS.hollow)이 계속 쥐고 **모양은 어제 값 그대로**다 —
+#        다섯 중 어제 여섯 번 깨진 자리를 다 지나온 유일한 모양이라, 가장
+#        안 검증된 재질에 붙일 것이 가장 검증된 모양이어야 한다.
+#   tall l04 잭과 콩나무 `grow=fire · gstep=1 · side=bigdart` 던질 때마다
+#        한 걸음 **자란다** → 위로 길다. 가로 명판의 거의 정확한 전치라
+#        (24.40x33.60 대 35.87x25.62) 둘이 같은 랙에 있으면 즉시 갈린다.
+#   drip l05 녹는 시계 `side=carry` 남은 다트가 다음 판으로 **흘러간다** →
+#        위는 평평하고 아래만 처진다. bt 11.80 != bb 16.60 이 상하 비대칭을
+#        **값으로** 쥐므로 말림·그림자·표적·조각이 어긋날 자리가 없다.
+const FORMS := {
+	"disc": {"fam": "disc"},
+
+	#  물림 다섯 — 12칸 격자(칸 j 중심 = 15°+30j) 위의 **슬롯 집합 하나**다.
+	#  주기 PI/6 · 위상 · 반폭 0.13 · 깊이 2.2 를 한 칸도 안 건드리고 정수
+	#  하나만 바꾼다. 박음 여섯이 그 격자 위에 앉게 맞춰 둔 자리라
+	#  (_mill_f 머리말 · _spot_near), 주기를 흔들면 물림과 박음이 어긋나
+	#  「한 물건에 결이 둘」이 된다.
+	#  r_mill 은 손으로 안 적는다 — _coin_mdep 이 간격·깊이 두 식에서 뽑은
+	#  값과 여기 값이 갈리면 qa ⓙ 가 실패한다.
+	"even": {"fam": "mill", "slots": 0xFFF, "r_mill": 16.0},
+	"axis": {"fam": "mill", "slots": 0x249, "r_mill": 10.0},
+	"lean": {"fam": "mill", "slots": 0x1F8, "r_mill": 16.0},
+	"pair": {"fam": "mill", "slots": 0x333, "r_mill": 16.0},
+	"bare": {"fam": "mill", "slots": 0x000, "r_mill":  0.0},
+
+	"slab": {"fam": "plaque", "kind": "rect",  "a": 17.935, "bt": 12.810,
+			"bb": 12.810, "cut": 3.2, "tilt": 0.175, "fr": 12.810, "fc": 0.0},
+	"sq":   {"fam": "plaque", "kind": "rect",  "a": 15.585, "bt": 15.585,
+			"bb": 15.585, "cut": 3.2, "tilt": 0.0,   "fr": 15.585, "fc": 0.0},
+	"dia":  {"fam": "plaque", "kind": "rhomb", "a": 19.500, "bt": 16.600,
+			"bb": 16.600, "cut": 0.0, "tilt": 0.0,   "fr": 13.550, "fc": 0.0,
+			"bs": 2.800},
+	"tall": {"fam": "plaque", "kind": "rect",  "a": 12.200, "bt": 16.800,
+			"bb": 16.800, "cut": 3.2, "tilt": 0.0,   "fr": 12.200, "fc": 0.0},
+	"drip": {"fam": "plaque", "kind": "drip",  "a": 17.200, "bt": 11.800,
+			"bb": 16.600, "cut": 3.0, "tilt": 0.0,   "fr": 13.023, "fc": 1.223,
+			"bs": 5.800},
+}
+
+
+#  동전이 제 모양을 고르는 길 — 한 줄이다.
+#    it.rarity ─ _stk_ti ─ STK_TIERS[ti].shape ─┐ (가족)
+#                                               ├─ _coin_form → 폼 이름 하나
+#    it.id ──── COIN_FORM ──────────────────────┘ (변형)
+#  **기하가 rank_off 를 보는 유일한 자리다.** game.gd 에서 rank_off 를 읽는
+#  자리가 열이 넘는데 실루엣은 여기 하나에서만 꺼진다 — 그래야 dev 의 전·후
+#  비교(shot_rank 의 rank_table_off)가 새 모양에서도 참이다.
+func _coin_form(it: Dictionary, tier: Dictionary) -> String:
+	if rank_off:
+		return "disc"
+	var fam := String(tier.get("shape", "disc"))
+	var f := String(COIN_FORM.get(String(it.get("id", "")), ""))
+	#  폼의 가족이 그 동전의 등급 가족과 안 맞으면 가족 기본으로 떨어진다.
+	#  **r15 교통카드가 common 이다**(items.csv 실측) — 접두사 r 에 속아 사전에
+	#  적으면 흔한 원반이 물림을 얻어 등급이 한 칸 올라가 보인다. qa ⓟ 가 짚는다.
+	if f == "" or String(FORMS[f].get("fam", "")) != fam:
+		return String(FORM_BASE.get(fam, "disc"))
+	return f
 const C_LINER := Color("efe9db")    # 이형지 뒷면 — 말릴 때만 보인다. 인쇄가 없다
 const HOLO := [Color("74d6ea"), Color("ef86c6"), Color("ffd873")]
 const C_FELT := Color("16281f")
@@ -11394,7 +11522,11 @@ func _half_disc(c: Vector2, u: float, left: bool) -> PackedVector2Array:
 func draw_item_sticker(c: Vector2, r: float, it: Dictionary, rot: float, lift: float,
 		dim: float, num_sz: int, peel := 0.0) -> void:
 	var ti := _stk_ti(String(it.get("rarity", "common")))
-	draw_sticker(c, r, STK_TIERS[ti], rot, lift, it.get("g", "") != "", dim,
+	#  **폼을 여기서 한 번만 고른다.** 몸통 · 얼굴 · 조건 자리 · 말림 넷이
+	#  같은 문자열 하나를 받는다 — 어제는 draw_sticker 가 tier 만 받아서
+	#  이 함수가 표를 **한 번 더** 읽었고, 그래서 두 자세가 갈릴 자리가 있었다.
+	var form := _coin_form(it, STK_TIERS[ti])
+	draw_sticker(c, r, STK_TIERS[ti], form, rot, lift, it.get("g", "") != "", dim,
 			peel, _mat_of(it))
 	#  ── 등급 고리를 걷었다 (2026-09-18) ────────────────
 	#  여기 draw_arc(c, r-3.0, …, 1.0) 한 줄이 등급을 말하던 자리였다. 실측
@@ -11418,20 +11550,16 @@ func draw_item_sticker(c: Vector2, r: float, it: Dictionary, rot: float, lift: f
 	#  이름이 같이 서므로 비워 두는 편이 낫다.
 	#  얼굴은 **바탕**이다. 몸 색에서 한 단만 옮겨 낸 워터마크라, 그 위에
 	#  조건과 값이 그대로 읽힌다. 어두운 몸은 밝혀서 낸다(옆면과 같은 규칙).
-	#  실루엣이 플라크면 얼굴도 말림도 사각을 따른다 — 표(STK_TIERS)를 여기서
-	#  한 번 더 읽는다. draw_sticker 의 지역 변수라 넘겨받을 길이 없다.
-	var plq: bool = (not rank_off
-			and String(STK_TIERS[ti].get("shape", "disc")) == "plaque")
-	#  인쇄면 반지름. draw_sticker 의 rw 와 **같은 식이어야** 얼굴이
-	#  테두리 밑으로 기어들지 않는다 — 거기 지역 변수라 여기서 다시 잰다.
-	var fr: float = r - clampf(r * 0.16, 1.0, 2.2) - 1.0
-	if plq:
-		#  두 자세가 **같은 식**(_plq_face_r)을 본다 — 갈리면 테이블에서 집어
-		#  랙에 꽂는 순간 메달 크기가 튄다.
-		fr = _plq_face_r(float(RANK.plq_b) * r / float(TBL.chip_r),
-				float(_plq_band(r, STK_TIERS[ti])))
+	#  실루엣이 판이면 얼굴도 말림도 그 판을 따른다. **한 함수(_coin_face)가
+	#  두 자세에 같은 수를 준다** — 갈리면 테이블에서 집어 랙에 꽂는 순간
+	#  메달 크기가 튄다. 원반·물린 원반 가지는 어제 이 자리의 식 그대로다
+	#  (draw_sticker 의 rw 와 같은 식이라 얼굴이 테 밑으로 안 기어든다).
+	var plq: bool = String(FORMS[form].get("fam", "disc")) == "plaque"
+	var fv := _coin_face(form, r, float(_plq_band(r, STK_TIERS[ti])))
+	var fcp := c + Vector2(0.0, fv.y)     # 얼굴 중심 — drip 만 +1.223k 처진다
+	var fr: float = fv.z
 	if _mat_of(it) != "hollow" and fr > 2.0:
-		_icon_item(c, fr, fr, String(it.get("id", "")), dim)
+		_icon_item(fcp, fr, fr, String(it.get("id", "")), dim)
 	var ink: Color = C_CHIP.lightened(0.5) if it.k == "chip" else C_MULT.lightened(0.45)
 	#  ── 얼굴에는 글자를 안 쓴다 ────────────────────────
 	#  그림이 생기기 전에는 값과 방식 이름이 얼굴의 전부였다. 이제 그림이
@@ -11439,7 +11567,7 @@ func draw_item_sticker(c: Vector2, r: float, it: Dictionary, rot: float, lift: f
 	#  값·조건·방식의 온전한 말은 툴팁이 갖는다 — 지름 38px 에서 두 번
 	#  말할 자리가 없다(2026-09-16).
 	if String(it.k) == "" and String(it.c) == "":
-		_rank_peel(c, r, ti, plq, peel, dim)
+		_rank_peel(c, r, form, peel, dim)
 		return
 	# 얼굴을 위아래로 가른다 — 위는 조건(언제 터지는가), 아래는 값(얼마나).
 	# 값만 있으면 조건이 정반대인 짝이 똑같이 보인다.
@@ -11452,20 +11580,20 @@ func draw_item_sticker(c: Vector2, r: float, it: Dictionary, rot: float, lift: f
 	if plq:
 		cy = -fr * 0.40
 		cr = fr * 0.506
-	_icon_cond(c + Vector2(1.0, cy + 1.0), cr, String(it.c),
+	_icon_cond(fcp + Vector2(1.0, cy + 1.0), cr, String(it.c),
 			Color(0.0, 0.0, 0.0, 0.45 * (1.0 - dim)))
-	_icon_cond(c + Vector2(0.0, cy), cr, String(it.c),
+	_icon_cond(fcp + Vector2(0.0, cy), cr, String(it.c),
 			ink.darkened(dim + 0.08))
 	# 말린 끝은 인쇄를 덮는다. 그래서 맨 마지막이다 — 순서가 곧 물리다.
-	_rank_peel(c, r, ti, plq, peel, dim)
+	_rank_peel(c, r, form, peel, dim)
 
 
 # 동전 몸통. 동전 슬롯·테이블·툴팁·컬렉션이 같은 그림을 쓰도록 여기 하나로 모았다.
 #  gold_rim — 골드를 버는 동전은 다이컷을 금박으로 찍는다. 링을 하나 더
 #  두르지 않는 이유는 반지름 13px 에 고리 셋(다이컷·등급·골드)이 들어가면
 #  1.5px 간격으로 뭉개져 셋 다 안 읽히기 때문이다. 테두리 색은 공짜다.
-func draw_sticker(c: Vector2, r: float, tier: Dictionary, rot: float,
-		lift: float, gold_rim: bool, dim: float, peel := 0.0,
+func draw_sticker(c: Vector2, r: float, tier: Dictionary, form: String,
+		rot: float, lift: float, gold_rim: bool, dim: float, peel := 0.0,
 		mat := "") -> void:
 	var body := Color(tier.body).darkened(dim)
 	#  유리는 **인쇄면만** 비친다. 다이컷 흰 띠는 그대로 둔다 — 그 띠 하나가
@@ -11489,21 +11617,19 @@ func draw_sticker(c: Vector2, r: float, tier: Dictionary, rot: float,
 			else bb2.darkened(float(EDGE.lo))))
 	var rim := rim0.darkened(dim)
 	var rw: float = clampf(r * 0.16, 1.0, 2.2)      # 테두리 폭. r=8 툴팁에서도 안 뭉갠다
-	var y := _peel_y(r, peel)
+	var y := _coin_peel_y(form, r, peel)
 	#  ── 실루엣 갈래 (2026-09-18) ──────────────────────
-	#  누운 자세(_sticker_flat)와 **같은 표**를 읽는다. 둘이 갈리면 테이블에서
-	#  집어 랙에 꽂는 순간 딴 물건이 된다.
-	var shape := "disc" if rank_off else String(tier.get("shape", "disc"))
-	if pixel and shape == "mill":
-		shape = "disc"
-	if shape == "plaque":
-		_plaque_up(c, r, tier, rot, lift, gold_rim, dim, peel, mat)
+	#  누운 자세(_sticker_flat)와 **같은 폼 문자열**을 받는다. 어제는 둘이
+	#  표를 따로 읽었고, 그래서 `pixel and mill → disc` 같은 술어가 한쪽에만
+	#  남을 자리가 있었다. 이제 갈래가 인자 하나다.
+	if String(FORMS[form].get("fam", "disc")) == "plaque":
+		_plaque_up(c, r, tier, form, rot, lift, gold_rim, dim, peel, mat)
 		return
-	#  물림은 **큰 자리에서만**. r=8 에서 골 0.8px 은 1px 밑이라 흐린 테가 될
-	#  뿐이고, 그 아래는 밴드 색만 남긴다(테이블 22.04 · 랙/손 19 만 문다).
-	var mdep: float = 0.0
-	if shape == "mill" and r >= float(RANK.r_mill):
-		mdep = float(RANK.mill_deep) * r / float(TBL.chip_r)
+	#  물림은 **큰 자리에서만**. 문턱이 폼마다 다르다 — 물림 넷 중 `axis` 하나가
+	#  10.0 이라 컬렉션 13 · 런 정보 12 · 런 끝 10 에서도 살고, 나머지 셋은
+	#  16.0 이라 오늘 그림이 안 바뀐다. 그 아래는 밴드 색만 남긴다.
+	var mdep: float = _coin_mdep(form, r)
+	var slots: int = _coin_slots(form)
 	#  ── 등급 밴드 (2026-09-18) ────────────────────────
 	#  걷어 낸 등급 고리의 일을 여기가 가져간다. 테 고리 [r-rw, r] 의 **바깥**
 	#  bw 만 먹으므로 안쪽 rim(금테면 금)이 늘 남는다 — 밴드가 테를 통째로
@@ -11535,13 +11661,14 @@ func draw_sticker(c: Vector2, r: float, tier: Dictionary, rot: float,
 					float(q) * (TAU / 4.0), float(q + 1) * (TAU / 4.0), 7), rim)
 	else:
 		if bw > 0.0:
-			_rank_seg(c, r, y, mdep, _rank_col(String(tier.rarity), gold_rim, dim))
-		_rank_seg(c, r - bw, y, mdep, rim)          # 옆면(테두리)
+			_rank_seg(c, r, y, mdep, slots,
+					_rank_col(String(tier.rarity), gold_rim, dim))
+		_rank_seg(c, r - bw, y, mdep, slots, rim)          # 옆면(테두리)
 		#  베벨 한 줄. 테두리와 얼굴이 맞붙으면 두 면이 한 덩어리로 뭉쳐
 		#  두께가 안 읽힌다 — 누운 자세의 _e_ring_w 와 같은 일을 한다.
 		#  2026-09-18 — 어두운 몸 둘에서 이 한 줄이 옆면과 **똑같은 색**이었다
 		#  (EDGE 머리말). _bev_col 이 그 예외를 쥔다.
-		_rank_seg(c, r - rw, y, mdep, _bev_col(bb2, dim))
+		_rank_seg(c, r - rw, y, mdep, slots, _bev_col(bb2, dim))
 	#  인쇄면. 누운 자세와 **같은 규칙으로** 갈린다 — 두 자세가 어긋나면
 	#  집어 드는 순간 딴 물건이 된다.
 	if hollow:
@@ -11549,7 +11676,7 @@ func draw_sticker(c: Vector2, r: float, tier: Dictionary, rot: float,
 	elif pixel:
 		_pix_disc(c, r - rw - 1.0, r - rw - 1.0, body)
 	else:
-		_rank_seg(c, r - rw - 1.0, y, mdep, body)
+		_rank_seg(c, r - rw - 1.0, y, mdep, slots, body)
 	if wax:
 		#  정면이라 흘러내릴 아래가 곧 원의 밑이다. 세 방울.
 		for k in 3:
@@ -11626,7 +11753,7 @@ func draw_sticker(c: Vector2, r: float, tier: Dictionary, rot: float,
 		for k in spn:
 			var sa: float = PI + PI * (float(k) + 0.5) / float(spn)
 			var dv := Vector2(cos(sa), sin(sa))
-			var rr: float = r * _mill_f(sa, r, mdep) if mdep > 0.0 else r
+			var rr: float = r * _mill_f(sa, r, mdep, slots) if mdep > 0.0 else r
 			draw_line(c + dv * (rr - bw - 0.5), c + dv * rr, sink,
 					float(RANK.spot_w))
 
@@ -11636,13 +11763,11 @@ func draw_sticker(c: Vector2, r: float, tier: Dictionary, rot: float,
 #  랙에 꽂는 순간 딴 물건이 된다. 선 자세에는 두께가 안 보이므로 옆면 rw 고리를
 #  안 두른다(진짜 플라크는 아크릴 한 장이라 테가 없다). 그 자리를 겹테가 쥔다.
 #  랙 r=19 에서 화면 32.0 x 20.6 — 원반 38 x 38 옆에 서면 한눈에 갈린다.
-func _plaque_up(c: Vector2, r: float, tier: Dictionary, rot: float,
-		lift: float, gold_rim: bool, dim: float, peel: float,
+func _plaque_up(c: Vector2, r: float, tier: Dictionary, form: String,
+		rot: float, lift: float, gold_rim: bool, dim: float, peel: float,
 		mat: String) -> void:
 	var k: float = r / float(TBL.chip_r)
-	var a: float = float(RANK.plq_a) * k
-	var b: float = float(RANK.plq_b) * k
-	var cut: float = float(RANK.plq_cut) * k
+	var mt := _coin_metrics(form, k)
 	var hollow: bool = mat == "hollow"
 	var glass: bool = mat == "glass"
 	var wax: bool = mat == "wax"
@@ -11653,13 +11778,13 @@ func _plaque_up(c: Vector2, r: float, tier: Dictionary, rot: float,
 	var rim: Color = (C_GOLD.darkened(0.22) if gold_rim
 			else (bb.lightened(0.30) if bb.v < 0.32
 			else bb.darkened(float(EDGE.lo)))).darkened(dim)
-	var y := _plq_peel_y(r, peel)
+	var y := _coin_peel_y(form, r, peel)
 	var fa := 1.0 - dim
 	var bnd := _plq_band(r, tier)
 	var rc := _rank_col(String(tier.rarity), gold_rim, dim)
 	if lift > 0.05:
-		draw_colored_polygon(_plq_pts(c + Vector2(0.0, lift), 0.0, a, b, cut, 1.0),
-				Color(0.0, 0.0, 0.0, 0.22))
+		draw_colored_polygon(_coin_pts_k(form, c + Vector2(0.0, lift), 0.0, k,
+				1.0, 0.0), Color(0.0, 0.0, 0.0, 0.22))
 	#  바깥에서 안으로 한 겹씩 좁혀 채운다 — 겹테 둘 · 턱 · 몸.
 	#  번짐과 **같은 위상**으로 바깥 줄이 떤다(누운 자세와 같은 규약).
 	var pu := _rank_pulse(String(tier.rarity))
@@ -11676,24 +11801,25 @@ func _plaque_up(c: Vector2, r: float, tier: Dictionary, rot: float,
 		#  누운 자세와 **같은 짝**을 부른다: 겹테는 _plq_rim(알파가 아니라
 		#  섞음으로 떤다 — 알파 고리는 깎인 모서리에서 1px 이가 빠진다),
 		#  턱은 _poly_ring 한 겹. 말림은 접는 선을 같이 넘겨 고리째 자른다.
-		_plq_rim(c, 0.0, a, b, cut, 1.0, rc, bnd, body, oa, c.y + y)
-		_poly_ring(_plq_pts(c, 0.0, a - o, b - o, cut, 1.0),
-				_plq_pts(c, 0.0, a - o - 1.0, b - o - 1.0, cut, 1.0),
+		_coin_rim(form, c, 0.0, k, k, k, 1.0, rc, bnd, body, oa, c.y + y)
+		_poly_ring(_coin_pts_k(form, c, 0.0, k, 1.0, -o),
+				_coin_pts_k(form, c, 0.0, k, 1.0, -o - 1.0),
 				_bev_col(bb, dim), c.y + y)
 	else:
 		if bnd >= 1:
-			_plq_fill(c, a, b, cut, y, Color(rc, oa * fa))
+			_coin_fill(form, c, k, 0.0, y, Color(rc, oa * fa))
 		if bnd >= 2:
-			_plq_fill(c, a - 1.0, b - 1.0, cut, y,
+			_coin_fill(form, c, k, -1.0, y,
 					Color(rc.darkened(float(TIP_RANK.inner_dk)), fa))
 		#  턱 한 줄. 어두운 몸이라 bev_dark 로 낸다 — 옆면 색과 같아지면 면이 뭉친다.
-		_plq_fill(c, a - o, b - o, cut, y, _bev_col(bb, dim))
-		_plq_fill(c, a - o - 1.0, b - o - 1.0, cut, y, body)
+		_coin_fill(form, c, k, -o, y, _bev_col(bb, dim))
+		_coin_fill(form, c, k, -o - 1.0, y, body)
 	if wax:
-		#  방울은 **플라크 밑변**에서 떨어진다(누운 자세와 같은 규약).
+		#  방울은 **실루엣의 아래 경계**에서 떨어진다(누운 자세와 같은 규약).
 		for j in 3:
-			var wp := _plq_xy(c, 0.0, 1.0, Vector2((float(j) - 1.0) * a * 0.5, b))
-			var wl: float = b * 0.20 + float(j % 2) * 3.0
+			var wx: float = (float(j) - 1.0) * float(mt.a) * 0.5
+			var wp := c + Vector2(wx, _coin_bottom(form, wx / maxf(k, 0.001)) * k)
+			var wl: float = float(mt.bb) * 0.20 + float(j % 2) * 3.0
 			if wp.y - c.y > y:
 				continue
 			draw_rect(Rect2(wp.x - 1.0, wp.y, 2.0, wl), rim)
@@ -11709,8 +11835,8 @@ func _plaque_up(c: Vector2, r: float, tier: Dictionary, rot: float,
 		#  있었다. 두 자세가 다시 갈리지 않게 상수 한 칸으로 뺐다.
 		for j in 6:
 			var a2: float = rot + float(j) * (TAU / 6.0)
-			draw_colored_polygon(_plq_fan(c, 0.0, 1.0, a - o - 2.0, b - o - 2.0,
-					0.20, a2, a2 + TAU / 6.0, 4),
+			draw_colored_polygon(_coin_fan(form, c, 0.0, k, k, k, 1.0, o + 2.0,
+					a2, a2 + TAU / 6.0, 4),
 					Color(HOLO[j % 3], float(RANK.plq_holo_a) * fa))
 	#  얼굴과 말림은 **draw_item_sticker 가 얹는다** — 원반도 거기서 얹으므로
 	#  두 실루엣이 같은 자리에서 갈린다(여기서 얹으면 얼굴이 두 번 그려진다).
@@ -11720,18 +11846,17 @@ func _plaque_up(c: Vector2, r: float, tier: Dictionary, rot: float,
 #  다각형 미러링(_plq_fold)이다. **사각이 오히려 쉽다** — 곡률을 풀 일이 없다.
 #  뒤집힌 쪽은 이형지라 인쇄가 없고, 그래서 얼굴 위에 겹쳐도 무엇이 가려졌는지가
 #  안 헷갈린다(원반 쪽 머리말 그대로).
-func _rank_peel(c: Vector2, r: float, ti: int, plq: bool, peel: float,
+func _rank_peel(c: Vector2, r: float, form: String, peel: float,
 		dim: float) -> void:
-	if not plq:
-		_peel_fold(c, r, peel, dim)
-		return
-	var y := _plq_peel_y(r, peel)
 	var k: float = r / float(TBL.chip_r)
-	var b: float = float(RANK.plq_b) * k
+	if String(FORMS[form].get("fam", "disc")) != "plaque":
+		_peel_fold(c, r, _coin_mdep(form, r), _coin_slots(form), peel, dim)
+		return
+	var y := _coin_peel_y(form, r, peel)
+	var b: float = float(FORMS[form].get("bb", 0.0)) * k
 	if y >= b - 0.6:
 		return
-	var fold := _plq_fold(_plq_pts(c, 0.0, float(RANK.plq_a) * k, b,
-			float(RANK.plq_cut) * k, 1.0), c.y + y)
+	var fold := _plq_fold(_coin_pts_k(form, c, 0.0, k, 1.0, 0.0), c.y + y)
 	if fold.size() < 3:
 		return
 	draw_colored_polygon(fold, C_LINER.darkened(dim))
@@ -11777,16 +11902,27 @@ func _disc_seg(c: Vector2, r: float, y: float, col: Color) -> void:
 # 동전을 떼면 아래 끝이 위로 말린다. 아래 활꼴을 접는 선에 대해 미러링하는
 # 것이 전부다 — 종이접기 그대로라 곡률을 풀 일이 없다. 뒤집힌 쪽은 이형지라
 # 인쇄가 없고, 그래서 얼굴 위에 겹쳐도 무엇이 가려졌는지가 안 헷갈린다.
-func _peel_fold(c: Vector2, r: float, peel: float, dim: float) -> void:
+#  mdep·slots — **물린 바깥선을 따라 미러링한다.** 어제는 매끈한 원으로
+#  미러링해서 골마다 이형지가 실루엣보다 2.2px 넓게 떠 있었다. 각으로 도는
+#  것은 _mill_seg 의 어법 그대로다 — 골이 수평선과 세 번 넘게 만나 다리가
+#  놓이는 함정을 아예 안 밟는다.
+#  미러링한 y 를 접는 선 **위로 자른다**(minf) — 골이 깊어 그 각의 몸이
+#  접는 선까지 안 내려오면 이형지도 거기서는 0 폭이어야 맞다. 세로 투영이라
+#  점 차례가 안 꼬여 비볼록 자르기의 다리 함정을 안 산다.
+#  접는 선 양끝은 **미러링한 점 목록의 첫·끝**에서 뽑는다 — hx=√(r²−y²) 는
+#  매끈한 원을 전제하므로 물린 원반에서 골 밖까지 선이 나간다.
+func _peel_fold(c: Vector2, r: float, mdep: float, slots: int, peel: float,
+		dim: float) -> void:
 	var y := _peel_y(r, peel)
 	if y >= r - 0.6:
 		return
 	var t := asin(clampf(y / r, -1.0, 1.0))
 	var pts := PackedVector2Array()
-	for i in 17:
-		var a: float = t + (PI - 2.0 * t) * float(i) / 16.0
-		var q := Vector2(cos(a), sin(a)) * r
-		pts.append(c + Vector2(q.x, y - (q.y - y)))
+	for i in 33:
+		var a: float = t + (PI - 2.0 * t) * float(i) / 32.0
+		var f: float = _mill_f(a, r, mdep, slots) if mdep > 0.0 else 1.0
+		var q := Vector2(cos(a), sin(a)) * r * f
+		pts.append(c + Vector2(q.x, minf(y, y - (q.y - y))))
 	draw_colored_polygon(pts, C_LINER.darkened(dim))
 	# 접힌 가장자리 — 이형지와 얼굴을 가른다. 색 대비만으로는 흔함 등급에서
 	# 둘이 붙는다(크림 vs 이형지 명도차 8%). 선이 대비를 대신한다.
@@ -11794,8 +11930,8 @@ func _peel_fold(c: Vector2, r: float, peel: float, dim: float) -> void:
 		draw_line(pts[i], pts[i + 1], Color(0.0, 0.0, 0.0, 0.30), 1.0)
 	# 접는 선 = 아직 붙어 있는 마지막 자리. 이 한 줄이 없으면 뒷면이 그냥
 	# 얼굴 위에 뜬 밝은 반달로 보인다.
-	var hx := sqrt(maxf(r * r - y * y, 0.0))
-	draw_line(c + Vector2(-hx, y), c + Vector2(hx, y),
+	draw_line(Vector2(pts[0].x, c.y + y),
+			Vector2(pts[pts.size() - 1].x, c.y + y),
 			Color(0.0, 0.0, 0.0, 0.45), 1.0)
 
 
@@ -15413,16 +15549,34 @@ func _shard_cut(s: Dictionary, n: int, sd: int, psi := 0.0) -> Array:
 	#  실루엣이 원으로 되돌아간다.** 사진·팩이 이미 쓰는 격자로 자른다.
 	#  조각 4~6 개라 qa_smash 의 「동시 조각 상한 40」에 안 닿는다.
 	#  **반지름은 면 좌표다** — 화면값을 넣으면 세로가 한 번 더 눌린다.
-	if String(s.type) == "item" and not rank_off \
-			and String(s.d.get("rarity", "")) == "legendary":
-		#  조각은 psi 로 돌아가는데(_smash_poly) 플라크는 ±10° 로만 기운다.
+	var cfm := _stock_form(s)
+	var cfam := String(FORMS[cfm].get("fam", "disc"))
+	if cfam == "plaque":
+		#  조각은 psi 로 돌아가는데(_smash_poly) 판은 제 tilt 만큼만 기운다.
 		#  차이만큼 미리 돌려 둬야 언 프레임의 실루엣이 원물건과 겹친다.
-		var dv := _plq_ang(psi) - psi
+		#  tilt 0 인 폼 넷에서는 그냥 -psi 가 되어 공짜로 일반화된다.
+		var cm := _coin_metrics(cfm, 1.0)
+		var dv := _coin_ang(cfm, psi) - psi
+		#  **bbox 격자로 자르고 폼 다각형으로 한 번 더 깎는다**(_coin_clip).
+		#  dia·drip 은 bbox 귀퉁이가 몸 밖으로 크게 나가므로 클립이 없으면
+		#  허공에 조각이 뜨고, 사각 폼의 깎은 모서리 삐짐도 같이 고쳐진다.
+		#  40면px² 아래는 버린다 — 「1px 외톨이는 물건이 아니라 먼지」.
+		var body := _coin_pts_k(cfm, Vector2.ZERO, 0.0, 1.0, 1.0, 0.0)
+		#  격자를 폼의 bbox 에 맞춘다. drip 은 위아래 반높이가 달라(11.80 대
+		#  16.60) 가운데를 (bb-bt)/2 만큼 내려야 [-bt, bb] 가 정확히 덮인다 —
+		#  대칭 폼 넷에서는 0 이라 어제 값 그대로다.
+		var gy: float = (float(cm.bt) + float(cm.bb)) * 0.5
+		var go := Vector2(0.0, (float(cm.bb) - float(cm.bt)) * 0.5)
 		var out := []
-		for p in _shard_grid(float(RANK.plq_a), float(RANK.plq_b), 2,
-				clampi(n - 2, 2, 3), sd):
-			var q := PackedVector2Array()
+		for p in _shard_grid(float(cm.a), gy, 2, 2, sd):
+			var cell := PackedVector2Array()
 			for v in (p as PackedVector2Array):
+				cell.append(v + go)
+			var cl := _coin_clip(cell, body)
+			if cl.size() < 3 or _coin_area(cl) < 40.0:
+				continue
+			var q := PackedVector2Array()
+			for v in cl:
 				q.append(v.rotated(dv))
 			out.append(q)
 		return out
@@ -15441,7 +15595,12 @@ func _shard_cut(s: Dictionary, n: int, sd: int, psi := 0.0) -> Array:
 			return _shard_fan(15.5, 15.5, n, sd)
 		"mod":
 			return _shard_fan(TBL.mod_r, TBL.mod_r, n, sd)
-	return _shard_fan(TBL.chip_r, TBL.chip_r, n, sd)
+	#  물린 원반 — 부채의 **바깥 반지름에 _mill_f 를 곱한다.** 경계 반지름을
+	#  이웃과 나눠 쓰는 규약이 각으로도 그대로 지켜져(같은 각이면 같은 배율)
+	#  이음매에 1px 틈이 안 생긴다. 흔들림 진폭 ±0.06r = ±1.32면px 이 깊이
+	#  2.2 보다 **작으므로** 안 곱하면 언 프레임의 실루엣이 매끈한 원이 된다.
+	return _shard_fan(TBL.chip_r, TBL.chip_r, n, sd,
+			_coin_mdep(cfm, TBL.chip_r), _coin_slots(cfm))
 
 
 # 부채꼴 띠 + 속 하나. **반지름은 면 좌표다** — chip_r 22.04 를 넣으면
@@ -15455,7 +15614,8 @@ func _shard_cut(s: Dictionary, n: int, sd: int, psi := 0.0) -> Array:
 #
 # 경계의 반지름은 이웃과 **나눠 쓴다** — 조각마다 따로 흔들면 이음매에
 # 1px 틈이 생겨 언 한 프레임의 실루엣이 갈라진 유리로 보인다.
-func _shard_fan(rx: float, ry: float, n: int, sd: int) -> Array:
+func _shard_fan(rx: float, ry: float, n: int, sd: int, mdep := 0.0,
+		slots := 0xFFF) -> Array:
 	var ang := []
 	var rad := []
 	var crd := []
@@ -15476,6 +15636,8 @@ func _shard_fan(rx: float, ry: float, n: int, sd: int) -> Array:
 			var aa: float = lerpf(a0, a1, float(q) / 3.0)
 			var rr: float = rad[j] if q == 0 else (rad[j1] if q == 3
 					else 1.0 + (_gl_rand(j * 13 + q, sd) - 0.5) * 0.12)
+			if mdep > 0.0:
+				rr *= _mill_f(aa, rx, mdep, slots)
 			p.append(Vector2(cos(aa) * rx * rr, sin(aa) * ry * rr))
 		p.append(Vector2(cos(a1) * rx, sin(a1) * ry) * crd[j1])
 		out.append(p)
@@ -16566,8 +16728,7 @@ func _obj_shape(i: int, m: Vector2) -> bool:
 	#  _boost_one 이 itemgot 받은 장에 legend_pack_w 를 달아 팩 풀에 넣고
 	#  _boost_spill 이 stock 에 쏟는다. 팩을 뜯는 순간 이 길을 지난다.
 	#  표적 넓이는 약 1100 화면px² 로 shot_shopsize 의 하한 200 위다.
-	if String(stock[i].type) == "item" and not rank_off \
-			and String(stock[i].d.get("rarity", "")) == "legendary":
+	if String(FORMS[_stock_form(stock[i])].get("fam", "disc")) == "plaque":
 		#  **옆면까지 덮는다.** 윗면 다각형만 내면 두꺼운 아크릴(6.11px)이
 		#  통째로 죽은 자리가 된다 — 잉크는 아래로 18.07 까지 가는데 잡히는
 		#  것은 11.67 까지라, 물건 높이의 17% 가 안 잡혔다(2026-09-18 실측).
@@ -16581,9 +16742,14 @@ func _obj_shape(i: int, m: Vector2) -> bool:
 		#  끝은 잉크의 끝보다 2.32px 밖이고 그 자리 세로가 12.9 > 6.11 이라
 		#  **잉크 위에는 빈틈이 한 점도 없다**(잰 값).
 		#  sd 는 _plaque_flat 과 **같은 식**이어야 그리는 쪽과 안 갈린다.
-		var pp := _plq_pts(c, _plq_ang(float(it.psi)),
-				float(RANK.plq_a) + 2.0, float(RANK.plq_b) + 2.0,
-				float(RANK.plq_cut), TBL.flat)
+		#  2026-09-18 — +2 를 **법선 오프셋**으로 준다. 축 확대(a+2/b+2)는
+		#  경사변에서 여유가 1.438px 로 고르지 않아, dia 처럼 비스듬한 변이
+		#  긴 폼에서 꼭짓점 사이가 얇아진다. 법선이면 전 둘레 2.000px 다.
+		#  **다섯이 전부 볼록이라 _in_poly 가 그대로 맞다** — 레전더리를 전부
+		#  볼록으로 고른 이유의 절반이 이것이다.
+		var fm := _stock_form(stock[i])
+		var pp := _coin_pts_k(fm, c, _coin_ang(fm, float(it.psi)), 1.0,
+				TBL.flat, 2.0)
 		var psd: float = TBL.chip_t * TBL.tall * float(RANK.plq_side)
 		return _in_poly(m, pp) or _in_poly(m - Vector2(0.0, psd), pp)
 	var lz: float = TBL.chip_t * TBL.tall * 0.5          # 옆면 슬리버를 덮는다
@@ -16595,6 +16761,17 @@ func _obj_shape(i: int, m: Vector2) -> bool:
 # 볼록 다각형 안인가. 사진의 네 귀퉁이가 유일한 소비자다 — 돌아간
 # 네모라 축정렬 검사로는 귀퉁이가 어긋난다. 감기 방향과 무관하게 맞다:
 # 모든 외적의 부호가 같으면 안이다.
+#  매물 하나의 폼. **표적 · 그림자 · 깨짐 셋이 이 한 줄을 지난다** — 어제는
+#  셋이 `rarity == "legendary"` 라는 같은 술어를 각자 베껴 써서, 레전더리가
+#  다섯 모양이 되는 순간 셋이 **동시에 거짓**이 될 자리였다.
+#  rank_off 는 _coin_form 안에서 한 번만 꺼진다.
+func _stock_form(s: Dictionary) -> String:
+	if String(s.get("type", "")) != "item":
+		return "disc"
+	var d: Dictionary = s.get("d", {})
+	return _coin_form(d, STK_TIERS[_stk_ti(String(d.get("rarity", "common")))])
+
+
 func _in_poly(m: Vector2, pts: PackedVector2Array) -> bool:
 	var sg := 0.0
 	for i in pts.size():
@@ -16764,12 +16941,15 @@ func _obj_shadow(i: int) -> void:
 			#  「사진은 네모라 그림자도 네모다」가 **동전에서만** 안 지켜지면
 			#  플라크가 바닥에서 떠 보인다(2026-09-18). 그리는 것과 같은
 			#  다각형을 k 배로 깐다.
-			if String(stock[i].type) == "item" and not rank_off \
-					and String(stock[i].d.get("rarity", "")) == "legendary":
-				draw_colored_polygon(_plq_pts(g, _plq_ang(float(it.psi)),
-						float(RANK.plq_a) * k, float(RANK.plq_b) * k,
-						float(RANK.plq_cut) * k, TBL.flat), col)
+			var sfm := _stock_form(stock[i])
+			if String(FORMS[sfm].get("fam", "disc")) == "plaque":
+				#  **그리는 것과 같은 함수에서** 뽑는다 — k 배만 다르다.
+				draw_colored_polygon(_coin_pts_k(sfm, g,
+						_coin_ang(sfm, float(it.psi)), k, TBL.flat, 0.0), col)
 				return
+			#  원반·물린 원반은 타원 그대로 둔다. 그림자는 k>=1 배라 잉크보다
+			#  늘 크고 물림은 안으로만 파므로 **덮기가 식으로 보장된다** —
+			#  qa ⓛ 이 「같은가」가 아니라 「덮는가」를 잰다.
 			draw_colored_polygon(_e_pts(g, it.r * k, it.r * k * TBL.flat, 14), col)
 
 
@@ -17151,7 +17331,19 @@ func _rank_pulse(rar: String) -> float:
 #  골은 코사인 한 봉우리다. 각진 골을 파면 640x360 에서 이가 빠진 것으로 보인다.
 #  주기는 **앞호의 박음 간격과 같다**(PI/n) — 물린 자리와 박음이 어긋나면
 #  한 물건에 결이 둘이라 둘 다 안 읽힌다. 그래서 앞호에 n 개 · 온 바퀴에 2n 개다.
-func _mill_f(a: float, rx: float, depth: float) -> float:
+#
+#  ── slots — 레어의 변형 (2026-09-18) ────────────────────
+#  한 바퀴가 **12칸**이고 칸 j 의 중심이 15°+30j 다(위 주기가 그렇게 잡혀
+#  있다). slots 는 그 12칸의 비트마스크 하나 — **어느 칸을 무는가**가 변형의
+#  전부다. 주기도 반폭도 깊이도 한 자도 안 건드리므로 박음 여섯(격자 위에
+#  앉아 있다)과 결이 안 어긋난다.
+#  **기본값을 안 준다.** 기본 0xFFF 를 주면 slots 를 빠뜨린 자리가 조용히
+#  「고름」으로 그려져 아무도 못 잡는다 — 호출 다섯이 고닷 단계에서 전부 운다.
+func _mill_f(a: float, rx: float, depth: float, slots: int) -> float:
+	if slots != 0xFFF:
+		var j: int = int(floor(fposmod(a, TAU) / (PI / 6.0))) % 12
+		if (slots >> j) & 1 == 0:
+			return 1.0
 	var per: float = PI / float(RANK.mill_n)
 	var ph: float = fposmod(a - per * 0.5, per)
 	var dd: float = minf(ph, per - ph)
@@ -17162,20 +17354,21 @@ func _mill_f(a: float, rx: float, depth: float) -> float:
 
 
 #  물린 원반 한 바퀴. seg 96 이면 44px 폭에서 한 칸이 1.4px 이라 골이 안 끊긴다.
-func _mill_pts(c: Vector2, rx: float, ry: float, depth: float,
+func _mill_pts(c: Vector2, rx: float, ry: float, depth: float, slots: int,
 		seg := 96) -> PackedVector2Array:
 	var pts := PackedVector2Array()
 	for i in seg:
 		var a: float = TAU * float(i) / float(seg)
-		var f: float = _mill_f(a, rx, depth)
+		var f: float = _mill_f(a, rx, depth, slots)
 		pts.append(c + Vector2(cos(a) * rx * f, sin(a) * ry * f))
 	return pts
 
 
 #  누운 자세의 바깥선. mdep 0 이면 옛 타원 그대로다 — 갈래를 값 하나로 눌러
 #  두어야 그리는 자리 열둘이 갈래를 안 센다.
-func _rank_pts(c: Vector2, rx: float, ry: float, mdep: float) -> PackedVector2Array:
-	return _mill_pts(c, rx, ry, mdep) if mdep > 0.0 else _e_pts(c, rx, ry)
+func _rank_pts(c: Vector2, rx: float, ry: float, mdep: float,
+		slots: int) -> PackedVector2Array:
+	return _mill_pts(c, rx, ry, mdep, slots) if mdep > 0.0 else _e_pts(c, rx, ry)
 
 
 #  이 각이 박음 자리인가. 빗살을 건너뛸 때와 물린 자리를 잴 때가 **같은 식**을
@@ -17197,34 +17390,36 @@ func _bev_col(bb: Color, dim: float) -> Color:
 #  물린 원반의 활꼴. _disc_seg 와 **같은 식**으로 접는 선 위쪽만 낸다 —
 #  물린 윤곽은 볼록이 아니라, 일반 다각형 자르기로 넘기면 골이 수평선과 세 번
 #  넘게 만나는 자리에서 다리가 놓인다. 각으로 돌면 그 함정이 아예 없다.
-func _mill_seg(c: Vector2, r: float, y: float, depth: float, col: Color) -> void:
+func _mill_seg(c: Vector2, r: float, y: float, depth: float, slots: int,
+		col: Color) -> void:
 	if y >= r - 0.4:
-		draw_colored_polygon(_mill_pts(c, r, r, depth), col)
+		draw_colored_polygon(_mill_pts(c, r, r, depth, slots), col)
 		return
 	var t := asin(clampf(y / r, -1.0, 1.0))
 	var pts := PackedVector2Array()
 	for i in 61:
 		var a: float = (PI - t) + (PI + 2.0 * t) * float(i) / 60.0
-		var f := _mill_f(a, r, depth)
+		var f := _mill_f(a, r, depth, slots)
 		pts.append(c + Vector2(cos(a) * r * f, sin(a) * r * f))
 	draw_colored_polygon(pts, col)
 
 
 #  선 자세의 한 겹. mdep 0 이면 옛 활꼴 그대로다 — 갈래를 값 하나로 눌러
 #  두어야 draw_sticker 의 네 자리가 갈래를 안 센다.
-func _rank_seg(c: Vector2, r: float, y: float, mdep: float, col: Color) -> void:
+func _rank_seg(c: Vector2, r: float, y: float, mdep: float, slots: int,
+		col: Color) -> void:
 	if mdep > 0.0:
-		_mill_seg(c, r, y, mdep, col)
+		_mill_seg(c, r, y, mdep, slots, col)
 	else:
 		_disc_seg(c, r, y, col)
 
 
 #  선 자세에서 한 겹 채운다. 말림이 있으면 접는 선 위쪽만 남긴다 —
 #  볼록 다각형이라 수평선 하나로 자르는 것이 원보다 오히려 쉽다.
-func _plq_fill(c: Vector2, a: float, b: float, cut: float, y: float,
+func _coin_fill(form: String, c: Vector2, k: float, grow: float, y: float,
 		col: Color) -> void:
-	var p := _plq_pts(c, 0.0, a, b, cut, 1.0)
-	if y < b + 1.0:
+	var p := _coin_pts_k(form, c, 0.0, k, 1.0, grow)
+	if y < float(FORMS[form].get("bb", 0.0)) * k + 1.0:
 		p = _plq_seg(p, c.y + y)
 	if p.size() >= 3:
 		draw_colored_polygon(p, col)
@@ -17232,12 +17427,13 @@ func _plq_fill(c: Vector2, a: float, b: float, cut: float, y: float,
 
 #  앞쪽 호(화면 아래 반). 옆면 띠 · 빗살 · 박음 · 밴드가 전부 이 호를 쓴다 —
 #  한 함수에서 내야 물린 원반에서 넷이 같은 자리를 짚는다.
-func _front_arc(c: Vector2, rx: float, ry: float, depth: float,
+#  **slots 를 여기가 안 받으면 레어 변형에서 네 결이 한꺼번에 어긋난다.**
+func _front_arc(c: Vector2, rx: float, ry: float, depth: float, slots: int,
 		n := 28) -> PackedVector2Array:
 	var pts := PackedVector2Array()
 	for i in n + 1:
 		var a: float = PI * float(i) / float(n)
-		var f: float = _mill_f(a, rx, depth) if depth > 0.0 else 1.0
+		var f: float = _mill_f(a, rx, depth, slots) if depth > 0.0 else 1.0
 		pts.append(c + Vector2(cos(a) * rx * f, sin(a) * ry * f))
 	return pts
 
@@ -17248,6 +17444,12 @@ func _front_arc(c: Vector2, rx: float, ry: float, depth: float,
 #  a²+b² 로 잡은 안전선보다 **더 안쪽**이다(20.47 < 22.04).
 #  **꼭짓점 순서가 계약이다**: 0~3 이 아래 사슬(오른쪽→아래→왼쪽), 4~7 이 위
 #  사슬이다. 속이 빈 플라크(l03)가 앞쪽 띠만 두를 때 이 순서를 센다.
+#  2026-09-18 — **게임은 이제 이 셋을 안 부른다**(_plq_pts · _plq_ang ·
+#  _plq_face_r · _plq_peel_y). 지우지 않고 **회귀의 증인**으로 남긴다:
+#  qa_rank 가 어제의 이 식과 오늘의 _coin_* 을 나란히 불러 slab 에서 한
+#  글자도 안 다른 것을 잰다. 그것이 「리팩터가 기존 그림을 안 건드렸다」를
+#  주석이 아니라 수로 적는 유일한 길이다. 폼 층이 slab 을 바꾸는 날 이
+#  단언이 먼저 울고, 그때 같이 지운다.
 func _plq_pts(c: Vector2, ang: float, a: float, b: float, cut: float,
 		flat: float) -> PackedVector2Array:
 	var k: Array[Vector2] = [
@@ -17374,23 +17576,356 @@ func _poly_ring(op: PackedVector2Array, ip: PackedVector2Array,
 #  알파 고리는 깎인 모서리에서 조각끼리 겹쳐 1px 이가 빠진다(2026-09-18 실측).
 #  oa — 바깥 줄만 맥동한다. 안쪽 줄은 안 떤다: 두 줄이 같이 흔들리면 테가
 #  굵어졌다 얇아졌다 하는 것으로 읽힌다.
-func _plq_rim(c: Vector2, ang: float, a: float, b: float, cut: float,
-		flat: float, col: Color, w: int, under: Color, oa := 1.0,
+#  2026-09-18 — 고리를 **법선 오프셋**으로 낸다. 축 축소(a-1/b-1)는 곧은 변에서만
+#  1px 이고 경사변에서는 0.721px(dia)·1.414px(깎은 모서리)이라, 「겹테 2px」이
+#  변에 따라 28% 얇거나 41% 두꺼웠다 — 그게 곧 등급이 흐려지는 것이다.
+func _coin_rim(form: String, c: Vector2, ang: float, sx: float, sy: float,
+		sc: float, flat: float, col: Color, w: int, under: Color, oa := 1.0,
 		yc := INF) -> void:
 	for k in w:
 		var cc: Color = (col.lerp(under, 1.0 - oa) if k == 0
 				else col.darkened(float(TIP_RANK.inner_dk)))
-		_poly_ring(_plq_pts(c, ang, a - float(k), b - float(k), cut, flat),
-				_plq_pts(c, ang, a - float(k) - 1.0, b - float(k) - 1.0, cut, flat),
+		_poly_ring(_coin_pts(form, c, ang, sx, sy, sc, flat, -float(k)),
+				_coin_pts(form, c, ang, sx, sy, sc, flat, -float(k) - 1.0),
 				cc, yc)
 
 
-#  플라크의 번짐. _rar_glow 는 타원 전용이라 갈래를 따로 낸다 — 번짐이
-#  사각으로 번지면 물건이 가려져 있어도 「네모난 빛」이 등급을 말한다.
-#  같은 겹 수(7) · 같은 걸음(2.6) · 같은 알파 식이라 **새 자리를 안 만든다**:
-#  도달이 a+18.2 = 36.7 면px 로 동전의 chip_r+18.2 = 40.24 안이다.
-func _rar_glow_plq(c: Vector2, ang: float, a: float, b: float, cut: float,
-		flat: float, rar: String, dim: float, ring := false) -> void:
+# ══════════════════════════════════════════════════════════
+#  바깥선 하나를 아는 함수  (2026-09-18)
+# ──────────────────────────────────────────────────────────
+#  **뿌리 하나: 모양을 아는 함수를 하나만 세운다.** 실루엣을 각자 다시
+#  유도하던 자리가 다섯이었다 — _sticker_flat · draw_sticker · _obj_shape ·
+#  _obj_shadow · _shard_cut. 뒤 셋은 전부 `rarity == "legendary"` 라는 **같은
+#  술어**와 RANK.plq_a/plq_b/plq_cut 를 각자 베껴 썼다. 레전더리 다섯이 각자
+#  실루엣을 가지면 그 셋이 **동시에 거짓**이 된다. 열하나 x 다섯 = 95 자리를
+#  다섯 자리로 줄인다.
+#
+#  **면 좌표에서 돌리고 나서 y 를 누른다**(_plq_xy). 순서를 바꾸면 기울어진
+#  판이 원근을 안 탄다 — 새 폼도 같은 한 식을 지난다.
+
+
+#  폼 하나의 국소 꼭짓점. sx·sy 는 반폭·반높이 배율(누운 자세의 wob 을 그대로
+#  나른다), sc 는 깎음 배율이다 — 누운 자세는 깎음을 안 흔들고(sc 1.0) 선
+#  자세는 셋 다 k 다. 어제 _plaque_flat · _plaque_up 이 그렇게 갈라 쓰던 것을
+#  값 셋으로 옮긴 것뿐이라 **그림이 안 바뀐다.**
+func _coin_local(form: String, sx: float, sy: float, sc: float) -> Array:
+	var m: Dictionary = FORMS[form]
+	var a: float = float(m.get("a", 0.0)) * sx
+	var bt: float = float(m.get("bt", 0.0)) * sy
+	var bb: float = float(m.get("bb", 0.0)) * sy
+	var ct: float = float(m.get("cut", 0.0)) * sc
+	var bs: float = float(m.get("bs", 0.0)) * sy
+	match String(m.get("kind", "rect")):
+		"rhomb":
+			#  육각 — 위아래가 한 점이고 좌우만 bs 만큼 무디다.
+			#  「누른 한 점에 꽂는다」의 그 점이 아래 꼭짓점이다.
+			return [Vector2(a, bs), Vector2(0.0, bb), Vector2(-a, bs),
+					Vector2(-a, -bs), Vector2(0.0, -bt), Vector2(a, -bs)]
+		"drip":
+			#  일곱 꼭짓점 — **위 모서리 둘만** 깎는다. 위는 평평하고 아래만
+			#  한 점으로 처져 rhomb(위아래 다 뾰족)와 한눈에 갈린다.
+			return [Vector2(a, bs), Vector2(0.0, bb), Vector2(-a, bs),
+					Vector2(-a, -(bt - ct)), Vector2(-(a - ct), -bt),
+					Vector2(a - ct, -bt), Vector2(a, -(bt - ct))]
+	#  rect — 어제 _plq_pts 의 여덟 꼭짓점 그대로다. **순서가 계약이다**:
+	#  0~3 이 아래 사슬(오른쪽→아래→왼쪽), 4~7 이 위 사슬. 속이 빈 판(l03)이
+	#  앞쪽 띠만 두를 때 이 차례를 센다. 새 폼 둘도 같은 차례로 돈다.
+	return [Vector2(a, bb - ct), Vector2(a - ct, bb),
+			Vector2(-(a - ct), bb), Vector2(-a, bb - ct),
+			Vector2(-a, -(bt - ct)), Vector2(-(a - ct), -bt),
+			Vector2(a - ct, -bt), Vector2(a, -(bt - ct))]
+
+
+#  볼록 다각형을 **법선으로** 민다 — 축 확대가 아니다. 마이터 한계
+#  RANK.coin_miter 로 뾰족한 꼭짓점이 번짐을 밖으로 못 밀게 자른다.
+#  **왜 축 확대를 걷었는가 — 재 봤다**(2026-09-18):
+#   · 겹테: dia 를 `a-1/b-1` 로 재면 경사변 넷에서 밴드가 **0.721px** 다.
+#     「겹테 2px」이 여섯 변 중 넷에서 28% 얇아지고, 그게 곧 **등급이
+#     흐려지는 것**이다. 법선이면 여섯 변 다 정확히 1.000px.
+#   · 표적: `a+2/b+2` 는 경사변 여유가 **1.438px** 로 고르지 않다. 법선이면
+#     전 둘레 2.000px.
+#   · 사각(slab·sq·tall)의 **곧은 변 넷은 한 값이 나온다.** 갈리는 것은 깎은
+#     모서리 넷뿐인데, 거기서도 축 확대 쪽이 틀렸다 — 45° 변에서 밴드가
+#     1.414px 로 41% **두꺼웠다**. 오늘 그림이 눈에 띄게 바뀌는 자리는
+#     l03 의 겹테 모서리와 번짐 코너 둘뿐이고, 둘 다 고르게 바뀐다.
+func _poly_grow(k: Array, g: float) -> Array:
+	if absf(g) < 0.0001 or k.size() < 3:
+		return k
+	var n := k.size()
+	var ctr := Vector2.ZERO
+	for v in k:
+		ctr += v
+	ctr /= float(n)
+	#  변마다 바깥 법선. 감기 방향과 무관하게 **무게중심 반대쪽**이 바깥이다
+	#  (볼록이라 무게중심이 늘 안에 있다 — qa ⓗ-b 가 볼록임을 따로 잰다).
+	var nv := []
+	for i in n:
+		var p: Vector2 = k[i]
+		var q: Vector2 = k[(i + 1) % n]
+		var e: Vector2 = (q - p).orthogonal()
+		if e.length() < 0.0001:
+			nv.append(Vector2.ZERO)
+			continue
+		e = e.normalized()
+		if e.dot((p + q) * 0.5 - ctr) < 0.0:
+			e = -e
+		nv.append(e)
+	var ml: float = float(RANK.coin_miter)
+	var out := []
+	for i in n:
+		var n1: Vector2 = nv[i]                       # 변 i(p→q)의 바깥 법선
+		var n0: Vector2 = nv[(i - 1 + n) % n]         # 앞 변의 바깥 법선
+		var mt: Vector2 = n0 + n1
+		if mt.length() < 0.0001:
+			out.append(Vector2(k[i]) + n1 * g)
+			continue
+		mt = mt.normalized()
+		out.append(Vector2(k[i]) + mt * (g * minf(1.0 / maxf(mt.dot(n1), 0.02), ml)))
+	return out
+
+
+#  폼 하나의 화면 바깥선. grow 는 **법선 오프셋(면px)** 이고 배율 뒤에 먹는다 —
+#  1px 밴드가 r 과 무관하게 1px 이어야 작은 자리에서 테가 판을 안 먹는다.
+func _coin_pts(form: String, c: Vector2, ang: float, sx: float, sy: float,
+		sc: float, flat: float, grow: float) -> PackedVector2Array:
+	var pts := PackedVector2Array()
+	for v in _poly_grow(_coin_local(form, sx, sy, sc), grow):
+		pts.append(_plq_xy(c, ang, flat, Vector2(v)))
+	return pts
+
+
+#  세 배율이 같은 자리(선 자세 · 그림자 · 표적)가 쓰는 짧은 길.
+func _coin_pts_k(form: String, c: Vector2, ang: float, k: float, flat: float,
+		grow: float) -> PackedVector2Array:
+	return _coin_pts(form, c, ang, k, k, k, flat, grow)
+
+
+#  폼 하나의 치수를 k 배로. 그리는 쪽·재는 쪽·잡는 쪽이 **같은 사전**을 본다.
+func _coin_metrics(form: String, k: float) -> Dictionary:
+	var m: Dictionary = FORMS[form]
+	return {
+		"fam": String(m.get("fam", "disc")),
+		"kind": String(m.get("kind", "")),
+		"a": float(m.get("a", 0.0)) * k,
+		"bt": float(m.get("bt", 0.0)) * k,
+		"bb": float(m.get("bb", 0.0)) * k,
+		"cut": float(m.get("cut", 0.0)) * k,
+		"bs": float(m.get("bs", 0.0)) * k,
+		"tilt": float(m.get("tilt", 0.0)),
+		"fr": float(m.get("fr", 0.0)) * k,
+		"fc": float(m.get("fc", 0.0)) * k,
+		"slots": int(m.get("slots", 0xFFF)),
+		"r_mill": float(m.get("r_mill", 0.0)),
+	}
+
+
+#  폼의 기울임. _plq_ang 의 일반해다 — psi 는 물리가 매기는 자유 회전인데
+#  그대로 쓰면 아래끝 잉크가 _obj_box 를 넘는다. 폭을 물려 흔들림으로만 쓴다.
+#  **세로가 긴 폼(tall·sq·dia·drip)은 tilt 0 이라 여기서 0 이 나온다.**
+func _coin_ang(form: String, psi: float) -> float:
+	return sin(psi) * float(FORMS[form].get("tilt", 0.0))
+
+
+#  폼이 쥔 슬롯 마스크. 물림 가족만 읽는다(나머지는 mdep 0 이라 안 지난다).
+func _coin_slots(form: String) -> int:
+	return int(FORMS[form].get("slots", 0xFFF))
+
+
+#  물린 깊이. **문턱은 간격만 재던 것이 아니라 깊이도 잰다** — 작은 자리에서
+#  실제로 뭉개지는 것은 깊이다(2.2·r/22.04 라 r=13 에서 1.30 · r=10 에서 1.00).
+#  개수를 줄여도 깊이는 안 살아나므로 바닥 RANK.mill_deep_min 을 따로 박는다.
+#  **r>=16 에서는 자연값 1.597 이라 오늘 그림이 한 픽셀도 안 바뀐다.**
+func _coin_mdep(form: String, r: float) -> float:
+	var m: Dictionary = FORMS[form]
+	if String(m.get("fam", "disc")) != "mill":
+		return 0.0
+	var rm: float = float(m.get("r_mill", 0.0))
+	if rm <= 0.0 or r < rm:
+		return 0.0
+	return maxf(float(RANK.mill_deep_min),
+			float(RANK.mill_deep) * r / float(TBL.chip_r))
+
+
+#  물림 문턱을 **식에서** 뽑는다. FORMS 의 r_mill 과 갈리면 qa ⓙ 가 실패한다 —
+#  손으로 적은 상수가 식에서 나온 값이 되는 자리다:
+#    even 30° → ceil(max(8.0/(PI/6), 1.5/0.16)) = ceil(15.279) = **16.0**
+#      ← 어제 손으로 적은 RANK.r_mill 16.0 과 정확히 같다.
+#    axis 90° → ceil(max(5.093, 9.375)) = **10.0** — 컬렉션 13 · 런 정보 12 ·
+#      런 끝 10 까지 변형 하나가 산다.
+func _coin_rmill_fx(form: String) -> float:
+	var m: Dictionary = FORMS[form]
+	if String(m.get("fam", "disc")) != "mill":
+		return 0.0
+	var s: int = int(m.get("slots", 0))
+	var idx := []
+	for j in 12:
+		if (s >> j) & 1 == 1:
+			idx.append(j)
+	if idx.is_empty():
+		return 0.0
+	var gap := 12
+	if idx.size() > 1:
+		for i in idx.size():
+			var d: int = int(idx[(i + 1) % idx.size()]) - int(idx[i])
+			if d <= 0:
+				d += 12
+			gap = mini(gap, d)
+	return ceilf(maxf(float(RANK.mill_gap_min) / (float(gap) * (PI / 6.0)),
+			float(RANK.mill_deep_min) / float(RANK.mill_deep_ratio)))
+
+
+#  얼굴이 앉는 자리 — (중심x, 중심y, 반지름). **두 자세가 이 한 식을 본다.**
+#  어제는 draw_item_sticker 가 표를 한 번 더 읽어(지역 변수를 못 넘겨서)
+#  같은 수를 두 자리에서 따로 냈다. drip 만 중심이 +1.223 만큼 처진다 —
+#  늘어진 쪽으로 최대 내접원이 내려간다.
+func _coin_face(form: String, r: float, band: float) -> Vector3:
+	var m: Dictionary = FORMS[form]
+	if String(m.get("fam", "disc")) == "plaque":
+		var k: float = r / float(TBL.chip_r)
+		return Vector3(0.0, float(m.get("fc", 0.0)) * k,
+				float(m.get("fr", 0.0)) * k - band - 1.0)
+	#  원반·물린 원반 — 어제 draw_item_sticker 가 쓰던 그 식이다(테두리 rw 와
+	#  같은 식이어야 얼굴이 테 밑으로 안 기어든다).
+	return Vector3(0.0, 0.0, r - clampf(r * 0.16, 1.0, 2.2) - 1.0)
+
+
+#  접는 선의 높이. 판은 **제 아래 반높이**로 잰다 — _peel_y 는 반지름을
+#  전제하는데 판의 반높이는 그보다 작아, 그대로 쓰면 접는 선이 판 밖에
+#  떨어져 「한 픽셀도 안 말린다」(어제 레전더리가 그랬다).
+#  **slab 은 어제 _plq_peel_y 와, 원반·물린 원반은 _peel_y 와 한 글자도 안
+#  다르다** — 리팩터가 기존 그림을 안 건드렸다는 증명이다. drip 만 bb 16.60 !=
+#  bt 11.80 이라 제 아래 반높이로 잰다.
+func _coin_peel_y(form: String, r: float, peel: float) -> float:
+	var m: Dictionary = FORMS[form]
+	if String(m.get("fam", "disc")) == "plaque":
+		return _peel_y(float(m.get("bb", 0.0)) * (r / float(TBL.chip_r)), peel)
+	return _peel_y(r, peel)
+
+
+#  국소 x 에서 실루엣의 **아래 경계 y**. 밀랍 방울이 여기 매달린다 —
+#  「흐르는 것은 물건의 끝에서 떨어져야 흐르는 것이다」(_sticker_flat 머리말)의
+#  일반해다. drip 은 방울 셋이 y = 11.20 · **16.60** · 11.20 에 매달려
+#  가운데 것이 5.40 면px 더 아래로 늘어진다 — 늘어진 시계가 실제로 흐른다.
+func _coin_bottom(form: String, xl: float) -> float:
+	var k := _coin_local(form, 1.0, 1.0, 1.0)
+	var n := k.size()
+	var y := 0.0
+	var hit := false
+	for i in n:
+		var p: Vector2 = k[i]
+		var q: Vector2 = k[(i + 1) % n]
+		if absf(q.x - p.x) < 0.0001:
+			if absf(xl - p.x) < 0.0001:
+				y = maxf(y, maxf(p.y, q.y)) if hit else maxf(p.y, q.y)
+				hit = true
+			continue
+		if xl < minf(p.x, q.x) - 0.0001 or xl > maxf(p.x, q.x) + 0.0001:
+			continue
+		var yy: float = lerpf(p.y, q.y, (xl - p.x) / (q.x - p.x))
+		y = maxf(y, yy) if hit else yy
+		hit = true
+	return y if hit else float(FORMS[form].get("bb", 0.0))
+
+
+#  볼록-볼록 자르기(서덜랜드-호지먼 온 바퀴). bbox 격자로 자른 깨짐 조각을
+#  폼 다각형으로 한 번 더 깎는다 — dia·drip 은 bbox 귀퉁이가 몸 밖으로 크게
+#  나가므로 이것이 없으면 허공에 조각이 뜬다.
+func _coin_clip(cell: PackedVector2Array,
+		body: PackedVector2Array) -> PackedVector2Array:
+	var out := cell
+	var n := body.size()
+	if n < 3:
+		return out
+	var ctr := Vector2.ZERO
+	for v in body:
+		ctr += v
+	ctr /= float(n)
+	for i in n:
+		if out.size() < 3:
+			return PackedVector2Array()
+		var a: Vector2 = body[i]
+		var b: Vector2 = body[(i + 1) % n]
+		var nv: Vector2 = (b - a).orthogonal()
+		if nv.length() < 0.0001:
+			continue
+		nv = nv.normalized()
+		if nv.dot((a + b) * 0.5 - ctr) < 0.0:
+			nv = -nv
+		var d: float = nv.dot(a)
+		var nx := PackedVector2Array()
+		var m := out.size()
+		for j in m:
+			var p: Vector2 = out[j]
+			var q: Vector2 = out[(j + 1) % m]
+			var pd: float = nv.dot(p) - d
+			var qd: float = nv.dot(q) - d
+			if pd <= 0.0:
+				nx.append(p)
+			if (pd <= 0.0) != (qd <= 0.0) and absf(qd - pd) > 0.0001:
+				nx.append(p + (q - p) * (-pd / (qd - pd)))
+		out = nx
+	return out
+
+
+#  다각형 넓이(면px²). 깨짐 조각의 「1px 외톨이는 물건이 아니라 먼지」 바닥과
+#  qa 의 타일링 검사가 같은 자를 본다.
+func _coin_area(pts: PackedVector2Array) -> float:
+	var s := 0.0
+	var n := pts.size()
+	for i in n:
+		var p: Vector2 = pts[i]
+		var q: Vector2 = pts[(i + 1) % n]
+		s += p.x * q.y - q.x * p.y
+	return absf(s) * 0.5
+
+
+#  마감(홀로) 부채 한 조각. **판 틀 안에서** 돈다 — 따로 그리면 기울임에서
+#  모서리로 삐져나온다. 부채는 폼의 얼굴 중심(fc)에 앉고, 반지름은 판 안에
+#  드는 가장 큰 배율로 잘린다: 변마다 「그 법선에서 타원이 뻗는 길이」와
+#  「중심에서 변까지의 거리」를 견줘 최솟값을 쓴다.
+#  **사각 셋(slab·sq·tall)은 배율이 늘 1 이라 오늘 그림이 안 바뀐다** — 타원이
+#  이미 제 외접 사각 안이고 깎인 모서리는 그보다 멀다(잰 값). 새로 잘리는
+#  것은 경사변을 가진 dia·drip 둘뿐이고, 안 자르면 무지개가 판 밖으로 샌다.
+func _coin_fan(form: String, c: Vector2, ang: float, sx: float, sy: float,
+		sc: float, flat: float, band: float, t0: float, t1: float,
+		seg: int) -> PackedVector2Array:
+	var m: Dictionary = FORMS[form]
+	var fc: float = float(m.get("fc", 0.0)) * sy
+	var body := _poly_grow(_coin_local(form, sx, sy, sc), -band)
+	var ha: float = float(m.get("a", 0.0)) * sx - band
+	var hb: float = float(m.get("bb", 0.0)) * sy - band
+	var lam := 1.0
+	var n := body.size()
+	var ctr := Vector2(0.0, fc)
+	var mid := Vector2.ZERO
+	for v in body:
+		mid += v
+	mid /= float(n)
+	for i in n:
+		var p: Vector2 = body[i]
+		var q: Vector2 = body[(i + 1) % n]
+		var nv: Vector2 = (q - p).orthogonal()
+		if nv.length() < 0.0001:
+			continue
+		nv = nv.normalized()
+		if nv.dot((p + q) * 0.5 - mid) < 0.0:
+			nv = -nv
+		var d: float = nv.dot(p - ctr)
+		var s: float = sqrt(ha * nv.x * ha * nv.x + hb * nv.y * hb * nv.y)
+		if s > 0.0001:
+			lam = minf(lam, d / s)
+	lam = clampf(lam, 0.0, 1.0)
+	return _plq_fan(_plq_xy(c, ang, flat, ctr), ang, flat, ha * lam, hb * lam,
+			0.20, t0, t1, seg)
+
+
+#  폼의 번짐. _rar_glow 는 타원 전용이라 갈래를 따로 낸다 — 번짐이 제 모양으로
+#  번져야 물건이 가려져 있어도 **모양이 등급을 말한다.**
+#  같은 겹 수(7) · 같은 걸음(2.6) · 같은 알파 식이라 **새 자리를 안 만든다.**
+#  법선 오프셋이라 도달을 폼마다 다시 쟀다 — 다섯 다 원반의 chip_r+18.2 =
+#  40.24 안이다(qa ⓥ 가 같은 수를 다시 잰다).
+func _coin_glow(form: String, c: Vector2, ang: float, sx: float, sy: float,
+		sc: float, flat: float, rar: String, dim: float, ring := false) -> void:
 	var col := _glow_of(rar)
 	if col.a <= 0.0:
 		return
@@ -17403,13 +17938,14 @@ func _rar_glow_plq(c: Vector2, ang: float, a: float, b: float, cut: float,
 		var f: float = 1.0 - float(k) / float(int(GLOW.n) + 1)
 		var ca := Color(col, col.a * f * f * fa * pu)
 		if ring:
-			#  폭 g+1 의 고리 — _e_ring_w(rx+g, …, g+1) 와 같은 셈이라 안쪽이 a-1 이다
-			_poly_ring(_plq_pts(c, ang, a + g, b + g, cut, flat),
-					_plq_pts(c, ang, a - 1.0, b - 1.0, cut, flat), ca)
+			#  폭 g+1 의 고리 — _e_ring_w(rx+g, …, g+1) 와 같은 셈이라 안쪽이 -1 이다
+			_poly_ring(_coin_pts(form, c, ang, sx, sy, sc, flat, g),
+					_coin_pts(form, c, ang, sx, sy, sc, flat, -1.0), ca)
 		else:
-			draw_colored_polygon(_plq_pts(c, ang, a + g, b + g, cut, flat), ca)
-	_poly_ring(_plq_pts(c, ang, a + 2.4, b + 2.4, cut, flat),
-			_plq_pts(c, ang, a, b, cut, flat),
+			draw_colored_polygon(
+					_coin_pts(form, c, ang, sx, sy, sc, flat, g), ca)
+	_poly_ring(_coin_pts(form, c, ang, sx, sy, sc, flat, 2.4),
+			_coin_pts(form, c, ang, sx, sy, sc, flat, 0.0),
 			Color(col.lightened(0.30), float(GLOW.rim) * fa * pu))
 
 
@@ -17425,19 +17961,23 @@ func _sticker_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: floa
 	#  동전 슬롯에 꽂는 순간 재질이 바뀐다.
 	var mat := _mat_of(it)
 	#  ── 실루엣 갈래 (2026-09-18) ──────────────────────
-	#  등급이 실루엣까지 쥔다. 표(STK_TIERS)가 고르고 여기는 따르기만 한다.
-	#  **도트 재질은 안 문다** — 3px 격자 위에 곡선 골을 파면 두 해상도가 한
-	#  물건에 섞여 도트로도 매끈한 것으로도 안 읽힌다(빗살을 안 새기는 것과
-	#  같은 이유). r09 불사의 토템 하나뿐이다.
-	var shape := "disc" if rank_off else String(t.get("shape", "disc"))
-	if mat == "pixel" and shape == "mill":
-		shape = "disc"
-	if shape == "plaque":
-		_plaque_flat(c, it, t, rot, dim, wob, mat)
+	#  등급표(STK_TIERS)가 **가족**을 고르고 COIN_FORM 이 그 안의 **변형**을
+	#  고른다. 선 자세(draw_sticker)와 **같은 한 함수**를 부른다 — 둘이
+	#  갈리면 테이블에서 집어 랙에 꽂는 순간 딴 물건이 된다.
+	#  `pixel and mill → disc` 두 줄이 여기 있었다. 표 한 칸으로 옮겼다
+	#  (COIN_FORM["r09"] = "bare" · slots 0x000) — 술어가 하나도 안 남는다.
+	#  3px 격자 위에 곡선 골을 파면 두 해상도가 섞인다는 판단은 그대로 살아
+	#  있고, 이제 **표가 그렇게 말한다.**
+	var form := _coin_form(it, t)
+	if String(FORMS[form].get("fam", "disc")) == "plaque":
+		_plaque_flat(c, it, t, rot, dim, wob, mat, form)
 		return
-	#  물린 깊이. 0 이면 옛 타원 그대로다 — 갈래를 값 하나로 눌러 두면
+	#  물린 깊이·슬롯. 0 이면 옛 타원 그대로다 — 갈래를 값 하나로 눌러 두면
 	#  아래 열두 자리가 갈래를 안 센다.
-	var mdep: float = float(RANK.mill_deep) if shape == "mill" else 0.0
+	#  **rx(wob 먹은 값)가 아니라 chip_r 로 잰다** — 깊이가 흔들림을 타면
+	#  같은 동전이 프레임마다 다른 깊이로 파인다. 어제 값(2.2)과 정확히 같다.
+	var mdep: float = _coin_mdep(form, TBL.chip_r)
+	var slots: int = _coin_slots(form)
 	var glass: bool = mat == "glass"
 	var hollow: bool = mat == "hollow"
 	var pixel: bool = mat == "pixel"
@@ -17467,7 +18007,7 @@ func _sticker_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: floa
 	var sd: float = TBL.chip_t * TBL.tall              # 옆면 높이 2.77px
 	#  그림자는 옆면 **밑**에서 진다. 전에는 낙차가 곧 그림자였는데 이제
 	#  그 자리에 옆면이 서므로, 그림자를 한 겹 더 내려야 바닥에 닿는다.
-	draw_colored_polygon(_rank_pts(c + Vector2(0.0, sd + 2.0), rx, ry, mdep),
+	draw_colored_polygon(_rank_pts(c + Vector2(0.0, sd + 2.0), rx, ry, mdep, slots),
 			Color(0.0, 0.0, 0.0, 0.26 * (1.0 - dim)))
 	#  번짐은 물린 자리를 안 따른다 — 골이 2.2px 인데 번짐은 18px 을 뻗는
 	#  흐린 빛이라, 거기까지 결을 새기면 아무도 못 보는 계산만 는다.
@@ -17493,7 +18033,7 @@ func _sticker_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: floa
 		#  실루엣의 절반만 도트라 "덜 그려진 것" 으로 읽힌다.
 		_pix_disc(c + Vector2(0.0, sd), rx, ry, side)
 	else:
-		draw_colored_polygon(_rank_pts(c + Vector2(0.0, sd), rx, ry, mdep), side)
+		draw_colored_polygon(_rank_pts(c + Vector2(0.0, sd), rx, ry, mdep, slots), side)
 	#  빗살 — 앞쪽 호에만 새긴다. 뒤쪽은 윗면에 가려 안 보인다.
 	#  도트 재질에는 안 새긴다. 3px 격자 위에 1px 빗살을 얹으면 두 해상도가
 	#  한 물건에 섞여 도트로도 매끈한 것으로도 안 읽힌다.
@@ -17517,7 +18057,7 @@ func _sticker_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: floa
 	elif pixel:
 		_pix_disc(c, rx, ry, body)
 	else:
-		draw_colored_polygon(_rank_pts(c, rx, ry, mdep), body)
+		draw_colored_polygon(_rank_pts(c, rx, ry, mdep, slots), body)
 	if wax:
 		#  녹아 흐른다. 방울은 옆면 **밑**에서 시작해야 흘러내린 것으로
 		#  읽힌다 — 윗면에서 시작하면 그냥 무늬다.
@@ -17554,8 +18094,8 @@ func _sticker_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: floa
 	#  색**이라 주석이 스스로 깨져 있었다. _bev_col 이 그 예외를 쥔다.
 	if not hollow and not pixel:
 		if mdep > 0.0:
-			_poly_ring(_rank_pts(c, rx, ry, mdep),
-					_rank_pts(c, rx - 1.0, ry - 1.0, mdep), _bev_col(bb, dim))
+			_poly_ring(_rank_pts(c, rx, ry, mdep, slots),
+					_rank_pts(c, rx - 1.0, ry - 1.0, mdep, slots), _bev_col(bb, dim))
 		else:
 			_e_ring_w(c, rx, ry, 1.0, _bev_col(bb, dim))
 	if struck:
@@ -17586,14 +18126,14 @@ func _sticker_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: floa
 	#  있고 동전 슬롯에는 없는 동전이 된다(draw_item_sticker 의 얼굴 주석).
 	#  ── 테 한 벌은 **맨 마지막**이다 (2026-09-18) ──────
 	#  얼굴 뒤에 얹는다 — 진짜 칩의 금속 테가 인레이 위로 물리는 그대로다.
-	_rank_edge_flat(c, rx, ry, sd, mdep, t, rar, gold, side0, dim, pixel)
+	_rank_edge_flat(c, rx, ry, sd, mdep, slots, t, rar, gold, side0, dim, pixel)
 
 
 #  누운 자세의 테 한 벌 — 밴드(색)와 박음(셈). 자리를 안 겹친다.
 #  **얼굴 뒤, 맨 마지막에 얹는다** — 진짜 칩의 금속 테가 인레이 위로 물린다.
 func _rank_edge_flat(c: Vector2, rx: float, ry: float, sd: float, mdep: float,
-		t: Dictionary, rar: String, gold: bool, side0: Color, dim: float,
-		snap := false) -> void:
+		slots: int, t: Dictionary, rar: String, gold: bool, side0: Color,
+		dim: float, snap := false) -> void:
 	if rank_off:
 		return
 	var bw: float = float(t.get("band", 0))
@@ -17612,7 +18152,7 @@ func _rank_edge_flat(c: Vector2, rx: float, ry: float, sd: float, mdep: float,
 		#  자리에서 x 가 되돌아가 띠가 제 몸을 가로지르고, 고닷의 삼각분할이
 		#  자기교차 다각형에 빈 배열을 돌려준다. 희귀(매끈한 타원)만 보이고
 		#  레어만 안 보이던 것이 이것이다. annulus 를 넷으로 가르는 그 수법이다.
-		var arc := _front_arc(c, rx, ry, mdep)
+		var arc := _front_arc(c, rx, ry, mdep, slots)
 		var col := _rank_col(rar, gold, dim)
 		var up := Vector2(0.0, sd - bw)
 		var dn := Vector2(0.0, sd)
@@ -17627,7 +18167,7 @@ func _rank_edge_flat(c: Vector2, rx: float, ry: float, sd: float, mdep: float,
 	var sw: float = float(RANK.spot_w)
 	for k in spn:
 		var a: float = PI * (float(k) + 0.5) / float(spn)
-		var f: float = _mill_f(a, rx, mdep) if mdep > 0.0 else 1.0
+		var f: float = _mill_f(a, rx, mdep, slots) if mdep > 0.0 else 1.0
 		var p := c + Vector2(cos(a) * rx * f, sin(a) * ry * f)
 		#  r09 불사의 토템만 3px 격자에 스냅한다 — 「3px 격자 위에 1px 을
 		#  얹으면 두 해상도가 한 물건에 섞인다」와 같은 이유다.
@@ -17658,19 +18198,19 @@ func _rank_edge_flat(c: Vector2, rx: float, ry: float, sd: float, mdep: float,
 #  원으로 맞닿았을 때 겹침은 원만 재므로 자가 못 잡고 눈이 먼저 잡는다.
 #  크기 감각은 **번짐**이 대신 낸다(_rar_glow_plq).
 func _plaque_flat(c: Vector2, it: Dictionary, t: Dictionary, rot: float,
-		dim: float, wob: float, mat: String) -> void:
+		dim: float, wob: float, mat: String, form: String) -> void:
 	var rar := String(t.rarity)
 	var gold: bool = it.get("g", "") != ""
 	var hollow: bool = mat == "hollow"
 	var wax: bool = mat == "wax"
 	var flat: float = TBL.flat
 	#  wob 은 동전과 **같은 식**으로 탄다 — 안 그러면 상인 손 위에서 레전더리만
-	#  안 흔들린다(보드 확장이 그랬다).
-	var a: float = float(RANK.plq_a) * (1.0 + wob * 0.05)
-	var b: float = float(RANK.plq_b) * (1.0 - wob * 0.12)
-	var cut: float = float(RANK.plq_cut)
-	var ang := _plq_ang(rot)
-	#  진짜 플라크는 두꺼운 아크릴이다. 옆면을 동전의 1.9배로 둔다.
+	#  안 흔들린다(보드 확장이 그랬다). 깎음(sc)은 안 흔든다 — 어제 그대로다.
+	var sx: float = 1.0 + wob * 0.05
+	var sy: float = 1.0 - wob * 0.12
+	var ang := _coin_ang(form, rot)
+	#  진짜 플라크는 두꺼운 아크릴이다. **옆면은 다섯이 같다** — 폼마다 가르면
+	#  「온 띠 박음」의 두께가 변형마다 달라져 등급이 변형에 따라 흐려진다.
 	var sd: float = TBL.chip_t * TBL.tall * float(RANK.plq_side)
 	var bb := Color(t.body)
 	var body := bb.darkened(dim)
@@ -17679,16 +18219,16 @@ func _plaque_flat(c: Vector2, it: Dictionary, t: Dictionary, rot: float,
 			else bb.darkened(float(EDGE.lo))))
 	var side := side0.darkened(dim)
 	var fa := 1.0 - dim
-	var top := _plq_pts(c, ang, a, b, cut, flat)
+	var top := _coin_pts(form, c, ang, sx, sy, 1.0, flat, 0.0)
 
 	#  「사진은 네모라 그림자도 네모다」가 여기에도 걸린다 — 동전에서만 안
 	#  지켜지면 플라크가 떠 보인다.
-	draw_colored_polygon(_plq_pts(c + Vector2(0.0, sd + 2.0), ang, a, b, cut, flat),
-			Color(0.0, 0.0, 0.0, 0.26 * fa))
-	#  번짐이 **사각으로** 번진다. 물건이 가려져 있어도 네모난 빛이 등급을 말한다.
-	#  속이 빈 재질은 반드시 고리로 — 뚫린 구멍으로 번짐이 비쳐 「분홍 동전」이
-	#  되던 그 사고가 사각에서도 똑같이 난다.
-	_rar_glow_plq(c, ang, a, b, cut, flat, rar, dim, hollow)
+	draw_colored_polygon(_coin_pts(form, c + Vector2(0.0, sd + 2.0), ang,
+			sx, sy, 1.0, flat, 0.0), Color(0.0, 0.0, 0.0, 0.26 * fa))
+	#  번짐이 **제 모양으로** 번진다. 물건이 가려져 있어도 그 모양의 빛이
+	#  등급을 말한다. 속이 빈 재질은 반드시 고리로 — 뚫린 구멍으로 번짐이
+	#  비쳐 「분홍 동전」이 되던 그 사고가 어느 폼에서도 똑같이 난다.
+	_coin_glow(form, c, ang, sx, sy, 1.0, flat, rar, dim, hollow)
 	if hollow:
 		#  NULL — 찍힌 것이 없다. 앞쪽 띠로만 두른다. 각기둥을 통째로 깔면
 		#  비치는 것이 펠트가 아니라 제 옆면이라 「빈 것」이 죽는다(타원 쪽에서
@@ -17705,8 +18245,8 @@ func _plaque_flat(c: Vector2, it: Dictionary, t: Dictionary, rot: float,
 			draw_colored_polygon(PackedVector2Array([p, q,
 					q + Vector2(0.0, sd), p + Vector2(0.0, sd)]), side)
 	else:
-		draw_colored_polygon(_plq_pts(c + Vector2(0.0, sd), ang, a, b, cut, flat),
-				side)
+		draw_colored_polygon(_coin_pts(form, c + Vector2(0.0, sd), ang,
+				sx, sy, 1.0, flat, 0.0), side)
 	#  ── 윗면은 바깥에서 안으로 한 겹씩 **채운다** ──────
 	#  겹테를 고리로 얹었다가 두 가지를 한꺼번에 잃었다(2026-09-18 실측):
 	#    ① 겹테가 a..a-2 를 먹어 그 밑에 깔린 **턱이 통째로 덮였다** — 두께를
@@ -17724,18 +18264,22 @@ func _plaque_flat(c: Vector2, it: Dictionary, t: Dictionary, rot: float,
 		if bnd >= 1:
 			draw_colored_polygon(top, rc.lerp(body, 1.0 - oa))
 		if bnd >= 2:
-			draw_colored_polygon(_plq_pts(c, ang, a - 1.0, b - 1.0, cut, flat),
+			draw_colored_polygon(_coin_pts(form, c, ang, sx, sy, 1.0, flat, -1.0),
 					rc.darkened(float(TIP_RANK.inner_dk)))
 		#  턱. 어두운 몸이라 bev_dark 로 낸다 — 안 그러면 옆면과 같은 색이다.
-		draw_colored_polygon(_plq_pts(c, ang, a - float(bnd), b - float(bnd),
-				cut, flat), _bev_col(bb, dim))
-		draw_colored_polygon(_plq_pts(c, ang, a - float(bnd) - 1.0,
-				b - float(bnd) - 1.0, cut, flat), body)
+		draw_colored_polygon(_coin_pts(form, c, ang, sx, sy, 1.0, flat,
+				-float(bnd)), _bev_col(bb, dim))
+		draw_colored_polygon(_coin_pts(form, c, ang, sx, sy, 1.0, flat,
+				-float(bnd) - 1.0), body)
 	if wax:
-		#  녹는 시계 — 방울이 타원 둘레가 아니라 **플라크 밑변**에서 떨어진다.
-		#  「흐르는 것은 물건의 끝에서 떨어져야 흐르는 것이다」 그대로다.
+		#  녹는 시계 — 방울이 **실루엣의 아래 경계**에서 떨어진다(_coin_bottom).
+		#  「흐르는 것은 물건의 끝에서 떨어져야 흐르는 것이다」의 일반해다:
+		#  밑변이 직선이 아닌 폼(drip)에서도 방울이 끝에 매달린다. l05 는
+		#  가운데 방울이 양옆보다 5.40 면px 더 아래로 늘어진다.
 		for k in 3:
-			var wp := _plq_xy(c, ang, flat, Vector2((float(k) - 1.0) * a * 0.5, b))
+			var wx: float = (float(k) - 1.0) * _coin_metrics(form, sx).a * 0.5
+			var wp := _plq_xy(c, ang, flat,
+					Vector2(wx, _coin_bottom(form, wx / maxf(sx, 0.001)) * sy))
 			var wl: float = sd + 3.0 + float(k % 2) * 3.5
 			draw_rect(Rect2(wp.x - 1.0, wp.y, 2.0, wl), side)
 			draw_circle(wp + Vector2(0.0, wl), 1.7, side)
@@ -17747,21 +18291,23 @@ func _plaque_flat(c: Vector2, it: Dictionary, t: Dictionary, rot: float,
 		#  무지개가 아크릴의 어른거림으로 읽힌다.
 		#  **선 자세(_plaque_up)와 한 상수를 같이 읽는다** — 여기만 고치고
 		#  저쪽에 0.26 을 남겨 두었다가 랙에서만 얼룩이 그대로 있었다.
-		var fr := _plq_face_r(b, float(bnd))
+		var fv := _coin_face(form, TBL.chip_r * sy, float(bnd))
 		for k in 6:
 			var a2: float = rot + float(k) * (TAU / 6.0)
-			draw_colored_polygon(_plq_fan(c, ang, flat, a - float(bnd) - 1.0,
-					b - float(bnd) - 1.0, 0.20, a2, a2 + TAU / 6.0, 4),
+			draw_colored_polygon(_coin_fan(form, c, ang, sx, sy, 1.0, flat,
+					float(bnd) + 1.0, a2, a2 + TAU / 6.0, 4),
 					Color(HOLO[k % 3], float(RANK.plq_holo_a) * fa))
-		#  메달. 구운 PNG 는 원형 알파라 사각 안에 그대로 앉는다 —
+		#  메달. 구운 PNG 는 원형 알파라 어느 폼 안에도 그대로 앉는다 —
 		#  faces.txt 도 disc() 도 한 줄 안 건드리므로 --import 단계가 아예 없다.
-		_icon_item(c, fr, fr * flat, String(it.get("id", "")), dim)
+		#  **얼굴 중심이 폼마다 다르다**(drip 만 +1.223) — 누운 자세는 flat 을 먹인다.
+		_icon_item(_plq_xy(c, ang, flat, Vector2(0.0, fv.y)), fv.z, fv.z * flat,
+				String(it.get("id", "")), dim)
 	else:
 		#  속이 빈 플라크 — 채우면 「빈 것」이 죽는다. 겹테와 턱을 고리로만 얹는다.
-		_plq_rim(c, ang, a, b, cut, flat, rc, bnd, body, oa)
-		_poly_ring(_plq_pts(c, ang, a - float(bnd), b - float(bnd), cut, flat),
-				_plq_pts(c, ang, a - float(bnd) - 1.0, b - float(bnd) - 1.0,
-				cut, flat), _bev_col(bb, dim))
+		_coin_rim(form, c, ang, sx, sy, 1.0, flat, rc, bnd, body, oa)
+		_poly_ring(_coin_pts(form, c, ang, sx, sy, 1.0, flat, -float(bnd)),
+				_coin_pts(form, c, ang, sx, sy, 1.0, flat, -float(bnd) - 1.0),
+				_bev_col(bb, dim))
 
 
 # ── 값표 자리 ───────────────────────────────────────────
