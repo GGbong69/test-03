@@ -28115,11 +28115,19 @@ func _boost_deal(bd: Dictionary) -> void:
 func _boost_one(kind: String) -> Dictionary:
 	match kind:
 		"item":
+			#  조준 바닥은 상점(_stock_items)이 쓰는 것과 **같은 판 번호**를
+			#  본다. 팩도 상점 자리에서 사서 그 자리에서 열므로 같은 라운드를
+			#  준비한다. 한동안 여기가 비어 있었는데, 그러면 같은 동전이 두
+			#  길에서 다른 확률로 나왔다 — R8 에서 레어 조준이 상점 5.47% 인데
+			#  팩은 라운드와 무관하게 0.82% 로 6.7배 갈렸다. 「라운드가
+			#  올라갈수록」이 한 길에서만 참이면 그것은 규칙이 아니다. 2026-09-18
+			var fw := GameData.aim_floor_own(leg_no + 1) if _has_aim_item() else GameData.aim_floor(leg_no + 1)
 			var pool := []
 			for it in GameData.items():
 				if _has_item(it.id):
 					continue
-				if GameData.item_weight(it) <= 0.0:
+				var iw := GameData.item_weight(it)
+				if iw <= 0.0:
 					# 등급 가중치가 0 인 장(레전더리)은 테이블에 안 뜬다.
 					# **팩은 다르다** — 한 번 받아 본 장은 여기서 다시 만난다.
 					# 기획서 P.16 의 「다음 런부터는 팩에서 확률적으로」다.
@@ -28128,6 +28136,15 @@ func _boost_one(kind: String) -> Dictionary:
 					var lw: Dictionary = it.duplicate()
 					lw["w"] = GameData.tune("legend_pack_w")
 					pool.append(lw)
+					continue
+				#  바닥은 상점과 **같은 순서 계약**으로 얹는다 — 가중치 0 문을
+				#  지나온 장에만. 문 앞에서 박으면 l02 정조준이 legend_pack_w
+				#  대신 조준 바닥으로 떠서 기획서 P.16 의 팩 확률이 조용히 깨진다.
+				if fw > iw and String(it.get("aim", "")) != "":
+					#  사본이 필수다. GameData.items() 는 캐시를 그대로 돌려준다.
+					var aw: Dictionary = it.duplicate()
+					aw["w"] = fw
+					pool.append(aw)
 					continue
 				pool.append(it)
 			var d := _draw_weighted(pool)

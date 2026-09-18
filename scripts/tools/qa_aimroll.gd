@@ -20,7 +20,8 @@ const GameData = preload("res://scripts/data.gd")
 const Dev = preload("res://scripts/dev.gd")
 
 const AIM_N := 1500         # 라운드당 상점. 여덟이면 12000곳 = 자리 48000칸
-const OWN_N := 1000         # 이미 조준 동전을 든 채로 굴리는 표본(⑪)
+const PACK_N := 2500        # 팩에서 뽑는 동전. 갈림이 6배라 이만큼이면 갈린다
+const OWN_N := 1000         # 이미 조준 동전을 든 채로 굴리는 표본(⑬)
 
 var g = null
 var busy := false
@@ -321,7 +322,45 @@ func _run() -> void:
 	_ok("레전더리가 테이블에 안 뜬다", legs == 0,
 			"%d번 / 자리 %d칸" % [legs, AIM_N * rn * GameData.shop_slots(1)])
 
-	# ⑫ **캐시가 안 더러워진다 — 이 사고를 잡는 유일한 줄.**
+	# ⑫ **팩도 같은 사다리를 탄다.** 동전이 오는 길은 상점 자리와 팩 둘이다
+	#    (_boost_one). 한동안 팩이 사다리 밖에 있었는데, 그러면 같은 동전이
+	#    R8 에서 상점 5.47% · 팩 0.82% 로 6.7배 갈렸다 — 「라운드가
+	#    올라갈수록」이 한 길에서만 참이면 그것은 규칙이 아니라 상점의
+	#    버릇이다. 표본이 아니라 갈림이 6배라 적게 굴려도 갈린다. 2026-09-18
+	var pk := [0, 0]
+	var pk_rare := [0, 0]
+	var pk_leg := [0, 0]
+	for side in 2:
+		g.owned = []
+		g.leg_no = _leg_of_round(1 if side == 0 else rn)
+		for i in PACK_N:
+			var e: Dictionary = g._boost_one("item")
+			if e.is_empty():
+				continue
+			if String(e.d.get("aim", "")) != "":
+				pk[side] = int(pk[side]) + 1
+				if String(e.d.get("rarity", "")) == "rare":
+					pk_rare[side] = int(pk_rare[side]) + 1
+			if String(e.d.get("rarity", "")) == "legendary":
+				pk_leg[side] = int(pk_leg[side]) + 1
+	var kp0 := _pct(int(pk_rare[0]), PACK_N)
+	var kp8 := _pct(int(pk_rare[1]), PACK_N)
+	print("")
+	print("        팩에서 뽑은 동전 %d장씩 — 상점과 같은 바닥을 쓰는가" % PACK_N)
+	print("          R1  조준 %5.2f%% · 레어 조준 %5.2f%%" % [_pct(int(pk[0]), PACK_N), kp0])
+	print("          R%d  조준 %5.2f%% · 레어 조준 %5.2f%%" % [rn, _pct(int(pk[1]), PACK_N), kp8])
+	print("")
+	_ok("팩도 라운드를 탄다", kp8 > kp0 * 2.0,
+			"레어 조준 R1 %.2f%% → R%d %.2f%%" % [kp0, rn, kp8])
+	#  팩의 레전더리는 **바닥이 아니라 legend_pack_w** 로 뜬다. 바닥을 가중치
+	#  0 문 앞에서 박으면 l02 정조준이 조준 바닥으로 올라타 기획서 P.16 의
+	#  팩 확률이 조용히 깨진다 — 상점의 순서 계약(⑪)과 같은 자리다.
+	_ok("팩의 레전더리가 라운드를 안 탄다", int(pk_leg[1]) <= maxi(int(pk_leg[0]) * 3, 3),
+			"R1 %d번 · R%d %d번" % [int(pk_leg[0]), rn, int(pk_leg[1])])
+	g.owned = []
+
+	# ⑬ **캐시가 안 더러워진다 — 이 사고를 잡는 유일한 줄.**
+	#    위 ⑫ 가 팩 길도 굴려 놓았으므로 이 줄은 상점과 팩 **둘 다**를 본다.
 	#    GameData.items() 는 _cache["items"] 를 그대로 돌려준다. duplicate()
 	#    를 빠뜨려 원본에 w 를 박으면 바닥이 런을 넘어 눌어붙는데, 그것은
 	#    max 가 아니라 덮어쓰기라 라운드가 낮아져도 안 내려간다 — 그런데도
@@ -334,7 +373,7 @@ func _run() -> void:
 			"더러워진 장 %d개%s" % [dirty.size(),
 				"" if dirty.is_empty() else ": " + ", ".join(dirty)])
 
-	# ⑬ 감쇠가 일한다 — 이미 조준 동전을 든 플레이어.
+	# ⑭ 감쇠가 일한다 — 이미 조준 동전을 든 플레이어.
 	#    _aim_from_items 가 든 동전 첫 장만 읽으므로 둘째 장은 봉인이 걸릴
 	#    때만 산다. 사다리를 그대로 두면 **올릴수록 나빠진다** — 후반 상점이
 	#    죽은 픽으로 덮인다. aim_own_w 는 곁들이가 아니라 짝이다.
@@ -367,7 +406,7 @@ func _run() -> void:
 	_ok("들었어도 R1 은 오늘 그대로", absf(o1s - 2.02) < 1.5,
 			"상점당 %.3f%% (설계 2.02%% · 자리당 %.3f%%)" % [o1s, o1])
 
-	# ⑭ **꼬리를 수로 남긴다** — 다음 일감(「조준 예약 칸 — R5 상점, 폭 밖
+	# ⑮ **꼬리를 수로 남긴다** — 다음 일감(「조준 예약 칸 — R5 상점, 폭 밖
 	#    정가 한 장」)의 출발선이다. 나중에 게이트를 얹을 때 「사다리가 얼마를
 	#    줬고 예약이 얼마를 줬나」가 이 줄 하나로 갈린다.
 	#
@@ -406,7 +445,7 @@ func _run() -> void:
 	_ok("런에서 조준을 보는 비율이 85% 이상", 100.0 * (1.0 - miss) >= 85.0,
 			"%.2f%% — 빈손 런이 20.7%% 에서 여기까지 줄었다" % (100.0 * (1.0 - miss)))
 
-	# ⑮ 개발자 모드에도 길이 났는가. **dev_probe 는 _rows 까지만 보고
+	# ⑯ 개발자 모드에도 길이 났는가. **dev_probe 는 _rows 까지만 보고
 	#    _cur_name 을 안 부른다** — 그 줄의 글은 draw() 안에서만 만들어지고
 	#    draw 는 헤드리스에서 안 돈다. 여기가 그 글의 유일한 검사다.
 	Dev.page = 1                       # 1쪽 「물건」

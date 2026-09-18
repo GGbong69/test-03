@@ -41,6 +41,8 @@ static var open_page := 0
 static var _q := []
 static var _qt := 0.0
 static var _sfx_rows := []       # 소리 이름 목록. 표에서 한 번만 읽는다
+static var _aimw_key := ""       # 조준 저울 줄을 마지막에 센 (고른 라운드|든 동전)
+static var _aimw_txt := ""       # 그때 나온 글. 열쇠가 같으면 다시 안 센다
 
 const PAGES := ["경제·진행", "물건", "판·조준", "해금", "소리"]
 # 글자는 페이퍼로지 Bold 12 하나다. 줄 칸(13px) · 탭 · 단추(14px)의 **한가운데**에
@@ -516,6 +518,19 @@ static func _cur_name(g: Node, e: Dictionary) -> String:
 	if k == "aimw":
 		var rn := GameData.rounds_n()
 		var rr: int = i % maxi(rn, 1) + 1
+		#  **프레임마다 다시 세지 않는다.** game.gd 의 _process 는 마지막 줄이
+		#  조건 없는 queue_redraw() 라 판이 떠 있는 동안 이 줄이 매 프레임
+		#  그려진다. 재 보니 _stock_items 한 번이 4.66 ms 고 거기에 돌려받은
+		#  장마다 item_weight 를 한 바퀴 더 돌아 프레임당 6.79 ms 였다 —
+		#  60프레임 예산 16.7 ms 의 절반이라 이 쪽을 보는 동안 판이 끊겼다
+		#  (견줄 값으로 _rows 한 바퀴가 0.01 ms 다). 답이 달라지는 것은 고른
+		#  라운드와 든 동전 둘뿐이라 그 둘을 열쇠로 스티커한다. 2026-09-18
+		var ids := ""
+		for oi in g.owned:
+			ids += String(oi.get("id", "")) + ","
+		var key := "%d|%s" % [rr, ids]
+		if key == _aimw_key:
+			return _aimw_txt
 		#  그 라운드의 **첫 상점**이 보는 판 번호다. R1 은 leg_no=1 뒤라
 		#  nxt=2 인데, 2 로 안 막으면 min_leg(전 등급 2)가 후보를 통째로
 		#  걸러 R1 만 「후보 0장」으로 보인다 — 없는 사고가 보이는 자리다.
@@ -547,8 +562,10 @@ static func _cur_name(g: Node, e: Dictionary) -> String:
 		if sum > 0.0 and ks > 0.0:
 			per = (iw / ks) * (aws / sum)
 		var shp := 1.0 - pow(1.0 - per, float(GameData.shop_slots(nxt)))
-		return "%d/%d · 바닥 %.2f%s · 후보 %d · 칸 %.2f%% · 판 %.2f%%" % [
+		_aimw_key = key
+		_aimw_txt = "%d/%d · 바닥 %.2f%s · 후보 %d · 칸 %.2f%% · 판 %.2f%%" % [
 				rr, rn, fw, " (든 뒤)" if own else "", live, per * 100.0, shp * 100.0]
+		return _aimw_txt
 	# 표가 아니라 상수 목록이라 _list 를 안 지난다 — 그래도 화면에서는
 	# 다른 줄과 같은 꼴("3/8 빗각")로 보여야 몇 가지 중 몇 번째인지 안다.
 	if k == "aim":
