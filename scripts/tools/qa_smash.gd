@@ -10,9 +10,16 @@ extends SceneTree
 #
 #  시계를 손으로 감는다(g.set_process(false)) — 쓸기는 사람 손에만 붙어
 #  있어서 오토플레이도 다른 도구도 이 경로를 안 밟는다.
-#  sweep_probe 와 같이 sub 을 「한 프레임」으로 삼는다. 실제로는 한 프레임에
-#  서브스텝이 여럿이지만, 물리가 프레임률과 무관한 것이 이미 증명돼 있으므로
-#  (DROP.sub 주석) 160fps 로 돌린 것과 같다.
+#
+#  **감는 폭을 2026-09-18 에 다시 잡았다.** 전에는 DROP.sub(0.00625)를 「한
+#  프레임」으로 삼아 _sweep_update / _waste_update / _smash_update 에 그대로
+#  먹였다. 물건의 물리는 프레임률과 무관한 것이 증명돼 있지만(DROP.sub 주석)
+#  **조각은 그 증명 밖이다** — _smash_update 는 서브스텝을 안 타는 맨
+#  오일러이고 게임은 그것을 한 프레임에 한 번, dd(최대 DROP.max_d)로 부른다.
+#  5배 고운 폭으로 재면 「조각이 새 매물 위에 안 남는다」를 지키는 자가
+#  지키려는 그 상태를 한 번도 안 재게 된다. 실제로 여유가 폭마다 갈린다.
+#  지금은 _drop_update 의 차례 그대로 감고(셋은 프레임 폭 · _drop_step 만
+#  acc 에 이월해 sub 으로), 폭을 **두 벌** 돈다: 1/60 과 DROP.max_d.
 #
 #  실행:  godot --headless --path . --script scripts/tools/qa_smash.gd -- <시드> <횟수>
 
@@ -73,8 +80,18 @@ func _process(_d: float) -> bool:
 	var y_hi := -1.0e9
 	var hit_ms := []                 # 매물 넷일 때의 부딪힘 시각(실측값 찍기용)
 	var spread_ms := 0.0             # 첫 부딪힘 → 마지막 부딪힘(초)
+	#  게임이 쓰는 프레임 폭 두 벌 — 60fps 와 가장 거친 폭(DROP.max_d).
+	#  거친 쪽이 언제나 빠듯하다: 조각의 오일러가 성기고, 죽는 순간도 착지
+	#  시각도 프레임 격자에 한 칸씩 늦게 걸린다.
+	var dts := [1.0 / 60.0, float(g.DROP.max_d)]
+	var gap_of := [1.0e9, 1.0e9]     # 폭마다의 여유(단언 ②)
+	var snd_of := [0, 0]             # 폭마다의 소리 수(단언 ⑧)
 
-	for r in rolls:
+	#  두 벌을 한 줄로 돈다 — 들여쓰기를 한 단 더 파면 아래가 통째로 밀린다.
+	for rr in rolls * dts.size():
+		var wi: int = rr / rolls
+		var dt: float = float(dts[wi])
+		var r: int = rr % rolls
 		g.leg_no = 1 + (r % 7)
 		g.gold = 99
 		g._open_shop()
@@ -107,15 +124,25 @@ func _process(_d: float) -> bool:
 		var t_real := 0.0
 		var last_alive := 0.0
 		var snd0: int = g.smash_snd_n
-		while k < 4000 and (g.sweep_live or not g.shards.is_empty()
+		var acc := 0.0
+		#  프레임 예산이다(전에는 서브스텝을 셌다). 조각까지 다 죽는 데
+		#  60fps 에서 80프레임 남짓이라 800 은 열 배 여유다.
+		while k < 800 and (g.sweep_live or not g.shards.is_empty()
 				or not g.grit.is_empty()):
 			k += 1
-			t_real += sub
-			g._sweep_update(sub)
-			g.drop_t += sub
-			g._drop_step(sub)
-			g._waste_update(sub)
-			g._smash_update(sub)
+			t_real += dt
+			#  _drop_update 의 차례 그대로 — 셋은 프레임 폭으로, 물리만 acc 에
+			#  이월해 sub 으로 쪼갠다(DROP.sub_max 도 그대로 건다).
+			g._sweep_update(dt)
+			g._waste_update(dt)
+			g._smash_update(dt)
+			acc += dt
+			var ns := 0
+			while acc >= sub and ns < int(g.DROP.sub_max):
+				acc -= sub
+				g.drop_t += sub
+				g._drop_step(sub)
+				ns += 1
 			for i in n:
 				if gone[i]:
 					continue
@@ -162,14 +189,21 @@ func _process(_d: float) -> bool:
 						or c.y < g.TBL.fy or c.y > g.TBL.ny):
 					n_out += 1
 		max_snd = maxi(max_snd, g.smash_snd_n - snd0)
+		snd_of[wi] = maxi(int(snd_of[wi]), g.smash_snd_n - snd0)
 		if first_land < 1.0e8:
 			min_gap = minf(min_gap, first_land - last_alive)
+			gap_of[wi] = minf(float(gap_of[wi]), first_land - last_alive)
 		spread_ms = maxf(spread_ms, t_last - maxf(t_first, 0.0))
 
 	_ok("동시 조각 상한", max_shards <= 40 and max_grit <= 30,
 			"조각 최대 %d (상한 40) · 부스러기 %d (상한 30)" % [max_shards, max_grit])
+	#  **폭마다 따로 찍는다.** 거친 폭이 늘 빠듯하다 — 조각이 죽는 순간도
+	#  새 매물의 착지 시각도 프레임 격자에 한 칸씩 늦게 걸리고, 조각의 오일러가
+	#  그만큼 성기다. 문턱 0.10 은 SMASH.life_hi 를 0.42 에서 0.34 로 내려서
+	#  번 여유다(0.42 면 60fps 에서 0.045초뿐이었다).
 	_ok("조각이 딜링 전에 죽는다", min_gap > 0.10,
-			"마지막 조각 → 첫 착지 여유 최소 %.3f초 (문턱 0.10)" % min_gap)
+			"여유 최소 %.3f초 (문턱 0.10) — 1/60 %.3f · %.4f %.3f"
+			% [min_gap, float(gap_of[0]), float(dts[1]), float(gap_of[1])])
 	_ok("도착이 훑기 안에 든다", max_hit_t < t1,
 			"가장 늦은 부딪힘 sweep_t %.3f (rake 끝 %.3f)" % [max_hit_t, t1])
 	_ok("끌려간 물건이 없다", n_drag == 0,
@@ -183,8 +217,13 @@ func _process(_d: float) -> bool:
 			"밖에 선 조각 %d · 중심 x[%.0f,%.0f] y[%.0f,%.0f]" % [n_out, x_lo, x_hi, y_lo, y_hi])
 	_ok("흔들림 상한", max_shake <= float(g.SMASH.shake0) + 0.001,
 			"최대 %.1f (상한 %.1f)" % [max_shake, float(g.SMASH.shake0)])
+	#  폭마다 갈린다 — 소리 문(smash_snd_t)은 _smash_update 가 프레임마다 한
+	#  번 깎는데 부딪힘은 _drop_step 안에서 서브스텝마다 터진다. 폭이 거칠수록
+	#  한 프레임 안에 든 부딪힘이 같은 닫힌 문을 본다.
 	_ok("한 쓸기의 소리 수", max_snd <= int(g.SMASH.snd_max),
-			"최대 %d개 (상한 %d)" % [max_snd, int(g.SMASH.snd_max)])
+			"최대 %d개 (상한 %d) — 1/60 %d · %.4f %d"
+			% [max_snd, int(g.SMASH.snd_max), int(snd_of[0]),
+			float(dts[1]), int(snd_of[1])])
 
 	#  ── 되돌리기 문 ────────────────────────────────
 	#  움직임을 끈 손님은 **옛 길**로 간다 — 조각도 가루도 먼지도 흔들림도
@@ -203,13 +242,20 @@ func _process(_d: float) -> bool:
 		g._sweep_begin()
 		var k := 0
 		var seen := 0
-		while k < 4000 and g.sweep_live:
+		var mo_acc := 0.0
+		var mo_dt: float = float(g.DROP.max_d)   # 가장 거친 폭으로 한 번
+		while k < 800 and g.sweep_live:
 			k += 1
-			g._sweep_update(sub)
-			g.drop_t += sub
-			g._drop_step(sub)
-			g._waste_update(sub)
-			g._smash_update(sub)
+			g._sweep_update(mo_dt)
+			g._waste_update(mo_dt)
+			g._smash_update(mo_dt)
+			mo_acc += mo_dt
+			var mo_ns := 0
+			while mo_acc >= sub and mo_ns < int(g.DROP.sub_max):
+				mo_acc -= sub
+				g.drop_t += sub
+				g._drop_step(sub)
+				mo_ns += 1
 			mo_debris += g.shards.size() + g.grit.size() + g.smash_dust.size()
 			mo_shake = maxf(mo_shake, float(g.shake))
 			seen = maxi(seen, g.waste.size())
@@ -224,10 +270,14 @@ func _process(_d: float) -> bool:
 		var line := ""
 		for v in hit_ms:
 			line += "%.3f " % float(v)
-		print("  매물 넷 부딪힘(초) — %s" % line)
+		#  프레임 격자에 걸린 값이다 — 한 프레임 안에 든 부딪힘은 같은 수로
+		#  찍힌다(사슬로 끌려간 것들이 실제로 몰려 온다).
+		print("  매물 넷 부딪힘(초 · 프레임 격자) — %s" % line)
 	print("  부딪힘이 퍼진 폭 최대 %.3f초" % spread_ms)
 
-	print("%d롤 · 시드 %d — %s" % [rolls, seed_v,
+	print("  프레임 폭 두 벌 — 1/60 %.4f 과 DROP.max_d %.4f"
+			% [float(dts[0]), float(dts[1])])
+	print("%d롤(폭마다) · 시드 %d — %s" % [rolls, seed_v,
 			"아홉 검사 전부 통과" if fails == 0 else "실패 %d건" % fails])
 	quit(fails)
 	return true
