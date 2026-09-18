@@ -91,11 +91,38 @@ func _run() -> void:
 	print("  %s" % _names())
 	await _shot("rank_mat")
 
+	#  ②-b 레전더리 다섯 — **각자 고유 실루엣**(2026-09-18).
+	#     랙 다섯 = 정확히 한 판이라 정사각·마름모·가로·세로·늘어짐이
+	#     한 줄에 선다. 보는 것 둘: 다섯이 서로 다른가 · 다섯이 **같은
+	#     등급으로** 보이는가(겹테 2 · 홀로 온 바퀴 · 옆면 두께).
+	print("\n②-b 랙 — 레전더리 다섯의 고유 실루엣")
+	Dev._run(g, {"t": "act", "a": "form_leg"})
+	print("  %s" % _names())
+	await _shot("form_leg")
+
+	#  ②-c 레어 변형 다섯 — **한 가족으로 보이면서 서로 세어지게 달라야** 한다.
+	print("\n②-c 랙 — 레어 변형 다섯 (고름·축·쏠림·쌍·매끈)")
+	Dev._run(g, {"t": "act", "a": "form_var"})
+	print("  %s" % _names())
+	await _shot("form_var")
+
 	#  ③ 누운 자세 — 밴드·박음·물림·플라크를 한 테이블에서.
 	print("\n③ 테이블 — 네 등급 (누운 자세)")
 	Dev._run(g, {"t": "act", "a": "rank_table"})
 	g._drop_settle()
 	await _shot("rank_table")
+
+	#  ③-b 누운 테이블은 **사용자가 실제로 고르는 자리**다(rx 22.04).
+	#     모양이 가장 크게 보이는 곳이고, 툴팁 없이 갈려야 하는 곳이다.
+	print("\n③-b 테이블 — 레전더리 다섯 (누운 자세)")
+	Dev._run(g, {"t": "act", "a": "form_leg_table"})
+	g._drop_settle()
+	await _shot("form_leg_table")
+
+	print("\n③-c 테이블 — 레어 변형 다섯 (누운 자세 · 골 폭 5.73 · 깊이 2.20)")
+	Dev._run(g, {"t": "act", "a": "form_var_table"})
+	g._drop_settle()
+	await _shot("form_var_table")
 
 	#  ④ 같은 테이블을 **새 테 없이** 한 번 더. 전·후가 같은 자리에 선다.
 	print("\n④ 같은 테이블 — 등급 테 끔 (전·후 비교)")
@@ -112,22 +139,30 @@ func _run() -> void:
 	#     돈다). 동전은 _shard_cut 의 기본 가지라 갈래를 안 내면 플라크도
 	#     부채꼴로 잘린다 — 언 한 프레임이 흰 실루엣 구실을 하는데 그
 	#     실루엣이 **원으로 되돌아간다.** 여기서 그것을 눈으로 잡는다.
-	print("\n⑤ 깨짐 — 플라크가 제 모양으로 타일링되는가")
-	Dev._run(g, {"t": "act", "a": "rank_table"})
+	#  2026-09-18 — **다섯을 한꺼번에 깬다.** 어제는 판 하나에 대해서만 돌던
+	#  길이라, 다섯이 제 모양으로 타일링되는지는 한 장으로 본 적이 없었다.
+	print("\n⑤ 깨짐 — 판 다섯이 제 모양으로 타일링되는가")
+	Dev._run(g, {"t": "act", "a": "form_leg_table"})
 	g._drop_settle()
 	var ti := -1
+	var legs := []
 	for j in mini(g.drop.size(), g.stock.size()):
 		if String(g.stock[j].type) == "item" \
 				and String(g.stock[j].d.get("rarity", "")) == "legendary":
-			ti = j
-			break
+			legs.append(j)
+			if ti < 0:
+				ti = j
 	if ti >= 0:
 		g.smash_snd_n = 0
 		g.smash_snd_t = 0.0
 		g.smash_n = 0
-		g.drop[ti].u = g._chute_dock_u(g.Z_SELL, g.drop[ti].w) + g.drop[ti].hw
-		g.drop[ti].vu = -2600.0
-		g._smash_at(ti)
+		#  **자리를 안 옮긴다.** 다섯을 같은 구멍으로 밀면 흰 실루엣 다섯이
+		#  한 점에 겹쳐 한 덩어리가 된다 — 제자리에서 깨야 다섯이 각자
+		#  제 모양으로 타일링된 것이 보인다. vu 만 준다(_smash_at 은 세기를
+		#  vu 로 재고 자리는 안 본다).
+		for j in legs:
+			g.drop[j].vu = -2600.0
+			g._smash_at(int(j))
 		#  언 프레임(t < 0)에서 찍는다 — 조각이 태어난 자리에서 원물건 모양을
 		#  빈틈없이 타일링한 채 흰색으로 서 있는 그 한 컷이다.
 		g._process(1.0 / 60.0)
@@ -148,6 +183,32 @@ func _run() -> void:
 	else:
 		print("  테이블에서 레전더리를 못 찾았다")
 
-	print("\n찍음: shots/rank_rack · rank_mat · rank_table · rank_table_off"
-			+ " · rank_smash\n")
+	#  ⑥ 레어 변형이 깨질 때도 제 물림을 쥐는가 — _shard_fan 에 _mill_f 를
+	#     곱했는지가 여기서 갈린다(안 곱하면 언 프레임이 매끈한 원이 된다).
+	print("\n⑥ 깨짐 — 레어 변형이 제 물림으로 타일링되는가")
+	Dev._run(g, {"t": "act", "a": "form_var_table"})
+	g._drop_settle()
+	var rs := []
+	for j in mini(g.drop.size(), g.stock.size()):
+		if String(g.stock[j].type) == "item" \
+				and String(g.stock[j].d.get("rarity", "")) == "rare":
+			rs.append(j)
+	if not rs.is_empty():
+		g.smash_snd_n = 0
+		g.smash_snd_t = 0.0
+		g.smash_n = 0
+		for j in rs:
+			g.drop[j].vu = -2600.0
+			g._smash_at(int(j))
+		g._process(1.0 / 60.0)
+		_quiet()
+		g.queue_redraw()
+		await process_frame
+		await process_frame
+		root.get_texture().get_image().save_png("res://shots/form_smash.png")
+		print("  form_smash · 조각 %d" % g.shards.size())
+
+	print("\n찍음: shots/rank_rack · rank_mat · form_leg · form_var ·"
+			+ " rank_table · form_leg_table · form_var_table ·"
+			+ " rank_table_off · rank_smash · form_smash\n")
 	quit(0)
