@@ -150,5 +150,40 @@ func _run() -> void:
 	g._tip_build({"k": "cmod", "i": 0})
 	_ok("보드 확장에 등급 태그가 없다", _tags().size() == 1, "[%s]" % "][".join(_tags()))
 
+	#  ── 등급 판 위에서 글이 읽히는가 (2026-09-18) ──────
+	#  판 면을 등급색 쪽으로 섞으면 그 위의 잉크 대비가 깎인다. 섞는 몫 0.08 은
+	#  **무너지는 자리 바로 한 칸 아래**다 — 0.10 이면 배수 붉음(C_MULT)이
+	#  4.41 로 4.5:1 밑으로 떨어지고 0.12 면 4.22 다. 이 자리는 한 번 깨진
+	#  적이 있다(_tip_draw 의 lightened(0.06) 주석: 배수 붉음이 3.7:1 까지
+	#  떨어져 있었다). face_mix 를 올리면 **일부러 실패해야** 한다.
+	print("")
+	var mix: float = g.TIP_RANK.face_mix
+	for rr in GameData.RARITIES:
+		var face: Color = g.C_PANEL
+		if String(rr) != "common":
+			face = g.C_PANEL.lerp(GameData.rarity_color(String(rr)), mix)
+		for ink in [["C_TXT", g.C_TXT], ["C_DIM", g.C_DIM],
+				["C_MULT", g.C_MULT], ["C_ACC", g.C_ACC]]:
+			var cr := _contrast(ink[1], face)
+			_ok("%s 판 위 %s >= 4.5:1" % [rr, ink[0]], cr >= 4.5,
+					"면 #%s · %.2f" % [face.to_html(false), cr])
+
 	print("\n통과 %d · 실패 %d" % [okn, fail])
 	quit(mini(fail, 125))
+
+
+func _lum(c: Color) -> float:
+	var v := [c.r, c.g, c.b]
+	var w := [0.2126, 0.7152, 0.0722]
+	var o := 0.0
+	for i in 3:
+		var x: float = v[i]
+		x = x / 12.92 if x <= 0.03928 else pow((x + 0.055) / 1.055, 2.4)
+		o += x * float(w[i])
+	return o
+
+
+func _contrast(a: Color, b: Color) -> float:
+	var la := _lum(a)
+	var lb := _lum(b)
+	return (maxf(la, lb) + 0.05) / (minf(la, lb) + 0.05)

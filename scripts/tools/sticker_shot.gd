@@ -48,6 +48,7 @@ func _process(_d: float) -> bool:
 	g._process(1.0 / 60.0)
 	g.tip_a = 0.0
 	g.tip_title = ""
+	g.rar_t = 0.0        # 등급 맥동을 못박는다(2026-09-18)
 	g.queue_redraw()
 	frames += 1
 

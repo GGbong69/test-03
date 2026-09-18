@@ -461,7 +461,17 @@ static func _pick_draw(g: Node) -> void:
 			break
 		var c := _pick_cell(j)
 		var sel := idx == cur
-		g.draw_rect(c, Color(0.30, 0.26, 0.40) if sel else Color(0.13, 0.11, 0.18))
+		#  동전 줄은 칸 바탕에 등급색을 어둡게 깐다(2026-09-18). 한 쪽에 네
+		#  등급이 **띠로 갈려** 보이므로 「몇 번째 줄부터 레어인가」를 세지
+		#  않아도 된다. 고른 칸은 지금처럼 밝게 — 고른 것이 먼저다.
+		var cb := Color(0.30, 0.26, 0.40) if sel else Color(0.13, 0.11, 0.18)
+		if not sel and open_k.begins_with("item"):
+			var rows2 := _list(open_k)
+			if idx < rows2.size():
+				var rr := String(rows2[idx].get("rarity", ""))
+				if rr != "":
+					cb = cb.lerp(GameData.rarity_color(rr).darkened(0.62), 0.75)
+		g.draw_rect(c, cb)
 		g.draw_string(g.font, Vector2(c.position.x + 4.0, _base(g, c.position.y, c.size.y)),
 				"%d %s" % [idx + 1, names[idx]],
 				HORIZONTAL_ALIGNMENT_LEFT, c.size.x - 8.0, 12,
@@ -505,6 +515,20 @@ static func _rows(g: Node) -> Array:
 			return [
 				{"n1": "동전 주기", "t": "list", "k": "item",
 						"n": GameData.items().size()},
+				#  등급별로 훑는 넉 줄(2026-09-18). 고르개와 실행은 한 줄도 안
+				#  고쳐도 돈다 — k 가 무엇이든 _list(k) 의 행을 주기 때문이다.
+				{"n1": "일반 주기", "t": "list", "k": "item_common",
+						"n": _list("item_common").size()},
+				{"n1": "희귀 주기", "t": "list", "k": "item_uncommon",
+						"n": _list("item_uncommon").size()},
+				{"n1": "레어 주기", "t": "list", "k": "item_rare",
+						"n": _list("item_rare").size()},
+				{"n1": "레전더리 주기", "t": "list", "k": "item_legendary",
+						"n": _list("item_legendary").size()},
+				{"n1": "등급 한 벌 랙에", "t": "act", "a": "rank_rack"},
+				{"n1": "재질x등급 랙에", "t": "act", "a": "rank_mat"},
+				{"n1": "등급 한 벌 테이블에", "t": "act", "a": "rank_table"},
+				{"n1": "등급 테 끄기/켜기", "t": "act", "a": "rank_off"},
 				{"n1": "동전 무작위", "t": "act", "a": "item_rand"},
 				{"n1": "동전 슬롯 비우기", "t": "act", "a": "item_clear"},
 				{"n1": "사탕 주기", "t": "list", "k": "cons",
@@ -576,9 +600,32 @@ static func _rows(g: Node) -> Array:
 			]
 
 
+#  등급 하나만 걸러 낸다(2026-09-18). 지금 고르개는 「번호 이름」 한 줄뿐이라
+#  등급이 **어디에도 안 떴다** — 백 줄을 훑으며 「이건 무슨 등급이지」를
+#  물을 자리가 없었다. 네 줄로 갈라 두면 ←/→ 로 등급 경계를 연달아 넘으며
+#  박음 0→3→6→온띠와 원반→물린 원→플라크가 **한 자리에서** 갈리는 것이 보인다.
+static func _item_by(id: String) -> Dictionary:
+	for it in GameData.items():
+		if String(it.get("id", "")) == id:
+			return it
+	return {}
+
+
+static func _rar_items(rar: String) -> Array:
+	var out := []
+	for it in GameData.items():
+		if String(it.get("rarity", "common")) == rar:
+			out.append(it)
+	return out
+
+
 static func _list(k: String) -> Array:
 	match k:
 		"item": return GameData.items()
+		"item_common": return _rar_items("common")
+		"item_uncommon": return _rar_items("uncommon")
+		"item_rare": return _rar_items("rare")
+		"item_legendary": return _rar_items("legendary")
 		# 사탕과 사진이 한 표에 산다(둘 다 "골라서 쓰는" 물건이라 길이 같다).
 		# 개발자 판에서는 갈라 보여야 한다 — 섞어 놓으면 사진 여덟이 사탕
 		# 틈에 묻혀 "왜 없지" 가 된다.
@@ -631,6 +678,11 @@ static func _cur_name(e: Dictionary) -> String:
 		return "(없음)"
 	var r: Dictionary = rows[i % rows.size()]
 	var nm := String(r.get("n", r.get("name", r.get("id", "?"))))
+	#  동전 줄에는 등급 낱말을 잇는다(2026-09-18) — 「12/100 태양계 · 레어」.
+	#  백 줄을 훑을 때 등급이 **같이** 읽힌다. 그림이 아니라 표가 말하는
+	#  자리라, 테가 안 보이는 것과 테를 잘못 그린 것을 여기서 가른다.
+	if k.begins_with("item") and String(r.get("rarity", "")) != "":
+		nm += " · " + GameData.rarity_name(String(r.rarity))
 	return "%d/%d %s" % [i + 1, rows.size(), nm]
 
 
@@ -883,6 +935,68 @@ static func _run(g: Node, e: Dictionary) -> void:
 			g.motion_off = not g.motion_off
 			_say("모션 %s" % ("끔" if g.motion_off else "켬"))
 			return
+		"rank_off":
+			#  새 테 한 벌(밴드·박음·물림·플라크·맥동)을 통째로 끄고 옛 그림으로
+			#  되돌린다. 전·후를 **같은 자리에서** 눈으로 대는 것이 「정말
+			#  나아졌나」를 재는 유일한 길이고, 사진 두 장을 뜰 때도 이 하나면 된다.
+			g.rank_off = not g.rank_off
+			_say("등급 테 %s" % ("끔" if g.rank_off else "켬"))
+			return
+		"rank_rack":
+			#  네 등급을 한 줄에 세운다. 랙은 r=19 라 밴드·박음·물림이 다 사는
+			#  **가장 큰 선 자세**다 — 여기서 안 갈리면 더 작은 자리에서도 안 갈린다.
+			#  슬롯이 다섯이라(tuning.max_items) 재질 셋은 rank_mat 이 따로 맡는다.
+			g.owned = []
+			for rr in ["common", "uncommon", "rare", "legendary"]:
+				var pl := _rar_items(String(rr))
+				if not pl.is_empty():
+					g.owned.append(pl[0].duplicate())
+			g.sealed = -1
+			g._panel_reset()
+			_say("등급 한 벌 랙에 — %d장" % g.owned.size())
+			return
+		"rank_mat":
+			#  **회귀가 나면 이 셋 중 하나에서 난다** — 표식과 재질이 실제로
+			#  만나는 자리가 셋뿐이다(나머지 재질 셋은 전부 흔함이라 표식이 0개다):
+			#    u22 WHITE ALBUM  금테 x 희귀    — 금테와 등급 밴드가 겹치는 유일한 장
+			#    r09 불사의 토템  도트 x 레어    — 물림 없이 격자 스냅 박음
+			#    l03 NULL         빈 인쇄 x 레전더리 — 윗면 없는 빈 플라크
+			g.owned = []
+			for id2 in ["u22", "r09", "l03"]:
+				var d2 := _item_by(String(id2))
+				if not d2.is_empty():
+					g.owned.append(d2.duplicate())
+			g.sealed = -1
+			g._panel_reset()
+			_say("재질x등급 %d장" % g.owned.size())
+			return
+		"rank_table":
+			#  「사진은 상점당 0.5% 라 눈으로 보려면 길이 따로 있어야 한다」
+			#  (restock_fix)와 같은 이유다 — **레전더리는 저울로는 영원히 안 뜬다**
+			#  (가중치 0). 누운 자세의 밴드·박음·물림·플라크를 한 테이블에서 견준다.
+			#  여기서 **리롤을 한 번 돌리면** _smash_at → _shard_cut 의 새 격자
+			#  가지가 플라크를 제 모양으로 타일링하는지, 값표가 안 밀렸는지,
+			#  물건끼리 안 겹쳐 눕는지가 한 번에 보인다 — 플라크의 물리를
+			#  실제로 굴려 보는 유일한 길이다.
+			if g.state != g.S.SHOP:
+				g._open_shop()
+			g._roll_stock()
+			var si := 0
+			for rr2 in ["common", "uncommon", "rare", "legendary", "legendary"]:
+				var pl2 := _rar_items(String(rr2))
+				if pl2.is_empty():
+					continue
+				while si < g.stock.size() and bool(g.stock[si].get("free", false)):
+					si += 1
+				if si >= g.stock.size():
+					break
+				var d3: Dictionary = pl2[randi() % pl2.size()]
+				g.stock[si] = {"type": "item", "d": d3,
+						"cost": g._league_cost(int(d3.get("cost", 0))), "sold": false}
+				si += 1
+			g._drop_roll()
+			_say("등급 한 벌 테이블에")
+			return
 		"restock_fix":
 			# 사진은 상점당 0.5% 다(기획서 P.30). 손으로 리롤해서는 이백
 			# 번을 굴려도 한 번 볼까 말까라, 테이블 위의 사진을 눈으로
@@ -1086,7 +1200,7 @@ static func _run(g: Node, e: Dictionary) -> void:
 				_q.clear()
 				g._sfx(snm)
 				_say(snm)
-		"item":
+		"item", "item_common", "item_uncommon", "item_rare", "item_legendary":
 			if not rows.is_empty():
 				_give_item(g, rows[i % rows.size()])
 		"photo", "cons":

@@ -29,6 +29,9 @@ func _process(_d: float) -> bool:
 func _shot(nm: String) -> void:
 	for i in 6:
 		g._process(1.0 / 60.0)
+	#  등급 맥동을 못박는다(2026-09-18) — 번짐 알파가 프레임마다 달라지면
+	#  같은 자리에서 뜬 두 장이 서로 다른 그림이 된다.
+	g.rar_t = 0.0
 	g.queue_redraw()
 	await process_frame
 	await process_frame
