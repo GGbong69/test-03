@@ -388,6 +388,7 @@ static func _rows(g: Node) -> Array:
 				{"n1": "다트 다시 채우기", "t": "act", "a": "refill"},
 				{"n1": "최악의 상태", "t": "act", "a": "worst"},
 				{"n1": "정산 다시 재생", "t": "act", "a": "replay"},
+				{"n1": "점수 카드 걸음", "t": "list", "k": "cardfx", "n": 3},
 			]
 		1:
 			return [
@@ -484,6 +485,10 @@ static func _list(k: String) -> Array:
 	return []
 
 
+# 점수 카드를 다시 볼 세 단. 이름과 큐를 한 곳에서 쥔다.
+const CARDFX_STEPS := ["담담", "큼", "한 방"]
+
+
 static func _cur_name(e: Dictionary) -> String:
 	var k := String(e.k)
 	var i: int = int(pick.get(k, 0))
@@ -493,6 +498,10 @@ static func _cur_name(e: Dictionary) -> String:
 		var am: Array = GameData.AIM_MODES
 		var j: int = i % maxi(am.size(), 1)
 		return "%d/%d %s" % [j + 1, am.size(), GameData.aim_name(String(am[j]))]
+	# 이것도 _list 를 안 지나는 상수 목록이다. 제 갈래를 안 내면 아래 rows 가
+	# 비어서 화면에 「(없음)」이 뜬다 — 줄은 있는데 이름이 없는 꼴이다(2026-09-18).
+	if k == "cardfx":
+		return "%d/3 %s" % [i % 3 + 1, CARDFX_STEPS[i % 3]]
 	if k == "score":
 		var sm: Array = GameData.SCORE_MODES
 		var j2: int = i % maxi(sm.size(), 1)
@@ -832,6 +841,65 @@ static func _run(g: Node, e: Dictionary) -> void:
 			g._aim_begin()
 			_aim_sticker(g, am)
 			_say("조준 %s" % GameData.aim_name(am))
+		"cardfx":
+			# 「정산 다시 재생」은 **판 종료 정산 화면**(clear_t)을 되감는 줄이지
+			# 점수 카드의 걸음이 아니다. 카드 연출을 다시 볼 줄은 지금까지 하나도
+			# 없었다 — 고치는 동안 매번 판을 넘길 수는 없다(2026-09-18).
+			#
+			# _land 를 **안 거친다.** 점수 셈도 동전 발동도 닳음도 하나도 안 돈다 —
+			# _land 가 하던 초기화를 손으로 놓고 큐만 세운다.
+			if not g._is_play():
+				_say("판 위에서만")
+				return
+			var ci := i % 3
+			g.card_side = 1
+			g.card_y = 206.0
+			g.card_mode = 0
+			g.cur_chip = 0
+			g.cur_mult = 0
+			g.card_item = ""
+			g.calc_lit = false
+			g.roll_t = -1.0
+			g.pitch_step = 0
+			g._card_reset()
+			g.queue.clear()
+			# share 가 큰 걸음(0→12 · 0→240)과 작은 걸음이 **한 줄에 섞여 있어야**
+			# 「크기 차이가 곧 점수 크기다」가 한 번에 보인다.
+			# item 의 i 는 0 을 넘긴다 — 동전 슬롯이 비어도 _panel_fire 가 스스로 막는다.
+			match ci:
+				0:
+					g.queue.append({"k": "chip", "v": 12})
+					g.queue.append({"k": "mult", "v": 2})
+					g.queue.append({"k": "item", "i": 0, "kind": "chip", "v": 40,
+							"lbl": "점수 +40"})
+					g.queue.append({"k": "item", "i": 0, "kind": "mult", "v": 3,
+							"lbl": "배수 +3"})
+				1:
+					g.queue.append({"k": "chip", "v": 240})
+					g.queue.append({"k": "mult", "v": 9})
+					g.queue.append({"k": "item", "i": 0, "kind": "chip", "v": 1200,
+							"lbl": "점수 +1200"})
+					g.queue.append({"k": "item", "i": 0, "kind": "xmult", "v": 3,
+							"lbl": "배수 ×3"})
+				_:
+					g.queue.append({"k": "chip", "v": 900})
+					g.queue.append({"k": "mult", "v": 30})
+					g.queue.append({"k": "item", "i": 0, "kind": "chip", "v": 4000,
+							"lbl": "점수 +4000"})
+					g.queue.append({"k": "item", "i": 0, "kind": "xmult", "v": 3,
+							"lbl": "배수 ×3"})
+					# 합계는 「한 방」에만 넣는다 — 점수가 실제로 오르면 판이 끝나
+					# 화면이 바뀐다. 이 단은 목표의 반을 밟으러 가는 것이고,
+					# 넘겨서 판이 끝나는 것이 **보고 싶은 그림**이라 막지 않는다.
+					g.queue.append({"k": "total"})
+			# _pace() 가 읽는 두 값이다. 안 놓으면 앞 정산의 값이 남아 배속이
+			# 틀린 채로 돈다.
+			g.settle_n = g.queue.size()
+			g.burst_n = 0
+			g.card_target = 1.0
+			g.state = g.S.RESOLVE
+			g.qt = g.beat * 1.1
+			_say("점수 카드 — %s" % CARDFX_STEPS[ci])
 		"score":
 			g.score_mode = String(GameData.SCORE_MODES[i % GameData.SCORE_MODES.size()])
 			_say("계산 '%s'" % g.score_mode)

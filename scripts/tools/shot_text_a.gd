@@ -135,7 +135,16 @@ func _run() -> void:
 			"card_target": 1.0, "card_side": 1, "card_mode": 0,
 			"cur_chip": 9999, "cur_mult": 999, "calc_lit": false, "roll_t": -1.0,
 			"card_item": String(_item("c48").n), "score_mode": "std",
-			"calc_flash": 0.0, "total_flash": 0.0}
+			"calc_flash": 0.0, "total_flash": 0.0,
+			# 카드 춤 축 아홉을 같이 못 박는다. 안 박으면 여섯 컷이 매번 다른
+			# 프레임으로 찍혀 **전후 비교가 죽는다** — 코드가 아니라 자가
+			# 망가지는 것이라 한참 뒤에 안다(2026-09-18).
+			# gain_roll 을 total_flash 와 **다른 축**으로 뺀 것이 이 때문이다:
+			# 굴림 시계를 total_flash 에 물렸으면 card_total_flash 컷이 "+0" 으로
+			# 찍혀 컷의 뜻이 바뀐다. 축을 가르면 여섯 컷이 한 픽셀도 안 바뀐다.
+			"card_pop": 0.0, "card_vel": 0.0, "chip_j": 0.0, "mult_j": 0.0,
+			"chip_amt": 0.30, "mult_amt": 0.30, "card_burst": 0.0,
+			"gain_roll": 0.0, "card_jrate": 4.0}
 	keep = cb.duplicate()
 	await _shot("card_std")
 	keep = cb.duplicate()
@@ -158,6 +167,14 @@ func _run() -> void:
 	keep["cur_mult"] = 5499
 	await _shot("card_total")
 	#  달아오른 순간 — 저울 두 수가 한 번 부푼다(24 × 1.45) · 총점이 부푼다(36 × 1.55)
+	#
+	#  **시계를 1.0 이 아니라 0.662 에 꽂는다**(2026-09-18). 춤이 생기면서 시계 1.0 의
+	#  뜻이 「다 부풀었다」에서 「막 시작했다(예비 눌림 직전)」로 바뀌었다 — 봉우리는
+	#  u = 1 − f = 0.338, 곧 f = 0.662 다. 1.0 로 두면 이 두 컷이 안 부푼 카드를 찍어
+	#  **컷의 뜻이 바뀐다.** 크기 상한은 그대로라, 이렇게 꽂으면 고치기 전 여섯 장과
+	#  픽셀 단위로 같은 그림이 다시 나온다 — 그게 이 두 컷이 지키는 것이다
+	#  (칸 24 × 1.45 = 34 · 총점 36 × 1.54 = 55).
+	var f_top := 0.662
 	keep = cb.duplicate()
 	keep["calc_lit"] = true
 	keep["score_mode"] = "bal"
@@ -165,12 +182,24 @@ func _run() -> void:
 	keep["calc_m"] = 999
 	keep["cur_chip"] = 5499
 	keep["cur_mult"] = 5499
+	#  색은 calc_flash(1.0 이 가장 희다) · 크기는 chip_j·mult_j(0.662 가 봉우리).
+	#  두 축이 갈라져 있어 한 프레임에 둘 다 꼭대기로 세울 수 있다.
 	keep["calc_flash"] = 1.0
+	keep["chip_j"] = f_top
+	keep["mult_j"] = f_top
+	keep["chip_amt"] = 0.45
+	keep["mult_amt"] = 0.45
 	await _shot("card_flash")
+	keep = cb.duplicate()
+	keep["calc_lit"] = true
+	keep["score_mode"] = "bal"
+	keep["calc_c"] = 9999
+	keep["calc_m"] = 999
+	keep["cur_chip"] = 5499
+	keep["cur_mult"] = 5499
 	keep["card_mode"] = 1
 	keep["last_gain"] = 99999
-	keep["calc_flash"] = 0.0
-	keep["total_flash"] = 1.0
+	keep["total_flash"] = f_top
 	await _shot("card_total_flash")
 
 	# ── 5. 가운데에 놓아 쓰기 — 이름 · 거절 ──────────────
@@ -209,7 +238,10 @@ func _run() -> void:
 
 	# ── 6. 아래 안내 줄 — 가장 긴 것 ─────────────────────
 	g.aim_mode = "kick"
-	keep = {"state": g.S.AIM_V, "shown": 120.0}
+	#  카드를 내린다(2026-09-18). 앞의 카드 컷들이 card_target 을 1 로 올려 둔 채라
+	#  여기서 card_p 를 안 박으면 「+99999」가 든 카드가 안내 줄 위에 그대로 남아
+	#  찍혔다 — 이 컷이 재려는 것은 **아래 안내 줄**이지 카드가 아니다.
+	keep = {"state": g.S.AIM_V, "shown": 120.0, "card_p": 0.0}
 	await _shot("hint_kick")
 	g.aim_mode = "std"
 

@@ -76,6 +76,14 @@ func _shot(name: String) -> void:
 	g.set_process(false)
 	g.shake = 0.0
 	g.card_p = 1.0
+	# 카드 **몸**만 자리에 앉힌다 — 안 앉히면 넉 장이 매번 다른 높이로 찍혀
+	# 전후로 y 를 견줄 수가 없다. chip_j / mult_j 는 **일부러 안 박는다**:
+	# ②번 컷(「바뀜」)이 번쩍임이 살아 있는 프레임을 노리는 컷이라, 몸만
+	# 고정하고 글자 춤은 살려 두는 것이 이 도구의 뜻이다(2026-09-18).
+	g.card_pop = 0.0
+	g.card_vel = 0.0
+	g.card_burst = 0.0
+	g.gain_roll = 0.0
 	g.queue_redraw()
 	await process_frame
 	await process_frame
