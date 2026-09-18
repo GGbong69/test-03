@@ -25,6 +25,7 @@ const Save = preload("res://scripts/save.gd")
 #    ⑥ 「겹치기」에서 둘이 서고 서로 다른 축이다
 #    ⑦ 새 런이 사전 · 무효 · 기억을 전부 비운다
 #    ⑧ 판을 오갔다 돌아와도 안 바뀐다
+#    ⑨ 봉인 소리가 라운드마다 **한 번** 운다 — 상점을 같이 돌려야 잡힌다
 # ══════════════════════════════════════════════════════════
 
 var g = null
@@ -95,6 +96,36 @@ func _run() -> void:
 			"정한 것 %s · 걸린 것 %s" % [first, live])
 	_ok("목표도 _target_at 과 같다", g.target == g._target_at(boss),
 			"%d / %d" % [g.target, g._target_at(boss)])
+	#  런 정보 탭이 **판 위에서는 지금 걸린 것**을 든다. 탭이 열리면 state 가
+	#  S.RUNINFO 로 갈리므로 state 만 물으면 active_mods 갈래가 한 번도 안
+	#  돌고, 보스 판을 던지는 중에 탭을 열었을 때 「없음」이 떴다(2026-09-18).
+	g.state = g.S.PICK
+	g.run_from = g.S.PICK
+	g.state = g.S.RUNINFO
+	var carry := []
+	for m2 in g._carry_mods():
+		carry.append(String(m2.get("id", "")))
+	_ok("런 정보가 판 위에서 지금 걸린 것을 든다", carry == first,
+			"걸린 것 %s · 탭이 보여 주는 것 %s" % [first, carry])
+	#  그 밖(상점)에서는 **다가올 보스**다 — 빌드를 짜는 자리라 그쪽이 맞다.
+	#  판을 안 던지는 중이라 active_mods 가 비어 있고, 옛날에는 그것만 읽어서
+	#  정작 살 것을 고르는 순간에 언제나 「없음」이었다.
+	g.leg_no = 1
+	g._begin_leg()                     # 보통 판 — active_mods 가 빈다
+	g.run_from = g.S.SHOP
+	g.state = g.S.RUNINFO
+	var ahead := []
+	for m3 in g._carry_mods():
+		ahead.append(String(m3.get("id", "")))
+	_ok("런 정보가 상점에서는 다가올 보스를 든다",
+			g.active_mods.is_empty() and ahead == first,
+			"걸린 것 %d개 · 탭 %s (대비할 보스 %d번)"
+			% [g.active_mods.size(), str(ahead), g._boss_ahead()])
+	g.state = g.S.LEG
+	#  ④ 가 「보스 → 보통」 순서라야 함정이 잡힌다. 위에서 보통 판을 한 번
+	#  세웠으니 보스로 되돌려 놓는다.
+	g.leg_no = boss
+	g._begin_leg()
 
 	# ④ **보스 다음에 보통 판** — 가장 큰 함정의 회귀 검사다
 	g.leg_no = 1
@@ -171,3 +202,39 @@ func _run() -> void:
 	g._open_leg()
 	_ok("판을 오갔다 돌아와도 안 바뀐다", _ids(boss) == back,
 			"%s → %s" % [back, _ids(boss)])
+
+	# ⑨ 봉인 소리가 **라운드마다** 한 번 운다.
+	#    _sfx 는 아무것도 안 남기므로 이름을 돌려주는 _leg_open_sfx 를 부른다.
+	#    ⚠ 상점을 **같이 돌려야** 잡히는 회귀다 — 라운드의 마지막 상점이
+	#    다음 라운드 보스를 미리 굴려 두므로, 소리를 「굴렸는가」로 물으면
+	#    런 통틀어 1라운드 첫 판에서 딱 한 번만 운다(2026-09-18).
+	g._new_run()
+	var seal_at := {}          # 라운드 → 봉인 소리가 운 판 번호들
+	var stray := []            # 라운드 첫 판이 아닌데 운 자리
+	for rn in range(1, GameData.legs_n() + 1):
+		g.leg_no = rn
+		g._open_leg()
+		if g._leg_open_sfx() == "boss_seal":
+			var rd: int = GameData.round_of(rn)
+			var lst: Array = seal_at.get(rd, [])
+			lst.append(rn)
+			seal_at[rd] = lst
+			if GameData.leg_idx(rn) != 0:
+				stray.append(rn)
+		g._open_shop()
+	var rounds := {}
+	for rn2 in range(1, GameData.legs_n() + 1):
+		if g._round_boss(rn2) > 0:
+			rounds[GameData.round_of(rn2)] = true
+	var miss := []
+	var dupe := []
+	for rd2 in rounds.keys():
+		var lst2: Array = seal_at.get(rd2, [])
+		if lst2.is_empty():
+			miss.append(rd2)
+		elif lst2.size() > 1:
+			dupe.append(rd2)
+	_ok("봉인 소리가 라운드마다 한 번 운다", miss.is_empty(),
+			"안 운 라운드 %s (보스 라운드 %s)" % [str(miss), str(rounds.keys())])
+	_ok("한 라운드에 두 번 안 운다", dupe.is_empty(), "겹친 라운드 %s" % str(dupe))
+	_ok("라운드 첫 판에서만 운다", stray.is_empty(), "첫 판이 아닌 자리 %s" % str(stray))

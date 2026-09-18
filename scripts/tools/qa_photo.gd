@@ -253,14 +253,49 @@ func _process(_d: float) -> bool:
 	var before := []
 	for mid in was:
 		before.append(String(mid))
+	#  ⚠ 손에 **두 장**을 쥐여 준다. 한 장만 쥐여 주면 「쓰면 사라진다」가
+	#  cons.is_empty() 로 통과하면서, 갈래가 제 안에서 한 번 빼고 꼬리가 또
+	#  빼는 고장을 못 잡는다 — 실제로 옆칸의 15G 짜리가 말없이 날아갔고
+	#  손에 한 장뿐일 때는 remove_at 범위 밖 오류가 통과한 로그 안에
+	#  찍히고 있었다(2026-09-18).
+	var other := _find("v_par")
 	_hold("v_peek")
+	g.cons.append(other)
+	var held: int = g.cons.size()
 	g._cons_use(0)
 	var now := []
 	for mid in g.boss_mods.get(pboss, PackedStringArray()):
 		now.append(String(mid))
 	_ok("프리크라임 — 보스 제약이 달라진다", before != now and not now.is_empty(),
 			"%s → %s" % [str(before), str(now)])
-	_ok("프리크라임 — 쓰면 사라진다", g.cons.is_empty(), "손에 %d장" % g.cons.size())
+	_ok("프리크라임 — 딱 한 장만 사라진다", g.cons.size() == held - 1,
+			"%d장 → %d장" % [held, g.cons.size()])
+	_ok("프리크라임 — 옆칸은 그대로 남는다",
+			g.cons.size() == 1 and String(g.cons[0].get("id", "")) == "v_par",
+			"남은 것 %s" % str(g.cons))
+
+	# ⑩ 이미 무효인 보스에는 다시 뽑기가 **안 쓰인다**
+	#  무효를 지우던 때는 15G 두 장을 쓰고 판이 더 나빠졌다 — GOOD
+	#  AFTERNOON 이 말없이 풀리고 살아 있는 제약이 도로 걸렸다. 사탕이
+	#  손에 남는 것까지 같이 잰다(_cons_deny 는 손에서 안 뺀다, 2026-09-18).
+	g.state = g.S.SHOP
+	g.leg_no = 1
+	var vboss: int = g._boss_ahead()
+	g._roll_boss_mods(vboss, true)
+	var kept := []
+	for mid in g.boss_mods.get(vboss, PackedStringArray()):
+		kept.append(String(mid))
+	g.boss_void[vboss] = true
+	_hold("v_peek")
+	g._cons_use(0)
+	_ok("무효인 보스에는 다시 뽑기가 안 쓰인다", g.cons.size() == 1,
+			"손에 %d장" % g.cons.size())
+	_ok("무효가 안 풀린다", g.boss_void.has(vboss), "무효 %s" % str(g.boss_void.keys()))
+	var still := []
+	for mid in g.boss_mods.get(vboss, PackedStringArray()):
+		still.append(String(mid))
+	_ok("제약도 안 굴러간다", still == kept, "%s → %s" % [str(kept), str(still)])
+	g.boss_void.clear()
 
 	print("\n%s" % ("전부 통과" if fails == 0 else "실패 %d건" % fails))
 	quit(mini(fails, 125))

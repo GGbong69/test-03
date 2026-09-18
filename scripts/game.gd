@@ -2402,13 +2402,27 @@ func _open_leg() -> void:
 	#  주석의 「안 보이면 도박이지 선택이 아니다」가 그대로 제약에도 든다.
 	#  라운드 안에서 이 함수가 세 번 불려도 사전 열쇠가 문지기라 한 번
 	#  굴린 것이 안 바뀐다(2026-09-18).
-	var sealed_now := _roll_boss_mods(_round_boss())
+	_roll_boss_mods(_round_boss())
 	state = S.LEG
-	#  못 박히는 프레임에만 다른 소리다. 둘을 같이 내면 한 프레임에
-	#  뭉개므로 **갈아 낸다** — 라운드 첫 판 선택에만 무게가 실린다.
-	_sfx("boss_seal" if sealed_now else "leg_open")
+	#  라운드의 **첫** 판 선택에만 다른 소리다. 둘을 같이 내면 한 프레임에
+	#  뭉개므로 **갈아 낸다** — 첫 판에만 무게가 실리고 둘째 · 셋째는 평소
+	#  소리라, 그 대비가 「이 라운드가 무엇으로 정해졌다」를 말한다.
+	#  ⚠ _roll_boss_mods 의 반환값으로는 못 센다. 라운드의 마지막 상점이
+	#  다음 라운드 보스를 미리 굴려 두므로(_open_shop) 여기서는 이미 열쇠가
+	#  있어 false 가 돌아온다 — 그렇게 물었더니 런 통틀어 1라운드 첫 판에서
+	#  딱 한 번만 울었다(2026-09-18). 「굴렸는가」가 아니라 「라운드가
+	#  열렸는가」가 이 소리의 뜻이다.
+	_sfx(_leg_open_sfx())
 	#  과녁(보스 카드)과 값이 먼저 서야 한다 — 그래서 굴린 뒤다.
 	_tutor("u_boss")
+
+
+#  판 선택이 열릴 때 낼 소리. 이름을 돌려주는 것은 **검사가 부를 수 있게**
+#  하기 위해서다 — _sfx 는 아무것도 안 남기므로, 소리가 런 통틀어 한 번만
+#  울던 고장을 도구가 못 잡았다(2026-09-18).
+func _leg_open_sfx() -> String:
+	return "boss_seal" if GameData.leg_idx(leg_no) == 0 \
+			and boss_mods.has(_round_boss()) else "leg_open"
 
 
 # 이 라운드의 첫 판 번호. 세 판을 늘어놓을 때 기준이 된다.
@@ -5418,8 +5432,16 @@ func _draw() -> void:
 # ══════════════════════════════════════════════════════════
 
 func _is_play() -> bool:
-	return state == S.PICK or state == S.AIM_V or state == S.AIM_H \
-			or state == S.CONFIRM or state == S.FLY or state == S.RESOLVE
+	return _is_play_at(state)
+
+
+#  같은 물음을 **다른 화면 번호에** 던진다. 런 정보처럼 판 위에 겹쳐 뜨는
+#  화면은 제 state 가 S.RUNINFO 라, 거기서 _is_play() 를 물으면 언제나
+#  거짓이다 — 밑에 깔린 화면(run_from)을 물어야 「지금 판을 던지는 중인가」가
+#  나온다. _boss_ahead 가 이미 쓰는 그 수다(2026-09-18).
+func _is_play_at(s: int) -> bool:
+	return s == S.PICK or s == S.AIM_V or s == S.AIM_H \
+			or s == S.CONFIRM or s == S.FLY or s == S.RESOLVE
 
 
 #  조준 단계인가 — 손이 조준선에 가 있는 동안.
@@ -11609,10 +11631,19 @@ func _cons_use(i: int) -> void:
 			var rbn := _boss_ahead()
 			if rbn <= 0:
 				return _cons_deny(c, "다음 보스 판이 없다")
-			cons.remove_at(i)
-			Save.bump("cons_used")
+			#  이미 무효인 보스에는 **안 쓰인다.** 여기서 무효를 지우던
+			#  때는 15G 를 낸 GOOD AFTERNOON 이 말없이 풀리고 살아 있는
+			#  제약이 도로 걸렸다 — 15G 두 장을 쓰고 판이 더 나빠지는데
+			#  화면이 안 막았다. 누르는 그 순간 보스 카드에는 대각선 그은
+			#  무효 명판이 보이고 있다(2026-09-18).
+			if boss_void.has(rbn):
+				return _cons_deny(c, "이미 무효인 보스다")
+			#  ⚠ 여기서 손에서 빼지 마라. 아래 꼬리가 소비 · 팝업 · 소리를
+			#  한꺼번에 낸다. 옛 _photo_peek 은 return 으로 끝나서 제 안에서
+			#  뺐는데 그 두 줄을 그대로 데려왔더니 사탕이 **두 장** 사라졌다
+			#  — 옆칸의 15G 짜리가 말없이 날아갔고, 손에 한 장뿐이면 대신
+			#  remove_at 범위 밖 오류가 났다(2026-09-18).
 			_roll_boss_mods(rbn, true, boss_mods.get(rbn, PackedStringArray()))
-			boss_void.erase(rbn)        # 다시 뽑은 것은 무효가 아니다
 			say = "보스 제약 다시 뽑음"
 		_:
 			# 스티커 둘은 아직 대상 선택 흐름이 없다.
@@ -20899,6 +20930,13 @@ func _leg_card(i: int, rn: int) -> void:
 	var hov: bool = kind == "boss" and not mids.is_empty() \
 			and tip_a > 0.004 and tip_mark == r and leg_t >= _deal_time()
 	var rim: Color = _sign_now() if now else Color(sc.rim)
+	#  모서리 징 색은 **맥동 · 얹힘 전의 테**에서 뽑는다. 맥동한 테로 갈래를
+	#  고르면 밝기가 문턱을 오르내리며 쐐기가 밝았다 어두웠다 한다.
+	#  밝은 테(지금 판 = 금빛)에서는 밝히지 말고 **어둡게** 민다 — 노랑 위에
+	#  lightened 를 얹었더니 한 단 차이라 사실상 안 그려졌다. 하필 카드가
+	#  제일 크고 제일 눈에 띄는 순간에만 채널 하나가 죽었다(2026-09-18).
+	var stud_c: Color = rim.darkened(0.28) if rim.get_luminance() > 0.45 \
+			else rim.lightened(0.30)
 	if boss_live:
 		rim = rim.lightened(0.05 + 0.05 * beat)
 	if hov:
@@ -21036,16 +21074,17 @@ func _leg_card(i: int, rn: int) -> void:
 	#  **화면 좌표 고정 5px.** 제 좌표가 아니라 화면 좌표라 카드가 눕든
 	#  서든 gs 1.12 로 커지든 크기가 안 변한다 — 장식 프레임의 철칙이다.
 	if bool(sc.get("stud", false)) and not mids.is_empty():
-		#  색은 **실제로 그린 테**에서 뽑는다. SIGN_COL 의 붉은 테를 그대로
-		#  쓰면 지금 판(금빛 테)에서 분홍 쐐기가 얹혀 붙인 자국으로 읽힌다.
-		var stc: Color = rim.lightened(0.30)
+		#  색은 **실제로 그린 테**에서 뽑는다(stud_c — 맥동 전 값이라 쐐기가
+		#  숨결을 따라 밝았다 어두웠다 하지 않는다). SIGN_COL 의 붉은 테를
+		#  그대로 쓰면 지금 판(금빛 테)에서 분홍 쐐기가 얹혀 붙인 자국으로
+		#  읽힌다.
 		var inn := [Vector2(1.0, 1.0), Vector2(-1.0, 1.0),
 				Vector2(-1.0, -1.0), Vector2(1.0, -1.0)]
 		for si in 4:
 			var cq: Vector2 = q[si]
 			var dv: Vector2 = inn[si] * 5.0
 			draw_colored_polygon(PackedVector2Array([cq,
-					cq + Vector2(dv.x, 0.0), cq + Vector2(0.0, dv.y)]), stc)
+					cq + Vector2(dv.x, 0.0), cq + Vector2(0.0, dv.y)]), stud_c)
 
 
 #  판 종류 — 작은 판 · 큰 판 · 보스. SIGN_COL 의 열쇠다.
@@ -28522,6 +28561,20 @@ func _ri_photos(p: Rect2) -> void:
 		y += float(RI.photo)
 
 
+#  런 정보의 「보스 제약」 줄. 판 위에서는 **지금 걸린 것**이고, 그 밖에서는
+#  다가올 보스에 걸릴 것이다 — 옛날에는 active_mods 만 읽어서 정작 빌드를
+#  짜는 상점에서 언제나 「없음」이었다(2026-09-18).
+#  ⚠ state 가 아니라 **밑에 깔린 화면**으로 가른다. 이 탭이 열린 동안
+#  state 는 언제나 S.RUNINFO 라 _is_play() 를 그대로 물으면 active_mods
+#  갈래가 한 번도 안 돈다 — 보스 판을 던지는 중에 탭을 열면 지금 조이고
+#  있는 제약 대신 다음 라운드 보스(아직 안 굴려진)를 집어 「없음」이 떴다.
+#  _boss_ahead 가 이미 쓰는 그 수(run_from)를 같이 쓴다. 그리기에서 떼어
+#  둔 것은 **검사가 부를 수 있게** 하기 위해서다.
+func _carry_mods() -> Array:
+	var scr: int = run_from if state == S.RUNINFO else state
+	return active_mods if _is_play_at(scr) else _leg_mods(_boss_ahead())
+
+
 func _ri_carry(p: Rect2) -> void:
 	var mag := {}
 	for d in magazine:
@@ -28575,11 +28628,9 @@ func _ri_carry(p: Rect2) -> void:
 	for tg in pending_tags:
 		trows.append(String(tg.get("n", "")))
 	#  보스 제약 — 「지금 이 런이 어떤 모양인가」인데 이 탭 어디에도
-	#  없었다. 판 위에서는 지금 걸린 것이고, 그 밖에서는 **다가올 보스에
-	#  걸릴 것**이다 — 옛날에는 active_mods 만 읽어서 정작 빌드를 짜는
-	#  상점에서 언제나 「없음」이었다(2026-09-18).
+	#  없었다. 무엇을 고르는지는 _carry_mods 머리말이 적고 있다.
 	var mrows := []
-	for mo in (active_mods if _is_play() else _leg_mods(_boss_ahead())):
+	for mo in _carry_mods():
 		mrows.append(String(mo.get("n", "")))
 	var left := [
 		# 이 칸에는 사진도 들어간다. HUD 의 칸 이름과 같은 말을 쓴다.
