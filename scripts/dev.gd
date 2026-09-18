@@ -540,6 +540,13 @@ static func _rows(g: Node) -> Array:
 				{"n1": "등급 한 벌 랙에", "t": "act", "a": "rank_rack"},
 				{"n1": "재질x등급 랙에", "t": "act", "a": "rank_mat"},
 				{"n1": "등급 한 벌 테이블에", "t": "act", "a": "rank_table"},
+				#  모양 열아홉을 훑는 넉 줄(2026-09-18). 등급 넉 줄 바로 밑에
+				#  둔다 — 「등급이 먼저 읽히는가」와 「개체가 갈리는가」를
+				#  ↑/↓ 한 칸으로 번갈아 보게 하려는 자리다.
+				{"n1": "레전더리 다섯 랙에", "t": "act", "a": "form_leg"},
+				{"n1": "레어 변형 랙에", "t": "act", "a": "form_var"},
+				{"n1": "레전더리 다섯 테이블에", "t": "act", "a": "form_leg_table"},
+				{"n1": "레어 변형 테이블에", "t": "act", "a": "form_var_table"},
 				{"n1": "등급 테 끄기/켜기", "t": "act", "a": "rank_off"},
 				{"n1": "동전 무작위", "t": "act", "a": "item_rand"},
 				{"n1": "동전 슬롯 비우기", "t": "act", "a": "item_clear"},
@@ -630,6 +637,35 @@ static func _item_by(id: String) -> Dictionary:
 		if String(it.get("id", "")) == id:
 			return it
 	return {}
+
+
+#  id 목록을 누운 테이블에 앞에서부터 꽂는다(2026-09-18). rank_table 과 **같은
+#  길**이라 툴팁도 창구도 물리도 그대로 산다 — 게임이 까는 것과 같은 모양이다.
+#  꺼진 동전(enabled=0)은 GameData.items() 가 이미 걸러 두므로 조용히 건너뛴다.
+#
+#  **공짜 칸을 건너뛰지 않는다.** rank_table 은 건너뛰는데, 상점에 공짜 한
+#  장이 서면(_item_free_pick) 칸이 다섯 중 넷으로 줄어 **마지막 하나가
+#  조용히 안 뜬다** — 실제로 그랬다: l05 녹는 시계가 테이블에 한 번도 안
+#  올라오고 l03 이 두 장 보였다(2026-09-18 실측). 다섯을 다 보려고 낸 줄이
+#  다섯 중 넷만 보여 주면 그 줄은 거짓말이다. 공짜 표는 그 자리에 그대로
+#  남긴다 — 값이 0 인 것은 상점의 성질이지 모양의 성질이 아니다.
+static func _form_table(g: Node, ids: Array) -> void:
+	if g.state != g.S.SHOP:
+		g._open_shop()
+	g._roll_stock()
+	for i in ids.size():
+		if i >= g.stock.size():
+			break
+		var d: Dictionary = _item_by(String(ids[i]))
+		if d.is_empty():
+			continue
+		var fr: bool = bool(g.stock[i].get("free", false))
+		var e := {"type": "item", "d": d, "sold": false,
+				"cost": 0 if fr else g._league_cost(int(d.get("cost", 0)))}
+		if fr:
+			e["free"] = true
+		g.stock[i] = e
+	g._drop_roll()
 
 
 static func _rar_items(rar: String) -> Array:
@@ -1040,6 +1076,11 @@ static func _run(g: Node, e: Dictionary) -> void:
 			#    u22 WHITE ALBUM  금테 x 희귀    — 금테와 등급 밴드가 겹치는 유일한 장
 			#    r09 불사의 토템  도트 x 레어    — 물림 없이 격자 스냅 박음
 			#    l03 NULL         빈 인쇄 x 레전더리 — 윗면 없는 빈 플라크
+			#  2026-09-18 — l03 은 `slab` 을 그대로 쥐므로 그림이 안 바뀌지만,
+			#  **r09 의 매끈함이 이제 술어가 아니라 표의 값이다**(COIN_FORM
+			#  r09 = bare · 슬롯 0x000). `pixel and mill → disc` 하드코딩이
+			#  두 자세에 하나씩 있던 것을 표 한 칸으로 옮긴 그 자리를 이 줄에서
+			#  눈으로 확인한다 — 한쪽만 고쳤으면 테이블과 랙에서 딴 물건이 된다.
 			g.owned = []
 			for id2 in ["u22", "r09", "l03"]:
 				var d2 := _item_by(String(id2))
@@ -1075,6 +1116,54 @@ static func _run(g: Node, e: Dictionary) -> void:
 				si += 1
 			g._drop_roll()
 			_say("등급 한 벌 테이블에")
+			return
+		#  ── 모양 열아홉을 훑는 넉 줄 (2026-09-18) ──────────
+		#  「게임에 만든 것은 같은 턴에 개발자 모드에도 길을 낸다」.
+		#  랙 슬롯이 다섯(tuning.max_items)이라 **레전더리 다섯 = 정확히 한 판**이다.
+		"form_leg":
+			#  정사각 · 무딘 마름모 · 가로 명판 · 세로 명판 · 늘어짐이 한 줄에
+			#  선다. 랙 r=19 는 겹테·박음·맥동이 다 사는 **가장 큰 선 자세**라
+			#  여기서 안 갈리면 더 작은 자리에서도 안 갈린다.
+			#  보는 것 둘: 다섯이 **서로 다른가** · 다섯이 **같은 등급으로
+			#  보이는가**(겹테 2 · 홀로 온 바퀴 · 2.2초 맥동 · 옆면 두께).
+			g.owned = []
+			for lid in ["l01", "l02", "l03", "l04", "l05"]:
+				var ld := _item_by(String(lid))
+				if not ld.is_empty():
+					g.owned.append(ld.duplicate())
+			g.sealed = -1
+			g._panel_reset()
+			_say("레전더리 %d장 — 정사각·마름모·가로·세로·늘어짐" % g.owned.size())
+			return
+		"form_var":
+			#  다섯 종 대표. **다섯 다 enabled=1 이라 사본 트릭이 필요 없다.**
+			#  r=19 에서 물림이 다 사는 자리이고, 여기가 「다섯이 한 가족인가 ·
+			#  서로 세어지게 다른가」를 재는 유일한 화면이다.
+			g.owned = []
+			for rid in ["r13", "r04", "r02", "r01", "r09"]:
+				var rd := _item_by(String(rid))
+				if not rd.is_empty():
+					g.owned.append(rd.duplicate())
+			g.sealed = -1
+			g._panel_reset()
+			_say("레어 변형 %d장 — 고름·축·쏠림·쌍·매끈" % g.owned.size())
+			return
+		"form_leg_table":
+			#  **레전더리는 가중치 0 이라 저울로는 영원히 안 뜨고 팩으로만 온다.**
+			#  누운 자세 rx 는 늘 22.04 라 다섯이 최대 크기로 선다. 여기서
+			#  리롤을 한 번 돌리면 _smash_at → _shard_cut 의 새 가지가 다섯을
+			#  제 모양으로 타일링하는지 · 값표가 안 밀렸는지 · 물건끼리 안
+			#  겹쳐 눕는지가 한 번에 보인다.
+			_form_table(g, ["l01", "l02", "l03", "l04", "l05"])
+			_say("레전더리 다섯 테이블에")
+			return
+		"form_var_table":
+			#  **레어 변형이 가장 크게 보이는 자리가 누운 테이블(rx 22.04)**
+			#  이고, 사용자가 실제로 고르는 자리도 여기다. 골 폭 5.73px ·
+			#  깊이 2.20px 이 다섯 종에서 어떻게 갈리는지가 여기서만 제 크기로
+			#  보인다.
+			_form_table(g, ["r13", "r04", "r02", "r01", "r09"])
+			_say("레어 변형 다섯 테이블에")
 			return
 		"restock_fix":
 			# 사진은 상점당 0.5% 다(기획서 P.30). 손으로 리롤해서는 이백
