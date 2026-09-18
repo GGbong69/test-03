@@ -4812,8 +4812,15 @@ func _next_step() -> void:
 			var c0 := cur_chip
 			cur_chip += _chip_gain(st.v)
 			_sfx("settle_step", f)
-			chip_amt = _card_amt(c0, cur_chip)
-			chip_j = 1.0
+			# **0 만큼 바뀐 걸음은 안 튄다.** 빗나감이라도 동전이 발동했으면
+			# 큐가 miss · chip · mult 셋을 세우는데(4631~4637), 그 chip 의
+			# info.base 가 0 인 발이 실제로 있다 — 그 걸음에서 칸을 튀기면
+			# 0점을 얻고도 「점수가 바뀌었다」고 말한다. 하필 빗나간 발에서만
+			# 어긋나 오독이 제일 비싸다. 몸은 갈래 밖에서 그대로 챈다 —
+			# 걸음은 걸음이고 소리도 났다(2026-09-18).
+			if cur_chip != c0:
+				chip_amt = _card_amt(c0, cur_chip)
+				chip_j = 1.0
 			_card_kick(float(CARDFX.kick), float(CARDFX.press))
 		"pierce":
 			var pg := _chip_gain(st.v)
@@ -4829,8 +4836,11 @@ func _next_step() -> void:
 			var m0 := cur_mult
 			cur_mult = st.v
 			_sfx("settle_step", f)
-			mult_amt = _card_amt(m0, cur_mult)
-			mult_j = 1.0
+			# 같은 값을 다시 대입하는 걸음이 생겨도 안 샌다. 지금은 안 나지만
+			# 규칙을 갈래마다 같게 두어야 나중에 한 자리만 어긋나지 않는다.
+			if cur_mult != m0:
+				mult_amt = _card_amt(m0, cur_mult)
+				mult_j = 1.0
 			_card_kick(float(CARDFX.kick), float(CARDFX.press))
 		"item":
 			_panel_fire(st.i)
@@ -4838,22 +4848,28 @@ func _next_step() -> void:
 			# 갈래마다 **제 칸만** 튄다. 안 바뀐 칸은 가만둔다 — 그게 정보량이다.
 			# 둘을 한 시계로 묶으면 걸음마다 두 칸이 같이 튀어 「뭐가 바뀌었는지」가
 			# 사라진다(2026-09-18).
+			# 「0 만큼 바뀐 걸음은 안 튄다」는 chip · mult 갈래와 같은 규칙이다.
+			# mult_rand 는 0~7 을 굴리므로 **0 이 실제로 난다** — 그 발에서 칸이
+			# 튀면 「배수가 올랐다」고 거짓말을 한다(2026-09-18).
 			match st.kind:
 				"chip":
 					var c0 := cur_chip
 					cur_chip += _chip_gain(st.v)
-					chip_amt = _card_amt(c0, cur_chip)
-					chip_j = 1.0
+					if cur_chip != c0:
+						chip_amt = _card_amt(c0, cur_chip)
+						chip_j = 1.0
 				"mult", "mult_streak", "mult_rand":
 					var m0 := cur_mult
 					cur_mult += st.v
-					mult_amt = _card_amt(m0, cur_mult)
-					mult_j = 1.0
+					if cur_mult != m0:
+						mult_amt = _card_amt(m0, cur_mult)
+						mult_j = 1.0
 				"xmult":
 					var m1 := cur_mult
 					cur_mult *= st.v
-					mult_amt = _card_amt(m1, cur_mult)
-					mult_j = 1.0
+					if cur_mult != m1:
+						mult_amt = _card_amt(m1, cur_mult)
+						mult_j = 1.0
 				_:
 					# 갈래를 안 늘리면 새 효과가 소리 없이 사라진다. mult_rand 가
 					# 그렇게 죽어 있었고, 표는 그 카드를 87장 중 4위로 적고 있었다.

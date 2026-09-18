@@ -24,9 +24,19 @@ const Dev = preload("res://scripts/dev.gd")
 #    ④ 반영된 조준이 판을 넘겨도 남는다 — _start_leg 가 든 동전을
 #       다시 읽으므로, 값만 박으면 다음 판에서 조용히 std 로 풀린다
 #    ⑤ 여덟 방식을 차례로 다 고를 수 있다
+#    ⑥ **미리보기 줄이 판을 안 건드린다.** 「점수 카드 걸음」은 진짜 정산 큐를
+#       빌려 타는데, 큐가 비면 _next_step 의 빈 큐 갈래가 한 발이 끝나는 진짜
+#       길을 탄다 — 연출을 한 번 다시 보려고 누른 줄이 판 점수를 441,000 올리고
+#       Save.peak("best_gain") 을 디스크에 앉혔다(2026-09-18). 코드가 아니라
+#       **저장이 상하는** 종류라 눈으로는 한참 뒤에 안다.
 # ══════════════════════════════════════════════════════════
 
 var fails := 0
+#  ⑥번 블록만 게임의 _process 를 직접 민다. _initialize 는 **트리가 서기 전**이라
+#  거기서 밀면 _view_fit 의 get_viewport_rect 가 프레임마다 오류를 뱉는다(게임
+#  3548행이 커서에 같은 가드를 이미 달아 둔 그 자리다). 첫 프레임까지 미룬다.
+var _g: Node = null
+var _done := false
 
 
 func _say(ok: bool, name: String, detail := "") -> void:
@@ -39,6 +49,7 @@ func _initialize() -> void:
 	Save.path = "user://_dev_probe.cfg"
 	Save.wipe()
 	var g: Node = load("res://scenes/main.tscn").instantiate()
+	_g = g
 	root.add_child(g)
 	g.set_process(false)
 	g._new_run()
@@ -57,8 +68,18 @@ func _initialize() -> void:
 	print("\n── 계산 ──────────────────────────────────")
 	_score(g)
 
+
+#  트리가 선 첫 프레임. ⑥번 블록만 여기서 돈다.
+func _process(_d: float) -> bool:
+	if _done:
+		return true
+	_done = true
+	print("\n── 점수 카드 걸음 ────────────────────────")
+	_card(_g)
+
 	print("\n%s" % ("실패 %d건" % fails if fails > 0 else "개발자 판 전부 통과"))
 	quit(mini(fails, 125))
+	return true
 
 
 func _find(g: Node, label: String) -> int:
@@ -216,3 +237,84 @@ func _score(g: Node) -> void:
 	_say(seen.size() == GameData.SCORE_MODES.size(),
 			"계산 방식도 눌러서 다 고를 수 있다",
 			"지나온 방식 %d / %d" % [seen.size(), GameData.SCORE_MODES.size()])
+
+
+# ── ⑥ 미리보기 줄이 판을 안 건드린다 ──────────────────────
+#  「점수 카드 걸음」은 진짜 정산 큐를 빌려 탄다. 빌린 것을 **돌려놓는지**가
+#  여기서 갈린다 — 안 돌려놓으면 판 점수가 오르고, 다 쓴 동전이 지워지고,
+#  Save 가 디스크에 앉는다.
+func _card_spin(g: Node, cap := 1200) -> int:
+	var n := 0
+	while Dev.card_ph > 0 and n < cap:
+		g._process(1.0 / 60.0)
+		n += 1
+	return n
+
+
+func _card(g: Node) -> void:
+	Dev.page = 0
+	var i := _find(g, "점수 카드 걸음")
+	if i < 0:
+		_say(false, "경제·진행 쪽에 점수 카드 줄이 있다")
+		Dev.page = 2
+		return
+	var r: Rect2 = Dev._row(i)
+	# 화살표도 값 칸도 아닌 자리 — 고른 단을 그대로 실행한다.
+	var run_at := Vector2(r.position.x + 4.0, r.get_center().y)
+
+	# 이름이 「(없음)」으로 뜨는 함정. _list("cardfx") 가 빈 배열이라
+	# _cur_name 에 제 갈래가 없으면 화면에 아무것도 안 뜬다.
+	var names := []
+	for ci in 3:
+		Dev.pick["cardfx"] = ci
+		names.append(Dev._cur_name({"t": "list", "k": "cardfx", "n": 3}))
+	_say(not String(names[0]).contains("없음") and names[0] != names[2],
+			"고른 단 이름이 화면에 뜬다", str(names))
+
+	for ci in 3:
+		g._start_leg()
+		g._swap_skip()
+		g.state = g.S.AIM_V
+		Save.wipe()
+		# 앞 발이 남긴 값이 있는 자리에서 눌러 본다 — 0 에서 시작하면
+		# 「안 돌려놨다」와 「원래 0 이었다」가 구별이 안 된다.
+		g.cur_chip = 77
+		g.cur_mult = 5
+		g.last_gain = 385
+		g.owned.append({"n": "닳는 것", "k": "chip", "c": "always", "v": 1,
+				"grow": "tdec", "gstep": 1, "gs": 1, "id": "_probe", "price": 0})
+		var tot0: int = g.total
+		var own0: int = g.owned.size()
+		var st0: int = g.state
+		Dev.pick["cardfx"] = ci
+		Dev.click(g, run_at)
+		var fr := _card_spin(g)
+		var nm := String(Dev.CARDFX_STEPS[ci])
+		_say(fr < 1200, "%s — 미리보기가 스스로 끝난다" % nm, "%d 프레임" % fr)
+		_say(g.total == tot0, "%s — 판 점수가 안 오른다" % nm,
+				"%d → %d" % [tot0, g.total])
+		_say(Save.stat("best_gain") == 0 and Save.stat("best_score") == 0,
+				"%s — 개인 기록이 안 앉는다" % nm,
+				"best_gain %d · best_score %d"
+				% [Save.stat("best_gain"), Save.stat("best_score")])
+		_say(g.owned.size() == own0, "%s — 다 쓴 동전이 안 지워진다" % nm,
+				"%d → %d장" % [own0, g.owned.size()])
+		_say(g.state == st0, "%s — 누르기 전 자리로 돌아온다" % nm,
+				"%d → %d" % [st0, g.state])
+		_say(g.cur_chip == 77 and g.cur_mult == 5 and g.last_gain == 385,
+				"%s — 카드에 적힌 수도 돌아온다" % nm,
+				"%d × %d · +%d" % [g.cur_chip, g.cur_mult, g.last_gain])
+		g.owned.clear()
+
+	# 진행 중인 진짜 정산 위에서 누르면 그 발의 남은 걸음이 통째로 날아간다.
+	g._start_leg()
+	g._swap_skip()
+	g.state = g.S.RESOLVE
+	g.queue.clear()
+	g.queue.append({"k": "chip", "v": 7})
+	g.queue.append({"k": "total"})
+	Dev.pick["cardfx"] = 0
+	Dev.click(g, run_at)
+	_say(g.queue.size() == 2 and Dev.card_ph == 0,
+			"진행 중인 진짜 정산 위에서는 안 열린다", "남은 걸음 %d" % g.queue.size())
+	Dev.page = 2

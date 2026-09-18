@@ -37,6 +37,18 @@ static var open_k := ""
 static var open_n1 := ""     # 머리에 적을 줄 이름
 static var open_page := 0
 
+# 「점수 카드 걸음」 미리보기. 0 = 안 돎 · 1 = 걸음 · 2 = 합계 카드.
+#
+# 미리보기는 진짜 정산 큐를 빌려 타는데, 큐가 비는 순간 _next_step 의 빈 큐
+# 갈래가 **한 발이 끝나는 진짜 길**을 탄다 — _wear_spent 가 다 쓴 동전을 지우고
+# _finish_leg 가 Save 를 디스크에 앉힌다. 연출을 한 번 다시 보려고 누른 줄이
+# 판과 개인 기록을 건드리면 안 된다(2026-09-18).
+#
+# Dev.tick 이 game.gd:3188 에서 **상태 기계(3197)보다 먼저** 돌므로, 큐가 빈 채
+# qt 가 0 을 찍는 그 프레임을 여기서 가로채 제자리로 되돌린다.
+static var card_ph := 0
+static var card_back := {}       # 되돌릴 자리
+
 # 사다리를 차례로 낼 줄. [이름, f, 다음까지 초] 줄들. f 가 0 이면 표의 음이다.
 static var _q := []
 static var _qt := 0.0
@@ -192,6 +204,8 @@ static func tick(g: Node, d: float) -> void:
 		msg_t -= d
 		if msg_t <= 0.0:
 			msg = ""
+	if card_ph > 0:
+		_card_tick(g, d)
 	# 사다리는 한 소리가 아니라 **오르는 관계**가 내용이라, 한 번에 하나씩
 	# 내면 들을 수가 없다. 줄을 세워 두고 여기서 한 칸씩 흘린다.
 	if not _q.is_empty():
@@ -200,6 +214,103 @@ static func tick(g: Node, d: float) -> void:
 			var s: Array = _q.pop_front()
 			g._sfx(String(s[0]), float(s[1]))
 			_qt = float(s[2])
+
+
+# ── 「점수 카드 걸음」 미리보기의 끝맺음 ────────────────────
+#  **_next_step 의 빈 큐 갈래를 안 밟는다.** 거기는 연출이 아니라 한 발이
+#  끝나는 진짜 길이다 — burst_n 을 0 으로 내리고, _wear_spent 가 다 쓴 동전을
+#  owned 에서 지우고, _finish_leg 가 Save.peak 을 디스크에 앉히거나 _to_pick 이
+#  화면을 넘긴다. 연출을 한 번 다시 보는 값으로는 너무 비싸다(2026-09-18).
+#
+#  tick 이 game.gd:3188 에서 상태 기계(3197)보다 **먼저** 도는 것을 쓴다. 큐가
+#  빈 채 qt 가 0 을 찍는 프레임을 여기서 가로채므로 game.gd 에 갈래를 안 판다.
+static func _card_tick(g: Node, d: float) -> void:
+	# 카드가 다 미끄러져 나간 **뒤에** 수를 되돌린다. 나가는 동안은 마지막
+	# 걸음이 적은 값을 그대로 이고 간다 — 진짜 정산도 그렇게 나간다(빈 큐
+	# 갈래는 card_target 만 내리고 수는 다음 _land 까지 그대로 둔다). 나가기
+	# 전에 되돌리면 「0 × 0」이 0.3초 동안 미끄러져 나간다.
+	if card_ph == 3:
+		# 새 발이 내려앉았다 — _land 가 이미 다 되돌렸으므로 덮으면 그 발이 상한다.
+		if g.card_target > 0.0:
+			card_ph = 0
+			card_back = {}
+			return
+		if g.card_p > 0.02:
+			return
+		_card_nums(g)
+		return
+	# 다른 줄이 화면을 옮겼다 — 되돌릴 자리가 이미 없으니 손을 뗀다.
+	if g.state != g.S.RESOLVE:
+		card_ph = 0
+		card_back = {}
+		return
+	# 마지막 걸음이 아직 화면에 서 있다.
+	if not g.queue.is_empty() or g.qt - d > 0.0:
+		return
+	if card_ph == 1 and bool(card_back.get("big", false)):
+		_card_big(g)
+		return
+	_card_done(g)
+
+
+#  「한 방」의 합계 카드를 **손으로** 놓는다. 큐에 {"k": "total"} 을 넣으면
+#  _next_step 이 _score_combine 을 돌려 판 점수에 더하고 Save.peak("best_gain")
+#  을 쓴다 — 이 단은 4900 × 90 = 441,000 이라 best_gain 의 전설 동전 해금 문턱
+#  (100,000)을 한 번에 넘긴다. 그림만 따 오고 셈과 저장은 안 건드린다.
+#  _score_combine 은 순수 함수라 읽기만 하는 것이 안전하다(3716~3741).
+static func _card_big(g: Node) -> void:
+	card_ph = 2
+	g.pitch_step += 1
+	g.card_mode = 1
+	g.card_item = ""
+	g.calc_lit = false
+	g.roll_t = -1.0
+	g.last_gain = g._score_combine(g.cur_chip, g.cur_mult)
+	g.total_flash = 1.0
+	g.gain_roll = 1.0
+	g.card_burst = 1.0
+	g.shake = 9.0
+	g.board_punch = 1.0
+	g.qt = g.beat * 2.6 * g._pace()
+	g._card_kick(float(g.CARDFX.kick_total), float(g.CARDFX.press_total))
+	g._card_kick(float(g.CARDFX.kick_big) - float(g.CARDFX.kick_total),
+			float(g.CARDFX.press_big))
+	g._sfx("settle_total")
+	# 멈춤도 걸음의 절반으로 묶는다 — 게임 쪽(총점 걸음)과 같은 뺄셈이라야
+	# 미리보기의 걸음 길이가 「큼」 단과 같다.
+	if not g.motion_off:
+		g.hitstop = minf(float(g.CARDFX.stop), g.qt * 0.5)
+		g.qt -= g.hitstop
+	g.card_jrate = 1.0 / maxf(g.qt * float(g.CARDFX.jspan), 0.02)
+
+
+#  누르기 전 자리로 되돌린다. card_target 0 은 빈 큐 갈래가 하던 그 한 줄이다 —
+#  카드가 미끄러져 나가는 것까지가 연출이라 그것만 가져온다. 카드에 적힌 수는
+#  나간 뒤에 되돌린다(_card_tick 의 3단).
+static func _card_done(g: Node) -> void:
+	g.card_target = 0.0
+	g.calc_lit = false
+	g.roll_t = -1.0
+	g.queue.clear()
+	g.qt = 0.0
+	g.state = int(card_back.get("state", g.S.PICK))
+	g.pitch_step = int(card_back.get("pitch", 0))
+	g.settle_n = int(card_back.get("settle_n", 0))
+	g.burst_n = int(card_back.get("burst_n", 0))
+	card_ph = 3
+	g.queue_redraw()
+
+
+#  카드에 적힌 수만 되돌린다. 3단이 끝날 때와, 나가는 중에 줄을 또 누를 때
+#  둘 다 여기를 지난다 — 두 자리에 같은 값을 두 번 적으면 한쪽만 고치게 된다.
+static func _card_nums(g: Node) -> void:
+	g.card_mode = 0
+	g.card_item = ""
+	g.cur_chip = int(card_back.get("chip", 0))
+	g.cur_mult = int(card_back.get("mult", 0))
+	g.last_gain = int(card_back.get("gain", 0))
+	card_ph = 0
+	card_back = {}
 
 
 # ── 자리 ──────────────────────────────────────────────────
@@ -847,11 +958,31 @@ static func _run(g: Node, e: Dictionary) -> void:
 			# 없었다 — 고치는 동안 매번 판을 넘길 수는 없다(2026-09-18).
 			#
 			# _land 를 **안 거친다.** 점수 셈도 동전 발동도 닳음도 하나도 안 돈다 —
-			# _land 가 하던 초기화를 손으로 놓고 큐만 세운다.
-			if not g._is_play():
-				_say("판 위에서만")
+			# _land 가 하던 초기화를 손으로 놓고 큐만 세운다. 끝맺음은
+			# _card_tick 이 가로채므로 빈 큐 갈래(한 발이 끝나는 진짜 길)도
+			# 안 밟는다.
+			#
+			# **조준하는 동안에만 연다.** _is_play() 는 FLY · RESOLVE 까지 참이라,
+			# 날아가는 다트 위나 **진행 중인 진짜 정산 위**에서 눌리면 아래
+			# queue.clear() 가 그 발의 남은 걸음(합계 걸음까지)을 통째로 버려
+			# 그 발 점수가 영영 안 실린다(2026-09-18).
+			if not (g.state == g.S.PICK or g._is_aim_stage()):
+				_say("조준 중에만")
 				return
 			var ci := i % 3
+			# 앞 미리보기가 아직 미끄러져 나가는 중(3단)이면 그 되돌릴 값이
+			# 진짜다 — 지금 화면의 수는 앞 걸음이 남긴 것이라 그대로 베끼면
+			# 미리보기를 두 번 누른 뒤에 판이 안 돌아온다.
+			if card_ph == 3:
+				_card_nums(g)
+			# 되돌릴 자리. 미리보기는 판을 한 칸도 안 옮긴다.
+			card_back = {
+				"state": g.state, "pitch": g.pitch_step,
+				"settle_n": g.settle_n, "burst_n": g.burst_n,
+				"chip": g.cur_chip, "mult": g.cur_mult, "gain": g.last_gain,
+				"big": ci == 2,
+			}
+			card_ph = 1
 			g.card_side = 1
 			g.card_y = 206.0
 			g.card_mode = 0
@@ -888,13 +1019,15 @@ static func _run(g: Node, e: Dictionary) -> void:
 							"lbl": "점수 +4000"})
 					g.queue.append({"k": "item", "i": 0, "kind": "xmult", "v": 3,
 							"lbl": "배수 ×3"})
-					# 합계는 「한 방」에만 넣는다 — 점수가 실제로 오르면 판이 끝나
-					# 화면이 바뀐다. 이 단은 목표의 반을 밟으러 가는 것이고,
-					# 넘겨서 판이 끝나는 것이 **보고 싶은 그림**이라 막지 않는다.
-					g.queue.append({"k": "total"})
+					# 합계 걸음은 **큐에 안 넣는다.** {"k": "total"} 은 연출이
+					# 아니라 셈이다 — _score_combine 이 돌아 판 점수에 441,000 이
+					# 더해지고 Save.peak("best_gain") 이 앉는다(전설 동전 해금
+					# 문턱이 100,000 이다). 마지막 걸음이 끝나는 프레임에
+					# _card_big 이 합계 카드를 손으로 놓는다(2026-09-18).
 			# _pace() 가 읽는 두 값이다. 안 놓으면 앞 정산의 값이 남아 배속이
-			# 틀린 채로 돈다.
-			g.settle_n = g.queue.size()
+			# 틀린 채로 돈다. 「한 방」은 큐 밖의 합계 카드가 한 걸음 더라
+			# 하나를 더한다 — 안 더하면 배속이 「큼」과 갈린다.
+			g.settle_n = g.queue.size() + (1 if ci == 2 else 0)
 			g.burst_n = 0
 			g.card_target = 1.0
 			g.state = g.S.RESOLVE
