@@ -50,6 +50,9 @@ func _quiet() -> void:
 	g.mouse_at = Vector2(-50.0, -50.0)
 	g.tip_a = 0.0
 	g.tip_spot = -1
+	#  등급 맥동을 못박는다(2026-09-18). 안 넣으면 번짐 알파가 프레임마다
+	#  달라 「전·후 사진을 같은 자리에서 뜬다」는 이 자의 전제가 깨진다.
+	g.rar_t = 0.0
 
 
 func _say(ok: bool, name: String, detail := "") -> void:

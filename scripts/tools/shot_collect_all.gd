@@ -40,6 +40,9 @@ func _run() -> void:
 			g.collect_page = pg
 			for f in 4:
 				g.mouse_at = Vector2(-50.0, -50.0)
+				#  등급 맥동을 못박는다(2026-09-18) — 쪽마다 번짐이 달라지면
+				#  여섯 탭을 견줄 수가 없다.
+				g.rar_t = 0.0
 				g.queue_redraw()
 				await process_frame
 			root.get_texture().get_image().save_png("res://shots/colall_%d_%d.png" % [t, pg])

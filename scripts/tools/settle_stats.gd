@@ -126,7 +126,24 @@ func _body_box(it: Dictionary, s: Dictionary) -> Rect2:
 			return Rect2(c - Vector2(r, r), Vector2(r * 2.0, r * 2.0))
 		"dart":
 			return _dart_box(it, String(s.d.id))
-	# 기본 점수 — game.gd:3358-3363. 옆면 타원이 sd 만큼 아래로 한 겹 더 깔린다.
+	# 기본 점수 — game.gd 의 _sticker_flat. 옆면 타원이 sd 만큼 아래로 한 겹 더 깔린다.
+	#  2026-09-18 — 줄 번호 주석이 3358-3363 으로 낡아 있었다(지금은 _sticker_flat).
+	#  손으로 베낀 사각이라 game.gd 가 실루엣을 갈면 여기만 옛 값을 잰다.
+	#  **레전더리는 플라크다** — 깎은 사각에 두꺼운 옆면(동전의 1.9배)이다.
+	#  ±10° 기울임에서 아래끝 잉크가 가장 깊어지므로 최악각으로 잡는다.
+	if String(s.type) == "item" \
+			and String(s.get("d", {}).get("rarity", "")) == "legendary" \
+			and not bool(g.rank_off):
+		var pa: float = g.RANK.plq_a
+		var pb: float = g.RANK.plq_b
+		var pc: float = g.RANK.plq_cut
+		var psd: float = g.TBL.chip_t * g.TBL.tall * float(g.RANK.plq_side)
+		var tl: float = g.RANK.plq_tilt
+		#  깎인 꼭짓점 (a-cut, b) 가 최대 y 를 낸다 — 면에서 돌리고 flat 으로 누른다.
+		var hy: float = ((pa - pc) * sin(tl) + pb * cos(tl)) * g.TBL.flat
+		var hx: float = pa * cos(tl) + (pb - pc) * sin(tl)
+		return Rect2(Vector2(c.x - hx, c.y - hy),
+				Vector2(hx * 2.0, hy * 2.0 + psd))
 	var rx: float = g.TBL.chip_r
 	var ry: float = g.TBL.chip_r * g.TBL.flat
 	var sd: float = g.TBL.chip_t * g.TBL.tall
