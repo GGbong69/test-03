@@ -208,7 +208,66 @@ func _run() -> void:
 		root.get_texture().get_image().save_png("res://shots/form_smash.png")
 		print("  form_smash · 조각 %d" % g.shards.size())
 
+	#  ⑦ **작은 자리 — 몸 채움이 살아 있는가** (2026-09-19)
+	#     법선 오프셋이 깎은 모서리를 뒤집어 다각형이 자기교차가 되면 고닷의
+	#     삼각분할이 빈 배열을 돌려주고 **판이 통째로 안 그려진다**. 터지는
+	#     자리가 **r < 12.11 전 구간**이라 큰 자리(테이블 22.04 · 랙 19 ·
+	#     컬렉션 13)에서는 멀쩡해 보인다 — 위 여섯 장으로는 영원히 안 보인다.
+	#     실제로 망가지던 소비자 둘을 그래서 따로 찍는다:
+	#       · **런 정보 12**(30677) — 몸 색이 사라지고 턱 색이 판을 먹었다
+	#       · **툴팁 미니 8**(21779) — 같은 자리
+	print("\n⑦ 작은 자리 — 런 정보 12 · 툴팁 미니 8 (몸 채움이 사는가)")
+	#  툴팁 미니 8 — 레전더리를 테이블에 올려 놓고 커서를 그 위에 둔다.
+	#  **_quiet() 를 안 부른다** — 그 함수가 커서를 치우고 tip_a 를 0 으로
+	#  못박으므로, 툴팁을 찍는 장에서 부르면 툴팁이 없는 장이 나온다.
+	#  게임 제 손으로 _tip_update 가 돌아야 tip_chip 이 찬다.
+	Dev._run(g, {"t": "act", "a": "form_leg_table"})
+	g._drop_settle()
+	var tj := -1
+	for j in mini(g.drop.size(), g.stock.size()):
+		if String(g.stock[j].type) == "item" \
+				and String(g.stock[j].d.get("rarity", "")) == "legendary":
+			tj = j
+			break
+	if tj >= 0:
+		#  **_tip_update 는 mouse_at 이 아니라 _cursor() 를 본다**(3669) — 창이
+		#  있으면 진짜 커서 자리를 읽는다. 그래서 커서를 실제로 옮긴다.
+		#  논리 640x360 을 창 1280x720 으로 늘여 그리므로 창 좌표는 두 배다.
+		var mp: Vector2 = g._p2s(g.drop[tj].u, g.drop[tj].w, g.drop[tj].h)
+		Input.warp_mouse(mp * 2.0)
+		for k in 40:
+			g.mouse_at = mp
+			g._tutor_close()
+			g.tutor_out = 0.0
+			g.swap_live = false
+			g._process(1.0 / 60.0)
+		g.rar_t = 0.0
+		g.queue_redraw()
+		await process_frame
+		await process_frame
+		root.get_texture().get_image().save_png("res://shots/form_small_tip.png")
+		print("  form_small_tip · %s · 툴팁 짙기 %.2f (동전 r=8)"
+				% [g.stock[tj].d.get("n", "?"), g.tip_a])
+	else:
+		print("  테이블에서 레전더리를 못 찾았다")
+	#  런 정보 12 — **보유 탭(ri3)** 이 동전 다섯을 r=12 로 편다.
+	Dev._run(g, {"t": "act", "a": "form_leg"})
+	print("  랙: %s" % _names())
+	g.run_from = g.S.PICK
+	g.state = g.S.RUNINFO
+	for t in g.RI_TABS.size():
+		g.runinfo_tab = t
+		for k in 3:
+			g._process(1.0 / 60.0)
+		_quiet()
+		g.queue_redraw()
+		await process_frame
+		await process_frame
+		root.get_texture().get_image().save_png("res://shots/form_small_ri%d.png" % t)
+		print("  form_small_ri%d · 런 정보 탭 %d" % [t, t])
+
 	print("\n찍음: shots/rank_rack · rank_mat · form_leg · form_var ·"
 			+ " rank_table · form_leg_table · form_var_table ·"
-			+ " rank_table_off · rank_smash · form_smash\n")
+			+ " rank_table_off · rank_smash · form_smash ·"
+			+ " form_small_ri0~3 · form_small_tip\n")
 	quit(0)

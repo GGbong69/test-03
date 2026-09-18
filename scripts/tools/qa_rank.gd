@@ -108,9 +108,9 @@ func _lowy(k: Array) -> float:
 
 #  기울임 tl 에서 화면 아래끝(면 → 화면). 꼭짓점 전수로 잰다 — 어제 자는
 #  (a-cut, b) 한 점만 봤는데 rhomb·drip 은 그 꼭짓점이 아예 없다.
-func _ink_low(form: String, tl: float) -> float:
+func _ink_low(form: String, tl: float, sx := 1.0, sy := 1.0) -> float:
 	var m := -1e9
-	for v in _loc(form):
+	for v in _loc(form, sx, sy):
 		var q := Vector2(v)
 		m = maxf(m, q.x * sin(absf(tl)) + q.y * cos(absf(tl)))
 	return m * float(g.TBL.flat) + _psd()
@@ -123,6 +123,27 @@ func _psd() -> float:
 func _boxry() -> float:
 	return float(g.TBL.chip_r) * float(g.TBL.flat) \
 			+ float(g.TBL.chip_t) * float(g.TBL.tall)
+
+
+#  점에서 볼록 다각형 경계까지의 안쪽 여유(양수 = 안). 겹친 점이 만드는 길이
+#  0 짜리 변은 건너뛴다 — 뒤집힌 모서리를 모은 자리가 그렇게 생긴다.
+func _inset(p: Vector2, k: Array) -> float:
+	var n := k.size()
+	var ctr := Vector2.ZERO
+	for v in k:
+		ctr += Vector2(v)
+	ctr /= float(n)
+	var m := 1e9
+	for i in n:
+		var a := Vector2(k[i])
+		var b := Vector2(k[(i + 1) % n])
+		if (b - a).length() < 0.0001:
+			continue
+		var e := (b - a).orthogonal().normalized()
+		if e.dot((a + b) * 0.5 - ctr) < 0.0:
+			e = -e
+		m = minf(m, -(p - a).dot(e))
+	return m
 
 
 #  볼록한가 — 모든 외적의 부호가 같은가. _in_poly 와 _coin_clip 이 둘 다
@@ -387,6 +408,31 @@ func _forms_run() -> void:
 		var mg := _boxry() - lo
 		_ok("%s 아래끝 잉크 · 여유 >= 1.0" % f, mg >= 1.0,
 				"%.3f · 여유 %.3f (기울임 %+.1f°)" % [lo, mg, rad_to_deg(tl)])
+	#  ── 여기까지가 **wob 0 에서 재는 선**이다 (2026-09-19) ─────
+	#  _obj_box.ry 는 wob 을 안 먹는 고정 덮개고(16677), 누운 몸은 sy =
+	#  1-wob*0.12 로 늘어난다. **원반 자신이 wob-1 에서 그 상자를 2.084px
+	#  넘는다** — 백 장이 다 쓰는 원반이 그러므로 이 선은 wob 0 에서 재는
+	#  선이 맞다(안전선 ⓕ 와 같은 관례다). 그러니 판에 물을 것은 「상자
+	#  안인가」가 아니라 **「원반보다 나쁘지 않은가」**다: 상자를 넘는 것이
+	#  값표 자리(_bill_rect)에 닿는 문제라면, 원반이 이미 여섯 배 더 넘고
+	#  있는 자리를 판만 피해 갈 이유가 없다. 판을 줄여 쫓아갈 선이 아니라
+	#  **원반과 견주는 선**이다.
+	#  잰 값(wob-1 여유): 원반 **-2.084** · slab +1.442 · sq +0.719 ·
+	#  dia -0.177 · drip -0.177 · tall -0.353 — 다섯 다 원반보다 낫다.
+	print("  ── ⓖ wob ±1 아래끝 잉크 <= 원반 자신의 아래끝 ──")
+	for f in plq:
+		var tl2: float = float(g.FORMS[f].get("tilt", 0.0))
+		var worst := -1e9
+		var ww := 0.0
+		for w in [-1.0, 0.0, 1.0]:
+			var lo2 := _ink_low(f, tl2, 1.0 + w * 0.05, 1.0 - w * 0.12)
+			var dlo: float = chip * float(g.TBL.flat) * (1.0 - w * 0.12) \
+					+ float(g.TBL.chip_t) * float(g.TBL.tall)
+			if lo2 - dlo > worst:
+				worst = lo2 - dlo
+				ww = w
+		_ok("%s wob ±1 아래끝 <= 원반의 아래끝" % f, worst <= 0.0,
+				"가장 나쁜 wob %+.0f 에서 원반보다 %.3f px 낫다" % [ww, -worst])
 
 	# ── ⓖ-b′ **표적이 잉크를 덮는가 (판 다섯).** _obj_shape 를 직접 두드린다
 	print("  ── ⓖ-b 표적이 잉크를 덮는가 (판) ──")
@@ -395,6 +441,47 @@ func _forms_run() -> void:
 	print("  ── ⓖ-b″ 표적 타원 가지 — 오늘 처음 잰다 (원반·물림) ──")
 	_shape_probe(["disc"], "common", false)
 	_shape_probe(mill, "rare", false)
+
+	# ── ⓧ 삼각분할이 안 튄다. **꼭짓점을 세는 자로는 영원히 안 잡히는 자리다**
+	#  고닷의 삼각분할은 자기교차 다각형에 **빈 배열**을 돌려주고, 그러면
+	#  draw_colored_polygon 이 아무것도 안 그린다 — 판이 통째로 사라진다
+	#  (game.gd:18153 이 이미 적어 둔 실패 방식이다). 법선 오프셋은 안으로
+	#  미는 깊이가 깎음보다 커지는 순간 45° 모서리를 **뒤집는다**. 깎음은 k 로
+	#  같이 줄어드는데 오프셋은 면px 고정이라 **작은 반지름에서만** 터진다 —
+	#  2026-09-19 에 몸 채움(겹 3)이 **r < 12.11 전 구간**에서 다섯 폼 다
+	#  삼각 0개였고, 거기 **툴팁 미니 8 · 런 끝 10 · 런 정보 12** 가 다 들어
+	#  있었다. qa 는 246/0 으로 통과하고 있었다 — 폼 루프가 꼭짓점만 보고
+	#  삼각분할을 한 번도 안 불렀기 때문이다.
+	print("  ── ⓧ 삼각분할 (자기교차면 판이 통째로 안 그려진다) ──")
+	for f in plq:
+		var fs := String(f)
+		var bad := []
+		for r2 in [22.04, 19.0, 13.0, 12.0, 10.0, 8.0]:
+			var kk: float = r2 / chip
+			for gr in [0.0, -1.0, -2.0, -3.0]:
+				var pp: PackedVector2Array = g._coin_pts_k(fs,
+						Vector2(60.0, 40.0), 0.0, kk, float(g.TBL.flat), float(gr))
+				if pp.size() >= 3 and Geometry2D.triangulate_polygon(pp).is_empty():
+					bad.append("r%.0f겹%d" % [r2, int(-gr)])
+		_ok("%s 반지름 여섯 x 겹 넷이 다 삼각분할된다" % fs, bad.is_empty(),
+				"24/24" if bad.is_empty() else "터진 자리 " + ", ".join(bad))
+	#  속이 빈 판(l03)의 턱 고리 — 바깥·안쪽 겹이 **따로** 뒤집히면 칸 여덟 중
+	#  넷만 남는다(2026-09-19 실측: r=12 에서 4/8). 고리는 칸마다 사각 하나라
+	#  몸 채움과 터지는 자리가 다르다.
+	for r2 in [22.04, 19.0, 13.0, 12.0, 10.0, 8.0]:
+		var kk2: float = r2 / chip
+		var op: PackedVector2Array = g._coin_pts_k("slab", Vector2(60.0, 40.0),
+				0.0, kk2, float(g.TBL.flat), -2.0)
+		var ip: PackedVector2Array = g._coin_pts_k("slab", Vector2(60.0, 40.0),
+				0.0, kk2, float(g.TBL.flat), -3.0)
+		var cells := 0
+		for i in op.size():
+			var qd := PackedVector2Array([op[i], op[(i + 1) % op.size()],
+					ip[(i + 1) % ip.size()], ip[i]])
+			if not Geometry2D.triangulate_polygon(qd).is_empty():
+				cells += 1
+		_ok("l03 턱 고리 여덟 칸이 다 선다 (r %.2f)" % r2, cells == op.size(),
+				"%d/%d 칸" % [cells, op.size()])
 
 	# ── ⓗ-b′ 볼록 · 볼록 자르기
 	print("  ── ⓗ-b 볼록 · 말림 자르기 ──")
@@ -478,7 +565,7 @@ func _forms_run() -> void:
 		var old_fr: float = g._plq_face_r(
 				float(g.RANK.plq_b) * r2 / chip, bnd2)
 		_ok("slab 얼굴 = 어제 _plq_face_r (r %.2f)" % r2,
-				absf(float(g._coin_face("slab", r2, bnd2).z) - old_fr) < 1e-6,
+				absf(float(g._coin_face("slab", r2, r2, r2, bnd2).z) - old_fr) < 1e-6,
 				"%.4f" % old_fr)
 
 	# ── ⓙ′ 문턱과 깊이가 **식에서** 나온다
@@ -555,7 +642,7 @@ func _forms_run() -> void:
 			var band: float = 1.0 if r2 < float(g.RANK.r_spot) else 2.0
 			if _fam(fs) != "plaque":
 				band = 0.0
-			var fv: Vector3 = g._coin_face(fs, r2, band)
+			var fv: Vector3 = g._coin_face(fs, r2, r2, r2, band)
 			if r2 == 8.0:
 				r8 = fv.z
 				ok8 = fv.z > 2.0
@@ -572,6 +659,34 @@ func _forms_run() -> void:
 						inside = false
 		_ok("%s 얼굴이 판 안이고 r=8 에서 살아 있다" % fs, inside and ok8,
 				"r=8 얼굴 반지름 %.2f (그리기 바닥 2.0)" % r8)
+	#  ── ⓝ-b **wob 을 먹인 얼굴** (2026-09-19) ────────────────
+	#  위 줄은 **선 자세(wob 없음)** 만 잰다. 구운 얼굴 png 는 **원**인데 누운
+	#  몸은 가로·세로가 **반대로** 눌리므로(sx = 1+wob*0.05 · sy = 1-wob*0.12),
+	#  반지름을 세로 하나로만 뽑으면 wob 음수에서 얼굴이 가로로 테를 뚫는다.
+	#  잰 값(그 버그 때 삐진 길이, 면px): sq wob-1 **2.649** · tall **2.074** ·
+	#  dia 0.897 · drip 0.744 · slab 0.000. slab 만 성했던 것은 얼굴이 짧은
+	#  축(b 12.810)에 묶여 a 17.935 쪽에 여유가 남았기 때문이고, 그래서
+	#  **두 배율 중 작은 쪽에 묶는 것으로는 안 된다** — 그러면 이번엔 slab 이
+	#  wob-1 에서 얼굴을 2.178 잃는다. 어제 옳던 하나가 오늘 작아지는 것은
+	#  고친 것이 아니다. _coin_face 가 **제 몸에서 재도록** 고쳤고, 그러면
+	#  다섯이 어느 wob 에서도 정확히 맞닿는다(여유 0.000).
+	print("  ── ⓝ-b 얼굴이 누운 몸 안에 드는가 (wob 다섯) ──")
+	for f in plq:
+		var fs2 := String(f)
+		var worst := -1e9
+		var ww := 0.0
+		for w in [-1.0, -0.5, 0.0, 0.55, 1.0]:
+			var sx: float = 1.0 + w * 0.05
+			var sy: float = 1.0 - w * 0.12
+			#  누운 자세가 부르는 그대로다 — 깎음(sc)은 안 흔든다.
+			var fv2: Vector3 = g._coin_face(fs2, chip * sx, chip * sy, chip, 2.0)
+			var bd: Array = g._poly_grow(_loc(fs2, sx, sy, 1.0), -3.0)
+			var ov: float = fv2.z - _inset(Vector2(0.0, fv2.y), bd)
+			if ov > worst:
+				worst = ov
+				ww = w
+		_ok("%s 얼굴이 어느 wob 에서도 안 샌다" % fs2, worst <= 0.001,
+				"가장 나쁜 wob %+.2f 에서 %+.3f 면px" % [ww, worst])
 
 	# ── ⓥ 번짐의 도달
 	print("  ── ⓥ 번짐의 도달 <= 원반의 %.2f ──" % (22.04 + 18.2))
@@ -677,7 +792,12 @@ func _shard_probe(fs: Array, rar: String, is_plq: bool) -> void:
 	for f in fs:
 		var fm := String(f)
 		var s := {"type": "item", "d": {"id": _id_of_form(fm), "rarity": rar}}
-		var tot := 0.0
+		#  **바닥을 잰다 — 천장이 아니다.** 2026-09-19 까지 maxf 로 모았다:
+		#  시드 셋 중 **하나만** 통과하면 통과했다. 한 시드에서 _coin_clip 이
+		#  칸을 통째로 버려 실루엣의 3분의 1이 안 덮여도 다른 시드가 100% 면
+		#  조용히 지나갔다. 같은 고리의 mn·out_n 은 처음부터 바닥·누적이었는데
+		#  tot 하나만 방향이 반대였다.
+		var tot := 1e9
 		var mn := 1e9
 		var out_n := 0
 		var body: PackedVector2Array = g._coin_pts_k(fm, Vector2.ZERO, 0.0, 1.0, 1.0, 0.0)
@@ -694,8 +814,14 @@ func _shard_probe(fs: Array, rar: String, is_plq: bool) -> void:
 					for v in (p as PackedVector2Array):
 						if not g._in_poly(v, body):
 							out_n += 1
-			tot = maxf(tot, a / maxf(sil, 0.001))
-		var bar: float = 0.88 if is_plq else 0.90
+			tot = minf(tot, a / maxf(sil, 0.001))
+		#  **실측이 받쳐 주는 바닥**(2026-09-19 · 시드 셋의 최저값):
+		#   판 다섯 100.0% → 0.98 · 물림 다섯 94.8~98.5% → 0.94.
+		#  물림이 100 에 못 가는 것은 _shard_fan 이 호를 세 현으로 근사해
+		#  바깥이 조금 덜 덮이기 때문이고, 시드마다 부채 각이 달라 3.7점이
+		#  흔들린다(가장 낮은 자리가 pair sd37 의 94.8%). **이 수를 모르면
+		#  바닥을 다시 못 내린다.**
+		var bar: float = 0.98 if is_plq else 0.94
 		_ok("%s 조각이 실루엣을 덮는다 (>= %.0f%%)" % [fm, bar * 100.0],
 				tot >= bar, "%.1f%% · 실루엣 %.0f면px²" % [tot * 100.0, sil])
 		_ok("%s 가장 작은 조각 >= 40면px²%s"
