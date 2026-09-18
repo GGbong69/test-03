@@ -51,6 +51,15 @@ func _shot(nm: String) -> void:
 
 
 #  한 프레임. _drop_update 의 차례 그대로다.
+#
+#  **3D 팔을 손으로 같이 민다.** _hand3_sync / _body3_sync 는 _process 안에만
+#  있는데(game.gd 의 _npc_on 갈래) 여기는 set_process(false) 라 안 돈다 —
+#  안 밀면 열여섯 장 내내 상인이 **쉬는 자세로 얼어 있고 후리는 팔이 한 장도
+#  안 찍힌다**(2026-09-18 에 실제로 그렇게 찍었다). 그러면 이 도구가 재려던
+#  「마지막 물건의 조각이 손에 안 가리는가」(_smash_draw 를 _cover_draw 뒤에
+#  둔 이유)를 이 그림으로는 못 본다.
+#  여는 것(_hand3_open/_body3_open)은 set_process(false) 전 30프레임이 이미
+#  했고 두 번 불러도 _hand3_live 가 막으므로, 차례를 통째로 옮겨 적는다.
 func _frame(d: float) -> void:
 	g._sweep_update(d)
 	g._waste_update(d)
@@ -61,6 +70,12 @@ func _frame(d: float) -> void:
 		g.drop_t += g.DROP.sub
 		g._drop_step(g.DROP.sub)
 	g._drop_extras(d)
+	g.npc_clock += d         # 숨 · 쉬는 팔이 읽는 시계
+	if g._npc_on():
+		g._hand3_open()
+		g._hand3_sync()
+		g._body3_open()
+		g._body3_sync()
 
 
 func _stack(n: int) -> void:
