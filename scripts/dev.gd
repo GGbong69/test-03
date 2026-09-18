@@ -704,6 +704,32 @@ static func _run(g: Node, e: Dictionary) -> void:
 			if g.state != g.S.SHOP:
 				g._open_shop()
 			g._drop_settle()
+			#  한 번에 한 개를 깨므로 매물 수만큼 누르면 판이 빈다. 그 뒤로는
+			#  아래 for 가 한 바퀴를 헛돌고 **아무 일도 안 났다** — 누르는
+			#  사람에게는 줄이 죽은 것으로 보인다(2026-09-18, dev_probe 가
+			#  다섯째·여섯째 누름에서 잡았다). 비었으면 다시 깐다 — 「테이블
+			#  다시 굴리기」(restock)가 부르는 그 함수 그대로라 골드·가격을
+			#  안 만진다.
+			var live := false
+			for si in mini(g.drop.size(), g.stock.size()):
+				if not g.drop[si].gone:
+					live = true
+					break
+			if not live:
+				g._roll_stock()
+				g._drop_settle()
+			#  소리 문을 연다. 이 갈래는 _sweep_begin 을 안 부르므로
+			#  _sweep_reset 도 안 돈다 — 직전 쓸기가 상한(SMASH.snd_max)을
+			#  다 썼으면 smash_snd_n 이 그대로 남아 **다섯 번째 누름부터
+			#  영영 무음**이었다(2026-09-18). 여는 값 셋은 연출 카운터라
+			#  골드·가격과 무관하다.
+			g.smash_snd_n = 0
+			g.smash_snd_t = 0.0
+			g.smash_n = 0
+			#  씨도 한 칸 민다. smash_n 을 0 으로 되돌리면 조각 난수가
+			#  (smash_seed·131 + smash_n·17) 로 같은 자리에 떨어져 눌러도
+			#  눌러도 똑같은 조각이 난다 — 여러 벌을 보려고 두는 줄이다.
+			g.smash_seed += 1
 			for si in mini(g.drop.size(), g.stock.size()):
 				if g.drop[si].gone:
 					continue

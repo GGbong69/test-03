@@ -12460,14 +12460,24 @@ func _chute_draw() -> void:
 		#  쓸기 동안 이 빗변이 **벽이다**(_drop_lo). 새 도형을 안 그린다 —
 		#  이미 긋고 있는 이 선을 한 겹 굵게 덧그어 「여기 맞는다」를 말한다.
 		#  안쪽 2px 그늘이 없으면 굵어진 선이 그냥 밝아진 것으로만 보인다.
-		if z == Z_SELL and sweep_live and lip_up > 0.004:
-			var ln := (p[2] - p[1]).normalized()
-			var nm := Vector2(ln.y, -ln.x)      # 펠트 쪽(오른쪽) 법선
-			draw_line(p[1] + nm * 2.0, p[2] + nm * 2.0,
-					Color(C_WOOD.darkened(0.62), lip_up * 0.55), 2.0)
-			draw_line(p[1], p[2], Color(C_WOOD.lightened(0.55), lip_up), 2.0)
-			#  부딪힌 자리 — 그 화면 y 둘레 10px. **자국은 쓸기 안에서만 산다**
-			#  (걷어 낸 코스터 자국의 재발을 _sweep_reset 이 막는다).
+		#
+		#  문이 **open(상점에 있다) 하나**다. 전에는 sweep_live 도 같이
+		#  걸었는데, 그러면 쓸기를 안 열고 부딪힘만 세우는 길(dev 1장
+		#  「부딪힘 한 번」)에서 자국이 한 번도 안 떴다 — 줄이 약속한 것과
+		#  내는 것이 갈린 자리다(2026-09-18). 빼도 새지 않는다: lip_up 은
+		#  sweep_on 에서만 오르고 복귀 도중에 0 으로 돌아오며, 자국은
+		#  _smash_update 가 0.09초에 걷어 내고 _sweep_reset 이 한 번 더
+		#  비운다. **open 은 남겨야 한다** — 상점을 나가면 _smash_update 가
+		#  안 돌아 자국이 언 채로 남고, 그 자국이 스테이지 화면의 닫힌
+		#  창구까지 따라간다(걷어 낸 코스터 자국의 재발이 바로 그 길이다).
+		if z == Z_SELL and open and (lip_up > 0.004 or not lip_marks.is_empty()):
+			if lip_up > 0.004:
+				var ln := (p[2] - p[1]).normalized()
+				var nm := Vector2(ln.y, -ln.x)      # 펠트 쪽(오른쪽) 법선
+				draw_line(p[1] + nm * 2.0, p[2] + nm * 2.0,
+						Color(C_WOOD.darkened(0.62), lip_up * 0.55), 2.0)
+				draw_line(p[1], p[2], Color(C_WOOD.lightened(0.55), lip_up), 2.0)
+			#  부딪힌 자리 — 그 화면 y 둘레 10px.
 			for mk in lip_marks:
 				var my: float = float(mk.y)
 				var ka: float = 1.0 - float(mk.t) / float(SMASH.lip_mark_t)

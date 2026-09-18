@@ -50,6 +50,8 @@ func _initialize() -> void:
 
 	print("\n── 칸 자리 ───────────────────────────────")
 	_geometry(g)
+	print("\n── 부딪힘 한 번 ──────────────────────────")
+	_smash1(g)
 	print("\n── 조준 ──────────────────────────────────")
 	_aim(g)
 	print("\n── 계산 ──────────────────────────────────")
@@ -157,6 +159,47 @@ func _aim(g: Node) -> void:
 			"목록에서 기본을 집으면 동전도 떨어진다",
 			"방식 %s · 남은 조준 동전 %d · 고르개 '%s'"
 			% [g.aim_mode, left, Dev.open_k])
+
+
+# ── 「부딪힘 한 번」이 누를 때마다 같은 것을 낸다 ────────
+#
+#  이 줄은 _sweep_begin 을 안 부른다 — 그래서 _sweep_reset 도 안 돈다.
+#  소리 문(smash_snd_n)을 안 열어 두면 **다섯 번째 누름부터 영영 무음**이
+#  된다: 직전 쓸기가 상한(SMASH.snd_max)을 다 쓴 채로 남아 있기 때문이다
+#  (2026-09-18 에 실제로 그랬다). 줄이 제 주석에 적어 둔 것 — 「조각 · 먼지 ·
+#  턱 자국 · 소리를 한 번에 세워 놓고」 — 을 **누를 때마다** 다 내는지 여기서
+#  못 박는다. 턱 자국은 sweep_live 가 아니라 open(상점 안인가)으로 걸리므로
+#  쓸기를 안 열어도 뜬다(game.gd _chute_draw).
+func _smash1(g: Node) -> void:
+	Dev.page = 1
+	var i := _find(g, "부딪힘 한 번")
+	if i < 0:
+		_say(false, "물건 쪽에 부딪힘 줄이 있다")
+		Dev.page = 2
+		return
+	var c: Vector2 = Dev._row(i).get_center()
+	var mute := []                 # 소리가 안 난 누름
+	var no_mark := []              # 자국이 안 남은 누름
+	var no_shard := []             # 조각이 안 난 누름
+	var seeds := {}                # 눌러도 같은 조각이 나면 여기가 안 는다
+	#  여섯 번 — 상한(SMASH.snd_max)이 넷이라 다섯째부터가 옛 무음 구간이다.
+	for k in 6:
+		Dev.click(g, c)
+		if g.smash_snd_n <= 0:
+			mute.append(k + 1)
+		if g.lip_marks.is_empty():
+			no_mark.append(k + 1)
+		if g.shards.is_empty():
+			no_shard.append(k + 1)
+		seeds[int(g.smash_seed)] = true
+	_say(mute.is_empty(), "누를 때마다 소리가 난다", "무음이던 누름 " + str(mute))
+	_say(no_mark.is_empty(), "누를 때마다 턱 자국이 남는다",
+			"자국이 빈 누름 " + str(no_mark))
+	_say(no_shard.is_empty(), "누를 때마다 조각이 난다",
+			"조각이 빈 누름 " + str(no_shard))
+	_say(seeds.size() == 6, "누를 때마다 다른 조각이 난다",
+			"여섯 번에 씨 %d 벌" % seeds.size())
+	Dev.page = 2
 
 
 func _score(g: Node) -> void:
