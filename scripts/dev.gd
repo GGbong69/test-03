@@ -409,6 +409,9 @@ static func _rows(g: Node) -> Array:
 				{"n1": "팩 열기", "t": "list", "k": "boost",
 						"n": GameData.boosters().size()},
 				{"n1": "테이블 다시 굴리기", "t": "act", "a": "restock"},
+				{"n1": "쓸기 다시 보기", "t": "act", "a": "sweep"},
+				{"n1": "매물 아홉으로 쓸기", "t": "act", "a": "sweep9"},
+				{"n1": "부딪힘 한 번", "t": "act", "a": "smash1"},
 				{"n1": "테이블에 사진 깔기", "t": "act", "a": "restock_fix"},
 				{"n1": "모션 끄기/켜기", "t": "act", "a": "motion"},
 			]
@@ -662,6 +665,53 @@ static func _run(g: Node, e: Dictionary) -> void:
 		"restock":
 			g._roll_stock()
 			_say("테이블 다시")
+			return
+		"sweep":
+			#  쓸기는 상점에서 리롤을 눌러야만 돌고, 골드가 모자라면 그마저
+			#  안 돈다(_reroll 의 _deny 갈래). 연출을 고치는 동안 매번 런을
+			#  돌 수는 없다 — 「정산 연출은 한 번 지나가면 다시 못 본다」
+			#  (replay)와 같은 이유다.
+			#  **_reroll 을 안 부른다.** 골드·가격을 건드리면 개발자 모드가
+			#  밸런스를 만지는 자리가 된다. _sweep_begin 머리말이 「골드
+			#  정산은 _reroll 이 이미 끝냈다. 여기는 연출과 물리만 연다」고
+			#  적어 둔 그대로다.
+			if g.state != g.S.SHOP:
+				g._open_shop()
+			g._drop_settle()
+			g._sweep_begin()
+			_say("쓸기 다시")
+			return
+		"sweep9":
+			#  조각이 가장 붐비는 순간(큰 조각 36 + 부스러기 27)을 한 줄로
+			#  부른다. 「최악의 상태」(worst)가 같은 생각의 선례다 —
+			#  640x360 에서 이 상태를 못 그리면 지금 고치는 게 나중보다 싸다.
+			if g.state != g.S.SHOP:
+				g._open_shop()
+			g._roll_stock()
+			var n0: int = g.stock.size()
+			if n0 > 0:
+				while g.stock.size() < 9:
+					g.stock.append(g.stock[g.stock.size() % n0].duplicate(true))
+			g._drop_roll()
+			g._drop_settle()
+			g._sweep_begin()
+			_say("아홉으로 쓸기")
+			return
+		"smash1":
+			#  쓸기 없이 조각만 본다. 조각·먼지·턱 자국·소리를 한 번에
+			#  세워 놓고 **2px 밑으로 내려간 조각이 없는지** 정지 화면에서
+			#  들여다보는 줄이다. 「제목 판 깨기 직전」(egg)이 이 줄의 본이다.
+			if g.state != g.S.SHOP:
+				g._open_shop()
+			g._drop_settle()
+			for si in mini(g.drop.size(), g.stock.size()):
+				if g.drop[si].gone:
+					continue
+				g.drop[si].u = g._chute_dock_u(g.Z_SELL, g.drop[si].w) + g.drop[si].hw
+				g.drop[si].vu = -2600.0
+				g._smash_at(si)
+				break
+			_say("부딪힘 한 번")
 			return
 		"motion":
 			# 흔들림·밀려 듦·굴림을 통째로 끈다. 값은 그대로 최종값으로 간다 —
