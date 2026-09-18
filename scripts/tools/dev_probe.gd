@@ -267,7 +267,9 @@ func _card(g: Node) -> void:
 	var names := []
 	for ci in 3:
 		Dev.pick["cardfx"] = ci
-		names.append(Dev._cur_name({"t": "list", "k": "cardfx", "n": 3}))
+		#  _cur_name 은 2026-09-18 에 g 를 받게 됐다(조준 저울 줄이 상점 풀을
+		#  실제로 굴려 보기 때문이다). 여기는 그 갈래를 안 타지만 서명은 같이 따른다.
+		names.append(Dev._cur_name(g, {"t": "list", "k": "cardfx", "n": 3}))
 	_say(not String(names[0]).contains("없음") and names[0] != names[2],
 			"고른 단 이름이 화면에 뜬다", str(names))
 
