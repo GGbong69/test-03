@@ -10366,6 +10366,11 @@ const RANK := {
 	"plq_cut":   3.2,     # 모서리 넷을 깎는 길이
 	"plq_side":  1.9,     # 옆면 = chip_t * tall * 이것 = 6.11px. 두꺼운 아크릴이다
 	"plq_tilt":  0.175,   # ±10°. 이 위로 올리면 아래끝 잉크가 _obj_box 를 넘는다
+	#  홀로 마감의 알파. 원반(0.26)보다 낮다 — 메달이 가운데만 덮어 양끝에
+	#  마감이 그대로 드러나는데, 0.26 이면 어두운 몸 위에서 갈색 얼룩이 된다.
+	#  **두 자세가 이 한 칸을 같이 읽는다**(2026-09-18: 누운 자세만 0.15 로
+	#  고치고 선 자세에 0.26 을 남겨 두어 랙에서만 얼룩이 그대로 있었다).
+	"plq_holo_a": 0.15,
 	"r_mill":    16.0,    # 이 아래(화면 px)로는 실루엣을 안 문다. 골 0.8px 은 흐린 테다
 	"r_spot":    12.0,    # 이 아래로는 박음을 안 찍는다. 점선으로 뭉개느니 밴드만 남긴다
 }
@@ -11130,9 +11135,13 @@ func draw_sticker(c: Vector2, r: float, tier: Dictionary, rot: float,
 	#  바깥 한 겹이 옆면 색, 그 안 한 겹이 빛 받는 모서리다. 찍어 낸 쇠의
 	#  어법이고, 누운 자세의 옆면과 같은 색을 쓰므로 둘이 같은 물건으로 읽힌다.
 	var bb2 := Color(tier.body)
-	var rim: Color = (C_GOLD.darkened(0.22) if gold_rim
+	#  어둡게 깔기 **전**의 옆면 색을 따로 쥔다 — 박음 잉크(_spot_ink)가 v 로
+	#  갈래를 타는데, 이미 dim 이 먹은 색을 넣으면 어두운 자리에서 갈래가
+	#  뒤집힌다. 누운 자세도 side0 를 따로 쥐고 나중에 dim 을 먹인다.
+	var rim0: Color = (C_GOLD.darkened(0.22) if gold_rim
 			else (bb2.lightened(0.30) if bb2.v < 0.32
-			else bb2.darkened(float(EDGE.lo)))).darkened(dim)
+			else bb2.darkened(float(EDGE.lo))))
+	var rim := rim0.darkened(dim)
 	var rw: float = clampf(r * 0.16, 1.0, 2.2)      # 테두리 폭. r=8 툴팁에서도 안 뭉갠다
 	var y := _peel_y(r, peel)
 	#  ── 실루엣 갈래 (2026-09-18) ──────────────────────
@@ -11245,18 +11254,34 @@ func draw_sticker(c: Vector2, r: float, tier: Dictionary, rot: float,
 			var p1 := c + Vector2(cos(a3 + 0.55), sin(a3 + 0.55)) * (r * 0.34)
 			if p0.y - c.y <= y and p1.y - c.y <= y:
 				draw_line(p0, p1, Color(1.0, 1.0, 1.0, 0.42 * fa), 1.0)
-	#  ── 박음 — 선 자세에서는 **틈**이다 (2026-09-18) ──
-	#  누운 자세는 옆면에 찍고, 선 자세는 밴드를 끊는다. 틈은 안쪽 rim(금테면
-	#  금)을 드러내므로 **색을 하나도 안 더하고** 셈만 는다.
+	#  ── 박음 — 선 자세에서는 밴드를 끊는다 (2026-09-18) ──
+	#  누운 자세는 옆면에 찍고, 선 자세는 밴드를 끊는다. **잉크는 두 자세가
+	#  같다**(_spot_ink) — 처음에는 안쪽 rim 색으로 그어 「틈이 속을 드러낸다」
+	#  로 갔는데, **금테에서 셈 채널이 통째로 사라졌다**(2026-09-18 실측):
+	#  밴드도 _rank_col 이 금으로 내고 틈도 rim 이 금이라 같은 색을 같은 색
+	#  위에 그었다. rank_mat 의 u22(금테 x 희귀)가 흔한 금테 넷과 한 픽셀도
+	#  안 달랐다. 「색은 금박에 양보하고 **박음 개수는 그대로 남는다**」는
+	#  _rank_col 의 계약이 선 자세에서만 깨져 있었다.
+	#  _spot_ink 는 등급색이 아니라 옆면 밝기에서 내므로 금테 위 3.78 ·
+	#  어두운 몸 위 3.41~5.30 이다 — 셈 채널이 색 채널과 갈려 흑백에서도 산다.
+	#
+	#  **물린 반지름을 본다.** 틈 각과 골 각은 같도록 맞춰 두었으므로
+	#  (_mill_f 머리말: 주기가 PI/n 으로 같다) 여섯 틈이 전부 가장 깊은 골에
+	#  앉는다. 물리지 않은 r 로 그으면 골의 실루엣(r*0.900)보다 2.3px 밖까지
+	#  선이 나가 **떨어져 뜬 점 여섯**이 테 밖에 남았다(rank_rack 실측).
+	#  누운 자세(_rank_edge_flat)는 이미 _mill_f 를 곱하고 있었다 — 한 짝만
+	#  빠져 있었다.
 	#  **윗호에 판다** — 말림이 아랫쪽을 먹으므로(걷어 낸 등급 고리가 같은
 	#  판단을 했다) 아래에 파면 떼는 동안 셈이 사라진다.
 	#  r < 12 면 안 판다: 틈 2px 이 밴드 0.64px 을 점선으로 뭉갠다.
 	var spn: int = 0 if rank_off else int(tier.get("spots", 0))
 	if bw > 0.0 and spn > 0 and r >= float(RANK.r_spot):
+		var sink := _spot_ink(rim0).darkened(dim)
 		for k in spn:
 			var sa: float = PI + PI * (float(k) + 0.5) / float(spn)
 			var dv := Vector2(cos(sa), sin(sa))
-			draw_line(c + dv * (r - bw - 0.4), c + dv * (r + 0.4), rim,
+			var rr: float = r * _mill_f(sa, r, mdep) if mdep > 0.0 else r
+			draw_line(c + dv * (rr - bw - 0.5), c + dv * rr, sink,
 					float(RANK.spot_w))
 
 
@@ -11282,7 +11307,7 @@ func _plaque_up(c: Vector2, r: float, tier: Dictionary, rot: float,
 	var rim: Color = (C_GOLD.darkened(0.22) if gold_rim
 			else (bb.lightened(0.30) if bb.v < 0.32
 			else bb.darkened(float(EDGE.lo)))).darkened(dim)
-	var y := _peel_y(r, peel)
+	var y := _plq_peel_y(r, peel)
 	var fa := 1.0 - dim
 	var bnd := _plq_band(r, tier)
 	var rc := _rank_col(String(tier.rarity), gold_rim, dim)
@@ -11292,16 +11317,31 @@ func _plaque_up(c: Vector2, r: float, tier: Dictionary, rot: float,
 	#  바깥에서 안으로 한 겹씩 좁혀 채운다 — 겹테 둘 · 턱 · 몸.
 	#  번짐과 **같은 위상**으로 바깥 줄이 떤다(누운 자세와 같은 규약).
 	var pu := _rank_pulse(String(tier.rarity))
-	if bnd >= 1:
-		_plq_fill(c, a, b, cut, y,
-				Color(rc, clampf(0.86 + (pu - 1.0) * 0.583, 0.72, 1.0) * fa))
-	if bnd >= 2:
-		_plq_fill(c, a - 1.0, b - 1.0, cut, y,
-				Color(rc.darkened(float(TIP_RANK.inner_dk)), fa))
+	var oa: float = clampf(0.86 + (pu - 1.0) * 0.583, 0.72, 1.0)
 	var o := float(bnd)
-	#  턱 한 줄. 어두운 몸이라 bev_dark 로 낸다 — 옆면 색과 같아지면 면이 뭉친다.
-	_plq_fill(c, a - o, b - o, cut, y, _bev_col(bb, dim))
-	if not hollow:
+	if hollow:
+		#  속이 빈 플라크(l03 NULL) — **채우면 「빈 것」이 죽는다.**
+		#  2026-09-18 — 여기만 채우고 있었다: 몸만 건너뛰고 겹테·턱을 판으로
+		#  깔아 안쪽이 턱 색(#c4b7c1) 한 덩어리가 됐다. 빈 액자여야 할 것이
+		#  **빈 슬래브**로 보이고 남는 것이 조건 점 하나뿐이라 때가 낀 것처럼
+		#  읽혔다(rank_mat · colall_0_2 실측). 누운 자세(_plaque_flat)는
+		#  진작 고리로 가 있었다 — 「두 자세가 갈리면 테이블에서 집어 랙에
+		#  꽂는 순간 딴 물건이 된다」가 그 계약을 지키려고 쓴 함수에서 깨졌다.
+		#  누운 자세와 **같은 짝**을 부른다: 겹테는 _plq_rim(알파가 아니라
+		#  섞음으로 떤다 — 알파 고리는 깎인 모서리에서 1px 이가 빠진다),
+		#  턱은 _poly_ring 한 겹. 말림은 접는 선을 같이 넘겨 고리째 자른다.
+		_plq_rim(c, 0.0, a, b, cut, 1.0, rc, bnd, body, oa, c.y + y)
+		_poly_ring(_plq_pts(c, 0.0, a - o, b - o, cut, 1.0),
+				_plq_pts(c, 0.0, a - o - 1.0, b - o - 1.0, cut, 1.0),
+				_bev_col(bb, dim), c.y + y)
+	else:
+		if bnd >= 1:
+			_plq_fill(c, a, b, cut, y, Color(rc, oa * fa))
+		if bnd >= 2:
+			_plq_fill(c, a - 1.0, b - 1.0, cut, y,
+					Color(rc.darkened(float(TIP_RANK.inner_dk)), fa))
+		#  턱 한 줄. 어두운 몸이라 bev_dark 로 낸다 — 옆면 색과 같아지면 면이 뭉친다.
+		_plq_fill(c, a - o, b - o, cut, y, _bev_col(bb, dim))
 		_plq_fill(c, a - o - 1.0, b - o - 1.0, cut, y, body)
 	if wax:
 		#  방울은 **플라크 밑변**에서 떨어진다(누운 자세와 같은 규약).
@@ -11314,11 +11354,18 @@ func _plaque_up(c: Vector2, r: float, tier: Dictionary, rot: float,
 			draw_circle(wp + Vector2(0.0, wl), 1.7, rim)
 	if not hollow:
 		#  마감 — 홀로 온 바퀴. 플라크 **틀 안에서** 돈다.
-		#  알파가 원반(0.42)보다 낮다 — 누운 자세와 같은 이유다(그쪽 주석).
+		#  알파가 원반(0.42)보다 낮고 **누운 자세와 같은 값**이다(RANK.plq_holo_a).
+		#  2026-09-18 — 여기만 0.26 이었다. 주석은 「누운 자세와 같은 이유」라고
+		#  그쪽을 가리키는데, 그쪽이 적은 이유가 바로 「0.26 이면 무지개가
+		#  어두운 몸 위에서 갈색 얼룩이 된다」였다 — 실측으로 고친 값을 한
+		#  자세에만 넣고 다른 자세는 주석으로만 같다고 적어 두었던 것이다.
+		#  rank_rack 의 레전더리 메달 양옆에 6d4441 · 613e3f 가 그대로 남아
+		#  있었다. 두 자세가 다시 갈리지 않게 상수 한 칸으로 뺐다.
 		for j in 6:
 			var a2: float = rot + float(j) * (TAU / 6.0)
 			draw_colored_polygon(_plq_fan(c, 0.0, 1.0, a - o - 2.0, b - o - 2.0,
-					0.20, a2, a2 + TAU / 6.0, 4), Color(HOLO[j % 3], 0.26 * fa))
+					0.20, a2, a2 + TAU / 6.0, 4),
+					Color(HOLO[j % 3], float(RANK.plq_holo_a) * fa))
 	#  얼굴과 말림은 **draw_item_sticker 가 얹는다** — 원반도 거기서 얹으므로
 	#  두 실루엣이 같은 자리에서 갈린다(여기서 얹으면 얼굴이 두 번 그려진다).
 
@@ -11332,7 +11379,7 @@ func _rank_peel(c: Vector2, r: float, ti: int, plq: bool, peel: float,
 	if not plq:
 		_peel_fold(c, r, peel, dim)
 		return
-	var y := _peel_y(r, peel)
+	var y := _plq_peel_y(r, peel)
 	var k: float = r / float(TBL.chip_r)
 	var b: float = float(RANK.plq_b) * k
 	if y >= b - 0.6:
@@ -11351,6 +11398,20 @@ func _rank_peel(c: Vector2, r: float, ti: int, plq: bool, peel: float,
 # 접는 선의 높이(중심 기준 아래 방향). peel 1 이면 거의 다 말린다.
 func _peel_y(r: float, peel: float) -> float:
 	return r * (1.0 - clampf(peel, 0.0, 1.0) * 0.78)
+
+
+#  플라크의 접는 선. **원반의 자를 그대로 쓰면 안 된다** — _peel_y 는 반지름
+#  기준인데 플라크의 반높이는 0.581r 이라, 든 동전의 정착 말림(_peel_now 의
+#  0.28)에서 접는 선이 판 **밖**에 떨어진다: r=19 에서 y 14.85 대 반높이 11.04.
+#  그래서 레전더리만 **한 픽셀도 안 말렸다**(2026-09-18 실측) — 랙에서 집으면
+#  아흔아홉 장은 이형지가 들리는데 그 한 장만 안 들렸고, 볼록 자르기
+#  (_plq_seg · _plq_fold)는 게임에서 한 번도 안 도는 길이었다.
+#  제 높이로 재면 같은 몫이 말린다 — 두 실루엣 다 반높이의 0.78*peel 이다
+#  (peel 0.28 에서 11%).
+#  **곱셈 차례가 부르는 쪽(_plaque_up · _rank_peel)과 같아야 한다** — peel 0 이면
+#  접는 선이 판 밑변과 정확히 같은 수여야 자르기가 한 점도 안 깎는다.
+func _plq_peel_y(r: float, peel: float) -> float:
+	return _peel_y(float(RANK.plq_b) * (r / float(TBL.chip_r)), peel)
 
 
 # 원반에서 접는 선 위쪽만 채운다(활꼴). y >= r 이면 그냥 정원이라
@@ -16157,9 +16218,24 @@ func _obj_shape(i: int, m: Vector2) -> bool:
 	#  표적 넓이는 약 1100 화면px² 로 shot_shopsize 의 하한 200 위다.
 	if String(stock[i].type) == "item" and not rank_off \
 			and String(stock[i].d.get("rarity", "")) == "legendary":
-		return _in_poly(m, _plq_pts(c, _plq_ang(float(it.psi)),
+		#  **옆면까지 덮는다.** 윗면 다각형만 내면 두꺼운 아크릴(6.11px)이
+		#  통째로 죽은 자리가 된다 — 잉크는 아래로 18.07 까지 가는데 잡히는
+		#  것은 11.67 까지라, 물건 높이의 17% 가 안 잡혔다(2026-09-18 실측).
+		#  옛 타원 가지에서는 잡히던 자리다: 바로 아래 기본 가지가 lz 만큼
+		#  중심을 내리고 세로를 늘려 그 슬리버를 덮는데, 여기에만 그 보정이
+		#  없었다. _shop_hit 의 덮개(grow · 두 점 OR)는 **위쪽**만 넓히므로
+		#  도움이 안 된다.
+		#  옆면은 순수 수직 평행이동이라 **두 점 OR 이 정확한 덮개다**
+		#  (_shop_hit 이 같은 어법을 쓴다). 빈틈이 생기는 곳은 세로 두께가
+		#  옆면보다 얇아지는 **꼭짓점 끄트머리**뿐인데, +2 로 키운 다각형의
+		#  끝은 잉크의 끝보다 2.32px 밖이고 그 자리 세로가 12.9 > 6.11 이라
+		#  **잉크 위에는 빈틈이 한 점도 없다**(잰 값).
+		#  sd 는 _plaque_flat 과 **같은 식**이어야 그리는 쪽과 안 갈린다.
+		var pp := _plq_pts(c, _plq_ang(float(it.psi)),
 				float(RANK.plq_a) + 2.0, float(RANK.plq_b) + 2.0,
-				float(RANK.plq_cut), TBL.flat))
+				float(RANK.plq_cut), TBL.flat)
+		var psd: float = TBL.chip_t * TBL.tall * float(RANK.plq_side)
+		return _in_poly(m, pp) or _in_poly(m - Vector2(0.0, psd), pp)
 	var lz: float = TBL.chip_t * TBL.tall * 0.5          # 옆면 슬리버를 덮는다
 	var q := (m - c - Vector2(0.0, lz)) / Vector2(TBL.chip_r + 2.0,
 			TBL.chip_r * TBL.flat + lz + 2.0)
@@ -16924,12 +17000,19 @@ func _plq_fold(pts: PackedVector2Array, y: float) -> PackedVector2Array:
 #  볼록 다각형 고리. 바깥·안쪽이 같은 꼭짓점 수여야 한다 — 변마다 사각 하나로
 #  쪼개 넘긴다. 온 고리를 한 폴리곤으로 넘기면 비볼록이라 삼각분할이 튄다
 #  (annulus_at 머리말이 이미 밟아 본 함정이다).
+#  yc — 말림의 접는 선(화면 y). 넘기면 **칸마다** 그 선 위쪽만 남긴다. 고리를
+#  통째로 자르면 바깥·안쪽의 꼭짓점 수가 갈려 짝이 어긋나는데, 사각 한 칸은
+#  볼록이라 자르는 것이 공짜다.
 func _poly_ring(op: PackedVector2Array, ip: PackedVector2Array,
-		col: Color) -> void:
+		col: Color, yc := INF) -> void:
 	var n := mini(op.size(), ip.size())
 	for i in n:
 		var j := (i + 1) % n
-		draw_colored_polygon(PackedVector2Array([op[i], op[j], ip[j], ip[i]]), col)
+		var q := PackedVector2Array([op[i], op[j], ip[j], ip[i]])
+		if yc < INF:
+			q = _plq_seg(q, yc)
+		if q.size() >= 3:
+			draw_colored_polygon(q, col)
 
 
 #  플라크의 겹테 **고리 판**. 바깥 1px 등급색 · 안쪽 1px 그것의 darkened(0.45).
@@ -16942,13 +17025,14 @@ func _poly_ring(op: PackedVector2Array, ip: PackedVector2Array,
 #  oa — 바깥 줄만 맥동한다. 안쪽 줄은 안 떤다: 두 줄이 같이 흔들리면 테가
 #  굵어졌다 얇아졌다 하는 것으로 읽힌다.
 func _plq_rim(c: Vector2, ang: float, a: float, b: float, cut: float,
-		flat: float, col: Color, w: int, under: Color, oa := 1.0) -> void:
+		flat: float, col: Color, w: int, under: Color, oa := 1.0,
+		yc := INF) -> void:
 	for k in w:
 		var cc: Color = (col.lerp(under, 1.0 - oa) if k == 0
 				else col.darkened(float(TIP_RANK.inner_dk)))
 		_poly_ring(_plq_pts(c, ang, a - float(k), b - float(k), cut, flat),
 				_plq_pts(c, ang, a - float(k) - 1.0, b - float(k) - 1.0, cut, flat),
-				cc)
+				cc, yc)
 
 
 #  플라크의 번짐. _rar_glow 는 타원 전용이라 갈래를 따로 낸다 — 번짐이
@@ -17311,12 +17395,14 @@ func _plaque_flat(c: Vector2, it: Dictionary, t: Dictionary, rot: float,
 		#  그대로 드러나는데, 0.26 이면 무지개가 어두운 몸 위에서 **갈색 얼룩**이
 		#  된다(2026-09-18 실측 — 「때 낀 슬래브」로 보였다). 0.15 면 같은
 		#  무지개가 아크릴의 어른거림으로 읽힌다.
+		#  **선 자세(_plaque_up)와 한 상수를 같이 읽는다** — 여기만 고치고
+		#  저쪽에 0.26 을 남겨 두었다가 랙에서만 얼룩이 그대로 있었다.
 		var fr := _plq_face_r(b, float(bnd))
 		for k in 6:
 			var a2: float = rot + float(k) * (TAU / 6.0)
 			draw_colored_polygon(_plq_fan(c, ang, flat, a - float(bnd) - 1.0,
 					b - float(bnd) - 1.0, 0.20, a2, a2 + TAU / 6.0, 4),
-					Color(HOLO[k % 3], 0.15 * fa))
+					Color(HOLO[k % 3], float(RANK.plq_holo_a) * fa))
 		#  메달. 구운 PNG 는 원형 알파라 사각 안에 그대로 앉는다 —
 		#  faces.txt 도 disc() 도 한 줄 안 건드리므로 --import 단계가 아예 없다.
 		_icon_item(c, fr, fr * flat, String(it.get("id", "")), dim)

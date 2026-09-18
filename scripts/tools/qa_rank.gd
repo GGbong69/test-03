@@ -119,6 +119,13 @@ func _run() -> void:
 	_ok("금테 박음/옆면 >= 3:1", _cr(gink, gsd) >= 3.0,
 			"#%s / #%s = %.2f" % [gink.to_html(false), gsd.to_html(false),
 			_cr(gink, gsd)])
+	#  **금테에서 셈 채널이 죽지 않는가.** 밴드는 금박에 색을 양보하므로
+	#  (_rank_col) 박음까지 옆면 색으로 찍으면 같은 색을 같은 색 위에 긋는다 —
+	#  선 자세의 u22(금테 x 희귀)가 흔한 금테 넷과 한 픽셀도 안 달랐다.
+	var gband: Color = g._rank_col("uncommon", true, 0.0)
+	_ok("금테에서 밴드 != 박음 잉크", _cr(gband, gink) >= 3.0,
+			"밴드 #%s / 박음 #%s = %.2f" % [gband.to_html(false),
+			gink.to_html(false), _cr(gband, gink)])
 
 	# ⓔ 밴드가 바깥 이웃과 갈리는가. 누운 자세는 펠트, 선 자세는 UI 배경이다
 	print("  ── 밴드 대 바깥 이웃 ──")
@@ -156,6 +163,37 @@ func _run() -> void:
 			"%.2f + %.2f = %.2f <= %.2f (여유 %.2f)"
 			% [low, psd, low + psd, boxry, boxry - low - psd])
 
+	# ⓖ-b **표적이 옆면까지 덮는가.** 윗면 다각형만 내면 두꺼운 아크릴
+	#    (6.11px)이 통째로 죽은 자리가 된다 — 옛 타원 가지에서는 잡히던
+	#    자리라 회귀다. 그리는 식을 여기 베끼면 둘이 같이 틀리므로 **_obj_shape
+	#    를 직접 두드린다**: 잉크 꼭짓점 여덟과 그 아래 옆면 전부가 잡혀야 한다.
+	print("  ── 플라크 표적이 잉크를 덮는가 ──")
+	g.stock = [{"type": "item", "d": {"rarity": "legendary"}, "cost": 0,
+			"sold": false}]
+	g.drop = [{"u": 320.0, "w": 100.0, "h": 0.0, "psi": 0.0, "gone": false,
+			"sold": 0.0}]
+	var cc: Vector2 = g._p2s(320.0, 100.0, 0.0)
+	for psi in [0.0, PI * 0.5, -PI * 0.5]:      # ang 0 · +10° · -10°
+		g.drop[0].psi = psi
+		var ang: float = g._plq_ang(float(psi))
+		var ink: PackedVector2Array = g._plq_pts(cc, ang, pa, pb, pc,
+				float(g.TBL.flat))
+		var miss := 0
+		var deep := 0.0
+		for v in ink:
+			for s in 5:
+				var q: Vector2 = v + Vector2(0.0, psd * float(s) / 4.0)
+				if not g._obj_shape(0, q):
+					miss += 1
+					deep = maxf(deep, q.y - cc.y)
+		_ok("잉크가 다 잡힌다 (기울임 %+.0f°)" % rad_to_deg(ang), miss == 0,
+				"못 잡은 점 %d/40%s" % [miss,
+				"" if miss == 0 else " · 가장 깊은 곳 %.2f" % deep])
+	#  손으로 밀어 넣은 매물은 칸이 몇 개 빈 가짜다 — 아래에서 _process 를
+	#  돌리므로 다 쓰고 치운다.
+	g.stock = []
+	g.drop = []
+
 	# ⓗ 물린 원은 **안으로만** 판다. 밖으로 한 번이라도 나가면 물리가 깨진다
 	var worst := 0.0
 	for i in 720:
@@ -187,6 +225,28 @@ func _run() -> void:
 	_ok("말린 조각이 접는 선 아래로 안 샌다", leak == 0, "샌 점 %d개 / 9단" % leak)
 	_ok("접는 선 안쪽에서는 윗조각이 남는다", empty <= 1,
 			"빈 단 %d개 (맨 위 한 단은 비는 것이 맞다)" % empty)
+
+	# ⓗ-c **든 플라크가 실제로 말리는가.** 위 ⓗ-b 는 손으로 넣은 접는 선으로
+	#    재므로, 게임이 내는 값에서 접는 선이 판 **밖**에 떨어지는 것을 못
+	#    잡는다 — 실제로 그랬다: 원반의 자(_peel_y)를 반지름 기준으로 쓰는
+	#    바람에 레전더리만 한 픽셀도 안 말렸다. peel 은 _peel_now() 가 내는
+	#    진짜 두 값으로 잰다(떼는 순간의 튕김 · 손 안의 정착값).
+	print("  ── 든 플라크의 말림 ──")
+	var pr := 19.0                       # 랙 · 상인 손 · 든 동전
+	var pbr: float = pb * pr / chip
+	for pt in [0.0, 1.0]:
+		g.peel_t = pt
+		var pl: float = g._peel_now()
+		var yy: float = g._plq_peel_y(pr, pl)
+		var fq: float = (pbr - yy) / (2.0 * pbr)
+		var fd: float = (pr - g._peel_y(pr, pl)) / (2.0 * pr)
+		_ok("든 플라크가 말린다 (peel %.2f)" % pl, yy < pbr - 0.6,
+				"접는 선 %.2f < 반높이 %.2f — 말린 몫 %.1f%%"
+				% [yy, pbr, fq * 100.0])
+		_ok("원반과 **같은 몫**이 말린다 (peel %.2f)" % pl,
+				absf(fq - fd) < 0.001, "플라크 %.1f%% · 원반 %.1f%%"
+				% [fq * 100.0, fd * 100.0])
+	g.peel_t = 0.0
 
 	# ⓘ 맥동 — 광과민. 초당 3회 한계에서 멀찍이 떨어져 있어야 한다
 	print("  ── 맥동 ──")
