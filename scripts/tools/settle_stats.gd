@@ -24,6 +24,8 @@ extends SceneTree
 #    다트 _icon_dart   game.gd:3574-3644
 #    그림자 _obj_shadow game.gd:3312-3324 (light*3.35, 타원 r × r*flat)
 #    가격판 _bill_draw  game.gd:3393-3401 + draw_gold_at game.gd:2185-2191
+#    왼쪽 벽   _drop_lo     game.gd  (평상시 u_lo+hw · **쓸기 중에는 턱**
+#                                     _chute_dock_u(Z_SELL,w)+hw — 2026-09-18)
 # ══════════════════════════════════════════════════════════
 
 #  롤 수와 시드는 사용자 인자로 갈 수 있다:  ... --script ... -- 12345 800
