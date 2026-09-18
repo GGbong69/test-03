@@ -11555,7 +11555,8 @@ func draw_item_sticker(c: Vector2, r: float, it: Dictionary, rot: float, lift: f
 	#  메달 크기가 튄다. 원반·물린 원반 가지는 어제 이 자리의 식 그대로다
 	#  (draw_sticker 의 rw 와 같은 식이라 얼굴이 테 밑으로 안 기어든다).
 	var plq: bool = String(FORMS[form].get("fam", "disc")) == "plaque"
-	var fv := _coin_face(form, r, float(_plq_band(r, STK_TIERS[ti])))
+	#  선 자세는 wob 이 없다 — 두 배율이 같은 r 이라 어제 값과 한 글자도 안 다르다.
+	var fv := _coin_face(form, r, r, r, float(_plq_band(r, STK_TIERS[ti])))
 	var fcp := c + Vector2(0.0, fv.y)     # 얼굴 중심 — drip 만 +1.223k 처진다
 	var fr: float = fv.z
 	if _mat_of(it) != "hollow" and fr > 2.0:
@@ -17681,6 +17682,39 @@ func _poly_grow(k: Array, g: float) -> Array:
 			continue
 		mt = mt.normalized()
 		out.append(Vector2(k[i]) + mt * (g * minf(1.0 / maxf(mt.dot(n1), 0.02), ml)))
+	#  ── 뒤집힌 변을 메운다 (2026-09-19) ────────────────────────
+	#  **안으로 미는 깊이가 깎음보다 커지면 45° 모서리의 두 꼭짓점이 서로를
+	#  지나친다** — 다각형이 자기교차가 되고, 고닷의 삼각분할이 빈 배열을
+	#  돌려주어 **판이 통째로 안 그려진다**. 18153 이 이미 적어 둔 그 실패
+	#  방식이다(「희귀만 보이고 레어만 안 보이던 것이 이것이다」). 그때는 띠를
+	#  칸마다 쪼개 피했는데, 몸 채움은 한 폴리곤이라 그 수법이 안 걸린다.
+	#  터지는 조건은 식으로 나온다 — 45° 모서리에서 o > cut/(2-sqrt2) =
+	#  cut*1.7071. 깎음은 k 로 같이 줄어드는데 오프셋은 면px 고정이라
+	#  **작은 반지름에서만** 터진다: 몸 채움 o=3 · cut 3.2 면 r < 12.11 이
+	#  전부다. 그 안에 **툴팁 미니 8 · 런 끝 10 · 런 정보 12** 가 다 들어
+	#  있었다(2026-09-19 실측 — 다섯 폼 다 삼각 0개. 거기서 몸 색이 통째로
+	#  사라지고 밑에 깔린 턱 색이 판 전체를 먹었다).
+	#  **어제 식(축 축소)은 안 터졌다** — a·b 만 줄이고 cut 을 그대로 둬서
+	#  모서리가 절대 안 뒤집혔다. 법선 오프셋이 데려온 회귀다.
+	#  고치는 법: 뒤집힌 변의 두 끝을 가운뎃점 하나로 모은다. **꼭짓점 수를
+	#  그대로 두는 것이 계약이다** — _poly_ring 이 바깥·안쪽을 번호로 짝짓는다
+	#  (convex_hull 로 갈면 개수가 줄어 고리의 짝이 어긋난다). 겹친 점은
+	#  삼각분할이 그냥 버린다. 한 번 모은 자리가 이웃을 또 뒤집을 수 있어
+	#  안정될 때까지 돈다(다섯 폼 · 꼭짓점 여덟이면 두 바퀴 안에 선다).
+	for _pass in 4:
+		var mv := false
+		for i in n:
+			var j := (i + 1) % n
+			var s: Vector2 = Vector2(k[j]) - Vector2(k[i])
+			var d: Vector2 = Vector2(out[j]) - Vector2(out[i])
+			if s.length_squared() < 1e-8 or d.dot(s) >= 0.0:
+				continue
+			var md: Vector2 = (Vector2(out[i]) + Vector2(out[j])) * 0.5
+			out[i] = md
+			out[j] = md
+			mv = true
+		if not mv:
+			break
 	return out
 
 
@@ -17778,15 +17812,49 @@ func _coin_rmill_fx(form: String) -> float:
 #  어제는 draw_item_sticker 가 표를 한 번 더 읽어(지역 변수를 못 넘겨서)
 #  같은 수를 두 자리에서 따로 냈다. drip 만 중심이 +1.223 만큼 처진다 —
 #  늘어진 쪽으로 최대 내접원이 내려간다.
-func _coin_face(form: String, r: float, band: float) -> Vector3:
+#  ── 세 배율을 **따로 받고 제 몸에서 잰다** (2026-09-19) ─────
+#  구운 얼굴 png 는 **원**이다. 그런데 누운 몸은 wob 으로 가로·세로가 **반대로**
+#  눌린다(sx = 1+wob*0.05 · sy = 1-wob*0.12). 반지름을 세로 하나(sy)로만 뽑던
+#  것이 어제의 식인데, wob 이 음수면 얼굴은 커지고 몸은 좁아져 **얼굴이 가로로
+#  테 밖을 뚫는다.** slab 에서는 안 터졌다 — 얼굴이 짧은 축(b 12.810)에 묶여
+#  있었고 a 17.935 쪽에 3px 넘는 여유가 늘 있었기 때문이다. 새 폼 넷은 fr 이
+#  가로 반폭이거나(sq 15.585 · tall 12.200) 경사변 내접이라(dia 13.550 ·
+#  drip 13.023) 여유가 **0** — wob 0 에서 이미 정확히 맞닿아 있어 조금만
+#  음수로 가도 샌다. 2026-09-19 실측(면px 삐짐): sq wob-1 **2.649** ·
+#  tall **2.074** · dia 0.897 · drip 0.744 · slab 0.000.
+#  **두 배율 중 작은 쪽에 묶는 것은 틀렸다** — 그러면 짧은 축이 세로인 slab 이
+#  wob-1 에서 얼굴을 2.178 잃는다(잰 값). 어제 옳던 하나가 오늘 작아지는 것은
+#  고친 것이 아니다. 그래서 **제 몸에서 잰다**: 중심에서 각 변까지의 거리 중
+#  최솟값이 그 자세에서의 최대 내접원이다. _coin_fan 의 lam 고리와 같은 자다.
+#  · sx == sy == sc 인 자리(선 자세 · 누운 wob 0)는 정확히 fr*k - band - 1 이
+#   다시 나온다 — 어제 그림이 한 픽셀도 안 바뀐다(qa 가 1e-6 로 잰다).
+#  · **깎음(sc)까지 받는다** — 누운 자세는 깎음을 안 흔들고(1.0) 선 자세는 k 다.
+#   지금 다섯 폼은 깎은 모서리가 내접원을 안 물지만, 그것은 재서 아는 것이지
+#   전제할 것이 아니다.
+#  FORMS 의 fr·fc 는 그대로 **표에 남는다** — 이제 그리는 쪽이 안 읽고 qa 만
+#  읽는다. 재는 값과 적어 둔 값이 갈리면 ⓝ 이 먼저 운다.
+func _coin_face(form: String, rx: float, ry: float, rc: float,
+		band: float) -> Vector3:
 	var m: Dictionary = FORMS[form]
+	var ch: float = float(TBL.chip_r)
 	if String(m.get("fam", "disc")) == "plaque":
-		var k: float = r / float(TBL.chip_r)
-		return Vector3(0.0, float(m.get("fc", 0.0)) * k,
-				float(m.get("fr", 0.0)) * k - band - 1.0)
+		var cy: float = float(m.get("fc", 0.0)) * (ry / ch)
+		var ctr := Vector2(0.0, cy)
+		var k := _coin_local(form, rx / ch, ry / ch, rc / ch)
+		var n := k.size()
+		var d := 1e9
+		for i in n:
+			var p := Vector2(k[i])
+			var q := Vector2(k[(i + 1) % n])
+			if (q - p).length() < 0.0001:
+				continue
+			d = minf(d, absf((q - p).normalized().cross(ctr - p)))
+		return Vector3(0.0, cy, d - band - 1.0)
 	#  원반·물린 원반 — 어제 draw_item_sticker 가 쓰던 그 식이다(테두리 rw 와
-	#  같은 식이어야 얼굴이 테 밑으로 안 기어든다).
-	return Vector3(0.0, 0.0, r - clampf(r * 0.16, 1.0, 2.2) - 1.0)
+	#  같은 식이어야 얼굴이 테 밑으로 안 기어든다). 누운 원반은 얼굴을 여기서
+	#  안 뽑는다(타원 rx-1.5 / ry-1.5*flat 로 두 축을 따로 따라간다).
+	var rn: float = minf(rx, ry)
+	return Vector3(0.0, 0.0, rn - clampf(rn * 0.16, 1.0, 2.2) - 1.0)
 
 
 #  접는 선의 높이. 판은 **제 아래 반높이**로 잰다 — _peel_y 는 반지름을
@@ -18291,7 +18359,9 @@ func _plaque_flat(c: Vector2, it: Dictionary, t: Dictionary, rot: float,
 		#  무지개가 아크릴의 어른거림으로 읽힌다.
 		#  **선 자세(_plaque_up)와 한 상수를 같이 읽는다** — 여기만 고치고
 		#  저쪽에 0.26 을 남겨 두었다가 랙에서만 얼룩이 그대로 있었다.
-		var fv := _coin_face(form, TBL.chip_r * sy, float(bnd))
+		#  **두 배율을 따로 넘긴다** — 반지름은 좁은 축, 중심은 세로 축이다.
+		#  sy 하나만 넘겼을 때 wob 음수에서 얼굴이 가로로 테를 뚫었다.
+		var fv := _coin_face(form, TBL.chip_r * sx, TBL.chip_r * sy, TBL.chip_r, float(bnd))
 		for k in 6:
 			var a2: float = rot + float(k) * (TAU / 6.0)
 			draw_colored_polygon(_coin_fan(form, c, ang, sx, sy, 1.0, flat,
