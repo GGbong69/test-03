@@ -1226,6 +1226,33 @@ static func shop_slots(n: int) -> int:
 	return _i(_round_row(n), "shop_slots", "rounds", 0)
 
 
+#  조준 동전의 **최소** 가중치. 등급 가중치가 이보다 높으면 그대로 둔다(max).
+#  그래서 교통카드(common 0.60)는 사다리 꼭대기 0.35 에도 안 걸린다 —
+#  배수였다면 이 4골드짜리가 레어 다섯과 **같은 비율로 같이** 밀려 올라가,
+#  조준 칸 셋 중 둘이 이미 든 교통카드가 된다. 바닥은 그 장을 만나지도 않는다.
+#  열이 없거나 칸이 비면 0.0 이라 max 가 등급 값을 고른다 = 오늘과 같은 게임.
+#
+#  인자는 shop_slots 와 **같은 판 번호(leg_no)** 다. 라운드 번호가 아니다 —
+#  _round_row 가 안에서 round_of 를 한 번 돈다. 여기에 라운드 번호를 넣으면
+#  round_of 가 두 번 돌아 R8 이 R3 으로 읽히는데, 그 어긋남은 확률이라
+#  화면으로도 검사로도 안 보인다. 2026-09-18
+static func aim_floor(n: int) -> float:
+	return _f(_round_row(n), "aim_w", "rounds", 0.0)
+
+
+#  이미 조준 동전을 든 플레이어에게 쓰는 바닥. _aim_from_items(game.gd)가
+#  든 동전 **첫 장만** 읽어 둘째 장은 슬롯만 먹는다 — 여기를 낮게 둬야
+#  후반 상점이 죽은 픽으로 안 덮인다. **올릴수록 나빠지는 구간**이라
+#  사다리와 같은 열을 쓰면 안 된다.
+#
+#  0 이 아닌 것은 둘 때문이다. (a) 보스 제약 「봉인」이 앞장을 재우면
+#  _aim_from_items 가 뒷장으로 넘어가므로 둘째 장이 완전한 죽은 칸이 아니다.
+#  (b) 첫 상점에서 4골드 교통카드를 집은 것이 런 전체를 잠그는 함정이 되면
+#  안 된다 — 갈아타는 문은 끝까지 열어 둔다. 2026-09-18
+static func aim_floor_own(n: int) -> float:
+	return _f(_round_row(n), "aim_own_w", "rounds", 0.0)
+
+
 # 상점 자리 하나에 무엇이 오는지의 저울. rarity.csv 와 같은 어법이다 —
 # 값은 서로의 비일 뿐이라 합이 1 일 필요가 없다.
 static func shop_kinds() -> Array:
@@ -2675,6 +2702,17 @@ static func _v_legs() -> void:
 		_errs.append("tuning — curve_first %.0f 가 무장 없는 한 판 기댓값 %.0f 의 60%% 를 넘는다. 첫 라운드가 튜토리얼이 아니게 된다"
 				% [round_base(1), unarmed])
 
+	#  조준 바닥이 견줄 두 수. **숫자로 안 박는다** — 등급 저울이 바뀌면
+	#  바닥의 뜻도 같이 따라가야 한다(0.35 는 「uncommon 과 동률」이라는
+	#  뜻이지 0.35 라는 숫자가 아니다). item_weight 의 어법 그대로 훑는다.
+	var rare_w := 0.05
+	var com_w := 0.60
+	for rr in _raw.get("rarity", []):
+		if rr.get("id") == "rare":
+			rare_w = _f(rr, "weight", "rarity", 0.05)
+		elif rr.get("id") == "common":
+			com_w = _f(rr, "weight", "rarity", 0.60)
+
 	for i in raw.size():
 		var r: Dictionary = raw[i]
 		var who := "rounds:%d" % r.get("_line", 0)
@@ -2697,6 +2735,28 @@ static func _v_legs() -> void:
 				_errs.append("%s — %s 가 %.2f 다. 1.00 미만이면 리그이 쉬워진다" % [who, col, m])
 			if i > 0 and m < _f(raw[i - 1], col, "rounds", 0.0) - 0.001:
 				_errs.append("%s — %s 가 앞 판보다 낮다" % [who, col])
+		#  조준 바닥. max 라 등급 값 아래로는 구조적으로 못 내려가지만, 표에
+		#  그보다 낮은 수가 적히면 「표에 적힌 값이 곧 그 라운드의 저울」이라는
+		#  읽기가 거짓말이 된다. 상한이 common 인 것은 조준 동전이 여섯 장뿐이라
+		#  common 0.60 에 닿으면 후반 상점이 같은 얼굴만 내기 때문이다 —
+		#  Luck be a Landlord 에서 레어 버프가 쌓여 커먼이 통째로 증발한 자리다.
+		#  게임이 뜨기 전에 운다. 2026-09-18
+		var aw := _f(r, "aim_w", "rounds", 0.0)
+		var ow := _f(r, "aim_own_w", "rounds", 0.0)
+		if aw < rare_w - 0.0001:
+			_errs.append("%s — aim_w 가 %.2f 다. 레어 저울(%.2f) 아래면 표가 거짓말을 한다"
+					% [who, aw, rare_w])
+		if aw >= com_w:
+			_errs.append("%s — aim_w 가 %.2f 다. 일반 저울(%.2f) 이상이면 후반 상점에서 일반이 증발한다"
+					% [who, aw, com_w])
+		if i > 0 and aw < _f(raw[i - 1], "aim_w", "rounds", 0.0) - 0.0001:
+			_errs.append("%s — aim_w 가 앞 판보다 낮다. 사용자가 시킨 것은 「올라갈수록」이다" % who)
+		if ow > aw + 0.0001:
+			_errs.append("%s — aim_own_w(%.2f) 가 aim_w(%.2f) 보다 높다. 이미 든 쪽이 더 흔하면 겹침 방지가 거꾸로 선다"
+					% [who, ow, aw])
+		if ow < rare_w - 0.0001:
+			_errs.append("%s — aim_own_w 가 %.2f 다. 레어 저울(%.2f) 아래면 오늘보다 드물어진다"
+					% [who, ow, rare_w])
 
 	var bl: Array = _raw.get("legs", [])
 	if bl.is_empty():

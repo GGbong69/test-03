@@ -384,7 +384,10 @@ var dead_idx := -1              # "금지 구역"이 죽이는 칸. -1 이면 �
 #  쓸어 다시 던지는 판이고 사진은 그 판에 안 오른다. 리롤해도 안 씻기는
 #  것이 코드 0줄로 성립하는 이유가 그것이다(_roll_stock 은 stock 만 지운다).
 #  한 라운드에 하나. 사면 사라지고 그 라운드에는 다시 안 뜬다.
-var aim_mode := "std"           # 이 런의 조준 방식. 다트통이 정한다
+# 이 런의 조준 방식. **든 동전 앞자리**가 정한다(_aim_from_items) —
+# packs.csv 에 aim 열이 아예 없다. 「다트통이 정한다」고 적혀 있던 자리라
+# 다음 사람이 다트통 표를 헛되이 뒤졌다. 2026-09-18
+var aim_mode := "std"
 # 대상을 안 고르는 사탕·사진의 갈래. 오토플레이가 이것만 자동으로 쓴다.
 const AUTO_CONS := ["area", "gold", "sellsum", "redo", "pardon"]
 
@@ -1809,7 +1812,20 @@ func _league_cost(c: int) -> int:
 # 이 상점에 뜰 수 있는 동전. 이미 가진 장과 아직 이른 장을 뺀다.
 # 등장 조건은 없앴고 무엇이 뜨는지는 등급 가중치가 혼자 정한다
 # (min_leg 는 전부 2 — 첫 상점이 열리는 판이라 아무것도 안 막는다).
+#
+#  조준 동전만 여기서 **바닥**을 하나 더 쓴다(rounds.csv 의 aim_w). 라운드가
+#  오를수록 바닥이 올라가 「후반일수록 조준을 바꾸는 동전이 잘 뜬다」가 된다.
+#  바닥은 이 함수 **안에서** 고른다 — 인자로 받으면 개발자 판이 상점과 다른
+#  수를 넣고도 맞는 척할 수 있다. 여기서 고르면 dev.gd 가 이 함수를 그냥
+#  부르는 것만으로 상점이 실제로 굴리는 것과 **똑같은 풀**을 받는다. 2026-09-18
 func _stock_items(nxt: int) -> Array:
+	#  조준 바닥은 **해금 게이트(min_leg)와 같은 판 번호(nxt)로 본다.**
+	#  _roll_stock 안에는 판 번호가 둘이다 — 해금이 보는 `nxt = leg_no + 1`
+	#  과 폭이 보는 `shop_slots(leg_no)`. 폭 쪽을 따라가면 라운드 경계가
+	#  한 판 밀리는데, 그 밀림은 표본 6.6% 안에 묻혀 검사로도 화면으로도
+	#  끝까지 안 보인다. 상점은 판 N 을 클리어한 뒤 N+1 을 위해 열리므로
+	#  플레이어가 곧 맞설 라운드가 이 상점이 준비하는 라운드다. 2026-09-18
+	var fw := GameData.aim_floor_own(nxt) if _has_aim_item() else GameData.aim_floor(nxt)
 	var out := []
 	for it in GameData.items():
 		if _has_item(it.id) or GameData.item_min_leg(it) > nxt:
@@ -1817,10 +1833,34 @@ func _stock_items(nxt: int) -> Array:
 		# 가중치 0 은 **테이블에 안 뜬다는 뜻**이다. 저울에만 맡기면 마지막
 		# 원소로 떨어지는 폴백(_draw_weighted)에 걸려 아주 가끔 뜬다.
 		# 레전더리가 그 자리라, 따로 얻는 길로만 오게 하려면 여기서 빼야 한다.
-		if GameData.item_weight(it) <= 0.0:
+		var w := GameData.item_weight(it)
+		if w <= 0.0:
+			continue
+		#  바닥은 **이 문을 지나온 장에만** 얹는다. 순서가 계약이다 —
+		#  문 앞에서 박으면 l02 정조준이 상점에 서서 「레전더리는 따로
+		#  얻는 길로만 온다」가 조용히 깨진다. 0 x N = 0 이라 안전한 게
+		#  아니라, 레전더리가 바닥을 **만나기 전에 빠지기** 때문에 안전하다.
+		if fw > w and String(it.get("aim", "")) != "":
+			#  **사본이 필수다.** GameData.items() 는 _cache["items"] 를 그대로
+			#  돌려주므로 원본에 w 를 박으면 다음 상점·다음 런까지 남는다.
+			#  그것은 max 가 아니라 덮어쓰기라 라운드가 낮아져도 안 내려간다.
+			#  _boost_one 이 legend_pack_w 를 같은 꼴로 박는 선례다.
+			var lw: Dictionary = it.duplicate()
+			lw["w"] = fw
+			out.append(lw)
 			continue
 		out.append(it)
 	return out
+
+
+#  든 동전 중 조준을 쥔 장이 있는가. _aim_from_items 와 달리 sealed 를
+#  안 건너뛴다 — _open_shop 이 _roll_stock 보다 **먼저** sealed = -1 로
+#  지우므로 상점 시점엔 봉인이 아예 없다. 물을 것이 없는 자리다. 2026-09-18
+func _has_aim_item() -> bool:
+	for it in owned:
+		if String(it.get("aim", "")) != "":
+			return true
+	return false
 
 
 # 판이 더는 못 받는 보드 확장과 이미 산 보드 확장을 여기서 뺀다.
@@ -1980,6 +2020,13 @@ func _buy(i: int) -> void:
 			# 사본이다. 성장 상태(gs)가 원본 카탈로그에 붙으면 다음 런까지
 			# 살아남는다 — 컬렉션과 테이블이 같은 사전을 읽기 때문이다.
 			var cp: Dictionary = s.d.duplicate()
+			#  상점 저울이 박은 조준 바닥이다(_stock_items). 든 동전에 얹혀
+			#  다니면 안 된다 — 지금 has("w") 를 읽는 곳은 _draw_weighted
+			#  하나뿐이라 아무 일도 안 하지만, owned 의 모양을 오늘과 같게
+			#  둔다. 여기가 동전이 owned 로 들어가는 유일한 상점 길목이다
+			#  (다트통 grant 는 GameData.items() 에서 바로 떠 w 가 없다).
+			#  2026-09-18
+			cp.erase("w")
 			cp.gs = 0
 			cp.bought = leg_no          # 삭음(주황 리그)이 읽는 나이다
 			owned.append(cp)
