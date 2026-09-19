@@ -62,6 +62,8 @@ func _run() -> void:
 		await _wait(20)
 		await _snap("%s_title" % st[0])
 		#  컬렉션 + 툴팁
+		#  못 본 칸은 물음표라 그림이 안 보인다 — 전부 발견으로 그린다(저장은 안 만진다)
+		g._dev_unlock_all()
 		g.state = g.S.COLLECT
 		g.collect_tab = 0
 		g.collect_page = 0

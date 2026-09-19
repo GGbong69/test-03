@@ -13,6 +13,8 @@ var plan := []
 func _initialize() -> void:
 	g = load("res://scenes/main.tscn").instantiate()
 	root.add_child(g)
+	#  못 본 칸은 물음표라 그림이 안 보인다 — 전부 발견으로 그린다(저장은 안 만진다)
+	g._dev_unlock_all()
 	plan = [
 		{"at": 14, "st": g.S.TITLE, "png": "scr_title.png"},
 		{"at": 22, "st": g.S.SETTINGS, "png": "scr_settings.png"},

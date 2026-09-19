@@ -48,6 +48,8 @@ func _col(kind: String, rows: Array) -> void:
 func _run() -> void:
 	for i in 5:
 		await process_frame
+	#  못 본 칸은 물음표라 그림이 안 보인다 — 전부 발견으로 그린다(저장은 안 만진다)
+	g._dev_unlock_all()
 	g.state = g.S.COLLECT
 	_col("citem", GameData.items())
 	_col("cmod", GameData.mods())

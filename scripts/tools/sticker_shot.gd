@@ -79,6 +79,8 @@ func _process(_d: float) -> bool:
 		_save("stk_peel2.png")    # 손에서 정착한 말림
 		g.hand_st = g.H.NONE
 	if frames == 50:
+		#  못 본 칸은 물음표라 그림이 안 보인다 — 전부 발견으로 그린다(저장은 안 만진다)
+		g._dev_unlock_all()
 		g.state = g.S.COLLECT
 		g.collect_tab = 0
 		g.collect_page = 0

@@ -101,6 +101,8 @@ func _run() -> void:
 			pages[pg] = true
 			var c: Vector2 = g._col_cell(i).get_center() + Vector2(0.0, -11.0)
 			cells[id] = {"page": pg, "x": c.x, "y": c.y}
+	#  못 본 칸은 물음표라 그림이 안 보인다 — 전부 발견으로 그린다(저장은 안 만진다)
+	g._dev_unlock_all()
 	g.state = g.S.COLLECT
 	g.collect_tab = 0
 	for on in [false, true]:
