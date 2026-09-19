@@ -775,17 +775,35 @@ func _pass7() -> void:
 	Save.run_drop()
 
 	# ── 자리 ──
-	_eq("글줄이 다섯이다", g.TITLE_ROWS.size(), 5)
+	_eq("표에는 다섯 줄이다", g.TITLE_ROWS.size(), 5)
 	_eq("「시작」은 0번 그대로다", _row_of("시작"), 0)
-	_eq("「계속하기」는 둘째 줄이다", _row_of("계속하기"), g.TTL_RESUME)
-	#  ⚠ 아래끝 300 은 **한 픽셀도 안 바뀐 값**이다(넷이 y184~300 이었다).
-	_eq("다섯 줄의 아래끝이 그대로다", g._menu_rect(4).end.y, 300.0)
+	_eq("「계속하기」는 표에서 둘째다", _row_of("계속하기"), g.TTL_RESUME)
+	#  ⚠ 화면에 서는 줄은 넷일 수도 다섯일 수도 있다(_title_rows).
+	#  **자리는 밑변으로 잰다** — 줄 수가 바뀌어도 프로필 패와의 틈이 같아야
+	#  하고, 그 틈이 이 판의 유일한 여백이다. 넷일 때 윗변 184 는
+	#  「계속하기」가 없던 시절의 그 값이다. 2026-09-20
+	var live := Save.run_live()
+	_say(not live, "여기서는 이어할 것이 없다(줄 넷)", "live=%s" % live)
+	_eq("넷일 때 아래끝", g._menu_rect(3).end.y, 300.0)
 	var pb: Rect2 = g._prof_badge_rect()
-	var box: Rect2 = g._menu_rect(0).merge(g._menu_rect(g.TITLE_ROWS.size() - 1))
-	_say(not pb.intersects(box), "프로필 패가 글줄과 안 겹친다",
+	var box: Rect2 = g._menu_rect(0).merge(
+			g._menu_rect(g._title_rows().size() - 1))
+	_say(not pb.intersects(box), "프로필 패가 글줄과 안 겹친다(넷)",
 			"%s · %s" % [pb, box])
 	_say(box.position.y > 123.0, "영문 제목 잉크 밑과 안 겹친다",
 			"y %.0f" % box.position.y)
+	#  다섯 줄일 때도 같은 두 자를 댄다 — 줄이 하나 늘면 **위로** 자란다.
+	g._new_run()
+	_title()
+	var box5: Rect2 = g._menu_rect(0).merge(
+			g._menu_rect(g._title_rows().size() - 1))
+	_eq("다섯일 때 아래끝", g._menu_rect(4).end.y, 300.0)
+	_say(not pb.intersects(box5), "프로필 패가 글줄과 안 겹친다(다섯)",
+			"%s" % box5)
+	_say(box5.position.y > 123.0, "다섯 줄도 영문 제목 밑과 안 겹친다",
+			"y %.0f" % box5.position.y)
+	Save.run_drop()
+	_title()
 
 	print("")
 	# ── 글자가 안 늘었다 ──
@@ -810,30 +828,39 @@ func _pass7() -> void:
 	_eq("로비 곁줄이 짧아졌다", lob, "제목 화면으로 돌아간다")
 
 	print("")
-	# ── 이어할 것이 없으면 흐리다 ──
+	# ── 이어할 것이 없으면 줄이 아예 없다 ──
+	#  처음에는 흐리게 뒀는데 사용자가 「없으면 버튼이 없어도 되지 않느냐」고
+	#  물었고, 닐슨의 비활성 지침(「왜 못 쓰는지 설명할 수 있을 때만 흐리게」)과
+	#  이 저장소의 해설 금지가 겹쳐 **감추는 쪽**으로 갔다(2026-09-20).
 	_title()
 	for i in 20:
 		g._title_tick(1.0 / 60.0)
-	_eq("흐린 줄이다", float(g.ttl_e[g.TTL_RESUME]), 0.0)
-	#  ⚠ **쉬는 자리에서도 흐려야 한다.** ee 만 0 으로 눌러 두면 쉬는 줄이
-	#  어차피 전부 ee 0 이라 다섯이 똑같이 보인다 — 그림을 찍어 보고서야
-	#  드러난 구멍이다(2026-09-20). 짙기 축이 따로 있어야 한다.
-	_say(g.TTL_DEAD < 1.0, "쉴 때 눌러 둘 짙기가 따로 있다",
-			"%.2f" % g.TTL_DEAD)
-	g.mouse_at = g._menu_rect(g.TTL_RESUME).get_center()
-	for i in 20:
-		g._title_tick(1.0 / 60.0)
-	_eq("얹혀도 안 산다", float(g.ttl_e[g.TTL_RESUME]), 0.0)
-	g.pops.clear()
-	g._click(g._menu_rect(g.TTL_RESUME).get_center())
-	_eq("눌러도 제목 그대로다", g.state, g.S.TITLE)
-	_say(g.pops.is_empty() and g.deny_flash <= 0.0,
-			"거절도 안 한다 — 흐린 줄이 이미 말했다")
+	var vis := []
+	for row in g._title_rows():
+		vis.append(String(row.n))
+	_say(not vis.has("계속하기"), "이어할 것이 없으면 그 줄이 없다",
+			" · ".join(vis))
+	_eq("줄이 넷이다", g._title_rows().size(), 4)
+	_eq("첫 줄은 여전히 시작", String(g._title_rows()[0].n), "시작")
+	#  밑변을 못 박았으므로 줄 수가 바뀌어도 프로필 패와의 틈이 같다.
+	_eq("넷일 때 밑변", g._menu_rect(3).end.y, 300.0)
+	#  옛 자리(「계속하기」가 없던 시절 TMENU.y 184)와 글자 그대로 같다.
+	_eq("넷일 때 윗변", g._menu_top(), 184.0)
+	#  그 자리를 눌러도 이제 **컬렉션**이 아니라 아무 일도 안 나면 안 된다 —
+	#  둘째 줄은 이제 컬렉션이다. 번호가 아니라 이름으로 눌러야 한다는 뜻이다.
+	_eq("둘째 줄은 컬렉션", String(g._title_rows()[1].n), "컬렉션")
 
 	# ── 있으면 산다 ──
 	g._new_run()
 	_say(Save.run_live(), "런이 서면 이어하기가 있다")
 	_title()
+	var vis2 := []
+	for row in g._title_rows():
+		vis2.append(String(row.n))
+	_say(vis2.has("계속하기"), "런이 있으면 줄이 선다", " · ".join(vis2))
+	_eq("줄이 다섯이다", g._title_rows().size(), 5)
+	_eq("다섯일 때도 밑변", g._menu_rect(4).end.y, 300.0)
+	_eq("「계속하기」는 둘째 줄", String(g._title_rows()[g.TTL_RESUME].n), "계속하기")
 	g.mouse_at = g._menu_rect(g.TTL_RESUME).get_center()
 	for i in 30:
 		g._title_tick(1.0 / 60.0)

@@ -5172,16 +5172,18 @@ func _click(m: Vector2) -> void:
 		S.TITLE:
 			#  **줄 수를 표에서 센다.** 4 를 박아 두었더니 줄을 하나 늘렸을 때
 			#  마지막 줄이 그려지기만 하고 안 눌렸다.
-			for i in TITLE_ROWS.size():
+			var trows := _title_rows()
+			for i in trows.size():
 				if _menu_rect(i).has_point(m):
-					match String(TITLE_ROWS[i].n):
+					match String(trows[i].n):
 						"시작":
 							_open_newrun()
 						"계속하기":
+							#  이 줄은 이어할 것이 있을 때만 선다(_title_rows).
+							#  그래도 되살리기가 실패하면 조용히 돌아간다 —
+							#  거절은 「눌러도 되는데 지금은 안 된다」는 뜻이라
+							#  여기 안 맞는다.
 							if not _run_load():
-								#  흐린 줄이 이미 말했다. _deny() 도 안 낸다 —
-								#  거절은 「눌러도 되는데 지금은 안 된다」는
-								#  뜻이라 여기 안 맞는다.
 								return
 						"컬렉션":
 							#  옛 프로필이 저장에 이미 남긴 것을 한 번 읽는다.
@@ -26727,12 +26729,24 @@ var pause_from := -1     # 게임 중 ESC 로 설정을 열면 돌아갈 상태.
 #  154 로 올리면 다섯 줄이 154·184·214·244·274 → **아래끝 300 그대로다.**
 #  영문 제목 잉크 밑(123)과 31px. 글자를 안 늘리고 자리를 내는 길이
 #  이것 하나다. 2026-09-20
-const TMENU := {"x": SAFE, "y": 154.0, "h": 26.0, "gap": 4.0, "w": 148.0}
+#  **밑변을 못 박고 위로 자란다.** 「계속하기」는 이어할 것이 있을 때만 서므로
+#  줄이 넷이었다 다섯이 됐다 한다 — 위를 박으면 프로필 패(318)와의 틈이
+#  줄 수마다 달라져 판이 헐거워 보이고, 밑을 박으면 그 틈이 늘 18px 다.
+#  덤으로 **넷일 때의 자리가 「계속하기」가 없던 시절과 글자 그대로 같다**
+#  (304 − 30×4 = 184 — 옛 TMENU.y 그 값이다). 2026-09-20
+const TMENU := {"x": SAFE, "bot": 300.0, "h": 26.0, "gap": 4.0, "w": 148.0}
+
+
+#  글줄 윗변. 줄 높이 = n·h + (n−1)·gap 이라 밑변에서 빼면 나온다.
+func _menu_top() -> float:
+	var n: int = _title_rows().size()
+	return float(TMENU.bot) - (float(n) * (float(TMENU.h) + float(TMENU.gap))
+			- float(TMENU.gap))
 
 
 func _menu_rect(i: int) -> Rect2:
 	return Rect2(Vector2(float(TMENU.x),
-			float(TMENU.y) + float(i) * (float(TMENU.h) + float(TMENU.gap))),
+			_menu_top() + float(i) * (float(TMENU.h) + float(TMENU.gap))),
 			Vector2(TMENU.w, TMENU.h))
 
 
@@ -26979,13 +26993,31 @@ const TITLE_ROWS := [
 	{"n": "설정"},
 	{"n": "종료"},
 ]
-#  「계속하기」 줄 번호. 표에서 이름으로 찾아도 되지만, 매 프레임 도는
-#  _ttl_tick 이 쓰므로 한 번 세어 둔다.
+#  「계속하기」 줄 번호 — **표 안에서의** 번호다. 화면에서는 이 줄이 없을 수 있다.
 const TTL_RESUME := 1
-#  이어할 것이 없을 때 그 줄의 짙기. 쉬는 줄은 이미 C_DIM 이라 얹힘만
-#  죽여서는 다른 줄과 **구별이 안 된다** — 한 축을 더 눌러야 「못 쓰는
-#  줄」로 읽힌다. 0.40 은 글자가 읽히기는 하되 손이 안 가는 자리다.
-const TTL_DEAD := 0.40
+
+
+#  화면에 **실제로 서는** 줄. 이어할 것이 없으면 「계속하기」가 아예 없다.
+#
+#  처음에는 흐리게 두었는데(2026-09-20 아침) 사용자가 그림을 보내며 「없으면
+#  버튼이 없어도 되지 않느냐」고 물었다. 레퍼런스를 다시 찾아 그쪽이 맞다고
+#  판정했다 — 닐슨의 비활성 컨트롤 지침이 「왜 못 쓰는지를 **설명할 수 있을 때만**
+#  흐리게 두고, 설명을 못 붙이면 감추는 쪽이 낫다」다. 그런데 이 저장소는
+#  **해설 문장을 금지**한다(효과와 값만). 즉 우리는 「저장된 런이 없습니다」를
+#  못 적으므로, 흐린 줄은 처음 켠 사람에게 **이유를 영영 안 말하는 줄**이 된다.
+#  발라트로는 아예 그 줄이 없다(PLAY 하나가 이어하기까지 겸한다).
+#
+#  잃는 것은 「그런 기능이 있다」는 발견인데, 런을 한 번 시작하면 줄이 스스로
+#  나타나므로 그때가 곧 발견이다. 그리고 런이 끝나면 줄이 **사라지는 것**이
+#  「런이 끝났다」는 표시가 된다 — 흐려지는 것이 하던 일과 같고 더 분명하다.
+func _title_rows() -> Array:
+	if _run_ok():
+		return TITLE_ROWS
+	var out := []
+	for i in TITLE_ROWS.size():
+		if i != TTL_RESUME:
+			out.append(TITLE_ROWS[i])
+	return out
 
 
 #  제목 판 위의 자루들. **스크림 위**에 그린다 — 밑에 두면 유령이 된 판과
@@ -27183,11 +27215,12 @@ func _draw_title() -> void:
 	draw_string(font, Vector2(SAFE + 2.0, 123.0), "HIGHTON",
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, C_DIM)
 	#  글줄을 꿰는 세로선 — 설정과 같은 어법이다.
-	var y0: float = float(TMENU.y) + 4.0
-	var y1: float = _menu_rect(TITLE_ROWS.size() - 1).end.y - 4.0
+	var trows := _title_rows()
+	var y0: float = _menu_top() + 4.0
+	var y1: float = _menu_rect(trows.size() - 1).end.y - 4.0
 	draw_rect(Rect2(float(TMENU.x) - 10.0, y0, 1.0, y1 - y0),
 			Color(C_WIRE, 0.30))
-	for i in TITLE_ROWS.size():
+	for i in trows.size():
 		var r := _menu_rect(i)
 		var ee: float = ttl_e[i] if i < ttl_e.size() else 0.0
 		var ew: float = ttl_w[i] if i < ttl_w.size() else 0.0
@@ -27197,22 +27230,14 @@ func _draw_title() -> void:
 		var br := r
 		if font_sm != null:
 			br.size.x = minf(r.size.x, font_sm.get_string_size(
-					String(TITLE_ROWS[i].n), HORIZONTAL_ALIGNMENT_LEFT,
+					String(trows[i].n), HORIZONTAL_ALIGNMENT_LEFT,
 					-1, 20).x + 16.0)
-		#  ⚠ 이어할 것이 없는 줄은 **쉬는 자리에서도 흐리다.**
-		#  _ttl_tick 에서 ee 를 0 으로 눌러 두는 것만으로는 모자랐다 — 쉬는
-		#  줄은 어차피 전부 ee 0 이라 다섯이 **똑같이** 보이고, 커서를 얹어
-		#  보기 전에는 못 쓰는 줄인 줄 모른다. 그림을 찍어 보고서야 드러났다
-		#  (2026-09-20). 짙기 한 축만 더 눌러 「있었는지 없었는지를 사람이
-		#  안다」를 세운다 — 글자는 한 자도 안 는다.
-		var a: float = 1.0
-		if i == TTL_RESUME and not _run_ok():
-			a = TTL_DEAD
-		_row_band(self, br, ee, ew, a)
+		#  흐린 줄이 없다 — 못 쓰는 줄은 **아예 안 선다**(_title_rows 머리말).
+		_row_band(self, br, ee, ew, 1.0)
 		draw_string(font_sm, r.position + Vector2(0.0,
 				_menu_base_y(font_sm, 20, 0.0, r.size.y)),
-				String(TITLE_ROWS[i].n), HORIZONTAL_ALIGNMENT_LEFT, -1, 20,
-				Color(C_DIM.lerp(C_TXT, ee), a))
+				String(trows[i].n), HORIZONTAL_ALIGNMENT_LEFT, -1, 20,
+				C_DIM.lerp(C_TXT, ee))
 	_prof_badge_draw()
 	# 빌려 온 것을 적는 자리. 빌린 것이 있으면 그 라이선스가 이 줄을
 	# **조건으로** 단다 — 그때는 지우면 못 낸다. 비어 있으면 안 그린다.
@@ -32522,25 +32547,19 @@ func _title_tick(d: float) -> void:
 	var was := ttl_hot
 	ttl_hot = -1
 	if on:
-		for i in TITLE_ROWS.size():
+		for i in _title_rows().size():
 			if _menu_rect(i).has_point(mouse_at):
 				ttl_hot = i
 				break
-		#  이어할 것이 없으면 그 줄은 **얹힘이 안 산다** — 띠도 딸깍도 없다.
-		#  판단은 _run_ok() 하나고 **지금 프로필만** 본다(다른 슬롯을
-		#  묻지 않는다 — slot_info 의 「보여 주려고 올렸다가 남의 프로필이
-		#  올라온 채로 남는다」가 그 교훈이다). 제목은 판이 안 도는 화면이라
-		#  매 프레임 물어도 boot() 이 _at == want 면 즉시 return 한다.
-		#  ⚠ **되살리는 술어와 같은 것을 본다.** ver 만 보던 때는 판 번호가
-		#  표 밖이거나 다트통 id 가 사라진 저장에서 줄이 밝은 채로 죽었다.
-		if ttl_hot == TTL_RESUME and not _run_ok():
-			ttl_hot = -1
-	_row_ease(ttl_e, ttl_w, TITLE_ROWS.size(), ttl_hot if on else -1, d)
-	#  흐린 줄. _row_band 와 글자색이 ee 를 보므로 여기 두 줄이면 그리는 쪽은
-	#  한 글자도 안 고친다.
-	if not _run_ok() and ttl_e.size() > TTL_RESUME:
-		ttl_e[TTL_RESUME] = 0.0
-		ttl_w[TTL_RESUME] = 0.0
+		#  못 쓰는 줄을 고를 일이 없다 — 그 줄이 화면에 없기 때문이다.
+		#  판단은 _title_rows() 안의 _run_ok() 하나고 **지금 프로필만** 본다
+		#  (다른 슬롯을 묻지 않는다 — slot_info 의 「보여 주려고 올렸다가 남의
+		#  프로필이 올라온 채로 남는다」가 그 교훈이다). 제목은 판이 안 도는
+		#  화면이라 매 프레임 물어도 boot() 이 _at == want 면 즉시 return 한다.
+	#  ⚠ 줄 수가 넷↔다섯으로 바뀌므로 **얹힘 배열도 그 수로 잡는다.**
+	#  다섯으로 잡아 두면 줄이 넷일 때 마지막 칸이 떠돌고, 넷으로 박아 두면
+	#  다섯째 줄이 영영 안 밝는다.
+	_row_ease(ttl_e, ttl_w, _title_rows().size(), ttl_hot if on else -1, d)
 	#  프로필 패에 들어설 때의 딸깍은 공용 얹힘(_ui_hover_tick)이 낸다 —
 	#  패가 그리면서 ui_hot 을 적는다. 여기서도 내면 한 번 들어서는데 두 번 난다.
 	ttl_prof_hot = on and _prof_badge_rect().has_point(mouse_at)
