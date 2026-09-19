@@ -474,6 +474,10 @@ static func _names(k: String) -> PackedStringArray:
 			out.append("R%d %.2f" % [n + 1,
 					GameData.aim_floor(n * GameData.legs_per_round() + 1)])
 		return out
+	#  그림 표본도 표가 아니라 판 번호다 — 안 넣으면 고르개가 빈 채로 뜬다.
+	#  game.gd 의 _art_sheet 가 같은 차례로 읽는다. 2026-09-19
+	if k == "artsheet":
+		return PackedStringArray(ART_SHEET)
 	for r in _list(k):
 		out.append(String(r.get("n", r.get("name", r.get("id", "?")))))
 	return out
@@ -692,6 +696,23 @@ static func _rows(g: Node) -> Array:
 						"n": GameData.modifiers().size()},
 				{"n1": "보스 제약 다시 굴리기", "t": "act", "a": "boss_roll"},
 				{"n1": "보스 제약 무효 켜기/끄기", "t": "act", "a": "boss_void"},
+				#  **보는 줄이다. 누르는 줄이 아니다** — 1쪽 「조준 저울」과
+				#  같은 규약이다("a" 키가 없고 _run 의 match k 에도 없어
+				#  ◀▶ 를 눌러도 게임 상태가 안 바뀐다).
+				#  골드·팩·제약을 크기별로 늘어놓는 판을 game.gd 가 _draw
+				#  끝에서 겹쳐 그린다(_art_sheet). 게임의 비공개 그리기
+				#  함수를 써야 해서 판 자체는 거기 있고, 여기는 고르개만 낸다.
+				#  **어느 화면 위에서도 뜬다** — 런 밖 제목 화면에서도이고,
+				#  \ 로 개발자 판을 닫아도 표본은 남는다(판이 표본을 덮지
+				#  않게 하려는 자리다. 끄려면 이 줄을 「끔」으로 되돌린다).
+				#
+				#  ⚠ **1쪽(물건)이 아니라 여기인 이유.** 1쪽은 줄이 서른넷인데
+				#  판이 열아홉 줄까지만 그려서(_panel 높이 330 · ROW 15)
+				#  「다트 바꾸기」 아래는 **화면 밖이라 아예 안 뜬다.** 거기
+				#  두면 만들어 놓고 못 누르는 줄이 된다 — dev_shot 의 dev_1
+				#  에서 눈으로 확인했다. 이 쪽은 열넷째 줄이라 넉넉하다.
+				#  2026-09-19
+				{"n1": "그림 표본", "t": "list", "k": "artsheet", "n": 5},
 				{"n1": "조준 방식", "t": "list", "k": "aim",
 						"n": GameData.AIM_MODES.size()},
 				{"n1": "계산 방식", "t": "list", "k": "score",
@@ -820,6 +841,10 @@ const CARDFX_STEPS := ["담담", "큼", "한 방"]
 #  (0.10초)와 겹치기 직전이라 **개발자 사다리에만** 둔다(2026-09-19).
 const FAST_STEPS := [1.0, 2.0, 2.5, 3.0]
 const FAST_NAMES := ["1배", "2배", "2.5배", "3배"]
+
+#  그림 표본 다섯 판. game.gd 의 _art_sheet 가 **같은 차례**로 읽는다 —
+#  여기 순서를 바꾸면 거기 match 도 같이 바꾼다. 2026-09-19
+const ART_SHEET := ["끔", "골드", "팩", "제약", "셋 작게"]
 
 #  부서짐 재질 여섯. 표(game.gd 의 BREAK)와 **같은 차례**로 적는다 —
 #  ◀▶ 로 훑을 때 유리 → 밀랍이 이웃이라 둘의 차이(0.400 대 0.560 ·
@@ -963,6 +988,10 @@ static func _cur_name(g: Node, e: Dictionary) -> String:
 	if k == "fast":
 		return "%d/%d %s" % [i % FAST_STEPS.size() + 1, FAST_STEPS.size(),
 				FAST_NAMES[i % FAST_STEPS.size()]]
+	#  그림 표본도 표가 아니라 상수 목록이다. **_names 와 짝으로** 낸다.
+	if k == "artsheet":
+		return "%d/%d %s" % [i % ART_SHEET.size() + 1, ART_SHEET.size(),
+				ART_SHEET[i % ART_SHEET.size()]]
 	if k == "score":
 		var sm: Array = GameData.SCORE_MODES
 		var j2: int = i % maxi(sm.size(), 1)

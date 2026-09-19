@@ -223,17 +223,28 @@ func _shadow_box(it: Dictionary) -> Rect2:
 
 
 # ── 가격판 (game.gd:3401 · 2185-2191) ─────────────────
+#  2026-09-19 — 여기는 그리기 기하를 **손으로 베낀 사본**이었고, 베낀
+#  뒤에 게임이 움직여서 **이미 거짓말 중이었다**: 크기를 9 로 적어 뒀는데
+#  실제 BILL.sz 는 12 였고, `9.0*0.85` 도 `y − 9.0*0.62` 도 옛 식이었다.
+#  사본을 고치는 것이 아니라 **없애는 것**이 고침이다 — 게임의 자를
+#  그대로 부른다. 이제 PLQ 가 바뀌어도 이 자가 저절로 따라온다.
+#  ⚠ 그래서 ⑥의 「가격판 아래」가 35.00 → **36.00** 으로 는다. 그림이
+#  커진 것이 아니라 **자가 참말을 하기 시작한 것**이다(크기 9 로 재던 것을
+#  실제 BILL.sz 12 로 잰다). 상인·팔 치수 주석이 35 를 인용하고 있으면
+#  그 수가 애초에 거짓이었다.
 func _bill_box(it: Dictionary, s: Dictionary) -> Rect2:
 	var txt := str(s.cost)
-	var bw: float = g.gold_w(txt, 9)
+	var sz: int = int(g.BILL.sz)
+	var bw: float = g.gold_w(txt, sz)
 	var x: float = float(it.u) - bw * 0.5
 	var y: float = g._p2g(it.w) + g.DROP.bill_dy
-	var iw: float = 9.0 * 0.85                   # 금화 아이콘 폭
-	var ih: float = iw * 0.64
-	var py: float = y - 9.0 * 0.62
-	# draw_plaque: 그림자 rect 가 h*0.22 만큼 아래로 더 간다
-	var top: float = minf(py, y - g.font.get_ascent(9))
-	var bot: float = maxf(py + ih * 0.22 + ih, y + g.font.get_descent(9))
+	var iw: float = float(sz) * float(g.PLQ.w)
+	var ih: float = iw * float(g.PLQ.h)
+	var py: float = g._gold_icon_top(y, sz)
+	# draw_plaque: 밑 옆면이 h*PLQ.side 만큼 아래로 더 간다(바닥 1.0)
+	var top: float = minf(py, y - g.font.get_ascent(sz))
+	var bot: float = maxf(py + ih + maxf(ih * float(g.PLQ.side), 1.0),
+			y + g.font.get_descent(sz))
 	return Rect2(Vector2(x, top), Vector2(bw, bot - top))
 
 

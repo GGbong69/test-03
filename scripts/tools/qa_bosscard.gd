@@ -144,9 +144,16 @@ func _run() -> void:
 				% ("없음" if cut.is_empty() else ", ".join(cut)))
 
 	# ⑤ 명판 · 글리프가 카드 안쪽 면 안이다.
-	#    _icon_modifier 열 종의 실측 바깥 지름은 전부 ±0.92r 안이다 —
-	#    가장 멀리 가는 것이 dead 의 부채꼴(위 -0.84r · 옆 ±0.785r)이고
-	#    flat 의 대각선이 ±0.86r + 획이다. 여기서는 그 상수로 잰다.
+	#    2026-09-19 — 여기 적혀 있던 「열 종의 실측 바깥 지름은 전부
+	#    ±0.92r 안」은 **거짓이었다.** flat 의 cut 대각선이 중심에서
+	#    1.216r 까지 갔고(획 빼고), 그런데도 이 검사는 통과했다 —
+	#    단언이 참이어서가 아니라 **명판이 넉넉해서** 통과한 것이다.
+	#    이제 game.gd 가 키라인을 못 박고 있으므로 **그 값을 읽는다.**
+	#    KEY.cir 은 설계가 정한 **캡**이지 실측이 아니다 — 캡을 바꾸면
+	#    game.gd 의 키라인 머리말과 **같이** 고쳐라. 잉크가 실제로 그
+	#    안에 드는지는 qa_art ④ 가 그린 픽셀을 재서 본다.
+	var G = load("res://scripts/game.gd")
+	var CAP: float = float(G.KEY.cir)
 	var face := Rect2(RIM, RIM, 153.33 - RIM * 2.0, 86.0 - RIM * 2.0)
 	var bad := PackedStringArray()
 	for one in [true, false]:
@@ -159,7 +166,7 @@ func _run() -> void:
 			var pl := Rect2(c.x - pr, c.y - pr, pr * 2.0, pr * 2.0)
 			if not face.encloses(pl):
 				bad.append("명판 %s" % str(c))
-			var gl: float = gr * 0.92
+			var gl: float = gr * CAP
 			if not face.encloses(Rect2(c.x - gl, c.y - gl, gl * 2.0, gl * 2.0)):
 				bad.append("글리프 %s" % str(c))
 			#  글리프가 명판 안쪽 반지름(pr - 2)에도 들어야 한다
@@ -167,6 +174,25 @@ func _run() -> void:
 				bad.append("글리프가 명판을 넘는다 %.2f > %.2f" % [gl, pr - 2.0])
 	_ok("명판 · 글리프가 카드 면 안이다", bad.is_empty(),
 			"%s" % ", ".join(bad))
+
+	#    ⑤-2 **선 카드에서도 같은 벌이다.**
+	#    명판은 스케일을 안 하려고 gr 을 카드 배율 gs 로 **미리 나눠** 넘긴다
+	#    (up=1 에서 8.5/1.12 = 7.589). 벌을 그 나눈 수로 가르면 화면 크기는
+	#    8.5 그대로인데 그림만 작은 벌로 떨어진다 — 보스 판에 도착하는 순간
+	#    한 프레임에 표시가 툭 줄었다(2026-09-20). 여기서 gr 을 8.5/9.0 으로
+	#    베껴 두고 재는 바람에 이 자는 7.589 를 **한 번도 안 봤다.**
+	var STEP: float = float(G.MODK.step)
+	var tier := PackedStringArray()
+	for one3 in [true, false]:
+		var base: float = 8.5 if one3 else 9.0
+		for up in [0.0, 1.0]:
+			var gs: float = 1.0 + 0.12 * up
+			var shown: float = lerpf(base, base / 1.12, up) * gs
+			if absf(shown - base) > 0.005 or shown < STEP:
+				tier.append("%s up%.0f → 화면 %.3f (문턱 %.1f)"
+						% ["한 장" if one3 else "두 장", up, shown, STEP])
+	_ok("선 카드에서도 큰 벌이다", tier.is_empty(),
+			"%s" % ("어긋난 것 없다" if tier.is_empty() else ", ".join(tier)))
 
 	# ⑥ {v} 자리표 — GameData.modifiers() 의 d 는 fill() 을 지난 값이고
 	#    표의 desc 는 날것이다. 날것을 물리면 화면에 「{v}배」가 그대로 뜬다.

@@ -6336,6 +6336,7 @@ func _draw() -> void:
 	# 사진이 연 화면은 개발자 판 바로 아래다 — 게임 위, 개발자 아래.
 	if photo != "":
 		_photo_draw()
+	_art_sheet()          # DEV
 	Dev.draw(self)          # DEV
 	draw_set_transform(Vector2.ZERO)
 	if screen_flash > 0.0:
@@ -6413,6 +6414,189 @@ func _hud_draw() -> void:
 	#  _draw_clear 에는 안 건다: _draw_screen 은 한 프레임에 두 번 돌 수
 	#  있고 _hud_draw 만 _draw 에서 정확히 한 번 돈다.
 	_wreck_draw()
+
+
+# ══════════════════════════════════════════════════════════
+#  그림 표본 (DEV — 정식 출시에서 _art_sheet 호출 한 줄과 함께 지운다)
+# ──────────────────────────────────────────────────────────
+#  골드 · 팩 · 제약은 따로 놓인 그림이 아니라 **한 집**이다. 그런데 셋을
+#  나란히 놓고 보는 자리가 게임 안에 한 군데도 없었다 — 골드는 값만
+#  ±50 으로 움직이고, 팩은 여는 길만 있고(판 위에 눕힌 모습을 부르는 길이
+#  아예 없다), 제약은 걸기/풀기는 되는데 열하나를 한 줄로 세우는 길이 없다.
+#  dev.gd 가 아니라 여기가 자리인 이유는 game.gd 의 비공개 그리기 함수를
+#  써야 해서다. dev.gd 에는 **보는 줄 하나**(「그림 표본」)만 낸다.
+#
+#  이 판이 최종 판정 자리다. 수로 맞아도 여기서 안 맞으면 **수가 틀린 것**이다.
+#    ① 골드 — 잉크 가운데선과 플라크 덩어리 상자가 다섯 크기 전부에서
+#       겹치는가. **1.22 파생 관계를 재는 유일한 그물이다** — 어긋나도
+#       아무 검사가 안 터진다.
+#    ② 팩 — 다섯 상태 전부에 눈금이 있는가 · rise=0 이 판 위와 한 픽셀도
+#       안 다른가 · 크림프가 psi 90° 에서도 남는가.
+#    ③ 제약 — 키라인 밖으로 삐져나온 것이 하나도 없는가 · 문턱 8.0 이
+#       세로로 무엇을 바꾸는가.
+#  마지막 쪽은 셋을 **작게** 모아 광학 무게를 본다(회색조 변환은 그림을
+#  저장하는 자 쪽에서 한다 — 픽셀을 실제로 섞는 편이 정직하다).
+#  2026-09-19
+var art_guide := true      # 눈금자를 그린다. **검사 도구만 끈다** — 잉크만 재려고
+var art_cells := []        # 이번 프레임에 그린 칸. 검사가 이걸 읽어 잉크를 잰다
+
+const ART_IDS := ["narrow", "gust", "short", "dead", "dull", "tgt",
+		"shade", "flat", "odd", "turn", "fog"]
+const ART_CIR := ["shade", "flat", "odd", "turn"]   # 원형 키라인을 받는 가족
+const ART_G1 := Color(0.35, 0.90, 1.00, 0.80)       # 눈금자 — 수의 잉크 가운데
+const ART_G2 := Color(1.00, 0.45, 0.85, 0.80)       # 눈금자 — 그리는 것의 상자
+
+
+func _art_sheet() -> void:
+	art_cells = []
+	var pg: int = int(Dev.pick.get("artsheet", 0)) % 5
+	if pg == 0:
+		return
+	draw_rect(_full(), C_BG)
+	if pg == 4:
+		#  셋을 작게 모은다. 작아지면 광학 무게가 안 맞는 것이 먼저 무너진다.
+		var qs: float = 0.42
+		for q in [[1, Vector2(6.0, 6.0)], [2, Vector2(281.0, 6.0)],
+				[3, Vector2(6.0, 170.0)]]:
+			draw_set_transform(q[1], 0.0, Vector2(qs, qs))
+			_art_page(int(q[0]), false)
+		draw_set_transform(Vector2(281.0, 170.0), 0.0, Vector2(qs, qs))
+		_art_family()
+		draw_set_transform(Vector2.ZERO)
+		return
+	_art_page(pg, art_guide)
+
+
+func _art_page(pg: int, gd: bool) -> void:
+	match pg:
+		1:
+			_art_gold(gd)
+		2:
+			_art_pack(gd)
+		3:
+			_art_mod(gd)
+
+
+#  한 집으로 보이는가 — 통화 · 그 통화로 사는 것 · 판을 조이는 것을
+#  한 바닥선에 나란히 세운다. 획 굵기와 광택 어법이 갈리는 것이
+#  여기서만 한눈에 온다.
+func _art_family() -> void:
+	draw_gold_at(20.0, 60.0, "1234", 24, C_GOLD)
+	_boost_flat(Vector2(240.0, 52.0), {"size": 4, "pick": 1}, 0.0, 0.0)
+	for i in 4:
+		_icon_modifier(Vector2(330.0 + float(i) * 34.0, 52.0), 11.0,
+				String(ART_IDS[i * 3]), 0.0)
+	draw_gold_at(20.0, 140.0, "7", 12, C_GOLD)
+	_boost_flat(Vector2(240.0, 132.0), {"size": 2, "pick": 1}, 0.0, 0.0)
+	for i in 4:
+		_icon_modifier(Vector2(330.0 + float(i) * 34.0, 132.0), 6.0,
+				String(ART_IDS[i * 3]), 0.0)
+
+
+#  ① 골드 — 크기 다섯을 세로로 쌓는다.
+#  줄마다 두 겹을 얹는다: **수의 잉크 가운데선**과 **플라크 덩어리 상자**.
+#  둘의 가운데가 겹치면 정렬이 맞는 것이다.
+func _art_gold(gd: bool) -> void:
+	var ys := [62.0, 132.0, 192.0, 242.0]
+	var szs := [36, 24, 20, 12]
+	for i in 4:
+		var s: int = int(szs[i])
+		var y: float = float(ys[i])
+		var gw: float = gold_w("1234", s)
+		draw_gold_at(30.0, y, "1234", s, C_GOLD)
+		art_cells.append({"k": "gold", "r": float(s), "c": Vector2(30.0, y)})
+		if gd:
+			var a: float = font.get_ascent(s)
+			var mid: float = y - a * float(INK.num) * 0.5
+			draw_rect(Rect2(22.0, mid, gw + 16.0, 1.0), ART_G1)
+			var iw: float = float(s) * float(PLQ.w)
+			var ih: float = iw * float(PLQ.h) * (1.0 + float(PLQ.side))
+			var top: float = _gold_icon_top(y, s)
+			draw_rect(Rect2(30.0, top, iw, ih), ART_G2, false, 1.0)
+			draw_rect(Rect2(30.0, top + ih * 0.5, iw, 1.0), ART_G2)
+		var marks: int = 2
+		var fw: float = float(s) * float(PLQ.w)
+		if fw >= float(PLQ.step_gloss):
+			marks = 3
+		if fw >= float(PLQ.step_panel):
+			marks = 4
+		draw_string(font, Vector2(360.0, y),
+				"%d  면 %.2f  표시 %d  gold_w %.2f" % [s, fw, marks, gw],
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 12, C_TXT)
+	#  판 카드 보상 — **게임에서 가장 작은 플라크다.** 12pt 가 아니다.
+	for ci in 8:
+		draw_plaque(Vector2(30.0 + float(ci) * 7.0, 300.0), 5.0,
+				5.0 * float(PLQ.h), C_GOLD)
+	art_cells.append({"k": "gold", "r": 5.0, "c": Vector2(30.0, 300.0)})
+	draw_string(font, Vector2(360.0, 306.0), "판 카드 보상  면 5.00  표시 2",
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, C_TXT)
+
+
+#  ② 팩 — 판 위 넷과 여는 넷. 사진을 곁에 세워 비가 갈리는지 본다.
+#  psi 0° 와 90° 를 같이 찍는 이유: 비 하나에만 기대면 90° 에서 가로
+#  네모가 되어 사진과 다시 붙는다. **크림프가 돌아가도 남는지**가
+#  여기서만 판정된다.
+func _art_pack(gd: bool) -> void:
+	var small := {"size": 2, "pick": 1}
+	var bigp := {"size": 4, "pick": 1}
+	var row := [[small, 0.0, 46.0], [small, PI * 0.5, 120.0],
+			[bigp, 0.0, 196.0], [bigp, PI * 0.5, 270.0]]
+	for e in row:
+		var cc := Vector2(float(e[2]), 62.0)
+		_boost_flat(cc, e[0], float(e[1]), 0.0)
+		art_cells.append({"k": "pack", "r": float(e[1]), "c": cc})
+	_fix_flat(Vector2(370.0, 62.0), {}, 0.0, 0.0, GOODS_K)
+	_fix_flat(Vector2(450.0, 62.0), {}, PI * 0.5, 0.0, GOODS_K)
+	if gd:
+		#  이음매 반두께와 띠 반높이가 같은 비로 자라는가. **눈금자를 물건
+		#  옆에 세운다** — 위에 그었더니 자가 재려던 뜯는 실을 덮어 버렸다.
+		var sm: float = float(PACK.seam) * GOODS_K
+		var bh: float = sm * float(PACK.band)
+		for v in [-bh, -sm, sm, bh]:
+			draw_rect(Rect2(14.0, 62.0 + float(v) * TBL.flat, 14.0, 1.0),
+					ART_G2 if absf(float(v)) > sm else ART_G1)
+	draw_string(font, Vector2(24.0, 108.0),
+			"판 위  작은 0°/90°  큰 0°/90°        사진 0°/90°",
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, C_TXT)
+	#  여는 넷. rise=0 은 **판 위와 한 픽셀도 안 달라야 한다.**
+	for e in [[0.0, 0.0, 60.0], [0.35, 0.0, 165.0], [0.7, 0.0, 300.0],
+			[1.0, 0.5, 480.0]]:
+		var cc := Vector2(float(e[2]), 215.0)
+		_boost_open(cc, bigp, float(e[0]), float(e[1]))
+		art_cells.append({"k": "open", "r": float(e[0]), "c": cc})
+	draw_string(font, Vector2(24.0, 330.0),
+			"여는 중  rise 0 / 0.35 / 0.7        rise 1 tear 0.5",
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, C_TXT)
+
+
+#  ③ 제약 — 열하나 × 세 크기. 세로가 곧 문턱 8.0 이 무엇을 바꾸는가다.
+#  맨 아랫줄은 **무효 대각선을 같이 켠 칸**이다 — flat 에서 cut 대각선을
+#  뺀 것이 실제로 X 를 없앴는지가 거기서만 보인다.
+func _art_mod(gd: bool) -> void:
+	var rs := [11.0, 8.5, 6.0, 6.0]
+	var ys := [56.0, 146.0, 222.0, 292.0]
+	for j in 4:
+		var r: float = float(rs[j])
+		for i in ART_IDS.size():
+			var cc := Vector2(32.0 + float(i) * 56.0, float(ys[j]))
+			_icon_modifier(cc, r, String(ART_IDS[i]), 0.0)
+			art_cells.append({"k": "mod", "r": r, "c": cc,
+					"id": String(ART_IDS[i]), "void": j == 3})
+			if j == 3:
+				draw_line(cc + Vector2(-r * 1.2, r * 1.2),
+						cc + Vector2(r * 1.2, -r * 1.2), Color(C_TXT, 0.7), 1.5)
+			elif gd:
+				if ART_CIR.has(String(ART_IDS[i])):
+					draw_arc(cc, r * float(KEY.cir), 0.0, TAU, 24, ART_G2, 1.0)
+				else:
+					var k2: float = r * float(KEY.sq)
+					draw_rect(Rect2(cc - Vector2(k2, k2),
+							Vector2(k2 * 2.0, k2 * 2.0)), ART_G2, false, 1.0)
+		#  줄 이름은 **눈금자와 같이 꺼진다.** 켜 두면 잉크를 재는 자가
+		#  글자까지 잉크로 세어 첫 칸의 상자가 왼쪽으로 늘어난다.
+		if gd:
+			draw_string(font, Vector2(4.0, float(ys[j]) + 4.0),
+					"%d" % int(r), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, C_TXT)
 
 
 func annulus_at(c: Vector2, ri: float, ro: float, a0: float, a1: float,
@@ -11019,7 +11203,10 @@ func _bank_gold_w(n: String, sz: int) -> float:
 	var tail: float = floorf(float(sz) / 20.0)
 	if sz != 20:
 		return gold_w(n, sz) - tail
-	return 20.0 * 0.85 + gold_gap(20) \
+	#  20 단만 식을 손으로 베낀 자리다. PLQ 로 묶어 둔다 — 검산하면
+	#  19.2 + 3.8 = 23.0 으로 옛 17.0 + 6.0 과 같아서 10864 의 24→20→12
+	#  **강등 문턱이 한 자도 안 뒤집힌다**(2026-09-19).
+	return 20.0 * float(PLQ.w) + gold_gap(20) \
 			+ font_sm.get_string_size(n, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x - tail
 
 
@@ -11028,8 +11215,12 @@ func _bank_gold(cx: float, y: float, n: String, sz: int, c: Color) -> void:
 	if sz != 20:
 		draw_gold_at(x, y, n, sz, c)
 		return
-	var iw := 20.0 * 0.85
-	draw_plaque(Vector2(x, _gold_icon_top(y, 20)), iw, iw * 0.64, c)
+	var iw := 20.0 * float(PLQ.w)
+	draw_plaque(Vector2(x, _gold_icon_top(y, 20)), iw, iw * float(PLQ.h), c)
+	#  ⚠ 다음 줄이 색 인자 c 를 무시하고 C_GOLD 를 못 박는다. **기존 흠이고
+	#  이번 일감(그림) 밖**이라 안 고친다 — 20 단에서만 「못 산다」 회색이
+	#  안 뜬다. 고칠 때는 12·24 단(draw_gold_at 이 c 를 그대로 넘긴다)과
+	#  같이 봐야 한다. 2026-09-19
 	draw_string(font_sm, Vector2(x + iw + gold_gap(20), y), n,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 20, C_GOLD)
 
@@ -11267,6 +11458,36 @@ const EDGE := {
 	"reed": 13,        # 앞쪽 호에 새기는 빗살 수
 	"bev":  0.30,      # 윗면 가장자리 한 줄. 빛 받는 모서리다
 	"bev_dark": 0.70,  # 어두운 몸(v < 0.32)의 턱. 옆면과 같은 색이 되는 것을 막는다
+}
+
+
+#  ── 통화 플라크의 치수 (2026-09-19) ────────────────────────
+#  **불변식: 폭몫(w) + 틈몫(gap) = 1.15.** 옛 값이 0.85 + 0.30 이었고 지금은
+#  0.96 + 0.19 다. 이 합이 깨지는 순간 gold_w 가 움직이고, 그러면 값표 폭 ·
+#  자금판 24→20→12 강등 문턱(10864) · 정산 줄 오른끝(24193) · 툴팁 폭
+#  예약(22330, gold_w + 6.0) · _bill_one 의 분리 불변식(19843)이 **한꺼번에**
+#  밀린다. 그 다섯 중 어느 것도 검사가 안 잡는다 — 수로 지키는 수밖에 없다.
+#  실제 쓰는 크기 넷에서 gold_w 가 소수점까지 같다:
+#    12 → 11.52+2.68 · 20 → 19.20+3.80 · 24 → 23.04+4.56 · 36 → 34.56+6.84
+#    (옛값 10.20+4.00 · 17.00+6.00 · 20.40+7.20 · 30.60+10.80 과 각각 같다)
+#  gap_lo 2.68 = 4.0 − (0.96−0.85)×12. 옛 바닥 4.0 이 **12 에서만** 걸렸으므로
+#  그 한 크기에서 gold_w 를 보존하는 값이 이것뿐이다(2.7 은 +0.02px 어긋난다).
+#  바뀌는 것은 **보이는 것**뿐이다 — 플라크가 13% 커지고 틈이 0.30em 에서
+#  0.19em(신 스페이스)으로 붙는다. 조판 관례는 접두 통화 기호에 공백 0 이고,
+#  지금 플라크는 수의 접두사가 아니라 딴 낱말로 읽혔다. 새 자리를 안 내고
+#  **있던 공기를 물건으로 옮기는 것**이 12px 대역에서 상시로 도는 이 그림의
+#  가장 싼 답이다.
+#  h 0.64 는 실물 바카라 플라크(85×53×3.5mm → 0.6235)와 3% 안이라 안 건드린다.
+#  side 0.22 도 안 건드린다 — 아래 draw_plaque 머리말에 근거가 있다.
+const PLQ := {
+	"w": 0.96,          # 면 폭 / 글자 크기
+	"h": 0.64,          # 면 높이 / 면 폭
+	"side": 0.22,       # 밑 옆면 / 면 높이. 1.22(=1+side)가 덩어리 높이다
+	"gap": 0.19,        # 플라크와 수 사이 / 글자 크기
+	"gap_lo": 2.68,     # 그 틈의 바닥(px)
+	"gloss_in": 0.10,   # 대각 광택이 위아래 변에서 떨어지는 몫 / 면 높이
+	"step_gloss": 9.0,  # 이 면 폭부터 대각 광택이 선다
+	"step_panel": 16.0, # 이 면 폭부터 속 네모가 선다
 }
 
 
@@ -12531,14 +12752,65 @@ func _peel_fold(c: Vector2, r: float, mdep: float, slots: int, peel: float,
 #  동전보다 위 등급인 직사각 화폐판. 아이템이 원반이므로 통화는
 #  직사각으로 형태를 갈랐다. 대각 광택과 어두운 옆면이 금속감의
 #  전부라 둘 중 하나만 빼도 그냥 노란 네모가 된다.
+#  실물 근거로 그 판단을 굳힌다(2026-09-19). 바카라 플라크는 85×53×3.5mm 라
+#  세로비 0.6235 — 여기 PLQ.h 0.64 와 3% 안이다. 그리고 카지노 규정이
+#  「각 액면은 **크기와 모양**으로 즉시 구별돼야 한다」를 못 박으므로
+#  「아이템=원반 / 통화=직사각」은 관례가 아니라 규격이다. 깎기·겹테를
+#  얹지 않는 이유도 같다 — 그러면 레전더리 플라크(_plaque_flat, 깎음 3.2)와
+#  한 어휘가 되어 두 뜻이 같이 흐려진다. **민 직사각 · 안 깎음 · 테 없음.**
+#
+#  ── 밑 옆면이 과장인 것은 필수였다 ──
+#  side 0.22h = 0.141w 인데 실물 상대 두께는 3.5/85 = 0.041 이다. **3.4배
+#  과장이다.** 실물 비율이면 12pt(면 폭 11.52)에서 0.42px 라 그냥 사라진다.
+#  값은 안 바꾼다 — 과장이 없으면 두께가 없다.
+#
+#  ── 크기 단 셋. 크기가 벌어지는데 표시 수가 안 줄던 것이 이 그림의 병이다 ──
+#  **size 가 아니라 면 폭 w 로 가른다.** draw_plaque 를 부르는 길이 셋이고
+#  (draw_gold_at · 자금판 20단 · 판 카드 보상) 뒤 둘은 size 를 안 넘긴다 —
+#  size 로 가르면 그 둘이 옛 그림으로 남아 화면마다 돈이 다른 물건이 된다.
+#    w < 9        몸 · 밑 옆면          (판 카드 보상 5.00×3.20)
+#    9 ≤ w < 16   + 대각 광택           (12pt 값뱃지·값표·판매·리롤·창구)
+#    w ≥ 16       + 속 네모             (20 자금판 · 24 정산 줄 · 36 총액)
+#  문턱 16.0: 광택이 속 네모를 「포일이 인쇄판 위를 지난다」로 가로지르려면
+#  속 네모 세로(0.30h)가 광택 획(1.0px)의 세 배는 돼야 한다 → h ≥ 10.0 →
+#  w ≥ 15.6. 문턱 9.0: 대각 광택이 네 변에서 1px 이상 떨어지려면 h ≥ 5.7 →
+#  w ≥ 8.9.
+#
+#  ── 대비를 실측하고 표식 하나를 뺐다 (C_GOLD 위, 2026-09-19) ──
+#    윗줄 빛 lightened(.45)  1.230:1   ← 이 저장소가 제 시험(qa_ui ③)에 쓰는
+#                                       바닥 1.4 를 못 넘는다. **뺀다.**
+#                                       12pt 에서 속 네모와 0.22px 로 붙어
+#                                       둘이 서로를 죽이기까지 했다.
+#    대각 광택 lightened(.50) 1.258:1  → lightened(.75) **1.413:1** 로 올린다
+#    속 네모  darkened(.40)   2.667:1
+#    밑 옆면  darkened(.55)   4.201:1  ← EDGE.lo 0.46 으로 안 내린다. 3.16 으로
+#                                       25% 약해지는데 옆면이 12pt 에서 1.44px
+#                                       라 동전 옆면(2.77px)의 절반이다.
+#                                       **얇은 마크는 더 어두워야 같이 읽힌다.**
+#  광택을 올린 것은 집안의 **유일한 예외**이고 실물 근거가 있다 — 플라크의
+#  광택은 층 합성에 넣은 홀로그램 포일이지 칩 에지 스팟처럼 몰드로 박은
+#  것이 아니다. 팩·제약에는 광택을 한 획도 안 긋는다.
+#  여백 1.0 을 비율로 돌린 이유: 절대 1.0 은 36 에서 높이의 5% 인데 5.5 에서는
+#  28% 라 **한 물건 안에서 획 규약이 갈렸다**(팩의 seam 1.6 과 같은 병).
 func draw_plaque(p: Vector2, w: float, h: float, c: Color) -> void:
-	draw_rect(Rect2(p + Vector2(0.0, h * 0.22), Vector2(w, h)), c.darkened(0.55))
+	#  바닥 1.0 이 걸리는 것은 0.22h < 1.0 → h < 4.545 → w < 7.10 일 때뿐이고,
+	#  draw_gold_at 을 지나는 최소 면 폭은 size 12 의 11.52 다. 그래서
+	#  **_gold_icon_top 의 ih 계약은 어느 크기에서도 안 깨진다** — 바닥이
+	#  실제로 걸리는 유일한 자리가 판 카드 보상(w 5.0)이고 거기는 계약 밖이다.
+	var side: float = maxf(h * float(PLQ.side), 1.0)
+	draw_rect(Rect2(p + Vector2(0.0, side), Vector2(w, h)), c.darkened(0.55))
 	draw_rect(Rect2(p, Vector2(w, h)), c)
-	draw_rect(Rect2(p + Vector2(1.0, 1.0), Vector2(w - 2.0, 1.0)), c.lightened(0.45))
-	draw_line(p + Vector2(w * 0.18, h - 1.0), p + Vector2(w * 0.72, 1.0),
-			c.lightened(0.5), 1.0)
-	draw_rect(Rect2(p + Vector2(w * 0.28, h * 0.34), Vector2(w * 0.44, h * 0.3)),
-			c.darkened(0.4))
+	if w >= float(PLQ.step_panel):
+		draw_rect(Rect2(p + Vector2(w * 0.28, h * 0.34), Vector2(w * 0.44, h * 0.3)),
+				c.darkened(0.4))
+	#  **광택이 맨 위다.** 속 네모 밑에 깔면 판이 획을 두 동강 내서
+	#  「긁힌 자국 둘」이 된다 — 포일이 인쇄판 **위를** 지나야 층이 읽힌다.
+	#  단 문턱 16.0 이 그 읽힘을 전제로 유도된 값이기도 하다.
+	if w < float(PLQ.step_gloss):
+		return
+	var gin: float = maxf(h * float(PLQ.gloss_in), 1.0)
+	draw_line(p + Vector2(w * 0.18, h - gin), p + Vector2(w * 0.72, gin),
+			c.lightened(0.75), 1.0)
 
 
 # 플라크와 수 사이. 크기에 비례해야 36pt 정산 총액과 12pt 값뱃지가 같은
@@ -12546,11 +12818,13 @@ func draw_plaque(p: Vector2, w: float, h: float, c: Color) -> void:
 # 그리는 쪽이 같은 값을 봐야 가운데·오른쪽 정렬이 안 어긋난다.
 #  수는 font(Bold)로 찍는다. 크기는 글자 위계 다섯 단 중 12 · 24 · 36 이다.
 func gold_gap(size: int) -> float:
-	return maxf(4.0, float(size) * 0.30)
+	return maxf(float(PLQ.gap_lo), float(size) * float(PLQ.gap))
 
 
+#  **불변식의 눈**이다 — PLQ.w + PLQ.gap = 1.15 가 지켜지는 한 이 수는
+#  12 · 20 · 24 · 36 에서 소수점까지 안 움직인다(PLQ 머리말).
 func gold_w(n: String, size: int) -> float:
-	return float(size) * 0.85 + gold_gap(size) \
+	return float(size) * float(PLQ.w) + gold_gap(size) \
 			+ font.get_string_size(n, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
 
 
@@ -12558,16 +12832,21 @@ func gold_w(n: String, size: int) -> float:
 #  맞춘다. 갈무리 때는 윗변을 바닥선 위 0.62 크기에 박아 두었는데, 갈무리 수가 크기의
 #  0.92 로 커서 플라크 밑이 바닥선에 앉아도 가운데로 읽혔다. 페이퍼로지 수는 0.79 라
 #  같은 자리면 플라크가 수보다 한 칸 반(24 에서 2px) 가라앉았다.
+#  손으로 적힌 1.22 를 **식으로 돌린다**(2026-09-19). 1.22 는 0.22(PLQ.side)의
+#  파생값(1 + side)이다. side 만 고치고 1.22 를 안 고치면 플라크가 수의 잉크
+#  가운데에서 가라앉는데 **아무 검사도 안 터진다** — 12 에서 ~0.9px · 36 에서
+#  ~2.7px. 갈무리에서 페이퍼로지로 갈아탈 때 이 종류를 한 번 겪었다.
+#  이번에 side 를 안 바꾸지만 식으로 묶어 두는 것이 다음 턴의 보험이다.
 func _gold_icon_top(y: float, size: int) -> float:
-	var ih: float = float(size) * 0.85 * 0.64 * 1.22
+	var ih: float = float(size) * float(PLQ.w) * float(PLQ.h) * (1.0 + float(PLQ.side))
 	var a: float = font.get_ascent(size) if font != null else float(size)
 	return _ink_half(y - a * float(INK.num) * 0.5 - ih * 0.5)
 
 
 # 왼쪽 정렬로 그리고 차지한 폭을 돌려준다 — 문장 중간에 끼워 넣을 때 쓴다.
 func draw_gold_at(x: float, y: float, n: String, size: int, c: Color) -> float:
-	var iw := float(size) * 0.85
-	draw_plaque(Vector2(x, _gold_icon_top(y, size)), iw, iw * 0.64, c)
+	var iw := float(size) * float(PLQ.w)
+	draw_plaque(Vector2(x, _gold_icon_top(y, size)), iw, iw * float(PLQ.h), c)
 	draw_string(font, Vector2(x + iw + gold_gap(size), y), n,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, size, c)
 	return gold_w(n, size)
@@ -16979,8 +17258,16 @@ func _shard_cut(s: Dictionary, n: int, sd: int, psi := 0.0) -> Array:
 			return _shard_grid(FIX_W * GOODS_K, FIX_H * GOODS_K, 2,
 					clampi(n - 2, 2, 3), sd)
 		"boost":
-			return _shard_grid(FIX_W * 1.06 * GOODS_K, FIX_H * 1.06 * GOODS_K, 2,
-					clampi(n - 2, 2, 3), sd)
+			#  밑값만 PACK 으로 옮긴다. **행 수는 안 바꾼다**(2026-09-19).
+			#  「세로로 긴 물건이 2×2 로 깨지면 조각이 팩보다 더 길쭉해진다」로
+			#  3행에 못 박으려다 물렀다 — 재 보니 **그 전제가 틀렸다.**
+			#  2열 × 2행은 칸이 15.08 × 21.46 으로 **가로세로비가 팩과
+			#  소수점까지 같다**(0.703). 길쭉해지는 일이 없다.
+			#  그리고 3행에 못 박으면 팩마다 조각이 늘 여섯이라 qa_smash 의
+			#  「동시 조각 상한 40」이 **42 로 깨진다**(실제로 터뜨려 봤다).
+			#  상한은 연출 예산이라 그림 일감이 건드릴 자리가 아니다.
+			return _shard_grid(float(PACK.w) * GOODS_K, float(PACK.h) * GOODS_K,
+					2, clampi(n - 2, 2, 3), sd)
 		"dart":
 			return _shard_rod(TBL.dart_l, 2.4 * GOODS_K, maxi(n - 1, 3), sd)
 		"cons":
@@ -18082,7 +18369,7 @@ func _obj_box(i: int) -> Rect2:
 			var ed := Vector2(absf(dn.x) * dl + 5.0, absf(dn.y) * dl + 5.0)
 			return Rect2(c - ed, ed * 2.0)
 		"boost":
-			var br: float = maxf(FIX_W, FIX_H) * 1.06 * GOODS_K + 3.0
+			var br: float = maxf(float(PACK.w), float(PACK.h)) * GOODS_K + 3.0
 			var eb := Vector2(br, br * TBL.flat + 3.0)
 			return Rect2(c - eb, eb * 2.0)
 		"fix":
@@ -18109,8 +18396,12 @@ func _obj_shape(i: int, m: Vector2) -> bool:
 			var dn := de.normalized()
 			return _seg_d(m, c - dn * dl, c + dn * dl) <= 7.0
 		"boost":
-			return _in_poly(m, _quad_at(c, it.psi, FIX_W * 1.34 * GOODS_K,
-					FIX_H * 1.34 * GOODS_K))
+			#  **잡히는 것이 그림과 정반대였다** — 26.43 × 21.77 로 가로가
+			#  넓고 세로가 좁은데 팩은 세로로 긴 물건이다. 허공이 잡히고
+			#  가장자리가 안 잡혔다. 그리는 것과 같은 밑값에 여유만 곱한다.
+			return _in_poly(m, _quad_at(c, it.psi,
+					float(PACK.w) * float(PACK.hit) * GOODS_K,
+					float(PACK.h) * float(PACK.hit) * GOODS_K))
 		"fix":
 			# 그리는 것과 같은 네 귀퉁이를 쓴다 — 둘이 어긋날 수가 없다.
 			return _in_poly(m, _fix_quad(c, it.psi, 1.14 * GOODS_K))
@@ -18322,8 +18613,10 @@ func _obj_shadow(i: int) -> void:
 			var fq := _fix_quad(g, it.psi, k * GOODS_K)
 			draw_colored_polygon(fq, col)
 		"boost":
-			# 상자도 네모다. 사진보다 한 뼘 크다.
-			draw_colored_polygon(_fix_quad(g, it.psi, k * 1.06 * GOODS_K), col)
+			#  팩도 네모다. **사진의 상수 크기를 쓰고 있었다**(_fix_quad) —
+			#  이 한 줄을 안 옮기면 그림과 그림자가 다른 비로 어긋난다.
+			draw_colored_polygon(_quad_at(g, it.psi,
+					float(PACK.w) * k * GOODS_K, float(PACK.h) * k * GOODS_K), col)
 		"mod":
 			#  와펜은 방패 모양 그림자. 그림이 없으면 옛 타원이다.
 			var mtx := _mod_art(String(stock[i].d.id))
@@ -18440,6 +18733,41 @@ const FIX_W := 17.0      # 반폭
 const FIX_H := 14.0      # 반높이(누르기 전)
 
 
+#  ── 팩의 치수 (2026-09-19) ─────────────────────────────────
+#  팩은 **사진에게서 갈라져 나온다.** 여태 밑값을 FIX_W/FIX_H 로 빌려 써서
+#  가로세로 비가 소수점까지 같고(둘 다 1.214) 크기만 6% 달랐다 — 배율로는
+#  절대 안 갈린다. 게다가 **같은 테 한 획**(C_WIRE.darkened(0.25))을 둘러서
+#  색이 달라도 한 물건으로 보였다.
+#  고침은 둘이 짝이다.
+#    ① **비를 뒤집는다.** 세로로 세운 주머니 0.703 대 사진 1.214 — 비의 비
+#       1.73 이라 어떤 배율로도 서로가 못 된다.
+#    ② **테를 크림프로 바꾼다.** 팩은 판 위에서 psi 로 **한 바퀴 다 돈다**
+#       (_drop_one 의 randf()*TAU). 비 하나에만 기대면 psi 90° 에서 가로
+#       네모가 되어 사진과 다시 붙는다. **톱니 가장자리는 돌아가도 안
+#       없어지는 실루엣 차이다.** 둘 다 걸어야 어느 각에서도 갈린다.
+#  크기는 사진과 나란히 세운다 — 화면 면적 30.16×33.82 ≈ 1020px² 로 사진
+#  1010 과 1% 안이다. 「배율은 그대로인데 밑값이 바뀌면」 팩이 테이블에서
+#  제일 큰 물건이 됐던 사고(_boost_flat 옛 주석, 1.18 → 1.06)를 안 되풀이한다.
+#  외접 반지름은 27.08 → **26.23 으로 줄어든다**(TBL.chip_r 22.04 위인 것은
+#  지금도 그랬다 — 회귀가 아니다).
+#
+#  **FIX 를 빌려 쓰던 여섯 자리가 전부 이 하나를 읽는다** — _boost_flat ·
+#  _boost_draw · 그림자 · _obj_box · _obj_shape · _shard_cut. 「겉과 열림이
+#  한 물건」은 말이 아니라 **상수와 코드 공유**다. 한 곳만 고치면 나머지
+#  다섯이 어긋나는데 그림자·히트·조각은 특정 상황에서만 떠서 화면에서
+#  바로 안 보인다 — 지금 배율이 다섯으로 갈려 있는 것 자체가 그 자국이다.
+const PACK := {
+	"w": 13.0,      # 면 반폭(밑값). 테이블은 GOODS_K 를 곱한다
+	"h": 18.5,      # 면 반높이(밑값)
+	"seam": 1.6,    # 두 블럭이 맞물린 자리의 반두께. **면이다 — 배율 k 를 탄다**
+	"band": 1.7,    # 봉인띠 반높이 = seam * band. 1.0 보다 커야 블럭 틈을 덮는다
+	"hit": 1.20,    # 집기 판정 여유
+	"teeth": 9,     # 크림프 톱니 수
+	"pip": 0.115,   # 눈금 반지름 / 면 반폭
+	"pitch": 3.2,   # 눈금 피치 / 눈금 반지름. **n 과 무관하게 고정이다**
+}
+
+
 # 면에 누운 네모의 네 귀퉁이. 크기를 받는 쪽이다 — _fix_quad 는 사진의
 # 상수 크기를 쓰고, 팩처럼 크기가 다른 것은 이쪽을 부른다.
 func _quad_at(c: Vector2, rot: float, ex: float, ey: float) -> PackedVector2Array:
@@ -18464,68 +18792,197 @@ func _fix_quad(c: Vector2, rot: float, k := 1.0, fy := -1.0) -> PackedVector2Arr
 	return pts
 
 
-# 펠트에 누운 팩 — 봉인된 상자다. 사진(폴라로이드)과 같은 네모 어법을
-# 쓰되 **띠를 두른다** — 그 한 줄이 "아직 안 열었다" 를 말한다.
-# 안에 든 수만큼 상자 위에 눈금을 새겨, 큰 팩과 작은 팩이 그림만으로 갈린다.
-# 찢긴 자리가 있는 네모. 한 변만 톱니로 만든다 — 두 쪽이 갈라졌을 때
-# **맞물리는 이가 서로 반대**여야 "한 장이 찢어졌다" 로 읽힌다. 그래서
-# 위쪽은 위로, 아래쪽은 아래로 같은 위상의 톱니를 쓰고 부호만 뒤집는다.
+# 팩의 면 좌표 한 점을 화면으로 옮긴다. 돌리고 나서 눕힌다 —
+# 팩을 이루는 모든 조각이 **이 한 변환만** 쓴다.
+func _pack_pt(c: Vector2, co: float, si: float, x: float, y: float) -> Vector2:
+	return c + Vector2(x * co - y * si, (x * si + y * co) * TBL.flat)
+
+
+# 팩 한 쪽. 바깥 변은 **크림프**(눌러 봉한 자리), 안쪽 변은 **뜯긴 자리**다.
+# bite 가 0 이면 안쪽 변이 곧은 이음매라, 판 위(_boost_flat)와 여는
+# 연출(_boost_draw)이 **이 한 함수를 같이 쓴다.**
 #
-#   ey0  성한 쪽 반높이 (부호가 찢긴 방향을 정한다)
-#   ey1  찢긴 쪽 반높이
-func _torn_quad(c: Vector2, rot: float, ex: float, ey0: float, ey1: float,
-		teeth := 7, bite := 2.2) -> PackedVector2Array:
+#   ey_out  바깥 변(크림프)의 반높이 — 부호가 그 쪽이 어느 쪽인지 정한다
+#   ey_in   안쪽 변(이음매 · 뜯긴 자리)의 반높이
+#
+# 크림프는 **안으로만** 문다. 톱니가 밖으로 나가면 외접 반지름이 커져
+# qa_rank 의 안전선이 이유 없이 흔들린다 — 그래서 톱니의 바깥 끝이 곧
+# ey_out 이고, 팩의 겉 크기는 톱니가 있으나 없으나 같다.
+# 크림프 위상은 **왼쪽 끝(i=0)이 파인 자리**로 시작한다. 겉의 뜯는 홈이
+# 그 자리에 있어서 겉과 열림이 한 자리에서 만난다.
+# 찢긴 이(bite)는 안쪽 변을 x=+ex 에서부터 세므로 **왼쪽 끝이 뻗은 이**다
+# (teeth 가 홀수라 그렇다). 뜯는 홈이 그 이를 타고 물러나는 이유다.
+#  뜯는 실의 **면** 두께. 화면에서 1px 로 서야 하므로 눕는 만큼(TBL.flat)
+#  되돌려 잡는다 — 면 1.0 으로 두면 화면에서 0.79px 이라 아예 안 뜬다.
+#  2026-09-19 에 실제로 판 위에서 통째로 사라져 있었다.
+func _pack_thread(k: float) -> float:
+	return maxf(0.8 * k / GOODS_K, 1.0) / TBL.flat
+
+
+func _pack_quad(c: Vector2, rot: float, ex: float, ey_out: float, ey_in: float,
+		teeth: int, crimp: float, bite: float) -> PackedVector2Array:
 	var co := cos(rot)
 	var si := sin(rot)
+	var sg: float = signf(ey_out - ey_in)      # 바깥이 어느 쪽인가
 	var pts := PackedVector2Array()
-	var put := func(x: float, y: float) -> void:
-		pts.append(c + Vector2(x * co - y * si, (x * si + y * co) * TBL.flat))
-	# 성한 세 변
-	put.call(-ex, ey0)
-	put.call(ex, ey0)
-	# 찢긴 변 — 오른쪽에서 왼쪽으로 톱니를 그으며 돌아온다
 	for i in teeth + 1:
-		var t: float = 1.0 - float(i) / float(teeth)
-		var x: float = lerpf(-ex, ex, t)
+		var d: float = crimp if (i % 2 == 0) else 0.0
+		pts.append(_pack_pt(c, co, si,
+				lerpf(-ex, ex, float(i) / float(teeth)), ey_out - sg * d))
+	for i in teeth + 1:
 		var d: float = bite if (i % 2 == 0) else -bite
-		put.call(x, ey1 + d * signf(ey1 - ey0))
+		pts.append(_pack_pt(c, co, si,
+				lerpf(ex, -ex, float(i) / float(teeth)), ey_in + sg * d))
 	return pts
 
 
-func _boost_flat(c: Vector2, bd: Dictionary, rot: float, dim: float) -> void:
-	#  사진보다 한 뼘 크다. 1.18 이었는데 사진을 키우자(13→17) 팩이 같이
-	#  자라 테이블에서 제일 큰 물건이 됐다 — 배율은 그대로인데 밑값이
-	#  바뀌면 이런 일이 난다.
-	var w := FIX_W * 1.06 * GOODS_K
-	var h := FIX_H * 1.06 * GOODS_K
-	var seam := 1.6                     # 두 블럭이 맞물린 자리의 두께 — 획이라 안 키운다
-	draw_colored_polygon(_quad_at(c + Vector2(0.0, 1.2), rot, w, h),
-			Color(0.0, 0.0, 0.0, 0.35))
-	# **두 블럭**이다. 뜯기 전에도 둘로 보여야, 뜯을 때 그 이음매가 열리는
-	# 것으로 읽힌다 — 한 장으로 그려 놓고 갈라지면 없던 금이 생긴 것이 된다.
-	# 위쪽을 살짝 밝게 둬 두 장이 겹쳐 있음을 그림자 없이 말한다.
+# 펠트에 누운 팩 — 봉인된 **세로 주머니**다. 사진과 비로 갈리고(0.703 대
+# 1.214), 테 대신 크림프로 갈리고, 작은 팩과 큰 팩은 눈금으로 갈린다.
+# **두 블럭**이다. 뜯기 전에도 둘로 보여야, 뜯을 때 그 이음매가 열리는
+# 것으로 읽힌다 — 한 장으로 그려 놓고 갈라지면 없던 금이 생긴 것이 된다.
+#
+#  2026-09-19 — 블럭 자리를 **팩 제 축**으로 옮긴다. 옛 코드는 블럭
+#  중심을 화면 y 로만 밀어서(mid.y * TBL.flat), psi 90° 에서 두 블럭이
+#  23.8px 높이로 9.2px 만 떨어져 **겹쳤다** — 그 각에서는 이음매가 아예
+#  사라졌다. 팩은 randf()*TAU 로 한 바퀴 다 돈다.
+#  팩 몸통 하나. **판 위와 여는 연출이 글자 그대로 같은 함수다** —
+#  tear 가 0 이면 두 쪽이 붙어 판 위 그림이 되고, 자라면 갈라진다.
+#  「겉과 열림이 한 물건」이 말이 아니라 **한 함수**인 자리가 여기다.
+#
+#  ── 띠가 찢기는 법은 유도값이다 ──
+#  띠는 팩 가운데에서 ±seam·band 인데 블럭은 ±seam 에서 시작한다. 찢기면
+#  띠는 **가운데(0)에서 갈라지므로** 한 쪽이 지는 조각은 [∓1.7s, 0] —
+#  블럭 안쪽으로 (band−1)·seam 만큼 물리고, 블럭 끝에서 seam 만큼 더
+#  나가 두 블럭 사이를 덮는다. tear=0 이면 두 조각이 0 에서 정확히
+#  맞물려 **틈이 없다.**
+#  2026-09-19 — 한 번 seam·0.5 로 두고 그려 봤더니 tear=0 에서 두 쪽
+#  사이로 바탕이 2s 만큼 비쳤다(k=2.5 에서 6.3px). 이 유도를 안 지키면
+#  여는 첫 프레임이 판 위와 다른 물건이 된다.
+#
+#  ── 톱니는 **띠의 안쪽 변**이 진다 (2026-09-20) ──
+#  여태 톱니를 블럭의 안쪽 변(±seam)에 물렸는데, 띠가 거기서 seam 만큼
+#  **더 나가 곧은 턱으로** 그 톱니를 통째로 덮고 있었다. 실측하면 파인
+#  이가 띠 밖으로 나오려면 tear > 0.659, 뻗은 이는 tear > 0.941 이라
+#  0.30초 중 앞 3분의 2 동안 톱니가 **한 개도 안 보였다.** 다 찢긴
+#  tear=1 에서도 1.74면px 만 드러나 의도한 5.1 의 3분의 1 이었다 —
+#  두 쪽이 「찢긴 종이」가 아니라 「검은 립이 달린 직사각형」이었다.
+#  고침은 자리를 옮기는 것이다. **각 쪽에서 찢기는 쪽 끝은 띠다**
+#  (블럭의 안쪽 변은 띠 밑에 깔려 어느 tear 에서도 안 보인다). 그러니
+#  톱니는 띠가 져야 맞다 — 실루엣이 곧 찢긴 자리가 된다.
+#  블럭의 안쪽 변은 곧게 둔다. 톱니를 거기 남기면 tear > 0.659 에서
+#  파인 이가 띠의 바깥 변보다 깊어져 **바탕이 비친다**(지금 그랬다).
+#  띠의 이 깊이는 seam 으로 막는다 — 그보다 깊으면 파인 자리에서 띠가
+#  블럭보다 물러나 종이 속살이 드러난다. 1.7·k 대신 1.6·k 라 6% 얕다.
+func _pack_body(c: Vector2, rot: float, k: float, bd: Dictionary,
+		tear: float, dim: float) -> void:
+	var w: float = float(PACK.w) * k          # 판 위 15.08
+	var h: float = float(PACK.h) * k          # 판 위 21.46
+	var seam: float = float(PACK.seam) * k    # 면이다 — 배율을 탄다
 	var lo := (h - seam) * 0.5
-	for k in 2:
-		var sgn: float = -1.0 if k == 0 else 1.0
-		var mid := Vector2(0.0, sgn * (seam + lo))
-		var q := _quad_at(c + Vector2(mid.x, mid.y * TBL.flat), rot, w, lo)
-		draw_colored_polygon(q, Color(
-				C_PANEL.lightened(0.34 if k == 0 else 0.24).darkened(dim), 1.0))
-		draw_polyline(q + PackedVector2Array([q[0]]),
-				Color(C_WIRE.darkened(0.25 + dim), 0.5), 1.0)
-	# 이음매를 지나는 띠. 두 블럭을 묶는 봉인이라 가운데를 덮는다.
-	draw_colored_polygon(_quad_at(c, rot, w, seam + 1.1),
-			Color(C_ACC.darkened(dim), 1.0))
-	# 눈금 — 안에 든 수. 위 블럭에 새겨 큰 팩과 작은 팩을 그림으로 가른다.
+	var crimp: float = maxf(0.06 * h, 1.2)
+	var nt: float = maxf(0.14 * w, 2.0)
+	var th: float = _pack_thread(k)
+	#  띠가 블럭 안으로 물리는 깊이. 바깥 변은 여기, 안쪽 변은 팩 가운데(0).
+	var bite_in: float = (float(PACK.band) - 1.0) * seam
+	#  찢긴 이의 깊이. seam 을 넘으면 파인 자리에서 띠가 블럭보다 물러난다.
+	var bite: float = minf(1.7 * k * tear, seam)
+	# 벌어지는 거리. 처음에 빠르게 뜯기고 끝에서 느려진다 — 손으로 뜯는 결이다.
+	var gap: float = float(BOOST.gap) * (1.0 - pow(1.0 - tear, 2.4))
+	var bco := cos(rot)
+	var bsi := sin(rot)
+	for kk in 2:
+		var sgn: float = -1.0 if kk == 0 else 1.0
+		# 위쪽은 위로, 아래쪽은 아래로. 갈라지면서 서로 반대로 기운다.
+		var rt: float = rot + sgn * tear * 0.24
+		var co := cos(rt)
+		var si := sin(rt)
+		var cc := _pack_pt(c, bco, bsi, 0.0, sgn * (seam + lo)) \
+				+ Vector2(gap * sgn * 0.16, sgn * gap * TBL.flat)
+		#  위쪽을 살짝 밝게 둬 두 장이 겹쳐 있음을 그림자 없이 말한다.
+		#  **테 한 획(draw_polyline)을 버렸다** — 사진이 같은 테를 두르고
+		#  있어서 색이 달라도 한 물건으로 보였다. 가장자리는 크림프가 말한다.
+		#  안쪽 변은 **곧다.** 띠가 통째로 덮는 자리라 톱니를 물려 봐야
+		#  안 보이고, 깊어지면 띠 바깥으로 삐져나와 바탕이 비친다.
+		draw_colored_polygon(
+				_pack_quad(cc, rt, w, sgn * lo, -sgn * lo,
+						int(PACK.teeth), crimp, 0.0),
+				Color(C_PANEL.lightened(0.34 if kk == 0 else 0.24).darkened(dim), 1.0))
+		#  이음매를 지나는 띠 — **눌린 자리**다. 여태 C_ACC 가 가운데를 통으로
+		#  덮었는데(41.8 × 4.25 ≈ 178px²), C_ACC 대 C_GOLD 가 **1.191:1** 이라
+		#  640×360 에서 같은 호박색이다 — 팩이 값표 옆에 서면 봉인이 「돈」으로
+		#  읽혔다. 저장소가 제 시험(qa_ui ③)에 쓰는 바닥이 1.4 인데 제가 못 넘었다.
+		#  **새 색은 안 만든다. 자리·모양·면적으로 푼다.**
+		#  띠는 팩 제 몸의 어두운 단(실물 열 봉합 자리가 실제로 눌려 어둡다)이고,
+		#  호박색은 **띠 바깥 가장자리의 뜯는 실 1px 로만** 남는다 —
+		#  178 → 약 32px², 82% 감소.
+		#  **찢기는 쪽 끝이 이 변이다.** 톱니를 여기 물린다 — 바깥 변
+		#  (블럭 안쪽으로 bite_in)은 곧게 두고, 팩 가운데(0)에 닿는
+		#  안쪽 변만 bite 로 문다. tear=0 이면 bite=0 이라 판 위 그림이
+		#  옛 네모와 **한 픽셀도 안 다르다.**
+		var bo: float = -sgn * (lo - bite_in)       # 띠 바깥 변
+		var bi: float = -sgn * (lo + seam)          # 띠 안쪽 변 = 팩 가운데
+		draw_colored_polygon(
+				_pack_quad(cc, rt, w, bo, bi, int(PACK.teeth), 0.0, bite),
+				Color(C_PANEL.lightened(0.10).darkened(dim), 1.0))
+		#  뜯는 홈 — 봉인띠 왼쪽 귀의 삼각 결각. 닫힌 채로 「뜯는 물건」임을
+		#  말하고 찢어질 자리를 미리 가리킨다. 반쪽씩 두 블럭이 나눠 지므로
+		#  tear=0 에서 온전한 삼각이 되고, 갈라지면 같이 갈라진다.
+		#  밑변은 **찢긴 이를 타고 물러난다.** 팩 가운데(0)에 못 박아 두면
+		#  왼쪽 끝 이가 뻗은 만큼(bite) 삼각이 그 이의 오른쪽 비탈 밖으로
+		#  0.26·bite 만큼 삐져나와 1px 수염이 남는다 — 확대해서 봤다.
+		#  물러나는 깊이는 띠 안에 머무는 데까지만이다(삼각 끝이 띠 바깥
+		#  변을 넘으면 종이 위에 검은 쐐기가 얹힌다).
+		var nb: float = minf(bite, maxf(float(PACK.band) * seam - nt, 0.0))
+		var ny: float = -sgn * (seam + lo - nb)
+		draw_colored_polygon(PackedVector2Array([
+				_pack_pt(cc, co, si, -w, ny + sgn * nt),
+				_pack_pt(cc, co, si, -w + nt, ny),
+				_pack_pt(cc, co, si, -w, ny)]),
+				Color(C_PANEL.darkened(0.55 + dim * 0.3), 1.0))
+		if kk != 0:
+			continue
+		#  호박색 실과 눈금은 **위 쪽만** 진다. 눈금은 겉을 말하던 유일한
+		#  표시라 열 때 사라지면 안 된다 — 떠난 블럭 안에서 **팩 가운데를
+		#  되짚어** 넘기므로 판 위와 글자 그대로 같은 식이다.
+		#  실은 띠의 **바깥** 가장자리다(가운데가 아니다). 가운데에 두면
+		#  찢긴 뒤 그 실이 너덜한 변에 얹혀 「날것으로 찢긴 자리」가 안
+		#  읽힌다 — 바깥에 두면 실은 성하고 안쪽만 찢긴다.
+		draw_colored_polygon(_quad_at(
+				_pack_pt(cc, co, si, 0.0, -sgn * (lo - bite_in + th * 0.5)),
+				rt, w, th * 0.5),
+				Color(C_ACC.darkened(dim), 1.0))
+		_pack_pips(_pack_pt(cc, co, si, 0.0, seam + lo), co, si, bd, w, h,
+				dim, 1.0 - tear)
+
+
+func _boost_flat(c: Vector2, bd: Dictionary, rot: float, dim: float) -> void:
+	draw_colored_polygon(_quad_at(c + Vector2(0.0, 1.2), rot,
+			float(PACK.w) * GOODS_K, float(PACK.h) * GOODS_K),
+			Color(0.0, 0.0, 0.0, 0.35))
+	_pack_body(c, rot, GOODS_K, bd, 0.0, dim)
+
+
+#  눈금 — 안에 든 수(size)와 가져갈 수(pick)를 **한 채널에** 얹는다.
+#  피치가 **고정**이라 2 와 4 가 「같은 자의 절반」으로 즉시 읽힌다. 옛
+#  코드는 n 과 무관하게 ±0.62w 를 꽉 채워서, n=2 는 간격 25.9px(양 끝
+#  리벳 둘) · n=4 는 8.6px(줄)이었다 — 「절반」이 아니라 **다른 배치**로
+#  읽혔다. 넷 이하는 세지 않고 인식되므로 피치만 고정하면 공짜로 얻는다.
+#  pick 개만 밝고 나머지는 낮다 — 「4 중 1」이 글자 없이 선다. 발라트로는
+#  크기를 JUMBO·MEGA **글자로** 말하는데 우리는 글자를 못 쓴다.
+#  **둘 다 채운 원이다** — 외곽선을 쓰면 16px 아래에서 죽는다.
+#  겉면이 30×34px 뿐이라 장식은 안 얹는다. 정보는 한 채널에만.
+#  c 는 **팩 가운데**다(블럭 가운데가 아니다) — 여는 연출에서 위 블럭이
+#  떠난 뒤에도 같은 식을 쓰려면 떠나기 전의 팩 가운데를 되짚어 넘긴다.
+func _pack_pips(c: Vector2, co: float, si: float, bd: Dictionary,
+		w: float, h: float, dim: float, a: float) -> void:
 	var n: int = maxi(1, int(bd.get("size", 2)))
-	var co := cos(rot)
-	var si := sin(rot)
-	for i2 in n:
-		var t: float = 0.0 if n == 1 else (float(i2) / float(n - 1) * 2.0 - 1.0)
-		var q2 := Vector2(t * w * 0.62, -h * 0.62)
-		var e := Vector2(q2.x * co - q2.y * si, q2.x * si + q2.y * co)
-		draw_circle(c + Vector2(e.x, e.y * TBL.flat), 1.5,
-				Color(C_TXT.darkened(dim), 0.9))
+	var pk: int = clampi(int(bd.get("pick", 1)), 0, n)
+	var pr: float = maxf(float(PACK.pip) * w, 1.5)
+	var pitch: float = float(PACK.pitch) * pr
+	for i in n:
+		var x: float = (float(i) - float(n - 1) * 0.5) * pitch
+		draw_circle(_pack_pt(c, co, si, x, -0.62 * h), pr,
+				Color(C_TXT.darkened(dim), (0.9 if i < pk else 0.30) * a))
 
 
 # 펠트에 누운 사진 — 폴라로이드다. 테두리가 두껍고 아래가 더 두껍다.
@@ -20659,8 +21116,14 @@ func _dk_quads(tip: Vector2, ax: Vector2, nrm: Vector2, rows: Array, col: Color)
 # ══════════════════════════════════════════════════════════
 #  제약 아이콘
 # ──────────────────────────────────────────────────────────
-#  GameData.modifiers() 6종. 세 자리에서 크기만 달리 쓴다.
-#    스테이지 카드 r=9(18px) · 하단 제약 줄 r=7(14px) · 툴팁 r=7(14px)
+#  GameData.modifiers() **열한 가지**(표 열 줄 + 모르는 id 가지). 다섯 자리에서
+#  크기만 달리 쓴다 — 작은 쪽부터:
+#    상점 앞치마 명판 r=6.0 · 상단 바 r=6.0 · 툴팁 r=7.0 ·
+#    보스 카드 r=8.5/9.0 · **컬렉션 r=11.0**
+#  2026-09-19 — 이 머리말이 넉 줄 낡아 있었다. 「6종 · 세 자리 · r9/r7/r7」은
+#  **거짓**이고, 「가장 큰 자리가 보스 카드」도 뒤집혀 있었다. 가장 큰 곳은
+#  컬렉션(11.0)이고 가장 작은 곳은 앞치마였다(5.5 → 6.0 으로 올렸다).
+#  설계 범위는 **r 6.0 ~ 11.0, 두 배뿐**이다(골드는 5.0 → 34.6 이다).
 #  이름을 _icon_mod 로 못 짓는다 — 코드에서 mod 는 이미 보드 확장다.
 #
 #  ── 실루엣 ──
@@ -20687,31 +21150,99 @@ func _dk_quads(tip: Vector2, ax: Vector2, nrm: Vector2, rows: Array, col: Color)
 #  파선으로 끊기엔 14px 에서 호가 3~5px 라 자리가 없다. 없어진 것은
 #  "없음"과 "그 자리를 덮은 loss" 로만 말한다.
 #  cut 을 바탕색이 아니라 고정 어두운 색으로 둔 것도 같은 이유다.
-#  항상 loss 덩어리 위에만 찍으므로 대비가 7:1 로 고정이고 자리를
-#  안 탄다. 바탕색으로 구멍을 뚫으면 하단 줄에선 C_BG 와 같아져
+#  loss 위에서 7.8:1 · grey 위에서 5.5:1 이라 **어느 쪽에 찍어도 자리를
+#  안 탄다.** 바탕색으로 구멍을 뚫으면 하단 줄에선 C_BG 와 같아져
 #  그리나 마나가 된다.
+#  2026-09-19 — 「cut 은 loss 덩어리 위에만」을 **grey 원반 위에도** 찍는
+#  것으로 넓혔다. 근거는 회색조다: 원형 넷을 채운 원반으로 바꾸고 나니
+#  loss 대 grey 가 1.42:1 뿐이라 odd·turn·flat 의 속 그림이 회색조 40%
+#  에서 **통째로 사라졌다**(실제로 찍어 보고 물렀다). 세 톤 중 회색조를
+#  건너는 것은 cut 뿐이라, 원형 넷은 전부 cut 을 한 점씩 진다.
 #
 #  ── 극성 ──
 #  _icon_mod 는 좋아진 곳을 C_ACC 로 덮는다. 여기는 정확히 뒤집어
 #  나빠진 곳만 loss 로 칠한다. 이 세트에 C_ACC / C_GOLD 는 한 번도
 #  안 나온다 — 금색이 한 점만 섞여도 "얻는 것"으로 읽힌다.
-#  loss 와 grey 의 휘도차는 1.23:1 뿐이라 회색조에서 색은 못 믿는다.
-#  그래서 loss 는 여섯 중 다섯에서 그 아이콘의 가장 큰 단일 도형이다.
-#  narrow 만 예외인데, 주제가 "얇아짐" 자체라 loss 가 얇은 것이 곧 뜻이다.
+#  loss 와 grey 의 휘도차는 **1.424:1** 이라 회색조에서 색은 못 믿는다
+#  (2026-09-19 실측. 여기 적혀 있던 1.23 은 틀린 수였다).
+#  그래서 **뜻을 지는 도형은 언제나 loss 나 cut 이다** — grey 는 살아남은
+#  바탕이지 말하는 쪽이 아니다. narrow 만 예외인데, 주제가 "얇아짐" 자체라
+#  loss 가 얇은 것이 곧 뜻이다.
+#  2026-09-19 — 원형 넷은 grey 원반이 면적으로는 제일 크다. 「loss 가 가장
+#  큰 도형」이던 옛 규칙이 거기서 깨지는데, **깨져도 되는 자리**다: 원반은
+#  판(살아남은 것)이고 그 위에 파인 것이 제약이다. 대신 그 넷은 회색조를
+#  건너려고 cut 을 한 점씩 반드시 진다(아래 각 가지 참조).
+#  **규칙 한 줄: 배수 붉음은 언제나 숫자다. loss 붉음은 언제나 grey 가
+#  둘러싼 덩어리다.** 보스 카드에서 제약이 크게 떠도 「배수」와 안 섞이는
+#  근거가 색이 아니라 **글자냐 도형이냐**다.
 #
-#  ── 크기 ──
+#  ── 크기: 키라인 둘 (2026-09-19) ───────────────────────────
 #  좌표는 전부 r 비율, 두께에만 하한을 건다. narrow 의 2:1 은 하한이
 #  걸린 뒤에도 유지된다 — 굵은 쪽이 2.0 에 눌리면 얇은 쪽은 그 절반인
-#  1.0 이 되므로 비가 안 무너진다.
-#  여섯 전부 2r 정사각을 넘지 않는다. 하나라도 넘으면 세 자리의 여백
-#  검산이 아이콘마다 달라져 전부 거짓말이 된다.
-#  r=7 에서 가장 가는 획 1.05px, 가장 좁은 틈 1.09px. 하한은 r=6.5 다.
+#  1.0 이 되므로 비가 안 무너진다. 획은 r 5.5→11 에서 1.65배로 크는데
+#  광학 표준(1.5배)에 붙는다 — bold_lo 2.0 바닥 덕이고, **우연이지만 옳다.**
+#  **획은 통과였고 낙제한 것은 바깥 상자였다.** 실측하니 1.06r(narrow) ~
+#  2.06r(flat) 로 94% 벌어져 있었고, 여기 적혀 있던 「여섯 전부 2r 정사각을
+#  안 넘는다」가 flat 에서 이미 거짓이었다. 원형 넷은 제 바깥 고리와
+#  겹치기까지 했다(r=11 에서도 shade·odd 가 −0.385px).
+#  그래서 **키라인 둘**을 못 박는다(Material 24 격자의 원 ⌀20 · 정사각 18):
+#    KEY.cir 0.83r — 원형 가족   KEY.sq 0.75r — 각진 가족
+#  **규약 한 줄: 잉크가 획 절반까지 포함해 제 키라인 안에 든다.**
+#  원이 정사각보다 11% 커야 같은 크기로 보인다. 옛 상태를 이 자로 재면
+#  원형 넷이 0.895r 로 7% 넘고 각진 것들이 0.86~1.03r 로 15~37% 넘었다 —
+#  **원이 작아 보이던 게 아니라 막대가 커 보이던 것**이다.
+#  하드 캡은 KEY.cir 이다. qa_bosscard ⑤ 가 이 값을 읽어 검산한다.
+#
+#  ── 두 벌 · 문턱 8.0 ───────────────────────────────────────
+#  틈 규약(LIM.gap)을 고리 가족에 걸면 속 그림의 바깥 한계가
+#  (KEY.cir·r − 획) − 틈 이다:
+#    r=11.0 → 5.64(0.51r) · r=8.5 → 4.29(0.50r) · r=5.5 → 2.07(0.38r)
+#  **r=8.0 이 갈림목이다.** 그 아래에서는 「외곽선 + 속 그림」이라는 구조
+#  자체가 안 선다(16px 아래는 채움이 외곽선을 이긴다).
+#  부르는 자리 다섯이 문턱으로 정확히 셋 대 셋으로 갈리고, 문턱이 7.0 과
+#  8.5 **사이**에 떨어져 어느 자리도 경계에 안 선다.
+#  ⚠ 「경계에 안 선다」는 **화면에 서는 r** 로 셌을 때만 참이다. 보스 카드는
+#  명판을 안 늘리려고 r 을 카드 배율로 **미리 나눠** 넘긴다 — 선 카드에서
+#  8.5/1.12 = 7.589 라 문턱 밑으로 떨어진다. 화면 크기는 8.5 그대로인데
+#  그림만 작은 벌이 됐다(2026-09-20 에 픽셀로 잡았다. 누운 보스와 선 보스의
+#  같은 먹통에서 열쇠구멍 목이 있고 없고가 갈렸다). 그래서 벌을 가르는 수를
+#  **따로 받는다** — 배율을 제 손으로 먹인 부르는 쪽만 그 수를 넘긴다.
+#  **하한은 r 6.0 이다** — 앞치마 명판 속 원이 6.5 라 0.83×6.0 = 4.98 이
+#  들어가는 가장 큰 값이다(옛 하한 6.5 는 5.40 이라 아슬했다).
+#  큰 벌이 더하는 것은 **전부 맥락**(w1 또는 loss 안의 cut)이다. 뜻을 지는
+#  도형은 작은 벌에 다 있다 — 이것이 「보스 카드에서 크게 뜨는 그림이
+#  작은 자리에서도 읽힌다」의 보증이다.
+#
+#  ── 코드 자리 규약 (어기면 그림은 멀쩡한데 검사가 거짓으로 실패한다) ──
+#  qa_ui ⑥ 은 game.gd 를 **문자열로 읽어** _icon_modifier 의 선언 줄부터
+#  _chute_edge 의 선언 줄까지를 잘라, 거기서 `"<id>":` 와 탭 두 개 + `_:` 를
+#  찾는다. 자르는 자를 **처음 만나는 선언 글자**로 삼으므로:
+#    · 새 보조 함수는 전부 _icon_modifier **앞**에 둔다
+#    · 가지를 `"a", "b":` 로 합치지 않는다
+#    · 두 벌은 **가지 안에서** `big` 한 변수로 가른다. 작은 벌을 별도
+#      함수로 빼면 검사가 거짓으로 실패한다
+#    · _chute_edge 를 옮기지도 이름을 바꾸지도 않는다
+#    · **주석에 그 두 선언 줄을 글자 그대로 적지 않는다** — 적는 순간
+#      자가 주석을 먼저 물어 본문이 빈 칸이 된다. 2026-09-19 에 실제로
+#      한 번 그렇게 열 가지가 통째로 「그림 없음」으로 떴다.
 # ══════════════════════════════════════════════════════════
 
 const LIM := {
 	"thin": 0.15, "thin_lo": 1.0,   # 맥락 획
 	"bold": 0.30, "bold_lo": 2.0,   # 구조 획
+	#  **뜻이 다른 두 표시 사이에만** 건다. 실루엣(제약 원반의 림 · 골드의
+	#  밑 옆면 · 팩의 크림프)은 물건의 끝이지 표시가 아니라 이 규약을 안
+	#  받는다. 세 곳 다 이 구별이 없어서 2px 규칙이 엉뚱하게 깨지거나
+	#  엉뚱하게 지켜지고 있었다. 2026-09-19
+	"gap": 0.167, "gap_lo": 1.5,
 }
+
+#  Material 24 격자. 원은 ⌀20/24 = 0.833, 정사각은 18/24 = 0.75 다.
+const KEY := {"cir": 0.83, "sq": 0.75}
+
+#  제약 아이콘 두 벌. step 위가 큰 벌, 아래가 작은 벌이다.
+#  r_lo 는 이 세트를 부를 수 있는 가장 작은 r — 그 밑은 그림이 안 선다.
+const MODK := {"step": 8.0, "r_lo": 6.0}
 
 
 # ══════════════════════════════════════════════════════════
@@ -21125,6 +21656,33 @@ func _icon_tag(c: Vector2, r: float, kind: String, a := 1.0,
 			draw_circle(c, r * 0.7, col)
 
 
+#  제약 아이콘의 보조 셋. **_icon_modifier 앞에 둔다** — qa_ui ⑥ 이
+#  그 함수의 선언 줄부터 _chute_edge 의 선언 줄까지를 문자열로 잘라
+#  읽으므로, 뒤에 두면 가지 수를 잘못 센다(_icon_unfound 머리말이 같은
+#  이유로 그 자리를 못 박았다).
+
+#  뜻이 다른 두 표시 사이의 틈. 실루엣에는 안 건다.
+func _mod_gap(r: float) -> float:
+	return maxf(r * float(LIM.gap), float(LIM.gap_lo))
+
+
+#  원형 가족의 몸. **고리를 획에서 면으로 바꾼 자리다**(2026-09-19).
+#  draw_arc 로 긋던 시절에는 속 그림이 제 고리와 −0.14 ~ −0.385px 겹쳤다 —
+#  r=11 에서도 그랬으니 어느 크기에서도 안 서는 말이었다. 채운 원반으로
+#  바꾸면 겹침이 **정의상 사라진다**: 원반의 가장자리는 실루엣이지 표시가
+#  아니라 틈 규약을 안 받고, 남는 grey 테두리가 곧 판의 림이다.
+#  「바탕 없이 획과 덩어리만」은 안 깨진다 — 원반은 바탕이 아니라 **물건**
+#  이고, 빈 동전 슬롯의 속 빈 고리와 정확히 반대라 둘이 갈린다.
+func _mod_disc(c: Vector2, r: float, col: Color) -> void:
+	draw_circle(c, r * float(KEY.cir), col)
+
+
+#  각진 가족의 세로 막대. 키라인 가장자리에 붙여 놓는다 — 바닥이 걸려도
+#  2:1 비가 안 무너지고, 바닥이 잉크를 키라인 밖으로 못 민다.
+func _mod_bar(c: Vector2, r: float, x0: float, w: float, col: Color) -> void:
+	var ks: float = r * float(KEY.sq)
+	draw_rect(Rect2(c + Vector2(x0, -ks), Vector2(w, ks * 2.0)), col)
+
 #  못 본 칸. 「모르는 제약」이 쓰던 원반을 컬렉션이 같이 쓴다 — 빈 칸이 아니라
 #  원반이 서야 「여기 뭔가 있는데 아직 못 봤다」가 화면에서 읽힌다(아래
 #  _icon_modifier 의 기본 가지 주석이 적어 둔 그 뜻 그대로다).
@@ -21144,71 +21702,130 @@ func _icon_tag(c: Vector2, r: float, kind: String, a := 1.0,
 func _icon_unfound(c: Vector2, r: float, dim := 0.0, a := 1.0) -> void:
 	var grey := Color(C_WIRE.lightened(0.18).darkened(dim), a)
 	var w1: float = maxf(r * float(LIM.thin), float(LIM.thin_lo))
-	draw_arc(c, r * 0.82, 0.0, TAU, 20, grey, w1)
+	#  반지름은 제약 원형 가족과 **같은 키라인**(KEY.cir)을 쓴다. 손으로 적은
+	#  0.82 를 두면 같은 화면에 반지름이 둘이 된다(2026-09-20 합칠 때 맞췄다).
+	draw_arc(c, r * float(KEY.cir), 0.0, TAU, 20, grey, w1)
 	#  「?」 는 10(곁말). 잉크 가운데를 원반 가운데에 앉힌다.
 	draw_string(font_sm, Vector2(c.x - r, _ink_mid_y(c.y, 10)), "?",
 			HORIZONTAL_ALIGNMENT_CENTER, r * 2.0, 10, grey)
 
 
 func _icon_modifier(c: Vector2, r: float, id: String, dim: float,
-		a: float = 1.0) -> void:
+		a: float = 1.0, sr: float = -1.0) -> void:
 	var grey := Color(C_WIRE.lightened(0.18).darkened(dim), a)
 	var loss := Color(C_MULT.lightened(0.25).darkened(dim), a)
 	var cut := Color(C_DARK.darkened(0.45), a)          # loss 덩어리 안에만
 	var w1: float = maxf(r * float(LIM.thin), float(LIM.thin_lo))
 	var w2: float = maxf(r * float(LIM.bold), float(LIM.bold_lo))
+	#  **두 벌은 여기 한 변수로 가른다.** 작은 벌을 별도 함수로 빼면
+	#  qa_ui ⑥ 이 가지를 못 찾아 거짓으로 실패한다(머리말 참조).
+	#  sr 은 **화면에 서는 반지름**이다. 부르는 쪽이 제 변환으로 그림을
+	#  키우거나 줄이면 r 은 이미 그 배율로 나눈 수라서, r 로 벌을 가르면
+	#  화면 크기는 한 픽셀도 안 변했는데 그림만 벌이 바뀐다 — 보스 카드가
+	#  서는 순간 실제로 그랬다(2026-09-20). 안 넘기면 r 이 곧 화면이다.
+	var big: bool = (sr if sr > 0.0 else r) >= float(MODK.step)
+	var kc: float = r * float(KEY.cir)     # 원형 키라인
+	var ks: float = r * float(KEY.sq)      # 각진 키라인
+	var gp: float = _mod_gap(r)
 
 	match id:
 		# ── 좁은 판 ──────────────────────────────────────
 		# 세로 막대 둘, 굵기비 정확히 2:1. 왼쪽 grey 가 원래 폭,
 		# 오른쪽 loss 가 남은 폭이다. 한 프레임에 before/after 를 같이
 		# 넣으므로 유령선이 필요 없다 — 왼쪽 막대가 이미 그 유령이다.
+		#  2026-09-19 — 상자가 1.06r × 1.60r 에 중심이 −0.043r 로 **왼쪽에
+		#  쏠려** 있었다. 세로를 키라인(±0.75r)에 맞추고 **두 막대를 한
+		#  덩어리로 묶어 가운데에 앉힌다** — 덩어리 폭이 굵은 막대 + 틈 +
+		#  얇은 막대라 두께 2:1 이 바닥에 눌려도 상자가 대칭으로 남는다.
+		#  ⚠ 막대를 키라인 **가장자리에 붙이면** 상자는 대칭이 되지만
+		#  둘 사이가 r=6 에서 5.9px 로 벌어져 「원래 폭 옆의 남은 폭」이
+		#  아니라 동떨어진 선 둘이 된다 — 한 번 그렇게 그려 보고 물렀다.
+		#  **면 둘뿐이라 작은 벌에서도 하나도 안 버린다.**
 		"narrow":
-			var nh := r * 1.60
-			var nw := maxf(r * 0.34, 2.0)
-			draw_rect(Rect2(c + Vector2(-r * 0.40 - nw * 0.5, -nh * 0.5),
-					Vector2(nw, nh)), grey)
-			draw_rect(Rect2(c + Vector2(r * 0.40 - nw * 0.25, -nh * 0.5),
-					Vector2(nw * 0.5, nh)), loss)
+			var nwg := maxf(r * 0.34, 2.0)
+			var nwl := maxf(r * 0.17, 1.0)
+			var ngp: float = maxf(gp, r * 0.30)
+			var nx: float = -(nwg + ngp + nwl) * 0.5
+			_mod_bar(c, r, nx, nwg, grey)
+			_mod_bar(c, r, nx + nwg + ngp, nwl, loss)
 
 		# ── 역풍 ────────────────────────────────────────
 		# 겹화살. 배속 버튼 관례 그대로라 "2배"를 개수로 말한다 —
 		# 학습 비용이 0 이고, 각진 획이라 세트에서 유일하다.
-		# 아래 가는 선은 게이지 궤도, 이 아이콘에서 유일하게 멀쩡한 것.
+		# 아래 가는 선은 게이지 궤도.
+		#  2026-09-19 — 「이 아이콘에서 유일하게 멀쩡한 것」이라고 적어
+		#  뒀는데, 사실은 **혼자만 대칭이라 쏠림을 드러내던 것**이었다.
+		#  겹화살이 x[−0.80r, +0.44r] 라 중심이 −0.18r 인데 게이지선만
+		#  ±0.88r 로 대칭이라, r=11 에서 2px 씩 어긋나 명판 안에서 그림이
+		#  기울어 보였다. 화살을 −0.58r/+0.14r 로 옮겨 x[±0.58r] 로 만들고
+		#  게이지선을 키라인(±0.75r)에 맞춘다.
+		#  작은 벌은 게이지선을 버린다 — 화살 아래끝과의 틈이 r=6 에서
+		#  바닥(1.5)을 못 채운다. 뜻을 지는 것은 화살 쪽이다.
 		"gust":
-			draw_line(c + Vector2(-r * 0.88, r * 0.86),
-					c + Vector2(r * 0.88, r * 0.86), grey, w1)
+			#  게이지선이 밑에만 있어 덩어리가 아래로 쏠렸다(r=8.5 에서
+			#  0.147r). 쏠린 만큼 통째로 올린다 — 게이지선이 빠지는
+			#  작은 벌에서는 0 이라 저절로 맞는다.
+			var goy: float = ((r * 0.66 + w1) - (r * 0.46 + w2 * 0.5)) * 0.5 \
+					if big else 0.0
+			if big:
+				draw_rect(Rect2(c + Vector2(-ks, r * 0.66 - goy),
+						Vector2(ks * 2.0, w1)), grey)
 			for i in 2:
-				var gx := r * (-0.80 + 0.80 * float(i))
-				draw_line(c + Vector2(gx, -r * 0.46),
-						c + Vector2(gx + r * 0.44, 0.0), loss, w2)
-				draw_line(c + Vector2(gx + r * 0.44, 0.0),
-						c + Vector2(gx, r * 0.46), loss, w2)
+				var gx := r * (-0.58 + 0.72 * float(i))
+				draw_line(c + Vector2(gx, -r * 0.46 - goy),
+						c + Vector2(gx + r * 0.44, -goy), loss, w2)
+				draw_line(c + Vector2(gx + r * 0.44, -goy),
+						c + Vector2(gx, r * 0.46 - goy), loss, w2)
 
 		# ── 안개 ────────────────────────────────────────
 		# CONFIRM 은 조준 십자에 링 두 개(22→7, 30→11)를 조여 붙여
-		# "멈춰 볼 틈"을 만든다. 그 링이 통째로 없다. 남은 것은 십자와
-		# 가운데 표적점뿐이고, 둘 사이의 빈 고리가 사라진 확인 구간이다.
+		# "멈춰 볼 틈"을 만든다. 그 링이 통째로 없다고 적혀 있었다.
+		#  2026-09-19 — 링을 **그려 넣는 대신 그 자리를 비운다.** 확인
+		#  구간의 뜻이 「사라진 고리」이므로, 십자를 그 반지름에서 한 번
+		#  끊으면 없어진 고리가 곧 그림이 된다. 그릴 자리도 없다 —
+		#  가운데 점과 십자 사이에 고리를 넣으려면 틈 규약(LIM.gap) 때문에
+		#  r=11 에서도 팔이 1.8px 밖에 안 남는다.
+		#  ⚠ **fog 는 축 이름이지 제약 id 가 아니다**(MODIFIER_AXES 에 있고
+		#  챌린지 「깜깜이」가 그 축을 켜지만 _icon_modifier 는 id 로 갈린다).
+		#  이 가지는 지금 **한 번도 안 불린다.** 지우지 않는 이유는 qa_ui ⑥
+		#  이 「표의 id 가 다 있나」만 보아서 남는 가지를 안 잡고, modifiers.csv
+		#  에 id 가 오르는 날 그대로 서기 때문이다.
 		"fog":
-			var hole := r * 0.34
+			var fbk: float = r * 0.50
+			var fhal: float = gp * 0.5
 			for i in 4:
 				var fa := TAU * float(i) * 0.25
 				var fd := Vector2(cos(fa), sin(fa))
-				draw_line(c + fd * hole, c + fd * r * 0.86, loss, w2)
+				if big:
+					draw_line(c + fd * (r * 0.16 + gp), c + fd * (fbk - fhal),
+							loss, w2)
+					draw_line(c + fd * (fbk + fhal), c + fd * ks, loss, w2)
+				else:
+					draw_line(c + fd * (r * 0.16 + gp), c + fd * ks, loss, w2)
 			draw_circle(c, r * 0.16, grey)
 
 		# ── 단벌 ────────────────────────────────────────
 		# 탄창 그대로 — 가로 칸을 세로로 쌓는다(_mag_rect 도 그 배치다).
 		# 남은 두 칸은 grey, 없어진 맨 윗칸 자리에는 칸보다 긴 loss 막대를
 		# 눕힌다. 칸보다 길어야 "줄의 일원"이 아니라 "가로지른 마이너스"다.
+		#  2026-09-19 — 상자가 1.72r × 1.39r 로 가로가 키라인을 15% 넘었다.
+		#  막대를 ±0.75r 로 줄이고 **쌓기를 세로 가운데에 맞춘다**. 칸 폭은
+		#  1.12r 이라 막대가 확실히 더 길다 — 「줄의 일원」이 아니라
+		#  「가로지른 마이너스」로 읽히는 근거가 그 길이 차다.
+		#  작은 벌은 grey 칸 하나를 버린다 — 셋을 쌓으면 칸 높이가 바닥
+		#  2.0 에 눌려 칸 사이 틈이 1.0px 로 주저앉는다.
 		"short":
-			var sbw := r * 1.30
-			var sbh := r * 0.30
-			draw_rect(Rect2(c + Vector2(-r * 0.86, -r * 0.72),
-					Vector2(r * 1.72, r * 0.34)), loss)
-			for i in 2:
-				draw_rect(Rect2(c + Vector2(-sbw * 0.5,
-						r * (-0.13 + 0.50 * float(i))), Vector2(sbw, sbh)), grey)
+			var sbw := r * 1.12
+			var sbh: float = maxf(r * 0.26, 2.0)
+			var slh: float = maxf(r * 0.30, 2.0)
+			var scn: int = 2 if big else 1
+			var stot: float = slh + gp * float(scn) + sbh * float(scn)
+			var sy: float = -stot * 0.5
+			draw_rect(Rect2(c + Vector2(-ks, sy), Vector2(ks * 2.0, slh)), loss)
+			for i in scn:
+				sy += (slh if i == 0 else sbh) + gp
+				draw_rect(Rect2(c + Vector2(-sbw * 0.5, sy),
+						Vector2(sbw, sbh)), grey)
 
 		# ── 금지 구역 ────────────────────────────────────
 		# 20번은 화면에서 12시다 — sectors[0]=20 이고 annulus_at 의 각 0 이
@@ -21216,30 +21833,37 @@ func _icon_modifier(c: Vector2, r: float, id: String, dim: float,
 		# 걸친다. 그래서 꼭짓점을 아래 두고 위로 벌어지는 조각을 그린다.
 		# 여섯 중 이것만 grey 가 없다 — 조각이 통째로 죽으므로 살아남은
 		# 것이 없고, 없는 것을 그리면 거짓말이 된다.
+		#  2026-09-19 — 상자가 1.57r × 1.58r 이고 바깥 반지름이 1.007r 이라
+		#  키라인을 넘었다. 꼭짓점을 +0.70r, 반지름을 1.45r 로 당기면
+		#  위 끝이 정확히 −0.75r, 옆이 ±0.72r 로 **키라인 안**에 든다.
+		#  **면 둘뿐이라 작은 벌에서도 안 버린다** — cut 은 뜻 자체다.
 		"dead":
-			var ap := c + Vector2(0.0, r * 0.74)
+			var ap := c + Vector2(0.0, r * 0.70)
 			var fan := PackedVector2Array([ap])
 			for i in 9:
 				var da := lerpf(-0.52, 0.52, float(i) / 8.0)
-				fan.append(ap + Vector2(sin(da), -cos(da)) * r * 1.58)
+				fan.append(ap + Vector2(sin(da), -cos(da)) * r * 1.45)
 			draw_colored_polygon(fan, loss)
 			# 0점. 폭을 조각 폭에서 역산했으므로 어느 크기에서도 안 샌다
-			# (아래 모서리 안쪽으로 0.156r = r=7 에서 1.09px 남는다).
+			# (그 높이에서 조각 반폭이 0.71r 이라 ±0.44r 이 0.27r 안쪽이다).
 			draw_rect(Rect2(c + Vector2(-r * 0.44, -r * 0.54),
 					Vector2(r * 0.88, maxf(r * 0.24, 1.4))), cut)
 
 		# ── 높은 목표 ────────────────────────────────────
 		# 목표선(가로획)이 있고 그 위를 뚫고 오르는 화살표. 손실색 하나다 —
 		# 제약 세트에는 얻는 색이 한 점도 안 들어간다는 규칙 그대로다.
+		#  2026-09-19 — 촉 끝이 −0.86r 이라 키라인을 넘었다. 촉을 −0.75r 로
+		#  당기고 목표선을 ±0.75r 로 맞춘다. **기둥이 선을 지난다**(뚫는다)는
+		#  것이 이 아이콘의 전부라 셋 다 작은 벌에도 남는다.
 		"tgt":
-			draw_rect(Rect2(c + Vector2(-r * 0.7, r * 0.5),
-					Vector2(r * 1.4, w1)), grey)
-			draw_rect(Rect2(c + Vector2(-w2 * 0.5, -r * 0.34),
-					Vector2(w2, r * 0.9)), loss)
+			draw_rect(Rect2(c + Vector2(-ks, r * 0.52),
+					Vector2(ks * 2.0, w1)), grey)
+			draw_rect(Rect2(c + Vector2(-w2 * 0.5, -r * 0.22),
+					Vector2(w2, r * 0.86)), loss)
 			var tipv := PackedVector2Array([
-					c + Vector2(0.0, -r * 0.86),
-					c + Vector2(-r * 0.42, -r * 0.22),
-					c + Vector2(r * 0.42, -r * 0.22)])
+					c + Vector2(0.0, -ks),
+					c + Vector2(-r * 0.40, -r * 0.22),
+					c + Vector2(r * 0.40, -r * 0.22)])
 			draw_colored_polygon(tipv, loss)
 
 		# ── 둔화 ────────────────────────────────────────
@@ -21247,64 +21871,115 @@ func _icon_modifier(c: Vector2, r: float, id: String, dim: float,
 		# 기하가 아니라 물건이다 — 그 어긋남이 곧 "대상이 다르다"는 표시다.
 		# 동전 슬롯이 봉인 동전에 이미 "봉인"을 C_MULT 로 찍으므로 자물쇠는
 		# 이 게임에 이미 있는 어휘다. 아치가 dead 의 부채꼴과 갈라준다.
+		#  2026-09-19 — 상자가 1.36r × 1.45r 로 **열하나 중 유일하게 원래부터
+		#  키라인 안**이었다. 자리는 안 건드리고 둘만 고친다: 열쇠구멍 원에
+		#  바닥을 걸고(작은 자리에서 점으로 사라졌다), 목은 작은 벌에서
+		#  버린다 — 자물쇠임을 지는 것은 아치와 몸이지 목이 아니다.
 		"dull":
 			var ly := c.y - r * 0.13
 			draw_arc(Vector2(c.x, ly), r * 0.44, PI, TAU, 12, grey, w2)
 			draw_rect(Rect2(Vector2(c.x - r * 0.68, ly),
 					Vector2(r * 1.36, r * 0.86)), loss)
-			draw_circle(Vector2(c.x, c.y + r * 0.18), r * 0.15, cut)
-			draw_rect(Rect2(c + Vector2(-r * 0.12, r * 0.18),
-					Vector2(r * 0.24, r * 0.38)), cut)
+			draw_circle(Vector2(c.x, c.y + r * 0.18), maxf(r * 0.15, 1.2), cut)
+			if big:
+				draw_rect(Rect2(c + Vector2(-r * 0.12, r * 0.18),
+						Vector2(r * 0.24, r * 0.38)), cut)
 
 		# ── 그늘 ────────────────────────────────────────
 		# 먹색 칸만 죽는다. 색으로 갈리는 제약이라 기하가 아니라 **칠**이
 		# 그 말을 해야 한다 — 한 칸 걸러 어둡게 칠한다.
+		#  작은 벌은 쐐기를 넷으로 줄인다 — 여섯이면 r=6 에서 호가 2.1px 라
+		#  획과 못 갈린다(넷이면 3.1px). odd 와 갈리는 채널은 그대로
+		#  둘이다: **길이**(shade 는 림까지 · odd 는 0.50r 까지)와
+		#  **cut 의 유무**(shade 에만 먹 쐐기가 있다).
 		"shade":
-			draw_arc(c, r * 0.82, 0.0, TAU, 20, grey, w1)
-			for k in 6:
-				var sa0: float = TAU * float(k) / 6.0
-				draw_colored_polygon(annulus_at(c, r * 0.18, r * 0.78,
-						sa0, sa0 + TAU / 12.0, 5),
+			_mod_disc(c, r, grey)
+			var sn: int = 6 if big else 4
+			for k in sn:
+				var sa0: float = TAU * float(k) / float(sn)
+				draw_colored_polygon(annulus_at(c, r * 0.18, kc - w1,
+						sa0, sa0 + TAU / float(sn * 2), 5),
 						loss if k % 2 == 0 else cut)
 
 		# ── 민짜 ────────────────────────────────────────
 		# 트리플 띠가 죽는다. 「이 링이 없다」는 링을 지우는 것보다
 		# 그어 없애는 쪽이 읽힌다.
+		#  2026-09-19 — **대각선이 두 가지를 동시에 망가뜨리고 있었다.**
+		#   ① 바깥 끝이 중심에서 1.216r 이라 열하나 중 제일 크게 키라인을
+		#      넘었다(상자 2.06r × 2.06r, 94% 벌어진 그 끝이다).
+		#   ② **대각선이 두 뜻을 졌다.** 여기가 아이콘 **안**에 「\」를 긋고,
+		#      무효 표시는 명판 **위**에 「/」를 긋는다 — r=5.5 앞치마에서
+		#      무효된 「민짜」는 둘이 겹쳐 **X 한 글자**가 됐다.
+		#  대각선을 없애고 **띠를 가로지르는 짧은 cut 막대 하나**로 바꾼다.
+		#  「그어 없앤다」를 띠 위에서 국소로 지키면서, 무효 대각선은 이제
+		#  그 획 하나만의 뜻을 진다. 작은 벌은 그 막대를 버린다 — 1.0px 이
+		#  1.6px 띠를 가로지르면 둘 다 죽는다.
 		"flat":
-			draw_arc(c, r * 0.82, 0.0, TAU, 20, grey, w1)
-			draw_arc(c, r * 0.5, 0.0, TAU, 18, loss, w2 * 1.4)
-			draw_line(c + Vector2(-r * 0.86, -r * 0.86),
-					c + Vector2(r * 0.86, r * 0.86), cut, w2 * 1.6)
+			_mod_disc(c, r, grey)
+			var fro: float = r * 0.62
+			var fri: float = fro - maxf(r * 0.22, 1.6)
+			draw_colored_polygon(annulus_at(c, fri, fro, 0.0, TAU, 20), loss)
+			#  cut 막대를 **작은 벌에도 남긴다.** 회색조로 눕혀 보니 loss 대
+			#  grey 가 1.42:1 뿐이라, 이것을 빼면 r=6 에서 그냥 민 원반이
+			#  된다 — cut 만이 회색조에서 산다(grey 와 5.5:1). 굵기를 w2 로
+			#  둬서 띠보다 굵게 지나가야 「그어 없앴다」가 읽힌다.
+			var fdv := Vector2(cos(-PI / 3.0), sin(-PI / 3.0))
+			draw_line(c + fdv * (fri - w1), c + fdv * (fro + w1), cut, w2)
 
 		# ── 홀대 ────────────────────────────────────────
 		# 홀수 칸만 반값이다. 「절반」을 **크기**로 말한다 — 한 칸 걸러
 		# 짧게 잘린다.
+		#  홀 자리만 판다. 성한 자리는 **안 그린다** — 원반이 곧 성한 판이라
+		#  거기 grey 쐐기를 얹으면 그리나 마나다.
+		#  「반값」을 **길이로 말한다**: 안쪽 절반은 loss 로 남고 **바깥
+		#  절반은 cut 으로 파낸다.** 회색조로 눕혀 보니 loss 만으로는 r=6 에서
+		#  그냥 민 원반이었다 — 바깥 절반을 파야 「잘려 나갔다」가 산다.
+		#  shade 와 갈리는 채널은 **개수**(shade 넷/여섯 대 odd 둘)와
+		#  **두 토막**(odd 만 한 쐐기 안에서 안팎이 갈린다)이다.
+		#  **면 둘뿐이라 작은 벌에서도 안 버린다.**
 		"odd":
-			draw_arc(c, r * 0.82, 0.0, TAU, 20, grey, w1)
+			_mod_disc(c, r, grey)
 			for k in 4:
+				if k % 2 == 0:
+					continue
 				var ob: float = TAU * float(k) / 4.0
-				var oro: float = r * (0.78 if k % 2 == 0 else 0.46)
-				draw_colored_polygon(annulus_at(c, r * 0.18, oro,
-						ob, ob + TAU / 8.0, 5),
-						grey if k % 2 == 0 else loss)
+				draw_colored_polygon(annulus_at(c, r * 0.18, r * 0.50,
+						ob, ob + TAU / 8.0, 5), loss)
+				draw_colored_polygon(annulus_at(c, r * 0.50, kc - w1,
+						ob, ob + TAU / 8.0, 5), cut)
 
 		# ── 돌린 판 ──────────────────────────────────────
 		# 판이 도는 것이 아니라 **값이** 돈다 — 테두리는 그대로 두고
 		# 안쪽만 돌린다.
+		#  2026-09-19 — 그 말이 어느 크기에서도 안 섰다. 호가 제 테두리와
+		#  r=11 에서 −0.130px 겹쳤다. 테두리를 채운 원반의 림으로 바꾸고
+		#  호를 그 안에 넣으면 「테두리는 그대로」가 처음으로 참이 된다.
+		#  작은 벌은 호를 반 바퀴로 줄이고 촉에 바닥을 건다.
 		"turn":
-			draw_arc(c, r * 0.82, 0.0, TAU, 20, grey, w1)
-			draw_arc(c, r * 0.48, -PI * 0.75, PI * 0.55, 14, loss, w2 * 1.5)
-			var tp: Vector2 = c + Vector2(cos(PI * 0.55), sin(PI * 0.55)) * r * 0.48
+			_mod_disc(c, r, grey)
+			var ta0: float = -PI * 0.75 if big else -PI * 0.5
+			var ta1: float = PI * 0.55
+			#  값이 **떠난 자리**를 cut 으로 판다. 회색조로 눕혀 보니 loss
+			#  호만으로는 r=6 에서 민 원반이었다 — 화살이 어디서 왔는지를
+			#  파낸 홈으로 말하면 그림이 서고, 「돌았다」가 두 점으로 읽힌다.
+			var tq: Vector2 = c + Vector2(cos(ta0), sin(ta0)) * r * 0.48
+			draw_circle(tq, maxf(r * 0.16, 1.3), cut)
+			draw_arc(c, r * 0.48, ta0, ta1, 14, loss, w2)
+			var tp: Vector2 = c + Vector2(cos(ta1), sin(ta1)) * r * 0.48
+			var th2: float = maxf(r * 0.20, 1.6)
 			draw_colored_polygon(PackedVector2Array([
-					tp + Vector2(-r * 0.2, -r * 0.06),
-					tp + Vector2(r * 0.16, -r * 0.24),
-					tp + Vector2(r * 0.16, r * 0.14)]), loss)
+					tp + Vector2(-th2, -th2 * 0.3),
+					tp + Vector2(th2 * 0.8, -th2 * 1.2),
+					tp + Vector2(th2 * 0.8, th2 * 0.7)]), loss)
 
 		# ── 모르는 제약 ──────────────────────────────────
 		# 표에 id 가 늘면 여기로 온다. 빈 칸이 아니라 **물음표 원반**이
 		# 서야, 그림이 없다는 것이 화면에서 보인다.
 		# 컬렉션의 못 본 칸도 같은 원반이다 — 둘 다 「모른다」다.
 		_:
+			#  **컬렉션의 못 본 칸과 한 함수를 쓴다** — 둘 다 「모른다」이고,
+			#  갈라 두면 한쪽만 고쳐 같은 화면에 다른 물음표가 둘 선다.
+			#  그림에 글자가 드는 것은 이 하나뿐이고 새로 안 늘린다.
 			_icon_unfound(c, r, dim, a)
 
 # ══════════════════════════════════════════════════════════
@@ -24674,8 +25349,13 @@ func _leg_card(i: int, rn: int) -> void:
 			draw_circle(cpt + Vector2(0.0, 1.0), pr, Color(sc.hi, 0.55))
 			draw_circle(cpt, pr, Color(sc.rim).lightened(0.25))
 			draw_circle(cpt, pr - 2.0, Color(sc.face).darkened(0.55))
+			#  **화면에 서는 r 을 같이 넘긴다.** gr 은 카드 배율 gs 로 미리
+			#  나눈 수다(up=1 에서 8.5/1.12 = 7.589) — 그 수로 두 벌을
+			#  가르면 크기는 그대로인데 보스 판에 도착하는 순간 표시가 툭
+			#  준다(shade 쐐기 6→4 · gust 게이지선 · dull 목 · flat 막대).
+			#  up 은 0 아니면 1 이라 중간이 없어 **한 프레임에** 갈렸다.
 			_icon_modifier(cpt, gr, String(mids[mi]),
-					0.55 if mvoid else 0.0, ga)
+					0.55 if mvoid else 0.0, ga, gr * gs)
 			if mvoid:
 				#  명판을 **지우지 않는다** — 지우면 보통 판으로 읽혀
 				#  15G 를 쓴 흔적이 사라진다. 한 획만 긋는다.
@@ -24717,8 +25397,16 @@ func _leg_card(i: int, rn: int) -> void:
 		var rw: int = GameData.reward_of(rn)
 		var cw: float = 7.0
 		var cx0: float = w * 0.5 - float(rw) * cw * 0.5
+		#  **게임에서 가장 작은 플라크다** — 12pt(면 폭 11.52)가 아니라 여기다.
+		#  5.5 × 3.6 은 비 0.6545 로 계약(PLQ.h 0.64) 밖이었다. 손으로 적힌
+		#  수였다. 5.00 × 3.20 으로 계약 비에 맞추면 피치 7.0 에서 가로 틈이
+		#  1.5 → 2.0px 로 늘어 「요소 사이 2px」을 채우고, 여덟 개까지 늘어선
+		#  줄에서도 셈이 산다. 여기 목표는 금속감이 아니라 **셈**이다.
+		#  단 1(몸 + 밑 옆면)이고, 밑 옆면은 바닥 1.0 이 걸려 0.70 → 1.0px 로
+		#  **실제로 선다.** 2026-09-19
 		for ci in mini(rw, 8):
-			draw_plaque(Vector2(cx0 + float(ci) * cw, 66.5), 5.5, 3.6, C_GOLD)
+			draw_plaque(Vector2(cx0 + float(ci) * cw, 66.5), 5.0,
+					5.0 * float(PLQ.h), C_GOLD)
 	draw_set_transform(shake_off)
 
 	#  ── 모서리 징 넷 ────────────────────────────────
@@ -25056,8 +25744,14 @@ func _boss_plaque() -> void:
 		var c := Vector2(x0 + float(k) * 16.0 + 8.0, 309.0)
 		draw_circle(c, 8.0, Color(SIGN_COL.boss.rim).darkened(0.15))
 		draw_circle(c, 6.5, Color(SIGN_COL.boss.face).darkened(0.45))
-		_icon_modifier(c, 5.5, String(ids[k]), 0.55 if off else 0.0)
+		#  **제약 아이콘이 서는 가장 작은 자리다.** 5.5 는 주석이 못 박은
+		#  하한을 유일하게 밑돌던 값이었다 — 6.0 으로 올린다(MODK.r_lo).
+		#  명판 속 원이 6.5 라 0.83 × 6.0 = 4.98 이 그대로 든다. 2026-09-19
+		_icon_modifier(c, float(MODK.r_lo), String(ids[k]), 0.55 if off else 0.0)
 		if off:
+			#  무효 「/」. flat 에서 cut 대각선을 뺐으므로 **이 획이 이제
+			#  무효 하나의 뜻만 진다** — 전에는 무효된 「민짜」가 둘이
+			#  겹쳐 X 한 글자로 보였다.
 			draw_line(c + Vector2(-7.0, 7.0), c + Vector2(7.0, -7.0),
 					Color(C_TXT, 0.7), 1.5)
 	draw_string(font, Vector2(x0 + gw + 4.0, 314.0),
@@ -28111,7 +28805,14 @@ func _cup3_cup(skin: Dictionary) -> AnimatableBody3D:
 #
 #  2D 플라크의 네 가지 표식 중 셋을 옮긴다. 몸 · 어두운 옆면 · 파인 판.
 #  대각 광택만 뺐다 — 3D 는 빛이 그 일을 한다.
-#  비율도 2D 를 따른다: 세로 = 가로의 0.64 (draw_gold_at 의 iw · iw*0.64).
+#  비율도 2D 를 따른다: 세로 = 가로의 0.64 (draw_gold_at 의 iw · iw*PLQ.h).
+#
+#  2026-09-19 — 2D 에 **크기 단 셋**(면 폭 9 · 16 문턱)을 들였는데 **여기는
+#  그 규약을 안 받는다.** 3D 는 빛이 단을 대신하고, 단을 흉내 내면 같은
+#  물건이 카메라 거리에 따라 표식 수가 바뀌는 꼴이 된다.
+#  그리고 이번 설계는 **세로비 0.64 를 한 자도 안 건드렸다** — 그래서
+#  아래 물리 상수(반대각 0.34 대 통 안반지름 1.13 · spill 2.0)가 전부
+#  그대로다. 비를 건드리는 날에는 spill 과 drop 을 같이 재야 한다.
 # ══════════════════════════════════════════════════════════
 
 const GOLD3 := {
@@ -32222,6 +32923,39 @@ func _boost_sweep() -> void:
 # 눈앞으로 온 팩. 다 오면 **두 블럭이 갈라진다** — 투명도로 빼지 않는다.
 # 사라지는 것과 찢어지는 것은 다른 일이고, 종이는 찢어져도 안 옅어진다.
 # 갈라진 자리에 톱니를 남겨 "뜯겼다" 를 그림이 말하게 한다.
+#
+#  2026-09-19 — 판 위와 여기가 **다른 물건이었다.** 셋을 이어 붙인다.
+#   ① 밑배율. 판 위가 ×1.06×GOODS_K = 1.2296 인데 여기는 ×1.18×k 이고
+#      k 가 1.0 에서 시작해 첫 프레임이 판 위의 **0.960배**였다 — 눈앞으로
+#      오면서 한 번 쪼그라들었다가 커졌다. k 의 시작을 GOODS_K 로 옮기면
+#      **rise=0 에서 판 위와 한 픽셀도 안 다르다.** 끝은 판 위의 2.586배다.
+#      (밑값만 1.18 → 1.06 으로 낮추는 길은 첫 프레임을 13.8% 작게 만들어
+#      더 나빠진다. 고칠 자리는 밑값이 아니라 **k 의 시작**이다.)
+#   ② 눈금이 **열 때 사라졌다** — 겉을 말하던 유일한 표시인데. 같은 식을
+#      k 태워 위 블럭에 그리고 알파 (1−tear)로 스러뜨린다.
+#   ③ 이음매와 띠가 **다른 법칙으로 자랐다**(flat 은 seam 1.6 고정에 띠
+#      seam+1.1, 여기는 seam·k 에 띠 seam·0.5). 둘 다 PACK.seam·k 와
+#      seam·PACK.band 로 묶는다. 찢긴 뒤 각 쪽이 지는 띠 반쪽은 **유도값**
+#      이다 — 반높이 (band−1)·seam·0.5, 블럭 중심에서 lo 만큼 안쪽.
+#  BOOST.big 3.0 은 안 건드린다. 세로가 길어졌어도 다 벌어져서 가로 78px ·
+#  두 쪽 세로 합 약 157px 로 화면 안에 남는다 — 가로는 오히려 120 → 78 로
+#  좁아졌다.
+#  여는 중의 배율. **시작이 GOODS_K 다** — 1.0 에서 시작하면 첫 프레임이
+#  판 위의 0.960배라 눈앞으로 오면서 한 번 쪼그라들었다 커진다.
+#  뒤에서 앞으로 — 세제곱으로 빼면 마지막에 훅 다가온다.
+func _boost_k(rise: float) -> float:
+	return GOODS_K + (float(BOOST.big) - GOODS_K) * (1.0 - pow(1.0 - rise, 3.0))
+
+
+#  벌어지는 두 쪽. **그림 표본(_art_pack)도 이 함수를 그대로 부른다** —
+#  「rise=0 이 판 위와 한 픽셀도 안 다른가」를 손으로 볼 길이 그것뿐이다.
+#  돌려주는 것은 반높이 h — 이름 받침이 그 밑에 선다.
+func _boost_open(c: Vector2, bd: Dictionary, rise: float, tear: float) -> float:
+	var k: float = _boost_k(rise)
+	_pack_body(c, 0.0, k, bd, tear, 0.0)
+	return float(PACK.h) * k
+
+
 func _boost_draw() -> void:
 	if boost_t < 0.0 or boost_card.is_empty():
 		return
@@ -32231,32 +32965,7 @@ func _boost_draw() -> void:
 			Color(0.0, 0.0, 0.0, 0.5 * rise * (1.0 - tear * 0.55)))
 
 	var c := Vector2(VIEW.x * 0.5, VIEW.y * 0.46)
-	# 뒤에서 앞으로 — 커지면서 온다. 세제곱으로 빼면 마지막에 훅 다가온다.
-	var k: float = 1.0 + (float(BOOST.big) - 1.0) * (1.0 - pow(1.0 - rise, 3.0))
-	var w := FIX_W * 1.18 * k
-	var h := FIX_H * 1.18 * k
-	var seam: float = 1.6 * k
-	var lo: float = (h - seam) * 0.5
-	# 벌어지는 거리. 처음에 빠르게 뜯기고 끝에서 느려진다 — 손으로 뜯는 결이다.
-	var gap: float = float(BOOST.gap) * (1.0 - pow(1.0 - tear, 2.4))
-
-	for kk in 2:
-		var sgn: float = -1.0 if kk == 0 else 1.0
-		# 위쪽은 위로, 아래쪽은 아래로. 갈라지면서 서로 반대로 기운다.
-		var cy: float = sgn * ((seam + lo) + gap)
-		var rot: float = sgn * tear * 0.24
-		var cc := c + Vector2(gap * sgn * 0.16, cy * TBL.flat)
-		# 성한 변은 바깥쪽, 찢긴 변은 안쪽(가운데를 보는 쪽)이다.
-		var q := _torn_quad(cc, rot, w, sgn * lo, -sgn * lo,
-				9, 3.4 * k * 0.5 * tear)
-		draw_colored_polygon(q, C_PANEL.lightened(0.34 if kk == 0 else 0.24))
-		draw_polyline(q + PackedVector2Array([q[0]]),
-				Color(C_WIRE.darkened(0.25), 0.55), 1.0)
-		# 띠도 같이 찢긴다 — 봉인이 두 쪽에 나뉘어 붙어 간다.
-		var by: float = -sgn * (lo - seam * 0.5)
-		draw_colored_polygon(
-				_quad_at(cc + Vector2(0.0, by * TBL.flat), rot, w, seam * 0.5),
-				C_ACC)
+	var h: float = _boost_open(c, boost_card, rise, tear)
 
 	# 터지는 빛 — 찢기는 순간에만 잠깐. 안의 것이 나오는 자리를 말한다.
 	if tear > 0.0:
