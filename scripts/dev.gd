@@ -11,12 +11,13 @@ extends RefCounted
 #  정식 출시에 이것이 들어가면 안 된다. 지우는 자리를 **셋으로** 못 박는다.
 #    ① 이 파일(scripts/dev.gd)을 지운다
 #    ② game.gd 의 `const Dev = preload("res://scripts/dev.gd")` 한 줄
-#    ③ game.gd 가 Dev 를 부르는 네 줄 — 전부 `# DEV` 주석이 달려 있다
+#    ③ game.gd 가 Dev 를 부르는 다섯 줄 — 전부 `# DEV` 주석이 달려 있다
 #         _process()         Dev.tick(self, d)
 #         _unhandled_input() Dev.key(self, k.keycode)
 #         _click()           Dev.click(self, m)
+#         _wheel()           Dev.wheel(self, m, dir)
 #         _draw()            Dev.draw(self)
-#  `grep -n "# DEV" scripts/game.gd` 로 그 다섯이 한 번에 나온다.
+#  `grep -n "# DEV" scripts/game.gd` 로 그 여섯이 한 번에 나온다(머리말 한 줄 포함).
 #
 #  게임 상태는 여기서만 만진다. game.gd 에 개발자용 갈래를 파지 않는다 —
 #  파는 순간 지우기가 "세 줄" 이 아니게 되고, 그러면 안 지워진다.
@@ -141,6 +142,39 @@ static func click(g: Node, m: Vector2) -> bool:
 			_run(g, e)
 		return true
 	return _panel().has_point(m)          # 판 안의 헛클릭은 삼킨다
+
+
+# 휠. click 과 **같은 인자 차례 · 같은 가로채기 규약**이다 — 게임에 휠 쪽
+# 넘기기를 내면 개발자 모드에 정확히 같은 모양의 화살표가 남는다.
+# 화면 글은 한 자도 안 늘린다(판 오른쪽 위 줄이 길어지면 고르개 머리와
+# 폭이 어긋난다). 쿨다운은 게임의 wheel_ms 하나를 같이 쓴다 — 제 시계를
+# 따로 들면 고르개에서만 감도가 달라진다. 2026-09-19
+static func wheel(g: Node, m: Vector2, dir: int) -> bool:
+	if not on:
+		return false
+	# 고르개가 떠 있으면 그것이 휠을 통째로 가진다 — click 과 같은 규약이다.
+	# 한 쪽이 PCOL x PROW = 54 라 켜진 동전이 두 쪽이고, 여기가 휠이 제일
+	# 값어치 있는 자리다.
+	if open_k != "":
+		open_page = posmod(open_page + dir, _pick_pages(_names(open_k).size()))
+		return true
+	for i in PAGES.size():
+		if _tab(i).has_point(m):
+			page = posmod(page + dir, PAGES.size())   # TAB 키와 같은 값
+			return true
+	var rows := _rows(g)
+	for i in rows.size():
+		if not _row(i).has_point(m):
+			continue
+		var e: Dictionary = rows[i]
+		if String(e.t) == "list" and int(e.n) > 0:
+			pick[e.k] = posmod(int(pick.get(e.k, 0)) + dir, int(e.n))
+			# **고른 것이 곧 적용이다** — ◀▶ 와 같은 길이다.
+			_run(g, e)
+		# 값이 없는 줄 위에서는 아무 일도 안 하되 삼킨다. 안 삼키면 판 밑
+		# 화면의 쪽이 대신 넘어간다.
+		return true
+	return _panel().has_point(m)          # 판 안의 헛굴림도 삼킨다
 
 
 #  글자 한 줄을 칸(top · h)의 세로 한가운데에 세우는 기준선. 게임의 _menu_base_y 와 같은

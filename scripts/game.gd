@@ -2,7 +2,7 @@ extends Node2D
 
 const GameData = preload("res://scripts/data.gd")
 const Save = preload("res://scripts/save.gd")
-# DEV — 정식 출시에서 지운다. 지우는 자리는 이 줄과 아래 "# DEV" 셋뿐이다.
+# DEV — 정식 출시에서 지운다. 지우는 자리는 이 줄과 아래 "# DEV" 다섯뿐이다.
 const Dev = preload("res://scripts/dev.gd")
 
 # ── 다트 로그라이트 프로토타입 ──────────────────────────────
@@ -3986,6 +3986,21 @@ func _unhandled_input(e: InputEvent) -> void:
 
 	if e is InputEventMouseButton:
 		var mb := e as InputEventMouseButton
+		#  휠은 왼쪽 버튼 갈래 **앞**에서 떼어 낸다. 아래 줄들이 mouse_at ·
+		#  mouse_down 을 쓰는데 휠은 눌림·뗌 두 번 들어와 mouse_down 을 false 로
+		#  덮는다 — 눌린 단추 그림(_ui_face 과 짝인 Input.is_mouse_button_pressed)과
+		#  input_probe 의 관문이 같이 깨진다. 2026-09-19
+		if mb.button_index == MOUSE_BUTTON_WHEEL_UP \
+				or mb.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			#  눌림에만 답한다 — 안 거르면 한 칸 굴렸는데 두 쪽이 넘어간다.
+			#  factor 는 곱하지 않는다(플랫폼에 따라 0 으로 들어와 아무것도
+			#  안 움직인다). 한 이벤트 = 한 칸이다.
+			#  좌표는 여기서도 view_pad 를 뺀다 — 안 빼면 21:9 에서 「탭 줄
+			#  위인가 격자 위인가」가 220px 어긋난다.
+			if mb.pressed:
+				_wheel(mb.position - view_pad,
+						-1 if mb.button_index == MOUSE_BUTTON_WHEEL_UP else 1)
+			return
 		if mb.button_index != MOUSE_BUTTON_LEFT:
 			return
 		#  들어오는 자리는 뷰포트 좌표다. 화면이 16:9 가 아니면 Game 노드가
@@ -4343,6 +4358,124 @@ func _click(m: Vector2) -> void:
 			if _menu_back_rect().has_point(m):
 				state = S.TITLE
 				_sfx("back")
+
+
+# ══════════════════════════════════════════════════════════
+#  휠 — 이미 선 화살표·탭·게이지가 하는 일만, 그대로 한다
+# ──────────────────────────────────────────────────────────
+#  규약은 한 줄이다. **휠은 새 길을 안 만든다** — 화살표·탭·단추·끌기를 한 칸도
+#  안 지우고, 화면에 글자를 한 자도 안 늘린다. 사거나 팔거나 던지는 되돌릴 수
+#  없는 행동에는 절대 안 태운다(휠은 굴리다 미끄러지는 입력이다).
+#
+#  방향은 못 박는다: dir 은 위 = -1 · 아래 = +1. 쪽·탭·줄은 +dir(위 = 앞으로),
+#  값은 -dir(위 = 크게).
+#
+#  문지기를 **화면마다 흩지 않는다.** 안 가르면 판 위(조준·던지기)에서 굴렸을
+#  때 「아무 일 없음」이 아니라 뒤에 깔린 화면의 쪽이 넘어간다. 받는 화면은
+#  다섯뿐이고 나머지는 조용히 흘린다.
+#
+#  _click 에 **안 태운다.** 그 첫머리의 _paint_click · _photo_rack_click ·
+#  Dev.click · _hud_btn_click 이 줄줄이 걸려 있어 굴리는 것이 개발자 판의 줄을
+#  누르거나 HUD 단추를 누른다. 그 앞의 _tutor_click 은 클릭을 **넘기기**로 쓰므로
+#  배우다 말고 걸음이 넘어가고, S.INTRO 는 아무 누름이나 인트로를 끝낸다.
+#  그래서 따로 세우고 가로채는 차례만 흉내 낸다. 2026-09-19
+# ══════════════════════════════════════════════════════════
+
+#  트랙패드 한 번 쓸기가 이벤트 수십 개다. 쿨다운이 없으면 컬렉션 세 쪽이
+#  통째로 감긴다. page 소리(d 0.04)보다 길어 빠른 굴림에서도 소리가 안 겹친다.
+const WHEEL_MS := 60
+#  _process 에 쌓지 않고 **시계로 잰다** — hitstop 이 통째로 return 하는
+#  프레임과 배움 중 늦춘 시간에서 감도가 달라진다.
+var wheel_ms := 0
+
+
+func _wheel(m: Vector2, dir: int) -> void:
+	var now := Time.get_ticks_msec()
+	if now - wheel_ms < WHEEL_MS:
+		return
+	#  사진이 연 화면은 그 아래를 통째로 가린다 — _click 과 같은 규약이다.
+	if photo == "paint" or photo_rack != "":
+		return
+	if Dev.wheel(self, m, dir):          # DEV
+		wheel_ms = now
+		return
+	#  연출 중 · 배우는 중 · 검증 중 · 인트로 · 무언가를 쥔 손.
+	if swap_live or _tutor_live() or _autoplay \
+			or state == S.INTRO or hand_st == H.CARRY:
+		return
+	var moved := false
+	match state:
+		S.COLLECT:
+			#  탭 줄 위는 탭, 그 밖은 쪽. 탭 줄(y46~68)과 격자(y72~304)는
+			#  안 겹치므로 자리로 가른다 — 1쪽짜리 탭에서 굴려도 탭 줄
+			#  위에서는 언제나 탭이 넘어가 죽은 자리가 안 생긴다.
+			var tb := _col_tab_rect(0).merge(_col_tab_rect(COL_TABS.size() - 1))
+			if tb.has_point(m):
+				collect_tab = posmod(collect_tab + dir, COL_TABS.size())
+				#  탭을 갈면 쪽은 0 — 클릭과 같은 규약이다. 안 따르면
+				#  _col_count 가 clamp 를 해도 쪽 글 「3 / 1」은 못 막는다.
+				collect_page = 0
+				_sfx("menu_pick2")
+				moved = true
+			elif _col_pages() > 1:
+				collect_page = posmod(collect_page + dir, _col_pages())
+				_sfx("page")
+				moved = true
+		S.RUNINFO:
+			#  넘길 쪽이 없는 화면이라 휠은 탭에만 맨다. 판 높이가 탭을 갈아도
+			#  안 변하는 것은 _ri_panel 이 이미 보장한다 — 빨리 훑어도 판이
+			#  위아래로 안 뛴다.
+			if _ri_panel().has_point(m):
+				runinfo_tab = posmod(runinfo_tab + dir, RI_TABS.size())
+				_sfx("menu_pick2")
+				moved = true
+		S.NEWRUN:
+			#  통 무대 + 화살표 + 점 줄까지. 리그 줄(y198)은 **안 받는다** —
+			#  잠긴 리그에서 _deny 가 연달아 운다.
+			var st := _pack_rect().merge(_pack_arrow(false)).merge(_pack_arrow(true))
+			st.end = Vector2(st.end.x, 196.0)
+			if GameData.packs().size() > 1 and st.has_point(m):
+				_pack_step(dir)
+				_sfx("pack_flip")
+				moved = true
+		S.SETTINGS:
+			var rows := _set_rows()
+			var face := _set_face()
+			var key := String(rows[face])
+			#  고른 줄이 게이지 줄일 때만, 오른쪽 판의 홈 위에서만. 클릭이
+			#  쓰는 자와 같다. 왼쪽 글줄에는 휠을 안 맨다 — 거기는 얹힘이
+			#  펼칠 줄을 정하므로 휠로 옮겨도 다음 마우스 움직임에 되돌아가
+			#  「굴렸는데 안 먹는다」로 보인다.
+			if bool(_set_info(key).get("g", false)) \
+					and _vol_track().grow(7.0).has_point(m):
+				#  위 = 크게(-dir). 0.05 는 스무 칸이라 휠 한 칸이 손에
+				#  잡히면서 눈에도 보인다 — **끌기의 0.01 은 손대지 않는다**
+				#  (백 칸이라 휠 한 칸으로는 아무것도 안 움직인 것처럼 보인다).
+				var cur: float = vol if key == "vol" else vol_mus
+				var nx := snappedf(clampf(cur - float(dir) * 0.05, 0.0, 1.0), 0.01)
+				if not is_equal_approx(nx, cur):
+					_vol_set(key, nx)
+					vol_save_k = key
+					vol_save_t = 0.30
+					moved = true
+		S.PROFILE:
+			#  줄 목록이므로 끝에서 **선다**(안 감는다). 고르는 것은 되돌릴 수
+			#  있고, 들어가는 것은 고른 줄을 또 누르는 둘째 클릭이라 휠만으로는
+			#  프로필이 안 바뀐다.
+			if _prof_rect(0).merge(_prof_rect(Save.SLOTS - 1)).has_point(m):
+				var ns := clampi(prof_sel + dir, 1, Save.SLOTS)
+				if ns != prof_sel:
+					prof_sel = ns
+					#  겨눔을 푼다 — 클릭이 이미 하는 일이다. 안 박으면 지우기를
+					#  겨눈 채 줄만 옮겨 가 **다른 프로필을 지울 뻔한 상태**가
+					#  남는다.
+					prof_arm = -1
+					_sfx("menu_pick2")
+					moved = true
+	#  쿨다운을 **움직였을 때만** 거는 것이 요점이다 — 판 위에서 굴린 헛바퀴가
+	#  다음 화면의 첫 칸을 먹으면 안 된다.
+	if moved:
+		wheel_ms = now
 
 
 # ══════════════════════════════════════════════════════════
