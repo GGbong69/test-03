@@ -16,7 +16,9 @@ const Save = preload("res://scripts/save.gd")
 #    ① 흐름 — 던지면 전환이 켜지고 상태·데이터는 그 프레임에 다 선다
 #    ② 첫 프레임에 판이 실제로 **누워 화면 안에** 있고, 판이 뜰 때
 #       테이블은 이미 화면 밖이다 (두 층은 안 겹친다)
-#    ③ 전환 중에는 클릭이 안 먹고, 아무 키나 누르면 건너뛴다
+#    ③ 전환 중의 클릭과 키는 **둘 다 건너뛰기**다 — 결과가 같고, 밑 화면으로
+#       안 샌다 (2026-09-19. 예전에는 클릭만 통째로 삼켜져서, 키가 없는
+#       모바일에는 빠져나갈 길이 아예 없었다)
 #    ④ 판정 사각은 전환 중에 한 픽셀도 안 움직인다
 #    ⑤ 전환은 게임 상태를 한 비트도 안 바꾼다
 #    ⑥ 스스로 끝나고, 끝나면 두 값이 정확히 제자리다
@@ -97,6 +99,34 @@ func _initialize() -> void:
 			"판 윗변 최고 y %.1f · 여유 %.1fpx (테이블 최대 %.0fpx 남음)"
 			% [high, high - 360.0, worst])
 
+	# ③ 클릭도 키와 **똑같이** 건너뛴다. 연출의 끝 상태로 곧장 갈 뿐이고,
+	#    클릭은 거기서 삼켜져 밑 화면으로 안 샌다 — 판을 눌렀다고 다트가
+	#    날아가거나 탄창이 갈리면 안 된다. 제 전환을 따로 열고 그 안에서
+	#    잰다: 아래 ④~⑥ 이 쓰는 전환을 여기서 먹으면 그쪽 시계가 밀린다.
+	#    (2026-09-19)
+	var by := {}
+	for way in ["클릭", "키"]:
+		g.leg_no = 1
+		g._open_leg()
+		g._click(g._leg_go().get_center())
+		var st0: int = g.state
+		var rem_a: int = g.remaining.size()
+		var grip_a: int = g.grip_pick
+		if way == "클릭":
+			g._click(g.BC)          # 판 한가운데 — 평소라면 다트가 날아가는 자리
+		else:
+			_key(g, KEY_SPACE)
+		by[way] = [g.swap_live, g.swap_scr, g.swap_t, st0, g.state,
+				rem_a, g.remaining.size(), grip_a, g.grip_pick]
+		_say(not g.swap_live and g.swap_scr == -1 and is_zero_approx(g.swap_t)
+				and g.state == st0 and g.remaining.size() == rem_a
+				and g.grip_pick == grip_a,
+				"전환 중 %s 는 건너뛰기다" % way,
+				"live=%s scr=%d state=%d %d발" % [g.swap_live, g.swap_scr,
+					g.state, g.remaining.size()])
+	_say(by["클릭"] == by["키"], "클릭과 키가 같은 결과를 낸다",
+			"%s / %s" % [str(by["클릭"]), str(by["키"])])
+
 	# 다시 연다 — 아래 검사들이 도는 전환을 쓴다
 	g.leg_no = 1
 	g._open_leg()
@@ -116,13 +146,6 @@ func _initialize() -> void:
 			same = false
 			moved = "%d번" % i
 	_say(same and g.swap_live, "판정 사각은 안 움직인다", moved)
-
-	# ③ 전환 중에는 클릭이 안 먹는다
-	var st: int = g.state
-	g._click(g.BC)
-	g._click(g._mag_rect(0).get_center())
-	_say(g.state == st and g.swap_live,
-			"전환 중에는 클릭이 안 먹는다", "state %d" % g.state)
 
 	# ⑤ 게임 상태를 한 비트도 안 바꾼다
 	var gold0: int = g.gold
