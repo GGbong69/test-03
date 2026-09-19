@@ -1045,6 +1045,10 @@ func _intro_over(k: float) -> void:
 # ══════════════════════════════════════════════════════════
 
 func _new_run() -> void:
+	#  미룬 다트통 저장을 여기서 비운다 — 「시작」은 새 런 화면을 떠나는
+	#  자리라, 굴려 고른 통이 디스크에 안 앉은 채로 지나갈 수 있다.
+	#  2026-09-19
+	_pack_save_due()
 	#  지난 런에 열린 것을 새 런까지 끌고 가면 안 된다.
 	run_unlocked.clear()
 	#  배움도 런 단위로 센다. 줄에 남은 것을 새 런까지 끌고 가면 엉뚱한
@@ -3369,6 +3373,13 @@ func _process(d: float) -> void:
 				_next_step()
 		S.NEWRUN:
 			_cup_update(d)
+			#  미룬 다트통 저장 — 굴림·연타가 멎고 0.30 초 뒤 한 번 쓴다.
+			#  나가는 자리(「시작」·「뒤로」·ESC)가 따로 비우므로 여기를
+			#  못 지나도 값은 안 샌다. 2026-09-19
+			if pack_save_t > 0.0:
+				pack_save_t -= d
+				if pack_save_t <= 0.0:
+					_pack_save()
 
 	if sell_sel >= 0:
 		sell_t += d
@@ -3939,6 +3950,9 @@ func _unhandled_input(e: InputEvent) -> void:
 						_settings_back()
 					elif state == S.COLLECT or state == S.NEWRUN \
 							or state == S.PROFILE:
+						#  미룬 다트통 저장을 비우고 나간다 — 안 비우면
+						#  고른 통이 조용히 안 남는다. 2026-09-19
+						_pack_save_due()
 						state = S.TITLE
 					elif hand_st != H.NONE:
 						_hand_abort()
@@ -4166,6 +4180,14 @@ func _click(m: Vector2) -> void:
 						_pack_step(1 if right else -1)
 						_sfx("pack_flip")
 						return
+				#  그려만 두고 안 눌리던 점. 화살표 **뒤**에 본다 — 자리가
+				#  안 겹치므로 차례는 서로를 안 가린다. 칸이 10x11 로 작아
+				#  어디까지나 덤이고 주 길은 화살표다. 2026-09-19
+				for k in GameData.packs().size():
+					if _pack_pip_rect(k).has_point(m):
+						_pack_jump(k)
+						_sfx("pack_flip")
+						return
 			if _newrun_go().has_point(m):
 				if not _pack_open(newrun_pip):
 					_deny()
@@ -4174,6 +4196,7 @@ func _click(m: Vector2) -> void:
 				_sfx("run_start")
 				return
 			if _newrun_back().has_point(m):
+				_pack_save_due()
 				state = S.TITLE
 				_sfx("back")
 				return
@@ -24289,6 +24312,33 @@ func _cup_reset() -> void:
 func _pack_step(dir: int) -> void:
 	if GameData.packs().size() < 2:
 		return
+	_pack_slide(newrun_pip + dir, dir)
+
+
+#  점을 곧장 누른다. 리그 여덟은 곧장 누르는데 다트통 열셋만 한 칸씩이라
+#  같은 화면에서 문법이 둘이었고, posmod 로 감겨도 최악 여섯 번이다. 점은
+#  「여기를 눌러라」로 보이는 그림인데 안 눌렸다 — 개발자 모드가 같은 문제를
+#  이미 푼 답(값 칸을 누르면 목록이 통째로 펴진다)의 게임 쪽 짝이다.
+#  미끄러지는 방향만 가까운 쪽으로 고르고 나머지는 _pack_step 과 같은 몸이다.
+#  2026-09-19
+func _pack_jump(k: int) -> void:
+	var n := GameData.packs().size()
+	if n < 2:
+		return
+	var t := posmod(k, n)
+	if t == newrun_pip:
+		return
+	var dd := t - newrun_pip
+	if dd > n / 2:
+		dd -= n
+	elif dd < -n / 2:
+		dd += n
+	_pack_slide(t, 1 if dd > 0 else -1)
+
+
+#  화살표와 점이 같은 몸을 쓴다 — 갈리면 한쪽만 저장을 미루거나 한쪽만
+#  램프를 안 민다.
+func _pack_slide(target: int, dir: int) -> void:
 	# 미끄러지는 도중에 또 누르면 그 자리에서 새로 시작한다. 나가던 통을
 	# 버리고 지금 통이 나가는 통이 된다 — 연달아 눌러도 줄이 안 밀린다.
 	cup_prev = newrun_pip
@@ -24296,8 +24346,11 @@ func _pack_step(dir: int) -> void:
 	cup_t = 0.0
 	#  램프를 툭 민다. 통이 나가는 쪽으로 밀리고 용수철이 되돌린다.
 	cup_skv += float(dir) * float(STAGE.sk_v)
-	_pack_view(newrun_pip + dir)
+	_pack_view(target)
 	_cup3_step(dir)
+	#  저장은 굴림·연타가 멎은 뒤 한 번. 미루기를 안 두면 휠 한 번이 프로필
+	#  파일을 열 번 넘게 쓴다.
+	pack_save_t = 0.30
 
 
 func _cup_ease(t: float) -> float:
@@ -28064,6 +28117,22 @@ func _league_rect(i: int) -> Rect2:
 	return Rect2(Vector2(167.0 + float(i) * 39.0, 198.0), Vector2(33.0, 22.0))
 
 
+#  다트통 점 줄. 그리는 쪽과 누르는 쪽이 **같은 자**를 쓴다 — 전에는 그리는
+#  식만 있어서 점이 그려지기만 하고 안 눌렸다. 2026-09-19
+func _pack_pip(k: int) -> Vector2:
+	var n := GameData.packs().size()
+	var pw: float = float(n) * 4.0 + float(maxi(n - 1, 0)) * 6.0
+	return Vector2(VIEW.x * 0.5 - pw * 0.5 + float(k) * 10.0 + 2.0, 192.0)
+
+
+#  누르는 칸. 아래를 196 에서 끊는 것은 리그 줄(_league_rect y198)과 2px
+#  떨어뜨리기 위해서다 — 붙여 두면 손이 한 칸 미끄러져 리그를 갈아 버리고,
+#  그것은 런의 구성을 바꾸는 행동이다. 칸 사이 간격이 10 이라 폭 10 이면
+#  열셋이 서로 안 겹친다. 2026-09-19
+func _pack_pip_rect(k: int) -> Rect2:
+	return Rect2(_pack_pip(k).x - 5.0, 185.0, 10.0, 11.0)
+
+
 #  「시작」 · 「뒤로」 줄. 리그 설명을 11 로 키우며(14px 간격, 마지막 줄 바닥 ~306)
 #  6px 내렸고, 도트가 격자에 떨어지는 12 로 옮기며(15px 간격, 마지막 줄 바닥 ~308)
 #  4px 더 내렸다 — 줄 사각(296~311)과 안 닿는다. 둘 다 화면 바닥(352) 안이다.
@@ -28100,21 +28169,40 @@ func _league_won(i: int) -> bool:
 
 # 다트통을 넘기면 리그을 그 다트통이 뚫은 만큼으로 내린다. 발라트로가 덱을 바꿀 때
 # 하는 그 한 줄이고, 이게 있어야 "리그은 다트통마다 따로 뚫는다" 가 읽힌다.
+#
+#  **디스크는 안 친다.** 예전에는 이 함수 끝에서 곧장 Save.set_pick 을 불렀는데
+#  set_pick 이 제 안에서 또 flush 라 한 칸 넘길 때마다 파일을 두 번 쳤다 —
+#  휠 한 번 굴리면 프로필 파일을 열 번 넘게 쓴다. 저장은 _pack_save 로 뗐고
+#  굴림·연타가 멎은 뒤 한 번 앉는다(pack_save_t). 2026-09-19
 func _pack_view(i: int) -> void:
 	var rows := GameData.packs()
 	if rows.is_empty():
 		return
 	newrun_pip = posmod(i, rows.size())
 	GameData.pack = String(rows[newrun_pip].get("id", ""))
-	Save.set_pick("pack", GameData.pack)
 	var top := 0
 	for k in GameData.leagues().size():
 		if _league_open(k):
 			top = k
 	if GameData.league_idx() > top:
 		GameData.league = String(GameData.leagues()[top].get("id", ""))
-		Save.set_pick("league", GameData.league)
-	Save.flush()
+
+
+#  고른 다트통·리그을 디스크에 앉힌다. set_pick 이 제 안에서 flush 하므로
+#  뒤에 flush 를 또 안 붙인다. 2026-09-19
+var pack_save_t := 0.0
+
+
+func _pack_save() -> void:
+	pack_save_t = 0.0
+	Save.set_pick("pack", GameData.pack)
+	Save.set_pick("league", GameData.league)
+
+
+#  나가는 자리에서 비운다 — 안 비우면 고른 다트통이 조용히 안 남는다.
+func _pack_save_due() -> void:
+	if pack_save_t > 0.0:
+		_pack_save()
 
 
 # 저장에 남은 다트통을 화면의 지금 자리로 맞춘 뒤 연다.
@@ -28126,6 +28214,7 @@ func _open_newrun() -> void:
 		if String(rows[i].get("id", "")) == GameData.pack:
 			newrun_pip = i
 	_pack_view(newrun_pip)
+	_pack_save()          # 여는 자리에서는 곧장 앉힌다 — 리그이 내려갔을 수 있다
 	_cup_reset()
 	_cup3_open()
 	state = S.NEWRUN
@@ -28213,10 +28302,10 @@ func _draw_newrun() -> void:
 		draw_rect(Rect2(536.0, 62.0, 16.0, 11.0),
 				Color(String(GameData.leagues()[best].get("color", "cfc9bd"))))
 	if many:
-		var pw: float = float(packs.size()) * 4.0 + float(packs.size() - 1) * 6.0
 		for k in packs.size():
-			#  둥근 점 — UI 가 둥글어진 뒤로 네모 점만 뾰족하게 남아 있었다
-			draw_circle(Vector2(VIEW.x * 0.5 - pw * 0.5 + float(k) * 10.0 + 2.0, 192.0), 2.2,
+			#  둥근 점 — UI 가 둥글어진 뒤로 네모 점만 뾰족하게 남아 있었다.
+			#  자리는 _pack_pip 하나다(누르는 쪽과 같은 자).
+			draw_circle(_pack_pip(k), 2.2,
 					C_TXT if k == newrun_pip else C_PANEL.lightened(0.06))
 
 	# 리그 사다리 — 왼쪽이 약한 단이다. 가로로 눕혔으니 읽는 방향을 따른다.
