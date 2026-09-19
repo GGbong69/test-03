@@ -740,6 +740,7 @@ func _pass6() -> void:
 	#  절을 가른 그 이유를 이 절에도 재는 자리다.
 	_eq("프로필 화면의 해금 수가 안 늘었다",
 			int(Save.slot_info(1).get("unlocks", -1)), unl1)
+
 	Save.erase_slot(1)
 	Save._cfg = null
 	Save._at = ""
@@ -748,6 +749,53 @@ func _pass6() -> void:
 	_say(Save.run_live(), "2번은 아직 있다")
 	Save.wipe()
 	_say(not Save.run_live(), "저장 통째로 지우기에도 같이 없어진다")
+	for i in range(1, Save.SLOTS + 1):
+		Save.erase_slot(i)
+
+	print("")
+	#  ── 남의 프로필로 새는가 ────────────────────────────
+	#  「1번에서 한 진도를 2번으로 바꿔서 플레이할 수 있는 것 아니냐, 해금이
+	#  다른데 오류 나지 않느냐」(사용자, 2026-09-20). 읽어서 답하지 말고
+	#  **돌려서** 답하는 자리다. 제 상태를 제가 세운다 — 위 블록의 끝 상태에
+	#  기대면 그쪽을 고칠 때 여기가 조용히 거짓이 된다.
+	Save._cfg = null
+	Save._at = ""
+	Save._slot = 0
+	Save.use_slot(1)
+	#  1번만 이 다트통을 푼다 — 「베낀 파일은 해금도 같이 온다」를 재는 자다.
+	Save.unlock("pack:p_iron")
+	g._new_run()
+	g.gold = 611
+	g._knot("leg")
+	_say(g._run_ok(), "1번에는 이어할 것이 있다")
+	#  2번은 **런이 없는** 프로필이다(위와 달리 여기서는 안 만든다).
+	Save.use_slot(2)
+	_say(not g._run_ok(), "갈아탄 프로필에서는 이어하기가 꺼진다")
+	var rn := []
+	for row in g._title_rows():
+		rn.append(String(row.n))
+	_say(rn.size() == 4 and not rn.has("계속하기"),
+			"갈아탄 프로필의 제목 줄이 넷", " · ".join(rn))
+	#  파일을 손으로 베껴 넣어도 — 절은 살아 있지만(ver 가 맞다) **슬롯 번호**가
+	#  달라 안 선다. 이 한 칸이 「파일을 옮겨 남의 런을 연다」를 막는 자다.
+	var raw := FileAccess.get_file_as_bytes(Save.slot_path(1))
+	var fh := FileAccess.open(Save.slot_path(2), FileAccess.WRITE)
+	fh.store_buffer(raw)
+	fh.close()
+	Save._cfg = null
+	Save._at = ""
+	Save.use_slot(2)
+	_say(Save.run_live(), "베낀 절은 ver 로는 살아 있다")
+	_say(not g._run_ok(), "그래도 안 선다 — 적힌 슬롯이 다르다",
+			"적힌 %d · 지금 %d" % [int(Save.run_get("slot", 0)), Save.slot()])
+	#  ⚠ 해금 어긋남은 **이 길로는 안 생긴다.** 파일을 통째로 베끼면 [해금]
+	#  절도 같이 따라오므로, 런이 쓰는 다트통·리그은 그 파일 안에서 언제나
+	#  풀려 있다. 절 하나만 손으로 오려 붙여야 어긋나는데 그때는 뼈대 여섯
+	#  (슬롯·매듭·판 번호·탄창·다트통·리그)이 먼저 막는다.
+	_say(Save.unlocked("pack:p_iron"),
+			"베낀 파일은 해금도 같이 온다 — 런과 안 어긋난다")
+	Save._cfg = null
+	Save._at = ""
 	for i in range(1, Save.SLOTS + 1):
 		Save.erase_slot(i)
 
