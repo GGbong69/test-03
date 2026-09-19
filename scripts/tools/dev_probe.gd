@@ -63,6 +63,8 @@ func _initialize() -> void:
 	_geometry(g)
 	print("\n── 부딪힘 한 번 ──────────────────────────")
 	_smash1(g)
+	print("\n── 동전의 죽음 ───────────────────────────")
+	_wreck(g)
 	print("\n── 조준 ──────────────────────────────────")
 	_aim(g)
 	print("\n── 계산 ──────────────────────────────────")
@@ -221,6 +223,50 @@ func _smash1(g: Node) -> void:
 	_say(seeds.size() == 6, "누를 때마다 다른 조각이 난다",
 			"여섯 번에 씨 %d 벌" % seeds.size())
 	Dev.page = 2
+
+
+# ── 동전의 죽음 넷을 **각각 여섯 번씩** 누른다 ─────────────
+#  smash1 이 다섯째 누름에서 영영 무음이 됐던 그 회귀를 같은 자로 잰다.
+#  네 줄 전부 앞머리에 _wreck_open(묶음 열기 · 씨 밀기 · 비었으면 다시
+#  깔기)을 두었는데, 그 셋 중 **하나라도 빠지면 여기가 잡는다**:
+#    묶음을 안 열면  → 둘째 누름부터 소리가 안 난다(묶음이 이미 소비됐다)
+#    씨를 안 밀면    → 눌러도 눌러도 같은 조각이 같은 자리에 떨어진다
+#    다시 안 깔면    → 동전이 바닥난 뒤로 줄이 죽은 것처럼 보인다
+func _wreck(g: Node) -> void:
+	Dev.page = 0
+	for label in ["판 끝 마모 한 번", "선반 여섯 채우기"]:
+		_wreck_row(g, label)
+	Dev.page = 1
+	for label in ["부서짐 재질", "굴림 남았다 한 번"]:
+		_wreck_row(g, label)
+	Dev.page = 2
+
+
+func _wreck_row(g: Node, label: String) -> void:
+	var i := _find(g, label)
+	if i < 0:
+		_say(false, "「%s」 줄이 있다" % label, "")
+		return
+	#  ⚠ **목록 줄은 ▶ 를 눌러야 그 자리에서 돈다.** 값 칸은 고르개를
+	#  여는 자리라 여섯 번 눌러도 아무 일이 안 난다 — 이 프로브를 처음
+	#  값 칸으로 겨눴다가 여섯 번 다 빈 누름으로 잡혔다(2026-09-19).
+	#  「▶ 는 앞으로」가 이미 ② 에서 못 박힌 규약이고 이 줄도 그것을 탄다.
+	var row: Rect2 = Dev._row(i)
+	var c: Vector2 = Dev._arrow(row, true).get_center() \
+			if String(Dev._rows(g)[i].get("t", "")) == "list" \
+			else row.get_center()
+	var empty := []
+	var seeds := {}
+	for k in 6:
+		g.wreck.clear()
+		Dev.click(g, c)
+		if g.wreck.is_empty():
+			empty.append(k + 1)
+		seeds[int(g.wreck_seed)] = true
+	_say(empty.is_empty(), "「%s」 — 누를 때마다 선다" % label,
+			"빈 누름 " + str(empty))
+	_say(seeds.size() == 6, "「%s」 — 누를 때마다 씨가 민다" % label,
+			"여섯 번에 씨 %d 벌" % seeds.size())
 
 
 func _score(g: Node) -> void:
