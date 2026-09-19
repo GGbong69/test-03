@@ -18691,8 +18691,10 @@ func _pack_pt(c: Vector2, co: float, si: float, x: float, y: float) -> Vector2:
 # 크림프는 **안으로만** 문다. 톱니가 밖으로 나가면 외접 반지름이 커져
 # qa_rank 의 안전선이 이유 없이 흔들린다 — 그래서 톱니의 바깥 끝이 곧
 # ey_out 이고, 팩의 겉 크기는 톱니가 있으나 없으나 같다.
-# 톱니 위상은 **왼쪽 끝(i=0)이 파인 자리**로 시작한다. 겉의 뜯는 홈이
+# 크림프 위상은 **왼쪽 끝(i=0)이 파인 자리**로 시작한다. 겉의 뜯는 홈이
 # 그 자리에 있어서 겉과 열림이 한 자리에서 만난다.
+# 찢긴 이(bite)는 안쪽 변을 x=+ex 에서부터 세므로 **왼쪽 끝이 뻗은 이**다
+# (teeth 가 홀수라 그렇다). 뜯는 홈이 그 이를 타고 물러나는 이유다.
 #  뜯는 실의 **면** 두께. 화면에서 1px 로 서야 하므로 눕는 만큼(TBL.flat)
 #  되돌려 잡는다 — 면 1.0 으로 두면 화면에서 0.79px 이라 아예 안 뜬다.
 #  2026-09-19 에 실제로 판 위에서 통째로 사라져 있었다.
@@ -18733,11 +18735,27 @@ func _pack_quad(c: Vector2, rot: float, ex: float, ey_out: float, ey_in: float,
 #  ── 띠가 찢기는 법은 유도값이다 ──
 #  띠는 팩 가운데에서 ±seam·band 인데 블럭은 ±seam 에서 시작한다. 찢기면
 #  띠는 **가운데(0)에서 갈라지므로** 한 쪽이 지는 조각은 [∓1.7s, 0] —
-#  반높이 seam·band·0.5, 블럭 중심에서 lo + (1 − band·0.5)·seam 만큼
-#  안쪽이다. tear=0 이면 두 조각이 0 에서 정확히 맞물려 **틈이 없다.**
+#  블럭 안쪽으로 (band−1)·seam 만큼 물리고, 블럭 끝에서 seam 만큼 더
+#  나가 두 블럭 사이를 덮는다. tear=0 이면 두 조각이 0 에서 정확히
+#  맞물려 **틈이 없다.**
 #  2026-09-19 — 한 번 seam·0.5 로 두고 그려 봤더니 tear=0 에서 두 쪽
 #  사이로 바탕이 2s 만큼 비쳤다(k=2.5 에서 6.3px). 이 유도를 안 지키면
 #  여는 첫 프레임이 판 위와 다른 물건이 된다.
+#
+#  ── 톱니는 **띠의 안쪽 변**이 진다 (2026-09-20) ──
+#  여태 톱니를 블럭의 안쪽 변(±seam)에 물렸는데, 띠가 거기서 seam 만큼
+#  **더 나가 곧은 턱으로** 그 톱니를 통째로 덮고 있었다. 실측하면 파인
+#  이가 띠 밖으로 나오려면 tear > 0.659, 뻗은 이는 tear > 0.941 이라
+#  0.30초 중 앞 3분의 2 동안 톱니가 **한 개도 안 보였다.** 다 찢긴
+#  tear=1 에서도 1.74면px 만 드러나 의도한 5.1 의 3분의 1 이었다 —
+#  두 쪽이 「찢긴 종이」가 아니라 「검은 립이 달린 직사각형」이었다.
+#  고침은 자리를 옮기는 것이다. **각 쪽에서 찢기는 쪽 끝은 띠다**
+#  (블럭의 안쪽 변은 띠 밑에 깔려 어느 tear 에서도 안 보인다). 그러니
+#  톱니는 띠가 져야 맞다 — 실루엣이 곧 찢긴 자리가 된다.
+#  블럭의 안쪽 변은 곧게 둔다. 톱니를 거기 남기면 tear > 0.659 에서
+#  파인 이가 띠의 바깥 변보다 깊어져 **바탕이 비친다**(지금 그랬다).
+#  띠의 이 깊이는 seam 으로 막는다 — 그보다 깊으면 파인 자리에서 띠가
+#  블럭보다 물러나 종이 속살이 드러난다. 1.7·k 대신 1.6·k 라 6% 얕다.
 func _pack_body(c: Vector2, rot: float, k: float, bd: Dictionary,
 		tear: float, dim: float) -> void:
 	var w: float = float(PACK.w) * k          # 판 위 15.08
@@ -18747,8 +18765,10 @@ func _pack_body(c: Vector2, rot: float, k: float, bd: Dictionary,
 	var crimp: float = maxf(0.06 * h, 1.2)
 	var nt: float = maxf(0.14 * w, 2.0)
 	var th: float = _pack_thread(k)
-	var bhalf: float = seam * float(PACK.band) * 0.5
-	var bin: float = lo + (1.0 - float(PACK.band) * 0.5) * seam
+	#  띠가 블럭 안으로 물리는 깊이. 바깥 변은 여기, 안쪽 변은 팩 가운데(0).
+	var bite_in: float = (float(PACK.band) - 1.0) * seam
+	#  찢긴 이의 깊이. seam 을 넘으면 파인 자리에서 띠가 블럭보다 물러난다.
+	var bite: float = minf(1.7 * k * tear, seam)
 	# 벌어지는 거리. 처음에 빠르게 뜯기고 끝에서 느려진다 — 손으로 뜯는 결이다.
 	var gap: float = float(BOOST.gap) * (1.0 - pow(1.0 - tear, 2.4))
 	var bco := cos(rot)
@@ -18764,9 +18784,11 @@ func _pack_body(c: Vector2, rot: float, k: float, bd: Dictionary,
 		#  위쪽을 살짝 밝게 둬 두 장이 겹쳐 있음을 그림자 없이 말한다.
 		#  **테 한 획(draw_polyline)을 버렸다** — 사진이 같은 테를 두르고
 		#  있어서 색이 달라도 한 물건으로 보였다. 가장자리는 크림프가 말한다.
+		#  안쪽 변은 **곧다.** 띠가 통째로 덮는 자리라 톱니를 물려 봐야
+		#  안 보이고, 깊어지면 띠 바깥으로 삐져나와 바탕이 비친다.
 		draw_colored_polygon(
 				_pack_quad(cc, rt, w, sgn * lo, -sgn * lo,
-						int(PACK.teeth), crimp, 1.7 * k * tear),
+						int(PACK.teeth), crimp, 0.0),
 				Color(C_PANEL.lightened(0.34 if kk == 0 else 0.24).darkened(dim), 1.0))
 		#  이음매를 지나는 띠 — **눌린 자리**다. 여태 C_ACC 가 가운데를 통으로
 		#  덮었는데(41.8 × 4.25 ≈ 178px²), C_ACC 대 C_GOLD 가 **1.191:1** 이라
@@ -18776,13 +18798,25 @@ func _pack_body(c: Vector2, rot: float, k: float, bd: Dictionary,
 		#  띠는 팩 제 몸의 어두운 단(실물 열 봉합 자리가 실제로 눌려 어둡다)이고,
 		#  호박색은 **띠 바깥 가장자리의 뜯는 실 1px 로만** 남는다 —
 		#  178 → 약 32px², 82% 감소.
-		var cbn := _pack_pt(cc, co, si, 0.0, -sgn * bin)
-		draw_colored_polygon(_quad_at(cbn, rt, w, bhalf),
+		#  **찢기는 쪽 끝이 이 변이다.** 톱니를 여기 물린다 — 바깥 변
+		#  (블럭 안쪽으로 bite_in)은 곧게 두고, 팩 가운데(0)에 닿는
+		#  안쪽 변만 bite 로 문다. tear=0 이면 bite=0 이라 판 위 그림이
+		#  옛 네모와 **한 픽셀도 안 다르다.**
+		var bo: float = -sgn * (lo - bite_in)       # 띠 바깥 변
+		var bi: float = -sgn * (lo + seam)          # 띠 안쪽 변 = 팩 가운데
+		draw_colored_polygon(
+				_pack_quad(cc, rt, w, bo, bi, int(PACK.teeth), 0.0, bite),
 				Color(C_PANEL.lightened(0.10).darkened(dim), 1.0))
 		#  뜯는 홈 — 봉인띠 왼쪽 귀의 삼각 결각. 닫힌 채로 「뜯는 물건」임을
 		#  말하고 찢어질 자리를 미리 가리킨다. 반쪽씩 두 블럭이 나눠 지므로
 		#  tear=0 에서 온전한 삼각이 되고, 갈라지면 같이 갈라진다.
-		var ny: float = -sgn * (seam + lo)
+		#  밑변은 **찢긴 이를 타고 물러난다.** 팩 가운데(0)에 못 박아 두면
+		#  왼쪽 끝 이가 뻗은 만큼(bite) 삼각이 그 이의 오른쪽 비탈 밖으로
+		#  0.26·bite 만큼 삐져나와 1px 수염이 남는다 — 확대해서 봤다.
+		#  물러나는 깊이는 띠 안에 머무는 데까지만이다(삼각 끝이 띠 바깥
+		#  변을 넘으면 종이 위에 검은 쐐기가 얹힌다).
+		var nb: float = minf(bite, maxf(float(PACK.band) * seam - nt, 0.0))
+		var ny: float = -sgn * (seam + lo - nb)
 		draw_colored_polygon(PackedVector2Array([
 				_pack_pt(cc, co, si, -w, ny + sgn * nt),
 				_pack_pt(cc, co, si, -w + nt, ny),
@@ -18797,7 +18831,8 @@ func _pack_body(c: Vector2, rot: float, k: float, bd: Dictionary,
 		#  찢긴 뒤 그 실이 너덜한 변에 얹혀 「날것으로 찢긴 자리」가 안
 		#  읽힌다 — 바깥에 두면 실은 성하고 안쪽만 찢긴다.
 		draw_colored_polygon(_quad_at(
-				_pack_pt(cbn, co, si, 0.0, -(bhalf - th * 0.5)), rt, w, th * 0.5),
+				_pack_pt(cc, co, si, 0.0, -sgn * (lo - bite_in + th * 0.5)),
+				rt, w, th * 0.5),
 				Color(C_ACC.darkened(dim), 1.0))
 		_pack_pips(_pack_pt(cc, co, si, 0.0, seam + lo), co, si, bd, w, h,
 				dim, 1.0 - tear)
@@ -21049,6 +21084,12 @@ func _dk_quads(tip: Vector2, ax: Vector2, nrm: Vector2, rows: Array, col: Color)
 #  자체가 안 선다(16px 아래는 채움이 외곽선을 이긴다).
 #  부르는 자리 다섯이 문턱으로 정확히 셋 대 셋으로 갈리고, 문턱이 7.0 과
 #  8.5 **사이**에 떨어져 어느 자리도 경계에 안 선다.
+#  ⚠ 「경계에 안 선다」는 **화면에 서는 r** 로 셌을 때만 참이다. 보스 카드는
+#  명판을 안 늘리려고 r 을 카드 배율로 **미리 나눠** 넘긴다 — 선 카드에서
+#  8.5/1.12 = 7.589 라 문턱 밑으로 떨어진다. 화면 크기는 8.5 그대로인데
+#  그림만 작은 벌이 됐다(2026-09-20 에 픽셀로 잡았다. 누운 보스와 선 보스의
+#  같은 먹통에서 열쇠구멍 목이 있고 없고가 갈렸다). 그래서 벌을 가르는 수를
+#  **따로 받는다** — 배율을 제 손으로 먹인 부르는 쪽만 그 수를 넘긴다.
 #  **하한은 r 6.0 이다** — 앞치마 명판 속 원이 6.5 라 0.83×6.0 = 4.98 이
 #  들어가는 가장 큰 값이다(옛 하한 6.5 는 5.40 이라 아슬했다).
 #  큰 벌이 더하는 것은 **전부 맥락**(w1 또는 loss 안의 cut)이다. 뜻을 지는
@@ -21527,7 +21568,7 @@ func _mod_bar(c: Vector2, r: float, x0: float, w: float, col: Color) -> void:
 
 
 func _icon_modifier(c: Vector2, r: float, id: String, dim: float,
-		a: float = 1.0) -> void:
+		a: float = 1.0, sr: float = -1.0) -> void:
 	var grey := Color(C_WIRE.lightened(0.18).darkened(dim), a)
 	var loss := Color(C_MULT.lightened(0.25).darkened(dim), a)
 	var cut := Color(C_DARK.darkened(0.45), a)          # loss 덩어리 안에만
@@ -21535,7 +21576,11 @@ func _icon_modifier(c: Vector2, r: float, id: String, dim: float,
 	var w2: float = maxf(r * float(LIM.bold), float(LIM.bold_lo))
 	#  **두 벌은 여기 한 변수로 가른다.** 작은 벌을 별도 함수로 빼면
 	#  qa_ui ⑥ 이 가지를 못 찾아 거짓으로 실패한다(머리말 참조).
-	var big: bool = r >= float(MODK.step)
+	#  sr 은 **화면에 서는 반지름**이다. 부르는 쪽이 제 변환으로 그림을
+	#  키우거나 줄이면 r 은 이미 그 배율로 나눈 수라서, r 로 벌을 가르면
+	#  화면 크기는 한 픽셀도 안 변했는데 그림만 벌이 바뀐다 — 보스 카드가
+	#  서는 순간 실제로 그랬다(2026-09-20). 안 넘기면 r 이 곧 화면이다.
+	var big: bool = (sr if sr > 0.0 else r) >= float(MODK.step)
 	var kc: float = r * float(KEY.cir)     # 원형 키라인
 	var ks: float = r * float(KEY.sq)      # 각진 키라인
 	var gp: float = _mod_gap(r)
@@ -25147,8 +25192,13 @@ func _leg_card(i: int, rn: int) -> void:
 			draw_circle(cpt + Vector2(0.0, 1.0), pr, Color(sc.hi, 0.55))
 			draw_circle(cpt, pr, Color(sc.rim).lightened(0.25))
 			draw_circle(cpt, pr - 2.0, Color(sc.face).darkened(0.55))
+			#  **화면에 서는 r 을 같이 넘긴다.** gr 은 카드 배율 gs 로 미리
+			#  나눈 수다(up=1 에서 8.5/1.12 = 7.589) — 그 수로 두 벌을
+			#  가르면 크기는 그대로인데 보스 판에 도착하는 순간 표시가 툭
+			#  준다(shade 쐐기 6→4 · gust 게이지선 · dull 목 · flat 막대).
+			#  up 은 0 아니면 1 이라 중간이 없어 **한 프레임에** 갈렸다.
 			_icon_modifier(cpt, gr, String(mids[mi]),
-					0.55 if mvoid else 0.0, ga)
+					0.55 if mvoid else 0.0, ga, gr * gs)
 			if mvoid:
 				#  명판을 **지우지 않는다** — 지우면 보통 판으로 읽혀
 				#  15G 를 쓴 흔적이 사라진다. 한 획만 긋는다.

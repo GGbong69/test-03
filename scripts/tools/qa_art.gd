@@ -10,6 +10,10 @@ const Dev = preload("res://scripts/dev.gd")
 #   godot --path . --quit-after 900 --script scripts/tools/qa_art.gd
 #   종료 코드 = 실패 개수
 #
+#  **창을 달고 돌려라.** ④ 는 그린 픽셀을 재는 자라 --headless 에서는
+#  텍스처가 없다. 헤드리스로 돌리면 ④ 만 건너뛰고 나머지는 다 돌며
+#  끝맺음도 한다 — 그러나 그때의 초록은 「제약 그림은 아직 안 쟀다」다.
+#
 #  이 셋에는 여태 **모양을 재는 자가 하나도 없었다.** shot_* 가 그림으로만
 #  잡고, qa_pack 의 단언 열셋은 전부 논리라 기하가 0건이고, qa_bosscard ⑤ 는
 #  게임을 안 읽고 수를 베껴 뒀다(0.92r — flat 의 대각선이 1.216r 이었는데도
@@ -37,6 +41,7 @@ const LOCK := {"12": 14.20, "20": 23.00, "24": 27.60, "36": 41.40}
 var g = null
 var busy := false
 var fails := 0
+var skipped := false
 var img: Image = null
 
 
@@ -118,54 +123,69 @@ func _run() -> void:
 
 	# ── ④ 제약 키라인 ────────────────────────────────
 	print("\n④ 제약 — 그린 픽셀을 재서 키라인에 든다")
+	#  **헤드리스에서는 못 잰다.** root.get_texture() 가 null 을 주고,
+	#  가드 없이 save_png 를 부르면 그 자리에서 _run 이 끊겨 **quit 에
+	#  영영 못 간다** — 프로세스가 바깥 timeout 까지 살아 있고 종료 코드가
+	#  124 로 나온다. 「종료 코드 = 실패 개수」 약속이 거기서 깨지고
+	#  ⑤⑥ 열셋이 조용히 안 돈다(2026-09-20 에 실제로 그랬다).
+	#  저장소 선례(shot_bills · shot_bank)와 같은 자로 가른다.
+	var eyes: bool = DisplayServer.get_name() != "headless"
 	Dev.on = false
 	g.art_guide = false
 	Dev.pick["artsheet"] = 3
 	g.queue_redraw()
 	await process_frame
 	await process_frame
-	img = root.get_texture().get_image()
-	img.save_png("res://shots/art_mod_raw.png")
-	var s: float = float(img.get_width()) / g.VIEW.x
-	var worst := 0.0
-	var worst_n := ""
-	var offc := 0.0
-	var offn := ""
-	var empty := PackedStringArray()
-	for cell in g.art_cells:
-		if String(cell.k) != "mod" or bool(cell.get("void", false)):
-			continue
-		var r: float = float(cell.r)
-		var c: Vector2 = cell.c
-		var m := _ink(c, r * 1.6, s)
-		var bb: Rect2 = m.box
-		if bb.size.x <= 0.0:
-			empty.append("%s r%.1f" % [cell.id, r])
-			continue
-		var cir: bool = g.ART_CIR.has(String(cell.id))
-		var cap: float = r * float(g.KEY.cir if cir else g.KEY.sq)
-		#  원형 가족은 **잉크 한 점의 반지름**으로 잰다. 상자 귀퉁이로 재면
-		#  반지름 R 인 원이 R√2 로 나와서 어떤 원도 제 키라인을 못 넘는다 —
-		#  자가 거짓으로 터진다(2026-09-19 에 그렇게 한 번 터졌다).
-		#  각진 가족은 상자의 반쪽으로 잰다.
-		var far: float = float(m.far) if cir \
-				else maxf(maxf(absf(bb.position.x - c.x), absf(bb.end.x - c.x)),
-					maxf(absf(bb.position.y - c.y), absf(bb.end.y - c.y)))
-		var over: float = far - cap
-		if over > worst:
-			worst = over
-			worst_n = "%s r%.1f (%.2f > %.2f)" % [cell.id, r, far, cap]
-		var ctr: float = (bb.get_center() - c).length() / r
-		if ctr > offc:
-			offc = ctr
-			offn = "%s r%.1f (%.3fr)" % [cell.id, r, ctr]
-	_ok("열하나가 다 그려진다", empty.is_empty(),
-			"빈 칸: %s" % ("없다" if empty.is_empty() else ", ".join(empty)))
-	#  1.0px 은 래스터 여유다 — 반 픽셀 덮개 둘.
-	_ok("잉크가 키라인 안에 든다", worst <= 1.0,
-			"가장 넘친 것: %s" % ("없다" if worst_n == "" else worst_n))
-	_ok("상자 가운데가 칸 가운데에 선다", offc <= 0.15,
-			"가장 쏠린 것: %s" % ("없다" if offn == "" else offn))
+	if eyes:
+		var tex := root.get_texture()
+		img = tex.get_image() if tex != null else null
+	if img == null:
+		skipped = true
+		print("  ⚠ 건너뜀 — **창이 있어야 돈다.** 이 셋은 그린 픽셀을 재는")
+		print("    자라 --headless 로는 아무것도 못 본다. 제약 그림을")
+		print("    고쳤으면 --quit-after 900 으로 한 번 더 돌려라.")
+	else:
+		img.save_png("res://shots/art_mod_raw.png")
+		var s: float = float(img.get_width()) / g.VIEW.x
+		var worst := 0.0
+		var worst_n := ""
+		var offc := 0.0
+		var offn := ""
+		var empty := PackedStringArray()
+		for cell in g.art_cells:
+			if String(cell.k) != "mod" or bool(cell.get("void", false)):
+				continue
+			var r: float = float(cell.r)
+			var c: Vector2 = cell.c
+			var m := _ink(c, r * 1.6, s)
+			var bb: Rect2 = m.box
+			if bb.size.x <= 0.0:
+				empty.append("%s r%.1f" % [cell.id, r])
+				continue
+			var cir: bool = g.ART_CIR.has(String(cell.id))
+			var cap: float = r * float(g.KEY.cir if cir else g.KEY.sq)
+			#  원형 가족은 **잉크 한 점의 반지름**으로 잰다. 상자 귀퉁이로 재면
+			#  반지름 R 인 원이 R√2 로 나와서 어떤 원도 제 키라인을 못 넘는다 —
+			#  자가 거짓으로 터진다(2026-09-19 에 그렇게 한 번 터졌다).
+			#  각진 가족은 상자의 반쪽으로 잰다.
+			var far: float = float(m.far) if cir \
+					else maxf(maxf(absf(bb.position.x - c.x), absf(bb.end.x - c.x)),
+						maxf(absf(bb.position.y - c.y), absf(bb.end.y - c.y)))
+			var over: float = far - cap
+			if over > worst:
+				worst = over
+				worst_n = "%s r%.1f (%.2f > %.2f)" % [cell.id, r, far, cap]
+			var ctr: float = (bb.get_center() - c).length() / r
+			if ctr > offc:
+				offc = ctr
+				offn = "%s r%.1f (%.3fr)" % [cell.id, r, ctr]
+		_ok("열하나가 다 그려진다", empty.is_empty(),
+				"빈 칸: %s" % ("없다" if empty.is_empty() else ", ".join(empty)))
+		#  1.0px 은 래스터 여유다 — 반 픽셀 덮개 둘.
+		_ok("잉크가 키라인 안에 든다", worst <= 1.0,
+				"가장 넘친 것: %s" % ("없다" if worst_n == "" else worst_n))
+		_ok("상자 가운데가 칸 가운데에 선다", offc <= 0.15,
+				"가장 쏠린 것: %s" % ("없다" if offn == "" else offn))
 	g.art_guide = true
 	Dev.pick["artsheet"] = 0
 
@@ -199,6 +219,37 @@ func _run() -> void:
 			g._pack_thread(gk) * g.TBL.flat >= 0.999,
 			"%.3fpx" % (g._pack_thread(gk) * g.TBL.flat))
 
+	#  ⑤-2 **찢긴 자리가 톱니인가 — 그린 픽셀로 본다.**
+	#  수로는 못 잡는다. 여태 봉인띠가 블럭 끝에서 seam 만큼 더 나간
+	#  **곧은 턱**으로 톱니를 통째로 덮고 있었는데(파인 이가 나오려면
+	#  tear > 0.659, 뻗은 이는 > 0.941) ⑤ 의 단언 여섯이 전부 초록이었다.
+	#  두 쪽은 ±0.12rad 로 기울어 있으므로 **곧은 자를 맞춰 본다** —
+	#  기울기는 직선이 다 먹고 톱니만 잔차로 남는다.
+	if img != null:
+		g.art_guide = false
+		Dev.pick["artsheet"] = 2
+		g.queue_redraw()
+		await process_frame
+		await process_frame
+		img = root.get_texture().get_image()
+		img.save_png("res://shots/art_pack_raw.png")
+		var sp: float = float(img.get_width()) / g.VIEW.x
+		#  판 ②의 마지막 칸 — rise 1 · tear 0.5. 아래 쪽의 **찢긴 변**이다.
+		var kb: float = g._boost_k(1.0)
+		var sm: float = float(g.PACK.seam) * kb
+		var lo: float = (float(g.PACK.h) * kb - sm) * 0.5
+		var gp: float = float(g.BOOST.gap) * (1.0 - pow(0.5, 2.4))
+		var bt: float = minf(1.7 * kb * 0.5, sm) * g.TBL.flat
+		var cx: float = 480.0 + gp * 0.16
+		var cy: float = 215.0 + (sm + lo) * g.TBL.flat + gp * g.TBL.flat
+		var ey: float = cy - (lo + sm) * g.TBL.flat
+		var dev: float = _edge_dev(cx, float(g.PACK.w) * kb * 0.78, ey, 20.0, sp)
+		#  톱니 진폭의 절반은 넘어야 「곧은 변이 아니다」라고 말할 수 있다.
+		_ok("찢긴 변이 톱니다", dev >= bt * 0.5,
+				"잔차 %.2fpx (이 진폭 ±%.2fpx)" % [dev, bt])
+		g.art_guide = true
+		Dev.pick["artsheet"] = 0
+
 	# ── ⑥ 대비 ──────────────────────────────────────
 	print("\n⑥ 대비")
 	var gold: Color = g.C_GOLD
@@ -223,7 +274,11 @@ func _run() -> void:
 	_ok("cut 이 grey 위에서도 읽힌다", _con(cut, grey) >= 3.0,
 			"%.3f:1 (loss 위에서는 %.3f:1)" % [_con(cut, grey), _con(cut, loss)])
 
-	print("\n%s" % ("전부 통과" if fails == 0 else "실패 %d건" % fails))
+	#  **건너뛴 것을 통과로 읽으면 안 된다.** ④ 는 이 셋에 걸린 **유일한
+	#  기하 그물**이라, 창 없이 돌린 초록은 「제약 그림은 아직 안 쟀다」는
+	#  뜻이다. 종료 코드는 그대로 실패 개수다(건너뜀은 실패가 아니다).
+	print("\n%s%s" % ["전부 통과" if fails == 0 else "실패 %d건" % fails,
+			"  ⚠ ④ 는 안 쟀다 — 창을 달고 한 번 더 돌려라" if skipped else ""])
 	quit(fails)
 
 
@@ -255,6 +310,46 @@ func _ink(c: Vector2, rad: float, s: float) -> Dictionary:
 	if hi.x < lo.x:
 		return {"box": Rect2(), "far": 0.0}
 	return {"box": Rect2(lo, hi - lo), "far": far}
+
+
+#  가로 [cx−hw, cx+hw] 의 칸마다 **맨 위 잉크**를 찾아 곧은 자를 맞추고,
+#  가장 큰 잔차를 논리 px 로 돌려준다. 기울어도 직선이 다 먹으므로 남는
+#  것은 톱니뿐이다. 곧은 변이면 0.5px 안(래스터 반 칸)에 든다.
+func _edge_dev(cx: float, hw: float, ey: float, win: float, s: float) -> float:
+	var bg: Color = g.C_BG
+	var xs := PackedFloat32Array()
+	var ys := PackedFloat32Array()
+	for px in range(int((cx - hw) * s), int((cx + hw) * s) + 1):
+		if px < 0 or px >= img.get_width():
+			continue
+		for py in range(maxi(0, int((ey - win) * s)),
+				mini(img.get_height() - 1, int((ey + win) * s)) + 1):
+			var p := img.get_pixel(px, py)
+			if absf(p.r - bg.r) + absf(p.g - bg.g) + absf(p.b - bg.b) < 0.05:
+				continue
+			xs.append(float(px) / s)
+			ys.append(float(py) / s)
+			break
+	var n: int = xs.size()
+	if n < 8:
+		return -1.0
+	var sx := 0.0
+	var sy := 0.0
+	for i in n:
+		sx += xs[i]
+		sy += ys[i]
+	sx /= float(n)
+	sy /= float(n)
+	var num := 0.0
+	var den := 0.0
+	for i in n:
+		num += (xs[i] - sx) * (ys[i] - sy)
+		den += (xs[i] - sx) * (xs[i] - sx)
+	var a: float = num / den if den > 0.0001 else 0.0
+	var worst := 0.0
+	for i in n:
+		worst = maxf(worst, absf(ys[i] - (sy + a * (xs[i] - sx))))
+	return worst
 
 
 func _lin(v: float) -> float:

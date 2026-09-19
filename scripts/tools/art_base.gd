@@ -44,10 +44,16 @@ func _run() -> void:
 		for sz in [12, 20, 24, 36]:
 			row += "%s:%.4f  " % [str(sz), g.gold_w(n, int(sz))]
 		print("  gold_w(%-6s) %s" % [n, row])
+	#  _gold_icon_top 은 **플라크 윗변 y** 다(면 폭이 아니다). 한 번
+	#  「면 폭」이라 찍어 두고 size 12 에서 −9.0000 을 읽었다 — 자가
+	#  거짓말을 하면 「고치기 전 · 고친 뒤」가 통째로 못 쓰게 된다.
+	#  면 폭과 덩어리는 qa_art ② 가 재는 그 식 그대로 낸다.
 	for sz in [12, 20, 24, 36]:
-		print("  gold_gap(%d) = %.4f · 면 폭 %.4f · 덩어리 %.4f"
-				% [sz, g.gold_gap(int(sz)), g._gold_icon_top(0.0, int(sz)),
-				0.0 - g._gold_icon_top(0.0, int(sz))])
+		var fw: float = float(sz) * float(g.PLQ.w)
+		var ih: float = fw * float(g.PLQ.h) * (1.0 + float(g.PLQ.side))
+		print("  gold_gap(%d) = %.4f · 면 폭 %.4f · 덩어리 %.4f · 윗변 %.4f"
+				% [sz, g.gold_gap(int(sz)), fw, ih,
+				g._gold_icon_top(0.0, int(sz))])
 	print("── 자금판 ────────────────────────────────")
 	for n in ["7", "99", "123", "99999"]:
 		print("  _bank_gold_w(%-6s) 24:%.4f  20:%.4f  12:%.4f"
@@ -55,11 +61,30 @@ func _run() -> void:
 				g._bank_gold_w(n, 12)])
 
 	print("── 팩 ───────────────────────────────────")
+	#  **FIX 를 빌려 쓰지 않는다.** 여기서 옛 식(FIX × 1.06)을 손으로 베껴
+	#  두고 _obj_box 가 PACK 을 읽도록 고친 뒤에도 23.903 을 찍고 있었다 —
+	#  자가 저 혼자 옛 그림을 재면 기준선이 거짓이 된다.
 	var gk: float = g.GOODS_K
-	print("  사진 면 %.2f x %.2f · 화면 %.2f x %.2f"
+	var pw: float = float(g.PACK.w) * gk
+	var ph: float = float(g.PACK.h) * gk
+	print("  사진 면 %.2f x %.2f · 화면 %.2f x %.2f · 비 %.3f"
 			% [g.FIX_W * gk * 2.0, g.FIX_H * gk * 2.0,
-			g.FIX_W * gk * 2.0, g.FIX_H * gk * 2.0 * g.TBL.flat])
-	print("  _obj_box(boost) 반폭 %.3f" % (maxf(g.FIX_W, g.FIX_H) * 1.06 * gk + 3.0))
+			g.FIX_W * gk * 2.0, g.FIX_H * gk * 2.0 * g.TBL.flat,
+			float(g.FIX_W) / float(g.FIX_H)])
+	print("  팩   면 %.2f x %.2f · 화면 %.2f x %.2f · 비 %.3f"
+			% [pw * 2.0, ph * 2.0, pw * 2.0, ph * 2.0 * g.TBL.flat,
+			float(g.PACK.w) / float(g.PACK.h)])
+	print("  팩 면적 %.0fpx² (사진 %.0fpx²) · 외접 반지름 %.2f"
+			% [pw * 2.0 * ph * 2.0 * g.TBL.flat,
+			g.FIX_W * gk * 2.0 * g.FIX_H * gk * 2.0 * g.TBL.flat,
+			sqrt(pw * pw + ph * ph)])
+	print("  이음매 반두께 %.3f · 띠 반높이 %.3f · 뜯는 실 화면 %.3fpx"
+			% [float(g.PACK.seam) * gk,
+			float(g.PACK.seam) * float(g.PACK.band) * gk,
+			g._pack_thread(gk) * g.TBL.flat])
+	print("  _obj_box(boost) 반폭 %.3f · 히트 %.2f x %.2f"
+			% [maxf(float(g.PACK.w), float(g.PACK.h)) * gk + 3.0,
+			pw * float(g.PACK.hit) * 2.0, ph * float(g.PACK.hit) * 2.0])
 
 	print("── 대비 (C_GOLD 위) ──────────────────────")
 	for pair in [["윗줄 빛 .45", g.C_GOLD.lightened(0.45)],

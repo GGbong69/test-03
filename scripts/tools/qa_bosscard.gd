@@ -175,6 +175,25 @@ func _run() -> void:
 	_ok("명판 · 글리프가 카드 면 안이다", bad.is_empty(),
 			"%s" % ", ".join(bad))
 
+	#    ⑤-2 **선 카드에서도 같은 벌이다.**
+	#    명판은 스케일을 안 하려고 gr 을 카드 배율 gs 로 **미리 나눠** 넘긴다
+	#    (up=1 에서 8.5/1.12 = 7.589). 벌을 그 나눈 수로 가르면 화면 크기는
+	#    8.5 그대로인데 그림만 작은 벌로 떨어진다 — 보스 판에 도착하는 순간
+	#    한 프레임에 표시가 툭 줄었다(2026-09-20). 여기서 gr 을 8.5/9.0 으로
+	#    베껴 두고 재는 바람에 이 자는 7.589 를 **한 번도 안 봤다.**
+	var STEP: float = float(G.MODK.step)
+	var tier := PackedStringArray()
+	for one3 in [true, false]:
+		var base: float = 8.5 if one3 else 9.0
+		for up in [0.0, 1.0]:
+			var gs: float = 1.0 + 0.12 * up
+			var shown: float = lerpf(base, base / 1.12, up) * gs
+			if absf(shown - base) > 0.005 or shown < STEP:
+				tier.append("%s up%.0f → 화면 %.3f (문턱 %.1f)"
+						% ["한 장" if one3 else "두 장", up, shown, STEP])
+	_ok("선 카드에서도 큰 벌이다", tier.is_empty(),
+			"%s" % ("어긋난 것 없다" if tier.is_empty() else ", ".join(tier)))
+
 	# ⑥ {v} 자리표 — GameData.modifiers() 의 d 는 fill() 을 지난 값이고
 	#    표의 desc 는 날것이다. 날것을 물리면 화면에 「{v}배」가 그대로 뜬다.
 	var raw := PackedStringArray()
