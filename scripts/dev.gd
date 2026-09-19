@@ -1564,10 +1564,17 @@ static func _run(g: Node, e: Dictionary) -> void:
 			if pk.is_empty():
 				_say("이어할 것이 없다")
 			else:
-				_say("판 %d · %d골드 · 동전 %d · 매물 %d · %s · %s/%s · 슬롯 %d"
+				#  「몫」은 팩에서 쏟은 것 중 아직 집을 수 있는 장수다 —
+				#  매물 칸에 섞여 있어 매물 수로는 안 보인다.
+				#  「못 탄다」는 절은 성한데 뼈대가 어긋난 것이다(제목 줄이
+				#  흐려지는 그 자리). 둘 다 해당할 때만 붙는다.
+				_say("판 %d · %d골드 · 동전 %d · 매물 %d%s · %s · %s/%s · 슬롯 %d%s"
 						% [int(pk.leg_no), int(pk.gold), int(pk.owned),
-						int(pk.stock), _knot_kr(String(pk.at)),
-						String(pk.pack), String(pk.league), int(pk.slot)])
+						int(pk.stock),
+						"" if int(pk.boost) <= 0 else " · 몫 %d" % int(pk.boost),
+						_knot_kr(String(pk.at)),
+						String(pk.pack), String(pk.league), int(pk.slot),
+						"" if bool(pk.ok) else " · 못 탄다"])
 			return
 		"run_drop":
 			Save.run_drop()

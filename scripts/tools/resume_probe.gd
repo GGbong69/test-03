@@ -7,7 +7,7 @@ const Save = preload("res://scripts/save.gd")
 #  이어하기 검사 — 적고 → 껐다 켜고 → 되살린 뒤 **한 칸씩** 댄다
 #
 #  실행:  godot --headless --path . --script scripts/tools/resume_probe.gd
-#         … --script scripts/tools/resume_probe.gd -- pass2   (…3 4 5 6 7)
+#         … --script scripts/tools/resume_probe.gd -- pass2   (…3 4 5 6 7 8)
 #  종료 코드 = 실패 개수. **차수를 이 순서로 돌려야 한다.**
 #
 #  **두 번 돌려야 진짜 검사다.** save_probe 머리말의 그 한 문장이 이 검사의
@@ -23,6 +23,7 @@ const Save = preload("res://scripts/save.gd")
 #    5차 — 되감기가 **무르기**인가(리롤이 아닌가) · 뱃지를 두 번 안 먹는가
 #    6차 — 지우는 자리 넷과 「로비로 나가기」 · 슬롯
 #    7차 — 제목 자리와 겨눔 · 「글자가 안 늘었다」
+#    8차 — 값은 나갔는데 매듭이 안 적히던 자리들 (2026-09-20 검토)
 #
 #  ⚠ 비교는 **한 칸씩** 한다. 통째로 대면 어느 칸이 어긋났는지가 로그에
 #  안 남아, 붉어진 다음에 다시 사람이 읽어야 한다.
@@ -114,6 +115,7 @@ func _initialize() -> void:
 		"pass5": _pass5()
 		"pass6": _pass6()
 		"pass7": _pass7()
+		"pass8": _pass8()
 		_: _pass1()
 	print("\n%s" % ("실패 %d건" % fails if fails > 0 else "전부 통과"))
 	quit(mini(fails, 125))
@@ -321,13 +323,16 @@ func _pass1() -> void:
 		_say(sold_n >= 1, "매듭에 팔린 칸이 남는다", "%d칸" % sold_n)
 
 	#  ── 문지기 ──
-	g.boost_pick = 1
+	#  ⚠ 팩은 **뜯는 중(boost_t >= 0)만** 막는다. 쏟은 것을 집는 중
+	#  (boost_pick > 0)까지 막았더니 그것이 곧 팩 내용 스커밍이었다 —
+	#  8차가 그 자리를 잰다. 2026-09-20
+	g.boost_t = 0.2
 	var before := int(Save.run_get("gold", 0))
 	g.gold = 12345
 	g._knot("shop")
-	_eq("팩에서 고르는 중에는 한 글자도 안 적는다",
+	_eq("팩을 뜯는 중에는 한 글자도 안 적는다",
 			int(Save.run_get("gold", 0)), before)
-	g.boost_pick = 0
+	g.boost_t = -1.0
 	g.photo = "burn"
 	g._knot("shop")
 	_eq("사진이 테이블을 갈아 낀 중에도 안 적는다",
@@ -426,6 +431,9 @@ func _pass3() -> void:
 		"판 번호가 0 이면 버린다": ["leg_no", 0],
 		"판 번호가 표 밖이면 버린다": ["leg_no", GameData.legs_n() + 1],
 		"탄창이 비면 버린다": ["magazine", PackedStringArray()],
+		#  _run_ok 는 제목에서 매 프레임 돈다 — 자료형이 다른 값 하나가
+		#  프레임마다 오류를 뱉으면 안 된다.
+		"탄창 자료형이 다르면 버린다": ["magazine", 5],
 		"슬롯이 딴 번호면 버린다": ["slot", Save.slot() + 1],
 		"다트통 id 가 표에 없으면 버린다": ["pack", "없는통"],
 		"리그 id 가 표에 없으면 버린다": ["league", "없는리그"],
@@ -436,7 +444,19 @@ func _pass3() -> void:
 		var pair: Array = cases[nm]
 		Save.run_set(String(pair[0]), pair[1])
 		Save.flush()
-		_say(not g._run_load(), nm)
+		#  ⚠ **흐리는 술어와 되살리는 술어가 같은가.** 제목 글줄은 _run_ok()
+		#  하나로 흐림을 정하므로 여기가 갈리면 「계속하기」가 **밝은 채로
+		#  죽는다** — 눌러도 화면이 안 바뀌고 거절도 안 하니 고장으로만
+		#  읽힌다. ver 만 보던 때 실제로 그랬다. 2026-09-20
+		_say(not g._run_load() and not g._run_ok(), nm)
+	#  ver 는 성한데 뼈대가 어긋난 자리 — run_live() 만으로는 못 거르는
+	#  것이 있다는 것을 못 박는다.
+	for k in good:
+		Save.run_set(k, good[k])
+	Save.run_set("leg_no", GameData.legs_n() + 1)
+	Save.flush()
+	_say(Save.run_live() and not g._run_ok(),
+			"ver 가 성해도 뼈대가 어긋나면 흐려진다")
 
 	print("")
 	#  ── 줄 단위로 떨어뜨리는 것 — 런은 산다 ──
@@ -517,6 +537,9 @@ func _pass4() -> void:
 	_say(g.mark_sec >= 0, "목표물 칸이 뽑혔다", "%d번" % g.mark_sec)
 	_say(g.sectors != GameData.SECTORS_BASE, "칸이 섞였다")
 	var c := ConfigFile.new()
+	#  줄기 자리는 **적힌 값**을 그대로 들고 간다 — 5차가 되살린 뒤 다시
+	#  적힌 것과 대서, 되살리기가 제 매듭을 망가뜨리지 않는지를 잰다.
+	c.set_value(WS, "rng", int(Save.run_get("rng", -1)))
 	c.set_value(WS, "sealed", g.sealed)
 	c.set_value(WS, "mark_sec", g.mark_sec)
 	c.set_value(WS, "sectors", PackedInt32Array(g.sectors))
@@ -560,9 +583,36 @@ func _pass5() -> void:
 	_eq("보스 제약이 섰다", g.active_mods.size(), w.get_value(WS, "active_n", -1))
 	_eq("목표가 제약을 태운 값이다", g.target, w.get_value(WS, "target", -1))
 	_eq("던지다 끈 판은 첫머리로 돌아온다 — 점수 0", g.total, 0)
-	#  되살린 그 자리가 곧 매듭이다 — 불러오자마자 다시 적혔는가.
+	print("")
+	#  ── 되살린 자리가 **같은 매듭**인가 ────────────────────
+	#  ⚠ at·leg_no 만 보던 때 이 자리가 고장을 통과시켰다. 되살리기가 갈림
+	#  **뒤**에 매듭을 한 줄로 모아 적었는데, 그 한 줄이 _begin_leg 이
+	#  올바른 자리(굴리기 전·먹기 전)에 적어 둔 것을 _start_leg 이 다 쓴
+	#  뒤의 값으로 덮어썼다 — 파일의 rng 가 0 에서 굴린 값으로, 잔탄이
+	#  2 에서 0 으로, 뱃지가 한 장에서 빈 칸으로 바뀌었다. 2026-09-20
 	_eq("불러오자마자 다시 적혔다", String(Save.run_get("at", "")), "pick")
 	_eq("다시 적힌 것도 같은 판이다", int(Save.run_get("leg_no", 0)), g.leg_no)
+	_eq("다시 적힌 줄기 자리가 그대로다", int(Save.run_get("rng", -1)),
+			int(w.get_value(WS, "rng", -2)))
+	_eq("다시 적힌 잔탄이 **먹기 전** 값이다",
+			int(Save.run_get("carry_darts", -1)), 2)
+	var pt2: Array = Save.run_get("pending_tags", [])
+	_say(pt2.size() == 1, "다시 적힌 뱃지 줄도 **쓰기 전**이다",
+			"%d장" % pt2.size())
+
+	print("")
+	#  ── 두 번째 되살리기가 첫 번째와 같은 판을 세우는가 ──
+	#  매듭이 제자리를 잃으면 여기서 갈린다 — 되감을 때마다 봉인이 다시
+	#  뽑히면 껐다 켜기가 곧 리롤이다.
+	var seal1: int = g.sealed
+	var mark1: int = g.mark_sec
+	var sec1 := PackedInt32Array(g.sectors)
+	var rem1: int = g.remaining.size()
+	_say(g._run_load(), "두 번째도 되살아난다")
+	_eq("두 번 되살려도 같은 동전이 봉인된다", g.sealed, seal1)
+	_eq("두 번 되살려도 같은 칸이 목표물이다", g.mark_sec, mark1)
+	_eq("두 번 되살려도 섞인 차례가 같다", PackedInt32Array(g.sectors), sec1)
+	_eq("두 번 되살려도 다트가 안 줄어든다", g.remaining.size(), rem1)
 
 
 # ══════════════════════════════════════════════════════════
@@ -868,3 +918,192 @@ func _key(code: int) -> void:
 	e.keycode = code
 	e.pressed = true
 	g._unhandled_input(e)
+
+
+# ══════════════════════════════════════════════════════════
+#  8차 — 검토가 찾아낸 새 나가는 자리 셋 (2026-09-20)
+#
+#  셋 다 「값은 이미 나갔는데 매듭은 아직 안 적혔다」는 **같은 모양**이다.
+#  한 차수에 모아 두는 이유가 그것이다 — 넷째가 생기면 여기 붙인다.
+# ══════════════════════════════════════════════════════════
+func _shop_at(kind: String) -> int:
+	for i in g.stock.size():
+		if String(g.stock[i].type) == kind and g._buy_block(i) == "":
+			return i
+	return -1
+
+
+func _pass8() -> void:
+	print("8차 — 값은 나갔는데 매듭이 안 적히던 자리들")
+	_game()
+	Save.wipe()
+	Save.run_drop()
+
+	# ── ① 되살리기가 제 매듭을 안 망가뜨린다 ──────────────
+	#  되살리기가 갈림 **뒤**에 매듭을 한 줄로 모아 적던 때, "pick" 갈래의
+	#  그 한 줄이 _begin_leg 이 올바른 자리에 적어 둔 것을 _start_leg 이 다
+	#  쓴 뒤의 값으로 덮어썼다. 한 프로세스 안에서도 드러난다.
+	g._new_run()
+	g.carry_darts = 2
+	g.pending_tags.append({"kind": "dart", "v": 1, "n": "덤",
+			"d": "다트 +1", "w": "다음 판", "rar": "common"})
+	g._begin_leg()
+	var rng0 := int(Save.run_get("rng", -1))
+	var carry0 := int(Save.run_get("carry_darts", -1))
+	var tags0: int = (Save.run_get("pending_tags", []) as Array).size()
+	_eq("적힌 잔탄이 먹기 전 값이다", carry0, 2)
+	_eq("적힌 뱃지가 쓰기 전 줄이다", tags0, 1)
+	_say(g._run_load(), "되살아났다")
+	_eq("되살린 뒤에도 줄기 자리가 그대로다",
+			int(Save.run_get("rng", -1)), rng0)
+	_eq("되살린 뒤에도 적힌 잔탄이 그대로다",
+			int(Save.run_get("carry_darts", -1)), carry0)
+	_eq("되살린 뒤에도 적힌 뱃지 줄이 그대로다",
+			(Save.run_get("pending_tags", []) as Array).size(), tags0)
+	var seal1: int = g.sealed
+	var rem1: int = g.remaining.size()
+	_say(g._run_load(), "두 번째도 되살아난다")
+	_eq("두 번 되감아도 같은 동전이 봉인된다", g.sealed, seal1)
+	for i in 8:
+		g._run_load()
+	_eq("열 번 되감아도 같은 다트 수다", g.remaining.size(), rem1)
+	_eq("열 번 되감아도 같은 봉인이다", g.sealed, seal1)
+
+	print("")
+	# ── ② 쓸기 중에는 상점을 못 빠져나간다 ────────────────
+	#  _reroll 은 골드와 굴린 횟수를 **즉시** 깎는데 매듭은 쓸기가 끝나는
+	#  자리에서야 적힌다. 그 사이에 설정으로 빠져나가면 _drop_update 가
+	#  state != S.SHOP 에서 즉시 return 이라 쓸기가 **얼어붙고**, 그대로
+	#  로비로 나가면 디스크에는 리롤 **전** 매듭이 남았다 — 골드가 돌아오고
+	#  매물이 새로 뽑히는 무한 공짜 리롤이다. 2026-09-20
+	Save.wipe()
+	g._new_run()
+	g.gold = 999
+	g._open_shop()
+	g.drop_fast = false          # ⚠ 느린 길을 지나야 쓸기가 실제로 산다
+	#  공짜 리롤 몫을 지나 보낸다 — 값이 0 이면 「값을 즉시 치른다」가
+	#  빈 검사가 된다(실제로 그랬다).
+	g.rerolls_used = g._free_rerolls() + 2
+	g.reroll_cost = g._reroll_price()
+	_say(g.reroll_cost > 0, "굴리는 값이 0 이 아니다", "%d골드" % g.reroll_cost)
+	var gold0: int = g.gold
+	var used0: int = g.rerolls_used
+	g._reroll()
+	_say(g.sweep_live, "느린 길은 쓸기를 연다")
+	_say(g.gold < gold0 and g.rerolls_used == used0 + 1,
+			"리롤은 값을 **즉시** 치른다", "%d → %d골드" % [gold0, g.gold])
+	_eq("쓸기가 도는 동안에는 매듭이 아직 리롤 전이다",
+			int(Save.run_get("gold", -1)), gold0)
+	g._pause_open()
+	_eq("쓸기 중에는 설정이 안 열린다", g.state, g.S.SHOP)
+	_say(not g._hud_btns_on(), "쓸기 중에는 단추도 안 선다")
+	#  ⚠ **문을 다시 닫아 놓고** 다음 길을 잰다. 안 그러면 「설정에서 ESC 로
+	#  돌아왔다」가 「ESC 가 안 열었다」와 같은 그림이 되어 검사가 헛돈다.
+	g.state = g.S.SHOP
+	g.pause_from = -1
+	_key(KEY_ESCAPE)
+	_eq("키도 같은 문을 지난다", g.state, g.S.SHOP)
+	g.state = g.S.SHOP
+	g.pause_from = -1
+	g._click(g._hud_btn_rect(1).get_center())
+	_eq("화면 단추도 같은 문을 지난다", g.state, g.S.SHOP)
+	#  연출을 끝까지 돌린다 — 끝나는 그 자리에서 적혀야 한다.
+	for i in 400:
+		if not g.sweep_live:
+			break
+		g._drop_update(0.02)
+	_say(not g.sweep_live, "쓸기가 끝났다")
+	_eq("끝나는 자리에서 리롤 결과가 적혔다",
+			int(Save.run_get("gold", -1)), g.gold)
+	_eq("굴린 횟수도 적혔다", int(Save.run_get("rerolls_used", -1)),
+			g.rerolls_used)
+	var live := []
+	for s in g.stock:
+		live.append(String((s.d as Dictionary).get("id", "")))
+	var wrote := []
+	for s in Save.run_get("stock", []):
+		wrote.append(String((s as Dictionary).get("id", "")))
+	_eq("굴린 그 판이 적혔다", wrote, live)
+	g.drop_fast = true
+
+	print("")
+	# ── ③ 팩 내용을 보고 나면 무를 수 없다 ────────────────
+	#  _buy 가 골드를 **먼저** 깎고, 내용은 전역 randi 라 다시 사면 매번
+	#  다르다. 쏟은 것을 집는 중을 문지기가 막던 때는 「내용을 보고 마음에
+	#  안 들면 껐다 켠다」가 곧 팩 다시 굴리기였다. 2026-09-20
+	Save.wipe()
+	g._new_run()
+	g.gold = 999
+	g._open_shop()
+	var bi := _shop_at("boost")
+	if bi < 0:
+		#  매물에 팩이 안 떴다 — 굴려서 찾는다. 못 찾으면 이 절만 건너뛴다.
+		for i in 40:
+			g._reroll()
+			bi = _shop_at("boost")
+			if bi >= 0:
+				break
+	_say(bi >= 0, "상점에서 팩을 하나 찾았다")
+	if bi >= 0:
+		var gold1: int = g.gold
+		g._buy(bi)
+		_say(g.gold < gold1, "팩 값이 나갔다", "%d → %d골드" % [gold1, g.gold])
+		_eq("뜯는 중에는 아직 매듭이 안 적힌다",
+				int(Save.run_get("gold", -1)), gold1)
+		#  ⚠ 뜯는 동안 설정으로 빠져나가면 _boost_tick 이 그 뒤에서 쏟는데,
+		#  state 만 보던 _knot_shop 은 한 글자도 안 적었다 — 돌아와 내용만
+		#  보고 끄면 팩이 다시 굴려졌다. 막는 자리가 둘이다: 문을 아예 안
+		#  열고(여기), 열렸더라도 덮인 화면의 밑바닥을 본다(아래).
+		g._pause_open()
+		_eq("뜯는 중에는 설정이 안 열린다", g.state, g.S.SHOP)
+		_say(not g._hud_btns_on(), "뜯는 중에는 단추도 안 선다")
+		g.state = g.S.SHOP
+		g.pause_from = -1
+		_key(KEY_ESCAPE)
+		_eq("뜯는 중에는 키도 같은 문을 지난다", g.state, g.S.SHOP)
+		#  ⚠ 런 정보는 뜯는 중에도 열린다(제 문지기가 boost_t 를 안 본다).
+		#  그 뒤에서 쏟아도 매듭이 적혀야 한다 — 덮은 화면의 밑바닥이
+		#  상점이면 상점이다(_knot_shop).
+		g.run_from = g.S.SHOP
+		g.state = g.S.RUNINFO
+		g._boost_tick(9.0)        # 뜯기를 끝까지 돌린다 — 안이 쏟아진다
+		_eq("런 정보에 덮여 있어도 쏟는 자리에서 적혔다",
+				int(Save.run_get("gold", -1)), g.gold)
+		g.state = g.S.SHOP
+		_say(g.boost_pick > 0, "몫이 섰다", "%d장" % g.boost_pick)
+		_eq("쏟는 그 순간 적혔다", int(Save.run_get("gold", -1)), g.gold)
+		_eq("남은 몫도 적혔다", int(Save.run_get("boost_pick", -1)),
+				g.boost_pick)
+		var spill := []
+		for s in g.stock:
+			if bool(s.get("pack", false)):
+				spill.append(String((s.d as Dictionary).get("id", "")))
+		_say(spill.size() > 0, "쏟은 것이 테이블에 섰다", "%d개" % spill.size())
+		#  ⚠ 여기가 핵심이다 — 내용을 다 보고 되감아도 골드가 안 돌아오고
+		#  같은 것이 같은 자리에 선다.
+		var pick0: int = g.boost_pick
+		_say(g._run_load(), "되살아났다")
+		_eq("되감아도 팩 값이 안 돌아온다", g.gold, Save.run_get("gold", -1))
+		_eq("되감아도 남은 몫이 그대로다", g.boost_pick, pick0)
+		var spill2 := []
+		for s in g.stock:
+			if bool(s.get("pack", false)):
+				spill2.append(String((s.d as Dictionary).get("id", "")))
+		_eq("되감아도 **같은 것**이 쏟아져 있다", spill2, spill)
+		#  몫을 다 쓰면 나머지가 쓸려 나가고 그 자리도 적힌다.
+		var pi := -1
+		for i in g.stock.size():
+			if bool(g.stock[i].get("pack", false)) and g._buy_block(i) == "":
+				pi = i
+				break
+		if pi >= 0:
+			g._buy(pi)
+			_eq("집은 뒤에도 남은 몫이 적힌다",
+					int(Save.run_get("boost_pick", -1)), g.boost_pick)
+		#  상점을 떠나면 매물도 몫도 접힌다 — 파일이 테이블과 다른 말을
+		#  하는 자리를 안 남긴다.
+		g._next_leg()
+		_eq("판 선택 매듭에는 매물이 없다",
+				(Save.run_get("stock", []) as Array).size(), 0)
+		_eq("판 선택 매듭에는 몫도 없다",
+				int(Save.run_get("boost_pick", -1)), 0)

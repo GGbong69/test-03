@@ -29,6 +29,10 @@ func _ok(nm: String, cond: bool, note := "") -> void:
 
 func _calm() -> void:
 	g.swap_live = false
+	#  연출 둘도 같이 내린다 — 이제 단추가 이것들도 보므로, 한 검사가
+	#  세워 둔 채로 넘어가면 다음 검사가 통째로 붉어진다. 2026-09-20
+	g.sweep_live = false
+	g.boost_t = -1.0
 	g.photo = ""
 	g.photo_rack = ""
 	g._tutor_close()
@@ -54,6 +58,22 @@ func _run() -> void:
 	g.state = g.S.SHOP
 	g.swap_live = true
 	_ok("갈아 끼우는 동안은 안 선다", not g._hud_btns_on())
+	_calm()
+	#  ⚠ 쓸기도 같다. 테이블은 쓸기 동안 얹힘부터 죽는데(_table_hover)
+	#  단추만 딸깍거리면서 아무 일도 안 했고, 그 틈으로 설정을 열어 로비로
+	#  나가면 리롤이 통째로 물렸다. 2026-09-20
+	g.state = g.S.SHOP
+	g.sweep_live = true
+	_ok("쓸기 동안은 안 선다", not g._hud_btns_on())
+	g.sweep_live = false
+	#  팩 뜯기도 같다 — 화면을 어둡게 덮는 0.64초다.
+	#  다만 **쏟은 것을 집는 중**은 평소 상점이라 그대로 선다.
+	g.boost_t = 0.2
+	_ok("팩을 뜯는 동안은 안 선다", not g._hud_btns_on())
+	g.boost_t = -1.0
+	g.boost_pick = 2
+	_ok("쏟은 것을 집는 중에는 선다", g._hud_btns_on())
+	g.boost_pick = 0
 	_calm()
 
 	# ── 겹치지 않는다 ──────────────────────────────────
