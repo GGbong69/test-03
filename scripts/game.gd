@@ -1090,6 +1090,10 @@ func _new_run() -> void:
 	var nd: int = maxi(1, GameData.tune_i("darts_base") + int(pk.get("darts_add", 0)))
 	for i in nd:
 		magazine.append(d0)
+	#  자루에 찼다 — 다트가 처음 내 판에 들어오는 자리다. 고리 **밖**에서
+	#  한 번 부른다(같은 다트를 셋 넣는 고리 안에서 세 번 부를 일이 없다).
+	#  2026-09-19
+	_found("dart", String(d0.get("id", "std")))
 	owned.clear()
 	cons.clear()
 	track_lv.clear()
@@ -1534,6 +1538,12 @@ func _pack_grants() -> void:
 	#  보드 확장은 한 장만 낀다 — 다트통이 여럿을 줘도 마지막 한 장이 남는다.
 	for id in GameData.pack_grants("grant_mod"):
 		mods_own = [String(id)]
+		#  ⚠ 이 줄과 _apply_mod 가 **한 쌍**이다. 여기는 _apply_mod 를 안
+		#  지나고 mods_own 에 직접 박는다(아래에서 _board_bake 를 한 번만
+		#  부른다 — 순서가 달라 못 합친다). packs.csv 에 grant_mod 열은
+		#  **있고 열세 줄이 다 비었다** — 오늘은 안 밟히지만 값이 드는 날
+		#  한 쪽만 적었으면 조용히 빠진다. 2026-09-19
+		_found("mod", String(id))
 	if not mods_own.is_empty():
 		_board_bake()
 	# 다트통이 쥐여 주는 사진. 1회성이 되면서 영구 목록이 아니라 사탕 칸으로
@@ -1542,10 +1552,12 @@ func _pack_grants() -> void:
 		for f in GameData.fixtures():
 			if String(f.id) == String(id) and cons.size() < GameData.cons_slots():
 				cons.append(f.duplicate())
+				_found("cons", String(f.id))
 	for id in GameData.pack_grants("grant_cons"):
 		for c in GameData.consumables():
 			if String(c.id) == String(id) and cons.size() < GameData.cons_slots():
 				cons.append(c)
+				_found("cons", String(c.id))
 				break
 	for id in GameData.pack_grants("grant_item"):
 		for it in GameData.items():
@@ -1555,8 +1567,11 @@ func _pack_grants() -> void:
 			gp.gs = 0
 			gp.bought = 0
 			owned.append(gp)
+			_found("item", String(it.id))
 			# 다트통이 쥐여 준 것도 손에 넣어 본 것이다 — 저울 다트통으로
 			# 데칼코마니를 써 봤으면 그 뒤로 팩에서도 만난다.
+			#  ⚠ 아래 두 줄은 **팩 풀의 열쇠다.** 위 _found 와 뜻이 다르고
+			#  절도 다르다 — 한 글자도 안 건드린다(2026-09-19).
 			if GameData.item_weight(it) <= 0.0:
 				Save.unlock("itemgot:" + String(it.id))
 			break
@@ -1626,6 +1641,73 @@ func _dart_peaks() -> void:
 	# 쌓여 있어야 한다는 것이 save.gd 머리말의 규약이다.
 	for k in ["hvy", "lgt", "mag"]:
 		Save.peak("best_dart_" + k, int(n.get(k, 0)))
+
+
+# ══════════════════════════════════════════════════════════
+#  발견 — 컬렉션이 읽는 단
+# ──────────────────────────────────────────────────────────
+#  **처음 내 판에 들어온 순간** 컬렉션에 선다. 동전·보드 확장·다트·사탕·
+#  사진은 손에 들어온 순간이고, 제약은 손에 안 들어오므로 판에 걸린
+#  순간이다 — 여섯 탭이 같은 한 줄을 쓴다. 갈래마다 다른 규칙이 아니라
+#  같은 규칙이 손 없는 것에 닿은 것이다.
+#
+#  「쓴 순간」이 아니라 「든 순간」인 까닭 — 사탕은 칸에 들고 다니다 런이
+#  끝나면 그대로 사라진다. 쓴 순간으로 잡으면 들고만 있다 끝난 사탕이
+#  영영 안 열린다.
+#
+#  **적는 자리는 이 함수 하나다.** 갈래마다 Save 를 직접 부르면 새 길이
+#  날 때마다 한 곳씩 빠진다 — 사탕이 다섯 문으로 들어오는 것이 그 증거다.
+#
+#  ⚠ itemgot: 과 **다른 열쇠이고 다른 절이다.** itemgot 은 「팩에 드는가」를
+#  답하고(쓰는 자리 둘이 item_weight <= 0.0 문 안이라 **레전더리 전용이다**),
+#  이것은 「컬렉션에 보이는가」를 답한다. 한 열쇠로 묶으면 둘 중 하나를
+#  고치는 날 나머지가 같이 움직인다 — 컬렉션 때문에 팩 확률이 흔들린다.
+#  2026-09-19
+# ══════════════════════════════════════════════════════════
+func _found(kind: String, id: String) -> void:
+	if id == "":
+		return
+	Save.discover(kind + ":" + id)
+
+
+# ── 이미 플레이한 프로필 ──────────────────────────────────
+#  **없는 기록을 지어내지 않는다.** 대신 저장이 **이미 아는 것**은 읽는다 —
+#  덮개가 아니라 파생이라, 새 프로필에서는 저절로 아무것도 안 나온다(그래서
+#  「새 프로필인가」를 따로 가릴 필요가 없고 boot() 에 손댈 일이 없다).
+#
+#    itemgot:<id>                그 장을 손에 넣어 봤다 (레전더리)
+#    best_dart_hvy/lgt/mag > 0   그 다트가 자루에 있었다 (2026-09-09 부터 센다)
+#    runs > 0                    첫 런은 std 통일 수밖에 없다 — hvy·lgt·mag 통
+#                                셋이 전부 best_dart_* >= 3 을 먼저 채워야 열리고
+#                                그 통계는 런에서만 오른다(packs.csv)
+#    runs:<pack> > 0             그 통으로 완주했다 → 그 통이 쥐여 준 것을 받았다
+#
+#  보드 확장·사탕·사진·제약은 저장에 id 가 안 남는다(mods_bought 는 수만
+#  센다) — 읽을 것이 없으면 안 적는다.
+#
+#  ⚠ 한 번만 돈다. 빗장은 [발견] 절의 _v 이고, Save.unfound_all() 이 그것을
+#  다시 세우므로 개발자 판에서 잠근 것이 다음 실행에 안 되살아난다.
+#  ⚠ 여기만 **바로 flush 한다** — 제목 화면이라 뒤에 판 끝이 안 온다.
+func _found_migrate() -> void:
+	if Save.found_ready():
+		return
+	Save.found_ready_set()
+	for it in GameData.items():
+		if Save.unlocked("itemgot:" + String(it.id)):
+			_found("item", String(it.id))
+	if Save.stat("runs") > 0:
+		_found("dart", "std")
+	for dk in ["hvy", "lgt", "mag"]:
+		if Save.stat("best_dart_" + dk) > 0:
+			_found("dart", dk)
+	for pk in GameData.packs():
+		if Save.tally("runs:" + String(pk.get("id", ""))) <= 0:
+			continue
+		for col in [["grant_item", "item"], ["grant_cons", "cons"],
+				["grant_fixture", "cons"]]:
+			for gid in String(pk.get(String(col[0]), "")).split(";", false):
+				_found(String(col[1]), String(gid).strip_edges())
+	Save.flush()
 
 
 # ══════════════════════════════════════════════════════════
@@ -2144,6 +2226,9 @@ func _buy(i: int) -> void:
 			cp.gs = 0
 			cp.bought = leg_no          # 삭음(주황 리그)이 읽는 나이다
 			owned.append(cp)
+			#  상점 매물과 팩에서 집은 것이 **같은 이 길**로 온다
+			#  (_buy_block 의 s.pack). 팩 쪽에 따로 적을 자리가 없다.
+			_found("item", String(cp.id))
 			#  동전이 처음 손에 들어온 자리. 순서가 값을 바꾸는 게임이라
 			#  슬롯을 보기 전에 말해 둬야 한다.
 			_tutor("u_rack")
@@ -2151,16 +2236,22 @@ func _buy(i: int) -> void:
 			# 한 번 손에 넣었으면 이제 팩에서도 온다. 뜬 것이 아니라
 			# **받은 것**을 세는 이유는, 슬롯이 꽉 차 못 산 장이 다음
 			# 상점에 다시 와야 하기 때문이다.
+			#  ⚠ 아래 두 줄은 **팩 풀의 열쇠다.** 위 _found 와 뜻이 다르고
+			#  절도 다르다 — 한 글자도 안 건드린다(2026-09-19).
 			if GameData.item_weight(cp) <= 0.0:
 				Save.unlock("itemgot:" + String(cp.id))
 		"mod":
 			_apply_mod(s.d.id)
 		"dart":
 			magazine[_std_slot()] = s.d
+			#  hvy·lgt·mag 를 만나는 **주된 길이 이쪽이다** — p_iron 해금이
+			#  best_dart_hvy >= 3 이라 상점에서 사 봐야 그 통이 열린다.
+			_found("dart", String(s.d.id))
 		"cons":
 			# 칸으로 들어간다. 상점 즉시 사용은 칸에서 바로 누르면 되므로
 			# 별도 경로가 없다 — 확인 버튼을 만들지 않는 규칙과도 맞는다.
 			cons.append(s.d)
+			_found("cons", String(s.d.id))
 			_tutor("u_cons")
 		"boost":
 			# 산 자리에서 바로 펼친다. 칸을 안 먹으므로 _buy_block 에
@@ -2178,6 +2269,9 @@ func _buy(i: int) -> void:
 				_deny()
 				return
 			cons.append(s.d.duplicate())
+			#  사탕과 **같은 접두사**다. 갈래는 세는 쪽(candies()/fixtures())
+			#  에서만 갈린다 — cat 이 뒤집혀도 열쇠가 고아가 안 된다.
+			_found("cons", String(s.d.id))
 			_tutor("u_cons")
 			_panel_reset()
 	_sfx("fixture_buy" if s.type == "fix" else "buy")
@@ -2403,6 +2497,9 @@ func _apply_mod(id: String) -> void:
 	if not mods_own.is_empty():
 		_mod_shed(String(mods_own[0]))
 	mods_own = [id]
+	#  상점이 여기로 온다. 다트통 grant_mod 쪽은 이 함수를 안 지나므로
+	#  거기에도 같은 줄이 있다 — 그 주석이 둘을 묶는다. 2026-09-19
+	_found("mod", id)
 	_board_bake()
 
 
@@ -2778,6 +2875,7 @@ func _take_tag_once(t: Dictionary) -> void:
 				pick.gs = 0
 				pick.bought = leg_no
 				owned.append(pick)
+				_found("item", String(pick.id))
 				_panel_reset()
 		#  건너뛴 판마다. **이 뱃지를 준 건너뛰기까지 센다** — _skip_leg 이
 		#  leg_skipped 를 먼저 적고 나서 이 함수를 부른다. 그래서 최소 한 판,
@@ -2812,7 +2910,11 @@ func _take_cons(pool: Array, v: int, full: String) -> void:
 		if pool.is_empty():
 			_tag_void("줄 것이 없다")
 			return
-		cons.append(pool[randi() % pool.size()].duplicate())
+		#  고른 줄을 먼저 받는다 — append 안에서 randi 를 굴리면 무엇이
+		#  들어갔는지를 다시 물을 길이 없다. 2026-09-19
+		var got: Dictionary = pool[randi() % pool.size()].duplicate()
+		cons.append(got)
+		_found("cons", String(got.get("id", "")))
 
 
 #  **빈손으로 끝난 뱃지는 말한다.** 칸이 꽉 차 있으면 뱃지를 쓰고도
@@ -2995,6 +3097,13 @@ func _begin_leg() -> void:
 		#  여기 글자로 박혀 있어 이름이 바뀔 때마다 같이 고쳐야 한다.
 		pop(BC + Vector2(0.0, -40.0), "GOOD AFTERNOON", C_ACC, 12, 1.1)
 	active_mods = _leg_mods(leg_no)
+	#  판에 **걸린** 순간이다 — 제약은 손에 안 들어오므로 여섯 탭 중 유일하게
+	#  「든 순간」이 없다. boss_void(GOOD AFTERNOON)면 _leg_mods 가 빈 배열을
+	#  내므로 무효된 보스의 제약은 안 세어진다 — 걸리지 않은 것을 걸렸다고
+	#  적지 않는다. 보스가 아닌 판은 위에서 early return 이라 여기 안 온다.
+	#  2026-09-19
+	for mo in active_mods:
+		_found("modf", String(mo.get("id", "")))
 	target = _target_at(leg_no)
 	_start_leg()
 
@@ -4443,6 +4552,10 @@ func _click(m: Vector2) -> void:
 						"시작":
 							_open_newrun()
 						"컬렉션":
+							#  옛 프로필이 저장에 이미 남긴 것을 한 번 읽는다.
+							#  state = S.COLLECT 가 서는 자리가 게임에서 여기
+							#  하나라 길목이 하나다. 2026-09-19
+							_found_migrate()
 							collect_tab = 0
 							state = S.COLLECT
 						"설정":
@@ -13823,6 +13936,9 @@ func _photo_apply(kind: String, oi: int) -> bool:
 		cp.gs = 0                      # 성장값은 안 따라간다. 새 장이다
 		cp.bought = leg_no
 		owned.append(cp)
+		#  이미 든 장을 복제하는 것이라 늘 참이지만, 「owned 로 드는 네 문」을
+		#  셋만 적지 않는다. 2026-09-19
+		_found("item", String(cp.id))
 		_panel_reset()
 		pop(at + Vector2(0.0, 24.0), "%s  복제" % it.n, C_ACC, 12, 1.1)
 		_sfx("buy")
@@ -21009,6 +21125,31 @@ func _icon_tag(c: Vector2, r: float, kind: String, a := 1.0,
 			draw_circle(c, r * 0.7, col)
 
 
+#  못 본 칸. 「모르는 제약」이 쓰던 원반을 컬렉션이 같이 쓴다 — 빈 칸이 아니라
+#  원반이 서야 「여기 뭔가 있는데 아직 못 봤다」가 화면에서 읽힌다(아래
+#  _icon_modifier 의 기본 가지 주석이 적어 둔 그 뜻 그대로다).
+#
+#  **등급색도 탭별 크기도 안 준다.** 등급을 입히면 어느 칸이 레전더리인지가
+#  새어 가린 뜻이 없어지고, 반지름을 탭마다 달리하면(다트 15 · 사탕 11 · 사진
+#  큰 그림) 크기가 곧 「이 탭은 큰 물건」이라는 정보가 된다. 여섯 탭이 r=13
+#  회색 원반 하나다 — 갈래를 색으로 가르는 것은 한 격자에 갈래가 섞였을 때의
+#  장치고, **우리는 탭이 이미 갈래다.**
+#
+#  #928ba6 은 컬렉션 바탕(_scrim 0.94) 위 6.06:1 · 얹힘 받침 위 5.47:1.
+#  글자 10 은 qa_ui 의 다섯 단(10·12·20·24·36) 안이다 — 새 크기를 안 만든다.
+#
+#  ⚠ 이 함수를 _icon_modifier **앞**에 둔다. qa_ui 가 _icon_modifier ~
+#  _chute_edge 구간을 잘라 「제약마다 그림이 있다」를 재므로 그 구간을 안
+#  늘린다. 2026-09-19
+func _icon_unfound(c: Vector2, r: float, dim := 0.0, a := 1.0) -> void:
+	var grey := Color(C_WIRE.lightened(0.18).darkened(dim), a)
+	var w1: float = maxf(r * float(LIM.thin), float(LIM.thin_lo))
+	draw_arc(c, r * 0.82, 0.0, TAU, 20, grey, w1)
+	#  「?」 는 10(곁말). 잉크 가운데를 원반 가운데에 앉힌다.
+	draw_string(font_sm, Vector2(c.x - r, _ink_mid_y(c.y, 10)), "?",
+			HORIZONTAL_ALIGNMENT_CENTER, r * 2.0, 10, grey)
+
+
 func _icon_modifier(c: Vector2, r: float, id: String, dim: float,
 		a: float = 1.0) -> void:
 	var grey := Color(C_WIRE.lightened(0.18).darkened(dim), a)
@@ -21162,11 +21303,9 @@ func _icon_modifier(c: Vector2, r: float, id: String, dim: float,
 		# ── 모르는 제약 ──────────────────────────────────
 		# 표에 id 가 늘면 여기로 온다. 빈 칸이 아니라 **물음표 원반**이
 		# 서야, 그림이 없다는 것이 화면에서 보인다.
+		# 컬렉션의 못 본 칸도 같은 원반이다 — 둘 다 「모른다」다.
 		_:
-			#  「?」 는 10(곁말). 잉크 가운데를 원반 가운데에 앉힌다.
-			draw_arc(c, r * 0.82, 0.0, TAU, 20, grey, w1)
-			draw_string(font_sm, Vector2(c.x - r, _ink_mid_y(c.y, 10)), "?",
-					HORIZONTAL_ALIGNMENT_CENTER, r * 2.0, 10, grey)
+			_icon_unfound(c, r, dim, a)
 
 # ══════════════════════════════════════════════════════════
 #  손 · 계산대   (끌어 옮기기 · 두 갈래 구매)
@@ -22601,6 +22740,24 @@ func _tip_build(hit: Dictionary) -> void:
 		return
 
 	var i: int = hit.i
+	#  컬렉션의 못 본 칸 — 이름도 그림도 효과도 등급도 안 내준다. 여섯 갈래에
+	#  각각 달면 한 곳만 고쳐도 나머지 다섯이 조용히 새므로 **문을 하나로
+	#  둔다.** 컬렉션 열쇠가 아니면 ct 가 −1 이라 안 걸린다.
+	#
+	#  **제목 줄은 반드시 세운다** — probe_collect 가 tip_title != "" 를
+	#  단언하고, 빈 사전을 내면 손가락에게 **아무 반응 없는 죽은 칸**이 된다
+	#  (컬렉션은 첫 톡이 곧 깊은 층이다 — _read_deep). 호버로만 읽히는 것을
+	#  안 만든다.
+	#
+	#  _tip_set_rar 를 **안 부른다** → 등급 태그도 등급 판색도 안 선다.
+	#  「미발견인데 등급이 샌다」가 곧 어느 칸이 상인지 알려 주는 것이다.
+	#  tip_chip 도 안 세운다 — 제목 옆 미니동전이 실루엣을 샌다. 2026-09-19
+	var ct := _col_tab_of(String(hit.k))
+	if ct >= 0 and not _col_found(ct, i):
+		_tip_set_tag(String(COL_TABS[ct].n))
+		tip_mark = _col_cell(i % COL_PAGE)
+		tip_title = "???"
+		return
 	match hit.k:
 		"rack":
 			_tip_set_tag("동전")
@@ -31607,20 +31764,69 @@ func _settings_back() -> void:
 	pause_from = -1
 
 
-# ── 컬렉션 — 게임에 실린 전부를 편다. 해금이 없으므로 도감이 곧 전량이다 ──
+# ── 컬렉션 — 게임에 실린 전부를 편다. 표가 전량이고 그 위를 발견이 덮는다 ──
+#
+#  **잠김은 없고 미발견만 있다.** 발라트로는 자물쇠(조건을 채우면 열릴 것)와
+#  물음표(이미 나오는데 아직 못 만난 것)를 화면에서 갈랐는데, 자물쇠 쪽은
+#  조건 문장과 한 쌍이어야 뜻이 산다 — 우리는 그 문장을 못 쓴다. 자물쇠만
+#  그리면 「뭔가 다르다」만 말하고 무엇이 다른지는 안 말한다. 잡음이다.
+#  그래서 여섯 탭이 **회색 원반 하나**로 간다. 2026-09-19
 
 const COL_PAGE := 28        # 7 × 4 — 한 쪽에 얹는 수
 var collect_page := 0
+#  컬렉션만 전부 발견으로 그린다. **저장에 한 글자도 안 쓴다** — 기획서 그림
+#  도구 스무남짓이 이 대역 하나로 제 그림을 찍는다(_dev_unlock_all).
+var found_all := false
 
 
+#  탭 번호 하나로 그 탭의 표를 낸다. 전에는 _col_total 과 _draw_collect 의
+#  cnt 배열이 **각자** 여섯 표를 적고 있었다. 발견 판정과 개수 세기가
+#  셋째·넷째가 되면 COL_TABS 를 한 줄로 모았던 뜻이 없어진다.
+func _col_rows(t: int) -> Array:
+	match t:
+		0: return GameData.items()
+		1: return GameData.mods()
+		2: return GameData.darts()
+		3: return GameData.candies()
+		4: return GameData.fixtures()
+	return GameData.modifiers()
+
+
+func _col_tab_of(k: String) -> int:
+	for t in COL_TABS.size():
+		if String(COL_TABS[t].k) == k:
+			return t
+	return -1
+
+
+#  이 칸을 봤는가. **컬렉션만 묻는다** — 팩 풀도 상점도 이 함수를 안 부르고,
+#  이 함수도 itemgot: 을 안 본다. 두 계통이 서로를 모른다.
+func _col_found(t: int, gi: int) -> bool:
+	if found_all:
+		return true
+	var rows := _col_rows(t)
+	if gi < 0 or gi >= rows.size():
+		return false
+	return Save.found(String(COL_TABS[t].f) + ":" + String(rows[gi].get("id", "")))
+
+
+#  **표를 훑으며 센다.** Save.found_of().size() 로 세면 표에서 빠진 id 가
+#  저장에 남아 있을 때 70/69 가 나온다.
+func _col_found_n(t: int) -> int:
+	var rows := _col_rows(t)
+	if found_all:
+		return rows.size()
+	var n := 0
+	var pre := String(COL_TABS[t].f) + ":"
+	for r in rows:
+		if Save.found(pre + String(r.get("id", ""))):
+			n += 1
+	return n
+
+
+#  ⚠ 인자 없는 꼴을 지킨다 — qa_wheel 이 이 이름으로 부른다.
 func _col_total() -> int:
-	match collect_tab:
-		0: return GameData.items().size()
-		1: return GameData.mods().size()
-		2: return GameData.darts().size()
-		3: return GameData.candies().size()
-		4: return GameData.fixtures().size()
-	return GameData.modifiers().size()
+	return _col_rows(collect_tab).size()
 
 
 # 이번 쪽에 실제로 놓인 수. 칸 인덱스는 쪽 안에서 0부터다.
@@ -31630,6 +31836,46 @@ func _col_count() -> int:
 
 func _col_pages() -> int:
 	return maxi(1, int(ceil(float(_col_total()) / float(COL_PAGE))))
+
+
+#  ── 기획서 그림 도구가 전부 발견 상태로 찍는 길 ─────────────
+#  ⚠ **저장을 한 글자도 안 쓴다.** 그리는 쪽만 덮는 대역이라 도구가 사람의
+#  프로필을 지나갈 길이 없고, itemgot: 도 팩 풀도 안 움직인다.
+#  ⚠ pack: · league: 도 **안 연다.** Save.path 를 안 박는 도구는 모든 도구가
+#  공유하는 _tool_profile_1.cfg 를 쓰므로, 거기에 해금을 심으면 「잠긴 통이
+#  잠겨 있다」를 재는 옆 도구가 조용히 거짓 초록을 낸다. dev.gd 의 unlock_all
+#  은 그대로 둔다 — 그쪽은 사람이 부른다.
+#
+#  shot_collect_all.gd 가 2026-09-17(커밋 2b72096)부터 이 이름을 두드리고
+#  있었다 — 저장소에 함수가 없어 has_method 가 false 라 건너뛰고 있었다.
+#  2026-09-19
+func _dev_unlock_all() -> void:
+	found_all = true
+	queue_redraw()
+
+
+#  대역을 **내린다. 저장은 안 만진다** — 켜기 전에 보던 진짜 진도로 돌아온다.
+#  ⚠ 이 함수가 없어서 한 번 뎄다(2026-09-19). 대역을 내리는 줄이 아래
+#  _dev_unlock_none() 하나뿐이라, 개발자 판에서 「전부 열기」로 다 찬 화면을
+#  구경하고 되돌리려 그 줄을 누르면 **진짜 진도가 디스크에서 사라졌다**
+#  (unfound_all 은 바로 flush 한다). 열기는 저장을 안 쓰므로 되살릴 길도
+#  없었다. 바로 위 「해금」 쌍은 unlock_all 이 표에서 다시 심어 주니 진짜
+#  왕복인데, 발견 쌍만 한쪽이 분쇄기였다.
+#  도구들이 `g.found_all = false` 를 손으로 박고 있던 것도 이 문이 없어서다.
+func _dev_unlock_off() -> void:
+	found_all = false
+	queue_redraw()
+
+
+#  이쪽은 **진짜로 지운다.** 대역으로는 새 프로필이 보는 것을 못 본다 —
+#  이미 플레이한 프로필에서 이 기능을 눈으로 보는 유일한 길이다.
+#  Save.unfound_all() 이 [발견] 절을 지우고 _v 를 다시 세우므로 다음에
+#  컬렉션을 열어도 _found_migrate 가 되살리지 않는다.
+#  ⚠ **되돌리기가 아니다.** 대역을 내리기만 하려면 _dev_unlock_off().
+func _dev_unlock_none() -> void:
+	found_all = false
+	Save.unfound_all()
+	queue_redraw()
 
 
 func _col_tab_rect(t: int) -> Rect2:
@@ -32430,26 +32676,37 @@ func _ri_carry(p: Rect2) -> void:
 # 이름과 툴팁 열쇠를 **한 줄에 같이** 둔다. 전에는 두 곳이 각자 순서를
 # 적고 있었고, 사진 탭을 넷째에 끼워 넣자 툴팁 배열만 다섯 칸으로 남아
 # 사진이 제약 설명을 집었다. 한 곳에서 나오면 그런 어긋남이 안 생긴다.
+#  발견 접두사(f)도 **같은 줄에 얹는다** — 일곱째 자리에서 또 여섯을 순서대로
+#  적으면, 사진 탭이 제약 설명을 집던 위 그 사고가 다시 난다.
+#
+#  ⚠ 사탕과 사진이 **접두사를 나눠 쓴다.** 둘은 consumables.csv 한 표에 살고
+#  cat 열로 갈린다 — 탭 열쇠로 적으면 cat 이 뒤집히는 날 cfix:c_again 이
+#  고아가 된다(「오리 금고가 사탕으로 뜨던」 2026-09-13, data.gd 의 is_fixture
+#  가 그래서 있다). **id 로만 적고 갈래는 세는 쪽에서만 갈린다.** 여섯 표의
+#  id 109개는 전부 유일하다 — qa_found 가 그것을 잰다. 2026-09-19
 const COL_TABS := [
-	{"n": "동전", "k": "citem"},
-	{"n": "보드 확장", "k": "cmod"},
-	{"n": "다트", "k": "cdart"},
-	{"n": "사탕", "k": "ccons"},
-	{"n": "사진", "k": "cfix"},
-	{"n": "제약", "k": "cmodf"},
+	{"n": "동전", "k": "citem", "f": "item"},
+	{"n": "보드 확장", "k": "cmod", "f": "mod"},
+	{"n": "다트", "k": "cdart", "f": "dart"},
+	{"n": "사탕", "k": "ccons", "f": "cons"},
+	{"n": "사진", "k": "cfix", "f": "cons"},
+	{"n": "제약", "k": "cmodf", "f": "modf"},
 ]
 
 
 func _draw_collect() -> void:
 	_scrim()
 	_hdr(self, "컬렉션")
-	# 이름은 COL_TABS 가, 개수는 표가 낸다 — 이름을 여기서 또 적으면
-	# 탭이 늘 때 순서가 또 어긋난다.
-	var cnt := [GameData.items().size(), GameData.mods().size(),
-			GameData.darts().size(), GameData.candies().size(),
-			GameData.fixtures().size(), GameData.modifiers().size()]
+	#  「본 것 / 전부」. 숫자는 값이라 해설이 아니다 — 발라트로는 탭에 느낌표만
+	#  띄우고 수를 안 적어 공략이 외부 도구를 쓴다. 그 자리를 메운다.
+	#  이름은 COL_TABS 가, 개수는 표가 낸다 — 이름을 여기서 또 적으면 탭이 늘
+	#  때 순서가 또 어긋난다.
+	#  ⚠ **공백 없는 슬래시다.** 가장 긴 「보드 확장 12/12」가 87.0px 이고 탭
+	#  안쪽이 95.33px 다. 공백을 끼우면 93.0px 라 여유가 2.3px 뿐인데
+	#  _tab_draw 는 넘치면 **자른다**. 2026-09-19
 	for t in COL_TABS.size():
-		_tab_draw(self, _col_tab_rect(t), "%s %d" % [COL_TABS[t].n, cnt[t]],
+		_tab_draw(self, _col_tab_rect(t),
+				"%s %d/%d" % [COL_TABS[t].n, _col_found_n(t), _col_rows(t).size()],
 				t == collect_tab, _col_tab_rect(t).has_point(mouse_at))
 
 	var base := collect_page * COL_PAGE
@@ -32472,34 +32729,43 @@ func _draw_collect() -> void:
 		var c := cell.get_center() + Vector2(0.0, -11.0 - roundf(chv))
 		var gi := base + i
 		var nm := ""
-		match collect_tab:
-			0:
-				var it: Dictionary = GameData.items()[gi]
-				draw_item_sticker(c, 13.0, it, 0.0, 0.0, 0.0, 10)
-				nm = it.n
-			1:
-				var md: Dictionary = GameData.mods()[gi]
-				_icon_mod(c, 13.0, md.id, 0.0)
-				nm = md.n
-			2:
-				var dt: Dictionary = GameData.darts()[gi]
-				_icon_dart(c, 15.0, dt.id, 0.0, -0.62)
-				nm = dt.n
-			3:
-				# 테이블에 뜨는 그림 그대로 쓴다 — 두 글자 상자였을 때는
-				# 컬렉션의 사탕과 판 위의 사탕이 다른 물건으로 보였다.
-				var cs: Array = GameData.candies()
-				_icon_cons(c, 11.0, String(cs[gi].id))
-				nm = cs[gi].n
-			4:
-				var fx: Dictionary = GameData.fixtures()[gi]
-				#  세워 보인다 — 도감은 그림을 보는 자리라 눕혀 누르면 줄이 빠진다
-				_fix_flat(c, {}, 0.0, 0.0, GOODS_K, String(fx.id), 1.0)
-				nm = fx.n
-			5:
-				var mo: Dictionary = GameData.modifiers()[gi]
-				_icon_modifier(c, 11.0, mo.id, 0.0)
-				nm = mo.n
+		#  못 본 칸 — 그림 하나, 이름 하나. **자리는 안 움직인다**: 격자가 표
+		#  순서 그대로 돌아 못 본 칸이 제 칸을 지키므로 「몇 개 비었나」가 눈
+		#  으로 세진다. 발견한 것만 앞으로 당기면 물음표를 그리는 뜻이 통째로
+		#  죽는다. 그림 중심 c 도 찾은 칸과 **같다** — 발견으로 뒤집혀도 한
+		#  픽셀도 안 흔들린다. 2026-09-19
+		if not _col_found(collect_tab, gi):
+			_icon_unfound(c, 13.0)
+			nm = "???"
+		else:
+			match collect_tab:
+				0:
+					var it: Dictionary = GameData.items()[gi]
+					draw_item_sticker(c, 13.0, it, 0.0, 0.0, 0.0, 10)
+					nm = it.n
+				1:
+					var md: Dictionary = GameData.mods()[gi]
+					_icon_mod(c, 13.0, md.id, 0.0)
+					nm = md.n
+				2:
+					var dt: Dictionary = GameData.darts()[gi]
+					_icon_dart(c, 15.0, dt.id, 0.0, -0.62)
+					nm = dt.n
+				3:
+					# 테이블에 뜨는 그림 그대로 쓴다 — 두 글자 상자였을 때는
+					# 컬렉션의 사탕과 판 위의 사탕이 다른 물건으로 보였다.
+					var cs: Array = GameData.candies()
+					_icon_cons(c, 11.0, String(cs[gi].id))
+					nm = cs[gi].n
+				4:
+					var fx: Dictionary = GameData.fixtures()[gi]
+					#  세워 보인다 — 도감은 그림을 보는 자리라 눕혀 누르면 줄이 빠진다
+					_fix_flat(c, {}, 0.0, 0.0, GOODS_K, String(fx.id), 1.0)
+					nm = fx.n
+				5:
+					var mo: Dictionary = GameData.modifiers()[gi]
+					_icon_modifier(c, 11.0, mo.id, 0.0)
+					nm = mo.n
 		#  이름 9 → 11 → 12. 칸(86px)에 안 드는 긴 이름만 한 단 내린다 — SemiBold 10
 		#  (「WHITE ALBUM」). 그래도 안 드는 것(「더 굿 더 베드 더 트리플」 · 「It's Not
 		#  About Money」)은 SemiBold 10 **두 줄**로 접는다. 1px 씩 줄여 넣으면 크기 다섯

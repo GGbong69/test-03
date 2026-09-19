@@ -28,9 +28,11 @@ func _run() -> void:
 	if DisplayServer.get_name() == "headless":
 		quit(0)
 		return
-	#  잠긴 칸은 실루엣이라 그림이 안 보인다 — 해금을 전부 연다
-	if g.has_method("_dev_unlock_all"):
-		g._dev_unlock_all()
+	#  못 본 칸은 물음표라 그림이 안 보인다 — 전부 발견으로 그린다(저장은 안 만진다)
+	#  ⚠ has_method 로 감싸지 않는다. 2026-09-17 에 이 갈고리를 심었는데 게임
+	#  쪽에 함수가 없어 **조용히 건너뛰고** 있었고, 그 사실을 이틀 뒤에야
+	#  알았다. 이름이 바뀌면 시끄럽게 죽는 편이 낫다. 2026-09-19
+	g._dev_unlock_all()
 	g.state = g.S.COLLECT
 	for t in g.COL_TABS.size():
 		g.collect_tab = t

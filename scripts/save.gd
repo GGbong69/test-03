@@ -113,6 +113,12 @@ const S_TAL := "세기"
 #  해금(S_UNL)과 모양이 같지만 **칸을 가른다.** unlock_keys() 는 컬렉션
 #  화면의 계약이라, 거기에 가르친 기록이 섞이면 컬렉션이 배움을 센다.
 const S_TUT := "배움"
+#  발견 — 컬렉션이 읽는 유일한 칸. 해금(S_UNL)과 모양이 같지만 **절을 가른다.**
+#  slot_info(아래 295)가 [해금] 키를 **갈래를 안 가리고** 세어(301-304) 프로필
+#  화면에 「해금 N개」로 찍으므로(game.gd:25374), 발견 109개를 같은 절에 넣으면
+#  그 수가 그대로 두 배가 된다. 배움(S_TUT)을 왜 뺐는지가 바로 위 112-114 에
+#  적혀 있고, 이것이 같은 판단이다. 2026-09-19
+const S_FND := "발견"
 
 # 통계 키 — 전부 int 누적이거나 최댓값이다.
 #  누적(bump): 던진 다트·트리플·불·빗나감·구매·판매·리롤·사탕·런·완주
@@ -441,6 +447,75 @@ static func unlocked_of(kind: String) -> PackedStringArray:
 		if String(k).begins_with(kind + ":") and bool(_cfg.get_value(S_UNL, k, false)):
 			out.append(String(k).substr(kind.length() + 1))
 	return out
+
+
+# ── 발견 ────────────────────────────────────────────────
+#  열쇠는 "<갈래>:<id>" — item:c01 · cons:v_cash · modf:gust. 갈래를 앞에 두는
+#  해금(위 357)의 어법 그대로고, 절 이름이 셋째 토막 노릇을 한다.
+#  "_v" 는 콜론이 없어 열쇠와 절대 안 부딪힌다 — 이 프로필이 발견을 세기
+#  시작했다는 표시이자, game.gd 의 _found_migrate 가 한 번만 돌게 하는 빗장이다.
+#
+#  ⚠ 해금(itemgot:)과 **다른 계통이다.** itemgot 은 「팩에 드는가」를 답하고
+#  이것은 「컬렉션에 보이는가」를 답한다. 한 열쇠로 묶으면 컬렉션 때문에 팩
+#  확률이 흔들린다. 2026-09-19
+static func found(id: String) -> bool:
+	boot()
+	return bool(_cfg.get_value(S_FND, id, false))
+
+
+#  처음이면 true — unlock() · teach() 와 같은 규약이다.
+#  ⚠ **flush 를 안 한다.** unlock() 은 부를 때마다 디스크를 치는데(위 365-371)
+#  발견은 상점에서 연달아 선다. 같은 저장소가 2026-09-19 에 이 자리에서 한 번
+#  뎄다 — game.gd 「휠 한 번 굴리면 프로필 파일을 열 번 넘게 쓴다」. 판 끝·런
+#  끝의 flush 에 묻어간다. bump() 와 같은 길이다.
+static func discover(id: String) -> bool:
+	boot()
+	if bool(_cfg.get_value(S_FND, id, false)):
+		return false
+	_cfg.set_value(S_FND, id, true)
+	return true
+
+
+static func found_keys() -> PackedStringArray:
+	boot()
+	if not _cfg.has_section(S_FND):
+		return PackedStringArray()
+	return _cfg.get_section_keys(S_FND)
+
+
+static func found_of(kind: String) -> PackedStringArray:
+	boot()
+	var out := PackedStringArray()
+	if not _cfg.has_section(S_FND):
+		return out
+	for k in _cfg.get_section_keys(S_FND):
+		if String(k).begins_with(kind + ":") and bool(_cfg.get_value(S_FND, k, false)):
+			out.append(String(k).substr(kind.length() + 1))
+	return out
+
+
+#  이 프로필이 발견을 세기 시작했는가. 한 번 걷는 이주의 빗장이다.
+static func found_ready() -> bool:
+	boot()
+	return int(_cfg.get_value(S_FND, "_v", 0)) >= 1
+
+
+static func found_ready_set() -> void:
+	boot()
+	_cfg.set_value(S_FND, "_v", 1)
+
+
+#  개발자 판과 tools/unlock.gd 만 부른다. lock() 이 [해금]에 대해 그렇듯
+#  게임은 안 부른다.
+#  ⚠ **_v 를 다시 세운다.** 안 세우면 다음에 컬렉션을 열 때 _found_migrate 가
+#  또 돌아 방금 잠근 것이 되살아난다 — 「발견 전부 잠그기」가 한 프레임짜리가
+#  된다. 지운 프로필은 **발견을 세는 프로필**이다.
+static func unfound_all() -> void:
+	boot()
+	if _cfg.has_section(S_FND):
+		_cfg.erase_section(S_FND)
+	_cfg.set_value(S_FND, "_v", 1)
+	flush()
 
 
 # ── 통계 ────────────────────────────────────────────────

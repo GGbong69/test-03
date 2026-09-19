@@ -68,6 +68,8 @@ func _run() -> void:
 	g.cons = [fx[5].duplicate(), fx[0].duplicate()]
 	await _shot("photo_hud", 10)
 	#  컬렉션 — 사진 탭
+	#  못 본 칸은 물음표라 그림이 안 보인다 — 전부 발견으로 그린다(저장은 안 만진다)
+	g._dev_unlock_all()
 	g.state = g.S.COLLECT
 	g.collect_tab = 4
 	g.collect_page = 0

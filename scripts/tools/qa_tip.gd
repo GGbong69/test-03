@@ -120,11 +120,28 @@ func _run() -> void:
 	if not g.cons.is_empty():
 		_check("손에 든 것", {"k": "held", "i": 0})
 
+	#  ── 못 본 칸이 아무것도 안 샌다 (2026-09-19) ──────
+	#  컬렉션은 이제 못 본 것을 물음표로 가린다. 가린 칸이 **등급을 흘리면**
+	#  그것만으로 어느 칸이 상인지가 알려진다 — 가린 뜻이 통째로 샌다.
+	#  아래 세 줄은 그 구멍 셋을 각각 잰다. 대역을 켜기 **전에** 잰다.
+	g.state = g.S.COLLECT
+	g._dev_unlock_off()
+	print("")
+	g._tip_build({"k": "citem", "i": 0})
+	_ok("못 본 동전 — 태그가 한 장", _tags().size() == 1, "[%s]" % "][".join(_tags()))
+	_ok("못 본 동전 — 본문이 0줄", g.tip_lines.is_empty(),
+			"%d줄 | %s" % [g.tip_lines.size(), _body().substr(0, 40)])
+	_ok("못 본 동전 — 미니동전이 없다", (g.tip_chip as Dictionary).is_empty(),
+			"등급 '%s'" % String(g.tip_rar))
+
+	#  아래로는 **전부 발견 상태**로 잰다 — 이 자가 재는 것은 태그 규약이고,
+	#  잠긴 칸에서는 그것을 못 잰다. ⚠ 저장을 안 만지는 대역이다.
+	g._dev_unlock_all()
+
 	# 컬렉션 여섯 탭
 	var tabs := [["citem", "컬렉션 동전"], ["cmod", "컬렉션 보드 확장"],
 			["cdart", "컬렉션 다트"], ["ccons", "컬렉션 사탕"],
 			["cfix", "컬렉션 사진"], ["cmodf", "컬렉션 제약"]]
-	g.state = g.S.COLLECT
 	for t in tabs:
 		_check(String(t[1]), {"k": String(t[0]), "i": 0})
 

@@ -112,6 +112,8 @@ func _idx(rows: Array, id: String) -> int:
 #  컬렉션 한 칸 — 그 칸이 든 쪽을 펴고 짚는다(툴팁이 그 칸 밑에 선다)
 func _col(nm: String, tab: int, rows: Array, id: String) -> void:
 	var i := _idx(rows, id)
+	#  못 본 칸은 물음표라 그림이 안 보인다 — 전부 발견으로 그린다(저장은 안 만진다)
+	g._dev_unlock_all()
 	g.state = g.S.COLLECT
 	g.collect_tab = tab
 	g.collect_page = i / g.COL_PAGE
