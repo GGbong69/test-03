@@ -1790,6 +1790,9 @@ func _leg_end_wear() -> void:
 #
 # 그래서 **이 갈래만 판 중에도 시체가 슬롯 자리에 선다.** 판이 이어지면
 # (_to_pick) 동전 칸이 그려지는 중이라 _wreck_draw 가 scr 1 을 고른다.
+# 서는 칸은 죽은 칸이 아니라 **지우고 난 뒤 처음 비는 칸**이다 — 죽은
+# 칸에는 뒷 동전이 이미 당겨져 와 있어서 거기 세우면 산 동전에 「다 썼다」를
+# 붙이게 된다(_wreck_seat 머리말).
 # 낱말도 다르다 — 툴팁 수치가 0 으로 내려가는 것이 **미리 보이므로**
 # 놀라움이 아니라 예고된 끝이고, 그래서 「부서졌다」가 아니라 「다 썼다」다.
 func _wear_spent() -> void:
@@ -12532,6 +12535,17 @@ const WRECK := {
 	#  302 로 단추(y 290)를 밟는다. n=6 이면 gap 36 이라 아래끝 272 다.
 	"span": 180.0,
 	"wx0": 8.0, "wx1": 88.0, "wy0": 46.0, "wy1": 276.0,   # 선반 조각 벽
+	#  밀랍이 흘러내리며 늘어나는 세로 배율의 **끝**. 늘어난 조각은 둘레
+	#  반지름도 그만큼 커지므로 벽에 넘기는 값이 ex×sy 여야 하고, 줄이
+	#  좁으면 이 끝까지 못 간다(_wreck_sy_max). 안 줄였더니 여섯 칸
+	#  선반에서 이웃 동전 몸을 17px 파고들었다(2026-09-19).
+	"melt_sy": 1.55,
+	#  줄 하나가 어떤 경우에도 갖는 세로 놀이. 칸이 여섯이면 줄 몫이
+	#  ±18 인데 부채꼴 하나의 둘레 반지름이 19 라 ex 를 빼면 창이
+	#  뒤집힌다 — 거기서 조각을 제자리에 못 박으면 여섯이 도로 **온전한
+	#  실루엣으로 타일링**되어 「안 부서진 것」처럼 보인다. 비대칭이
+	#  반대쪽으로 무너지는 자리라 최소 놀이를 남긴다.
+	"row_play": 8.0,
 	#  슬롯 조각 벽. **ex 를 빼고 나면 실제 창이 이만큼 좁아진다** —
 	#  24~100 에 둘레 반지름 16 을 물리면 세로가 40~84 뿐이고, 동전 중심이
 	#  41 이라 조각이 아래로만 갈 수 있어 한 덩어리로 뭉쳤다(그림으로
@@ -12641,7 +12655,7 @@ func _wreck_push(i: int, it: Dictionary, why: String, bn: int,
 		tot = maxf(tot, 0.90)
 	var e := {
 		"i": i, "it": it, "why": why, "bn": bn, "safe": safe,
-		"mat": mat, "sd": sd, "scr": -2, "k": -1,
+		"mat": mat, "sd": sd, "scr": -2, "k": -1, "si": -1,
 		"t": -float(WRECK.stagger) * float(wreck.size() - wreck_snd_from) \
 				if safe else 0.0,
 		"tot": tot, "pcs": [], "gr": [],
@@ -12649,9 +12663,20 @@ func _wreck_push(i: int, it: Dictionary, why: String, bn: int,
 	if not safe:
 		_wreck_cut(e, it, int(br.n), sd, br)
 	wreck.append(e)
+	#  ⚠ **상한에서 잘라낼 때는 묶음 시작도 같이 민다.** 앞에서 지우면
+	#  인덱스가 통째로 내려가는데 wreck_snd_from 을 그대로 두면 이번 묶음의
+	#  **앞부분이 소리 훑기에서 빠진다** — 유리가 그 앞에 있었으면 유리
+	#  대신 기본음이 나고, 잘린 수가 묶음 시작과 같아지면 range 가 통째로
+	#  비어 **한 번도 안 운다.** 이 일감의 원인이 바로 「판 끝에 소리가
+	#  0」이었으니 되살아나면 안 되는 자리다(2026-09-19, 검토가 잡았다).
+	#  닿는 길: 목숨 시체 하나가 먼저 눕고 같은 프레임에 랙 여섯이 죽으면
+	#  일곱째에서 잘린다. 개발자 모드 「부서짐 재질」을 시체가 살아 있는
+	#  동안 일곱 번 누르면 더 빠르다.
+	var cut := 0
 	while wreck.size() > int(WRECK.cap):
 		wreck.remove_at(0)
-	wreck_snd_from = mini(wreck_snd_from, wreck.size())
+		cut += 1
+	wreck_snd_from = clampi(wreck_snd_from - cut, 0, wreck.size())
 
 
 #  조각은 **있는 함수를 한 글자도 안 고치고** 부른다. _shard_cut 은 순수
@@ -12828,6 +12853,45 @@ func _wreck_tick(d: float) -> void:
 	wreck = wreck.filter(func(e): return float(e.t) < float(e.tot))
 
 
+#  ① 자리를 아직 안 고른 것들을 **한 프레임에 한꺼번에** 눕힌다.
+#  하나씩 눕히면 나중 장이 먼저 장의 간격을 못 본다.
+#
+#  **배정을 그리기 밖으로 뺀 것은 검사가 재야 하기 때문이다** — 알파 둘을
+#  밖으로 낸 것과 같은 이유다. 그리기 함수는 _draw 밖에서 못 부르므로
+#  배정이 그리기 안에만 있으면 「시체가 산 동전 위에 안 서는가」를
+#  헤드리스에서 **못 잰다.** 실제로 그 규칙이 안 재어져서 조각과
+#  「다 썼다」 넉 자가 멀쩡한 이웃 동전에 붙은 그림이 나왔다(2026-09-19).
+func _wreck_seat(scr: int) -> void:
+	var fresh := []
+	for e in wreck:
+		if int(e.scr) == -2:
+			fresh.append(e)
+	if fresh.is_empty():
+		return
+	fresh.sort_custom(func(a, b): return int(a.i) < int(b.i))
+	#  **부서진 시체는 빈 칸에 선다.** e.i 는 지우기 **전**의 자리인데
+	#  owned.remove_at 이 뒷 동전을 그 칸으로 당기므로 _slot_rect(e.i)
+	#  는 죽은 칸이 아니라 **산 동전의 칸**이다 — 그대로 두었더니 판 중
+	#  소진(tdec) 조각과 「다 썼다」 넉 자가 멀쩡한 이웃 동전 위에
+	#  얹혀 화면이 **산 동전을 죽었다고 말했다**(2026-09-19, 그림으로
+	#  잡았다. c34 가 랙 마지막 칸이 아닌 한 늘 그랬다). 지우고 난 뒤
+	#  처음 비는 칸이 owned.size() 이고, 그 빈 칸이야말로 **이 제거가
+	#  화면에 낸 자국**이다. 어느 동전이었는지는 조각이 제 실루엣으로
+	#  말한다. 둘이 같은 프레임에 죽으면 다음 빈 칸으로 한 칸씩 민다.
+	#  **남았다는 제 동전이 아직 그 자리에 있으므로 e.i 그대로다.**
+	var sl: int = owned.size()
+	for e in fresh:
+		e.scr = scr
+		if scr == 0:
+			e.k = wreck_n
+			wreck_n += 1
+		elif bool(e.safe):
+			e.si = mini(int(e.i), GameData.max_items() - 1)
+		else:
+			e.si = mini(sl, GameData.max_items() - 1)
+			sl += 1
+
+
 #  **이것이 유일한 그리기 문이다.** _hud_draw 맨 끝 한 줄이고
 #  `if state != S.CLEAR` 게이트 **밖**이다. _draw_clear 에는 안 건다 —
 #  _draw_screen 은 한 프레임에 **두 번** 돌 수 있고(S.RUNINFO 의
@@ -12838,19 +12902,7 @@ func _wreck_draw() -> void:
 	if wreck.is_empty():
 		return
 	var scr := _wreck_scr()
-	#  ① 자리를 아직 안 고른 것들을 **한 프레임에 한꺼번에** 눕힌다.
-	#  하나씩 눕히면 나중 장이 먼저 장의 간격을 못 본다.
-	var fresh := []
-	for e in wreck:
-		if int(e.scr) == -2:
-			fresh.append(e)
-	if not fresh.is_empty():
-		fresh.sort_custom(func(a, b): return int(a.i) < int(b.i))
-		for e in fresh:
-			e.scr = scr
-			if scr == 0:
-				e.k = wreck_n
-				wreck_n += 1
+	_wreck_seat(scr)
 	var gap: float = minf(float(WRECK.gap_max),
 			float(WRECK.span) / float(maxi(wreck_n - 1, 1)))
 	for e in wreck:
@@ -12860,12 +12912,20 @@ func _wreck_draw() -> void:
 		if int(e.scr) < 0 or int(e.scr) != scr or float(e.t) < 0.0:
 			continue
 		if scr == 0:
-			_wreck_one(e, Vector2(float(WRECK.x),
-					float(WRECK.y0) + gap * float(e.k)), true)
+			var cy: float = float(WRECK.y0) + gap * float(e.k)
+			#  **제 줄의 몫**을 같이 넘긴다 — 조각 벽의 세로가 띠 전체가
+			#  아니라 이웃과의 절반까지다(_wreck_clamp 머리말). 양 끝 줄만
+			#  띠 끝까지 쓰므로 **시체가 하나뿐인 판은 지금처럼 띠를 다
+			#  쓴다** — 그것이 제일 흔한 판이다.
+			_wreck_one(e, Vector2(float(WRECK.x), cy), true, Vector2(
+					float(WRECK.wy0) if int(e.k) <= 0 else cy - gap * 0.5,
+					float(WRECK.wy1) if int(e.k) >= wreck_n - 1
+							else cy + gap * 0.5))
 		else:
-			_wreck_one(e, _slot_rect(mini(int(e.i),
+			_wreck_one(e, _slot_rect(mini(maxi(int(e.si), 0),
 					GameData.max_items() - 1)).get_center()
-					+ Vector2(0.0, float(PANEL.chip_dy)), false)
+					+ Vector2(0.0, float(PANEL.chip_dy)), false,
+					Vector2(float(WRECK.sy0), float(WRECK.sy1)))
 
 
 #  조각 벽은 **후조건 클램프**다(_smash_update 의 어법을 베끼되 자가
@@ -12878,7 +12938,18 @@ func _wreck_draw() -> void:
 #  되려면 **조각이 통째로** 안에 들어야 한다.
 #  ex 가 반폭보다 크면(작은 슬롯 · 큰 조각) 가운데로 모은다 — 빈 구간에
 #  clampf 를 걸면 min>max 라 값이 뒤집힌다.
-func _wreck_clamp(c: Vector2, p: Vector2, shelf: bool, ex := 0.0) -> Vector2:
+#
+#  **세로 벽은 띠 전체가 아니라 제 줄이다.** 처음에는 y[46,276] 을 통째로
+#  열어 뒀는데, 유리는 0.215초에 50px 을 내려가고 줄 간격은 36~42 뿐이라
+#  **구조적으로 한 줄을 넘는다** — 그림에서 첫 줄(유리) 조각 둘이 둘째 줄
+#  「남았다」의 **온전한 동전 위에** 앉았고, 여섯 줄에서는 가운데 셋이
+#  한 덩어리로 뭉쳐 어느 동전이 무엇으로 죽었는지 못 가렸다(2026-09-19).
+#  비대칭이 「조각인가 온전한가」 하나에 실려 있는데 이웃 조각이 그 온전한
+#  실루엣을 덮으면 바로 그 자리에서 읽기가 무너진다.
+#  row 는 그 줄의 몫 y[위,아래] — 이웃과의 절반까지고, 양 끝 줄만 띠
+#  끝까지 쓴다. 기본값은 띠 전체라 줄이 하나면 지금과 똑같다.
+func _wreck_clamp(c: Vector2, p: Vector2, shelf: bool, ex := 0.0,
+		row := Vector2(-9999.0, 9999.0)) -> Vector2:
 	var x0: float
 	var x1: float
 	var y0: float
@@ -12886,8 +12957,15 @@ func _wreck_clamp(c: Vector2, p: Vector2, shelf: bool, ex := 0.0) -> Vector2:
 	if shelf:
 		x0 = float(WRECK.wx0) + ex
 		x1 = float(WRECK.wx1) - ex
-		y0 = float(WRECK.wy0) + ex
-		y1 = float(WRECK.wy1) - ex
+		#  ex 를 뺀 줄 몫이 뒤집혀도 **최소 놀이는 남긴다**(row_play).
+		#  세로만 가운데 모으기를 안 쓰는 이유가 그것이다 — 못 박으면
+		#  조각들이 도로 온전한 실루엣이 된다.
+		#  ⚠ 그 놀이는 **줄 몫만 뚫고 띠는 못 뚫는다.** 처음에는 바깥에서
+		#  한 번에 잰 탓에 마지막 줄(중심 253)의 놀이가 띠 아래끝 276 을
+		#  넘어 조각이 278 까지 갔다 — 단추(y 290) 쪽이라 띠가 곧 벽이다.
+		var play := float(WRECK.row_play)
+		y0 = maxf(minf(row.x + ex, c.y - play), float(WRECK.wy0) + ex)
+		y1 = minf(maxf(row.y - ex, c.y + play), float(WRECK.wy1) - ex)
 	else:
 		x0 = maxf(c.x - float(WRECK.sx), 4.0) + ex
 		x1 = minf(c.x + float(WRECK.sx), VIEW.x - 4.0) - ex
@@ -12929,7 +13007,40 @@ func _wreck_pa(e: Dictionary, j: int, n: int) -> float:
 	return 0.0 if float(e.t) >= off else fa
 
 
-func _wreck_one(e: Dictionary, c: Vector2, shelf: bool) -> void:
+#  밀랍이 얼마나 늘어나도 되는가 — **제 줄이 품는 만큼만.** 늘어난 조각의
+#  세로 반지름은 ex×sy 인데, 줄이 36px 뿐인 여섯 칸 선반에서 1.55 를 그대로
+#  늘리면 반지름이 29 가 되어 **이웃 동전 몸을 17px 파고든다**(검사가 수로
+#  잡았다, 2026-09-19). 줄이 넉넉하면 — 시체가 하나인 흔한 판이 그렇다 —
+#  표값 그대로 흘러내린다. 벽과 같은 규약이다: 좁으면 좁은 대로 줄인다.
+func _wreck_sy_max(ex: float, row: Vector2, mode: String) -> float:
+	if mode != "melt":
+		return 1.0
+	return clampf((row.y - row.x) / maxf(ex * 2.0, 0.001),
+			1.0, float(WRECK.melt_sy))
+
+
+#  조각 다각형 하나 — **그리기와 검사가 같은 함수를 부른다.** 밀랍만
+#  세로 배율이 늘어나며 흘러내리는데(조각이 흩어지는 것이 아니라 늘어나는
+#  것이 「녹는다」다), 그 한 줄이 _wreck_one 안에만 있으면 검사는 안
+#  늘어난 다각형을 재게 되어 「이웃 줄을 덮는가」가 실제보다 작게 나온다.
+func _wreck_poly(e: Dictionary, pc: Dictionary, cen: Vector2,
+		sy_max := 1.0) -> PackedVector2Array:
+	var br: Dictionary = BREAK.get(String(e.mat), BREAK[""])
+	var frozen: bool = float(e.t) < float(br.hold) and not motion_off
+	var sy := 1.0
+	if String(br.mode) == "melt" and not frozen:
+		sy = lerpf(1.0, sy_max,
+				clampf((float(e.t) - float(br.hold))
+						/ maxf(float(br.fly), 0.001), 0.0, 1.0))
+	var poly := PackedVector2Array()
+	for v in (pc.pts as PackedVector2Array):
+		var q: Vector2 = (v as Vector2).rotated(float(pc.rot))
+		poly.append(cen + Vector2(q.x, q.y * sy))
+	return poly
+
+
+func _wreck_one(e: Dictionary, c: Vector2, shelf: bool,
+		row := Vector2(-9999.0, 9999.0)) -> void:
 	var col := _wreck_col(String(e.why))
 	var t: float = float(e.t)
 	var i0: int = int(e.sd)
@@ -12984,16 +13095,13 @@ func _wreck_one(e: Dictionary, c: Vector2, shelf: bool) -> void:
 	var pcs: Array = e.pcs
 	for j in pcs.size():
 		var pc: Dictionary = pcs[j]
-		var cen := _wreck_clamp(cc2, pc.p, shelf, float(pc.get("ex", 0.0)))
-		#  밀랍만 **세로 배율이 1.00 → 1.55 로 늘어나며** 흘러내린다.
-		var sy := 1.0
-		if md == "melt" and not frozen:
-			sy = lerpf(1.0, 1.55,
-					clampf((t - hold) / maxf(fly, 0.001), 0.0, 1.0))
-		var poly := PackedVector2Array()
-		for v in (pc.pts as PackedVector2Array):
-			var q: Vector2 = (v as Vector2).rotated(float(pc.rot))
-			poly.append(cen + Vector2(q.x, q.y * sy))
+		#  벽에는 **늘어난 뒤의 반지름**을 넘긴다 — 안 그러면 밀랍이 늘어난
+		#  끝으로 벽을 넘는다. 가로도 같이 조여지지만 밀랍은 옆으로 거의
+		#  안 가므로(0~18) 보이는 것이 안 바뀐다.
+		var pex: float = float(pc.get("ex", 0.0))
+		var symx: float = _wreck_sy_max(pex, row, md)
+		var cen := _wreck_clamp(cc2, pc.p, shelf, pex * symx, row)
+		var poly := _wreck_poly(e, pc, cen, symx)
 		if poly.size() < 3:
 			continue
 		if frozen:
@@ -13020,7 +13128,7 @@ func _wreck_one(e: Dictionary, c: Vector2, shelf: bool) -> void:
 		for gr in (e.gr as Array):
 			if float(gr.t) < 0.0:
 				continue
-			draw_rect(Rect2(_wreck_clamp(cc2, gr.p, shelf, 1.0).round(),
+			draw_rect(Rect2(_wreck_clamp(cc2, gr.p, shelf, 1.0, row).round(),
 					Vector2.ONE), Color(gr.col, fa))
 	_wreck_text(e, c, col, shelf)
 

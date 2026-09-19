@@ -276,30 +276,107 @@ func _process(_d: float) -> bool:
 			"pixel": "r09", "hollow": "l03", "": "c04"}
 	var sh_bad := 0
 	var sh_worst := ""
-	for m in mats:
-		_hold([String(ids[m])])
-		g.wreck_seed += 1
-		g._wreck_add(0, g.owned[0], "boom", 2)
-		var c := Vector2(float(g.WRECK.x), float(g.WRECK.y0))
-		for f in 60:
-			_tick(1)
-			if g.wreck.is_empty():
-				break
-			for pc in (g.wreck[0].pcs as Array):
-				var ex: float = float(pc.get("ex", 0.0))
-				var p: Vector2 = g._wreck_clamp(c, pc.p, true, ex)
-				#  **회전까지 먹인 실제 꼭짓점**을 잰다 — 둘레 반지름은
-				#  상한이라 통과해도 실물은 더 들어와 있을 수 있지만,
-				#  반대쪽(실물이 더 나가는 것)은 여기서만 잡힌다.
-				for v in (pc.pts as PackedVector2Array):
-					var q: Vector2 = p + (v as Vector2).rotated(float(pc.rot))
-					shard_max = maxf(shard_max, q.x)
-					if q.x < 8.0 or q.x > 88.0 or q.y < 46.0 or q.y > 276.0:
-						sh_bad += 1
-						sh_worst = "%s (%.1f, %.1f)" % [m, q.x, q.y]
+	#  **줄 수를 1부터 상한까지 다 돌며 잰다.** 한 줄만 재던 첫 벌은
+	#  세로 벽이 띠 전체(y[46,276])인 것을 못 잡았다 — 유리는 0.215초에
+	#  50px 을 내려가는데 줄 간격은 36~42 뿐이라 구조적으로 한 줄을
+	#  넘었고, 그림에서 첫 줄 조각이 둘째 줄 「남았다」의 **온전한 동전
+	#  위에** 앉아 있었다(2026-09-19). 검사가 줄을 하나만 세우면 이
+	#  회귀가 초록인 채로 산다.
+	var deep := 0.0          # 이웃 동전 몸으로 가장 깊이 들어간 깊이
+	var deep_msg := ""
+	var play_min := 999.0    # 가장 빡빡한 줄이 실제로 가진 세로 놀이
+	for n in range(1, n_max + 1):
+		var gp: float = minf(float(g.WRECK.gap_max),
+				float(g.WRECK.span) / float(maxi(n - 1, 1)))
+		for k in n:
+			var cy2: float = float(g.WRECK.y0) + gp * float(k)
+			#  _wreck_draw 가 넘기는 것과 **같은 식**으로 줄의 몫을 세운다.
+			var row := Vector2(
+					float(g.WRECK.wy0) if k <= 0 else cy2 - gp * 0.5,
+					float(g.WRECK.wy1) if k >= n - 1 else cy2 + gp * 0.5)
+			for m in mats:
+				_hold([String(ids[m])])
+				g.wreck_seed += 1
+				g._wreck_add(0, g.owned[0], "boom", 2)
+				var c := Vector2(float(g.WRECK.x), cy2)
+				for f in 60:
+					_tick(1)
+					if g.wreck.is_empty():
+						break
+					for pc in (g.wreck[0].pcs as Array):
+						#  벽에 넘기는 것은 **늘어난 뒤의 반지름**이다 —
+						#  그리기가 쓰는 함수를 그대로 불러 낸다.
+						var ex0: float = float(pc.get("ex", 0.0))
+						var symx: float = g._wreck_sy_max(ex0, row,
+								String(g.BREAK[m].mode))
+						var ex: float = ex0 * symx
+						var p: Vector2 = g._wreck_clamp(c, pc.p,
+								true, ex, row)
+						#  **창을 직접 잰다.** 지나간 자리를 재면 옆으로만
+						#  간 조각이 0 으로 나와 창이 열려 있는지를 못
+						#  말한다 — 위아래로 아주 멀리 찍어 보고 어디서
+						#  멎는지로 창의 높이를 잰다.
+						#  ⚠ **띠가 조각보다 좁은 줄은 뺀다.** 밀랍은
+						#  늘어나며 둘레 반지름이 29 까지 가서 마지막
+						#  줄(중심 253)에서는 띠 아래끝 276 이 먼저 닿는다
+						#  — 거기서는 놀이보다 벽이 먼저고, 벽을 지키는
+						#  것은 바로 아래 꼭짓점 검사가 증명한다.
+						if cy2 - ex >= float(g.WRECK.wy0) \
+								and cy2 + ex <= float(g.WRECK.wy1):
+							play_min = minf(play_min,
+									g._wreck_clamp(c, Vector2(0.0, 999.0),
+											true, ex, row).y
+									- g._wreck_clamp(c, Vector2(0.0, -999.0),
+											true, ex, row).y)
+						#  **회전도 밀랍 늘어남도 먹인 실제 꼭짓점**을
+						#  잰다 — 그리기가 쓰는 바로 그 함수를 부른다.
+						#  규칙을 여기서 베껴 적으면 그리기가 달라져도
+						#  검사가 초록인 채로 남는다.
+						for q in g._wreck_poly(g.wreck[0], pc, p, symx):
+							shard_max = maxf(shard_max, q.x)
+							if q.x < 8.0 or q.x > 88.0 \
+									or q.y < 46.0 or q.y > 276.0:
+								sh_bad += 1
+								sh_worst = "n=%d k=%d %s (%.1f, %.1f)" \
+										% [n, k, m, q.x, q.y]
+							#  이웃 줄의 **동전 몸**을 얼마나 파고드는가.
+							for nb in [-1, 1]:
+								if k + nb < 0 or k + nb >= n:
+									continue
+								var nc := Vector2(float(g.WRECK.x),
+										cy2 + gp * float(nb))
+								var dp: float = float(g.PANEL.r) \
+										- q.distance_to(nc)
+								if dp > deep:
+									deep = dp
+									deep_msg = "n=%d k=%d %s" % [n, k, m]
 	_ok("조각이 글자 왼끝 96 을 안 넘는다", sh_bad == 0 and shard_max <= 88.0,
 			"가장 오른쪽 꼭짓점 x %.1f (벽 88 · 글자 96)%s"
 			% [shard_max, (" · " + sh_worst) if sh_worst != "" else ""])
+	#  **이웃 줄을 덮지 않는다.** 비대칭이 「조각인가 온전한가」 하나에
+	#  실려 있으므로 이웃의 온전한 실루엣을 조각이 덮으면 그 자리에서
+	#  읽기가 무너진다. 꼭짓점 하나가 테를 스치는 것까지는 둔다 — 줄
+	#  간격이 36~42 인데 동전 지름이 38 이라 스침은 구조적으로 못 피한다.
+	#  **자는 계산해서 나온다**: 조각 중심이 제 줄에서 최대 row_play(8)
+	#  만큼 가고 둘레 반지름이 PANEL.r(19) 이라 꼭짓점은 27 까지 간다.
+	#  가장 빡빡한 줄 간격이 36 이므로 이웃 중심에서 9 가 남고, 파고드는
+	#  깊이의 상한은 19 − 9 = 10 이다. 그보다 깊으면 놀이가 커졌거나
+	#  조각이 커진 것이다(밀랍이 늘어난 채로 오면 여기가 먼저 빨개진다).
+	var gap_min: float = minf(float(g.WRECK.gap_max),
+			float(g.WRECK.span) / float(maxi(n_max - 1, 1)))
+	var deep_bar: float = float(g.PANEL.r) - (gap_min
+			- float(g.WRECK.row_play) - float(g.PANEL.r))
+	_ok("조각이 이웃 줄 동전 몸을 안 덮는다", deep <= deep_bar,
+			"가장 깊이 파고든 것 %.1fpx (자 %.1f = 테 %.0f − 남은 %.0f)%s"
+			% [deep, deep_bar, float(g.PANEL.r),
+					gap_min - float(g.WRECK.row_play) - float(g.PANEL.r),
+					(" · " + deep_msg) if deep_msg != "" else ""])
+	#  **못 박으면 도로 온전해 보인다.** 조각이 하나도 안 움직이면 여섯이
+	#  다시 원물건 실루엣으로 타일링되어 「안 부서진 것」이 된다.
+	_ok("가장 빡빡한 줄에도 세로 놀이가 있다",
+			play_min >= float(g.WRECK.row_play) - 0.01,
+			"가장 좁은 줄의 세로 창 %.1fpx (최소 %.1f)"
+			% [play_min, float(g.WRECK.row_play)])
 
 	# ── ⑦ 좌표가 두 번 눌리는 함정 ──────────────────────
 	#  _shard_cut 이 내는 점은 **면 좌표**(chip_r 22.04)고 랙 동전은
@@ -419,6 +496,29 @@ func _process(_d: float) -> bool:
 	g._wear_spent()
 	_ok("소진은 hand_drop 이다", String(g.wreck_snd_last) == "hand_drop",
 			"울린 것 %s" % g.wreck_snd_last)
+	#  **상한에서 잘라내도 묶음이 안 잘린다.** 앞에서 지우면 인덱스가
+	#  통째로 내려가는데 묶음 시작을 같이 안 밀면 이번 묶음의 **앞부분이
+	#  소리 훑기에서 빠진다** — 첫 장이 유리였으면 유리 대신 기본음이
+	#  나고, 잘린 수가 묶음 시작과 같아지면 range 가 통째로 비어 **한 번도
+	#  안 운다.** 이 일감의 원인이 「판 끝에 소리가 0」이었으니 되살아나면
+	#  안 되는 자리다(2026-09-19, 검토가 잡았다).
+	_hold(["c04"])
+	g.wreck_seed += 1
+	g.wreck_snd_from = g.wreck.size()
+	g._wreck_add(0, _find("c04"), "rdec", 0)       # 앞 묶음 하나
+	g._wreck_sfx()
+	g.wreck_seed += 1
+	g.wreck_snd_from = g.wreck.size()
+	g._wreck_add(0, _find("c03"), "boom", 2)       # 이번 묶음의 첫 장이 유리다
+	for ci in range(int(g.WRECK.cap) - 1):         # 여기서 앞 묶음이 잘려 나간다
+		g._wreck_add(0, _find("c04"), "rdec", 0)
+	g.wreck_snd_n = 0
+	g._wreck_sfx()
+	_ok("상한에서 잘라내도 묶음의 첫 장이 안 빠진다",
+			g.wreck_snd_n == 1
+			and String(g.wreck_snd_last) == "coin_break_glass",
+			"시체 %d(상한 %d) → %s ×%d" % [g.wreck.size(),
+					int(g.WRECK.cap), g.wreck_snd_last, g.wreck_snd_n])
 
 	# ── ⑩ 모션 끄기는 일부러 다르다 ─────────────────────
 	#  _smash_at 의 모션 끄기(아무것도 없다)와 **일부러 다른** 자리다.
@@ -498,6 +598,34 @@ func _process(_d: float) -> bool:
 	g._wear_spent()
 	_ok("판 중 시체는 슬롯을 고른다", g._wreck_scr() == 1,
 			"state PICK → scr %d" % g._wreck_scr())
+	#  **그 슬롯이 산 동전의 칸이면 안 된다.** e.i 는 지우기 전의 자리라
+	#  owned.remove_at 이 뒷 동전을 그 칸으로 당긴다 — 조각과 「다 썼다」
+	#  넉 자가 멀쩡한 이웃에 붙어 **화면이 산 동전을 죽었다고 말했다**
+	#  (2026-09-19, 그림으로 잡았다). 가운데 칸이 죽는 판을 세워 못 박는다.
+	#  배정은 그리기 밖(_wreck_seat)이라 헤드리스에서 그대로 부른다.
+	_hold(["c04", "c34", "c04"])
+	g.owned[1].gs = int(g.owned[1].v) / int(g.owned[1].gstep)
+	g._wear_spent()
+	g._wreck_seat(1)
+	var seat_i: int = int(g.wreck[0].si) if g.wreck.size() == 1 else -1
+	_ok("시체는 빈 칸에 선다",
+			g.owned.size() == 2 and seat_i == 2,
+			"산 동전 %d장(칸 0·1) → 시체는 칸 %d" % [g.owned.size(), seat_i])
+	#  둘이 같은 프레임에 죽으면 다음 빈 칸으로 한 칸씩 민다.
+	_hold(["c34", "c34", "c04"])
+	for w in 2:
+		g.owned[w].gs = int(g.owned[w].v) / int(g.owned[w].gstep)
+	g._wear_spent()
+	g._wreck_seat(1)
+	var two_ok: bool = g.wreck.size() == 2 and g.owned.size() == 1 \
+			and int(g.wreck[0].si) != int(g.wreck[1].si)
+	for we in g.wreck:
+		if int(we.si) < g.owned.size():
+			two_ok = false
+	_ok("둘이 같이 죽어도 칸을 안 겹친다", two_ok,
+			"산 동전 %d장 → 칸 %s" % [g.owned.size(),
+					str([int(g.wreck[0].si), int(g.wreck[1].si)])
+					if g.wreck.size() == 2 else "(시체 %d)" % g.wreck.size()])
 	g.state = g.S.CLEAR
 	_ok("정산에서는 선반을 고른다", g._wreck_scr() == 0,
 			"state CLEAR → scr %d" % g._wreck_scr())
