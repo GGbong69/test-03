@@ -650,6 +650,10 @@ static func _rows(g: Node) -> Array:
 				{"n1": "판매 단추 세우기", "t": "act", "a": "sell_arm"},
 				{"n1": "툴팁 얕게/깊게", "t": "act", "a": "tip_layer"},
 				{"n1": "로비 겨눔 세우기", "t": "act", "a": "lobby_arm"},
+				#  두 겨눔이 같은 문법이므로 목록에서도 붙어 서야 「같은 물건
+				#  둘」로 읽힌다. 새 런 화면을 여닫지 않고 붉은 띠 · 굵은 획 ·
+				#  짙어진 글자를 **그 자리에서** 본다. 2026-09-20
+				{"n1": "새 런 겨눔 세우기", "t": "act", "a": "start_arm"},
 			]
 		2:
 			return [
@@ -685,6 +689,17 @@ static func _rows(g: Node) -> Array:
 				{"n1": "해금 전부 잠그기", "t": "act", "a": "unlock_none"},
 				{"n1": "통계 지우기", "t": "act", "a": "stat_clear"},
 				{"n1": "저장 통째로 지우기", "t": "act", "a": "wipe"},
+				#  ── 이어하기 넷이 짝이다 (2026-09-20) ──────────────
+				#  「적기」와 「지우기」가 서로를 되돌리고, 「보기」가 디스크에
+				#  무엇이 앉았는지를 **되살리지 않고** 확인시킨다 — 되살리기는
+				#  화면을 바꾸므로 **보는 길과 타는 길을 갈라야** 「적히긴
+				#  했는데 화면이 이상한가」를 한 화면에서 판별할 수 있다.
+				#  「적기」는 _knot_ok() 문지기가 **정말 막는지**를 손으로 보는
+				#  유일한 길이다 — 팩을 뜯는 중에 눌러 보면 「(매듭 아님)」이 붙는다.
+				{"n1": "이어하기 적기", "t": "act", "a": "run_save"},
+				{"n1": "이어하기 되살리기", "t": "act", "a": "run_load"},
+				{"n1": "이어하기 보기", "t": "act", "a": "run_peek"},
+				{"n1": "이어하기 지우기", "t": "act", "a": "run_drop"},
 			]
 		_:
 			# 소리는 프로브가 못 본다 — 수치가 맞아도 손에 안 맞는 것이 여기서만
@@ -952,6 +967,16 @@ static func _cur_name(g: Node, e: Dictionary) -> String:
 static func _say(t: String) -> void:
 	msg = t
 	msg_t = 2.5
+
+
+#  이어하기 매듭 셋의 이름. 파일에는 영문 열쇠로 앉고 화면에는 한국어로 선다 —
+#  개발자 판의 다른 줄이 전부 한국어라 여기만 영문이면 눈이 한 번 걸린다.
+static func _knot_kr(at: String) -> String:
+	match at:
+		"leg": return "판 선택"
+		"pick": return "판 첫머리"
+		"shop": return "상점"
+	return at
 
 
 # 조준 방식을 **동전으로도** 쥐여 준다. 값만 박아 두면 다음 _start_leg
@@ -1295,6 +1320,15 @@ static func _run(g: Node, e: Dictionary) -> void:
 			g.lobby_arm_t = 0.0
 			_say("로비 겨눔 %s" % ("섬" if g.lobby_arm else "풀림"))
 			return
+		"start_arm":
+			g.start_arm = not g.start_arm
+			#  ⚠ 시계를 0 으로 둔다 — START_ARM_MIN(0.40) 하한 때문에 곧장
+			#  확정이 안 된다. **그것이 맞다.** 개발자 판으로 세운 겨눔도
+			#  손으로 세운 겨눔과 같은 자를 써야 「여기서는 되는데 손으로는
+			#  안 된다」가 안 생긴다.
+			g.start_arm_t = 0.0
+			_say("새 런 겨눔 %s" % ("섬" if g.start_arm else "풀림"))
+			return
 		"rank_off":
 			#  새 테 한 벌(밴드·박음·물림·플라크·맥동)을 통째로 끄고 옛 그림으로
 			#  되돌린다. 전·후를 **같은 자리에서** 눈으로 대는 것이 「정말
@@ -1508,6 +1542,36 @@ static func _run(g: Node, e: Dictionary) -> void:
 		"stat_clear", "wipe":
 			Save.wipe()
 			_say("저장 지움")
+			return
+		"run_save":
+			#  지금 화면에 맞는 매듭으로 적는다. 판 선택 · 상점 말고는 전부
+			#  「판 첫머리」다 — 던지는 중에 껐을 때 되살아나는 그 자리다.
+			var at := "leg" if g.state == g.S.LEG \
+					else ("shop" if g.state == g.S.SHOP else "pick")
+			var okk: bool = g._knot_ok()
+			g._knot(at)
+			_say("판 %d · %d골드 · %s%s" % [g.leg_no, g.gold, _knot_kr(at),
+					"" if okk else "  (매듭 아님 — 안 적혔다)"])
+			return
+		"run_load":
+			_say("되살렸다" if g._run_load() else "이어할 것이 없다")
+			return
+		"run_peek":
+			#  **되살리지 않고** 읽는다. 동전 장수와 매물 수를 적는 이유:
+			#  표에서 id 가 사라져 조용히 떨어진 줄을 사람에게는 안 말하기로
+			#  했으므로(효과와 값만), 그 수를 보는 자리가 **여기 하나여야** 한다.
+			var pk: Dictionary = g._run_peek()
+			if pk.is_empty():
+				_say("이어할 것이 없다")
+			else:
+				_say("판 %d · %d골드 · 동전 %d · 매물 %d · %s · %s/%s · 슬롯 %d"
+						% [int(pk.leg_no), int(pk.gold), int(pk.owned),
+						int(pk.stock), _knot_kr(String(pk.at)),
+						String(pk.pack), String(pk.league), int(pk.slot)])
+			return
+		"run_drop":
+			Save.run_drop()
+			_say("지웠다")
 			return
 
 	# 목록형 — 지금 고른 것을 적용한다

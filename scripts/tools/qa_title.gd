@@ -167,7 +167,16 @@ func _run() -> void:
 	_ok("판 밖을 누르면 안 난다", g.ttl_fly.is_empty() and g.ttl_stuck.is_empty())
 
 	_title()
-	g._click(g._menu_rect(1).get_center())   # 「컬렉션」
+	#  ⚠ 여기는 _menu_rect(1) 이 「컬렉션」이라고 **번호로** 박혀 있었다.
+	#  2026-09-20 에 줄이 다섯이 되면서(「계속하기」가 둘째) 그 번호가
+	#  딴 줄을 가리켰다 — 줄을 하나 늘릴 때마다 깨지는 단언이다.
+	#  표에서 **이름으로** 찾는다. 밑에서 names 를 모으는 그 어법이다.
+	var ci := -1
+	for i in g.TITLE_ROWS.size():
+		if String(g.TITLE_ROWS[i].n) == "컬렉션":
+			ci = i
+	_ok("글줄에 컬렉션이 있다", ci >= 0)
+	g._click(g._menu_rect(ci).get_center())
 	_ok("글줄은 여전히 글줄이다", g.state == g.S.COLLECT and g.ttl_fly.is_empty(),
 			"state=%d" % g.state)
 

@@ -194,6 +194,7 @@ func _run() -> void:
 	#  그래서 qa_ui 의 어법 그대로 **소스를 읽어** 센다.
 	var src := FileAccess.get_file_as_string("res://scripts/game.gd")
 	var thick_calls := 0
+	var thick_armed := 0
 	var band_calls := 0
 	for ln in src.split("\n"):
 		var t := String(ln).strip_edges()
@@ -204,12 +205,20 @@ func _run() -> void:
 		if t.begins_with("func _row_band("):
 			continue
 		band_calls += 1
-		#  인자 여덟 = thick 을 넘긴 자리. 「3.0 if armed else 1.0」이 그 한 줄이다.
-		if t.contains("if armed else"):
+		#  인자가 한 줄에 안 끝나면(끝이 쉼표) 여덟째 = 굵기를 넘긴 자리다.
+		if t.ends_with(","):
 			thick_calls += 1
+			if t.contains("if armed else"):
+				thick_armed += 1
 	_ok("띠를 부르는 자리가 남아 있다", band_calls >= 5, "%d곳" % band_calls)
-	_ok("굵기를 넘기는 자리는 겨눔 한 곳뿐",
-			thick_calls == 1, "%d곳 / 전체 %d곳" % [thick_calls, band_calls])
+	#  ⚠ 여기는 「겨눔 **한 곳뿐**」이었다. 2026-09-20 에 「새 런 시작」 겨눔이
+	#  둘째 자리로 들어오면서 그 수가 깨졌다 — **수가 아니라 조건이 계약이다.**
+	#  굵기는 겨눔에서만 쓴다(색 하나로만 말하면 WCAG 1.4.1). 겨눔과 무관하게
+	#  굵기를 미는 줄이 하나라도 있으면 붉다.
+	_ok("굵기를 넘기는 자리는 전부 겨눔이다",
+			thick_calls >= 1 and thick_armed == thick_calls,
+			"겨눔 %d / 굵기 %d / 띠 전체 %d곳"
+			% [thick_armed, thick_calls, band_calls])
 	#  설정 글줄을 그리는 함수 안의 draw_string 수. 글줄 이름 하나와 게이지
 	#  수 하나, 딱 둘이다 — 겨눔이 **글자를 한 자도 안 더했다**는 기계적 증거다.
 	var in_fn := false

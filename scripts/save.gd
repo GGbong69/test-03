@@ -113,6 +113,30 @@ const S_TAL := "세기"
 #  해금(S_UNL)과 모양이 같지만 **칸을 가른다.** unlock_keys() 는 컬렉션
 #  화면의 계약이라, 거기에 가르친 기록이 섞이면 컬렉션이 배움을 센다.
 const S_TUT := "배움"
+#  이어하기 — 진행 중인 런 하나를 통째로 담는 절.
+#  **절을 가르는 이유는 지우는 방식에 있다.** 런이 끝나면 이 절만
+#  erase_section 으로 통째로 지우는데, 해금(S_UNL)·통계(S_STA)와 한 절이면
+#  그 한 줄이 사람의 진도를 지운다.
+#  slot_info(290 둘레)는 [해금] 키만 세므로 이 절은 그 셈에 안 걸린다 —
+#  직접 읽어 확인했다. 프로필 화면의 「해금 N개」가 이것 때문에 늘 일은 없다.
+#
+#  ⚠ **새 파일을 안 판다.** 절이면 run_set → boot() → _pp() → slot_path()
+#  → _tool_run() → TOOL_PROF 가 **저절로** 도구 자리로 돌린다.
+#  오늘 이 가지에서 직접 센 것: scripts/tools 의 도구 204개 중 _new_run() 을
+#  부르는 것이 116개고, 그중 **22개**는 Save.path 조차 안 박는다
+#  (axis_probe · build_probe · curve_probe · econ_probe · lever_probe ·
+#  probe_league · probe_music · probe_packs · probe_runinfo · probe_sell_any ·
+#  probe_track · settle_probe · shot_clear · shot_drag · shot_quad ·
+#  shot_worst · swap_shot · thumb · track_probe · zz_adv · zz_aim · zz_over).
+#  새 파일이면 그 스물둘이 사람의 진행 중인 런을 곧장 쓰고 지운다 —
+#  검사 한 번에 런이 날아간다. 세는 법:
+#      comm -23 <(grep -l "_new_run()" scripts/tools/*.gd | sort) \
+#               <(grep -l "Save.path"  scripts/tools/*.gd | sort)
+#  2026-09-20
+const S_RUN := "이어하기"
+#  저장 판. 다르면(낮든 높든) 조용히 버린다. 표의 뼈대(판 수·갈래·매듭
+#  이름)가 바뀌는 날 2 로 올린다.
+const RUN_VER := 1
 
 # 통계 키 — 전부 int 누적이거나 최댓값이다.
 #  누적(bump): 던진 다트·트리플·불·빗나감·구매·판매·리롤·사탕·런·완주
@@ -499,3 +523,50 @@ static func wipe() -> void:
 	boot()
 	_cfg = ConfigFile.new()
 	flush()
+
+
+# ── 이어하기 ────────────────────────────────────────────
+#  진행 중인 런 하나. 게임이 「안전한 자리」(판 선택 · 판 첫머리 · 상점)에서
+#  값을 통째로 받아 적고, 제목 화면의 「계속하기」가 그것을 되살린다.
+#
+#  여기는 **담는 자리일 뿐**이다. 무엇을 담는지는 game.gd 의 _run_save 가
+#  정한다 — 저장 계층이 런의 모양을 알면 런 상태가 하나 늘 때 고칠 자리가
+#  둘이 된다.
+#
+#  프로필 파일 안의 한 절이라 **슬롯마다 저절로 따로**고, erase_slot() ·
+#  wipe() 가 파일·설정째 갈아 치우므로 따로 지울 자리를 안 만든다.
+
+static func run_get(key: String, dflt: Variant) -> Variant:
+	boot()
+	return _cfg.get_value(S_RUN, key, dflt)
+
+
+#  ⚠ **flush 를 안 한다.** 한 매듭에 서른 남짓이 줄줄이 들어오므로 열쇠마다
+#  디스크를 치면 매듭 하나에 서른 번 쓴다. bump() 가 「한 발 던질 때마다
+#  디스크를 때리면 안 된다」로 같은 판단을 내린 자리가 위에 있다.
+#  부르는 쪽(_run_save)이 **끝에 한 번** flush() 한다.
+static func run_set(key: String, v: Variant) -> void:
+	boot()
+	_cfg.set_value(S_RUN, key, v)
+
+
+#  이어할 것이 있는가. **슬롯을 올리지 않고 묻는다** — 제목 화면이 이 한
+#  줄로 글줄을 흐린다. slot_info 가 「보여 주려고 올렸다가 안 고르고 나가면
+#  남의 프로필이 올라온 채로 남는다」를 피한 그 규약이다.
+#  제목에서 매 프레임 불리지만 boot() 이 _at == want 면 즉시 return 이라
+#  디스크에 안 닿는다.
+static func run_live() -> bool:
+	boot()
+	return int(_cfg.get_value(S_RUN, "ver", 0)) == RUN_VER
+
+
+#  ⚠ **제 안에서 flush 한다.** 완주 갈래 넷 중 하나(목숨이 마지막 판에서
+#  터진 완주 — game.gd 의 `state = S.OVER; won = true; _sfx("run_win")`
+#  넉 줄짜리 좁은 갈래)에만 Save.flush() 가 **없다**. 부르는 쪽에 맡기면
+#  거기 하나가 빠져 **이긴 런이 「계속하기」로 되살아난다.** 손으로는 거의
+#  못 밟는 갈래라 눈으로는 영영 안 걸린다. 2026-09-20
+static func run_drop() -> void:
+	boot()
+	if _cfg.has_section(S_RUN):
+		_cfg.erase_section(S_RUN)
+		flush()

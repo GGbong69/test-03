@@ -519,6 +519,32 @@ var magazine := []              # 영구 구성 (상점에서 바꾼다)
 var remaining := []             # 이번 판에 남은 다트
 var cur_dart := {}              # 지금 던지는 다트
 
+# ── 런 줄기 — 되감을 때 다시 굴리는 것만 여기서 뽑는다 ─────────
+#  이어하기의 매듭 하나가 **판 첫머리**(_begin_leg 들머리)다. 거기서 되살리면
+#  _begin_leg → _start_leg 이 다시 도는데, 그때 아래 셋이 새로 뽑히면
+#  껐다 켜기 한 번이 곧 **다시 뽑기**가 된다:
+#      mark_sec   「목표물」 챌린지가 이 판에 뽑는 칸   (_start_leg)
+#      sealed     둔화·리그이 봉인하는 동전 자리         (_start_leg)
+#      칸 섞기    _board_shuffle 의 sh.shuffle()
+#  봉인이 핵심 동전에 걸렸을 때 껐다 켜서 다시 뽑는 길이 열리는 것이
+#  세이브 스커밍이다. 셋만 제 줄기로 옮기면 되감기가 **무르기**로 남고
+#  **리롤**이 안 된다 — 사용자가 낸 값은 다트 한 발이지 다른 판이 아니다.
+#
+#  나머지 굴림(매물 · 보스 제약 · 뱃지)은 **전역 그대로 둔다.** 뽑힌 결과를
+#  id 로 받아 적으므로 다시 굴릴 일이 없다. 이 저장소에 randomize() 가 한
+#  줄도 없고 seed() 는 도구·그림 굽기만 쓰므로, 고도가 실행마다 전역 RNG 를
+#  임의로 심는다 — 「씨앗을 적고 다시 굴린다」는 전역으로 성립하지 않는다.
+#  그래서 **뽑힌 결과를 적는 것**이 기본 수법이고, 되감는 셋만 줄기를 받는다.
+#
+#  ⚠ _start_leg 에 굴림을 새로 더하려거든 **run_rng 를 써라.** 전역 randi()
+#  를 쓰면 되감기가 **조용히** 다른 판이 된다 — 화면으로도 기존 검사로도
+#  안 보인다. resume_probe 4차가 그 파수다. 2026-09-20
+var run_seed := 0
+var run_rng := RandomNumberGenerator.new()
+#  매듭에서의 run_rng.state. 매듭을 선언하는 그 자리에서 잡는다 —
+#  「굴리기 **전**」 자리여야 되감아 같은 것이 나온다.
+var knot_rng := 0
+
 # ── 진행 상태 ─────────────────────────────────────────────
 var state: int = S.AIM_V
 var leg_no := 1
@@ -1041,6 +1067,451 @@ func _intro_over(k: float) -> void:
 
 
 # ══════════════════════════════════════════════════════════
+#  이어하기 — 매듭 셋에서 적고, 그 자리로 되살린다
+# ──────────────────────────────────────────────────────────
+#  사용자가 고른 것은 **안전한 자리에서만 되살린다**이다(2026-09-19).
+#  판 선택 · 판 첫머리 · 상점처럼 매듭이 지어진 자리에서 적고, 던지는 중에
+#  껐으면 **그 판의 첫머리**로 돌아온다. 다트 한 발을 잃는 대신 저장이
+#  단순하고 깨질 자리가 적다.
+#
+#  **새 파일을 안 판다.** 프로필 파일 안의 한 절(Save.S_RUN)이다 — 그러면
+#  도구가 사람의 저장을 못 밟는 규약(TOOL_PROF)을 공짜로 탄다. 까닭은
+#  save.gd 의 S_RUN 머리말에 적어 두었다.
+#
+#  ── 적지 않는 것은 전부 **함수**다 ──────────────────────
+#  적으면 출처가 둘이 되어 언젠가 갈라진다. 되살릴 때 다시 낸다:
+#    · 표에서      target(_target_at) · 판 다트 수(darts_of) · 상점 폭
+#    · _board_bake()      sectors · 링 폭 여덟 · 배수 넷 (mods_own 의 함수)
+#    · _modes_refresh()   score_mode · aim_mode · calc_col · score_mul
+#    · _begin_leg()       active_mods · target
+#    · _start_leg()       remaining · cur_dart · grip_* · total · streak …
+#      **판 첫머리로 되살리는 선택이 이 서른 남짓을 통째로 지운다** —
+#      이것이 사용자가 고른 방식의 실익이다.
+#    · 그림·연출 전부(drop · waste · shards · boost_* · wreck · pops …)
+#
+#  ── 세이브 스커밍 ────────────────────────────────────────
+#  막는다: 상점 리롤(매물을 통째로 적고 되살릴 때 _roll_stock 을 안 부른다)
+#          · 리롤 결과 무르기(리롤이 **끝나는 순간** 그 결과를 적는다)
+#          · 팩 내용(뜯는 중에는 문지기가 한 글자도 안 적는다)
+#          · 봉인 칸 · 건너뛸 판 다시 고르기(pick 매듭이 _start_leg 앞이다)
+#  안 막는다: 판 첫머리로 되감기. 사용자가 낸 값이고, run_rng 덕에 되감아도
+#          **같은 판**이 서므로 **무르기**이지 **리롤**이 아니다.
+# ══════════════════════════════════════════════════════════
+
+#  매듭 셋. 이 밖의 값이 적혀 있으면 남이 고친 파일이라 통째로 버린다.
+const KNOTS := ["leg", "pick", "shop"]
+
+#  ── 적는 목록은 **여기 하나다** ─────────────────────────
+#  열쇠 이름이 곧 변수 이름이라 get/set 으로 오간다. 흩어 두면 런 상태가
+#  하나 늘 때 반드시 빠뜨린다 — 적는 쪽과 되살리는 쪽 둘을 같이 고쳐야
+#  하는 목록은 둘 중 하나가 늘 뒤처진다.
+#  둘째 칸은 **빈 값**이다. 저장에 그 열쇠가 없으면 이 값으로 떨어지므로,
+#  되살리기가 _new_run() 을 안 지나도 지난 런의 찌꺼기가 안 남는다.
+#  전부 원시값(int · bool · String · 그것들의 배열/사전)이라 ConfigFile 에
+#  **한 번의 변환도 없이** 앉는다.
+const RUN_PLAIN := [
+	# ── 런 단위 진도 ──
+	["leg_no", 1], ["gold", 0], ["throw6", 0],
+	#  ⚠ shop_seen 은 배움 게이트다. 되살리기가 이 값을 올리면 상점 설명이
+	#  밀린다 — _open_shop 을 안 부르는 이유 중 하나가 이것이다.
+	["shop_seen", 0], ["bought_item", false], ["carry_darts", 0],
+	["track_lv", {}],        # 열쇠가 **int**(트랙 id)다
+	["track_hits", {}],      # 같음
+	["zone_hist", {}],       # 열쇠가 **String**(zone 이름)이다 — 위 둘과 다르다
+	["run_unlocked", []],    # [{k, n}] — 이미 원시값이다
+	# ── 뱃지 ──
+	#  leg_tags_round 가 _open_leg 의 문지기다. **이것이 없으면 되살린 뒤
+	#  라운드 뱃지를 통째로 다시 굴린다.**
+	["leg_tags_round", 0], ["leg_skipped", {}], ["tag_copy", 0],
+	#  pending_tags 는 {kind,v,n,d,w,rar} 여섯이 **전부 원시값**이라 사전
+	#  그대로 싣는다. id 칸을 새로 팔 이유가 없다 — _spend_tags 는 kind·v 만
+	#  읽고, 나머지 넷은 곁줄 글자이며 **이미 받은 사실**이라 표가 바뀌어도
+	#  옛 값이 맞다(다음 판·다음 상점 안에 소진된다).
+	["pending_tags", []],
+	# ── 보드 확장 ──
+	#  **판 기하 여덟·배수 넷의 유일한 출처다**(_board_bake 가 여기서 낸다).
+	["mods_own", []],
+	# ── 보스 ──
+	#  셋 다 int/String 이라 어제 원시값으로 잡아 둔 설계가 그대로 앉는다.
+	["boss_mods", {}],       # 판번호 → PackedStringArray(제약 id)
+	["boss_void", {}],       # 판번호 → bool
+	["boss_seen", []],       # 제약 id 목록
+]
+
+#  상점 갈래마다 매물이 사는 표. 되살릴 때 id 로 행을 도로 찾는다.
+#  _roll_stock 의 pools 와 **같은 갈래 이름**이다 — 갈리면 되살린 상점이
+#  조용히 다른 물건을 판다.
+func _stock_pool(kind: String) -> Array:
+	match kind:
+		"item": return GameData.items()
+		"mod": return GameData.mods()
+		"dart": return GameData.darts()
+		"cons": return GameData.candies()
+		"fix": return GameData.fixtures()
+		"boost": return GameData.boosters()
+	return []
+
+
+#  표에서 id 하나를 찾는다. 없으면 빈 사전이다 — 표에서 줄이 사라져도
+#  런이 안 죽는다(_mod_row 의 그 태도 그대로).
+func _row_by_id(pool: Array, id: String) -> Dictionary:
+	for r in pool:
+		if String(r.get("id", "")) == id:
+			return r
+	return {}
+
+
+#  사전 줄들을 id 배열로. 적을 때는 **id 만** 적는다 — 사전을 통째로 적으면
+#  표가 바뀔 때 옛 수치가 부활해 「밸런스는 나중에」가 조용히 깨진다.
+func _ids_of(rows: Array) -> PackedStringArray:
+	var out := PackedStringArray()
+	for r in rows:
+		out.append(String(r.get("id", "")))
+	return out
+
+
+#  id 배열을 표의 행으로. **없는 id 는 그 줄만 조용히 버린다**(런은 산다).
+#  ⚠ 무엇이 없어졌는지 사람에게 말하지 않는다 — 표에서 줄이 사라지는 일은
+#  개발 중에만 일어나고, 「무엇이 빠졌다」는 효과도 값도 아닌 해설이다.
+#  그 수는 개발자 판의 「이어하기 보기」가 적는다.
+func _rows_of(pool: Array, ids: PackedStringArray) -> Array:
+	var out := []
+	for id in ids:
+		var r := _row_by_id(pool, String(id))
+		if not r.is_empty():
+			out.append(r.duplicate())
+	return out
+
+
+#  런 줄기를 새로 심는다. 전역에서 씨앗 하나만 받는다.
+func _run_seed_new() -> void:
+	run_seed = randi()
+	run_rng.seed = run_seed
+	run_rng.state = 0
+	knot_rng = 0
+
+
+#  차례를 지키는 섞기. Array.shuffle() 은 전역을 쓰므로 못 쓴다.
+#  합이 그대로라 판값이 안 변하는 것은 _board_shuffle 의 규약 그대로다.
+func _shuffle_run(a: Array) -> void:
+	for i in range(a.size() - 1, 0, -1):
+		var j := int(run_rng.randi() % (i + 1))
+		var t: Variant = a[i]
+		a[i] = a[j]
+		a[j] = t
+
+
+#  ── 문지기 하나 ─────────────────────────────────────────
+#  쓰는 길이 **이 하나만** 지나게 한다. 흩어 두면 언젠가 한 갈래가 안
+#  지나간다. 발라트로는 팩 여는 중(STATE=9)으로 적힌 저장이 **소프트락**
+#  이었고 — 수리하려면 9 를 8 로 손으로 고쳐야 했다 — 패 연출 중 재장전이
+#  소모품을 두 번 먹여 1.0.0n 에서 런 중 이어하기를 뺐다. 2026-09-20
+func _knot_ok() -> bool:
+	if boost_t >= 0.0 or boost_pick > 0:      # 팩 뜯는 중 · 쏟은 것을 집는 중
+		return false
+	if sweep_live or swap_live:               # 쓸기 · 화면 갈이
+		return false
+	if photo != "" or photo_rack != "":       # 사진이 테이블 · 동전을 갈아 낀 중
+		return false
+	return leg_no >= 1 and not magazine.is_empty()
+
+
+#  매듭을 잡고 적는다. **규약이 하나라 빠뜨릴 자리가 없다** — 매듭을
+#  선언하는 그 자리에서 run_rng.state 를 같이 잡는다. leg·shop 은 그 사이에
+#  run_rng 를 안 건드리므로 지금 값 그대로이고, **pick 만 _start_leg() 앞에서
+#  잡는 것이 뜻이 있다**(거기서 봉인·목표물·칸 섞기가 굴려진다).
+func _knot(at: String) -> void:
+	knot_rng = int(run_rng.state)
+	_run_save(at)
+
+
+#  상점에서 값이 바뀌고 연출이 끝난 직후마다. **리롤이 끝나는 순간 그 결과를
+#  적는 것이 세이브 스커밍 방어의 핵심이다** — 난수 자리표를 못 쓰니(고도에
+#  전역 RNG 의 자리표를 읽는 길이 없다) 「되살린 뒤 첫 리롤」은 새 뽑기일
+#  수밖에 없는데, 결과를 곧장 적으면 「리롤 → 마음에 안 듦 → 껐다 켬 →
+#  다른 결과」가 성립하지 않는다.
+func _knot_shop() -> void:
+	if state == S.SHOP:
+		_knot("shop")
+
+
+func _run_save(at: String) -> void:
+	if not _knot_ok():
+		return
+	Save.run_set("ver", Save.RUN_VER)
+	#  프로필 파일을 손으로 옮겨 남의 런이 열리는 것을 막는다.
+	Save.run_set("slot", Save.slot())
+	Save.run_set("at", at)
+	Save.run_set("seed", run_seed)
+	Save.run_set("rng", knot_rng)
+	#  [고름] 칸에도 pack·league 가 있지만 그건 「마지막에 고른 것」이고
+	#  이건 「이 런의 것」이다. 되살리기 전에 프로필 화면에서 다른 통을
+	#  골랐으면 둘이 갈린다.
+	#  ⚠ **실제로 선 행의 id 를 적는다.** GameData.pack 은 빈 값일 수 있고
+	#  (「빈 값이면 표의 첫 행」이 그 규약이다), 그러면 되살릴 때 「표에
+	#  있는 id 인가」를 물을 수가 없다 — 빈 값과 사라진 id 가 같은 꼴이 된다.
+	#  여기서 한 번 풀어 적으면 뜻이 안 바뀌고(pack_row 가 같은 행을 낸다)
+	#  읽는 쪽이 뼈대 검사를 제대로 할 수 있다.
+	Save.run_set("pack", String(GameData.pack_row().get("id", "")))
+	Save.run_set("league", String(GameData.league_row().get("id", "")))
+	#  챌린지를 세우는 게임 코드는 아직 한 줄도 없다(개발자 판과 검사뿐).
+	#  늘 "" 지만 칸은 지금 판다 — 서는 날 저장이 한 판 뒤처지지 않게.
+	Save.run_set("challenge", GameData.challenge)
+	for e in RUN_PLAIN:
+		var v: Variant = get(String(e[0]))
+		#  ⚠ **사본을 넘긴다.** 사전·배열은 참조라, 그대로 넘기면 ConfigFile 이
+		#  **살아 있는 그 배열**을 들고 있게 된다 — 매듭 뒤에 런이 값을 고치면
+		#  적어 둔 것이 같이 바뀌고, 다음 flush 가 그 바뀐 값을 디스크에 앉힌다.
+		#  _begin_leg 매듭 직후 _start_leg 이 _spend_tags 로 pending_tags 를
+		#  비우는데, 적어 둔 뱃지 줄이 같이 비는 것으로 실제로 걸렸다(검사가
+		#  잡았다). 2026-09-20
+		if v is Dictionary or v is Array:
+			v = v.duplicate(true)
+		Save.run_set(String(e[0]), v)
+	#  동전은 **세 칸만** 적는다. 카탈로그와 다른 칸이 gs(성장 걸음)와
+	#  bought(산 판 번호 — 검정 리그 삭음이 읽는다) 둘뿐이고 w 는 _buy 가
+	#  지운다. 사전을 통째로 적으면 표가 바뀔 때 옛 수치가 부활한다.
+	var ow := []
+	for o in owned:
+		ow.append({"id": String(o.get("id", "")),
+				"gs": int(o.get("gs", 0)), "bought": int(o.get("bought", 0))})
+	Save.run_set("owned", ow)
+	#  사탕과 사진은 consumables() **한 표**에 산다. 런 중 변하는 칸이 없어
+	#  id 만으로 온전하다.
+	Save.run_set("cons", _ids_of(cons))
+	#  다트 자루. 상점 dart 매물이 magazine[_std_slot()] 을 덮는 것이 유일한 변화다.
+	Save.run_set("magazine", _ids_of(magazine))
+	#  건너뛰면 받을 뱃지 — 행이 아니라 **id** 다(tags.csv 에 id 열이 있다).
+	var lt := {}
+	for k in leg_tags:
+		lt[int(k)] = String((leg_tags[k] as Dictionary).get("id", ""))
+	Save.run_set("leg_tags", lt)
+	if at == "shop":
+		var st := []
+		for s in stock:
+			#  ⚠ cost 를 **값 그대로** 적는다. _league_cost(표의 cost)로 다시
+			#  내면 안 된다 — 뱃지 「외상」이 _roll_stock 에서 임의 칸의 cost 를
+			#  0 으로 덮는데, 그 뱃지는 이미 pending_tags 에서 소진된 뒤다.
+			#  다시 내면 할인이 통째로 사라진다.
+			#  free 는 해금 공짜 한 장이라 「외상」과 **다른 사실**이므로
+			#  비트 하나로 뭉치면 안 되고, pack 은 팩에서 쏟은 것이다.
+			#  여섯 칸 다 적는 것이 싸고 정확하다.
+			st.append({"t": String(s.type), "id": String((s.d as Dictionary).get("id", "")),
+					"cost": int(s.cost), "sold": bool(s.sold),
+					"free": bool(s.get("free", false)),
+					"pack": bool(s.get("pack", false))})
+		Save.run_set("stock", st)
+		#  무료 리롤 뱃지를 먹었으면 음수로 시작한다.
+		Save.run_set("reroll_cost", reroll_cost)
+		Save.run_set("rerolls_used", rerolls_used)
+	else:
+		#  상점을 떠나면 매물 칸을 비운다. 안 비우면 판 선택 매듭에 지난
+		#  상점의 매물이 남아, 읽는 쪽은 안 보더라도 「이어하기 보기」가
+		#  없는 테이블을 있다고 적는다. 파일이 거짓말하는 자리를 안 남긴다.
+		Save.run_set("stock", [])
+	#  ⚠ **여기서 flush 한다.** bump/peak 은 판 끝·런 끝의 flush 에 묻어가는데
+	#  이어하기는 묻어갈 수 없다 — 판 선택과 상점에는 flush 가 없고,
+	#  **바로 그 자리에서 창이 닫히는 것**이 이 기능의 전제다. 매듭은 판당
+	#  서넛이라 디스크를 때릴 일이 없다.
+	Save.flush()
+
+
+#  되살리지 않고 무엇이 적혔는지만 읽는다. 개발자 판의 「이어하기 보기」가
+#  쓴다 — **보는 길과 타는 길을 갈라야** 「적히긴 했는데 화면이 이상한가」를
+#  한 화면에서 판별할 수 있다. 없으면 빈 사전이다.
+func _run_peek() -> Dictionary:
+	if not Save.run_live():
+		return {}
+	var ow: Array = Save.run_get("owned", [])
+	var st: Array = Save.run_get("stock", [])
+	return {
+		"at": String(Save.run_get("at", "")),
+		"slot": int(Save.run_get("slot", 0)),
+		"leg_no": int(Save.run_get("leg_no", 0)),
+		"gold": int(Save.run_get("gold", 0)),
+		"pack": String(Save.run_get("pack", "")),
+		"league": String(Save.run_get("league", "")),
+		"owned": ow.size(),
+		"stock": st.size(),
+	}
+
+
+#  ── 읽기 — 버릴 것부터 본다 ─────────────────────────────
+#  하나라도 어긋나면 **아무 말 없이** 이어하기 없음이다. 「저장을 못
+#  읽었습니다」 같은 문구를 안 띄운다 — 글줄이 흐려지는 것으로 이미 말이 된다.
+#  못 읽는 파일은 Save._read 가 빈 설정을 돌려주므로 절이 통째로 없는 것과
+#  같은 꼴이 되어 **저절로** 여기로 떨어진다. 반쪽 파일도 같다.
+func _run_load() -> bool:
+	if not Save.run_live():
+		return false
+	if int(Save.run_get("slot", 0)) != Save.slot():
+		return false
+	var at := String(Save.run_get("at", ""))
+	if not KNOTS.has(at):
+		return false          # 매듭이 셋뿐이다 — 다른 값은 남이 고친 파일이다
+	var ln := int(Save.run_get("leg_no", 0))
+	if ln < 1 or ln > GameData.legs_n():
+		return false
+	var mg: PackedStringArray = Save.run_get("magazine", PackedStringArray())
+	var mgr := _rows_of(GameData.darts(), mg)
+	if mgr.is_empty():
+		return false          # 뼈대다 — 탄창이 비면 판이 못 선다
+	#  ⚠ **다트통과 리그은 뼈대다.** 표에서 id 가 사라졌으면 줄만 떨어뜨리면
+	#  안 된다 — pack_row()/league_row() 가 모르는 id 를 **첫 행으로** 떨어뜨리
+	#  므로 pack_v · _pack_grants · darts_add 가 통째로 다른 값이 되어
+	#  **다른 런**이 선다. 통째로 버린다.
+	var pk := String(Save.run_get("pack", ""))
+	var lg := String(Save.run_get("league", ""))
+	if _row_by_id(GameData.packs(), pk).is_empty():
+		return false
+	if _row_by_id(GameData.leagues(), lg).is_empty():
+		return false
+
+	#  ── 꽂는 차례. **순서가 계약이다** ──────────────────
+	#  _new_run 이 「**지운 뒤에** 쥐여 준다」로 지키는 그 순서다.
+	#  ⚠ Save.set_pick 을 부르지 않는다 — [고름]은 「마지막에 고른 것」이라
+	#  이어하기가 덮으면 안 된다.
+	GameData.pack = pk
+	GameData.league = lg
+	GameData.challenge = String(Save.run_get("challenge", ""))
+	run_seed = int(Save.run_get("seed", 0))
+	run_rng.seed = run_seed          # seed 를 세우면 state 가 0 으로 돌아간다
+	run_rng.state = int(Save.run_get("rng", 0))
+	knot_rng = int(run_rng.state)
+	for e in RUN_PLAIN:
+		var v: Variant = Save.run_get(String(e[0]), e[1])
+		#  ⚠ 사본을 꽂는다. 빈 값은 **상수의 그 사전/배열**이고, ConfigFile 이
+		#  돌려주는 것도 제가 들고 있는 값이다 — 그대로 꽂으면 런이 상수를
+		#  고친다.
+		if v is Dictionary or v is Array:
+			v = v.duplicate(true)
+		set(String(e[0]), v)
+	magazine = mgr
+	owned = []
+	for o in Save.run_get("owned", []):
+		var od: Dictionary = o
+		var row := _row_by_id(GameData.items(), String(od.get("id", "")))
+		if row.is_empty():
+			continue          # 표에서 사라진 장 — 그 줄만 조용히 버린다
+		var cp := row.duplicate()
+		cp.erase("w")         # _buy 가 지우는 그 칸. owned 의 모양을 같게 둔다
+		cp.gs = int(od.get("gs", 0))
+		cp.bought = int(od.get("bought", 0))
+		owned.append(cp)
+	cons = _rows_of(GameData.consumables(), Save.run_get("cons", PackedStringArray()))
+	leg_tags = {}
+	var lt: Dictionary = Save.run_get("leg_tags", {})
+	for k in lt:
+		var trow := _row_by_id(GameData.tags(), String(lt[k]))
+		if not trow.is_empty():
+			leg_tags[int(k)] = trow
+	_board_bake()             # mods_own 을 꽂은 **뒤**. 판 기하 여덟·배수 넷
+	#  ⚠ leg_tag 는 _open_leg 만 세운다 — "pick" 갈래가 그 함수를 안 지나
+	#  **빈 채로 남는다.** 여기서 표에서 다시 낸다.
+	leg_tag = _leg_tag(leg_no)
+	_modes_refresh(false)     # owned 를 꽂은 **뒤** · false 라 판을 다시 안 세운다
+	_panel_reset()
+	won = false
+	over_t = 0.0
+	leg_t = 0.0
+	sealed = -1
+	sell_sel = -1
+	buy_sel = -1
+	pause_from = -1
+	tutor_q.clear()
+	tutor_id = ""
+	photo = ""
+	photo_back.clear()
+	photo_rack = ""
+	photo_rack_i = -1
+	boost_t = -1.0
+	boost_pick = 0
+	boost_card = {}
+	boost_spill.clear()
+	#  연출 깃발 둘도 여기서 푼다. 남아 있으면 끝의 _knot(at) 이 문지기에
+	#  걸려 **말없이 안 적힌다** — 지금은 제목에서만 들어오므로 둘 다 이미
+	#  꺼져 있지만, 되살리는 길이 하나 더 나는 날 조용히 깨질 자리다.
+	#  _sweep_reset 은 걷어 낸 자국(shards · grit)까지 같이 비운다.
+	_swap_skip()
+	_sweep_reset()
+
+	# ── 매듭으로 갈린다. 여기서만 화면이 선다 ──
+	match at:
+		"shop":
+			#  ⚠ _open_shop() 을 **절대 안 부른다** — shop_seen 이 오르고,
+			#  _spend_tags("reroll") 을 또 먹고, 다음 라운드 보스를 **다시
+			#  굴리고**, _roll_stock() 이 매물을 다시 뽑는다 = 껐다 켜는 것이
+			#  곧 공짜 리롤. _roll_stock 도 안 부른다 — 그 안에서
+			#  _spend_tags("shop")·("free") 를 **소비한다**.
+			_stock_restore()
+			reroll_cost = int(Save.run_get("reroll_cost", _reroll_price()))
+			rerolls_used = int(Save.run_get("rerolls_used", 0))
+			#  _drop_roll 은 _hand_abort()·_give_end()·drop.clear() 를 제 첫
+			#  세 줄에서 하므로 상인 손에 옛 색인이 남는 사고는 스스로 막는다.
+			_drop_roll()
+			#  ⚠ **던진 뒤에 이미 판 것을 도착시킨다.** _drop_one 은 늘
+			#  sold 0 · gone false 로 물건을 새로 떨어뜨리는데, _drop_extras
+			#  가 매 프레임 stock[i].sold 를 **폴링**해서(_buy 가 drop 을 못
+			#  건드리는 규약) 어긋난 칸에 _drop_leave 를 건다. 그대로 두면
+			#  되살린 첫 0.5초에 **지난 상점에서 산 것들이 다시 실려 나가고**
+			#  「보드 확장」·「탄창 교체」 쪽지가 그때 다시 뜬다.
+			#  연출을 태우지 않고 **끝 상태로 박는다** — 산 것은 이미 도착한
+			#  물건이지 지금 나가는 물건이 아니다. 2026-09-20
+			_drop_sold_sync()
+			state = S.SHOP
+		"pick":
+			#  ⚠ _start_leg() 을 **직접 부르지 않는다** — 보통 판의
+			#  active_mods = [] 와 target = target_of(leg_no) 를 건너뛴다.
+			#  _begin_leg 머리말이 「이걸 안 지나는 길을 새로 내면 지난 보스
+			#  제약이 런 끝까지 살아붙는다」고 박아 두었고, **되살리기가
+			#  정확히 그 「새로 내는 길」이다.**
+			#  carry_darts 와 _spend_tags("dart") 는 매듭이 그 **앞**이라
+			#  정확히 한 번 먹는다.
+			_begin_leg()
+		_:
+			#  문지기 둘이 **다시 안 굴린다** — 라운드 뱃지는
+			#  `bta != leg_tags_round` 가, 보스 제약은 `boss_mods.has(bn)` 이
+			#  막는다. 그래서 _open_leg() 을 그냥 불러도 된다.
+			#  배움은 _tutor 안의 Save.teach() 가 막는다 — 이미 가르쳤으면
+			#  false 를 내므로 되살리기가 설명을 다시 띄우지 않는다.
+			_open_leg()
+	#  FTL 식 「불러오면 지운다」를 안 쓴다 — 불러온 직후 튕기면 런이 통째로
+	#  사라진다. 되살린 이 자리가 곧 매듭이라 **다시 적는다.** 다음 매듭에서
+	#  덮이는 것이 곧 지우기다. 2026-09-20
+	_knot(at)
+	return true
+
+
+#  매물을 갈래별 표에서 되세운다. 여섯 칸을 그대로 꽂는다.
+#  이미 판 매물을 **연출 없이** 끝 상태로 박는다. _drop_leave · _drop_arrive
+#  를 안 지나므로 쪽지도 슬롯 튐도 안 난다 — 되살린 상점에서 지난 구매가
+#  다시 일어난 것처럼 보이면 안 된다.
+func _drop_sold_sync() -> void:
+	for i in mini(drop.size(), stock.size()):
+		if bool(stock[i].sold):
+			drop[i].sold = 1.0
+			drop[i].gone = true
+
+
+func _stock_restore() -> void:
+	stock = []
+	for e in Save.run_get("stock", []):
+		var s: Dictionary = e
+		var kind := String(s.get("t", ""))
+		var row := _row_by_id(_stock_pool(kind), String(s.get("id", "")))
+		if row.is_empty():
+			continue          # 표에서 사라진 매물 — 그 줄만 조용히 버린다
+		var it := {"type": kind, "d": row.duplicate(),
+				"cost": int(s.get("cost", 0)), "sold": bool(s.get("sold", false))}
+		#  없을 때는 칸을 안 판다 — _roll_stock 이 내는 모양과 같게 둔다.
+		if bool(s.get("free", false)):
+			it["free"] = true
+		if bool(s.get("pack", false)):
+			it["pack"] = true
+		stock.append(it)
+
+
+# ══════════════════════════════════════════════════════════
 #  런 / 판 진행
 # ══════════════════════════════════════════════════════════
 
@@ -1049,6 +1520,17 @@ func _new_run() -> void:
 	#  자리라, 굴려 고른 통이 디스크에 안 앉은 채로 지나갈 수 있다.
 	#  2026-09-19
 	_pack_save_due()
+	#  새 런이 곧 옛 런을 버리는 자리다. 들어오는 길 **넷**이 전부 이 함수를
+	#  지난다 — 부팅 자동플레이 · SPACE@S.NEWRUN · 자동플레이@S.OVER ·
+	#  _newrun_go() 클릭. 그래서 지우는 자리도 여기 하나면 된다.
+	Save.run_drop()
+	_run_seed_new()
+	#  ⚠ carry_darts 가 이 함수에 **없었다**(「녹는 시계」가 _finish_leg 에서
+	#  세우고 _start_leg 이 먹는다). 런이 OVER 로 끝나면 값이 남아 **다음 런의
+	#  첫 판이 지난 런의 잔탄을 받는다** — 지금 있는 버그고, 이어하기가 이
+	#  값을 적게 되는 이상 같은 구멍이 하나 더 난다. 밸런스가 아니라 런
+	#  상태라 여기서 고친다. 2026-09-20
+	carry_darts = 0
 	#  지난 런에 열린 것을 새 런까지 끌고 가면 안 된다.
 	run_unlocked.clear()
 	#  배움도 런 단위로 센다. 줄에 남은 것을 새 런까지 끌고 가면 엉뚱한
@@ -1118,7 +1600,8 @@ func _start_leg() -> void:
 	# 「목표물」은 판마다 칸을 새로 뽑는다. 조준이 통째로 그 한 칸으로 좁아진다.
 	mark_sec = -1
 	if GameData.chal_on("sec_only"):
-		mark_sec = randi() % maxi(sectors.size(), 1)
+		#  런 줄기에서 뽑는다 — 되감아도 같은 칸이어야 한다(run_rng 머리말).
+		mark_sec = int(run_rng.randi() % maxi(sectors.size(), 1))
 	# 「빨강, 파랑, 노랑」은 "이번 판" 짜리다. 판이 새로 서면 지운다 —
 	# 「또 같은 아침」(같은 판을 다시 여는 사진)도 이 길을 지나므로 칠은
 	# 거기서도 풀린다.
@@ -1207,7 +1690,10 @@ func _start_leg() -> void:
 	# 제약 둔화와 리그이 같은 축을 민다 — 보라 리그부터는 매 판 상시다.
 	var seal := int(mod_v("seal_items", 0.0)) \
 			+ int(GameData.league_v("seal_items", 0.0))
-	sealed = randi() % owned.size() if seal > 0 and not owned.is_empty() else -1
+	#  런 줄기에서 뽑는다 — 되감아도 **같은 동전**이 봉인돼야 한다. 전역에서
+	#  뽑던 때는 껐다 켜는 것이 곧 봉인 다시 뽑기였다(run_rng 머리말).
+	sealed = int(run_rng.randi() % owned.size()) \
+			if seal > 0 and not owned.is_empty() else -1
 	dead_idx = int(mod_v("sector_kill", -1.0))
 	#  표의 번호는 스무 칸 판의 것이다. 칸 수가 다르면(피자 여덟) 같은 방위의 칸으로 옮긴다.
 	if dead_idx >= 0 and _sec_n() != GameData.SECTORS_BASE.size():
@@ -1367,6 +1853,11 @@ func _finish_leg() -> void:
 				if leg_no >= GameData.legs_n():
 					state = S.OVER
 					won = true
+					#  ⚠ **완주 갈래 넷 중 이 하나에만 Save.flush() 가 없다.**
+					#  넉 줄뿐인 좁은 갈래라 손으로는 거의 못 밟는다 — 그래서
+					#  run_drop() 이 제 안에서 flush 한다. 빠뜨리면 **이긴
+					#  런이 「계속하기」로 되살아난다.** 2026-09-20
+					Save.run_drop()
 					_sfx("run_win")
 					return
 				_leg_end_wear()
@@ -1375,6 +1866,7 @@ func _finish_leg() -> void:
 		state = S.OVER
 		won = false
 		_pack_unlock_check()
+		Save.run_drop()       # 패배 — 되살릴 런이 없다
 		Save.flush()
 		_sfx("run_lose")
 		return
@@ -1401,6 +1893,7 @@ func _finish_leg() -> void:
 		_dart_peaks()
 		_win_peaks()
 		_pack_unlock_check()
+		Save.run_drop()       # 완주(NULL 보드 처치)
 		Save.flush()
 		pop(BC, "%s — 보드 처치" % owned[i].n, C_ACC, 12, 1.8)
 		_sfx("run_win")
@@ -1420,6 +1913,7 @@ func _finish_leg() -> void:
 		_dart_peaks()
 		_win_peaks()
 		_pack_unlock_check()
+		Save.run_drop()       # 완주(마지막 판)
 		Save.flush()
 		_sfx("run_win")
 		return
@@ -1885,6 +2379,10 @@ func _open_shop() -> void:
 	_roll_stock()
 	state = S.SHOP
 	_sfx("shop_open")
+	#  ── 매듭 ③ 상점 ──
+	#  _panel_reset · _sweep_reset 을 거쳤고 _roll_stock() 이 매물을 깔았다.
+	#  **매물을 적는 것이 공짜 리롤을 막는 자리다.**
+	_knot("shop")
 
 
 #  가중치 뽑기. 동전과 제약이 같은 저울을 쓴다 — 제약은 행에 w 를 들고 있고,
@@ -2188,6 +2686,10 @@ func _buy(i: int) -> void:
 		boost_pick = maxi(0, boost_pick - 1)
 		if boost_pick <= 0:
 			_boost_sweep()
+	#  값이 바뀌었다 — 상점 매듭을 다시 적는다. 팩을 뜯는 중이면 문지기가
+	#  한 글자도 안 적으므로(boost_pick > 0), 되살아나는 자리는 **팩을 사기
+	#  직전**이다. 골드도 안 나갔으니 손해가 없다.
+	_knot_shop()
 
 
 func _std_slot() -> int:
@@ -2441,7 +2943,9 @@ func _board_shuffle(on: bool) -> void:
 	# 합이 그대로라 판값이 안 변한다 — 섞기는 난이도의 축이 아니라
 	# 기억의 축이다. 자리만 바뀌고 판의 무게는 같다.
 	var sh: Array = sec_plain.duplicate()
-	sh.shuffle()
+	#  ⚠ Array.shuffle() 은 **전역** RNG 를 쓴다. 되감을 때 차례가 달라지면
+	#  「무르기」가 「다른 판」이 된다 — 런 줄기로 섞는다(run_rng 머리말).
+	_shuffle_run(sh)
 	sectors = sh
 
 
@@ -2497,6 +3001,10 @@ func _reroll() -> void:
 	reroll_cost = _reroll_price()
 	if drop_fast:
 		_roll_stock()            # 헤드리스는 팔을 안 기다린다. 새 판이 곧 결과다
+		#  **리롤이 끝나는 그 순간** 결과를 적는다 — 이것이 없으면 「리롤 →
+		#  마음에 안 듦 → 껐다 켬 → 다른 결과」가 열린다. 느린 길은
+		#  _sweep_deal 끝에서 같은 일을 한다.
+		_knot_shop()
 	else:
 		_sweep_begin()           # 끝에서 _sweep_deal 이 _roll_stock 을 부른다
 	_sfx("reroll")
@@ -2504,6 +3012,12 @@ func _reroll() -> void:
 
 func _next_leg() -> void:
 	_hand_abort()
+	#  팩에서 쏟은 것을 다 안 집고 판을 넘기면 그 몫은 여기서 끝난다.
+	#  여태 이 값은 다음 _roll_stock 이 지울 때까지 남았는데, 상점 밖에서는
+	#  _drop_update 가 즉시 return 이라 아무 일도 안 해서 안 보였다.
+	#  ⚠ **이어하기가 이 값을 읽는다** — _knot_ok 가 「쏟은 것을 집는 중」을
+	#  막으므로, 안 지우면 판 선택 매듭이 조용히 안 적힌다. 2026-09-20
+	boost_pick = 0
 	leg_no += 1
 	_open_leg()
 
@@ -2553,6 +3067,11 @@ func _open_leg() -> void:
 	_sfx(_leg_open_sfx())
 	#  과녁(보스 카드)과 값이 먼저 서야 한다 — 그래서 굴린 뒤다.
 	_tutor("u_boss")
+	#  ── 매듭 ① 판 선택 ──
+	#  뱃지·보스 제약을 **이미 굴려 둔 뒤**라 되살려 이 함수를 다시 불러도
+	#  문지기 둘이 안 굴린다. sealed = -1 이고, _drop_update 가
+	#  state != S.SHOP 에서 즉시 return 이라 낙하 물리가 아예 안 돈다.
+	_knot("leg")
 
 
 #  판 선택이 열릴 때 낼 소리. 이름을 돌려주는 것은 **검사가 부를 수 있게**
@@ -2981,6 +3500,17 @@ func _begin_leg() -> void:
 	sealed = -1
 	sell_sel = -1
 	buy_sel = -1
+	#  ── 매듭 ② 판 첫머리 ──
+	#  **여기가 판 첫머리다.** _start_leg 이 carry_darts 와 _spend_tags("dart")
+	#  를 **아직 안 먹은** 자리이고, sealed · mark_sec · 칸 섞기를 **아직 안
+	#  굴린** 자리다. 그래서 되살려 _begin_leg() 을 다시 불러도 정확히 한 번
+	#  먹고 같은 칸이 봉인된다 — 여기서 잡은 knot_rng 가 그 셋을 되감는다.
+	#  _start_leg 뒤에 적으면 먹은 값을 적게 되어 되살릴 때 두 번 먹는다.
+	#
+	#  판 선택(매듭 ①)으로만 되살리지 않는 이유도 여기다 — 그러면 껐다 켠
+	#  손이 **어느 판을 건너뛸지 다시 고를 수 있다**(_skip_leg 이 뱃지를 준다).
+	#  사용자가 낸 값은 다트 한 발이지 선택의 무르기가 아니다. 2026-09-20
+	_knot("pick")
 	if not GameData.is_boss(leg_no):
 		active_mods = []
 		target = GameData.target_of(leg_no)
@@ -4099,10 +4629,13 @@ func _unhandled_input(e: InputEvent) -> void:
 					elif state == S.TITLE:
 						_open_newrun()
 					elif state == S.NEWRUN:
-						if _pack_open(newrun_pip):
-							_new_run()
-						else:
+						#  ⚠ 키도 **같은 문**을 지난다(_start_go). 손가락에만
+						#  겨눔을 달면 그 문으로 사고가 그대로 돌아온다 —
+						#  OVER_LOCK 머리말이 적어 둔 그 자리다. 2026-09-20
+						if not _pack_open(newrun_pip):
 							_deny()
+						elif _start_go():
+							_new_run()
 					elif state == S.SETTINGS:
 						_settings_back()
 					elif state == S.COLLECT or state == S.PROFILE:
@@ -4396,6 +4929,12 @@ func _click(m: Vector2) -> void:
 				return
 			_open_newrun()
 		S.NEWRUN:
+			#  ⚠ **푸는 검사가 확정 표적보다 먼저 선다.** prof_arm 이
+			#  「지우기를 글줄보다 먼저 본다」로 지키는 그 순서다 — 뒤에 두면
+			#  확정 단추가 「딴 데」 안에 들어가 첫 누름이 둘째로 샌다.
+			#  리그 · 화살표 · 점 · 뒤로 — 확정 단추 밖은 전부 풀림이다.
+			if not _newrun_go().has_point(m):
+				start_arm = false
 			for i in GameData.leagues().size():
 				if not _league_rect(i).has_point(m):
 					continue
@@ -4425,6 +4964,9 @@ func _click(m: Vector2) -> void:
 				if not _pack_open(newrun_pip):
 					_deny()
 					return
+				#  ⚠ 여기가 런을 **덮는** 자리다(start_arm 머리말).
+				if not _start_go():
+					return
 				_new_run()
 				_sfx("run_start")
 				return
@@ -4441,6 +4983,12 @@ func _click(m: Vector2) -> void:
 					match String(TITLE_ROWS[i].n):
 						"시작":
 							_open_newrun()
+						"계속하기":
+							if not _run_load():
+								#  흐린 줄이 이미 말했다. _deny() 도 안 낸다 —
+								#  거절은 「눌러도 되는데 지금은 안 된다」는
+								#  뜻이라 여기 안 맞는다.
+								return
 						"컬렉션":
 							collect_tab = 0
 							state = S.COLLECT
@@ -4547,6 +5095,17 @@ func _click(m: Vector2) -> void:
 							return
 						lobby_arm = false
 						_vol_save_due()
+						#  ⚠ **지우지 않는다. 나가기 직전에 적는다.**
+						#  나갔다 돌아와 잇는 것이 「로비로 나가기」의 뜻이다.
+						#  pause_from 을 -1 로 내리기 **전**이어야 한다 —
+						#  판 중에 설정을 열었으면 state 가 S.SETTINGS 라
+						#  돌아갈 자리를 pause_from 만 알고 있다.
+						#  판 위·정산에서 나갔으면 직전 매듭(그 판의 첫머리)을
+						#  그대로 들고 나간다 — 덮어쓸 것이 없다.
+						if pause_from == S.SHOP:
+							_knot("shop")
+						elif pause_from == S.LEG:
+							_knot("leg")
 						pause_from = -1
 						state = S.TITLE
 					"quit":
@@ -13541,6 +14100,9 @@ func _sell(i: int) -> void:
 	pop(at + Vector2(0.0, -14.0), "+%d" % v, C_GOLD, 12, 0.8)
 	_sfx("sell")
 	_modes_refresh()            # 판 동전의 효력은 파는 그 순간 끝난다
+	#  상점에서 팔았으면 매듭을 다시 적는다. 판 위에서도 파는 길이 있으므로
+	#  _knot_shop 이 state 를 본다 — 판 중에는 적을 자리가 아니다.
+	_knot_shop()
 
 
 # ══════════════════════════════════════════════════════════
@@ -13712,6 +14274,9 @@ func _cons_use(i: int) -> void:
 	cons.remove_at(i)
 	pop(at + Vector2(0.0, 26.0), say, C_ACC, 10, 0.9)
 	_sfx("cons_use")
+	#  상점에서 썼으면 매듭을 다시 적는다. 판 위에서 쓴 것은 안 적힌다 —
+	#  판 중은 매듭이 아니고, 그 판은 첫머리부터 다시 던지는 것이 규약이다.
+	_knot_shop()
 
 
 # 판 위에서 동전 슬롯을 눌러 고른다. 딴 데를 누르면 무른다 — 손에 그대로
@@ -13778,6 +14343,10 @@ func _photo_close() -> void:
 	sell_sel = -1
 	_hand_abort()
 	_drop_roll()
+	#  사진이 테이블을 갈아 끼운 동안은 문지기가 한 글자도 안 적었다
+	#  (photo != "" — 그때 stock 은 매물이 아니라 **내 동전**이다).
+	#  다 쓰고 화면이 닫힌 지금이 그 값을 적을 자리다.
+	_knot_shop()
 
 
 # 고른 동전을 창구로 보냈다.
@@ -16557,6 +17126,11 @@ func _sweep_update(d: float) -> void:
 	if sweep_t >= t1 + SWEEP.back:
 		sweep_live = false
 		sweep_on = false
+		#  연출이 다 끝난 **뒤**에 적는다 — 문지기가 sweep_live 를 막으므로
+		#  _sweep_deal 안에서는 한 글자도 안 적힌다. 리롤 결과를 곧장 적는
+		#  것이 세이브 스커밍 방어의 핵심이라(_knot_shop 머리말) 이 한 줄이
+		#  느린 길의 그 자리다.
+		_knot_shop()
 
 
 # 훑기가 끝났다. 남은 것이 있으면(선이 트레이를 전부 덮으므로 있을 수 없다)
@@ -22222,11 +22796,14 @@ var tip_a := 0.0                # 페이드
 #  ③ **값이 오가는 확정은 지목을 낳은 자리에서 안 난다.**
 #     확정 표적이 따로 있고, 두 표적 중심은 지름 24px 원이 안 겹칠 만큼
 #     떨어진다 — 든 동전 → 판매 단추(지갑 밑) · 매물 → 창구 · 프로필 →
-#     「정말 지운다」. 되돌릴 수 없고 **런을 버리는 것**만 예외로 같은 표적에서
-#     두 번 받는다(prof_arm · lobby_arm): 첫 누름이 겨눔, 둘째가 확정,
-#     2.5초나 딴 곳을 누르면 **소리 없이** 풀린다.
-#     「새 런」은 겨눔 대신 **표적 좁히기 + 0.40초 잠금**을 쓴다 — 한 런에
-#     한 번뿐이라 겨눔까지 물리면 마찰이 두 겹이다.
+#     「정말 지운다」. 되돌릴 수 없고 **무르기가 없는 것**만 예외로 같은
+#     표적에서 두 번 받는다(prof_arm · lobby_arm · start_arm): 첫 누름이 겨눔,
+#     둘째가 확정, 2.5초나 딴 곳을 누르면 **소리 없이** 풀린다.
+#     S.OVER 의 「새 런」은 겨눔 대신 **표적 좁히기 + 0.40초 잠금**을 쓴다 —
+#     런이 이미 끝난 자리라 덮을 것이 없다.
+#     ⚠ 새 런 화면의 확정(start_arm)은 **이어할 런이 있을 때만** 겨눈다
+#     (2026-09-20). 없으면 한 번 누름 그대로다 — 없는 것을 지키느라 모든
+#     손에 마찰을 물리지 않는다.
 #
 #  ④ **길게 누르기(0.45초)는 어디서나 「더 읽기」뿐이다.**
 #     임계를 넘는 순간 그 손짓은 읽기로 확정되고 **떼도 값이 안 바뀐다**.
@@ -25207,8 +25784,14 @@ var pause_from := -1     # 게임 중 ESC 로 설정을 열면 돌아갈 상태.
 #  줄 높이 22 → 24 → 26. 글자를 11 에서 18 · 20 으로 키우며(2026-09-17 「UI 에 비해
 #  글자가 작다」) 잉크가 22px 띠에 꽉 차 줄을 늘렸다. 페이퍼로지 20 의 잉크(17px)가
 #  줄 한가운데에 위아래 4px 을 남기고 선다(_menu_base_y).
-#  넷이 y 184~300 이고 프로필 패(318~)와 18px 떨어진다.
-const TMENU := {"x": SAFE, "y": 184.0, "h": 26.0, "gap": 4.0, "w": 148.0}
+#  ── 다섯째 줄(「계속하기」)이 들어오면서 y 184 → 154 ──────
+#  넷이 y 184~300 이었고 프로필 패(_prof_badge_rect = Rect2(16,318,148,30))와
+#  18px 이었다. 다섯째를 **그냥 더하면** 아래끝이 330 이라 패를 먹고,
+#  qa_title 의 「프로필 패가 글줄과 안 겹친다」가 **반드시** 실패한다.
+#  154 로 올리면 다섯 줄이 154·184·214·244·274 → **아래끝 300 그대로다.**
+#  영문 제목 잉크 밑(123)과 31px. 글자를 안 늘리고 자리를 내는 길이
+#  이것 하나다. 2026-09-20
+const TMENU := {"x": SAFE, "y": 154.0, "h": 26.0, "gap": 4.0, "w": 148.0}
 
 
 func _menu_rect(i: int) -> Rect2:
@@ -25298,6 +25881,10 @@ func _use_profile(i: int) -> void:
 	Save.use_slot(i)
 	prof_sel = i
 	prof_arm = -1
+	#  ⚠ 슬롯을 갈았는데 겨눔이 남으면 **남의 런을 덮는다.** 이어하기는
+	#  프로필 파일 안의 절이라 슬롯마다 따로고, 「계속하기」의 흐림은 매
+	#  프레임 Save.run_live() 를 보므로 저절로 따라온다. 2026-09-20
+	start_arm = false
 	GameData.league = String(Save.get_pick("league", ""))
 	GameData.pack = String(Save.get_pick("pack", ""))
 	_sfx("menu_pick")
@@ -25432,12 +26019,37 @@ const CREDITS := ""
 
 #  글줄에 키 이름을 안 적는다 — 「시작 · 스페이스」 가 짜쳐 보였다(사용자,
 #  2026-09-17). 스페이스로 시작하는 길은 그대로다.
+#  「계속하기」는 **둘째 줄**이다. 「시작」을 안 밀어 내는 쪽을 고른 이유가
+#  손 기억만은 아니다 — _menu_rect(0) 을 「시작」으로 쓰는 도구가 둘 있다
+#  (league_probe 가 0번 줄을 눌러 런을 시작하고, shot_text_c 가 0번 줄 위에서
+#  얹힘 사진을 찍는다). 0번을 갈아 끼우면 그 둘이 깨지고 사진은 평소 줄이
+#  아니라 **흐린 줄**을 찍는다.
+#
+#  이어할 것이 없으면 **흐리기만 한다**(슬더스 식 — 있었는지 없었는지를
+#  사람이 안다). 죽거나 이기면 줄이 흐려지는 것이 곧 「런이 끝났다」는
+#  표시라, 그 말을 글자로 안 적어도 된다.
+#  **그리는 줄은 한 글자도 안 고친다** — _row_band 가 ee <= 0.004 에서 그냥
+#  return 하고 글자색이 C_DIM.lerp(C_TXT, ee) 라, _ttl_tick 에서 ee 를 0 으로
+#  눌러 두면 띠도 글자도 **저절로** 흐려진다.
+#
+#  ⚠ 「계속하기」는 설정의 back 이 판 중에 쓰는 이름과 같은 글자다
+#  (「계속하기 — 판으로 돌아간다」). 뜻이 같으므로(하던 것으로 돌아간다)
+#  용어가 갈리는 것이 아니라 **오히려 일관된다.** 용어 사전이 서는 날 두
+#  자리가 같은 낱말을 가리킨다는 것만 적어 두면 된다. 2026-09-20
 const TITLE_ROWS := [
 	{"n": "시작"},
+	{"n": "계속하기"},
 	{"n": "컬렉션"},
 	{"n": "설정"},
 	{"n": "종료"},
 ]
+#  「계속하기」 줄 번호. 표에서 이름으로 찾아도 되지만, 매 프레임 도는
+#  _ttl_tick 이 쓰므로 한 번 세어 둔다.
+const TTL_RESUME := 1
+#  이어할 것이 없을 때 그 줄의 짙기. 쉬는 줄은 이미 C_DIM 이라 얹힘만
+#  죽여서는 다른 줄과 **구별이 안 된다** — 한 축을 더 눌러야 「못 쓰는
+#  줄」로 읽힌다. 0.40 은 글자가 읽히기는 하되 손이 안 가는 자리다.
+const TTL_DEAD := 0.40
 
 
 #  제목 판 위의 자루들. **스크림 위**에 그린다 — 밑에 두면 유령이 된 판과
@@ -25651,11 +26263,20 @@ func _draw_title() -> void:
 			br.size.x = minf(r.size.x, font_sm.get_string_size(
 					String(TITLE_ROWS[i].n), HORIZONTAL_ALIGNMENT_LEFT,
 					-1, 20).x + 16.0)
-		_row_band(self, br, ee, ew, 1.0)
+		#  ⚠ 이어할 것이 없는 줄은 **쉬는 자리에서도 흐리다.**
+		#  _ttl_tick 에서 ee 를 0 으로 눌러 두는 것만으로는 모자랐다 — 쉬는
+		#  줄은 어차피 전부 ee 0 이라 다섯이 **똑같이** 보이고, 커서를 얹어
+		#  보기 전에는 못 쓰는 줄인 줄 모른다. 그림을 찍어 보고서야 드러났다
+		#  (2026-09-20). 짙기 한 축만 더 눌러 「있었는지 없었는지를 사람이
+		#  안다」를 세운다 — 글자는 한 자도 안 는다.
+		var a: float = 1.0
+		if i == TTL_RESUME and not Save.run_live():
+			a = TTL_DEAD
+		_row_band(self, br, ee, ew, a)
 		draw_string(font_sm, r.position + Vector2(0.0,
 				_menu_base_y(font_sm, 20, 0.0, r.size.y)),
 				String(TITLE_ROWS[i].n), HORIZONTAL_ALIGNMENT_LEFT, -1, 20,
-				C_DIM.lerp(C_TXT, ee))
+				Color(C_DIM.lerp(C_TXT, ee), a))
 	_prof_badge_draw()
 	# 빌려 온 것을 적는 자리. 빌린 것이 있으면 그 라이선스가 이 줄을
 	# **조건으로** 단다 — 그때는 지우면 못 낸다. 비어 있으면 안 그린다.
@@ -25688,10 +26309,14 @@ var prof_sel := 1               # 프로필 화면에서 **고른** 줄 (쓰는 
 var prof_arm := -1              # 지우기를 겨눈 슬롯. -1 이면 안 겨눔
 #  ── 「로비로 나가기」 겨눔 ────────────────────────────────
 #  첫 누름이 겨누고 둘째가 나간다 — 프로필 지우기와 **같은 문법**이다
-#  (톡의 규약 ③: 런을 버리는 것만 같은 표적에서 두 번 받는다).
-#  _set_rows 머리말이 「소리를 만지다가 손이 미끄러져 런을 버리는 자리」라고
+#  (톡의 규약 ③: 무르기가 없는 것만 같은 표적에서 두 번 받는다).
+#  _set_rows 머리말이 「소리를 만지다가 손이 미끄러져 나가는 자리」라고
 #  이미 적어 둔 그 자리라, 확인창 대신 겨눔 한 단을 둔다 — 확인창은 모든
 #  사용자에게 마찰을 물린다.
+#  ⚠ 2026-09-20 이어하기가 생기면서 **이 줄은 런을 안 버린다** — 나가기
+#  직전에 매듭을 적고 나가고, 제목의 「계속하기」가 그것을 잇는다. 겨눔을
+#  그대로 두는 이유는 판 위에서 나가면 **그 판을 첫머리부터 다시 던져야**
+#  하기 때문이다. 여전히 값을 치르는 누름이라 여전히 두 번 묻는다.
 #  **글자는 한 자도 안 는다** — 겨눈 것은 띠 색 · 폭 · 마침표 굵기가 말하고,
 #  글줄 색은 warn 줄이 이미 ee 로 붉어지므로 ee 를 1 로 미는 것만으로
 #  저절로 따라온다(_draw_settings 의 글줄 줄은 한 글자도 안 건드린다).
@@ -25699,6 +26324,30 @@ var prof_arm := -1              # 지우기를 겨눈 슬롯. -1 이면 안 겨�
 var lobby_arm := false
 var lobby_arm_t := 0.0
 const LOBBY_ARM := 2.5
+#  ── 「새 런 시작」 겨눔 ───────────────────────────────────
+#  새 런은 이어하기를 **덮는다.** 그래서 lobby_arm 과 같은 문법을 한 단 더 단다.
+#
+#  ⚠ **겨눔은 제목의 「시작」이 아니라 새 런 화면의 확정에 단다.** 제목의
+#  「시작」은 _open_newrun() 일 뿐이고 **되돌릴 수 있다**(새 런 화면에서
+#  「뒤로」도 ESC 도 있다). 런을 덮는 것은 _new_run() 이고 사람이 그것을
+#  부르는 길은 **둘**이다 — 확정 단추 클릭과 스페이스. 되돌릴 수 있는
+#  누름에 마찰을 물리면 도구 둘(league_probe · shot_text_c)이 깨지고 가장
+#  많이 눌리는 줄이 두 번 눌러야 하는 줄이 된다. prof_arm 도 lobby_arm 도
+#  **되돌릴 수 없는 그 누름**에 붙어 있다.
+#
+#  **이어하기가 있을 때만 겨눈다.** 없으면 한 번 누름 그대로다 — 없는 것을
+#  지키느라 모든 손에 마찰을 물리지 않는다. 런이 끝나고 들어온 손은 런이
+#  이미 지워진 뒤라 저절로 안 겨눈다.
+#
+#  ⚠ START_ARM_MIN 은 OVER_LOCK 과 **같은 값**이다. 슬더스의 Abandon Run 이
+#  한 번 누름을 두 번으로 읽어 런을 날린 보고가 되풀이됐고, lobby_arm 에는
+#  그 하한이 없다. 넘기기 전의 둘째 누름은 **통째로 삼킨다** — 소리도 안
+#  낸다(풀림은 사건이 아니라는 규약의 짝).
+#  2.5초는 lobby_arm 과 같은 창이다. 2026-09-20
+var start_arm := false
+var start_arm_t := 0.0
+const START_ARM_MIN := 0.40
+const START_ARM := LOBBY_ARM
 var prof_e := []                # 그 줄의 얹힘 짙기 — 제목·설정과 같은 어법
 var prof_w := []                # 그 줄 띠가 쓸려 든 폭
 
@@ -29637,6 +30286,25 @@ func _newrun_go() -> Rect2:
 	return Rect2(Vector2(236.0, 316.0), Vector2(168.0, 34.0))
 
 
+#  새 런 확정의 **문 하나**. 손가락과 키가 같은 문을 지난다 — OVER_LOCK
+#  머리말의 「키에만 문을 열면 그 문으로 사고가 그대로 돌아온다」가 그 이유다.
+#  true 를 내면 부르는 쪽이 _new_run() 으로 간다. false 면 아무 일도 안 난다.
+func _start_go() -> bool:
+	if not Save.run_live():
+		return true              # 덮을 런이 없다 — 한 번 누름 그대로다
+	if not start_arm:
+		start_arm = true
+		start_arm_t = 0.0
+		#  겨눔 소리는 prof_arm · lobby_arm 이 쓰는 그것이고, 확정 소리
+		#  (run_start)는 **안 지난다** — 첫 누름이 시작한 것처럼 울면 안 된다.
+		_sfx("menu_pick2")
+		return false
+	if start_arm_t < START_ARM_MIN:
+		return false             # 흘러든 둘째 누름 — 소리도 안 낸다
+	start_arm = false
+	return true
+
+
 func _newrun_back() -> Rect2:
 	return Rect2(Vector2(44.0, 318.0), Vector2(88.0, 30.0))
 
@@ -29874,8 +30542,11 @@ func _draw_newrun() -> void:
 
 	#  「시작」은 던지러 가는 이동이라 글줄로 둔다 — 판 위의 조작 단추와
 	#  무게가 다르다. 못 누르는 동안은 띠가 안 선다.
+	#  겨눈 채면 붉게 서 있다 — 이어하기를 덮는 누름이라 한 번 더 묻는다
+	#  (start_arm 머리말). 이어할 것이 없으면 겨눔이 아예 안 서므로 이 줄은
+	#  평소 그대로다.
 	_back_row(self, _newrun_go(), "시작", "",
-			open and _newrun_go().has_point(mouse_at))
+			open and _newrun_go().has_point(mouse_at), 1.0, start_arm)
 	_back_row(self, _newrun_back(), "뒤로", "",
 			_newrun_back().has_point(mouse_at))
 
@@ -30038,14 +30709,14 @@ func _set_rows() -> Array:
 #  **재서** 놓는다: 무리 전체 높이를 구해 제목 아래 남는 칸 한가운데에 앉힌다.
 #
 #  나가는 두 줄(로비로 · 게임) 앞에는 틈을 둔다. 소리를 만지다가 손이
-#  미끄러져 런을 버리는 자리가 거기라서, 눈으로 한 번 끊어 준다.
+#  미끄러져 판을 뜨는 자리가 거기라서, 눈으로 한 번 끊어 준다.
 #  그 자리를 2026-09-19 에 **겨눔 한 단**(lobby_arm)이 막았다 — 첫 누름이
 #  겨누고 둘째가 나간다. 틈(split 14px)은 그대로 둔다: 눈으로 끊는 것과
 #  손으로 한 번 더 묻는 것은 하는 일이 달라서, 두 장치가 겹쳐 서는 것이 맞다.
 #  **줄은 한 줄도 안 는다** — qa_settings 의 「제목 5줄 · 판 중 6줄」이 그대로
 #  통과하는 것이 곧 「글자가 한 자도 안 늘었다」의 기계적 증거다.
-#  「게임 나가기」에는 겨눔을 **안** 둔다 — 런을 버리는 것과 게임을 끄는 것은
-#  무게가 다르다.
+#  「게임 나가기」에는 겨눔을 **안** 둔다 — 판을 뜨는 것과 게임을 끄는 것은
+#  무게가 다르다. 둘 다 이어하기가 받으므로 잃는 것은 그 판 하나뿐이다.
 #  설정 화면 ──────────────────────────────────────────────
 #  ESC 를 누르면 게임이 뿌예지고 왼쪽에서 글줄이 밀려 들어온다. 단추 상자를
 #  세우지 않는다 — 640x360 에 여섯 칸을 넣으면 그 자체로 꽉 차서, 전에는
@@ -30138,8 +30809,12 @@ func _set_info(key: String) -> Dictionary:
 		"mus":
 			return {"n": "음악", "d": "판 밖에서 도는 곡", "g": true}
 		"lobby":
+			#  「이 런을 버리고」를 뗐다 — 이어하기가 생긴 뒤로 런은 안 버려진다.
+			#  나갔다 돌아와 「계속하기」로 이으면 된다. 글자가 **줄었다.**
+			#  warn 과 겨눔(lobby_arm)은 **그대로 둔다** — 판 중에 나가면 그
+			#  판을 첫머리부터 다시 던져야 하므로 여전히 값을 치른다. 2026-09-20
 			return {"n": "로비로 나가기",
-					"d": "이 런을 버리고 제목 화면으로 돌아간다", "warn": true}
+					"d": "제목 화면으로 돌아간다", "warn": true}
 		"quit":
 			return {"n": "게임 나가기", "d": "게임을 끝낸다", "warn": true}
 	return {"n": key, "d": ""}
@@ -30416,15 +31091,21 @@ func _arrow_btn(c: CanvasItem, r: Rect2, right: bool, hot: bool) -> void:
 #  뒤로 한 줄. 화면마다 다른 상자였던 것을 한 어법으로 모은다.
 #  a 는 줄 전체의 짙기다. 기본 1.0 이라 **부르는 다섯 자리가 한 줄도 안
 #  바뀐다** — 런 끝의 잠금만 이 축으로 떠오른다(2026-09-19).
+#  armed 는 **겨눈 채로 서 있다**는 뜻이다. 기본 false 라 부르는 나머지
+#  자리는 한 글자도 안 바뀐다. 설정의 「로비로 나가기」가 쓰는 채널 넷을
+#  그대로 쓴다 — 띠 색 C_ACC → C_MULT · 얹힘과 무관하게 다 들어온 채 고정 ·
+#  마침표 획 1 → 3px(색 하나로만 말하면 WCAG 1.4.1) · 글자색은 e 가 1 로
+#  밀리므로 **공짜로** 짙어진다. **글자는 한 자도 안 는다.** 2026-09-20
 func _back_row(c: CanvasItem, r: Rect2, label: String, key: String,
-		hot := false, a := 1.0) -> void:
+		hot := false, a := 1.0, armed := false) -> void:
 	#  들어설 때의 딸깍. **r 을 꼭 같이 본다** — 런 끝 화면은 「새 런」 을
 	#  hot 으로 늘 켜 두므로(아무 데나 누르면 간다) hot 만 보면 화면이 열리는
 	#  순간 커서가 어디 있든 딸깍이 난다.
 	if hot and _ui_can_hover() and r.has_point(mouse_at):
 		ui_hot = "row:%s:%d" % [label, int(r.position.y)]
-	var e: float = 1.0 if hot else 0.0
-	_row_band(c, r, e, e, a, C_ACC, 4.0)
+	var e: float = 1.0 if (hot or armed) else 0.0
+	_row_band(c, r, e, e, a, C_MULT if armed else C_ACC, 4.0,
+			3.0 if armed else 1.0)
 	#  홀로 서는 길잡이라 가운데로 모은다. 왼쪽 맞춤이면 이름과 단축키가
 	#  칸의 양 끝으로 갈라져 한 덩이로 안 읽힌다.
 	#  이름 11 → 18 → 20 · 곁말 9 → 11 → 12. 판 위 단추 이름과 같은 크기다(2026-09-17
@@ -30545,8 +31226,10 @@ func _set_panel(c: CanvasItem, key: String, e: float) -> void:
 	c.draw_string(font, p.position + Vector2(20.0, 42.0),
 			String(info.get("n", key)), HORIZONTAL_ALIGNMENT_LEFT, -1, 24,
 			Color(C_MULT if warn else C_TXT, pe))
-	#  한 줄 설명 9 → 11 → 12. 가장 긴 「이 런을 버리고 제목 화면으로 돌아간다」 가
-	#  판 안 폭(346)에 든다. 이름 잉크 밑(43)과 17px 띄워 기준선 70 에 선다.
+	#  한 줄 설명 9 → 11 → 12. 가장 긴 「던지고 맞고 사고파는 소리」 가 판 안
+	#  폭(346)에 든다. 이름 잉크 밑(43)과 17px 띄워 기준선 70 에 선다.
+	#  전에 가장 길던 「이 런을 버리고 제목 화면으로 돌아간다」는 이어하기가
+	#  생기면서 「제목 화면으로 돌아간다」로 **줄었다**(2026-09-20).
 	c.draw_string(font, p.position + Vector2(20.0, 70.0),
 			String(info.get("d", "")), HORIZONTAL_ALIGNMENT_LEFT, -1, 12,
 			Color(C_DIM, pe))
@@ -30898,7 +31581,19 @@ func _title_tick(d: float) -> void:
 			if _menu_rect(i).has_point(mouse_at):
 				ttl_hot = i
 				break
+		#  이어할 것이 없으면 그 줄은 **얹힘이 안 산다** — 띠도 딸깍도 없다.
+		#  판단은 Save.run_live() 하나고 **지금 프로필만** 본다(다른 슬롯을
+		#  묻지 않는다 — slot_info 의 「보여 주려고 올렸다가 남의 프로필이
+		#  올라온 채로 남는다」가 그 교훈이다). 제목은 판이 안 도는 화면이라
+		#  매 프레임 물어도 boot() 이 _at == want 면 즉시 return 한다.
+		if ttl_hot == TTL_RESUME and not Save.run_live():
+			ttl_hot = -1
 	_row_ease(ttl_e, ttl_w, TITLE_ROWS.size(), ttl_hot if on else -1, d)
+	#  흐린 줄. _row_band 와 글자색이 ee 를 보므로 여기 두 줄이면 그리는 쪽은
+	#  한 글자도 안 고친다.
+	if not Save.run_live() and ttl_e.size() > TTL_RESUME:
+		ttl_e[TTL_RESUME] = 0.0
+		ttl_w[TTL_RESUME] = 0.0
 	#  프로필 패에 들어설 때의 딸깍은 공용 얹힘(_ui_hover_tick)이 낸다 —
 	#  패가 그리면서 ui_hot 을 적는다. 여기서도 내면 한 번 들어서는데 두 번 난다.
 	ttl_prof_hot = on and _prof_badge_rect().has_point(mouse_at)
@@ -31587,6 +32282,13 @@ func _set_tick(d: float) -> void:
 		lobby_arm_t += d
 		if lobby_arm_t > LOBBY_ARM or state != S.SETTINGS:
 			lobby_arm = false
+			queue_redraw()
+	#  새 런 겨눔도 같은 자리에서 잰다 — 두 겨눔이 같은 문법이므로 시계도
+	#  같은 자리에 서야 한다. 화면을 뜨면(state != S.NEWRUN) 같이 풀린다.
+	if start_arm:
+		start_arm_t += d
+		if start_arm_t > START_ARM or state != S.NEWRUN:
+			start_arm = false
 			queue_redraw()
 	if set_t != was:
 		queue_redraw()
