@@ -71,6 +71,8 @@ func _initialize() -> void:
 	_score(g)
 	print("\n── 새 줄 여섯 ────────────────────────────")
 	_newrows(g)
+	print("\n── 발견 두 줄 ────────────────────────────")
+	_found(g)
 
 
 #  트리가 선 첫 프레임. ⑥번 블록만 여기서 돈다.
@@ -84,6 +86,50 @@ func _process(_d: float) -> bool:
 	print("\n%s" % ("실패 %d건" % fails if fails > 0 else "개발자 판 전부 통과"))
 	quit(mini(fails, 125))
 	return true
+
+
+# ── 발견 두 줄 (2026-09-19) ─────────────────────────────
+#  규칙 3 — 게임에 만든 것은 같은 턴에 개발자 모드에도 길을 낸다. 오가는
+#  왕복이 화면 안에서 끝나야 한다.
+#
+#  ⚠ **비대칭을 자로 굳힌다.** 「열기」는 그리는 쪽만 덮고 저장에 한 글자도
+#  안 쓴다(기획서 그림 도구 스무남짓이 그 대역으로 돈다 — 저장을 쓰면 옆
+#  도구가 거짓 초록을 낸다). 「잠그기」는 진짜로 지운다 — 이미 플레이한
+#  프로필에서 이 기능을 눈으로 보는 유일한 길이다.
+func _found(g: Node) -> void:
+	var page0 := Dev.page
+	Dev.page = 3
+	for nm in ["발견 전부 열기", "발견 전부 잠그기"]:
+		_say(_find(g, nm) >= 0, "page 3 에 「%s」 줄이 있다" % nm)
+
+	#  먼저 비운다 — 이 자는 판을 깔며 동전·다트를 얻으므로 발견이 이미 서 있다.
+	Dev._run(g, {"a": "found_none"})
+	var n0 := Save.found_keys().size()
+	var lit0: int = g._col_found_n(0)
+	_say(not g.found_all and lit0 == 0, "「발견 전부 잠그기」가 0 / N 으로",
+			"동전 %d / %d" % [lit0, g._col_rows(0).size()])
+
+	#  열기 — 화면은 다 차고 **저장은 안 움직인다**
+	Dev._run(g, {"a": "found_all"})
+	_say(g.found_all, "「발견 전부 열기」가 대역을 세운다")
+	_say(g._col_found_n(0) == g._col_rows(0).size(), "전부 발견이면 N / N",
+			"동전 %d / %d" % [g._col_found_n(0), g._col_rows(0).size()])
+	_say(Save.found_keys().size() == n0, "「열기」가 저장에 한 글자도 안 쓴다",
+			"열쇠 %d → %d" % [n0, Save.found_keys().size()])
+
+	#  ⚠ [해금]은 어느 쪽에도 안 흔들린다 — 절이 갈렸다는 증거이고,
+	#  그것이 곧 팩 풀(itemgot:)이 안 움직인다는 증거다.
+	var unl0 := Save.unlock_keys().size()
+	Dev._run(g, {"a": "found_none"})
+	_say(Save.unlock_keys().size() == unl0, "발견을 다 잠가도 [해금]이 그대로",
+			"해금 %d → %d" % [unl0, Save.unlock_keys().size()])
+
+	#  빗장 — 잠근 것이 다음에 컬렉션을 열 때 되살아나면 안 된다.
+	g._found_migrate()
+	_say(g._col_found_n(0) == 0 and g._col_found_n(2) == 0,
+			"잠근 뒤 이주가 되살리지 않는다",
+			"동전 %d · 다트 %d" % [g._col_found_n(0), g._col_found_n(2)])
+	Dev.page = page0
 
 
 func _find(g: Node, label: String) -> int:

@@ -413,6 +413,16 @@ func _run() -> void:
 	g.collect_tab = 0
 	g.collect_page = 0
 	_ok("컬렉션도 깊은 층이다", g._read_deep())
+	#  **못 본 칸도 손가락에게 대답한다** — 빈 사전을 내면 톡해도 아무 일이
+	#  안 나는 죽은 칸이 되고, 모바일에서는 그것이 「여기는 아무것도 없다」로
+	#  읽힌다. 호버로만 읽히는 것을 안 만든다. 2026-09-19
+	#  제 자리(user://_qa_hold.cfg)라 사람의 저장이 아니다 — 절을 비워
+	#  첫 칸이 확실히 미발견이 되게 한다.
+	g._dev_unlock_none()
+	var ch: Dictionary = g._tip_hit((g._col_cell(0) as Rect2).get_center())
+	g._tip_build(ch)
+	_ok("못 본 칸도 톡에 대답한다", not ch.is_empty() and g.tip_title == "???",
+			"열쇠 %s · 제목 '%s'" % [String(ch.get("k", "")), g.tip_title])
 
 	# ══ 누름이 곧 확정인 단추 — 무르기가 안 걸린다 (이름을 박아 둔다) ══
 	#  규약 ④의 무르기는 「뗌이 확정하는 자리」에서만 참이다. _click 은

@@ -153,6 +153,23 @@ func _collect() -> void:
 	var pages: int = g._col_pages()
 	_ok("동전 탭 쪽 수", pages == 3, "%d 쪽 (%d 종 / %d)"
 			% [pages, g._col_total(), g.COL_PAGE])
+	#  **못 본 칸이 자리를 지킨다** — 발견 수가 쪽 수를 안 줄인다. 줄이면
+	#  「몇 개 비었나」가 눈에서 사라져 물음표를 그리는 뜻이 통째로 죽는다.
+	#  여기는 대역이 꺼진 자리다(_collect_tip 이 그 뒤에 켠다). 2026-09-19
+	var pg_dim := []
+	var pg_lit := []
+	for t in g.COL_TABS.size():
+		g.collect_tab = t
+		pg_dim.append(g._col_pages())
+	g._dev_unlock_all()
+	for t in g.COL_TABS.size():
+		g.collect_tab = t
+		pg_lit.append(g._col_pages())
+	g.found_all = false
+	g.collect_tab = 0
+	g.collect_page = 0
+	_ok("발견 수가 쪽 수를 안 줄인다", pg_dim == pg_lit,
+			"못 봄 %s · 다 봄 %s" % [str(pg_dim), str(pg_lit)])
 
 	# 격자 위 — 쪽이 넘어간다. 아래로 세 번이면 제자리(감긴다).
 	var grid: Vector2 = g._col_cell(0).get_center()
@@ -235,6 +252,9 @@ func _collect() -> void:
 #  저장소에 없었다.
 func _collect_tip() -> void:
 	g.state = g.S.COLLECT
+	#  못 본 칸은 제목이 ??? 라 아래 「표 순서와 맞다」를 못 잰다 — 전부
+	#  발견으로 놓고 잰다. 저장을 안 만지는 대역이다. 2026-09-19
+	g._dev_unlock_all()
 	g.collect_tab = 0
 	var rows: Array = GameData.items()
 	var bad := ""
