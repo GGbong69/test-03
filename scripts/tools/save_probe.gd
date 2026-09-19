@@ -57,6 +57,15 @@ func _initialize() -> void:
 
 func _pass1() -> void:
 	print("1차 — 쓴다  (%s)" % ProjectSettings.globalize_path(Save.path))
+	#  ⚠ **2차가 일부러 깨뜨려 둔 파일부터 치운다.** Save.wipe() 는 덮어쓰기라
+	#  그 전에 한 번 읽히고, 그 읽기가 실패하면서 _err 가 남는다 — 아래
+	#  「쓰기가 실패하지 않았다」가 **차수를 두 번 돌린 다음에만** 붉어졌다.
+	#  save_probe 가 컴파일조차 안 되던 동안(2026-09-20 에 고쳤다) 2차가 한
+	#  번도 안 돌아서 여태 안 보이던 자리다.
+	if FileAccess.file_exists(Save.path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(Save.path))
+	Save._cfg = null
+	Save._at = ""
 	Save.wipe()
 	_say(Save.stat("darts") == 0 and not Save.unlocked("pack:mag"),
 			"지운 뒤에는 전부 기본값", "darts %d" % Save.stat("darts"))
@@ -118,12 +127,21 @@ func _pass2() -> void:
 	if f != null:
 		f.store_string("이건 설정 파일이 아니다 [[[ = = ] ] ]\n= 3 ㅋ")
 		f.close()
-	Save._loaded = false
+	#  ⚠ 여기는 `Save._loaded = false` 였는데 save.gd 에 **없는 이름**이다
+	#  (한 번 읽었나만 보던 시절의 이름 — 지금은 _at 이 「지금 올라와 있는
+	#  파일」을 든다). GDScript 는 없는 정적 멤버 대입을 **컴파일 시점에**
+	#  잡으므로 이 한 줄이 save_probe 를 **통째로** 안 돌게 하고 있었다 —
+	#  2차·3차까지 같이 죽어 있었다. 2026-09-20
 	Save._cfg = null
-	var v: Variant = Save.get_set("vol", 1.0)
-	_say(is_equal_approx(float(v), 1.0),
-			"깨진 파일이면 기본값으로 산다", "vol %.2f · 사유 '%s'"
-			% [float(v), Save.last_error()])
+	Save._at = ""
+	#  ⚠ 그리고 단언 자체도 헛돌고 있었다 — 쓰레기를 쓴 것은 **프로필**
+	#  파일(Save.path)인데 get_set 은 **전역**(_gcfg)을 읽는다. 깨뜨린 그
+	#  파일을 읽는 자로 바꾼다. 프로필의 통계는 위에서 채워 두었으므로,
+	#  깨진 뒤에 기본값 0 이 나오는 것이 곧 「안 죽고 산다」다.
+	var v: Variant = Save.stat("darts")
+	_say(int(v) == 0,
+			"깨진 파일이면 기본값으로 산다", "darts %d · 사유 '%s'"
+			% [int(v), Save.last_error()])
 
 
 # 3차 — 통계 훅이 **모든 발**을 세는가.

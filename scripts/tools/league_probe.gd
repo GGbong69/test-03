@@ -106,8 +106,14 @@ func _initialize() -> void:
 	# 열린 단은 눌리고 저장에 남는다
 	Save.unlock(GameData.league_key("green"))
 	g._click(g._league_rect(1).get_center())
-	_say(GameData.league == "green" and String(Save.get_set("league", "")) == "green",
-			"열린 리그은 눌리고 저장된다", "리그 '%s'" % GameData.league)
+	#  ⚠ 여기는 Save.get_set 을 읽고 있었다 — **전역**(설정) 쪽이다.
+	#  2026-09-15 에 프로필이 갈리면서 「마지막에 고른 리그」가 [고름]으로
+	#  옮겨 갔고(set_pick), 그 뒤로 이 단언은 계속 붉었다. 이 검사는 그날
+	#  이후 한 번도 안 고쳐졌다(마지막 손질 2026-09-11).
+	#  게임이 쓰는 자리를 읽는다. 2026-09-20
+	_say(GameData.league == "green" and String(Save.get_pick("league", "")) == "green",
+			"열린 리그은 눌리고 저장된다", "리그 '%s' · 적힌 것 '%s'"
+			% [GameData.league, Save.get_pick("league", "")])
 
 	# 시작이 런을 연다
 	g._click(g._newrun_go().get_center())
