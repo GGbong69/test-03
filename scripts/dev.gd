@@ -557,6 +557,12 @@ static func _rows(g: Node) -> Array:
 				{"n1": "다트 다시 채우기", "t": "act", "a": "refill"},
 				{"n1": "최악의 상태", "t": "act", "a": "worst"},
 				{"n1": "정산 다시 재생", "t": "act", "a": "replay"},
+				#  동전이 부서지는 자리를 다시 보는 둘(2026-09-19).
+				#  「판 끝 마모 한 번」은 **실제 경로 그대로** 태우는 줄이다 —
+				#  「부서졌다」가 한 글자도 안 보이던 원인(_settle_clear 의
+				#  pops.clear())이 바로 그 경로에 있었다.
+				{"n1": "판 끝 마모 한 번", "t": "act", "a": "wear1"},
+				{"n1": "선반 여섯 채우기", "t": "act", "a": "wreck6"},
 				{"n1": "점수 카드 걸음", "t": "list", "k": "cardfx", "n": 3},
 			]
 		1:
@@ -612,6 +618,13 @@ static func _rows(g: Node) -> Array:
 				{"n1": "쓸기 다시 보기", "t": "act", "a": "sweep"},
 				{"n1": "매물 아홉으로 쓸기", "t": "act", "a": "sweep9"},
 				{"n1": "부딪힘 한 번", "t": "act", "a": "smash1"},
+				#  여섯 재질을 **한 줄에 나란히 댄다** — ◀▶ 로 짚으면
+				#  유리(0.400s·5조각·방사)가 밀랍(0.560s·3조각·아래로만)보다
+				#  짧고 많고 빠른가가 손가락 두 번에 드러난다.
+				#  바로 밑 줄과 번갈아 눌러 **비대칭**(0.80초 조용함 대
+				#  0.40초 파열)을 ↑↓ 한 칸으로 재 본다.
+				{"n1": "부서짐 재질", "t": "list", "k": "breakmat", "n": 6},
+				{"n1": "굴림 남았다 한 번", "t": "act", "a": "safe1"},
 				{"n1": "테이블에 사진 깔기", "t": "act", "a": "restock_fix"},
 				{"n1": "모션 끄기/켜기", "t": "act", "a": "motion"},
 			]
@@ -747,6 +760,62 @@ static func _list(k: String) -> Array:
 # 점수 카드를 다시 볼 세 단. 이름과 큐를 한 곳에서 쥔다.
 const CARDFX_STEPS := ["담담", "큼", "한 방"]
 
+#  부서짐 재질 여섯. 표(game.gd 의 BREAK)와 **같은 차례**로 적는다 —
+#  ◀▶ 로 훑을 때 유리 → 밀랍이 이웃이라 둘의 차이(0.400 대 0.560 ·
+#  5조각 대 3조각 · 방사 대 아래로만)가 한 칸 옆에서 바로 보인다.
+#  대표 동전은 MATS 가 실제로 그 재질을 매어 둔 id 다.
+const BREAK_MATS := [
+	{"m": "glass", "n": "유리", "id": "c03"},
+	{"m": "wax", "n": "밀랍", "id": "c06"},
+	{"m": "cast", "n": "주물", "id": "c30"},
+	{"m": "pixel", "n": "픽셀", "id": "r09"},
+	{"m": "hollow", "n": "빈 것", "id": "l03"},
+	{"m": "", "n": "기본", "id": "c04"},
+]
+
+
+#  ── 동전의 죽음을 다시 보는 줄들이 쓰는 셋 (2026-09-19) ──
+#  smash1(1062-1065)이 **실제로 밟은 자리**다 — 갈래가 _sweep_begin 을
+#  안 부르면 _sweep_reset 도 안 돌아 소리 문이 닫힌 채 남아 다섯째
+#  누름부터 영영 무음이었다. 여기도 같은 셋을 앞머리에 놓는다.
+static func _wreck_open(g: Node) -> void:
+	g.wreck_snd_from = g.wreck.size()   # 이번 묶음을 새로 연다
+	g.wreck_seed += 1                   # 안 밀면 눌러도 같은 조각이 같은 자리다
+	if g.owned.is_empty():
+		#  비었으면 다시 깐다 — 줄이 죽은 것으로 보이는 회귀를 막는
+		#  그 자리다. c03(유리 1/2) · c06(밀랍 1/10) 둘이면 굴림도
+		#  재질도 한 번에 선다.
+		for bid in ["c03", "c06"]:
+			var it := _item_by_id(bid)
+			if not it.is_empty():
+				g.owned.append(it)
+		g._panel_reset()
+
+
+static func _item_by_id(id: String) -> Dictionary:
+	for it in GameData.items():
+		if String(it.get("id", "")) == id:
+			return (it as Dictionary).duplicate(true)
+	return {}
+
+
+#  시체를 태어난 자리로 되돌린다. 조각의 t 는 **음수에서 시작**하므로
+#  (언 흰 실루엣 구간) 0 이 아니라 -hold 로 되돌려야 언 프레임이 다시 선다.
+static func _wreck_rewind(g: Node) -> void:
+	for we in g.wreck:
+		we.t = 0.0
+		var t0: float = 0.0 if g.motion_off \
+				else -float(g.BREAK.get(String(we.mat), g.BREAK[""]).hold)
+		for pc in (we.pcs as Array):
+			pc.p = (pc.d0 as Vector2) * 6.0 if g.motion_off else Vector2.ZERO
+			pc.v = pc.v0
+			pc.rot = 0.0
+			pc.t = t0
+		for gr in (we.gr as Array):
+			gr.p = (gr.d0 as Vector2) * 7.0 if g.motion_off else Vector2.ZERO
+			gr.v = gr.v0
+			gr.t = t0
+
 
 static func _cur_name(g: Node, e: Dictionary) -> String:
 	var k := String(e.k)
@@ -819,6 +888,15 @@ static func _cur_name(g: Node, e: Dictionary) -> String:
 	# 비어서 화면에 「(없음)」이 뜬다 — 줄은 있는데 이름이 없는 꼴이다(2026-09-18).
 	if k == "cardfx":
 		return "%d/3 %s" % [i % 3 + 1, CARDFX_STEPS[i % 3]]
+	#  이것도 _list 를 안 지나는 상수 목록이다. 총 길이를 같이 찍는다 —
+	#  「유리 0.40 / 밀랍 0.56」이 한 줄에 보여야 ◀▶ 한 칸으로 견준다.
+	if k == "breakmat":
+		var bj: int = i % BREAK_MATS.size()
+		var bm: Dictionary = BREAK_MATS[bj]
+		var bt: Dictionary = load("res://scripts/game.gd").BREAK[String(bm.m)]
+		return "%d/%d %s · %d조각 · %.2fs" % [bj + 1, BREAK_MATS.size(),
+				bm.n, int(bt.n),
+				float(bt.hold) + float(bt.fly) + float(bt.sink)]
 	if k == "score":
 		var sm: Array = GameData.SCORE_MODES
 		var j2: int = i % maxi(sm.size(), 1)
@@ -969,7 +1047,69 @@ static func _run(g: Node, e: Dictionary) -> void:
 			# 정산 연출은 한 번 지나가면 다시 못 본다. 고치는 동안 매번
 			# 판을 넘길 수는 없다.
 			g.clear_t = 0.0
+			#  **선반도 같이 되감는다.** clear_t 만 되돌리면 「정산 다시
+			#  재생」이 표만 처음부터고 시체는 이미 가라앉아 있어서 정말
+			#  처음이 아니다(2026-09-19). 시체의 시계는 clear_t 와 **따로**
+			#  도는데 — 그래야 건너뛰기(clear_t = 99)에 안 죽는다 — 그
+			#  갈라 둔 값이 여기서는 손으로 이어 줘야 하는 자리다.
+			_wreck_rewind(g)
 			_say("정산 처음부터")
+			return
+		"wear1":
+			#  **실제 경로 그대로** 태운다. 연출만 보는 줄이 아니라
+			#  「진짜 그 길로 가면 보이는가」를 보는 줄이고, 이 넷 중
+			#  제일 중요하다 — 「부서졌다」가 한 글자도 안 보이던 원인
+			#  (_settle_clear 의 pops.clear())이 바로 이 경로에 있었다.
+			#  ⚠ _settle_clear 를 부르므로 **골드가 실제로 정산된다.**
+			_wreck_open(g)
+			g._leg_end_wear()
+			g._settle_clear()
+			_say("판 끝 마모 — 골드도 정산됐다")
+			return
+		"wreck6":
+			#  랙을 꽉 채우고 전부 죽여 **최악**을 세운다(「최악의 상태」와
+			#  같은 생각이다 — 640x360 에서 이 상태를 못 그리면 지금 고치는
+			#  게 나중보다 싸다). 정지 화면에서 볼 것 다섯: 항목이 단추
+			#  (y 290)와 큰 표(x 190)를 안 밟는가 · 조각이 글자 왼끝(96)을
+			#  안 넘는가 · 소리가 하나인가 · 맥동이 어긋나는가 ·
+			#  다섯(gap 42)과 여섯(gap 36)이 둘 다 서는가.
+			_wreck_open(g)
+			g.owned.clear()
+			var want: int = maxi(GameData.max_items(), 1)
+			for bm in ["c03", "c06", "c30", "r09", "l03", "c04"]:
+				if g.owned.size() >= want:
+					break
+				var bit := _item_by_id(String(bm))
+				if not bit.is_empty():
+					g.owned.append(bit)
+			while g.owned.size() < want and not GameData.items().is_empty():
+				g.owned.append((GameData.items()[g.owned.size()
+						% GameData.items().size()] as Dictionary).duplicate())
+			g.sealed = -1
+			g._panel_reset()
+			g.wreck.clear()
+			g.wreck_n = 0
+			g.wreck_snd_from = 0
+			g.wreck_seed += 1
+			var n6: int = g.owned.size()
+			for wi in range(n6 - 1, -1, -1):
+				g._wreck_add(wi, g.owned[wi], "boom" if wi % 2 == 0 else "perish",
+						2 if wi % 2 == 0 else 0)
+			g.owned.clear()
+			g._panel_reset()
+			g._wreck_sfx()
+			_say("선반 %d 줄" % n6)
+			return
+		"safe1":
+			#  「남았다」 하나. 위 「부서짐 재질」과 **번갈아 눌러** 비대칭이
+			#  실제로 읽히는지(0.80초 조용함 대 0.40초 파열)를 ↑↓ 한 칸으로
+			#  재 본다. leg_no 를 한 칸씩 밀면 고리 트인 자리와 뜨는 높이가
+			#  매번 달라지는지가 보인다 — 습관화 방어가 실제로 도는지 재는
+			#  유일한 길이다.
+			_wreck_open(g)
+			g._wreck_safe(0, g.owned[0], 10)
+			g._wreck_sfx()
+			_say("남았다 1/10")
 			return
 		"worst":
 			# 제약 넷 · 동전 최대 · 사탕 칸 최대 · 보드 확장. 640x360 에서
@@ -1312,6 +1452,23 @@ static func _run(g: Node, e: Dictionary) -> void:
 			g._aim_begin()
 			_aim_sticker(g, am)
 			_say("조준 %s" % GameData.aim_name(am))
+		"breakmat":
+			#  고른 재질의 대표 동전을 랙 첫 칸에서 그 자리로 부순다.
+			#  **한 줄로 여섯을 나란히 대는 자리**라 유리 → 밀랍이 이웃인
+			#  것이 요점이다. 굴림 갈래(유리·밀랍)는 「1/2」·「1/10」이
+			#  같이 서고 나머지 넷은 수가 없다 — 수의 있고 없음이
+			#  「굴렸는가」를 말하는 그 규칙이 여기서 눈으로 확인된다.
+			_wreck_open(g)
+			var bmr: Dictionary = BREAK_MATS[i % BREAK_MATS.size()]
+			var bmi := _item_by_id(String(bmr.id))
+			if bmi.is_empty():
+				_say("%s: 대표 동전이 표에 없다" % bmr.n)
+				return
+			var bbn: int = GameData.boom_n(String(bmi.get("boom", "")))
+			g._wreck_add(0, bmi, "boom" if bbn > 0 else "rdec", bbn)
+			g._wreck_sfx()
+			_say("%s 부서짐" % bmr.n)
+			return
 		"cardfx":
 			# 「정산 다시 재생」은 **판 종료 정산 화면**(clear_t)을 되감는 줄이지
 			# 점수 카드의 걸음이 아니다. 카드 연출을 다시 볼 줄은 지금까지 하나도
