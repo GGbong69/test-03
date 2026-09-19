@@ -144,9 +144,16 @@ func _run() -> void:
 				% ("없음" if cut.is_empty() else ", ".join(cut)))
 
 	# ⑤ 명판 · 글리프가 카드 안쪽 면 안이다.
-	#    _icon_modifier 열 종의 실측 바깥 지름은 전부 ±0.92r 안이다 —
-	#    가장 멀리 가는 것이 dead 의 부채꼴(위 -0.84r · 옆 ±0.785r)이고
-	#    flat 의 대각선이 ±0.86r + 획이다. 여기서는 그 상수로 잰다.
+	#    2026-09-19 — 여기 적혀 있던 「열 종의 실측 바깥 지름은 전부
+	#    ±0.92r 안」은 **거짓이었다.** flat 의 cut 대각선이 중심에서
+	#    1.216r 까지 갔고(획 빼고), 그런데도 이 검사는 통과했다 —
+	#    단언이 참이어서가 아니라 **명판이 넉넉해서** 통과한 것이다.
+	#    이제 game.gd 가 키라인을 못 박고 있으므로 **그 값을 읽는다.**
+	#    KEY.cir 은 설계가 정한 **캡**이지 실측이 아니다 — 캡을 바꾸면
+	#    game.gd 의 키라인 머리말과 **같이** 고쳐라. 잉크가 실제로 그
+	#    안에 드는지는 qa_art ④ 가 그린 픽셀을 재서 본다.
+	var G = load("res://scripts/game.gd")
+	var CAP: float = float(G.KEY.cir)
 	var face := Rect2(RIM, RIM, 153.33 - RIM * 2.0, 86.0 - RIM * 2.0)
 	var bad := PackedStringArray()
 	for one in [true, false]:
@@ -159,7 +166,7 @@ func _run() -> void:
 			var pl := Rect2(c.x - pr, c.y - pr, pr * 2.0, pr * 2.0)
 			if not face.encloses(pl):
 				bad.append("명판 %s" % str(c))
-			var gl: float = gr * 0.92
+			var gl: float = gr * CAP
 			if not face.encloses(Rect2(c.x - gl, c.y - gl, gl * 2.0, gl * 2.0)):
 				bad.append("글리프 %s" % str(c))
 			#  글리프가 명판 안쪽 반지름(pr - 2)에도 들어야 한다

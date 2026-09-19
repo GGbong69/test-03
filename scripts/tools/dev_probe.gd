@@ -110,7 +110,37 @@ func _newrows(g: Node) -> void:
 	for nm in ["손가락인 척", "판매 단추 세우기", "툴팁 얕게/깊게", "로비 겨눔 세우기"]:
 		_say(_find(g, nm) >= 0, "page 1 에 「%s」 줄이 있다" % nm)
 
+	#  page 2 「판·조준」 — 그림 표본(2026-09-19)
+	Dev.page = 2
+	var ia := _find(g, "그림 표본")
+	_say(ia >= 0, "page 2 에 「그림 표본」 줄이 있다")
+	if ia >= 0:
+		#  **판 안에 실제로 그려지는 줄이어야 한다.** 1쪽(물건)은 줄이
+		#  서른넷인데 판이 열아홉 줄까지만 그려서, 거기 두면 만들어 놓고
+		#  못 누르는 줄이 된다. 그 사고를 여기서 자로 굳힌다.
+		_say(Dev._panel().encloses(Dev._row(ia)),
+				"「그림 표본」 줄이 판 안에 그려진다",
+				"줄 %d · %s" % [ia, str(Dev._row(ia))])
+		#  **보는 줄이다. 누르는 줄이 아니다** — 「조준 저울」과 같은 규약.
+		var row: Dictionary = Dev._rows(g)[ia]
+		_say(not row.has("a"), "「그림 표본」이 누르는 줄이 아니다")
+		var g0: int = g.gold
+		var l0: int = g.leg_no
+		for v in 5:
+			Dev.pick["artsheet"] = v
+			Dev._run(g, row)
+		_say(g.gold == g0 and g.leg_no == l0,
+				"「그림 표본」을 돌려도 게임이 안 바뀐다",
+				"골드 %d→%d · 판 %d→%d" % [g0, g.gold, l0, g.leg_no])
+		Dev.pick["artsheet"] = 0
+	_say(Dev._names("artsheet").size() == 5, "「artsheet」 고르개가 안 빈다",
+			"%s" % [Dev._names("artsheet")])
+	_say(String(Dev._cur_name(g, {"k": "artsheet"})).contains("/"),
+			"「artsheet」 값 칸이 「n/5 이름」 꼴이다",
+			Dev._cur_name(g, {"k": "artsheet"}))
+
 	#  고르개가 안 빈다.
+	Dev.page = 1
 	var names := Dev._names("fast")
 	_say(names.size() == 4, "「fast」 고르개가 안 빈다", "%s" % [names])
 	_say(String(Dev._cur_name(g, {"k": "fast"})).contains("/"),
