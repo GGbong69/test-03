@@ -4273,9 +4273,11 @@ func _click(m: Vector2) -> void:
 						_sfx("menu_pick2")
 						return
 					"lobby":
+						_vol_save_due()
 						pause_from = -1
 						state = S.TITLE
 					"quit":
+						_vol_save_due()
 						get_tree().quit()
 					"back":
 						_settings_back()
@@ -28567,9 +28569,15 @@ func _set_slide(i: int, m: Vector2) -> void:
 	var rows := _set_rows()
 	if i < 0 or i >= rows.size():
 		return
-	var key := String(rows[i])
 	var tr := _vol_track()
-	var x := snappedf(clampf((m.x - tr.position.x) / tr.size.x, 0.0, 1.0), 0.01)
+	_vol_set(String(rows[i]),
+			snappedf(clampf((m.x - tr.position.x) / tr.size.x, 0.0, 1.0), 0.01))
+
+
+#  값 하나를 앉힌다. 끌기와 휠이 **같은 몸**을 쓴다 — 둘로 갈리면 한쪽만
+#  Front 를 다시 안 그려 게이지가 멎은 채로 남는다. 끊는 단위는 부르는 쪽이
+#  정한다(끌기 0.01 · 휠 0.05). 2026-09-19
+func _vol_set(key: String, x: float) -> void:
 	if key == "vol":
 		vol = x
 	elif key == "mus":
@@ -28581,6 +28589,29 @@ func _set_slide(i: int, m: Vector2) -> void:
 	var fr := get_node_or_null("Front")
 	if fr != null:
 		fr.queue_redraw()
+
+
+#  미룬 음량 저장 — 굴림이 멎은 뒤 한 번 쓴다. Save.set_set 이 곧 gflush 라
+#  칸마다 쓰면 스무 칸을 굴리는 동안 파일을 스무 번 친다. 게이지가 「뗄 때
+#  한 번」(_set_slide_end)으로 이미 푼 그 문제고, 휠에는 뗌이 없어 시계로
+#  민다. 2026-09-19
+var vol_save_t := 0.0
+var vol_save_k := ""
+
+
+func _vol_save() -> void:
+	vol_save_t = 0.0
+	if vol_save_k == "vol":
+		Save.set_set("vol", vol)
+	elif vol_save_k == "mus":
+		Save.set_set("vol_mus", vol_mus)
+	vol_save_k = ""
+
+
+#  나가는 자리에서 비운다 — 안 비우면 굴린 음량이 조용히 안 남는다.
+func _vol_save_due() -> void:
+	if vol_save_t > 0.0:
+		_vol_save()
 
 
 #  손을 뗀다. 저장은 여기서 한 번 — 끄는 동안 매 프레임 쓰면 파일을 두드린다.
@@ -29885,6 +29916,13 @@ func _ttl_spot() -> Vector2:
 #  흐림 판은 세기가 0 이면 꺼 둔다. 화면 전체를 후면 복사해 아홉 번 따는
 #  판이라, 안 쓰는 동안 켜 두면 매 프레임 그 값을 낸다.
 func _set_tick(d: float) -> void:
+	#  미룬 음량 저장. 이 함수는 화면과 무관하게 매 프레임 돌고(_process 가
+	#  hitstop 보다 **먼저** 부른다) 설정을 나가도 계속 돌므로, 굴린 값이
+	#  화면을 떠난 뒤에도 반드시 앉는다. 2026-09-19
+	if vol_save_t > 0.0:
+		vol_save_t -= d
+		if vol_save_t <= 0.0:
+			_vol_save()
 	var want: bool = state == S.SETTINGS
 	var was := set_t
 	#  열림과 닫힘의 시간이 다르다. 닫기는 이미 마음을 정한 뒤라 같은
@@ -29939,6 +29977,7 @@ func _set_tick(d: float) -> void:
 
 # 설정을 닫는다 — 판 중에 열었으면 그 자리로, 아니면 제목으로.
 func _settings_back() -> void:
+	_vol_save_due()
 	state = pause_from if pause_from >= 0 else S.TITLE
 	pause_from = -1
 
