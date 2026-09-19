@@ -683,6 +683,8 @@ static func _rows(g: Node) -> Array:
 			return [
 				{"n1": "해금 전부 열기", "t": "act", "a": "unlock_all"},
 				{"n1": "해금 전부 잠그기", "t": "act", "a": "unlock_none"},
+				{"n1": "발견 전부 열기", "t": "act", "a": "found_all"},
+				{"n1": "발견 전부 잠그기", "t": "act", "a": "found_none"},
 				{"n1": "통계 지우기", "t": "act", "a": "stat_clear"},
 				{"n1": "저장 통째로 지우기", "t": "act", "a": "wipe"},
 			]
@@ -1504,6 +1506,26 @@ static func _run(g: Node, e: Dictionary) -> void:
 				if Save.lock(String(key2)):
 					n2 += 1
 			_say("%d개 잠갔다" % n2)
+			return
+		#  ⚠ 바로 위 「해금 전부 잠그기」가 훑는 Save.unlock_keys() 는 **[해금]
+		#  절만** 낸다 — [발견]을 안 건드린다. 줄이 따로 있어야 하는 까닭이
+		#  이것이고, 덕분에 얻는 것이 있다: 해금을 다 잠가도(itemgot 이
+		#  지워져도) 발견 표시가 안 흔들리고, 발견을 다 잠가도 팩 풀이 안
+		#  흔들린다. **두 계통이 서로를 모른다.**
+		#  그리고 해금과 발견은 다른 단이다 — 한 줄로 두 단을 열면 발견만
+		#  껐다 켜며 화면을 보는 일이 못 된다.
+		#
+		#  비대칭인 까닭 — 「열기」는 저장을 안 쓰고 「잠그기」는 쓴다. 열기는
+		#  압도적으로 **도구**가 쓴다(기획서 그림 스무남짓). 잠그기는 사람이
+		#  쓰고, 이미 플레이한 프로필에서 이 기능을 보는 유일한 길이다.
+		#  2026-09-19
+		"found_all":
+			g._dev_unlock_all()
+			_say("전부 발견")
+			return
+		"found_none":
+			g._dev_unlock_none()
+			_say("전부 미발견")
 			return
 		"stat_clear", "wipe":
 			Save.wipe()
