@@ -2,7 +2,7 @@ extends Node2D
 
 const GameData = preload("res://scripts/data.gd")
 const Save = preload("res://scripts/save.gd")
-# DEV — 정식 출시에서 지운다. 지우는 자리는 이 줄과 아래 "# DEV" 다섯뿐이다.
+# DEV — 정식 출시에서 지운다. 지우는 자리는 이 줄과 아래 "# DEV" 여섯뿐이다.
 const Dev = preload("res://scripts/dev.gd")
 
 # ── 다트 로그라이트 프로토타입 ──────────────────────────────
@@ -31589,7 +31589,8 @@ func _draw_hint() -> void:
 	#  떠 있으면 사용자 눈에 「키를 적어 놓은 것」 으로 읽힌다(2026-09-17).
 	#  안내 줄이 20 으로 커지며 y[333.5,351] 를 쓰므로 한 줄 위(바닥선 330)로 비킨다.
 	#  9 → 10. x[378,602] 로 화면 안이다.
-	if OS.is_debug_build() and Dev.on:
+	#  이 줄은 블록을 거느린다 — 지울 때 안의 draw_string 두 줄을 같이 지운다.
+	if OS.is_debug_build() and Dev.on:          # DEV
 		draw_string(font_sm, Vector2(VIEW.x - 262.0, 330), "[ ] 조준 %.2f    - = 정산 %.2f    ; ' 확인텀 %.2f"
 				% [gauge_speed, beat, confirm_hold], HORIZONTAL_ALIGNMENT_LEFT, -1, 10,
 				C_OFF)

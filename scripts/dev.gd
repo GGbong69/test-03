@@ -11,13 +11,15 @@ extends RefCounted
 #  정식 출시에 이것이 들어가면 안 된다. 지우는 자리를 **셋으로** 못 박는다.
 #    ① 이 파일(scripts/dev.gd)을 지운다
 #    ② game.gd 의 `const Dev = preload("res://scripts/dev.gd")` 한 줄
-#    ③ game.gd 가 Dev 를 부르는 다섯 줄 — 전부 `# DEV` 주석이 달려 있다
+#    ③ game.gd 가 Dev 를 부르는 여섯 줄 — 전부 `# DEV` 주석이 달려 있다
 #         _process()         Dev.tick(self, d)
 #         _unhandled_input() Dev.key(self, k.keycode)
 #         _click()           Dev.click(self, m)
 #         _wheel()           Dev.wheel(self, m, dir)
 #         _draw()            Dev.draw(self)
-#  `grep -n "# DEV" scripts/game.gd` 로 그 여섯이 한 번에 나온다(머리말 한 줄 포함).
+#         _draw()            if OS.is_debug_build() and Dev.on:  ← 조절 값 줄.
+#                            이 줄만이 아니라 **그 안 draw_string 을 같이** 지운다
+#  `grep -n "# DEV" scripts/game.gd` 로 그 일곱이 한 번에 나온다(머리말 한 줄 포함).
 #
 #  게임 상태는 여기서만 만진다. game.gd 에 개발자용 갈래를 파지 않는다 —
 #  파는 순간 지우기가 "세 줄" 이 아니게 되고, 그러면 안 지워진다.
