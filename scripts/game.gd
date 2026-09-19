@@ -21373,8 +21373,20 @@ func _tip_build(hit: Dictionary) -> void:
 	match hit.k:
 		"rack":
 			_tip_set_tag("동전")
-			tip_mark = Rect2()
-			tip_slot = i
+			#  같은 열쇠가 자리 **둘**에서 온다 — HUD 상단 슬롯과 런 정보
+			#  「보유」 줄. 슬롯 쪽은 사각 대신 링으로 표시하므로 칸 번호를
+			#  tip_slot 으로 넘기는데, 런 정보에서 그대로 넘겼더니 _tip_pos 가
+			#  앵커를 _slot_rect 로 갈아타 툴팁이 **커서 밑 동전이 아니라 상단
+			#  슬롯**에 붙었다(가로로 최대 86px 어긋나고, 제 설명 상자가 가리킨
+			#  동전 줄을 덮었다). 덤으로 _draw_rack 의 `i == tip_slot` 이 가린
+			#  막 뒤 엉뚱한 슬롯의 얹힘 링을 켰다. 자리를 상태로 가른다.
+			#  2026-09-19
+			if state == S.RUNINFO:
+				tip_mark = _ri_coin_rect(i)
+				tip_slot = -1
+			else:
+				tip_mark = Rect2()
+				tip_slot = i
 			if i >= owned.size():
 				return
 			var it: Dictionary = owned[i]

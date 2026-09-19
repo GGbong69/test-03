@@ -309,6 +309,43 @@ func _ri_coins() -> void:
 			hit_ok = false
 	_ok("「보유」 동전이 제 툴팁을 세운다", hit_ok,
 			"동전 %d장" % g.owned.size())
+
+	#  **앵커가 커서 밑 동전에 붙는가.** 같은 열쇠(rack)가 HUD 상단 슬롯에서도
+	#  오므로, _tip_build 가 tip_slot 을 그대로 넘기면 _tip_pos 가 앵커를
+	#  _slot_rect 로 갈아타 툴팁이 딴 자리에 뜨고(가로 최대 86px) 제 상자가
+	#  가리킨 동전 줄을 덮는다. 덤으로 _draw_rack 의 얹힘 링이 엉뚱한 슬롯에서
+	#  켜진다. 여기서 잰다 — 2026-09-19 에 한 번 그랬다.
+	var anc := true
+	var cov := ""
+	for i in g.owned.size():
+		var cr: Rect2 = g._ri_coin_rect(i)
+		g._tip_build(g._tip_hit(cr.get_center()))
+		if g.tip_slot != -1 or not g.tip_mark.get_center().is_equal_approx(
+				cr.get_center()):
+			anc = false
+		var box := Rect2(g._tip_pos(g._tip_size()), g._tip_size())
+		if absf(box.get_center().x - cr.get_center().x) > 4.0 \
+				and box.position.x > 4.0 and box.end.x < g.VIEW.x - 4.0:
+			anc = false
+		if box.intersects(cr):
+			cov += " %d" % i
+	_ok("툴팁이 그 동전에 붙는다", anc, "동전 %d장" % g.owned.size())
+	_ok("툴팁이 그 동전을 안 덮는다", cov == "",
+			"덮음%s" % (cov if cov != "" else " 없음"))
+
+	#  HUD 상단 슬롯 쪽은 한 칸도 안 변했는가 — 거기는 사각이 아니라 링이고,
+	#  앵커도 _slot_rect 그대로여야 한다.
+	var keep: int = g.state
+	g.state = g.S.PICK
+	g._tip_build({"k": "rack", "i": 0})
+	var sb := Rect2(g._tip_pos(g._tip_size()), g._tip_size())
+	_ok("상단 슬롯은 그대로 링 · 제 슬롯에 붙는다",
+			g.tip_slot == 0 and g.tip_mark.size.x == 0.0
+			and absf(sb.get_center().x
+				- g._slot_rect(0).get_center().x) <= 4.0,
+			"슬롯 %d · 가로차 %.0f" % [g.tip_slot,
+				sb.get_center().x - g._slot_rect(0).get_center().x])
+	g.state = keep
 	# 다른 탭에서는 안 잡는다 — 그림이 없는 자리다
 	g.runinfo_tab = 0
 	var none: Dictionary = g._tip_hit(g._ri_coin_rect(0).get_center())
