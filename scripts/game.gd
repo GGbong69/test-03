@@ -4417,7 +4417,11 @@ func _wheel(m: Vector2, dir: int) -> void:
 				collect_page = 0
 				_sfx("menu_pick2")
 				moved = true
-			elif _col_pages() > 1:
+			#  「탭 줄 밖 전부」이되 **화면 안**이다. 이 갈래만 사각이 없었더니
+			#  21:9 에서 view_pad.x 가 220 이라 좌우 검은 띠 — 게임이 한 점도
+			#  안 그려진 자리 — 에서 굴려도 쪽이 넘어갔다. 나머지 네 화면은
+			#  전부 사각으로 막혀 있다. 2026-09-19
+			elif _col_pages() > 1 and Rect2(Vector2.ZERO, VIEW).has_point(m):
 				collect_page = posmod(collect_page + dir, _col_pages())
 				_sfx("page")
 				moved = true

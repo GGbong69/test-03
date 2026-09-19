@@ -170,6 +170,21 @@ func _collect() -> void:
 	_roll(g._col_arrow_rect(true).get_center(), 1)
 	_ok("화살표 줄 위도 쪽", g.collect_page == 1, "쪽 %d" % g.collect_page)
 
+	#  **화면 밖**에서는 안 넘어간다. 21:9 에서 view_pad.x 가 220 이라 좌우
+	#  검은 띠가 통째로 살아 있는 휠 자리가 되어 있었다 — 게임이 한 점도 안
+	#  그려진 자리다(2026-09-19). 여기는 진짜 이벤트가 아니라 라우터를 곧장
+	#  부른다 — 창 밖 좌표는 창의 입력 길에서 살아남는다는 보장이 없고,
+	#  재려는 것은 _wheel 안의 사각 검사 하나다.
+	g.collect_page = 1
+	var out := true
+	for q in [Vector2(-180.0, 500.0), Vector2(900.0, -40.0),
+			Vector2(-1.0, 100.0), Vector2(320.0, 400.0)]:
+		g.wheel_ms = 0
+		g._wheel(q, 1)
+		if g.collect_page != 1:
+			out = false
+	_ok("화면 밖 휠은 흘린다", out, "쪽 %d" % g.collect_page)
+
 	# 탭 줄 위 — 탭이 넘어가고 쪽이 0 으로 박힌다
 	g.collect_tab = 0
 	g.collect_page = 2
