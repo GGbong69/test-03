@@ -21191,6 +21191,16 @@ func _tip_hit(m: Vector2) -> Dictionary:
 			for i in ll.size():
 				if _league_line_rect(i).has_point(m):
 					return {"k": "lg", "i": i}
+		S.RUNINFO:
+			#  「보유」 탭. 든 동전을 그림으로 늘어놓는데 그 위에는 아무것도
+			#  안 떴다 — 무엇을 들었나 보려고 연 화면에서, 그것이 무슨
+			#  효과인지는 창을 닫고 상단 슬롯에 커서를 얹어야 알았다.
+			#  상단 슬롯이 이미 쓰는 열쇠를 그대로 쓴다(_tip_build 에 새
+			#  가지가 필요 없다). 2026-09-19
+			if runinfo_tab == 3:
+				for i in owned.size():
+					if _ri_coin_rect(i).has_point(m):
+						return {"k": "rack", "i": i}
 		S.COLLECT:
 			var kk := String(COL_TABS[collect_tab].k)
 			for i in _col_count():
@@ -30217,6 +30227,21 @@ func _ri_panel() -> Rect2:
 	return Rect2(Vector2(74.0, (VIEW.y - h) * 0.5), Vector2(VIEW.x - 148.0, h))
 
 
+#  「보유」 탭에 늘어놓은 동전 한 칸. 그리는 쪽(_ri_carry)과 툴팁이 **같은 자**를
+#  쓴다 — 자가 둘이면 손이 어긋나고, 어긋난 자리는 「가리켰는데 아무것도 안 뜬다」로
+#  보인다. 식은 _ri_carry 가 쓰던 그대로다(반지름 12). 2026-09-19
+func _ri_coin_rect(i: int) -> Rect2:
+	var p := _ri_panel()
+	var xl: float = p.position.x + 16.0
+	var cxw: float = xl + float(RI.coin_x)
+	#  동전이 없으면 나누기가 0 이 된다. 그리는 쪽은 그 갈래로 안 들어오지만
+	#  이 자는 검사도 부르므로 여기서 막는다.
+	var step: float = minf(34.0, (xl + p.size.x - 32.0 - cxw - 24.0)
+			/ float(maxi(owned.size(), 1)))
+	return Rect2(cxw + float(i) * step, p.position.y + float(RI.top) - 2.0,
+			24.0, 24.0)
+
+
 func _ri_tab_rect(t: int) -> Rect2:
 	var p := _ri_panel()
 	var w: float = (p.size.x - 24.0) / float(RI_TABS.size())
@@ -30799,10 +30824,9 @@ func _ri_carry(p: Rect2) -> void:
 		draw_string(font_sm, Vector2(cxw, hy), "없음",
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 20, C_OFF)
 	else:
-		var step: float = minf(34.0, (xl + p.size.x - 32.0 - cxw - 24.0)
-				/ float(owned.size()))
 		for i in owned.size():
-			draw_item_sticker(Vector2(cxw + 12.0 + float(i) * step, y0 + 10.0), 12.0,
+			#  자리는 _ri_coin_rect 하나다 — 툴팁이 같은 자를 쓴다(2026-09-19).
+			draw_item_sticker(_ri_coin_rect(i).get_center(), 12.0,
 					owned[i], 0.0, 0.0, 0.55 if i == sealed else 0.0, 10)
 	y0 += float(RI.coins)
 
