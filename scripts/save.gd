@@ -119,6 +119,30 @@ const S_TUT := "배움"
 #  그 수가 그대로 두 배가 된다. 배움(S_TUT)을 왜 뺐는지가 바로 위 112-114 에
 #  적혀 있고, 이것이 같은 판단이다. 2026-09-19
 const S_FND := "발견"
+#  이어하기 — 진행 중인 런 하나를 통째로 담는 절.
+#  **절을 가르는 이유는 지우는 방식에 있다.** 런이 끝나면 이 절만
+#  erase_section 으로 통째로 지우는데, 해금(S_UNL)·통계(S_STA)와 한 절이면
+#  그 한 줄이 사람의 진도를 지운다.
+#  slot_info(290 둘레)는 [해금] 키만 세므로 이 절은 그 셈에 안 걸린다 —
+#  직접 읽어 확인했다. 프로필 화면의 「해금 N개」가 이것 때문에 늘 일은 없다.
+#
+#  ⚠ **새 파일을 안 판다.** 절이면 run_set → boot() → _pp() → slot_path()
+#  → _tool_run() → TOOL_PROF 가 **저절로** 도구 자리로 돌린다.
+#  오늘 이 가지에서 직접 센 것: scripts/tools 의 도구 204개 중 _new_run() 을
+#  부르는 것이 116개고, 그중 **22개**는 Save.path 조차 안 박는다
+#  (axis_probe · build_probe · curve_probe · econ_probe · lever_probe ·
+#  probe_league · probe_music · probe_packs · probe_runinfo · probe_sell_any ·
+#  probe_track · settle_probe · shot_clear · shot_drag · shot_quad ·
+#  shot_worst · swap_shot · thumb · track_probe · zz_adv · zz_aim · zz_over).
+#  새 파일이면 그 스물둘이 사람의 진행 중인 런을 곧장 쓰고 지운다 —
+#  검사 한 번에 런이 날아간다. 세는 법:
+#      comm -23 <(grep -l "_new_run()" scripts/tools/*.gd | sort) \
+#               <(grep -l "Save.path"  scripts/tools/*.gd | sort)
+#  2026-09-20
+const S_RUN := "이어하기"
+#  저장 판. 다르면(낮든 높든) 조용히 버린다. 표의 뼈대(판 수·갈래·매듭
+#  이름)가 바뀌는 날 2 로 올린다.
+const RUN_VER := 1
 
 # 통계 키 — 전부 int 누적이거나 최댓값이다.
 #  누적(bump): 던진 다트·트리플·불·빗나감·구매·판매·리롤·사탕·런·완주
@@ -265,6 +289,26 @@ static func boot() -> void:
 	_cfg = _read(want)
 
 
+#  ⚠ **원자적이지 않다 — 언젠가 고쳐야 하는 자리다.**
+#  _cfg.save(_at) 는 제자리에 덮어쓴다. 쓰다가 전원이 나가면 반쪽 파일이
+#  남는데, 잘린 ConfigFile 은 **대개 오류 없이 파싱된다** — 앞쪽 열쇠만
+#  올라오고 뒤쪽은 없는 채로. 그러면 [해금]과 [통계]가 **아무 말 없이**
+#  사라지고, 다음 flush() 가 그 망가진 설정을 되써서 영구화한다.
+#  잘라서 재 봤다: 90%에서 자르면 오류 없이 해금 하나와 통계 전부가,
+#  30%에서는 전부 사라진다(2026-09-20 검토).
+#
+#  이어하기가 이 위험을 **늘렸다.** 매듭이 판당 서넛이라 프로필 파일을
+#  고쳐 쓰는 횟수가 판당 한둘에서 열 남짓으로 는다. 창이 여전히 밀리초
+#  단위라 확률은 작지만, 잃는 것이 「런 하나」가 아니라 **사람의 진도
+#  통째**라는 것은 적어 둔다 — 그렇게 적어 둔 자리가 없었다.
+#
+#  고치는 길은 .tmp 에 쓰고 갈아 끼우는 것인데, 고도의 DirAccess.rename 은
+#  윈도우에서 **대상을 먼저 지우고** 옮기므로(godot#98360 · PR #98361)
+#  .bak 과 _read 의 되읽기까지 같이 세워야 안전해진다. 반쪽만 하면 더
+#  나쁘다 — 지우고 옮기는 사이에 죽으면 프로필이 통째로 없어진다.
+#  그리고 .bak 이 서면 erase_slot()·wipe() 가 그것까지 지워야 한다(안
+#  그러면 지운 프로필이 되살아난다). **별개 일감**이고, 그 둘은 지금 다른
+#  워크플로우가 만지는 자리라 이번 턴에 안 건드린다.
 static func flush() -> void:
 	boot()
 	var e := _cfg.save(_at)
@@ -574,3 +618,55 @@ static func wipe() -> void:
 	boot()
 	_cfg = ConfigFile.new()
 	flush()
+
+
+# ── 이어하기 ────────────────────────────────────────────
+#  진행 중인 런 하나. 게임이 「안전한 자리」(판 선택 · 판 첫머리 · 상점)에서
+#  값을 통째로 받아 적고, 제목 화면의 「계속하기」가 그것을 되살린다.
+#
+#  여기는 **담는 자리일 뿐**이다. 무엇을 담는지는 game.gd 의 _run_save 가
+#  정한다 — 저장 계층이 런의 모양을 알면 런 상태가 하나 늘 때 고칠 자리가
+#  둘이 된다.
+#
+#  프로필 파일 안의 한 절이라 **슬롯마다 저절로 따로**고, erase_slot() ·
+#  wipe() 가 파일·설정째 갈아 치우므로 따로 지울 자리를 안 만든다.
+
+static func run_get(key: String, dflt: Variant) -> Variant:
+	boot()
+	return _cfg.get_value(S_RUN, key, dflt)
+
+
+#  ⚠ **flush 를 안 한다.** 한 매듭에 서른 남짓이 줄줄이 들어오므로 열쇠마다
+#  디스크를 치면 매듭 하나에 서른 번 쓴다. bump() 가 「한 발 던질 때마다
+#  디스크를 때리면 안 된다」로 같은 판단을 내린 자리가 위에 있다.
+#  부르는 쪽(_run_save)이 **끝에 한 번** flush() 한다.
+static func run_set(key: String, v: Variant) -> void:
+	boot()
+	_cfg.set_value(S_RUN, key, v)
+
+
+#  절이 서 있는가. **슬롯을 올리지 않고 묻는다** — slot_info 가 「보여
+#  주려고 올렸다가 안 고르고 나가면 남의 프로필이 올라온 채로 남는다」를
+#  피한 그 규약이다. 매 프레임 불려도 boot() 이 _at == want 면 즉시
+#  return 이라 디스크에 안 닿는다.
+#
+#  ⚠ **이것만으로 「계속하기」를 켜지 마라.** 여기는 ver 하나만 본다 —
+#  절은 성한데 판 번호가 표 밖이거나 다트통 id 가 표에서 사라진 저장에서도
+#  참이다. 탈 수 있는가는 game.gd 의 _run_ok() 가 뼈대 여섯까지 보고
+#  답하고, 제목 글줄의 흐림도 되살리기도 **그쪽 하나**를 본다. 갈라 두었던
+#  동안 그 줄이 밝은 채로 죽어 있었다. 2026-09-20
+static func run_live() -> bool:
+	boot()
+	return int(_cfg.get_value(S_RUN, "ver", 0)) == RUN_VER
+
+
+#  ⚠ **제 안에서 flush 한다.** 완주 갈래 넷 중 하나(목숨이 마지막 판에서
+#  터진 완주 — game.gd 의 `state = S.OVER; won = true; _sfx("run_win")`
+#  넉 줄짜리 좁은 갈래)에만 Save.flush() 가 **없다**. 부르는 쪽에 맡기면
+#  거기 하나가 빠져 **이긴 런이 「계속하기」로 되살아난다.** 손으로는 거의
+#  못 밟는 갈래라 눈으로는 영영 안 걸린다. 2026-09-20
+static func run_drop() -> void:
+	boot()
+	if _cfg.has_section(S_RUN):
+		_cfg.erase_section(S_RUN)
+		flush()

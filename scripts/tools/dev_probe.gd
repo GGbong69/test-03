@@ -218,8 +218,15 @@ func _newrows(g: Node) -> void:
 		_say(_find(g, nm) >= 0, "page 0 에 「%s」 줄이 있다" % nm)
 	#  page 1 「물건」
 	Dev.page = 1
-	for nm in ["손가락인 척", "판매 단추 세우기", "툴팁 얕게/깊게", "로비 겨눔 세우기"]:
+	for nm in ["손가락인 척", "판매 단추 세우기", "툴팁 얕게/깊게",
+			"로비 겨눔 세우기", "새 런 겨눔 세우기"]:
 		_say(_find(g, nm) >= 0, "page 1 에 「%s」 줄이 있다" % nm)
+	#  page 3 「해금」 — 이어하기 넷이 짝이다. 하나가 빠지면 「적기」와
+	#  「지우기」가 서로를 못 되돌린다. 2026-09-20
+	Dev.page = 3
+	for nm in ["이어하기 적기", "이어하기 되살리기", "이어하기 보기",
+			"이어하기 지우기"]:
+		_say(_find(g, nm) >= 0, "page 3 에 「%s」 줄이 있다" % nm)
 
 	#  page 2 「판·조준」 — 그림 표본(2026-09-19)
 	Dev.page = 2
@@ -298,6 +305,11 @@ func _newrows(g: Node) -> void:
 	Dev._run(g, {"a": "lobby_arm"})
 	_say(not g.lobby_arm, "한 번 더 누르면 푼다")
 
+	Dev._run(g, {"a": "start_arm"})
+	_say(g.start_arm, "「새 런 겨눔 세우기」가 겨눔을 세운다")
+	Dev._run(g, {"a": "start_arm"})
+	_say(not g.start_arm, "한 번 더 누르면 푼다")
+
 	g.owned.clear()
 	for it in GameData.items():
 		g.owned.append((it as Dictionary).duplicate())
@@ -308,6 +320,36 @@ func _newrows(g: Node) -> void:
 	g.sell_sel = -1
 	g.owned.clear()
 	Dev.page = page0
+
+	#  ── 이어하기 넷. **글줄이 실제로 도는지**를 잰다 ──
+	#  「보기」는 되살리지 않고 읽는 자리라 글자 짜맞추기가 틀려도 화면
+	#  말고는 아무 데서도 안 드러난다 — 칸을 하나 더할 때마다 여기서 한 번
+	#  돌려 봐야 한다(남은 몫 · 못 탄다 두 칸이 그렇게 늘었다). 2026-09-20
+	#  문지기를 지나는 자리를 만들어 준다 — 위 검사들이 세워 둔 연출
+	#  깃발이 남아 있으면 「적기」가 말없이 아무것도 안 한다.
+	var st0: int = g.state
+	g.state = g.S.LEG
+	g.photo = ""
+	g.photo_rack = ""
+	g.boost_t = -1.0
+	g.boost_pick = 0
+	g.sweep_live = false
+	g.swap_live = false
+	Save.run_drop()
+	Dev._run(g, {"a": "run_peek"})
+	_say(true, "「이어하기 보기」 — 없을 때도 안 죽는다")
+	Dev._run(g, {"a": "run_save"})
+	_say(Save.run_live(), "「이어하기 적기」가 절을 세운다")
+	Dev._run(g, {"a": "run_peek"})
+	_say(true, "「이어하기 보기」 — 있을 때도 안 죽는다")
+	_say(g._run_ok(), "적은 것이 **탈 수 있는** 이어하기다")
+	Dev._run(g, {"a": "run_load"})
+	_say(Save.run_live(), "「되살리기」 뒤에도 절이 선다")
+	Dev._run(g, {"a": "run_drop"})
+	_say(not Save.run_live(), "「지우기」가 절을 지운다")
+	g.state = st0
+	#  되살리기가 설명을 열어 둘 수 있다 — 다음 절에 안 흘리게 닫는다.
+	g._tutor_close()
 
 
 # ── ① 그려지는 자리와 눌리는 자리 ────────────────────────
