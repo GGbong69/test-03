@@ -139,8 +139,12 @@ static func click(g: Node, m: Vector2) -> bool:
 				# **고른 것이 곧 적용이다.** 화살표가 값만 바꾸고 적용을 따로
 				# 눌러야 하면, 검사 도구에서 그 한 번을 빠뜨리는 것이 기본값이
 				# 된다 — 눌러도 게임이 안 바뀌는 것으로 보인다.
+				_pend = {}          # 손으로 누른 것이 기다리던 휠 적용을 이긴다
+				_pend_t = 0.0
 				_run(g, e)
 		else:
+			_pend = {}
+			_pend_t = 0.0
 			_run(g, e)
 		return true
 	return _panel().has_point(m)          # 판 안의 헛클릭은 삼킨다
@@ -151,6 +155,14 @@ static func click(g: Node, m: Vector2) -> bool:
 # 화면 글은 한 자도 안 늘린다(판 오른쪽 위 줄이 길어지면 고르개 머리와
 # 폭이 어긋난다). 쿨다운은 게임의 wheel_ms 하나를 같이 쓴다 — 제 시계를
 # 따로 들면 고르개에서만 감도가 달라진다. 2026-09-19
+#  휠이 멎었다고 보는 시간(초). 게임 쪽 쿨다운(WHEEL_MS 0.06)보다 넉넉히
+#  길어야 한 번의 튕김이 한 번으로 묶인다 — 트랙패드 한 쓸기가 이벤트 수십
+#  개다. 0.18 이면 칸을 하나씩 또박또박 굴려도 칸마다 적용된다.
+const WHEEL_APPLY := 0.18
+static var _pend := {}        # 굴림이 멎으면 적용할 줄. 비면 없다
+static var _pend_t := 0.0
+
+
 static func wheel(g: Node, m: Vector2, dir: int) -> bool:
 	if not on:
 		return false
@@ -171,8 +183,16 @@ static func wheel(g: Node, m: Vector2, dir: int) -> bool:
 		var e: Dictionary = rows[i]
 		if String(e.t) == "list" and int(e.n) > 0:
 			pick[e.k] = posmod(int(pick.get(e.k, 0)) + dir, int(e.n))
-			# **고른 것이 곧 적용이다** — ◀▶ 와 같은 길이다.
-			_run(g, e)
+			#  값은 그 자리에서 바뀌고 **적용은 굴림이 멎은 뒤 한 번**이다.
+			#  ◀▶ 는 한 번 누르면 한 칸이라 그 자리에서 적용해도 되지만,
+			#  휠은 한 번 튕기면 칸이 열 몇 개 지나간다 — 칸마다 적용하면
+			#  「소리 하나」 줄에서 소리가 한 움큼 쏟아지고(사용자 제보,
+			#  2026-09-20 「디버그에 왜 자꾸 이상한 소리 나?」), 「부서짐 재질」은
+			#  부수는 소리를 그만큼 내고, 「동전 주기」는 동전을 그만큼 주고,
+			#  「팩 열기」는 팩을 그만큼 연다. 값만 먼저 보여 주고 손이 멎으면
+			#  그 값 하나를 적용한다 — 보는 것과 하는 것이 갈리는 자리다.
+			_pend = e
+			_pend_t = WHEEL_APPLY
 		# 값이 없는 줄 위에서는 아무 일도 안 하되 삼킨다. 안 삼키면 판 밑
 		# 화면의 쪽이 대신 넘어간다.
 		return true
@@ -242,6 +262,14 @@ static func tick(g: Node, d: float) -> void:
 		msg_t -= d
 		if msg_t <= 0.0:
 			msg = ""
+	#  휠이 멎었다 — 마지막으로 고른 값 하나를 그제서야 적용한다(wheel 주석).
+	if _pend_t > 0.0:
+		_pend_t -= d
+		if _pend_t <= 0.0:
+			var pe: Dictionary = _pend
+			_pend = {}
+			if not pe.is_empty():
+				_run(g, pe)
 	if card_ph > 0:
 		_card_tick(g, d)
 	# 사다리는 한 소리가 아니라 **오르는 관계**가 내용이라, 한 번에 하나씩

@@ -64,6 +64,9 @@ func _initialize() -> void:
 	print("\n── 부딪힘 한 번 ──────────────────────────")
 	_smash1(g)
 	print("\n── 동전의 죽음 ───────────────────────────")
+	print("
+── 휠 한 번 팅김 ──────────")
+	_wheel_once(g)
 	_wreck(g)
 	print("\n── 조준 ──────────────────────────────────")
 	_aim(g)
@@ -153,6 +156,45 @@ func _found(g: Node) -> void:
 			"동전 %d / %d" % [g._col_found_n(0), g._col_rows(0).size()])
 	Dev._run(g, {"a": "found_none"})
 	Dev.page = page0
+
+
+#  휠은 한 번 튕기면 칸이 열 몇 개 지나간다. 칸마다 적용하면 「소리 하나」 줄이
+#  소리를 한 움큼 쏟고 「동전 주기」는 동전을 그만큼 준다 — 사용자가 그 소리를
+#  듣고 물어 왔다(2026-09-20 「디버그에 왜 자꾸 이상한 소리 나?」).
+#  그래서 **값은 그 자리에서, 적용은 굴림이 멎은 뒤 한 번**이다. 세는 자는
+#  동전 수다 — 소리는 못 세지만 같은 문(_run)을 지나므로 한 줄이 둘을 다 잰다.
+func _wheel_once(g: Node) -> void:
+	Dev.page = 1
+	var i := _find(g, "동전 주기")
+	if i < 0:
+		_say(false, "물건 쪽에 동전 주기 줄이 있다")
+		Dev.page = 2
+		return
+	var c: Vector2 = Dev._row(i).get_center()
+	g.owned.clear()
+	Dev._pend = {}
+	Dev._pend_t = 0.0
+	for k in 8:
+		Dev.wheel(g, c, 1)
+	_say(g.owned.is_empty(), "굴리는 동안에는 아무것도 안 준다",
+			"여덟 칸 굴려 %d장" % g.owned.size())
+	for k in 20:                      # WHEEL_APPLY 0.18 + 여유
+		Dev.tick(g, 1.0 / 60.0)
+	_say(g.owned.size() == 1, "멎으면 딱 한 번 적용한다", "%d장" % g.owned.size())
+	for k in 5:
+		Dev.wheel(g, c, 1)
+	for k in 20:
+		Dev.tick(g, 1.0 / 60.0)
+	_say(g.owned.size() == 2, "다시 굴려도 한 번씩", "모두 %d장" % g.owned.size())
+	#  손으로 누르는 길은 **그 자리에서** 적용한다 — 여기가 느려지면 안 된다
+	var arr: Rect2 = Dev._arrow(Dev._row(i), true)
+	var n1: int = g.owned.size()
+	Dev.click(g, arr.get_center())
+	_say(g.owned.size() == n1 + 1, "화살표는 그 자리에서 적용한다",
+			"%d장" % (g.owned.size() - n1))
+	g.owned.clear()
+	g._panel_reset()
+	Dev.page = 2
 
 
 func _find(g: Node, label: String) -> int:
