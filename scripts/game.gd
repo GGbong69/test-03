@@ -1243,6 +1243,11 @@ func _start_leg() -> void:
 	_card_reset()
 	darts.clear()
 	pops.clear()
+	#  선반은 판마다 새로 센다. wreck_n 이 간격을 쥐므로 안 비우면 다음
+	#  판의 첫 시체가 지난 판의 줄 수만큼 아래에서 시작한다.
+	wreck.clear()
+	wreck_n = 0
+	wreck_snd_from = 0
 	waves.clear()
 	sparks.clear()
 	ring_fx.clear()
@@ -1341,13 +1346,21 @@ func _finish_leg() -> void:
 			var sv: Dictionary = owned[i]
 			if String(sv.get("k", "")) == "save" \
 					and float(total) >= float(target) * float(sv.v) / 100.0:
-				var at := _slot_rect(mini(i, GameData.max_items() - 1)).get_center()
+				#  제 몸을 부숴 실패를 무른다. 안 눌렀고 값도 안 받았으니
+				#  **파괴**다 — 낱말만 「막았다」로 갈린다. 재질은 pixel
+				#  이라 조각이 흩어지지 않고 격자 넷이 한 칸씩 꺼진다.
+				#  **파괴음을 안 얹는다** — 바로 밑 _sfx("save_life") 가
+				#  이미 그 순간에 울고, 겹치면 「막았다」와 「부서졌다」가
+				#  귀에서 섞인다. _wreck_sfx 는 pixel 을 안 세므로 아무
+				#  소리도 안 내고 묶음 지표만 민다.
+				wreck_seed += 1
+				wreck_snd_from = wreck.size()
+				_wreck_add(i, sv, "save", 0)
 				_seal_drop(i)
 				owned.remove_at(i)
-				_panel_reset()
-				pop(at + Vector2(0.0, 24.0), "%s — 실패를 막았다" % sv.n,
-						C_ACC, 12, 1.2)
+				_panel_pull(i)
 				_sfx("save_life")
+				_wreck_sfx()
 				# 마지막 판에서 목숨이 터져도 완주는 완주다. 여기서 곧장
 				# 정산으로 가면 아래 완주 검사에 못 닿아, 상점이 0칸으로 열리고
 				# 목표가 라운드 8 그대로인 유령 25판이 시작된다.
@@ -1711,29 +1724,57 @@ func _leg_end_wear() -> void:
 		pop(_slot_rect(0).get_center() + Vector2(0.0, -22.0),
 				"남의 동전 −%d" % pay, C_MULT, 12, 1.0)
 	var per := int(GameData.league_v("perish", 0.0))
+	#  시체 한 묶음을 연다. 소리는 이 묶음 끝에서 **한 번**만 난다.
+	wreck_seed += 1
+	wreck_snd_from = wreck.size()
 	var i := owned.size() - 1
 	while i >= 0:
 		var it: Dictionary = owned[i]
-		var dead := false
-		# 삭음 — 주황 리그. 산 판을 기억해 두었다가 그만큼 지나면 부순다.
+		# 삭음 — 검정 리그. 산 판을 기억해 두었다가 그만큼 지나면 부순다.
+		# ⚠ 이 주석은 오래 「주황 리그」라고 적고 있었는데 leagues.csv 는
+		#   black perish 5 · orange perish 0 이다(2026-09-19, 직접 읽어
+		#   확인). 표가 맞고 주석이 틀렸으므로 주석만 고쳤다.
+		var perished := false
 		if per > 0:
-			var age := leg_no - int(it.get("bought", leg_no))
-			if age >= per:
-				dead = true
+			perished = leg_no - int(it.get("bought", leg_no)) >= per
+		var decayed := false
 		if String(it.get("grow", "")) == "rdec":
 			it.gs = int(it.get("gs", 0)) + 1
-			if int(it.v) - int(it.gstep) * int(it.gs) <= 0:
-				dead = true
+			decayed = int(it.v) - int(it.gstep) * int(it.gs) <= 0
 		var bn := GameData.boom_n(String(it.get("boom", "")))
-		if bn > 0 and randf() < 1.0 / float(bn):
-			dead = true
+		#  **굴렸는가를 따로 든다.** items.csv 백 줄 중 boom 칸이 찬 것은
+		#  정확히 둘이다(c03 r2 · c06 r10). 나머지 아흔여덟은 굴리지
+		#  않으므로 「남았다」를 말할 자격이 없다 — 확률이 없는 동전까지
+		#  「살았다」를 외치면 뜻이 사라진다.
+		#
+		#  ⚠ **`rolled and randf()` 순서를 절대 뒤집지 마라.** 단축평가가
+		#  옛 줄(`bn > 0 and randf() < …`)과 똑같이 걸려야 randf 호출
+		#  **수와 차례가 한 칸도 안 달라진다.** 뒤집으면 boom 없는 동전에서도
+		#  randf 가 돌아 판 끝마다 전역 RNG 가 한 칸씩 밀리고, 「파괴 확률을
+		#  안 고쳤다」가 참인데 **런 전체가 달라진다.**
+		var rolled := bn > 0
+		var boomed := rolled and randf() < 1.0 / float(bn)
+		var dead := perished or decayed or boomed
 		if dead:
-			pop(_slot_rect(mini(i, GameData.max_items() - 1)).get_center()
-					+ Vector2(0.0, 24.0), "%s — 부서졌다" % it.n, C_MULT, 12, 1.1)
+			#  **확정 죽음이 굴림을 이긴다.** 삭아 죽는 장은 굴림 결과와
+			#  무관하게 이번 판에 떠난다 — 그 장에 「1/10」을 붙이면
+			#  「굴려서 졌다」는 거짓말이 된다. 그리고 이것이 생존 쪽
+			#  규칙(rolled and not dead)과 정확히 대칭이라 검사로 한 줄에
+			#  잴 수 있다.
+			var why := "perish" if perished else ("rdec" if decayed else "boom")
+			_wreck_add(i, it, why, bn if why == "boom" else 0)
 			_seal_drop(i)
 			owned.remove_at(i)
-			_panel_reset()
+			#  _panel_reset 은 통째로 0 으로 돌리는 길이라 **상점에서만**
+			#  안전했다. 이제 어디서든 파므로 밀어내는 쪽이 맞다 —
+			#  _panel_pull 머리말이 이미 그 정답을 적어 뒀고 _sell 만 그
+			#  길을 걷고 있었다(2026-09-19).
+			_panel_pull(i)
+		elif rolled:
+			#  굴렸고 아무것도 안 죽인 장. 여기서만 「남았다」다.
+			_wreck_safe(i, it, bn)
 		i -= 1
+	_wreck_sfx()
 
 
 
@@ -1746,18 +1787,25 @@ func _leg_end_wear() -> void:
 # 큐가 다 빈 자리라야 둘 다 피한다.
 #
 # rdec 은 여기서 안 본다 — 그쪽은 판마다 닳으므로 판 끝이 제 자리다.
+#
+# 그래서 **이 갈래만 판 중에도 시체가 슬롯 자리에 선다.** 판이 이어지면
+# (_to_pick) 동전 칸이 그려지는 중이라 _wreck_draw 가 scr 1 을 고른다.
+# 낱말도 다르다 — 툴팁 수치가 0 으로 내려가는 것이 **미리 보이므로**
+# 놀라움이 아니라 예고된 끝이고, 그래서 「부서졌다」가 아니라 「다 썼다」다.
 func _wear_spent() -> void:
+	wreck_seed += 1
+	wreck_snd_from = wreck.size()
 	var i := owned.size() - 1
 	while i >= 0:
 		var it: Dictionary = owned[i]
 		if String(it.get("grow", "")) == "tdec" \
 				and int(it.v) - int(it.gstep) * int(it.get("gs", 0)) <= 0:
-			pop(_slot_rect(mini(i, GameData.max_items() - 1)).get_center()
-					+ Vector2(0.0, 24.0), "%s — 다 썼다" % it.n, C_MULT, 12, 1.1)
+			_wreck_add(i, it, "spent", 0)
 			_seal_drop(i)
 			owned.remove_at(i)
-			_panel_reset()
+			_panel_pull(i)
 		i -= 1
+	_wreck_sfx()
 
 
 func _gold_from_items() -> Array:
@@ -3020,6 +3068,24 @@ const SFX := {
 	# ── 판과 런 ───────────────────────────────────
 	"leg_clear":    {"seq": [392.0, 494.0, 587.0], "gap": 0.09, "d": 0.18, "a": 0.22},
 	"save_life":      {"seq": [392.0, 523.0], "gap": 0.09, "d": 0.16, "a": 0.22},
+	#  ── 동전이 부서진다 (2026-09-19) ─────────────────
+	#  판 끝에 나는 소리라 leg_clear · save_life 의 형제들 사이가 제자리다
+	#  (상점 구획이 아니다). **판 밖이다** — _draw_clear 머리말이 이미
+	#  「릴 굴림과 칩 소리는 판 밖의 어휘라 여기서는 써도 된다(판 위는
+	#  다트 그대로다)」고 정해 뒀다. 판 위에서 나는 단 하나(소진 tdec)는
+	#  새 소리를 안 짓고 hand_drop 을 쓴다.
+	#
+	#  넷 다 **잡음이 이끌고 음정이 내려간다** — save_life([392,523] 오름) ·
+	#  leg_clear([392,494,587] 오름)과 귀로 안 겹친다.
+	#  cast 와 hollow 는 파일을 안 굽고 coin_break 를 ×0.84 · ×1.18 로
+	#  민다(_sfx 의 pitch_scale = f/SFX_BASE). **여섯 재질, 네 파일.**
+	"coin_break":       {"f": 294.0, "d": 0.13, "a": 0.19},
+	"coin_break_glass": {"f": 392.0, "d": 0.11, "a": 0.19},
+	"coin_break_wax":   {"f": 165.0, "d": 0.22, "a": 0.15},
+	#  「안 부서졌다」는 **부서지는 층이 빠진 소리**다 — 파열도 밑도 없다.
+	#  a 0.07 은 coin_break 의 0.19 대비 0.37배이고 hand_drop 과 같은 값이다.
+	#  save_life 가 [392,523] **두** 음이라 여기는 **한** 음만 쓴다.
+	"coin_safe":        {"f": 523.0, "d": 0.05, "a": 0.07},
 	"run_win":        {"seq": [262.0, 330.0, 392.0, 523.0, 659.0], "gap": 0.10, "d": 0.22, "a": 0.26},
 	"run_lose":       {"seq": [300.0, 240.0, 180.0], "gap": 0.13, "d": 0.24, "a": 0.22},
 	"leg_open":     {"seq": [392.0, 523.0], "gap": 0.07, "d": 0.12, "a": 0.18},
@@ -3290,6 +3356,10 @@ func _process(d: float) -> void:
 	for p in pops:
 		p.t += d
 	pops = pops.filter(func(p): return p.t < p.life)
+	#  시체의 시계는 clear_t 와 **따로** 돈다. 그래야 건너뛰기
+	#  (_click 의 clear_t = 99.0)에 안 죽고, if state == S.CLEAR 분기
+	#  밖이라 판 중 소진(tdec)도 같은 시계를 탄다.
+	_wreck_tick(d)
 
 	card_v += (card_target - card_p) * 420.0 * d
 	card_v *= exp(-17.0 * d)
@@ -5994,6 +6064,12 @@ func _hud_draw() -> void:
 	_hud_btns_draw()
 	# 판매 팝업이 스크림(알파 0.94) 밑에 깔리면 안 보인다 — 판 다음에 그린다.
 	_draw_pops()
+	#  시체 — **이 한 줄이 유일한 그리기 문이다.** 위 `if state != S.CLEAR`
+	#  게이트 **밖**이라 정산 화면에서도 돈다(5964 주석의 「정산 화면은 그
+	#  자체가 명세다」에 예외가 하나 생긴 자리다 — 이 층만 정산 위에 선다).
+	#  _draw_clear 에는 안 건다: _draw_screen 은 한 프레임에 두 번 돌 수
+	#  있고 _hud_draw 만 _draw 에서 정확히 한 번 돈다.
+	_wreck_draw()
 
 
 func annulus_at(c: Vector2, ri: float, ro: float, a0: float, a1: float,
@@ -10915,7 +10991,9 @@ const RANK := {
 #  것이 손에 들기 전에 보여야 한다. 그림을 줄여 붙이면 38px 에서 뭉개지고,
 #  뭉개지지 않아도 "그 영화를 아는가" 만 묻는 그림이 된다.
 const MATS := {
-	"c03": "glass",      # 유리 대포 — 판마다 1/6 로 부서진다(boom r2)
+	#  ⚠ 이 줄은 「1/6」이라 적고 있었는데 제 괄호 안의 r2 와 어긋나 있었다.
+	#  boom 이 rN = 1/N 을 받게 되면서 r6 에서 내려온 자리다(2026-09-19).
+	"c03": "glass",      # 유리 대포 — 판마다 1/2 로 부서진다(boom r2)
 	"c06": "wax",        # 이카로스 — 배수 x4, 판마다 1/10 로 녹는다(boom r10)
 	"l05": "wax",        # 녹는 시계 — 남은 다트가 다음 판으로 흘러간다(side carry)
 	"c30": "cast",       # 윅 존 — 한 발도 안 빗나가야 한다. 무를 데가 없다
@@ -12326,6 +12404,656 @@ func _elide(t: String, w: float, sz: int) -> String:
 			break
 		out += t[i]
 	return out.strip_edges(false, true) + "…"
+
+
+
+# ══════════════════════════════════════════════════════════
+#  동전의 죽음 — 선반 · 조각 · 「남았다」       (2026-09-19)
+# ──────────────────────────────────────────────────────────
+#  사용자 — 「동전이 파괴될 때도 사실 잘 모르겠거든? 걍 플레이하다가
+#  동전이 어느새 사라진 것 같아.」 「파괴 안 되었으면 파괴 안 되었다는
+#  식으로 할까?」
+#
+#  **「어느새 사라졌다」의 원인은 연출이 약해서가 아니라 0 이라서였다.**
+#  _finish_leg 의 두 줄(_leg_end_wear → _settle_clear)이 붙어 있고 사이에
+#  await 도 프레임 경계도 없다. 그래서 _leg_end_wear 가 찍은 pop 을
+#  _settle_clear 의 pops.clear() 가 **같은 프레임에** 지운다 — 그리기까지
+#  한 번도 못 갔다. 소리는 표에 한 줄도 없었다. 피드백이 정확히 0 이다.
+#  그래서 이 구획이 하는 일은 「더 크게」가 아니라 **보일 수 있는 프레임을
+#  찾아 주는 것**이다. pops 를 안 쓰고 제 배열로 제가 그린다.
+#
+#  바깥과 닿는 곳은 넷뿐이다. 동전 슬롯 머리말의 계약을 그대로 잇는다.
+#    _wreck_add / _wreck_safe   죽을 때 · 굴림을 견뎠을 때
+#                               (_leg_end_wear · _wear_spent · 목숨)
+#    _wreck_sfx()               한 묶음의 끝에서 한 번        (같은 셋)
+#    _wreck_tick(d)             매 프레임 진행               (_process)
+#    _wreck_draw()              매 프레임 그리기        (_hud_draw 맨 끝)
+#
+#  **owned 를 안 건드린다.** 시체는 owned 와 무관한 배열에 눕고
+#  owned.remove_at 은 지금처럼 같은 프레임에 동기로 끝난다 —
+#  qa_grow_step(196·203)과 settle_probe(105)가 _leg_end_wear() 를 시계
+#  없이 부르고 **그 줄 다음에** owned 를 재기 때문이다. 「조각이 날아간
+#  뒤에 지우면 더 자연스럽지 않나」가 이 일감에서 제일 자연스러운
+#  생각이고, 그 순간 검사 셋이 죽는다.
+#
+#  **박자를 0초 늘린다.** 노드도 뷰포트도 타이머도 await 도 안 만든다
+#  (CARDFX 머리말과 같은 규약). 연출은 정산이 이미 저절로 흘리는
+#  0.6~1.2초 안에서 끝나고 _clear_done() 에 시체 조건을 **안 더한다** —
+#  손은 지금과 똑같은 순간에 누를 수 있다.
+#
+#  **비대칭은 글자가 아니라 동전에 일어나는 일에 있다.** 부서짐과 남음은
+#  같은 자리 · 같은 크기 · 같은 글자 크기를 쓰고, 갈리는 것은 둘이다 —
+#  온전한 실루엣인가 조각인가, 그리고 소리가 크냐 톡이냐.
+# ══════════════════════════════════════════════════════════
+
+#  재질마다 부서지는 꼴이 다르다. MATS 가 이미 재질을 적어 뒀고(유리
+#  대포는 유리 · 이카로스는 밀랍 · 토템은 픽셀) 여기는 그 재질이
+#  **어떻게 죽는가**만 쥔다. 표가 둘이고 칸이 안 겹친다.
+#
+#  치수의 근거: 랙 동전은 π·19² = 1134px². _shard_fan 머리말이 실측한
+#  5등분 조각 224면px² 에 k²(0.862² = 0.743)를 곱해 166px² · 가장 짧은 변
+#  5.5px 이다 — 「1px 외톨이는 물건이 아니라 먼지」 바닥의 다섯 배 위다.
+#
+#  ⚠ **n 은 부채꼴 수이고 실제 다각형은 n+1 이다** — _shard_fan 이
+#  「부채꼴 띠 + 속 하나」를 내기 때문이다(그 머리말이 적어 뒀다). 유리
+#  n=5 → 조각 6, 밀랍 n=3 → 4. plaque 가족은 아예 n 을 안 보고 bbox
+#  2×2 격자에서 3~4 를 낸다. 검사 ⑫ 가 **표가 아니라 실제 수**를 잰다.
+#
+#  **흔들림도 멈춤도 없다. 전부 0 이고, 영영 0 이다.** 근거 셋:
+#  ① _draw_clear 머리말이 「정산은 **읽는** 화면이지 비치는 화면이
+#     아니다」로 스크림을 0.94 → 1.0 으로 올린 자리다. 읽어야 하는 표를
+#     흔드는 것은 그 결정의 정반대고, shake 는 화면을 통째로 민다.
+#  ② 검정 리그(perish 5)에서는 파괴가 **판당 한 번**이 정상 상태다.
+#     거기에 흔들림을 걸면 마지막 리그가 내내 폭죽이 된다.
+#  ③ hitstop 은 _process 가 통째로 return 하는 값이라 그것을 건드리는
+#     것이 곧 판 끝 박자를 늘리는 것이다.
+#  대신 **국소**다 — 조각이 흰색으로 얼고 몸이 2px 내려앉는다.
+const BREAK := {
+	#  유리는 **깨진다.** 부채꼴 다섯이 방사로 튄다. 총 0.400초는 그
+	#  축의 한쪽 끝이고, 밀랍 0.560초가 반대쪽 끝이다.
+	"glass": {"n": 5, "hold": 0.045, "fly": 0.215, "sink": 0.140,
+			"v_lo": 150.0, "v_hi": 195.0, "grav": 340.0, "om": 7.0,
+			"mode": "fan", "rim": true, "grit": 8,
+			"snd": "coin_break_glass", "pit": 1.0},
+	#  밀랍은 **녹는다.** 조각이 흩어지는 것이 아니라 **늘어나는** 것이
+	#  「녹는다」다 — 세로 배율만 1.00 → 1.55 로 간다. 1.4배 길고 절반
+	#  조각이고 옆으로 거의 안 가고 색이 하나고 고역이 없다.
+	"wax": {"n": 3, "hold": 0.045, "fly": 0.395, "sink": 0.120,
+			"v_lo": 26.0, "v_hi": 44.0, "grav": 110.0, "om": 0.6,
+			"mode": "melt", "rim": false, "grit": 0,
+			"snd": "coin_break_wax", "pit": 1.0},
+	#  주물은 **쪼개진다.** 둘로 크게. 무거워서 빨리 떨어진다(중력 520).
+	"cast": {"n": 2, "hold": 0.045, "fly": 0.235, "sink": 0.140,
+			"v_lo": 95.0, "v_hi": 135.0, "grav": 520.0, "om": 2.0,
+			"mode": "fan", "rim": false, "grit": 4,
+			"snd": "coin_break", "pit": 0.84},
+	#  픽셀은 **칸이 꺼진다.** 격자 넷이 한 칸씩 사라진다. 소리가 없는
+	#  갈래(save_life 가 이미 울었다)라 그림이 다 말해야 한다.
+	"pixel": {"n": 4, "hold": 0.045, "fly": 0.220, "sink": 0.055,
+			"v_lo": 0.0, "v_hi": 0.0, "grav": 0.0, "om": 0.0,
+			"mode": "grid", "rim": false, "grit": 0,
+			"snd": "", "pit": 1.0},
+	#  빈 것은 **안으로 꺼진다.** 조각이 없고 테만 오므라든다 — 값이 없는
+	#  물건이라 흩어질 몸도 없다(MATS l03 주석).
+	"hollow": {"n": 0, "hold": 0.0, "fly": 0.220, "sink": 0.080,
+			"v_lo": 0.0, "v_hi": 0.0, "grav": 0.0, "om": 0.0,
+			"mode": "ring", "rim": false, "grit": 0,
+			"snd": "coin_break", "pit": 1.18},
+	#  나머지 아흔넷. 그냥 부서진다.
+	"": {"n": 4, "hold": 0.045, "fly": 0.275, "sink": 0.140,
+			"v_lo": 105.0, "v_hi": 145.0, "grav": 380.0, "om": 4.0,
+			"mode": "fan", "rim": false, "grit": 5,
+			"snd": "coin_break", "pit": 1.0},
+}
+
+#  자리와 박자. 상자는 직접 재서 넣은 값이다.
+#
+#  **선반은 정산 화면 왼쪽 띠다.** S.CLEAR 에서 _hud_draw 가 동전 슬롯을
+#  **안 그리므로** 슬롯 좌표에 매단 연출은 정산에서 허공에 뜬다. 반면
+#  _draw_clear 의 표는 큰 벌 x[190,450] · 작은 벌 x[227,413] · 단추
+#  x[232,408]·y[290,332] · 총액 x 320 가운데 · 제목 잉크 y[27,46] 이라
+#  **x[8,180] × y[52,276] 이 줄 수(3~9)와 표 크기에 상관없이 언제나
+#  빈다.** 오른쪽 표는 이 판이 준 것, 왼쪽 띠는 이 판이 가져간 것 —
+#  저장소가 이미 「왼쪽은 버려지는 쪽」이다(_sell 의 「판매 창구는 화면
+#  왼쪽이라 그쪽 손이 민다」 · _grit_burst 의 「버려지는 길이라는 읽기」).
+#
+#  **조각 벽 x[8,88] 이 글자 왼끝 96 에 8px 못 미친다** — 동전을 x 90 에
+#  두면 조각이 x 124 까지 날아 글자를 밟는다. 그래서 동전 중심이 48 이다.
+const WRECK := {
+	#  시체 상한. 랙 최대가 여섯이다 — packs.csv 의 p_rack 이 item_slots=6
+	#  이고 tuning.csv 의 max_items 5 는 기본값일 뿐이다(상한 9).
+	#  헤드리스 누수도 여기서 막는다: qa_grow_step 은 _leg_end_wear() 를
+	#  판 수만큼 부르는데 _process 가 없어 시체가 안 죽는다.
+	"cap": 6,
+	"x": 48.0,             # 선반 동전 중심. r 19 → x[29,67] · 고리 r+2 → x[27,69]
+	"y0": 73.0,            # 첫 중심. 동전 위끝 54 = 제목 잉크 밑 8px
+	"gap_max": 42.0,
+	#  **간격을 수에서 낸다.** 42 고정이면 여섯째가 y 283 → 동전 아래끝
+	#  302 로 단추(y 290)를 밟는다. n=6 이면 gap 36 이라 아래끝 272 다.
+	"span": 180.0,
+	"wx0": 8.0, "wx1": 88.0, "wy0": 46.0, "wy1": 276.0,   # 선반 조각 벽
+	#  슬롯 조각 벽. **ex 를 빼고 나면 실제 창이 이만큼 좁아진다** —
+	#  24~100 에 둘레 반지름 16 을 물리면 세로가 40~84 뿐이고, 동전 중심이
+	#  41 이라 조각이 아래로만 갈 수 있어 한 덩어리로 뭉쳤다(그림으로
+	#  확인, 2026-09-19). 22~108 이면 창이 38~92 로 서고 위아래가 선다.
+	#  아래끝 108 은 판 윗머리(y 80 언저리) 위에 조각이 잠깐 걸리는
+	#  자리인데, 그것이 「여기서 부서졌다」의 읽기라 그대로 둔다.
+	"sx": 46.0, "sy0": 22.0, "sy1": 108.0,
+	#  슬롯 쪽 낱말은 동전 **밑**이다. +30 은 동전 슬롯 밑변(y 64)에
+	#  글자 윗머리가 4px 걸쳐 테두리를 물고 있었다 — +36 이면 글자가
+	#  y[66,77] 이라 판을 완전히 벗어난다.
+	"s_word_dy": 36.0, "s_odds_dy": 47.0,
+	"tx": 96.0, "tw": 84.0,       # 글자 x[96,180] = 84px
+	#  「부서졌다」 48 + 틈 6 + 「1/10」 22 = 76 ≤ 84 (페이퍼로지 한글 12 ≈
+	#  12px/자 · 수 10 ≈ 5.5px/자). 이름은 시체가 말하므로 글자에서 뺐다 —
+	#  옛 pop 이 실측으로 밟은 「유리 대포 — 부서졌」 잘림이 원인째 사라진다.
+	"sz": 12, "sz_odds": 10,
+	"set_t": 0.060,        # 꽂힘. 몸이 2px 내려앉는 동안 조각이 언 채 있다
+	"set_dy": 2.0,
+	#  남음은 0.80초로 부서짐(0.30~0.56초)보다 **길다.** 부서짐은
+	#  시끄럽다 — 소리 + 조각 + 흰 언 프레임이 짧아도 읽힌다. 남음은
+	#  조용하다 — 톡 하나뿐이라 시간이 있어야 보인다.
+	"safe_t": 0.80,
+	"safe_pulse": 0.12,    # 1.12 → 1.00 맥동 한 번. 그 뒤 가만히
+	"safe_dim": 0.45,
+	"safe_arc": 0.82,      # 트인 고리. _panel_slot 의 얹힘 고리와 같은 자리
+	"stagger": 0.05,       # 항목마다 어긋나는 시작(_egg_bit 의 wait 어법)
+	"jit": 0.06,           # 피치 흔들기 ±6%
+	#  수를 걷고 싶어지면 손잡이가 이것 하나다. 끄면 굴림/확정이
+	#  색(C_ODDS 대 C_OFF)으로만 갈린다. **기본은 켜 둔다.**
+	"show_odds": true,
+}
+
+var wreck := []
+var wreck_seed := 0
+var wreck_n := 0           # 이번 판이 선반에 눕힌 수 — 간격이 여기서 난다
+var wreck_snd_from := 0    # 이번 묶음의 시작 인덱스. 소리는 묶음에 하나다
+#  마지막 묶음이 실제로 **무엇을 울렸는가.** 헤드리스에서는 sfx_pool 이
+#  비어 있어 소리가 난 자국이 아무 데도 안 남는다 — 「한 묶음에 하나」와
+#  「유리가 첫 장」은 그 자국이 있어야만 잴 수 있는 규칙이라 여기에 적는다.
+var wreck_snd_last := ""
+var wreck_snd_n := 0
+
+
+#  ── 무엇이 어느 낱말을 받는가 ──────────────────────────
+#  owned.remove_at 이 불리는 다섯 자리를 가르는 자는 둘이다 —
+#  **플레이어가 눌렀는가 · 값을 받았는가.** 눌러서 값을 받으면 거래,
+#  안 눌렀는데 사라지면 파괴, 툴팁 수치가 0 으로 내려가는 것을 미리
+#  보여 준 끝이면 소진. 판매(_sell)와 태우기(_photo_apply "burn")는
+#  둘 다 골드가 나오는 **거래**라 여기에 한 글자도 안 온다.
+const WRECK_WORD := {
+	"perish": "부서졌다",   # 삭음 — 검정 리그
+	"rdec": "부서졌다",     # 판마다 닳다가 0
+	"boom": "부서졌다",     # 굴려서 졌다
+	"spent": "다 썼다",     # 소진 — 예고된 끝이라 낱말이 다르다
+	"save": "막았다",       # 제 몸을 부숴 실패를 무른다
+	"safe": "남았다",       # 굴렸고 아무것도 안 죽인 장
+}
+
+
+#  낱말의 색. C_ODDS 인 근거: 툴팁이 「판마다 1/%d 확률로 파괴」를 그
+#  색으로 적고 있어 **툴팁에서 그 몫을 읽은 눈이 판 끝에 같은 색을 다시
+#  본다.** 옛 파괴 팝이 쓰던 C_MULT(배수의 붉음)는 어휘가 어긋나 있었다.
+#  색 상수만 빌리고 _tint · 툴팁 함수는 안 건드린다.
+func _wreck_col(why: String) -> Color:
+	match why:
+		"boom", "safe":
+			return C_ODDS
+		"save":
+			return C_ACC
+	return C_OFF
+
+
+#  0 = 정산 선반 · 1 = 동전 칸 · -1 = 아무 데도 아니다.
+#  **태어날 때가 아니라 첫 그리기에 고르는 것이 요점이다** —
+#  _leg_end_wear 가 도는 순간 state 는 아직 S.RESOLVE 이고 _settle_clear
+#  가 같은 사슬 끝에서 S.CLEAR 로 바꾼다.
+func _wreck_scr() -> int:
+	if state == S.CLEAR:
+		return 0
+	if state == S.OVER or state == S.TITLE or state == S.SETTINGS \
+			or state == S.COLLECT or state == S.NEWRUN or state == S.RUNINFO \
+			or state == S.PROFILE or state == S.INTRO:
+		return -1
+	return 1
+
+
+func _wreck_add(i: int, it: Dictionary, why: String, bn: int) -> void:
+	_wreck_push(i, it, why, bn, false)
+
+
+func _wreck_safe(i: int, it: Dictionary, bn: int) -> void:
+	_wreck_push(i, it, "safe", bn, true)
+
+
+func _wreck_push(i: int, it: Dictionary, why: String, bn: int,
+		safe: bool) -> void:
+	var mat := _mat_of(it)
+	var br: Dictionary = BREAK.get(mat, BREAK[""])
+	var sd: int = wreck_seed * 131 + wreck.size() * 17
+	var tot: float = float(WRECK.safe_t) if safe \
+			else float(br.hold) + float(br.fly) + float(br.sink)
+	#  **모션 끄기는 리롤과 일부러 다르다.** _smash_at 의 모션 끄기 길은
+	#  「조각도 먼지도 흔들림도 없다」인데 여기서는 다르다 — 리롤 조각은
+	#  장식이고 이것은 **정보**다. 껐으면 즉시 최종 상태를 그리고 항목
+	#  수명 내내 붙들고 있는다. 소리는 **낸다**(모션 끄기는 눈의 문제다).
+	if motion_off:
+		tot = maxf(tot, 0.90)
+	var e := {
+		"i": i, "it": it, "why": why, "bn": bn, "safe": safe,
+		"mat": mat, "sd": sd, "scr": -2, "k": -1,
+		"t": -float(WRECK.stagger) * float(wreck.size() - wreck_snd_from) \
+				if safe else 0.0,
+		"tot": tot, "pcs": [], "gr": [],
+	}
+	if not safe:
+		_wreck_cut(e, it, int(br.n), sd, br)
+	wreck.append(e)
+	while wreck.size() > int(WRECK.cap):
+		wreck.remove_at(0)
+	wreck_snd_from = mini(wreck_snd_from, wreck.size())
+
+
+#  조각은 **있는 함수를 한 글자도 안 고치고** 부른다. _shard_cut 은 순수
+#  함수이고 읽는 것이 s.type 과 s.d 뿐이라 즉석 껍질 두 칸이면 된다.
+#  _stock_form → _coin_form 을 거쳐 **동전이 제 실루엣을 그대로 들고
+#  온다** — FORMS 열하나가 공짜로 따라온다. plaque 가족은 인자 n 을 안
+#  보고 bbox 2×2 격자 + _coin_clip 으로 3~4 조각을 낸다.
+#
+#  **단위 맞춤 한 줄 — 여기가 틀리는 자리다.** _shard_cut 이 내는 점은
+#  면 좌표 TBL.chip_r(19.0 × GOODS_K 1.16 = 22.04) 기준이고 랙 동전은
+#  화면 PANEL.r(19.0) **정원**이다. 전 점에 k = 0.862 를 **등방으로만**
+#  곱하고 **TBL.flat(0.788)은 안 곱한다** — _shard_fan 머리말이 「화면값을
+#  그대로 넣으면 세로가 한 번 더 눌려 13.7px 짜리 납작한 조각이 난다」고
+#  이미 밟은 자리다.
+func _wreck_cut(e: Dictionary, it: Dictionary, n: int, sd: int,
+		br: Dictionary) -> void:
+	if n <= 0:
+		return
+	var shell := {"type": "item", "d": it}
+	var cuts: Array = _shard_cut(shell, n, sd, 0.0)
+	var cols: Array = _shard_cols(shell)
+	if cuts.is_empty() or cols.is_empty():
+		return
+	var k: float = float(PANEL.r) / float(TBL.chip_r)
+	var md := String(br.mode)
+	for j in cuts.size():
+		var q := PackedVector2Array()
+		#  **조각의 둘레 반지름을 같이 잰다.** 점은 동전 중심 기준의 국소
+		#  좌표라, 벽을 조각의 **중심**에만 걸면 다각형이 그만큼 더 나간다 —
+		#  실제로 그렇게 두었더니 조각 하나가 「부서졌다」의 「1/2」 위에
+		#  앉았고 또 하나가 제목 잉크 띠(y[27,46])를 밟았다(2026-09-19,
+		#  그림을 찍어 눈으로 잡았다). 회전해도 안 변하는 값이라야 하므로
+		#  축이 아니라 **둘레 반지름**으로 잰다.
+		var ex := 0.0
+		for v in (cuts[j] as PackedVector2Array):
+			q.append((v as Vector2) * k)
+			ex = maxf(ex, (v as Vector2).length() * k)
+		var u: float = _gl_rand(j * 9 + 3, sd)
+		var ang: float = TAU * (float(j) + _gl_rand(j * 9 + 7, sd) * 0.6) \
+				/ float(cuts.size())
+		var dir := Vector2(sin(ang), -cos(ang))
+		var sp: float = lerpf(float(br.v_lo), float(br.v_hi), u)
+		var vel := Vector2.ZERO
+		if md == "fan":
+			vel = dir * sp
+		elif md == "melt":
+			#  세로는 **아래로만** 간다. 가로는 0~18 뿐이다.
+			vel = Vector2((_gl_rand(j * 9 + 11, sd) - 0.5) * 36.0, sp)
+		e.pcs.append({
+			"pts": q, "col": cols[j % cols.size()], "ex": ex,
+			"p": dir * 6.0 if motion_off else Vector2.ZERO,
+			"v": Vector2.ZERO if motion_off else vel,
+			#  태어날 때의 속도를 남겨 둔다 — 「정산 다시 재생」이 시체를
+			#  되감을 때 되돌릴 값이 이것뿐이다(dev.gd 의 _wreck_rewind).
+			"v0": Vector2.ZERO if motion_off else vel,
+			"d0": dir,
+			"rot": 0.0, "om": (u - 0.5) * 2.0 * float(br.om),
+			#  **음수에서 시작한다**(_egg_bit 의 wait 어법). 그동안 조각이
+			#  태어난 자리에서 원물건 모양을 빈틈없이 타일링한 채 흰색으로
+			#  언다 — 흰 실루엣을 따로 그릴 필요가 없어진다.
+			"t": 0.0 if motion_off else -float(br.hold),
+		})
+	#  부스러기. 재질이 낸 가루라 조각과 같은 중력을 먹는다.
+	for j in int(br.grit):
+		var a2: float = _gl_rand(j * 13 + 5, sd) * TAU
+		var s2: float = lerpf(float(br.v_lo), float(br.v_hi),
+				_gl_rand(j * 13 + 9, sd)) * 0.7
+		var d2 := Vector2(sin(a2), -cos(a2))
+		e.gr.append({
+			"p": d2 * 7.0 if motion_off else Vector2.ZERO,
+			"v": Vector2.ZERO if motion_off else d2 * s2,
+			"v0": Vector2.ZERO if motion_off else d2 * s2,
+			"d0": d2,
+			"col": cols[j % cols.size()],
+			"t": 0.0 if motion_off else -float(br.hold),
+		})
+
+
+#  **파괴음은 한 묶음에 하나다.** 「같은 소리 둘이 같은 ms 에 겹치면
+#  한 덩어리가 된다」를 SMASH.snd_gap 주석이 쓸기 아홉으로 이미 실측했고
+#  (「실측으로 한 쓸기에 일곱까지 났다」), 판 끝은 18ms 를 벌 방법이
+#  없으니 아예 하나로 간다. 타이머 대신 **우선순위**다 — 유리가 섞여
+#  있으면 유리가 첫 장이 된다(간판 사건은 묶지 않는다).
+#
+#  **문이 닫혀 있어도 조각과 글자는 전부 난다** — _smash_sfx 의 「화면에는
+#  여전히 조각이 나므로 사건이 안 사라진다」 규약 그대로.
+func _wreck_sfx() -> void:
+	var pick := ""
+	var pit := 1.0
+	var sdk := 0
+	var any_safe := false
+	for i in range(wreck_snd_from, wreck.size()):
+		var e: Dictionary = wreck[i]
+		if bool(e.safe):
+			any_safe = true
+			continue
+		var br: Dictionary = BREAK.get(String(e.mat), BREAK[""])
+		var nm := String(br.snd)
+		var pt2 := float(br.pit)
+		#  소진(tdec)은 **판 위에서 나는 유일한 갈래**다. 새 소리를 안 짓고
+		#  hand_drop(147Hz · 50ms, 「손에서 놓는다」)을 쓴다 — 다트도
+		#  카지노도 아닌 손 어휘라 양쪽 규칙 어디에도 안 걸린다.
+		if String(e.why) == "spent":
+			nm = "hand_drop"
+			pt2 = 1.0
+		#  pixel(목숨)은 세지 않는다 — save_life 가 이미 울었고, 파괴음을
+		#  겹치면 「막았다」와 「부서졌다」가 귀에서 섞인다.
+		if nm == "":
+			continue
+		if pick == "" or nm == "coin_break_glass":
+			pick = nm
+			pit = pt2
+			sdk = int(e.sd)
+			if nm == "coin_break_glass":
+				break
+	#  **생존음은 파괴음이 하나도 안 났을 때만, 그때도 하나다.** 뭔가
+	#  부서진 판에서 톡 소리를 더 얹으면 손실의 머리기사가 흐려진다.
+	if pick == "" and any_safe:
+		for i in range(wreck_snd_from, wreck.size()):
+			if bool(wreck[i].safe):
+				pick = "coin_safe"
+				pit = 1.0
+				sdk = int(wreck[i].sd)
+				break
+	wreck_snd_from = wreck.size()
+	wreck_snd_last = pick
+	if pick == "":
+		return
+	wreck_snd_n += 1
+	#  **피치 흔들기는 randf() 가 아니라 _gl_rand 다.** _smash_sfx 가 이미
+	#  그 규약을 적었고(프로브의 씨 고정을 안 흔들기 위해서다), 여기서는
+	#  이유가 하나 더 있다 — **판 끝 randf() 흐름을 한 번이라도 더
+	#  소비하면 런 전체가 달라진다.** 「파괴 확률을 안 고쳤다」가 참인데
+	#  판은 달라지는 자리가 정확히 여기다.
+	var jt: float = 1.0 + (_gl_rand(sdk * 3 + 1, wreck_seed) - 0.5) \
+			* 2.0 * float(WRECK.jit)
+	_sfx(pick, SFX_BASE * pit * jt)
+
+
+#  _process 가 waves·sparks·ring_fx·pops 를 깎는 그 자리 바로 다음 줄에서
+#  돈다. if state == S.CLEAR 분기 **밖**이라 판 중이든 정산이든 똑같이
+#  돈다 — 새 시계를 하나도 안 만든다. _egg_bits_tick 과 같은 꼴: t 를
+#  더하고 음수면 건너뛰고 중력을 먹이고 벽에 가두고 넘으면 버린다.
+func _wreck_tick(d: float) -> void:
+	if wreck.is_empty():
+		return
+	for e in wreck:
+		e.t = float(e.t) + d
+		if bool(e.safe) or motion_off:
+			continue
+		var br: Dictionary = BREAK.get(String(e.mat), BREAK[""])
+		var gv: float = float(br.grav)
+		#  가라앉는 동안은 멎어 있다 — 조각이 제자리에서 색이 내려앉는
+		#  것이 SMASH.sink_t 의 어법이다.
+		if float(e.t) >= float(br.hold) + float(br.fly):
+			continue
+		for pc in (e.pcs as Array):
+			pc.t = float(pc.t) + d
+			if float(pc.t) < 0.0:
+				continue
+			var v: Vector2 = pc.v
+			v.y += gv * d
+			pc.v = v
+			pc.p = (pc.p as Vector2) + v * d
+			pc.rot = float(pc.rot) + float(pc.om) * d
+		for gr in (e.gr as Array):
+			gr.t = float(gr.t) + d
+			if float(gr.t) < 0.0:
+				continue
+			var gvv: Vector2 = gr.v
+			gvv.y += gv * d
+			gr.v = gvv
+			gr.p = (gr.p as Vector2) + gvv * d
+	wreck = wreck.filter(func(e): return float(e.t) < float(e.tot))
+
+
+#  **이것이 유일한 그리기 문이다.** _hud_draw 맨 끝 한 줄이고
+#  `if state != S.CLEAR` 게이트 **밖**이다. _draw_clear 에는 안 건다 —
+#  _draw_screen 은 한 프레임에 **두 번** 돌 수 있고(S.RUNINFO 의
+#  _draw_screen(run_from) + _draw_screen(state) · S.SETTINGS 재귀 · swap
+#  중 _swap_screen) _hud_draw 만 _draw 에서 정확히 한 번 돈다. 덤으로
+#  _draw_clear 를 한 글자도 안 건드리게 된다.
+func _wreck_draw() -> void:
+	if wreck.is_empty():
+		return
+	var scr := _wreck_scr()
+	#  ① 자리를 아직 안 고른 것들을 **한 프레임에 한꺼번에** 눕힌다.
+	#  하나씩 눕히면 나중 장이 먼저 장의 간격을 못 본다.
+	var fresh := []
+	for e in wreck:
+		if int(e.scr) == -2:
+			fresh.append(e)
+	if not fresh.is_empty():
+		fresh.sort_custom(func(a, b): return int(a.i) < int(b.i))
+		for e in fresh:
+			e.scr = scr
+			if scr == 0:
+				e.k = wreck_n
+				wreck_n += 1
+	var gap: float = minf(float(WRECK.gap_max),
+			float(WRECK.span) / float(maxi(wreck_n - 1, 1)))
+	for e in wreck:
+		#  ② 자리는 한 번 정하면 안 바뀐다. 이 한 술어가 「정산 화면에서
+		#  튀어나가기」와 「빨리 눌러 넘겼을 때 상점에 조각이 남기」를
+		#  둘 다 막는다 — 시체가 화면을 따라 나가지 않는다.
+		if int(e.scr) < 0 or int(e.scr) != scr or float(e.t) < 0.0:
+			continue
+		if scr == 0:
+			_wreck_one(e, Vector2(float(WRECK.x),
+					float(WRECK.y0) + gap * float(e.k)), true)
+		else:
+			_wreck_one(e, _slot_rect(mini(int(e.i),
+					GameData.max_items() - 1)).get_center()
+					+ Vector2(0.0, float(PANEL.chip_dy)), false)
+
+
+#  조각 벽은 **후조건 클램프**다(_smash_update 의 어법을 베끼되 자가
+#  다르다 — 저쪽은 면 좌표고 이쪽은 화면 좌표다). 벽이 곧 보증이라
+#  가장 빠른 조각 하나가 벽에 닿아도 글자를 영영 안 밟는다.
+#
+#  **ex 를 빼고 가둔다.** 점이 동전 중심 기준의 국소 좌표라, 중심만
+#  가두면 다각형이 제 둘레 반지름만큼 더 나간다 — 그림을 찍어 보니 벽이
+#  88 인데 조각이 98 까지 가서 글자 왼끝(96)을 밟고 있었다. 벽이 보증이
+#  되려면 **조각이 통째로** 안에 들어야 한다.
+#  ex 가 반폭보다 크면(작은 슬롯 · 큰 조각) 가운데로 모은다 — 빈 구간에
+#  clampf 를 걸면 min>max 라 값이 뒤집힌다.
+func _wreck_clamp(c: Vector2, p: Vector2, shelf: bool, ex := 0.0) -> Vector2:
+	var x0: float
+	var x1: float
+	var y0: float
+	var y1: float
+	if shelf:
+		x0 = float(WRECK.wx0) + ex
+		x1 = float(WRECK.wx1) - ex
+		y0 = float(WRECK.wy0) + ex
+		y1 = float(WRECK.wy1) - ex
+	else:
+		x0 = maxf(c.x - float(WRECK.sx), 4.0) + ex
+		x1 = minf(c.x + float(WRECK.sx), VIEW.x - 4.0) - ex
+		y0 = float(WRECK.sy0) + ex
+		y1 = float(WRECK.sy1) - ex
+	return Vector2(
+			clampf(c.x + p.x, x0, x1) if x1 >= x0 else (x0 + x1) * 0.5,
+			clampf(c.y + p.y, y0, y1) if y1 >= y0 else (y0 + y1) * 0.5)
+
+
+#  ── 알파 둘을 그리기 밖에 둔다 ─────────────────────────
+#  **검사가 잴 수 있어야 하기 때문이다.** 그리기 함수는 _draw 밖에서 못
+#  부르므로, 알파 규칙이 _wreck_one 안에만 있으면 「모션 끄기에서도
+#  정지 그림이 정보를 들고 있는가」를 헤드리스에서 **못 잰다.** 실제로
+#  그 한 줄이 안 재어져서 pixel 이 모션 끄기에서도 칸을 차례로 꺼 버렸고
+#  「막았다」 넉 자만 허공에 뜬 그림이 나왔다(2026-09-19, 눈으로 잡았다).
+#  qa_wreck 과 _wreck_one 이 **같은 함수**를 부른다.
+
+#  묶음 전체의 가라앉음 — 조각이 멎고 제자리에서 색이 내려앉는다.
+func _wreck_fa(e: Dictionary) -> float:
+	if motion_off:
+		return 1.0
+	var br: Dictionary = BREAK.get(String(e.mat), BREAK[""])
+	return 1.0 - clampf((float(e.t) - float(br.hold) - float(br.fly))
+			/ maxf(float(br.sink), 0.001), 0.0, 1.0)
+
+
+#  조각 하나의 알파. 픽셀만 **한 칸씩 꺼진다** — 넷이 같이 사라지면 그냥
+#  지워진 것이고, 차례로 꺼져야 「칸이 꺼졌다」로 읽힌다. 모션 끄기에서는
+#  **안 끈다**: 그 화면에서 이 층은 정보를 붙들고 있어야 하는 쪽이라
+#  꺼지는 것이 곧 정보를 버리는 것이다.
+func _wreck_pa(e: Dictionary, j: int, n: int) -> float:
+	var fa := _wreck_fa(e)
+	var br: Dictionary = BREAK.get(String(e.mat), BREAK[""])
+	if String(br.mode) != "grid" or motion_off:
+		return fa
+	var off: float = float(br.hold) \
+			+ float(br.fly) * (float(j) + 1.0) / float(maxi(n, 1))
+	return 0.0 if float(e.t) >= off else fa
+
+
+func _wreck_one(e: Dictionary, c: Vector2, shelf: bool) -> void:
+	var col := _wreck_col(String(e.why))
+	var t: float = float(e.t)
+	var i0: int = int(e.sd)
+	if bool(e.safe):
+		#  ── 남았다 ──────────────────────────────────────
+		#  **부서진 장과 같은 선반 · 같은 칸 크기 · 같은 글자 크기 ·
+		#  같은 색.** 갈리는 것은 온전한 실루엣이라는 것과, 움직임이
+		#  0.12초 맥동 한 번뿐이라는 것이다. 「살아남음을 작게」를 글자
+		#  크기로 풀면 비대칭을 거꾸로 베끼는 것이 된다 — 작은 것은
+		#  **움직임**과 **소리 세기**지 글자가 아니다.
+		#
+		#  **습관화 방어 넷을 전부 건다.** 이카로스 한 장이 평균 아홉 번
+		#  「남았다」를 말하고, 둘째 노출부터 시각 처리 반응이 급락한다.
+		#  횟수를 줄여서는 못 풀고 **매번 조금씩 달라야** 푼다. 전부
+		#  _gl_rand 라 엔진 RNG 를 한 번도 안 쓴다 — 씨가 leg_no 라
+		#  헤드리스에서 재현되고 검사가 잴 수 있다.
+		var u: float = clampf(t / float(WRECK.safe_pulse), 0.0, 1.0)
+		var amp: float = 0.12 * (1.0
+				+ (_gl_rand(leg_no * 7 + i0, 53) - 0.5) * 0.30)
+		var s: float = 1.0 + amp * (1.0 - u)
+		var bob: float = (_gl_rand(leg_no * 7 + i0, 137) - 0.5) * 6.0
+		var cc := c + Vector2(0.0, bob)
+		var a0: float = _gl_rand(leg_no * 7 + i0, 91) * TAU
+		draw_item_sticker(cc, float(PANEL.r) * s, e.it, 0.0, 0.0,
+				float(WRECK.safe_dim), 12)
+		#  고리는 _panel_slot 의 얹힘 고리와 **한 픽셀도 다르지 않은
+		#  자리**다 — 새 어휘를 안 늘린다. 색만 C_ACC 에서 간다.
+		draw_arc(cc, float(PANEL.r) + 2.0, a0,
+				a0 + float(WRECK.safe_arc) * TAU, 24, col, 1.0)
+		_wreck_text(e, c, col, shelf)
+		return
+	var br: Dictionary = BREAK.get(String(e.mat), BREAK[""])
+	var hold: float = float(br.hold)
+	var fly: float = float(br.fly)
+	var md := String(br.mode)
+	var fa: float = _wreck_fa(e)
+	#  ① 꽂힘 — 몸이 2px 내려앉는다. 제 칸 안이고 화면은 가만히 있다.
+	#  언 프레임과 **같은 구간**이라 두 읽기가 한 번에 실린다.
+	var cc2 := c + Vector2(0.0, float(WRECK.set_dy)
+			* clampf(t / float(WRECK.set_t), 0.0, 1.0))
+	if md == "ring":
+		#  **안으로 꺼진다.** 조각이 없고 테만 오므라든다.
+		var rr: float = float(PANEL.r) \
+				* (1.0 - clampf((t - hold) / maxf(fly, 0.001), 0.0, 1.0))
+		if motion_off:
+			rr = float(PANEL.r) * 0.45
+		if rr > 1.0:
+			draw_arc(cc2, rr, 0.0, TAU, 24, Color(C_LIGHT, fa), 1.0)
+		_wreck_text(e, c, col, shelf)
+		return
+	var frozen: bool = t < hold and not motion_off
+	var pcs: Array = e.pcs
+	for j in pcs.size():
+		var pc: Dictionary = pcs[j]
+		var cen := _wreck_clamp(cc2, pc.p, shelf, float(pc.get("ex", 0.0)))
+		#  밀랍만 **세로 배율이 1.00 → 1.55 로 늘어나며** 흘러내린다.
+		var sy := 1.0
+		if md == "melt" and not frozen:
+			sy = lerpf(1.0, 1.55,
+					clampf((t - hold) / maxf(fly, 0.001), 0.0, 1.0))
+		var poly := PackedVector2Array()
+		for v in (pc.pts as PackedVector2Array):
+			var q: Vector2 = (v as Vector2).rotated(float(pc.rot))
+			poly.append(cen + Vector2(q.x, q.y * sy))
+		if poly.size() < 3:
+			continue
+		if frozen:
+			#  ② 언 프레임 — 조각이 원물건 실루엣을 빈틈없이 타일링한 채
+			#  C_LIGHT 로 얼고 경계에 C_TABLE 1px 금이 그어진다. SMASH 의
+			#  실측 주석이 적어 뒀다 — 「금이 보여야 「깨졌다」로 읽힌다 …
+			#  순백을 통째로 깔았더니 흰 구름 한 덩어리로 보였다」.
+			#  **이 한 수가 연출의 전부다.**
+			draw_colored_polygon(poly, C_LIGHT)
+			var ln := poly.duplicate()
+			ln.append(poly[0])
+			draw_polyline(ln, C_TABLE, 1.0)
+			continue
+		var pa := _wreck_pa(e, j, pcs.size())
+		if pa <= 0.01:
+			continue
+		draw_colored_polygon(poly, Color(pc.col, pa))
+		if bool(br.rim):
+			#  유리만 흰 테 1px — 날이 선 것이 유리의 읽기다.
+			var ln2 := poly.duplicate()
+			ln2.append(poly[0])
+			draw_polyline(ln2, Color(C_LIGHT, pa * 0.7), 1.0)
+	if not frozen:
+		for gr in (e.gr as Array):
+			if float(gr.t) < 0.0:
+				continue
+			draw_rect(Rect2(_wreck_clamp(cc2, gr.p, shelf, 1.0).round(),
+					Vector2.ONE), Color(gr.col, fa))
+	_wreck_text(e, c, col, shelf)
+
+
+#  **pop() 을 안 쓴다.** 이유 둘: ① _settle_clear 의 pops.clear() 가 같은
+#  프레임에 지운다(지금 안 보이는 **진짜 이유**가 그 한 줄이다)
+#  ② _draw_pops 는 draw_string(x-60, …, 폭 120, CENTER) 고정이라 옛
+#  주석이 실측한 잘림이 되돌아온다. **pops.clear() 를 안 건드리고 제 층이
+#  직접 그린다.**
+func _wreck_text(e: Dictionary, c: Vector2, col: Color, shelf: bool) -> void:
+	var w := String(WRECK_WORD.get(String(e.why), ""))
+	if w == "":
+		return
+	if shelf:
+		draw_string(font, Vector2(float(WRECK.tx), c.y + 4.0), w,
+				HORIZONTAL_ALIGNMENT_LEFT, float(WRECK.tw), int(WRECK.sz), col)
+	else:
+		draw_string(font, Vector2(c.x - 60.0, c.y + float(WRECK.s_word_dy)), w,
+				HORIZONTAL_ALIGNMENT_CENTER, 120, int(WRECK.sz), col)
+	#  **수의 있고 없음이 「굴렸는가」를 말한다.** 확정으로 죽는 장은
+	#  굴림 결과와 무관하게 떠나므로 「1/10」을 붙이면 「굴려서 졌다」는
+	#  거짓말이 된다. 「발동 안 했는데 번쩍임」과 「발동했는데 안 번쩍임」이
+	#  **둘 다** 버그라는 그 1:1 규칙이다.
+	if not bool(WRECK.show_odds) or int(e.bn) <= 0:
+		return
+	var od := "1/%d" % int(e.bn)
+	if shelf:
+		draw_string(font_sm, Vector2(float(WRECK.tx), c.y + 15.0), od,
+				HORIZONTAL_ALIGNMENT_LEFT, float(WRECK.tw),
+				int(WRECK.sz_odds), col)
+	else:
+		draw_string(font_sm, Vector2(c.x - 60.0, c.y + float(WRECK.s_odds_dy)),
+				od, HORIZONTAL_ALIGNMENT_CENTER, 120, int(WRECK.sz_odds), col)
 
 
 
