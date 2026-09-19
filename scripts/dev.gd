@@ -394,6 +394,12 @@ static func _names(k: String) -> PackedStringArray:
 		for m in GameData.SCORE_MODES:
 			out.append(GameData.score_name(String(m)))
 		return out
+	#  빨리 보기 사다리 — _cur_name 과 **짝으로** 낸다. 한쪽만 내면 값 칸을
+	#  눌렀을 때 고르개가 텅 빈 채로 뜬다(2026-09-19).
+	if k == "fast":
+		for nm in FAST_NAMES:
+			out.append(String(nm))
+		return out
 	#  조준 저울도 표가 아니라 라운드 번호라 _list 를 안 지난다. 안 넣으면
 	#  값 칸을 눌렀을 때 고르개가 텅 빈 채로 뜬다. 사다리(aim_w)를 적는다 —
 	#  이미 든 쪽의 바닥은 _cur_name 이 "(든 뒤)" 를 달아 말해 준다.
@@ -522,6 +528,14 @@ static func _rows(g: Node) -> Array:
 				{"n1": "최악의 상태", "t": "act", "a": "worst"},
 				{"n1": "정산 다시 재생", "t": "act", "a": "replay"},
 				{"n1": "점수 카드 걸음", "t": "list", "k": "cardfx", "n": 3},
+				#  정산 빨리 보기(2026-09-19). 사다리 = 1배 / 2배 / 2.5배 / 3배.
+				#  게임 기본은 2.5(셋째)다. **바닥(걸음 4프레임)은 사다리
+				#  위에서도 그대로 걸린다** — _fast_rate 가 minf(FAST.mul,
+				#  _fast_lim()) 로 씌우므로 3배를 골라도 눌린 박자에서는
+				#  한도가 1.53 이다. 고정은 안 눌러도 걸리는 toggle 자리다.
+				{"n1": "정산 빨리 보기", "t": "list", "k": "fast", "n": 4},
+				{"n1": "빨리 보기 고정", "t": "act", "a": "fast_lock"},
+				{"n1": "런 끝 잠금 풀기", "t": "act", "a": "over_unlock"},
 			]
 		1:
 			return [
@@ -578,6 +592,15 @@ static func _rows(g: Node) -> Array:
 				{"n1": "부딪힘 한 번", "t": "act", "a": "smash1"},
 				{"n1": "테이블에 사진 깔기", "t": "act", "a": "restock_fix"},
 				{"n1": "모션 끄기/켜기", "t": "act", "a": "motion"},
+				#  ── 손가락 길을 데스크톱에서 밟아 본다(2026-09-19) ──
+				#  「손가락인 척」이 dev-mode-parity 의 요점이다. 끄면 얹힘
+				#  길이 통째로 죽고 **누름-읽기만 남는다** — 톡 한 번에 얕은
+				#  층, 0.45초에 깊은 층, 고리가 차오르는 것까지 모바일 전체를
+				#  손으로 밟아 볼 수 있다. 읽기 관문이 오직 여기서만 검증된다.
+				{"n1": "손가락인 척", "t": "act", "a": "touch"},
+				{"n1": "판매 단추 세우기", "t": "act", "a": "sell_arm"},
+				{"n1": "툴팁 얕게/깊게", "t": "act", "a": "tip_layer"},
+				{"n1": "로비 겨눔 세우기", "t": "act", "a": "lobby_arm"},
 			]
 		2:
 			return [
@@ -710,6 +733,10 @@ static func _list(k: String) -> Array:
 
 # 점수 카드를 다시 볼 세 단. 이름과 큐를 한 곳에서 쥔다.
 const CARDFX_STEPS := ["담담", "큼", "한 방"]
+#  정산 빨리 보기 사다리. 게임 기본은 2.5(셋째)다 — 3.0 은 settle_step 소리
+#  (0.10초)와 겹치기 직전이라 **개발자 사다리에만** 둔다(2026-09-19).
+const FAST_STEPS := [1.0, 2.0, 2.5, 3.0]
+const FAST_NAMES := ["1배", "2배", "2.5배", "3배"]
 
 
 static func _cur_name(g: Node, e: Dictionary) -> String:
@@ -783,6 +810,11 @@ static func _cur_name(g: Node, e: Dictionary) -> String:
 	# 비어서 화면에 「(없음)」이 뜬다 — 줄은 있는데 이름이 없는 꼴이다(2026-09-18).
 	if k == "cardfx":
 		return "%d/3 %s" % [i % 3 + 1, CARDFX_STEPS[i % 3]]
+	#  빨리 보기 사다리도 표가 아니라 상수 목록이다. **_names 에도 같은
+	#  갈래를 낸다** — 한쪽만 내면 고르개를 열었을 때 텅 빈다(2026-09-19).
+	if k == "fast":
+		return "%d/%d %s" % [i % FAST_STEPS.size() + 1, FAST_STEPS.size(),
+				FAST_NAMES[i % FAST_STEPS.size()]]
 	if k == "score":
 		var sm: Array = GameData.SCORE_MODES
 		var j2: int = i % maxi(sm.size(), 1)
@@ -1050,6 +1082,43 @@ static func _run(g: Node, e: Dictionary) -> void:
 			g.motion_off = not g.motion_off
 			_say("모션 %s" % ("끔" if g.motion_off else "켬"))
 			return
+		"fast_lock":
+			#  안 눌러도 배속이 걸린다. _fast_on 이 fast_lock 을 Dev.on 검사보다
+			#  **먼저** 보므로 개발자 판을 연 채로도 걸린다(2026-09-19).
+			g.fast_lock = not g.fast_lock
+			_say("빨리 보기 고정 %s" % ("켬" if g.fast_lock else "끔"))
+			return
+		"over_unlock":
+			#  런 끝 잠금 0.40초를 건너뛴다. 갈무리 도구가 쓰는 그 값이다.
+			g.over_t = 9.0
+			_say("런 끝 잠금 풀림")
+			return
+		"touch":
+			#  얹힘 길을 통째로 죽인다 — 누름-읽기만 남는다. ⑤의 코드가
+			#  **오직 여기서만** 손으로 검증된다(dev-mode-parity).
+			g.hover_live = not g.hover_live
+			g.tip_pin = {}
+			_say("얹힘 %s" % ("켬" if g.hover_live else "끔 — 손가락인 척"))
+			return
+		"sell_arm":
+			#  새 자리(4,56,72,22)와 되살아난 이름 줄을 손 없이 재고 찍는다.
+			g.sell_sel = 0
+			g.sell_t = 0.0
+			_say("판매 단추 %s" % g._sell_btn_rect())
+			return
+		"tip_layer":
+			#  ⚠ _tip_update 가 hover_live 참일 때 매 프레임 false 로 되돌리므로
+			#  **「손가락인 척」을 켠 뒤에만 뜻이 있다.**
+			g.tip_lite = not g.tip_lite
+			_say("툴팁 %s%s" % ["얕게" if g.tip_lite else "깊게",
+					"" if not g.hover_live else " (손가락인 척부터)"])
+			return
+		"lobby_arm":
+			#  붉은 띠 · 굵은 마침표를 설정을 여닫지 않고 바로 본다.
+			g.lobby_arm = not g.lobby_arm
+			g.lobby_arm_t = 0.0
+			_say("로비 겨눔 %s" % ("섬" if g.lobby_arm else "풀림"))
+			return
 		"rank_off":
 			#  새 테 한 벌(밴드·박음·물림·플라크·맥동)을 통째로 끄고 옛 그림으로
 			#  되돌린다. 전·후를 **같은 자리에서** 눈으로 대는 것이 「정말
@@ -1268,6 +1337,13 @@ static func _run(g: Node, e: Dictionary) -> void:
 	# 목록형 — 지금 고른 것을 적용한다
 	var rows := _list(k)
 	match k:
+		"fast":
+			#  배수만 민다. 바닥(걸음 4프레임)은 _fast_rate 가 씌우므로
+			#  3배를 골라도 눌린 박자에서는 한도가 1.53 이다 —
+			#  **사다리 위에서도 걸음을 안 건너뛴다**(2026-09-19).
+			var fi: int = i % FAST_STEPS.size()
+			g.fast_mul = float(FAST_STEPS[fi])
+			_say("빨리 보기 %.1f배" % g.fast_mul)
 		"aim":
 			var am := String(GameData.AIM_MODES[i % GameData.AIM_MODES.size()])
 			g.aim_mode = am

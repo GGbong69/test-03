@@ -3204,6 +3204,30 @@ func _process(d: float) -> void:
 	_idle_tick(d)
 	_give_tick(d)
 	d *= _tutor_slow()
+	#  이번 프레임의 빨리 보기 배수. **늦추기 뒤**라 배움 여운에서 늦추기와
+	#  곱해지고, **hitstop 조기 반환보다 앞**이라 멈춤 60ms 동안 통째로
+	#  얼어붙지 않는다. 자리가 곧 답인 한 줄이다(2026-09-19).
+	fast_rate = _fast_rate()
+	#  길게 누르기 = 더 읽기. **실시간으로 잰다**(Time.get_ticks_msec) —
+	#  hitstop 조기 반환과 배움 늦추기에서 감도가 달라지면 안 된다. 그래서
+	#  이 단도 조기 반환 **위**에 선다.
+	#  hover_live 가 참이면 _hold_ok 가 거짓이라 통째로 안 돈다(데스크톱 무변경).
+	#  읽을 것이 없는 자리에서는 손짓을 안 뺏는다 — _tip_hit 이 빈 사전을
+	#  내면 시계가 아예 안 돈다(천천히 눌러 파는 손을 안 막는다). 2026-09-19
+	hold_a = 0.0
+	if mouse_down and not press_read and _hold_ok() and hand_st != H.CARRY \
+			and mouse_at.distance_to(press_p0) <= float(HAND.slip):
+		var hm := _tip_hit(press_p0)
+		if not hm.is_empty():
+			hold_a = clampf(float(Time.get_ticks_msec() - press_ms)
+					/ float(_hold_ms()), 0.0, 1.0)
+			if hold_a >= 1.0:
+				press_read = true
+				hm["st"] = state
+				tip_pin = hm
+				tip_pin_at = press_p0
+				tip_lite = false       # 길게 누르기는 언제나 깊은 층이다
+				hold_a = 0.0
 	#  등급 맥동. 늦추기 **뒤**라 배움 중에는 같이 느려진다.
 	if not motion_off:
 		rar_t += d
@@ -3245,7 +3269,10 @@ func _process(d: float) -> void:
 			beep_t = beep_gap
 
 	if hitstop > 0.0:
-		hitstop -= d
+		#  멈춤도 같은 배수로 줄인다. qt 와 함께 줄어야 걸음 벽시계의
+		#  **비율**이 안 변해서, 「큰 값과 작은 값의 걸음 길이 차」를 재는
+		#  card_shots 가 안 운다(2026-09-19).
+		hitstop -= d * fast_rate
 		queue_redraw()
 		return
 
@@ -3266,11 +3293,16 @@ func _process(d: float) -> void:
 	# pace 0.30(걸음 0.102초)에서는 창 0.25초가 걸음 2.5개를 덮어 칸이 영영 부푼 채
 	# 앉고, total 걸음(0.884초)에서는 0.33초 만에 죽어 나머지 0.55초가 빈다.
 	# 굴림만 세 배로 깎는다 — 수가 다 서는 프레임이 봉우리와 같아야 한다(2026-09-18).
-	total_flash = maxf(total_flash - d * card_jrate, 0.0)
-	calc_flash = maxf(calc_flash - d * card_jrate, 0.0)
-	chip_j = maxf(chip_j - d * card_jrate, 0.0)
-	mult_j = maxf(mult_j - d * card_jrate, 0.0)
-	gain_roll = maxf(gain_roll - d * card_jrate * 3.0, 0.0)
+	# **빨리 보기가 걸리면 춤도 같이 빨라진다.** 안 태우면 rate 2.5 에서 글자춤이
+	# 걸음보다 2.5배 길어져 다음 걸음으로 새어 나간다 — 걸음 시계와 이 다섯은
+	# 반드시 한 커밋에 있어야 하는 짝이다. card_jrate 의 식(_next_step 끝)은
+	# **한 글자도 안 고친다**: qt 는 값 그대로 서고 깎는 속도만 바뀌므로 걸음
+	# 중간에 손을 떼도 창이 저절로 맞는다(2026-09-19).
+	total_flash = maxf(total_flash - d * fast_rate * card_jrate, 0.0)
+	calc_flash = maxf(calc_flash - d * fast_rate * card_jrate, 0.0)
+	chip_j = maxf(chip_j - d * fast_rate * card_jrate, 0.0)
+	mult_j = maxf(mult_j - d * fast_rate * card_jrate, 0.0)
+	gain_roll = maxf(gain_roll - d * fast_rate * card_jrate * 3.0, 0.0)
 	card_burst = maxf(card_burst - d * float(CARDFX.burst_fade), 0.0)
 	_tick_score(d)
 
@@ -3346,13 +3378,21 @@ func _process(d: float) -> void:
 					aim = burst_hits.pop_front()
 					_land(false)
 		S.RESOLVE:
-			qt -= d
+			#  빨리 보기가 깎는 **단 하나의 시계**다. 걸음을 안 건너뛴다 —
+			#  아래 `if qt <= 0.0: _next_step()` 이 프레임당 한 번뿐이라
+			#  **프레임당 한 걸음이 구조적 상한**이고, 바닥(4프레임)이 있어
+			#  걸음마다 최소 넉 장이 보장된다. 멀티스텝 루프를 안 넣는다.
+			qt -= d * fast_rate
 			# 물음표의 눈이 구르는 동안만 걸음 **안**에서 시계가 돈다.
 			# 멎는 순간이 둘이라 그 소리를 걸음이 설 때 미리 못 낸다 —
 			# 조준을 잠그는 그 소리를 그대로 쓴다. 하는 일이 같다.
 			if roll_t >= 0.0:
 				var rw := roll_t
-				roll_t += d
+				#  걸음 **안**의 시계라 같이 태운다 — 안 태우면 빨라진
+				#  걸음이 끝난 뒤에 오른쪽 눈이 멎어 소리 하나가 다음
+				#  걸음으로 샌다. rw 비교가 같은 값을 보므로 두 번 멎는
+				#  것은 그대로 걸음 안에서 다 난다(2026-09-19).
+				roll_t += d * fast_rate
 				# 멎는 자리마다 **몸만** 채인다. 글자는 안 건드린다 — _roll_sz 가
 				# 이미 멎은 칸을 한 번 부풀리므로 여기에 j 를 얹으면 두 번 부푼다.
 				# 왼쪽 멎고 뛰고, 0.13초 뒤 오른쪽 멎고 또 뛴다 — **한 걸음이 두 번
@@ -3894,6 +3934,11 @@ func _advance() -> void:
 
 
 func _unhandled_input(e: InputEvent) -> void:
+	#  손가락 판별. **return 하지 않는다** — 에뮬레이션된 마우스 이벤트가
+	#  그대로 흘러야 기존 길이 한 줄도 안 상한다. 한 번 꺼지면 다시 안 켠다
+	#  (톡의 규약 ⑤ · hover_live 머리말). 2026-09-19
+	if e is InputEventScreenTouch or e is InputEventScreenDrag:
+		hover_live = false
 	if e is InputEventKey:
 		var k := e as InputEventKey
 		if k.pressed and not k.echo:
@@ -3945,6 +3990,17 @@ func _unhandled_input(e: InputEvent) -> void:
 					elif buy_sel >= 0 or sell_sel >= 0:
 						buy_sel = -1
 						sell_sel = -1
+					elif state == S.OVER:
+						#  런 끝에서는 물러날 자리가 없다 — 런은 이미 끝났고
+						#  이 화면을 닫는 유일한 문이 「새 런」이다. 제목으로
+						#  보내면 화면에 단추가 없는 **키 전용 목적지**가 생겨
+						#  손가락에 구멍이 난다. TAB 과 「정보」 단추가 같은
+						#  길인 그 어법이다. 잠금은 손가락과 **같이** 지킨다 —
+						#  키에만 문을 열면 그 문으로 사고가 그대로 돌아온다.
+						#  여태 이 갈래는 아래 한 줄이 S.OVER 를 빼는 바람에
+						#  **아무 일도 안 했다**(2026-09-19).
+						if _over_live():
+							_open_newrun()
 					elif state != S.TITLE and state != S.OVER:
 						# 판 중의 ESC 는 일시정지다 — 설정을 열고, 닫으면
 						# 열던 자리로 돌아간다. 진행 상태는 전부 그대로다.
@@ -3966,6 +4022,13 @@ func _unhandled_input(e: InputEvent) -> void:
 						state = S.TITLE
 					elif state == S.PICK:
 						_pick_dart(0)
+					elif state == S.OVER:
+						#  ⚠ 여태 이 자리는 밑의 _click(-1,-1) 이 **좌표를 안
+						#  보는 덕분에** 우연히 동작했다. 단추 안에서만 받게
+						#  된 순간 조용히 죽는 자리라 제 갈래를 판다.
+						#  잠금은 손가락과 같이 지킨다. 2026-09-19
+						if _over_live():
+							_open_newrun()
 					else:
 						_click(Vector2(-1, -1))
 		return
@@ -3988,6 +4051,16 @@ func _unhandled_input(e: InputEvent) -> void:
 			#  실수로 물건을 사면 설명이 손해로 끝난다.
 			if _tutor_click(mp):
 				return
+			#  읽기 관문 — **아무것도 안 삼킨다.** 누른 자리와 시각을 적어
+			#  둘 뿐이라 밑의 손 · 클릭이 하던 일이 한 톨도 안 바뀐다.
+			#  읽기 판정은 _process 에서 따로 돈다 — _click 앞머리의 문지기
+			#  다섯(칠하기 · 사진 고르기 · 개발자 판 · 갈아 끼우기 · HUD
+			#  단추)을 지나기 전에 무엇을 하면 개발자 판 줄이 눌린다.
+			press_p0 = mp
+			press_ms = Time.get_ticks_msec()
+			press_read = false
+			press_buy = buy_sel
+			tip_pin = {}              # 새 누름은 앞 읽기를 지운다
 			if _hand_press(mp):
 				return                    # 삼킨다 — 탭인지 드래그인지 아직 모른다
 			_click(mp)
@@ -3996,8 +4069,31 @@ func _unhandled_input(e: InputEvent) -> void:
 				# 저장은 뗄 때 한 번. 끄는 동안 매 프레임 쓰면 파일을 두드린다.
 				_set_slide_end()
 				return
+			if press_read:
+				#  읽기가 된 손짓은 아무것도 확정 안 한다 — 소리도 없다
+				#  (톡의 규약 ④ · WCAG 2.5.2 의 임계에서 값이 안 바뀐다).
+				#  지목은 되돌린다: 길게 누르기는 읽기지 취소가 아니다.
+				press_read = false
+				hold_a = 0.0
+				if hand_st != H.NONE:
+					_hand_abort()         # _hand_abort 가 buy_sel 을 지운다
+					buy_sel = press_buy
+				return
 			_hand_release(mp)
+			#  톡 = 지목 = 읽기. **손가락에서만 선다** — 마우스는 얹힘이
+			#  이미 읽으므로 핀이 설 자리가 없다(데스크톱 무변경).
+			if not hover_live:
+				var pk := _tip_hit(mp)
+				if not pk.is_empty():
+					pk["st"] = state
+					tip_pin = pk
+					tip_pin_at = mp
+					tip_lite = not _read_deep()
 	elif e is InputEventMouseMotion:
+		#  마우스가 조금이라도 움직이면 읽기 핀이 그 프레임에 풀린다 —
+		#  데스크톱 방어선의 셋째 겹이다(2026-09-19).
+		if hover_live and not (e as InputEventMouseMotion).relative.is_zero_approx():
+			tip_pin = {}
 		# 손 상태와 무관하게 받아 둔다 — _hand_motion 은 쥐고 있을 때만
 		# 갱신하는데, 놓기·당김 조준은 아무것도 안 쥔 채로 자리를 읽는다.
 		mouse_at = (e as InputEventMouseMotion).position - view_pad
@@ -4142,12 +4238,21 @@ func _click(m: Vector2) -> void:
 			else:
 				buy_sel = -1            # 맨 펠트 = 취소
 		S.OVER:
-			# 검증 실행은 소크 테스트라 곧장 다음 런으로 돈다. 사람은 새 런으로 —
-			# 다트통과 리그을 다시 고를 자리가 거기다.
+			# 검증 실행은 소크 테스트라 곧장 다음 런으로 돈다 — **잠금 밖**이다.
+			# 사람은 새 런으로 — 다트통과 리그을 다시 고를 자리가 거기다.
 			if _autoplay:
 				_new_run()
-			else:
-				_open_newrun()
+				return
+			#  ① 잠금 ② 단추 안. **둘 다 있어야 한다** — 타이머만 두면
+			#  0.4초 뒤의 헛클릭이 그대로 런을 버리고, 표적만 좁히면
+			#  직전까지 두드리던 손이 그 줄을 때리는 경우가 남는다.
+			#  ⚠ 여기서 _deny() 를 부르지 마라 — 잠긴 0.4초 동안 손이 여러
+			#  번 들어오면 거절이 연달아 운다(2026-09-19).
+			if not _over_live():
+				return
+			if not _over_newrun_rect().has_point(m):
+				return
+			_open_newrun()
 		S.NEWRUN:
 			for i in GameData.leagues().size():
 				if not _league_rect(i).has_point(m):
@@ -4254,6 +4359,7 @@ func _click(m: Vector2) -> void:
 				if tr.has_point(m):
 					# 누른 자리로 곧장 가고 뗄 때까지 따라온다. 예전에는 클릭
 					# 한 번만 받고 0.05 로 끊어서 계단처럼 움직였다.
+					lobby_arm = false     # 소리를 끄는 손이 겨눔을 안 들고 다닌다
 					set_drag = face
 					set_sel = face
 					_set_slide(face, m)
@@ -4263,6 +4369,10 @@ func _click(m: Vector2) -> void:
 			for i in rows.size():
 				if not _set_rect(i).has_point(m):
 					continue
+				#  딴 줄을 누르면 겨눔이 즉시 풀린다 — 겨눈 줄을 또 누르는
+				#  것만 확정이다(prof_arm 이 글줄보다 먼저 서는 그 규약).
+				if String(rows[i]) != "lobby":
+					lobby_arm = false
 				set_sel = i
 				match rows[i]:
 					"fs":
@@ -4273,6 +4383,18 @@ func _click(m: Vector2) -> void:
 						_sfx("menu_pick2")
 						return
 					"lobby":
+						#  겨눔 한 단. "vol","mus" 가 같은 자리에서 return
+						#  하는 선례를 그대로 쓴다 — 아래 _sfx("menu_back")
+						#  을 안 지나야 첫 누름이 나가는 소리를 안 낸다.
+						#  겨눔 소리는 prof_arm 이 쓰는 그것(menu_pick2)이고,
+						#  확정은 지금 나는 menu_back 그대로다 — 판 밖이라
+						#  카지노 어휘가 유지된다. 새 소리를 안 굽는다.
+						if not lobby_arm:
+							lobby_arm = true
+							lobby_arm_t = 0.0
+							_sfx("menu_pick2")
+							return
+						lobby_arm = false
 						pause_from = -1
 						state = S.TITLE
 					"quit":
@@ -4873,6 +4995,61 @@ func _pace() -> float:
 			float(PACE.min), 1.0)
 
 
+#  ── 정산 빨리 보기 ────────────────────────────────────────
+#  누르고 있는 동안만 **걸음 시계**가 빨라진다. 걸음을 하나도 안 건너뛴다 —
+#  소리도 값도 그대로 나고, 줄어드는 것은 걸음 사이의 기다림뿐이다.
+#
+#  상한 2.5 는 귀가 정한다: settle_step 소리가 0.10초인데 보통 박자 chip
+#  걸음(0.340)을 2.5 로 나누면 0.136 이라 아직 36ms 길다. 3.0 이면 0.113 로
+#  13ms 밖에 안 남아 어디서나 겹치기 직전이 된다. 3.0 은 개발자 사다리에만 둔다.
+#
+#  바닥 4프레임 = MO.tap — 이 저장소의 가장 작은 움직임 단위다. 카드 춤 창이
+#  qt*jspan(0.78)이라 4프레임 걸음이면 춤이 3.1프레임이고, 그 밑은 640x360
+#  정수 글꼴에서 「튄다」가 아니라 스트로브가 된다.
+#  **_mo 를 안 쓴다** — 모션을 꺼도 바닥은 남아야 한다. 2026-09-19
+const FAST := {"mul": 2.5, "floor": 4.0}
+var fast_mul := 2.5      # 개발자 사다리가 1.0 / 2.0 / 2.5 / 3.0 으로 민다
+var fast_lock := false   # 개발자 모드 전용 고정 — 안 눌러도 걸린다
+var fast_rate := 1.0     # 이번 프레임의 배수. _process 가 매 프레임 덮는다
+
+
+#  바닥을 **새 변수 없이** 잰다. qt0(이 걸음의 이름값)를 들면 리셋 자리가
+#  다섯으로 늘고 dev.gd 의 카드 재생 두 줄까지 같이 고쳐야 한다 — 빠뜨리면
+#  「개발자 판에서만 안 빨라진다」가 된다. 대신 큐에서 **가장 짧은 걸음의
+#  이름값**인 beat*_pace() 로 잰다: 어느 갈래도 이보다 짧지 않다
+#  (miss 1.4 · bal 1.6 · total 2.6 · 목표돌파 3.4배).
+#  곱하는 지점이 「프레임당 깎는 양」 한 축뿐이라 _pace 와 곱해져 9배가 되는
+#  사고가 구조적으로 없다 — _pace 는 qt 를 **세울 때** 쓰인다.
+#  curve_probe 가 beat 를 0.015 로 누르면 한도가 0.225 → maxf 로 1.0 이 되어
+#  **가속이 통째로 꺼진다**(정산이 900초를 넘기던 그 자리다). 2026-09-19
+func _fast_lim() -> float:
+	return maxf(beat * _pace() / (float(FAST.floor) / 60.0), 1.0)
+
+
+#  문지기 목록은 _ui_can_hover 의 표를 **그대로 빌린다** — 배움 · 연출 ·
+#  사진 · 든 손을 한 곳에 적어 두려고 만든 표라, 새 목록을 또 적으면 둘이
+#  갈라진다. 「누르고 있음」은 이벤트가 아니므로 _click 이 아니라 여기서
+#  Input 을 읽는다(모바일에서는 그대로 길게 누르기가 된다).
+#  HUD 단추 둘을 빼는 것은 「설정」을 누르는 손이 정산을 재촉하지 않게 함이다.
+func _fast_on() -> bool:
+	if state != S.RESOLVE or _autoplay:
+		return false
+	if fast_lock:
+		return true                      # 개발자 고정 — Dev.on 도 지난다
+	if Dev.on or not _ui_can_hover() or hand_st != H.NONE:
+		return false
+	if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		return false
+	return not _hud_btn_rect(0).has_point(mouse_at) \
+			and not _hud_btn_rect(1).has_point(mouse_at)
+
+
+func _fast_rate() -> float:
+	if not _fast_on():
+		return 1.0
+	return clampf(fast_mul, 1.0, minf(float(FAST.mul), _fast_lim()))
+
+
 func _next_step() -> void:
 	if queue.is_empty():
 		card_target = 0.0
@@ -5127,6 +5304,10 @@ func _next_step() -> void:
 	#
 	# 회귀: pace 1.0 chip 걸음 → 3.77(옛 4.0, 거의 같다) · 저울 → 2.36 ·
 	# 합계 → 1.45(옛 3.0 은 0.33초에 죽어 남은 0.55초가 비었다) · 목표돌파 → 1.11.
+	#
+	# 빨리 보기(fast_rate)는 이 식을 **안 고친다**. qt 는 이름값 그대로 서고
+	# _process 가 깎는 속도만 바뀌므로 이 창이 저절로 맞는다 — 걸음 중간에
+	# 손을 떼도 남은 춤이 남은 걸음과 같은 비율로 선다(2026-09-19).
 	card_jrate = 1.0 / maxf(qt * float(CARDFX.jspan), 0.02)
 
 
@@ -5413,29 +5594,42 @@ func _mag_rect(i: int) -> Rect2:
 	return _grip_pose(i).hit
 
 
-# 선반 자리. 왼쪽 벽 — 자금판(y 20~54) 아래, 판매 창구 이름표(y 128) 위다.
-# 테이블 물건은 펠트 위에 물리로 떨어지므로 이 사각과 영영 안 겹친다.
-# 상점 밖에서 고른 동전을 파는 버튼. 고른 것이 없거나 상점이면 빈 사각이다
-# (상점에는 창구가 있고, 두 자리를 같이 두면 같은 일에 문이 둘이 된다).
+# 판매 단추 — 상점 밖에서 고른 동전을 파는 유일한 자리다. 고른 것이 없거나
+# 상점이면 빈 사각이다(상점에는 창구가 있고, 두 자리를 같이 두면 같은 일에
+# 문이 둘이 된다).
 #
-# 자리는 고른 칸 바로 아래다. 동전 슬롯 아래 y[62,79] 는 창구·버튼(112~)과
-# 매물 최상단(99.3)과 조준 잠금 반경(76.4) 어디에도 안 겹치는 띠다.
-#  13 → 16(몸 13 + 턱 3). 값을 9 → 11 로 올리며 몸이 자랐다 — 갈무리11 의 수가
-#  10px 라 몸이 13 은 돼야 위아래가 빈다. 판 밑줄(y 63)을 덮고 판에 **붙여** 세운다 —
-#  고른 동전에서 내려온 딱지로 읽히고, 턱 밑이 판의 숫자 고리 「20」(y 80~)과 1px 떨어진다.
-#  16 → 17. 값을 11 → 12(도트 격자)로 옮기며 수의 잉크가 11px 가 됐다. 밑(턱 밑 79)은
-#  그대로 두고 **위로** 한 줄 늘려 판 밑줄 위 한 줄(y 62)까지 덮는다 — 고른 동전은
-#  4px 떠올라 밑변이 56 이라 안 닿는다.
-#  판 밑줄 두 줄이 칸 사각(_slot_rect)과 겹치지만 누름은 이 단추를 먼저 본다(_hand_press_at).
+#  **자리를 고른 칸 밑에서 지갑 밑으로 옮겼다(2026-09-19).** 칸 밑
+#  (y[62,79] · 48x17)은 마우스에서는 문제가 없었다 — 호버로 읽으니 읽으려고
+#  누를 일이 없다. 손가락은 **읽으려고 누르는 것이 곧 지목**이라(톡의 규약 ②),
+#  고른 뒤 둘째 톡이 17px 아래로 미끄러지면 그대로 팔렸다.
+#
+#  칸 밑에는 고칠 자리가 없다는 것이 계산으로 나온다. 지름 24 원 검사를
+#  넘기려면 단추 중심이 칸 밑변(64)에서 12px 아래, 즉 y >= 76 이어야 하는데
+#  **y 76.44 부터가 판 조준 원**이다(BC.y - R*aim_click_r = 196 - 119.56 —
+#  _hand_press_at 이 이미 적어 둔 수). 내리면 조준 표적을 먹고, 조준 난이도는
+#  한 톨도 못 바꾼다. 남는 띠가 12.4px 라 손가락 자(56x20)의 세로도 못 채운다.
+#  **밑으로도 위로도 못 간다 — 그래서 옆으로 뗀다.**
+#
+#  새 자리는 이 함수의 옛 머리말이 이미 가리키던 그 띠다 — 「왼쪽 벽,
+#  자금판(y 20~54) 아래, 판매 창구 이름표(y 128) 위. 테이블 물건은 펠트 위에
+#  물리로 떨어지므로 이 사각과 영영 안 겹친다.」
+#
+#  Rect2(4,56,72,22) · 중심 (40,67) · 24px 원 x[28,52] y[55,79]
+#    사탕 칸 중심(100,42)과 65.8px · 가장 왼쪽 동전 칸 중심(190,42)과 155px
+#    벽의 자루 잡기 판정 위끝(GRIP.cy − 118 − GRIP.hit = 88)과 10px
+#    BC 까지 271px — 조준 원(119.56)과 **아예 안 만난다**
+#    판 숫자 고리(y 80~)와 2px — 옛 자리가 1px 이던 것보다 낫다
+#  72x22 는 qa_hudbtn 의 손가락 자 56x20 을 **가로세로 둘 다** 넘는다.
+#  _bank_rect 에서 파생해 **좌표 소유자를 안 늘린다.** 자금판이 BANK.tall 로
+#  자라는 두 화면(상점 · CLEAR)에서는 _can_sell 이 거짓이라 여기 안 온다.
+#  노드 좌표라 view_pad 와 무관하고 x 76 <= 640 이라 21:9 에서도 안전하다.
 func _sell_btn_rect() -> Rect2:
 	if state == S.SHOP or sell_sel < 0 or sell_sel >= owned.size():
 		return Rect2()
 	if not _can_sell():
 		return Rect2()
-	var cell := _slot_rect(sell_sel)
-	var w := 48.0
-	return Rect2(cell.get_center().x - w * 0.5, cell.position.y + cell.size.y - 2.0,
-			w, 17.0)
+	var b := _bank_rect()
+	return Rect2(b.position.x, b.end.y + 2.0, b.size.x, 22.0)
 
 
 func _reroll_rect() -> Rect2:
@@ -12017,9 +12211,11 @@ func _panel_draw() -> void:
 #  짙은 판에 금빛 윗띠 한 줄로 「단추」 를 말했는데, 단추가 칠한 덩어리 + 턱으로
 #  바뀌며 윗띠를 걷었다(2026-09-17). 히트는 _sell_btn_rect 그대로라 뜨고 앉아도
 #  판정이 안 흔들린다.
-#  값은 9 → 11 → 12 로 올랐고 몸은 16 → 17(_sell_btn_rect)이다. 수는 윗줄 빛을 뺀
-#  몸 14px 의 가운데에 선다 — 바닥선 12 · 숫자 잉크 y[2.5,12] 라 빛 밑 1.5 · 턱 위 2px.
-#  갈무리 때의 13 이면 페이퍼로지 수가 턱에 붙었다.
+#  값은 9 → 11 → 12 로 올랐고 몸은 16 → 17 → **22**(_sell_btn_rect)다. 자리를
+#  지갑 밑으로 옮기며 손가락 자(56x20)를 넘기려고 키웠다(2026-09-19).
+#  수는 윗줄 빛을 뺀 몸 **19px**(22 − 턱 3)의 가운데에 선다 — _ink_mid_y((19+1)*0.5,
+#  12) 로 바닥선 10, 숫자 잉크 y[0.5,10] 이라 빛 밑 4 · 턱 위 4px 다. 식은 그대로라
+#  몸이 자란 만큼 저절로 따라왔다. **크기 12 를 유지한다**(글자 다섯 단 안).
 func _sell_btn_draw() -> void:
 	var r := _sell_btn_rect()
 	if r.size.x <= 0.0:
@@ -12088,7 +12284,13 @@ func _panel_slot(i: int) -> void:
 		draw_arc(c, r + 2.0, 0.0, TAU, 24,
 				C_MULT.lightened(0.25) if photo_rack == "burn" else C_ACC, 1.0)
 	elif press:
-		draw_arc(c, r + 2.0, 0.0, TAU, 24, C_TXT, 1.0)
+		#  손가락은 누르는 동안 고리가 **차오른다** — 남은 시간을 글자로 안
+		#  적는 Firefox 의 답 그대로다. 색 + 호의 길이 = 채널 둘이라 WCAG
+		#  1.4.1 을 넘고, draw_arc 라 글자 다섯 단 자에 안 걸린다. 글자 0자.
+		#  마우스(hover_live)는 1.0 으로 고정돼 **오늘과 한 픽셀도 다르지
+		#  않은 온 고리**다. 2026-09-19
+		var hp: float = 1.0 if hover_live else clampf(hold_a, 0.08, 1.0)
+		draw_arc(c, r + 2.0, -PI * 0.5, -PI * 0.5 + TAU * hp, 24, C_TXT, 1.0)
 	elif sel:
 		var k := 0.5 + 0.5 * sin(sell_t * 9.0)
 		draw_arc(c, r + 2.0, 0.0, TAU, 24,
@@ -12098,10 +12300,12 @@ func _panel_slot(i: int) -> void:
 
 	#  글자는 **판 밑**에 단다(바닥선 = 판 밑변 + 11). 전에는 칸 안 밑줄에 9 로
 	#  동전 아랫단을 깔고 앉아 금테 · 그림에 눌려 읽히지 않았다. 11 로 올리면
-	#  동전을 더 먹으므로 판 밖으로 내렸다(2026-09-17). 판 밑 y[64,74] 은 판매
-	#  단추(y[62,79])가 서는 띠이고, 판의 숫자 고리(y 80~)와 안 겹친다.
+	#  동전을 더 먹으므로 판 밖으로 내렸다(2026-09-17). 판 밑 y[64,74] 은 판의
+	#  숫자 고리(y 80~)와 안 겹친다.
 	#  11 → 12. 바닥선은 +11 — 페이퍼로지 한글 잉크가 y[65,75.5] 라 판 밑줄(63) 밑
 	#  한 줄을 비우고, 가운데 칸 이름의 밑이 판 테의 윗끝(y 76~)에 안 닿는다.
+	#  판 밑 y[64,74] 는 이제 **이름 줄만의 것**이다 — 판매 단추가 지갑 밑으로
+	#  떠났다(_sell_btn_rect · 2026-09-19).
 	#  사탕 칸 이름(_cons_draw)도 같은 줄에 선다 — 첫 줄 밑 글자가 한 바닥선이다.
 	var ly: float = _panel_rect().end.y + 11.0
 	# 상점에서는 동전 슬롯이 매물대가 된다 — 태그 자리에 회수액을 건다.
@@ -12126,9 +12330,12 @@ func _panel_slot(i: int) -> void:
 		label = it.n
 	if label == "":
 		return
-	#  판매 단추가 이 칸 밑에 서 있으면 그 자리는 단추의 것이다.
-	if i == sell_sel and _sell_btn_rect().size.x > 0.0:
-		return
+	#  여기 있던 두 줄 — 「판매 단추가 이 칸 밑에 서 있으면 그 자리는 단추의
+	#  것이다」 — 를 걷었다(2026-09-19). 판매 단추가 지갑 밑으로 떠나면서
+	#  이유가 없어졌다. **덤으로, 고른 동전에 얹힌 동안 그 이름이 다시
+	#  보인다**(이 줄은 slot_hot 이 여는 것이라 얹혔을 때만 선다): 위에서는
+	#  이름 붙은 동전이 붉게 맥동하고 아래 지갑 밑에서 「+N」이 뜬다 —
+	#  글자를 한 자도 안 더하고 「어느 동전인가」가 두 군데서 말해진다.
 	#  조준 중에는 HUD 와 같이 물러난다 — _hud_draw 의 어두운 띠는 판 밑변(64)
 	#  까지라 판 밖으로 내린 이 줄을 안 덮는다. 정보 · 설정 단추와 같은 0.55 다.
 	var a: float = 0.55 if _is_aim_stage() else 1.0
@@ -12628,6 +12835,14 @@ func _cons_draw() -> void:
 			var up := 0.0
 			if press:
 				_rr(self, _cons_rect(i).grow(-2.0), Color(C_BG, 0.35))
+				#  손가락은 누르는 동안 테두리가 차오른다 — 0.45초를 넘기면
+				#  그 손짓이 **읽기**가 되어 떼도 안 쓰인다(사탕의 옛 예외를
+				#  갚는 자리다). 마우스는 이 갈래를 아예 안 밟는다. 2026-09-19
+				if not hover_live and hold_a > 0.0:
+					var cr := _cons_rect(i)
+					draw_arc(cr.get_center(), cr.size.x * 0.5 + 1.0,
+							-PI * 0.5, -PI * 0.5 + TAU * clampf(hold_a, 0.08, 1.0),
+							20, C_TXT, 1.0)
 			elif h > 0.0:
 				_rr(self, _cons_rect(i).grow(-2.0), Color(C_TXT, 0.07 * h))
 				up = roundf(h)
@@ -20143,7 +20358,10 @@ func _hand_press_at(m: Vector2) -> bool:
 			return true
 	# 판매 버튼 — 상점 밖에서 파는 유일한 자리다. 동전 슬롯 잡기보다 먼저
 	# 본다. 확정은 **뗄 때**고 끌고 나가면 취소다 — 창구·사탕 칸과 같은
-	# 문법이라 실수로 파는 경로가 없다.
+	# 문법이라 실수로 파는 경로가 없다(톡의 규약 ①).
+	#  2026-09-19: 단추가 지갑 밑(4,56,72,22)으로 떠나 이제 동전 칸과
+	#  **물리적으로 안 겹친다**. 차례가 뜻을 잃었지만 규약 자체는 남겨
+	#  둔다 — 다음에 자리를 또 옮길 때 이 순서가 안전망이 된다.
 	if _sell_btn_rect().has_point(m):
 		hand_st = H.ARMED
 		hand_src = 5
@@ -20926,6 +21144,91 @@ var tip_spot := -1              # 호버 중인 테이블 자리 (테이블 구�
 var tip_a := 0.0                # 페이드
 
 
+# ══════════════════════════════════════════════════════════
+#  톡의 규약 — 게임 전체에서 같다 (2026-09-19)
+# ──────────────────────────────────────────────────────────
+#  ① **누름은 지목한다. 뗌이 확정한다.**
+#     누르는 순간에는 어떤 값도 안 바뀐다. 같은 사각 안에서 떼야 확정이고,
+#     HAND.slip(5 뷰px = 10 device px) 넘게 끌면 취소다. 창구 · 판매 단추 ·
+#     사탕이 **이미** 이 문법이다(_hand_press_at → _hand_release).
+#
+#  ② **지목은 값을 안 바꾸고, 지목한 것은 읽힌다.**
+#     「물건」은 든 동전 · 상점 매물 · 컬렉션 칸 · 런 끝의 동전이다. 톡 하면
+#     (ㄱ) 그것을 지금 가리킨 것으로 세우고 (ㄴ) 그 설명을 연다 — 한 동작이다.
+#     sell_sel · buy_sel 은 **지목**이지 확정이 아니다. 코드는 그대로고
+#     이름만 정확해진다(_rack_tap 은 값을 한 톨도 안 바꾼다).
+#
+#  ③ **값이 오가는 확정은 지목을 낳은 자리에서 안 난다.**
+#     확정 표적이 따로 있고, 두 표적 중심은 지름 24px 원이 안 겹칠 만큼
+#     떨어진다 — 든 동전 → 판매 단추(지갑 밑) · 매물 → 창구 · 프로필 →
+#     「정말 지운다」. 되돌릴 수 없고 **런을 버리는 것**만 예외로 같은 표적에서
+#     두 번 받는다(prof_arm · lobby_arm): 첫 누름이 겨눔, 둘째가 확정,
+#     2.5초나 딴 곳을 누르면 **소리 없이** 풀린다.
+#     「새 런」은 겨눔 대신 **표적 좁히기 + 0.40초 잠금**을 쓴다 — 한 런에
+#     한 번뿐이라 겨눔까지 물리면 마찰이 두 겹이다.
+#
+#  ④ **길게 누르기(0.45초)는 어디서나 「더 읽기」뿐이다.**
+#     임계를 넘는 순간 그 손짓은 읽기로 확정되고 **떼도 값이 안 바뀐다** —
+#     곧 길게 누르기는 읽을 것이 있는 자리의 **무르기**이기도 하다(사탕을
+#     길게 누르면 읽기만 하고 안 쓴다). 읽을 것이 없는 자리(판매 단추 ·
+#     창구)는 _tip_hit 이 빈 사전을 내므로 무르기가 안 걸린다 — 천천히
+#     눌러 파는 손을 방해하지 않는다.
+#
+#  ⑤ **마우스에서는 한 줄도 안 바뀐다.** 얹힘이 곧 읽기이고 지금 그대로
+#     즉시 태그까지 전부 보여 준다. 입력원을 갈라 두는 것이 회귀를 막는
+#     유일한 길이라, 아래 hover_live 가 그 갈라둠이다.
+#
+#  ※ 규약이 못 덮는 한 자리: 사진으로 동전 고르기(photo_rack)는 톡이 곧
+#     태우기·복제다. 그때 화면은 「고르는 층」이라 동전이 물건이 아니라
+#     **단추 노릇**을 하고 있고, 딴 데를 누르면 무르기다 — 층 위에서는
+#     물건이 단추가 된다. _ui_can_hover 가 이 층을 이미 표에 적어 뒀다.
+# ══════════════════════════════════════════════════════════
+#
+#  hover_live 가 이 구획의 **회귀 금지선**이다. 기본 참이고 손가락 이벤트가
+#  한 번이라도 들어오면 거짓이 되어 다시 안 켜진다(한 대에서 둘을 같이 쓰는
+#  일은 없다). 참인 동안 아래 갈래는 **하나도 안 돈다** — 데스크톱과 헤드리스
+#  검사는 새 코드를 영영 안 밟고, 그래서 「툴팁이 0.45초 늦게 뜬다」가
+#  구조적으로 불가능하다.
+#  덤: Godot 의 emulate_mouse_from_touch 기본값이 참이라 손가락을 떼도 커서가
+#  마지막 자리에 남는다 — 이 갈라둠이 없으면 손가락 화면에서 툴팁이 영영
+#  안 꺼진다. hover_live 는 회귀 방어선이자 그 버그의 예방이다. 2026-09-19
+var hover_live := true
+var tip_pin := {}               # {k, i, st}. 비면 얹힘 길 그대로
+var tip_pin_at := Vector2.ZERO
+var tip_lite := false           # 얕은 층(태그 줄을 안 낸다). **기본은 false = 다 낸다**
+var press_p0 := Vector2.ZERO
+var press_ms := 0
+var press_read := false         # 이 손짓은 읽기가 됐다 — 뗄 때 확정 안 한다
+var press_buy := -1             # 무르기가 지목을 안 건드리게 되돌릴 값
+var hold_a := 0.0               # 누름 진행도 0~1. 「누르는 중」을 글자 없이 말한다
+
+
+#  길게 누르기 문턱(ms). confirm_hold 축에 태우되 **값은 안 건드린다** —
+#  그건 조준 난이도다. 읽는 쪽에서 바닥 · 천장만 둔다: 바닥 0.30 은 안드로이드
+#  더블탭 임계(300ms) 위라 톡과 안 섞이고(tuning 하한이 0 이고 오토플레이가
+#  0.05 로 누른다 — 0 이면 톡이 곧 길게 누르기다), 천장 0.60 은 손가락이
+#  포기하기 전이다. 두 OS 표준이 0.5 라 기본 0.45 가 그 안이다.
+#  **OS 값에 안 맡긴다** — 접근성 설정이 1000~1500ms 로 늘려 둔 사람에게
+#  잠긴 문이 되면 안 된다. 2026-09-19
+func _hold_ms() -> int:
+	return int(clampf(confirm_hold, 0.30, 0.60) * 1000.0)
+
+
+#  문지기 목록은 _ui_can_hover 의 표를 그대로 빌린다.
+#  S.RESOLVE 를 따로 뺀다: 정산 중의 누름은 **빨리 보기의 것**이고, 거기서
+#  읽을 것은 상단 띠 제약 아이콘 하나뿐이라 그 한 자리를 위해 손짓을 뺏을
+#  이유가 없다. 이 한 줄이 ①과 ⑤의 유일한 충돌을 상태로 끊는다.
+func _hold_ok() -> bool:
+	return not hover_live and _ui_can_hover() and not _autoplay and not Dev.on \
+			and state != S.RESOLVE and state != S.INTRO
+
+
+#  읽으려고 연 화면 — **첫 톡이 곧 깊은 층**이다. 여기서 층을 가르는 것은
+#  뜻이 없고, 이 둘이 「길게 누르기가 유일한 길이 아니다」의 예비 길이 된다.
+func _read_deep() -> bool:
+	return state == S.COLLECT or state == S.OVER
+
+
 # ic  왼쪽에 붙일 제약 아이콘 id (없으면 빈 문자열 — 기존 호출은 3인자 그대로)
 # tl  이름 뒤에 12pt 로 이어 붙일 설명 (제약 줄에서만 쓴다)
 # sz  20(효과 · 1층) 또는 12(곁줄). 다른 크기는 깨진다(TIP 머리말).
@@ -21171,6 +21474,13 @@ func _tip_hit(m: Vector2) -> Dictionary:
 			for i in _col_count():
 				if _col_cell(i).has_point(m):
 					return {"k": kk, "i": collect_page * COL_PAGE + i}
+		S.OVER:
+			#  「마지막까지 든 것」이 그림만 있고 이름조차 안 떴다. 열쇠는
+			#  동전 슬롯과 같은 "rack" 을 그대로 쓴다 — _tip_build 에 새
+			#  가지가 필요 없고, 자리 가르기 한 줄만 넓히면 된다.
+			for i in owned.size():
+				if _over_coin_rect(i).has_point(m):
+					return {"k": "rack", "i": i}
 		S.PICK, S.AIM_V, S.AIM_H:
 			var ch2 := _cons_hit(m)
 			if ch2 >= 0:
@@ -21197,8 +21507,18 @@ func _tip_build(hit: Dictionary) -> void:
 	match hit.k:
 		"rack":
 			_tip_set_tag("동전")
-			tip_mark = Rect2()
-			tip_slot = i
+			#  **자리를 상태로 가른다.** 런 끝 화면의 동전은 동전 슬롯이
+			#  아니라 제 사각을 가지므로 tip_mark 로 앵커를 잡는다 —
+			#  tip_slot 으로 넘기면 _tip_pos 가 앵커를 _slot_rect 로 갈아타
+			#  툴팁이 커서 밑 동전이 아니라 **상단 슬롯**에 붙고, 덤으로
+			#  _panel_slot 의 `i == tip_slot` 이 가린 막 뒤 엉뚱한 슬롯의
+			#  얹힘 링을 켠다. 2026-09-19
+			if state == S.OVER:
+				tip_mark = _over_coin_rect(i)
+				tip_slot = -1
+			else:
+				tip_mark = Rect2()
+				tip_slot = i
 			if i >= owned.size():
 				return
 			var it: Dictionary = owned[i]
@@ -21415,7 +21735,19 @@ func _tip_eff(it: Dictionary) -> String:
 
 
 # 태그 한 장. 색이 갈래를 절반쯤 말한다.
+#  **층의 문은 이 한 곳이다.** tip_tags.append 가 저장소 전체에 이 한 줄뿐이고
+#  _tip_set_rar · _tip_set_tag 가 둘 다 여기를 지나므로 문이 하나다.
+#  얕은 층(톡 한 번)은 제목과 효과만 내고 태그 줄을 안 낸다 — tip_tags 가 비면
+#  _tip_tags_h 가 0 을 내어 **판 높이가 저절로 줄므로** _tip_size/_tip_draw 의
+#  「같은 식」 불변식에 손댈 일이 없다.
+#  tip_rar 는 _tip_set_rar 가 이 호출 **앞**에 세우므로 얕은 층에서도 툴팁 판의
+#  등급 색이 산다.
+#  ⚠ **기본값은 false(= 다 낸다)** 여야 한다 — qa_tip 이 _tip_build 를 직접 불러
+#  「동전 태그는 정확히 둘」을 단언하므로, 얕은 층은 명시적으로 켤 때만 켜진다.
+#  그 자가 우는 순간 tip_lite 의 기본값이 뒤집힌 것이다. 2026-09-19
 func _tip_tag(t: String, c: Color) -> void:
+	if tip_lite:
+		return
 	if t == "":
 		return
 	tip_tags.append({"t": t, "c": c})
@@ -21559,9 +21891,29 @@ func _tip_update(d: float) -> void:
 		# 커서 아래 물건이 통째로 미끄러지는 중이다. 판정은 안 움직이므로
 		# 툴팁만 그 자리에 붙어 남는다 — 뜯어 둔다.
 		tip_a = 0.0
+		tip_pin = {}
 		_tip_clear()
 		return
-	var hit := _tip_hit(_cursor())
+	#  핀은 제 화면에서만 산다. 끌기가 시작되면 그것은 무엇을 가리키는
+	#  중이 아니라 옮기는 중이다(_tip_hit 머리말의 그 규약).
+	if hand_st == H.CARRY or int(tip_pin.get("st", state)) != state:
+		tip_pin = {}
+	var hit := {}
+	if hover_live:
+		#  ← **회귀 금지선.** 마우스는 층을 영영 안 본다 — 매 프레임 되돌린다.
+		tip_lite = false
+		hit = _tip_hit(_cursor())     # 오늘과 글자 그대로 같다
+	#  ⚠ **얹힘이 무조건 이긴다.** 핀은 얹힘이 빈손일 때만 선다 —
+	#  데스크톱 방어선의 둘째 겹이다.
+	if hit.is_empty() and not tip_pin.is_empty():
+		#  화면이 그대로여도 물건이 없어졌을 수 있다(사탕을 썼다 · 동전을
+		#  팔았다). 다시 짚어 보고 다르면 스스로 낫는다.
+		var now := _tip_hit(tip_pin_at)
+		if String(now.get("k", "")) != String(tip_pin.get("k", "")) \
+				or int(now.get("i", -1)) != int(tip_pin.get("i", -1)):
+			tip_pin = {}
+		else:
+			hit = tip_pin
 	_tip_build(hit)
 	if hit.is_empty():
 		tip_a = maxf(tip_a - d * TIP.fade, 0.0)
@@ -23456,6 +23808,59 @@ func _boss_plaque() -> void:
 			-1, 12, C_DIM if off else C_TXT)
 
 
+#  ── 런 끝 잠금 ────────────────────────────────────────────
+#  런 끝(S.OVER)은 화면 **어디를 눌러도** 즉시 새 런이었다. 직전까지 정산을
+#  넘기려고 두드리던 손이 그대로 흘러들어 런이 날아가는 자리다.
+#  고침은 둘이 짝이다 — **확정 표적을 「새 런」 줄 안으로 좁히고**(진짜 고침),
+#  거기에 짧은 잠금을 얹는다(보조).
+#
+#  0.40초: 하한은 더블클릭 임계(안드로이드 더블탭 300 · 윈도 500) 위여야
+#  흘러든 둘째 누름을 막고, 상한은 1초 — 넘기면 「안 눌린다」가 아니라
+#  「고장났다」로 읽힌다. 판이 서는 시간(_mo("panel") 0.233)보다 길어
+#  「다 서기 전에는 못 누른다」가 저절로 성립한다.
+#  **모션을 꺼도 안 줄인다** — 잠금은 연출이 아니라 안전이다.
+#  시계는 over_t 를 그대로 쓴다: _new_run 에서만 0 이 되고 _process 에서만
+#  자라므로 이미 정확하다. 새 변수를 만들면 리셋을 빠뜨릴 자리가 하나 는다.
+#  2026-09-19
+const OVER_LOCK := 0.40
+
+
+func _over_panel() -> Rect2:
+	return Rect2(74.0, 45.0, VIEW.x - 148.0, 270.0)
+
+
+func _over_live() -> bool:
+	return over_t >= OVER_LOCK
+
+
+func _over_lock_a() -> float:
+	return clampf(over_t / OVER_LOCK, 0.0, 1.0)
+
+
+#  「새 런」 줄. **그리는 쪽과 누르는 쪽이 같은 자를 쓴다** — _hud_btn_rect ·
+#  _set_rect 가 쓰는 그 규약이다. 값은 _draw_over 가 손으로 계산해 넘기던
+#  것과 한 픽셀도 안 다르다. 452x26 이라 손가락 자(56x20)를 크게 넘는다.
+func _over_newrun_rect() -> Rect2:
+	var p := _over_panel()
+	return Rect2(p.position.x + 20.0, p.end.y - 40.0, p.size.x - 40.0, 26.0)
+
+
+#  런 끝 화면의 든 동전 한 칸. 여태 그림만 있고 이름조차 안 떴다 —
+#  _draw_over 가 draw_item_sticker 를 좌표로 바로 그리고 사각 함수가 없었다.
+#  24x24 는 WCAG 2.5.8 의 최소 표적이다. 동전 사이 step = min(30, (cw-8)/n)
+#  이라 든 것이 여덟까지는 26.25px 로 24px 원이 안 겹치고, 아홉이면 23.33 으로
+#  아슬하게 겹친다 — 다만 **이 표적들은 값을 한 톨도 안 바꾸므로**(읽기 전용)
+#  오탭의 대가가 「옆 동전을 읽었다」뿐이라 그 취지에 안 걸린다. 2026-09-19
+func _over_coin_rect(i: int) -> Rect2:
+	var p := _over_panel()
+	var cw: float = (p.size.x - 56.0) * 0.5
+	var xr: float = p.position.x + 20.0 + cw + 16.0
+	var y: float = p.position.y + 106.0
+	var step: float = minf(30.0, (cw - 8.0) / float(maxi(owned.size(), 1)))
+	var c := Vector2(xr + 11.0 + float(i) * step, y + 24.0)
+	return Rect2(c - Vector2(12.0, 12.0), Vector2(24.0, 24.0))
+
+
 func _draw_over() -> void:
 	_scrim()
 	var e: float = _ease_enter(over_t / maxf(_mo("panel"), 0.001)) 			if _mo("panel") > 0.0 else 1.0
@@ -23463,7 +23868,7 @@ func _draw_over() -> void:
 	#  수 줄이 16 → 22 간격이 되어, 실패 화면의 넷째 줄(마지막 판)이 해금 줄과
 	#  겹칠 자리였다. 크기를 다섯 단(20 · 12 · 36)으로 옮기며 수 줄이 22 → 24 간격이
 	#  되어 8px 을 더 늘렸다. 화면 세로 가운데(45~315)에 선다.
-	var p := Rect2(74.0, 45.0, VIEW.x - 148.0, 270.0)
+	var p := _over_panel()
 	_panel(p, true, e)
 
 	var x0: float = p.position.x + 20.0
@@ -23507,9 +23912,10 @@ func _draw_over() -> void:
 		draw_string(font_sm, Vector2(xr, y + 28.0), "없음",
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(C_OFF, e))
 	else:
-		var step: float = minf(30.0, (cw - 8.0) / float(owned.size()))
+		#  **자가 하나다.** 좌표를 여기서 또 세면 「가리켰는데 아무것도
+		#  안 뜬다」가 난다 — 그리는 자리와 읽는 자리가 갈리기 때문이다.
 		for i in owned.size():
-			draw_item_sticker(Vector2(xr + 11.0 + float(i) * step, y + 24.0),
+			draw_item_sticker(_over_coin_rect(i).get_center(),
 					10.0, owned[i], 0.0, 0.0, 0.0, 10)
 	draw_string(font, Vector2(xr, y + 54.0),
 			GameData.pack_row().get("name", ""), HORIZONTAL_ALIGNMENT_LEFT,
@@ -23544,8 +23950,12 @@ func _draw_over() -> void:
 
 	#  「새 런」 줄 18 → 26px — 이름이 20 이 되어 잉크 18 이 칸 한가운데(위아래 4px) 선다.
 	#  판의 턱(PANEL_LIP) 위로 11px 뜬다.
-	_back_row(self, Rect2(x0, p.end.y - 40.0, p.size.x - 40.0, 26.0),
-			"새 런", "", true)
+	#  잠긴 동안 줄이 **서서히 떠오른다.** 남은 시간을 숫자로 안 적는다 —
+	#  카운트다운 숫자를 걷고 페이드인으로 바꾼 Firefox 의 답 그대로다.
+	#  0.40 에 닿는 순간 hot 이 켜져 금빛 띠가 들고, 커서가 그 줄 위면
+	#  _back_row 의 ui_hot 이 딸깍을 한 번 내 준다 — 「지금부터 눌린다」를
+	#  글자 없이 말하는 소리다. 새 소리를 안 굽는다. 2026-09-19
+	_back_row(self, _over_newrun_rect(), "새 런", "", _over_live(), _over_lock_a())
 
 
 # ══════════════════════════════════════════════════════════
@@ -24177,6 +24587,19 @@ func _draw_title() -> void:
 var newrun_pip := 0             # 지금 보고 있는 다트통 번호
 var prof_sel := 1               # 프로필 화면에서 **고른** 줄 (쓰는 줄과 다르다)
 var prof_arm := -1              # 지우기를 겨눈 슬롯. -1 이면 안 겨눔
+#  ── 「로비로 나가기」 겨눔 ────────────────────────────────
+#  첫 누름이 겨누고 둘째가 나간다 — 프로필 지우기와 **같은 문법**이다
+#  (톡의 규약 ③: 런을 버리는 것만 같은 표적에서 두 번 받는다).
+#  _set_rows 머리말이 「소리를 만지다가 손이 미끄러져 런을 버리는 자리」라고
+#  이미 적어 둔 그 자리라, 확인창 대신 겨눔 한 단을 둔다 — 확인창은 모든
+#  사용자에게 마찰을 물린다.
+#  **글자는 한 자도 안 는다** — 겨눈 것은 띠 색 · 폭 · 마침표 굵기가 말하고,
+#  글줄 색은 warn 줄이 이미 ee 로 붉어지므로 ee 를 1 로 미는 것만으로
+#  저절로 따라온다(_draw_settings 의 글줄 줄은 한 글자도 안 건드린다).
+#  2.5초는 안드로이드 뒤로가기 종료 2초와 웹 관용구 3초 사이다. 2026-09-19
+var lobby_arm := false
+var lobby_arm_t := 0.0
+const LOBBY_ARM := 2.5
 var prof_e := []                # 그 줄의 얹힘 짙기 — 제목·설정과 같은 어법
 var prof_w := []                # 그 줄 띠가 쓸려 든 폭
 
@@ -28451,6 +28874,13 @@ func _set_rows() -> Array:
 #
 #  나가는 두 줄(로비로 · 게임) 앞에는 틈을 둔다. 소리를 만지다가 손이
 #  미끄러져 런을 버리는 자리가 거기라서, 눈으로 한 번 끊어 준다.
+#  그 자리를 2026-09-19 에 **겨눔 한 단**(lobby_arm)이 막았다 — 첫 누름이
+#  겨누고 둘째가 나간다. 틈(split 14px)은 그대로 둔다: 눈으로 끊는 것과
+#  손으로 한 번 더 묻는 것은 하는 일이 달라서, 두 장치가 겹쳐 서는 것이 맞다.
+#  **줄은 한 줄도 안 는다** — qa_settings 의 「제목 5줄 · 판 중 6줄」이 그대로
+#  통과하는 것이 곧 「글자가 한 자도 안 늘었다」의 기계적 증거다.
+#  「게임 나가기」에는 겨눔을 **안** 둔다 — 런을 버리는 것과 게임을 끄는 것은
+#  무게가 다르다.
 #  설정 화면 ──────────────────────────────────────────────
 #  ESC 를 누르면 게임이 뿌예지고 왼쪽에서 글줄이 밀려 들어온다. 단추 상자를
 #  세우지 않는다 — 640x360 에 여섯 칸을 넣으면 그 자체로 꽉 차서, 전에는
@@ -28631,8 +29061,11 @@ func _row_ease(es: Array, ws: Array, n: int, face: int, d: float,
 #
 #  한 장으로 그리면 오른쪽에 딱딱한 끝이 생긴다. 세로 조각 열둘을 왼쪽부터
 #  옅어지게 깔아 오른쪽으로 녹인다.
+#  thick 은 마침표 획의 굵기다. 기본 1.0 이라 **부르는 여섯 자리가 한 줄도
+#  안 바뀐다.** 색 하나로만 상태를 말하면 WCAG 1.4.1 에 걸리므로 모양 한 축이
+#  꼭 필요해서 낸 인자다 — 「로비로 나가기」 겨눔이 이것으로 말한다(2026-09-19).
 func _row_band(c: CanvasItem, r: Rect2, ee: float, ew: float, a: float,
-		col := C_ACC, pad := 12.0) -> void:
+		col := C_ACC, pad := 12.0, thick := 1.0) -> void:
 	if ee <= 0.004:
 		return
 	#  ── 조각은 **겹치지도 벌어지지도 않는다** ───────────────
@@ -28663,7 +29096,7 @@ func _row_band(c: CanvasItem, r: Rect2, ee: float, ew: float, a: float,
 				Color(col, float(SETB.a) * (1.0 - f) * (1.0 - f) * a))
 	#  쓸려 들어오는 끝을 한 획으로 세운다 — 띠가 어디까지 왔는지가 그 한
 	#  줄로 읽힌다. 다 들어오면 오른쪽 끝에 서서 마침표가 된다.
-	c.draw_rect(Rect2(edge - 1.0, y0, 1.0, hh), Color(col, 0.55 * ee * a))
+	c.draw_rect(Rect2(edge - thick, y0, thick, hh), Color(col, 0.55 * ee * a))
 
 
 #  띠가 다 들어왔을 때 마침표가 서는 x. 같은 줄에 제 표식을 세우는 쪽은
@@ -28787,15 +29220,17 @@ func _arrow_btn(c: CanvasItem, r: Rect2, right: bool, hot: bool) -> void:
 
 
 #  뒤로 한 줄. 화면마다 다른 상자였던 것을 한 어법으로 모은다.
+#  a 는 줄 전체의 짙기다. 기본 1.0 이라 **부르는 다섯 자리가 한 줄도 안
+#  바뀐다** — 런 끝의 잠금만 이 축으로 떠오른다(2026-09-19).
 func _back_row(c: CanvasItem, r: Rect2, label: String, key: String,
-		hot := false) -> void:
+		hot := false, a := 1.0) -> void:
 	#  들어설 때의 딸깍. **r 을 꼭 같이 본다** — 런 끝 화면은 「새 런」 을
 	#  hot 으로 늘 켜 두므로(아무 데나 누르면 간다) hot 만 보면 화면이 열리는
 	#  순간 커서가 어디 있든 딸깍이 난다.
 	if hot and _ui_can_hover() and r.has_point(mouse_at):
 		ui_hot = "row:%s:%d" % [label, int(r.position.y)]
 	var e: float = 1.0 if hot else 0.0
-	_row_band(c, r, e, e, 1.0, C_ACC, 4.0)
+	_row_band(c, r, e, e, a, C_ACC, 4.0)
 	#  홀로 서는 길잡이라 가운데로 모은다. 왼쪽 맞춤이면 이름과 단축키가
 	#  칸의 양 끝으로 갈라져 한 덩이로 안 읽힌다.
 	#  이름 11 → 18 → 20 · 곁말 9 → 11 → 12. 판 위 단추 이름과 같은 크기다(2026-09-17
@@ -28809,11 +29244,11 @@ func _back_row(c: CanvasItem, r: Rect2, label: String, key: String,
 	var x0: float = r.position.x + (r.size.x - lw - kw) * 0.5
 	var y: float = _menu_base_y(font_sm, 20, r.position.y, r.size.y)
 	c.draw_string(font_sm, Vector2(x0, y), label, HORIZONTAL_ALIGNMENT_LEFT,
-			-1, 20, C_DIM.lerp(C_TXT, e))
+			-1, 20, Color(C_DIM.lerp(C_TXT, e), a))
 	if key != "":
 		c.draw_string(font, Vector2(x0 + lw, y), "   " + key,
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 12,
-				Color(C_GOLD, 0.5 + 0.5 * e))
+				Color(C_GOLD, (0.5 + 0.5 * e) * a))
 
 
 func _draw_settings(c: CanvasItem) -> void:
@@ -28852,7 +29287,23 @@ func _draw_settings(c: CanvasItem) -> void:
 			r.size.x = minf(r.size.x, tw + 16.0)
 		var ee: float = set_row_e[i] if i < set_row_e.size() else 0.0
 		var ew: float = set_row_w[i] if i < set_row_w.size() else 0.0
-		_row_band(c, r, ee, ew, e)
+		#  겨눈 줄 — **글자는 한 자도 안 는다.** 채널 넷으로 말한다:
+		#    색     띠가 금(C_ACC) → 붉음(C_MULT). prof_arm 의 겨눈 몸과 같다
+		#    고정   얹힘과 무관하게 다 들어온 채 선다. 커서가 떠나도 안 진다 —
+		#           그것이 「아직 서 있다」다
+		#    굵기   띠 끝 마침표 획 1px → 3px. 색 하나로만 말하면 WCAG 1.4.1
+		#    글자색 **공짜로 따라온다** — 「로비로 나가기」는 이미 warn 줄이라
+		#           아래 col 이 ee 로 붉어진다. ee 를 먼저 1.0 으로 미는 **순서**가
+		#           그 이유이고, 그래서 밑의 글줄 줄들을 한 글자도 안 고친다
+		#           (= qa_ui 의 「그 자리에서 darkened/lightened 안 함」 무변경).
+		#  ⚠ 인라인 틴트(draw_string 안의 C_*.lightened)를 쓰지 마라 — 그것이
+		#  정확히 qa_ui 가 잡는 패턴이다. 2026-09-19
+		var armed: bool = key == "lobby" and lobby_arm
+		if armed:
+			ee = 1.0
+			ew = 1.0
+		_row_band(c, r, ee, ew, e, C_MULT if armed else C_ACC, 12.0,
+				3.0 if armed else 1.0)
 		var col: Color = C_DIM.lerp(C_TXT, ee)
 		if bool(info.get("warn", false)):
 			col = C_DIM.lerp(C_RED.lightened(0.35), ee)
@@ -29927,6 +30378,15 @@ func _set_tick(d: float) -> void:
 		blur.visible = e > 0.001
 		if blur.visible and blur.material != null:
 			blur.material.set_shader_parameter("amount", e)
+	#  겨눔 만료. 이 함수는 _process 가 **hitstop 보다 먼저** 부르고 화면과
+	#  무관하게 매 프레임 도므로 겨눔이 멈춤 중에 얼지 않는다.
+	#  **소리 없이** 푼다 — 풀림은 사건이 아니다. 겨눔이 영영 남는 쪽이 더
+	#  위험하므로 상태가 설정을 떠나도 같이 푼다. 2026-09-19
+	if lobby_arm:
+		lobby_arm_t += d
+		if lobby_arm_t > LOBBY_ARM or state != S.SETTINGS:
+			lobby_arm = false
+			queue_redraw()
 	if set_t != was:
 		queue_redraw()
 	# 앞판은 떠 있는 동안 늘 다시 그린다. 커서가 옮겨 다니면 펼칠 줄이
@@ -29939,6 +30399,7 @@ func _set_tick(d: float) -> void:
 
 # 설정을 닫는다 — 판 중에 열었으면 그 자리로, 아니면 제목으로.
 func _settings_back() -> void:
+	lobby_arm = false        # 나가는 문 하나 — ESC · 스페이스 · 「뒤로」가 다 여기를 지난다
 	state = pause_from if pause_from >= 0 else S.TITLE
 	pause_from = -1
 
@@ -30423,6 +30884,10 @@ func _runinfo_toggle() -> bool:
 #  판 중의 ESC 와 「설정」 단추가 같이 부른다. 설정을 열고, 닫으면 열던
 #  자리로 돌아간다. 진행 상태는 전부 그대로다.
 func _pause_open() -> void:
+	#  설정을 다시 열었을 때 겨눔이 남아 있으면 안 된다. prof_arm 도
+	#  「열 때 · 갈아탈 때」 두 자리에 리셋이 있다 — 화면이 바뀌는 자리를
+	#  빠뜨리는 것이 겨눔의 가장 흔한 사고다(2026-09-19).
+	lobby_arm = false
 	if hand_st != H.NONE:
 		_hand_abort()
 	pause_from = state
