@@ -69,6 +69,8 @@ func _initialize() -> void:
 	_aim(g)
 	print("\n── 계산 ──────────────────────────────────")
 	_score(g)
+	print("\n── 새 줄 여섯 ────────────────────────────")
+	_newrows(g)
 
 
 #  트리가 선 첫 프레임. ⑥번 블록만 여기서 돈다.
@@ -90,6 +92,81 @@ func _find(g: Node, label: String) -> int:
 		if String(rows[i].get("n1", "")) == label:
 			return i
 	return -1
+
+
+# ── 새 줄 여섯 (2026-09-19) ─────────────────────────────
+#  게임에 만든 것은 같은 턴에 개발자 모드에도 길을 낸다.
+#  ⚠ 목록형 줄은 **_names 와 _cur_name 에 갈래를 둘 다** 내야 한다.
+#  한쪽만 내면 값 칸을 눌렀을 때 고르개가 텅 빈 채로 뜬다 — 「(없음)」이
+#  화면에 남는 그 사고를 여기서 자로 굳힌다.
+func _newrows(g: Node) -> void:
+	var page0 := Dev.page
+	#  page 0 「경제·진행」
+	Dev.page = 0
+	for nm in ["정산 빨리 보기", "빨리 보기 고정", "런 끝 잠금 풀기"]:
+		_say(_find(g, nm) >= 0, "page 0 에 「%s」 줄이 있다" % nm)
+	#  page 1 「물건」
+	Dev.page = 1
+	for nm in ["손가락인 척", "판매 단추 세우기", "툴팁 얕게/깊게", "로비 겨눔 세우기"]:
+		_say(_find(g, nm) >= 0, "page 1 에 「%s」 줄이 있다" % nm)
+
+	#  고르개가 안 빈다.
+	var names := Dev._names("fast")
+	_say(names.size() == 4, "「fast」 고르개가 안 빈다", "%s" % [names])
+	_say(String(Dev._cur_name(g, {"k": "fast"})).contains("/"),
+			"「fast」 값 칸이 「n/4 이름」 꼴이다",
+			Dev._cur_name(g, {"k": "fast"}))
+
+	#  누르는 그 순간 게임에 반영된다.
+	Dev.page = 0
+	var i0 := _find(g, "정산 빨리 보기")
+	Dev.pick["fast"] = 0
+	Dev._run(g, Dev._rows(g)[i0])
+	_say(is_equal_approx(g.fast_mul, 1.0), "사다리 1칸 → 1배",
+			"%.1f" % g.fast_mul)
+	Dev.pick["fast"] = 3
+	Dev._run(g, Dev._rows(g)[i0])
+	_say(is_equal_approx(g.fast_mul, 3.0), "사다리 4칸 → 3배",
+			"%.1f" % g.fast_mul)
+	g.fast_mul = 2.5
+
+	var lock0: bool = g.fast_lock
+	Dev._run(g, {"a": "fast_lock"})
+	_say(g.fast_lock != lock0, "「빨리 보기 고정」이 뒤집는다")
+	Dev._run(g, {"a": "fast_lock"})
+
+	g.over_t = 0.0
+	Dev._run(g, {"a": "over_unlock"})
+	_say(g._over_live(), "「런 끝 잠금 풀기」가 잠금을 푼다",
+			"over_t %.1f" % g.over_t)
+
+	var hv0: bool = g.hover_live
+	Dev._run(g, {"a": "touch"})
+	_say(g.hover_live != hv0, "「손가락인 척」이 얹힘 길을 끈다",
+			"hover_live %s" % g.hover_live)
+	#  끈 뒤에라야 층 줄이 뜻을 가진다.
+	var lite0: bool = g.tip_lite
+	Dev._run(g, {"a": "tip_layer"})
+	_say(g.tip_lite != lite0, "「툴팁 얕게/깊게」가 층을 뒤집는다",
+			"tip_lite %s" % g.tip_lite)
+	Dev._run(g, {"a": "touch"})          # 얹힘을 도로 켠다
+	g.tip_lite = false
+
+	Dev._run(g, {"a": "lobby_arm"})
+	_say(g.lobby_arm, "「로비 겨눔 세우기」가 겨눔을 세운다")
+	Dev._run(g, {"a": "lobby_arm"})
+	_say(not g.lobby_arm, "한 번 더 누르면 푼다")
+
+	g.owned.clear()
+	for it in GameData.items():
+		g.owned.append((it as Dictionary).duplicate())
+		break
+	Dev._run(g, {"a": "sell_arm"})
+	_say(g.sell_sel == 0 and (g._sell_btn_rect() as Rect2).size.x > 0.0,
+			"「판매 단추 세우기」가 단추를 세운다", "%s" % g._sell_btn_rect())
+	g.sell_sel = -1
+	g.owned.clear()
+	Dev.page = page0
 
 
 # ── ① 그려지는 자리와 눌리는 자리 ────────────────────────
