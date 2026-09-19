@@ -103,6 +103,14 @@ func _run() -> void:
 	g.sell_t = 0.0
 	_hover((g._slot_rect(0) as Rect2).get_center())
 	await _shot("five_4_sell_btn")
+	#  조준 중 — 어두운 띠가 판 밑변 64 까지인데 단추는 y[56,78] 이다.
+	#  알파를 안 물리면 아래 14px 가 100% 로 남아 가로 이음매가 단추
+	#  한가운데를 지른다. 옆의 사탕 줄 · 동전 이름과 **같은 밝기**로
+	#  물러나 있는지를 눈으로 대 본다(2026-09-19).
+	g.state = g.S.AIM_V
+	_hover(Vector2(-50.0, -50.0))
+	await _shot("five_4b_sell_aim")
+	g.state = g.S.PICK
 
 	# ── ⑤ 툴팁 두 층 ─────────────────────────────
 	g.sell_sel = -1
@@ -117,6 +125,11 @@ func _run() -> void:
 	g.tip_lite = true
 	_hover(Vector2(-50.0, -50.0))
 	await _shot("five_5b_tip_lite")
+	#  또 톡 = 깊은 층. 길게 누르기가 유일한 길이 아니라는 **짧은 길**이
+	#  화면에서 실제로 태그 줄을 세우는지 본다 — 위의 five_5b 와 같은
+	#  동전인데 판이 태그 둘만큼 높아야 한다(2026-09-19).
+	g.tip_lite = false
+	await _shot("five_5e_tip_again")
 	#  누름 고리가 차오르는 중 — 절반쯤. **게임의 _process 를 끈다** —
 	#  안 끄면 매 프레임 hold_a 가 0 으로 되돌아가 고리가 바닥값(0.08)으로 선다.
 	g.tip_pin = {}

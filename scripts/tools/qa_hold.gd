@@ -144,6 +144,25 @@ func _tags() -> int:
 	return (g.tip_tags as Array).size()
 
 
+#  동전 차례를 한 줄로. 순서가 바뀌었는지는 이것으로만 본다
+#  (input_probe._ids 와 같은 어법 — 자를 두 개 만들지 않는다).
+func _ids() -> String:
+	var out := []
+	for it in (g.owned as Array):
+		out.append(String((it as Dictionary).id))
+	return " ".join(out)
+
+
+#  p 에서 q 까지 끈다. 도중에 press_read 가 섰든 말든 손짓은 같다.
+func _drag(p: Vector2, q: Vector2) -> void:
+	for k in range(1, 9):
+		_move(p.lerp(q, float(k) / 8.0))
+		g._process(1.0 / 60.0)
+	_btn(q, false)
+	g._process(1.0 / 60.0)
+	g._tip_update(1.0 / 60.0)
+
+
 #  판 중 화면을 세운다. 동전 셋과 사탕 하나를 쥐여 준다.
 func _stage_play() -> void:
 	g._new_run()
@@ -198,6 +217,13 @@ func _run() -> void:
 	_hold(slot0, 700)
 	_ok("데스크톱 — 길게 눌러도 읽기로 안 바뀐다", not g.press_read)
 	_ok("데스크톱 — 층이 여전히 안 갈린다", not g.tip_lite)
+	#  「또 톡하면 깊게」도 마우스에서는 아예 안 돈다 — 핀을 세우는 갈래
+	#  자체가 not hover_live 안에 있다. 얹힘이 이미 다 보여 주기 때문이다.
+	_tap(slot0)
+	_tap(slot0)
+	_ok("데스크톱 — 또 톡해도 핀이 안 선다",
+			(g.tip_pin as Dictionary).is_empty(), "%s" % g.tip_pin)
+	_ok("데스크톱 — 또 톡해도 층이 안 갈린다", not g.tip_lite)
 
 	# ══ 손가락 — 톡 = 지목 = 읽기 ═══════════════════
 	_stage_play()
@@ -236,6 +262,79 @@ func _run() -> void:
 			and (g.cons as Array).size() == cons0 and g.total == total0)
 	_ok("길게 누르기 — 손 상태가 무르기로 끝난다",
 			g.hand_st == g.H.NONE, "hand_st %d" % g.hand_st)
+
+	# ══ 또 톡 = 깊은 층 — 길게 누르기가 유일한 길이 아니다 ══
+	#  런 안에서는 S.COLLECT(제목에서만 들어간다)도 S.OVER(런이 끝난 뒤)도
+	#  못 쓰고, 설계서가 든 런 정보 「보유」 탭은 이 가지에 아직 없다.
+	#  그래서 태그 줄이 **길게 누르기 전용**이 돼 있었다 — 0.45초를 못 쥐는
+	#  손에게 잠긴 문이다. 톡 두 번이 그 구멍을 메운다.
+	_stage_play()
+	_finger(true)
+	var slot1: Vector2 = (g._slot_rect(1) as Rect2).get_center()
+	_tap(slot0)
+	_ok("런 안 — 첫 톡은 얕다", g.tip_lite and _tags() == 0,
+			"태그 %d · lite %s" % [_tags(), g.tip_lite])
+	_tap(slot0)
+	_ok("런 안 — **같은 것을 또 톡하면 깊다**",
+			not g.tip_lite and _tags() == 2, "태그 %d" % _tags())
+	_tap(slot0)
+	_ok("세 번째 톡에도 깊게 선다 (토글이 아니다)",
+			not g.tip_lite and _tags() == 2, "태그 %d" % _tags())
+	_tap(slot1)
+	_ok("딴 것을 톡하면 도로 얕다", g.tip_lite and _tags() == 0,
+			"태그 %d" % _tags())
+	var own_n: int = (g.owned as Array).size()
+	var gold_n: int = g.gold
+	_tap(slot1)
+	_ok("깊게 여는 둘째 톡도 값을 한 톨도 안 바꾼다",
+			(g.owned as Array).size() == own_n and g.gold == gold_n)
+	_tap(Vector2(320.0, 300.0))
+	_ok("빈 자리를 톡하면 읽기가 닫힌다",
+			(g.tip_pin as Dictionary).is_empty(), "%s" % g.tip_pin)
+	#  상점 매물도 같다 — 「살까 말까」가 읽기가 가장 필요한 자리다.
+	_stage_shop()
+	_finger(true)
+	var sh := Vector2(-1.0, -1.0)
+	for i in (g.drop as Array).size():
+		var c: Vector2 = (g._obj_box(i) as Rect2).get_center()
+		if String((g._tip_hit(c) as Dictionary).get("k", "")) == "stock":
+			sh = c
+			break
+	if sh.x >= 0.0:
+		_tap(sh)
+		var lite1: bool = g.tip_lite
+		_tap(sh)
+		_ok("상점 매물도 또 톡하면 깊다", lite1 and not g.tip_lite,
+			"첫 톡 lite %s → 둘째 %s" % [lite1, g.tip_lite])
+	else:
+		_ok("상점 매물을 짚을 자리가 없다", false)
+
+	# ══ 쥐었다가 끌면 **끌기가 이긴다** ════════════════
+	#  press_read 가 선 뒤에 손이 H.CARRY 로 넘어가도 뗌 갈래가 무조건
+	#  _hand_abort 로 끝내 버리면, 「꾹 눌렀다가 끌어서 순서 바꾸기」 —
+	#  모바일에서 가장 먼저 나오는 손짓 — 하나만 조용히 죽는다.
+	_stage_play()
+	_finger(true)
+	var slot2: Vector2 = (g._slot_rect(2) as Rect2).get_center()
+	var before: String = _ids()
+	_btn(slot0, true)
+	var th := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - th < 700:
+		g._process(1.0 / 60.0)
+		OS.delay_msec(4)
+	_ok("쥐는 동안 읽기가 선다", g.press_read)
+	_drag(slot0, slot2)
+	_ok("쥐었다 끌면 순서가 **여전히** 바뀐다", _ids() != before,
+			"%s → %s" % [before, _ids()])
+	#  안 쥐고 그냥 끈 것과 같은 결과여야 한다.
+	_stage_play()
+	_finger(true)
+	var plain0: String = _ids()
+	_btn(slot0, true)
+	g._process(1.0 / 60.0)
+	_drag(slot0, slot2)
+	_ok("안 쥐고 끈 것과 같은 차례가 된다", _ids() != plain0,
+			"%s → %s" % [plain0, _ids()])
 
 	# ══ 취소 반경 — HAND.slip 5 양쪽 ══════════════════
 	_finger(true)
@@ -315,6 +414,38 @@ func _run() -> void:
 	g.collect_page = 0
 	_ok("컬렉션도 깊은 층이다", g._read_deep())
 
+	# ══ 누름이 곧 확정인 단추 — 무르기가 안 걸린다 (이름을 박아 둔다) ══
+	#  규약 ④의 무르기는 「뗌이 확정하는 자리」에서만 참이다. _click 은
+	#  누르는 순간 도는데 press_read 는 뗌만 막으므로, 「건너뛰기」를 길게
+	#  누르면 임계에 닿기 **전에** 이미 판이 넘어가 있다. 그래도 관문을
+	#  안 닫는다 — 값을 바꾼 것은 길게 누르기가 아니라 **톡이고**, 닫으면
+	#  손가락에게 그 뱃지를 읽을 길이 통째로 없어진다. 이 자가 재는 것은
+	#  「길게 누르기가 톡보다 **더** 나쁘지 않다」 한 가지다.
+	_stage_play()
+	g._begin_leg()
+	g.state = g.S.LEG
+	g.leg_t = 99.0
+	_calm()
+	var skip: Vector2 = (g._leg_skip() as Rect2).get_center()
+	if not (g._leg_tag(g.leg_no) as Dictionary).is_empty():
+		_finger(true)
+		var lg0: int = g.leg_no
+		_tap(skip)
+		var tap_d: int = g.leg_no - lg0
+		_stage_play()
+		g._begin_leg()
+		g.state = g.S.LEG
+		g.leg_t = 99.0
+		_calm()
+		_finger(true)
+		var lg1: int = g.leg_no
+		_hold(skip, 700)
+		_ok("건너뛰기 — 길게 누르기가 톡보다 더 건너뛰지 않는다",
+			g.leg_no - lg1 == tap_d,
+			"톡 +%d · 길게 +%d" % [tap_d, g.leg_no - lg1])
+	else:
+		_ok("이 판에는 건너뛰기 뱃지가 없다 — 건너뛴다", true)
+
 	# ══ S.RESOLVE 에서는 읽기가 손짓을 안 뺏는다 (①과의 충돌) ══
 	_stage_play()
 	_finger(true)
@@ -386,6 +517,36 @@ func _run() -> void:
 	g.state = g.S.SHOP
 	_ok("상점에서는 안 뜬다 (창구가 그 일을 한다)",
 			(g._sell_btn_rect() as Rect2).size.x <= 0.0)
+	g.state = g.S.PICK
+
+	#  조준 띠는 판 밑변 64 까지인데 단추는 y[56,78] 이라 **위 8px 만
+	#  덮인다** — 아래 14px 가 100% 로 남으면 가로 이음매가 단추
+	#  한가운데를 지르고, 1px 조준선을 살리려고 깐 띠 밑에서 화면에서
+	#  가장 밝은 덩어리가 판매 단추가 된다.
+	#  ⚠ 이웃들의 0.55 알파를 쓰면 **못 고친다** — 띠와 0.55 가 수로 같은
+	#  물러남이라 위쪽만 두 번 물러나 이음매가 절반만 옅어진다.
+	sb = g._sell_btn_rect()
+	_ok("단추가 띠 밑변 64 를 가로지른다 (그래서 손을 봐야 한다)",
+			sb.position.y < 64.0 and sb.end.y > 64.0,
+			"y[%.0f,%.0f]" % [sb.position.y, sb.end.y])
+	var aim_src := FileAccess.get_file_as_string("res://scripts/game.gd")
+	var fn0: int = aim_src.find("func _sell_btn_draw()")
+	var fn1: int = aim_src.find("\nfunc ", fn0 + 8)
+	var body: String = aim_src.substr(fn0, fn1 - fn0)
+	_ok("넘은 만큼 띠를 제가 들고 간다",
+			body.contains("if _is_aim_stage():")
+			and body.contains("64.0 + _hud_dy()")
+			and body.contains("Color(C_BG, 0.45)"))
+	_ok("띠 값이 _hud_draw 의 그것과 같다 (자가 하나다)",
+			aim_src.contains("draw_rect(_wide(0.0, 64.0 + _hud_dy(), true),")
+			and aim_src.contains("Color(C_BG, 0.45))"))
+	_ok("몸과 수에는 알파를 안 물린다 (두 번 물러나면 안 된다)",
+			body.contains("_ui_face(self, \"hud:sell\", r, true)")
+			and not body.contains("0.55 if _is_aim_stage()"))
+	for st2 in ["AIM_V", "AIM_H", "CONFIRM"]:
+		g.state = int(g.S[st2])
+		_ok("%s 에서 단추가 실제로 뜬다 (안 뜨는 자리가 아니다)" % st2,
+			(g._sell_btn_rect() as Rect2).size.x > 0.0 and g._is_aim_stage())
 	g.state = g.S.PICK
 
 	#  고른 동전의 이름 줄이 되살아났다 — 억누르던 갈래를 걷은 증거다.
