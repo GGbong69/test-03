@@ -4052,8 +4052,9 @@ func _unhandled_input(e: InputEvent) -> void:
 				KEY_TAB:
 					# 런 정보 — 런 안에서만 뜻이 있다. 타이틀·설정·컬렉션에서는
 					# 볼 런이 없고, 연출 중(RESOLVE·전환)에는 입력을 안 받는다.
-					# 화면의 「정보」 단추와 같은 길이다(_runinfo_toggle).
-					_runinfo_toggle()
+					# 닫혀 있으면 화면의 「정보」 단추와 같은 길로 열고, 열려
+					# 있으면 **탭을 한 칸 넘긴다**(_runinfo_step).
+					_runinfo_step()
 				KEY_F11:
 					_toggle_fullscreen()
 				KEY_ESCAPE:
@@ -32085,6 +32086,29 @@ func _hud_btn_rect(i: int) -> Rect2:
 
 
 #  TAB 과 「정보」 단추가 같이 부른다. 열거나 닫았으면 참.
+#  런 정보를 여닫는 키가 **닫지 않고 넘긴다.** 「탭을 누르면 탭 화면이 꺼지지
+#  말고 진행 · 트랙 · 사진 · 보유로 넘어가게」(사용자, 2026-09-19).
+#
+#  닫기를 넘기기와 **같은 자리에 두지 않는** 것이 요점이다 — 그러면 마지막
+#  탭에서 한 번 더 누르는 순간 화면이 사라진다. 넷을 훑는 손짓과 나가는 손짓이
+#  같은 키면 훑다가 반드시 한 번은 잘못 나간다. 닫는 것은 ESC 와 「정보」
+#  단추의 몫으로 남는다(둘 다 이미 있다).
+#
+#  **여는 자리는 안 건드린다** — 닫혀 있으면 지금처럼 마지막에 보던 탭으로
+#  열린다. 여기서 0 으로 되돌리면 「정보」 단추로 열 때와 키로 열 때가 서로
+#  다른 탭을 내어, 같은 화면을 여는 두 길이 갈린다. 도구들도 탭을 손으로
+#  박아 두고 여는 어법을 쓴다(deck_shots2 는 트랙 탭을 찍는다).
+#
+#  감기(posmod)는 판 위 휠(4660)과 탭 단추가 쓰는 그 값·그 소리 그대로다 —
+#  키 · 휠 · 단추 셋이 한 문장을 말한다. 손가락 길은 한 칸도 안 바뀐다.
+func _runinfo_step() -> bool:
+	if state != S.RUNINFO:
+		return _runinfo_toggle()
+	runinfo_tab = posmod(runinfo_tab + 1, RI_TABS.size())
+	_sfx("menu_pick2")
+	return true
+
+
 func _runinfo_toggle() -> bool:
 	if state == S.RUNINFO:
 		state = run_from

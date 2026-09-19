@@ -30,6 +30,26 @@ func _initialize() -> void:
 		g._click(g._ri_tab_rect(t).get_center())
 		print("탭 %d 클릭 -> runinfo_tab=%d %s"
 				% [t, g.runinfo_tab, "ok" if g.runinfo_tab == t else "실패"])
+	#  키는 닫지 않고 **넘긴다**(2026-09-19). 닫기를 넘기기와 같은 자리에 두면
+	#  마지막 탭에서 한 번 더 누르는 순간 화면이 사라진다.
+	g.state = g.S.PICK
+	g.run_from = g.state
+	g.runinfo_tab = 2
+	g._runinfo_step()
+	print("닫혀 있을 때 한 번 -> 열림=%s · 탭=%d(마지막에 보던 자리) %s"
+			% [g.state == g.S.RUNINFO, g.runinfo_tab,
+			"ok" if g.state == g.S.RUNINFO and g.runinfo_tab == 2 else "실패"])
+	g.runinfo_tab = 0
+	var seq := []
+	for _k in 5:
+		g._runinfo_step()
+		seq.append(g.runinfo_tab)
+		if g.state != g.S.RUNINFO:
+			break
+	print("다섯 번 눌러 %s · 안 닫힌다=%s %s"
+			% [str(seq), g.state == g.S.RUNINFO,
+			"ok" if seq == [1, 2, 3, 0, 1] and g.state == g.S.RUNINFO else "실패"])
+
 	var mid: Vector2 = g._runinfo_back_rect().get_center()
 	g._click(mid)
 	print("닫기 클릭 후 제자리(PICK)? %s" % (g.state == g.S.PICK))
