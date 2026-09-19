@@ -31853,10 +31853,24 @@ func _dev_unlock_all() -> void:
 	queue_redraw()
 
 
+#  대역을 **내린다. 저장은 안 만진다** — 켜기 전에 보던 진짜 진도로 돌아온다.
+#  ⚠ 이 함수가 없어서 한 번 뎄다(2026-09-19). 대역을 내리는 줄이 아래
+#  _dev_unlock_none() 하나뿐이라, 개발자 판에서 「전부 열기」로 다 찬 화면을
+#  구경하고 되돌리려 그 줄을 누르면 **진짜 진도가 디스크에서 사라졌다**
+#  (unfound_all 은 바로 flush 한다). 열기는 저장을 안 쓰므로 되살릴 길도
+#  없었다. 바로 위 「해금」 쌍은 unlock_all 이 표에서 다시 심어 주니 진짜
+#  왕복인데, 발견 쌍만 한쪽이 분쇄기였다.
+#  도구들이 `g.found_all = false` 를 손으로 박고 있던 것도 이 문이 없어서다.
+func _dev_unlock_off() -> void:
+	found_all = false
+	queue_redraw()
+
+
 #  이쪽은 **진짜로 지운다.** 대역으로는 새 프로필이 보는 것을 못 본다 —
 #  이미 플레이한 프로필에서 이 기능을 눈으로 보는 유일한 길이다.
 #  Save.unfound_all() 이 [발견] 절을 지우고 _v 를 다시 세우므로 다음에
 #  컬렉션을 열어도 _found_migrate 가 되살리지 않는다.
+#  ⚠ **되돌리기가 아니다.** 대역을 내리기만 하려면 _dev_unlock_off().
 func _dev_unlock_none() -> void:
 	found_all = false
 	Save.unfound_all()

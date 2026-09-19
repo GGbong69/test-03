@@ -125,7 +125,7 @@ func _run() -> void:
 	#  그것만으로 어느 칸이 상인지가 알려진다 — 가린 뜻이 통째로 샌다.
 	#  아래 세 줄은 그 구멍 셋을 각각 잰다. 대역을 켜기 **전에** 잰다.
 	g.state = g.S.COLLECT
-	g.found_all = false
+	g._dev_unlock_off()
 	print("")
 	g._tip_build({"k": "citem", "i": 0})
 	_ok("못 본 동전 — 태그가 한 장", _tags().size() == 1, "[%s]" % "][".join(_tags()))

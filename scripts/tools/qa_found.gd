@@ -66,7 +66,7 @@ func _six() -> Array:
 
 
 func _wipe_found() -> void:
-	g.found_all = false
+	g._dev_unlock_off()
 	Save.unfound_all()
 
 
@@ -423,7 +423,7 @@ func _migrate() -> void:
 	print("── 이주 ────────────────────────────────────")
 	#  새 프로필 — 통계가 0 이고 itemgot 이 없으므로 아무것도 안 나온다
 	Save.wipe()
-	g.found_all = false
+	g._dev_unlock_off()
 	g._found_migrate()
 	_ok("새 프로필은 이주해도 0 / 109", _six() == [0, 0, 0, 0, 0, 0], str(_six()))
 	_ok("[발견]에는 _v 만 선다", Save.found_ready() and Save.found_keys().size() == 1,
@@ -431,7 +431,7 @@ func _migrate() -> void:
 
 	#  이미 플레이한 프로필 — 저장이 아는 것만 읽는다
 	Save.wipe()
-	g.found_all = false
+	g._dev_unlock_off()
 	var leg := _legend_id()
 	Save.unlock("itemgot:" + leg)
 	Save.bump("runs")
@@ -468,4 +468,4 @@ func _migrate() -> void:
 	_ok("「발견 전부 열기」가 N / N", _six() == [69, 12, 4, 5, 9, 10], str(_six()))
 	_ok("「발견 전부 열기」가 저장에 안 쓴다", Save.found_keys().size() == k0,
 			"열쇠 %d → %d" % [k0, Save.found_keys().size()])
-	g.found_all = false
+	g._dev_unlock_off()

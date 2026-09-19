@@ -165,7 +165,7 @@ func _collect() -> void:
 	for t in g.COL_TABS.size():
 		g.collect_tab = t
 		pg_lit.append(g._col_pages())
-	g.found_all = false
+	g._dev_unlock_off()
 	g.collect_tab = 0
 	g.collect_page = 0
 	_ok("발견 수가 쪽 수를 안 줄인다", pg_dim == pg_lit,

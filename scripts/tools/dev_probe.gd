@@ -96,10 +96,13 @@ func _process(_d: float) -> bool:
 #  안 쓴다(기획서 그림 도구 스무남짓이 그 대역으로 돈다 — 저장을 쓰면 옆
 #  도구가 거짓 초록을 낸다). 「잠그기」는 진짜로 지운다 — 이미 플레이한
 #  프로필에서 이 기능을 눈으로 보는 유일한 길이다.
+#
+#  ⚠ 그래서 「열기」가 **토글**이다. 되돌리기를 「잠그기」에서 찾게 두면
+#  구경 한 번에 진짜 진도가 날아간다 — 맨 아래 왕복 줄이 그것을 잰다.
 func _found(g: Node) -> void:
 	var page0 := Dev.page
 	Dev.page = 3
-	for nm in ["발견 전부 열기", "발견 전부 잠그기"]:
+	for nm in ["발견 전부 열기/끄기", "발견 전부 잠그기"]:
 		_say(_find(g, nm) >= 0, "page 3 에 「%s」 줄이 있다" % nm)
 
 	#  먼저 비운다 — 이 자는 판을 깔며 동전·다트를 얻으므로 발견이 이미 서 있다.
@@ -129,6 +132,26 @@ func _found(g: Node) -> void:
 	_say(g._col_found_n(0) == 0 and g._col_found_n(2) == 0,
 			"잠근 뒤 이주가 되살리지 않는다",
 			"동전 %d · 다트 %d" % [g._col_found_n(0), g._col_found_n(2)])
+
+	#  ⚠ **왕복 자체를 잰다.** 「열기」와 「잠그기」를 따로 재면 이 사고가
+	#  안 잡힌다(2026-09-19). 대역을 내리는 줄이 「전부 잠그기」 하나뿐이던
+	#  때, 다 찬 화면을 구경하고 되돌리려 그 줄을 누르는 순간 **진짜 진도가
+	#  디스크에서 사라졌다** — 열기는 저장을 안 쓰니 되살릴 길도 없었다.
+	#  이제 같은 줄을 다시 누르는 것이 되돌리기다.
+	var one := "item:" + String(g._col_rows(0)[0].get("id", ""))
+	Save.discover(one)
+	Save.flush()
+	var n1 := Save.found_keys().size()
+	Dev._run(g, {"a": "found_all"})
+	_say(g.found_all, "「열기」 한 번에 대역이 선다")
+	Dev._run(g, {"a": "found_all"})
+	_say(not g.found_all, "같은 줄을 다시 누르면 대역이 내려간다")
+	_say(Save.found_keys().size() == n1 and Save.found(one),
+			"왕복이 저장을 한 글자도 안 지운다",
+			"열쇠 %d → %d" % [n1, Save.found_keys().size()])
+	_say(g._col_found_n(0) == 1, "되돌린 화면이 진짜 진도를 낸다",
+			"동전 %d / %d" % [g._col_found_n(0), g._col_rows(0).size()])
+	Dev._run(g, {"a": "found_none"})
 	Dev.page = page0
 
 

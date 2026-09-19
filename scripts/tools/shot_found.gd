@@ -42,7 +42,10 @@ func _run() -> void:
 	if DisplayServer.get_name() == "headless":
 		quit(0)
 		return
-	#  대역이 아니라 **진짜로 비운다** — 대역(found_all)은 켜는 쪽만 있다.
+	#  대역을 내리는 것(_dev_unlock_off)으로는 모자라다 — 이 자는 **아무것도
+	#  못 본 프로필**을 찍어야 하는데, 도구 프로필에는 판을 까는 동안 선
+	#  발견이 남아 있다. 그래서 절을 **진짜로 비운다**. 사람의 저장이 아니라
+	#  _tool_profile 이라 지울 진도가 없다.
 	g._dev_unlock_none()
 	g.state = g.S.COLLECT
 	g.collect_page = 0
