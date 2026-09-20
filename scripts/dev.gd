@@ -726,6 +726,13 @@ static func _rows(g: Node) -> Array:
 						"n": GameData.AIM_MODES.size()},
 				{"n1": "계산 방식", "t": "list", "k": "score",
 						"n": GameData.SCORE_MODES.size()},
+				#  ⚠ **1쪽이 아니라 여기인 이유**는 바로 위 주석이 이미 적어
+				#  뒀다(1쪽은 열아홉 줄까지만 그려서 아래가 화면 밖이다).
+				#  무한은 **런의 시작 조건**이라 챌린지·리그·다트통과 같은
+				#  무리다. 챌린지 줄이 「판 도중에 갈면 아무 일도 안 난다」로
+				#  새 런을 여는 것과 달리, 무한은 **판 번호를 옮기는 것**이라
+				#  새 런을 안 연다. 2026-09-20
+				{"n1": "무한모드", "t": "act", "a": "endless"},
 				{"n1": "챌린지", "t": "list", "k": "chal",
 						"n": GameData.challenges().size()},
 				{"n1": "리그", "t": "list", "k": "league",
@@ -748,6 +755,7 @@ static func _rows(g: Node) -> Array:
 				{"n1": "발견 전부 열기/끄기", "t": "act", "a": "found_all"},
 				{"n1": "발견 전부 잠그기", "t": "act", "a": "found_none"},
 				{"n1": "통계 지우기", "t": "act", "a": "stat_clear"},
+				{"n1": "챌린지·무한 기록 지우기", "t": "act", "a": "tal_clear"},
 				{"n1": "저장 통째로 지우기", "t": "act", "a": "wipe"},
 				#  ── 이어하기 넷이 짝이다 (2026-09-20) ──────────────
 				#  「적기」와 「지우기」가 서로를 되돌리고, 「보기」가 디스크에
@@ -1092,9 +1100,41 @@ static func _run(g: Node, e: Dictionary) -> void:
 			_say("실패")
 			return
 		"leg":
-			g.leg_no = clampi(g.leg_no + int(e.v), 1, GameData.legs_n())
+			#  ⚠ legs_n() 이면 무한 구간을 **손으로 볼 길이 한 곳도 없다.**
+			#  무한을 켠 뒤 판 25 · 27 · 48 · 102 로 걸어가 목표 · 작은/큰/보스
+			#  박자 · 보스 제약 · 진행 칸 한 바퀴를 눈으로 보는 자리다.
+			#  2026-09-20
+			g.leg_no = clampi(g.leg_no + int(e.v), 1, GameData.legs_top())
 			g._open_leg()
 			_say("판 %d" % g.leg_no)
+			return
+		"endless":
+			#  런의 갈래를 바꾸는 줄이다. 켜면 판을 **무한 첫 판**(25)으로
+			#  옮기고 곧장 9라운드 첫 판을 연다 — 끄면 판 번호는 그대로 두고
+			#  상한만 본편으로 돌아온다(판 ± 로 내려오면 된다).
+			GameData.endless = not GameData.endless
+			g.endless_ok = false
+			if GameData.endless:
+				g.leg_no = maxi(g.leg_no, GameData.legs_n() + 1)
+				g._open_leg()
+			_say("무한 %s · 판 %d" % ["켬" if GameData.endless else "끔", g.leg_no])
+			return
+		"tal_clear":
+			#  ⚠ **「통계 지우기」와 가른다.** wins 는 통계고 chal:<id> 는
+			#  해금이라 한 줄로 묶으면 「챌린지 클리어 표시만 지우고 해금
+			#  문턱은 남긴 상태」를 못 만든다 — 그 상태가 목록 검사(체크가
+			#  선 줄에만 금빛 획)가 가장 자주 서는 자리다. 챌린지 탭 잠금을
+			#  다시 시험하려면 기존 「통계 지우기」를 쓴다. 2026-09-20
+			var gone := 0
+			for uk in Save.unlock_keys():
+				if String(uk).begins_with("chal:"):
+					Save.lock(String(uk))
+					gone += 1
+			for tk in Save.tally_keys():
+				if String(tk).begins_with("endless:"):
+					Save.tally_drop(String(tk))
+					gone += 1
+			_say("챌린지·무한 기록 %d개 지움" % gone)
 			return
 		"shop":
 			g._open_shop()

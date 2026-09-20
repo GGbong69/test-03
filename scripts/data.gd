@@ -85,6 +85,11 @@ const TUNE_KEYS := [
 	"kick_n", "kick_share",
 	"track_score", "track_mult",
 	"curve_first", "curve_last", "curve_bow",
+	# ── 2026-09-20 · 무한모드(기획서 P.17 「함수로 설정」) ──────
+	#  round_base_endless 가 앞의 둘을, legs_top/rounds_top 이 셋째를,
+	#  _roll_boss_mods 가 넷째를, big() 이 다섯째를 읽는다.
+	"endless_step", "endless_accel", "endless_rounds", "endless_stack_per",
+	"big_at",
 ]
 
 # 등급 네 단. 발라트로의 이름을 따른다 — 일반 · 희귀 · 레어 · 레전더리.
@@ -706,17 +711,29 @@ static func legs_n() -> int:
 	return rounds_n() * legs_per_round()
 
 
+#  ⚠ 위 상한(legs_n)을 **일부러 걷었다.** 무한모드의 판 번호는 25 이상이라
+#  clamp 가 남아 있으면 판 25 가 조용히 「라운드 8 · 보스 판」이 된다 —
+#  오류가 아니라 clamp 라 아무 말이 없고, 목표는 20000 에 굳고 전부 보스라
+#  못 건너뛰며 _round_boss 가 이미 끝난 24 를 가리켜 **보스 제약이 하나도
+#  안 걸린다.** 「무한을 만들었는데 실은 8라운드가 무한 반복」이 그 꼴이다.
+#  두 식 모두 clamp 없이 임의의 n 에서 옳고 **n <= legs_n() 에서 한 값도
+#  안 다르다**(qa_endless 의 첫 단언이 그것을 기계로 잰다). 2026-09-20
 static func round_of(n: int) -> int:
 	var per := legs_per_round()
 	@warning_ignore("integer_division")
-	var a := (clampi(n, 1, legs_n()) - 1) / per + 1
+	var a := (maxi(n, 1) - 1) / per + 1
 	return a
 
 
 static func leg_idx(n: int) -> int:
-	return (clampi(n, 1, legs_n()) - 1) % legs_per_round()
+	return (maxi(n, 1) - 1) % legs_per_round()
 
 
+#  ⚠ 아래 둘의 clampi 는 **일부러 남긴다** — 위 둘과 달리 이것은 사고가
+#  아니라 **명시한 규약**이다. 무한은 rounds.csv 의 마지막 줄(라운드 8 —
+#  darts 6 · aim_w 0.35 · aim_own_w 0.15 · shop_slots 4)을 계속 읽고
+#  legs.csv 셋(작은·큰·보스)을 돌려 쓴다. 무한의 기울기는 endless_step ·
+#  endless_accel 둘만 쥔다. 2026-09-20
 static func _round_row(n: int) -> Dictionary:
 	var rs := rows("rounds")
 	if rs.is_empty():
@@ -744,6 +761,33 @@ static var pack := ""
 # 통째로 덮는 꼴로 만들었다. 새 계층을 파지 않고 이미 있는 손잡이를
 # 민다는 것이 요점이다.
 static var challenge := ""
+
+#  이 런이 무한 구간에 들어섰는가. 기획서 P.17 의 「8라운드 클리어 이후」다.
+#  **챌린지 바로 옆에 둔다** — 저장에 적는 자리도 둘이 나란하다(game.gd
+#  1279 · 1439). RUN_PLAIN 에는 못 앉는다: 그 배열은 game.gd **노드의
+#  속성**을 get() 으로 긁는데 이것은 여기 static var 다. 2026-09-20
+static var endless := false
+
+
+#  무한의 끝 라운드. 표에서 온다 — 천장(int64)부터 역산한 값이라
+#  「넘치는 일이 구조에 없다」가 이 한 수의 뜻이다.
+static func endless_rounds() -> int:
+	return maxi(tune_i("endless_rounds"), rounds_n())
+
+
+static func endless_legs_n() -> int:
+	return endless_rounds() * legs_per_round()
+
+
+#  지금 런의 마지막 판 번호. 무한이면 102, 아니면 24.
+#  **legs_n() 을 그대로 쓰던 자리 열하나가 이것으로 바뀐다** — 안 바꾸면
+#  그 자리들이 무한 구간에서 「마지막 판」·「보스 예고 없음」으로 굳는다.
+static func legs_top() -> int:
+	return endless_legs_n() if endless else legs_n()
+
+
+static func rounds_top() -> int:
+	return endless_rounds() if endless else rounds_n()
 
 
 static func packs() -> Array:
@@ -900,13 +944,25 @@ static func challenges() -> Array:
 	return out
 
 
-static func chal_row() -> Dictionary:
+#  id 하나의 행. **모르는 id 는 빈 사전이다** — league_row/pack_row 와 달리
+#  첫 행 폴백이 없다. 부르는 쪽(_run_ok)이 「표에서 사라졌는가」를 물을 수
+#  있어야 하기 때문이다. 2026-09-20
+static func chal_row_of(id: String) -> Dictionary:
 	boot()
-	var want: String = challenge if challenge != "" else "none"
+	var want: String = id if id != "" else "none"
 	for r in _raw.get("chal", []):
 		if String(r.get("id", "")) == want:
 			return r
 	return {}
+
+
+static func chal_row() -> Dictionary:
+	return chal_row_of(challenge)
+
+
+#  챌린지가 걸려 있는가. "" 와 "none" 이 같은 뜻이다.
+static func chal_any() -> bool:
+	return challenge != "" and challenge != "none"
 
 
 # 챌린지가 이 열을 밀고 있는가. 빈칸이면 기본값 그대로다 —
@@ -1010,8 +1066,68 @@ static func round_base(a: int) -> float:
 	return pow(10.0, lg + t * (lg_end - lg) + bow)
 
 
+#  ── 무한 구간의 목표 곡선 ───────────────────────────────
+#  기획서 P.17 이 「무한모드의 목표점수는 **함수로 설정**」이라 적은 자리다.
+#
+#      m = a − rounds_n()                     (무한 라운드 차수, m >= 1)
+#      log10 T(a) = log10(curve_last) + m·log10(step) + log10(accel)·m(m−1)/2
+#
+#  로그에서 **2차식**이다 — 발라트로가 d = 1 + 0.2(ante−8) 로 만든 모양과
+#  같은 갈래인데, 이중지수가 아니라 int64 안에 드는 쪽으로 눌렀다.
+#
+#  ⚠ **지수가 m(m−1)/2 다.** m(m+1)/2 로 쓰면 m=1 에서 가속항이 이미 붙어
+#  첫 걸음이 step(1.630)이 아니라 1.724 가 된다 — 「계속」을 누른 그 라운드가
+#  런에서 가장 가파른 벽이 되는 자리라 이 부호 하나가 설계의 요점이다.
+#  m(m−1)/2 면 첫 걸음이 정확히 step 이고 가속은 **둘째 걸음부터** 붙는다.
+#
+#  ⚠ **round_base 의 N 을 늘려 무한을 내지 마라.** 그 식은 양 끝
+#  (curve_first · curve_last)을 고정한 보간이라 N 을 9 로 늘리는 순간
+#  **이미 지나온 라운드 1~8 의 목표가 통째로 바뀐다.** 그래서 본편 곡선을
+#  한 값도 안 건드리고 그 **뒤에 이어 붙이는** 함수를 따로 낸다. 2026-09-20
+static func round_base_endless(a: int) -> float:
+	var n := rounds_n()
+	if a <= n:
+		return round_base(a)
+	var m := float(mini(a, endless_rounds()) - n)
+	var last := tune("curve_last")
+	if last <= 0.0:
+		return round_base(n)
+	var lg := log(last) / log(10.0)
+	var ls := log(tune("endless_step")) / log(10.0)
+	var la := log(tune("endless_accel")) / log(10.0)
+	return pow(10.0, lg + m * ls + la * m * (m - 1.0) * 0.5)
+
+
+#  ── 큰 수를 사람이 읽게 깎는다. **깎는 자리는 여기 하나다** ──────
+#  둘이 되면 표 값과 화면 값이 1 차이로 갈린다 — round_base 머리말이 이미
+#  같은 사고를 적어 두었다(25 가 24.999999 로 나온 일).
+#  ⚠ 돌려주는 것이 **String** 이라 구조적으로 계산에 못 들어간다 — 깎은
+#  수가 다시 값이 되는 길이 없다. 표 값도 판정도 안 깎는다.
+#  ⚠ 「유효숫자 둘 값 내림」으로는 글자가 **안 줄어든다** — 2.0e7 을 int 로
+#  적으면 "20000000" 여덟 자다. 줄이는 것은 단위 쪽이다.
+#  최대 폭 검산(12pt): 「6210조」 44px · 「256경」 36px · 「1.4억」 36px —
+#  전부 상단바 목표 칸 60px 안. 2026-09-20
+static func big(v: int) -> String:
+	var at := tune_i("big_at")
+	if absi(v) < at:
+		return str(v)
+	var neg: bool = v < 0
+	var a := absi(v)
+	#  만 1e4 · 억 1e8 · 조 1e12 · 경 1e16 — **가장 큰 단위 하나만** 쓴다.
+	var units := [[10000000000000000, "경"], [1000000000000, "조"],
+			[100000000, "억"], [10000, "만"]]
+	for u in units:
+		var d: int = int(u[0])
+		if a < d:
+			continue
+		var m := float(a) / float(d)
+		var s: String = ("%d%s" % [int(m), String(u[1])]) if m >= 10.0 			else ("%.1f%s" % [m, String(u[1])])
+		return ("−" + s) if neg else s
+	return str(v)
+
+
 static func target_of(n: int) -> int:
-	var base := round_base(round_of(n))
+	var base := round_base_endless(round_of(n))
 	var m := _f(leg_of(n), "mult", "legs", 1.0)
 	# 챌린지가 목표를 통째로 민다(깜깜이 0.7배). 여기 한 자리에 둔다 —
 	# 보스 제약의 「문턱」은 이 위에 game.gd 의 _target_at 가 따로 올린다.
