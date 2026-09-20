@@ -188,6 +188,18 @@ func _process(_d: float) -> bool:
 	_ok("wins 를 다시 안 박는다", Save.stat("wins") == w0,
 			"wins %d → %d" % [w0, Save.stat("wins")])
 	_ok("무한 상단에서는 갈래를 다시 안 세운다", not g.endless_ok)
+	#  ⚠ **다시 안 박는 것은 기록이지 화면 깃발이 아니다.** won 은 저장에
+	#  한 톨도 안 닿는데(읽는 자리가 「완주/실패」 글자 · 색 · 넘긴 판 셈뿐),
+	#  안 세웠더니 천장을 **넘긴** 런이 붉은 「실패」로 뜨고 같은 판에
+	#  「넘긴 판 101」과 「무한 판 102」가 나란히 찍혔다 — run_win 소리와도
+	#  반대말을 한다. 위 두 줄(wins · 갈래)과 **같이** 재야 둘이 안 엉킨다.
+	#  2026-09-20
+	_ok("무한 상단에서 화면이 완주로 선다", g.won,
+			"won %s · state %d" % [str(g.won), g.state])
+	_ok("넘긴 판이 마지막 판을 안 깎는다",
+			maxi(g.leg_no - (0 if g.won else 1), 0) == GameData.endless_legs_n(),
+			"넘긴 판 %d · 판 %d"
+					% [maxi(g.leg_no - (0 if g.won else 1), 0), g.leg_no])
 	GameData.endless = false
 
 	# ── ④ 마지막 판에서 목숨이 터진 완주 ─────────────────

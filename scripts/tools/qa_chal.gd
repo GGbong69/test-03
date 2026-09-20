@@ -148,6 +148,31 @@ func _process(_d: float) -> bool:
 			paid = int(row.v)
 	_ok("외상 — 미리보기와 정산이 같은 수다", paid == settle,
 			"미리보기 %d · 정산 %d" % [settle, paid])
+	#  ⚠ **사탕 「보유 골드 2배」가 빚을 두 배로 불렸다.** 이자와 **같은
+	#  종류**인데 그 자리만 maxi(gold, 0) 을 안 지났다 — mini(−20, v) 가
+	#  −20 을 내고 _gold_add 는 빼는 쪽을 안 막으므로 −40 이 됐고, 서식이
+	#  "골드 +%d" 라 「골드 +−20」으로 찍혔다. 갑절은 **가진 것**의 값이다.
+	#  2026-09-20
+	var dbl := {}
+	for c in GameData.rows("cons"):
+		if String(c.get("cat", "")) == "gold":
+			dbl = (c as Dictionary).duplicate()
+			break
+	if dbl.is_empty():
+		_ok("외상 — 갑절 사탕이 표에 있다", false, "못 찾음")
+	else:
+		_arm("debt")
+		g.cons = [dbl]
+		var g0: int = g.gold
+		g._cons_use(0)
+		_ok("외상 — 갑절이 빚을 안 불린다", g.gold == g0,
+				"골드 %d → %d" % [g0, g.gold])
+		_arm("none")
+		g.cons = [dbl]
+		g.gold = 20
+		g._cons_use(0)
+		_ok("갑절은 저축에서는 그대로 돈다", g.gold > 20,
+				"골드 20 → %d" % g.gold)
 
 	# ── 빈손 — 버는 길이 끊기고 뱃지가 두 배 ──────────────
 	_arm("empty")
@@ -156,6 +181,53 @@ func _process(_d: float) -> bool:
 	g.darts_left = 3
 	g._settle_clear()
 	_ok("빈손 — 클리어해도 골드가 안 는다", g.gold == 0, "골드 %d" % g.gold)
+	#  ⚠ **내역도 같이 막는다.** 클리어와 잔탄은 0 으로 눌러 두는데 동전
+	#  골드만 안 눌러서, 「알 낳는 거위 +4」가 금빛으로 서는데 총액은 0 인
+	#  정산 표가 나왔다 — 「못 받은 줄은 눌러 둔다」가 한 줄에서만 깨졌다.
+	#  2026-09-20
+	var lit := []
+	for row in g.clear_gold_detail:
+		if int(row.v) != 0:
+			lit.append("%s %d" % [String(row.n), int(row.v)])
+	_ok("빈손 — 내역에 받은 줄이 하나도 없다", lit.is_empty(), str(lit))
+	#  동전을 들려서도 잰다 — 새던 자리가 바로 이 갈래다
+	_arm("empty")
+	g.gold = 0
+	var geese := []
+	for it in GameData.items():
+		if String(it.get("g", "")) == "leg" and int(it.get("gv", 0)) > 0:
+			geese.append((it as Dictionary).duplicate())
+			break
+	if geese.is_empty():
+		_ok("빈손 — 판 골드 동전이 표에 있다", false, "못 찾음")
+	else:
+		#  ⚠ **복제해서 넘긴다.** g.owned = geese 로 넘기면 같은 배열을
+		#  가리켜, 밑의 _arm 이 부르는 _new_run 의 owned.clear() 가
+		#  이 지역 변수까지 비운다.
+		var gname := String(geese[0].get("n", ""))
+		g.owned = geese.duplicate(true)
+		g.total = g.target
+		g.darts_left = 0
+		g._settle_clear()
+		var lit2 := []
+		for row in g.clear_gold_detail:
+			if int(row.v) != 0:
+				lit2.append("%s %d" % [String(row.n), int(row.v)])
+		_ok("빈손 — 동전 골드 줄이 내역에 안 선다", lit2.is_empty(), str(lit2))
+		_ok("빈손 — 동전을 들어도 지갑이 안 는다", g.gold == 0,
+				"골드 %d" % g.gold)
+		#  없음에서는 그 줄이 제 값으로 선다 — 위 단언이 「늘 비었다」가 아니다
+		_arm("none")
+		g.owned = geese.duplicate(true)
+		g.gold = 0
+		g.total = g.target
+		g.darts_left = 0
+		g._settle_clear()
+		var gv0 := 0
+		for row in g.clear_gold_detail:
+			if String(row.n) == gname:
+				gv0 = int(row.v)
+		_ok("없음에서는 그 동전 줄이 제 값으로 선다", gv0 > 0, "%d" % gv0)
 	_arm("empty")
 	g.gold = 0
 	var tag := {}
@@ -264,6 +336,30 @@ func _process(_d: float) -> bool:
 	#  _draw 도 안 읽어서, 여태 어느 칸인지 알 길이 화면에 0곳이었다.
 	_ok("목표물 — 뽑힌 칸을 그리는 자가 있다",
 			g.has_method("_board_dim_sector"), "_board_dim_sector")
+	#  ⚠ **그런데 판 밖까지 따라 나왔다.** mark_sec 을 −1 로 되돌리는 자리가
+	#  _start_leg 하나뿐인데 _draw_aim 은 state 를 안 보고 매 프레임 불린다 —
+	#  목표물 런을 끝내고 나오면 제목 화면의 다트판이 스무 칸 중 열아홉이
+	#  검게 깔린 채였다. 판 뒤에 깔리는 그림은 「판이 서 있는가」를 같이
+	#  물어야 한다. 겹쳐 뜨는 화면(런 정보·판 중의 설정)은 **뚫고** 묻는다.
+	#  2026-09-20
+	g.state = g.S.PICK
+	_ok("목표물 — 판 위에서는 깔린다", g.mark_sec >= 0 and g._is_play_deep(),
+			"칸 %d" % g.mark_sec)
+	g.run_from = g.S.PICK
+	g.state = g.S.RUNINFO
+	_ok("목표물 — 런 정보를 열어도 안 걷힌다", g._is_play_deep(), "")
+	g.pause_from = g.S.PICK
+	g.state = g.S.SETTINGS
+	_ok("목표물 — 판 중의 설정에서도 안 걷힌다", g._is_play_deep(), "")
+	g.pause_from = -1
+	for scr in [g.S.TITLE, g.S.NEWRUN, g.S.OVER, g.S.SHOP, g.S.SETTINGS]:
+		g.state = scr
+		if g._is_play_deep():
+			_ok("목표물 — 판 밖(%d)까지 안 따라간다" % scr, false, "")
+			break
+	_ok("목표물 — 제목·로비·런 끝·상점까지 안 따라간다",
+			not g._is_play_deep(), "칸 %d 인 채로 state %d" % [g.mark_sec, g.state])
+	g.state = g.S.PICK
 
 	# ── 겹치기 — 제약이 둘 ────────────────────────────────
 	_arm("stack")

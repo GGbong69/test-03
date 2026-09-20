@@ -37,6 +37,14 @@ func _ok(nm: String, cond: bool, detail := "") -> void:
 		fails += 1
 
 
+func _key(code: int) -> void:
+	var e := InputEventKey.new()
+	e.keycode = code
+	e.physical_keycode = code
+	e.pressed = true
+	g._unhandled_input(e)
+
+
 func _raw_rows() -> Array:
 	var out := []
 	for r in GameData.rows("chal"):
@@ -139,6 +147,47 @@ func _process(_d: float) -> bool:
 			GameData.league == String(GameData.leagues()[0].get("id", "")),
 			GameData.league)
 	_ok("그 첫 행은 늘 열려 있다", g._pack_open(0) and g._league_open(0))
+
+	# ── ④-b 탭을 나가는 문 셋 ─────────────────────────────
+	#  ⚠ **못 박은 값이 사람의 고름을 덮으면 안 된다.** 탭 1 은 다트통·리그을
+	#  표 첫 행으로 못 박고 참값을 newrun_keep 에만 둔다. 되돌리는 자리가
+	#  _nr_tab_set(0) 하나뿐이었을 때는 「뒤로」·ESC·「시작」 셋이 그 함수를
+	#  안 지나서, 탭을 **한 번 스치기만 해도** 고른 통이 base/white 로 굳은
+	#  채 _open_newrun 의 _pack_save() 에 실려 디스크에 앉았다 — 저장에서 다시
+	#  읽는 자리가 부팅과 프로필 교체 둘뿐이라 **되돌릴 길이 없다.**
+	#  최댓값과 같은 종류의 사고다. 2026-09-20
+	print("\n④-b 탭을 나가도 고른 통이 산다")
+	var p2 := String(GameData.packs()[2].get("id", ""))
+	var l2 := String(GameData.leagues()[0].get("id", ""))
+	for way in ["뒤로", "ESC", "런"]:
+		Save.set_pick("pack", p2)
+		Save.set_pick("league", l2)
+		g._open_newrun()
+		GameData.pack = p2
+		GameData.league = l2
+		g.newrun_pip = 2
+		g._click(g._nr_tab(1).get_center())
+		if way == "뒤로":
+			g._click(g._newrun_back().get_center())
+		elif way == "ESC":
+			_key(KEY_ESCAPE)
+		else:
+			#  챌린지 런을 한 판 하고 나온 길 — 런이 끝나면 「새 런」이
+			#  _open_newrun 으로 돌아온다.
+			g._new_run()
+		_ok("%s — 디스크의 다트통이 안 덮인다" % way,
+				String(Save.get_pick("pack", "")) == p2,
+				String(Save.get_pick("pack", "")))
+		_ok("%s — 디스크의 리그이 안 덮인다" % way,
+				String(Save.get_pick("league", "")) == l2,
+				String(Save.get_pick("league", "")))
+		#  로비를 다시 열어도 앉히는 것은 사람이 고른 쪽이다
+		g._open_newrun()
+		_ok("%s — 로비를 다시 열어도 그 통이다" % way,
+				GameData.pack == p2 and String(Save.get_pick("pack", "")) == p2,
+				"%s / %s" % [GameData.pack, String(Save.get_pick("pack", ""))])
+		_ok("%s — 탭이 기본으로 돌아온다" % way, g.newrun_tab == 0,
+				"탭 %d" % g.newrun_tab)
 
 	# ── ⑤ 자리 ────────────────────────────────────────────
 	print("\n⑤ 자리 — 겹치지 않는가 · 손가락에 드는가")

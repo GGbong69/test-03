@@ -27,6 +27,7 @@ const Save = preload("res://scripts/save.gd")
 #    mode_endless_leg 무한 구간의 판 선택 — 깎인 목표
 #    mode_endless     무한 구간의 판 — 분모 없는 상단바 · 한 바퀴 도는 진행 칸
 #    mode_mark        「목표물」이 걸린 판 — 뽑힌 칸만 밝다
+#    mode_mark_out    그 런을 나온 제목 — 판이 고르게 밝다(안 따라 나온다)
 #
 #  진짜 저장은 안 건드린다 — 제 대역에 심고 그 위에서 찍는다.
 # ══════════════════════════════════════════════════════════
@@ -161,6 +162,15 @@ func _run() -> void:
 	g._swap_skip()
 	await _wait(40)
 	await _shot("mode_mark", "뽑힌 칸 %d" % g.mark_sec)
+	#  ⚠ **판 밖까지 따라 나오는가.** mark_sec 을 되돌리는 자리가 _start_leg
+	#  하나뿐이고 _draw_aim 은 state 를 안 보고 매 프레임 불려서, 목표물
+	#  런을 끝내고 나온 제목 화면의 다트판이 스무 칸 중 열아홉이 검게 깔린
+	#  채였다. **이 그림에서 판이 고르게 밝아야 한다.** 2026-09-20
+	g._newrun_leave()
+	g.state = g.S.TITLE
+	await _wait(40)
+	await _shot("mode_mark_out", "목표물 런을 나온 제목 — 판이 고르다 (칸 %d)"
+			% g.mark_sec)
 
 	GameData.challenge = ""
 	quit()

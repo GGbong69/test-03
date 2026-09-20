@@ -131,7 +131,14 @@ func _process(_d: float) -> bool:
 	g._open_leg()
 	g._begin_leg()
 	g._swap_skip()
-	_ok("본편 판 3 의 목표가 84 다", g.target == 84, str(g.target))
+	#  ⚠ **보스 판이라 제약이 목표를 민다.** 84 를 손으로 박았더니 tgt 배수가
+	#  걸린 굴림에서 105 가 나와 검사가 들쭉날쭉했다(2026-09-20). 표의 값과
+	#  제약을 얹은 값을 따로 묻는다 — 재려던 것은 「무한을 끄면 본편 곡선이
+	#  그대로 돌아온다」이고 그것은 표의 값 쪽이다.
+	_ok("본편 판 3 의 목표가 84 다", GameData.target_of(3) == 84,
+			str(GameData.target_of(3)))
+	_ok("걸린 목표가 제약까지 얹은 값이다", g.target == g._target_at(3),
+			"%d / %d" % [g.target, g._target_at(3)])
 	_ok("본편 판 3 이 보스다", GameData.is_boss(3))
 	_ok("legs_top() 이 24 로 돌아온다", GameData.legs_top() == 24)
 
