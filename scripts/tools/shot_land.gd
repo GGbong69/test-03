@@ -70,7 +70,9 @@ func _lay(ids: Array) -> void:
 	g.hush_t = 0.0
 	g.land_snd_t = 0.0
 	g.shake = 0.0
-	g.leg_fx_leg = -1
+	#  드러냄은 **장 하나당 런에 한 번**이라, 같은 l02 를 두 번 세우는
+	#  이 도구는 기록을 비운 뒤 굴려야 둘째 그림에도 한 벌이 든다.
+	g.leg_fx_seen.clear()
 	g._drop_roll()
 
 

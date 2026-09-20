@@ -1503,9 +1503,9 @@ static func _run(g: Node, e: Dictionary) -> void:
 			_say("레어 변형 %d장 — 고름·축·쏠림·쌍·매끈" % g.owned.size())
 			return
 		#  ── 나타나는 순간을 보는 줄 셋 (2026-09-20) ────────
-		#  ⚠ 셋 다 leg_fx_leg 를 −1 로 지운 **뒤** 돈다. 예고는 판 하나당
-		#  한 번이라(리롤 누적 방지) 안 지우면 **두 번째 누름이 조용히
-		#  아무것도 안 한다** — 개발자 판에서 그것은 고장으로 읽힌다.
+		#  ⚠ 셋 다 leg_fx_seen 을 비운 **뒤** 돈다. 드러냄은 **장 하나당
+		#  런에 한 번**이라(리롤·상점 누적 방지) 안 지우면 **두 번째 누름이
+		#  조용히 아무것도 안 한다** — 개발자 판에서 그것은 고장으로 읽힌다.
 		#  ⚠ 셋 다 **확률을 한 톨도 안 건드린다**: _form_table 은 stock 을
 		#  갈아 끼울 뿐이고 land_pack 은 boost_spill 을 손수 덮어쓴다.
 		"land_rank":
@@ -1520,7 +1520,7 @@ static func _run(g: Node, e: Dictionary) -> void:
 				var pl3 := _rar_items(String(rr3))
 				if not pl3.is_empty():
 					lids.append(String(pl3[0].id))
-			g.leg_fx_leg = -1
+			g.leg_fx_seen.clear()
 			_form_table(g, lids)
 			_say("등급마다 등장 %d장" % lids.size())
 			return
@@ -1532,7 +1532,7 @@ static func _run(g: Node, e: Dictionary) -> void:
 			#  덮는가** · 번짐이 2.2초 맥동으로 **끊김 없이 이어지는가** ·
 			#  부풂이 **_coin_glow 를 실제로 타는가**(플라크가 빛나는가) ·
 			#  **글자가 한 자도 안 뜨는가**.
-			g.leg_fx_leg = -1
+			g.leg_fx_seen.clear()
 			_form_table(g, ["l02"])
 			_say("레전더리 등장")
 			return
@@ -1552,7 +1552,7 @@ static func _run(g: Node, e: Dictionary) -> void:
 			if bs.is_empty():
 				_say("팩 표가 비었다")
 				return
-			g.leg_fx_leg = -1
+			g.leg_fx_seen.clear()
 			g._boost_deal(bs[bs.size() - 1])
 			var want := ["legendary", "rare", "uncommon", "common"]
 			g.boost_spill = []

@@ -693,10 +693,21 @@ var land_snd_n := 0      # 이번 딜링에서 낸 착지 소리 수 (LAND.max �
 var hush_t := 0.0        # 침묵 창 — 플라크가 앉은 뒤 나머지가 소리 없이 앉는다
 var leg_cue_t := -1.0    # 레전더리 예고 경과. −1 이 「안 켜졌다」
 var leg_cue_n := 0       # 예고 톡을 몇 개 냈는가
-#  예고가 이미 난 판 번호. **이 한 줄이 리롤 누적을 막는 전부다** —
-#  _roll_stock 이 리롤마다 _item_free_pick 을 다시 부르므로(그 장은 아직
-#  itemgot 이 아니다) 없으면 같은 레전더리가 한 상점에서 여덟 번 예고한다.
-var leg_fx_leg := -1
+#  드러냄이 이미 난 **장 id** 들. 런 단위다(_new_run 이 비운다).
+#  **이 한 줄이 누적을 막는 전부다** — _roll_stock 이 리롤마다
+#  _item_free_pick 을 다시 부르므로(그 장은 아직 itemgot 이 아니다) 없으면
+#  같은 레전더리가 한 상점에서 여덟 번 드러난다.
+#  ⚠ **판 번호가 아니라 장 id 로 잠근다**(2026-09-20 고침). 판 번호로
+#  잠갔더니 문이 판마다 다시 열렸다 — 공짜 한 장은 손에 넣기 전까지
+#  상점마다 다시 서므로(2311 주석의 「슬롯이 꽉 차서 못 받았으면 다음
+#  상점에 또 와야 한다」), 동전 칸이 찬 손님은 남은 상점 **스물셋 전부**
+#  에서 한 벌을 다시 봤다. 「프로필당 네 번」이라는 세기 예산이 거기서
+#  통째로 무너진다.
+var leg_fx_seen := {}
+#  **이번 딜링이 레전더리 한 벌을 낼 자격이 있는가.** 드러냄을 켜는 그
+#  자리에서만 선다(_drop_roll · _boost_spill). 예고만 잠그고 비네트·흔들림·
+#  튕김을 밖에 두었더니 리롤마다 화면이 다시 흔들렸다 — 문 하나로 묶는다.
+var leg_fx_arm := false
 var leg_vig := 0.0       # 가장자리 비네트 [0,1]
 var leg_vig_up := false  # 드는 중인가 나가는 중인가
 
@@ -1653,6 +1664,20 @@ func _new_run() -> void:
 	mods_own.clear()
 	_board_bake()
 	leg_no = 1
+	#  등장 연출도 런 단위다(2026-09-20). leg_no 가 여기서 1 로 돌아가는데
+	#  드러냄 기록을 안 지우면, 런 A 에서 본 장이 런 B 에서 **아무 표시 없이
+	#  조용히 안 난다** — 프로필 통틀어 네 번뿐인 사건을 하나 잃는 것이고,
+	#  그것은 화면에 「안 났다」가 아니라 아무것으로도 안 보인다.
+	#  나머지 다섯은 시계·문이라 지난 런의 값을 물려받을 이유가 없다.
+	leg_fx_seen.clear()
+	leg_fx_arm = false
+	leg_cue_t = -1.0
+	leg_cue_n = 0
+	leg_vig = 0.0
+	leg_vig_up = false
+	hush_t = 0.0
+	land_snd_t = 0.0
+	land_snd_n = 0
 	# 시작 조건은 다트통이 쥔다 — 표가 비면 튜닝 값이 그대로 남는다.
 	var pk := GameData.pack_row()
 	gold = GameData.start_gold() + int(pk.get("gold_add", 0))
@@ -18784,28 +18809,68 @@ func _drop_roll() -> void:
 	#  stock[0] 은 늘 레전더리이고, i=0 · t0=0 이라 **넷 중 제일 먼저**
 	#  착지한다. 순서만으로 무대가 서므로 새 기하도 새 확률도 필요 없다.
 	#
-	#  ⚠ leg_fx_leg 가 없으면 **한 상점에서 여덟 번 예고한다** — _roll_stock
-	#  이 리롤마다 _item_free_pick 을 다시 부르고, 그 장은 아직 itemgot 이
+	#  ⚠ 문이 없으면 **한 상점에서 여덟 번 드러난다** — _roll_stock 이
+	#  리롤마다 _item_free_pick 을 다시 부르고, 그 장은 아직 itemgot 이
 	#  아니라 그 상점의 **모든 딜링에 다시 서기** 때문이다. 리롤로 다시 선
 	#  그 장은 착지 소리·번짐·바닥 빛만 받는다. **드러냄은 한 번이어야
 	#  드러냄이다.**
 	#  drop_fast(헤드리스)는 _drop_settle 이 같은 프레임에 다 감아 예고
-	#  시각이 뜻을 잃으므로 아예 안 켠다.
-	#  ⚠ **켜거나 끄거나 둘 중 하나다.** 안 켜는 갈래에서 −1 로 안 지우면,
-	#  예고가 도는 0.341초 안에 상점을 떠난 판에서 _drop_update 가 state 문에
-	#  막혀 leg_cue_t 를 못 깎고(S.SHOP 이 아니면 _drop_extras 앞에서 돌아간다),
-	#  그 남은 값이 **다음 상점의 첫 딜링에서 톡 하나를 낸다.**
+	#  **시각**이 뜻을 잃으므로 톡 셋만 안 켠다 — 자격(leg_fx_arm)은 그대로
+	#  세운다. 여기까지 끄면 헤드리스 검사에서 비네트·흔들림이 통째로
+	#  안 나 **재는 자가 제 눈을 가리게 된다.**
+	#  ⚠ **켜거나 끄거나 둘 중 하나다.** 안 켜는 갈래에서 안 지우면, 연출이
+	#  도는 동안 상점을 떠난 판에서 _drop_update 가 state 문에 막혀 값을
+	#  못 깎고(S.SHOP 이 아니면 _drop_extras 앞에서 돌아간다), 그 **얼어붙은
+	#  값이 다음 상점의 첫 딜링에서 되살아난다** — 예고는 톡 하나로,
+	#  비네트는 leg_vig_up 이 참인 채라 **가장자리가 가득 차올랐다가** 빠진다.
+	#  레전더리가 한 장도 없는 딜링 위에서. 그래서 여섯을 다 누른다.
+	#  (2026-09-20 고침 — leg_cue_t 만 지우고 비네트를 빠뜨렸던 자리다)
 	leg_cue_t = -1.0
-	if (not drop_fast and not stock.is_empty()
-			and String(stock[0].get("type", "")) == "item"
-			and String(stock[0].get("d", {}).get("rarity", "")) == "legendary"
-			and not bool(stock[0].get("sold", false))
-			and leg_fx_leg != leg_no):
-		leg_fx_leg = leg_no
-		leg_cue_t = 0.0
-		leg_cue_n = 0
+	leg_vig = 0.0
+	leg_vig_up = false
+	land_snd_t = 0.0
+	hush_t = 0.0
+	leg_fx_arm = false
+	var l0: String = _leg_stage_id()
+	if l0 != "":
+		leg_fx_seen[l0] = true
+		leg_fx_arm = true
+		if not drop_fast:
+			leg_cue_t = 0.0
+			leg_cue_n = 0
 	if drop_fast:
 		_drop_settle()
+
+
+#  이번 테이블에 「아직 안 드러낸 레전더리」가 있는가. 있으면 그 장 id 를,
+#  없으면 빈 문자열을 돌려준다. **읽기만 한다** — 확률도 재고도 안 건드린다.
+#
+#  ⚠ 0번 자리만 보지 않고 **테이블을 훑는다.** 지금은 상점 저울이
+#  레전더리를 0 으로 막아 공짜 칸(stock[0])이 유일한 길이지만, 0번만 보면
+#  개발자 판의 「등급마다 등장」줄(사다리 넷을 한 테이블에 세운다)에서
+#  레전더리가 마지막 칸에 서고 **한 벌이 통째로 안 난다** — 재는 줄이
+#  거짓말을 하게 된다. 훑는 값은 네 칸이라 공짜다.
+#
+#  ⚠ own 을 보는 이유: 사진(마릴린 딥틱 · It's Not About Money)이 상점
+#  테이블을 치우고 그 자리에 **내가 이미 가진 동전**을 깔면서 _drop_roll 을
+#  부른다(_photo_open 14887). 그 줄만 own 열쇠를 갖는다(매물 줄은 절대 안
+#  갖는다). 이 문이 없으면 보유 레전더리가 사진을 열 때마다 등장 연출을
+#  통째로 다시 내고 — 닫을 때 매물이 다시 깔리므로 **한 번 쓸 때마다 두 번**
+#  — 「프로필당 네 번」이 사실상 무제한이 된다. 「나타난 순간」의 어휘는
+#  이미 가진 물건에 쓰는 말이 아니다(2026-09-20).
+func _leg_stage_id() -> String:
+	for s in stock:
+		if String(s.get("type", "")) != "item" or s.has("own"):
+			continue
+		if bool(s.get("sold", false)):
+			continue
+		var d: Dictionary = s.get("d", {})
+		if String(d.get("rarity", "")) != "legendary":
+			continue
+		var id := String(d.get("id", ""))
+		if not leg_fx_seen.has(id):
+			return id
+	return ""
 
 
 # "떨어지는 중" 이다. 던져서 미끄러지는 것은 여기 안 든다 — 물건이 이미
@@ -18979,6 +19044,14 @@ func _land_fx(i: int) -> void:
 	#  이미 산 장이 되살릴 때 소리를 내고 빛난다.
 	if bool(s.get("sold", false)):
 		return
+	#  ⚠ **사진 테이블은 등장이 아니다.** _photo_open(14876)이 매물을 치우고
+	#  **내가 이미 가진 동전**을 깔면서 _drop_roll 을 부른다 — 그 줄만 own
+	#  열쇠를 갖는다. 이 문이 없으면 보유 레전더리가 사진을 열 때마다
+	#  플라크 소리·비네트·흔들림을 다시 내고, 닫을 때(14898) 매물이 다시
+	#  깔리므로 **한 번 쓸 때마다 두 번** 난다. 사진은 상점마다 쓸 수 있으니
+	#  그 손님에게는 「프로필당 네 번」이 무제한이 된다(2026-09-20).
+	if s.has("own"):
+		return
 	var rar := String(s.get("d", {}).get("rarity", "common"))
 	var row: Array = LAND.get(rar, LAND.common)
 	var snd := String(row[0])
@@ -18996,8 +19069,18 @@ func _land_fx(i: int) -> void:
 		it.lg = 1.0
 		it.lgt = minf(float(row[3]), float(LAND.cap))
 
-	#  ── 레전더리만 받는 것 ─────────────────────────
-	if leg:
+	#  ── 레전더리만 받는 것 — **드러냄 한 벌** ──────────
+	#  ⚠ **예고와 같은 문 안이다.** 전에는 예고(_drop_roll)만 잠그고 이
+	#  갈래를 밖에 두었다 — 공짜 칸 레전더리는 손에 넣기 전까지 리롤마다
+	#  stock[0] 에 다시 서므로, 한 상점 여덟 딜링에서 **예고 1회 · 비네트 8회
+	#  · 흔들림 8회**가 났다(직접 셌다). 게다가 낙하 중 리롤은 _sweep_begin
+	#  이 공중의 물건에 _drop_settle 을 걸어 그 자리에서 착지를 터뜨리므로
+	#  **1초 안에 두 번**도 났다. 이 저장소가 연출로 세 번 반려당한 바로
+	#  그 피로다. 자격을 **한 번 쓰고 태운다**(2026-09-20).
+	#  리롤로 다시 선 그 장은 착지 소리·번짐·바닥 빛만 받는다 — 사건이
+	#  사라지지는 않되 화면을 다시 흔들지는 않는다.
+	if leg and leg_fx_arm:
+		leg_fx_arm = false
 		leg_vig = 0.0
 		leg_vig_up = true
 		if not motion_off:
@@ -34095,9 +34178,18 @@ func _boost_spill() -> void:
 	#  ⚠ 여기는 t0 를 **안 먹인다**(stag 을 주는 곳은 _drop_roll 뿐) —
 	#  넷이 **한 프레임에** 앉는다. 상점은 0.08 계단이라 소리가 저절로
 	#  갈리지만 팩은 안 갈린다. **소리 문이 팩에서는 장식이 아니라 필수
-	#  부품이다.** 판 잠금(leg_fx_leg)은 안 건다 — 팩은 런당 1% 라 누적되지 않는다.
+	#  부품이다.** 장 잠금(leg_fx_seen)은 안 건다 — 팩은 **돈을 내고 여는
+	#  사건 하나**이고 런당 1% 라 누적되지 않는다. 같은 장이 두 팩에서
+	#  나왔다면 그 둘은 서로 다른 등장이다.
 	land_snd_n = 0
-	leg_cue_t = -1.0          # 여기서도 켜거나 끄거나 둘 중 하나다(_drop_roll 주석)
+	#  **켜거나 끄거나 둘 중 하나다**(_drop_roll 주석). 안 지우면 팩을 열고
+	#  곧장 판으로 나간 손님의 비네트가 얼어붙었다가 다음 상점에서 되살아난다.
+	leg_cue_t = -1.0
+	leg_vig = 0.0
+	leg_vig_up = false
+	land_snd_t = 0.0
+	hush_t = 0.0
+	leg_fx_arm = leg_in       # 자격은 drop_fast 와 무관하다 — 톡 셋만 시각을 탄다
 	if leg_in and not drop_fast:
 		leg_cue_t = 0.0
 		leg_cue_n = 0

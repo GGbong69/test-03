@@ -157,7 +157,7 @@ func _wind(frames: int, dt: float) -> void:
 func _deal(ids: Array, suppress := false, frames := 120,
 		dt := 1.0 / 60.0) -> void:
 	_setup(ids)
-	g.leg_fx_leg = -1
+	g.leg_fx_seen.clear()
 	g.shake = 0.0
 	g.hush_t = 0.0
 	g.land_snd_t = 0.0
@@ -333,7 +333,7 @@ func _process(_d: float) -> bool:
 	for r in 300:
 		seed(seed_v + 900 + r)
 		_setup([r0, c0, c0, c0])
-		g.leg_fx_leg = -1
+		g.leg_fx_seen.clear()
 		g._drop_roll()
 		var it: Dictionary = g.drop[0]
 		var hh: float = float(it.h)
@@ -374,7 +374,7 @@ func _process(_d: float) -> bool:
 	var sh_peak := 0.0
 	seed(seed_v + 5)
 	_setup([l0, c0, c0, c0])
-	g.leg_fx_leg = -1
+	g.leg_fx_seen.clear()
 	g.shake = 0.0
 	g._drop_roll()
 	_snd_reset()
@@ -406,35 +406,119 @@ func _process(_d: float) -> bool:
 			"SMASH.snd_gap %.3f < LAND.gap %.3f < DROP.stag %.3f"
 			% [float(g.SMASH.snd_gap), float(g.LAND.gap), float(g.DROP.stag)])
 
-	# ── ⑥ 리롤 연타 — 한 상점에서 예고는 한 번 ──────────
-	print("\n-- ⑥ 리롤이 예고를 누적하지 않는다 --")
+	# ── ⑥ 리롤 연타 — 한 상점에서 드러냄은 한 벌 ────────
+	print("\n-- ⑥ 리롤이 드러냄을 누적하지 않는다 --")
 	seed(seed_v + 11)
 	g.leg_no = 3
-	g.leg_fx_leg = -1
+	g.leg_fx_seen.clear()
 	var cue_on := 0
 	var vig_on := 0
+	var shk_on := 0
+	var knk_on := 0
+	var plq_on := 0
 	for r in 8:
 		_setup([l0, c0, c0, c0])
-		g.leg_vig = 0.0
-		g.leg_vig_up = false
-		g.leg_cue_t = -1.0
+		g.shake = 0.0
 		g._drop_roll()
 		if g.leg_cue_t >= 0.0:
 			cue_on += 1
-		if g.leg_vig_up:
+		_snd_reset()
+		#  ⚠ **감는 동안의 최대값으로 잰다.** _wind(90) = 1.5초 **뒤**에 보면
+		#  비네트는 이미 0 이고 흔들림도 죽어 있다 — 그 자리에서 재면 여덟
+		#  번 나도 0 으로 보인다. 전에 vig_on 이 단언 한 줄 없는 **죽은
+		#  변수**였던 것이 정확히 이 착각 위에 있었다(2026-09-20).
+		var vg_pk := 0.0
+		var sh_pk2 := 0.0
+		var kn_pk := 0.0
+		for k in 90:
+			_frame += 1
+			if g.drop_awake or g.sweep_live:
+				g.drop_acc += 1.0 / 60.0
+				var ns6 := 0
+				while g.drop_acc >= float(g.DROP.sub) and ns6 < int(g.DROP.sub_max):
+					g.drop_acc -= float(g.DROP.sub)
+					g.drop_t += float(g.DROP.sub)
+					g._drop_step(float(g.DROP.sub))
+					ns6 += 1
+			g._drop_extras(1.0 / 60.0)
+			vg_pk = maxf(vg_pk, float(g.leg_vig))
+			sh_pk2 = maxf(sh_pk2, float(g.shake))
+			#  _knock(17290)이 쥐는 값은 lv 다 — ⑫ 가 같은 열쇠를 본다.
+			if g.drop.size() > 0:
+				kn_pk = maxf(kn_pk, absf(float(g.drop[0].get("lv", 0.0))))
+			g.shake = maxf(g.shake - (1.0 / 60.0) * 34.0, 0.0)
+			_snd_drain()
+		if vg_pk > 0.001:
 			vig_on += 1
-		_wind(90, 1.0 / 60.0)
-		if g.leg_vig > 0.0:
-			vig_on += 1
-	_ok("한 상점 여덟 딜링에 예고 한 번", cue_on == 1,
-			"예고가 켜진 딜링 %d/8 (leg_fx_leg 문)" % cue_on)
-	#  판이 바뀌면 다시 난다 — 새 상점은 그 물건을 처음 보는 화면이다.
+		if sh_pk2 > 0.001:
+			shk_on += 1
+		if kn_pk > 0.001:
+			knk_on += 1
+		for nm6 in _names():
+			if String(nm6) == "coin_plaque":
+				plq_on += 1
+	_ok("여덟 딜링에 예고 한 번", cue_on == 1,
+			"예고가 켜진 딜링 %d/8" % cue_on)
+	#  ⚠ **예고만 잠그면 안 된다.** 전에는 비네트·흔들림·튕김이 문 밖에
+	#  있어 예고 1회에 **비네트 8회 · 흔들림 8회**가 났다 — 세 줄이 그
+	#  회귀를 잠근다.
+	_ok("여덟 딜링에 비네트 한 번", vig_on == 1,
+			"비네트가 오른 딜링 %d/8" % vig_on)
+	_ok("여덟 딜링에 흔들림 한 번", shk_on == 1,
+			"흔들림이 오른 딜링 %d/8" % shk_on)
+	_ok("여덟 딜링에 튕김 한 번", knk_on == 1,
+			"_knock 이 든 딜링 %d/8" % knk_on)
+	#  소리·번짐·바닥 빛은 **계속 난다** — 사건이 사라지면 안 된다.
+	_ok("착지 소리는 딜링마다 난다", plq_on == 8,
+			"플라크 %d/8 — 다시 선 장은 소리·번짐·바닥 빛만 받는다" % plq_on)
+	#  ── 장 id 로 잠근다 — 판이 바뀌어도 같은 장은 안 다시 난다 ──
+	#  공짜 한 장은 손에 넣기 전까지 **상점마다 다시 선다**(2311 주석의
+	#  「슬롯이 꽉 차서 못 받았으면 다음 상점에 또 와야 한다」). 판 번호로
+	#  잠갔더니 남은 상점 스물셋에서 한 벌이 다시 났다.
 	g.leg_no = 4
 	_setup([l0, c0, c0, c0])
-	g.leg_cue_t = -1.0
 	g._drop_roll()
-	_ok("판이 바뀌면 다시 난다", g.leg_cue_t >= 0.0,
-			"leg_no 4 에서 예고 켜짐 %s" % (g.leg_cue_t >= 0.0))
+	_ok("판이 바뀌어도 같은 장은 한 번",
+			g.leg_cue_t < 0.0 and not bool(g.leg_fx_arm),
+			"leg_no 4 · 같은 %s — 예고 %s · 자격 %s"
+			% [l0, g.leg_cue_t >= 0.0, bool(g.leg_fx_arm)])
+	#  다른 장이면 난다 — 드러냄은 **장마다** 한 번이다.
+	var l1 := ""
+	for it6 in GameData.items():
+		if String(it6.get("rarity", "")) == "legendary" and String(it6.id) != l0:
+			l1 = String(it6.id)
+			break
+	_setup([l1, c0, c0, c0])
+	g._drop_roll()
+	_ok("다른 장이면 다시 난다",
+			l1 != "" and g.leg_cue_t >= 0.0 and bool(g.leg_fx_arm),
+			"%s 에서 예고 켜짐 %s" % [l1, g.leg_cue_t >= 0.0])
+	#  ── 마지막 칸이어도 난다 ────────────────────────────
+	#  개발자 판의 「등급마다 등장」줄이 사다리 넷을 한 테이블에 세우므로
+	#  레전더리가 3번 칸에 선다. 0번 자리만 보면 그 줄에서 한 벌이 통째로
+	#  안 나 **재는 줄이 거짓말을 한다.**
+	g.leg_fx_seen.clear()
+	_setup([c0, u0, r0, l0])
+	g.shake = 0.0
+	g._drop_roll()
+	var tail_arm: bool = bool(g.leg_fx_arm)
+	var tail_vig := 0.0
+	for k7 in 120:
+		_frame += 1
+		if g.drop_awake or g.sweep_live:
+			g.drop_acc += 1.0 / 60.0
+			var ns7 := 0
+			while g.drop_acc >= float(g.DROP.sub) and ns7 < int(g.DROP.sub_max):
+				g.drop_acc -= float(g.DROP.sub)
+				g.drop_t += float(g.DROP.sub)
+				g._drop_step(float(g.DROP.sub))
+				ns7 += 1
+		g._drop_extras(1.0 / 60.0)
+		tail_vig = maxf(tail_vig, float(g.leg_vig))
+		_snd_drain()
+	_ok("마지막 칸이어도 한 벌이 난다", tail_arm and tail_vig > 0.5,
+			"자격 %s · 비네트 최대 %.2f (사다리 넷 · 레전더리 3번 칸)"
+			% [tail_arm, tail_vig])
 
 	# ── ⑦ 확률이 한 톨도 안 움직였다 ────────────────────
 	print("\n-- ⑦ 확률 불변 --")
@@ -518,7 +602,7 @@ func _process(_d: float) -> bool:
 	var stop_bad := 0
 	seed(seed_v + 21)
 	_setup([l0, r0, u0, c0])
-	g.leg_fx_leg = -1
+	g.leg_fx_seen.clear()
 	g._drop_roll()
 	_snd_reset()
 	for k in 240:
@@ -544,7 +628,7 @@ func _process(_d: float) -> bool:
 	#  건너뛰기 — _drop_settle 이 같은 _drop_step 을 감아 전부 한 프레임에 앉힌다.
 	seed(seed_v + 31)
 	_setup([l0, r0, u0, c0])
-	g.leg_fx_leg = -1
+	g.leg_fx_seen.clear()
 	g.hush_t = 0.0
 	g.land_snd_t = 0.0
 	g._drop_roll()
@@ -650,7 +734,7 @@ func _process(_d: float) -> bool:
 	print("\n-- ⑬ 소리와 빛이 같은 프레임 --")
 	seed(seed_v + 51)
 	_setup([r0, c0, c0, c0])
-	g.leg_fx_leg = -1
+	g.leg_fx_seen.clear()
 	g.hush_t = 0.0
 	g.land_snd_t = 0.0
 	g._drop_roll()
@@ -682,7 +766,7 @@ func _process(_d: float) -> bool:
 	_setup([l0, r0, u0, c0])
 	#  이미 산 장은 _drop_sold_sync 가 sold 를 세우기 **전에** 떨어진다.
 	g.stock[1]["sold"] = true
-	g.leg_fx_leg = -1
+	g.leg_fx_seen.clear()
 	g.hush_t = 0.0
 	g.land_snd_t = 0.0
 	g._drop_roll()
@@ -696,6 +780,113 @@ func _process(_d: float) -> bool:
 			rv_land += 1
 	_ok("산 장은 빛도 소리도 없다", sold_lg <= 0.0,
 			"팔린 레어의 부풂 %.3f — _land_fx 가 stock[i].sold 를 본다" % sold_lg)
+
+	# ── ⑮ 사진 테이블은 등장이 아니다 ───────────────────
+	#  _photo_open(14876)이 매물을 치우고 **내가 이미 가진 동전**을 깔면서
+	#  _drop_roll 을 부른다. 문이 없으면 보유 레전더리가 사진을 열 때마다
+	#  한 벌을 다시 내고, 닫을 때 매물이 다시 깔려 **한 번에 두 번** 난다.
+	#  사진은 상점마다 쓸 수 있으니 「프로필당 네 번」이 거기서 무제한이 된다.
+	print("\n-- ⑮ 사진 테이블은 조용하다 --")
+	seed(seed_v + 71)
+	if g.state != g.S.SHOP:
+		g._open_shop()
+	g._roll_stock()
+	g.leg_fx_seen.clear()
+	g.owned = [_item_by(l0).duplicate(), _item_by(r0).duplicate(),
+			_item_by(u0).duplicate(), _item_by(c0).duplicate()]
+	g.shake = 0.0
+	g.leg_vig = 0.0
+	g.leg_vig_up = false
+	_snd_reset()
+	g._photo_open("burn", 2)
+	var ph_cue: bool = g.leg_cue_t >= 0.0
+	var ph_arm: bool = bool(g.leg_fx_arm)
+	_wind(180, 1.0 / 60.0)
+	var ph_snd := 0
+	for nm7 in _names():
+		if String(nm7) == "coin_plaque" or String(nm7) == "coin_land":
+			ph_snd += 1
+	var ph_lg := 0.0
+	for it7 in g.drop:
+		ph_lg = maxf(ph_lg, float(it7.get("lg", 0.0)))
+	_ok("보유 동전은 등장하지 않는다",
+			not ph_cue and not ph_arm and ph_snd == 0
+			and ph_lg <= 0.0 and float(g.leg_vig) <= 0.0
+			and float(g.shake) <= 0.001,
+			"예고 %s · 자격 %s · 착지 소리 %d건 · 부풂 %.3f · 비네트 %.3f"
+			% [ph_cue, ph_arm, ph_snd, ph_lg, float(g.leg_vig)])
+	g._photo_close()
+	_snd_reset()
+	_wind(180, 1.0 / 60.0)
+	g.owned = []
+
+	# ── ⑯ 상점을 떠나도 비네트가 안 얼어붙는다 ──────────
+	#  _drop_update(18822)가 `if state != S.SHOP: return` 으로 돌아가므로
+	#  _drop_extras 가 안 돈다 — 첫 착지 직후 판으로 나가면 leg_vig 와
+	#  leg_vig_up 이 **그 자리에 언다.** 나가기 단추는 _drop_busy() 앞에서
+	#  처리되므로(5131) 낙하 중에도 눌린다. 다음 상점에서 _drop_extras 가
+	#  다시 돌기 시작하면 up 이 참인 채라 **레전더리가 한 장도 없는 딜링
+	#  위에서 가장자리가 가득 차올랐다가** 빠진다(2026-09-20 고침).
+	print("\n-- ⑯ 떠난 뒤 값이 안 얼어붙는다 --")
+	seed(seed_v + 81)
+	_setup([l0, c0, c0, c0])
+	g.leg_fx_seen.clear()
+	g._drop_roll()
+	_wind(30, 1.0 / 60.0)          # 첫 착지 직후 — 비네트가 도는 중이다
+	var mid_vig: float = float(g.leg_vig)
+	var mid_up: bool = bool(g.leg_vig_up)
+	#  판으로 나간 셈 친다 — _drop_extras 가 안 도는 구간이다.
+	var st_back = g.state
+	g.state = g.S.LEG
+	for k8 in 600:
+		g._drop_update(1.0 / 60.0)
+	g.state = st_back
+	var froze: bool = float(g.leg_vig) > 0.001 or bool(g.leg_vig_up)
+	#  다음 상점의 첫 딜링 — 일반 넷이다.
+	_setup([c0, c0, c0, c0])
+	g.leg_no += 1
+	g.shake = 0.0
+	g._drop_roll()
+	var nx_vig := 0.0
+	for k9 in 120:
+		_frame += 1
+		if g.drop_awake or g.sweep_live:
+			g.drop_acc += 1.0 / 60.0
+			var ns9 := 0
+			while g.drop_acc >= float(g.DROP.sub) and ns9 < int(g.DROP.sub_max):
+				g.drop_acc -= float(g.DROP.sub)
+				g.drop_t += float(g.DROP.sub)
+				g._drop_step(float(g.DROP.sub))
+				ns9 += 1
+		g._drop_extras(1.0 / 60.0)
+		nx_vig = maxf(nx_vig, float(g.leg_vig))
+		_snd_drain()
+	_ok("떠난 뒤 다음 딜링이 조용하다", nx_vig <= 0.001,
+			"떠날 때 비네트 %.3f(up %s) → 얼었나 %s → 다음 딜링 최대 %.3f"
+			% [mid_vig, mid_up, froze, nx_vig])
+
+	# ── ⑰ 새 런이 기록을 비운다 ─────────────────────────
+	#  leg_no 가 _new_run 에서 1 로 돌아가는데 드러냄 기록을 안 지우면,
+	#  런 A 에서 본 장이 런 B 에서 **아무 표시 없이 조용히 안 난다** —
+	#  프로필 통틀어 네 번뿐인 사건 하나를 표시 없이 잃는다.
+	print("\n-- ⑰ 런 경계 --")
+	g.leg_fx_seen.clear()
+	g.leg_fx_seen["l02"] = true
+	g.leg_vig = 0.7
+	g.leg_vig_up = true
+	g.leg_cue_t = 0.2
+	g.hush_t = 0.2
+	g.land_snd_t = 0.02
+	g.land_snd_n = 3
+	g._new_run()
+	_ok("_new_run 이 여덟을 다 누른다",
+			g.leg_fx_seen.is_empty() and not bool(g.leg_fx_arm)
+			and g.leg_cue_t < 0.0 and float(g.leg_vig) <= 0.0
+			and not bool(g.leg_vig_up) and float(g.hush_t) <= 0.0
+			and float(g.land_snd_t) <= 0.0 and int(g.land_snd_n) == 0,
+			"seen %d · arm %s · cue %.2f · vig %.2f · up %s · hush %.2f"
+			% [g.leg_fx_seen.size(), bool(g.leg_fx_arm), float(g.leg_cue_t),
+					float(g.leg_vig), bool(g.leg_vig_up), float(g.hush_t)])
 
 	print("\n%s" % ["검사 전부 통과" if fails == 0 else "실패 %d건" % fails])
 	quit(fails)
