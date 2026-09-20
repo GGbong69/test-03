@@ -3199,8 +3199,19 @@ func _next_leg() -> void:
 	#  ⚠ **이어하기가 이 값을 읽는다** — _knot_ok 가 「쏟은 것을 집는 중」을
 	#  막으므로, 안 지우면 판 선택 매듭이 조용히 안 적힌다. 2026-09-20
 	boost_pick = 0
+	#  ── 라운드 경계 ──
+	#  증감 **전후**의 라운드를 견준다. leg_idx == 0 으로 재지 않는 것은
+	#  되살리기·새 런·_skip_leg 도 그 조건을 맞히기 때문이다 — 여기서
+	#  재면 「라운드가 갈렸다」가 판 번호가 오른 이 자리에서만 참이다.
+	var r0 := GameData.round_of(leg_no)
 	leg_no += 1
+	#  연출을 **_open_leg 뒤**에 연다. _knot("leg") 가 이 함수의 마지막
+	#  줄이라, 뒤에 열면 매듭이 연출보다 **먼저** 적힌다 — _knot_ok 에
+	#  turn_live 를 한 줄도 안 넣어도 된다. 앞에 열면 판 선택 매듭이
+	#  말없이 안 적혀 껐다 켜면 이 판이 통째로 사라진다. 2026-09-20
 	_open_leg()
+	if GameData.round_of(leg_no) != r0:
+		_turn_begin(r0)
 
 
 # ══════════════════════════════════════════════════════════
@@ -3245,7 +3256,7 @@ func _open_leg() -> void:
 	#  있어 false 가 돌아온다 — 그렇게 물었더니 런 통틀어 1라운드 첫 판에서
 	#  딱 한 번만 울었다(2026-09-18). 「굴렸는가」가 아니라 「라운드가
 	#  열렸는가」가 이 소리의 뜻이다.
-	_sfx(_leg_open_sfx())
+	_sfx(_leg_open_sfx(), _leg_open_f())
 	#  과녁(보스 카드)과 값이 먼저 서야 한다 — 그래서 굴린 뒤다.
 	_tutor("u_boss")
 	#  ── 매듭 ① 판 선택 ──
@@ -3261,6 +3272,23 @@ func _open_leg() -> void:
 func _leg_open_sfx() -> String:
 	return "boss_seal" if GameData.leg_idx(leg_no) == 0 \
 			and boss_mods.has(_round_boss()) else "leg_open"
+
+
+#  라운드마다 반음. **라운드가 열리는 첫 판에서만** 민다 — 둘째 · 셋째
+#  판까지 밀면 「라운드가 올랐다」가 아니라 「판이 열렸다」가 된다.
+#  1.05946 = 2^(1/12). 정산 걸음이 반음씩 오르는 그 어법이고(게임 이름이
+#  거기서 왔다), 마지막 바퀴에 음을 반음 올리는 레이싱 게임의 셈이다.
+#  R1 x1.000(오늘 그대로) -> R8 x1.4983. boss_seal 의 [330, 247] 이 R8 에서
+#  [494, 370] 인데 둘 다 이 표에 이미 선 음이라(leg_clear 의 494) 사다리가
+#  팔레트 밖으로 안 걸어 나간다.
+#  **상한 1.50** 은 문지기다 — 그 위는 봉인이 얇아져 「무게가 내려앉는다」가
+#  「문이 열린다」로 뒤집힌다. 라운드 수를 늘리는 모드가 와도 안 뒤집힌다.
+#  ⚠ **파일이 있어야 민다.** _sfx 의 beep_seq 갈래는 f 를 통째로 무시하므로
+#  sfx/boss_seal.wav 가 사라지면 사다리가 **말없이** 평평해진다. 2026-09-20
+func _leg_open_f() -> float:
+	if GameData.leg_idx(leg_no) != 0:
+		return 0.0
+	return SFX_BASE * minf(pow(1.05946, float(GameData.round_of(leg_no) - 1)), 1.50)
 
 
 # 이 라운드의 첫 판 번호. 세 판을 늘어놓을 때 기준이 된다.
@@ -4754,9 +4782,11 @@ func _unhandled_input(e: InputEvent) -> void:
 			if state == S.INTRO:
 				_intro_end()
 				return
-			if swap_live:
+			if swap_live or turn_live:
 				# 연출은 아무 키로나 건너뛴다. 잠긴 채로 못 빠져나가는
 				# 자리를 안 만드는 것이 ESC(일시정지)보다 앞선다.
+				# 라운드 경계도 같은 문으로 나간다(_swap_skip 이 _turn_skip
+				# 을 같이 내린다) — 새 문을 안 낸다. 2026-09-20
 				_swap_skip()
 				return
 			match k.keycode:
@@ -4876,6 +4906,18 @@ func _unhandled_input(e: InputEvent) -> void:
 			_intro_end()
 			return
 		if mb.pressed:
+			#  연출 건너뛰기가 **배움 넘기기보다 앞**이다. 키 갈래는 이미 이
+			#  차례인데(Dev → 인트로 → 연출 → 나머지) 손가락만 뒤에 있었다 —
+			#  배움 띠가 살아 있는 동안 클릭이 _tutor_click 에 통째로 삼켜져
+			#  연출이 안 끝났고, 키로만 빠져나갈 수 있었다. **모바일에는 키가
+			#  없다.** 게다가 띠는 두 연출 동안 안 그려지므로(_draw 의 문지기)
+			#  보이지도 않는 말상자를 넘기려고 누르는 꼴이었다.
+			#  _open_leg 이 _tutor("u_leg") 를 세우는 바로 그 프레임에 경계가
+			#  열리므로 이 겹침은 드문 자리가 아니다 — 실제 이벤트를 먹여
+			#  재서 잡았다. 2026-09-20
+			if swap_live or turn_live:
+				_swap_skip()
+				return
 			#  설명 중이면 클릭이 **넘기기**다. 게임에 안 보낸다 — 배우다 말고
 			#  실수로 물건을 사면 설명이 손해로 끝난다.
 			if _tutor_click(mp):
@@ -4976,7 +5018,7 @@ func _click(m: Vector2) -> void:
 		return
 	if Dev.click(self, m):          # DEV
 		return
-	if swap_live:
+	if swap_live or turn_live:
 		#  키는 이미 아무 키로나 이 연출을 건너뛴다(_unhandled_input 의
 		#  swap_live 갈래). 마우스·손가락만 못 건너뛰었는데, 모바일에는 키가
 		#  없어 빠져나갈 길이 아예 없는 자리였다 — 「잠긴 채로 못 빠져나가는
@@ -6803,6 +6845,7 @@ func _swap_begin(to_board: bool) -> void:
 
 
 func _swap_update(d: float) -> void:
+	_turn_update(d)          # 라운드 경계는 나란한 갈래다 — 문지기 앞에 선다
 	if not swap_live:
 		return
 	swap_t += d
@@ -6812,10 +6855,14 @@ func _swap_update(d: float) -> void:
 
 
 # 연출을 즉시 끝낸다. 프로브·도구가 감을 손잡이다.
+# ⚠ 도구 마흔 남짓이 이 함수 하나로 정지 프레임을 찍는다 — 새 연출을
+# 여기 안 매달면 shot_*.gd · deck_shots*.gd · art_*.gd 가 중간 프레임을
+# 찍어 갈무리가 **조용히** 상한다. 2026-09-20
 func _swap_skip() -> void:
 	swap_t = 0.0
 	swap_live = false
 	swap_scr = -1
+	_turn_skip()
 
 
 # 판 층의 한 점이 지금 화면 어디로 가는가. 그리기와 검사가 같은 식을 쓴다 —
@@ -6860,6 +6907,233 @@ func _swap_screen(sh: Vector2) -> void:
 	_draw_screen(swap_scr)
 	shake_off = sh
 	draw_set_transform(sh)
+
+
+# ══════════════════════════════════════════════════════════
+#  라운드 경계 한 박자 — 불이 한 칸 옮겨 붙는다
+# ══════════════════════════════════════════════════════════
+#  판 갈이(_swap_*)에 **안 얹는다.** 판 갈이는 런에 스물셋 번 나고 라운드
+#  경계는 일곱 번이라, 같은 자리에 얹으면 스물셋 번이 다 길어진다. 게다가
+#  _swap_begin 의 문지기가 S.SHOP→S.LEG 를 아예 안 받고, 넓혀도 나가는
+#  쪽·들어오는 쪽이 둘 다 테이블이라 「테이블이 빠지고 판이 선다」는
+#  뼈대가 성립을 안 한다. **나란한 갈래로 낸다.**
+#
+#  ── 무엇을 보여 주는가 ──
+#  오늘 라운드 경계에 실제로 바뀌는 픽셀은 **빈 칸 하나가 어두운 테 칸이
+#  되는 것** 하나뿐이다(_run_pips). 넘긴 칸은 이미 C_ACC 로 꽉 차 있고
+#  테도 C_ACC 라 「지금 칸」과 「지나간 칸」이 화면에서 **같은 그림**이다.
+#  그것이 5px 에 1px 테라 아무도 못 봤다 — 「넘어간 건지 잘 모르겠더라」
+#  (사용자, 2026-09-20). 그래서 그 칸 여덟을 0.56초 동안 4.4배로 들어
+#  올려 화면 위쪽에 세우고, 불이 한 칸 오른쪽으로 옮겨 붙는 것을 한 번
+#  보여 주고, 제자리에 넣는다. 손님은 연출이 아니라 **바의 어느 자리를
+#  읽어야 하는지**를 배운다. 다음부터는 5px 으로도 읽힌다.
+#
+#  ── 박자 ──
+#  총 길이를 수로 안 박고 **딜에 묶었다** — clampf(_deal_time(), 0.36, 0.56).
+#  판 선택이 열릴 때마다 카드 딜이 이미 0.56초를 도므로(DEAL.dur 0.34 +
+#  stag 0.11x2) 그 위에 얹으면 **새로 더한 애니메이션 시간이 0** 이다.
+#  마지막 카드가 서는 프레임에 연출도 끝난다.
+#  위끝 0.56 은 0.59 「휙휙 안 바뀐다」(SWAP 머리말) 밑으로 0.03 남긴
+#  값이고, 아래끝 0.36 은 판 갈이와 같은 값이다 — 라운드당 판 수를 흔드는
+#  모드가 와도 박자가 이 구간 밖으로 못 걸어 나간다.
+#  런 전체 0.56 x 7 = 3.92초(판 갈이 0.36 x 23 = 8.28초의 절반 이하).
+#  0.30 쪽 반려의 원인은 총 길이가 아니라 **두 동작이 뭉친 것**이었는데,
+#  여기는 hold 가 통째로 정지라 안 뭉친다. 2026-09-20
+const TURN := {
+	# 비율이다. 합이 1.00 — 절대 초가 아니라 _deal_time() 을 나눈 몫이다
+	"rise":  0.27,   # 칸 여덟이 바에서 떨어져 나와 부푼다
+	"hold":  0.14,   # **아무것도 안 움직인다.** 「여덟 중 몇째」가 여기서 읽힌다
+	"douse": 0.21,   # 넘긴 칸의 불이 꺼진다
+	"light": 0.13,   # 오른쪽 빈 칸에 불이 붙는다
+	"home":  0.25,   # 제자리로. rise 보다 **짧다** — 나타나는 것이 사라지는 것보다 길다
+	"k":     4.4,                   # 칸 5px -> 22px
+	"to":    Vector2(320.0, 108.0), # 줄 아래끝 119. 선 카드 윗변 122.68 과 3.7px
+	"scrim": 0.62,                  # 판 갈이 복귀 0.94 보다 **일부러 옅다**
+									# — 뒤에서 도는 카드 딜이 계속 보여야
+									# 「이 0.56초가 딜 위에 얹혀 있다」가 읽힌다
+	"cap":   12,                    # 칸이 이보다 많으면 큰 줄이 화면 밖이다
+}
+
+var turn_t := 0.0
+var turn_live := false
+var turn_from := 0      # 넘기기 **전** 라운드. 그림만 쓴다 — 게임은 안 읽는다
+
+
+#  from_round 를 **인자로** 받는 것이 이 연출의 계약이다 — leg_no 를 읽지도
+#  쓰지도 않으므로 런 진도를 한 칸도 안 움직이고 몇 번이고 다시 볼 수 있다
+#  (개발자 모드의 「라운드 넘김 다시 보기」가 그것을 쓴다). _swap_begin 의
+#  「게임 상태를 한 비트도 안 만진다」를 인자 하나로 강제한다.
+func _turn_begin(from_round: int) -> void:
+	if drop_fast:
+		return          # 소크 · 오토플레이 · 도구는 안 탄다. _swap_begin 과 같은 줄
+	if from_round < 1 or GameData.rounds_n() > int(TURN.cap):
+		#  칸이 열둘을 넘으면 큰 줄이 화면 밖이다(K 4.4 에서 한 칸 30.8px).
+		#  잘린 줄을 보여 주느니 연출을 아예 안 낸다.
+		return
+	turn_t = 0.0
+	turn_live = true
+	turn_from = from_round
+	#  소리는 여기서 안 낸다. boss_seal 이 이미 이 프레임에 울고 있고
+	#  (_open_leg), page 는 불이 옮겨 붙는 한 프레임에 _turn_stamp 가 낸다.
+
+
+# 연출을 즉시 끝낸다. 프로브·도구가 감을 손잡이다.
+# **게임 상태를 한 비트도 안 만진다** — 세 값만 내린다. 건너뛰기가 결과에
+# 닿는 것처럼 보이면 통제감 착각이 생긴다(_swap_skip 과 같은 규약).
+func _turn_skip() -> void:
+	turn_t = 0.0
+	turn_live = false
+	turn_from = 0
+
+
+func _turn_update(d: float) -> void:
+	if not turn_live:
+		return
+	#  배움 늦추기를 **도로 나눈다.** _process 가 d 에 _tutor_slow() 를 곱한
+	#  뒤 그대로 여기까지 흘려보내는데, data/tutor.csv 의 slow 최솟값 0.30 에서는
+	#  0.56초가 **1.87초**가 된다 — 반려선 0.59 의 세 배다. 이 박자는 게임
+	#  시간이 아니라 _deal_time() 에 묶인 화면 시간이고, 「더해진 애니메이션
+	#  0초」라는 약속이 통째로 그 곱셈 하나에 걸려 있었다. 게다가 늦추는 그
+	#  말상자를 연출이 가리고 있어 왜 느린지조차 안 보였다.
+	#  판 갈이는 오늘 이 성질을 그대로 둔다 — 그쪽은 0.36초라 0.30 배에서도
+	#  1.2초고, 손대면 정지 프레임을 찍는 도구 마흔이 같이 흔들린다.
+	#  2026-09-20
+	var t0 := turn_t
+	turn_t += d / maxf(_tutor_slow(), 0.01)
+	var lit := _turn_lit_at()
+	if t0 < lit and turn_t >= lit:
+		_turn_stamp()               # 불이 옮겨 붙는 그 한 프레임
+	if turn_t >= _turn_total():
+		_turn_skip()
+	queue_redraw()
+
+
+func _turn_span() -> float:
+	return clampf(_deal_time(), 0.36, 0.56)
+
+
+#  douse 가 시작하는 시각. motion_off 면 rise·hold 가 통째로 없다 —
+#  걸음 **길이**를 줄이는 것이 아니라 걸음 **수**를 줄인다.
+func _turn_t0() -> float:
+	return 0.0 if motion_off else _turn_span() * (float(TURN.rise) + float(TURN.hold))
+
+
+func _turn_lit_at() -> float:
+	return _turn_t0() + _turn_span() * float(TURN.douse)
+
+
+func _turn_total() -> float:
+	var s := _turn_span()
+	if motion_off:
+		return s * (float(TURN.douse) + float(TURN.light))   # 0.190
+	return s                                                  # 0.560
+
+
+#  0 -> 1 -> 0. 칸이 들린 정도다.
+#  **motion_off 면 늘 1 이다** — 큰 줄이 움직임 없이 그 자리에 선다.
+#  한동안 여기가 0 이었다(「칸이 바에 앉은 채로 불만 옮겨 붙는다」). 찍어
+#  보고 그것이 빈말이었음을 알았다: k 가 0 이면 줄이 5px 이고 스크림도 0 이라,
+#  움직임을 끄러 온 손님은 **사용자가 「모르겠다」고 한 그 크기 그대로**를
+#  받으면서 입력 잠금 0.190초와 단추 깜박임만 치렀다. 값만 내고 읽을 것은
+#  하나도 못 받은 셈이다. 죽여야 하는 것은 **옮기는 동작**(rise·home 과 그
+#  사이의 hold)이지 크기가 아니다 — 그 셋은 _turn_t0 · _turn_total 이 그대로
+#  빼고, 줄은 컷으로 섰다가 컷으로 걷힌다. 0.190초.
+#  2026-09-20
+func _turn_k() -> float:
+	if motion_off:
+		return 1.0
+	var s := _turn_span()
+	var a: float = s * float(TURN.rise)
+	var b: float = s * (1.0 - float(TURN.home))
+	if turn_t < a:
+		return _e_out(turn_t / a)
+	if turn_t < b:
+		return 1.0
+	return 1.0 - _e_out((turn_t - b) / (s * float(TURN.home)))
+
+
+#  소리가 나는 유일한 한 프레임. **게임 상태를 안 만진다.**
+#  page 는 「카드 한 장이 넘어간다 · 음정이 없다」(sfx_bake)라 밀어도
+#  얇아지지 않고 밝기만 한 단 오른다 — 스플릿플랩 딸깍 그 자체이고 이미
+#  판 밖 소리다. **새 파일을 안 굽는다**: coin_break 머리말의 「여섯 재질,
+#  네 파일」과 같은 규약으로 있는 파일을 pitch_scale 로 민다.
+func _turn_stamp() -> void:
+	_sfx("page", _turn_f())
+
+
+#  boss_seal 과 **같은 비**를 쓴다 — 한 경계가 한 목소리로 말한다.
+func _turn_f() -> float:
+	return SFX_BASE * minf(pow(1.05946, float(turn_from)), 1.50)
+
+
+#  칸 i(0부터)의 사각. k=0 이면 바의 제자리, k=1 이면 TURN.to 의 큰 줄이다.
+func _turn_cell(i: int, k: float) -> Rect2:
+	var pip: Rect2 = LAY.bar_pip
+	var n := float(GameData.rounds_n())
+	var sc: float = lerpf(1.0, float(TURN.k), k)
+	var dx: float = float(LAY.bar_pip_dx) * sc
+	var w: float = dx * (n - 1.0) + pip.size.x * sc
+	var home := pip.position + Vector2(
+			float(LAY.bar_pip_dx) * (n - 1.0) + pip.size.x, pip.size.y) * 0.5
+	var c := home.lerp(TURN.to, k)
+	return Rect2(roundf(c.x - w * 0.5 + float(i) * dx),
+			roundf(c.y - pip.size.y * sc * 0.5),
+			roundf(pip.size.x * sc), roundf(pip.size.y * sc))
+
+
+#  스크림 한 장 + 칸 여덟. _run_pips 의 어휘를 그대로 빌린다 — 글자 0자,
+#  숫자도 안 띄운다. 보이는 것은 네모 여덟 개뿐이다.
+#  ⚠ **randf() 를 한 줄도 안 쓴다.** 난수를 한 번이라도 굴리면
+#  run_rng.state 가 어긋나 되살리기가 틀어진다(turn_probe ⑤가 잡는다).
+func _turn_draw() -> void:
+	if not turn_live:
+		return
+	var s := _turn_span()
+	var dk: float = clampf((turn_t - _turn_t0()) / (s * float(TURN.douse)), 0.0, 1.0)
+	var lk: float = clampf((turn_t - _turn_lit_at()) / (s * float(TURN.light)), 0.0, 1.0)
+	var k := _turn_k()
+	#  흔들림 **밖**에서 덮는다. 변환 밑에 _full() 을 깔면 가장자리에 밝은
+	#  띠가 남는다(지금 판 갈이 복귀 스크림이 0.94 라 안 드러날 뿐이다).
+	#  스크림은 **k 를 그대로 탄다.** 줄이 들 때 들고 내려앉을 때 걷히므로
+	#  덮개와 덮이는 것이 한 몸으로 움직인다. 모션을 끄면 k 가 늘 1 이라
+	#  스크림도 0.62 로 서 있다가 연출과 같이 걷힌다 — 램프가 아니라 컷이다.
+	#  (한동안 모션 끄기에서 k 가 0 이었고, 그러면 스크림도 0 이라 어둠 없이
+	#  단추만 사라졌다 돌아왔다. _turn_k 머리말에 적었다.) 2026-09-20
+	draw_set_transform(Vector2.ZERO)
+	draw_rect(_full(), Color(C_BG, float(TURN.scrim) * k))
+	draw_set_transform(shake_off)
+	var rim: float = float(clampi(roundi(lerpf(1.0, float(TURN.k), k)), 1, 3))
+	var cur := turn_from - 1        # 불이 꺼지는 칸
+	var nxt := turn_from            # 불이 붙는 칸
+	for i in GameData.rounds_n():
+		var q := _turn_cell(i, k)
+		if i < cur:
+			draw_rect(q, C_ACC)                                   # 지나간 라운드
+		elif i == cur:
+			#  닫힘 — 한 번 밝아졌다 가라앉고 테가 진다. 오늘 화면에서
+			#  「지금 칸」과 「지나간 칸」을 갈라 주던 유일한 것이 이 테다.
+			draw_rect(q, C_ACC.lightened(0.40 * sin(PI * dk)))
+			draw_rect(q, Color(C_ACC, 1.0 - dk), false, rim)
+		elif i == nxt:
+			draw_rect(q, C_BG.lerp(C_ACC.darkened(0.62), lk))     # 열림
+			draw_rect(q, Color(C_ACC, lerpf(0.22 * k, 1.0, lk)), false, rim)
+		else:
+			draw_rect(q, C_BG)
+			#  ⚠ **찍어 보고 알았다.** 바에서는 안 온 칸이 판 위에 뚫린
+			#  홈이라 저절로 읽히는데, 들려 나오면 밑이 스크림(C_BG)이라
+			#  **같은 색끼리 겹쳐 통째로 사라졌다** — 여덟 중 다섯만 보여
+			#  「여덟 중 몇째」를 셀 수가 없었다. 희미한 테로 자리만 남긴다.
+			#  알파를 k 에 묶은 것이 요점이다: 집(k=0)에서는 0 이라
+			#  _run_pips 의 그림과 한 픽셀도 안 갈린다. 2026-09-20
+			draw_rect(q, Color(C_ACC, 0.22 * k), false, rim)
+	#  고리 — **add_wave 를 안 쓴다.** waves 는 _draw_fx 가 그리는데 그
+	#  함수는 _draw_screen · _hud_draw 보다 **먼저** 돈다. 칸 자리에 낸
+	#  고리는 펠트와 HUD 에 통째로 덮여 한 프레임도 안 보인다.
+	if lk > 0.0 and lk < 1.0 and not motion_off:
+		var c := _turn_cell(nxt, k).get_center()
+		var q0 := _turn_cell(nxt, k).size.x
+		draw_arc(c, lerpf(q0 * 0.6, q0 * 2.2, _e_out(lk)), 0.0, TAU, 24,
+				Color(C_ACC, (1.0 - lk) * 0.5), 2.0)
 
 
 # 화면 한 벌. state 가 아니라 scr 를 받는다 — 전환 중에는 그려야 할
@@ -6971,11 +7245,15 @@ func _draw() -> void:
 	# 화면이 바뀌어도 같은 자리에 남는 것만 판이다 — 그래서 스크림 뒤에 그린다.
 	_hud_draw()
 	_mod_shed_draw()
+	#  라운드 경계 — **_hud_draw 뒤**다. 갈리는 칸이 바에 있으므로 바를
+	#  덮어야 칸이 바에서 떨어져 나온다. _draw_leg 안에 넣으면 _hud_draw 가
+	#  그 위에 바를 다시 얹어 스크림 밖에 밝은 바가 남는다.
+	_turn_draw()
 	#  배움 띠 — HUD 위, 툴팁 밑이다. 툴팁은 커서를 따라다니므로
 	#  띠를 덮어도 그 순간 손님이 보는 것은 툴팁 쪽이다.
-	if not swap_live:
+	if not swap_live and not turn_live:
 		_tutor_draw()
-	if not swap_live:
+	if not swap_live and not turn_live:
 		_tip_draw(sh)
 	draw_set_transform(Vector2.ZERO)
 	# 사진이 연 화면은 개발자 판 바로 아래다 — 게임 위, 개발자 아래.
@@ -11668,7 +11946,16 @@ func _draw_topbar() -> void:
 	draw_string(font, Vector2(8, ty), "R%d/%d"
 			% [GameData.round_of(leg_no), GameData.rounds_n()],
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, C_TXT)
-	_run_pips(LAY.bar_pip.position)
+	#  ⚠ 라운드 경계가 도는 동안에는 **여기서 안 그린다.** 그 연출의 큰 줄이
+	#  곧 이 칸 여덟이라 밑에 같은 것을 한 벌 더 깔 이유가 없는데, 깔았더니
+	#  둘이 서로 다른 말을 했다 — 이쪽은 round_of(leg_no) 로 **새** 라운드를,
+	#  연출은 turn_from 으로 **옛** 라운드를 같은 화면에서 동시에 말한다.
+	#  게다가 아래 테(draw_rect ..., false, 1.0)가 제 5x5 밖으로 오른쪽·아래
+	#  **한 픽셀 넘쳐** 그려져서, 연출이 5x5 만 덮는 동안 그 한 줄이 밖으로
+	#  샜다. 화소로 쟀다: 칸 x[72,77) y[7,12) 의 속은 14111F 인데 x=77 의
+	#  y7~11 과 y=12 의 x72~77 이 F2B134 로 남는다. 2026-09-20
+	if not turn_live:
+		_run_pips(LAY.bar_pip.position)
 
 	# 2칸 x[100,584] — 목표. 진행바 좌표는 기존 그대로다.
 	#  판 이름은 12 에서 「보스 판」 이 잉크 40px 이다. x104 에서는 게이지(146)와
@@ -14526,13 +14813,17 @@ func _can_sell() -> bool:
 #
 # 막는 자리는 넷뿐이다.
 #   · 동전 슬롯이 안 그려지는 화면 — _hud_draw 가 거르는 것들과 CLEAR
-#   · 전환·쓸기 — 입력을 통째로 삼키는 두 연출
+#   · 판 갈이·라운드 경계·쓸기 — 입력을 통째로 삼키는 세 연출
 #   · RESOLVE — queue 가 owned 인덱스(k=item 의 i)를 들고 있다. 끼워 넣으면
 #     엉뚱한 동전이 카드에 뜬다. 「득점 시작 시 순서 스냅샷」이 여기서
 #     지켜진다. 큐는 다트가 꽂힐 때 세워지므로 FLY 까지는 열어 둬도 된다
 #   · 연발이 도는 중 — 커서가 곧 조준이라(kick) 끄는 손이 남은 발을 끌고 간다
 func _can_rack_move() -> bool:
-	if swap_live or sweep_live or state == S.RESOLVE or burst_left > 0:
+	#  라운드 경계도 「입력을 통째로 삼키는 연출」이다 — 위 목록의 둘과 같은
+	#  줄에 선다. _hand_press_at 이 이미 물러서므로 오늘은 여기까지 안 오지만,
+	#  문지기 둘이 서로 다른 말을 하고 있으면 다음에 잡는 자리를 하나 더 내는
+	#  손이 그 틈으로 샌다. 2026-09-20
+	if swap_live or turn_live or sweep_live or state == S.RESOLVE or burst_left > 0:
 		return false
 	return state == S.SHOP or state == S.LEG or _is_play()
 
@@ -22877,7 +23168,17 @@ func _hand_press(m: Vector2) -> bool:
 
 
 func _hand_press_at(m: Vector2) -> bool:
-	if swap_live:
+	#  ⚠ **연출 둘 다** 여기서 물러선다. 라운드 경계(turn_live)를 빠뜨렸더니
+	#  0.56초 동안 잡는 갈래 다섯이 그대로 살아 있었다 — 실제 이벤트를 먹여
+	#  재 보니 동전 슬롯0 을 누르면 hand_src 1 로 잡히고(ARMED), 슬롯2 로 끌어
+	#  떼면 owned 가 **정말로 바뀐 채** turn_live 는 내내 참이었다. 사탕 칸도
+	#  hand_src 4 로 같이 잡혔다. 여기서 true 를 내면 _unhandled_input 이
+	#  거기서 돌아서므로 밑의 _click(= 건너뛰기 문)이 아예 안 불린다:
+	#  「아무 데나 누르면 끝난다」와 「누름이 밑 화면으로 안 샌다」가 화면
+	#  위쪽 띠(동전 슬롯 · 사탕 칸)에서 **동시에** 깨졌고, 집은 동전은 스크림
+	#  밑이라 잡힌 것도 안 보였다. 모바일에는 키가 없어 그 자리에서는 빠져나갈
+	#  길이 아예 없다. 한 줄이 다섯 갈래를 다 막는다. 2026-09-20
+	if swap_live or turn_live:
 		return false
 	if _autoplay:
 		return false                          # 좌표 입력은 오토플레이의 어휘가 아니다
@@ -25244,8 +25545,12 @@ var ui_under := false
 #  내 동전으로 갈아 끼우고 창구 · 리롤 · 다음 판은 그대로 눌린다.
 #  층 위에서 실제로 받는 것(배움 건너뛰기 · 칠할 칸 · 고를 동전)은 이 문을
 #  안 거치고 제 조건으로 밝힌다.
+#  ⚠ 라운드 경계도 판 갈이와 같은 줄이다. 그쪽은 단추를 아예 안 그리지만
+#  경계는 스크림 밑에 그린 채로 두므로(_hud_btns_draw), 여기를 빠뜨리면
+#  연출이 도는 0.56초 동안 커서가 얹힌 단추가 뜨고 menu_pick2 가 운다 —
+#  **못 누르는 단추가 눌릴 것처럼 굴고 소리까지 낸다.** 2026-09-20
 func _ui_can_hover() -> bool:
-	return not swap_live and hand_st != H.CARRY and not ui_under \
+	return not swap_live and not turn_live and hand_st != H.CARRY and not ui_under \
 			and photo != "paint" and photo_rack == "" \
 			and not _tutor_live()
 
@@ -33849,7 +34154,7 @@ const HUDBTN := {"gap": 4.0}
 #  설정이 열려 리롤과 팩이 통째로 물렸다(_pause_open). 2026-09-20
 #  쏟은 것을 **집는 중**(boost_pick > 0)은 평소 상점이라 그대로 선다.
 func _hud_btns_on() -> bool:
-	if swap_live or sweep_live or boost_t >= 0.0 \
+	if swap_live or turn_live or sweep_live or boost_t >= 0.0 \
 			or photo != "" or photo_rack != "":
 		return false
 	return _is_play() or state == S.CLEAR or state == S.SHOP \
@@ -33947,7 +34252,16 @@ func _hud_btn_click(m: Vector2) -> bool:
 
 
 func _hud_btns_draw() -> void:
-	if not _hud_btns_on():
+	#  ⚠ 라운드 경계만 **그리기에서 빼지 않는다.** _hud_btns_on() 은 누름
+	#  문지기로 그대로 두고 그림은 스크림에 맡긴다 — 그 연출은 첫 프레임과
+	#  끝 프레임에 k 가 0 이라 스크림도 0 인데(0 에서 출발해 0 으로 돌아온다),
+	#  거기서 그림까지 지우면 **가리는 것 하나 없이 단추 둘만 사라졌다
+	#  돌아온다.** 런에 일곱 번 나는 번쩍임이고, 0.56초를 깨끗한 한 박자로
+	#  읽히게 하려는 연출이 제 손으로 그것을 깨는 꼴이었다. turn_live 만 다른
+	#  두 프레임을 대어 보고 잡았다(같은 판 · 같은 t=0 · k=0.0000).
+	#  누름은 _click 과 _unhandled_input 이 _hud_btn_click 보다 **앞**에서 이미
+	#  삼키므로 문지기를 푸는 것이 아니다. 2026-09-20
+	if not _hud_btns_on() and not turn_live:
 		return
 	#  조준 중에는 HUD 가 물러난다(_hud_draw 의 띠). 단추도 같이 물러나야
 	#  조준선이 화면에서 가장 센 것으로 남는다.
