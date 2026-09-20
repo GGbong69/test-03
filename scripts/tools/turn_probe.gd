@@ -17,7 +17,9 @@ const Dev = preload("res://scripts/dev.gd")
 #  재는 것
 #    ① 경계에서만 난다 — 런에 정확히 일곱 번
 #    ② 박자 — _deal_time() 에 묶여 있고 [0.36, 0.56] 밖으로 안 나간다
-#    ③ 키와 클릭 **둘 다** 즉시 끝낸다(모바일에 키가 없다)
+#    ③ 키와 클릭 **둘 다** 즉시 끝낸다(모바일에 키가 없다).
+#       클릭은 **진짜 이벤트**로 잰다 — g._click() 을 직접 부르면 그 앞에 선
+#       _tutor_click · _hand_press 가 누름을 삼키는 사고를 못 잡는다
 #    ④ 매듭이 연출보다 **먼저** 적힌다
 #    ⑤ 게임 상태를 한 비트도 안 바꾼다(run_rng 포함)
 #    ⑥ 판정 사각이 한 픽셀도 안 움직인다
@@ -49,6 +51,35 @@ func _key(g: Node, code: int) -> void:
 	var e := InputEventKey.new()
 	e.pressed = true
 	e.keycode = code
+	g._unhandled_input(e)
+
+
+#  **진짜 이벤트**로 누른다. g._click() 을 직접 부르면 그 앞에 선 _tutor_click
+#  과 _hand_press 를 통째로 건너뛰어, 저 둘이 누름을 삼키는 사고를 못 잡는다 —
+#  실제로 동전 슬롯이 연출 중에 잡히고 있었는데 옛 검사가 통과했다. 2026-09-20
+func _press(g: Node, p: Vector2, down := true) -> void:
+	var e := InputEventMouseButton.new()
+	e.button_index = MOUSE_BUTTON_LEFT
+	e.pressed = down
+	e.position = p + g.view_pad
+	g._unhandled_input(e)
+
+
+#  동전 한 닢. owned 는 **사전 배열**이다 — 문자열을 넣으면 _run_save 와
+#  _tip_build 가 조용히 토한다. 2026-09-20
+func _coin(id: String) -> Dictionary:
+	for it in GameData.items():
+		if String(it.id) == id:
+			var c: Dictionary = it.duplicate()
+			c.gs = 0
+			c.bought = 1
+			return c
+	return {}
+
+
+func _motion(g: Node, p: Vector2) -> void:
+	var e := InputEventMouseMotion.new()
+	e.position = p + g.view_pad
 	g._unhandled_input(e)
 
 
@@ -147,21 +178,48 @@ func _initialize() -> void:
 			"스스로 끝나고 제자리로",
 			"live=%s t=%.4f from=%d" % [g.turn_live, g.turn_t, g.turn_from])
 
-	#  motion_off — 걸음 길이가 아니라 걸음 **수**가 준다
+	#  motion_off — 걸음 길이가 아니라 걸음 **수**가 준다. 옮기는 동작
+	#  (rise·hold·home)만 빠지고 **크기는 안 빠진다.**
 	g.motion_off = true
 	_step(g, per * 2)
 	var moff: float = g._turn_total()
-	var kmax := 0.0
+	var kmin := 9.0
+	var kmax := -9.0
 	while g.turn_live:
+		kmin = minf(kmin, g._turn_k())
 		kmax = maxf(kmax, g._turn_k())
 		g._process(F)
 	_say(absf(moff - 0.190) < 0.002, "모션 끄면 0.190초", "%.3f초" % moff)
-	#  스크림 알파 = TURN.scrim x k 다. k 가 늘 0 이면 스크림도 늘 0 —
-	#  **이 한 줄이 그것을 지킨다.** 한 번 0.62 까지 찼다가 끝 프레임에 뚝
-	#  꺼져서, 움직임을 끄러 온 사람이 전체 화면 번쩍임을 받았다. 2026-09-20
-	_say(is_zero_approx(kmax),
-			"모션 끄면 칸이 바에 앉고 스크림도 안 든다", "k 최대 %.4f" % kmax)
+	#  ⚠ 여기가 한 번 0 이었다. k 가 0 이면 줄이 5px 이고 스크림(TURN.scrim x k)
+	#  도 0 이라, 움직임을 끄러 온 손님은 **사용자가 「모르겠다」고 한 그 크기**
+	#  를 받으면서 입력 잠금 0.190초와 단추 깜박임만 치렀다. 지금은 1 로 못
+	#  박는다 — 큰 줄이 컷으로 서고 한 프레임도 안 움직인다. 2026-09-20
+	_say(is_equal_approx(kmin, 1.0) and is_equal_approx(kmax, 1.0),
+			"모션 끄면 큰 줄이 움직임 없이 선다", "k [%.4f, %.4f]" % [kmin, kmax])
+	_say(is_equal_approx(float(g.TURN.scrim) * kmax, float(g.TURN.scrim)),
+			"모션 꺼도 스크림이 선다 (맨몸으로 단추만 사라지지 않는다)")
 	g.motion_off = false
+
+	#  배움 늦추기가 박자를 **안** 늘린다. tutor.csv 의 u_leg 는 slow 0.30 이고
+	#  _open_leg 이 바로 그 갈래를 세우므로, 옛 코드에서는 0.56초가 **1.87초**가
+	#  됐다 — 반려선 0.59 의 세 배다. 게다가 늦추는 그 말상자는 연출에 가려
+	#  보이지도 않았다. 2026-09-20
+	_step(g, per * 2)
+	g.tutor_id = "u_leg"               # 말상자가 다 서 있는 자리로 박는다
+	g.tutor_i = 0
+	g.tutor_pre = 0.0
+	g.tutor_out = 0.0
+	g.tutor_t = 10.0
+	_say(absf(g._tutor_slow() - 0.30) < 0.01, "배움 배수가 0.30 이다",
+			"%.3f배" % g._tutor_slow())
+	var slow_t := 0.0
+	while g.turn_live and slow_t < 3.0:
+		g._process(F)
+		slow_t += F
+	_say(absf(slow_t - total) < 0.03, "배움 늦추기 0.30 배에서도 총 길이가 같다",
+			"%.3f초 (기대 %.3f)" % [slow_t, total])
+	g._tutor_close()
+	g._turn_skip()
 
 	# ── ③ 키와 클릭 둘 다 ──────────────────────────────
 	print("③ 건너뛰는 길")
@@ -191,6 +249,52 @@ func _initialize() -> void:
 	_say(rest_k == rest_c, "두 길이 같은 끝 상태로 간다", rest_k)
 	_say(g.state == st0 and g.remaining.size() == rem0,
 			"누름이 밑 화면으로 안 샌다", "state %d · %d발" % [g.state, g.remaining.size()])
+
+	#  ⚠ **진짜 이벤트**로 다시 잰다. 위의 g._click() 은 그 앞에 선
+	#  _tutor_click 과 _hand_press 를 통째로 건너뛰므로, 저 둘이 누름을 삼키면
+	#  이 검사가 통과한 채로 손님만 잠긴다. 실제로 둘 다 삼키고 있었다.
+	#  ① 배움 띠가 살아 있어도 손가락 하나로 끝난다(키 전용 길을 안 만든다)
+	_step(g, per * 2)
+	_wind(g, 0.10)
+	g.tutor_id = "u_leg"
+	g.tutor_i = 0
+	g.tutor_pre = 0.0
+	g.tutor_out = 0.0
+	g.tutor_t = 10.0
+	_press(g, g._leg_go().get_center())
+	_press(g, g._leg_go().get_center(), false)
+	_say(not g.turn_live, "배움 띠가 살아 있어도 손가락으로 끝난다")
+	g._tutor_close()
+	g._turn_skip()
+
+	#  ② 동전 슬롯·사탕 칸을 눌러도 잡히지 않고, 그 누름이 연출을 끝낸다
+	g.owned = [_coin("c01"), _coin("c02"), _coin("c03")]
+	_step(g, per * 2)
+	_wind(g, 0.10)
+	var own0 := str(g.owned)
+	var slot: Rect2 = g._slot_rect(0)
+	_press(g, slot.get_center())
+	var grabbed: int = g.hand_st
+	_motion(g, g._slot_rect(2).get_center())
+	g._process(F)
+	_press(g, g._slot_rect(2).get_center(), false)
+	_say(grabbed == 0, "연출 중에는 동전 슬롯이 안 잡힌다", "hand_st %d" % grabbed)
+	_say(not g.turn_live, "동전 슬롯을 눌러도 연출이 끝난다")
+	_say(str(g.owned) == own0, "끌어 떼도 동전 순서가 그대로다",
+			"%s %s %s" % [String(g.owned[0].id), String(g.owned[1].id),
+			String(g.owned[2].id)])
+	g._turn_skip()
+
+	_step(g, per * 2)
+	_wind(g, 0.10)
+	var cons_r: Rect2 = g._cons_rect(0)
+	_press(g, cons_r.get_center())
+	var c_grab: int = g.hand_st
+	_press(g, cons_r.get_center(), false)
+	_say(c_grab == 0 and not g.turn_live,
+			"사탕 칸을 눌러도 안 잡히고 연출이 끝난다", "hand_st %d" % c_grab)
+	g.owned = []
+	g._turn_skip()
 	#  딜은 안 건너뛴다 — 오늘과 정확히 같은 자리에 선다
 	var lt0: float = g.leg_t
 	_wind(g, 0.10)
@@ -282,6 +386,15 @@ func _initialize() -> void:
 	g._open_leg()
 	g._next_leg()
 	_say(g.turn_live and not g._hud_btns_on(), "연출 중에는 단추가 안 선다")
+	#  ⚠ **안 서는 것과 안 보이는 것은 다르다.** 첫 프레임과 끝 프레임은
+	#  k 가 0 이라 스크림도 0 인데, 거기서 그림까지 지우면 가리는 것 하나
+	#  없이 단추 둘만 사라졌다 돌아온다 — 런에 일곱 번 나는 번쩍임이다.
+	#  _hud_btns_draw 는 turn_live 를 **그리기에서 뺀다**. 2026-09-20
+	_say(is_zero_approx(g._turn_k()),
+			"첫 프레임의 k 가 0 이다 (그래서 스크림도 0)", "k %.4f" % g._turn_k())
+	#  그린 김에 눌릴 것처럼 굴면 안 된다 — 얹힘이 살아 있으면 커서가 얹힌
+	#  단추가 뜨고 menu_pick2 가 운다. 판 갈이와 같은 줄에 세웠다.
+	_say(not g._ui_can_hover(), "연출 중에는 얹힘도 죽는다")
 	g._turn_skip()
 	_say(g._hud_btns_on(), "끝나면 단추가 다시 선다")
 

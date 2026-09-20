@@ -4906,6 +4906,18 @@ func _unhandled_input(e: InputEvent) -> void:
 			_intro_end()
 			return
 		if mb.pressed:
+			#  연출 건너뛰기가 **배움 넘기기보다 앞**이다. 키 갈래는 이미 이
+			#  차례인데(Dev → 인트로 → 연출 → 나머지) 손가락만 뒤에 있었다 —
+			#  배움 띠가 살아 있는 동안 클릭이 _tutor_click 에 통째로 삼켜져
+			#  연출이 안 끝났고, 키로만 빠져나갈 수 있었다. **모바일에는 키가
+			#  없다.** 게다가 띠는 두 연출 동안 안 그려지므로(_draw 의 문지기)
+			#  보이지도 않는 말상자를 넘기려고 누르는 꼴이었다.
+			#  _open_leg 이 _tutor("u_leg") 를 세우는 바로 그 프레임에 경계가
+			#  열리므로 이 겹침은 드문 자리가 아니다 — 실제 이벤트를 먹여
+			#  재서 잡았다. 2026-09-20
+			if swap_live or turn_live:
+				_swap_skip()
+				return
 			#  설명 중이면 클릭이 **넘기기**다. 게임에 안 보낸다 — 배우다 말고
 			#  실수로 물건을 사면 설명이 손해로 끝난다.
 			if _tutor_click(mp):
@@ -6975,8 +6987,17 @@ func _turn_skip() -> void:
 func _turn_update(d: float) -> void:
 	if not turn_live:
 		return
+	#  배움 늦추기를 **도로 나눈다.** _process 가 d 에 _tutor_slow() 를 곱한
+	#  뒤 그대로 여기까지 흘려보내는데, data/tutor.csv 의 slow 최솟값 0.30 에서는
+	#  0.56초가 **1.87초**가 된다 — 반려선 0.59 의 세 배다. 이 박자는 게임
+	#  시간이 아니라 _deal_time() 에 묶인 화면 시간이고, 「더해진 애니메이션
+	#  0초」라는 약속이 통째로 그 곱셈 하나에 걸려 있었다. 게다가 늦추는 그
+	#  말상자를 연출이 가리고 있어 왜 느린지조차 안 보였다.
+	#  판 갈이는 오늘 이 성질을 그대로 둔다 — 그쪽은 0.36초라 0.30 배에서도
+	#  1.2초고, 손대면 정지 프레임을 찍는 도구 마흔이 같이 흔들린다.
+	#  2026-09-20
 	var t0 := turn_t
-	turn_t += d
+	turn_t += d / maxf(_tutor_slow(), 0.01)
 	var lit := _turn_lit_at()
 	if t0 < lit and turn_t >= lit:
 		_turn_stamp()               # 불이 옮겨 붙는 그 한 프레임
@@ -7006,11 +7027,19 @@ func _turn_total() -> float:
 	return s                                                  # 0.560
 
 
-#  0 -> 1 -> 0. 칸이 들린 정도다. motion_off 면 늘 0 이라 칸이 바에 앉은
-#  채로 불만 옮겨 붙는다 — **정보는 살고 움직임만 죽는다.**
+#  0 -> 1 -> 0. 칸이 들린 정도다.
+#  **motion_off 면 늘 1 이다** — 큰 줄이 움직임 없이 그 자리에 선다.
+#  한동안 여기가 0 이었다(「칸이 바에 앉은 채로 불만 옮겨 붙는다」). 찍어
+#  보고 그것이 빈말이었음을 알았다: k 가 0 이면 줄이 5px 이고 스크림도 0 이라,
+#  움직임을 끄러 온 손님은 **사용자가 「모르겠다」고 한 그 크기 그대로**를
+#  받으면서 입력 잠금 0.190초와 단추 깜박임만 치렀다. 값만 내고 읽을 것은
+#  하나도 못 받은 셈이다. 죽여야 하는 것은 **옮기는 동작**(rise·home 과 그
+#  사이의 hold)이지 크기가 아니다 — 그 셋은 _turn_t0 · _turn_total 이 그대로
+#  빼고, 줄은 컷으로 섰다가 컷으로 걷힌다. 0.190초.
+#  2026-09-20
 func _turn_k() -> float:
 	if motion_off:
-		return 0.0
+		return 1.0
 	var s := _turn_span()
 	var a: float = s * float(TURN.rise)
 	var b: float = s * (1.0 - float(TURN.home))
@@ -7063,11 +7092,11 @@ func _turn_draw() -> void:
 	var k := _turn_k()
 	#  흔들림 **밖**에서 덮는다. 변환 밑에 _full() 을 깔면 가장자리에 밝은
 	#  띠가 남는다(지금 판 갈이 복귀 스크림이 0.94 라 안 드러날 뿐이다).
-	#  스크림은 **k 를 그대로 탄다.** 들릴 때 들고 내려앉을 때 걷힌다.
-	#  한동안 「칸이 안 들리면 dk 를 쓴다」로 적었다가 고쳤다 — 모션을 끄면
-	#  k 가 늘 0 이라 스크림이 0.62 까지 찼다가 연출이 끝나는 프레임에
-	#  **뚝 꺼졌다.** 움직임을 끄러 온 사람에게 전체 화면 번쩍임을 주는 셈이다.
-	#  k 에 묶으면 모션이 꺼진 동안 스크림이 저절로 0 이다. 2026-09-20
+	#  스크림은 **k 를 그대로 탄다.** 줄이 들 때 들고 내려앉을 때 걷히므로
+	#  덮개와 덮이는 것이 한 몸으로 움직인다. 모션을 끄면 k 가 늘 1 이라
+	#  스크림도 0.62 로 서 있다가 연출과 같이 걷힌다 — 램프가 아니라 컷이다.
+	#  (한동안 모션 끄기에서 k 가 0 이었고, 그러면 스크림도 0 이라 어둠 없이
+	#  단추만 사라졌다 돌아왔다. _turn_k 머리말에 적었다.) 2026-09-20
 	draw_set_transform(Vector2.ZERO)
 	draw_rect(_full(), Color(C_BG, float(TURN.scrim) * k))
 	draw_set_transform(shake_off)
@@ -11915,7 +11944,16 @@ func _draw_topbar() -> void:
 	draw_string(font, Vector2(8, ty), "R%d/%d"
 			% [GameData.round_of(leg_no), GameData.rounds_n()],
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, C_TXT)
-	_run_pips(LAY.bar_pip.position)
+	#  ⚠ 라운드 경계가 도는 동안에는 **여기서 안 그린다.** 그 연출의 큰 줄이
+	#  곧 이 칸 여덟이라 밑에 같은 것을 한 벌 더 깔 이유가 없는데, 깔았더니
+	#  둘이 서로 다른 말을 했다 — 이쪽은 round_of(leg_no) 로 **새** 라운드를,
+	#  연출은 turn_from 으로 **옛** 라운드를 같은 화면에서 동시에 말한다.
+	#  게다가 아래 테(draw_rect ..., false, 1.0)가 제 5x5 밖으로 오른쪽·아래
+	#  **한 픽셀 넘쳐** 그려져서, 연출이 5x5 만 덮는 동안 그 한 줄이 밖으로
+	#  샜다. 화소로 쟀다: 칸 x[72,77) y[7,12) 의 속은 14111F 인데 x=77 의
+	#  y7~11 과 y=12 의 x72~77 이 F2B134 로 남는다. 2026-09-20
+	if not turn_live:
+		_run_pips(LAY.bar_pip.position)
 
 	# 2칸 x[100,584] — 목표. 진행바 좌표는 기존 그대로다.
 	#  판 이름은 12 에서 「보스 판」 이 잉크 40px 이다. x104 에서는 게이지(146)와
@@ -14773,13 +14811,17 @@ func _can_sell() -> bool:
 #
 # 막는 자리는 넷뿐이다.
 #   · 동전 슬롯이 안 그려지는 화면 — _hud_draw 가 거르는 것들과 CLEAR
-#   · 전환·쓸기 — 입력을 통째로 삼키는 두 연출
+#   · 판 갈이·라운드 경계·쓸기 — 입력을 통째로 삼키는 세 연출
 #   · RESOLVE — queue 가 owned 인덱스(k=item 의 i)를 들고 있다. 끼워 넣으면
 #     엉뚱한 동전이 카드에 뜬다. 「득점 시작 시 순서 스냅샷」이 여기서
 #     지켜진다. 큐는 다트가 꽂힐 때 세워지므로 FLY 까지는 열어 둬도 된다
 #   · 연발이 도는 중 — 커서가 곧 조준이라(kick) 끄는 손이 남은 발을 끌고 간다
 func _can_rack_move() -> bool:
-	if swap_live or sweep_live or state == S.RESOLVE or burst_left > 0:
+	#  라운드 경계도 「입력을 통째로 삼키는 연출」이다 — 위 목록의 둘과 같은
+	#  줄에 선다. _hand_press_at 이 이미 물러서므로 오늘은 여기까지 안 오지만,
+	#  문지기 둘이 서로 다른 말을 하고 있으면 다음에 잡는 자리를 하나 더 내는
+	#  손이 그 틈으로 샌다. 2026-09-20
+	if swap_live or turn_live or sweep_live or state == S.RESOLVE or burst_left > 0:
 		return false
 	return state == S.SHOP or state == S.LEG or _is_play()
 
@@ -23124,7 +23166,17 @@ func _hand_press(m: Vector2) -> bool:
 
 
 func _hand_press_at(m: Vector2) -> bool:
-	if swap_live:
+	#  ⚠ **연출 둘 다** 여기서 물러선다. 라운드 경계(turn_live)를 빠뜨렸더니
+	#  0.56초 동안 잡는 갈래 다섯이 그대로 살아 있었다 — 실제 이벤트를 먹여
+	#  재 보니 동전 슬롯0 을 누르면 hand_src 1 로 잡히고(ARMED), 슬롯2 로 끌어
+	#  떼면 owned 가 **정말로 바뀐 채** turn_live 는 내내 참이었다. 사탕 칸도
+	#  hand_src 4 로 같이 잡혔다. 여기서 true 를 내면 _unhandled_input 이
+	#  거기서 돌아서므로 밑의 _click(= 건너뛰기 문)이 아예 안 불린다:
+	#  「아무 데나 누르면 끝난다」와 「누름이 밑 화면으로 안 샌다」가 화면
+	#  위쪽 띠(동전 슬롯 · 사탕 칸)에서 **동시에** 깨졌고, 집은 동전은 스크림
+	#  밑이라 잡힌 것도 안 보였다. 모바일에는 키가 없어 그 자리에서는 빠져나갈
+	#  길이 아예 없다. 한 줄이 다섯 갈래를 다 막는다. 2026-09-20
+	if swap_live or turn_live:
 		return false
 	if _autoplay:
 		return false                          # 좌표 입력은 오토플레이의 어휘가 아니다
@@ -25491,8 +25543,12 @@ var ui_under := false
 #  내 동전으로 갈아 끼우고 창구 · 리롤 · 다음 판은 그대로 눌린다.
 #  층 위에서 실제로 받는 것(배움 건너뛰기 · 칠할 칸 · 고를 동전)은 이 문을
 #  안 거치고 제 조건으로 밝힌다.
+#  ⚠ 라운드 경계도 판 갈이와 같은 줄이다. 그쪽은 단추를 아예 안 그리지만
+#  경계는 스크림 밑에 그린 채로 두므로(_hud_btns_draw), 여기를 빠뜨리면
+#  연출이 도는 0.56초 동안 커서가 얹힌 단추가 뜨고 menu_pick2 가 운다 —
+#  **못 누르는 단추가 눌릴 것처럼 굴고 소리까지 낸다.** 2026-09-20
 func _ui_can_hover() -> bool:
-	return not swap_live and hand_st != H.CARRY and not ui_under \
+	return not swap_live and not turn_live and hand_st != H.CARRY and not ui_under \
 			and photo != "paint" and photo_rack == "" \
 			and not _tutor_live()
 
@@ -34177,7 +34233,16 @@ func _hud_btn_click(m: Vector2) -> bool:
 
 
 func _hud_btns_draw() -> void:
-	if not _hud_btns_on():
+	#  ⚠ 라운드 경계만 **그리기에서 빼지 않는다.** _hud_btns_on() 은 누름
+	#  문지기로 그대로 두고 그림은 스크림에 맡긴다 — 그 연출은 첫 프레임과
+	#  끝 프레임에 k 가 0 이라 스크림도 0 인데(0 에서 출발해 0 으로 돌아온다),
+	#  거기서 그림까지 지우면 **가리는 것 하나 없이 단추 둘만 사라졌다
+	#  돌아온다.** 런에 일곱 번 나는 번쩍임이고, 0.56초를 깨끗한 한 박자로
+	#  읽히게 하려는 연출이 제 손으로 그것을 깨는 꼴이었다. turn_live 만 다른
+	#  두 프레임을 대어 보고 잡았다(같은 판 · 같은 t=0 · k=0.0000).
+	#  누름은 _click 과 _unhandled_input 이 _hud_btn_click 보다 **앞**에서 이미
+	#  삼키므로 문지기를 푸는 것이 아니다. 2026-09-20
+	if not _hud_btns_on() and not turn_live:
 		return
 	#  조준 중에는 HUD 가 물러난다(_hud_draw 의 띠). 단추도 같이 물러나야
 	#  조준선이 화면에서 가장 센 것으로 남는다.
