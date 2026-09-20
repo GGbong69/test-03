@@ -2155,13 +2155,23 @@ func _finish_leg() -> void:
 
 	if leg_no >= GameData.legs_top():
 		#  ── 무한의 상단(마지막 라운드)에 닿았다 ──────────
-		#  **문 안에서 갈린다.** won 은 판 24 에서 이미 박혔다 — 여기서 다시
-		#  박으면 한 런에 wins 가 둘이 되고 해금이 두 번 돈다. 승리를 그
-		#  자리에서 박는 것이 이 설계의 규약이고(발라트로도 뱀파이어
-		#  서바이버즈도 같다 — 무한에서 죽어도 완주는 남는다) 그 순서가 곧
-		#  문지기다. 2026-09-20
+		#  **문 안에서 갈린다.** 승리를 판 24 에서 그 자리에 박는 것이 이
+		#  설계의 규약이고(발라트로도 뱀파이어 서바이버즈도 같다 — 무한에서
+		#  죽어도 완주는 남는다) 그 순서가 곧 문지기다. 여기서 기록을 다시
+		#  박으면 한 런에 wins 가 둘이 되고 해금이 두 번 돈다.
+		#  ⚠ **다시 안 박는 것은 기록(_bump("wins") · 해금 · _win_peaks)이지
+		#  won 이 아니다.** won 은 저장에 한 톨도 안 닿는 **화면 깃발**이라
+		#  (561 선언 · 읽는 자리가 26927·26945·26957·27020·5387 뿐) 안 세우면
+		#  천장을 **넘긴** 런이 붉은 「실패」로 뜨고, 26945 의 cleared 가 한 판을
+		#  깎아 같은 판에 「넘긴 판 101」과 「무한 판 102」가 나란히 찍힌다.
+		#  화면이 제 안에서 어긋나고 run_win 소리와도 반대말을 한다.
+		#  바로 밑 쌍둥이 갈래(마지막 판에서 목숨이 터진 완주)는 같은 순간에
+		#  won 을 세운다 — 한 순간을 두 길이 반대로 그리면 안 된다.
+		#  _endless_go 가 무한에 들어서며 won 을 끄므로 여기까지 거짓이다.
+		#  2026-09-20
 		if GameData.endless:
 			state = S.OVER
+			won = true
 			Save.tally_max("endless:leg", leg_no)
 			Save.tally_max("endless:score", total)
 			Save.run_drop()
@@ -2239,6 +2249,15 @@ func _settle_clear() -> void:
 	var item_gold := 0
 	for r in item_rows:
 		item_gold += r.v
+	#  ⚠ **화면도 같이 막는다.** 위에서 클리어와 잔탄은 0 으로 눌러 두는데
+	#  동전 골드만 안 눌러서, 「빈손」 정산이 셋을 흐리게 0 으로 적고 그 밑에
+	#  「알 낳는 거위 +4」만 금빛으로 세웠다 — 지갑은 _gold_add 가 막아 안
+	#  느는데 내역만 받은 것처럼 적는다. 「못 받은 줄은 눌러 둔다」는 이
+	#  자리의 규약이 한 줄에서만 깨진 자리다. 막는 판단과 화면이 같은 수를
+	#  본다. 2026-09-20
+	if GameData.chal_on("gold_off"):
+		item_rows = []
+		item_gold = 0
 	# 클리어 보상은 판마다 다르다 — 작은 3 · 큰 4 · 보스 5.
 	# 발라트로와 같은 값이고, legs.csv 가 쥔다.
 	var clear := GameData.reward_of(leg_no)
@@ -5059,7 +5078,7 @@ func _unhandled_input(e: InputEvent) -> void:
 							or state == S.PROFILE:
 						#  미룬 다트통 저장을 비우고 나간다 — 안 비우면
 						#  고른 통이 조용히 안 남는다. 2026-09-19
-						_pack_save_due()
+						_newrun_leave()
 						state = S.TITLE
 					elif hand_st != H.NONE:
 						_hand_abort()
@@ -5464,7 +5483,7 @@ func _click(m: Vector2) -> void:
 				_sfx("run_start")
 				return
 			if _newrun_back().has_point(m):
-				_pack_save_due()
+				_newrun_leave()
 				state = S.TITLE
 				_sfx("back")
 				return
@@ -7332,6 +7351,19 @@ func _is_play() -> bool:
 func _is_play_at(s: int) -> bool:
 	return s == S.PICK or s == S.AIM_V or s == S.AIM_H \
 			or s == S.CONFIRM or s == S.FLY or s == S.RESOLVE
+
+
+#  판이 지금 화면에 서 있는가 — **겹쳐 뜨는 화면을 뚫고** 묻는다.
+#  런 정보와 설정(판 중의 ESC)은 제 state 를 들고 뜨지만 그 밑에 판이
+#  그대로 있다. **판 뒤에 깔리는 그림은 이 물음을 써야 한다** — _is_play()
+#  로 물으면 런 정보를 여는 순간 그림이 걷혔다가 닫으면 다시 깔린다.
+#  _boss_ahead 가 이미 같은 수(밑에 깔린 화면을 묻는다)를 쓴다. 2026-09-20
+func _is_play_deep() -> bool:
+	if state == S.RUNINFO:
+		return _is_play_at(run_from)
+	if state == S.SETTINGS:
+		return pause_from >= 0 and _is_play_at(pause_from)
+	return _is_play_at(state)
 
 
 #  조준 단계인가 — 손이 조준선에 가 있는 동안.
@@ -11725,7 +11757,12 @@ func _draw_aim() -> void:
 	#  「목표물」 — 점수가 나는 **그 한 칸**만 남기고 판을 가라앉힌다.
 	#  판이 서 있는 내내 깔리고, 조준 어둠보다 **먼저** 깔려 둘이 겹치면
 	#  더 짙어진다(제약 둘이 같이 걸린 것이 그 그림이다).
-	if mark_sec >= 0:
+	#  ⚠ **판 위인지를 같이 묻는다.** mark_sec 을 −1 로 되돌리는 자리가
+	#  _start_leg 하나뿐인데 이 함수는 state 를 안 보고 매 프레임 불린다 —
+	#  안 물으면 목표물 런을 끝내고 나온 **제목·로비·런 끝 화면까지**
+	#  판 스무 칸 중 열아홉이 검게 깔린 채 따라 나온다. 3D 무대를 닫는
+	#  규약(「판이 안 서는 화면에서는 지운다」)과 같은 자다. 2026-09-20
+	if mark_sec >= 0 and _is_play_deep():
 		_board_dim_sector(mark_sec, float(AIMDIM.a))
 	#  지금 꽂힐 칸을 밝히고 판의 나머지를 가라앉힌다 — 제목 판에서 커서가 든
 	#  칸이 밝아지는 그것을 판 위로 가져왔다(사용자, 2026-09-17). 조준선보다
@@ -15020,7 +15057,14 @@ func _cons_use(i: int) -> void:
 		"gold":
 			# 갑절이되 늘어나는 폭에 상한이 있다. 0 골드면 0 이라 살 때를
 			# 고르는 것 자체가 판단이 된다.
-			var add: int = mini(gold, int(c.get("v", 0)))
+			#  ⚠ **빚에서 갑절이 빚을 갑절로 불렸다.** 「외상」은 −20 으로
+			#  시작하는데 mini(−20, v) 가 −20 을 내고 _gold_add 는 빼는 쪽을
+			#  안 막으므로(0 이하는 그대로 더한다) −40 이 됐다 — 「보유 골드
+			#  2배」라는 글자가 값과 반대로 돌고, 서식이 "골드 +%d" 라
+			#  「골드 +−20」으로 찍혔다. 갑절은 **가진 것**의 값이지 빚의
+			#  값이 아니다 — _interest_now 가 이미 쓰는 그 자(maxi(gold, 0))를
+			#  여기서도 지난다. 2026-09-20
+			var add: int = mini(maxi(gold, 0), int(c.get("v", 0)))
 			add = _gold_add(add, "cons")
 			say = "골드 +%d" % add
 		"sellsum":
@@ -26945,9 +26989,17 @@ func _draw_over() -> void:
 	var cleared: int = maxi(leg_no - (0 if won else 1), 0)
 	var rows := [
 		["넘긴 판", ("%d" % cleared) if GameData.endless 				else ("%d / %d" % [cleared, GameData.legs_n()])],
-		["최고 판 점수", GameData.big(Save.stat("best_score"))],
-		["던진 다트", str(Save.stat("darts"))],
 	]
+	#  ⚠ **밑의 두 줄은 프로필을 읽는다** — best_score 는 PEAKS 이고 darts 는
+	#  누적이다. 챌린지·무한 런은 그 둘을 한 톨도 안 미므로(_rec_off) 방금 친
+	#  런이 수에 안 든다: 무한으로 200발을 더 던져도 「던진 다트」가 판 24 의
+	#  수에서 멈춘 채다. 「이번 런이 어땠나」라고 적은 블록에서 위 한 줄은
+	#  이번 런이고 아래 둘은 지난 런들의 굳은 수라 같은 칸이 두 뜻을 낸다.
+	#  **그래서 안 센 런에서는 안 세운다** — 이 배열은 아래에서 이미 줄이
+	#  출렁이므로 줄을 빼는 어법이 이 자리에 이미 있다. 2026-09-20
+	if not _rec_off():
+		rows.append(["최고 판 점수", GameData.big(Save.stat("best_score"))])
+		rows.append(["던진 다트", str(Save.stat("darts"))])
 	#  무한 런의 자랑은 **세기 절**에서 온다(STATS·PEAKS 를 안 민다).
 	#  이 배열은 이미 if not won 으로 줄이 출렁이므로 한 줄 더 세우는 것이
 	#  이 자리의 기존 어법이다. 최대 4줄 · 마지막 기준선 178 이라 해금
@@ -31811,6 +31863,16 @@ var pack_save_t := 0.0
 
 func _pack_save() -> void:
 	pack_save_t = 0.0
+	#  ⚠ **챌린지 탭이 미는 값은 「이 런」의 것이지 사람의 고름이 아니다.**
+	#  _nr_tab_set(1) 이 다트통·리그을 표 첫 행(base/white)으로 못 박고
+	#  참값은 newrun_keep 에만 둔다. 그대로 앉히면 탭을 한 번 스치기만 해도
+	#  고른 통이 디스크에서 base 로 덮이고, 저장에서 다시 읽는 자리가
+	#  부팅(_load_settings)과 프로필 교체(_use_profile) 둘뿐이라 **되돌릴
+	#  길이 없다.** 앉히는 것은 늘 사람이 고른 쪽이다. 2026-09-20
+	if newrun_tab == 1 and newrun_keep.size() >= 2:
+		Save.set_pick("pack", String(newrun_keep[0]))
+		Save.set_pick("league", String(newrun_keep[1]))
+		return
 	Save.set_pick("pack", GameData.pack)
 	Save.set_pick("league", GameData.league)
 
@@ -31819,6 +31881,19 @@ func _pack_save() -> void:
 func _pack_save_due() -> void:
 	if pack_save_t > 0.0:
 		_pack_save()
+
+
+#  새 런 화면에서 **물러나는** 문 — 「뒤로」와 ESC 둘이 여기로 모인다.
+#  ⚠ 「시작」은 이 문이 아니다. 저쪽은 물러나는 것이 아니라 **고른 것을
+#  들고 나가는** 자리라 챌린지 탭을 되돌리면 방금 고른 챌린지가 지워진다.
+#  그래서 탭을 푸는 자리는 여기와 _open_newrun 둘이고, 「시작」은 _pack_save
+#  안의 문지기(newrun_tab == 1 이면 사람이 고른 쪽을 앉힌다)로 지킨다.
+#  안 풀면 챌린지 탭이 못 박은 base/white 가 메모리에 남아 제목 화면까지
+#  따라 나간다. 2026-09-20
+func _newrun_leave() -> void:
+	if state == S.NEWRUN:
+		_nr_tab_set(0)
+	_pack_save_due()
 
 
 # 저장에 남은 다트통을 화면의 지금 자리로 맞춘 뒤 연다.
@@ -31831,6 +31906,13 @@ func _open_newrun() -> void:
 	#  (_new_run() 에서 안 지운다 — 개발자 판과 검사가 GameData.challenge 를
 	#  세우고 곧장 _new_run() 을 부르는 선례가 이미 있고, 그 규약을 안 깬다.)
 	#  2026-09-20
+	#  ⚠ **탭을 되돌리는 길도 하나다.** newrun_tab = 0 을 손으로 박으면
+	#  _nr_tab_set 을 안 지나 newrun_keep 이 안 풀린다 — 챌린지 탭에 선 채로
+	#  화면을 뜬 사람(「뒤로」·ESC·「시작」 셋 다 그 함수를 안 지난다)의
+	#  다트통·리그이 base/white 로 굳은 채 밑의 _pack_save() 에 실려 나간다.
+	#  탭을 나가는 것은 **고름을 되돌리는 일**이므로 그 함수를 지난다.
+	#  2026-09-20
+	_nr_tab_set(0)
 	newrun_tab = 0
 	newrun_chal = 0
 	GameData.challenge = ""
@@ -31954,9 +32036,12 @@ func _nr_tab_set(t: int) -> void:
 		newrun_tab = 1
 		_chal_pick(newrun_chal)
 		return
-	GameData.pack = String(newrun_keep[0])
-	GameData.league = String(newrun_keep[1])
-	newrun_pip = _pack_idx_of(GameData.pack)
+	#  ⚠ 되돌릴 값이 없으면 **안 건드린다.** 탭을 안 지나고 newrun_tab 을
+	#  손으로 박은 자리(검사 도구)에서 빈 값을 앉히면 고른 통이 사라진다.
+	if newrun_keep.size() >= 2 and String(newrun_keep[0]) != "":
+		GameData.pack = String(newrun_keep[0])
+		GameData.league = String(newrun_keep[1])
+		newrun_pip = _pack_idx_of(GameData.pack)
 	newrun_tab = 0
 	#  기본 탭이 곧 「없음」이다.
 	GameData.challenge = ""
@@ -32011,8 +32096,22 @@ func _draw_newrun() -> void:
 	var copen := _chal_unlocked()
 	for t in 2:
 		var tr := _nr_tab(t)
+		var thot: bool = tr.has_point(mouse_at)
+		#  ⚠ **잠긴 탭은 얹혀도 안 뜬다.** 바로 밑 리그 사다리가 못 여는
+		#  단에 쓰는 그 말씨다(「얹혀도 안 뜬다 — 누르면 거절이다. 테만
+		#  밝아져 여기도 단이 있다까지만 말한다」). hot 을 그대로 넘기면
+		#  잠긴 탭이 한 칸 떠오르고 글자가 밝아져 살아 있는 탭과 똑같이
+		#  대답한 뒤 누르면 거절음만 난다 — 오늘 아침 「계속하기」에서 세운
+		#  규약(못 쓰는 것은 못 쓰는 것처럼 선다)과 어긋난다.
+		#  딸깍은 남긴다(리그 칩이 잠겨도 ui_hot 을 적는 그대로) —
+		#  커서가 대답을 아예 안 하면 안 눌리는 자리로 읽힌다.
+		#  **조건은 밑줄의 「완주 0 / 1」이 값으로 이미 말한다 —
+		#  글자를 한 자도 안 더한다.**
+		var tlive: bool = t == 0 or copen
+		if thot and not tlive and _ui_can_hover():
+			ui_hot = "tab:챌린지"
 		_tab_draw(self, tr, "기본" if t == 0 else "챌린지",
-				newrun_tab == t, tr.has_point(mouse_at), 12)
+				newrun_tab == t, thot and tlive, 12, not tlive)
 	if not copen:
 		#  ⚠ **잠겼을 때만 그린다. 열린 뒤에는 한 글자도 안 남는다.**
 		#  이 저장소는 오늘 아침 「계속하기」를 흐리게 두지 않고 **아예 안
@@ -32661,8 +32760,11 @@ func _menu_base_y(f: Font, sz: int, top: float, h: float) -> float:
 #  sz — 글자 크기. 12 면 Bold 를, 20 이면 SemiBold(font_sm)를 몸 한가운데에 세운다
 #  (_menu_base_y). 부르는 쪽이 고른다: 런 정보 탭(두 글자)은 20 이 들고, 컬렉션 탭은
 #  「보드 확장 12」 가 20 에서 106px 라 95px 칸을 넘어 12 다.
+#  off — 못 누르는 탭. 몸은 그 자리에 그대로 세우고 **글자만** 떨군다
+#  (C_OFF). 잠긴 다트통의 이름 · 잠긴 리그 단이 쓰는 그 단이고, 새 글자는
+#  한 자도 안 붙는다 — 왜 못 쓰는지는 부르는 쪽이 값으로 적는다. 2026-09-20
 func _tab_draw(c: CanvasItem, r: Rect2, label: String, on: bool,
-		hot := false, sz := 12) -> void:
+		hot := false, sz := 12, off := false) -> void:
 	#  들어설 때의 딸깍만 공용 얹힘에 맡긴다(그림은 이 자리의 것 그대로).
 	#  **뜨는 탭에만** 적는다 — 고른 탭은 얹혀도 안 뜨는데 소리만 나면 무엇이
 	#  대답했는지가 안 보인다. r 도 같이 본다: hot 을 부르는 쪽이 늘 켜 둬도
@@ -32681,9 +32783,11 @@ func _tab_draw(c: CanvasItem, r: Rect2, label: String, on: bool,
 	var tf: Font = font_sm if big else font
 	#  몸 한가운데 — 런 정보 탭(몸 24 · 20)은 기준선 20, 컬렉션 탭(몸 20 · 12)은 14.5.
 	var ly: float = _menu_base_y(tf, sz, 0.0, body.size.y)
+	var tc: Color = C_BG if on else C_DIM.lerp(C_TXT, 0.8 if hot else 0.0)
+	if off and not on:
+		tc = C_OFF
 	c.draw_string(tf, body.position + Vector2(0.0, ly), label,
-			HORIZONTAL_ALIGNMENT_CENTER, body.size.x, sz,
-			C_BG if on else C_DIM.lerp(C_TXT, 0.8 if hot else 0.0))
+			HORIZONTAL_ALIGNMENT_CENTER, body.size.x, sz, tc)
 
 
 #  넘김 단추 하나. 탭이 아니라 **단추**라 제 어법을 쓴다.
