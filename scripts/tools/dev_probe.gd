@@ -228,6 +228,61 @@ func _newrows(g: Node) -> void:
 			"이어하기 지우기"]:
 		_say(_find(g, nm) >= 0, "page 3 에 「%s」 줄이 있다" % nm)
 
+	#  ── 모드 둘 (2026-09-20) ──────────────────────────
+	#  규칙 3 — 게임에 만든 것은 같은 턴에 개발자 판에도 길을 낸다.
+	#  챌린지는 이미 2쪽에 줄이 있고(「챌린지」 목록 · _new_run 으로 곧장
+	#  들어간다) 여기서 새로 나는 것은 **무한**뿐이다.
+	Dev.page = 2
+	var ie := _find(g, "무한모드")
+	_say(ie >= 0, "page 2 에 「무한모드」 줄이 있다")
+	_say(_find(g, "챌린지") >= 0, "page 2 에 「챌린지」 줄이 그대로 있다")
+	if ie >= 0:
+		#  1쪽이 아니라 2쪽인 이유 — 판 안에 **실제로 그려지는** 줄이어야 한다.
+		_say(Dev._panel().encloses(Dev._row(ie)),
+				"「무한모드」 줄이 판 안에 그려진다",
+				"줄 %d · %s" % [ie, str(Dev._row(ie))])
+		var erow: Dictionary = Dev._rows(g)[ie]
+		var lg0: int = g.leg_no
+		Dev._run(g, erow)
+		_say(GameData.endless, "누르면 무한이 켜진다")
+		_say(g.leg_no > GameData.legs_n(),
+				"판이 무한 첫 판으로 옮겨간다", "판 %d → %d" % [lg0, g.leg_no])
+		_say(g.state == g.S.LEG, "판 선택이 열린다", "state %d" % g.state)
+		#  ⚠ 판 ± 의 상한을 같이 안 풀면 무한 구간을 손으로 볼 길이 없다.
+		Dev.page = 0
+		var il := _find(g, "판 +1")
+		_say(il >= 0, "page 0 에 「판 +1」 줄이 있다")
+		if il >= 0:
+			var lrow: Dictionary = Dev._rows(g)[il]
+			for k in 200:
+				Dev._run(g, lrow)
+			_say(g.leg_no == GameData.endless_legs_n(),
+					"판 ± 가 무한 상단(102)까지 간다", "판 %d" % g.leg_no)
+		Dev.page = 2
+		Dev._run(g, erow)
+		_say(not GameData.endless, "다시 누르면 꺼진다")
+		g.leg_no = 1
+		g._open_leg()
+	#  page 3 — 챌린지·무한 기록만 지운다
+	Dev.page = 3
+	_say(_find(g, "챌린지·무한 기록 지우기") >= 0,
+			"page 3 에 「챌린지·무한 기록 지우기」 줄이 있다")
+	var ic := _find(g, "챌린지·무한 기록 지우기")
+	if ic >= 0:
+		Save.unlock("chal:blind")
+		Save.tally_max("endless:leg", 42)
+		Save.bump("wins")
+		Save.unlock("pack:p_mag")
+		var w0: int = Save.stat("wins")
+		Dev._run(g, Dev._rows(g)[ic])
+		_say(not Save.unlocked("chal:blind"), "챌린지 표시를 지운다")
+		_say(Save.tally("endless:leg") == 0, "무한 기록을 지운다",
+				"%d" % Save.tally("endless:leg"))
+		#  ⚠ **wins 와 다트통 해금은 안 건드린다** — 그래야 「클리어 표시만
+		#  지우고 문턱은 남긴 상태」를 만들 수 있다.
+		_say(Save.stat("wins") == w0, "완주 수는 안 건드린다", "wins %d" % Save.stat("wins"))
+		_say(Save.unlocked("pack:p_mag"), "다트통 해금은 안 건드린다")
+
 	#  page 2 「판·조준」 — 그림 표본(2026-09-19)
 	Dev.page = 2
 	var ia := _find(g, "그림 표본")

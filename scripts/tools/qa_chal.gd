@@ -90,6 +90,33 @@ func _process(_d: float) -> bool:
 	var want: int = int(coin.v) * 3
 	_ok("홑장 — 효과가 세 배", got == want,
 			"큐에 %d (기본 %d · 바라는 값 %d)" % [got, int(coin.v), want])
+	#  ⚠ 여태 주 효과만 타고 **보조 효과(k2/v2)와 즉시 골드(gv)는 안 탔다** —
+	#  슬롯을 하나로 줄인 대가가 복합 동전과 골드 동전에서 반쪽이었다.
+	#  조건이 붙은 장은 그 조건을 맞춰야 발동한다 — 불 조건이면 불에 꽂는다.
+	var twin := {}
+	for it2 in GameData.items():
+		if String(it2.get("k2", "")) != "" and int(it2.get("v2", 0)) != 0:
+			var cd := String(it2.get("c", ""))
+			if cd == "" or cd == "bull":
+				twin = it2.duplicate()
+				break
+	if twin.is_empty():
+		print("     (보조 효과가 있는 동전이 표에 없다 — 건너뛴다)")
+	else:
+		twin.gs = 0
+		g.owned.clear()
+		g.owned.append(twin)
+		g.target = 1 << 30
+		g.total = 0
+		g.darts_left = 9
+		g.aim = g.BC if String(twin.get("c", "")) == "bull" 				else g.BC + Vector2(0.0, -g.R * 0.75)
+		g._land()
+		var got2 := 0
+		for q in g.queue:
+			if String(q.get("k", "")) == "item" 					and String(q.get("kind", "")) == String(twin.k2):
+				got2 = int(q.get("v", 0))
+		_ok("홑장 — 보조 효과도 세 배", got2 == int(twin.v2) * 3,
+				"%s · 큐에 %d (기본 %d)" % [twin.n, got2, int(twin.v2)])
 
 	# ── 깜깜이 — 안개 상시 · 목표 0.7배 ───────────────────
 	_arm("blind")
@@ -102,6 +129,25 @@ func _process(_d: float) -> bool:
 	# ── 외상 — 빚으로 시작 · 이자 두 배 ───────────────────
 	_arm("debt")
 	_ok("외상 — 빚으로 시작한다", g.gold == -20, "골드 %d" % g.gold)
+	#  ⚠ **빚에서 이자가 음수였다.** mini(−20 / 5, 5) = −4 이고 interest_mul 2
+	#  가 그것을 −8 로 만들어 「골드 이자 2배」가 빚을 두 배로 불렸다.
+	#  표의 값이 아니라 정수나눗셈이라 「밸런스는 나중에」에 안 걸린다.
+	_ok("외상 — 빚에서 이자가 0 이상이다", g._interest_now() >= 0,
+			"골드 %d · 이자 %d" % [g.gold, g._interest_now()])
+	g.gold = 25
+	_ok("외상 — 저축에는 이자가 두 배로 붙는다", g._interest_now() == 10,
+			"골드 25 · 이자 %d" % g._interest_now())
+	#  미리보기 둘이 같은 자를 쓰는가 — 세 자리가 갈리면 화면이 판을 속인다
+	var settle: int = g._interest_now()
+	g.total = g.target
+	g.darts_left = 0
+	g._settle_clear()
+	var paid: int = 0
+	for row in g.clear_gold_detail:
+		if String(row.n) == "이자":
+			paid = int(row.v)
+	_ok("외상 — 미리보기와 정산이 같은 수다", paid == settle,
+			"미리보기 %d · 정산 %d" % [settle, paid])
 
 	# ── 빈손 — 버는 길이 끊기고 뱃지가 두 배 ──────────────
 	_arm("empty")
@@ -123,25 +169,79 @@ func _process(_d: float) -> bool:
 		g._take_tag(tag)
 		_ok("빈손 — 뱃지 골드가 두 배", g.gold == int(tag.get("v", 0)) * 2,
 				"골드 %d (뱃지 %d)" % [g.gold, int(tag.get("v", 0))])
+	#  ⚠ **여태 새는 갈래가 여섯이었다.** 막는 자리가 둘(이자·잔탄 · 클리어)
+	#  뿐이라 정산의 item_gold · 동전 즉시 골드 · 판매 · 사탕 둘 · 사진
+	#  태우기가 통째로 샜다. 기획서 P.16 은 「골드를 얻지 않는다」이고
+	#  CSV 주석(「클리어·잔탄·이자를 통째로 막고」)은 구현 당시의 메모다 —
+	#  **기획서가 계약이다.** 2026-09-20
+	_arm("empty")
+	g.gold = 0
+	_ok("빈손 — 판매가 막힌다", g._gold_add(12, "sell") == 0 and g.gold == 0,
+			"골드 %d" % g.gold)
+	_ok("빈손 — 동전 즉시 골드가 막힌다", g._gold_add(9, "item") == 0, "")
+	_ok("빈손 — 사탕이 막힌다", g._gold_add(20, "cons") == 0, "")
+	_ok("빈손 — 사진 태우기가 막힌다", g._gold_add(30, "burn") == 0, "")
+	_ok("빈손 — 정산 뭉치가 막힌다", g._gold_add(40, "settle") == 0, "")
+	#  ⚠ **현상금만 예외다.** 그것이 「건너뛰기 보상」이고 표가 tag_mul 2 로
+	#  일부러 두 배로 키운 그 갈래다 — 막으면 빈손의 유일한 수입이 사라져
+	#  챌린지가 플레이 불가가 된다.
+	_ok("빈손 — 현상금(뱃지)만 산다", g._gold_add(25, "tag") == 25 and g.gold == 25,
+			"골드 %d" % g.gold)
+	#  빼는 쪽은 안 막는다
+	g.gold = 10
+	g._gold_add(-4, "spend")
+	_ok("빈손 — 빼는 쪽은 안 막는다", g.gold == 6, "골드 %d" % g.gold)
 
 	# ── 큰손 — 물건이 공짜 ────────────────────────────────
 	_arm("rich")
 	_ok("큰손 — 값이 0 이다", g._league_cost(12) == 0,
 			"12골드 → %d" % g._league_cost(12))
+	#  ⚠ 리롤만 _league_cost 를 안 지나 **값을 받고 있었다.** 표가
+	#  cost_mul 0 한 값으로 「상점의 **모든** 물건이 공짜」라 적었다 —
+	#  대가는 shop_round 가 따로 치른다(보통 런 23번 → 큰손 7번).
+	g.rerolls_used = 9
+	_ok("큰손 — 리롤도 공짜다", g._reroll_price() == 0,
+			"리롤 %d골드" % g._reroll_price())
+	g.rerolls_used = 0
+	_ok("큰손 — 상점이 라운드마다 한 번이다",
+			GameData.chal_i("shop_round", 0) == 1, "shop_round %d" % GameData.chal_i("shop_round", 0))
 
 	# ── 목표물 — 한 칸만 산다 ─────────────────────────────
 	_arm("mark")
 	_ok("목표물 — 판마다 칸을 뽑는다", g.mark_sec >= 0, "칸 %d" % g.mark_sec)
-	# 뽑힌 칸에 꽂으면 곱해지고, 다른 칸은 0 이다
 	var sw := 18.0 * PI / 180.0
 	var hit: Vector2 = g.BC + Vector2(sin(float(g.mark_sec) * sw),
 			-cos(float(g.mark_sec) * sw)) * g.R * 0.75
 	var other: int = (g.mark_sec + 5) % 20
 	var miss: Vector2 = g.BC + Vector2(sin(float(other) * sw),
 			-cos(float(other) * sw)) * g.R * 0.75
-	_ok("목표물 — 뽑힌 칸은 곱해진다", int(g.hit_info(hit).base) > 0,
-			"칸 %d · 값 %d" % [g.mark_sec, int(g.hit_info(hit).base)])
+	#  ⚠ **여기가 헛통과였다.** `int(g.hit_info(hit).base) > 0` 만 보고 있었는데
+	#  hit_info 는 sec_mul 을 **안 탄다**(적용은 _land 한 곳이다) — 챌린지를
+	#  안 걸어도 통과했다. 이제 _land 를 지나 큐로 잰다. 같은 점에 두 번
+	#  꽂아 「챌린지가 걸린 때」와 「안 걸린 때」를 나란히 댄다. 2026-09-20
 	g.target = 1 << 30
+	g.total = 0
+	g.darts_left = 9
+	g.aim = hit
+	g._land()
+	while not g.queue.is_empty():
+		g._next_step()
+	var got_mark: int = g.total
+	var keep_sec: int = g.mark_sec
+	g.mark_sec = -1                 # 챌린지만 잠깐 끈다
+	g.total = 0
+	g.darts_left = 9
+	g.aim = hit
+	g._land()
+	while not g.queue.is_empty():
+		g._next_step()
+	var got_bare: int = g.total
+	g.mark_sec = keep_sec
+	var want_mul: float = GameData.chal_f("sec_mul", 1.0)
+	_ok("목표물 — 뽑힌 칸이 실제로 곱해진다",
+			got_bare > 0 and absf(float(got_mark) - float(got_bare) * want_mul)
+					<= float(got_bare) * 0.05,
+			"칸 %d · 걸림 %d · 맨 %d (x%.1f)" % [keep_sec, got_mark, got_bare, want_mul])
 	g.total = 0
 	g.darts_left = 9
 	g.aim = miss
@@ -150,6 +250,20 @@ func _process(_d: float) -> bool:
 		g._next_step()
 	_ok("목표물 — 다른 칸은 0 이다", g.total == 0,
 			"다른 칸(%d)에 꽂고 점수 %d" % [other, g.total])
+	#  ⚠ **불은 산다.** hit_info 의 불은 idx = −1 이라 여태 else 에 떨어져
+	#  0점이 됐다 — 그러면 조준 동전 · 리볼버 · 「정조준」 해금이 그 런에서
+	#  통째로 죽는다(챌린지 하나가 다른 시스템 셋을 끈다).
+	g.total = 0
+	g.darts_left = 9
+	g.aim = g.BC
+	g._land()
+	while not g.queue.is_empty():
+		g._next_step()
+	_ok("목표물 — 불은 0점이 아니다", g.total > 0, "불 점수 %d" % g.total)
+	#  ⚠ **화면에 그려지는가.** mark_sec 이 나오는 줄이 다섯뿐이고 어느
+	#  _draw 도 안 읽어서, 여태 어느 칸인지 알 길이 화면에 0곳이었다.
+	_ok("목표물 — 뽑힌 칸을 그리는 자가 있다",
+			g.has_method("_board_dim_sector"), "_board_dim_sector")
 
 	# ── 겹치기 — 제약이 둘 ────────────────────────────────
 	_arm("stack")

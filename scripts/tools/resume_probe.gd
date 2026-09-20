@@ -7,7 +7,7 @@ const Save = preload("res://scripts/save.gd")
 #  이어하기 검사 — 적고 → 껐다 켜고 → 되살린 뒤 **한 칸씩** 댄다
 #
 #  실행:  godot --headless --path . --script scripts/tools/resume_probe.gd
-#         … --script scripts/tools/resume_probe.gd -- pass2   (…3 4 5 6 7 8)
+#         … --script scripts/tools/resume_probe.gd -- pass2   (…3 4 5 6 7 8 9 10)
 #  종료 코드 = 실패 개수. **차수를 이 순서로 돌려야 한다.**
 #
 #  **두 번 돌려야 진짜 검사다.** save_probe 머리말의 그 한 문장이 이 검사의
@@ -24,6 +24,8 @@ const Save = preload("res://scripts/save.gd")
 #    6차 — 지우는 자리 넷과 「로비로 나가기」 · 슬롯
 #    7차 — 제목 자리와 겨눔 · 「글자가 안 늘었다」
 #    8차 — 값은 나갔는데 매듭이 안 적히던 자리들 (2026-09-20 검토)
+#    9차 — **무한 x 챌린지 런**을 적고 죽는다 (2026-09-20)
+#   10차 — 새 프로세스에서 그 런을 되살려 한 칸씩 댄다
 #
 #  ⚠ 비교는 **한 칸씩** 한다. 통째로 대면 어느 칸이 어긋났는지가 로그에
 #  안 남아, 붉어진 다음에 다시 사람이 읽어야 한다.
@@ -116,6 +118,8 @@ func _initialize() -> void:
 		"pass6": _pass6()
 		"pass7": _pass7()
 		"pass8": _pass8()
+		"pass9": _pass9()
+		"pass10": _pass10()
 		_: _pass1()
 	print("\n%s" % ("실패 %d건" % fails if fails > 0 else "전부 통과"))
 	quit(mini(fails, 125))
@@ -156,6 +160,13 @@ func _snap() -> Dictionary:
 		"pack": String(GameData.pack_row().get("id", "")),
 		"league": String(GameData.league_row().get("id", "")),
 		"challenge": GameData.challenge,
+		#  무한은 챌린지 **바로 옆 칸**이다 — 저장에 적는 자리도 나란하다.
+		"endless": GameData.endless,
+		#  「목표물」이 이 판에 뽑은 칸. 판 첫머리에서 run_rng 로 굴리므로
+		#  되살린 런이 **같은 칸**을 뽑아야 한다.
+		"mark_sec": g.mark_sec,
+		"legs_top": GameData.legs_top(),
+		"target": GameData.target_of(g.leg_no),
 		# ── 런 단위 진도 ──
 		"leg_no": g.leg_no, "gold": g.gold, "throw6": g.throw6,
 		"shop_seen": g.shop_seen, "bought_item": g.bought_item,
@@ -1182,3 +1193,67 @@ func _pass8() -> void:
 				(Save.run_get("stock", []) as Array).size(), 0)
 		_eq("판 선택 매듭에는 몫도 없다",
 				int(Save.run_get("boost_pick", -1)), 0)
+
+
+# ══════════════════════════════════════════════════════════
+#  9차 — 무한 x 챌린지 런을 적고 죽는다
+# ──────────────────────────────────────────────────────────
+#  ⚠ **이 자리가 어제까지 통째로 막혀 있었다.** _run_ok 의 「판 번호가
+#  1..legs_n() 밖이면 거짓」 한 줄이 무한 런(판 25 이상)을 조용히 떨어뜨려,
+#  껐다 켜면 무한 런이 말없이 사라졌다. 구간을 둘로 늘린 뒤에도 **디스크를
+#  한 번 지나는** 왕복이 성립하는가를 여기서 잰다 — 같은 프로세스 안에서
+#  쓰고 읽는 것은 ConfigFile 이 메모리에 들고 있는 값을 다시 보는 것뿐이다.
+# ══════════════════════════════════════════════════════════
+func _pass9() -> void:
+	print("9차 — 무한 x 챌린지 런을 적는다")
+	_game()
+	Save.wipe()
+	GameData.challenge = "mark"       # 판마다 칸을 뽑는 챌린지 — 파생이 산다
+	GameData.league = "white"
+	GameData.pack = "base"
+	g._new_run()
+	GameData.endless = true
+	g.leg_no = 61                     # 라운드 21 · 작은 판
+	g.gold = 137
+	g._open_leg()                     # 매듭 ① 판 선택
+	g._begin_leg()                    # 매듭 ② 판 첫머리 — 여기서 칸을 뽑는다
+	_eq("② 판 첫머리에서 적혔다", String(Save.run_get("at", "")), "pick")
+	_eq("무한 칸이 적혔다", bool(Save.run_get("endless", false)), true)
+	_eq("챌린지도 적혔다", String(Save.run_get("challenge", "")), "mark")
+	_eq("판 번호가 적혔다", int(Save.run_get("leg_no", 0)), 61)
+	_say(g.mark_sec >= 0, "「목표물」이 칸을 뽑았다", "칸 %d" % g.mark_sec)
+	_say(g._run_ok(), "문지기가 무한 런을 받는다")
+	_dump(_snap())
+	print("  … 무한 매듭을 남기고 죽는다. 10차를 돌려라")
+
+
+# ══════════════════════════════════════════════════════════
+#  10차 — 새 프로세스에서 그 런을 되살린다
+# ══════════════════════════════════════════════════════════
+func _pass10() -> void:
+	print("10차 — 무한 런이 껐다 켜도 같은 런인가")
+	var w := _load_want()
+	_game()
+	_say(g._run_load(), "되살아났다")
+	var got := _snap()
+	for k in got:
+		if k == "runs":
+			continue
+		_eq(k, got[k], w.get_value(WS, String(k), null))
+	print("")
+	#  ⚠ 되살린 런이 **무한인가** — 이 칸이 안 돌아오면 상한이 24 로 내려가
+	#  다음 판에서 런이 통째로 끝난다.
+	_eq("무한이 켜진 채다", GameData.endless, true)
+	_eq("상한이 102 다", GameData.legs_top(), 102)
+	_eq("라운드가 21 이다", GameData.round_of(g.leg_no), 21)
+	_say(GameData.is_boss(63), "무한에도 보스 박자가 산다", GameData.leg_name(63))
+	#  판 102 · 판 25 도 같은 길인가 — 구간의 양 끝이다
+	for ln in [25, 102]:
+		Save.run_set("leg_no", ln)
+		Save.flush()
+		_say(g._run_ok(), "구간의 끝(판 %d)도 탄다" % ln)
+	Save.run_set("leg_no", 103)
+	Save.flush()
+	_say(not g._run_ok(), "구간 밖(판 103)은 막힌다")
+	GameData.endless = false
+	GameData.challenge = ""

@@ -266,3 +266,65 @@ func _run() -> void:
 	_ok("빈 자리는 안 잡는다", g._tip_hit(Vector2(320.0, 300.0)).is_empty())
 	g.owned = []
 	_ok("동전이 없으면 빈손", g._tip_hit(Vector2(400.0, 175.0)).is_empty())
+
+	# ── 완주 화면의 갈래 한 쌍 (2026-09-20) ──────────
+	#  기획서 P.17 「무한모드 계속하기와 로비로 가기 중에서 선택」.
+	#  세로로 못 쌓는다 — 해금 쪽지 줄(판바닥 −70 = y245)과 30px 뿐이라
+	#  한 줄(26) + 틈(12) = 38 이 안 든다. 그래서 가로로 가른다.
+	print("
+완주 화면의 갈래")
+	var l: Rect2 = g._over_row_l()
+	var r: Rect2 = g._over_row_r()
+	_ok("두 줄이 안 겹친다", not l.intersects(r), "%s / %s" % [l, r])
+	_ok("두 줄이 판 안이다", g._over_panel().encloses(l)
+			and g._over_panel().encloses(r))
+	_ok("둘 다 손가락 크기다", l.size.x >= 56.0 and l.size.y >= 20.0
+			and r.size.x >= 56.0 and r.size.y >= 20.0, "%s / %s" % [l.size, r.size])
+	_ok("해금 쪽지 줄과 안 닿는다",
+			l.position.y > g._over_panel().end.y - 70.0,
+			"줄 y %.0f · 쪽지 y %.0f" % [l.position.y, g._over_panel().end.y - 70.0])
+	#  ⚠ **옛 한 줄의 한가운데(x=320)가 틈에 떨어진다** — 습관 탭 방어다.
+	var mid := Vector2(320.0, 288.0)
+	_ok("옛 줄의 한가운데가 18px 틈에 떨어진다",
+			not l.has_point(mid) and not r.has_point(mid),
+			"틈 x%.0f~%.0f" % [l.end.x, r.position.x])
+
+	#  완주 & endless_ok 일 때만 갈린다.
+	_over(2.0)
+	g.won = true
+	g.endless_ok = true
+	g.endless_arm = false
+	#  완주 갈래가 세우는 자리 그대로 — 판 24 를 막 넘긴 상태다.
+	g.leg_no = GameData.legs_n()
+	g._click(mid)
+	_ok("습관 탭(옛 한가운데)이 아무 일도 안 한다",
+			g.state == g.S.OVER and not g.endless_arm, "state %d" % g.state)
+	g._click(r.get_center())
+	_ok("「무한 런」은 첫 누름이 겨눈다",
+			g.endless_arm and g.state == g.S.OVER, "state %d" % g.state)
+	g.endless_arm_t = 1.0
+	g._click(r.get_center())
+	_ok("둘째 누름에 무한으로 들어간다",
+			GameData.endless and g.leg_no > GameData.legs_n(),
+			"무한 %s · 판 %d" % [str(GameData.endless), g.leg_no])
+	_ok("들어간 뒤 갈래가 내려간다", not g.endless_ok and not g.endless_arm)
+	GameData.endless = false
+
+	#  왼쪽은 글자·목적지·자리가 그대로라 **한 번 누름**이다.
+	_over(2.0)
+	g.won = true
+	g.endless_ok = true
+	g._click(l.get_center())
+	_ok("「새 런」은 한 번 누름 그대로다", g.state == g.S.NEWRUN,
+			"state %d" % g.state)
+
+	#  실패 화면은 전폭 한 줄 그대로다.
+	_over(2.0)
+	g.won = false
+	g.endless_ok = false
+	g._click(Vector2(320.0, 288.0))
+	_ok("실패 화면은 전폭 한 줄 그대로다", g.state == g.S.NEWRUN,
+			"state %d" % g.state)
+	_ok("전폭 줄이 그 자리다",
+			g._over_newrun_rect() == Rect2(94.0, 275.0, 452.0, 26.0),
+			"%s" % g._over_newrun_rect())
