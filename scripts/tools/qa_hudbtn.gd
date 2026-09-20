@@ -31,6 +31,7 @@ func _calm() -> void:
 	g.swap_live = false
 	#  연출 둘도 같이 내린다 — 이제 단추가 이것들도 보므로, 한 검사가
 	#  세워 둔 채로 넘어가면 다음 검사가 통째로 붉어진다. 2026-09-20
+	g.turn_live = false      # 라운드 경계도 같은 줄에 선다
 	g.sweep_live = false
 	g.boost_t = -1.0
 	g.photo = ""
