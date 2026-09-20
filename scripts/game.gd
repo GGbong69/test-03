@@ -685,6 +685,21 @@ var ring_fx := []
 var screen_flash := 0.0
 var hitstop := 0.0
 
+#  ── 첫 착지의 등급 연출 (2026-09-20) ──────────────────────
+#  전부 그리기·소리 값이다. _unhandled_input 을 한 줄도 안 지나고
+#  sweep_live 를 안 세운다 — 연출이 입력을 막는 길이 구조적으로 없다.
+var land_snd_t := 0.0    # 착지 소리 문. **실시간 d 로 깎는다**(sweep_t 는 x1.3 이라 단위가 다르다)
+var land_snd_n := 0      # 이번 딜링에서 낸 착지 소리 수 (LAND.max 가 천장)
+var hush_t := 0.0        # 침묵 창 — 플라크가 앉은 뒤 나머지가 소리 없이 앉는다
+var leg_cue_t := -1.0    # 레전더리 예고 경과. −1 이 「안 켜졌다」
+var leg_cue_n := 0       # 예고 톡을 몇 개 냈는가
+#  예고가 이미 난 판 번호. **이 한 줄이 리롤 누적을 막는 전부다** —
+#  _roll_stock 이 리롤마다 _item_free_pick 을 다시 부르므로(그 장은 아직
+#  itemgot 이 아니다) 없으면 같은 레전더리가 한 상점에서 여덟 번 예고한다.
+var leg_fx_leg := -1
+var leg_vig := 0.0       # 가장자리 비네트 [0,1]
+var leg_vig_up := false  # 드는 중인가 나가는 중인가
+
 var _autoplay := false
 var _auto_t := 0.0
 
@@ -3829,6 +3844,28 @@ const SFX := {
 
 	# ── 상점 ──────────────────────────────────────
 	"shop_open":      {"f": 440.0, "d": 0.10, "a": 0.18},
+	#  ── 매물이 펠트에 앉는다 (2026-09-20) ────────────────
+	#  등급이 나타나는 순간의 소리다. **네 등급이 한 파일을 나눠 쓴다** —
+	#  일반은 안 내고 · 희귀 392 · 레어 523 · 예고 톡 셋 294/330/392.
+	#  coin_break 의 「여섯 재질, 네 파일」 옆에 「네 등급, 한 파일」이다.
+	#
+	#  ⚠ **coin_land 는 반드시 392 로 굽는다.** _sfx 의
+	#  pitch_scale = f / SFX_BASE 라 밑음이 392 여야 _sfx("coin_land", 523.0)
+	#  이 정확히 523 으로 난다. 밑음을 옮기면 사다리 전체가 조용히 틀어진다.
+	#  ⚠ **coin_plaque 는 인자 없이 부른다.** 밑음이 262 라 f 를 주면
+	#  262/392 = 175Hz 로 난다. 여기를 섞으면 플라크가 한 옥타브 밑에서 운다.
+	#
+	#  **잭팟 종을 안 빌렸다.** 종은 이미 「이겼다」에 묶여 있다 —
+	#  run_win(종 다섯 + 동전 열여섯) · target_hit(종 넷) · hit_bull_i 에 0.14
+	#  로 얕게. **상점에서는 한 번도 안 운다.** 등장에 종을 쓰면 「나왔다」와
+	#  「이겼다」가 같은 말이 되고, 팩을 뜯고 곧장 정산으로 가는 흐름에서
+	#  둘이 붙어 난다. 그래서 sfx_bake 의 BELL 이 못 박은 **tierce 1.2 를
+	#  이 둘에 한 개도 안 넣었다** — 그 비가 종을 종으로 만든다.
+	"coin_land":      {"f": 392.0, "d": 0.11, "a": 0.13},
+	#  240ms 라 sfx_pool 네 자리 중 하나를 문다. **판 하나에 한 번만 나는
+	#  소리**라 README 의 「0.3초 넘는 소리는 한 번만 나는 자리에만」 규약 안이다.
+	#  a 0.20 은 buy 와 같고 run_win 0.26 아래다 — 상점의 사건이지 런의 승리가 아니다.
+	"coin_plaque":    {"f": 262.0, "d": 0.22, "a": 0.20},
 	"buy":            {"seq": [523.0, 659.0], "gap": 0.07, "d": 0.11, "a": 0.20},
 	# 사는 쪽이 올라가므로(523→659) 파는 쪽은 **내려간다.** 둘 다 올라가면
 	# 값을 내는 것과 받는 것이 같은 손짓이 된다 — 실제로 그래서 안 갈렸다.
@@ -6976,6 +7013,9 @@ func _draw() -> void:
 	if not swap_live:
 		_tip_draw(sh)
 	draw_set_transform(Vector2.ZERO)
+	#  레전더리 비네트 — 줌을 대신하는 자리다. **Dev.draw 보다 앞**이라
+	#  개발자 판을 안 덮는다(screen_flash 는 그 뒤라 개발자 판까지 덮는다).
+	_land_vig()
 	# 사진이 연 화면은 개발자 판 바로 아래다 — 게임 위, 개발자 아래.
 	if photo != "":
 		_photo_draw()
@@ -6984,6 +7024,42 @@ func _draw() -> void:
 	draw_set_transform(Vector2.ZERO)
 	if screen_flash > 0.0:
 		draw_rect(_full(), Color(1.0, 1.0, 1.0, screen_flash * 0.34))
+
+
+#  ══ 레전더리 가장자리 비네트 ══ (2026-09-20)
+#  카메라 줌은 없고 만들 길도 막혀 있다: 배율은 구획 불변식(「이 구획은
+#  draw_set_transform 을 한 번도 안 부른다」)이 금하고, 남은 길인 노드
+#  position 은 _view_fit 의 정수 여백이 쥐고 있다 — 비정수 배율은
+#  canvas_items ×2 · nearest 에서 화면 전체를 흐린다.
+#  그 자리를 **가장자리 네 겹**이 대신한다. 바깥부터 α 0.18·0.12·0.07·0.03 을
+#  6px 씩 두른다. **화면 가운데를 한 픽셀도 안 건드리므로** 640×360 에서
+#  픽셀이 안 깨진다.
+#
+#  screen_flash 를 **안 쓴다** — 흰색 고정이고 Dev.draw 뒤이며 판 위 셋
+#  (이너 불 1.0 · 목표 돌파 0.7 · 제목 판 깨짐 0.9)과 줄을 공유한다.
+#  **레전더리의 플래시는 제 몸의 ef86c6 부풂이다.**
+func _land_vig() -> void:
+	#  swap_live 로 잠근다 — 라운드 전환 연출과 안 겹친다.
+	if leg_vig <= 0.0 or state != S.SHOP or swap_live:
+		return
+	var r := _full()
+	var w: float = float(LAND.vig_w)
+	for k in LAND.vig.size():
+		var a: float = float(LAND.vig[k]) * leg_vig
+		if a <= 0.0:
+			continue
+		var col := Color(C_BG, a)
+		var o: float = float(k) * w      # 바깥에서 안으로 한 겹씩
+		var x0: float = r.position.x + o
+		var y0: float = r.position.y + o
+		var sw: float = r.size.x - o * 2.0
+		var sh2: float = r.size.y - o * 2.0
+		if sw <= 0.0 or sh2 <= 0.0:
+			break
+		draw_rect(Rect2(x0, y0, sw, w), col)                       # 위
+		draw_rect(Rect2(x0, y0 + sh2 - w, sw, w), col)             # 아래
+		draw_rect(Rect2(x0, y0 + w, w, sh2 - w * 2.0), col)        # 왼쪽
+		draw_rect(Rect2(x0 + sw - w, y0 + w, w, sh2 - w * 2.0), col)  # 오른쪽
 
 
 # ══════════════════════════════════════════════════════════
@@ -18486,6 +18562,95 @@ const DROP := {
 	"bill_dy": 33.0,
 }
 
+
+# ══════════════════════════════════════════════════════════
+#  첫 착지 — 등급이 앉는 소리·빛  (2026-09-20)
+# ──────────────────────────────────────────────────────────
+#  「레어 동전이랑 레전더리 동전은 상점에서의 연출이 좀 더 있으면 좋겠는데」
+#  (사용자, 2026-09-20). 등급은 지금까지 **서 있는 상태**로만 읽혔다 —
+#  나타나는 순간에는 넷이 똑같이 툭 떨어졌다.
+#
+#  ── 왜 층으로 쌓는가 ────────────────────────────────
+#  빈도를 재서 예산을 정했다(런 하나 = 상점 23곳 × 폭 4 · 무료 리롤 1):
+#    일반 90.5장 · 희귀 17.8장 · 레어 3.9장 · 레전더리 **프로필 통틀어 네 번**.
+#  희귀는 40분에 열여덟 번 난다 — 시간을 한 프레임이라도 주면 셋째 판부터
+#  피로가 된다(이 저장소는 그 이유로 연출을 세 번 반려당했다). 그래서
+#  희귀는 **소리 한 겹뿐**이고, 레어가 그 위에 두 겹(다른 음 · 번짐 부풂)을
+#  얹어 희귀:레어 = 4.5:1 이라는 실제 빈도 폭을 「조금은 더」로 옮긴다.
+#  레전더리는 프로필당 네 번이라 무엇을 붙여도 피로가 원리상 안 생긴다 —
+#  예산 전부를 여기 쓴다. 층수가 **0 : 1 : 3 : 7** 이다.
+#
+#  ── 박자는 전부 0 이다 ──────────────────────────────
+#  딜링(t=0)부터 첫 착지까지 **0.411초가 이미 비어 있다**(qa_land 가 300롤로
+#  재서 0.382~0.440 · 평균 0.411) —
+#  낙하 경로 전체(_roll_stock · _drop_roll · _drop_one · _drop_step ·
+#  _drop_lock · _drop_settle · _drop_extras)에 _sfx 호출이 0건이었고,
+#  그 앞쪽은 카운터 덮개가 물건을 통째로 가리기까지 한다(_cover_draw 가
+#  _goods_draw 뒤에 불린다). 예고 0.341초는
+#  새 시간이 아니라 **그 침묵 안**이다. g · sub · v_land · t_max · stag 을
+#  한 자도 안 건드리므로 마지막 착지도 _drop_lock 도 한 프레임 안 밀린다.
+#
+#  ── 등급 넉 줄 [소리 이름 · 음(Hz) · 번짐 **더하는** 배수 · 번짐 수명] ──
+#  일반이 침묵인 것이 곧 일반의 표식이다 — _glow_of("common").a == 0
+#  (qa_shoproll ⑧ 이 잰다) 규약의 **소리 쪽 짝**이다.
+#
+#  음정의 근거: 392 는 SFX_BASE 고, 523 은 buy 의 첫 음(cons_use ·
+#  chute_enter 도 같은 자리)이라 상점 가족의 제 음정이다. 희귀↔레어 비가
+#  1.3342(완전4도)인데, **1.2 를 피한 것이 계약이다** — sfx/README 가
+#  「종을 종으로 만드는 건 tierce 1.2」라고 못 박았으니 등급 사다리 어디에도
+#  그 비를 안 놓는다. 레전더리는 반대로 262 로 **뚝 떨어진다**: 사다리가
+#  392 → 523 으로 오르다가 무거운 것으로 착지한다. 262 는 shop_smash 가
+#  이미 쓰는 가족의 낮은 닻이다.
+#  ⚠ 262 는 coin_plaque 파일의 **밑음**이다 — _sfx 를 인자 없이 불러야
+#  피치 1.0 으로 난다. f 를 주면 262/392 = 175Hz 로 난다.
+const LAND := {
+	"common":    ["", 0.0, 0.00, 0.00],
+	"uncommon":  ["coin_land", 392.0, 0.00, 0.00],
+	"rare":      ["coin_land", 523.0, 0.90, 0.18],
+	"legendary": ["coin_plaque", 262.0, 2.20, 0.55],
+
+	#  ── 문과 상한 — 연타·중첩으로 느는 것을 구조로 막는다 ──
+	#  gap 은 SMASH.snd_gap(0.040) 바로 위이면서 DROP.stag(0.080)을 안 먹는
+	#  자리다: 상점 다섯 칸이 전부 소리를 내고, 팩(한 프레임 동시)은 하나로 뭉친다.
+	"gap": 0.045,
+	#  max 4 — sfx_pool 이 넷이라 그 위로는 앞엣것이 끊긴다(sfx/README 의 경고).
+	"max": 4,
+	#  예고 전체 상한. 마지막 톡 0.341 위의 한 칸이다. 예고는 **발사 시각에서
+	#  앞으로만** 재고 착지를 안 기다린다 — 뒤로 미는 길이 코드에 아예 없다.
+	"lead": 0.36,
+	"hush": 0.30,    # 플라크가 앉은 뒤 나머지가 소리 없이 앉는 창
+	"cap": 0.60,     # 번짐 부풂 수명 상한
+	#  흔들림 4.5 — 눈금 위의 한 칸이다(거절 4.0 < 4.5 < 보드 확장 떨굼 5.0 <
+	#  리롤 6.0/3.0 < 목표 9.0 < 돌파 13.0 < 판 깨짐 14.0). **리롤의 6.0 을
+	#  안 넘는 것이 계약이다**: 조용히 나타나는 사건이 물건을 부수는 사건보다
+	#  세게 흔들리면 어긋난다. 감쇠 d×34 라 0.132초에 죽는다.
+	"shake": 4.5,
+
+	#  ── 예고 — 슬롯의 reel anticipation 을 구도만 빌린다 ──
+	#  마지막 릴이 **머뭇거리고** 음이 **오른다**. 실행은 coin_land 한 파일을
+	#  세 번 미는 것이 전부다 — 새 파일 0 · 새 기하 0 · 새 시간 0.
+	#  음은 오르고 **간격은 벌어진다**(0.100 → 0.130) — 릴이 머뭇거린다.
+	#  세 톡의 비가 1.122 · 1.188 로 **서로 달라서** 한 음정이 소리를 규정하지
+	#  않는다 — 그래서 종이 안 선다(잭팟 종은 이미 「이겼다」를 쥐고 있다).
+	#  셋 다 첫 착지(실측 최소 0.382)보다 **앞**이고, 앞 둘은 물건이 아직
+	#  레일 밑에서 안 나온 동안 난다 — 소리가 눈보다 먼저 온다.
+	"cue": [0.111, 0.211, 0.341],
+	"cue_f": [294.0, 330.0, 392.0],
+
+	#  ── 바닥 빛 — 디아블로식 세로 빛기둥이 아니라 **눕힌다** ──
+	#  640×360 에서 세로 한 줄은 화면 높이의 큰 몫을 먹어 촌스러워진다.
+	"floor_a": 0.22, "floor_k": 2.4,
+
+	#  ── 가장자리 비네트 — 줌을 대신하는 자리 ──
+	#  카메라 배율은 구획 불변식이 금하고(draw_set_transform 을 한 번도 안
+	#  부른다), 노드 position 은 _view_fit 의 정수 여백이 쥐고 있다.
+	#  비정수 배율은 canvas_items ×2 · nearest 에서 화면 전체를 흐린다.
+	#  네 겹 × 6px 을 가장자리에만 두른다 — **화면 가운데를 한 픽셀도 안
+	#  건드리므로 픽셀이 안 깨진다.**
+	"vig": [0.18, 0.12, 0.07, 0.03], "vig_w": 6.0,
+	"vig_in": 0.10, "vig_out": 0.35,
+}
+
 var drop := []          # 물체 하나 = 사전 하나. stock 과 인덱스를 공유한다.
 var drop_t := 0.0       # 이번 낙하의 경과
 var drop_acc := 0.0     # 서브스텝 누적기 (나머지를 이월해 프레임률 독립을 만든다)
@@ -18582,6 +18747,14 @@ func _drop_one(i: int, n: int) -> Dictionary:
 		"roll": 0.0,      # 3D 로 세워 그리는 물체가 구른 각(사탕·다트)
 		"handled": false, # 손이 실제로 던진 적이 있는가 — roll 을 그 뒤부터만 쌓는다
 		"flung": false,   # 날이 후렸는가. 눌림·뜨기·회전을 **한 번만** 박는다
+		#  ── 첫 착지 연출 (2026-09-20) ────────────────
+		#  **이 함수 하나만 고친다.** 머리말이 「두 곳이 각자 사전을 지으면
+		#  열쇠가 하나만 빠져도 조용히 다르게 논다」고 적어 둔 그대로,
+		#  상점(_drop_roll)과 팩(_boost_spill)이 둘 다 여기를 지나므로
+		#  한 곳만 고치면 양쪽이 같이 산다.
+		"land": false,    # 첫 착지를 **한 번만** 잡는다(튐마다 다시 안 든다)
+		"lg": 0.0,        # 번짐 부풂 [0,1] — 1 에서 시작해 선형으로 0 으로 간다
+		"lgt": 0.0,       # 그 부풂의 수명(초)
 	}
 
 
@@ -18601,6 +18774,36 @@ func _drop_roll() -> void:
 		e.t0 = float(i) * DROP.stag      # 입장 시차는 첫 낙하에서만 뜻이 있다
 		drop.append(e)
 	drop_awake = true
+	#  ── 등장 연출 (2026-09-20) ──────────────────────────
+	#  딜링당 상한이라 딜링마다 연다.
+	land_snd_n = 0
+	#  레전더리 예고. **상점의 공짜 칸은 구조적으로 레전더리 전용이다** —
+	#  Save.unlock("item:") 은 game.gd 2313 한 곳뿐이고 그 위가 ustat == ""
+	#  을 거르는데, items.csv 에서 unlock_stat 을 가진 장은 l02·l03·l04·l05
+	#  넷뿐이고 **전부 레전더리**다(직접 셌다). 그래서 _item_free_pick →
+	#  stock[0] 은 늘 레전더리이고, i=0 · t0=0 이라 **넷 중 제일 먼저**
+	#  착지한다. 순서만으로 무대가 서므로 새 기하도 새 확률도 필요 없다.
+	#
+	#  ⚠ leg_fx_leg 가 없으면 **한 상점에서 여덟 번 예고한다** — _roll_stock
+	#  이 리롤마다 _item_free_pick 을 다시 부르고, 그 장은 아직 itemgot 이
+	#  아니라 그 상점의 **모든 딜링에 다시 서기** 때문이다. 리롤로 다시 선
+	#  그 장은 착지 소리·번짐·바닥 빛만 받는다. **드러냄은 한 번이어야
+	#  드러냄이다.**
+	#  drop_fast(헤드리스)는 _drop_settle 이 같은 프레임에 다 감아 예고
+	#  시각이 뜻을 잃으므로 아예 안 켠다.
+	#  ⚠ **켜거나 끄거나 둘 중 하나다.** 안 켜는 갈래에서 −1 로 안 지우면,
+	#  예고가 도는 0.341초 안에 상점을 떠난 판에서 _drop_update 가 state 문에
+	#  막혀 leg_cue_t 를 못 깎고(S.SHOP 이 아니면 _drop_extras 앞에서 돌아간다),
+	#  그 남은 값이 **다음 상점의 첫 딜링에서 톡 하나를 낸다.**
+	leg_cue_t = -1.0
+	if (not drop_fast and not stock.is_empty()
+			and String(stock[0].get("type", "")) == "item"
+			and String(stock[0].get("d", {}).get("rarity", "")) == "legendary"
+			and not bool(stock[0].get("sold", false))
+			and leg_fx_leg != leg_no):
+		leg_fx_leg = leg_no
+		leg_cue_t = 0.0
+		leg_cue_n = 0
 	if drop_fast:
 		_drop_settle()
 
@@ -18670,6 +18873,15 @@ func _drop_step(dt: float) -> void:
 				it.vw *= 1.0 - DROP.mu_b
 				it.om *= 1.0 - DROP.mu_b
 				_drop_wob(it, rv)
+				#  「툭」의 정의가 _drop_wob 에 적혀 있으니 등급 연출도 같은
+				#  자리에 선다(2026-09-20). **두 갈래 다 건다** — 지금 값
+				#  (e_item 0.34 · h0 100~120 · g 1400 → 첫 충돌 rv ≈ 189 ≫
+				#  v_land 42)에서는 첫 착지가 늘 이 윗갈래로 가지만, 나중에
+				#  누가 v_land 나 e 를 만지면 조용히 아랫갈래로 넘어간다.
+				#  두 갈래 다 거는 것이 그 회귀를 막는 전부다.
+				if not it.land:
+					it.land = true
+					_land_fx(i)
 			else:
 				# air 플래그로 가른다. |vh| 임계로 가르면 그 임계가 g*sub(8.75)와
 				# 결합해 sub 을 바꾸는 순간 조용히 틀린다.
@@ -18677,6 +18889,9 @@ func _drop_step(dt: float) -> void:
 					_drop_wob(it, 26.0)
 				it.air = false
 				it.vh = 0.0
+				if not it.land:
+					it.land = true
+					_land_fx(i)
 
 		if it.h <= DROP.h_touch:
 			# 쿨롱 등감속. 유한 시간에 정확히 0 이 된다 — 정착 증명의 열쇠다.
@@ -18742,6 +18957,71 @@ func _drop_step(dt: float) -> void:
 # 착지 흔들림 — 그리기 전용 스프링에 한 대 먹인다. 물리로 안 돌아온다.
 func _drop_wob(it: Dictionary, v: float) -> void:
 	it.wv = maxf(it.wv, clampf(absf(v) / 260.0, 0.0, 1.0))
+
+
+#  ══ 물건 하나가 처음 펠트에 앉는 순간 ══ (2026-09-20)
+#  「나타난 순간」은 뽑힌 때(_roll_stock)도 t0 도 아니라 **여기**다 —
+#  _cover_draw(15588)가 _goods_draw(19482)보다 **뒤에 불린다**(15542 대 15544,
+#  직접 확인했다). 레일에서 나오기 전까지 물건이 그 덮개 뒤에 있으므로,
+#  뽑힌 때에 빛나 봐야 아무도 못 본다.
+#
+#  물리를 한 값도 안 건드린다: 여기서 쓰는 것은 소리와 그리기 값과
+#  스프링(_knock)뿐이고, 그 셋은 _drop_step 의 적분에 한 방울도 안 흘러든다.
+func _land_fx(i: int) -> void:
+	if i < 0 or i >= stock.size() or i >= drop.size():
+		return
+	var s: Dictionary = stock[i]
+	#  사탕·다트·사진·팩·보드 확장은 등급이 없다. 동전만 등급을 말한다.
+	if String(s.get("type", "")) != "item":
+		return
+	#  ⚠ **sold 를 반드시 본다.** 되살리기 갈래(1504~1543)는 _drop_sold_sync()
+	#  가 sold 를 세우기 **전에** _drop_roll() 을 부르므로, 이 문이 없으면
+	#  이미 산 장이 되살릴 때 소리를 내고 빛난다.
+	if bool(s.get("sold", false)):
+		return
+	var rar := String(s.get("d", {}).get("rarity", "common"))
+	var row: Array = LAND.get(rar, LAND.common)
+	var snd := String(row[0])
+	#  **일반은 여기서 나간다 — 아무 일도 안 일어난다.** 침묵이 일반의 표식이다.
+	if snd == "":
+		return
+	var it: Dictionary = drop[i]
+	var leg: bool = rar == "legendary"
+
+	#  ── 번짐 부풂 ──────────────────────────────────
+	#  **motion_off 에서도 켠다** — 시간을 타는 알파지 움직임이 아니다.
+	#  꺼지는 것은 _knock 과 shake 둘뿐이고, 그 손님에게도 세 음과 빛이
+	#  등급을 말하므로 정보가 안 사라진다.
+	if float(row[2]) > 0.0:
+		it.lg = 1.0
+		it.lgt = minf(float(row[3]), float(LAND.cap))
+
+	#  ── 레전더리만 받는 것 ─────────────────────────
+	if leg:
+		leg_vig = 0.0
+		leg_vig_up = true
+		if not motion_off:
+			_knock(i, 1.0)
+			shake = maxf(shake, float(LAND.shake))
+
+	#  ── 소리 ───────────────────────────────────────
+	#  **레전더리는 문을 건너뛴다** — 딜링에 최대 한 장이라 넘칠 수 없고,
+	#  제 침묵 창에 제가 막히면 안 된다. 나머지는 문에 막히면 **그림만 난다**
+	#  (SMASH 가 「문이 닫혔으면 그림만 난다 — 화면에는 여전히 조각이 나므로
+	#  사건이 안 사라진다」로 세운 그 어법 그대로).
+	if not leg:
+		if hush_t > 0.0 or land_snd_t > 0.0 or land_snd_n >= int(LAND.max):
+			return
+	if leg:
+		#  ⚠ **인자 없이 부른다.** coin_plaque 는 밑음이 262 라 f 를 주면
+		#  _sfx 의 pitch_scale = f/SFX_BASE 가 한 번 더 걸려 175Hz 로 난다.
+		_sfx(snd)
+	else:
+		_sfx(snd, float(row[1]))
+	land_snd_t = float(LAND.gap)
+	land_snd_n += 1
+	if leg:
+		hush_t = float(LAND.hush)
 
 
 # 스윕이 아니라 위치 클램프다 — 후조건이라 벽 터널링이 구조적으로 불가능하다.
@@ -18927,11 +19207,43 @@ func _drop_settle() -> void:
 # 물리와 무관한 것만. drop_awake 와 상관없이 매 프레임 돈다.
 # tip_spot 은 지난 프레임 값이다(_tip_update 가 _process 끝) — 들어올림 1프레임 지연.
 func _drop_extras(d: float) -> void:
+	#  ── 착지 연출의 시계 셋 (2026-09-20) ─────────────────
+	#  ⚠ **실시간 d 로 깎는다.** sweep_t(×1.3)로 깎으면 안 된다 —
+	#  _smash_sfx 주석이 그 함정을 이미 적어 뒀고, 리롤 갈래에서 값이
+	#  손에 닿으므로 똑같이 밟기 쉽다.
+	#  이 함수가 drop_awake 와 무관하게 매 프레임 도는 것이 자리를 고른 이유다.
+	land_snd_t = maxf(land_snd_t - d, 0.0)
+	hush_t = maxf(hush_t - d, 0.0)
+	#  예고 — **발사 시각에서 앞으로만** 잰다. 착지 시각을 안 기다리므로
+	#  뒤로 미는 길이 코드에 아예 없고, 그래서 늘어날 수가 없다.
+	#  **상한이 코드에 박히는 자리가 여기다**(LAND.lead).
+	if leg_cue_t >= 0.0:
+		leg_cue_t += d
+		while (leg_cue_n < LAND.cue.size()
+				and leg_cue_t >= float(LAND.cue[leg_cue_n])):
+			_sfx("coin_land", float(LAND.cue_f[leg_cue_n]))
+			leg_cue_n += 1
+		if leg_cue_n >= LAND.cue.size() or leg_cue_t > float(LAND.lead):
+			leg_cue_t = -1.0
+	#  비네트 — 0.10초에 들고 0.35초에 나간다. 전부 페이드라 껐다 켜는
+	#  프레임이 한 개도 없다(_rank_pulse 주석의 「초당 3회 한계」 계약).
+	if leg_vig_up:
+		leg_vig = minf(leg_vig + d / float(LAND.vig_in), 1.0)
+		if leg_vig >= 1.0:
+			leg_vig_up = false
+	elif leg_vig > 0.0:
+		leg_vig = maxf(leg_vig - d / float(LAND.vig_out), 0.0)
+
 	var hov: int = tip_spot if tip_a > 0.004 else -1
 	for i in drop.size():
 		var it: Dictionary = drop[i]
 		if it.gone:
 			continue
+		#  ⚠ **sold 갈래와 give_i 갈래보다 앞이다.** 뒤에 두면 팔린 물건과
+		#  상인이 든 물건의 부풂이 그 자리에 얼어붙는다. **선형으로 0 으로**
+		#  내려가야 껐다 켜는 프레임이 없어 광과민 계약이 산다.
+		if float(it.get("lg", 0.0)) > 0.0:
+			it.lg = maxf(float(it.lg) - d / maxf(float(it.lgt), 0.0001), 0.0)
 		# stock 을 읽는 곳 셋 중 하나. _buy 는 "건드리면 안 됨" 이라 폴링한다.
 		if it.sold <= 0.0 and i < stock.size() and stock[i].sold:
 			it.sold = 0.0001
@@ -19180,6 +19492,10 @@ func _goods_draw() -> void:
 	var z := _z_order()
 	for i in z:                     # 그림자 먼저 전부 — 어떤 몸통보다도 밑이다
 		_obj_shadow(i)
+		#  레전더리의 바닥 빛. **그림자 층 안이다** — add_wave 로는 못 한다:
+		#  _draw_fx(6944)가 _draw_screen(6967)보다 먼저 돌고 _felt_draw 의
+		#  draw_rect(_full(), C_WOOD) 가 통째로 덮는다(직접 확인했다).
+		_land_floor(i)
 	var hov: int = tip_spot if tip_a > 0.004 else -1
 	#  얹힌 물건이 뜨고(lift_hov) 나머지가 가라앉는 것은 이미 있다. 들어서는
 	#  딸깍만 단추와 맞춘다 — 그림은 안 바꾼다. 떨어지는 동안은 툴팁이 안
@@ -19227,6 +19543,40 @@ func _give_draw() -> void:
 		return
 	_obj_draw(give_i, 0.0)
 	_bill_one(give_i)
+
+
+#  등급 하나가 첫 착지에서 번짐을 몇 배로 부풀리는가. LAND 표의 셋째 열이다.
+#  _obj_paint 와 새 검사가 같은 식을 써야 자가 그림을 안 보고도 잰다.
+func _land_bloom(rar: String) -> float:
+	return float((LAND.get(rar, LAND.common) as Array)[2])
+
+
+#  레전더리가 앉은 자리의 바닥 빛 (2026-09-20).
+#  접지점에 타원 하나. **몸통보다 밑이고 물건 밑에만 있으므로** 실루엣 ·
+#  충돌 원 · _obj_box · _bill_rect 를 한 자도 안 건드린다.
+#  handpay 의 탑 라이트를 구도만 빌렸다 — 빛이 먼저 알리고, 빛은 사라지지
+#  않고 **선 상태(2.2초 맥동)로 이어 붙는다.** 그래서 새 어휘를 안 배운다.
+func _land_floor(i: int) -> void:
+	if i < 0 or i >= drop.size() or i >= stock.size():
+		return
+	var it: Dictionary = drop[i]
+	var lg: float = float(it.get("lg", 0.0))
+	if lg <= 0.0 or it.sold > 0.0:
+		return
+	var s: Dictionary = stock[i]
+	if String(s.get("type", "")) != "item":
+		return
+	if String(s.get("d", {}).get("rarity", "")) != "legendary":
+		return
+	#  lg 는 1 → 0 으로 내려간다. 봉우리 하나로 올렸다 내린다 — 껐다 켜는
+	#  프레임이 없어야 광과민 계약이 산다.
+	var k: float = 1.0 - lg               # 0 → 1 로 흐른 몫
+	var peak: float = sin(clampf(k, 0.0, 1.0) * PI)
+	var r: float = float(TBL.chip_r) * lerpf(1.0, float(LAND.floor_k), k)
+	var col := _glow_of("legendary")
+	draw_colored_polygon(
+			_e_pts(Vector2(float(it.u), _p2g(float(it.w))), r, r * TBL.flat),
+			Color(col, minf(float(LAND.floor_a) * peak, 1.0)))
 
 
 # 그림자가 없으면 높이 h 와 깊이 w 가 화면 y 하나로 뭉개져 구분이 안 된다.
@@ -19322,7 +19672,12 @@ func _obj_paint(it: Dictionary, s: Dictionary, dim: float) -> void:
 		dim = sv * 0.55
 	match s.type:
 		"item":
-			_sticker_flat(c, s.d, it.psi, dim, it.wob)
+			#  ⚠ **it.get 이어야 한다** — 이 함수의 두 번째 소비자인 창구로
+			#  빠진 물건(waste)은 stock 을 안 들고 **제 사본**을 들고 오므로
+			#  새 열쇠(lg)가 없을 수 있다.
+			_sticker_flat(c, s.d, it.psi, dim, it.wob,
+					_land_bloom(String(s.d.get("rarity", "common")))
+							* float(it.get("lg", 0.0)))
 		"cons":
 			# 사탕 — 카드가 아니라 모델이 구르며 떨어진다. it.psi 는 물리가
 			# 이미 매기는 회전이다(_drop_roll 의 om 이 프레임마다 더한다) —
@@ -19743,8 +20098,15 @@ func _glow_of(rar: String) -> Color:
 #  번짐은 물건보다 큰 타원을 겹쳐 깐 것이라 속이 차 있다. 뚫린 구멍으로
 #  그것이 비치면 "아무것도 안 찍힌 동전" 이 "분홍 동전" 이 된다 —
 #  NULL 이 정확히 그렇게 보였다.
+#  bloom — 첫 착지의 **일회성** 부풂(2026-09-20). 기본 0.0 이라 선 자세
+#  (draw_sticker)·랙·컬렉션·툴팁으로 한 방울도 안 샌다. 호출부가 한 곳뿐이라
+#  기본 인자가 곧 실제 격리다(STK_TIERS 머리말의 「한 줄이 소비자 여덟을
+#  바꾼다」 함정을 이렇게 비켜 간다).
+#  ⚠ **알파만 곱한다.** GLOW.n(7)·GLOW.step(2.6)을 한 자도 안 건드리므로
+#  도달 18.2px 이 **정의상 못 움직인다** → qa_rank ⓥ(22.04+18.2)가 구조적으로
+#  못 깨진다. 번짐이 커져도 닿는 자리는 그대로다.
 func _rar_glow(c: Vector2, rx: float, ry: float, rar: String, dim: float,
-		ring := false) -> void:
+		ring := false, bloom := 0.0) -> void:
 	var col := _glow_of(rar)
 	if col.a <= 0.0:
 		return
@@ -19754,20 +20116,24 @@ func _rar_glow(c: Vector2, rx: float, ry: float, rar: String, dim: float,
 	#  맥동은 **여기서** 곱한다(2026-09-18). _glow_of 안에 넣으면 qa_shoproll ⑧
 	#  이 그 함수의 색·알파를 그대로 대조하다가 프레임마다 다른 값을 본다.
 	var pu := _rank_pulse(rar)
+	#  부풂도 **같은 자리에** 곱한다 — rar_t 와 다른 채널이라 _rank_pulse 의
+	#  단언(「일반·희귀는 안 흔들린다」)을 한 글자도 안 건드린다.
+	pu *= 1.0 + bloom
 	for k in range(int(GLOW.n), 0, -1):
 		var g: float = float(k) * float(GLOW.step)
 		# 밖으로 갈수록 제곱으로 옅어진다. 선형이면 바깥 테가 남는다.
 		var f: float = 1.0 - float(k) / float(int(GLOW.n) + 1)
+		#  ⚠ 1.0 으로 **자른다** — 레전더리 ×3.20 에서 rim 이 2.18 까지 간다.
+		#  잘려서 포화하는 것이 곧 「빛이 터진다」라 의도와도 맞는다.
+		var ca := Color(col, minf(col.a * f * f * fa * pu, 1.0))
 		if ring:
-			_e_ring_w(c, rx + g, ry + g * TBL.flat, g + 1.0,
-					Color(col, col.a * f * f * fa * pu))
+			_e_ring_w(c, rx + g, ry + g * TBL.flat, g + 1.0, ca)
 		else:
-			draw_colored_polygon(_e_pts(c, rx + g, ry + g * TBL.flat),
-					Color(col, col.a * f * f * fa * pu))
+			draw_colored_polygon(_e_pts(c, rx + g, ry + g * TBL.flat), ca)
 	# 몸통에 바로 붙는 테. 번짐만 있으면 「흐리다」로 읽힌다 — 물건 가장자리에
 	# 닿는 밝은 한 겹이 있어야 빛이 그 물건에서 나오는 것으로 보인다.
 	_e_ring_w(c, rx + 1.4, ry + 1.4 * TBL.flat, 2.4,
-			Color(col.lightened(0.30), float(GLOW.rim) * fa * pu))
+			Color(col.lightened(0.30), minf(float(GLOW.rim) * fa * pu, 1.0)))
 
 
 #  도트로 찍은 원반. 행마다 폭을 재서 3px 막대를 쌓는다 — 매끈한 타원들
@@ -20500,8 +20866,16 @@ func _coin_fan(form: String, c: Vector2, ang: float, sx: float, sy: float,
 #  같은 겹 수(7) · 같은 걸음(2.6) · 같은 알파 식이라 **새 자리를 안 만든다.**
 #  법선 오프셋이라 도달을 폼마다 다시 쟀다 — 다섯 다 원반의 chip_r+18.2 =
 #  40.24 안이다(qa ⓥ 가 같은 수를 다시 잰다).
+#  ⚠ **여기가 레전더리가 실제로 지나는 자리다**(2026-09-20). STK_TIERS 의
+#  shape 이 "plaque" 라 _sticker_flat 이 _plaque_flat 으로 갈라지고, 거기서
+#  번짐을 내는 것은 _rar_glow 가 아니라 이 함수다. 부풂을 _rar_glow 에만
+#  꿰면 **레어까지만 빛나고 레전더리는 한 픽셀도 안 변한다** — 그리고 화면이
+#  「안 난다」가 아니라 「조금 난다」로 보이므로 눈으로 못 잡는다.
+#  (rank_off 에서는 _coin_form 이 disc 를 돌려주어 레전더리가 _rar_glow 로
+#   간다 — 그래서 **둘 다** 고쳐야 개발자 판에서도 같은 것이 보인다.)
 func _coin_glow(form: String, c: Vector2, ang: float, sx: float, sy: float,
-		sc: float, flat: float, rar: String, dim: float, ring := false) -> void:
+		sc: float, flat: float, rar: String, dim: float, ring := false,
+		bloom := 0.0) -> void:
 	var col := _glow_of(rar)
 	if col.a <= 0.0:
 		return
@@ -20509,10 +20883,11 @@ func _coin_glow(form: String, c: Vector2, ang: float, sx: float, sy: float,
 	if fa <= 0.02:
 		return
 	var pu := _rank_pulse(rar)
+	pu *= 1.0 + bloom
 	for k in range(int(GLOW.n), 0, -1):
 		var g: float = float(k) * float(GLOW.step)
 		var f: float = 1.0 - float(k) / float(int(GLOW.n) + 1)
-		var ca := Color(col, col.a * f * f * fa * pu)
+		var ca := Color(col, minf(col.a * f * f * fa * pu, 1.0))
 		if ring:
 			#  폭 g+1 의 고리 — _e_ring_w(rx+g, …, g+1) 와 같은 셈이라 안쪽이 -1 이다
 			_poly_ring(_coin_pts(form, c, ang, sx, sy, sc, flat, g),
@@ -20522,10 +20897,14 @@ func _coin_glow(form: String, c: Vector2, ang: float, sx: float, sy: float,
 					_coin_pts(form, c, ang, sx, sy, sc, flat, g), ca)
 	_poly_ring(_coin_pts(form, c, ang, sx, sy, sc, flat, 2.4),
 			_coin_pts(form, c, ang, sx, sy, sc, flat, 0.0),
-			Color(col.lightened(0.30), float(GLOW.rim) * fa * pu))
+			Color(col.lightened(0.30), minf(float(GLOW.rim) * fa * pu, 1.0)))
 
 
-func _sticker_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: float) -> void:
+#  bloom 은 첫 착지의 일회성 부풂이다(2026-09-20). 기본 0.0 이라 선 자세
+#  (draw_sticker) 쪽 소비자 여덟 — 랙 19 · 컬렉션 13 · 런 정보 12 · 런 끝 10 ·
+#  툴팁 8 — 으로 한 방울도 안 샌다. 그대로 아래로 넘길 뿐이다.
+func _sticker_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: float,
+		bloom := 0.0) -> void:
 	var ti := _stk_ti(String(it.get("rarity", "common")))
 	var t: Dictionary = STK_TIERS[ti]
 	var rar := String(it.get("rarity", "common"))
@@ -20546,7 +20925,7 @@ func _sticker_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: floa
 	#  있고, 이제 **표가 그렇게 말한다.**
 	var form := _coin_form(it, t)
 	if String(FORMS[form].get("fam", "disc")) == "plaque":
-		_plaque_flat(c, it, t, rot, dim, wob, mat, form)
+		_plaque_flat(c, it, t, rot, dim, wob, mat, form, bloom)
 		return
 	#  물린 깊이·슬롯. 0 이면 옛 타원 그대로다 — 갈래를 값 하나로 눌러 두면
 	#  아래 열두 자리가 갈래를 안 센다.
@@ -20587,7 +20966,7 @@ func _sticker_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: floa
 			Color(0.0, 0.0, 0.0, 0.26 * (1.0 - dim)))
 	#  번짐은 물린 자리를 안 따른다 — 골이 2.2px 인데 번짐은 18px 을 뻗는
 	#  흐린 빛이라, 거기까지 결을 새기면 아무도 못 보는 계산만 는다.
-	_rar_glow(c, rx, ry, rar, dim, glass or hollow)
+	_rar_glow(c, rx, ry, rar, dim, glass or hollow, bloom)
 	#  옆면 — 아래로 sd 민 같은 타원. 윗면과의 합집합이 원기둥이다.
 	#  유리도 옆면은 있다(유리에도 두께가 있다). 비치는 것은 윗면뿐이다.
 	#  **속이 비치는 재질은 옆면도 앞쪽 띠로만 두른다.** 타원을 통째로 깔면
@@ -20774,7 +21153,7 @@ func _rank_edge_flat(c: Vector2, rx: float, ry: float, sd: float, mdep: float,
 #  원으로 맞닿았을 때 겹침은 원만 재므로 자가 못 잡고 눈이 먼저 잡는다.
 #  크기 감각은 **번짐**이 대신 낸다(_rar_glow_plq).
 func _plaque_flat(c: Vector2, it: Dictionary, t: Dictionary, rot: float,
-		dim: float, wob: float, mat: String, form: String) -> void:
+		dim: float, wob: float, mat: String, form: String, bloom := 0.0) -> void:
 	var rar := String(t.rarity)
 	var gold: bool = it.get("g", "") != ""
 	var hollow: bool = mat == "hollow"
@@ -20804,7 +21183,7 @@ func _plaque_flat(c: Vector2, it: Dictionary, t: Dictionary, rot: float,
 	#  번짐이 **제 모양으로** 번진다. 물건이 가려져 있어도 그 모양의 빛이
 	#  등급을 말한다. 속이 빈 재질은 반드시 고리로 — 뚫린 구멍으로 번짐이
 	#  비쳐 「분홍 동전」이 되던 그 사고가 어느 폼에서도 똑같이 난다.
-	_coin_glow(form, c, ang, sx, sy, 1.0, flat, rar, dim, hollow)
+	_coin_glow(form, c, ang, sx, sy, 1.0, flat, rar, dim, hollow, bloom)
 	if hollow:
 		#  NULL — 찍힌 것이 없다. 앞쪽 띠로만 두른다. 각기둥을 통째로 깔면
 		#  비치는 것이 펠트가 아니라 제 옆면이라 「빈 것」이 죽는다(타원 쪽에서
@@ -33692,12 +34071,36 @@ func _boost_spill() -> void:
 		stock.append({"type": String(e.type), "d": e.d, "cost": 0,
 				"sold": false, "pack": true})
 		drop.append(_drop_one(stock.size() - 1, n))
+	#  ⚠ 예고를 켜기 **전에** 레전더리가 들었는지 본다 — 아래에서 비운다.
+	var leg_in := false
+	for e in boost_spill:
+		if (String(e.get("type", "")) == "item"
+				and String(e.get("d", {}).get("rarity", "")) == "legendary"):
+			leg_in = true
+			break
 	boost_spill.clear()
 	drop_awake = true
 	drop_toss = true          # 새 낙하로 센다 — 첫 낙하의 시차 예산을 안 물려받는다
 	drop_t = 0.0
 	drop_acc = 0.0
 	_sfx("stage_pick")
+	#  ── 등장 연출 (2026-09-20) ──────────────────────────
+	#  **레전더리의 주 무대가 여기다** — 등급 가중치가 0 이라 상점 테이블에는
+	#  영원히 안 뜨고 팩으로만 온다. 규칙 한 줄이 두 길을 잇는다:
+	#  「예고는 **물건이 발사되는 그 순간** 켠다」 — 상점은 _drop_roll 끝,
+	#  팩은 여기. 둘 다 그 뒤로 0.28초의 덮개 + 0.13초의 비행이 있어 톡 셋
+	#  (0.341)이 정확히 그 안에 든다. BOOST.rise 0.34 + tear 0.30 도 이미
+	#  흐른 뒤라 **+0.000초**다.
+	#
+	#  ⚠ 여기는 t0 를 **안 먹인다**(stag 을 주는 곳은 _drop_roll 뿐) —
+	#  넷이 **한 프레임에** 앉는다. 상점은 0.08 계단이라 소리가 저절로
+	#  갈리지만 팩은 안 갈린다. **소리 문이 팩에서는 장식이 아니라 필수
+	#  부품이다.** 판 잠금(leg_fx_leg)은 안 건다 — 팩은 런당 1% 라 누적되지 않는다.
+	land_snd_n = 0
+	leg_cue_t = -1.0          # 여기서도 켜거나 끄거나 둘 중 하나다(_drop_roll 주석)
+	if leg_in and not drop_fast:
+		leg_cue_t = 0.0
+		leg_cue_n = 0
 	#  ⚠ **쏟은 그 순간 적는다.** 내용이 화면에 서는 자리이면서 골드가 이미
 	#  나간 자리다 — 리롤이 끝나는 순간 그 결과를 적는 것과 **같은 수법**이다.
 	#  여기서 안 적으면 「내용을 보고 마음에 안 들면 껐다 켠다」가 곧 팩 다시
@@ -33770,7 +34173,21 @@ func _boost_draw() -> void:
 	# 터지는 빛 — 찢기는 순간에만 잠깐. 안의 것이 나오는 자리를 말한다.
 	if tear > 0.0:
 		var fa: float = (1.0 - tear) * tear * 4.0
-		draw_circle(c, 8.0 + 46.0 * tear, Color(C_ACC, 0.34 * fa))
+		#  봉투가 뜯기는 원. **안에 레전더리가 있을 때만** ef86c6 로 터진다
+		#  (2026-09-20) — 봉투가 뜯기기 전에 내용을 예고하는 유일한 자리다.
+		#  C_ACC(308행)는 **f2b134 = 레어의 등급색 그대로**라 팩은 이미 레어
+		#  색으로 터지고 있었다. 희귀(3f8fd8)로도 갈지 마라 — 파란 봉투가
+		#  되고, 일반은 _glow_of 가 α0 이라 원이 통째로 사라진다.
+		#  **조건 하나 · 색 하나 · 새 그림 0 · 새 시간 0.**
+		#  boost_spill 은 **읽기만 한다** — 딜링 갈래(_boost_one ·
+		#  legend_pack_w · pool)는 다른 워크플로우가 쥐고 있다.
+		var tc := C_ACC
+		for e in boost_spill:
+			if (String(e.get("type", "")) == "item"
+					and String(e.get("d", {}).get("rarity", "")) == "legendary"):
+				tc = GameData.rarity_color("legendary")
+				break
+		draw_circle(c, 8.0 + 46.0 * tear, Color(tc, 0.34 * fa))
 
 	#  팩 이름 11 → 18 → 20. 「작은 팩」 이 58px 다.
 	#  **받침을 깐다.** 이름이 서는 자리는 테이블 한가운데라 매물의 값표(플라크 + 수)가
