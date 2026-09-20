@@ -628,6 +628,18 @@ static func _rows(g: Node) -> Array:
 				{"n1": "등급 한 벌 랙에", "t": "act", "a": "rank_rack"},
 				{"n1": "재질x등급 랙에", "t": "act", "a": "rank_mat"},
 				{"n1": "등급 한 벌 테이블에", "t": "act", "a": "rank_table"},
+				#  ── 나타나는 순간을 보는 줄 셋 (2026-09-20) ──────
+				#  바로 위가 **선 상태**를 보는 줄이고 이 셋은 **나타나는
+				#  순간**을 보는 줄이다. 나란히 두면 ↑/↓ 한 칸으로 둘을
+				#  번갈아 보며 「등장 뒤에 선 상태로 제대로 이어 붙었는가」를
+				#  눈으로 잰다 — 레전더리 설계의 핵심 주장(터짐이 2.2초
+				#  맥동으로 이어 붙는다)이 그 한 칸 안에서 검증된다.
+				#  레전더리는 **프로필 통틀어 네 번**(해금 넷)이고 팩으로는
+				#  런당 1% 라, 이 줄이 없으면 구운 다음 날 아무도 이것을
+				#  확인 못 한다(restock_fix 가 사진 0.5% 로 낸 줄과 같은 이유).
+				{"n1": "등급마다 등장", "t": "act", "a": "land_rank"},
+				{"n1": "레전더리 등장", "t": "act", "a": "land_leg"},
+				{"n1": "팩에서 레전더리", "t": "act", "a": "land_pack"},
 				#  모양 열아홉을 훑는 넉 줄(2026-09-18). 등급 넉 줄 바로 밑에
 				#  둔다 — 「등급이 먼저 읽히는가」와 「개체가 갈리는가」를
 				#  ↑/↓ 한 칸으로 번갈아 보게 하려는 자리다.
@@ -1489,6 +1501,67 @@ static func _run(g: Node, e: Dictionary) -> void:
 			g.sealed = -1
 			g._panel_reset()
 			_say("레어 변형 %d장 — 고름·축·쏠림·쌍·매끈" % g.owned.size())
+			return
+		#  ── 나타나는 순간을 보는 줄 셋 (2026-09-20) ────────
+		#  ⚠ 셋 다 leg_fx_leg 를 −1 로 지운 **뒤** 돈다. 예고는 판 하나당
+		#  한 번이라(리롤 누적 방지) 안 지우면 **두 번째 누름이 조용히
+		#  아무것도 안 한다** — 개발자 판에서 그것은 고장으로 읽힌다.
+		#  ⚠ 셋 다 **확률을 한 톨도 안 건드린다**: _form_table 은 stock 을
+		#  갈아 끼울 뿐이고 land_pack 은 boost_spill 을 손수 덮어쓴다.
+		"land_rank":
+			#  한 딜링에 사다리 넷이 0.08초 계단으로 차례로 앉는다 —
+			#  침묵 → 한 톡(392) → 낮은 톡(523)+부풂 → 플라크(262)+전부.
+			#  **「일반이 정말 조용한가」**와 **「희귀와 레어가 귀로 갈리는가」**
+			#  를 한 번에 듣고 본다. 「조금은 더」가 실제로 조금인지를 재는
+			#  유일한 자리다.
+			#  ⚠ id 를 손으로 안 박는다 — 표가 바뀌면 줄이 조용히 거짓말을 한다.
+			var lids := []
+			for rr3 in ["common", "uncommon", "rare", "legendary"]:
+				var pl3 := _rar_items(String(rr3))
+				if not pl3.is_empty():
+					lids.append(String(pl3[0].id))
+			g.leg_fx_leg = -1
+			_form_table(g, lids)
+			_say("등급마다 등장 %d장" % lids.size())
+			return
+		"land_leg":
+			#  공짜 칸에 레전더리를 세운다. 예고 톡 셋 → 플라크 → 침묵 창 →
+			#  바닥 빛 → 비네트 → 맥동으로 이어짐까지 통째로 다시 탄다.
+			#  여기서 보는 것 다섯: 느린 낙하 없이도 **사건으로 읽히는가**
+			#  (나머지 셋이 소리 없이 앉는가) · 비네트가 **개발자 판을 안
+			#  덮는가** · 번짐이 2.2초 맥동으로 **끊김 없이 이어지는가** ·
+			#  부풂이 **_coin_glow 를 실제로 타는가**(플라크가 빛나는가) ·
+			#  **글자가 한 자도 안 뜨는가**.
+			g.leg_fx_leg = -1
+			_form_table(g, ["l02"])
+			_say("레전더리 등장")
+			return
+		"land_pack":
+			#  **팩이 레전더리의 주 무대다** — 등급 가중치가 0 이라 상점
+			#  테이블에는 영원히 안 뜬다. 여기서만 보이는 것 셋:
+			#  **소리 문이 실제로 일하는가**(t0 가 없어 넷이 한 프레임에
+			#  앉으므로 상점에서는 저절로 갈리는 소리가 여기서는 안 갈린다 —
+			#  문이 없으면 한 덩어리가 된다) · 봉투가 뜯기기 전에 **ef86c6 로
+			#  터지는가** · 예고가 팩 쪽 앵커에서도 **착지 앞에 드는가**.
+			#  ⚠ 확률 불변: _boost_deal 이 제 저울로 뽑기는 하지만 그 결과를
+			#  **통째로 덮어쓴다.** legend_pack_w 도 pool 도 tuning 도 한 자
+			#  안 건드리고, 다음 팩은 늘 하던 대로 굴린다.
+			if g.state != g.S.SHOP:
+				g._open_shop()
+			var bs: Array = GameData.boosters()
+			if bs.is_empty():
+				_say("팩 표가 비었다")
+				return
+			g.leg_fx_leg = -1
+			g._boost_deal(bs[bs.size() - 1])
+			var want := ["legendary", "rare", "uncommon", "common"]
+			g.boost_spill = []
+			for rr4 in want:
+				var pl4 := _rar_items(String(rr4))
+				if pl4.is_empty():
+					continue
+				g.boost_spill.append({"type": "item", "d": pl4[0]})
+			_say("팩에서 레전더리 %d장" % g.boost_spill.size())
 			return
 		"form_leg_table":
 			#  **레전더리는 가중치 0 이라 저울로는 영원히 안 뜨고 팩으로만 온다.**
