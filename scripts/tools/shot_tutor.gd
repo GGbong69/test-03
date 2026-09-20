@@ -55,5 +55,13 @@ func _run() -> void:
 	await _step("u_sell", 0, "tut_sell")     # 왼쪽 창구
 	await _step("u_rack", 1, "tut_rack")     # 동전 슬롯
 	await _step("u_give", 0, "tut_give")     # 상인
+	#  판 위의 셋 — 여기 그림이 **한 장도 없었다.** 그래서 u_score 셋째 걸음의
+	#  과녁이 자금판(지갑)을 가리키는 것을 아무도 못 봤다. 사용자가 화면을
+	#  보내며 「튜토리얼이 이게 맞아?」라고 물어서야 드러났다(2026-09-20).
+	g._begin_leg()
+	await _wait(12)
+	await _step("u_score", 0, "tut_score1")  # 판
+	await _step("u_score", 1, "tut_score2")  # 동전 슬롯
+	await _step("u_score", 2, "tut_score3")  # 이 판의 몫 — 상단 바
 	print("끝")
 	quit(0)

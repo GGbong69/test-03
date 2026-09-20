@@ -34572,7 +34572,18 @@ func _mark_rect(k: String) -> Rect2:
 			var rr: float = _board_rim(_theme_ring_w(_board_theme()))
 			return Rect2(BC.x - rr, BC.y - rr, rr * 2.0, rr * 2.0)
 		"rack": return _panel_rect()
-		"score": return _bank_rect()
+		#  「점수 곱하기 배수가 이 판의 몫입니다」가 가리키는 자리.
+		#  **자금판(골드)을 가리키고 있었다** — 그 판은 이 판의 몫이 아니라
+		#  지갑이다. 사용자가 그림을 보내며 「튜토리얼이 이게 맞아?」라고 물었고,
+		#  화면에서 밝은 것은 왼쪽 위 골드였다(2026-09-20).
+		#
+		#  이 판의 몫이 실제로 서는 자리는 **상단 바**다 — 게이지(146~446)와
+		#  목표(오른끝 506) · 점수(오른끝 578)가 한 줄에 선다. 셋을 한 사각으로
+		#  묶어 「목표와 지금까지의 몫」을 통째로 밝힌다.
+		#  ⚠ 자금판으로 돌리지 마라. 정산 화면(S.CLEAR)에서는 _hud_draw 가
+		#  자금판을 아예 안 그리므로(「정산 화면은 그 자체가 명세다」) 그때 밝히면
+		#  빈 자리를 가리킨다. 상단 바는 상점(_bar_hidden)에서만 숨는다.
+		"score": return Rect2(144.0, 2.0, 436.0, 14.0)
 		"chute_buy": return Rect2(VIEW.x - 86.0, TBL.fy, 86.0, TBL.ny - TBL.fy)
 		"chute_sell": return Rect2(0.0, TBL.fy, 86.0, TBL.ny - TBL.fy)
 		"goods": return Rect2(96.0, TBL.fy + 6.0, VIEW.x - 192.0,
