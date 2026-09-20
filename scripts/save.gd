@@ -436,6 +436,39 @@ static func tally_up(key: String, n := 1) -> int:
 	return v
 
 
+#  최댓값 쪽. peak() 와 같은 일을 **자유 열쇠 절**에서 한다.
+#  ⚠ PEAKS 배열을 안 늘리는 것이 요점이다 — 무한 구간의 수를 best_leg ·
+#  best_gain 같은 자에 섞으면 해금 조건의 뜻이 조용히 바뀌고, **최댓값은
+#  안 내려가므로 되돌릴 방법이 없다**(game.gd 의 _rec_off 머리말).
+#  열쇠 둘: endless:leg · endless:score. 2026-09-20
+static func tally_max(key: String, v: int) -> int:
+	boot()
+	var cur := tally(key)
+	if v <= cur:
+		return cur
+	_cfg.set_value(S_TAL, key, v)
+	return v
+
+
+#  심어 둔 세기 열쇠 전부. 개발 도구가 갈래별로 지울 때 쓴다 —
+#  unlock_keys() 와 같은 어법이다.
+static func tally_keys() -> PackedStringArray:
+	boot()
+	if not _cfg.has_section(S_TAL):
+		return PackedStringArray()
+	return _cfg.get_section_keys(S_TAL)
+
+
+#  세기 한 줄을 지운다. lock() 과 같이 **개발 도구만** 부른다.
+static func tally_drop(key: String) -> bool:
+	boot()
+	if not _cfg.has_section_key(S_TAL, key):
+		return false
+	_cfg.erase_section_key(S_TAL, key)
+	flush()
+	return true
+
+
 # 해금을 되돌린다. 개발 도구(tools/unlock.gd)만 부른다 — 심는 것만큼
 # 지우는 것이 있어야 해금 흐름을 다시 시험할 수 있다. 게임은 안 부른다.
 static func lock(id: String) -> bool:
