@@ -419,19 +419,26 @@ func _initialize() -> void:
 	g._turn_skip()
 
 	# ── ⑩ 소리 ────────────────────────────────────────
-	print("⑩ 소리 — 새 파일이 하나도 안 늘었다")
+	print("⑩ 소리 — 이 연출이 제 파일을 안 팠다")
 	var wavs := 0
+	var turn_wav := PackedStringArray()
 	var d := DirAccess.open("res://sfx")
 	if d != null:
 		for f in d.get_files():
 			if f.ends_with(".wav"):
 				wavs += 1
-	_say(wavs == 62, "sfx/*.wav 가 62개 그대로다", "%d개" % wavs)
+				if f.begins_with("turn"):
+					turn_wav.append(f)
+	#  파일 **수**를 못 박으면 뒤에 오는 기능이 소리 하나만 구워도 여기가
+	#  터진다 — 무한 런의 endless_go.wav 가 실제로 그랬다. 못 박을 것은
+	#  「이 연출이 제 파일을 안 팠다」와 「README 가 실제 수와 맞다」다.
+	#  2026-09-20
+	_say(turn_wav.is_empty(), "라운드 넘김 전용 wav 가 없다", ", ".join(turn_wav))
 	_say(ResourceLoader.exists("res://sfx/boss_seal.wav"),
 			"boss_seal.wav 가 있다 (없으면 사다리가 말없이 죽는다)")
 	_say(ResourceLoader.exists("res://sfx/page.wav"), "page.wav 가 있다")
 	var rd := FileAccess.get_file_as_string("res://sfx/README.md")
-	_say(rd.find("62") >= 0, "README 의 62 가 그대로다")
+	_say(rd.find(str(wavs)) >= 0, "README 의 수가 실제와 맞다", "%d개" % wavs)
 
 	var want_hz := [392.0, 415.3, 440.0, 466.2, 493.9, 523.3, 554.4, 587.3]
 	var ladder_ok := true
