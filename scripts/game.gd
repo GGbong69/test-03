@@ -5415,6 +5415,24 @@ func _click(m: Vector2) -> void:
 				if _mag_rect(i).has_point(m):
 					_pick_dart(i)
 					return
+		#  확인 27프레임 + 비행 13프레임 = **40프레임(0.667초)** 이 발마다
+		#  입력을 하나도 안 받고 있었다. 이 match 에 두 갈래가 아예 없었고
+		#  _fast_on 도 첫 줄이 `state != S.RESOLVE` 라 곧장 false 다 —
+		#  6발 판이면 240프레임 4.00초, 24판 한 바퀴면 96초가 누를 수도
+		#  빨리 볼 수도 없는 자리였다. 첫 발의 확인은 뜸이지만 스무 번째
+		#  발의 확인은 통행료다(ch() 주석이 「입력을 안 받는 순수 연출」이라고
+		#  스스로 적어 뒀다).
+		#
+		#  **건너뛰기가 아니라 시계를 끝까지 미는 것**이다 — 다음 프레임에
+		#  S.CONFIRM·S.FLY 의 **원래 길**이 한 줄도 안 빠지고 그대로 끝난다
+		#  (자석 lerp · again_aim · again_dart · _grip_consume · dart_fly ·
+		#  fly_rot · _land). 값은 한 톨도 안 바뀌고 새 상태도 0개다.
+		#  SPACE 도 같은 문을 지난다(_unhandled_input 의 끝 _click(-1,-1)) —
+		#  키 전용 길을 안 낸다. **모바일도 같은 탭으로 먹는다.** 2026-09-24
+		S.CONFIRM:
+			confirm_t = ch()
+		S.FLY:
+			fly_t = GameData.tune("fly_time")
 		S.AIM_V, S.AIM_H:
 			# 다트를 갈아타는 것은 **첫 축을 잠그기 전까지**다.
 			# 규칙이 뜻하는 것은 "던질 자루를 무를 수 없다" 가 아니라
