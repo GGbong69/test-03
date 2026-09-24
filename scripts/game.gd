@@ -7669,6 +7669,7 @@ func _draw() -> void:
 	_brk_crack_draw()               # 금은 판 위, 판 효과 앞
 	_draw_fx()
 	_brk_shards_draw()              # 조각은 다트 **밑**이다
+	_brk_crack_draw(true)           # 언 흰 실루엣 위에 파단선을 한 번 더
 	#  꽂힌 다트는 판보다 **먼저** 빠진다 — 곧게 아래로만 가며 진다.
 	#  연출이 안 도는 동안 두 함수가 0.0 · 1.0 을 내므로 보통 길은
 	#  한 바이트도 안 바뀐다.
@@ -16922,10 +16923,24 @@ func _brk_hot(s: int) -> float:
 #  왼쪽 위에서 오는 것은 _icon_dart 가 이미 세운 규약이다. 갓 난 금은 그
 #  모서리가 하얗게 달았다 식는다. **새 색을 한 개도 안 만든다** — C_BG 와
 #  C_WIRE 뿐이다. 2026-09-24
-func _brk_crack_draw() -> void:
+#
+#  ⚠ **갈라지는 그 프레임에 파단선이 지워졌다.** 발화 프레임부터 판이 없으니
+#  금도 없다고 두었는데, 같은 프레임에 조각은 hold(0.045초) 동안 전부 흰색
+#  이라 화면에 **이음매 없는 매끈한 흰 원판 하나**만 남고 회색 다트 넷이 그
+#  위에 얹힌다 — 0.68초를 들여 그린 파단선이 정작 갈라지는 그 프레임에
+#  사라진다(shots/brk_04_fire.png · brk_05_hold.png 로 잡았다).
+#  그래서 **언 동안만**(brk_t < 0) 조각 위에 금을 C_BG 로 한 번 더 긋는다
+#  (over). 흰 실루엣에 검은 파단선이 그어진 한 프레임이 이 연출에서 제일
+#  값싼 그림이다. 밝은 줄은 흰 위의 흰이라 안 긋는다. **시간도 상태도 0** 이라
+#  qa_break 가 재는 것이 하나도 안 움직인다. 2026-09-24
+func _brk_crack_draw(over := false) -> void:
 	if not brk_live or brk_stage <= 0 or brk_rings.is_empty():
 		return
-	if brk_fired and not motion_off:
+	if over:
+		#  조각 위에 얹는 길 — 언 동안(흰 실루엣)에만 산다
+		if not brk_fired or motion_off or brk_t >= 0.0:
+			return
+	elif brk_fired and not motion_off:
 		return                      # 판이 없으면 금도 없다
 	var sw := _sec_w()
 	var step: int = maxi(_sec_n() / maxi(brk_w, 1), 1)
@@ -16942,7 +16957,9 @@ func _brk_crack_draw() -> void:
 	#  자란다(틈 반폭 + 0.5px). 2026-09-24
 	var lift := Vector2(-1.0, -1.0).normalized()
 	for k in mini(brk_stage, brk_rings.size() * 2):
-		var ht: float = _brk_hot(k + 1)
+		#  언 실루엣 위에서는 열이 뜻이 없다 — 다 식은 폭(2px)으로 굵게
+		#  긋는다. 그 한 프레임이 「여기가 갈라졌다」를 통째로 말한다.
+		var ht: float = 0.0 if over else _brk_hot(k + 1)
 		var lit := C_WIRE.lerp(Color.WHITE, 0.72).lerp(Color.WHITE, ht)
 		var gw: float = lerpf(2.0, 1.0, ht)
 		var off: float = gw * 0.5 + 0.5
@@ -16975,7 +16992,9 @@ func _brk_crack_draw() -> void:
 				if rr < 1.0:
 					continue
 				draw_arc(BC, rr, ra0, ra1, 6 + step, C_BG, gw)
-				draw_arc(BC + lift * off, rr, ra0, ra1, 6 + step, lit, 1.0)
+				if not over:
+					draw_arc(BC + lift * off, rr, ra0, ra1, 6 + step,
+							lit, 1.0)
 		else:                       # 살
 			var r0: float = R * float(brk_rings[bi][0])
 			var r1: float = R * float(brk_rings[bi][1])
@@ -16999,7 +17018,8 @@ func _brk_crack_draw() -> void:
 					nm = -nm
 				nm *= off
 				draw_line(BC + u * r0, BC + u * r1, C_BG, gw)
-				draw_line(BC + nm + u * r0, BC + nm + u * r1, lit, 1.0)
+				if not over:
+					draw_line(BC + nm + u * r0, BC + nm + u * r1, lit, 1.0)
 
 
 #  조각과 부스러기. hold 동안은 제자리에서 **흰색**이라 원판이 빈틈없이
