@@ -111,6 +111,18 @@ static func click(g: Node, m: Vector2) -> bool:
 	# 같이 판정하면 가려진 줄이 눌린다.
 	if open_k != "":
 		return _pick_click(g, m)
+	#  머리 단추 셋 — 탭보다 **먼저** 본다. 탭 칸과는 y 로 갈려 있지만
+	#  차례를 못 박아 두면 탭 폭을 늘릴 때 조용히 가려진다.
+	if _top_btn(2).has_point(m):
+		on = false
+		open_k = ""
+		return true
+	if _top_btn(0).has_point(m):
+		page = posmod(page - 1, PAGES.size())
+		return true
+	if _top_btn(1).has_point(m):
+		page = posmod(page + 1, PAGES.size())   # TAB 키와 같은 값
+		return true
 	for i in PAGES.size():
 		if _tab(i).has_point(m):
 			page = i
@@ -216,10 +228,18 @@ static func draw(g: Node) -> void:
 	var p := _panel()
 	g.draw_rect(p, Color(0.04, 0.03, 0.07, 0.94))
 	g.draw_rect(Rect2(p.position, Vector2(p.size.x, 2.0)), Color(1.0, 0.35, 0.35))
-	g.draw_string(g.font, p.position + Vector2(8.0, 15.0), "개발자",
+	#  머리 이름과 단추 셋이 **같은 기준선**에 선다(단추 14px 의 한가운데).
+	#  고르개 머리가 쓰는 그 식이다.
+	var hb: float = _base(g, _top_btn(0).position.y, _top_btn(0).size.y)
+	g.draw_string(g.font, Vector2(p.position.x + 8.0, hb), "개발자",
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1.0, 0.35, 0.35))
-	g.draw_string(g.font, p.position + Vector2(0.0, 15.0), "\\ 닫기 · TAB 다음 쪽",
-			HORIZONTAL_ALIGNMENT_RIGHT, p.size.x - 8.0, 12, Color(0.55, 0.52, 0.60))
+	#  키 이름을 적던 자리에 **누를 수 있는 것**을 세운다(위 _top_btn 머리말).
+	for w in 3:
+		var b := _top_btn(w)
+		g.draw_rect(b, Color(0.20, 0.17, 0.28))
+		g.draw_string(g.font, Vector2(b.position.x, hb),
+				["◀", "▶", "닫기"][w], HORIZONTAL_ALIGNMENT_CENTER, b.size.x, 12,
+				Color(0.90, 0.88, 0.95))
 
 	for i in PAGES.size():
 		var t := _tab(i)
@@ -449,7 +469,26 @@ static func _pick_cell(j: int) -> Rect2:
 
 # 0 이전 쪽 · 1 다음 쪽 · 2 닫기
 static func _pick_btn(which: int) -> Rect2:
-	var p := _pick_panel()
+	return _btn_row(_pick_panel(), which)
+
+
+#  판 머리의 단추 셋 — 0 이전 쪽 · 1 다음 쪽 · 2 닫기.
+#
+#  여태 이 자리에는 「\ 닫기 · TAB 다음 쪽」이라는 **키 이름**이 글자로
+#  박혀 있었고, 본 판에는 닫는 화면 단추가 **아예 없었다**. 모바일이
+#  예정돼 있어 손가락으로 켠 사람은 그 화면을 못 빠져나온다 —
+#  「잠긴 채로 못 빠져나가는 자리를 안 만든다」가 여기에도 걸린다.
+#  게다가 키 이름을 화면에 적지 않는 것이 이 저장소의 규칙이다.
+#
+#  자리·크기는 고르개의 것을 그대로 쓴다(둘이 한 함수를 지난다) — 두 판이
+#  같은 손짓으로 닫히고 같은 손짓으로 쪽을 넘긴다. 키(\ · TAB)는 그대로
+#  산다. 2026-09-24
+static func _top_btn(which: int) -> Rect2:
+	return _btn_row(_panel(), which)
+
+
+#  판 오른쪽 위에 ◀ ▶ 닫기 셋을 앉히는 한 자. 본 판과 고르개가 같이 쓴다.
+static func _btn_row(p: Rect2, which: int) -> Rect2:
 	var y: float = p.position.y + 4.0
 	var right: float = p.position.x + p.size.x - 6.0
 	match which:
@@ -580,9 +619,12 @@ static func _pick_draw(g: Node) -> void:
 				HORIZONTAL_ALIGNMENT_LEFT, c.size.x - 8.0, 12,
 				Color(1.0, 0.90, 0.55) if sel else Color(0.86, 0.86, 0.92))
 
-	g.draw_string(g.font, p.position + Vector2(8.0, p.size.y - 5.0),
-			"누르면 바로 적용 · ESC 나 판 밖을 눌러 닫는다",
-			HORIZONTAL_ALIGNMENT_LEFT, p.size.x - 16.0, 12, Color(0.55, 0.52, 0.60))
+	#  밑줄을 통째로 지운다(2026-09-24). 적혀 있던 것은 「누르면 바로
+	#  적용 · ESC 나 판 밖을 눌러 닫는다」였는데, ① **키 이름을 적지
+	#  않는다**가 이 저장소의 규칙이고 ② 닫는 길은 머리의 「닫기」
+	#  단추가 이미 가졌으며 ③ 마지막 줄(PROW 18)과 같은 높이에서
+	#  겹쳐 두 줄이 포개졌다. 그림이 이미 말하는 것을 글로 또 적지
+	#  않는다 — 내밀려던 문장은 하나도 안 남긴다.
 
 
 # 고르개 머리에 적을 이름. 열 때 줄 이름을 그대로 받아 둔다 — 여는 순간에는
