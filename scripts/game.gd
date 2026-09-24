@@ -16475,8 +16475,15 @@ func _brk_cols_at(th: String, cols: Array, ci: int) -> Array:
 	var pair: Array = cols[ci % cols.size()]
 	match th:
 		"pizza":
-			#  치즈와 크러스트. 칸 값이 하나로 눕는 판이라 칸 색도 하나다.
-			return [PIZZAART.cheese, PIZZAART.crust]
+			#  ⚠ **조각마다 다른 바탕이다.** 앞서는 [cheese, crust] 한 쌍을
+			#  박아 두어 ci 를 한 번도 안 봤고, 그래서 피자가 **열일곱 조각
+			#  전부 창백한 치즈 한 색**으로 깨졌다 — 이 판에서 제일 알아보기
+			#  쉬운 것(밝은 치즈와 짙은 불고기가 번갈아 도는 리듬)이 깨지는
+			#  순간 사라진다. 칸 값이 하나로 눕는 것은 **값**이지 색이
+			#  아니다: _sec_col 은 그대로 돌고 _pz_base 가 그 색을 재료
+			#  쪽으로 끈다. 그 자가 판이 실제로 칠하는 바탕이고 죽은 칸까지
+			#  같은 규칙으로 가라앉히므로 그대로 쓴다. 2026-09-24
+			return [_pz_base(ci, cols), PIZZAART.crust]
 		"clock":
 			#  문자판 칸은 칸 색 그대로 돈다(크림·먹). 바깥 테만 황동이다.
 			return [pair[0], CLOCKART.gilt[2]]
@@ -16503,6 +16510,16 @@ func _brk_band_mix(r0: float, r1: float) -> float:
 			+ maxf(0.0, minf(hi, rt_dbl_out) - maxf(r0, rt_dbl_in))
 	if rt_trp2_out > 0.0:
 		hit += maxf(0.0, minf(hi, rt_trp2_out) - maxf(r0, rt_trp2_in))
+	#  ⚠ **띠를 통째로 접은 판은 바깥 물감이 테에만 남는다.** 피자는
+	#  더블·트리플 폭을 0 으로 접으므로(mods.csv — _mod_step 의 b.ti = b.to ·
+	#  b.din = b.dout) hit 이 **구조적으로 언제나 0** 이고, 그러면 바깥 겹이
+	#  안쪽 물감 그대로 떠서 **크러스트가 한 조각도 안 뜬다** — 찍어 보고
+	#  잡았다. 띠가 접힌 판에서만 테를 셈에 넣는다: 거기서는 테가 곧 바깥
+	#  물감 그 자체다(피자 크러스트 0.15R). 띠가 살아 있는 판은 이 줄에
+	#  안 걸리므로 기본 판·시계·도넛·과녁은 한 픽셀도 안 바뀐다.
+	#  2026-09-24
+	if hit <= 0.0 and r1 > rt_dbl_out:
+		return clampf((r1 - rt_dbl_out) / (r1 - r0), 0.0, 1.0)
 	return clampf(hit / w, 0.0, 1.0)
 
 

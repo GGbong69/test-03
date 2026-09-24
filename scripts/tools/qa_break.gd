@@ -345,6 +345,42 @@ func _run() -> void:
 	_ok("테마 넷이 제 물감으로 깨진다", col_ok,
 			"기본 %s / %s" % [(plain_pair[1] as Color).to_html(false), col_txt])
 
+	# ── ⑧-d 리듬 — **한 색으로 깨지지 않는다** ──────────────
+	#  판은 밝고 어두운 칸이 번갈아 도는 물건이라 그 리듬이 조각에 안
+	#  남으면 「판이 깨졌다」가 아니라 「무언가 흩어졌다」가 된다. 두 번
+	#  깨졌다: 한 번은 조각이 먹는 칸 수가 짝수라 언제나 같은 홀짝 칸을
+	#  짚어 판이 통째로 빨강이었고, 한 번은 피자가 [cheese, crust] 한 쌍을
+	#  박아 두어 ci 를 안 봐서 **열일곱 조각이 전부 창백한 치즈**였다.
+	#  바깥 물감도 같이 잰다 — 피자는 띠 폭이 0 이라 섞는 비가 구조적으로
+	#  0 이 나와 크러스트가 한 조각도 안 떴다(_brk_band_mix 의 접힌 판 갈래).
+	var rhy_ok := true
+	var rhy_txt := ""
+	for m in [["", "기본"], ["pizz", "피자"], ["clok", "시계"],
+			["dnut", "도넛"], ["aimb", "과녁"]]:
+		_open()
+		_board(String(m[0]))
+		g._brk_arm(2)
+		g._brk_fire()
+		var seen := {}
+		var outer := {}
+		var last: int = (g.brk_rings as Array).size() - 1
+		for s in g.brk_shards:
+			seen[(s.col as Color).to_html(false)] = true
+		#  바깥 겹만 따로 — 테 물감이 실제로 섞여 드는지.
+		for j in g.brk_w:
+			var mx: float = g._brk_band_mix(float(g.brk_rings[last][0]),
+					float(g.brk_rings[last][1]))
+			outer[mx] = true
+			if mx <= 0.0:
+				rhy_ok = false
+		if seen.size() < 3:
+			rhy_ok = false
+		rhy_txt += "%s 색%d·바깥섞임%s  " % [String(m[1]), seen.size(),
+				"·".join((outer.keys() as Array).map(
+						func(v): return "%.2f" % float(v)))]
+		g._brk_skip()
+	_ok("한 색으로 안 깨진다 — 판의 리듬이 조각에 남는다", rhy_ok, rhy_txt)
+
 	# ── ⑨ 보드 확장 — 천체 고리에서 겹이 는다 ───────────────
 	_open()
 	_board("arst")
