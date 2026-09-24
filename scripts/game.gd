@@ -6056,6 +6056,25 @@ func _thud() -> void:
 	_sfx("board_thud", SFX_BASE * randf_range(0.94, 1.06))
 
 
+#  착탄 순간에 뜨는 **값**. 꽂힌 자리의 수다 — 칸 수 × 그 자리의 배수
+#  (트리플 20 → 「60」 · 이너 불 → 「50」 · 싱글 5 → 「5」).
+#
+#  여태 뜨던 글자는 「더블」 「트리플」 「아우터 불」 「불스아이」로 전부
+#  **갈래 이름**이었다 — 판 위에서 가장 큰 글자가 「효과와 값만 · 분류
+#  설명 금지」를 정면으로 어겼고, 정작 20인지 3인지는 그 글자가 안 말한
+#  채 수가 0.374초 뒤 카드에 왔다. 가장 자주 나는 싱글은 글자가 아예 없었다.
+#
+#  ⚠ **info.base 가 아니라 info.sector 를 쓴다**(심사와 갈린 자리).
+#  _land 는 _impact 를 부르기 전에 트랙 강화분을 `info.base += tb.s` 로
+#  이미 얹어 두므로, base × land_mult 는 **판의 값도 아니고 카드에 뜰
+#  값도 아닌 제3의 수**가 되어 화면 어디와도 안 맞는다. sector 는 칸에
+#  적힌 그 수 그대로다 — 바로 위 머리말의 「등급은 꽂힌 자리가 정한다 —
+#  점수에 쓰는 배수가 아니다」와 같은 소유를 지킨다.
+#  **점수 계산은 한 줄도 안 건드린다 — 이미 있는 수를 적기만 한다.** 2026-09-24
+func _land_val(info: Dictionary, hit_mult: int) -> String:
+	return "%d" % (int(info.sector) * maxi(hit_mult, 1))
+
+
 func _impact(info: Dictionary, hit_mult: int) -> void:
 	var lbl := Vector2(0.0, 26.0) if aim.y < BC.y else Vector2(0.0, -24.0)
 	var grade := _hit_grade(info, hit_mult)
@@ -6084,6 +6103,8 @@ func _impact(info: Dictionary, hit_mult: int) -> void:
 			board_punch = 0.45
 			hit_flash_amt = 0.4
 			add_wave(aim, 3.0, 24.0, C_TXT, 0.35, 1.0, 0.28)
+			#  가장 자주 나는 착탄인데 글자가 없었다. 값 하나를 준다.
+			pop(aim + lbl, _land_val(info, hit_mult), C_TXT, 12, 0.7)
 		2:
 			shake = 6.5
 			board_punch = 0.8
@@ -6091,7 +6112,7 @@ func _impact(info: Dictionary, hit_mult: int) -> void:
 			hit_flash_amt = 0.7
 			add_wave(aim, 3.0, 42.0, C_ACC, 0.75, 1.5, 0.40)
 			add_ring_fx(R * rt_dbl_in, R * rt_dbl_out, C_ACC, 0.50)
-			pop(aim + lbl, "더블", C_ACC, 12, 0.8)
+			pop(aim + lbl, _land_val(info, hit_mult), C_ACC, 12, 0.8)
 		3:
 			shake = 9.5
 			board_punch = 1.0
@@ -6100,7 +6121,7 @@ func _impact(info: Dictionary, hit_mult: int) -> void:
 			add_wave(aim, 3.0, 54.0, C_ACC, 0.85, 2.0, 0.45)
 			add_wave(aim, 3.0, 32.0, C_TXT, 0.60, 1.0, 0.32)
 			add_ring_fx(R * rt_trp_in, R * rt_trp_out, C_ACC, 0.55)
-			pop(aim + lbl, "트리플", C_ACC, 20, 0.9)
+			pop(aim + lbl, _land_val(info, hit_mult), C_ACC, 20, 0.9)
 		4:
 			shake = 11.0
 			board_punch = 1.0
@@ -6109,7 +6130,9 @@ func _impact(info: Dictionary, hit_mult: int) -> void:
 			add_wave(BC, R * rt_bull_o, R * 1.15, C_GREEN.lightened(0.45), 0.80, 2.0, 0.50)
 			add_wave(BC, 4.0, 46.0, C_TXT, 0.70, 1.5, 0.35)
 			add_sparks(10, R * rt_bull_o, R * 0.95, 12.0, C_GREEN.lightened(0.5), 0.42)
-			pop(BC + Vector2(0.0, -34.0), "아우터 불", C_GREEN.lightened(0.55), 20, 0.9)
+			#  자리를 BC 에서 aim 으로 옮긴다 — 꽂힌 자리에 값이 붙는 것이
+			#  나머지 넷과 같은 어법이고, 불 둘만 판 한가운데에 박혀 있었다.
+			pop(aim + lbl, _land_val(info, hit_mult), C_GREEN.lightened(0.55), 20, 0.9)
 		5:
 			shake = 15.0
 			board_punch = 1.0
@@ -6120,7 +6143,7 @@ func _impact(info: Dictionary, hit_mult: int) -> void:
 			add_wave(BC, R * rt_bull_i, R * 0.90, C_ACC, 0.80, 2.0, 0.45)
 			add_wave(BC, 3.0, 52.0, C_TXT, 0.80, 1.5, 0.32)
 			add_sparks(16, R * rt_bull_i, R * 1.10, 16.0, C_ACC, 0.55)
-			pop(BC + Vector2(0.0, -38.0), "불스아이", C_ACC, 24, 1.1)
+			pop(aim + lbl, _land_val(info, hit_mult), C_ACC, 24, 1.1)
 
 
 # mark 가 false 면 연발의 한 발이다 — 이미 꽂혀 있고, 점수도 한 발치가
