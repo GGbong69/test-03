@@ -14,6 +14,7 @@ extends SceneTree
 #
 #  사람의 저장을 안 건드린다 — 도구는 Save.gpath / Save.path 를 제 자리로 박는다.
 const Save = preload("res://scripts/save.gd")
+const GameData = preload("res://scripts/data.gd")
 var g = null
 var busy := false
 var tag := "imp"
@@ -160,5 +161,19 @@ func _run() -> void:
 	g.state = g.S.PICK
 	await _step(1)
 	await _snap("stuck")
+
+	#  ── 상단 띄 오른쪽 끝 ─────────────────────
+	#  제약 아이콘이 서는 자리다(LAY.bar_mod x 584~640). 심사가 여기를
+	#  「정산 빨리 보기 조작(‖ · ≫ · +2)」으로 읽었는데, 실제로는
+	#  narrow(막대 둘 — 원래 폭 grey + 남은 폭 loss) · gust(겹화살) ·
+	#  넘친 개수다. 누를 수 있는 것이 아니라 **표시**라 단추 문법을
+	#  입히면 오히려 거짓말이 된다 — 눈으로 보려고 넣는 한 장이다. 2026-09-24
+	await _fresh()
+	g.active_mods.clear()
+	var mfs: Array = GameData.modifiers()
+	for i in mini(4, mfs.size()):
+		g.active_mods.append(mfs[i])
+	await _step(1)
+	await _snap("modband")
 	print("  찍음")
 	quit(0)
