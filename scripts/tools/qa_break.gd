@@ -490,6 +490,59 @@ func _run() -> void:
 	_ok("_start_leg 이 지난 판의 깨짐을 안 물려받는다", not g.brk_live, "")
 	g._swap_skip()
 
+	# ── ⑮-b 판을 떠나면 내린다 — 제목 판을 안 지운다 ────────
+	#  판 중의 ESC → 「로비로 나가기」는 state 를 곧장 S.TITLE 로 옮기고
+	#  내리는 자리 셋(_finish_leg · _start_leg · _swap_skip)을 하나도 안
+	#  밟는다. 안 막으면 brk_live 가 참인 채 남아 _brk_board_dy() 가 INF 를
+	#  계속 내고, 판 층을 그리는 문에 state 갈래가 없으므로 **제목 화면의
+	#  다트판이 영영 안 그려진다.** 문이 두 겹이라 둘 다 잰다.
+	_open()
+	g._brk_arm(2)
+	g._brk_fire()
+	g.state = g.S.TITLE
+	g.pause_from = -1
+	_ok("판을 떠난 프레임에 이미 판이 돌아온다",
+			not is_inf(g._brk_board_dy()),
+			"그리는 쪽 문 — _brk_tick 이 hitstop 에 건너뛴 프레임도 덮는다")
+	for _k in 5:
+		g._brk_tick(DT)
+	_ok("제목으로 나가면 깨짐이 내려간다",
+			not g.brk_live and (g.brk_shards as Array).is_empty()
+			and not is_inf(g._brk_board_dy()),
+			"brk_live %s · 조각 %d · _brk_board_dy %.1f"
+			% [g.brk_live, (g.brk_shards as Array).size(), g._brk_board_dy()])
+	#  금만 난 중(발화 전)에 나가도 제목 판에 금이 안 박힌다.
+	_open()
+	g.state = g.S.RESOLVE       # 금이 나려면 걸음 안이어야 한다
+	g._brk_arm(2)
+	for _k in 10:
+		g._brk_tick(DT)
+	var mid_stage: int = g.brk_stage
+	g.state = g.S.TITLE
+	g._brk_tick(DT)
+	_ok("금만 난 중에 나가도 금이 안 남는다",
+			mid_stage > 0 and not g.brk_live and g.brk_stage == 0,
+			"나가기 전 단 %d → 단 %d" % [mid_stage, g.brk_stage])
+	#  ⚠ **판 중에 연 설정은 얼기 그대로다.** _is_play_deep() 이 밑에 깔린
+	#  화면을 보므로 여기서 갈리면 안 된다 — 닫고 돌아온 손님이 깨지던
+	#  판을 이어서 본다.
+	_open()
+	g._brk_arm(2)
+	g._brk_fire()
+	g.pause_from = g.S.RESOLVE
+	g.state = g.S.SETTINGS
+	var froze: Vector2 = g.brk_shards[0].c
+	for _k in 10:
+		g._brk_tick(DT)
+	_ok("판 중에 연 설정은 내리지 않고 언다",
+			g.brk_live and g.brk_shards.size() > 0
+			and (g.brk_shards[0].c as Vector2).is_equal_approx(froze),
+			"brk_live %s · 조각이 제자리 %s"
+			% [g.brk_live, (g.brk_shards[0].c as Vector2).is_equal_approx(froze)])
+	g.state = g.S.RESOLVE
+	g.pause_from = -1
+	g._brk_skip()
+
 	# ── ⑯ 씨 — 판마다 다르고 같은 판은 늘 같다 ──────────────
 	_open()
 	_board("")
