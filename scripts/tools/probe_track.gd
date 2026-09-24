@@ -36,7 +36,7 @@ func _go() -> void:
 	print("― 뱃지로 올려 본다 ―")
 	g.track_lv.clear()
 	var before: int = g.track_lv.size()
-	g._take_tag({"kind": "track", "v": 1, "when": "now", "name": "영역 승급"})
+	g._take_tag({"kind": "track", "v": 1, "when": "now", "name": "트랙 강화"})
 	var after: int = g.track_lv.size()
 	print("  뱃지 1회: 올린 트랙 수 %d -> %d %s" % [before, after, "ok" if after == 1 else "실패"])
 	for tk in g.track_lv:

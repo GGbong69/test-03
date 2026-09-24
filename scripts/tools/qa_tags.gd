@@ -132,7 +132,7 @@ func _run() -> void:
 	g._take_tag(_tag("t_tally"))
 	_ok("발품 — 네 판이면 20", g.gold == 20, "골드 %d" % g.gold)
 
-	# ⑦ 주력 승급 — 가장 많이 맞힌 트랙
+	# ⑦ 많이 맞힌 트랙 강화 — 가장 많이 맞힌 트랙
 	print("")
 	var tracks := {}
 	for a in GameData.areas_all():
@@ -141,7 +141,7 @@ func _run() -> void:
 	_fresh()
 	g.track_hits = {int(tl[0]): 3, int(tl[1]): 9, int(tl[2]): 1}
 	g._take_tag(_tag("t_hot"))
-	_ok("주력 승급 — 제일 많이 맞힌 트랙", int(g.track_lv.get(int(tl[1]), 0)) == 2,
+	_ok("많이 맞힌 트랙 강화 — 제일 많이 맞힌 트랙", int(g.track_lv.get(int(tl[1]), 0)) == 2,
 			"%s Lv%d (나머지 %d/%d)" % [g._track_name(int(tl[1])),
 					int(g.track_lv.get(int(tl[1]), 0)),
 					int(g.track_lv.get(int(tl[0]), 0)),

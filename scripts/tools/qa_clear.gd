@@ -62,9 +62,13 @@ func _run() -> void:
 	_ok("정산으로 들어왔다", g.state == g.S.CLEAR, "state %d" % g.state)
 	_ok("내역이 섰다", (g.clear_gold_detail as Array).size() >= 3,
 			"%d줄" % (g.clear_gold_detail as Array).size())
+	#  ⚠ **화면 글을 여기 다시 적지 않는다.** 전에는 "클리어 보상" 을 글자로
+	#  박아 뒀다가 game.gd 가 「넘김 보상」으로 갈리자 자가 거짓으로 울었다
+	#  (2026-09-25). 재는 것은 **판 이름이 첫 줄에 또 서지 않는다**는 그 한 가지다.
+	var nm0 := String(g.clear_gold_detail[0].n)
 	_ok("첫 줄이 판 이름이 아니다",
-			String(g.clear_gold_detail[0].n) == "클리어 보상",
-			"'%s' — 판 이름은 제목이 이미 말한다" % g.clear_gold_detail[0].n)
+			nm0 != "" and not nm0.contains(GameData.leg_name(g.leg_no)),
+			"'%s' — 판 이름은 제목이 이미 말한다" % nm0)
 
 	# ① 판 위 팝업은 판 위에서 끝난다
 	_ok("판 위 팝업을 안 끌고 온다", (g.pops as Array).is_empty(),
