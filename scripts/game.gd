@@ -34503,8 +34503,10 @@ func _league_lines() -> Array:
 	if String(r.get("reward_small", "")) != "" and rs < 3:
 		#  클리어 보상만 0 이 된다(_settle_clear). 잔탄 · 이자 · 동전 골드는 그대로 들어오므로
 		#  「골드가 안 들어온다」 는 틀린 말이었다.
+		#  ⚠ 「보상」을 빼면 안 된다 — 일곱 리그가 reward_small 0 이라 화면 글이
+		#  「작은 판을 넘기면 골드 0」이 되어 골드가 통째로 안 들어온다는 말이 된다.
 		out.append({"n": "작은 판 보상 %d" % rs,
-				"d": "작은 판을 넘기면 골드 %d" % rs})
+				"d": "작은 판 넘김 보상 %d골드" % rs})
 	if int(GameData.league_v("seal_items", 0.0)) > 0:
 		out.append({"n": "봉인 %d" % int(GameData.league_v("seal_items", 0.0)),
 				"d": "판마다 동전 하나 무작위 봉인"})
