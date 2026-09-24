@@ -3086,7 +3086,7 @@ func _buy_block(i: int) -> String:
 	if gold < s.cost:
 		return "골드가 %d 모자란다" % (s.cost - gold)
 	if s.type == "item" and owned.size() >= GameData.max_items():
-		return "동전 슬롯이 꽉 찼다 (%d/%d)" % [owned.size(), GameData.max_items()]
+		return _buy_full_tag(s)
 	if s.type == "dart" and _std_slot() < 0:
 		return "바꿀 표준 다트가 없다"
 	# 사탕과 사진은 **같은 칸**을 쓴다. 여기서 사탕만 보고 있었다 —
@@ -3094,8 +3094,22 @@ func _buy_block(i: int) -> String:
 	# **뒤에** 거절해서, 값을 치르고 물건은 사라졌다. 두 갈래를 같이 본다.
 	var slotty: bool = s.type == "cons" or s.type == "fix"
 	if slotty and cons.size() >= GameData.cons_slots():
-		return "사탕 칸이 꽉 찼다 (%d/%d)" % [cons.size(), GameData.cons_slots()]
+		return _buy_full_tag(s)
 	return ""
+
+
+#  칸이 꽉 찼다 — **값으로만** 말한다. 여태 「동전 슬롯이 꽉 찼다 (5/5)」
+#  「사탕 칸이 꽉 찼다 (2/2)」라 문장이었는데, 밑줄에는 [동전]·[레전더리]
+#  태그가 따로 서서 한 툴팁에 두 문법이 섞였다.
+#
+#  나머지 까닭(「이미 샀다」 「골드가 12 모자란다」 「바꿀 표준 다트가 없다」)은
+#  값이 아니라 **사정**이라 문장으로 남는다 — 그쪽은 곁줄이 제 자리다.
+#  거절 하단 줄도 같은 값을 받는다 — 기준이 둘로 갈라지면 같은 거절이
+#  누를 때와 가리킬 때 다른 말을 한다. 2026-09-24
+func _buy_full_tag(s: Dictionary) -> String:
+	if String(s.get("type", "")) == "item":
+		return "슬롯 %d/%d" % [owned.size(), GameData.max_items()]
+	return "사탕 칸 %d/%d" % [cons.size(), GameData.cons_slots()]
 
 
 func _buy(i: int) -> void:
@@ -26232,10 +26246,18 @@ func _tip_build(hit: Dictionary) -> void:
 							% String(GameData.mod_of(String(mods_own[0])).get("n", "")),
 							12, C_MULT)
 			# 못 사는 이유를 누르기 전에 알려준다. _deny() 는 원인을 한 문장으로 뭉갠다.
+			#  ⚠ **칸이 꽉 찬 둘만 태그 줄로 간다.** 그 둘은 값(「슬롯 5/5」)이고
+			#  나머지는 사정(「이미 샀다」)이라 곁줄이 제 자리다 — 한 툴팁에
+			#  두 문법이 섞이던 자리였다. 같은가는 _buy_full_tag 의 값과 견줘
+			#  묻는다: _buy_block 의 **차례를 그대로 지나온 뒤**라, 이미 산
+			#  물건이 칸까지 꽉 찼어도 「이미 샀다」가 먼저 선다. 2026-09-24
 			var blk := _buy_block(i)
 			if blk != "":
-				_tip_add(blk, 12,
-						C_OFF if s.sold else C_RED.lightened(0.2))
+				if blk == _buy_full_tag(s):
+					_tip_tag(blk, C_RED.lightened(0.2))
+				else:
+					_tip_add(blk, 12,
+							C_OFF if s.sold else C_RED.lightened(0.2))
 		"tag":
 			# i 는 판 번호다. 짚는 자리는 건너뛰기 단추 하나다.
 			var bt := _leg_tag(i)
