@@ -155,10 +155,20 @@ godot --headless --script scripts/tools/probe_sfx.gd    # 잰다
 ## 길이
 
 한 음이면 표의 `d` 근처, 여러 음이면 `gap*(n-1)+d` 다. 표의 박자가 곧 소리의
-길이다. 자리가 넷뿐이라(`sfx_pool`) 여운 안에 다섯 번 누르면 앞엣것이 끊기는데,
-0.3초를 넘는 것들(`settle_bal` · `settle_total` · `shop_open` · `target_hit` ·
-`hit_bull_i` · `run_win` · `leg_clear` · `fixture_buy`)은 전부 한 번씩만
-나는 자리다.
+길이다. 자리가 넷뿐이라(`sfx_pool`) 여운 안에 다섯 번 누르면 앞엣것이 끊긴다.
+0.3초를 넘는 것은 **열하나**다 — `target_hit` 0.752 · `run_win` 0.657 ·
+`run_lose` 0.500 · `settle_total` 0.420 · `hit_bull_i` 0.410 · `leg_clear`
+0.370 · `fixture_buy` 0.360 · `boss_seal` 0.350 · `shop_open` 0.340 ·
+`settle_bal` 0.340 · `board_break` 0.320.
+
+⚠ 이 절이 한 번 틀렸다 — 여덟만 적고 `run_lose` · `boss_seal` · `board_break`
+셋을 빠뜨린 채 「전부 한 번씩만 나는 자리다」로 닫고 있었다. 앞의 열은 지금도
+한 번씩만 난다. **`board_break` 만 다르다**(2026-09-24) — 한 방은 한 번뿐이지만
+같은 사건이 앞뒤로 소리를 더 낸다: 금이 번지는 0.68초 동안 `board_crack` 이
+단마다(최대 여섯), 판이 뜬 뒤 `board_thud` 가 층−1 번(보스 둘). 이 표에서 한
+사건이 소리를 여러 알 내는 첫 자리이고, 그래서 자리 넷을 넘는지가 사람 손이
+아니라 `qa_break` 의 「한 사건의 소리가 pool 4 밑」에 걸려 있다. 다음에 이
+표를 늘릴 때 세어야 하는 것은 이름 수가 아니라 **한 사건이 내는 알 수**다.
 
 ## 쏟아지는 동전
 
