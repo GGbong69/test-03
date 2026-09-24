@@ -2440,7 +2440,7 @@ func _pack_unlock_next() -> void:
 		if String(r.get("prereq", "")) != cur:
 			continue
 		if Save.unlock("pack:" + String(r.get("id", ""))):
-			run_unlocked.append({"k": "다트통", "n": String(r.get("name", ""))})
+			run_unlocked.append(_unl_tag("다트통", String(r.get("name", ""))))
 			pop(Vector2(VIEW.x * 0.5, 232.0),
 					"%s 열렸다" % r.get("name", ""), C_GOLD, 12, 1.6)
 
@@ -2646,7 +2646,7 @@ func _league_unlock_next() -> void:
 		if need <= 0 or n < need:
 			continue
 		if Save.unlock(GameData.league_key(String(r.get("id", "")))):
-			run_unlocked.append({"k": "리그", "n": String(r.get("name", ""))})
+			run_unlocked.append(_unl_tag("리그", String(r.get("name", ""))))
 			pop(Vector2(VIEW.x * 0.5, 210.0),
 					"%s 열렸다" % r.get("name", ""), C_GOLD, 12, 1.6)
 
@@ -3086,7 +3086,7 @@ func _buy_block(i: int) -> String:
 	if gold < s.cost:
 		return "골드가 %d 모자란다" % (s.cost - gold)
 	if s.type == "item" and owned.size() >= GameData.max_items():
-		return "동전 슬롯이 꽉 찼다 (%d/%d)" % [owned.size(), GameData.max_items()]
+		return _buy_full_tag(s)
 	if s.type == "dart" and _std_slot() < 0:
 		return "바꿀 표준 다트가 없다"
 	# 사탕과 사진은 **같은 칸**을 쓴다. 여기서 사탕만 보고 있었다 —
@@ -3094,8 +3094,22 @@ func _buy_block(i: int) -> String:
 	# **뒤에** 거절해서, 값을 치르고 물건은 사라졌다. 두 갈래를 같이 본다.
 	var slotty: bool = s.type == "cons" or s.type == "fix"
 	if slotty and cons.size() >= GameData.cons_slots():
-		return "사탕 칸이 꽉 찼다 (%d/%d)" % [cons.size(), GameData.cons_slots()]
+		return _buy_full_tag(s)
 	return ""
+
+
+#  칸이 꽉 찼다 — **값으로만** 말한다. 여태 「동전 슬롯이 꽉 찼다 (5/5)」
+#  「사탕 칸이 꽉 찼다 (2/2)」라 문장이었는데, 밑줄에는 [동전]·[레전더리]
+#  태그가 따로 서서 한 툴팁에 두 문법이 섞였다.
+#
+#  나머지 까닭(「이미 샀다」 「골드가 12 모자란다」 「바꿀 표준 다트가 없다」)은
+#  값이 아니라 **사정**이라 문장으로 남는다 — 그쪽은 곁줄이 제 자리다.
+#  거절 하단 줄도 같은 값을 받는다 — 기준이 둘로 갈라지면 같은 거절이
+#  누를 때와 가리킬 때 다른 말을 한다. 2026-09-24
+func _buy_full_tag(s: Dictionary) -> String:
+	if String(s.get("type", "")) == "item":
+		return "슬롯 %d/%d" % [owned.size(), GameData.max_items()]
+	return "사탕 칸 %d/%d" % [cons.size(), GameData.cons_slots()]
 
 
 func _buy(i: int) -> void:
@@ -4369,9 +4383,13 @@ func gs() -> float:
 
 
 func ch() -> float:
-	# 제약이 못 건드린다 — 확인 구간은 입력을 안 받는 순수 연출이라 배수를
-	# 걸어도 화면에서 아무 일이 안 일어난다. 안개가 그 축을 쓰다가 죽은
-	# 효과가 됐고, 지금은 조준선을 지우는 fog 축으로 옮겼다.
+	# 제약이 못 건드린다 — 확인 구간에는 **고를 것이 없어서** 배수를 걸어도
+	# 판단이 안 바뀐다. 안개가 그 축을 쓰다가 죽은 효과가 됐고, 지금은
+	# 조준선을 지우는 fog 축으로 옮겼다.
+	#  ⚠ 여기 「입력을 안 받는 순수 연출」이라 적혀 있었는데 **이제 받는다** —
+	#  _click 의 S.CONFIRM 갈래가 이 시계를 끝까지 민다(2026-09-24). 값을
+	#  바꾸는 입력이 아니라 **기다림을 끝내는** 입력이라 위 진술(제약이 걸
+	#  자리가 아니다)은 그대로 산다.
 	return confirm_hold
 
 
@@ -4995,8 +5013,13 @@ func _kick_fire() -> void:
 	burst_hits.append(aim)
 	# 여기서 화면에 꽂는다. 정산은 이미 꽂힌 자리를 읽으므로 그때는
 	# 다시 안 꽂는다(_land 의 mark=false).
+	#  ⚠ **발마다 새로 굴린다.** fly_rot 을 쓰고 있었는데 연발은 S.FLY 를
+	#  안 지나 그 값이 한 발에 한 번도 안 갱신된다 — 여섯 발이 각 하나를
+	#  돌려 써서 판에 **자로 잰 듯 나란히** 박혔다. 바로 위 _land 의 주석이
+	#  싫다고 적어 둔 그림이 정작 여기 있었다. 이을 각이 없으므로(비행 0프레임)
+	#  꽂는 자리에서 굴리는 것이 맞다. 2026-09-24
 	darts.append({"p": aim, "id": String(cur_dart.get("id", "std")),
-			"rot": fly_rot})
+			"rot": randf_range(-0.26, 0.26)})
 	_sfx("kick_shot")
 	kick_o += Vector2(aim_rng.randf_range(-float(KICK.side), float(KICK.side)),
 			-float(KICK.up))
@@ -5195,7 +5218,11 @@ func _unhandled_input(e: InputEvent) -> void:
 						_tutor_close()
 						_sfx("menu_back")
 					elif state == S.RUNINFO:
-						state = run_from
+						#  **같은 문을 지난다.** 여기서 state 를 손으로 박으면
+						#  「정보」 단추로 닫을 때만 소리가 나고 키로 닫으면
+						#  조용했다 — _runinfo_toggle 의 닫기 갈래가 그 소리를
+						#  이미 들고 있다. 2026-09-25
+						_runinfo_toggle()
 					elif state == S.SETTINGS:
 						_settings_back()
 					elif state == S.COLLECT or state == S.NEWRUN \
@@ -5207,6 +5234,12 @@ func _unhandled_input(e: InputEvent) -> void:
 					elif hand_st != H.NONE:
 						_hand_abort()
 					elif buy_sel >= 0 or sell_sel >= 0:
+						#  지목을 푸는 소리. 톡으로 풀면 _shop_tap·_rack_tap 이
+						#  제 소리를 내는데 키로 풀면 무음이었다 — 어느 쪽을
+						#  집고 있었나로 갈린다(매물 shop · 슬롯 rack).
+						#  2026-09-25
+						_sfx("shop_deselect" if buy_sel >= 0
+								else "rack_deselect")
 						buy_sel = -1
 						sell_sel = -1
 					elif state == S.OVER:
@@ -5340,7 +5373,9 @@ func _unhandled_input(e: InputEvent) -> void:
 				#  (톡의 규약 ④ · WCAG 2.5.2 의 임계에서 값이 안 바뀐다).
 				#  지목은 되돌린다: 길게 누르기는 읽기지 취소가 아니다.
 				if hand_st != H.NONE:
-					_hand_abort()         # _hand_abort 가 buy_sel 을 지운다
+					#  quiet — 바로 위가 적어 둔 「소리도 없다」를 지킨다.
+					#  _hand_abort 가 이제 제 소리를 내므로 여기만 끈다.
+					_hand_abort(true)     # _hand_abort 가 buy_sel 을 지운다
 					buy_sel = press_buy
 				return
 			_hand_release(mp)
@@ -5417,6 +5452,24 @@ func _click(m: Vector2) -> void:
 				if _mag_rect(i).has_point(m):
 					_pick_dart(i)
 					return
+		#  확인 27프레임 + 비행 13프레임 = **40프레임(0.667초)** 이 발마다
+		#  입력을 하나도 안 받고 있었다. 이 match 에 두 갈래가 아예 없었고
+		#  _fast_on 도 첫 줄이 `state != S.RESOLVE` 라 곧장 false 다 —
+		#  6발 판이면 240프레임 4.00초, 24판 한 바퀴면 96초가 누를 수도
+		#  빨리 볼 수도 없는 자리였다. 첫 발의 확인은 뜸이지만 스무 번째
+		#  발의 확인은 통행료다(ch() 주석이 「입력을 안 받는 순수 연출」이라고
+		#  스스로 적어 뒀다).
+		#
+		#  **건너뛰기가 아니라 시계를 끝까지 미는 것**이다 — 다음 프레임에
+		#  S.CONFIRM·S.FLY 의 **원래 길**이 한 줄도 안 빠지고 그대로 끝난다
+		#  (자석 lerp · again_aim · again_dart · _grip_consume · dart_fly ·
+		#  fly_rot · _land). 값은 한 톨도 안 바뀌고 새 상태도 0개다.
+		#  SPACE 도 같은 문을 지난다(_unhandled_input 의 끝 _click(-1,-1)) —
+		#  키 전용 길을 안 낸다. **모바일도 같은 탭으로 먹는다.** 2026-09-24
+		S.CONFIRM:
+			confirm_t = ch()
+		S.FLY:
+			fly_t = GameData.tune("fly_time")
 		S.AIM_V, S.AIM_H:
 			# 다트를 갈아타는 것은 **첫 축을 잠그기 전까지**다.
 			# 규칙이 뜻하는 것은 "던질 자루를 무를 수 없다" 가 아니라
@@ -5619,9 +5672,9 @@ func _click(m: Vector2) -> void:
 				_sfx("run_start")
 				return
 			if _newrun_back().has_point(m):
+				#  소리는 _newrun_leave 안에 있다 — ESC 도 같은 문을 지난다.
 				_newrun_leave()
 				state = S.TITLE
-				_sfx("back")
 				return
 		S.TITLE:
 			#  **줄 수를 표에서 센다.** 4 를 박아 두었더니 줄을 하나 늘렸을 때
@@ -5729,7 +5782,11 @@ func _click(m: Vector2) -> void:
 				set_sel = i
 				match rows[i]:
 					"fs":
+						#  "vol","mus" 와 같은 꼴로 선다 — 제 소리는
+						#  _toggle_fullscreen 안에 있고, 여기서 return 해야
+						#  맨 밑 menu_back 을 안 먹는다. 2026-09-25
 						_toggle_fullscreen()
+						return
 					"vol", "mus":
 						# 고르기만 한다. 값은 오른쪽 판의 홈에서 끈다 —
 						# 왼쪽은 글줄이라는 규약을 한 줄도 깨지 않는다.
@@ -5766,7 +5823,11 @@ func _click(m: Vector2) -> void:
 						_vol_save_due()
 						get_tree().quit()
 					"back":
+						#  소리는 _settings_back 안에 있다 — ESC·스페이스도
+						#  같은 문을 지난다. 밑의 menu_back 을 안 먹게
+						#  "vol","mus","fs" 와 같은 꼴로 선다. 2026-09-25
 						_settings_back()
+						return
 				_sfx("menu_back")
 				return
 		S.RUNINFO:
@@ -6040,9 +6101,53 @@ func _thud() -> void:
 	_sfx("board_thud", SFX_BASE * randf_range(0.94, 1.06))
 
 
-func _impact(info: Dictionary, hit_mult: int) -> void:
+#  착탄 순간에 뜨는 **값**. 꽂힌 자리의 수다 — 칸 수 × 그 자리의 배수
+#  (트리플 20 → 「60」 · 이너 불 → 「50」 · 싱글 5 → 「5」).
+#
+#  여태 뜨던 글자는 「더블」 「트리플」 「아우터 불」 「불스아이」로 전부
+#  **갈래 이름**이었다 — 판 위에서 가장 큰 글자가 「효과와 값만 · 분류
+#  설명 금지」를 정면으로 어겼고, 정작 20인지 3인지는 그 글자가 안 말한
+#  채 수가 0.374초 뒤 카드에 왔다. 가장 자주 나는 싱글은 글자가 아예 없었다.
+#
+#  ⚠ **info.sector 를 쓰다가 한 번 크게 틀렸다.** 트랙 강화분이 얹힌
+#  info.base 를 피하려고 sector 를 집었는데, sector 는 hit_info 가 낸
+#  날것이라 _land 가 그 뒤에 지나는 **죽이는 축 다섯**(금줄 dead_idx ·
+#  색 죽이기 dead_col · 홀짝 odd_mul · 「목표물」 mark_sec · 칠 paint_sec)
+#  을 한 번도 안 탄다. 「목표물」 런에서는 발마다 틀렸다 — 뽑힌 칸이
+#  아닌 20 트리플은 카드가 0 인데 판 위에 「60」이 떴고, 뽑힌 칸이면
+#  실제 300 인데도 「60」이 떴다. 앞서 뜨던 「트리플」은 갈래 이름이라
+#  틀릴 수가 없었다: **「효과와 값만」을 고치려다 판 위 가장 큰 글자가
+#  거짓이 됐다.**
+#
+#  답은 축을 다 지난 뒤이면서 트랙 강화보다는 앞인 **그 한 지점**의 값을
+#  뜨는 것이다 — land_mult 를 잡는 바로 그 자리(「판이 무엇인가」가 끝나는
+#  곳)에서 land_base 를 같이 잡아 여기로 넘긴다. 그러면 트랙 강화분도
+#  안 섞이고 죽은 칸도 죽은 채로 적힌다.
+#
+#  **0 이면 글자를 아예 안 낸다.** 0점을 「0」으로 적으면 빗나감과 같은
+#  말이 되는데, 빗나감(등급 0)은 지금도 글자가 없다.
+#  **점수 계산은 한 줄도 안 건드린다 — 이미 셈해 둔 수를 적기만 한다.**
+#  2026-09-25
+func _land_val(land_base: int, hit_mult: int) -> String:
+	var v: int = land_base * maxi(hit_mult, 1)
+	return "" if v == 0 else "%d" % v
+
+
+#  값이 0 이면 뜨지 않는 pop. 등급 다섯 자리가 같은 갈래를 쓰므로 한 곳에 둔다.
+func _land_pop(p: Vector2, land_base: int, hit_mult: int, c: Color,
+		sz: int, life: float) -> void:
+	var txt := _land_val(land_base, hit_mult)
+	if txt.is_empty():
+		return
+	pop(p, txt, c, sz, life)
+
+
+#  land_base 를 안 주면 info.base 를 쓴다 — 축을 아직 안 지난 날판(검사
+#  도구가 hit_info 를 갓 떠서 부르는 자리)에서는 둘이 같은 수다.
+func _impact(info: Dictionary, hit_mult: int, land_base: int = -1) -> void:
 	var lbl := Vector2(0.0, 26.0) if aim.y < BC.y else Vector2(0.0, -24.0)
 	var grade := _hit_grade(info, hit_mult)
+	var lv: int = int(info.base) if land_base < 0 else land_base
 	_thud()
 	_sfx(HIT_SFX[grade])
 
@@ -6050,12 +6155,26 @@ func _impact(info: Dictionary, hit_mult: int) -> void:
 		0:
 			shake = 1.5
 			board_punch = 0.15
-			hit_flash_amt = 0.25
+			#  ⚠ **0 이 맞다.** 여기 0.25 가 적혀 있었지만 판번쩍(11758)은
+			#  `if hit_bull: … elif hit_idx >= 0:` 인데 판벌이 반환은 idx −1 ·
+			#  "bull" 키 없음이라 두 갈래 다 안 걸린다 — 처음부터 닿을 수 없는
+			#  줄이었다. 띠를 그리게 고치는 길도 안 간다: 빗나감이 칠할 수 있는
+			#  면은 테 둘레 전체뿐이라 **싱글(한 칸)보다 넓어져** 사다리가
+			#  뒤집힌다. 빗나감은 판을 안 밝힌다 — 그것이 뜻이다.
+			hit_flash_amt = 0.0
+			#  대신 **꽂힌 자리에 물결 하나**. 등급 1~5 는 전부 물결이 있고
+			#  0 만 없어서, 빗나감은 화면에 사실상 아무 일도 안 일어난 채
+			#  22프레임(0.374초)을 지나 카드에 「빗나감」이 떴다. 가장 옅고
+			#  가장 작은 물결이라 사다리의 맨 아랫단으로 선다(싱글 24 → 18).
+			#  2026-09-24
+			add_wave(aim, 3.0, 18.0, C_TXT, 0.22, 1.0, 0.22)
 		1:
 			shake = 3.0
 			board_punch = 0.45
 			hit_flash_amt = 0.4
 			add_wave(aim, 3.0, 24.0, C_TXT, 0.35, 1.0, 0.28)
+			#  가장 자주 나는 착탄인데 글자가 없었다. 값 하나를 준다.
+			_land_pop(aim + lbl, lv, hit_mult, C_TXT, 12, 0.7)
 		2:
 			shake = 6.5
 			board_punch = 0.8
@@ -6063,7 +6182,7 @@ func _impact(info: Dictionary, hit_mult: int) -> void:
 			hit_flash_amt = 0.7
 			add_wave(aim, 3.0, 42.0, C_ACC, 0.75, 1.5, 0.40)
 			add_ring_fx(R * rt_dbl_in, R * rt_dbl_out, C_ACC, 0.50)
-			pop(aim + lbl, "더블", C_ACC, 12, 0.8)
+			_land_pop(aim + lbl, lv, hit_mult, C_ACC, 12, 0.8)
 		3:
 			shake = 9.5
 			board_punch = 1.0
@@ -6072,19 +6191,29 @@ func _impact(info: Dictionary, hit_mult: int) -> void:
 			add_wave(aim, 3.0, 54.0, C_ACC, 0.85, 2.0, 0.45)
 			add_wave(aim, 3.0, 32.0, C_TXT, 0.60, 1.0, 0.32)
 			add_ring_fx(R * rt_trp_in, R * rt_trp_out, C_ACC, 0.55)
-			pop(aim + lbl, "트리플", C_ACC, 20, 0.9)
+			_land_pop(aim + lbl, lv, hit_mult, C_ACC, 20, 0.9)
 		4:
 			shake = 11.0
-			board_punch = 1.0
+			#  ⚠ 여기 아래 셋이 전부 1.0 이라 **여섯 등급이 네 값에 앉아**
+			#  있었다. push = 1 + board_punch × 0.028 이라 테 108px 에서
+			#  0.45 / 1.36 / 2.42 / 3.02 / 3.02 / 3.02px — 눈은 흔들림이
+			#  1.5→15.0 으로 열 배 오르고 멈춤도 0/0/3/5/6/9프레임으로
+			#  제대로 벌어지는데 판펀치만 위에서 누웠다.
+			#  **0~3 은 한 톨도 안 건드리고** 위 둘만 편다(1.0 / 1.35 / 1.75
+			#  → 3.02 / 4.08 / 5.29px). 걸음이 0.60 / 1.06 / 1.21px 라
+			#  세 단이 실제로 갈린다. 2026-09-24
+			board_punch = 1.35
 			hitstop = 0.11
 			hit_flash_amt = 0.9
 			add_wave(BC, R * rt_bull_o, R * 1.15, C_GREEN.lightened(0.45), 0.80, 2.0, 0.50)
 			add_wave(BC, 4.0, 46.0, C_TXT, 0.70, 1.5, 0.35)
 			add_sparks(10, R * rt_bull_o, R * 0.95, 12.0, C_GREEN.lightened(0.5), 0.42)
-			pop(BC + Vector2(0.0, -34.0), "아우터 불", C_GREEN.lightened(0.55), 20, 0.9)
+			#  자리를 BC 에서 aim 으로 옮긴다 — 꽂힌 자리에 값이 붙는 것이
+			#  나머지 넷과 같은 어법이고, 불 둘만 판 한가운데에 박혀 있었다.
+			_land_pop(aim + lbl, lv, hit_mult, C_GREEN.lightened(0.55), 20, 0.9)
 		5:
 			shake = 15.0
-			board_punch = 1.0
+			board_punch = 1.75
 			hitstop = 0.15
 			hit_flash_amt = 1.0
 			screen_flash = 1.0
@@ -6092,7 +6221,7 @@ func _impact(info: Dictionary, hit_mult: int) -> void:
 			add_wave(BC, R * rt_bull_i, R * 0.90, C_ACC, 0.80, 2.0, 0.45)
 			add_wave(BC, 3.0, 52.0, C_TXT, 0.80, 1.5, 0.32)
 			add_sparks(16, R * rt_bull_i, R * 1.10, 16.0, C_ACC, 0.55)
-			pop(BC + Vector2(0.0, -38.0), "불스아이", C_ACC, 24, 1.1)
+			_land_pop(aim + lbl, lv, hit_mult, C_ACC, 24, 1.1)
 
 
 # mark 가 false 면 연발의 한 발이다 — 이미 꽂혀 있고, 점수도 한 발치가
@@ -6150,6 +6279,13 @@ func _land(mark := true) -> void:
 		track_hits[_tk] = int(track_hits.get(_tk, 0)) + 1
 
 	var land_mult: int = int(info.mult)
+	#  연출이 적을 **값**도 여기서 같이 뜬다. 이 지점이라야 맞는다:
+	#  죽이는 축 다섯(금줄 · 색 · 홀짝 · 「목표물」 · 칠)은 이미 다 지났고,
+	#  트랙 강화(info.base += tb.s)는 아직 안 왔다. 앞이면 죽은 칸이 산
+	#  것처럼 적히고, 뒤면 판에도 카드에도 없는 제3의 수가 적힌다.
+	#  한 번 틀렸던 자리다 — _land_val 머리말에 무엇이 깨졌는지 적었다.
+	#  2026-09-25
+	var land_base: int = int(info.base)
 
 	# 다트 특성
 	var pierce_gain := 0
@@ -6194,12 +6330,17 @@ func _land(mark := true) -> void:
 
 	# 꽂힌 자루마다 살짝 다른 각. 한 번 정하고 저장하므로 프레임 간 안 흔들린다.
 	# 연발은 쏘는 동안 이미 꽂아 두었으므로 여기서는 안 꽂는다.
+	#  ⚠ **fly_rot 을 잇는다.** 여기서 randf_range 를 다시 굴리고 있었다 —
+	#  4568 이 「나는 동안과 꽂힌 뒤가 같은 각이라야 착탄 프레임에서 자루가
+	#  홱 돌지 않는다」며 세워 둔 각을 착탄 한 프레임 전에 버린 꼴이라,
+	#  던지는 12프레임을 다 보고 마지막에 자루가 홱 돌았다(구조상 최대 29.8°).
+	#  보통 발은 비행이 있으므로 그 각을 그대로 잇는다. 2026-09-24
 	if mark:
 		darts.append({"p": aim, "id": String(cur_dart.get("id", "std")),
-				"rot": randf_range(-0.26, 0.26)})
+				"rot": fly_rot})
 	# 연출에는 **꽂힌 자리의 배수**를 넘긴다. info.mult 는 이 위에서
 	# 다트와 트랙이 이미 주무른 값이라, 그걸 넘기면 연출이 점수를 따라간다.
-	_impact(info, land_mult)
+	_impact(info, land_mult, land_base)
 
 	hit_flash = 1.0
 	hit_idx = info.idx
@@ -6476,7 +6617,14 @@ func _land(mark := true) -> void:
 	settle_n = queue.size()
 	_tutor("u_score")
 	state = S.RESOLVE
-	qt = beat * 1.1
+	#  ⚠ **_pace() 를 태운다.** 착탄에서 첫 걸음까지의 이 머리 걸음만
+	#  붙박이였다 — _next_step 의 모든 갈래는 `beat * pace` 인데 여기만
+	#  beat * 1.1 이라, 바로 두 줄 위에서 `settle_n = queue.size()` 로 짐을
+	#  재 놓고도 그 짐을 안 썼다. 큐가 길수록 머리 숨이 짧아져야 정산 전체가
+	#  한 박자로 읽힌다. 새 상태가 0개이고(settle_n 이 이미 섰다) 카드 춤
+	#  창(card_jrate)이 qt 를 읽으므로 저절로 맞는다.
+	#  **tuning.csv 를 안 연다 — beat 값은 그대로다.** 2026-09-24
+	qt = beat * 1.1 * _pace()
 
 
 # 작은 다트의 기본 점수. **들어올 때** 깎는다 — 정산 결과만 깎으면 카드는
@@ -7675,6 +7823,15 @@ func _draw() -> void:
 			draw_set_transform(sh)
 	else:
 		_brk_hole_draw()            # 판이 뜬 자리 — 벽에 남은 자국
+	#  조준 어둠 · 칸 밝힘 · 조준 두 선 · 확인 고리 · 비행 원은 전부 **판
+	#  면의 것**이라 판 바로 위에 선다. 여태 꽂힌 자루보다 **뒤**에 있어서
+	#  주황 조준 가로선이 꽂힌 자루의 몸을 가로질러 갈랐다 — 판에 꽂힌
+	#  물건 위를 조준선이 지나면 자루가 판 뒤에 있는 것으로 읽힌다.
+	#  판 갈이 중에는 판이 눕는 중이라 안 그린다(옛 자리의 else 갈래와 같은
+	#  문지기다). _swap_board 가 swap_live 아닐 때 곧장 물러서므로 변환은
+	#  여기서도 그대로 sh 다. 2026-09-24
+	if not swap_live:
+		_draw_aim()
 	_brk_crack_draw()               # 금은 판 위, 판 효과 앞
 	_draw_fx()
 	_brk_shards_draw()              # 조각은 다트 **밑**이다
@@ -7701,7 +7858,8 @@ func _draw() -> void:
 			# 들어오는 테이블이 나중이다 — 다 누운 판을 덮으며 자리를 잡는다.
 			_swap_screen(sh)
 	else:
-		_draw_aim()
+		#  _draw_aim 은 판 바로 위로 올라갔다(꽂힌 자루보다 먼저). 여기에는
+		#  카드부터 남는다 — 카드는 판 위에 뜨는 판이라 자루보다 뒤가 맞다.
 		_draw_card()
 		# 런 정보는 화면을 갈아 끼우는 것이 아니라 **판 위에 뜨는 판**이다.
 		# 열던 화면을 먼저 그리고 그 위에 얹어야 "잠깐 확인하고 닫는다" 로
@@ -12170,6 +12328,8 @@ func _draw_darts(a := 1.0) -> void:
 	# 첫 발은 꽂힌 자루가 없다. 나는 자루만 있어도 무대를 그려야 한다.
 	if darts.is_empty() and not _bd3_flying():
 		return
+	#  그림자가 먼저다 — 3D 한 장이든 2D 받침이든 그 **밑**에 깔린다.
+	_dart_shade_2d(a)
 	if _bd3_live():
 		var tex: Texture2D = bd_vp.get_texture()
 		if tex != null:
@@ -12180,6 +12340,34 @@ func _draw_darts(a := 1.0) -> void:
 					Color(1.0, 1.0, 1.0, a))
 			return
 	_draw_darts_2d(a)
+
+
+#  꽂힌 자루의 그림자. **3D 자루 밑에 2D 로 깐다.**
+#
+#  자루 몸이 밝은 회색이라 **크림 칸 위에서는 바탕과 대비가 없어** 어디
+#  꽂혔는지 눈으로 못 셌다 — 먹색 칸에서는 잘 보이므로 판에 닿는 순간
+#  절반만 사라지던 셈이다. 착탄은 한 발의 결과를 확인하는 자리다.
+#
+#  **새 색을 한 개도 안 만든다** — 판이 제 밑에 까는 그 그림자
+#  (BOARDART.shadow)를 그대로 짚는다. 어긋남도 판과 같은 쪽(오른쪽 아래)이다.
+#  자리는 _draw_darts_2d 가 쓰는 **그 투영**을 그대로 빌린다 — 두 벌이
+#  나란히 같은 셈을 한다는 위 구획 주석의 계약이라, 3D 자루가 서는 자리와
+#  한 자에서 난다. 2026-09-24
+func _dart_shade_2d(a := 1.0) -> void:
+	for e in darts:
+		var v: Vector2 = e.p - BC
+		var r := v.length()
+		var dl := clampf(r * float(DART_PERSP) * 0.5,
+				float(DART_MIN), float(DART_MAX))
+		var u := (-v).normalized() if r > 0.001 else Vector2(0.0, 1.0)
+		var o := Vector2(1.0, 2.0)
+		var sc: Color = BOARDART.shadow
+		#  ⚠ 길이는 dl **한 배**다. dl 은 2D 아이콘의 *반길이*(DART_MIN 주석)라
+		#  2D 받침은 2dl 을 쓰는데, 3D 자루는 눈 쪽으로 기울어 서므로 화면에
+		#  서는 길이가 그 절반쯤이다(찍어서 쟀다 — 자루 12.5px 에 2dl 은 29px).
+		#  2dl 로 그으면 그림자가 꽁지 밖으로 길게 삐져나가 **자루가 아니라
+		#  금 한 줄**이 된다. 짧은 쪽으로 틀리면 자루 밑에 숨을 뿐이다.
+		draw_line(e.p + o, e.p - u * dl + o, Color(sc, sc.a * a), 2.0)
 
 
 # 3D 가 없을 때의 받침. 같은 투영을 손으로 계산한다 — 자세한 근거는
@@ -12202,6 +12390,34 @@ func _draw_darts_2d(a := 1.0) -> void:
 
 
 func _draw_aim() -> void:
+	#  ⚠ **판이 없으면 판 위에 아무것도 안 그린다.** 이 함수가 내는 것은
+	#  전부 판 면에 얹히는 것들이다(칸 가라앉히기 · 칸 밝히기 · 조준 두 선 ·
+	#  확인 고리 둘 · 비행 원). 판 깨짐이 도는 동안 _draw_board 는 이미
+	#  쉬는데(brk_fired 선언 주석) 여기만 안 쉬어서, 판이 조각으로 터져
+	#  날아가는 위를 주황 조준 가로선이 그대로 가로질렀다. 개발자 판의
+	#  「다시 보기」는 S.AIM_H·S.PICK 에서 깨짐을 트므로 실제로 나는 그림이다.
+	#  **brk_live / brk_fired 를 읽기만 한다 — BRK 블록은 안 건드린다.**
+	#  2026-09-24
+	#
+	#  ⚠ **이 반환이 함수 맨 위에 있어서 너무 많이 걷어 갔다.** 판 깨짐은
+	#  금이 0.68초 번지는 동안 판이 **아직 멀쩡히 그려지는데**(판 층은
+	#  brk_fired 부터 쉰다), 맨 위에서 돌아서는 바람에 「목표물」의 칸
+	#  어둠 열아홉이 깨짐 첫 프레임에 통째로 벗겨졌다 — 판이 확 밝아졌다가
+	#  깨진다. 정작 막으려던 주황 조준선은 **실제 판에서는 애초에 안 그려진다**:
+	#  아래 사슬이 S.AIM_V/AIM_H/CONFIRM/FLY 에서만 그리는데 깨짐은
+	#  S.RESOLVE 에서만 돌기 때문이다(_brk_tick 의 state 문). 개발자
+	#  「다시 보기」만 S.AIM_H·S.PICK 에서 트므로 선을 접는 것 자체는 맞다.
+	#
+	#  그래서 **가른다** — 판이 서 있는 동안 깔리는 것(칸 어둠)은 판과 같이
+	#  살고, 판 면에 얹는 선·고리만 판과 같이 죽는다. 판이 서 있는지는
+	#  _brk_board_dy() 하나가 쥐고 있으므로(판 층의 문과 같은 자) 그것을
+	#  그대로 묻는다 — 여기서 brk_fired 를 따로 읽으면 문이 두 벌이 된다.
+	#  **칸 어둠을 brk_live 내내 살려 두는 길은 안 간다**: _board_dim_sector 는
+	#  판이 있든 없든 판 반지름에 검은 띠를 긋기 때문에, 조각이 뜬 뒤에는
+	#  맨 배경에 검은 부채 열아홉이 찍힌다. 2026-09-25
+	var board_up := not is_inf(_brk_board_dy())
+	if not board_up and brk_live:
+		return
 	#  「목표물」 — 점수가 나는 **그 한 칸**만 남기고 판을 가라앉힌다.
 	#  판이 서 있는 내내 깔리고, 조준 어둠보다 **먼저** 깔려 둘이 겹치면
 	#  더 짙어진다(제약 둘이 같이 걸린 것이 그 그림이다).
@@ -12218,20 +12434,40 @@ func _draw_aim() -> void:
 	var gp := _aim_glow_at()
 	if gp.x > -9000.0:
 		aim_glow_last = gp
-	if aim_dim > 0.0:
+	#  ⚠ **이 둘은 깨지는 동안 죽는다**(칸 어둠과 갈리는 자리다). 「이 칸에
+	#  꽂힌다」를 말하는 조준 affordance 라, 이미 꽂히고 판이 깨지는 중에
+	#  남아 있으면 없어질 칸을 가리킨다. 「목표물」의 칸 어둠은 판이 그 런
+	#  내내 지고 있는 성질이라 판과 같이 살지만, 이쪽은 조준과 같이 죽는다.
+	#  2026-09-25
+	if aim_dim > 0.0 and not brk_live:
 		_board_dim_except(aim_glow_last, float(AIMDIM.a) * aim_dim)
 		_cell_glow(aim_glow_last, Color(C_ACC, aim_dim), 1.8 * aim_dim)
+	if brk_live:
+		return
 	if state == S.AIM_V or state == S.AIM_H:
 		_draw_aim_live()
 	elif state == S.CONFIRM:
 		_aim_h_line(aim.y, C_ACC)
 		_aim_v_line(aim.x, C_ACC)
 		if mod_v("fog", 0.0) <= 0.0:
-			var e := 1.0 - pow(1.0 - clampf(confirm_t / maxf(ch(), 0.001), 0.0, 1.0), 3.0)
+			#  ⚠ 곡선을 갈았다. `1 - (1-t)³` 은 **처음이 가장 빠른** 곡선인데
+			#  창이 27프레임이라 꼬리가 통째로 남았다 — 앞 13프레임이 움직임의
+			#  86%를 쓰고, 고리가 21프레임째 0.097px · 24프레임째 0.028px 라
+			#  640×360 정수 화면에서 **마지막 21프레임이 같은 그림**이었다.
+			#  「급하게 시작해 멈춘 채로 끝난다」. smoothstep 은 _bd3_fly 가
+			#  12108 에서 이미 쓰는 곡선이라 저장소에 어법이 하나 더 안 는다.
+			#  **confirm_hold 값은 한 톨도 안 건드린다 — 곡선만.** 2026-09-24
+			var t := clampf(confirm_t / maxf(ch(), 0.001), 0.0, 1.0)
+			var e := t * t * (3.0 - 2.0 * t)
 			draw_arc(aim, lerpf(22.0, 7.0, e), 0.0, TAU, 24, C_TXT, 1.0)
 			draw_arc(aim, lerpf(30.0, 11.0, e), 0.0, TAU, 24, Color(C_TXT, 0.3), 1.0)
 	elif state == S.FLY:
-		var k := 1.0 - fly_t / 0.2
+		#  ⚠ 0.2 가 박혀 있었다. tuning.csv 는 fly_time 을 0.05~1.0 으로 여는데
+		#  여기만 그 값을 안 읽어서, 0.2 를 넘기면 k 가 음수로 가고 반지름도
+		#  알파도 같이 음수가 됐다(fly_t 0.5 면 반지름 −36). 같은 파일
+		#  _bd3_fly(12107)는 진작 GameData.tune 을 읽는다 — 2D 길과 3D 길이
+		#  갈라져 있던 것이다. 그 꼴을 그대로 빌린다. 2026-09-24
+		var k := 1.0 - fly_t / maxf(GameData.tune("fly_time"), 0.001)
 		draw_circle(aim, 3.0 + k * 26.0, Color(C_TXT, 0.2 + k * 0.55))
 
 
@@ -25364,7 +25600,17 @@ func _toss_wake() -> void:
 
 
 # 손을 비우는 유일한 문.
-func _hand_abort() -> void:
+#  quiet — 이 손짓은 **아무것도 확정 안 한다**는 자리에서만 준다.
+#  지금은 길게 누르기(읽기) 하나뿐이고, 그 자리 주석이 「소리도 없다」를
+#  WCAG 2.5.2 와 함께 이미 못 박아 두었다.
+func _hand_abort(quiet := false) -> void:
+	#  ⚠ **소리는 쥔 것이 실제로 있었을 때만 낸다.** 이 함수는 손이 빈 채로도
+	#  청소용으로 불리는 자리가 열 곳 넘는다(_drop_roll · _drop_settle · 판을
+	#  여닫는 길들). 안 물으면 판이 열릴 때마다 놓는 소리가 난다.
+	#  키(ESC·스페이스)로 놓을 때가 무음이고 손가락으로 놓을 때만
+	#  (_hand_release) 울던 것을 여기 한 곳에서 잇는다 — 도착점이 하나라
+	#  갈래마다 흩을 까닭이 없다. 2026-09-25
+	var had := hand_st != H.NONE and not quiet
 	if hand_src == 0 and hand_i >= 0 and hand_i < drop.size():
 		var it: Dictionary = drop[hand_i]
 		if it.held:
@@ -25377,6 +25623,8 @@ func _hand_abort() -> void:
 	hand_zone = -1
 	hand_src = 0
 	buy_sel = -1
+	if had:
+		_sfx("hand_drop")
 
 
 # ══ 프레임 ════════════════════════════════════════════
@@ -26363,10 +26611,18 @@ func _tip_build(hit: Dictionary) -> void:
 							% String(GameData.mod_of(String(mods_own[0])).get("n", "")),
 							12, C_MULT)
 			# 못 사는 이유를 누르기 전에 알려준다. _deny() 는 원인을 한 문장으로 뭉갠다.
+			#  ⚠ **칸이 꽉 찬 둘만 태그 줄로 간다.** 그 둘은 값(「슬롯 5/5」)이고
+			#  나머지는 사정(「이미 샀다」)이라 곁줄이 제 자리다 — 한 툴팁에
+			#  두 문법이 섞이던 자리였다. 같은가는 _buy_full_tag 의 값과 견줘
+			#  묻는다: _buy_block 의 **차례를 그대로 지나온 뒤**라, 이미 산
+			#  물건이 칸까지 꽉 찼어도 「이미 샀다」가 먼저 선다. 2026-09-24
 			var blk := _buy_block(i)
 			if blk != "":
-				_tip_add(blk, 12,
-						C_OFF if s.sold else C_RED.lightened(0.2))
+				if blk == _buy_full_tag(s):
+					_tip_tag(blk, C_RED.lightened(0.2))
+				else:
+					_tip_add(blk, 12,
+							C_OFF if s.sold else C_RED.lightened(0.2))
 		"tag":
 			# i 는 판 번호다. 짚는 자리는 건너뛰기 단추 하나다.
 			var bt := _leg_tag(i)
@@ -27378,7 +27634,15 @@ func _photo_draw() -> void:
 				draw_string(font_sm, Vector2(0.0, 52.0),
 						"%d 칸  x%d" % [int(sectors[idx]) if idx < sectors.size() else 0, photo_v],
 						HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 20, C_ACC)
-			draw_string(font_sm, Vector2(0.0, 28.0), "칠할 칸을 고르세요",
+			#  ⚠ **존댓말 해설이 여기 하나 남아 있었다** — 「칠할 칸을
+			#  고르세요」. 바로 두 줄 위가 이미 「%d 칸  x%d」로 값만 적고
+			#  있어서 **한 화면 안에서 두 문법이 싸웠다.** 판 위 안내줄을
+			#  전부 명사형으로 모은 손질(2026-09-24)이 이 줄을 안 지났다 —
+			#  그 손질은 _draw_hint 가 내는 state 별 줄과 다트통 줄만 훑었고
+			#  여기는 _photo_draw 라 자에도 안 걸렸다. qa_words 의 훑는
+			#  대상을 이 함수까지 넓혀 세 번째 곳이 또 안 남게 했다.
+			#  2026-09-25
+			draw_string(font_sm, Vector2(0.0, 28.0), "칠할 칸 고르기",
 					HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 20, C_TXT)
 
 
@@ -27816,6 +28080,17 @@ var clear_t := 0.0              # 정산이 흐른 시간(초). 0 이면 막 열
 #  말하고 런 종료 화면에는 한 글자도 안 남았다 — 새 리그가 열려도 그것을
 #  본 사람이 없을 수 있다. 런이 끝날 때 이 줄을 화면에 남긴다.
 var run_unlocked := []
+
+
+#  런 끝 해금 쪽지 한 장. **머리와 겹치는 낱말을 뗀다** — 표의 이름이
+#  「검정 리그」 「선금 다트통」이라 머리를 그대로 붙이면 화면에
+#  「리그 검정 리그」 「다트통 선금 다트통」으로 찍혔다(txtc_*_over_won 에서
+#  봤다). 겹치지 않는 이름(「넓은 동전 슬롯」)은 한 글자도 안 바뀐다.
+#  뗀 뒤가 비면(이름이 머리 그 자체이면) 이름을 그대로 둔다 — 값이 없는
+#  쪽지를 내느니 겹말이 낫다. 2026-09-24
+static func _unl_tag(k: String, n: String) -> Dictionary:
+	var v := n.replace(k, "").strip_edges()
+	return {"k": k, "n": n if v == "" else v}
 var over_t := 0.0               # 런 종료 화면이 흐른 시간
 
 
@@ -29227,6 +29502,16 @@ func _toggle_fullscreen() -> void:
 			DisplayServer.WINDOW_MODE_WINDOWED if fs
 			else DisplayServer.WINDOW_MODE_FULLSCREEN)
 	Save.set_set("fullscreen", not fs)
+	#  ⚠ **설정 여섯 줄 중 이 줄만 제 소리가 없었다.** "vol","mus" 는
+	#  menu_pick2 를 내고 return 하는데 "fs" 는 그대로 떨어져 맨 밑
+	#  _sfx("menu_back") 을 먹었다 — 켜고 끄는 토글이 **나가는 소리**로
+	#  울었다. 키(F11)로 하면 소리가 아예 0이었다.
+	#  소리를 **여기 안에** 둔다 — 부르는 자리가 둘(줄 · 키)이라 바깥에
+	#  두면 한쪽이 또 빠진다. 켬과 끔을 같은 톡으로 낸다: 켜짐 여부는
+	#  화면이 곧바로 말하므로 소리까지 갈릴 까닭이 없다.
+	#  _load_settings 는 이 함수를 안 지나고 window_set_mode 를 직접
+	#  부르므로 켜고 시작해도 부팅에 소리가 안 난다. 2026-09-25
+	_sfx("menu_pick2")
 
 
 # 저장에서 설정을 되돌린다. 창 모드는 실제로 바꿔 보고 결과를 다시 읽는다 —
@@ -33676,6 +33961,10 @@ func _newrun_leave() -> void:
 	if state == S.NEWRUN:
 		_nr_tab_set(0)
 	_pack_save_due()
+	#  _settings_back 과 같은 까닭으로 소리가 여기 있다 — 새 런·컬렉션·
+	#  프로필을 나가는 길이 단추와 ESC 둘인데 단추 쪽만 울었다.
+	#  부르는 쪽(단추)의 _sfx 는 뺐다. 2026-09-25
+	_sfx("back")
 
 
 # 저장에 남은 다트통을 화면의 지금 자리로 맞춘 뒤 연다.
@@ -34101,10 +34390,30 @@ func _pack_lines(row: Dictionary) -> Array:
 	if String(row.get("dart_gold", "")) != "":
 		var dg := int(row.get("dart_gold", 0))
 		if dg != GameData.gold_per_dart():
-			out.append("남은 다트 1개당 %d골드" % dg)
+			#  0 은 「1개당 0골드」가 아니라 **없음**이다 — 수로 적으면 곱이
+			#  있는 것처럼 읽힌다(이자 없음과 같은 말씨). 2026-09-24
+			out.append("남은 다트 골드 없음" if dg == 0
+					else "남은 다트 1개당 %d골드" % dg)
 	var did := String(row.get("dart_id", ""))
 	if did != "" and did != "std":
 		out.append("%s 다트로 시작" % GameData.dart_name(did))
+	#  한 발의 값 · 계산 방식. 이 둘이 빠져 있어서 외줄(1.6배)과 물음표
+	#  (무작위)는 줄글을 비우면 화면에 **아무 말도 안 남았다** — 표에 적힌
+	#  효과가 조용히 사라지는 유일한 두 열이었다. 2026-09-24
+	#  자릿수는 GameData._num 이 쥔다 — 리그 줄(34072)이 쓰는 그 자라
+	#  1.60 이 「1.6」으로, 2.00 이 「2」로 같은 말씨로 선다.
+	#  ⚠ **빈 칸을 먼저 묻는다.** CSV 의 빈 칸은 「없는 열」이 아니라
+	#  「빈 글자」라 .get(기본값) 이 기본값을 안 내고, float("") 은 1.0 이
+	#  아니라 **0.0** 이다 — 선물 다트통에 「한 발의 값 0배」가 뗴다(찍어서
+	#  봤다). 값이 있는 줄만 낸다. 2026-09-24
+	var smul_s := String(row.get("score_mul", ""))
+	if smul_s != "" and float(smul_s) != 1.0:
+		out.append("한 발의 값 %s배" % GameData._num(float(smul_s)))
+	var scm := String(row.get("score", ""))
+	if scm == "rand":
+		out.append("발마다 점수·배수 무작위")
+	elif scm == "bal":
+		out.append("저울 계산")
 	# 쥐여 주는 것들 — 이름으로 낸다. id 는 표의 말이지 사람의 말이 아니다.
 	#  사진은 cons 표(consumables.csv)에 산다 — _raw 에 fixtures 표가 없어 id(v_cash)가 찍혔다.
 	for gk in [["grant_item", "items"], ["grant_mod", "mods"],
@@ -34360,10 +34669,30 @@ func _vol_set(key: String, x: float) -> void:
 	else:
 		return
 	_apply_vol()
+	#  ⚠ **소리 크기를 맞추는 동안 소리가 한 알도 안 났다.** 홈을 잡는
+	#  순간 menu_pick2 가 한 번 나고 그 뒤로는 미는 내내 무음이라, 새 크기를
+	#  **귀로 못 듣고** 눈으로만 맞춰야 했다. 버스 음량이 바로 위
+	#  _apply_vol 에서 이미 걸린 뒤라 여기서 내는 톡이 곧 새 크기다.
+	#  **음악 쪽("mus")은 안 낸다** — 효과음 톡으로 음악 크기를 말할 수 없고,
+	#  음악은 제가 이미 울고 있어 들을 것이 따로 있다.
+	#  연타 방지는 휠이 쓰는 60ms 를 그대로 빌린다 — 끌기는 프레임마다
+	#  _vol_set 을 부르므로 안 막으면 한 번 미는 데 톡이 수십 알 난다.
+	#  그 상수가 「page 소리보다 길어 빠른 굴림에서도 안 겹친다」로 이미
+	#  서 있고 menu_pick2 는 그보다 짧다. 2026-09-25
+	if key == "vol":
+		var vnow := Time.get_ticks_msec()
+		if vnow - vol_snd_ms >= WHEEL_MS:
+			vol_snd_ms = vnow
+			_sfx("menu_pick2")
 	queue_redraw()
 	var fr := get_node_or_null("Front")
 	if fr != null:
 		fr.queue_redraw()
+
+
+#  음량 톡의 마지막 때. 휠 쿨다운(wheel_ms)과 **따로 둔다** — 그쪽은 입력을
+#  막는 자라, 같이 쓰면 톡 하나가 다음 굴림 한 칸을 삼킨다.
+var vol_snd_ms := 0
 
 
 #  미룬 음량 저장 — 굴림이 멎은 뒤 한 번 쓴다. Save.set_set 이 곧 gflush 라
@@ -34638,10 +34967,35 @@ func _back_row(c: CanvasItem, r: Rect2, label: String, key: String,
 				Color(C_GOLD, (0.5 + 0.5 * e) * a))
 
 
+#  설정 뒤에 **제목이** 서 있는가. 여는 동안은 pause_from 이 말하고,
+#  닫히는 동안은 _settings_back 이 pause_from 을 -1 로 지운 뒤라 state 가 말한다
+#  (닫힘은 set_t 가 _mo("base") 만큼 더 도므로 그동안에도 답이 맞아야 한다).
+#  상점·판 중에서 열었으면 닫히는 동안 state 가 S.SHOP · S.PICK 이라 거짓이다.
+func _set_over_title() -> bool:
+	return (state == S.SETTINGS and pause_from < 0) or state == S.TITLE
+
+
 func _draw_settings(c: CanvasItem) -> void:
 	var e := _set_ease()
 	var rows := _set_rows()
 	var face := _set_face()
+
+	#  제목 위에서 열 때만 **전면 스크림**. 제목 메뉴(x 15~110)와 설정 목록이
+	#  같은 칸에 서 있어 글자가 글자 위에 그대로 얹혔다 — 「설정」이 「하이톤」
+	#  위에, 「뒤로」가 「HIGHTON」 위에, 「음악」이 「컬렉션」 위에, 「게임 나가기」가
+	#  「종료」 위에. 밑의 왼쪽 그늘은 띠 여덟 장을 다 합쳐도 **최대 알파 0.14** 라
+	#  뒤를 지우기에 턱없이 옅었고, 흐림 판도 글자 획을 못 지운다. 제목에서
+	#  설정을 여는 길은 첫 화면의 기본 동선이라 런마다 한 번은 지난다.
+	#  ⚠ **값은 0.86 이지 런 정보의 0.55 가 아니다.** 0.55 로 먼저 깔고 찍어
+	#  봤는데 「하이톤」 「컬렉션」 「종료」가 여전히 읽혔다 — 런 정보는 판 하나를
+	#  가리고 왼쪽이 비어 있지만, 여기는 제목의 **큰 흰 로고**가 설정 목록 바로
+	#  밑에 서서 같은 값으로는 획이 안 지워졌다.
+	#  사진 화면의 _scrim(0.94)까지 올리지는 않는다 — 뒤에 판이 희미하게 비치는
+	#  편이 「잠깐 여는 판」으로 읽힌다.
+	#  상점 위(ui_10_settings)·판 중에는 왼쪽이 비어 안 겹치므로 **안 깐다.**
+	#  2026-09-24
+	if _set_over_title():
+		c.draw_rect(_full(), Color(0.0, 0.0, 0.0, 0.86 * e))
 
 	#  왼쪽 가장자리 그늘 — 흐린 판 위에서도 글씨가 읽히게 한다.
 	#  띠 여덟 장이면 640x360 에서 이음매가 안 보인다.
@@ -35820,6 +36174,14 @@ func _settings_back() -> void:
 	lobby_arm = false        # 나가는 문 하나 — ESC · 스페이스 · 「뒤로」가 다 여기를 지난다
 	state = pause_from if pause_from >= 0 else S.TITLE
 	pause_from = -1
+	#  ⚠ **같은 일을 키로 하면 조용하고 단추로 하면 울었다.** 「뒤로」를
+	#  눌렀을 때만 부르는 쪽이 menu_back 을 냈고 ESC·스페이스는 무음이었다 —
+	#  **모바일이 예정돼 있어** 손가락으로 배운 사람과 키로 배운 사람이 같은
+	#  일을 다른 소리로 배우는 자리다. 소리를 ESC 갈래마다 흩지 않고
+	#  **도착점인 여기 한 곳**에 둔다: 위 주석이 이미 「나가는 문 하나」라
+	#  적어 둔 그 이유가 소리에도 그대로 선다. 부르는 쪽 셋의 _sfx 는 뺐다 —
+	#  안 빼면 단추 길에서만 두 번 운다. 2026-09-25
+	_sfx("menu_back")
 
 
 # ── 컬렉션 — 게임에 실린 전부를 편다. 표가 전량이고 그 위를 발견이 덮는다 ──
@@ -37402,32 +37764,42 @@ func _draw_hint() -> void:
 	#  배움 말상자가 아래를 쓴다. 둘이 겹치면 둘 다 못 읽는다.
 	if _tutor_live():
 		return
+	#  판이 깨지는 동안도 비킨다. 던질 판이 조각으로 흩어지는 밑에서
+	#  「던질 다트를 고르세요」가 그대로 서 있으면 **없는 판에 던지라고
+	#  부르는 꼴**이라 연출이 끊긴다. 여태 이 이른 반환은 _tutor_live()
+	#  하나뿐이라 배움 말상자만 비켜 주고 판 깨짐은 안 봤다.
+	#  **brk_live 를 읽기만 한다 — BRK 블록은 안 건드린다.** 2026-09-24
+	if brk_live:
+		return
 	var hint := ""
 	match state:
 		S.PICK:
-			hint = "던질 다트를 고르세요"
+			#  명사형으로 모은다 — 조준 줄(AIM_HINT)이 전부 「…결정」이라
+			#  여기만 존댓말이면 한 발 안에서 어투가 바뀐다. 2026-09-24
+			hint = "던질 다트 고르기"
 		S.AIM_V:
 			hint = _aim_hint(0)
 		S.AIM_H:
 			hint = _aim_hint(1)
-		S.CONFIRM:
-			hint = "조준 확인"
-	#  11 → 18 → 20. 가장 긴 말(「눌러 쏘고 밀리는 조준을 따라 잡으세요」)이 304px 라
-	#  가운데 x[168,472] 에 들고, 바닥선 350 이면 잉크가 y[333.5,351] — 판의 숫자 고리
+		#  ⚠ S.CONFIRM 은 **비운다.** 「조준 확인」은 효과도 값도 아닌
+		#  **상태 이름**이고, 그 상태는 이미 그림이 말한다 — 조준 십자에
+		#  고리 둘이 27프레임 동안 조여든다(_draw_aim 의 S.CONFIRM 갈래).
+		#  글자는 발마다 27프레임씩 같은 말을 되풀이할 뿐이었다. 2026-09-24
+	#  11 → 18 → 20. 가장 긴 말(「다트판을 눌러 원 크기 결정」)이 **212px** 라
+	#  가운데 x[214,426] 에 들고, 바닥선 350 이면 잉크가 y[333.5,351] — 판의 숫자 고리
 	#  (~317)와 점수 카드(~326) 밑 · 화면 밑(360)과 9px 다.
+	#  전에 가장 길던 「눌러 쏘고 밀리는 조준을 따라 잡으세요」(304px)는 명사형으로
+	#  모으며 「밀리는 조준 잡기」로 줄었다(2026-09-24) — 자리가 92px 더 남았다.
+	#  **이 수는 qa_words 가 잰다** — 줄을 고치면 그 자가 새 폭을 적어 준다.
 	if hint != "":
 		draw_string(font_sm, Vector2(0, 350), hint,
 				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 20, C_ACC)
 
-	# 손 부채가 하단 좌측을 쓰므로 오른쪽으로 비킨다.
-	# 조절 값 표시는 개발 빌드 전용이다 — 내보낸 exe 와 문서용 스크린샷에
-	# 이 줄이 찍혀 나가는 것을 한 번 겪었다. 조절 키 자체는 릴리즈에도 산다.
-	#  개발자 판(\)이 열렸을 때만 적는다 — 키 이름이 줄 머리라, 판 위에 늘
-	#  떠 있으면 사용자 눈에 「키를 적어 놓은 것」 으로 읽힌다(2026-09-17).
-	#  안내 줄이 20 으로 커지며 y[333.5,351] 를 쓰므로 한 줄 위(바닥선 330)로 비킨다.
-	#  9 → 10. x[378,602] 로 화면 안이다.
-	#  이 줄은 블록을 거느린다 — 지울 때 안의 draw_string 두 줄을 같이 지운다.
-	if OS.is_debug_build() and Dev.on:          # DEV
-		draw_string(font_sm, Vector2(VIEW.x - 262.0, 330), "[ ] 조준 %.2f    - = 정산 %.2f    ; ' 확인텀 %.2f"
-				% [gauge_speed, beat, confirm_hold], HORIZONTAL_ALIGNMENT_LEFT, -1, 10,
-				C_OFF)
+	#  ⚠ **조절 값 줄을 통째로 걷었다(2026-09-24).** 여기 「[ ] 조준 %.2f
+	#  - = 정산 %.2f    ; ' 확인텀 %.2f」가 서 있었다 — 판 위에 **키 이름을
+	#  그대로 적는** 유일한 줄이었고, 그러면서도 그 셋을 미는 길이 키보드
+	#  여섯 개뿐이라 모바일에는 길이 없었다.
+	#  넷(조준 게이지 · 정산 박자 · 확인 텀 · 비행 시간)이 개발자 판 2쪽에
+	#  **줄로 섰다**(dev.gd 의 TUNE_STEPS) — 줄 이름이 지금 값을 그대로
+	#  적으므로 여기서 또 적을 까닭이 없고, ◀▶ 로 손가락에도 길이 난다.
+	#  조절 키 자체는 그대로 산다(_unhandled_input).

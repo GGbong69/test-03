@@ -59,13 +59,19 @@ static var _sfx_rows := []       # 소리 이름 목록. 표에서 한 번만 �
 static var _aimw_key := ""       # 조준 저울 줄을 마지막에 센 (고른 라운드|든 동전)
 static var _aimw_txt := ""       # 그때 나온 글. 열쇠가 같으면 다시 안 센다
 
-const PAGES := ["경제·진행", "물건", "판·조준", "해금", "소리"]
+#  ⚠ 「조작감」은 **끝에 붙인다**(2026-09-24). 가운데에 끼우면 뒤 쪽의
+#  번호가 밀리는데 dev_probe 가 쪽 번호 0·1·2·3 을 손으로 박아 쓴다.
+const PAGES := ["경제·진행", "물건", "판·조준", "해금", "소리", "조작감"]
 # 글자는 페이퍼로지 Bold 12 하나다. 줄 칸(13px) · 탭 · 단추(14px)의 **한가운데**에
 # 잉크(한글 10px)를 세운다(_base — 기준선 11 · 11.5). 갈무리 때 박은 기준선 12 는
 # 페이퍼로지 잉크가 기준선 밑으로 내려가 글자 밑이 칸 바닥에 붙었다(「69 녹는 시계」 ·
 # 「저장 통째로 지우기」, 2026-09-17). 값 칸 128 · 고르개 520 폭에 「1/69 발라트로의 조커」
 # 가 그대로 든다.
-const W := 300.0
+#  ⚠ 300 → 336(2026-09-24). 쪽이 여섯이 되며 탭 한 칸이 57.6 → 48px 로
+#  좁아져 「경제·진행」이 「경제·진」으로 **잘려 찍혔다**(txtc_now_dev_5).
+#  336 이면 (336−12)/6 = 54px 라 네 글자 + 가운뎃점(44px)이 든다.
+#  판 오른끝은 4+336 = 340 이라 640 폭 화면에서 오른쪽 절반은 그대로 비운다.
+const W := 336.0
 const ROW := 15.0
 const ARW := 13.0              # 화살표 칸 너비 — ◀ · ▶ 잉크 12px 가 든다
 const VALW := 128.0            # 값 칸 너비
@@ -111,6 +117,18 @@ static func click(g: Node, m: Vector2) -> bool:
 	# 같이 판정하면 가려진 줄이 눌린다.
 	if open_k != "":
 		return _pick_click(g, m)
+	#  머리 단추 셋 — 탭보다 **먼저** 본다. 탭 칸과는 y 로 갈려 있지만
+	#  차례를 못 박아 두면 탭 폭을 늘릴 때 조용히 가려진다.
+	if _top_btn(2).has_point(m):
+		on = false
+		open_k = ""
+		return true
+	if _top_btn(0).has_point(m):
+		page = posmod(page - 1, PAGES.size())
+		return true
+	if _top_btn(1).has_point(m):
+		page = posmod(page + 1, PAGES.size())   # TAB 키와 같은 값
+		return true
 	for i in PAGES.size():
 		if _tab(i).has_point(m):
 			page = i
@@ -216,10 +234,18 @@ static func draw(g: Node) -> void:
 	var p := _panel()
 	g.draw_rect(p, Color(0.04, 0.03, 0.07, 0.94))
 	g.draw_rect(Rect2(p.position, Vector2(p.size.x, 2.0)), Color(1.0, 0.35, 0.35))
-	g.draw_string(g.font, p.position + Vector2(8.0, 15.0), "개발자",
+	#  머리 이름과 단추 셋이 **같은 기준선**에 선다(단추 14px 의 한가운데).
+	#  고르개 머리가 쓰는 그 식이다.
+	var hb: float = _base(g, _top_btn(0).position.y, _top_btn(0).size.y)
+	g.draw_string(g.font, Vector2(p.position.x + 8.0, hb), "개발자",
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1.0, 0.35, 0.35))
-	g.draw_string(g.font, p.position + Vector2(0.0, 15.0), "\\ 닫기 · TAB 다음 쪽",
-			HORIZONTAL_ALIGNMENT_RIGHT, p.size.x - 8.0, 12, Color(0.55, 0.52, 0.60))
+	#  키 이름을 적던 자리에 **누를 수 있는 것**을 세운다(위 _top_btn 머리말).
+	for w in 3:
+		var b := _top_btn(w)
+		g.draw_rect(b, Color(0.20, 0.17, 0.28))
+		g.draw_string(g.font, Vector2(b.position.x, hb),
+				["◀", "▶", "닫기"][w], HORIZONTAL_ALIGNMENT_CENTER, b.size.x, 12,
+				Color(0.90, 0.88, 0.95))
 
 	for i in PAGES.size():
 		var t := _tab(i)
@@ -449,7 +475,26 @@ static func _pick_cell(j: int) -> Rect2:
 
 # 0 이전 쪽 · 1 다음 쪽 · 2 닫기
 static func _pick_btn(which: int) -> Rect2:
-	var p := _pick_panel()
+	return _btn_row(_pick_panel(), which)
+
+
+#  판 머리의 단추 셋 — 0 이전 쪽 · 1 다음 쪽 · 2 닫기.
+#
+#  여태 이 자리에는 「\ 닫기 · TAB 다음 쪽」이라는 **키 이름**이 글자로
+#  박혀 있었고, 본 판에는 닫는 화면 단추가 **아예 없었다**. 모바일이
+#  예정돼 있어 손가락으로 켠 사람은 그 화면을 못 빠져나온다 —
+#  「잠긴 채로 못 빠져나가는 자리를 안 만든다」가 여기에도 걸린다.
+#  게다가 키 이름을 화면에 적지 않는 것이 이 저장소의 규칙이다.
+#
+#  자리·크기는 고르개의 것을 그대로 쓴다(둘이 한 함수를 지난다) — 두 판이
+#  같은 손짓으로 닫히고 같은 손짓으로 쪽을 넘긴다. 키(\ · TAB)는 그대로
+#  산다. 2026-09-24
+static func _top_btn(which: int) -> Rect2:
+	return _btn_row(_panel(), which)
+
+
+#  판 오른쪽 위에 ◀ ▶ 닫기 셋을 앉히는 한 자. 본 판과 고르개가 같이 쓴다.
+static func _btn_row(p: Rect2, which: int) -> Rect2:
 	var y: float = p.position.y + 4.0
 	var right: float = p.position.x + p.size.x - 6.0
 	match which:
@@ -475,6 +520,12 @@ static func _names(k: String) -> PackedStringArray:
 	if k == "fast":
 		for nm in FAST_NAMES:
 			out.append(String(nm))
+		return out
+	#  조작감 손잡이 넷. 표가 아니라 상수 목록이라 **_cur_name 과
+	#  짝으로** 낼다 — 한쪽만 내면 값 칸을 눌렀을 때 고르개가 횟하다.
+	if TUNE_STEPS.has(k):
+		for v in TUNE_STEPS[k]:
+			out.append("%.2f" % float(v))
 		return out
 	#  조준 저울도 표가 아니라 라운드 번호라 _list 를 안 지난다. 안 넣으면
 	#  값 칸을 눌렀을 때 고르개가 텅 빈 채로 뜬다. 사다리(aim_w)를 적는다 —
@@ -580,9 +631,12 @@ static func _pick_draw(g: Node) -> void:
 				HORIZONTAL_ALIGNMENT_LEFT, c.size.x - 8.0, 12,
 				Color(1.0, 0.90, 0.55) if sel else Color(0.86, 0.86, 0.92))
 
-	g.draw_string(g.font, p.position + Vector2(8.0, p.size.y - 5.0),
-			"누르면 바로 적용 · ESC 나 판 밖을 눌러 닫는다",
-			HORIZONTAL_ALIGNMENT_LEFT, p.size.x - 16.0, 12, Color(0.55, 0.52, 0.60))
+	#  밑줄을 통째로 지운다(2026-09-24). 적혀 있던 것은 「누르면 바로
+	#  적용 · ESC 나 판 밖을 눌러 닫는다」였는데, ① **키 이름을 적지
+	#  않는다**가 이 저장소의 규칙이고 ② 닫는 길은 머리의 「닫기」
+	#  단추가 이미 가졌으며 ③ 마지막 줄(PROW 18)과 같은 높이에서
+	#  겹쳐 두 줄이 포개졌다. 그림이 이미 말하는 것을 글로 또 적지
+	#  않는다 — 내밀려던 문장은 하나도 안 남긴다.
 
 
 # 고르개 머리에 적을 이름. 열 때 줄 이름을 그대로 받아 둔다 — 여는 순간에는
@@ -810,17 +864,62 @@ static func _rows(g: Node) -> Array:
 				{"n1": "이어하기 보기", "t": "act", "a": "run_peek"},
 				{"n1": "이어하기 지우기", "t": "act", "a": "run_drop"},
 			]
-		_:
+		4:
+			#  ⚠ 여기 쪽 번호를 **적어 둔다.** 여태 `_:` 기본 갈래였는데,
+			#  여섯째 쪽을 붙이자 그 기본이 새 쪽까지 삼켜 「조작감」 탭에서
+			#  소리 줄이 떴다(찍어서 봤다). 기본 갈래는 맨 끝 쪽 하나만
+			#  맡는다. 2026-09-24
 			# 소리는 프로브가 못 본다 — 수치가 맞아도 손에 안 맞는 것이 여기서만
 			# 드러난다. 표 순서 그대로 놓으므로 가족끼리 붙어서 견줘 들린다.
 			return [
 				{"n1": "소리 하나", "t": "list", "k": "sfx",
 						"n": _list("sfx").size()},
-				{"n1": "정산 사다리 12칸", "t": "act", "a": "sfx_lad"},
+				{"n1": "정산 사다리 13칸", "t": "act", "a": "sfx_lad"},
 				{"n1": "착탄 사다리 여섯", "t": "act", "a": "sfx_hit"},
 				{"n1": "손 짝 넷", "t": "act", "a": "sfx_pair"},
 				{"n1": "표 전부 차례로", "t": "act", "a": "sfx_all"},
 				{"n1": "그치기", "t": "act", "a": "sfx_stop"},
+			]
+		_:
+			#  ── 조작감 (2026-09-24) · 맨 끝 쪽이라 기본 갈래다 ──
+			#  여태 이 넷은 **키보드에만** 있었다 — `[ ] - = ; '` 여섯 키뿐이고
+			#  fly_time 은 길이 아예 없었다. 그러고도 그 값을 화면에 적는
+			#  game.gd 의 줄이 **키 이름을 그대로 찍었다**(그 줄은 이제 없다).
+			#  모바일이 예정돼 있어 키 전용 길은 길이 아니다.
+			#
+			#  ⚠ **2쪽(판·조준)이 아니라 새 쪽인 까닭.** 판이 **열아홉 줄까지만**
+			#  그리는데(_panel 높이 330 · _row y 62+15i · 높이 13) 2쪽은 이미
+			#  열일곱이라, 넷을 거기 얹으면 스물하나가 되어 「제목 판 깨기
+			#  직전」과 「인트로 다시 보기」가 화면 밖으로 밀린다 — 만들어 놓고
+			#  못 누르는 줄이 된다(1쪽이 마흔 줄로 이미 그 꼴이고, 「그림 표본」
+			#  줄이 같은 까닭으로 1쪽에서 2쪽으로 옮겨 온 자리다).
+			#  0쪽 열여덟 · 3쪽 열일곱이라 넷이 들 자리가 어디에도 없었다.
+			#  이름은 tuning.csv 가 이 넷에 실제로 적어 둔 갈래 이름 그대로다.
+			#
+			#  **줄 이름이 지금 값을 그대로 적는다** — 사다리 칸과 실제가
+			#  어긋나도 화면이 거짓말을 안 한다(옛 「정산 빨리 보기」 줄이
+			#  1배를 가리킨 채 게임은 2.5였던 그 어긋남을 안 만든다).
+			#  사다리 어법은 FAST_STEPS 가 세운 것을 그대로 빌린다.
+			#
+			#  ⚠ **그래 놓고 값 칸에 같은 어긋남을 그대로 냈다.** pick 이
+			#  0 에서 출발해서, 줄 이름은 「조준 게이지 0.70」인데 값 칸은
+			#  「1/6 0.35」였다 — ▶ 를 한 번 누르면 살아 있는 값이 0.70 에서
+			#  0.50 으로 **내려갔다.** 넷 다 그랬다. 줄을 낼 때마다 지금 값에
+			#  가장 가까운 칸으로 맞춘다. 캐시가 아니라 **매번 다시 맞추는**
+			#  까닭은, 값을 미는 길이 여기 말고도 있어서(키 여섯 · 표 부팅)
+			#  캐시는 그쪽으로 값이 움직이면 곧 상한다. 고른 칸을 앉히면
+			#  살아 있는 값이 정확히 그 칸이 되므로 다시 맞춰도 같은 칸이다 —
+			#  ◀▶ 는 언제나 지금 값의 양옆으로 간다. 2026-09-25
+			_tune_sync(g)
+			return [
+				{"n1": "조준 게이지 %.2f" % g.gauge_speed, "t": "list",
+						"k": "gauge", "n": (TUNE_STEPS["gauge"] as Array).size()},
+				{"n1": "정산 박자 %.2f" % g.beat, "t": "list",
+						"k": "beat", "n": (TUNE_STEPS["beat"] as Array).size()},
+				{"n1": "확인 텀 %.2f" % g.confirm_hold, "t": "list",
+						"k": "chold", "n": (TUNE_STEPS["chold"] as Array).size()},
+				{"n1": "비행 시간 %.2f" % GameData.tune("fly_time"), "t": "list",
+						"k": "fly", "n": (TUNE_STEPS["fly"] as Array).size()},
 			]
 
 
@@ -918,6 +1017,48 @@ const CARDFX_STEPS := ["담담", "큼", "한 방"]
 #  (0.10초)와 겹치기 직전이라 **개발자 사다리에만** 둔다(2026-09-19).
 const FAST_STEPS := [1.0, 2.0, 2.5, 3.0]
 const FAST_NAMES := ["1배", "2배", "2.5배", "3배"]
+
+#  조작감 손잡이 넷의 사다리(2026-09-24).
+#
+#  여태 이 넷은 **키보드에만** 있었다 — gauge_speed·resolve_beat·confirm_hold 가
+#  `[ ] - = ; '` 여섯 키뿐이고 fly_time 은 길이 아예 없었다. 그러고도 그 값을
+#  화면에 적는 game.gd 의 줄은 「[ ] 조준 %.2f    - = 정산 %.2f    ; ' 확인텀 %.2f」로
+#  **키 이름을 그대로 찍었다.** 모바일이 예정돼 있어 키 전용 길은 길이 아니다.
+#
+#  ⚠ **tuning.csv 를 한 톨도 안 고친다.** 사다리는 표의 기본값 **둘레**를 훑는
+#  눈금일 뿐이고, 셋째 칸이 표의 값(0.7 · 0.34 · 0.45 · 0.2)이다. 범위도
+#  표의 min·max 안에 든다(0.15~4.0 · 0.05~1.5 · 0.0~1.5 · 0.05~1.0).
+#  줄 이름이 **지금 값을 그대로 적으므로**(_rows 참조) 칸과 실제가 어긋나도
+#  화면이 거짓말을 안 한다 — 옛 「fast」 줄이 1배를 가리킨 채 게임은 2.5인
+#  그 어긋남을 여기서는 안 만든다.
+#  조작감 손잡이 넷의 값 칸을 **지금 값**에 맞춘다. 사다리에 정확히 앉은
+#  값이 아니어도(표를 손으로 고치면 그렇다) 가장 가까운 칸을 고르므로,
+#  줄 이름이 적는 실제 값과 값 칸이 서로 먼 곳을 가리키는 일이 없다.
+static func _tune_sync(g: Node) -> void:
+	var live := {
+		"gauge": float(g.gauge_speed),
+		"beat": float(g.beat),
+		"chold": float(g.confirm_hold),
+		"fly": float(GameData.tune("fly_time")),
+	}
+	for k in live:
+		var ts: Array = TUNE_STEPS[k]
+		var best := 0
+		var bd := INF
+		for j in ts.size():
+			var d: float = absf(float(ts[j]) - float(live[k]))
+			if d < bd:
+				bd = d
+				best = j
+		pick[k] = best
+
+
+const TUNE_STEPS := {
+	"gauge": [0.35, 0.50, 0.70, 1.00, 1.40, 2.00],
+	"beat":  [0.15, 0.25, 0.34, 0.45, 0.60, 0.85],
+	"chold": [0.00, 0.20, 0.45, 0.70, 1.00, 1.50],
+	"fly":   [0.05, 0.12, 0.20, 0.32, 0.50, 0.80],
+}
 
 #  그림 표본 다섯 판. game.gd 의 _art_sheet 가 **같은 차례**로 읽는다 —
 #  여기 순서를 바꾸면 거기 match 도 같이 바꾼다. 2026-09-19
@@ -1073,6 +1214,11 @@ static func _cur_name(g: Node, e: Dictionary) -> String:
 	if k == "fast":
 		return "%d/%d %s" % [i % FAST_STEPS.size() + 1, FAST_STEPS.size(),
 				FAST_NAMES[i % FAST_STEPS.size()]]
+	#  조작감 손잡이 넷 — _names 와 짝이다.
+	if TUNE_STEPS.has(k):
+		var ts: Array = TUNE_STEPS[k]
+		var j3: int = i % ts.size()
+		return "%d/%d %.2f" % [j3 + 1, ts.size(), float(ts[j3])]
 	#  그림 표본도 표가 아니라 상수 목록이다. **_names 와 짝으로** 낸다.
 	if k == "artsheet":
 		return "%d/%d %s" % [i % ART_SHEET.size() + 1, ART_SHEET.size(),
@@ -1858,6 +2004,30 @@ static func _run(g: Node, e: Dictionary) -> void:
 	# 목록형 — 지금 고른 것을 적용한다
 	var rows := _list(k)
 	match k:
+		"gauge", "beat", "chold", "fly":
+			#  조작감 손잡이 넷. 사다리 한 칸을 그 자리에서 앉힌다.
+			#
+			#  ⚠ fly_time 만 **표를 직접 밀어 넣는다**(GameData._tune).
+			#  나머지 셋과 달리 fly_time 은 game.gd 에 변수가 없고 읽는 자리
+			#  넷이 전부 GameData.tune("fly_time") 을 그대로 부른다 — 그 넷을
+			#  새 변수로 돌리는 것은 따로 일감이다(검사 도구 여럿이 그 값을
+			#  직접 읽는다). 개발자 모드 전용이고 다음 실행에 표가 다시
+			#  부팅되므로 사람의 저장에도 안 남는다. 2026-09-24
+			var ts: Array = TUNE_STEPS[k]
+			var tv: float = float(ts[i % ts.size()])
+			match k:
+				"gauge":
+					g.gauge_speed = tv
+					_say("조준 게이지 %.2f" % tv)
+				"beat":
+					g.beat = tv
+					_say("정산 박자 %.2f" % tv)
+				"chold":
+					g.confirm_hold = tv
+					_say("확인 텀 %.2f" % tv)
+				"fly":
+					GameData._tune["fly_time"] = tv
+					_say("비행 시간 %.2f" % tv)
 		"fast":
 			#  배수만 민다. 바닥(걸음 4프레임)은 _fast_rate 가 씌우므로
 			#  3배를 골라도 눌린 박자에서는 한도가 1.53 이다 —
