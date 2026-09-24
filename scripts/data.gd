@@ -1800,7 +1800,10 @@ static func eff_line(it: Dictionary) -> String:
 			return "판을 넘기면 바로 완주"
 		if String(it.get("side", "")) == "bigdart":
 			# 발동한 발에서만 커지고(빗나가면 안 큰다) 얻는 것은 양옆 칸 값이다(pierce_gain → 점수)
-			return "맞히면 다트가 커진다 · 커진 만큼 양옆 칸 값을 점수에 더한다"
+			# ⚠ 여기만 「때마다」다 — 한 발씩 **쌓인다**. 짝인 「빗나가면」이
+			# 붙은 hitmiss 는 「맞히면」이 그 되풀이를 이미 지지만 이 줄은 짝이
+			# 없어 한 번만 커지는 것으로 읽힌다. 「던질 때마다」 「켜질 때마다」와 한 꼴이다.
+			return "맞힐 때마다 다트가 커진다 · 커진 만큼 양옆 칸 값을 점수에 더한다"
 		if String(it.get("side", "")) == "carry":
 			# dadd += carry_darts — 다음 판의 판 시작 다트로 얹힌다. 잔탄 골드는 그대로 받는다
 			return "남은 다트 1개당 다음 판 시작 다트 +1"
@@ -1827,8 +1830,10 @@ static func eff_line(it: Dictionary) -> String:
 		"mag_hvy": return "무거운 다트 1개당 " + base
 		"missing": return "기본에서 줄어든 다트 1개당 " + base
 		"low": return "판에서 맞힌 가장 작은 수 1당 " + base
-		# zone_hist 는 런 단위이고 맞힌 영역을 따른다
-		"zonehist": return "이번 런에 그 영역을 맞힌 1발당 " + base
+		# zone_hist 는 런 단위이고 맞힌 영역을 따른다.
+		# ⚠ 「그 영역」으로 줄이면 가리킬 말이 줄 안에 없다 — c36 은 cond 가
+		# always 라 앞에 붙는 조건 말이 없고 이 한 줄이 툴팁 전부다.
+		"zonehist": return "맞힌 영역을 이번 런에 맞힌 1발당 " + base
 		# 값이 v × 다른 동전 판매가 합이다 — 「배수 추가」로만 찍으면 v 가 얼굴에서 사라진다
 		#  「판매가 합 1당」 은 말이 걸렸다 — 판매가는 골드라 「1골드당」 이면 합까지 읽힌다
 		"rackval": return "다른 동전 판매가 1골드당 " + base
@@ -1845,7 +1850,7 @@ static func eff_line(it: Dictionary) -> String:
 	if String(it.get("side", "")) == "boardkill":
 		base += " · 판을 넘기면 완주"
 	if String(it.get("side", "")) == "bigdart":
-		base += " · 맞히면 다트가 커진다"
+		base += " · 맞힐 때마다 다트가 커진다"
 	var bn := boom_n(String(it.get("boom", "")))
 	if bn > 0:
 		base += " · 판마다 1/%d 확률로 파괴" % bn
@@ -1971,7 +1976,9 @@ static func gold_text(g: String, gv: int) -> String:
 		"spare": return "판을 넘기면 남은 다트 1개당 골드 +%d" % gv
 		"clean": return "한 발도 안 빗나가고 판을 넘기면 골드 +%d" % gv
 		"blitz": return "남은 다트 %d개 이상으로 판을 넘기면 골드 +%d" % [gold_blitz(), gv]
-		"broke": return "판을 넘길 때 골드 %d 이하면 골드 +%d" % [gold_broke(), gv]
+		# ⚠ 여기만 「가진」을 살린다 — 「보유」를 지우니 한 줄에 「골드」가 둘이
+		# 서고 앞은 쥔 골드 · 뒤는 받는 몫이라 「받을 골드가 6 이하면」으로 읽혔다.
+		"broke": return "판을 넘길 때 가진 골드 %d 이하면 골드 +%d" % [gold_broke(), gv]
 		"leg": return "판마다 골드 +%d" % gv
 		"risk50": return "%s 1/2 확률로 골드 +%d" % [cond_text("risk"), gv]
 		# 조건은 _tip_eff 가 앞에 잇는다 — 「크림 칸 맞히면 골드 +1」
