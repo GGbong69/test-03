@@ -874,7 +874,7 @@ static func _rows(g: Node) -> Array:
 			return [
 				{"n1": "소리 하나", "t": "list", "k": "sfx",
 						"n": _list("sfx").size()},
-				{"n1": "정산 사다리 12칸", "t": "act", "a": "sfx_lad"},
+				{"n1": "정산 사다리 13칸", "t": "act", "a": "sfx_lad"},
 				{"n1": "착탄 사다리 여섯", "t": "act", "a": "sfx_hit"},
 				{"n1": "손 짝 넷", "t": "act", "a": "sfx_pair"},
 				{"n1": "표 전부 차례로", "t": "act", "a": "sfx_all"},
