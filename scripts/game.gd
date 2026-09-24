@@ -12368,7 +12368,25 @@ func _draw_aim() -> void:
 	#  「다시 보기」는 S.AIM_H·S.PICK 에서 깨짐을 트므로 실제로 나는 그림이다.
 	#  **brk_live / brk_fired 를 읽기만 한다 — BRK 블록은 안 건드린다.**
 	#  2026-09-24
-	if brk_live:
+	#
+	#  ⚠ **이 반환이 함수 맨 위에 있어서 너무 많이 걷어 갔다.** 판 깨짐은
+	#  금이 0.68초 번지는 동안 판이 **아직 멀쩡히 그려지는데**(판 층은
+	#  brk_fired 부터 쉰다), 맨 위에서 돌아서는 바람에 「목표물」의 칸
+	#  어둠 열아홉이 깨짐 첫 프레임에 통째로 벗겨졌다 — 판이 확 밝아졌다가
+	#  깨진다. 정작 막으려던 주황 조준선은 **실제 판에서는 애초에 안 그려진다**:
+	#  아래 사슬이 S.AIM_V/AIM_H/CONFIRM/FLY 에서만 그리는데 깨짐은
+	#  S.RESOLVE 에서만 돌기 때문이다(_brk_tick 의 state 문). 개발자
+	#  「다시 보기」만 S.AIM_H·S.PICK 에서 트므로 선을 접는 것 자체는 맞다.
+	#
+	#  그래서 **가른다** — 판이 서 있는 동안 깔리는 것(칸 어둠)은 판과 같이
+	#  살고, 판 면에 얹는 선·고리만 판과 같이 죽는다. 판이 서 있는지는
+	#  _brk_board_dy() 하나가 쥐고 있으므로(판 층의 문과 같은 자) 그것을
+	#  그대로 묻는다 — 여기서 brk_fired 를 따로 읽으면 문이 두 벌이 된다.
+	#  **칸 어둠을 brk_live 내내 살려 두는 길은 안 간다**: _board_dim_sector 는
+	#  판이 있든 없든 판 반지름에 검은 띠를 긋기 때문에, 조각이 뜬 뒤에는
+	#  맨 배경에 검은 부채 열아홉이 찍힌다. 2026-09-25
+	var board_up := not is_inf(_brk_board_dy())
+	if not board_up and brk_live:
 		return
 	#  「목표물」 — 점수가 나는 **그 한 칸**만 남기고 판을 가라앉힌다.
 	#  판이 서 있는 내내 깔리고, 조준 어둠보다 **먼저** 깔려 둘이 겹치면
@@ -12386,9 +12404,16 @@ func _draw_aim() -> void:
 	var gp := _aim_glow_at()
 	if gp.x > -9000.0:
 		aim_glow_last = gp
-	if aim_dim > 0.0:
+	#  ⚠ **이 둘은 깨지는 동안 죽는다**(칸 어둠과 갈리는 자리다). 「이 칸에
+	#  꽂힌다」를 말하는 조준 affordance 라, 이미 꽂히고 판이 깨지는 중에
+	#  남아 있으면 없어질 칸을 가리킨다. 「목표물」의 칸 어둠은 판이 그 런
+	#  내내 지고 있는 성질이라 판과 같이 살지만, 이쪽은 조준과 같이 죽는다.
+	#  2026-09-25
+	if aim_dim > 0.0 and not brk_live:
 		_board_dim_except(aim_glow_last, float(AIMDIM.a) * aim_dim)
 		_cell_glow(aim_glow_last, Color(C_ACC, aim_dim), 1.8 * aim_dim)
+	if brk_live:
+		return
 	if state == S.AIM_V or state == S.AIM_H:
 		_draw_aim_live()
 	elif state == S.CONFIRM:
