@@ -162,16 +162,17 @@ const AIM_STAGES := {
 # 한 문장을 돌려 쓰면 "눌러 좌우 결정" 을 읽고 원 크기를 정하게 된다.
 # 칸 수와 문장 수가 어긋나면 안내가 빈 채로 뜬다 — 검증기가 막는다.
 #
-#  ⚠ **어투가 하나다 — 명사형.** 밑의 셋만 존댓말(「…누르세요」 「…튕기세요」
-#  「…잡으세요」)이라, 한 발 던지는 동안 화면 밑줄의 어투가 두 번 바뀌었다
-#  (고르기 → 존댓말 → 상태 이름). 위 다섯이 이미 「…결정」이므로 그쪽으로
-#  모은다. 2026-09-24
+#  ⚠ **어투가 하나다 — 명사형 「-기」.** 2026-09-24 에 여덟 줄을 「다트판을
+#  눌러 … 결정」으로 모았는데, 그것은 어디를 누르라는 **입력 지시**였고
+#  같은 말이 여섯 번 되풀이됐다. 이미 맞던 셋(「꽂을 자리 고르기」
+#  「튕겨 던지기」 「밀리는 조준 잡기」)이 본이다 — 무엇을 정하는지만
+#  적는다. 2026-09-25
 const AIM_HINT := {
-	"std": ["다트판을 눌러 높이 결정", "다트판을 눌러 좌우 결정"],
-	"ring": ["다트판을 눌러 원 크기 결정", "다트판을 눌러 각도 결정"],
-	"tilt": ["다트판을 눌러 첫 축 결정", "다트판을 눌러 둘째 축 결정"],
-	"cross": ["다트판을 눌러 교차점 결정"],
-	"drift": ["떠도는 조준점을 눌러 결정"],
+	"std": ["높이 잡기", "좌우 잡기"],
+	"ring": ["원 크기 잡기", "각도 잡기"],
+	"tilt": ["첫 축 잡기", "둘째 축 잡기"],
+	"cross": ["교차점 잡기"],
+	"drift": ["떠도는 조준점 잡기"],
 	"place": ["꽂을 자리 고르기"],
 	"pull": ["튕겨 던지기"],
 	"kick": ["밀리는 조준 잡기"],
@@ -563,7 +564,7 @@ static func consumables() -> Array:
 			# _cons_use 안에 갈래마다 박혀 있었다.
 			#   any   아무 때나
 			#   rest  상점 · 판 선택중
-			#   play  판 플레이 중
+			#   play  판에서
 			"use_at": r.get("use_at", "any"),
 			"track": _i(r, "track", "cons", 0),
 			"v": cv,
@@ -578,7 +579,7 @@ static func consumables() -> Array:
 static func use_at_name(w: String) -> String:
 	match w:
 		"rest": return "상점·판 선택"
-		"play": return "판 플레이 중"
+		"play": return "판에서"
 	return ""
 
 
@@ -1688,28 +1689,28 @@ static func cond_tag(c: String) -> String:
 static func cond_text(c: String) -> String:
 	match c:
 		"always": return "모든 다트"
-		"triple": return "트리플 명중 시"
-		"double": return "더블 명중 시"
-		"band": return "더블·트리플 명중 시"
-		"bull": return "불 명중 시"
-		"odd": return "홀수 칸 명중 시"
-		"even": return "짝수 칸 명중 시"
-		"left": return "왼쪽 절반 명중 시"
-		"right": return "오른쪽 절반 명중 시"
-		"big": return "15 이상 칸 명중 시"
-		"mid": return "6~14 칸 명중 시"
-		"small": return "5 이하 칸 명중 시"
+		"triple": return "트리플 맞히면"
+		"double": return "더블 맞히면"
+		"band": return "더블·트리플 맞히면"
+		"bull": return "불 맞히면"
+		"odd": return "홀수 칸 맞히면"
+		"even": return "짝수 칸 맞히면"
+		"left": return "왼쪽 절반 맞히면"
+		"right": return "오른쪽 절반 맞히면"
+		"big": return "15 이상 칸 맞히면"
+		"mid": return "6~14 칸 맞히면"
+		"small": return "5 이하 칸 맞히면"
 		"same": return "직전과 같은 숫자면"
 		"sum11": return "직전과 합이 11이면"
 		"diff": return "직전과 다른 숫자면"
-		"first": return "판 첫 다트에"
-		"last": return "판 마지막 다트에"
-		"streak": return "연속 명중 1회마다"
+		"first": return "판 첫 다트면"
+		"last": return "판 마지막 다트면"
+		"streak": return "연속으로 맞힌 1발당"
 		"warm": return "이번 판에 트리플을 맞힌 뒤"
 		"miss": return "빗나가면"
 		"missp": return "직전 발이 빗나갔으면"
-		"risk": return "더블·트리플·불 명중 시"
-		"risk1": return "판 첫 더블·트리플·불 명중 시"
+		"risk": return "더블·트리플·불 맞히면"
+		"risk1": return "판 첫 더블·트리플·불 맞히면"
 		"few": return "판 시작 다트가 3개 이하면"
 		"sixth": return "6번째 발마다"
 		"pair": return "이번 판에 같은 숫자를 2회 맞힌 발부터"
@@ -1722,12 +1723,12 @@ static func cond_text(c: String) -> String:
 		"zones4": return "이번 판에 네 영역을 모두 맞힌 발부터"
 		"rezone": return "이번 판에 이미 맞힌 영역을 다시 맞히면"
 	if c.begins_with("sec:"):
-		return c.substr(4).replace(",", "·") + "번 명중 시"
+		return c.substr(4).replace(",", "·") + "번 맞히면"
 	if c.begins_with("col:"):
 		var nm := PackedStringArray()
 		for t in c.substr(4).split(","):
 			nm.append(color_name(int(t)))
-		return "·".join(nm) + " 칸 명중 시"
+		return "·".join(nm) + " 칸 맞히면"
 	return ""
 
 
@@ -1799,7 +1800,7 @@ static func eff_line(it: Dictionary) -> String:
 			return "판을 넘기면 바로 완주"
 		if String(it.get("side", "")) == "bigdart":
 			# 발동한 발에서만 커지고(빗나가면 안 큰다) 얻는 것은 양옆 칸 값이다(pierce_gain → 점수)
-			return "명중마다 다트가 커진다 · 커진 만큼 양옆 칸 값을 점수에 더한다"
+			return "맞히면 다트가 커진다 · 커진 만큼 양옆 칸 값을 점수에 더한다"
 		if String(it.get("side", "")) == "carry":
 			# dadd += carry_darts — 다음 판의 판 시작 다트로 얹힌다. 잔탄 골드는 그대로 받는다
 			return "남은 다트 1개당 다음 판 시작 다트 +1"
@@ -1810,9 +1811,9 @@ static func eff_line(it: Dictionary) -> String:
 	# tdec 은 _wear_spent 가, rdec 은 판 끝이 0 에서 지운다.
 	var stat: String = "점수" if it.k == "chip" else "배수"
 	if g == "hitmiss":
-		return "%s +0에서 시작 · 명중마다 +%d · 빗나가면 −%d" % [stat, it.gstep, it.gstep]
+		return "%s +0에서 시작 · 맞히면 +%d · 빗나가면 −%d" % [stat, it.gstep, it.gstep]
 	if g == "fire":
-		return "%s +%d에서 시작 · 발동마다 +%d" % [stat, it.gstep, it.gstep]
+		return "%s +%d에서 시작 · 켜질 때마다 +%d" % [stat, it.gstep, it.gstep]
 	if g == "tdec":
 		return "%s +%d에서 시작 · 던질 때마다 −%d · 0이면 파괴" % [stat, it.v, it.gstep]
 	if g == "rdec":
@@ -1820,14 +1821,14 @@ static func eff_line(it: Dictionary) -> String:
 	var base := eff_text(it.k, it.v)
 	match String(it.get("per", "")):
 		"darts_left": return "남은 다트 1개당 " + base
-		"items": return "보유 동전 1장당 " + base
-		"gold": return "보유 골드 1당 " + base
-		"gold5": return "보유 골드 5당 " + base
+		"items": return "동전 1장당 " + base
+		"gold": return "골드 1당 " + base
+		"gold5": return "골드 5당 " + base
 		"mag_hvy": return "무거운 다트 1개당 " + base
 		"missing": return "기본에서 줄어든 다트 1개당 " + base
-		"low": return "판 최저 명중 숫자 1당 " + base
+		"low": return "판에서 맞힌 가장 작은 수 1당 " + base
 		# zone_hist 는 런 단위이고 맞힌 영역을 따른다
-		"zonehist": return "맞힌 영역의 이번 런 명중 1회당 " + base
+		"zonehist": return "이번 런에 그 영역을 맞힌 1발당 " + base
 		# 값이 v × 다른 동전 판매가 합이다 — 「배수 추가」로만 찍으면 v 가 얼굴에서 사라진다
 		#  「판매가 합 1당」 은 말이 걸렸다 — 판매가는 골드라 「1골드당」 이면 합까지 읽힌다
 		"rackval": return "다른 동전 판매가 1골드당 " + base
@@ -1844,7 +1845,7 @@ static func eff_line(it: Dictionary) -> String:
 	if String(it.get("side", "")) == "boardkill":
 		base += " · 판을 넘기면 완주"
 	if String(it.get("side", "")) == "bigdart":
-		base += " · 명중마다 다트가 커진다"
+		base += " · 맞히면 다트가 커진다"
 	var bn := boom_n(String(it.get("boom", "")))
 	if bn > 0:
 		base += " · 판마다 1/%d 확률로 파괴" % bn
@@ -1970,10 +1971,10 @@ static func gold_text(g: String, gv: int) -> String:
 		"spare": return "판을 넘기면 남은 다트 1개당 골드 +%d" % gv
 		"clean": return "한 발도 안 빗나가고 판을 넘기면 골드 +%d" % gv
 		"blitz": return "남은 다트 %d개 이상으로 판을 넘기면 골드 +%d" % [gold_blitz(), gv]
-		"broke": return "판을 넘길 때 보유 골드 %d 이하면 골드 +%d" % [gold_broke(), gv]
+		"broke": return "판을 넘길 때 골드 %d 이하면 골드 +%d" % [gold_broke(), gv]
 		"leg": return "판마다 골드 +%d" % gv
-		"risk50": return "더블·트리플·불 명중 시 1/2 확률로 골드 +%d" % gv
-		# 조건은 _tip_eff 가 앞에 잇는다 — 「크림 칸 명중 시 골드 +1」
+		"risk50": return "%s 1/2 확률로 골드 +%d" % [cond_text("risk"), gv]
+		# 조건은 _tip_eff 가 앞에 잇는다 — 「크림 칸 맞히면 골드 +1」
 		"hit": return "골드 +%d" % gv
 	return ""
 
@@ -1981,7 +1982,7 @@ static func gold_text(g: String, gv: int) -> String:
 # 동전 위에 얹는 짧은 태그 (원 안에는 긴 글이 안 들어간다)
 static func gold_tag(g: String) -> String:
 	match g:
-		"clear": return "클리어"
+		"clear": return "넘김"
 		"spare": return "잔탄"
 		"clean": return "무실책"
 		"blitz": return "속공"
@@ -2543,7 +2544,7 @@ static func _v_items() -> void:
 		var aimed := String(r.get("aim", "")) != "" \
 				or String(r.get("score", "")) != ""
 		if aimed and String(r.get("cond", "")) != "":
-			_errs.append("%s — 방식을 쥔 동전에 발동 조건이 붙었다" % who)
+			_errs.append("%s — 방식을 쥔 동전에 조건이 붙었다" % who)
 		if not aimed and not CONDS.has(r.get("cond", "")):
 			_errs.append("%s — 모르는 조건 '%s'" % [who, r.get("cond", "")])
 		# 효과 없는 카드도 있다 — 골드·다트·승급만 하는 조커들. 그때는
@@ -2552,7 +2553,7 @@ static func _v_items() -> void:
 			if not aimed and String(r.get("gold", "")) == "" \
 					and String(r.get("dadd", "")) == "" \
 					and String(r.get("side", "")) == "":
-				_errs.append("%s — 효과도 부가도 없는 빈 카드다" % who)
+				_errs.append("%s — 효과도 부가도 없는 빈 동전이다" % who)
 		elif not KINDS.has(r.get("kind", "")):
 			_errs.append("%s — 모르는 효과 '%s'" % [who, r.get("kind", "")])
 		if not RARITIES.has(r.get("rarity", "")):
@@ -2647,7 +2648,7 @@ static func _v_items() -> void:
 						cov += 1
 						break
 			if cov == part.size():
-				_warns.append("items — %s 를 %s 로 다 덮는다. 두 장을 같이 사면 조건 없는 카드가 된다"
+				_warns.append("items — %s 를 %s 로 다 덮는다. 두 장을 같이 사면 조건 없는 동전이 된다"
 						% [part, kk])
 	# 아무 동전도 안 쓰는 조건은 화면에 영영 안 나온다. 숫자를 손으로 적지 않고
 	# 여기서 센다 — 손으로 적은 현황은 커밋 한 번에 낡는다.
