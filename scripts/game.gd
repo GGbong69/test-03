@@ -34366,10 +34366,30 @@ func _back_row(c: CanvasItem, r: Rect2, label: String, key: String,
 				Color(C_GOLD, (0.5 + 0.5 * e) * a))
 
 
+#  설정 뒤에 **제목이** 서 있는가. 여는 동안은 pause_from 이 말하고,
+#  닫히는 동안은 _settings_back 이 pause_from 을 -1 로 지운 뒤라 state 가 말한다
+#  (닫힘은 set_t 가 _mo("base") 만큼 더 도므로 그동안에도 답이 맞아야 한다).
+#  상점·판 중에서 열었으면 닫히는 동안 state 가 S.SHOP · S.PICK 이라 거짓이다.
+func _set_over_title() -> bool:
+	return (state == S.SETTINGS and pause_from < 0) or state == S.TITLE
+
+
 func _draw_settings(c: CanvasItem) -> void:
 	var e := _set_ease()
 	var rows := _set_rows()
 	var face := _set_face()
+
+	#  제목 위에서 열 때만 **전면 스크림**. 제목 메뉴(x 15~110)와 설정 목록이
+	#  같은 칸에 서 있어 글자가 글자 위에 그대로 얹혔다 — 「설정」이 「하이톤」
+	#  위에, 「뒤로」가 「HIGHTON」 위에, 「음악」이 「컬렉션」 위에, 「게임 나가기」가
+	#  「종료」 위에. 밑의 왼쪽 그늘은 띠 여덟 장을 다 합쳐도 **최대 알파 0.14** 라
+	#  뒤를 지우기에 턱없이 옅었고, 흐림 판도 글자 획을 못 지운다. 제목에서
+	#  설정을 여는 길은 첫 화면의 기본 동선이라 런마다 한 번은 지난다.
+	#  값은 런 정보(_draw_runinfo)의 0.55 를 그대로 빌린다 — 덮개 화면이 뒤를
+	#  가리는 어법을 저장소에 하나로 둔다. 상점 위(ui_10_settings)·판 중에는
+	#  왼쪽이 비어 안 겹치므로 **안 깐다.** 2026-09-24
+	if _set_over_title():
+		c.draw_rect(_full(), Color(0.0, 0.0, 0.0, 0.55 * e))
 
 	#  왼쪽 가장자리 그늘 — 흐린 판 위에서도 글씨가 읽히게 한다.
 	#  띠 여덟 장이면 640x360 에서 이음매가 안 보인다.
