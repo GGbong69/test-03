@@ -4988,8 +4988,13 @@ func _kick_fire() -> void:
 	burst_hits.append(aim)
 	# 여기서 화면에 꽂는다. 정산은 이미 꽂힌 자리를 읽으므로 그때는
 	# 다시 안 꽂는다(_land 의 mark=false).
+	#  ⚠ **발마다 새로 굴린다.** fly_rot 을 쓰고 있었는데 연발은 S.FLY 를
+	#  안 지나 그 값이 한 발에 한 번도 안 갱신된다 — 여섯 발이 각 하나를
+	#  돌려 써서 판에 **자로 잰 듯 나란히** 박혔다. 바로 위 _land 의 주석이
+	#  싫다고 적어 둔 그림이 정작 여기 있었다. 이을 각이 없으므로(비행 0프레임)
+	#  꽂는 자리에서 굴리는 것이 맞다. 2026-09-24
 	darts.append({"p": aim, "id": String(cur_dart.get("id", "std")),
-			"rot": fly_rot})
+			"rot": randf_range(-0.26, 0.26)})
 	_sfx("kick_shot")
 	kick_o += Vector2(aim_rng.randf_range(-float(KICK.side), float(KICK.side)),
 			-float(KICK.up))
@@ -6187,9 +6192,14 @@ func _land(mark := true) -> void:
 
 	# 꽂힌 자루마다 살짝 다른 각. 한 번 정하고 저장하므로 프레임 간 안 흔들린다.
 	# 연발은 쏘는 동안 이미 꽂아 두었으므로 여기서는 안 꽂는다.
+	#  ⚠ **fly_rot 을 잇는다.** 여기서 randf_range 를 다시 굴리고 있었다 —
+	#  4568 이 「나는 동안과 꽂힌 뒤가 같은 각이라야 착탄 프레임에서 자루가
+	#  홱 돌지 않는다」며 세워 둔 각을 착탄 한 프레임 전에 버린 꼴이라,
+	#  던지는 12프레임을 다 보고 마지막에 자루가 홱 돌았다(구조상 최대 29.8°).
+	#  보통 발은 비행이 있으므로 그 각을 그대로 잇는다. 2026-09-24
 	if mark:
 		darts.append({"p": aim, "id": String(cur_dart.get("id", "std")),
-				"rot": randf_range(-0.26, 0.26)})
+				"rot": fly_rot})
 	# 연출에는 **꽂힌 자리의 배수**를 넘긴다. info.mult 는 이 위에서
 	# 다트와 트랙이 이미 주무른 값이라, 그걸 넘기면 연출이 점수를 따라간다.
 	_impact(info, land_mult)
