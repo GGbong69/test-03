@@ -72,7 +72,8 @@ func _board(id: String) -> void:
 #  한다 — 「연출이 더한 프레임 0」의 A/B 짝이다.
 func _throw(kill := false, cap := 900) -> Dictionary:
 	var o := {"arm": -1, "fire": -1, "gone": -1, "clear": -1,
-			"snd": 0, "shards": 0, "bits": 0, "pops": 0,
+			"snd": 0, "crack": 0, "brk": 0,
+			"shards": 0, "bits": 0, "pops": 0,
 			"shake": -1.0, "qt": -1.0, "hitstop": -1.0,
 			"stage": 0, "dart_gone": -1, "swap": false, "turn": false}
 	g.target = 1
@@ -87,12 +88,27 @@ func _throw(kill := false, cap := 900) -> Dictionary:
 		var now: int = g.sfx_next
 		var dn: int = posmod(now - prev, pool)
 		prev = now
+		#  ⚠ **이름으로 센다.** 앞서는 sfx_next 가 몇 칸 돌았는지만 셌는데,
+		#  그러면 깨짐이 소리를 한 종류 더 내는 순간 이 수가 통째로 어긋나
+		#  「층대로 1·2·3」이 딴 것을 가리킨다 — 그 줄이 재려는 것은 **꼬리
+		#  톡**이다. _sfx 가 자리마다 stream 을 갈아 끼우므로 그 자리의
+		#  resource_path 가 곧 이름이다. 2026-09-24
 		#  ⚠ **정산 프레임은 안 센다.** 그 프레임에 _settle_clear 가
-		#  leg_clear 를 울리는데 그것은 깨짐의 소리가 아니다 — 세면 층마다
-		#  꼭 하나씩 더 잡혀 표와 영영 안 맞는다.
+		#  leg_clear 를 울리는데 그것은 깨짐의 소리가 아니다.
 		#  도안이 선 프레임도 안 센다(target_hit 이 거기서 운다).
 		if o.arm >= 0 and o.clear < 0 and g.state != g.S.CLEAR:
-			o.snd += dn
+			for k in dn:
+				var pi: int = posmod(prev - dn + k, pool)
+				var st = (g.sfx_pool[pi] as AudioStreamPlayer).stream
+				var snm := "" if st == null \
+						else String(st.resource_path).get_file().get_basename()
+				match snm:
+					"board_thud":
+						o.snd += 1
+					"board_crack":
+						o.crack += 1
+					"board_break":
+						o.brk += 1
 		if g.brk_live and o.arm < 0:
 			o.arm = f
 			o.shake = g.shake
@@ -489,16 +505,46 @@ func _run() -> void:
 					float(g.BRK.big[4]), float(g.BRK.boss[4])])
 	var snd_txt := ""
 	var snd_ok := true
+	var crk_txt := ""
+	var crk_ok := true
 	for t in 3:
 		_open()
 		g.leg_no = t + 1          # 작은 1 · 큰 2 · 보스 3
 		var r := _throw()
 		var row: Array = g.BRK[["small", "big", "boss"][t]]
-		snd_txt += "%s %d회(표 %d)  " % [["작은", "큰", "보스"][t],
-				int(r.snd), int(row[3])]
-		if int(r.snd) != int(row[3]):
+		#  **판이 뜨는 소리** = 발화 한 방 + 꼬리 톡(row[3] − 1).
+		#  금이 번지는 앞 0.68초의 삐걱(board_crack)은 여기서 안 센다 —
+		#  그것은 사건이 아니라 사건이 오는 소리이고, 아래 줄이 따로 센다.
+		snd_txt += "%s 한방%d+톡%d(표 %d)  " % [["작은", "큰", "보스"][t],
+				int(r.brk), int(r.snd), int(row[3])]
+		if int(r.brk) + int(r.snd) != int(row[3]):
 			snd_ok = false
-	_ok("한 깨짐의 소리가 층대로 1·2·3", snd_ok, snd_txt)
+		#  ⚠ **단마다 한 알.** 작은 판은 꼬리 톡이 0회라, 이 줄이 없으면
+		#  런에서 맨 처음 듣는 깨짐이 0.30초짜리 한 방뿐이다(2026-09-24).
+		crk_txt += "%s 단%d·삐걱%d  " % [["작은", "큰", "보스"][t],
+				int(r.stage), int(r.crack)]
+		if int(r.crack) != int(r.stage) or int(r.stage) <= 0:
+			crk_ok = false
+	_ok("판이 뜨는 소리가 층대로 1·2·3 — 한 방 + 꼬리 톡", snd_ok, snd_txt)
+	_ok("금이 번지는 동안 단마다 삐걱이 한 알", crk_ok, crk_txt)
+	_ok("board_crack 이 SFX 표에 있고 파일이 있다",
+			(g.SFX as Dictionary).has("board_crack")
+			and ResourceLoader.exists("res://sfx/board_crack.wav"),
+			"표에 없는 이름은 push_error 로 무음이 된다")
+	#  삐걱은 **한 방보다 여려야 한다** — 사건이 오는 소리가 사건보다 크면
+	#  발화가 안 들린다. 표의 a 로 잰다.
+	_ok("삐걱이 한 방보다 여리다",
+			float(g.SFX.board_crack.a) < float(g.SFX.board_thud.a)
+			and float(g.SFX.board_thud.a) < float(g.SFX.board_break.a),
+			"삐걱 %.2f < 톡 %.2f < 한방 %.2f" % [float(g.SFX.board_crack.a),
+					float(g.SFX.board_thud.a), float(g.SFX.board_break.a)])
+	#  단 간격이 SMASH.snd_gap 위여야 한 알씩 갈린다. 보스가 제일 촘촘하다 —
+	#  brk_span(걸음 꼬리에서 난다) × 0.90 을 단 수로 나눈 것이 그 간격이다.
+	g._brk_arm(2)
+	var gap: float = (g.brk_span * 0.90) / float((g.brk_rings as Array).size() * 2)
+	_ok("단 간격이 SMASH.snd_gap 위", gap >= float(g.SMASH.snd_gap),
+			"보스 %.3f / 문턱 %.3f" % [gap, float(g.SMASH.snd_gap)])
+	g._brk_skip()
 	_ok("한 사건의 소리가 pool 4 밑", int(g.BRK.boss[3]) <= 3,
 			"보스 %d개 / sfx_pool %d" % [int(g.BRK.boss[3]),
 					(g.sfx_pool as Array).size()])
@@ -519,10 +565,10 @@ func _run() -> void:
 			int(fr.arm) >= 0 and int(fr.fire) > int(fr.arm)
 			and int(fr.clear) > int(fr.fire),
 			"도안 %d · 발화 %d · 정산 %d" % [fr.arm, fr.fire, fr.clear])
-	_ok("빨리 보기에서 꼬리 톡이 0회 — 소리는 board_break 하나",
-			int(fr.snd) == 1,
-			"%d회 — 안 막으면 정산 프레임에 소리 다섯이라 target_hit 이 끊긴다"
-			% int(fr.snd))
+	_ok("빨리 보기에서 꼬리 톡도 삐걱도 0회 — 소리는 board_break 하나",
+			int(fr.snd) == 0 and int(fr.crack) == 0 and int(fr.brk) == 1,
+			"한방 %d · 톡 %d · 삐걱 %d — 안 막으면 정산 프레임에 소리가 다섯이라 target_hit 이 끊긴다"
+			% [int(fr.brk), int(fr.snd), int(fr.crack)])
 	_ok("빨리 보기가 창을 줄인다",
 			int(fr.clear) - int(fr.arm) < int(live.clear) - int(live.arm),
 			"%d프레임 < %d프레임" % [int(fr.clear) - int(fr.arm),
@@ -549,8 +595,10 @@ func _run() -> void:
 			% g._brk_board_dy())
 	_ok("모션 끄기 — 금은 끝까지 그어진다", int(mo.stage) >= 6,
 			"단 %d" % mo.stage)
-	_ok("모션 끄기 — 소리는 층대로 그대로 난다", int(mo.snd) == 3,
-			"보스 %d회 / 표 3회" % int(mo.snd))
+	_ok("모션 끄기 — 소리는 층대로 그대로 난다",
+			int(mo.brk) + int(mo.snd) == 3 and int(mo.crack) == int(mo.stage),
+			"한방 %d + 톡 %d = 3 · 삐걱 %d(단 %d)"
+			% [int(mo.brk), int(mo.snd), int(mo.crack), int(mo.stage)])
 	_ok("모션 끄기 — 프레임 수가 그대로",
 			int(mo.clear) - int(mo.arm) <= int(live.clear) - int(live.arm) + 4,
 			"%d프레임 (켬 %d프레임 — 돌파 멈춤 60ms 가 원래 없다)"

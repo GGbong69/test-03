@@ -4138,6 +4138,13 @@ const SFX := {
 	#  ×1.06 · ×0.97 · ×0.88 로 곧장 민다. a 0.22 는 leg_clear 와 같고
 	#  hit_bull_i 0.26 밑이다: 판의 사건이지 런의 승리가 아니다. 2026-09-24
 	"board_break":    {"f": SFX_BASE, "d": 0.30, "a": 0.22},
+	#  금이 한 단 나아갈 때마다 나는 **아주 여린 삐걱**. 앞서는 깨짐의
+	#  소리가 발화 한 방과 꼬리 톡뿐이었고, 작은 판은 톡이 0회라 **런에서
+	#  맨 처음 듣는 깨짐이 0.30초짜리 한 방**이었다 — 그림이 0.68초를 들여
+	#  금을 긋는 동안 소리가 한 알도 없었다. 판 **위** 소리라 나무 결이다:
+	#  칩·동전·릴·종은 한 알도 안 섞는다. a 0.07 은 board_thud 0.12 밑
+	#  으로, 이것은 사건이 아니라 **사건이 오는 소리**다. 2026-09-24
+	"board_crack":    {"f": SFX_BASE, "d": 0.04, "a": 0.07},
 	# 제목 판 이스터에그 — 불을 잇달아 물면 판이 쪼개진다. 판 위 소리라
 	# 유리가 아니라 판이다(사용자, 2026-09-17). f 는 단이 오를수록 내려 민다.
 	"egg_crack":      {"f": SFX_BASE, "d": 0.20, "a": 0.20},
@@ -16684,9 +16691,26 @@ func _brk_tick(d: float) -> void:
 		var k: float = clampf(brk_c / maxf(brk_span * 0.90, 0.001), 0.0, 1.0)
 		var st: int = clampi(int(k * float(brk_rings.size() * 2)),
 				0, brk_rings.size() * 2)
+		var top: int = brk_rings.size() * 2
 		while brk_stage < st:
 			brk_stage += 1
 			brk_born[brk_stage] = brk_c      # 이 단이 난 때 — 여기서부터 식는다
+			#  ⚠ **금이 번지는 앞 0.68초에 소리가 한 알도 없었다.**
+			#  깨짐의 소리는 발화 한 방(board_break)과 꼬리 톡뿐인데,
+			#  층 표의 row[3] 이 작은 판에서 1 이라 톡이 0회다 — 런에서
+			#  맨 처음 듣는 깨짐이 0.30초짜리 한 방이었다.
+			#  단이 날 때마다 여린 삐걱을 한 알 낸다. **빨리 보기에서는
+			#  안 낸다** — 꼬리 톡과 같은 문이고 같은 근거다(그쪽에서는
+			#  단 간격이 SMASH.snd_gap 0.040 밑으로 떨어져 sfx_pool
+			#  넷에서 산 소리가 끊긴다). 단이 최대 여섯이고 보스의 단
+			#  간격이 0.113초라 그 문턱 위다.
+			#  음은 **내려간다** — 금이 바깥으로 갈수록 무는 나무가 크다.
+			#  층 배수(row[4])를 그대로 물려 작은·큰·보스가 제 음역에
+			#  선다. 퇴장은 내린다는 board_break 의 규약이다.
+			if fast_rate <= 1.0:
+				_sfx("board_crack", SFX_BASE * float(_brk_row()[4])
+						* lerpf(1.05, 0.92, float(brk_stage - 1)
+								/ maxf(float(top - 1), 1.0)))
 		if brk_c >= brk_span:
 			_brk_fire()
 		return
