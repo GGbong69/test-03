@@ -2440,7 +2440,7 @@ func _pack_unlock_next() -> void:
 		if String(r.get("prereq", "")) != cur:
 			continue
 		if Save.unlock("pack:" + String(r.get("id", ""))):
-			run_unlocked.append({"k": "다트통", "n": String(r.get("name", ""))})
+			run_unlocked.append(_unl_tag("다트통", String(r.get("name", ""))))
 			pop(Vector2(VIEW.x * 0.5, 232.0),
 					"%s 열렸다" % r.get("name", ""), C_GOLD, 12, 1.6)
 
@@ -2646,7 +2646,7 @@ func _league_unlock_next() -> void:
 		if need <= 0 or n < need:
 			continue
 		if Save.unlock(GameData.league_key(String(r.get("id", "")))):
-			run_unlocked.append({"k": "리그", "n": String(r.get("name", ""))})
+			run_unlocked.append(_unl_tag("리그", String(r.get("name", ""))))
 			pop(Vector2(VIEW.x * 0.5, 210.0),
 					"%s 열렸다" % r.get("name", ""), C_GOLD, 12, 1.6)
 
@@ -27685,6 +27685,17 @@ var clear_t := 0.0              # 정산이 흐른 시간(초). 0 이면 막 열
 #  말하고 런 종료 화면에는 한 글자도 안 남았다 — 새 리그가 열려도 그것을
 #  본 사람이 없을 수 있다. 런이 끝날 때 이 줄을 화면에 남긴다.
 var run_unlocked := []
+
+
+#  런 끝 해금 쪽지 한 장. **머리와 겹치는 낱말을 뗀다** — 표의 이름이
+#  「검정 리그」 「선금 다트통」이라 머리를 그대로 붙이면 화면에
+#  「리그 검정 리그」 「다트통 선금 다트통」으로 찍혔다(txtc_*_over_won 에서
+#  봤다). 겹치지 않는 이름(「넓은 동전 슬롯」)은 한 글자도 안 바뀐다.
+#  뗀 뒤가 비면(이름이 머리 그 자체이면) 이름을 그대로 둔다 — 값이 없는
+#  쪽지를 내느니 겹말이 낫다. 2026-09-24
+static func _unl_tag(k: String, n: String) -> Dictionary:
+	var v := n.replace(k, "").strip_edges()
+	return {"k": k, "n": n if v == "" else v}
 var over_t := 0.0               # 런 종료 화면이 흐른 시간
 
 
