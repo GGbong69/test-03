@@ -1782,6 +1782,9 @@ func _start_leg() -> void:
 	revo_bull = true
 	revo_darts = 0
 	paint_mul = 1.0
+	#  지난 판의 깨짐을 내린다. 대비용 한 줄이고 darts.clear() 와 같은
+	#  규약이다 — 판이 새로 서면 지난 판의 것은 하나도 안 넘어온다.
+	_brk_skip()
 	# 테이블을 빼고 판을 세운다. **데이터보다 먼저** 부른다 — 이 아래가
 	# 판의 링 폭(rt_*)을 다시 잡으므로, 연출을 나중에 열면 올라오는 동안은
 	# 지난 판의 모양이었다가 다 선 순간 툭 바뀐다.
@@ -2046,6 +2049,18 @@ func _earn(n: int) -> void:
 
 
 func _finish_leg() -> void:
+	#  ⚠ **판 깨짐은 여기서 내린다 — _settle_clear 가 아니다.** 이 함수는
+	#  나가는 길이 여섯인데(실패 · 목숨 동전 · NULL 보드 처치 · 무한 상단 ·
+	#  마지막 판 완주 · 정산) 그중 넷이 _settle_clear 에 안 닿는다. 특히
+	#  **마지막 판(24)은 정산을 안 거치고 S.OVER 로 빠지므로** 거기 매달면
+	#  런에서 가장 큰 판 하나만 연출이 안 걷힌다. 그리고 _draw_over ·
+	#  _draw_shop 은 _scrim() 이라 알파 0.94 이고 _draw_board 를 부르는
+	#  문에는 state 갈래가 **없으므로**, 안 걷으면 깨진 판이 런 종료·상점
+	#  뒤에서 6% 로 비치고 판 갈이에서는 **어긋난 채로 눕는다.**
+	#  이 한 줄이 그 넷을 한꺼번에 끊는다. 줄 자체는 state 도 clear_t 도
+	#  shake 도 hitstop 도 안 건드리므로 qa_wreck ⑧ ⑨ 와 settle_probe ③-b
+	#  가 전부 초록이다. 2026-09-24
+	_brk_skip()
 	# 「녹는 시계」 — 판 종료시 남은 다트를 다음 판으로 넘긴다(기획서 s27).
 	carry_darts = 0
 	for o in owned:
@@ -4117,6 +4132,12 @@ const SFX := {
 	# 자리마다 음이 다른데, 촉이 판에 박히는 몸소리는 어디에 꽂히든 하나다.
 	# 부르는 쪽이 매번 음을 조금 밀어 세 발이 「툭 툭 툭」 으로 갈린다.
 	"board_thud":     {"f": 131.0, "d": 0.08, "a": 0.12},
+	#  판이 깨진다 — 목표를 넘긴 판이 금을 따라 갈라져 뜬다. 판 **위**
+	#  소리라 유리가 아니라 나무·철선이다(egg_crack 과 같은 집, 다른 사건).
+	#  f 가 SFX_BASE 인 것은 pitch_scale = f/SFX_BASE 계약이다 — 층이
+	#  ×1.06 · ×0.97 · ×0.88 로 곧장 민다. a 0.22 는 leg_clear 와 같고
+	#  hit_bull_i 0.26 밑이다: 판의 사건이지 런의 승리가 아니다. 2026-09-24
+	"board_break":    {"f": SFX_BASE, "d": 0.30, "a": 0.22},
 	# 제목 판 이스터에그 — 불을 잇달아 물면 판이 쪼개진다. 판 위 소리라
 	# 유리가 아니라 판이다(사용자, 2026-09-17). f 는 단이 오를수록 내려 민다.
 	"egg_crack":      {"f": SFX_BASE, "d": 0.20, "a": 0.20},
@@ -4492,6 +4513,10 @@ func _process(d: float) -> void:
 	#  (_click 의 clear_t = 99.0)에 안 죽고, if state == S.CLEAR 분기
 	#  밖이라 판 중 소진(tdec)도 같은 시계를 탄다.
 	_wreck_tick(d)
+	#  판 깨짐도 여기서 돈다 — hitstop 조기 반환 **밑**이라 멈춤 60ms 동안
+	#  같이 얼고, 안에서 d * fast_rate 를 태워 빨리 보기에서 걸음과 같은
+	#  비율로 줄어든다(카드 시계 여섯과 같은 근거). 2026-09-24
+	_brk_tick(d)
 
 	card_v += (card_target - card_p) * 420.0 * d
 	card_v *= exp(-17.0 * d)
@@ -6776,6 +6801,20 @@ func _next_step() -> void:
 				if not motion_off:
 					hitstop = minf(float(CARDFX.stop), qt * 0.5)
 					qt -= hitstop
+			# ── 판 깨짐 도안을 세운다 ────────────────────────
+			#  ⚠ **was_short 로 물으면 안 된다.** 이 함수 첫머리(6542
+			#  둘레)가 큐가 빈 뒤에도 burst_hits 가 남았으면 _finish_leg
+			#  대신 다음 다트를 판다 — 즉 「목표를 넘긴 프레임」이 「판이
+			#  끝나는 프레임」이 **아니다.** 리볼버·반동으로 목표를 넘기면
+			#  판이 통째로 깨진 뒤에 남은 다트가 **없는 판에** 날아가고,
+			#  그 다음 total 걸음은 was_short 가 거짓이라 그 판은 영영
+			#  안 깨진다. 조건을 「이 걸음 뒤에 판이 정말 끝나는가」로
+			#  적는다. burst_hits 를 비우는 자리는 _land 계열뿐이라 목표
+			#  돌파에서 안 비워짐을 확인했다.
+			#  **hitstop 을 뺀 뒤의 qt 를 읽어야** 꼬리가 맞으므로 위
+			#  블록보다 반드시 뒤다. 2026-09-24
+			if total >= target and burst_hits.is_empty():
+				_brk_arm()
 
 	# ── 카드 시계를 이 걸음의 **실제 길이**에 맨다 ────────────────────
 	# 이 설계에서 가장 중요한 한 줄이고, **반드시 함수의 마지막 줄**이어야 한다 —
@@ -7271,6 +7310,7 @@ func _swap_skip() -> void:
 	swap_live = false
 	swap_scr = -1
 	_turn_skip()
+	_brk_skip()          # 판 깨짐도 같이 내린다 — 정지 프레임을 찍는 도구 51개가 이 문을 지난다
 
 
 # 판 층의 한 점이 지금 화면 어디로 가는가. 그리기와 검사가 같은 식을 쓴다 —
@@ -7617,14 +7657,29 @@ func _draw() -> void:
 	#  제목의 이스터에그(EGG) — 판이 깨져 없는 동안은 안 그리고, 새 판이
 	#  오르는 동안은 아래로 밀어 그린다. 그 밖에는 0 이라 아무 일도 없다.
 	var edy := _egg_board_dy()
-	if not is_inf(edy):
+	#  판 깨짐 — 조각이 뜬 뒤에는 INF 라 판을 안 그린다. 그동안 원판은
+	#  조각이 빈틈없이 타일링한 채 흰색으로 얼어 있다. 2026-09-24
+	var bdy := _brk_board_dy()
+	if not is_inf(edy) and not is_inf(bdy):
 		if edy != 0.0:
 			draw_set_transform(sh + Vector2(0.0, edy))
 		_draw_board()
 		if edy != 0.0:
 			draw_set_transform(sh)
+	_brk_crack_draw()               # 금은 판 위, 판 효과 앞
 	_draw_fx()
-	_draw_darts()
+	_brk_shards_draw()              # 조각은 다트 **밑**이다
+	#  꽂힌 다트는 판보다 **먼저** 빠진다 — 곧게 아래로만 가며 진다.
+	#  연출이 안 도는 동안 두 함수가 0.0 · 1.0 을 내므로 보통 길은
+	#  한 바이트도 안 바뀐다.
+	var bda := _brk_dart_a()
+	if bda > 0.0:
+		var bdd := _brk_dart_dy()
+		if bdd != 0.0:
+			draw_set_transform(sh + Vector2(0.0, bdd))
+		_draw_darts(bda)
+		if bdd != 0.0:
+			draw_set_transform(sh)
 	draw_set_transform(sh)          # 눕힘을 반드시 되돌린다
 	if swap_live:
 		if not swap_in:
@@ -12082,7 +12137,10 @@ func _bd3_sync() -> void:
 			_dart3_face_u(bd_nodes[i], Vector3(0.0, 0.0, _bd3_eye()))
 
 
-func _draw_darts() -> void:
+#  a 는 층 전체의 짙기다. 판 깨짐이 꽂힌 다트를 떨어뜨리며 지울 때만
+#  1.0 이 아니고, 3D 길은 모듈레이트가 · 2D 길은 _icon_dart 의 a 가 받는다 —
+#  한 갈래에 한 줄씩이라 헤드리스와 창 있는 실행이 같다. 2026-09-24
+func _draw_darts(a := 1.0) -> void:
 	# 렌더러가 있으면 3D 무대를 연다. 없는 자리(헤드리스)에서는 안 열리고
 	# 아래 2D 받침이 그대로 선다 — 여는 쪽에서 한 번만 가른다.
 	#
@@ -12108,14 +12166,15 @@ func _draw_darts() -> void:
 			var sz := _bd3_size()
 			# 눕히기 변환이 걸린 채로 그린다 — 판과 같이 눌려야 판 갈이
 			# 연출에서 다트만 서 있는 그림이 안 나온다.
-			draw_texture_rect(tex, Rect2(Vector2.ZERO, sz), false)
+			draw_texture_rect(tex, Rect2(Vector2.ZERO, sz), false,
+					Color(1.0, 1.0, 1.0, a))
 			return
-	_draw_darts_2d()
+	_draw_darts_2d(a)
 
 
 # 3D 가 없을 때의 받침. 같은 투영을 손으로 계산한다 — 자세한 근거는
 # 위 구획 주석과 DART_PERSP 에 있다.
-func _draw_darts_2d() -> void:
+func _draw_darts_2d(a := 1.0) -> void:
 	for e in darts:
 		var v: Vector2 = e.p - BC
 		var r := v.length()
@@ -12129,7 +12188,7 @@ func _draw_darts_2d() -> void:
 		var rot: float = u.angle() - Vector2(6.0, -10.0).angle() + float(e.rot)
 		# 촉이 착탄점에 오도록 중심을 뒤로 물린다 — _icon_dart 는 tip = c + dir*dl 이다.
 		# 예전에는 선 하나와 점 하나로 그려서 다트가 아니라 압정으로 보였다.
-		_icon_dart(e.p - u * dl, dl, e.id, 0.0, rot, 1.0)
+		_icon_dart(e.p - u * dl, dl, e.id, 0.0, rot, a)
 
 
 func _draw_aim() -> void:
@@ -16220,6 +16279,690 @@ var smash_snd_t := 0.0   # 소리 문. **실시간 d 로 깎는다**(sweep_t 는
 var smash_snd_n := 0     # 이번 쓸기에서 낸 소리 수(상한 SMASH.snd_max)
 var smash_n := 0         # 이번 쓸기에서 깨진 수
 var smash_deal_n := 0    # 그중 안전망(_sweep_deal)이 깬 수 — 프로브가 읽는다
+
+
+# ══════════════════════════════════════════════════════════
+#  판 깨짐 — 금이 그은 선을 따라 판이 뜬다
+# ══════════════════════════════════════════════════════════
+#  「판 클리어 하면 다트 보드 깨지는 연출 넣고 싶은데」(사용자, 2026-09-24).
+#
+#  ── 어디에 사는가 ───────────────────────────────────────
+#  목표를 넘긴 걸음(_next_step 의 "total" 갈래) **안**에 산다. 거기서
+#  qt = beat*3.4 가 서고 같은 줄에서 hitstop 이 빠져 벽시계로 1.096초가
+#  열리는데, **그 창은 이미 비어 있다**: screen_flash 는 +12(감쇠 d×5) ·
+#  board_punch 는 +21(d×3.4) · shake 는 +13.0 에서 d×34 로 +27 프레임에
+#  죽고, 정산이 열리는 +69 까지 화면의 모든 값이 0 이다. 43프레임 ·
+#  0.717초가 통째로 비어 있고 연출(0.42초)은 그 안에 든다.
+#  **런 벽시계에 더해지는 초가 0** 이다 — LAND 가 「딜부터 첫 착지까지
+#  0.411초가 이미 비어 있다 · 박자는 전부 0」으로 세운 그 수다.
+#  견줄 값: EGG 를 통째로 옮겼으면 2.40 × 24판 = 57.6초다.
+#
+#  ── 왜 _finish_leg 가 아닌가 ────────────────────────────
+#  qa_wreck ⑧(420~424)과 settle_probe ③-b(152)가 `g._finish_leg()` 가
+#  **돌아온 그 줄에서** state == S.CLEAR · clear_t == 0 을 잰다. 연출을
+#  거기 매달면 그 둘이 즉시 빨개진다. 걸음 안에 살면 _finish_leg 가 받는
+#  것은 `_brk_skip()` 한 줄뿐이고, 그 줄은 state · clear_t · shake ·
+#  hitstop 을 한 비트도 안 만진다.
+#
+#  ── 글자 0자 ────────────────────────────────────────────
+#  pop() 을 한 번도 안 부르고 draw_string 을 한 줄도 안 쓴다. 정산 제목이
+#  이미 「라운드 N  큰 판 클리어」를 적는다(_draw_clear 첫 줄들). 깨짐이
+#  말하는 것은 금 · 조각 · 소리뿐이다.
+#
+#  ── 밸런스 불변 ─────────────────────────────────────────
+#  보상 · 목표 · 확률 · 가격을 한 톨도 안 읽고 안 고친다. 층을 고르는 자는
+#  GameData.leg_idx(leg_no) 하나뿐이다.
+#
+#  ── 입력 불변 ───────────────────────────────────────────
+#  새 잠금 깃발을 안 만들고 _click · _unhandled_input 에 갈래를 안 더한다.
+#  이 연출은 S.RESOLVE 걸음 안에 살아 원래 입력이 없는 구간이고, 유일한
+#  입력인 빨리 보기(누르고 있기)를 **탄다**. 키보드 전용 길 0 —
+#  모바일에서 그대로 산다.
+const BRK := {
+	#  ── 발화 자리 ────────────────────────────────
+	#  **걸음의 꼬리로 문다**: qt <= minf(tail, qt0 * cap_k).
+	#  벽시계 상수로 박으면 빨리 보기(fast_rate 2.5)에서 걸음만 빨라져
+	#  연출이 leg_clear 뒤로 샌다. 비율(qt0 의 몇 할)로 물면 이번엔
+	#  **연발 길에서 틀린다** — 리볼버·반동으로 목표를 넘긴 판의 마지막
+	#  걸음은 beat*3.4 가 아니라 beat*2.6 이라 걸음 길이가 세 가지다.
+	#  절대 꼬리 + 비율 상한이면 걸음이 어떤 길이로 와도 **정산 앞의 숨이
+	#  언제나 같다**: tail 0.42 = hold 0.045 + life_hi 0.34 + 숨 0.035.
+	#  숨 두 프레임은 EGG 의 「판이 없는 숨」(hold 0.45)의 짧은 판이다.
+	"tail": 0.42, "cap_k": 0.50,
+	#  ── 박자 (SMASH 에서 그대로 — 프레임 폭마다 실측된 값들이다) ──
+	"hold": 0.045,       # 조각이 제자리에서 흰색으로 언다 (SMASH.hold)
+	"life_lo": 0.24, "life_hi": 0.34,   # (SMASH.life_*)
+	"sink": 0.10,        # 마지막 이 시간 동안 C_BG 로 (SMASH.sink_t)
+	#  hot 0.30: 갓 난 금의 모서리가 하얗게 달았다 식는 시간.
+	#  ⚠ 설계서의 0.12 는 **단 사이(보스 0.113초)보다 짧아서** 어느
+	#  프레임에도 달아 있는 금이 하나뿐이었다 — 금이 자라는 것이 아니라
+	#  한 줄씩 깜빡이는 것으로 보인다. 0.30 이면 보스에서 두세 단이 같이
+	#  달아 있어 **바깥으로 번져 간다**가 읽힌다(EGG.hot 0.45 의 짧은 판).
+	"hot": 0.30,
+	#  ── 꽂힌 다트 — 판보다 **먼저** 빠진다 ──
+	#  0.20 이면 조각의 마지막(0.385)보다 0.185초 빠르다. 「위에 얹혀
+	#  있던 것을 아래 것보다 먼저 치운다」 — _egg_shatter 가 조각을 만들기
+	#  **전에** ttl_stuck 을 비우는 그 차례다.
+	"dart": 0.20, "dart_v": 120.0,
+	#  ── 조각 (EGG 에서 그대로) ──
+	"grav": 950.0,       # EGG.grav
+	"grit_grav": 520.0,  # EGG.chip_grav
+	#  바깥 겹일수록 세게 튄다 — 위로 한 번 솟았다 떨어져야 「깨졌다」다.
+	#  곧게 바깥으로만 가면 터진 것이 아니라 흩어진 것이다(_egg_shatter).
+	#  EGG 의 90~180 + 90*bi 를 수명 0.95 → 0.34 에 맞춰 줄인 값이다.
+	"sp_lo": 120.0, "sp_hi": 260.0, "up_lo": 95.0, "up_hi": 190.0, "om": 8.0,
+	"grit_sp_lo": 200.0, "grit_sp_hi": 420.0,
+	"grit_life_lo": 0.18, "grit_life_hi": 0.30,
+	#  ── 상한 — 640×360 에서 지저분해지지 않는 선 ──
+	#  qa_smash:198 이 「동시 조각 40 · grit 30」을 조각 예산으로 못 박았다.
+	#  실제 최대는 31 + 24 = 55 인데, 그 프로브가 이미 「가장 붐비는 순간」
+	#  으로 인정한 쓸기가 36 + 27 = 63 이다.
+	"cap": 32, "grit_cap": 24,
+	#  ── 층 [부채(원함) · 겹 · 부스러기 · 소리 겹 · 음 배수] ──
+	#  LAND 의 0:1:3:7 과 같은 어법. 다만 **빈도가 사다리를 못 만든다** —
+	#  legs.csv 가 세 줄이고 legs_per_round 3 × rounds_n 8 이라 작은 8 ·
+	#  큰 8 · 보스 8 로 8:8:8 이다. 사다리는 「그 클리어가 무엇을 사는가」
+	#  에서 온다: skippable 이 1/1/0 이라 작은·큰은 건너뛸 수 있고
+	#  **보스만 런마다 보장되며 라운드를 닫는다.**
+	#  **길이는 셋이 같다(0.42초).** 길이로 쌓으면 보스 8번이 런에 초를
+	#  더한다 — 쌓이는 것은 겹 · 금 단 · 부스러기 · 소리 겹뿐이다.
+	#  무한 판은 보스와 같다. 겹도 소리도 시간도 한 톨 안 더한다.
+	#  ⚠ 작은 판의 부채가 **4 가 아니라 5** 다. 4 면 한 조각이 기본 판의
+	#  칸 다섯을 먹어 **판의 4분의 1짜리 덩어리**가 되는데, 그것이 돌며
+	#  벌어지면 640×360 에서 깨진 판이 아니라 바람개비가 열리는 그림이
+	#  된다 — 하필 런에서 **맨 처음 보는 깨짐**이 이것이다(R1 작은 판).
+	#  5 도 20 의 약수라 조각 경계가 그대로 철선에 앉고(피자 8칸에서는
+	#  여전히 4 로 앉는다) 사다리는 11 < 21 < 31 로 오히려 고르게 선다.
+	#  길이 · 소리 · 톱밥은 한 톨도 안 건드리므로 「길이는 셋이 같다」도
+	#  그대로다. 2026-09-24
+	"small": [5, 2, 10, 1, 1.06],
+	"big":   [8, 2, 16, 2, 0.97],
+	"boss":  [8, 3, 24, 3, 0.88],
+	#  꼬리 톡 자리(초). 사이가 0.080 이라 SMASH.snd_gap 0.040 위다.
+	"thud": [0.060, 0.140],
+}
+
+var brk_live := false    # 도안이 서 있다 — 금이 나는 중이거나 조각이 난 뒤
+var brk_fired := false   # 조각이 났다. **이때부터 _draw_board 가 쉰다**
+var brk_t := 0.0         # 발화부터 흐른 시간. 음수면 hold(제자리에서 흰색)
+var brk_c := 0.0         # 도안이 선 뒤의 시계. 금의 열이 이것으로 식는다
+var brk_qt0 := 0.0       # 도안이 선 프레임의 qt — 꼬리를 재는 자
+var brk_span := 0.0      # 금이 다 그어지는 데 걸리는 벽시계(초)
+var brk_free := false    # 걸음에 안 매인다 — 개발자 모드의 「다시 보기」 전용
+var brk_tier := 0        # 0 작은 · 1 큰 · 2 보스
+var brk_seed := 1        # 파단선의 씨. 판 번호에서 난다
+var brk_w := 1           # 부채 수(_sec_n() 의 약수)
+var brk_stage := 0       # 그어진 금의 단
+var brk_snd := 0         # 낸 꼬리 톡 수
+var brk_dart := -1.0     # 꽂힌 다트가 손을 놓은 뒤 흐른 시간. 음수면 아직
+var brk_rings := []      # [[r0, r1], ...] 지금 판의 띠 표에서 뜬 겹
+var brk_born := PackedFloat32Array()   # 단마다 난 때(brk_c)
+var brk_shards := []     # {c, pts, v, rot, w, col, t, life}
+var brk_bits := []       # 부스러기 {p, v, t, life, sz}
+
+
+#  이 층의 줄. [부채 · 겹 · 부스러기 · 소리 겹 · 음 배수]
+func _brk_row() -> Array:
+	return BRK[["small", "big", "boss"][brk_tier]]
+
+
+# ── 겹 ── **지금 그려지는 판**의 띠 표에서 뜬다. 박아 둔 수가 한 톨도 없다.
+#  ⚠ _egg_shatter 의 띠 셋을 빌리면 안 된다 — 그쪽은 0.44 · 0.76 을 박아
+#  두었고 _sec_n() · rt_* 를 한 번도 안 본다(TAU/20.0 · for i in 20).
+#  빌릴 자는 _board_dim_sector 다: 거기만 rt_* 에서 표를 만들고 천체 고리
+#  까지 본다. rt_* 여덟은 _board_bake 와 _start_leg 가 보드 확장에서
+#  **판마다 새로 굽는다** — 판이 넓어지면 금도 같이 넓어진다. 2026-09-24
+func _brk_rings(want: int) -> Array:
+	var bands := [[rt_bull_o, rt_trp_in], [rt_trp_in, rt_trp_out],
+			[rt_trp_out, rt_dbl_in], [rt_dbl_in, rt_dbl_out]]
+	if rt_trp2_out > 0.0:                    # 천체 고리 — 싱글 안쪽이 셋으로
+		bands[0] = [rt_bull_o, rt_trp2_in]
+		bands.append([rt_trp2_in, rt_trp2_out])
+		bands.append([rt_trp2_out, rt_trp_in])
+	bands.sort_custom(func(a, b): return float(a[0]) < float(b[0]))
+	#  **폭 0 인 띠를 먼저 버린다.** 피자가 더블·트리플을 그렇게 접는다
+	#  (mods.csv 「폭을 0 으로 접으면 … 넓이도 저절로 0 이다」 — _mod_step
+	#  의 b.ti = b.to · b.din = b.dout). _band_draw 가 이미 같은 것을 같은
+	#  이유로 거른다: 넓이 없는 다각형은 삼각분할이 튄다. 이 한 줄 덕에
+	#  피자는 겹이 저절로 둘이 되고 갈래를 따로 안 판다.
+	var out := []
+	for b in bands:
+		if float(b[1]) > float(b[0]) + 0.001:
+			out.append([float(b[0]), float(b[1])])
+	if out.is_empty():
+		return [[rt_bull_o, rt_dbl_out]]
+	#  **가장 얇은 이웃끼리 붙여** want 까지 줄인다. 남는 경계가 언제나
+	#  실제 철선 위라 조각 경계가 판의 선과 한 픽셀도 안 어긋난다.
+	while out.size() > want and out.size() > 1:
+		var bi := 0
+		var bw := INF
+		for i in out.size() - 1:
+			var w: float = (out[i][1] - out[i][0]) + (out[i + 1][1] - out[i + 1][0])
+			if w < bw:
+				bw = w
+				bi = i
+		out[bi] = [out[bi][0], out[bi + 1][1]]
+		out.remove_at(bi + 1)
+	#  ⚠ **바깥 겹은 판의 끝이 아니라 테까지 먹는다.** 띠 표는 노는 면
+	#  (rt_dbl_out = 1.0)까지만 적는데 실제로 그려지는 판은 그 밖에 테가
+	#  한 겹 더 있고 칸 숫자가 거기 앉는다(_board_rim = R*(rt_dbl_out+gap)).
+	#  거기까지 안 먹으면 조각이 뜨는 프레임에 **테와 숫자만 먼저 사라져**
+	#  판이 한 번 작아졌다 터지는 것으로 보인다 — 실제로 찍어 보고 잡았다.
+	#  2026-09-24
+	out[out.size() - 1][1] = maxf(out[out.size() - 1][1],
+			rt_dbl_out + _theme_ring_w(_board_theme()))
+	return out
+
+
+# ── 부채 ── 칸 수의 **약수**만 쓴다. 한 조각이 먹는 칸 수가 정수라 조각
+#  경계가 언제나 칸 경계(철선)에 앉는다. 스물을 박으면 피자에서 어긋난다 —
+#  _sec_n() 이 유일한 출처다(「sectors 의 길이가 유일한 출처다 — 기본 판은
+#  20, 피자는 8 조각이다」).
+#  ⚠ **시계(clok)는 칸이 열둘이 아니라 스물이다.** 설계서가 12 로 적었지만
+#  mods.csv 의 axis 가 "flat" 이고 _mod_step 의 그 갈래는 칸 **값**만
+#  덮는다(sec.resize 를 부르는 자는 피자 하나뿐이다). 그래서 시계·도넛·
+#  과녁은 기본 판과 같은 약수 집합을 쓴다. 2026-09-24
+#  기본 20 → 1·2·4·5·10·20 · 피자 8 → 1·2·4·8
+func _brk_wedges(want: int) -> int:
+	var n := _sec_n()
+	var best := 1
+	for k in range(1, n + 1):
+		if n % k == 0 and absi(k - want) < absi(best - want):
+			best = k
+	return best
+
+
+#  조각 하나의 물감 [안쪽 · 바깥]. **그 테마가 실제로 칠하는 색에서 뜬다.**
+#  ⚠ _board_cols() 는 **토너먼트 판의 진실일 뿐이다** — 테마 넷은 그 배열을
+#  받아도 제 물감으로 덮는다(시계는 황동 테, 피자는 크러스트, 도넛은 글레이즈,
+#  과녁은 짚). 찍어 보니 시계 판이 빨강·초록 조각으로 깨지고 피자가 먹색
+#  조각으로 깨졌다 — 「지금 그려지는 판에서 뜬다」가 색에서만 거짓이었다.
+#  **새 색을 한 개도 안 만든다** — 네 표에 이미 있는 물감을 짚기만 한다.
+#  2026-09-24
+func _brk_cols_at(th: String, cols: Array, ci: int) -> Array:
+	var pair: Array = cols[ci % cols.size()]
+	match th:
+		"pizza":
+			#  ⚠ **조각마다 다른 바탕이다.** 앞서는 [cheese, crust] 한 쌍을
+			#  박아 두어 ci 를 한 번도 안 봤고, 그래서 피자가 **열일곱 조각
+			#  전부 창백한 치즈 한 색**으로 깨졌다 — 이 판에서 제일 알아보기
+			#  쉬운 것(밝은 치즈와 짙은 불고기가 번갈아 도는 리듬)이 깨지는
+			#  순간 사라진다. 칸 값이 하나로 눕는 것은 **값**이지 색이
+			#  아니다: _sec_col 은 그대로 돌고 _pz_base 가 그 색을 재료
+			#  쪽으로 끈다. 그 자가 판이 실제로 칠하는 바탕이고 죽은 칸까지
+			#  같은 규칙으로 가라앉히므로 그대로 쓴다. 2026-09-24
+			return [_pz_base(ci, cols), PIZZAART.crust]
+		"clock":
+			#  문자판 칸은 칸 색 그대로 돈다(크림·먹). 바깥 테만 황동이다.
+			return [pair[0], CLOCKART.gilt[2]]
+		"donut":
+			var gz: Array = DONUTART.glaze.get(_sec_col(ci), DONUTART.glaze[0])
+			return [gz[0], DONUTART.dough]
+		"target":
+			return [TARGETART.paper, TARGETART.straw]
+	return [pair[0], pair[1]]
+
+
+#  조각 하나가 먹는 반지름 구간이 띠 색(빨강·초록)을 얼마나 무는가.
+#  겹을 붙여 줄이면 한 조각이 싱글과 더블을 같이 먹으므로 **둘 중 하나로
+#  고르면 거짓말이 된다** — 문 폭의 비로 섞는다. 피자는 띠가 폭 0 이라
+#  저절로 0 이 나와 칸 색 그대로다.
+func _brk_band_mix(r0: float, r1: float) -> float:
+	#  테는 노는 면이 아니라 판의 가장자리라 색 셈에서 뺀다 — 안 빼면 바깥
+	#  겹이 테 폭만큼 묽어져 띠가 있는 판과 없는 판이 같은 색으로 뜬다.
+	var hi: float = minf(r1, rt_dbl_out)
+	var w: float = hi - r0
+	if w <= 0.0:
+		return 0.0
+	var hit: float = maxf(0.0, minf(hi, rt_trp_out) - maxf(r0, rt_trp_in)) \
+			+ maxf(0.0, minf(hi, rt_dbl_out) - maxf(r0, rt_dbl_in))
+	if rt_trp2_out > 0.0:
+		hit += maxf(0.0, minf(hi, rt_trp2_out) - maxf(r0, rt_trp2_in))
+	#  ⚠ **띠를 통째로 접은 판은 바깥 물감이 테에만 남는다.** 피자는
+	#  더블·트리플 폭을 0 으로 접으므로(mods.csv — _mod_step 의 b.ti = b.to ·
+	#  b.din = b.dout) hit 이 **구조적으로 언제나 0** 이고, 그러면 바깥 겹이
+	#  안쪽 물감 그대로 떠서 **크러스트가 한 조각도 안 뜬다** — 찍어 보고
+	#  잡았다. 띠가 접힌 판에서만 테를 셈에 넣는다: 거기서는 테가 곧 바깥
+	#  물감 그 자체다(피자 크러스트 0.15R). 띠가 살아 있는 판은 이 줄에
+	#  안 걸리므로 기본 판·시계·도넛·과녁은 한 픽셀도 안 바뀐다.
+	#  2026-09-24
+	if hit <= 0.0 and r1 > rt_dbl_out:
+		return clampf((r1 - rt_dbl_out) / (r1 - r0), 0.0, 1.0)
+	return clampf(hit / w, 0.0, 1.0)
+
+
+# ── 도안을 뜬다 ── 목표를 넘긴 걸음의 끝에서 부른다.
+#  **화면이 한 픽셀도 안 바뀐다** — 배열 셋을 세우고 시계를 연다.
+#  금 그물과 조각 도안이 **같은 기하**다: 금이 그은 그 선을 따라 판이
+#  갈라진다. EGG 는 금(egg_segs)과 조각(egg_shards)이 따로 난 무늬였다.
+#  tier 를 −1 로 두면 지금 판에서 뽑는다. 개발자 모드의 「다시 보기」만
+#  층을 손으로 준다 — 그 길은 leg_no 를 한 칸도 안 옮기므로 무늬는 이
+#  판의 것이고 층만 갈린다.
+func _brk_arm(tier := -1) -> void:
+	#  소크 · 오토플레이 · 도구는 안 탄다. _swap_begin · _turn_begin 과
+	#  **같은 첫 줄**이고 같은 근거다: 이 함수가 게임 상태를 안 만지므로
+	#  건너뛰어도 두 쪽이 정확히 같은 게임을 한다.
+	if drop_fast:
+		return
+	_brk_skip()
+	brk_tier = clampi(GameData.leg_idx(leg_no) if tier < 0 else tier, 0, 2)
+	var row: Array = _brk_row()
+	brk_rings = _brk_rings(int(row[1]))
+	brk_w = _brk_wedges(int(row[0]))
+	#  상한 — 겹을 먼저 줄이고, 그래도 넘으면 부채를 한 약수 아래로.
+	while brk_w * brk_rings.size() + 1 > int(BRK.cap) and brk_rings.size() > 1:
+		brk_rings = _brk_rings(brk_rings.size() - 1)
+	while brk_w * brk_rings.size() + 1 > int(BRK.cap) and brk_w > 1:
+		brk_w = _brk_wedges(brk_w - 1)
+	#  씨는 **판 번호**에서 난다. 같은 판이면 언제나 같은 무늬로 갈라지고
+	#  (EGG 의 「날 때마다 무늬가 바뀌면 깨지는 게 아니라 깜빡이는 것이다」)
+	#  판이 다르면 다른 무늬다 — 무한 102판이 공짜로 전부 다르다.
+	brk_seed = 104729 * leg_no + 1
+	brk_born.resize(brk_rings.size() * 2 + 1)
+	brk_born.fill(0.0)
+	brk_live = true
+	#  qt 는 바로 위에서 서고 hitstop 만큼 빠진 뒤다. **그 뒤에 읽어야**
+	#  꼬리가 맞으므로 _brk_arm 은 걸음 갈래의 마지막에 선다.
+	#  걸음 밖(개발자 모드 다시 보기)에서는 qt 가 0 이라 표준 돌파 걸음을
+	#  자로 쓴다 — 그래야 다시 보기가 실제와 같은 길이로 돈다.
+	brk_qt0 = qt if qt > 0.001 else beat * 3.4
+	brk_span = maxf(brk_qt0 - _brk_fire_at(), 0.0)
+
+
+#  이 걸음에서 조각이 뜨는 qt. 걸음이 세 길이로 오는데(돌파 beat*3.4 ·
+#  연발 마지막 beat*2.6 · 눌린 박자 beat 0.015) 절대 꼬리로 물면 정산 앞의
+#  숨이 언제나 같다. 상한은 비율이라 아주 짧은 걸음에서도 반은 남는다.
+func _brk_fire_at() -> float:
+	return minf(float(BRK.tail), brk_qt0 * float(BRK.cap_k))
+
+
+# ── 연출 시계 ── _process 의 _wreck_tick 옆. hitstop 조기 반환 **밑**이라
+#  멈춤 60ms 동안 깨짐도 같이 언다.
+#  **d * fast_rate 를 탄다.** qt 가 S.RESOLVE 에서 그 배수로만 깎이므로,
+#  안 태우면 빨리 보기(2.5)에서 연출만 혼자 2.5배 길어져 정산 뒤로 샌다 —
+#  카드 시계 여섯이 이미 같은 이유로 같은 배수를 탄다. 2026-09-24
+func _brk_tick(d: float) -> void:
+	if not brk_live:
+		return
+	#  ⚠ **판을 떠나면 얼지 말고 내린다.** 판 중의 ESC → 「로비로 나가기」는
+	#  pause_from 을 −1 로 내리고 state 를 곧장 S.TITLE 로 옮기는데, 그 길은
+	#  내리는 자리 셋(_finish_leg 첫 줄 · _start_leg · _swap_skip)을 **하나도
+	#  안 밟는다.** 아래 얼기만 걸리면 brk_live 가 참인 채 남고
+	#  _brk_board_dy() 가 INF 를 계속 내어 **제목 화면의 다트판이 영영 안
+	#  그려진다** — 판 층을 그리는 문에는 state 갈래가 없기 때문이다. 제목 판
+	#  이스터에그로도 못 되살린다(_egg_board_dy 가 판을 세워도 bdy 가 INF 라
+	#  그 문을 못 지난다). 발화 뒤에 나가면 조각이 제목 위에 얼어 있고, 금만
+	#  난 중에 나가면 제목 판에 금이 박힌 채 남는다. 개발자 2쪽의 「제목 판
+	#  금 가기 직전」·「제목 판 깨기 직전」도 state 를 직접 옮기는 같은
+	#  구멍이라, 나가는 자리마다 한 줄씩 적는 대신 **여기 한 문**으로 막는다.
+	#  _is_play_deep() 이라 런 정보·설정은 밑에 깔린 판을 보고 아래 얼기로
+	#  그대로 넘어간다 — 판 중에 연 설정은 한 프레임도 안 바뀐다. 2026-09-24
+	if not _is_play_deep():
+		_brk_skip()
+		return
+	#  ⚠ **걸음이 멎으면 깨짐도 멎는다.** qt 는 S.RESOLVE 에서만 깎이는데
+	#  판 중에 런 정보나 설정(ESC)을 열면 state 가 그리로 가고 걸음이 선
+	#  채로 멎는다 — 안 막으면 그 화면 뒤에서 판이 혼자 깨지고, 닫고 돌아온
+	#  손님은 없어진 판을 본다. 여기서 같이 얼면 두 시계가 안 갈린다.
+	#  brk_free 는 개발자 모드의 「다시 보기」 하나만 켠다. 2026-09-24
+	if not brk_free and state != S.RESOLVE:
+		return
+	var dd := d * fast_rate
+	brk_c += dd
+	if not brk_fired:
+		#  아직 금만 나는 동안. 금은 발화 프레임에 정확히 다 그어진다.
+		#  **qt 를 안 읽고 제 시계로 잰다** — brk_c 와 (brk_qt0 − qt) 는
+		#  둘 다 d * fast_rate 로 걷고 hitstop 에서 같이 얼므로 값이 같고,
+		#  제 시계로 재면 걸음 밖(다시 보기)에서도 같은 길이로 돈다.
+		#  ⚠ **단은 발화보다 조금 먼저 다 찬다(0.90).** 꼭 맞춰 두면 마지막
+		#  단이 k == 1.0 에서만 서는데 그 프레임이 곧 발화라 **파단선이
+		#  다 그어진 그림을 아무도 못 본다** — 찍어 보고 잡았다. 0.90 이면
+		#  마지막 단이 넉 프레임쯤 서 있다가 그 선대로 갈라진다.
+		var k: float = clampf(brk_c / maxf(brk_span * 0.90, 0.001), 0.0, 1.0)
+		var st: int = clampi(int(k * float(brk_rings.size() * 2)),
+				0, brk_rings.size() * 2)
+		while brk_stage < st:
+			brk_stage += 1
+			brk_born[brk_stage] = brk_c      # 이 단이 난 때 — 여기서부터 식는다
+		if brk_c >= brk_span:
+			_brk_fire()
+		return
+	brk_t += dd
+	if brk_dart >= 0.0:
+		brk_dart += dd
+	#  꼬리 톡. **빨리 보기에서는 안 낸다** — 그쪽에서는 톡 사이가 0.024 로
+	#  SMASH.snd_gap 0.040 밑으로 떨어지고, 정산 프레임에 산 소리가 다섯이
+	#  되어 sfx_pool 넷에서 가장 오래된 target_hit 이 끊긴다.
+	#  SMASH.snd_max 4 와 같은 꼴의 문이다.
+	if fast_rate <= 1.0:
+		var row: Array = _brk_row()
+		while brk_snd < int(row[3]) - 1 and brk_t >= float(BRK.thud[brk_snd]):
+			#  ⚠ **131 이 아니라 SFX_BASE 를 민다.** _sfx 의 계약이
+			#  pitch_scale = f / SFX_BASE(392) 라 131*1.06 을 주면 피치가
+			#  0.354 로 떨어져 툭이 먹먹한 쿵이 된다. _impact 가 이미
+			#  SFX_BASE * randf_range(0.94, 1.06) 으로 같은 것을 민다.
+			#  설계서의 131.0 * (...) 는 여기서 갈랐다. 2026-09-24
+			_sfx("board_thud", SFX_BASE * (1.06 if brk_snd == 0 else 0.94))
+			brk_snd += 1
+	var gv: float = float(BRK.grav)
+	for s in brk_shards:
+		s.t = float(s.t) + dd
+		if float(s.t) < 0.0:
+			continue                    # hold 동안 제자리에서 흰색으로 언다
+		var v: Vector2 = s.v
+		v.y += gv * dd
+		s.v = v
+		s.c = (s.c as Vector2) + v * dd
+		s.rot = float(s.rot) + float(s.w) * dd
+	brk_shards = brk_shards.filter(func(s): return float(s.t) < float(s.life))
+	var bv: float = float(BRK.grit_grav)
+	for b in brk_bits:
+		b.t = float(b.t) + dd
+		if float(b.t) < 0.0:
+			continue
+		var v2: Vector2 = b.v
+		v2.y += bv * dd
+		b.v = v2
+		b.p = (b.p as Vector2) + v2 * dd
+	brk_bits = brk_bits.filter(func(b): return float(b.t) < float(b.life))
+	#  ⚠ **조각이 다 죽어도 스스로 안 끝낸다.** 끝내면 _brk_board_dy() 가
+	#  INF 를 그만 내어 **말짱한 판이 도로 튀어나온다** — 한 프레임만
+	#  어긋나도 보인다. 판이 없는 그 두 프레임이 「숨」이고, 내리는 자리는
+	#  _finish_leg 첫 줄 하나뿐이다. 2026-09-24
+
+
+# ── 뜬다 ── 조각이 태어나고 판이 그리기를 멈춘다.
+func _brk_fire() -> void:
+	var row: Array = _brk_row()
+	brk_fired = true
+	#  남은 단을 이 프레임에 한꺼번에 적는다. 모션을 끈 손님에게는 이
+	#  한 줄이 「금이 완성된 채로 뜬다」가 되고, 켠 손님에게는 반올림
+	#  때문에 마지막 한 단이 안 난 프레임을 메운다.
+	while brk_stage < brk_rings.size() * 2:
+		brk_stage += 1
+		brk_born[brk_stage] = brk_c
+	#  판 **위** 소리다. 칩 · 동전 · 릴 · 종은 한 알도 안 섞는다.
+	#  leg_clear · target_hit · run_win 의 종도 안 빌린다(sfx/README: 종을
+	#  종으로 만드는 건 tierce 1.2 — 그 비를 어디에도 안 놓는다).
+	#  egg_crack 도 **안 쓴다** — 그것은 제목 판의 말이고, 두 판이 같은
+	#  소리로 깨지면 둘이 같은 물건이 된다.
+	#  음이 **내려간다**(416 · 380 · 345). 이 저장소의 사다리는 전부
+	#  오름인데(leg_clear · LAND.cue · target_hit) 등장은 올리고 퇴장은
+	#  내린다. 비가 1.095 · 1.101 로 서로 달라 한 음정이 소리를 규정하지
+	#  않는다(LAND 예고 셋 1.122 · 1.188 이 세운 규약).
+	_sfx("board_break", SFX_BASE * float(row[4]))
+	brk_snd = 0
+	brk_t = -float(BRK.hold)
+	brk_dart = 0.0
+	#  ⚠ **흔들림도 멈춤도 섬광도 0 이다.** 셋 다 목표 돌파가 이 창의 t=0 에
+	#  이미 냈고 연출은 그것을 탄다. 저장소 눈금(거절 4.0 < LAND 4.5 <
+	#  보드 확장 5.0 < 리롤 6.0 < 합계 9.0 < **돌파 13.0** < 제목 판 깨짐
+	#  14.0 < 이너 불 15.0)에 칸을 안 더한다 — 런에 한 번뿐인 제목 판의
+	#  꼭대기를 24번 밟지 않는다. 그리고 이 0 이 qa_wreck ⑨ 와
+	#  turn_probe ⑤ 를 **구조적으로** 지킨다.
+	if motion_off:
+		#  움직임을 끈 손님에게는 **안 날린다.** 금은 온몸에 두른 채 남고
+		#  판은 안 사라지고 소리는 층대로 그대로 난다 — qa_land ⑫ 의
+		#  「움직임만 끄고 빛·소리는 남긴다」. _egg_shatter 가 세운 갈래다.
+		#  순간 소멸은 깜빡임이지 그림이 아니다.
+		return
+	var sw := _sec_w()
+	var step: int = maxi(_sec_n() / maxi(brk_w, 1), 1)
+	var cols := _board_cols()      # 죽은 칸이 죽은 채로 뜬다 — 그 배열이 출처다
+	var th := _board_theme()
+	for j in brk_w:
+		var si: int = j * step
+		var a0: float = float(si) * sw - sw * 0.5
+		var a1: float = a0 + sw * float(step)
+		#  ⚠ **색을 뽑는 칸을 한 칸씩 엇갈려 짚는다.** 판은 칸이 크림·먹
+		#  으로, 띠가 빨강·초록으로 **번갈아** 도는데, 조각이 먹는 칸 수
+		#  (step)가 짝수면 j*step 이 언제나 짝수 칸이라 **판이 통째로 빨강
+		#  한 색으로 깨졌다** — 찍어 보고 잡았다. step 이 홀수면 j*step 의
+		#  홀짝이 저절로 갈리므로 그때는 안 엇갈린다. 2026-09-24
+		var ci: int = (si + (j % 2 if step % 2 == 0 else 0)) % _sec_n()
+		var pair: Array = _brk_cols_at(th, cols, ci)
+		for bi in brk_rings.size():
+			#  ⚠ 안쪽 반지름 바닥 0.75px — 「도넛」은 불을 **진짜로 없애서**
+			#  rt_bull_o 가 0 이다. 0 으로 두면 annulus_at 의 안쪽 고리가
+			#  한 점에 겹쳐 쌓여 삼각분할이 튄다(_band_draw 가 폭 0 을
+			#  거르는 그 이유). 0.75px 은 눈에 안 보이는 바닥이다.
+			var r0: float = maxf(R * float(brk_rings[bi][0]), 0.75)
+			var r1: float = R * float(brk_rings[bi][1])
+			var ma: float = (a0 + a1) * 0.5
+			var c := Vector2(sin(ma), -cos(ma)) * (r0 + r1) * 0.5
+			var pts := PackedVector2Array()
+			#  부채가 넓으면 마디를 더 준다 — 안 주면 넓은 조각이 현으로
+			#  눌려 판이 원래 다각형이던 것처럼 보인다.
+			for q in annulus_at(Vector2.ZERO, r0, r1, a0, a1, 3 + step):
+				pts.append(q - c)
+			var u := c.normalized()
+			var sp: float = lerpf(float(BRK.sp_lo), float(BRK.sp_hi),
+					float(bi) / maxf(float(brk_rings.size() - 1), 1.0))
+			brk_shards.append({"c": c, "pts": pts,
+					"v": u * sp + Vector2(
+							(_gl_rand(j * 7 + bi, brk_seed) - 0.5) * 52.0,
+							-lerpf(float(BRK.up_lo), float(BRK.up_hi),
+									_gl_rand(j * 11 + bi, brk_seed))),
+					"rot": 0.0,
+					"w": (_gl_rand(j * 13 + bi, brk_seed) - 0.5) * 2.0 * float(BRK.om),
+					#  칸 색과 띠 색을 **문 폭의 비로** 섞는다. 둘 다
+					#  _board_cols() 가 낸 그 배열이라 죽은 칸도 죽은 채로
+					#  뜬다. 새 색을 한 개도 안 만든다.
+					"col": (pair[0] as Color).lerp(pair[1] as Color,
+							_brk_band_mix(float(brk_rings[bi][0]),
+									float(brk_rings[bi][1]))),
+					#  **음수에서 시작한다.** 그동안 조각이 태어난 자리에서
+					#  원판을 빈틈없이 타일링한 채 흰색으로 언다 — 흰
+					#  실루엣을 따로 그릴 필요가 없어진다. **이 한 수가
+					#  테마별 실루엣 문제를 통째로 푼다**: 피자는 SubViewport
+					#  텍스처 한 장이라 폴리곤으로 못 되뜨는데, 색이 눈에
+					#  드는 순간에는 조각이 이미 200px/초 넘게 움직인다.
+					#  SMASH.hold 가 같은 이유로 같은 값을 골랐다.
+					"t": -float(BRK.hold),
+					"life": lerpf(float(BRK.life_lo), float(BRK.life_hi),
+							_gl_rand(j * 17 + bi, brk_seed))})
+	#  불 하나 더. 「도넛」은 불이 없으므로 안 낸다.
+	if rt_bull_o > 0.0:
+		var bull := PackedVector2Array()
+		for k in 12:
+			var a := TAU * float(k) / 12.0
+			bull.append(Vector2(cos(a), sin(a)) * R * rt_bull_o)
+		brk_shards.append({"c": Vector2.ZERO, "pts": bull,
+				"v": Vector2((_gl_rand(991, brk_seed) - 0.5) * 70.0,
+						-lerpf(float(BRK.up_lo), float(BRK.up_hi),
+								_gl_rand(992, brk_seed))),
+				"rot": 0.0, "w": (_gl_rand(993, brk_seed) - 0.5) * 2.0 * float(BRK.om),
+				#  바깥 불은 초록이다 — 시계 판만 그 자리가 검은 법랑 원판이다.
+				"col": CLOCKART.enamel if th == "clock" else C_GREEN,
+				"t": -float(BRK.hold),
+				"life": lerpf(float(BRK.life_lo), float(BRK.life_hi),
+						_gl_rand(994, brk_seed))})
+	#  부스러기 — 조각 사이에서 튀는 나뭇가루. 유리 가루(egg_bits)가 아니라
+	#  판 부스러기라 색을 철선에서 뜬다.
+	var gn: int = mini(int(row[2]), int(BRK.grit_cap))
+	for i in gn:
+		var ua := _gl_rand(i * 3 + 1, brk_seed) * TAU
+		var u2 := Vector2(cos(ua), sin(ua))
+		var at: Vector2 = u2 * R * sqrt(_gl_rand(i * 5 + 2, brk_seed)) * 0.95
+		brk_bits.append({"p": at,
+				"v": u2 * lerpf(float(BRK.grit_sp_lo), float(BRK.grit_sp_hi),
+						_gl_rand(i * 7 + 3, brk_seed))
+						+ Vector2(0.0, -lerpf(80.0, 220.0,
+								_gl_rand(i * 11 + 4, brk_seed))),
+				"t": -float(BRK.hold) * _gl_rand(i * 13 + 5, brk_seed),
+				"life": lerpf(float(BRK.grit_life_lo), float(BRK.grit_life_hi),
+						_gl_rand(i * 17 + 6, brk_seed)),
+				"sz": 1.0 + _gl_rand(i * 19 + 7, brk_seed) * 1.2})
+
+
+# ── 즉시 끝내는 손잡이 ──
+#  ⚠ **도구 쉰하나가 _swap_skip 하나로 정지 프레임을 찍는다.** 새 연출을
+#  거기 안 매달면 shot_*.gd · deck_shots*.gd · art_*.gd 가 중간 프레임을
+#  찍어 갈무리가 **조용히** 상한다(_swap_skip 머리말, 2026-09-20).
+#  **게임 상태를 한 비트도 안 만진다** — _turn_skip 과 같은 규약이다.
+#  state · clear_t · shake · hitstop 을 한 비트도 안 건드리므로
+#  qa_wreck ⑧ ⑨ 와 settle_probe ③-b 가 구조적으로 초록이다.
+func _brk_skip() -> void:
+	brk_live = false
+	brk_fired = false
+	brk_free = false
+	brk_t = 0.0
+	brk_c = 0.0
+	brk_qt0 = 0.0
+	brk_span = 0.0
+	brk_dart = -1.0
+	brk_stage = 0
+	brk_snd = 0
+	brk_rings = []
+	brk_shards.clear()
+	brk_bits.clear()
+
+
+#  판의 높이. 뜬 뒤에는 INF(안 그린다). _egg_board_dy 의 쌍둥이다.
+#  **조각은 판 층에 그린다** — _draw_clear 첫 줄의 **알파 없는**
+#  draw_rect(_full(), C_BG) 밑이라 살아 남아도 정산 위에 한 픽셀도 못
+#  선다. 시체 선반(x[8,180]×y[52,276])과 부딪힐 길이 아예 없다.
+func _brk_board_dy() -> float:
+	if not brk_live or not brk_fired or motion_off:
+		return 0.0
+	#  ⚠ **판 밖에서는 절대로 판을 지우지 않는다.** 판 층을 그리는 문에는
+	#  state 갈래가 없어서 이 함수 하나가 「판을 안 그린다」를 통째로 쥔다 —
+	#  화면이 판을 떠났는데 INF 가 남으면 제목 · 로비 · 런 종료의 다트판이
+	#  같이 사라진다. 위 _brk_tick 이 이미 내리지만 그쪽은 hitstop 조기 반환
+	#  **밑**이라 멈춤 동안 한 프레임을 건너뛸 수 있다. **지우는 자에는 문을
+	#  두 겹 둔다** — 한 프레임만 어긋나도 판이 없는 제목이 보인다.
+	#  2026-09-24
+	if not _is_play_deep():
+		return 0.0
+	return INF
+
+
+#  꽂힌 다트. **판보다 먼저 빠진다** — 발라트로가 판이 죽을 때 판 이름
+#  글자를 먼저 밀어낸 그 수이고, _egg_shatter 가 ttl_stuck 을 조각보다
+#  먼저 비운 그 수다. **곧게 아래로만** 간다: 조각은 바깥, 다트는 아래.
+#  그래야 「판의 일부」가 아니라 「판에 얹혀 있던 것」으로 읽힌다.
+#  ⚠ darts 는 **안 비운다** — darts.clear() 는 _start_leg 한 곳뿐이고
+#  그대로 둔다. _egg_shatter 가 비우는 ttl_stuck 은 제목 화면 전용
+#  배열이지 게임 상태가 아니다. 그 선례를 darts 에 옮기면 안 된다.
+#  2026-09-24
+func _brk_dart_dy() -> float:
+	if not brk_live or brk_dart < 0.0 or motion_off:
+		return 0.0
+	var t := minf(brk_dart, float(BRK.dart))
+	return float(BRK.dart_v) * t + 0.5 * float(BRK.grav) * t * t
+
+
+#  다트 층의 짙기. 낙하만으로는 안 된다 — 판 위쪽에 꽂힌 발은 0.20초에
+#  43px 내려가 봐야 화면 안이라 **툭 사라진다.** 설계서는 변환 한 줄만
+#  걸라고 했지만 그러면 그 팝이 남는다. _icon_dart 가 이미 알파를 받고
+#  (a := 1.0) 3D 길은 draw_texture_rect 의 모듈레이트가 받으므로, 한
+#  갈래에 한 줄씩이면 두 길이 같이 진다. 2026-09-24
+func _brk_dart_a() -> float:
+	if not brk_live or brk_dart < 0.0 or motion_off:
+		return 1.0
+	return clampf(1.0 - brk_dart / float(BRK.dart), 0.0, 1.0)
+
+
+#  갓 난 금의 열. 흰색에서 C_WIRE 로 식는다 — 식은 금이 철선 한 줄로
+#  보이므로 테마 넷이 전부 제 어휘로 받는다. **새 색을 안 만든다.**
+func _brk_hot(s: int) -> float:
+	if s <= 0 or s >= brk_born.size():
+		return 0.0
+	return clampf(1.0 - (brk_c - float(brk_born[s])) / float(BRK.hot), 0.0, 1.0)
+
+
+#  금 — 난 단까지 그린다. **조각을 자르는 그 선이다.**
+#  살(방사)은 부채 경계, 테(동심)는 겹 경계. 단이 번갈아 바깥으로 간다
+#  (0 불 둘레 → 1 첫 겹의 살 → 2 다음 테 → …).
+#  EGG 는 금과 조각이 따로 난 무늬였다. 여기서는 하나다 — 0.68초 동안
+#  금이 어디가 깨질지 미리 적고, 그 선대로 뜬다.
+#
+#  ⚠ **줄 하나로는 안 보인다.** 설계서는 「식은 금이 철선 한 줄로 보이므로
+#  테마 넷이 제 어휘로 받는다」로 C_WIRE 한 줄을 적었는데, 실제로 찍어 보니
+#  판의 철선이 이미 그 색 그 굵기라 금이 **판 무늬에 통째로 묻혔다** —
+#  0.68초 동안 화면이 안 변하는 것으로 보인다. 게다가 이 판은 크림 칸과
+#  먹 칸이 번갈아 도므로 **한 가지 색으로는 어느 쪽에서든 반은 안 보인다.**
+#  그래서 금 하나를 두 줄로 긋는다: 제자리에 **어두운 틈**(크림 칸에서
+#  읽힌다) · 왼쪽 위로 1px 민 **밝은 모서리**(먹 칸에서 읽힌다). 빛이
+#  왼쪽 위에서 오는 것은 _icon_dart 가 이미 세운 규약이다. 갓 난 금은 그
+#  모서리가 하얗게 달았다 식는다. **새 색을 한 개도 안 만든다** — C_BG 와
+#  C_WIRE 뿐이다. 2026-09-24
+func _brk_crack_draw() -> void:
+	if not brk_live or brk_stage <= 0 or brk_rings.is_empty():
+		return
+	if brk_fired and not motion_off:
+		return                      # 판이 없으면 금도 없다
+	var sw := _sec_w()
+	var step: int = maxi(_sec_n() / maxi(brk_w, 1), 1)
+	var gap := Color(C_BG, 0.85)
+	var lift := Vector2(-1.0, -1.0)
+	for k in mini(brk_stage, brk_rings.size() * 2):
+		var lit := C_WIRE.lightened(0.5).lerp(Color.WHITE, _brk_hot(k + 1))
+		var bi: int = k / 2
+		if k % 2 == 0:              # 테
+			var r: float = R * float(brk_rings[bi][0])
+			draw_arc(BC, r, 0.0, TAU, 32 + brk_w, gap, 1.0)
+			draw_arc(BC + lift, r, 0.0, TAU, 32 + brk_w, lit, 1.0)
+		else:                       # 살
+			var r0: float = R * float(brk_rings[bi][0])
+			var r1: float = R * float(brk_rings[bi][1])
+			for j in brk_w:
+				var a: float = float(j * step) * sw - sw * 0.5
+				var u := Vector2(sin(a), -cos(a))
+				#  ⚠ **살은 lift 를 그대로 못 쓴다.** 테는 원이라 중심을
+				#  미는 것이 곧 베벨이지만, 살은 직선이라 **제 방향과 나란한
+				#  각에서 lift 가 그 선 위로 떨어진다** — 135°·315° 에서
+				#  u 가 (±0.707, ±0.707) 이라 lift(−1,−1) 와 평행이고,
+				#  밝은 줄이 어두운 틈 **위에** 그대로 얹혀 틈을 지운다.
+				#  남은 밝은 줄 하나는 크림 칸에서 판의 철선과 구별이 안 돼
+				#  금이 판 위에서 통째로 사라진다. 기본 20칸 판의 살 각이
+				#  36j−9(부채 10) · 72j−9(부채 5) 라 **큰·보스 열 갈래 중
+				#  둘 · 작은 다섯 갈래 중 하나**가 거기 걸렸다 — 찍어 보고
+				#  잡았다. 선의 **법선**으로 밀면 어느 각에서도 두 줄이 안
+				#  겹치고, 빛이 오는 쪽으로 뒤집어 「왼쪽 위에서 온다」를
+				#  그대로 지킨다(_icon_dart 의 규약). 2026-09-24
+				var nm := Vector2(-u.y, u.x)
+				if nm.dot(lift) < 0.0:
+					nm = -nm
+				draw_line(BC + u * r0, BC + u * r1, gap, 1.0)
+				draw_line(BC + nm + u * r0, BC + nm + u * r1, lit, 1.0)
+
+
+#  조각과 부스러기. hold 동안은 제자리에서 **흰색**이라 원판이 빈틈없이
+#  타일링된 실루엣으로 보인다 — 그 흰 프레임이 실루엣을 지고, 색이 눈에
+#  드는 순간에는 조각이 이미 200px/초 넘게 움직인다.
+func _brk_shards_draw() -> void:
+	if not brk_live or not brk_fired:
+		return
+	var sink: float = float(BRK.sink)
+	for sh in brk_shards:
+		var t: float = sh.t
+		var col: Color = sh.col
+		if t < 0.0:
+			col = Color.WHITE              # 언 동안
+		else:
+			var left: float = float(sh.life) - t
+			if left < sink:
+				#  마지막 0.10초 동안 배경색으로 가라앉는다(SMASH.sink_t).
+				#  알파로 지우면 뒤가 비쳐 조각이 유령이 된다.
+				col = col.lerp(C_BG, clampf(1.0 - left / sink, 0.0, 1.0))
+		var c: Vector2 = sh.c
+		var cr := cos(float(sh.rot))
+		var sr := sin(float(sh.rot))
+		var pts := PackedVector2Array()
+		for q in sh.pts:
+			pts.append(BC + c + Vector2(q.x * cr - q.y * sr, q.x * sr + q.y * cr))
+		draw_colored_polygon(pts, col)
+	for b in brk_bits:
+		var bt: float = b.t
+		if bt < 0.0:
+			continue
+		var al: float = clampf(1.0 - bt / float(b.life), 0.0, 1.0)
+		var p: Vector2 = BC + (b.p as Vector2)
+		var s2: float = b.sz
+		draw_rect(Rect2(p - Vector2(s2, s2) * 0.5, Vector2(s2, s2)),
+				C_WIRE.lerp(Color.WHITE, al * 0.6))
+
 
 #  ── 테이블 위 물건의 배율 ────────────────────────────
 #  2026-09-17 제보: "아이템들 크기 살짝씩 다 키워도 될거 같은데".
