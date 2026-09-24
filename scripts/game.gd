@@ -7666,6 +7666,8 @@ func _draw() -> void:
 		_draw_board()
 		if edy != 0.0:
 			draw_set_transform(sh)
+	else:
+		_brk_hole_draw()            # 판이 뜬 자리 — 벽에 남은 자국
 	_brk_crack_draw()               # 금은 판 위, 판 효과 앞
 	_draw_fx()
 	_brk_shards_draw()              # 조각은 다트 **밑**이다
@@ -16831,6 +16833,8 @@ func _brk_fire() -> void:
 									_gl_rand(j * 11 + bi, brk_seed))),
 					"rot": 0.0,
 					"w": (_gl_rand(j * 13 + bi, brk_seed) - 0.5) * 2.0 * float(BRK.om),
+					#  결(무늬)을 뽑을 씨. 조각마다 다르고 판마다 다르다.
+					"sd": j * 37 + bi + 1,
 					#  칸 색과 띠 색을 **문 폭의 비로** 섞는다. 둘 다
 					#  _board_cols() 가 낸 그 배열이라 죽은 칸도 죽은 채로
 					#  뜬다. 새 색을 한 개도 안 만든다.
@@ -16872,6 +16876,7 @@ func _brk_fire() -> void:
 								-lerpf(float(BRK.up_lo), float(BRK.up_hi),
 										_gl_rand(992, brk_seed))),
 				"rot": 0.0, "w": (_gl_rand(993, brk_seed) - 0.5) * 2.0 * float(BRK.om),
+				"sd": 997,
 				#  ⚠ **판 어디에도 없는 색이 한가운데에 박혔다.** 시계만
 				#  갈래가 있어, 금이어야 할 과녁의 불이 초록 원판(#479a58)
 				#  으로 떴다 — 과녁의 불은 10 링, 곧 금이다(찍어 보고
@@ -16938,6 +16943,31 @@ func _brk_board_dy() -> float:
 	if not _is_play_deep():
 		return 0.0
 	return INF
+
+
+#  판이 뜬 자리. **판 층의 문이 닫혔을 때 이 한 겹만 대신 그린다.**
+#  ⚠ _brk_board_dy() 가 INF 를 내면 _draw_board 가 통째로 안 도는데, 그
+#  안 첫 두 줄인 **벽 그림자**와 **판 두께**까지 같이 사라진다. 조각은 ro
+#  까지만 덮으므로 오른쪽 아래가 한 프레임에 먼저 깎여, 「벽에 걸려 있던
+#  것이 깨졌다」가 아니라 「판이 원래 없었다」가 된다(brk_08_fly_c ·
+#  brk_09_sink 의 판 자리가 완전한 맨 배경이었다 — 찍어 보고 잡았다).
+#  재료는 BOARDART 표에 이미 있는데 안 쓰고 있었다.
+#  그림자는 조각 수명이 지나는 동안 0.40 → 0 으로 눕는다 — 「자국이
+#  남았다 지워진다」가 공짜로 난다. 두께 원은 조각이 판을 통째로 덮고
+#  있는 hold 동안만 남겨 실루엣이 한 번 작아지는 것도 같이 없앤다.
+#  **_draw_board 본문은 한 줄도 안 건드린다** — 문만 연다. 2026-09-24
+func _brk_hole_draw() -> void:
+	if not brk_live or not brk_fired or motion_off or not _is_play_deep():
+		return
+	var ro := _board_rim(_theme_ring_w(_board_theme())) \
+			* (1.0 + board_punch * 0.028)
+	if brk_t < 0.0:
+		draw_circle(BC + Vector2(0.0, float(BOARDART.side)), ro,
+				BOARDART.side_col)
+	var k: float = clampf(1.0 - brk_t / maxf(float(BRK.life_hi), 0.001),
+			0.0, 1.0)
+	var sc: Color = BOARDART.shadow
+	draw_circle(BC + Vector2(3.0, 6.0), ro + 1.0, Color(sc, sc.a * k))
 
 
 #  꽂힌 다트. **판보다 먼저 빠진다** — 발라트로가 판이 죽을 때 판 이름
@@ -17101,10 +17131,26 @@ func _brk_crack_draw(over := false) -> void:
 #  조각과 부스러기. hold 동안은 제자리에서 **흰색**이라 원판이 빈틈없이
 #  타일링된 실루엣으로 보인다 — 그 흰 프레임이 실루엣을 지고, 색이 눈에
 #  드는 순간에는 조각이 이미 200px/초 넘게 움직인다.
+#
+#  ⚠ **조각이 draw_colored_polygon 한 줄뿐이라 종잇조각처럼 떴다.**
+#  그림자도 테두리도 무늬도 없어서, 기본 판의 구멍결 · 도넛의 스프링클 ·
+#  피자의 토핑이 뜨는 순간 전부 사라진다 — brk_3_donut_crack(스프링클
+#  수십 알)과 brk_3_donut_fly(민무늬 갈색)를 나란히 놓으면 확연하다.
+#  이 저장소의 테이블 물건은 전부 그림자를 지고 판 자신도 그림자를 지는데
+#  (_draw_board 첫 줄) 조각만 평면이었다.
+#  세 겹을 얹는다 — 같은 다각형을 BOARDART.shadow 로 (3,6) 밀어 **먼저**,
+#  조각 색을 한 단 어둡힌 1px 테두리, 그리고 결 점 서넛.
+#  **언 동안(흰 실루엣)에는 하나도 안 그린다** — 그 흰 프레임이 실루엣을
+#  지는 수라(태어날 때 t 가 음수인 그 수) 깨면 안 된다. 그 위에는 이미
+#  파단선이 얹혀 있다. 조각 상한이 BRK.cap 32 라 조각당 서넛으로 못
+#  박는다. **새 색을 한 개도 안 만든다** — 그 조각 색과 표의 색뿐이다.
+#  2026-09-24
 func _brk_shards_draw() -> void:
 	if not brk_live or not brk_fired:
 		return
 	var sink: float = float(BRK.sink)
+	var th := _board_theme()
+	var spk: Array = DONUTART.sprinkle
 	for sh in brk_shards:
 		var t: float = sh.t
 		var col: Color = sh.col
@@ -17122,7 +17168,39 @@ func _brk_shards_draw() -> void:
 		var pts := PackedVector2Array()
 		for q in sh.pts:
 			pts.append(BC + c + Vector2(q.x * cr - q.y * sr, q.x * sr + q.y * cr))
+		if t < 0.0:
+			draw_colored_polygon(pts, col)      # 언 동안 — 민 실루엣 한 겹
+			continue
+		#  그림자 — 판과 테이블 물건이 전부 지는 그 어긋남(3,6)이다.
+		#  조각이 식는 동안 같이 눕는다.
+		var fade: float = clampf(1.0 - t / maxf(float(sh.life), 0.001), 0.0, 1.0)
+		var sc: Color = BOARDART.shadow
+		var spts := PackedVector2Array()
+		for q2 in pts:
+			spts.append(q2 + Vector2(3.0, 6.0))
+		draw_colored_polygon(spts, Color(sc, sc.a * fade))
 		draw_colored_polygon(pts, col)
+		#  테두리 — 그 조각 색을 구멍결만큼(hole_dark) 어둡힌 1px.
+		var line := PackedVector2Array(pts)
+		line.append(pts[0])
+		draw_polyline(line, col.darkened(float(BOARDART.hole_dark)), 1.0)
+		#  결 — 조각 하나에 점 서넛. 도넛만 무지개 지미 한두 알이다.
+		var sd: int = int(sh.get("sd", 1))
+		var n: int = 2 if th == "donut" else 3
+		for d in n:
+			var vi: int = int(_gl_rand(sd * 3 + d, brk_seed)
+					* float(pts.size())) % pts.size()
+			var lp: Vector2 = pts[vi] - (BC + c)
+			var dp: Vector2 = BC + c + lp * lerpf(0.35, 0.80,
+					_gl_rand(sd * 5 + d, brk_seed))
+			if th == "donut":
+				var sk: Color = spk[int(_gl_rand(sd * 7 + d, brk_seed)
+						* float(spk.size())) % spk.size()]
+				draw_rect(Rect2(dp - Vector2(1.0, 0.5), Vector2(2.0, 1.0)),
+						Color(sk, fade))
+			else:
+				draw_rect(Rect2(dp - Vector2(0.5, 0.5), Vector2(1.0, 1.0)),
+						col.darkened(float(BOARDART.hole_dark)))
 	for b in brk_bits:
 		var bt: float = b.t
 		if bt < 0.0:
