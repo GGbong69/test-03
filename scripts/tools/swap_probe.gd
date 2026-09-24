@@ -22,15 +22,21 @@ const Save = preload("res://scripts/save.gd")
 #    ④ 판정 사각은 전환 중에 한 픽셀도 안 움직인다
 #    ⑤ 전환은 게임 상태를 한 비트도 안 바꾼다
 #    ⑥ 스스로 끝나고, 끝나면 두 값이 정확히 제자리다
-#    ⑦ 돌아오는 길도 같은 함수로 돈다
+#    ⑦ 돌아오는 길도 같은 함수로 돈다 — 정산의 **첫** 누름은 굴림을
+#       끝내고, 그 다음 누름이 연다 (2026-09-14 부터의 규약)
 #    ⑧ 소크(drop_fast)와 테이블 아닌 화면에서는 아예 안 켜진다
 # ══════════════════════════════════════════════════════════
 
 var fails := 0
+#  마지막 줄의 검사 수를 **세어서** 찍는다. 손으로 적어 두었더니 검사가
+#  스물이 된 뒤에도 「열여덟 검사 전부 통과」로 찍고 있었다 — 초록 줄이
+#  둘 늘어도 아무도 모르는 자다. 2026-09-20
+var checks := 0
 
 
 func _say(ok: bool, name: String, detail := "") -> void:
 	print("  %s %-32s %s" % ["OK  " if ok else "실패", name, detail])
+	checks += 1
 	if not ok:
 		fails += 1
 
@@ -59,6 +65,7 @@ func _key(g: Node, code: int) -> void:
 
 func _initialize() -> void:
 	Save.path = "user://_probe_swap.cfg"
+	Save.gpath = "user://_probe_swap_g.cfg"   # 도구 마흔과 같은 줄. 제 자리를 박는다
 	Save.wipe()
 	var g: Node = load("res://scenes/main.tscn").instantiate()
 	root.add_child(g)
@@ -166,7 +173,25 @@ func _initialize() -> void:
 			"끝나면 눕힘이 항등이다", "y100 → %.3f" % g._swap_map(100.0))
 
 	# ⑦ 돌아오는 길 — 같은 함수가 반대로 돈다
+	#
+	#  ⚠ 여기는 **누름이 둘**이다. 정산 화면의 첫 누름은 상점으로 안 넘어가고
+	#  굴림을 끝낸다(_click 의 S.CLEAR 맨 앞, 2026-09-14 · 225f516). 이 검사는
+	#  그전 규약 — 「아무 데나 한 번 누르면 상점」 — 을 그대로 재고 있어서, 첫
+	#  누름이 굴림에 먹힌 뒤 열리지도 않은 전환을 두고 「선 1.000 · 빠진 0.000」
+	#  으로 붉게 떴다. 그 둘은 전환이 **안 도는** 동안의 값이다(_swap_rise 는
+	#  1.0, _swap_gone 은 0.0 을 돌려준다) — 실패 줄이 연출이 아니라 제 자신을
+	#  찍고 있었던 셈이다.
+	#
+	#  연출은 멀쩡하다. 굴림을 재운 뒤 한 번 누르면 지금도 선 1.000 · 빠진
+	#  1.000 에서 시작해 22프레임(0.36초 = SWAP.dur)에 스스로 끝나고, 판 윗변은
+	#  내내 366.3 (>= 360) 이다 — 재서 확인했다. 그래서 **규약을 지우지 않고,
+	#  누름 둘을 각각 잰다.** 첫 누름이 굴림만 끝내는 것도 이제 계약이다.
+	#  2026-09-20
 	g.state = g.S.CLEAR
+	g._click(Vector2(320.0, 200.0))
+	_say(g.state == g.S.CLEAR and not g.swap_live and g._clear_done(),
+			"구르는 중의 누름은 굴림만 끝낸다",
+			"state %d · live=%s" % [g.state, g.swap_live])
 	g._click(Vector2(320.0, 200.0))
 	_say(g.swap_live and not g.swap_in and g.state == g.S.SHOP
 			and is_equal_approx(g._swap_rise(), 1.0)
@@ -180,8 +205,14 @@ func _initialize() -> void:
 		if float(g.SWAP.dx) * g._swap_gone() < g.VIEW.x:
 			hi = minf(hi, g._swap_map(g.BC.y - g.R * 1.13))
 		g._process(1.0 / 60.0)
-	_say(hi >= 360.0, "테이블이 들 때 판은 이미 화면 밖이다",
-			"판 윗변 최고 y %.1f · 여유 %.1fpx" % [hi, hi - 360.0])
+	#  hi < INF 가 **한 프레임이라도 쟀다**는 뜻이다. 없으면 전환이 아예 안
+	#  열린 날에 루프가 0바퀴를 돌고 INF >= 360 이 참이라 초록으로 찍힌다 —
+	#  바로 위 두 줄이 붉은 그 날에 이 줄만 통과해서 「돌아오는 길은 멀쩡하다」
+	#  고 거짓말을 했다. ②' 의 같은 모양은 바로 앞 줄이 swap_live 를 단언하고
+	#  드는 순간 dx=0 이라 빈 채로 나올 수 없다. 2026-09-20
+	var note := ("판 윗변 최고 y %.1f · 여유 %.1fpx" % [hi, hi - 360.0]
+			if hi < INF else "한 프레임도 못 쟀다 — 전환이 안 열렸다")
+	_say(hi < INF and hi >= 360.0, "테이블이 들 때 판은 이미 화면 밖이다", note)
 	_wind(g, dur * 0.05)
 	_say(not g.swap_live and g.state == g.S.SHOP,
 			"돌아오는 길도 스스로 끝난다", "state %d" % g.state)
@@ -211,5 +242,5 @@ func _initialize() -> void:
 	_say(not g.swap_live, "돌아올 곳이 상점이 아니면 안 켠다")
 
 	print("
-%s" % ("실패 %d건" % fails if fails > 0 else "열여덟 검사 전부 통과"))
+%s" % ("실패 %d건" % fails if fails > 0 else "검사 %d건 전부 통과" % checks))
 	quit(mini(fails, 125))
