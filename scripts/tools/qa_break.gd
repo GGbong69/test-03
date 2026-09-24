@@ -336,14 +336,60 @@ func _run() -> void:
 	var col_txt := ""
 	_open()
 	_board("")
-	var plain_pair: Array = g._brk_cols_at("", g._board_cols(), 0)
+	#  ⚠ **바깥 겹의 반지름으로 묻는다.** 과녁·도넛은 색이 칸이 아니라
+	#  반지름으로 서는 판이라 _brk_cols_at 이 겹 [r0, r1] 을 같이 받는다.
+	g._brk_arm(2)
+	var lastb: int = (g.brk_rings as Array).size() - 1
+	var or0: float = float(g.brk_rings[lastb][0])
+	var or1: float = float(g.brk_rings[lastb][1])
+	var in0: float = float(g.brk_rings[0][0])
+	var in1: float = float(g.brk_rings[0][1])
+	var plain_pair: Array = g._brk_cols_at("", g._board_cols(), 0, or0, or1)
 	for th in ["pizza", "clock", "donut", "target"]:
-		var p: Array = g._brk_cols_at(th, g._board_cols(), 0)
+		var p: Array = g._brk_cols_at(th, g._board_cols(), 0, or0, or1)
 		if (p[1] as Color).is_equal_approx(plain_pair[1] as Color):
 			col_ok = false
 		col_txt += "%s %s  " % [th, (p[1] as Color).to_html(false)]
 	_ok("테마 넷이 제 물감으로 깨진다", col_ok,
 			"기본 %s / %s" % [(plain_pair[1] as Color).to_html(false), col_txt])
+	#  ⚠ 과녁·도넛은 **반지름을 안 보면** 안쪽 겹과 바깥 겹이 같은 한 쌍으로
+	#  나온다 — 과녁이 판 밖 색(paper)으로, 도넛이 분홍 없이 깨진 그 병이다.
+	var rad_ok := true
+	var rad_txt := ""
+	for th in ["donut", "target"]:
+		var pi: Array = g._brk_cols_at(th, g._board_cols(), 0, in0, in1)
+		var po: Array = g._brk_cols_at(th, g._board_cols(), 0, or0, or1)
+		if (pi[0] as Color).is_equal_approx(po[0] as Color) \
+				and (pi[1] as Color).is_equal_approx(po[1] as Color):
+			rad_ok = false
+		rad_txt += "%s 안 %s/%s · 바깥 %s/%s  " % [th,
+				(pi[0] as Color).to_html(false), (pi[1] as Color).to_html(false),
+				(po[0] as Color).to_html(false), (po[1] as Color).to_html(false)]
+	_ok("과녁·도넛은 색을 반지름으로 고른다", rad_ok, rad_txt)
+	#  과녁지 가장자리(paper)는 **판 밖 = 빗나감** 색이다. 조각에 뜨면 안 된다.
+	var pap_ok := true
+	var pap_txt := ""
+	for bi2 in (g.brk_rings as Array).size():
+		var pt: Array = g._brk_cols_at("target", g._board_cols(), 0,
+				float(g.brk_rings[bi2][0]), float(g.brk_rings[bi2][1]))
+		for c in pt:
+			if (c as Color).is_equal_approx(g.TARGETART.paper as Color):
+				pap_ok = false
+		pap_txt += "겹%d %s/%s  " % [bi2, (pt[0] as Color).to_html(false),
+				(pt[1] as Color).to_html(false)]
+	_ok("과녁 조각에 판 밖 색(paper)이 없다", pap_ok, pap_txt)
+	#  불 — 판 어디에도 없는 초록이 과녁 한가운데에 박혀 있었다.
+	var bull_ok: bool = (g._brk_bull_col("target") as Color).is_equal_approx(
+					g.TARGETART.gold as Color) \
+			and (g._brk_bull_col("clock") as Color).is_equal_approx(
+					g.CLOCKART.enamel as Color) \
+			and (g._brk_bull_col("") as Color).is_equal_approx(g.C_GREEN as Color)
+	_ok("불이 테마마다 그 판에 있는 색이다", bull_ok,
+			"과녁 %s · 시계 %s · 기본 %s" % [
+					(g._brk_bull_col("target") as Color).to_html(false),
+					(g._brk_bull_col("clock") as Color).to_html(false),
+					(g._brk_bull_col("") as Color).to_html(false)])
+	g._brk_skip()
 
 	# ── ⑧-d 리듬 — **한 색으로 깨지지 않는다** ──────────────
 	#  판은 밝고 어두운 칸이 번갈아 도는 물건이라 그 리듬이 조각에 안

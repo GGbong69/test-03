@@ -16480,7 +16480,13 @@ func _brk_wedges(want: int) -> int:
 #  조각으로 깨졌다 — 「지금 그려지는 판에서 뜬다」가 색에서만 거짓이었다.
 #  **새 색을 한 개도 안 만든다** — 네 표에 이미 있는 물감을 짚기만 한다.
 #  2026-09-24
-func _brk_cols_at(th: String, cols: Array, ci: int) -> Array:
+#  ⚠ **색이 칸이 아니라 반지름으로 서는 판이 둘 있다.** 과녁은 안쪽이
+#  빨강 · 트리플이 하늘 · 바깥이 검정 · 더블이 흰이고, 도넛은 띠만 분홍
+#  프로스팅이다. 칸(ci)만 받으면 그 둘을 못 짚어 앞서는 한 쌍을 박아 두었고,
+#  그래서 과녁이 판 밖 색(paper)으로 깨지고 도넛에서 분홍이 통째로 사라졌다.
+#  겹의 반지름 [r0, r1](R 배수)을 같이 받는다. 2026-09-24
+func _brk_cols_at(th: String, cols: Array, ci: int,
+		r0 := 0.0, r1 := 1.0) -> Array:
 	var pair: Array = cols[ci % cols.size()]
 	match th:
 		"pizza":
@@ -16497,11 +16503,65 @@ func _brk_cols_at(th: String, cols: Array, ci: int) -> Array:
 			#  문자판 칸은 칸 색 그대로 돈다(크림·먹). 바깥 테만 황동이다.
 			return [pair[0], CLOCKART.gilt[2]]
 		"donut":
+			#  ⚠ **분홍이 표에 없었다.** 앞서는 [gz[0], dough] 한 쌍이라
+			#  띠(트리플·더블)를 칠하는 icing(#f288b0)이 한 조각에도 안
+			#  떴다 — 도넛 판에서 **제일 먼저 읽히는 그 고리**가 깨지는
+			#  순간 통째로 사라지고 황갈·갈·크림 세 색만 남았다.
+			#  바깥 물감은 프로스팅이고, 테까지 먹는 겹만 테 몫만큼
+			#  반죽으로 끌린다 — 도넛의 테는 진짜로 반죽(튀긴 링)이다.
 			var gz: Array = DONUTART.glaze.get(_sec_col(ci), DONUTART.glaze[0])
-			return [gz[0], DONUTART.dough]
+			return [gz[0], (DONUTART.icing as Color).lerp(DONUTART.dough,
+					_brk_rim_mix(r0, r1))]
 		"target":
-			return [TARGETART.paper, TARGETART.straw]
+			#  ⚠ **과녁이 판 밖 색으로 깨졌다.** 앞서는 [paper, straw] 를
+			#  박아 ci 도 반지름도 한 번도 안 봤다 — paper(#cfc5b2)는 표
+			#  주석이 「과녁지 가장자리(판 밖 = 빗나감)」라 적은 색이고,
+			#  gold·red·blue·black·white 가 조각에 한 톨도 안 떴다.
+			#  안쪽 물감은 **그 판이 실제로 칠하는 싱글 색**을 그대로 뜬다
+			#  (_tg_single — 칠한 칸 · 죽은 칸까지 그 자가 쥔다). 안쪽
+			#  빨강과 바깥 검정 중 어느 쪽인가는 그 겹이 더 많이 무는 쪽이
+			#  정한다. 바깥 물감은 그 겹이 무는 띠 — 트리플 하늘 · 더블 흰 —
+			#  이고 테 몫만큼 짚이 섞인다.
+			#  **TARGETART 표에 있는 색만 짚고 새 색을 안 만든다.**
+			if r1 <= rt_bull_o + 0.001:
+				return [TARGETART.gold, TARGETART.gold]
+			var iw: float = maxf(0.0, minf(r1, rt_trp_in) - maxf(r0, rt_bull_o))
+			var ow: float = maxf(0.0, minf(r1, rt_dbl_in) - maxf(r0, rt_trp_out))
+			var flat: Color = TARGETART.torn if _tg_dead(ci) \
+					else _tg_single(ci, ow >= iw)
+			var tw: float = maxf(0.0, minf(r1, rt_trp_out) - maxf(r0, rt_trp_in))
+			var dw: float = maxf(0.0, minf(r1, rt_dbl_out) - maxf(r0, rt_dbl_in))
+			var bnd: Color = TARGETART.blue if tw > dw else TARGETART.white
+			return [flat, bnd.lerp(TARGETART.straw, _brk_rim_mix(r0, r1))]
 	return [pair[0], pair[1]]
+
+
+#  바깥 물감 안에서 **테**가 차지하는 몫. 조각 하나가 띠와 테를 같이 물면
+#  둘 중 하나로 고르는 순간 거짓말이 된다 — _brk_band_mix 가 칸과 띠를 문
+#  폭의 비로 섞는 그 셈을, 띠와 테 사이에 한 번 더 놓는다. 겹을 붙여 줄이면
+#  가장 바깥 겹이 더블과 테를 같이 무는 것이 **언제나**라 이 셈이 없으면
+#  둘 중 하나가 판마다 통째로 사라진다. 테를 안 무는 겹은 0 이다.
+func _brk_rim_mix(r0: float, r1: float) -> float:
+	var rim: float = maxf(0.0, r1 - rt_dbl_out)
+	if rim <= 0.0:
+		return 0.0
+	var bnd: float = maxf(0.0, minf(r1, rt_trp_out) - maxf(r0, rt_trp_in)) \
+			+ maxf(0.0, minf(r1, rt_dbl_out) - maxf(r0, rt_dbl_in))
+	if rt_trp2_out > 0.0:
+		bnd += maxf(0.0, minf(r1, rt_trp2_out) - maxf(r0, rt_trp2_in))
+	return clampf(rim / maxf(rim + bnd, 0.001), 0.0, 1.0)
+
+
+#  바깥 불의 물감. 판마다 그 자리에 실제로 칠하는 색이다 — 기본 판은 초록
+#  고리, 시계는 검은 법랑 원판, 과녁은 금(10 링). 피자는 불이 치즈 위라
+#  기본 초록으로 둔다(그 자리에 고리 무늬가 그대로 돈다).
+func _brk_bull_col(th: String) -> Color:
+	match th:
+		"clock":
+			return CLOCKART.enamel
+		"target":
+			return TARGETART.gold
+	return C_GREEN
 
 
 #  조각 하나가 먹는 반지름 구간이 띠 색(빨강·초록)을 얼마나 무는가.
@@ -16721,8 +16781,11 @@ func _brk_fire() -> void:
 		#  한 색으로 깨졌다** — 찍어 보고 잡았다. step 이 홀수면 j*step 의
 		#  홀짝이 저절로 갈리므로 그때는 안 엇갈린다. 2026-09-24
 		var ci: int = (si + (j % 2 if step % 2 == 0 else 0)) % _sec_n()
-		var pair: Array = _brk_cols_at(th, cols, ci)
 		for bi in brk_rings.size():
+			#  ⚠ **물감을 겹 안에서 뜬다.** 과녁·도넛은 색이 칸이 아니라
+			#  반지름으로 서는 판이라 겹마다 다시 물어야 한다. 2026-09-24
+			var pair: Array = _brk_cols_at(th, cols, ci,
+					float(brk_rings[bi][0]), float(brk_rings[bi][1]))
 			#  ⚠ 안쪽 반지름 바닥 0.75px — 「도넛」은 불을 **진짜로 없애서**
 			#  rt_bull_o 가 0 이다. 0 으로 두면 annulus_at 의 안쪽 고리가
 			#  한 점에 겹쳐 쌓여 삼각분할이 튄다(_band_draw 가 폭 0 을
@@ -16809,8 +16872,12 @@ func _brk_fire() -> void:
 								-lerpf(float(BRK.up_lo), float(BRK.up_hi),
 										_gl_rand(992, brk_seed))),
 				"rot": 0.0, "w": (_gl_rand(993, brk_seed) - 0.5) * 2.0 * float(BRK.om),
-				#  바깥 불은 초록이다 — 시계 판만 그 자리가 검은 법랑 원판이다.
-				"col": CLOCKART.enamel if th == "clock" else C_GREEN,
+				#  ⚠ **판 어디에도 없는 색이 한가운데에 박혔다.** 시계만
+				#  갈래가 있어, 금이어야 할 과녁의 불이 초록 원판(#479a58)
+				#  으로 떴다 — 과녁의 불은 10 링, 곧 금이다(찍어 보고
+				#  잡았다). 테마마다 **그 판이 그 자리에 칠하는 색**을
+				#  짚는다. 2026-09-24
+				"col": _brk_bull_col(th),
 				"t": -float(BRK.hold),
 				"life": float(BRK.life_hi)})
 	#  부스러기 — 조각 사이에서 튀는 나뭇가루. 유리 가루(egg_bits)가 아니라
@@ -16944,6 +17011,15 @@ func _brk_crack_draw(over := false) -> void:
 		return                      # 판이 없으면 금도 없다
 	var sw := _sec_w()
 	var step: int = maxi(_sec_n() / maxi(brk_w, 1), 1)
+	#  ⚠ **살 열 줄이 한 점에서 만나 한가운데에 흰 별표가 박혔다.** 도넛은
+	#  불을 진짜로 없애 rt_bull_o 가 0 이라 첫 겹이 [0, …] 인데, 금의 안쪽
+	#  반지름에 바닥이 없으면 살이 전부 판 한가운데로 모인다(찍어 보고
+	#  잡았다). 조각 쪽에는 이미 0.75px 바닥이 있는데 **금 쪽에만 없었다** —
+	#  같은 이유를 한 곳에만 적었다. 바닥은 그 판이 실제로 그리기 시작하는
+	#  반지름이다: 도넛은 구멍 입술(DONUTART.hole 0.14R)이고 거기가 곧 금이
+	#  시작할 자리다. 불이 있는 판은 rt_bull_o 가 0 이 아니라 이 줄에 안
+	#  걸리므로 한 픽셀도 안 바뀐다. 2026-09-24
+	var lo: float = R * float(DONUTART.hole) if _board_theme() == "donut" else 0.0
 	#  ⚠ **식은 금이 판의 철선보다 어두웠다.** 앞서는 밝은 줄이
 	#  C_WIRE.lightened(0.5) = #bcb8c8 이었는데 판이 이미 긋는 철선
 	#  (BOARDART.wire)이 #c9c4d4 라 **한 단 더 밝다** — 다 식은 금이 판의
@@ -16983,7 +17059,7 @@ func _brk_crack_draw(over := false) -> void:
 			#  ⚠ draw_arc 의 각은 +X 에서 재고 판의 칸 각은 위에서 재므로
 			#  −PI/2 를 물린다. 도넛은 불을 진짜로 없애 첫 겹이 0 에서
 			#  시작하니 1px 밑인 단은 건너뛴다. 2026-09-24
-			var r: float = R * float(brk_rings[bi][0])
+			var r: float = maxf(R * float(brk_rings[bi][0]), lo)
 			for j in brk_w:
 				var ra0: float = float(j * step) * sw - sw * 0.5 - PI * 0.5
 				var ra1: float = ra0 + sw * float(step)
@@ -16996,7 +17072,7 @@ func _brk_crack_draw(over := false) -> void:
 					draw_arc(BC + lift * off, rr, ra0, ra1, 6 + step,
 							lit, 1.0)
 		else:                       # 살
-			var r0: float = R * float(brk_rings[bi][0])
+			var r0: float = maxf(R * float(brk_rings[bi][0]), lo)
 			var r1: float = R * float(brk_rings[bi][1])
 			for j in brk_w:
 				var a: float = float(j * step) * sw - sw * 0.5
