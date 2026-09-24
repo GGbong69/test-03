@@ -6497,7 +6497,14 @@ func _land(mark := true) -> void:
 	settle_n = queue.size()
 	_tutor("u_score")
 	state = S.RESOLVE
-	qt = beat * 1.1
+	#  ⚠ **_pace() 를 태운다.** 착탄에서 첫 걸음까지의 이 머리 걸음만
+	#  붙박이였다 — _next_step 의 모든 갈래는 `beat * pace` 인데 여기만
+	#  beat * 1.1 이라, 바로 두 줄 위에서 `settle_n = queue.size()` 로 짐을
+	#  재 놓고도 그 짐을 안 썼다. 큐가 길수록 머리 숨이 짧아져야 정산 전체가
+	#  한 박자로 읽힌다. 새 상태가 0개이고(settle_n 이 이미 섰다) 카드 춤
+	#  창(card_jrate)이 qt 를 읽으므로 저절로 맞는다.
+	#  **tuning.csv 를 안 연다 — beat 값은 그대로다.** 2026-09-24
+	qt = beat * 1.1 * _pace()
 
 
 # 작은 다트의 기본 점수. **들어올 때** 깎는다 — 정산 결과만 깎으면 카드는
@@ -12255,11 +12262,24 @@ func _draw_aim() -> void:
 		_aim_h_line(aim.y, C_ACC)
 		_aim_v_line(aim.x, C_ACC)
 		if mod_v("fog", 0.0) <= 0.0:
-			var e := 1.0 - pow(1.0 - clampf(confirm_t / maxf(ch(), 0.001), 0.0, 1.0), 3.0)
+			#  ⚠ 곡선을 갈았다. `1 - (1-t)³` 은 **처음이 가장 빠른** 곡선인데
+			#  창이 27프레임이라 꼬리가 통째로 남았다 — 앞 13프레임이 움직임의
+			#  86%를 쓰고, 고리가 21프레임째 0.097px · 24프레임째 0.028px 라
+			#  640×360 정수 화면에서 **마지막 21프레임이 같은 그림**이었다.
+			#  「급하게 시작해 멈춘 채로 끝난다」. smoothstep 은 _bd3_fly 가
+			#  12108 에서 이미 쓰는 곡선이라 저장소에 어법이 하나 더 안 는다.
+			#  **confirm_hold 값은 한 톨도 안 건드린다 — 곡선만.** 2026-09-24
+			var t := clampf(confirm_t / maxf(ch(), 0.001), 0.0, 1.0)
+			var e := t * t * (3.0 - 2.0 * t)
 			draw_arc(aim, lerpf(22.0, 7.0, e), 0.0, TAU, 24, C_TXT, 1.0)
 			draw_arc(aim, lerpf(30.0, 11.0, e), 0.0, TAU, 24, Color(C_TXT, 0.3), 1.0)
 	elif state == S.FLY:
-		var k := 1.0 - fly_t / 0.2
+		#  ⚠ 0.2 가 박혀 있었다. tuning.csv 는 fly_time 을 0.05~1.0 으로 여는데
+		#  여기만 그 값을 안 읽어서, 0.2 를 넘기면 k 가 음수로 가고 반지름도
+		#  알파도 같이 음수가 됐다(fly_t 0.5 면 반지름 −36). 같은 파일
+		#  _bd3_fly(12107)는 진작 GameData.tune 을 읽는다 — 2D 길과 3D 길이
+		#  갈라져 있던 것이다. 그 꼴을 그대로 빌린다. 2026-09-24
+		var k := 1.0 - fly_t / maxf(GameData.tune("fly_time"), 0.001)
 		draw_circle(aim, 3.0 + k * 26.0, Color(C_TXT, 0.2 + k * 0.55))
 
 
