@@ -606,6 +606,72 @@ func _run() -> void:
 	_ok("같은 판은 늘 같은 무늬", s24 == int(seeds[24]),
 			"씨 %d — 날 때마다 바뀌면 깨지는 게 아니라 깜빡이는 것이다" % s24)
 
+	# ── ⑯-b 조각이 나는 꼴 — 한 겹이 한 속도로 안 난다 ──────
+	#  ⚠ **흔들림을 빼고 잰다.** v 는 (바깥 속도 × 발사 방향) + (옆 흔들림,
+	#  −위로)라, 그냥 |v| 를 재면 위로 성분이 다 덮어 버린다. 흔들림 두
+	#  줄은 씨와 (j · bi) 만으로 나므로 여기서 **그대로 다시 떠서** 뺀다 —
+	#  그러면 남는 것이 조각별 바깥 속도와 발사각 그 자체다. 조각은
+	#  j(부채) 바깥 · bi(겹) 안쪽 차례로 쌓이고 불이 맨 뒤다.
+	#  옛 코드는 sp 가 bi 만 읽어 **한 겹의 조각이 전부 같은 속도로 같은
+	#  각도**였다 — 멈춘 그림이 바람개비였다(사용자 제보, 2026-09-24).
+	_open()
+	_board("")
+	g.leg_no = 7
+	g._brk_arm(2)
+	g._brk_fire()
+	var nb: int = (g.brk_rings as Array).size()
+	var sd: int = g.brk_seed
+	var ulo: float = float(g.BRK.up_lo)
+	var uhi: float = float(g.BRK.up_hi)
+	var lay := {}                      # 겹 → [바깥 속도]
+	var dmax := 0.0                    # 발사각이 부채 한가운데에서 벗어난 최대
+	var fan: float = g._sec_w() * float(maxi(g._sec_n() / maxi(g.brk_w, 1), 1))
+	for j in g.brk_w:
+		for bi in nb:
+			var sh: Dictionary = g.brk_shards[j * nb + bi]
+			var jit := Vector2((g._gl_rand(j * 7 + bi, sd) - 0.5) * 52.0,
+					-lerpf(ulo, uhi, g._gl_rand(j * 11 + bi, sd)))
+			var core: Vector2 = (sh.v as Vector2) - jit
+			var u0: Vector2 = (sh.c as Vector2).normalized()
+			if not lay.has(bi):
+				lay[bi] = []
+			(lay[bi] as Array).append(core.length())
+			dmax = maxf(dmax, absf(u0.angle_to(core)))
+	var sp_ok := true
+	var sp_txt := ""
+	for bi in nb:
+		var la: Array = lay[bi]
+		var seen := {}
+		for v in la:
+			seen["%.2f" % float(v)] = true
+		var lo := INF
+		var hi := 0.0
+		for v in la:
+			lo = minf(lo, float(v))
+			hi = maxf(hi, float(v))
+		#  조각마다 다른 속도여야 하고(같은 값이 둘이면 겹 번호만 읽은 것이다)
+		#  가장 빠른 조각이 가장 느린 조각의 1.3배는 넘어야 한다(표 0.70~1.35).
+		if seen.size() != la.size() or hi < lo * 1.3:
+			sp_ok = false
+		sp_txt += "겹%d %d개 %.0f~%.0f(×%.2f)  " % [bi, la.size(), lo, hi, hi / maxf(lo, 0.001)]
+	_ok("한 겹 안에서 조각마다 바깥 속도가 다르다", sp_ok, sp_txt)
+	#  발사각 — 부채 한가운데 고정이 아니라 ±0.25 부채 안에서 흔들린다.
+	_ok("발사각이 부채 한가운데에 안 박혀 있다",
+			dmax > 0.001 and dmax <= fan * 0.25 + 0.0001,
+			"최대 %.3f rad / 상한 %.3f(부채 %.3f 의 1/4)" % [dmax, fan * 0.25, fan])
+	#  불 — 바깥 성분이 0 이면 둘레가 다 식은 뒤 한가운데에 혼자 남는다.
+	var bull: Dictionary = g.brk_shards[(g.brk_shards as Array).size() - 1]
+	var bjit := Vector2((g._gl_rand(991, sd) - 0.5) * 70.0,
+			-lerpf(ulo, uhi, g._gl_rand(992, sd)))
+	var bout: float = ((bull.v as Vector2) - bjit).length()
+	_ok("불도 바깥으로 난다 — 제자리에서 위아래로만 안 논다",
+			bout >= float(g.BRK.sp_lo) * 0.70 - 0.5,
+			"바깥 %.0fpx/s / 바닥 %.0f" % [bout, float(g.BRK.sp_lo) * 0.70])
+	_ok("불이 마지막에 진다 — 수명이 life_hi 로 박혀 있다",
+			is_equal_approx(float(bull.life), float(g.BRK.life_hi)),
+			"불 %.3f / life_hi %.3f" % [float(bull.life), float(g.BRK.life_hi)])
+	g._brk_skip()
+
 	# ── ⑰ 입력 — 새 잠금 깃발을 안 만든다 ───────────────────
 	_open()
 	g._brk_arm(2)

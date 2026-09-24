@@ -16736,8 +16736,30 @@ func _brk_fire() -> void:
 			for q in annulus_at(Vector2.ZERO, r0, r1, a0, a1, 3 + step):
 				pts.append(q - c)
 			var u := c.normalized()
+			#  ⚠ **겹 번호만 읽으면 한 겹이 통째로 같은 속도로 난다.**
+			#  앞서는 sp 가 겹 번호(bi)만 보고 조각 번호(j)를 한 번도 안 봤다 —
+			#  한 겹의 조각 열(작은 다섯 · 보스 열)이 **전부 같은 속도로 같은 각도**
+			#  로 나간다. 멈춘 그림으로 보면 깨진 판이 아니라 **바람개비가 열리는**
+			#  그림이다 — 사용자가 작은 판(11조각)을 짚어 말한 그것이고, 런에서
+			#  **맨 처음 보는 깨짐**이 이것이다. 조각별 난수는 옆으로 ±26px/s 흔드는
+			#  한 줄뿐이라 그 줄로는 대열이 안 풀렸다. 부채를 다섯으로 벌린 앞
+			#  커밋(9c40fb5)은 덩어리 크기를 고쳤지 대열을 안 고쳤다.
+			#  같은 집 WRECK 가 이미 답을 냈다(_wreck_cut) — 조각마다 난수를 떠서
+			#  v_lo~v_hi 를 흩고 발사각까지 흔든다. 같은 어법으로 **겹 기준값에
+			#  조각별 배수**를 물린다.
+			#  ⚠ 속도와 각도를 **한 난수로** 뜨면 안 된다 — 빠른 조각이 언제나 같은
+			#  쪽으로 돌아 고리가 나선으로 바뀔 뿐이다. 두 번 뜬다.
+			#  **표(sp_lo·sp_hi·up_*·life_*)는 한 톨도 안 건드린다** — 기준값은
+			#  그대로 두고 그 둘레로 흩기만 한다. 2026-09-24
+			var us := _gl_rand(j * 23 + bi, brk_seed)
+			var uq := _gl_rand(j * 29 + bi * 5 + 1, brk_seed)
 			var sp: float = lerpf(float(BRK.sp_lo), float(BRK.sp_hi),
-					float(bi) / maxf(float(brk_rings.size() - 1), 1.0))
+					float(bi) / maxf(float(brk_rings.size() - 1), 1.0)) \
+					* lerpf(0.70, 1.35, us)
+			#  발사각을 **부채 폭의 ±0.25** 만큼 돌린다. 부채 폭에 매어 두면 조각이
+			#  몇이든 이웃 궤적과 겹치는 몫이 같다 — 절대 라디안으로 박으면 부채
+			#  다섯(작은)에서는 티가 안 나고 부채 열(보스)에서는 궤적이 서로 스친다.
+			u = u.rotated((uq - 0.5) * 0.5 * sw * float(step))
 			brk_shards.append({"c": c, "pts": pts,
 					"v": u * sp + Vector2(
 							(_gl_rand(j * 7 + bi, brk_seed) - 0.5) * 52.0,
@@ -16767,16 +16789,29 @@ func _brk_fire() -> void:
 		for k in 12:
 			var a := TAU * float(k) / 12.0
 			bull.append(Vector2(cos(a), sin(a)) * R * rt_bull_o)
+		#  ⚠ **불만 바깥 성분이 0 이었다.** 앞서는 v 가 ((rand−0.5)*70, −up) 뿐
+		#  이라 위로 솟았다 제자리로 떨어질 뿐이고, 수명도 다른 조각과 같은
+		#  분포를 떠서 둘레가 다 식은 뒤 **한가운데에 혼자 짙게 남았다** —
+		#  초록 원판 하나가 빈 배경에 박힌 그림이다(찍어 보고 잡았다).
+		#  씨에서 뜬 **한 방향**으로 바깥 성분을 준다. 빠르기는 가장 안쪽 겹의
+		#  기준값(sp_lo)에 조각들과 같은 배수를 물린 것이다 — 불은 판의 한가운데
+		#  라 안쪽 겹과 같은 칸에 선다. 수명은 **life_hi 로 못 박아** 반드시
+		#  마지막에 지게 둔다: 판의 심장이 마지막까지 날아가다 사라지는 것은
+		#  그림이고, 아무 데도 안 가고 남는 것은 지우다 만 자국이다.
+		#  **표는 한 톨도 안 건드린다** — 표에 이미 있는 값을 짚기만 한다.
+		#  2026-09-24
+		var ba: float = _gl_rand(995, brk_seed) * TAU
+		var bsp: float = float(BRK.sp_lo) * lerpf(0.70, 1.35, _gl_rand(996, brk_seed))
 		brk_shards.append({"c": Vector2.ZERO, "pts": bull,
-				"v": Vector2((_gl_rand(991, brk_seed) - 0.5) * 70.0,
-						-lerpf(float(BRK.up_lo), float(BRK.up_hi),
-								_gl_rand(992, brk_seed))),
+				"v": Vector2(cos(ba), sin(ba)) * bsp
+						+ Vector2((_gl_rand(991, brk_seed) - 0.5) * 70.0,
+								-lerpf(float(BRK.up_lo), float(BRK.up_hi),
+										_gl_rand(992, brk_seed))),
 				"rot": 0.0, "w": (_gl_rand(993, brk_seed) - 0.5) * 2.0 * float(BRK.om),
 				#  바깥 불은 초록이다 — 시계 판만 그 자리가 검은 법랑 원판이다.
 				"col": CLOCKART.enamel if th == "clock" else C_GREEN,
 				"t": -float(BRK.hold),
-				"life": lerpf(float(BRK.life_lo), float(BRK.life_hi),
-						_gl_rand(994, brk_seed))})
+				"life": float(BRK.life_hi)})
 	#  부스러기 — 조각 사이에서 튀는 나뭇가루. 유리 가루(egg_bits)가 아니라
 	#  판 부스러기라 색을 철선에서 뜬다.
 	var gn: int = mini(int(row[2]), int(BRK.grit_cap))
