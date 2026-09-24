@@ -30,6 +30,13 @@ extends SceneTree
 const POOL := 4           # game.gd 의 sfx_pool 크기
 const LATE_MS := 30.0     # 이보다 늦게 서면 누른 것과 따로 논다
 const LOUD_DB := 3.0      # 합성음과 이보다 벌어지면 다른 자리와 못 선다
+#  ⚠ **소리표의 지붕.** 이 저장소의 천장(_lp)이 4600~6500 이라 6kHz 가
+#  지붕이고, 그 위에 에너지의 이만큼을 넘게 두면 「밝다」가 아니라 「샌다」다.
+#  ⚠ 파일이 있으면 _sfx 가 f/392 배만큼 재생 속도를 올리고 **굽는 자리의
+#  천장도 그만큼 같이 밀린다** — 6kHz 로 구운 소리가 R8 에서 9kHz 가 된다.
+#  그래서 이름마다 그 자리가 **실제로 미는 최대 배수**로 나눈 자리에서 잰다.
+#  재는 자가 굽는 자를 못 잡아 「전부 초록」인데 새고 있었다(2026-09-24).
+const HIGH := 0.02
 
 const Voice = preload("res://scripts/tools/sfx_voice.gd")
 const SR_ := 44100.0
@@ -152,6 +159,54 @@ func _init() -> void:
 			warn.append("%s — %s" % [nm, say2])
 		print("%-16s 파일 — %.0fHz 위 에너지 %.1f%%  %s"
 				% [nm, top, frac * 100.0, say2])
+
+	# ── 지붕 ──────────────────────────────────────────
+	#  ⚠ **재는 자가 굽는 자를 못 잡아 「전부 초록」인데 새고 있었다.**
+	#  위 정산 사다리(3.78배) 셋만 보고 있었는데, 지붕을 넘는 길이 둘 더
+	#  있다 — 굽는 자리에 천장(_lp)을 아예 안 단 가족과, pitch 를 미느라
+	#  그 천장이 같이 밀리는 자리다. 이름마다 **실제로 미는 최대 배수**로
+	#  나눈 자리에서 6kHz 위 에너지를 재면 둘이 한 자로 잡힌다.
+	#  _b_settle 은 3.78배 사다리 때문에 부분음 상한을 따로 내렸는데,
+	#  이 사다리들에는 그 셈을 한 번도 안 했다.
+	#  이름 → 그 자리가 미는 **최대 배수**. 셈은 게임 쪽 식 그대로다.
+	#  여기 없는 이름은 1.0 — _sfx 가 f 를 안 주거나 SFX_BASE 그대로다.
+	#    page       _turn_f      min(1.05946^7, 1.50) = 1.4983 (R8)
+	#    leg_open   _leg_open_f  같은 식 = 1.4983
+	#    coin_land  등급 예고    523/392 = 1.3342 (레어)
+	#    coin_break _wreck_sfx   1.18 * (1 + WRECK.jit 0.06) = 1.2508
+	#    shop_smash _smash_sfx   1.14 * 1.04 = 1.1856
+	#    settle_*   _settle_f    3.78 — 위 정산 사다리가 따로 본다
+	print("")
+	print("- 지붕 -")
+	var push := {"page": 1.4983, "leg_open": 1.4983, "coin_land": 1.3342,
+			"coin_break": 1.2508, "shop_smash": 1.1856}
+	var rows := []
+	for nm3 in names:
+		var path3 := "res://sfx/%s.wav" % nm3
+		if not ResourceLoader.exists(path3):
+			continue
+		if String(nm3).begins_with("settle_"):
+			continue                    # 위 정산 사다리가 3.78배로 따로 본다
+		var mul: float = float(push.get(nm3, 1.0))
+		var x3 := Voice.pcm(load(path3))
+		var cap := 6000.0 / mul
+		var hi3 := _above(x3, cap)
+		var full3 := Voice.rms(x3, 1000.0)
+		var frac3 := 0.0 if full3 <= 0.0 else (hi3 / full3) * (hi3 / full3)
+		rows.append([frac3, String(nm3), mul, cap])
+	rows.sort_custom(func(a, b): return float(a[0]) > float(b[0]))
+	for i in mini(rows.size(), 6):
+		var r3: Array = rows[i]
+		print("%-16s x%.2f — %.0fHz 위 에너지 %.1f%%"
+				% [String(r3[1]), float(r3[2]), float(r3[3]),
+						float(r3[0]) * 100.0])
+	for r4 in rows:
+		if float(r4[0]) >= HIGH:
+			warn.append("%s — x%.2f 에서 6kHz 위에 에너지 %.1f%% — 굽는 천장을 내려라"
+					% [String(r4[1]), float(r4[2]), float(r4[0]) * 100.0])
+	print("가장 밝은 %s %.1f%% / 문턱 %.0f%% · 잰 이름 %d"
+			% [String(rows[0][1]), float(rows[0][0]) * 100.0, HIGH * 100.0,
+					rows.size()])
 
 	if not warn.is_empty():
 		print("")
