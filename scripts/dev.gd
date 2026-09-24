@@ -270,6 +270,18 @@ static func tick(g: Node, d: float) -> void:
 			_pend = {}
 			if not pe.is_empty():
 				_run(g, pe)
+	#  판 깨짐 다시 보기의 끝맺음. 조각이 다 지면 판을 되세운다 —
+	#  게임 쪽(_brk_tick)은 **일부러** 스스로 안 끝내므로(말짱한 판이 한
+	#  프레임 도로 튀어나온다) 진짜 판에서는 _finish_leg 첫 줄이 내리고
+	#  다시 보기에서는 이 줄이 내린다. 2026-09-24
+	#  내리는 때를 BRK.tail(0.42초)로 못 박는다 — 진짜 판에서 _finish_leg 가
+	#  내리는 바로 그 자리다. 모션을 끄면 조각이 0개라 「조각이 다 지면」
+	#  으로는 그 순간이 0초가 되어 금을 볼 틈이 없다.
+	if _brk_replay and (not g.brk_live or (g.brk_fired
+			and g.brk_t >= float(load("res://scripts/game.gd").BRK.tail)
+			and g.brk_shards.is_empty() and g.brk_bits.is_empty())):
+		g._brk_skip()
+		_brk_replay = false
 	if card_ph > 0:
 		_card_tick(g, d)
 	# 사다리는 한 소리가 아니라 **오르는 관계**가 내용이라, 한 번에 하나씩
@@ -478,6 +490,11 @@ static func _names(k: String) -> PackedStringArray:
 	#  game.gd 의 _art_sheet 가 같은 차례로 읽는다. 2026-09-19
 	if k == "artsheet":
 		return PackedStringArray(ART_SHEET)
+	#  판 깨짐의 층 셋. 표가 아니라 상수라 **_cur_name 과 짝으로** 낸다 —
+	#  한쪽만 내면 값 칸을 눌렀을 때 고르개가 텅 빈 채로 뜬다(빨리 보기
+	#  사다리가 같은 실패를 적어 뒀다). 2026-09-24
+	if k == "brk":
+		return PackedStringArray(BRK_TIERS)
 	for r in _list(k):
 		out.append(String(r.get("n", r.get("name", r.get("id", "?")))))
 	return out
@@ -752,6 +769,18 @@ static func _rows(g: Node) -> Array:
 				{"n1": "다트통", "t": "list", "k": "pack",
 						"n": GameData.packs().size()},
 				{"n1": "판 다시 굽기", "t": "act", "a": "bake"},
+				#  ── 부서짐 어휘가 한 쪽에 모인다 ──────────────
+				#  ◀▶ 로 작은 · 큰 · 보스 셋을 짚으면 그 자리에서 층대로
+				#  다시 깨진다(겹 · 금 단 · 부스러기 · 소리 겹이 갈린다).
+				#  **2쪽인 이유**: 한 쪽에 열아홉 줄까지 드는데(_panel
+				#  y[22,352] · _row y 62+15i · 높이 13) 0쪽은 열여덟이라
+				#  한 줄뿐이고 1쪽은 마흔으로 이미 넘쳐 있다. 여기는
+				#  열여섯 → 열일곱이고 바로 밑이 제목 판 깨짐 둘이다.
+				#  바로 위 「제약 걸기」·「판 다시 굽기」로 피자·시계·도넛·
+				#  과녁을 끼우고 이 줄을 누르면 **피자(8칸)에서 부채가 8 로
+				#  접히고 겹이 2 로 주는지**가 손가락 세 번에 드러난다 —
+				#  이 연출의 가장 중요한 눈 검사다. 2026-09-24
+				{"n1": "판 깨짐 다시 보기", "t": "list", "k": "brk", "n": 3},
 				{"n1": "제목 판 금 가기 직전", "t": "act", "a": "egg_crack"},
 				{"n1": "제목 판 깨기 직전", "t": "act", "a": "egg"},
 				{"n1": "인트로 다시 보기", "t": "act", "a": "intro"},
@@ -874,6 +903,14 @@ static func _list(k: String) -> Array:
 			return _sfx_rows
 	return []
 
+
+# 판 깨짐의 층 셋. game.gd 의 BRK.small · big · boss 와 **같은 차례**다.
+const BRK_TIERS := ["작은 판", "큰 판", "보스 판"]
+#  다시 보기가 켠 깨짐인가. game.gd 의 _brk_tick 은 **일부러** 스스로 안
+#  끝낸다(끝내면 말짱한 판이 한 프레임 도로 튀어나온다) — 진짜 판에서는
+#  _finish_leg 첫 줄이 내리는데 다시 보기에는 그 줄이 없다. 그 뒷정리를
+#  게임이 아니라 **여기서** 한다: 다시 보기의 수명은 dev 것이다. 2026-09-24
+static var _brk_replay := false
 
 # 점수 카드를 다시 볼 세 단. 이름과 큐를 한 곳에서 쥔다.
 const CARDFX_STEPS := ["담담", "큼", "한 방"]
@@ -1016,6 +1053,14 @@ static func _cur_name(g: Node, e: Dictionary) -> String:
 		return "%d/3 %s" % [i % 3 + 1, CARDFX_STEPS[i % 3]]
 	#  이것도 _list 를 안 지나는 상수 목록이다. 총 길이를 같이 찍는다 —
 	#  「유리 0.40 / 밀랍 0.56」이 한 줄에 보여야 ◀▶ 한 칸으로 견준다.
+	#  판 깨짐의 층. 층이 무엇을 가르는지를 값 칸이 그대로 적는다 —
+	#  겹 · 부스러기 · 소리 겹이 층의 전부이고 **길이는 셋이 같다.**
+	if k == "brk":
+		var gj: int = i % BRK_TIERS.size()
+		var gt: Array = load("res://scripts/game.gd").BRK[
+				["small", "big", "boss"][gj]]
+		return "%d/%d %s · 겹%d · 톱밥%d · 소리%d" % [gj + 1, BRK_TIERS.size(),
+				BRK_TIERS[gj], int(gt[1]), int(gt[2]), int(gt[3])]
 	if k == "breakmat":
 		var bj: int = i % BREAK_MATS.size()
 		var bm: Dictionary = BREAK_MATS[bj]
@@ -1828,6 +1873,23 @@ static func _run(g: Node, e: Dictionary) -> void:
 			g._aim_begin()
 			_aim_sticker(g, am)
 			_say("조준 %s" % GameData.aim_name(am))
+		"brk":
+			#  「라운드 넘김 다시 보기」와 **같은 규약**이다 — 필요하면
+			#  화면만 맞춰 주고, 값(골드 · 목표 · 매물 · **leg_no**)은 한
+			#  톨도 안 건드리고 연출 함수만 부른다. 개발자 모드가 런
+			#  진도를 만지는 자리를 안 만든다.
+			#  씨가 leg_no 에서 나므로 층만 바꿔도 무늬는 이 판의 것이다 —
+			#  무늬까지 바꿔 보려면 0쪽 「판 +1」로 판을 옮긴다.
+			if not g._is_play_deep():
+				g._start_leg()      # 「다트 채우기」와 같은 길. leg_no 를 안 옮긴다
+			g._swap_skip()          # 판이 눕는 중이면 세워 놓고 본다
+			g._brk_arm(i % BRK_TIERS.size())
+			#  걸음(S.RESOLVE) 밖이라 제 시계로 돌게 푼다. _brk_arm 이
+			#  qt 가 0 인 것을 보고 표준 돌파 걸음을 자로 삼는다.
+			g.brk_free = true
+			_brk_replay = true
+			_say("판 깨짐 — %s" % BRK_TIERS[i % BRK_TIERS.size()])
+			return
 		"breakmat":
 			#  고른 재질의 대표 동전을 랙 **첫 빈 칸**에서 부순다 — 시체는
 			#  지우고 난 뒤 처음 비는 칸에 서므로 산 동전을 안 덮는다.
