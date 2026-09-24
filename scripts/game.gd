@@ -2329,9 +2329,9 @@ func _settle_clear() -> void:
 	#  건너뛰기 뱃지 「현상금」. 이자를 센 **뒤**라 제 몫에 이자가 안 붙는다.
 	var bounty := _bounty_take()
 	clear_gold_detail = [
-		#  판 이름은 **제목이 이미 말했다**("라운드 1  작은 판 클리어").
+		#  판 이름은 **제목이 이미 말했다**("라운드 1  작은 판 넘김").
 		#  같은 말을 두 줄 아래에 또 적으면 내역 첫 줄이 정보가 아니다.
-		{"n": "클리어 보상", "v": clear},
+		{"n": "넘김 보상", "v": clear},
 		{"n": "남은 다트 %d개" % darts_left, "v": dart_gold},
 		{"n": "이자", "v": interest},
 	]
@@ -15727,7 +15727,7 @@ func _cons_block(c: Dictionary) -> String:
 	match String(c.get("use_at", "any")):
 		"rest":
 			if state != S.SHOP and state != S.LEG:
-				return "상점이나 판 선택에서 쓴다"
+				return "상점·판 선택에서 쓴다"
 		"play":
 			if not _is_play():
 				return "판에서만 쓴다"
@@ -25488,7 +25488,7 @@ func _hand_release(m: Vector2) -> void:
 		if z == Z_SELL and _can_sell() and i >= 0 and i < owned.size():
 			_sell(i)
 		elif z == Z_BUY:
-			pay_msg = "테이블 물건만 살 수 있다"
+			pay_msg = "테이블 물건만 산다"
 			pay_msg_t = HAND.msg_t
 			_deny()
 		else:
@@ -25539,7 +25539,7 @@ func _hand_release(m: Vector2) -> void:
 			_deny()
 			_hand_land(it)
 			return
-		var blk := "가진 것만 팔 수 있다" if z == Z_SELL else _buy_block(i)
+		var blk := "가진 것만 판다" if z == Z_SELL else _buy_block(i)
 		if blk == "":
 			_pay_take(i)
 			return                            # 이미 떠났다. 자리로 안 돌려보낸다
@@ -26119,8 +26119,11 @@ var tip_lines := []             # [{"s": String, "sz": int, "c": Color}]
 var tip_chip := {}              # 제목 옆 미니동전로 그릴 아이템 (없으면 빈 사전)
 var tip_rar := ""               # 판 면·테·턱에 쓰는 등급. 동전이 아니면 빈 낱말
 # 태그 줄 — 툴팁 맨 아래. 본문은 제목과 효과 문장만 지고, 그 밖의 것은
-# 전부 여기로 내려온다: 갈래 · 등급 · 발동 조건 · 다트의 게이지와 배수 ·
-# 사진의 사용조건. 본문에 특성이 섞이면 효과 문장이 안 읽힌다.
+# 전부 여기로 내려온다: 갈래 · 등급 · 사용조건. 본문에 특성이 섞이면
+# 효과 문장이 안 읽힌다.
+#
+# ⚠ 조건은 **본문에 남는다** — 태그가 아니다(26788 의 주석이 그 말이고
+# 덤프 140개 실측도 조건 태그 0개다). 다트의 게이지·배수도 본문이다.
 #
 # 2026-09-13 사용자 지시. 전에는 갈래 하나와 등급 하나, 둘 고정이었고
 # 조건과 「등급 · N골드」는 본문 줄이었다. 값은 통째로 뺐다 — 상점은
@@ -28155,7 +28158,7 @@ func _draw_clear() -> void:
 	#  스크림을 1.0 으로. 0.94 라 뒤 다트판의 「20」이 내역 둘째 줄 위에
 	#  앉아 있었다 — 정산은 읽는 화면이지 비치는 화면이 아니다.
 	draw_rect(_full(), C_BG)
-	draw_string(font, Vector2(0, 46), "라운드 %d  %s 클리어"
+	draw_string(font, Vector2(0, 46), "라운드 %d  %s 넘김"
 			% [GameData.round_of(leg_no), GameData.leg_name(leg_no)],
 			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 24, C_ACC)
 
@@ -28862,9 +28865,9 @@ func _draw_shop() -> void:
 		ma = deny_flash
 	elif hand_st == H.CARRY and hand_zone >= 0:
 		if hand_src == 1:
-			msg = "" if hand_zone == Z_SELL else "테이블 물건만 살 수 있다"
+			msg = "" if hand_zone == Z_SELL else "테이블 물건만 산다"
 		else:
-			msg = "가진 것만 팔 수 있다" if hand_zone == Z_SELL else _buy_block(hand_i)
+			msg = "가진 것만 판다" if hand_zone == Z_SELL else _buy_block(hand_i)
 		ma = 0.85
 	#  9 → 11 → 12(글자 키우기, 2026-09-17 — 11 은 갈무리11 의 격자에 안 떨어졌다).
 	#  리롤(끝 184)과 다음 판(432) 사이 x[188,428] 의 가운데에 선다 — 화면
@@ -34501,7 +34504,7 @@ func _league_lines() -> Array:
 		#  클리어 보상만 0 이 된다(_settle_clear). 잔탄 · 이자 · 동전 골드는 그대로 들어오므로
 		#  「골드가 안 들어온다」 는 틀린 말이었다.
 		out.append({"n": "작은 판 보상 %d" % rs,
-				"d": "작은 판 클리어 보상 %d골드" % rs})
+				"d": "작은 판을 넘기면 골드 %d" % rs})
 	if int(GameData.league_v("seal_items", 0.0)) > 0:
 		out.append({"n": "봉인 %d" % int(GameData.league_v("seal_items", 0.0)),
 				"d": "판마다 동전 하나 무작위 봉인"})
@@ -36370,7 +36373,7 @@ func _col_name_split(nm: String) -> PackedStringArray:
 #  탭으로 가른다 — 컬렉션 화면이 이미 쓰는 어법이고, 한 번에 한 가지만
 #  본다. 전체 화면이 아니라 판 위에 뜨는 판이다: 열어도 뒤의 게임이
 #  남아 있어야 "잠깐 확인하고 닫는다" 로 읽힌다.
-const RI_TABS := ["진행", "트랙", "사진", "보유"]
+const RI_TABS := ["진행", "트랙", "사진", "가진 것"]
 
 #  런 정보 판의 자. 그리는 쪽(_ri_*)과 판 높이를 재는 쪽(_ri_h)이 **같은 자**를
 #  써야 탭이 늘어도 넘치지 않는다 — 전에는 높이를 손으로 적은 수(176 · 214 · 256)로
@@ -36440,7 +36443,7 @@ func _ri_panel() -> Rect2:
 	return Rect2(Vector2(74.0, (VIEW.y - h) * 0.5), Vector2(VIEW.x - 148.0, h))
 
 
-#  「보유」 탭에 늘어놓은 동전 한 칸. 그리는 쪽(_ri_carry)과 툴팁이 **같은 자**를
+#  「가진 것」 탭에 늘어놓은 동전 한 칸. 그리는 쪽(_ri_carry)과 툴팁이 **같은 자**를
 #  쓴다 — 자가 둘이면 손이 어긋나고, 어긋난 자리는 「가리켰는데 아무것도 안 뜬다」로
 #  보인다. 식은 _ri_carry 가 쓰던 그대로다(반지름 12). 2026-09-19
 func _ri_coin_rect(i: int) -> Rect2:
@@ -37150,7 +37153,7 @@ func _ri_carry(p: Rect2) -> void:
 	var xr: float = p.position.x + 24.0 + cw
 	var y0: float = p.position.y + float(RI.top)
 
-	#  **보유 동전을 실제로 그린다.** 탭 이름이 「보유」인데 개수만 세고
+	#  **가진 동전을 실제로 그린다.** 탭 이름이 「가진 것」인데 개수만 세고
 	#  정작 무엇을 들었는지는 한 장도 안 그리고 있었다 — 이 탭을 여는
 	#  이유가 그것인데.
 	#  그림은 **머리와 한 줄**이다. 머리 밑에 그림 줄(34px)을 따로 두었더니 글자를

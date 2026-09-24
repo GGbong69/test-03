@@ -657,7 +657,7 @@ static func _rows(g: Node) -> Array:
 				{"n1": "골드 +50", "t": "act", "a": "gold", "v": 50},
 				{"n1": "골드 −50", "t": "act", "a": "gold", "v": -50},
 				{"n1": "이 판 목표 채우기", "t": "act", "a": "fill"},
-				{"n1": "이 판 클리어", "t": "act", "a": "clear"},
+				{"n1": "이 판 넘기기", "t": "act", "a": "clear"},
 				{"n1": "즉시 실패", "t": "act", "a": "lose"},
 				{"n1": "판 +1", "t": "act", "a": "leg", "v": 1},
 				{"n1": "판 −1", "t": "act", "a": "leg", "v": -1},
@@ -1293,7 +1293,7 @@ static func _run(g: Node, e: Dictionary) -> void:
 		"clear":
 			g.total = g.target
 			g._finish_leg()
-			_say("클리어")
+			_say("넘김")
 			return
 		"lose":
 			g.total = 0
