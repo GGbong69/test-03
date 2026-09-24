@@ -16929,15 +16929,28 @@ func _brk_crack_draw() -> void:
 		return                      # 판이 없으면 금도 없다
 	var sw := _sec_w()
 	var step: int = maxi(_sec_n() / maxi(brk_w, 1), 1)
-	var gap := Color(C_BG, 0.85)
-	var lift := Vector2(-1.0, -1.0)
+	#  ⚠ **식은 금이 판의 철선보다 어두웠다.** 앞서는 밝은 줄이
+	#  C_WIRE.lightened(0.5) = #bcb8c8 이었는데 판이 이미 긋는 철선
+	#  (BOARDART.wire)이 #c9c4d4 라 **한 단 더 밝다** — 다 식은 금이 판의
+	#  무늬보다 어두워서, 0.68초 동안 「금이 번진다」가 숫자 고리 위에서만
+	#  읽혔다(찍어 보고 잡았다). 0.72 로 밀면 #dad7e0 이라 철선보다 한 단
+	#  밝다. **새 색은 여전히 C_BG · C_WIRE · WHITE 셋뿐이다.**
+	#  어두운 틈도 알파 0.85 · 폭 1px 이라 크림 칸에서 회색 한 줄로 누웠다.
+	#  알파를 떼고 폭을 벌려 **벌어지는 틈**으로 만든다: 갓 난 단은 1px 로
+	#  가늘고 식을수록 2px 로 열린다 — 그래야 「금이 자란다」가 읽힌다.
+	#  밝은 모서리는 그 틈 바로 바깥에 붙어야 하므로 미는 거리도 같이
+	#  자란다(틈 반폭 + 0.5px). 2026-09-24
+	var lift := Vector2(-1.0, -1.0).normalized()
 	for k in mini(brk_stage, brk_rings.size() * 2):
-		var lit := C_WIRE.lightened(0.5).lerp(Color.WHITE, _brk_hot(k + 1))
+		var ht: float = _brk_hot(k + 1)
+		var lit := C_WIRE.lerp(Color.WHITE, 0.72).lerp(Color.WHITE, ht)
+		var gw: float = lerpf(2.0, 1.0, ht)
+		var off: float = gw * 0.5 + 0.5
 		var bi: int = k / 2
 		if k % 2 == 0:              # 테
 			var r: float = R * float(brk_rings[bi][0])
-			draw_arc(BC, r, 0.0, TAU, 32 + brk_w, gap, 1.0)
-			draw_arc(BC + lift, r, 0.0, TAU, 32 + brk_w, lit, 1.0)
+			draw_arc(BC, r, 0.0, TAU, 32 + brk_w, C_BG, gw)
+			draw_arc(BC + lift * off, r, 0.0, TAU, 32 + brk_w, lit, 1.0)
 		else:                       # 살
 			var r0: float = R * float(brk_rings[bi][0])
 			var r1: float = R * float(brk_rings[bi][1])
@@ -16959,7 +16972,8 @@ func _brk_crack_draw() -> void:
 				var nm := Vector2(-u.y, u.x)
 				if nm.dot(lift) < 0.0:
 					nm = -nm
-				draw_line(BC + u * r0, BC + u * r1, gap, 1.0)
+				nm *= off
+				draw_line(BC + u * r0, BC + u * r1, C_BG, gw)
 				draw_line(BC + nm + u * r0, BC + nm + u * r1, lit, 1.0)
 
 
