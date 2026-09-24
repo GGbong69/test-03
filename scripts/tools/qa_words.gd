@@ -5,11 +5,15 @@ extends SceneTree
 #
 #  사용자가 세 번 반려한 것이 「해설 문장」이다. 그 규칙이 여태 사람 눈으로만
 #  지켜졌고, 그래서 다트통 설명 여섯이 존댓말 해설로 남아 있었다(2026-09-24).
-#  이 자가 재는 것 넷:
-#    ① 판 위 안내줄 · 조준 줄 — 존댓말 없음 · 상태 이름 없음 · 화면 폭 안
+#  이 자가 재는 것 여섯:
+#    ① 판 위 안내줄 · 조준 줄 — 존댓말 없음 · 상태 이름 없음 · 화면 폭 안 ·
+#       끝이 명사형 「-기」다(「다트판을 눌러 … 결정」이 여덟 줄이었다)
 #    ② 다트통 줄 — 존댓말 없음. 줄글을 비운 다트통이 **빈 채로 서지 않는다**
 #    ③ 런 끝 해금 쪽지 — 머리와 값이 같은 낱말을 두 번 말하지 않는다
 #    ④ 못 사는 까닭 — 칸이 꽉 찬 둘은 값(「슬롯 5/5」)이고 문장이 아니다
+#    ⑤ 그리는 세 소스의 큰따옴표 전수 — 존댓말 없음 · 금칙어 없음
+#    ⑥ **표(data/*.csv)의 name · desc · text** — 존댓말 없음 · 금칙어 없음 ·
+#       마침표로 문장을 잇지 않는다
 #
 #  ⚠ 글꼴이 없는 실행(헤드리스)에서는 폭을 못 잰다 — 그 한 줄만 건너뛰고
 #  나머지는 다 돈다. 「재는 자리가 없다고 검사가 조용히 통과해 버리는 것」을
@@ -28,6 +32,46 @@ const POLITE := ["세요", "십시오", "합니다", "습니다", "됩니다", "
 		"립니다", "니다", "세오"]
 #  판 위 안내줄이 쓸 수 있는 가로 폭. 640 짜리 화면에 가운데로 선다.
 const HINT_W := 600.0
+
+#  ── 금칙어 ────────────────────────────────────────────────
+#  2026-09-25 에 한 번에 걷어낸 말들이다. 왼쪽이 나면 오른쪽으로 쓴다.
+#  전수로 세서 **지금 전부 0곳**이고, 이 자가 0 을 지킨다 — 규칙서를 안 읽은
+#  다음 사람도 여기서 막힌다.
+#  ⚠ 일부러 뺀 셋. 낱말로 가를 수 없어 눈으로 지킨다:
+#    · 「구역」 — 제약 이름 「금지 구역」이 아직 산다(용어 결정이 남았다)
+#    · 「카드」 — 동전을 가리킬 때만 금칙어다. 「교통카드」(동전 이름) ·
+#      「보스 카드」 · 점수 카드 연출이 같은 글자를 쓴다
+#    · 「랙」 — 「트랙」 안에 들어 있다
+const BANNED := {
+	"명중": "맞히면 · 빗나가면",
+	"발동": "켜진다 · 켜질 때마다",
+	"보유": "지운다 — 누구 것인지는 물을 것이 없다",
+	"클리어": "판은 넘김 · 런은 완주",
+	"플레이": "판에서",
+	"승급": "강화",
+	"수 있다": "값으로 닫거나 평서 「-다」로 닫는다",
+	"랜덤": "무작위",
+	"소모품": "사탕",
+	"코인": "골드",
+	"멀티": "배수",
+	"칩": "점수",
+	"스티커": "슬롯",
+	"불스아이": "불",
+	"가끔": "확률을 그대로 적는다",
+	"때때로": "확률을 그대로 적는다",
+	"종종": "확률을 그대로 적는다",
+	"드물게": "확률을 그대로 적는다",
+	"대략": "수치를 그대로 적는다",
+	"살짝": "수치를 그대로 적는다",
+	"결정": "잡기 · 고르기",
+	"다트판을 눌러": "무엇을 정하는지만 적는다",
+}
+#  표에서 사람이 쓴 글이 사는 칸. 나머지 열은 값이거나 우리끼리 보는 주석이다.
+const TXT_COLS := ["name", "desc", "text"]
+#  값 표(손잡이 설명이 길게 붙는다)는 화면 글이 아니다.
+const SKIP_TABLES := ["tuning"]
+#  콘솔은 화면이 아니다 — 이 낱말이 든 줄의 글은 ⑤ 가 안 본다.
+const CONSOLE := ["push_warning(", "push_error(", "printerr(", "print("]
 
 
 func _initialize() -> void:
@@ -64,9 +108,24 @@ func _process(_d: float) -> bool:
 
 func _polite(t: String) -> bool:
 	for e in POLITE:
-		if t.ends_with(e):
-			return true
+		if not t.ends_with(e):
+			continue
+		#  ⚠ 「니다」가 「아니다」를 오탐한다 — 검증기 글 열몇 줄이 그 꼴이다
+		#  (「정수가 아니다」 「hex 가 여섯 자가 아니다」). 앞 글자가 「아」면
+		#  존댓말이 아니라 평서다.
+		if e == "니다" and t.ends_with("아니다"):
+			continue
+		return true
 	return false
+
+
+#  금칙어가 들었나. 든 것을 「낱말 → 대신 쓸 말」로 돌려준다.
+func _banned(t: String) -> Array:
+	var out := []
+	for w in BANNED:
+		if t.contains(w):
+			out.append("%s→%s" % [w, BANNED[w]])
+	return out
 
 
 #  화면에 실제로 그려지는 폭. 글꼴이 없으면 −1.
@@ -92,6 +151,20 @@ func _run() -> void:
 			bad.append(t)
 	_ok("판 위 줄에 존댓말이 없다", bad.is_empty(),
 			"%d줄" % hints.size() if bad.is_empty() else str(bad))
+	#  어투가 하나다 — **명사형 「-기」**. 2026-09-24 에 여덟 줄을 「다트판을
+	#  눌러 … 결정」으로 모았는데 그것은 어디를 누르라는 입력 지시였고 같은
+	#  말이 여섯 번 되풀이됐다. 이 두 줄이 그 되돌이를 막는다.
+	var nom := []
+	var ins := []
+	for t in hints:
+		if not t.ends_with("기"):
+			nom.append(t)
+		if not _banned(t).is_empty():
+			ins.append("%s %s" % [t, _banned(t)])
+	_ok("판 위 줄이 명사형 「-기」다", nom.is_empty(),
+			"%d줄" % hints.size() if nom.is_empty() else str(nom))
+	_ok("판 위 줄에 금칙어가 없다", ins.is_empty(),
+			"" if ins.is_empty() else str(ins))
 	#  상태 이름은 글자가 아니라 그림이 말한다 — 「조준 확인」이 발마다
 	#  27프레임씩 떠 있었다. S.CONFIRM 은 빈 줄이라야 한다.
 	g.state = g.S.CONFIRM
@@ -212,6 +285,7 @@ func _run() -> void:
 	#  머리가 # 인 줄(주석)은 건너뛴다 — 무엇이 깨졌는지 적는 우리 주석이
 	#  존댓말을 인용하기 때문이다.
 	var src_bad := []
+	var src_ban := []
 	var src_n := 0
 	for path in ["res://scripts/game.gd", "res://scripts/dev.gd",
 			"res://scripts/data.gd"]:
@@ -225,18 +299,72 @@ func _run() -> void:
 			ln += 1
 			if line.strip_edges().begins_with("#"):
 				continue
+			#  콘솔로 나가는 줄은 화면 글이 아니다 — 무엇이 깨졌는지 적는
+			#  우리 말이라 용어 사전 밖이다.
+			var con := false
+			for c in CONSOLE:
+				if line.contains(c):
+					con = true
+					break
+			if con:
+				continue
 			for lit in _lits(line):
 				if not _han(lit):
 					continue
 				src_n += 1
 				if _polite(lit):
 					src_bad.append("%s:%d 「%s」" % [path.get_file(), ln, lit])
+				var bw := _banned(lit)
+				if not bw.is_empty():
+					src_ban.append("%s:%d 「%s」 %s"
+							% [path.get_file(), ln, lit, bw])
 		f.close()
 	_ok("그리는 파일에 존댓말 글이 없다", src_bad.is_empty(),
 			"한글 글 %d개" % src_n if src_bad.is_empty() else str(src_bad))
+	_ok("그리는 파일에 금칙어가 없다", src_ban.is_empty(),
+			"금칙어 %d갈래" % BANNED.size() if src_ban.is_empty() else str(src_ban))
 	#  재는 자리가 실제로 있는지 같이 못 박는다 — 글을 한 개도 안 세고
 	#  조용히 통과하면 자가 죽은 것이다.
 	_ok("셀 글이 실제로 있다", src_n >= 200, "%d개" % src_n)
+
+	# ── ⑥ 표(data/*.csv)의 사람이 쓴 글 ──────────────────
+	#  ⚠ **이 구멍이 2026-09-25 반려의 원인이다.** ⑤ 는 그리는 세 소스의
+	#  큰따옴표만 읽어서 data/*.csv 가 통째로 그물 밖이었다 — 배움 글
+	#  19줄이 「전부 통과」 밑에서 존댓말로 살아남은 까닭이다. 표를
+	#  하나씩 적는 길은 안 간다: GameData.FILES 를 통째로 도므로
+	#  **표가 늘어도 이 자를 지난다.**
+	var csv_pol := []
+	var csv_ban := []
+	var csv_dot := []
+	var csv_n := 0
+	for tbl in GameData.FILES:
+		if SKIP_TABLES.has(String(tbl)):
+			continue
+		for r in GameData.rows(String(tbl)):
+			for col in TXT_COLS:
+				var t := String(r.get(col, "")).strip_edges()
+				if t == "" or not _han(t):
+					continue
+				csv_n += 1
+				var who := "%s:%d/%s 「%s」" % [tbl, r.get("_line", 0), col, t]
+				if _polite(t):
+					csv_pol.append(who)
+				var bw2 := _banned(t)
+				if not bw2.is_empty():
+					csv_ban.append("%s %s" % [who, bw2])
+				#  곁가지는 「 · 」로 잇는다 — 마침표로 이으면 앞도 뒤도 안
+				#  읽힌다(aim_text 주석이 2026-09-15 에 세운 집 규칙).
+				if _dot_join(t):
+					csv_dot.append(who)
+	_ok("표 글에 존댓말이 없다", csv_pol.is_empty(),
+			"%d칸" % csv_n if csv_pol.is_empty() else str(csv_pol))
+	_ok("표 글에 금칙어가 없다", csv_ban.is_empty(),
+			"금칙어 %d갈래" % BANNED.size() if csv_ban.is_empty() else str(csv_ban))
+	_ok("표 글이 마침표로 문장을 안 잇는다", csv_dot.is_empty(),
+			"" if csv_dot.is_empty() else str(csv_dot))
+	#  재는 자리가 실제로 있는지 못 박는다 — 표를 한 칸도 안 읽고
+	#  조용히 통과하면 이 검사가 죽은 것이다.
+	_ok("셀 표 글이 실제로 있다", csv_n >= 150, "%d칸" % csv_n)
 
 	print("\n%s" % ("전부 통과" if fail == 0 else "실패 %d건" % fail))
 	print("통과 %d · 실패 %d · 건너뜀 %d" % [okn, fail, skip])
@@ -268,6 +396,20 @@ func _lits(line: String) -> Array:
 		out.append(buf)
 		i = j + 1
 	return out
+
+
+#  마침표로 문장을 이었나. ⚠ 소수점은 마침표가 아니다 — 「목표 점수 0.7배」
+#  같은 값이 수두룩하다. 앞뒤가 둘 다 숫자면 값이고, 아니면 문장을 이은 것이다.
+func _dot_join(t: String) -> bool:
+	for i in t.length():
+		if t[i] != ".":
+			continue
+		var a := t[i - 1] if i > 0 else ""
+		var b := t[i + 1] if i + 1 < t.length() else ""
+		if a.is_valid_int() and b.is_valid_int():
+			continue
+		return true
+	return false
 
 
 #  한글 음절이 한 자라도 있나. 영어 열쇠·경로를 걸러 낸다.
