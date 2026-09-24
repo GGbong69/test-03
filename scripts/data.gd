@@ -2286,18 +2286,23 @@ static func _v_packs() -> void:
 		if _i(r, "dart_gold", "packs", 0) < 0:
 			_errs.append("%s — 잔탄 골드가 음수다" % who)
 		_v_desc(who, r.get("desc", ""), PACK_DESC_KEYS)
-		# 기준선과 다른 데가 있는데 줄글이 없으면 그 다트통은 화면에서 기본
-		# 다트통과 구분이 안 된다. 일당 다트통이 실제로 그랬다.
-		var off := _i(r, "darts_add", "packs", 0) != 0 \
-				or _i(r, "gold_add", "packs", 0) != 0 \
-				or String(r.get("interest_off", "")) != "" \
-				or String(r.get("dart_gold", "")) != "" \
-				or (String(r.get("item_slots", "")) != ""
-						and _i(r, "item_slots", "packs", 0) != tune_i("max_items")) \
-				or (String(r.get("cons_slots", "")) != ""
-						and _i(r, "cons_slots", "packs", 0) != tune_i("cons_slots"))
-		if off and String(r.get("desc", "")) == "":
-			_errs.append("%s — 기준선과 다른데 줄글이 없다" % who)
+		#  ⚠ **규약이 뒤집혔다(2026-09-24).** 전에는 「기준선과 다른데 줄글이
+		#  없으면 화면에서 기본 다트통과 구분이 안 된다」며 줄글을 **요구**했다.
+		#  그 말은 이제 거짓이다 — 줄글이 비면 _pack_lines(game.gd)가 **바로
+		#  그 열들**에서 「다트 +1 · 동전 슬롯 6칸 · 이자 없음」 꼴의 효과 줄을
+		#  뽑는다. 오히려 줄글을 비우는 쪽이 낫다: 말이 용어 사전 한 곳에서
+		#  나오므로 열을 고치면 화면이 저절로 따라오고, 손으로 적은 줄글은
+		#  표를 고칠 때마다 옛말로 남는다(실제로 존댓말 해설 문장 여섯이
+		#  그렇게 남아 있었다).
+		#
+		#  그래서 요구를 **생성기가 못 읽는 열**로 좁힌다. 지금 그런 열은
+		#  target_mul 하나다 — 한 발의 값(score_mul)과 계산 방식(score)은
+		#  _pack_lines 가 같은 날 같이 받았다. 이 목록이 생성기와 갈리면
+		#  표에 적힌 효과가 화면에서 조용히 사라진다.
+		var tmul := String(r.get("target_mul", ""))
+		var mute: bool = tmul != "" and _f(r, "target_mul", "packs", 1.0) != 1.0
+		if mute and String(r.get("desc", "")) == "":
+			_errs.append("%s — 목표 배수는 줄 생성기가 못 적는다. 줄글이 있어야 한다" % who)
 		var sm: String = r.get("score", "")
 		var tm := String(r.get("target_mul", ""))
 		if tm != "" and _f(r, "target_mul", "packs", 1.0) <= 0.0:

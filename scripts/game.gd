@@ -34003,10 +34003,30 @@ func _pack_lines(row: Dictionary) -> Array:
 	if String(row.get("dart_gold", "")) != "":
 		var dg := int(row.get("dart_gold", 0))
 		if dg != GameData.gold_per_dart():
-			out.append("남은 다트 1개당 %d골드" % dg)
+			#  0 은 「1개당 0골드」가 아니라 **없음**이다 — 수로 적으면 곱이
+			#  있는 것처럼 읽힌다(이자 없음과 같은 말씨). 2026-09-24
+			out.append("남은 다트 골드 없음" if dg == 0
+					else "남은 다트 1개당 %d골드" % dg)
 	var did := String(row.get("dart_id", ""))
 	if did != "" and did != "std":
 		out.append("%s 다트로 시작" % GameData.dart_name(did))
+	#  한 발의 값 · 계산 방식. 이 둘이 빠져 있어서 외줄(1.6배)과 물음표
+	#  (무작위)는 줄글을 비우면 화면에 **아무 말도 안 남았다** — 표에 적힌
+	#  효과가 조용히 사라지는 유일한 두 열이었다. 2026-09-24
+	#  자릿수는 GameData._num 이 쥔다 — 리그 줄(34072)이 쓰는 그 자라
+	#  1.60 이 「1.6」으로, 2.00 이 「2」로 같은 말씨로 선다.
+	#  ⚠ **빈 칸을 먼저 묻는다.** CSV 의 빈 칸은 「없는 열」이 아니라
+	#  「빈 글자」라 .get(기본값) 이 기본값을 안 내고, float("") 은 1.0 이
+	#  아니라 **0.0** 이다 — 선물 다트통에 「한 발의 값 0배」가 뗴다(찍어서
+	#  봤다). 값이 있는 줄만 낸다. 2026-09-24
+	var smul_s := String(row.get("score_mul", ""))
+	if smul_s != "" and float(smul_s) != 1.0:
+		out.append("한 발의 값 %s배" % GameData._num(float(smul_s)))
+	var scm := String(row.get("score", ""))
+	if scm == "rand":
+		out.append("발마다 점수·배수 무작위")
+	elif scm == "bal":
+		out.append("저울 계산")
 	# 쥐여 주는 것들 — 이름으로 낸다. id 는 표의 말이지 사람의 말이 아니다.
 	#  사진은 cons 표(consumables.csv)에 산다 — _raw 에 fixtures 표가 없어 id(v_cash)가 찍혔다.
 	for gk in [["grant_item", "items"], ["grant_mod", "mods"],
