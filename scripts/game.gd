@@ -5211,7 +5211,11 @@ func _unhandled_input(e: InputEvent) -> void:
 						_tutor_close()
 						_sfx("menu_back")
 					elif state == S.RUNINFO:
-						state = run_from
+						#  **같은 문을 지난다.** 여기서 state 를 손으로 박으면
+						#  「정보」 단추로 닫을 때만 소리가 나고 키로 닫으면
+						#  조용했다 — _runinfo_toggle 의 닫기 갈래가 그 소리를
+						#  이미 들고 있다. 2026-09-25
+						_runinfo_toggle()
 					elif state == S.SETTINGS:
 						_settings_back()
 					elif state == S.COLLECT or state == S.NEWRUN \
@@ -5223,6 +5227,12 @@ func _unhandled_input(e: InputEvent) -> void:
 					elif hand_st != H.NONE:
 						_hand_abort()
 					elif buy_sel >= 0 or sell_sel >= 0:
+						#  지목을 푸는 소리. 톡으로 풀면 _shop_tap·_rack_tap 이
+						#  제 소리를 내는데 키로 풀면 무음이었다 — 어느 쪽을
+						#  집고 있었나로 갈린다(매물 shop · 슬롯 rack).
+						#  2026-09-25
+						_sfx("shop_deselect" if buy_sel >= 0
+								else "rack_deselect")
 						buy_sel = -1
 						sell_sel = -1
 					elif state == S.OVER:
@@ -5356,7 +5366,9 @@ func _unhandled_input(e: InputEvent) -> void:
 				#  (톡의 규약 ④ · WCAG 2.5.2 의 임계에서 값이 안 바뀐다).
 				#  지목은 되돌린다: 길게 누르기는 읽기지 취소가 아니다.
 				if hand_st != H.NONE:
-					_hand_abort()         # _hand_abort 가 buy_sel 을 지운다
+					#  quiet — 바로 위가 적어 둔 「소리도 없다」를 지킨다.
+					#  _hand_abort 가 이제 제 소리를 내므로 여기만 끈다.
+					_hand_abort(true)     # _hand_abort 가 buy_sel 을 지운다
 					buy_sel = press_buy
 				return
 			_hand_release(mp)
@@ -5653,9 +5665,9 @@ func _click(m: Vector2) -> void:
 				_sfx("run_start")
 				return
 			if _newrun_back().has_point(m):
+				#  소리는 _newrun_leave 안에 있다 — ESC 도 같은 문을 지난다.
 				_newrun_leave()
 				state = S.TITLE
-				_sfx("back")
 				return
 		S.TITLE:
 			#  **줄 수를 표에서 센다.** 4 를 박아 두었더니 줄을 하나 늘렸을 때
@@ -5763,7 +5775,11 @@ func _click(m: Vector2) -> void:
 				set_sel = i
 				match rows[i]:
 					"fs":
+						#  "vol","mus" 와 같은 꼴로 선다 — 제 소리는
+						#  _toggle_fullscreen 안에 있고, 여기서 return 해야
+						#  맨 밑 menu_back 을 안 먹는다. 2026-09-25
 						_toggle_fullscreen()
+						return
 					"vol", "mus":
 						# 고르기만 한다. 값은 오른쪽 판의 홈에서 끈다 —
 						# 왼쪽은 글줄이라는 규약을 한 줄도 깨지 않는다.
@@ -5800,7 +5816,11 @@ func _click(m: Vector2) -> void:
 						_vol_save_due()
 						get_tree().quit()
 					"back":
+						#  소리는 _settings_back 안에 있다 — ESC·스페이스도
+						#  같은 문을 지난다. 밑의 menu_back 을 안 먹게
+						#  "vol","mus","fs" 와 같은 꼴로 선다. 2026-09-25
 						_settings_back()
+						return
 				_sfx("menu_back")
 				return
 		S.RUNINFO:
@@ -25308,7 +25328,17 @@ func _toss_wake() -> void:
 
 
 # 손을 비우는 유일한 문.
-func _hand_abort() -> void:
+#  quiet — 이 손짓은 **아무것도 확정 안 한다**는 자리에서만 준다.
+#  지금은 길게 누르기(읽기) 하나뿐이고, 그 자리 주석이 「소리도 없다」를
+#  WCAG 2.5.2 와 함께 이미 못 박아 두었다.
+func _hand_abort(quiet := false) -> void:
+	#  ⚠ **소리는 쥔 것이 실제로 있었을 때만 낸다.** 이 함수는 손이 빈 채로도
+	#  청소용으로 불리는 자리가 열 곳 넘는다(_drop_roll · _drop_settle · 판을
+	#  여닫는 길들). 안 물으면 판이 열릴 때마다 놓는 소리가 난다.
+	#  키(ESC·스페이스)로 놓을 때가 무음이고 손가락으로 놓을 때만
+	#  (_hand_release) 울던 것을 여기 한 곳에서 잇는다 — 도착점이 하나라
+	#  갈래마다 흩을 까닭이 없다. 2026-09-25
+	var had := hand_st != H.NONE and not quiet
 	if hand_src == 0 and hand_i >= 0 and hand_i < drop.size():
 		var it: Dictionary = drop[hand_i]
 		if it.held:
@@ -25321,6 +25351,8 @@ func _hand_abort() -> void:
 	hand_zone = -1
 	hand_src = 0
 	buy_sel = -1
+	if had:
+		_sfx("hand_drop")
 
 
 # ══ 프레임 ════════════════════════════════════════════
@@ -29198,6 +29230,16 @@ func _toggle_fullscreen() -> void:
 			DisplayServer.WINDOW_MODE_WINDOWED if fs
 			else DisplayServer.WINDOW_MODE_FULLSCREEN)
 	Save.set_set("fullscreen", not fs)
+	#  ⚠ **설정 여섯 줄 중 이 줄만 제 소리가 없었다.** "vol","mus" 는
+	#  menu_pick2 를 내고 return 하는데 "fs" 는 그대로 떨어져 맨 밑
+	#  _sfx("menu_back") 을 먹었다 — 켜고 끄는 토글이 **나가는 소리**로
+	#  울었다. 키(F11)로 하면 소리가 아예 0이었다.
+	#  소리를 **여기 안에** 둔다 — 부르는 자리가 둘(줄 · 키)이라 바깥에
+	#  두면 한쪽이 또 빠진다. 켬과 끔을 같은 톡으로 낸다: 켜짐 여부는
+	#  화면이 곧바로 말하므로 소리까지 갈릴 까닭이 없다.
+	#  _load_settings 는 이 함수를 안 지나고 window_set_mode 를 직접
+	#  부르므로 켜고 시작해도 부팅에 소리가 안 난다. 2026-09-25
+	_sfx("menu_pick2")
 
 
 # 저장에서 설정을 되돌린다. 창 모드는 실제로 바꿔 보고 결과를 다시 읽는다 —
@@ -33647,6 +33689,10 @@ func _newrun_leave() -> void:
 	if state == S.NEWRUN:
 		_nr_tab_set(0)
 	_pack_save_due()
+	#  _settings_back 과 같은 까닭으로 소리가 여기 있다 — 새 런·컬렉션·
+	#  프로필을 나가는 길이 단추와 ESC 둘인데 단추 쪽만 울었다.
+	#  부르는 쪽(단추)의 _sfx 는 뺐다. 2026-09-25
+	_sfx("back")
 
 
 # 저장에 남은 다트통을 화면의 지금 자리로 맞춘 뒤 연다.
@@ -34351,10 +34397,30 @@ func _vol_set(key: String, x: float) -> void:
 	else:
 		return
 	_apply_vol()
+	#  ⚠ **소리 크기를 맞추는 동안 소리가 한 알도 안 났다.** 홈을 잡는
+	#  순간 menu_pick2 가 한 번 나고 그 뒤로는 미는 내내 무음이라, 새 크기를
+	#  **귀로 못 듣고** 눈으로만 맞춰야 했다. 버스 음량이 바로 위
+	#  _apply_vol 에서 이미 걸린 뒤라 여기서 내는 톡이 곧 새 크기다.
+	#  **음악 쪽("mus")은 안 낸다** — 효과음 톡으로 음악 크기를 말할 수 없고,
+	#  음악은 제가 이미 울고 있어 들을 것이 따로 있다.
+	#  연타 방지는 휠이 쓰는 60ms 를 그대로 빌린다 — 끌기는 프레임마다
+	#  _vol_set 을 부르므로 안 막으면 한 번 미는 데 톡이 수십 알 난다.
+	#  그 상수가 「page 소리보다 길어 빠른 굴림에서도 안 겹친다」로 이미
+	#  서 있고 menu_pick2 는 그보다 짧다. 2026-09-25
+	if key == "vol":
+		var vnow := Time.get_ticks_msec()
+		if vnow - vol_snd_ms >= WHEEL_MS:
+			vol_snd_ms = vnow
+			_sfx("menu_pick2")
 	queue_redraw()
 	var fr := get_node_or_null("Front")
 	if fr != null:
 		fr.queue_redraw()
+
+
+#  음량 톡의 마지막 때. 휠 쿨다운(wheel_ms)과 **따로 둔다** — 그쪽은 입력을
+#  막는 자라, 같이 쓰면 톡 하나가 다음 굴림 한 칸을 삼킨다.
+var vol_snd_ms := 0
 
 
 #  미룬 음량 저장 — 굴림이 멎은 뒤 한 번 쓴다. Save.set_set 이 곧 gflush 라
@@ -35836,6 +35902,14 @@ func _settings_back() -> void:
 	lobby_arm = false        # 나가는 문 하나 — ESC · 스페이스 · 「뒤로」가 다 여기를 지난다
 	state = pause_from if pause_from >= 0 else S.TITLE
 	pause_from = -1
+	#  ⚠ **같은 일을 키로 하면 조용하고 단추로 하면 울었다.** 「뒤로」를
+	#  눌렀을 때만 부르는 쪽이 menu_back 을 냈고 ESC·스페이스는 무음이었다 —
+	#  **모바일이 예정돼 있어** 손가락으로 배운 사람과 키로 배운 사람이 같은
+	#  일을 다른 소리로 배우는 자리다. 소리를 ESC 갈래마다 흩지 않고
+	#  **도착점인 여기 한 곳**에 둔다: 위 주석이 이미 「나가는 문 하나」라
+	#  적어 둔 그 이유가 소리에도 그대로 선다. 부르는 쪽 셋의 _sfx 는 뺐다 —
+	#  안 빼면 단추 길에서만 두 번 운다. 2026-09-25
+	_sfx("menu_back")
 
 
 # ── 컬렉션 — 게임에 실린 전부를 편다. 표가 전량이고 그 위를 발견이 덮는다 ──
