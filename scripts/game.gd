@@ -6124,7 +6124,15 @@ func _impact(info: Dictionary, hit_mult: int) -> void:
 			pop(aim + lbl, _land_val(info, hit_mult), C_ACC, 20, 0.9)
 		4:
 			shake = 11.0
-			board_punch = 1.0
+			#  ⚠ 여기 아래 셋이 전부 1.0 이라 **여섯 등급이 네 값에 앉아**
+			#  있었다. push = 1 + board_punch × 0.028 이라 테 108px 에서
+			#  0.45 / 1.36 / 2.42 / 3.02 / 3.02 / 3.02px — 눈은 흔들림이
+			#  1.5→15.0 으로 열 배 오르고 멈춤도 0/0/3/5/6/9프레임으로
+			#  제대로 벌어지는데 판펀치만 위에서 누웠다.
+			#  **0~3 은 한 톨도 안 건드리고** 위 둘만 편다(1.0 / 1.35 / 1.75
+			#  → 3.02 / 4.08 / 5.29px). 걸음이 0.60 / 1.06 / 1.21px 라
+			#  세 단이 실제로 갈린다. 2026-09-24
+			board_punch = 1.35
 			hitstop = 0.11
 			hit_flash_amt = 0.9
 			add_wave(BC, R * rt_bull_o, R * 1.15, C_GREEN.lightened(0.45), 0.80, 2.0, 0.50)
@@ -6135,7 +6143,7 @@ func _impact(info: Dictionary, hit_mult: int) -> void:
 			pop(aim + lbl, _land_val(info, hit_mult), C_GREEN.lightened(0.55), 20, 0.9)
 		5:
 			shake = 15.0
-			board_punch = 1.0
+			board_punch = 1.75
 			hitstop = 0.15
 			hit_flash_amt = 1.0
 			screen_flash = 1.0
