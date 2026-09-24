@@ -900,6 +900,17 @@ static func _rows(g: Node) -> Array:
 			#  어긋나도 화면이 거짓말을 안 한다(옛 「정산 빨리 보기」 줄이
 			#  1배를 가리킨 채 게임은 2.5였던 그 어긋남을 안 만든다).
 			#  사다리 어법은 FAST_STEPS 가 세운 것을 그대로 빌린다.
+			#
+			#  ⚠ **그래 놓고 값 칸에 같은 어긋남을 그대로 냈다.** pick 이
+			#  0 에서 출발해서, 줄 이름은 「조준 게이지 0.70」인데 값 칸은
+			#  「1/6 0.35」였다 — ▶ 를 한 번 누르면 살아 있는 값이 0.70 에서
+			#  0.50 으로 **내려갔다.** 넷 다 그랬다. 줄을 낼 때마다 지금 값에
+			#  가장 가까운 칸으로 맞춘다. 캐시가 아니라 **매번 다시 맞추는**
+			#  까닭은, 값을 미는 길이 여기 말고도 있어서(키 여섯 · 표 부팅)
+			#  캐시는 그쪽으로 값이 움직이면 곧 상한다. 고른 칸을 앉히면
+			#  살아 있는 값이 정확히 그 칸이 되므로 다시 맞춰도 같은 칸이다 —
+			#  ◀▶ 는 언제나 지금 값의 양옆으로 간다. 2026-09-25
+			_tune_sync(g)
 			return [
 				{"n1": "조준 게이지 %.2f" % g.gauge_speed, "t": "list",
 						"k": "gauge", "n": (TUNE_STEPS["gauge"] as Array).size()},
@@ -1020,6 +1031,28 @@ const FAST_NAMES := ["1배", "2배", "2.5배", "3배"]
 #  줄 이름이 **지금 값을 그대로 적으므로**(_rows 참조) 칸과 실제가 어긋나도
 #  화면이 거짓말을 안 한다 — 옛 「fast」 줄이 1배를 가리킨 채 게임은 2.5인
 #  그 어긋남을 여기서는 안 만든다.
+#  조작감 손잡이 넷의 값 칸을 **지금 값**에 맞춘다. 사다리에 정확히 앉은
+#  값이 아니어도(표를 손으로 고치면 그렇다) 가장 가까운 칸을 고르므로,
+#  줄 이름이 적는 실제 값과 값 칸이 서로 먼 곳을 가리키는 일이 없다.
+static func _tune_sync(g: Node) -> void:
+	var live := {
+		"gauge": float(g.gauge_speed),
+		"beat": float(g.beat),
+		"chold": float(g.confirm_hold),
+		"fly": float(GameData.tune("fly_time")),
+	}
+	for k in live:
+		var ts: Array = TUNE_STEPS[k]
+		var best := 0
+		var bd := INF
+		for j in ts.size():
+			var d: float = absf(float(ts[j]) - float(live[k]))
+			if d < bd:
+				bd = d
+				best = j
+		pick[k] = best
+
+
 const TUNE_STEPS := {
 	"gauge": [0.35, 0.50, 0.70, 1.00, 1.40, 2.00],
 	"beat":  [0.15, 0.25, 0.34, 0.45, 0.60, 0.85],
