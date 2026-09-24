@@ -7744,6 +7744,15 @@ func _draw() -> void:
 		_draw_board()
 		if edy != 0.0:
 			draw_set_transform(sh)
+	#  조준 어둠 · 칸 밝힘 · 조준 두 선 · 확인 고리 · 비행 원은 전부 **판
+	#  면의 것**이라 판 바로 위에 선다. 여태 꽂힌 자루보다 **뒤**에 있어서
+	#  주황 조준 가로선이 꽂힌 자루의 몸을 가로질러 갈랐다 — 판에 꽂힌
+	#  물건 위를 조준선이 지나면 자루가 판 뒤에 있는 것으로 읽힌다.
+	#  판 갈이 중에는 판이 눕는 중이라 안 그린다(옛 자리의 else 갈래와 같은
+	#  문지기다). _swap_board 가 swap_live 아닐 때 곧장 물러서므로 변환은
+	#  여기서도 그대로 sh 다. 2026-09-24
+	if not swap_live:
+		_draw_aim()
 	_brk_crack_draw()               # 금은 판 위, 판 효과 앞
 	_draw_fx()
 	_brk_shards_draw()              # 조각은 다트 **밑**이다
@@ -7769,7 +7778,8 @@ func _draw() -> void:
 			# 들어오는 테이블이 나중이다 — 다 누운 판을 덮으며 자리를 잡는다.
 			_swap_screen(sh)
 	else:
-		_draw_aim()
+		#  _draw_aim 은 판 바로 위로 올라갔다(꽂힌 자루보다 먼저). 여기에는
+		#  카드부터 남는다 — 카드는 판 위에 뜨는 판이라 자루보다 뒤가 맞다.
 		_draw_card()
 		# 런 정보는 화면을 갈아 끼우는 것이 아니라 **판 위에 뜨는 판**이다.
 		# 열던 화면을 먼저 그리고 그 위에 얹어야 "잠깐 확인하고 닫는다" 로
@@ -12238,6 +12248,8 @@ func _draw_darts(a := 1.0) -> void:
 	# 첫 발은 꽂힌 자루가 없다. 나는 자루만 있어도 무대를 그려야 한다.
 	if darts.is_empty() and not _bd3_flying():
 		return
+	#  그림자가 먼저다 — 3D 한 장이든 2D 받침이든 그 **밑**에 깔린다.
+	_dart_shade_2d(a)
 	if _bd3_live():
 		var tex: Texture2D = bd_vp.get_texture()
 		if tex != null:
@@ -12248,6 +12260,34 @@ func _draw_darts(a := 1.0) -> void:
 					Color(1.0, 1.0, 1.0, a))
 			return
 	_draw_darts_2d(a)
+
+
+#  꽂힌 자루의 그림자. **3D 자루 밑에 2D 로 깐다.**
+#
+#  자루 몸이 밝은 회색이라 **크림 칸 위에서는 바탕과 대비가 없어** 어디
+#  꽂혔는지 눈으로 못 셌다 — 먹색 칸에서는 잘 보이므로 판에 닿는 순간
+#  절반만 사라지던 셈이다. 착탄은 한 발의 결과를 확인하는 자리다.
+#
+#  **새 색을 한 개도 안 만든다** — 판이 제 밑에 까는 그 그림자
+#  (BOARDART.shadow)를 그대로 짚는다. 어긋남도 판과 같은 쪽(오른쪽 아래)이다.
+#  자리는 _draw_darts_2d 가 쓰는 **그 투영**을 그대로 빌린다 — 두 벌이
+#  나란히 같은 셈을 한다는 위 구획 주석의 계약이라, 3D 자루가 서는 자리와
+#  한 자에서 난다. 2026-09-24
+func _dart_shade_2d(a := 1.0) -> void:
+	for e in darts:
+		var v: Vector2 = e.p - BC
+		var r := v.length()
+		var dl := clampf(r * float(DART_PERSP) * 0.5,
+				float(DART_MIN), float(DART_MAX))
+		var u := (-v).normalized() if r > 0.001 else Vector2(0.0, 1.0)
+		var o := Vector2(1.0, 2.0)
+		var sc: Color = BOARDART.shadow
+		#  ⚠ 길이는 dl **한 배**다. dl 은 2D 아이콘의 *반길이*(DART_MIN 주석)라
+		#  2D 받침은 2dl 을 쓰는데, 3D 자루는 눈 쪽으로 기울어 서므로 화면에
+		#  서는 길이가 그 절반쯤이다(찍어서 쟀다 — 자루 12.5px 에 2dl 은 29px).
+		#  2dl 로 그으면 그림자가 꽁지 밖으로 길게 삐져나가 **자루가 아니라
+		#  금 한 줄**이 된다. 짧은 쪽으로 틀리면 자루 밑에 숨을 뿐이다.
+		draw_line(e.p + o, e.p - u * dl + o, Color(sc, sc.a * a), 2.0)
 
 
 # 3D 가 없을 때의 받침. 같은 투영을 손으로 계산한다 — 자세한 근거는
