@@ -27330,7 +27330,15 @@ func _photo_draw() -> void:
 				draw_string(font_sm, Vector2(0.0, 52.0),
 						"%d 칸  x%d" % [int(sectors[idx]) if idx < sectors.size() else 0, photo_v],
 						HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 20, C_ACC)
-			draw_string(font_sm, Vector2(0.0, 28.0), "칠할 칸을 고르세요",
+			#  ⚠ **존댓말 해설이 여기 하나 남아 있었다** — 「칠할 칸을
+			#  고르세요」. 바로 두 줄 위가 이미 「%d 칸  x%d」로 값만 적고
+			#  있어서 **한 화면 안에서 두 문법이 싸웠다.** 판 위 안내줄을
+			#  전부 명사형으로 모은 손질(2026-09-24)이 이 줄을 안 지났다 —
+			#  그 손질은 _draw_hint 가 내는 state 별 줄과 다트통 줄만 훑었고
+			#  여기는 _photo_draw 라 자에도 안 걸렸다. qa_words 의 훑는
+			#  대상을 이 함수까지 넓혀 세 번째 곳이 또 안 남게 했다.
+			#  2026-09-25
+			draw_string(font_sm, Vector2(0.0, 28.0), "칠할 칸 고르기",
 					HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 20, C_TXT)
 
 

@@ -199,9 +199,84 @@ func _run() -> void:
 			not _polite(t_cons) and not t_cons.ends_with("다")
 					and t_cons.contains("/"), "「%s」" % t_cons)
 
+	# ── ⑤ 그리는 파일 전수 — 존댓말 글이 한 줄도 없다 ────
+	#  ⚠ **위 넷으로는 못 잡는 자리가 있었다.** ①은 _draw_hint 가 내는
+	#  state 별 줄과 AIM_HINT 만, ②는 다트통 줄만 훑는다. 그래서 사진
+	#  화면이 제 손으로 그리던 「칠할 칸을 고르세요」가 판 위 안내줄을 전부
+	#  명사형으로 모은 뒤에도 그대로 남았다(2026-09-25 에 잡았다) — 그
+	#  줄은 _photo_draw 안에 있어서 **재는 자리가 애초에 없었다.**
+	#
+	#  함수를 하나씩 더 적는 길은 안 간다 — 그러면 다음에 새로 그리는
+	#  함수가 또 그물 밖에 난다. 파일을 통째로 읽어 **큰따옴표 글 전부**를
+	#  본다: 그리는 세 파일 어디에 새 글이 나도 이 자를 지난다.
+	#  머리가 # 인 줄(주석)은 건너뛴다 — 무엇이 깨졌는지 적는 우리 주석이
+	#  존댓말을 인용하기 때문이다.
+	var src_bad := []
+	var src_n := 0
+	for path in ["res://scripts/game.gd", "res://scripts/dev.gd",
+			"res://scripts/data.gd"]:
+		var f := FileAccess.open(path, FileAccess.READ)
+		if f == null:
+			_skip("%s 를 읽는다" % path.get_file(), "파일을 못 열었다")
+			continue
+		var ln := 0
+		while not f.eof_reached():
+			var line := f.get_line()
+			ln += 1
+			if line.strip_edges().begins_with("#"):
+				continue
+			for lit in _lits(line):
+				if not _han(lit):
+					continue
+				src_n += 1
+				if _polite(lit):
+					src_bad.append("%s:%d 「%s」" % [path.get_file(), ln, lit])
+		f.close()
+	_ok("그리는 파일에 존댓말 글이 없다", src_bad.is_empty(),
+			"한글 글 %d개" % src_n if src_bad.is_empty() else str(src_bad))
+	#  재는 자리가 실제로 있는지 같이 못 박는다 — 글을 한 개도 안 세고
+	#  조용히 통과하면 자가 죽은 것이다.
+	_ok("셀 글이 실제로 있다", src_n >= 200, "%d개" % src_n)
+
 	print("\n%s" % ("전부 통과" if fail == 0 else "실패 %d건" % fail))
 	print("통과 %d · 실패 %d · 건너뜀 %d" % [okn, fail, skip])
 	quit(0 if fail == 0 else 1)
+
+
+#  한 줄에서 큰따옴표 글을 다 뽑는다. 역슬래시 다음 한 글자는 건너뛴다 —
+#  그 글자를 버려도 꼬리 판정에는 영향이 없다(오히려 "…합니다\n" 이
+#  꼬리를 숨기지 못한다).
+func _lits(line: String) -> Array:
+	var out := []
+	var i := 0
+	var n := line.length()
+	while i < n:
+		if line[i] != '"':
+			i += 1
+			continue
+		var j := i + 1
+		var buf := ""
+		while j < n:
+			var c := line[j]
+			if c == "\\":
+				j += 2
+				continue
+			if c == '"':
+				break
+			buf += c
+			j += 1
+		out.append(buf)
+		i = j + 1
+	return out
+
+
+#  한글 음절이 한 자라도 있나. 영어 열쇠·경로를 걸러 낸다.
+func _han(t: String) -> bool:
+	for i in t.length():
+		var c := t.unicode_at(i)
+		if c >= 0xAC00 and c <= 0xD7A3:
+			return true
+	return false
 
 
 #  _draw_hint 의 match 를 자가 읽을 수 있게 같은 표를 여기서 되짚는다.
