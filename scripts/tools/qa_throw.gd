@@ -59,6 +59,13 @@ func _at(f: float) -> Vector2:
 	return g.BC + Vector2(0.0, -g.R * f)
 
 
+#  i 번 칸 한가운데로 반지름 f*R 인 점. hit_info 의 각 셈을 거꾸로 푼다 —
+#  ang = idx * _sec_w() 가 그 칸의 중심이고, v = (sin, -cos) * r 이다.
+func _at_sec(i: int, f: float) -> Vector2:
+	var a: float = float(i) * g._sec_w()
+	return g.BC + Vector2(sin(a), -cos(a)) * (g.R * f)
+
+
 func _run() -> void:
 	for i in 8:
 		g._process(DT)
@@ -196,6 +203,51 @@ func _run() -> void:
 	_ok("판펀치가 등급마다 오른다", rise, str(shown) + "px")
 	#  0.40px 은 640×360 을 정수 두 배로 키운 화면에서 **한 픽셀**이 갈리는 선이다.
 	_ok("이웃 등급이 화면에서 갈린다", gap_ok, "가장 좁은 걸음 %.2fpx" % worst)
+
+	# ── ⑤ 착탄 값이 죽이는 축을 지난다 ──────────────────
+	#  ⚠ **한 번 크게 틀렸던 자리다.** 값을 info.sector 에서 떴는데 그것은
+	#  hit_info 가 낸 날것이라, _land 가 그 뒤에 지나는 금줄 · 색 · 홀짝 ·
+	#  「목표물」 · 칠을 한 번도 안 탔다. 「목표물」 런에서는 카드가 0 인데
+	#  판 위에 「60」이 떴다 — 판 위 가장 큰 글자가 발마다 거짓이었다.
+	#  갈래 이름(「트리플」)은 틀릴 수가 없어서 이 병이 안 보였다.
+	#  아래 둘은 **글자와 카드가 같은 수를 말하는가**만 묻는다. 2026-09-25
+
+	#  ⓐ 금줄이 죽인 칸 — 0점이면 글자가 아예 없다(0 을 적으면 빗나감과
+	#     같은 말이 되는데, 빗나감은 글자가 없다).
+	_fresh()
+	var ptr := _at((g.rt_trp_in + g.rt_trp_out) * 0.5)
+	var hit0: Dictionary = g.hit_info(ptr)
+	g.pops.clear()
+	g.dead_idx = int(hit0.idx)
+	g.aim = ptr
+	g.state = g.S.FLY
+	g._land()
+	_ok("금줄이 죽인 칸에는 값이 안 뜬다", g.pops.is_empty(),
+			"칸 %d · %d장" % [int(hit0.sector), g.pops.size()])
+
+	#  ⓑ 홀짝 보정이 곱한 칸 — 글자도 같이 곱해져야 한다. 날것을 적으면
+	#     여기서 옛 수가 그대로 나온다.
+	var odd_i := -1
+	for si in g.sectors.size():
+		if int(g.sectors[si]) % 2 == 1:
+			odd_i = si
+			break
+	if odd_i < 0:
+		_ok("홀수 칸이 판에 있다", false, "못 찾음")
+	else:
+		_fresh()
+		var pod := _at_sec(odd_i, (g.rt_trp_in + g.rt_trp_out) * 0.5)
+		var hod: Dictionary = g.hit_info(pod)
+		g.pops.clear()
+		g.odd_mul = 3.0
+		g.aim = pod
+		g.state = g.S.FLY
+		g._land()
+		var got3 := "" if g.pops.is_empty() else String(g.pops[g.pops.size() - 1].txt)
+		var want3 := "%d" % (int(hod.sector) * 3 * maxi(int(hod.mult), 1))
+		var raw3 := "%d" % (int(hod.sector) * maxi(int(hod.mult), 1))
+		_ok("홀짝이 곱한 칸은 곱해진 값이 뜬다", got3 == want3,
+				"「%s」 want %s · 날것이면 %s" % [got3, want3, raw3])
 
 	print("\n%s" % ("전부 통과" if fail == 0 else "실패 %d건" % fail))
 	print("통과 %d · 실패 %d" % [okn, fail])

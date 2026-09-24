@@ -6082,20 +6082,45 @@ func _thud() -> void:
 #  설명 금지」를 정면으로 어겼고, 정작 20인지 3인지는 그 글자가 안 말한
 #  채 수가 0.374초 뒤 카드에 왔다. 가장 자주 나는 싱글은 글자가 아예 없었다.
 #
-#  ⚠ **info.base 가 아니라 info.sector 를 쓴다**(심사와 갈린 자리).
-#  _land 는 _impact 를 부르기 전에 트랙 강화분을 `info.base += tb.s` 로
-#  이미 얹어 두므로, base × land_mult 는 **판의 값도 아니고 카드에 뜰
-#  값도 아닌 제3의 수**가 되어 화면 어디와도 안 맞는다. sector 는 칸에
-#  적힌 그 수 그대로다 — 바로 위 머리말의 「등급은 꽂힌 자리가 정한다 —
-#  점수에 쓰는 배수가 아니다」와 같은 소유를 지킨다.
-#  **점수 계산은 한 줄도 안 건드린다 — 이미 있는 수를 적기만 한다.** 2026-09-24
-func _land_val(info: Dictionary, hit_mult: int) -> String:
-	return "%d" % (int(info.sector) * maxi(hit_mult, 1))
+#  ⚠ **info.sector 를 쓰다가 한 번 크게 틀렸다.** 트랙 강화분이 얹힌
+#  info.base 를 피하려고 sector 를 집었는데, sector 는 hit_info 가 낸
+#  날것이라 _land 가 그 뒤에 지나는 **죽이는 축 다섯**(금줄 dead_idx ·
+#  색 죽이기 dead_col · 홀짝 odd_mul · 「목표물」 mark_sec · 칠 paint_sec)
+#  을 한 번도 안 탄다. 「목표물」 런에서는 발마다 틀렸다 — 뽑힌 칸이
+#  아닌 20 트리플은 카드가 0 인데 판 위에 「60」이 떴고, 뽑힌 칸이면
+#  실제 300 인데도 「60」이 떴다. 앞서 뜨던 「트리플」은 갈래 이름이라
+#  틀릴 수가 없었다: **「효과와 값만」을 고치려다 판 위 가장 큰 글자가
+#  거짓이 됐다.**
+#
+#  답은 축을 다 지난 뒤이면서 트랙 강화보다는 앞인 **그 한 지점**의 값을
+#  뜨는 것이다 — land_mult 를 잡는 바로 그 자리(「판이 무엇인가」가 끝나는
+#  곳)에서 land_base 를 같이 잡아 여기로 넘긴다. 그러면 트랙 강화분도
+#  안 섞이고 죽은 칸도 죽은 채로 적힌다.
+#
+#  **0 이면 글자를 아예 안 낸다.** 0점을 「0」으로 적으면 빗나감과 같은
+#  말이 되는데, 빗나감(등급 0)은 지금도 글자가 없다.
+#  **점수 계산은 한 줄도 안 건드린다 — 이미 셈해 둔 수를 적기만 한다.**
+#  2026-09-25
+func _land_val(land_base: int, hit_mult: int) -> String:
+	var v: int = land_base * maxi(hit_mult, 1)
+	return "" if v == 0 else "%d" % v
 
 
-func _impact(info: Dictionary, hit_mult: int) -> void:
+#  값이 0 이면 뜨지 않는 pop. 등급 다섯 자리가 같은 갈래를 쓰므로 한 곳에 둔다.
+func _land_pop(p: Vector2, land_base: int, hit_mult: int, c: Color,
+		sz: int, life: float) -> void:
+	var txt := _land_val(land_base, hit_mult)
+	if txt.is_empty():
+		return
+	pop(p, txt, c, sz, life)
+
+
+#  land_base 를 안 주면 info.base 를 쓴다 — 축을 아직 안 지난 날판(검사
+#  도구가 hit_info 를 갓 떠서 부르는 자리)에서는 둘이 같은 수다.
+func _impact(info: Dictionary, hit_mult: int, land_base: int = -1) -> void:
 	var lbl := Vector2(0.0, 26.0) if aim.y < BC.y else Vector2(0.0, -24.0)
 	var grade := _hit_grade(info, hit_mult)
+	var lv: int = int(info.base) if land_base < 0 else land_base
 	_thud()
 	_sfx(HIT_SFX[grade])
 
@@ -6122,7 +6147,7 @@ func _impact(info: Dictionary, hit_mult: int) -> void:
 			hit_flash_amt = 0.4
 			add_wave(aim, 3.0, 24.0, C_TXT, 0.35, 1.0, 0.28)
 			#  가장 자주 나는 착탄인데 글자가 없었다. 값 하나를 준다.
-			pop(aim + lbl, _land_val(info, hit_mult), C_TXT, 12, 0.7)
+			_land_pop(aim + lbl, lv, hit_mult, C_TXT, 12, 0.7)
 		2:
 			shake = 6.5
 			board_punch = 0.8
@@ -6130,7 +6155,7 @@ func _impact(info: Dictionary, hit_mult: int) -> void:
 			hit_flash_amt = 0.7
 			add_wave(aim, 3.0, 42.0, C_ACC, 0.75, 1.5, 0.40)
 			add_ring_fx(R * rt_dbl_in, R * rt_dbl_out, C_ACC, 0.50)
-			pop(aim + lbl, _land_val(info, hit_mult), C_ACC, 12, 0.8)
+			_land_pop(aim + lbl, lv, hit_mult, C_ACC, 12, 0.8)
 		3:
 			shake = 9.5
 			board_punch = 1.0
@@ -6139,7 +6164,7 @@ func _impact(info: Dictionary, hit_mult: int) -> void:
 			add_wave(aim, 3.0, 54.0, C_ACC, 0.85, 2.0, 0.45)
 			add_wave(aim, 3.0, 32.0, C_TXT, 0.60, 1.0, 0.32)
 			add_ring_fx(R * rt_trp_in, R * rt_trp_out, C_ACC, 0.55)
-			pop(aim + lbl, _land_val(info, hit_mult), C_ACC, 20, 0.9)
+			_land_pop(aim + lbl, lv, hit_mult, C_ACC, 20, 0.9)
 		4:
 			shake = 11.0
 			#  ⚠ 여기 아래 셋이 전부 1.0 이라 **여섯 등급이 네 값에 앉아**
@@ -6158,7 +6183,7 @@ func _impact(info: Dictionary, hit_mult: int) -> void:
 			add_sparks(10, R * rt_bull_o, R * 0.95, 12.0, C_GREEN.lightened(0.5), 0.42)
 			#  자리를 BC 에서 aim 으로 옮긴다 — 꽂힌 자리에 값이 붙는 것이
 			#  나머지 넷과 같은 어법이고, 불 둘만 판 한가운데에 박혀 있었다.
-			pop(aim + lbl, _land_val(info, hit_mult), C_GREEN.lightened(0.55), 20, 0.9)
+			_land_pop(aim + lbl, lv, hit_mult, C_GREEN.lightened(0.55), 20, 0.9)
 		5:
 			shake = 15.0
 			board_punch = 1.75
@@ -6169,7 +6194,7 @@ func _impact(info: Dictionary, hit_mult: int) -> void:
 			add_wave(BC, R * rt_bull_i, R * 0.90, C_ACC, 0.80, 2.0, 0.45)
 			add_wave(BC, 3.0, 52.0, C_TXT, 0.80, 1.5, 0.32)
 			add_sparks(16, R * rt_bull_i, R * 1.10, 16.0, C_ACC, 0.55)
-			pop(aim + lbl, _land_val(info, hit_mult), C_ACC, 24, 1.1)
+			_land_pop(aim + lbl, lv, hit_mult, C_ACC, 24, 1.1)
 
 
 # mark 가 false 면 연발의 한 발이다 — 이미 꽂혀 있고, 점수도 한 발치가
@@ -6227,6 +6252,13 @@ func _land(mark := true) -> void:
 		track_hits[_tk] = int(track_hits.get(_tk, 0)) + 1
 
 	var land_mult: int = int(info.mult)
+	#  연출이 적을 **값**도 여기서 같이 뜬다. 이 지점이라야 맞는다:
+	#  죽이는 축 다섯(금줄 · 색 · 홀짝 · 「목표물」 · 칠)은 이미 다 지났고,
+	#  트랙 강화(info.base += tb.s)는 아직 안 왔다. 앞이면 죽은 칸이 산
+	#  것처럼 적히고, 뒤면 판에도 카드에도 없는 제3의 수가 적힌다.
+	#  한 번 틀렸던 자리다 — _land_val 머리말에 무엇이 깨졌는지 적었다.
+	#  2026-09-25
+	var land_base: int = int(info.base)
 
 	# 다트 특성
 	var pierce_gain := 0
@@ -6281,7 +6313,7 @@ func _land(mark := true) -> void:
 				"rot": fly_rot})
 	# 연출에는 **꽂힌 자리의 배수**를 넘긴다. info.mult 는 이 위에서
 	# 다트와 트랙이 이미 주무른 값이라, 그걸 넘기면 연출이 점수를 따라간다.
-	_impact(info, land_mult)
+	_impact(info, land_mult, land_base)
 
 	hit_flash = 1.0
 	hit_idx = info.idx
