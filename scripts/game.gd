@@ -16948,9 +16948,34 @@ func _brk_crack_draw() -> void:
 		var off: float = gw * 0.5 + 0.5
 		var bi: int = k / 2
 		if k % 2 == 0:              # 테
+			#  ⚠ **테 금이 판의 철선과 정확히 같은 반지름에 그어졌다.**
+			#  _brk_rings 가 「남는 경계가 언제나 실제 철선 위」가 되도록
+			#  일부러 스냅하기 때문이다(그 불변식은 조각 경계의 존재 이유라
+			#  그대로 둔다). 그래서 원 하나를 통째로 그으면 1px 철선 위에
+			#  겹쳐 **굵어진 것으로만** 보인다 — lift 는 원 중심을 대각으로
+			#  밀 뿐이라 그것도 못 푼다. **바이트로 잡았다**: 1단(테)만
+			#  그어진 프레임과 금이 아예 없는 프레임의 md5 가 같았다
+			#  (shots/brk_01_crack_a.png · brk_11_back.png). 0.68초 중 첫
+			#  단이 그림에서 완전한 무동작이었다.
+			#  원을 **부채 경계에서 끊어 어긋난 호 여럿**으로 낸다. 호마다
+			#  씨로 ±2.5px 를 떠서 반지름을 흔들면 철선 위에 통째로 눕는
+			#  일이 없고, 꺾이는 자리가 곧 다음 단의 살이 설 자리라
+			#  「이 선을 따라 갈라진다」가 오히려 더 또렷해진다.
+			#  **단 수는 안 줄인다** — 줄이면 brk_born · brk_stage · 소리
+			#  겹이 같이 흔들린다. 조각 경계(_brk_fire)는 스냅한 채 그대로다.
+			#  ⚠ draw_arc 의 각은 +X 에서 재고 판의 칸 각은 위에서 재므로
+			#  −PI/2 를 물린다. 도넛은 불을 진짜로 없애 첫 겹이 0 에서
+			#  시작하니 1px 밑인 단은 건너뛴다. 2026-09-24
 			var r: float = R * float(brk_rings[bi][0])
-			draw_arc(BC, r, 0.0, TAU, 32 + brk_w, C_BG, gw)
-			draw_arc(BC + lift * off, r, 0.0, TAU, 32 + brk_w, lit, 1.0)
+			for j in brk_w:
+				var ra0: float = float(j * step) * sw - sw * 0.5 - PI * 0.5
+				var ra1: float = ra0 + sw * float(step)
+				var rr: float = r + lerpf(-2.5, 2.5,
+						_gl_rand(j * 31 + k, brk_seed))
+				if rr < 1.0:
+					continue
+				draw_arc(BC, rr, ra0, ra1, 6 + step, C_BG, gw)
+				draw_arc(BC + lift * off, rr, ra0, ra1, 6 + step, lit, 1.0)
 		else:                       # 살
 			var r0: float = R * float(brk_rings[bi][0])
 			var r1: float = R * float(brk_rings[bi][1])

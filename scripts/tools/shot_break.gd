@@ -108,12 +108,24 @@ func _run() -> void:
 	_arm(2)
 	print("  보스 — 부채 %d · 겹 %d · 단 %d" % [g.brk_w,
 			(g.brk_rings as Array).size(), (g.brk_rings as Array).size() * 2])
-	await _hold(1)
+	#  ⚠ **단이 날 때까지 감고 찍는다.** 앞서는 _hold(1) 한 프레임만 감고
+	#  「첫 단」이라 적었는데, 첫 단은 brk_span 0.676초의 1/6 인 0.101초
+	#  (여섯 프레임째)에 난다 — 한 프레임 뒤에는 brk_stage 가 아직 0 이라
+	#  **금이 한 줄도 안 그어진 판**을 찍고 있었다. 그래서 이 그림의 md5 가
+	#  금이 아예 없는 11_back 과 **똑같았다**(2026-09-24, 바이트로 잡았다).
+	#  프레임 수로 세지 말고 단으로 센다 — 박자가 바뀌어도 같은 그림이
+	#  나오고, 「1단이 그림에서 무동작인가」를 md5 로 물을 수 있게 된다.
+	while g.brk_stage < 1:
+		await _hold(1)
 	await _snap("01_crack_a")          # 첫 단 — 불 둘레가 갈라진다
-	await _hold(19)
+	print("  첫 단이 난 프레임의 단 %d" % g.brk_stage)
+	while g.brk_stage < (g.brk_rings as Array).size():
+		await _hold(1)
 	await _snap("02_crack_b")          # 절반쯤 — 살과 테가 번갈아 바깥으로
-	await _hold(21)
+	while g.brk_stage < (g.brk_rings as Array).size() * 2 and not g.brk_fired:
+		await _hold(1)
 	await _snap("03_crack_c")          # 거의 다 — 금이 조각 경계를 다 적었다
+	print("  금이 다 그어진 단 %d" % g.brk_stage)
 	#  발화까지 남은 프레임을 다 감는다(brk_span 0.676초 ≈ 41프레임)
 	while not g.brk_fired:
 		await _hold(1)
