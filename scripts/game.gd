@@ -4567,8 +4567,13 @@ func _process(d: float) -> void:
 	for rf in ring_fx:
 		rf.t += d
 	ring_fx = ring_fx.filter(func(rf): return rf.t < rf.life)
+	#  **d * fast_rate 를 탄다**(2026-09-26 수선). 빨리 보기는 정산에서만 서므로
+	#  (_fast_on 이 state != S.RESOLVE 에서 1.0 을 돌려준다) 정산 밖 팝은 한 톨도
+	#  안 달라진다. 안 태우면 걸음만 2.5배 빨라지고 팝은 실시간이라 **같은 자리에
+	#  쌓이는 개수가 2.5배**가 됐다 — 잇는 선·카드 시계 여섯이 전부 이 축을 타는
+	#  그 까닭과 같다.
 	for p in pops:
-		p.t += d
+		p.t += d * fast_rate
 	pops = pops.filter(func(p): return p.t < p.life)
 	#  시체의 시계는 clear_t 와 **따로** 돈다. 그래야 건너뛰기
 	#  (_click 의 clear_t = 99.0)에 안 죽고, if state == S.CLEAR 분기
@@ -6853,7 +6858,7 @@ func _next_step() -> void:
 			var c0 := cur_chip
 			cur_chip += pg
 			card_item = "양옆 칸  점수 +%d" % pg
-			pop(cc, "+%d" % pg, C_CHIP, 20, 0.9)
+			pop(cc, "+%d" % pg, C_CHIP, 20, _pop_life())
 			_sfx("settle_pierce", f)
 			chip_amt = _card_amt(c0, cur_chip)
 			chip_j = 1.0
@@ -6923,9 +6928,12 @@ func _next_step() -> void:
 			# st.v 는 이미 굴린 값이다 — kind 를 날것으로 넘기면 "배수 +0~7
 			# 무작위" 가 떠서 결과를 상한으로 뒤집어 읽힌다. 큐 라벨(1634)과
 			# 같은 매핑을 여기도 쓴다.
+			#  수명이 **걸음에 매인다**(2026-09-26 수선). 팝이 전부 카드 윗변
+			#  한 점(cc)에서 나므로 0.9초 붙박이면 동전이 둘만 발동해도
+			#  「점수 +80」 위에 「배수 +4」가 얹혀 한 덩어리가 됐다.
 			pop(cc, GameData.eff_text(
 					"mult" if st.kind == "mult_rand" else String(st.kind), st.v),
-					col, 20, 0.9)
+					col, 20, _pop_life())
 			_sfx("settle_item", f)
 			shake = 3.0
 			# 몸은 갈래 밖에서 한 번만 챈다. 모르는 효과(_ 갈래)도 걸음은 걸음이라
@@ -7143,6 +7151,13 @@ func _next_step() -> void:
 #  한 단 줄어든다.)
 func pop(p: Vector2, txt: String, c: Color, sz: int, life: float) -> void:
 	pops.append({"p": p, "txt": txt, "c": c, "sz": sz, "t": 0.0, "life": life})
+
+
+#  정산 걸음이 내는 팝의 수명. **걸음에 맨다**(2026-09-26 수선) — 까닭은
+#  CARDFX.pop_life 옆에 적었다. 부르는 자리는 걸음 안(pierce · 동전)뿐이고,
+#  판 위 팝이나 상점 팝은 제 사건이라 제 수명을 그대로 쓴다.
+func _pop_life() -> float:
+	return minf(0.9, qt * float(CARDFX.pop_life))
 
 
 # ══════════════════════════════════════════════════════════
@@ -12965,11 +12980,20 @@ func _draw_topbar() -> void:
 	draw_string(font, Vector2(float(LAY.bar_tgt_r) - 60.0, ty),
 			GameData.big(target), HORIZONTAL_ALIGNMENT_RIGHT, 60.0, 12, C_DIM)
 	#  점수는 12 에 둔다. 18(갈무리9 두 배)은 수의 획이 16px 라 18px 띠에서 화면
-	#  윗변(y 0)까지 닿았다 — 찍어 보고 걷었다(2026-09-17). 목표와 크기가 같아졌어도
-	#  점수색(C_CHIP)과 흐린 곁말(C_DIM)이 둘을 가른다.
+	#  윗변(y 0)까지 닿았다 — 찍어 보고 걷었다(2026-09-17).
+	#
+	#  **C_CHIP → C_LIGHT** (2026-09-26 수선). 이 수는 칩이 아니라 칩 × 배수의
+	#  누적이다. 카드의 총합 「+n」을 C_LIGHT 로 옮긴 그 까닭이 여기에도 그대로
+	#  걸린다 — 총합은 점수도 배수도 아니라 둘의 곱이라 제 색이 없는 것이 정직하다.
+	#  그런데 같은 턴에 이 띠를 걸음에 매어(score_roll) **눈이 여기로 오게 만들어
+	#  놓고** 카드는 크림 · 띠는 파랑으로 갈라 두면, 한 수를 두 색이 말한다.
+	#  C_CHIP 은 이제 「칩」 하나만 진다(칸 · 팝 · 잇는 선 셋이 다 같은 뜻이다).
+	#  ⚠ 「점수색과 흐린 곁말이 둘을 가른다」는 전제는 **세진다** — 목표(C_DIM,
+	#  L 0.308)와의 상호 대비가 C_CHIP 1.65:1 에서 C_LIGHT 2.21:1 로 오르고,
+	#  띠 바탕(C_BG) 대비도 9.6:1 → 14.0:1 이다. 색이 아니라 밝기로 가른다.
 	draw_string(font, Vector2(float(LAY.bar_score_r) - 64.0, ty),
 			GameData.big(int(round(shown))), HORIZONTAL_ALIGNMENT_RIGHT, 64.0, 12,
-			C_CHIP)
+			C_LIGHT)
 
 	# 3칸 x[584,640] — 이번 판 제약 수. 이름 전체는 하단 y341 줄이 갖는다.
 	# active_mods 는 _begin_leg 가 판마다 다시 세운다 — 보통 판이면 비고
@@ -27552,7 +27576,11 @@ func _card_box_ys() -> Array:
 #  써서 12 로 접히면 한 줄이 턱 쪽으로 쏠렸다.
 #  총점(36)은 두 칸이 서던 자리의 가운데(total_mid 41)에 선다 — 카드가 걸음을 넘겨도
 #  큰 수의 가운데가 안 흔들리고, 밑 셈 줄(math)은 동전 이름 줄과 같은 가운데다.
-const CARDTXT := {"box_y": 18.0, "box_h": 46.0, "gap": 5.0, "line_mid": 78.5, "total_mid": 41.0}
+#  칸의 가로 자리도 여기 둔다(2026-09-26 수선). 그리는 쪽에 12 · 98 · 134 를 박아
+#  두었더니 잇는 선이 도착점을 「12 + 98÷2 = 61」처럼 **손으로 더해** 갖고 있었다 —
+#  카드 폭이 바뀌면 선만 조용히 어긋나는 자리다. 한 곳에서 꺼낸다.
+const CARDTXT := {"box_y": 18.0, "box_h": 46.0, "gap": 5.0, "line_mid": 78.5, "total_mid": 41.0,
+		"box_x1": 12.0, "box_x2": 134.0, "box_w": 98.0}
 
 
 # 카드가 걸음에 반응하는 세기. **감각 조정은 이 표에서만 한다** — PANEL 이 동전
@@ -27628,6 +27656,17 @@ const CARDFX := {
 	                     # 정산당 한 번뿐이라 걸음 길이에 맬 이유가 없다
 
 	"sz_min": 16,        # _fit_sz 가 내려갈 수 있는 바닥
+
+	# 정산 팝(「점수 +80」 · 「배수 +4」)의 수명 — **걸음의 몇 배인가.** 초가 아니다.
+	# 0.9초 붙박이였는데 걸음이 pace 1.0 에서 0.34초라 세 걸음, pace 바닥(0.102초)
+	# 에서 아홉 걸음이 한 수명에 들었다. 팝이 전부 카드 윗변 **한 점**에서 나므로
+	# 「점수 +80」 위에 「배수 +4」가 얹혀 무엇인지 못 읽는 덩어리가 됐다
+	# (grow_slot_1 그림에 그대로 찍혔다). 걸음에 매면 뜨는 글자가 24px 를 오르는
+	# 동안 다음 걸음이 오므로 **박자를 어떻게 눌러도 두 팝 사이가 같은 픽셀 수**로
+	# 벌어진다 — 1.30 에서 다음 팝이 날 때 앞 팝이 18.5px 위 · 알파 0.41 이다.
+	# 새 벽시계 상수가 0개고 잇는 선이 card_jrate 에 매인 것과 같은 어법이다.
+	# 상한 0.9 는 오늘 값 — 어떤 박자에서도 **오늘보다 길어지지 않는다**. 2026-09-26
+	"pop_life": 1.30,
 }
 
 
@@ -27787,10 +27826,12 @@ func _draw_card() -> void:
 				s2 = _roll_sz(rk, float(RND.lock2))
 				d1 = 0.0
 				d2 = 0.0
-			_card_box(p, 12.0, 98.0, bcol, f1, "점수", s1, d1)
+			_card_box(p, float(CARDTXT.box_x1), float(CARDTXT.box_w),
+					bcol, f1, "점수", s1, d1)
 			draw_string(font, p + Vector2(110, float(_card_box_ys()[0])), "×",
 					HORIZONTAL_ALIGNMENT_CENTER, 24, 24, C_DIM)
-			_card_box(p, 134.0, 98.0, bcol, f2, "배수", s2, d2)
+			_card_box(p, float(CARDTXT.box_x2), float(CARDTXT.box_w),
+					bcol, f2, "배수", s2, d2)
 			# 이 수가 어디서 왔는지는 이 한 줄에만 있다. 동전 이름이 서던
 			# 자리를 빌린다 — 이 걸음에는 발동하는 동전이 없다.
 			var cl := "%d + %d ÷ 2" % [calc_c, calc_m]
@@ -27814,7 +27855,7 @@ func _draw_card() -> void:
 			#  옆 칸은 제 색으로 가만있는다 — 그 대비가 정보량의 전부다(2026-09-18).
 			var jc := _card_juice(chip_j)
 			var jm := _card_juice(mult_j)
-			_card_box(p, 12.0, 98.0,
+			_card_box(p, float(CARDTXT.box_x1), float(CARDTXT.box_w),
 					C_CHIP.lerp(Color(1.0, 1.0, 1.0), float(CARDFX.warm) * chip_j),
 					str(cur_chip), "점수",
 					_fit_sz(str(cur_chip), 94.0,
@@ -27822,7 +27863,7 @@ func _draw_card() -> void:
 					roundf(float(CARDFX.squash) * maxf(-jc, 0.0)))
 			draw_string(font, p + Vector2(110, float(_card_box_ys()[0])), "×",
 					HORIZONTAL_ALIGNMENT_CENTER, 24, 24, C_DIM)
-			_card_box(p, 134.0, 98.0,
+			_card_box(p, float(CARDTXT.box_x2), float(CARDTXT.box_w),
 					C_MULT.lerp(Color(1.0, 1.0, 1.0), float(CARDFX.warm) * mult_j),
 					str(cur_mult), "배수",
 					_fit_sz(str(cur_mult), 94.0,
@@ -27893,11 +27934,39 @@ func _link_src() -> Vector2:
 	return BC + _theme_dir(float(hit_idx) * _sec_w()) * (hit_r0 + hit_r1) * 0.5
 
 
-#  도착점. 61 = 칸 x 12 + 폭 98 의 절반 · 183 = 134 + 49 ·
-#  total_mid 41 = box_y 18 + box_h 46 의 절반(둘 다 _card_box 가 쓰는 수다).
-func _link_dst() -> Vector2:
-	return card_pos() + Vector2(0.0, _card_lift()) \
-			+ Vector2(183.0 if src_ring else 61.0, float(CARDTXT.total_mid))
+#  도착하는 칸. **좌표를 손으로 더하지 않는다** — _card_box 가 칸을 그리는 그
+#  수를 CARDTXT 에서 그대로 꺼낸다(2026-09-26 수선). 예전에는 61 = 12 + 98÷2 ·
+#  183 = 134 + 49 를 여기 박아 두었다.
+func _link_box() -> Rect2:
+	return Rect2(card_pos() + Vector2(0.0, _card_lift())
+			+ Vector2(float(CARDTXT.box_x2 if src_ring else CARDTXT.box_x1),
+					float(CARDTXT.box_y)),
+			Vector2(float(CARDTXT.box_w), float(CARDTXT.box_h)))
+
+
+#  도착점 — 칸의 **가운데가 아니라 테두리**다. (2026-09-26 수선)
+#
+#  가운데로 꽂으면 선이 그 칸의 수를 긁는다. 이 층은 머리만 빨려 드는 구조라
+#  **칸에 걸친 토막이 가장 오래 남고**, 640×360 에서 수의 획이 2~3px 인데 겉선
+#  3 + 속선 1 이 그 위를 지나면 「120」의 1 과 2 가 사선 하나에 통째로 갈린다 —
+#  내놓은 그림(grow_slot_0 · grow_live_00)에 그대로 찍혔다. 한 판에 걸음이 수십
+#  번이고 하필 **사용자가 잘 읽고 싶다고 말한 그 수** 위다.
+#
+#  멎는 자리만 앞당긴다 — 머리는 같은 시계로 같은 방향을 가므로 「꼬리 도착 =
+#  칸 봉우리」(qa_link ⑯)가 그대로 산다. 받아서 튀는 일은 이미 _card_kick 이 한다.
+#  출발점이 그 칸 안이면(카드가 판 위를 덮은 프레임) t 가 0 이라 길이가 0 이 되고
+#  min_len 밑으로 떨어져 **안 그린다** — 칸 위에 토막을 남기느니 안 긋는다.
+func _link_dst(src: Vector2) -> Vector2:
+	var r := _link_box()
+	var v := r.get_center() - src
+	#  src → 칸 가운데 반직선이 사각에 **드는** 지점(슬랩 교차). 가운데가 사각
+	#  안이므로 두 축의 앞 평면 중 늦은 쪽이 곧 들어서는 자리다.
+	var t := 0.0
+	if absf(v.x) > 0.0001:
+		t = maxf(t, minf((r.position.x - src.x) / v.x, (r.end.x - src.x) / v.x))
+	if absf(v.y) > 0.0001:
+		t = maxf(t, minf((r.position.y - src.y) / v.y, (r.end.y - src.y) / v.y))
+	return src + v * clampf(t, 0.0, 1.0)
 
 
 #  **머리는 안 난다 — 꼬리만 난다.** 걸음이 서는 프레임에 선이 이미 출발점에서
@@ -27933,7 +28002,7 @@ func _link_plan() -> Dictionary:
 	var t := clampf((1.0 - src_t) / float(ARC.drain), 0.0, 1.0)
 	if t >= 1.0:
 		return {}
-	var dst := _link_dst()
+	var dst := _link_dst(src)
 	var head := src if motion_off else src.lerp(dst, 1.0 - pow(1.0 - t, 3.0))
 	if head.distance_to(dst) < float(ARC.min_len):
 		return {}       # 점은 방향을 안 말한다
