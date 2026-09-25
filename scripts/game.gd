@@ -641,6 +641,36 @@ var card_burst := 0.0          # 「한 방」의 금빛 테두리(판 뒤에 �
 var gain_roll := 0.0           # 합계의 수 굴리기(1 → 0 이면 0 → last_gain)
 var card_jrate := 4.0          # 위 시계들의 감쇠. _next_step 끝에서 qt 에 맨다
 
+# ── 늦게 도착한 총합 · 잇는 선 (2026-09-26) ──────────────────
+#  사용자: 「점수 획득할 때 더 잘 알 수 있으면 좋겠어」.
+#
+#  【띠가 얼마나 늦었는가 — 손대기 전 실측】 _tick_score 가 **날것의 d** 로
+#  lerp(0.02^d) 를 돌아 반감기 0.177초다. 1000점 차를 반 점 안으로 좁히는 데
+#  1.94초(116프레임) — 합계 걸음 53프레임의 **2.2배**다. 게다가 fast_rate 를
+#  안 타서 빨리 보기 2.5배에서는 정산만 빨라지고 띠는 실시간 그대로라 **더**
+#  벌어졌다. 카드가 「+n」을 다 세우고 걸음이 끝나도 화면에서 제일 큰 숫자가
+#  아직 기어가고 있었다. 이제 걸음이 값을 쥔다.
+var score_roll := 0.0          # 상단 띠 총합 굴리기(1 → 0 이면 score_from → total)
+var score_from := 0.0          # 그 굴림이 떠난 자리
+var score_div := 2.60          # 이 걸음의 굴림 나눗수. 창 = qt × jspan ÷ 이 값
+
+# ── 값이 어디서 왔는가 (2026-09-26) ────────────────────────
+#  걸음이 올린 수의 **출처**에서 카드의 그 칸으로 한 획을 긋는다. 여태 판과
+#  카드가 따로 반응할 뿐 둘을 잇는 것이 없었다 — 「어디서 왔는가」를 말하는
+#  층이 하나도 없었다(waves 는 한 점에서 퍼지고 sparks 는 BC 고정, pops 는
+#  위로 24px 만 뜬다).
+#
+#  **머리는 안 난다 — 꼬리만 난다.** 걸음이 서는 프레임에 선이 이미 출발점에서
+#  도착점까지 통째로 서 있고, 그 다음부터 꼬리가 카드 쪽으로 빨려 든다. 날아가는
+#  물체를 안 만든 것은 잰 값이다: pace 0.30 에서 창이 4.8프레임이라 머리를
+#  태우면 한 프레임에 30px 토막만 남아 방향이 통째로 사라진다. 머리를 카드에
+#  못 박아 두면 가장 눌린 박자에서도 **첫 프레임에 전체 길이가 한 번 선다.**
+var src_t := 0.0               # 그 획의 시계(1 → 0). 창은 qt × jspan 이라 걸음을 못 넘는다
+var src_ring := false          # false = 점수 칸으로 · true = 배수 칸으로
+var src_slot := -1             # −1 이면 판이 냈고 0 이상이면 그 동전 칸이 냈다.
+                               # slot_hot 으로는 못 고른다 — PANEL.hot 0.62초(37프레임)가
+                               # 걸음의 1.8배라 pace 0.30 에서 여섯 칸이 한꺼번에 달아 있다
+
 # 계산 방식이 두 값을 갈아 끼운 카드. **셈은 여기 없다** — 걸음이 서는 순간
 # cur_chip·cur_mult 는 이미 고른 값이고, 아래 둘은 「어떤 두 수가 그렇게
 # 됐는가」를 카드에 적기 위해서만 든다.
@@ -4519,6 +4549,12 @@ func _process(d: float) -> void:
 	chip_j = maxf(chip_j - d * fast_rate * card_jrate, 0.0)
 	mult_j = maxf(mult_j - d * fast_rate * card_jrate, 0.0)
 	gain_roll = maxf(gain_roll - d * fast_rate * card_jrate * 3.0, 0.0)
+	#  상단 띠 굴림과 잇는 선도 **같은 시계**를 탄다(2026-09-26). 새 벽시계
+	#  상수가 0개인 근거가 이 두 줄이다 — card_jrate 가 qt 에 매여 있으므로
+	#  창이 걸음에 비례해 줄고, fast_rate 를 타므로 빨리 보기에서도 어긋날
+	#  자리가 구조적으로 없다. score_div 는 걸음마다 세워지는 나눗수다.
+	score_roll = maxf(score_roll - d * fast_rate * card_jrate * score_div, 0.0)
+	src_t = maxf(src_t - d * fast_rate * card_jrate, 0.0)
 	card_burst = maxf(card_burst - d * float(CARDFX.burst_fade), 0.0)
 	_tick_score(d)
 
@@ -4678,6 +4714,31 @@ func _physics_process(d: float) -> void:
 
 
 func _tick_score(d: float) -> void:
+	#  정산이 굴리는 동안에는 **걸음이 값을 쥔다**(2026-09-26). 아래 벽시계 lerp 는
+	#  반감기 0.177초라 1000점 차를 반 점 안으로 좁히는 데 1.94초(116프레임)가
+	#  걸렸다 — 합계 걸음(53프레임)의 **2.2배**다. 카드가 「+n」을 다 세우고 걸음이
+	#  끝나도 화면에서 제일 큰 숫자가 아직 기어가고 있었고, fast_rate 를 안 타서
+	#  빨리 보기에서는 **더** 벌어졌다. 「점수 획득할 때 더 잘 알 수 있으면」의
+	#  가장 직접적인 자리다.
+	#
+	#  창의 마지막 8%(hold)는 최종값에 세워 둔다 — 슬롯의 마지막 릴 홀드를 ms 가
+	#  아니라 **비**로 빌렸다. ms 로 박으면 빨리 보기에서 창보다 홀드가 길어진다.
+	#  모션 끄기에서는 즉시 선다 — _card_gain 이 오늘 쓰는 규약과 같게 맞춘다.
+	if score_roll > 0.0:
+		if motion_off:
+			shown = float(total)
+		else:
+			var k := clampf((1.0 - score_roll) / float(GROW.hold), 0.0, 1.0)
+			shown = lerpf(score_from, float(total), 1.0 - pow(1.0 - k, float(GROW.ease)))
+			if k >= 1.0:
+				#  ⚠ 무한 R34 목표가 18자리(최악 19자리)인데 float64 의 정수 정확
+				#  구간은 9.0e15 까지다. lerp 왕복이 남긴 오차가 int(round(shown))
+				#  에서 total 과 갈릴 수 있으므로 여기서 한 번 더 못 박는다.
+				shown = float(total)
+		return
+	#  정산 밖(상점 정산 · 개발자 줄 · 되살리기)은 손대기 전 그대로다. 이 줄을
+	#  지우면 걸음을 안 거치고 total 이 바뀌는 자리에서 띠가 영영 안 따라간다 —
+	#  settle_probe ④ 가 이 갈래를 시계 없이 600번 직접 부른다.
 	shown = lerpf(shown, float(total), 1.0 - pow(0.02, d))
 	if absf(shown - float(total)) < 0.5:
 		shown = float(total)
@@ -6676,6 +6737,13 @@ var fast_mul := 2.5      # 개발자 사다리가 1.0 / 2.0 / 2.5 / 3.0 으로 �
 var fast_lock := false   # 개발자 모드 전용 고정 — 안 눌러도 걸린다
 var fast_rate := 1.0     # 이번 프레임의 배수. _process 가 매 프레임 덮는다
 
+#  개발자 손잡이 셋(2026-09-26). **게임 기본은 전부 「오늘 그대로」가 아니라
+#  「이 커밋 그대로」**다 — grow_roll 0 이 손대기 전 띠(벽시계 lerp)로 돌리는
+#  자리라, 전·후를 **같은 화면 같은 발에서** 눈으로 대는 유일한 길이다.
+var grow_roll := 1.0     # 띠 굴림 세기. 0 이면 굴림을 안 세운다(손대기 전 그대로)
+var grow_shake := 1.0    # 합계 흔들림 배. 0 / 0.5 / 1 / 1.5 / 2
+var link_mode := 3       # 잇는 선 0 끔 · 1 판에서만 · 2 동전에서만 · 3 전부
+
 
 #  바닥을 **새 변수 없이** 잰다. qt0(이 걸음의 이름값)를 들면 리셋 자리가
 #  다섯으로 늘고 dev.gd 의 카드 재생 두 줄까지 같이 고쳐야 한다 — 빠뜨리면
@@ -6744,6 +6812,12 @@ func _next_step() -> void:
 	var cc := card_pos() + Vector2(CARD_W * 0.5, 12.0)
 	calc_lit = false           # 방식 걸음이 아니면 카드는 보통대로 그린다
 	roll_t = -1.0
+	#  잇는 선을 걸음마다 한 번 되돌린다(2026-09-26). 갈래마다 제 값을 세우므로
+	#  「출처가 없는 걸음」(빗나감 · 저울 · 물음표)은 가만히 두면 선이 안 난다 —
+	#  선이 없는 구간이 규칙적으로 끼어야 도드라짐이 산다. 여기서 끄는 것이
+	#  「선이 걸음을 못 넘는다」의 구조적 보장이기도 하다.
+	src_t = 0.0
+	src_slot = -1
 
 	match st.k:
 		"miss":
@@ -6768,6 +6842,11 @@ func _next_step() -> void:
 			if cur_chip != c0:
 				chip_amt = _card_amt(c0, cur_chip)
 				chip_j = 1.0
+				#  판의 그 칸에서 점수 칸으로 한 획(2026-09-26). **새 가드를 안
+				#  판다** — 「0 만큼 바뀐 걸음은 안 말한다」를 이 가드가 이미
+				#  쥐고 있다. 칸 춤과 선이 같은 조건으로 나야 둘이 안 갈린다.
+				src_t = 1.0
+				src_ring = false
 			_card_kick(float(CARDFX.kick), float(CARDFX.press))
 		"pierce":
 			var pg := _chip_gain(st.v)
@@ -6778,6 +6857,9 @@ func _next_step() -> void:
 			_sfx("settle_pierce", f)
 			chip_amt = _card_amt(c0, cur_chip)
 			chip_j = 1.0
+			#  양옆 칸도 판이 낸 값이다 — 출발점은 꽂힌 칸 하나뿐이라 선도 하나다.
+			src_t = 1.0
+			src_ring = false
 			_card_kick(float(CARDFX.kick), float(CARDFX.press))
 		"mult":
 			var m0 := cur_mult
@@ -6788,6 +6870,8 @@ func _next_step() -> void:
 			if cur_mult != m0:
 				mult_amt = _card_amt(m0, cur_mult)
 				mult_j = 1.0
+				src_t = 1.0
+				src_ring = true
 			_card_kick(float(CARDFX.kick), float(CARDFX.press))
 		"item":
 			_panel_fire(st.i)
@@ -6799,24 +6883,38 @@ func _next_step() -> void:
 			# mult_rand 는 0~7 을 굴리므로 **0 이 실제로 난다** — 그 발에서 칸이
 			# 튀면 「배수가 올랐다」고 거짓말을 한다(2026-09-18).
 			match st.kind:
+				#  **동전 걸음이 처음으로 출처를 짚는다**(2026-09-26). 여태 판도
+				#  카드도 이 갈래에서는 「어디서」를 한 번도 안 말했다 — 정산
+				#  걸음의 서너 할이 그랬다. 선의 출발점은 그 슬롯이고 도착점은
+				#  올라간 칸이다. 셋 다 **이미 있는 가드 안**이라 「0 만큼 바뀐
+				#  걸음은 안 말한다」가 그대로 물린다(mult_rand 는 0 을 실제로 굴린다).
 				"chip":
 					var c0 := cur_chip
 					cur_chip += _chip_gain(st.v)
 					if cur_chip != c0:
 						chip_amt = _card_amt(c0, cur_chip)
 						chip_j = 1.0
+						src_t = 1.0
+						src_ring = false
+						src_slot = st.i
 				"mult", "mult_streak", "mult_rand":
 					var m0 := cur_mult
 					cur_mult += st.v
 					if cur_mult != m0:
 						mult_amt = _card_amt(m0, cur_mult)
 						mult_j = 1.0
+						src_t = 1.0
+						src_ring = true
+						src_slot = st.i
 				"xmult":
 					var m1 := cur_mult
 					cur_mult *= st.v
 					if cur_mult != m1:
 						mult_amt = _card_amt(m1, cur_mult)
 						mult_j = 1.0
+						src_t = 1.0
+						src_ring = true
+						src_slot = st.i
 				_:
 					# 갈래를 안 늘리면 새 효과가 소리 없이 사라진다. mult_rand 가
 					# 그렇게 죽어 있었고, 표는 그 카드를 87장 중 4위로 적고 있었다.
@@ -6904,13 +7002,47 @@ func _next_step() -> void:
 			_peak("best_gain", last_gain)
 			card_mode = 1
 			total_flash = 1.0
-			shake = 9.0
+			#  여태 +14 든 +1476 이든 9.0 이었다(2026-09-26). **카드는 이미 크기를
+			#  안다** — kick_big 34.0 으로 몸이 더 튀고 글자가 47~55px 로 자라며
+			#  card_burst 가 걸린다. 모르는 것은 **화면 흔들림 하나뿐**이라 축이
+			#  하나 빠져 있었다. 조사는 「흔들림이 점수를 모른다」고 적었는데
+			#  정확히는 「카드는 아는데 화면만 모른다」다.
+			#
+			#  **제곱해서 쓴다.** 선형이면 중앙값이 8.0 이라 「작은 값은 조용하다」가
+			#  안 읽힌다. 제곱이면 약 88% 의 발이 오늘보다 덜 흔들리고 12% 만 더
+			#  흔들린다 — 전체 연출량이 **준다.**
+			#
+			#  ⚠ **대입(=) 을 유지한다 — maxf 로 바꾸지 마라.** 연발은 합계 걸음이
+			#  여섯 번 나는데 pace 바닥에서 걸음이 0.265초고 12.0 의 수명이
+			#  0.353초다. maxf 면 1.6초를 끊김 없이 1~3Hz 로 흔들어 멀미 대역
+			#  (0.5~2Hz)의 연속 패닝이 된다. 대입이면 걸음마다 다시 세워졌다 죽는다.
+			#  대입이 깎는 자리 하나: 큐 [빗나감, 합계] · pace 0.30 에서 불속불
+			#  15.0 의 잔광 6.33 을 6.00 으로 0.33(0.010초) 깎는다. 그 밖의 모든
+			#  큐는 잔광 4.26 이하라 안 깎는다 — 재고 받아들였다.
+			var gn := _grow_n()
+			shake = lerpf(float(GROW.shk_lo), float(GROW.shk_hi), gn * gn) * grow_shake
 			board_punch = 1.0
 			qt = beat * 2.6 * pace
 			# 런 통틀어 카드가 가장 크게 사는 자리다. 「+n」이 0 에서 굴러오르고
 			# 글자가 36 → 최대 55px 로 자라며, **굴림이 끝나는 프레임에 봉우리가
 			# 온다.** 수가 다 서는 그 프레임이 카드가 제일 큰 프레임이다.
 			gain_roll = 1.0
+			#  ── 상단 띠 총합이 **처음으로 정산 시계를 탄다** (2026-09-26) ──
+			#  손대기 전 _tick_score 는 날것의 d 를 쓰는 벽시계 lerp 라 반감기
+			#  0.177초 · 1000점 차를 좁히는 데 1.94초(116프레임)가 걸렸다.
+			#  합계 걸음(53프레임)의 2.2배라, 카드가 다 세우고 걸음이 끝나도
+			#  화면에서 제일 큰 숫자가 아직 기어가고 있었다. 창을 qt 에 매므로
+			#  **새 벽시계 상수가 0개**다.
+			#
+			#  ⚠ score_from 은 total − last_gain 이 **아니다** — 연발에서 앞
+			#  굴림이 안 끝난 채 다음 합계가 오면 값이 튄다. 지금 화면에 선
+			#  수(shown)에서 출발한다.
+			#  grow_roll 0 은 개발자 모드가 굴림을 통째로 끄는 자리다(손대기 전
+			#  띠로 돌아간다) — 전·후를 같은 발에서 눈으로 대는 유일한 길이다.
+			if grow_roll > 0.0:
+				score_from = shown
+				score_roll = 1.0
+				score_div = lerpf(float(GROW.div_lo), float(GROW.div_hi), gn) / grow_roll
 			_card_kick(float(CARDFX.kick_total), float(CARDFX.press_total))
 			if was_short and total >= target:
 				# 목표 돌파 — 판이 여기서 끝난다.
@@ -6925,7 +7057,22 @@ func _next_step() -> void:
 				pop(BC + Vector2(0.0, -46.0), "목표 달성", C_ACC, 24, 1.2)
 				qt = beat * 3.4
 			else:
-				_sfx("settle_total")
+				#  큰 값일수록 낮게 깔린다(2026-09-26). **새로 굽지 않는다** —
+				#  sfx 파일 67개 그대로고 README 두 곳도 안 건드린다. _sfx 가 f
+				#  인자를 이미 받아 pitch_scale = clampf(f / SFX_BASE, 0.25, 4.0)
+				#  로 쓰므로, 392 를 그대로 넘기면 pitch 1.000 = **손대기 전과 한
+				#  톨도 안 다른 소리**다(n=0 인 흔한 발이 그렇다).
+				#  ⚠ 이 줄은 목표돌파 갈래의 else: 안이라 target_hit 의 제 사다리와
+				#  구조적으로 안 섞인다 — 「판이 끝났다」가 안 흐려진다.
+				#  과장은 소리가 아니라 0.060초의 침묵이라는 위 주석 그대로,
+				#  낮은 음이 그 침묵 뒤에 깔리는 것이 이 층의 전부다.
+				#  ⚠ settle_total 은 표 밑음이 196 이라 **wav 가 없는 날**에는
+				#  beep 갈래가 f 를 절대 Hz 로 받아 한 옥타브 위로 난다. 이건
+				#  board_thud(131) · shop_smash(262) · shop_smash_lo(196) 가
+				#  이미 지고 있는 같은 어긋남이고, probe_sfx 의 「합성음 0」이
+				#  그 갈래를 통째로 막는다. _sfx 는 저쪽 일감과도 겹치므로
+				#  고치지 않고 qa_total ⑨ 가 파일과 표를 같이 못 박는다.
+				_sfx("settle_total", SFX_BASE * pow(2.0, -float(GROW.semi) * gn / 12.0))
 			# 「한 방」 — 목표의 반을 한 발로 냈거나 지금 돌파했다.
 			#
 			# 과장은 소리가 아니라 **0.060초의 침묵**이다. _fill_audio 가 hitstop
@@ -7054,6 +7201,22 @@ func _card_amt(a: int, b: int) -> float:
 			float(CARDFX.amt0), float(CARDFX.amt_cap))
 
 
+# 이 발이 「얼마나 큰가」. 0 = 조용히 지나갈 값 · 1 = 이 런에서 손꼽는 한 방.
+# **띠 굴림 · 흔들림 · 음정 셋이 이 하나를 읽는다** — 세기 축을 셋 만들면 셋이
+# 언젠가 갈라진다.
+#
+# ⚠ **last_gain 도 target 도 한 글자도 안 바꾼다.** 읽기만 한다(밸런스 유예).
+# target 0 을 maxf 로 막는 것은 개발자 모드의 「이 판 목표 채우기」와 도구가
+# 세우는 손큐에서 target 이 0 인 프레임이 실제로 있기 때문이다. 2026-09-26
+func _grow_n() -> float:
+	var r := float(absi(last_gain)) / maxf(float(target), 1.0)
+	if r <= float(GROW.r_lo):
+		return 0.0
+	var lo := log(float(GROW.r_lo)) / log(10.0)
+	var hi := log(float(GROW.r_hi)) / log(10.0)
+	return clampf((log(r) / log(10.0) - lo) / (hi - lo), 0.0, 1.0)
+
+
 # 합계 걸음에서 보이는 「+n」. 0 에서 굴러올라 **봉우리와 같은 프레임에 선다** —
 # 수가 다 서는 그 프레임이 카드가 제일 큰 프레임이다. floor 라 정수만 보인다.
 func _card_gain() -> int:
@@ -7101,6 +7264,16 @@ func _card_reset() -> void:
 	gain_roll = 0.0
 	card_jrate = 4.0
 	total_flash = 0.0
+	#  ⚠ 안 적으면 total_flash 가 겪은 사고(바로 위 주석: 「어디서도 안 지워졌다」)를
+	#  그대로 되풀이한다 — 판이 바뀌거나 런이 바뀔 때 앞 정산의 굴림과 선이 남는다.
+	#  settle_probe ④ 가 score_roll 0 을 전제로 _tick_score 를 600번 직접 부르는
+	#  것도 이 줄이 지킨다. 2026-09-26
+	score_roll = 0.0
+	score_from = 0.0
+	score_div = float(GROW.div_lo)
+	src_t = 0.0
+	src_ring = false
+	src_slot = -1
 
 
 func _fit_sz(txt: String, w: float, sz: int) -> int:
@@ -8012,6 +8185,12 @@ func _hud_draw() -> void:
 				draw_set_transform(shake_off)
 	#  벽(_grip_draw) 다음이다 — 벽이 왼쪽 몇 칸을 덮으면 글자가 가운데를 잃는다.
 	_hud_btns_draw()
+	#  잇는 선은 pop **바로 앞**이다(2026-09-26). 여기가 유일한 자리다 —
+	#  _draw_fx 는 _draw_card 보다 앞이라 카드 **밑**에 깔리고, 「카드 위에 뜨는
+	#  것은 pop 뿐이다」가 이미 적혀 있다. 이 지점 변환은 draw_set_transform(shake_off)
+	#  라 판·카드와 같은 좌표계다. 다른 _draw_pops() 호출에는 **안 붙인다** —
+	#  정산 화면 밖이다.
+	_draw_link()
 	# 판매 팝업이 스크림(알파 0.94) 밑에 깔리면 안 보인다 — 판 다음에 그린다.
 	_draw_pops()
 	#  시체 — **이 한 줄이 유일한 그리기 문이다.** 위 `if state != S.CLEAR`
@@ -27452,6 +27631,86 @@ const CARDFX := {
 }
 
 
+#  【늦게 도착한 총합】 상단 띠 · 흔들림 · 음정이 **한 자**를 같이 읽는다.
+#  (2026-09-26 · 사용자: 「점수 획득할 때 더 잘 알 수 있으면」)
+#
+#  ⚠ **초가 한 개도 없다.** 전부 창의 비이거나 픽셀이다. 실시간 상수(0.25초
+#  같은)를 하나라도 박으면 curve_probe·score_probe 가 beat 를 0.015 로 누른
+#  자리에서 걸음(0.012초)보다 연출이 길어져 걸음 스무 개가 한 연출 안에 들고,
+#  2026-09-15 의 「16런이 900초를 넘김」이 그대로 돌아온다. CARDFX 가 같은
+#  까닭으로 초를 안 쓰고(jspan·hold 가 비다) 그 규약을 그대로 잇는다.
+const GROW := {
+	# 자 — last_gain ÷ target 을 로그로 눕힌다. 절대 점수가 아니라 **비율**인
+	# 까닭: 무한 R20 의 다섯 자리 한 방은 R1 의 세 자리 한 방보다 **작은**
+	# 사건인데 자릿수로 재면 거꾸로 뒤집힌다. 이 자는 R1 부터 R34(18자리)까지
+	# 같은 뜻이고, 저장소가 이미 갖고 있다 — CARDFX.big 0.50 이 정확히 이
+	# 비율이다. 문턱 하나였던 것을 연속으로 펴는 것뿐이라 새 축이 안 는다.
+	#
+	# 바닥 0.05: 실측 p25(r 0.110)가 제곱 뒤 0.046 이라 바닥 위 0.27 — 사실상
+	# 구별이 안 된다. **그게 목적이다.** 천장 2.00: 상위 약 6%. 1.00 에 두면
+	# 9% 가 천장에 몰려 천장이 천장이 아니게 된다.
+	"r_lo": 0.05, "r_hi": 2.00,
+
+	# 흔들림 — **제곱해서 쓴다.** 선형이면 중앙값(r 0.216)이 8.0 이라 「작은
+	# 값은 조용하다」가 안 읽힌다. 제곱이면 약 88% 의 발이 오늘보다 덜 흔들리고
+	# 약 12% 만 더 흔들린다. 상한 12.0 은 두 번 재서 나왔다:
+	#  ① 사다리에서 불 11.0 과 목표돌파 13.0 **사이의 빈 칸**이라 위계를 한 칸도
+	#     안 깬다 — 판이 끝나는 자리가 가장 세다는 2026-09-18 계약이 산다.
+	#  ② shake 감쇠(_process 의 `shake - d * 34.0`)는 fast_rate 를 **안 탄다.**
+	#     12.0 의 수명 0.353초가 빨리 보기 2.5배 합계 걸음(0.884/2.5 = 0.354초)과
+	#     **딱 같다.** 13.0 이면 0.382초로 걸음을 **샌다.** 여유가 0 인 값이라
+	#     qa_total ⑦ 이 프레임으로 잠근다.
+	"shk_lo": 6.0, "shk_hi": 12.0,
+
+	# 띠 굴림 감쇠 나눗수. 창 = qt × jspan ÷ div → 창÷qt 가 0.300~0.886 이라
+	# **qt 가 무엇이든**(beat 0.34 도 0.015 도 · pace 1.00 도 0.30 도 · 빨리 보기
+	# 1.0 도 2.5 도) 걸음 안에서 끝난다. 부등식으로 성립하므로 상수가 안 는다.
+	"div_lo": 2.60, "div_hi": 0.88,
+	"hold": 0.92,   # 창의 마지막 8% 는 최종값에 세워 둔다. 슬롯의 마지막 릴
+	                # 홀드를 ms 가 아니라 **비**로 빌렸다 — ms 로 박으면 빨리
+	                # 보기 2.5 에서 창보다 홀드가 길어진다
+	"ease": 1.8,    # 띠는 카드 굴림(3.0)보다 **평평하다**. 그래야 카드가 먼저
+	                # 서고 띠가 뒤따르는 순서가 읽힌다
+
+	# 음정 — settle_total 을 최대 7반음(완전5도) 내린다. n=0 이 **정확히 오늘
+	# 값**(pitch 1.000)이라 흔한 발은 한 톨도 안 다르다. 새로 굽는 파일 0개.
+	# 7반음에서 끊는 까닭 셋: ① 옥타브는 작은 스피커에서 기음이 죽고 클릭만
+	# 남는다 ② 0.667 은 _sfx 의 clamp [0.25, 4.0] 한가운데라 어느 끝에도 안
+	# 붙는다 ③ 꼬리 0.510초가 가장 짧은 합계 걸음(pace 1.0 에서 0.884초)보다
+	# 짧아 다음 발의 착탄과 안 문다.
+	"semi": 7.0,
+}
+
+
+#  【잇는 선】 값의 출처에서 카드의 그 칸으로 긋는 한 획.
+const ARC := {
+	# 꼬리가 카드에 닿는 시각 = 창의 34%. **_card_juice 봉우리가 u=0.338 이라**
+	# (card_shots 의 F_TOP 이 그 값을 못 박아 뒀다) 선의 마지막 픽셀이 칸에
+	# 빨려 드는 프레임에 칸이 가장 크다. 합계 걸음이 「굴림이 끝나는 프레임이
+	# 곧 봉우리다」로 세운 계약을 걸음 전체로 넓힌 것이고, **카드에는 새 연출을
+	# 한 줄도 안 얹는다** — 받아서 튀는 일은 이미 있는 _card_kick 이 한다.
+	"drain": 0.34,
+	"w": 1.0,        # 속선. 640×360 에서 2px 는 밧줄이다
+	"case": 3.0,     # 겉선 폭. 크림 칸(C_LIGHT) 위에서 C_CHIP 이 1.34:1 로
+	                 # 잠기므로 어두운 테로 먼저 떼 낸다(픽셀아트 아웃라인 어법)
+	# 겉선 문턱(정규화 amt). **피로 밸브와 호출 밸브가 같은 줄이다** — 어두운
+	# 바탕에서는 겉선이 배경과 같아 안 보이고 비용만 남으므로 세기 문턱 위에서만
+	# 긋는다.
+	#
+	# ⚠ **설계서는 0.35 였고 재 보니 틀렸다.** 설계서의 산수가 _card_amt 의
+	# 자릿수 항(amt_mag)을 빼먹어서, 연발 알갱이 넷이 [0.833, 0.467, 0.444,
+	# 0.383] 으로 내려오는데 0.35 면 넷 다 겉선이 걸린다 — 「넷째에서 스스로
+	# 꺼진다」가 참이 아니었다(qa_link ⑱-d 가 잡았다). 0.40 이면 넷째만 꺼지고,
+	# 160→168 은 0.235 라 그대로 속선이며, 동전이 얹는 뒤 걸음(40→60 은 0.344 ·
+	# 1200→1240 은 0.324)도 가늘어진다. **한 발의 첫 걸음만 굵다**는 설계서의
+	# 뜻을 실제로 내는 값이 0.40 이다. 2026-09-26
+	"case_at": 0.40,
+	"case_a": 0.85,
+	"a0": 0.35, "a1": 0.95,
+	"min_len": 1.5,  # 이보다 짧으면 안 그린다 — 점은 방향을 안 말한다
+}
+
+
 func _card_line(p: Vector2, mid: float, t: String, fit: String, dim := false) -> void:
 	var w: float = CARD_W - 20.0
 	if font_sm.get_string_size(fit, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x <= w:
@@ -27586,9 +27845,19 @@ func _draw_card() -> void:
 		#  **수가 다 서는 그 프레임에 카드가 제일 크다.**
 		var gtxt := "+" + str(_card_gain())
 		var sz := _fit_sz(gtxt, CARD_W - 16.0, int(36.0 * (1.0 + amt * maxf(jt, 0.0))))
+		#  C_ACC → C_LIGHT (2026-09-26). C_ACC(f2b134)가 한 화면에서 셋을 말하고
+		#  있었다 — 여기 「+n」 · 「목표 달성」 팝 · 판 위 강조. 게다가 C_ACC(39.5°)와
+		#  C_GOLD(45.2°)는 5.7° 차 · 대비 1.19:1 이라 **총합과 돈이 같은 호박색**이다.
+		#  총합은 점수도 배수도 아니라 **둘의 곱**이라 제 색이 없는 것이 정직하고,
+		#  C_LIGHT(e8dfc8)는 채도 13.8%(C_ACC 78.5%)라 색이 아니라 **밝기**다 —
+		#  배경 대비 14.00:1 로 카드 위 무엇보다 밝고(C_ACC 9.84 · C_GOLD 11.71)
+		#  색상 정보를 안 쓰므로 색각 이상에서 불변이다.
+		#  **고정색이다** — 세기를 C_TXT 로 lerp 하는 길은 두 끝 상호 대비가
+		#  1.16:1(문턱 밑)이라 뺐다. 세기는 크기(36→55px)·굴림·흔들림 셋이
+		#  이미 말하고, 그 순간 눈이 1.16:1 을 읽을 수 없다.
 		draw_string(font, p + Vector2(0, _ink_mid_y(float(CARDTXT.total_mid), 36)
 				+ roundf(float(CARDFX.squash) * maxf(-jt, 0.0))), gtxt,
-				HORIZONTAL_ALIGNMENT_CENTER, CARD_W, sz, C_ACC)
+				HORIZONTAL_ALIGNMENT_CENTER, CARD_W, sz, C_LIGHT)
 		# 저울은 곱한 두 수가 같아서 「53 × 53」만 적으면 어디서 온 값인지가
 		# 사라진다. 방금 지나간 걸음을 한 줄로 되짚어 준다 — 카드가 닫히기
 		# 전 마지막 화면이라 여기 적힌 것이 기억에 남는다.
@@ -27605,6 +27874,106 @@ func _draw_card() -> void:
 #  남았다 — 판 위 네 단(24 불스아이 · 20 트리플 · 12 더블 · 10 순서)에서 가장 큰 말과
 #  가장 작은 말이 한 단 굵게 서서 위계가 그대로다. 부르는 쪽(pop)이 다섯 단 중 하나를
 #  넘긴다. 튀어 오르는 순간(첫 0.2초)만 크기가 부풀었다 돌아온다.
+#  ══════════════════════════════════════════════════════════
+#   잇는 선 — 값의 출처에서 카드의 그 칸으로 (2026-09-26)
+#  ══════════════════════════════════════════════════════════
+
+#  출발점. 좌표를 박지 않고 그리는 쪽이 쓰는 식을 그대로 꺼낸다.
+func _link_src() -> Vector2:
+	#  동전 중심 식은 _panel_draw 의 것과 **글자 그대로 같다** — 두 벌로
+	#  갈리면 한쪽만 움직인다.
+	if src_slot >= 0:
+		return _slot_rect(src_slot).get_center() + Vector2(0.0, float(PANEL.chip_dy))
+	if hit_bull:
+		return BC
+	if hit_idx < 0:
+		return Vector2.INF          # 부르는 쪽이 물러선다(출처 없는 발)
+	#  부채 가운데 · 그 고리의 한가운데. 각 규약은 _theme_dir 과 같다
+	#  (a=0 이 위쪽) — _hit_info 가 atan2(v.x, −v.y) 로 idx 를 뜬 그 규약이다.
+	return BC + _theme_dir(float(hit_idx) * _sec_w()) * (hit_r0 + hit_r1) * 0.5
+
+
+#  도착점. 61 = 칸 x 12 + 폭 98 의 절반 · 183 = 134 + 49 ·
+#  total_mid 41 = box_y 18 + box_h 46 의 절반(둘 다 _card_box 가 쓰는 수다).
+func _link_dst() -> Vector2:
+	return card_pos() + Vector2(0.0, _card_lift()) \
+			+ Vector2(183.0 if src_ring else 61.0, float(CARDTXT.total_mid))
+
+
+#  **머리는 안 난다 — 꼬리만 난다.** 걸음이 서는 프레임에 선이 이미 출발점에서
+#  도착점까지 통째로 서 있고, 그 다음부터 꼬리가 카드 쪽으로 빨려 든다.
+#  날아가는 물체를 안 만든 것은 잰 값이다: pace 0.30 에서 창이 4.8프레임이라
+#  머리를 태우면 한 프레임에 30px 토막만 남아 방향이 통째로 사라지고 다음 걸음
+#  궤적과 겹쳐 「어디서 왔나」가 **더** 흐려진다. 머리를 카드에 못 박아 두면 가장
+#  눌린 박자에서도 첫 프레임에 전체 길이가 한 번 선다 — 한 프레임에 **선**이 서는
+#  것이 한 프레임에 **점**이 서는 것보다 방향을 말한다.
+#
+#  ⚠ **합계 걸음에는 안 난다.** 합계는 이 게임에서 가장 붐비는 프레임이고 판
+#  깨짐이 서는 프레임이다. 판→카드 선이 앞 걸음들에서 이미 「어디서 왔나」를
+#  말했는데 거기서 또 말할 이유가 없다. src_t 가 합계 갈래에서 안 서므로 갈래를
+#  따로 안 판다 — 그 프레임에 내가 더하는 그리기 호출은 **0개**다.
+#
+#  ⚠ **모션 끄기에서는 꼬리를 안 태우고 전체 길이를 창 내내 고정**으로 세운다 —
+#  움직임만 죽고 빛은 산다. 가드를 여기 **안**에 두는 것은 _card_juice · _card_lift
+#  가 세운 규약 그대로다(부르는 쪽에 갈래가 안 는다).
+#  **순수 함수다** — 뷰포트도 노드도 안 건드린다. 이 걸음의 이 프레임에 선이
+#  어떻게 서는가를 통째로 낸다. 빈 딕셔너리면 아무것도 안 그린다.
+#  그리는 쪽(_draw_link)은 이 답을 받아 긋기만 하고, qa_link 는 화면 없이
+#  같은 답을 읽는다 — **호출 수와 문턱을 재는 자가 그리는 자와 한 몸**이다.
+func _link_plan() -> Dictionary:
+	if src_t <= 0.0 or card_p <= 0.5 or link_mode == 0:
+		return {}
+	if link_mode == 1 and src_slot >= 0:
+		return {}
+	if link_mode == 2 and src_slot < 0:
+		return {}
+	var src := _link_src()
+	if not is_finite(src.x):
+		return {}
+	var t := clampf((1.0 - src_t) / float(ARC.drain), 0.0, 1.0)
+	if t >= 1.0:
+		return {}
+	var dst := _link_dst()
+	var head := src if motion_off else src.lerp(dst, 1.0 - pow(1.0 - t, 3.0))
+	if head.distance_to(dst) < float(ARC.min_len):
+		return {}       # 점은 방향을 안 말한다
+	#  세기 축을 새로 안 만든다 — 카드가 이미 쓰는 _card_amt(0.15~0.45)를 그대로
+	#  탄다. 한 발의 첫 chip·mult 걸음은 0 에서 출발해 share 가 1.0 이라 굵은 선이
+	#  반드시 걸리고, 뒤따르는 동전 걸음은 이미 큰 수에 얹혀 대개 밑으로 떨어진다.
+	#  연발은 share 가 1.00 → 0.50 → 0.33 → 0.25 로 떨어져 **넷째 알갱이에서 겉선이
+	#  스스로 꺼진다** — 세는 장치도 쿨다운도 없이 **발의 모양이 강약을 만든다.**
+	var amt := mult_amt if src_ring else chip_amt
+	#  ⚠ **문턱은 정규화한 세기(k)에 둔다 — 알파에 두면 밸브가 늘 열린다.**
+	#  a0 가 0.35 이고 문턱도 0.35 라 알파로 재면 가장 약한 선까지 겉선이
+	#  걸렸다(qa_link ⑱-b 가 잡았다: 160→168 이 알파 0.49 로 통과해 버렸다).
+	#  k 로 재면 0→40 은 0.833 ≥ 0.35 라 겉선이 걸리고 160→168 은 0.235 라
+	#  속선만 남는다 — 설계가 말한 그 사다리다.
+	var k := clampf((amt - 0.15) / 0.30, 0.0, 1.0)
+	var a := lerpf(float(ARC.a0), float(ARC.a1), k)
+	#  **그 선이 올리는 수의 색.** 규칙 하나, 예외 없음 — 동전이 낸 값이라도
+	#  그건 돈이 아니라 점수·배수이므로 C_GOLD 를 안 쓰고, C_ACC 도 안 쓴다
+	#  (「+n」에서 셋을 하나로 줄인 색에 넷째를 얹지 않는다).
+	#  C_CHIP(204.8°)과 C_MULT(8.6°)는 이미 196° 갈라진 파랑↔주황축이라
+	#  발라트로의 파랑/빨강을 가져올 자리가 없다 — 저장소가 이미 그 축이다.
+	#  겉선은 크림 칸(C_LIGHT) 위에서 C_CHIP 이 1.34:1 로 잠기기 때문에 둔다 —
+	#  선의 첫 30~90px 가 판 면을 지나므로 실제로 가라앉는다. 어두운 바탕에서는
+	#  배경과 같아 안 보이고 비용만 남으므로 **세기 문턱 위에서만** 긋는다:
+	#  피로 밸브와 호출 밸브가 같은 줄이다.
+	return {"a": head, "b": dst, "al": a, "ring": src_ring, "k": k,
+			"col": C_MULT if src_ring else C_CHIP,
+			"case": k >= float(ARC.case_at)}
+
+
+func _draw_link() -> void:
+	var pl := _link_plan()
+	if pl.is_empty():
+		return
+	var a: float = float(pl.al)
+	if bool(pl.case):
+		draw_line(pl.a, pl.b, Color(C_BG, a * float(ARC.case_a)), float(ARC.case))
+	draw_line(pl.a, pl.b, Color(pl.col, a), float(ARC.w))
+
+
 func _draw_pops() -> void:
 	for p in pops:
 		var k: float = p.t / p.life
