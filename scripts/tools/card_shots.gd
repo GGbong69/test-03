@@ -254,8 +254,66 @@ func _run() -> void:
 	keep = {}
 	live = true
 	g.motion_off = false
+	await _live_src()
 	await _live()
 	quit()
+
+
+# ── 살아 있는 정산에서 출처가 짚이는 프레임 (2026-09-25) ──────
+#  위 11~15 는 축을 손으로 놓은 장이다. 여기서는 **진짜 한 발을 꽂아**
+#  게임이 스스로 세운 큐를 걸음마다 판다 — 짚는 자리가 실제 착탄과 같은지는
+#  이것으로만 눈에 보인다(수로는 settle_probe 가 잰다).
+#  트리플 20(맨 위 칸)에 꽂고 chip 걸음과 mult 걸음을 한 장씩 찍는다.
+func _live_src() -> void:
+	g.set_process(false)
+	#  ⚠ **_shot 이 시계를 밀면 안 된다.** _tick 은 live 면 _process 를 세 번
+	#  돌리는데, 그 세 프레임에 빛이 이미 1/5 식는다 — 걸음을 미는 것은
+	#  아래 루프가 손으로 한다.
+	live = false
+	g._start_leg()
+	g._swap_skip()
+	g.owned = []
+	g._panel_reset()
+	g.sealed = -1
+	g.total = 0
+	g.target = 99999                  # 판이 안 끝나게 — 깨짐과 안 섞인다
+	g.queue.clear()
+	g.burst_hits = []
+	g.state = g.S.RESOLVE
+	var trp: float = g.R * (g.rt_trp_in + g.rt_trp_out) * 0.5
+	g.aim = g.BC + Vector2(0.0, -trp)
+	g._land()
+	#  ⚠ **착탄 연출을 지운다.** 시계를 안 미는 장이라 _impact 의 고리 ·
+	#  물결 · 불꽃 · 팝이 전부 갓 난 세기로 남아 있어, 첫 장에서 그것이
+	#  출처 빛을 통째로 덮었다(찍어 보고 잡았다 — 왼쪽 장의 주황 고리가
+	#  chip 의 것이 아니라 트리플 착탄의 ring_fx 였다). 진짜 판에서는
+	#  0.55초 안에 다 지고 정산 걸음은 그 뒤다. 여기서 보려는 것은
+	#  **걸음이 짚는 자리** 하나뿐이다. 2026-09-25
+	(g.ring_fx as Array).clear()
+	(g.waves as Array).clear()
+	(g.sparks as Array).clear()
+	(g.pops as Array).clear()
+	g.hit_flash = 0.0
+	g.settle_n = (g.queue as Array).size()
+	var shot := 0
+	var guard := 0
+	while not (g.queue as Array).is_empty() and guard < 900:
+		var nk := String((g.queue as Array)[0].get("k", ""))
+		g._next_step()
+		guard += 1
+		if nk == "chip" or nk == "mult":
+			#  빛이 갓 선 프레임을 찍는다 — 걸음의 78% 창이라 몇 프레임 뒤면
+			#  이미 절반이 식는다.
+			await _shot("2%d_live_%s" % [shot, nk])
+			shot += 1
+		#  ⚠ **걸음 사이를 _process 로 밀면 안 된다.** qt 가 0 이 되는
+		#  프레임에 _process 가 스스로 _next_step 을 부르므로, 밀어 두면
+		#  다음 걸음(mult)을 이 루프가 아니라 게임이 먹고 지나간다 —
+		#  그래서 처음엔 chip 한 장만 찍혔다. 걸음은 여기서만 판다.
+	g.state = g.S.PICK
+	live = true
+	print("  살아 있는 출처 %d장 — 칸 %d · 고리 %.1f~%.1f"
+			% [shot, g.hit_idx, g.hit_r0, g.hit_r1])
 
 
 # ── 살아 있는 정산을 숫자로 잰다 ─────────────────────────
