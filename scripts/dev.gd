@@ -546,6 +546,12 @@ static func _names(k: String) -> PackedStringArray:
 	#  사다리가 같은 실패를 적어 뒀다). 2026-09-24
 	if k == "brk":
 		return PackedStringArray(BRK_TIERS)
+	#  오버 금의 단. 표가 아니라 상수 목록이라 **_cur_name 과 짝으로**
+	#  낸다 — 같은 이유, 같은 실패. 2026-09-25
+	if k == "brkdeep":
+		return PackedStringArray(DEEP_TIERS)
+	if k == "src":
+		return PackedStringArray(SRC_STEPS)
 	for r in _list(k):
 		out.append(String(r.get("n", r.get("name", r.get("id", "?")))))
 	return out
@@ -835,6 +841,26 @@ static func _rows(g: Node) -> Array:
 				#  접히고 겹이 2 로 주는지**가 손가락 세 번에 드러난다 —
 				#  이 연출의 가장 중요한 눈 검사다. 2026-09-24
 				{"n1": "판 깨짐 다시 보기", "t": "list", "k": "brk", "n": 3},
+				#  ── 오버 금의 단 (2026-09-25) ───────────────────
+				#  **한 쪽 한계가 열아홉 줄이고 여기가 열일곱이었다** — 빈
+				#  칸이 정확히 둘이다. 하나를 여기 쓰고 하나를 남긴다.
+				#  위 「판 깨짐」 줄이 재는 것은 **층**이고 이 줄이 재는 것은
+				#  **깊이**다. 한 줄이 두 축을 말하면 손가락 세 번으로 무엇이
+				#  무엇을 바꿨는지 못 가른다 — 그래서 위 줄에 0단을 못
+				#  박았다(아래 "brk" 갈래). 두 줄을 위아래로 두면 **층을
+				#  고정하고 단을 돌리는 것**과 **단을 고정하고 층을 돌리는
+				#  것**이 나란히 선다. 큰 배율은 손으로 만들기 어려우니
+				#  이 줄이 2·3단을 보는 유일한 길이다.
+				{"n1": "오버 금 다시 보기", "t": "list", "k": "brkdeep", "n": 4},
+				#  ── 정산 출처 짚기 (2026-09-25) ─────────────────
+				#  남은 한 칸을 여기 쓴다(18 → 19줄, 한계 19).
+				#  **모션 끄기에서 넷이 다 사는지**가 손가락 두 번에 드러나는
+				#  자리다 — 전부 알파와 색이라 하나도 안 죽어야 한다.
+				#  발라트로의 모션 감소가 조커 발동 애니를 꺼 「이 값이 어디서
+				#  왔는가」를 통째로 잃는 그 자리를 규약으로 막는다.
+				#  슬롯 쪽은 「동전 발동」 줄로 따로 보되, 거기서는 튐만 죽고
+				#  달아오름과 카드 줄이 남아야 한다.
+				{"n1": "출처 짚기 다시 보기", "t": "list", "k": "src", "n": 4},
 				{"n1": "제목 판 금 가기 직전", "t": "act", "a": "egg_crack"},
 				{"n1": "제목 판 깨기 직전", "t": "act", "a": "egg"},
 				{"n1": "인트로 다시 보기", "t": "act", "a": "intro"},
@@ -1005,6 +1031,13 @@ static func _list(k: String) -> Array:
 
 # 판 깨짐의 층 셋. game.gd 의 BRK.small · big · boss 와 **같은 차례**다.
 const BRK_TIERS := ["작은 판", "큰 판", "보스 판"]
+#  오버 금의 단 넷. game.gd 의 BRKDEEP 과 **같은 차례**다.
+#  큰 배율은 손으로 만들기 어렵다 — x3 을 넘기려면 목표의 세 배를 한 발에
+#  내야 하는데 실측 분포에서 6% 다. 이 줄이 3단을 보는 유일한 길이다.
+const DEEP_TIERS := ["0단", "1단", "2단", "3단"]
+#  출처 짚기의 네 상태. 모양 둘(부채 한 칸 · 고리 하나) × 색 둘(판이 낸 값
+#  그대로 · 무언가 얹혔다)이 곧 그 연출의 전부라 목록이 그대로 어휘다.
+const SRC_STEPS := ["칸", "고리", "칸 · 얹힘", "고리 · 얹힘"]
 #  다시 보기가 켠 깨짐인가. game.gd 의 _brk_tick 은 **일부러** 스스로 안
 #  끝낸다(끝내면 말짱한 판이 한 프레임 도로 튀어나온다) — 진짜 판에서는
 #  _finish_leg 첫 줄이 내리는데 다시 보기에는 그 줄이 없다. 그 뒷정리를
@@ -1202,6 +1235,29 @@ static func _cur_name(g: Node, e: Dictionary) -> String:
 				["small", "big", "boss"][gj]]
 		return "%d/%d %s · 겹%d · 톱밥%d · 소리%d" % [gj + 1, BRK_TIERS.size(),
 				BRK_TIERS[gj], int(gt[1]), int(gt[2]), int(gt[3])]
+	#  오버 금의 단. 「판 깨짐」 줄이 「겹 · 톱밥 · 소리」를 적는 그 어법으로
+	#  **이 단을 가르는 자**를 그대로 적는다 — 넘긴 배율의 구간이다.
+	#  값을 BRKDEEP 에서 그대로 읽어 두 곳이 갈라질 길을 안 만든다.
+	#  ⚠ **폭 · 톱니 · 음까지 적었다가 값 칸에서 잘렸다**(찍어 보고 잡았다).
+	#  이 칸은 화살표 둘 사이라 스물몇 자에서 끊긴다 — 바로 위 「판 깨짐」
+	#  줄의 「톱밥10 · 소리1」이 이미 그렇게 잘려 있다. 단을 가르는 것은
+	#  배율 하나이고 나머지 셋은 그 결과라, 자만 적고 결과는 화면이
+	#  보여 준다. 2026-09-25
+	if k == "brkdeep":
+		var dj: int = i % DEEP_TIERS.size()
+		var dt: Dictionary = load("res://scripts/game.gd").BRKDEEP
+		var lo: float = 1.0 if dj == 0 else float(dt.step[dj - 1])
+		if dj >= DEEP_TIERS.size() - 1:
+			return "%d/%d %s · x%.2f~" % [dj + 1, DEEP_TIERS.size(),
+					DEEP_TIERS[dj], lo]
+		return "%d/%d %s · x%.2f~%.2f" % [dj + 1, DEEP_TIERS.size(),
+				DEEP_TIERS[dj], lo, float(dt.step[dj])]
+	#  출처 짚기. 모양 · 색이 곧 이 연출의 전부라 값 칸이 그대로 적는다.
+	if k == "src":
+		var sj: int = i % SRC_STEPS.size()
+		return "%d/%d %s · %s · %s" % [sj + 1, SRC_STEPS.size(), SRC_STEPS[sj],
+				"고리 하나" if sj % 2 == 1 else "부채 하나",
+				"주황" if sj >= 2 else "흰"]
 	if k == "breakmat":
 		var bj: int = i % BREAK_MATS.size()
 		var bm: Dictionary = BREAK_MATS[bj]
@@ -2053,12 +2109,57 @@ static func _run(g: Node, e: Dictionary) -> void:
 			if not g._is_play_deep():
 				g._start_leg()      # 「다트 채우기」와 같은 길. leg_no 를 안 옮긴다
 			g._swap_skip()          # 판이 눕는 중이면 세워 놓고 본다
-			g._brk_arm(i % BRK_TIERS.size())
+			#  ⚠ 둘째 인자로 **0단을 못 박는다.** 이 줄이 재는 것은 층이다 —
+			#  여기서 깊이가 판의 total/target 을 따라가면 같은 층을 두 번
+			#  눌렀을 때 금 굵기가 달라져, 무엇이 무엇을 바꿨는지 못 가른다.
+			#  깊이는 바로 밑 「오버 금 다시 보기」가 쥔다. 2026-09-25
+			g._brk_arm(i % BRK_TIERS.size(), 0)
 			#  걸음(S.RESOLVE) 밖이라 제 시계로 돌게 푼다. _brk_arm 이
 			#  qt 가 0 인 것을 보고 표준 돌파 걸음을 자로 삼는다.
 			g.brk_free = true
 			_brk_replay = true
 			_say("판 깨짐 — %s" % BRK_TIERS[i % BRK_TIERS.size()])
+			return
+		"brkdeep":
+			#  「판 깨짐 다시 보기」와 **같은 규약**이다 — 값(골드 · 목표 ·
+			#  매물 · leg_no)을 한 톨도 안 건드리고 연출 함수만 부른다.
+			#  층은 **지금 판의 것**(−1)이고 단만 돈다: 한 줄이 한 가지만
+			#  말한다. 바로 위 「제약 걸기」·「판 다시 굽기」로 피자 · 도넛 ·
+			#  과녁을 끼우면 세 손가락에 테마 × 층 × 단이 다 보인다.
+			if not g._is_play_deep():
+				g._start_leg()
+			g._swap_skip()
+			g._brk_arm(-1, i % DEEP_TIERS.size())
+			g.brk_free = true
+			_brk_replay = true
+			_say("오버 금 — %s" % DEEP_TIERS[i % DEEP_TIERS.size()])
+			return
+		"src":
+			#  걸음(S.RESOLVE) 밖에서 세운다. card_jrate 가 0 이면 빛이
+			#  영영 안 죽으므로 **실제 chip 걸음과 같은 길이**로 같이
+			#  세운다(걸음 beat × CARDFX.jspan). 판에 안 꽂힌 상태면
+			#  트리플 한 칸을 손으로 꽂아 둔다 — 안 그러면 짚을 자리가
+			#  없다. 값(골드 · 목표 · leg_no)을 한 톨도 안 건드린다.
+			if not g._is_play_deep():
+				g._start_leg()
+			g._swap_skip()
+			if int(g.hit_idx) < 0 and not bool(g.hit_bull):
+				g.hit_idx = 0
+				g.hit_r0 = g.R * g.rt_trp_in     # hit_info 가 내는 그 단위(픽셀)
+				g.hit_r1 = g.R * g.rt_trp_out
+				g.hit_bull = false
+			#  세기는 판이 정한 사다리를 탄다(빗나감 0 · 싱글 0.4 · … ·
+			#  불 1.0). 앞 발이 빗나감이면 0 이라 아무것도 안 밝으므로
+			#  여기서만 트리플 자리로 올린다 — 다시 보기의 값이다.
+			if float(g.hit_flash_amt) <= 0.0:
+				g.hit_flash_amt = 0.9
+			var si: int = i % SRC_STEPS.size()
+			g.src_ring = si % 2 == 1
+			g.src_mix = si >= 2
+			g.src_t = 1.0
+			g.card_jrate = 1.0 / maxf(g.beat * float(
+					load("res://scripts/game.gd").CARDFX.jspan), 0.02)
+			_say("출처 짚기 — %s" % SRC_STEPS[si])
 			return
 		"breakmat":
 			#  고른 재질의 대표 동전을 랙 **첫 빈 칸**에서 부순다 — 시체는

@@ -86,9 +86,12 @@ func _darts() -> void:
 	]
 
 
-func _arm(tier: int) -> void:
+#  deep 은 오버 금의 단(0~3). −1 이면 지금 판이 목표를 얼마나 넘겼는지에서
+#  뜨는데, 이 도구는 total 이 0 이라 **언제나 0단**이다 — 그래서 아래 서른셋은
+#  한 바이트도 안 바뀐다. 2026-09-25
+func _arm(tier: int, deep := -1) -> void:
 	g._brk_skip()
-	g._brk_arm(tier)
+	g._brk_arm(tier, deep)
 	g.brk_free = true          # 걸음(S.RESOLVE) 밖에서도 제 시계로 돈다
 
 
@@ -192,6 +195,48 @@ func _run() -> void:
 		await _hold(1)
 	await _hold(2)
 	await _snap("40_motion_off")
+	g.motion_off = false
+	g._brk_skip()
+
+	# ── ⑤ 오버 금 — 같은 판 · 같은 프레임 · 단 넷 (2026-09-25) ──
+	#  **네 장을 나란히 놓는 것이 이 연출의 최종 판정 자리다.** 같은 씨라
+	#  파단선의 무늬가 넷에서 글자 그대로 같고, 다른 것은 굵기 · 밝기 ·
+	#  테의 험함뿐이어야 한다. 금이 두 종류로 보이면 진 것이다.
+	#  금이 다 그어진 프레임(발화 직전)에서 찍는다 — 단이 발화보다 0.90
+	#  먼저 차게 해 둔 그 넉 프레임이 여기다.
+	for t in 4:
+		await _leg([])
+		_darts()
+		_arm(2, t)
+		while not g.brk_fired \
+				and g.brk_stage < (g.brk_rings as Array).size() * 2:
+			await _hold(1)
+		await _snap("5%d_deep_%d" % [t, t])
+		print("  오버 금 %d단 — 폭 +%.1f · 밝기 %.2f · 톱니 %.1f · 음 %.2f"
+				% [t, float(g.BRKDEEP.gw[t]), float(g.BRKDEEP.lit[t]),
+						float(g.BRKDEEP.jag[t]), float(g.BRKDEEP.pit[t])])
+		g._brk_skip()
+	#  3단을 테마 넷에서 한 번씩 — 폭 3.2px 이 판을 검은 격자로 안 덮는지.
+	#  도넛은 불이 없어 첫 겹이 0 에서 시작하고 피자는 부채가 8 로 접힌다.
+	for m2 in [["pizz", "pizza"], ["dnut", "donut"], ["aimb", "target"]]:
+		await _leg([String(m2[0])])
+		_darts()
+		_arm(2, 3)
+		while not g.brk_fired \
+				and g.brk_stage < (g.brk_rings as Array).size() * 2:
+			await _hold(1)
+		await _snap("53_deep3_%s" % String(m2[1]))
+		g._brk_skip()
+	#  모션 끄기 × 3단 — **금이 하나도 안 죽는다.** 판이 뜨는 것과 조각만
+	#  꺼지고 굵기 · 밝기 · 톱니는 그대로다. 40_motion_off(0단)와 짝으로 본다.
+	await _leg([])
+	_darts()
+	g.motion_off = true
+	_arm(2, 3)
+	while not g.brk_fired:
+		await _hold(1)
+	await _hold(2)
+	await _snap("54_deep3_motion_off")
 	g.motion_off = false
 	g._brk_skip()
 

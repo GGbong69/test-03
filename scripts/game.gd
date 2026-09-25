@@ -679,6 +679,28 @@ var hit_idx := -1
 var hit_r0 := 0.0
 var hit_r1 := 0.0
 var hit_bull := false
+#  ── 정산 출처 짚기 (2026-09-25) ───────────────────────────
+#  사용자: 「점수 정산할 때 효과가 어디서 일어난 건지 좀 더 잘 알려줄 수
+#  있으면 좋겠어」. 카드가 말 못 하는 것은 chip · mult 둘뿐이고, 그 둘이
+#  **판에서 온 값**이다(큐가 {k, v} 만 싣는다). 동전 몫은 이미 세 군데서
+#  말해진다 — 슬롯의 튐 · 달아오름 · 카드의 이름 줄. 새 신호를 안 더한다.
+#    chip 걸음 → 판의 **그 부채 한 칸**이 밝는다 (칸이 점수를 낸다)
+#    mult 걸음 → 판의 **그 띠 한 고리**가 밝는다 (고리가 배수를 낸다). 띠가
+#                넓으면(싱글) 안팎 경계만 칠해 판을 안 씻는다 — _draw_board
+#  모양이 축을 말하고 색이 출처를 말한다: 흰 = 판이 낸 값 그대로 ·
+#  C_ACC = 판 위에 무언가 얹혔다(제약 다섯 · 링 죽이기 · 다트 특성 ·
+#  트랙 강화 · 연발의 작은 다트). 다섯 다 판 위에 **제 자리가 없는**
+#  물건이라 따로 켤 곳을 파면 그것이 곧 클러터다.
+#  ⚠ **hit_flash 는 한 글자도 안 건드린다** — 착탄 섬광은 제 일이 따로
+#  있고 감쇠도 다르다(4506, d × 2.6). 이쪽은 걸음에 매인다.
+var src_t := 0.0         # 이 걸음의 출처 빛. card_jrate 로 걸음의 78% 만에 죽는다
+var src_ring := false    # 참이면 고리(배수) · 거짓이면 부채 한 칸(점수)
+var src_mix := false     # 참이면 판이 낸 값에 무언가 얹혔다 — C_ACC
+#  넓은 띠를 칠할 때 안팎 경계 한 겹의 두께(판 반지름 비). 0.06R = 5.9px 고
+#  두 겹이 0.12R 이라 트리플 · 더블(둘 다 0.10R)이 「통째로」 갈래에 남는다 —
+#  즉 **이 값이 트리플 · 더블 · 불의 그림을 그대로 둘지를 혼자 쥔다.**
+#  0.05 밑으로 내리면 그 둘도 경계 둘로 갈라진다(settle_probe 가 잰다).
+const SRC_EDGE := 0.06
 var waves := []
 var sparks := []
 var ring_fx := []
@@ -4520,6 +4542,13 @@ func _process(d: float) -> void:
 	mult_j = maxf(mult_j - d * fast_rate * card_jrate, 0.0)
 	gain_roll = maxf(gain_roll - d * fast_rate * card_jrate * 3.0, 0.0)
 	card_burst = maxf(card_burst - d * float(CARDFX.burst_fade), 0.0)
+	#  출처 빛도 **같은 시계를 탄다** — 새 벽시계 상수를 한 개도 안 박는다.
+	#  card_jrate = 1/(qt × jspan 0.78)(_next_step 의 마지막 줄)라 창이 언제나
+	#  걸음의 78% 다: pace 1.0 chip 걸음 0.340초 → 0.265초(15.9프레임) ·
+	#  pace 0.30 눌린 걸음 0.102초 → 0.080초(4.8프레임). 빨리 보기 2.5배면
+	#  걸음도 창도 같은 비로 준다 — **구조적으로 다음 걸음을 못 덮는다.**
+	#  2026-09-25
+	src_t = maxf(src_t - d * fast_rate * card_jrate, 0.0)
 	_tick_score(d)
 
 	for w in waves:
@@ -4532,7 +4561,13 @@ func _process(d: float) -> void:
 		rf.t += d
 	ring_fx = ring_fx.filter(func(rf): return rf.t < rf.life)
 	for p in pops:
-		p.t += d
+		#  ⚠ **빨리 보기를 탄다.** 동전 팝의 수명 0.9초가 2.5배에서 걸음
+		#  여섯(0.816초)을 덮어, 여섯 걸음치 숫자가 판 위에 한꺼번에 쌓여
+		#  있었다 — 「출처를 더 잘 보여 준다」가 오히려 더 안 읽히게 된다.
+		#  _fast_on() 이 state != S.RESOLVE 에서 곧장 false 라 **정산 밖에서
+		#  fast_rate 는 언제나 정확히 1.0** 이다: 상태 갈래가 필요 없고
+		#  정산 밖 화면은 한 프레임도 안 바뀐다. 2026-09-25
+		p.t += d * fast_rate
 	pops = pops.filter(func(p): return p.t < p.life)
 	#  시체의 시계는 clear_t 와 **따로** 돈다. 그래야 건너뛰기
 	#  (_click 의 clear_t = 99.0)에 안 죽고, if state == S.CLEAR 분기
@@ -4555,7 +4590,10 @@ func _process(d: float) -> void:
 	card_vel *= exp(-float(CARDFX.damp) * d)
 	card_pop = clampf(card_pop + card_vel * d, float(CARDFX.lo), float(CARDFX.hi))
 
-	_panel_update(d)
+	#  빨리 보기를 **슬롯 시계 셋만** 태운다 — 안에서 갈랐다. PANEL.hot
+	#  0.62초가 2.5배 걸음 넷(0.544초)을 덮어, 어느 동전이 방금 발동했는지가
+	#  네 걸음치 겹쳐 있었다. 2026-09-25
+	_panel_update(d, fast_rate)
 	# 3D 통은 새 런 화면에만 산다. 지우는 자리를 한 곳에 둔다 — 나가는
 	# 길이 셋(ESC · 뒤로 · 시작)이라 각각에 달면 언젠가 하나를 빠뜨린다.
 	if state != S.NEWRUN and cup_vp != null:
@@ -6234,6 +6272,13 @@ func _land(mark := true) -> void:
 		aim = BC + Vector2(cos(a), sin(a)) * sqrt(randf()) * R * 0.95
 
 	var info := hit_info(aim)
+	#  ⚠ **판이 낸 날값을 여기서 뜬다.** 「판 위에 무언가 얹혔나」를 재는
+	#  자다 — 아래 죽이는 축 다섯(금줄 · 색 · 홀짝 · 목표물 · 칠) · 링
+	#  죽이기 · 다트 특성 · 트랙 강화가 **전부** 이 아래에 있으므로 한
+	#  비교가 넷을 다 받는다. 정산 큐가 이 둘과 대어 "mx" 한 칸을 싣고,
+	#  판이 밝을 때 흰색과 C_ACC 를 가른다. 2026-09-25
+	var raw_base := int(info.base)
+	var raw_mult := int(info.mult)
 	# 칸을 죽이는 축 셋. 번호 · 색 · 홀짝 순으로 좁아진다.
 	if dead_idx >= 0 and info.idx == dead_idx:
 		info.base = 0
@@ -6478,6 +6523,11 @@ func _land(mark := true) -> void:
 	calc_flash = 0.0
 	roll_t = -1.0
 	card_item = ""
+	#  앞 발의 출처 빛이 다음 발로 안 샌다. 걸음 안에서 저절로 죽는 값이라
+	#  구조적으로는 이미 0 이지만, 판을 떠났다 돌아오는 길(ESC → 로비 →
+	#  이어하기)처럼 걸음이 중간에 끊기는 자리가 있어 여기서 한 번 내린다 —
+	#  card_item 과 같은 자리, 같은 이유다. 2026-09-25
+	src_t = 0.0
 	card_mode = 0
 	pitch_step = 0
 	_card_reset()
@@ -6505,13 +6555,21 @@ func _land(mark := true) -> void:
 	if info.mult == 0 and fired.is_empty() and info.base <= 0:
 		queue.append({"k": "miss"})
 	else:
+		#  "mx" — 판이 낸 날값에서 **바뀌었나**. 1 이면 판 위에 무언가
+		#  얹힌 것이라 출처 빛이 C_ACC 로 선다.
+		#  ⚠ 걸음 쪽은 **반드시** st.get("mx", 0) 으로 읽는다 — 큐를 손으로
+		#  짓는 도구 여섯(settle_probe · card_shots · dev_probe · mod_probe ·
+		#  bal_shots)이 {k, v} 만 넣는다. 없으면 0 = 흰색이다. 2026-09-25
+		var mx_c: int = 1 if int(info.base) != raw_base else 0
+		var mx_m: int = 1 if int(info.mult) != raw_mult else 0
 		if info.mult == 0:
 			queue.append({"k": "miss"})
-			queue.append({"k": "chip", "v": info.base})
-			queue.append({"k": "mult", "v": 1})
+			queue.append({"k": "chip", "v": info.base, "mx": mx_c})
+			#  빗나감의 배수 1 은 **큐가 넣는 값**이라 판이 낸 것이 아니다.
+			queue.append({"k": "mult", "v": 1, "mx": 0})
 		else:
-			queue.append({"k": "chip", "v": info.base})
-			queue.append({"k": "mult", "v": info.mult})
+			queue.append({"k": "chip", "v": info.base, "mx": mx_c})
+			queue.append({"k": "mult", "v": info.mult, "mx": mx_m})
 		if pierce_gain > 0:
 			queue.append({"k": "pierce", "v": pierce_gain})
 		for i in fired:
@@ -6744,6 +6802,15 @@ func _next_step() -> void:
 	var cc := card_pos() + Vector2(CARD_W * 0.5, 12.0)
 	calc_lit = false           # 방식 걸음이 아니면 카드는 보통대로 그린다
 	roll_t = -1.0
+	#  ⚠ **카드의 이름 줄이 걸음을 건너 살아 있었다.** card_item 을 세우는
+	#  갈래는 miss · pierce · item · bal · rnd 다섯인데 chip · mult 갈래가
+	#  그것을 **안 지웠다** — 점수가 나는 빗나감의 큐가 [miss, chip, mult, …]
+	#  라(보드 아웃 트랙), 「빗나감」이라 적힌 줄이 그 뒤 두 걸음 0.68초
+	#  동안 **양수 점수 옆에 그대로 서 있었다.** 출처를 새로 적기 전에
+	#  지금 거짓말하는 줄부터 막는 것이 순서다. 갈래마다 제 라벨을 다시
+	#  세우므로 다섯은 한 픽셀도 안 바뀐다(_land 6480 과 같은 어법).
+	#  2026-09-25
+	card_item = ""
 
 	match st.k:
 		"miss":
@@ -6757,7 +6824,11 @@ func _next_step() -> void:
 			# 바뀌기 **전** 값을 받아 둔다. 셈 줄은 한 글자도 안 바꾼다 —
 			# 이미 난 값을 읽기만 한다.
 			var c0 := cur_chip
-			cur_chip += _chip_gain(st.v)
+			#  큐가 실은 값과 **실제로 오른 값**을 따로 쥔다. 연발의 작은
+			#  다트는 _chip_gain 이 여기서 kick_share(0.25)로 깎으므로 둘이
+			#  갈린다 — 그 갈림을 아래 출처 색이 읽는다.
+			var cg := _chip_gain(int(st.v))
+			cur_chip += cg
 			_sfx("settle_step", f)
 			# **0 만큼 바뀐 걸음은 안 튄다.** 빗나감이라도 동전이 발동했으면
 			# 큐가 miss · chip · mult 셋을 세우는데(4631~4637), 그 chip 의
@@ -6768,6 +6839,22 @@ func _next_step() -> void:
 			if cur_chip != c0:
 				chip_amt = _card_amt(c0, cur_chip)
 				chip_j = 1.0
+				#  **판의 그 부채 한 칸**이 밝는다 — 칸이 점수를 낸다.
+				#  ⚠ 갈래 **안**이다. 밖에 두면 빗나간 발의 info.base 가 0 인
+				#  chip 걸음에서 「점수가 났다」고 거짓말한다 — 바로 위
+				#  주석이 같은 사고를 이미 적었다.
+				src_t = 1.0
+				src_ring = false
+				#  ⚠ **연발도 얹힌 것이다.** "mx" 는 hit_info 직후의 날값과
+				#  큐를 세울 때의 값만 대므로 연발의 깎기를 못 본다 — 그 갈래가
+				#  흰색으로 밝으면 「판이 낸 값 그대로」라 해 놓고 카드에는 칸
+				#  값의 4분의 1이 뜬다. 연발 다트통을 든 런은 **모든 발**이
+				#  그랬다. 큐가 아니라 여기서 댄다 — 깎는 자가 이 줄이라, v 가
+				#  1 이라 깎아도 값이 그대로인 발까지 정확히 가려낸다(「0 만큼
+				#  바뀐 걸음은 안 밝는다」와 같은 자다). 큐를 손으로 짓는 도구
+				#  여섯은 kick_pellet 이 거짓이라 cg == st.v 고 한 픽셀도 안
+				#  바뀐다. 2026-09-25
+				src_mix = int(st.get("mx", 0)) == 1 or cg != int(st.v)
 			_card_kick(float(CARDFX.kick), float(CARDFX.press))
 		"pierce":
 			var pg := _chip_gain(st.v)
@@ -6788,6 +6875,12 @@ func _next_step() -> void:
 			if cur_mult != m0:
 				mult_amt = _card_amt(m0, cur_mult)
 				mult_j = 1.0
+				#  **판의 그 띠 한 고리**가 통째로 밝는다 — 고리(싱글 ·
+				#  더블 · 트리플 · 불)가 배수를 낸다. 갈래 안인 근거는
+				#  chip 과 같다.
+				src_t = 1.0
+				src_ring = true
+				src_mix = int(st.get("mx", 0)) == 1
 			_card_kick(float(CARDFX.kick), float(CARDFX.press))
 		"item":
 			_panel_fire(st.i)
@@ -11902,6 +11995,66 @@ func _draw_board() -> void:
 			var a0 := hit_idx * sw - sw * 0.5
 			_band_draw(hit_r0 * push, hit_r1 * push, a0, a0 + sw, fc)
 
+	#  ── 정산 출처 짚기 — 착탄 섬광의 쌍둥이 (2026-09-25) ──────
+	#  **점이 선이 되는 그림**이라 한 판이면 배운다: chip 걸음에 그 칸이,
+	#  mult 걸음에 그 고리가 밝는다. 걸음당 새 그리기 호출이 **0 · 1 · 2** 다
+	#  (판은 이미 매 프레임 칸 20 × 띠 4 = 80 다각형을 그린다). 둘이 되는 것은
+	#  넓은 띠의 안팎 경계를 나눠 칠할 때뿐이다 — 아래에 왜인지 적었다.
+	#  세기를 hit_flash_amt 에 태워 **판이 이미 정해 둔 사다리를 그대로
+	#  탄다** — 빗나감 0.0 · 싱글 0.4 · 더블 0.7 · 트리플 0.9 · 불 1.0.
+	#  빗나간 발은 amt 가 0 이라 안 밝는다: 그 발은 판에 밝힐 자리가 애초에
+	#  없다(hit_idx = −1). 새 세기 표를 안 만든다.
+	#  ⚠ **어둠(_board_dim_sector)을 안 쓴다.** 프레임마다 다각형 여든 장이고
+	#  판마다 수십 번 나는 신호라 판이 통째로 깜빡이는 것으로 읽힌다. 이
+	#  갈래는 어둠이 필요 없다 — 한 번에 하나만 밝으므로 「하나만 밝다」가
+	#  곧 어둠이다.
+	#  ⚠ **착탄 연출과 자리가 겹치는 프레임이 실제로 있다.** 정산 들머리가
+	#  beat × 1.1 × _pace() 라 연발이나 긴 큐에서 pace 가 바닥(0.30)이면
+	#  0.112초고, 그때 chip · mult 두 걸음이 ring_fx 0.55초와 hit_flash
+	#  0.385초 **안**에 통째로 든다. 겹쳐도 **거짓말이 아니다** — 둘 다 같은
+	#  자리를 가리킨다(착탄은 「여기 꽂혔다」 · 걸음은 「이 수가 여기서 났다」).
+	#  게다가 출처 빛은 알파 0.4~1.0 이고 그때 ring_fx 의 잔광은 0.25라
+	#  묻히지도 않는다 — 찍어서 댔다(card_shots 24_live_burst).
+	#  색을 바꿔 가르는 길은 **안 간다**: C_ACC 는 「얹혔다」 한 가지만
+	#  말해야 하는데, 그것을 옮기면 다시 두 가지를 말하는 색이 하나 생긴다.
+	if src_t > 0.0 and hit_flash_amt > 0.0:
+		var sc := (C_ACC if src_mix else Color.WHITE)
+		sc.a = src_t * hit_flash_amt
+		if hit_bull:
+			draw_circle(BC, hit_r1 * push, sc)   # 불에는 칸이 없다 — 두 모양이 같다
+		elif src_ring:
+			#  ⚠ **넓은 띠는 안팎 경계만 칠한다.** 띠 통째로 칠하면 싱글에서
+			#  무너진다 — 안쪽 싱글이 0.42R(41px) · 바깥 싱글이 0.24R 이라
+			#  판의 3분의 1이 흰 물에 잠기고, 「고리 하나」가 아니라 「판이
+			#  씻겼다」로 읽힌다(칸 색까지 회색으로 눌린다 — 찍어서 봤다).
+			#  게다가 그 물이 **가장 흔하고 가장 값싼 싱글에서만 크다**:
+			#  넓이 × 알파로 재면 바깥싱글 719 > 안쪽싱글 322 였는데 트리플이
+			#  1054 · 더블이 1277 이라, 알파가 타는 사다리(싱글 0.4 · 더블 0.7 ·
+			#  트리플 0.9 · 불 1.0)를 넓이가 되받아 뒤집어 놓았다.
+			#  0.06R 두 겹은 **트리플 · 더블 · 불을 한 픽셀도 안 바꾼다** —
+			#  두 띠가 0.10R 이라 0.12R 밑이고, 그러면 두 겹이 겹쳐 아래
+			#  「통째로」 갈래로 그대로 떨어진다(겹쳐 그리면 알파가 두 번
+			#  얹혀 0.9 가 0.99 로 뜬다 — 갈래를 가른 이유가 그것이다).
+			#  불이 가장 작고 밝은 점으로 남는 것은 안 고친다: 판이 정한
+			#  기하가 그것이고, 작아서 값진 자리다. 2026-09-25
+			var bw := hit_r1 - hit_r0
+			var ew := R * SRC_EDGE
+			if bw <= ew * 2.0:
+				draw_arc(BC, (hit_r0 + hit_r1) * 0.5 * push, 0.0, TAU, 40, sc, bw * push)
+			else:
+				#  안쪽 경계가 **실제로 있는** 띠에서만 안쪽을 긋는다. 도넛은
+				#  불을 지워 안쪽 싱글의 hit_r0 가 0 이라, 안 막으면 한복판에
+				#  지름 12px 짜리 회색 점이 뜬다 — 도넛 구멍 안에 떠서 아무것도
+				#  안 가리킨다(찍어서 잡았다). 경계가 점이면 고리가 아니다.
+				if hit_r0 > ew:
+					draw_arc(BC, (hit_r0 + ew * 0.5) * push, 0.0, TAU, 40, sc, ew * push)
+				draw_arc(BC, (hit_r1 - ew * 0.5) * push, 0.0, TAU, 40, sc, ew * push)
+		elif hit_idx >= 0:
+			#  칸은 띠의 20분의 1이라 넓이가 애초에 작다 — 넓은 띠의 칸도
+			#  「부채 하나」로 읽힌다(넷을 다 찍어 봤다). 통째로 둔다.
+			var sa0 := hit_idx * sw - sw * 0.5
+			_band_draw(hit_r0 * push, hit_r1 * push, sa0, sa0 + sw, sc)
+
 	# 칸 숫자는 누우면 지운다. 비균일 배율이 글자를 세로로만 눌러
 	# 글자가 얼룩이 된다 — 글자는 눌러서 눕힐 수 없다.
 	#  값이 하나뿐인 판(피자 32 · 시계 12)은 숫자 색이 알파 0 이다(사용자, 2026-09-17).
@@ -13509,14 +13662,20 @@ func _panel_fire(i: int) -> void:
 	slot_hot[i] = PANEL.hot
 
 
-func _panel_update(d: float) -> void:
+#  rate 는 정산 빨리 보기의 배수다. **슬롯 시계 셋만** 탄다 — 발동한 동전의
+#  튐과 달아오름은 걸음에 매인 신호라 걸음이 재지면 같이 재져야 하고
+#  (카드 시계 여섯과 같은 근거), peel_t 는 상점 가판의 시계라 걸음과 아무
+#  상관이 없다. 둘을 한 d 로 묶으면 2.5배에서 상인 가판이 같이 빨라진다.
+#  정산 밖에서는 rate 가 언제나 1.0 이라 한 프레임도 안 바뀐다. 2026-09-25
+func _panel_update(d: float, rate := 1.0) -> void:
 	_panel_ensure()
+	var dd := d * rate
 	for i in slot_pop.size():
 		# 0 으로 당기는 스프링. 지나쳐서 반대로 눌리는 게 "통통" 의 정체다.
-		slot_vel[i] -= slot_pop[i] * PANEL.stiff * d
-		slot_vel[i] *= exp(-PANEL.damp * d)
-		slot_pop[i] = clampf(slot_pop[i] + slot_vel[i] * d, -0.6, 1.4)
-		slot_hot[i] = maxf(slot_hot[i] - d, 0.0)
+		slot_vel[i] -= slot_pop[i] * PANEL.stiff * dd
+		slot_vel[i] *= exp(-PANEL.damp * dd)
+		slot_pop[i] = clampf(slot_pop[i] + slot_vel[i] * dd, -0.6, 1.4)
+		slot_hot[i] = maxf(slot_hot[i] - dd, 0.0)
 	peel_t += d
 
 
@@ -16647,6 +16806,67 @@ const BRK := {
 	"thud": [0.060, 0.140],
 }
 
+# ══ 오버 금 — 목표를 넘긴 만큼 그 금을 깊이로 민다 (2026-09-25) ══
+#  사용자의 말: 「판에서 플레이한 점수가 목표점수보다 높아지고 오버할수록
+#  효과로 금가는 거 넣으면 안 돼?」 발라트로가 점수판을 태우는 그 자리다.
+#
+#  ── 왜 BRK 안이 아니라 밖인가 ────────────────────────────
+#  qa_break ⑩ 이 `not g.BRK.has("small_t")` 로 「표에 층별 시간이 없다」를
+#  잰다. 판 층(작은·큰·보스)과 깊이(0~3)는 **다른 축**이라 읽는 사람 눈에도
+#  갈라져 있어야 한다. 층이 쥐는 것은 기하와 개수 전부(부채·겹·단 수·
+#  부스러기·소리 겹·음역), 깊이가 쥐는 것은 **굵기와 빛과 험함**뿐이다.
+#  겹치는 자리는 음 하나인데 거기서도 축이 갈린다 — row[4]는 「어느 판이냐」,
+#  pit 는 「얼마나 넘겼냐」다.
+#
+#  ── 왜 새 금이 아니라 있는 금인가 ────────────────────────
+#  돌파 걸음이 **70프레임**인데 금이 0~45 · 조각이 45~69 · 정산이 70 이다
+#  (qa_break ③ 실측). **빈 프레임이 1** 이라 앞에도 뒤에도 못 붙인다.
+#  게다가 금을 따로 그으면 한 화면에 금이 두 종류가 된다 — 진 것이다.
+#  그래서 _brk_crack_draw 의 그 금 하나를 **갈아 끼운다**: 같은 함수 ·
+#  같은 기하 · 같은 씨(brk_seed) · 같은 단 수 · 같은 길이.
+#  새 자루 0 · 새 루프 0 · 새 프레임 0 · 새 소리 0 · 새 글자 0.
+#
+#  ── 문턱은 왜 비율인가 ───────────────────────────────────
+#  절대 점수가 아니라 **목표 대비 비율**이라 목표 곡선(42 → 20000, 238배)이
+#  어디에 있든 같은 자가 선다. 실측(deep_probe, 오토플레이 602판)으로
+#  버킷 경계에 그대로 앉혔다:
+#    0단 k < 1.25    46.7%   24판 런에 약 11회  ← **지금과 한 픽셀도 안 다르다**
+#    1단 1.25 ~ 2.00 38.9%   약 9회
+#    2단 2.00 ~ 3.00  8.5%   약 2회
+#    3단 3.00 이상    6.0%   약 1.4회   (실측 최대 **x10.89**)
+#  0단이 절반인 것이 설계다 — 아무것도 안 바뀌는 단이 있어야 위 셋이 단으로
+#  읽힌다. 오토플레이는 노리고 트리플을 안 맞히므로 **아래쪽 어림**이고
+#  사람은 2·3단을 조금 더 본다. 문턱은 수치가 아니라 연출 상수라 여기 두고
+#  tuning.csv 를 안 연다 — 밸런스 유예를 한 톨도 안 건드린다.
+const BRKDEEP := {
+	"step": [1.25, 2.00, 3.00],          # 문턱 셋 → 단 넷
+	#  ⚠ **자라는 것은 식은 쪽뿐이다.** 갓 난 금은 네 단 모두 1px 흰 실이고
+	#  식으면서 2.0 + gw 로 열린다. 그래야 「벌어지는 틈」이라는 원래 뜻이
+	#  그대로 살고 열 시간(BRK.hot 0.30)을 한 톨도 안 건드린다 — hot 을
+	#  늘리면 하얗고 **가는** 금이 늘어 폭 축과 정면으로 싸운다.
+	"gw":   [0.0, 0.4, 0.8, 1.2],        # 식은 틈이 더 벌어지는 폭(px)
+	#  철선 #c9c4d4 보다 **위쪽으로만** 민다(#dad7e0 → 약 #f2f1f4).
+	#  아래로는 한 칸도 안 간다 — 0.5(#bcb8c8)가 철선보다 어두워 금이
+	#  통째로 판 무늬에 묻힌 기록이 아래 _brk_crack_draw 머리말에 있다.
+	"lit":  [0.72, 0.78, 0.84, 0.90],    # 식은 금이 WHITE 로 가는 비
+	#  ⚠ **안쪽으로만 벌린다.** 테 호는 겹의 안쪽 경계에 서는데 보스의
+	#  바깥 겹 안쪽 경계가 판 테(1.24R = 121.5px)에서 8px 안이라, 대칭으로
+	#  벌리면 3단 보스에서 테를 밟는다. 실루엣은 깨짐의 것이다 — 3단이
+	#  해야 하는 말은 「더 크다」가 아니라 「더 험하다」다.
+	"jag":  [0.0, 1.5, 3.0, 4.5],        # 테 호가 안쪽으로 더 흔들리는 폭(px)
+	#  ⚠ **사다리가 안 뒤집히는 것을 수로 확인했다.** 층 음역(row[4]
+	#  1.06 · 0.97 · 0.88)과 겹치는 유일한 축이라, 작은 판 3단이 큰 판
+	#  0단보다 높아야 한다:
+	#    작은 3단 1.06 × 0.94 = 0.996 > 큰   0단 0.97  ✓
+	#    큰   3단 0.97 × 0.94 = 0.912 > 보스 0단 0.88  ✓
+	#  단 넷의 내림폭 6%(약 반음)는 들리고, 층 셋의 사다리는 **어느
+	#  조합에서도** 안 뒤집힌다. 저장소가 겹 3 실험에서 실제로 한 번 빠진
+	#  함정이 「작은 판이 보스보다 요란해지는 뒤집힌 사다리」다.
+	#  종의 비(tierce 1.2)도 안 놓는다 — pit 넷의 어느 두 값의 비도
+	#  1.020 ~ 1.064 라 1.2 근처가 아니다.
+	"pit":  [1.00, 0.98, 0.96, 0.94],    # 금·깨짐의 음 배수
+}
+
 var brk_live := false    # 도안이 서 있다 — 금이 나는 중이거나 조각이 난 뒤
 var brk_fired := false   # 조각이 났다. **이때부터 _draw_board 가 쉰다**
 var brk_t := 0.0         # 발화부터 흐른 시간. 음수면 hold(제자리에서 흰색)
@@ -16664,11 +16884,38 @@ var brk_rings := []      # [[r0, r1], ...] 지금 판의 띠 표에서 뜬 겹
 var brk_born := PackedFloat32Array()   # 단마다 난 때(brk_c)
 var brk_shards := []     # {c, pts, v, rot, w, col, t, life}
 var brk_bits := []       # 부스러기 {p, v, t, life, sz}
+#  0~3. 얼마나 넘겼나 — 도안이 설 때 한 번 뜨고 그대로 간다.
+#  ⚠ **둘째 깃발(over_live 같은)을 안 판다.** brk_live 는 qa_break 의
+#  자다 — ① 이 그 깃발이 참이 되는 **첫 프레임**에 shake 13.0 ·
+#  qt · hitstop 상한 · pops 수 넷을 매달았고, ⑥ 은 `brk_live and not
+#  burst_hits.is_empty()` 가 한 번이라도 참이면 곧장 진다. 깊이는 판이
+#  사는 동안 아무것도 안 켜므로 둘 다 **구조적으로** 초록이다. 2026-09-25
+var brk_deep := 0
 
 
 #  이 층의 줄. [부채 · 겹 · 부스러기 · 소리 겹 · 음 배수]
 func _brk_row() -> Array:
 	return BRK[["small", "big", "boss"][brk_tier]]
+
+
+# ── 얼마나 넘겼나 ── total / target 을 BRKDEEP.step 셋에 대어 0~3 을 낸다.
+#  자를 **사용자의 말 그대로** 잡았다: 「판에서 플레이한 점수가 목표점수보다
+#  높아지고」. _brk_arm 안에서 **한 번** 읽는다 — 그 자리는 total 이 이미
+#  더해진 뒤고 burst_hits 가 빈 것이 확인된 뒤라, 연발로 넘긴 판도 **판
+#  전체의 최종 총점**으로 잰다.
+#  ⚠ last_gain / (target − 이전 total) 은 **안 쓴다** — 분모가 1 까지
+#  내려가 상한이 없다.
+#  ⚠ clampi 가 가장 값싼 안전장치다. qa_break 의 던지기가 target 1 · total 0
+#  이라 자가 60배로 뜨고, 실측 최대도 x10.89 다(deep_probe). 클램프가
+#  없으면 배열 넷이 범위를 넘어 그 자리에서 터진다.
+#  **읽기뿐이다** — 점수 · 배수 · 목표 · 보상 · 확률에 한 톨도 안 닿는다.
+func _brk_deep_tier() -> int:
+	var k := float(total) / maxf(float(target), 1.0)
+	var t := 0
+	for s in BRKDEEP.step:
+		if k >= float(s):
+			t += 1
+	return clampi(t, 0, 3)
 
 
 # ── 겹 ── **지금 그려지는 판**의 띠 표에서 뜬다. 박아 둔 수가 한 톨도 없다.
@@ -16863,13 +17110,20 @@ func _brk_band_mix(r0: float, r1: float) -> float:
 #  tier 를 −1 로 두면 지금 판에서 뽑는다. 개발자 모드의 「다시 보기」만
 #  층을 손으로 준다 — 그 길은 leg_no 를 한 칸도 안 옮기므로 무늬는 이
 #  판의 것이고 층만 갈린다.
-func _brk_arm(tier := -1) -> void:
+#  deep 은 개발자 모드의 「오버 금 다시 보기」만 손으로 준다 — 큰 배율은
+#  손으로 만들기 어려워 그 줄이 유일한 확인 길이다. −1 이면 지금 판이 목표를
+#  얼마나 넘겼는지에서 뜬다. 둘째 인자가 선택이라 기존 부르는 자리 열여덟이
+#  한 글자도 안 바뀐다. 2026-09-25
+func _brk_arm(tier := -1, deep := -1) -> void:
 	#  소크 · 오토플레이 · 도구는 안 탄다. _swap_begin · _turn_begin 과
 	#  **같은 첫 줄**이고 같은 근거다: 이 함수가 게임 상태를 안 만지므로
 	#  건너뛰어도 두 쪽이 정확히 같은 게임을 한다.
 	if drop_fast:
 		return
 	_brk_skip()
+	#  ⚠ **_brk_skip() 뒤여야 한다.** 순서가 뒤집히면 방금 민 단을 그 줄이
+	#  0 으로 지운다 — brk_stage · brk_snd 와 같은 자리, 같은 이유다.
+	brk_deep = _brk_deep_tier() if deep < 0 else clampi(deep, 0, 3)
 	brk_tier = clampi(GameData.leg_idx(leg_no) if tier < 0 else tier, 0, 2)
 	var row: Array = _brk_row()
 	brk_rings = _brk_rings(int(row[1]))
@@ -16962,8 +17216,12 @@ func _brk_tick(d: float) -> void:
 			#  음은 **내려간다** — 금이 바깥으로 갈수록 무는 나무가 크다.
 			#  층 배수(row[4])를 그대로 물려 작은·큰·보스가 제 음역에
 			#  선다. 퇴장은 내린다는 board_break 의 규약이다.
+			#  깊이는 **음만** 민다(BRKDEEP.pit) — 알 수는 한 알도 안 는다.
+			#  삐걱의 수가 곧 단 수(층의 것)라, 깊이가 거기 손대면 두 축이
+			#  같은 채널에서 싸운다. 2026-09-25
 			if fast_rate <= 1.0:
 				_sfx("board_crack", SFX_BASE * float(_brk_row()[4])
+						* float(BRKDEEP.pit[brk_deep])
 						* lerpf(1.05, 0.92, float(brk_stage - 1)
 								/ maxf(float(top - 1), 1.0)))
 		if brk_c >= brk_span:
@@ -17032,7 +17290,9 @@ func _brk_fire() -> void:
 	#  오름인데(leg_clear · LAND.cue · target_hit) 등장은 올리고 퇴장은
 	#  내린다. 비가 1.095 · 1.101 로 서로 달라 한 음정이 소리를 규정하지
 	#  않는다(LAND 예고 셋 1.122 · 1.188 이 세운 규약).
-	_sfx("board_break", SFX_BASE * float(row[4]))
+	#  깊이는 여기서도 **음만** 민다(BRKDEEP.pit). 한 방은 한 방이다 —
+	#  알이 한 알도 안 늘고 길이도 그대로다. 2026-09-25
+	_sfx("board_break", SFX_BASE * float(row[4]) * float(BRKDEEP.pit[brk_deep]))
 	brk_snd = 0
 	brk_t = -float(BRK.hold)
 	brk_dart = 0.0
@@ -17200,6 +17460,9 @@ func _brk_skip() -> void:
 	brk_dart = -1.0
 	brk_stage = 0
 	brk_snd = 0
+	#  ⚠ 도구 쉰하나가 지나는 문이라 **여기서 안 내리면 앞 판의 단이 다음
+	#  그림에 샌다.** brk_stage · brk_snd 와 같은 자리다. 2026-09-25
+	brk_deep = 0
 	brk_rings = []
 	brk_shards.clear()
 	brk_bits.clear()
@@ -17345,8 +17608,17 @@ func _brk_crack_draw(over := false) -> void:
 		#  언 실루엣 위에서는 열이 뜻이 없다 — 다 식은 폭(2px)으로 굵게
 		#  긋는다. 그 한 프레임이 「여기가 갈라졌다」를 통째로 말한다.
 		var ht: float = 0.0 if over else _brk_hot(k + 1)
-		var lit := C_WIRE.lerp(Color.WHITE, 0.72).lerp(Color.WHITE, ht)
-		var gw: float = lerpf(2.0, 1.0, ht)
+		#  ⚠ **깊이(brk_deep)는 식은 쪽만 민다.** 갓 난 금은 네 단 모두
+		#  1px 흰 실이다 — 자라는 것이 식은 틈뿐이라야 「벌어지는 틈」이라는
+		#  위의 뜻이 그대로 살고, 열 시간(BRK.hot 0.30)을 한 톨도 안 건드린다.
+		#  hot 을 늘리는 길은 안 갔다: 하얗고 **가는** 금이 늘어나 폭 축과
+		#  정면으로 싸운다. 0단은 0.72 · lerpf(2.0, 1.0) 그대로라 **지금과
+		#  한 픽셀도 안 다르다.** 2026-09-25
+		var lit := C_WIRE.lerp(Color.WHITE, float(BRKDEEP.lit[brk_deep])) \
+				.lerp(Color.WHITE, ht)
+		var gw: float = lerpf(2.0 + float(BRKDEEP.gw[brk_deep]), 1.0, ht)
+		#  밝은 모서리는 넓어진 틈 바로 바깥에 저절로 따라붙는다 — 이 줄은
+		#  한 글자도 안 고친다.
 		var off: float = gw * 0.5 + 0.5
 		var bi: int = k / 2
 		if k % 2 == 0:              # 테
@@ -17372,8 +17644,15 @@ func _brk_crack_draw(over := false) -> void:
 			for j in brk_w:
 				var ra0: float = float(j * step) * sw - sw * 0.5 - PI * 0.5
 				var ra1: float = ra0 + sw * float(step)
-				var rr: float = r + lerpf(-2.5, 2.5,
-						_gl_rand(j * 31 + k, brk_seed))
+				#  ⚠ **깊이의 톱니는 안쪽으로만 벌린다.** 테 호는 겹의
+				#  안쪽 경계에 서는데 보스의 바깥 겹 안쪽 경계가 판 테
+				#  (1.24R = 121.5px)에서 8px 안이라, 대칭으로 벌리면 3단
+				#  보스에서 호가 테를 밟는다 — 실루엣은 깨짐의 것이지
+				#  금의 것이 아니다. 3단이 해야 하는 말은 「더 크다」가
+				#  아니라 **「더 험하다」**다. 씨(brk_seed)는 그대로라 같은
+				#  판이 네 단에서 같은 무늬로 갈라진다. 2026-09-25
+				var rr: float = r + lerpf(-2.5 - float(BRKDEEP.jag[brk_deep]),
+						2.5, _gl_rand(j * 31 + k, brk_seed))
 				if rr < 1.0:
 					continue
 				draw_arc(BC, rr, ra0, ra1, 6 + step, C_BG, gw)

@@ -137,6 +137,8 @@ func _play(n: int, hold: bool) -> Dictionary:
 	var two := false
 	var leak := false
 	var danced := false
+	var src_leak := false
+	var src_danced := false
 	while g.state == g.S.RESOLVE and frames < 4000:
 		var ps0: int = g.pitch_step
 		g._process(1.0 / 60.0)
@@ -144,11 +146,18 @@ func _play(n: int, hold: bool) -> Dictionary:
 		cur += 1
 		if g.chip_j <= 0.0:
 			danced = true
+		#  출처 빛도 같은 시계를 탄다 — 카드 춤과 **같은 자로** 잰다.
+		#  2026-09-25
+		if g.src_t <= 0.0:
+			src_danced = true
 		if g.pitch_step > ps0:
 			#  걸음이 바뀐 프레임. 앞 걸음의 춤이 그 안에서 다 끝났어야 한다 —
 			#  첫 걸음(cur 이 세움부터 센 것)만 빼고 본다.
 			if steps.size() > 0 and not danced:
 				leak = true
+			if steps.size() > 0 and not src_danced:
+				src_leak = true
+			src_danced = false
 			if g.pitch_step - ps0 > 1:
 				two = true
 			steps.append(cur)
@@ -157,6 +166,7 @@ func _play(n: int, hold: bool) -> Dictionary:
 	if hold:
 		_btn(false)
 	return {"frames": frames, "steps": steps, "two": two, "leak": leak,
+			"src_leak": src_leak,
 			"pitch": g.pitch_step, "total": g.total, "gold": g.gold - gold0,
 			"chip": g.cur_chip, "mult": g.cur_mult, "shown": g.shown,
 			"flash": maxf(maxf(g.total_flash, g.chip_j),
@@ -206,6 +216,11 @@ func _run() -> void:
 
 	# ── ⓙ 카드 춤이 걸음을 안 넘긴다 ──────────────────────
 	_ok("카드 춤이 걸음 안에서 끝난다 (3273~ 짝)", not fast.leak)
+	#  정산 출처 짚기의 빛도 **같은 시계**를 탄다. 안 태우면 2.5배에서
+	#  판이 여러 걸음치 밝은 채로 겹쳐 「출처를 더 잘 보여 준다」가 오히려
+	#  더 안 읽히게 된다. 2026-09-25
+	_ok("출처 빛이 걸음 안에서 끝난다", not fast.src_leak)
+	_ok("정산이 끝나면 출처 빛도 0", g.src_t <= 0.0001, "%.4f" % g.src_t)
 	_ok("정산이 끝나면 카드 시계가 다 0", fast.flash <= 0.0001,
 			"최대 %.4f" % fast.flash)
 
@@ -319,3 +334,36 @@ func _run() -> void:
 			"rate %.2f · 한도 %.2f" % [g._fast_rate(), g._fast_lim()])
 	_btn(false)
 	g.fast_mul = 2.5
+
+	# ── ⓛ 걸음에 매인 신호가 걸음과 **같은 비로** 준다 (2026-09-25) ──
+	#  슬롯 달아오름(PANEL.hot 0.62초)과 동전 팝(0.9초)만 빨리 보기를 안
+	#  타고 있었다 — 2.5배에서 각각 걸음 넷 · 여섯을 덮어 「어느 동전이
+	#  방금 발동했나」와 「이번 걸음의 수가 몇인가」가 여러 걸음치 겹쳤다.
+	#  같은 **벽시계 시간**(25프레임 1배 = 10프레임 2.5배)을 태워 두 값이
+	#  같은 자리에 오는지로 잰다. ⓙ 의 카드 시계 여섯과 같은 계약이다.
+	var hot := []
+	var age := []
+	for hz in [[25, 1.0], [10, 2.5]]:
+		_stage(8)
+		g.fast_lock = float(hz[1]) > 1.0
+		g.fast_mul = float(hz[1])
+		#  슬롯 배열은 owned 가 아니라 max_items() 로 선다 — 동전을
+		#  쥐여 줄 필요가 없다.
+		g._panel_reset()
+		g._panel_fire(0)
+		(g.pops as Array).clear()
+		g.pop(g.BC, "+1", g.C_CHIP, 12, 0.9)
+		for _f in int(hz[0]):
+			g._process(1.0 / 60.0)
+		hot.append(float(g.slot_hot[0]))
+		age.append(0.0 if (g.pops as Array).is_empty()
+				else float((g.pops as Array)[0].t))
+	g.fast_lock = false
+	g.fast_mul = 2.5
+	g._panel_reset()
+	_ok("슬롯 달아오름이 빨리 보기를 탄다",
+			absf(float(hot[0]) - float(hot[1])) < 0.02,
+			"1배 25프레임 %.3f ↔ 2.5배 10프레임 %.3f" % [hot[0], hot[1]])
+	_ok("동전 팝이 빨리 보기를 탄다",
+			absf(float(age[0]) - float(age[1])) < 0.02,
+			"1배 25프레임 %.3f ↔ 2.5배 10프레임 %.3f" % [age[0], age[1]])
