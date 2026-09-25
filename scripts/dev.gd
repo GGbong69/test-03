@@ -1227,14 +1227,21 @@ static func _cur_name(g: Node, e: Dictionary) -> String:
 		return "%d/3 %s" % [i % 3 + 1, CARDFX_STEPS[i % 3]]
 	#  이것도 _list 를 안 지나는 상수 목록이다. 총 길이를 같이 찍는다 —
 	#  「유리 0.40 / 밀랍 0.56」이 한 줄에 보여야 ◀▶ 한 칸으로 견준다.
-	#  판 깨짐의 층. 층이 무엇을 가르는지를 값 칸이 그대로 적는다 —
-	#  겹 · 부스러기 · 소리 겹이 층의 전부이고 **길이는 셋이 같다.**
+	#  판 깨짐의 층. 층이 무엇을 가르는지를 값 칸이 그대로 적는다.
+	#  ⚠ **「겹」이 아니라 「살」이다(2026-09-25).** 조각이 부채×띠 격자가
+	#  아니라 **맞은 자리에서 뻗은 금이 가른 유리 면**이 되었으므로, 층을
+	#  가르는 첫 수가 겹이 아니라 살이다 — 겹은 이제 색 띠 표일 뿐이라
+	#  값 칸에 적으면 거짓말이 된다. 살 9/12/15 는 약수 스냅이 없어 층을
+	#  돌리면 **눈에 보이게 갈린다**(앞서는 셋 다 10 으로 접혀 작은 판과
+	#  큰 판이 기하에서 같았다).
+	#  ⚠ 이 칸은 화살표 둘 사이라 **스물몇 자에서 끊긴다** — 「오버 금」
+	#  줄이 이미 그렇게 잘린 적이 있다. 넷만 적는다.
 	if k == "brk":
 		var gj: int = i % BRK_TIERS.size()
-		var gt: Array = load("res://scripts/game.gd").BRK[
+		var gt: Dictionary = load("res://scripts/game.gd").BRK[
 				["small", "big", "boss"][gj]]
-		return "%d/%d %s · 겹%d · 톱밥%d · 소리%d" % [gj + 1, BRK_TIERS.size(),
-				BRK_TIERS[gj], int(gt[1]), int(gt[2]), int(gt[3])]
+		return "%d/%d %s · 살%d · 마디%d · 단%d" % [gj + 1, BRK_TIERS.size(),
+				BRK_TIERS[gj], int(gt.spokes), int(gt.knots), int(gt.stages)]
 	#  오버 금의 단. 「판 깨짐」 줄이 「겹 · 톱밥 · 소리」를 적는 그 어법으로
 	#  **이 단을 가르는 자**를 그대로 적는다 — 넘긴 배율의 구간이다.
 	#  값을 BRKDEEP 에서 그대로 읽어 두 곳이 갈라질 길을 안 만든다.
