@@ -76,6 +76,8 @@ func _initialize() -> void:
 	_newrows(g)
 	print("\n── 발견 두 줄 ────────────────────────────")
 	_found(g)
+	print("\n── 총합 걸음 다시 보기 ───────────────────")
+	_growrow(g)
 
 
 #  트리가 선 첫 프레임. ⑥번 블록만 여기서 돈다.
@@ -681,3 +683,63 @@ func _card(g: Node) -> void:
 	_say(g.queue.size() == 2 and Dev.card_ph == 0,
 			"진행 중인 진짜 정산 위에서는 안 열린다", "남은 걸음 %d" % g.queue.size())
 	Dev.page = 2
+
+
+# ── 총합 걸음 다시 보기 (2026-09-26 수선) ────────────────
+#  이 줄이 **살아 있는 판의 목표를 1000 으로 덮고 안 되돌렸다.** 목표 4200 짜리
+#  판 도중에 누르면 그 판이 1000 짜리가 되고, total 이 이미 1000 을 넘었으면 다음
+#  합계 걸음의 「목표를 넘겼나」가 그 자리에서 참이 되어 판이 끝나 버린다. 게이지
+#  (shown ÷ target)와 정산 보상도 엉뚱한 목표로 선다.
+#  qa_break 가 저쪽 쪽에 대해 「개발자 모드가 런 진도를 안 만진다 — 골드 4→4 ·
+#  판 1→1 · **목표 42→42**」를 이미 못 박아 두었는데 그 검사는 판 깨짐 줄만 재므로
+#  이 줄을 못 잡았다. 같은 자를 5쪽에도 댄다.
+func _growrow(g: Node) -> void:
+	var page0 := Dev.page
+	Dev.page = 5
+	var i := _find(g, "총합 걸음 다시 보기")
+	_say(i >= 0, "5쪽에 「총합 걸음 다시 보기」 줄이 있다")
+	if i < 0:
+		Dev.page = page0
+		return
+	var r: Rect2 = Dev._row(i)
+	var run_at := Vector2(r.position.x + 4.0, r.get_center().y)
+	g._start_leg()
+	g._swap_skip()
+	g.state = g.S.AIM_V          # 살아 있는 판 한가운데에서 누른다
+	#  1000 이 아닌 목표를 세운다 — 옛 코드가 박던 값과 같으면 「안 만졌다」와
+	#  「만졌는데 같은 값이었다」가 구별이 안 된다.
+	g.target = 4200
+	g.total = 1500
+	g.shown = 1500.0
+	var tg0: int = g.target
+	var tt0: int = g.total
+	var gd0: int = g.gold
+	var lg0: int = g.leg_no
+	#  네 단(바닥 · 한 방 · 목표 · 천장)을 전부 눌러 본다 — 천장 2.00 이 target
+	#  1000 시절에 last_gain 2000 을 세워 total 1500 을 곧장 넘겼다.
+	var moved := []
+	for ci in 4:
+		Dev.pick["grow"] = ci
+		Dev.click(g, run_at)
+		if g.target != tg0:
+			moved.append("목표 %d → %d" % [tg0, g.target])
+		if g.total != tt0:
+			moved.append("점수 %d → %d" % [tt0, g.total])
+		if g.gold != gd0 or g.leg_no != lg0:
+			moved.append("골드/판")
+	_say(moved.is_empty(), "런 진도(목표 · 점수 · 골드 · 판)를 안 만진다",
+			"목표 %d · 점수 %d" % [g.target, g.total] if moved.is_empty()
+			else str(moved))
+	#  세기가 **살아 있는 목표**에 매인다 — 목표를 안 덮으므로 비가 그대로 산다.
+	Dev.pick["grow"] = 3
+	Dev.click(g, run_at)
+	var rn: float = float(g.last_gain) / float(maxi(g.target, 1))
+	_say(absf(rn - 2.00) < 0.01, "천장 단이 살아 있는 목표의 두 배를 세운다",
+			"이득 %d ÷ 목표 %d = %.2f" % [g.last_gain, g.target, rn])
+	#  ① 띠 굴림이 미리보기에서 **실제로 구른다.** score_from = shown 이면
+	#  shown 이 이미 total 이라 한 픽셀도 안 굴렀다.
+	_say(g.score_roll > 0.0 and absf(g.score_from - float(g.total)) > 1.0,
+			"띠가 미리보기에서 실제로 구른다",
+			"떠난 자리 %.0f → 총점 %d" % [g.score_from, g.total])
+	g._card_reset()
+	Dev.page = page0

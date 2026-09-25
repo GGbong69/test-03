@@ -2149,15 +2149,26 @@ static func _run(g: Node, e: Dictionary) -> void:
 			#  정산을 안 돌리고 **그 걸음만** 네 크기로 재생한다. 0쪽의 「정산
 			#  다시 재생」과 갈라 두는 까닭: 저쪽은 실제 경로 그대로 태우는
 			#  줄이고 이쪽은 **네 크기를 나란히 견주는** 줄이다.
-			#  ⚠ **total 을 안 바꾼다** — 세우는 것은 target·last_gain·score_from
-			#  뿐이라 저장된 점수가 안 움직인다. **_brk_arm 도 안 부른다** —
-			#  판을 깨지 않고 층만 보는 것이 이 줄의 뜻이다.
+			#  ⚠ **런 진도를 한 톨도 안 만진다** — total 도 **target 도** 안
+			#  바꾼다. **_brk_arm 도 안 부른다** — 판을 깨지 않고 층만 보는
+			#  것이 이 줄의 뜻이다.
+			#
+			#  ⚠⚠ 2026-09-26 수선: 여기서 `g.target = 1000` 을 박아 두고
+			#  되돌리는 자리가 없었다. 목표 4200 짜리 판 도중에 이 줄을 누르면
+			#  그 판이 1000 짜리가 되고, total 이 이미 1000 을 넘었으면 다음
+			#  합계 걸음의 「목표를 넘겼나」가 그 자리에서 참이 되어 판이
+			#  끝나 버렸다. 게이지(shown ÷ target)와 정산 보상도 엉뚱한 목표로
+			#  섰고, 눌러서 되돌리는 길이 없었다. 「한 방」(_card_big)은
+			#  card_back 으로 되돌리고 qa_break 는 「개발자 모드가 런 진도를
+			#  안 만진다 — 목표 42→42」를 이미 못 박아 두었는데 이 줄만 샜다.
+			#  _grow_n 은 **이득÷목표 비**만 보므로, 목표를 그대로 두고 이득을
+			#  그 비로 세우면 같은 그림이 난다 — 오히려 살아 있는 판의 크기로
+			#  견주므로 미리보기가 더 정직하다.
 			if not g._is_play_deep():
 				g._start_leg()
 			g._swap_skip()
 			var rr: float = float(GROW_R[i % GROW_R.size()])
-			g.target = 1000
-			g.last_gain = int(round(rr * 1000.0))
+			g.last_gain = int(round(rr * float(maxi(g.target, 1))))
 			var gn: float = g._grow_n()
 			g.card_mode = 1
 			g.card_target = 1.0
@@ -2169,7 +2180,13 @@ static func _run(g: Node, e: Dictionary) -> void:
 					* g.grow_shake
 			g.board_punch = 1.0
 			if g.grow_roll > 0.0:
-				g.score_from = g.shown
+				#  **떠난 자리**를 이번 이득만큼 내려 둔다(2026-09-26 수선).
+				#  score_from = shown 이면 shown 이 이미 total 이라 띠가 한
+				#  픽셀도 안 굴러, 이 줄이 재생한다고 적어 둔 네 층 중 ①번이
+				#  미리보기에서 통째로 안 보였다. total 은 그대로다 — 굴림이
+				#  끝나면 shown 이 제자리로 돌아온다. 0 에서 막는 것은 이득이
+				#  총점보다 큰 판 초반에 띠가 잠깐 마이너스를 찍기 때문이다.
+				g.score_from = maxf(g.shown - float(g.last_gain), 0.0)
 				g.score_roll = 1.0
 				g.score_div = lerpf(float(g.GROW.div_lo), float(g.GROW.div_hi), gn) \
 						/ g.grow_roll
