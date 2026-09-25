@@ -17820,6 +17820,12 @@ func _brk_bull_col(th: String) -> Color:
 			return CLOCKART.enamel
 		"target":
 			return TARGETART.gold
+		#  ⚠ **피자의 불이 초록 원판으로 떴다** — 과녁이 밟았던 그 함정을
+		#  피자만 그대로 밟고 있었다(찍어 보고 잡았다, 2026-09-25).
+		#  피자 한복판은 토마토·바질 고명이라 판 어디에도 초록 원판이 없다.
+		#  표에 이미 있는 소스 색을 짚는다 — **새 색이 아니다.**
+		"pizza":
+			return PIZZAART.sauce
 	return C_GREEN
 
 
