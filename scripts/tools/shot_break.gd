@@ -109,8 +109,9 @@ func _run() -> void:
 	_darts()
 	print("  기본 판 칸 %d" % g._sec_n())
 	_arm(2)
-	print("  보스 — 부채 %d · 겹 %d · 단 %d" % [g.brk_w,
-			(g.brk_rings as Array).size(), (g.brk_rings as Array).size() * 2])
+	print("  보스 — 살 %d · 면 %d · 색 띠 %d · 단 %d"
+			% [(g.brk_spokes as Array).size(), (g.brk_facets as Array).size(),
+					(g.brk_rings as Array).size(), int(g._brk_row().stages)])
 	#  ⚠ **단이 날 때까지 감고 찍는다.** 앞서는 _hold(1) 한 프레임만 감고
 	#  「첫 단」이라 적었는데, 첫 단은 brk_span 0.676초의 1/6 인 0.101초
 	#  (여섯 프레임째)에 난다 — 한 프레임 뒤에는 brk_stage 가 아직 0 이라
@@ -125,7 +126,7 @@ func _run() -> void:
 	while g.brk_stage < (g.brk_rings as Array).size():
 		await _hold(1)
 	await _snap("02_crack_b")          # 절반쯤 — 살과 테가 번갈아 바깥으로
-	while g.brk_stage < (g.brk_rings as Array).size() * 2 and not g.brk_fired:
+	while g.brk_stage < int(g._brk_row().stages) and not g.brk_fired:
 		await _hold(1)
 	await _snap("03_crack_c")          # 거의 다 — 금이 조각 경계를 다 적었다
 	print("  금이 다 그어진 단 %d" % g.brk_stage)
@@ -170,7 +171,7 @@ func _run() -> void:
 		#  금이 다 그어진 프레임 — **조각을 자르는 그 선**이 판의 철선과
 		#  한 픽셀도 안 어긋나는지가 여기서 드러난다.
 		while not g.brk_fired \
-				and g.brk_stage < (g.brk_rings as Array).size() * 2:
+				and g.brk_stage < int(g._brk_row().stages):
 			await _hold(1)
 		await _snap("3_%s_crack" % String(m[1]))
 		while not g.brk_fired:
@@ -179,9 +180,10 @@ func _run() -> void:
 		await _snap("3_%s_fire" % String(m[1]))
 		await _hold(8)
 		await _snap("3_%s_fly" % String(m[1]))
-		print("  %s — 칸 %d · 부채 %d · 겹 %d · 조각 %d · 톱밥 %d"
+		print("  %s — 칸 %d · 살 %d · 면 %d · 색 띠 %d · 조각 %d · 톱밥 %d"
 				% [String(m[1]) if String(m[1]) != "" else "기본", g._sec_n(),
-						g.brk_w, (g.brk_rings as Array).size(),
+						(g.brk_spokes as Array).size(), (g.brk_facets as Array).size(),
+						(g.brk_rings as Array).size(),
 						(g.brk_shards as Array).size(),
 						(g.brk_bits as Array).size()])
 		g._brk_skip()
@@ -209,12 +211,13 @@ func _run() -> void:
 		_darts()
 		_arm(2, t)
 		while not g.brk_fired \
-				and g.brk_stage < (g.brk_rings as Array).size() * 2:
+				and g.brk_stage < int(g._brk_row().stages):
 			await _hold(1)
 		await _snap("5%d_deep_%d" % [t, t])
-		print("  오버 금 %d단 — 폭 +%.1f · 밝기 %.2f · 톱니 %.1f · 음 %.2f"
+		print("  오버 금 %d단 — 폭 +%.1f · 밝기 %.2f · 멈춘곁가지 %d · 구덩이고리 %d · 음 %.2f"
 				% [t, float(g.BRKDEEP.gw[t]), float(g.BRKDEEP.lit[t]),
-						float(g.BRKDEEP.jag[t]), float(g.BRKDEEP.pit[t])])
+						int(g.BRKDEEP.brch[t]), int(g.BRKDEEP.pitn[t]),
+						float(g.BRKDEEP.pit[t])])
 		g._brk_skip()
 	#  3단을 테마 넷에서 한 번씩 — 폭 3.2px 이 판을 검은 격자로 안 덮는지.
 	#  도넛은 불이 없어 첫 겹이 0 에서 시작하고 피자는 부채가 8 로 접힌다.
@@ -223,7 +226,7 @@ func _run() -> void:
 		_darts()
 		_arm(2, 3)
 		while not g.brk_fired \
-				and g.brk_stage < (g.brk_rings as Array).size() * 2:
+				and g.brk_stage < int(g._brk_row().stages):
 			await _hold(1)
 		await _snap("53_deep3_%s" % String(m2[1]))
 		g._brk_skip()
@@ -239,6 +242,36 @@ func _run() -> void:
 	await _snap("54_deep3_motion_off")
 	g.motion_off = false
 	g._brk_skip()
+
+	# ── ⑥ 맞은 자리 — **가장자리에 맞은 판** (2026-09-25) ──────
+	#  ⚠ 위의 서른몇 장은 마지막 자루가 판 한복판(−0.04R, 0.02R)이라
+	#  **맞은 자리 축을 하나도 안 보여 준다.** 금이 꽂힌 자리에서 뻗는지는
+	#  치우친 타격에서만 눈에 보이고, hold 타일링이 제일 어려운 자리도
+	#  거기다(살 길이가 방향마다 rim−|H| ~ rim+|H| 로 갈린다).
+	#  0.806R 은 더블 띠, 0.95R 은 테 코앞이다.
+	for sp in [["dbl", 0.806], ["rim", 0.95]]:
+		await _leg([])
+		_darts()
+		#  마지막 자루만 옮긴다 — 금이 뻗는 자리는 **마지막** 자루다
+		var rr: float = g.R * float(sp[1])
+		g.darts[g.darts.size() - 1] = {"p": g.BC + Vector2(rr * 0.62, -rr * 0.78),
+				"id": "std", "rot": 0.05}
+		_arm(2)
+		while not g.brk_fired and g.brk_stage < int(g._brk_row().stages):
+			await _hold(1)
+		await _snap("60_hit_%s_crack" % String(sp[0]))
+		while not g.brk_fired:
+			await _hold(1)
+		await _hold(1)
+		await _snap("61_hit_%s_hold" % String(sp[0]))
+		await _hold(8)
+		await _snap("62_hit_%s_fly" % String(sp[0]))
+		print("  맞은 자리 %s — |H| %.1f · 살 %d · 면 %d · 조각 %d"
+				% [String(sp[0]), g.brk_hit.length(),
+						(g.brk_spokes as Array).size(),
+						(g.brk_facets as Array).size(),
+						(g.brk_shards as Array).size()])
+		g._brk_skip()
 
 	print("  찍음 %s" % tag)
 	quit(0)
