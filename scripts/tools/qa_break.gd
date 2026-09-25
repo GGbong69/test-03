@@ -1336,6 +1336,50 @@ func _run() -> void:
 		hit_txt += "%s ✓ " % (id3 if id3 != "" else "기본")
 	_ok("금이 맞은 자리에서 뻗는다", hit_ok, hit_txt)
 
+	# ── ㉚ 도안 한 프레임의 셈이 자 안이다 (2026-09-25) ──────
+	#  ⚠ **자가 없는 축이었다.** ③(70프레임)과 ⑳(70/54/4/29)은 프레임
+	#  **수**를 재지 한 프레임의 벽시계를 안 잰다. `_brk_arm` 은 프레임 0 에
+	#  그물을 통째로 짓는다 — 실측 3.6~7.1ms(60fps 예산 16.67ms)다. 그
+	#  자리는 hitstop 을 qt 에서 뺀 바로 뒤라 여유가 있지만, **재는 자가
+	#  없으면 나중에 눈치 못 챈 채 는다.**
+	#  벽시계로 걸면 느린 기계에서 제 손으로 빨개지므로 **셈의 크기**를
+	#  못 박는다 — 결정적이고, 실제로 시간을 미는 것이 이 넷이다.
+	var bud_ok := true
+	var bud_txt := ""
+	for id4 in ["", "pizz", "dnut", "aimb", "clok", "arst"]:
+		_open()
+		_board(id4)
+		var wf := 0
+		var wv := 0
+		var ws := 0
+		for t4 in 3:
+			for sd4 in range(1, 13):
+				g._brk_skip()
+				g.leg_no = sd4 * 3 + t4
+				g.darts = [{"p": g.BC + Vector2(
+						sin(float(sd4)) * g.R * 0.86,
+						-cos(float(sd4)) * g.R * 0.86), "id": "std", "rot": 0.0}]
+				g._brk_arm(t4, 3)
+				wf = maxi(wf, (g.brk_facets as Array).size())
+				ws = maxi(ws, (g.brk_web as Array).size())
+				var vn := 0
+				for f in g.brk_facets:
+					vn += f.pts.size()
+				wv = maxi(wv, vn)
+				g._brk_skip()
+		if wf > int(g.BRK.cap):
+			bud_ok = false
+			bud_txt += "[%s 면 %d > 상한 %d]" % [id4, wf, int(g.BRK.cap)]
+		if wv > 3000:
+			bud_ok = false
+			bud_txt += "[%s 정점 %d > 3000]" % [id4, wv]
+		if ws > 320:
+			bud_ok = false
+			bud_txt += "[%s 마디 %d > 320]" % [id4, ws]
+		bud_txt += "%s 면%d·정점%d·마디%d  " % [
+				id4 if id4 != "" else "기본", wf, wv, ws]
+	_ok("도안 한 프레임의 셈이 자 안이다", bud_ok, bud_txt)
+
 	# ══ 정산 출처 짚기 — 걸음에 매인 빛 ═══════════════════════
 	#  사용자: 「점수 정산할 때 효과가 어디서 일어난 건지 좀 더 잘 알려줄 수
 	#  있으면 좋겠어」(2026-09-25). 한 판에 4~8번 · 24판 런에 100~190번 나는
