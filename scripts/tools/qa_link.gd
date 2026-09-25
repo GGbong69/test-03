@@ -45,6 +45,12 @@ func _ok(nm: String, cond: bool, note := "") -> void:
 	print("  %s %-48s %s" % ["통과" if cond else "실패", nm, note])
 
 
+#  점이 사각의 **테두리 위**인가. 안(0.6px 줄인 사각)에 들면 거짓이고, 밖
+#  (0.6px 키운 사각)에 있어도 거짓이다. 2026-09-26
+func _on_edge(p: Vector2, r: Rect2) -> bool:
+	return r.grow(0.6).has_point(p) and not r.grow(-0.6).has_point(p)
+
+
 func _calm() -> void:
 	g.swap_live = false
 	g.photo = ""
@@ -205,30 +211,57 @@ func _run() -> void:
 	while g.src_t <= 0.0 and g.state == g.S.RESOLVE:
 		g._process(1.0 / 60.0)
 	var bs: Vector2 = g._link_src()
-	var bd: Vector2 = g._link_dst()
+	var bd: Vector2 = g._link_dst(bs)
+	var bb: Rect2 = g._link_box()
 	_ok("⑮ 판 걸음 출발점이 판 위다",
 			g.src_slot < 0 and bs.distance_to(g.BC) <= g.R + 1.0,
 			"BC 에서 %.1f (R %.1f)" % [bs.distance_to(g.BC), g.R])
-	_ok("⑮-b 점수 걸음 도착점이 점수 칸이다",
-			not g.src_ring and is_equal_approx(bd.x - g.card_pos().x, 61.0),
-			"x+%.1f" % (bd.x - g.card_pos().x))
+	#  **가운데가 아니라 테두리다**(2026-09-26 수선). 가운데로 꽂으면 선이 그
+	#  칸의 수를 긁는다 — 꼬리만 빨려 드는 구조라 칸에 걸친 토막이 가장 오래
+	#  남고, 640×360 에서 수의 획이 2~3px 인데 겉선 3 + 속선 1 이 그 위를 지났다.
+	_ok("⑮-b 점수 걸음 도착점이 점수 칸 **테두리**다",
+			not g.src_ring and _on_edge(bd, bb)
+					and is_equal_approx(bb.position.x - g.card_pos().x, 12.0),
+			"%s · 칸 %s" % [bd, bb])
 
 	_stage([_item(2, "mult", 3)])
 	g._process(1.0 / 60.0)
 	while g.src_t <= 0.0 and g.state == g.S.RESOLVE:
 		g._process(1.0 / 60.0)
 	var cs: Vector2 = g._link_src()
-	var cd: Vector2 = g._link_dst()
+	var cd: Vector2 = g._link_dst(cs)
+	var cb: Rect2 = g._link_box()
 	var sr: Rect2 = g._slot_rect(2)
 	_ok("⑮-c 동전 걸음이 그 슬롯에서 난다",
 			g.src_slot == 2 and sr.grow(2.0).has_point(cs),
 			"slot %d · %s in %s" % [g.src_slot, cs, sr])
-	_ok("⑮-d 배수 걸음 도착점이 배수 칸이다",
-			g.src_ring and is_equal_approx(cd.x - g.card_pos().x, 183.0),
-			"x+%.1f" % (cd.x - g.card_pos().x))
+	_ok("⑮-d 배수 걸음 도착점이 배수 칸 **테두리**다",
+			g.src_ring and _on_edge(cd, cb)
+					and is_equal_approx(cb.position.x - g.card_pos().x, 134.0),
+			"%s · 칸 %s" % [cd, cb])
 	#  동전이 낸 걸음은 **판을 안 가리킨다** — 안 그러면 거짓말이다.
 	_ok("⑮-e 동전 걸음은 판에서 출발하지 않는다",
 			cs.distance_to(g.BC) > 1.0)
+	#  ⑮-f **선이 칸 안으로 한 픽셀도 안 든다.** 이 자가 「수를 안 긁는다」의
+	#  본체다 — 머리가 어디에 있든 그 획 전체가 칸 밖이어야 한다.
+	_stage([_chip(40), {"k": "mult", "v": 5}, _item(0, "chip", 20),
+			_item(3, "mult", 2)])
+	var into := 0
+	var seen_f := 0
+	var wn := 0
+	while g.state == g.S.RESOLVE and wn < 900:
+		g._process(1.0 / 60.0)
+		wn += 1
+		var p: Dictionary = g._link_plan()
+		if p.is_empty():
+			continue
+		seen_f += 1
+		var inner: Rect2 = (g._link_box() as Rect2).grow(-0.6)
+		for q in 33:
+			if inner.has_point((p.a as Vector2).lerp(p.b as Vector2, q / 32.0)):
+				into += 1
+	_ok("⑮-f 선이 칸 안으로 안 든다(수를 안 긁는다)", into == 0 and seen_f > 0,
+			"칸 안에 든 표본 %d / %d프레임 × 33" % [into, seen_f])
 
 	# ── ⑯ 꼬리가 닿는 프레임이 칸 봉우리와 같다 ─────────────
 	#  ARC.drain 0.34 를 고른 유일한 까닭이다. 선의 마지막 픽셀이 빨려 드는
@@ -348,3 +381,38 @@ func _run() -> void:
 			not pm.is_empty() and float(pm.al) > 0.0,
 			"알파 %.2f · 창 %d프레임" % [0.0 if pm.is_empty()
 					else float(pm.al), seen + 1])
+
+	# ── ㉑ 정산 팝이 한 자리에 안 쌓인다 ──────────────────
+	#  팝은 전부 카드 윗변 **한 점**(cc)에서 난다. 수명이 0.9초 붙박이였을 때는
+	#  pace 1.0 에서도 세 걸음, pace 바닥에서 아홉 걸음이 한 수명에 들어
+	#  「점수 +80」 위에 「배수 +4」가 얹혔다 — 무엇인지 못 읽는 덩어리가 카드
+	#  바로 위에 섰고, 그 위를 새로 그은 선이 또 지났다. 「점수 획득할 때 더 잘
+	#  알 수 있으면」의 정반대라 여기서 프레임으로 잠근다.
+	#  자: 같은 x(2px 안) · 읽을 만한 알파(≥0.25) 둘이 12px 안에 겹치면 실패다.
+	#  수명을 걸음에 매면 다음 팝이 날 때 앞 팝이 18.5px 위 · 알파 0.41 이라
+	#  세로로 갈리고, **박자를 어떻게 눌러도 그 픽셀 수가 같다.**
+	for pc in [1, 40]:
+		_stage([_item(0, "chip", 20), _item(1, "mult", 4),
+				_item(2, "chip", 30), _item(3, "mult", 2)], pc)
+		var clash := 0
+		var most_pop := 0
+		var pf := 0
+		while g.state == g.S.RESOLVE and pf < 900:
+			g._process(1.0 / 60.0)
+			pf += 1
+			var vis := []
+			for p in g.pops:
+				var k: float = float(p.t) / maxf(float(p.life), 0.0001)
+				if 1.0 - k * k < 0.25:
+					continue
+				vis.append(Vector2(float(p.p.x), float(p.p.y) - k * 24.0))
+			most_pop = maxi(most_pop, vis.size())
+			for a in range(vis.size()):
+				for b in range(a + 1, vis.size()):
+					if absf(vis[a].x - vis[b].x) < 2.0 \
+							and absf(vis[a].y - vis[b].y) < 12.0:
+						clash += 1
+		_ok("㉑%s 정산 팝이 한 자리에 안 겹친다"
+				% ("" if pc == 1 else "-b 눌린 박자에서도"),
+				clash == 0,
+				"겹침 %d · 한 프레임 최대 %d장 · 걸음 넷" % [clash, most_pop])
