@@ -229,5 +229,141 @@ func _initialize() -> void:
 	_say(String(hit.get("k", "")) == "legboss" and int(hit.get("i", 0)) == bn,
 			"딜이 끝나면 누운 칸이 보스 카드를 잡는다", "%s" % hit)
 
-	print("\n%s" % ("실패 %d건" % fails if fails > 0 else "열여섯 검사 전부 통과"))
+	# ── 큐의 새 키 "mx" 는 **선택이다** (2026-09-25) ───────────
+	#  정산 출처 짚기가 chip · mult 걸음에 「판이 낸 값에 무언가 얹혔나」를
+	#  한 칸으로 싣는다. 걸음 쪽이 그것을 **필수로** 읽으면 큐를 손으로
+	#  짓는 도구 여섯(여기 · card_shots · dev_probe · mod_probe · bal_shots)이
+	#  그 자리에서 한꺼번에 죽는다. 없으면 0 = 흰색이라는 것을 여기서 못 박는다.
+	g.owned = []
+	g._panel_reset()
+	g.state = g.S.RESOLVE
+	g.cur_chip = 0
+	g.cur_mult = 0
+	g.src_t = 0.0
+	g.src_mix = true                       # 안 지워지면 여기서 드러난다
+	g.queue = [{"k": "chip", "v": 40}]     # mx 없음 — 옛 도구가 짓는 꼴 그대로
+	g._next_step()
+	_say(g.cur_chip == 40 and not g.src_mix and g.src_t > 0.0,
+			"큐의 mx 가 없어도 안 죽는다", "점수 %d · 얹힘 %s · 빛 %.2f"
+			% [g.cur_chip, g.src_mix, g.src_t])
+	# 0 만큼 바뀐 걸음은 안 밝는다 — 빗나간 발의 info.base 가 0 인 chip 걸음에서
+	# 판을 밝히면 「점수가 났다」고 거짓말한다.
+	g.src_t = 0.0
+	g.cur_chip = 0
+	g.queue = [{"k": "chip", "v": 0, "mx": 0}]
+	g._next_step()
+	_say(is_zero_approx(g.src_t), "0 만큼 바뀐 chip 걸음은 판을 안 밝힌다",
+			"빛 %.2f" % g.src_t)
+	g.src_t = 0.0
+	g.cur_mult = 5
+	g.queue = [{"k": "mult", "v": 5, "mx": 0}]   # 같은 값 재대입
+	g._next_step()
+	_say(is_zero_approx(g.src_t), "같은 값을 다시 대입하는 mult 걸음도 안 밝힌다",
+			"빛 %.2f" % g.src_t)
+	# mx 가 1 이면 색이 갈린다 — 판이 낸 값에 무언가 얹혔다.
+	g.cur_mult = 0
+	g.queue = [{"k": "mult", "v": 3, "mx": 1}]
+	g._next_step()
+	_say(g.src_ring and g.src_mix and g.src_t > 0.0,
+			"mult 걸음은 고리를, mx 1 은 얹힘 색을 켠다",
+			"고리 %s · 얹힘 %s" % [g.src_ring, g.src_mix])
+
+	# ── 카드의 이름 줄이 걸음을 건너 안 산다 (2026-09-25) ──────
+	#  card_item 을 세우는 갈래는 다섯인데 chip · mult 가 그것을 안 지웠다 —
+	#  점수가 나는 빗나감의 큐 [miss, chip, mult, …] 에서 「빗나감」이 양수
+	#  점수 옆에 0.68초 더 서 있었다.
+	g.cur_chip = 0
+	g.cur_mult = 0
+	g.card_item = ""
+	g.queue = [{"k": "miss"}, {"k": "chip", "v": 12, "mx": 0},
+			{"k": "mult", "v": 1, "mx": 0}]
+	g._next_step()
+	var lbl_miss: String = String(g.card_item)
+	g._next_step()
+	var lbl_chip: String = String(g.card_item)
+	g._next_step()
+	var lbl_mult: String = String(g.card_item)
+	_say(lbl_miss != "" and lbl_chip == "" and lbl_mult == "",
+			"「빗나감」이 다음 걸음으로 안 샌다",
+			"miss '%s' → chip '%s' → mult '%s'" % [lbl_miss, lbl_chip, lbl_mult])
+	# 제 라벨을 세우는 갈래는 한 픽셀도 안 바뀐다.
+	g.queue = [{"k": "pierce", "v": 4}]
+	g._next_step()
+	_say(String(g.card_item) != "", "제 라벨을 세우는 갈래는 그대로",
+			"'%s'" % g.card_item)
+
+	# ── 출처가 **맞는 물건**을 짚는가 (2026-09-25) ─────────────
+	#  이 일의 치명상이 여기다 — 틀린 칸이나 틀린 고리를 밝히면 연출이
+	#  거짓말을 하는 것이고, 그건 아무것도 안 밝히는 것보다 나쁘다.
+	#  실제로 한 발을 꽂아 hit_info 의 진실과 화면이 짚는 자리를 댄다.
+	g.state = g.S.RESOLVE
+	g.owned = []
+	g._panel_reset()
+	g.sealed = -1
+	g.dead_idx = -1
+	g.dead_col = -1
+	g.dead_ring = 0
+	g.mark_sec = -1
+	g.paint_sec = -1
+	g.odd_mul = 1.0
+	g.track_lv = {}
+	g.cur_dart = GameData.darts()[0].duplicate()
+	g.total = 0
+	g.target = 99999          # 판이 안 끝나게 — 깨짐과 안 섞인다
+	#  칸 0(맨 위)의 트리플 한가운데. 판의 각은 위에서 재고 칸 0 의
+	#  한가운데가 곧 0 이다.
+	var trp: float = g.R * (g.rt_trp_in + g.rt_trp_out) * 0.5
+	var pt: Vector2 = g.BC + Vector2(0.0, -trp)
+	var truth: Dictionary = g.hit_info(pt)
+	g.aim = pt
+	g.queue = []
+	g.burst_hits = []
+	g._land()
+	_say(int(g.hit_idx) == int(truth.idx)
+			and is_equal_approx(float(g.hit_r0), float(truth.r0))
+			and is_equal_approx(float(g.hit_r1), float(truth.r1)),
+			"판이 짚는 자리가 hit_info 의 진실과 같다",
+			"칸 %d/%d · 고리 %.1f~%.1f" % [g.hit_idx, int(truth.idx),
+					g.hit_r0, g.hit_r1])
+	#  걸음을 하나씩 파며 모양이 축을 말하는지 본다.
+	var shape := []
+	while not (g.queue as Array).is_empty():
+		var nk := String((g.queue as Array)[0].get("k", ""))
+		g.src_t = 0.0
+		g._next_step()
+		if nk == "chip" or nk == "mult":
+			shape.append([nk, g.src_t > 0.0, g.src_ring, g.src_mix])
+	var shape_ok := true
+	for e in shape:
+		if String(e[0]) == "chip" and (not bool(e[1]) or bool(e[2]) or bool(e[3])):
+			shape_ok = false
+		if String(e[0]) == "mult" and (not bool(e[1]) or not bool(e[2]) or bool(e[3])):
+			shape_ok = false
+	_say(shape_ok and shape.size() == 2,
+			"chip 은 부채 · mult 는 고리 · 얹힌 것이 없으면 흰색",
+			"%s" % str(shape))
+	#  판 위에 무언가 얹히면 색이 갈린다 — 칠(점수 쪽)과 링 죽이기(배수 쪽).
+	g.paint_sec = int(truth.idx)
+	g.paint_mul = 2.0
+	g.dead_ring = int(truth.mult)
+	g.total = 0
+	g.queue = []
+	g.aim = pt
+	g._land()
+	var mix := []
+	while not (g.queue as Array).is_empty():
+		var nk2 := String((g.queue as Array)[0].get("k", ""))
+		g._next_step()
+		if nk2 == "chip" or nk2 == "mult":
+			mix.append([nk2, g.src_mix])
+	var mix_ok := mix.size() == 2
+	for e2 in mix:
+		if not bool(e2[1]):
+			mix_ok = false
+	_say(mix_ok, "판 위에 얹힌 것이 있으면 두 걸음 다 얹힘 색",
+			"%s — 칠 x2.0 · 링 죽이기 %d" % [str(mix), int(truth.mult)])
+	g.paint_sec = -1
+	g.dead_ring = 0
+
+	print("\n%s" % ("실패 %d건" % fails if fails > 0 else "스물다섯 검사 전부 통과"))
 	quit(mini(fails, 125))

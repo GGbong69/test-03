@@ -93,7 +93,11 @@ func _base() -> Dictionary:
 			"calc_flash": 0.0, "total_flash": 0.0,
 			"card_pop": 0.0, "card_vel": 0.0, "chip_j": 0.0, "mult_j": 0.0,
 			"chip_amt": 0.30, "mult_amt": 0.30, "card_burst": 0.0,
-			"gain_roll": 0.0, "card_jrate": 4.0, "motion_off": false}
+			"gain_roll": 0.0, "card_jrate": 4.0, "motion_off": false,
+			#  출처 빛은 **꺼 둔다** — 1~10 은 카드의 춤을 재는 장이라
+			#  판 쪽 신호가 끼면 「1_참 이 고치기 전과 한 픽셀도 같은가」가
+			#  흐려진다. 켜는 장은 11~15 뿐이다. 2026-09-25
+			"src_t": 0.0, "src_ring": false, "src_mix": false}
 
 
 # 춤 곡선의 자리를 f 로 되짚는다. u = 1 − f 이므로
@@ -211,6 +215,41 @@ func _run() -> void:
 	keep["card_pop"] = 1.20
 	keep["card_burst"] = 1.0
 	await _shot("10_모션끔")
+
+	# ── 11~14. 출처 짚기 — 판이 어디서 값이 왔는지 짚는다 ──
+	#  chip 걸음은 **그 부채 한 칸** · mult 걸음은 **그 띠 한 고리**가
+	#  밝는다. 흰색은 판이 낸 값 그대로 · C_ACC 는 판 위에 무언가 얹혔다.
+	#  네 장을 나란히 놓으면 모양 둘 × 색 둘이 곧 이 연출의 전부인 것이
+	#  드러난다. 착탄 섬광(hit_flash)은 0 으로 두어 **이 빛만** 보게 한다.
+	#  2026-09-25
+	var src_base := _base()
+	src_base["hit_flash"] = 0.0
+	src_base["hit_flash_amt"] = 0.9        # 트리플 — 판이 정한 사다리를 탄다
+	src_base["hit_bull"] = false
+	src_base["hit_idx"] = 3
+	src_base["hit_r0"] = g.R * g.rt_trp_in
+	src_base["hit_r1"] = g.R * g.rt_trp_out
+	src_base["src_t"] = 1.0
+	for c in [["11_출처_칸", false, false], ["12_출처_고리", true, false],
+			["13_출처_칸_얹힘", false, true], ["14_출처_고리_얹힘", true, true]]:
+		keep = src_base.duplicate()
+		keep["src_ring"] = bool(c[1])
+		keep["src_mix"] = bool(c[2])
+		keep["chip_j"] = 0.0 if bool(c[1]) else F_TOP
+		keep["mult_j"] = F_TOP if bool(c[1]) else 0.0
+		keep["card_pop"] = 0.609
+		await _shot(String(c[0]))
+
+	# ── 15. 출처 · 모션 끔 — **하나도 안 죽어야 한다** ───
+	#  발라트로의 모션 감소가 조커 발동 애니를 꺼 「이 값이 어디서 왔는가」를
+	#  통째로 잃는 그 자리다. 전부 알파와 색이라 산다 — 카드의 튐만 죽는다.
+	keep = src_base.duplicate()
+	keep["src_ring"] = true
+	keep["src_mix"] = true
+	keep["motion_off"] = true
+	keep["mult_j"] = F_TOP
+	keep["card_pop"] = 1.20
+	await _shot("15_출처_모션끔")
 
 	keep = {}
 	live = true

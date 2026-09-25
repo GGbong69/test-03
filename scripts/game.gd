@@ -679,6 +679,22 @@ var hit_idx := -1
 var hit_r0 := 0.0
 var hit_r1 := 0.0
 var hit_bull := false
+#  ── 정산 출처 짚기 (2026-09-25) ───────────────────────────
+#  사용자: 「점수 정산할 때 효과가 어디서 일어난 건지 좀 더 잘 알려줄 수
+#  있으면 좋겠어」. 카드가 말 못 하는 것은 chip · mult 둘뿐이고, 그 둘이
+#  **판에서 온 값**이다(큐가 {k, v} 만 싣는다). 동전 몫은 이미 세 군데서
+#  말해진다 — 슬롯의 튐 · 달아오름 · 카드의 이름 줄. 새 신호를 안 더한다.
+#    chip 걸음 → 판의 **그 부채 한 칸**이 밝는다 (칸이 점수를 낸다)
+#    mult 걸음 → 판의 **그 띠 한 고리**가 통째로 밝는다 (고리가 배수를 낸다)
+#  모양이 축을 말하고 색이 출처를 말한다: 흰 = 판이 낸 값 그대로 ·
+#  C_ACC = 판 위에 무언가 얹혔다(제약 다섯 · 링 죽이기 · 다트 특성 ·
+#  트랙 강화). 셋 다 판 위에 **제 자리가 없는** 물건이라 따로 켤 곳을
+#  파면 그것이 곧 클러터다.
+#  ⚠ **hit_flash 는 한 글자도 안 건드린다** — 착탄 섬광은 제 일이 따로
+#  있고 감쇠도 다르다(4506, d × 2.6). 이쪽은 걸음에 매인다.
+var src_t := 0.0         # 이 걸음의 출처 빛. card_jrate 로 걸음의 78% 만에 죽는다
+var src_ring := false    # 참이면 고리(배수) · 거짓이면 부채 한 칸(점수)
+var src_mix := false     # 참이면 판이 낸 값에 무언가 얹혔다 — C_ACC
 var waves := []
 var sparks := []
 var ring_fx := []
@@ -4520,6 +4536,13 @@ func _process(d: float) -> void:
 	mult_j = maxf(mult_j - d * fast_rate * card_jrate, 0.0)
 	gain_roll = maxf(gain_roll - d * fast_rate * card_jrate * 3.0, 0.0)
 	card_burst = maxf(card_burst - d * float(CARDFX.burst_fade), 0.0)
+	#  출처 빛도 **같은 시계를 탄다** — 새 벽시계 상수를 한 개도 안 박는다.
+	#  card_jrate = 1/(qt × jspan 0.78)(_next_step 의 마지막 줄)라 창이 언제나
+	#  걸음의 78% 다: pace 1.0 chip 걸음 0.340초 → 0.265초(15.9프레임) ·
+	#  pace 0.30 눌린 걸음 0.102초 → 0.080초(4.8프레임). 빨리 보기 2.5배면
+	#  걸음도 창도 같은 비로 준다 — **구조적으로 다음 걸음을 못 덮는다.**
+	#  2026-09-25
+	src_t = maxf(src_t - d * fast_rate * card_jrate, 0.0)
 	_tick_score(d)
 
 	for w in waves:
@@ -4532,7 +4555,13 @@ func _process(d: float) -> void:
 		rf.t += d
 	ring_fx = ring_fx.filter(func(rf): return rf.t < rf.life)
 	for p in pops:
-		p.t += d
+		#  ⚠ **빨리 보기를 탄다.** 동전 팝의 수명 0.9초가 2.5배에서 걸음
+		#  여섯(0.816초)을 덮어, 여섯 걸음치 숫자가 판 위에 한꺼번에 쌓여
+		#  있었다 — 「출처를 더 잘 보여 준다」가 오히려 더 안 읽히게 된다.
+		#  _fast_on() 이 state != S.RESOLVE 에서 곧장 false 라 **정산 밖에서
+		#  fast_rate 는 언제나 정확히 1.0** 이다: 상태 갈래가 필요 없고
+		#  정산 밖 화면은 한 프레임도 안 바뀐다. 2026-09-25
+		p.t += d * fast_rate
 	pops = pops.filter(func(p): return p.t < p.life)
 	#  시체의 시계는 clear_t 와 **따로** 돈다. 그래야 건너뛰기
 	#  (_click 의 clear_t = 99.0)에 안 죽고, if state == S.CLEAR 분기
@@ -4555,7 +4584,10 @@ func _process(d: float) -> void:
 	card_vel *= exp(-float(CARDFX.damp) * d)
 	card_pop = clampf(card_pop + card_vel * d, float(CARDFX.lo), float(CARDFX.hi))
 
-	_panel_update(d)
+	#  빨리 보기를 **슬롯 시계 셋만** 태운다 — 안에서 갈랐다. PANEL.hot
+	#  0.62초가 2.5배 걸음 넷(0.544초)을 덮어, 어느 동전이 방금 발동했는지가
+	#  네 걸음치 겹쳐 있었다. 2026-09-25
+	_panel_update(d, fast_rate)
 	# 3D 통은 새 런 화면에만 산다. 지우는 자리를 한 곳에 둔다 — 나가는
 	# 길이 셋(ESC · 뒤로 · 시작)이라 각각에 달면 언젠가 하나를 빠뜨린다.
 	if state != S.NEWRUN and cup_vp != null:
@@ -6234,6 +6266,13 @@ func _land(mark := true) -> void:
 		aim = BC + Vector2(cos(a), sin(a)) * sqrt(randf()) * R * 0.95
 
 	var info := hit_info(aim)
+	#  ⚠ **판이 낸 날값을 여기서 뜬다.** 「판 위에 무언가 얹혔나」를 재는
+	#  자다 — 아래 죽이는 축 다섯(금줄 · 색 · 홀짝 · 목표물 · 칠) · 링
+	#  죽이기 · 다트 특성 · 트랙 강화가 **전부** 이 아래에 있으므로 한
+	#  비교가 넷을 다 받는다. 정산 큐가 이 둘과 대어 "mx" 한 칸을 싣고,
+	#  판이 밝을 때 흰색과 C_ACC 를 가른다. 2026-09-25
+	var raw_base := int(info.base)
+	var raw_mult := int(info.mult)
 	# 칸을 죽이는 축 셋. 번호 · 색 · 홀짝 순으로 좁아진다.
 	if dead_idx >= 0 and info.idx == dead_idx:
 		info.base = 0
@@ -6478,6 +6517,11 @@ func _land(mark := true) -> void:
 	calc_flash = 0.0
 	roll_t = -1.0
 	card_item = ""
+	#  앞 발의 출처 빛이 다음 발로 안 샌다. 걸음 안에서 저절로 죽는 값이라
+	#  구조적으로는 이미 0 이지만, 판을 떠났다 돌아오는 길(ESC → 로비 →
+	#  이어하기)처럼 걸음이 중간에 끊기는 자리가 있어 여기서 한 번 내린다 —
+	#  card_item 과 같은 자리, 같은 이유다. 2026-09-25
+	src_t = 0.0
 	card_mode = 0
 	pitch_step = 0
 	_card_reset()
@@ -6505,13 +6549,21 @@ func _land(mark := true) -> void:
 	if info.mult == 0 and fired.is_empty() and info.base <= 0:
 		queue.append({"k": "miss"})
 	else:
+		#  "mx" — 판이 낸 날값에서 **바뀌었나**. 1 이면 판 위에 무언가
+		#  얹힌 것이라 출처 빛이 C_ACC 로 선다.
+		#  ⚠ 걸음 쪽은 **반드시** st.get("mx", 0) 으로 읽는다 — 큐를 손으로
+		#  짓는 도구 여섯(settle_probe · card_shots · dev_probe · mod_probe ·
+		#  bal_shots)이 {k, v} 만 넣는다. 없으면 0 = 흰색이다. 2026-09-25
+		var mx_c: int = 1 if int(info.base) != raw_base else 0
+		var mx_m: int = 1 if int(info.mult) != raw_mult else 0
 		if info.mult == 0:
 			queue.append({"k": "miss"})
-			queue.append({"k": "chip", "v": info.base})
-			queue.append({"k": "mult", "v": 1})
+			queue.append({"k": "chip", "v": info.base, "mx": mx_c})
+			#  빗나감의 배수 1 은 **큐가 넣는 값**이라 판이 낸 것이 아니다.
+			queue.append({"k": "mult", "v": 1, "mx": 0})
 		else:
-			queue.append({"k": "chip", "v": info.base})
-			queue.append({"k": "mult", "v": info.mult})
+			queue.append({"k": "chip", "v": info.base, "mx": mx_c})
+			queue.append({"k": "mult", "v": info.mult, "mx": mx_m})
 		if pierce_gain > 0:
 			queue.append({"k": "pierce", "v": pierce_gain})
 		for i in fired:
@@ -6744,6 +6796,15 @@ func _next_step() -> void:
 	var cc := card_pos() + Vector2(CARD_W * 0.5, 12.0)
 	calc_lit = false           # 방식 걸음이 아니면 카드는 보통대로 그린다
 	roll_t = -1.0
+	#  ⚠ **카드의 이름 줄이 걸음을 건너 살아 있었다.** card_item 을 세우는
+	#  갈래는 miss · pierce · item · bal · rnd 다섯인데 chip · mult 갈래가
+	#  그것을 **안 지웠다** — 점수가 나는 빗나감의 큐가 [miss, chip, mult, …]
+	#  라(보드 아웃 트랙), 「빗나감」이라 적힌 줄이 그 뒤 두 걸음 0.68초
+	#  동안 **양수 점수 옆에 그대로 서 있었다.** 출처를 새로 적기 전에
+	#  지금 거짓말하는 줄부터 막는 것이 순서다. 갈래마다 제 라벨을 다시
+	#  세우므로 다섯은 한 픽셀도 안 바뀐다(_land 6480 과 같은 어법).
+	#  2026-09-25
+	card_item = ""
 
 	match st.k:
 		"miss":
@@ -6768,6 +6829,13 @@ func _next_step() -> void:
 			if cur_chip != c0:
 				chip_amt = _card_amt(c0, cur_chip)
 				chip_j = 1.0
+				#  **판의 그 부채 한 칸**이 밝는다 — 칸이 점수를 낸다.
+				#  ⚠ 갈래 **안**이다. 밖에 두면 빗나간 발의 info.base 가 0 인
+				#  chip 걸음에서 「점수가 났다」고 거짓말한다 — 바로 위
+				#  주석이 같은 사고를 이미 적었다.
+				src_t = 1.0
+				src_ring = false
+				src_mix = int(st.get("mx", 0)) == 1
 			_card_kick(float(CARDFX.kick), float(CARDFX.press))
 		"pierce":
 			var pg := _chip_gain(st.v)
@@ -6788,6 +6856,12 @@ func _next_step() -> void:
 			if cur_mult != m0:
 				mult_amt = _card_amt(m0, cur_mult)
 				mult_j = 1.0
+				#  **판의 그 띠 한 고리**가 통째로 밝는다 — 고리(싱글 ·
+				#  더블 · 트리플 · 불)가 배수를 낸다. 갈래 안인 근거는
+				#  chip 과 같다.
+				src_t = 1.0
+				src_ring = true
+				src_mix = int(st.get("mx", 0)) == 1
 			_card_kick(float(CARDFX.kick), float(CARDFX.press))
 		"item":
 			_panel_fire(st.i)
@@ -11902,6 +11976,31 @@ func _draw_board() -> void:
 			var a0 := hit_idx * sw - sw * 0.5
 			_band_draw(hit_r0 * push, hit_r1 * push, a0, a0 + sw, fc)
 
+	#  ── 정산 출처 짚기 — 착탄 섬광의 쌍둥이 (2026-09-25) ──────
+	#  **점이 선이 되는 그림**이라 한 판이면 배운다: chip 걸음에 그 칸이,
+	#  mult 걸음에 그 고리가 밝는다. 걸음당 새 그리기 호출이 **0 또는 1** 이다
+	#  (판은 이미 매 프레임 칸 20 × 띠 4 = 80 다각형을 그린다).
+	#  세기를 hit_flash_amt 에 태워 **판이 이미 정해 둔 사다리를 그대로
+	#  탄다** — 빗나감 0.0 · 싱글 0.4 · 더블 0.7 · 트리플 0.9 · 불 1.0.
+	#  빗나간 발은 amt 가 0 이라 안 밝는다: 그 발은 판에 밝힐 자리가 애초에
+	#  없다(hit_idx = −1). 새 세기 표를 안 만든다.
+	#  ⚠ **어둠(_board_dim_sector)을 안 쓴다.** 프레임마다 다각형 여든 장이고
+	#  판마다 수십 번 나는 신호라 판이 통째로 깜빡이는 것으로 읽힌다. 이
+	#  갈래는 어둠이 필요 없다 — 한 번에 하나만 밝으므로 「하나만 밝다」가
+	#  곧 어둠이다.
+	if src_t > 0.0 and hit_flash_amt > 0.0:
+		var sc := (C_ACC if src_mix else Color.WHITE)
+		sc.a = src_t * hit_flash_amt
+		if hit_bull:
+			draw_circle(BC, hit_r1 * push, sc)   # 불에는 칸이 없다 — 두 모양이 같다
+		elif src_ring:
+			#  _draw_fx 의 ring_fx 가 쓰는 그 draw_arc 그대로다.
+			var mid := (hit_r0 + hit_r1) * 0.5 * push
+			draw_arc(BC, mid, 0.0, TAU, 40, sc, (hit_r1 - hit_r0) * push)
+		elif hit_idx >= 0:
+			var sa0 := hit_idx * sw - sw * 0.5
+			_band_draw(hit_r0 * push, hit_r1 * push, sa0, sa0 + sw, sc)
+
 	# 칸 숫자는 누우면 지운다. 비균일 배율이 글자를 세로로만 눌러
 	# 글자가 얼룩이 된다 — 글자는 눌러서 눕힐 수 없다.
 	#  값이 하나뿐인 판(피자 32 · 시계 12)은 숫자 색이 알파 0 이다(사용자, 2026-09-17).
@@ -13509,14 +13608,20 @@ func _panel_fire(i: int) -> void:
 	slot_hot[i] = PANEL.hot
 
 
-func _panel_update(d: float) -> void:
+#  rate 는 정산 빨리 보기의 배수다. **슬롯 시계 셋만** 탄다 — 발동한 동전의
+#  튐과 달아오름은 걸음에 매인 신호라 걸음이 재지면 같이 재져야 하고
+#  (카드 시계 여섯과 같은 근거), peel_t 는 상점 가판의 시계라 걸음과 아무
+#  상관이 없다. 둘을 한 d 로 묶으면 2.5배에서 상인 가판이 같이 빨라진다.
+#  정산 밖에서는 rate 가 언제나 1.0 이라 한 프레임도 안 바뀐다. 2026-09-25
+func _panel_update(d: float, rate := 1.0) -> void:
 	_panel_ensure()
+	var dd := d * rate
 	for i in slot_pop.size():
 		# 0 으로 당기는 스프링. 지나쳐서 반대로 눌리는 게 "통통" 의 정체다.
-		slot_vel[i] -= slot_pop[i] * PANEL.stiff * d
-		slot_vel[i] *= exp(-PANEL.damp * d)
-		slot_pop[i] = clampf(slot_pop[i] + slot_vel[i] * d, -0.6, 1.4)
-		slot_hot[i] = maxf(slot_hot[i] - d, 0.0)
+		slot_vel[i] -= slot_pop[i] * PANEL.stiff * dd
+		slot_vel[i] *= exp(-PANEL.damp * dd)
+		slot_pop[i] = clampf(slot_pop[i] + slot_vel[i] * dd, -0.6, 1.4)
+		slot_hot[i] = maxf(slot_hot[i] - dd, 0.0)
 	peel_t += d
 
 

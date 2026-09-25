@@ -839,15 +839,36 @@ func _run() -> void:
 	Dev.page = 2
 	var rows2: Array = Dev._rows(g)
 	var drow := {}
+	var srow := {}
 	for r in rows2:
 		if String(r.get("k", "")) == "brkdeep":
 			drow = r
+		if String(r.get("k", "")) == "src":
+			srow = r
 	_ok("2쪽에 「오버 금 다시 보기」 줄이 있다", not drow.is_empty(),
 			"2쪽 %d줄" % rows2.size())
 	_ok("오버 금 고르개가 안 빈다",
 			Dev._names("brkdeep").size() == 4 and Dev._cur_name(g, drow) != "",
 			"%s / '%s'" % [", ".join(Dev._names("brkdeep")),
 					Dev._cur_name(g, drow)])
+	_ok("2쪽에 「출처 짚기 다시 보기」 줄이 있다", not srow.is_empty(), "")
+	_ok("출처 짚기 고르개가 안 빈다",
+			Dev._names("src").size() == 4 and Dev._cur_name(g, srow) != "",
+			"%s / '%s'" % [", ".join(Dev._names("src")), Dev._cur_name(g, srow)])
+	if not srow.is_empty():
+		var sg0: int = g.gold
+		var sl0: int = g.leg_no
+		Dev.pick["src"] = 3
+		Dev._run(g, srow)
+		_ok("「출처 짚기」가 고리 · 얹힘으로 선다",
+				g.src_t > 0.0 and g.src_ring and g.src_mix
+				and g.hit_flash_amt > 0.0,
+				"빛 %.2f · 고리 %s · 얹힘 %s · 세기 %.2f"
+				% [g.src_t, g.src_ring, g.src_mix, g.hit_flash_amt])
+		_ok("「출처 짚기」가 런 진도를 안 만진다",
+				g.gold == sg0 and g.leg_no == sl0,
+				"골드 %d→%d · 판 %d→%d" % [sg0, g.gold, sl0, g.leg_no])
+		g.src_t = 0.0
 	if not drow.is_empty():
 		var dg0: int = g.gold
 		var dl0: int = g.leg_no
@@ -1086,6 +1107,102 @@ func _run() -> void:
 					base_lo, deep_lo]
 	_ok("톱니가 안쪽으로만 벌어진다 — 테 밖으로 한 픽셀도 안 나간다",
 			jag_ok, jag_txt)
+
+	# ══ 정산 출처 짚기 — 걸음에 매인 빛 ═══════════════════════
+	#  사용자: 「점수 정산할 때 효과가 어디서 일어난 건지 좀 더 잘 알려줄 수
+	#  있으면 좋겠어」(2026-09-25). 한 판에 4~8번 · 24판 런에 100~190번 나는
+	#  신호라 **안 물리는 것**이 전부다. 창이 언제나 걸음의 78%(card_jrate)인
+	#  것을 수로 못 박는다. 무엇을 짚는가는 settle_probe 가 잰다.
+
+	# ── ㉔ 출처 빛이 걸음 안에서 죽는다 ─────────────────────
+	#  창이 걸음의 78%(card_jrate)라 **구조적으로** 다음 걸음을 못 덮는다.
+	#  첫 걸음만 chip(빛이 선다)으로 세우고 뒤를 miss 로 채워, 걸음이 갈리는
+	#  프레임에 빛이 이미 0 인지 본다. 큐를 길게 세워 _pace() 가 걸음을
+	#  누르는 자리도 같이 잰다.
+	#  ⚠ **눌린 박자(beat 0.015)에서는 한 프레임 남는다.** card_jrate 의
+	#  바닥 maxf(qt × 0.78, 0.02)가 걸음(0.015초)보다 길어지기 때문인데,
+	#  **카드 시계 여섯이 이미 같은 바닥을 같은 이유로 쓴다** — 그래서
+	#  자를 「chip_j 보다 늦게 안 죽는다」로 적는다. 새 상수가 0개라는 것이
+	#  곧 이 자다. 사람이 보는 박자(0.34)에서는 둘 다 걸음 안에서 죽는다.
+	#  2026-09-25
+	var win_ok := true
+	var win_txt := ""
+	for c3 in [[0.34, 1, 1.0], [0.34, 20, 1.0], [0.015, 1, 1.0],
+			[0.34, 1, 2.5]]:
+		_open()
+		g.state = g.S.RESOLVE
+		g.beat = float(c3[0])
+		g.fast_lock = float(c3[2]) > 1.0
+		g.fast_mul = float(c3[2])
+		#  ⚠ **_pace() 는 큐 길이가 아니라 settle_n 을 읽는다**(_land 가
+		#  세운다). 큐만 길게 세우면 걸음이 하나도 안 눌려 「눌린 박자」
+		#  자리가 자를 못 댄다 — 여기서 직접 세운다.
+		g.settle_n = int(c3[1])
+		g.queue = [{"k": "chip", "v": 7, "mx": 0}]
+		#  꼬리는 **적어도 하나** — 걸음이 갈리는 프레임이 있어야 잰다.
+		for _q in maxi(int(c3[1]) - 1, 1):
+			g.queue.append({"k": "miss"})       # 빛을 안 세우는 걸음으로 채운다
+		g.cur_chip = 0
+		var rest: int = (g.queue as Array).size() - 1
+		g._next_step()                          # 첫 걸음 — _pace() 가 큐 전체를 본다
+		var lit_f := 0
+		var jf := 0
+		var bnd := -1
+		for f2 in 600:
+			g._process(DT)
+			if (g.queue as Array).size() < rest:
+				bnd = f2 + 1
+				break
+			if g.src_t > 0.0:
+				lit_f = f2 + 1
+			if g.chip_j > 0.0:
+				jf = f2 + 1
+		if bnd < 0 or lit_f > jf:
+			win_ok = false
+			win_txt += "[beat %.3f 빛 %d > 카드 %d]" % [float(c3[0]), lit_f, jf]
+		if float(c3[0]) > 0.1 and lit_f >= bnd:
+			win_ok = false
+			win_txt += "[beat %.3f 빛 %d >= 걸음 %d]" % [float(c3[0]), lit_f, bnd]
+		win_txt += "beat %.3f·큐%d·%.1f배 → 걸음 %d · 빛 %d · 카드 %d  " % [
+				float(c3[0]), int(c3[1]), float(c3[2]), bnd, lit_f, jf]
+	g.beat = beat
+	g.fast_lock = false
+	g.fast_mul = 1.0
+	_ok("출처 빛이 카드 시계와 같은 창을 쓴다 — 다음 걸음을 못 덮는다",
+			win_ok, win_txt)
+
+	# ── ㉕ 출처 짚기가 글자를 한 자도 안 더한다 ─────────────
+	_open()
+	g.state = g.S.RESOLVE
+	(g.pops as Array).clear()
+	g.cur_chip = 0
+	g.cur_mult = 0
+	g.queue = [{"k": "chip", "v": 40, "mx": 1}, {"k": "mult", "v": 3, "mx": 0}]
+	g._next_step()
+	g._next_step()
+	_ok("출처 짚기가 팝업을 한 개도 안 더한다", (g.pops as Array).is_empty(),
+			"%d개 — pop() 을 한 번도 안 부른다" % (g.pops as Array).size())
+
+	# ── ㉖ 모션 끄기에서 출처가 **하나도 안 죽는다** ─────────
+	#  발라트로의 모션 감소가 조커 발동 애니를 꺼 「이 값이 어디서 왔는가」를
+	#  통째로 잃는 그 자리를 여기서 막는다. 넷 다 알파와 색이라 산다.
+	_open()
+	g.motion_off = true
+	g.state = g.S.RESOLVE
+	var mo_ok := true
+	var mo_txt := ""
+	for c4 in [["chip", false], ["mult", true]]:
+		g.src_t = 0.0
+		g.cur_chip = 0
+		g.cur_mult = 0
+		g.queue = [{"k": String(c4[0]), "v": 9, "mx": 1}]
+		g._next_step()
+		if not (g.src_t > 0.0 and g.src_ring == bool(c4[1]) and g.src_mix):
+			mo_ok = false
+		mo_txt += "%s 빛%.2f·고리%s·얹힘%s  " % [String(c4[0]), g.src_t,
+				g.src_ring, g.src_mix]
+	g.motion_off = false
+	_ok("모션 끄기에서 출처가 하나도 안 죽는다", mo_ok, mo_txt)
 
 	print("\n통과 %d · 실패 %d" % [okn, fail])
 	quit(1 if fail > 0 else 0)

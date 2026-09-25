@@ -227,6 +227,18 @@ func _run() -> void:
 			await _hold(1)
 		await _snap("53_deep3_%s" % String(m2[1]))
 		g._brk_skip()
+	#  모션 끄기 × 3단 — **금이 하나도 안 죽는다.** 판이 뜨는 것과 조각만
+	#  꺼지고 굵기 · 밝기 · 톱니는 그대로다. 40_motion_off(0단)와 짝으로 본다.
+	await _leg([])
+	_darts()
+	g.motion_off = true
+	_arm(2, 3)
+	while not g.brk_fired:
+		await _hold(1)
+	await _hold(2)
+	await _snap("54_deep3_motion_off")
+	g.motion_off = false
+	g._brk_skip()
 
 	print("  찍음 %s" % tag)
 	quit(0)

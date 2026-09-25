@@ -550,6 +550,8 @@ static func _names(k: String) -> PackedStringArray:
 	#  낸다 — 같은 이유, 같은 실패. 2026-09-25
 	if k == "brkdeep":
 		return PackedStringArray(DEEP_TIERS)
+	if k == "src":
+		return PackedStringArray(SRC_STEPS)
 	for r in _list(k):
 		out.append(String(r.get("n", r.get("name", r.get("id", "?")))))
 	return out
@@ -850,6 +852,15 @@ static func _rows(g: Node) -> Array:
 				#  것**이 나란히 선다. 큰 배율은 손으로 만들기 어려우니
 				#  이 줄이 2·3단을 보는 유일한 길이다.
 				{"n1": "오버 금 다시 보기", "t": "list", "k": "brkdeep", "n": 4},
+				#  ── 정산 출처 짚기 (2026-09-25) ─────────────────
+				#  남은 한 칸을 여기 쓴다(18 → 19줄, 한계 19).
+				#  **모션 끄기에서 넷이 다 사는지**가 손가락 두 번에 드러나는
+				#  자리다 — 전부 알파와 색이라 하나도 안 죽어야 한다.
+				#  발라트로의 모션 감소가 조커 발동 애니를 꺼 「이 값이 어디서
+				#  왔는가」를 통째로 잃는 그 자리를 규약으로 막는다.
+				#  슬롯 쪽은 「동전 발동」 줄로 따로 보되, 거기서는 튐만 죽고
+				#  달아오름과 카드 줄이 남아야 한다.
+				{"n1": "출처 짚기 다시 보기", "t": "list", "k": "src", "n": 4},
 				{"n1": "제목 판 금 가기 직전", "t": "act", "a": "egg_crack"},
 				{"n1": "제목 판 깨기 직전", "t": "act", "a": "egg"},
 				{"n1": "인트로 다시 보기", "t": "act", "a": "intro"},
@@ -1024,6 +1035,9 @@ const BRK_TIERS := ["작은 판", "큰 판", "보스 판"]
 #  큰 배율은 손으로 만들기 어렵다 — x3 을 넘기려면 목표의 세 배를 한 발에
 #  내야 하는데 실측 분포에서 6% 다. 이 줄이 3단을 보는 유일한 길이다.
 const DEEP_TIERS := ["0단", "1단", "2단", "3단"]
+#  출처 짚기의 네 상태. 모양 둘(부채 한 칸 · 고리 하나) × 색 둘(판이 낸 값
+#  그대로 · 무언가 얹혔다)이 곧 그 연출의 전부라 목록이 그대로 어휘다.
+const SRC_STEPS := ["칸", "고리", "칸 · 얹힘", "고리 · 얹힘"]
 #  다시 보기가 켠 깨짐인가. game.gd 의 _brk_tick 은 **일부러** 스스로 안
 #  끝낸다(끝내면 말짱한 판이 한 프레임 도로 튀어나온다) — 진짜 판에서는
 #  _finish_leg 첫 줄이 내리는데 다시 보기에는 그 줄이 없다. 그 뒷정리를
@@ -1231,6 +1245,12 @@ static func _cur_name(g: Node, e: Dictionary) -> String:
 		return "%d/%d %s · x%.2f~ · 폭+%.1f · 톱니%.1f · 음%.2f" % [
 				dj + 1, DEEP_TIERS.size(), DEEP_TIERS[dj], lo,
 				float(dt.gw[dj]), float(dt.jag[dj]), float(dt.pit[dj])]
+	#  출처 짚기. 모양 · 색이 곧 이 연출의 전부라 값 칸이 그대로 적는다.
+	if k == "src":
+		var sj: int = i % SRC_STEPS.size()
+		return "%d/%d %s · %s · %s" % [sj + 1, SRC_STEPS.size(), SRC_STEPS[sj],
+				"고리 하나" if sj % 2 == 1 else "부채 하나",
+				"주황" if sj >= 2 else "흰"]
 	if k == "breakmat":
 		var bj: int = i % BREAK_MATS.size()
 		var bm: Dictionary = BREAK_MATS[bj]
@@ -2106,6 +2126,33 @@ static func _run(g: Node, e: Dictionary) -> void:
 			g.brk_free = true
 			_brk_replay = true
 			_say("오버 금 — %s" % DEEP_TIERS[i % DEEP_TIERS.size()])
+			return
+		"src":
+			#  걸음(S.RESOLVE) 밖에서 세운다. card_jrate 가 0 이면 빛이
+			#  영영 안 죽으므로 **실제 chip 걸음과 같은 길이**로 같이
+			#  세운다(걸음 beat × CARDFX.jspan). 판에 안 꽂힌 상태면
+			#  트리플 한 칸을 손으로 꽂아 둔다 — 안 그러면 짚을 자리가
+			#  없다. 값(골드 · 목표 · leg_no)을 한 톨도 안 건드린다.
+			if not g._is_play_deep():
+				g._start_leg()
+			g._swap_skip()
+			if int(g.hit_idx) < 0 and not bool(g.hit_bull):
+				g.hit_idx = 0
+				g.hit_r0 = g.R * g.rt_trp_in     # hit_info 가 내는 그 단위(픽셀)
+				g.hit_r1 = g.R * g.rt_trp_out
+				g.hit_bull = false
+			#  세기는 판이 정한 사다리를 탄다(빗나감 0 · 싱글 0.4 · … ·
+			#  불 1.0). 앞 발이 빗나감이면 0 이라 아무것도 안 밝으므로
+			#  여기서만 트리플 자리로 올린다 — 다시 보기의 값이다.
+			if float(g.hit_flash_amt) <= 0.0:
+				g.hit_flash_amt = 0.9
+			var si: int = i % SRC_STEPS.size()
+			g.src_ring = si % 2 == 1
+			g.src_mix = si >= 2
+			g.src_t = 1.0
+			g.card_jrate = 1.0 / maxf(g.beat * float(
+					load("res://scripts/game.gd").CARDFX.jspan), 0.02)
+			_say("출처 짚기 — %s" % SRC_STEPS[si])
 			return
 		"breakmat":
 			#  고른 재질의 대표 동전을 랙 **첫 빈 칸**에서 부순다 — 시체는
