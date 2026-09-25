@@ -70,12 +70,18 @@ func _board(id: String) -> void:
 #  한 발을 던져 목표를 넘기고, **돌파 프레임부터 정산까지**를 프레임으로
 #  적는다. kill 이 참이면 매 프레임 _brk_skip() 을 불러 연출을 아예 못 살게
 #  한다 — 「연출이 더한 프레임 0」의 A/B 짝이다.
-func _throw(kill := false, cap := 900) -> Dictionary:
+#  deep 이 0 이상이면 도안이 선 뒤 **매 프레임** 그 단으로 못 박는다.
+#  brk_deep 은 그리기와 음 높이만 읽는 값이라 매 프레임 같은 값을 다시
+#  적는 것이 실제 판과 똑같다. 이 도구의 던지기는 target 1 · total 0 이라
+#  자가 통째로 3단으로 뜨므로, 네 단을 재려면 이 문이 있어야 한다.
+#  2026-09-25
+func _throw(kill := false, cap := 900, deep := -1) -> Dictionary:
 	var o := {"arm": -1, "fire": -1, "gone": -1, "clear": -1,
 			"snd": 0, "crack": 0, "brk": 0,
 			"shards": 0, "bits": 0, "pops": 0,
 			"shake": -1.0, "qt": -1.0, "hitstop": -1.0,
-			"stage": 0, "dart_gone": -1, "swap": false, "turn": false}
+			"stage": 0, "dart_gone": -1, "deep": -1,
+			"swap": false, "turn": false}
 	g.target = 1
 	g.total = 0
 	g.state = g.S.CONFIRM
@@ -84,6 +90,10 @@ func _throw(kill := false, cap := 900) -> Dictionary:
 	var prev: int = g.sfx_next
 	var pool: int = maxi((g.sfx_pool as Array).size(), 1)
 	for f in cap:
+		#  ⚠ **_process 보다 앞이다.** 삐걱은 그 프레임 안에서 울므로,
+		#  뒤에 적으면 첫 단이 자가 뜬 3단 음으로 난다.
+		if deep >= 0 and g.brk_live:
+			g.brk_deep = deep
 		g._process(DT)
 		var now: int = g.sfx_next
 		var dn: int = posmod(now - prev, pool)
@@ -115,6 +125,7 @@ func _throw(kill := false, cap := 900) -> Dictionary:
 			o.qt = g.qt
 			o.hitstop = g.hitstop
 			o.pops = (g.pops as Array).size()
+			o.deep = g.brk_deep
 		if g.brk_fired and o.fire < 0:
 			o.fire = f
 		if o.arm >= 0:
@@ -823,6 +834,258 @@ func _run() -> void:
 	_ok("소리 쪽은 저절로 는다 — SFX.keys() 를 읽는다",
 			Dev._list("sfx").any(func(e): return String(e.n) == "board_break"),
 			"4쪽에 줄을 안 더한다")
+	#  깊이 줄 둘도 같은 자를 댄다 — 고르개가 안 비는가.
+	_open()
+	Dev.page = 2
+	var rows2: Array = Dev._rows(g)
+	var drow := {}
+	for r in rows2:
+		if String(r.get("k", "")) == "brkdeep":
+			drow = r
+	_ok("2쪽에 「오버 금 다시 보기」 줄이 있다", not drow.is_empty(),
+			"2쪽 %d줄" % rows2.size())
+	_ok("오버 금 고르개가 안 빈다",
+			Dev._names("brkdeep").size() == 4 and Dev._cur_name(g, drow) != "",
+			"%s / '%s'" % [", ".join(Dev._names("brkdeep")),
+					Dev._cur_name(g, drow)])
+	if not drow.is_empty():
+		var dg0: int = g.gold
+		var dl0: int = g.leg_no
+		var dt0: int = g.target
+		Dev.pick["brkdeep"] = 3
+		Dev._run(g, drow)
+		_ok("「오버 금」이 3단으로 깨진다", g.brk_live and g.brk_deep == 3,
+				"brk_live %s · 단 %d" % [g.brk_live, g.brk_deep])
+		_ok("「오버 금」이 런 진도를 안 만진다",
+				g.gold == dg0 and g.leg_no == dl0 and g.target == dt0,
+				"골드 %d→%d · 판 %d→%d · 목표 %d→%d"
+				% [dg0, g.gold, dl0, g.leg_no, dt0, g.target])
+		for _k in 180:
+			Dev.tick(g, DT)
+			g._brk_tick(DT)
+		g._brk_skip()
+	#  ⚠ **위 「판 깨짐」 줄은 0단을 못 박아야 한다.** 그 줄이 재는 것은
+	#  층이다 — 깊이가 판을 따라가면 같은 층을 두 번 눌러도 금 굵기가
+	#  달라져 무엇이 무엇을 바꿨는지 못 가른다.
+	if not row.is_empty():
+		_open()
+		g.total = 999999          # 자가 3단으로 뜨는 자리
+		Dev.pick["brk"] = 1
+		Dev._run(g, row)
+		_ok("「판 깨짐」 줄은 깊이를 0 으로 못 박는다", g.brk_deep == 0,
+				"단 %d — 한 줄이 한 축만 말한다" % g.brk_deep)
+		g._brk_skip()
+
+	# ══ 오버 금 (BRKDEEP) — 깊이 축 ═══════════════════════════
+	#  사용자: 「판에서 플레이한 점수가 목표점수보다 높아지고 오버할수록
+	#  효과로 금가는 거」(2026-09-25). 깊이는 **있는 금 하나를 갈아 끼운다** —
+	#  같은 함수 · 같은 기하 · 같은 씨 · 같은 단 수 · 같은 길이.
+	#  아래 다섯이 그 「같다」를 전부 수로 붙든다.
+
+	# ── ⑲ 깊이가 층의 것을 한 톨도 안 만진다 ────────────────
+	#  두 축이 안 겹친다는 것의 유일한 그물이다. 없으면 ⑧ ⑩ 이 깊이 0단
+	#  에서만 재는 것이 **우연**으로 남는다.
+	var ax_ok := true
+	var ax_txt := ""
+	for id in ["", "pizz", "dnut"]:
+		_open()
+		_board(id)
+		var base := []
+		for t in 4:
+			g._brk_arm(2, t)
+			var w0: int = g.brk_w
+			var rg: int = (g.brk_rings as Array).size()
+			var dborn: int = (g.brk_born as PackedFloat32Array).size()
+			var sd2: int = g.brk_seed
+			var drow3: int = int(g._brk_row()[3])
+			g._brk_fire()
+			var cur := [w0, rg, g.brk_stage, (g.brk_bits as Array).size(),
+					(g.brk_shards as Array).size(), drow3, dborn, sd2]
+			if t == 0:
+				base = cur
+			elif cur != base:
+				ax_ok = false
+				ax_txt += "[%s 단%d %s != %s]" % [id, t, str(cur), str(base)]
+			g._brk_skip()
+		ax_txt += "%s 부채%d·겹%d·단%d·톱밥%d·조각%d·소리겹%d  " % [
+				id if id != "" else "기본", int(base[0]), int(base[1]),
+				int(base[2]), int(base[3]), int(base[4]), int(base[5])]
+	_ok("깊이가 층의 것(기하·개수·씨)을 한 톨도 안 만진다", ax_ok, ax_txt)
+
+	# ── ⑳ 길이 0 — 이번 일의 유일한 치명상 ──────────────────
+	#  돌파 걸음 70프레임 중 0~69 를 BRK 가 이미 쓴다. **빈 프레임이 1** 이라
+	#  깊이가 한 프레임이라도 늘리면 정산(S.CLEAR)으로 샌다.
+	#  ⚠ **1.0배로만 보면 절대 안 드러난다** — 2.5배에서는 마지막 조각이
+	#  지는 프레임과 걸음 끝이 0프레임 차다. 박자 셋 × 빨리 보기까지 댄다.
+	var len_ok := true
+	var len_txt := ""
+	for bt2 in [0.34, 0.26, 0.015]:
+		var lwant := -1
+		for t in 4:
+			_open()
+			g.beat = bt2
+			var rr2 := _throw(false, 900, t)
+			var lgot: int = int(rr2.clear) - int(rr2.arm)
+			if lwant < 0:
+				lwant = lgot
+			elif lgot != lwant:
+				len_ok = false
+				len_txt += "[beat %.3f 단%d %d != %d]" % [bt2, t, lgot, lwant]
+		len_txt += "beat %.3f → %d프레임  " % [bt2, lwant]
+	g.beat = beat
+	#  빨리 보기 2.5배에서도 네 단이 같은 프레임 수다. 2.5배에서는 마지막
+	#  조각이 지는 프레임과 걸음 끝이 0프레임 차라 여기가 진짜 자다.
+	var fwant := -1
+	for t in 4:
+		_open()
+		g.fast_lock = true
+		g.fast_mul = 2.5
+		var rf2 := _throw(false, 900, t)
+		var gotf: int = int(rf2.clear) - int(rf2.arm)
+		if fwant < 0:
+			fwant = gotf
+		elif gotf != fwant:
+			len_ok = false
+			len_txt += "[2.5배 단%d %d != %d]" % [t, gotf, fwant]
+	g.fast_lock = false
+	g.fast_mul = 1.0
+	len_txt += "2.5배 → %d프레임" % fwant
+	_ok("깊이가 걸음을 한 프레임도 안 늘린다", len_ok, len_txt)
+
+	# ── ㉑ 자가 안 터진다 ───────────────────────────────────
+	#  clampi 가 가장 값싼 안전장치다. 이 도구의 던지기가 target 1 · total 0
+	#  이라 자가 60배로 뜨고, 실측 최대도 x10.89 다(deep_probe). 클램프가
+	#  없으면 배열 넷이 범위를 넘어 그 자리에서 터진다.
+	_open()
+	var dp_ok := true
+	var dp_txt := ""
+	for c in [[0, 0], [1, 0], [0, 100], [1, 60], [42, 41], [42, 53],
+			[42, 84], [42, 126], [42, 9223372036854775807], [1, -5]]:
+		g.target = int(c[0])
+		g.total = int(c[1])
+		var dv: int = g._brk_deep_tier()
+		if dv < 0 or dv > 3:
+			dp_ok = false
+		dp_txt += "목표%d·총점%d→%d  " % [int(c[0]), int(c[1]), dv]
+	_ok("깊이 자가 언제나 0~3 안", dp_ok, dp_txt)
+	#  문턱이 실측 버킷 경계 그대로인가 — 표를 고치면 여기서 걸린다.
+	g.target = 100
+	var step_ok := true
+	var step_txt := ""
+	for c2 in [[99, 0], [124, 0], [125, 1], [199, 1], [200, 2], [299, 2],
+			[300, 3], [1089, 3]]:
+		g.total = int(c2[0])
+		var dv2: int = g._brk_deep_tier()
+		if dv2 != int(c2[1]):
+			step_ok = false
+		step_txt += "x%.2f→%d " % [float(c2[0]) / 100.0, dv2]
+	_ok("문턱 셋이 x1.25 · x2.00 · x3.00", step_ok, step_txt)
+	#  던지기가 실제로 3단에서 도는 것을 적는다 — ①③⑤⑥⑦⑪⑫⑭⑯ 이
+	#  전부 3단에서 초록인 것이 우연이 아님을 여기서 못 박는다.
+	_open()
+	var d3 := _throw()
+	_ok("이 도구의 던지기는 3단에서 돈다", int(d3.deep) == 3,
+			"단 %d — 목표 1 에 총점이 얹히니 자가 상한에 붙는다" % int(d3.deep))
+
+	# ── ㉒ 깊이가 소리 **알 수**를 안 바꾼다 ─────────────────
+	#  pit 는 음만 민다. 알 수는 층의 것이다(삐걱 = 단 수 · 한방+톡 = row[3]).
+	var dsnd_ok := true
+	var dsnd_txt := ""
+	for t in 4:
+		for tier in 3:
+			_open()
+			g.leg_no = [1, 2, 3][tier]
+			g.motion_off = true          # 조각 없이 금과 소리만 끝까지 본다
+			var sr := _throw(false, 900, t)
+			var want_c: int = int(sr.stage)
+			var want_s: int = int(g._brk_row()[3])
+			if int(sr.crack) != want_c or int(sr.brk) + int(sr.snd) != want_s:
+				dsnd_ok = false
+				dsnd_txt += "[단%d 층%d 삐걱%d/%d · 한방+톡%d/%d]" % [t, tier,
+						int(sr.crack), want_c, int(sr.brk) + int(sr.snd), want_s]
+			g.motion_off = false
+		dsnd_txt += "단%d ✓ " % t
+	_ok("깊이가 소리 알 수를 안 바꾼다 — 음만 민다", dsnd_ok, dsnd_txt)
+	#  사다리가 안 뒤집힌다 — 작은 3단이 큰 0단보다, 큰 3단이 보스 0단보다 높다.
+	var pit: Array = g.BRKDEEP.pit
+	var lad_ok := true
+	var lad_txt := ""
+	for ti in 2:
+		var phi: float = float(g.BRK[["small", "big", "boss"][ti]][4]) \
+				* float(pit[3])
+		var lo2: float = float(g.BRK[["small", "big", "boss"][ti + 1]][4]) \
+				* float(pit[0])
+		if phi <= lo2:
+			lad_ok = false
+		lad_txt += "%.3f > %.3f  " % [phi, lo2]
+	#  종의 비(tierce 1.2)를 깊이가 어디에도 안 놓는다.
+	for i2 in 4:
+		for j2 in 4:
+			if i2 != j2 and absf(float(pit[i2]) / float(pit[j2]) - 1.2) < 0.05:
+				lad_ok = false
+				lad_txt += "[종의 비]"
+	_ok("층 사다리가 깊이 넷 어디에서도 안 뒤집힌다", lad_ok, lad_txt)
+
+	# ── ㉓ 톱니가 **안쪽으로만** 벌어진다 ────────────────────
+	#  테 호는 겹의 안쪽 경계에 서는데 보스의 바깥 겹 안쪽 경계가 판 테에서
+	#  8px 안이라, 대칭으로 벌리면 3단 보스에서 호가 테를 밟는다. 실루엣은
+	#  깨짐의 것이지 금의 것이 아니다. 그래서 재는 것 셋이다:
+	#    ⓐ 단이 깊어져도 호의 **최대** 반지름이 0단보다 절대 안 크다
+	#    ⓑ 어느 단에서도 호가 판 테(1.24R) 밖으로 안 나간다
+	#    ⓒ 호의 **최소** 반지름은 실제로 안으로 내려간다 — 안 내려가면
+	#       톱니가 아무 일도 안 하는 것이라 그것도 실패다
+	#  ⚠ ⓐ 를 「네 단이 **같다**」로 적었다가 걸렸다(2026-09-25). 뜬 표본의
+	#  가장 큰 씨가 1.0 이 아니라 0.97 쯤이라, 아래끝을 내리면 그 표본의
+	#  값도 lerp 위에서 조금 따라 내려온다 — **바깥으로 미는 것이 아니라
+	#  안쪽으로 당겨진 것**이라 이 연출의 약속은 그대로다. ⑧-b 와 짝이다.
+	var jag_ok := true
+	var jag_txt := ""
+	for id2 in ["", "pizz", "clok", "dnut", "aimb", "arst"]:
+		_open()
+		_board(id2)
+		for tier2 in 3:
+			var jmx := -1.0
+			var base_lo := 0.0
+			var deep_lo := 0.0
+			for t in 4:
+				g._brk_arm(tier2, t)
+				var lo3: float = g.R * float(g.DONUTART.hole) \
+						if g._board_theme() == "donut" else 0.0
+				var top2 := 0.0
+				var bot2 := 99999.0
+				for k in (g.brk_rings as Array).size() * 2:
+					if k % 2 != 0:
+						continue
+					var r2: float = maxf(g.R * float(g.brk_rings[k / 2][0]), lo3)
+					for j in g.brk_w:
+						var rr3: float = r2 + lerpf(
+								-2.5 - float(g.BRKDEEP.jag[t]), 2.5,
+								g._gl_rand(j * 31 + k, g.brk_seed))
+						top2 = maxf(top2, rr3)
+						bot2 = minf(bot2, rr3)
+				if t == 0:
+					jmx = top2
+					base_lo = bot2
+				else:
+					if top2 > jmx + 0.001:
+						jag_ok = false
+						jag_txt += "[%s 층%d 단%d 바깥 %.2f > %.2f]" % [id2,
+								tier2, t, top2, jmx]
+					deep_lo = bot2
+				g._brk_skip()
+			var rim: float = g._board_rim(g._theme_ring_w(g._board_theme()))
+			if jmx > rim + 0.001:
+				jag_ok = false
+				jag_txt += "[%s 층%d 호 %.1f > 테 %.1f]" % [id2, tier2, jmx, rim]
+			if deep_lo >= base_lo - 0.001:
+				jag_ok = false
+				jag_txt += "[%s 층%d 안쪽이 안 내려간다 %.2f/%.2f]" % [id2,
+						tier2, deep_lo, base_lo]
+			jag_txt += "%s%d 바깥%.0f/테%.0f·안쪽%.1f→%.1f " % [
+					id2 if id2 != "" else "기본", tier2, jmx, rim,
+					base_lo, deep_lo]
+	_ok("톱니가 안쪽으로만 벌어진다 — 테 밖으로 한 픽셀도 안 나간다",
+			jag_ok, jag_txt)
 
 	print("\n통과 %d · 실패 %d" % [okn, fail])
 	quit(1 if fail > 0 else 0)
