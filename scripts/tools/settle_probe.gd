@@ -365,6 +365,49 @@ func _initialize() -> void:
 	g.paint_sec = -1
 	g.dead_ring = 0
 
+	# ── 연발의 작은 다트도 **얹힌 것**이다 (2026-09-25) ────────
+	#  _chip_gain 이 걸음 안에서 칸 값의 4분의 1(kick_share)로 깎는다.
+	#  "mx" 는 hit_info 직후의 날값과 큐를 세울 때의 값만 대므로 그 깎기를
+	#  못 본다 — 흰색으로 밝으면 「판이 낸 값 그대로」라 해 놓고 카드에는
+	#  4분의 1이 뜬다. 연발 다트통을 든 런은 **모든 발**이 그랬다.
+	#  오토플레이에 연발이 한 발도 안 섞여 score_probe 가 못 잡는 자리라
+	#  여기서 손으로 켜서 못 박는다.
+	g.total = 0
+	g.cur_chip = 0
+	g.cur_mult = 0
+	g.queue = []
+	g.burst_hits = []
+	g.aim = pt
+	g._land(false)                    # mark 가 거짓 = 연발의 한 발
+	var kick_mix := false
+	var kick_chip := 0
+	while not (g.queue as Array).is_empty():
+		var nk3 := String((g.queue as Array)[0].get("k", ""))
+		g._next_step()
+		if nk3 == "chip":
+			kick_mix = g.src_mix
+			kick_chip = int(g.cur_chip)
+	_say(kick_mix and kick_chip > 0 and kick_chip < int(truth.base),
+			"연발의 작은 다트는 얹힘 색으로 밝는다",
+			"얹힘 %s · 점수 %d (칸 %d)" % [kick_mix, kick_chip, int(truth.base)])
+	g.kick_pellet = false
+	#  보통 한 발은 그대로 흰색이다 — 위 한 줄이 판 전체를 주황으로
+	#  물들이지 않았다는 짝 검사다.
+	g.total = 0
+	g.cur_chip = 0
+	g.cur_mult = 0
+	g.queue = []
+	g.aim = pt
+	g._land()
+	var plain_mix := true
+	while not (g.queue as Array).is_empty():
+		var nk4 := String((g.queue as Array)[0].get("k", ""))
+		g._next_step()
+		if nk4 == "chip":
+			plain_mix = g.src_mix
+	_say(not plain_mix, "보통 한 발의 chip 걸음은 그대로 흰색",
+			"얹힘 %s" % plain_mix)
+
 	# ── 넓은 띠는 **안팎 경계만** 칠한다 (2026-09-25) ──────────
 	#  띠 통째로 칠하면 싱글에서 무너진다: 안쪽 싱글이 0.42R(41px) ·
 	#  바깥 싱글이 0.24R 이라 판의 3분의 1이 흰 물에 잠기고, 넓이 × 알파로
@@ -400,5 +443,5 @@ func _initialize() -> void:
 	_say(geo_ok, "넓은 띠만 안팎 경계로 갈린다 — 트리플 · 더블은 통째로",
 			"경계 %.1fpx · %s" % [ew, " · ".join(geo)])
 
-	print("\n%s" % ("실패 %d건" % fails if fails > 0 else "스물여섯 검사 전부 통과"))
+	print("\n%s" % ("실패 %d건" % fails if fails > 0 else "스물여덟 검사 전부 통과"))
 	quit(mini(fails, 125))

@@ -265,6 +265,11 @@ func _run() -> void:
 	#  24 — **착탄 연출을 안 지운 채** 연발 박자로 선 걸음. 지운 장으로는
 	#  이 문제가 영영 안 나온다: 출처 빛과 착탄 고리가 같은 자리에 겹친다.
 	await _live_src("24_live_burst", (g.rt_trp_in + g.rt_trp_out) * 0.5, true, true)
+	#  34 — **연발의 작은 다트.** 칸 값의 4분의 1만 오르므로 chip 걸음이
+	#  주황(얹힘)이어야 한다. 흰색이면 「판이 낸 값 그대로」라 해 놓고
+	#  카드에 4분의 1이 뜬 그 거짓말이 돌아온 것이다.
+	await _live_src("34_live_kick", (g.rt_trp_in + g.rt_trp_out) * 0.5,
+			false, true, true)
 	await _live()
 	quit()
 
@@ -281,7 +286,9 @@ func _run() -> void:
 #    rk     = 조준 반지름(R 의 비)
 #    keepfx = 착탄 연출을 **안 지운다**(빠른 박자에서 겹치는 그 프레임)
 #    burst  = 연발 박자(pace 바닥 0.30)로 걸음을 세운다
-func _live_src(nm: String, rk: float, keepfx := false, burst := false) -> void:
+#    kick   = 연발의 작은 다트로 꽂는다(_land(false)) — 칸 값의 4분의 1
+func _live_src(nm: String, rk: float, keepfx := false, burst := false,
+		kick := false) -> void:
 	g.set_process(false)
 	#  ⚠ **_shot 이 시계를 밀면 안 된다.** _tick 은 live 면 _process 를 세 번
 	#  돌리는데, 그 세 프레임에 빛이 이미 1/5 식는다 — 걸음을 미는 것은
@@ -302,7 +309,7 @@ func _live_src(nm: String, rk: float, keepfx := false, burst := false) -> void:
 	#  걸음이 서는 **진짜** 박자가 그것이다.
 	if burst:
 		g.burst_n = 5
-	g._land()
+	g._land(not kick)
 	if not keepfx:
 		#  ⚠ **착탄 연출을 지운다.** 시계를 안 미는 장이라 _impact 의 고리 ·
 		#  물결 · 불꽃 · 팝이 전부 갓 난 세기로 남아 있어, 첫 장에서 그것이
