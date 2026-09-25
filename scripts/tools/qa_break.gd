@@ -25,6 +25,19 @@ var okn := 0
 var fail := 0
 const DT := 1.0 / 60.0
 
+#  ── ⑧ 이 쓸어 보는 맞은 자리 표 [판 반지름 비, 씨] ──
+#  한복판 · 0.30 · 0.45 · 0.62 · 0.75 · 더블(0.806) · 테 코앞(0.90 · 0.95).
+#  **설계서가 못 박은 여섯**에 씨 둘씩을 물렸다. 한복판은 L 이 방향마다
+#  같아 무게가 평평해지는 자리라 반드시 끼고, 0.806~0.95 는 먼 쪽 살이
+#  rim+|H| 까지 늘어 쐐기 하나가 판을 통째로 먹으려 드는 자리다.
+const HITS := [
+	[0.0, 0], [0.0, 1],
+	[0.30, 2], [0.45, 3],
+	[0.62, 0], [0.75, 1],
+	[0.806, 2], [0.806, 3],
+	[0.90, 0], [0.95, 1],
+]
+
 
 func _initialize() -> void:
 	#  사람의 저장을 안 건드린다 — 도구는 제 자리를 박는다.
@@ -98,6 +111,26 @@ func _board(id: String) -> void:
 	g._board_bake()
 	g._start_leg()
 	g._swap_skip()
+
+
+#  ── 맞은 자리를 박는다 ──
+#  ⚠ **이 줄이 없으면 덮임 자가 한 자리만 잰다.** `_board()` 가
+#  `_start_leg()` 로 darts 를 비우므로 `_brk_hit_at()` 이 언제나 **씨
+#  갈래**로 떨어지고, leg_no 도 테마 여섯 × 층 셋에서 전부 같아 **열여덟
+#  판이 글자 그대로 같은 자리**에서 깨졌다(실측 0.302R 한 곳, 가짓수 1).
+#  그런데 이 모형이 통째로 기대고 선 두 축 — 살을 **L² 무게**로 나누는
+#  것(BRKWEB.wpow)과 **천장**(BRKWEB.amax_k) — 은 L 이 방향마다 크게
+#  다른 **가장자리 타격에서만** 일을 한다. 한복판 근처 한 자리만 재는
+#  자는 둘 다 못 지킨다.
+#  **직접 재서 확인했다**: wpow 를 2.0 → 0.0(설계서가 「두 설계가 똑같이
+#  틀렸다」고 적은 바로 그 수)으로 되돌려도 ⑧ 이 **그대로 초록**인데,
+#  같은 빌드의 최대면은 10.2% → **16.8%** 로 ⑧ 자신의 천장(12%)을
+#  넘었다. 자가 제 천장이 무너지는 것을 못 본 것이다. 2026-09-25
+func _hit(hf: float, s: int) -> void:
+	g.leg_no = 7 + s * 5
+	var a: float = 0.37 + float(s) * 1.9 + hf * 2.7
+	g.darts = [{"p": g.BC + Vector2(sin(a), -cos(a)) * g.R * hf,
+			"id": "std", "rot": 0.0}]
 
 
 #  한 발을 던져 목표를 넘기고, **돌파 프레임부터 정산까지**를 프레임으로
@@ -336,6 +369,10 @@ func _run() -> void:
 	#  직접** 잰다 — 줄어든 자가 없고 오히려 덮임 자가 는다.
 	#  ⓐ 는 이제 `_brk_shards_draw` 가 조각을 col 한 색으로 칠하는 것이
 	#  지키므로 ⑧-d 가 색 가짓수로 잰다.
+	#  ⚠ **테마 여섯 × 층 셋 × 맞은 자리 열**을 쓴다(HITS · _hit 머리말).
+	#  맞은 자리 축이 빠져 있던 동안 이 자는 제 천장이 무너지는 것을 못
+	#  봤다 — 덮임은 쪼개기가 정리로 지키지만 **크기**는 L 이 방향마다
+	#  얼마나 다른가에 통째로 달려 있고, 그것이 곧 맞은 자리다. 2026-09-25
 	var th_ok := true
 	var th_txt := ""
 	for id in ["", "pizz", "clok", "dnut", "aimb", "arst"]:
@@ -345,57 +382,76 @@ func _run() -> void:
 		var want_bands := _bands().size()
 		var line := ""
 		for t in 3:
-			g._brk_arm(t)
-			var rings: int = (g.brk_rings as Array).size()
-			var fac: int = (g.brk_facets as Array).size()
-			var rim: float = g._brk_rim()
-			var disc: float = PI * rim * rim
-			#  ⓐ 면이 판을 빈틈없이 덮는가 — **방향 모서리 짝짓기**로 잰다.
-			#  쪼개기만으로 지은 분할이면 속 모서리는 정순 하나 · 역순
-			#  하나로 짝이 맞고, 짝 없는 모서리는 전부 판 테 위다.
-			var tile := _tile(rim)
-			if int(tile[0]) > 0:
-				th_ok = false
-				line += "[구멍의 씨앗 %d]" % int(tile[0])
-			if int(tile[1]) > 0:
-				th_ok = false
-				line += "[겹침의 씨앗 %d]" % int(tile[1])
-			#  ⓑ 실루엣이 원 — 면의 최대 반지름이 판 테와 소수점까지 같다
-			if absf(float(tile[2]) - g._board_rim(
-					g._theme_ring_w(g._board_theme()))) > 0.01:
-				th_ok = false
-				line += "[최대r %.3f]" % float(tile[2])
-			#  ⓒ 크기 — 가장 큰 면이 판의 12% 밑, 가장 작은 면이 25px² 위
-			var amx := 0.0
-			var amn := INF
-			for f in g.brk_facets:
-				var ar: float = g._brk_area(f.pts)
-				amx = maxf(amx, ar)
-				amn = minf(amn, ar)
-			if amx > disc * 0.12:
-				th_ok = false
-				line += "[최대면 %.1f%%]" % (amx / disc * 100.0)
-			if amn < 25.0:
-				th_ok = false
-				line += "[최소면 %.0fpx²]" % amn
-			if rings > want_bands:
-				th_ok = false
-				line += "[색 띠 %d > 살아 있는 띠 %d]" % [rings, want_bands]
-			g._brk_fire()
-			var sh: int = (g.brk_shards as Array).size()
-			var bull: int = 1 if g.rt_bull_o > 0.0 else 0
-			#  면 한 장이 조각 한 장. 불만 맨 뒤에 따로 얹는다.
-			if sh != fac + bull:
-				th_ok = false
-				line += "[조각 %d != 면 %d + 불 %d]" % [sh, fac, bull]
-			if sh > int(g.BRK.cap):
-				th_ok = false
-				line += "[조각 %d > 상한 %d]" % [sh, int(g.BRK.cap)]
-			if (g.brk_bits as Array).size() > int(g.BRK.grit_cap):
-				th_ok = false
-				line += "[톱밥 초과]"
-			line += "%d·%d " % [fac, sh]
-			g._brk_skip()
+			#  ⚠ **맞은 자리를 쓸면서 잰다**(_hit 머리말). 앞서는 여기서
+			#  곧장 `_brk_arm(t)` 을 불렀는데, 그러면 darts 가 비어 있어
+			#  맞은 자리가 **열여덟 판 전부 한 곳**이었다 — 이 모형이 기대고
+			#  선 두 축(L² 무게 · 천장)이 일하는 가장자리 타격을 한 번도
+			#  안 본 채 초록이었다.
+			var fac_lo := 999
+			var fac_hi := 0
+			var amx_k := 0.0
+			var amn_p := INF
+			for hp in HITS:
+				var hf := float(hp[0])
+				var hs := int(hp[1])
+				_hit(hf, hs)
+				g._brk_arm(t)
+				var rings: int = (g.brk_rings as Array).size()
+				var fac: int = (g.brk_facets as Array).size()
+				var rim: float = g._brk_rim()
+				var disc: float = PI * rim * rim
+				var at := "%.2fR·씨%d " % [hf, hs]
+				fac_lo = mini(fac_lo, fac)
+				fac_hi = maxi(fac_hi, fac)
+				#  ⓐ 면이 판을 빈틈없이 덮는가 — **방향 모서리 짝짓기**로
+				#  잰다. 쪼개기만으로 지은 분할이면 속 모서리는 정순 하나 ·
+				#  역순 하나로 짝이 맞고, 짝 없는 모서리는 전부 판 테 위다.
+				var tile := _tile(rim)
+				if int(tile[0]) > 0:
+					th_ok = false
+					line += "[%s구멍의 씨앗 %d]" % [at, int(tile[0])]
+				if int(tile[1]) > 0:
+					th_ok = false
+					line += "[%s겹침의 씨앗 %d]" % [at, int(tile[1])]
+				#  ⓑ 실루엣이 원 — 면의 최대 반지름이 판 테와 소수점까지 같다
+				if absf(float(tile[2]) - g._board_rim(
+						g._theme_ring_w(g._board_theme()))) > 0.01:
+					th_ok = false
+					line += "[%s최대r %.3f]" % [at, float(tile[2])]
+				#  ⓒ 크기 — 가장 큰 면이 판의 12% 밑, 가장 작은 면이 25px² 위
+				var amx := 0.0
+				var amn := INF
+				for f in g.brk_facets:
+					var ar: float = g._brk_area(f.pts)
+					amx = maxf(amx, ar)
+					amn = minf(amn, ar)
+				amx_k = maxf(amx_k, amx / disc)
+				amn_p = minf(amn_p, amn)
+				if amx > disc * 0.12:
+					th_ok = false
+					line += "[%s최대면 %.1f%%]" % [at, amx / disc * 100.0]
+				if amn < 25.0:
+					th_ok = false
+					line += "[%s최소면 %.0fpx²]" % [at, amn]
+				if rings > want_bands:
+					th_ok = false
+					line += "[색 띠 %d > 살아 있는 띠 %d]" % [rings, want_bands]
+				g._brk_fire()
+				var sh: int = (g.brk_shards as Array).size()
+				var bull: int = 1 if g.rt_bull_o > 0.0 else 0
+				#  면 한 장이 조각 한 장. 불만 맨 뒤에 따로 얹는다.
+				if sh != fac + bull:
+					th_ok = false
+					line += "[%s조각 %d != 면 %d + 불 %d]" % [at, sh, fac, bull]
+				if sh > int(g.BRK.cap):
+					th_ok = false
+					line += "[%s조각 %d > 상한 %d]" % [at, sh, int(g.BRK.cap)]
+				if (g.brk_bits as Array).size() > int(g.BRK.grit_cap):
+					th_ok = false
+					line += "[%s톱밥 초과]" % at
+				g._brk_skip()
+			line += "%d~%d·최대%.1f%%·최소%.0f " % [
+					fac_lo, fac_hi, amx_k * 100.0, amn_p]
 		th_txt += "%s(칸%d) %s " % [id if id != "" else "기본", n, line]
 	_ok("테마 여섯에서 면이 판을 빈틈없이 덮는다", th_ok, th_txt)
 
