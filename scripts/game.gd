@@ -862,6 +862,21 @@ const INTRO := {
 	"flash": 0.35,                   # E 가 붙을 때 금빛 번쩍
 	"settle": 4.75,                  # 어둠이 스크림으로 가라앉기 시작
 	"end": 5.35,                     # 제목으로 넘긴다
+	#  ⚠ **아무 누름 하나가 인트로를 통째로 지웠다**(2026-09-25 제보:
+	#  「게임 건너뛰기가 너무 잘 돼서 오프닝을 못 보여주네」). 실행하고
+	#  창을 한 번 누르면 그 클릭이 그대로 건너뛰기라, 처음 켠 사람은
+	#  5.35초짜리를 한 프레임도 못 본다.
+	#  고치는 길은 「못 건너뛰게」가 아니라 **두 걸음**이다:
+	#    · 앞 lock 초는 아무 누름도 안 먹는다 — 실행 직후에 딸려 오는
+	#      누름과 창을 집는 클릭이 여기서 죽는다.
+	#    · 그 뒤 첫 누름은 **빨리 감는다**(ff 배). 실수로 눌러도 끝을
+	#      보여 주고, 지루한 사람은 그 자리에서 몇 배로 지나간다.
+	#    · 한 번 더 누르면 그때 넘어간다.
+	#  「누르면 빨라진다」는 정산 화면이 이미 쓰는 어휘라(fast_rate 2.5)
+	#  새 말을 안 들인다. 글자로 안내하지 않는다 — 화면이 빨라지는 것이
+	#  곧 안내다.
+	"lock": 0.65,                    # 이 앞은 아무 누름도 안 먹는다
+	"ff": 2.5,                       # 첫 누름 뒤의 배속(정산 빨리 보기와 같다)
 	"out": 0.55,                     # 제목 글줄이 떠오르는 시간
 	"dark": Color(0.04, 0.03, 0.07), # 어둠 = 제목 스크림의 색
 	"lit": 0.20,                     # 램프가 다 켜졌을 때 남는 어둠
@@ -874,6 +889,7 @@ var intro_t := -1.0        # 흐른 시간. 인트로가 아니면 −1
 var intro_out := 0.0       # 제목으로 넘긴 뒤 글줄을 덮은 막(1 → 0)
 var intro_fired := 0       # 던진 자루 수
 var intro_rang := {}       # 한 번만 울리는 소리
+var intro_ff := false      # 첫 누름 뒤 — 빨리 감는 중
 
 
 func _intro_wanted() -> bool:
@@ -887,6 +903,7 @@ func _intro_begin() -> void:
 	intro_t = 0.0
 	intro_out = 0.0
 	intro_fired = 0
+	intro_ff = false
 	intro_rang.clear()
 	pause_from = -1
 	state = S.INTRO
@@ -913,7 +930,7 @@ func _intro_tick(d: float) -> void:
 		queue_redraw()
 	if state != S.INTRO:
 		return
-	intro_t += d
+	intro_t += d * (float(INTRO.ff) if intro_ff else 1.0)
 	var t := intro_t
 	if t >= float(INTRO.lamp):
 		_intro_once("lamp", "menu_pick")
@@ -934,6 +951,19 @@ func _intro_tick(d: float) -> void:
 		_intro_end()
 		return
 	queue_redraw()
+
+
+#  누름 하나가 인트로에 하는 일 — 두 걸음이다(INTRO.lock · INTRO.ff 머리말).
+#  키든 손가락이든 이 한 문을 지나므로 두 길이 영영 안 갈린다.
+func _intro_press() -> void:
+	if state != S.INTRO:
+		return
+	if intro_t < float(INTRO.lock):
+		return                      # 실행 직후에 딸려 온 누름 — 아무 일도 없다
+	if not intro_ff:
+		intro_ff = true             # 첫 누름은 빨리 감기다
+		return
+	_intro_end()
 
 
 #  제목으로. 건너뛸 때도 이 길이다.
@@ -5219,7 +5249,7 @@ func _unhandled_input(e: InputEvent) -> void:
 			if Dev.key(self, k.keycode):          # DEV
 				return
 			if state == S.INTRO:
-				_intro_end()
+				_intro_press()
 				return
 			if swap_live or turn_live:
 				# 연출은 아무 키로나 건너뛴다. 잠긴 채로 못 빠져나가는
@@ -5352,7 +5382,7 @@ func _unhandled_input(e: InputEvent) -> void:
 		mouse_at = mp
 		mouse_down = mb.pressed
 		if mb.pressed and state == S.INTRO:
-			_intro_end()
+			_intro_press()
 			return
 		if mb.pressed:
 			#  연출 건너뛰기가 **배움 넘기기보다 앞**이다. 키 갈래는 이미 이
