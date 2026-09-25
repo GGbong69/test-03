@@ -17089,6 +17089,32 @@ func _brk_area(pts: PackedVector2Array) -> float:
 	return absf(a) * 0.5
 
 
+#  ── 대각 (lo, hi) 으로 가른 두 쪽의 넓이 — **배열을 안 짓고** 잰다 ──
+#  `_brk_try_cut` 이 후보 셋을 견줘 하나만 쓰는데, 앞서는 셋 다 실제로
+#  쪼개 보고 넓이를 쟀다. 짓지 않고 재면 배열 넷과 사전 둘이 통째로 빠진다.
+#  ⚠ **더하는 차례가 `_brk_area` 와 글자 그대로 같다.** 부동소수는 차례가
+#  바뀌면 끝자리가 달라지는데 이 수로 후보의 우열을 가리므로, 끝자리 하나가
+#  깨지는 무늬를 바꾼다. 앞쪽 누적으로 O(1) 에 내는 빠른 길을 **일부러**
+#  버렸다 — 같은 판이 언제나 같은 무늬로 깨져야 한다.
+#  ⓐ 앞쪽: pts[lo..hi] 를 돌고 (hi → lo) 로 닫는다.
+#  ⓑ 뒤쪽: pts[hi..n−1] · (n−1 → 0) · pts[0..lo] 를 돌고 (lo → hi) 로 닫는다.
+#  되돌리는 것: Vector2(앞쪽 넓이, 뒤쪽 넓이). 2026-09-25
+func _brk_halves(pts: PackedVector2Array, lo: int, hi: int) -> Vector2:
+	var n := pts.size()
+	var s0 := 0.0
+	for i in range(lo, hi):
+		s0 += pts[i].x * pts[i + 1].y - pts[i + 1].x * pts[i].y
+	s0 += pts[hi].x * pts[lo].y - pts[lo].x * pts[hi].y
+	var s1 := 0.0
+	for i in range(hi, n - 1):
+		s1 += pts[i].x * pts[i + 1].y - pts[i + 1].x * pts[i].y
+	s1 += pts[n - 1].x * pts[0].y - pts[0].x * pts[n - 1].y
+	for i in range(0, lo):
+		s1 += pts[i].x * pts[i + 1].y - pts[i + 1].x * pts[i].y
+	s1 += pts[lo].x * pts[hi].y - pts[hi].x * pts[lo].y
+	return Vector2(absf(s0) * 0.5, absf(s1) * 0.5)
+
+
 #  넓이 가중 무게중심. 색을 뽑는 칸이 여기서 선다.
 func _brk_centroid(pts: PackedVector2Array) -> Vector2:
 	var n := pts.size()
@@ -17147,18 +17173,37 @@ func _brk_diag_ok(pts: PackedVector2Array, ia: int, ib: int, mid: Array) -> bool
 	for c in range(1, chain.size() - 1):
 		if not Geometry2D.is_point_in_polygon(chain[c], pts):
 			return false
+	var last: int = chain.size() - 2
 	for c in chain.size() - 1:
 		var p0: Vector2 = chain[c]
 		var p1: Vector2 = chain[c + 1]
 		if not Geometry2D.is_point_in_polygon((p0 + p1) * 0.5, pts):
 			return false
+		#  ⚠ **상자 퇴짜.** `segment_intersects_segment` 가 이 함수에서 제일
+		#  비싼 줄인데, 판 테가 120각형이라 n 이 크고 판 하나에 쪼개기 후보가
+		#  예순 번 넘게 돈다 — 그 곱이 `_brk_arm` 한 프레임을 **최악 8.5ms**
+		#  까지 밀어 올렸다(60fps 예산 16.67ms 의 절반. 모바일이 예정돼
+		#  있는데 GDScript 가 폰에서 몇 배 느리다). 두 토막의 상자가 안
+		#  겹치면 교차가 **있을 수 없으므로** 여기서 곧장 물러서도 답이 한
+		#  비트도 안 바뀐다 — 열에 아홉이 여기서 사라진다.
+		#  ⚠ 부등호가 **strict** 여야 한다. 상자가 선으로 닿는 경우(가로·세로
+		#  토막)를 퇴짜 놓으면 진짜 교차를 놓친다. 2026-09-25
+		var lox: float = minf(p0.x, p1.x)
+		var hix: float = maxf(p0.x, p1.x)
+		var loy: float = minf(p0.y, p1.y)
+		var hiy: float = maxf(p0.y, p1.y)
 		for i in n:
 			var j: int = (i + 1) % n
 			if c == 0 and (i == ia or j == ia):
 				continue
-			if c == chain.size() - 2 and (i == ib or j == ib):
+			if c == last and (i == ib or j == ib):
 				continue
-			if Geometry2D.segment_intersects_segment(p0, p1, pts[i], pts[j]) != null:
+			var q0: Vector2 = pts[i]
+			var q1: Vector2 = pts[j]
+			if minf(q0.x, q1.x) > hix or maxf(q0.x, q1.x) < lox \
+					or minf(q0.y, q1.y) > hiy or maxf(q0.y, q1.y) < loy:
+				continue
+			if Geometry2D.segment_intersects_segment(p0, p1, q0, q1) != null:
 				return false
 	return true
 
@@ -17328,14 +17373,22 @@ func _brk_make_web() -> void:
 		brk_chords.append(lst)
 
 
-#  이 점에 닿아 있는 마디들. 이은 곁가지가 **허공에서 시작하지 않도록**
+#  두 점에 닿아 있는 마디들. 이은 곁가지가 **허공에서 시작하지 않도록**
 #  제 부모를 찾는 자다.
-func _brk_touch(p: Vector2) -> Array:
+#  ⚠ **두 점을 한 바퀴에 훑는다.** 앞서는 한 점짜리를 두 번 불러 마디
+#  이백~삼백 줄을 두 번 지났는데, 한 판에 열댓 번 도니 그 곱이 컸다.
+#  둘 다 문 마디가 그때는 **두 번** 담겼지만, 받는 쪽 둘(`_brk_cut_seg`
+#  의 pr · `_brk_web_stage` 의 o)이 **전부 최댓값 접기**라 한 번 담기나
+#  두 번 담기나 같은 수가 난다. 차례도 안 본다. 2026-09-25
+func _brk_touch(pa: Vector2, pb: Vector2) -> Array:
 	var out := []
 	for i in brk_web.size():
 		var sg: Dictionary = brk_web[i]
-		if (sg.a as Vector2).distance_squared_to(p) < 0.25 \
-				or (sg.b as Vector2).distance_squared_to(p) < 0.25:
+		var a: Vector2 = sg.a
+		var b: Vector2 = sg.b
+		if a.distance_squared_to(pa) < 0.25 or b.distance_squared_to(pa) < 0.25 \
+				or a.distance_squared_to(pb) < 0.25 \
+				or b.distance_squared_to(pb) < 0.25:
 			out.append(i)
 	return out
 
@@ -17454,8 +17507,7 @@ func _brk_make_facets() -> void:
 #  갈라진 선과 조각 모서리가 한 픽셀도 안 어긋난다. 부모를 찾아 매달아
 #  **허공에서 시작하는 금**이 안 생기게 한다.
 func _brk_cut_seg(pa: Vector2, pb: Vector2, rng: RandomNumberGenerator) -> void:
-	var par := _brk_touch(pa)
-	par.append_array(_brk_touch(pb))
+	var par := _brk_touch(pa, pb)
 	var bpr := 0.0
 	for x in par:
 		bpr = maxf(bpr, float(brk_web[x].pr))
@@ -17477,30 +17529,53 @@ func _brk_try_cut(f: Dictionary, rng: RandomNumberGenerator,
 	#  아니므로 가를 수 있다. 막아야 하는 것은 **세모**뿐이다.
 	if n < 4:
 		return []
-	var best := []
+	#  ⚠ **재고 나서 짓는다.** 앞서는 후보마다 `_brk_split` 이 배열 넷을
+	#  통째로 지은 **뒤에** 넓이로 버렸는데, 후보 셋 중 둘은 어차피 버려진다.
+	#  이 함수가 한 판에 열댓 번 돌아 `_brk_arm` 한 프레임에서 제일 비싼
+	#  자리였다 — 그 한 프레임이 최악 8.5ms(60fps 예산 16.67ms)였고, 모바일이
+	#  예정돼 있는데 GDScript 가 폰에서 몇 배 느리다.
+	#  이제 `_brk_halves` 로 **배열을 안 짓고** 두 넓이를 재고, **이긴 후보
+	#  하나만** 실제로 쪼갠다. 2026-09-25
+	var pts: PackedVector2Array = f.pts
 	var bq := -1.0
+	var bia := -1
+	var bib := -1
 	var start: int = rng.randi_range(0, n - 1)
 	for d in n:
 		var ia: int = (start + d) % n
 		for off in [n / 2, n / 2 + 1, n / 2 - 1]:
 			var ib: int = (ia + int(off)) % n
-			var two := _brk_split(f, ia, ib, [])
-			if two.is_empty():
+			var lo: int = mini(ia, ib)
+			var hi: int = maxi(ia, ib)
+			#  붙어 있는 두 정점 사이로는 못 가른다 — `_brk_split` 과 같은 문
+			if hi - lo < 2 or (lo == 0 and hi == n - 1):
 				continue
-			var a0 := _brk_area(two[0].pts)
-			var a1 := _brk_area(two[1].pts)
+			var ar := _brk_halves(pts, lo, hi)
+			var a0: float = ar.x
+			var a1: float = ar.y
 			if a0 < amin or a1 < amin:
 				continue
-			if (two[0].pts.size() < 4 and a0 > amax) \
-					or (two[1].pts.size() < 4 and a1 > amax):
+			if ((hi - lo + 1) < 4 and a0 > amax) \
+					or ((n - hi + lo + 1) < 4 and a1 > amax):
 				continue
 			var q: float = minf(a0, a1) / maxf(a0, a1)
-			if q > bq:
-				bq = q
-				best = [two[0], two[1], f.pts[ia], f.pts[ib]]
-		if not best.is_empty():
+			#  ⚠ 진 후보는 **모양을 안 본다.** 이긴 것과 성한 것은 서로
+			#  기대지 않는 두 조건이라 차례를 바꿔도 뽑히는 후보가 같다.
+			if q <= bq:
+				continue
+			if not _brk_diag_ok(pts, lo, hi, []):
+				continue
+			bq = q
+			bia = ia
+			bib = ib
+		if bia >= 0:
 			break
-	return best
+	if bia < 0:
+		return []
+	var two := _brk_split(f, bia, bib, [])
+	if two.is_empty():
+		return []
+	return [two[0], two[1], pts[bia], pts[bib]]
 
 
 #  ── 깊이의 금 — **면을 한 장도 안 가른다** ──
