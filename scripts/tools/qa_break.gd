@@ -60,6 +60,39 @@ func _open() -> void:
 
 
 #  보드 확장 하나를 끼우고 판을 다시 세운다. mods_own 이 판의 유일한 출처다.
+#  ── 면이 판을 빈틈없이 덮는가 ── **정확한 자다. 래스터가 아니다.**
+#  `_brk_make_facets` 는 판 다각형을 **쪼개기만** 해서 면을 낸다. 그런
+#  분할이면 속 모서리는 반드시 **정순 하나 · 역순 하나**로 짝이 맞고,
+#  짝이 없는 모서리는 전부 판 테 위에 있다. 그래서 ⓐ 짝이 없는데 테
+#  위가 아닌 모서리 = **구멍의 씨앗** ⓑ 같은 방향으로 두 번 나온 모서리
+#  = **겹침의 씨앗**이다. 0.5px 래스터는 판 하나에 236,000 칸이라 자가
+#  못 돌고, 무엇보다 **부동소수 엡실론이 끼어든다** — 이 자에는 안 낀다.
+#  되돌리는 것: [구멍의 씨앗, 겹침의 씨앗, 면의 최대 반지름]
+func _tile(rim: float) -> Array:
+	var dir := {}
+	var maxr := 0.0
+	for f in g.brk_facets:
+		var poly: PackedVector2Array = f.pts
+		var n: int = poly.size()
+		for i in n:
+			var p: Vector2 = poly[i]
+			var q: Vector2 = poly[(i + 1) % n]
+			maxr = maxf(maxr, p.length())
+			var k := "%.3f,%.3f|%.3f,%.3f" % [p.x, p.y, q.x, q.y]
+			dir[k] = int(dir.get(k, 0)) + 1
+	var loose := 0
+	var dup := 0
+	for k in dir:
+		if int(dir[k]) > 1:
+			dup += int(dir[k]) - 1
+		var parts: PackedStringArray = (k as String).split("|")
+		if not dir.has(parts[1] + "|" + parts[0]):
+			var xy: PackedStringArray = parts[0].split(",")
+			if absf(Vector2(float(xy[0]), float(xy[1])).length() - rim) > 0.02:
+				loose += 1
+	return [loose, dup, maxr]
+
+
 func _board(id: String) -> void:
 	g.mods_own = [] if id == "" else [id]
 	g._board_bake()
@@ -294,7 +327,15 @@ func _run() -> void:
 			tail_ok = false
 	_ok("걸음 길이 셋에서 숨이 같다", tail_ok, tail_txt)
 
-	# ── ⑧ 테마 — 박아 둔 20 이 한 곳도 없다 ─────────────────
+	# ── ⑧ 테마 — 면이 판을 빈틈없이 덮고 수가 자 안에 든다 ───
+	#  ⚠ **앞 자는 「부채가 칸 수의 약수 · 겹이 산 띠 안」이었다.**
+	#  그 약수 규약이 곧 「레고블럭」의 뿌리라 규약째로 죽었다(game.gd 의
+	#  _brk_wedges 비석). 하지만 그 자가 **지키려던 것**은 약수가 아니라
+	#  ⓐ 조각 하나가 한 색으로 읽히고 ⓑ 조각이 읽히는 크기이고
+	#  ⓒ 조각이 예산 안이라는 셋이다. 새 모형에서 그 셋을 **부채 없이
+	#  직접** 잰다 — 줄어든 자가 없고 오히려 덮임 자가 는다.
+	#  ⓐ 는 이제 `_brk_shards_draw` 가 조각을 col 한 색으로 칠하는 것이
+	#  지키므로 ⑧-d 가 색 가짓수로 잰다.
 	var th_ok := true
 	var th_txt := ""
 	for id in ["", "pizz", "clok", "dnut", "aimb", "arst"]:
@@ -305,37 +346,58 @@ func _run() -> void:
 		var line := ""
 		for t in 3:
 			g._brk_arm(t)
-			var wedge: int = g.brk_w
 			var rings: int = (g.brk_rings as Array).size()
+			var fac: int = (g.brk_facets as Array).size()
+			var rim: float = g._brk_rim()
+			var disc: float = PI * rim * rim
+			#  ⓐ 면이 판을 빈틈없이 덮는가 — **방향 모서리 짝짓기**로 잰다.
+			#  쪼개기만으로 지은 분할이면 속 모서리는 정순 하나 · 역순
+			#  하나로 짝이 맞고, 짝 없는 모서리는 전부 판 테 위다.
+			var tile := _tile(rim)
+			if int(tile[0]) > 0:
+				th_ok = false
+				line += "[구멍의 씨앗 %d]" % int(tile[0])
+			if int(tile[1]) > 0:
+				th_ok = false
+				line += "[겹침의 씨앗 %d]" % int(tile[1])
+			#  ⓑ 실루엣이 원 — 면의 최대 반지름이 판 테와 소수점까지 같다
+			if absf(float(tile[2]) - g._board_rim(
+					g._theme_ring_w(g._board_theme()))) > 0.01:
+				th_ok = false
+				line += "[최대r %.3f]" % float(tile[2])
+			#  ⓒ 크기 — 가장 큰 면이 판의 12% 밑, 가장 작은 면이 25px² 위
+			var amx := 0.0
+			var amn := INF
+			for f in g.brk_facets:
+				var ar: float = g._brk_area(f.pts)
+				amx = maxf(amx, ar)
+				amn = minf(amn, ar)
+			if amx > disc * 0.12:
+				th_ok = false
+				line += "[최대면 %.1f%%]" % (amx / disc * 100.0)
+			if amn < 25.0:
+				th_ok = false
+				line += "[최소면 %.0fpx²]" % amn
+			if rings > want_bands:
+				th_ok = false
+				line += "[색 띠 %d > 살아 있는 띠 %d]" % [rings, want_bands]
 			g._brk_fire()
 			var sh: int = (g.brk_shards as Array).size()
 			var bull: int = 1 if g.rt_bull_o > 0.0 else 0
-			if n % wedge != 0:
+			#  면 한 장이 조각 한 장. 불만 맨 뒤에 따로 얹는다.
+			if sh != fac + bull:
 				th_ok = false
-				line += "[부채 %d 가 칸 %d 의 약수가 아니다]" % [wedge, n]
-			if rings > want_bands:
-				th_ok = false
-				line += "[겹 %d > 살아 있는 띠 %d]" % [rings, want_bands]
-			if sh != wedge * rings + bull:
-				th_ok = false
-				line += "[조각 %d != %d]" % [sh, wedge * rings + bull]
+				line += "[조각 %d != 면 %d + 불 %d]" % [sh, fac, bull]
 			if sh > int(g.BRK.cap):
 				th_ok = false
 				line += "[조각 %d > 상한 %d]" % [sh, int(g.BRK.cap)]
 			if (g.brk_bits as Array).size() > int(g.BRK.grit_cap):
 				th_ok = false
 				line += "[톱밥 초과]"
-			#  가장 작은 조각의 안쪽 호. 「1px 외톨이는 물건이 아니라 먼지」
-			#  바닥(약 2px)의 위여야 한다.
-			var arc: float = g.R * maxf(float(g.brk_rings[0][0]), 0.0) \
-					* (TAU / float(n)) * float(n / wedge)
-			if g.rt_bull_o > 0.0 and arc < 2.0:
-				th_ok = false
-				line += "[안쪽 호 %.1fpx]" % arc
-			line += "%d/%d·%d " % [wedge, rings, sh]
+			line += "%d·%d " % [fac, sh]
 			g._brk_skip()
 		th_txt += "%s(칸%d) %s " % [id if id != "" else "기본", n, line]
-	_ok("테마 여섯에서 부채가 칸의 약수 · 겹이 산 띠 안", th_ok, th_txt)
+	_ok("테마 여섯에서 면이 판을 빈틈없이 덮는다", th_ok, th_txt)
 
 	# ── ⑧-b 테 — 조각이 판의 **테까지** 먹는다 ──────────────
 	#  띠 표는 노는 면(1.0)까지만 적는데 실제로 그려지는 판은 그 밖에 테가
@@ -439,11 +501,21 @@ func _run() -> void:
 		var last: int = (g.brk_rings as Array).size() - 1
 		for s in g.brk_shards:
 			seen[(s.col as Color).to_html(false)] = true
-		#  바깥 겹만 따로 — 테 물감이 실제로 섞여 드는지.
-		for j in g.brk_w:
-			var mx: float = g._brk_band_mix(float(g.brk_rings[last][0]),
-					float(g.brk_rings[last][1]))
-			outer[mx] = true
+		#  바깥 물감이 실제로 섞여 드는지 — **면이 무는 구간**으로 묻는다.
+		#  ⚠ 앞서는 「그 겹의 띠」를 넣었는데, 조각이 실제로 무는 폭과 달라
+		#  `_brk_band_mix` 가 제 뜻대로 못 섰다. 판 테를 무는 면만 골라
+		#  그 면의 r0n~r1n 을 그대로 넣는다.
+		for f in g.brk_facets:
+			var r0n := INF
+			var r1n := 0.0
+			for q in f.pts:
+				var rr: float = (q as Vector2).length() / maxf(g.R, 1.0)
+				r0n = minf(r0n, rr)
+				r1n = maxf(r1n, rr)
+			if r1n < float(g.brk_rings[last][1]) - 0.02:
+				continue
+			var mx: float = g._brk_band_mix(r0n, r1n)
+			outer[snappedf(mx, 0.01)] = true
 			if mx <= 0.0:
 				rhy_ok = false
 		if seen.size() < 3:
@@ -477,21 +549,43 @@ func _run() -> void:
 	_board("")
 	var tier_len := []
 	var tier_txt := ""
+	#  ⚠ **칸이 하나 늘었다 — 살과 면.** 앞서는 겹·단·톱밥·소리 넷이었는데,
+	#  겹이 조각 기하에서 빠졌으므로 겹만으로는 층이 안 갈린다. 그리고
+	#  앞 모형에서는 `_brk_wedges` 가 10/8/8 을 **전부 10 으로 스냅해**
+	#  작은 판과 큰 판이 기하에서 글자 그대로 같았다(둘 다 21조각·단 4) —
+	#  그 사실을 자가 한 번도 못 잡았다. 살 9/12/15 는 약수 제약이 없어
+	#  **실제로 갈리고**, 그것을 여기서 못 박는다.
+	#  ⚠ **맞은 자리를 셋에서 똑같이 둔다.** 면 수는 맞은 자리에 따라
+	#  달라지므로(치우치면 천장이 더 쪼갠다) 같은 자리에서 견줘야 사다리가
+	#  층의 것이 된다.
 	for t in 3:
+		g.darts = [{"p": g.BC + Vector2(0.0, -g.R * 0.30), "id": "std",
+				"rot": 0.0}]
 		g._brk_arm(t)
+		var spk: int = (g.brk_spokes as Array).size()
+		var fac: int = (g.brk_facets as Array).size()
 		g._brk_fire()
-		var row: Array = g.BRK[["small", "big", "boss"][t]]
-		tier_len.append([(g.brk_rings as Array).size(), g.brk_stage,
-				(g.brk_bits as Array).size(), int(row[3])])
-		tier_txt += "%s 겹%d·단%d·톱밥%d·소리%d  " % [
-				["작은", "큰", "보스"][t], (g.brk_rings as Array).size(),
-				g.brk_stage, (g.brk_bits as Array).size(), int(row[3])]
+		var row: Dictionary = g.BRK[["small", "big", "boss"][t]]
+		tier_len.append([spk, g.brk_stage, (g.brk_bits as Array).size(),
+				int(row.snd), fac])
+		tier_txt += "%s 살%d·단%d·톱밥%d·소리%d·면%d  " % [
+				["작은", "큰", "보스"][t], spk, g.brk_stage,
+				(g.brk_bits as Array).size(), int(row.snd), fac]
 		g._brk_skip()
-	var ladder_ok: bool = int(tier_len[0][0]) <= int(tier_len[2][0]) \
+	var ladder_ok: bool = int(tier_len[0][0]) < int(tier_len[1][0]) \
+			and int(tier_len[1][0]) < int(tier_len[2][0]) \
 			and int(tier_len[0][1]) <= int(tier_len[2][1]) \
 			and int(tier_len[0][2]) < int(tier_len[2][2]) \
-			and int(tier_len[0][3]) < int(tier_len[2][3])
-	_ok("층이 겹·단·톱밥·소리로 오른다", ladder_ok, tier_txt)
+			and int(tier_len[0][3]) < int(tier_len[2][3]) \
+			and int(tier_len[0][4]) < int(tier_len[2][4])
+	_ok("층이 살·단·톱밥·소리·면으로 오른다", ladder_ok, tier_txt)
+	#  ⚠ **작은 판과 큰 판이 기하에서 실제로 갈린다.** 앞 모형이 조용히
+	#  깨뜨리고 있던 바로 그 자리라 따로 못 박는다.
+	_ok("작은 판과 큰 판이 기하에서 갈린다",
+			int(tier_len[0][0]) != int(tier_len[1][0])
+			and int(tier_len[0][4]) != int(tier_len[1][4]),
+			"살 %d/%d · 면 %d/%d" % [int(tier_len[0][0]), int(tier_len[1][0]),
+					int(tier_len[0][4]), int(tier_len[1][4])])
 	var same_len := absf(float(g.BRK.hold) + float(g.BRK.life_hi)) > 0.0
 	_ok("길이는 셋이 같다 — 표에 층별 시간이 없다",
 			same_len and not g.BRK.has("small_t"),
@@ -505,15 +599,15 @@ func _run() -> void:
 	_ok("board_break.wav 가 구워져 있다",
 			ResourceLoader.exists("res://sfx/board_break.wav"), "")
 	_ok("종의 비(tierce 1.2)를 안 쓴다",
-			absf(float(g.BRK.small[4]) / float(g.BRK.big[4]) - 1.2) > 0.05
-			and absf(float(g.BRK.big[4]) / float(g.BRK.boss[4]) - 1.2) > 0.05,
-			"%.3f · %.3f" % [float(g.BRK.small[4]) / float(g.BRK.big[4]),
-					float(g.BRK.big[4]) / float(g.BRK.boss[4])])
+			absf(float(g.BRK.small.pitch) / float(g.BRK.big.pitch) - 1.2) > 0.05
+			and absf(float(g.BRK.big.pitch) / float(g.BRK.boss.pitch) - 1.2) > 0.05,
+			"%.3f · %.3f" % [float(g.BRK.small.pitch) / float(g.BRK.big.pitch),
+					float(g.BRK.big.pitch) / float(g.BRK.boss.pitch)])
 	_ok("음이 내려간다 — 등장은 올리고 퇴장은 내린다",
-			float(g.BRK.small[4]) > float(g.BRK.big[4])
-			and float(g.BRK.big[4]) > float(g.BRK.boss[4]),
-			"%.2f → %.2f → %.2f" % [float(g.BRK.small[4]),
-					float(g.BRK.big[4]), float(g.BRK.boss[4])])
+			float(g.BRK.small.pitch) > float(g.BRK.big.pitch)
+			and float(g.BRK.big.pitch) > float(g.BRK.boss.pitch),
+			"%.2f → %.2f → %.2f" % [float(g.BRK.small.pitch),
+					float(g.BRK.big.pitch), float(g.BRK.boss.pitch)])
 	var snd_txt := ""
 	var snd_ok := true
 	var crk_txt := ""
@@ -522,13 +616,13 @@ func _run() -> void:
 		_open()
 		g.leg_no = t + 1          # 작은 1 · 큰 2 · 보스 3
 		var r := _throw()
-		var row: Array = g.BRK[["small", "big", "boss"][t]]
+		var row: Dictionary = g.BRK[["small", "big", "boss"][t]]
 		#  **판이 뜨는 소리** = 발화 한 방 + 꼬리 톡(row[3] − 1).
 		#  금이 번지는 앞 0.68초의 삐걱(board_crack)은 여기서 안 센다 —
 		#  그것은 사건이 아니라 사건이 오는 소리이고, 아래 줄이 따로 센다.
 		snd_txt += "%s 한방%d+톡%d(표 %d)  " % [["작은", "큰", "보스"][t],
-				int(r.brk), int(r.snd), int(row[3])]
-		if int(r.brk) + int(r.snd) != int(row[3]):
+				int(r.brk), int(r.snd), int(row.snd)]
+		if int(r.brk) + int(r.snd) != int(row.snd):
 			snd_ok = false
 		#  ⚠ **단마다 한 알.** 작은 판은 꼬리 톡이 0회라, 이 줄이 없으면
 		#  런에서 맨 처음 듣는 깨짐이 0.30초짜리 한 방뿐이다(2026-09-24).
@@ -552,12 +646,12 @@ func _run() -> void:
 	#  단 간격이 SMASH.snd_gap 위여야 한 알씩 갈린다. 보스가 제일 촘촘하다 —
 	#  brk_span(걸음 꼬리에서 난다) × 0.90 을 단 수로 나눈 것이 그 간격이다.
 	g._brk_arm(2)
-	var gap: float = (g.brk_span * 0.90) / float((g.brk_rings as Array).size() * 2)
+	var gap: float = (g.brk_span * 0.90) / float(int(g._brk_row().stages))
 	_ok("단 간격이 SMASH.snd_gap 위", gap >= float(g.SMASH.snd_gap),
 			"보스 %.3f / 문턱 %.3f" % [gap, float(g.SMASH.snd_gap)])
 	g._brk_skip()
-	_ok("한 사건의 소리가 pool 4 밑", int(g.BRK.boss[3]) <= 3,
-			"보스 %d개 / sfx_pool %d" % [int(g.BRK.boss[3]),
+	_ok("한 사건의 소리가 pool 4 밑", int(g.BRK.boss["snd"]) <= 3,
+			"보스 %d개 / sfx_pool %d" % [int(g.BRK.boss["snd"]),
 					(g.sfx_pool as Array).size()])
 	_ok("톡 사이가 SMASH.snd_gap 위",
 			float(g.BRK.thud[1]) - float(g.BRK.thud[0]) >= float(g.SMASH.snd_gap),
@@ -728,24 +822,55 @@ func _run() -> void:
 	var sd: int = g.brk_seed
 	var ulo: float = float(g.BRK.up_lo)
 	var uhi: float = float(g.BRK.up_hi)
-	var lay := {}                      # 겹 → [바깥 속도]
-	var dmax := 0.0                    # 발사각이 부채 한가운데에서 벗어난 최대
-	var fan: float = g._sec_w() * float(maxi(g._sec_n() / maxi(g.brk_w, 1), 1))
-	for j in g.brk_w:
-		for bi in nb:
-			var sh: Dictionary = g.brk_shards[j * nb + bi]
-			var jit := Vector2((g._gl_rand(j * 7 + bi, sd) - 0.5) * 52.0,
-					-lerpf(ulo, uhi, g._gl_rand(j * 11 + bi, sd)))
-			var core: Vector2 = (sh.v as Vector2) - jit
-			var u0: Vector2 = (sh.c as Vector2).normalized()
-			if not lay.has(bi):
-				lay[bi] = []
-			(lay[bi] as Array).append(core.length())
-			dmax = maxf(dmax, absf(u0.angle_to(core)))
+	var lay := {}                      # 거리 띠 → [바깥 속도]
+	var dmax := 0.0                    # 발사각이 제 방향에서 벗어난 최대
+	var dover := 0.0                   # 그 벗어남이 제 면의 각폭 1/4 을 넘은 몫
+	var far_lo := INF                  # 맞은 자리에 가장 가까운 면의 속도
+	var far_hi := 0.0                  # 가장 먼 면의 속도
+	var far_dlo := INF
+	var far_dhi := 0.0
+	#  ⚠ **겹도 j 도 없다.** 앞 자는 `brk_shards[j*nb+bi]` 로 부채×겹 격자
+	#  인덱스를 직접 찍었는데 그물에는 그런 격자가 없다. 지키려던 것(한
+	#  겹이 통째로 같은 속도로 나면 깨진 판이 아니라 **바람개비가 열리는
+	#  그림**이다)은 겹 없이 그대로 선다 — **무게중심이 맞은 자리에서
+	#  얼마나 먼가**로 0.25R 띠를 묶어 같은 띠 안을 견준다.
+	for i in (g.brk_facets as Array).size():
+		var sh: Dictionary = g.brk_shards[i]
+		var sdi: int = i * 37 + 1
+		var jit := Vector2((g._gl_rand(sdi * 7 + 2, sd) - 0.5) * 52.0,
+				-lerpf(ulo, uhi, g._gl_rand(sdi * 11 + 3, sd)))
+		var core: Vector2 = (sh.v as Vector2) - jit
+		#  ⚠ **판 한복판이 아니라 맞은 자리에서 잰다.**
+		var dv: Vector2 = (sh.c as Vector2) - g.brk_hit
+		var u0: Vector2 = dv.normalized()
+		var band: int = int(dv.length() / (g.R * 0.25))
+		if not lay.has(band):
+			lay[band] = []
+		(lay[band] as Array).append(core.length())
+		var dev: float = absf(u0.angle_to(core))
+		dmax = maxf(dmax, dev)
+		#  그 면이 **맞은 자리에서 보이는 각폭**의 1/4 안이어야 한다.
+		#  ⚠ 절대 라디안으로 박으면 안 된다 — 면 크기가 안팎으로 열 배 다르다.
+		var lo2 := INF
+		var hi2 := -INF
+		for q in (g.brk_facets[i] as Dictionary).pts:
+			var rel: float = wrapf((q as Vector2 - g.brk_hit).angle()
+					- u0.angle(), -PI, PI)
+			lo2 = minf(lo2, rel)
+			hi2 = maxf(hi2, rel)
+		dover = maxf(dover, dev - clampf(hi2 - lo2, 0.0, PI) * 0.25 - 0.0001)
+		if dv.length() < far_dlo:
+			far_dlo = dv.length()
+			far_lo = core.length()
+		if dv.length() > far_dhi:
+			far_dhi = dv.length()
+			far_hi = core.length()
 	var sp_ok := true
 	var sp_txt := ""
-	for bi in nb:
+	for bi in lay.keys():
 		var la: Array = lay[bi]
+		if la.size() < 2:
+			continue
 		var seen := {}
 		for v in la:
 			seen["%.2f" % float(v)] = true
@@ -758,12 +883,19 @@ func _run() -> void:
 		#  가장 빠른 조각이 가장 느린 조각의 1.3배는 넘어야 한다(표 0.70~1.35).
 		if seen.size() != la.size() or hi < lo * 1.3:
 			sp_ok = false
-		sp_txt += "겹%d %d개 %.0f~%.0f(×%.2f)  " % [bi, la.size(), lo, hi, hi / maxf(lo, 0.001)]
-	_ok("한 겹 안에서 조각마다 바깥 속도가 다르다", sp_ok, sp_txt)
-	#  발사각 — 부채 한가운데 고정이 아니라 ±0.25 부채 안에서 흔들린다.
-	_ok("발사각이 부채 한가운데에 안 박혀 있다",
-			dmax > 0.001 and dmax <= fan * 0.25 + 0.0001,
-			"최대 %.3f rad / 상한 %.3f(부채 %.3f 의 1/4)" % [dmax, fan * 0.25, fan])
+		sp_txt += "띠%d %d개 %.0f~%.0f(×%.2f)  " % [bi, la.size(), lo, hi,
+				hi / maxf(lo, 0.001)]
+	_ok("같은 거리 띠 안에서 조각마다 바깥 속도가 다르다", sp_ok, sp_txt)
+	#  ⚠ **속도가 맞은 자리에서의 거리로 오른다.** 표(sp_lo~sp_hi)를 한 톨도
+	#  안 건드리고 기준값을 거리로 매는 그 줄을 여기서 못 박는다 — 앞
+	#  모형은 겹 번호로 맸다.
+	_ok("바깥 속도가 맞은 자리에서 멀수록 빠르다", far_hi > far_lo,
+			"가까운 %.0fpx → %.0fpx/s · 먼 %.0fpx → %.0fpx/s"
+					% [far_dlo, far_lo, far_dhi, far_hi])
+	#  발사각 — 제 방향 고정이 아니라 **제 면의 각폭**의 1/4 안에서 흔들린다.
+	_ok("발사각이 제 면의 각폭 안에서 흔들린다",
+			dmax > 0.001 and dover <= 0.0,
+			"최대 %.3f rad · 각폭 1/4 을 넘은 몫 %.4f" % [dmax, maxf(dover, 0.0)])
 	#  불 — 바깥 성분이 0 이면 둘레가 다 식은 뒤 한가운데에 혼자 남는다.
 	var bull: Dictionary = g.brk_shards[(g.brk_shards as Array).size() - 1]
 	var bjit := Vector2((g._gl_rand(991, sd) - 0.5) * 70.0,
@@ -914,14 +1046,25 @@ func _run() -> void:
 		var base := []
 		for t in 4:
 			g._brk_arm(2, t)
-			var w0: int = g.brk_w
+			var w0: int = (g.brk_spokes as Array).size()
 			var rg: int = (g.brk_rings as Array).size()
 			var dborn: int = (g.brk_born as PackedFloat32Array).size()
 			var sd2: int = g.brk_seed
-			var drow3: int = int(g._brk_row()[3])
+			var drow3: int = int(g._brk_row().snd)
+			#  ⚠ **면의 꼭짓점까지 글자 그대로 같아야 한다.** 깊이가 더하는
+			#  둘(멈춘 곁가지 · 구덩이 고리)은 **면을 한 장도 안 가르므로**
+			#  이것이 검사로가 아니라 **구조적으로** 참이다 — 그 둘이 제
+			#  난수 흐름을 따로 쓰는 것이 그 까닭이다(_brk_deep_cracks).
+			var vsum := 0.0
+			var vn := 0
+			for f in g.brk_facets:
+				for q in f.pts:
+					vsum += (q as Vector2).x * 1.7 + (q as Vector2).y * 3.1
+					vn += 1
 			g._brk_fire()
 			var cur := [w0, rg, g.brk_stage, (g.brk_bits as Array).size(),
-					(g.brk_shards as Array).size(), drow3, dborn, sd2]
+					(g.brk_shards as Array).size(), drow3, dborn, sd2,
+					vn, snappedf(vsum, 0.001)]
 			if t == 0:
 				base = cur
 			elif cur != base:
@@ -1019,7 +1162,7 @@ func _run() -> void:
 			g.motion_off = true          # 조각 없이 금과 소리만 끝까지 본다
 			var sr := _throw(false, 900, t)
 			var want_c: int = int(sr.stage)
-			var want_s: int = int(g._brk_row()[3])
+			var want_s: int = int(g._brk_row().snd)
 			if int(sr.crack) != want_c or int(sr.brk) + int(sr.snd) != want_s:
 				dsnd_ok = false
 				dsnd_txt += "[단%d 층%d 삐걱%d/%d · 한방+톡%d/%d]" % [t, tier,
@@ -1032,9 +1175,9 @@ func _run() -> void:
 	var lad_ok := true
 	var lad_txt := ""
 	for ti in 2:
-		var phi: float = float(g.BRK[["small", "big", "boss"][ti]][4]) \
+		var phi: float = float(g.BRK[["small", "big", "boss"][ti]].pitch) \
 				* float(pit[3])
-		var lo2: float = float(g.BRK[["small", "big", "boss"][ti + 1]][4]) \
+		var lo2: float = float(g.BRK[["small", "big", "boss"][ti + 1]].pitch) \
 				* float(pit[0])
 		if phi <= lo2:
 			lad_ok = false
@@ -1047,72 +1190,151 @@ func _run() -> void:
 				lad_txt += "[종의 비]"
 	_ok("층 사다리가 깊이 넷 어디에서도 안 뒤집힌다", lad_ok, lad_txt)
 
-	# ── ㉓ 톱니가 **안쪽으로만** 벌어진다 ────────────────────
-	#  테 호는 겹의 안쪽 경계에 서는데 보스의 바깥 겹 안쪽 경계가 판 테에서
-	#  8px 안이라, 대칭으로 벌리면 3단 보스에서 호가 테를 밟는다. 실루엣은
-	#  깨짐의 것이지 금의 것이 아니다. 그래서 재는 것 셋이다:
-	#    ⓐ 단이 깊어져도 호의 **최대** 반지름이 0단보다 절대 안 크다
-	#    ⓑ 어느 단에서도 호가 판 테(1.24R) 밖으로 안 나간다
-	#    ⓒ 호의 **최소** 반지름은 실제로 안으로 내려간다 — 안 내려가면
-	#       톱니가 아무 일도 안 하는 것이라 그것도 실패다
-	#  ⚠ ⓐ 를 「네 단이 **같다**」로 적었다가 걸렸다(2026-09-25). 뜬 표본의
-	#  가장 큰 씨가 1.0 이 아니라 0.97 쯤이라, 아래끝을 내리면 그 표본의
-	#  값도 lerp 위에서 조금 따라 내려온다 — **바깥으로 미는 것이 아니라
-	#  안쪽으로 당겨진 것**이라 이 연출의 약속은 그대로다. ⑧-b 와 짝이다.
+	# ── ㉓ 깊이가 금을 험하게 하되 테 밖으로 못 민다 ─────────
+	#  ⚠ **앞 자는 「톱니가 안쪽으로만 벌어진다」였고, 그 톱니(BRKDEEP.jag)가
+	#  죽었다.** 그물에서는 테 호가 곧 **면의 모서리**라 그것을 밀면 조각이
+	#  같이 밀려 ⑲ 가 그 자리에서 빨개진다. 자를 지우지 않고 **뜻을 옮긴다**:
+	#  그 자가 지키려던 것은 「깊이가 실루엣을 만지면 안 된다 · 그러면서도
+	#  실제로 험해져야 한다」 둘이고, 새 모형에서 그 둘을 더 곧게 잰다.
+	#    ⓐ 어느 단에서도 금이 판 테 **밖으로 한 픽셀도** 안 나간다
+	#       — 멈춘 곁가지 끝점까지 전부 훑는다
+	#    ⓑ 깊이가 오를수록 실제로 험해진다 — 마디 수가 **단조로** 는다
+	#    ⓒ 면의 꼭짓점이 네 단에서 글자 그대로 같다(깊이가 기하를 안 만진다)
+	#  ⚠ **수식을 손으로 베끼지 않는다.** 이 자가 바로 「없어진 수식을 재며
+	#  초록이 된」 전례다(2026-09-25, 옛 주석). 게임이 실제로 세운
+	#  `brk_web` 을 통째로 훑는다 — 굽는 자가 바뀌면 재는 자가 반드시 같이
+	#  바뀐다.
 	var jag_ok := true
 	var jag_txt := ""
 	for id2 in ["", "pizz", "clok", "dnut", "aimb", "arst"]:
 		_open()
 		_board(id2)
 		for tier2 in 3:
-			var jmx := -1.0
-			var base_lo := 0.0
-			var deep_lo := 0.0
+			var rim: float = g._board_rim(g._theme_ring_w(g._board_theme()))
+			var segs := []
+			var vkey := []
+			var far := 0.0
 			for t in 4:
 				g._brk_arm(tier2, t)
-				var lo3: float = g.R * float(g.DONUTART.hole) \
-						if g._board_theme() == "donut" else 0.0
-				var top2 := 0.0
-				var bot2 := 99999.0
-				for k in (g.brk_rings as Array).size() * 2:
-					if k % 2 != 0:
-						continue
-					var r2: float = maxf(g.R * float(g.brk_rings[k / 2][0]), lo3)
-					#  ⚠ 수식을 **베끼지 않고 게임의 함수를 그대로 부른다**
-					#  (2026-09-25). 전에는 여기가 `lerpf(-2.5 - jag, 2.5, …)`
-					#  를 손으로 옮겨 적었는데, 금이 「호마다 상수 하나」에서
-					#  「각을 따라 흔들리는 선」으로 바뀌자 이 자는 **없어진
-					#  수식을 재며 초록**이 됐다. 재는 자가 굽는 자를 못 잡는
-					#  그 꼴이다. 각을 촘촘히 훑어 실제로 그어지는 반지름의
-					#  위아래를 잰다.
-					for q in 240:
-						var aq: float = TAU * float(q) / 240.0
-						var rr3: float = r2 + g._brk_arc_off(k / 2, aq)
-						top2 = maxf(top2, rr3)
-						bot2 = minf(bot2, rr3)
-				if t == 0:
-					jmx = top2
-					base_lo = bot2
-				else:
-					if top2 > jmx + 0.001:
-						jag_ok = false
-						jag_txt += "[%s 층%d 단%d 바깥 %.2f > %.2f]" % [id2,
-								tier2, t, top2, jmx]
-					deep_lo = bot2
+				#  금 마디의 **양 끝점을 전부** 훑는다 — 멈춘 곁가지 포함.
+				for sg in g.brk_web:
+					far = maxf(far, (sg.a as Vector2).length())
+					far = maxf(far, (sg.b as Vector2).length())
+				segs.append((g.brk_web as Array).size())
+				#  면의 꼭짓점 지문
+				var vs := ""
+				for f in g.brk_facets:
+					for q in f.pts:
+						vs += "%.3f,%.3f;" % [(q as Vector2).x, (q as Vector2).y]
+				vkey.append(vs.md5_text())
 				g._brk_skip()
-			var rim: float = g._board_rim(g._theme_ring_w(g._board_theme()))
-			if jmx > rim + 0.001:
+			if far > rim + 0.01:
 				jag_ok = false
-				jag_txt += "[%s 층%d 호 %.1f > 테 %.1f]" % [id2, tier2, jmx, rim]
-			if deep_lo >= base_lo - 0.001:
+				jag_txt += "[%s 층%d 금 %.2f > 테 %.2f]" % [id2, tier2, far, rim]
+			#  ⓑ 마디 수가 단조로 는다(멈춘 곁가지 0→2→4→6)
+			for t2 in 3:
+				if int(segs[t2 + 1]) < int(segs[t2]):
+					jag_ok = false
+					jag_txt += "[%s 층%d 마디 %d → %d]" % [id2, tier2,
+							int(segs[t2]), int(segs[t2 + 1])]
+			if int(segs[3]) <= int(segs[0]):
 				jag_ok = false
-				jag_txt += "[%s 층%d 안쪽이 안 내려간다 %.2f/%.2f]" % [id2,
-						tier2, deep_lo, base_lo]
-			jag_txt += "%s%d 바깥%.0f/테%.0f·안쪽%.1f→%.1f " % [
-					id2 if id2 != "" else "기본", tier2, jmx, rim,
-					base_lo, deep_lo]
-	_ok("톱니가 안쪽으로만 벌어진다 — 테 밖으로 한 픽셀도 안 나간다",
-			jag_ok, jag_txt)
+				jag_txt += "[%s 층%d 3단이 안 험해진다 %d/%d]" % [id2, tier2,
+						int(segs[0]), int(segs[3])]
+			#  ⓒ 면이 네 단에서 한 점도 안 바뀐다
+			for t3 in 3:
+				if String(vkey[t3 + 1]) != String(vkey[0]):
+					jag_ok = false
+					jag_txt += "[%s 층%d 단%d 에서 면이 바뀌었다]" % [id2,
+							tier2, t3 + 1]
+			jag_txt += "%s%d 금%.0f/테%.0f·마디%d→%d " % [
+					id2 if id2 != "" else "기본", tier2, far, rim,
+					int(segs[0]), int(segs[3])]
+	_ok("깊이가 금을 험하게 하되 테 밖으로 못 민다", jag_ok, jag_txt)
+
+	# ── ㉙ 금이 **맞은 자리**에서 뻗는다 (2026-09-25) ────────
+	#  사용자: 「시작화면 같이 유리같이 깨져야지」. 유리가 유리인 것은
+	#  **한 점에서 갈라지기** 때문이고, 그 점은 마지막 다트가 꽂힌 자리다.
+	#  이 자가 사용자의 말을 글자 그대로 잰다.
+	#    ⓐ 모든 살의 뿌리가 구덩이 둘레(PIT)에 붙어 있다
+	#    ⓑ 자루가 있으면 맞은 자리가 **마지막** 자루다
+	#    ⓒ 자루가 없고 꽂힌 칸이 있으면 그 칸·띠의 한가운데다
+	#    ⓓ 둘 다 없으면(개발자 다시 보기) 씨에서 뜨고, 같은 판이면 언제나
+	#       같은 자리다 — 판마다는 다르다
+	#    ⓔ 한 번 굳은 뒤 연출이 끝날 때까지 **한 비트도** 안 바뀐다.
+	#       프레임마다 다시 읽으면 무늬가 깜빡인다(EGG 가 세운 씨 계약의
+	#       본디 뜻이 이것이다)
+	#    ⓕ 도넛에서 구멍 입술 밖이다 — 안이면 살이 한 점에 모여 **흰
+	#       별표**가 박힌다(_brk_crack_draw 가 밟았던 함정)
+	var hit_ok := true
+	var hit_txt := ""
+	var pitr: float = float(g.BRKWEB.pit)
+	for id3 in ["", "dnut", "pizz"]:
+		_open()
+		_board(id3)
+		#  ⓑ 마지막 자루
+		g.darts = [
+			{"p": g.BC + Vector2(-g.R * 0.30, g.R * 0.20), "id": "std", "rot": 0.0},
+			{"p": g.BC + Vector2(g.R * 0.55, -g.R * 0.44), "id": "std", "rot": 0.0},
+		]
+		g._brk_arm(2)
+		var want: Vector2 = (g.darts[1].p as Vector2) - g.BC
+		if g.brk_hit.distance_to(want) > 0.01:
+			hit_ok = false
+			hit_txt += "[%s 마지막 자루가 아니다]" % id3
+		#  ⓐ 살의 뿌리가 전부 구덩이 둘레
+		for sp2 in g.brk_spokes:
+			var root: Vector2 = (sp2.pts as Array)[0]
+			if absf(root.distance_to(g.brk_hit) - pitr) > 0.01:
+				hit_ok = false
+				hit_txt += "[%s 뿌리 %.2f != %.2f]" % [id3,
+						root.distance_to(g.brk_hit), pitr]
+				break
+		#  ⓕ 도넛 구멍 입술 밖
+		if g._board_theme() == "donut" \
+				and g.brk_hit.length() < g.R * float(g.DONUTART.hole):
+			hit_ok = false
+			hit_txt += "[도넛 구멍 안 %.1f]" % g.brk_hit.length()
+		#  ⓔ 연출이 끝날 때까지 한 비트도 안 바뀐다
+		var frozen: Vector2 = g.brk_hit
+		g._brk_fire()
+		for _f in 40:
+			g._brk_tick(DT)
+			if g.brk_hit != frozen:
+				hit_ok = false
+				hit_txt += "[%s 무늬가 깜빡인다]" % id3
+				break
+		g._brk_skip()
+		#  ⓒ 자루가 없고 꽂힌 칸이 있으면 그 칸·띠의 한가운데
+		g.darts = []
+		g.hit_idx = 3
+		g.hit_r0 = 0.20
+		g.hit_r1 = 0.40
+		g._brk_arm(2)
+		var wa: float = 3.0 * g._sec_w()
+		var wp: Vector2 = Vector2(sin(wa), -cos(wa)) * g.R * 0.30
+		if g.brk_hit.distance_to(wp) > 0.01:
+			hit_ok = false
+			hit_txt += "[%s 꽂힌 칸이 아니다]" % id3
+		g._brk_skip()
+		#  ⓓ 둘 다 없으면 씨에서 — 같은 판은 같고, 판마다 다르다
+		g.hit_idx = -1
+		g.leg_no = 4
+		g._brk_arm(2)
+		var h4: Vector2 = g.brk_hit
+		g._brk_skip()
+		g._brk_arm(2)
+		var h4b: Vector2 = g.brk_hit
+		g._brk_skip()
+		g.leg_no = 5
+		g._brk_arm(2)
+		var h5: Vector2 = g.brk_hit
+		g._brk_skip()
+		if h4 != h4b or h4 == h5:
+			hit_ok = false
+			hit_txt += "[%s 씨 자리 %s/%s/%s]" % [id3, h4, h4b, h5]
+		hit_txt += "%s ✓ " % (id3 if id3 != "" else "기본")
+	_ok("금이 맞은 자리에서 뻗는다", hit_ok, hit_txt)
 
 	# ══ 정산 출처 짚기 — 걸음에 매인 빛 ═══════════════════════
 	#  사용자: 「점수 정산할 때 효과가 어디서 일어난 건지 좀 더 잘 알려줄 수
