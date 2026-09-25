@@ -1711,7 +1711,7 @@ static func cond_text(c: String) -> String:
 		"missp": return "직전 발이 빗나갔으면"
 		"risk": return "더블·트리플·불 맞히면"
 		"risk1": return "판 첫 더블·트리플·불 맞히면"
-		"few": return "판 시작 다트가 3개 이하면"
+		"few": return "시작 다트가 3개 이하면"
 		"sixth": return "6번째 발마다"
 		"pair": return "이번 판에 같은 숫자를 2회 맞힌 발부터"
 		"trip": return "이번 판에 같은 숫자를 3회 맞힌 발부터"
@@ -1780,7 +1780,7 @@ static func eff_line(it: Dictionary) -> String:
 		# 무엇을 주고 무엇을 받는지가 카드에서 안 읽힌다.
 		var ad := int(it.get("dadd", 0))
 		if ad != 0:
-			return "%s · 판 시작 다트 %s" % [am, _sgn(ad)]
+			return "%s · 다트 %s" % [am, _sgn(ad)]
 		return am
 	# 계산 방식을 쥔 장도 같다 — 조준과 한 갈래라 같은 자리에서 갈린다.
 	# 이 줄이 없으면 「효과가 한 줄도 안 나온다」 검사에 걸린다. 실제로
@@ -1792,7 +1792,14 @@ static func eff_line(it: Dictionary) -> String:
 	if String(it.get("k", "")) == "":
 		var da := int(it.get("dadd", 0))
 		if da != 0:
-			return "판 시작 다트 " + _sgn(da)
+			#  「판 시작 다트 +1」이 아니라 **「다트 +1」**이다. 다트통 줄
+			#  (game.gd 의 _pack_lines)이 같은 것을 이미 「다트 +1」 「다트 −3」
+			#  으로 적고 있어서, 같은 값을 두 이름으로 부르던 꼴이었다.
+			#  「판 시작」은 없어도 뜻이 안 변한다 — 판마다 그만큼 더 들고
+			#  시작한다는 말은 짧은 쪽이 더 잘 읽힌다. 다만 **조건** 쪽
+			#  (cond_text few)은 「시작 다트가 3개 이하면」으로 「시작」을
+			#  남긴다 — 빼면 「남은 다트」로 읽힌다. 2026-09-25
+			return "다트 " + _sgn(da)
 		if String(it.get("side", "")) == "trackup25":
 			return "1/4 확률로 맞힌 트랙 강화 +1"
 		if String(it.get("side", "")) == "boardkill":
@@ -1806,7 +1813,7 @@ static func eff_line(it: Dictionary) -> String:
 			return "맞힐 때마다 다트가 커진다 · 커진 만큼 양옆 칸 값을 점수에 더한다"
 		if String(it.get("side", "")) == "carry":
 			# dadd += carry_darts — 다음 판의 판 시작 다트로 얹힌다. 잔탄 골드는 그대로 받는다
-			return "남은 다트 1개당 다음 판 시작 다트 +1"
+			return "남은 다트 1개당 다음 판 다트 +1"
 		return ""     # 골드 카드 — 효과는 골드 줄이 이미 말한다
 	var g: String = String(it.get("grow", ""))
 	# 성장형 넷은 한 틀이다 — 「[점수|배수] +X에서 시작 · [주기] ±Y (· 0이면 파괴)」.
@@ -1844,7 +1851,7 @@ static func eff_line(it: Dictionary) -> String:
 	# 다트를 깎는 대가가 얼굴에서 사라진다.
 	var da2 := int(it.get("dadd", 0))
 	if da2 != 0:
-		base += " · 판 시작 다트 " + _sgn(da2)
+		base += " · 다트 " + _sgn(da2)
 	if String(it.get("side", "")) == "trackup25":
 		base += " · 1/4 확률로 맞힌 트랙 강화 +1"
 	if String(it.get("side", "")) == "boardkill":
