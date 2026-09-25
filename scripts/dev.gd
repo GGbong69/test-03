@@ -1236,15 +1236,22 @@ static func _cur_name(g: Node, e: Dictionary) -> String:
 		return "%d/%d %s · 겹%d · 톱밥%d · 소리%d" % [gj + 1, BRK_TIERS.size(),
 				BRK_TIERS[gj], int(gt[1]), int(gt[2]), int(gt[3])]
 	#  오버 금의 단. 「판 깨짐」 줄이 「겹 · 톱밥 · 소리」를 적는 그 어법으로
-	#  **이 단이 무엇을 가르는지 그대로** 적는다 — 문턱 · 폭 · 톱니 · 음.
+	#  **이 단을 가르는 자**를 그대로 적는다 — 넘긴 배율의 구간이다.
 	#  값을 BRKDEEP 에서 그대로 읽어 두 곳이 갈라질 길을 안 만든다.
+	#  ⚠ **폭 · 톱니 · 음까지 적었다가 값 칸에서 잘렸다**(찍어 보고 잡았다).
+	#  이 칸은 화살표 둘 사이라 스물몇 자에서 끊긴다 — 바로 위 「판 깨짐」
+	#  줄의 「톱밥10 · 소리1」이 이미 그렇게 잘려 있다. 단을 가르는 것은
+	#  배율 하나이고 나머지 셋은 그 결과라, 자만 적고 결과는 화면이
+	#  보여 준다. 2026-09-25
 	if k == "brkdeep":
 		var dj: int = i % DEEP_TIERS.size()
 		var dt: Dictionary = load("res://scripts/game.gd").BRKDEEP
 		var lo: float = 1.0 if dj == 0 else float(dt.step[dj - 1])
-		return "%d/%d %s · x%.2f~ · 폭+%.1f · 톱니%.1f · 음%.2f" % [
-				dj + 1, DEEP_TIERS.size(), DEEP_TIERS[dj], lo,
-				float(dt.gw[dj]), float(dt.jag[dj]), float(dt.pit[dj])]
+		if dj >= DEEP_TIERS.size() - 1:
+			return "%d/%d %s · x%.2f~" % [dj + 1, DEEP_TIERS.size(),
+					DEEP_TIERS[dj], lo]
+		return "%d/%d %s · x%.2f~%.2f" % [dj + 1, DEEP_TIERS.size(),
+				DEEP_TIERS[dj], lo, float(dt.step[dj])]
 	#  출처 짚기. 모양 · 색이 곧 이 연출의 전부라 값 칸이 그대로 적는다.
 	if k == "src":
 		var sj: int = i % SRC_STEPS.size()
