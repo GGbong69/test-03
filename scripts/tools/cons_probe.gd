@@ -25,7 +25,7 @@ func _initialize() -> void:
 # 노드 좌표 → 뷰포트 좌표. _unhandled_input 첫 줄이 view_pad 를 도로 뺀다 —
 # 창이 16:9 가 아니면 Game 노드가 여백만큼 밀려 있어서다. _cons_rect 가
 # 돌려주는 것은 노드 좌표라, 안 되돌리면 헤드리스에서 view_pad (0,140) 만큼
-# 위를 누른다. 사탕 칸 y[20,64] 가 화면 밖으로 나가서 여섯 화면이 전부
+# 위를 누른다. 사탕·사진 칸 y[20,64] 가 화면 밖으로 나가서 여섯 화면이 전부
 # "안 쓰인다" 로 나오던 것이 이것이다.
 func _vp(p: Vector2) -> Vector2:
 	return p + g.view_pad

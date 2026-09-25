@@ -1,7 +1,7 @@
 extends SceneTree
 
-# 사탕 칸 검사. 2026-09-13 사용자 제보 — "왜 사탕으로 표시돼?"
-#   사진을 손에 들면 사탕 칸에 **사탕 그림**으로 떴다. 사탕과 사진이 한 표에
+# 사탕·사진 칸 검사. 2026-09-13 사용자 제보 — "왜 사탕으로 표시돼?"
+#   사진을 손에 들면 사탕·사진 칸에 **사탕 그림**으로 떴다. 사탕과 사진이 한 표에
 #   살고 같은 칸을 쓰는데, 그리는 쪽이 id 만 보고 안 갈랐다.
 #
 #   godot --path . --quit-after 900 --script scripts/tools/qa_consicon.gd
@@ -49,7 +49,7 @@ func _shoot(nm: String) -> void:
 func _run() -> void:
 	for i in 8:
 		g._process(1.0 / 60.0)
-	print("\n사탕 칸 검사 — 사탕과 사진을 가른다\n")
+	print("\n사탕·사진 칸 검사 — 사탕과 사진을 가른다\n")
 
 	# ① 갈래 판정. 이름이나 앞글자로는 못 가른다 — 구성 VIII 의 id 가 c_again 이다
 	var cd := GameData.candies()

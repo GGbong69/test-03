@@ -1480,7 +1480,7 @@ static func _run(g: Node, e: Dictionary) -> void:
 			_say("남았다 1/10")
 			return
 		"worst":
-			# 제약 넷 · 동전 최대 · 사탕 칸 최대 · 보드 확장. 640x360 에서
+			# 제약 넷 · 동전 최대 · 사탕·사진 칸 최대 · 보드 확장. 640x360 에서
 			# 이 상태를 못 그리면 레이아웃이 틀린 것이고, **지금 고치는 게
 			# 나중보다 싸다.** 화면이 가장 붐비는 순간을 한 줄로 부른다.
 			g.active_mods = []
@@ -2203,12 +2203,12 @@ static func _run(g: Node, e: Dictionary) -> void:
 				_say("다트 %s" % dd.get("n", dd.get("name", "")))
 		"vou":
 			if not rows.is_empty():
-				# 사진은 1회성이라 사탕 칸으로 들어간다
+				# 사진은 1회성이라 사탕·사진 칸으로 들어간다
 				if g.cons.size() < GameData.cons_slots():
 					g.cons.append(rows[i % rows.size()].duplicate())
 					_say("사진 %s" % rows[i % rows.size()].get("n", ""))
 				else:
-					_say("사탕 칸이 꽉 찼다")
+					_say("사탕·사진 칸이 꽉 찼다")
 		"tag":
 			if not rows.is_empty():
 				g._take_tag(rows[i % rows.size()])

@@ -1,6 +1,6 @@
 extends SceneTree
 # 시계 판(보드 확장 「시계」)이 입는 옷 — 기본 · 칠 · 조준 밝힘(트리플 · 더블 · 싱글 · 불) ·
-# 죽은 색(그늘) · 죽은 칸(금지 구역). 창이 있어야 찍힌다.
+# 죽은 색(그늘) · 죽은 칸(막힌 칸). 창이 있어야 찍힌다.
 #   godot --path . --quit-after 9000 --script scripts/tools/shot_board_clock.gd -- <접두>
 # 끝에 죽은 크림 칸(dead_cream) · 실띠 0.5 / 넓은 판 1.5 의 트리플 조준(band_05 · band_15)도 찍는다.
 # 접두를 안 주면 ck_ 로 찍는다(고치기 전 판을 ck_old_ 로 찍어 두고 견준다).
@@ -130,7 +130,7 @@ func _run() -> void:
 	await _hold(6)
 	await _snap("dead_col")
 
-	#  죽은 칸(금지 구역) — 칠한 칸과 함께
+	#  죽은 칸(막힌 칸) — 칠한 칸과 함께
 	g.dead_col = -1
 	g.sec_col[3] = 2
 	g.sec_col[nsc - 2] = 3

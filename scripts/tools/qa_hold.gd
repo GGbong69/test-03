@@ -492,7 +492,7 @@ func _run() -> void:
 		_ok("동전 칸 %d 과 24px 원이 안 겹친다" % i, d >= 24.0, "%.1fpx" % d)
 	for i in (g.cons as Array).size():
 		var d2: float = sc.distance_to((g._cons_rect(i) as Rect2).get_center())
-		_ok("사탕 칸 %d 과 24px 원이 안 겹친다" % i, d2 >= 24.0, "%.1fpx" % d2)
+		_ok("사탕·사진 칸 %d 과 24px 원이 안 겹친다" % i, d2 >= 24.0, "%.1fpx" % d2)
 	for nm in ["cap", "darts", "menu"]:
 		var r: Rect2 = g.LAY[nm]
 		r.position.y += g._hud_dy()
@@ -657,7 +657,7 @@ func _desk() -> void:
 			"[%s]" % g.tip_title)
 	#  물건이 없어지면 핀이 스스로 낫는다. 동전 **칸**은 물건이 빠져도 칸
 	#  자체가 남아 같은 열쇠를 내므로(자리의 툴팁이다) 사탕으로 잰다 —
-	#  사탕 칸은 든 장수만큼만 서서, 쓰면 그 자리가 통째로 없어진다.
+	#  사탕·사진 칸은 든 장수만큼만 서서, 쓰면 그 자리가 통째로 없어진다.
 	g.mouse_at = Vector2(320.0, 300.0)
 	g.tip_pin = {"k": "held", "i": 0, "st": g.state}
 	g.tip_pin_at = (g._cons_rect(0) as Rect2).get_center()

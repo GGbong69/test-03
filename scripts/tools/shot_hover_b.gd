@@ -1,5 +1,5 @@
 extends SceneTree
-# 얹힘 B 묶음 — HUD 첫 줄 · 동전 슬롯 · 사탕 칸 · 벽 다트 · 덮인 화면.
+# 얹힘 B 묶음 — HUD 첫 줄 · 동전 슬롯 · 사탕·사진 칸 · 벽 다트 · 덮인 화면.
 # 같은 자리를 안 얹은 것 · 얹은 것 · 누른 것으로 한 장씩.
 #   godot --path . --quit-after 3000 --script scripts/tools/shot_hover_b.gd
 #
@@ -95,7 +95,7 @@ func _run() -> void:
 	g._panel_reset()
 	g.cons = [GameData.candies()[0].duplicate(), GameData.fixtures()[5].duplicate()]
 
-	# ── 판 고르기(LEG) — 동전 슬롯 · 사탕 칸 · 판매 단추 ─────────
+	# ── 판 고르기(LEG) — 동전 슬롯 · 사탕·사진 칸 · 판매 단추 ─────────
 	await _shot("hb_leg_none", away)
 	await _shot("hb_rack_hov", g._slot_rect(1).get_center())
 	arm = 1
@@ -131,7 +131,7 @@ func _run() -> void:
 	await _shot("hb_rack_burn", g._slot_rect(0).get_center())
 	g.photo_rack = "clone"
 	await _shot("hb_rack_clone", g._slot_rect(0).get_center())
-	#  고르는 중에는 다른 단추가 안 뜬다 — 사탕 칸에 얹어 본다
+	#  고르는 중에는 다른 단추가 안 뜬다 — 사탕·사진 칸에 얹어 본다
 	await _shot("hb_rack_clone_cons", g._cons_rect(0).get_center())
 	g.photo_rack = ""
 

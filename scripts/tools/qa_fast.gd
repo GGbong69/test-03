@@ -32,7 +32,7 @@ const GameData = preload("res://scripts/data.gd")
 const Save = preload("res://scripts/save.gd")
 const Dev = preload("res://scripts/dev.gd")
 
-#  HUD 단추(578,20,58,44)와 사탕 칸 · 동전 칸 어디에도 안 닿는 자리.
+#  HUD 단추(578,20,58,44)와 사탕·사진 칸 · 동전 칸 어디에도 안 닿는 자리.
 const HOLD_AT := Vector2(320.0, 330.0)
 
 var g = null

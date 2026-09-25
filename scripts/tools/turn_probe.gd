@@ -267,7 +267,7 @@ func _initialize() -> void:
 	g._tutor_close()
 	g._turn_skip()
 
-	#  ② 동전 슬롯·사탕 칸을 눌러도 잡히지 않고, 그 누름이 연출을 끝낸다
+	#  ② 동전 슬롯·사탕·사진 칸을 눌러도 잡히지 않고, 그 누름이 연출을 끝낸다
 	g.owned = [_coin("c01"), _coin("c02"), _coin("c03")]
 	_step(g, per * 2)
 	_wind(g, 0.10)
@@ -292,7 +292,7 @@ func _initialize() -> void:
 	var c_grab: int = g.hand_st
 	_press(g, cons_r.get_center(), false)
 	_say(c_grab == 0 and not g.turn_live,
-			"사탕 칸을 눌러도 안 잡히고 연출이 끝난다", "hand_st %d" % c_grab)
+			"사탕·사진 칸을 눌러도 안 잡히고 연출이 끝난다", "hand_st %d" % c_grab)
 	g.owned = []
 	g._turn_skip()
 	#  딜은 안 건너뛴다 — 오늘과 정확히 같은 자리에 선다
