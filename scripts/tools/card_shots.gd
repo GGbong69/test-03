@@ -254,7 +254,17 @@ func _run() -> void:
 	keep = {}
 	live = true
 	g.motion_off = false
-	await _live_src()
+	#  띠 여섯 — 판이 정한 기하가 그대로 나온다. 걸음마다 한 장씩이라
+	#  이름이 <자리>_chip · <자리>_mult 로 짝을 이룬다.
+	await _live_src("20_live_trp", (g.rt_trp_in + g.rt_trp_out) * 0.5)
+	await _live_src("22_live_sglin", (g.rt_bull_o + g.rt_trp_in) * 0.5)
+	await _live_src("26_live_sglout", (g.rt_trp_out + g.rt_dbl_in) * 0.5)
+	await _live_src("28_live_dbl", (g.rt_dbl_in + g.rt_dbl_out) * 0.5)
+	await _live_src("30_live_bull", g.rt_bull_o * 0.7)
+	await _live_src("32_live_bulli", g.rt_bull_i * 0.5)
+	#  24 — **착탄 연출을 안 지운 채** 연발 박자로 선 걸음. 지운 장으로는
+	#  이 문제가 영영 안 나온다: 출처 빛과 착탄 고리가 같은 자리에 겹친다.
+	await _live_src("24_live_burst", (g.rt_trp_in + g.rt_trp_out) * 0.5, true, true)
 	await _live()
 	quit()
 
@@ -263,8 +273,15 @@ func _run() -> void:
 #  위 11~15 는 축을 손으로 놓은 장이다. 여기서는 **진짜 한 발을 꽂아**
 #  게임이 스스로 세운 큐를 걸음마다 판다 — 짚는 자리가 실제 착탄과 같은지는
 #  이것으로만 눈에 보인다(수로는 settle_probe 가 잰다).
-#  트리플 20(맨 위 칸)에 꽂고 chip 걸음과 mult 걸음을 한 장씩 찍는다.
-func _live_src() -> void:
+#
+#  ⚠ **띠 다섯을 다 찍는다.** 처음엔 트리플 하나만 찍었다. 그 한 장으로는
+#  고리가 늘 곱게 읽혔는데, 싱글 띠는 폭이 0.42R(안쪽) · 0.24R(바깥)이라
+#  통째로 칠하면 판의 3분의 1이 흰 물에 잠긴다 — **가장 흔한 착탄에서만**
+#  무너지는 그림이라 트리플 장 한 장으로는 영영 안 드러난다. 2026-09-25
+#    rk     = 조준 반지름(R 의 비)
+#    keepfx = 착탄 연출을 **안 지운다**(빠른 박자에서 겹치는 그 프레임)
+#    burst  = 연발 박자(pace 바닥 0.30)로 걸음을 세운다
+func _live_src(nm: String, rk: float, keepfx := false, burst := false) -> void:
 	g.set_process(false)
 	#  ⚠ **_shot 이 시계를 밀면 안 된다.** _tick 은 live 면 _process 를 세 번
 	#  돌리는데, 그 세 프레임에 빛이 이미 1/5 식는다 — 걸음을 미는 것은
@@ -280,21 +297,33 @@ func _live_src() -> void:
 	g.queue.clear()
 	g.burst_hits = []
 	g.state = g.S.RESOLVE
-	var trp: float = g.R * (g.rt_trp_in + g.rt_trp_out) * 0.5
-	g.aim = g.BC + Vector2(0.0, -trp)
+	g.aim = g.BC + Vector2(0.0, -g.R * rk)
+	#  연발은 pace 를 바닥(0.30)까지 누른다 — 착탄 연출이 아직 살아 있는 채로
+	#  걸음이 서는 **진짜** 박자가 그것이다.
+	if burst:
+		g.burst_n = 5
 	g._land()
-	#  ⚠ **착탄 연출을 지운다.** 시계를 안 미는 장이라 _impact 의 고리 ·
-	#  물결 · 불꽃 · 팝이 전부 갓 난 세기로 남아 있어, 첫 장에서 그것이
-	#  출처 빛을 통째로 덮었다(찍어 보고 잡았다 — 왼쪽 장의 주황 고리가
-	#  chip 의 것이 아니라 트리플 착탄의 ring_fx 였다). 진짜 판에서는
-	#  0.55초 안에 다 지고 정산 걸음은 그 뒤다. 여기서 보려는 것은
-	#  **걸음이 짚는 자리** 하나뿐이다. 2026-09-25
-	(g.ring_fx as Array).clear()
-	(g.waves as Array).clear()
-	(g.sparks as Array).clear()
-	(g.pops as Array).clear()
-	g.hit_flash = 0.0
+	if not keepfx:
+		#  ⚠ **착탄 연출을 지운다.** 시계를 안 미는 장이라 _impact 의 고리 ·
+		#  물결 · 불꽃 · 팝이 전부 갓 난 세기로 남아 있어, 첫 장에서 그것이
+		#  출처 빛을 통째로 덮었다(찍어 보고 잡았다 — 왼쪽 장의 주황 고리가
+		#  chip 의 것이 아니라 트리플 착탄의 ring_fx 였다).
+		#  ⚠ **여기서 지우는 것은 장을 고르는 일이지 판을 고치는 일이 아니다.**
+		#  「진짜 판에서는 0.55초 안에 다 지고 정산 걸음은 그 뒤다」라고 적어
+		#  두었던 것은 **틀렸다**: 정산 들머리가 beat × 1.1 × pace 라 pace 가
+		#  바닥(0.30)이면 0.112초고, chip 걸음이 0.112~0.214 · mult 걸음이
+		#  0.214~0.316 초다 — ring_fx 0.55초와 hit_flash 0.385초 **안**이다.
+		#  그래서 겹친 프레임을 24 로 따로 찍는다. 2026-09-25
+		(g.ring_fx as Array).clear()
+		(g.waves as Array).clear()
+		(g.sparks as Array).clear()
+		(g.pops as Array).clear()
+		g.hit_flash = 0.0
+		#  안쪽 불(등급 5)은 화면번쩍을 1.0 으로 세운다 — 안 내리면 장
+		#  전체가 흰 막에 덮여 판이 짚는 자리가 안 보인다.
+		g.screen_flash = 0.0
 	g.settle_n = (g.queue as Array).size()
+	_age(g.qt)                        # 들머리 걸음만큼 착탄 연출을 식힌다
 	var shot := 0
 	var guard := 0
 	while not (g.queue as Array).is_empty() and guard < 900:
@@ -304,16 +333,37 @@ func _live_src() -> void:
 		if nk == "chip" or nk == "mult":
 			#  빛이 갓 선 프레임을 찍는다 — 걸음의 78% 창이라 몇 프레임 뒤면
 			#  이미 절반이 식는다.
-			await _shot("2%d_live_%s" % [shot, nk])
+			await _shot("%s_%s" % [nm, nk])
 			shot += 1
+		_age(g.qt)
 		#  ⚠ **걸음 사이를 _process 로 밀면 안 된다.** qt 가 0 이 되는
 		#  프레임에 _process 가 스스로 _next_step 을 부르므로, 밀어 두면
 		#  다음 걸음(mult)을 이 루프가 아니라 게임이 먹고 지나간다 —
 		#  그래서 처음엔 chip 한 장만 찍혔다. 걸음은 여기서만 판다.
 	g.state = g.S.PICK
 	live = true
-	print("  살아 있는 출처 %d장 — 칸 %d · 고리 %.1f~%.1f"
-			% [shot, g.hit_idx, g.hit_r0, g.hit_r1])
+	print("  %s — %d장 · 칸 %d · 고리 %.1f~%.1f · 세기 %.2f · pace %.2f · 착탄고리 %d"
+			% [nm, shot, g.hit_idx, g.hit_r0, g.hit_r1, g.hit_flash_amt, g._pace(),
+			(g.ring_fx as Array).size()])
+	g.burst_n = 0
+
+
+#  시계를 못 미는 장이라 착탄 연출을 손으로 식힌다. 게임의 _process 가
+#  깎는 그 식과 같다(hit_flash 는 d × 2.6 · 나머지는 제 수명).
+func _age(t: float) -> void:
+	g.hit_flash = maxf(g.hit_flash - t * 2.6, 0.0)
+	for rf in g.ring_fx:
+		rf.t += t
+	g.ring_fx = (g.ring_fx as Array).filter(func(rf): return rf.t < rf.life)
+	for w in g.waves:
+		w.t += t
+	g.waves = (g.waves as Array).filter(func(w): return w.t < w.life)
+	for sp in g.sparks:
+		sp.t += t
+	g.sparks = (g.sparks as Array).filter(func(sp): return sp.t < sp.life)
+	for pp in g.pops:
+		pp.t += t
+	g.pops = (g.pops as Array).filter(func(pp): return pp.t < pp.life)
 
 
 # ── 살아 있는 정산을 숫자로 잰다 ─────────────────────────

@@ -365,5 +365,40 @@ func _initialize() -> void:
 	g.paint_sec = -1
 	g.dead_ring = 0
 
-	print("\n%s" % ("실패 %d건" % fails if fails > 0 else "스물다섯 검사 전부 통과"))
+	# ── 넓은 띠는 **안팎 경계만** 칠한다 (2026-09-25) ──────────
+	#  띠 통째로 칠하면 싱글에서 무너진다: 안쪽 싱글이 0.42R(41px) ·
+	#  바깥 싱글이 0.24R 이라 판의 3분의 1이 흰 물에 잠기고, 넓이 × 알파로
+	#  재면 가장 값싼 싱글이 트리플보다 크게 빛나 세기 사다리가 뒤집힌다.
+	#  ⓐ 갈리는 띠가 싱글 둘뿐이고 ⓑ 트리플 · 더블은 통째로 남으며
+	#  ⓒ 갈릴 때 두 겹이 안 겹치는 것을 잰다 — 겹치면 알파가 두 번 얹혀
+	#  0.9 가 0.99 로 뜬다.
+	var ew: float = g.R * g.SRC_EDGE
+	#  넷째 칸 = 그려야 하는 겹 수(통째로 1 · 갈리면 2 · 안쪽 경계가 점이면 1).
+	#  마지막 줄은 **도넛**이다 — 불을 지워 안쪽 싱글의 r0 가 0 이라,
+	#  안 막으면 판 한복판에 아무것도 안 가리키는 점이 하나 뜬다.
+	var bands := [
+		["안쪽 싱글", g.R * g.rt_bull_o, g.R * g.rt_trp_in, 2],
+		["바깥 싱글", g.R * g.rt_trp_out, g.R * g.rt_dbl_in, 2],
+		["트리플", g.R * g.rt_trp_in, g.R * g.rt_trp_out, 1],
+		["더블", g.R * g.rt_dbl_in, g.R * g.rt_dbl_out, 1],
+		["도넛 안쪽", 0.0, g.R * g.rt_trp_in, 1],
+	]
+	var geo_ok := true
+	var geo := []
+	for b in bands:
+		var br0: float = float(b[1])
+		var br1: float = float(b[2])
+		var split: bool = (br1 - br0) > ew * 2.0
+		var arcs: int = 1
+		if split:
+			arcs = 2 if br0 > ew else 1
+		if arcs != int(b[3]):
+			geo_ok = false
+		if split and br0 > ew and br0 + ew > br1 - ew:
+			geo_ok = false
+		geo.append("%s %.1f 겹%d" % [String(b[0]), br1 - br0, arcs])
+	_say(geo_ok, "넓은 띠만 안팎 경계로 갈린다 — 트리플 · 더블은 통째로",
+			"경계 %.1fpx · %s" % [ew, " · ".join(geo)])
+
+	print("\n%s" % ("실패 %d건" % fails if fails > 0 else "스물여섯 검사 전부 통과"))
 	quit(mini(fails, 125))
