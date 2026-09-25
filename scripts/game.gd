@@ -16867,6 +16867,114 @@ const BRKDEEP := {
 	"pit":  [1.00, 0.98, 0.96, 0.94],    # 금·깨짐의 음 배수
 }
 
+
+#  ── 갈라지는 선은 자로 그은 선이 아니다 ──────────────────
+#  「금이 좀 무작위로 가면 좋겠는데? 지금은 그냥 레고블럭들이 서로 떨어진
+#  거 같아」(2026-09-25). 그 말이 맞다 — 금도 조각 모서리도 부채 경계와
+#  띠 경계에 **딱** 앉는다. 조각 경계를 철선에 앉히는 규약(_brk_rings 의
+#  존재 이유)이 그렇게 만든 것인데, 그 규약이 지키려던 것은 **어느 선을
+#  따라 갈라지는가**이지 **그 선이 자로 그은 듯 곧아야 한다**가 아니다.
+#
+#  그래서 경계마다 씨에서 뜬 **연속 잡음**을 얹는다. 결을 따라가되 좌우로
+#  흔들린다 — 실제로 갈라진 판이 그렇다.
+#  · **금과 조각이 같은 함수를 부른다.** 한쪽만 흔들면 갈라진 선과 조각
+#    모서리가 어긋나 그림이 거짓말을 한다.
+#  · 흔들리는 폭은 **이웃까지 거리의 비**로 맨다. 절대 픽셀로 박으면 부채
+#    다섯(작은 판)에서는 티가 안 나고 부채 열(보스)에서는 이웃과 스친다.
+#  · **판 테는 잠근다**(k == 겹 수). 실루엣이 흔들리면 조각 두 장 사이로
+#    배경이 비쳐 이가 빠진 것으로 읽힌다. 불 둘레(k == 0)는 잠그지 않는
+#    대신 **불 조각도 같은 함수로 뜬다** — 둘이 같은 선을 쓰므로 하드
+#    타일링이 안 깨진다.
+#  · 씨는 brk_seed 라 **같은 판은 언제나 같은 무늬로** 갈라진다(EGG 가
+#    세운 규약). 깊이(brk_deep)는 이 잡음을 한 톨도 안 건드린다 —
+#    qa_break ⑲ 가 「깊이가 기하를 안 만진다」를 잰다.
+const BRKWOB := {
+	"a": 0.17,     # 살이 부채 폭의 몇 할까지 흔들리나
+	"r": 0.17,     # 테가 이웃 띠 폭의 몇 할까지 흔들리나
+	"n": 3,        # 한 경계에 마디 몇 — 셋이면 한 변에 굽이가 둘
+}
+
+
+#  t∈[0,1] 위의 연속 잡음. 끝을 0 으로 잠그거나(loop=false) 이어 붙인다.
+#  smoothstep 이라 마디에서 안 꺾인다 — 꺾이면 「부서진 선」이 아니라
+#  「톱니 무늬」가 된다.
+func _brk_wob(sk: int, t: float, loop := false) -> float:
+	var n: int = maxi(int(BRKWOB.n), 1)
+	var x: float = clampf(t, 0.0, 1.0) * float(n)
+	var i: int = mini(int(x), n - 1)
+	var f: float = x - float(i)
+	f = f * f * (3.0 - 2.0 * f)
+	return lerpf(_brk_wob_k(sk, i, n, loop), _brk_wob_k(sk, i + 1, n, loop), f)
+
+
+func _brk_wob_k(sk: int, i: int, n: int, loop: bool) -> float:
+	if not loop and (i <= 0 or i >= n):
+		return 0.0
+	return _gl_rand(sk * 97 + posmod(i, n) * 7 + 3, brk_seed) * 2.0 - 1.0
+
+
+#  살(방사) 경계 j 가 반지름 rn(0~1)에서 얼마나 옆으로 밀리나 — 라디안.
+#  양 끝(불 둘레 · 판 테)에서 0 이라 조각이 테 밖으로 안 벌어진다.
+func _brk_edge_a(j: int, rn: float) -> float:
+	var step: int = maxi(_sec_n() / maxi(brk_w, 1), 1)
+	return _brk_wob(j * 13 + 1, rn) * _sec_w() * float(step) * float(BRKWOB.a)
+
+
+#  테(동심) 경계 k 가 각 a 에서 얼마나 안팎으로 밀리나 — 픽셀.
+#  k 는 0(불 둘레) ~ 겹 수(판 테)다. **판 테는 0 으로 잠근다.**
+func _brk_edge_r(k: int, a: float) -> float:
+	var n: int = brk_rings.size()
+	if n <= 0 or k >= n:
+		return 0.0
+	var w: float = R * (float(brk_rings[k][1]) - float(brk_rings[k][0]))
+	if k > 0:
+		w = minf(w, R * (float(brk_rings[k - 1][1])
+				- float(brk_rings[k - 1][0])))
+	return _brk_wob(200 + k * 17, a / TAU, true) * w * float(BRKWOB.r)
+
+
+#  금의 테 호가 실제로 서는 반지름 오프셋 = 경계의 흔들림 + 깊이의 톱니.
+#  ⚠ 톱니는 **안쪽으로만** 간다(BRKDEEP.jag 머리말). 조각은 이 함수를 안
+#  부른다 — 깊이가 기하를 안 만진다는 약속이 거기 있다.
+func _brk_arc_off(k: int, a: float) -> float:
+	return _brk_edge_r(k, a) - absf(_brk_wob(300 + k * 23, a / TAU, true)) 			* float(BRKDEEP.jag[brk_deep])
+
+
+#  조각 한 장의 테두리. 네 변을 **경계 함수로 걷는다** — 이웃과 모서리가
+#  글자 그대로 같은 수로 나오므로 흰 실루엣이 빈틈없이 타일링된다.
+func _brk_cell(bi: int, j: int, a0: float, a1: float,
+		r0: float, r1: float, seg: int) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	var rr := maxf(R, 1.0)
+	var rn0: float = r0 / rr
+	var rn1: float = r1 / rr
+	var cA: float = a0 + _brk_edge_a(j, rn0)
+	var cB: float = a1 + _brk_edge_a(j + 1, rn0)
+	var cC: float = a1 + _brk_edge_a(j + 1, rn1)
+	var cD: float = a0 + _brk_edge_a(j, rn1)
+	var dA: float = _brk_edge_r(bi, cA)
+	var dB: float = _brk_edge_r(bi, cB)
+	var dC: float = _brk_edge_r(bi + 1, cC)
+	var dD: float = _brk_edge_r(bi + 1, cD)
+	var side: int = maxi(seg / 2, 2)
+	for s in seg + 1:                       # 안쪽 호 A→B
+		var a: float = lerpf(cA, cB, float(s) / float(seg))
+		out.append(Vector2(sin(a), -cos(a)) * (r0 + _brk_edge_r(bi, a)))
+	for s in range(1, side + 1):            # 오른쪽 살 B→C
+		var f: float = float(s) / float(side)
+		var rn: float = lerpf(rn0, rn1, f)
+		var a2: float = a1 + _brk_edge_a(j + 1, rn)
+		out.append(Vector2(sin(a2), -cos(a2)) * (rn * rr + lerpf(dB, dC, f)))
+	for s in range(1, seg + 1):             # 바깥 호 C→D
+		var a3: float = lerpf(cC, cD, float(s) / float(seg))
+		out.append(Vector2(sin(a3), -cos(a3)) * (r1 + _brk_edge_r(bi + 1, a3)))
+	for s in range(1, side):                # 왼쪽 살 D→A
+		var f2: float = float(s) / float(side)
+		var rn2: float = lerpf(rn1, rn0, f2)
+		var a4: float = a0 + _brk_edge_a(j, rn2)
+		out.append(Vector2(sin(a4), -cos(a4)) * (rn2 * rr + lerpf(dD, dA, f2)))
+	return out
+
 var brk_live := false    # 도안이 서 있다 — 금이 나는 중이거나 조각이 난 뒤
 var brk_fired := false   # 조각이 났다. **이때부터 _draw_board 가 쉰다**
 var brk_t := 0.0         # 발화부터 흐른 시간. 음수면 hold(제자리에서 흰색)
@@ -17338,7 +17446,12 @@ func _brk_fire() -> void:
 			var pts := PackedVector2Array()
 			#  부채가 넓으면 마디를 더 준다 — 안 주면 넓은 조각이 현으로
 			#  눌려 판이 원래 다각형이던 것처럼 보인다.
-			for q in annulus_at(Vector2.ZERO, r0, r1, a0, a1, 3 + step):
+			#  ⚠ annulus_at(자로 그은 부채꼴)이 아니라 **경계 함수를 걷는다**
+			#  (2026-09-25). 그 전에는 네 변이 부채·띠 선에 딱 앉아 조각이
+			#  전부 같은 꼴의 블록이었다 — 「레고블럭들이 서로 떨어진 것
+			#  같다」는 말이 그것이다. _brk_cell 이 금과 **같은 함수**를
+			#  쓰므로 갈라진 선과 조각 모서리가 한 픽셀도 안 어긋난다.
+			for q in _brk_cell(bi, j, a0, a1, r0, r1, 3 + step):
 				pts.append(q - c)
 			var u := c.normalized()
 			#  ⚠ **겹 번호만 읽으면 한 겹이 통째로 같은 속도로 난다.**
@@ -17393,9 +17506,14 @@ func _brk_fire() -> void:
 	#  불 하나 더. 「도넛」은 불이 없으므로 안 낸다.
 	if rt_bull_o > 0.0:
 		var bull := PackedVector2Array()
-		for k in 12:
-			var a := TAU * float(k) / 12.0
-			bull.append(Vector2(cos(a), sin(a)) * R * rt_bull_o)
+		#  ⚠ 불도 **경계 함수 k=0** 을 쓴다. 안쪽 겹의 아래 모서리가 같은
+		#  함수로 흔들리므로, 둘이 같은 선을 안 쓰면 불 둘레로 배경이 비쳐
+		#  흰 실루엣에 고리 모양 틈이 생긴다. 마디를 열둘에서 열여섯으로
+		#  늘린 것은 흔들린 원이 열둘에서는 각져 보이기 때문이다. 2026-09-25
+		for k in 16:
+			var a := TAU * float(k) / 16.0
+			bull.append(Vector2(sin(a), -cos(a))
+					* (R * rt_bull_o + _brk_edge_r(0, a)))
 		#  ⚠ **불만 바깥 성분이 0 이었다.** 앞서는 v 가 ((rand−0.5)*70, −up) 뿐
 		#  이라 위로 솟았다 제자리로 떨어질 뿐이고, 수명도 다른 조각과 같은
 		#  분포를 떠서 둘레가 다 식은 뒤 **한가운데에 혼자 짙게 남았다** —
@@ -17651,14 +17769,30 @@ func _brk_crack_draw(over := false) -> void:
 				#  금의 것이 아니다. 3단이 해야 하는 말은 「더 크다」가
 				#  아니라 **「더 험하다」**다. 씨(brk_seed)는 그대로라 같은
 				#  판이 네 단에서 같은 무늬로 갈라진다. 2026-09-25
-				var rr: float = r + lerpf(-2.5 - float(BRKDEEP.jag[brk_deep]),
-						2.5, _gl_rand(j * 31 + k, brk_seed))
-				if rr < 1.0:
+				#  ⚠ 호 하나에 **상수 하나**를 더하던 것을 각을 따라
+				#  흔들리는 선으로 바꿨다(2026-09-25). 전에는 호마다 반지름이
+				#  통째로 ±2.5px 어긋날 뿐이라 원호 자체는 자로 그은 듯
+				#  곧았고, 조각 모서리는 아예 안 흔들렸다 — 깨진 판이
+				#  레고 블록으로 보인 까닭이다. 이제 조각과 **같은 함수**
+				#  (_brk_edge_r)를 쓰고, 깊이의 톱니만 여기서 더한다.
+				var seg2: int = 6 + step
+				var arc := PackedVector2Array()
+				var lin := PackedVector2Array()
+				var bad := false
+				for q in seg2 + 1:
+					var aa: float = lerpf(ra0, ra1, float(q) / float(seg2)) 							+ PI * 0.5
+					var rq: float = r + _brk_arc_off(bi, aa)
+					if rq < 1.0:
+						bad = true
+						break
+					var dir := Vector2(sin(aa), -cos(aa))
+					arc.append(BC + dir * rq)
+					lin.append(BC + lift * off + dir * rq)
+				if bad:
 					continue
-				draw_arc(BC, rr, ra0, ra1, 6 + step, C_BG, gw)
+				draw_polyline(arc, C_BG, gw)
 				if not over:
-					draw_arc(BC + lift * off, rr, ra0, ra1, 6 + step,
-							lit, 1.0)
+					draw_polyline(lin, lit, 1.0)
 		else:                       # 살
 			var r0: float = maxf(R * float(brk_rings[bi][0]), lo)
 			var r1: float = R * float(brk_rings[bi][1])
@@ -17681,9 +17815,23 @@ func _brk_crack_draw(over := false) -> void:
 				if nm.dot(lift) < 0.0:
 					nm = -nm
 				nm *= off
-				draw_line(BC + u * r0, BC + u * r1, C_BG, gw)
+				#  ⚠ 살도 **조각과 같은 경계 함수**를 걷는다(2026-09-25).
+				#  전에는 두 점을 잇는 곧은 선이라, 갈라진 자리가 자로 그은
+				#  선이었다. 마디 여섯이면 굽이 둘이 보이고 640×360 에서
+				#  도트가 안 뭉갠다.
+				var sg: int = 6
+				var rad := PackedVector2Array()
+				var rlt := PackedVector2Array()
+				for q2 in sg + 1:
+					var f2: float = float(q2) / float(sg)
+					var rq2: float = lerpf(r0, r1, f2)
+					var aq: float = a + _brk_edge_a(j, rq2 / maxf(R, 1.0))
+					var dq := Vector2(sin(aq), -cos(aq))
+					rad.append(BC + dq * rq2)
+					rlt.append(BC + nm + dq * rq2)
+				draw_polyline(rad, C_BG, gw)
 				if not over:
-					draw_line(BC + nm + u * r0, BC + nm + u * r1, lit, 1.0)
+					draw_polyline(rlt, lit, 1.0)
 
 
 #  조각과 부스러기. hold 동안은 제자리에서 **흰색**이라 원판이 빈틈없이

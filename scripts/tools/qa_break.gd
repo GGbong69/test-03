@@ -1078,10 +1078,16 @@ func _run() -> void:
 					if k % 2 != 0:
 						continue
 					var r2: float = maxf(g.R * float(g.brk_rings[k / 2][0]), lo3)
-					for j in g.brk_w:
-						var rr3: float = r2 + lerpf(
-								-2.5 - float(g.BRKDEEP.jag[t]), 2.5,
-								g._gl_rand(j * 31 + k, g.brk_seed))
+					#  ⚠ 수식을 **베끼지 않고 게임의 함수를 그대로 부른다**
+					#  (2026-09-25). 전에는 여기가 `lerpf(-2.5 - jag, 2.5, …)`
+					#  를 손으로 옮겨 적었는데, 금이 「호마다 상수 하나」에서
+					#  「각을 따라 흔들리는 선」으로 바뀌자 이 자는 **없어진
+					#  수식을 재며 초록**이 됐다. 재는 자가 굽는 자를 못 잡는
+					#  그 꼴이다. 각을 촘촘히 훑어 실제로 그어지는 반지름의
+					#  위아래를 잰다.
+					for q in 240:
+						var aq: float = TAU * float(q) / 240.0
+						var rr3: float = r2 + g._brk_arc_off(k / 2, aq)
 						top2 = maxf(top2, rr3)
 						bot2 = minf(bot2, rr3)
 				if t == 0:
