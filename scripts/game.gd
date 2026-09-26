@@ -2529,7 +2529,54 @@ func _pack_grants() -> void:
 			if GameData.item_weight(it) <= 0.0:
 				Save.unlock("itemgot:" + String(it.id))
 			break
+	_boot_gift()
 	_panel_reset()
+
+
+#  ── 첫 런에 쥐여 주는 두 장 ──────────────────────────
+#  「튜토리얼을 게임의 매력을 보여 주는 걸로 특화하자 — 튜토리얼에서 개사기
+#  아이템 주는 거 확실하게」(2026-09-26).
+#  까닭이 분명하다. 이 게임의 재미는 **빌드가 불어나는 것**인데, 첫 판 셋은
+#  동전 슬롯이 비어 있어 「다트 던져 작은 수 나오는 게임」으로 보인다. 대회
+#  심사처럼 **5분만 보는 사람**은 그 구간만 보고 판단한다 — 정점을 구조적으로
+#  못 보는 것이다. 첫 런에 두 장을 쥐여 주면 첫 발부터 카드가 춤추고 목표를
+#  넘겨 판이 깨진다.
+#
+#  고른 두 장과 까닭:
+#   · **빌리의 바지**(점수 +40 · 배수 +4) — 조건이 없다. 어디에 꽂아도 크게
+#     오르므로 **빗나가도** 그림이 선다. 첫 손님이 조준을 못해도 재미가 난다.
+#   · **SAFETY LAST!**(판 마지막 다트에 배수 ×3) — 판의 **마지막 발**에서
+#     터진다. 끝이 절정이 되는 박자를 공짜로 얻는다.
+#  둘이 곱해져 여섯째 발이 세 자리에서 네 자리로 뛴다 — 그 한 발이 이 게임의
+#  전부를 말한다.
+#
+#  ⚠ **딱 한 번이다.** 배움 표(Save.taught)에 적어 두고, 이미 적혀 있으면
+#  건너뛴다 — 새 런마다 주면 그것은 튜토리얼이 아니라 밸런스다.
+#  ⚠ 챌린지·무한 런은 안 준다(_rec_off 가 그 둘을 이미 가른다). 그쪽은
+#  「제약을 걸고 도는」 런이라 공짜 두 장이 그 뜻을 통째로 지운다.
+#  ⚠ 슬롯이 모자라면(다트통이 이미 쥐여 준 것이 있으면) 있는 만큼만 넣는다.
+func _boot_gift() -> void:
+	if _rec_off() or Save.taught("u_boot"):
+		return
+	Save.teach("u_boot")
+	for gid in BOOT_GIFT:
+		if owned.size() >= GameData.max_items():
+			break
+		for it in GameData.items():
+			if String(it.id) != String(gid):
+				continue
+			var gp: Dictionary = it.duplicate()
+			gp.gs = 0
+			gp.bought = 0
+			owned.append(gp)
+			_found("item", String(it.id))
+			break
+
+
+#  첫 런의 두 장. 표에 안 두고 여기 두는 까닭 — 이것은 **밸런스 값이 아니라
+#  한 번짜리 연출**이고, packs.csv 에 두면 다트통 줄로 읽혀 「이 통을 고르면
+#  늘 나온다」가 된다. 2026-09-26
+const BOOT_GIFT := ["r14", "u26"]
 
 
 # 지금 다트통으로 완주했다 — 그것을 앞줄로 적어 둔 다트통들을 연다.
