@@ -40,6 +40,7 @@ func _initialize() -> void:
 	root.add_child(g)
 	_run()
 	_tongues()
+	_live()
 	print("\n통과 %d · 실패 %d" % [ok, bad])
 	quit(bad)
 
@@ -1005,3 +1006,121 @@ func ", i0 + 10)
 	_ok("16-c motion off freezes flames", body.find("0 if motion_off else") >= 0, "")
 	_ok("16-d no new colours", body.find("Color(\"") < 0, "")
 	_ok("16-e no text", body.find("draw_string") < 0, "")
+
+
+#  ── 17 계산하는 동안 탄다 (2026-09-27) ──────────────────────
+#  「불타는 이펙트는 점수가 계산될 때 적용되어야지 · 점수가 엄청 높아졌을 때
+#   계산될 때 알겠지?」 — 불이 합계 걸음 한 칸에서만 켜지던 것을 점수·배수
+#  걸음마다 카드에 선 값으로 다시 잰다. 못 박는 것:
+#    · 작은 값은 계산 내내 아무 일도 없다(0단 계약이 계산 중에도 선다)
+#    · 큰 값은 **합계 전에** 불이 서고, 값이 오를수록 겹이 안 내려간다
+#    · 계산하는 동안 창이 안 빠진다 · 합계 뒤에는 빠져 다음 발로 안 샌다
+#    · 값이 클수록 불의 혀가 높다 · 장부와 점수는 한 톨도 안 바뀐다
+func _live_stage(steps: Array, tgt := 1000) -> void:
+	_stage(0.0, 1, tgt)
+	g.cur_chip = 0
+	g.cur_mult = 1
+	g.queue.clear()
+	for st in steps:
+		g.queue.append(st)
+	g.queue.append({"k": "total"})
+	g.settle_n = g.queue.size()
+	g.qt = 0.0
+
+
+func _live_walk() -> Dictionary:
+	var pre_lay := []          # 합계 전, 걸음이 설 때마다 겹
+	var pre_min_t := 1.0       # 불이 선 뒤 합계 전까지 창의 최솟값
+	var lit_pre := false
+	var ps: int = g.pitch_step
+	var fr := 0
+	var tot0: int = int(g.total)
+	var after_zero := false
+	var heat_hi := 0.0
+	while g.state == g.S.RESOLVE and fr < 6000:
+		g._process(1.0 / 60.0)
+		fr += 1
+		if int(g.total) == tot0:
+			if g.pitch_step != ps:
+				ps = g.pitch_step
+				pre_lay.append(int(g.fire_lay))
+			if int(g.fire_lay) > 0 and float(g.fire_t) > 0.0:
+				lit_pre = true
+			if lit_pre and g.hitstop <= 0.0:
+				pre_min_t = minf(pre_min_t, float(g.fire_t))
+			heat_hi = maxf(heat_hi, float(g.fire_heat))
+		elif float(g.fire_t) <= 0.0:
+			after_zero = true
+	return {"lay": pre_lay, "lit": lit_pre, "min_t": pre_min_t,
+			"zero": after_zero, "heat": heat_hi, "hold": bool(g.fire_hold),
+			"total": int(g.total)}
+
+
+func _live() -> void:
+	print("
+── 17 계산하는 동안 탄다 ─────────────────────")
+	g._new_run()
+	_calm()
+	#  작은 값 — 80 × 3 = 240 (r 0.24, 0단)
+	_live_stage([{"k": "chip", "v": 80}, {"k": "mult", "v": 3}])
+	var sm := _live_walk()
+	_ok("17-a 작은 값은 계산 내내 테두리가 한 픽셀도 없다", not bool(sm.lit),
+			"겹 %s" % [sm.lay])
+	#  큰 값 — 80 → ×4 → +120 → ×3 → ×5 = 200 × 60 = 12000 (r 12)
+	g.fire_used = false
+	g.fire_peak = 0
+	_live_stage([{"k": "chip", "v": 80}, {"k": "mult", "v": 4},
+			{"k": "item", "i": 0, "kind": "chip", "v": 120, "lbl": "t"},
+			{"k": "item", "i": 0, "kind": "xmult", "v": 3, "lbl": "t"},
+			{"k": "item", "i": 0, "kind": "xmult", "v": 5, "lbl": "t"}])
+	var used0: bool = g.fire_used
+	var bg := _live_walk()
+	var lay: Array = bg.lay
+	var mono := true
+	for i in range(1, lay.size()):
+		if int(lay[i]) < int(lay[i - 1]):
+			mono = false
+	_ok("17-b 큰 값은 **합계 전에** 불이 선다", bool(bg.lit) and lay.has(3),
+			"합계 전 겹 %s" % [lay])
+	_ok("17-c 값이 오르는 동안 겹이 안 내려간다", mono and lay.size() >= 4,
+			"%s" % [lay])
+	_ok("17-d 계산하는 동안 창이 안 빠진다", float(bg.min_t) >= 0.999,
+			"최솟값 %.3f" % float(bg.min_t))
+	_ok("17-e 합계 뒤에는 창이 빠진다 · 잡음이 풀린다",
+			bool(bg.zero) and not bool(bg.hold), "")
+	_ok("17-f 판 목표의 열 배를 넘으면 혀가 두 배다",
+			absf(float(bg.heat) - float(g.FIRE.heat_x)) < 0.001,
+			"혀 %.2f" % float(bg.heat))
+	_ok("17-g 점수가 그대로다(12000)", int(bg.total) == 12000, "%d" % int(bg.total))
+	#  계산 걸음은 「판에 한 번」 장부를 안 건드린다 — 합계 걸음만 쓴다.
+	_stage(0.0, 1)
+	g.fire_used = false
+	g.fire_peak = 0
+	g.cur_chip = 5000
+	g.cur_mult = 1
+	g.queue.clear()
+	g.queue.append({"k": "mult", "v": 2})
+	g.qt = 0.0
+	g._process(1.0 / 60.0)
+	_ok("17-h 계산 걸음이 장부를 안 건드린다",
+			not bool(g.fire_used) and int(g.fire_peak) == 0 and int(g.fire_lay) == 3,
+			"used %s · peak %d · 겹 %d" % [g.fire_used, g.fire_peak, g.fire_lay])
+	#  혀 높이 — 문턱에서 1배, 그 밑도 1배.
+	g.target = 1000
+	_ok("17-i 불이 서는 문턱 밑에서는 혀가 1배다",
+			absf(float(g._fire_heat_of(900)) - 1.0) < 0.001
+			and absf(float(g._fire_heat_of(1266)) - 1.0) < 0.01, "")
+	#  발이 바뀌면 잡음이 안 남는다.
+	g.fire_hold = true
+	g.fire_heat = 2.0
+	g._card_reset()
+	_ok("17-j _card_reset 이 잡음과 혀를 내린다",
+			not bool(g.fire_hold) and float(g.fire_heat) == 1.0, "")
+	var src := FileAccess.get_file_as_string("res://scripts/game.gd")
+	var i0: int = src.find("func _fire_live")
+	var i1: int = src.find("
+func ", i0 + 10)
+	var body: String = src.substr(i0, i1 - i0)
+	_ok("17-k 계산 중 불은 점수를 읽기만 한다",
+			body.find("total") < 0 and body.find("cur_chip =") < 0
+			and body.find("cur_mult =") < 0 and body.find("draw_string") < 0, "")

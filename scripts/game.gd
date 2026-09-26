@@ -797,6 +797,13 @@ var fire_used := false   # **판에 한 번.** leg_fx_arm 의 어법 그대로 �
 var fire_peak := 0       # 이 판에서 여태 가장 큰 합계 걸음(4단의 둘째 문)
 var fire_lock := -1      # 개발자 5쪽 — 단 강제(−1 이 살아 있는 값)
 var fire_mul := 1.0      # 개발자 5쪽 — 테두리 세기 배(0 이 「손대기 전」)
+#  ── 계산하는 동안 탄다 (2026-09-27) ──
+#  「불타는 이펙트는 점수가 계산될 때 적용되어야지」 — 합계 걸음 한 칸에서만
+#  켜지던 불을 **점수·배수 걸음마다** 지금 카드에 선 값으로 다시 잰다.
+#  fire_hold 가 서 있는 동안 창이 안 빠진다(가득 찬 채 탄다). 합계 걸음이
+#  _fire_arm 에서 내리고, 그 뒤로는 옛 창 그대로 빠진다.
+var fire_hold := false
+var fire_heat := 1.0     # 불의 혀 높이 배. 값이 클수록 높이 탄다(FIRE.heat_*)
 
 var _autoplay := false
 var _auto_t := 0.0
@@ -4784,7 +4791,8 @@ func _process(d: float) -> void:
 	#  2.5 든 창이 걸음을 **못 넘는다**(부등식으로 성립한다 — qa_fire ⑦ 이 잰다).
 	#  ⚠ card_burst 의 burst_fade(고정 1.33초 · 바로 위 줄)는 **절대 안 베낀다** —
 	#  그 예외의 근거가 「정산당 한 번뿐」인데 가장자리는 걸음마다 난다. 2026-09-26
-	fire_t = maxf(fire_t - d * fast_rate * card_jrate, 0.0)
+	if not fire_hold:
+		fire_t = maxf(fire_t - d * fast_rate * card_jrate, 0.0)
 	_tick_score(d)
 
 	for w in waves:
@@ -7485,6 +7493,10 @@ func _next_step() -> void:
 			if total >= target and burst_hits.is_empty():
 				_brk_arm()
 
+	#  계산하는 동안 탄다 — 합계 걸음은 _fire_arm 이 제 값으로 선다(2026-09-27).
+	if String(st.k) != "total":
+		_fire_live()
+
 	# ── 카드 시계를 이 걸음의 **실제 길이**에 맨다 ────────────────────
 	# 이 설계에서 가장 중요한 한 줄이고, **반드시 함수의 마지막 줄**이어야 한다 —
 	# 위 match 에서 qt 를 덮는 갈래가 다섯(miss · bal · rnd · total · 목표돌파)이라
@@ -7583,7 +7595,12 @@ func _card_amt(a: int, b: int) -> float:
 # target 0 을 maxf 로 막는 것은 개발자 모드의 「이 판 목표 채우기」와 도구가
 # 세우는 손큐에서 target 이 0 인 프레임이 실제로 있기 때문이다. 2026-09-26
 func _grow_n() -> float:
-	var r := float(absi(last_gain)) / maxf(float(target), 1.0)
+	return _grow_of(last_gain)
+
+
+#  같은 자를 아무 값에나 댄다 — 계산 중인 카드 값(_fire_live)이 이 길로 잰다.
+func _grow_of(v: int) -> float:
+	var r := float(absi(v)) / maxf(float(target), 1.0)
 	if r <= float(GROW.r_lo):
 		return 0.0
 	var lo := log(float(GROW.r_lo)) / log(10.0)
@@ -7657,14 +7674,47 @@ func _fire_lay_of(gn: float) -> int:
 #  _next_step 과 dev 가 **같이 부른다**(dev 쪽은 _fire_peek 문을 지나 부른다 —
 #  그 문이 「판에 한 번」 장부를 떠 두고 되돌린다).
 func _fire_arm(gn: float, brk: bool) -> void:
+	fire_hold = false          # 계산이 끝났다 — 여기서부터 창이 빠진다
 	fire_hot = _fire_tier(gn, brk)
 	#  개발자 단 강제는 그림도 같이 강제한다 — 4단을 고르면 겹 셋(가장 큰
 	#  크기)으로 보여야 「가장 큰 걸음이 이렇게 보인다」를 댈 수 있다.
 	fire_lay = mini(fire_lock, 3) if fire_lock >= 0 else _fire_lay_of(gn)
+	fire_heat = _fire_heat_of(last_gain)
 	if fire_hot >= 1:
 		#  **대입이다.** maxf 로 바꾸면 연발에서 불이 안 꺼져 상시 장식이 된다 —
 		#  바로 위 shake 가 같은 까닭으로 대입인 그 줄과 짝이다.
 		fire_t = 1.0
+
+
+#  계산 걸음(점수 · 배수 · 동전 · 저울 · 물음표)이 끝날 때마다 부른다.
+#  합계 걸음이 더할 값을 **지금 카드에 선 두 수로** 미리 셈해 같은 자(gn)로
+#  단을 낸다 — 값이 오르는 동안 테두리가 달아오르고, 값이 판 목표를 훌쩍
+#  넘으면 불이 선다. 셈은 _score_combine · score_mul 을 **읽기만** 한다
+#  (합계 걸음과 같은 식이라 계산 중에 선 불과 합계에서 선 불이 안 갈린다).
+#  ⚠ 단 강제(fire_lock)를 안 읽는다 — 그것은 합계 걸음의 멈춤·침묵을 보는 줄이다.
+#  ⚠ 「판에 한 번」 장부(fire_used · fire_peak)를 안 건드린다 — 그림만 선다.
+func _fire_live() -> void:
+	var v: int = _score_combine(cur_chip, cur_mult)
+	if score_mul != 1.0:
+		v = int(round(float(v) * score_mul))
+	fire_lay = _fire_lay_of(_grow_of(v))
+	fire_hold = fire_lay > 0
+	if fire_hold:
+		fire_t = 1.0
+		fire_heat = _fire_heat_of(v)
+
+
+#  불의 혀가 얼마나 높이 타는가. 불이 서는 문턱(t3)에서 1배 · 값이 판 목표의
+#  heat_r 배에 이르면 heat_x 배. 그 사이는 로그로 눕힌다(비율 자와 같은 어법).
+func _fire_heat_of(v: int) -> float:
+	var lo := log(float(GROW.r_lo)) / log(10.0)
+	var hi := log(float(GROW.r_hi)) / log(10.0)
+	var r3 := pow(10.0, lo + float(FIRE.t3) * (hi - lo))
+	var r := float(absi(v)) / maxf(float(target), 1.0)
+	if r <= r3:
+		return 1.0
+	var k := clampf(log(r / r3) / log(float(FIRE.heat_r) / r3), 0.0, 1.0)
+	return lerpf(1.0, float(FIRE.heat_x), k)
 
 
 #  「터짐」이 한 점에 모이는 자리. 4단에서 **여기서 처음으로** 소리가 난다.
@@ -7752,6 +7802,8 @@ func _fire_reset() -> void:
 	fire_t = 0.0
 	fire_hot = 0
 	fire_lay = 0
+	fire_hold = false
+	fire_heat = 1.0
 	stop_fire = false
 	fire_snd = 0.0
 
@@ -8664,11 +8716,18 @@ func _fire_tongues(g2: float, top: float) -> void:
 	var step := 4.0
 	var bucket: int = 0 if motion_off else int(Time.get_ticks_msec() / 83)
 	var ember := C_GOLD.lerp(C_MULT, 0.55)
-	var a: float = clampf(0.62 * g2, 0.0, 0.70)
+	#  혀 하나가 세 토막이다 — 밑동 45% 금빛 · 가운데 35% 불씨 · 끝 20% 붉고
+	#  가늘다. 처음엔 두 토막(불씨 겉 · 금빛 속)이라 찍어 보니 막대그래프처럼
+	#  읽혔다(2026-09-27). 불은 뿌리가 가장 뜨겁고 끝이 붉게 뾰족하다.
+	var a: float = clampf(0.85 * g2, 0.0, 0.85)
 	if a <= 0.01:
 		return
-	var h_lo := 5.0
-	var h_hi := 17.0
+	var cg := Color(C_GOLD, a)
+	var ce := Color(ember, a)
+	var cm := Color(C_MULT, a)
+	#  값이 클수록 높이 탄다(fire_heat · FIRE.heat_* 주석).
+	var h_lo := 5.0 * fire_heat
+	var h_hi := 17.0 * fire_heat
 	var W: float = VIEW.x
 	var H: float = VIEW.y
 	#  ⚠ **위 가장자리에는 혀를 안 세운다.** 처음에는 네 변 다 세웠는데 찍어
@@ -8679,8 +8738,9 @@ func _fire_tongues(g2: float, top: float) -> void:
 	for i in int(W / step):
 		var x := float(i) * step
 		var hb: float = lerpf(h_lo, h_hi, _gl_rand(i * 7 + bucket * 131, 911))
-		draw_rect(Rect2(x, H - hb, step, hb), Color(ember, a))
-		draw_rect(Rect2(x + 1.0, H - hb * 0.6, step - 2.0, hb * 0.6), Color(C_GOLD, a))
+		draw_rect(Rect2(x, H - hb * 0.45, step, hb * 0.45), cg)
+		draw_rect(Rect2(x, H - hb * 0.80, step, hb * 0.35), ce)
+		draw_rect(Rect2(x + 1.0, H - hb, step - 2.0, hb * 0.20), cm)
 	#  옆 혀는 **아래로 갈수록 높다** — 불이 바닥에서 올라가는 모양이고, 위쪽
 	#  HUD 옆에서는 짧아져 자금판 · 메뉴 칸을 덜 씻는다.
 	for j in int((H - top) / step):
@@ -8688,10 +8748,12 @@ func _fire_tongues(g2: float, top: float) -> void:
 		var up: float = lerpf(0.30, 1.0, float(j) / maxf((H - top) / step, 1.0))
 		var hl: float = lerpf(h_lo, h_hi, _gl_rand(j * 13 + bucket * 139, 917)) * up
 		var hr: float = lerpf(h_lo, h_hi, _gl_rand(j * 17 + bucket * 149, 919)) * up
-		draw_rect(Rect2(0.0, y, hl, step), Color(ember, a))
-		draw_rect(Rect2(0.0, y + 1.0, hl * 0.6, step - 2.0), Color(C_GOLD, a))
-		draw_rect(Rect2(W - hr, y, hr, step), Color(ember, a))
-		draw_rect(Rect2(W - hr * 0.6, y + 1.0, hr * 0.6, step - 2.0), Color(C_GOLD, a))
+		draw_rect(Rect2(0.0, y, hl * 0.45, step), cg)
+		draw_rect(Rect2(hl * 0.45, y, hl * 0.35, step), ce)
+		draw_rect(Rect2(hl * 0.80, y + 1.0, hl * 0.20, step - 2.0), cm)
+		draw_rect(Rect2(W - hr * 0.45, y, hr * 0.45, step), cg)
+		draw_rect(Rect2(W - hr * 0.80, y, hr * 0.35, step), ce)
+		draw_rect(Rect2(W - hr, y + 1.0, hr * 0.20, step - 2.0), cm)
 
 
 # ══════════════════════════════════════════════════════════
@@ -29455,6 +29517,9 @@ const FIRE := {
 	# 돌파는 이 표를 안 읽는다(배수 1.0 고정) — qa_break 가 그 프레임에서
 	# hitstop <= CARDFX.stop 과 qt == beat*3.4 − hitstop 을 잰다.
 	"stop_mul": [1.0, 1.5, 2.0],
+	# 불의 혀 높이 — 불이 서는 문턱에서 1배, 한 발이 판 목표의 **열 배**면 두 배
+	# (아래 5~17px → 10~34px). 「점수가 엄청 높아졌을 때」가 불 크기로 읽힌다.
+	"heat_r": 10.0, "heat_x": 2.0,
 }
 
 
