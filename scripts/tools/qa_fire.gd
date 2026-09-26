@@ -39,6 +39,7 @@ func _initialize() -> void:
 	g = load("res://scenes/main.tscn").instantiate()
 	root.add_child(g)
 	_run()
+	_tongues()
 	print("\n통과 %d · 실패 %d" % [ok, bad])
 	quit(bad)
 
@@ -983,3 +984,24 @@ func _dev_count(needle: String) -> int:
 		n += 1
 		i = txt.find(needle, i + 1)
 	return n
+
+#  -- 16 top-tier flames (2026-09-26) --
+#  겹 셋이 가장 큰 걸음에서도 흐린 틀로만 보여 불꽃을 얹었다. 그 불꽃이
+#  지켜야 하는 것을 못 박는다 — 맨 윗단에서만 난다(자주 나는 단에 달리면
+#  상시 장식이 된다) · 위 가장자리에 안 선다(HUD 이름을 갉아먹었다) ·
+#  모션을 끄면 선 채로 탄다 · 새 색 0 · 글자 0.
+func _tongues() -> void:
+	print("
+-- 16 --")
+	var src := FileAccess.get_file_as_string("res://scripts/game.gd")
+	_ok("16-a flames only at top tier",
+			src.find("if fire_lay >= 3:
+		_fire_tongues(g2, top)") >= 0, "")
+	var i0: int = src.find("func _fire_tongues")
+	var i1: int = src.find("
+func ", i0 + 10)
+	var body: String = src.substr(i0, i1 - i0)
+	_ok("16-b no tongues on the top edge", body.find("Rect2(x, top,") < 0, "")
+	_ok("16-c motion off freezes flames", body.find("0 if motion_off else") >= 0, "")
+	_ok("16-d no new colours", body.find("Color(\"") < 0, "")
+	_ok("16-e no text", body.find("draw_string") < 0, "")

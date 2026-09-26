@@ -8643,6 +8643,55 @@ func _fire_edge() -> void:
 		draw_rect(Rect2(x0, y0 + sh2 - w, sw, w), col)                # 아래
 		draw_rect(Rect2(x0, y0 + w, w, sh2 - w * 2.0), col)           # 왼쪽
 		draw_rect(Rect2(x0 + sw - w, y0 + w, w, sh2 - w * 2.0), col)  # 오른쪽
+	if fire_lay >= 3:
+		_fire_tongues(g2, top)
+
+
+#  ── 맨 윗단의 불꽃 (2026-09-26) ──────────────────────
+#  겹 셋은 「달아오름」까지만 말했다. 찍어 보니 **가장 큰 걸음에서도 흐린
+#  갈색 틀**로만 보여 「화면 테두리가 불탄다」로 안 읽혔다 — 사용자가 한
+#  말은 「진짜 극적이면」이었다. 설계가 섬광 안전선을 너무 멀리 잡았다(가장
+#  밝은 겹이 문턱의 23%). 섬광 규정이 막는 것은 **넓은 면이 1초에 세 번 넘게
+#  뒤집히는 것**인데 이 불은 판에 0.4번 나는 한 번짜리라 그 자리가 아니다.
+#  가장자리를 따라 4px 마다 불의 혀를 세우고 높이를 씨로 흔든다.
+#  · **맨 윗단만이다** — 실측 상위 10%. 자주 나는 단에 달면 상시 장식이 된다
+#    (2026-09-17 금빛 윗띠를 걷은 그 실수). 1·2단은 한 픽셀도 안 바뀐다.
+#  · 혀 높이는 **1/12초마다** 다시 뜬다. 프레임마다 뜨면 지글거림이 되고 도트는
+#    끊겨야 불로 읽힌다. 모션을 끄면 흔들리지 않고 선 채로 탄다.
+#  · 새 색 0 — C_GOLD 에 C_MULT 를 섞은 불씨가 바깥, C_GOLD 가 속.
+#  · 위 가장자리는 띠(LAY.bar) 밑에서 시작한다 — 점수를 덮지 않는다.
+func _fire_tongues(g2: float, top: float) -> void:
+	var step := 4.0
+	var bucket: int = 0 if motion_off else int(Time.get_ticks_msec() / 83)
+	var ember := C_GOLD.lerp(C_MULT, 0.55)
+	var a: float = clampf(0.62 * g2, 0.0, 0.70)
+	if a <= 0.01:
+		return
+	var h_lo := 5.0
+	var h_hi := 17.0
+	var W: float = VIEW.x
+	var H: float = VIEW.y
+	#  ⚠ **위 가장자리에는 혀를 안 세운다.** 처음에는 네 변 다 세웠는데 찍어
+	#  보니 위 혀가 동전 슬롯 · 다트 칸의 이름(「동전」「다트」「정보」)을
+	#  갉아먹었다 — 점수를 읽게 하려고 만든 층이 정보를 덮으면 진 것이다.
+	#  불은 아래에서 타오르므로 아래와 옆만으로 「탄다」가 선다. 위는 겹의
+	#  달아오름만 남는다.
+	for i in int(W / step):
+		var x := float(i) * step
+		var hb: float = lerpf(h_lo, h_hi, _gl_rand(i * 7 + bucket * 131, 911))
+		draw_rect(Rect2(x, H - hb, step, hb), Color(ember, a))
+		draw_rect(Rect2(x + 1.0, H - hb * 0.6, step - 2.0, hb * 0.6), Color(C_GOLD, a))
+	#  옆 혀는 **아래로 갈수록 높다** — 불이 바닥에서 올라가는 모양이고, 위쪽
+	#  HUD 옆에서는 짧아져 자금판 · 메뉴 칸을 덜 씻는다.
+	for j in int((H - top) / step):
+		var y := top + float(j) * step
+		var up: float = lerpf(0.30, 1.0, float(j) / maxf((H - top) / step, 1.0))
+		var hl: float = lerpf(h_lo, h_hi, _gl_rand(j * 13 + bucket * 139, 917)) * up
+		var hr: float = lerpf(h_lo, h_hi, _gl_rand(j * 17 + bucket * 149, 919)) * up
+		draw_rect(Rect2(0.0, y, hl, step), Color(ember, a))
+		draw_rect(Rect2(0.0, y + 1.0, hl * 0.6, step - 2.0), Color(C_GOLD, a))
+		draw_rect(Rect2(W - hr, y, hr, step), Color(ember, a))
+		draw_rect(Rect2(W - hr * 0.6, y + 1.0, hr * 0.6, step - 2.0), Color(C_GOLD, a))
 
 
 # ══════════════════════════════════════════════════════════
