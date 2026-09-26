@@ -449,6 +449,17 @@ var clok_out := 0
 var revo_bull := true            # 여태 던진 것이 전부 불이었나
 var revo_darts := 0              # 이 판에 던진 수. 0 발짜리 판은 안 센다
 var mark_sec := -1       # 「목표물」 챌린지가 이 판에 뽑은 칸
+#  ── 시계 판의 차례 ──────────────────────────────────
+#  「시계」가 여태 한 일은 칸 값을 전부 12 로 눕히는 것뿐이었다. 그러면
+#  어디를 맞혀도 같으니 **판을 볼 이유가 사라진다**(2026-09-26 제보:
+#  「시계가 효과가 너무 쓰레기인데?」). 실제 다트에 시계를 그대로 쓰는
+#  연습 게임 「라운드 더 클록」이 있다 — 1번부터 차례로 맞혀 올라가고,
+#  변형 규칙이 **싱글 한 칸 · 더블 두 칸 · 트리플 세 칸** 전진이다.
+#  그 규칙이 우리 링에 공짜로 얹힌다: hit_info 의 mult 가 이미 1·2·3 이다.
+#  −1 이면 시계 판이 아니다. 0 이상이면 지금 차례인 칸이다.
+var clok_at := -1
+var clok_mul := 1.0      # 차례인 칸에 붙는 배수(mods.csv 의 v1)
+var clok_lap := 0        # 이 판에 돈 바퀴 수 — 개발자 판과 자가 읽는다
 var paint_mul := 1.0
 var score_mode := "std"         # 이 런의 점수 계산 방식. 든 동전이 먼저 쥔다
 # 다트통이 미는 최종 점수 배율. 계산 방식과 같이 판 시작에 한 번 읽는다.
@@ -1848,6 +1859,20 @@ func _new_run() -> void:
 
 
 func _start_leg() -> void:
+	#  시계 판의 차례는 **열두 시 자리(칸 0)에서 시작해 시계 방향**으로 돈다.
+	#  칸을 무작위로 뽑지 않는 까닭: 시계 바늘이 열두 시에서 출발하지 않으면
+	#  판이 시계로 안 읽힌다. 판마다 처음으로 돌아가므로 「한 판에 얼마나
+	#  돌렸나」가 그 판의 성적이 된다.
+	clok_at = -1
+	clok_lap = 0
+	clok_mul = 1.0
+	if _board_theme() == "clock":
+		clok_at = 0
+		for m in GameData.mods():
+			if String(m.get("id", "")) == "clok":
+				var vv = m.v
+				clok_mul = maxf(float(vv[1]) if vv is Array else 1.0, 1.0)
+				break
 	# 「목표물」은 판마다 칸을 새로 뽑는다. 조준이 통째로 그 한 칸으로 좁아진다.
 	mark_sec = -1
 	if GameData.chal_on("sec_only"):
@@ -3426,10 +3451,14 @@ func _mod_step(b: Dictionary, sec: Array, m: Dictionary) -> void:
 				var add: int = int(m.v[0]) if sec[i] >= DNUT_HI else int(m.v[1])
 				sec[i] = mini(sec[i] + add, GameData.sector_max())
 		"flat":
-			# 칸 값을 통째로 하나로 덮는다. 칸을 고르는 이유가 사라지고
-			# 링만 남으므로 링 빌드와 정면으로 맞물린다.
+			# 칸 값을 통째로 하나로 덮는다.
+			#  ⚠ v1 이 생기면서 m.v 가 스칼라에서 배열로 바뀐다
+			#  (mods() 가 「v1 이 비면 스칼라」로 짓는다). 둘 다 받는다 —
+			#  값이 없던 시절의 판을 되살릴 길을 남겨 둔다. 2026-09-26
+			var fv = m.v
+			var flat_v: int = int(fv[0]) if fv is Array else int(fv)
 			for i in sec.size():
-				sec[i] = int(m.v)
+				sec[i] = flat_v
 
 
 # 이 보드 확장 목록이면 판이 어떻게 되는가. 사지 않고 물어볼 수 있어야
@@ -6415,6 +6444,27 @@ func _land(mark := true) -> void:
 					* GameData.chal_f("sec_mul", 1.0)))
 		else:
 			info.base = 0
+	#  ⚠ **시계 판의 차례인 칸.** 「목표물」 바로 뒤에 선다 — 두 제약이 같이
+	#  걸리면 목표물이 0 으로 죽인 칸에 배수를 곱해 0 이고, 그것이 「그 칸에서만
+	#  난다」와 맞는 답이다. 불은 idx 가 −1 이라 여기 안 걸린다(목표물과 같은
+	#  근거: 차례는 **칸**을 도는 것이고 불은 칸 배열 밖이다). 2026-09-26
+	if clok_at >= 0 and info.idx == clok_at:
+		info.base = int(round(float(info.base) * clok_mul))
+	#  ⚠ **차례가 넘어간다 — 맞힌 링만큼.** 싱글 한 칸 · 더블 두 칸 ·
+	#  트리플 세 칸으로, 실제 「라운드 더 클록」의 변형 규칙 그대로다.
+	#  hit_info 의 mult 가 이미 1·2·3 이라 새 수를 안 들인다.
+	#  ⓐ **한 발에 한 번이다.** 연발의 작은 다트(mark=false)는 한 발을 여섯으로
+	#     쪼갠 것이라, 여기서 세면 한 번 던져 여섯 칸을 간다.
+	#  ⓑ 링 죽이기를 **지난 뒤**의 mult 를 읽는다 — 「민짜」가 트리플 배수를
+	#     1 로 내린 판에서는 트리플을 맞혀도 한 칸만 간다. 제약이 이 판에
+	#     실제로 한 일을 차례도 같이 받는 것이 맞다.
+	#  ⓒ 점수 배수(위)는 연발의 작은 다트에도 그대로 붙는다 — 그 발이 그
+	#     칸을 맞힌 것은 사실이기 때문이다. 넘어가는 것만 한 번이다.
+	if mark and clok_at >= 0 and info.idx == clok_at:
+		var cstep: int = maxi(int(info.mult), 1)
+		var cn: int = maxi(_sec_n(), 1)
+		clok_lap += (clok_at + cstep) / cn
+		clok_at = (clok_at + cstep) % cn
 	# 「빨강, 파랑, 노랑」이 칠한 칸. 죽이는 축을 다 지난 뒤에 곱한다 — 금줄이 죽인 칸을
 	# 칠했으면 0 에 곱해 0 이다. 두 장을 같이 쓴 결과가 그것이 맞다.
 	if paint_sec >= 0 and info.idx == paint_sec:
@@ -12812,6 +12862,12 @@ func _draw_aim() -> void:
 	#  규약(「판이 안 서는 화면에서는 지운다」)과 같은 자다. 2026-09-20
 	if mark_sec >= 0 and _is_play_deep():
 		_board_dim_sector(mark_sec, float(AIMDIM.a))
+	#  시계 판의 **차례인 칸**. 「목표물」처럼 나머지를 가라앉히지 않는다 —
+	#  저쪽은 판 하나에 한 칸이 고정이지만 이쪽은 발마다 옮겨 다니므로,
+	#  스무 칸을 매 발 어둡혔다 밝혔다 하면 판이 깜빡이는 것으로 읽힌다.
+	#  그 칸 하나만 밝힌다. 색은 **새로 안 만든다** — C_LIGHT 를 옅게 깐다.
+	if clok_at >= 0 and _is_play_deep():
+		_board_lit_sector(clok_at)
 	#  지금 꽂힐 칸을 밝히고 판의 나머지를 가라앉힌다 — 제목 판에서 커서가 든
 	#  칸이 밝아지는 그것을 판 위로 가져왔다(사용자, 2026-09-17). 조준선보다
 	#  먼저 그려 선이 위에 선다. 걷히는 동안(날아가는 중)은 마지막 칸을 쓴다.
@@ -12874,6 +12930,26 @@ var aim_glow_last := Vector2(-9999.0, -9999.0)
 #  어느 칸에서 점수가 나는지 알 길이 화면에 0곳이었다.
 #  **새 그림은 없다** — 조준 어둠이 쓰는 그 자(_band_draw)를 그대로 쓴다.
 #  불은 살아 있으므로(_land 의 머리말) 여기서도 안 가라앉힌다. 2026-09-20
+#  차례인 칸을 도드라지게 하는 깊이. 「목표물」의 AIMDIM.a(0.28)보다 얕다 —
+#  그쪽은 판마다 고정이고 이쪽은 발마다 옮겨 다닌다.
+const CLOK_DIM := 0.10
+
+
+#  차례인 칸 하나가 도드라진다.
+func _board_lit_sector(sec: int) -> void:
+	if sec < 0:
+		return
+	#  ⚠ **그 칸을 칠하지 않고 나머지를 살짝 가라앉힌다.** 처음에는 차례인
+	#  칸에 크림을 옅게 깔았는데, 시계 판의 문자판이 이미 상아색이라
+	#  **크림 위의 크림**이 되어 찍어 보니 거의 안 보였다(ck_band_05.png).
+	#  판마다 바탕색이 다르므로 「무슨 색을 얹어야 보이나」에는 답이 없다 —
+	#  대신 **어둠은 어느 바탕에서도 같은 방향으로 읽힌다.** 「목표물」이
+	#  쓰는 그 자루를 그대로 빌리되 알파를 훨씬 얕게 준다(0.28 → 0.10):
+	#  저쪽은 판 하나에 한 칸이 고정이라 세게 눌러도 되지만, 이쪽은 발마다
+	#  옮겨 다녀서 세게 누르면 판이 깜빡이는 것으로 읽힌다. 2026-09-26
+	_board_dim_sector(sec, float(CLOK_DIM))
+
+
 func _board_dim_sector(sec: int, a: float) -> void:
 	if sec < 0:
 		return

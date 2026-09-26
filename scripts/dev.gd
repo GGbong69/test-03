@@ -994,6 +994,15 @@ static func _rows(g: Node) -> Array:
 						"t": "list", "k": "link", "n": LINK_NAMES.size()},
 				{"n1": "총합 걸음 다시 보기", "t": "list", "k": "grow",
 						"n": (GROW_R as Array).size()},
+				#  ── 시계 판의 차례 (2026-09-26) ───────────────────
+				#  「라운드 더 클록」의 차례는 판 위에서 **맞혀야만** 넘어간다.
+				#  시계 판을 켠 런을 잡아 스무 칸을 손으로 도는 것은 검사할
+				#  길이 아니라서, 여기서 한 칸씩 민다. 시계 판이 아니면
+				#  −1 이라 줄이 「없음」을 적는다 — 그 자리에서 눌러도 아무
+				#  일이 안 난다(클램프가 −1 을 지킨다).
+				{"n1": "시계 차례 %s" % ("없음" if g.clok_at < 0
+						else "%d번 칸" % (g.clok_at + 1)),
+						"t": "act", "a": "clok"},
 			]
 
 
@@ -1693,6 +1702,16 @@ static func _run(g: Node, e: Dictionary) -> void:
 			g._drop_settle()
 			g._sweep_begin()
 			_say("쓸기 다시")
+			return
+		"clok":
+			#  시계 판의 차례를 한 칸 민다. **판 위 값은 한 톨도 안 건드린다** —
+			#  차례는 점수·목표·골드를 읽지도 쓰지도 않고 「어느 칸이 지금
+			#  세 배인가」만 말한다. 시계 판이 아니면 −1 이라 아무 일이 없다.
+			if g.clok_at >= 0:
+				g.clok_at = (g.clok_at + 1) % maxi(g._sec_n(), 1)
+				_say("시계 차례 %d번 칸" % (g.clok_at + 1))
+			else:
+				_say("시계 판이 아니다")
 			return
 		"turn":
 			#  「쓸기 다시 보기」와 **같은 규약**이다 — 필요하면 화면만
