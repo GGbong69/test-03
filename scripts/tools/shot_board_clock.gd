@@ -2,7 +2,7 @@ extends SceneTree
 # 시계 판(보드 확장 「시계」)이 입는 옷 — 기본 · 칠 · 조준 밝힘(트리플 · 더블 · 싱글 · 불) ·
 # 죽은 색(그늘) · 죽은 칸(막힌 칸). 창이 있어야 찍힌다.
 #   godot --path . --quit-after 9000 --script scripts/tools/shot_board_clock.gd -- <접두>
-# 끝에 죽은 크림 칸(dead_cream) · 실띠 0.5 / 넓은 판 1.5 의 트리플 조준(band_05 · band_15)도 찍는다.
+# 끝에 죽은 백색 칸(dead_cream) · 실띠 0.5 / 넓은 판 1.5 의 트리플 조준(band_05 · band_15)도 찍는다.
 # 접두를 안 주면 ck_ 로 찍는다(고치기 전 판을 ck_old_ 로 찍어 두고 견준다).
 # 견줌 장: python scripts/tools/sheet_board_clock.py [새 접두] [옛 접두] [사이 접두 …]
 #   → shots/ck_sheet.png(줄마다 접두 하나) · ck_sheet_1x.png(게임 한 배 크기) · ck_plain_x2.png
@@ -123,7 +123,7 @@ func _run() -> void:
 	await _hold(6)
 	await _snap("aim_bullo")
 
-	#  죽은 색(그늘 — 먹 칸이 죽는다)
+	#  죽은 색(그늘 — 흑색 칸이 죽는다)
 	g.sec_col = base_col.duplicate()
 	g.dead_col = 1
 	_plain()
@@ -142,7 +142,7 @@ func _run() -> void:
 	_aim_at(_pol(8.0, 0.61))
 	await _hold(6)
 	await _snap("dead_aim")
-	#  크림 칸이 죽는다 — 6시 인덱스(굵은 막대)가 선 칸
+	#  백색 칸이 죽는다 — 6시 인덱스(굵은 막대)가 선 칸
 	g.dead_idx = 10
 	_plain()
 	await _hold(6)

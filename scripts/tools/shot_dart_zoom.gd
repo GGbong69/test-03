@@ -8,7 +8,7 @@ extends SceneTree
 #   2  테이블(dl 23.2 · 흩뿌린 각 · 구름)  펠트 바탕 · 흐린 것(dim 0.55 · 알파 0.72)
 #   3  컬렉션(dl 15 · −0.62)            어두운 바탕
 #   4  제목 판(dl 16 · 네 각)            어두워진 크림 · 검정 · 빨강 · 초록 칸
-#   5  2D 판 받침(dl 4 · 6 · 9 · 12)     판 크림 칸
+#   5  2D 판 받침(dl 4 · 6 · 9 · 12)     판 백색 칸
 const IDS := ["std", "hvy", "lgt", "mag"]
 var busy := false
 var tag := "new"

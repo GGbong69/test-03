@@ -1,6 +1,6 @@
 extends SceneTree
 #  착탄 한 벌 — 등급 여섯이 나는 첫 프레임 · 둘째 · 여섯째 · 열둘째,
-#  확인 고리가 조여드는 네 시점, 꽂힌 자루가 크림 칸 위에 선 그림.
+#  확인 고리가 조여드는 네 시점, 꽂힌 자루가 백색 칸 위에 선 그림.
 #
 #     godot --path . --quit-after 20000 --script scripts/tools/shot_impact.gd [-- 꼬리표]
 #
@@ -145,7 +145,7 @@ func _run() -> void:
 		g.queue_redraw()
 		await _snap("confirm_%d" % k)
 
-	#  ── 꽂힌 자루 ── 크림 칸 위에 다섯. 확인 조준선이 그 위를 지나는지 본다.
+	#  ── 꽂힌 자루 ── 백색 칸 위에 다섯. 확인 조준선이 그 위를 지나는지 본다.
 	await _fresh()
 	g.darts.clear()
 	for i in 5:

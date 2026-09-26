@@ -1476,7 +1476,7 @@ static func color_name(i: int) -> String:
 	return String(c[i].get("name", ""))
 
 
-#  기본 칸 색 — 크림 · 먹이 번갈아 선다. 칸 수를 받는다(피자는 여덟 조각).
+#  기본 칸 색 — 백색 · 흑색이 번갈아 선다. 칸 수를 받는다(피자는 여덟 조각).
 static func colors_base(n: int = SECTORS_BASE.size()) -> Array:
 	var out := []
 	for i in n:
@@ -1988,7 +1988,7 @@ static func gold_text(g: String, gv: int) -> String:
 		"broke": return "판을 넘길 때 가진 골드 %d 이하면 골드 +%d" % [gold_broke(), gv]
 		"leg": return "판마다 골드 +%d" % gv
 		"risk50": return "%s 1/2 확률로 골드 +%d" % [cond_text("risk"), gv]
-		# 조건은 _tip_eff 가 앞에 잇는다 — 「크림 칸 맞히면 골드 +1」
+		# 조건은 _tip_eff 가 앞에 잇는다 — 「백색 칸 맞히면 골드 +1」
 		"hit": return "골드 +%d" % gv
 	return ""
 
