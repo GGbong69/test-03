@@ -8825,15 +8825,23 @@ const PIZZAART := {
 	"pep_pool": Color("e8783a"),         # 컵에 고인 기름
 	"pep_hi": Color("f0a07a"),
 	"pep_fat": Color("e2866a"),          # 납작한 페퍼로니의 지방 알갱이
-	#  ⚠ **쪽빛(3) 조각이 블루베리였다**(2026-09-26 제보: 「피자에 파란 건
-	#  뭐야? 피자 맞아」). 고르곤졸라 + 블루베리는 실제로 있는 조합이지만
-	#  640×360 에서는 재료가 아니라 **「파란 조각」**으로 읽힌다 — 피자 넷
-	#  중 하나만 음식으로 안 보이면 그 판은 피자가 아니다.
-	#  페스토로 간다: 모차렐라(밝음) · 불고기(짙은 갈색) · 페퍼로니(빨강) ·
-	#  페스토(초록)로 넷이 다 갈리면서 전부 피자다. 바질 물감은 이미 있다
-	#  (0번 조각의 잎). 고르곤졸라 부스러기는 그대로 둔다 — 크림색이라
-	#  파랗게 안 읽히고, 페스토 + 고르곤졸라도 실제 피자다.
-	"pesto_base": Color("9fae74"),       # 쪽빛(3) 조각 바탕 — 페스토가 옅게 밴 치즈
+	#  ⚠ **쪽빛(3) 조각은 두 번 갈았다**(2026-09-26).
+	#    ① 처음엔 고르곤졸라 + **블루베리**였다. 실제로 있는 조합이지만
+	#       640×360 에서는 재료가 아니라 「파란 조각」으로 읽혔다.
+	#    ② 그래서 페스토(초록)로 갔는데 그것도 「이상한 색」이라는 말을
+	#       들었다 — 맞는 말이다. 초록 바탕 피자는 흔히 파는 것이 아니다.
+	#  세 번째 답은 **하와이안**이다: 치즈 바탕에 파인애플 노랑과 햄 분홍.
+	#  어디서나 파는 피자이고, 바탕을 이상한 색으로 물들이지 않고 **토핑의
+	#  색**으로 이웃과 갈린다 — 실제 피자가 서로 갈리는 방식 그대로다.
+	#  넷: 모차렐라(민무늬 밝음) · 하와이안(노랑·분홍) · 불고기(짙은 갈색) ·
+	#  페퍼로니(빨강).
+	"hawai_base": Color("f2cd7e"),       # 쪽빛(3) 조각 바탕 — 파인애플 즙이 밴 치즈
+	"pnap": Color("f2c542"),             # 파인애플 — 구워져 가장자리가 갈색
+	"pnap_hi": Color("ffe79a"),
+	"pnap_dk": Color("b8801f"),
+	"ham": Color("e8918f"),              # 햄 — 분홍
+	"ham_hi": Color("f7bdb6"),
+	"ham_dk": Color("a85a5e"),
 	"bleu": Color("e4eef0"),             # 고르곤졸라 부스러기 · 즙이 덜 밴 치즈
 	"vein": Color("22485e"),             # 푸른 곰팡이 결
 	"mold": Color("3a6e6c"),             # 부스러기 속 청록 곰팡이
@@ -9138,22 +9146,22 @@ func _pz_bake(key: String, rng: RandomNumberGenerator, sw: float) -> Array:
 				for k in 8:
 					_pz_put(small, "herb", rng, sw, [], 1.0, 0.0, 0.0, 1.0, 0.0)
 				sl[2] = [under, small + top]
-				# 3 쪽빛 — 페스토 · 고르곤졸라: 페스토가 덜 밴 치즈 · 눌어붙은 자리 | 부스러기 · 바질 잎
-				#  눌어붙은 자국은 잎 무더기 한가운데에 깐다 — 잎 둘레로 번진 짙은 초록이다.
+				# 3 쪽빛 — 하와이안: 파인애플 즙이 밴 치즈 · 즙이 고인 자리 | 햄 · 파인애플
+				#  즙 자국은 파인애플 무더기 한가운데에 깐다 — 구운 즙이 번져 금빛이 짙다.
 				under = []
 				for k in 7:
 					_pz_put(under, "peek", rng, sw, [], rng.randf_range(2.5, 4.5), 0.0, 0.0, 1.0, 0.0)
 				tk = []
 				top = []
-				for k in 5:
-					_pz_put(top, "crumb", rng, sw, tk, rng.randf_range(1.5, 2.3), 1.0, 0.0, 1.0, 0.5)
+				for k in 6:
+					_pz_put(top, "ham", rng, sw, tk, rng.randf_range(3.2, 4.4), 1.0, 0.0, 1.0, 0.5)
 				for g in 7:
 					var bc := _pz_spot(rng, sw, [], 1.0, 0.0, 0.0, 1.0, 0.0)
 					if bc.is_empty():
 						continue
 					_pz_put(under, "stain", rng, sw, [], rng.randf_range(4.5, 7.5), 0.0, 0.0, 1.0, 0.0, bc, 1.5)
 					for k in rng.randi_range(3, 6):
-						_pz_put(top, "leaf", rng, sw, tk, rng.randf_range(3.4, 4.6), -0.6, 0.0, 1.0, 1.0, bc, 5.0)
+						_pz_put(top, "pnap", rng, sw, tk, rng.randf_range(3.0, 4.0), -0.6, 0.0, 1.0, 1.0, bc, 5.0)
 				for k in 5:
 					_pz_put(top, "herb", rng, sw, [], 1.0, 0.0, 0.0, 1.0, 0.0)
 				sl[3] = [under, top]
@@ -10198,7 +10206,7 @@ func _pz_base(i: int, cols: Array) -> Color:
 			#  수를 두었더니 초록 잎 밑에서 바탕이 여전히 파랬다(찍어 보고
 			#  잡았다). 이웃들과 같은 자리로 올린다 — 모차렐라 0.70 ·
 			#  불고기 0.72 · 페퍼로니 0.45. 2026-09-26
-			return c.lerp(pz.pesto_base, 0.80)
+			return c.lerp(pz.hawai_base, 0.80)
 	return c.lerp(pz.cheese, 0.2)
 
 
@@ -10694,8 +10702,8 @@ func _pz_toppings(i: int, base: Color, lst: Array, push: float) -> void:
 			"oil":
 				_pz_blot(q, e, base.lerp(pz.cheese_oil, 0.6))
 			"stain":
-				#  양념이 졸아든 자리(불고기) · 페스토가 눌어붙은 자리
-				_pz_blot(q, e, base.lerp(pz.pesto, 0.72) if kind == 3 else base.lerp(pz.beef_dk, 0.35))
+				#  양념이 졸아든 자리(불고기) · 파인애플 즙이 고여 구워진 자리
+				_pz_blot(q, e, base.lerp(pz.pnap_dk, 0.55) if kind == 3 else base.lerp(pz.beef_dk, 0.35))
 			"peek":
 				#  토핑 틈으로 비치는 치즈 — 양념 · 즙이 덜 밴 자리
 				_pz_blot(q, e, base.lerp(pz.bleu, 0.48) if kind == 3 else base.lerp(pz.cheese_gold, 0.5))
@@ -10745,6 +10753,25 @@ func _pz_toppings(i: int, base: Color, lst: Array, push: float) -> void:
 				var hq: Vector2 = q + Vector2(lump[1])
 				_pz_rect(Rect2(hq, Vector2(2.0, 1.0) if w != 3 else Vector2(1.0, 1.0)), Color(pz.beef_hi, 0.9))
 				_pz_rect(Rect2(q - Vector2(lump[1]).round(), Vector2.ONE), Color(pz.beef_dk, 0.8))
+			"pnap":
+				#  파인애플 — 네모지게 썬 조각. 가운데가 밝고 가장자리가 구워져 짙다.
+				#  둥근 토핑(페퍼로니 · 올리브) 사이에서 **모난 것**이 하나 있어야
+				#  같은 노랑이라도 치즈와 안 뭉갠다. 2026-09-26
+				var pw := floorf(sz)
+				_pz_rect(Rect2(q + Vector2(1.0, 1.0) - Vector2(pw, pw),
+						Vector2(pw * 2.0, pw * 2.0)), Color(0.0, 0.0, 0.0, 0.28))
+				_pz_rect(Rect2(q - Vector2(pw, pw), Vector2(pw * 2.0, pw * 2.0)), pz.pnap_dk)
+				_pz_rect(Rect2(q - Vector2(pw - 1.0, pw - 1.0),
+						Vector2(pw * 2.0 - 2.0, pw * 2.0 - 2.0)), pz.pnap)
+				_pz_rect(Rect2(q - Vector2(pw - 1.0, pw - 1.0),
+						Vector2(maxf(pw - 1.0, 1.0), 1.0)), pz.pnap_hi)
+			"ham":
+				#  햄 — 얇게 썬 분홍 조각. 가장자리가 살짝 말려 한 칸 짙다.
+				_pz_disc(q + Vector2(1.0, 1.0), sz, Color(0.0, 0.0, 0.0, 0.26))
+				_pz_disc(q, sz, pz.ham_dk)
+				_pz_disc(q, sz - 1.0, pz.ham)
+				_pz_rect(Rect2(q + Vector2(-2.0, -floorf(sz) + 1.0), Vector2(2.0, 1.0)),
+						Color(pz.ham_hi, 0.85))
 			"olive":
 				#  블랙올리브 고리 — 가운데 구멍으로 바탕이 비치고 왼쪽 위 테에 빛 한 점
 				_pz_disc(q + Vector2(1.0, 1.0), sz, Color(0.0, 0.0, 0.0, 0.3))
@@ -10838,7 +10865,7 @@ func _pz_burnt(i: int, base: Color, sl: Dictionary, push: float) -> void:
 	var over: Array = sl[kind if kind >= 0 else 0][1]
 	for e in over:
 		var nm := String(e[0])
-		if not (nm in ["pep", "olive", "mush", "beef", "crumb", "leaf"]):
+		if not (nm in ["pep", "olive", "mush", "beef", "crumb", "leaf", "pnap", "ham"]):
 			continue
 		var q := _pz_at(i, e[1], e[2], push)
 		if nm == "beef":
