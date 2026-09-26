@@ -143,7 +143,7 @@ func _walk(n: int) -> Array:
 		fr += 1
 		if int(g.total) != prev:
 			prev = int(g.total)
-			out.append({"hot": int(g.fire_hot),
+			out.append({"hot": int(g.fire_hot), "lay": int(g.fire_lay),
 					"stop": snappedf(float(g.hitstop), 0.001),
 					"snd": float(g.fire_snd) > 0.0})
 	return out
@@ -173,12 +173,14 @@ func _play(hold_fast := false) -> Dictionary:
 	var shk_hi := 0.0
 	var env_hi := 0.0
 	var hot := 0
+	var lay := 0
 	var stop0 := 0.0
 	g.fast_lock = hold_fast
 	while g.state == g.S.RESOLVE and frames < 6000:
 		g._process(1.0 / 60.0)
 		frames += 1
 		hot = maxi(hot, int(g.fire_hot))
+		lay = maxi(lay, int(g.fire_lay))
 		stop0 = maxf(stop0, float(g.hitstop))
 		if g.hitstop > 0.0:
 			stop_f += 1
@@ -190,8 +192,8 @@ func _play(hold_fast := false) -> Dictionary:
 		shk_hi = maxf(shk_hi, float(g.shake))
 	g.fast_lock = false
 	return {"frames": frames, "stop": stop_f, "fire": fire_f,
-			"quiet": quiet_f, "shk": shk_hi, "hot": hot, "env": env_hi,
-			"stop0": stop0, "shake_end": float(g.shake)}
+			"quiet": quiet_f, "shk": shk_hi, "hot": hot, "lay": lay,
+			"env": env_hi, "stop0": stop0, "shake_end": float(g.shake)}
 
 
 func _spread(a: Array) -> int:
@@ -206,13 +208,16 @@ func _spread(a: Array) -> int:
 #  ── 표를 그대로 다시 셈한 거울 ────────────────────────────
 #  _fire_edge 가 그리는 사각을 목록으로 낸다. ⑨-0 이 이 거울이 표와 어긋나지
 #  않았는지를 먼저 잠근다.
-func _rects(hot: int) -> Array:
+#  ⚠ 인자는 **겹 단(fire_lay 0~3)**이다 — 단(fire_hot 0~4)이 아니다.
+#  갈라 둔 까닭은 game.gd 의 fire_lay 머리말에 있다(4단은 깃발을 태운 값이라
+#  같은 판에서 더 큰 걸음이 더 적은 겹을 받았다).
+func _rects(lay: int) -> Array:
 	var out := []
-	if hot <= 0:
+	if lay <= 0:
 		return out
 	var top: float = float(g.LAY.bar.size.y)
 	var w: float = float(g.FIRE.w)
-	for k in int(g.FIRE.lay[hot]):
+	for k in int(g.FIRE.lay[lay]):
 		var o: float = float(k) * w
 		var x0: float = o
 		var y0: float = top + o
@@ -305,7 +310,7 @@ func _run() -> void:
 	for r in [0.02, 0.05, 0.10, 0.30]:
 		_stage(float(r), 1)
 		var st := _play()
-		var rects: int = _rects(int(g.fire_hot)).size()
+		var rects: int = _rects(int(g.fire_lay)).size()
 		if int(st.hot) != 0 or float(g.fire_t) > 0.0 or rects != 0 \
 				or int(st.quiet) != 0 or float(st.stop0) > 0.0:
 			z_ok = false
@@ -426,23 +431,93 @@ func _run() -> void:
 	_ok("⑤-d R8 급 목표(15000)에서 r 0.55 짜리 발이 4단이 된다", t_r8 == 4,
 			"%d단 · gn %.3f · 이득 %d / 목표 %d"
 			% [t_r8, g._grow_n(), g.last_gain, g.target])
+	#  ⑤-e **겹 수가 크기를 거꾸로 말하지 않는다.** (2026-09-26 · 되짚어 고침)
+	#  ⚠ 이 줄은 **fire_lay 를 갈라 두기 전 코드에서 빨개진다.** 손대기 전에는
+	#  그림이 fire_hot 을 읽었고 4단은 깃발을 태운 값이라, 한 판 안에서 gn 이
+	#  오르는데 겹이 내려갔다 — 실측으로 r 0.55 겹 2 → r 0.62 겹 3 → r 0.70 겹 2.
+	#  점수를 읽게 하려고 만든 층이 「작아졌다」고 말한 것이다. 같은 걸음 셋을
+	#  같은 판에서 이어 재고, **겹이 한 번도 안 내려가는지**를 잰다.
+	#  ⚠ 걸음 경계는 **total 이 오르는 프레임**으로 잡는다(grow_dist 와 같은 검출).
+	#  _play() 는 큐가 빌 때까지 도므로 걸음 셋을 한 번에 삼켜 버린다 — 처음에 그렇게
+	#  적어서 gn 이 셋 다 0.65 로 찍혔다.
+	var rs := [0.55, 0.62, 0.70]
+	_stage_many(float(rs[0]), 3)
+	var lay_seq := []
+	var gn_seq := []
+	var pi := 0
+	var prev_t: int = int(g.total)
+	var fr5 := 0
+	while g.state == g.S.RESOLVE and fr5 < 4000:
+		g._process(1.0 / 60.0)
+		fr5 += 1
+		if int(g.total) != prev_t:
+			prev_t = int(g.total)
+			lay_seq.append(int(g.fire_lay))
+			gn_seq.append(snappedf(g._grow_n(), 0.001))
+			pi += 1
+			if pi < rs.size():
+				g.cur_chip = int(round(float(rs[pi]) * float(g.target)))
+				g.cur_mult = 1
+	var mono := true
+	for j in range(1, lay_seq.size()):
+		if int(lay_seq[j]) < int(lay_seq[j - 1]):
+			mono = false
+	_ok("⑤-e 같은 판에서 gn 이 오르면 겹이 안 내려간다", mono,
+		"gn %s → 겹 %s" % [gn_seq, lay_seq])
+	#  ⑤-f 표가 **넷**이다 — fire_hot(0~4)으로 찾으면 안 되는 것을 수로 못 박는다.
+	_ok("⑤-f FIRE.gain · lay 가 네 칸이다(겹 단 0~3)",
+		(F.gain as Array).size() == 4 and (F.lay as Array).size() == 4
+		and int(F.lay[3]) == 3,
+		"세기 %d칸 · 겹 %d칸" % [(F.gain as Array).size(), (F.lay as Array).size()])
 
 	# ── ⑥ 흔들림 누수 수선 ─────────────────────────────────
-	#  ⚠ 이 줄은 **수선 전 코드에서 빨개진다** — 오늘 이미 1.40프레임(잔광
-	#  0.79px)을 샌다. _process 의 멈춤 블록 안 `if stop_fire:` 한 줄이 같이
-	#  들어가야 초록이 된다.
+	#  ⚠⚠ **세움을 r 0.90 → 1.90 으로 올리고 목표 위에서 출발시켰다(되짚어 고침).**
+	#  처음엔 _stage(0.90, 1) 로 재서 이 줄이 **수선이 없어도 초록**이었다: r 0.90
+	#  이면 shake 가 9.68 밖에 안 서서, 수명 0.285초가 빨리 보기 걸음 0.354초 안에
+	#  멈춤을 얹어도 다 죽는다(실측 · 고친 뒤 끝 0.0000 · 손대기 전 끝도 0.0000).
+	#  즉 지키려는 줄을 지워도 안 빨개지는 검사였다. 갈리는 자리는 gn ≳ 0.92
+	#  (r ≳ 1.6)이고 **돌파가 아닌** 걸음이다 — 실측으로 r 1.90 에서 손대기 전 끝이
+	#  2단 0.501 · 3단 0.501 · 4단 1.068 이다. _stage_many 가 total 을 목표 **위**에서
+	#  출발시키므로 was_short 가 거짓이라 돌파가 안 선다(무한 런과 반동으로 목표를
+	#  넘긴 뒤 걸음이 이어지는 **실제 자리**이기도 하다).
 	print("\n── ⑥ 흔들림 누수 ─────────────────────────────")
 	var leak_ok := true
 	var leak_note := ""
 	for t in [2, 3, 4]:
-		_stage(0.90, 1)
+		_stage_many(1.90, 1)
 		g.fire_lock = t
 		var st := _play(true)
 		g.fire_lock = -1
 		if float(st.shake_end) > 0.0001:
 			leak_ok = false
-		leak_note += "%d단 끝 %.3f · " % [t, st.shake_end]
+		leak_note += "%d단 봉우리 %.2f 끝 %.3f · " % [t, st.shk, st.shake_end]
 	_ok("⑥ 빨리 보기 2.5 에서 2·3·4단 걸음 끝 흔들림이 0", leak_ok, leak_note)
+	#  ⑥-a **빨리 보기를 안 켠 자리에서는 멈춤이 흔들림을 한 톨도 안 깎는다.**
+	#  (2026-09-26 · 되짚어 고침) 처음엔 멈춤 동안 `d * 34.0` 을 그대로 깎았는데,
+	#  그러면 풀리는 프레임의 진폭이 단을 따라 **거꾸로** 내려갔다 — 실측으로 봉우리
+	#  11.83 에서 2단 9.57 · 3단 8.43 · 4단 7.30 이었다. 값이 클수록 화면이 덜
+	#  흔들린 것이고, 사용자가 콕 집어 말한 「화면이 흔들리거나」를 깎는 거래였다.
+	#  깎는 양을 `fast_rate − 1` 에 매어 배수 1.0 에서 정확히 0 이 되게 고쳤다.
+	var rel_ok := true
+	var rel_note := ""
+	for t in [2, 3, 4]:
+		_stage_many(1.90, 1)
+		g.fire_lock = t
+		var rel := -1.0
+		var pk := 0.0
+		var fr6 := 0
+		while g.state == g.S.RESOLVE and fr6 < 4000:
+			var was: bool = g.hitstop > 0.0
+			g._process(1.0 / 60.0)
+			fr6 += 1
+			pk = maxf(pk, float(g.shake))
+			if was and g.hitstop <= 0.0:
+				rel = float(g.shake)
+		g.fire_lock = -1
+		if rel < pk - 0.0001:
+			rel_ok = false
+		rel_note += "%d단 봉우리 %.2f → 풀림 %.2f · " % [t, pk, rel]
+	_ok("⑥-a 배수 1.0 에서 풀리는 프레임 진폭이 봉우리 그대로다", rel_ok, rel_note)
 	#  ⑥-b **착탄 멈춤의 잔광이 한 톨도 안 바뀌었는가.** 깃발로 잠갔으므로
 	#  정산이 안 세운 멈춤에서는 감쇠가 오늘 그대로 안 돌아야 한다.
 	_stage(0.90, 1)
@@ -618,9 +693,9 @@ func _run() -> void:
 	g.fire_lock = -1
 	g.motion_off = false
 	_ok("⑪ 모션 끄기에서도 테두리가 뜬다(사각 수가 켰을 때와 같다)",
-			_rects(int(stm.hot)).size() == _rects(4).size() and int(stm.fire) > 0,
-			"%d단 · 사각 %d · 창 %d프레임"
-			% [stm.hot, _rects(int(stm.hot)).size(), stm.fire])
+			_rects(int(stm.lay)).size() == _rects(3).size() and int(stm.fire) > 0,
+			"%d단 · 겹 %d단 · 사각 %d · 창 %d프레임"
+			% [stm.hot, stm.lay, _rects(int(stm.lay)).size(), stm.fire])
 	_ok("⑪-b 모션 끄기에서 멈춤이 0 이고 침묵이 0 이다",
 			float(stm.stop0) <= 0.0 and int(stm.quiet) == 0
 			and float(g.fire_snd) <= 0.0,
@@ -724,17 +799,19 @@ func _run() -> void:
 	g.total = 777
 	g.last_gain = 55
 	g.gold = 31
+	#  ⚠ snap 에 **fire_used · fire_peak 를 같이 담는다**(2026-09-26) — 다섯만
+	#  담았을 때 미리보기가 그 둘을 태우는 것을 구조적으로 못 잡았다(⑭-h).
 	var snap := [int(g.target), int(g.total), int(g.last_gain), int(g.leg_no),
-			int(g.gold)]
+		int(g.gold), bool(g.fire_used), int(g.fire_peak)]
 	for i in range(1, 6):
 		Dev.pick["ftier"] = i
 		Dev._run(g, {"k": "ftier"})
 	Dev.pick["fglow"] = 4
 	Dev._run(g, {"k": "fglow"})
 	var snap2 := [int(g.target), int(g.total), int(g.last_gain), int(g.leg_no),
-			int(g.gold)]
-	_ok("⑭-c 단 강제와 세기 밀기가 런 진도를 한 톨도 안 바꾼다", snap == snap2,
-			"%s → %s" % [snap, snap2])
+		int(g.gold), bool(g.fire_used), int(g.fire_peak)]
+	_ok("⑭-c 단 강제와 세기 밀기가 런 진도와 장부를 한 톨도 안 바꾼다",
+		snap == snap2, "%s → %s" % [snap, snap2])
 	#  _fire_sync — ▶ 한 번이 살아 있는 값을 안 내린다.
 	g.fire_lock = 2
 	g.fire_mul = 1.0
@@ -752,23 +829,56 @@ func _run() -> void:
 	_stage(0.90, 1)
 	g.fire_t = 0.0
 	g.fire_hot = 0
+	g.fire_lay = 0
 	Dev.pick["grow"] = 3              # 천장 2.00
 	Dev._run(g, {"k": "grow"})
 	_ok("⑭-e 「총합 걸음 다시 보기」가 테두리도 세운다",
-			int(g.fire_hot) >= 1 and float(g.fire_t) > 0.0,
-			"%d단 · 창 %.2f" % [g.fire_hot, g.fire_t])
+		int(g.fire_hot) >= 1 and int(g.fire_lay) >= 1 and float(g.fire_t) > 0.0,
+		"%d단 · 겹 %d단 · 창 %.2f" % [g.fire_hot, g.fire_lay, g.fire_t])
 	#  「한 방」(_card_big)도 같은 한 함수를 부른다 — 사본을 안 늘렸다.
 	_stage(0.90, 1)
 	g.fire_t = 0.0
 	g.fire_hot = 0
+	g.fire_lay = 0
 	Dev._card_big(g)
 	_ok("⑭-f 「한 방」도 테두리와 멈춤 배수를 같이 세운다",
-			int(g.fire_hot) >= 1 and float(g.fire_t) > 0.0
-			and float(g.hitstop) > 0.0,
-			"%d단 · 창 %.2f · 멈춤 %.3f" % [g.fire_hot, g.fire_t, g.hitstop])
-	_ok("⑭-g dev 쪽이 게임 식을 새로 베끼지 않았다(_fire_arm 을 부른다)",
-			_dev_calls("_fire_arm") >= 2,
-			"_fire_arm 부르는 자리 %d곳" % _dev_calls("_fire_arm"))
+		int(g.fire_hot) >= 1 and int(g.fire_lay) >= 1
+		and float(g.fire_t) > 0.0 and float(g.hitstop) > 0.0,
+		"%d단 · 겹 %d단 · 창 %.2f · 멈춤 %.3f"
+		% [g.fire_hot, g.fire_lay, g.fire_t, g.hitstop])
+	#  ⚠ 부르는 이름이 _fire_arm → **_fire_peek** 으로 바뀌었다(2026-09-26).
+	#  살아 있는 판의 fire_used · fire_peak 을 태우던 것을 그 문 하나로 막았다 —
+	#  ⑭-h 가 그 장부를 직접 잰다. 여기서 재는 것은 여전히 「사본을 안 늘렸다」다:
+	#  dev 쪽에 _fire_tier 사본이 0개이고 게임 쪽 함수를 두 자리가 같이 부른다.
+	_ok("⑭-g dev 쪽이 게임 식을 새로 베끼지 않았다(_fire_peek 을 부른다)",
+		_dev_count("g._fire_arm(") == 1 and _dev_peeks() >= 2
+		and not _dev_has("_fire_tier"),
+		"g._fire_arm( %d곳(문 안 하나) · _fire_peek %d곳"
+			% [_dev_count("g._fire_arm("), _dev_peeks()])
+	#  ⑭-h **미리보기가 「판에 한 번」 장부를 안 태운다.** (2026-09-26 · 되짚어 고침)
+	#  실측으로 「다시 보기」 천장 2.00 한 번에 fire_used true · fire_peak 2000 이
+	#  되고 되돌리는 자리가 없었다 — 그러면 그 판의 나머지 걸음이 진짜로 4단 자격을
+	#  얻어도 안 나고 문 ②(판 최고 기록)가 그 판 내내 죽는다. ⑭-c 의 snap 다섯이
+	#  target·total·last_gain·leg_no·gold 뿐이라 이 둘을 구조적으로 못 잡았다.
+	_stage(0.90, 1)
+	g.fire_used = false
+	g.fire_peak = 0
+	g.last_gain = 0
+	Dev.pick["grow"] = 3              # 천장 2.00 — last_gain 이 2 × 목표로 선다
+	Dev._run(g, {"k": "grow"})
+	var burn1 := [bool(g.fire_used), int(g.fire_peak)]
+	_stage(0.90, 1)
+	g.fire_used = false
+	g.fire_peak = 0
+	g.last_gain = 0
+	Dev._card_big(g)
+	Dev._card_done(g)
+	Dev._card_nums(g)
+	var burn2 := [bool(g.fire_used), int(g.fire_peak)]
+	_ok("⑭-h 미리보기 둘이 「판에 한 번」 장부를 안 태운다",
+		burn1 == [false, 0] and burn2 == [false, 0],
+		"다시 보기 %s · 한 방 %s (둘 다 [false, 0] 이어야 한다)"
+		% [burn1, burn2])
 
 	# ── ⑮ 글자 0자 · 밸런스 불변 · 입력 ──────────────────────
 	print("\n── ⑮ 글자 0자 · 밸런스 불변 · 입력 ──────────")
@@ -847,4 +957,29 @@ func _dev_calls(needle: String) -> int:
 	while i >= 0:
 		n += 1
 		i = txt.find("g." + needle, i + 1)
+	return n
+
+
+#  dev.gd 안에서 미리보기 문을 부르는 자리 수. `g.` 접두가 없는 static 호출이라
+#  _dev_calls 로는 못 센다 — 셈하는 자를 따로 둔다.
+func _dev_peeks() -> int:
+	return _dev_count("_fire_peek(g,")
+
+
+#  dev.gd 가 게임 쪽 식을 손으로 베낀 자리가 있는가(사본 수를 잠그는 자).
+func _dev_has(needle: String) -> bool:
+	return _dev_count("func " + needle) > 0
+
+
+func _dev_count(needle: String) -> int:
+	var f := FileAccess.open("res://scripts/dev.gd", FileAccess.READ)
+	if f == null:
+		return 0
+	var txt := f.get_as_text()
+	f.close()
+	var n := 0
+	var i := txt.find(needle)
+	while i >= 0:
+		n += 1
+		i = txt.find(needle, i + 1)
 	return n

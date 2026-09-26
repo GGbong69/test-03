@@ -98,8 +98,12 @@ func _snap(nm: String) -> void:
 	var img := root.get_texture().get_image()
 	img.save_png("res://shots/%s_%s.png" % [tag, nm])
 	var k := _ring(img)
-	print("  %s_%s  단 %d · 창 %.2f · 봉투 %.3f · 멈춤 %.3f · 흔들림 %.1f"
-			% [tag, nm, g.fire_hot, g.fire_t, g._fire_env(), g.hitstop, g.shake]
+	#  ⚠ 단(fire_hot)과 겹 단(fire_lay)을 **둘 다** 찍는다(2026-09-26). 그림이
+	#  읽는 것은 겹 단이고 멈춤·침묵이 읽는 것은 단이다 — 하나만 찍으면 「4단인데
+	#  겹이 둘」인 그림을 앞에 두고 무엇이 맞는지 못 가른다.
+	print("  %s_%s  단 %d · 겹 %d · 창 %.2f · 봉투 %.3f · 멈춤 %.3f · 흔들림 %.1f"
+			% [tag, nm, g.fire_hot, g.fire_lay, g.fire_t, g._fire_env(),
+			g.hitstop, g.shake]
 			+ " · 늦춘소리 %.0f · 바깥 %dpx 고리 평균 RGB %.4f %.4f %.4f"
 			% [g.fire_snd, int(g.FIRE.w), k.r, k.g, k.b])
 
@@ -257,6 +261,30 @@ func _run() -> void:
 	await _snap("dev5_불")
 	g.fire_lock = -1
 	Dev.on = false
+
+	# ── ⑦ 한 판 안에서 값이 오른다 — 겹이 안 줄어드는가 ──
+	#  (2026-09-26 · 되짚어 고침) 손대기 전에는 그림이 fire_hot 을 읽었고 4단은
+	#  「판에 한 번」 깃발을 태운 값이라, 같은 판에서 r 0.55 두 겹 → r 0.62 **세
+	#  겹** → r 0.70 두 겹이 났다. 뒤에 온 더 큰 발이 앞의 것보다 **얇아 보인**
+	#  것이다. 이 절은 그 셋을 나란히 찍어 눈으로 판정하는 자리다 — 단 강제를
+	#  안 쓰고 **살아 있는 값**으로 돌려야 하므로 total 을 목표 위에서 출발시켜
+	#  돌파를 뺀다(무한 런과 반동으로 목표를 넘긴 뒤 걸음이 이어지는 그 자리다).
+	print("── 한 판 안에서 값이 오른다 (살아 있는 값) ──")
+	await _fresh()
+	_stage(0.55)
+	g.total = g.target * 5
+	g.shown = float(g.total)
+	g.queue.clear()
+	for _q in 3:
+		g.queue.append({"k": "total"})
+	var rs := [0.55, 0.62, 0.70]
+	for j in rs.size():
+		g.cur_chip = int(round(float(rs[j]) * float(g.target)))
+		g.cur_mult = 1
+		await _to_edge()
+		g.shake = 0.0
+		await _step(1)
+		await _snap("rise%d_r%03d" % [j, int(round(float(rs[j]) * 100.0))])
 
 	print("끝")
 	quit()

@@ -391,7 +391,7 @@ static func _card_big(g: Node) -> void:
 	#  ⚠ 가장자리와 멈춤 깊이도 **게임 쪽 한 함수로** 세운다(2026-09-26). 여기서
 	#  식을 또 베끼면 사본이 셋이 된다 — game.gd 의 _fire_arm 이 그 사본을 **줄이려고**
 	#  있는 함수다. 돌파가 아니므로 brk = false 다.
-	g._fire_arm(gn, false)
+	_fire_peek(g, gn)
 	#  4단이면 소리를 멈춤이 풀리는 프레임으로 늦춘다 — 게임 쪽과 같은 갈림이라야
 	#  미리보기가 거짓말을 안 한다.
 	var pit: float = g.SFX_BASE * pow(2.0, -float(g.GROW.semi) * gn / 12.0)
@@ -411,6 +411,29 @@ static func _card_big(g: Node) -> void:
 	elif g.fire_snd > 0.0:
 		g._fire_release()
 	g.card_jrate = 1.0 / maxf(g.qt * float(g.CARDFX.jspan), 0.02)
+
+
+#  ══ 미리보기가 「판에 한 번」 장부를 태우지 않게 하는 문 ══ (2026-09-26)
+#  ⚠ g._fire_arm 은 fire_lock 이 −1(살아 있는 값)이면 _fire_tier 를 지나며
+#  **fire_used 를 세우고 fire_peak 을 미리보기 이득으로 못 박는다.** 실측으로
+#  「총합 걸음 다시 보기」 천장 2.00 한 번에 used true · peak 2000 이 되고,
+#  「한 방」은 peak 이 그 판 아무도 못 넘는 수(4900 × 90 = 441,000)로 섰다.
+#  _card_done · _card_nums 는 last_gain 만 되돌려서 이 둘이 샜다. 그러면
+#   · 그 판의 나머지 걸음이 진짜로 4단 자격을 얻어도 3단에 머문다(깊은 멈춤
+#     0.120 도 침묵도 안 난다),
+#   · fire_peak 이 박혀 문 ②(판 최고 기록)가 그 판 내내 죽는다.
+#  「개발자 모드가 런 진도를 한 톨도 안 만진다」는 이 쪽 규약이 새 멤버 둘에서만
+#  샌 것이다(qa_break 의 「목표 42→42」 · 아래 「다시 보기」 머리말). 미리보기가
+#  쓰는 것은 fire_hot · fire_lay · fire_t 뿐이므로 장부는 떠 두고 되돌린다.
+#  ⚠ 단 강제(fire_lock >= 0)에서는 _fire_tier 가 맨 앞에서 돌아 장부를 안 읽지만,
+#  이 문은 그 갈래에서도 값이 같으므로 조건을 안 갈라 둔다 — 갈라 두면 나중에
+#  한쪽만 고치게 된다.
+static func _fire_peek(g: Node, gn: float) -> void:
+	var fu: bool = g.fire_used
+	var fp: int = g.fire_peak
+	g._fire_arm(gn, false)
+	g.fire_used = fu
+	g.fire_peak = fp
 
 
 #  누르기 전 자리로 되돌린다. card_target 0 은 빈 큐 갈래가 하던 그 한 줄이다 —
@@ -1195,6 +1218,10 @@ const LINK_NAMES := ["끔", "판에서만", "동전에서만", "전부"]
 #  **값과 무관하게 그 단의 테두리·멈춤·침묵이 난다** — 상위 10% 짜리 발을 손으로
 #  못 만드는 문제를 이 한 칸이 없앤다. _fire_tier 가 fire_lock >= 0 을 **맨 앞에서**
 #  돌려주므로 fire_used·fire_peak 장부를 안 건드린다(같은 판에서 4단을 잇달아 본다).
+#  ⚠ 겹 수는 **min(단, 3)** 이다(2026-09-26 · 단과 겹을 갈라 둔 뒤). 즉 강제 4단은
+#  「gn 이 4단 띠에 앉은 발」 중 **가장 큰 쪽**(gn >= t3)을 보여 준다 — 3단과 겹이
+#  같고 갈리는 것이 멈춤 깊이와 침묵뿐인 것이 실제 그 자리의 그림이다. 살아 있는
+#  값에서는 겹이 값만 따르므로 gn 이 t2~t3 인 4단은 두 겹으로 난다.
 const FIRE_NAMES := ["살아 있는 값", "0단 없음", "1단 한 겹", "2단 두 겹",
 		"3단 가득", "4단 빈 박"]
 #  가장자리 세기 — 위 gshake 사다리 어법 그대로다. **0 이 「손대기 전」**이라
@@ -2362,11 +2389,17 @@ static func _run(g: Node, e: Dictionary) -> void:
 			#  화면을 얼리면 ◀▶ 로 넷을 잇달아 견주는 일이 끊긴다. 그래서 4단을
 			#  골라도 침묵이 안 난다(소리는 그대로 낸다) — 단 강제로 깊은 멈춤까지
 			#  보려면 위 「빈 박 단」 줄과 「한 방」(_card_big)을 쓴다.
-			g._fire_arm(gn, false)
+			#  ⚠ **_fire_peek 이다** — 바로 이 줄이 살아 있는 판의 fire_used ·
+			#  fire_peak 을 태웠다(위 _fire_peek 머리말에 실측을 적었다). 「런
+			#  진도를 한 톨도 안 만진다」는 이 줄의 규약이 새 멤버 둘에서 샜다.
+			_fire_peek(g, gn)
 			g._sfx("settle_total",
 					g.SFX_BASE * pow(2.0, -float(g.GROW.semi) * gn / 12.0))
-			_say("총합 걸음 %s · 세기 %.2f · 흔들림 %.1f · 빈 박 %d단"
-					% [GROW_R_NAMES[i % GROW_R.size()], gn, g.shake, int(g.fire_hot)])
+			#  ⚠ 겹 수를 같이 찍는다 — 단(fire_hot)과 겹(fire_lay)이 갈린 뒤로는
+			#  단만 찍으면 화면이 거짓말을 한다(4단이라도 겹은 gn 이 정한다).
+			_say("총합 걸음 %s · 세기 %.2f · 흔들림 %.1f · 빈 박 %d단 · 겹 %d"
+					% [GROW_R_NAMES[i % GROW_R.size()], gn, g.shake,
+					int(g.fire_hot), int(g.fire_lay)])
 			return
 		"fast":
 			#  배수만 민다. 바닥(걸음 4프레임)은 _fast_rate 가 씌우므로
