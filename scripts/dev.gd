@@ -388,12 +388,28 @@ static func _card_big(g: Node) -> void:
 	g._card_kick(float(g.CARDFX.kick_total), float(g.CARDFX.press_total))
 	g._card_kick(float(g.CARDFX.kick_big) - float(g.CARDFX.kick_total),
 			float(g.CARDFX.press_big))
-	g._sfx("settle_total", g.SFX_BASE * pow(2.0, -float(g.GROW.semi) * gn / 12.0))
+	#  ⚠ 가장자리와 멈춤 깊이도 **게임 쪽 한 함수로** 세운다(2026-09-26). 여기서
+	#  식을 또 베끼면 사본이 셋이 된다 — game.gd 의 _fire_arm 이 그 사본을 **줄이려고**
+	#  있는 함수다. 돌파가 아니므로 brk = false 다.
+	g._fire_arm(gn, false)
+	#  4단이면 소리를 멈춤이 풀리는 프레임으로 늦춘다 — 게임 쪽과 같은 갈림이라야
+	#  미리보기가 거짓말을 안 한다.
+	var pit: float = g.SFX_BASE * pow(2.0, -float(g.GROW.semi) * gn / 12.0)
+	if int(g.fire_hot) >= 4 and not g.motion_off:
+		g.fire_snd = pit
+	else:
+		g._sfx("settle_total", pit)
 	# 멈춤도 걸음의 절반으로 묶는다 — 게임 쪽(총점 걸음)과 같은 뺄셈이라야
-	# 미리보기의 걸음 길이가 「큼」 단과 같다.
+	# 미리보기의 걸음 길이가 「큼」 단과 같다. 배수는 단이 쥔다(FIRE.stop_mul).
 	if not g.motion_off:
-		g.hitstop = minf(float(g.CARDFX.stop), g.qt * 0.5)
+		var sm: float = float(g.FIRE.stop_mul[clampi(int(g.fire_hot) - 2, 0, 2)])
+		g.hitstop = minf(float(g.CARDFX.stop) * sm, g.qt * 0.5)
 		g.qt -= g.hitstop
+		g.stop_fire = true
+		if g.hitstop <= 0.0:
+			g._fire_release()
+	elif g.fire_snd > 0.0:
+		g._fire_release()
 	g.card_jrate = 1.0 / maxf(g.qt * float(g.CARDFX.jspan), 0.02)
 
 
@@ -994,6 +1010,15 @@ static func _rows(g: Node) -> Array:
 						"t": "list", "k": "link", "n": LINK_NAMES.size()},
 				{"n1": "총합 걸음 다시 보기", "t": "list", "k": "grow",
 						"n": (GROW_R as Array).size()},
+				#  ── 달아오르는 가장자리와 빈 박 (2026-09-26) ──────
+				#  **쪽을 새로 안 판다.** 위 머리말이 적은 그 사고(탭 48px 에서
+				#  「경제·진행」이 잘림) 때문이다. 이 쪽은 이 두 줄로 아홉 → 열한
+				#  줄이 되고 한 쪽 한계가 열아홉이라 여덟 칸이 남는다.
+				{"n1": "빈 박 단 %s" % FIRE_NAMES[clampi(g.fire_lock + 1, 0,
+						FIRE_NAMES.size() - 1)],
+						"t": "list", "k": "ftier", "n": FIRE_NAMES.size()},
+				{"n1": "가장자리 불 %d%%" % int(g.fire_mul * 100.0), "t": "list",
+						"k": "fglow", "n": (FIRE_STEPS["fglow"] as Array).size()},
 				#  ── 시계 판의 차례 (2026-09-26) ───────────────────
 				#  「라운드 더 클록」의 차례는 판 위에서 **맞혀야만** 넘어간다.
 				#  시계 판을 켠 런을 잡아 스무 칸을 손으로 도는 것은 검사할
@@ -1165,8 +1190,31 @@ const GROW_STEPS := {
 	"gshake": [0.00, 0.50, 1.00, 1.50, 2.00],
 }
 const LINK_NAMES := ["끔", "판에서만", "동전에서만", "전부"]
+#  ── 달아오르는 가장자리와 빈 박 (2026-09-26) ──
+#  단 강제. −1(살아 있는 값)부터 4단까지 여섯 칸이고 고르면 g.fire_lock 이 선다.
+#  **값과 무관하게 그 단의 테두리·멈춤·침묵이 난다** — 상위 10% 짜리 발을 손으로
+#  못 만드는 문제를 이 한 칸이 없앤다. _fire_tier 가 fire_lock >= 0 을 **맨 앞에서**
+#  돌려주므로 fire_used·fire_peak 장부를 안 건드린다(같은 판에서 4단을 잇달아 본다).
+const FIRE_NAMES := ["살아 있는 값", "0단 없음", "1단 한 겹", "2단 두 겹",
+		"3단 가득", "4단 빈 박"]
+#  가장자리 세기 — 위 gshake 사다리 어법 그대로다. **0 이 「손대기 전」**이라
+#  전·후를 같은 화면 같은 발에서 눈으로 댄다.
+#  ⚠ **천장이 200% 가 아니라 150% 다.** gshake 사다리를 그대로 베끼면 안 되는
+#  자리다: FIRE.a 의 밑값을 찍어 보고 0.14 → 0.20 으로 올렸는데(테가 「달아오른다」로
+#  안 읽혔다), 0.20 × 200% = α 0.40 이면 합성 ΔY 0.102 로 섬광 휘도 문턱 0.0865 를
+#  **넘는다.** 150%(α 0.30)는 ΔY 0.0623 = 문턱의 72% 라 안이다. 밑값과 이 천장은
+#  **짝이라 한쪽만 올리면 규정을 깬다** — qa_fire ⑧ 이 둘을 같이 잰다.
+#  채널별 슬라이더가 현행 접근성 모범이고 「모션 끄기」 하나는 전량/무 두 단뿐이라는
+#  것이 이 칸이 따로 있는 근거다.
+const FIRE_STEPS := {"fglow": [0.00, 0.50, 1.00, 1.25, 1.50]}
 #  다시 보기 넷 — last_gain ÷ target 의 비다. 바닥 · 한 방 문턱 · 목표 한 판 ·
-#  천장. 실제 경로로는 r 2.00 짜리 발을 손으로 못 만든다.
+#  천장.
+#  ⚠ 「실제 경로로는 r 2.00 짜리 발을 손으로 못 만든다」고 적혀 있었는데
+#  **실측과 어긋난다**(2026-09-26 수선): grow_dist 가 r >= 2.00 을 상위 몇 %로
+#  실제로 세고 런마다 몇 번 나는지를 찍는다 — 드물지만 난다. 손으로 **겨냥해서**
+#  만들 수 없다는 뜻으로 적은 문장이 「안 난다」로 읽혔다.
+#  ⚠ 여기 칸을 **더하지 않는다** — 이것은 GROW 의 자다. 새 단 경계는 위
+#  「빈 박 단」 줄로 본다.
 const GROW_R := [0.05, 0.50, 1.00, 2.00]
 const GROW_R_NAMES := ["바닥 0.05", "한 방 0.50", "목표 1.00", "천장 2.00"]
 
@@ -1187,6 +1235,18 @@ static func _grow_sync(g: Node) -> void:
 				best = j
 		pick[k] = best
 	pick["link"] = clampi(int(g.link_mode), 0, LINK_NAMES.size() - 1)
+	#  달아오르는 가장자리와 빈 박도 **매번 다시 맞춘다**(2026-09-26) — 위 주석의
+	#  까닭 그대로다. 단 강제는 −1 이 0번 칸이라 한 칸 민다.
+	pick["ftier"] = clampi(int(g.fire_lock) + 1, 0, FIRE_NAMES.size() - 1)
+	var fs2: Array = FIRE_STEPS["fglow"]
+	var bf := 0
+	var bfd := INF
+	for j in fs2.size():
+		var fd: float = absf(float(fs2[j]) - float(g.fire_mul))
+		if fd < bfd:
+			bfd = fd
+			bf = j
+	pick["fglow"] = bf
 
 #  그림 표본 다섯 판. game.gd 의 _art_sheet 가 **같은 차례**로 읽는다 —
 #  여기 순서를 바꾸면 거기 match 도 같이 바꾼다. 2026-09-19
@@ -1393,6 +1453,15 @@ static func _cur_name(g: Node, e: Dictionary) -> String:
 	if k == "grow":
 		var j7: int = i % GROW_R_NAMES.size()
 		return "%d/%d %s" % [j7 + 1, GROW_R_NAMES.size(), GROW_R_NAMES[j7]]
+	#  달아오르는 가장자리와 빈 박 — _names 와 짝이다(2026-09-26).
+	if k == "ftier":
+		var j8: int = i % FIRE_NAMES.size()
+		return "%d/%d %s" % [j8 + 1, FIRE_NAMES.size(), FIRE_NAMES[j8]]
+	if k == "fglow":
+		var fs: Array = FIRE_STEPS["fglow"]
+		var j9: int = i % fs.size()
+		return "%d/%d %s" % [j9 + 1, fs.size(),
+				"고치기 전" if float(fs[j9]) <= 0.0 else "%d%%" % int(float(fs[j9]) * 100.0)]
 	#  그림 표본도 표가 아니라 상수 목록이다. **_names 와 짝으로** 낸다.
 	if k == "artsheet":
 		return "%d/%d %s" % [i % ART_SHEET.size() + 1, ART_SHEET.size(),
@@ -2227,6 +2296,18 @@ static func _run(g: Node, e: Dictionary) -> void:
 			#  **코드를 안 고치고 층을 끄는 유일한 길이다.**
 			g.link_mode = i % LINK_NAMES.size()
 			_say("잇는 선 — %s" % LINK_NAMES[g.link_mode])
+		"ftier":
+			#  ⚠ target·total·last_gain·leg_no·gold 를 **한 톨도 안 만진다** —
+			#  아래 "grow" 갈래의 「⚠⚠ 2026-09-26 수선」이 g.target = 1000 을
+			#  박아 두고 되돌리는 자리가 없어 판이 끝나 버린 사고를 적어 뒀다.
+			#  단 강제는 그릴 때 읽는 한 정수라 되돌릴 것이 없다.
+			g.fire_lock = (i % FIRE_NAMES.size()) - 1
+			_say("빈 박 단 — %s" % FIRE_NAMES[i % FIRE_NAMES.size()])
+		"fglow":
+			var fg: Array = FIRE_STEPS["fglow"]
+			g.fire_mul = float(fg[i % fg.size()])
+			_say("가장자리 불 %s" % ("고치기 전" if g.fire_mul <= 0.0
+					else "%d%%" % int(g.fire_mul * 100.0)))
 		"grow":
 			#  정산을 안 돌리고 **그 걸음만** 네 크기로 재생한다. 0쪽의 「정산
 			#  다시 재생」과 갈라 두는 까닭: 저쪽은 실제 경로 그대로 태우는
@@ -2273,10 +2354,19 @@ static func _run(g: Node, e: Dictionary) -> void:
 				g.score_div = lerpf(float(g.GROW.div_lo), float(g.GROW.div_hi), gn) \
 						/ g.grow_roll
 			g._card_kick(float(g.CARDFX.kick_total), float(g.CARDFX.press_total))
+			#  ⚠ **가장자리도 같이 세운다**(2026-09-26). 안 붙이면 이 줄이
+			#  재생한다고 적어 둔 층 중 가장자리만 미리보기에서 통째로 안 보인다 —
+			#  굴림이 score_from = shown 때문에 안 보였던 바로 위의 그 사고와 같은
+			#  꼴이다. 식을 베끼지 않고 게임 쪽 한 함수를 부른다.
+			#  ⚠ 여기서는 멈춤을 안 건다 — 이 줄은 **그 걸음만** 재생하는 자리라
+			#  화면을 얼리면 ◀▶ 로 넷을 잇달아 견주는 일이 끊긴다. 그래서 4단을
+			#  골라도 침묵이 안 난다(소리는 그대로 낸다) — 단 강제로 깊은 멈춤까지
+			#  보려면 위 「빈 박 단」 줄과 「한 방」(_card_big)을 쓴다.
+			g._fire_arm(gn, false)
 			g._sfx("settle_total",
 					g.SFX_BASE * pow(2.0, -float(g.GROW.semi) * gn / 12.0))
-			_say("총합 걸음 %s · 세기 %.2f · 흔들림 %.1f"
-					% [GROW_R_NAMES[i % GROW_R.size()], gn, g.shake])
+			_say("총합 걸음 %s · 세기 %.2f · 흔들림 %.1f · 빈 박 %d단"
+					% [GROW_R_NAMES[i % GROW_R.size()], gn, g.shake, int(g.fire_hot)])
 			return
 		"fast":
 			#  배수만 민다. 바닥(걸음 4프레임)은 _fast_rate 가 씌우므로
