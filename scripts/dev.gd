@@ -373,13 +373,22 @@ static func _card_big(g: Node) -> void:
 	g.total_flash = 1.0
 	g.gain_roll = 1.0
 	g.card_burst = 1.0
-	g.shake = 9.0
+	#  ⚠ 흔들림·음정·띠 굴림을 **게임 쪽과 같은 식으로** 세운다(2026-09-26).
+	#  9.0 고정과 인자 없는 소리를 그대로 두면 이 미리보기가 거짓말을 한다 —
+	#  「미리보기의 걸음 길이가 큼 단과 같다」는 아래 주석이 세운 계약을
+	#  세기 축에도 그대로 물린다.
+	var gn: float = g._grow_n()
+	g.shake = lerpf(float(g.GROW.shk_lo), float(g.GROW.shk_hi), gn * gn) * g.grow_shake
 	g.board_punch = 1.0
 	g.qt = g.beat * 2.6 * g._pace()
+	if g.grow_roll > 0.0:
+		g.score_from = g.shown
+		g.score_roll = 1.0
+		g.score_div = lerpf(float(g.GROW.div_lo), float(g.GROW.div_hi), gn) / g.grow_roll
 	g._card_kick(float(g.CARDFX.kick_total), float(g.CARDFX.press_total))
 	g._card_kick(float(g.CARDFX.kick_big) - float(g.CARDFX.kick_total),
 			float(g.CARDFX.press_big))
-	g._sfx("settle_total")
+	g._sfx("settle_total", g.SFX_BASE * pow(2.0, -float(g.GROW.semi) * gn / 12.0))
 	# 멈춤도 걸음의 절반으로 묶는다 — 게임 쪽(총점 걸음)과 같은 뺄셈이라야
 	# 미리보기의 걸음 길이가 「큼」 단과 같다.
 	if not g.motion_off:
@@ -526,6 +535,25 @@ static func _names(k: String) -> PackedStringArray:
 	if TUNE_STEPS.has(k):
 		for v in TUNE_STEPS[k]:
 			out.append("%.2f" % float(v))
+		return out
+	#  늦게 도착한 총합 손잡이 셋 + 다시 보기(2026-09-26). 표가 아니라 상수
+	#  목록이라 **_cur_name 과 짝으로** 낸다 — 한쪽만 내면 값 칸을 눌렀을 때
+	#  고르개가 텅 빈 채로 뜬다(2026-09-19 에 한 번 그랬다).
+	if k == "groll":
+		for v in GROW_STEPS["groll"]:
+			out.append("고치기 전" if float(v) <= 0.0 else "%.2f배" % float(v))
+		return out
+	if k == "gshake":
+		for v in GROW_STEPS["gshake"]:
+			out.append("%d%%" % int(float(v) * 100.0))
+		return out
+	if k == "link":
+		for nm in LINK_NAMES:
+			out.append(String(nm))
+		return out
+	if k == "grow":
+		for nm in GROW_R_NAMES:
+			out.append(String(nm))
 		return out
 	#  조준 저울도 표가 아니라 라운드 번호라 _list 를 안 지난다. 안 넣으면
 	#  값 칸을 눌렀을 때 고르개가 텅 빈 채로 뜬다. 사다리(aim_w)를 적는다 —
@@ -937,6 +965,7 @@ static func _rows(g: Node) -> Array:
 			#  살아 있는 값이 정확히 그 칸이 되므로 다시 맞춰도 같은 칸이다 —
 			#  ◀▶ 는 언제나 지금 값의 양옆으로 간다. 2026-09-25
 			_tune_sync(g)
+			_grow_sync(g)
 			return [
 				{"n1": "조준 게이지 %.2f" % g.gauge_speed, "t": "list",
 						"k": "gauge", "n": (TUNE_STEPS["gauge"] as Array).size()},
@@ -946,6 +975,25 @@ static func _rows(g: Node) -> Array:
 						"k": "chold", "n": (TUNE_STEPS["chold"] as Array).size()},
 				{"n1": "비행 시간 %.2f" % GameData.tune("fly_time"), "t": "list",
 						"k": "fly", "n": (TUNE_STEPS["fly"] as Array).size()},
+				#  ── 늦게 도착한 총합 (2026-09-26) ──────────────────
+				#  ⚠ **새 쪽을 안 판다.** 이 쪽은 네 줄뿐이고 한 쪽 한계가
+				#  열아홉이라 열다섯 칸이 비어 있었다(2쪽이 꽉 찬 것과 헷갈리지
+				#  마라). 그리고 탭 폭이 (W − 12) / PAGES.size() 라 일곱 쪽이면
+				#  46.3px 인데, W 머리말이 **48px 에서 「경제·진행」이 「경제·진」
+				#  으로 잘려 찍혔다**고 적어 두었다 — 그래서 판을 300 → 336 으로
+				#  넓힌 것이다. 쪽을 늘리면 그 사고가 글자 그대로 돌아오고
+				#  dev_probe 는 쪽 수만 훑으므로 그 잘림을 못 잡는다.
+				#
+				#  ⚠ 줄 이름이 **살아 있는 값을 그대로 찍는다** — 위 넷이 세운
+				#  규약이고, 값 칸도 매번 지금 값에 맞춘다(_grow_sync).
+				{"n1": "총합 굴림 %.2f배" % g.grow_roll, "t": "list",
+						"k": "groll", "n": (GROW_STEPS["groll"] as Array).size()},
+				{"n1": "총합 흔들림 %d%%" % int(g.grow_shake * 100.0), "t": "list",
+						"k": "gshake", "n": (GROW_STEPS["gshake"] as Array).size()},
+				{"n1": "잇는 선 · %s" % LINK_NAMES[clampi(g.link_mode, 0, 3)],
+						"t": "list", "k": "link", "n": LINK_NAMES.size()},
+				{"n1": "총합 걸음 다시 보기", "t": "list", "k": "grow",
+						"n": (GROW_R as Array).size()},
 			]
 
 
@@ -1092,6 +1140,44 @@ const TUNE_STEPS := {
 	"chold": [0.00, 0.20, 0.45, 0.70, 1.00, 1.50],
 	"fly":   [0.05, 0.12, 0.20, 0.32, 0.50, 0.80],
 }
+
+#  늦게 도착한 총합 — 손잡이 셋과 다시 보기 하나(2026-09-26).
+#
+#  **0 이 「고치기 전 그대로」다.** groll 0 이면 띠가 손대기 전 벽시계 lerp 로
+#  돌아가고 gshake 0 이면 합계 걸음이 화면을 안 흔든다 — 전·후를 **같은 화면
+#  같은 발에서** 눈으로 대는 유일한 길이라 「등급 테 끄기」가 있는 까닭과 같다.
+#
+#  gshake 200% 는 상한 24.0 이라 판 깨짐 14.0 · 불속불 15.0 을 넘긴다.
+#  **그게 목적이다** — 「위계가 깨지면 어떻게 보이는가」를 손가락 한 번으로
+#  보여 주는 자리라 100 에서 안 끊는다. 그리고 흔들림을 따로 낮추는 길은
+#  접근성 쪽에서도 필요한 것이다(모션 끄기는 전량/무 두 단뿐이다).
+const GROW_STEPS := {
+	"groll":  [0.00, 0.50, 1.00, 1.50, 2.00],
+	"gshake": [0.00, 0.50, 1.00, 1.50, 2.00],
+}
+const LINK_NAMES := ["끔", "판에서만", "동전에서만", "전부"]
+#  다시 보기 넷 — last_gain ÷ target 의 비다. 바닥 · 한 방 문턱 · 목표 한 판 ·
+#  천장. 실제 경로로는 r 2.00 짜리 발을 손으로 못 만든다.
+const GROW_R := [0.05, 0.50, 1.00, 2.00]
+const GROW_R_NAMES := ["바닥 0.05", "한 방 0.50", "목표 1.00", "천장 2.00"]
+
+
+#  값 칸을 **지금 값**에 맞춘다 — 조작감 넷이 세운 규약 그대로다(2026-09-25 의
+#  「▶ 한 번이 살아 있는 값을 내렸다」를 안 되풀이한다). 캐시가 아니라 매번
+#  다시 맞춘다: 값을 미는 길이 여기 말고도 있다.
+static func _grow_sync(g: Node) -> void:
+	var live := {"groll": float(g.grow_roll), "gshake": float(g.grow_shake)}
+	for k in live:
+		var ts: Array = GROW_STEPS[k]
+		var best := 0
+		var bd := INF
+		for j in ts.size():
+			var dd: float = absf(float(ts[j]) - float(live[k]))
+			if dd < bd:
+				bd = dd
+				best = j
+		pick[k] = best
+	pick["link"] = clampi(int(g.link_mode), 0, LINK_NAMES.size() - 1)
 
 #  그림 표본 다섯 판. game.gd 의 _art_sheet 가 **같은 차례**로 읽는다 —
 #  여기 순서를 바꾸면 거기 match 도 같이 바꾼다. 2026-09-19
@@ -1282,6 +1368,22 @@ static func _cur_name(g: Node, e: Dictionary) -> String:
 		var ts: Array = TUNE_STEPS[k]
 		var j3: int = i % ts.size()
 		return "%d/%d %.2f" % [j3 + 1, ts.size(), float(ts[j3])]
+	#  늦게 도착한 총합 — _names 와 짝이다(2026-09-26).
+	if k == "groll":
+		var gs: Array = GROW_STEPS["groll"]
+		var j4: int = i % gs.size()
+		return "%d/%d %s" % [j4 + 1, gs.size(),
+				"고치기 전" if float(gs[j4]) <= 0.0 else "%.2f배" % float(gs[j4])]
+	if k == "gshake":
+		var hs: Array = GROW_STEPS["gshake"]
+		var j5: int = i % hs.size()
+		return "%d/%d %d%%" % [j5 + 1, hs.size(), int(float(hs[j5]) * 100.0)]
+	if k == "link":
+		var j6: int = i % LINK_NAMES.size()
+		return "%d/%d %s" % [j6 + 1, LINK_NAMES.size(), LINK_NAMES[j6]]
+	if k == "grow":
+		var j7: int = i % GROW_R_NAMES.size()
+		return "%d/%d %s" % [j7 + 1, GROW_R_NAMES.size(), GROW_R_NAMES[j7]]
 	#  그림 표본도 표가 아니라 상수 목록이다. **_names 와 짝으로** 낸다.
 	if k == "artsheet":
 		return "%d/%d %s" % [i % ART_SHEET.size() + 1, ART_SHEET.size(),
@@ -2091,6 +2193,72 @@ static func _run(g: Node, e: Dictionary) -> void:
 				"fly":
 					GameData._tune["fly_time"] = tv
 					_say("비행 시간 %.2f" % tv)
+		"groll":
+			var gr: Array = GROW_STEPS["groll"]
+			g.grow_roll = float(gr[i % gr.size()])
+			_say("총합 굴림 %s" % ("고치기 전" if g.grow_roll <= 0.0
+					else "%.2f배" % g.grow_roll))
+		"gshake":
+			var gh: Array = GROW_STEPS["gshake"]
+			g.grow_shake = float(gh[i % gh.size()])
+			_say("총합 흔들림 %d%%" % int(g.grow_shake * 100.0))
+		"link":
+			#  합칠 때 저쪽 조각 비행과 내 긴 선(슬롯 0 → 배수 칸 최장 약 412px)이
+			#  부딪히면 여기서 「판에서만」으로 내려 두고 눈으로 판단한다 —
+			#  **코드를 안 고치고 층을 끄는 유일한 길이다.**
+			g.link_mode = i % LINK_NAMES.size()
+			_say("잇는 선 — %s" % LINK_NAMES[g.link_mode])
+		"grow":
+			#  정산을 안 돌리고 **그 걸음만** 네 크기로 재생한다. 0쪽의 「정산
+			#  다시 재생」과 갈라 두는 까닭: 저쪽은 실제 경로 그대로 태우는
+			#  줄이고 이쪽은 **네 크기를 나란히 견주는** 줄이다.
+			#  ⚠ **런 진도를 한 톨도 안 만진다** — total 도 **target 도** 안
+			#  바꾼다. **_brk_arm 도 안 부른다** — 판을 깨지 않고 층만 보는
+			#  것이 이 줄의 뜻이다.
+			#
+			#  ⚠⚠ 2026-09-26 수선: 여기서 `g.target = 1000` 을 박아 두고
+			#  되돌리는 자리가 없었다. 목표 4200 짜리 판 도중에 이 줄을 누르면
+			#  그 판이 1000 짜리가 되고, total 이 이미 1000 을 넘었으면 다음
+			#  합계 걸음의 「목표를 넘겼나」가 그 자리에서 참이 되어 판이
+			#  끝나 버렸다. 게이지(shown ÷ target)와 정산 보상도 엉뚱한 목표로
+			#  섰고, 눌러서 되돌리는 길이 없었다. 「한 방」(_card_big)은
+			#  card_back 으로 되돌리고 qa_break 는 「개발자 모드가 런 진도를
+			#  안 만진다 — 목표 42→42」를 이미 못 박아 두었는데 이 줄만 샜다.
+			#  _grow_n 은 **이득÷목표 비**만 보므로, 목표를 그대로 두고 이득을
+			#  그 비로 세우면 같은 그림이 난다 — 오히려 살아 있는 판의 크기로
+			#  견주므로 미리보기가 더 정직하다.
+			if not g._is_play_deep():
+				g._start_leg()
+			g._swap_skip()
+			var rr: float = float(GROW_R[i % GROW_R.size()])
+			g.last_gain = int(round(rr * float(maxi(g.target, 1))))
+			var gn: float = g._grow_n()
+			g.card_mode = 1
+			g.card_target = 1.0
+			g.total_flash = 1.0
+			g.gain_roll = 1.0
+			g.qt = g.beat * 2.6
+			g.card_jrate = 1.0 / maxf(g.qt * float(g.CARDFX.jspan), 0.02)
+			g.shake = lerpf(float(g.GROW.shk_lo), float(g.GROW.shk_hi), gn * gn) \
+					* g.grow_shake
+			g.board_punch = 1.0
+			if g.grow_roll > 0.0:
+				#  **떠난 자리**를 이번 이득만큼 내려 둔다(2026-09-26 수선).
+				#  score_from = shown 이면 shown 이 이미 total 이라 띠가 한
+				#  픽셀도 안 굴러, 이 줄이 재생한다고 적어 둔 네 층 중 ①번이
+				#  미리보기에서 통째로 안 보였다. total 은 그대로다 — 굴림이
+				#  끝나면 shown 이 제자리로 돌아온다. 0 에서 막는 것은 이득이
+				#  총점보다 큰 판 초반에 띠가 잠깐 마이너스를 찍기 때문이다.
+				g.score_from = maxf(g.shown - float(g.last_gain), 0.0)
+				g.score_roll = 1.0
+				g.score_div = lerpf(float(g.GROW.div_lo), float(g.GROW.div_hi), gn) \
+						/ g.grow_roll
+			g._card_kick(float(g.CARDFX.kick_total), float(g.CARDFX.press_total))
+			g._sfx("settle_total",
+					g.SFX_BASE * pow(2.0, -float(g.GROW.semi) * gn / 12.0))
+			_say("총합 걸음 %s · 세기 %.2f · 흔들림 %.1f"
+					% [GROW_R_NAMES[i % GROW_R.size()], gn, g.shake])
+			return
 		"fast":
 			#  배수만 민다. 바닥(걸음 4프레임)은 _fast_rate 가 씌우므로
 			#  3배를 골라도 눌린 박자에서는 한도가 1.53 이다 —

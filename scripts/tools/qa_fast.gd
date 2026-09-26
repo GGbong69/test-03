@@ -169,8 +169,13 @@ func _play(n: int, hold: bool) -> Dictionary:
 			"src_leak": src_leak,
 			"pitch": g.pitch_step, "total": g.total, "gold": g.gold - gold0,
 			"chip": g.cur_chip, "mult": g.cur_mult, "shown": g.shown,
-			"flash": maxf(maxf(g.total_flash, g.chip_j),
-					maxf(g.mult_j, g.gain_roll))}
+			#  ⚠ 「정산이 끝나면 카드 시계가 다 0」을 재는 그물이 **넷만 보고**
+			#  있었다. score_roll·src_t 를 안 적으면 정산 뒤에 굴림과 선이 남는
+			#  것을 아무도 못 본다 — total_flash 가 이미 한 번 겪은 사고다
+			#  (_card_reset 주석: 「어디서도 안 지워졌다」). 2026-09-26
+			"flash": maxf(maxf(maxf(g.total_flash, g.chip_j),
+					maxf(g.mult_j, g.gain_roll)),
+					maxf(g.score_roll, g.src_t))}
 
 
 func _min_step(steps: Array) -> int:
