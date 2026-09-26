@@ -500,6 +500,14 @@ static func teach(id: String) -> bool:
 	return true
 
 
+#  한 갈래만 다시 배우게 한다. 개발자 판(「첫 손님 두 장 다시」)만 부른다.
+static func forget(id: String) -> void:
+	boot()
+	if _cfg.has_section_key(S_TUT, id):
+		_cfg.erase_section_key(S_TUT, id)
+		flush()
+
+
 #  다시 배우게 한다. 설정에서 끄고 켜는 자리가 이것을 부른다.
 static func forget_all() -> void:
 	boot()

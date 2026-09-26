@@ -2567,7 +2567,6 @@ func _pack_grants() -> void:
 			if GameData.item_weight(it) <= 0.0:
 				Save.unlock("itemgot:" + String(it.id))
 			break
-	_boot_gift()
 	_panel_reset()
 
 
@@ -2588,27 +2587,37 @@ func _pack_grants() -> void:
 #  둘이 곱해져 여섯째 발이 세 자리에서 네 자리로 뛴다 — 그 한 발이 이 게임의
 #  전부를 말한다.
 #
-#  ⚠ **딱 한 번이다.** 배움 표(Save.taught)에 적어 두고, 이미 적혀 있으면
-#  건너뛴다 — 새 런마다 주면 그것은 튜토리얼이 아니라 밸런스다.
+#  ── 손에 쥐여 주지 않고 **첫 상점에 공짜로 깐다** (2026-09-27) ──
+#  처음엔 런이 시작하자마자 손에 넣어 줬는데 「튜토리얼로 좋은 아이템을 상점에서
+#  자연스럽게 줘야지 이게 뭐야」로 반려됐다. 사용자와 정한 흐름:
+#   · 첫 상점 테이블 네 칸 중 **두 칸**에 공짜 딱지로 선다 — 나머지 두 칸은
+#     평소처럼 굴린다(평소 상점이 어떤지도 같이 보인다).
+#   · 사는 법(창구로 끌기)은 그대로 배운다 — 값만 0 이다.
+#   · 상인이 「첫 손님이라 둘은 그냥 준다」 한 줄(u_gift).
+#   · 안 집고 나가면 막지 않되, **다음 상점에 다시** 공짜로 선다. 둘 다 손에
+#     들어온 순간 배움 표에 적고 그 뒤로는 안 선다(_buy).
+#   · SAFETY LAST! 가 처음 켜질 때 한 줄(u_last).
 #  ⚠ 챌린지·무한 런은 안 준다(_rec_off 가 그 둘을 이미 가른다). 그쪽은
 #  「제약을 걸고 도는」 런이라 공짜 두 장이 그 뜻을 통째로 지운다.
-#  ⚠ 슬롯이 모자라면(다트통이 이미 쥐여 준 것이 있으면) 있는 만큼만 넣는다.
-func _boot_gift() -> void:
-	if _rec_off() or Save.taught("u_boot"):
-		return
-	Save.teach("u_boot")
+#  ⚠ 오토플레이(curve_probe · score_probe · grow_dist)는 저장을 비우고 돌아서
+#  안 막으면 **매 측정 런이 첫 런**이 된다 — 곡선이 튜토리얼 선물을 먹고 잰다.
+func _boot_due() -> bool:
+	return not _rec_off() and not _autoplay and not Save.taught("u_boot")
+
+
+#  이 상점에 공짜로 깔 장 — 아직 손에 없는 것만.
+func _boot_stock() -> Array:
+	var out := []
+	if not _boot_due():
+		return out
 	for gid in BOOT_GIFT:
-		if owned.size() >= GameData.max_items():
-			break
+		if _has_item(String(gid)):
+			continue
 		for it in GameData.items():
-			if String(it.id) != String(gid):
-				continue
-			var gp: Dictionary = it.duplicate()
-			gp.gs = 0
-			gp.bought = 0
-			owned.append(gp)
-			_found("item", String(it.id))
-			break
+			if String(it.id) == String(gid):
+				out.append(it)
+				break
+	return out
 
 
 #  첫 런의 두 장. 표에 안 두고 여기 두는 까닭 — 이것은 **밸런스 값이 아니라
@@ -3056,6 +3065,9 @@ func _open_shop() -> void:
 	if leg_no + 1 <= GameData.legs_top():
 		_roll_boss_mods(_round_boss(leg_no + 1))
 	_roll_stock()
+	#  공짜 두 장이 선 테이블에서만 — 값 설명(u_shop) 바로 뒤에 온다.
+	if _mark_rect("gift").size.x >= 2.0:
+		_tutor("u_gift")
 	state = S.SHOP
 	_sfx("shop_open")
 	#  ── 매듭 ③ 상점 ──
@@ -3180,17 +3192,25 @@ func _roll_stock() -> void:
 		# 이 한 장은 건너뛰어야 한다 — 0 에서 0 이 될 뿐이라 뱃지를 버린다.
 		stock.append({"type": "item", "d": freebie, "cost": 0,
 				"sold": false, "free": true})
+	#  첫 손님의 두 장 — 테이블 칸을 **나눠 쓴다**(네 칸이면 공짜 둘 · 평소 둘).
+	var gifts := _boot_stock()
+	for gd in gifts:
+		stock.append({"type": "item", "d": gd, "cost": 0,
+				"sold": false, "free": true})
 	var tag_more := _spend_tags("shop")     # 뱃지 — 매물이 는다
 	var tag_free := _spend_tags("free")     # 뱃지 — 몇 개가 공짜다
 	# 테이블 폭이다. 갈래마다 칸을 못 박던 자리(동전 2 · 보드 확장 1 ·
 	# 다트 1)를 걷었다 — 기획서 P.17 은 여섯 갈래가 「랜덤 등장」이라 적었다.
-	var slots := GameData.shop_slots(leg_no) + tag_more
+	var slots := maxi(GameData.shop_slots(leg_no) + tag_more - gifts.size(), 0)
 
 	# 갈래마다 후보를 미리 깐다. 뽑은 것은 빼므로 한 상점에 같은 물건이
 	# 두 번 안 온다. 바닥난 갈래는 저울에서 통째로 빠져, 살 수 있는 보드
 	# 확장이 없는 판에서도 자리가 비지 않고 다른 갈래가 그 자리를 받는다.
+	var ipool := _stock_items(nxt)
+	for gd in gifts:
+		ipool = ipool.filter(func(e): return String(e.id) != String(gd.id))
 	var pools := {
-		"item": _stock_items(nxt),
+		"item": ipool,
 		"mod": _stock_mods(),
 		"dart": GameData.darts().slice(1),
 		"cons": GameData.candies().duplicate(),
@@ -3338,6 +3358,9 @@ func _buy(i: int) -> void:
 			#  상점 매물과 팩에서 집은 것이 **같은 이 길**로 온다
 			#  (_buy_block 의 s.pack). 팩 쪽에 따로 적을 자리가 없다.
 			_found("item", String(cp.id))
+			#  첫 손님의 두 장을 다 쥐었다 — 그 뒤로는 안 깐다(_boot_due).
+			if _boot_due() and _boot_stock().is_empty():
+				Save.teach("u_boot")
 			#  동전이 처음 손에 들어온 자리. 순서가 값을 바꾸는 게임이라
 			#  슬롯을 보기 전에 말해 둬야 한다.
 			_tutor("u_rack")
@@ -7196,6 +7219,10 @@ func _next_step() -> void:
 		"item":
 			_panel_fire(st.i)
 			card_item = st.lbl
+			#  첫 손님의 두 장 중 끝이 절정인 장 — 처음 켜질 때 한 줄(u_last).
+			if int(st.i) >= 0 and int(st.i) < owned.size() \
+					and String(owned[int(st.i)].get("id", "")) == "u26":
+				_tutor("u_last")
 			# 갈래마다 **제 칸만** 튄다. 안 바뀐 칸은 가만둔다 — 그게 정보량이다.
 			# 둘을 한 시계로 묶으면 걸음마다 두 칸이 같이 튀어 「뭐가 바뀌었는지」가
 			# 사라진다(2026-09-18).
@@ -25362,6 +25389,10 @@ func _bill_at(i: int, r: Rect2) -> void:
 				HORIZONTAL_ALIGNMENT_CENTER, 80.0, 12,
 				C_ACC if boost_pick > 0 else C_OFF)
 		return
+	if bool(s.get("free", false)) and int(s.cost) == 0:
+		draw_string(font, Vector2(r.get_center().x - 40.0, y), "공짜",
+				HORIZONTAL_ALIGNMENT_CENTER, 80.0, 12, C_ACC)
+		return
 	var can: bool = not s.sold and gold >= s.cost
 	draw_gold_at(r.position.x, y, str(s.cost), int(BILL.sz), C_GOLD if can else C_OFF)
 
@@ -25402,6 +25433,14 @@ func _bill_one(i: int) -> void:
 				_p2g(it.w) + DROP.bill_dy + float(BILL.dy) + 7.0), pt,
 				HORIZONTAL_ALIGNMENT_CENTER, 80.0, 12,
 				C_ACC if boost_pick > 0 else C_OFF)
+		return
+	#  공짜 딱지 — 0 골드로 적으면 값이 빠진 것처럼 읽힌다(2026-09-27).
+	if bool(s.get("free", false)) and int(s.cost) == 0:
+		if s.sold:
+			return
+		draw_string(font, Vector2(it.u - 40.0,
+				_p2g(it.w) + DROP.bill_dy + float(BILL.dy) + 7.0), "공짜",
+				HORIZONTAL_ALIGNMENT_CENTER, 80.0, 12, C_ACC)
 		return
 	var txt := str(s.cost)
 	var bw := gold_w(txt, int(BILL.sz))
@@ -39824,6 +39863,18 @@ func _mark_rect(k: String) -> Rect2:
 		"chute_sell": return Rect2(0.0, TBL.fy, 86.0, TBL.ny - TBL.fy)
 		"goods": return Rect2(96.0, TBL.fy + 6.0, VIEW.x - 192.0,
 				TBL.ny - TBL.fy - 6.0)
+		#  첫 손님의 두 장(공짜 동전)을 감싼다. 없으면 빈 사각 — 안 가르친다.
+		"gift":
+			var gr := Rect2()
+			for i in mini(stock.size(), drop.size()):
+				var s: Dictionary = stock[i]
+				if s.sold or not bool(s.get("free", false)) or s.type != "item":
+					continue
+				if not BOOT_GIFT.has(String(s.d.get("id", ""))):
+					continue
+				var bx := _obj_box(i).grow(4.0)
+				gr = bx if gr.size.x < 1.0 else gr.merge(bx)
+			return gr
 		"dealer": return Rect2(NPC.cx - 78.0, 46.0, 156.0, TBL.fy - 46.0)
 		"reroll": return _reroll_rect()
 		"cons":

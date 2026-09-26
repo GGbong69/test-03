@@ -956,6 +956,9 @@ static func _rows(g: Node) -> Array:
 				{"n1": "이어하기 되살리기", "t": "act", "a": "run_load"},
 				{"n1": "이어하기 보기", "t": "act", "a": "run_peek"},
 				{"n1": "이어하기 지우기", "t": "act", "a": "run_drop"},
+				#  첫 손님의 두 장(2026-09-27) — 첫 런 첫 상점에만 공짜로 서므로
+				#  다시 보려면 배움 셋을 지운다. 상점이면 그 자리에서 다시 깐다.
+				{"n1": "첫 손님 두 장 다시", "t": "act", "a": "boot"},
 			]
 		4:
 			#  ⚠ 여기 쪽 번호를 **적어 둔다.** 여태 `_:` 기본 갈래였는데,
@@ -2279,6 +2282,19 @@ static func _run(g: Node, e: Dictionary) -> void:
 		"run_drop":
 			Save.run_drop()
 			_say("지웠다")
+			return
+		"boot":
+			for tid in ["u_boot", "u_gift", "u_last"]:
+				Save.forget(String(tid))
+			if g._rec_off():
+				_say("챌린지·무한 런에는 안 선다")
+				return
+			if g.state == g.S.SHOP:
+				g._roll_stock()
+				g._tutor("u_gift")
+				_say("첫 손님 두 장 — 테이블에 깔았다")
+			else:
+				_say("첫 손님 두 장 — 다음 상점에 선다")
 			return
 
 	# 목록형 — 지금 고른 것을 적용한다

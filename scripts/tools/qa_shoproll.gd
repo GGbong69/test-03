@@ -15,6 +15,7 @@ extends SceneTree
 #   godot --path . --headless --script scripts/tools/qa_shoproll.gd
 
 const GameData = preload("res://scripts/data.gd")
+const Save = preload("res://scripts/save.gd")
 
 const N := 12000            # 표본. 0.5% 를 넉넉한 오차로 재기에 충분하다
 
@@ -25,6 +26,14 @@ var fail := 0
 
 
 func _initialize() -> void:
+	#  ⚠ 사람의 저장을 안 읽는다(2026-09-27). 첫 손님의 두 장이 배움 표를 보고
+	#  테이블 칸을 나눠 쓰므로, 사람의 저장을 읽으면 「폭이 늘 표대로다」가
+	#  그 사람이 두 장을 받았는지에 따라 갈린다. 두 장은 이미 받은 것으로 둔다
+	#  — 그쪽은 qa_boot 가 잰다.
+	Save.path = "user://_qa_shoproll.cfg"
+	Save.gpath = "user://_qa_shoproll_g.cfg"
+	Save.wipe()
+	Save.teach("u_boot")
 	g = load("res://scenes/main.tscn").instantiate()
 	root.add_child(g)
 	g.set_process(false)
