@@ -2499,7 +2499,7 @@ func _settle_clear() -> void:
 	clear_gold_detail = [
 		#  판 이름은 **제목이 이미 말했다**("라운드 1  작은 판 넘김").
 		#  같은 말을 두 줄 아래에 또 적으면 내역 첫 줄이 정보가 아니다.
-		{"n": "넘김 보상", "v": clear},
+		{"n": "클리어 보상", "v": clear},
 		{"n": "남은 다트 %d개" % darts_left, "v": dart_gold},
 		{"n": "이자", "v": interest},
 	]
@@ -30415,7 +30415,7 @@ func _draw_clear() -> void:
 	#  스크림을 1.0 으로. 0.94 라 뒤 다트판의 「20」이 내역 둘째 줄 위에
 	#  앉아 있었다 — 정산은 읽는 화면이지 비치는 화면이 아니다.
 	draw_rect(_full(), C_BG)
-	draw_string(font, Vector2(0, 46), "라운드 %d  %s 넘김"
+	draw_string(font, Vector2(0, 46), "라운드 %d  %s 클리어"
 			% [GameData.round_of(leg_no), GameData.leg_name(leg_no)],
 			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 24, C_ACC)
 
@@ -30726,7 +30726,7 @@ func _leg_card(i: int, rn: int) -> void:
 		_sign_text(Vector2(cx - 40.0, 34.5), 80.0,
 				_elide(GameData.leg_name(rn), 80.0, 20), 20,
 				Color(paint.darkened(0.35), 0.9), font_sm)
-		_sign_text(Vector2(cx - 40.0, 59.5), 80.0, "넘김", 20,
+		_sign_text(Vector2(cx - 40.0, 59.5), 80.0, "클리어", 20,
 				Color(paint.darkened(0.45), 0.8), font_sm)
 		draw_set_transform(shake_off)
 		return
@@ -31326,7 +31326,7 @@ func _draw_over() -> void:
 	var y: float = p.position.y + 106.0
 	var cleared: int = maxi(leg_no - (0 if won else 1), 0)
 	var rows := [
-		["넘긴 판", ("%d" % cleared) if GameData.endless 				else ("%d / %d" % [cleared, int(TUT.legs) if tut_run else GameData.legs_n()])],
+		["클리어한 판", ("%d" % cleared) if GameData.endless 				else ("%d / %d" % [cleared, int(TUT.legs) if tut_run else GameData.legs_n()])],
 	]
 	#  ⚠ **밑의 두 줄은 프로필을 읽는다** — best_score 는 PEAKS 이고 darts 는
 	#  누적이다. 챌린지·무한 런은 그 둘을 한 톨도 안 미므로(_rec_off) 방금 친
@@ -36765,7 +36765,7 @@ func _league_lines() -> Array:
 		#  ⚠ 「보상」을 빼면 안 된다 — 일곱 리그가 reward_small 0 이라 화면 글이
 		#  「작은 판을 넘기면 골드 0」이 되어 골드가 통째로 안 들어온다는 말이 된다.
 		out.append({"n": "작은 판 보상 %d" % rs,
-				"d": "작은 판 넘김 보상 %d골드" % rs})
+				"d": "작은 판 클리어 보상 %d골드" % rs})
 	if int(GameData.league_v("seal_items", 0.0)) > 0:
 		out.append({"n": "봉인 %d" % int(GameData.league_v("seal_items", 0.0)),
 				"d": "판마다 동전 하나 무작위 봉인"})

@@ -1842,7 +1842,7 @@ static func eff_line(it: Dictionary) -> String:
 			return "1/4 확률로 맞힌 트랙 강화 +1"
 		if String(it.get("side", "")) == "boardkill":
 			# 런 승리는 화면이 「완주」라 부른다 — 「런 클리어」는 그 말 밖이다
-			return "판을 넘기면 바로 완주"
+			return "판을 클리어하면 바로 완주"
 		if String(it.get("side", "")) == "bigdart":
 			# 발동한 발에서만 커지고(빗나가면 안 큰다) 얻는 것은 양옆 칸 값이다(pierce_gain → 점수)
 			# ⚠ 여기만 「때마다」다 — 한 발씩 **쌓인다**. 짝인 「빗나가면」이
@@ -1861,7 +1861,7 @@ static func eff_line(it: Dictionary) -> String:
 	if g == "hitmiss":
 		return "%s +0에서 시작 · 맞히면 +%d · 빗나가면 −%d" % [stat, it.gstep, it.gstep]
 	if g == "fire":
-		return "%s +%d에서 시작 · 켜질 때마다 +%d" % [stat, it.gstep, it.gstep]
+		return "%s +%d에서 시작 · 발동할 때마다 +%d" % [stat, it.gstep, it.gstep]
 	if g == "tdec":
 		return "%s +%d에서 시작 · 던질 때마다 −%d · 0이면 파괴" % [stat, it.v, it.gstep]
 	if g == "rdec":
@@ -1893,7 +1893,7 @@ static func eff_line(it: Dictionary) -> String:
 	if String(it.get("side", "")) == "trackup25":
 		base += " · 1/4 확률로 맞힌 트랙 강화 +1"
 	if String(it.get("side", "")) == "boardkill":
-		base += " · 판을 넘기면 완주"
+		base += " · 판을 클리어하면 완주"
 	if String(it.get("side", "")) == "bigdart":
 		base += " · 맞힐 때마다 다트가 커진다"
 	var bn := boom_n(String(it.get("boom", "")))
@@ -2017,13 +2017,13 @@ static func gold_dart_hit(it: Dictionary, x: Dictionary) -> bool:
 
 static func gold_text(g: String, gv: int) -> String:
 	match g:
-		"clear": return "판을 넘기면 골드 +%d" % gv
-		"spare": return "판을 넘기면 남은 다트 1개당 골드 +%d" % gv
-		"clean": return "한 발도 안 빗나가고 판을 넘기면 골드 +%d" % gv
-		"blitz": return "남은 다트 %d개 이상으로 판을 넘기면 골드 +%d" % [gold_blitz(), gv]
+		"clear": return "판을 클리어하면 골드 +%d" % gv
+		"spare": return "판을 클리어하면 남은 다트 1개당 골드 +%d" % gv
+		"clean": return "한 발도 안 빗나가고 판을 클리어하면 골드 +%d" % gv
+		"blitz": return "남은 다트 %d개 이상으로 판을 클리어하면 골드 +%d" % [gold_blitz(), gv]
 		# ⚠ 여기만 「가진」을 살린다 — 「보유」를 지우니 한 줄에 「골드」가 둘이
 		# 서고 앞은 쥔 골드 · 뒤는 받는 몫이라 「받을 골드가 6 이하면」으로 읽혔다.
-		"broke": return "판을 넘길 때 가진 골드 %d 이하면 골드 +%d" % [gold_broke(), gv]
+		"broke": return "판을 클리어할 때 가진 골드 %d 이하면 골드 +%d" % [gold_broke(), gv]
 		"leg": return "판마다 골드 +%d" % gv
 		"risk50": return "%s 1/2 확률로 골드 +%d" % [cond_text("risk"), gv]
 		# 조건은 _tip_eff 가 앞에 잇는다 — 「백색 칸 맞히면 골드 +1」
@@ -2034,7 +2034,7 @@ static func gold_text(g: String, gv: int) -> String:
 # 동전 위에 얹는 짧은 태그 (원 안에는 긴 글이 안 들어간다)
 static func gold_tag(g: String) -> String:
 	match g:
-		"clear": return "넘김"
+		"clear": return "클리어"
 		"spare": return "잔탄"
 		"clean": return "무실책"
 		"blitz": return "속공"
