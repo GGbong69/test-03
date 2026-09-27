@@ -1247,7 +1247,7 @@ static func tutor_steps(id: String) -> Array:
 #  빈 이름은 "아무 데도 안 밝힌다" 다 — 화면 전체가 주제일 때 쓴다.
 const TUTOR_MARKS := ["", "leg_go", "leg_skip", "leg_boss", "board", "rack",
 		"score", "chute_buy", "chute_sell", "goods", "dealer", "reroll",
-		"cons", "gift"]
+		"cons", "gift", "info"]
 const TUTOR_WAITS := ["tap", "time"]
 
 

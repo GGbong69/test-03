@@ -155,6 +155,8 @@ func _run() -> void:
 	else:
 		_skip("두 장을 쥐면 상인이 리롤을 가리킨다", "표에서 u_more 를 지웠다")
 	_ok("평소 리롤 설명은 겹쳐 안 뜬다", Save.taught("u_reroll"), "")
+	_ok("리롤 전에는 정보 단추 줄이 안 뜬다(리롤 쪽이 아직 안 섰다)",
+			not g.tutor_q.has("u_info"), str(g.tutor_q))
 	var g1: int = g.gold
 	g._reroll()
 	_ok("첫 리롤은 무료다", g.gold == g1, "골드 %d → %d" % [g1, g.gold])
@@ -165,6 +167,13 @@ func _run() -> void:
 	_take_all()
 	_ok("동전 다섯 칸이 첫 상점에서 다 찬다",
 			_ids() == ["r14", "u11", "c03", "u26", "c06"], str(_ids()))
+	if _has("u_info"):
+		_ok("선물을 다 받으면 정보 단추 줄이 선다", g.tutor_q.has("u_info")
+				or String(g.tutor_id) == "u_info", str(g.tutor_q))
+		_ok("정보 단추 과녁이 선다", g._mark_rect("info").size.x > 2.0,
+				str(g._mark_rect("info")))
+	else:
+		_skip("선물을 다 받으면 정보 단추 줄이 선다", "표에서 u_info 를 지웠다")
 	_ok("동전 슬롯을 안 넘긴다", g.owned.size() <= GameData.max_items(), "")
 	var held := []
 	for c in g.cons:
@@ -297,6 +306,69 @@ func _run() -> void:
 		_ok("처음 켜질 때 한 줄이 선다", g.tutor_q.has("u_last"), str(g.tutor_q))
 	else:
 		_skip("처음 켜질 때 한 줄이 선다", "표에서 u_last 를 지웠다")
+
+	# ── ⑧-b 말하는 줄 — 비주얼 노벨처럼 (2026-09-27) ──────
+	#  tutor.csv 의 who 가 찬 줄은 이름표가 서고 한 자씩 나온다. 첫 누름은 다
+	#  보여 주기, 둘째 누름이 넘기기다. 어느 줄이 말하는 줄인지는 사람이 표에서
+	#  정한다 — 표에서 who 가 찬 첫 줄을 골라 잰다.
+	print("⑧-b 말하는 줄")
+	var talk_id := ""
+	var talk_i := 0
+	for r in GameData.tutor():
+		if String(r.get("who", "")).strip_edges() != "" and String(r.get("id", "")) != "":
+			talk_id = String(r.id)
+			talk_i = int(r.get("step", "1")) - 1
+			break
+	if talk_id == "":
+		_skip("말하는 줄이 한 자씩 나온다", "표에 who 가 찬 줄이 없다")
+	else:
+		g._tutor_close()
+		g.tutor_q.clear()
+		g.tutor_id = talk_id
+		g.tutor_i = talk_i
+		g.tutor_t = 0.0
+		g.tutor_pre = 0.0
+		g.tutor_out = 0.0
+		g.motion_off = false
+		var full := String(g._tutor_step().get("text", "")).length()
+		_ok("이름표가 표의 who 를 읽는다", g._tutor_who() != "", g._tutor_who())
+		_ok("처음에는 한 자도 안 보인다", g._tutor_shown() == 0, "%d" % g._tutor_shown())
+		g.tutor_t = 0.1
+		var mid: int = g._tutor_shown()
+		_ok("시간이 가면 한 자씩 나온다", mid > 0 and mid < full, "%d / %d" % [mid, full])
+		g.tutor_t = float(g.TUTOR.lead) + 0.01
+		if g._tutor_typing():
+			var i_before: int = g.tutor_i
+			g._tutor_click(Vector2(-1.0, -1.0))
+			_ok("다 안 나왔을 때 누르면 먼저 다 보여 준다",
+					not g._tutor_typing() and g.tutor_i == i_before
+					and String(g.tutor_id) == talk_id, "%d / %d" % [g._tutor_shown(), full])
+		else:
+			_skip("다 안 나왔을 때 누르면 먼저 다 보여 준다", "lead 안에 다 나오는 짧은 줄")
+		var i2: int = g.tutor_i
+		g._tutor_click(Vector2(-1.0, -1.0))
+		_ok("다 나온 뒤에 누르면 넘어간다", g.tutor_i != i2 or String(g.tutor_id) != talk_id, "")
+		g.tutor_id = talk_id
+		g.tutor_i = talk_i
+		g.tutor_t = 0.0
+		g.motion_off = true
+		_ok("모션을 끄면 한 번에 다 선다", g._tutor_shown() == full, "")
+		g.motion_off = false
+		g._tutor_close()
+	#  설명(내레이션) 줄은 그대로 한 번에 선다.
+	var narr_id := ""
+	for r in GameData.tutor():
+		if String(r.get("who", "")).strip_edges() == "" and String(r.get("id", "")) != "":
+			narr_id = String(r.id)
+			break
+	if narr_id != "":
+		g.tutor_id = narr_id
+		g.tutor_i = 0
+		g.tutor_t = 0.0
+		_ok("설명 줄은 한 번에 선다", g._tutor_shown()
+				== String(g._tutor_step().get("text", "")).length(), narr_id)
+		g._tutor_close()
+	_ok("정보 과녁 이름이 표에 있다", GameData.TUTOR_MARKS.has("info"), "")
 
 	# ── ⑨ 표를 안 건드린다 ────────────────────────────
 	print("⑨ 밸런스")

@@ -2293,7 +2293,7 @@ static func _run(g: Node, e: Dictionary) -> void:
 			if GameData.chal_any() or GameData.endless:
 				_say("챌린지·무한 런에는 안 선다")
 				return
-			for tid in ["u_boot", "u_gift", "u_last"]:
+			for tid in ["u_boot", "u_gift", "u_more", "u_info", "u_last"]:
 				Save.forget(String(tid))
 			g.tut_run = true
 			if g.state == g.S.SHOP:

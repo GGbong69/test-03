@@ -3467,7 +3467,9 @@ func _buy(i: int) -> void:
 	gold -= s.cost
 	s.sold = true
 	#  튜토리얼 선물을 받아 갔다 — 팩·사탕·사진은 여기서 적어야 다시 안 선다.
-	if bool(s.get("free", false)) and _tut_svc(String(s.type), String(s.d.get("id", ""))):
+	var tut_gift: bool = bool(s.get("free", false)) \
+			and _tut_svc(String(s.type), String(s.d.get("id", "")))
+	if tut_gift:
 		var tg := String(TUT_HEAD[String(s.type)]) + String(s.d.get("id", ""))
 		if not tut_got.has(tg):
 			tut_got.append(tg)
@@ -3559,6 +3561,11 @@ func _buy(i: int) -> void:
 		boost_pick = maxi(0, boost_pick - 1)
 		if boost_pick <= 0:
 			_boost_sweep()
+	#  선물을 다 받았다 — 「정보」 단추에서 다시 볼 수 있다고 알린다(u_info ·
+	#  2026-09-27 「아이템 다 획득하면 정보 탭을 열어 확인할 수 있다고」).
+	#  첫 상점은 **리롤 뒤**여야 다 받은 것이다 — 리롤 전에는 리롤 쪽이 아직 안 섰다.
+	if tut_gift and (tut_rr or shop_seen > 1) and _boot_stock().is_empty():
+		_tutor("u_info")
 	#  값이 바뀌었다 — 상점 매듭을 다시 적는다. **팩을 막 샀으면** 문지기가
 	#  뜯는 0.64초 동안만 막고(boost_t >= 0.0), 쏟는 _boost_spill 이 그
 	#  자리에서 곧장 적는다 — 내용이 보이는 첫 순간이 곧 매듭이다.
@@ -39643,6 +39650,12 @@ const TUTOR := {
 	"line": 24.0,        # 글 한 줄 높이 — 20px 잉크 17.5 + 사이 6.5
 	"foot": 28.0,        # 발치 줄 — 건너뛰기 단추(20)와 위아래 4
 	"skip": Vector2(72.0, 20.0),   # 건너뛰기 단추(턱 4 포함). 12px 낱말 43 + 여백
+	#  ── 누가 말하는 줄(tutor.csv 의 who) — 비주얼 노벨처럼 (2026-09-27) ──
+	#  「상점 주인이 말하는 듯한 대사는 텍스트노벨 같은 표현으로」. who 가 찬
+	#  줄은 말상자 윗변에 이름표가 서고 글이 **한 자씩** 나온다. 누르면 먼저 다
+	#  보여 주고, 한 번 더 눌러야 넘어간다. 글은 왼쪽에 붙는다(대화체).
+	"cps": 30.0,         # 한 자씩 — 초당 글자 수. 「이건 서비스야 가져가」(11자)가 0.37초
+	"plate_h": 20.0,     # 이름표 높이 — 말상자 윗변에 반쯤 걸친다
 }
 var tutor_q := []          # 아직 못 보여 준 갈래
 var tutor_id := ""         # 지금 도는 갈래
@@ -39674,6 +39687,25 @@ func _tutor(id: String) -> void:
 
 func _tutor_live() -> bool:
 	return tutor_id != ""
+
+
+#  이 걸음을 누가 말하나(tutor.csv 의 who). 비면 설명(내레이션)이다.
+func _tutor_who() -> String:
+	return String(_tutor_step().get("who", "")).strip_edges()
+
+
+#  지금 보이는 글자 수. 말하는 줄만 한 자씩 나온다 — 모션을 끄면 한 번에 다 선다
+#  (움직임만 꺼지고 글은 남는다는 모션 끄기 규약).
+func _tutor_shown() -> int:
+	var n := String(_tutor_step().get("text", "")).length()
+	if _tutor_who() == "" or motion_off:
+		return n
+	return clampi(int(tutor_t * float(TUTOR.cps)), 0, n)
+
+
+#  말하는 줄이 아직 다 안 나왔는가 — 누르면 먼저 다 보여 준다.
+func _tutor_typing() -> bool:
+	return _tutor_shown() < String(_tutor_step().get("text", "")).length()
 
 
 #  지금 걸음. 없으면 빈 사전이다.
@@ -39780,6 +39812,11 @@ func _tutor_click(m := Vector2(-1.0, -1.0)) -> bool:
 		_tutor_close()
 		_sfx("menu_back")
 		return true
+	#  말하는 줄이 한 자씩 나오는 중이면 먼저 끝까지 보여 준다(비주얼 노벨의 문법).
+	if _tutor_typing():
+		tutor_t = float(String(_tutor_step().get("text", "")).length()) \
+				/ float(TUTOR.cps) + 0.01
+		return true
 	_tutor_next()
 	return true
 
@@ -39835,6 +39872,8 @@ func _mark_rect(k: String) -> Rect2:
 			return gr
 		"dealer": return Rect2(NPC.cx - 78.0, 46.0, 156.0, TBL.fy - 46.0)
 		"reroll": return _reroll_rect()
+		#  화면 오른쪽 위의 「정보」 단추 — 받은 것을 다시 보는 자리.
+		"info": return _hud_btn_rect(0) if _hud_btns_on() else Rect2()
 		"cons":
 			if cons.is_empty():
 				return Rect2(_use_spot() - Vector2(44.0, 44.0),
@@ -39881,10 +39920,14 @@ func _tutor_draw() -> void:
 	var lh: float = TUTOR.line
 	_rr(self, Rect2(bx, by, bw, bh), Color(C_BG, 0.94 * a))
 	_rr_line(self, Rect2(bx, by, bw, bh), Color(C_ACC, 0.7 * a))
-	for i in lines.size():
-		draw_string(font_sm, Vector2(bx + bp, by + bp + 19.0 + float(i) * lh),
-				String(lines[i]), HORIZONTAL_ALIGNMENT_CENTER, bw - bp * 2.0,
-				20, Color(C_TXT, a))
+	var who := _tutor_who()
+	if who == "":
+		for i in lines.size():
+			draw_string(font_sm, Vector2(bx + bp, by + bp + 19.0 + float(i) * lh),
+					String(lines[i]), HORIZONTAL_ALIGNMENT_CENTER, bw - bp * 2.0,
+					20, Color(C_TXT, a))
+	else:
+		_tutor_talk_draw(lines, who, bx, by, bw, a)
 	#  발치 줄의 베이스라인 — 건너뛰기 단추 몸(턱 위 16px)의 글자와 같은 줄.
 	#  바닥선 13 이면 페이퍼로지 12 잉크가 몸 안에서 [3,13.5] 라 윗모서리 빛 한 줄을 빼면
 	#  위 2 · 아래 2.5 로 고르다. 갈무리 때의 14 그대로면 [4,14.5] 로 낱말 밑이 턱에 1.5px
@@ -39915,6 +39958,53 @@ func _tutor_draw() -> void:
 			Color(_ui_ink("tutor:skip", true), a))
 	draw_string(font, Vector2(bx, fy), GameData.text("tut_next"),
 			HORIZONTAL_ALIGNMENT_RIGHT, sk.position.x - bx - 8.0, 12, Color(C_DIM, a))
+
+
+#  말하는 줄 — 이름표 · 왼쪽에 붙은 글 · 한 자씩 · 다 나오면 ▼.
+#  줄 나눔은 **다 나온 글**로 미리 한다 — 나오는 중에 줄이 바뀌면 낱말이
+#  아랫줄로 튀어 읽던 눈이 끊긴다.
+func _tutor_talk_draw(lines: PackedStringArray, who: String, bx: float, by: float,
+		bw: float, a: float) -> void:
+	var bp: float = float(TUTOR.box_pad)
+	var lh: float = TUTOR.line
+	var ph: float = float(TUTOR.plate_h)
+	#  이름표 — 윗변에 반쯤 걸친 금빛 판. 글자는 바탕색으로 판에 박는다.
+	var nw: float = 44.0
+	if font != null:
+		nw = font.get_string_size(who, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x + 20.0
+	var plate := Rect2(bx + 12.0, by - ph * 0.5, nw, ph)
+	_rr(self, plate, Color(C_ACC, a))
+	draw_string(font, Vector2(plate.position.x, _ink_mid_y(plate.get_center().y, 12)),
+			who, HORIZONTAL_ALIGNMENT_CENTER, plate.size.x, 12, Color(C_BG, a))
+	#  글 — 이름표 밑에서 왼쪽에 붙는다. 보이는 몫만 줄마다 잘라 그린다.
+	var left := _tutor_shown()
+	var tx0: float = bx + bp + 6.0
+	var last_end := Vector2.ZERO
+	for i in lines.size():
+		var ln := String(lines[i])
+		var take: int = mini(left, ln.length())
+		left -= ln.length()
+		#  낱말 사이 빈칸 한 자 — 줄 나눔이 먹은 자리를 셈에서도 뺀다.
+		if i < lines.size() - 1:
+			left -= 1
+		var part := ln.substr(0, take)
+		var base := Vector2(tx0, by + bp + 19.0 + float(i) * lh)
+		if part != "":
+			draw_string(font_sm, base, part, HORIZONTAL_ALIGNMENT_LEFT, -1, 20,
+					Color(C_TXT, a))
+		if take > 0 and font_sm != null:
+			last_end = base + Vector2(font_sm.get_string_size(part,
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x, 0.0)
+		if left <= 0:
+			break
+	#  다 나왔다 — 끝에 ▼ 가 깜박인다. 글자가 아니라 도형이다.
+	if not _tutor_typing() and last_end != Vector2.ZERO:
+		var bl: float = 0.5 + 0.5 * sin(npc_clock * 6.0)
+		if motion_off:
+			bl = 1.0
+		var tp := last_end + Vector2(7.0, -10.0)
+		draw_colored_polygon(PackedVector2Array([tp, tp + Vector2(8.0, 0.0),
+				tp + Vector2(4.0, 5.0)]), Color(C_ACC, (0.45 + 0.55 * bl) * a))
 
 
 #  어둠 한 장에 구멍 하나. 사각 넷으로 두른다 — 구멍 자리에 아무것도 안 그리는
