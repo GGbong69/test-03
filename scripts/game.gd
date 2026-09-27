@@ -5436,7 +5436,7 @@ func _aim_stages() -> int:
 
 
 func _aim_hint(stage: int) -> String:
-	var a: Array = GameData.AIM_HINT.get(aim_mode, [])
+	var a: Array = GameData.aim_hints(aim_mode)
 	return String(a[stage]) if stage < a.size() else ""
 
 
@@ -31304,7 +31304,7 @@ func _draw_over() -> void:
 	var x0: float = p.position.x + 20.0
 	#  결과는 이 화면의 주인공이다. 하나만 크고 나머지는 다 곁말이다.
 	#  튜토리얼 런은 6판에서 끝난다 — 이긴 제목만 갈린다(2026-09-27).
-	var head := ("튜토리얼 끝" if tut_run else "완주") if won else "실패"
+	var head := (GameData.text("tut_end") if tut_run else "완주") if won else "실패"
 	draw_string(font, Vector2(x0, p.position.y + 46.0),
 			head, HORIZONTAL_ALIGNMENT_LEFT, -1, 36,
 			Color(C_ACC if won else C_MULT, e))
@@ -39921,7 +39921,8 @@ func _tutor_draw() -> void:
 	var n := GameData.tutor_steps(tutor_id).size() if tutor_id != "" else 0
 	if n > 1:
 		draw_string(font, Vector2(bx + bp, fy),
-				"%d / %d" % [tutor_i + 1, n], HORIZONTAL_ALIGNMENT_LEFT, -1, 12,
+				GameData.text("tut_count", {"i": tutor_i + 1, "n": n}),
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 12,
 				Color(C_DIM, a))
 	#  건너뛰기는 **누를 수 있는 단추**다. 전에는 「ESC 건너뛰기」 글줄이라
 	#  키가 없는 손(모바일)에게는 건너뛸 길이 없었다.
@@ -39933,10 +39934,11 @@ func _tutor_draw() -> void:
 	if sk.has_point(mouse_at) and tutor_t >= float(TUTOR.lead):
 		ui_hot = "tutor:skip"
 	var sb := _ui_face(self, "tutor:skip", sk, true, a)
-	draw_string(font, Vector2(sb.position.x, sb.position.y + 13.0), "건너뛰기",
+	#  글자 셋은 전부 표(texts.csv)에서 온다 — 사람이 고친다(2026-09-27).
+	draw_string(font, Vector2(sb.position.x, sb.position.y + 13.0), GameData.text("tut_skip"),
 			HORIZONTAL_ALIGNMENT_CENTER, sb.size.x, 12,
 			Color(_ui_ink("tutor:skip", true), a))
-	draw_string(font, Vector2(bx, fy), "눌러서 계속",
+	draw_string(font, Vector2(bx, fy), GameData.text("tut_next"),
 			HORIZONTAL_ALIGNMENT_RIGHT, sk.position.x - bx - 8.0, 12, Color(C_DIM, a))
 
 
@@ -40069,9 +40071,9 @@ func _draw_hint() -> void:
 	var hint := ""
 	match state:
 		S.PICK:
-			#  명사형으로 모은다 — 조준 줄(AIM_HINT)이 전부 「…결정」이라
+			#  명사형으로 모은다 — 조준 줄(texts.csv 의 aim_*)이 전부 「…결정」이라
 			#  여기만 존댓말이면 한 발 안에서 어투가 바뀐다. 2026-09-24
-			hint = "던질 다트 고르기"
+			hint = GameData.text("hint_pick")
 		S.AIM_V:
 			hint = _aim_hint(0)
 		S.AIM_H:

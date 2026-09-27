@@ -144,9 +144,11 @@ func _run() -> void:
 	print("\n글 검사 — 효과와 값만\n")
 
 	# ── ① 판 위 안내줄 · 조준 줄 ─────────────────────────
-	var hints := ["던질 다트 고르기"]
-	for m in GameData.AIM_HINT:
-		for t in GameData.AIM_HINT[m]:
+	#  판 위 줄은 2026-09-27 부터 표(texts.csv)에 산다 — 사람이 고친다.
+	#  ⚠ 이 자가 빨개졌다면 **사람이 표를 고친 것일 수 있다.** 되돌리지 말고 묻는다.
+	var hints := [GameData.text("hint_pick")]
+	for m in GameData.AIM_MODES:
+		for t in GameData.aim_hints(String(m)):
 			hints.append(String(t))
 	var bad := []
 	for t in hints:
@@ -277,7 +279,7 @@ func _run() -> void:
 
 	# ── ⑤ 그리는 파일 전수 — 존댓말 글이 한 줄도 없다 ────
 	#  ⚠ **위 넷으로는 못 잡는 자리가 있었다.** ①은 _draw_hint 가 내는
-	#  state 별 줄과 AIM_HINT 만, ②는 다트통 줄만 훑는다. 그래서 사진
+	#  state 별 줄과 조준 줄(texts.csv)만, ②는 다트통 줄만 훑는다. 그래서 사진
 	#  화면이 제 손으로 그리던 「칠할 칸을 고르세요」가 판 위 안내줄을 전부
 	#  명사형으로 모은 뒤에도 그대로 남았다(2026-09-25 에 잡았다) — 그
 	#  줄은 _photo_draw 안에 있어서 **재는 자리가 애초에 없었다.**

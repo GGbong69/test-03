@@ -61,6 +61,10 @@ const FILES := {
 	"colors": "colors.csv",
 	"tags": "tags.csv",
 	"tutor": "tutor.csv",
+	#  화면 글 — 튜토리얼 말상자의 단추·걸음 세기, 판 아래 안내 같은 고정 문구.
+	#  사람이 표에서 고친다(2026-09-27 「튜토리얼 문구들 다 데이터화 시켜 내가
+	#  수정하게」). 튜토리얼 **문장**은 tutor.csv 가 그대로 쥔다.
+	"texts": "texts.csv",
 	"boosters": "boosters.csv",
 	"tuning": "tuning.csv",
 	# ── HIGHTON 스펙(2026-08-23 통합 컨텍스트)에서 온 표 ──
@@ -158,25 +162,18 @@ const AIM_STAGES := {
 	"cross": 1, "drift": 1, "place": 1, "pull": 1, "kick": 1,
 }
 
-# 잠그는 칸마다 화면 아래에 뜰 말. 방식마다 무엇을 정하는지가 달라서
-# 한 문장을 돌려 쓰면 "눌러 좌우 결정" 을 읽고 원 크기를 정하게 된다.
-# 칸 수와 문장 수가 어긋나면 안내가 빈 채로 뜬다 — 검증기가 막는다.
-#
-#  ⚠ **어투가 하나다 — 명사형 「-기」.** 2026-09-24 에 여덟 줄을 「다트판을
-#  눌러 … 결정」으로 모았는데, 그것은 어디를 누르라는 **입력 지시**였고
-#  같은 말이 여섯 번 되풀이됐다. 이미 맞던 셋(「꽂을 자리 고르기」
-#  「튕겨 던지기」 「밀리는 조준 잡기」)이 본이다 — 무엇을 정하는지만
-#  적는다. 2026-09-25
-const AIM_HINT := {
-	"std": ["높이 잡기", "좌우 잡기"],
-	"ring": ["원 크기 잡기", "각도 잡기"],
-	"tilt": ["첫 축 잡기", "둘째 축 잡기"],
-	"cross": ["교차점 잡기"],
-	"drift": ["떠도는 조준점 잡기"],
-	"place": ["꽂을 자리 고르기"],
-	"pull": ["튕겨 던지기"],
-	"kick": ["밀리는 조준 잡기"],
-}
+# 잠그는 칸마다 화면 아래에 뜰 말 — **texts.csv 의 aim_<방식>_<칸>** 줄이다
+# (2026-09-27 에 표로 옮겼다. 전에는 여기 AIM_HINT 상수였다).
+# 방식마다 무엇을 정하는지가 달라서 한 문장을 돌려 쓰면 "눌러 좌우 결정" 을
+# 읽고 원 크기를 정하게 된다. 칸 수와 줄 수가 어긋나면 안내가 빈 채로 뜬다 —
+# 검증기(_v_item_aim · _v_texts)가 막는다.
+static func aim_hints(mode: String) -> Array:
+	var out := []
+	for k in int(AIM_STAGES.get(mode, 0)):
+		out.append(text("aim_%s_%d" % [mode, k + 1]))
+	return out
+
+
 const SCORE_MODES := ["std", "bal", "rand"]
 
 const MODIFIER_AXES := ["band_mul", "gauge_mul", "fog", "darts_add",
@@ -255,6 +252,19 @@ static func _read(path: String, who: String) -> Array:
 			row[head[i]] = r[i].strip_edges() if i < r.size() else ""
 		out.append(row)
 	f.close()
+	#  ⚠ 한국어 윈도우 엑셀의 「CSV(쉼표로 분리)」 저장은 한글을 cp949 로 적는다.
+	#  UTF-8 로 읽으면 글자가 전부 깨진 채(U+FFFD) 게임에 뜬다 — 사람이 표를
+	#  고치게 된 뒤로(2026-09-27) 가장 흔히 밟을 자리라 한 번에 알려 준다.
+	for row2 in out:
+		var bad := false
+		for k in row2:
+			if str(row2[k]).contains("�"):
+				bad = true
+				break
+		if bad:
+			_errs.append("%s — 한글이 깨졌다. 파일이 UTF-8 이 아니다 — 엑셀에서는 「CSV UTF-8(쉼표로 분리)」로 저장한다"
+					% who)
+			break
 	return out
 
 
@@ -1206,7 +1216,7 @@ static func tags() -> Array:
 #
 #  ── 문구 ────────────────────────────────────────────
 #  동작이나 규칙 한 마디다. 왜 그런지는 안 적는다.
-#  던지기·조준은 여기 없다 — 하단 안내(AIM_HINT)가 이미 잠금마다
+#  던지기·조준은 여기 없다 — 하단 안내(texts.csv 의 aim_*)가 이미 잠금마다
 #  가르치므로 같은 말을 두 곳에서 하면 둘 다 안 읽힌다.
 static func tutor() -> Array:
 	boot()
@@ -1239,6 +1249,34 @@ const TUTOR_MARKS := ["", "leg_go", "leg_skip", "leg_boss", "board", "rack",
 		"score", "chute_buy", "chute_sell", "goods", "dealer", "reroll",
 		"cons", "gift"]
 const TUTOR_WAITS := ["tap", "time"]
+
+
+#  ── 화면 글(texts.csv) ─────────────────────────────────
+#  열쇠(id)로 부르고 {이름} 자리를 채운다. 표에 없는 열쇠는 **열쇠 그대로**
+#  보인다 — 빈칸으로 사라지는 것보다 무엇이 빠졌는지 화면에서 바로 보인다.
+#  검증기(_v_texts)가 부팅 때 빠진 열쇠를 오류로 적는다.
+static func text(id: String, vals := {}) -> String:
+	var t: String = _texts().get(id, id)
+	return fill(t, vals) if not vals.is_empty() else t
+
+
+static func _texts() -> Dictionary:
+	boot()
+	if not _cache.has("texts"):
+		var m := {}
+		for r in _raw.get("texts", []):
+			m[String(r.get("id", ""))] = String(r.get("text", ""))
+		_cache["texts"] = m
+	return _cache["texts"]
+
+
+#  게임이 부르는 화면 글 열쇠. 목록이 곧 계약이다 — 표에서 줄을 지우거나
+#  열쇠를 잘못 고치면 부팅이 소리를 낸다. 조준 안내(aim_*)는 AIM_STAGES 가
+#  세므로 여기 안 적는다(_v_item_aim).
+const TEXT_NEED := {
+	"tut_next": [], "tut_skip": [], "tut_count": ["i", "n"],
+	"tut_end": [], "hint_pick": [],
+}
 
 
 # 이 판에 걸 수 있는 뱃지 하나. 라운드가 문이고 가중치가 저울이다.
@@ -2043,6 +2081,7 @@ static func _validate() -> void:
 	_v_colors()
 	_v_tags()
 	_v_tutor()
+	_v_texts()
 	_v_item_aim()
 
 
@@ -2179,6 +2218,31 @@ static func _has_row(table: String, id: String) -> bool:
 # 된다 — 히든 다트통이 통째로 아무 일도 안 하는 다트통이 되는 길이다.
 #  배움 표. 빈 문구 하나가 화면에 빈 말상자로 뜨고, 모르는 과녁 하나가
 #  아무 데도 안 밝히는 걸음이 된다 — 둘 다 화면에서는 "고장" 으로 읽힌다.
+static func _v_texts() -> void:
+	var seen := {}
+	for r in _raw.get("texts", []):
+		var id: String = r.get("id", "")
+		var ln: int = r.get("_line", 0)
+		if seen.has(id):
+			_errs.append("texts:%d %s — 열쇠가 겹친다. 뒤 줄이 앞 줄을 덮는다" % [ln, id])
+		seen[id] = true
+		if String(r.get("text", "")).strip_edges() == "":
+			_errs.append("texts:%d %s — 글이 비었다. 화면에 빈칸이 뜬다" % [ln, id])
+		var known: bool = TEXT_NEED.has(id)
+		if id.begins_with("aim_"):
+			var parts := id.split("_")
+			known = parts.size() == 3 and AIM_STAGES.has(parts[1]) 					and int(parts[2]) >= 1 and int(parts[2]) <= int(AIM_STAGES[parts[1]])
+		if not known:
+			_warns.append("texts:%d %s — 게임이 안 부르는 열쇠다. 열쇠 글자가 틀렸는가" % [ln, id])
+	for need in TEXT_NEED:
+		if not seen.has(need):
+			_errs.append("texts — %s 줄이 없다. 화면에 열쇠 글자가 그대로 뜬다" % need)
+			continue
+		for v in TEXT_NEED[need]:
+			if String(_texts().get(need, "")).find("{%s}" % v) < 0:
+				_errs.append("texts %s — {%s} 자리가 없다. 그 수가 안 보인다" % [need, v])
+
+
 static func _v_tutor() -> void:
 	var seen := {}          # id → 본 step 들
 	for r in _raw.get("tutor", []):
@@ -2235,13 +2299,11 @@ static func _v_item_aim() -> void:
 			_errs.append("조준 %s — aim_text 에 문구가 없다. 동전이 빈 칸이 된다" % m)
 		if aim_name(m) == m:
 			_errs.append("조준 %s — aim_name 에 짧은 이름이 없다. 속이름이 화면에 뜬다" % m)
-		var hs: Array = AIM_HINT.get(m, [])
-		if hs.size() != st:
-			_errs.append("조준 %s — 잠금 %d회인데 안내가 %d줄이다"
-					% [m, st, hs.size()])
-		for h in hs:
-			if String(h).strip_edges() == "":
-				_errs.append("조준 %s — 안내 한 줄이 비었다" % m)
+		for k in st:
+			var hid := "aim_%s_%d" % [m, k + 1]
+			if not _texts().has(hid):
+				_errs.append("조준 %s — 잠금 %d회인데 texts.csv 에 %s 줄이 없다. 안내가 빈 채로 뜬다"
+						% [m, st, hid])
 	for r in _raw.get("items", []):
 		var am: String = r.get("aim", "")
 		if am != "" and not AIM_MODES.has(am):
