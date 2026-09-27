@@ -1,15 +1,15 @@
 extends SceneTree
 
-# 튜토리얼 런 검사 (2026-09-26 · 2026-09-27 두 번 갈아엎음).
+# 튜토리얼 런 검사 (2026-09-26 · 2026-09-27 여러 번 갈아엎음).
 #   「튜토리얼을 게임의 매력을 보여 주는 걸로 특화하자 — 개사기 아이템 주는 거」
 #   사용자와 절차대로 정한 흐름:
-#     ① 처음 켠 사람의 첫 런은 2라운드 6판짜리 튜토리얼 런이다
-#     ② 첫 상점 두 장 → 리롤을 가리키고 세 장 더 → 둘째·셋째 상점은 보드 확장 ·
-#        사탕 · 팩 · 사진(TUT.pages) · 태그 [서비스]
+#     ① 처음 켠 사람의 첫 런은 1라운드 3판짜리 튜토리얼 런이다
+#     ② 첫 상점 두 장 → 리롤을 가리키고 동전 셋 · 사탕 → 둘째 상점은 보드 확장 ·
+#        팩 · 사진(TUT.pages) · 태그 [서비스]
 #        · 안 집으면 다음 상점에 다시 · 곱하기는 알아서 오른쪽 끝
-#     ③ 첫 상점 상인 두 줄 · SAFETY LAST! 첫 발동 한 줄
-#     ④ 판 목표는 튜토리얼 런에서만 오른다(TUT.target)
-#     ⑤ 6판을 넘기면 「튜토리얼 끝」 → 로비. 그때 배움 표에 적는다
+#     ③ 상인 말(표에 있으면) — 문구는 사람이 표에서 고친다
+#     ④ 판 목표 · 보스 제약은 본편 그대로 — 넘치는 점수(「점수뽕」)가 목적이다
+#     ⑤ 3판을 클리어하면 「튜토리얼 끝」 → 로비. 그때 배움 표에 적는다
 #     ⑥ 챌린지·무한·검사 도구가 곧장 부르는 _new_run() 에는 안 선다 · 기록 0
 #
 #   godot --path . --headless --script scripts/tools/qa_boot.gd
@@ -113,12 +113,12 @@ func _run() -> void:
 	_tut()
 	_ok("처음 켠 사람이 「시작」을 누르면 튜토리얼 런이다", g.tut_run, "")
 	_ok("런 시작에 손에 넣어 주지 않는다", _ids().is_empty(), str(_ids()))
-	_ok("라운드가 둘로 보인다", g._run_rounds() == 2, "%d" % g._run_rounds())
+	_ok("라운드가 하나로 보인다", g._run_rounds() == 1, "%d" % g._run_rounds())
 	_ok("기록을 안 남긴다", g._rec_off(), "")
 	_ok("이어하기에 적힌다", str(g.RUN_PLAIN).find("tut_run") >= 0, "")
 
-	# ── ② 상점 셋 ────────────────────────────────────
-	print("② 상점 셋")
+	# ── ② 상점 둘 ────────────────────────────────────
+	print("② 상점 둘")
 	_shop(1)
 	_ok("첫 상점에는 첫 쪽만 선다(리롤 전)", _gift_ids() == ["r14", "u26"], str(_gift_ids()))
 	var free0 := true
@@ -158,37 +158,38 @@ func _run() -> void:
 	var g1: int = g.gold
 	g._reroll()
 	_ok("첫 리롤은 무료다", g.gold == g1, "골드 %d → %d" % [g1, g.gold])
-	_ok("리롤하면 세 장이 더 선다", _gift_ids() == ["c03", "c06", "u11"], str(_gift_ids()))
+	_ok("리롤하면 동전 셋과 사탕이 선다", _gift_ids() == ["c03", "c06", "c_tr", "u11"],
+			str(_gift_ids()))
 	_ok("그래도 테이블 폭은 그대로다", g.stock.size() == GameData.shop_slots(1),
 			"%d" % g.stock.size())
 	_take_all()
 	_ok("동전 다섯 칸이 첫 상점에서 다 찬다",
 			_ids() == ["r14", "u11", "c03", "u26", "c06"], str(_ids()))
 	_ok("동전 슬롯을 안 넘긴다", g.owned.size() <= GameData.max_items(), "")
-	_shop(2)
-	_ok("둘째 상점에 보드 확장과 사탕이 선다", _gift_ids() == ["c_tr", "dnut"],
-			str(_gift_ids()))
-	_take_all()
-	_ok("보드 확장이 끼워졌다", (g.mods_own as Array).has("dnut"), str(g.mods_own))
 	var held := []
 	for c in g.cons:
 		held.append(String(c.get("id", "")))
 	_ok("사탕이 칸에 들었다", held.has("c_tr"), str(held))
-	g.cons.clear()          # 셋째 판에 썼다고 친다
-	_shop(3)
-	_ok("셋째 상점에 팩과 사진이 선다", _gift_ids() == ["b_small", "c_again"],
-			str(_gift_ids()))
+	g.cons.clear()          # 둘째 판에 썼다고 친다
+	_shop(2)
+	_ok("둘째 상점에 보드 확장 · 팩 · 사진이 선다",
+			_gift_ids() == ["b_small", "c_again", "dnut"], str(_gift_ids()))
+	_ok("테이블 폭은 그대로다(나머지 한 칸은 평소 매물)",
+			g.stock.size() == GameData.shop_slots(2), "%d" % g.stock.size())
 	var pk_ok := false
 	for i in _gift_at():
 		if String(g.stock[i].type) == "boost":
 			pk_ok = (g.stock[i].d.get("pool", []) as Array) == ["cons", "fix"]
 	_ok("선물 팩은 사탕·사진만 쏟는다(동전 칸이 꽉 찼다)", pk_ok, "")
 	for i in _gift_at():
-		if String(g.stock[i].type) == "fix":
+		if String(g.stock[i].type) == "fix" or String(g.stock[i].type) == "mod":
 			g._buy(i)
+	_ok("보드 확장이 끼워졌다", (g.mods_own as Array).has("dnut"), str(g.mods_own))
 	_ok("받아 간 사진은 적힌다", (g.tut_got as Array).has("f:c_again"), str(g.tut_got))
-	_shop(4)
-	_ok("넷째 상점에는 안 받은 팩만 다시 선다", _gift_ids() == ["b_small"],
+	#  상점 셋째는 튜토리얼 런에 없다(3판에서 끝난다) — 남은 것이 다시 서는
+	#  규칙만 잰다.
+	_shop(3)
+	_ok("다음 상점에는 안 받은 팩만 다시 선다", _gift_ids() == ["b_small"],
 			str(_gift_ids()))
 	_ok("사탕은 써서 사라져도 다시 안 선다", not _gift_ids().has("c_tr"), "")
 
@@ -196,9 +197,9 @@ func _run() -> void:
 	print("③ 안 집고 나가면")
 	_tut()
 	_shop(1)
-	_ok("리롤을 안 하면 세 장은 안 선다", _gift_at().size() == 2, "%d장" % _gift_at().size())
+	_ok("리롤을 안 하면 리롤 쪽은 안 선다", _gift_at().size() == 2, "%d장" % _gift_at().size())
 	_shop(2)
-	_ok("다음 상점에 앞 쪽까지 다 다시 선다", _gift_at().size() == 7,
+	_ok("다음 상점에 앞 쪽까지 다 다시 선다", _gift_at().size() == 9,
 			"%d장 %s · 판 %d" % [_gift_at().size(), str(_gift_ids()), g.stock.size()])
 
 	# ── ④ 태그 ───────────────────────────────────────
@@ -212,43 +213,30 @@ func _run() -> void:
 			src.count("_tip_tag(\"서비스\", C_ACC)") == 4, "")
 	_ok("값표가 「공짜」를 적는다", src.find("\"공짜\"") >= 0, "")
 
-	# ── ⑤ 판 목표 ────────────────────────────────────
-	print("⑤ 판 목표")
-	var tg_ok := true
+	# ── ⑤ 판 목표 · 보스 제약은 본편 그대로 ─────────────
+	#  한때 튜토리얼 런에서만 목표를 올리고 보스 제약 둘을 뺐다 — 반려됐다
+	#  (2026-09-27 「점수뽕을 느끼는 걸 제공할 거였는데 … 점수 곡선도 걍 기본으로」).
+	print("⑤ 판 목표 · 보스 제약")
+	var same := true
 	var note := ""
 	for n in range(1, int(T.legs) + 1):
-		var tt: int = int(T.target[n - 1])
-		var got: int = g._target_at(n)
-		if tt > 0 and got < tt:
-			tg_ok = false
-		note += "%d " % got
-	_ok("튜토리얼 런은 제 목표를 쓴다", tg_ok, note)
-	var raised := false
-	for n in range(2, int(T.legs) + 1):
-		if int(T.target[n - 1]) > GameData.target_of(n):
-			raised = true
-	_ok("둘째 판부터 본편보다 높다", raised, str(T.target))
-	_ok("첫 판은 본편 그대로다(선물 전)", int(T.target[0]) == 0, "")
-	#  보스 제약에서 「문턱」·「먹통」이 빠진다 — 잰 목표가 무너지는 둘이다.
-	var bad_mod := 0
-	for k in 300:
-		g._roll_boss_mods(3, true)
-		for mid in g.boss_mods.get(3, PackedStringArray()):
-			if String(mid) == "tgt" or String(mid) == "dull":
-				bad_mod += 1
-	_ok("튜토리얼 보스에는 문턱·먹통이 안 걸린다", bad_mod == 0, "300번 중 %d" % bad_mod)
-	g.tut_run = false
-	_ok("튜토리얼이 아니면 본편 목표다", g._tut_target(2) == 0, "")
+		var a0: int = g._target_at(n)
+		g.tut_run = false
+		var a1: int = g._target_at(n)
+		g.tut_run = true
+		if a0 != a1:
+			same = false
+		note += "%d " % a0
+	_ok("튜토리얼 런도 본편 목표다", same and not T.has("target"), note)
 	var seen_bad := false
 	for k in 300:
 		g._roll_boss_mods(3, true)
 		for mid in g.boss_mods.get(3, PackedStringArray()):
 			if String(mid) == "tgt" or String(mid) == "dull":
 				seen_bad = true
-	_ok("본편 보스에는 그대로 걸린다", seen_bad, "")
-	g.tut_run = true
+	_ok("튜토리얼 보스도 제약 표를 그대로 쓴다", seen_bad, "")
 
-	# ── ⑥ 6판에서 끝난다 ──────────────────────────────
+	# ── ⑥ 마지막 판에서 끝난다 ──────────────────────────────
 	print("⑥ 끝")
 	g.state = g.S.RESOLVE
 	g.leg_no = int(T.legs)
@@ -257,7 +245,7 @@ func _run() -> void:
 	g.queue.clear()
 	g.burst_hits.clear()
 	g._finish_leg()
-	_ok("6판을 넘기면 런 끝 화면이다", g.state == g.S.OVER and g.won, "")
+	_ok("%d판을 클리어하면 런 끝 화면이다" % int(T.legs), g.state == g.S.OVER and g.won, "")
 	_ok("그때 배움 표에 적는다", Save.taught("u_boot"), "")
 	_ok("무한 갈래를 안 연다", not g.endless_ok, "")
 	g.state = g.S.TITLE

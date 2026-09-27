@@ -2299,9 +2299,6 @@ static func _run(g: Node, e: Dictionary) -> void:
 			if g.state == g.S.SHOP:
 				g._roll_stock()
 				g._tutor("u_gift")
-			#  목표는 판이 설 때 읽는다 — 지금 판에는 그 자리에서 건다.
-			if g._tut_target(g.leg_no) > 0 and g.state != g.S.SHOP:
-				g.target = g._target_at(g.leg_no)
 			_say("튜토리얼 런 켬 — %d판에서 끝난다" % int(g.TUT.legs))
 			return
 
