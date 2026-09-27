@@ -23,6 +23,9 @@ var RUNS := 8
 # 기본 동전 슬롯. id 를 박아 두었더니 표가 갈리면서 셋이 한꺼번에 죽었다 —
 # 표에서 앞의 셋을 집는다. 특정 조합을 보려면 rack= 인자로 준다.
 var RACK: PackedStringArray = PackedStringArray()
+#  보드 확장도 같이 끼운다(mods=pizz) · 판 몇 개에서 끊을지(legs=6 — 튜토리얼 런의 길이).
+var MODS: PackedStringArray = PackedStringArray()
+var LEGS := 0
 const FRAME_CAP := 400000
 
 var last_round := 1
@@ -44,12 +47,16 @@ func _initialize() -> void:
 			RUNS = maxi(1, int(t.substr(5)))
 		elif t.begins_with("rack="):
 			RACK = t.substr(5).split(",")
+		elif t.begins_with("mods="):
+			MODS = t.substr(5).split(",")
+		elif t.begins_with("legs="):
+			LEGS = maxi(0, int(t.substr(5)))
 	if RACK.is_empty():
 		for it in GameData.items():
 			if RACK.size() >= 3:
 				break
 			RACK.append(String(it.id))
-	print("동전 슬롯: %s · 런 %d회" % [", ".join(RACK), RUNS])
+	print("동전 슬롯: %s · 보드 확장: %s · 런 %d회" % [", ".join(RACK), ", ".join(MODS), RUNS])
 
 
 func _fill_rack() -> void:
@@ -64,6 +71,9 @@ func _fill_rack() -> void:
 			g.owned.append(c)
 			break
 	g._panel_reset()
+	if not MODS.is_empty():
+		g.mods_own = Array(MODS)
+		g._board_bake()
 
 
 func _row(n: int) -> Dictionary:
@@ -87,6 +97,21 @@ func _finish() -> void:
 				% [n, GameData.target_of(n), 100.0 * float(r["pass"]) / maxf(sn, 1.0),
 				du, float(GameData.darts_of(n)) / maxf(du, 0.5), one, one / tg,
 				float(r.gs) / sn])
+	#  한 줄 요약 — 판마다 「첫 발 ÷ 목표」의 기하평균과 통과율.
+	var lg := 0.0
+	var ln := 0
+	var sp := 0
+	var ss := 0
+	for n in st:
+		var r2: Dictionary = st[n]
+		var one2: float = float(r2.one) / maxf(float(r2.seen), 1.0)
+		if one2 > 0.0:
+			lg += log(one2 / float(GameData.target_of(n)))
+			ln += 1
+		sp += int(r2["pass"])
+		ss += int(r2.seen)
+	print("요약  첫발/목표 기하평균 x%.2f · 통과 %d/%d"
+			% [exp(lg / maxf(float(ln), 1.0)), sp, ss])
 	quit(0)
 
 
@@ -131,7 +156,9 @@ func _process(_d: float) -> bool:
 	if g.leg_darts > 0 and g.darts_left <= g.leg_darts:
 		_used = g.leg_darts - g.darts_left
 
-	if g.state == g.S.OVER:
+	#  legs= 이면 그 판을 넘기는 순간 런을 끊는다(튜토리얼 런 길이만 본다).
+	var cut: bool = LEGS > 0 and g.leg_no > LEGS
+	if g.state == g.S.OVER or cut:
 		runs += 1
 		print("  … 런 %d 끝 (판 %d · 완주 %s)" % [runs, g.leg_no, str(g.won)])
 		if runs >= RUNS:

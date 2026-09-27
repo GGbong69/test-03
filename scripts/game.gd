@@ -570,6 +570,7 @@ var bought_item := false
 var gold := 0
 var owned := []
 var won := false
+var tut_run := false     # 튜토리얼 런(처음 켠 사람의 첫 런 · 2라운드 6판) — TUT 머리말
 
 var last_sector := -1
 var last_miss := false          # 직전 투척이 빗나갔는가 — 조건 missp 가 읽는다
@@ -1266,6 +1267,7 @@ const RUN_PLAIN := [
 	#  ⚠ shop_seen 은 배움 게이트다. 되살리기가 이 값을 올리면 상점 설명이
 	#  밀린다 — _open_shop 을 안 부르는 이유 중 하나가 이것이다.
 	["shop_seen", 0], ["bought_item", false], ["carry_darts", 0],
+	["tut_run", false],      # 튜토리얼 런이면 이어해도 튜토리얼이다
 	["track_lv", {}],        # 열쇠가 **int**(트랙 id)다
 	["track_hits", {}],      # 같음
 	["zone_hist", {}],       # 열쇠가 **String**(zone 이름)이다 — 위 둘과 다르다
@@ -1778,7 +1780,10 @@ func _stock_restore() -> void:
 #  런 / 판 진행
 # ══════════════════════════════════════════════════════════
 
-func _new_run() -> void:
+#  human — 사람이 로비에서 「시작」을 누른 길(키 · 손가락 둘)만 true 다.
+#  튜토리얼 런은 그 길에서만 선다: 검사 도구 수백 개가 이 함수를 곧장 부르므로
+#  거기서까지 켜면 저장을 비운 도구마다 6판짜리 튜토리얼 런이 된다.
+func _new_run(human := false) -> void:
 	#  미룬 다트통 저장을 여기서 비운다 — 「시작」은 새 런 화면을 떠나는
 	#  자리라, 굴려 고른 통이 디스크에 안 앉은 채로 지나갈 수 있다.
 	#  2026-09-19
@@ -1804,6 +1809,9 @@ func _new_run() -> void:
 	#  런 끝 · ESC 셋이 전부 그 함수를 지난다. 2026-09-20
 	GameData.endless = false
 	endless_ok = false
+	#  튜토리얼 런 — 무한을 끈 **뒤에** 묻는다(_tut_due 가 무한을 본다).
+	tut_run = false
+	tut_run = human and _tut_due()
 	#  지난 런에 열린 것을 새 런까지 끌고 가면 안 된다.
 	run_unlocked.clear()
 	#  배움도 런 단위로 센다. 줄에 남은 것을 새 런까지 끌고 가면 엉뚱한
@@ -2136,8 +2144,10 @@ func _grip_consume() -> void:
 #
 #  자랑할 자리는 따로 판다 — 세기 절(S_TAL)의 endless:leg · endless:score.
 #  2026-09-20
+#  ⚠ 튜토리얼 런도 기록을 안 남긴다(2026-09-27). 상점이 공짜로 가장 센 빌드를
+#  쥐여 주는 런이라, 적으면 한 발 점수 10만(전설 해금 문턱)이 첫 런에 거저 선다.
 func _rec_off() -> bool:
-	return GameData.chal_any() or GameData.endless
+	return GameData.chal_any() or GameData.endless or tut_run
 
 
 #  ── 통계로 가는 문 셋 ───────────────────────────────────
@@ -2355,6 +2365,11 @@ func _finish_leg() -> void:
 		_sfx("run_win")
 		return
 
+	#  튜토리얼 런은 6판에서 끝난다 — 상점 대신 정산 화면(「튜토리얼 끝」).
+	if tut_run and leg_no >= int(TUT.legs):
+		_tut_end()
+		return
+
 	if leg_no >= GameData.legs_top():
 		#  ── 무한의 상단(마지막 라운드)에 닿았다 ──────────
 		#  **문 안에서 갈린다.** 승리를 판 24 에서 그 자리에 박는 것이 이
@@ -2570,60 +2585,134 @@ func _pack_grants() -> void:
 	_panel_reset()
 
 
-#  ── 첫 런에 쥐여 주는 두 장 ──────────────────────────
-#  「튜토리얼을 게임의 매력을 보여 주는 걸로 특화하자 — 튜토리얼에서 개사기
-#  아이템 주는 거 확실하게」(2026-09-26).
-#  까닭이 분명하다. 이 게임의 재미는 **빌드가 불어나는 것**인데, 첫 판 셋은
-#  동전 슬롯이 비어 있어 「다트 던져 작은 수 나오는 게임」으로 보인다. 대회
-#  심사처럼 **5분만 보는 사람**은 그 구간만 보고 판단한다 — 정점을 구조적으로
-#  못 보는 것이다. 첫 런에 두 장을 쥐여 주면 첫 발부터 카드가 춤추고 목표를
-#  넘겨 판이 깨진다.
+#  ══ 튜토리얼 런 (2026-09-26 · 2026-09-27 갈아엎음) ══════════════════
+#  「튜토리얼을 게임의 매력을 보여 주는 걸로 특화하자 — 개사기 아이템 주는 거」.
+#  이 게임의 재미는 **빌드가 불어나는 것**인데 동전 슬롯이 빈 동안은 「다트 던져
+#  작은 수 나오는 게임」으로 보인다. 대회 심사처럼 짧게 보는 사람은 그 구간만
+#  보고 판단한다. 그래서 처음 켠 사람의 첫 런을 **2라운드 6판짜리 튜토리얼 런**
+#  으로 만들고, 상점마다 공짜 선물로 게임 안에서 가장 센 빌드를 채워 준다.
 #
-#  고른 두 장과 까닭:
-#   · **빌리의 바지**(점수 +40 · 배수 +4) — 조건이 없다. 어디에 꽂아도 크게
-#     오르므로 **빗나가도** 그림이 선다. 첫 손님이 조준을 못해도 재미가 난다.
-#   · **SAFETY LAST!**(판 마지막 다트에 배수 ×3) — 판의 **마지막 발**에서
-#     터진다. 끝이 절정이 되는 박자를 공짜로 얻는다.
-#  둘이 곱해져 여섯째 발이 세 자리에서 네 자리로 뛴다 — 그 한 발이 이 게임의
-#  전부를 말한다.
-#
-#  ── 손에 쥐여 주지 않고 **첫 상점에 공짜로 깐다** (2026-09-27) ──
-#  처음엔 런이 시작하자마자 손에 넣어 줬는데 「튜토리얼로 좋은 아이템을 상점에서
-#  자연스럽게 줘야지 이게 뭐야」로 반려됐다. 사용자와 정한 흐름:
-#   · 첫 상점 테이블 네 칸 중 **두 칸**에 공짜 딱지로 선다 — 나머지 두 칸은
-#     평소처럼 굴린다(평소 상점이 어떤지도 같이 보인다).
-#   · 사는 법(창구로 끌기)은 그대로 배운다 — 값만 0 이다.
-#   · 상인이 「첫 손님이라 둘은 그냥 준다」 한 줄(u_gift).
-#   · 안 집고 나가면 막지 않되, **다음 상점에 다시** 공짜로 선다. 둘 다 손에
-#     들어온 순간 배움 표에 적고 그 뒤로는 안 선다(_buy).
+#  사용자와 절차대로 정한 것(2026-09-27):
+#   · 처음엔 런 시작에 손에 두 장을 쥐여 줬다 — 「상점에서 자연스럽게 줘야지」.
+#   · 상점 1 · 2 · 3 에 선물이 공짜 딱지로 놓인다. 테이블 칸을 나눠 쓴다.
+#     안 집고 나가면 다음 상점에 다시 놓인다. 툴팁 태그 [서비스].
+#   · 첫 상점 상인 두 줄 「처음 보는 손님이군」 → 「이건 서비스야 가져가」(u_gift).
+#   · 곱하기는 알아서 오른쪽 끝에 선다(_tut_slot) — 왼쪽부터 켜지므로.
+#   · 판 목표를 튜토리얼 런에서만 올린다(TUT.target). 본편 목표로는 1~6판이 전부
+#     첫 발에 끝나 마지막 발 ×3 이 한 번도 안 켜졌다(build_probe 실측 — 첫 두
+#     장만으로 첫 발이 목표의 1.6~6.5배).
+#   · 6판을 넘기면 정산 화면(「튜토리얼 끝」) → 로비. 그때 배움 표 u_boot 에
+#     적는다 — 중간에 지거나 나가면 다음 런이 다시 튜토리얼이다.
 #   · SAFETY LAST! 가 처음 켜질 때 한 줄(u_last).
-#  ⚠ 챌린지·무한 런은 안 준다(_rec_off 가 그 둘을 이미 가른다). 그쪽은
-#  「제약을 걸고 도는」 런이라 공짜 두 장이 그 뜻을 통째로 지운다.
-#  ⚠ 오토플레이(curve_probe · score_probe · grow_dist)는 저장을 비우고 돌아서
-#  안 막으면 **매 측정 런이 첫 런**이 된다 — 곡선이 튜토리얼 선물을 먹고 잰다.
+#  ⚠ 챌린지·무한·오토플레이는 안 선다. 그리고 튜토리얼 런은 **기록을 안 남긴다**
+#  (_rec_off). 사람이 로비에서 「시작」을 누른 길에서만 선다(_new_run 의 human).
+#  이 런의 라운드 수 — 화면(라운드 칸 · 「R1/2」)만 읽는다. 튜토리얼 런은 둘.
+func _run_rounds() -> int:
+	if tut_run:
+		return maxi(int(TUT.legs) / maxi(GameData.legs_per_round(), 1), 1)
+	return GameData.rounds_n()
+
+
+func _tut_due() -> bool:
+	return not GameData.chal_any() and not GameData.endless and not _autoplay 			and not Save.taught("u_boot")
+
+
 func _boot_due() -> bool:
-	return not _rec_off() and not _autoplay and not Save.taught("u_boot")
+	return tut_run
 
 
-#  이 상점에 공짜로 깔 장 — 아직 손에 없는 것만.
+#  튜토리얼 선물인가. "m:" 는 보드 확장.
+func _tut_gift_id(id: String) -> bool:
+	for st in TUT.gifts:
+		if (st as Array).has(id):
+			return true
+	return false
+
+
+#  툴팁 태그 [서비스] 를 붙일 자리 — 튜토리얼 런의 선물이면.
+func _tut_svc(type: String, id: String) -> bool:
+	if not tut_run:
+		return false
+	return _tut_gift_id(("m:" + id) if type == "mod" else id)
+
+
+#  이 상점에 공짜로 깔 것 — 지금까지 열린 상점의 선물 중 아직 안 가진 것.
+#  [{type, d}]. shop_seen 은 _open_shop 이 _roll_stock 보다 **먼저** 올린다.
 func _boot_stock() -> Array:
 	var out := []
-	if not _boot_due():
+	if not tut_run:
 		return out
-	for gid in BOOT_GIFT:
-		if _has_item(String(gid)):
-			continue
-		for it in GameData.items():
-			if String(it.id) == String(gid):
-				out.append(it)
-				break
+	var stages: Array = TUT.gifts
+	for k in mini(shop_seen, stages.size()):
+		for gid in stages[k]:
+			var id := String(gid)
+			if id.begins_with("m:"):
+				var mid := id.substr(2)
+				if mods_own.has(mid) or not _mod_room(mid):
+					continue
+				var mr := _row_by_id(GameData.mods(), mid)
+				if not mr.is_empty():
+					out.append({"type": "mod", "d": mr})
+				continue
+			if _has_item(id):
+				continue
+			var ir := _row_by_id(GameData.items(), id)
+			if not ir.is_empty():
+				out.append({"type": "item", "d": ir})
 	return out
 
 
-#  첫 런의 두 장. 표에 안 두고 여기 두는 까닭 — 이것은 **밸런스 값이 아니라
-#  한 번짜리 연출**이고, packs.csv 에 두면 다트통 줄로 읽혀 「이 통을 고르면
-#  늘 나온다」가 된다. 2026-09-26
-const BOOT_GIFT := ["r14", "u26"]
+#  선물이 설 슬롯 — 곱하기는 오른쪽 끝, 나머지는 첫 곱하기 앞.
+#  ⚠ 효과 종류의 열쇠는 **"k"** 다(items() 가 표의 kind 열을 k 로 옮긴다).
+#  처음에 "kind" 로 읽어 곱하기를 못 알아보고 SAFETY LAST! 가 더하기 앞에
+#  섰다 — 마지막 발 ×3 이 1.5배로 줄어든 것을 tut_probe 가 잡았다.
+func _tut_slot(c: Dictionary) -> int:
+	if String(c.get("k", "")) == "xmult":
+		return owned.size()
+	for i in owned.size():
+		if String(owned[i].get("k", "")) == "xmult":
+			return i
+	return owned.size()
+
+
+#  튜토리얼 런의 판 목표. 0 이면 본편 목표를 그대로 쓴다.
+func _tut_target(rn: int) -> int:
+	if not tut_run or rn < 1 or rn > (TUT.target as Array).size():
+		return 0
+	return int(TUT.target[rn - 1])
+
+
+#  6판을 넘겼다 — 정산 화면(「튜토리얼 끝」)으로 끝내고 로비로 보낸다.
+#  기록은 안 남긴다(_rec_off). 이어하기도 지운다.
+func _tut_end() -> void:
+	Save.teach("u_boot")
+	state = S.OVER
+	won = true
+	endless_ok = false
+	Save.run_drop()
+	Save.flush()
+	_sfx("run_win")
+
+
+#  표에 안 두고 여기 두는 까닭 — 밸런스 값이 아니라 **한 번짜리 연출**이고,
+#  packs.csv 에 두면 다트통 줄로 읽혀 「이 통을 고르면 늘 나온다」가 된다.
+#  gifts — 상점 1 · 2 · 3 에 놓을 것. build_probe 로 잰 가장 센 조합이다
+#  (1~6판 첫 발 ÷ 목표 기하평균: 빌리의 바지 · SAFETY LAST! 만 3.9배 →
+#  + BULLET TIME · 유리 대포 · 이카로스 62배 → 도넛 판까지 65배).
+#  target — tut_probe 로 잰 판마다 발 점수에서 박았다(2026-09-27, 자동 플레이 8회).
+#    겨눈 것 둘: ① 자동 플레이가 **마지막 발 앞까지로는 못 넘는다**(마지막 발
+#    ×3 이 판을 깬다) ② 사람 실력이 자동 플레이의 70% 여도 넘는다.
+#    판 2 (여섯 발 · 빌리의 바지 · SAFETY LAST!) 다섯 발 1,390 · 여섯 발 2,130 → 1,500
+#    판 3 (네 발 — BULLET TIME 이 다트 −2)    세 발 9,300 · 네 발 18,200 → 11,000
+#    판 4~6 (+ 이카로스 · 도넛)               세 발 39,000 · 네 발 78,000 → 42,000~48,000
+#    판 1 은 선물 전이라 본편 그대로(0).
+#  ⚠ 유리 대포(판마다 1/2)·이카로스(1/10)가 깨지면 한 판은 못 미칠 수 있다 —
+#  깨진 선물은 다음 상점에 다시 공짜로 놓인다(_boot_stock 이 「안 가진 것」을 본다).
+const TUT := {
+	"legs": 6,
+	"gifts": [["r14", "u26"], ["u11", "c03"], ["c06", "m:dnut"]],
+	"target": [0, 1500, 11000, 42000, 45000, 48000],
+}
 
 
 # 지금 다트통으로 완주했다 — 그것을 앞줄로 적어 둔 다트통들을 연다.
@@ -3192,11 +3281,13 @@ func _roll_stock() -> void:
 		# 이 한 장은 건너뛰어야 한다 — 0 에서 0 이 될 뿐이라 뱃지를 버린다.
 		stock.append({"type": "item", "d": freebie, "cost": 0,
 				"sold": false, "free": true})
-	#  첫 손님의 두 장 — 테이블 칸을 **나눠 쓴다**(네 칸이면 공짜 둘 · 평소 둘).
+	#  튜토리얼 런의 선물 — 테이블 칸을 **나눠 쓴다**(네 칸이면 공짜 둘 · 평소 둘).
 	var gifts := _boot_stock()
+	var gift_ids := []
 	for gd in gifts:
-		stock.append({"type": "item", "d": gd, "cost": 0,
+		stock.append({"type": String(gd.type), "d": gd.d, "cost": 0,
 				"sold": false, "free": true})
+		gift_ids.append(String(gd.d.id))
 	var tag_more := _spend_tags("shop")     # 뱃지 — 매물이 는다
 	var tag_free := _spend_tags("free")     # 뱃지 — 몇 개가 공짜다
 	# 테이블 폭이다. 갈래마다 칸을 못 박던 자리(동전 2 · 보드 확장 1 ·
@@ -3206,12 +3297,9 @@ func _roll_stock() -> void:
 	# 갈래마다 후보를 미리 깐다. 뽑은 것은 빼므로 한 상점에 같은 물건이
 	# 두 번 안 온다. 바닥난 갈래는 저울에서 통째로 빠져, 살 수 있는 보드
 	# 확장이 없는 판에서도 자리가 비지 않고 다른 갈래가 그 자리를 받는다.
-	var ipool := _stock_items(nxt)
-	for gd in gifts:
-		ipool = ipool.filter(func(e): return String(e.id) != String(gd.id))
 	var pools := {
-		"item": ipool,
-		"mod": _stock_mods(),
+		"item": _stock_items(nxt).filter(func(e): return not gift_ids.has(String(e.id))),
+		"mod": _stock_mods().filter(func(e): return not gift_ids.has(String(e.id))),
 		"dart": GameData.darts().slice(1),
 		"cons": GameData.candies().duplicate(),
 		# 사진은 이제 선반이 아니라 테이블 위 매물이다. 라운드마다 한 장을
@@ -3354,13 +3442,16 @@ func _buy(i: int) -> void:
 			cp.erase("w")
 			cp.gs = 0
 			cp.bought = leg_no          # 삭음(주황 리그)이 읽는 나이다
-			owned.append(cp)
+			#  튜토리얼 선물은 곱하기를 오른쪽 끝에 세운다(_tut_slot) — 상점이라
+			#  _panel_reset 이 안전하다(발동 스프링이 안 살아 있다).
+			if _tut_svc("item", String(cp.id)):
+				owned.insert(_tut_slot(cp), cp)
+				_panel_reset()
+			else:
+				owned.append(cp)
 			#  상점 매물과 팩에서 집은 것이 **같은 이 길**로 온다
 			#  (_buy_block 의 s.pack). 팩 쪽에 따로 적을 자리가 없다.
 			_found("item", String(cp.id))
-			#  첫 손님의 두 장을 다 쥐었다 — 그 뒤로는 안 깐다(_boot_due).
-			if _boot_due() and _boot_stock().is_empty():
-				Save.teach("u_boot")
 			#  동전이 처음 손에 들어온 자리. 순서가 값을 바꾸는 게임이라
 			#  슬롯을 보기 전에 말해 둬야 한다.
 			_tutor("u_rack")
@@ -4207,6 +4298,10 @@ func _roll_boss_mods(bn: int, force := false,
 	if bn <= 0 or (not force and boss_mods.has(bn)):
 		return false
 	var left := GameData.modifiers().duplicate()
+	#  튜토리얼 런은 목표를 재서 박았다(TUT.target) — 「문턱」(목표 ×배)이 그
+	#  위에 곱해지면 첫 손님이 튜토리얼에서 진다. 그 한 종만 판에서 뺀다.
+	if tut_run:
+		left = left.filter(func(m): return String(m.get("k", "")) != "target_mul")
 	#  지난 보스가 정한 것은 **빼는 것이 아니라 뒤로 미룬다.** 표가 열
 	#  종이라 보통은 남지만, 「겹치기」가 둘을 걸면 모자랄 수 있다 —
 	#  새것만 고집하다 뽑을 것이 없어지는 쪽이 더 나쁘다(2026-09-16).
@@ -4275,6 +4370,9 @@ func _leg_mods(rn: int) -> Array:
 #  세면 카드가 「목표 8000」이라 적고 실제로는 10000 이 된다.
 func _target_at(rn: int) -> int:
 	var t := GameData.target_of(rn)
+	#  튜토리얼 런은 제 목표를 쓴다(TUT.target). 보스 제약의 배수는 그 위에 건다.
+	if _tut_target(rn) > 0:
+		t = _tut_target(rn)
 	for m in _leg_mods(rn):
 		if String(m.k) == "target_mul":
 			t = int(ceil(float(t) * float(m.v)))
@@ -4307,7 +4405,8 @@ func _begin_leg() -> void:
 	_knot("pick")
 	if not GameData.is_boss(leg_no):
 		active_mods = []
-		target = GameData.target_of(leg_no)
+		target = _tut_target(leg_no) if _tut_target(leg_no) > 0 \
+				else GameData.target_of(leg_no)
 		_start_leg()
 		return
 	_roll_boss_mods(_round_boss())      # 안전망. 보통은 이미 서 있다
@@ -5605,7 +5704,7 @@ func _unhandled_input(e: InputEvent) -> void:
 						if newrun_tab == 0 and not _pack_open(newrun_pip):
 							_deny()
 						elif _start_go():
-							_new_run()
+							_new_run(true)
 					elif state == S.SETTINGS:
 						_settings_back()
 					elif state == S.COLLECT or state == S.PROFILE:
@@ -6003,7 +6102,7 @@ func _click(m: Vector2) -> void:
 				#  ⚠ 여기가 런을 **덮는** 자리다(start_arm 머리말).
 				if not _start_go():
 					return
-				_new_run()
+				_new_run(true)
 				_sfx("run_start")
 				return
 			if _newrun_back().has_point(m):
@@ -13710,7 +13809,7 @@ func _draw_topbar() -> void:
 	#  ⚠ **무한에는 분모가 없다.** 끝이 없는데 「/8」을 찍으면 화면이
 	#  거짓말한다 — 분모가 없는 것이 곧 「본편을 지났다」이다. 2026-09-20
 	draw_string(font, Vector2(8, ty),
-			("R%d" % GameData.round_of(leg_no)) if GameData.endless 			else ("R%d/%d" % [GameData.round_of(leg_no), GameData.rounds_n()]),
+			("R%d" % GameData.round_of(leg_no)) if GameData.endless 			else ("R%d/%d" % [GameData.round_of(leg_no), _run_rounds()]),
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, C_TXT)
 	#  ⚠ 라운드 경계가 도는 동안에는 **여기서 안 그린다.** 그 연출의 큰 줄이
 	#  곧 이 칸 여덟이라 밑에 같은 것을 한 벌 더 깔 이유가 없는데, 깔았더니
@@ -13816,7 +13915,7 @@ func _run_pips(at: Vector2) -> void:
 	var done_b: int = GameData.leg_idx(leg_no) \
 			+ (1 if (state == S.CLEAR or state == S.SHOP) else 0)
 	var pip: Rect2 = LAY.bar_pip
-	for i in GameData.rounds_n():
+	for i in _run_rounds():
 		var q := Rect2(at + Vector2(float(i) * LAY.bar_pip_dx, 0.0), pip.size)
 		if i < round - 1:
 			draw_rect(q, C_ACC)
@@ -13900,7 +13999,7 @@ func _bank_draw() -> void:
 				C_OFF if itr > 0 else C_OFF)
 	#  런 진행 — 런 바가 숨는 화면(상점 · 스테이지)에서 몇 판째인지가 여기 남는다.
 	#  칸 여덟 = 7×7 + 5 = 54px, 판 가운데.
-	var pw: float = float(LAY.bar_pip_dx) * float(GameData.rounds_n() - 1) + LAY.bar_pip.size.x
+	var pw: float = float(LAY.bar_pip_dx) * float(_run_rounds() - 1) + LAY.bar_pip.size.x
 	_run_pips(Vector2(roundf(r.get_center().x - pw * 0.5), r.position.y + float(BANK.pip_y)))
 
 
@@ -28519,6 +28618,9 @@ func _tip_build(hit: Dictionary) -> void:
 			tip_title = it.n
 			tip_chip = it
 			_tip_set_rar(String(it.get("rarity", "")))
+			#  튜토리얼 선물 — 태그 [서비스](2026-09-27).
+			if _tut_svc("item", String(it.get("id", ""))):
+				_tip_tag("서비스", C_ACC)
 			_tip_add(_tip_eff(it), 20, C_TXT)
 			if i == sealed:
 				_tip_add("이번 판 봉인", 12, C_MULT)
@@ -28567,6 +28669,8 @@ func _tip_build(hit: Dictionary) -> void:
 					_tip_add("지금 낀 %s 대신 낀다"
 							% String(GameData.mod_of(String(mods_own[0])).get("n", "")),
 							12, C_MULT)
+			if bool(s.get("free", false)) 					and _tut_svc(String(s.type), String(s.d.get("id", ""))):
+				_tip_tag("서비스", C_ACC)
 			# 못 사는 이유를 누르기 전에 알려준다. _deny() 는 원인을 한 문장으로 뭉갠다.
 			#  ⚠ **칸이 꽉 찬 둘만 태그 줄로 간다.** 그 둘은 값(「슬롯 5/5」)이고
 			#  나머지는 사정(「이미 샀다」)이라 곁줄이 제 자리다 — 한 툴팁에
@@ -28656,6 +28760,8 @@ func _tip_build(hit: Dictionary) -> void:
 			var om: Dictionary = GameData.mod_of(String(mods_own[0])) if not mods_own.is_empty() else {}
 			tip_mark = _modplate_rect()
 			tip_title = String(om.get("n", ""))
+			if not mods_own.is_empty() and _tut_svc("mod", String(mods_own[0])):
+				_tip_tag("서비스", C_ACC)
 			_tip_add(String(om.get("d", "")), 20, C_TXT)
 		"cmod":
 			_tip_set_tag("보드 확장")
@@ -30509,7 +30615,7 @@ func _draw_leg() -> void:
 	#  카드 윗변(y158) 사이 띠의 가운데로 내린다 — 잉크 [141,151.5] 로 위 5.5 · 아래 6.7.
 	draw_string(font, Vector2(0.0, TBL.fy + 23.0),
 			("라운드 %d" % GameData.round_of(leg_no)) if GameData.endless 					else ("라운드 %d / %d" % [GameData.round_of(leg_no),
-							GameData.rounds_n()]),
+							_run_rounds()]),
 			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 12,
 			Color(C_TABLE.lightened(0.40), 0.85))
 	_leg_card(cur, first + cur)
@@ -31322,8 +31428,10 @@ func _draw_over() -> void:
 
 	var x0: float = p.position.x + 20.0
 	#  결과는 이 화면의 주인공이다. 하나만 크고 나머지는 다 곁말이다.
+	#  튜토리얼 런은 6판에서 끝난다 — 이긴 제목만 갈린다(2026-09-27).
+	var head := ("튜토리얼 끝" if tut_run else "완주") if won else "실패"
 	draw_string(font, Vector2(x0, p.position.y + 46.0),
-			"완주" if won else "실패", HORIZONTAL_ALIGNMENT_LEFT, -1, 36,
+			head, HORIZONTAL_ALIGNMENT_LEFT, -1, 36,
 			Color(C_ACC if won else C_MULT, e))
 	#  곁말 9 → 18 → 20. 결과(36) 밑 한 줄이라 자리가 넉넉하다 — 잉크(17px)가
 	#  결과의 잉크 밑에서 10px 떨어져 선다(기준선 74).
@@ -31343,7 +31451,7 @@ func _draw_over() -> void:
 	var y: float = p.position.y + 106.0
 	var cleared: int = maxi(leg_no - (0 if won else 1), 0)
 	var rows := [
-		["넘긴 판", ("%d" % cleared) if GameData.endless 				else ("%d / %d" % [cleared, GameData.legs_n()])],
+		["넘긴 판", ("%d" % cleared) if GameData.endless 				else ("%d / %d" % [cleared, int(TUT.legs) if tut_run else GameData.legs_n()])],
 	]
 	#  ⚠ **밑의 두 줄은 프로필을 읽는다** — best_score 는 PEAKS 이고 darts 는
 	#  누적이다. 챌린지·무한 런은 그 둘을 한 톨도 안 미므로(_rec_off) 방금 친
@@ -39868,9 +39976,9 @@ func _mark_rect(k: String) -> Rect2:
 			var gr := Rect2()
 			for i in mini(stock.size(), drop.size()):
 				var s: Dictionary = stock[i]
-				if s.sold or not bool(s.get("free", false)) or s.type != "item":
+				if s.sold or not bool(s.get("free", false)):
 					continue
-				if not BOOT_GIFT.has(String(s.d.get("id", ""))):
+				if not _tut_svc(String(s.type), String(s.d.get("id", ""))):
 					continue
 				var bx := _obj_box(i).grow(4.0)
 				gr = bx if gr.size.x < 1.0 else gr.merge(bx)

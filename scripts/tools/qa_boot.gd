@@ -1,14 +1,15 @@
 extends SceneTree
 
-# 첫 손님의 두 장 검사 (2026-09-26 · 2026-09-27 갈아엎음).
+# 튜토리얼 런 검사 (2026-09-26 · 2026-09-27 두 번 갈아엎음).
 #   「튜토리얼을 게임의 매력을 보여 주는 걸로 특화하자 — 개사기 아이템 주는 거」
-#   처음엔 런 시작에 손에 넣어 줬는데 「상점에서 자연스럽게 줘야지」로 반려돼
-#   사용자와 흐름을 정했다:
-#     ① 첫 상점 테이블 네 칸 중 두 칸에 공짜 딱지로 선다(나머지 둘은 평소대로)
-#     ② 상인이 「첫 손님이라 둘은 그냥 준다」 한 줄(u_gift)
-#     ③ 안 집고 나가면 다음 상점에 다시 선다 · 둘 다 쥐면 그 뒤로 안 선다
-#     ④ SAFETY LAST! 가 처음 켜질 때 한 줄(u_last)
-#     ⑤ 챌린지·무한 런에는 안 선다 · 점수 표를 한 톨도 안 건드린다
+#   사용자와 절차대로 정한 흐름:
+#     ① 처음 켠 사람의 첫 런은 2라운드 6판짜리 튜토리얼 런이다
+#     ② 상점 1 · 2 · 3 에 가장 센 빌드가 공짜로 놓인다(TUT.gifts) · 태그 [서비스]
+#        · 안 집으면 다음 상점에 다시 · 곱하기는 알아서 오른쪽 끝
+#     ③ 첫 상점 상인 두 줄 · SAFETY LAST! 첫 발동 한 줄
+#     ④ 판 목표는 튜토리얼 런에서만 오른다(TUT.target)
+#     ⑤ 6판을 넘기면 「튜토리얼 끝」 → 로비. 그때 배움 표에 적는다
+#     ⑥ 챌린지·무한·검사 도구가 곧장 부르는 _new_run() 에는 안 선다 · 기록 0
 #
 #   godot --path . --headless --script scripts/tools/qa_boot.gd
 
@@ -33,7 +34,7 @@ func _initialize() -> void:
 func _ok(n: String, c: bool, d := "") -> void:
 	if c: okn += 1
 	else: fail += 1
-	print("  %s %-40s %s" % ["통과" if c else "실패", n, d])
+	print("  %s %-44s %s" % ["통과" if c else "실패", n, d])
 
 
 func _ids() -> Array:
@@ -43,22 +44,41 @@ func _ids() -> Array:
 	return out
 
 
-#  테이블에 선 공짜 선물의 자리들.
+#  테이블에 선 선물의 자리들 — 공짜이면서 선물 표에 있는 것.
 func _gift_at() -> Array:
 	var out := []
 	for i in g.stock.size():
 		var s: Dictionary = g.stock[i]
-		if s.type == "item" and bool(s.get("free", false)) \
-				and (g.BOOT_GIFT as Array).has(String(s.d.id)):
+		if bool(s.get("free", false)) and g._tut_svc(String(s.type), String(s.d.id)):
 			out.append(i)
 	return out
 
 
-func _shop() -> void:
+func _gift_ids() -> Array:
+	var out := []
+	for i in _gift_at():
+		out.append(String(g.stock[i].d.id))
+	out.sort()
+	return out
+
+
+func _tut() -> void:
+	Save.wipe()
+	GameData.challenge = ""
+	g.state = g.S.TITLE
+	g._new_run(true)
+
+
+func _shop(leg: int) -> void:
 	g.state = g.S.SHOP
-	g.leg_no = 1
+	g.leg_no = leg
 	g.gold = 4
 	g._open_shop()
+
+
+func _take_all() -> void:
+	for i in _gift_at():
+		g._buy(i)
 
 
 func _process(_d: float) -> bool:
@@ -70,109 +90,152 @@ func _process(_d: float) -> bool:
 
 
 func _run() -> void:
-	print("\n== 첫 손님의 두 장 ==")
-	var want: Array = (g.BOOT_GIFT as Array).duplicate()
+	print("\n== 튜토리얼 런 ==")
+	var T: Dictionary = g.TUT
 
-	# ── ① 손에는 안 준다 · 첫 상점에 선다 ─────────────
-	print("① 첫 런 첫 상점")
+	# ── ① 누가 튜토리얼 런을 받는가 ───────────────────
+	print("① 문")
 	Save.wipe()
 	g.state = g.S.TITLE
 	g._new_run()
+	_ok("검사 도구가 곧장 부르는 새 런은 튜토리얼이 아니다", not g.tut_run, "")
+	_tut()
+	_ok("처음 켠 사람이 「시작」을 누르면 튜토리얼 런이다", g.tut_run, "")
 	_ok("런 시작에 손에 넣어 주지 않는다", _ids().is_empty(), str(_ids()))
-	_shop()
-	var at := _gift_at()
-	_ok("두 장이 테이블에 선다", at.size() == want.size(), "%d장" % at.size())
+	_ok("라운드가 둘로 보인다", g._run_rounds() == 2, "%d" % g._run_rounds())
+	_ok("기록을 안 남긴다", g._rec_off(), "")
+	_ok("이어하기에 적힌다", str(g.RUN_PLAIN).find("tut_run") >= 0, "")
+
+	# ── ② 상점 셋 ────────────────────────────────────
+	print("② 상점 셋")
+	_shop(1)
+	var want1: Array = (T.gifts[0] as Array).duplicate()
+	want1.sort()
+	_ok("첫 상점에 첫 선물이 선다", _gift_ids() == want1, str(_gift_ids()))
 	var free0 := true
-	for i in at:
+	for i in _gift_at():
 		if int(g.stock[i].cost) != 0:
 			free0 = false
-	_ok("둘 다 값이 0 이다", free0, "")
-	_ok("테이블 폭은 그대로다(둘은 평소 매물)",
+	_ok("값이 0 이다", free0, "")
+	_ok("테이블 폭은 그대로다(나머지는 평소 매물)",
 			g.stock.size() == GameData.shop_slots(1), "%d / %d"
 			% [g.stock.size(), GameData.shop_slots(1)])
-	var dup := false
-	for i in g.stock.size():
-		if at.has(i):
-			continue
-		var s: Dictionary = g.stock[i]
-		if s.type == "item" and want.has(String(s.d.id)):
-			dup = true
-	_ok("같은 장이 평소 매물로 또 안 선다", not dup, "")
-	_ok("상인 한 줄이 줄에 선다",
-			g.tutor_q.has("u_gift") or String(g.tutor_id) == "u_gift",
-			str(g.tutor_q))
-	#  낙하가 앉은 뒤 과녁이 두 장을 감싼다
+	_ok("상인 두 줄이 줄에 선다",
+			g.tutor_q.has("u_gift") or String(g.tutor_id) == "u_gift", str(g.tutor_q))
+	var steps := GameData.tutor_steps("u_gift")
+	_ok("상인 말이 고른 그대로다", steps.size() == 2
+			and String(steps[0].text) == "처음 보는 손님이군"
+			and String(steps[1].text) == "이건 서비스야 가져가", "")
 	g.drop_fast = true
 	for k in 200:
 		g._drop_step(1.0 / 60.0)
-	var mr: Rect2 = g._mark_rect("gift")
-	var inside := true
+	_ok("과녁이 선물을 감싼다", g._mark_rect("gift").size.x > 2.0, "")
+	#  곱하기를 먼저 집어도 오른쪽 끝에 선다
+	var at := _gift_at()
+	var xi := -1
 	for i in at:
-		if not mr.encloses(g._obj_box(i)):
-			inside = false
-	_ok("과녁이 두 장을 감싼다", mr.size.x > 2.0 and inside,
-			"%.0fx%.0f" % [mr.size.x, mr.size.y])
-	_ok("과녁 이름이 표에 있다", GameData.TUTOR_MARKS.has("gift"), "")
+		if String(g.stock[i].d.get("k", "")) == "xmult":
+			xi = i
+	g._buy(xi)
+	_take_all()
+	_ok("곱하기는 알아서 오른쪽 끝이다", _ids() == ["r14", "u26"], str(_ids()))
+	_shop(2)
+	var want2: Array = (T.gifts[1] as Array).duplicate()
+	want2.sort()
+	_ok("둘째 상점에 둘째 선물이 선다", _gift_ids() == want2, str(_gift_ids()))
+	_take_all()
+	_ok("더하기는 곱하기 앞에 끼어든다", _ids() == ["r14", "u11", "c03", "u26"], str(_ids()))
+	_shop(3)
+	_ok("셋째 상점에 곱하기와 보드 확장이 선다", _gift_ids() == ["c06", "dnut"],
+			str(_gift_ids()))
+	_take_all()
+	_ok("다섯 장이 다 섰다", _ids() == ["r14", "u11", "c03", "u26", "c06"], str(_ids()))
+	_ok("보드 확장이 끼워졌다", (g.mods_own as Array).has("dnut"), str(g.mods_own))
+	_ok("동전 슬롯을 안 넘긴다", g.owned.size() <= GameData.max_items(), "")
+	_shop(4)
+	_ok("넷째 상점부터는 선물이 없다", _gift_at().is_empty(), "")
 
-	# ── ② 한 장만 집고 나가면 다음 상점에 남은 한 장 ──
-	print("② 안 집고 나가면")
-	var g0: int = g.gold
-	g._buy(at[0])
-	var got1 := _ids()
-	_ok("공짜로 집힌다 — 골드가 그대로다", g.gold == g0 and got1.size() == 1,
-			"%s · 골드 %d" % [got1, g.gold])
-	_ok("한 장만으로는 배움 표에 안 적힌다", not Save.taught("u_boot"), "")
-	_shop()
-	var at2 := _gift_at()
-	_ok("다음 상점에 남은 한 장이 다시 선다", at2.size() == 1
-			and not got1.has(String(g.stock[at2[0]].d.id)), "%d장" % at2.size())
-	g._buy(at2[0])
-	var all := true
-	for w in want:
-		if not _ids().has(String(w)):
-			all = false
-	_ok("둘 다 손에 들어왔다", all, str(_ids()))
-	_ok("둘 다 쥐면 배움 표에 적힌다", Save.taught("u_boot"), "")
-	_shop()
-	_ok("그 뒤 상점에는 안 선다", _gift_at().is_empty(), "")
+	# ── ③ 안 집은 사람 ───────────────────────────────
+	print("③ 안 집고 나가면")
+	_tut()
+	_shop(1)
+	_shop(2)
+	_ok("다음 상점에 앞 선물까지 다시 선다", _gift_at().size() == 4,
+			"%d장" % _gift_at().size())
 
-	# ── ③ 두 번째 런 ─────────────────────────────────
-	print("③ 두 번째 런")
+	# ── ④ 태그 ───────────────────────────────────────
+	print("④ 태그")
+	_ok("선물은 [서비스] 다", g._tut_svc("item", "r14") and g._tut_svc("mod", "dnut"), "")
+	_ok("선물이 아닌 것은 아니다", not g._tut_svc("item", "c01"), "")
+	var src := FileAccess.get_file_as_string("res://scripts/game.gd")
+	_ok("태그 자리가 셋이다(슬롯 · 테이블 · 낀 판)",
+			src.count("_tip_tag(\"서비스\", C_ACC)") == 3, "")
+	_ok("값표가 「공짜」를 적는다", src.find("\"공짜\"") >= 0, "")
+
+	# ── ⑤ 판 목표 ────────────────────────────────────
+	print("⑤ 판 목표")
+	var tg_ok := true
+	var note := ""
+	for n in range(1, int(T.legs) + 1):
+		var tt: int = int(T.target[n - 1])
+		var got: int = g._target_at(n)
+		if tt > 0 and got < tt:
+			tg_ok = false
+		note += "%d " % got
+	_ok("튜토리얼 런은 제 목표를 쓴다", tg_ok, note)
+	var raised := false
+	for n in range(2, int(T.legs) + 1):
+		if int(T.target[n - 1]) > GameData.target_of(n):
+			raised = true
+	_ok("둘째 판부터 본편보다 높다", raised, str(T.target))
+	_ok("첫 판은 본편 그대로다(선물 전)", int(T.target[0]) == 0, "")
+	g.tut_run = false
+	_ok("튜토리얼이 아니면 본편 목표다", g._tut_target(2) == 0, "")
+	g.tut_run = true
+
+	# ── ⑥ 6판에서 끝난다 ──────────────────────────────
+	print("⑥ 끝")
+	g.state = g.S.RESOLVE
+	g.leg_no = int(T.legs)
+	g.target = 100
+	g.total = 200
+	g.queue.clear()
+	g.burst_hits.clear()
+	g._finish_leg()
+	_ok("6판을 넘기면 런 끝 화면이다", g.state == g.S.OVER and g.won, "")
+	_ok("그때 배움 표에 적는다", Save.taught("u_boot"), "")
+	_ok("무한 갈래를 안 연다", not g.endless_ok, "")
 	g.state = g.S.TITLE
-	g._new_run()
-	_shop()
-	_ok("두 번째 런 첫 상점에도 안 선다", _gift_at().is_empty(), "")
-
-	# ── ④ 아예 안 집은 사람 ───────────────────────────
-	print("④ 하나도 안 집고 나간 사람")
-	Save.wipe()
+	g._new_run(true)
+	_ok("다음 런은 튜토리얼이 아니다", not g.tut_run, "")
+	#  중간에 지면 다음 런이 다시 튜토리얼이다
+	_tut()
+	g.state = g.S.RESOLVE
+	g.leg_no = 3
+	g.target = 1000
+	g.total = 10
+	g.darts_left = 0
+	g.queue.clear()
+	g.burst_hits.clear()
+	g._finish_leg()
+	_ok("중간에 지면 배움 표에 안 적는다", g.state == g.S.OVER and not g.won
+			and not Save.taught("u_boot"), "")
 	g.state = g.S.TITLE
-	g._new_run()
-	_shop()
-	_shop()
-	_ok("다음 상점에 두 장 다 다시 선다", _gift_at().size() == want.size(), "")
+	g._new_run(true)
+	_ok("그 다음 런이 다시 튜토리얼이다", g.tut_run, "")
 
-	# ── ⑤ 챌린지·무한 ────────────────────────────────
-	print("⑤ 제약을 걸고 도는 런")
+	# ── ⑦ 제약을 걸고 도는 런 ─────────────────────────
+	print("⑦ 챌린지·무한")
 	Save.wipe()
 	GameData.challenge = "solo"
 	g.state = g.S.TITLE
-	g._new_run()
-	_shop()
-	_ok("챌린지 런에는 안 선다", _gift_at().is_empty(), "")
+	g._new_run(true)
+	_ok("챌린지 런은 튜토리얼이 아니다", not g.tut_run, "")
 	GameData.challenge = ""
-	Save.wipe()
-	g.state = g.S.TITLE
-	g._new_run()
-	GameData.endless = true
-	_ok("무한 런에는 안 선다", g._boot_stock().is_empty(), "")
-	GameData.endless = false
 
-	# ── ⑥ SAFETY LAST! 가 처음 켜질 때 ─────────────────
-	print("⑥ 끝이 절정인 장")
-	Save.wipe()
-	g.state = g.S.TITLE
-	g._new_run()
+	# ── ⑧ SAFETY LAST! 가 처음 켜질 때 ─────────────────
+	print("⑧ 끝이 절정인 장")
+	_tut()
 	for it in GameData.items():
 		if String(it.id) == "u26":
 			var cp: Dictionary = it.duplicate()
@@ -188,24 +251,15 @@ func _run() -> void:
 	g.queue.append({"k": "item", "i": 0, "kind": "xmult", "v": 3, "lbl": "배수 ×3"})
 	g._next_step()
 	_ok("처음 켜질 때 한 줄이 선다", g.tutor_q.has("u_last"), str(g.tutor_q))
-	g.tutor_q.clear()
-	g.queue.append({"k": "item", "i": 0, "kind": "xmult", "v": 3, "lbl": "배수 ×3"})
-	g._next_step()
-	_ok("두 번째부터는 안 선다", not g.tutor_q.has("u_last"), "")
 
-	# ── ⑦ 표를 안 건드린다 · 글 ───────────────────────
-	print("⑦ 밸런스 · 글")
-	var src := FileAccess.get_file_as_string("res://scripts/game.gd")
-	var i0: int = src.find("func _boot_due")
-	var i1: int = src.find("\nconst BOOT_GIFT", i0)
+	# ── ⑨ 표를 안 건드린다 ────────────────────────────
+	print("⑨ 밸런스")
+	var i0: int = src.find("func _boot_stock")
+	var i1: int = src.find("\nfunc ", i0 + 10)
 	var body: String = src.substr(i0, i1 - i0)
-	_ok("주는 자가 값을 한 개도 안 고친다",
+	_ok("선물 고르는 자가 값을 한 개도 안 고친다",
 			body.find("score") < 0 and body.find("target") < 0
 			and body.find("gold") < 0, "")
-	_ok("값표가 「공짜」를 적는다", src.find("\"공짜\"") >= 0, "")
-	var tut := FileAccess.get_file_as_string("res://data/tutor.csv")
-	_ok("상인 한 줄이 표에 있다", tut.find("u_gift,1,첫 손님이라 둘은 그냥 준다") >= 0, "")
-	_ok("끝 한 줄이 표에 있다", tut.find("u_last,1,마지막 다트에서 배수가 세 배가 된다") >= 0, "")
 
 	print("\n통과 %d · 실패 %d" % [okn, fail])
 	quit(fail)

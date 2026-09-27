@@ -76,7 +76,8 @@ func _run() -> void:
 		g._drop_step(1.0 / 60.0)
 	var blank := PackedStringArray()
 	for mk in GameData.TUTOR_MARKS:
-		if String(mk) == "" or String(mk) == "leg_boss":
+		#  gift 는 튜토리얼 런의 선물이 선 상점에만 있다 — qa_boot 가 잰다.
+		if String(mk) == "" or String(mk) == "leg_boss" or String(mk) == "gift":
 			continue
 		var rr: Rect2 = g._mark_rect(String(mk))
 		if rr.size.x < 2.0 or rr.size.y < 2.0:
