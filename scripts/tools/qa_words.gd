@@ -73,6 +73,8 @@ const BANNED := {
 const TXT_COLS := ["name", "desc", "text"]
 #  값 표(손잡이 설명이 길게 붙는다)는 화면 글이 아니다.
 const SKIP_TABLES := ["tuning"]
+#  사람이 직접 고치는 표 — 「표 글」 검사에서 참고로만 적는다(위 ⑥ 머리말).
+const USER_TABLES := ["tutor", "texts"]
 #  콘솔은 화면이 아니다 — 이 낱말이 든 줄의 글은 ⑤ 가 안 본다.
 const CONSOLE := ["push_warning(", "push_error(", "printerr(", "print("]
 
@@ -342,16 +344,26 @@ func _run() -> void:
 	var csv_ban := []
 	var csv_dot := []
 	var csv_n := 0
+	#  ⚠ **사람이 직접 고치는 표**(2026-09-27~)는 참고로만 적고 실패로 안 센다.
+	#  튜토리얼 문장(tutor)과 화면 글(texts)은 사용자가 표에서 고친다 — 사용자가
+	#  존댓말로 고치고 「클리어」「발동」을 썼다(2026-09-27). 그 표의 말투는 사람이
+	#  정한다. 걸린 칸은 아래 「참고」 줄에 적어 두기만 하고, 고칠지는 묻는다.
+	var own_hits := []
 	for tbl in GameData.FILES:
 		if SKIP_TABLES.has(String(tbl)):
 			continue
+		var own: bool = USER_TABLES.has(String(tbl))
 		for r in GameData.rows(String(tbl)):
 			for col in TXT_COLS:
 				var t := String(r.get(col, "")).strip_edges()
 				if t == "" or not _han(t):
 					continue
-				csv_n += 1
 				var who := "%s:%d/%s 「%s」" % [tbl, r.get("_line", 0), col, t]
+				if own:
+					if _polite(t) or not _banned(t).is_empty() or _dot_join(t):
+						own_hits.append(who)
+					continue
+				csv_n += 1
 				if _polite(t):
 					csv_pol.append(who)
 				var bw2 := _banned(t)
@@ -361,6 +373,9 @@ func _run() -> void:
 				#  읽힌다(aim_text 주석이 2026-09-15 에 세운 집 규칙).
 				if _dot_join(t):
 					csv_dot.append(who)
+	if not own_hits.is_empty():
+		print("  참고 사람이 고치는 표(%s)에서 집 규칙과 다른 칸 %d개 — 실패로 안 센다"
+				% [", ".join(USER_TABLES), own_hits.size()])
 	_ok("표 글에 존댓말이 없다", csv_pol.is_empty(),
 			"%d칸" % csv_n if csv_pol.is_empty() else str(csv_pol))
 	_ok("표 글에 금칙어가 없다", csv_ban.is_empty(),

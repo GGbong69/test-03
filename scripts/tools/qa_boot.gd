@@ -38,6 +38,16 @@ func _ok(n: String, c: bool, d := "") -> void:
 	print("  %s %-44s %s" % ["통과" if c else "실패", n, d])
 
 
+#  표에 그 갈래가 있는가 — 튜토리얼 문장은 사람이 표에서 고치고 지운다
+#  (2026-09-27). 문구를 글자 그대로 박지 않는다: 있으면 제자리에 뜨는지만 본다.
+func _has(id: String) -> bool:
+	return not GameData.tutor_steps(id).is_empty()
+
+
+func _skip(n: String, why: String) -> void:
+	print("  건너뜀 %-44s %s" % [n, why])
+
+
 func _ids() -> Array:
 	var out := []
 	for o in g.owned:
@@ -119,12 +129,11 @@ func _run() -> void:
 	_ok("테이블 폭은 그대로다(나머지는 평소 매물)",
 			g.stock.size() == GameData.shop_slots(1), "%d / %d"
 			% [g.stock.size(), GameData.shop_slots(1)])
-	_ok("상인 두 줄이 줄에 선다",
-			g.tutor_q.has("u_gift") or String(g.tutor_id) == "u_gift", str(g.tutor_q))
-	var steps := GameData.tutor_steps("u_gift")
-	_ok("상인 말이 고른 그대로다", steps.size() == 2
-			and String(steps[0].text) == "처음 보는 손님이군"
-			and String(steps[1].text) == "이건 서비스야 가져가", "")
+	if _has("u_gift"):
+		_ok("상인 말이 줄에 선다",
+				g.tutor_q.has("u_gift") or String(g.tutor_id) == "u_gift", str(g.tutor_q))
+	else:
+		_skip("상인 말이 줄에 선다", "표에서 u_gift 를 지웠다")
 	g.drop_fast = true
 	for k in 200:
 		g._drop_step(1.0 / 60.0)
@@ -136,14 +145,15 @@ func _run() -> void:
 		if String(g.stock[i].d.get("k", "")) == "xmult":
 			xi = i
 	g._buy(xi)
-	_ok("한 장만으로는 리롤을 안 가리킨다", not g.tutor_q.has("u_more"), "")
+	var has_more := _has("u_more")
+	if has_more:
+		_ok("한 장만으로는 리롤을 안 가리킨다", not g.tutor_q.has("u_more"), "")
 	_take_all()
 	_ok("곱하기는 알아서 오른쪽 끝이다", _ids() == ["r14", "u26"], str(_ids()))
-	_ok("두 장을 쥐면 상인이 리롤을 가리킨다", g.tutor_q.has("u_more"), str(g.tutor_q))
-	var more := GameData.tutor_steps("u_more")
-	_ok("리롤 말이 고른 그대로다", more.size() == 1
-			and String(more[0].text) == "다른 것도 한번 봐봐"
-			and String(more[0].mark) == "reroll", "")
+	if has_more:
+		_ok("두 장을 쥐면 상인이 리롤을 가리킨다", g.tutor_q.has("u_more"), str(g.tutor_q))
+	else:
+		_skip("두 장을 쥐면 상인이 리롤을 가리킨다", "표에서 u_more 를 지웠다")
 	_ok("평소 리롤 설명은 겹쳐 안 뜬다", Save.taught("u_reroll"), "")
 	var g1: int = g.gold
 	g._reroll()
@@ -295,7 +305,10 @@ func _run() -> void:
 	g.queue.clear()
 	g.queue.append({"k": "item", "i": 0, "kind": "xmult", "v": 3, "lbl": "배수 ×3"})
 	g._next_step()
-	_ok("처음 켜질 때 한 줄이 선다", g.tutor_q.has("u_last"), str(g.tutor_q))
+	if _has("u_last"):
+		_ok("처음 켜질 때 한 줄이 선다", g.tutor_q.has("u_last"), str(g.tutor_q))
+	else:
+		_skip("처음 켜질 때 한 줄이 선다", "표에서 u_last 를 지웠다")
 
 	# ── ⑨ 표를 안 건드린다 ────────────────────────────
 	print("⑨ 밸런스")

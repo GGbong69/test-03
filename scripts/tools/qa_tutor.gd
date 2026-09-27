@@ -22,6 +22,17 @@ func _ok(nm: String, cond: bool, note := "") -> void:
 	else: bad += 1
 	print("  %s %-42s %s" % ["통과" if cond else "실패", nm, note])
 
+#  표에 그 갈래가 있는가. 튜토리얼 문장은 사람이 표에서 고치고 **지우기도
+#  한다**(2026-09-27 — 보스 · 리롤 · 건네기 설명을 지웠다). 지운 갈래는 게임이
+#  건너뛰므로 여기서도 「건너뜀」으로 적고 실패로 안 센다.
+func _has(id: String) -> bool:
+	return not GameData.tutor_steps(id).is_empty()
+
+
+func _skip(nm: String, why: String) -> void:
+	print("  건너뜀 %-44s %s" % [nm, why])
+
+
 func _tick(n: int) -> void:
 	for k in n:
 		g._tutor_tick(1.0 / 60.0)
@@ -127,9 +138,12 @@ func _run() -> void:
 			g.leg_no = lv2
 			break
 	g._open_leg()
-	_ok("보스가 선 라운드에서는 가르친다",
-			Save.taught("u_boss") and g.state == g.S.LEG,
-			"%d판 · 상태 %d" % [g.leg_no, g.state])
+	if _has("u_boss"):
+		_ok("보스가 선 라운드에서는 가르친다",
+				Save.taught("u_boss") and g.state == g.S.LEG,
+				"%d판 · 상태 %d" % [g.leg_no, g.state])
+	else:
+		_skip("보스가 선 라운드에서는 가르친다", "표에서 u_boss 를 지웠다")
 	#  그 자리에서 과녁이 진짜로 선다 — 구멍 없는 어둠만 깔리면 안 된다
 	var mr: Rect2 = g._mark_rect("leg_boss")
 	_ok("가르칠 때 과녁이 서 있다", mr.size.x > 2.0 and mr.size.y > 2.0,
@@ -243,5 +257,15 @@ func _run() -> void:
 	_ok("눌러서 끝까지 넘어간다", hits >= 3 and not g._tutor_live(),
 			"%d번 눌렀다" % hits)
 	g._open_shop()
-	_ok("두 번째 상점에서 리롤·건네기",
-			Save.taught("u_reroll") and Save.taught("u_give"), "")
+	var want2 := []
+	for tid in ["u_reroll", "u_give"]:
+		if _has(tid):
+			want2.append(tid)
+	if want2.is_empty():
+		_skip("두 번째 상점에서 리롤·건네기", "표에서 u_reroll · u_give 를 지웠다")
+	else:
+		var got2 := true
+		for tid in want2:
+			if not Save.taught(String(tid)):
+				got2 = false
+		_ok("두 번째 상점에서 %s" % " · ".join(want2), got2, "")
