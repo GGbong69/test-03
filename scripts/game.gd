@@ -14787,8 +14787,8 @@ func _fbg(c: Vector2, rx: float, ry: float, col: Color) -> void:
 
 #  동전의 얼굴 — 그 동전이 **무엇인가**.
 #
-#  조건 그림(_icon_cond)이 "언제" 를, 값이 "얼마나" 를, 이것이 "무엇" 을
-#  말한다. 값은 이 위에 그려지므로 어두운 받침을 깔고 나온다(draw_item_sticker).
+#  이것이 "무엇" 을 말한다. 2026-09-27 부터 얼굴에는 이 그림만 선다 —
+#  조건(언제)·값(얼마나)은 툴팁이 말한다(draw_item_sticker).
 #
 #  **색은 지어내지 않는다.** 레퍼런스에서 뽑은 값을 쓴다 — 스파르타의
 #  b50e0e/eba64c 는 그 깃발 그대로고, 잭과 콩나무의 f3c424 는 그 책 표지
@@ -15047,178 +15047,6 @@ func _ring_i(c: Vector2, rx: float, ry: float, col: Color) -> void:
 		prev = p
 
 
-# 조건 그림 — 동전이 "언제" 터지는가를 얼굴에 새긴다.
-#
-# 지금까지 동전은 값(얼마나)만 보였다. 그래서 등급·잉크·숫자가 같으면
-# 조건이 정반대여도 똑같이 보였다 — 홀수 애호와 짝수 애호, 좌익수와 우익수가
-# 화면에서 구분 불가였다. 재미의 절반은 조건 쪽인데 그게 안 그려지고 있었다.
-#
-# 열여섯 조건을 원시 도형만으로 가른다. 글자는 안 쓴다 — 동전 슬롯 반지름 15 에서
-# 얼굴에 남는 자리가 지름 17px 라 한글은 물론 숫자도 둘은 안 들어간다.
-# 갈리는 축을 도형 갈래로 나눠 뒀다: 선 / 점 / 반원 / 삼각 / 원 / 원쌍 / 막대 / X.
-# 같은 갈래 안에서만 개수와 방향으로 갈리므로 실루엣이 먼저 읽힌다.
-func _icon_cond(c: Vector2, r: float, cond: String, col: Color) -> void:
-	var u := r * 0.62          # 도형 반경 — 얼굴 안에 머무는 상한
-	# 숫자 지정 조건 — 숫자가 곧 아이콘이다. 셋 넘으면 첫 수에 점을 단다.
-	if cond.begins_with("col:"):
-		# 색 조건은 글자가 아니라 칠로 말한다. 쓰는 색을 나란히 눕힌다.
-		var cs := cond.substr(4).split(",")
-		var bw: float = r * 1.7 / float(maxi(cs.size(), 1))
-		for k in cs.size():
-			draw_rect(Rect2(c.x - r * 0.85 + float(k) * bw, c.y - u * 0.6,
-					bw - 1.0, u * 1.2), Color(GameData.color_hex(int(cs[k]))))
-		return
-	if cond.begins_with("sec:"):
-		var parts := cond.substr(4).split(",")
-		var txt := "·".join(parts) if parts.size() <= 2 else parts[0] + "…"
-		draw_string(font, c + Vector2(-r, u * 0.55), txt,
-				HORIZONTAL_ALIGNMENT_CENTER, r * 2.0, maxi(6, int(u * 1.1)), col)
-		return
-	match cond:
-		"always":
-			draw_circle(c, u * 0.78, col)
-		"triple":
-			for i in 3:
-				var y := c.y + (float(i) - 1.0) * u * 0.62
-				draw_line(Vector2(c.x - u, y), Vector2(c.x + u, y), col, 1.0)
-		"double":
-			for i in 2:
-				var y := c.y + (float(i) * 2.0 - 1.0) * u * 0.42
-				draw_line(Vector2(c.x - u, y), Vector2(c.x + u, y), col, 1.0)
-		"bull":
-			draw_arc(c, u * 0.86, 0.0, TAU, 14, col, 1.0)
-			draw_circle(c, u * 0.34, col)
-		"odd":
-			draw_circle(c, u * 0.46, col)
-		"even":
-			for k in [-1.0, 1.0]:
-				draw_circle(c + Vector2(k * u * 0.48, 0.0), u * 0.42, col)
-		"left":
-			draw_colored_polygon(_half_disc(c, u, true), col)
-			draw_arc(c, u, 0.0, TAU, 16, col, 1.0)
-		"right":
-			draw_colored_polygon(_half_disc(c, u, false), col)
-			draw_arc(c, u, 0.0, TAU, 16, col, 1.0)
-		"big":
-			draw_colored_polygon(PackedVector2Array([c + Vector2(0.0, -u),
-					c + Vector2(u * 0.9, u * 0.62), c + Vector2(-u * 0.9, u * 0.62)]), col)
-		"small":
-			draw_colored_polygon(PackedVector2Array([c + Vector2(0.0, u),
-					c + Vector2(u * 0.9, -u * 0.62), c + Vector2(-u * 0.9, -u * 0.62)]), col)
-		"same":
-			# 두 원이 반쯤 겹친다 — 겹침이 곧 "같다"
-			for k in [-1.0, 1.0]:
-				draw_arc(c + Vector2(k * u * 0.34, 0.0), u * 0.62, 0.0, TAU, 14, col, 1.0)
-		"diff":
-			# 하나는 채우고 하나는 비운다 — 대비가 곧 "다르다"
-			draw_circle(c + Vector2(-u * 0.46, 0.0), u * 0.44, col)
-			draw_arc(c + Vector2(u * 0.46, 0.0), u * 0.44, 0.0, TAU, 12, col, 1.0)
-		"sum11":
-			# 횡단보도 — 이름이 가리키는 그 길이다. 줄이 넷이면 조건이
-			# "둘을 잇는다" 로 읽히지 않아 셋으로 둔다.
-			for k in [-1.0, 0.0, 1.0]:
-				draw_rect(Rect2(c.x + k * u * 0.54 - u * 0.16, c.y - u * 0.72,
-						u * 0.32, u * 1.44), col)
-		"first":
-			draw_line(c + Vector2(-u * 0.8, -u * 0.7), c + Vector2(-u * 0.8, u * 0.7), col, 1.6)
-			draw_circle(c + Vector2(u * 0.3, 0.0), u * 0.38, col)
-		"last":
-			draw_circle(c + Vector2(-u * 0.3, 0.0), u * 0.38, col)
-			draw_line(c + Vector2(u * 0.8, -u * 0.7), c + Vector2(u * 0.8, u * 0.7), col, 1.6)
-		"streak":
-			for i in 3:
-				draw_circle(c + Vector2((float(i) - 1.0) * u * 0.66,
-						(1.0 - float(i)) * u * 0.52), u * 0.28, col)
-		"miss":
-			for k in [-1.0, 1.0]:
-				draw_line(c + Vector2(-u * 0.75, k * u * 0.75),
-						c + Vector2(u * 0.75, -k * u * 0.75), col, 1.4)
-		"missp":
-			# 빗나감이 이어졌다 — 작은 X 둘이 나란히 선다
-			for dx in [-0.52, 0.52]:
-				for k in [-1.0, 1.0]:
-					draw_line(c + Vector2((dx - 0.38) * u, k * u * 0.62),
-							c + Vector2((dx + 0.38) * u, -k * u * 0.62), col, 1.2)
-		"risk":
-			# 위험 영역 셋 — 두 호(띠) + 중심 점(불)
-			draw_arc(c, u * 0.92, -2.2, -0.9, 8, col, 1.0)
-			draw_arc(c, u * 0.92, 0.9, 2.2, 8, col, 1.0)
-			draw_circle(c, u * 0.3, col)
-		"risk1":
-			draw_arc(c, u * 0.92, -2.2, 2.2, 14, col, 1.0)
-			draw_string(font, c + Vector2(-u, u * 0.5), "1",
-					HORIZONTAL_ALIGNMENT_CENTER, u * 2.0, maxi(6, int(u * 1.2)), col)
-		"few":
-			for i in 3:
-				var bx := c.x + (float(i) - 1.0) * u * 0.6
-				draw_line(Vector2(bx, c.y + u * 0.5), Vector2(bx, c.y - u * 0.1
-						- float(i == 1) * u * 0.4), col, 1.3)
-		"sixth":
-			draw_string(font, c + Vector2(-u, u * 0.55), "6",
-					HORIZONTAL_ALIGNMENT_CENTER, u * 2.0, maxi(7, int(u * 1.5)), col)
-		"pair":
-			for dx in [-0.45, 0.45]:
-				draw_circle(c + Vector2(dx * u, 0.0), u * 0.3, col)
-		"trip":
-			for dx in [-0.66, 0.0, 0.66]:
-				draw_circle(c + Vector2(dx * u, 0.0), u * 0.26, col)
-		"quad":
-			for dx in [-0.45, 0.45]:
-				for dy in [-0.45, 0.45]:
-					draw_circle(c + Vector2(dx * u, dy * u), u * 0.26, col)
-		"pair2":
-			for dx in [-0.72, -0.3, 0.3, 0.72]:
-				draw_circle(c + Vector2(dx * u, float(absf(dx) < 0.5) * u * 0.4
-						- u * 0.2), u * 0.22, col)
-		"spread":
-			draw_circle(c + Vector2(-u * 0.6, u * 0.45), u * 0.26, col)
-			draw_circle(c + Vector2(u * 0.1, -u * 0.55), u * 0.26, col)
-			draw_circle(c + Vector2(u * 0.65, u * 0.25), u * 0.26, col)
-		"zone3":
-			for rr in [0.35, 0.65, 0.95]:
-				draw_arc(c, u * rr, -2.4, -0.7, 8, col, 1.0)
-		"zones2":
-			draw_arc(c, u * 0.85, PI * 0.6, PI * 1.4, 10, col, 1.2)
-			draw_arc(c, u * 0.85, -PI * 0.4, PI * 0.4, 10, col, 1.2)
-		"zones4":
-			for aa in [0.785, 2.356, 3.927, 5.498]:
-				draw_circle(c + Vector2(cos(aa), sin(aa)) * u * 0.62, u * 0.24, col)
-		"rezone":
-			draw_arc(c, u * 0.7, -2.6, 1.6, 12, col, 1.2)
-			var tp := c + Vector2(cos(1.6), sin(1.6)) * u * 0.7
-			draw_colored_polygon(PackedVector2Array([tp + Vector2(0.3, -0.4) * u,
-					tp + Vector2(-0.5, -0.1) * u, tp + Vector2(0.2, 0.5) * u]), col)
-		"band":
-			# 동전 슬롯 r=15 → r_icon 6.30 → u 3.906. 두 호의 중심 간격 2.227px,
-			# 굵기 1.0 을 빼면 배경이 1.23px 남는다 — 1배에서 두 겹으로 갈린다.
-			var a0 := -PI * 0.5 - 1.22
-			var a1 := -PI * 0.5 + 1.22
-			draw_arc(c, u * 0.95, a0, a1, 12, col, 1.0)
-			draw_arc(c, u * 0.38, a0, a1, 8, col, 1.0)
-		"warm":
-			# 내림 사선. 오름은 정밀(점 3개)이 이미 쓴다. 획 사이 수직 간격 2.20px.
-			for i in 3:
-				var o := (float(i) - 1.0) * u * 0.62
-				draw_line(c + Vector2(-u * 0.34 + o, -u * 0.74),
-						c + Vector2(u * 0.34 + o, u * 0.74), col, 1.0)
-		"mid":
-			# 대물 ▲ 과 소물 ▼ 이 꼭짓점에서 만난다. 만나는 곳이 곧 가운데다.
-			draw_colored_polygon(PackedVector2Array([
-					c + Vector2(-u * 0.85, -u * 0.72),
-					c + Vector2(u * 0.85, -u * 0.72), c]), col)
-			draw_colored_polygon(PackedVector2Array([
-					c + Vector2(-u * 0.85, u * 0.72),
-					c + Vector2(u * 0.85, u * 0.72), c]), col)
-
-
-func _half_disc(c: Vector2, u: float, left: bool) -> PackedVector2Array:
-	var pts := PackedVector2Array()
-	for i in 13:
-		var a := PI * 0.5 + PI * float(i) / 12.0 * (1.0 if left else -1.0)
-		pts.append(c + Vector2(cos(a), sin(a)) * u)
-	return pts
-
-
 # 아이템 하나를 동전로 그린다. 동전 슬롯과 상점이 같은 그림을 쓰도록 여기 하나로 모았다.
 func draw_item_sticker(c: Vector2, r: float, it: Dictionary, rot: float, lift: float,
 		dim: float, num_sz: int, peel := 0.0) -> void:
@@ -15242,50 +15070,22 @@ func draw_item_sticker(c: Vector2, r: float, it: Dictionary, rot: float, lift: f
 	#  **순서가 계약이다**: 밴드가 먼저 서고 나서 이 고리를 걷었다 —
 	#  rarity_color 를 부르는 자리가 다섯에서 넷으로 줄었다 다시 다섯이 되는
 	#  것이 아니라 늘 다섯 이상이어야 한다.
-	#  ── 방식이 곧 효과인 장 ────────────────────────
-	#  조준·계산을 쥔 장은 조건 칸도 값 칸도 비어 있다(item_desc 의 주석).
-	#  그런데 얼굴은 그것을 모르고 빈 아이콘을 찍고 값 자리에 **0** 을
-	#  그려 왔다 — 0점짜리 동전으로 읽힌다(2026-09-15 제보).
-	#  그 장은 아래위로 가를 것이 없으므로 **가운데 한 줄**로 방식을 적는다.
-	#  글자 두셋이라 r 10 아래(툴팁)에서는 안 그린다 — 그 크기에서는 곁에
-	#  이름이 같이 서므로 비워 두는 편이 낫다.
-	#  얼굴은 **바탕**이다. 몸 색에서 한 단만 옮겨 낸 워터마크라, 그 위에
-	#  조건과 값이 그대로 읽힌다. 어두운 몸은 밝혀서 낸다(옆면과 같은 규칙).
 	#  실루엣이 판이면 얼굴도 말림도 그 판을 따른다. **한 함수(_coin_face)가
 	#  두 자세에 같은 수를 준다** — 갈리면 테이블에서 집어 랙에 꽂는 순간
 	#  메달 크기가 튄다. 원반·물린 원반 가지는 어제 이 자리의 식 그대로다
 	#  (draw_sticker 의 rw 와 같은 식이라 얼굴이 테 밑으로 안 기어든다).
-	var plq: bool = String(FORMS[form].get("fam", "disc")) == "plaque"
 	#  선 자세는 wob 이 없다 — 두 배율이 같은 r 이라 어제 값과 한 글자도 안 다르다.
 	var fv := _coin_face(form, r, r, r, float(_plq_band(r, STK_TIERS[ti])))
 	var fcp := c + Vector2(0.0, fv.y)     # 얼굴 중심 — drip 만 +1.223k 처진다
 	var fr: float = fv.z
 	if _mat_of(it) != "hollow" and fr > 2.0:
 		_icon_item(fcp, fr, fr, String(it.get("id", "")), dim)
-	var ink: Color = C_CHIP.lightened(0.5) if it.k == "chip" else C_MULT.lightened(0.45)
-	#  ── 얼굴에는 글자를 안 쓴다 ────────────────────────
-	#  그림이 생기기 전에는 값과 방식 이름이 얼굴의 전부였다. 이제 그림이
-	#  "무엇인가" 를 말하므로 그 위에 숫자를 얹으면 그림을 가리기만 한다.
-	#  값·조건·방식의 온전한 말은 툴팁이 갖는다 — 지름 38px 에서 두 번
-	#  말할 자리가 없다(2026-09-16).
-	if String(it.k) == "" and String(it.c) == "":
-		_rank_peel(c, r, form, peel, dim)
-		return
-	# 얼굴을 위아래로 가른다 — 위는 조건(언제 터지는가), 아래는 값(얼마나).
-	# 값만 있으면 조건이 정반대인 짝이 똑같이 보인다.
-	#  플라크는 세로가 짧다 — r 로 재면 조건 아이콘이 윗변 밖으로 샌다.
-	#  얼굴 반지름(fr)으로 재면 두 실루엣이 같은 비를 쓴다: 원반 r=19 에서
-	#  fr 15.8 이라 0.40fr = 6.32 · 0.506fr = 8.00 으로 옛 값(6.27 · 7.98)과
-	#  0.05px 안에서 같다.
-	var cy: float = -r * 0.33
-	var cr: float = r * 0.42
-	if plq:
-		cy = -fr * 0.40
-		cr = fr * 0.506
-	_icon_cond(fcp + Vector2(1.0, cy + 1.0), cr, String(it.c),
-			Color(0.0, 0.0, 0.0, 0.45 * (1.0 - dim)))
-	_icon_cond(fcp + Vector2(0.0, cy), cr, String(it.c),
-			ink.darkened(dim + 0.08))
+	#  ── 얼굴에는 글자도 표시도 안 얹는다 ──────────────────
+	#  그림이 생기기 전에는 값과 방식 이름이 얼굴의 전부였다. 값 숫자는
+	#  2026-09-16 에 걷었고, 남아 있던 조건 표시(「4·10」「8」「1」「6」 같은
+	#  숫자와 작은 도형)도 2026-09-27 에 걷었다 — 「그림 위에 텍스트 다 지워,
+	#  이제 그래픽 있잖아」. 누운 자세(_sticker_flat)는 원래 안 얹었으므로 이제
+	#  두 자세가 같다. 값·조건·방식의 말은 툴팁이 갖는다.
 	# 말린 끝은 인쇄를 덮는다. 그래서 맨 마지막이다 — 순서가 곧 물리다.
 	_rank_peel(c, r, form, peel, dim)
 
