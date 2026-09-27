@@ -13,7 +13,7 @@ const Save = preload("res://scripts/save.gd")
 #  그래서 판마다 **그 판에 들고 있을 빌드로** 여섯 발을 다 던지게 하고(목표를
 #  무한대로 둔다) 발마다 점수를 적는다. 튜토리얼 목표는 여기서 나온 수로 박는다.
 #
-#  빌드는 game.gd 의 TUT.gifts 를 **그대로** 읽는다 — 판 n 에는 상점 n−1 까지의
+#  빌드는 game.gd 의 TUT.pages 를 **그대로** 읽는다 — 판 n 에는 상점 n−1 까지의
 #  선물이 다 들어 있다고 본다(곱하기는 오른쪽 끝, _tut_slot 과 같은 규칙).
 # ══════════════════════════════════════════════════════════
 
@@ -46,13 +46,17 @@ func _build(n: int) -> void:
 	g.owned.clear()
 	var mods := []
 	var ids := []
-	var stages: Array = g.TUT.gifts
-	for k in mini(n - 1, stages.size()):
-		for gid in stages[k]:
-			ids.append(String(gid))
+	#  판 n 에는 상점 n−1 까지의 쪽이 다 들어 있다(리롤 쪽 포함 — 튜토리얼
+	#  안내가 리롤을 시킨다). 팩·사탕·사진은 사람이 쓸지 모르므로 안 센다.
+	for pg in g.TUT.pages:
+		if int(pg.shop) < n:
+			for gid in pg.ids:
+				ids.append(String(gid))
 	for gid in ids:
 		if gid.begins_with("m:"):
 			mods.append(gid.substr(2))
+			continue
+		if gid.find(":") == 1:
 			continue
 		for it in GameData.items():
 			if String(it.id) == gid:

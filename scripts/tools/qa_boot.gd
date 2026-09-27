@@ -4,7 +4,8 @@ extends SceneTree
 #   「튜토리얼을 게임의 매력을 보여 주는 걸로 특화하자 — 개사기 아이템 주는 거」
 #   사용자와 절차대로 정한 흐름:
 #     ① 처음 켠 사람의 첫 런은 2라운드 6판짜리 튜토리얼 런이다
-#     ② 상점 1 · 2 · 3 에 가장 센 빌드가 공짜로 놓인다(TUT.gifts) · 태그 [서비스]
+#     ② 첫 상점 두 장 → 리롤을 가리키고 세 장 더 → 둘째·셋째 상점은 보드 확장 ·
+#        사탕 · 팩 · 사진(TUT.pages) · 태그 [서비스]
 #        · 안 집으면 다음 상점에 다시 · 곱하기는 알아서 오른쪽 끝
 #     ③ 첫 상점 상인 두 줄 · SAFETY LAST! 첫 발동 한 줄
 #     ④ 판 목표는 튜토리얼 런에서만 오른다(TUT.target)
@@ -109,9 +110,7 @@ func _run() -> void:
 	# ── ② 상점 셋 ────────────────────────────────────
 	print("② 상점 셋")
 	_shop(1)
-	var want1: Array = (T.gifts[0] as Array).duplicate()
-	want1.sort()
-	_ok("첫 상점에 첫 선물이 선다", _gift_ids() == want1, str(_gift_ids()))
+	_ok("첫 상점에는 첫 쪽만 선다(리롤 전)", _gift_ids() == ["r14", "u26"], str(_gift_ids()))
 	var free0 := true
 	for i in _gift_at():
 		if int(g.stock[i].cost) != 0:
@@ -137,39 +136,70 @@ func _run() -> void:
 		if String(g.stock[i].d.get("k", "")) == "xmult":
 			xi = i
 	g._buy(xi)
+	_ok("한 장만으로는 리롤을 안 가리킨다", not g.tutor_q.has("u_more"), "")
 	_take_all()
 	_ok("곱하기는 알아서 오른쪽 끝이다", _ids() == ["r14", "u26"], str(_ids()))
-	_shop(2)
-	var want2: Array = (T.gifts[1] as Array).duplicate()
-	want2.sort()
-	_ok("둘째 상점에 둘째 선물이 선다", _gift_ids() == want2, str(_gift_ids()))
+	_ok("두 장을 쥐면 상인이 리롤을 가리킨다", g.tutor_q.has("u_more"), str(g.tutor_q))
+	var more := GameData.tutor_steps("u_more")
+	_ok("리롤 말이 고른 그대로다", more.size() == 1
+			and String(more[0].text) == "다른 것도 한번 봐봐"
+			and String(more[0].mark) == "reroll", "")
+	_ok("평소 리롤 설명은 겹쳐 안 뜬다", Save.taught("u_reroll"), "")
+	var g1: int = g.gold
+	g._reroll()
+	_ok("첫 리롤은 무료다", g.gold == g1, "골드 %d → %d" % [g1, g.gold])
+	_ok("리롤하면 세 장이 더 선다", _gift_ids() == ["c03", "c06", "u11"], str(_gift_ids()))
+	_ok("그래도 테이블 폭은 그대로다", g.stock.size() == GameData.shop_slots(1),
+			"%d" % g.stock.size())
 	_take_all()
-	_ok("더하기는 곱하기 앞에 끼어든다", _ids() == ["r14", "u11", "c03", "u26"], str(_ids()))
-	_shop(3)
-	_ok("셋째 상점에 곱하기와 보드 확장이 선다", _gift_ids() == ["c06", "dnut"],
+	_ok("동전 다섯 칸이 첫 상점에서 다 찬다",
+			_ids() == ["r14", "u11", "c03", "u26", "c06"], str(_ids()))
+	_ok("동전 슬롯을 안 넘긴다", g.owned.size() <= GameData.max_items(), "")
+	_shop(2)
+	_ok("둘째 상점에 보드 확장과 사탕이 선다", _gift_ids() == ["c_tr", "dnut"],
 			str(_gift_ids()))
 	_take_all()
-	_ok("다섯 장이 다 섰다", _ids() == ["r14", "u11", "c03", "u26", "c06"], str(_ids()))
 	_ok("보드 확장이 끼워졌다", (g.mods_own as Array).has("dnut"), str(g.mods_own))
-	_ok("동전 슬롯을 안 넘긴다", g.owned.size() <= GameData.max_items(), "")
+	var held := []
+	for c in g.cons:
+		held.append(String(c.get("id", "")))
+	_ok("사탕이 칸에 들었다", held.has("c_tr"), str(held))
+	g.cons.clear()          # 셋째 판에 썼다고 친다
+	_shop(3)
+	_ok("셋째 상점에 팩과 사진이 선다", _gift_ids() == ["b_small", "c_again"],
+			str(_gift_ids()))
+	var pk_ok := false
+	for i in _gift_at():
+		if String(g.stock[i].type) == "boost":
+			pk_ok = (g.stock[i].d.get("pool", []) as Array) == ["cons", "fix"]
+	_ok("선물 팩은 사탕·사진만 쏟는다(동전 칸이 꽉 찼다)", pk_ok, "")
+	for i in _gift_at():
+		if String(g.stock[i].type) == "fix":
+			g._buy(i)
+	_ok("받아 간 사진은 적힌다", (g.tut_got as Array).has("f:c_again"), str(g.tut_got))
 	_shop(4)
-	_ok("넷째 상점부터는 선물이 없다", _gift_at().is_empty(), "")
+	_ok("넷째 상점에는 안 받은 팩만 다시 선다", _gift_ids() == ["b_small"],
+			str(_gift_ids()))
+	_ok("사탕은 써서 사라져도 다시 안 선다", not _gift_ids().has("c_tr"), "")
 
 	# ── ③ 안 집은 사람 ───────────────────────────────
 	print("③ 안 집고 나가면")
 	_tut()
 	_shop(1)
+	_ok("리롤을 안 하면 세 장은 안 선다", _gift_at().size() == 2, "%d장" % _gift_at().size())
 	_shop(2)
-	_ok("다음 상점에 앞 선물까지 다시 선다", _gift_at().size() == 4,
-			"%d장" % _gift_at().size())
+	_ok("다음 상점에 앞 쪽까지 다 다시 선다", _gift_at().size() == 7,
+			"%d장 %s · 판 %d" % [_gift_at().size(), str(_gift_ids()), g.stock.size()])
 
 	# ── ④ 태그 ───────────────────────────────────────
 	print("④ 태그")
-	_ok("선물은 [서비스] 다", g._tut_svc("item", "r14") and g._tut_svc("mod", "dnut"), "")
+	_ok("선물은 [서비스] 다", g._tut_svc("item", "r14") and g._tut_svc("mod", "dnut")
+			and g._tut_svc("boost", "b_small") and g._tut_svc("cons", "c_tr")
+			and g._tut_svc("fix", "c_again"), "")
 	_ok("선물이 아닌 것은 아니다", not g._tut_svc("item", "c01"), "")
 	var src := FileAccess.get_file_as_string("res://scripts/game.gd")
-	_ok("태그 자리가 셋이다(슬롯 · 테이블 · 낀 판)",
-			src.count("_tip_tag(\"서비스\", C_ACC)") == 3, "")
+	_ok("태그 자리가 넷이다(슬롯 · 테이블 · 낀 판 · 사탕 칸)",
+			src.count("_tip_tag(\"서비스\", C_ACC)") == 4, "")
 	_ok("값표가 「공짜」를 적는다", src.find("\"공짜\"") >= 0, "")
 
 	# ── ⑤ 판 목표 ────────────────────────────────────
@@ -189,8 +219,23 @@ func _run() -> void:
 			raised = true
 	_ok("둘째 판부터 본편보다 높다", raised, str(T.target))
 	_ok("첫 판은 본편 그대로다(선물 전)", int(T.target[0]) == 0, "")
+	#  보스 제약에서 「문턱」·「먹통」이 빠진다 — 잰 목표가 무너지는 둘이다.
+	var bad_mod := 0
+	for k in 300:
+		g._roll_boss_mods(3, true)
+		for mid in g.boss_mods.get(3, PackedStringArray()):
+			if String(mid) == "tgt" or String(mid) == "dull":
+				bad_mod += 1
+	_ok("튜토리얼 보스에는 문턱·먹통이 안 걸린다", bad_mod == 0, "300번 중 %d" % bad_mod)
 	g.tut_run = false
 	_ok("튜토리얼이 아니면 본편 목표다", g._tut_target(2) == 0, "")
+	var seen_bad := false
+	for k in 300:
+		g._roll_boss_mods(3, true)
+		for mid in g.boss_mods.get(3, PackedStringArray()):
+			if String(mid) == "tgt" or String(mid) == "dull":
+				seen_bad = true
+	_ok("본편 보스에는 그대로 걸린다", seen_bad, "")
 	g.tut_run = true
 
 	# ── ⑥ 6판에서 끝난다 ──────────────────────────────

@@ -571,6 +571,8 @@ var gold := 0
 var owned := []
 var won := false
 var tut_run := false     # 튜토리얼 런(처음 켠 사람의 첫 런 · 2라운드 6판) — TUT 머리말
+var tut_rr := false      # 이 상점에서 리롤했는가 — _open_shop 이 내리고 _reroll 이 세운다
+var tut_got := []        # 받아 간 팩 · 사탕 · 사진 선물(머리 붙은 id). 동전·판은 가진 것을 본다
 
 var last_sector := -1
 var last_miss := false          # 직전 투척이 빗나갔는가 — 조건 missp 가 읽는다
@@ -1268,6 +1270,8 @@ const RUN_PLAIN := [
 	#  밀린다 — _open_shop 을 안 부르는 이유 중 하나가 이것이다.
 	["shop_seen", 0], ["bought_item", false], ["carry_darts", 0],
 	["tut_run", false],      # 튜토리얼 런이면 이어해도 튜토리얼이다
+	["tut_rr", false],       # 이 상점에서 리롤했는가(리롤 뒤 선물 쪽)
+	["tut_got", []],         # 받아 간 선물(동전 · 보드 확장 밖의 것 — 팩 · 사탕 · 사진)
 	["track_lv", {}],        # 열쇠가 **int**(트랙 id)다
 	["track_hits", {}],      # 같음
 	["zone_hist", {}],       # 열쇠가 **String**(zone 이름)이다 — 위 둘과 다르다
@@ -1812,6 +1816,8 @@ func _new_run(human := false) -> void:
 	#  튜토리얼 런 — 무한을 끈 **뒤에** 묻는다(_tut_due 가 무한을 본다).
 	tut_run = false
 	tut_run = human and _tut_due()
+	tut_rr = false
+	tut_got = []
 	#  지난 런에 열린 것을 새 런까지 끌고 가면 안 된다.
 	run_unlocked.clear()
 	#  배움도 런 단위로 센다. 줄에 남은 것을 새 런까지 끌고 가면 엉뚱한
@@ -2621,45 +2627,85 @@ func _boot_due() -> bool:
 	return tut_run
 
 
-#  튜토리얼 선물인가. "m:" 는 보드 확장.
+#  튜토리얼 선물인가. 머리 — 없음 동전 · m: 보드 확장 · b: 팩 · c: 사탕 · f: 사진.
 func _tut_gift_id(id: String) -> bool:
-	for st in TUT.gifts:
-		if (st as Array).has(id):
+	for pg in TUT.pages:
+		if (pg.ids as Array).has(id):
 			return true
 	return false
 
 
+const TUT_HEAD := {"item": "", "mod": "m:", "boost": "b:", "cons": "c:", "fix": "f:"}
+
+
 #  툴팁 태그 [서비스] 를 붙일 자리 — 튜토리얼 런의 선물이면.
 func _tut_svc(type: String, id: String) -> bool:
-	if not tut_run:
+	if not tut_run or not TUT_HEAD.has(type):
 		return false
-	return _tut_gift_id(("m:" + id) if type == "mod" else id)
+	return _tut_gift_id(String(TUT_HEAD[type]) + id)
 
 
-#  이 상점에 공짜로 깔 것 — 지금까지 열린 상점의 선물 중 아직 안 가진 것.
-#  [{type, d}]. shop_seen 은 _open_shop 이 _roll_stock 보다 **먼저** 올린다.
+#  이 상점에 공짜로 깔 것 — [{type, d, gid}]. 쪽(TUT.pages)마다 「몇 번째 상점」과
+#  「그 상점에서 리롤한 뒤인가」가 문이다. 지난 상점의 것 중 안 받은 것도 다시 선다.
+#  shop_seen 은 _open_shop 이 _roll_stock 보다 **먼저** 올린다.
+#  ⚠ 동전·보드 확장은 「가졌는가」를 본다 — 깨진 유리 대포·이카로스는 다음
+#  상점에 다시 선다. 팩·사탕·사진은 쓰면 사라지므로 「받아 갔는가」(tut_got).
 func _boot_stock() -> Array:
 	var out := []
 	if not tut_run:
 		return out
-	var stages: Array = TUT.gifts
-	for k in mini(shop_seen, stages.size()):
-		for gid in stages[k]:
+	for pg in TUT.pages:
+		var sh := int(pg.shop)
+		if sh > shop_seen or (sh == shop_seen and bool(pg.get("rr", false)) and not tut_rr):
+			continue
+		for gid in pg.ids:
 			var id := String(gid)
-			if id.begins_with("m:"):
-				var mid := id.substr(2)
-				if mods_own.has(mid) or not _mod_room(mid):
-					continue
-				var mr := _row_by_id(GameData.mods(), mid)
-				if not mr.is_empty():
-					out.append({"type": "mod", "d": mr})
-				continue
-			if _has_item(id):
-				continue
-			var ir := _row_by_id(GameData.items(), id)
-			if not ir.is_empty():
-				out.append({"type": "item", "d": ir})
+			var head := id.substr(0, 2) if id.find(":") == 1 else ""
+			var bare := id.substr(2) if head != "" else id
+			match head:
+				"":
+					if _has_item(bare):
+						continue
+					var ir := _row_by_id(GameData.items(), bare)
+					if not ir.is_empty():
+						out.append({"type": "item", "d": ir, "gid": id})
+				"m:":
+					if mods_own.has(bare) or not _mod_room(bare):
+						continue
+					var mr := _row_by_id(GameData.mods(), bare)
+					if not mr.is_empty():
+						out.append({"type": "mod", "d": mr, "gid": id})
+				"b:":
+					if tut_got.has(id):
+						continue
+					var br := _row_by_id(GameData.boosters(), bare)
+					if not br.is_empty():
+						#  동전 슬롯이 이미 꽉 찬 런이라 사탕·사진만 쏟게 한다 —
+						#  동전이 쏟아지면 고를 수가 없다. 사본에만 박는다.
+						var bd: Dictionary = br.duplicate()
+						bd["pool"] = ["cons", "fix"]
+						out.append({"type": "boost", "d": bd, "gid": id})
+				"c:":
+					if tut_got.has(id):
+						continue
+					var cr := _row_by_id(GameData.candies(), bare)
+					if not cr.is_empty():
+						out.append({"type": "cons", "d": cr, "gid": id})
+				"f:":
+					if tut_got.has(id):
+						continue
+					var fr := _row_by_id(GameData.fixtures(), bare)
+					if not fr.is_empty():
+						out.append({"type": "fix", "d": fr, "gid": id})
 	return out
+
+
+#  첫 쪽(첫 상점이 열릴 때 서는 선물)의 동전을 다 쥐었는가.
+func _tut_first_done() -> bool:
+	for gid in TUT.pages[0].ids:
+		if not _has_item(String(gid)):
+			return false
+	return true
 
 
 #  선물이 설 슬롯 — 곱하기는 오른쪽 끝, 나머지는 첫 곱하기 앞.
@@ -2696,22 +2742,33 @@ func _tut_end() -> void:
 
 #  표에 안 두고 여기 두는 까닭 — 밸런스 값이 아니라 **한 번짜리 연출**이고,
 #  packs.csv 에 두면 다트통 줄로 읽혀 「이 통을 고르면 늘 나온다」가 된다.
-#  gifts — 상점 1 · 2 · 3 에 놓을 것. build_probe 로 잰 가장 센 조합이다
-#  (1~6판 첫 발 ÷ 목표 기하평균: 빌리의 바지 · SAFETY LAST! 만 3.9배 →
-#  + BULLET TIME · 유리 대포 · 이카로스 62배 → 도넛 판까지 65배).
+#  동전 조합은 build_probe 로 잰 가장 센 것이다(1~6판 첫 발 ÷ 목표 기하평균:
+#  빌리의 바지 · SAFETY LAST! 만 3.9배 → + BULLET TIME · 유리 대포 · 이카로스
+#  62배 → 도넛 판까지 65배).
 #  target — tut_probe 로 잰 판마다 발 점수에서 박았다(2026-09-27, 자동 플레이 8회).
-#    겨눈 것 둘: ① 자동 플레이가 **마지막 발 앞까지로는 못 넘는다**(마지막 발
-#    ×3 이 판을 깬다) ② 사람 실력이 자동 플레이의 70% 여도 넘는다.
-#    판 2 (여섯 발 · 빌리의 바지 · SAFETY LAST!) 다섯 발 1,390 · 여섯 발 2,130 → 1,500
-#    판 3 (네 발 — BULLET TIME 이 다트 −2)    세 발 9,300 · 네 발 18,200 → 11,000
-#    판 4~6 (+ 이카로스 · 도넛)               세 발 39,000 · 네 발 78,000 → 42,000~48,000
+#    둘째 판부터 동전 다섯 칸이 다 차 있고 BULLET TIME 이 다트를 넷으로 줄인다.
+#    한 발 약 12,500 · 마지막 발(×3) 약 37,500 · 세 발 합 최고 41,300 · 네 발 합 약 75,000.
+#    고정 더하기가 커서(점수 +140 · 배수 +19) 아무 데나 맞혀도 자동 플레이의 85%
+#    이상이 난다(빗나가도 약 10,600). 그래서 **세 발로는 어떤 경우에도 못 넘고
+#    네 번째 발 ×3 으로 넘는** 42,000 에서 판마다 2,000 씩 올린다.
 #    판 1 은 선물 전이라 본편 그대로(0).
 #  ⚠ 유리 대포(판마다 1/2)·이카로스(1/10)가 깨지면 한 판은 못 미칠 수 있다 —
 #  깨진 선물은 다음 상점에 다시 공짜로 놓인다(_boot_stock 이 「안 가진 것」을 본다).
 const TUT := {
 	"legs": 6,
-	"gifts": [["r14", "u26"], ["u11", "c03"], ["c06", "m:dnut"]],
-	"target": [0, 1500, 11000, 42000, 45000, 48000],
+	#  선물 쪽. shop — 몇 번째 상점 · rr — 그 상점에서 **리롤한 뒤에** 선다.
+	#  첫 상점: 두 장을 사면 상인이 리롤을 가리키고(u_more) 리롤하면 세 장이 더
+	#  선다 — 둘째 판부터 동전 다섯 칸이 가장 센 빌드로 찬다(사용자 2026-09-27:
+	#  「동전 두 개로는 우리 게임의 매력을 충분히 못 보여 줄 것 같아」).
+	#  둘째 · 셋째 상점은 동전 밖의 재미 — 보드 확장 · 사탕 · 팩 · 사진.
+	#  지팡이 사탕은 셋째 판에 써서 칸을 비우고, 셋째 상점의 팩·사진이 두 칸을 채운다.
+	"pages": [
+		{"shop": 1, "ids": ["r14", "u26"]},
+		{"shop": 1, "rr": true, "ids": ["u11", "c03", "c06"]},
+		{"shop": 2, "ids": ["m:dnut", "c:c_tr"]},
+		{"shop": 3, "ids": ["b:b_small", "f:c_again"]},
+	],
+	"target": [0, 42000, 44000, 46000, 48000, 50000],
 }
 
 
@@ -3153,8 +3210,9 @@ func _open_shop() -> void:
 	#  무엇에 대비하는지가 안 보인다(2026-09-18).
 	if leg_no + 1 <= GameData.legs_top():
 		_roll_boss_mods(_round_boss(leg_no + 1))
+	tut_rr = false
 	_roll_stock()
-	#  공짜 두 장이 선 테이블에서만 — 값 설명(u_shop) 바로 뒤에 온다.
+	#  선물이 선 테이블에서만 — 값 설명(u_shop) 바로 뒤에 온다.
 	if _mark_rect("gift").size.x >= 2.0:
 		_tutor("u_gift")
 	state = S.SHOP
@@ -3301,12 +3359,12 @@ func _roll_stock() -> void:
 		"item": _stock_items(nxt).filter(func(e): return not gift_ids.has(String(e.id))),
 		"mod": _stock_mods().filter(func(e): return not gift_ids.has(String(e.id))),
 		"dart": GameData.darts().slice(1),
-		"cons": GameData.candies().duplicate(),
+		"cons": GameData.candies().filter(func(e): return not gift_ids.has(String(e.id))),
 		# 사진은 이제 선반이 아니라 테이블 위 매물이다. 라운드마다 한 장을
 		# 걸어 두던 자리를 걷었다 — 기획서 P.30 의 0.5% 는 shop.csv 의
 		# 저울이 쥔다. 리롤하면 다른 것이 오고, 안 사도 안 남는다.
-		"fix": GameData.fixtures().duplicate(),
-		"boost": GameData.boosters().duplicate(),
+		"fix": GameData.fixtures().filter(func(e): return not gift_ids.has(String(e.id))),
+		"boost": GameData.boosters().filter(func(e): return not gift_ids.has(String(e.id))),
 	}
 	var n := 0
 	while n < slots:
@@ -3422,6 +3480,11 @@ func _buy(i: int) -> void:
 	var s: Dictionary = stock[i]
 	gold -= s.cost
 	s.sold = true
+	#  튜토리얼 선물을 받아 갔다 — 팩·사탕·사진은 여기서 적어야 다시 안 선다.
+	if bool(s.get("free", false)) and _tut_svc(String(s.type), String(s.d.get("id", ""))):
+		var tg := String(TUT_HEAD[String(s.type)]) + String(s.d.get("id", ""))
+		if not tut_got.has(tg):
+			tut_got.append(tg)
 	match String(s.type):
 		"item": _bump("items_bought")
 		"mod": _bump("mods_bought")
@@ -3449,6 +3512,11 @@ func _buy(i: int) -> void:
 				_panel_reset()
 			else:
 				owned.append(cp)
+			#  첫 상점의 두 장을 다 쥐었다 — 상인이 리롤 단추를 가리킨다(u_more).
+			#  평소 리롤 설명(u_reroll · 둘째 상점)은 이 줄이 대신하므로 적어 둔다.
+			if tut_run and shop_seen == 1 and not tut_rr and _tut_first_done():
+				_tutor("u_more")
+				Save.teach("u_reroll")
 			#  상점 매물과 팩에서 집은 것이 **같은 이 길**로 온다
 			#  (_buy_block 의 s.pack). 팩 쪽에 따로 적을 자리가 없다.
 			_found("item", String(cp.id))
@@ -3839,6 +3907,7 @@ func _reroll() -> void:
 	gold -= reroll_cost
 	_bump("rerolls")
 	rerolls_used += 1
+	tut_rr = true             # 튜토리얼 런 — 리롤 뒤 선물 쪽이 열린다(TUT.pages)
 	reroll_cost = _reroll_price()
 	if drop_fast:
 		_roll_stock()            # 헤드리스는 팔을 안 기다린다. 새 판이 곧 결과다
@@ -4298,10 +4367,13 @@ func _roll_boss_mods(bn: int, force := false,
 	if bn <= 0 or (not force and boss_mods.has(bn)):
 		return false
 	var left := GameData.modifiers().duplicate()
-	#  튜토리얼 런은 목표를 재서 박았다(TUT.target) — 「문턱」(목표 ×배)이 그
-	#  위에 곱해지면 첫 손님이 튜토리얼에서 진다. 그 한 종만 판에서 뺀다.
+	#  튜토리얼 런은 목표를 재서 박았다(TUT.target) — 두 종만 판에서 뺀다.
+	#   · 「문턱」(목표 ×배) — 잰 목표 위에 곱해지면 첫 손님이 진다.
+	#   · 「먹통」(동전 하나 봉인) — 이 빌드는 이카로스·유리 대포가 막히면 한 발이
+	#     4분의 1로 떨어진다(tut_probe 에서 보스 판 한 발이 1만 2천 → 8천으로 튀었다).
 	if tut_run:
-		left = left.filter(func(m): return String(m.get("k", "")) != "target_mul")
+		left = left.filter(func(m): return not ["target_mul", "seal_items"].has(
+				String(m.get("k", ""))))
 	#  지난 보스가 정한 것은 **빼는 것이 아니라 뒤로 미룬다.** 표가 열
 	#  종이라 보통은 남지만, 「겹치기」가 둘을 걸면 모자랄 수 있다 —
 	#  새것만 고집하다 뽑을 것이 없어지는 쪽이 더 나쁘다(2026-09-16).
@@ -28718,6 +28790,9 @@ func _tip_build(hit: Dictionary) -> void:
 			_tip_set_tag("사탕" if String(hc.get("cat", "")) == "area" else "사진")
 			tip_mark = _cons_rect(i)
 			tip_title = String(hc.n)
+			if _tut_svc("cons" if String(hc.get("cat", "")) == "area" else "fix",
+					String(hc.get("id", ""))):
+				_tip_tag("서비스", C_ACC)
 			_tip_add(String(hc.d), 20, C_TXT)
 			_tip_tag(GameData.use_at_name(String(hc.get("use_at", "any"))), C_ACC)
 		"legboss":
