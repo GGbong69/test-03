@@ -4839,9 +4839,15 @@ func _process(d: float) -> void:
 		_hand3_sync()
 		_body3_open()
 		_body3_sync()
+		_room3d_open()
+		_room3d_run(room3d_on)
+		if not motion_off:
+			room_t += d
+		Room3D.tick_room(room_vp, room_t)
 	elif _hand3_live() or _body3_live():
 		_hand3_close()
 		_body3_close()
+		_room3d_run(false)
 
 	_fill_audio()
 	_mus_update(d)
@@ -19434,6 +19440,13 @@ func _felt_draw() -> void:
 	# 자리에 다트판이 그대로 비친다.
 	# 판 갈이 때는 _draw 가 이 사각을 **안 밀고** 맨 밑에 미리 깔았다.
 	# 여기서 또 그리면 벽이 테이블을 따라 옮겨진다.
+	if _room3d_live():
+		#  3D 방(원근)을 화면 전체에, 테이블(직교)을 그 위에. 펠트 결 · 상인
+		#  라인 · 창구 몸통은 3D 가 이미 그렸다 — 창구는 반응만 덮는다.
+		draw_texture_rect(room_vp.get_texture(), _full(), false)
+		draw_texture_rect(tbl3_vp.get_texture(), _room3d_rect(), false)
+		_chute_draw()
+		return
 	if not swap_live:
 		draw_rect(_full(), C_WOOD)
 	# 펠트는 사다리꼴이다. 좌우 빗변이 그대로 창구라 모양이 곧 규칙이다.
@@ -19474,8 +19487,12 @@ func _cover_draw() -> void:
 	# 이 띠는 카운터가 벽에 드리운 그늘이다 — 카운터가 나가면 같이 옅어져
 	# 벽에 녹는다. 안 그러면 테이블이 다 빠진 뒤에도 y=128 에 가로 이음선
 	# 하나가 화면을 가로질러 남는다.
-	draw_rect(_wide(0.0, TBL.fy, true),
-			_swap_wall(C_WOOD.darkened(0.30).lerp(C_WOOD, _swap_gone())))
+	var r3 := _room3d_live()
+	if r3:
+		_room3d_band(_full().position.y, float(TBL.fy) - 20.0)
+	else:
+		draw_rect(_wide(0.0, TBL.fy, true),
+				_swap_wall(C_WOOD.darkened(0.30).lerp(C_WOOD, _swap_gone())))
 	if swap_live:
 		draw_set_transform(shake_off)
 	# 상인만 위로 더 뺀다. 실루엣은 동전 슬롯 뒤에 잘리는 것을 전제로 그린
@@ -19490,8 +19507,11 @@ func _cover_draw() -> void:
 	_npc_body()
 	if nd > 0.01:
 		draw_set_transform(shake_off)
-	draw_rect(_wide(TBL.fy - 3.0, 3.0), C_WOOD)
-	draw_rect(_wide(TBL.fy - 1.0, 1.0), C_WOOD.lightened(0.18))
+	if r3:
+		_room3d_tband(float(TBL.fy) - 20.0, float(TBL.fy) + 1.0)
+	else:
+		draw_rect(_wide(TBL.fy - 3.0, 3.0), C_WOOD)
+		draw_rect(_wide(TBL.fy - 1.0, 1.0), C_WOOD.lightened(0.18))
 	if nd > 0.01:
 		draw_set_transform(shake_off - Vector2(0.0, nd))
 	_npc_arms()
@@ -19503,6 +19523,9 @@ func _cover_draw() -> void:
 	#  상인이 든 물건은 손 **다음**이다.
 	_give_draw()
 	# 가까운 쪽 레일 — 리롤·다음 버튼이 그 아래 앞치마에 얹힌다
+	if r3:
+		_room3d_tband(float(TBL.ny) - 6.0, VIEW.y)
+		return
 	draw_rect(_wide(TBL.ny, 2.0), C_WOOD.lightened(0.24))
 	draw_rect(_wide(TBL.ny + 6.0, VIEW.y - TBL.ny - 6.0, false, true),
 			C_WOOD.darkened(0.35))
@@ -19554,19 +19577,40 @@ func _chute_draw() -> void:
 			p.append(Vector2(VIEW.x, TBL.fy))
 			p.append(Vector2(VIEW.x - CHUTE.back, TBL.fy))
 			p.append(Vector2(VIEW.x, TBL.ny))
-		draw_colored_polygon(p, body)
-		var gr := Color(C_WOOD.lightened(0.55), 0.16 if lit else lerpf(0.10, 0.16, hk))
-		var yy: float = TBL.fy + 4.0
-		while yy < TBL.ny:
-			var e := _chute_edge(yy)
-			if e > 2.0:
-				if z == Z_SELL:
-					draw_line(Vector2(0.0, yy), Vector2(e, yy), gr, 1.0)
-				else:
-					draw_line(Vector2(VIEW.x - e, yy), Vector2(VIEW.x, yy), gr, 1.0)
-			yy += 5.0
+		var r3 := _room3d_live()
+		if r3:
+			#  3D 쟁반이 몸통을 이미 그렸다 — 얹힘 · 불 · 누름 · 번쩍임만 빛으로 덮는다.
+			var oa := 0.0
+			var oc := C_LIGHT
+			if pay_flash > 0.0 and (lit or (z == Z_BUY and hk > 0.0)):
+				oc = C_ACC
+				oa = 0.40 * pay_flash
+			elif lit:
+				oc = C_ACC
+				oa = 0.20
+			elif press:
+				oc = Color.BLACK
+				oa = 0.30
+			elif hk > 0.0:
+				oa = 0.12 * hk
+			if oa > 0.0:
+				draw_colored_polygon(p, Color(oc, oa))
+		else:
+			draw_colored_polygon(p, body)
+			var gr := Color(C_WOOD.lightened(0.55), 0.16 if lit else lerpf(0.10, 0.16, hk))
+			var yy: float = TBL.fy + 4.0
+			while yy < TBL.ny:
+				var e := _chute_edge(yy)
+				if e > 2.0:
+					if z == Z_SELL:
+						draw_line(Vector2(0.0, yy), Vector2(e, yy), gr, 1.0)
+					else:
+						draw_line(Vector2(VIEW.x - e, yy), Vector2(VIEW.x, yy), gr, 1.0)
+				yy += 5.0
 		var eg: Color = C_ACC if lit else C_WOOD.lightened(0.34).lerp(C_ACC, hk)
-		draw_line(p[1], p[2], Color(eg, 0.95 if lit else lerpf(0.50, 0.95, hk)), 1.0)
+		var ea: float = 0.95 if lit else lerpf(0.0 if r3 else 0.50, 0.95, hk)
+		if ea > 0.0:
+			draw_line(p[1], p[2], Color(eg, ea), 1.0)
 		#  ── 턱 ────────────────────────────────────────
 		#  쓸기 동안 이 빗변이 **벽이다**(_drop_lo). 새 도형을 안 그린다 —
 		#  이미 긋고 있는 이 선을 한 겹 굵게 덧그어 「여기 맞는다」를 말한다.
@@ -20054,6 +20098,62 @@ const HAND3 := {
 	#  어깨 밖으로 삐져나온다.
 	"back": 46.0,        # 팔꿈치 너머로 더 그리는 길이
 }
+
+#  ── 지하 카지노 바 — 3D 방 · 3D 테이블 (2026-10-01 맛보기 · scripts/room3d.gd) ──
+#  「배경 화면이 없어서 그런가… 공간감… 약간 3D 게임 같이」. 방은 원근, 테이블은
+#  상인 손과 같은 직교 −52° 라 물건(2D)이 그 위에 정확히 앉는다.
+const Room3D = preload("res://scripts/room3d.gd")
+var room3d_on := true        # 개발자 5쪽 — 3D 방 켬/끔(옛 단색과 맞대 본다)
+var room_vp: SubViewport = null
+var tbl3_vp: SubViewport = null
+var room_t := 0.0            # 방의 시계 — 게임 시간이라 모션 끄기에서 멈춘다
+
+
+#  테이블 화판이 덮는 화면 사각. 먼 턱(펠트 위 20px)부터 화면 밑까지.
+func _room3d_rect() -> Rect2:
+	return Rect2(0.0, float(TBL.fy) - 20.0, VIEW.x, VIEW.y - float(TBL.fy) + 20.0)
+
+
+func _room3d_live() -> bool:
+	return room3d_on and room_vp != null and is_instance_valid(room_vp) \
+			and tbl3_vp != null and is_instance_valid(tbl3_vp) and not swap_live
+
+
+func _room3d_open() -> void:
+	if room_vp != null or not _has_renderer():
+		return
+	room_vp = Room3D.make_room(self)
+	tbl3_vp = Room3D.make_table(self, _room3d_rect(), float(TBL.fy), float(TBL.ny),
+			float(CHUTE.back), float(TBL.flat), float(TBL.tall), float(HAND3.pitch))
+
+
+#  안 보일 때는 굽기를 멈춘다 — 지우지는 않는다(다시 지으면 한 박자 걸린다).
+func _room3d_run(on: bool) -> void:
+	var md := SubViewport.UPDATE_ALWAYS if on else SubViewport.UPDATE_DISABLED
+	for vp in [room_vp, tbl3_vp]:
+		if vp != null and is_instance_valid(vp):
+			(vp as SubViewport).render_target_update_mode = md
+
+
+#  방 화판의 화면 사각 일부를 그대로 다시 붙인다 — 덮개가 쓴다(물건이 카운터
+#  뒤에서 올라올 때 벽이 덮는다).
+func _room3d_band(top: float, bot: float) -> void:
+	var f := _full()
+	var t0: float = clampf((top - f.position.y) / f.size.y, 0.0, 1.0)
+	var t1: float = clampf((bot - f.position.y) / f.size.y, 0.0, 1.0)
+	var ts := Vector2(Room3D.ROOM_PX)
+	draw_texture_rect_region(room_vp.get_texture(),
+			Rect2(f.position.x, top, f.size.x, bot - top),
+			Rect2(0.0, ts.y * t0, ts.x, ts.y * (t1 - t0)))
+
+
+#  테이블 화판의 화면 띠 하나를 다시 붙인다(먼 턱 · 가까운 팔걸이 · 앞판).
+func _room3d_tband(top: float, bot: float) -> void:
+	var r := _room3d_rect()
+	draw_texture_rect_region(tbl3_vp.get_texture(),
+			Rect2(r.position.x, top, r.size.x, bot - top),
+			Rect2(0.0, top - r.position.y, r.size.x, bot - top))
+
 
 var hand3_vp: SubViewport = null
 var hand3_rig := []        # [{root: Node3D}] — 왼손·오른손

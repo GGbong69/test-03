@@ -40,6 +40,8 @@ func _initialize() -> void:
 	if a.size() > 0:
 		out_png = a[0]
 	g = load("res://scenes/main.tscn").instantiate()
+	#  실루엣은 벽 **단색**을 배경으로 잰다 — 3D 방(2026-10-01) 위에서는 못 잰다.
+	g.room3d_on = false
 	root.add_child(g)
 	g.set_process(false)
 

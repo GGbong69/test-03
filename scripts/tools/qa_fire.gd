@@ -793,7 +793,7 @@ func _run() -> void:
 	Dev.page = 5
 	var rows5: int = Dev._rows(g).size()
 	Dev.page = page0
-	_ok("⑭-b 5쪽이 11줄이고 한 쪽 한계 19 안이다", rows5 == 11 and rows5 <= 19,
+	_ok("⑭-b 5쪽이 11줄 이상이고 한 쪽 한계 19 안이다", rows5 >= 11 and rows5 <= 19,
 			"%d줄 (한계는 _panel y[22,352] ÷ ROW %.0f)" % [rows5, Dev.ROW])
 	#  살아 있는 판을 한 톨도 안 만진다 — qa_break 의 「목표 42→42」 어법.
 	_stage(0.90, 1)

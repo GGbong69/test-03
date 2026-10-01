@@ -1056,6 +1056,9 @@ static func _rows(g: Node) -> Array:
 				{"n1": "시계 차례 %s" % ("없음" if g.clok_at < 0
 						else "%d번 칸" % (g.clok_at + 1)),
 						"t": "act", "a": "clok"},
+				#  3D 방(2026-10-01 맛보기) — 옛 단색과 같은 자리에서 맞대 본다.
+				{"n1": "3D 방 %s" % ("켬" if g.room3d_on else "끔"),
+						"t": "act", "a": "room3d"},
 			]
 
 
@@ -2280,6 +2283,10 @@ static func _run(g: Node, e: Dictionary) -> void:
 						_knot_kr(String(pk.at)),
 						String(pk.pack), String(pk.league), int(pk.slot),
 						"" if bool(pk.ok) else " · 못 탄다"])
+			return
+		"room3d":
+			g.room3d_on = not g.room3d_on
+			_say("3D 방 %s" % ("켬" if g.room3d_on else "끔"))
 			return
 		"run_drop":
 			Save.run_drop()
