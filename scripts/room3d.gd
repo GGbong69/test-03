@@ -13,8 +13,9 @@ extends RefCounted
 #     (빛줄기 원뿔과 양옆 슬롯머신은 찍어 보니 천막 · UI 막대로 읽혀 걷었다.)
 #   · 테이블 — **직교** 카메라 −52°. 상인 손(_stage3_make)과 같은 식이라
 #     3D 한 칸이 화면 1px 이고, 면 좌표 (u, h, w) 가 _p2s 그대로 화면에
-#     떨어진다. 물건(2D)이 그 위에 정확히 앉는다. 펠트 · 꺼진 창구 ·
-#     먼 턱 · 가죽 팔걸이 · 나무 앞판, 머리 위 램프의 빛 웅덩이와 그림자.
+#     떨어진다. 물건(2D)이 그 위에 정확히 앉는다. 골동품 상인의 진열대 —
+#     포도주빛 벨벳 · 조각 나무 틀과 놋쇠 모서리 갓 · 양 끝 소품(판매 저울 ·
+#     구매 금전등록기와 종) · 둥근 난간 · 판넬 앞판, 램프의 빛 웅덩이와 그림자.
 #
 #  ⚠ 셰이더 시계를 안 쓴다 — tick() 이 받는 t 는 게임 시간이라 모션
 #  끄기에서 멈춘다. 헤드리스에서는 만들지 않는다(부르는 쪽이 막는다).
@@ -38,6 +39,13 @@ const COL := {
 	"lamp": Color("ffcf8a"),
 	"neon": Color("ff5a7a"),
 	"neon2": Color("62e0ff"),
+	#  진열대(시안 Q) — 포도주빛 벨벳 · 짙은 조각 나무 · 청동 몸통 · 상아 건반
+	"velvet": Color("64182b"),
+	"carve": Color("26150d"),
+	"oak": Color("3b2416"),
+	"bronze": Color("8c5e2e"),
+	"ivory": Color("e8dcbe"),
+	"glass": Color("120e10"),
 }
 
 
@@ -319,9 +327,25 @@ static func tick_room(vp: SubViewport, t: float) -> void:
 		nl.light_energy = 0.9 * flick
 
 
-# ══ 테이블 ═══════════════════════════════════════════════════
-#  r — 화면에서 이 화판이 덮는 사각(논리 px). fy · ny — 펠트 먼/가까운 모서리.
-#  back — 먼 모서리에서 펠트가 시작하는 x(창구 빗변). flat · tall — 52° 시점.
+# ══ 테이블 — 골동품 상인의 진열대 (2026-10-01 · 시안 Q) ═══════════
+#  짙은 조각 나무 틀 안에 포도주빛 벨벳을 깔고(물건이 눕는 면 그대로),
+#  양 끝 옛 창구 자리에 소품 둘을 세운다 — 왼쪽은 놋쇠 저울(파는 것을
+#  상인이 단다), 오른쪽은 옛 금전등록기와 종(값을 치르는 곳). 틀 모서리는
+#  놋쇠 갓. 빛은 머리 위 램프의 웅덩이 + 소품마다 진열 스포트(왼쪽 위).
+#
+#  r — 화면에서 이 화판이 덮는 사각(논리 px). fy · ny — 벨벳 먼/가까운 모서리.
+#  back — 먼 모서리에서 벨벳이 시작하는 x(옛 창구 빗변). flat · tall — 52° 시점.
+#
+#  소품 자리 — 면 좌표 (u, h, w), 받침 바닥 가운데. game.gd 가 이름표와
+#  반응을 여기에 맞춘다. 둘 다 옛 창구 삼각형 안이라 물건(u 116~524)을
+#  안 가린다. 키는 먼 턱 위로 솟되 화판 윗끝(fy − 36)을 안 넘는다.
+const TOP_H := 3.0                              # 옆 카운터 윗면 — 벨벳보다 한 단 위
+const SELL_AT := Vector3(37.0, TOP_H, 30.0)     # 저울
+const BUY_AT := Vector3(609.0, TOP_H, 27.0)     # 금전등록기
+const BELL_AT := Vector3(580.0, TOP_H, 12.0)    # 종 — 등록기 왼쪽 뒤
+const LAMP_E := 1.5                             # 소품 스포트 평소 세기
+
+
 static func make_table(host: Node, r: Rect2, fy: float, ny: float, back: float,
 		flat: float, tall: float, pitch_deg: float) -> SubViewport:
 	var vp := SubViewport.new()
@@ -362,72 +386,129 @@ static func make_table(host: Node, r: Rect2, fy: float, ny: float, back: float,
 	we.environment = env
 	root.add_child(we)
 
-	var W: float = (ny - fy) / flat          # 펠트 깊이(면 단위)
+	var W: float = (ny - fy) / flat          # 벨벳 깊이(면 단위)
 	var X: float = r.size.x
+	var brass := _mat(COL.brass, 0.3, 0.55)
 
-	# ── 펠트 — 사다리꼴 한 장(빗변이 창구) ──
-	var felt_m := _mat(COL.felt, 1.0)
-	#  천 결 — 2~3px 짜리 잔털이 밝기 ±12% 로 깔린다. 매끈하면 화면이지 천이 아니다.
-	felt_m.albedo_texture = _noise_tex(0.9, 0.76, 1.0, 7)
-	felt_m.uv1_scale = Vector3(5.0, 5.0, 1.0)
+	# ── 벨벳 — 사다리꼴 한 장. 물건이 눕는 면(h 0) 그대로다 ──
+	var vel := _mat(COL.velvet, 1.0)
+	#  보풀 — 1~2px 잔결이 밝기 ±15%. 매끈하면 천이 아니라 칠이다.
+	vel.albedo_texture = _noise_tex(0.9, 0.7, 1.0, 7)
+	vel.uv1_scale = Vector3(5.0, 5.0, 1.0)
 	root.add_child(_quad([Vector3(back, 0.0, 0.0), Vector3(X - back, 0.0, 0.0),
-			Vector3(X, 0.0, W), Vector3(0.0, 0.0, W)], felt_m))
+			Vector3(X, 0.0, W), Vector3(0.0, 0.0, W)], vel))
 
-	# ── 창구 — 빗변 바깥의 꺼진 쟁반(나무 살) ──
-	var tray := _mat(COL.wood, 0.8)
-	tray.albedo_texture = _noise_tex(0.06, 0.6, 1.0, 3)
-	tray.uv1_scale = Vector3(1.0, 8.0, 1.0)
-	var dip := -7.0
-	root.add_child(_quad([Vector3(0.0, dip, 0.0), Vector3(back, dip, 0.0),
-			Vector3(0.0, dip, W)], tray))
-	root.add_child(_quad([Vector3(X - back, dip, 0.0), Vector3(X, dip, 0.0),
-			Vector3(X, dip, W)], tray))
-	#  나무 살 — 미끄럼틀 결. 빗변까지 가로로 놓는다(옛 그림의 5px 줄을 3D 로).
-	var slat := _mat(COL.trim, 0.5)
-	var ww := 4.0
-	while ww < W - 2.0:
-		var e: float = back * (1.0 - ww / W)
-		if e > 4.0:
-			root.add_child(_box(Vector3(e - 2.0, 1.6, 1.4), Vector3((e - 2.0) * 0.5, dip + 0.8, ww), slat))
-			root.add_child(_box(Vector3(e - 2.0, 1.6, 1.4), Vector3(X - (e - 2.0) * 0.5, dip + 0.8, ww), slat))
-		ww += 7.0
-	#  빗변 안벽 — 펠트에서 쟁반으로 꺼지는 면
-	var wallm := _mat(COL.wood, 0.7)
-	root.add_child(_quad([Vector3(back, 0.0, 0.0), Vector3(0.0, 0.0, W),
-			Vector3(0.0, dip, W), Vector3(back, dip, 0.0)], wallm))
-	root.add_child(_quad([Vector3(X - back, 0.0, 0.0), Vector3(X - back, dip, 0.0),
-			Vector3(X, dip, W), Vector3(X, 0.0, W)], wallm))
+	# ── 옆 카운터 — 옛 창구 자리. 윤 나는 짙은 나무, 벨벳보다 한 단 위 ──
+	#  윤은 반만 — 더 매끈하면 진열 스포트가 카운터에 번진 얼룩으로 비친다.
+	var top := _mat(COL.oak, 0.6)
+	top.albedo_texture = _noise_tex(0.05, 0.6, 1.0, 3)
+	top.uv1_scale = Vector3(8.0, 1.0, 1.0)
+	root.add_child(_quad([Vector3(-30.0, TOP_H, -2.0), Vector3(back, TOP_H, -2.0),
+			Vector3(0.0, TOP_H, W), Vector3(-30.0, TOP_H, W)], top))
+	root.add_child(_quad([Vector3(X - back, TOP_H, -2.0), Vector3(X + 30.0, TOP_H, -2.0),
+			Vector3(X + 30.0, TOP_H, W), Vector3(X, TOP_H, W)], top))
 
-	# ── 먼 턱 — 상인 앞 카운터 끝(놋쇠 줄 하나) ──
-	var lip := _mat(COL.wood, 0.45)
+	# ── 조각 틀 — 빗변 몰딩(나무 두 단) + 벨벳 쪽 금실 + 모서리 놋쇠 갓 ──
+	var carve := _mat(COL.carve, 0.5)
+	carve.albedo_texture = _noise_tex(0.08, 0.7, 1.0, 21)
+	var bead := _mat(COL.wood, 0.35)
+	var ln: float = Vector2(back, W).length()
+	for sd in [-1.0, 1.0]:
+		var s: float = float(sd)
+		#  빗변 방향 d · 바깥(카운터 쪽) 법선 n — 면 (u, w)
+		var d := Vector3(s * back, 0.0, W) / ln
+		var n := Vector3(s * W, 0.0, -back) / ln
+		var m0 := Vector3(back * 0.5 if s < 0.0 else X - back * 0.5, 0.0, W * 0.5)
+		var yaw := Vector3(0.0, atan2(s * back, W), 0.0)
+		var body := _box(Vector3(7.0, 5.5, ln + 10.0), m0 + n * 3.5 + Vector3(0.0, 2.75, 0.0), carve)
+		body.rotation = yaw
+		root.add_child(body)
+		var bd := _box(Vector3(2.6, 1.8, ln + 10.0), m0 + n * 2.2 + Vector3(0.0, 6.2, 0.0), bead)
+		bd.rotation = yaw
+		root.add_child(bd)
+		var pip := _box(Vector3(1.4, 1.4, ln + 10.0), m0 - n * 0.7 + Vector3(0.0, 0.7, 0.0), brass)
+		pip.rotation = yaw
+		root.add_child(pip)
+		#  먼 모서리 놋쇠 갓 — 몰딩이 먼 턱에 닿는 자리
+		var c0: Vector3 = Vector3(back if s < 0.0 else X - back, 0.0, 0.0)
+		var cap := _box(Vector3(10.0, 7.6, 7.0), c0 + n * 3.5 + Vector3(0.0, 3.8, 2.0), brass)
+		cap.rotation = yaw
+		root.add_child(cap)
+		root.add_child(_ball(1.6, c0 + n * 3.5 + Vector3(0.0, 7.8, 2.0), brass))
+		#  벨벳 모서리 쇠 — 먼 모서리 둘에 놋쇠 삼각 판
+		var e0: Vector3 = c0 + Vector3(0.0, 0.5, 0.0)
+		var e1: Vector3 = e0 + Vector3(-s * 13.0, 0.0, 0.0)
+		var e2: Vector3 = e0 + d * 13.0
+		root.add_child(_quad([e0, e1, e2], brass))
+
+	# ── 먼 턱 — 상인 앞 카운터 끝. 짙은 조각 나무 · 이빨 장식 · 놋쇠 줄 ──
+	var lip := _mat(COL.carve, 0.45)
 	lip.albedo_texture = _noise_tex(0.05, 0.7, 1.0, 5)
 	lip.uv1_scale = Vector3(1.0, 10.0, 1.0)
-	root.add_child(_box(Vector3(X + 40.0, 9.0, 12.0), Vector3(X * 0.5, 4.5, -6.0), lip))
-	root.add_child(_box(Vector3(X + 40.0, 1.6, 1.6), Vector3(X * 0.5, 9.4, 0.2), _mat(COL.brass, 0.3, 0.8)))
+	root.add_child(_box(Vector3(X + 40.0, 8.0, 14.0), Vector3(X * 0.5, 4.0, -7.0), lip))
+	#  갓 — 앞으로 1.5 내민 윗판과 그 앞 놋쇠 줄
+	root.add_child(_box(Vector3(X + 40.0, 2.4, 15.5), Vector3(X * 0.5, 9.2, -6.25), bead))
+	root.add_child(_box(Vector3(X + 40.0, 0.9, 1.0), Vector3(X * 0.5, 10.2, 1.0), brass))
+	#  이빨 장식(덴틸) — 갓 밑에 작은 토막이 6 간격으로
+	var dent := _mat(COL.wood.lightened(0.06), 0.5)
+	var du := -14.0
+	while du < X + 14.0:
+		root.add_child(_box(Vector3(3.0, 3.6, 1.4), Vector3(du, 5.6, 0.5), dent))
+		du += 6.0
+	#  벨벳 먼 끝 금실
+	root.add_child(_box(Vector3(X - back * 2.0, 1.4, 1.4), Vector3(X * 0.5, 0.7, 1.9), brass))
 
-	# ── 가까운 팔걸이 — 가죽 쿠션(둥근 기둥) ──
-	var leather := _mat(COL.leather, 0.42)
-	leather.albedo_texture = _noise_tex(0.5, 0.85, 1.0, 9)
-	var rail := _cyl(9.0, 9.0, X + 60.0, Vector3(X * 0.5, 4.0, W + 8.0), leather, 20)
+	# ── 가까운 팔걸이 — 둥근 나무 난간 + 밑 구슬 줄 ──
+	var railm := _mat(COL.wood, 0.3)
+	railm.albedo_texture = _noise_tex(0.05, 0.7, 1.0, 9)
+	var rail := _cyl(8.5, 8.5, X + 60.0, Vector3(X * 0.5, 4.0, W + 8.0), railm, 20)
 	rail.rotation_degrees = Vector3(0.0, 0.0, 90.0)
 	root.add_child(rail)
-	#  팔걸이를 받치는 놋쇠 줄
-	root.add_child(_box(Vector3(X + 60.0, 1.4, 1.4), Vector3(X * 0.5, -5.5, W + 15.5), _mat(COL.brass, 0.3, 0.8)))
+	root.add_child(_box(Vector3(X + 60.0, 1.4, 1.4), Vector3(X * 0.5, -5.0, W + 16.0), brass))
+	var bu := -8.0
+	while bu < X + 8.0:
+		var bb := _ball(2.2, Vector3(bu, -8.6, W + 18.6), carve)
+		bb.scale = Vector3(1.4, 1.0, 1.0)
+		root.add_child(bb)
+		bu += 7.0
 
-	# ── 앞판 — 나무 판자, 화면 아래 끝까지 ──
-	var apron := _mat(COL.wood, 0.75)
+	# ── 앞판 — 짙은 나무 판넬(테 · 돋은 판 · 놋쇠 모서리 갓), 화면 아래 끝까지 ──
+	var apron := _mat(COL.wood_dk, 0.75)
 	apron.albedo_texture = _noise_tex(0.04, 0.55, 1.0, 13)
 	apron.uv1_scale = Vector3(2.0, 1.0, 1.0)
 	root.add_child(_box(Vector3(X + 60.0, 260.0, 4.0), Vector3(X * 0.5, -136.0, W + 16.0), apron))
-	#  판자 이음
-	for k in range(0, int(X / 96.0) + 2):
-		root.add_child(_box(Vector3(1.4, 260.0, 0.6), Vector3(float(k) * 96.0 - 16.0, -136.0, W + 18.2),
-				_mat(COL.wood_dk)))
+	var zf: float = W + 18.0
+	var frame := _mat(COL.wood, 0.55)
+	frame.albedo_texture = _noise_tex(0.05, 0.65, 1.0, 17)
+	var field := _mat(COL.wood.darkened(0.12), 0.6)
+	field.albedo_texture = _noise_tex(0.04, 0.6, 1.0, 19)
+	field.uv1_scale = Vector3(2.0, 1.0, 1.0)
+	#  위 띠
+	root.add_child(_box(Vector3(X + 60.0, 4.0, 2.4), Vector3(X * 0.5, -13.0, zf + 1.2), frame))
+	var pw := 128.0
+	for k in range(0, 6):
+		var su: float = float(k) * pw
+		#  선대(세로 테)
+		root.add_child(_box(Vector3(7.0, 200.0, 2.4), Vector3(su, -115.0, zf + 1.2), frame))
+		if k == 5:
+			break
+		var cu: float = su + pw * 0.5
+		#  돋은 판 — 테 안쪽에서 한 단 나온다
+		root.add_child(_box(Vector3(pw - 22.0, 160.0, 1.4), Vector3(cu, -103.0, zf + 0.7), field))
+		#  모서리 놋쇠 갓 — 판 위 두 모서리
+		for sx in [-1.0, 1.0]:
+			root.add_child(_box(Vector3(3.0, 3.0, 1.0), Vector3(cu + float(sx) * (pw * 0.5 - 13.0),
+					-25.5, zf + 1.9), brass))
 
-	# ── 빛 — 머리 위 램프(빛 웅덩이 · 그림자) + 왼쪽 위 채움빛 ──
+	# ── 소품 — 저울(판매) · 금전등록기와 종(구매) ──
+	_scale_prop(root, SELL_AT)
+	_register_prop(root, BUY_AT)
+	_bell_prop(root, BELL_AT)
+
+	# ── 빛 — 머리 위 램프(빛 웅덩이 · 그림자) + 왼쪽 위 채움빛 + 소품 스포트 ──
 	var sl := SpotLight3D.new()
 	sl.light_color = COL.lamp
-	#  빛 웅덩이 — 펠트 한가운데가 밝고 가장자리 · 창구가 가라앉는다(인스크립션의 램프).
+	#  빛 웅덩이 — 벨벳 한가운데가 밝고 가장자리가 가라앉는다.
 	sl.light_energy = 7.0
 	sl.spot_range = 1200.0
 	sl.spot_attenuation = 0.2
@@ -442,7 +523,182 @@ static func make_table(host: Node, r: Rect2, fy: float, ny: float, back: float,
 	dl.light_energy = 0.30
 	dl.light_color = Color("ffd8b0")
 	root.add_child(dl)
+	#  진열 스포트 — 소품마다 왼쪽 위에서 하나. 옆에 꺼 둔 웅덩이 빛 하나.
+	#  반응(prop_glow)이 스포트를 밝히고 웅덩이를 켠다 — 소품과 그 둘레
+	#  카운터가 같이 달아올라 「여기」를 말한다(옛 창구 삼각형 칠의 자리).
+	for pr in [["SellLamp", SELL_AT + Vector3(0.0, 32.0, 0.0), 14.0],
+			["BuyLamp", BUY_AT + Vector3(-6.0, 26.0, -4.0), 12.0]]:
+		var ps := SpotLight3D.new()
+		ps.name = String(pr[0])
+		ps.light_color = COL.lamp
+		ps.light_energy = LAMP_E
+		ps.spot_range = 280.0
+		ps.spot_attenuation = 0.0
+		ps.spot_angle = float(pr[2])
+		ps.spot_angle_attenuation = 1.6
+		#  그림자는 끈다 — 저울대 그림자가 벨벳 왼끝에 검은 얼룩으로 떨어진다.
+		#  소품을 바닥에 붙이는 그림자는 머리 위 램프가 이미 드리운다.
+		ps.shadow_enabled = false
+		var tgt: Vector3 = pr[1]
+		var at: Vector3 = tgt + Vector3(-45.0, 175.0, -35.0)
+		ps.transform = Transform3D(Basis.looking_at(tgt - at, Vector3.UP), at)
+		root.add_child(ps)
+		var po := OmniLight3D.new()
+		po.name = String(pr[0]) + "Pool"
+		po.light_color = COL.lamp
+		po.light_energy = 0.0
+		po.omni_range = 48.0
+		po.omni_attenuation = 0.0
+		po.position = Vector3(tgt.x, TOP_H + 30.0, tgt.z + 6.0)
+		root.add_child(po)
 	return vp
+
+
+#  소품 반응 — 얹힘 · 끌어 댐 · 산 순간에 그 소품의 스포트가 밝아진다.
+#  k 0 = 평소 · 1 = 한껏 · 음수 = 눌려 가라앉음. col 쪽으로 빛이 물든다.
+#  게임 쪽 그리기(_chute_draw)가 매 틀 부른다 — 시계를 안 쓰니 모션 끄기와 무관하다.
+static func prop_glow(vp: SubViewport, z: int, k: float, col: Color) -> void:
+	if vp == null or not is_instance_valid(vp):
+		return
+	var root := vp.get_node_or_null("Table")
+	if root == null:
+		return
+	var nm: String = "BuyLamp" if z == 1 else "SellLamp"
+	var tint: Color = COL.lamp.lerp(col, clampf(k, 0.0, 1.0) * 0.6)
+	var l: SpotLight3D = root.get_node_or_null(nm)
+	if l != null:
+		l.light_energy = LAMP_E * maxf(1.0 + 1.2 * k, 0.2)
+		l.light_color = tint
+	var po: OmniLight3D = root.get_node_or_null(nm + "Pool")
+	if po != null:
+		po.light_energy = 0.9 * maxf(k, 0.0)
+		po.light_color = tint
+
+
+#  공 하나(반구면 바닥이 원점).
+static func _ball(rad: float, at: Vector3, m: Material, hemi := false) -> MeshInstance3D:
+	var sm := SphereMesh.new()
+	sm.radius = rad
+	sm.height = rad if hemi else rad * 2.0
+	sm.is_hemisphere = hemi
+	sm.radial_segments = 14
+	sm.rings = 7
+	var mi := MeshInstance3D.new()
+	mi.mesh = sm
+	mi.material_override = m
+	mi.position = at
+	return mi
+
+
+#  막대 하나 — a 에서 b 까지(u-h 평면, w 는 같다). 매단 줄 · 손잡이.
+static func _rod(a: Vector3, b: Vector3, t: float, m: Material) -> MeshInstance3D:
+	var v: Vector3 = b - a
+	var mi := _box(Vector3(t, v.length(), t), (a + b) * 0.5, m)
+	mi.rotation = Vector3(0.0, 0.0, atan2(-v.x, v.y))
+	return mi
+
+
+#  저울 — 판매. 나무 받침 · 놋쇠 기둥 · 기운 저울대 · 매단 접시 둘.
+#  오른 접시에 추 둘이 얹혀 그쪽이 내려앉았다(상인이 무게를 단다).
+#  기둥이 먼 턱 위로 솟는다 — 키가 곧 실루엣이다(옆 카운터는 폭이 모자란다).
+static func _scale_prop(root: Node3D, at: Vector3) -> void:
+	var brass := _mat(COL.brass, 0.3, 0.55)
+	var brass_dk := _mat(COL.brass.darkened(0.45), 0.5, 0.4)
+	var wood := _mat(COL.carve, 0.45)
+	var wood2 := _mat(COL.wood, 0.4)
+	root.add_child(_box(Vector3(32.0, 3.4, 17.0), at + Vector3(0.0, 1.7, 0.0), wood))
+	root.add_child(_box(Vector3(26.0, 2.8, 12.0), at + Vector3(0.0, 4.8, 0.0), wood2))
+	root.add_child(_cyl(4.6, 7.6, 3.4, at + Vector3(0.0, 7.9, 0.0), brass, 14))
+	root.add_child(_cyl(2.0, 2.5, 46.0, at + Vector3(0.0, 32.6, 0.0), brass, 8))
+	#  기둥 허리 고리 둘 — 매끈한 막대보다 깎은 놋쇠로 읽힌다
+	for ry in [20.0, 44.0]:
+		root.add_child(_cyl(3.0, 3.0, 1.6, at + Vector3(0.0, float(ry), 0.0), brass, 12))
+	var piv: Vector3 = at + Vector3(0.0, 56.0, 0.0)
+	root.add_child(_ball(3.2, piv, brass))
+	root.add_child(_cyl(0.4, 1.8, 7.0, piv + Vector3(0.0, 5.5, 0.0), brass, 8))
+	root.add_child(_ball(2.0, piv + Vector3(0.0, 9.6, 0.0), brass))
+	var tilt: float = deg_to_rad(-8.0)      # 오른쪽이 내려앉는다
+	var hl := 24.0
+	var beam := _box(Vector3(hl * 2.0, 2.8, 2.8), piv, brass)
+	beam.rotation = Vector3(0.0, 0.0, tilt)
+	root.add_child(beam)
+	for sd in [-1.0, 1.0]:
+		var s: float = float(sd)
+		var end: Vector3 = piv + Vector3(s * hl * cos(tilt), s * hl * sin(tilt), 0.0)
+		root.add_child(_ball(2.0, end, brass))
+		var pan: Vector3 = end + Vector3(0.0, -26.0, 0.0)
+		for k in [-1.0, 1.0]:
+			root.add_child(_rod(end, pan + Vector3(float(k) * 8.0, 1.2, 0.0), 1.4, brass_dk))
+		root.add_child(_cyl(10.0, 5.8, 3.0, pan, brass, 18))
+		root.add_child(_cyl(7.8, 7.8, 0.4, pan + Vector3(0.0, 1.55, 0.0), brass_dk, 18))
+		if s > 0.0:
+			root.add_child(_cyl(3.0, 3.0, 3.8, pan + Vector3(-2.0, 3.2, 0.0), brass, 10))
+			root.add_child(_cyl(2.1, 2.1, 2.6, pan + Vector3(3.6, 2.6, 0.8), brass, 10))
+			root.add_child(_ball(1.1, pan + Vector3(-2.0, 5.6, 0.0), brass))
+
+
+#  금전등록기 — 구매. 나무 서랍 받침 · 청동 몸통 · 기운 건반(상아 알 셋 줄) ·
+#  위 창(숫자 깃) · 반달 볏 · 오른쪽 손잡이. 볏이 먼 턱 위로 솟는다.
+static func _register_prop(root: Node3D, at: Vector3) -> void:
+	var wood := _mat(COL.carve, 0.45)
+	var wood2 := _mat(COL.wood, 0.4)
+	var body := _mat(COL.bronze, 0.35, 0.5)
+	body.albedo_texture = _noise_tex(0.35, 0.78, 1.0, 31)
+	var slope := _mat(COL.bronze.darkened(0.25), 0.4, 0.45)
+	var brass := _mat(COL.brass, 0.3, 0.55)
+	var ivory := _mat(COL.ivory, 0.5)
+	var glass := _mat(COL.glass, 0.15)
+	var hw := 19.0
+	#  서랍 받침 (w −15 … 18)
+	root.add_child(_box(Vector3(hw * 2.0 + 2.0, 9.6, 33.0), at + Vector3(0.0, 4.8, 1.5), wood))
+	root.add_child(_box(Vector3(hw * 2.0 - 4.0, 6.0, 1.0), at + Vector3(0.0, 4.8, 18.4), wood2))
+	root.add_child(_box(Vector3(9.0, 1.6, 1.2), at + Vector3(0.0, 5.2, 19.2), brass))
+	#  몸통 — 뒤쪽 (w −15 … 3), h 9.6 … 31
+	root.add_child(_box(Vector3(hw * 2.0, 21.4, 18.0), at + Vector3(0.0, 20.3, -6.0), body))
+	#  몸통 허리 놋쇠 띠
+	root.add_child(_box(Vector3(hw * 2.0 + 0.8, 1.4, 18.6), at + Vector3(0.0, 30.4, -6.0), brass))
+	#  건반 경사면 — 몸통 앞 윗모서리 밑(w 3, h 29)에서 받침 앞(w 16, h 9.6)까지
+	var b0: Vector3 = at + Vector3(-hw, 9.6, 16.0)
+	var b1: Vector3 = at + Vector3(hw, 9.6, 16.0)
+	var b2: Vector3 = at + Vector3(hw, 29.0, 3.0)
+	var b3: Vector3 = at + Vector3(-hw, 29.0, 3.0)
+	root.add_child(_quad([b0, b1, b2, b3], slope))
+	#  건반 — 경사면의 바깥 법선으로 살짝 띄운 상아 알, 셋 줄 여섯 칸
+	var nrm := Vector3(0.0, 13.0, 19.4).normalized()
+	var kx: float = atan2(nrm.z, nrm.y)
+	for row in 3:
+		var t: float = 0.2 + float(row) * 0.29
+		var p0: Vector3 = b0.lerp(b3, t)
+		for col in 6:
+			var ku: float = at.x - hw + 4.0 + float(col) * 6.0
+			var key := _box(Vector3(3.2, 1.4, 3.2), Vector3(ku, p0.y, p0.z) + nrm * 0.7, ivory)
+			key.rotation = Vector3(kx, 0.0, 0.0)
+			root.add_child(key)
+	#  위 창 — 숫자 깃이 서는 놋쇠 틀, 앞에 어두운 유리와 상아 깃 둘
+	root.add_child(_box(Vector3(28.0, 11.0, 5.0), at + Vector3(0.0, 36.5, -12.0), brass))
+	root.add_child(_box(Vector3(21.0, 6.0, 0.6), at + Vector3(0.0, 36.5, -9.3), glass))
+	for fx in [-3.6, 3.6]:
+		root.add_child(_box(Vector3(4.6, 4.2, 0.5), at + Vector3(float(fx), 36.3, -8.9), ivory))
+	#  반달 볏 — 축이 w 인 원통의 윗반만 틀 위로 나온다
+	var crest := _cyl(10.0, 10.0, 3.6, at + Vector3(0.0, 42.0, -12.0), brass, 20)
+	crest.rotation_degrees = Vector3(90.0, 0.0, 0.0)
+	root.add_child(crest)
+	root.add_child(_ball(2.2, at + Vector3(0.0, 53.4, -12.0), brass))
+	#  손잡이 — 오른쪽 옆구리에서 뻗은 자루와 손잡이 알
+	var hub := _cyl(3.0, 3.0, 2.4, at + Vector3(hw + 1.2, 20.0, -6.0), brass, 10)
+	hub.rotation_degrees = Vector3(0.0, 0.0, 90.0)
+	root.add_child(hub)
+	root.add_child(_rod(at + Vector3(hw + 2.8, 20.0, -6.0), at + Vector3(hw + 4.6, 10.6, -6.0), 1.8, brass))
+	root.add_child(_ball(2.1, at + Vector3(hw + 4.6, 10.0, -6.0), wood2))
+
+
+#  종 — 계산대 곁 손님 종. 나무 받침 · 놋쇠 반구 · 꼭지.
+static func _bell_prop(root: Node3D, at: Vector3) -> void:
+	var brass := _mat(COL.brass, 0.28, 0.6)
+	root.add_child(_cyl(6.6, 7.2, 2.2, at + Vector3(0.0, 1.1, 0.0), _mat(COL.carve, 0.4), 16))
+	root.add_child(_ball(5.6, at + Vector3(0.0, 2.2, 0.0), brass, true))
+	root.add_child(_cyl(0.9, 0.9, 2.2, at + Vector3(0.0, 8.8, 0.0), brass, 8))
+	root.add_child(_ball(1.4, at + Vector3(0.0, 10.2, 0.0), brass))
 
 
 #  면 좌표 점 셋·넷으로 판 한 장. 점 순서대로 감는다.

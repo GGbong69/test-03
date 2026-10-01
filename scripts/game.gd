@@ -19449,6 +19449,11 @@ func _felt_draw() -> void:
 		return
 	if not swap_live:
 		draw_rect(_full(), C_WOOD)
+	if _room3d_tbl():
+		#  판 갈이 — 벽은 _draw 가 밑에 깔았고, 진열대만 미끄러진다.
+		draw_texture_rect(tbl3_vp.get_texture(), _room3d_rect(), false)
+		_chute_draw()
+		return
 	# 펠트는 사다리꼴이다. 좌우 빗변이 그대로 창구라 모양이 곧 규칙이다.
 	var felt := PackedVector2Array([
 			Vector2(CHUTE.back, TBL.fy), Vector2(VIEW.x - CHUTE.back, TBL.fy),
@@ -19507,8 +19512,10 @@ func _cover_draw() -> void:
 	_npc_body()
 	if nd > 0.01:
 		draw_set_transform(shake_off)
-	if r3:
-		_room3d_tband(float(TBL.fy) - 20.0, float(TBL.fy) + 1.0)
+	var t3 := _room3d_tbl()
+	if t3:
+		#  화판 윗끝부터 — 턱 위로 솟은 소품도 벽 띠 위에 다시 선다(나머지는 투명).
+		_room3d_tband(_room3d_rect().position.y, float(TBL.fy) + 1.0)
 	else:
 		draw_rect(_wide(TBL.fy - 3.0, 3.0), C_WOOD)
 		draw_rect(_wide(TBL.fy - 1.0, 1.0), C_WOOD.lightened(0.18))
@@ -19523,7 +19530,7 @@ func _cover_draw() -> void:
 	#  상인이 든 물건은 손 **다음**이다.
 	_give_draw()
 	# 가까운 쪽 레일 — 리롤·다음 버튼이 그 아래 앞치마에 얹힌다
-	if r3:
+	if t3:
 		_room3d_tband(float(TBL.ny) - 6.0, VIEW.y)
 		return
 	draw_rect(_wide(TBL.ny, 2.0), C_WOOD.lightened(0.24))
@@ -19577,24 +19584,25 @@ func _chute_draw() -> void:
 			p.append(Vector2(VIEW.x, TBL.fy))
 			p.append(Vector2(VIEW.x - CHUTE.back, TBL.fy))
 			p.append(Vector2(VIEW.x, TBL.ny))
-		var r3 := _room3d_live()
+		var r3 := _room3d_tbl()
 		if r3:
-			#  3D 쟁반이 몸통을 이미 그렸다 — 얹힘 · 불 · 누름 · 번쩍임만 빛으로 덮는다.
-			var oa := 0.0
-			var oc := C_LIGHT
+			#  진열대(시안 Q) — 옛 창구 삼각형은 이제 카운터이고 그 위에 소품이
+			#  선다(왼쪽 저울 · 오른쪽 금전등록기). 삼각형을 덮어 칠하면 옛 창구가
+			#  되살아나므로, 얹힘 · 불 · 누름 · 번쩍임은 그 소품의 진열 스포트가
+			#  맡는다(Room3D.prop_glow). 판정은 아직 삼각형(_chute_at) 그대로다.
+			var gk := 0.0
+			var gc := C_LIGHT
 			if pay_flash > 0.0 and (lit or (z == Z_BUY and hk > 0.0)):
-				oc = C_ACC
-				oa = 0.40 * pay_flash
+				gc = C_ACC
+				gk = 1.0 + 1.2 * pay_flash
 			elif lit:
-				oc = C_ACC
-				oa = 0.20
+				gc = C_ACC
+				gk = 1.0
 			elif press:
-				oc = Color.BLACK
-				oa = 0.30
+				gk = -0.5
 			elif hk > 0.0:
-				oa = 0.12 * hk
-			if oa > 0.0:
-				draw_colored_polygon(p, Color(oc, oa))
+				gk = 0.6 * hk
+			Room3D.prop_glow(tbl3_vp, z, gk, gc)
 		else:
 			draw_colored_polygon(p, body)
 			var gr := Color(C_WOOD.lightened(0.55), 0.16 if lit else lerpf(0.10, 0.16, hk))
@@ -19608,8 +19616,9 @@ func _chute_draw() -> void:
 						draw_line(Vector2(VIEW.x - e, yy), Vector2(VIEW.x, yy), gr, 1.0)
 				yy += 5.0
 		var eg: Color = C_ACC if lit else C_WOOD.lightened(0.34).lerp(C_ACC, hk)
-		var ea: float = 0.95 if lit else lerpf(0.0 if r3 else 0.50, 0.95, hk)
-		if ea > 0.0:
+		var ea: float = 0.95 if lit else lerpf(0.50, 0.95, hk)
+		#  진열대에서 빗변은 조각 틀이다 — 금빛 선을 안 긋는다(소품 빛이 말한다).
+		if ea > 0.0 and not r3:
 			draw_line(p[1], p[2], Color(eg, ea), 1.0)
 		#  ── 턱 ────────────────────────────────────────
 		#  쓸기 동안 이 빗변이 **벽이다**(_drop_lo). 새 도형을 안 그린다 —
@@ -19642,8 +19651,9 @@ func _chute_draw() -> void:
 				var y1: float = clampf(my + 5.0, TBL.fy, TBL.ny)
 				draw_line(Vector2(_chute_edge(y0), y0), Vector2(_chute_edge(y1), y1),
 						Color(C_LIGHT, 0.8 * ka), 2.0)
-		if not open:
+		if not open and not r3:
 			# 닫힌 창구 — 셔터 두 줄. 스테이지 화면에서는 사고팔 것이 없다.
+			# 진열대에서는 소품이 그냥 놓여 있다 — 셔터를 걸 창구가 없다.
 			for k in 2:
 				var sy: float = TBL.fy + 26.0 + float(k) * 13.0
 				var e := _chute_edge(sy)
@@ -19688,11 +19698,16 @@ func _chute_act(z: int) -> bool:
 #  값을 24 로 올리면 빗변을 넘어 펠트에 올라앉으므로 12 에 둔다.
 #  오른쪽 이름은 오른끝 맞춤이다 — 전에는 「구매」 폭(22)을 손으로 빼 x 613 에 섰다.
 #  크기(20 · 12)는 그리는 줄에 숫자로 적는다 — qa_ui 가 줄에서 읽는다.
-const CHUTE_TXT := {"ly": 20.0, "vdy": 19.0, "x": 5.0}
+#  진열대(3D 테이블 · 시안 Q)에서는 이름이 소품 **밑** 카운터에 선다 —
+#  저울 · 등록기 받침 앞끝이 y 157 · 162 라 이름 잉크 [163.5,181] · 값 [189.5,199].
+#  옆 카운터가 앞으로 갈수록 좁아 「+12」 끝이 조각 틀에 몇 px 걸친다(물건은 x 79 밖).
+const CHUTE_TXT := {"ly": 20.0, "vdy": 19.0, "x": 5.0, "ly3": 52.0}
 
 
 func _chute_label() -> void:
 	var ly: float = TBL.fy + float(CHUTE_TXT.ly)
+	if _room3d_tbl():
+		ly = TBL.fy + float(CHUTE_TXT.ly3)
 	var vy: float = ly + float(CHUTE_TXT.vdy)
 	var ex: float = CHUTE_TXT.x
 	# 사진이 깐 테이블은 창구가 하는 일이 다르다. 「구매」라고 적힌 자리에
@@ -19702,8 +19717,8 @@ func _chute_label() -> void:
 		var lab: String = "판매" if bn else "복제"
 		var live: bool = buy_sel >= 0 and buy_sel < stock.size()
 		if bn:
-			draw_string(font_sm, Vector2(ex, ly), lab, HORIZONTAL_ALIGNMENT_LEFT,
-					-1, 20, C_TXT if live else C_DIM)
+			_chute_name(Vector2(ex, ly), lab, HORIZONTAL_ALIGNMENT_LEFT, -1.0,
+					C_TXT if live else C_DIM)
 			if live:
 				var oi: int = int(stock[buy_sel].get("own", -1))
 				if oi >= 0 and oi < owned.size():
@@ -19711,12 +19726,12 @@ func _chute_label() -> void:
 							"+%d" % (GameData.sell_value(owned[oi]) * photo_v),
 							12, C_GOLD)
 		else:
-			draw_string(font_sm, Vector2(0.0, ly), lab, HORIZONTAL_ALIGNMENT_RIGHT,
-					VIEW.x - ex, 20, C_TXT if live else C_DIM)
+			_chute_name(Vector2(0.0, ly), lab, HORIZONTAL_ALIGNMENT_RIGHT, VIEW.x - ex,
+					C_TXT if live else C_DIM)
 		return
 	var si: int = hand_i if (hand_st == H.CARRY and hand_src == 1) else sell_sel
 	var slive: bool = _can_sell() and si >= 0 and si < owned.size()
-	draw_string(font_sm, Vector2(ex, ly), "판매", HORIZONTAL_ALIGNMENT_LEFT, -1, 20,
+	_chute_name(Vector2(ex, ly), "판매", HORIZONTAL_ALIGNMENT_LEFT, -1.0,
 			C_TXT if slive else C_DIM)
 	if slive:
 		draw_gold_at(ex, vy, "+%d" % GameData.sell_value(owned[si]), 12, C_GOLD)
@@ -19724,12 +19739,19 @@ func _chute_label() -> void:
 	var bi: int = hand_i if (hand_st == H.CARRY and hand_src == 0) else buy_sel
 	var blive: bool = bi >= 0 and bi < stock.size()
 	var ok: bool = blive and _buy_block(bi) == ""
-	draw_string(font_sm, Vector2(0.0, ly), "구매", HORIZONTAL_ALIGNMENT_RIGHT,
-			VIEW.x - ex, 20, (C_TXT if ok else C_MULT) if blive else C_DIM)
+	_chute_name(Vector2(0.0, ly), "구매", HORIZONTAL_ALIGNMENT_RIGHT, VIEW.x - ex,
+			(C_TXT if ok else C_MULT) if blive else C_DIM)
 	if blive:
 		var cs := str(stock[bi].cost)
 		draw_gold_at(VIEW.x - ex - gold_w(cs, 12), vy, cs, 12,
 				C_GOLD if ok else C_DIM.darkened(0.25))
+
+
+#  창구 이름 한 줄(20). 진열대에서는 나무 카운터 위에 서므로 1px 그늘을 먼저 깐다.
+func _chute_name(at: Vector2, s: String, al: HorizontalAlignment, w: float, c: Color) -> void:
+	if _room3d_tbl():
+		draw_string(font_sm, at + Vector2(1.0, 1.0), s, al, w, 20, Color(0.0, 0.0, 0.0, 0.6))
+	draw_string(font_sm, at, s, al, w, 20, c)
 
 
 # 상인 몸통 — 카운터 위로 올라온 부분만. 동전 슬롯이 이 위에 얹혀 트레이로 읽힌다.
@@ -20109,14 +20131,22 @@ var tbl3_vp: SubViewport = null
 var room_t := 0.0            # 방의 시계 — 게임 시간이라 모션 끄기에서 멈춘다
 
 
-#  테이블 화판이 덮는 화면 사각. 먼 턱(펠트 위 20px)부터 화면 밑까지.
+#  테이블 화판이 덮는 화면 사각. 펠트 위 36px 부터 화면 밑까지 — 먼 턱은
+#  위 20px 이지만, 진열대 양 끝 소품(저울 · 금전등록기)이 그 위로 솟는다.
+#  턱 위는 투명이라 방이 비친다.
 func _room3d_rect() -> Rect2:
-	return Rect2(0.0, float(TBL.fy) - 20.0, VIEW.x, VIEW.y - float(TBL.fy) + 20.0)
+	return Rect2(0.0, float(TBL.fy) - 36.0, VIEW.x, VIEW.y - float(TBL.fy) + 36.0)
 
 
 func _room3d_live() -> bool:
-	return room3d_on and room_vp != null and is_instance_valid(room_vp) \
-			and tbl3_vp != null and is_instance_valid(tbl3_vp) and not swap_live
+	return _room3d_tbl() and room_vp != null and is_instance_valid(room_vp) and not swap_live
+
+
+#  3D 테이블(진열대)이 서 있는가 — 판 갈이 중에도 참이다. 판 갈이 동안 방은
+#  2D 벽으로 물러나지만 테이블은 진열대 그대로 미끄러져 나간다(옛 초록 펠트가
+#  한 박자 비치면 다른 탁자로 읽힌다).
+func _room3d_tbl() -> bool:
+	return room3d_on and tbl3_vp != null and is_instance_valid(tbl3_vp)
 
 
 func _room3d_open() -> void:
