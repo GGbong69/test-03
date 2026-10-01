@@ -25,13 +25,14 @@ func _initialize() -> void:
 	var fail := 0
 	fail += _t_geometry(g)
 	fail += _t_latch(g)
+	fail += _t_props(g)
 	fail += _t_buy(g)
 	fail += _t_buy_wrong(g)
 	fail += _t_sell(g)
 	fail += _t_sell_wrong(g)
 	fail += _t_move(g)
 	fail += _t_lanes(g)
-	print("\n%s" % ("실패 %d건" % fail if fail > 0 else "여덟 검사 전부 통과"))
+	print("\n%s" % ("실패 %d건" % fail if fail > 0 else "아홉 검사 전부 통과"))
 	quit(mini(fail, 125))
 
 
@@ -93,6 +94,44 @@ func _t_latch(g: Node) -> int:
 		if g._chute_at(p, 0.0) != -1:
 			bad += 1
 	return _say(bad == 0, "창구 래치", "어긋난 점 %d개" % bad)
+
+
+# ②-b 진열대 — 소품 몸(턱 위로 솟은 데까지)도 창구다. 소품은 화면 끝에서
+#  10px 넘게 떨어지고, 물건 자리(u 116~524) · 그 밑 이름 잉크를 안 덮고,
+#  화판(_room3d_rect) 안에 들며, 그 위에서는 상인에게 건네지 않는다.
+func _t_props(g: Node) -> int:
+	if not g.room3d_on:
+		return _say(true, "진열대 소품 창구", "3D 테이블 꺼짐 — 건너뜀")
+	var bad := 0
+	var why := ""
+	var name_top: float = g.TBL.fy + float(g.CHUTE_TXT.ly3) - 16.5
+	for z in 2:
+		var pr: Rect2 = g._prop_rect(z)
+		var top := Vector2(pr.get_center().x, pr.position.y + 3.0)
+		if g._chute_at(top, 0.0) != z:
+			bad += 1
+			why += " %d:윗끝" % z
+		if g._chute_at(pr.get_center(), 0.0) != z:
+			bad += 1
+			why += " %d:가운데" % z
+		if pr.position.x < 10.0 or pr.end.x > g.VIEW.x - 10.0:
+			bad += 1
+			why += " %d:화면끝 x[%.0f,%.0f]" % [z, pr.position.x, pr.end.x]
+		if (z == g.Z_SELL and pr.end.x > 116.0) or (z == g.Z_BUY and pr.position.x < 524.0):
+			bad += 1
+			why += " %d:물건 자리" % z
+		if pr.end.y > name_top:
+			bad += 1
+			why += " %d:이름 y %.1f>%.1f" % [z, pr.end.y, name_top]
+		if pr.position.y < g._room3d_rect().position.y:
+			bad += 1
+			why += " %d:화판 위 y %.1f" % [z, pr.position.y]
+		g.state = g.S.SHOP
+		if g._give_at(top):
+			bad += 1
+			why += " %d:건넴" % z
+	return _say(bad == 0, "진열대 소품 창구", why if why != "" else "저울 %s · 등록기 %s" % [
+			str(g._prop_rect(0)), str(g._prop_rect(1))])
 
 
 func _shop(g: Node) -> void:

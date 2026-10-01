@@ -19586,10 +19586,11 @@ func _chute_draw() -> void:
 			p.append(Vector2(VIEW.x, TBL.ny))
 		var r3 := _room3d_tbl()
 		if r3:
-			#  진열대(시안 Q) — 옛 창구 삼각형은 이제 카운터이고 그 위에 소품이
-			#  선다(왼쪽 저울 · 오른쪽 금전등록기). 삼각형을 덮어 칠하면 옛 창구가
-			#  되살아나므로, 얹힘 · 불 · 누름 · 번쩍임은 그 소품의 진열 스포트가
-			#  맡는다(Room3D.prop_glow). 판정은 아직 삼각형(_chute_at) 그대로다.
+			#  진열대 — 옛 창구 삼각형은 이제 카운터이고 그 위에 소품이 선다
+			#  (왼쪽 저울 · 오른쪽 금전등록기). 삼각형을 덮어 칠하면 옛 창구가
+			#  되살아나므로, 얹힘 · 불 · 누름 · 번쩍임은 그 소품이 맡는다
+			#  (Room3D.prop_glow) — 스포트가 밝아지고 놋쇠가 달아오른다. 팔 것을
+			#  대면 저울 왼 접시가 내려앉고, 산 순간 등록기 서랍이 튀어나온다.
 			var gk := 0.0
 			var gc := C_LIGHT
 			if pay_flash > 0.0 and (lit or (z == Z_BUY and hk > 0.0)):
@@ -19602,7 +19603,8 @@ func _chute_draw() -> void:
 				gk = -0.5
 			elif hk > 0.0:
 				gk = 0.6 * hk
-			Room3D.prop_glow(tbl3_vp, z, gk, gc)
+			var act: float = pay_flash if z == Z_BUY else (1.0 if lit else 0.0)
+			Room3D.prop_glow(tbl3_vp, z, gk, gc, act, get_process_delta_time())
 		else:
 			draw_colored_polygon(p, body)
 			var gr := Color(C_WOOD.lightened(0.55), 0.16 if lit else lerpf(0.10, 0.16, hk))
@@ -19698,17 +19700,19 @@ func _chute_act(z: int) -> bool:
 #  값을 24 로 올리면 빗변을 넘어 펠트에 올라앉으므로 12 에 둔다.
 #  오른쪽 이름은 오른끝 맞춤이다 — 전에는 「구매」 폭(22)을 손으로 빼 x 613 에 섰다.
 #  크기(20 · 12)는 그리는 줄에 숫자로 적는다 — qa_ui 가 줄에서 읽는다.
-#  진열대(3D 테이블 · 시안 Q)에서는 이름이 소품 **밑** 카운터에 선다 —
-#  저울 · 등록기 받침 앞끝이 y 157 · 162 라 이름 잉크 [163.5,181] · 값 [189.5,199].
-#  옆 카운터가 앞으로 갈수록 좁아 「+12」 끝이 조각 틀에 몇 px 걸친다(물건은 x 79 밖).
-const CHUTE_TXT := {"ly": 20.0, "vdy": 19.0, "x": 5.0, "ly3": 52.0}
+#  진열대(3D 테이블)에서는 이름이 소품 **밑** 카운터에 선다 — 저울 · 등록기
+#  받침 앞끝이 y 154 · 157(서랍이 튀어나오면 162)이라 이름 잉크 [163.5,181] ·
+#  값 [186.5,196](vdy3 16).
+#  옆 카운터가 앞으로 갈수록 좁아 값 줄을 3px 당겨 조각 틀에서 뗐다.
+const CHUTE_TXT := {"ly": 20.0, "vdy": 19.0, "x": 5.0, "ly3": 52.0, "vdy3": 16.0}
 
 
 func _chute_label() -> void:
 	var ly: float = TBL.fy + float(CHUTE_TXT.ly)
+	var vy: float = ly + float(CHUTE_TXT.vdy)
 	if _room3d_tbl():
 		ly = TBL.fy + float(CHUTE_TXT.ly3)
-	var vy: float = ly + float(CHUTE_TXT.vdy)
+		vy = ly + float(CHUTE_TXT.vdy3)
 	var ex: float = CHUTE_TXT.x
 	# 사진이 깐 테이블은 창구가 하는 일이 다르다. 「구매」라고 적힌 자리에
 	# 복제를 시키면 무슨 일이 날지 손이 모른다 — 이름이 곧 계약이다.
@@ -20131,11 +20135,11 @@ var tbl3_vp: SubViewport = null
 var room_t := 0.0            # 방의 시계 — 게임 시간이라 모션 끄기에서 멈춘다
 
 
-#  테이블 화판이 덮는 화면 사각. 펠트 위 36px 부터 화면 밑까지 — 먼 턱은
-#  위 20px 이지만, 진열대 양 끝 소품(저울 · 금전등록기)이 그 위로 솟는다.
-#  턱 위는 투명이라 방이 비친다.
+#  테이블 화판이 덮는 화면 사각. 펠트 위 40px 부터 화면 밑까지 — 먼 턱은
+#  위 20px 이지만, 진열대 양 끝 소품(저울 · 금전등록기)이 그 위로 솟는다
+#  (등록기 볏 꼭지가 y 96). 턱 위는 투명이라 방이 비친다.
 func _room3d_rect() -> Rect2:
-	return Rect2(0.0, float(TBL.fy) - 36.0, VIEW.x, VIEW.y - float(TBL.fy) + 36.0)
+	return Rect2(0.0, float(TBL.fy) - 40.0, VIEW.x, VIEW.y - float(TBL.fy) + 40.0)
 
 
 func _room3d_live() -> bool:
@@ -21373,7 +21377,7 @@ var npc_elbow := [Vector2.ZERO, Vector2.ZERO]
 #  여기서 떼면 건네는 것인가. 창구(좌우)와 안 겹치는 위쪽 띠다.
 func _give_at(m: Vector2) -> bool:
 	return state == S.SHOP and photo == "" and not sweep_live \
-			and m.y <= TBL.fy + float(GIVE.band)
+			and m.y <= TBL.fy + float(GIVE.band) and _chute_at(m, 0.0) < 0
 
 
 func _give_live() -> bool:
@@ -27242,7 +27246,14 @@ func _chute_edge(y: float) -> float:
 
 
 # 커서가 어느 창구 위인가. pad 로 히스테리시스를 만든다.
+#  진열대(3D 테이블)에서는 소품 몸(저울 · 금전등록기)도 창구다 — 먼 턱 위로
+#  솟은 접시 · 볏에 대고 떼도 판다 · 산다. 삼각형은 그대로 산다(쓸기의 턱 ·
+#  도크가 그 빗변이다). 그림이 없는 헤드리스에서도 같은 판정이라 자가 잰다.
 func _chute_at(m: Vector2, pad: float) -> int:
+	if room3d_on:
+		for z in 2:
+			if _prop_rect(z).grow(pad).has_point(m):
+				return z
 	if m.y < TBL.fy - pad or m.y > TBL.ny + pad:
 		return -1
 	var e := _chute_edge(m.y) + pad
@@ -27251,6 +27262,12 @@ func _chute_at(m: Vector2, pad: float) -> int:
 	if m.x >= VIEW.x - e:
 		return Z_BUY
 	return -1
+
+
+#  소품 하나의 화면 사각 — 0 저울(판매) · 1 금전등록기(구매).
+func _prop_rect(z: int) -> Rect2:
+	return Room3D.prop_rect(z, VIEW.x, float(TBL.fy), float(TBL.ny), float(CHUTE.back),
+			float(TBL.flat), float(TBL.tall))
 
 
 # 도킹 목표 u. 물건 중심을 빗변 위에 얹어 반쯤 걸치게 한다 — "건네는 중" 이다.
@@ -39984,8 +40001,15 @@ func _mark_rect(k: String) -> Rect2:
 		#  자금판을 아예 안 그리므로(「정산 화면은 그 자체가 명세다」) 그때 밝히면
 		#  빈 자리를 가리킨다. 상단 바는 상점(_bar_hidden)에서만 숨는다.
 		"score": return Rect2(144.0, 2.0, 436.0, 14.0)
-		"chute_buy": return Rect2(VIEW.x - 86.0, TBL.fy, 86.0, TBL.ny - TBL.fy)
-		"chute_sell": return Rect2(0.0, TBL.fy, 86.0, TBL.ny - TBL.fy)
+		#  진열대에서는 소품과 그 밑 이름 · 값까지(카운터 y ~198)를 감싼다.
+		"chute_buy":
+			if room3d_on:
+				return _prop_rect(Z_BUY).merge(Rect2(VIEW.x - 86.0, TBL.fy, 86.0, 72.0))
+			return Rect2(VIEW.x - 86.0, TBL.fy, 86.0, TBL.ny - TBL.fy)
+		"chute_sell":
+			if room3d_on:
+				return _prop_rect(Z_SELL).merge(Rect2(0.0, TBL.fy, 86.0, 72.0))
+			return Rect2(0.0, TBL.fy, 86.0, TBL.ny - TBL.fy)
 		"goods": return Rect2(96.0, TBL.fy + 6.0, VIEW.x - 192.0,
 				TBL.ny - TBL.fy - 6.0)
 		#  첫 손님의 두 장(공짜 동전)을 감싼다. 없으면 빈 사각 — 안 가르친다.
