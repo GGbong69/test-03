@@ -2437,8 +2437,12 @@ static func _run(g: Node, e: Dictionary) -> void:
 			if GameData.chal_any() or GameData.endless:
 				_say("챌린지·무한 런에는 안 선다")
 				return
-			for tid in ["u_boot", "u_gift", "u_more", "u_info", "u_last"]:
+			#  말상자 넷만 지운다 — u_boot(튜토리얼을 썼다)는 **적는다**. 지우면
+			#  보기용으로 켠 뒤 여는 새 런이 또 튜토리얼이 된다(2026-10-02 부터
+			#  튜토리얼은 한 번뿐이다).
+			for tid in ["u_gift", "u_more", "u_info", "u_last"]:
 				Save.forget(String(tid))
+			Save.teach("u_boot")
 			g.tut_run = true
 			if g.state == g.S.SHOP:
 				g._roll_stock()

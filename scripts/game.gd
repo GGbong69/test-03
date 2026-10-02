@@ -1824,6 +1824,13 @@ func _new_run(human := false) -> void:
 	#  튜토리얼 런 — 무한을 끈 **뒤에** 묻는다(_tut_due 가 무한을 본다).
 	tut_run = false
 	tut_run = human and _tut_due()
+	#  **선 순간 다 쓴 것으로 적는다**(2026-10-02). 전에는 3판을 다 깨야 적어서
+	#  중간에 지거나 나가면 다음 런이 또 튜토리얼이었다 — 사람이 그걸 모른 채
+	#  새 런을 열자 상점에 공짜가 깔렸다: 「처음 튜토리얼 할때만 물건 소개겸
+	#  이렇게 줘야지 일단 플레이에서 무료로 주면 어떻게」. 이어하기로 되살린
+	#  튜토리얼 런은 그대로 튜토리얼이다(tut_run 이 매듭에 실려 온다).
+	if tut_run:
+		Save.teach("u_boot")
 	tut_rr = false
 	tut_got = []
 	#  지난 런에 열린 것을 새 런까지 끌고 가면 안 된다.
@@ -2615,8 +2622,10 @@ func _pack_grants() -> void:
 #   · 첫 상점 상인 두 줄 「처음 보는 손님이군」 → 「이건 서비스야 가져가」(u_gift).
 #   · 곱하기는 알아서 오른쪽 끝에 선다(_tut_slot) — 왼쪽부터 켜지므로.
 #   · 판 목표는 본편 그대로다 — 넘치는 점수가 곧 연출이다(TUT 머리말).
-#   · 3판을 클리어하면 정산 화면(「튜토리얼 끝」) → 로비. 그때 배움 표 u_boot 에
-#     적는다 — 중간에 지거나 나가면 다음 런이 다시 튜토리얼이다.
+#   · 3판을 클리어하면 정산 화면(「튜토리얼 끝」) → 로비.
+#   · **튜토리얼은 한 번뿐이다**(2026-10-02). 런이 서는 순간 배움 표 u_boot 에
+#     적는다 — 중간에 지거나 나가도 다음 런은 본편이다. 전에는 끝까지 깨야
+#     적어서 새 런마다 공짜가 깔렸다(「일단 플레이에서 무료로 주면 어떻게」).
 #  ⚠ 챌린지·무한·오토플레이는 안 선다. 그리고 튜토리얼 런은 **기록을 안 남긴다**
 #  (_rec_off). 사람이 로비에서 「시작」을 누른 길에서만 선다(_new_run 의 human).
 #  이 런의 라운드 수 — 화면(라운드 칸 · 「R1/1」)만 읽는다. 튜토리얼 런은 하나.
@@ -2626,8 +2635,11 @@ func _run_rounds() -> int:
 	return GameData.rounds_n()
 
 
+#  u_gift(첫 상점 상인 대사)를 본 저장도 이미 튜토리얼을 겪은 것으로 친다 —
+#  선 순간 u_boot 를 적기 전(2026-10-02 전)에 중간에 나간 저장이 다음 런에서
+#  튜토리얼을 또 받지 않게.
 func _tut_due() -> bool:
-	return not GameData.chal_any() and not GameData.endless and not _autoplay 			and not Save.taught("u_boot")
+	return not GameData.chal_any() and not GameData.endless and not _autoplay 			and not Save.taught("u_boot") and not Save.taught("u_gift")
 
 
 func _boot_due() -> bool:

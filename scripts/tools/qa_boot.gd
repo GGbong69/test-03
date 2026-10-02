@@ -260,8 +260,11 @@ func _run() -> void:
 	g.state = g.S.TITLE
 	g._new_run(true)
 	_ok("다음 런은 튜토리얼이 아니다", not g.tut_run, "")
-	#  중간에 지면 다음 런이 다시 튜토리얼이다
+	#  튜토리얼은 한 번뿐이다 — 선 순간 적고, 중간에 져도 다음 런은 본편이다.
+	#  「처음 튜토리얼 할때만 물건 소개겸 이렇게 줘야지 일단 플레이에서 무료로
+	#  주면 어떻게」(2026-10-02). 전에는 끝까지 깨야 적어서 새 런마다 또 섰다.
 	_tut()
+	_ok("튜토리얼이 서는 순간 배움 표에 적는다", g.tut_run and Save.taught("u_boot"), "")
 	g.state = g.S.RESOLVE
 	g.leg_no = 3
 	g.target = 1000
@@ -270,11 +273,16 @@ func _run() -> void:
 	g.queue.clear()
 	g.burst_hits.clear()
 	g._finish_leg()
-	_ok("중간에 지면 배움 표에 안 적는다", g.state == g.S.OVER and not g.won
-			and not Save.taught("u_boot"), "")
+	_ok("중간에 지면 런이 끝난다", g.state == g.S.OVER and not g.won, "")
 	g.state = g.S.TITLE
 	g._new_run(true)
-	_ok("그 다음 런이 다시 튜토리얼이다", g.tut_run, "")
+	_ok("중간에 져도 다음 런은 튜토리얼이 아니다", not g.tut_run, "")
+	#  옛 저장 — 끝까지 안 깨서 u_boot 가 없지만 첫 상점 대사(u_gift)는 본 사람.
+	Save.wipe()
+	Save.teach("u_gift")
+	g.state = g.S.TITLE
+	g._new_run(true)
+	_ok("첫 상점 대사를 본 옛 저장은 튜토리얼을 또 안 받는다", not g.tut_run, "")
 
 	# ── ⑦ 제약을 걸고 도는 런 ─────────────────────────
 	print("⑦ 챌린지·무한")
