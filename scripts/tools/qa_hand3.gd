@@ -118,20 +118,42 @@ func _front(n: Node) -> bool:
 	return n is VisualInstance3D and ((n as VisualInstance3D).layers & g.HAND3_FRONT) != 0
 
 
-#  2026-10-02 「지금 동전 짚는 손 모양 너무 이상한데 좀 레퍼런스 찾으면서 어떻게 해봐」 —
-#  쥔 손이 엄지를 동전 면에 꽂은 막대로 읽혔고, 손 나머지는 동전 밑에 숨었다. 동전 다루기
-#  안내(조폐국 · CoinWeek · 에드먼턴 화폐학회)는 다 테만 잡고 면은 안 만지라고 하고, 정밀
-#  집기 그림은 엄지 · 검지 끝만 일하고 나머지는 말린 손이다. 이제 손은 물건 **뒤**에 서고
-#  손끝 둘만 테에 1~1.5px 얹힌다(GIVE 「테를 집는다」). 그것을 두 손 다 잰다:
+#  손등 윗면(손바닥 덩어리 윗면 네 모서리)의 화면 윗선 — 화면 x 에서 그 면이 가장 위로
+#  올라간 y. x 가 면 밖이면 면 전체의 가장 위.
+func _back_top(hd: Node3D, x: float) -> float:
+	var pt: float = float(g.HAND3.palm_t) * 0.5
+	var pw: float = float(g.HAND3.palm_w) * 0.5
+	var q := [_scr(hd.global_transform * Vector3(0.0, pt, -pw + 2.0)),
+			_scr(hd.global_transform * Vector3(float(g.FING3.palm), pt - 1.0, -pw)),
+			_scr(hd.global_transform * Vector3(float(g.FING3.palm), pt - 1.0, pw)),
+			_scr(hd.global_transform * Vector3(0.0, pt, pw - 2.0))]
+	var top := 1e9
+	var lo := 1e9
+	for k in 4:
+		var a: Vector2 = q[k]
+		var b: Vector2 = q[(k + 1) % 4]
+		lo = minf(lo, a.y)
+		if (a.x - x) * (b.x - x) <= 0.0 and absf(b.x - a.x) > 0.001:
+			top = minf(top, lerpf(a.y, b.y, (x - a.x) / (b.x - a.x)))
+	return top if top < 1e8 else lo
+
+
+#  2026-10-02 「지금 동전 짚는 손 모양 너무 이상한데 좀 레퍼런스 찾으면서 어떻게 해봐」 →
+#  「뭔하려느지는 알겠는데 엄지가 너무 올라가지 않았어? 레퍼런스 찾아보고 좀 손모양 제대로
+#  만들어봐」. 둘째 판은 엄지 끝 · 검지 끝으로 뒤 테 양 어깨를 집었는데, 엄지가 손목 위에서
+#  나와 검지와 70° 벌어진 갈퀴였다. 사진(Unsplash 「테이블 위에 동전을 쌓는 사람」)과 동전
+#  다루기 안내(테만 잡는다)대로 이제 **닫힌 집기**다 — 검지 끝은 동전 윗면 테 안, 엄지는 그
+#  바로 밑에서 받친다(GIVE 「테를 집는다」). 그것을 두 손 다 잰다:
 #    · 물건이 손 좌표에서 안 미끄러진다(흔들림 ≤ 1.5 — 그대로)
-#    · 집는 손끝 둘(검지 끝 · 엄지 끝 마디 끝)의 화면 자리가 테 **위**다 — 손끝 반폭에서
-#      테 밖으로 나간 거리를 뺀 것이 테를 덮는 폭이고, 그것이 0.5~3px 이다(0 밑이면 손끝이
-#      테에서 떠 집은 것이 아니고, 3 넘으면 손끝이 면에 얹혀 다시 「짚는」 손이다)
-#    · 그 둘 말고 손의 어느 마디도 물건 윤곽 안에 안 든다(너클 넷 · 말린 손끝 셋 · 검지
-#      가운데 마디 · 엄지 뿌리와 마디 · 손바닥 모서리 — 윤곽 비 ≥ 1)
+#    · 검지 끝(볼이 닿는 자리)이 동전 윗면 테 안 1.5~4.5px — 사진의 2~4px
+#    · 엄지 끝이 검지 끝에서 화면 6.5px 안 — 닫힌 집기(두 손끝이 만난다)
+#    · 엄지 벌림(손바닥 면에서 검지와 엄지 사이 각)이 30° 안 — 사진의 20~30°. 갈퀴는 70°
+#    · 엄지 어느 마디(뿌리 · 마디 · 끝)도 화면에서 손등 윗선 위로 안 솟는다
+#    · 손 나머지(너클 넷 · 말린 마디 · 손끝 셋 · 손바닥 모서리)는 물건 윤곽 밖 — 검지는 위로
+#      아치, 엄지는 밑이라 뺀다
 #    · 반지 낀 손(오른손)이 쥐어도 반지가 물건에 안 가린다
-#    · 앞 층에는 집는 손끝 둘(엄지 끝마디 · 검지 끝마디)만 선다. 다트는 손 밑을 지나므로
-#      손 전부가 선다(give_all)
+#    · 앞 층에는 물건 위로 아치를 그리는 검지(두 마디)만 선다 — 엄지 · 손바닥은 아니다.
+#      다트는 손 밑을 지나므로 손 전부가 선다(give_all)
 func _grip_case(kind: String, mx: float) -> void:
 	var gi := _stock_as(kind)
 	var nm: String = "%s · %s손" % [kind, "왼" if mx < 320.0 else "오른"]
@@ -148,8 +170,12 @@ func _grip_case(kind: String, mx: float) -> void:
 		await _wait(1)
 	var lo := Vector2(1e9, 1e9)
 	var hi := Vector2(-1e9, -1e9)
-	var tip_lo := Vector2(99.0, 99.0)      # (검지, 엄지) 테를 덮는 폭 최소
-	var tip_hi := Vector2(-99.0, -99.0)    # 최대
+	var tip_in := Vector2(99.0, -99.0)     # 검지 볼이 테 안으로 들어온 px (최소, 최대)
+	var pinch := 0.0                       # 엄지 끝 ↔ 검지 끝 화면 거리 최대
+	var abd := 0.0                         # 엄지 벌림 최대(도)
+	var rise := -99.0                      # 엄지가 손등 윗선 위로 솟은 px 최대
+	var tpad := Vector2(99.0, -99.0)       # 엄지 끝(축)이 테 밖으로 나간 px (최소, 최대)
+	var rise_at := ""
 	var hand_in := 99.0
 	var hand_at := ""
 	var ring_r := 99.0
@@ -158,8 +184,6 @@ func _grip_case(kind: String, mx: float) -> void:
 	var rg: Dictionary = g.hand3_rig[side]
 	var hj: Dictionary = rg.hj
 	var oj: Dictionary = (g.hand3_rig[1 - side] as Dictionary).hj
-	var tw_i: float = float(g.FING3.fw[0]) * 0.8 * 0.5
-	var tw_t: float = float(g.HAND3.th_w) * 0.74 * 0.5
 	while g.give_t < t2 - 0.05 and guard < 800:
 		guard += 1
 		await _wait(1)
@@ -173,19 +197,33 @@ func _grip_case(kind: String, mx: float) -> void:
 		hi = Vector2(maxf(hi.x, lc.x), maxf(hi.y, lc.z))
 		if kind == "rare":
 			var cs: Vector2 = g._p2s(float(it.u), float(it.w), float(it.h))
-			var p_i := _scr((rg.tips[0] as Node3D).global_transform.origin)
-			var p_t := _scr((rg.ttip as Node3D).global_transform.origin)
-			var ov := Vector2(tw_i - _rim_px(p_i, cs, it), tw_t - _rim_px(p_t, cs, it))
-			tip_lo = Vector2(minf(tip_lo.x, ov.x), minf(tip_lo.y, ov.y))
-			tip_hi = Vector2(maxf(tip_hi.x, ov.x), maxf(tip_hi.y, ov.y))
+			var ti3: Vector3 = (rg.tips[0] as Node3D).global_transform.origin
+			var tt3: Vector3 = (rg.ttip as Node3D).global_transform.origin
+			#  검지 볼이 닿는 자리 = 손끝 축에서 볼 반 두께(give_pad) 아래.
+			var pin := -_rim_px(_scr(ti3 - Vector3(0.0, float(g.give_pad), 0.0)), cs, it)
+			tip_in = Vector2(minf(tip_in.x, pin), maxf(tip_in.y, pin))
+			pinch = maxf(pinch, _scr(ti3).distance_to(_scr(tt3)))
+			var tr := _rim_px(_scr(tt3), cs, it)
+			tpad = Vector2(minf(tpad.x, tr), maxf(tpad.y, tr))
+			#  벌림 — 손 좌표 xz 에서 너클 → 검지 끝, 엄지 뿌리 → 엄지 끝.
+			var inv: Transform3D = hd.global_transform.affine_inverse()
+			var kn: Vector3 = inv * (hj.j1[0] as Node3D).global_transform.origin
+			var vi: Vector3 = inv * ti3 - kn
+			var vt: Vector3 = inv * tt3 - inv * (hj.thumb as Node3D).global_transform.origin
+			abd = maxf(abd, rad_to_deg(absf(Vector2(vi.x, vi.z).angle_to(Vector2(vt.x, vt.z)))))
+			for pr in [["엄지 뿌리", (hj.thumb as Node3D).global_transform.origin],
+					["엄지 마디", (hj.t2 as Node3D).global_transform.origin], ["엄지 끝", tt3]]:
+				var sp := _scr(pr[1])
+				var up: float = _back_top(hd, sp.x) - sp.y
+				if up > rise:
+					rise = up
+					rise_at = String(pr[0])
 			var pts := []
 			for f in 4:
 				pts.append(["너클%d" % f, (hj.j1[f] as Node3D).global_transform.origin])
 			for f in range(1, 4):
 				pts.append(["말린 손끝%d" % f, (rg.tips[f] as Node3D).global_transform.origin])
-			pts.append(["검지 가운데 마디", (hj.j2[0] as Node3D).global_transform.origin])
-			pts.append(["엄지 뿌리", (hj.thumb as Node3D).global_transform.origin])
-			pts.append(["엄지 마디", (hj.t2 as Node3D).global_transform.origin])
+				pts.append(["말린 마디%d" % f, (hj.j2[f] as Node3D).global_transform.origin])
 			for x in [0.0, 16.0, 30.0]:
 				for z in [-15.0, 15.0]:
 					for y in [-5.0, 5.0]:
@@ -200,11 +238,14 @@ func _grip_case(kind: String, mx: float) -> void:
 				ring_r = minf(ring_r, _cover_r(_scr(rn.global_transform * Vector3(6.0, 0.0, 0.0)), cs, it))
 		var all: bool = bool(g.give_all)
 		var palm_on := _front((hj["in"] as Node3D).get_child(0))
-		var tips_on := _front((hj.j2[0] as Node3D).get_child(0)) and _front((hj.t2 as Node3D).get_child(0))
-		var other_off := not _front((oj.t2 as Node3D).get_child(0)) \
-				and not _front((oj.j2[0] as Node3D).get_child(0))
-		front_ok = front_ok and g.hand3_front_on and tips_on and other_off \
-				and palm_on == all \
+		var idx_on := _front((hj.j1[0] as Node3D).get_child(0)) \
+				and _front((hj.j2[0] as Node3D).get_child(0))
+		var thumb_on := _front((hj.thumb as Node3D).get_child(0)) \
+				or _front((hj.t2 as Node3D).get_child(0))
+		var other_off := not _front((oj.j1[0] as Node3D).get_child(0)) \
+				and not _front((oj.t2 as Node3D).get_child(0))
+		front_ok = front_ok and g.hand3_front_on and idx_on and other_off \
+				and palm_on == all and thumb_on == all \
 				and g.hand3_fvp.render_target_update_mode == SubViewport.UPDATE_ALWAYS
 		n += 1
 	_ok("살핀 틀이 있다 (%s)" % nm, n > 10, "%d틀" % n)
@@ -212,25 +253,31 @@ func _grip_case(kind: String, mx: float) -> void:
 	_ok("물건이 쥔 자리에서 안 미끄러진다 (%s)" % nm, drift <= 1.5,
 			"손 좌표 흔들림 %.2f (손각 · 숙임 · 들기를 다 탄다)" % drift)
 	if kind == "rare":
-		_ok("검지 끝이 테에 얹힌다 (%s)" % nm, tip_lo.x >= 0.5 and tip_hi.x <= 3.0,
-				"테를 덮는 폭 %.1f ~ %.1fpx (0.5~3)" % [tip_lo.x, tip_hi.x])
-		_ok("엄지 끝이 테에 얹힌다 (%s)" % nm, tip_lo.y >= 0.5 and tip_hi.y <= 3.0,
-				"테를 덮는 폭 %.1f ~ %.1fpx (0.5~3)" % [tip_lo.y, tip_hi.y])
+		_ok("검지 끝이 동전 윗면 테 안 (%s)" % nm, tip_in.x >= 1.5 and tip_in.y <= 4.5,
+				"테 안 %.1f ~ %.1fpx (1.5~4.5 — 사진의 2~4)" % [tip_in.x, tip_in.y])
+		_ok("엄지 끝이 검지 끝과 만난다 (%s)" % nm, pinch <= 6.5,
+				"화면 거리 최대 %.1fpx (6.5 이하)" % pinch)
+		print("        엄지 끝 축이 테 밖으로 %.1f ~ %.1fpx" % [tpad.x, tpad.y])
+		_ok("엄지 벌림이 30° 안 (%s)" % nm, abd <= 30.0,
+				"%.0f° (사진 20~30° · 옛 갈퀴 70°)" % abd)
+		_ok("엄지가 손등 위로 안 솟는다 (%s)" % nm, rise <= 0.0,
+				"%s 가 손등 윗선보다 %.1fpx %s" % [rise_at, absf(rise), "위" if rise > 0.0 else "아래"])
 		_ok("손 나머지는 물건 윤곽 밖 (%s)" % nm, hand_in >= 1.0,
 				"가장 안쪽 %s %.2f (1 이상이면 윤곽 밖)" % [hand_at, hand_in])
 		if side == 1:
 			_ok("반지가 물건에 안 가린다", ring_r >= 1.0, "윤곽 비 %.2f" % ring_r)
-	_ok("집는 손끝만 앞 층에 선다 (%s)" % nm, front_ok,
-			"손 전부" if bool(g.give_all) else "엄지 끝마디 · 검지 끝마디")
+	_ok("검지만 앞 층에 선다 (%s)" % nm, front_ok,
+			"손 전부" if bool(g.give_all) else "검지 두 마디 — 엄지 · 손바닥은 밑")
+	#  뿌린 뒤 집기는 GIVE.rel 초에 걸쳐 풀린다(give_rel) — 다 풀릴 때까지 기다린다.
 	guard = 0
-	while g.give_i >= 0 and guard < 600:
+	while (g.give_i >= 0 or float(g.give_rel) > 0.0) and guard < 900:
 		guard += 1
 		await _wait(1)
 	await _wait(3)
 	var off := true
 	for i in 2:
 		var hj2: Dictionary = (g.hand3_rig[i] as Dictionary).hj
-		off = off and not _front((hj2.t2 as Node3D).get_child(0)) \
+		off = off and not _front((hj2.j1[0] as Node3D).get_child(0)) \
 				and not _front((hj2.j2[0] as Node3D).get_child(0)) \
 				and not _front((hj2["in"] as Node3D).get_child(0))
 	_ok("놓으면 앞 층을 걷는다 (%s)" % nm, off and not g.hand3_front_on

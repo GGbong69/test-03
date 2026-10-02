@@ -6,8 +6,9 @@ extends SceneTree
 #    godot --path . --script scripts/tools/shot_npc3.gd -- hold    # 집은 손만(고칠 때)
 #  확대는 최근접으로만 — 보간하면 손가락 골과 팔 굵기 단이 흐려져 재는 것이 그림이
 #  아니라 필터가 된다.
-#  집은 손(hold)은 「지금 동전 짚는 손 모양 너무 이상한데」 를 보는 칸이다 — 엄지 · 검지
-#  끝만 테에 1~1.5px 얹히고 손 나머지가 물건 윤곽 밖(상인 쪽)에 서는지, 등급 빛이 손
+#  집은 손(hold)은 「지금 동전 짚는 손 모양 너무 이상한데」 · 「엄지가 너무 올라가지 않았어?」
+#  를 보는 칸이다 — 검지 끝은 동전 윗면 테 안에 · 엄지는 그 밑에 붙은 닫힌 집기인지, 엄지가
+#  손등 위로 안 솟는지, 손 나머지가 물건 윤곽 밖(상인 쪽)에 서는지, 등급 빛이 손
 #  **밑**에 깔리는지(너클이 안 바래는지)를 본다. 등급 빛이 있는 레어 동전으로 찍는다.
 const Save = preload("res://scripts/save.gd")
 const GameData = preload("res://scripts/data.gd")
@@ -33,6 +34,12 @@ func _initialize() -> void:
 
 
 func _process(_d: float) -> bool:
+	#  실제 마우스가 창 위에 있으면 그 자리 물건의 설명이 뜬다(_cursor 는 진짜 커서를 읽는다)
+	#  — 찍는 동안은 얹힘을 끈다.
+	if g != null:
+		g.hover_live = false
+		g.tip_pin = {}
+		g.tip_a = 0.0
 	if busy:
 		return false
 	busy = true
@@ -127,7 +134,9 @@ func _give_hold(kind: String, side: int) -> Vector2:
 	g._give_begin(gi, Vector2(200.0 if side == 0 else 440.0, 130.0))
 	await _hold(80, func():
 		g.give_t = minf(g.give_t, LOOK_T)
-		g.mouse_at = Vector2(-50, -50))
+		g.mouse_at = Vector2(-50, -50)
+		g.tip_pin = {}
+		g.tip_a = 0.0)
 	var it: Dictionary = g.drop[gi]
 	var c: Vector2 = g._p2s(float(it.u), float(it.w), float(it.h))
 	print("  집기 %-6s %s손 — 물건 %d 화면 (%.1f, %.1f) · give_t %.2f · 쥠 %.2f"
@@ -145,9 +154,16 @@ func _holds() -> void:
 	var c: Vector2 = await _give_hold("rare", 1)
 	var im: Image = root.get_texture().get_image()
 	_crop(im, _hold_rect(c, 120.0, 96.0), 4).save_png("res://shots/npc_%s_hold.png" % V)
+	#  오른손만 8배 — 검지 끝 둘레 64 × 52. 엄지가 검지 밑에 붙어 닫힌 집기인지, 손등
+	#  윤곽 위로 안 솟는지를 화소로 본다(「엄지가 너무 올라가지 않았어?」).
+	var rg1: Dictionary = g.hand3_rig[1]
+	var tip3: Vector3 = (rg1.tips[0] as Node3D).global_transform.origin
+	var tps := Vector2(tip3.x, float(g.TBL.fy) + tip3.z * float(g.TBL.flat) - tip3.y * float(g.TBL.tall))
+	_crop(im, Rect2(tps - Vector2(34.0, 30.0), Vector2(64.0, 52.0)), 8).save_png(
+			"res://shots/npc_%s_hold_x8.png" % V)
 	#  게임 배율(2배) 그대로 — 상인 둘레를 자르지 않고. 화면에서 읽히는지가 이 칸의 일이다.
 	_crop(im, Rect2(150.0, 30.0, 340.0, 220.0), 2).save_png("res://shots/npc_%s_hold_game.png" % V)
-	#  ① 손 화판 · ③ 앞 화판을 따로 — 앞 층에 무엇이 섰는지(손끝 둘)가 합친 그림에서는 안 갈린다.
+	#  ① 손 화판 · ③ 앞 화판을 따로 — 앞 층에 무엇이 섰는지(검지)가 합친 그림에서는 안 갈린다.
 	if g.hand3_fvp != null:
 		var hr := _hold_rect(c, 120.0, 96.0)
 		var r3: Rect2 = g.HAND3.rect
