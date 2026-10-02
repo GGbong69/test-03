@@ -129,7 +129,11 @@ func _run() -> void:
 		if g.hand3_fvp != null:
 			var r3: Rect2 = g.HAND3.rect
 			var hr3 := Rect2(hr.position - r3.position, hr.size)
-			for pr in [["hand", g.hand3_vp], ["front", g.hand3_fvp]]:
+			#  그림자 화판(시안 B — 그림자를 한 겹으로 따로 굽는다)이 있으면 그것도.
+			var vps := [["hand", g.hand3_vp], ["front", g.hand3_fvp]]
+			if g.get("hand3_svp") != null:
+				vps.append(["shad", g.hand3_svp])
+			for pr in vps:
 				var im3: Image = (pr[1] as SubViewport).get_texture().get_image()
 				var part := im3.get_region(Rect2i(hr3))
 				part.resize(int(hr.size.x) * 4, int(hr.size.y) * 4, Image.INTERPOLATE_NEAREST)

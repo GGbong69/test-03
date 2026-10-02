@@ -106,6 +106,8 @@ func _grip_checks() -> void:
 	var lo := Vector2(1e9, 1e9)
 	var hi := Vector2(-1e9, -1e9)
 	var worst := 0.0
+	var ftip := 0.0
+	var ntip := 0
 	var thumb_r := Vector2(1e9, -1e9)
 	var front_ok := true
 	var n := 0
@@ -129,6 +131,15 @@ func _grip_checks() -> void:
 			for sz in [-1.0, 1.0]:
 				var tip: Vector3 = hd.global_transform * Vector3(pl, sy * pt * 0.5, sz * pw * 0.5)
 				worst = maxf(worst, _cover_r(_scr(tip), cs, it))
+		#  손가락을 세운 판(rig 의 tips — 손끝 마디 끝마다 하나)은 외곽 상자 모서리만이
+		#  아니라 **진짜 손끝**도 잰다. 굽힌 손가락은 상자 안에서 끝나도 밑으로 처져
+		#  (h 가 낮으면 화면에서 아래) 물건 앞 테 밑으로 나올 수 있다. 손끝 마디 끝의
+		#  위 · 아래 두 점(굵기 반 2.5)이 물건 윤곽 안이어야 한다.
+		for tp in rg.get("tips", []):
+			var tt3: Transform3D = (tp as Node3D).global_transform
+			for dy in [-2.5, 2.5]:
+				ftip = maxf(ftip, _cover_r(_scr(tt3 * Vector3(0.0, dy, 0.0)), cs, it))
+			ntip += 1
 		var th: Node3D = rg.thumb
 		var tt: Vector3 = hd.global_transform * (th.transform * Vector3(float(g.HAND3.th_l),
 				float(g.HAND3.th_t) * 0.5, 0.0))
@@ -146,6 +157,9 @@ func _grip_checks() -> void:
 			"손 좌표 흔들림 %.2f (손각 · 굴림 · 들기를 다 탄다)" % drift)
 	_ok("손끝이 물건 테 안에서 끝난다", worst <= 1.0,
 			"손끝 네 모서리 최대 %.2f (1 이하면 물건이 덮는다)" % worst)
+	if ntip > 0:
+		_ok("손가락 끝이 물건 테 안에서 끝난다", ftip <= 1.0,
+				"손끝 마디 끝 최대 %.2f (1 이하면 물건이 덮는다)" % ftip)
 	_ok("엄지 끝이 물건 윗면에 얹힌다", thumb_r.y <= 0.95 and thumb_r.x >= 0.45,
 			"테에서 %.2f ~ %.2f (0.45~0.95 — 테 가까이, 물건 안)" % [thumb_r.x, thumb_r.y])
 	_ok("쥔 엄지만 앞 층에 선다", front_ok, "")
