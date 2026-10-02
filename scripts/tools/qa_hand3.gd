@@ -43,6 +43,125 @@ func _wait(n: int) -> void:
 		await process_frame
 
 
+#  위팔 축과 팔뚝 축이 한 점(팔꿈치)에서 만나는가 — 두 축 선분 사이 가장 가까운 거리.
+#  자세 사전(hand3_pose)과 비교하지 않는다: 3D 는 지난 틀의 자세로 서므로 쓸기처럼
+#  빠른 동작에서는 한 틀 차이만큼(20) 어긋나 보인다. 두 상자가 **서로** 만나는가를 잰다.
+func _elbow_gap(i: int) -> float:
+	if i >= g.hand3_rig.size():
+		return 99.0
+	var rg: Dictionary = g.hand3_rig[i]
+	var ut: Transform3D = (rg.up as Node3D).transform
+	var at: Transform3D = (rg.arm as Node3D).transform
+	var d := 99.0
+	for k in 161:
+		var p: Vector3 = ut.origin + ut.basis.x * (float(k) / 160.0)
+		d = minf(d, _seg_d(p, at.origin, at.origin + at.basis.x))
+	return d
+
+
+func _seg_d(p: Vector3, a: Vector3, b: Vector3) -> float:
+	var ab := b - a
+	var t := clampf((p - a).dot(ab) / maxf(ab.length_squared(), 0.0001), 0.0, 1.0)
+	return p.distance_to(a + ab * t)
+
+
+#  월드 → 화면. 상인 무대의 직교 −52° 카메라와 같은 식(_p2s)이다.
+func _scr(p: Vector3) -> Vector2:
+	return Vector2(p.x, float(g.TBL.fy) + p.z * float(g.TBL.flat) - p.y * float(g.TBL.tall))
+
+
+#  든 물건의 그려진 윤곽(윗면 타원 + 그 밑 옆면 띠) 안에서 점이 얼마나 바깥인가.
+#  1 이하면 물건이 덮는다. 옆면 띠는 윗면을 sd 만큼 끌어내린 것이라 중심보다
+#  아래 점은 sd 만큼 당겨 잰다.
+func _cover_r(p: Vector2, c: Vector2, it: Dictionary) -> float:
+	var wob: float = float(it.get("wob", 0.0))
+	var rx: float = float(g.TBL.chip_r) * (1.0 + wob * 0.05)
+	var ry: float = float(g.TBL.chip_r) * float(g.TBL.flat) * (1.0 - wob * 0.12)
+	var sd: float = float(g.TBL.chip_t) * float(g.TBL.tall)
+	var dy: float = p.y - c.y
+	if dy > 0.0:
+		dy = maxf(dy - sd, 0.0)
+	return sqrt(pow((p.x - c.x) / rx, 2.0) + pow(dy / ry, 2.0))
+
+
+func _grip_checks() -> void:
+	var gi := -1
+	for i in g.drop.size():
+		if not bool(g.drop[i].get("gone", false)) and String(g.stock[i].type) == "item":
+			gi = i
+			break
+	_ok("건넬 동전이 있다", gi >= 0, "")
+	if gi < 0:
+		return
+	g._give_begin(gi, Vector2(400.0, 130.0))
+	var side: int = g.give_side
+	var t1: float = float(g.GIVE.take)
+	var t2: float = t1 + float(g.GIVE.look)
+	#  받기가 끝날 때까지 감는다.
+	var guard := 0
+	while g.give_t < t1 + 0.05 and guard < 400:
+		guard += 1
+		await _wait(1)
+	#  살피는 동안 — 물건이 쥔 손 좌표에서 안 미끄러지는가, 손끝이 덮였는가.
+	var lo := Vector2(1e9, 1e9)
+	var hi := Vector2(-1e9, -1e9)
+	var worst := 0.0
+	var thumb_r := Vector2(1e9, -1e9)
+	var front_ok := true
+	var n := 0
+	while g.give_t < t2 - 0.05 and guard < 800:
+		guard += 1
+		await _wait(1)
+		if g.give_i != gi:
+			break
+		var rg: Dictionary = g.hand3_rig[side]
+		var hd: Node3D = rg.hand
+		var it: Dictionary = g.drop[gi]
+		var c3 := Vector3(float(it.u), float(it.h), float(it.w))
+		var lc: Vector3 = hd.global_transform.affine_inverse() * c3
+		lo = Vector2(minf(lo.x, lc.x), minf(lo.y, lc.z))
+		hi = Vector2(maxf(hi.x, lc.x), maxf(hi.y, lc.z))
+		var cs: Vector2 = g._p2s(float(it.u), float(it.w), float(it.h))
+		var pl: float = g.HAND3.palm_l
+		var pt: float = g.HAND3.palm_t
+		var pw: float = g.HAND3.palm_w
+		for sy in [-1.0, 1.0]:
+			for sz in [-1.0, 1.0]:
+				var tip: Vector3 = hd.global_transform * Vector3(pl, sy * pt * 0.5, sz * pw * 0.5)
+				worst = maxf(worst, _cover_r(_scr(tip), cs, it))
+		var th: Node3D = rg.thumb
+		var tt: Vector3 = hd.global_transform * (th.transform * Vector3(float(g.HAND3.th_l),
+				float(g.HAND3.th_t) * 0.5, 0.0))
+		var tr := _cover_r(_scr(tt), cs, it)
+		thumb_r = Vector2(minf(thumb_r.x, tr), maxf(thumb_r.y, tr))
+		var mine_on: bool = ((th.get_child(0) as VisualInstance3D).layers & g.HAND3_FRONT) != 0
+		var oth: Node3D = (g.hand3_rig[1 - side] as Dictionary).thumb
+		var other_off: bool = ((oth.get_child(0) as VisualInstance3D).layers & g.HAND3_FRONT) == 0
+		front_ok = front_ok and g.hand3_front_on and mine_on and other_off \
+				and g.hand3_fvp.render_target_update_mode == SubViewport.UPDATE_ALWAYS
+		n += 1
+	_ok("살핀 틀이 있다", n > 10, "%d틀" % n)
+	var drift: float = (hi - lo).length()
+	_ok("물건이 쥔 자리에서 안 미끄러진다", drift <= 1.5,
+			"손 좌표 흔들림 %.2f (손각 · 굴림 · 들기를 다 탄다)" % drift)
+	_ok("손끝이 물건 테 안에서 끝난다", worst <= 1.0,
+			"손끝 네 모서리 최대 %.2f (1 이하면 물건이 덮는다)" % worst)
+	_ok("엄지 끝이 물건 윗면에 얹힌다", thumb_r.y <= 0.95 and thumb_r.x >= 0.45,
+			"테에서 %.2f ~ %.2f (0.45~0.95 — 테 가까이, 물건 안)" % [thumb_r.x, thumb_r.y])
+	_ok("쥔 엄지만 앞 층에 선다", front_ok, "")
+	guard = 0
+	while g.give_i >= 0 and guard < 600:
+		guard += 1
+		await _wait(1)
+	await _wait(3)
+	var th_off := true
+	for i in 2:
+		var th2: Node3D = (g.hand3_rig[i] as Dictionary).thumb
+		th_off = th_off and (((th2.get_child(0) as VisualInstance3D).layers & g.HAND3_FRONT) == 0)
+	_ok("놓으면 앞 층을 걷는다", th_off and not g.hand3_front_on
+			and g.hand3_fvp.render_target_update_mode == SubViewport.UPDATE_DISABLED, "")
+
+
 func _run() -> void:
 	await _wait(10)
 	if DisplayServer.get_name() == "headless":
@@ -119,9 +238,37 @@ func _run() -> void:
 		_ok("앞자락이 셔츠를 덮는다", float(g.BODY3.pan_w) >= need,
 				"앞자락 %.0f ≥ %.1f" % [float(g.BODY3.pan_w), need])
 
-	# ⑦ 위팔은 쓸 때만 선다 — 쉬는 자세에서는 몸통 옆구리에 붙는다
-	_ok("쉴 때 위팔은 없다",
-			g.hand3_upper == null or not g.hand3_upper.visible, "")
+	# ⑦ 위팔은 **늘** 선다 — 2026-10-02 「몸에 비해 팔이 너무 얇지 않아?」.
+	#  옛 팔은 위팔을 쓸 때만 그려서, 쉬는 팔이 동전 슬롯 밑변에서 곧장 떨어지는
+	#  막대였다(어깨도 팔꿈치 꺾임도 없이). 이제 어깨에서 나온다.
+	for i in 2:
+		var rgu: Dictionary = g.hand3_rig[i]
+		_ok("쉴 때 위팔이 선다 (%s)" % ("왼" if i == 0 else "오른"),
+				(rgu.up as Node3D).visible, "")
+		_ok("위팔과 팔뚝이 팔꿈치에서 만난다 (%s)" % ("왼" if i == 0 else "오른"),
+				_elbow_gap(i) < 1.0, "틈 %.2f" % _elbow_gap(i))
+	# ⑦′ 비례 — 손과 팔이 **같이** 컸는가. 사람 비를 과녁으로 둔다(HAND3 머리말):
+	#    가슴 : 위팔 : 팔뚝(팔꿈치) : 손 폭 ≈ 3.2 : 1.1 : 1.0 : 0.9
+	#    손 폭 ≈ 손목 × 1.2 · 손 길이 ≈ 손 폭 × 2
+	#  「팔만 두꺼워 지는게 아니라 손도 같이 커져야 하지 않을까?」 — 표에서 바로 잰다.
+	var H3: Dictionary = g.HAND3
+	var B3: Dictionary = g.BODY3
+	var chest: float = 2.0 * (float(B3.hinge) + float(B3.side) * cos(deg_to_rad(float(B3.yaw)))
+			+ (104.0 - float(B3.lean_y)) * tan(deg_to_rad(float(B3.lean))))
+	var k_up: float = float(H3.up_w0) / float(H3.arm_w0)
+	var k_hd: float = float(H3.palm_w) / float(H3.arm_w0)
+	var k_wr: float = float(H3.palm_w) / float(H3.arm_w1)
+	var k_ln: float = float(H3.palm_l) / float(H3.palm_w)
+	var k_ch: float = chest / float(H3.arm_w0)
+	_ok("가슴 : 팔뚝 2.8~3.6", k_ch >= 2.8 and k_ch <= 3.6, "%.2f (가슴 %.0f)" % [k_ch, chest])
+	_ok("위팔 : 팔뚝 1.0~1.25", k_up >= 1.0 and k_up <= 1.25, "%.2f" % k_up)
+	_ok("손 폭 : 팔뚝 0.8~1.0", k_hd >= 0.8 and k_hd <= 1.0, "%.2f" % k_hd)
+	_ok("손 폭 : 손목 1.1~1.3", k_wr >= 1.1 and k_wr <= 1.3, "%.2f" % k_wr)
+	_ok("손 길이 : 손 폭 1.75~2.2", k_ln >= 1.75 and k_ln <= 2.2, "%.2f" % k_ln)
+	_ok("손이 동전보다 크다", float(H3.palm_w) * float(H3.palm_l)
+			>= PI * float(g.TBL.chip_r) * float(g.TBL.chip_r),
+			"손 %.0f · 동전 %.0f" % [float(H3.palm_w) * float(H3.palm_l),
+			PI * float(g.TBL.chip_r) * float(g.TBL.chip_r)])
 	#  쓸기는 상점의 일이다 — 시계(_sweep_update)가 거기서만 돈다.
 	g.gold = 40
 	g.leg_no = 2
@@ -135,33 +282,37 @@ func _run() -> void:
 	g._sweep_begin()
 	await _wait(14)
 	_ok("쓸면 위팔이 선다",
-			g.hand3_upper != null and g.hand3_upper.visible, "")
-	var utf: Transform3D = g.hand3_upper.transform
-	var el3: Vector3 = utf.origin + utf.basis.x
-	var arm3: Node3D = (g.hand3_rig[1] as Dictionary).arm
-	var gap: float = (el3 - arm3.transform.origin).length()
-	#  위팔 끝과 아래팔 뿌리가 같은 점이어야 한다. 벌어지면 팔이 끊긴다.
-	_ok("위팔과 아래팔이 한 점에서 만난다", gap < 1.0, "틈 %.2f" % gap)
+			((g.hand3_rig[1] as Dictionary).up as Node3D).visible, "")
+	#  위팔과 팔뚝이 같은 팔꿈치를 지나야 한다. 벌어지면 팔이 끊긴다.
+	_ok("쓸 때도 팔꿈치에서 만난다", _elbow_gap(1) < 1.0, "틈 %.2f" % _elbow_gap(1))
 	_ok("쓸면 팔 그림자가 진다",
 			((g.hand3_rig[1] as Dictionary).armsh as Node3D).visible, "")
 	while g.sweep_live:
 		await _wait(8)
 	await _wait(6)
 
-	# 팔뿌리의 마구리가 동전 슬롯(밑변 48) 밑으로 나오면 안 된다.
-	#  손을 앞으로 뻗는 몸짓이 팔꿈치까지 끌고 나오는데, 팔은 거기서
-	#  끝나는 상자라 잘린 단면이 그대로 보인다(HAND3.back 의 주석).
+	# 팔뿌리(어깨)가 동전 슬롯(밑변 48) 밑으로 나오면 안 된다 — 거기서 위팔이
+	#  끝나는 상자라 잘린 단면이 그대로 보인다. 옛 판은 팔뚝 뿌리를 46 늘려
+	#  숨겼다(HAND3.back) — 이제 위팔이 어깨까지 잇고 어깨가 슬롯 뒤다.
 	#  제일 멀리 뻗는 「살핌」으로 잰다.
 	g._npc_react("살핌", 1)
 	g.idle_t = g._idle_len() * 0.5
 	await _wait(3)
-	var ab: Node3D = (g.hand3_rig[1] as Dictionary).arm
-	var ao: Vector3 = ab.transform.origin
-	var asy: float = g.TBL.fy + ao.z * g.TBL.flat - ao.y * g.TBL.tall
-	_ok("팔뿌리가 동전 슬롯 뒤에 있다", asy <= 44.0, "화면 y %.1f (슬롯 48)" % asy)
+	for i in 2:
+		var up3: Node3D = (g.hand3_rig[i] as Dictionary).up
+		var uo: Vector3 = up3.transform.origin
+		var usy: float = g.TBL.fy + uo.z * g.TBL.flat - uo.y * g.TBL.tall
+		_ok("살필 때 어깨가 동전 슬롯 뒤에 있다 (%s)" % ("왼" if i == 0 else "오른"),
+				usy <= 44.0, "화면 y %.1f (슬롯 48)" % usy)
+		_ok("살필 때도 팔꿈치에서 만난다 (%s)" % ("왼" if i == 0 else "오른"),
+				_elbow_gap(i) < 1.0, "틈 %.2f" % _elbow_gap(i))
 	g.idle_act = -1
 	g.idle_t = 0.0
 	await _wait(3)
+
+	# ⑦″ 쥔다 — 2026-10-02 「동전에 손가락이 뚫리는데 이건 뭐 어떻게 안될까?」.
+	#  상인이 물건을 받아 살피는 박자 한가운데에서 잰다.
+	await _grip_checks()
 
 
 	# ⑧ 화면을 뜨면 지워진다 — 안 보이는 뷰포트가 런 내내 돌면 안 된다

@@ -58,9 +58,12 @@ func _run() -> void:
 			"창구 %d" % g._chute_at(top, 0.0))
 
 	#  헤드리스라 _npc_arms(그리기)가 안 돌아서 손바닥이 비어 있다.
-	#  살핌 때 손이 서는 자리를 그대로 세워 둔다.
+	#  살핌 때 손이 서는 자리를 그대로 세워 둔다. 2026-10-02 부터 물건은
+	#  손바닥(npc_palm)이 아니라 뒤 테를 쥔 자리(npc_hold)에 걸린다 — 둘 다 세운다.
 	g.npc_palm[1] = Vector3(430.0, 36.0, 15.0)
 	g.npc_palm[0] = Vector3(214.0, 36.0, 15.0)
+	g.npc_hold[1] = Vector3(430.0, 30.0, 21.0)
+	g.npc_hold[0] = Vector3(214.0, 30.0, 21.0)
 
 	# ③ 건네면 상인이 든다
 	_ok("매물이 있다", g.drop.size() > 0, "%d개" % g.drop.size())
@@ -106,14 +109,18 @@ func _run() -> void:
 			"wob %.3f" % float(it.wob))
 	g.npc_grip[side] = Vector2(0.0, 0.0)
 	g._give_tick(1.0 / 60.0)
-	var pm: Vector3 = g.npc_palm[g.give_side]
-	_ok("손바닥 위에 얹혔다",
-			absf(float(it.h) - (pm.z + float(g.GIVE.hold))) < 0.01,
-			"h %.1f = 손바닥 %.1f + %.1f" % [float(it.h), pm.z,
-			float(g.GIVE.hold)])
-	_ok("손바닥 한가운데다", absf(float(it.u) - pm.x) < 0.01
+	#  2026-10-02 「동전에 손가락이 뚫리는데 이건 뭐 어떻게 안될까?」 — 물건은
+	#  손바닥 한가운데가 아니라 **뒤 테**를 쥔다(GIVE 「테를 쥔다」). 쥔 자리
+	#  (npc_hold)가 물건 뒤 테이고 물건 윗면 높이다. 한가운데는 거기서 손각 쪽으로
+	#  물건 반지름만큼 나간다 — 손각 0 이면 u 쪽으로.
+	var pm: Vector3 = g.npc_hold[g.give_side]
+	var gr: float = g._give_r(it)
+	_ok("쥔 자리 높이에 얹혔다", absf(float(it.h) - pm.z) < 0.01,
+			"h %.1f = 쥔 자리 %.1f" % [float(it.h), pm.z])
+	_ok("뒤 테가 쥔 자리다", absf(float(it.u) - gr - pm.x) < 0.01
 			and absf(float(it.w) - pm.y) < 0.01,
-			"u %.1f/%.1f · w %.1f/%.1f" % [float(it.u), pm.x, float(it.w), pm.y])
+			"u %.1f − r %.1f = %.1f · w %.1f/%.1f" % [float(it.u), gr, pm.x,
+			float(it.w), pm.y])
 	#  카운터 선을 안 넘어야 한다 — 넘으면 벽 사각이 물건을 지운다
 	var sy: float = g.TBL.fy + float(it.w) * g.TBL.flat - float(it.h) * g.TBL.tall
 	_ok("든 물건이 카운터 밑에 있다", sy > g.TBL.fy,
@@ -130,6 +137,7 @@ func _run() -> void:
 	# 마무리는 **가로지르는 뿌리기 하나**다 — 준 손의 반대쪽으로 간다
 	for sd2 in 2:
 		g.npc_palm[sd2] = Vector3(214.0 if sd2 == 0 else 430.0, 36.0, 15.0)
+		g.npc_hold[sd2] = Vector3(214.0 if sd2 == 0 else 430.0, 30.0, 21.0)
 		var mx: float = 120.0 if sd2 == 0 else 520.0
 		var slow := 0
 		var wrong := 0
@@ -160,6 +168,7 @@ func _run() -> void:
 			"%.0f ≤ %.0f" % [tv, float(g.HAND.toss_cap)])
 	#  뿌리는 순간 높이가 0 이어야 한다 — 아니면 물건이 한 프레임에 툭 떨어진다
 	g.npc_palm[1] = Vector3(430.0, 36.0, 15.0)
+	g.npc_hold[1] = Vector3(430.0, 30.0, 21.0)
 	g._give_begin(0, Vector2(520.0, g.TBL.fy))
 	var t3: float = float(g.GIVE.take) + float(g.GIVE.look) + float(g.GIVE.set)
 	var hi_h := 0.0
@@ -171,7 +180,12 @@ func _run() -> void:
 			hi_h = float((g.drop[0] as Dictionary).h)
 	_ok("뿌리기 직전 높이가 0", hi_h < 1.0, "h %.2f" % hi_h)
 
-	# 손이 이쪽저쪽 뒤척이는가 — 한 방향으로만 가면 "뒤척였다" 가 아니다
+	# 손이 이쪽저쪽 기울이는가 — 한 방향으로만 가면 "살폈다" 가 아니다.
+	#  기준을 ±17° 에서 ±8.6° 로 내렸다(2026-10-02). 옛 손은 물건을 손바닥에 얹고
+	#  70° 뒤척였는데, 이제 엄지가 물건 윗면 테를 누르는 쥔 손이다 — 물건이 2D 라
+	#  누운 채로만 그려지므로 손이 크게 구르면 굴러 내려간 쪽 손끝이 물건 옆테
+	#  밖으로 나와 「동전에 손가락이 뚫리는」 그림이 된다(qa_hand3 이 손끝을 잰다).
+	#  「양쪽으로」 가 이 검사의 뜻이고, 그것은 그대로 잰다.
 	var li2: int = g._idle_index("살핌")
 	g.idle_act = li2
 	g.idle_side = 1
@@ -186,7 +200,7 @@ func _run() -> void:
 		rhi = maxf(rhi, float(hh.roll))
 		alo = minf(alo, float(hh.ang))
 		ahi = maxf(ahi, float(hh.ang))
-	_ok("손이 양쪽으로 굴린다", rlo < -0.3 and rhi > 0.3,
+	_ok("손이 양쪽으로 굴린다", rlo < -0.15 and rhi > 0.15,
 			"굴림 %.0f° ~ %+.0f°" % [rad_to_deg(rlo), rad_to_deg(rhi)])
 	_ok("손각도 양쪽으로 흔든다", alo < -0.05 and ahi > 0.05,
 			"손각 %.0f° ~ %+.0f°" % [rad_to_deg(alo), rad_to_deg(ahi)])
