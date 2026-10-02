@@ -138,6 +138,125 @@ func _back_top(hd: Node3D, x: float) -> float:
 	return top if top < 1e8 else lo
 
 
+#  ── 엄지의 살 (2026-10-02) ─────────────────────────────────
+#  「나이 엄지에 무지내전근이랑 무지대립근이 없잖아」 — 엄지가 상자 손바닥 모서리에 꽂힌 가는
+#  토막 둘이라 손의 일부가 아니라 막대로 읽혔다. 사람 엄지는 손목 노뼈 쪽 CMC 에서 나온
+#  손허리뼈가 엄지 두덩(무지대립근 · 짧은 벌림근 · 짧은 굽힘근) 속에 묻혀 있고, 첫 물갈퀴
+#  (무지내전근 · 첫째 등쪽 뼈사이근)가 엄지 첫마디 한가운데쯤까지 검지 손허리뼈 머리와 잇는다
+#  (game.gd THUMB3 머리말). 그래서 손등에서 본 엄지 쪽 윤곽은 손목에서 엄지 끝까지 볼록한
+#  곡선 하나다 — 손목 쪽으로 파인 V 도, 손바닥 모서리에서 꺾여 나간 막대도 없다. 그것을
+#  쉼 · 집기 · 쓸기에서 잰다:
+#    · 엄지 쪽 윤곽(손 화판의 알파)이 손목 옆구리 → 엄지 MCP 사이에서 그 두 점을 잇는 줄보다
+#      2px 넘게 안으로 파이지 않는다 — 막대가 모서리에 꽂히면 그 사이가 V 로 파인다
+#    · 엄지 첫마디 한가운데 자리와 검지 손허리뼈 머리를 잇는 줄이 통째로 손 안이다 — 손목
+#      쪽으로 깊은 틈이 없다(물갈퀴가 메운다)
+#    · 물갈퀴 살이 엄지 첫마디에 닿는 가장 먼 자리가 첫마디의 한가운데(0.5) 이상
+#    · 엄지 두덩(손허리뼈 + 둔덕) 폭이 뿌리 쪽 4 분의 1 자리에서 손바닥 폭의 0.28 이상
+func _mask(im: Image, p: Vector2) -> bool:
+	var r3: Rect2 = g.HAND3.rect
+	var x := int(floor(p.x - r3.position.x))
+	var y := int(floor(p.y - r3.position.y))
+	if x < 0 or y < 0 or x >= im.get_width() or y >= im.get_height():
+		return false
+	return im.get_pixel(x, y).a > 0.5
+
+
+#  손 안의 점 p 에서 d 쪽으로 윤곽 끝까지 반 px 씩 간다.
+func _edge(im: Image, p: Vector2, d: Vector2) -> Vector2:
+	var q := p
+	for _k in 80:
+		var nq := q + d * 0.5
+		if not _mask(im, nq):
+			return q
+		q = nq
+	return q
+
+
+#  손목 옆구리 → 엄지 MCP 의 윤곽 파임(px). 두 점을 엄지 쪽(손 −z·sg 의 화면 방향)으로
+#  윤곽 끝까지 밀고, 그 두 끝을 잇는 줄 위의 점마다 손 밖이면 안으로 얼마나 들어가야 손에
+#  닿는지 잰다. 손목 점은 손목 관절 바로 앞(x 2.5 — 손바닥 뿌리 깎은 모서리 3.4 안)이다:
+#  x 0~1 은 팔뚝과 손이 만나는 모서리라 손목을 꺾은 만큼 오목해지고, 그것은 엄지가 아니다
+#  (쉬는 오른손은 x 1 에서 재면 2.0px · 2.5 에서 1.5px). 대각선 윤곽의 화소 계단만으로
+#  0.5~1px 이 나온다.
+func _notch(im: Image, hj: Dictionary) -> float:
+	var hd: Node3D = hj.root
+	var sg: float = hj.sg
+	var o := _scr(hd.global_transform.origin)
+	var out := (_scr(hd.global_transform * Vector3(0.0, 0.0, -10.0 * sg)) - o).normalized()
+	var wb := _edge(im, _scr(hd.global_transform * Vector3(2.5, 0.0, -11.0 * sg)), out)
+	var mb := _edge(im, _scr((hj.t1 as Node3D).global_transform.origin), out)
+	var deep := 0.0
+	for k in range(1, 40):
+		var q: Vector2 = wb.lerp(mb, float(k) / 40.0)
+		var dd := 0.0
+		while dd < 20.0 and not _mask(im, q):
+			q -= out * 0.5
+			dd += 0.5
+		deep = maxf(deep, dd)
+	return deep
+
+
+#  물갈퀴 자리에 틈이 없는가 — 엄지 첫마디 한가운데와 검지 손허리뼈 머리를 잇는 줄에서
+#  손 밖인 표본의 수.
+func _web_gap(im: Image, hj: Dictionary) -> int:
+	var hd: Node3D = hj.root
+	var sg: float = hj.sg
+	var a := _scr((hj.t1 as Node3D).global_transform * Vector3(float(g.THUMB3.lp) * 0.5, 0.0, 0.0))
+	var b := _scr(hd.global_transform * Vector3(27.0, 0.6, -12.8 * sg))
+	var miss := 0
+	for k in 21:
+		if not _mask(im, a.lerp(b, float(k) / 20.0)):
+			miss += 1
+	return miss
+
+
+#  물갈퀴 살이 엄지 첫마디에 닿는 가장 먼 자리(첫마디 길이의 비). 물갈퀴 타원체 겉면을
+#  고루 찍어 첫마디 좌표로 옮기고, 첫마디 굵기 안(축에서 반폭 + 1)에 든 점의 x 가운데 가장 큰 것.
+func _web_reach(hj: Dictionary) -> float:
+	var inv: Transform3D = (hj.t1 as Node3D).global_transform.affine_inverse()
+	var wt: Transform3D = (hj.web as Node3D).global_transform
+	var r: float = float(g.THUMB3.pw0) * 0.5 + 1.0
+	var best := -99.0
+	for a in 24:
+		for b in 13:
+			var th: float = PI * float(b) / 12.0
+			var ph: float = TAU * float(a) / 24.0
+			var q := Vector3(cos(th), sin(th) * cos(ph), sin(th) * sin(ph))
+			var lq: Vector3 = inv * (wt * q)
+			if Vector2(lq.y, lq.z).length() <= r:
+				best = maxf(best, lq.x)
+	return best / float(g.THUMB3.lp)
+
+
+#  엄지 두덩 폭 — 손허리뼈 뿌리 쪽 4 분의 1 자리에서 손허리뼈 단면과 둔덕 타원체 단면을
+#  합친 폭(손허리뼈 좌표의 z). 둔덕은 손허리뼈의 자식이라 그 자리 · 배율을 그대로 읽는다.
+func _thenar_w(hj: Dictionary) -> float:
+	var T: Dictionary = g.THUMB3
+	var tn: Node3D = hj.thenar
+	var xb: float = float(T.lm) * 0.25
+	var u: float = (xb - tn.position.x) / tn.scale.x
+	var hw: float = tn.scale.z * sqrt(maxf(0.0, 1.0 - u * u))
+	var mb: float = T.m_back
+	var mw: float = lerpf(float(T.mw0), float(T.mw1), (xb + mb) / (float(T.lm) + mb)) * 0.5
+	return maxf(tn.position.z + hw, mw) - minf(tn.position.z - hw, -mw)
+
+
+func _thumb_anat(tag: String, i: int) -> void:
+	var hj: Dictionary = (g.hand3_rig[i] as Dictionary).hj
+	var nm: String = "%s · %s손" % [tag, "왼" if i == 0 else "오른"]
+	var im: Image = (g.hand3_vp as SubViewport).get_texture().get_image()
+	var nt := _notch(im, hj)
+	_ok("엄지 쪽 윤곽이 손목 → MCP 에서 안 파인다 (%s)" % nm, nt <= 2.0,
+			"가장 깊은 파임 %.1fpx (2 이하 — 막대가 꽂히면 V)" % nt)
+	var gp := _web_gap(im, hj)
+	_ok("물갈퀴 자리에 틈이 없다 (%s)" % nm, gp == 0,
+			"엄지 첫마디 한가운데 → 검지 머리 21점 중 손 밖 %d" % gp)
+	var wr := _web_reach(hj)
+	_ok("물갈퀴가 엄지 첫마디 한가운데까지 (%s)" % nm, wr >= 0.5, "첫마디의 %.2f (0.5 이상)" % wr)
+	var tw := _thenar_w(hj) / float(g.HAND3.palm_w)
+	_ok("엄지 두덩이 굵다 (%s)" % nm, tw >= 0.28, "뿌리 쪽 폭 = 손바닥 폭의 %.2f (0.28 이상)" % tw)
+
+
 #  2026-10-02 「지금 동전 짚는 손 모양 너무 이상한데 좀 레퍼런스 찾으면서 어떻게 해봐」 →
 #  「뭔하려느지는 알겠는데 엄지가 너무 올라가지 않았어? 레퍼런스 찾아보고 좀 손모양 제대로
 #  만들어봐」. 둘째 판은 엄지 끝 · 검지 끝으로 뒤 테 양 어깨를 집었는데, 엄지가 손목 위에서
@@ -212,6 +331,7 @@ func _grip_case(kind: String, mx: float) -> void:
 			var vt: Vector3 = inv * tt3 - inv * (hj.thumb as Node3D).global_transform.origin
 			abd = maxf(abd, rad_to_deg(absf(Vector2(vi.x, vi.z).angle_to(Vector2(vt.x, vt.z)))))
 			for pr in [["엄지 뿌리", (hj.thumb as Node3D).global_transform.origin],
+					["엄지 MCP", (hj.t1 as Node3D).global_transform.origin],
 					["엄지 마디", (hj.t2 as Node3D).global_transform.origin], ["엄지 끝", tt3]]:
 				var sp := _scr(pr[1])
 				var up: float = _back_top(hd, sp.x) - sp.y
@@ -236,6 +356,8 @@ func _grip_case(kind: String, mx: float) -> void:
 			if side == 1:
 				var rn: Node3D = (hj.j1[2] as Node3D)
 				ring_r = minf(ring_r, _cover_r(_scr(rn.global_transform * Vector3(6.0, 0.0, 0.0)), cs, it))
+			if n == 20:
+				_thumb_anat("집기", side)
 		var all: bool = bool(g.give_all)
 		var palm_on := _front((hj["in"] as Node3D).get_child(0))
 		var idx_on := _front((hj.j1[0] as Node3D).get_child(0)) \
@@ -408,6 +530,11 @@ func _run() -> void:
 	g._tutor_close()
 	g.tutor_q.clear()
 	await _wait(30)
+	g.idle_act = -1
+	g.idle_wait = 9.0
+	await _wait(20)
+	for i in 2:
+		_thumb_anat("쉼", i)
 	g._sweep_begin()
 	await _wait(14)
 	_ok("쓸면 위팔이 선다",
@@ -416,6 +543,13 @@ func _run() -> void:
 	_ok("쓸 때도 팔꿈치에서 만난다", _elbow_gap(1) < 1.0, "틈 %.2f" % _elbow_gap(1))
 	_ok("쓸면 팔 그림자가 진다",
 			((g.hand3_rig[1] as Dictionary).armsh as Node3D).visible, "")
+	#  편 손 — 쓸기가 손을 다 편 박자(_sweep_amt 0.9 이상)에서 엄지를 잰다. 왼손은 쓸지 않는다.
+	var sw_guard := 0
+	while g.sweep_live and g._sweep_amt() < 0.9 and sw_guard < 120:
+		sw_guard += 1
+		await _wait(1)
+	_ok("쓸기가 손을 편다", g._sweep_amt() >= 0.9, "%.2f" % g._sweep_amt())
+	_thumb_anat("쓸기", 1)
 	while g.sweep_live:
 		await _wait(8)
 	await _wait(6)

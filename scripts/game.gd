@@ -20155,13 +20155,8 @@ const HAND3 := {
 	"palm_l": 58.0,      # 손 길이(손목 → 가운뎃손가락 끝). 폭의 1.87 배
 	"palm_w": 31.0,      # 너클 폭 — 엄지 뺀 네 손가락. 손목(27)보다 1.15 배 넓다
 	"palm_t": 12.0,      # 두께. 폭의 0.37 — 사람 손이 0.33 이다. 더 두꺼우면 벽돌이다
-	#  엄지 — 옛 상자 손에는 없었다. 실루엣 밖으로 나오는 유일한 손가락이고(PALM
-	#  머리말), 든 물건 **앞**에 서는 유일한 마디라 따로 둔다(HAND3_FRONT).
-	#  뿌리는 손목 앞 th_x, 손바닥 엄지 쪽 옆구리. 쉴 때는 손끝 방향에서 th_out
-	#  만큼 벌어져 판에 눕고, 쥘 때는 검지와 마주 서서 물건 뒤 테를 집는다(GIVE 「테를 집는다」).
-	"th_l": 26.0, "th_w": 10.0, "th_t": 9.0,
-	"th_x": 8.0,
-	"th_out": 22.0,
+	#  엄지는 이 외곽(엄지 뺀 네 손가락의 폭) **바깥**에 붙는다 — 세 마디 · 엄지 두덩 ·
+	#  물갈퀴로 THUMB3 가 쥔다(옛 th_* 의 두 마디 막대는 2026-10-02 에 걷었다).
 	#  쉴 때 손이 손끝 쪽으로 숙는 각(도). 손바닥은 턱에 얹고 손가락은 벨벳으로
 	#  늘어진다. 9° 로 두었다가 3° 로 내렸다 — 숙인 손은 화면에서 0.616 배로
 	#  더 길어져(손끝이 내려간다) 짧은 팔뚝 앞에 긴 판때기가 됐다(2026-10-02 촬영).
@@ -20226,7 +20221,7 @@ const HAND3 := {
 #  너클 능선은 한 단 밝은 살 넷이다 — 옛 _npc_ink 의 knuck 이 하던 일.
 #
 #  ── 크기는 HAND3 가 쥔다 (2026-10-02) ─────────────────────
-#  손 외곽 58 × 31 × 12 · 엄지 26 × 10 × 9 는 세 시안이 같이 쓰는 값이다(HAND3
+#  손 외곽 58 × 31 × 12 는 세 시안이 같이 쓰는 값이다(HAND3
 #  「크기」). 여기는 그 안을 가르는 값만 둔다 — 손바닥 32 + 가운뎃손가락 26 = 58.
 #  첫 판(손 25 × 26)은 손가락 하나가 화면 5px 이라 빗면 골이 1px 로 겨우 섰고,
 #  동전(44)이 손을 통째로 덮어 손이 안 보였다.
@@ -20247,18 +20242,7 @@ const FING3 := {
 	"l2": [11.5, 13.5, 12.5, 9.5],    # 끝 마디(가운뎃 · 끝 마디를 하나로)
 	#  부채꼴 — 손가락을 펼 때 각 손가락이 도는 비. 가운데 둘은 조금만 간다.
 	"fan": [1.0, 0.32, -0.32, -1.0],
-	#  엄지 두 마디 — 15.5 + 13.5 = 29. 공통 외곽(HAND3.th_l 26)보다 3 길다(굵기 · 벌림은
-	#  HAND3.th_* 그대로). 사람 엄지는 엄지 두덩에서 끝까지가 검지(24) 보다 길다 — 26 이면
-	#  닫힌 집기에서 엄지 끝이 검지 끝 밑까지 못 가 검지를 너클 바로 밑으로 끌어내려야 했고
-	#  (주먹이 동전을 짚는 그림 — 촬영), 쉬는 엄지도 너클 줄에서 멈춘 혹이었다(검토 B).
-	"tl1": 15.5, "tl2": 13.5,
-	#  엄지 손톱이 비스듬히 옆을 보게 제 축으로 굴린 각. 42 에서는 엄지가 모로 서서
-	#  위에서 보면 폭이 반으로 줄었다 — 24 면 윗면이 보이면서도 손톱은 옆으로 돈다.
-	"t_twist": 24.0,
-	#  쉬는 엄지 뿌리 x — 공통 외곽(HAND3.th_x 8)보다 3 앞이다. 8 이면 엄지 끝이 너클 줄에서
-	#  멈춰 손 옆의 짧은 혹이 됐다(검토 B — 「쉬는 엄지가 뭉툭하다」). 사람 엄지는 손목이
-	#  아니라 손바닥 3 분의 1 쯤에서 손에서 떨어진다(쥘 때는 GIVE.th_root 로 더 나온다).
-	"t_rx": 11.0,
+	#  엄지는 THUMB3(세 마디 · 엄지 두덩 · 물갈퀴)이 쥔다.
 	#  ── 살 — 픽셀아트 사다리 ─────────────────────────
 	#  분홍 플라스틱도 회색도 아니다. 램프(ffcf8a)가 파랑을 반쯤 먹으므로
 	#  **바탕은 식은 장밋빛**이다 — 살빛 바탕(c98c6c)을 그대로 넣었더니 램프
@@ -20284,11 +20268,10 @@ const FPOSE := {
 	#  쉼 — 손바닥은 먼 턱에, 손가락은 벨벳으로 늘어진다. 새끼로 갈수록 더 굽는다.
 	#  끝 관절은 얕게(12~18) — 22~32 로 말았더니 끝 마디 마구리가 카메라를 봐서
 	#  손끝마다 빛을 못 받은 검은 단이 붙었다(검토 실측).
-	#  엄지는 접지 않는다(tf 0) — 벌림 th_out 그대로 판에 눕는다. 접으면 굴림 탓에
+	#  엄지는 접지 않는다(tf 0) — 검지 옆을 따라 판에 눕는다(THUMB3.yaw). 접으면 굴림 탓에
 	#  손바닥 밑으로 가서, 손 옆에 엄지 끝이 2px 만 남아 엄지 없는 주걱으로 읽혔다(촬영).
 	#  내림은 조금(td 6) — 0 이면 엄지 끝이 너클 줄에서 멈춰 6~7px 혹으로만 나왔다
-	#  (검토 B). 뿌리를 앞으로 낸 것(FING3.t_rx)과 같이 엄지 끝이 너클 줄을 넘어 검지
-	#  첫 마디 옆까지 와서 판에 닿는다.
+	#  (검토 B). 엄지 끝이 너클 줄을 넘어 검지 첫 마디 옆까지 와서 판에 닿는다.
 	"rest": [7.0, 8.0, 10.0, 13.0, 12.0, 14.0, 16.0, 18.0, 3.0, 0.0, 10.0, 6.0],
 	#  편 손 — 쓸기 · 내밀기 · 기대기. 손바닥이 판을 민다.
 	"open": [2.0, 1.0, 1.0, 3.0, 4.0, 4.0, 5.0, 6.0, 6.0, 0.0, 6.0, 4.0],
@@ -20307,6 +20290,92 @@ const FPOSE := {
 	#  여기 값은 쉼에서 그 자리로 건너가는 길의 중간일 뿐이다.
 	"grip": [30.0, 62.0, 74.0, 86.0, 40.0, 86.0, 96.0, 104.0, 0.0, 0.0, 20.0, 0.0],
 }
+# ══════════════════════════════════════════════════════════
+#  엄지 — 세 마디 · 엄지 두덩 · 물갈퀴 (2026-10-02)
+# ──────────────────────────────────────────────────────────
+#  「나이 엄지에 무지내전근이랑 무지대립근이 없잖아」 — 엄지가 상자 손바닥 모서리에 꽂힌
+#  가는 토막 둘이라 손의 일부가 아니라 막대로 읽혔다. 사람 엄지는 이렇게 생겼다:
+#    ① **세 마디가 움직인다** — 손목 노뼈 쪽 손바닥 뿌리(CMC)에서 나오는 엄지 손허리뼈 ·
+#       첫마디 · 끝마디. 손허리뼈는 따로 선 손가락이 아니라 **엄지 두덩 속에 묻혀** 있고,
+#       자유로운 엄지는 MCP(손허리뼈 끝)에서 시작한다.
+#    ② **엄지 두덩**(무지대립근 · 짧은 벌림근 · 짧은 굽힘근) — 손허리뼈를 감싸는 살 둔덕.
+#       손목 주름에서 MCP 까지, 뿌리에서 손바닥 폭의 3 분의 1 언저리로 굵고 MCP 쪽으로
+#       가늘어진다. 손바닥 노뼈 쪽을 두껍고 둥글게 만든다. 맞세우면(집기) 엄지가 안쪽으로
+#       돌아(엎침) 볼이 검지 볼을 보고, 둔덕이 손바닥 가운데로 구른다.
+#    ③ **첫 물갈퀴**(무지내전근 · 첫째 등쪽 뼈사이근) — 엄지(손허리뼈 · 첫마디 뿌리)와
+#       검지 손허리뼈 머리를 잇는 살. 엄지 첫마디 한가운데쯤까지 닿아서, 엄지와 손바닥
+#       사이에 손목 쪽으로 깊이 파인 홈이 없다. 엄지를 모으거나 집으면 손등에서 둥글게
+#       부풀고(오그라든 뼈사이근), 벌리면(쓸기의 편 손) 얇게 늘어난다.
+#    ④ 손등에서 본 엄지 쪽 윤곽은 손목 → 물갈퀴 → 엄지 끝까지 **볼록한 곡선 하나**다.
+#       막대도 V 틈도 없다. 손허리뼈 · 첫마디가 끝마디보다 굵다.
+#  그래서 엄지는 손허리뼈(tm) → 첫마디(ta) → 끝마디(tb) 세 마디이고, 손허리뼈에 엄지 두덩
+#  (매끈한 법선의 타원체)이 붙고, 물갈퀴(타원체 하나)가 매 틀 첫마디 한가운데와 검지
+#  손허리뼈 머리 사이에 걸린다 — 두께가 모은 정도를 탄다. 손가락 넷의 팔각 기둥(면마다 법선
+#  하나 — 골을 판다)과 달리 둘은 살 덩어리라 매끈하게 둔다.
+#  자세: 쉼 · 몸짓은 FPOSE 의 엄지 값(벌림 · 접기 · 내림 · 끝마디 굽힘)에서 짓고 그 몫 일부를
+#  손허리뼈가 탄다(m_k — CMC 가 같이 움직인다). 쥘 때는 손허리뼈를 GIVE.th_mcp 로 겨누고
+#  첫마디 · 끝마디를 두 마디 사슬로 엄지 끝 자리에 세운다(_grip3_ik).
+#  손 좌표 · 오른손 기준(엄지 쪽 −z) — 거울 손은 z 를 뒤집는다.
+const THUMB3 := {
+	#  CMC — 손목 노뼈 쪽 손바닥 뿌리. 손목 옆구리(반폭 13.5)보다 1.5 안 · 조금 손바닥 쪽.
+	#  손바닥 덩어리는 엄지 뺀 네 손가락의 폭(31)이라 엄지는 그 **바깥**에 붙는다 — 사람 손
+	#  폭은 엄지를 붙이면 1.2 배쯤 된다. 첫 시도는 CMC 를 2.6 안에 묻어 손허리뼈 · 첫마디가
+	#  손바닥 옆구리 밑에 숨었고, 쉬는 손에 엄지가 1px 띠로만 남았다(엄지만 칠해 본 촬영).
+	"cmc": Vector3(6.0, -2.5, -12.0),
+	#  세 마디 길이 — 16 · 13.5 · 11.5. 손허리뼈가 가장 길다(사람 4.6 · 3.2 · 2.4cm 의 차례).
+	#  자유로운 엄지(25)는 사람보다 길게 둔다 — 손가락 넷이 짧게 그린 손(검지 24)이라 닫힌
+	#  집기에서 엄지 끝이 검지 끝 밑까지 늘림 없이 닿아야 해서다(GIVE 「테를 집는다」).
+	#  쉬는 엄지 끝은 검지 첫 마디 끝(x 43) 언저리 — 엄지가 검지 옆에 붙으면 끝이 검지 가운데
+	#  마디에 닿는다.
+	"lm": 16.0, "lp": 13.5, "ld": 11.5,
+	#  쉬는 손허리뼈 — 앞에서 노뼈 쪽 25° · 손바닥 쪽 9°. 손등에서 보면 손목 옆구리에서
+	#  MCP 까지 손 윤곽이 바깥으로 부푼다(엄지 두덩 · 손허리뼈). 몸짓의 엄지 벌림 · 내림은
+	#  m_k 몫을 손허리뼈가 같이 탄다(CMC 가 움직인다) — 엄지 끝만 돌리면 MCP 에서 꺾인 막대다.
+	"m_yaw": 25.0, "m_down": 9.0, "m_k": 0.35,
+	#  쉬는 첫마디 — 앞에서 노뼈 쪽 20° · 손바닥 쪽 2° + 엄지 내림(FPOSE td). 손허리뼈보다
+	#  5° 안으로 꺾여 검지 옆을 비스듬히 따라 눕는다. 첫마디 한가운데까지는 물갈퀴가 검지와
+	#  잇고, 그 앞은 엄지 끝 쪽으로 좁은 틈이 벌어진다 — 판에 편 사람 손이 그렇다. 8 · 13° 로
+	#  붙여 두었더니 엄지가 같은 살빛의 검지와 한 덩어리라 손가락이 넷인 넓적한 손으로
+	#  읽혔다(촬영).
+	"yaw": 20.0, "p_down": 2.0,
+	#  손가락 부채(FPOSE 의 spread)가 엄지 벌림을 더하는 비와 상한 — 편 손(spread 6 · 쓸기)은
+	#  18°, 쫙 편 손(15)은 30° 더 벌어지고 물갈퀴가 얇게 늘어난다.
+	"ab_k": 6.0, "ab_max": 30.0,
+	#  엄지 손톱이 비스듬히 옆을 보게 제 축으로 굴린 각(첫마디). 손허리뼈는 그 반만 돈다.
+	"twist": 24.0,
+	#  단면 (폭 · 두께) — 뿌리 → 끝. 손허리뼈 뿌리는 좁게 CMC 뒤 m_back 까지 손바닥에 묻어
+	#  손목 옆구리에서 비스듬히 자라 나오게 한다 — CMC 에서 바로 넓게 시작하면 손목과 엄지
+	#  두덩 사이가 오목하게 꺾였다(qa_hand3 윤곽 파임 2.5px). 손허리뼈 머리 · 첫마디가 가장
+	#  굵고 끝마디가 가늘다.
+	"m_back": 4.0,
+	"mw0": 7.0, "mt0": 7.0, "mw1": 9.8, "mt1": 8.2,
+	"pw0": 9.4, "pt0": 8.0, "pw1": 8.6, "pt1": 7.2,
+	"dw0": 8.2, "dt0": 6.9, "dw1": 6.3, "dt1": 5.3,
+	#  엄지 두덩 — 손허리뼈의 손바닥 · 노뼈 쪽 살 둔덕(타원체 반지름: 마디 길이 쪽 · 두께 · 폭).
+	#  폭 반지름 5.6 이라 뿌리 쪽 4 분의 1 자리에서 폭이 손바닥 폭(31)의 0.34 다. 짧은 벌림근이
+	#  노뼈 쪽 가장자리를 이루므로 손등에서 본 엄지 쪽 윤곽이 손목과 MCP 사이에서 바깥으로
+	#  부푼다(볼록한 곡선 하나). 손허리뼈와 같이 돌아서, 맞세우면(쥠 — 손허리뼈가 안으로
+	#  엎친다) 손바닥 가운데 쪽으로 구른다.
+	"th_r": Vector3(8.6, 4.8, 5.6),
+	#  그 한가운데 — 손허리뼈 길이의 비 · 손바닥 쪽(−y) · 노뼈 쪽(−z·sg). 손바닥 가운데
+	#  쪽(+2.2)에 두었더니 손허리뼈 밑에 숨어 손등에서 엄지 쪽 윤곽이 곧은 줄이었다.
+	"th_at": Vector3(0.36, -2.2, -0.4),
+	#  물갈퀴 — 엄지 첫마디의 web_at 자리와 검지 손허리뼈 머리(너클 30.5 의 뒤 · 손바닥
+	#  옆구리 2.5 안 · 손등 쪽)를 잇는 선이 물갈퀴의 자유 가장자리이고, 살은 그 선의 손목 쪽 —
+	#  두 손허리뼈 사이 — 을 메운다. web_w 는 그 깊이 반지름, 두께는 벌린 손 → 모은 손.
+	"web_b": Vector3(27.0, 1.0, -12.8),
+	"web_at": 0.65,
+	"web_w": 6.5, "web_t0": 2.0, "web_t1": 4.2,
+}
+#  엄지 자세 셈의 자리 — 매 틀 Transform 을 새로 사전에 담지 않게 멤버에 쓴다(_thumb3_pose ·
+#  _grip3_ik 가 쓰고 _hand3_sync 가 섞는다). r 쉼 · g 쥠.
+var thumb_mr := Transform3D()
+var thumb_pr := Basis()
+var thumb_cr := 0.0
+var thumb_mg := Transform3D()
+var thumb_pg := Basis()
+var thumb_cg := 0.0
+
 #  몸짓 이름 — 그 손이 하는 몸짓이 아니어도 손가락을 같이 쓰는 몸짓(몸 전체를
 #  쓴다). 매 틀 배열을 새로 짓지 않게 const 로 올린다.
 const FING3_BUSY := ["털기", "기대기", "기지개", "고쳐서기", "끄덕", "움찔", "저음"]
@@ -20760,70 +20829,109 @@ func _hand3_build(mats: Variant, mir: bool, ring := false, shadow := false) -> D
 		j1.append(a)
 		j2.append(b)
 		tips.append(tp)
-	#  엄지 — 손바닥 옆구리, 손목 가까이에서 나온다(HAND3.th_*). 두 마디 합이 th_l.
+	#  엄지 — 세 마디(THUMB3 머리말). 손허리뼈(tm)는 CMC 에서 나와 엄지 두덩 속에 묻히고,
+	#  자유로운 엄지는 MCP(ta)에서 시작한다. 첫 자식은 늘 그 마디의 메시다(qa_hand3 이 읽는다).
+	var T: Dictionary = THUMB3
+	var tm := Node3D.new()
+	inn.add_child(tm)
+	var mbk: float = T.m_back
+	tm.add_child(_mi3(_prism3(float(T.lm) + mbk, T.mw0, T.mt0, T.mw1, T.mt1, 3.0), m_skin,
+			Vector3(-mbk, 0.0, 0.0)))
+	#  엄지 두덩 — 매끈한 타원체(살). 손허리뼈와 같이 돌고, 맞세우면 손바닥 가운데로 구른다.
+	var then := _mi3(_blob3_mesh(), m_skin)
+	var tr: Vector3 = T.th_r
+	var ta3: Vector3 = T.th_at
+	then.position = Vector3(float(T.lm) * ta3.x, ta3.y, ta3.z * sg)
+	then.scale = tr
+	tm.add_child(then)
 	var ta := Node3D.new()
-	inn.add_child(ta)
-	var tw: float = H.th_w
-	var tt: float = H.th_t
-	#  뿌리 단면을 한 단 넓게(1.25 · 1.15) — 엄지가 손바닥 옆구리에서 두덩으로 자라 나온다.
-	#  같은 굵기로 시작하면 손바닥 모서리에 꽂힌 막대로 읽혔다(검토 A · 쥔 엄지).
-	ta.add_child(_mi3(_prism3(F.tl1, tw * 1.25, tt * 1.15, tw * 0.92, tt * 0.9, 2.4), m_skin))
+	ta.position = Vector3(T.lm, 0.0, 0.0)
+	tm.add_child(ta)
+	ta.add_child(_mi3(_prism3(float(T.lp) + 1.5, T.pw0, T.pt0, T.pw1, T.pt1, 2.6), m_skin,
+			Vector3(-1.5, 0.0, 0.0)))
 	var tb := Node3D.new()
-	tb.position = Vector3(F.tl1, 0.0, 0.0)
+	tb.position = Vector3(T.lp, 0.0, 0.0)
 	ta.add_child(tb)
-	tb.add_child(_mi3(_prism3(float(F.tl2) + 1.0, tw * 0.92, tt * 0.9, tw * 0.74, tt * 0.72,
-			2.0), m_skin, Vector3(-1.0, 0.0, 0.0)))
+	tb.add_child(_mi3(_prism3(float(T.ld) + 1.0, T.dw0, T.dt0, T.dw1, T.dt1, 2.0), m_skin,
+			Vector3(-1.0, 0.0, 0.0)))
 	if not shadow:
-		tb.add_child(_mi3(_prism3(4.2, tw * 0.52, 0.9, tw * 0.46, 0.8, 0.3), md.nail,
-				Vector3(float(F.tl2) - 4.6, tt * 0.38, 0.0)))
+		tb.add_child(_mi3(_prism3(4.2, float(T.dw1) * 0.7, 0.9, float(T.dw1) * 0.62, 0.8, 0.3),
+				md.nail, Vector3(float(T.ld) - 4.6, float(T.dt1) * 0.5, 0.0)))
 	#  엄지 끝 자리 — 손가락 끝(tips)과 같은 것. qa_hand3 이 집은 엄지 끝을 잰다.
 	var ttp := Node3D.new()
-	ttp.position = Vector3(float(F.tl2), 0.0, 0.0)
+	ttp.position = Vector3(T.ld, 0.0, 0.0)
 	tb.add_child(ttp)
-	var xr := _thumb3_rest(mir)
-	ta.transform = xr
-	return {"root": root, "in": inn, "j1": j1, "j2": j2, "tips": tips, "t2": tb, "sg": sg,
-			"thumb": ta, "rest": xr, "ttip": ttp}
+	#  첫 물갈퀴 — 손 좌표에 선 타원체. 매 틀 첫마디 web_at 자리와 검지 손허리뼈 머리 사이에
+	#  건다(_thumb3_web).
+	var web := _mi3(_blob3_mesh(), m_skin)
+	inn.add_child(web)
+	_thumb3_pose(sg, PackedFloat32Array(FPOSE.rest), 0)
+	tm.transform = thumb_mr
+	ta.basis = thumb_pr
+	tb.basis = Basis(Vector3.BACK, -deg_to_rad(thumb_cr))
+	return {"root": root, "in": inn, "j1": j1, "j2": j2, "tips": tips, "t1": ta, "t2": tb,
+			"sg": sg, "thumb": tm, "thenar": then, "web": web, "ttip": ttp}
 
 
-#  쉬는 엄지 — 손바닥 엄지 쪽 옆구리에서 손끝 방향으로 th_out 벌어져 판에 눕는다.
-#  실루엣의 노치가 여기서 난다(옛 PALM 의 p2~p4). FPOSE.rest 의 엄지 값을 쓴다.
-func _thumb3_rest(mir: bool) -> Transform3D:
-	var p := PackedFloat32Array(FPOSE.rest)
-	return _thumb3_pose(-1.0 if mir else 1.0, p, 0)
+#  살 덩어리 하나 — 반지름 1 의 매끈한 공(엄지 두덩 · 물갈퀴). 배율로 타원체가 된다.
+#  손가락 기둥과 달리 법선이 매끈하다 — 살로 읽혀야 하는 자리라서다(THUMB3 머리말).
+func _blob3_mesh() -> SphereMesh:
+	var m := SphereMesh.new()
+	m.radius = 1.0
+	m.height = 2.0
+	m.radial_segments = 12
+	m.rings = 6
+	return m
 
 
-#  자세 배열(p, o 부터 12)의 엄지 값으로 엄지 뿌리 변환을 짓는다. 뿌리 자리는
-#  손바닥 엄지 쪽 옆구리(FING3.t_rx · HAND3 외곽 폭)이고, 각은 벌림(th_out → 접으면 손끝
-#  쪽으로 눕는다) · 손톱이 옆을 보게 굴린 각(t_twist) · 손바닥 쪽으로 내린 각이다.
-#  굴림이 있어서 내림이 손바닥 안쪽으로 간다.
-func _thumb3_pose(sg: float, p: PackedFloat32Array, o: int) -> Transform3D:
-	var tf: float = p[o + 9]
-	var yaw: float = lerpf(float(HAND3.th_out), 2.0, tf)
-	var b := Basis(Vector3.UP, sg * deg_to_rad(yaw)) \
-			* Basis(Vector3.RIGHT, -sg * deg_to_rad(float(FING3.t_twist))) \
-			* Basis(Vector3.BACK, -deg_to_rad(p[o + 11] + 18.0 * maxf(tf, 0.0)))
-	var org := Vector3(float(FING3.t_rx), -float(HAND3.palm_t) * 0.2,
-			-sg * (float(HAND3.palm_w) * 0.5 - float(HAND3.th_w) * 0.25))
-	return Transform3D(b, org)
+#  자세 배열(p, o 부터 12)의 엄지 값으로 쉼 · 몸짓의 엄지 세 마디를 짓는다 — thumb_mr
+#  (손허리뼈 변환) · thumb_pr(첫마디의 손허리뼈에 대한 basis) · thumb_cr(끝마디 굽힘).
+#  손허리뼈 · 첫마디 각은 둘 다 손 좌표의 요(노뼈 쪽 +) · 굴림(손톱이 옆을 보게) · 내림이다:
+#    벌림 — 부채(spread)가 더한다. 그 m_k 몫을 손허리뼈가 같이 탄다(CMC 가 움직인다 —
+#           엄지 끝만 돌리면 MCP 에서 꺾인 막대가 된다).
+#    내림 — FPOSE 의 td. 역시 m_k 몫을 손허리뼈가 탄다.
+#    접기 — tf(주먹 · 짚기). 손허리뼈가 손바닥 밑으로 들고(대립 — 무지대립근) 첫마디가
+#           손 안쪽으로 눕는다.
+func _thumb3_pose(sg: float, p: PackedFloat32Array, o: int) -> void:
+	var T: Dictionary = THUMB3
+	var tf: float = maxf(p[o + 9], 0.0)
+	var td: float = p[o + 11]
+	var ab: float = clampf((p[o + 8] - 3.0) * float(T.ab_k), 0.0, float(T.ab_max))
+	var mk: float = T.m_k
+	var my: float = float(T.m_yaw) + mk * ab - 14.0 * tf
+	var md: float = float(T.m_down) + mk * td + 20.0 * tf
+	var py: float = lerpf(float(T.yaw) + ab, -4.0, tf)
+	var pd: float = float(T.p_down) + td + 18.0 * tf
+	var c: Vector3 = T.cmc
+	var mb := Basis(Vector3.UP, sg * deg_to_rad(my)) \
+			* Basis(Vector3.RIGHT, -sg * deg_to_rad(float(T.twist) * 0.5)) \
+			* Basis(Vector3.BACK, -deg_to_rad(md))
+	thumb_mr = Transform3D(mb, Vector3(c.x, c.y, c.z * sg))
+	var pb := Basis(Vector3.UP, sg * deg_to_rad(py)) \
+			* Basis(Vector3.RIGHT, -sg * deg_to_rad(float(T.twist))) \
+			* Basis(Vector3.BACK, -deg_to_rad(pd))
+	thumb_pr = mb.transposed() * pb
+	thumb_cr = p[o + 10]
 
 
 #  집는 손 — 검지 끝은 물건 위, 엄지 끝은 그 바로 밑(GIVE 「테를 집는다」). 손 i 의 쥠
-#  가중 k 로 검지 관절(첫 · 끝 굽힘과 부채 요)과 엄지 끝마디 굽힘을 hand3_fp · hand3_isp 에
-#  섞어 넣고, 엄지 뿌리 변환(쥔 자리)을 돌려준다 — 쉬는 엄지에서 이 변환으로 건너간다.
+#  가중 k 로 검지 관절(첫 굽힘 · 끝 굽힘과 부채 요)을 hand3_fp · hand3_isp 에 섞어 넣고,
+#  엄지 세 마디의 쥔 자리를 thumb_mg · thumb_pg · thumb_cg 에 쓴다 — 쉬는 엄지에서 이
+#  자리로 건너간다(_hand3_sync).
 #
 #  ── 검지 — 마디 둘의 평면 사슬 ─────────────────────────────
 #  너클에서 검지 끝 자리(_grip3_pt 1)를 보는 요(부채)로 손가락 평면을 세우고, 그
 #  평면에서 첫 마디 · 끝 마디(l1 · l2)로 닿는다 — 가운데 마디가 위로 솟는 아치이고 끝
 #  마디가 동전 윗면으로 내려앉는다(사진의 검지 — 너클 43° · 가운데 85°).
-#  ── 엄지 — 같은 사슬, 손톱은 아래 · 바깥 ───────────────────────
-#  뿌리는 GIVE.th_root(엄지 두덩). 검지 밑을 거의 나란히 앞으로 가서 끝 볼이 위를 보며
+#  ── 엄지 — 손허리뼈 + 같은 사슬, 손톱은 아래 · 바깥 ────────────────
+#  손허리뼈는 CMC 에서 GIVE.th_mcp 를 겨누고, 첫마디 · 끝마디가 MCP 에서 사슬로 닿는다.
+#  검지 밑을 거의 나란히 앞으로 가서 끝 볼이 위를 보며
 #  물건 밑면을 받친다 — 엄지 마디는 손톱 쪽(아래 · 바깥)으로 솟고 끝마디가 위로 굽는다.
 #  둘째 판은 마디를 「위 · 검지 반대쪽」으로 솟게 해서 엄지가 손등 위로 올라간 갈퀴가
-#  됐다(「엄지가 너무 올라가지 않았어?」). 사슬 길이(26)로 못 닿으면 그만큼만 늘린다 —
-#  지금 값에서는 28.2 라 안 늘어난다(옛 쥠은 곧은 막대를 1.3~1.6 배 늘려 「꽂힌 막대」였다).
+#  됐다(「엄지가 너무 올라가지 않았어?」). 사슬 길이(25)로 못 닿으면 그만큼만 늘린다 —
+#  지금 값에서는 24.1 이라 안 늘어난다(옛 쥠은 곧은 막대를 1.3~1.6 배 늘려 「꽂힌 막대」였다).
 #  쥐지 않는 손(k 0)은 손대지 않는다 — 쉼 자세가 그대로다.
-func _grip3_ik(i: int, sg: float, k: float, sc: float) -> Transform3D:
+func _grip3_ik(i: int, sg: float, k: float, sc: float) -> void:
 	var o: int = i * 12
 	var ti := _grip3_pt(sg, 1, sc)
 	var tt := _grip3_pt(sg, -1, sc)
@@ -20844,14 +20952,25 @@ func _grip3_ik(i: int, sg: float, k: float, sc: float) -> Transform3D:
 	hand3_fp[o + 4] = lerpf(hand3_fp[o + 4], rad_to_deg(c2), k)
 	hand3_isp[i] = rad_to_deg(atan2(-dv.z * sg, dv.x))
 	hand3_ik[i] = k
-	#  엄지
-	var r: Vector3 = GIVE.th_root
-	var ro := Vector3(r.x, r.y, r.z * sg)
+	#  엄지 — 손허리뼈를 GIVE.th_mcp 로 겨눈다(엄지 두덩이 오그라들며 엄지가 손바닥 밑으로
+	#  맞선다). 손허리뼈의 등쪽(y)은 노뼈 쪽 · 위를 보게 세운다 — 엄지 두덩(−y · +z 쪽에 붙은
+	#  살)이 손바닥 가운데 쪽 아래로 구른다(엎침). 그 끝 MCP 에서 첫마디 · 끝마디 두 마디
+	#  사슬로 엄지 끝 자리에 닿는다.
+	var T: Dictionary = THUMB3
+	var c: Vector3 = T.cmc
+	var co := Vector3(c.x, c.y, c.z * sg)
+	var mt: Vector3 = GIVE.th_mcp
+	var mx := (Vector3(mt.x, mt.y, mt.z * sg) - co).normalized()
+	var mh := Vector3(0.0, 0.3, -sg)
+	var my := (mh - mx * mh.dot(mx)).normalized()
+	var mb := Basis(mx, my, mx.cross(my))
+	thumb_mg = Transform3D(mb, co)
+	var ro: Vector3 = co + mx * float(T.lm)
 	var dv2 := tt - ro
 	var dl: float = maxf(dv2.length(), 0.01)
 	var u := dv2 / dl
-	var tl1: float = FING3.tl1
-	var tl2: float = FING3.tl2
+	var tl1: float = T.lp
+	var tl2: float = T.ld
 	var st: float = maxf(1.0, dl / (tl1 + tl2) * 1.0005)
 	var hint := Vector3(0.0, -0.35, -1.0 * sg)
 	var v := (hint - u * hint.dot(u)).normalized()
@@ -20863,8 +20982,8 @@ func _grip3_ik(i: int, sg: float, k: float, sc: float) -> Transform3D:
 	var d2 := (tt - jp) / s2
 	var fy := (v - fx * v.dot(fx)).normalized()
 	var fz := fx.cross(fy)
-	hand3_fp[o + 10] = lerpf(hand3_fp[o + 10], rad_to_deg(atan2(-d2.dot(fy), d2.dot(fx))), k)
-	return Transform3D(Basis(fx * st, fy, fz), ro)
+	thumb_pg = mb.transposed() * Basis(fx * st, fy, fz)
+	thumb_cg = rad_to_deg(atan2(-d2.dot(fy), d2.dot(fx)))
 
 
 #  팔 한 토막 — 길이 1 짜리 깎은 상자(_taper3_mesh). 뿌리가 x 0, 끝이 x 1 이라
@@ -21158,7 +21277,7 @@ func _hand3_open() -> void:
 		_hand3_layer_set(sj.root, HAND3_SHAD)
 		_hand3_layer_set(as3, HAND3_SHAD)
 		_hand3_layer_set(bl, HAND3_SHAD)
-		hand3_rig.append({"hand": hj.root, "thumb": hj.thumb, "rest": hj.rest,
+		hand3_rig.append({"hand": hj.root, "thumb": hj.thumb,
 				"shad": sj.root, "sthumb": sj.thumb, "sm": sm,
 				"arm": fo.root, "armsh": as3, "up": up3.root, "front": false,
 				"hj": hj, "sj": sj, "fore": fo, "upf": up3, "blob": bl, "tips": hj.tips,
@@ -21353,8 +21472,8 @@ func _fing3(i: int, gk: float) -> void:
 
 
 #  관절에 자세를 얹는다. 굽힘은 제 z 축으로 −(손끝이 손바닥 쪽 −y 로 간다),
-#  부채는 제 y 축으로 — 거울 손은 부채 방향만 뒤집힌다. 엄지 뿌리(thumb)는
-#  _hand3_sync 가 쥠과 섞어 세우고, 여기서는 엄지 끝 마디만 굽힌다.
+#  부채는 제 y 축으로 — 거울 손은 부채 방향만 뒤집힌다. 엄지 세 마디는
+#  _hand3_sync 가 쥠과 섞어 세운다(_thumb3_set).
 func _fing3_apply(h: Dictionary, o: int) -> void:
 	var sg: float = h.sg
 	var j1: Array = h.j1
@@ -21368,7 +21487,58 @@ func _fing3_apply(h: Dictionary, o: int) -> void:
 		(j1[f] as Node3D).basis = Basis(Vector3.UP, sp) \
 				* Basis(Vector3.BACK, -deg_to_rad(hand3_fp[o + f]))
 		(j2[f] as Node3D).basis = Basis(Vector3.BACK, -deg_to_rad(hand3_fp[o + 4 + f]))
-	(h.t2 as Node3D).basis = Basis(Vector3.BACK, -deg_to_rad(hand3_fp[o + 10]))
+
+
+#  엄지 세 마디를 얹고 물갈퀴를 건다(손 사본 · 그림자 사본 둘 다 — 같은 자리다).
+#  엄지 두덩은 맞세울수록(opp — 쥠 · 엄지 접기) 오그라든 살이 두꺼워진다(무지대립근 ·
+#  짧은 굽힘근이 줄며 부푼다) — 두께 반지름 +20% · 폭 +8%.
+func _thumb3_set(h: Dictionary, tmx: Transform3D, tpx: Transform3D, tcb: Basis,
+		sg: float, opp: float) -> void:
+	(h.thumb as Node3D).transform = tmx
+	(h.t1 as Node3D).transform = tpx
+	(h.t2 as Node3D).basis = tcb
+	var tr: Vector3 = THUMB3.th_r
+	(h.thenar as Node3D).scale = Vector3(tr.x, tr.y * (1.0 + 0.2 * opp), tr.z * (1.0 + 0.08 * opp))
+	_thumb3_web(h, tmx, tpx, sg)
+
+
+#  첫 물갈퀴(무지내전근 · 첫째 등쪽 뼈사이근 — THUMB3 머리말)를 건다. 엄지 첫마디의
+#  web_at 자리(tmx · tpx 로 셈한 손 좌표) A 와 검지 손허리뼈 머리(web_b) B 를 잇는 선이
+#  물갈퀴의 자유 가장자리이고, 살은 그 선에서 엄지 손허리뼈 쪽(두 손허리뼈 사이 세모)을
+#  메우는 타원체 하나다 — 긴 축이 A–B, 깊이 축(web_w)이 손허리뼈 3 분의 1 자리 쪽, 두께 축이
+#  그 세모의 법선(손등 쪽). 한가운데를 A–B 선에서 깊이의 0.8 만큼 물려서 살이 그 선을 거의
+#  안 넘는다(엄지 첫마디 한가운데까지 닿되 오리발이 되지 않는다). 깊이 축을 손 −x 로만 두면
+#  세모가 아니라 엄지 바깥으로 혹이 솟았다(엄지만 칠해 본 촬영). 두께는 모은 정도를 탄다: 첫마디가 손 축에서 노뼈 쪽으로
+#  벌어진 각이 0° 면 web_t1(손등에 둥근 둔덕 — 오그라든 뼈사이근), 40° 면 web_t0(늘어난 막).
+#  손가락 넷처럼 관절 변환만 바꾼다 — 메시를 다시 짓지 않는다(매 틀 할당 0).
+func _thumb3_web(h: Dictionary, tmx: Transform3D, tpx: Transform3D, sg: float) -> void:
+	var T: Dictionary = THUMB3
+	var a: Vector3 = tmx * (tpx * Vector3(float(T.lp) * float(T.web_at), 0.0, 0.0))
+	var wb: Vector3 = T.web_b
+	var b := Vector3(wb.x, wb.y, wb.z * sg)
+	var pm: Vector3 = tmx * Vector3(float(T.lm) * 0.35, 0.0, 0.0)
+	var ax := b - a
+	var ln: float = maxf(ax.length(), 0.01)
+	var xd := ax / ln
+	var mid := (a + b) * 0.5
+	var nd := pm - mid
+	nd = nd - xd * nd.dot(xd)
+	if nd.length_squared() < 0.0001:
+		nd = Vector3.LEFT
+	nd = nd.normalized()
+	var yd := nd.cross(xd)
+	var zd := nd
+	if yd.y < 0.0:
+		yd = -yd
+		zd = -nd
+	var fd: Vector3 = (tmx.basis * tpx.basis).x
+	var spread: float = maxf(atan2(-fd.z * sg, fd.x), 0.0)
+	var kk: float = clampf(1.0 - spread / deg_to_rad(40.0), 0.0, 1.0)
+	var th: float = lerpf(float(T.web_t0), float(T.web_t1), kk)
+	var ww: float = T.web_w
+	var w := h.web as Node3D
+	w.transform = Transform3D(Basis(xd * (ln * 0.5 + 1.5), yd * th, zd * ww),
+			mid + nd * (0.8 * ww) + yd * (th * 0.25))
 
 
 #  2D 가 셈한 자세를 3D 에 옮긴다. 면 좌표 (u,w) → 월드 (u, h, w).
@@ -21394,11 +21564,10 @@ func _hand3_sync() -> void:
 		_fing3(i, gk)
 		#  집는 손 — 검지 · 엄지 끝마디를 테에 세운다(_grip3_ik). 쥐는 손이 아니면 섞임을
 		#  0 으로 걷어 둔다(검지 부채 덮기가 남지 않게).
-		var gx := Transform3D.IDENTITY
 		var gw: float = smoothstep(0.0, 1.0, gk)
 		hand3_ik[i] = 0.0
 		if gw > 0.0005:
-			gx = _grip3_ik(i, float(hj.sg), gw, float(ps.sc))
+			_grip3_ik(i, float(hj.sg), gw, float(ps.sc))
 		_fing3_apply(hj, o)
 		_fing3_apply(sj, o)
 		#  손 — 요 → 숙임(손끝이 벨벳으로, 제 z 축) → 굴림(제 x 축). 오일러로는
@@ -21419,13 +21588,20 @@ func _hand3_sync() -> void:
 			hbr = hb * Basis(Vector3.RIGHT, hrl)
 		nd.transform = Transform3D(hbr.scaled(Vector3.ONE * sc), at)
 		nd.visible = true
-		#  엄지 — 쥘수록 쉬는 자리(손가락 자세의 엄지 값)에서 집는 자리(_grip3_ik)로
-		#  건너간다. 그림자 손의 엄지도 같은 자리다.
-		var tx: Transform3D = _thumb3_pose(sg, hand3_fp, o)
+		#  엄지 세 마디 — 쥘수록 쉬는 자리(손가락 자세의 엄지 값)에서 집는 자리(_grip3_ik)로
+		#  건너간다. 그림자 손의 엄지도 같은 자리다. 물갈퀴는 그 자세에서 건다.
+		_thumb3_pose(sg, hand3_fp, o)
+		var tmx: Transform3D = thumb_mr
+		var tpx := Transform3D(thumb_pr, Vector3(float(THUMB3.lm), 0.0, 0.0))
+		var tcx: float = thumb_cr
 		if gw > 0.0005:
-			tx = tx.interpolate_with(gx, gw)
-		(rg.thumb as Node3D).transform = tx
-		(rg.sthumb as Node3D).transform = tx
+			tmx = tmx.interpolate_with(thumb_mg, gw)
+			tpx = tpx.interpolate_with(Transform3D(thumb_pg, tpx.origin), gw)
+			tcx = lerpf(tcx, thumb_cg, gw)
+		var tcb := Basis(Vector3.BACK, -deg_to_rad(tcx))
+		var opp: float = maxf(gw, clampf(hand3_fp[o + 9], 0.0, 1.0))
+		_thumb3_set(hj, tmx, tpx, tcb, sg, opp)
+		_thumb3_set(sj, tmx, tpx, tcb, sg, opp)
 		#  앞 층 — 물건 **위**로 아치를 그리는 검지(두 마디 다)만 물건 **다음에** 한 번 더
 		#  그린다(HAND3_FRONT). 가운데 마디가 테 바로 위에 서므로 끝마디만 올리면 그 마디가
 		#  동전 밑으로 들어가 검지가 테에서 끊겼다. 엄지는 물건 **밑**이라 ① 그대로 — 물건이
@@ -22785,7 +22961,8 @@ const GIVE := {
 	#  물건 한가운데는 ti 에서 din 으로 (물건의 그 방향 반폭 − inset) 나가고 pad 만큼 낮다
 	#  — 물건마다 반폭이 달라도 검지 끝은 늘 그 물건 가장자리 안 inset 에 얹힌다(_give_fit).
 	#  엄지 끝은 검지 끝 바로 밑(tdrop — 물건 두께 + 두 손가락 볼)에서 tout 만큼 바깥이다.
-	#  자로 재 봤다(손 표: 엄지 29 · 검지 24 · 너클 31, 동전 44) — 엄지가 검지 끝 밑까지 닿고
+	#  자로 재 봤다(손 표: 엄지 29 · 검지 24 · 너클 31, 동전 44 — 엄지는 이제 손허리뼈 16 +
+	#  MCP 부터 25 다, THUMB3) — 엄지가 검지 끝 밑까지 닿고
 	#  손 · 말린 손가락이 동전 윤곽 밖에 서는 자세를 수만 번 뽑아 남긴 것 가운데, 손각이
 	#  사진의 각(검지 너클 40° 남짓 · 가운데 마디 70°)에 가깝고 엄지 벌림이 작은 쪽을 골랐다:
 	#  검지 36° · 70°, 엄지 벌림 13°, 두 손끝 화면 거리 3.9px. 손끝은 화면 가운데 쪽으로
@@ -22810,15 +22987,17 @@ const GIVE := {
 	#  사이로 빠져나와 엄지가 아니라 여섯째 손가락이 됐다(엄지만 칠해 본 촬영).
 	"tout": 0.5,
 	"tlat": 3.0,
-	#  쥔 엄지 뿌리 — 손바닥 옆구리 **아래**(엄지 두덩), 쉼(t_rx 11)보다 앞이다. 엄지를 맞세우면
-	#  엄지 두덩이 손바닥 밑으로 부풀며 엄지 첫 마디가 앞으로 나온다(사람 엄지 손허리뼈가 하는 일).
-	#  손바닥 옆구리 선(반폭 14.6) 바로 바깥 · 아래라 엄지 첫 마디가 손 안쪽 가장자리 밑을
-	#  따라가고, 끝마디는 동전 밑으로 들어간다(동전이 엄지에 얹힌다). 손바닥 밑(z 13.5)에 두면
-	#  엄지가 통째로 검지 밑에 숨어 끝만 검지와 가운뎃손가락 사이로 비쳤고(엄지만 칠해 본 촬영),
-	#  옆구리 밖 위(z 17 · y −3.5)에 두면 엄지 뿌리가 화면에서 손등 윗선보다 2px 솟았다
-	#  (qa_hand3 「엄지가 손등 위로 안 솟는다」). 여기서 엄지 끝 자리까지 28.7 — 엄지(29)가
-	#  거의 곧게 검지를 따라간다(사진).
-	"th_root": Vector3(18.0, -5.0, -15.5),
+	#  쥔 엄지 손허리뼈가 겨누는 자리(MCP 쪽) — CMC(THUMB3.cmc)에서 앞 · 손바닥 쪽 · 조금 바깥.
+	#  엄지를 맞세우면 손허리뼈가 손바닥 밑으로 돌아 들고(무지대립근) 엄지 두덩이 손바닥
+	#  가운데 쪽으로 구른다. 손허리뼈(16)를 이리 겨누면 MCP 가 바로 이 자리 — 손바닥 옆구리
+	#  선(반폭 14.7) 바로 바깥 · 아래라 첫마디가 손 안쪽 가장자리 밑을 따라가고, 끝마디는
+	#  동전 밑으로 들어간다(동전이 엄지에 얹힌다). MCP 에서 엄지 끝 자리까지 24.1 — 첫마디 ·
+	#  끝마디(13.5 + 11.5)가 살짝 굽은 채 검지를 따라간다(사진). 손바닥 밑(z 13)으로 넣으면
+	#  엄지 첫마디가 손바닥에 묻혀 엄지 두덩 · 물갈퀴가 손등에서 안 보였다(촬영). 옛 두 마디 엄지는 뿌리를 옆구리
+	#  밖(18, −5, −15.5)에 꽂아 손바닥 모서리에 붙은 막대였다(「무지내전근이랑 무지대립근이
+	#  없잖아」). 옆구리 밖 위(z 17 · y −3.5)로 가면 엄지가 화면에서 손등 윗선 위로 솟는다
+	#  (qa_hand3 「엄지가 손등 위로 안 솟는다」).
+	"th_mcp": Vector3(19.5, -10.0, -16.0),
 	#  쥠이 이 위면 검지가 앞 층에 선다. 받는 도중 손끝이 아직 건너가는 길(면 위)에서
 	#  앞 층에 서면 날아오는 동전 면에 얹힌다(촬영) — 거의 다 쥐었을 때(받기의 마지막 1/15 ·
 	#  동전이 99% 와 있다)부터 선다.

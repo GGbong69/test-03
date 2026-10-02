@@ -3,13 +3,17 @@ extends SceneTree
 #  살핌 · 쓸기) · 테를 집은 손(오른손 · 왼손 · 물건 넷 · 게임 배율) · 몸짓 열둘 · 판 고르기.
 #  shots/npc_<V>_*.png 로. 창이 있어야 돈다:
 #    godot --path . --script scripts/tools/shot_npc3.gd            # 전부
-#    godot --path . --script scripts/tools/shot_npc3.gd -- hold    # 집은 손만(고칠 때)
+#    godot --path . --script scripts/tools/shot_npc3.gd -- hold    # 집은 손 · 엄지만(고칠 때)
+#    godot --path . --script scripts/tools/shot_npc3.gd -- thumb   # 엄지 8배만
 #  확대는 최근접으로만 — 보간하면 손가락 골과 팔 굵기 단이 흐려져 재는 것이 그림이
 #  아니라 필터가 된다.
 #  집은 손(hold)은 「지금 동전 짚는 손 모양 너무 이상한데」 · 「엄지가 너무 올라가지 않았어?」
 #  를 보는 칸이다 — 검지 끝은 동전 윗면 테 안에 · 엄지는 그 밑에 붙은 닫힌 집기인지, 엄지가
 #  손등 위로 안 솟는지, 손 나머지가 물건 윤곽 밖(상인 쪽)에 서는지, 등급 빛이 손
 #  **밑**에 깔리는지(너클이 안 바래는지)를 본다. 등급 빛이 있는 레어 동전으로 찍는다.
+#  엄지(thumb_x8)는 「나이 엄지에 무지내전근이랑 무지대립근이 없잖아」를 보는 칸이다 — 엄지가
+#  살 둔덕(엄지 두덩)에서 자라 나오고 물갈퀴로 검지에 이어지는지, 손등에서 본 엄지 쪽
+#  윤곽이 손목에서 엄지 끝까지 볼록한 곡선 하나인지(막대 · V 틈 없이) 화소로 본다.
 const Save = preload("res://scripts/save.gd")
 const GameData = preload("res://scripts/data.gd")
 const V := "B"
@@ -21,6 +25,7 @@ const LOOK_T := 1.06
 var g = null
 var busy := false
 var only_hold := false
+var only_thumb := false
 
 
 func _initialize() -> void:
@@ -28,6 +33,7 @@ func _initialize() -> void:
 	Save.path = "user://_shot_npc3.cfg"
 	Save.wipe()
 	only_hold = OS.get_cmdline_user_args().has("hold")
+	only_thumb = OS.get_cmdline_user_args().has("thumb")
 	g = load("res://scenes/main.tscn").instantiate()
 	root.add_child(g)
 	seed(20261002)
@@ -217,6 +223,64 @@ func _holds() -> void:
 	await _wait(60)
 
 
+#  엄지 칸 하나 — 손 i 의 CMC 와 엄지 끝 한가운데를 가운데로 56 × 44 를 8 배.
+func _thumb_cell(im: Image, i: int) -> Image:
+	var hj: Dictionary = (g.hand3_rig[i] as Dictionary).hj
+	var a: Vector3 = (hj.thumb as Node3D).global_transform.origin
+	var b: Vector3 = (hj.ttip as Node3D).global_transform.origin
+	var m := (a + b) * 0.5
+	var ms := Vector2(m.x, float(g.TBL.fy) + m.z * float(g.TBL.flat) - m.y * float(g.TBL.tall))
+	return _crop(im, Rect2(ms - Vector2(28.0, 22.0), Vector2(56.0, 44.0)), 8)
+
+
+#  엄지 8배 — 두 줄(화면 오른손 · 왼손) × 세 칸(쉼 · 집기 · 편 손). 편 손은 오른손이
+#  쓸기 한가운데, 왼손은 쓸지 않으므로(쓰는 동안 HUD 뒤로 물러난다) 「기대기」 한가운데 —
+#  두 손이 다 편 손(FPOSE.open)이다.
+func _thumbs() -> void:
+	if g._give_live():
+		g._give_end()
+	await _hold(40, func():
+		g.idle_act = -1
+		g.idle_wait = 9.0
+		g.mouse_at = Vector2(-50, -50))
+	var cw := 56 * 8
+	var ch := 44 * 8
+	var gap := 6
+	var sheet: Image = null
+	var im: Image = root.get_texture().get_image()
+	var cells: Array = [[_thumb_cell(im, 1), _thumb_cell(im, 0)]]
+	await _give_hold("rare", 1)
+	var gr: Image = _thumb_cell(root.get_texture().get_image(), 1)
+	await _give_hold("rare", 0)
+	cells.append([gr, _thumb_cell(root.get_texture().get_image(), 0)])
+	if g._give_live():
+		g._give_end()
+	await _hold(40, func():
+		g.idle_act = -1
+		g.idle_wait = 9.0)
+	g._sweep_begin()
+	await _hold(6, func():
+		g.sweep_t = 0.43)
+	var sw: Image = _thumb_cell(root.get_texture().get_image(), 1)
+	while g.sweep_live:
+		await _wait(4)
+	await _wait(10)
+	var li: int = g._idle_index("기대기")
+	await _pose_act("기대기", 0.5 * float((g.IDLE.acts[li] as Dictionary).t), 0)
+	cells.append([sw, _thumb_cell(root.get_texture().get_image(), 0)])
+	await _hold(20, func():
+		g.idle_act = -1
+		g.idle_wait = 9.0)
+	for c in 3:
+		for r in 2:
+			var ci: Image = cells[c][r]
+			if sheet == null:
+				sheet = Image.create(cw * 3 + gap * 2, ch * 2 + gap, false, ci.get_format())
+				sheet.fill(Color.BLACK)
+			sheet.blit_rect(ci, Rect2i(0, 0, cw, ch), Vector2i(c * (cw + gap), r * (ch + gap)))
+	sheet.save_png("res://shots/npc_%s_thumb_x8.png" % V)
+
+
 func _run() -> void:
 	await _wait(10)
 	if DisplayServer.get_name() == "headless":
@@ -234,9 +298,15 @@ func _run() -> void:
 	g._open_shop()
 	await _wait(200)
 	_quiet()
+	if only_thumb:
+		await _thumbs()
+		print("찍었다 — npc_%s_thumb_x8" % V)
+		quit(0)
+		return
 	if only_hold:
 		await _holds()
-		print("찍었다 — npc_%s_hold · hold_L · hold_kinds · hold_game" % V)
+		await _thumbs()
+		print("찍었다 — npc_%s_hold · hold_L · hold_kinds · hold_game · thumb_x8" % V)
 		quit(0)
 		return
 	#  쉼 — 몸짓을 걷고 쉼을 길게 잡는다.
@@ -286,6 +356,7 @@ func _run() -> void:
 	while g.sweep_live:
 		await _wait(4)
 	await _wait(10)
+	await _thumbs()
 
 	#  몸짓 열둘 — 한가운데 박자. 새 팔(위팔 · 팔꿈치 · 큰 손)이 몸짓마다 안
 	#  끊기는지(팔꿈치 이음매 · 손목 · 어깨) 한 장에서 본다.
@@ -318,5 +389,5 @@ func _run() -> void:
 		g.idle_wait = 9.0
 		g.mouse_at = Vector2(-50, -50))
 	root.get_texture().get_image().save_png("res://shots/npc_%s_leg.png" % V)
-	print("찍었다 — npc_%s_shop · close · poses · hold · hold_L · hold_kinds · hold_game · acts · leg" % V)
+	print("찍었다 — npc_%s_shop · close · poses · hold · hold_L · hold_kinds · hold_game · thumb_x8 · acts · leg" % V)
 	quit(0)
