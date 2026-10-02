@@ -4821,6 +4821,7 @@ func _process(d: float) -> void:
 	#  화면이 느려진 것이 아니라 멈춘 것으로 보인다.
 	_idle_tick(d)
 	_give_tick(d)
+	_prop_tick(d)            # 판 소품 몸짓(저울 · 등록기)과 저울대 — 상인과 같은 시계
 	d *= _tutor_slow()
 	#  이번 프레임의 빨리 보기 배수. **늦추기 뒤**라 배움 여운에서 늦추기와
 	#  곱해지고, **hitstop 조기 반환보다 앞**이라 멈춤 60ms 동안 통째로
@@ -9018,6 +9019,7 @@ func _hud_draw() -> void:
 					Color(C_BG, 0.45))
 		_modplate_draw()    # 낀 보드 확장 명판(던지는 동안만)
 		_rack_hold_draw()   # 판 위다 — 끌고 다니는 동전은 무엇에도 안 덮인다
+		_prop_fly_draw()    # 판 동전이 동전 슬롯에서 저울 접시로 난다(판매 몸짓)
 		_use_draw()         # 가운데로 끌고 온 사탕·사진과 그 자리
 		# 나가는 전환에서만 같이 들어온다. 돌아오는 쪽은 안 그린다 —
 		# HUD 는 스크림 위라, 벽만 어두운 화면에 홀로 밝게 뜬다.
@@ -16531,6 +16533,10 @@ func _wreck_text(e: Dictionary, c: Vector2, col: Color, shelf: bool) -> void:
 
 var sell_sel := -1
 var sell_t := 0.0               # 선택 링 맥동에만 쓴다
+#  끌어서 판 동전을 놓은 화면 자리 · 그때 말림 — _hand_release 가 _sell 직전에 적고 _sell 이
+#  읽고 지운다. 판 동전이 거기서 저울로 난다(판 소품 몸짓). 아니면 INF(동전 슬롯 칸에서).
+var sell_drag := Vector2.INF
+var sell_peel := 0.0
 # 이번 프레임의 흔들림 이동. 카드 얼굴이 제 변환을 걸 때 여기에 겹치고,
 # 끝나면 이 값으로 되돌린다 — 안 되돌리면 남은 변환이 HUD 를 통째로 민다.
 var shake_off := Vector2.ZERO
@@ -16608,10 +16614,17 @@ func _sell_hit(m: Vector2) -> bool:
 func _sell(i: int) -> void:
 	if i < 0 or i >= owned.size():
 		return
-	#  판매 창구는 화면 왼쪽이라 그쪽 손이 민다.
-	_npc_react("손짓", 0)
-	var v := GameData.sell_value(owned[i])
 	var at := _slot_rect(i).get_center()
+	#  판매 창구는 화면 왼쪽이라 그쪽 손이 민다. 진열대가 서 있으면 상인이 판 동전을
+	#  저울 왼 접시에 받아 집어 간다(_prop_sell — 판 소품 몸짓). 동전은 끌어 놓은 자리
+	#  (sell_drag)나 동전 슬롯 칸(고른 동전은 4 떠 있다)에서 난다. 못 서면 옛 손짓이다.
+	#  값은 아래 그대로 · 이 순간 확정된다 — 몸짓은 그림이다.
+	var from: Vector2 = sell_drag if sell_drag.is_finite() \
+			else at + Vector2(0.0, float(PANEL.chip_dy) - (4.0 if sell_sel == i else 0.0))
+	if not _prop_sell(owned[i], from, sell_peel if sell_drag.is_finite() else 0.0):
+		_npc_react("손짓", 0)
+	sell_drag = Vector2.INF
+	var v := GameData.sell_value(owned[i])
 	v = _gold_add(v, "sell")
 	_bump("sold")
 	_earn(v)
@@ -19548,6 +19561,9 @@ func _cover_draw() -> void:
 	_npc_body()
 	if nd > 0.01:
 		draw_set_transform(shake_off)
+	#  판 동전이 먼 턱 뒤로 떨어진다(판매 몸짓) — 몸통 다음 · 턱(아래 테이블 띠) 앞이라
+	#  턱이 덮어 사라진다.
+	_prop_drop_draw()
 	var t3 := _room3d_tbl()
 	if t3:
 		#  화판 윗끝부터 — 턱 위로 솟은 소품도 벽 띠 위에 다시 선다(나머지는 투명).
@@ -19567,6 +19583,8 @@ func _cover_draw() -> void:
 	_hand3_draw()
 	#  상인이 든 물건은 손 **다음**이다.
 	_give_draw()
+	#  저울 접시의 판 동전 · 상인이 집어 든 판 동전 — 든 물건과 같은 차례(판매 몸짓).
+	_prop_coin_draw()
 	#  물건 위로 아치를 그린 검지는 그 물건 **다음**이다 — 물건 앞에 서는 마디만 한 번 더(HAND3_FRONT).
 	_hand3_front_draw()
 	# 가까운 쪽 레일 — 리롤·다음 버튼이 그 아래 앞치마에 얹힌다
@@ -19643,7 +19661,9 @@ func _chute_draw() -> void:
 				gk = -0.5
 			elif hk > 0.0:
 				gk = 0.6 * hk
-			var act: float = pay_flash if z == Z_BUY else (1.0 if lit else 0.0)
+			#  저울대는 scale_tilt 그대로다 — 끌어 대면 내려앉고(_scale_tick), 판 동전이 접시에
+			#  얹히면 출렁인다. 접시 동전과 손이 같은 값으로 접시 자리를 셈한다(Room3D.pan_top).
+			var act: float = pay_flash if z == Z_BUY else scale_tilt
 			Room3D.prop_glow(tbl3_vp, z, gk, gc, act, get_process_delta_time())
 		else:
 			draw_colored_polygon(p, body)
@@ -19977,6 +19997,25 @@ func _npc_arm(i: int, g: Dictionary, bd: Dictionary, a: float) -> void:
 	#  쥐는 손은 GIVE.pit 로 건너간다 — 검지 끝 · 엄지 끝이 손등보다 낮게 내려와 테를
 	#  물고, 손 자체는 물건 뒤에 높이 선다.
 	var pit: float = deg_to_rad(lerpf(float(HAND3.pit), float(GIVE.pit), gk)) * (1.0 - a)
+	#  판 소품 몸짓 — 그 손이 저울 · 등록기로 뻗는다(PROP 머리말). 위의 자세(쉼 · 몸짓)가
+	#  밑이고, 손목은 과녁에서 · 팔꿈치는 두 마디 사슬로 낸다. 아래 손바닥 · 든 물건 ·
+	#  3D 자세가 다 이 값을 읽는다 — 집은 동전이 손끝을 따라온다.
+	if _prop_live(i):
+		pa_wr = wr
+		pa_el = el
+		pa_hw = hw
+		pa_he = he
+		pa_ang = ang
+		pa_pit = pit
+		pa_rl = rl
+		_prop_arm(i, sh, sc)
+		wr = pa_wr
+		el = pa_el
+		hw = pa_hw
+		he = pa_he
+		ang = pa_ang
+		pit = pa_pit
+		rl = pa_rl
 	#  손바닥 한가운데 — 누름(_npc_hit)이 쓴다. 손목이 아니라 **손바닥**이라야
 	#  손을 눌렀을 때 손이 맞는다.
 	npc_palm[i] = _palm_of(wr, ang, sc, hw)
@@ -20015,6 +20054,10 @@ func _npc_shoulder(i: int, bd: Dictionary) -> Vector3:
 # 옛 소매 24 는 벽보다 어두워서 팔이 벽에 잠겨 있었다. 손 윗면 133 은
 # 화면에서 가장 밝은 덩어리이고, 그래서 눈이 손부터 본다.
 func _npc_limb(ps: Dictionary) -> void:
+	#  자세만 셈하는 판(검사가 그리기 밖에서 _npc_arms 를 부른다 — qa_prop)은 아무것도
+	#  안 그린다. 자세 값(npc_palm · npc_hold · npc_elbow)은 _npc_arm 이 이미 적었다.
+	if npc_dry:
+		return
 	#  3D 손이 서 있으면 2D 는 안 그린다 — 두 손이 겹쳐 선다.
 	#  자세는 _npc_arm 이 이미 셈했으므로 그것만 넘긴다.
 	if _hand3_live():
@@ -21245,6 +21288,9 @@ func _hand3_open() -> void:
 	if _hand3_live() or not _has_renderer():
 		return
 	hand3_vp = _stage3_make(HAND3.rect)
+	#  진열 스포트 둘 — 저울 · 등록기에 닿은 손이 소품과 같은 빛을 받는다(판 소품 몸짓 ·
+	#  Room3D.prop_lamps 머리말). 몸통 무대에는 안 단다(몸은 소품까지 안 간다).
+	Room3D.prop_lamps(hand3_vp, false)
 	var hm := _hand3_mats()
 	var fm := {"skin": _skin3_mat(FING3.skin, 0.16, 0.8),
 			"cloth": _skin3_mat(FORE3.cloth, 0.08, 0.95),
@@ -21488,6 +21534,18 @@ func _fing3(i: int, gk: float) -> void:
 		if a > 0.004:
 			_fp_mix(o, FPOSE.open, a)
 		busy = maxf(busy, a)
+	#  판 소품 몸짓 — 저울로 뻗는 손은 펴며 가고(집는 것은 아래 쥠이 한다), 등록기를
+	#  치는 손은 검지를 편다(FPOSE.point). 그 손의 몸짓 굴림 · 요(짚기의 30°)는 걷는다 —
+	#  남으면 검지가 건반 옆을 친다.
+	if _prop_live(i):
+		var pr: float = _prop_reach(i)
+		if i == 0:
+			_fp_mix(o, FPOSE.open, 0.7 * pr)
+		if pw_n > 0.0005:
+			_fp_mix(o, FPOSE.point, pw_n)
+		busy = maxf(busy, pr)
+		sup *= 1.0 - pr
+		yaw *= 1.0 - pr
 	#  쥠 — 맨 나중에 덮는다. 쥔 손은 몸짓이 무엇이든 물건을 놓지 않는다.
 	_fp_mix(o, FPOSE.grip, gk)
 	busy = maxf(busy, gk)
@@ -22242,7 +22300,12 @@ func _idle_tick(d: float) -> void:
 		return
 	idle_wait -= d
 	if idle_wait <= 0.0:
-		_idle_pick()
+		#  소품 몸짓(저울 · 등록기) 동안은 새 몸짓을 안 뽑는다 — 뻗은 손 옆에서 기지개를
+		#  켜면 두 짓이 한 몸을 두고 다툰다. 응수(_npc_react)는 그대로 든다.
+		if _prop_live(0) or _prop_live(1):
+			idle_wait = 0.3
+		else:
+			_idle_pick()
 
 
 #  제비. auto 가 켜진 것 중에서만 뽑고, 손도 같이 뒤집는다 —
@@ -22370,6 +22433,8 @@ func _idle_body() -> Dictionary:
 	var out := {"yaw": s * float(IDLE.sway) + npc_eye * float(IDLE.eye),
 			"roll": -s * float(IDLE.tip) - npc_eye * float(IDLE.eye_tip),
 			"rise": 0.0, "lean": 0.0}
+	#  판 소품 몸짓 — 저울 · 등록기로 뻗는 쪽으로 몸이 기운다(몸짓 위에 더한다).
+	_prop_body(out)
 	var k := _idle_env()
 	if k <= 0.0:
 		return out
@@ -22785,13 +22850,19 @@ func _give_psi(ga: float) -> float:
 #  GIVE.rel 초에 걸쳐서다(give_rel). 내리기 동안 놓았더니 손이 집기를 풀며 쉬는 손각으로
 #  28° 돌아오는 사이 손끝이 동전 면 위를 지나갔다(npc_B_hold_seq 촬영).
 #  엄지 자리(_hand3_sync)와 앞 층(HAND3_FRONT)과 손 숙임 · 손각(_npc_arm)이 읽는다.
+#  판 소품 몸짓(저울에서 동전을 집는 손)의 쥠도 여기서 같이 낸다 — 집기 · 앞 층 · 손각이
+#  건네기와 한 길이다(_prop_w).
 func _give_grip(i: int) -> float:
+	var pg := 0.0
+	if _prop_live(i):
+		_prop_w(i)
+		pg = pw_g
 	if i != give_side:
-		return 0.0
+		return pg
 	if not _give_live():
-		return give_rel
+		return maxf(give_rel, pg)
 	var t1: float = GIVE.take
-	return smoothstep(t1 * 0.55, t1, give_t)
+	return maxf(smoothstep(t1 * 0.55, t1, give_t), pg)
 
 
 # ══════════════════════════════════════════════════════════
@@ -23238,6 +23309,701 @@ func _idle_index(nm: String) -> int:
 		if String((IDLE.acts[i] as Dictionary).n) == nm:
 			return i
 	return -1
+
+
+# ══════════════════════════════════════════════════════════
+#  판 소품 몸짓 — 팔면 저울에 올리고, 사면 등록기를 친다 (2026-10-02)
+# ──────────────────────────────────────────────────────────
+#  「팔고 살 때 상인이 소품을 쓰게 할까요?」 — 「둘 다」 · 「음... 해봐」.
+#  진열대 양 끝 소품(Room3D 저울 · 금전등록기)이 여태 빛만 냈다. 이제 상인 손이 쓴다.
+#
+#  ── 판매 (화면 왼손 · 1.30 초) ────────────────────────────
+#    0.00  판 동전(판 것의 그림 사본 — draw_item_sticker 그대로)이 동전 슬롯 칸에서,
+#          끌어 놓았으면 놓은 자리에서 왼 접시로 난다. 손은 같은 순간 뻗기 시작한다.
+#    0.20  접시에 닿는다 — 톡(coin_land). 저울대가 그 접시 쪽으로 기울며 한 번 출렁인다.
+#    0.30  손이 닿으며 테를 집는다 — 0.44 에 다 쥔다(hand_take). 건네기(GIVE)와 같은
+#          집기다: 검지 끝이 동전 윗면 테 안, 엄지가 그 밑, 나머지 셋은 말려 손바닥 밑.
+#          검지는 앞 층(HAND3_FRONT)이라 동전 위로 아치를 그린다.
+#    0.44  든다 — 무게가 떠나 접시가 올라오며 출렁인다. 0.56 부터 먼 턱 너머(상인 쪽)로
+#          당긴다.
+#    0.94  턱 뒤에서 놓는다 — 동전이 떨어져 먼 턱에 가려 사라진다(_prop_drop_draw).
+#          손은 1.30 에 쉼이다.
+#  ── 구매 (화면 오른손 · 0.80 초) ──────────────────────────
+#    0.00  손이 등록기 건반 위로 뻗으며 검지를 편다(FPOSE.point).
+#    0.26  검지 끝이 건반 위에 선다 → 0.32 누른다 — 그 순간 서랍이 튀어나온다
+#          (pay_flash) · 딸깍. 0.40 떼고 0.80 쉼이다.
+#  ── 값은 한 톨도 안 바뀐다 ────────────────────────────────
+#  골드 · 동전 · 매물 · 봉인 · 동전 슬롯 · 매듭은 옛 그 자리 그 순간에 확정된다
+#  (_sell · _pay_take). 몸짓은 그 뒤에 도는 그림이고 입력을 안 막는다. 못 서면 — 상인이
+#  바쁘다(건네기 · 쓸기 · 판 갈이) · 움직임 끔 · 진열대가 없다(헤드리스 · 3D 방 끔) —
+#  옛 응수(손짓 · 끄덕)다.
+#  ── 팔이 팔로 읽혀야 한다 ────────────────────────────────
+#  소품은 쉬는 손(화면 x 190~450)에서 멀다(저울 x 10~83 · 등록기 567~630). 손만
+#  미끄러지면 마술손이다(IDLE 머리말 「모으기」). 그래서
+#   · 손목은 과녁에서 거꾸로 낸다 — 접시 동전을 집는 자리(_hold_of 와 같은 변환)와
+#     건반 위 검지 끝. 집은 동전이 손끝 사이에서 안 미끄러진다.
+#   · 팔꿈치는 두 마디 사슬이다(_arm_ik) — 팔 전체 길이(위팔 + 팔뚝)를 그 틀 쉼 자세
+#     그대로 못 박고 어깨에서 손목까지 닿는 자리를 푼다. 팔이 안 늘어나고 팔꿈치가
+#     따라온다. 뻗는 만큼 팔꿈치가 팔을 따라 손 쪽으로 옮겨 위팔 : 팔뚝이 사람 비가
+#     된다(PROP.fore_k — 쉬는 팔은 카메라 탓에 위팔 134 : 팔뚝 64 다). 굽는 쪽은
+#     바깥 · 위 · 뒤(PROP.pole) — 손을 엎고 옆으로 뻗으면 팔꿈치가 바깥 위로 든다.
+#     그래서 위팔은 쉴 때처럼 거의 HUD 뒤에 남고 화면에는 팔꿈치에서 손까지가 선다.
+#   · 몸이 그쪽으로 기울고 돈다(_prop_body) — 어깨가 몸통을 따라 소품 쪽으로 온다.
+#     쓸기의 기울기와 같은 자리다. 어깨가 안 오면 저울은 팔 길이 밖이다.
+#  ── 다시 팔고 사면 ────────────────────────────────────────
+#  같은 손의 몸짓이 처음부터 다시 돈다. 손은 지금 자리에서 건너가고(PROP.snap — 쉼으로
+#  튕기지 않는다), 앞 동전은 그 자리에서 졸아든다(prop_ghost). 두 손은 따로 돈다.
+#  끊기면(쓸기 · 건네기 · 화면을 떠남) 손이 PROP.cut 에 걸쳐 쉼으로 돌아간다.
+# ══════════════════════════════════════════════════════════
+const PROP := {
+	# ── 판매 — 저울 (초) ──
+	"s_fly": 0.20,       # 동전이 접시로 난다
+	"s_reach": 0.40,     # 손이 접시에 닿는다(뻗기 봉투 끝)
+	"s_g0": 0.30, "s_g1": 0.44,     # 테를 집는다(쥠 0 → 1)
+	"s_lift": 0.56,      # 든다
+	"s_carry": 0.84,     # 먼 턱 너머로 당겼다
+	"s_rel": 0.94,       # 놓는다
+	"s_end": 1.30,       # 손이 쉼이다
+	"hop": 18.0,         # 나는 동전 포물선 높이(화면 px)
+	"lift": 10.0,        # 접시에서 드는 높이
+	"arc": 10.0,         # 당길 때 한가운데서 더 드는 높이
+	#  접시 위 동전 — 접시 테 반지름(10 × 1.1)보다 반 칸 작다. 테이블 동전(22)을 그대로
+	#  올리면 접시 두 배라 접시가 동전 밑에 숨는다. 두께는 그 비로 줄였다.
+	"coin_r": 10.5,
+	"coin_t": 2.4,
+	"fall_g": 2600.0,    # 놓은 동전이 떨어지는 가속(면/s²) — 0.13 초에 턱 뒤로 든다
+	#  손각(도) — 접시에서는 손끝이 왼쪽(조금 앞)을 본다. 어깨 → 접시 팔 줄이 172° 언저리라
+	#  손목이 거의 안 꺾인다(145° 로 두었더니 27° 꺾이고 손목이 뒤로 물러나 팔이 2% 늘었다).
+	#  당길 때는 손끝을 왼쪽 뒤(200°)로 마저 돌려 동전을 손 왼쪽에 둔 채 끈다 — 손끝이 앞을
+	#  보면 손목이 동전보다 40 뒤라 손이 HUD 밑 어둠으로 들어갔다(촬영).
+	#  숙임 10° — 손끝이 접시로 내려가고 손목이 든다. 1°(건네기의 GIVE.pit)면 손바닥이
+	#  저울대 왼끝 위에 낮게 얹혀 그 앞에 있어야 할 저울대를 덮었다(4배 촬영).
+	"s_ang0": 170.0, "s_ang1": 200.0, "s_pit": 10.0,
+	#  놓는 자리 — 동전 한가운데 (u, h, w). 먼 턱 뒤끝(w −14)보다 뒤라 떨어지면 턱이 가린다.
+	#  턱 바로 위 낮은 자리(화면 y 107)라 0.13 초 만에 턱 뒤로 든다. 저울 오른쪽이라
+	#  떨어지는 동전이 저울 몸에 안 걸린다.
+	"s_lip": Vector3(92.0, 16.0, -16.0),
+	#  몸 — roll · yaw · lean · rise. 왼쪽으로 기울어(roll +) 왼 어깨가 저울 쪽으로 내려오고,
+	#  조금 앞으로 나온다.
+	"s_body": [0.18, 0.04, 10.0, -4.0],
+	# ── 구매 — 등록기 (초) ──
+	"b_reach": 0.26,     # 검지 끝이 건반 위에 선다
+	"b_press": 0.32,     # 누른다 — 서랍이 튀어나온다
+	"b_up": 0.40,        # 뗐다
+	"b_end": 0.80,
+	#  건반 줄 · 칸 — 상인에게 가장 가까운 뒤 줄의 왼끝. 손은 등록기 **왼쪽** 카운터 위에
+	#  떠서 검지만 건반으로 뻗는다 — 손끝이 앞을 보게(35°) 두었더니 손바닥이 등록기 몸통
+	#  · 볏 위에 얹혀 볏 뒤에 있어야 할 손이 볏을 덮었다(촬영).
+	"b_key": Vector2i(2, 0),
+	"b_ang": 12.0, "b_pit": 18.0,    # 손각 · 숙임(도) — 검지가 건반으로 비스듬히 내려간다
+	"b_hover": 6.0, "b_dip": 1.5,    # 건반 위로 뜬 높이 · 눌러 들어가는 깊이
+	#  편 검지 끝 볼 — 손 좌표(오른손 기준 · 거울 손은 z 를 뒤집는다). 너클 30.5 에서 두
+	#  마디(12.5 + 11.5)가 거의 곧게 뻗고(FPOSE.point −2° · 4°), 볼은 축보다 두께 반 밑이다.
+	"b_tip": Vector3(54.5, -2.6, -11.2),
+	"b_body": [-0.09, 0.03, 5.0, -2.0],
+	#  팔꿈치가 굽는 쪽 — 어깨에서 (바깥 · 위 · 뒤). 바깥은 손마다 뒤집는다.
+	"pole": Vector3(0.5, 1.0, -0.6),
+	#  뻗은 팔의 팔뚝 길이 — 손 길이(palm_l)의 배. 쉬는 팔뚝(64)은 카메라 탓에 일부러
+	#  짧고(NPC 머리말 — 손목이 턱 뒤에 서야 해서) 위팔(134)은 HUD 뒤라 일부러 길다.
+	#  옆으로 쭉 뻗으면 위팔이 HUD 밑으로 나와 팔뚝의 두 배인 소매 막대가 됐다(촬영).
+	#  뻗는 동안 팔꿈치를 팔을 따라 손 쪽으로 옮겨 사람 비(위팔 ≈ 팔뚝의 1.1~1.2 배)로
+	#  둔다 — **팔 전체 길이(위팔 + 팔뚝)는 그대로다**(_prop_arm). 1.35 면 위팔 120 :
+	#  팔뚝 78 이라 화면에서 위팔이 팔뚝의 1.7 배였고, 1.5 면 저울에서 98 : 84 다.
+	#  맨살 길이는 그대로(FORE3.bare)라 늘어난 몫은 걷은 단 위 소매가 채운다.
+	"fore_k": 1.5,
+	"snap": 0.12,        # 다시 할 때 앞 자세에서 건너가는 시간
+	"cut": 0.15,         # 끊겨 쉼으로 돌아가는 시간
+	"ghost": 0.12,       # 앞 동전이 졸아드는 시간
+	#  저울대 출렁임 — 용수철(각진동수 · 감쇠비). 0.45 면 한 번 20% 넘어갔다 돌아온다.
+	"tilt_w": 16.0, "tilt_z": 0.45,
+}
+#  손마다 — 0 판매(화면 왼손) · 1 구매(오른손). 배열은 처음 한 번 짓고 칸만 고친다.
+var prop_t := [-1.0, -1.0]        # 몸짓 시계. −1 이면 안 돈다
+var prop_cut := [0.0, 0.0]        # 끊겨 돌아가는 중이면 남은 몫 1 → 0
+#  앞 자세(다시 하거나 끊길 때 그 틀의 손) — 손목(u, h, w) · 손각 · 숙임 · 섞임 · 쥠 · 검지
+var prop_snap_w := [Vector3.ZERO, Vector3.ZERO]
+var prop_snap_a := [0.0, 0.0]
+var prop_snap_p := [0.0, 0.0]
+var prop_snap_k := [0.0, 0.0]
+var prop_snap_g := [0.0, 0.0]
+var prop_snap_n := [0.0, 0.0]
+#  지난 틀에 얹은 자세 — _prop_arm 이 적는다(앞 자세는 여기서 뜬다)
+var prop_lw := [Vector3.ZERO, Vector3.ZERO]
+var prop_la := [0.0, 0.0]
+var prop_lp := [0.0, 0.0]
+var prop_lk := [0.0, 0.0]
+var prop_rr := [0.0, 0.0]         # 어깨 → 손목 거리 / 팔 길이 — 1 을 넘으면 늘어난 팔(qa_prop)
+var prop_le := [Vector3.ZERO, Vector3.ZERO]    # 그 틀 팔꿈치 · 어깨 (u, h, w) — 촬영 · 검사가 잰다
+var prop_ls := [Vector3.ZERO, Vector3.ZERO]
+var prop_it := {}                 # 판 동전 그림 — 판 것(사본)
+var prop_from := Vector2.ZERO     # 나는 동전이 떠난 화면 자리
+var prop_peel := 0.0              # 끌던 동전의 말림 — 날며 펴진다
+var prop_tilt0 := 0.0             # 날기 전 저울대 — 끌어 대던 동안 기울어 있었으면 그대로 둔다
+var prop_grab := Vector3.ZERO     # 다 쥔 순간의 동전 자리 (u, h, w) — 그 뒤는 손이 든다
+var prop_grab_ok := false
+var prop_drop := Vector3(0.0, -99.0, 0.0)    # 놓은 동전 (u, h, w)
+var prop_dv := 0.0
+var prop_ghost := {}              # 앞 동전 {it, c, r, sq, lay, t} — lay 0 HUD 위 · 1 손 층 · 2 턱 뒤
+var prop_force := false           # 그림 없는 판(헤드리스 검사)에서도 몸짓을 돌린다
+var npc_dry := false              # _npc_arms 가 자세만 셈하고 안 그린다(검사가 그리기 밖에서 부른다)
+#  저울대 기울기 — 0 평소 · 1 왼 접시가 내려앉음. Room3D.prop_glow 가 그대로 받는다.
+var scale_tilt := 0.0
+var scale_tv := 0.0
+var scale_ring := 0.0             # 용수철로 출렁이는 남은 시간
+#  _prop_w 가 적는 그 손의 섞임 — 과녁 · 앞 자세 · 쥠 · 검지 (매 틀 사전을 안 짓는다)
+var pw_k := 0.0
+var pw_s := 0.0
+var pw_g := 0.0
+var pw_n := 0.0
+#  _prop_goal 이 적는 과녁 — 손목 축(u, h, w) · 손각 · 숙임(라디안)
+var pg_w := Vector3.ZERO
+var pg_a := 0.0
+var pg_p := 0.0
+var prop_ga := 0.0                # _prop_coin_goal 이 적는 손각(도)
+#  _npc_arm ↔ _prop_arm 이 주고받는 자세
+var pa_wr := Vector2.ZERO
+var pa_el := Vector2.ZERO
+var pa_hw := 0.0
+var pa_he := 0.0
+var pa_ang := 0.0
+var pa_pit := 0.0
+var pa_rl := 0.0
+#  나는 동전의 화면 자리 · 반지름 · 눌림 · 말림(_prop_fly_at 이 적는다)
+var pf_c := Vector2.ZERO
+var pf_r := 0.0
+var pf_sq := 1.0
+var pf_peel := 0.0
+
+
+#  몸짓이 서지 못하는 때 — 서던 것도 이것이 참이 되면 끊긴다.
+func _prop_stop() -> bool:
+	return motion_off or state != S.SHOP or not _npc_on() or sweep_live or swap_live \
+			or turn_live or _give_live() or not (_room3d_tbl() or prop_force)
+
+
+func _prop_live(i: int) -> bool:
+	return prop_t[i] >= 0.0
+
+
+#  판다 — _sell 이 값을 확정하기 **전에** 부른다(판 것은 그 뒤 owned 에서 빠진다).
+#  it 은 그림 사본이다(읽기만 한다). from 은 동전이 떠나는 화면 자리 · peel 은 그 말림.
+#  섰으면 참 — 거짓이면 부르는 쪽이 옛 응수(손짓)를 낸다.
+func _prop_sell(it: Dictionary, from: Vector2, peel: float) -> bool:
+	if _prop_stop():
+		return false
+	if _prop_live(0):
+		_prop_ghost_take()
+		_prop_snap(0)
+	else:
+		_prop_snap_clear(0)
+	prop_it = it
+	prop_from = from
+	prop_peel = peel
+	prop_t[0] = 0.0
+	prop_cut[0] = 0.0
+	prop_grab_ok = false
+	prop_tilt0 = scale_tilt
+	prop_drop = Vector3(0.0, -99.0, 0.0)
+	prop_dv = 0.0
+	#  집기 치수 — 건네기의 그 값(give_*)에 접시 동전을 적는다. 건네기가 서는 동안은
+	#  이 몸짓이 안 선다(_prop_stop)라 서로 안 덮는다 — 건넬 때 _give_fit 이 다시 적는다.
+	give_depth = float(PROP.coin_r)
+	give_pad = float(GIVE.pad) * 0.8
+	give_tdrop = float(GIVE.tdrop) - (float(TBL.chip_t) - float(PROP.coin_t))
+	give_rot = 0
+	give_all = false
+	return true
+
+
+#  산다 — _pay_take 가 값을 확정하기 전에 부른다. 서랍 번쩍임(pay_flash)은 검지가 건반을
+#  누르는 순간으로 미룬다(_prop_tick). 섰으면 참 — 거짓이면 옛 응수(끄덕) · 바로 번쩍임.
+func _prop_buy() -> bool:
+	if _prop_stop():
+		return false
+	if _prop_live(1):
+		_prop_snap(1)
+	else:
+		_prop_snap_clear(1)
+	prop_t[1] = 0.0
+	prop_cut[1] = 0.0
+	return true
+
+
+#  개발자 「상인 몸짓」 줄 — 값(골드 · 동전 · 매물)을 한 톨도 안 건드리고 몸짓만 본다.
+#  판매는 든 동전 하나의 그림 사본(없으면 판 위 동전 매물 · 그것도 없으면 빈 동전)을
+#  동전 슬롯 첫 칸에서 날린다. 못 서면 그 까닭을 돌려준다(빈 글이면 섰다).
+func _prop_preview(z: int) -> String:
+	if state != S.SHOP:
+		return "상점에서만"
+	if motion_off:
+		return "움직임을 껐다"
+	if not (_room3d_tbl() or prop_force):
+		return "진열대가 없다"
+	if _prop_stop():
+		return "상인이 바쁘다"
+	if z == 1:
+		_prop_buy()
+		return ""
+	var it: Dictionary = {}
+	if not owned.is_empty():
+		it = (owned[0] as Dictionary).duplicate()
+	else:
+		for k in mini(stock.size(), drop.size()):
+			var s: Dictionary = stock[k]
+			if String(s.get("type", "")) == "item" and not bool(s.get("sold", false)):
+				it = (s.d as Dictionary).duplicate()
+				break
+	if it.is_empty():
+		it = {"id": "", "rarity": "common"}
+	_prop_sell(it, _slot_rect(0).get_center() + Vector2(0.0, PANEL.chip_dy), 0.0)
+	return ""
+
+
+#  지난 틀의 손을 앞 자세로 뜬다 — 다시 하거나 끊길 때 손이 거기서 건너간다.
+#  지난 틀에 얹은 것이 없으면(헤드리스 · 그 손이 안 뻗었다) 섞임 0 이라 쉼에서 시작한다.
+func _prop_snap(i: int) -> void:
+	_prop_w(i)
+	prop_snap_w[i] = prop_lw[i]
+	prop_snap_a[i] = prop_la[i]
+	prop_snap_p[i] = prop_lp[i]
+	prop_snap_k[i] = prop_lk[i]
+	prop_snap_g[i] = pw_g
+	prop_snap_n[i] = pw_n
+
+
+func _prop_snap_clear(i: int) -> void:
+	prop_snap_k[i] = 0.0
+	prop_snap_g[i] = 0.0
+	prop_snap_n[i] = 0.0
+
+
+#  앞 동전을 그 자리에서 졸아들게 넘긴다 — 다시 팔거나 끊길 때. 나는 중이면 HUD 위,
+#  접시 · 손이면 손 층, 떨어지는 중이면 턱 뒤에서.
+func _prop_ghost_take() -> void:
+	if prop_it.is_empty() or not _prop_live(0):
+		return
+	var t: float = prop_t[0]
+	if t < float(PROP.s_fly):
+		_prop_fly_at(t)
+		prop_ghost = {"it": prop_it, "c": pf_c, "r": pf_r, "sq": pf_sq, "lay": 0, "t": 0.0}
+	elif t < float(PROP.s_rel):
+		var c3 := _prop_coin_now()
+		prop_ghost = {"it": prop_it, "c": _p2s(c3.x, c3.y, c3.z), "r": float(PROP.coin_r),
+				"sq": float(TBL.flat), "lay": 1, "t": 0.0}
+	elif prop_drop.y > -30.0:
+		prop_ghost = {"it": prop_it, "c": _p2s(prop_drop.x, prop_drop.z, prop_drop.y),
+				"r": float(PROP.coin_r), "sq": float(TBL.flat), "lay": 2, "t": 0.0}
+	prop_it = {}
+
+
+func _prop_cut_now(i: int) -> void:
+	_prop_snap(i)
+	prop_cut[i] = 1.0
+	if i == 0:
+		_prop_ghost_take()
+	elif prop_t[1] < float(PROP.b_press):
+		pay_flash = 1.0            # 값은 이미 치렀다 — 서랍은 연다
+
+
+func _prop_end(i: int) -> void:
+	prop_t[i] = -1.0
+	prop_cut[i] = 0.0
+	prop_lk[i] = 0.0
+	_prop_snap_clear(i)
+	if i == 0:
+		prop_it = {}
+		prop_drop = Vector3(0.0, -99.0, 0.0)
+
+
+#  매 틀 — _process 가 _give_tick 다음에 부른다(늦추기 전 · 상인 시계와 같은 자리).
+func _prop_tick(d: float) -> void:
+	_scale_tick(d)
+	if not prop_ghost.is_empty():
+		prop_ghost.t = float(prop_ghost.t) + d
+		if float(prop_ghost.t) >= float(PROP.ghost):
+			prop_ghost.clear()
+	for i in 2:
+		if not _prop_live(i):
+			continue
+		if prop_cut[i] <= 0.0 and _prop_stop():
+			_prop_cut_now(i)
+		if prop_cut[i] > 0.0:
+			prop_cut[i] = maxf(float(prop_cut[i]) - d / float(PROP.cut), 0.0)
+			if prop_cut[i] <= 0.0:
+				_prop_end(i)
+			continue
+		var t0: float = prop_t[i]
+		var t1: float = t0 + d
+		prop_t[i] = t1
+		if i == 0:
+			_prop_sell_beat(t0, t1, d)
+			if t1 >= float(PROP.s_end):
+				_prop_end(0)
+				continue
+		else:
+			if t0 < float(PROP.b_press) and t1 >= float(PROP.b_press):
+				#  검지가 건반을 누른다 — 서랍이 튀어나오고 딸깍. 메뉴 가족의 마른 디텐트(슬롯 릴
+				#  멈춤쇠 · 판 밖 카지노)를 제 음 그대로 — 등록기 건반도 멈춤쇠다. 음을 올리면
+				#  천장(_lp 7500)이 지붕 6kHz 를 넘어 민다(probe_sfx 「지붕」).
+				pay_flash = 1.0
+				_sfx("menu_pick2")
+			if t1 >= float(PROP.b_end):
+				_prop_end(1)
+				continue
+		#  앞 자세는 다 뻗은 뒤로는 안 쓴다 — 돌아올 때는 쉼으로 간다.
+		if t1 >= float(PROP.s_reach if i == 0 else PROP.b_reach):
+			prop_snap_k[i] = 0.0
+
+
+func _prop_sell_beat(t0: float, t1: float, d: float) -> void:
+	var P: Dictionary = PROP
+	if t0 < float(P.s_fly) and t1 >= float(P.s_fly):
+		#  놋쇠 접시에 얹힌다 — 얇은 원판이 앉는 그 파일을 한 단 위(587)로.
+		_sfx("coin_land", 587.0)
+	if t0 < float(P.s_g1) and t1 >= float(P.s_g1):
+		prop_grab = _prop_pan3()
+		prop_grab_ok = true
+		_sfx("hand_take")
+	if t0 < float(P.s_rel) and t1 >= float(P.s_rel):
+		prop_drop = P.s_lip
+		prop_dv = 0.0
+	if t1 > float(P.s_rel) and prop_drop.y > -30.0:
+		prop_dv += float(P.fall_g) * d
+		prop_drop.y -= prop_dv * d
+
+
+#  저울대 — 끌어 대면(창구 불) 왼 접시가 내려앉고(옛 그대로 초당 5), 판 동전이 접시에
+#  얹혀 있는 동안은 용수철로 내려앉아 한 번 출렁이고, 들면 같은 용수철로 올라온다.
+func _scale_tick(d: float) -> void:
+	var want := 0.0
+	if state == S.SHOP and hand_zone == Z_SELL:
+		want = 1.0
+	if _prop_live(0) and prop_cut[0] <= 0.0:
+		var t: float = prop_t[0]
+		if t < float(PROP.s_fly):
+			want = maxf(want, prop_tilt0)
+		elif t < float(PROP.s_g1) + 0.02:
+			want = 1.0
+		scale_ring = 0.6
+	if scale_ring > 0.0:
+		scale_ring -= d
+		var dt: float = minf(d, 0.05)
+		var w: float = PROP.tilt_w
+		scale_tv += (w * w * (want - scale_tilt) - 2.0 * float(PROP.tilt_z) * w * scale_tv) * dt
+		scale_tilt += scale_tv * dt
+	else:
+		scale_tv = 0.0
+		scale_tilt = move_toward(scale_tilt, want, d * 5.0)
+
+
+#  그 손의 섞임을 pw_* 에 적는다 — 과녁(pw_k) · 앞 자세(pw_s) · 쥠(pw_g) · 검지(pw_n).
+#  끊긴 손은 앞 자세에서 쉼으로만 간다.
+func _prop_w(i: int) -> void:
+	pw_k = 0.0
+	pw_s = 0.0
+	pw_g = 0.0
+	pw_n = 0.0
+	var t: float = prop_t[i]
+	if t < 0.0:
+		return
+	var P: Dictionary = PROP
+	var cut: float = prop_cut[i]
+	if cut > 0.0:
+		var c: float = smoothstep(0.0, 1.0, cut)
+		pw_s = float(prop_snap_k[i]) * c
+		pw_g = float(prop_snap_g[i]) * c
+		pw_n = float(prop_snap_n[i]) * c
+		return
+	var sn: float = smoothstep(0.0, float(P.snap), t)
+	pw_s = prop_snap_k[i]
+	if i == 0:
+		var r0: float = P.s_reach
+		var r1: float = P.s_rel
+		var r2: float = P.s_end
+		if t < r0:
+			pw_k = _ease_io(t / r0)
+		elif t < r1:
+			pw_k = 1.0
+		else:
+			pw_k = 1.0 - _ease_io((t - r1) / (r2 - r1))
+		var g: float = smoothstep(float(P.s_g0), float(P.s_g1), t) if t < r1 \
+				else 1.0 - smoothstep(r1, r1 + 0.1, t)
+		pw_g = lerpf(float(prop_snap_g[0]), g, sn)
+		pw_n = float(prop_snap_n[0]) * (1.0 - sn)
+	else:
+		var q0: float = P.b_reach
+		var q1: float = P.b_up
+		var q2: float = P.b_end
+		if t < q0:
+			pw_k = _ease_io(t / q0)
+		elif t < q1:
+			pw_k = 1.0
+		else:
+			pw_k = 1.0 - _ease_io((t - q1) / (q2 - q1))
+		var n: float = smoothstep(0.02, q0 * 0.85, t) if t < q1 else 1.0 - smoothstep(q1, q2, t)
+		pw_n = lerpf(float(prop_snap_n[1]), n, sn)
+		pw_g = float(prop_snap_g[1]) * (1.0 - sn)
+
+
+#  그 손이 소품 쪽에 얼마나 가 있나 0..1 — 몸 기울기 · 팔꿈치 굽는 쪽 · 손가락 쉼이 탄다.
+func _prop_reach(i: int) -> float:
+	_prop_w(i)
+	return pw_k + (1.0 - pw_k) * pw_s
+
+
+#  몸이 소품 쪽으로 기운다 — _idle_body 가 그 틀 자세에 더한다(어깨 · 3D 몸통이 같이 탄다).
+#  뻗는 동안은 늘 도는 층(무게 옮기기 · 커서 따라보기)을 그만큼 걷는다 — 몸이 소품에
+#  붙들려 있다. 그 층이 어깨를 ±9 돌려 저울이 팔 길이 밖(1.04)으로 나갔다(qa_prop).
+func _prop_body(out: Dictionary) -> void:
+	var top := 0.0
+	for i in 2:
+		if _prop_live(i):
+			top = maxf(top, smoothstep(0.0, 1.0, _prop_reach(i)))
+	if top <= 0.0005:
+		return
+	out.yaw *= 1.0 - top
+	out.roll *= 1.0 - top
+	for i in 2:
+		if not _prop_live(i):
+			continue
+		var w: float = smoothstep(0.0, 1.0, _prop_reach(i))
+		if w <= 0.0005:
+			continue
+		var bv: Array = PROP.s_body if i == 0 else PROP.b_body
+		out.roll += float(bv[0]) * w
+		out.yaw += float(bv[1]) * w
+		out.lean += float(bv[2]) * w
+		out.rise += float(bv[3]) * w
+
+
+#  그 손을 소품으로 뻗는다 — _npc_arm 이 셈한 자세(pa_*)를 받아 고쳐 쓴다(PROP 머리말).
+#  sh 어깨 (u, w, h) · sc 손 배율. 손목 · 팔꿈치는 3D 점(u, h, w)으로 푼다 — 3D 팔
+#  (_hand3_sync)이 잇는 바로 그 점들이다(팔꿈치는 팔뚝 축 · 손목은 손 두께 한가운데).
+func _prop_arm(i: int, sh: Vector3, sc: float) -> void:
+	_prop_w(i)
+	var k: float = pw_k
+	var sk: float = pw_s
+	var ke: float = k + (1.0 - k) * sk
+	prop_lk[i] = ke
+	if ke <= 0.0005:
+		return
+	var ht: float = float(HAND3.palm_t) * sc * 0.5
+	var ea: float = float(HAND3.arm_t0) * 0.5
+	var s3 := Vector3(sh.x, sh.z, sh.y)
+	var w0 := Vector3(pa_wr.x, pa_hw + ht, pa_wr.y)
+	var e0 := Vector3(pa_el.x, pa_he + ea, pa_el.y)
+	#  위팔 · 팔뚝 길이 — 그 틀 쉼 자세에서 잰다. 팔 전체(l1 + l2)는 그대로 두고, 뻗는
+	#  만큼 팔꿈치를 팔을 따라 옮겨 팔뚝을 사람 비(PROP.fore_k)로 둔다. 사슬이 이 길이로만
+	#  닿는다 — 팔이 안 늘어난다.
+	var l1: float = s3.distance_to(e0)
+	var l2: float = e0.distance_to(w0)
+	var la: float = l1 + l2
+	l2 = lerpf(l2, minf(float(PROP.fore_k) * float(HAND3.palm_l) * sc, la * 0.5), ke)
+	l1 = la - l2
+	var fw := w0
+	var fa: float = pa_ang
+	var fp: float = pa_pit
+	if sk > 0.0005:
+		fw = w0.lerp(prop_snap_w[i], sk)
+		fa = lerp_angle(pa_ang, float(prop_snap_a[i]), sk)
+		fp = lerpf(pa_pit, float(prop_snap_p[i]), sk)
+	var w := fw
+	pa_ang = fa
+	pa_pit = fp
+	if k > 0.0005:
+		_prop_goal(i, sc)
+		w = fw.lerp(pg_w, k)
+		pa_ang = lerp_angle(fa, pg_a, k)
+		pa_pit = lerpf(fp, pg_p, k)
+	pa_rl *= 1.0 - ke
+	var pv: Vector3 = PROP.pole
+	var pole := e0.lerp(s3 + Vector3(pv.x * (-1.0 if i == 0 else 1.0), pv.y, pv.z) * 100.0, ke)
+	var e := _arm_ik(s3, w, l1, l2, pole)
+	prop_rr[i] = s3.distance_to(w) / maxf(l1 + l2, 1.0)
+	pa_wr = Vector2(w.x, w.z)
+	pa_hw = w.y - ht
+	pa_el = Vector2(e.x, e.z)
+	pa_he = e.y - ea
+	prop_lw[i] = w
+	prop_la[i] = pa_ang
+	prop_lp[i] = pa_pit
+	prop_le[i] = e
+	prop_ls[i] = s3
+
+
+#  두 마디 사슬 — 어깨 s 에서 손목 w 까지 위팔 l1 · 팔뚝 l2 로 닿는 팔꿈치. 굽는 쪽은 pole
+#  (s → w 줄에 수직인 몫만 쓴다). 못 닿으면 곧게 편다 — 늘어나는 몫은 prop_rr 이 잰다.
+func _arm_ik(s: Vector3, w: Vector3, l1: float, l2: float, pole: Vector3) -> Vector3:
+	var dv := w - s
+	var d: float = maxf(dv.length(), 0.001)
+	var u := dv / d
+	var dd: float = clampf(d, absf(l1 - l2) + 0.01, l1 + l2 - 0.01)
+	var ca: float = clampf((l1 * l1 + dd * dd - l2 * l2) / (2.0 * l1 * dd), -1.0, 1.0)
+	var pv := pole - s
+	pv -= u * pv.dot(u)
+	if pv.length_squared() < 0.000001:
+		pv = Vector3.UP - u * u.y
+	pv = pv.normalized()
+	return s + (u * ca + pv * sqrt(maxf(1.0 - ca * ca, 0.0))) * l1
+
+
+#  과녁 — 손목 축(pg_w · u, h, w) · 손각(pg_a) · 숙임(pg_p).
+#   판매: 동전이 서야 할 자리(_prop_coin_goal)를 검지 · 엄지가 집도록 _hold_of 를 거꾸로 푼다.
+#   구매: 편 검지 끝 볼(PROP.b_tip)이 건반 알 윗면(+ 뜬 높이 · 누름)에 서도록.
+func _prop_goal(i: int, sc: float) -> void:
+	var P: Dictionary = PROP
+	var t: float = prop_t[i]
+	if i == 0:
+		var c := _prop_coin_goal(t)
+		pg_a = deg_to_rad(prop_ga)
+		pg_p = deg_to_rad(float(P.s_pit))
+		var b := Basis(Vector3.UP, -pg_a) * Basis(Vector3.BACK, -pg_p)
+		pg_w = c - b * (_grip3_pt(1.0, 2, sc) * sc)
+		return
+	pg_a = deg_to_rad(float(P.b_ang))
+	pg_p = deg_to_rad(float(P.b_pit))
+	var b2 := Basis(Vector3.UP, -pg_a) * Basis(Vector3.BACK, -pg_p)
+	var tp: Vector3 = P.b_tip
+	pg_w = _prop_key3() + Vector3(0.0, _prop_dip(t), 0.0) - b2 * (Vector3(tp.x, tp.y, -tp.z) * sc)
+
+
+#  판 동전이 서야 할 자리 (u, h, w — 윗면 한가운데). 손이 거기를 집도록 손목을 낸다.
+#  손각(도)은 prop_ga 에 적는다 — 접시에서 s_ang0, 당기며 s_ang1 로.
+func _prop_coin_goal(t: float) -> Vector3:
+	var P: Dictionary = PROP
+	prop_ga = float(P.s_ang0)
+	if t < float(P.s_g1) or not prop_grab_ok:
+		return _prop_pan3()
+	if t < float(P.s_lift):
+		var k: float = _ease_io((t - float(P.s_g1)) / (float(P.s_lift) - float(P.s_g1)))
+		return prop_grab + Vector3(0.0, float(P.lift) * k, 0.0)
+	var k2: float = _ease_io((t - float(P.s_lift)) / (float(P.s_carry) - float(P.s_lift)))
+	prop_ga = lerpf(float(P.s_ang0), float(P.s_ang1), k2)
+	var up: Vector3 = prop_grab + Vector3(0.0, float(P.lift), 0.0)
+	var lip: Vector3 = P.s_lip
+	return up.lerp(lip, k2) + Vector3(0.0, float(P.arc) * sin(k2 * PI), 0.0)
+
+
+#  지금 판 동전 (u, w, h) — 그리기 자리. 쥐기 전은 접시(기울기를 따라간다), 쥔 뒤는
+#  손이 집은 자리(npc_hold — 손과 같은 변환)다.
+func _prop_coin_now() -> Vector3:
+	var t: float = prop_t[0]
+	if t >= float(PROP.s_g1) and prop_grab_ok:
+		return npc_hold[0]
+	var p := _prop_pan3()
+	return Vector3(p.x, p.z, p.y)
+
+
+#  왼 접시 위 동전 윗면 (u, h, w).
+func _prop_pan3() -> Vector3:
+	return Room3D.pan_top(VIEW.x, float(TBL.fy), float(TBL.ny), float(CHUTE.back),
+			float(TBL.flat), scale_tilt) + Vector3(0.0, float(PROP.coin_t), 0.0)
+
+
+#  누를 건반 알 윗면 (u, h, w).
+func _prop_key3() -> Vector3:
+	var kk: Vector2i = PROP.b_key
+	return Room3D.key_top(VIEW.x, float(TBL.fy), float(TBL.ny), float(CHUTE.back),
+			float(TBL.flat), kk.x, kk.y)
+
+
+#  검지 끝 높이 덤 — 건반 위에 떴다가 내리꽂고(끝으로 갈수록 빠르다) 튕겨 오른다.
+func _prop_dip(t: float) -> float:
+	var P: Dictionary = PROP
+	var hv: float = P.b_hover
+	var dn: float = -float(P.b_dip)
+	if t < float(P.b_reach) or t >= float(P.b_up):
+		return hv
+	if t < float(P.b_press):
+		var k: float = (t - float(P.b_reach)) / (float(P.b_press) - float(P.b_reach))
+		return lerpf(hv, dn, k * k)
+	var k2: float = (t - float(P.b_press)) / (float(P.b_up) - float(P.b_press))
+	return lerpf(dn, hv, 1.0 - (1.0 - k2) * (1.0 - k2))
+
+
+#  나는 동전 — 화면 자리 · 반지름 · 눌림 · 말림을 pf_* 에 적는다. 떠난 자리에서 접시까지
+#  포물선으로 난다. 동전 슬롯의 선 동전(PANEL.r · 정면)이 접시에 누운 작은 동전(coin_r ·
+#  TBL.flat 로 눌림)이 된다 — 날며 눕는다.
+func _prop_fly_at(t: float) -> void:
+	var e: float = smoothstep(0.0, 1.0, clampf(t / float(PROP.s_fly), 0.0, 1.0))
+	var p := _prop_pan3()
+	var p1 := _p2s(p.x, p.z, p.y)
+	pf_c = prop_from.lerp(p1, e) - Vector2(0.0, float(PROP.hop) * 4.0 * e * (1.0 - e))
+	pf_r = lerpf(float(PANEL.r), float(PROP.coin_r), e)
+	pf_sq = lerpf(1.0, float(TBL.flat), e)
+	pf_peel = prop_peel * (1.0 - e)
+
+
+#  판 동전 하나 — 동전 슬롯이 쓰는 그 그림(draw_item_sticker)을 sq 로 눌러 눕힌다.
+#  누운 만큼 옆면(같은 실루엣을 어둡게 · 두께만큼 아래)이 비친다. dim 은 졸아들 때.
+#  ⚠ 이 구획(상점 테이블)의 draw_set_transform 금지 불변식의 예외다 — _leg_card ·
+#  _cover_draw 처럼 **같은 함수 안에서** draw_set_transform(shake_off) 로 되돌린다.
+#  눕힌 그림은 좌표를 옮겨서는 못 그린다(동전 얼굴이 구운 그림이다).
+func _prop_coin_paint(c: Vector2, r: float, sq: float, it: Dictionary, peel: float,
+		dim := 0.0) -> void:
+	if r < 0.6 or it.is_empty():
+		return
+	var lay: float = clampf((1.0 - sq) / (1.0 - float(TBL.flat)), 0.0, 1.0)
+	var side: float = float(PROP.coin_t) * float(TBL.tall) * lay
+	draw_set_transform_matrix(Transform2D(Vector2(1.0, 0.0), Vector2(0.0, sq), shake_off + c))
+	if side > 0.05:
+		draw_item_sticker(Vector2(0.0, side / sq), r, it, 0.0, 0.0, minf(0.62 + dim, 1.0), 12)
+	draw_item_sticker(Vector2.ZERO, r, it, 0.0, 0.0, dim, 12, peel)
+	draw_set_transform(shake_off)
+
+
+func _prop_ghost_draw(lay: int) -> void:
+	if prop_ghost.is_empty() or int(prop_ghost.lay) != lay:
+		return
+	var k: float = 1.0 - float(prop_ghost.t) / float(PROP.ghost)
+	if k <= 0.0:
+		return
+	_prop_coin_paint(prop_ghost.c, float(prop_ghost.r) * k, float(prop_ghost.sq),
+			prop_ghost.it, 0.0, (1.0 - k) * 0.6)
+
+
+#  ① HUD 위 — 동전 슬롯을 떠나 접시로 나는 동안. 끌던 동전(_rack_hold_draw) 바로 뒤라
+#  무엇에도 안 덮인다(동전 슬롯 칸에서 떠나는 것이 보여야 한다).
+func _prop_fly_draw() -> void:
+	_prop_ghost_draw(0)
+	if not _prop_live(0) or prop_cut[0] > 0.0 or prop_it.is_empty():
+		return
+	var t: float = prop_t[0]
+	if t >= float(PROP.s_fly):
+		return
+	_prop_fly_at(t)
+	_prop_coin_paint(pf_c, pf_r, pf_sq, prop_it, pf_peel)
+
+
+#  ② 손 층 — 접시에 얹힌 동안 · 집어 든 동안. 손 화판 **다음** · 앞 화판(검지) **앞**이라
+#  건네받은 물건(_give_draw)과 같은 차례다: 손은 동전 밑, 아치를 그린 검지만 동전 위.
+func _prop_coin_draw() -> void:
+	_prop_ghost_draw(1)
+	if not _prop_live(0) or prop_cut[0] > 0.0 or prop_it.is_empty():
+		return
+	var t: float = prop_t[0]
+	if t < float(PROP.s_fly) or t >= float(PROP.s_rel):
+		return
+	var c3 := _prop_coin_now()
+	_prop_coin_paint(_p2s(c3.x, c3.y, c3.z), float(PROP.coin_r), float(TBL.flat), prop_it, 0.0)
+
+
+#  ③ 턱 뒤 — 놓은 동전이 떨어진다. 상인 몸통 다음 · 먼 턱(테이블 띠) **앞**이라 턱이
+#  나중에 덮어 동전이 턱 뒤로 사라진다. 손 · 팔은 그 뒤에 그린다(손이 동전 위다).
+func _prop_drop_draw() -> void:
+	_prop_ghost_draw(2)
+	if not _prop_live(0) or prop_cut[0] > 0.0 or prop_it.is_empty():
+		return
+	if prop_t[0] < float(PROP.s_rel) or prop_drop.y <= -30.0:
+		return
+	#  턱(테이블 띠)은 화면 y fy + 1 까지만 다시 덮는다 — 그 밑은 벨벳이 먼저 깔린 자리라
+	#  동전 밑끝이 거기를 넘으면 턱 **앞** 벨벳 위에 한 줄 비친다(촬영). 그 틀이면 이미
+	#  윗끝까지 턱 갓(y 110.6~) 뒤라 통째로 걷는다.
+	var c := _p2s(prop_drop.x, prop_drop.z, prop_drop.y)
+	if c.y + float(PROP.coin_r) * float(TBL.flat) + float(PROP.coin_t) * float(TBL.tall) \
+			> float(TBL.fy) + 1.0:
+		return
+	_prop_coin_paint(c, float(PROP.coin_r), float(TBL.flat), prop_it, 0.0)
 
 
 
@@ -29278,6 +30044,9 @@ func _hand_release(m: Vector2) -> void:
 	# 동전 슬롯 동전 — 왼쪽 창구는 판매, 다른 동전 슬롯 칸 위는 순서 바꾸기.
 	if src == 1:
 		if z == Z_SELL and _can_sell() and i >= 0 and i < owned.size():
+			#  판 동전이 놓은 자리에서 저울로 난다(_sell · 판 소품 몸짓).
+			sell_drag = m
+			sell_peel = _peel_now()
 			_sell(i)
 		elif z == Z_BUY:
 			pay_msg = "테이블 물건만 산다"
@@ -29674,11 +30443,17 @@ func _pay_click() -> void:
 
 # 두 경로가 만나는 한 점. _buy 는 한 글자도 안 고친다 —
 # stock[i].sold 를 _drop_extras 가 폴링해 _drop_leave 를 띄운다.
+#  진열대가 서 있으면 상인이 등록기 건반을 친다(_prop_buy — 판 소품 몸짓). 서랍 번쩍임
+#  (pay_flash)은 검지가 건반을 누르는 순간으로 미룬다 — 그림일 뿐이라 값과 안 얽힌다.
+#  못 서면 옛 끄덕 · 바로 번쩍임이다. 값(_buy)은 아래 그대로 · 이 순간 확정된다.
 func _pay_take(i: int) -> void:
-	_npc_react("끄덕")
+	var acted := _prop_buy()
+	if not acted:
+		_npc_react("끄덕")
 	var cost: int = stock[i].cost
 	_buy(i)
-	pay_flash = 1.0
+	if not acted:
+		pay_flash = 1.0
 	pay_msg = ""
 	pay_msg_t = 0.0
 	pop(_bank_rect().get_center() + Vector2(0.0, 30.0), "-%d" % cost, C_GOLD, 12, 0.7)

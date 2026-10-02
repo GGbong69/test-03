@@ -747,31 +747,7 @@ static func make_table(host: Node, r: Rect2, fy: float, ny: float, back: float,
 	#  진열 스포트 — 소품마다 왼쪽 위에서 하나. 옆에 꺼 둔 웅덩이 빛 하나.
 	#  반응(prop_glow)이 스포트를 밝히고 웅덩이를 켠다 — 소품과 그 둘레
 	#  카운터가 같이 달아올라 「여기」를 말한다(옛 창구 삼각형 칠의 자리).
-	for pr in [["SellLamp", SELL_AT + Vector3(0.0, 34.0, 0.0), 15.0],
-			["BuyLamp", BUY_AT + Vector3(0.0, 30.0, 0.0), 14.0]]:
-		var ps := SpotLight3D.new()
-		ps.name = String(pr[0])
-		ps.light_color = COL.lamp
-		ps.light_energy = LAMP_E
-		ps.spot_range = 280.0
-		ps.spot_attenuation = 0.0
-		ps.spot_angle = float(pr[2])
-		ps.spot_angle_attenuation = 1.6
-		#  그림자는 끈다 — 저울대 그림자가 벨벳 왼끝에 검은 얼룩으로 떨어진다.
-		#  소품을 바닥에 붙이는 것은 받침 그늘(_blob)이 맡는다.
-		ps.shadow_enabled = false
-		var tgt: Vector3 = pr[1]
-		var at: Vector3 = tgt + Vector3(-45.0, 175.0, -35.0)
-		ps.transform = Transform3D(Basis.looking_at(tgt - at, Vector3.UP), at)
-		root.add_child(ps)
-		var po := OmniLight3D.new()
-		po.name = String(pr[0]) + "Pool"
-		po.light_color = COL.lamp
-		po.light_energy = 0.0
-		po.omni_range = 48.0
-		po.omni_attenuation = 0.0
-		po.position = Vector3(tgt.x, TOP_H + 30.0, tgt.z + 6.0)
-		root.add_child(po)
+	prop_lamps(root, true)
 	#  니스 반사 — 먼 쪽 높이 램프 넷. 반사점이 소품에 안 가리는 자리로 간다:
 	#  저울 왼 앞 · 등록기 오른 옆 카운터, 상인 손 바깥의 먼 턱 갓 둘.
 	#  빛 w = 반사점 w − 높이 × 0.78. 맨빛은 약하게, 반사만 세게 — 나무가
@@ -794,6 +770,41 @@ static func make_table(host: Node, r: Rect2, fy: float, ny: float, back: float,
 		og.position = Vector3(tg.x, tg.y + 150.0, tg.z - 150.0 * 0.78)
 		root.add_child(og)
 	return vp
+
+
+#  진열 스포트 둘(SellLamp · BuyLamp) — 소품마다 왼쪽 위에서 좁게. pool 이면 그 옆에 꺼 둔
+#  웅덩이 빛(…Pool)도 단다(테이블만 — 반응 prop_glow 가 켠다). 상인 손 무대도 같은 둘을
+#  평소 세기로 단다(game.gd _hand3_open) — 판 소품 몸짓(저울 · 등록기)에서 소품에 닿은
+#  손이 소품과 같은 빛을 받는다. 없으면 램프 웅덩이 밖이라 손만 어둠 속 갈색 덩어리였다
+#  (촬영). 쉬는 손 · 건네받는 손은 이 좁은 원뿔(반지름 47 언저리) 밖이다.
+static func prop_lamps(root: Node, pool: bool) -> void:
+	for pr in [["SellLamp", SELL_AT + Vector3(0.0, 34.0, 0.0), 15.0],
+			["BuyLamp", BUY_AT + Vector3(0.0, 30.0, 0.0), 14.0]]:
+		var ps := SpotLight3D.new()
+		ps.name = String(pr[0])
+		ps.light_color = COL.lamp
+		ps.light_energy = LAMP_E
+		ps.spot_range = 280.0
+		ps.spot_attenuation = 0.0
+		ps.spot_angle = float(pr[2])
+		ps.spot_angle_attenuation = 1.6
+		#  그림자는 끈다 — 저울대 그림자가 벨벳 왼끝에 검은 얼룩으로 떨어진다.
+		#  소품을 바닥에 붙이는 것은 받침 그늘(_blob)이 맡는다.
+		ps.shadow_enabled = false
+		var tgt: Vector3 = pr[1]
+		var at: Vector3 = tgt + Vector3(-45.0, 175.0, -35.0)
+		ps.transform = Transform3D(Basis.looking_at(tgt - at, Vector3.UP), at)
+		root.add_child(ps)
+		if not pool:
+			continue
+		var po := OmniLight3D.new()
+		po.name = String(pr[0]) + "Pool"
+		po.light_color = COL.lamp
+		po.light_energy = 0.0
+		po.omni_range = 48.0
+		po.omni_attenuation = 0.0
+		po.position = Vector3(tgt.x, TOP_H + 30.0, tgt.z + 6.0)
+		root.add_child(po)
 
 
 #  머리 위 램프 + 왼쪽 위 채움빛. 테이블과 상인 무대(game.gd _stage3_make)가
@@ -837,10 +848,13 @@ static func lamp_env() -> Environment:
 #  소품 반응 — 매 틀 _chute_draw 가 부른다. z 0 저울 · 1 금전등록기.
 #   k   — 스포트 세기. 0 평소 · 1 한껏 · 음수 = 눌려 가라앉음. col 쪽으로 물든다.
 #         0 을 넘으면 그 소품의 놋쇠가 col 빛으로 달아오른다.
-#   act — 소품의 몸짓. 저울은 1 이면 왼 접시(팔 것을 얹는 쪽)가 내려앉고,
+#   act — 소품의 몸짓. 저울은 저울대 기울기 그 값이다(0 평소 · 1 왼 접시가
+#         내려앉음 · 그 너머는 출렁임) — game.gd 가 민다(scale_tilt). 접시에 얹힌
+#         동전과 그것을 집는 손이 같은 값으로 접시 자리를 셈해야(pan_top) 동전이
+#         접시를 따라가므로, 기울기를 여기서 따로 굴리지 않는다.
 #         금전등록기는 산 순간의 번쩍임(pay_flash)을 받아 서랍이 튀어나오고
 #         값 깃이 솟는다.
-#   d   — 이번 틀의 시간. 저울대가 이것으로 기운다.
+#   d   — 이번 틀의 시간(지금은 안 쓴다 — 저울대도 game.gd 가 민다).
 static func prop_glow(vp: SubViewport, z: int, k: float, col: Color, act := 0.0, d := 0.0) -> void:
 	if vp == null or not is_instance_valid(vp):
 		return
@@ -866,10 +880,7 @@ static func prop_glow(vp: SubViewport, z: int, k: float, col: Color, act := 0.0,
 		bm.emission = col if k > 0.0 else COL.lamp
 		bm.emission_energy_multiplier = e
 	if z == 0:
-		var cur: float = float(pn.get_meta("tilt", 0.0))
-		cur = move_toward(cur, clampf(act, 0.0, 1.0), d * 5.0)
-		pn.set_meta("tilt", cur)
-		_scale_set(pn, cur)
+		_scale_set(pn, clampf(act, -0.6, 1.6))
 	else:
 		var out: float = smoothstep(0.0, 0.3, act)
 		var dr: Node3D = pn.get_node_or_null("Drawer")
@@ -968,6 +979,22 @@ static func _scale_prop(root: Node3D, sh: float) -> void:
 	_scale_set(n, 0.0)
 
 
+#  왼 접시 윗면 — 접시 노드에서 그 밑 놋쇠 판(−26 · 높이 3)과 짙은 안판(−24.45 · 0.4)의
+#  윗면. 판 동전이 여기 눕는다(pan_top).
+const PAN_TOP := -24.25
+
+
+#  왼 접시 윗면 한가운데 — 면 좌표 (u, h, w). a 는 저울대 기울기(_scale_set 과 같은 값).
+#  game.gd 의 판매 몸짓(_prop_*)이 판 동전과 그것을 집는 손을 여기 세운다 — 접시를 짓는
+#  _scale_prop 과 같은 상수 · 같은 기울임(lean)이라 그림과 한 점도 안 갈린다.
+#  X 화면 폭 · fy · ny 벨벳 먼/가까운 모서리 · back 빗변 · flat 시점(make_table 과 같다).
+static func pan_top(X: float, fy: float, ny: float, back: float, flat: float, a: float) -> Vector3:
+	var sh: float = lean(SELL_AT, X, (ny - fy) / flat, back)
+	var t: float = deg_to_rad(lerpf(float(SCALE_TILT[0]), float(SCALE_TILT[1]), a))
+	var p: Vector3 = SCALE_PIV + Vector3(-SCALE_HL * cos(t), -SCALE_HL * sin(t) + PAN_TOP, 0.0)
+	return SELL_AT + Vector3((p.x + sh * p.z) * SELL_K, p.y * SELL_K, p.z * SELL_K)
+
+
 #  저울대 기울기 — a 0 평소(추 쪽이 내려앉음) · 1 팔 것을 댄 때. 접시는
 #  저울대 끝에 매달려 늘 수직으로 선다.
 static func _scale_set(n: Node3D, a: float) -> void:
@@ -980,6 +1007,30 @@ static func _scale_set(n: Node3D, a: float) -> void:
 		if p != null:
 			var s: float = -1.0 if nm == "PanL" else 1.0
 			p.position = SCALE_PIV + Vector3(s * SCALE_HL * cos(t), s * SCALE_HL * sin(t), 0.0)
+
+
+#  건반판 — 왼 앞 · 왼 뒤 모서리(오른쪽은 u 를 뒤집는다)와 경사면 법선(정규화 전).
+#  건반 알 하나의 자리(_key_at)를 짓는 자리와 상인이 그 알을 누르는 자리(key_top)가
+#  같이 읽는다.
+const KEY_B0 := Vector3(-16.2, 11.0, 17.0)
+const KEY_B3 := Vector3(-16.2, 29.0, 1.5)
+const KEY_N := Vector3(0.0, 15.5, 18.0)
+const KEY_CAP := 1.7          # 알 윗면 — 경사면에서 법선으로(테 0.6 · 알 1.4 를 1.0 에 앉힌 끝)
+
+
+#  건반 알 하나의 바닥 가운데(등록기 제 좌표). row 0 앞(손님 쪽) → 2 뒤 · col 0 왼 → 4 오른.
+static func _key_at(row: int, col: int) -> Vector3:
+	var p0: Vector3 = KEY_B0.lerp(KEY_B3, 0.2 + float(row) * 0.3)
+	return Vector3(-12.0 + float(col) * 6.0, p0.y, p0.z)
+
+
+#  건반 알 윗면 한가운데 — 면 좌표 (u, h, w). game.gd 의 구매 몸짓이 상인 검지 끝을 여기
+#  세운다. 등록기를 짓는 식(_prop_node 의 기울임 · BUY_K)과 같다 — pan_top 과 같은 까닭.
+static func key_top(X: float, fy: float, ny: float, back: float, flat: float,
+		row: int, col: int) -> Vector3:
+	var sh: float = lean(BUY_AT, X, (ny - fy) / flat, back)
+	var p: Vector3 = _key_at(row, col) + KEY_N.normalized() * KEY_CAP
+	return BUY_AT + Vector3((p.x + sh * p.z) * BUY_K, p.y * BUY_K, p.z * BUY_K)
 
 
 #  금전등록기 — 구매. 나무 서랍장(놋쇠 띠 · 서랍 · 손잡이) 위 청동 몸통(놋쇠
@@ -1019,20 +1070,17 @@ static func _register_prop(root: Node3D, sh: float) -> void:
 		n.add_child(_box(Vector3(2.4, 20.2, 2.4), Vector3(float(sx) * 17.4, 20.9, 0.8), brass))
 	n.add_child(_box(Vector3(37.6, 1.6, 18.2), Vector3(0.0, 31.6, -7.0), brass))
 	#  건반판 — 몸통 앞(w 1.5, h 29)에서 서랍장 위 앞(w 17, h 11)까지 기운 면
-	var b0 := Vector3(-16.2, 11.0, 17.0)
-	var b1 := Vector3(16.2, 11.0, 17.0)
-	var b2 := Vector3(16.2, 29.0, 1.5)
-	var b3 := Vector3(-16.2, 29.0, 1.5)
+	var b0: Vector3 = KEY_B0
+	var b1 := Vector3(-KEY_B0.x, KEY_B0.y, KEY_B0.z)
+	var b2 := Vector3(-KEY_B3.x, KEY_B3.y, KEY_B3.z)
+	var b3: Vector3 = KEY_B3
 	n.add_child(_quad([b0, b1, b2, b3], slope))
 	#  건반 — 둥근 상아 알을 검은 테에 앉힌다. 경사면 법선으로 세운다.
-	var nrm := Vector3(0.0, 15.5, 18.0).normalized()
+	var nrm: Vector3 = KEY_N.normalized()
 	var kx: float = atan2(nrm.z, nrm.y)
 	for row in 3:
-		var t: float = 0.2 + float(row) * 0.3
-		var p0: Vector3 = b0.lerp(b3, t)
 		for col in 5:
-			var ku: float = -12.0 + float(col) * 6.0
-			var at := Vector3(ku, p0.y, p0.z)
+			var at := _key_at(row, col)
 			var rim := _cyl(2.2, 2.2, 0.6, at + nrm * 0.3, ink, 10)
 			rim.rotation = Vector3(kx, 0.0, 0.0)
 			n.add_child(rim)

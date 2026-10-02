@@ -638,6 +638,8 @@ static func _names(k: String) -> PackedStringArray:
 			out.append(String((a as Dictionary).n))
 		for h in NPC_HOLDS:
 			out.append("살핌 · %s" % String(h[0]))
+		for p in NPC_PROPS:
+			out.append(String(p))
 		return out
 	for r in _list(k):
 		out.append(String(r.get("n", r.get("name", r.get("id", "?")))))
@@ -1093,8 +1095,10 @@ static func _rows(g: Node) -> Array:
 				#  플라크 · 다트 · 사탕 · 팩 · 사진 · 와펜」 은 그 종류를 집는다(2026-10-02 —
 				#  물건마다 집는 자리가 달라서: 원반 · 플라크는 손 쪽 테, 팩 · 사진은 윗변, 다트는
 				#  자루, 사탕은 옆구리). 열셋째 줄이다(한계 열아홉).
+				#  맨 끝 「저울에 올리기 · 등록기 치기」 는 판 소품 몸짓(2026-10-02)이다 —
+				#  팔고 사는 그 몸짓을 값(골드 · 동전 · 매물)을 한 톨도 안 건드리고 본다.
 				{"n1": "상인 몸짓", "t": "list", "k": "npcact",
-						"n": (g.IDLE.acts as Array).size() + NPC_HOLDS.size()},
+						"n": (g.IDLE.acts as Array).size() + NPC_HOLDS.size() + NPC_PROPS.size()},
 			]
 
 
@@ -1209,6 +1213,9 @@ static var _npc_side := 0
 const NPC_HOLDS := [["동전", "item", "rare"], ["플라크", "item", "legendary"],
 		["다트", "dart", ""], ["사탕", "cons", ""], ["팩", "boost", ""], ["사진", "fix", ""],
 		["와펜", "mod", ""]]
+#  판 소품 몸짓 — 차례가 곧 소품 번호다(0 저울 · 1 금전등록기 — game.gd 의 _prop_preview).
+#  판매는 든 동전의 그림 사본을 날리고, 구매는 서랍만 연다 — 값은 그대로다.
+const NPC_PROPS := ["저울에 올리기", "등록기 치기"]
 #  미리 보느라 갈아 끼운 매물 — {i, s}. 그 물건이 상인 손을 떠나 판에 가라앉으면 tick 이
 #  제 매물로 되돌린다(값 · 매물을 한 톨도 안 건드린다는 이 줄의 약속).
 static var _hold_back := {}
@@ -1578,8 +1585,10 @@ static func _cur_name(g: Node, e: Dictionary) -> String:
 				"주황" if sj >= 2 else "흰"]
 	if k == "npcact":
 		var na: Array = _npc_acts()
-		var nn: int = na.size() + NPC_HOLDS.size()
+		var nn: int = na.size() + NPC_HOLDS.size() + NPC_PROPS.size()
 		var nj: int = i % maxi(nn, 1)
+		if nj >= na.size() + NPC_HOLDS.size():
+			return "%d/%d %s" % [nj + 1, nn, String(NPC_PROPS[nj - na.size() - NPC_HOLDS.size()])]
 		if nj >= na.size():
 			return "%d/%d 살핌 · %s" % [nj + 1, nn, String(NPC_HOLDS[nj - na.size()][0])]
 		return "%d/%d %s" % [nj + 1, nn, String((na[nj] as Dictionary).n)]
@@ -2478,12 +2487,18 @@ static func _run(g: Node, e: Dictionary) -> void:
 			#  「살핌」만 매물 하나를 상인 손에 건넨다 — 손님이 건넨 것과 같은 길이라
 			#  다 살피면 판 위로 뿌린다(매물 자리만 바뀐다).
 			var na2: Array = _npc_acts()
-			var nj2: int = i % maxi(na2.size() + NPC_HOLDS.size(), 1)
+			var nj2: int = i % maxi(na2.size() + NPC_HOLDS.size() + NPC_PROPS.size(), 1)
 			if not g._npc_on():
 				_say("상인이 없는 화면이다")
 				return
 			if g._give_live() or g.sweep_live:
 				_say("상인이 바쁘다")
+				return
+			#  판 소품 몸짓 — 저울에 올리기 · 등록기 치기. 손은 소품이 정한다(번갈지 않는다).
+			if nj2 >= na2.size() + NPC_HOLDS.size():
+				var pz: int = nj2 - na2.size() - NPC_HOLDS.size()
+				var why: String = g._prop_preview(pz)
+				_say("상인 몸짓 — %s" % (String(NPC_PROPS[pz]) if why == "" else why))
 				return
 			_npc_side = 1 - _npc_side
 			if nj2 >= na2.size():

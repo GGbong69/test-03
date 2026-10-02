@@ -172,13 +172,14 @@ func _init() -> void:
 	#  여기 없는 이름은 1.0 — _sfx 가 f 를 안 주거나 SFX_BASE 그대로다.
 	#    page       _turn_f      min(1.05946^7, 1.50) = 1.4983 (R8)
 	#    leg_open   _leg_open_f  같은 식 = 1.4983
-	#    coin_land  등급 예고    523/392 = 1.3342 (레어)
+	#    coin_land  판 소품 몸짓 587/392 = 1.4974 (판 동전이 저울 접시에 얹힌다 —
+	#               _prop_sell_beat · 2026-10-02). 등급 예고는 523/392 = 1.3342 (레어)
 	#    coin_break _wreck_sfx   1.18 * (1 + WRECK.jit 0.06) = 1.2508
 	#    shop_smash _smash_sfx   1.14 * 1.04 = 1.1856
 	#    settle_*   _settle_f    3.78 — 위 정산 사다리가 따로 본다
 	print("")
 	print("- 지붕 -")
-	var push := {"page": 1.4983, "leg_open": 1.4983, "coin_land": 1.3342,
+	var push := {"page": 1.4983, "leg_open": 1.4983, "coin_land": 1.4974,
 			"coin_break": 1.2508, "shop_smash": 1.1856}
 	var rows := []
 	for nm3 in names:
