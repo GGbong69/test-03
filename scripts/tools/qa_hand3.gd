@@ -84,96 +84,164 @@ func _cover_r(p: Vector2, c: Vector2, it: Dictionary) -> float:
 	return sqrt(pow((p.x - c.x) / rx, 2.0) + pow(dy / ry, 2.0))
 
 
-func _grip_checks() -> void:
+#  점이 윤곽 밖으로 나간 화면 px(안이면 음수). 타원은 한가운데에서 그 점까지의 거리를
+#  _cover_r 로 나누면 그 방향의 반지름이라, 그 차가 곧 테에서의 거리다(윗쪽 반에서 정확).
+func _rim_px(p: Vector2, c: Vector2, it: Dictionary) -> float:
+	var cr: float = maxf(_cover_r(p, c, it), 0.001)
+	return p.distance_to(c) * (1.0 - 1.0 / cr)
+
+
+#  판 위 매물 하나를 kind 로 갈아 끼운다(shot_npc3 과 같은 길) — 그리는 것만 바뀐다.
+func _stock_as(kind: String) -> int:
 	var gi := -1
 	for i in g.drop.size():
-		if not bool(g.drop[i].get("gone", false)) and String(g.stock[i].type) == "item":
+		if not bool(g.drop[i].get("gone", false)) and float(g.drop[i].get("sold", 0.0)) <= 0.0:
 			gi = i
 			break
-	_ok("건넬 동전이 있다", gi >= 0, "")
+	if gi < 0:
+		return -1
+	match kind:
+		"rare":
+			for r in GameData.items():
+				if String(r.get("rarity", "")) == "rare":
+					g.stock[gi] = {"type": "item", "cost": 9, "sold": false, "d": r}
+					break
+		"dart":
+			var ds: Array = GameData.darts()
+			g.stock[gi] = {"type": "dart", "cost": 6, "sold": false, "d": ds[mini(1, ds.size() - 1)]}
+		"pack":
+			g.stock[gi] = {"type": "boost", "cost": 6, "sold": false, "d": GameData.boosters()[0]}
+	return gi
+
+
+func _front(n: Node) -> bool:
+	return n is VisualInstance3D and ((n as VisualInstance3D).layers & g.HAND3_FRONT) != 0
+
+
+#  2026-10-02 「지금 동전 짚는 손 모양 너무 이상한데 좀 레퍼런스 찾으면서 어떻게 해봐」 —
+#  쥔 손이 엄지를 동전 면에 꽂은 막대로 읽혔고, 손 나머지는 동전 밑에 숨었다. 동전 다루기
+#  안내(조폐국 · CoinWeek · 에드먼턴 화폐학회)는 다 테만 잡고 면은 안 만지라고 하고, 정밀
+#  집기 그림은 엄지 · 검지 끝만 일하고 나머지는 말린 손이다. 이제 손은 물건 **뒤**에 서고
+#  손끝 둘만 테에 1~1.5px 얹힌다(GIVE 「테를 집는다」). 그것을 두 손 다 잰다:
+#    · 물건이 손 좌표에서 안 미끄러진다(흔들림 ≤ 1.5 — 그대로)
+#    · 집는 손끝 둘(검지 끝 · 엄지 끝 마디 끝)의 화면 자리가 테 **위**다 — 손끝 반폭에서
+#      테 밖으로 나간 거리를 뺀 것이 테를 덮는 폭이고, 그것이 0.5~3px 이다(0 밑이면 손끝이
+#      테에서 떠 집은 것이 아니고, 3 넘으면 손끝이 면에 얹혀 다시 「짚는」 손이다)
+#    · 그 둘 말고 손의 어느 마디도 물건 윤곽 안에 안 든다(너클 넷 · 말린 손끝 셋 · 검지
+#      가운데 마디 · 엄지 뿌리와 마디 · 손바닥 모서리 — 윤곽 비 ≥ 1)
+#    · 반지 낀 손(오른손)이 쥐어도 반지가 물건에 안 가린다
+#    · 앞 층에는 집는 손끝 둘(엄지 끝마디 · 검지 끝마디)만 선다. 다트는 손 밑을 지나므로
+#      손 전부가 선다(give_all)
+func _grip_case(kind: String, mx: float) -> void:
+	var gi := _stock_as(kind)
+	var nm: String = "%s · %s손" % [kind, "왼" if mx < 320.0 else "오른"]
+	_ok("건넬 매물이 있다 (%s)" % nm, gi >= 0, "")
 	if gi < 0:
 		return
-	g._give_begin(gi, Vector2(400.0, 130.0))
+	g._give_begin(gi, Vector2(mx, 130.0))
 	var side: int = g.give_side
 	var t1: float = float(g.GIVE.take)
 	var t2: float = t1 + float(g.GIVE.look)
-	#  받기가 끝날 때까지 감는다.
 	var guard := 0
 	while g.give_t < t1 + 0.05 and guard < 400:
 		guard += 1
 		await _wait(1)
-	#  살피는 동안 — 물건이 쥔 손 좌표에서 안 미끄러지는가, 손끝이 덮였는가.
 	var lo := Vector2(1e9, 1e9)
 	var hi := Vector2(-1e9, -1e9)
-	var worst := 0.0
-	var ftip := 0.0
-	var ntip := 0
-	var thumb_r := Vector2(1e9, -1e9)
+	var tip_lo := Vector2(99.0, 99.0)      # (검지, 엄지) 테를 덮는 폭 최소
+	var tip_hi := Vector2(-99.0, -99.0)    # 최대
+	var hand_in := 99.0
+	var hand_at := ""
+	var ring_r := 99.0
 	var front_ok := true
 	var n := 0
+	var rg: Dictionary = g.hand3_rig[side]
+	var hj: Dictionary = rg.hj
+	var oj: Dictionary = (g.hand3_rig[1 - side] as Dictionary).hj
+	var tw_i: float = float(g.FING3.fw[0]) * 0.8 * 0.5
+	var tw_t: float = float(g.HAND3.th_w) * 0.74 * 0.5
 	while g.give_t < t2 - 0.05 and guard < 800:
 		guard += 1
 		await _wait(1)
 		if g.give_i != gi:
 			break
-		var rg: Dictionary = g.hand3_rig[side]
 		var hd: Node3D = rg.hand
 		var it: Dictionary = g.drop[gi]
 		var c3 := Vector3(float(it.u), float(it.h), float(it.w))
 		var lc: Vector3 = hd.global_transform.affine_inverse() * c3
 		lo = Vector2(minf(lo.x, lc.x), minf(lo.y, lc.z))
 		hi = Vector2(maxf(hi.x, lc.x), maxf(hi.y, lc.z))
-		var cs: Vector2 = g._p2s(float(it.u), float(it.w), float(it.h))
-		var pl: float = g.HAND3.palm_l
-		var pt: float = g.HAND3.palm_t
-		var pw: float = g.HAND3.palm_w
-		for sy in [-1.0, 1.0]:
-			for sz in [-1.0, 1.0]:
-				var tip: Vector3 = hd.global_transform * Vector3(pl, sy * pt * 0.5, sz * pw * 0.5)
-				worst = maxf(worst, _cover_r(_scr(tip), cs, it))
-		#  손가락을 세운 판(rig 의 tips — 손끝 마디 끝마다 하나)은 외곽 상자 모서리만이
-		#  아니라 **진짜 손끝**도 잰다. 굽힌 손가락은 상자 안에서 끝나도 밑으로 처져
-		#  (h 가 낮으면 화면에서 아래) 물건 앞 테 밑으로 나올 수 있다. 손끝 마디 끝의
-		#  위 · 아래 두 점(굵기 반 2.5)이 물건 윤곽 안이어야 한다.
-		for tp in rg.get("tips", []):
-			var tt3: Transform3D = (tp as Node3D).global_transform
-			for dy in [-2.5, 2.5]:
-				ftip = maxf(ftip, _cover_r(_scr(tt3 * Vector3(0.0, dy, 0.0)), cs, it))
-			ntip += 1
-		var th: Node3D = rg.thumb
-		var tt: Vector3 = hd.global_transform * (th.transform * Vector3(float(g.HAND3.th_l),
-				float(g.HAND3.th_t) * 0.5, 0.0))
-		var tr := _cover_r(_scr(tt), cs, it)
-		thumb_r = Vector2(minf(thumb_r.x, tr), maxf(thumb_r.y, tr))
-		var mine_on: bool = ((th.get_child(0) as VisualInstance3D).layers & g.HAND3_FRONT) != 0
-		var oth: Node3D = (g.hand3_rig[1 - side] as Dictionary).thumb
-		var other_off: bool = ((oth.get_child(0) as VisualInstance3D).layers & g.HAND3_FRONT) == 0
-		front_ok = front_ok and g.hand3_front_on and mine_on and other_off \
+		if kind == "rare":
+			var cs: Vector2 = g._p2s(float(it.u), float(it.w), float(it.h))
+			var p_i := _scr((rg.tips[0] as Node3D).global_transform.origin)
+			var p_t := _scr((rg.ttip as Node3D).global_transform.origin)
+			var ov := Vector2(tw_i - _rim_px(p_i, cs, it), tw_t - _rim_px(p_t, cs, it))
+			tip_lo = Vector2(minf(tip_lo.x, ov.x), minf(tip_lo.y, ov.y))
+			tip_hi = Vector2(maxf(tip_hi.x, ov.x), maxf(tip_hi.y, ov.y))
+			var pts := []
+			for f in 4:
+				pts.append(["너클%d" % f, (hj.j1[f] as Node3D).global_transform.origin])
+			for f in range(1, 4):
+				pts.append(["말린 손끝%d" % f, (rg.tips[f] as Node3D).global_transform.origin])
+			pts.append(["검지 가운데 마디", (hj.j2[0] as Node3D).global_transform.origin])
+			pts.append(["엄지 뿌리", (hj.thumb as Node3D).global_transform.origin])
+			pts.append(["엄지 마디", (hj.t2 as Node3D).global_transform.origin])
+			for x in [0.0, 16.0, 30.0]:
+				for z in [-15.0, 15.0]:
+					for y in [-5.0, 5.0]:
+						pts.append(["손바닥 %.0f" % x, hd.global_transform * Vector3(x, y, z)])
+			for pr in pts:
+				var cr := _cover_r(_scr(pr[1]), cs, it)
+				if cr < hand_in:
+					hand_in = cr
+					hand_at = String(pr[0])
+			if side == 1:
+				var rn: Node3D = (hj.j1[2] as Node3D)
+				ring_r = minf(ring_r, _cover_r(_scr(rn.global_transform * Vector3(6.0, 0.0, 0.0)), cs, it))
+		var all: bool = bool(g.give_all)
+		var palm_on := _front((hj["in"] as Node3D).get_child(0))
+		var tips_on := _front((hj.j2[0] as Node3D).get_child(0)) and _front((hj.t2 as Node3D).get_child(0))
+		var other_off := not _front((oj.t2 as Node3D).get_child(0)) \
+				and not _front((oj.j2[0] as Node3D).get_child(0))
+		front_ok = front_ok and g.hand3_front_on and tips_on and other_off \
+				and palm_on == all \
 				and g.hand3_fvp.render_target_update_mode == SubViewport.UPDATE_ALWAYS
 		n += 1
-	_ok("살핀 틀이 있다", n > 10, "%d틀" % n)
+	_ok("살핀 틀이 있다 (%s)" % nm, n > 10, "%d틀" % n)
 	var drift: float = (hi - lo).length()
-	_ok("물건이 쥔 자리에서 안 미끄러진다", drift <= 1.5,
-			"손 좌표 흔들림 %.2f (손각 · 굴림 · 들기를 다 탄다)" % drift)
-	_ok("손끝이 물건 테 안에서 끝난다", worst <= 1.0,
-			"손끝 네 모서리 최대 %.2f (1 이하면 물건이 덮는다)" % worst)
-	if ntip > 0:
-		_ok("손가락 끝이 물건 테 안에서 끝난다", ftip <= 1.0,
-				"손끝 마디 끝 최대 %.2f (1 이하면 물건이 덮는다)" % ftip)
-	_ok("엄지 끝이 물건 윗면에 얹힌다", thumb_r.y <= 0.95 and thumb_r.x >= 0.45,
-			"테에서 %.2f ~ %.2f (0.45~0.95 — 테 가까이, 물건 안)" % [thumb_r.x, thumb_r.y])
-	_ok("쥔 엄지만 앞 층에 선다", front_ok, "")
+	_ok("물건이 쥔 자리에서 안 미끄러진다 (%s)" % nm, drift <= 1.5,
+			"손 좌표 흔들림 %.2f (손각 · 숙임 · 들기를 다 탄다)" % drift)
+	if kind == "rare":
+		_ok("검지 끝이 테에 얹힌다 (%s)" % nm, tip_lo.x >= 0.5 and tip_hi.x <= 3.0,
+				"테를 덮는 폭 %.1f ~ %.1fpx (0.5~3)" % [tip_lo.x, tip_hi.x])
+		_ok("엄지 끝이 테에 얹힌다 (%s)" % nm, tip_lo.y >= 0.5 and tip_hi.y <= 3.0,
+				"테를 덮는 폭 %.1f ~ %.1fpx (0.5~3)" % [tip_lo.y, tip_hi.y])
+		_ok("손 나머지는 물건 윤곽 밖 (%s)" % nm, hand_in >= 1.0,
+				"가장 안쪽 %s %.2f (1 이상이면 윤곽 밖)" % [hand_at, hand_in])
+		if side == 1:
+			_ok("반지가 물건에 안 가린다", ring_r >= 1.0, "윤곽 비 %.2f" % ring_r)
+	_ok("집는 손끝만 앞 층에 선다 (%s)" % nm, front_ok,
+			"손 전부" if bool(g.give_all) else "엄지 끝마디 · 검지 끝마디")
 	guard = 0
 	while g.give_i >= 0 and guard < 600:
 		guard += 1
 		await _wait(1)
 	await _wait(3)
-	var th_off := true
+	var off := true
 	for i in 2:
-		var th2: Node3D = (g.hand3_rig[i] as Dictionary).thumb
-		th_off = th_off and (((th2.get_child(0) as VisualInstance3D).layers & g.HAND3_FRONT) == 0)
-	_ok("놓으면 앞 층을 걷는다", th_off and not g.hand3_front_on
+		var hj2: Dictionary = (g.hand3_rig[i] as Dictionary).hj
+		off = off and not _front((hj2.t2 as Node3D).get_child(0)) \
+				and not _front((hj2.j2[0] as Node3D).get_child(0)) \
+				and not _front((hj2["in"] as Node3D).get_child(0))
+	_ok("놓으면 앞 층을 걷는다 (%s)" % nm, off and not g.hand3_front_on
 			and g.hand3_fvp.render_target_update_mode == SubViewport.UPDATE_DISABLED, "")
+
+
+func _grip_checks() -> void:
+	await _grip_case("rare", 400.0)
+	await _grip_case("rare", 240.0)
+	await _grip_case("dart", 240.0)
+	await _grip_case("pack", 400.0)
 
 
 func _run() -> void:
@@ -324,8 +392,9 @@ func _run() -> void:
 	g.idle_t = 0.0
 	await _wait(3)
 
-	# ⑦″ 쥔다 — 2026-10-02 「동전에 손가락이 뚫리는데 이건 뭐 어떻게 안될까?」.
-	#  상인이 물건을 받아 살피는 박자 한가운데에서 잰다.
+	# ⑦″ 집는다 — 2026-10-02 「동전에 손가락이 뚫리는데 이건 뭐 어떻게 안될까?」 ·
+	#  「지금 동전 짚는 손 모양 너무 이상한데」. 상인이 물건을 받아 살피는 박자 내내 잰다 —
+	#  레어 동전을 두 손에 한 번씩, 다트(손 전부가 앞 층) · 팩을 한 번씩.
 	await _grip_checks()
 
 

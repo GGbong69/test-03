@@ -59,7 +59,8 @@ func _run() -> void:
 
 	#  헤드리스라 _npc_arms(그리기)가 안 돌아서 손바닥이 비어 있다.
 	#  살핌 때 손이 서는 자리를 그대로 세워 둔다. 2026-10-02 부터 물건은
-	#  손바닥(npc_palm)이 아니라 뒤 테를 쥔 자리(npc_hold)에 걸린다 — 둘 다 세운다.
+	#  손바닥(npc_palm)이 아니라 손끝 둘이 테를 집은 그 물건의 자리(npc_hold)에 선다 —
+	#  둘 다 세운다.
 	g.npc_palm[1] = Vector3(430.0, 36.0, 15.0)
 	g.npc_palm[0] = Vector3(214.0, 36.0, 15.0)
 	g.npc_hold[1] = Vector3(430.0, 30.0, 21.0)
@@ -92,12 +93,15 @@ func _run() -> void:
 	g._give_tick(1.0 / 60.0)
 	_ok("손이 멈추면 물건도 멈춘다", absf(float(it.psi) - psi1) < 0.0001,
 			"psi %+.4f" % (float(it.psi) - psi1))
+	#  굴림은 손이 아니라 손끝 사이의 물건을 기울인다(쥔 손은 안 구른다 — _npc_arm).
+	#  옮기는 비가 GIVE.tip 이고 칸(−1..1)에서 자른다.
 	g.npc_grip[side] = Vector2(0.6, deg_to_rad(70.0))
 	g._give_tick(1.0 / 60.0)
+	var want_w: float = clampf(sin(deg_to_rad(70.0)) * float(g.GIVE.tip), -1.0, 1.0)
 	_ok("손을 굴리면 물건이 기운다",
-			absf(float(it.wob) - sin(deg_to_rad(70.0))) < 0.001
+			absf(float(it.wob) - want_w) < 0.001
 			and absf(float(it.roll) - deg_to_rad(70.0)) < 0.001,
-			"wob %.2f · roll %.2f" % [float(it.wob), float(it.roll)])
+			"wob %.2f (%.2f) · roll %.2f" % [float(it.wob), want_w, float(it.roll)])
 	g.npc_grip[side] = Vector2(0.6, -deg_to_rad(70.0))
 	g._give_tick(1.0 / 60.0)
 	_ok("반대로 굴리면 반대로 기운다", float(it.wob) < -0.9,
@@ -109,18 +113,16 @@ func _run() -> void:
 			"wob %.3f" % float(it.wob))
 	g.npc_grip[side] = Vector2(0.0, 0.0)
 	g._give_tick(1.0 / 60.0)
-	#  2026-10-02 「동전에 손가락이 뚫리는데 이건 뭐 어떻게 안될까?」 — 물건은
-	#  손바닥 한가운데가 아니라 **뒤 테**를 쥔다(GIVE 「테를 쥔다」). 쥔 자리
-	#  (npc_hold)가 물건 뒤 테이고 물건 윗면 높이다. 한가운데는 거기서 손각 쪽으로
-	#  물건 반지름만큼 나간다 — 손각 0 이면 u 쪽으로.
+	#  2026-10-02 「동전에 손가락이 뚫리는데」 · 「지금 동전 짚는 손 모양 너무 이상한데」 —
+	#  물건은 손바닥 위가 아니라 손끝 둘이 **테를 집은** 자리에 선다(GIVE 「테를 집는다」).
+	#  npc_hold 가 손 좌표의 그 점을 손과 같은 변환으로 옮긴 물건 한가운데 · 윗면 높이라,
+	#  물건은 그 자리에 그대로 서야 한다(옛 판은 뒤 테 자리에서 반지름만큼 앞이었다).
 	var pm: Vector3 = g.npc_hold[g.give_side]
-	var gr: float = g._give_r(it)
 	_ok("쥔 자리 높이에 얹혔다", absf(float(it.h) - pm.z) < 0.01,
 			"h %.1f = 쥔 자리 %.1f" % [float(it.h), pm.z])
-	_ok("뒤 테가 쥔 자리다", absf(float(it.u) - gr - pm.x) < 0.01
+	_ok("물건이 집은 자리에 선다", absf(float(it.u) - pm.x) < 0.01
 			and absf(float(it.w) - pm.y) < 0.01,
-			"u %.1f − r %.1f = %.1f · w %.1f/%.1f" % [float(it.u), gr, pm.x,
-			float(it.w), pm.y])
+			"u %.1f/%.1f · w %.1f/%.1f" % [float(it.u), pm.x, float(it.w), pm.y])
 	#  카운터 선을 안 넘어야 한다 — 넘으면 벽 사각이 물건을 지운다
 	var sy: float = g.TBL.fy + float(it.w) * g.TBL.flat - float(it.h) * g.TBL.tall
 	_ok("든 물건이 카운터 밑에 있다", sy > g.TBL.fy,
@@ -180,12 +182,12 @@ func _run() -> void:
 			hi_h = float((g.drop[0] as Dictionary).h)
 	_ok("뿌리기 직전 높이가 0", hi_h < 1.0, "h %.2f" % hi_h)
 
-	# 손이 이쪽저쪽 기울이는가 — 한 방향으로만 가면 "살폈다" 가 아니다.
-	#  기준을 ±17° 에서 ±8.6° 로 내렸다(2026-10-02). 옛 손은 물건을 손바닥에 얹고
-	#  70° 뒤척였는데, 이제 엄지가 물건 윗면 테를 누르는 쥔 손이다 — 물건이 2D 라
-	#  누운 채로만 그려지므로 손이 크게 구르면 굴러 내려간 쪽 손끝이 물건 옆테
-	#  밖으로 나와 「동전에 손가락이 뚫리는」 그림이 된다(qa_hand3 이 손끝을 잰다).
-	#  「양쪽으로」 가 이 검사의 뜻이고, 그것은 그대로 잰다.
+	# 이쪽저쪽 기울여 보는가 — 한 방향으로만 가면 "살폈다" 가 아니다.
+	#  2026-10-02 둘째 판부터 쥔 손은 안 구르고, 굴림(6°)은 손끝 사이의 **물건**을
+	#  기울인다(GIVE.tip 배 — _npc_arm · _give_tick). 손이 구르면 테를 문 손끝이 누운 채인
+	#  2D 테에서 떠서다(qa_hand3 이 손끝이 테를 덮는 폭을 잰다). 그래서 손의 굴림각이
+	#  아니라 화면에 나오는 것 — 물건 기울임(wob = sin 굴림 · tip)이 양쪽으로 0.25(세로 3%)
+	#  넘게 가는지를 잰다. 「양쪽으로」 가 이 검사의 뜻이고, 그것은 그대로다.
 	var li2: int = g._idle_index("살핌")
 	g.idle_act = li2
 	g.idle_side = 1
@@ -200,8 +202,10 @@ func _run() -> void:
 		rhi = maxf(rhi, float(hh.roll))
 		alo = minf(alo, float(hh.ang))
 		ahi = maxf(ahi, float(hh.ang))
-	_ok("손이 양쪽으로 굴린다", rlo < -0.15 and rhi > 0.15,
-			"굴림 %.0f° ~ %+.0f°" % [rad_to_deg(rlo), rad_to_deg(rhi)])
+	var wlo: float = sin(rlo) * float(g.GIVE.tip)
+	var whi: float = sin(rhi) * float(g.GIVE.tip)
+	_ok("물건이 양쪽으로 기운다", wlo < -0.25 and whi > 0.25,
+			"wob %.2f ~ %+.2f (굴림 %.1f° ~ %+.1f°)" % [wlo, whi, rad_to_deg(rlo), rad_to_deg(rhi)])
 	_ok("손각도 양쪽으로 흔든다", alo < -0.05 and ahi > 0.05,
 			"손각 %.0f° ~ %+.0f°" % [rad_to_deg(alo), rad_to_deg(ahi)])
 	g.idle_act = -1

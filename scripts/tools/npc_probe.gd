@@ -114,7 +114,14 @@ func _measure() -> void:
 		fails += 1
 		return
 
-	# 두 가면을 뜬다 — 상인인가(실루엣), 그리고 밝은가(L* 45 이상).
+	# 두 가면을 뜬다 — 상인인가(실루엣), 그리고 밝은 **살**인가(L* 45 이상 · 살빛 채도).
+	#  2026-10-02 시안 B 에서 「밝은 것」 을 살빛으로 좁혔다. 이 검사의 뜻은 눈이 손부터
+	#  가는가인데, L* 하나로만 세면 걷은 크림 소매가 손 다음 밝기라 소매 조각이 「손 말고
+	#  밝은 것」 으로 잡혔다 — 그래서 소매를 0.9 배로 눌러 맞췄더니 크림이 낙타색 · 황토로
+	#  읽혀 시안 B 의 정체가 무너졌다(검토 B: 「프로브가 그림을 틀린 쪽으로 몰았다」).
+	#  천을 다시 어둡게 하지 않고 검사를 고친다 — 밝고(L* 45) **살빛 채도**(a* 12 · b* 18
+	#  이상)인 화소만 센다. 손이 먼저 읽히는 것은 채도와 램프 웅덩이가 맡는다. 무채색에
+	#  가까운 크림 천(a* ≤ 8 · b* ≤ 14)은 밝아도 손과 다투지 않는다.
 	var fg := PackedByteArray()
 	var lit := PackedByteArray()
 	fg.resize(W * H)
@@ -123,7 +130,8 @@ func _measure() -> void:
 		for x in W:
 			var c := img.get_pixel(X0 + x, Y0 + y)
 			fg[y * W + x] = 0 if _is_bg(c, Y0 + y) else 1
-			lit[y * W + x] = 1 if _lstar(c) >= 45.0 else 0
+			var lab := _lab(c)
+			lit[y * W + x] = 1 if lab.x >= 45.0 and lab.y >= 12.0 and lab.z >= 18.0 else 0
 
 	var blobs := _label(fg)
 	var big := _over(blobs, 30)
@@ -273,9 +281,9 @@ func _measure() -> void:
 	# ── T5 화면에서 밝은 것이 손 둘뿐인가 ─────────────────
 	# 눈은 가장 밝은 데로 먼저 간다. 그게 옆구리 획이면 상인이 안 읽힌다.
 	_ok("밝은 덩어리", bright.size() == 2,
-			"%d개 (기준 정확히 2 — 손 둘)" % bright.size())
+			"%d개 (기준 정확히 2 — 손 둘 · L* 45+ 살빛)" % bright.size())
 	for b in bright:
-		print("        L*45+ 면적 %4d  x[%d,%d] y[%d,%d]"
+		print("        L*45+ 살빛 면적 %4d  x[%d,%d] y[%d,%d]"
 				% [b.area, b.x0, b.x1, b.y0, b.y1])
 
 	# ── T9 손이 동전보다 작지 않은가 ──────────────────────
@@ -326,11 +334,26 @@ func _is_bg(c: Color, sy: int) -> bool:
 	return false
 
 
-# CIE L*. RGB 차이는 이 어두운 구간에서 거짓말을 한다 — 조끼(9)와 소매(24)
-# 는 RGB 로 15 나 갈리는 것 같지만 L* 로는 4.0 이라 눈에 안 보인다.
-func _lstar(c: Color) -> float:
-	var y := 0.2126 * _lin(c.r) + 0.7152 * _lin(c.g) + 0.0722 * _lin(c.b)
-	return 116.0 * pow(y, 1.0 / 3.0) - 16.0 if y > 0.008856 else 903.3 * y
+# CIE L*a*b* (D65). RGB 차이는 이 어두운 구간에서 거짓말을 한다 — 조끼(9)와 소매(24)
+# 는 RGB 로 15 나 갈리는 것 같지만 L* 로는 4.0 이라 눈에 안 보인다. 살빛인가는
+# a*(붉은 쪽) · b*(노란 쪽)로 가른다(T5 머리말).
+func _lab(c: Color) -> Vector3:
+	var r := _lin(c.r)
+	var gg := _lin(c.g)
+	var b := _lin(c.b)
+	var xx := (0.4124 * r + 0.3576 * gg + 0.1805 * b) / 0.95047
+	var yy := 0.2126 * r + 0.7152 * gg + 0.0722 * b
+	var zz := (0.0193 * r + 0.1192 * gg + 0.9505 * b) / 1.08883
+	var fx := _labf(xx)
+	var fy := _labf(yy)
+	var fz := _labf(zz)
+	return Vector3(116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz))
+
+
+func _labf(t: float) -> float:
+	return pow(t, 1.0 / 3.0) if t > 0.008856 else 7.787 * t + 16.0 / 116.0
+
+
 
 
 func _lin(v: float) -> float:

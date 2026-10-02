@@ -17213,6 +17213,9 @@ const NPC := {
 	"ang_l": 84.0, "sc_l": 0.97,
 	"ang_r": 112.0, "sc_r": 1.0,   # 쓸 때의 손각은 상수가 아니라 팔 방향이 정한다
 	"breathe": 1.4,
+	#  판 고르기에서 쉬는 손목을 바깥으로 미는 길이(면 u). 카드 가장자리에서 손 안쪽
+	#  모서리(엄지)까지 화면 4px 이상 — 12 는 오른손 엄지가 카드 모서리에 닿았다.
+	"leg_out": 16.0,
 }
 
 # 손 하나. 손목이 원점이고 +x 가 손가락 방향, +y 가 새끼손가락 쪽이다.
@@ -19542,12 +19545,14 @@ func _cover_draw() -> void:
 	_npc_arms()
 	if nd > 0.01:
 		draw_set_transform(shake_off)
+	#  든 물건의 등급 빛은 손 **밑**이다 — 몸은 손 다음, 빛은 손 앞(_give_glow_draw).
+	_give_glow_draw()
 	#  3D 손은 **두 팔 다음**이다. 팔 사이에 끼우면 한쪽 손이 반대편
 	#  팔 밑으로 들어간다.
 	_hand3_draw()
 	#  상인이 든 물건은 손 **다음**이다.
 	_give_draw()
-	#  쥔 엄지는 그 물건 **다음**이다 — 물건 앞에 서는 마디만 한 번 더(HAND3_FRONT).
+	#  테를 집은 손끝 둘은 그 물건 **다음**이다 — 물건 앞에 서는 마디만 한 번 더(HAND3_FRONT).
 	_hand3_front_draw()
 	# 가까운 쪽 레일 — 리롤·다음 버튼이 그 아래 앞치마에 얹힌다
 	if t3:
@@ -19891,6 +19896,17 @@ func _npc_arms() -> void:
 		g0.dw -= float(SWEEP.aside) * a
 		g0.dh += float(SWEEP.aside_h) * a
 		g0.el = lerpf(float(g0.el), 1.0, a)
+	#  ── 판 고르기에서는 쉬는 두 손이 바깥으로 벌어진다 ────────
+	#  그 화면은 가운데 판 카드(x 241~400 · 윗변 y 122)가 두 손 사이에 선다. 손이
+	#  58 로 커진 뒤 손끝이 y 151 까지 내려와 두 손의 엄지 · 검지 쪽이 카드 밑으로
+	#  미끄러져 들어간 그림이 됐다(검토 B — 「끼인 손가락」). 그 화면에서만 손목을
+	#  바깥으로 민다(NPC.leg_out). 쓸기의 비켜서기와 같은 봉투다 — 팔꿈치까지 통째로
+	#  따라가고(el 1), 몸짓 · 숨 위에 더해지며, 화면을 뜨면 같은 길로 돌아온다(npc_leg).
+	if npc_leg > 0.002:
+		g0.du -= float(NPC.leg_out) * npc_leg
+		g1.du += float(NPC.leg_out) * npc_leg
+		g0.el = lerpf(float(g0.el), 1.0, npc_leg)
+		g1.el = lerpf(float(g1.el), 1.0, npc_leg)
 	_npc_arm(0, g0, bd, 0.0)
 	# 쓸는 팔 — 어깨부터 **쭉 편 채** 휩쓴다(_npc_arm 의 쓸기 갈래).
 	_npc_arm(1, g1, bd, a)
@@ -19917,6 +19933,13 @@ func _npc_arm(i: int, g: Dictionary, bd: Dictionary, a: float) -> void:
 	var he: float = float(HAND3.h_el) + float(g.dh) * 0.5
 	var rl: float = float(g.roll)
 	var gk := _give_grip(i)
+	#  쥐는 손은 물건 쪽으로 돈다 — 엄지–검지 사이(물갈퀴)가 물건을 보게(GIVE 「테를
+	#  집는다」). 쉬는 손각에서 90° ± yaw 로 건너간다(화면 왼손은 바깥 +, 오른손은 −,
+	#  거울이다). 손목에서 30° 언저리 꺾임이라 사람 손목(자뼈 쪽 30~40°) 안이다.
+	if gk > 0.0005:
+		var ga0: float = deg_to_rad(90.0 + (1.0 if i == 0 else -1.0) * float(GIVE.yaw))
+		ang += angle_difference(deg_to_rad(float(NPC.ang_l if i == 0 else NPC.ang_r)), ga0) \
+				* smoothstep(0.0, 1.0, gk)
 	var wrr: float = float(NPC.wr_w)
 	if a > 0.004:
 		# 쓸는 팔 — 몸이 +5° 기울며 뻗고, −5° 로 넘어가는 동안 팔이 부채꼴로
@@ -19935,19 +19958,25 @@ func _npc_arm(i: int, g: Dictionary, bd: Dictionary, a: float) -> void:
 		sc *= lerpf(1.0, float(SWEEP.hand_up), a)
 		rl *= 1.0 - a
 		wrr = lerpf(wrr, 15.0, a)
-	#  쉬는 손은 손끝 쪽으로 숙는다(손바닥은 턱, 손가락은 벨벳). 쥐는 손 ·
-	#  미는 손은 편다 — 숙인 채 쥐면 든 물건이 손끝 쪽으로 기울어 떠 보인다.
-	var pit: float = deg_to_rad(float(HAND3.pit)) * (1.0 - maxf(gk, a))
+	#  쉬는 손은 손끝 쪽으로 숙는다(손바닥은 턱, 손가락은 벨벳). 미는 손은 편다.
+	#  쥐는 손은 GIVE.pit 로 건너간다 — 집는 손끝 둘이 손등보다 낮게 내려와 테를
+	#  물고, 손 자체는 물건 뒤에 높이 선다.
+	var pit: float = deg_to_rad(lerpf(float(HAND3.pit), float(GIVE.pit), gk)) * (1.0 - a)
 	#  손바닥 한가운데 — 누름(_npc_hit)이 쓴다. 손목이 아니라 **손바닥**이라야
 	#  손을 눌렀을 때 손이 맞는다.
 	npc_palm[i] = _palm_of(wr, ang, sc, hw)
-	#  든 물건의 뒤 테가 걸리는 자리 — _give_tick 이 물건을 여기에 건다.
-	npc_hold[i] = _hold_of(wr, ang, sc, hw, pit, rl)
+	#  손끝 둘이 테를 집은 물건의 자리 — _give_tick 이 물건을 여기에 세운다.
+	#  쥔 손은 안 구른다 — 굴림(살핌의 「이쪽저쪽 기울여 본다」)은 손끝 둘 사이에서
+	#  물건만 기운다(npc_grip.y → wob). 2D 물건은 누운 채로만 그려져서, 손이 구르면
+	#  테를 문 손끝이 그려진 테에서 위아래로 떠(검지 −0.2~2.3px · qa_hand3) 「집은」 것이
+	#  풀린다. 사람도 동전을 손끝 사이에 끼운 채 손가락으로 굴려 빛에 비춰 본다.
+	var rh: float = rl * (1.0 - gk)
+	npc_hold[i] = _hold_of(wr, ang, sc, hw, pit, rh, i == 1)
 	npc_grip[i] = Vector2(ang, rl)
 	npc_elbow[i] = el
 	npc_shoulder[i] = sh
 	_npc_limb({"sh": sh, "el": el, "wr": wr, "ang": ang, "sc": sc, "mir": i == 1,
-			"wrr": wrr, "hw": hw, "eh": he, "roll": rl, "pit": pit, "grip": gk})
+			"wrr": wrr, "hw": hw, "eh": he, "roll": rh, "pit": pit, "grip": gk})
 
 
 #  어깨 — 몸통 3D 가 서는 자세(_body3_sync 와 **같은 식**)로 옮긴 면 좌표
@@ -20118,7 +20147,7 @@ const HAND3 := {
 	#  몸통을 조금 좁히고(BODY3 가슴 122) 팔을 굵히고(위팔 40 · 팔뚝 36) 손을
 	#  키웠다(31 × 58). 122 : 40 : 36 : 31 = 3.4 : 1.1 : 1.0 : 0.86.
 	#  **이 표가 손 크기의 원본이다.** 손가락을 세우는 판(시안 A/B/C)도 손 외곽을
-	#  여기서 가져가야 든 물건 자리(GIVE.gx · _hold_of)와 누름 자리가 손을 따라간다.
+	#  여기서 가져가야 든 물건 자리(GIVE · _hold_of)와 누름 자리가 손을 따라간다.
 	#  길이는 매물 윗줄이 정한다 — 손바닥은 먼 턱에, 손끝은 벨벳 먼 띠에 얹혀야
 	#  하는데 그 띠가 매물 윗줄(w 28, 동전 윗끝 화면 133)까지 17px 뿐이다. 60 이면
 	#  손끝이 y 155 까지 내려와 윗줄 동전을 22px 덮었다(옛 상자 손 145). 58 · 숙임 3°
@@ -20129,7 +20158,7 @@ const HAND3 := {
 	#  엄지 — 옛 상자 손에는 없었다. 실루엣 밖으로 나오는 유일한 손가락이고(PALM
 	#  머리말), 든 물건 **앞**에 서는 유일한 마디라 따로 둔다(HAND3_FRONT).
 	#  뿌리는 손목 앞 th_x, 손바닥 엄지 쪽 옆구리. 쉴 때는 손끝 방향에서 th_out
-	#  만큼 벌어져 판에 눕고, 쥘 때(GIVE.gx)는 물건 뒤 테를 넘어 그 윗면을 누른다.
+	#  만큼 벌어져 판에 눕고, 쥘 때는 검지와 마주 서서 물건 뒤 테를 집는다(GIVE 「테를 집는다」).
 	"th_l": 26.0, "th_w": 10.0, "th_t": 9.0,
 	"th_x": 8.0,
 	"th_out": 22.0,
@@ -20223,6 +20252,10 @@ const FING3 := {
 	#  엄지 손톱이 비스듬히 옆을 보게 제 축으로 굴린 각. 42 에서는 엄지가 모로 서서
 	#  위에서 보면 폭이 반으로 줄었다 — 24 면 윗면이 보이면서도 손톱은 옆으로 돈다.
 	"t_twist": 24.0,
+	#  쉬는 엄지 뿌리 x — 공통 외곽(HAND3.th_x 8)보다 3 앞이다. 8 이면 엄지 끝이 너클 줄에서
+	#  멈춰 손 옆의 짧은 혹이 됐다(검토 B — 「쉬는 엄지가 뭉툭하다」). 사람 엄지는 손목이
+	#  아니라 손바닥 3 분의 1 쯤에서 손에서 떨어진다(쥘 때는 GIVE.th_root 로 더 나온다).
+	"t_rx": 11.0,
 	#  ── 살 — 픽셀아트 사다리 ─────────────────────────
 	#  분홍 플라스틱도 회색도 아니다. 램프(ffcf8a)가 파랑을 반쯤 먹으므로
 	#  **바탕은 식은 장밋빛**이다 — 살빛 바탕(c98c6c)을 그대로 넣었더니 램프
@@ -20248,10 +20281,12 @@ const FPOSE := {
 	#  쉼 — 손바닥은 먼 턱에, 손가락은 벨벳으로 늘어진다. 새끼로 갈수록 더 굽는다.
 	#  끝 관절은 얕게(12~18) — 22~32 로 말았더니 끝 마디 마구리가 카메라를 봐서
 	#  손끝마다 빛을 못 받은 검은 단이 붙었다(검토 실측).
-	#  엄지는 접지도 내리지도 않는다(tf 0 · td 0) — 벌림 th_out 그대로 판에 눕는다.
-	#  접고 내리면 굴림 탓에 내림이 손바닥 밑으로 가서, 손 옆에 엄지 끝이 2px 만 남아
-	#  손이 엄지 없는 주걱으로 읽혔다(촬영).
-	"rest": [7.0, 8.0, 10.0, 13.0, 12.0, 14.0, 16.0, 18.0, 3.0, 0.0, 10.0, 0.0],
+	#  엄지는 접지 않는다(tf 0) — 벌림 th_out 그대로 판에 눕는다. 접으면 굴림 탓에
+	#  손바닥 밑으로 가서, 손 옆에 엄지 끝이 2px 만 남아 엄지 없는 주걱으로 읽혔다(촬영).
+	#  내림은 조금(td 6) — 0 이면 엄지 끝이 너클 줄에서 멈춰 6~7px 혹으로만 나왔다
+	#  (검토 B). 뿌리를 앞으로 낸 것(FING3.t_rx)과 같이 엄지 끝이 너클 줄을 넘어 검지
+	#  첫 마디 옆까지 와서 판에 닿는다.
+	"rest": [7.0, 8.0, 10.0, 13.0, 12.0, 14.0, 16.0, 18.0, 3.0, 0.0, 10.0, 6.0],
 	#  편 손 — 쓸기 · 내밀기 · 기대기. 손바닥이 판을 민다.
 	"open": [2.0, 1.0, 1.0, 3.0, 4.0, 4.0, 5.0, 6.0, 6.0, 0.0, 6.0, 4.0],
 	#  쫙 편 손 — 기지개 · 움찔 · 손사래. 손가락이 뒤로 젖는다.
@@ -20260,15 +20295,13 @@ const FPOSE := {
 	"fist": [84.0, 86.0, 88.0, 88.0, 100.0, 104.0, 104.0, 104.0, 0.0, 0.85, 40.0, 30.0],
 	#  짚기 — 검지만 편다.
 	"point": [-2.0, 82.0, 86.0, 88.0, 4.0, 100.0, 104.0, 104.0, 0.0, 0.7, 36.0, 26.0],
-	#  쥔 손 — 든 물건의 **뒤 테**를 쥔다(GIVE 「테를 쥔다」). 손가락은 거의 편 채
-	#  물건 밑으로 들어가 뒤 절반 밑에서 끝난다 — 물건(2D)이 덮어 안 보인다. 엄지는
-	#  물건 윗면으로 건너가 앞 층에 선다(_thumb3_grip · HAND3_FRONT). 엄지 값 셋은
-	#  쥔 자리(grip_xf)가 덮으므로 곧게(tc 0) 두기만 한다 — 굽은 채 늘리면 엄지 끝이
-	#  물건 테 위에서 멈춘다.
-	#  손끝이 외곽 상자(palm_l · palm_t) 밖으로 나가면 안 된다 — qa_hand3 이 상자
-	#  모서리와 손끝 넷을 같이 잰다. 많이 말면 손끝이 내려가(h) 화면에서 물건 앞 테
-	#  밑으로 삐져나온다 — 그것이 「동전에 손가락이 뚫리는」 그림이다.
-	"grip": [4.0, 4.0, 5.0, 6.0, 6.0, 6.0, 7.0, 8.0, 4.0, 0.0, 0.0, 0.0],
+	#  집는 손 — 엄지와 검지 끝 둘만 물건 테를 문다(GIVE 「테를 집는다」). 정밀 집기
+	#  그림의 규칙대로 **나머지 셋은 손바닥 쪽으로 느슨히 만다**(반 주먹 — 주먹 fist 의
+	#  9 할) — 셋이 같이 펴 있으면 다섯이 다 일하는 틀린 손이 되고, 펴진 손끝이 물건
+	#  뒤 테 밑으로 들어가 다시 「뚫린」 그림이 된다. 새끼로 갈수록 더 만다.
+	#  검지(첫 칸 · 다섯째 칸)와 엄지는 여기 값이 아니라 _grip3_ik 가 테에 세운다 —
+	#  여기 값은 쉼에서 그 자리로 건너가는 길의 중간일 뿐이다.
+	"grip": [30.0, 80.0, 84.0, 86.0, 40.0, 98.0, 100.0, 102.0, 0.0, 0.0, 20.0, 0.0],
 }
 #  몸짓 이름 — 그 손이 하는 몸짓이 아니어도 손가락을 같이 쓰는 몸짓(몸 전체를
 #  쓴다). 매 틀 배열을 새로 짓지 않게 const 로 올린다.
@@ -20280,15 +20313,30 @@ const FING3_BUSY := ["털기", "기대기", "기지개", "고쳐서기", "끄덕
 #  팔이 길어지는 자세에서 맨살이 같이 늘어나 팔이 고무가 된다.
 #  굵기는 HAND3 의 팔(arm_w0 36 · arm_t0 26 → arm_w1 27 · arm_t1 17 · 위팔 up_w 40~37)
 #  을 따른다 — 세 시안이 같은 팔 굵기를 대야 손 모양만 갈린다.
+#
+#  셔츠 천 한 가지 — 걷은 소매와 조끼 V 사이 셔츠 앞판(VEST3.shirt)이 **같은 천**이다.
+#  조끼에 셔츠 소매를 걷은 차림이면 앞판과 소매가 한 벌이어야 한다 — 앞판은 회색
+#  모브(L* 29 · b* 3), 소매는 낙타색(b* 30대)이라 셔츠가 두 벌로 읽혔다(검토 B).
+#  바탕을 **식은 저채도**로 당긴다. 살(c4999f) · 조끼(VEST3)에서 이미 한 그 수다 —
+#  호박빛 램프(ffcf8a)가 파랑을 반쯤 먹으므로, 바탕이 크림(노랑)이면 램프 밑에서 황토 ·
+#  겨자가 되고(쉬는 소매 (122~127, 82~88, 27~47) · 쓸기 (221,180,99)), 푸른 잿빛이어야
+#  램프 밑에서 크림이 된다. 옛 값(175,161,129)은 npc_probe 「밝은 덩어리」를 맞추려
+#  0.9 배로 눌렀던 값이라 천이 살보다 어둡고 더 노랬다 — 같은 빛에서 크림 천이 맨살보다
+#  어둡고 노라면 크림이 아니다. 이제 천을 누르지 않고 검사가 살빛만 센다(npc_probe T5).
+const SHIRT3 := Color8(174, 188, 212)
 const FORE3 := {
 	#  쉬는 팔뚝(팔꿈치 너머 back 12 를 더해 76 · 70)에서 걷은 단이 팔꿈치 바로
 	#  밑에 서는 맨살 길이. 화면 오른팔은 덜 걷었다 — 두 소매가 같은 높이면 거울 쌍둥이다.
-	#  걷은 단은 팔꿈치에서 한 뼘(8~10) 밑이다 — 팔꿈치에 바로 붙이면 두툼한 단(31)이
-	#  화면에서 위로 9px 솟아 위팔의 소매 띠를 가렸다(촬영).
-	"bare": 42.0,
-	"bare_r": 38.0,
+	#  걷은 단은 **팔꿈치에 붙인다**(뿌리에서 back 12 — 위팔이 덮는 자리 바로 밑).
+	#  옛 값(42 · 38, 단 14 두께 31)은 단이 팔꿈치에서 8 내려와 있고 두꺼워, 쉬는 화면에서
+	#  맨 팔뚝이 29px · 손이 47px(0.62 배) — 큰 손이 짧은 토막에 달린 꼴이었다(검토 B).
+	#  팔꿈치 밑까지 걷은 소매면 드러난 팔뚝이 손 길이 언저리다. 단을 얇게(10 · 26) 해서
+	#  옛 기록의 「두툼한 단이 위로 9px 솟아 소매 띠를 가린다」도 같이 줄인다.
+	#  _fore3_fit 이 팔뚝이 짧아지는 자세에서는 맨살을 줄인다(단이 위팔 속으로 안 숨게).
+	"bare": 54.0,
+	"bare_r": 48.0,
 	"w_in": 34.0, "t_in": 23.0,     # 걷은 단 밑 — 팔뚝 살이 가장 굵은 자리
-	"roll": 14.0, "w_roll": 41.0, "t_roll": 31.0,   # 접어 올린 두툼한 단 — 소매보다 두껍다
+	"roll": 10.0, "w_roll": 39.0, "t_roll": 26.0,   # 접어 올린 단 — 소매보다 한 단 두껍다
 	#  놋쇠 소매 띠 — 위팔, 팔꿈치에서 g_el 위. 길이 gart · 소매보다 gart_up 솟는다.
 	#  위팔은 카메라에서 24° 만 비껴 **멀어지는** 쪽으로 서 있어(어깨가 가깝다 ·
 	#  1 단위가 화면 0.37px) 고리 하나가 화면에서는 위팔 단면만 한 타원이 되고, 보이는
@@ -20296,18 +20344,27 @@ const FORE3 := {
 	#  뒤로 들어가 띠의 양 끝만 위팔 옆구리에 세로 금줄로 남았다(촬영) — 소매 띠의
 	#  제자리인 위팔 한가운데(팔꿈치에서 44)로 올린다. 거기는 걷은 단보다 카메라에
 	#  가까워 반원이 단 위로 얹힌다.
-	"gart": 9.0, "gart_up": 4.0, "g_el": 44.0,
-	#  위팔 주름 고리 자리 — 어깨에서 위팔 길이의 비.
-	"folds": [0.35, 0.7],
-	#  크림 셔츠. d8cbab 는 램프 한가운데에서 (255,229,152) 로 하얗게 날아가, 쓸 때
-	#  위팔 소매가 화면에서 가장 크고 밝은 판이 됐다 — 손보다 먼저 눈에 들어왔다.
-	#  쉬는 자세에서도 걷은 단이 살만큼 밝아 소매와 살이 색상으로만 갈렸다(검토).
-	#  살보다 한 단 어두운 천이어야 손이 먼저 읽힌다. 검토가 권한 c2b38f 도 쉬는 위팔의
-	#  채움빛 받는 빗면이 (145,104,55) L* 47 이라 npc_probe 가 소매 조각 일곱을 「손 말고
-	#  밝은 것」으로 셌다 — 한 단(0.9) 더 내려 L* 43 아래로 둔다. 빛깔은 그대로 크림이고
-	#  쓸기의 램프 한가운데에서도 살 밝은 면(241,192,139) 아래다.
-	"cloth": Color8(175, 161, 129),
-	"fold": Color8(124, 114, 95),   # 접힌 골 — 식은 천 그늘. 주황기를 빼야 놋쇠 띠와 안 섞인다
+	#  44 는 상점 쉼에서 화면 y 44~48 이라 동전 슬롯 밑변(≈47)에 걸려 1~3px 만 비쳤다
+	#  (검토 B — B 의 소품이 안 보인다). 걷은 단을 얇게 하면서(위) 단이 솟던 높이가
+	#  줄었으므로 32 로 내린다 — 위팔 1 단위가 화면 0.37px 이라 y 50 언저리, 슬롯
+	#  밑변과 걷은 단 사이에 놋쇠 띠가 선다. 26 은 띠가 소매 밑단에 붙어 놋쇠 띠가 아니라
+	#  소맷부리 테두리로 읽혔다(촬영) — 띠 밑에 천이 한 뼘 보여야 「묶은 띠」다.
+	#  판 고르기(슬롯 밑변 ≈ 63)에서 가려지는 것은 받아들인다.
+	"gart": 9.0, "gart_up": 4.0, "g_el": 32.0,
+	#  위팔 주름 — 어깨에서 위팔 길이의 비. 고리(둘레를 다 도는 띠)가 아니라 카메라 쪽
+	#  앞면에 **비스듬히 반만** 접힌 골 하나씩이다(fold_a 기울기 · fold_w 앞면 폭의 비).
+	#  둘레 고리 둘이 걷은 단 테두리 · 소매 띠와 같은 간격이라 쓸 때 소매가 마디진 관
+	#  (대나무 · 갑옷 토시)으로 읽혔다(검토 B). 천의 주름은 비스듬하고 일부만 접힌다.
+	"folds": [0.42, 0.7],
+	"fold_a": [24.0, -18.0],
+	"fold_w": 0.42,
+	#  크림 셔츠 — SHIRT3(머리말). 이력: d8cbab 는 램프 한가운데에서 (255,229,152) 로
+	#  하얗게 날아가 쓸 때 위팔 소매가 화면에서 가장 크고 밝은 판이 됐고, c2b38f · 그 0.9 배
+	#  (175,161,129) 는 크림이 아니라 낙타색 · 황토로 읽혔다(검토 B). 식은 바탕(SHIRT3)은
+	#  쉬는 소매 L* 45 · a* 4~5 · b* 12~13, 쓸기 램프 한가운데 (195,175,142) — 무채색 크림이고
+	#  살 밝은 면(241,192,139) 아래다. 손이 먼저 읽히는 것은 살빛 채도가 맡는다.
+	"cloth": SHIRT3,
+	"fold": Color8(110, 113, 140),  # 접힌 골 — 같은 천 한 단 아래. 주황기를 빼야 놋쇠 띠와 안 섞인다
 	"brass": Color("c89a4a"),       # 진열대 놋쇠(Room3D.COL.brass)와 같은 쇠
 }
 
@@ -20376,9 +20433,10 @@ func _room3d_tband(top: float, bot: float) -> void:
 
 
 var hand3_vp: SubViewport = null
-#  손마다 한 벌 — {hand, thumb, rest, grip_xf, shad, sthumb, sm, arm, armsh, up, front}
+#  손마다 한 벌 — {hand, thumb, rest, shad, sthumb, sm, arm, armsh, up, front}
 #  (세 시안이 같이 쓰는 열쇠 — qa_hand3 이 읽는다) 에 시안 B 의 손가락 마디
-#  {hj, sj, fore, upf, blob} 를 더 단다.
+#  {hj, sj, fore, upf, blob, tips, ttip} 를 더 단다. 쥔 엄지 자리는 물건마다 달라
+#  (_give_fit · _grip3_ik) 옛 grip_xf(한 번 셈한 변환)는 걷었다.
 #  위팔(up)이 손마다 선다(2026-10-02). 옛 hand3_upper 는 쓸는 팔에만 붙는 한
 #  벌이었고 쉬는 팔은 위팔 없이 동전 슬롯 밑에서 떨어지는 막대였다.
 var hand3_rig := []
@@ -20391,6 +20449,10 @@ var hand3_fp := PackedFloat32Array()
 var hand3_fsup := [0.0, 0.0]     # 손바닥을 위로 돌린 정도 0..1 (내밀기 · 손짓) — 3D 만의 굴림
 var hand3_flean := [0.0, 0.0]    # 쉬는 손의 굴림(라디안) — 화면 오른손만
 var hand3_fyaw := [0.0, 0.0]     # 3D 만의 손 요(라디안) — 짚기에서 검지가 판을 가로지르게
+#  집는 검지의 부채 요(도 · 오른손 기준)와 그 섞임 0..1 — _grip3_ik 가 적고
+#  _fing3_apply 가 검지 하나에만 덮는다(부채는 손가락 넷이 한 값을 나눠 써서).
+var hand3_isp := [0.0, 0.0]
+var hand3_ik := [0.0, 0.0]
 
 
 # ══════════════════════════════════════════════════════════
@@ -20400,7 +20462,7 @@ var hand3_fyaw := [0.0, 0.0]     # 3D 만의 손 요(라디안) — 짚기에서
 #  든 물건은 2D(_give_draw)라 손 화판(3D 한 장) **다음에** 그린다. 그러면 손의
 #  어느 마디가 물건 앞이고 어느 마디가 뒤인지가 사라진다 — 물건이 손을 통째로
 #  덮으니, 물건 뒤로 가야 할 손가락이 물건 테 밖으로 삐져나온 자리만 보여서
-#  손가락이 동전을 꿰뚫은 것으로 읽혔다. 높이로는 못 푼다(GIVE.hold 의 주석).
+#  손가락이 동전을 꿰뚫은 것으로 읽혔다. 높이로는 못 푼다(GIVE 머리말).
 #
 #  손을 **두 번** 그린다.
 #    ① 손 화판(hand3_vp) — 전부. 물건 밑에 깔린다(_hand3_draw).
@@ -20412,16 +20474,17 @@ var hand3_fyaw := [0.0, 0.0]     # 3D 만의 손 요(라디안) — 짚기에서
 #  앞 화판은 쥐는 동안만 굽는다(쉴 때 640 × 228 을 비워 굽는 값이 아깝다).
 #
 #  ── 쓰는 법 — 어느 손이든 ───────────────────────────
-#  쥘 때 물건 **앞**에 와야 하는 마디(엄지 · 테를 감는 손끝)를
+#  쥘 때 물건 **앞**에 와야 하는 마디(테를 무는 엄지 끝 · 검지 끝)를
 #  _hand3_front_mark(마디, true) 로 표시하고, 놓을 때 false 로 걷는다. 표시는
 #  층 비트 하나를 더하고 빼는 것뿐이라 그 마디가 이미 선 층은 그대로다 —
 #  손 화판 카메라는 모든 층을 보므로 ① 에서 빠지지 않는다.
 #  물건 **뒤**로 가는 손가락은 아무것도 안 한다. 물건 테 안에서 끝나게
-#  자세를 잡는 것이 그쪽의 일이다(GIVE.gx 머리말 · FPOSE.grip).
+#  자세를 잡는 것이 그쪽의 일이다(GIVE 머리말 · FPOSE.grip).
 #  시안 B 의 첫 판은 손바닥을 위로 뒤집어 받쳐 들고 손끝 넷과 엄지를 앞 층에
 #  올렸는데, 앞 화판에 따로 밝은 바탕빛을 주어 그 조각들만 음영 없는 연어빛
-#  단색이 됐다(검토: 「동전 테두리의 소시지 넷」). 이제 세 시안이 같은 쥠(뒤 테 ·
-#  엄지는 위 · 손가락은 밑)이고 앞 화판은 같은 빛을 받는다.
+#  단색이 됐다(검토: 「동전 테두리의 소시지 넷」). 앞 화판은 같은 빛을 받는다.
+#  둘째 판(엄지는 면 위 · 손가락은 밑)은 엄지가 면에 꽂힌 막대로 읽혀(사용자)
+#  지금은 손끝 둘만 테에 얹는다 — 엄지 끝마디 · 검지 끝마디가 앞 층이다.
 const HAND3_FRONT := 1 << 9          # 렌더 층 10 — 앞 화판 카메라만 이 층을 본다
 var hand3_fvp: SubViewport = null
 var hand3_front_on := false          # 이번 틀에 앞 화판을 붙이는가 — _hand3_sync 가 정한다
@@ -20697,7 +20760,9 @@ func _hand3_build(mats: Variant, mir: bool, ring := false, shadow := false) -> D
 	inn.add_child(ta)
 	var tw: float = H.th_w
 	var tt: float = H.th_t
-	ta.add_child(_mi3(_prism3(F.tl1, tw, tt, tw * 0.92, tt * 0.9, 2.4), m_skin))
+	#  뿌리 단면을 한 단 넓게(1.25 · 1.15) — 엄지가 손바닥 옆구리에서 두덩으로 자라 나온다.
+	#  같은 굵기로 시작하면 손바닥 모서리에 꽂힌 막대로 읽혔다(검토 A · 쥔 엄지).
+	ta.add_child(_mi3(_prism3(F.tl1, tw * 1.25, tt * 1.15, tw * 0.92, tt * 0.9, 2.4), m_skin))
 	var tb := Node3D.new()
 	tb.position = Vector3(F.tl1, 0.0, 0.0)
 	ta.add_child(tb)
@@ -20706,10 +20771,14 @@ func _hand3_build(mats: Variant, mir: bool, ring := false, shadow := false) -> D
 	if not shadow:
 		tb.add_child(_mi3(_prism3(4.2, tw * 0.52, 0.9, tw * 0.46, 0.8, 0.3), md.nail,
 				Vector3(float(F.tl2) - 4.6, tt * 0.38, 0.0)))
+	#  엄지 끝 자리 — 손가락 끝(tips)과 같은 것. qa_hand3 이 집은 엄지 끝을 잰다.
+	var ttp := Node3D.new()
+	ttp.position = Vector3(float(F.tl2), 0.0, 0.0)
+	tb.add_child(ttp)
 	var xr := _thumb3_rest(mir)
 	ta.transform = xr
 	return {"root": root, "in": inn, "j1": j1, "j2": j2, "tips": tips, "t2": tb, "sg": sg,
-			"thumb": ta, "rest": xr, "grip": _thumb3_grip(mir)}
+			"thumb": ta, "rest": xr, "ttip": ttp}
 
 
 #  쉬는 엄지 — 손바닥 엄지 쪽 옆구리에서 손끝 방향으로 th_out 벌어져 판에 눕는다.
@@ -20720,7 +20789,7 @@ func _thumb3_rest(mir: bool) -> Transform3D:
 
 
 #  자세 배열(p, o 부터 12)의 엄지 값으로 엄지 뿌리 변환을 짓는다. 뿌리 자리는
-#  HAND3 외곽(th_x · 손바닥 엄지 쪽 옆구리)이고, 각은 벌림(th_out → 접으면 손끝
+#  손바닥 엄지 쪽 옆구리(FING3.t_rx · HAND3 외곽 폭)이고, 각은 벌림(th_out → 접으면 손끝
 #  쪽으로 눕는다) · 손톱이 옆을 보게 굴린 각(t_twist) · 손바닥 쪽으로 내린 각이다.
 #  굴림이 있어서 내림이 손바닥 안쪽으로 간다.
 func _thumb3_pose(sg: float, p: PackedFloat32Array, o: int) -> Transform3D:
@@ -20729,31 +20798,68 @@ func _thumb3_pose(sg: float, p: PackedFloat32Array, o: int) -> Transform3D:
 	var b := Basis(Vector3.UP, sg * deg_to_rad(yaw)) \
 			* Basis(Vector3.RIGHT, -sg * deg_to_rad(float(FING3.t_twist))) \
 			* Basis(Vector3.BACK, -deg_to_rad(p[o + 11] + 18.0 * maxf(tf, 0.0)))
-	var org := Vector3(float(HAND3.th_x), -float(HAND3.palm_t) * 0.2,
+	var org := Vector3(float(FING3.t_rx), -float(HAND3.palm_t) * 0.2,
 			-sg * (float(HAND3.palm_w) * 0.5 - float(HAND3.th_w) * 0.25))
 	return Transform3D(b, org)
 
 
-#  쥔 엄지 — 뿌리는 손등 쪽으로 조금 올라오고, 끝은 든 물건 뒤 테(GIVE.gx)에서
-#  GIVE.pad 안쪽 · 물건 윗면 위다. 물건은 손 윗면에서 GIVE.hold 떠 있으므로
-#  엄지 끝이 그 윗면을 1 누른다. 이 자리가 곧 _hold_of 의 자리다 — 둘이 같은
-#  GIVE 값을 읽어 엄지가 물건 테를 안 놓친다.
-func _thumb3_grip(mir: bool) -> Transform3D:
-	var ts: float = 1.0 if mir else -1.0
-	var pt: float = HAND3.palm_t
-	#  뿌리를 손등보다 높이 든다 — 엄지가 물건 위를 **수평으로** 건너 누르게.
-	#  뿌리가 손등 높이면 엄지가 물건 위로 25° 솟고, 그러면 윗면이 빛(왼쪽 위
-	#  앞)을 등지고 끝마구리가 카메라를 봐서 엄지가 어두운 토막으로 읽혔다(촬영).
-	var o := Vector3(float(HAND3.th_x), pt * 0.5 + float(GIVE.hold) * 0.9,
-			ts * (float(HAND3.palm_w) * 0.5 - 2.0))
-	var tip := Vector3(float(GIVE.gx) + float(GIVE.pad),
-			pt * 0.5 + float(GIVE.hold) + float(HAND3.th_t) * 0.5 - 1.0, ts * 2.0)
-	var fx := (tip - o).normalized()
-	var fz := fx.cross(Vector3.UP).normalized()
-	var fy := fz.cross(fx).normalized()
-	#  길이로 늘려 끝이 정확히 tip 에 닿게 한다 — 엄지는 th_l 짜리라
-	#  안 늘리면 뿌리와 끝 사이(33)에서 7 모자라 물건 테 위에서 멈춘다(촬영).
-	return Transform3D(Basis(fx * ((tip - o).length() / float(HAND3.th_l)), fy, fz), o)
+#  집는 손 — 손끝 둘을 물건 테에 세운다(GIVE 「테를 집는다」). 손 i 의 쥠 가중 k 로
+#  검지 관절(첫 · 끝 굽힘과 부채 요)과 엄지 끝마디 굽힘을 hand3_fp · hand3_isp 에 섞어
+#  넣고, 엄지 뿌리 변환(쥔 자리)을 돌려준다 — 쉬는 엄지에서 이 변환으로 건너간다.
+#
+#  ── 검지 — 마디 둘의 평면 사슬 ─────────────────────────────
+#  너클에서 검지 끝 자리(_grip3_pt 1)를 보는 요(부채)로 손가락 평면을 세우고, 그
+#  평면에서 첫 마디 · 끝 마디(l1 · l2)로 닿는다 — 끝 마디가 손바닥 쪽으로 굽어 손끝 볼이
+#  테에 내려앉고 가운데 마디가 위로 솟는다(사람 집게손가락의 갈고리).
+#  ── 엄지 — 같은 사슬, 솟는 쪽만 다르다 ───────────────────────
+#  뿌리는 GIVE.th_root. 첫 마디 끝(엄지 마디)은 **위 · 검지 반대쪽**으로 솟는다 —
+#  집는 엄지의 마디가 바깥으로 휘고 손톱이 위 · 바깥을 본다. 사슬 길이(26)로 못 닿으면
+#  그만큼만 늘린다 — 옛 쥠은 곧은 막대 하나를 1.3~1.6 배 늘려 「꽂힌 막대」가 됐다
+#  (검토). 지금 값에서는 뿌리에서 테까지 24.5 라 안 늘어나고 엄지 마디가 39° 휜다.
+#  쥐지 않는 손(k 0)은 손대지 않는다 — 쉼 자세가 그대로다.
+func _grip3_ik(i: int, sg: float, k: float, sc: float) -> Transform3D:
+	var o: int = i * 12
+	var ti := _grip3_pt(sg, 1, sc)
+	var tt := _grip3_pt(sg, -1, sc)
+	#  검지
+	var a0 := Vector3(float(FING3.fx[0]), float(FING3.fy), float(FING3.fz[0]) * sg)
+	var dv := ti - a0
+	var dh: float = Vector2(dv.x, dv.z).length()
+	var drop: float = -dv.y
+	var l1: float = FING3.l1[0]
+	var l2: float = FING3.l2[0]
+	var dd: float = Vector2(dh, drop).length()
+	var c1: float = atan2(drop, dh)
+	var c2 := 0.0
+	if dd < l1 + l2 - 0.01:
+		c2 = acos(clampf((dd * dd - l1 * l1 - l2 * l2) / (2.0 * l1 * l2), -1.0, 1.0))
+		c1 -= atan2(l2 * sin(c2), l1 + l2 * cos(c2))
+	hand3_fp[o] = lerpf(hand3_fp[o], rad_to_deg(c1), k)
+	hand3_fp[o + 4] = lerpf(hand3_fp[o + 4], rad_to_deg(c2), k)
+	hand3_isp[i] = rad_to_deg(atan2(-dv.z * sg, dv.x))
+	hand3_ik[i] = k
+	#  엄지
+	var r: Vector3 = GIVE.th_root
+	var ro := Vector3(r.x, r.y, r.z * sg)
+	var dv2 := tt - ro
+	var dl: float = maxf(dv2.length(), 0.01)
+	var u := dv2 / dl
+	var tl1: float = FING3.tl1
+	var tl2: float = FING3.tl2
+	var st: float = maxf(1.0, dl / (tl1 + tl2) * 1.0005)
+	var qa: float = deg_to_rad(float(GIVE.q))
+	var hint := Vector3(0.0, 0.8, 0.0) - Vector3(cos(qa), 0.0, sin(qa) * sg) * 0.6
+	var v := (hint - u * hint.dot(u)).normalized()
+	var s1: float = tl1 * st
+	var s2: float = tl2 * st
+	var al: float = acos(clampf((s1 * s1 + dl * dl - s2 * s2) / (2.0 * s1 * dl), -1.0, 1.0))
+	var jp := ro + (u * cos(al) + v * sin(al)) * s1
+	var fx := (jp - ro) / s1
+	var d2 := (tt - jp) / s2
+	var fy := (v - fx * v.dot(fx)).normalized()
+	var fz := fx.cross(fy)
+	hand3_fp[o + 10] = lerpf(hand3_fp[o + 10], rad_to_deg(atan2(-d2.dot(fy), d2.dot(fx))), k)
+	return Transform3D(Basis(fx * st, fy, fz), ro)
 
 
 #  팔 한 토막 — 길이 1 짜리 깎은 상자(_taper3_mesh). 뿌리가 x 0, 끝이 x 1 이라
@@ -20783,15 +20889,22 @@ func _up3_build(mats: Dictionary) -> Dictionary:
 			float(H.up_d) + float(FORE3.gart_up), float(H.up_w1) + float(FORE3.gart_up),
 			float(H.up_d) + float(FORE3.gart_up), 8.0), mats.brass)
 	root.add_child(ga)
-	#  주름 고리 둘 — 쓸 때 위팔이 판 위로 길게 누우면 주름 없는 크림 판때기가
-	#  화면에서 가장 크고 밝은 덩어리가 됐다(검토). 천은 접힌다.
+	#  주름 — 쓸 때 위팔이 판 위로 길게 누우면 주름 없는 크림 판때기가 화면에서 가장
+	#  크고 밝은 덩어리가 됐다(검토). 천은 접힌다 — 다만 **비스듬히, 반만**(FORE3.folds).
+	#  카메라 쪽 앞면(+y — _aim3 이 위팔 두께 축을 카메라 뒤축으로 세운다)에 얕은 골 막대
+	#  하나를 비스듬히 눕힌다. 받침(fd)은 위팔 길이 배율만 되밀고, 기울임은 그 밑 막대에
+	#  준다 — 늘어난 부모 밑에서 바로 돌리면 막대가 비틀려(밀림) 평행사변형이 된다.
 	var folds := []
-	for q in FORE3.folds:
-		#  1.6 솟긴다 — 0.8 이면 비스듬한 면에서 고리가 반쯤 소매에 묻혀 점선으로 끊겼다(촬영).
-		var wq: float = lerpf(float(H.up_w0), float(H.up_w1), float(q)) + 1.6
-		var fd := _mi3(_prism3(2.0, wq, float(H.up_d) + 1.6, wq, float(H.up_d) + 1.6, 8.4),
-				mats.fold)
+	for k in (FORE3.folds as Array).size():
+		var q: float = FORE3.folds[k]
+		var wq: float = lerpf(float(H.up_w0), float(H.up_w1), q)
+		var fd := Node3D.new()
 		root.add_child(fd)
+		var bar := _mi3(_prism3(1.8, wq * float(FORE3.fold_w), 1.6, wq * float(FORE3.fold_w) * 0.7,
+				1.2, 0.5), mats.fold, Vector3(0.0, float(H.up_d) * 0.5 - 0.1,
+				wq * 0.12 * (1.0 if k % 2 == 0 else -1.0)))
+		bar.rotation_degrees = Vector3(0.0, float(FORE3.fold_a[k]), 0.0)
+		fd.add_child(bar)
 		folds.append(fd)
 	return {"root": root, "gart": ga, "folds": folds}
 
@@ -21041,9 +21154,10 @@ func _hand3_open() -> void:
 		_hand3_layer_set(as3, HAND3_SHAD)
 		_hand3_layer_set(bl, HAND3_SHAD)
 		hand3_rig.append({"hand": hj.root, "thumb": hj.thumb, "rest": hj.rest,
-				"grip_xf": hj.grip, "shad": sj.root, "sthumb": sj.thumb, "sm": sm,
+				"shad": sj.root, "sthumb": sj.thumb, "sm": sm,
 				"arm": fo.root, "armsh": as3, "up": up3.root, "front": false,
-				"hj": hj, "sj": sj, "fore": fo, "upf": up3, "blob": bl, "tips": hj.tips})
+				"hj": hj, "sj": sj, "fore": fo, "upf": up3, "blob": bl, "tips": hj.tips,
+				"ttip": hj.ttip})
 
 	#  앞 화판 — 손 화판의 세계를 나눠 쓰고, 같은 카메라를 하나 더 세워 앞 층만
 	#  본다(HAND3_FRONT 머리말). 빛 · 환경은 세계에 붙어 있어 따로 안 둔다.
@@ -21240,8 +21354,12 @@ func _fing3_apply(h: Dictionary, o: int) -> void:
 	var sg: float = h.sg
 	var j1: Array = h.j1
 	var j2: Array = h.j2
+	var ik: float = hand3_ik[o / 12]
 	for f in 4:
-		var sp: float = deg_to_rad(hand3_fp[o + 8] * float(FING3.fan[f])) * sg
+		var spd: float = hand3_fp[o + 8] * float(FING3.fan[f])
+		if f == 0 and ik > 0.0005:
+			spd = lerpf(spd, float(hand3_isp[o / 12]), ik)
+		var sp: float = deg_to_rad(spd) * sg
 		(j1[f] as Node3D).basis = Basis(Vector3.UP, sp) \
 				* Basis(Vector3.BACK, -deg_to_rad(hand3_fp[o + f]))
 		(j2[f] as Node3D).basis = Basis(Vector3.BACK, -deg_to_rad(hand3_fp[o + 4 + f]))
@@ -21269,6 +21387,13 @@ func _hand3_sync() -> void:
 		var sj: Dictionary = rg.sj
 		var o: int = i * 12
 		_fing3(i, gk)
+		#  집는 손 — 검지 · 엄지 끝마디를 테에 세운다(_grip3_ik). 쥐는 손이 아니면 섞임을
+		#  0 으로 걷어 둔다(검지 부채 덮기가 남지 않게).
+		var gx := Transform3D.IDENTITY
+		var gw: float = smoothstep(0.0, 1.0, gk)
+		hand3_ik[i] = 0.0
+		if gw > 0.0005:
+			gx = _grip3_ik(i, float(hj.sg), gw, float(ps.sc))
 		_fing3_apply(hj, o)
 		_fing3_apply(sj, o)
 		#  손 — 요 → 숙임(손끝이 벨벳으로, 제 z 축) → 굴림(제 x 축). 오일러로는
@@ -21289,17 +21414,27 @@ func _hand3_sync() -> void:
 			hbr = hb * Basis(Vector3.RIGHT, hrl)
 		nd.transform = Transform3D(hbr.scaled(Vector3.ONE * sc), at)
 		nd.visible = true
-		#  엄지 — 쥘수록 쉬는 자리(손가락 자세의 엄지 값)에서 든 물건 위로 건너가고,
-		#  다 건너가면 앞 층에 선다(HAND3_FRONT). 그림자 손의 엄지도 같은 자리다.
-		var tx: Transform3D = _thumb3_pose(sg, hand3_fp, o).interpolate_with(
-				rg.grip_xf as Transform3D, smoothstep(0.0, 1.0, gk))
+		#  엄지 — 쥘수록 쉬는 자리(손가락 자세의 엄지 값)에서 집는 자리(_grip3_ik)로
+		#  건너간다. 그림자 손의 엄지도 같은 자리다.
+		var tx: Transform3D = _thumb3_pose(sg, hand3_fp, o)
+		if gw > 0.0005:
+			tx = tx.interpolate_with(gx, gw)
 		(rg.thumb as Node3D).transform = tx
 		(rg.sthumb as Node3D).transform = tx
+		#  앞 층 — 집는 손끝 둘(엄지 끝마디 · 검지 끝마디)만 물건 **다음에** 한 번 더
+		#  그린다(HAND3_FRONT). 손 나머지는 물건 윤곽 밖에서 끝나므로 ① 그대로다.
+		#  다트처럼 손 밑으로 들어가는 것을 쥐면 손 전부를 올린다(give_all — _give_fit).
 		#  표시는 바뀔 때만 한다 — 매 틀 마디 나무를 훑지 않는다.
 		var fr: bool = gk > float(GIVE.front_k)
 		if fr != bool(rg.front):
 			rg.front = fr
-			_hand3_front_mark(rg.thumb, fr)
+			if not fr:
+				_hand3_front_mark(rg.hand, false)
+			elif give_all:
+				_hand3_front_mark(rg.hand, true)
+			else:
+				_hand3_front_mark(hj.t2, true)
+				_hand3_front_mark((hj.j2 as Array)[0], true)
 		front = front or fr
 		#  그림자 — 손 사본을 빛 방향으로 **눕힌다.** 빛은 왼쪽 위에 고정이다
 		#  (빛 방향 −46°/−38°). 어긋남은 **월드**라 손이 어느 쪽을 보든
@@ -21488,11 +21623,19 @@ func _hand3_shad_draw() -> void:
 				Color(1.0, 1.0, 1.0, a1))
 
 
-#  ③ 앞 화판 — 든 물건 **다음**이다. 물건 앞에 서는 마디(엄지)만 다시 얹는다.
+#  ③ 앞 화판 — 든 물건 **다음**이다. 물건 앞에 서는 마디(테를 문 손끝 둘)만 다시 얹는다.
+#  얹기 전에 같은 그림을 빛 반대쪽(TBL.light)으로 한 칸 · 두 칸 밀어 먹으로 한 번 —
+#  손끝 밑 테 위에 1~2px 닿은 그늘이 선다. 그늘이 없으면 테에 얹힌 손끝이 물건 위에
+#  오려 붙인 살색 조각으로 떠 보인다(검토 A 가 엄지에서 짚은 것). 그리기 한 번 · 할당 0.
+#  손 전부가 앞 층인 쥠(다트 — give_all)은 안 깐다 — 손 전체의 그림자는 그림자 화판이 이미 깔았다.
 func _hand3_front_draw() -> void:
 	if not hand3_front_on or hand3_fvp == null or not is_instance_valid(hand3_fvp):
 		return
-	draw_texture_rect(hand3_fvp.get_texture(), HAND3.rect, false)
+	var tex: Texture2D = hand3_fvp.get_texture()
+	if not give_all:
+		draw_texture_rect(tex, Rect2(HAND3.rect.position + Vector2(1.0, 2.0), HAND3.rect.size),
+				false, Color(0.0, 0.0, 0.0, 0.35))
+	draw_texture_rect(tex, HAND3.rect, false)
 
 
 
@@ -21595,7 +21738,10 @@ func _body3_live() -> bool:
 const VEST3 := {
 	"vest": Color8(50, 52, 78),
 	"lap": Color8(40, 42, 64),
-	"shirt": Color8(100, 108, 148),
+	#  셔츠 앞판 — 걷은 소매와 같은 천(SHIRT3 머리말 — 색상 · 채도가 같다). 명도만 누른다:
+	#  같은 값이면 V 가 램프 정면이라 소매보다 밝은 L* 52 판이 가슴 한가운데 섰다(촬영) —
+	#  눈이 손보다 가슴으로 먼저 간다. 그늘 진 셔츠 앞판 값(L* 30~35)으로 둔다.
+	"shirt": Color8(108, 117, 131),     # SHIRT3 × 0.62 — 같은 빛깔, 한 단 그늘
 	"buckle": Color("c89a4a"),
 	"chain": Color("f0c255"),
 }
@@ -21844,6 +21990,7 @@ const IDLE := {
 }
 var idle_act := -1
 var idle_t := 0.0
+var npc_leg := 0.0          # 판 고르기의 벌린 손 0..1 — _idle_tick 이 민다
 var idle_wait := 1.6
 var idle_side := 1         # 한 손 몸짓이 쓰는 손. 0 화면 왼손 · 1 오른손
 var idle_rng := RandomNumberGenerator.new()
@@ -21866,6 +22013,10 @@ func _eye_tick(d: float) -> void:
 
 func _idle_tick(d: float) -> void:
 	_eye_tick(d)
+	#  판 고르기의 벌린 손(_npc_arms) — 그 화면에 들어서면 0.3 초에 벌어지고 뜨면 돌아온다.
+	#  움직임을 끄면 그 자리로 바로 간다.
+	var lw: float = 1.0 if state == S.LEG else 0.0
+	npc_leg = lw if motion_off else move_toward(npc_leg, lw, d * 3.3)
 	if not _npc_on() or _sweep_amt() > 0.004:
 		idle_act = -1
 		idle_t = 0.0
@@ -22248,9 +22399,12 @@ func _idle_hand(i: int) -> Dictionary:
 			out.du = k * (-sd * 12.0 - sd * 46.0 * sin(fl * PI))
 			out.dw = 40.0 * k
 			#  살피는 동안 손을 **든다** — 눈높이로 가져가 들여다본다. 내리기에
-			#  손이 판까지 내려온다. 물건은 그 손을 따라 0 으로 간다.
+			#  손이 물건을 판까지 데려다 놓는다(_give_land_dh — 집은 물건 밑면이 판에 닿는 손
+			#  높이). 테를 집는 손(2026-10-02)은 물건이 손등보다 22 아래에 매달려 있어, 옛
+			#  들기(4 → 13)로는 동전이 판에서 겨우 0~8 떠 손끝이 판 위 동전을 누르는 것으로
+			#  읽혔다 — 10 → 26 으로 들어 동전이 한가운데 박자에 판에서 20 넘게 뜬다.
 			var q := clampf((b - 0.20) / 0.52, 0.0, 1.0)
-			out.dh = k * lerpf(4.0 + 9.0 * sin(q * PI), -9.0, dn)
+			out.dh = k * lerpf(10.0 + 16.0 * sin(q * PI), _give_land_dh(i), dn)
 			#  굴림은 **살피는 박자에만** 든다. 뻗는 동안 이미 돌아 있으면
 			#  받기 전부터 뒤집어 놓고 기다리는 손이 된다.
 			#
@@ -22262,8 +22416,13 @@ func _idle_hand(i: int) -> Dictionary:
 			#  쥔 손이 아니라 물건 밑에서 혼자 뒤척이는 손이 됐다. 16° 에서도 굴러
 			#  내려간 쪽 손끝 모서리가 물건 옆테 밖으로 나왔다(qa_hand3 0.96 — 1 이 테).
 			#  12° 면 엄지 끝이 테 안쪽에 머물고 물건 기울임(wob = sin 12° · tip)이 같이 탄다.
-			out.roll = deg_to_rad(12.0) * k * sin(q * TAU)
-			out.ang = -sd * 0.20 * k * sin(q * PI * 2.0)
+			#  6° 로 한 번 더 줄였다(2026-10-02 · 테를 집는 손). 이제 이 굴림은 손이 아니라
+			#  손끝 사이의 물건만 기울인다(_npc_arm — 쥔 손은 안 구른다). GIVE.tip 이 세 배로
+			#  옮겨 동전 면이 램프 쪽으로 살짝 틀린다(wob ±0.31 · 세로 ±4%).
+			out.roll = deg_to_rad(6.0) * k * sin(q * TAU)
+			#  손각 흔들림도 0.20 에서 0.10 으로 — 물건이 손목에서 60 앞에 서므로 0.20 이면
+			#  물건이 화면에서 좌우로 12px 씩 휩쓸렸다. 살피는 손은 거의 멈춰 있다.
+			out.ang = -sd * 0.10 * k * sin(q * PI * 2.0)
 			out.el = 0.85
 	return out
 
@@ -22276,39 +22435,187 @@ func _palm_of(wr: Vector2, ang: float, sc: float, hw: float) -> Vector3:
 			hw + float(HAND3.palm_t) * sc)
 
 
-#  든 물건의 뒤 테가 걸리는 자리 — 손 좌표 (GIVE.gx, 손 윗면 + GIVE.hold) 를
-#  손목 · 손각 · 배율 · 숙임 · 굴림으로 옮긴 면 좌표 (u, w) 와 **물건 윗면** 높이 h.
-#  3D 손(_hand3_sync)과 **같은 변환**이다: 손목 높이 hw 에서 손 두께 반을 올린 축이
-#  원점이고, 요 → 숙임(제 z) → 굴림(제 x) 차례로 돈다. 굴림을 빼면 손이 살피며
-#  기울 때(16°) 물건이 손 좌표에서 옆으로 3.3 씩 미끄러졌다(qa_hand3 이 6.6 으로 잡았다).
-#  엄지 끝(_thumb3_grip)이 같은 gx 를 읽어 이 자리 바로 앞을 누른다.
+#  든 물건의 자리 — 손 좌표의 집는 점(_grip3_pt)을 손목 · 손각 · 배율 · 숙임 · 굴림으로
+#  옮긴 면 좌표 (u, w) 와 **물건 윗면** 높이 h. 3D 손(_hand3_sync)과 **같은 변환**이다:
+#  손목 높이 hw 에서 손 두께 반을 올린 축이 원점이고, 요 → 숙임(제 z) → 굴림(제 x)
+#  차례로 돈다. 굴림을 빼면 손이 살피며 기울 때 물건이 손 좌표에서 미끄러진다
+#  (qa_hand3 이 손 좌표 흔들림으로 잡는다). 손끝 둘(_grip3_ik)이 같은 점에서 ±give_h 를
+#  집으므로 물건과 손끝이 한 값에서 나온다.
 func _hold_of(wr: Vector2, ang: float, sc: float, hw: float, pit: float,
-		roll := 0.0) -> Vector3:
+		roll := 0.0, mir := false) -> Vector3:
 	var b := Basis(Vector3.UP, -ang) * Basis(Vector3.BACK, -pit) * Basis(Vector3.RIGHT, roll)
 	var ht: float = float(HAND3.palm_t) * sc * 0.5
-	var p := Vector3(wr.x, hw + ht, wr.y) + b * Vector3(float(GIVE.gx) * sc,
-			ht + float(GIVE.hold), 0.0)
+	var p := Vector3(wr.x, hw + ht, wr.y) + b * (_grip3_pt(-1.0 if mir else 1.0, 2, sc) * sc)
 	return Vector3(p.x, p.z, p.y)
 
 
-#  쥠 0..1 — 그 손이 물건 테를 쥐고 있는 정도. 받기 끝무렵에 쥐고(물건이 손에
-#  닿는 박자), 내리기 동안 놓는다(물건이 판으로 내려가 손을 떠난다).
-#  엄지 자리(_hand3_sync)와 앞 층(HAND3_FRONT)과 손 숙임(_npc_arm)이 읽는다.
+#  집기의 손 좌표 한 점 (손등 위 +y · 엄지 쪽 −z·sg). k 0 집는 자리(두 손끝 가운데) ·
+#  1 검지 끝 · −1 엄지 끝 · 2 물건 윗면 한가운데. 손끝은 손끝 축(마디 끝 가운데)이다.
+#  집는 자리(GIVE.m)는 손의 것이라 손 배율을 같이 타고, 벌림 · 깊이(give_*)는 **물건의**
+#  치수라 손 배율 sc 로 되나눈다 — 안 나누면 0.97 배인 왼손이 같은 동전을 3% 좁게
+#  집어 손끝이 테를 0.7px 더 덮었다(qa_hand3 이 두 손을 나란히 재서 갈렸다).
+func _grip3_pt(sg: float, k: int, sc := 1.0) -> Vector3:
+	var qa: float = deg_to_rad(float(GIVE.q))
+	var q := Vector3(cos(qa), 0.0, sin(qa) * sg)
+	var m: Vector3 = GIVE.m
+	var iv: float = 1.0 / maxf(sc, 0.1)
+	var c := Vector3(m.x, m.y, m.z * sg) + q * (give_mo * iv)
+	if k == 2:
+		return c + Vector3(sin(qa), 0.0, -cos(qa) * sg) * (give_d * iv) \
+				+ Vector3(0.0, give_top * iv, 0.0)
+	return c + q * (give_h * iv * float(k)) \
+			+ Vector3(0.0, (give_iy if k > 0 else give_ty) * iv, 0.0)
+
+
+#  건넬 때 한 번 — 이 물건을 어떻게 집는가(give_* 머리말). 손끝은 늘 물건의
+#  **뒤 테(상인 쪽 모서리)**를 문다(GIVE 「테를 집는다」). 물건마다 다른 것은 그 테가
+#  집는 줄에서 얼마나 앞에 있느냐(give_d)와, 테가 집는 폭보다 좁으면 엄지를 얼마나
+#  오므리느냐(give_mo)다. 플라크 꼭짓점을 읽느라 배열을 하나 짓지만 건넬 때 한 번이다.
+func _give_fit(s: Dictionary) -> void:
+	var hc: float = GIVE.h
+	var e: float = GIVE.e
+	give_h = hc
+	give_mo = 0.0
+	give_top = GIVE.top
+	give_rot = 0
+	give_all = false
+	give_ty = 0.0
+	give_iy = 0.0
+	var disc: float = float(TBL.chip_r)
+	match String(s.get("type", "")):
+		"item":
+			var form := _stock_form(s)
+			if String(FORMS[form].get("fam", "disc")) == "plaque":
+				#  플라크는 눕혀진 채 안 돈다(_coin_ang — psi 는 흔들림으로만 쓴다).
+				#  두 손끝이 선 가로 자리(±h)에서 윗변까지의 깊이를 꼭짓점에서 잰다.
+				var pts: Array = _coin_local(form, 1.0, 1.0, 1.0)
+				var ax := 0.0
+				for v in pts:
+					ax = maxf(ax, absf((v as Vector2).x))
+				#  두 손끝 사이로 윗변이 2.5 넘게 솟으면 오므린다 — 마름모(rhomb)는 위
+				#  꼭짓점이 집는 줄을 뚫고 손바닥 밑까지 올라가 손 위에 그려졌다(촬영).
+				#  오므리면 두 손끝이 꼭짓점 양옆 비탈을 문다 — 모서리를 집는 손이다.
+				var hh: float = minf(hc, ax - 1.5)
+				while hh > 3.0:
+					var sd: float = maxf(_poly_top(pts, hh), _poly_top(pts, -hh))
+					var pk := 0.0
+					for k in 9:
+						pk = maxf(pk, _poly_top(pts, lerpf(-hh, hh, float(k) / 8.0)))
+					if pk - sd <= 2.5:
+						break
+					hh -= 0.5
+				give_h = hh
+				give_mo = hc - give_h
+				give_d = maxf(_poly_top(pts, give_h), _poly_top(pts, -give_h)) + e
+				return
+		"mod":
+			disc = float(TBL.mod_r)
+		"boost":
+			#  팩 — 가로축을 집는 줄에 맞추고(give_rot 1) 윗변을 문다. 좁은 쪽(15)이 집는
+			#  폭(16.2)보다 좁아 엄지를 오므린다 — 손끝이 귀퉁이 안쪽 1.5 에 선다.
+			give_rot = 1
+			give_h = minf(hc, float(PACK.w) * GOODS_K - 1.5)
+			give_mo = hc - give_h
+			give_d = float(PACK.h) * GOODS_K + e
+			return
+		"fix":
+			give_rot = 1
+			give_h = minf(hc, FIX_W * GOODS_K - 1.5)
+			give_mo = hc - give_h
+			give_d = FIX_H * GOODS_K + e
+			return
+		"cons":
+			#  사탕 — 선 물건이라 그림 한가운데(포장 허리)를 양옆에서 문다. 테가 아니라
+			#  허리라 물건이 집는 줄 위에 선다(give_d 0 · give_top 0).
+			give_h = float(CANDY_GRIP) + e
+			give_mo = hc - give_h
+			give_d = 0.0
+			give_top = 0.0
+			return
+		"dart":
+			#  다트 — 연필을 가로로 들듯 자루 한가운데를 **위아래로** 문다. 엄지 끝이 자루 위,
+			#  검지 끝이 그 밑(give_ty · give_iy)이고 다트는 집는 줄(q)을 따라 눕는다(give_rot 1).
+			#  처음엔 촉을 앞(n)으로 두고 양옆에서 물었는데, 자루 뒤 반(23)이 손바닥 · 말린
+			#  손가락 밑으로 들어가 촉 끝 8px 만 남았다(촬영) — 무엇을 든 손인지가 안 읽혔다.
+			#  가로로 누우면 촉과 날개가 손 양옆으로 나와 다트가 통째로 읽힌다.
+			#  그래도 한가운데는 손가락 밑을 지나므로 손 전부가 그 앞에 선다(give_all) —
+			#  손등 · 손가락은 다트보다 높고, 2D 다트를 손 다음에 그리면 손가락 위에 얹힌다.
+			give_rot = 1
+			give_all = true
+			give_h = 0.0
+			give_mo = hc
+			give_d = 0.0
+			give_top = 0.0
+			var bw: float = _dart_barrel(String(s.get("d", {}).get("id", "")))
+			give_ty = bw + 1.2
+			give_iy = -(bw + 1.2)
+			return
+	#  원반 — 두 손끝이 반지름 + e 의 원 위에 서는 깊이. 12 시에서 ±40° 언저리다.
+	var rr: float = disc + e
+	give_d = sqrt(maxf(rr * rr - hc * hc, 1.0))
+
+
+#  볼록 다각형(면 좌표, −y 가 상인 쪽)의 윗변이 가로 x 에서 한가운데보다 얼마나
+#  뒤에 있는가. 세로줄 x 와 만나는 변들 가운데 가장 위(가장 작은 y)를 쓴다.
+func _poly_top(pts: Array, x: float) -> float:
+	var top := 0.0
+	var n := pts.size()
+	for i in n:
+		var a: Vector2 = pts[i]
+		var b: Vector2 = pts[(i + 1) % n]
+		if (a.x - x) * (b.x - x) > 0.0 or absf(b.x - a.x) < 0.0001:
+			continue
+		var y: float = lerpf(a.y, b.y, (x - a.x) / (b.x - a.x))
+		top = maxf(top, -y)
+	return top
+
+
+#  다트 자루(배럴)의 반폭 — DK_PARTS 의 배럴 구간(s 0.25~0.62)에서 가장 굵은 칸.
+#  판 위 다트는 촉이 앞(n)을 보아 0.79 로 눌려 그려지므로 그 배율(_icon_dart 의 k)을 곱한다.
+func _dart_barrel(id: String) -> float:
+	var parts: Array = DK_PARTS.get(id, DK_PARTS["std"])
+	var bw := 0.0
+	for p in parts:
+		if bool(p[2]):
+			continue
+		for r in p[3]:
+			if float(r[0]) >= 0.25 and float(r[0]) <= 0.62:
+				bw = maxf(bw, float(r[1]))
+	return bw * maxf(0.75, float(TBL.dart_l) * float(TBL.flat) / 19.0)
+
+
+#  집은 물건의 밑면이 판(h 0)에 닿는 손 높이 덤(살핌의 dh) — _hold_of 와 같은 변환의
+#  높이 성분만 푼다(쥔 손은 안 구르고 숙임은 GIVE.pit). 손목 밑면이 h_wr + dh 다.
+func _give_land_dh(i: int) -> float:
+	var sc: float = float(NPC.sc_l if i == 0 else NPC.sc_r)
+	var p := _grip3_pt(-1.0 if i == 1 else 1.0, 2, sc)
+	var pit: float = deg_to_rad(float(GIVE.pit))
+	var off: float = float(HAND3.palm_t) * sc * 0.5 + (-p.x * sin(pit) + p.y * cos(pit)) * sc
+	return -off - float(HAND3.h_wr)
+
+
+#  받는 동안 물건이 돌아가 설 각(give_rot) — 손각 ga 에서 손 좌표 방향을 면 각으로.
+#  집는 줄(q)을 물건 가로축(다트는 촉 쪽)으로 — 오른쪽을 보게 해서 그림이 뒤집히지 않는다.
+func _give_psi(ga: float) -> float:
+	var sg: float = -1.0 if give_side == 1 else 1.0
+	var qa: float = deg_to_rad(float(GIVE.q))
+	var t: float = ga + atan2(sin(qa) * sg, cos(qa))
+	return t + PI if cos(t) < 0.0 else t
+
+
+#  쥠 0..1 — 그 손이 물건 테를 집고 있는 정도. 받기 끝무렵에 집고(물건이 손에
+#  닿는 박자), 내려놓을 때까지 집은 채다 — 손이 물건을 판까지 데려다 놓는다(살핌의
+#  dh 가 내리기 끝에 물건 밑면을 판에 닿게 맞춘다 · _give_land_dh). 놓는 것은 뿌린 뒤
+#  GIVE.rel 초에 걸쳐서다(give_rel). 내리기 동안 놓았더니 손이 집기를 풀며 쉬는 손각으로
+#  28° 돌아오는 사이 손끝이 동전 면 위를 지나갔다(npc_B_hold_seq 촬영).
+#  엄지 자리(_hand3_sync)와 앞 층(HAND3_FRONT)과 손 숙임 · 손각(_npc_arm)이 읽는다.
 func _give_grip(i: int) -> float:
-	if not _give_live() or i != give_side:
+	if i != give_side:
 		return 0.0
+	if not _give_live():
+		return give_rel
 	var t1: float = GIVE.take
-	var t2: float = t1 + float(GIVE.look)
-	if give_t < t2:
-		return smoothstep(t1 * 0.55, t1, give_t)
-	return 1.0 - smoothstep(t2, t2 + float(GIVE.set), give_t)
-
-
-#  든 물건을 쥔 자리에서 한가운데까지 — 그려지는 반지름이다. 동전 · 팩 · 사진 ·
-#  사탕은 TBL.chip_r(22), 보드 확장은 충돌(24.4)보다 그림(22)이 작아 그림으로,
-#  다트는 가는 자루라 제 반지름(10.4) — 자루 한가운데를 쥔다.
-func _give_r(it: Dictionary) -> float:
-	return minf(float(it.get("r", TBL.chip_r)), float(TBL.chip_r))
+	return smoothstep(t1 * 0.55, t1, give_t)
 
 
 # ══════════════════════════════════════════════════════════
@@ -22475,31 +22782,65 @@ const GIVE := {
 	#
 	#  그래서 상인이 든 물건만 **손 다음에** 그린다(_give_draw).
 	#
-	#  ── 테를 쥔다 (2026-10-02) ─────────────────────
-	#  「동전에 손가락이 뚫리는데 이건 뭐 어떻게 안될까?」 — 손바닥 한가운데에
-	#  얹으니 손(58)이 물건(44)보다 길어져, 물건이 손을 덮고 남은 손끝이 물건
-	#  너머로 삐져나왔다. 2D 물건이 3D 손 화판 위에 통째로 얹히므로 그 손끝이
-	#  물건을 꿰뚫은 것으로 읽혔다.
+	#  ── 테를 집는다 (2026-10-02 · 둘째 판) ─────────────
+	#  「동전에 손가락이 뚫리는데」 → 첫 판은 **뒤 테를 쥐었다** — 엄지는 물건 윗면,
+	#  손가락 넷은 그 밑. 「지금 동전 짚는 손 모양 너무 이상한데 좀 레퍼런스 찾으면서
+	#  어떻게 해봐」(시안 B 를 고른 날). 화면에서 그것은 쥔 손이 아니었다 — 손목에서
+	#  뻗은 엄지가 동전 **면** 안 10px 까지 꽂힌 막대였고, 손 나머지는 동전 밑에 숨어
+	#  안 보였고, 등급 빛이 그 위로 덮여 너클이 유령 손가락이 됐다.
 	#
-	#  이제 물건은 **뒤 테**를 쥔다 — 엄지는 물건 윗면, 손가락은 그 밑.
-	#    · 뒤 테가 손 길이의 gx 자리(손가락 한가운데)에 걸리고, 물건 한가운데는
-	#      거기서 손끝 쪽으로 물건 반지름만큼 나간다(_give_tick). 손가락은 물건
-	#      **뒤 절반 밑**에서 끝난다 — 손끝(58)이 물건 한가운데(36 + 22 = 58)다.
-	#      앞 테까지 뻗으면 안 된다: 손가락은 물건보다 손 두께 + hold(18) 낮아서
-	#      52° 카메라에서는 물건 앞 테 **밑으로** 화면 11px 내려와 보인다(손끝 앞면
-	#      두께까지 셈하면 더). 28 · 31 에서 굴린 손끝 모서리가 앞 테 밑으로 나와
-	#      손가락이 물건을 꿰뚫은 그림이 그대로 남았다(qa_hand3 이 1.15 로 잡았다 —
-	#      손끝 네 모서리가 물건 윤곽 안인지 잰다).
-	#    · 엄지는 뒤 테에서 pad 안쪽 물건 윗면을 누르고, 쥐는 동안 앞 층에 선다
-	#      (HAND3_FRONT) — 물건 **다음에** 한 번 더 그려져 물건 위에 보인다.
-	#    · 손바닥(손목 ~ 너클)은 물건 뒤 테 밖이라 그대로 보인다. 쥔 손이다.
-	#  한 곳에서만 셈한다 — 손이 쥐는 자리(_hold_of → npc_hold)와 엄지 끝
-	#  (_thumb3_grip)과 물건 자리(_give_tick)가 다 이 세 값을 읽는다.
-	"gx": 38.0,          # 뒤 테가 걸리는 자리 — 손목에서 손끝 쪽으로(손 좌표)
-	"pad": 10.0,         # 엄지 끝이 뒤 테에서 물건 안쪽으로 들어온 길이
-	"front_k": 0.25,     # 쥠이 이 위면 엄지가 앞 층에 선다
-	"hold": 6.0,         # 손 윗면에서 물건 윗면까지 — 동전 두께(5.2)에 1 을 더 띄운다
-	"tip": 1.0,          # 손 굴림이 물건 기울임(wob)으로 옮겨지는 비
+	#  레퍼런스 — 동전을 보는 사람은 **테만 잡는다.** 미국 조폐국 · CoinWeek ·
+	#  에드먼턴 화폐학회의 다루기 안내가 다 같은 말이다: 엄지와 검지 사이에 테를
+	#  끼우고 면은 안 만진다. 손 그림 쪽(정밀 집기)도 같은 그림을 준다 — 손끝이
+	#  주인이고 손바닥은 안 닿고, **엄지가 이끌고**, 집는 두 손가락만 일하며 나머지
+	#  셋은 손바닥 쪽으로 느슨히 말린다(다섯이 똑같이 일하면 틀린 손이 된다).
+	#
+	#  그래서 지금은 **집는다** — 손등이 위, 손은 물건 **뒤**(상인 쪽)에 높이 서고,
+	#  엄지 끝과 검지 끝 둘만 물건 테에 1~1.5px 얹힌다. 손끝 둘만 앞 층(HAND3_FRONT)에
+	#  서고 나머지 손은 물건 윤곽 밖에서 끝난다 — 면 그림은 한 화소도 안 가린다.
+	#
+	#  ── 왜 3 시 · 9 시가 아니라 뒤 테인가 ──────────────────
+	#  자로 재 봤다(검토 노트의 손 표 — 엄지 26 · 뿌리 x 8~14, 검지 24, 너클 폭 31).
+	#  동전(44)이 손 폭의 1.42 배라, 손이 동전 뒤에 서서 엄지 · 검지를 동전 옆구리
+	#  (3 시 · 9 시)까지 내리는 자세는 **엄지가 1.3 배로 늘어도** 안 나온다 — 자세를
+	#  수만 번 뽑아 손 · 손가락이 물건 윤곽 밖에 서는 것만 남기면 두 손끝이 12 시에서
+	#  35~40° 안(10 시 반 · 1 시 반)에 모인다. 손이 물건을 덮지 않는 한, 엄지는 손목
+	#  곁에서 나오는 짧은 손가락이라 동전 앞쪽 반으로는 못 간다. 그래서 두 손끝이
+	#  **뒤 테의 양 어깨**를 집는다(집게 끝 둘이 테를 무는 그림). 손을 물건 쪽으로
+	#  틀어(yaw) 엄지–검지 사이 물갈퀴가 물건을 보게 하는 것이 그 자세의 열쇠다.
+	#
+	#  ── 값 (손 좌표 · 오른손 기준 — 엄지 쪽이 −z, 거울 손은 z 를 뒤집는다) ──
+	#  m 은 두 손끝의 가운데(집는 자리), q 는 엄지 끝 → 검지 끝 방향(xz 각),
+	#  h 는 동전을 집는 반폭이다 — 손끝은 m ± h·q. 물건 한가운데는 m 에서 q 에 수직인
+	#  앞쪽(n)으로 물건마다 다른 깊이(_give_fit)만큼 나간다. 그래서 물건이 무엇이든
+	#  손끝은 그 물건의 테(뒤 모서리)에 얹히고, 가는 것(다트 · 사탕)은 집게를 오므린다.
+	#  한 곳에서만 셈한다 — 물건 자리(_hold_of → npc_hold → _give_tick)와 손끝 자리
+	#  (_grip3_ik → 검지 관절 · 엄지 사슬)가 다 이 값을 읽는다.
+	"yaw": 28.0,         # 쥘 때 손각 — 90° ± yaw. 손이 바깥으로 돌아 물갈퀴가 물건을 본다
+	"pit": 8.0,          # 쥘 때 숙임(도) — 손끝이 테로 내려가는 손
+	"m": Vector3(31.0, -16.0, -22.5),   # 집는 자리 — 손목 기준, 손등보다 22 아래
+	"q": 55.0,           # 엄지 끝 → 검지 끝 (+x 에서 +z 쪽으로, 도)
+	"h": 15.5,           # 동전을 집는 반폭 — 두 손끝이 12 시에서 ±40° (10 시 반 · 1 시 반)
+	#  손끝 가운데가 물건 테 밖으로 나온 길이. 손끝 반폭(검지 3 · 엄지 3.7)에서 이것을
+	#  빼면 손끝이 테를 덮는 폭이다 — 1~1.5px. 0 이면 손끝 반이 면에 얹혀 다시 「짚는」
+	#  손이 되고, 반폭보다 크면 손끝이 테에서 떠 집은 것이 아니라 옆에 댄 손이 된다.
+	"e": 1.9,
+	"top": 1.5,          # 물건 윗면이 손끝 축보다 이만큼 위 — 손끝 볼이 테 위쪽 모서리를 문다
+	#  쥔 엄지 뿌리. 쉼(t_rx 11)보다 앞 · 손바닥 쪽이다 — 엄지를 맞세우면 엄지 두덩이
+	#  손바닥 밑으로 부풀며 엄지 첫 마디가 앞으로 나온다(사람 엄지 손허리뼈가 하는 일).
+	#  8 에 두면 엄지(26)가 뒤 테 어깨까지 28 을 가야 해서 곧은 막대로 늘었고, 손바닥
+	#  옆구리 밖(z 17.5)에 두면 휘기는 했지만 엄지가 손에서 떨어져 떠 보였다(손 화판 촬영).
+	#  손바닥 모서리 안(폭 14.6 · 두께 5.6)에서 테까지 24.5 — 엄지 마디가 39° 휜다.
+	"th_root": Vector3(18.0, -3.5, -14.5),
+	#  쥠이 이 위면 집는 손끝 둘이 앞 층에 선다. 0.25 에서는 받는 도중 손끝이 아직 테로
+	#  건너가는 길(면 위)에서 앞 층에 서서 날아오는 동전 면에 얹혔다(촬영) — 거의 다
+	#  쥐었을 때(받기의 마지막 1/15 · 동전이 99% 와 있다)부터 선다.
+	"front_k": 0.85,
+	"rel": 0.2,          # 뿌린 뒤 집기를 푸는 시간(초) — 손각 · 손가락이 쉼으로 돌아온다
+	#  살피는 굴림이 물건 기울임(wob)으로 옮겨지는 비. 쥔 손은 안 구르고(_npc_arm) 물건만
+	#  손끝 사이에서 기운다 — 굴림을 6° 로 줄였으므로 이 비로 키운다. 램프 쪽으로 살짝
+	#  틀어 보는 손끝이다(테를 문 자리는 그대로).
+	"tip": 3.0,
 	#  뿌리는 속도. 가로가 주고 세로는 거드는 정도다 — 길이가
 	#  HAND.toss_cap(260) 안이라 손이 던질 때와 같은 무게로 읽힌다.
 	"toss_u": 240.0,     # 가로. 준 손의 **반대쪽**으로 간다
@@ -22507,10 +22848,31 @@ const GIVE := {
 	"reach": 4.0,        # 손 내미는 예고가 붙고 떨어지는 속도
 }
 var give_i := -1           # 상인이 든 물건. drop 의 색인
+#  든 물건을 두 번에 나눠 그리는 차례 — 0 다 · 1 등급 빛만(손 밑) · 2 몸만(손 위).
+#  _rar_glow · _coin_glow 와 _sticker_flat · _plaque_flat · _obj_paint 가 읽는다.
+var glow_pass := 0
 var give_t := 0.0
 var give_side := 1
 var give_from := Vector3.ZERO    # 받기 전 자리 (u, w, h)
 var give_ang := 0.0        # 지난 프레임의 손각. 차이만큼 물건을 돌린다
+var give_rel := 0.0         # 뿌린 뒤 남은 쥠 1 → 0 (GIVE.rel) — _give_grip 이 그 손에 준다
+#  든 물건의 집기 치수 — 건넬 때 한 번 _give_fit 이 적는다(물건마다 다르다).
+#    give_h   손끝 둘이 집는 자리에서 q 로 벌어진 반폭(물건 테 + GIVE.e)
+#    give_mo  집는 자리를 q 로 민 길이 — 가는 것은 검지 끝은 두고 엄지가 오므린다
+#    give_d   물건 한가운데가 집는 줄에서 앞(n)으로 나간 깊이
+#    give_top 물건 윗면(그리는 자리)이 손끝 축보다 위인 높이
+#    give_rot 물건을 손에 맞춰 돌리는가 — 0 그대로 · 1 가로축(다트는 촉)을 집는 줄에
+#    give_all 손 전부를 앞 층에 — 다트처럼 손 밑으로 들어가는 것만(_give_fit)
+#  사탕을 집는 반폭 — 굽힌 그림(31 × 42)의 허리(포장 사탕의 꼬인 귀 사이 · 곰젤리의 배) 반폭이다.
+const CANDY_GRIP := 8.0
+var give_h := 16.2
+var give_mo := 0.0
+var give_d := 18.0
+var give_top := 1.5
+var give_rot := 0
+var give_all := false
+var give_ty := 0.0         # 엄지 끝 높이 덤 — 다트는 자루 위를 문다(_give_fit)
+var give_iy := 0.0         # 검지 끝 높이 덤 — 다트는 자루 밑
 #  이 런에서 상점을 몇 번 열었나. 배움이 "두 번째 상점" 을 가리는 데 쓴다 —
 #  저장에 안 남긴다. 한 런 안에서만 뜻이 있는 수다.
 var shop_seen := 0
@@ -22527,8 +22889,8 @@ var npc_grip := [Vector2.ZERO, Vector2.ZERO]
 var npc_elbow := [Vector2.ZERO, Vector2.ZERO]
 #  어깨 (u, w, h). 누름이 위팔을 맞히는 데 쓴다 — 위팔이 쉴 때도 서므로(2026-10-02).
 var npc_shoulder := [Vector3.ZERO, Vector3.ZERO]
-#  든 물건의 뒤 테가 걸리는 자리 (u, w) 와 그 자리의 물건 윗면 높이 h.
-#  _npc_arm 이 _hold_of 로 적고 _give_tick 이 읽는다(GIVE 의 「테를 쥔다」).
+#  든 물건의 한가운데 (u, w) 와 그 윗면 높이 h — 손끝 둘이 테를 집은 그 물건이
+#  서는 자리다. _npc_arm 이 _hold_of 로 적고 _give_tick 이 그대로 쓴다(GIVE 「테를 집는다」).
 var npc_hold := [Vector3.ZERO, Vector3.ZERO]
 
 
@@ -22556,6 +22918,7 @@ func _give_begin(i: int, m: Vector2) -> void:
 	give_t = 0.0
 	give_side = _npc_side(m.x)
 	give_from = Vector3(it.u, it.w, it.h)
+	give_rel = 0.0
 	give_ang = float((npc_grip[give_side] as Vector2).x)
 	it.held = true            # 물리에서 뺀다. 자리는 _give_tick 이 준다
 	it.sleep = true
@@ -22569,6 +22932,7 @@ func _give_begin(i: int, m: Vector2) -> void:
 	#  호버 값이 0 으로 안 돌아온다 — 상인 손 위에서 3.7px 떠 있게 된다.
 	it.lift = 0.0
 	it.lv = 0.0
+	_give_fit(stock[i] if i < stock.size() else {})
 	_npc_react("살핌", give_side)
 	_sfx("hand_take")
 
@@ -22585,6 +22949,9 @@ func _give_tick(d: float) -> void:
 		want = 0.0
 	npc_reach = move_toward(npc_reach, want, d * float(GIVE.reach))
 	if not _give_live():
+		#  뿌린 뒤 집기를 푼다. 움직임을 끄면 바로 놓는다.
+		if give_rel > 0.0:
+			give_rel = 0.0 if motion_off else move_toward(give_rel, 0.0, d / float(GIVE.rel))
 		return
 	if give_i >= drop.size() or state != S.SHOP or sweep_live:
 		_give_end()
@@ -22601,15 +22968,14 @@ func _give_tick(d: float) -> void:
 		idle_t = minf(give_t, tot - 0.0005)
 		idle_side = give_side
 	var it: Dictionary = drop[give_i]
-	#  물건은 뒤 테를 쥔 자리(npc_hold)에서 손끝 쪽으로 제 반지름만큼 나간다 —
-	#  GIVE 「테를 쥔다」. 손각(npc_grip.x)이 돌면 물건이 쥔 자리를 축으로
-	#  같이 돈다(아래 psi). 쥔 자리가 축이라 살피는 동안 물건이 손에서 안 미끄러진다.
+	#  물건은 손끝 둘이 테를 집은 자리(npc_hold)에 그대로 선다 — GIVE 「테를 집는다」.
+	#  npc_hold 는 손 좌표의 한 점을 손과 **같은 변환**으로 옮긴 것이라(_hold_of),
+	#  손이 들리고 돌고 구르는 동안 물건이 손 좌표에서 한 치도 안 미끄러진다.
 	#  ah 는 내리기 구간에서 이 값에서 0 으로 내려간다.
 	var hp3: Vector3 = npc_hold[give_side]
 	var ga: float = (npc_grip[give_side] as Vector2).x
-	var gr: float = _give_r(it)
-	var au: float = hp3.x + cos(ga) * gr
-	var aw: float = hp3.y + sin(ga) * gr
+	var au: float = hp3.x
+	var aw: float = hp3.y
 	var ah: float = hp3.z
 	#  카운터 선을 **절대 안 넘게** 민다. 넘으면 벽 사각(_cover_draw)이
 	#  나중에 덮어서 물건이 통째로 사라진다 — 손이 어디 있든 이 줄이 막는다.
@@ -22626,8 +22992,9 @@ func _give_tick(d: float) -> void:
 		it.w = aw
 		it.h = ah
 	else:
-		#  내린다 — 손을 따라 내려오면서 높이만 0 으로 간다.
-		#  여기서 0 을 만들어 두어야 뿌릴 때 안 튄다(머리말).
+		#  내린다 — 집은 채 손을 따라 내려오면서 높이만 0 으로 간다. 손이 그 박자에
+		#  물건 밑면을 판에 맞춰 내려오므로(_give_land_dh) ah 가 이미 0 언저리이고, 이
+		#  섞임은 그 나머지만 메운다. 여기서 0 을 만들어 두어야 뿌릴 때 안 튄다(머리말).
 		var k2 := _ease_io((give_t - t2) / float(GIVE.set))
 		it.u = au
 		it.w = aw
@@ -22648,6 +23015,14 @@ func _give_tick(d: float) -> void:
 	var da: float = angle_difference(give_ang, gp.x)
 	give_ang = gp.x
 	it.psi = fposmod(float(it.psi) + da, TAU)
+	#  받는 동안 물건을 손에 맞춰 돌린다(give_rot) — 네모(팩 · 사진)는 가로축을 집는
+	#  줄에 맞춰 뒤 모서리를 집고, 다트는 그 줄을 따라 가로로 눕혀 자루 한가운데를 위아래로
+	#  문다(_give_fit). 받는 끝에 맞아 떨어지고, 그 뒤로는 위의 da 가 손각을 따라
+	#  돌린다 — 손에 대한 자세가 안 바뀐다.
+	#  받기를 넘어서는 틀까지 한 번 더 — 그 틀의 비가 1 이라 정확히 맞춰 놓고 넘긴다.
+	if give_rot != 0 and give_t - d < t1:
+		var tg := _give_psi(ga)
+		it.psi = lerp_angle(float(it.psi), tg, _ease_io(clampf(give_t / t1, 0.0, 1.0)))
 	it.wob = clampf(sin(gp.y) * float(GIVE.tip), -1.0, 1.0)
 	it.roll = gp.y
 	if give_t >= tot:
@@ -22658,6 +23033,7 @@ func _give_end(v := Vector2.ZERO) -> void:
 	var i := give_i
 	give_i = -1
 	give_t = 0.0
+	give_rel = 0.0 if (motion_off or i < 0) else 1.0
 	if i < 0 or i >= drop.size():
 		return
 	var it: Dictionary = drop[i]
@@ -24767,12 +25143,26 @@ func _goods_draw() -> void:
 
 
 #  상인이 든 물건 하나. **손 다음에** 그린다 — 이 한 줄이 "손 위에 있다" 를
-#  만든다. 높이로는 못 만든다(GIVE.hold 의 주석).
+#  만든다. 높이로는 못 만든다(GIVE 머리말).
 func _give_draw() -> void:
 	if give_i < 0 or give_i >= drop.size() or give_i >= stock.size():
 		return
+	glow_pass = 2
 	_obj_draw(give_i, 0.0)
+	glow_pass = 0
 	_bill_one(give_i)
+
+
+#  상인이 든 물건의 등급 빛 — **손 화판보다 먼저**(_cover_draw). 빛이 몸통과 함께
+#  손 다음에 그려지면 테 밖 18px 번짐이 뒤 테 곁의 너클을 덮어, 손가락이 반투명하게
+#  바래 동전 테로 녹아드는 유령 손가락이 됐다(검토 결함 1 — 「동전에 손가락이
+#  뚫리는데」 가 모양만 바꿔 남은 자리). 차례: 빛 → ① 손 → ② 몸 → ③ 집는 손끝.
+func _give_glow_draw() -> void:
+	if give_i < 0 or give_i >= drop.size() or give_i >= stock.size():
+		return
+	glow_pass = 1
+	_obj_draw(give_i, 0.0)
+	glow_pass = 0
 
 
 #  등급 하나가 첫 착지에서 번짐을 몇 배로 부풀리는가. LAND 표의 셋째 열이다.
@@ -24900,6 +25290,9 @@ func _obj_paint(it: Dictionary, s: Dictionary, dim: float) -> void:
 			var kb: float = (sv - HAND.knee) / (1.0 - HAND.knee)
 			c = via.lerp(it.to, 1.0 - pow(1.0 - kb, 3.0))
 		dim = sv * 0.55
+	#  빛만 그리는 차례(glow_pass 1)는 등급 빛이 있는 동전 · 플라크만 — 나머지는 빛이 없다.
+	if glow_pass == 1 and String(s.type) != "item":
+		return
 	match s.type:
 		"item":
 			#  ⚠ **it.get 이어야 한다** — 이 함수의 두 번째 소비자인 창구로
@@ -25337,6 +25730,8 @@ func _glow_of(rar: String) -> Color:
 #  못 깨진다. 번짐이 커져도 닿는 자리는 그대로다.
 func _rar_glow(c: Vector2, rx: float, ry: float, rar: String, dim: float,
 		ring := false, bloom := 0.0) -> void:
+	if glow_pass == 2:
+		return                  # 상인이 든 물건의 몸만 그리는 차례 — 빛은 손 밑에 이미 깔았다
 	var col := _glow_of(rar)
 	if col.a <= 0.0:
 		return
@@ -26106,6 +26501,8 @@ func _coin_fan(form: String, c: Vector2, ang: float, sx: float, sy: float,
 func _coin_glow(form: String, c: Vector2, ang: float, sx: float, sy: float,
 		sc: float, flat: float, rar: String, dim: float, ring := false,
 		bloom := 0.0) -> void:
+	if glow_pass == 2:
+		return                  # _rar_glow 와 같다 — 든 물건의 빛은 손 밑(_give_glow_draw)
 	var col := _glow_of(rar)
 	if col.a <= 0.0:
 		return
@@ -26165,6 +26562,9 @@ func _sticker_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: floa
 	var slots: int = _coin_slots(form)
 	var glass: bool = mat == "glass"
 	var hollow: bool = mat == "hollow"
+	if glow_pass == 1:
+		_rar_glow(c, rx, ry, rar, dim, glass or hollow, bloom)
+		return
 	var pixel: bool = mat == "pixel"
 	var wax: bool = mat == "wax"
 	var struck: bool = mat == "cast"
@@ -26404,6 +26804,9 @@ func _plaque_flat(c: Vector2, it: Dictionary, t: Dictionary, rot: float,
 			else bb.darkened(float(EDGE.lo))))
 	var side := side0.darkened(dim)
 	var fa := 1.0 - dim
+	if glow_pass == 1:
+		_coin_glow(form, c, ang, sx, sy, 1.0, flat, rar, dim, hollow, bloom)
+		return
 	var top := _coin_pts(form, c, ang, sx, sy, 1.0, flat, 0.0)
 
 	#  「사진은 네모라 그림자도 네모다」가 여기에도 걸린다 — 동전에서만 안
