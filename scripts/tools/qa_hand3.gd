@@ -257,6 +257,46 @@ func _thumb_anat(tag: String, i: int) -> void:
 	_ok("엄지 두덩이 굵다 (%s)" % nm, tw >= 0.28, "뿌리 쪽 폭 = 손바닥 폭의 %.2f (0.28 이상)" % tw)
 
 
+#  ── 엄지 길이 (2026-10-02) ─────────────────────────────────
+#  「지금 엄지가 너무 길지 않아? 엄지가 거의 검지 길이 까지 오는게 말이 안되지 않니?」 —
+#  닫힌 집기가 닿게 하려고 엄지를 늘렸더니(자유 엄지 25 · 검지 24) 모은 엄지 끝이 검지 끝
+#  언저리까지 왔다. 엄지 · 검지 정상치 연구(PMC12309929 「Investigating Normative Measurements
+#  of the Thumb and Index Finger」)대로 잰다:
+#    · 모은(쉬는) 엄지 끝이 검지 첫마디(MCP → PIP)의 0.62~0.75 자리 — 연구의 69%. 손등에서
+#      본 손바닥 면(손 좌표 xz)에서 검지 첫마디 줄에 엄지 끝을 내려 잰다. 두 손 다.
+#    · 자유 엄지(MCP → 끝) / 검지(MCP → 끝) 길이 0.70~0.76 — 연구의 73%.
+#  닫힌 집기(엄지 끝이 검지 끝에서 6.5px 안)는 그대로 잰다 — 엄지를 늘리지 않고 검지가 더
+#  말려 내려와 맞춘다(GIVE 「테를 집는다」).
+func _thumb_tip_ratio(hj: Dictionary) -> float:
+	var inv: Transform3D = (hj.root as Node3D).global_transform.affine_inverse()
+	var k: Vector3 = inv * (hj.j1[0] as Node3D).global_transform.origin
+	var p: Vector3 = inv * (hj.j2[0] as Node3D).global_transform.origin
+	var t: Vector3 = inv * (hj.ttip as Node3D).global_transform.origin
+	var d := Vector2(p.x - k.x, p.z - k.z)
+	return Vector2(t.x - k.x, t.z - k.z).dot(d) / d.length_squared()
+
+
+func _thumb_len_ratio(hj: Dictionary) -> float:
+	var a: Vector3 = (hj.t1 as Node3D).global_transform.origin
+	var b: Vector3 = (hj.t2 as Node3D).global_transform.origin
+	var c: Vector3 = (hj.ttip as Node3D).global_transform.origin
+	var k: Vector3 = (hj.j1[0] as Node3D).global_transform.origin
+	var m: Vector3 = (hj.j2[0] as Node3D).global_transform.origin
+	var e: Vector3 = (hj.tips[0] as Node3D).global_transform.origin
+	return (a.distance_to(b) + b.distance_to(c)) / (k.distance_to(m) + m.distance_to(e))
+
+
+func _thumb_len(i: int) -> void:
+	var hj: Dictionary = (g.hand3_rig[i] as Dictionary).hj
+	var nm: String = "%s손" % ("왼" if i == 0 else "오른")
+	var tr := _thumb_tip_ratio(hj)
+	_ok("모은 엄지 끝이 검지 첫마디 0.62~0.75 (쉼 · %s)" % nm, tr >= 0.62 and tr <= 0.75,
+			"검지 첫마디의 %.2f (연구 0.69)" % tr)
+	var lr := _thumb_len_ratio(hj)
+	_ok("엄지 / 검지 길이 0.70~0.76 (%s)" % nm, lr >= 0.70 and lr <= 0.76,
+			"MCP → 끝 %.3f (연구 0.73)" % lr)
+
+
 #  2026-10-02 「지금 동전 짚는 손 모양 너무 이상한데 좀 레퍼런스 찾으면서 어떻게 해봐」 →
 #  「뭔하려느지는 알겠는데 엄지가 너무 올라가지 않았어? 레퍼런스 찾아보고 좀 손모양 제대로
 #  만들어봐」. 둘째 판은 엄지 끝 · 검지 끝으로 뒤 테 양 어깨를 집었는데, 엄지가 손목 위에서
@@ -535,6 +575,7 @@ func _run() -> void:
 	await _wait(20)
 	for i in 2:
 		_thumb_anat("쉼", i)
+		_thumb_len(i)
 	g._sweep_begin()
 	await _wait(14)
 	_ok("쓸면 위팔이 선다",

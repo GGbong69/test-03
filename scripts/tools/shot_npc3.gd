@@ -233,6 +233,30 @@ func _thumb_cell(im: Image, i: int) -> Image:
 	return _crop(im, Rect2(ms - Vector2(28.0, 22.0), Vector2(56.0, 44.0)), 8)
 
 
+#  엄지 길이 8배 — 쉬는 화면 오른손, 엄지 MCP 와 검지 PIP 사이를 가운데로 56 × 44. 검지 PIP
+#  자리에 검지 첫마디를 가로지르는 1px 눈금 하나를 **이 그림에만** 긋는다(게임에는 없다) —
+#  「지금 엄지가 너무 길지 않아?」: 모은 엄지 끝이 그 눈금 못 미쳐(검지 첫마디의 0.69 —
+#  PMC12309929) 서는지 본다.
+func _thumb_len_shot(im: Image) -> void:
+	var hj: Dictionary = (g.hand3_rig[1] as Dictionary).hj
+	var k: Vector3 = (hj.j1[0] as Node3D).global_transform.origin
+	var p: Vector3 = (hj.j2[0] as Node3D).global_transform.origin
+	var m: Vector3 = (hj.t1 as Node3D).global_transform.origin
+	var ks := Vector2(k.x, float(g.TBL.fy) + k.z * float(g.TBL.flat) - k.y * float(g.TBL.tall))
+	var ps := Vector2(p.x, float(g.TBL.fy) + p.z * float(g.TBL.flat) - p.y * float(g.TBL.tall))
+	var ms := Vector2(m.x, float(g.TBL.fy) + m.z * float(g.TBL.flat) - m.y * float(g.TBL.tall))
+	var o: Vector2 = (ps + ms) * 0.5 - Vector2(28.0, 22.0)
+	var cut := _crop(im, Rect2(o, Vector2(56.0, 44.0)), 8)
+	var d := (ps - ks).normalized()
+	var n := Vector2(-d.y, d.x)
+	var c8 := (ps - o) * 8.0
+	for t in range(-28, 29):
+		var q := c8 + n * float(t)
+		if q.x >= 0.0 and q.y >= 0.0 and q.x < float(cut.get_width()) and q.y < float(cut.get_height()):
+			cut.set_pixel(int(q.x), int(q.y), Color(0.2, 1.0, 1.0))
+	cut.save_png("res://shots/npc_%s_thumb_len.png" % V)
+
+
 #  엄지 8배 — 두 줄(화면 오른손 · 왼손) × 세 칸(쉼 · 집기 · 편 손). 편 손은 오른손이
 #  쓸기 한가운데, 왼손은 쓸지 않으므로(쓰는 동안 HUD 뒤로 물러난다) 「기대기」 한가운데 —
 #  두 손이 다 편 손(FPOSE.open)이다.
@@ -249,6 +273,7 @@ func _thumbs() -> void:
 	var sheet: Image = null
 	var im: Image = root.get_texture().get_image()
 	var cells: Array = [[_thumb_cell(im, 1), _thumb_cell(im, 0)]]
+	_thumb_len_shot(im)
 	await _give_hold("rare", 1)
 	var gr: Image = _thumb_cell(root.get_texture().get_image(), 1)
 	await _give_hold("rare", 0)
@@ -300,13 +325,13 @@ func _run() -> void:
 	_quiet()
 	if only_thumb:
 		await _thumbs()
-		print("찍었다 — npc_%s_thumb_x8" % V)
+		print("찍었다 — npc_%s_thumb_x8 · thumb_len" % V)
 		quit(0)
 		return
 	if only_hold:
 		await _holds()
 		await _thumbs()
-		print("찍었다 — npc_%s_hold · hold_L · hold_kinds · hold_game · thumb_x8" % V)
+		print("찍었다 — npc_%s_hold · hold_L · hold_kinds · hold_game · thumb_x8 · thumb_len" % V)
 		quit(0)
 		return
 	#  쉼 — 몸짓을 걷고 쉼을 길게 잡는다.
@@ -389,5 +414,5 @@ func _run() -> void:
 		g.idle_wait = 9.0
 		g.mouse_at = Vector2(-50, -50))
 	root.get_texture().get_image().save_png("res://shots/npc_%s_leg.png" % V)
-	print("찍었다 — npc_%s_shop · close · poses · hold · hold_L · hold_kinds · hold_game · thumb_x8 · acts · leg" % V)
+	print("찍었다 — npc_%s_shop · close · poses · hold · hold_L · hold_kinds · hold_game · thumb_x8 · thumb_len · acts · leg" % V)
 	quit(0)
