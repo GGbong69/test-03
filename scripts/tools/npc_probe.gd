@@ -8,6 +8,13 @@ extends SceneTree
 #  여기 넷이 다 통과하는데도 안 좋아 보이면 그건 형태가 아니라 색 문제고,
 #  하나라도 떨어지면 색을 아무리 만져도 안 산다. 순서가 그렇다.
 #
+#  2026-10-02 — 「몸에 비해 팔이 너무 얇지 않아?」 · 「팔만 두꺼워 지는게 아니라
+#  손도 같이 커져야 하지 않을까?」. 옛 팔(동전 슬롯 밑에서 떨어지는 폭 30 막대)을
+#  어깨에서 나온 팔로 바꾸며 조건을 새 설계로 다시 적었다 — 팔–몸통 골은 손 ·
+#  팔뚝 띠(y 100~)에서만, 그리고 위팔이 옆구리를 따라 나오는가 · 몸통 : 팔 굵기 ·
+#  팔꿈치 꺾임 · 손이 동전보다 작지 않은가를 더 잰다. 옛 팔은 굵기 4.06 · 꺾임 0.2px ·
+#  손 356(동전 1203)으로 셋에서 진다(같은 배경 판정으로 main 을 잰 값).
+#
 #  검사 칸의 위는 **동전 슬롯 밑변**이고 아래는 정착 물건이 칠하는
 #  최상단(131.8, 2000롤 실측) — 상인이 그릴 수 있는 전부다. 윗변을 손으로
 #  적었더니 동전 슬롯을 키운 날 그 띠가 칸에 들어와 몸통과 두 팔을 한 덩어리로
@@ -107,7 +114,14 @@ func _measure() -> void:
 		fails += 1
 		return
 
-	# 두 가면을 뜬다 — 상인인가(실루엣), 그리고 밝은가(L* 45 이상).
+	# 두 가면을 뜬다 — 상인인가(실루엣), 그리고 밝은 **살**인가(L* 45 이상 · 살빛 채도).
+	#  2026-10-02 시안 B 에서 「밝은 것」 을 살빛으로 좁혔다. 이 검사의 뜻은 눈이 손부터
+	#  가는가인데, L* 하나로만 세면 걷은 크림 소매가 손 다음 밝기라 소매 조각이 「손 말고
+	#  밝은 것」 으로 잡혔다 — 그래서 소매를 0.9 배로 눌러 맞췄더니 크림이 낙타색 · 황토로
+	#  읽혀 시안 B 의 정체가 무너졌다(검토 B: 「프로브가 그림을 틀린 쪽으로 몰았다」).
+	#  천을 다시 어둡게 하지 않고 검사를 고친다 — 밝고(L* 45) **살빛 채도**(a* 12 · b* 18
+	#  이상)인 화소만 센다. 손이 먼저 읽히는 것은 채도와 램프 웅덩이가 맡는다. 무채색에
+	#  가까운 크림 천(a* ≤ 8 · b* ≤ 14)은 밝아도 손과 다투지 않는다.
 	var fg := PackedByteArray()
 	var lit := PackedByteArray()
 	fg.resize(W * H)
@@ -115,8 +129,9 @@ func _measure() -> void:
 	for y in H:
 		for x in W:
 			var c := img.get_pixel(X0 + x, Y0 + y)
-			fg[y * W + x] = 0 if _is_bg(c) else 1
-			lit[y * W + x] = 1 if _lstar(c) >= 45.0 else 0
+			fg[y * W + x] = 0 if _is_bg(c, Y0 + y) else 1
+			var lab := _lab(c)
+			lit[y * W + x] = 1 if lab.x >= 45.0 and lab.y >= 12.0 and lab.z >= 18.0 else 0
 
 	var blobs := _label(fg)
 	var big := _over(blobs, 30)
@@ -126,38 +141,117 @@ func _measure() -> void:
 	# 몸통 + 팔 둘 = 셋. 하나로 뭉치면 그것이 옛 옷걸이다.
 	_ok("실루엣 덩어리", big.size() >= 3, "%d개 (기준 3 이상)" % big.size())
 
-	# ── T2 팔이 몸통에서 갈라지는가 ───────────────────────
-	# 설계할 때는 "닫힌 구멍" 을 노렸는데 위는 동전 슬롯, 아래는 카운터에 열려
-	# 있어 구멍이 안 닫힌다. 대신 더 센 것을 잰다 — 행별 최소 배경 폭.
+	# ── 팔 둘을 고른다 ────────────────────────────────────
+	# 몸통이 가장 큰 덩어리고, 팔은 그다음 큰 둘이다(왼쪽 · 오른쪽).
+	# 셔츠 V 는 밝아서 배경으로 세어지고, 그 안의 단추가 혼자 떨어진 작은
+	# 덩어리가 된다 — 「몸통 아닌 것」을 다 팔로 세면 단추와 V 테두리의 3px 가
+	# 팔–몸통 골로 잡힌다(2026-10-02 이전 판이 그래서 늘 3px 로 떨어졌다).
+	# 그래서 팔은 **면적 300 이상** 덩어리 중 몸통 바깥에 선 둘로 고른다.
+	var body: int = big[0].id if big.size() > 0 else -1
+	var arms: Array[Dictionary] = []
+	for b in big:
+		if b.id != body and b.area >= 300:
+			arms.append(b)
+	arms.sort_custom(func(a, c): return a.x0 < c.x0)
+	_ok("팔 둘", arms.size() >= 2, "%d개 (면적 300 이상 · 몸통 밖)" % arms.size())
+
+	# ── T2 손 · 팔뚝이 몸통에서 떨어져 있는가 ─────────────
+	# 2026-09-15 제보: "오른쪽 손이 너무 몸이랑 붙어 있는거 아니야?"
+	# **카운터 선 언저리(y 100~)에서만 잰다.** 2026-10-02 부터 위팔은 일부러
+	# 몸에 붙는다(「몸에 비해 팔이 너무 얇지 않아?」 — 어깨에서 나온 팔). 손과
+	# 팔뚝이 서는 띠에서 행별 최소 배경 폭이 8 이상이어야 한다.
 	var gap := 9999
 	var gap_y := -1
-	if big.size() >= 2:
-		var body: int = big[0].id
-		for y in H:
-			var bx := PackedInt32Array()
-			var ax := PackedInt32Array()
-			for x in W:
-				var id: int = blobs.lab[y * W + x]
-				if id < 0:
-					continue
-				if id == body:
-					bx.append(x)
-				else:
-					ax.append(x)
-			if bx.is_empty() or ax.is_empty():
+	if body >= 0 and arms.size() >= 2:
+		for y in range(maxi(100 - Y0, 0), H):
+			var bx := _run(blobs.lab, y, body)
+			if bx.x < 0:
 				continue
-			for u in ax:
-				for v in bx:
-					var d: int = absi(v - u)
-					if d < gap:
-						gap = d
-						gap_y = y + Y0
-	_ok("팔–몸통 골", gap_y >= 0 and gap >= 8,
+			for a in arms.slice(0, 2):
+				var ax := _run(blobs.lab, y, a.id)
+				if ax.x < 0:
+					continue
+				var d: int = (bx.x - ax.y) if ax.x < bx.x else (ax.x - bx.y)
+				if d < gap:
+					gap = d
+					gap_y = y + Y0
+	_ok("손·팔뚝–몸통 골", gap_y >= 0 and gap >= 8,
 			"없음" if gap_y < 0 else "%dpx @ y%d (기준 8 이상)" % [gap, gap_y])
+
+	# ── T6 위팔이 어깨에서 나오는가 ───────────────────────
+	# 2026-10-02 「몸에 비해 팔이 너무 얇지 않아?」 — 옛 팔은 동전 슬롯 밑변에서
+	# 곧장 떨어지는 막대였다(어깨도 위팔도 팔꿈치 꺾임도 없이). 이제 위팔이
+	# 슬롯 밑으로 나와 옆구리를 따라 내려온다: 검사 칸 첫 줄에서 팔이 서고, 그
+	# 안쪽 모서리가 몸통 모서리에서 18px 안이다.
+	var top_gap := 9999
+	if body >= 0 and arms.size() >= 2:
+		var bx0 := _run(blobs.lab, 0, body)
+		top_gap = -1
+		for a in arms.slice(0, 2):
+			var ax0 := _run(blobs.lab, 0, a.id)
+			if bx0.x < 0 or ax0.x < 0:
+				top_gap = 9999
+				break
+			var d0: int = (bx0.x - ax0.y) if ax0.x < bx0.x else (ax0.x - bx0.y)
+			top_gap = maxi(top_gap, d0)
+	_ok("위팔이 옆구리를 따라 나온다", top_gap <= 18,
+			"첫 줄 y%d 골 %s (기준 18 이하)" % [Y0, "없음" if top_gap >= 9999 else "%dpx" % top_gap])
+
+	# ── T7 팔 굵기 : 몸통 폭 ─────────────────────────────
+	# 같은 제보다. 옛 막대는 몸통 145 : 팔 30 = 4.8 이었다. 사람 가슴 : 위팔이
+	# 3.2 : 1.1 = 2.9 다(HAND3 머리말). 위팔이 서는 줄(첫 줄 + 10)에서 3.6 아래.
+	var thick := 0.0
+	if body >= 0 and arms.size() >= 2:
+		var bxt := _run(blobs.lab, 10, body)
+		for a in arms.slice(0, 2):
+			var axt := _run(blobs.lab, 10, a.id)
+			if bxt.x < 0 or axt.x < 0:
+				thick = 99.0
+				break
+			thick = maxf(thick, float(bxt.y - bxt.x + 1) / float(axt.y - axt.x + 1))
+	_ok("몸통 : 팔 굵기", thick > 0.0 and thick <= 3.6,
+			"%.2f (기준 3.6 이하 · 옛 막대 4.8)" % thick)
+
+	# ── T8 팔꿈치가 꺾이는가 ─────────────────────────────
+	# 막대는 위에서 아래로 곧다. 팔은 어깨 → 팔꿈치(바깥) → 손목(안쪽)으로
+	# 꺾인다 — 팔 가운데선이 위 · 아래 두 끝을 이은 줄보다 바깥으로 4px 이상
+	# 나간 줄이 있어야 한다.
+	var bend := 99.0
+	if arms.size() >= 2:
+		for a in arms.slice(0, 2):
+			#  위끝은 검사 칸 첫 줄, 아래끝은 손목 바로 위(y 92) — 손은 넓어서
+			#  가운데선을 끌어당기므로 넣지 않는다.
+			var yb: int = 92 - Y0
+			var c0 := _run(blobs.lab, 0, a.id)
+			var c1 := _run(blobs.lab, yb, a.id)
+			var out := 0.0
+			var sgn: float = -1.0 if a.x0 < X0 + W / 2 else 1.0
+			for y in range(1, yb):
+				var cy := _run(blobs.lab, y, a.id)
+				if c0.x < 0 or c1.x < 0 or cy.x < 0:
+					continue
+				var t: float = float(y) / float(yb)
+				var mid: float = lerpf(float(c0.x + c0.y), float(c1.x + c1.y), t) * 0.5
+				out = maxf(out, sgn * (float(cy.x + cy.y) * 0.5 - mid))
+			bend = minf(bend, out)
+			var cl := PackedStringArray()
+			for y in range(0, yb + 1, 6):
+				var cy2 := _run(blobs.lab, y, a.id)
+				cl.append("%d:%.0f" % [y + Y0, float(cy2.x + cy2.y) * 0.5 + X0])
+			print("        팔 가운데선 ", " ".join(cl), "  꺾임 %.1f" % out)
+	_ok("팔꿈치 꺾임", bend >= 4.0 and bend < 99.0, "%.1fpx (기준 4 이상)" % bend)
 
 	# ── T4 좌우가 거울인가 ────────────────────────────────
 	# 애니메이션에서 twinning 이라 부르는 것이다. 완전 미러면 0 이고,
 	# 옛 팔이 0.006 이었다 — 사실상 거울. 사람은 절대 그 자세를 안 한다.
+	#
+	# 2026-10-02 에 **팔만** 재도록 바꿨다. 옛 기준(실루엣 전체 0.25)은 가는 막대
+	# 팔 시절 값인데, 그 뒤 3D 몸통이 서면서 main 도 0.15 로 못 넘고 있었다(배경
+	# 판정을 고친 이 판으로 재 보면). 「몸에 비해 팔이 너무 얇지 않아?」 로 팔이
+	# 세 배 굵어지자 같은 어긋남(팔꿈치 6 · 손목 8 · 손각 20°)이 차지하는 몫이 더
+	# 줄었다 — 분모의 대부분이 좌우가 원래 같은 조끼라서다. 그래서 몸통을 빼고
+	# 팔 화소 가운데 거울 자리가 팔이 아닌 몫을 잰다. 기준 0.12 는 쌍둥이(0.006)의
+	# 스무 배 — 「거울이 아니다」 를 재는 값이지 「많이 어긋나라」 가 아니다.
 	var on := 0
 	var diff := 0
 	for y in H:
@@ -167,39 +261,99 @@ func _measure() -> void:
 			if fg[y * W + x] != fg[y * W + (W - 1 - x)]:
 				diff += 1
 	var twin: float = 0.0 if on == 0 else float(diff) / float(on)
-	_ok("좌우 비대칭", twin >= 0.25, "%.3f (기준 0.25 이상 · 완전대칭 0)" % twin)
+	#  팔만 따로 — 몸통(조끼)은 옷이라 원래 좌우가 같고, 그 화소가 분모에 들면
+	#  팔이 얼마나 어긋나든 값이 묽어진다. 팔 화소 가운데 거울 자리가 팔이 아닌 몫.
+	var arm_on := 0
+	var arm_diff := 0
+	if arms.size() >= 2:
+		var ids := [arms[0].id, arms[1].id]
+		for y in H:
+			for x in W:
+				if not ids.has(blobs.lab[y * W + x]):
+					continue
+				arm_on += 1
+				if not ids.has(blobs.lab[y * W + (W - 1 - x)]):
+					arm_diff += 1
+	var atwin: float = 0.0 if arm_on == 0 else float(arm_diff) / float(arm_on)
+	_ok("좌우 비대칭 (팔)", atwin >= 0.12,
+			"%.3f (기준 0.12 이상 · 완전대칭 0) · 실루엣 전체 %.3f" % [atwin, twin])
 
 	# ── T5 화면에서 밝은 것이 손 둘뿐인가 ─────────────────
 	# 눈은 가장 밝은 데로 먼저 간다. 그게 옆구리 획이면 상인이 안 읽힌다.
 	_ok("밝은 덩어리", bright.size() == 2,
-			"%d개 (기준 정확히 2 — 손 둘)" % bright.size())
+			"%d개 (기준 정확히 2 — 손 둘 · L* 45+ 살빛)" % bright.size())
 	for b in bright:
-		print("        L*45+ 면적 %4d  x[%d,%d] y[%d,%d]"
+		print("        L*45+ 살빛 면적 %4d  x[%d,%d] y[%d,%d]"
 				% [b.area, b.x0, b.x1, b.y0, b.y1])
+
+	# ── T9 손이 동전보다 작지 않은가 ──────────────────────
+	# 2026-10-02 「팔만 두꺼워 지는게 아니라 손도 같이 커져야 하지 않을까?」 —
+	# 옛 손(밝은 덩어리 356 · 481)은 판 위 동전(윗면 π·22·17.3 ≈ 1200)의 3분의 1 이었다.
+	# 검사 칸이 카운터 선 밑(132)에서 끊기므로 손의 윗부분만 잡히는데도
+	# 동전 윗면의 0.8 배는 넘어야 한다.
+	var coin: float = PI * float(g.TBL.chip_r) * float(g.TBL.chip_r) * float(g.TBL.flat)
+	var small := 99999
+	for b in bright:
+		small = mini(small, int(b.area))
+	_ok("손 ≥ 동전", bright.size() >= 2 and float(small) >= coin * 0.8,
+			"작은 손 %d · 동전 윗면 %.0f (기준 0.8 배)" % [small if small < 99999 else 0, coin])
 
 	print("상인 칸 x[%d,%d] y[%d,%d] · 화소 %d — %s"
 			% [X0, X1, Y0, Y1, on,
-			"네 검사 전부 통과" if fails == 0 else "실패 %d건" % fails])
+			"검사 전부 통과" if fails == 0 else "실패 %d건" % fails])
 	if out_png != "":
 		_save_sil(fg, lit, out_png)
 
 
+# 한 줄(y)에서 덩어리 id 가 차지한 x 범위 (첫 칸, 끝 칸). 없으면 (−1, −1).
+func _run(lab: PackedInt32Array, y: int, id: int) -> Vector2i:
+	if y < 0 or y >= H:
+		return Vector2i(-1, -1)
+	var lo := -1
+	var hi := -1
+	for x in W:
+		if lab[y * W + x] == id:
+			if lo < 0:
+				lo = x
+			hi = x
+	return Vector2i(lo, hi)
+
+
 # 배경인가. 초록이 우세하면 펠트·레일이고, 아니면 나무 색 목록과 맞춰 본다.
-func _is_bg(c: Color) -> bool:
+# **레일 색은 레일 줄에서만** 배경이다(sy 는 화면 y). 벽 앞에서 배경은 벽 하나뿐이다 —
+# 위팔이 서면서(2026-10-02) 굴린 소매의 밝은 면이 마침 C_WOOD 와 0.02 안으로
+# 맞아 떨어져 위팔 한 짝이 통째로 「배경」이 됐다(팔이 팔꿈치에서 끊긴 것으로 잡혔다).
+func _is_bg(c: Color, sy: int) -> bool:
 	if c.g > c.r + 0.02 and c.g > c.b + 0.015:
 		return true
-	for k in bg_cols:
+	var rail: bool = sy >= int(g.TBL.fy) - 4
+	for k in (bg_cols if rail else bg_cols.slice(0, 1)):
 		if absf(c.r - k.r) <= 0.02 and absf(c.g - k.g) <= 0.02 \
 				and absf(c.b - k.b) <= 0.02:
 			return true
 	return false
 
 
-# CIE L*. RGB 차이는 이 어두운 구간에서 거짓말을 한다 — 조끼(9)와 소매(24)
-# 는 RGB 로 15 나 갈리는 것 같지만 L* 로는 4.0 이라 눈에 안 보인다.
-func _lstar(c: Color) -> float:
-	var y := 0.2126 * _lin(c.r) + 0.7152 * _lin(c.g) + 0.0722 * _lin(c.b)
-	return 116.0 * pow(y, 1.0 / 3.0) - 16.0 if y > 0.008856 else 903.3 * y
+# CIE L*a*b* (D65). RGB 차이는 이 어두운 구간에서 거짓말을 한다 — 조끼(9)와 소매(24)
+# 는 RGB 로 15 나 갈리는 것 같지만 L* 로는 4.0 이라 눈에 안 보인다. 살빛인가는
+# a*(붉은 쪽) · b*(노란 쪽)로 가른다(T5 머리말).
+func _lab(c: Color) -> Vector3:
+	var r := _lin(c.r)
+	var gg := _lin(c.g)
+	var b := _lin(c.b)
+	var xx := (0.4124 * r + 0.3576 * gg + 0.1805 * b) / 0.95047
+	var yy := 0.2126 * r + 0.7152 * gg + 0.0722 * b
+	var zz := (0.0193 * r + 0.1192 * gg + 0.9505 * b) / 1.08883
+	var fx := _labf(xx)
+	var fy := _labf(yy)
+	var fz := _labf(zz)
+	return Vector3(116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz))
+
+
+func _labf(t: float) -> float:
+	return pow(t, 1.0 / 3.0) if t > 0.008856 else 7.787 * t + 16.0 / 116.0
+
+
 
 
 func _lin(v: float) -> float:

@@ -618,13 +618,7 @@ static func make_table(host: Node, r: Rect2, fy: float, ny: float, back: float,
 	root.add_child(cam)
 
 	var we := WorldEnvironment.new()
-	var env := Environment.new()
-	env.background_mode = Environment.BG_CANVAS
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color("2c2320")
-	env.ambient_light_energy = 0.45
-	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	we.environment = env
+	we.environment = lamp_env()
 	root.add_child(we)
 
 	var W: float = (ny - fy) / flat          # 벨벳 깊이(면 단위)
@@ -749,23 +743,7 @@ static func make_table(host: Node, r: Rect2, fy: float, ny: float, back: float,
 	_register_prop(root, lean(BUY_AT, X, W, back))
 
 	# ── 빛 — 머리 위 램프(빛 웅덩이 · 그림자) + 왼쪽 위 채움빛 + 소품 스포트 ──
-	var sl := SpotLight3D.new()
-	sl.light_color = COL.lamp
-	#  빛 웅덩이 — 벨벳 한가운데가 밝고 가장자리가 가라앉는다.
-	sl.light_energy = 7.0
-	sl.spot_range = 1200.0
-	sl.spot_attenuation = 0.2
-	sl.spot_angle = 38.0
-	sl.spot_angle_attenuation = 2.2
-	sl.shadow_enabled = true
-	sl.position = Vector3(X * 0.5, 360.0, W * 0.5)
-	sl.rotation_degrees = Vector3(-90.0, 0.0, 0.0)
-	root.add_child(sl)
-	var dl := DirectionalLight3D.new()
-	dl.rotation_degrees = Vector3(-46.0, -38.0, 0.0)
-	dl.light_energy = 0.30
-	dl.light_color = Color("ffd8b0")
-	root.add_child(dl)
+	lamp_rig(root, X, W, true)
 	#  진열 스포트 — 소품마다 왼쪽 위에서 하나. 옆에 꺼 둔 웅덩이 빛 하나.
 	#  반응(prop_glow)이 스포트를 밝히고 웅덩이를 켠다 — 소품과 그 둘레
 	#  카운터가 같이 달아올라 「여기」를 말한다(옛 창구 삼각형 칠의 자리).
@@ -816,6 +794,44 @@ static func make_table(host: Node, r: Rect2, fy: float, ny: float, back: float,
 		og.position = Vector3(tg.x, tg.y + 150.0, tg.z - 150.0 * 0.78)
 		root.add_child(og)
 	return vp
+
+
+#  머리 위 램프 + 왼쪽 위 채움빛. 테이블과 상인 무대(game.gd _stage3_make)가
+#  **이 한 벌**을 같이 쓴다 — 두 곳에 따로 적으면 빛을 한 번 만지는 날 상인이
+#  테이블 옆에 오려 붙인 사람이 된다(2026-10-02, 상인만 납작한 흰 빛이었다).
+#  두 무대는 좌표가 같다(1 월드 단위 = 화면 1px, 면 (u, h, w)) — 램프가 같은
+#  자리에 선다. X 화면 폭 · W 벨벳 깊이(면 단위). 그림자는 테이블만 켠다 —
+#  상인의 손 그림자는 손 사본을 눕힌 것이라(game.gd _hand3_sync) 램프가 또
+#  그리면 두 겹이 된다.
+static func lamp_rig(root: Node, X: float, W: float, shadow: bool) -> void:
+	var sl := SpotLight3D.new()
+	sl.light_color = COL.lamp
+	#  빛 웅덩이 — 벨벳 한가운데가 밝고 가장자리가 가라앉는다.
+	sl.light_energy = 7.0
+	sl.spot_range = 1200.0
+	sl.spot_attenuation = 0.2
+	sl.spot_angle = 38.0
+	sl.spot_angle_attenuation = 2.2
+	sl.shadow_enabled = shadow
+	sl.position = Vector3(X * 0.5, 360.0, W * 0.5)
+	sl.rotation_degrees = Vector3(-90.0, 0.0, 0.0)
+	root.add_child(sl)
+	var dl := DirectionalLight3D.new()
+	dl.rotation_degrees = Vector3(-46.0, -38.0, 0.0)
+	dl.light_energy = 0.30
+	dl.light_color = Color("ffd8b0")
+	root.add_child(dl)
+
+
+#  따뜻한 어둠 — 램프 밖은 이 값으로 가라앉는다. 테이블과 상인이 같이 쓴다.
+static func lamp_env() -> Environment:
+	var env := Environment.new()
+	env.background_mode = Environment.BG_CANVAS
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color("2c2320")
+	env.ambient_light_energy = 0.45
+	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	return env
 
 
 #  소품 반응 — 매 틀 _chute_draw 가 부른다. z 0 저울 · 1 금전등록기.

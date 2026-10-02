@@ -311,6 +311,17 @@ static func tick(g: Node, d: float) -> void:
 		_brk_replay = false
 	if card_ph > 0:
 		_card_tick(g, d)
+	#  「살핌 · 종류」가 잠깐 갈아 끼운 매물 — 상인 손을 떠나 판에 가라앉으면 되돌린다.
+	#  그사이 리롤 · 구매로 그 칸이 다른 매물이 됐으면(갈아 끼운 사전이 아니면) 손대지 않는다.
+	if not _hold_back.is_empty():
+		var hi: int = int(_hold_back.i)
+		if g.state != g.S.SHOP or hi >= g.stock.size() or hi >= g.drop.size() \
+				or not is_same(g.stock[hi], _hold_back.tmp) \
+				or bool((g.stock[hi] as Dictionary).get("sold", false)):
+			_hold_back = {}
+		elif not g._give_live() and bool((g.drop[hi] as Dictionary).get("sleep", false)):
+			g.stock[hi] = _hold_back.s
+			_hold_back = {}
 	# 사다리는 한 소리가 아니라 **오르는 관계**가 내용이라, 한 번에 하나씩
 	# 내면 들을 수가 없다. 줄을 세워 두고 여기서 한 칸씩 흘린다.
 	if not _q.is_empty():
@@ -620,6 +631,14 @@ static func _names(k: String) -> PackedStringArray:
 		return PackedStringArray(DEEP_TIERS)
 	if k == "src":
 		return PackedStringArray(SRC_STEPS)
+	#  상인 몸짓 — game.gd 의 IDLE.acts 차례 그대로, 그 뒤에 「살핌 · 종류」(NPC_HOLDS).
+	#  _cur_name 과 짝이다.
+	if k == "npcact":
+		for a in _npc_acts():
+			out.append(String((a as Dictionary).n))
+		for h in NPC_HOLDS:
+			out.append("살핌 · %s" % String(h[0]))
+		return out
 	for r in _list(k):
 		out.append(String(r.get("n", r.get("name", r.get("id", "?")))))
 	return out
@@ -1065,6 +1084,17 @@ static func _rows(g: Node) -> Array:
 				#  3D 방(2026-10-01 맛보기) — 옛 단색과 같은 자리에서 맞대 본다.
 				{"n1": "3D 방 %s" % ("켬" if g.room3d_on else "끔"),
 						"t": "act", "a": "room3d"},
+				#  ── 상인 몸짓 (2026-10-02) ────────────────────────
+				#  손가락이 선 뒤(주먹 · 짚기 · 두드리기 · 쫙 편 손 · 쥔 손) 그 자세를
+				#  볼 길이 저절로 나는 몸짓을 기다리거나 상인을 누르는 것뿐이었다(검토).
+				#  ◀▶ 로 몸짓을 골라 그 자리에서 낸다. 손은 누를 때마다 번갈아 — 두 손이
+				#  다른 손가락 판이다(금반지). 「살핌」은 상점에서 판 위 매물 하나를
+				#  실제로 건네 테를 집은 손(검지는 위 · 엄지는 밑 · 앞 층)까지 본다. 그 뒤 「살핌 · 동전 ·
+				#  플라크 · 다트 · 사탕 · 팩 · 사진 · 와펜」 은 그 종류를 집는다(2026-10-02 —
+				#  물건마다 집는 자리가 달라서: 원반 · 플라크는 손 쪽 테, 팩 · 사진은 윗변, 다트는
+				#  자루, 사탕은 옆구리). 열셋째 줄이다(한계 열아홉).
+				{"n1": "상인 몸짓", "t": "list", "k": "npcact",
+						"n": (g.IDLE.acts as Array).size() + NPC_HOLDS.size()},
 			]
 
 
@@ -1164,6 +1194,73 @@ static func _list(k: String) -> Array:
 							"id": tid})
 			return _tutor_rows
 	return []
+
+
+#  상인 몸짓 표 — game.gd 의 IDLE.acts. dev.gd 는 game.gd 를 preload 못 한다
+#  (game.gd 가 이쪽을 preload 한다) — 이미 올라와 있는 것을 load 로 집는다.
+static func _npc_acts() -> Array:
+	return load("res://scripts/game.gd").IDLE.acts
+
+
+#  상인 몸짓 줄이 다음에 쓸 손 — 누를 때마다 번갈아 준다.
+static var _npc_side := 0
+#  「살핌 · 종류」 — 이름 · 매물 종류(stock type) · 동전이면 등급. 동전은 등급 빛이 있는
+#  레어로 고른다(빛이 손 **밑**에 깔리는지 — 너클이 안 바래는지를 같이 본다).
+const NPC_HOLDS := [["동전", "item", "rare"], ["플라크", "item", "legendary"],
+		["다트", "dart", ""], ["사탕", "cons", ""], ["팩", "boost", ""], ["사진", "fix", ""],
+		["와펜", "mod", ""]]
+#  미리 보느라 갈아 끼운 매물 — {i, s}. 그 물건이 상인 손을 떠나 판에 가라앉으면 tick 이
+#  제 매물로 되돌린다(값 · 매물을 한 톨도 안 건드린다는 이 줄의 약속).
+static var _hold_back := {}
+
+
+#  판 위에 그 종류가 있으면 그것을, 없으면 매물 하나를 잠깐 그 종류로 갈아 끼워 쥐게 한다.
+static func _npc_hold_kind(g: Node, h: Array) -> void:
+	if g.state != g.S.SHOP:
+		_say("살핌은 상점에서만")
+		return
+	var ty: String = String(h[1])
+	var rar: String = String(h[2])
+	var gi := -1
+	var free := -1
+	for j in mini(g.drop.size(), g.stock.size()):
+		var dj: Dictionary = g.drop[j]
+		if bool(dj.get("gone", false)) or bool(dj.get("held", false)) \
+				or float(dj.get("sold", 0.0)) > 0.0:
+			continue
+		if free < 0:
+			free = j
+		var sj: Dictionary = g.stock[j]
+		if String(sj.type) == ty and (rar == "" or String(sj.d.get("rarity", "")) == rar):
+			gi = j
+			break
+	if gi < 0:
+		if free < 0:
+			_say("판 위에 매물이 없다")
+			return
+		var d := _hold_row(ty, rar)
+		if d.is_empty():
+			_say("표에 %s 이(가) 없다" % String(h[0]))
+			return
+		gi = free
+		var tmp := {"type": ty, "d": d, "sold": false,
+				"cost": int((g.stock[gi] as Dictionary).get("cost", 0))}
+		_hold_back = {"i": gi, "s": g.stock[gi], "tmp": tmp}
+		g.stock[gi] = tmp
+	g._give_begin(gi, Vector2(200.0 if _npc_side == 0 else 440.0, float(g.TBL.fy)))
+	_say("상인 몸짓 — 살핌 · %s" % String(h[0]))
+
+
+static func _hold_row(ty: String, rar: String) -> Dictionary:
+	var rows: Array = []
+	match ty:
+		"item": rows = _rar_items(rar)
+		"dart": rows = GameData.darts().slice(1)
+		"cons": rows = GameData.candies()
+		"boost": rows = GameData.boosters()
+		"fix": rows = GameData.fixtures()
+		"mod": rows = GameData.mods()
+	return rows[0] if not rows.is_empty() else {}
 
 
 # 판 깨짐의 층 셋. game.gd 의 BRK.small · big · boss 와 **같은 차례**다.
@@ -1479,6 +1576,13 @@ static func _cur_name(g: Node, e: Dictionary) -> String:
 		return "%d/%d %s · %s · %s" % [sj + 1, SRC_STEPS.size(), SRC_STEPS[sj],
 				"고리 하나" if sj % 2 == 1 else "부채 하나",
 				"주황" if sj >= 2 else "흰"]
+	if k == "npcact":
+		var na: Array = _npc_acts()
+		var nn: int = na.size() + NPC_HOLDS.size()
+		var nj: int = i % maxi(nn, 1)
+		if nj >= na.size():
+			return "%d/%d 살핌 · %s" % [nj + 1, nn, String(NPC_HOLDS[nj - na.size()][0])]
+		return "%d/%d %s" % [nj + 1, nn, String((na[nj] as Dictionary).n)]
 	if k == "breakmat":
 		var bj: int = i % BREAK_MATS.size()
 		var bm: Dictionary = BREAK_MATS[bj]
@@ -2369,6 +2473,37 @@ static func _run(g: Node, e: Dictionary) -> void:
 			var gh: Array = GROW_STEPS["gshake"]
 			g.grow_shake = float(gh[i % gh.size()])
 			_say("총합 흔들림 %d%%" % int(g.grow_shake * 100.0))
+		"npcact":
+			#  값(골드 · 매물 · leg_no)을 한 톨도 안 건드린다 — 몸짓 시계만 세운다.
+			#  「살핌」만 매물 하나를 상인 손에 건넨다 — 손님이 건넨 것과 같은 길이라
+			#  다 살피면 판 위로 뿌린다(매물 자리만 바뀐다).
+			var na2: Array = _npc_acts()
+			var nj2: int = i % maxi(na2.size() + NPC_HOLDS.size(), 1)
+			if not g._npc_on():
+				_say("상인이 없는 화면이다")
+				return
+			if g._give_live() or g.sweep_live:
+				_say("상인이 바쁘다")
+				return
+			_npc_side = 1 - _npc_side
+			if nj2 >= na2.size():
+				_npc_hold_kind(g, NPC_HOLDS[nj2 - na2.size()])
+				return
+			var nm: String = String((na2[nj2] as Dictionary).n)
+			if nm == "살핌" and g.state == g.S.SHOP:
+				var gi := -1
+				for j in g.drop.size():
+					var dj: Dictionary = g.drop[j]
+					if not bool(dj.get("gone", false)) and not bool(dj.get("held", false)):
+						gi = j
+						break
+				if gi >= 0:
+					g._give_begin(gi, Vector2(200.0 if _npc_side == 0 else 440.0,
+							float(g.TBL.fy)))
+					_say("상인 몸짓 — 살핌(쥔 손)")
+					return
+			g._npc_react(nm, _npc_side)
+			_say("상인 몸짓 — %s" % nm)
 		"link":
 			#  합칠 때 저쪽 조각 비행과 내 긴 선(슬롯 0 → 배수 칸 최장 약 412px)이
 			#  부딪히면 여기서 「판에서만」으로 내려 두고 눈으로 판단한다 —
