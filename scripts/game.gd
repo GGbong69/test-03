@@ -20016,6 +20016,9 @@ func _npc_arm(i: int, g: Dictionary, bd: Dictionary, a: float) -> void:
 		ang = pa_ang
 		pit = pa_pit
 		rl = pa_rl
+	#  손목 꺾임(옆 · 위아래, 도) — 팔뚝 축(팔꿈치 → 손목)에 대한 손. 검사(qa_prop)가 잰다.
+	npc_wb[i] = _wrist_bend(Vector3(el.x, he + float(HAND3.arm_t0) * 0.5, el.y),
+			Vector3(wr.x, hw + float(HAND3.palm_t) * sc * 0.5, wr.y), ang, pit)
 	#  손바닥 한가운데 — 누름(_npc_hit)이 쓴다. 손목이 아니라 **손바닥**이라야
 	#  손을 눌렀을 때 손이 맞는다.
 	npc_palm[i] = _palm_of(wr, ang, sc, hw)
@@ -23340,8 +23343,11 @@ func _idle_index(nm: String) -> int:
 #  ── 팔이 팔로 읽혀야 한다 ────────────────────────────────
 #  소품은 쉬는 손(화면 x 190~450)에서 멀다(저울 x 10~83 · 등록기 567~630). 손만
 #  미끄러지면 마술손이다(IDLE 머리말 「모으기」). 그래서
-#   · 손목은 과녁에서 거꾸로 낸다 — 접시 동전을 집는 자리(_hold_of 와 같은 변환)와
-#     건반 위 검지 끝. 집은 동전이 손끝 사이에서 안 미끄러진다.
+#   · 손목은 과녁에서 거꾸로 낸다 — 접시 동전을 검지 끝이 테 안에서 집는 자리
+#     (_prop_place — 3D 검지 사슬이 서는 그 점)와 건반 위 검지 끝. 집은 동전은 그 틀
+#     손의 검지 끝에서 다시 내어 그린다(prop_hold3) — 손끝 사이에서 안 미끄러진다.
+#   · 손목은 곧다 — 손은 팔뚝 축 둘레 옆 15° · 굽힘 25° 안에만 선다(_prop_goal 머리말).
+#     꺾을 몫은 팔꿈치 · 어깨 · 팔뚝 기울기가 진다. 꺾이는 것은 손끝(집기 · 누르기)뿐이다.
 #   · 팔꿈치는 두 마디 사슬이다(_arm_ik) — 팔 전체 길이(위팔 + 팔뚝)를 그 틀 쉼 자세
 #     그대로 못 박고 어깨에서 손목까지 닿는 자리를 푼다. 팔이 안 늘어나고 팔꿈치가
 #     따라온다. 뻗는 만큼 팔꿈치가 팔을 따라 손 쪽으로 옮겨 위팔 : 팔뚝이 사람 비가
@@ -23372,20 +23378,22 @@ const PROP := {
 	"coin_r": 10.5,
 	"coin_t": 2.4,
 	"fall_g": 2600.0,    # 놓은 동전이 떨어지는 가속(면/s²) — 0.13 초에 턱 뒤로 든다
-	#  손각(도) — 접시에서는 손끝이 왼쪽(조금 앞)을 본다. 어깨 → 접시 팔 줄이 172° 언저리라
-	#  손목이 거의 안 꺾인다(145° 로 두었더니 27° 꺾이고 손목이 뒤로 물러나 팔이 2% 늘었다).
-	#  당길 때는 손끝을 왼쪽 뒤(200°)로 마저 돌려 동전을 손 왼쪽에 둔 채 끈다 — 손끝이 앞을
-	#  보면 손목이 동전보다 40 뒤라 손이 HUD 밑 어둠으로 들어갔다(촬영).
-	#  숙임 10° — 손끝이 접시로 내려가고 손목이 든다. 1°(건네기의 GIVE.pit)면 손바닥이
-	#  저울대 왼끝 위에 낮게 얹혀 그 앞에 있어야 할 저울대를 덮었다(4배 촬영).
-	"s_ang0": 170.0, "s_ang1": 200.0, "s_pit": 10.0,
+	#  손이 기울고 싶은 쪽(도) — 손목 한도(dev · flex) 안에서만 산다(_prop_goal).
+	#  손각: 접시에서는 손끝이 왼쪽(조금 앞) · 당길 때는 왼쪽 뒤. 숙임: 손끝이 아래로 —
+	#  위에서 내려와 집는 손이다. 판판한 손(10°)은 팔뚝 · 손등이 거의 수평인데 말린 손가락이
+	#  손끝에서 곧장 떨어져 화면에서 손목이 꺾인 것으로 읽혔다(「손이 좀 꺽이네?」).
+	"s_ang0": 170.0, "s_ang1": 200.0, "s_pit": 30.0,
+	#  집는 자리 — 검지 끝에서 동전 한가운데로 가는 쪽(손 좌표 · 손끝 앞에서 엄지 쪽으로, 도).
+	#  다가오는 손 쪽 테를 손가락이 팔 줄 그대로 감싼다. 건네기(GIVE.din −50°)는 동전을 화면
+	#  가운데로 내미는 자리라 옆으로 크게 튼다 — 여기는 손끝 앞이다.
+	"s_din": -15.0,
 	#  놓는 자리 — 동전 한가운데 (u, h, w). 먼 턱 뒤끝(w −14)보다 뒤라 떨어지면 턱이 가린다.
 	#  턱 바로 위 낮은 자리(화면 y 107)라 0.13 초 만에 턱 뒤로 든다. 저울 오른쪽이라
 	#  떨어지는 동전이 저울 몸에 안 걸린다.
 	"s_lip": Vector3(92.0, 16.0, -16.0),
 	#  몸 — roll · yaw · lean · rise. 왼쪽으로 기울어(roll +) 왼 어깨가 저울 쪽으로 내려오고,
 	#  조금 앞으로 나온다.
-	"s_body": [0.18, 0.04, 10.0, -4.0],
+	"s_body": [0.20, 0.04, 14.0, -4.0],
 	# ── 구매 — 등록기 (초) ──
 	"b_reach": 0.26,     # 검지 끝이 건반 위에 선다
 	"b_press": 0.32,     # 누른다 — 서랍이 튀어나온다
@@ -23395,14 +23403,20 @@ const PROP := {
 	#  떠서 검지만 건반으로 뻗는다 — 손끝이 앞을 보게(35°) 두었더니 손바닥이 등록기 몸통
 	#  · 볏 위에 얹혀 볏 뒤에 있어야 할 손이 볏을 덮었다(촬영).
 	"b_key": Vector2i(2, 0),
-	"b_ang": 12.0, "b_pit": 18.0,    # 손각 · 숙임(도) — 검지가 건반으로 비스듬히 내려간다
+	"b_ang": 12.0, "b_pit": 30.0,    # 손이 기울고 싶은 쪽(도) — 검지가 건반으로 내리꽂힌다
 	"b_hover": 6.0, "b_dip": 1.5,    # 건반 위로 뜬 높이 · 눌러 들어가는 깊이
 	#  편 검지 끝 볼 — 손 좌표(오른손 기준 · 거울 손은 z 를 뒤집는다). 너클 30.5 에서 두
 	#  마디(12.5 + 11.5)가 거의 곧게 뻗고(FPOSE.point −2° · 4°), 볼은 축보다 두께 반 밑이다.
 	"b_tip": Vector3(54.5, -2.6, -11.2),
 	"b_body": [-0.09, 0.03, 5.0, -2.0],
-	#  팔꿈치가 굽는 쪽 — 어깨에서 (바깥 · 위 · 뒤). 바깥은 손마다 뒤집는다.
-	"pole": Vector3(0.5, 1.0, -0.6),
+	#  팔꿈치가 굽는 쪽 — 어깨에서 (바깥 · 위 · 뒤). 바깥은 손마다 뒤집는다. 등록기 쪽은
+	#  위로만 — 뒤로 굽으면 팔뚝이 앞(손님 쪽)을 보고 손이 따라 돌아 손바닥이 등록기 몸통
+	#  위로 올라간다(손목을 곧게 두므로 팔뚝 방향이 곧 손 방향이다).
+	"s_pole": Vector3(0.5, 1.0, -0.6),
+	"b_pole": Vector3(0.0, 1.0, 0.0),
+	#  손목 한도(도) — 팔뚝 축에 대한 손. 옆 꺾임(노뼈 · 자뼈 쪽) · 굽힘/젖힘. 과녁은 2~3°
+	#  안쪽(dev_in · flex_in)으로 푼다 — 섞인 틀의 당김(_prop_arm)이 과녁에서는 안 걸린다.
+	"dev": 15.0, "flex": 25.0, "dev_in": 13.0, "flex_in": 22.0,
 	#  뻗은 팔의 팔뚝 길이 — 손 길이(palm_l)의 배. 쉬는 팔뚝(64)은 카메라 탓에 일부러
 	#  짧고(NPC 머리말 — 손목이 턱 뒤에 서야 해서) 위팔(134)은 HUD 뒤라 일부러 길다.
 	#  옆으로 쭉 뻗으면 위팔이 HUD 밑으로 나와 팔뚝의 두 배인 소매 막대가 됐다(촬영).
@@ -23433,6 +23447,7 @@ var prop_la := [0.0, 0.0]
 var prop_lp := [0.0, 0.0]
 var prop_lk := [0.0, 0.0]
 var prop_rr := [0.0, 0.0]         # 어깨 → 손목 거리 / 팔 길이 — 1 을 넘으면 늘어난 팔(qa_prop)
+var npc_wb := [Vector2.ZERO, Vector2.ZERO]     # 손마다 손목 꺾임 (옆 · 굽힘, 도) — _npc_arm 이 적는다
 var prop_le := [Vector3.ZERO, Vector3.ZERO]    # 그 틀 팔꿈치 · 어깨 (u, h, w) — 촬영 · 검사가 잰다
 var prop_ls := [Vector3.ZERO, Vector3.ZERO]
 var prop_it := {}                 # 판 동전 그림 — 판 것(사본)
@@ -23440,6 +23455,7 @@ var prop_from := Vector2.ZERO     # 나는 동전이 떠난 화면 자리
 var prop_peel := 0.0              # 끌던 동전의 말림 — 날며 펴진다
 var prop_tilt0 := 0.0             # 날기 전 저울대 — 끌어 대던 동안 기울어 있었으면 그대로 둔다
 var prop_grab := Vector3.ZERO     # 다 쥔 순간의 동전 자리 (u, h, w) — 그 뒤는 손이 든다
+var prop_hold3 := Vector3.ZERO    # 이 틀 손이 집은 동전 (u, w, h) — _prop_arm 이 적는다
 var prop_grab_ok := false
 var prop_drop := Vector3(0.0, -99.0, 0.0)    # 놓은 동전 (u, h, w)
 var prop_dv := 0.0
@@ -23800,6 +23816,8 @@ func _prop_arm(i: int, sh: Vector3, sc: float) -> void:
 	var la: float = l1 + l2
 	l2 = lerpf(l2, minf(float(PROP.fore_k) * float(HAND3.palm_l) * sc, la * 0.5), ke)
 	l1 = la - l2
+	var ba: float = pa_ang
+	var bp: float = pa_pit
 	var fw := w0
 	var fa: float = pa_ang
 	var fp: float = pa_pit
@@ -23810,16 +23828,34 @@ func _prop_arm(i: int, sh: Vector3, sc: float) -> void:
 	var w := fw
 	pa_ang = fa
 	pa_pit = fp
+	var pv: Vector3 = PROP.s_pole if i == 0 else PROP.b_pole
+	var reach_pole := s3 + Vector3(pv.x * (-1.0 if i == 0 else 1.0), pv.y, pv.z) * 100.0
 	if k > 0.0005:
-		_prop_goal(i, sc)
+		_prop_goal(i, sc, s3, l1, l2, reach_pole)
 		w = fw.lerp(pg_w, k)
 		pa_ang = lerp_angle(fa, pg_a, k)
 		pa_pit = lerpf(fp, pg_p, k)
 	pa_rl *= 1.0 - ke
-	var pv: Vector3 = PROP.pole
-	var pole := e0.lerp(s3 + Vector3(pv.x * (-1.0 if i == 0 else 1.0), pv.y, pv.z) * 100.0, ke)
+	var pole := e0.lerp(reach_pole, ke)
 	var e := _arm_ik(s3, w, l1, l2, pole)
 	prop_rr[i] = s3.distance_to(w) / maxf(l1 + l2, 1.0)
+	#  손목 — 건너가는 틀까지 팔뚝 축 둘레 한도(PROP.dev · flex) 안으로 당긴다. 과녁 자세는
+	#  이미 한도 안이라(_prop_goal) 여기서는 안 움직이고, 쉼 ↔ 과녁 사이 섞인 틀에서 팔뚝이
+	#  먼저 돌 때만 손이 따라 돈다. 쉼 자세가 제 한도를 넘는 몫(화면 오른손은 쉴 때 안으로
+	#  18° 모은다 — NPC.ang_r)은 섞임의 제곱만큼 걷는다 — 몸짓 첫 틀에 손이 튀지 않는다.
+	#  그 몫은 쉼 자세(몸짓을 얹기 전 — 앞 자세가 아니다)에서 잰다. 몸이 기울며 쉼 자세
+	#  자체가 1° 남짓 더 꺾이므로 섞임 그대로 걷으면 반쯤 뻗은 틀에서 손이 쉴 때보다 더
+	#  꺾였다(qa_prop). 앞 자세로 재면 끊길 때 한도가 통째로 풀렸다(30°).
+	var b0: Vector2 = _wrist_bend(e0, w0, ba, bp)
+	var rk: float = (1.0 - ke) * (1.0 - ke)
+	var dl: float = float(PROP.dev) + maxf(b0.x - float(PROP.dev), 0.0) * rk
+	var fl: float = float(PROP.flex) + maxf(b0.y - float(PROP.flex), 0.0) * rk
+	_wrist_clamp(e, w, pa_ang, pa_pit, deg_to_rad(dl), deg_to_rad(fl))
+	pa_ang = wc_a
+	pa_pit = wc_p
+	#  집은 동전 자리 — 이 틀 손에서 낸다(_prop_coin_now 가 쥔 뒤 그린다).
+	if i == 0:
+		prop_hold3 = _prop_tip_coin(w, pa_ang, pa_pit, sc)
 	pa_wr = Vector2(w.x, w.z)
 	pa_hw = w.y - ht
 	pa_el = Vector2(e.x, e.z)
@@ -23829,6 +23865,61 @@ func _prop_arm(i: int, sh: Vector3, sc: float) -> void:
 	prop_lp[i] = pa_pit
 	prop_le[i] = e
 	prop_ls[i] = s3
+
+
+#  손목 꺾임 — 팔뚝 축 e → w 를 손 좌표(손각 a · 숙임 p, 굴림 뺌)로 옮겨 잰 (옆 꺾임 ·
+#  굽힘/젖힘), 도 · 절댓값. 곧은 손목이면 팔뚝이 손 +x 그대로다.
+func _wrist_bend(e: Vector3, w: Vector3, a: float, p: float) -> Vector2:
+	var f := w - e
+	if f.length_squared() < 0.0001:
+		return Vector2.ZERO
+	var fl: Vector3 = (Basis(Vector3.UP, -a) * Basis(Vector3.BACK, -p)).transposed() * f.normalized()
+	return Vector2(absf(rad_to_deg(atan2(fl.z, fl.x))), absf(rad_to_deg(atan2(fl.y, fl.x))))
+
+
+#  손각 a · 숙임 p 를 팔뚝 축(e → w) 둘레 옆 dl · 굽힘 fl(라디안) 안으로 당겨 wc_a · wc_p 에
+#  적는다(_wrist_bend 와 같은 셈). 손 좌표로 풀면 둘이 따로 선다 — 손각 쪽 팔뚝 성분을
+#  h(앞) · l(옆) · v(위)라 하면
+#    굽힘 = 숙임 + atan2(v, h)          — 숙임만 바꾸면 정확히 그만큼 준다
+#    옆   = atan2(l, √(h² + v²) · cos 굽힘) — l · h 가 손각을 탄다(팔뚝 요와의 차 Δ)
+#  그래서 숙임은 바로 자르고, 손각은 Δ 를 0 쪽으로 반씩 좁혀(열넷) 한도에 맞춘다. 셋 돌면
+#  둘이 같이 선다. 처음엔 요 · 기울기 차를 그대로 잘랐는데, 팔뚝이 가파르면 그 차와 손
+#  좌표 꺾임이 갈라 30° 까지 샜다(qa_prop).
+var wc_a := 0.0
+var wc_p := 0.0
+
+
+func _wrist_clamp(e: Vector3, w: Vector3, a: float, p: float, dl: float, fl: float) -> void:
+	wc_a = a
+	wc_p = p
+	var f := w - e
+	if f.length_squared() < 0.0001:
+		return
+	f = f.normalized()
+	var af: float = atan2(f.z, f.x)
+	var fh: float = Vector2(f.x, f.z).length()
+	for _n in 3:
+		var dt: float = angle_difference(wc_a, af)
+		var tv: float = atan2(f.y, fh * cos(dt))
+		wc_p = clampf(wc_p + tv, -fl, fl) - tv
+		var lo := 0.0
+		var hi: float = absf(dt)
+		if _wrist_dev(fh, f.y, hi, wc_p, fl) <= dl:
+			continue
+		for _b in 14:
+			var md: float = (lo + hi) * 0.5
+			if _wrist_dev(fh, f.y, md, wc_p, fl) > dl:
+				hi = md
+			else:
+				lo = md
+		wc_a = af - signf(dt) * lo
+
+
+#  옆 꺾임 — 팔뚝 요와 손각의 차 dt, 숙임 p(굽힘은 한도 fl 로 자른 값)에서.
+func _wrist_dev(fh: float, fv: float, dt: float, p: float, fl: float) -> float:
+	var h: float = fh * cos(dt)
+	var fx: float = clampf(p + atan2(fv, h), -fl, fl)
+	return absf(atan2(fh * sin(dt), sqrt(h * h + fv * fv) * cos(fx)))
 
 
 #  두 마디 사슬 — 어깨 s 에서 손목 w 까지 위팔 l1 · 팔뚝 l2 로 닿는 팔꿈치. 굽는 쪽은 pole
@@ -23848,23 +23939,72 @@ func _arm_ik(s: Vector3, w: Vector3, l1: float, l2: float, pole: Vector3) -> Vec
 
 
 #  과녁 — 손목 축(pg_w · u, h, w) · 손각(pg_a) · 숙임(pg_p).
-#   판매: 동전이 서야 할 자리(_prop_coin_goal)를 검지 · 엄지가 집도록 _hold_of 를 거꾸로 푼다.
+#   판매: 동전이 서야 할 자리(_prop_coin_goal)를 검지 끝이 테 안에서 집도록(_prop_place).
 #   구매: 편 검지 끝 볼(PROP.b_tip)이 건반 알 윗면(+ 뜬 높이 · 누름)에 서도록.
-func _prop_goal(i: int, sc: float) -> void:
+#  ── 손목은 곧게 ───────────────────────────────────────────
+#  「물건 팔때 손이 좀 꺽이네? 뭔가 이질적인데?」 — 손각 · 숙임을 표 값에 못 박고 손목만
+#  과녁에서 냈더니, 팔뚝은 어깨에서 비스듬히 오는데 손은 제 각을 지켜 손목에서 꺾였다
+#  (접시에서 굽힘 32° · 당길 때 옆 꺾임 95° · 굽힘 92° · 건반에서 36° · 43°). 멀리 있는
+#  것을 집는 사람은 손목을 거의 곧게 두고 팔뚝이 손을 과녁까지 싣고 간다 — 꺾이는 것은
+#  손끝(집기 · 누르기)뿐이다. 그래서 자세를 **팔뚝 축 둘레 한도 안**에서 푼다:
+#    손각 · 숙임으로 손목을 과녁에서 낸다 → 사슬로 팔꿈치를 푼다 → 팔뚝 축을 잰다 →
+#    손을 그 축 둘레 옆 dev_in · 굽힘 flex_in 안으로 당긴다(_wrist_clamp) → 다시.
+#  다섯 번이면 모인다. 남는 몫은 팔꿈치 · 어깨 기울기 · 팔뚝 기울기가 진다 —
+#  팔은 안 늘어난다(사슬 길이 그대로). 표의 손각 · 숙임(s_ang · s_pit · b_ang · b_pit)은
+#  이제 한도 안에서 손이 **기울고 싶은 쪽**일 뿐이다.
+func _prop_goal(i: int, sc: float, s3: Vector3, l1: float, l2: float, pole: Vector3) -> void:
 	var P: Dictionary = PROP
 	var t: float = prop_t[i]
+	var ad: float
+	var pd: float
+	var tgt: Vector3
 	if i == 0:
-		var c := _prop_coin_goal(t)
-		pg_a = deg_to_rad(prop_ga)
-		pg_p = deg_to_rad(float(P.s_pit))
-		var b := Basis(Vector3.UP, -pg_a) * Basis(Vector3.BACK, -pg_p)
-		pg_w = c - b * (_grip3_pt(1.0, 2, sc) * sc)
-		return
-	pg_a = deg_to_rad(float(P.b_ang))
-	pg_p = deg_to_rad(float(P.b_pit))
-	var b2 := Basis(Vector3.UP, -pg_a) * Basis(Vector3.BACK, -pg_p)
-	var tp: Vector3 = P.b_tip
-	pg_w = _prop_key3() + Vector3(0.0, _prop_dip(t), 0.0) - b2 * (Vector3(tp.x, tp.y, -tp.z) * sc)
+		tgt = _prop_coin_goal(t)
+		ad = deg_to_rad(prop_ga)
+		pd = deg_to_rad(float(P.s_pit))
+	else:
+		tgt = _prop_key3() + Vector3(0.0, _prop_dip(t), 0.0)
+		ad = deg_to_rad(float(P.b_ang))
+		pd = deg_to_rad(float(P.b_pit))
+	var dm: float = deg_to_rad(float(P.dev_in))
+	var fm: float = deg_to_rad(float(P.flex_in))
+	var a: float = ad
+	var p: float = pd
+	for _n in 5:
+		var w := _prop_place(i, tgt, a, p, sc)
+		_wrist_clamp(_arm_ik(s3, w, l1, l2, pole), w, ad, pd, dm, fm)
+		a = wc_a
+		p = wc_p
+	pg_a = a
+	pg_p = p
+	pg_w = _prop_place(i, tgt, a, p, sc)
+
+
+#  손목 축 자리 — 과녁(판매: 동전 윗면 한가운데 · 구매: 검지 끝 볼이 닿을 자리)을 손각 a ·
+#  숙임 p 의 손으로 짚을 때. 판매는 검지 끝(GIVE.ti — 3D 검지 사슬 _grip3_ik 이 서는 그 점)
+#  에서 동전 한가운데로 **눕힌 틀**(손각만)로 나간다 — 손이 숙어도 동전은 판판히 누워
+#  그려지므로 숙임까지 태우면 검지 끝이 테에서 위아래로 떴다. 집는 자리는 다가오는 손 쪽 테
+#  (PROP.s_din — 손끝 앞 · 조금 엄지 쪽)라 손가락이 팔 줄 그대로 테를 감싼다.
+func _prop_place(i: int, tgt: Vector3, a: float, p: float, sc: float) -> Vector3:
+	var b := Basis(Vector3.UP, -a) * Basis(Vector3.BACK, -p)
+	if i == 1:
+		var tp: Vector3 = PROP.b_tip
+		return tgt - b * (Vector3(tp.x, tp.y, -tp.z) * sc)
+	return tgt - _prop_coin_off(a) - b * (Vector3(GIVE.ti) * sc)
+
+
+#  검지 끝 → 판 동전 윗면 한가운데(면 좌표 u, h, w) — 손각만 탄다(눕힌 틀). 화면 왼손 기준.
+func _prop_coin_off(a: float) -> Vector3:
+	var dn: float = deg_to_rad(float(PROP.s_din))
+	return Basis(Vector3.UP, -a) * Vector3(cos(dn), 0.0, sin(dn)) \
+			* (float(PROP.coin_r) - float(GIVE.inset)) - Vector3(0.0, give_pad, 0.0)
+
+
+#  그 손(손목 축 w · 손각 a · 숙임 p)이 집은 판 동전 윗면 한가운데 (u, w, h — 그리기 차례).
+func _prop_tip_coin(w: Vector3, a: float, p: float, sc: float) -> Vector3:
+	var b := Basis(Vector3.UP, -a) * Basis(Vector3.BACK, -p)
+	var c: Vector3 = w + b * (Vector3(GIVE.ti) * sc) + _prop_coin_off(a)
+	return Vector3(c.x, c.z, c.y)
 
 
 #  판 동전이 서야 할 자리 (u, h, w — 윗면 한가운데). 손이 거기를 집도록 손목을 낸다.
@@ -23885,11 +24025,11 @@ func _prop_coin_goal(t: float) -> Vector3:
 
 
 #  지금 판 동전 (u, w, h) — 그리기 자리. 쥐기 전은 접시(기울기를 따라간다), 쥔 뒤는
-#  손이 집은 자리(npc_hold — 손과 같은 변환)다.
+#  손이 집은 자리(prop_hold3 — 그 틀 손의 검지 끝에서 낸다)다.
 func _prop_coin_now() -> Vector3:
 	var t: float = prop_t[0]
 	if t >= float(PROP.s_g1) and prop_grab_ok:
-		return npc_hold[0]
+		return prop_hold3
 	var p := _prop_pan3()
 	return Vector3(p.x, p.z, p.y)
 
