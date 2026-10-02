@@ -37,6 +37,15 @@ func _tick(n: int) -> void:
 	for k in n:
 		g._tutor_tick(1.0 / 60.0)
 
+#  한 걸음 넘긴다. 글이 한 자씩 나오는 중이면 첫 클릭은 「먼저 다 보여 주기」다
+#  — 설명 줄도 한 자씩 나오게 된 2026-10-02 부터(「텍스트가 나올때 한번에 나오지
+#  않고 한글자씩」). 그 전에는 말하는 줄만 그랬다. 두 번째 클릭이 넘긴다.
+func _advance() -> void:
+	if g._tutor_typing():
+		g._tutor_click()
+	g._tutor_click()
+
+
 # 걸음을 끝까지 눌러 넘긴다
 func _clickthru() -> int:
 	var hits := 0
@@ -175,12 +184,17 @@ func _run() -> void:
 	_tick(int((float(g.TUTOR.pre) + float(g.TUTOR.lead)) * 60.0) + 2)
 	_ok("예고가 지나면 말상자가 선다", g.tutor_pre <= 0.0 and g._tutor_a() > 0.0,
 			"a %.2f" % g._tutor_a())
+	#  설명 줄도 한 자씩 나온다 — 다 안 나왔을 때 누르면 먼저 다 보여 주고 머문다.
+	if g._tutor_typing():
+		g._tutor_click()
+		_ok("다 안 나온 설명 줄을 누르면 먼저 다 보여 준다",
+				not g._tutor_typing() and g.tutor_i == 0, "i %d" % g.tutor_i)
 	g._tutor_click()
 	_ok("누르면 다음 걸음", g.tutor_i == 1, "i %d" % g.tutor_i)
 	_tick(int(float(g.TUTOR.lead) * 60.0) + 2)
-	g._tutor_click()
+	_advance()
 	_tick(int(float(g.TUTOR.lead) * 60.0) + 2)
-	g._tutor_click()
+	_advance()
 	_ok("마지막을 넘기면 닫힌다", not g._tutor_live(), g.tutor_id)
 	_tick(60)
 	_ok("닫히고 나면 어둠도 진다", g._tutor_a() <= 0.001, "%.3f" % g._tutor_a())

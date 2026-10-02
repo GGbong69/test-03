@@ -355,7 +355,8 @@ func _run() -> void:
 		_ok("모션을 끄면 한 번에 다 선다", g._tutor_shown() == full, "")
 		g.motion_off = false
 		g._tutor_close()
-	#  설명(내레이션) 줄은 그대로 한 번에 선다.
+	#  설명(내레이션) 줄도 한 자씩 나온다 — 「텍스트가 나올때 한번에 나오지
+	#  않고 한글자씩 나오면서 웅웅 소리도」(2026-10-02). 전에는 한 번에 섰다.
 	var narr_id := ""
 	for r in GameData.tutor():
 		if String(r.get("who", "")).strip_edges() == "" and String(r.get("id", "")) != "":
@@ -365,8 +366,21 @@ func _run() -> void:
 		g.tutor_id = narr_id
 		g.tutor_i = 0
 		g.tutor_t = 0.0
-		_ok("설명 줄은 한 번에 선다", g._tutor_shown()
-				== String(g._tutor_step().get("text", "")).length(), narr_id)
+		var nfull := String(g._tutor_step().get("text", "")).length()
+		_ok("설명 줄도 처음에는 한 자도 안 보인다", g._tutor_shown() == 0, narr_id)
+		g.tutor_t = 0.1
+		var nmid: int = g._tutor_shown()
+		_ok("설명 줄도 시간이 가면 한 자씩 나온다", nmid > 0 and nmid <= nfull,
+				"%d / %d" % [nmid, nfull])
+		#  말소리 — 틱이 글자를 내면 「웅」 이 하나 난다(talk_n 이 센다).
+		g.tutor_t = 0.0
+		g.tutor_pre = 0.0
+		g.tutor_out = 0.0
+		g.talk_cool = 0.0
+		var tn0: int = g.talk_n
+		for _k in 6:
+			g._tutor_tick(1.0 / 60.0)
+		_ok("글자가 나오면 말소리가 난다", g.talk_n > tn0, "%d → %d" % [tn0, g.talk_n])
 		g._tutor_close()
 	_ok("정보 과녁 이름이 표에 있다", GameData.TUTOR_MARKS.has("info"), "")
 

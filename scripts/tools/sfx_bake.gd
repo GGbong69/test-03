@@ -412,7 +412,7 @@ func _nz(ms: float, f0: float, f1: float, q: float, seed: int, taun: float,
 func _build(nm: String) -> PackedFloat32Array:
 	# 가족마다 한 함수. 빈 것이 오면 다음 가족에 묻는다.
 	for f in [_b_throw(nm), _b_hit(nm), _b_settle(nm), _b_leg(nm),
-			_b_shop(nm), _b_hand(nm), _b_menu(nm)]:
+			_b_shop(nm), _b_hand(nm), _b_menu(nm), _b_voice(nm)]:
 		if not f.is_empty():
 			return f
 	return PackedFloat32Array()
@@ -2064,5 +2064,68 @@ func _b_menu(nm: String) -> PackedFloat32Array:
 			_hp(x, 800.0)
 			_lp(x, 3400.0, 3)
 			return _fade(x, 2.0)
+		_:
+			return PackedFloat32Array()
+
+
+# ══════════════════════════════════════════════════════════
+#  목소리 — 상인의 말소리 (2026-10-02)
+#
+#  「텍스트가 나올때 한번에 나오지 않고 한글자씩 나오면서 웅웅 소리도
+#   나오잖아」. 여덟째 가족이고 **물체가 아니라 사람**이다. 칩 · 동전 ·
+#  종을 한 알도 안 섞는다 — 말소리에 카지노 쇠가 섞이면 상인이 아니라
+#  기계가 말한다.
+#
+#  「웅」 한 알: 성대 떨림(배음 열여섯, 1/k^0.7)을 모음 「ㅜ」 의 포먼트
+#  (F1 330 · F2 780 · F3 2300 · 밝힘 3200)로 거르다가, 뒤 4할에서 받침 「ㅇ」 의
+#  콧소리(250Hz 웅얼거림 · 그 위가 꺼진다)로 넘어간다. 음은 조금 올랐다가
+#  말끝에서 내려앉는다. 부르는 쪽(_talk_blip)이 글자마다 ±6% 밀어
+#  「웅웅」 이 한 음으로 안 붙는다.
+# ══════════════════════════════════════════════════════════
+#  둘째 · 셋째 포먼트를 일부러 세게 둔다. 실제 「ㅜ」 대로 0.45 · 0.12 로 두면
+#  1kHz 위가 0% 라 작은 스피커에서 「웅」 이 아니라 안 들리는 둔한 울림이 된다
+#  (구워 재 보니 200~500Hz 에 80%). 셋째를 한 번 올려도 1kHz 위가 3% 라
+#  넷째(3200)를 더 얹었다 — 게임의 말소리는 실제 모음보다 밝게 짓는 것이 보통이다.
+const VOWEL_U := [[330.0, 100.0, 1.00], [780.0, 160.0, 1.10], [2300.0, 320.0, 1.60],
+		[3200.0, 420.0, 0.90]]
+const NASAL_NG := [[250.0, 80.0, 1.10], [780.0, 200.0, 0.40], [2300.0, 340.0, 0.50],
+		[3200.0, 460.0, 0.25]]
+
+
+func _b_voice(nm: String) -> PackedFloat32Array:
+	match nm:
+		"talk":
+			var ms := 75.0
+			var n := _n(ms)
+			var x := _blank(n)
+			var f0: float = float(cur.get("f", 140.0))
+			var ph := 0.0
+			for i in n:
+				var u := float(i) / float(n)
+				#  음높이 — 4% 위에서 들어 가운데서 조금 더 오르고 말끝에서 내려앉는다
+				var f: float = f0 * (1.04 + 0.03 * sin(PI * u) - 0.09 * u)
+				ph = fmod(ph + TAU * f / SR, TAU)
+				var m := clampf((u - 0.45) / 0.35, 0.0, 1.0)     # 모음 → 콧소리
+				var s := 0.0
+				for k in range(1, 17):
+					var fk: float = f * float(k)
+					if fk > 5000.0:
+						break
+					var g := 0.0
+					for j in VOWEL_U.size():
+						var va: Array = VOWEL_U[j]
+						var na: Array = NASAL_NG[j]
+						var fc: float = lerpf(float(va[0]), float(na[0]), m)
+						var bw: float = lerpf(float(va[1]), float(na[1]), m)
+						var am: float = lerpf(float(va[2]), float(na[2]), m)
+						var dd: float = (fk - fc) / bw
+						g += am / (1.0 + dd * dd)
+					s += sin(ph * float(k)) * g / pow(float(k), 0.7)
+				x[i] = s
+			_atk(x, 7.0)
+			_dec(x, 0.022, 32.0)
+			_hp(x, 80.0)
+			_lp(x, 5200.0, 2)
+			return _fade(x, 8.0)
 		_:
 			return PackedFloat32Array()

@@ -873,6 +873,14 @@ func _ready() -> void:
 		add_child(sp)
 		sfx_pool.append(sp)
 
+	# 말소리 — 자리가 **하나**다(_talk_blip). 목은 하나라 새 글자가 앞
+	# 「웅」 을 끊는 것이 맞고, 효과음 자리 넷을 말소리가 빼앗지도 않는다.
+	var tp := AudioStreamPlayer.new()
+	tp.playback_type = AudioServer.PLAYBACK_TYPE_STREAM
+	tp.bus = "SFX"
+	add_child(tp)
+	talk_pl = tp
+
 	# 음악 — 자리가 **하나**다. 겹쳐 넘기지 않고 나갔다 들어오므로 한 번에
 	# 한 곡만 울린다. 예전에는 겹치려고 둘이었다.
 	# 같은 버스에 서므로 _apply_vol 이 효과음과 함께 한 번에 줄인다.
@@ -4677,6 +4685,13 @@ const SFX := {
 	"menu_back":      {"f": 440.0, "d": 0.05, "a": 0.12},
 	"back":           {"f": 330.0, "d": 0.05, "a": 0.10},
 	"page":           {"f": 392.0, "d": 0.04, "a": 0.08},
+
+	# ── 목소리 ────────────────────────────────────
+	#  상인의 말소리 「웅」 한 알 — 말상자 글이 한 자씩 나올 때(_talk_tick).
+	#  카지노 가족이 아니다: 물체가 아니라 사람이라 쇠를 안 섞는다(README).
+	#  a 0.07 은 hand_drop 과 같은 단이다 — 초에 열다섯 번까지 나는 소리라
+	#  한 알이 손짓 하나보다 크면 말이 아니라 소음이 된다.
+	"talk":           {"f": 140.0, "d": 0.07, "a": 0.07},
 }
 
 # 파일을 낼 자리들. 겹쳐 나는 소리가 서로를 안 끊게 몇 개 돌려 쓴다.
@@ -39803,7 +39818,20 @@ const TUTOR := {
 	#  보여 주고, 한 번 더 눌러야 넘어간다. 글은 왼쪽에 붙는다(대화체).
 	"cps": 30.0,         # 한 자씩 — 초당 글자 수. 「이건 서비스야 가져가」(11자)가 0.37초
 	"plate_h": 20.0,     # 이름표 높이 — 말상자 윗변에 반쯤 걸친다
+	#  ── 말소리 (2026-10-02) ──────────────────────────
+	#  「텍스트가 나올때 한번에 나오지 않고 한글자씩 나오면서 웅웅 소리도
+	#   나오잖아」. 이제 **설명 줄도** 한 자씩 나오고, 글자가 나올 때마다
+	#  「웅」(sfx talk) 하나가 난다. 빈칸 · 문장부호에는 안 나고, 너무 붙지
+	#  않게 blip 초에 하나까지만 난다. 상인 줄은 제 목, 설명 줄은 한 단 위 ·
+	#  한 단 작게 — 상인이 아닌 목소리가 상인 목으로 말하면 누가 말하는지가 흐린다.
+	"blip": 0.065,       # 말소리 사이 최소 간격(초). 초당 30자에 두 자에 하나 꼴
+	"blip_jit": 0.06,    # 글자마다 음을 미는 폭(±). 같은 음이면 「웅웅」 이 한 줄로 붙는다
+	"blip_narr": 1.22,   # 설명 줄의 음 — 상인 목보다 한 단 위
+	"blip_narr_db": -4.0,  # 설명 줄의 크기(dB)
 }
+var talk_pl: AudioStreamPlayer = null
+var talk_n := 0            # 낸 말소리 수 — 음을 미는 차례다. 판의 난수를 안 건드린다
+var talk_cool := 0.0       # 다음 말소리까지 남은 시간(초)
 var tutor_q := []          # 아직 못 보여 준 갈래
 var tutor_id := ""         # 지금 도는 갈래
 var tutor_i := 0           # 그 갈래의 몇째 걸음
@@ -39841,11 +39869,12 @@ func _tutor_who() -> String:
 	return String(_tutor_step().get("who", "")).strip_edges()
 
 
-#  지금 보이는 글자 수. 말하는 줄만 한 자씩 나온다 — 모션을 끄면 한 번에 다 선다
-#  (움직임만 꺼지고 글은 남는다는 모션 끄기 규약).
+#  지금 보이는 글자 수. 말하는 줄도 설명 줄도 한 자씩 나온다(2026-10-02 —
+#  전에는 말하는 줄만). 모션을 끄면 한 번에 다 선다(움직임만 꺼지고 글은
+#  남는다는 모션 끄기 규약).
 func _tutor_shown() -> int:
 	var n := String(_tutor_step().get("text", "")).length()
-	if _tutor_who() == "" or motion_off:
+	if motion_off:
 		return n
 	return clampi(int(tutor_t * float(TUTOR.cps)), 0, n)
 
@@ -39853,6 +39882,45 @@ func _tutor_shown() -> int:
 #  말하는 줄이 아직 다 안 나왔는가 — 누르면 먼저 다 보여 준다.
 func _tutor_typing() -> bool:
 	return _tutor_shown() < String(_tutor_step().get("text", "")).length()
+
+
+#  글자가 새로 나왔으면 「웅」 하나(TUTOR 의 말소리 머리말). n0 → n1 이 이번
+#  틀에 나온 몫이다. 그 몫에 글자가 하나라도 있어야 난다 — 빈칸 · 문장부호만
+#  나온 틀은 조용하다. 누르면 한 번에 다 나오는 것은 틱이 아니라 클릭이
+#  하므로 여기로 안 온다(쏟아지는 「웅」 이 없다).
+func _talk_tick(d: float, n0: int, n1: int) -> void:
+	talk_cool = maxf(talk_cool - d, 0.0)
+	if n1 <= n0 or talk_cool > 0.0:
+		return
+	var tx := _tutor_text()
+	var said := false
+	for i in range(n0, mini(n1, tx.length())):
+		var c := tx.substr(i, 1)
+		if c.strip_edges() != "" and not ".,!?…·~-—()[]「」『』<>'\"".contains(c):
+			said = true
+			break
+	if not said:
+		return
+	talk_cool = float(TUTOR.blip)
+	talk_n += 1
+	var narr := _tutor_who() == ""
+	#  음 밀기 — 황금각으로 돈다. 판의 난수(randf)를 쓰면 말상자 하나가
+	#  다음 판의 뽑기를 바꾼다.
+	var p: float = (float(TUTOR.blip_narr) if narr else 1.0) \
+			* (1.0 + float(TUTOR.blip_jit) * sin(float(talk_n) * 2.39996))
+	_talk_blip(p, float(TUTOR.blip_narr_db) if narr else 0.0)
+
+
+#  「웅」 한 알. 파일이 있으면 제 자리(talk_pl)에서, 없으면 합성음으로.
+func _talk_blip(pitch: float, db: float) -> void:
+	var st := _sfx_file("talk")
+	if st == null or talk_pl == null:
+		_sfx("talk", float((SFX.talk as Dictionary).f) * pitch)
+		return
+	talk_pl.stream = st
+	talk_pl.pitch_scale = pitch
+	talk_pl.volume_db = db
+	talk_pl.play()
 
 
 #  지금 걸음. 없으면 빈 사전이다.
@@ -39901,7 +39969,9 @@ func _tutor_tick(d: float) -> void:
 			if tutor_pre <= 0.0:
 				_sfx("page")
 			return
+		var n0 := _tutor_shown()
 		tutor_t += d
+		_talk_tick(d, n0, _tutor_shown())
 		#  시간으로 넘기는 걸음. 기본은 눌러 넘기기다.
 		if String(_tutor_step().get("wait", "tap")) == "time" \
 				and tutor_t > float(TUTOR.lead) + 2.6:
@@ -40076,10 +40146,26 @@ func _tutor_draw() -> void:
 	_rr_line(self, Rect2(bx, by, bw, bh), Color(C_ACC, 0.7 * a))
 	var who := _tutor_who()
 	if who == "":
+		#  설명 줄도 한 자씩 나온다. 가운데 맞춤은 **다 나온 줄의 폭**으로 자리를
+		#  잡고 보이는 몫만 그 자리에서 왼쪽부터 그린다 — 나온 몫으로 가운데를
+		#  맞추면 글이 나오는 내내 옆으로 밀린다. 줄 나눔도 다 나온 글로 한다.
+		var left := _tutor_shown()
+		var iw: float = bw - bp * 2.0
 		for i in lines.size():
-			draw_string(font_sm, Vector2(bx + bp, by + bp + 19.0 + float(i) * lh),
-					String(lines[i]), HORIZONTAL_ALIGNMENT_CENTER, bw - bp * 2.0,
-					20, Color(C_TXT, a))
+			var ln := String(lines[i])
+			var take: int = mini(left, ln.length())
+			left -= ln.length()
+			if i < lines.size() - 1:
+				left -= 1          # 줄 나눔이 먹은 빈칸 한 자
+			if take > 0:
+				var lw: float = 0.0
+				if font_sm != null:
+					lw = font_sm.get_string_size(ln, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
+				draw_string(font_sm, Vector2(roundf(bx + bp + (iw - lw) * 0.5),
+						by + bp + 19.0 + float(i) * lh), ln.substr(0, take),
+						HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(C_TXT, a))
+			if left <= 0:
+				break
 	else:
 		_tutor_talk_draw(lines, who, bx, by, bw, a)
 	#  발치 줄의 베이스라인 — 건너뛰기 단추 몸(턱 위 16px)의 글자와 같은 줄.

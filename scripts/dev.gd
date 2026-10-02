@@ -56,6 +56,7 @@ static var card_back := {}       # 되돌릴 자리
 static var _q := []
 static var _qt := 0.0
 static var _sfx_rows := []       # 소리 이름 목록. 표에서 한 번만 읽는다
+static var _tutor_rows := []     # 말상자 갈래 목록(tutor.csv 의 id). 한 번만 읽는다
 static var _aimw_key := ""       # 조준 저울 줄을 마지막에 센 (고른 라운드|든 동전)
 static var _aimw_txt := ""       # 그때 나온 글. 열쇠가 같으면 다시 안 센다
 
@@ -972,6 +973,11 @@ static func _rows(g: Node) -> Array:
 			return [
 				{"n1": "소리 하나", "t": "list", "k": "sfx",
 						"n": _list("sfx").size()},
+				#  말상자 하나 — 글이 한 자씩 나오며 말소리 「웅」(talk)이 나는 것을
+				#  그 자리에서 듣는다(2026-10-02). 상인 줄 · 설명 줄을 다 고를 수 있다.
+				#  과녁이 이 화면에 없는 갈래는 안 띄운다(게임과 같은 문지기).
+				{"n1": "말상자 보기", "t": "list", "k": "tutor",
+						"n": _list("tutor").size()},
 				{"n1": "정산 사다리 13칸", "t": "act", "a": "sfx_lad"},
 				{"n1": "착탄 사다리 여섯", "t": "act", "a": "sfx_hit"},
 				{"n1": "손 짝 넷", "t": "act", "a": "sfx_pair"},
@@ -1139,6 +1145,24 @@ static func _list(k: String) -> Array:
 				for k2 in load("res://scripts/game.gd").SFX.keys():
 					_sfx_rows.append({"n": String(k2)})
 			return _sfx_rows
+		"tutor":
+			#  tutor.csv 의 갈래를 처음 나온 차례대로 하나씩. 말하는 줄이 있는
+			#  갈래는 이름표 주인을 잇는다 — 상인 목소리와 설명 목소리를 견줘 듣는다.
+			if _tutor_rows.is_empty():
+				var seen := {}
+				for r in GameData.tutor():
+					var tid := String((r as Dictionary).get("id", ""))
+					if tid == "" or seen.has(tid):
+						continue
+					seen[tid] = true
+					var who := ""
+					for s in GameData.tutor_steps(tid):
+						who = String((s as Dictionary).get("who", "")).strip_edges()
+						if who != "":
+							break
+					_tutor_rows.append({"n": tid + (" · " + who if who != "" else ""),
+							"id": tid})
+			return _tutor_rows
 	return []
 
 
@@ -2608,6 +2632,26 @@ static func _run(g: Node, e: Dictionary) -> void:
 		"score":
 			g.score_mode = String(GameData.SCORE_MODES[i % GameData.SCORE_MODES.size()])
 			_say("계산 '%s'" % g.score_mode)
+		"tutor":
+			#  배움을 지우고 다시 건다 — _tutor 가 그 자리에서 배움을 다시 적으므로
+			#  사람의 저장에는 남는 것이 없다. 과녁이 이 화면에 없으면 지우지도
+			#  않는다(지운 채 안 뜨면 나중 게임에서 갑자기 뜬다).
+			if rows.is_empty():
+				return
+			var tid := String(rows[i % rows.size()].id)
+			var ss := GameData.tutor_steps(tid)
+			if ss.is_empty():
+				_say("빈 갈래다")
+				return
+			var mk := String((ss[0] as Dictionary).get("mark", ""))
+			if mk != "" and g._mark_rect(mk).size.x < 2.0:
+				_say("이 화면에는 그 과녁이 없다")
+				return
+			g._tutor_close()
+			g.tutor_q.clear()
+			Save.forget(tid)
+			g._tutor(tid)
+			_say("말상자 %s" % tid)
 		"sfx":
 			# 고른 것이 곧 소리다. 화살표로 옆칸을 짚으면 바로 난다 —
 			# 따로 "내 보기" 를 눌러야 하면 견줘 듣는 동안 손이 두 배로 든다.
