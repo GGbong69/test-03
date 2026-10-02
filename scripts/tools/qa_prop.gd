@@ -1,17 +1,23 @@
 extends SceneTree
-# 판 소품 몸짓(2026-10-02) — 팔면 상인이 판 동전을 저울에서 집어 가고, 사면 등록기를 친다.
+# 판 소품 몸짓(2026-10-02) — 팔면 상인이 판 동전을 저울에서 집어 가고, 사면 등록기를
+# 내리친다(시안 C — 「C 로 바로」 · 「NPC가 수금기 내리 치면 좋겠어」).
 # 몸짓은 그림이다. 못 박는 것:
 #   ① 값이 몸짓과 무관하다 — 몸짓을 켜고 끈 두 판매 · 두 구매가 골드 · 동전 · 매물 · 봉인 ·
 #      매듭에서 글자 하나 안 다르고, 확정 순간도 같다(_sell · _pay_take 가 돌아온 그 줄).
-#      몸짓이 도는 동안 값이 한 톨도 안 움직인다.
+#      몸짓이 도는 동안 · 판 효과(동전 · 조각)가 다 가라앉을 때까지 값이 한 톨도 안 움직인다.
 #   ② 팔면 · 사면 몸짓이 서고 제 시간(PROP.s_end · b_end) 안에 끝나며, 두 손이 쉼으로
 #      돌아온다(손바닥 자리가 몸짓 전과 같다).
 #   ③ 팔이 안 늘어난다 — 어깨 → 손목 거리가 위팔 + 팔뚝을 안 넘는다. 집은 동전이 손끝을
-#      따라온다(npc_hold = 동전 과녁). 서랍은 검지가 누르는 박자에 튀어나온다.
+#      따라온다(npc_hold = 동전 과녁). 서랍은 손바닥이 닿는 박자에 튀어나온다.
 #   ④ 못 서면 옛 응수다 — 움직임 끔 · 건네는 중 · 쓰는 중 · 진열대가 없다(헤드리스 기본).
 #      서던 몸짓도 건네기 · 쓸기가 들면 끊겨 쉼으로 돌아간다.
 #   ⑤ 연달아 팔고 사도 멈춘 손 · 남은 동전 그림이 없다.
-#   ⑥ 개발자 「상인 몸짓」의 두 줄(저울에 올리기 · 등록기 치기)이 값을 안 건드린다.
+#   ⑥ 개발자 「상인 몸짓」의 두 줄(저울에 올리기 · 등록기 내리치기)이 값을 안 건드린다.
+#   ⑦ 내리치기 — 손이 치켜 올랐다가 손바닥이 건반에 닿고(손목 한도 안), 그 박자에 서랍이
+#      크게 튀어나오고 값 깃이 솟고 화면이 흔들리고 동전 · 나뭇조각 · 놋쇠 부스러기가 튀어
+#      바닥에 떨어져 다 가라앉는다. 한 사건의 소리가 넷 안이다. 판 효과는 매 틀 새로 안
+#      짓는다(칸 수가 그대로 · 정적 메모리가 안 는다). 움직임 끔 · 바쁜 상인 · 화면을 떠남의
+#      옛 길(서랍만 · 한 번에 · 걷힘)이 산다.
 # 헤드리스라 진열대(3D)가 없다 — 몸짓은 prop_force 로 세우고, 손 자세는 npc_dry 로
 # 그리기 밖에서 셈한다(_npc_arms).
 #   godot --headless --path . --script scripts/tools/qa_prop.gd
@@ -114,6 +120,11 @@ func _clear_acts() -> void:
 	g.scale_tilt = 0.0
 	g.scale_tv = 0.0
 	g.scale_ring = 0.0
+	g.reg_t = -1.0
+	g.reg_open = 0.0
+	g.reg_fx = Vector3.ZERO
+	g._burst_clear()
+	g.shake = 0.0
 
 
 func _ids(a: Array) -> String:
@@ -241,6 +252,7 @@ func _run() -> void:
 			g._pay_click()
 			var c0 := _econ()
 			var fl0: float = g.pay_flash
+			var dr0: bool = g.reg_t >= 0.0
 			var live2: bool = g._prop_live(1)
 			var fl_max := 0.0
 			var t_flash := -1.0
@@ -252,18 +264,20 @@ func _run() -> void:
 					fl_max = g.pay_flash
 					if t_flash < 0.0:
 						t_flash = tt
-			rb.append([c0, _econ(), live2, fl0, t_flash, g._idle_name()])
+			rb.append([c0, _econ(), live2, fl0, t_flash, g._idle_name(), dr0])
 		g.prop_force = false
 		_ok("구매 값이 몸짓과 무관하다", rb[0][0] == rb[1][0], "%s | %s" % [rb[0][0], rb[1][0]])
 		_ok("구매 — 몸짓 동안 값이 안 움직인다", rb[1][0] == rb[1][1], rb[1][1])
 		_ok("구매 — 진열대가 없으면 옛 끄덕 · 바로 서랍",
-				not bool(rb[0][2]) and float(rb[0][3]) >= 0.99 and rb[0][5] == "끄덕",
-				"몸짓 %s · 서랍 %.2f · 응수 %s" % [rb[0][2], float(rb[0][3]), rb[0][5]])
-		var pz: float = float(g.PROP.b_press)
-		_ok("구매 — 서랍은 검지가 누르는 박자에",
+				not bool(rb[0][2]) and float(rb[0][3]) >= 0.99 and rb[0][5] == "끄덕"
+				and bool(rb[0][6]),
+				"몸짓 %s · 번쩍임 %.2f · 서랍 %s · 응수 %s" % [rb[0][2], float(rb[0][3]), rb[0][6],
+				rb[0][5]])
+		var pz: float = float(g.PROP.b_hit)
+		_ok("구매 — 서랍은 손바닥이 닿는 박자에",
 				bool(rb[1][2]) and float(rb[1][3]) < 0.01
 				and absf(float(rb[1][4]) - pz) <= DT + 0.001,
-				"확정 때 %.2f · 튄 때 %.3f초 (누름 %.2f)" % [float(rb[1][3]), float(rb[1][4]), pz])
+				"확정 때 %.2f · 튄 때 %.3f초 (닿음 %.2f)" % [float(rb[1][3]), float(rb[1][4]), pz])
 
 	# ② 몸짓이 서고 제 시간 안에 끝나며 두 손이 쉼으로 돌아온다
 	_restore(base)
@@ -355,7 +369,7 @@ func _run() -> void:
 			rr = maxf(rr, float(g.prop_rr[1]))
 			near_u = maxf(near_u, (g.npc_palm[1] as Vector3).x)
 		_ok("구매 몸짓이 제 시간 안에 끝난다", t > 0.3 and t <= float(g.PROP.b_end) + DT * 1.5,
-				"%.3f초 (표 %.2f)" % [t, float(g.PROP.b_end)])
+				"%.3f초 (표 %.2f — 0.8~1.0 안)" % [t, float(g.PROP.b_end)])
 		_ok("손이 등록기까지 간다", near_u > 540.0, "손바닥 u 최대 %.0f" % near_u)
 		_ok("구매 팔도 안 늘어난다", rr <= 1.0, "최대 %.3f" % rr)
 		_pose()
@@ -419,8 +433,9 @@ func _run() -> void:
 		g.sweep_live = true
 		_tick_pose(0.3)
 		g.sweep_live = false
-		_ok("쓸기가 들면 구매 몸짓이 끊기고 서랍은 연다", not g._prop_live(1) and g.pay_flash > 0.0,
-				"서랍 %.2f" % g.pay_flash)
+		_ok("쓸기가 들면 구매 몸짓이 끊기고 서랍은 연다(조용히)", not g._prop_live(1)
+				and g.pay_flash > 0.0 and g.reg_t >= 0.0 and not g.reg_slam and g.bu_n == 0,
+				"번쩍임 %.2f · 서랍 %.2f · 판 효과 %d" % [g.pay_flash, g.reg_open, g.bu_n])
 	g.state = g.S.LEG
 	_ok("상점 밖 — 몸짓이 안 선다", not g._prop_buy(), "")
 	g.state = g.S.SHOP
@@ -485,7 +500,7 @@ func _run() -> void:
 	var na: int = (g.IDLE.acts as Array).size() + Dev.NPC_HOLDS.size()
 	var names: PackedStringArray = Dev._names("npcact")
 	_ok("개발자 줄에 두 몸짓이 있다", names.size() == na + 2
-			and names[na] == "저울에 올리기" and names[na + 1] == "등록기 치기",
+			and names[na] == "저울에 올리기" and names[na + 1] == "등록기 내리치기",
 			"%d줄 · %s · %s" % [names.size(), names[mini(na, names.size() - 1)],
 			names[mini(na + 1, names.size() - 1)]])
 	Dev.pick["npcact"] = na
@@ -495,8 +510,15 @@ func _run() -> void:
 	Dev.pick["npcact"] = na + 1
 	Dev._run(g, {"t": "list", "k": "npcact", "n": na + 2})
 	var dl1: bool = g._prop_live(1)
-	_tick(2.0)
-	_ok("개발자 「저울에 올리기」 · 「등록기 치기」가 선다", dl0 and dl1, "")
+	var dburst := 0
+	var dtt := 0.0
+	while dtt < 2.0:
+		g._prop_tick(DT)
+		dtt += DT
+		dburst = maxi(dburst, int(g.bu_n))
+	_ok("개발자 「저울에 올리기」 · 「등록기 내리치기」가 선다", dl0 and dl1, "")
+	_ok("개발자 「등록기 내리치기」가 판 효과까지 낸다", dburst > 0 and g.bu_n == 0,
+			"최대 %d알 · 남은 %d" % [dburst, g.bu_n])
 	_ok("개발자 줄이 값을 안 건드린다", _econ() == dev0, "%s | %s" % [dev0, _econ()])
 	g.owned.clear()
 	g._panel_reset()
@@ -509,3 +531,187 @@ func _run() -> void:
 	Dev.pick["npcact"] = na + 1
 	Dev._run(g, {"t": "list", "k": "npcact", "n": na + 2})
 	_ok("진열대가 없으면 개발자 줄도 안 선다", not g._prop_live(1), "")
+	_slam()
+
+
+func _buy_idx() -> int:
+	for i in g.stock.size():
+		if int(g.stock[i].cost) <= g.gold and g._buy_block(i) == "" 				and not bool(g.stock[i].get("sold", false)):
+			return i
+	return -1
+
+
+#  손바닥 닿는 점 — 그 틀 손(손목 축 · 손각 · 숙임)에서 PROP.b_palm 을 낸다(_prop_place 의 역).
+func _palm_pt() -> Vector3:
+	var w: Vector3 = g.prop_lw[1]
+	var b := Basis(Vector3.UP, -float(g.prop_la[1])) * Basis(Vector3.BACK, -float(g.prop_lp[1]))
+	var tp: Vector3 = g.PROP.b_palm
+	return w + b * (Vector3(tp.x, tp.y, -tp.z) * float(g.NPC.sc_r))
+
+
+# ⑦ 내리치기 — 「물건 구매하면 NPC가 수금기 내리 치면 좋겠어 수금기는 그럼 열리면서
+#  이팩트로 동전이랑 무서진(부서진) 조각같은것들도 조금 날아가면서」.
+func _slam() -> void:
+	var base := _snap()
+	_restore(base)
+	_clear_acts()
+	_calm()
+	g.prop_force = true
+	g.gold = 99
+	var bi := _buy_idx()
+	_ok("⑦ 살 매물이 있다", bi >= 0, "%d" % bi)
+	if bi < 0:
+		return
+	var P: Dictionary = g.PROP
+	var e0 := _econ()
+	g.buy_sel = bi
+	g._pay_click()
+	var e1 := _econ()
+	var t := 0.0
+	var hit_t := -1.0
+	var top_h := -999.0
+	var hit_h := 999.0
+	var palm_err := 0.0
+	var dr_max := 0.0
+	var fl_max := 0.0
+	var key_max := 0.0
+	var jo_min := 0.0
+	var shake_hit := 0.0
+	var kinds := [0, 0, 0]
+	var all_land := false
+	var n_max := 0
+	var burst_end := -1.0
+	var sz0: int = -1
+	var sz_same := true
+	var wb_hit := Vector2.ZERO
+	while t < 2.5:
+		var was: float = g.prop_t[1]
+		g._prop_tick(DT)
+		t += DT
+		_pose()
+		var pt: float = g.prop_t[1]
+		var ph: float = (g.npc_palm[1] as Vector3).z
+		if pt >= float(P.b_up) and pt < float(P.b_hit):
+			top_h = maxf(top_h, ph)
+		if was >= 0.0 and was < float(P.b_hit) and (pt >= float(P.b_hit) or pt < 0.0):
+			hit_t = t
+			hit_h = ph
+			shake_hit = g.shake
+			wb_hit = g.npc_wb[1]
+			for i in g.bu_t.size():
+				if float(g.bu_t[i]) >= 0.0:
+					kinds[int(g.bu_k[i])] += 1
+			sz0 = g.bu_t.size()
+		if pt >= float(P.b_up) and pt < float(P.b_hold):
+			var tg: Vector3 = g._prop_slam3(pt)
+			palm_err = maxf(palm_err, _palm_pt().distance_to(tg))
+		dr_max = maxf(dr_max, g.reg_open)
+		fl_max = maxf(fl_max, (g.reg_fx as Vector3).x)
+		key_max = maxf(key_max, (g.reg_fx as Vector3).z)
+		jo_min = minf(jo_min, (g.reg_fx as Vector3).y)
+		n_max = maxi(n_max, int(g.bu_n))
+		if sz0 >= 0 and g.bu_t.size() != sz0:
+			sz_same = false
+		if hit_t > 0.0 and g.bu_n > 0:
+			var landed := true
+			for i in g.bu_t.size():
+				if int(g.bu_k[i]) == 0 and float(g.bu_t[i]) >= 0.0 and int(g.bu_land[i]) == 0:
+					landed = false
+			if landed:
+				all_land = true
+		if hit_t > 0.0 and burst_end < 0.0 and g.bu_n == 0:
+			burst_end = t
+	var e2 := _econ()
+	_ok("⑦ 값은 확정 순간 그대로 · 판 효과 동안 안 움직인다", e0 != e1 and e1 == e2,
+			"%s → %s" % [e1, e2])
+	_ok("⑦ 손이 치켜 올랐다 내리친다", hit_t > 0.0 and top_h - hit_h >= 24.0,
+			"치켜든 손등 h %.1f → 닿은 틀 %.1f (%.1f)" % [top_h, hit_h, top_h - hit_h])
+	_ok("⑦ 손바닥이 건반에 닿는다(치켜든 자리 · 닿은 자리)", palm_err < 1.0,
+			"어긋남 최대 %.2f" % palm_err)
+	_ok("⑦ 닿은 틀 손목이 한도 안", wb_hit.x <= 15.05 and wb_hit.y <= 25.05,
+			"옆 %.1f° · 굽힘 %.1f°" % [wb_hit.x, wb_hit.y])
+	var dpx: float = float(g.Room3D.REG_OPEN) * float(g.Room3D.BUY_K) * float(g.TBL.flat) * dr_max
+	_ok("⑦ 서랍이 크게 튀어나온다(화면 18px 넘게)", dr_max >= 1.0 and dpx >= 18.0,
+			"나온 몫 %.2f · 화면 %.1fpx" % [dr_max, dpx])
+	_ok("⑦ 값 깃이 솟고 · 건반이 들어가고 · 몸이 튄다", fl_max > 1.05 and key_max > 0.99
+			and jo_min < -0.1, "깃 %.2f · 건반 %.2f · 몸 튐 %.2f" % [fl_max, key_max, jo_min])
+	_ok("⑦ 닿은 틀에 화면이 흔들린다", shake_hit >= float(g.BURST.shake) - 0.6,
+			"%.2fpx" % shake_hit)
+	var B: Dictionary = g.BURST
+	_ok("⑦ 동전 · 나뭇조각 · 놋쇠 부스러기가 튄다", kinds[0] == int(B.coin)
+			and kinds[1] == int(B.wood) and kinds[2] == int(B.brass),
+			"동전 %d · 나무 %d · 놋쇠 %d" % [kinds[0], kinds[1], kinds[2]])
+	_ok("⑦ 동전이 바닥에 떨어져 튄다", all_land, "")
+	_ok("⑦ 판 효과가 다 가라앉는다", burst_end > 0.0 and burst_end - hit_t
+			<= float((B.life as Vector2).y) + DT * 2.0,
+			"닿은 뒤 %.2f초 (수명 상한 %.2f)" % [burst_end - hit_t, float((B.life as Vector2).y)])
+	_ok("⑦ 한 사건의 소리가 넷 안(쿵 하나 + 톡)", 1 + int(g.bu_snd) <= 4
+			and int(g.bu_snd) >= 1, "톡 %d" % int(g.bu_snd))
+	_ok("⑦ 서랍이 다 닫히고 쉰다", g.reg_t < 0.0 and g.reg_open == 0.0
+			and g.reg_fx == Vector3.ZERO, "")
+	_ok("⑦ 판 효과 칸을 매 틀 새로 안 짓는다", sz_same and sz0 == int(B.coin) + int(B.wood)
+			+ int(B.brass), "칸 %d" % sz0)
+	#  정적 메모리 — 산 판 효과를 600 틀 굴리는 동안(다 가라앉으면 다시 낸다).
+	g._burst_spawn()
+	for k in 30:
+		g._burst_tick(DT)
+	var m0: int = OS.get_static_memory_usage()
+	for k in 600:
+		if g.bu_n <= 0:
+			g._burst_spawn()
+		g._burst_tick(DT)
+		g._reg_tick(DT)
+	var m1: int = OS.get_static_memory_usage()
+	_ok("⑦ 판 효과가 매 틀 메모리를 안 짓는다", m0 > 0 and m1 - m0 <= 0,
+			"정적 메모리 %d → %+d 바이트 (600 틀)" % [m0, m1 - m0])
+	g._burst_clear()
+
+	# 화면을 떠나면 걷힌다
+	g._burst_spawn()
+	g.state = g.S.LEG
+	g._prop_tick(DT)
+	_ok("⑦ 상점을 떠나면 판 효과가 걷힌다", g.bu_n == 0, "%d" % g.bu_n)
+	g.state = g.S.SHOP
+
+	# 움직임 끔 — 서랍이 한 번에 열리고 한 번에 닫힌다 · 흔들림 · 판 효과 없다
+	_restore(base)
+	_clear_acts()
+	_calm()
+	g.motion_off = true
+	g.gold = 99
+	bi = _buy_idx()
+	g.buy_sel = bi
+	g._pay_click()
+	var mid := false
+	var opened: bool = g.reg_open == 1.0
+	var tm := 0.0
+	var shut_t := -1.0
+	while tm < 1.0:
+		g._prop_tick(DT)
+		tm += DT
+		if g.reg_open > 0.0 and g.reg_open < 1.0:
+			mid = true
+		if shut_t < 0.0 and g.reg_open == 0.0:
+			shut_t = tm
+	_ok("⑦ 움직임 끔 — 서랍만 한 번에 열렸다 닫힌다", not g._prop_live(1) and opened
+			and not mid and shut_t > 0.3 and g.bu_n == 0 and g.shake == 0.0,
+			"열림 %s · 사이값 %s · 닫힘 %.2f초 · 판 효과 %d · 흔들림 %.1f" % [opened, mid, shut_t,
+			g.bu_n, g.shake])
+	g.motion_off = false
+
+	# 바쁜 상인(건네는 중) — 옛 끄덕 + 서랍만 조용히
+	_restore(base)
+	_clear_acts()
+	_calm()
+	g.gold = 99
+	g._give_begin(0, Vector2(200.0, g.TBL.fy))
+	bi = _buy_idx()
+	g.buy_sel = bi
+	g._pay_click()
+	g._prop_tick(DT)
+	_ok("⑦ 바쁜 상인 — 끄덕 · 서랍만(판 효과 · 흔들림 없이)", not g._prop_live(1)
+			and g.reg_t >= 0.0 and not g.reg_slam and g.bu_n == 0 and g.shake == 0.0,
+			"서랍 %.2f · 판 효과 %d" % [g.reg_open, g.bu_n])
+	g._give_end()
+	g.give_rel = 0.0
+	g.prop_force = false

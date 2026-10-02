@@ -19489,6 +19489,8 @@ func _table_draw() -> void:
 	#  0.512초고 조각은 0.85초까지 사니까, 그 0.34초 동안 마지막 물건의 조각이
 	#  손(hand_up 1.55배) 밑에 통째로 숨는다.
 	_smash_draw()
+	#  내리친 등록기 서랍에서 튄 동전 · 조각 — 테이블 · 손 위, HUD 밑(_burst_draw).
+	_burst_draw()
 	#  값은 이제 _goods_draw 안에서 물건마다 그린다(_bill_one) — 여기서
 	#  따로 한 바퀴 돌면 뒤 물건의 값이 앞 동전 위에 얹힌다.
 
@@ -19660,12 +19662,18 @@ func _chute_draw() -> void:
 			#  (왼쪽 저울 · 오른쪽 금전등록기). 삼각형을 덮어 칠하면 옛 창구가
 			#  되살아나므로, 얹힘 · 불 · 누름 · 번쩍임은 그 소품이 맡는다
 			#  (Room3D.prop_glow) — 스포트가 밝아지고 놋쇠가 달아오른다. 팔 것을
-			#  대면 저울 왼 접시가 내려앉고, 산 순간 등록기 서랍이 튀어나온다.
+			#  대면 저울 안 접시가 내려앉고, 산 순간 등록기 서랍이 튀어나온다.
+			#  내리쳐 연 서랍은 커서가 어디 있든 한 번 번쩍인다 — 손바닥이 닿는 틀의 빛이다.
+			#  번쩍임의 세제곱이라 0.2 초에 거의 진다(얹힌 창구의 1 + 1.2 배를 그대로 걸면
+			#  0.3 초 넘게 등록기가 통째로 노랗게 타 서랍 속 동전이 묻혔다 — 촬영).
 			var gk := 0.0
 			var gc := C_LIGHT
 			if pay_flash > 0.0 and (lit or (z == Z_BUY and hk > 0.0)):
 				gc = C_ACC
 				gk = 1.0 + 1.2 * pay_flash
+			elif pay_flash > 0.0 and z == Z_BUY and reg_slam:
+				gc = C_ACC
+				gk = 1.6 * pay_flash * pay_flash * pay_flash
 			elif lit:
 				gc = C_ACC
 				gk = 1.0
@@ -19675,8 +19683,12 @@ func _chute_draw() -> void:
 				gk = 0.6 * hk
 			#  저울대는 scale_tilt 그대로다 — 끌어 대면 내려앉고(_scale_tick), 판 동전이 접시에
 			#  얹히면 출렁인다. 접시 동전과 손이 같은 값으로 접시 자리를 셈한다(Room3D.pan_top).
-			var act: float = pay_flash if z == Z_BUY else scale_tilt
-			Room3D.prop_glow(tbl3_vp, z, gk, gc, act, get_process_delta_time())
+			#  등록기는 서랍 곡선(reg_open · reg_fx — _reg_curve) 그대로다. 판 효과가 같은 값으로
+			#  서랍 앞끝을 셈한다(Room3D.drawer_front).
+			if z == Z_BUY:
+				Room3D.prop_glow(tbl3_vp, z, gk, gc, reg_open, reg_fx)
+			else:
+				Room3D.prop_glow(tbl3_vp, z, gk, gc, scale_tilt)
 		else:
 			draw_colored_polygon(p, body)
 			var gr := Color(C_WOOD.lightened(0.55), 0.16 if lit else lerpf(0.10, 0.16, hk))
@@ -19772,11 +19784,29 @@ func _chute_act(z: int) -> bool:
 #  값을 24 로 올리면 빗변을 넘어 펠트에 올라앉으므로 12 에 둔다.
 #  오른쪽 이름은 오른끝 맞춤이다 — 전에는 「구매」 폭(22)을 손으로 빼 x 613 에 섰다.
 #  크기(20 · 12)는 그리는 줄에 숫자로 적는다 — qa_ui 가 줄에서 읽는다.
-#  진열대(3D 테이블)에서는 이름이 소품 **밑** 카운터에 선다 — 저울 · 등록기
-#  받침 앞끝이 y 154 · 157(서랍이 튀어나오면 162)이라 이름 잉크 [163.5,181] ·
-#  값 [186.5,196](vdy3 16).
-#  옆 카운터가 앞으로 갈수록 좁아 값 줄을 3px 당겨 조각 틀에서 뗐다.
+#  진열대(3D 테이블)에서는 이름이 소품 **밑** 카운터에 선다 — 이름 잉크 [163.5,181] ·
+#  값 [186.5,196](vdy3 16). 옆 카운터가 앞으로 갈수록 좁아 값 줄을 3px 당겨 조각 틀에서 뗐다.
+#  ── 시안 C (2026-10-02 · 「C 로 바로」) ──
+#  소품이 화면 끝에 걸친 두 배 몸이 됐어도 이름 · 값은 그 **소품 밑 카운터** 그대로다 —
+#  소품은 위(벽 띠)로 자랐고, 받침 앞끝(저울 y 159.9) · 닫힌 서랍 앞끝(등록기 y 159.3)이
+#  이름 윗끝(163.5) 위에서 멈춘다(room3d.gd 머리말 「시안 C」). 그래서 잘린 큰 몸 바로 밑에
+#  그 소품의 이름표처럼 붙고, 소품 몸이 글을 안 덮는다. 더 밑으로 내리면 옆 카운터가
+#  좁아져 이름이 조각 틀(빗변 몰딩)에 올라앉는다(y 189 에서 3px).
+#  내리친 서랍은 0.5 초 동안 화면 22px 까지 튀어나와 이름 윗단에 걸친다 — 글은 3D 화판
+#  **다음**에 그리므로(_chute_draw 끝) 서랍이 나와도 글이 위에 남아 읽힌다.
+#  판정 · 튜토리얼 밝힘이 이 글 자리를 같이 쓴다(_chute_txt_rect).
 const CHUTE_TXT := {"ly": 20.0, "vdy": 19.0, "x": 5.0, "ly3": 52.0, "vdy3": 16.0}
+
+
+#  진열대에서 이름 · 값이 차지하는 화면 사각(잉크 둘레 2px) — z 0 판매(왼끝) · 1 구매(오른끝).
+#  폭 52 는 이름 「판매」(36) · 가장 긴 값(금화 그림 + 세 자리)에 여유를 둔 것이다.
+func _chute_txt_rect(z: int) -> Rect2:
+	var ex: float = CHUTE_TXT.x
+	var y0: float = float(TBL.fy) + float(CHUTE_TXT.ly3) - 18.5
+	var h: float = float(CHUTE_TXT.vdy3) + 21.0
+	if z == Z_SELL:
+		return Rect2(ex - 2.0, y0, 52.0, h)
+	return Rect2(VIEW.x - ex - 50.0, y0, 52.0, h)
 
 
 func _chute_label() -> void:
@@ -20533,11 +20563,14 @@ var tbl3_vp: SubViewport = null
 var room_t := 0.0            # 방의 시계 — 게임 시간이라 모션 끄기에서 멈춘다
 
 
-#  테이블 화판이 덮는 화면 사각. 펠트 위 40px 부터 화면 밑까지 — 먼 턱은
-#  위 20px 이지만, 진열대 양 끝 소품(저울 · 금전등록기)이 그 위로 솟는다
-#  (등록기 볏 꼭지가 y 96). 턱 위는 투명이라 방이 비친다.
+#  테이블 화판이 덮는 화면 사각. 펠트 위 84px(y 44)부터 화면 밑까지 — 먼 턱은
+#  위 20px 이지만, 진열대 양 끝 소품(저울 · 금전등록기)이 그 위로 솟는다. 시안 C
+#  (2026-10-02)에서 소품이 두 배가 되어 등록기 볏 꼭지가 y 96 → 48 · 저울 꼭지가 y 63
+#  이다 — 옛 윗끝(fy − 40 = 88)이면 두 소품의 윗동이 화판 밖으로 잘린다(shop_probe
+#  「진열대 소품 창구」가 잰다). 턱 위는 투명이라 방이 비치고, 덮개(_cover_draw)가
+#  이 윗끝부터 턱까지 화판을 상인 몸통 위에 한 번 더 붙여 소품이 상인 앞에 선다.
 func _room3d_rect() -> Rect2:
-	return Rect2(0.0, float(TBL.fy) - 40.0, VIEW.x, VIEW.y - float(TBL.fy) + 40.0)
+	return Rect2(0.0, float(TBL.fy) - 84.0, VIEW.x, VIEW.y - float(TBL.fy) + 84.0)
 
 
 func _room3d_live() -> bool:
@@ -21550,12 +21583,16 @@ func _fing3(i: int, gk: float) -> void:
 			_fp_mix(o, FPOSE.open, a)
 		busy = maxf(busy, a)
 	#  판 소품 몸짓 — 저울로 뻗는 손은 펴며 가고(집는 것은 아래 쥠이 한다), 등록기를
-	#  치는 손은 검지를 편다(FPOSE.point). 그 손의 몸짓 굴림 · 요(짚기의 30°)는 걷는다 —
-	#  남으면 검지가 건반 옆을 친다.
+	#  내리치는 손은 손바닥을 펴고 손가락을 느슨히 만다(편 손 + 주먹 ¼ — 쫙 편 손바닥은
+	#  손사래이고 꽉 쥔 주먹은 화풀이다). 그 손의 몸짓 굴림 · 요(짚기의 30°)는 걷는다 —
+	#  남으면 손바닥이 건반 옆을 친다. pw_n(옛 짚기 검지)은 앞 자세에서 걷기만 한다.
 	if _prop_live(i):
 		var pr: float = _prop_reach(i)
 		if i == 0:
 			_fp_mix(o, FPOSE.open, 0.7 * pr)
+		else:
+			_fp_mix(o, FPOSE.open, pr)
+			_fp_mix(o, FPOSE.fist, 0.25 * pr)
 		if pw_n > 0.0005:
 			_fp_mix(o, FPOSE.point, pw_n)
 		busy = maxf(busy, pr)
@@ -23327,39 +23364,60 @@ func _idle_index(nm: String) -> int:
 
 
 # ══════════════════════════════════════════════════════════
-#  판 소품 몸짓 — 팔면 저울에 올리고, 사면 등록기를 친다 (2026-10-02)
+#  판 소품 몸짓 — 팔면 저울에 올리고, 사면 등록기를 내리친다 (2026-10-02)
 # ──────────────────────────────────────────────────────────
 #  「팔고 살 때 상인이 소품을 쓰게 할까요?」 — 「둘 다」 · 「음... 해봐」.
 #  진열대 양 끝 소품(Room3D 저울 · 금전등록기)이 여태 빛만 냈다. 이제 상인 손이 쓴다.
+#  같은 날 소품이 화면 끝에 걸친 큰 앞소품이 됐고(시안 C — room3d.gd 머리말), 사는
+#  몸짓은 검지로 건반 하나를 누르던 것에서 **내리치기**로 바뀌었다 —
+#  「물건 구매하면 NPC가 수금기 내리 치면 좋겠어 수금기는 그럼 열리면서 이팩트로
+#   동전이랑 무서진(부서진) 조각같은것들도 조금 날아가면서」.
 #
 #  ── 판매 (화면 왼손 · 1.30 초) ────────────────────────────
 #    0.00  판 동전(판 것의 그림 사본 — draw_item_sticker 그대로)이 동전 슬롯 칸에서,
-#          끌어 놓았으면 놓은 자리에서 왼 접시로 난다. 손은 같은 순간 뻗기 시작한다.
-#    0.20  접시에 닿는다 — 톡(coin_land). 저울대가 그 접시 쪽으로 기울며 한 번 출렁인다.
-#    0.30  손이 닿으며 테를 집는다 — 0.44 에 다 쥔다(hand_take). 건네기(GIVE)와 같은
-#          집기다: 검지 끝이 동전 윗면 테 안, 엄지가 그 밑, 나머지 셋은 말려 손바닥 밑.
+#          끌어 놓았으면 놓은 자리에서 저울 **안 접시**(상인 쪽 · PanR)로 난다. 바깥
+#          접시는 화면 왼끝에 잘려 있고 추가 얹혀 있다. 손은 같은 순간 뻗기 시작한다.
+#    0.20  접시에 닿는다 — 톡(coin_land). 저울대가 안 접시 쪽으로 화면 13px 기울며 한 번
+#          출렁인다(Room3D.SCALE_TILT +12° → −16°).
+#    0.30  손이 닿으며 상인 쪽 테를 집는다 — 0.44 에 다 쥔다(hand_take). 건네기(GIVE)와
+#          같은 집기다: 검지 끝이 동전 윗면 테 안, 엄지가 그 밑, 나머지 셋은 말려 손바닥 밑.
 #          검지는 앞 층(HAND3_FRONT)이라 동전 위로 아치를 그린다.
 #    0.44  든다 — 무게가 떠나 접시가 올라오며 출렁인다. 0.56 부터 먼 턱 너머(상인 쪽)로
 #          당긴다.
 #    0.94  턱 뒤에서 놓는다 — 동전이 떨어져 먼 턱에 가려 사라진다(_prop_drop_draw).
 #          손은 1.30 에 쉼이다.
-#  ── 구매 (화면 오른손 · 0.80 초) ──────────────────────────
-#    0.00  손이 등록기 건반 위로 뻗으며 검지를 편다(FPOSE.point).
-#    0.26  검지 끝이 건반 위에 선다 → 0.32 누른다 — 그 순간 서랍이 튀어나온다
-#          (pay_flash) · 딸깍. 0.40 떼고 0.80 쉼이다.
+#  ── 구매 — 내리치기 (화면 오른손 · 0.90 초) ──────────────────
+#    0.00  손이 등록기 위로 치켜 오른다 — 손바닥은 펴고 손가락은 느슨히(FPOSE.open +
+#          주먹 조금), 손목은 조금 젖힌다(b_pit0). 몸이 등록기 쪽으로 기울며 선다.
+#    0.20  치켜든 자리(건반 위 b_lift) → 0.28 한 번 더 든다(예비 동작 b_cockup).
+#    0.28  내리친다 — 0.06 초에 가속하며(제곱) 손바닥이 건반 뒤 두 줄 왼쪽에 닿는다.
+#    0.34  **닿는다.** 서랍이 화면 20px 튀어나와 넘치고(Room3D.REG_OPEN · _reg_curve),
+#          몸이 눌렸다 튀고 손바닥 밑 건반 여섯이 들어가고 값 깃이 솟는다(_reg_curve).
+#          손바닥 둘레로 빛살이 0.12 초 퍼진다. 열린 서랍에서 동전 열 · 나뭇조각 여섯 ·
+#          놋쇠 부스러기 넷이 튀어 카운터와 벨벳에 떨어져 튀고 미끄러지다 가라앉는다
+#          (BURST). 화면이 한 번 흔들린다(BURST.shake). 등록기 스포트가 한 번 번쩍인다. 소리는 판 밖 카지노 가족 그대로 — 내리친 쿵(shop_smash 를
+#          ×0.74 로 내림) 하나와 동전이 처음 떨어지는 톡(coin_land) 셋까지(README 「한
+#          사건이 내는 알 수」 — 자리 넷 안). 사는 소리(buy)는 옛 그대로 확정 순간이다.
+#    0.34~0.44  손이 눌러 둔 채 한 번 튄다(b_bounce). 0.90 에 쉼이다.
+#    서랍은 닿은 뒤 0.05 초에 튀어나와 0.30 초 머물다 0.24 초에 미끄러져 들어간다
+#    (_reg_curve) — 닿는 틀부터 0.59 초. 판 효과는 1.15 초 안에 다 가라앉는다.
 #  ── 값은 한 톨도 안 바뀐다 ────────────────────────────────
 #  골드 · 동전 · 매물 · 봉인 · 동전 슬롯 · 매듭은 옛 그 자리 그 순간에 확정된다
-#  (_sell · _pay_take). 몸짓은 그 뒤에 도는 그림이고 입력을 안 막는다. 못 서면 — 상인이
-#  바쁘다(건네기 · 쓸기 · 판 갈이) · 움직임 끔 · 진열대가 없다(헤드리스 · 3D 방 끔) —
-#  옛 응수(손짓 · 끄덕)다.
+#  (_sell · _pay_take). 몸짓은 그 뒤에 도는 그림이고 입력을 안 막는다. 산 물건은 옛
+#  그대로 동전 슬롯으로 난다. 못 서면 — 상인이 바쁘다(건네기 · 쓸기 · 판 갈이) ·
+#  진열대가 없다(헤드리스 · 3D 방 끔) — 옛 응수(손짓 · 끄덕)에 서랍만 열린다
+#  (_reg_open_now — 동전 · 흔들림 없이). 움직임 끔이면 서랍이 한 번에 열렸다 한 번에
+#  닫히고 판 효과 · 흔들림이 없다.
 #  ── 팔이 팔로 읽혀야 한다 ────────────────────────────────
-#  소품은 쉬는 손(화면 x 190~450)에서 멀다(저울 x 10~83 · 등록기 567~630). 손만
-#  미끄러지면 마술손이다(IDLE 머리말 「모으기」). 그래서
+#  소품은 쉬는 손(화면 x 190~450)에서 멀다(저울 안 접시 x 60~100 · 등록기 건반 x 575~640).
+#  손만 미끄러지면 마술손이다(IDLE 머리말 「모으기」). 그래서
 #   · 손목은 과녁에서 거꾸로 낸다 — 접시 동전을 검지 끝이 테 안에서 집는 자리
-#     (_prop_place — 3D 검지 사슬이 서는 그 점)와 건반 위 검지 끝. 집은 동전은 그 틀
-#     손의 검지 끝에서 다시 내어 그린다(prop_hold3) — 손끝 사이에서 안 미끄러진다.
+#     (_prop_place — 3D 검지 사슬이 서는 그 점)와 건반에 닿는 손바닥 한가운데(b_palm).
+#     집은 동전은 그 틀 손의 검지 끝에서 다시 내어 그린다(prop_hold3) — 손끝 사이에서
+#     안 미끄러진다.
 #   · 손목은 곧다 — 손은 팔뚝 축 둘레 옆 15° · 굽힘 25° 안에만 선다(_prop_goal 머리말).
-#     꺾을 몫은 팔꿈치 · 어깨 · 팔뚝 기울기가 진다. 꺾이는 것은 손끝(집기 · 누르기)뿐이다.
+#     꺾을 몫은 팔꿈치 · 어깨 · 팔뚝 기울기가 진다. 내리칠 때 젖힘 → 숙임도 이 안이다 —
+#     「손목이 백조 목처럼 꺾이면」 사람 팔이 아니다.
 #   · 팔꿈치는 두 마디 사슬이다(_arm_ik) — 팔 전체 길이(위팔 + 팔뚝)를 그 틀 쉼 자세
 #     그대로 못 박고 어깨에서 손목까지 닿는 자리를 푼다. 팔이 안 늘어나고 팔꿈치가
 #     따라온다. 뻗는 만큼 팔꿈치가 팔을 따라 손 쪽으로 옮겨 위팔 : 팔뚝이 사람 비가
@@ -23367,11 +23425,12 @@ func _idle_index(nm: String) -> int:
 #     바깥 · 위 · 뒤(PROP.pole) — 손을 엎고 옆으로 뻗으면 팔꿈치가 바깥 위로 든다.
 #     그래서 위팔은 쉴 때처럼 거의 HUD 뒤에 남고 화면에는 팔꿈치에서 손까지가 선다.
 #   · 몸이 그쪽으로 기울고 돈다(_prop_body) — 어깨가 몸통을 따라 소품 쪽으로 온다.
-#     쓸기의 기울기와 같은 자리다. 어깨가 안 오면 저울은 팔 길이 밖이다.
+#     쓸기의 기울기와 같은 자리다. 어깨가 안 오면 등록기는 팔 길이 밖이다.
 #  ── 다시 팔고 사면 ────────────────────────────────────────
 #  같은 손의 몸짓이 처음부터 다시 돈다. 손은 지금 자리에서 건너가고(PROP.snap — 쉼으로
 #  튕기지 않는다), 앞 동전은 그 자리에서 졸아든다(prop_ghost). 두 손은 따로 돈다.
-#  끊기면(쓸기 · 건네기 · 화면을 떠남) 손이 PROP.cut 에 걸쳐 쉼으로 돌아간다.
+#  끊기면(쓸기 · 건네기 · 화면을 떠남) 손이 PROP.cut 에 걸쳐 쉼으로 돌아간다 —
+#  아직 안 내리쳤으면 서랍만 열린다(값은 이미 치렀다).
 # ══════════════════════════════════════════════════════════
 const PROP := {
 	# ── 판매 — 저울 (초) ──
@@ -23382,13 +23441,14 @@ const PROP := {
 	"s_carry": 0.84,     # 먼 턱 너머로 당겼다
 	"s_rel": 0.94,       # 놓는다
 	"s_end": 1.30,       # 손이 쉼이다
-	"hop": 18.0,         # 나는 동전 포물선 높이(화면 px)
-	"lift": 10.0,        # 접시에서 드는 높이
-	"arc": 10.0,         # 당길 때 한가운데서 더 드는 높이
-	#  접시 위 동전 — 접시 테 반지름(10 × 1.1)보다 반 칸 작다. 테이블 동전(22)을 그대로
-	#  올리면 접시 두 배라 접시가 동전 밑에 숨는다. 두께는 그 비로 줄였다.
-	"coin_r": 10.5,
-	"coin_t": 2.4,
+	"hop": 22.0,         # 나는 동전 포물선 높이(화면 px)
+	"lift": 14.0,        # 접시에서 드는 높이
+	"arc": 12.0,         # 당길 때 한가운데서 더 드는 높이
+	#  접시 위 동전 — 안 접시 테 반지름(10 × 2.0 = 20)보다 한 칸 작다. 옛 10.5(테 11)를
+	#  곱 그대로 두면 두 배 접시 한가운데 점이 된다. 테이블 동전(22)보다 조금 작다 —
+	#  두께는 그 비(5.2 × 17 / 22)다.
+	"coin_r": 17.0,
+	"coin_t": 4.0,
 	"fall_g": 2600.0,    # 놓은 동전이 떨어지는 가속(면/s²) — 0.13 초에 턱 뒤로 든다
 	#  손이 기울고 싶은 쪽(도) — 손목 한도(dev · flex) 안에서만 산다(_prop_goal).
 	#  손각: 접시에서는 손끝이 왼쪽(조금 앞) · 당길 때는 왼쪽 뒤. 숙임: 손끝이 아래로 —
@@ -23396,36 +23456,43 @@ const PROP := {
 	#  손끝에서 곧장 떨어져 화면에서 손목이 꺾인 것으로 읽혔다(「손이 좀 꺽이네?」).
 	"s_ang0": 170.0, "s_ang1": 200.0, "s_pit": 30.0,
 	#  집는 자리 — 검지 끝에서 동전 한가운데로 가는 쪽(손 좌표 · 손끝 앞에서 엄지 쪽으로, 도).
-	#  다가오는 손 쪽 테를 손가락이 팔 줄 그대로 감싼다. 건네기(GIVE.din −50°)는 동전을 화면
-	#  가운데로 내미는 자리라 옆으로 크게 튼다 — 여기는 손끝 앞이다.
+	#  다가오는 손 쪽 테(안 접시의 상인 쪽 테)를 손가락이 팔 줄 그대로 감싼다. 건네기(GIVE.din
+	#  −50°)는 동전을 화면 가운데로 내미는 자리라 옆으로 크게 튼다 — 여기는 손끝 앞이다.
 	"s_din": -15.0,
 	#  놓는 자리 — 동전 한가운데 (u, h, w). 먼 턱 뒤끝(w −14)보다 뒤라 떨어지면 턱이 가린다.
-	#  턱 바로 위 낮은 자리(화면 y 107)라 0.13 초 만에 턱 뒤로 든다. 저울 오른쪽이라
-	#  떨어지는 동전이 저울 몸에 안 걸린다.
-	"s_lip": Vector3(92.0, 16.0, -16.0),
+	#  턱 바로 위 낮은 자리(화면 y 107)라 0.13 초 만에 턱 뒤로 든다. 저울 오른끝(u 101)
+	#  밖이라 떨어지는 동전이 저울 몸에 안 걸린다.
+	"s_lip": Vector3(132.0, 16.0, -16.0),
 	#  몸 — roll · yaw · lean · rise. 왼쪽으로 기울어(roll +) 왼 어깨가 저울 쪽으로 내려오고,
-	#  조금 앞으로 나온다.
-	"s_body": [0.20, 0.04, 14.0, -4.0],
-	# ── 구매 — 등록기 (초) ──
-	"b_reach": 0.26,     # 검지 끝이 건반 위에 선다
-	"b_press": 0.32,     # 누른다 — 서랍이 튀어나온다
-	"b_up": 0.40,        # 뗐다
-	"b_end": 0.80,
-	#  건반 줄 · 칸 — 상인에게 가장 가까운 뒤 줄의 왼끝. 손은 등록기 **왼쪽** 카운터 위에
-	#  떠서 검지만 건반으로 뻗는다 — 손끝이 앞을 보게(35°) 두었더니 손바닥이 등록기 몸통
-	#  · 볏 위에 얹혀 볏 뒤에 있어야 할 손이 볏을 덮었다(촬영).
-	"b_key": Vector2i(2, 0),
-	"b_ang": 12.0, "b_pit": 30.0,    # 손이 기울고 싶은 쪽(도) — 검지가 건반으로 내리꽂힌다
-	"b_hover": 6.0, "b_dip": 1.5,    # 건반 위로 뜬 높이 · 눌러 들어가는 깊이
-	#  편 검지 끝 볼 — 손 좌표(오른손 기준 · 거울 손은 z 를 뒤집는다). 너클 30.5 에서 두
-	#  마디(12.5 + 11.5)가 거의 곧게 뻗고(FPOSE.point −2° · 4°), 볼은 축보다 두께 반 밑이다.
-	"b_tip": Vector3(54.5, -2.6, -11.2),
-	"b_body": [-0.09, 0.03, 5.0, -2.0],
+	#  조금 앞으로 나온다. 안 접시가 옛 왼 접시보다 상인 쪽으로 60 가깝고 40 높아(시안 C)
+	#  옛 기울기(0.20 · 14)의 반쯤이면 닿는다.
+	"s_body": [0.12, 0.03, 9.0, -2.0],
+	# ── 구매 — 등록기를 내리친다 (초) ──
+	"b_up": 0.20,        # 치켜든 자리에 섰다(뻗기 봉투 끝)
+	"b_cock": 0.28,      # 한 번 더 들었다 — 여기서 내리친다
+	"b_hit": 0.34,       # 손바닥이 건반에 닿는다 — 서랍 · 판 효과 · 흔들림 · 쿵
+	"b_hold": 0.44,      # 눌러 둔 채 한 번 튀었다 — 여기서 쉼으로 돌아간다
+	"b_end": 0.90,
+	#  치켜든 높이(면 h) · 예비 동작에 더 드는 몫 · 치켜들며 몸 쪽(−w)으로 당기는 몫 ·
+	#  닿은 뒤 튀어 오르는 몫. 36 + 6 은 화면 26px — 손이 값 창 높이까지 들어 「내리친다」가
+	#  거리로 읽힌다. 46 + 8 은 치켜든 손끝이 정보/설정 단추 밑(y 48)으로 들어가 HUD 에
+	#  잘렸다(촬영). 더 들면 팔이 펴져 팔꿈치가 안 굽는다(쳐 내리는 팔은 굽었다 펴진다).
+	"b_lift": 36.0, "b_cockup": 6.0, "b_back": 4.0, "b_bounce": 5.0,
+	#  손바닥 닿는 점 — 손 좌표(손목 축에서 · 오른손 기준 · 거울 손은 z 를 뒤집는다).
+	#  손 길이 58 의 0.41 · 두께 12 의 반 밑 — 손바닥 한가운데 밑면이다.
+	"b_palm": Vector3(24.0, -6.5, 0.0),
+	#  손이 기울고 싶은 쪽(도) — 손끝이 오른쪽(조금 앞)으로 건반을 덮는다. 숙임은 치켜들 때
+	#  젖히고(손끝이 위 · b_pit0) 칠 때 숙인다(b_pit1) — 둘 다 손목 한도 안에서만 산다.
+	"b_ang": 20.0, "b_pit0": -8.0, "b_pit1": 12.0,
+	#  몸 — 등록기 쪽으로 기울고(roll −) 앞으로 나오며 치켜들 때 선다(rise +). 옛 검지
+	#  누르기(−0.09 · 5)보다 크다 — 내리치는 몸은 팔만 쓰지 않는다.
+	"b_body": [-0.15, 0.04, 9.0, 3.0],
 	#  팔꿈치가 굽는 쪽 — 어깨에서 (바깥 · 위 · 뒤). 바깥은 손마다 뒤집는다. 등록기 쪽은
-	#  위로만 — 뒤로 굽으면 팔뚝이 앞(손님 쪽)을 보고 손이 따라 돌아 손바닥이 등록기 몸통
-	#  위로 올라간다(손목을 곧게 두므로 팔뚝 방향이 곧 손 방향이다).
+	#  바깥 위로 — 치켜든 손 밑에서 팔꿈치가 옆으로 들려야 내리치는 팔이다. 뒤로 굽으면
+	#  팔뚝이 앞(손님 쪽)을 보고 손이 따라 돌아 손바닥이 등록기 몸통 위로 올라간다(손목을
+	#  곧게 두므로 팔뚝 방향이 곧 손 방향이다).
 	"s_pole": Vector3(0.5, 1.0, -0.6),
-	"b_pole": Vector3(0.0, 1.0, 0.0),
+	"b_pole": Vector3(0.45, 1.0, 0.0),
 	#  손목 한도(도) — 팔뚝 축에 대한 손. 옆 꺾임(노뼈 · 자뼈 쪽) · 굽힘/젖힘. 과녁은 2~3°
 	#  안쪽(dev_in · flex_in)으로 푼다 — 섞인 틀의 당김(_prop_arm)이 과녁에서는 안 걸린다.
 	"dev": 15.0, "flex": 25.0, "dev_in": 13.0, "flex_in": 22.0,
@@ -23502,6 +23569,92 @@ var pf_r := 0.0
 var pf_sq := 1.0
 var pf_peel := 0.0
 
+#  ── 등록기 서랍 · 값 깃 · 몸 눌림 · 건반 (2026-10-02 · 시안 C) ──────
+#  서랍이 열리는 곡선 하나(_reg_curve)를 셋이 같이 읽는다 — 3D 등록기(Room3D.prop_glow 의
+#  act · fx) · 판 효과가 튀는 자리(Room3D.drawer_front) · 검사(qa_prop). reg_t 는 연 뒤
+#  흐른 시간(−1 이면 닫혀 쉰다), reg_slam 은 내리쳐 연 것인가 — 몸 눌림 · 건반 · 넘쳐
+#  나오는 서랍 · 값 깃 넘침은 그때만이다. 끄덕(상인이 바쁘다 · 진열대가 없다)이나 내리치기
+#  전에 끊긴 몸짓은 서랍만 부드럽게 연다(값은 이미 치렀다).
+#  옛 서랍은 번쩍임(pay_flash)을 그대로 받아 화면 5px 나왔다 들어갔다 — 「솔찍히 지금도
+#  작어서 서랍 열린건진도 모르겠어」. 이제 화면 20px(넘치면 22px)을 0.05 초에 튀어나와
+#  0.3 초 머물고 0.24 초에 미끄러져 들어간다. 번쩍임(pay_flash)은 빛만 맡는다.
+#  움직임 끔이면 한 번에 열렸다 한 번에 닫힌다(머무는 시간 그대로) — 깃도 같이.
+const REG := {
+	"pop": 0.05,         # 튀어나와 넘친 끝(over)까지
+	"over": 1.12,        # 넘쳐 나오는 몫(다 열림 1 위)
+	"settle": 0.10,      # 넘친 몫이 1 로 돌아오는 시간
+	"soft": 0.10,        # 내리치지 않고 열 때 나오는 시간 — 안 넘친다
+	"hold": 0.30,        # 열린 채 머무는 시간(나온 뒤부터)
+	"shut": 0.24,        # 미끄러져 들어가는 시간
+	"jolt": 0.16,        # 몸이 눌렸다 튀는 시간(눌림 1 → 튐 −⅓ → 0)
+	"keys": 0.14,        # 손바닥 밑 건반이 들어갔다 나오는 시간
+	"flag_over": 1.25,   # 값 깃이 넘쳐 솟는 몫
+	"flag_hold": 0.42,   # 값 깃이 솟아 있는 시간
+	"flag_down": 0.14,   # 값 깃이 내려앉는 시간
+}
+var reg_t := -1.0
+var reg_slam := false
+var reg_open := 0.0              # 서랍이 나온 몫 — Room3D.prop_glow 의 act
+var reg_fx := Vector3.ZERO       # 값 깃 · 몸 눌림 · 건반 — Room3D.prop_glow 의 fx
+
+#  ── 판 효과 — 내리친 서랍에서 튀는 동전 · 조각 (2026-10-02 · 시안 C) ──
+#  「수금기는 그럼 열리면서 이팩트로 동전이랑 무서진(부서진) 조각같은것들도 조금 날아가면서」.
+#  열린 서랍 앞끝(Room3D.drawer_front)에서 동전 · 나뭇조각 · 놋쇠 부스러기가 튀어 면 좌표
+#  (u, w, h)에서 떨어지고, 바닥(오른 카운터 TOP_H · 벨벳 0)에 튀고 미끄러지다 바닥색으로
+#  가라앉는다 — 쓸기 부서짐(_smash_update)과 같은 세계의 물리 · 같은 사라지는 법(_smash_fade)
+#  이다. 동전은 게임의 통화(금빛) 그대로 — 잭팟 · 슬롯 · 종 · 777 그림은 한 알도 안 쓴다.
+#  그리는 차례는 _smash_draw 다음(테이블 · 손 위, HUD 밑).
+#  ⚠ 매 틀 새 배열 · 사전을 안 짓는다 — 칸은 처음 한 번 묶음 배열로 짓고 제자리에서
+#  고친다(qa_prop 이 잰다). 쓸기 조각(사전 배열)과 다른 까닭은 이것이 산 때마다 나는
+#  자리라서다. 그리기도 사각 · 선만 쓴다(다각형 배열을 안 짓는다).
+#  난수는 _gl_rand(차례, 판마다 씨)다 — randf 를 쓰면 판의 뽑기(리롤 · 매물)가 몸짓을
+#  켜고 끔에 따라 갈린다(qa_prop ① 이 값 같음을 잰다).
+const BURST := {
+	"coin": 10, "wood": 6, "brass": 4,        # 가짓수 — 동전 · 나뭇조각 · 놋쇠 부스러기
+	#  튀는 속도(면 단위/초). u 는 왼쪽(화면 안 · 물건 쪽)으로 많이 — 오른쪽은 화면 밖이다.
+	#  w 는 앞(손님 쪽), h 는 위. 정점 h 31~73 · 체공 0.5~0.75 초 — 서랍 위로 화면 한
+	#  뼘(15~40px) 솟고 옆으로 40~60px 흩어져야 「튀었다」가 게임 배율에서 보인다.
+	#  ⚠ 앞(w)을 세게 주면 안 된다 — 52° 시점에서 h 는 화면 위로 0.616 · w 는 화면 밑으로
+	#  0.788 이라, 앞으로 200 넘게 던지면 솟는 몫을 앞으로 오는 몫이 먹어 화면에서는 서랍
+	#  앞에 한 덩어리로 머물다 떨어졌다(촬영 — 정점에서 화면 2px 솟았다).
+	"vu": Vector2(-330.0, 10.0), "vw": Vector2(0.0, 90.0), "vh": Vector2(260.0, 400.0),
+	#  서랍 앞끝 둘레로 흩는 u 폭(면 단위) — 왼쪽으로 spread, 오른쪽으로 그 0.3 배. 서랍
+	#  앞끝 한가운데가 기울임(lean) 탓에 화면 x 629 라, 고르게 흩으면 셋에 하나가 화면 밖에서
+	#  태어났다(촬영).
+	"spread": 28.0,
+	#  중력 — 매물 낙하(DROP.g 1400)보다 가볍다. 작은 것이 조금 오래 떠야 「튀었다」가 보인다.
+	"g": 1100.0,
+	"e": 0.36,           # 바닥에 튀는 비 — 세 번째부터는 안 튄다
+	"fric": 380.0,       # 바닥 쿨롱 마찰(DROP.a_fric 520 의 결) — 유한 시간에 멎는다
+	"spin": Vector2(9.0, 22.0),     # 도는 빠르기(라디안/초)
+	"life": Vector2(0.85, 1.15),    # 수명 — 서랍이 닫히고(0.59) 반 박자 뒤까지 남는다
+	"sink": 0.16,        # 마지막 이 시간 동안 바닥색으로 가라앉는다(_smash_fade 의 어법)
+	#  소리 — 내리친 쿵(shop_smash 를 thud 배로 내림 · 쓸기 부서짐 0.86~1.14 밑) 하나와
+	#  동전이 처음 바닥에 닿는 톡(coin_land) snd 개까지. 한 사건이 넷 — sfx_pool 자리 넷 안
+	#  (README 「한 사건이 내는 알 수」). 톡 사이는 snd_gap 을 둔다(한 틀에 겹치면 한 덩어리).
+	"thud": 0.74, "snd": 3, "snd_gap": 0.05,
+	"pitch": [1.18, 1.34, 1.05],    # 톡의 음 — coin_land 밑음 392 의 배
+	"shake": 3.0,        # 흔들림(px) — 거절 4 · 쓸기 6 밑. 0.09 초에 죽는다
+	#  닿은 자리의 빛살 — 손바닥 둘레로 짧은 빛줄 일곱이 0.12 초 동안 퍼진다. 손이 덮는
+	#  한가운데(반지름 ray_r0)는 비우고 손 밖으로만 뻗는다 — 「쾅」 이 소리만이 아니라
+	#  그림에도 한 박자 있어야 한다(빛살 없이 찍었더니 손이 건반에 그냥 얹힌 것으로 읽혔다).
+	"rays": 7, "ray_t": 0.12, "ray_r0": 13.0, "ray_r1": 26.0, "ray_l0": 8.0, "ray_l1": 3.0,
+}
+var bu_p := PackedVector3Array()     # 자리 (u, w, h)
+var bu_v := PackedVector3Array()     # 속도
+var bu_t := PackedFloat32Array()     # 나이 — −1 이면 빈 칸
+var bu_life := PackedFloat32Array()
+var bu_a := PackedFloat32Array()     # 도는 각
+var bu_om := PackedFloat32Array()    # 도는 빠르기
+var bu_k := PackedByteArray()        # 0 동전 · 1 나뭇조각 · 2 놋쇠
+var bu_land := PackedByteArray()     # 바닥에 닿은 수
+var bu_n := 0                        # 산 수
+var bu_seed := 0                     # 판 효과마다 하나 — _gl_rand 의 두 번째 인자
+var bu_snd := 0                      # 이번 판 효과에서 낸 톡 수
+var bu_snd_t := 0.0                  # 톡 문(실시간)
+var bu_ray_t := -1.0                 # 빛살 나이 — −1 이면 없다
+var bu_ray_at := Vector2.ZERO        # 빛살 한가운데(화면) — 손바닥이 닿은 자리
+
 
 #  몸짓이 서지 못하는 때 — 서던 것도 이것이 참이 되면 끊긴다.
 func _prop_stop() -> bool:
@@ -23543,8 +23696,8 @@ func _prop_sell(it: Dictionary, from: Vector2, peel: float) -> bool:
 	return true
 
 
-#  산다 — _pay_take 가 값을 확정하기 전에 부른다. 서랍 번쩍임(pay_flash)은 검지가 건반을
-#  누르는 순간으로 미룬다(_prop_tick). 섰으면 참 — 거짓이면 옛 응수(끄덕) · 바로 번쩍임.
+#  산다 — _pay_take 가 값을 확정하기 전에 부른다. 서랍 · 번쩍임 · 판 효과는 손바닥이 건반에
+#  닿는 순간으로 미룬다(_prop_slam). 섰으면 참 — 거짓이면 옛 응수(끄덕) · 바로 서랍.
 func _prop_buy() -> bool:
 	if _prop_stop():
 		return false
@@ -23629,8 +23782,9 @@ func _prop_cut_now(i: int) -> void:
 	prop_cut[i] = 1.0
 	if i == 0:
 		_prop_ghost_take()
-	elif prop_t[1] < float(PROP.b_press):
-		pay_flash = 1.0            # 값은 이미 치렀다 — 서랍은 연다
+	elif prop_t[1] < float(PROP.b_hit):
+		pay_flash = 1.0            # 값은 이미 치렀다 — 서랍은 연다(내리치지 않았으니 조용히)
+		_reg_open_now(false)
 
 
 func _prop_end(i: int) -> void:
@@ -23646,6 +23800,8 @@ func _prop_end(i: int) -> void:
 #  매 틀 — _process 가 _give_tick 다음에 부른다(늦추기 전 · 상인 시계와 같은 자리).
 func _prop_tick(d: float) -> void:
 	_scale_tick(d)
+	_reg_tick(d)
+	_burst_tick(d)
 	if not prop_ghost.is_empty():
 		prop_ghost.t = float(prop_ghost.t) + d
 		if float(prop_ghost.t) >= float(PROP.ghost):
@@ -23669,17 +23825,13 @@ func _prop_tick(d: float) -> void:
 				_prop_end(0)
 				continue
 		else:
-			if t0 < float(PROP.b_press) and t1 >= float(PROP.b_press):
-				#  검지가 건반을 누른다 — 서랍이 튀어나오고 딸깍. 메뉴 가족의 마른 디텐트(슬롯 릴
-				#  멈춤쇠 · 판 밖 카지노)를 제 음 그대로 — 등록기 건반도 멈춤쇠다. 음을 올리면
-				#  천장(_lp 7500)이 지붕 6kHz 를 넘어 민다(probe_sfx 「지붕」).
-				pay_flash = 1.0
-				_sfx("menu_pick2")
+			if t0 < float(PROP.b_hit) and t1 >= float(PROP.b_hit):
+				_prop_slam()
 			if t1 >= float(PROP.b_end):
 				_prop_end(1)
 				continue
 		#  앞 자세는 다 뻗은 뒤로는 안 쓴다 — 돌아올 때는 쉼으로 간다.
-		if t1 >= float(PROP.s_reach if i == 0 else PROP.b_reach):
+		if t1 >= float(PROP.s_reach if i == 0 else PROP.b_up):
 			prop_snap_k[i] = 0.0
 
 
@@ -23759,8 +23911,11 @@ func _prop_w(i: int) -> void:
 		pw_g = lerpf(float(prop_snap_g[0]), g, sn)
 		pw_n = float(prop_snap_n[0]) * (1.0 - sn)
 	else:
-		var q0: float = P.b_reach
-		var q1: float = P.b_up
+		#  내리치기 — 치켜든 자리까지 뻗고(b_up) 내리쳐 눌러 둔 뒤(b_hold) 쉼으로. 손가락은
+		#  검지를 안 편다(옛 짚기 pw_n 은 앞 자세에서 걷기만 한다) — 편 손바닥은 _fing3 이
+		#  섞임(_prop_reach) 그대로 얹는다.
+		var q0: float = P.b_up
+		var q1: float = P.b_hold
 		var q2: float = P.b_end
 		if t < q0:
 			pw_k = _ease_io(t / q0)
@@ -23768,8 +23923,7 @@ func _prop_w(i: int) -> void:
 			pw_k = 1.0
 		else:
 			pw_k = 1.0 - _ease_io((t - q1) / (q2 - q1))
-		var n: float = smoothstep(0.02, q0 * 0.85, t) if t < q1 else 1.0 - smoothstep(q1, q2, t)
-		pw_n = lerpf(float(prop_snap_n[1]), n, sn)
+		pw_n = float(prop_snap_n[1]) * (1.0 - sn)
 		pw_g = float(prop_snap_g[1]) * (1.0 - sn)
 
 
@@ -23952,7 +24106,7 @@ func _arm_ik(s: Vector3, w: Vector3, l1: float, l2: float, pole: Vector3) -> Vec
 
 #  과녁 — 손목 축(pg_w · u, h, w) · 손각(pg_a) · 숙임(pg_p).
 #   판매: 동전이 서야 할 자리(_prop_coin_goal)를 검지 끝이 테 안에서 집도록(_prop_place).
-#   구매: 편 검지 끝 볼(PROP.b_tip)이 건반 알 윗면(+ 뜬 높이 · 누름)에 서도록.
+#   구매: 손바닥 한가운데 밑면(PROP.b_palm)이 건반 윗면(+ 치켜든 몫 · _prop_slam3)에 서도록.
 #  ── 손목은 곧게 ───────────────────────────────────────────
 #  「물건 팔때 손이 좀 꺽이네? 뭔가 이질적인데?」 — 손각 · 숙임을 표 값에 못 박고 손목만
 #  과녁에서 냈더니, 팔뚝은 어깨에서 비스듬히 오는데 손은 제 각을 지켜 손목에서 꺾였다
@@ -23975,9 +24129,9 @@ func _prop_goal(i: int, sc: float, s3: Vector3, l1: float, l2: float, pole: Vect
 		ad = deg_to_rad(prop_ga)
 		pd = deg_to_rad(float(P.s_pit))
 	else:
-		tgt = _prop_key3() + Vector3(0.0, _prop_dip(t), 0.0)
+		tgt = _prop_slam3(t)
 		ad = deg_to_rad(float(P.b_ang))
-		pd = deg_to_rad(float(P.b_pit))
+		pd = deg_to_rad(_prop_slam_pit(t))
 	var dm: float = deg_to_rad(float(P.dev_in))
 	var fm: float = deg_to_rad(float(P.flex_in))
 	var a: float = ad
@@ -23992,7 +24146,7 @@ func _prop_goal(i: int, sc: float, s3: Vector3, l1: float, l2: float, pole: Vect
 	pg_w = _prop_place(i, tgt, a, p, sc)
 
 
-#  손목 축 자리 — 과녁(판매: 동전 윗면 한가운데 · 구매: 검지 끝 볼이 닿을 자리)을 손각 a ·
+#  손목 축 자리 — 과녁(판매: 동전 윗면 한가운데 · 구매: 손바닥이 닿을 자리)을 손각 a ·
 #  숙임 p 의 손으로 짚을 때. 판매는 검지 끝(GIVE.ti — 3D 검지 사슬 _grip3_ik 이 서는 그 점)
 #  에서 동전 한가운데로 **눕힌 틀**(손각만)로 나간다 — 손이 숙어도 동전은 판판히 누워
 #  그려지므로 숙임까지 태우면 검지 끝이 테에서 위아래로 떴다. 집는 자리는 다가오는 손 쪽 테
@@ -24000,7 +24154,7 @@ func _prop_goal(i: int, sc: float, s3: Vector3, l1: float, l2: float, pole: Vect
 func _prop_place(i: int, tgt: Vector3, a: float, p: float, sc: float) -> Vector3:
 	var b := Basis(Vector3.UP, -a) * Basis(Vector3.BACK, -p)
 	if i == 1:
-		var tp: Vector3 = PROP.b_tip
+		var tp: Vector3 = PROP.b_palm
 		return tgt - b * (Vector3(tp.x, tp.y, -tp.z) * sc)
 	return tgt - _prop_coin_off(a) - b * (Vector3(GIVE.ti) * sc)
 
@@ -24052,25 +24206,359 @@ func _prop_pan3() -> Vector3:
 			float(TBL.flat), scale_tilt) + Vector3(0.0, float(PROP.coin_t), 0.0)
 
 
-#  누를 건반 알 윗면 (u, h, w).
-func _prop_key3() -> Vector3:
-	var kk: Vector2i = PROP.b_key
-	return Room3D.key_top(VIEW.x, float(TBL.fy), float(TBL.ny), float(CHUTE.back),
-			float(TBL.flat), kk.x, kk.y)
+#  내리치는 자리 — 손바닥이 닿는 건반 윗면 (u, h, w)(Room3D.slam_top).
+func _prop_slam_at() -> Vector3:
+	return Room3D.slam_top(VIEW.x, float(TBL.fy), float(TBL.ny), float(CHUTE.back),
+			float(TBL.flat))
 
 
-#  검지 끝 높이 덤 — 건반 위에 떴다가 내리꽂고(끝으로 갈수록 빠르다) 튕겨 오른다.
-func _prop_dip(t: float) -> float:
+#  치켜든 몫 0..(1 + 예비) — 0 이 닿음. 뻗는 동안(~b_up)은 치켜든 자리가 과녁이고(섞임이
+#  쉼에서 건너온다), 예비 동작에 조금 더 들었다가(b_cock) 제곱으로 가속해 내리친다(b_hit).
+#  닿은 뒤 한 번 튀어(b_bounce) 눌러 둔다(b_hold) — 그 뒤는 섞임이 쉼으로 데려간다.
+func _prop_raise(t: float) -> float:
 	var P: Dictionary = PROP
-	var hv: float = P.b_hover
-	var dn: float = -float(P.b_dip)
-	if t < float(P.b_reach) or t >= float(P.b_up):
-		return hv
-	if t < float(P.b_press):
-		var k: float = (t - float(P.b_reach)) / (float(P.b_press) - float(P.b_reach))
-		return lerpf(hv, dn, k * k)
-	var k2: float = (t - float(P.b_press)) / (float(P.b_up) - float(P.b_press))
-	return lerpf(dn, hv, 1.0 - (1.0 - k2) * (1.0 - k2))
+	var c: float = float(P.b_cockup) / float(P.b_lift)
+	if t < float(P.b_up):
+		return 1.0
+	if t < float(P.b_cock):
+		return 1.0 + c * smoothstep(float(P.b_up), float(P.b_cock), t)
+	if t < float(P.b_hit):
+		var k: float = (t - float(P.b_cock)) / (float(P.b_hit) - float(P.b_cock))
+		return (1.0 + c) * (1.0 - k * k)
+	if t < float(P.b_hold):
+		var kb: float = (t - float(P.b_hit)) / (float(P.b_hold) - float(P.b_hit))
+		return float(P.b_bounce) / float(P.b_lift) * sin(kb * PI) * (1.0 - kb)
+	return 0.0
+
+
+#  손바닥이 서야 할 자리 (u, h, w) — 건반 윗면에 치켜든 높이를 얹고, 치켜든 만큼 몸 쪽(−w)
+#  으로 당긴다(어깨 밑으로 손을 끌어올리는 팔이다).
+func _prop_slam3(t: float) -> Vector3:
+	var r: float = _prop_raise(t)
+	return _prop_slam_at() + Vector3(0.0, float(PROP.b_lift) * r,
+			-float(PROP.b_back) * minf(r, 1.0))
+
+
+#  손이 숙고 싶은 각(도) — 치켜든 동안 젖히고(손끝이 위) 내리치며 숙인다. 손목 한도
+#  안에서만 산다(_prop_goal 의 _wrist_clamp).
+func _prop_slam_pit(t: float) -> float:
+	var P: Dictionary = PROP
+	return lerpf(float(P.b_pit0), float(P.b_pit1),
+			smoothstep(float(P.b_cock), float(P.b_hit), t))
+
+
+#  손바닥이 건반에 닿는 그 틀(PROP 머리말 0.34) — 번쩍임 · 서랍 · 판 효과 · 흔들림 · 쿵.
+#  움직임 끔이면 이 몸짓이 애초에 안 서지만(_prop_stop), 개발자 줄 · 검사가 직접 부를
+#  때를 위해 흔들림 · 판 효과는 여기서도 막는다.
+func _prop_slam() -> void:
+	pay_flash = 1.0
+	_reg_open_now(true)
+	if motion_off:
+		return
+	shake = maxf(shake, float(BURST.shake))
+	_sfx("shop_smash", SFX_BASE * float(BURST.thud))
+	_burst_spawn()
+
+
+#  서랍을 연다 — slam 이면 내리쳐 튀어나오고(넘침 · 몸 눌림 · 건반 · 깃 넘침), 아니면
+#  부드럽게 열린다(끄덕 · 끊김). 이미 열려 있으면 처음부터 다시 — 연달아 사면 서랍이
+#  다시 튄다(값은 한 번씩 이미 치렀다).
+func _reg_open_now(slam: bool) -> void:
+	reg_t = 0.0
+	reg_slam = slam
+	_reg_curve(0.0)
+
+
+#  매 틀 — _prop_tick 이 부른다(상인과 같은 실시간 시계). 다 닫히면 쉰다.
+func _reg_tick(d: float) -> void:
+	if reg_t < 0.0:
+		reg_open = 0.0
+		reg_fx = Vector3.ZERO
+		return
+	reg_t += d
+	_reg_curve(reg_t)
+	if reg_t >= _reg_len():
+		reg_t = -1.0
+		reg_open = 0.0
+		reg_fx = Vector3.ZERO
+
+
+#  연 뒤 다 닫히기까지(초).
+func _reg_len() -> float:
+	var R: Dictionary = REG
+	return (float(R.pop) if reg_slam else float(R.soft)) + float(R.hold) + float(R.shut)
+
+
+#  서랍 · 값 깃 · 몸 눌림 · 건반을 연 뒤 t 초의 자세로 적는다(reg_open · reg_fx).
+func _reg_curve(t: float) -> void:
+	var R: Dictionary = REG
+	var t0: float = float(R.pop) if reg_slam else float(R.soft)
+	var t1: float = t0 + float(R.hold)
+	var t2: float = t1 + float(R.shut)
+	if motion_off:
+		#  한 번에 열리고 한 번에 닫힌다 — 머무는 시간만 산다.
+		var on: float = 1.0 if t < t1 else 0.0
+		reg_open = on
+		reg_fx = Vector3(on, 0.0, 0.0)
+		return
+	#  서랍 — 0.05 초에 넘친 끝까지 튀어나와(빠르게 감속) 1 로 돌아와 머물다 미끄러져 든다.
+	var top: float = float(R.over) if reg_slam else 1.0
+	if t < t0:
+		var k: float = t / t0
+		reg_open = top * (1.0 - (1.0 - k) * (1.0 - k))
+	elif t < t1:
+		reg_open = lerpf(top, 1.0, smoothstep(t0, t0 + float(R.settle), t))
+	elif t < t2:
+		reg_open = 1.0 - smoothstep(t1, t2, t)
+	else:
+		reg_open = 0.0
+	#  값 깃 — 서랍과 같이 솟아 머물다 내려앉는다. 내리쳤으면 한 번 넘친다.
+	var fh: float = float(R.flag_hold)
+	var fo: float = float(R.flag_over) if reg_slam else 1.0
+	var fl := 0.0
+	if t < t0:
+		fl = fo * smoothstep(0.0, t0, t)
+	elif t < fh:
+		fl = lerpf(fo, 1.0, smoothstep(t0, t0 + float(R.settle), t))
+	else:
+		fl = 1.0 - smoothstep(fh, fh + float(R.flag_down), t)
+	#  몸 — 닿는 틀에 눌렸다(1) 튀고(−⅓) 선다. 건반 — 눌렸다 반 박자 뒤 올라온다.
+	var jo := 0.0
+	var ky := 0.0
+	if reg_slam:
+		var jt: float = float(R.jolt)
+		if t < jt:
+			jo = cos(t / jt * PI * 1.5) * (1.0 - t / jt)
+		var kt: float = float(R.keys)
+		ky = 1.0 - smoothstep(kt * 0.4, kt, t)
+	reg_fx = Vector3(fl, jo, ky)
+
+
+#  그 자리의 바닥 높이 — 오른 카운터(옛 창구 삼각형) 위면 TOP_H, 벨벳이면 0.
+func _burst_floor(u: float, w: float) -> float:
+	var wd: float = (float(TBL.ny) - float(TBL.fy)) / float(TBL.flat)
+	var e: float = VIEW.x - float(CHUTE.back) * (1.0 - clampf(w / wd, 0.0, 1.0))
+	return Room3D.TOP_H if u >= e else 0.0
+
+
+#  판 효과를 낸다 — 열린 서랍 앞끝 둘레에서 BURST 의 가짓수만큼. 칸은 처음 한 번 짓고
+#  (합만큼) 그 뒤로는 제자리에서 다시 쓴다. 앞 판 효과가 남아 있으면 덮어쓴다.
+func _burst_spawn() -> void:
+	var B: Dictionary = BURST
+	var n: int = int(B.coin) + int(B.wood) + int(B.brass)
+	if bu_t.size() != n:
+		bu_p.resize(n)
+		bu_v.resize(n)
+		bu_t.resize(n)
+		bu_life.resize(n)
+		bu_a.resize(n)
+		bu_om.resize(n)
+		bu_k.resize(n)
+		bu_land.resize(n)
+	bu_seed += 1
+	bu_snd = 0
+	bu_snd_t = 0.0
+	var sa: Vector3 = _prop_slam_at()
+	bu_ray_at = _p2s(sa.x, sa.z, sa.y)
+	bu_ray_t = 0.0
+	var f3: Vector3 = Room3D.drawer_front(VIEW.x, float(TBL.fy), float(TBL.ny),
+			float(CHUTE.back), float(TBL.flat), 1.0)
+	var vu: Vector2 = B.vu
+	var vw: Vector2 = B.vw
+	var vh: Vector2 = B.vh
+	var sp: Vector2 = B.spin
+	var lf: Vector2 = B.life
+	for i in n:
+		var r0: float = _gl_rand(i * 7 + 1, bu_seed)
+		var r1: float = _gl_rand(i * 7 + 2, bu_seed)
+		var r2: float = _gl_rand(i * 7 + 3, bu_seed)
+		var r3: float = _gl_rand(i * 7 + 4, bu_seed)
+		var r4: float = _gl_rand(i * 7 + 5, bu_seed)
+		var kind: int = 0 if i < int(B.coin) else (1 if i < int(B.coin) + int(B.wood) else 2)
+		bu_k[i] = kind
+		bu_p[i] = Vector3(f3.x + lerpf(-float(B.spread), float(B.spread) * 0.3, r0),
+				f3.z - r1 * 6.0, f3.y + r2 * 4.0)
+		#  나뭇조각 · 부스러기는 조금 더 세게 · 높이 튄다(부서져 튕긴 것) — 동전은 쏟아진다.
+		var kick: float = 1.0 if kind == 0 else 1.15
+		bu_v[i] = Vector3(lerpf(vu.x, vu.y, r1), lerpf(vw.x, vw.y, r3),
+				lerpf(vh.x, vh.y, r4) * kick)
+		bu_t[i] = 0.0
+		bu_life[i] = lerpf(lf.x, lf.y, r2)
+		bu_a[i] = r0 * TAU
+		bu_om[i] = lerpf(sp.x, sp.y, r3) * (1.0 if r4 < 0.5 else -1.0)
+		bu_land[i] = 0
+	bu_n = n
+
+
+#  매 틀 — _prop_tick 이 부른다. 상점을 떠나거나 판 갈이가 들면 통째로 걷는다(화면이
+#  바뀐 뒤 테이블 좌표의 알갱이가 남으면 다른 화면 위에 얹힌다).
+func _burst_tick(d: float) -> void:
+	if bu_ray_t >= 0.0:
+		bu_ray_t += d
+		if bu_ray_t >= float(BURST.ray_t):
+			bu_ray_t = -1.0
+	if bu_n <= 0:
+		return
+	bu_snd_t = maxf(bu_snd_t - d, 0.0)
+	if state != S.SHOP or swap_live or motion_off:
+		_burst_clear()
+		return
+	var B: Dictionary = BURST
+	var g: float = B.g
+	var e: float = B.e
+	var fr: float = B.fric
+	var wd: float = (float(TBL.ny) - float(TBL.fy)) / float(TBL.flat)
+	var alive := 0
+	for i in bu_t.size():
+		var t: float = bu_t[i]
+		if t < 0.0:
+			continue
+		t += d
+		if t >= bu_life[i]:
+			bu_t[i] = -1.0
+			continue
+		bu_t[i] = t
+		alive += 1
+		var p: Vector3 = bu_p[i]
+		var v: Vector3 = bu_v[i]
+		v.z -= g * d
+		p += v * d
+		#  앞 · 뒤 벽 — 먼 턱 앞끝 · 가까운 팔걸이 안. 넘으면 튕겨 돌아온다.
+		if p.y < 2.0:
+			p.y = 2.0
+			v.y = absf(v.y) * e
+		elif p.y > wd - 4.0:
+			p.y = wd - 4.0
+			v.y = -absf(v.y) * e
+		var fl: float = _burst_floor(p.x, p.y)
+		if p.z <= fl:
+			p.z = fl
+			if v.z < -40.0 and bu_land[i] < 2:
+				v.z = -v.z * e
+				v.x *= 0.72
+				v.y *= 0.72
+				bu_land[i] = bu_land[i] + 1
+				if bu_land[i] == 1 and bu_k[i] == 0:
+					_burst_tok()
+			else:
+				v.z = 0.0
+				bu_land[i] = 2
+				var hs: float = Vector2(v.x, v.y).length()
+				if hs > 0.0001:
+					var kk: float = maxf(hs - fr * d, 0.0) / hs
+					v.x *= kk
+					v.y *= kk
+				bu_om[i] = signf(bu_om[i]) * maxf(absf(bu_om[i]) - 40.0 * d, 0.0)
+		bu_a[i] = bu_a[i] + bu_om[i] * d
+		bu_p[i] = p
+		bu_v[i] = v
+	bu_n = alive
+
+
+#  동전이 처음 바닥에 닿는 톡 — 판 효과마다 BURST.snd 개까지, 사이를 두고.
+func _burst_tok() -> void:
+	if bu_snd >= int(BURST.snd) or bu_snd_t > 0.0:
+		return
+	var ps: Array = BURST.pitch
+	_sfx("coin_land", SFX_BASE * float(ps[bu_snd % ps.size()]))
+	bu_snd += 1
+	bu_snd_t = float(BURST.snd_gap)
+
+
+func _burst_clear() -> void:
+	for i in bu_t.size():
+		bu_t[i] = -1.0
+	bu_n = 0
+	bu_ray_t = -1.0
+
+
+#  판 효과를 그린다 — _smash_draw 다음(테이블 · 손 위, HUD 밑). 사각 · 선만 쓴다.
+#  동전: 금빛 원판이 제 축으로 돌아 폭이 1~6px 로 숨쉬고, 바닥에 누우면 6 × 3 타원이다.
+#  나뭇조각: 2px 굵기 6px 막대가 돈다(속은 밝은 생나무, 겉은 니스 밤나무).
+#  놋쇠 부스러기: 2px 네모에 빛 한 점. 마지막 BURST.sink 초에 바닥색으로 가라앉는다.
+const BURST_COL := {
+	"coin": Color("f2c94c"), "coin_dk": Color("a8741f"), "coin_hi": Color("fff0b0"),
+	"coin_ol": Color("3a1f0c"), "ray": Color("fff4d6"),
+	"wood": Color("c38d55"), "wood_dk": Color("6a4630"),
+	"brass": Color("c89a4a"), "brass_hi": Color("ffe39a"),
+	"floor": Color("2a1712"),
+}
+
+
+func _burst_draw() -> void:
+	if bu_ray_t >= 0.0:
+		_burst_rays()
+	if bu_n <= 0:
+		return
+	var C: Dictionary = BURST_COL
+	var sk: float = BURST.sink
+	var top: float = float(TBL.fy) - 60.0
+	for i in bu_t.size():
+		var t: float = bu_t[i]
+		if t < 0.0:
+			continue
+		var p: Vector3 = bu_p[i]
+		var s: Vector2 = _p2s(p.x, p.y, p.z)
+		if s.y < top or s.y > VIEW.y or s.x < -6.0 or s.x > VIEW.x + 6.0:
+			continue
+		var x: float = roundf(s.x)
+		var y: float = roundf(s.y)
+		var sink: float = clampf(1.0 - (bu_life[i] - t) / sk, 0.0, 1.0) * 0.85
+		var fc: Color = C.floor
+		match int(bu_k[i]):
+			0:
+				var c0: Color = (C.coin as Color).lerp(fc, sink)
+				var cd: Color = (C.coin_dk as Color).lerp(fc, sink)
+				var ol: Color = (C.coin_ol as Color).lerp(fc, sink)
+				if bu_land[i] >= 2:
+					#  누운 동전 — 윗줄 4 · 가운데 6 · 밑줄(두께) 4, 둘레 1px 짙은 테
+					draw_rect(Rect2(x - 4.0, y - 1.0, 8.0, 3.0), ol)
+					draw_rect(Rect2(x - 3.0, y - 2.0, 6.0, 5.0), ol)
+					draw_rect(Rect2(x - 2.0, y - 1.0, 4.0, 1.0), c0)
+					draw_rect(Rect2(x - 3.0, y, 6.0, 1.0), c0)
+					draw_rect(Rect2(x - 2.0, y + 1.0, 4.0, 1.0), cd)
+				else:
+					#  도는 동전 — 폭이 |cos| 로 숨쉰다(1~6px, 키 6px). 모로 선 틀(폭 1)은 짙은
+					#  테다. 둘레 1px 짙은 테가 서랍 속 동전 · 번쩍인 놋쇠 위에서도 낱낱을 가른다.
+					var wx: float = 1.0 + roundf(5.0 * absf(cos(bu_a[i])))
+					var x0: float = x - floorf(wx * 0.5)
+					draw_rect(Rect2(x0 - 1.0, y - 3.0, wx + 2.0, 7.0), ol)
+					if wx <= 1.0:
+						draw_rect(Rect2(x0, y - 2.0, 1.0, 5.0), cd)
+					else:
+						draw_rect(Rect2(x0, y - 1.0, wx, 3.0), c0)
+						draw_rect(Rect2(x0 + 1.0, y - 2.0, wx - 2.0, 1.0), c0)
+						draw_rect(Rect2(x0 + 1.0, y + 2.0, wx - 2.0, 1.0), cd)
+						if sink < 0.3:
+							draw_rect(Rect2(x0 + 1.0, y - 1.0, 1.0, 1.0), C.coin_hi)
+			1:
+				var dv := Vector2(cos(bu_a[i]), sin(bu_a[i]) * 0.7) * 3.2
+				draw_line(Vector2(x, y) - dv, Vector2(x, y) + dv,
+						(C.wood_dk as Color).lerp(fc, sink), 2.0)
+				draw_line(Vector2(x, y) - dv * 0.6, Vector2(x, y) + dv * 0.6,
+						(C.wood as Color).lerp(fc, sink), 1.0)
+			_:
+				draw_rect(Rect2(x - 1.0, y - 1.0, 2.0, 2.0), (C.brass as Color).lerp(fc, sink))
+				if sink < 0.3 and bu_land[i] < 2:
+					draw_rect(Rect2(x - 1.0, y - 1.0, 1.0, 1.0), C.brass_hi)
+
+
+#  닿은 자리의 빛살(BURST 머리말 rays) — 손바닥 둘레 빛줄이 밖으로 퍼지며 짧아지고 옅어진다.
+#  각은 판 효과 씨로 조금 흔든다(고른 바퀴살이면 시계 · 도장으로 읽힌다).
+func _burst_rays() -> void:
+	var B: Dictionary = BURST
+	var k: float = clampf(bu_ray_t / float(B.ray_t), 0.0, 1.0)
+	var e: float = 1.0 - (1.0 - k) * (1.0 - k)
+	var r0: float = lerpf(float(B.ray_r0), float(B.ray_r1), e)
+	var ln: float = lerpf(float(B.ray_l0), float(B.ray_l1), e)
+	var c: Color = BURST_COL.ray
+	c.a = 1.0 - k * k
+	var n: int = int(B.rays)
+	for i in n:
+		#  위쪽 반원에 몰아 둔다 — 밑은 손바닥 · 건반이 덮고, 위로 튀는 것이 「쾅」이다.
+		var a: float = PI * (1.05 + 0.9 * float(i) / float(n - 1)) 				+ (_gl_rand(i + 91, bu_seed) - 0.5) * 0.25
+		var dv := Vector2(cos(a), sin(a))
+		draw_line(bu_ray_at + dv * r0, bu_ray_at + dv * (r0 + ln), c, 2.0)
 
 
 #  나는 동전 — 화면 자리 · 반지름 · 눌림 · 말림을 pf_* 에 적는다. 떠난 자리에서 접시까지
@@ -29924,6 +30412,7 @@ func _chute_edge(y: float) -> float:
 #  진열대(3D 테이블)에서는 소품 몸(저울 · 금전등록기)도 창구다 — 먼 턱 위로
 #  솟은 접시 · 볏에 대고 떼도 판다 · 산다. 삼각형은 그대로 산다(쓸기의 턱 ·
 #  도크가 그 빗변이다). 그림이 없는 헤드리스에서도 같은 판정이라 자가 잰다.
+#  시안 C 에서 소품 사각이 화면 끝에 걸친 큰 판이 됐다(_prop_rect — 화면으로 자른다).
 func _chute_at(m: Vector2, pad: float) -> int:
 	if room3d_on:
 		for z in 2:
@@ -29939,10 +30428,12 @@ func _chute_at(m: Vector2, pad: float) -> int:
 	return -1
 
 
-#  소품 하나의 화면 사각 — 0 저울(판매) · 1 금전등록기(구매).
+#  소품 하나의 화면 사각 — 0 저울(판매) · 1 금전등록기(구매). 화면으로 자른다 —
+#  시안 C 에서 소품이 화면 끝에 걸쳐(저울 바깥 접시 · 등록기 옆구리) 윤곽 사각이 화면
+#  밖으로 나간다. 잘린 몫은 누를 수 없으니 판정에서도 뺀다(shop_probe 「진열대 소품 창구」).
 func _prop_rect(z: int) -> Rect2:
 	return Room3D.prop_rect(z, VIEW.x, float(TBL.fy), float(TBL.ny), float(CHUTE.back),
-			float(TBL.flat), float(TBL.tall))
+			float(TBL.flat), float(TBL.tall)).intersection(Rect2(Vector2.ZERO, VIEW))
 
 
 # 도킹 목표 u. 물건 중심을 빗변 위에 얹어 반쯤 걸치게 한다 — "건네는 중" 이다.
@@ -30595,9 +31086,10 @@ func _pay_click() -> void:
 
 # 두 경로가 만나는 한 점. _buy 는 한 글자도 안 고친다 —
 # stock[i].sold 를 _drop_extras 가 폴링해 _drop_leave 를 띄운다.
-#  진열대가 서 있으면 상인이 등록기 건반을 친다(_prop_buy — 판 소품 몸짓). 서랍 번쩍임
-#  (pay_flash)은 검지가 건반을 누르는 순간으로 미룬다 — 그림일 뿐이라 값과 안 얽힌다.
-#  못 서면 옛 끄덕 · 바로 번쩍임이다. 값(_buy)은 아래 그대로 · 이 순간 확정된다.
+#  진열대가 서 있으면 상인이 등록기를 내리친다(_prop_buy — 판 소품 몸짓). 번쩍임 · 서랍 ·
+#  판 효과는 손바닥이 건반에 닿는 순간으로 미룬다(_prop_slam) — 그림일 뿐이라 값과 안
+#  얽힌다. 못 서면 옛 끄덕 · 바로 번쩍임 · 서랍만 조용히 연다(_reg_open_now(false) — 동전 ·
+#  흔들림 없이). 값(_buy)은 아래 그대로 · 이 순간 확정된다(사는 소리 buy 도 여기서 난다).
 func _pay_take(i: int) -> void:
 	var acted := _prop_buy()
 	if not acted:
@@ -30606,6 +31098,7 @@ func _pay_take(i: int) -> void:
 	_buy(i)
 	if not acted:
 		pay_flash = 1.0
+		_reg_open_now(false)
 	pay_msg = ""
 	pay_msg_t = 0.0
 	pop(_bank_rect().get_center() + Vector2(0.0, 30.0), "-%d" % cost, C_GOLD, 12, 0.7)
@@ -42740,14 +43233,15 @@ func _mark_rect(k: String) -> Rect2:
 		#  자금판을 아예 안 그리므로(「정산 화면은 그 자체가 명세다」) 그때 밝히면
 		#  빈 자리를 가리킨다. 상단 바는 상점(_bar_hidden)에서만 숨는다.
 		"score": return Rect2(144.0, 2.0, 436.0, 14.0)
-		#  진열대에서는 소품과 그 밑 이름 · 값까지(카운터 y ~198)를 감싼다.
+		#  진열대에서는 소품(화면으로 자른 사각)과 그 밑 이름 · 값(_chute_txt_rect)을 감싼다 —
+		#  시안 C 의 큰 소품은 벽 띠까지 솟아 구멍이 화면 끝에 붙은 세로 판이 된다.
 		"chute_buy":
 			if room3d_on:
-				return _prop_rect(Z_BUY).merge(Rect2(VIEW.x - 86.0, TBL.fy, 86.0, 72.0))
+				return _prop_rect(Z_BUY).merge(_chute_txt_rect(Z_BUY))
 			return Rect2(VIEW.x - 86.0, TBL.fy, 86.0, TBL.ny - TBL.fy)
 		"chute_sell":
 			if room3d_on:
-				return _prop_rect(Z_SELL).merge(Rect2(0.0, TBL.fy, 86.0, 72.0))
+				return _prop_rect(Z_SELL).merge(_chute_txt_rect(Z_SELL))
 			return Rect2(0.0, TBL.fy, 86.0, TBL.ny - TBL.fy)
 		"goods": return Rect2(96.0, TBL.fy + 6.0, VIEW.x - 192.0,
 				TBL.ny - TBL.fy - 6.0)

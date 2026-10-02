@@ -1,10 +1,10 @@
 extends SceneTree
-#  판 소품 몸짓 촬영 (2026-10-02) — 팔면 상인이 판 동전을 저울 왼 접시에서 집어 가고,
-#  사면 등록기 건반을 쳐 서랍이 튀어나온다(game.gd PROP 머리말). shots/ 에:
+#  판 소품 몸짓 촬영 (2026-10-02) — 팔면 상인이 판 동전을 저울 안 접시에서 집어 가고,
+#  사면 등록기를 내리쳐 서랍이 튀어나온다(game.gd PROP 머리말 · 시안 C). shots/ 에:
 #    prop_sell_strip.png  판매 여덟 박자 — 화면 왼쪽 반(x 0~330 · y 40~220) 3배
-#    prop_buy_strip.png   구매 여섯 박자 — 오른쪽 반(x 310~640 · y 40~220) 3배
+#    prop_buy_strip.png   구매(내리치기) 여섯 박자 — 오른쪽 반(x 310~640 · y 40~220) 3배
 #    prop_sell_x4.png     접시에서 테를 집은 손 4배
-#    prop_buy_x4.png      건반을 누르는 검지 4배
+#    prop_buy_x4.png      건반을 내리친 손바닥 4배
 #    prop_sell_full.png · prop_buy_full.png  그 박자의 온 화면(2배 그대로)
 #  창이 있어야 돈다:
 #    godot --path . --script scripts/tools/shot_prop.gd
@@ -18,7 +18,7 @@ const GameData = preload("res://scripts/data.gd")
 const L_RECT := Rect2(0.0, 40.0, 330.0, 180.0)
 const R_RECT := Rect2(310.0, 40.0, 330.0, 180.0)
 const SELL_T := [0.12, 0.20, 0.32, 0.46, 0.58, 0.74, 0.94, 1.08]
-const BUY_T := [0.10, 0.22, 0.29, 0.33, 0.42, 0.62]
+const BUY_T := [0.12, 0.24, 0.31, 0.35, 0.42, 0.62]
 var g = null
 var busy := false
 
@@ -202,10 +202,10 @@ func _run() -> void:
 		await _step_to(1, float(tt))
 		var im2: Image = root.get_texture().get_image()
 		cells.append(_crop(im2, R_RECT, 3))
-		print("  구매 " + _note(1) + " · 서랍 %.2f" % g.pay_flash)
-		if absf(float(tt) - 0.33) < 0.001:
+		print("  구매 " + _note(1) + " · 서랍 %.2f" % g.reg_open)
+		if absf(float(tt) - 0.35) < 0.001:
 			full = im2
-			var k3: Vector3 = g._prop_key3()
+			var k3: Vector3 = g._prop_slam_at()
 			var ks: Vector2 = g._p2s(k3.x, k3.z, k3.y)
 			x4 = _crop(im2, Rect2(clampf(ks.x - 70.0, 0.0, 530.0), ks.y - 56.0, 110.0, 80.0), 4)
 	_sheet(cells, 3).save_png("res://shots/prop_buy_strip.png")

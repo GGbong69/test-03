@@ -96,15 +96,36 @@ func _t_latch(g: Node) -> int:
 	return _say(bad == 0, "창구 래치", "어긋난 점 %d개" % bad)
 
 
-# ②-b 진열대 — 소품 몸(턱 위로 솟은 데까지)도 창구다. 소품은 화면 끝에서
-#  10px 넘게 떨어지고, 물건 자리(u 116~524) · 그 밑 이름 잉크를 안 덮고,
-#  화판(_room3d_rect) 안에 들며, 그 위에서는 상인에게 건네지 않는다.
+# ②-b 진열대 — 소품 몸(턱 위로 솟은 데까지)도 창구다.
+#  ── 시안 C (2026-10-02 · 「C 로 바로」) ──
+#  「저울이랑 수금기? 다 크기 키우고 배치도 진짜 게임 답게」 — 사용자가 고른 시안 C 는
+#  소품이 **화면 끝에 걸쳐 틀에 잘리는** 큰 앞소품이다. 옛 규칙 「화면 끝에서 10px 넘게
+#  떨어진다」는 그 고른 그림을 일부러 깬다 — 그래서 이 자는 그 줄을 걷고 이렇게 잰다:
+#    · 판정 사각(_prop_rect)은 화면으로 자른 뒤 화면 안이다(잘린 몫은 누를 수 없다)
+#      — 그리고 정말로 화면 끝에 닿는다(저울 왼끝 0 · 등록기 오른끝 640). 그것이 C 다.
+#    · 물건 자리(u 116~524)를 안 덮는다.
+#    · 단추(리롤 · 다음 판)를 안 덮는다 — 둘 다 온전히 보이고 눌려야 한다.
+#    · HUD 를 안 덮는다 — 자금판 · 사탕·사진 칸과 그 이름 줄 · 동전 슬롯 · 동전/다트
+#      꼬리표 · 정보/설정 단추(상점 자리 — 위 띠가 숨어 HUD 가 16px 올라와 있다).
+#    · 글을 안 덮는다 — 판매 · 구매 이름과 값(_chute_txt_rect)은 소품 사각 밑이다.
+#    · 사각 윗끝 · 가운데가 그 소품 창구로 잡히고, 그 위에서는 상인에게 건네지 않는다.
+#    · 3D 화판(_room3d_rect) 안에 든다(화판 밖이면 소품 윗동이 잘린다).
 func _t_props(g: Node) -> int:
 	if not g.room3d_on:
 		return _say(true, "진열대 소품 창구", "3D 테이블 꺼짐 — 건너뜀")
 	var bad := 0
 	var why := ""
-	var name_top: float = g.TBL.fy + float(g.CHUTE_TXT.ly3) - 16.5
+	g.state = g.S.SHOP
+	var scr := Rect2(Vector2.ZERO, g.VIEW)
+	#  사탕·사진 칸 + 그 밑 이름 줄(바닥선 = 칸 밑변 + 11 · 잉크 x 80~159 — _cons_draw).
+	var cb := Rect2(g.LAY.cons.position + Vector2(0.0, g._hud_dy()), g.LAY.cons.size)
+	var hud := {"자금판": g._bank_rect(),
+			"사탕·사진": Rect2(cb.position.x - 6.0, cb.position.y, cb.size.x + 14.0, cb.size.y + 13.0),
+			"동전 슬롯": g._panel_rect(),
+			"동전 꼬리표": Rect2(g.LAY.cap.position + Vector2(0.0, g._hud_dy()), g.LAY.cap.size),
+			"다트 꼬리표": Rect2(g.LAY.darts.position + Vector2(0.0, g._hud_dy()), g.LAY.darts.size),
+			"정보": g._hud_btn_rect(0), "설정": g._hud_btn_rect(1)}
+	var btn := {"리롤": g._reroll_rect(), "다음 판": g._next_rect()}
 	for z in 2:
 		var pr: Rect2 = g._prop_rect(z)
 		var top := Vector2(pr.get_center().x, pr.position.y + 3.0)
@@ -114,22 +135,40 @@ func _t_props(g: Node) -> int:
 		if g._chute_at(pr.get_center(), 0.0) != z:
 			bad += 1
 			why += " %d:가운데" % z
-		if pr.position.x < 10.0 or pr.end.x > g.VIEW.x - 10.0:
+		if not scr.encloses(pr):
 			bad += 1
-			why += " %d:화면끝 x[%.0f,%.0f]" % [z, pr.position.x, pr.end.x]
+			why += " %d:화면 밖 %s" % [z, str(pr)]
+		if (z == g.Z_SELL and pr.position.x > 0.5) or (z == g.Z_BUY and pr.end.x < g.VIEW.x - 0.5):
+			bad += 1
+			why += " %d:화면 끝에 안 걸림 x[%.0f,%.0f]" % [z, pr.position.x, pr.end.x]
 		if (z == g.Z_SELL and pr.end.x > 116.0) or (z == g.Z_BUY and pr.position.x < 524.0):
 			bad += 1
 			why += " %d:물건 자리" % z
-		if pr.end.y > name_top:
+		for k in btn:
+			if pr.intersects(btn[k]):
+				bad += 1
+				why += " %d:%s 단추" % [z, k]
+		for k in hud:
+			if pr.intersects(hud[k]):
+				bad += 1
+				why += " %d:HUD %s %s" % [z, k, str(hud[k])]
+		var tr: Rect2 = g._chute_txt_rect(z)
+		if pr.intersects(tr) or pr.end.y > g.TBL.fy + float(g.CHUTE_TXT.ly3) - 16.5:
 			bad += 1
-			why += " %d:이름 y %.1f>%.1f" % [z, pr.end.y, name_top]
+			why += " %d:이름 y %.1f" % [z, pr.end.y]
 		if pr.position.y < g._room3d_rect().position.y:
 			bad += 1
 			why += " %d:화판 위 y %.1f" % [z, pr.position.y]
-		g.state = g.S.SHOP
 		if g._give_at(top):
 			bad += 1
 			why += " %d:건넴" % z
+	#  두 이름 · 값 자리도 서로 · 단추 · HUD 를 안 덮는다(소품 밑 카운터).
+	for z in 2:
+		var tr2: Rect2 = g._chute_txt_rect(z)
+		for k in btn:
+			if tr2.intersects(btn[k]):
+				bad += 1
+				why += " %d:글이 %s 단추" % [z, k]
 	return _say(bad == 0, "진열대 소품 창구", why if why != "" else "저울 %s · 등록기 %s" % [
 			str(g._prop_rect(0)), str(g._prop_rect(1))])
 

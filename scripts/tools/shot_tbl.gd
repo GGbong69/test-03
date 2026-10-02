@@ -77,9 +77,13 @@ func _run() -> void:
 		g.hand_zone = 0
 		g.pay_flash = 0.0)
 	var a: Image = root.get_texture().get_image()
+	#  서랍은 이제 번쩍임(pay_flash)이 아니라 서랍 곡선(reg_t · _reg_curve)을 탄다 — 연 뒤
+	#  0.2 초(다 열려 머무는 틀)에 묶어 둔다(시안 C · 2026-10-02).
 	await _hold(6, func():
 		g.hand_zone = 1
-		g.pay_flash = 0.9)
+		g.pay_flash = 0.9
+		g.reg_slam = false
+		g.reg_t = 0.2)
 	var b: Image = root.get_texture().get_image()
 	var mix := a.duplicate()
 	var w: int = a.get_width() / 2
@@ -97,6 +101,7 @@ func _run() -> void:
 	im.save_png("res://shots/tbl_close_lit.png")
 	g.hand_zone = -1
 	g.pay_flash = 0.0
+	g.reg_t = -1.0
 	g.leg_no = 2
 	g._open_leg()
 	await _wait(120)
