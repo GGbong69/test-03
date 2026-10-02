@@ -19529,6 +19529,8 @@ func _cover_draw() -> void:
 	_hand3_draw()
 	#  상인이 든 물건은 손 **다음**이다.
 	_give_draw()
+	#  받쳐 든 손의 엄지 · 손끝은 물건 **다음**이다 — 물건 테두리를 쥔다.
+	_hand3_front_draw()
 	# 가까운 쪽 레일 — 리롤·다음 버튼이 그 아래 앞치마에 얹힌다
 	if t3:
 		_room3d_tband(float(TBL.ny) - 6.0, VIEW.y)
@@ -20073,9 +20075,17 @@ const HAND3 := {
 	#  모양만 모날 뿐 **움직임은 진짜 3D 다.** 손이 돌면 세 면(윗면·옆면·
 	#  앞면)의 넓이가 원근대로 바뀐다 — 2D 다각형을 돌리던 때는 그 일이
 	#  안 일어났다. 제보가 짚은 것이 바로 그것이다.
+	#
+	#  ⚠ **2026-10-02 손가락을 다시 세웠다(FING3).** 3D 테이블이 들어오자 회색
+	#  벽돌 손이 진열대 옆에 오려 붙인 것이 됐다. 이번엔 손을 **안 키운다** —
+	#  9월 15일의 사슬은 「손가락을 틈으로 가른다」에서 시작했는데, 틈 대신
+	#  **면**으로 가른다. 손가락마다 모서리를 깎은 팔각 기둥이라, 빛을 등진
+	#  빗면 한 줄이 손가락 사이 골이 된다(틈 0 · 픽셀 1). 손 전체 크기는
+	#  옛 상자(25 × 26)와 같다. 아래 palm_l · palm_t 는 이제 손 크기가 아니라
+	#  2D 가 쓰는 자리 값(_palm_of 의 물건 높이)이다 — 만지면 물건이 손에서 뜬다.
 	"gain": 1.0,
 	"palm_l": 25.0,      # 손 길이(손목→끝). 17 은 손이 아니라 혹으로 보였다
-	"palm_w": 26.0,      # 손 폭. 소매(30)보다 조금 좁아 손목이 한 단 진다
+	"palm_w": 26.0,      # 손 폭. 소매(30)보다 조금 좁아 손목이 한 단 진다 — 옛 상자 손의 값(이제 FING3.pw0 · pw1)
 	"palm_t": 14.0,      # 두께. 소매(16)보다 얇아 손목이 한 단 진다
 	#  팔뚝도 3D 다. 손만 3D 면 이음새에서 재질이 갈린다 —
 	#  2D 팔의 납작한 윗면과 3D 손의 모난 면이 한 자리에서 만난다.
@@ -20093,7 +20103,7 @@ const HAND3 := {
 	#  좁히려면 상자를 둘로 쪼개야 하는데, 그 이음매가 30px 에서 금 하나로
 	#  남을 뿐이라 얻는 것이 없다.
 	"arm_t": 16.0,       # 팔뚝 두께
-	"arm_w0": 30.0,      # 팔뚝 폭 (전체. 반지름이 아니다)
+	"arm_w0": 30.0,      # 팔뚝 폭 (전체. 반지름이 아니다) — 옛 상자 팔의 값(이제 FORE3 가 소매 · 맨살로 가른다)
 	#  ── 팔꿈치를 살짝 든다 ────────────────────────
 	#  팔이 통째로 판에 누워 있었다 — 팔꿈치도 손목도 h 가 같은 상자다.
 	#  11 들어 팔을 눕혀 둔다. 손이 판에 닿고 팔꿈치가 그보다 높은 것이
@@ -20123,6 +20133,108 @@ const HAND3 := {
 	#  **쓸 때는 안 늘린다** — 그때는 위팔이 어깨까지 그려지므로 늘리면
 	#  어깨 밖으로 삐져나온다.
 	"back": 46.0,        # 팔꿈치 너머로 더 그리는 길이
+}
+
+# ══════════════════════════════════════════════════════════
+#  손가락 — 3D (2026-10-02 · 시안 B: 맨손 · 걷어 올린 셔츠 소매)
+# ──────────────────────────────────────────────────────────
+#  손 좌표: 손목이 원점, +x 가 손끝, +y 가 손등, z 는 손 폭이다.
+#  z 는 **오른손(화면 왼손) 기준**으로 적는다 — 엄지 쪽이 −z 다. 화면 오른손
+#  (상인의 왼손)은 z 를 통째로 뒤집는다(_hand3_build 의 sg). _npc_limb 의
+#  거울 규칙과 같은 것이다: 마주 본 사람의 두 손은 거울상이고, 엄지는 둘 다
+#  몸 안쪽을 본다.
+#
+#  ── 30px 에서 손가락이 서는 세 가지 ──────────────────────
+#   ① 골은 틈이 아니라 **빗면**이다. 손가락 넷은 맞붙어 있고(틈 0.3), 모서리를
+#      깎은 팔각 기둥이라 왼쪽 위 빛을 등진 오른 빗면이 한 픽셀 어둡다.
+#      면마다 법선이 하나라 음영이 계단으로 떨어진다 — 매끈한 음영은 이
+#      크기에서 손가락 넷을 한 덩어리 얼룩으로 뭉갠다.
+#   ② **엄지가 실루엣 밖으로 나온다.** 옛 PALM 다각형이 노치 하나로 덩어리를
+#      손으로 만들던 그 자리다. 손목 가까이에서 몸 안쪽으로 뻗는다.
+#   ③ **굽힘이 실루엣에 나온다.** 손끝이 판으로 내려앉고(쉼), 두드릴 때 하나씩
+#      들리고, 주먹에서 접혀 사라진다. 손끝마다 손톱이 반 단 밝아 손가락 수를
+#      센다 — 손끝이 판에 닿는 자리에 그림자가 붙어 「놓였다」가 된다.
+#  너클 능선은 한 단 밝은 살 넷이다 — 옛 _npc_ink 의 knuck 이 하던 일.
+const FING3 := {
+	#  손바닥 덩어리. 손목(x 0)에서 너클(x palm)까지. 손바닥이 판에 닿게 한가운데를
+	#  뿌리(손 두께의 반 = palm_t/2)보다 py 만큼 내린다 — 밑면이 h_wr+1 언저리다.
+	"palm": 14.0,
+	"pw0": 21.0, "pw1": 24.0,    # 손목 · 너클 폭. 옛 상자 26 보다 좁다 — 엄지가 밖으로 나오므로
+	"pt0": 9.4, "pt1": 8.0,      # 두께. 옛 상자 14 는 벽돌이었다 — 사람 손은 폭의 3분의 1 이다
+	"py": -1.6,
+	#  손가락 넷 — 검지(엄지 쪽)부터 새끼까지.
+	"fz": [-8.5, -2.85, 2.85, 8.2],
+	"fx": [13.0, 13.6, 13.0, 12.0],   # 너클(첫 관절) 자리
+	"fw": [5.6, 5.8, 5.4, 4.6],       # 폭 — 넷 합이 너클 폭과 같다(틈 0.3)
+	"ft": [4.8, 5.0, 4.6, 4.0],       # 두께
+	"l1": [6.2, 6.8, 6.4, 5.0],       # 첫 마디
+	"l2": [5.6, 6.2, 5.8, 4.6],       # 끝 마디(가운뎃 · 끝 마디를 하나로)
+	#  부채꼴 — 손가락을 펼 때 각 손가락이 도는 비. 가운데 둘은 조금만 간다.
+	"fan": [1.0, 0.32, -0.32, -1.0],
+	#  엄지. 손목 가까이 손바닥 옆구리에서 몸 안쪽 앞으로 나온다.
+	"tx": 4.6, "ty": -1.8, "tz": 9.6,
+	"tl1": 7.6, "tl2": 6.0, "tw": 6.0, "tt": 5.2,
+	"t_yaw": 44.0,       # 펼친 엄지가 손끝 방향에서 벌어지는 각
+	"t_twist": 42.0,     # 엄지 손톱이 옆을 보게 제 축으로 굴린 각
+	#  ── 살 — 픽셀아트 사다리 ─────────────────────────
+	#  분홍 플라스틱도 회색도 아니다. 램프(ffcf8a)가 파랑을 반쯤 먹으므로
+	#  **바탕은 식은 장밋빛**이다 — 살빛 바탕(c98c6c)을 그대로 넣었더니 램프
+	#  밑에서 호박색(e4944c)으로 탔다(2026-10-02 실측). 장밋빛 바탕이 램프 밑에서
+	#  복숭앗빛 살(dda06e 언저리)로 떨어지고, 그늘 면은 따뜻한 어둠을 받아 밤색이
+	#  된다. 손바닥 · 너클은 한 단 밝고, 손톱은 살과 반 단만 갈린다 — 더 밝으면
+	#  손끝마다 흰 점이 찍혀 손톱이 아니라 발톱으로 읽힌다.
+	"skin": Color("c4999f"),
+	"palm_c": Color("d8b0b0"),
+	"knuck": Color("d6aaae"),
+	"nail": Color("dcb8b8"),
+	"ring": Color("f2c14e"),     # 금반지 — 화면 오른손 약지 하나
+	"rest_roll": 0.75,   # 쉬는 화면 오른손이 새끼 쪽 모서리로 기우는 굴림(43°)
+	"sh_a": 0.34,        # 접지 그림자 진하기 — 물건 그림자(DROP.sh_a)와 같은 값. 판때기가 아니라 판이 어두워진다
+}
+
+#  손가락 자세. 각은 도(°). c1 첫 관절 굽힘 넷 · c2 끝 관절 굽힘 넷 ·
+#  spread 부채 · tf 엄지 접기(0 벌림 · 1 손바닥 밑) · tc 엄지 굽힘 · td 엄지 내림.
+#  배열 차례: [c1×4, c2×4, spread, tf, tc, td]. 쉼에서 출발해 몸짓이 섞는다.
+const FPOSE := {
+	#  쉼 — 손가락이 판으로 늘어져 손끝이 닿는다. 새끼로 갈수록 더 굽는다.
+	"rest": [7.0, 8.0, 10.0, 13.0, 22.0, 25.0, 28.0, 32.0, 3.0, 0.15, 14.0, 10.0],
+	#  편 손 — 쓸기 · 내밀기 · 기대기. 손바닥이 판을 민다.
+	"open": [2.0, 1.0, 1.0, 3.0, 4.0, 4.0, 5.0, 6.0, 6.0, 0.0, 6.0, 4.0],
+	#  쫙 편 손 — 기지개 · 움찔 · 손사래. 손가락이 뒤로 젖는다.
+	"spread": [-10.0, -8.0, -8.0, -10.0, 2.0, 2.0, 2.0, 2.0, 15.0, 0.0, 0.0, -6.0],
+	#  주먹 — 내리치기 · 빼기.
+	"fist": [84.0, 86.0, 88.0, 88.0, 100.0, 104.0, 104.0, 104.0, 0.0, 0.85, 40.0, 30.0],
+	#  짚기 — 검지만 편다.
+	"point": [-2.0, 82.0, 86.0, 88.0, 4.0, 100.0, 104.0, 104.0, 0.0, 0.7, 36.0, 26.0],
+	#  받쳐 든 손 — 쟁반 받치는 손이다. 손바닥을 위로 돌려(sup) 물건 밑을 받치고,
+	#  손가락은 펴서 밑에 깔다가 **끝 마디만 세워** 물건 앞 테두리를 걸고, 엄지는
+	#  옆으로 쭉 벌려 옆 테두리를 건다(둘 다 앞 화판). 물건(동전 44px)이 손(26px)
+	#  보다 커서 손이 통째로 물건 밑에 숨는다 — 손가락을 다 말아 올렸더니 소시지
+	#  넷이 물건 한가운데에 누웠고, 엄지를 앞으로 접었더니 물건 한복판에 살색 얼룩
+	#  하나가 앉았다(2026-10-02 실측 두 번). 손끝이 테두리에 닿아야 「걸었다」다:
+	#  첫 마디를 펴야 손끝이 물건 앞 테두리(가운데에서 16px)까지 나간다.
+	#  tf 가 음수면 펼친 각(t_yaw) 너머로 더 벌린다(−1 이면 86°).
+	"cup": [0.0, 0.0, 0.0, 2.0, 40.0, 42.0, 44.0, 48.0, 10.0, -1.0, 16.0, 26.0],
+}
+
+#  팔뚝 — 셔츠 소매를 팔꿈치 바로 밑까지 걷어 올렸다. 손목에서 거꾸로 적는다:
+#  맨 팔뚝(bare) · 걷은 단(roll) · 소매 조금(gap) · 놋쇠 소매 띠(gart) · 소매.
+#  길이를 **손목에서 잰 월드 길이**로 못 박는다 — 비율로 적으면 쓸기처럼
+#  팔이 길어지는 자세에서 맨살이 같이 늘어나 팔이 고무가 된다.
+#  쉬는 팔은 화면 y 48(동전 슬롯 밑변)~126 이 보이고, 그 안에서 맨살이
+#  아래 반(80~126), 걷은 단 · 띠가 그 위다. 소매는 슬롯 밑으로 한 뼘 나온다.
+const FORE3 := {
+	"bare": 56.0,
+	"bare_r": 34.0,      # 화면 오른팔은 덜 걷었다 — 두 소매가 같은 높이면 거울 쌍둥이다
+	"w_wr": 15.0, "t_wr": 10.6,     # 손목. 손바닥 뿌리(21)보다 좁아 손목이 한 단 진다
+	"w_in": 21.0, "t_in": 14.6,     # 걷은 단 밑 — 팔뚝 살이 가장 굵은 자리
+	"roll": 13.0, "w_roll": 32.0, "t_roll": 21.0,   # 접어 올린 두툼한 단
+	"gap": 3.0,
+	"gart": 3.6, "w_gart": 27.8, "t_gart": 19.8,    # 놋쇠 소매 띠
+	"w_slv": 26.0, "t_slv": 18.0,   # 소매. 옛 팔 상자(30 × 16)의 자리를 이어받는다
+	"cloth": Color("d8cbab"),       # 크림 셔츠 — 조끼 V 의 셔츠와 같은 천
+	"fold": Color("8f8064"),        # 접힌 골
+	"brass": Color("c89a4a"),       # 진열대 놋쇠(Room3D.COL.brass)와 같은 쇠
 }
 
 #  ── 지하 카지노 바 — 3D 방 · 3D 테이블 (2026-10-01 맛보기 · scripts/room3d.gd) ──
@@ -20190,52 +20302,292 @@ func _room3d_tband(top: float, bot: float) -> void:
 
 
 var hand3_vp: SubViewport = null
-var hand3_rig := []        # [{root: Node3D}] — 왼손·오른손
-var hand3_pose := []       # _npc_limb 이 채운다 [{wr, ang, sc, mir}]
+var hand3_rig := []        # [{hand, shad, arm, armsh, hj, sj, fore}] — 왼손·오른손
+var hand3_pose := []       # _npc_limb 이 채운다 [{wr, ang, sc, mir, el, hw, eh, roll}]
 var hand3_upper: Node3D = null   # 위팔 — 쓸 때만 선다
 var hand3_up := {}         # _npc_arms 가 채운다 {sh, el, hh, on}
+#  앞 화판 — 상인이 받쳐 든 물건 **위로** 올라오는 엄지 · 손끝 마디만 굽는다.
+#  물건은 손 다음에 그리므로(_give_draw) 한 화판으로는 손가락이 물건 위에
+#  못 선다 — 받쳐 든 손이 물건 밑에 통째로 숨어 손이 안 보였다(2026-10-02 실측:
+#  동전 44px 이 손 26px 을 다 덮는다). 같은 월드를 같은 카메라로 한 번 더
+#  보되 그 층(HAND3_FRONT)만 찍어 물건 **다음에** 붙인다.
+var hand3_fvp: SubViewport = null
+var hand3_front := false   # 이번 프레임에 앞 화판을 붙이는가
+const HAND3_FRONT := 1 << 9          # 앞 화판만 보는 렌더 층(10번)
 
 
 func _hand3_live() -> bool:
 	return hand3_vp != null and is_instance_valid(hand3_vp)
 
 
-#  손 하나 — **상자 하나**다. 손목 쪽이 한 단 얇아 소매와 갈린다.
-#  뒤집기(mir)는 z 를 뒤집는 것인데, 상자는 z 대칭이라 실제로는 아무
-#  차이가 없다 — 인자를 남겨 두는 것은 부르는 쪽이 왼손·오른손을 아직
-#  가르고 있어서다(자세는 갈린다).
-func _hand3_build(col: Color, _mir: bool) -> Node3D:
+#  8각 기둥 하나 — x 0 에서 ln 으로 뻗고 단면이 (w0, t0) 에서 (w1, t1) 로
+#  바뀐다. 모서리를 bv 만큼 깎는다. **면마다 법선이 하나다** — 음영이 면
+#  단위로 계단을 이뤄 픽셀 한 칸이 면 하나가 된다. 매끈한 음영(원기둥 ·
+#  캡슐)은 5px 손가락에서 가장자리가 흐려져 넷이 한 얼룩으로 뭉친다.
+#  손가락 사이 골도 이것이 판다 — 빛을 등진 빗면 한 줄이 어둡다.
+func _prism3(ln: float, w0: float, t0: float, w1: float, t1: float,
+		bv: float) -> ArrayMesh:
+	var a := _prism3_sec(0.0, w0, t0, bv)
+	var b := _prism3_sec(ln, w1, t1, bv)
+	var vs := PackedVector3Array()
+	var ns := PackedVector3Array()
+	for k in 8:
+		var k2 := (k + 1) % 8
+		#  옆면 — 바깥은 단면 한가운데에서 그 면 쪽이다.
+		var mid: Vector3 = (a[k] + a[k2] + b[k] + b[k2]) * 0.25
+		var out := Vector3(0.0, mid.y, mid.z)
+		_tri3(vs, ns, a[k], b[k], b[k2], out)
+		_tri3(vs, ns, a[k], b[k2], a[k2], out)
+	for k in range(1, 7):
+		_tri3(vs, ns, a[0], a[k], a[k + 1], Vector3.LEFT)
+		_tri3(vs, ns, b[0], b[k], b[k + 1], Vector3.RIGHT)
+	var arr := []
+	arr.resize(Mesh.ARRAY_MAX)
+	arr[Mesh.ARRAY_VERTEX] = vs
+	arr[Mesh.ARRAY_NORMAL] = ns
+	var m := ArrayMesh.new()
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+	return m
+
+
+#  단면 여덟 점 — 윗면 두 점에서 시계 방향으로 돈다. 깎는 양은 짧은 변의
+#  0.45 를 안 넘는다(넘으면 면이 뒤집힌다).
+func _prism3_sec(x: float, w: float, t: float, bv: float) -> PackedVector3Array:
+	var hw := w * 0.5
+	var ht := t * 0.5
+	var c := minf(bv, minf(hw, ht) * 0.9)
+	return PackedVector3Array([
+			Vector3(x, ht, -hw + c), Vector3(x, ht, hw - c),
+			Vector3(x, ht - c, hw), Vector3(x, -ht + c, hw),
+			Vector3(x, -ht, hw - c), Vector3(x, -ht, -hw + c),
+			Vector3(x, -ht + c, -hw), Vector3(x, ht - c, -hw)])
+
+
+#  세모 하나를 바깥(out) 쪽 법선으로 넣는다. 고닷은 **시계 방향이 앞면**이라
+#  바깥에서 보아 시계 방향이 되게 감는다. 면 법선을 세 꼭짓점에 그대로 준다
+#  — 평평한 음영이다.
+func _tri3(vs: PackedVector3Array, ns: PackedVector3Array, p0: Vector3,
+		p1: Vector3, p2: Vector3, out: Vector3) -> void:
+	var n := (p1 - p0).cross(p2 - p0)
+	if n.length_squared() < 0.000001:
+		return
+	n = n.normalized()
+	if n.dot(out) > 0.0:
+		vs.append(p0)
+		vs.append(p2)
+		vs.append(p1)
+	else:
+		vs.append(p0)
+		vs.append(p1)
+		vs.append(p2)
+		n = -n
+	for _k in 3:
+		ns.append(n)
+
+
+func _mi3(mesh: Mesh, mat: Material, at := Vector3.ZERO) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	mi.mesh = mesh
+	mi.material_override = mat
+	mi.position = at
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return mi
+
+
+#  살 · 천 재질. _cup3_mat 의 「반사 끔」을 안 따른다 — 너클 · 손등에 램프가
+#  한 점 맺혀야 살이 산다. 대신 거칠게(0.72) 둬서 번들거리는 플라스틱은 막는다.
+func _skin3_mat(col: Color, spec := 0.22, rough := 0.72) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = col
+	m.roughness = rough
+	m.metallic_specular = spec
+	return m
+
+
+#  놋쇠 · 금. 쇠는 비출 하늘이 없어 어둡게 죽으므로 램프 빛을 조금 품게 한다.
+func _gold3_mat(col: Color, glow: float) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = col
+	m.metallic = 0.5
+	m.roughness = 0.32
+	m.emission_enabled = true
+	m.emission = col
+	m.emission_energy_multiplier = glow
+	return m
+
+
+#  접지 그림자 — 손 사본을 눕힌 것을 **반투명 검정**으로 깐다. 불투명 갈색
+#  판때기(옛 값)는 벨벳 위에서 손에서 떨어져 나온 검은 조각으로 읽혔다
+#  (2026-10-02). 반투명은 조각이 겹치는 자리(손가락 · 손바닥 · 팔뚝)가 두 겹
+#  어두워지는데, 스텐실이 막는다 — 한 화소에 한 번만 칠한다.
+#  스텐실 값 셋의 차례: 가림막 3 > 그림자 2 > 접지 얼룩 1. 각자 「제 값이
+#  거기 적힌 값보다 클 때만」 칠하고 제 값을 적는다 — 먼저 칠한 쪽이 이긴다.
+func _shad3_mat() -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.albedo_color = Color(0.03, 0.0, 0.02, float(FING3.sh_a))
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	m.stencil_mode = BaseMaterial3D.STENCIL_MODE_CUSTOM
+	m.stencil_flags = BaseMaterial3D.STENCIL_FLAG_READ | BaseMaterial3D.STENCIL_FLAG_WRITE
+	m.stencil_compare = BaseMaterial3D.STENCIL_COMPARE_GREATER
+	m.stencil_reference = 2
+	return m
+
+
+#  접지 얼룩 — 손 밑에 번진 옅은 어둠 하나(진열대 소품의 받침 그늘 _blob 과 같은
+#  어법). 판에 놓인 손은 그림자가 거의 손 밑에 숨는다(높이 8 · 어긋남 2.8) —
+#  빛이 맞으면 맞을수록 손이 판에서 떠 보인다. 둘레가 옅게 가라앉아야 「놓였다」.
+#  손이 들리면 옅어진다(_hand3_sync). 그림자가 칠한 자리는 안 덮는다(스텐실 1).
+func _blob3_mat() -> StandardMaterial3D:
+	var g := Gradient.new()
+	g.set_color(0, Color(0.0, 0.0, 0.0, 1.0))
+	g.set_color(1, Color(0.0, 0.0, 0.0, 0.0))
+	g.add_point(0.5, Color(0.0, 0.0, 0.0, 0.62))
+	var gt := GradientTexture2D.new()
+	gt.gradient = g
+	gt.fill = GradientTexture2D.FILL_RADIAL
+	gt.fill_from = Vector2(0.5, 0.5)
+	gt.fill_to = Vector2(1.0, 0.5)
+	gt.width = 32
+	gt.height = 32
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.albedo_color = Color(0.03, 0.0, 0.02, 0.0)
+	m.albedo_texture = gt
+	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	m.render_priority = 4
+	m.stencil_mode = BaseMaterial3D.STENCIL_MODE_CUSTOM
+	m.stencil_flags = BaseMaterial3D.STENCIL_FLAG_READ | BaseMaterial3D.STENCIL_FLAG_WRITE
+	m.stencil_compare = BaseMaterial3D.STENCIL_COMPARE_GREATER
+	m.stencil_reference = 1
+	return m
+
+
+#  카운터 뒤 가림막 — 그림자는 벨벳(w ≥ 0)에만 진다. 카운터 뒤는 벽 앞이라
+#  거기 진 그림자는 바닥이 아니라 팔 옆에 나란히 선 검은 띠가 된다(HAND3.h_el
+#  머리말). 보이지 않는 판 하나가 그 자리 스텐실을 먼저 채워 그림자를 막는다.
+func _shad3_mask() -> MeshInstance3D:
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.albedo_color = Color(0.0, 0.0, 0.0, 0.0)
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	m.render_priority = -8
+	m.stencil_mode = BaseMaterial3D.STENCIL_MODE_CUSTOM
+	m.stencil_flags = BaseMaterial3D.STENCIL_FLAG_WRITE
+	m.stencil_compare = BaseMaterial3D.STENCIL_COMPARE_ALWAYS
+	m.stencil_reference = 3
+	var pm := PlaneMesh.new()
+	pm.size = Vector2(2000.0, 600.0)
+	var mi := _mi3(pm, m, Vector3(320.0, -0.6, -300.0))
+	return mi
+
+
+func _hand3_mats() -> Dictionary:
+	return {"skin": _skin3_mat(FING3.skin), "palm": _skin3_mat(FING3.palm_c, 0.12),
+			"knuck": _skin3_mat(FING3.knuck, 0.34, 0.6), "nail": _skin3_mat(FING3.nail, 0.4, 0.5),
+			"ring": _gold3_mat(FING3.ring, 0.55)}
+
+
+#  손 하나. 뿌리(손목) → 안쪽 마디(in) → 손바닥 · 너클 · 손가락 넷 · 엄지.
+#  in 은 손에서는 그대로 두고 그림자 사본에서 기울임(빛 방향으로 미는 것)을
+#  받는다(_hand3_sync). 관절은 Node3D 하나씩이고 자세는 basis 만 바꾼다.
+#  front 는 받쳐 든 물건 위로 올라오는 조각들 — 손끝 마디 넷 · 엄지.
+#  mir 는 z 를 뒤집는다(엄지가 몸 안쪽). ring 이면 약지에 금반지를 낀다.
+func _hand3_build(mats: Dictionary, mir: bool, ring: bool) -> Dictionary:
+	var F: Dictionary = FING3
+	var sg: float = -1.0 if mir else 1.0
 	var root := Node3D.new()
-	var pl: float = HAND3.palm_l
-	var pw: float = HAND3.palm_w
-	var pt: float = HAND3.palm_t
-	var m := BoxMesh.new()
-	m.size = Vector3(pl, pt, pw)
-	var mi := MeshInstance3D.new()
-	mi.mesh = m
-	mi.material_override = _cup3_mat(col)
-	#  뿌리(손목)가 원점이라 상자를 앞으로 반 칸 민다.
-	mi.position = Vector3(pl * 0.5, 0.0, 0.0)
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	root.add_child(mi)
-	return root
+	var inn := Node3D.new()
+	root.add_child(inn)
+	var py: float = F.py
+	var pl: float = F.palm
+	inn.add_child(_mi3(_prism3(pl, F.pw0, F.pt0, F.pw1, F.pt1, 2.2), mats.skin,
+			Vector3(0.0, py, 0.0)))
+	#  손바닥 살 — 밑면에 한 겹 밝게. 손을 뒤집으면 손등과 값이 갈려
+	#  「손바닥이 보인다」가 읽힌다.
+	inn.add_child(_mi3(_prism3(pl - 2.5, F.pw0 - 3.6, 1.2, F.pw1 - 3.0, 1.2, 0.4),
+			mats.palm, Vector3(0.8, py - float(F.pt1) * 0.5 - 0.2, 0.0)))
+	var j1 := []
+	var j2 := []
+	var front := []
+	for f in 4:
+		var fx: float = F.fx[f]
+		var fz: float = sg * float(F.fz[f])
+		var w: float = F.fw[f]
+		var t: float = F.ft[f]
+		var l1: float = F.l1[f]
+		var l2: float = F.l2[f]
+		#  너클 — 손등 앞끝에 솟은 살. 한 단 밝다.
+		inn.add_child(_mi3(_prism3(3.4, w - 0.6, 2.2, w - 1.2, 1.6, 0.7), mats.knuck,
+				Vector3(fx - 3.6, py + float(F.pt1) * 0.5 - 0.2, fz)))
+		var a := Node3D.new()
+		a.position = Vector3(fx - 1.2, py + 0.9, fz)
+		inn.add_child(a)
+		a.add_child(_mi3(_prism3(l1 + 1.2, w, t, w * 0.94, t * 0.9, 1.4), mats.skin))
+		if ring and f == 2:
+			a.add_child(_mi3(_prism3(1.9, w + 1.3, t + 1.3, w + 1.3, t + 1.3, 0.9),
+					mats.ring, Vector3(3.0, 0.0, 0.0)))
+		var b := Node3D.new()
+		b.position = Vector3(l1 + 1.2, 0.0, 0.0)
+		a.add_child(b)
+		var s2 := _mi3(_prism3(l2, w * 0.94, t * 0.9, w * 0.8, t * 0.74, 1.3), mats.skin)
+		b.add_child(s2)
+		var nl := _mi3(_prism3(2.6, w * 0.56, 0.7, w * 0.5, 0.6, 0.2), mats.nail,
+				Vector3(l2 - 2.8, t * 0.4, 0.0))
+		b.add_child(nl)
+		j1.append(a)
+		j2.append(b)
+		front.append(s2)
+	#  엄지 — 손바닥 옆구리, 손목 가까이에서 나온다.
+	var ta := Node3D.new()
+	ta.position = Vector3(F.tx, py + float(F.ty), -sg * float(F.tz))
+	inn.add_child(ta)
+	var tw: float = F.tw
+	var tt: float = F.tt
+	var ts1 := _mi3(_prism3(F.tl1, tw, tt, tw * 0.92, tt * 0.9, 1.6), mats.skin)
+	ta.add_child(ts1)
+	var tb := Node3D.new()
+	tb.position = Vector3(F.tl1, 0.0, 0.0)
+	ta.add_child(tb)
+	var ts2 := _mi3(_prism3(F.tl2, tw * 0.92, tt * 0.9, tw * 0.74, tt * 0.72, 1.4), mats.skin)
+	tb.add_child(ts2)
+	var tn := _mi3(_prism3(2.6, tw * 0.52, 0.7, tw * 0.46, 0.6, 0.2), mats.nail,
+			Vector3(float(F.tl2) - 2.8, tt * 0.4, 0.0))
+	tb.add_child(tn)
+	#  앞 화판에는 손끝 마디 넷과 엄지가 간다 — 받쳐 든 물건의 앞 테두리 ·
+	#  옆 테두리를 거는 손가락들이다. 손톱은 손등 쪽이라 받쳐 들면 밑을 본다.
+	front.append(ts1)
+	front.append(ts2)
+	front.append(tn)
+	return {"root": root, "in": inn, "j1": j1, "j2": j2, "t1": ta, "t2": tb,
+			"front": front, "sg": sg, "lay": 1}
 
 
-func _arm3_build(col: Color) -> MeshInstance3D:
-	var m := BoxMesh.new()
-	#  길이 1 짜리 단위 상자. 뿌리(팔꿈치)가 x=0, 끝(손목)이 x=1 이라
-	#  배율 하나로 늘어난다 — 가운데가 원점이면 늘릴 때 뿌리가 같이 밀린다.
-	m.size = Vector3(1.0, float(HAND3.arm_t), float(HAND3.arm_w0))
-	var mi := MeshInstance3D.new()
-	mi.mesh = m
-	mi.material_override = _cup3_mat(col)
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	#  상자를 앞으로 반 칸 밀어 뿌리를 원점에 맞춘다.
-	mi.position = Vector3(0.5, 0.0, 0.0)
-	var root := MeshInstance3D.new()
-	root.mesh = null
-	root.add_child(mi)
-	return root
+#  팔뚝 — 셔츠 소매 · 놋쇠 띠 · 걷은 단 · 맨 팔뚝(FORE3). 뿌리가 원점이고
+#  +x 가 손목이다. 길이가 자세마다 바뀌므로 조각 자리는 _hand3_sync 가 민다.
+#  소매만 늘어나는 단위 기둥이다 — 나머지는 월드 길이 그대로라 고무가 안 된다.
+func _fore3_build(mats: Dictionary, bl: float) -> Dictionary:
+	var F: Dictionary = FORE3
+	var root := Node3D.new()
+	var slv := _mi3(_prism3(1.0, F.w_slv, F.t_slv, F.w_slv, F.t_slv, 4.6), mats.cloth)
+	root.add_child(slv)
+	var bare := _mi3(_prism3(bl, F.w_in, F.t_in, F.w_wr, F.t_wr, 3.4), mats.skin)
+	root.add_child(bare)
+	#  걷은 단 — 두툼한 띠 하나에 접힌 골 한 줄. 골이 없으면 두꺼운 소매로만 읽힌다.
+	var rl := Node3D.new()
+	root.add_child(rl)
+	rl.add_child(_mi3(_prism3(F.roll, F.w_roll, F.t_roll, float(F.w_roll) - 1.2,
+			float(F.t_roll) - 1.0, 5.6), mats.cloth))
+	rl.add_child(_mi3(_prism3(1.3, float(F.w_roll) + 0.7, float(F.t_roll) + 0.7,
+			float(F.w_roll) + 0.7, float(F.t_roll) + 0.7, 5.8), mats.fold,
+			Vector3(float(F.roll) * 0.42, 0.0, 0.0)))
+	var ga := _mi3(_prism3(F.gart, F.w_gart, F.t_gart, F.w_gart, F.t_gart, 5.0), mats.brass)
+	root.add_child(ga)
+	return {"root": root, "slv": slv, "bare": bare, "roll": rl, "gart": ga, "bl": bl}
 
 
 #  상인 무대 하나 — 뷰포트 · 직교 카메라 · 빛 · 환경.
@@ -20243,6 +20595,13 @@ func _arm3_build(col: Color) -> MeshInstance3D:
 #  반드시 갈린다 — 빛을 한 번 만지고 한쪽만 고치면 그날로 두 재질이 된다.
 #  카메라는 −52° 직교다. 그 각에서 화면 y = 0.788·w − 0.616·h 가 나오고,
 #  그것이 곧 _p2s 다(근사가 아니라 같은 식이다). 1 월드 단위 = 화면 1px.
+#
+#  ── 빛은 테이블의 것이다 (2026-10-02) ─────────────────
+#  옛 빛은 왼쪽 위 해 하나 + 밝은 나무색 환경광(C_WOOD.lightened 0.30 × 1.0)이라
+#  상인만 그늘 없는 흰 빛 속에 섰다 — 따뜻한 램프 밑 진열대 옆에서 오려 붙인
+#  사람이 됐다. 이제 진열대와 **같은 한 벌**(Room3D.lamp_rig · lamp_env)이다.
+#  두 무대가 같은 좌표라 램프가 같은 자리에 서서, 손은 빛 웅덩이 가장자리에서
+#  밝고 팔꿈치 · 몸통은 어둠으로 가라앉는다.
 func _stage3_make(r: Rect2) -> SubViewport:
 	var vp := SubViewport.new()
 	vp.size = Vector2i(int(r.size.x), int(r.size.y))
@@ -20252,7 +20611,15 @@ func _stage3_make(r: Rect2) -> SubViewport:
 	vp.msaa_3d = Viewport.MSAA_DISABLED
 	vp.gui_disable_input = true
 	add_child(vp)
+	vp.add_child(_stage3_cam(r))
+	Room3D.lamp_rig(vp, VIEW.x, (float(TBL.ny) - float(TBL.fy)) / float(TBL.flat), false)
+	var we := WorldEnvironment.new()
+	we.environment = Room3D.lamp_env()
+	vp.add_child(we)
+	return vp
 
+
+func _stage3_cam(r: Rect2) -> Camera3D:
 	var cam := Camera3D.new()
 	cam.projection = Camera3D.PROJECTION_ORTHOGONAL
 	cam.keep_aspect = Camera3D.KEEP_HEIGHT
@@ -20267,34 +20634,17 @@ func _stage3_make(r: Rect2) -> SubViewport:
 	#  직교라 거리는 그림에 안 나온다 — 잘림면만 피하면 된다.
 	#  카메라 뒤축(basis.z)은 (0, −sin p, cos p) 다.
 	cam.position = mid + Vector3(0.0, -sin(pit), cos(pit)) * 900.0
-	vp.add_child(cam)
-
-	var lt := DirectionalLight3D.new()
-	#  빛은 왼쪽 위에서. 상인 몸통의 그늘(NPC.shade)과 같은 방향이다.
-	lt.rotation_degrees = Vector3(-46.0, -38.0, 0.0)
-	lt.light_energy = 1.15
-	lt.shadow_enabled = false
-	vp.add_child(lt)
-
-	var we := WorldEnvironment.new()
-	var env := Environment.new()
-	env.background_mode = Environment.BG_CANVAS
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = C_WOOD.lightened(0.30)
-	env.ambient_light_energy = 1.0
-	we.environment = env
-	vp.add_child(we)
-	return vp
+	return cam
 
 
 #  면 좌표로 상자 하나. u·h·w 의 [lo,hi] 를 받는다 — 면 좌표로 적어야
 #  표를 읽고 화면 자리를 _p2s 로 바로 셈할 수 있다.
-func _blk3(uu: Vector2, hh: Vector2, ww: Vector2, col: Color) -> MeshInstance3D:
+func _blk3(uu: Vector2, hh: Vector2, ww: Vector2, col: Variant) -> MeshInstance3D:
 	var m := BoxMesh.new()
 	m.size = Vector3(uu.y - uu.x, hh.y - hh.x, ww.y - ww.x)
 	var mi := MeshInstance3D.new()
 	mi.mesh = m
-	mi.material_override = _cup3_mat(col)
+	mi.material_override = col if col is Material else _cup3_mat(col)
 	mi.position = Vector3((uu.x + uu.y) * 0.5, (hh.x + hh.y) * 0.5,
 			(ww.x + ww.y) * 0.5)
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -20311,7 +20661,7 @@ func _sh3_off(h: float) -> Vector3:
 
 
 #  a 에서 b 로 뻗는 단위 상자 하나의 변환. 길이는 x 축에 실어 보내므로
-#  메시는 x 0..1 짜리 단위 상자여야 한다(_arm3_build). 세로 배율 ty 는
+#  메시는 x 0..1 짜리 단위 기둥이어야 한다(_prism3 의 ln 1). 세로 배율 ty 는
 #  그림자를 납작하게 눕히는 자리다.
 func _aim3(a: Vector3, b: Vector3, ty: float, roll := 0.0) -> Transform3D:
 	var dv := b - a
@@ -20340,43 +20690,85 @@ func _hand3_open() -> void:
 	if _hand3_live() or not _has_renderer():
 		return
 	hand3_vp = _stage3_make(HAND3.rect)
-
+	for c in hand3_vp.get_children():
+		if c is Camera3D:
+			(c as Camera3D).cull_mask = 0xFFFFF & ~HAND3_FRONT
+	hand3_vp.add_child(_shad3_mask())
+	var hm := _hand3_mats()
+	var fm := {"skin": _skin3_mat(FING3.skin, 0.16, 0.8),
+			"cloth": _skin3_mat(FORE3.cloth, 0.08, 0.95),
+			"fold": _skin3_mat(FORE3.fold, 0.0, 1.0),
+			"brass": _gold3_mat(FORE3.brass, 0.18)}
 	hand3_rig.clear()
 	for i in 2:
 		#  자세를 받는 자리. 그림자와 손이 같이 움직여야 하므로 하나로 묶는다.
 		#  **그림자는 손 한 벌을 더 깔아 납작하게 눕힌 것이다.** 네모 판으로
 		#  대신했다가 손가락 밖으로 삐져나온 검은 직사각형이 됐다 — 그림자는
 		#  그림자를 지는 물건과 같은 모양이어야 한다. 여기서는 그것이 공짜다.
+		#  손가락이 서면서 더 공짜가 됐다 — 관절도 같은 각을 받으므로 두드리는
+		#  손끝의 그림자가 손끝을 따라 떨어졌다 붙는다.
 		#
 		#  **손과 형제로 둔다.** 손의 자식으로 매달았더니 어긋남이 손과 같이
 		#  돌아서, 손이 어느 쪽을 보든 그림자가 늘 손의 같은 옆구리에 붙었다 —
 		#  빛은 방에 고정이지 손에 붙어 다니지 않는다. 자세는 같이 받고
 		#  어긋남만 월드로 더한다(_hand3_sync).
-		var sh3 := _hand3_build(C_WOOD.darkened(0.84), i == 1)
-		sh3.scale = Vector3(1.0, 0.05, 1.0)
-		hand3_vp.add_child(sh3)
-		var hd3 := _hand3_build(C_WOOD.lightened(0.40), i == 1)
-		hand3_vp.add_child(hd3)
+		#  재질은 손마다 한 벌 — 손이 들리는 만큼 그 손의 그림자만 옅어진다.
+		var sm := _shad3_mat()
+		var smm := {"skin": sm, "palm": sm, "knuck": sm, "nail": sm, "ring": sm}
+		var sj := _hand3_build(smm, i == 1, false)
+		hand3_vp.add_child(sj.root)
+		#  금반지는 화면 오른손(상인의 왼손) 약지 하나 — 쓸기에서 1.55배로
+		#  커지는 손이라 반지가 한 번은 크게 보인다.
+		var hj := _hand3_build(hm, i == 1, i == 1)
+		hand3_vp.add_child(hj.root)
 		#  팔뚝. 손보다 **먼저** 넣어 손이 위에 오게 한다.
-		var am3 := _arm3_build(C_WOOD.lightened(0.04))
-		hand3_vp.add_child(am3)
+		var fo := _fore3_build(fm, float(FORE3.bare_r if i == 1 else FORE3.bare))
+		hand3_vp.add_child(fo.root)
 		#  팔 그림자는 **펠트를 밟는 토막에만** 깐다. 쉬는 자세에서 팔은
 		#  손목(w −2)까지라 통째로 카운터 위 — 곧 펠트가 아니라 벽 앞이고,
 		#  거기 깐 그림자는 바닥에 지는 것이 아니라 팔 옆에 나란히 선
 		#  검은 띠가 된다(굽고 나서 알았다. 팔을 모으면 그 띠가 팔만 해진다).
 		#  쓸 때는 반대로 팔이 통째로 판 위라 그림자가 있어야 한다.
 		#  자르는 자리는 _hand3_sync 가 잰다.
-		var as3 := _arm3_build(C_WOOD.darkened(0.84))
+		var as3 := _mi3(_prism3(1.0, 22.0, 14.0, 17.0, 11.0, 3.0), sm)
 		hand3_vp.add_child(as3)
-		hand3_rig.append({"hand": hd3, "shad": sh3, "arm": am3, "armsh": as3})
-	#  위팔 하나. 쓸는 팔에만 붙으므로 한 벌이면 된다.
+		var pm := PlaneMesh.new()
+		pm.size = Vector2.ONE
+		var bl := _mi3(pm, _blob3_mat())
+		hand3_vp.add_child(bl)
+		hand3_rig.append({"hand": hj.root, "shad": sj.root, "arm": fo.root,
+				"armsh": as3, "hj": hj, "sj": sj, "fore": fo, "blob": bl, "sm": sm})
+	#  위팔 하나. 쓸는 팔에만 붙으므로 한 벌이면 된다. 셔츠 소매다 —
+	#  걷은 것은 팔꿈치 밑이고 위팔은 소매 그대로다.
 	#  **2D 로 두면 팔이 팔꿈치에서 끊긴다** — 납작한 2D 토막과 굴린 3D
 	#  상자가 한 관절에서 만나면 폭도 밝기도 안 맞아서, 팔이 이어진 것이
 	#  아니라 두 동강이 겹쳐 놓인 것으로 읽힌다(2026-09-15 제보).
 	#  어깨 쪽이 가늘어지는 것은 원근이다 — 먼 것이 가늘다.
-	hand3_upper = _arm3_build(C_WOOD.lightened(0.04))
+	hand3_upper = _mi3(_prism3(1.0, 22.0, 16.0, float(FORE3.w_slv), float(FORE3.t_slv),
+			4.6), fm.cloth)
 	hand3_upper.visible = false
 	hand3_vp.add_child(hand3_upper)
+	#  앞 화판 — 같은 월드 · 같은 카메라, 앞 층만. 받쳐 든 동안만 굽는다(_hand3_sync).
+	hand3_fvp = SubViewport.new()
+	hand3_fvp.size = hand3_vp.size
+	hand3_fvp.transparent_bg = true
+	hand3_fvp.msaa_3d = Viewport.MSAA_DISABLED
+	hand3_fvp.gui_disable_input = true
+	hand3_fvp.render_target_update_mode = SubViewport.UPDATE_DISABLED
+	hand3_fvp.world_3d = hand3_vp.find_world_3d()
+	add_child(hand3_fvp)
+	var fc := _stage3_cam(HAND3.rect)
+	fc.cull_mask = HAND3_FRONT
+	#  물건에서 튀어 오른 빛. 받쳐 든 손끝은 손등이 관객을 보는데, 머리 위
+	#  램프 밑에서 관객 쪽 면은 진열대 앞판처럼 어둠에 잠긴다 — 물건 위에
+	#  검은 손가락 넷이 얹혀 얼룩으로 읽혔다(2026-10-02). 앞 층만 이 카메라가
+	#  찍으므로 이 환경광은 그 조각들만 받는다.
+	var fe := Room3D.lamp_env()
+	fe.ambient_light_color = Color("c8a088")
+	fe.ambient_light_energy = 1.1
+	fc.environment = fe
+	hand3_fvp.add_child(fc)
+	hand3_front = false
 
 
 func _hand3_close() -> void:
@@ -20385,12 +20777,177 @@ func _hand3_close() -> void:
 	if _hand3_live():
 		hand3_vp.queue_free()
 	hand3_vp = null
+	if hand3_fvp != null and is_instance_valid(hand3_fvp):
+		hand3_fvp.queue_free()
+	hand3_fvp = null
+	hand3_front = false
+
+
+#  자세 둘을 섞는다 — p 를 t 쪽으로 w 만큼. 배열 차례는 FPOSE 머리말.
+func _fp_mix(p: PackedFloat32Array, t: Array, w: float) -> PackedFloat32Array:
+	if w <= 0.0005:
+		return p
+	var k := clampf(w, 0.0, 1.0)
+	for j in p.size():
+		p[j] = lerpf(p[j], float(t[j]), k)
+	return p
+
+
+#  손가락 자세 — 지금 하는 몸짓에서 뽑는다. i 0 화면 왼손 · 1 오른손.
+#  2D 자세(손목 · 손각 · 굴림)는 한 자도 안 건드린다 — 손가락은 그 위에 얹는
+#  3D 만의 층이다. 몸짓 봉투(_idle_env)를 그대로 타므로 손가락이 손보다
+#  먼저 오거나 늦게 남지 않는다.
+#    p     [c1×4, c2×4, spread, tf, tc, td] (FPOSE)
+#    sup   손바닥을 위로 돌린 정도 0..1 (받쳐 들기 · 내밀기)
+#    front 손끝 마디 · 엄지를 앞 화판으로 — 받쳐 든 물건 테두리를 건다
+#    grow  3D 만의 손 배율 덧셈(받쳐 든 손이 관객 쪽으로 나온다)
+#    lean  쉬는 손의 굴림(라디안) — 화면 오른손만
+func _fing3(i: int) -> Dictionary:
+	var p := PackedFloat32Array(FPOSE.rest)
+	var sup := 0.0
+	var front := false
+	#  두 손이 같은 쉼이면 거울 쌍둥이다(NPC 머리말 — 완전대칭은 옷걸이의 냄새).
+	#  화면 오른손(반지 낀 손)은 손가락을 한 단 더 말고 새끼 쪽 모서리로 비스듬히
+	#  기대 쉰다(rest_roll). 몸짓 · 쓸기 · 내밀기가 이 손을 쓰면 걷힌다.
+	if i == 1:
+		for f in 4:
+			p[f] += 12.0
+			p[4 + f] += 18.0
+	#  쉼의 숨 — 손가락 넷이 제 박자로 아주 조금 오므렸다 편다. 같은 박자면
+	#  손이 통째로 껌뻑이는 것이 된다. 움직임을 끄면 안 돈다.
+	if not motion_off:
+		for f in 4:
+			p[f] += 2.4 * sin(npc_clock * 1.15 + float(f) * 1.37 + float(i) * 2.1)
+	var busy := 0.0
+	var k := _idle_env()
+	if k > 0.0:
+		var mine: bool = idle_side == i
+		var b := _idle_beat()
+		if mine or _idle_name() in ["털기", "기대기", "기지개", "고쳐서기", "끄덕",
+				"움찔", "저음"]:
+			busy = k
+		match _idle_name():
+			"털기":
+				#  어깨를 털면 손끝이 같이 떤다.
+				if not motion_off:
+					for f in 4:
+						p[f] += 9.0 * k * sin(b * PI * 6.0 + float(f) * 0.6)
+			"두드리기":
+				#  손가락으로 판을 두드린다 — 새끼부터 검지까지 차례로 든다 놓는다.
+				#  넷이 같이 들리면 두드림이 아니라 손이 오르내리는 것이다.
+				#  손이 셋 치는 박자(_idle_hand) 안에서 물결이 일곱 번 돈다(초당 4 번 —
+				#  손가락 하나가 드는 창은 물결의 0.42, 손가락 사이 어긋남은 0.16).
+				if mine:
+					for f in 4:
+						p[f] += 6.0 * k
+						if motion_off:
+							continue
+						var ph := fposmod(b * 7.0 - float(3 - f) * 0.16, 1.0)
+						var lift := sin(ph / 0.42 * PI) if ph < 0.42 else 0.0
+						p[f] -= 40.0 * k * lift
+						p[4 + f] -= 22.0 * k * lift
+			"기대기":
+				p = _fp_mix(p, FPOSE.open, 0.85 * k)
+			"뒤집기":
+				if mine:
+					p = _fp_mix(p, FPOSE.open, 0.6 * k)
+			"내리치기":
+				if mine:
+					p = _fp_mix(p, FPOSE.fist, k)
+			"기지개", "움찔":
+				p = _fp_mix(p, FPOSE.spread, (1.0 if _idle_name() == "기지개" else 0.8) * k)
+			"훑기":
+				if mine:
+					p = _fp_mix(p, FPOSE.open, k)
+			"손짓":
+				#  창구 쪽으로 손을 민다 — 편 손바닥이 조금 위를 본다.
+				if mine:
+					p = _fp_mix(p, FPOSE.open, k)
+					sup = 0.32 * k * sin(b * PI)
+			"짚기":
+				if mine:
+					p = _fp_mix(p, FPOSE.point, k)
+			"손사래":
+				if mine:
+					p = _fp_mix(p, FPOSE.spread, 0.85 * k)
+			"빼기":
+				if mine:
+					p = _fp_mix(p, FPOSE.fist, 0.45 * k)
+			"저음":
+				for f in 4:
+					p[f] += 7.0 * k
+			"살핌":
+				#  손바닥을 위로 돌려 받쳐 든다 — 받는 박자(0.196) 안에 돌고,
+				#  내리기(0.72~0.84)에서 도로 엎는다. 엎는 것이 곧 물건을 판에
+				#  내려놓는 짓이라 그 뒤 뿌리기는 편 손등이 민다.
+				#  들머리 봉투(k)를 **안 곱한다.** 건네기 전에 내밀기(npc_reach)가
+				#  이미 손바닥을 0.9 돌려 놓았는데, 내밀기가 0.25초에 걷히는 동안
+				#  봉투는 0.26초에 차서 그 사이 손이 반쯤 도로 엎였다가 다시 돌았다.
+				#  받는 박자 안에 su 가 먼저 차서 내밀기를 그대로 이어받는다.
+				if mine:
+					var su := smoothstep(0.0, 0.11, b)
+					var sd := 1.0 - smoothstep(0.72, 0.84, b)
+					sup = su * sd
+					p = _fp_mix(p, FPOSE.cup, sup)
+					p = _fp_mix(p, FPOSE.open, k * (1.0 - sd))
+					front = _give_live() and give_side == i and b > 0.15 and b < 0.78
+	#  내미는 예고 — 건넬 수 있을 때 그쪽 손이 손바닥을 펴 위로 돌린다.
+	#  「여기 놓아라」는 손바닥이 말한다.
+	if npc_reach > 0.002 and npc_reach_side == i:
+		p = _fp_mix(p, FPOSE.open, npc_reach)
+		sup = maxf(sup, 0.9 * npc_reach)
+	#  쓸기 — 편 손이 판을 민다.
+	if i == 1:
+		var a := _sweep_amt()
+		if a > 0.004:
+			p = _fp_mix(p, FPOSE.open, a)
+	#  grow — 받쳐 든 손은 관객 쪽으로 내민 손이라 원근만큼 커진다(쓸기의
+	#  hand_up 과 같은 이치). 3D 만의 배율이라 물건 자리(_palm_of)는 그대로다.
+	#  lean — 쉬는 오른손이 새끼 쪽으로 기우는 굴림(라디안, 거울 부호는 부르는 쪽).
+	if npc_reach_side == i:
+		busy = maxf(busy, npc_reach)
+	if i == 1:
+		busy = maxf(busy, _sweep_amt())
+	return {"p": p, "sup": sup, "front": front,
+			"grow": 0.2 * sup if _idle_name() == "살핌" else 0.0,
+			"lean": (float(FING3.rest_roll) if i == 1 else 0.0) * (1.0 - busy)}
+
+
+#  관절에 자세를 얹는다. 굽힘은 제 z 축으로 −(손끝이 손바닥 쪽 −y 로 간다),
+#  부채는 제 y 축으로 — 거울 손은 부채 방향만 뒤집힌다.
+func _fing3_apply(h: Dictionary, p: PackedFloat32Array) -> void:
+	var sg: float = h.sg
+	for f in 4:
+		var sp: float = deg_to_rad(p[8] * float(FING3.fan[f])) * sg
+		(h.j1[f] as Node3D).basis = Basis(Vector3.UP, sp) \
+				* Basis(Vector3.BACK, -deg_to_rad(p[f]))
+		(h.j2[f] as Node3D).basis = Basis(Vector3.BACK, -deg_to_rad(p[4 + f]))
+	#  엄지 — 바깥으로 벌린 각(접을수록 손끝 쪽으로 눕는다) · 손톱이 옆을 보게
+	#  굴린 각 · 손바닥 쪽으로 내린 각. 굴림이 있어서 굽힘이 손바닥 안쪽으로 간다.
+	var tf: float = p[9]
+	var yaw: float = lerpf(float(FING3.t_yaw), 2.0, tf)
+	(h.t1 as Node3D).basis = Basis(Vector3.UP, sg * deg_to_rad(yaw)) \
+			* Basis(Vector3.RIGHT, -sg * deg_to_rad(float(FING3.t_twist))) \
+			* Basis(Vector3.BACK, -deg_to_rad(p[11] + 18.0 * maxf(tf, 0.0)))
+	(h.t2 as Node3D).basis = Basis(Vector3.BACK, -deg_to_rad(p[10]))
+
+
+#  앞 화판 층으로 옮기거나 되돌린다. 바뀔 때만 손댄다.
+func _fing3_layer(h: Dictionary, on: bool) -> void:
+	var ly: int = HAND3_FRONT if on else 1
+	if int(h.lay) == ly:
+		return
+	h.lay = ly
+	for mi in h.front:
+		(mi as MeshInstance3D).layers = ly
 
 
 #  2D 가 셈한 자세를 3D 에 옮긴다. 면 좌표 (u,w) → 월드 (u, h, w).
 func _hand3_sync() -> void:
 	if not _hand3_live():
 		return
+	var any_front := false
+	var kk := _sh3_off(1.0)
 	for i in mini(hand3_rig.size(), hand3_pose.size()):
 		var ps: Dictionary = hand3_pose[i]
 		var rg: Dictionary = hand3_rig[i]
@@ -20401,32 +20958,67 @@ func _hand3_sync() -> void:
 		var hw: float = float(ps.hw)
 		var he: float = float(ps.eh)
 		var at := Vector3(wr.x, hw + float(HAND3.palm_t) * 0.5, wr.y)
-		#  면 위 각을 월드 y 축 회전으로. 면의 +w 가 월드 +z 라 부호가 같다.
-		var rot := Vector3(0.0, -float(ps.ang), 0.0)
+		var fp := _fing3(i)
+		sc *= 1.0 + float(fp.grow)
+		var hj: Dictionary = rg.hj
+		var sj: Dictionary = rg.sj
+		_fing3_apply(hj, fp.p)
+		_fing3_apply(sj, fp.p)
+		var fr: bool = bool(fp.front)
+		_fing3_layer(hj, fr)
+		any_front = any_front or fr
 		#  손 굴림 — 「뒤집기」가 쓴다. 자리를 안 옮기고 도는 것이라
 		#  미끄러질 수가 없다. 오일러로는 못 준다(요와 굴림이 섞여 손이
 		#  딴 축으로 돈다) — 요를 먼저 세우고 제 x 축으로 굴린다.
-		var hrl: float = float(ps.get("roll", 0.0))
+		#  받쳐 들기(sup)는 반 바퀴를 더 돈다 — 엄지가 위로 넘어가는 쪽이다
+		#  (화면 왼손은 +, 오른손은 −). 3D 만의 굴림이라 물건 기울임(npc_grip)은
+		#  2D 굴림만 계속 탄다.
+		var hrl: float = float(ps.get("roll", 0.0)) \
+				+ float(fp.sup) * PI * float(hj.sg) + float(fp.lean) * float(hj.sg)
 		var hb := Basis(Vector3.UP, -float(ps.ang))
+		var hbr := hb
 		if absf(hrl) > 0.0005:
-			hb = hb * Basis(Vector3.RIGHT, hrl)
-		nd.transform = Transform3D(hb.scaled(Vector3.ONE * sc), at)
+			hbr = hb * Basis(Vector3.RIGHT, hrl)
+		nd.transform = Transform3D(hbr.scaled(Vector3.ONE * sc), at)
 		nd.visible = true
-		#  빛은 왼쪽 위에 고정이다(빛 방향 −46°/−38°). 어긋남은 **월드**라
-		#  손이 어느 쪽을 보든 그림자는 늘 오른쪽 아래로 진다.
-		#  길이는 **높이에 비례한다**(_sh3_off) — 상수로 두면 든 손과
-		#  놓은 손의 그림자가 똑같아서 높이가 화면에서 사라진다.
-		sd.position = Vector3(at.x, -0.6, at.z) + _sh3_off(at.y)
-		sd.rotation = rot
-		sd.scale = Vector3(sc, 0.05, sc)
+		#  그림자 — 손 사본을 빛 방향으로 **눕힌다.** 빛은 왼쪽 위에 고정이다
+		#  (빛 방향 −46°/−38°). 어긋남은 **월드**라 손이 어느 쪽을 보든
+		#  그림자는 늘 오른쪽 아래로 진다. 길이는 **높이에 비례한다**(_sh3_off)
+		#  — 뿌리만이 아니라 조각마다 제 높이를 탄다: 사본 안쪽(in)에 빛 방향
+		#  기울임을 걸어, 판에 닿은 손끝은 그림자가 손끝에 붙고 들린 손가락은
+		#  그림자가 떨어진다. 그 틈이 「들었다」의 전부다.
+		#  뿌리는 요 · 납작 배율만 갖는다(굴림은 안쪽에) — 돌림이 손과 같다.
+		sd.transform = Transform3D(hb.scaled(Vector3(sc, 0.05 * sc, sc)),
+				Vector3(at.x, -0.6, at.z) + _sh3_off(at.y))
+		var kl: Vector3 = Basis(Vector3.UP, float(ps.ang)) * kk
+		var skew := Basis(Vector3.RIGHT, Vector3(kl.x, 1.0, kl.z), Vector3.BACK)
+		if absf(hrl) > 0.0005:
+			skew = skew * Basis(Vector3.RIGHT, hrl)
+		(sj["in"] as Node3D).transform = Transform3D(skew, Vector3.ZERO)
 		sd.visible = true
-		#  팔뚝 — 팔꿈치에서 손목까지. 두 끝의 높이가 다르므로 상자가
-		#  **기운다**. 기운 상자는 윗면 말고 옆면도 내주고, 그 두 면이
-		#  팔을 종이에서 덩어리로 바꾼다. 오일러로는 못 준다(요·피치가
-		#  섞여 팔이 축을 따라 돈다) — 축 셋을 직접 세운다.
+		#  높이 들수록 옅게 — 머리 위 램프는 한 점이 아니라 갓 달린 등이라 멀리 진
+		#  그림자는 번져 흐려진다. 받쳐 든 손(h 25)의 그림자를 짙게 두면 동전
+		#  밑에 검은 손가락 넷이 매달린 것으로 읽혔다(2026-10-02).
+		var smt: StandardMaterial3D = rg.sm
+		smt.albedo_color = Color(smt.albedo_color, float(FING3.sh_a)
+				* clampf(1.0 - (at.y - 9.0) / 26.0, 0.3, 1.0))
+		#  접지 얼룩 — 손바닥 한가운데 밑. 들수록 옅고 그림자 쪽으로 반만 밀린다.
+		var bl: MeshInstance3D = rg.blob
+		var ex := Vector2(cos(float(ps.ang)), sin(float(ps.ang)))
+		var pc: Vector2 = wr + ex * (12.0 * sc)
+		var lk: float = clampf(1.0 - (at.y - 8.0) / 22.0, 0.0, 1.0)
+		bl.transform = Transform3D(hb.scaled(Vector3(40.0 * sc, 1.0, 34.0 * sc)),
+				Vector3(pc.x, -0.7, pc.y) + _sh3_off(at.y) * 0.5)
+		var bmt: StandardMaterial3D = bl.material_override
+		bmt.albedo_color = Color(bmt.albedo_color, 0.40 * lk)
+		bl.visible = lk > 0.01
+		#  팔뚝 — 팔꿈치에서 손목까지. 두 끝의 높이가 다르므로 기둥이
+		#  **기운다**. 손목 끝은 손바닥 한가운데 높이다 — 맨 팔뚝이 손등과
+		#  한 줄로 이어진다(소매 상자 높이 arm_t 를 그대로 쓰면 손목에서
+		#  손등이 한 단 꺼진다).
 		var el: Vector2 = ps.el
 		var ap := Vector3(el.x, he + float(HAND3.arm_t) * 0.5, el.y)
-		var wp := Vector3(wr.x, hw + float(HAND3.arm_t) * 0.5, wr.y)
+		var wp := Vector3(wr.x, at.y + float(FING3.py) * sc, wr.y)
 		var am: Node3D = rg.arm
 		#  팔뚝은 손 굴림의 절반을 따라 돈다 — 사람 아래팔이 그렇다.
 		#  0 으로 두면 손목에서 재질이 끊기고, 1 로 두면 어깨까지 비틀린다.
@@ -20440,9 +21032,13 @@ func _hand3_sync() -> void:
 			var dv3 := wp - ap
 			if dv3.length() > 0.001:
 				ax = ap - dv3.normalized() * bk
-		am.transform = _aim3(ax, wp, 1.0,
-				deg_to_rad(float(HAND3.roll)) + hrl * 0.5)
+		var ln: float = maxf((wp - ax).length(), 1.0)
+		var atf := _aim3(ax, wp, 1.0, deg_to_rad(float(HAND3.roll))
+				+ float(ps.get("roll", 0.0)) * 0.5)
+		atf.basis.x = atf.basis.x / ln     # 길이는 조각이 갖는다 — 뿌리는 단위 축
+		am.transform = atf
 		am.visible = true
+		_fore3_fit(rg.fore, ln, sc)
 		#  팔 그림자 — 카운터 선(w 0)에서 자른다. 손목이 아직 카운터 뒤면
 		#  통째로 걷고, 넘어오는 순간에는 잘린 토막의 길이가 0 이라
 		#  켜지는 자리에서 안 튄다.
@@ -20474,12 +21070,51 @@ func _hand3_sync() -> void:
 		(rg2.shad as Node3D).visible = false
 		(rg2.arm as Node3D).visible = false
 		(rg2.armsh as Node3D).visible = false
+		(rg2.blob as Node3D).visible = false
+		_fing3_layer(rg2.hj, false)
+	#  앞 화판은 받쳐 든 동안만 굽는다 — 나머지 시간엔 그릴 것이 없다.
+	hand3_front = any_front
+	if hand3_fvp != null and is_instance_valid(hand3_fvp):
+		hand3_fvp.render_target_update_mode = SubViewport.UPDATE_ALWAYS \
+				if any_front else SubViewport.UPDATE_DISABLED
+
+
+#  팔뚝 조각을 길이 ln 에 맞춰 민다. 손목(x ln)에서 거꾸로 맨살 · 걷은 단 ·
+#  띠를 놓고 소매가 뿌리까지 남은 길이를 채운다. 손이 커지는 쓸기(sc 1.55)에는
+#  손목 쪽 단면을 반만 따라 키운다 — 손만 커지면 손목이 실처럼 가늘어진다.
+func _fore3_fit(fo: Dictionary, ln: float, sc: float) -> void:
+	var F: Dictionary = FORE3
+	var sw: float = lerpf(1.0, maxf(sc, 0.5), 0.55)
+	var x0: float = ln - float(fo.bl)
+	var bare: Node3D = fo.bare
+	bare.position = Vector3(x0, 0.0, 0.0)
+	bare.scale = Vector3(1.0, sw, sw)
+	var rl: Node3D = fo.roll
+	rl.position = Vector3(x0 - float(F.roll), 0.0, 0.0)
+	rl.visible = x0 > 0.0
+	var ga: Node3D = fo.gart
+	var gx: float = x0 - float(F.roll) - float(F.gap) - float(F.gart)
+	ga.position = Vector3(gx, 0.0, 0.0)
+	ga.visible = gx > 0.0
+	var sv: Node3D = fo.slv
+	var sl: float = x0 - float(F.roll) * 0.5
+	sv.visible = sl > 0.5
+	sv.scale = Vector3(maxf(sl, 0.5), 1.0, 1.0)
 
 
 func _hand3_draw() -> void:
 	if not _hand3_live():
 		return
 	var tex: Texture2D = hand3_vp.get_texture()
+	if tex != null:
+		draw_texture_rect(tex, HAND3.rect, false)
+
+
+#  받쳐 든 물건 **다음**에 붙인다 — 엄지와 손끝이 물건 테두리 위로 온다.
+func _hand3_front_draw() -> void:
+	if not hand3_front or hand3_fvp == null or not is_instance_valid(hand3_fvp):
+		return
+	var tex: Texture2D = hand3_fvp.get_texture()
 	if tex != null:
 		draw_texture_rect(tex, HAND3.rect, false)
 
@@ -20551,6 +21186,13 @@ const BODY3 := {
 	"btn_r": 3.4,
 	"belt": 6.0,         # 띠 윗면의 h. 카운터 선(앞면 h −24.5)보다 위여야 보인다
 	"belt_d": 14.0,      # 띠가 앞으로 나오는 깊이 — 윗면이 카운터 립이 된다
+	#  짝다리 — 몸이 늘 한쪽 엉덩이에 무게를 싣고 화면 왼쪽으로 조금 기운다(°).
+	#  무게 옮기기(IDLE.sway)는 그 위에서 오간다. 팔이 소매 · 손가락으로 갈라진
+	#  뒤 실루엣이 거울 쌍둥이로 돌아갔다 — 손 옆에 붙어 실루엣을 비틀던 검은
+	#  그림자 판이 반투명이 되고, 셔츠 V 가 벽색 구멍에서 천이 되면서
+	#  (npc_probe 좌우 비대칭 0.172 → 0.141). 몸통이 그 몫을 진다 — 3.4° 에서
+	#  0.181 이다(팔–몸통 골 12px). 허리(h 0)가 축이라 카운터 선은 안 움직인다.
+	"hip": 3.4,
 }
 
 var body3_vp: SubViewport = null
@@ -20559,6 +21201,41 @@ var body3_root: Node3D = null
 
 func _body3_live() -> bool:
 	return body3_vp != null and is_instance_valid(body3_vp)
+
+
+#  조끼 · 셔츠의 천 (2026-10-02). 옛 조끼는 C_WOOD 0.46 어둠의 무늬 없는 판이라
+#  램프 밑 진열대 옆에서 **검은 판때기**로 섰다. 세 가지로 옷을 만든다 —
+#   · 잔결 — 2px 결의 잡음을 밝기 ±11% 로 얹는다(트위드). 매끈하면 천이 아니라 칠이다.
+#   · 값 — 벽(2a1d17)보다 한 단 밝고 **식은** 회보라라, 따뜻한 벽 앞에서 색으로도
+#     갈린다. 초록 쪽으로는 못 간다 — npc_probe 가 초록 우세를 펠트(배경)로 센다.
+#   · 쇠 — 놋쇠 단추 셋 · 회중시계 줄. 램프가 한 점씩 맺혀 가운데 줄을 세운다.
+#  깃은 공단이라 한 단 밝고 반사가 있다 — 깃 모서리가 램프를 받아 V 를 그린다.
+const VEST3 := {
+	#  바탕이 푸른 것은 램프 탓이다 — 램프 밑에서 짙은 쪽빛 회색(38 39 4c 언저리)으로
+	#  떨어진다. 벽(3e1723)과 값은 비슷하고 색이 갈린다 — 따뜻한 방 앞의 식은 옷.
+	"vest": Color("45579a"),
+	#  깃은 조끼보다 **어둡고 매끈하다**(공단) — 크림 V 를 짙은 테로 두르고,
+	#  모서리만 램프를 받아 한 줄 빛난다.
+	"lap": Color("2a3050"),
+	#  V 의 셔츠 — 소매와 같은 크림이 조끼 그늘에 든 값. **L* 45 밑**이어야 한다:
+	#  npc_probe 는 화면에서 밝은 덩어리가 손 둘뿐인가를 잰다(눈이 손부터 보게).
+	"shirt": Color("7e7f8c"),
+	"belt": Color("2a1d17"),
+	"buckle": Color("c89a4a"),
+	"chain": Color("f0c255"),
+}
+
+
+#  천 재질 — 잔결을 제 메시 좌표로 깐다(삼면 투영). 몸이 돌아도 결이 천에
+#  붙어 다닌다(월드로 깔면 결이 몸 위를 흐른다).
+func _cloth3_mat(col: Color, seed: int, lo: float, spec := 0.08,
+		rough := 0.95) -> StandardMaterial3D:
+	var m := _skin3_mat(col, spec, rough)
+	m.albedo_texture = Room3D._noise_tex(0.5, lo, 1.0, seed)
+	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	m.uv1_triplanar = true
+	m.uv1_scale = Vector3.ONE / 256.0      # 1 텍셀 = 1 월드 = 화면 1px
+	return m
 
 
 func _body3_open() -> void:
@@ -20571,7 +21248,7 @@ func _body3_open() -> void:
 	body3_vp.add_child(rt)
 	body3_root = rt
 
-	var vest: Color = C_WOOD.darkened(0.46)
+	var vest := _cloth3_mat(VEST3.vest, 31, 0.78)
 	var hi: float = float(BODY3.hi)
 	var lo: float = float(BODY3.lo)
 	var fw: float = float(BODY3.face)
@@ -20585,7 +21262,13 @@ func _body3_open() -> void:
 	for s in [-1.0, 1.0]:
 		var pv := Node3D.new()
 		var ly: float = float(BODY3.lean_y)
-		pv.position = Vector3(s * float(BODY3.hinge), ly, fw)
+		#  돌쩌귀를 앞면보다 3.5 앞에 둔다(2026-10-02). 제자리(fw)면 옆 조각이
+		#  돌쩌귀에서 뒤로 물러나 가운데 조각 옆면(u ±34)의 앞 3.2 가 드러난다 —
+		#  어떤 빛도 안 받는 면이라, 몸이 돌 때 조끼 솔기에 검은 점이 한두 화소
+		#  섰다(옛 조끼는 벽만큼 어두워 안 보였다). 앞으로 당기면 옆 조각이 그
+		#  옆면을 덮고 음영 경계가 돌쩌귀(26)로 온다. 가로 자리는 그대로라 실루엣은
+		#  한 화소도 안 바뀐다.
+		pv.position = Vector3(s * float(BODY3.hinge), ly, fw + 3.5)
 		#  오일러 차례가 YXZ 라 눕히기(z)가 **먼저** 제 자리에서 돌고
 		#  그다음 통째로 틀린다(y). 그 차례라야 사다리꼴이 나온다.
 		#  부호가 −s 다. +s 로 두면 허리가 **넓어진다** — 사다리꼴이
@@ -20601,23 +21284,46 @@ func _body3_open() -> void:
 	#  네모라서 덮이는 자리가 모양을 정한다(BODY3 의 덮는 조건).
 	var shw: float = float(BODY3.sh_w)
 	rt.add_child(_blk3(Vector2(-shw, shw), Vector2(float(BODY3.sh_lo), hi),
-			Vector2(fw, fw + 4.0), C_LIGHT.darkened(0.60)))
+			Vector2(fw, fw + 4.0), _cloth3_mat(VEST3.shirt, 37, 0.9)))
 	#  앞자락 둘 — 조끼 앞판이다. 안쪽 모서리가 V 꼭짓점을 지나고 그 아래에서
-	#  서로 엇갈린다(윗지 조끼가 원래 그렇게 생겼다). 조끼와 같은 색이라
+	#  서로 엇갈린다(윗지 조끼가 원래 그렇게 생겼다). 조끼와 같은 천이라
 	#  화면에서는 안 보이고, 셔츠를 덮는 일만 한다.
 	#  깃은 그 위에 한 단 밝게 얹는 좁은 띠다 — 2D 가 하던 그대로.
+	var lap := _cloth3_mat(VEST3.lap, 33, 0.9, 0.45, 0.42)
 	for s in [-1.0, 1.0]:
 		_body3_vee(rt, s, float(BODY3.pan_w), fw + 4.0, fw + 10.0, vest)
-		_body3_vee(rt, s, float(BODY3.lap_w), fw + 10.0, fw + 15.0,
-				C_WOOD.darkened(0.36))
-	#  단추 셋. 깃보다 더 나와야 보인다 — 깃 둘이 가운데에서 엇갈리는
-	#  자리라, 깃 앞면보다 뒤에 두면 상자 안으로 들어간다.
+		_body3_vee(rt, s, float(BODY3.lap_w), fw + 10.0, fw + 15.0, lap)
+	#  단추 셋 — 놋쇠 둥근 단추. 깃보다 더 나와야 보인다 — 깃 둘이 가운데에서
+	#  엇갈리는 자리라, 깃 앞면보다 뒤에 두면 상자 안으로 들어간다.
+	var brass := _gold3_mat(FORE3.brass, 0.12)
 	var br: float = float(BODY3.btn_r)
 	var bf: float = fw + 15.0
+	var bm := CylinderMesh.new()
+	bm.top_radius = br * 0.78
+	bm.bottom_radius = br * 0.9
+	bm.height = 2.4
+	bm.radial_segments = 8
+	bm.rings = 1
 	for bh in BODY3.btn:
-		rt.add_child(_blk3(Vector2(-br, br),
-				Vector2(float(bh) - br, float(bh) + br),
-				Vector2(bf, bf + 4.0), C_WOOD.lightened(0.13)))
+		var bt := _mi3(bm, brass, Vector3(0.0, float(bh), bf + 1.2))
+		bt.rotation_degrees = Vector3(90.0, 0.0, 0.0)
+		rt.add_child(bt)
+	#  회중시계 줄 — 가운데 단추에서 화면 왼쪽 앞자락 아래로 늘어진다. 놋쇠
+	#  고리가 늘어진 곡선 하나라 조끼 한가운데에 쇠붙이 리듬이 선다.
+	#  **고리 사이를 띄운다.** 한 올로 이었더니 밝은 금줄 60px 이 한 덩어리로
+	#  서서 npc_probe 가 「손 말고 밝은 것」으로 잡았다 — 눈이 손보다 줄을 먼저
+	#  본다는 뜻이다. 고리마다 1px 끊기면 덩어리가 고리 하나(≤ 6px)로 쪼개진다.
+	var chm := _gold3_mat(VEST3.chain, 0.4)
+	var c0 := Vector3(-1.5, float(BODY3.btn[1]), bf + 1.6)
+	var c1 := Vector3(-27.0, float(BODY3.btn[2]) + 3.0, bf - 2.0)
+	var prev := c0
+	for k in range(1, 11):
+		var q := float(k) / 10.0
+		var pt := c0.lerp(c1, q) + Vector3(0.0, -7.5 * sin(q * PI), 0.0)
+		var seg := _mi3(_prism3(1.0, 1.3, 1.3, 1.3, 1.3, 0.3), chm)
+		seg.transform = _aim3(prev, prev.lerp(pt, 0.55), 1.0)
+		rt.add_child(seg)
+		prev = pt
 	#  허리띠. 앞으로 더 나와 **윗면이 보이는** 유일한 조각이다 —
 	#  카운터 바로 위에 밝은 가로 띠가 드러나고, 그것이 상인을
 	#  카운터 **뒤에** 세운다.
@@ -20627,13 +21333,13 @@ func _body3_open() -> void:
 	rt.add_child(_blk3(Vector2(-62.0, 62.0),
 			Vector2(lo, float(BODY3.belt)),
 			Vector2(fw - float(BODY3.d), fw + float(BODY3.belt_d)),
-			C_WOOD.darkened(0.52)))
+			_skin3_mat(VEST3.belt, 0.3, 0.6)))
 
 
 #  V 를 만드는 조각 하나. 안쪽 모서리가 꼭짓점을 지나 vee_a 로 기울고,
 #  거기서 바깥으로 wd 만큼 뻗는다. s −1 이 화면 왼쪽이다.
 func _body3_vee(rt: Node3D, s: float, wd: float, w0: float, w1: float,
-		col: Color) -> void:
+		col: Variant) -> void:
 	var pv := Node3D.new()
 	pv.position = Vector3(0.0, float(BODY3.vee), (w0 + w1) * 0.5)
 	pv.rotation_degrees = Vector3(0.0, 0.0, -s * float(BODY3.vee_a))
@@ -20658,7 +21364,8 @@ func _body3_sync() -> void:
 	var ps := _idle_body()
 	#  2D 의 화면 회전(th)과 같은 양을 월드 롤로 바꿈다. 높이 h 는
 	#  화면에서 0.616·h 라, 같은 가로 밀림을 내려면 각이 0.616 배여야 한다.
-	var roll: float = -_sweep_tilt() * float(TBL.tall) + float(ps.roll)
+	var roll: float = -_sweep_tilt() * float(TBL.tall) + float(ps.roll) \
+			+ deg_to_rad(float(BODY3.hip))
 	body3_root.rotation = Vector3(0.0, float(ps.yaw), roll)
 	body3_root.position = Vector3(float(NPC.cx), float(ps.rise), float(ps.lean))
 
