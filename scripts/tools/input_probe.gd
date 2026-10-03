@@ -423,6 +423,16 @@ func _row_tap(key: String) -> bool:
 	return true
 
 
+#  설정 창의 탭(2026-10-03 — 화면 · 소리는 줄이 아니라 탭이다).
+func _tab_tap(key: String) -> bool:
+	var i: int = (g.SET_TABS as Array).find(key)
+	if i < 0:
+		return false
+	_tap((g._set_tab_rect(i) as Rect2).get_center())
+	_settle()
+	return true
+
+
 func _pause_walk() -> void:
 	print("\n── 일시정지 · 설정 갈래 — ESC · 화면 단추 · 줄 누름 ──\n")
 	trouble = ""
@@ -440,20 +450,19 @@ func _pause_walk() -> void:
 	_say(g.state == _st("SETTINGS") and g._set_pg() == "pause", "ESC → 일시정지",
 			"%s · 쪽 %s" % [_name(g.state), g._set_pg()])
 	_row_tap("set")
-	_say(g._set_pg() == "top", "「설정」 누름 → 설정 쪽", g._set_pg())
-	_row_tap("screen")
 	_say(g._set_pg() == "screen" and (g._set_rows() as Array).has("warp"),
-			"「화면」 누름 → 전체화면 · CRT · 굴곡", "%s" % [g._set_rows()])
-	_key(KEY_ESCAPE)
-	_settle()
-	_say(g._set_pg() == "top", "ESC → 설정 쪽으로 한 단", g._set_pg())
-	_row_tap("sound")
-	_say(g._set_pg() == "sound", "「소리」 누름 → 효과음 · 음악", "%s" % [g._set_rows()])
-	_row_tap("back")
-	_say(g._set_pg() == "top", "「뒤로」 누름 → 설정 쪽", g._set_pg())
+			"「설정」 누름 → 설정 창 「화면」 탭(전체화면 · CRT · 굴곡)", "%s" % [g._set_rows()])
+	_tab_tap("sound")
+	_say(g._set_pg() == "sound", "「소리」 탭 누름 → 효과음 · 음악", "%s" % [g._set_rows()])
+	_tab_tap("screen")
+	_say(g._set_pg() == "screen", "「화면」 탭 누름 → 되돌아온다", g._set_pg())
 	_key(KEY_ESCAPE)
 	_settle()
 	_say(g._set_pg() == "pause" and g.state == _st("SETTINGS"), "ESC → 일시정지로 한 단",
+			g._set_pg())
+	_row_tap("set")
+	_row_tap("back")
+	_say(g._set_pg() == "pause" and g.state == _st("SETTINGS"), "「뒤로」 누름 → 일시정지",
 			g._set_pg())
 	_key(KEY_ESCAPE)
 	_settle()

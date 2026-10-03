@@ -160,8 +160,9 @@ func _run() -> void:
 	var info: Dictionary = g._set_info("crt")
 	_ok("이름 「CRT 필터」 · 게이지", String(info.get("n", "")) == "CRT 필터"
 			and bool(info.get("g", false)), "%s" % info)
-	_ok("한 줄 설명이 있다 · 굴곡을 말하지 않는다", String(info.get("d", "")) != ""
-			and not String(info.get("d", "")).contains("굴곡"), String(info.get("d", "")))
+	#  설명 줄은 없다(2026-10-03 창으로 고치며 — 「효과만, 해설 금지」). 값을 밀면 화면이
+	#  곧바로 그렇게 된다.
+	_ok("설명 줄이 없다", not info.has("d"), "%s" % info)
 	_ok("「화면」 갈래가 CRT 를 품는다", (g._set_info("screen").get("kids", []) as Array)
 			.has("crt"), "%s" % [g._set_info("screen").get("kids", [])])
 	var opens := {"제목": -1, "상점": g.S.SHOP, "판 중": g.S.AIM_V}
@@ -171,9 +172,9 @@ func _run() -> void:
 		g._set_go("pause" if int(opens[nm]) >= 0 else "top")
 		g.set_t = 1.0
 		g.set_pg_t = 1.0
-		#  누르며 들어간다 — 일시정지 › 설정 › 화면(제목은 설정 › 화면).
+		#  누르며 들어간다 — 일시정지 › 설정(첫 탭이 화면). 제목은 곧장 설정 창이다.
 		var path := []
-		for key in ["set", "screen"]:
+		for key in ["set"]:
 			var ki: int = (g._set_rows() as Array).find(key)
 			if ki >= 0:
 				g._click((g._set_rect(ki) as Rect2).get_center())
@@ -207,26 +208,29 @@ func _run() -> void:
 	g.set_t = 1.0
 	for k in 4:
 		g._set_tick(1.0 / 60.0)
-	#  진짜 누름으로 들어간다 — 「설정」 › 「화면」.
-	for key in ["set", "screen"]:
+	#  진짜 누름으로 들어간다 — 「설정」(첫 탭이 「화면」).
+	for key in ["set"]:
 		g.set_pg_t = 1.0
 		var c0: Vector2 = (g._set_rect((g._set_rows() as Array).find(key)) as Rect2).get_center()
 		_mouse(c0, true)
 		_mouse(c0, false)
 	g.set_pg_t = 1.0
-	_ok("일시정지 › 설정 › 화면", g._set_pg() == "screen", g._set_pg())
+	_ok("일시정지 › 설정 = 화면 탭", g._set_pg() == "screen", g._set_pg())
 
 	# ── ⑤ 누르고 · 끌고 · 떼기 ───────────────────────────
 	var rows2: Array = g._set_rows()
 	var ci2: int = rows2.find("crt")
-	#  왼쪽 글줄을 누르면 고르기만 한다(게임이 안 바뀐다).
-	_mouse(g._set_rect(ci2).get_center(), true)
-	_mouse(g._set_rect(ci2).get_center(), false)
-	_ok("글줄을 누르면 고른다", g.set_sel == ci2 and g.state == g.S.SETTINGS,
-			"set_sel %d" % g.set_sel)
+	#  줄의 이름 쪽을 누르면 고르기만 한다 — 값이 안 튄다(홈은 이름 칸 뒤에서 시작한다).
+	var crt0: float = g.crt
+	var nm_at: Vector2 = g._set_rect(ci2).position + Vector2(30.0, g._set_rect(ci2).size.y * 0.5)
+	_mouse(nm_at, true)
+	_mouse(nm_at, false)
+	_ok("이름을 누르면 고르기만 한다", g.set_sel == ci2 and g.state == g.S.SETTINGS
+			and g.set_drag == -1 and is_equal_approx(g.crt, crt0),
+			"set_sel %d · %.2f → %.2f" % [g.set_sel, crt0, g.crt])
 	g.mouse_at = Vector2(-50.0, -50.0)
 	g.set_hot = -1
-	_ok("오른쪽 판이 CRT 를 편다", g._set_face() == ci2)
+	_ok("띠가 CRT 줄에 선다", g._set_face() == ci2)
 	var tr: Rect2 = g._vol_track()
 	var p0 := Vector2(tr.position.x + tr.size.x * 0.20, tr.get_center().y)
 	var p1 := Vector2(tr.position.x + tr.size.x * 0.75, tr.get_center().y)
@@ -259,9 +263,8 @@ func _run() -> void:
 			and is_equal_approx(g._gauge_v("vol"), g.vol)
 			and is_equal_approx(g._gauge_v("mus"), g.vol_mus))
 	g._settings_back()
-	_ok("한 번 오르면 설정", g._set_pg() == "top" and g.state == g.S.SETTINGS)
-	g._settings_back()
-	_ok("또 오르면 일시정지", g._set_pg() == "pause" and g.state == g.S.SETTINGS)
+	_ok("한 번 오르면 일시정지(탭은 단이 아니다)", g._set_pg() == "pause"
+			and g.state == g.S.SETTINGS)
 	g._settings_back()
 	_ok("또 오르면 상점으로", g.state == g.S.SHOP)
 

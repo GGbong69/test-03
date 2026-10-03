@@ -507,8 +507,10 @@ func _esc() -> void:
 
 # ── 설정 ─────────────────────────────────────────────────
 #  2026-10-03 — 게이지가 갈래 안으로 들어갔다(「설정이 저기서 다 나열되기 보단 … 상위가
-#  있으면 좋겠는데」). 효과음 · 음악은 「소리」 쪽, 전체화면은 「화면」 쪽이다. 휠의 규약은
-#  그대로다: 고른 줄이 게이지일 때만, 오른쪽 판의 홈 위에서만.
+#  있으면 좋겠는데」). 효과음 · 음악은 「소리」 쪽, 전체화면은 「화면」 쪽이다.
+#  같은 날 창으로 고치며(「설정 UI 좀 더 개선 해봐」) 홈이 **줄마다 제 것**이 됐다 —
+#  휠은 커서 밑 줄이 게이지일 때 그 줄의 값을 민다. 고른 줄이 홈의 주인을 정하던 규약은
+#  없어졌다(홈이 하나뿐이던 때의 것이다).
 func _settings() -> void:
 	g.pause_from = -1
 	g.state = g.S.SETTINGS
@@ -550,26 +552,25 @@ func _settings() -> void:
 	var before: float = g.vol
 	_roll(Vector2(20.0, 340.0), 1)
 	_ok("홈 밖은 흘린다", is_equal_approx(g.vol, before), "%.2f" % g.vol)
-	# 게이지가 아닌 줄을 고른 채로 홈 위에서 굴려도 안 움직인다 — 「화면」 쪽의 전체화면
+	# 게이지가 아닌 줄 위에서 굴려도 안 움직인다 — 「화면」 탭의 전체화면
 	g._set_go("screen")
 	g.set_pg_t = 1.0
-	g.set_sel = (g._set_rows() as Array).find("fs")
 	g.set_hot = -1
 	var crt0: float = g.crt
 	var warp0: float = g.warp
-	_roll(tr, 1)
+	_roll((g._set_rect((g._set_rows() as Array).find("fs")) as Rect2).get_center(), 1)
 	_ok("게이지 줄이 아니면 흘린다", is_equal_approx(g.vol, before)
 			and is_equal_approx(g.crt, crt0) and is_equal_approx(g.warp, warp0),
 			"%.2f" % g.vol)
 	g._set_go("sound")
 	g.set_pg_t = 1.0
 	g.set_hot = -1
-	# 음악 줄을 고르면 같은 홈이 음악을 만진다
-	g.set_sel = rows.find("mus")
+	# 음악 줄 위에서 굴리면 음악이 움직인다 — 고른 줄(효과음)이 아니라 커서 밑 줄이다
+	g.set_sel = rows.find("vol")
 	g.vol_mus = 0.8
 	var v0: float = g.vol
-	_roll(tr, 1)
-	_ok("고른 줄이 어느 소리인지 정한다",
+	_roll((g._vol_track(rows.find("mus")) as Rect2).get_center(), 1)
+	_ok("커서 밑 줄이 어느 소리인지 정한다",
 			is_equal_approx(g.vol_mus, 0.75) and is_equal_approx(g.vol, v0),
 			"음악 %.2f · 효과음 %.2f" % [g.vol_mus, g.vol])
 	for i in 30:

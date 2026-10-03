@@ -92,6 +92,12 @@ func _tap(key: String) -> void:
 	g._click(_at(key))
 
 
+#  설정 창의 탭(2026-10-03 — 화면 · 소리는 줄이 아니라 탭이다).
+func _tab(key: String) -> void:
+	g.set_pg_t = 1.0
+	g._click((g._set_tab_rect((g.SET_TABS as Array).find(key)) as Rect2).get_center())
+
+
 func _run() -> void:
 	g._new_run()
 	_calm()
@@ -123,7 +129,7 @@ func _run() -> void:
 	_tap("lobby")
 	_tap("set")
 	_ok("풀림 — 딴 줄(설정)을 누르면 풀린다", not g.lobby_arm, "쪽 %s" % g._set_pg())
-	_ok("풀림 — 판은 안 떴다(설정 쪽)", g.state == g.S.SETTINGS and g._set_pg() == "top")
+	_ok("풀림 — 판은 안 떴다(설정 창)", g.state == g.S.SETTINGS and g._set_pg() != "pause")
 	g._settings_back()                       # 설정 › 일시정지
 	g.set_pg_t = 1.0
 	_ok("돌아온 일시정지 쪽에 겨눔이 안 남았다", g._set_pg() == "pause" and not g.lobby_arm)
@@ -137,7 +143,7 @@ func _run() -> void:
 	_ok("게이지 앞 — 겨눔이 섰다", g.lobby_arm)
 	_tap("set")
 	g.set_pg_t = 1.0
-	_tap("sound")                  # 소리 쪽 — 홈이 효과음을 쥔다
+	_tab("sound")                  # 소리 탭 — 효과음 줄에 홈이 있다
 	g.set_pg_t = 1.0
 	_ok("풀림 — 소리 쪽으로 가는 길에 겨눔이 안 따라온다", not g.lobby_arm, g._set_pg())
 	g.lobby_arm = true             # 겨눔이 남았다고 치고(개발자 판의 「로비 겨눔 세우기」)
@@ -239,13 +245,15 @@ func _run() -> void:
 			thick_calls >= 1 and thick_armed == thick_calls,
 			"겨눔 %d / 굵기 %d / 띠 전체 %d곳"
 			% [thick_armed, thick_calls, band_calls])
-	#  설정 글줄을 그리는 함수 안의 draw_string 수. 글줄 이름 하나와 게이지
-	#  수 하나, 딱 둘이다 — 겨눔이 **글자를 한 자도 안 더했다**는 기계적 증거다.
+	#  설정 줄을 그리는 함수 안의 draw_string 수. 이름 하나를 가운데(일시정지 · 뒤로)와
+	#  왼쪽(설정 줄)으로 갈라 쓰는 둘뿐이다 — 겨눔이 **글자를 한 자도 안 더했다**는
+	#  기계적 증거다. 게이지 수는 _set_gauge_draw 가 따로 쓴다(2026-10-03 창 둘로 고치며
+	#  줄 그리기가 _draw_settings 밖으로 나왔다).
 	var in_fn := false
 	var strings := 0
 	for ln in src.split("\n"):
 		var t := String(ln)
-		if t.begins_with("func _draw_settings("):
+		if t.begins_with("func _set_row_draw("):
 			in_fn = true
 			continue
 		if in_fn and t.begins_with("func "):
@@ -253,5 +261,5 @@ func _run() -> void:
 		if in_fn and not t.strip_edges().begins_with("#") \
 				and t.contains("draw_string("):
 			strings += 1
-	_ok("설정 글줄에 글자가 딱 둘 (이름 · 게이지 수)", strings == 2,
+	_ok("설정 줄에 글자가 딱 둘 (이름 가운데 · 왼쪽)", strings == 2,
 			"draw_string %d곳" % strings)

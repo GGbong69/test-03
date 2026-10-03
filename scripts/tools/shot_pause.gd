@@ -5,10 +5,12 @@ extends SceneTree
 #  지금 게임안에서 esc를 누르면 일시정지가 되어야지 일시정지에 설정을 누르면
 #  설정창이 되어야지 ㅇㅋ?」(사용자).
 #  shots/ 에:
-#    pause_menu.png       상점 위의 일시정지 — 「설정」 줄을 고른 채(판이 갈래 둘을 편다)
-#    settings_top.png     설정 쪽 — 「화면」 줄(판이 안의 세 줄과 값을 편다)
-#    settings_screen.png  화면 쪽 — 「화면 굴곡」 게이지
-#    settings_sound.png   소리 쪽 — 「효과음」 게이지
+#    pause_menu.png       상점 위의 일시정지 창 — 「설정」 줄을 고른 채
+#    settings_top.png     설정 창 「화면」 탭 — 처음 연 그대로(첫 줄에 띠)
+#    settings_screen.png  「화면」 탭 — 커서가 「화면 굴곡」 줄에 얹힌 채
+#    settings_sound.png   「소리」 탭 — 탭을 진짜 누름으로 갈아 연다
+#    settings_grow.png    일시정지 → 설정으로 창이 자라는 한가운데(쪽 갈이 0.4)
+#  (2026-10-03 같은 날 「설정 UI 좀 더 개선 해봐」로 창 둘이 됐다 — 일시정지 창 · 탭 있는 설정 창)
 #    title_settings.png   제목 → 설정(일시정지를 안 지난다)
 #    warp_0.png · warp_50.png · warp_100.png   CRT 40 의 상점에 굴곡 0 · 50 · 100
 #    warp_click.png       왼쪽 = 굴곡 50 의 화면에서 누른 자리(번호 고리),
@@ -102,6 +104,23 @@ func _press_row(key: String) -> void:
 		g._unhandled_input(e)
 
 
+#  탭을 **진짜 누름**으로 누른다.
+func _press_tab(key: String) -> void:
+	var t: int = (g.SET_TABS as Array).find(key)
+	if t < 0:
+		print("  ⚠ 탭 없음 %s" % key)
+		return
+	g.set_t = 1.0
+	g.set_pg_t = 1.0
+	var d := _inv((g._set_tab_rect(t) as Rect2).get_center() + g.view_pad)
+	for down in [true, false]:
+		var e := InputEventMouseButton.new()
+		e.button_index = MOUSE_BUTTON_LEFT
+		e.pressed = down
+		e.position = d
+		g._unhandled_input(e)
+
+
 #  g(d) = s 를 푸는 d. 셰이더는 앞으로만 미므로 역은 촬영 · 검사에서만 쓴다.
 func _inv(s: Vector2) -> Vector2:
 	var w: float = g._warp_live()
@@ -180,15 +199,25 @@ func _run() -> void:
 	_press_row("set")
 	g.mouse_at = Vector2(-50.0, -50.0)
 	await _snap("settings_top")
-	_press_row("screen")
-	g.set_sel = (g._set_rows() as Array).find("warp")
-	g.mouse_at = Vector2(-50.0, -50.0)
+	g.mouse_at = (g._set_rect((g._set_rows() as Array).find("warp")) as Rect2).get_center()
 	await _snap("settings_screen")
-	g._settings_back()
-	_press_row("sound")
+	g.mouse_at = Vector2(-50.0, -50.0)
+	_press_tab("sound")
 	g.mouse_at = Vector2(-50.0, -50.0)
 	await _snap("settings_sound")
+	#  자라는 한가운데 — 일시정지로 오른 뒤 다시 「설정」을 누르고 시계를 0.4 에 묶는다.
 	g._settings_back()
+	_press_row("set")
+	g.mouse_at = Vector2(-50.0, -50.0)
+	await _settle(2)
+	g.set_pg_t = 0.4
+	g.queue_redraw()
+	var fr = g.get_node_or_null("Front")
+	if fr != null:
+		fr.queue_redraw()
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("res://shots/settings_grow.png")
+	g.set_pg_t = 1.0
 	g._settings_back()
 	g._settings_back()
 	await _settle(30)

@@ -388,15 +388,19 @@ func _run() -> void:
 	g._vol_save_due()
 
 	# ── ⑧ 화면 굴곡 게이지를 굴곡 위에서 끈다 ────────────────
-	g._settings_back()                                # 소리 › 설정
-	_ok("소리에서 오르면 설정 · 「소리」 줄을 다시 집는다", g._set_pg() == "top"
-			and String(g._set_rows()[g.set_sel]) == "sound")
+	#  설정 창(2026-10-03 창 둘) — 탭은 단이 아니라 한 번 오르면 일시정지다.
+	g._settings_back()                                # 소리 탭 › 일시정지
+	_ok("설정 창에서 오르면 일시정지 · 「설정」 줄을 다시 집는다", g._set_pg() == "pause"
+			and String(g._set_rows()[g.set_sel]) == "set")
 	g.set_pg_t = 1.0
-	_tap(_at(g._set_rect((g._set_rows() as Array).find("screen")).get_center()))
-	_ok("굴곡 위에서 「화면」 갈래를 누른다", g._set_pg() == "screen", g._set_pg())
+	_tap(_at(g._set_rect((g._set_rows() as Array).find("set")).get_center()))
+	_ok("굴곡 위에서 「설정」을 누르면 화면 탭", g._set_pg() == "screen", g._set_pg())
 	g.set_pg_t = 1.0
-	_tap(_at(g._set_rect((g._set_rows() as Array).find("warp")).get_center()))
-	_ok("「화면 굴곡」 줄을 고른다", String(g._set_rows()[g.set_sel]) == "warp")
+	#  줄의 이름 쪽을 누른다 — 홈 둘레가 아니라 고르기만 한다.
+	var wr: Rect2 = g._set_rect((g._set_rows() as Array).find("warp"))
+	_tap(_at(wr.position + Vector2(30.0, wr.size.y * 0.5)))
+	_ok("「화면 굴곡」 줄을 고른다", String(g._set_rows()[g.set_sel]) == "warp"
+			and g.set_drag == -1)
 	g.set_hot = -1
 	var tr: Rect2 = g._vol_track()
 	var p0 := Vector2(tr.position.x + tr.size.x * 0.20, tr.get_center().y)
@@ -418,8 +422,8 @@ func _run() -> void:
 			"디스크 %s" % [Save.get_set("warp", -1.0)])
 	g._settings_back()
 	g._settings_back()
-	g._settings_back()
-	_ok("ESC 문 셋으로 판까지 오른다", g.state == g.S.SHOP, "state %d" % g.state)
+	_ok("ESC 문 둘로 판까지 오른다(설정 › 일시정지 › 판)", g.state == g.S.SHOP,
+			"state %d" % g.state)
 
 	# ── ⑨ GPU — 셰이더가 실제로 따 온 자리 ──────────────────
 	if DisplayServer.get_name() == "headless":
