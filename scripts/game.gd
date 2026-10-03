@@ -3946,6 +3946,8 @@ func _reroll() -> void:
 		#  마음에 안 듦 → 껐다 켬 → 다른 결과」가 열린다. 느린 길은
 		#  _sweep_deal 끝에서 같은 일을 한다.
 		_knot_shop()
+	elif _shop_bare() and _pound_table():
+		pass                     # 빈 테이블 — 주먹이 닿는 틀에 _pound_land 가 _roll_stock 을 부른다
 	else:
 		_sweep_begin()           # 끝에서 _sweep_deal 이 _roll_stock 을 부른다
 	_sfx("reroll")
@@ -9101,6 +9103,7 @@ func _hud_draw() -> void:
 		_modplate_draw()    # 낀 보드 확장 명판(던지는 동안만)
 		_rack_hold_draw()   # 판 위다 — 끌고 다니는 동전은 무엇에도 안 덮인다
 		_prop_fly_draw()    # 판 동전이 동전 슬롯에서 저울 접시로 난다(판매 몸짓)
+		_pound_candy_draw(0)   # 사탕이 사탕 칸에서 펠트로 난다(주먹 몸짓)
 		_use_draw()         # 가운데로 끌고 온 사탕·사진과 그 자리
 		# 나가는 전환에서만 같이 들어온다. 돌아오는 쪽은 안 그린다 —
 		# HUD 는 스크림 위라, 벽만 어두운 화면에 홀로 밝게 뜬다.
@@ -16903,8 +16906,12 @@ func _cons_use(i: int) -> void:
 			return _cons_deny(c, "아직 준비 중이다")
 	_bump("cons_used")
 	cons.remove_at(i)
-	pop(at + Vector2(0.0, 26.0), say, C_ACC, 10, 0.9)
-	_sfx("cons_use")
+	#  사탕을 상점에서 쓰면 펠트에 떨어뜨리고 상인이 주먹으로 부순다(POUND 머리말) — 값은
+	#  위에서 이미 올랐고, 글 · 소리는 부수는 틀에 그 자리에서 난다. 못 서면 옛 그대로 칸에서.
+	if not (state == S.SHOP and String(c.get("id", "")).begins_with("c_")
+			and _pound_candy(String(c.id), at, say)):
+		pop(at + Vector2(0.0, 26.0), say, C_ACC, 10, 0.9)
+		_sfx("cons_use")
 	#  상점에서 썼으면 매듭을 다시 적는다. 판 위에서 쓴 것은 안 적힌다 —
 	#  판 중은 매듭이 아니고, 그 판은 첫머리부터 다시 던지는 것이 규약이다.
 	_knot_shop()
@@ -17573,6 +17580,9 @@ const SMASH := {
 
 var sweep_t := 0.0       # 쓸기 경과(초)
 var sweep_live := false  # 연출 전체가 도는 중 — 입력을 통째로 삼킨다
+#  빈 테이블 리롤(2026-10-03) — 쓸 것이 없어 상인이 주먹으로 친다. sweep_live 를 같이 세워
+#  쓸기의 문지기(입력 · 리롤 재진입 · 일시정지 · 매듭)를 **그대로** 탄다(_pound_table).
+var sweep_pound := false
 var sweep_on := false    # 훑기 중 — 물리가 열린 구간
 var sweep_dealt := false # 새 판을 이미 깔았는가
 var waste := []          # 창구로 빠진 물건. stock 사본을 들고 다닌다
@@ -19552,6 +19562,8 @@ func _table_draw() -> void:
 	_felt_draw()
 	_goods_draw()
 	_waste_draw()
+	#  펠트에 앉은 사탕 — 물건 다음 · 상인 손 밑(주먹이 위에서 덮는다).
+	_pound_candy_draw(1)
 	_cover_draw()
 	#  조각은 _cover_draw **다음**이다. _waste_draw 옆에 두면 _cover_draw 가
 	#  그리는 _npc_arms 와 _hand3_draw 가 조각을 덮는다 — 날이 턱에 닿는 것이
@@ -21660,6 +21672,9 @@ func _fing3(i: int, gk: float) -> void:
 		var pr: float = _prop_reach(i)
 		if i == 0:
 			_fp_mix(o, FPOSE.open, 0.7 * pr)
+		elif prop_pound != "":
+			#  주먹 — 사탕 · 빈 테이블. 꽉 쥔 주먹은 화풀이다(등록기는 편 손 + ¼).
+			_fp_mix(o, FPOSE.fist, pr)
 		else:
 			_fp_mix(o, FPOSE.open, pr)
 			_fp_mix(o, FPOSE.fist, 0.25 * pr)
@@ -23583,6 +23598,27 @@ const PROP := {
 	"ghost": 0.12,       # 앞 동전이 졸아드는 시간
 	#  저울대 출렁임 — 용수철(각진동수 · 감쇠비). 0.45 면 한 번 20% 넘어갔다 돌아온다.
 	"tilt_w": 16.0, "tilt_z": 0.45,
+	# ── 주먹 — 사탕 부수기 · 빈 테이블 내리치기 (초 · 2026-10-03, POUND 머리말) ──
+	"p_up": 0.26,        # 주먹이 치켜든 자리에 섰다(뻗기 봉투 끝)
+	"p_cock": 0.36,      # 한 번 더 들었다 — 여기서 내리친다
+	"p_hit": 0.44,       # 주먹이 닿는다 — 부서짐 · 판 · 흔들림 · 쾅
+	"p_hold": 0.56,      # 눌러 둔 채 한 번 튀었다 — 빈 테이블 리롤은 여기서 문을 연다
+	"p_end": 1.05,
+	#  치켜든 높이(면 h) · 예비 동작 몫 · 치켜들며 몸 쪽(−w)으로 당기는 몫 · 튀는 몫.
+	#  등록기(36 + 6)보다 높다 — 화풀이 주먹은 손바닥 내리치기보다 크게 든다.
+	"p_lift": 46.0, "p_cockup": 10.0, "p_back": 6.0, "p_bounce": 4.0,
+	#  주먹 밑면 — 손 좌표(손목 축에서). 엎은 주먹의 맨 아래는 말린 손가락 첫마디의 등이다:
+	#  너클(x 30.5)에서 첫마디가 86° 굽어 거의 곧장 밑으로(l1 13) 가고 두께 반(3.3)을 더 내린다.
+	"p_fist": Vector3(28.0, -15.5, 0.0),
+	#  손이 기울고 싶은 쪽(도) — 손끝(주먹 앞)이 손님 쪽 · 조금 왼쪽. 치켜들 때 젖히고 칠 때
+	#  숙인다. 다 손목 한도 안에서만 산다(_prop_goal).
+	"p_ang": 100.0, "p_pit0": -12.0, "p_pit1": 8.0,
+	#  몸 — 앞으로 나와 내려앉는다(lean · rise). 등록기만큼 옆으로 안 기운다 — 앞이다.
+	"p_body": [-0.05, -0.05, 12.0, 4.0],
+	#  팔꿈치가 굽는 쪽 — 바깥 위. 치켜든 주먹 밑에서 팔꿈치가 옆으로 들려야 내리치는 팔이다.
+	"p_pole": Vector3(0.6, 1.0, -0.2),
+	#  사탕 — 사탕 칸에서 펠트로 난다(c_fly) · 앉으며 한 번 눌렸다 편다(c_squash).
+	"c_fly": 0.24, "c_hop": 26.0, "c_squash": 0.12,
 }
 #  손마다 — 0 판매(화면 왼손) · 1 구매(오른손). 배열은 처음 한 번 짓고 칸만 고친다.
 var prop_t := [-1.0, -1.0]        # 몸짓 시계. −1 이면 안 돈다
@@ -23614,6 +23650,14 @@ var prop_drop := Vector3(0.0, -99.0, 0.0)    # 놓은 동전 (u, h, w)
 var prop_dv := 0.0
 var prop_ghost := {}              # 앞 동전 {it, c, r, sq, lay, t} — lay 0 HUD 위 · 1 손 층 · 2 턱 뒤
 var prop_force := false           # 그림 없는 판(헤드리스 검사)에서도 몸짓을 돌린다
+#  오른손 몸짓의 갈래 — "" 등록기 내리치기(구매) · "candy" 사탕 부수기 · "table" 빈 테이블
+#  내리치기. 주먹이 닿을 자리(u, h, w)는 prop_pound_at(_pound_spot).
+var prop_pound := ""
+var prop_pound_at := Vector3.ZERO
+#  부술 사탕 — id(빈 글이면 없다) · 떠난 화면 자리(사탕 칸) · 부순 뒤 뜨는 글.
+var pc_id := ""
+var pc_from := Vector2.ZERO
+var pc_say := ""
 var npc_dry := false              # _npc_arms 가 자세만 셈하고 안 그린다(검사가 그리기 밖에서 부른다)
 #  저울대 기울기 — 0 평소 · 1 왼 접시가 내려앉음. Room3D.prop_glow 가 그대로 받는다.
 var scale_tilt := 0.0
@@ -23722,6 +23766,7 @@ var bu_a := PackedFloat32Array()     # 도는 각
 var bu_om := PackedFloat32Array()    # 도는 빠르기
 var bu_k := PackedByteArray()        # 0 동전 · 1 나뭇조각 · 2 놋쇠
 var bu_land := PackedByteArray()     # 바닥에 닿은 수
+var bu_c := PackedColorArray()       # 색 — 사탕 조각 · 반짝이 · 먼지(갈래 3~5)가 쓴다
 var bu_n := 0                        # 산 수
 var bu_seed := 0                     # 판 효과마다 하나 — _gl_rand 의 두 번째 인자
 var bu_snd := 0                      # 이번 판 효과에서 낸 톡 수
@@ -23732,8 +23777,8 @@ var bu_ray_at := Vector2.ZERO        # 빛살 한가운데(화면) — 손바닥
 
 #  몸짓이 서지 못하는 때 — 서던 것도 이것이 참이 되면 끊긴다.
 func _prop_stop() -> bool:
-	return motion_off or state != S.SHOP or not _npc_on() or sweep_live or swap_live \
-			or turn_live or _give_live() or not (_room3d_tbl() or prop_force)
+	return motion_off or state != S.SHOP or not _npc_on() or (sweep_live and not sweep_pound) \
+			or swap_live or turn_live or _give_live() or not (_room3d_tbl() or prop_force)
 
 
 func _prop_live(i: int) -> bool:
@@ -23776,12 +23821,317 @@ func _prop_buy() -> bool:
 	if _prop_stop():
 		return false
 	if _prop_live(1):
+		_prop1_flush(false)
 		_prop_snap(1)
 	else:
 		_prop_snap_clear(1)
+	prop_pound = ""
 	prop_t[1] = 0.0
 	prop_cut[1] = 0.0
 	return true
+
+
+# ══════════════════════════════════════════════════════════
+#  주먹 — 사탕 부수기 · 빈 테이블 내리치기 (2026-10-03)
+# ──────────────────────────────────────────────────────────
+#  「사탕을 사용하면 사탕이 테이블에 떨어지고 상점 주인이 주먹을 쥐고 사탕 부수는거 어떄?」 ·
+#  「상점에 아이템이 없을때 리롤을 누르면 테이블을 쓸어버리는 대신 테이블을 주먹으로 쾅
+#   내리치자」. 둘 다 오른손 몸짓(등록기 내리치기)의 갈래다 — 같은 사슬 · 같은 손목 한도 ·
+#  같은 몸 기울기를 타고, 손바닥 대신 **주먹 밑면**(PROP.p_fist)이 펠트 위 한 점(_pound_spot)
+#  에 닿는다. 손가락은 주먹(FPOSE.fist)으로 말린다.
+#    0.00  사탕이면 사탕 칸에서 펠트로 난다(0.24 · 포물선) — 앉으며 한 번 눌렸다 편다.
+#          주먹은 같은 순간 치켜 오른다(뻗기 봉투 p_up 0.26 · 높이 46).
+#    0.36  한 번 더 든다(예비 동작) → 제곱으로 가속해 내리친다.
+#    0.44  **닿는다.** 사탕이면 사탕 색 조각 열둘과 설탕 반짝이 여섯이 튀고 그 자리에 효과
+#          글이 뜬다(옛 사탕 칸 팝과 같은 글 · 소리 cons_use). 빈 테이블이면 먼지가 일고
+#          **새 판이 떨어진다**(_roll_stock — 쓸기의 _sweep_deal 자리). 둘 다 빛살 · 흔들림 ·
+#          쾅(shop_smash 를 낮춰) · 판 위 물건이 튄다(_knock — 가까울수록 세게).
+#    0.56  눌러 둔 채 한 번 튀었다 — 빈 테이블 리롤은 여기서 문(sweep_live)을 연다.
+#    1.05  쉼이다.
+#  ── 값은 옛 자리 그대로 ─────────────────────────────────
+#  사탕의 값(트랙 레벨)은 쓰는 순간 오른다(_cons_use) — 몸짓은 그 뒤의 그림이다. 리롤의
+#  골드 · 굴린 횟수도 누른 순간 나가고, 판만 주먹이 닿을 때 깔린다(쓸기와 같다). 몸짓이
+#  못 서면(헤드리스 · 3D 방 끔 · 움직임 끔 · 상인이 바쁘다) 옛 길 그대로다 — 사탕은 칸에서
+#  팝, 리롤은 쓸기. 끊기면(화면을 떠남 등) 닿기 전이라도 결과(글 · 판)는 그 자리에서 낸다.
+const POUND_SPOTS := [Vector2(384.0, 50.0), Vector2(344.0, 56.0), Vector2(424.0, 48.0),
+		Vector2(304.0, 62.0), Vector2(462.0, 46.0)]
+const POUND := {
+	"shake_table": 5.0,  # 흔들림(px) — 빈 테이블은 등록기(3)보다 크게 · 쓸기(6) 밑
+	"shake_candy": 3.5,
+	"thud": 0.62,        # 쾅 — shop_smash 를 이 배로 내린다(등록기 0.74 보다 낮고 무겁다)
+	"crunch": 1.30,      # 사탕 깨지는 소리 — coin_break_glass 를 이 배로(설탕 유리는 가볍다)
+	"knock": 1.0,        # 판 위 물건이 튀는 세기(가장 가까이) — 멀수록 줄어 0.3 까지
+	"knock_r": 170.0,    # 그 거리(면 u · w)
+	"shard": 12, "spark": 6, "dust": 10,
+}
+
+
+#  주먹 몸짓을 연다 — 오른손. 섰으면 참(거짓이면 부르는 쪽이 옛 길로 간다).
+func _prop_pound(kind: String, at: Vector3) -> bool:
+	if _prop_stop():
+		return false
+	if _prop_live(1):
+		_prop1_flush(true)
+		_prop_snap(1)
+	else:
+		_prop_snap_clear(1)
+	prop_pound = kind
+	prop_pound_at = at
+	prop_t[1] = 0.0
+	prop_cut[1] = 0.0
+	return true
+
+
+#  오른손이 하던 몸짓을 새 몸짓 앞에서 마무리한다 — 주먹이 닿기 전이면 결과(사탕 글 · 판)를
+#  지금 낸다. 사는 내리치기가 닿기 전에 주먹으로 넘어가면 서랍만 조용히 연다(값은 치렀다).
+#  사는 것끼리는 옛 그대로 처음부터 다시 돈다(닿는 틀에 한 번).
+func _prop1_flush(to_pound: bool) -> void:
+	if not _prop_live(1) or prop_cut[1] > 0.0:
+		return
+	var t: float = prop_t[1]
+	if prop_pound != "":
+		if t < float(PROP.p_hit):
+			_pound_land(false)
+	elif to_pound and t < float(PROP.b_hit):
+		pay_flash = 1.0
+		_reg_open_now(false)
+
+
+#  주먹이 닿을 자리 (u, h, w) — 오른손 앞 펠트. 판 위 물건이 있으면 후보 다섯 중 가장 빈
+#  자리(가장 가까운 물건이 가장 먼 곳)를 고른다 — 주먹이 물건 위로 떨어지면 무엇을 부수는지
+#  안 읽힌다.
+func _pound_spot() -> Vector3:
+	var best: Vector2 = POUND_SPOTS[0]
+	var bd := -1.0
+	for sp in POUND_SPOTS:
+		var md := 1.0e9
+		for i in mini(drop.size(), stock.size()):
+			var it: Dictionary = drop[i]
+			if bool(it.gone) or float(it.sold) > 0.0 or bool(stock[i].get("sold", false)):
+				continue
+			md = minf(md, Vector2(float(it.u), float(it.w)).distance_to(sp))
+		if md > bd:
+			bd = md
+			best = sp
+	return Vector3(best.x, 0.0, best.y)
+
+
+#  상점이 비었다 — 판 위에 안 팔린 것이 하나도 없다(팩에서 쏟은 것까지).
+func _shop_bare() -> bool:
+	for s in stock:
+		if not bool((s as Dictionary).get("sold", false)):
+			return false
+	return true
+
+
+#  빈 테이블 리롤 — 쓸 것이 없으니 주먹으로 친다. 판은 닿는 틀에 깔린다(_pound_land).
+#  섰으면 참 — 거짓이면 _reroll 이 옛 쓸기로 간다.
+func _pound_table() -> bool:
+	if drop_awake:
+		_drop_settle()
+	if not _prop_pound("table", _pound_spot()):
+		return false
+	_sweep_reset()
+	sweep_live = true
+	sweep_pound = true
+	buy_sel = -1
+	return true
+
+
+#  사탕을 테이블에 떨어뜨린다 — _cons_use 가 값을 다 올린 뒤에 부른다. from 은 사탕 칸.
+#  섰으면 참 — 거짓이면 부르는 쪽이 옛 길(칸에서 팝)로 간다.
+func _pound_candy(id: String, from: Vector2, say: String) -> bool:
+	if not CANDY3.has(id):
+		return false
+	if not _prop_pound("candy", _pound_spot()):
+		return false
+	pc_id = id
+	pc_from = from
+	pc_say = say
+	return true
+
+
+#  주먹이 치켜든 몫 0..(1 + 예비) — 0 이 닿음(_prop_raise 와 같은 꼴 · p_* 박자).
+func _pound_raise(t: float) -> float:
+	var P: Dictionary = PROP
+	var c: float = float(P.p_cockup) / float(P.p_lift)
+	if t < float(P.p_up):
+		return 1.0
+	if t < float(P.p_cock):
+		return 1.0 + c * smoothstep(float(P.p_up), float(P.p_cock), t)
+	if t < float(P.p_hit):
+		var k: float = (t - float(P.p_cock)) / (float(P.p_hit) - float(P.p_cock))
+		return (1.0 + c) * (1.0 - k * k)
+	if t < float(P.p_hold):
+		var kb: float = (t - float(P.p_hit)) / (float(P.p_hold) - float(P.p_hit))
+		return float(P.p_bounce) / float(P.p_lift) * sin(kb * PI) * (1.0 - kb)
+	return 0.0
+
+
+#  주먹 밑면이 서야 할 자리 (u, h, w) — 펠트 점에 치켜든 높이를 얹고 그만큼 몸 쪽으로 당긴다.
+func _pound3(t: float) -> Vector3:
+	var r: float = _pound_raise(t)
+	return prop_pound_at + Vector3(0.0, float(PROP.p_lift) * r,
+			-float(PROP.p_back) * minf(r, 1.0))
+
+
+func _pound_pit(t: float) -> float:
+	var P: Dictionary = PROP
+	return lerpf(float(P.p_pit0), float(P.p_pit1),
+			smoothstep(float(P.p_cock), float(P.p_hit), t))
+
+
+#  주먹이 닿는 틀 — fx 거짓이면 결과만 낸다(끊김 · 새 몸짓에 밀림 · 움직임 끔).
+func _pound_land(fx: bool) -> void:
+	var kind := prop_pound
+	var at := prop_pound_at
+	var s := _p2s(at.x, at.z, at.y)
+	if kind == "table" and sweep_pound and not sweep_dealt:
+		#  새 판 — 쓸기의 _sweep_deal 자리다. _roll_stock 끝의 _drop_roll 이 물건을 떨군다.
+		sweep_dealt = true
+		_roll_stock()
+	var col: Color = C_ACC
+	if kind == "candy" and pc_id != "":
+		col = CANDY.get(pc_id, C_ACC)
+		pop(s + Vector2(0.0, -30.0), pc_say, C_ACC, 10, 0.9)
+		_sfx("cons_use")
+		pc_id = ""
+	if not fx or motion_off:
+		return
+	shake = maxf(shake, float(POUND.shake_table if kind == "table" else POUND.shake_candy))
+	_sfx("shop_smash", SFX_BASE * float(POUND.thud))
+	if kind == "candy":
+		_sfx("coin_break_glass", SFX_BASE * float(POUND.crunch))
+	_pound_burst(kind, at, col)
+	bu_ray_at = s
+	bu_ray_t = 0.0
+	#  판이 울린다 — 판 위 물건이 튄다. 가까울수록 세게(빈 테이블은 새 판이 아직 공중이다).
+	for i in mini(drop.size(), stock.size()):
+		var it: Dictionary = drop[i]
+		if bool(it.gone) or float(it.sold) > 0.0:
+			continue
+		var dd: float = Vector2(float(it.u) - at.x, float(it.w) - at.z).length()
+		_knock(i, float(POUND.knock) * lerpf(1.0, 0.3,
+				clampf(dd / float(POUND.knock_r), 0.0, 1.0)))
+
+
+#  닿은 자리에서 튀는 것 — 판 효과 칸(bu_*)을 같이 쓴다(같은 물리 · 같은 가라앉음).
+#  사탕: 사탕 색 조각(3)이 둘레로 · 설탕 반짝이(4)가 위로. 빈 테이블: 펠트 먼지(5)가 낮게.
+func _pound_burst(kind: String, at: Vector3, col: Color) -> void:
+	var ns: int = int(POUND.shard) if kind == "candy" else 0
+	var nk: int = int(POUND.spark) if kind == "candy" else 0
+	var nd: int = int(POUND.dust)
+	var n: int = ns + nk + nd
+	_bu_size(maxi(n, bu_t.size()))
+	for i in bu_t.size():
+		bu_t[i] = -1.0
+	bu_seed += 1
+	bu_snd = int(BURST.snd)        # 톡(동전)은 안 낸다
+	var hi := col.lightened(0.35)
+	for i in n:
+		var r0: float = _gl_rand(i * 7 + 1, bu_seed)
+		var r1: float = _gl_rand(i * 7 + 2, bu_seed)
+		var r2: float = _gl_rand(i * 7 + 3, bu_seed)
+		var r3: float = _gl_rand(i * 7 + 4, bu_seed)
+		var kind_i: int = 3 if i < ns else (4 if i < ns + nk else 5)
+		bu_k[i] = kind_i
+		var a: float = TAU * (float(i) + r0 * 0.7) / float(maxi(ns if kind_i == 3 else
+				(nk if kind_i == 4 else nd), 1))
+		var sp: float
+		var vh: float
+		var lf: float
+		match kind_i:
+			3:
+				sp = lerpf(110.0, 250.0, r1)
+				vh = lerpf(160.0, 300.0, r2)
+				lf = lerpf(0.75, 1.05, r3)
+				bu_c[i] = col if i % 2 == 0 else hi
+			4:
+				sp = lerpf(40.0, 120.0, r1)
+				vh = lerpf(240.0, 380.0, r2)
+				lf = lerpf(0.45, 0.70, r3)
+				bu_c[i] = Color("fff6d8")
+			_:
+				sp = lerpf(50.0, 110.0, r1)
+				vh = lerpf(30.0, 80.0, r2)
+				lf = lerpf(0.35, 0.55, r3)
+				bu_c[i] = C_LIGHT.darkened(0.35)
+		#  w 성분 0.6 — 판이 얕다(쓸기 조각과 같은 까닭). 앞(손님 쪽)으로 조금 더 간다.
+		bu_p[i] = Vector3(at.x + cos(a) * 4.0, at.z + sin(a) * 3.0, at.y + 2.0)
+		bu_v[i] = Vector3(cos(a) * sp, sin(a) * sp * 0.6 + 20.0, vh)
+		bu_t[i] = 0.0
+		bu_life[i] = lf
+		bu_a[i] = r0 * TAU
+		bu_om[i] = lerpf(9.0, 22.0, r2) * (1.0 if r3 < 0.5 else -1.0)
+		bu_land[i] = 0
+	bu_n = n
+
+
+#  판 효과 칸을 n 으로 — 처음 한 번 짓고 그 뒤로는 제자리에서 다시 쓴다.
+func _bu_size(n: int) -> void:
+	if bu_t.size() == n:
+		return
+	bu_p.resize(n)
+	bu_v.resize(n)
+	bu_t.resize(n)
+	bu_life.resize(n)
+	bu_a.resize(n)
+	bu_om.resize(n)
+	bu_k.resize(n)
+	bu_land.resize(n)
+	bu_c.resize(n)
+
+
+#  사탕 그림 — 사탕 칸 → 펠트(c_fly)는 HUD 위(lay 0 — 벽 띠에 안 가린다), 앉은 뒤는 테이블
+#  층(lay 1 — 손 밑, 주먹이 위에서 덮는다). 서 있는 물건이라 밑끝이 닿는 점에 선다.
+#  ⚠ 이 구획(상점 테이블)의 draw_set_transform 금지 불변식의 예외다 — _prop_coin_paint 처럼
+#  **같은 함수 안에서** draw_set_transform(shake_off) 로 되돌린다(나는 동안 돌고 앉으며 눌린다).
+func _pound_candy_draw(lay: int) -> void:
+	if pc_id == "" or not _prop_live(1) or prop_pound != "candy" or prop_cut[1] > 0.0:
+		return
+	var t: float = prop_t[1]
+	var fl: float = float(PROP.c_fly)
+	var land := _p2s(prop_pound_at.x, prop_pound_at.z, prop_pound_at.y)
+	var c := land
+	var rot := 0.0
+	var sx := 1.0
+	var sy := 1.0
+	if t < fl:
+		if lay != 0:
+			return
+		var e: float = smoothstep(0.0, 1.0, t / fl)
+		c = pc_from.lerp(land, e) - Vector2(0.0, float(PROP.c_hop) * 4.0 * e * (1.0 - e))
+		rot = 2.4 * (1.0 - e)
+		sx = lerpf(0.7, 1.0, e)
+		sy = sx
+	else:
+		if lay != 1:
+			return
+		var q: float = clampf((t - fl) / float(PROP.c_squash), 0.0, 1.0)
+		var sq: float = 0.22 * sin(q * PI) * (1.0 - q * 0.5)
+		sx = 1.0 + sq * 0.6
+		sy = 1.0 - sq
+		#  그늘 — 앉은 자리에 납작한 타원 하나.
+		draw_colored_polygon(_oval_pts(land + Vector2(0.0, 1.0), 11.0, 3.5),
+				Color(0.0, 0.0, 0.0, 0.28))
+	var sz := Vector2(CANDY_VP) * 0.9
+	draw_set_transform(shake_off + c, rot, Vector2(sx, sy))
+	var tex := _candy_tex(pc_id)
+	if tex != null:
+		draw_texture_rect(tex, Rect2(Vector2(-sz.x * 0.5, -sz.y * 0.88), sz), false)
+	else:
+		draw_colored_polygon(_oval_pts(Vector2(0.0, -sz.y * 0.4), sz.x * 0.36, sz.y * 0.36),
+				CANDY.get(pc_id, C_ACC))
+	draw_set_transform(shake_off)
+
+
+#  타원 점 열여섯 — 그늘 · 대체 실루엣.
+func _oval_pts(c: Vector2, rx: float, ry: float) -> PackedVector2Array:
+	var p := PackedVector2Array()
+	for k in 16:
+		var a: float = TAU * float(k) / 16.0
+		p.append(c + Vector2(cos(a) * rx, sin(a) * ry))
+	return p
 
 
 #  개발자 「상인 몸짓」 줄 — 값(골드 · 동전 · 매물)을 한 톨도 안 건드리고 몸짓만 본다.
@@ -23798,6 +24148,21 @@ func _prop_preview(z: int) -> String:
 		return "상인이 바쁘다"
 	if z == 1:
 		_prop_buy()
+		return ""
+	if z == 2:
+		#  사탕 부수기 — 든 사탕(없으면 곰젤리)의 그림만 날린다. 트랙 레벨은 그대로다.
+		var cid := "c_sg"
+		for cc in cons:
+			if CANDY3.has(String((cc as Dictionary).get("id", ""))):
+				cid = String(cc.id)
+				break
+		if not _pound_candy(cid, _cons_rect(0).get_center(), "미리 보기"):
+			return "상인이 바쁘다"
+		return ""
+	if z == 3:
+		#  테이블 내리치기 — 주먹 · 먼지 · 흔들림 · 판 위 물건이 튄다. 판은 안 갈린다.
+		if not _prop_pound("table", _pound_spot()):
+			return "상인이 바쁘다"
 		return ""
 	var it: Dictionary = {}
 	if not owned.is_empty():
@@ -23856,6 +24221,9 @@ func _prop_cut_now(i: int) -> void:
 	prop_cut[i] = 1.0
 	if i == 0:
 		_prop_ghost_take()
+	elif prop_pound != "":
+		if prop_t[1] < float(PROP.p_hit):
+			_pound_land(false)     # 닿기 전에 끊겼다 — 글 · 판은 지금 낸다
 	elif prop_t[1] < float(PROP.b_hit):
 		pay_flash = 1.0            # 값은 이미 치렀다 — 서랍은 연다(내리치지 않았으니 조용히)
 		_reg_open_now(false)
@@ -23869,6 +24237,9 @@ func _prop_end(i: int) -> void:
 	if i == 0:
 		prop_it = {}
 		prop_drop = Vector3(0.0, -99.0, 0.0)
+	else:
+		prop_pound = ""
+		pc_id = ""
 
 
 #  매 틀 — _process 가 _give_tick 다음에 부른다(늦추기 전 · 상인 시계와 같은 자리).
@@ -23898,6 +24269,15 @@ func _prop_tick(d: float) -> void:
 			if t1 >= float(PROP.s_end):
 				_prop_end(0)
 				continue
+		elif prop_pound != "":
+			#  주먹 — 사탕이 펠트에 앉는 톡 · 닿는 틀의 쾅(_pound_land).
+			if prop_pound == "candy" and t0 < float(PROP.c_fly) and t1 >= float(PROP.c_fly):
+				_sfx("hand_drop")
+			if t0 < float(PROP.p_hit) and t1 >= float(PROP.p_hit):
+				_pound_land(true)
+			if t1 >= float(PROP.p_end):
+				_prop_end(1)
+				continue
 		else:
 			if t0 < float(PROP.b_hit) and t1 >= float(PROP.b_hit):
 				_prop_slam()
@@ -23905,7 +24285,9 @@ func _prop_tick(d: float) -> void:
 				_prop_end(1)
 				continue
 		#  앞 자세는 다 뻗은 뒤로는 안 쓴다 — 돌아올 때는 쉼으로 간다.
-		if t1 >= float(PROP.s_reach if i == 0 else PROP.b_up):
+		var up_t: float = float(PROP.s_reach) if i == 0 else (float(PROP.p_up)
+				if prop_pound != "" else float(PROP.b_up))
+		if t1 >= up_t:
 			prop_snap_k[i] = 0.0
 
 
@@ -23988,9 +24370,10 @@ func _prop_w(i: int) -> void:
 		#  내리치기 — 치켜든 자리까지 뻗고(b_up) 내리쳐 눌러 둔 뒤(b_hold) 쉼으로. 손가락은
 		#  검지를 안 편다(옛 짚기 pw_n 은 앞 자세에서 걷기만 한다) — 편 손바닥은 _fing3 이
 		#  섞임(_prop_reach) 그대로 얹는다.
-		var q0: float = P.b_up
-		var q1: float = P.b_hold
-		var q2: float = P.b_end
+		var pd: bool = prop_pound != ""
+		var q0: float = P.p_up if pd else P.b_up
+		var q1: float = P.p_hold if pd else P.b_hold
+		var q2: float = P.p_end if pd else P.b_end
 		if t < q0:
 			pw_k = _ease_io(t / q0)
 		elif t < q1:
@@ -24025,7 +24408,8 @@ func _prop_body(out: Dictionary) -> void:
 		var w: float = smoothstep(0.0, 1.0, _prop_reach(i))
 		if w <= 0.0005:
 			continue
-		var bv: Array = PROP.s_body if i == 0 else PROP.b_body
+		var bv: Array = PROP.s_body if i == 0 else (PROP.p_body if prop_pound != ""
+				else PROP.b_body)
 		out.roll += float(bv[0]) * w
 		out.yaw += float(bv[1]) * w
 		out.lean += float(bv[2]) * w
@@ -24068,7 +24452,8 @@ func _prop_arm(i: int, sh: Vector3, sc: float) -> void:
 	var w := fw
 	pa_ang = fa
 	pa_pit = fp
-	var pv: Vector3 = PROP.s_pole if i == 0 else PROP.b_pole
+	var pv: Vector3 = PROP.s_pole if i == 0 else (PROP.p_pole if prop_pound != ""
+			else PROP.b_pole)
 	var reach_pole := s3 + Vector3(pv.x * (-1.0 if i == 0 else 1.0), pv.y, pv.z) * 100.0
 	if k > 0.0005:
 		_prop_goal(i, sc, s3, l1, l2, reach_pole)
@@ -24202,6 +24587,10 @@ func _prop_goal(i: int, sc: float, s3: Vector3, l1: float, l2: float, pole: Vect
 		tgt = _prop_coin_goal(t)
 		ad = deg_to_rad(prop_ga)
 		pd = deg_to_rad(float(P.s_pit))
+	elif prop_pound != "":
+		tgt = _pound3(t)
+		ad = deg_to_rad(float(P.p_ang))
+		pd = deg_to_rad(_pound_pit(t))
 	else:
 		tgt = _prop_slam3(t)
 		ad = deg_to_rad(float(P.b_ang))
@@ -24228,7 +24617,7 @@ func _prop_goal(i: int, sc: float, s3: Vector3, l1: float, l2: float, pole: Vect
 func _prop_place(i: int, tgt: Vector3, a: float, p: float, sc: float) -> Vector3:
 	var b := Basis(Vector3.UP, -a) * Basis(Vector3.BACK, -p)
 	if i == 1:
-		var tp: Vector3 = PROP.b_palm
+		var tp: Vector3 = PROP.p_fist if prop_pound != "" else PROP.b_palm
 		return tgt - b * (Vector3(tp.x, tp.y, -tp.z) * sc)
 	return tgt - _prop_coin_off(a) - b * (Vector3(GIVE.ti) * sc)
 
@@ -24420,15 +24809,7 @@ func _burst_floor(u: float, w: float) -> float:
 func _burst_spawn() -> void:
 	var B: Dictionary = BURST
 	var n: int = int(B.coin) + int(B.wood) + int(B.brass)
-	if bu_t.size() != n:
-		bu_p.resize(n)
-		bu_v.resize(n)
-		bu_t.resize(n)
-		bu_life.resize(n)
-		bu_a.resize(n)
-		bu_om.resize(n)
-		bu_k.resize(n)
-		bu_land.resize(n)
+	_bu_size(n)
 	bu_seed += 1
 	bu_snd = 0
 	bu_snd_t = 0.0
@@ -24495,7 +24876,8 @@ func _burst_tick(d: float) -> void:
 		alive += 1
 		var p: Vector3 = bu_p[i]
 		var v: Vector3 = bu_v[i]
-		v.z -= g * d
+		#  먼지는 떠다닌다 — 무게가 거의 없다.
+		v.z -= g * d * (0.12 if bu_k[i] == 5 else 1.0)
 		p += v * d
 		#  앞 · 뒤 벽 — 먼 턱 앞끝 · 가까운 팔걸이 안. 넘으면 튕겨 돌아온다.
 		if p.y < 2.0:
@@ -24611,6 +24993,28 @@ func _burst_draw() -> void:
 						(C.wood_dk as Color).lerp(fc, sink), 2.0)
 				draw_line(Vector2(x, y) - dv * 0.6, Vector2(x, y) + dv * 0.6,
 						(C.wood as Color).lerp(fc, sink), 1.0)
+			3:
+				#  사탕 조각 — 3px 키 네모가 돈다(폭이 |cos| 로 숨쉰다) · 짙은 밑줄 · 빛 한 점.
+				var cc: Color = bu_c[i].lerp(fc, sink)
+				var wx: float = 1.0 + roundf(2.0 * absf(cos(bu_a[i])))
+				var x0: float = x - floorf(wx * 0.5)
+				draw_rect(Rect2(x0, y - 1.0, wx + 1.0, 3.0), cc.darkened(0.5))
+				draw_rect(Rect2(x0, y - 1.0, wx, 2.0), cc)
+				draw_rect(Rect2(x0, y - 1.0, 1.0, 1.0), cc.lightened(0.5))
+			4:
+				#  설탕 반짝이 — 1px 점이 반짝인다. 밝은 틀에는 십자(3px)로 핀다.
+				var tw: float = 0.5 + 0.5 * sin(t * 38.0 + float(i) * 1.7)
+				var sa: float = (1.0 - sink) * (0.35 + 0.65 * tw)
+				draw_rect(Rect2(x, y, 1.0, 1.0), Color(bu_c[i], sa))
+				if tw > 0.6 and bu_land[i] < 2:
+					draw_rect(Rect2(x - 1.0, y, 3.0, 1.0), Color(bu_c[i], sa * 0.55))
+					draw_rect(Rect2(x, y - 1.0, 1.0, 3.0), Color(bu_c[i], sa * 0.55))
+			5:
+				#  펠트 먼지 — 커지며 옅어진다.
+				var age: float = clampf(t / maxf(bu_life[i], 0.01), 0.0, 1.0)
+				var rr: float = roundf(1.0 + 3.0 * age)
+				draw_rect(Rect2(x - rr, y - roundf(rr * 0.5), rr * 2.0, maxf(roundf(rr), 1.0)),
+						Color(bu_c[i], 0.38 * (1.0 - age)))
 			_:
 				draw_rect(Rect2(x - 1.0, y - 1.0, 2.0, 2.0), (C.brass as Color).lerp(fc, sink))
 				if sink < 0.3 and bu_land[i] < 2:
@@ -24796,7 +25200,7 @@ func _sweep_vu() -> float:
 
 # 쉬는 자세와 훑는 자세를 섞는 비율. 뻗기에 0→1, 훑기에 1, 복귀에 1→0.
 func _sweep_amt() -> float:
-	if not sweep_live:
+	if not sweep_live or sweep_pound:
 		return 0.0
 	if sweep_t < SWEEP.reach:
 		return _ease_io(sweep_t / SWEEP.reach)
@@ -24810,7 +25214,7 @@ func _sweep_amt() -> float:
 # 왼쪽 −5° 까지. 허리(w 0 = 카운터 선)가 축이다. 걷기도 팔 늘리기도
 # 시켜 봤지만 다 부자연스러웠다 — 기울고, 팔은 쭉 편 채 원근으로 큰다.
 func _sweep_tilt() -> float:
-	if not sweep_live:
+	if not sweep_live or sweep_pound:
 		return 0.0
 	var k: float = clampf((_sweep_u() - SWEEP.u1) / (SWEEP.u0 - SWEEP.u1), 0.0, 1.0)
 	return deg_to_rad(lerpf(-SWEEP.tilt_deg, SWEEP.tilt_deg, k)) * _sweep_amt()
@@ -24847,6 +25251,7 @@ func _sweep_wipe() -> bool:
 func _sweep_reset() -> void:
 	sweep_t = 0.0
 	sweep_live = false
+	sweep_pound = false
 	sweep_on = false
 	sweep_dealt = false
 	waste.clear()
@@ -24886,6 +25291,20 @@ func _sweep_begin() -> void:
 
 func _sweep_update(d: float) -> void:
 	if not sweep_live:
+		return
+	if sweep_pound:
+		#  빈 테이블 내리치기(_pound_table) — 판은 주먹이 닿는 틀에 깔린다(_pound_land). 몸짓이
+		#  끊겼거나 딴 몸짓에 밀렸으면 여기서 깐다. 눌러 둔 주먹이 튀고 나면(p_hold) 문을 연다 —
+		#  매듭은 그때 적는다(쓸기의 끝과 같은 자리 · 같은 까닭).
+		sweep_t += d
+		if not sweep_dealt and not (_prop_live(1) and prop_pound == "table"):
+			sweep_dealt = true
+			_roll_stock()
+		if sweep_dealt and (not _prop_live(1) or prop_pound != "table"
+				or float(prop_t[1]) >= float(PROP.p_hold)):
+			sweep_live = false
+			sweep_pound = false
+			_knot_shop()
 		return
 	sweep_t += d * float(SWEEP.speed)
 	var t1: float = SWEEP.reach + SWEEP.rake

@@ -13,6 +13,10 @@ extends SceneTree
 #      서던 몸짓도 건네기 · 쓸기가 들면 끊겨 쉼으로 돌아간다.
 #   ⑤ 연달아 팔고 사도 멈춘 손 · 남은 동전 그림이 없다.
 #   ⑥ 개발자 「상인 몸짓」의 두 줄(저울에 올리기 · 등록기 내리치기)이 값을 안 건드린다.
+#   ⑧ 주먹(2026-10-03) — 사탕을 상점에서 쓰면 값은 그 순간 오르고 사탕이 펠트에 떨어져 주먹에
+#      부서진다(사탕 색 조각 · 설탕 반짝이 · 글). 빈 테이블 리롤은 쓸기 대신 주먹이 테이블을
+#      치고, 판은 닿는 틀에 깔리고, 문(sweep_live)은 눌러 둔 주먹이 튀고 나서 열린다. 주먹
+#      밑면이 과녁에 닿고 · 팔이 안 늘어나고 · 손목이 한도 안이다. 못 서면 옛 길(칸 팝 · 쓸기).
 #   ⑦ 내리치기 — 손이 치켜 올랐다가 손바닥이 건반에 닿고(손목 한도 안), 그 박자에 서랍이
 #      크게 튀어나오고 값 깃이 솟고 화면이 흔들리고 동전 · 나뭇조각 · 놋쇠 부스러기가 튀어
 #      바닥에 떨어져 다 가라앉는다. 한 사건의 소리가 넷 안이다. 판 효과는 매 틀 새로 안
@@ -499,10 +503,10 @@ func _run() -> void:
 	var dev0 := _econ()
 	var na: int = (g.IDLE.acts as Array).size() + Dev.NPC_HOLDS.size()
 	var names: PackedStringArray = Dev._names("npcact")
-	_ok("개발자 줄에 두 몸짓이 있다", names.size() == na + 2
-			and names[na] == "저울에 올리기" and names[na + 1] == "등록기 내리치기",
-			"%d줄 · %s · %s" % [names.size(), names[mini(na, names.size() - 1)],
-			names[mini(na + 1, names.size() - 1)]])
+	_ok("개발자 줄에 소품 몸짓 넷이 있다", names.size() == na + 4
+			and names[na] == "저울에 올리기" and names[na + 1] == "등록기 내리치기"
+			and names[na + 2] == "사탕 부수기" and names[na + 3] == "테이블 내리치기",
+			"%d줄 · %s" % [names.size(), ", ".join(names.slice(na))])
 	Dev.pick["npcact"] = na
 	Dev._run(g, {"t": "list", "k": "npcact", "n": na + 2})
 	var dl0: bool = g._prop_live(0)
@@ -532,6 +536,7 @@ func _run() -> void:
 	Dev._run(g, {"t": "list", "k": "npcact", "n": na + 2})
 	_ok("진열대가 없으면 개발자 줄도 안 선다", not g._prop_live(1), "")
 	_slam()
+	_pound()
 
 
 func _buy_idx() -> int:
@@ -714,4 +719,202 @@ func _slam() -> void:
 			"서랍 %.2f · 판 효과 %d" % [g.reg_open, g.bu_n])
 	g._give_end()
 	g.give_rel = 0.0
+	g.prop_force = false
+
+
+#  주먹 밑면 — 그 틀 손에서 PROP.p_fist 를 낸다(_prop_place 의 역).
+func _fist_pt() -> Vector3:
+	var w: Vector3 = g.prop_lw[1]
+	var b := Basis(Vector3.UP, -float(g.prop_la[1])) * Basis(Vector3.BACK, -float(g.prop_lp[1]))
+	var tp: Vector3 = g.PROP.p_fist
+	return w + b * (Vector3(tp.x, tp.y, -tp.z) * float(g.NPC.sc_r))
+
+
+#  주먹 한 번을 끝까지 돌리며 잰다 — 닿기 전 · 닿는 틀 · 끝.
+func _pound_run(sweep: bool) -> Dictionary:
+	var P: Dictionary = g.PROP
+	var r := {"hit": false, "top": -999.0, "hit_h": 999.0, "err": 0.0, "rr": 0.0,
+			"shake": 0.0, "kinds": [0, 0, 0, 0, 0, 0], "pc_before": "", "pc_after": "x",
+			"wb": Vector2.ZERO, "open_t": -1.0, "dealt_t": -1.0}
+	var tt := 0.0
+	while tt < 2.0:
+		var was: float = g.prop_t[1]
+		g._prop_tick(DT)
+		if sweep:
+			g._sweep_update(DT)
+		tt += DT
+		_pose()
+		var pt: float = g.prop_t[1]
+		var fh: float = _fist_pt().y
+		if pt >= float(P.p_up) and pt < float(P.p_hit):
+			r.top = maxf(float(r.top), fh)
+			r.pc_before = g.pc_id
+		if pt >= float(P.p_up) and pt < float(P.p_hold):
+			r.err = maxf(float(r.err), _fist_pt().distance_to(g._pound3(pt)))
+			r.rr = maxf(float(r.rr), float(g.prop_rr[1]))
+		if was >= 0.0 and was < float(P.p_hit) and (pt >= float(P.p_hit) or pt < 0.0):
+			r.hit = true
+			r.hit_h = fh
+			r.shake = g.shake
+			r.wb = g.npc_wb[1]
+			r.pc_after = g.pc_id
+			for i in g.bu_t.size():
+				if float(g.bu_t[i]) >= 0.0:
+					(r.kinds as Array)[int(g.bu_k[i])] += 1
+		if sweep and float(r.dealt_t) < 0.0 and g.sweep_dealt:
+			r.dealt_t = pt
+		if sweep and float(r.open_t) < 0.0 and not g.sweep_live:
+			r.open_t = pt if pt >= 0.0 else 99.0
+	return r
+
+
+# ⑧ 주먹 — 「사탕을 사용하면 사탕이 테이블에 떨어지고 상점 주인이 주먹을 쥐고 사탕
+#  부수는거」 · 「상점에 아이템이 없을때 리롤을 누르면 … 테이블을 주먹으로 쾅 내리치자」.
+func _pound() -> void:
+	var base := _snap()
+	var P: Dictionary = g.PROP
+	var Q: Dictionary = g.POUND
+	# ── 사탕 ──
+	_restore(base)
+	_clear_acts()
+	_calm()
+	g.prop_force = true
+	var cd: Dictionary = {}
+	for c in GameData.candies():
+		if String((c as Dictionary).get("id", "")).begins_with("c_") \
+				and String((c as Dictionary).get("cat", "")) == "area":
+			cd = (c as Dictionary).duplicate()
+			break
+	_ok("⑧ 쓸 사탕이 있다", not cd.is_empty(), String(cd.get("id", "")))
+	if cd.is_empty():
+		return
+	g.cons = [cd]
+	var tid: int = int(cd.track)
+	var lv0: int = int(g.track_lv.get(tid, 0))
+	wb_bad = 0
+	wb_note = ""
+	g._cons_use(0)
+	_ok("⑧ 사탕 — 값은 쓰는 순간 오른다 · 칸이 빈다", int(g.track_lv.get(tid, 0)) == lv0 + 1
+			and g.cons.is_empty(), "Lv %d → %d" % [lv0, int(g.track_lv.get(tid, 0))])
+	_ok("⑧ 사탕 — 주먹 몸짓이 서고 사탕이 펠트로 난다", g._prop_live(1) and g.prop_pound == "candy"
+			and g.pc_id == String(cd.id), "%s · %s" % [g.prop_pound, g.pc_id])
+	var e1 := _econ()
+	var rc := _pound_run(false)
+	_ok("⑧ 사탕 — 닿기 전까지 사탕이 펠트에 있고 닿는 틀에 부서진다",
+			bool(rc.hit) and String(rc.pc_before) == String(cd.id) and String(rc.pc_after) == "",
+			"전 %s · 후 %s" % [rc.pc_before, rc.pc_after])
+	var kc: Array = rc.kinds
+	_ok("⑧ 사탕 — 사탕 색 조각 · 설탕 반짝이가 튄다", int(kc[3]) == int(Q.shard)
+			and int(kc[4]) == int(Q.spark), "조각 %d · 반짝이 %d · 먼지 %d" % [kc[3], kc[4], kc[5]])
+	_ok("⑧ 사탕 — 주먹이 치켜 올랐다 내리친다", float(rc.top) - float(rc.hit_h) >= 30.0,
+			"주먹 밑 h %.1f → %.1f" % [float(rc.top), float(rc.hit_h)])
+	_ok("⑧ 사탕 — 주먹 밑면이 과녁에 닿는다", float(rc.err) < 1.0, "어긋남 %.2f" % float(rc.err))
+	_ok("⑧ 사탕 — 팔이 안 늘어난다", float(rc.rr) <= 1.0, "최대 %.3f" % float(rc.rr))
+	_ok("⑧ 사탕 — 닿은 틀 흔들림", float(rc.shake) >= float(Q.shake_candy) - 0.6,
+			"%.2fpx" % float(rc.shake))
+	_ok("⑧ 사탕 — 손목이 모든 틀 한도 안", wb_bad == 0, "넘은 틀 %d %s" % [wb_bad, wb_note])
+	_ok("⑧ 사탕 — 몸짓 동안 값이 안 움직인다", _econ() == e1, "%s | %s" % [e1, _econ()])
+	_ok("⑧ 사탕 — 끝나면 쉰다", not g._prop_live(1) and g.prop_pound == "" and g.pc_id == "", "")
+	# 못 서면 옛 길 — 칸에서 팝(몸짓 없음)
+	_restore(base)
+	_clear_acts()
+	g.prop_force = false
+	g.cons = [cd.duplicate()]
+	g._cons_use(0)
+	_ok("⑧ 사탕 — 진열대가 없으면 옛 길(몸짓 없이 값만)", not g._prop_live(1) and g.pc_id == ""
+			and g.cons.is_empty(), "")
+	# 닿기 전에 끊기면 글은 지금 낸다
+	_restore(base)
+	_clear_acts()
+	g.prop_force = true
+	g.cons = [cd.duplicate()]
+	g._cons_use(0)
+	g._prop_tick(DT * 3.0)
+	g.state = g.S.LEG
+	g._prop_tick(DT)
+	_ok("⑧ 사탕 — 화면을 떠나면 끊기고 사탕 그림이 안 남는다", g.pc_id == ""
+			and float(g.prop_cut[1]) > 0.0, "cut %.2f" % float(g.prop_cut[1]))
+	g.state = g.S.SHOP
+	_tick(1.0)
+	# ── 빈 테이블 ──
+	_restore(base)
+	_clear_acts()
+	_calm()
+	g.prop_force = true
+	g.drop_fast = false
+	for i in g.stock.size():
+		g.stock[i].sold = true
+	for i in g.drop.size():
+		g.drop[i].sold = 1.0
+	g.gold = 99
+	_ok("⑧ 빈 테이블이다", g._shop_bare(), "")
+	var rr0: int = g.rerolls_used
+	wb_bad = 0
+	wb_note = ""
+	g._reroll()
+	_ok("⑧ 빈 테이블 리롤 — 쓸기 대신 주먹이 선다", g.sweep_live and g.sweep_pound
+			and g._prop_live(1) and g.prop_pound == "table" and g._sweep_amt() == 0.0
+			and g.rerolls_used == rr0 + 1, "쓸기 %s · 주먹 %s · %s" % [g.sweep_live, g.sweep_pound,
+			g.prop_pound])
+	_ok("⑧ 닿기 전에는 판이 그대로(다 팔림)", g._shop_bare(), "")
+	var gd1: int = g.gold
+	g._reroll()
+	_ok("⑧ 주먹 도중 리롤 — 골드가 안 나간다", g.gold == gd1, "%d → %d" % [gd1, g.gold])
+	var rt := _pound_run(true)
+	_ok("⑧ 빈 테이블 — 닿는 틀에 새 판이 깔린다", bool(rt.hit)
+			and float(rt.dealt_t) >= float(P.p_hit) and float(rt.dealt_t) < float(P.p_hit) + DT * 2.0
+			and not g._shop_bare(), "깔린 틀 %.3f · 닿음 %.2f" % [float(rt.dealt_t), float(P.p_hit)])
+	var kt: Array = rt.kinds
+	_ok("⑧ 빈 테이블 — 먼지가 일고 흔들린다", int(kt[5]) == int(Q.dust)
+			and float(rt.shake) >= float(Q.shake_table) - 0.6, "먼지 %d · %.2fpx" % [kt[5],
+			float(rt.shake)])
+	_ok("⑧ 빈 테이블 — 주먹 밑면이 과녁에 닿는다 · 팔이 안 늘어난다", float(rt.err) < 1.0
+			and float(rt.rr) <= 1.0, "어긋남 %.2f · 팔 %.3f" % [float(rt.err), float(rt.rr)])
+	_ok("⑧ 빈 테이블 — 문은 눌러 둔 주먹이 튀고 나서 열린다", float(rt.open_t) >= float(P.p_hold)
+			and float(rt.open_t) < float(P.p_hold) + DT * 2.0 and not g.sweep_live
+			and not g.sweep_pound, "열린 틀 %.3f" % float(rt.open_t))
+	_ok("⑧ 빈 테이블 — 매듭이 새 판 뒤 금화로 적힌다", int(Save.run_get("gold", -1)) == g.gold,
+			"%s · %d" % [str(Save.run_get("gold", "-")), g.gold])
+	_ok("⑧ 빈 테이블 — 손목이 모든 틀 한도 안", wb_bad == 0, "넘은 틀 %d %s" % [wb_bad, wb_note])
+	# 못 서면 옛 쓸기
+	_restore(base)
+	_clear_acts()
+	g.prop_force = false
+	for i in g.stock.size():
+		g.stock[i].sold = true
+	for i in g.drop.size():
+		g.drop[i].sold = 1.0
+	g.gold = 99
+	g._reroll()
+	_ok("⑧ 빈 테이블 — 진열대가 없으면 옛 쓸기", g.sweep_live and not g.sweep_pound
+			and not g._prop_live(1), "")
+	g._sweep_reset()
+	# 안 빈 테이블은 그대로 쓸기
+	_restore(base)
+	_clear_acts()
+	g.prop_force = true
+	g.gold = 99
+	g._reroll()
+	_ok("⑧ 물건이 남은 리롤은 그대로 쓸기", g.sweep_live and not g.sweep_pound
+			and not g._prop_live(1), "")
+	g._sweep_reset()
+	# 개발자 줄 — 사탕 부수기 · 테이블 내리치기는 값을 안 건드린다
+	_restore(base)
+	_clear_acts()
+	_calm()
+	var na: int = (g.IDLE.acts as Array).size() + Dev.NPC_HOLDS.size()
+	var dv0 := _econ()
+	var lvs0: String = str(g.track_lv)
+	Dev.pick["npcact"] = na + 2
+	Dev._run(g, {"t": "list", "k": "npcact", "n": na + 4})
+	var d2: bool = g._prop_live(1) and g.prop_pound == "candy"
+	_tick(1.5)
+	Dev.pick["npcact"] = na + 3
+	Dev._run(g, {"t": "list", "k": "npcact", "n": na + 4})
+	var d3: bool = g._prop_live(1) and g.prop_pound == "table"
+	_tick(1.5)
+	_ok("⑧ 개발자 「사탕 부수기」 · 「테이블 내리치기」가 선다", d2 and d3, "%s · %s" % [d2, d3])
+	_ok("⑧ 개발자 줄이 값 · 트랙 레벨 · 판을 안 건드린다", _econ() == dv0
+			and str(g.track_lv) == lvs0, "%s | %s" % [dv0, _econ()])
+	g.drop_fast = true
 	g.prop_force = false
