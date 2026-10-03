@@ -8,6 +8,10 @@ extends SceneTree
 #   ② 기본값이 40 이다(빈 저장에서 읽은 값) · 도구 실행은 0 으로 뜬다(인트로와 같은 규약)
 #   ③ 층이 맨 위에 서고 클릭을 안 먹는다 · 0 이면 숨고 0 위면 선다
 #   ④ 설정 줄이 제목 · 상점 · 판 중 어디서 열어도 있다 — 게이지 줄이다
+#      2026-10-03 부터는 「화면」 갈래 안이다(「설정이 저기서 다 나열되기 보단 화면안에
+#      전체화면, crt 필터 이렇게 좀 상위가 있으면 좋겠는데」). 제목은 설정 › 화면,
+#      판 중은 일시정지 › 설정 › 화면 으로 **누르며** 들어가 거기 있는지 본다.
+#      굽힘은 「화면 굴곡」으로 갈라 나갔다 — CRT 손잡이는 주사선 · 번짐만 민다.
 #   ⑤ 홈을 누르고 끌고 떼면(손가락도 같은 길 — 터치는 마우스로 흉내 난다)
 #      값이 움직이고 뗄 때 저장된다 · 휠도 같다
 #   ⑥ 저장한 값을 다음 실행이 되읽는다
@@ -95,13 +99,15 @@ func _run() -> void:
 		for u in (sh as Shader).get_shader_uniform_list():
 			names.append(String((u as Dictionary).get("name", "")))
 		_ok("화면 읽기 셰이더다", (sh as Shader).code.contains("hint_screen_texture"))
-	var need := ["strength", "logical", "motion", "scan", "mask", "bend", "glow", "vig"]
+	#  bend 는 없다 — 굽힘이 「화면 굴곡」(warp)으로 갈라 나갔다(qa_warp 가 잰다).
+	var need := ["strength", "logical", "motion", "scan", "mask", "warp", "glow", "vig"]
 	var miss := []
 	for nm in need:
 		if not names.has(nm):
 			miss.append(nm)
 	_ok("구문이 선다 — uniform 이 다 나온다", miss.is_empty(),
 			"%d개" % names.size() if miss.is_empty() else "빠짐 %s · 나온 것 %s" % [miss, names])
+	_ok("CRT 세기가 굽힘을 안 민다(bend 가 없다)", not names.has("bend"))
 
 	# ── ② 기본값 ───────────────────────────────────────
 	var lay: CanvasLayer = g.crt_layer
@@ -110,14 +116,25 @@ func _run() -> void:
 	if lay == null or rect == null:
 		return
 	#  도구로 돈 이 실행은 꺼진 채 떴다 — 화소를 재는 프로브가 원본을 받는다.
-	_ok("도구 실행은 꺼진 채 뜬다", is_equal_approx(float(g.crt), 0.0) and not lay.visible,
-			"%.2f · 보임 %s" % [float(g.crt), lay.visible])
+	_ok("도구 실행은 꺼진 채 뜬다", is_equal_approx(float(g.crt), 0.0)
+			and is_equal_approx(float(g.warp), 0.0) and not lay.visible,
+			"CRT %.2f · 굴곡 %.2f · 보임 %s" % [float(g.crt), float(g.warp), lay.visible])
 	#  게임이 켤 때 읽는 그 길(_load_settings) — 빈 저장이면 40.
 	g._load_settings()
 	_ok("기본값 40", is_equal_approx(float(g.CRT_DEF), 0.4)
 			and is_equal_approx(float(g.crt), 0.4), "CRT_DEF %.2f · 빈 저장에서 읽은 값 %.2f"
 			% [float(g.CRT_DEF), float(g.crt)])
 	_ok("저장에 아직 안 적었다", _disk_crt() == null, "%s" % [_disk_crt()])
+	#  굴곡도 같은 길로 50 이 앉았다. 아래 클릭은 원본 자리를 그대로 누르므로 굴곡을
+	#  0 으로 내리고 잰다 — 굴곡 위의 누름은 qa_warp 가 잰다. 둘 다 서 있는 층에서
+	#  CRT 만 0 이면 층은 **선 채로** 남아야 한다(굴곡이 그리는 중이다).
+	_ok("굴곡 기본 50 도 같이 앉는다", is_equal_approx(float(g.warp), 0.5), "%.2f" % float(g.warp))
+	g._vol_set("crt", 0.0)
+	_ok("CRT 0 이어도 굴곡이 서 있으면 층이 선다", lay.visible
+			and is_equal_approx(float((g.crt_rect.material as ShaderMaterial)
+				.get_shader_parameter("strength")), 0.0))
+	g._vol_set("warp", 0.0)
+	g._vol_set("crt", 0.4)
 
 	# ── ③ 층 ───────────────────────────────────────────
 	var top := true
@@ -143,14 +160,30 @@ func _run() -> void:
 	var info: Dictionary = g._set_info("crt")
 	_ok("이름 「CRT 필터」 · 게이지", String(info.get("n", "")) == "CRT 필터"
 			and bool(info.get("g", false)), "%s" % info)
-	_ok("한 줄 설명이 있다", String(info.get("d", "")) != "", String(info.get("d", "")))
+	_ok("한 줄 설명이 있다 · 굴곡을 말하지 않는다", String(info.get("d", "")) != ""
+			and not String(info.get("d", "")).contains("굴곡"), String(info.get("d", "")))
+	_ok("「화면」 갈래가 CRT 를 품는다", (g._set_info("screen").get("kids", []) as Array)
+			.has("crt"), "%s" % [g._set_info("screen").get("kids", [])])
 	var opens := {"제목": -1, "상점": g.S.SHOP, "판 중": g.S.AIM_V}
 	for nm in opens:
+		g.state = g.S.SETTINGS
 		g.pause_from = int(opens[nm])
+		g._set_go("pause" if int(opens[nm]) >= 0 else "top")
+		g.set_t = 1.0
+		g.set_pg_t = 1.0
+		#  누르며 들어간다 — 일시정지 › 설정 › 화면(제목은 설정 › 화면).
+		var path := []
+		for key in ["set", "screen"]:
+			var ki: int = (g._set_rows() as Array).find(key)
+			if ki >= 0:
+				g._click((g._set_rect(ki) as Rect2).get_center())
+				g.set_pg_t = 1.0
+				path.append(g._set_pg())
 		var rows: Array = g._set_rows()
 		var ci := rows.find("crt")
-		_ok("%s에서 연 설정에 줄이 있다" % nm, ci >= 0
-				and ci == rows.find("mus") + 1, "%d번째 · %s" % [ci, rows])
+		_ok("%s에서 연 설정 › 화면에 줄이 있다" % nm, g._set_pg() == "screen" and ci >= 0
+				and ci == rows.find("fs") + 1 and ci == rows.find("warp") - 1,
+				"%s · %d번째 · %s" % [path, ci, rows])
 		var r: Rect2 = g._set_rect(ci)
 		_ok("%s — 줄이 화면 안이다" % nm, r.end.y <= 354.0, "%.0f" % r.end.y)
 	#  실제 문으로 연다 — 상점에서 「설정」(_pause_open).
@@ -168,11 +201,20 @@ func _run() -> void:
 	g.sweep_live = false
 	g.boost_t = -1.0
 	g._pause_open()
-	_ok("상점에서 설정이 열린다", g.state == g.S.SETTINGS and g.pause_from == g.S.SHOP,
-			"state %d · from %d" % [g.state, g.pause_from])
+	_ok("상점에서 일시정지가 열린다", g.state == g.S.SETTINGS and g.pause_from == g.S.SHOP
+			and g._set_pg() == "pause",
+			"state %d · from %d · 쪽 %s" % [g.state, g.pause_from, g._set_pg()])
 	g.set_t = 1.0
 	for k in 4:
 		g._set_tick(1.0 / 60.0)
+	#  진짜 누름으로 들어간다 — 「설정」 › 「화면」.
+	for key in ["set", "screen"]:
+		g.set_pg_t = 1.0
+		var c0: Vector2 = (g._set_rect((g._set_rows() as Array).find(key)) as Rect2).get_center()
+		_mouse(c0, true)
+		_mouse(c0, false)
+	g.set_pg_t = 1.0
+	_ok("일시정지 › 설정 › 화면", g._set_pg() == "screen", g._set_pg())
 
 	# ── ⑤ 누르고 · 끌고 · 떼기 ───────────────────────────
 	var rows2: Array = g._set_rows()
@@ -217,17 +259,26 @@ func _run() -> void:
 			and is_equal_approx(g._gauge_v("vol"), g.vol)
 			and is_equal_approx(g._gauge_v("mus"), g.vol_mus))
 	g._settings_back()
-	_ok("닫으면 상점으로", g.state == g.S.SHOP)
+	_ok("한 번 오르면 설정", g._set_pg() == "top" and g.state == g.S.SETTINGS)
+	g._settings_back()
+	_ok("또 오르면 일시정지", g._set_pg() == "pause" and g.state == g.S.SETTINGS)
+	g._settings_back()
+	_ok("또 오르면 상점으로", g.state == g.S.SHOP)
 
 	# ── ⑥ 되읽기 ───────────────────────────────────────
 	g._vol_set("crt", 0.63)
-	g.set_drag = ci2
 	g.pause_from = g.S.SHOP
+	g.set_page = "screen"
+	g.set_drag = ci2
 	g._set_slide_end()
 	g.pause_from = -1
 	g.crt = 0.9
 	g._load_settings()
 	_ok("저장한 값을 되읽는다", is_equal_approx(g.crt, 0.63), "%.2f" % g.crt)
+	#  되읽기는 굴곡(빈 저장이면 50)도 같이 앉힌다 — 아래 「0 이면 숨는다」는 CRT 만 재므로
+	#  굴곡을 다시 0 으로 내린다(굴곡이 서 있으면 층이 선 채인 것이 맞다 — ②).
+	g.warp = 0.0
+	g._crt_apply()
 	_ok("되읽은 값이 층에 앉는다", is_equal_approx(
 			float(mat.get_shader_parameter("strength")), 0.63) and lay.visible)
 
@@ -273,6 +324,37 @@ func _run() -> void:
 	_ok("값 칸이 지금 값에 맞는다", int(Dev.pick.get("crt", -1)) == 3
 			and String(Dev._cur_name(g, {"k": "crt"})).contains("60"),
 			Dev._cur_name(g, {"k": "crt"}))
+	#  「화면 굴곡」 줄 — CRT 줄 바로 밑(개발자 모드에 제때 넣기, 2026-10-03).
+	var rs4: Array = Dev._rows(g)
+	var ci4 := -1
+	var wi4 := -1
+	for i in rs4.size():
+		var kk := String((rs4[i] as Dictionary).get("k", ""))
+		if kk == "crt":
+			ci4 = i
+		elif kk == "warp":
+			wi4 = i
+	_ok("개발자 판 「화면 굴곡」이 CRT 줄 바로 밑", ci4 >= 0 and wi4 == ci4 + 1,
+			"CRT %d · 굴곡 %d" % [ci4, wi4])
+	_ok("굴곡 고르개가 안 빈다", Dev._names("warp").size() == 5, "%s" % [Dev._names("warp")])
+	var gotw := []
+	for j in Dev.WARP_STEPS.size():
+		Dev.pick["warp"] = j
+		Dev._run(g, {"k": "warp"})
+		gotw.append(int(roundf(g.warp * 100.0)))
+	_ok("굴곡 사다리 0 · 25 · 50 · 75 · 100", gotw == [0, 25, 50, 75, 100], "%s" % [gotw])
+	_ok("굴곡 100 이 셰이더에 앉는다", is_equal_approx(
+			float(mat.get_shader_parameter("warp")), 1.0))
+	g.crt = 0.0
+	Dev.pick["warp"] = 0
+	Dev._run(g, {"k": "warp"})
+	_ok("CRT 0 · 굴곡 사다리 0 이면 층이 숨는다", not lay.visible)
+	g.warp = 0.75
+	Dev._rows(g)
+	_ok("굴곡 값 칸이 지금 값에 맞는다", int(Dev.pick.get("warp", -1)) == 3
+			and String(Dev._cur_name(g, {"k": "warp"})).contains("75"),
+			Dev._cur_name(g, {"k": "warp"}))
+	g.warp = 0.0
 	Dev.page = pg0
 	g.crt = 0.4
 	g._crt_apply()

@@ -148,6 +148,8 @@ func _run() -> void:
 	# ③ 설정 — 효과음 게이지
 	g.pause_from = -1
 	g.state = g.S.SETTINGS
+	g._set_go("sound")         # 효과음은 설정 › 소리 쪽에 산다(2026-10-03)
+	g.set_pg_t = 1.0
 	var rows: Array = g._set_rows()
 	g.set_sel = rows.find("vol")
 	await _wait(40)

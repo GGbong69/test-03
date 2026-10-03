@@ -1,5 +1,8 @@
 extends SceneTree
-# 런 정보 · 설정 단추 — 키 없이(모바일) TAB · ESC 가 하던 일을 할 수 있는가.
+# 런 정보 · 일시정지 단추 — 키 없이(모바일) TAB · ESC 가 하던 일을 할 수 있는가.
+#   2026-10-03 — 「esc를 누르면 일시정지가 되어야지 일시정지에 설정을 누르면 설정창이
+#   되어야지」(사용자). ESC 가 일시정지 쪽을 열므로 화면 단추도 「설정」 → 「일시정지」로
+#   이름을 바꾸고 같은 쪽을 연다. 이름은 12 그대로 58px 몸에 든다(글자를 안 줄인다).
 #   godot --headless --path . --script scripts/tools/qa_hudbtn.gd
 const GameData = preload("res://scripts/data.gd")
 const Save = preload("res://scripts/save.gd")
@@ -131,17 +134,37 @@ func _run() -> void:
 	g._runinfo_toggle()
 	_ok("다시 닫으면 상점으로", g.state == g.S.SHOP)
 	g._click(c1)
-	_ok("「설정」 → 일시정지(상점)", g.state == g.S.SETTINGS and g.pause_from == g.S.SHOP,
-			"state %d · from %d" % [g.state, g.pause_from])
+	_ok("「일시정지」 → 일시정지 쪽(상점)", g.state == g.S.SETTINGS and g.pause_from == g.S.SHOP
+			and g._set_pg() == "pause",
+			"state %d · from %d · 쪽 %s" % [g.state, g.pause_from, g._set_pg()])
+	_ok("일시정지 쪽 맨 위가 「계속하기」 · 그 밑이 「설정」",
+			(g._set_rows() as Array).slice(0, 2) == ["back", "set"], "%s" % [g._set_rows()])
 	g._settings_back()
-	_ok("설정을 닫으면 상점으로", g.state == g.S.SHOP)
+	_ok("일시정지를 닫으면 상점으로", g.state == g.S.SHOP)
+	#  ESC 와 단추가 같은 쪽을 연다
+	var esc := InputEventKey.new()
+	esc.keycode = KEY_ESCAPE
+	esc.pressed = true
+	g._unhandled_input(esc)
+	var esc_pg: String = g._set_pg()
+	var esc_st: int = g.state
+	g._settings_back()
+	_ok("ESC 와 「일시정지」 가 같은 쪽을 연다", esc_st == g.S.SETTINGS and esc_pg == "pause"
+			and g.state == g.S.SHOP, "쪽 %s" % esc_pg)
+	#  이름이 몸에 든다 — 12 를 안 줄이고 58px 몸(턱 빼고) 안에 양옆 4px 이상.
+	#  글꼴은 _ready 가 싣는다 — 이 검사는 _initialize 에서 돌아 아직 없다. 같은 파일을 읽는다.
+	var hf: Font = load(g.FONT_PATH) as Font
+	var lw: float = hf.get_string_size("일시정지", HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
+	_ok("「일시정지」가 12 그대로 단추에 든다", lw + 8.0 <= g._hud_btn_rect(1).size.x,
+			"글 %.0fpx · 몸 %.0fpx" % [lw, g._hud_btn_rect(1).size.x])
 
 	#  조준 중 — 단추를 누른 손이 조준을 잠그면 안 된다
 	_calm()
 	g.state = g.S.AIM_V
 	var aim_before = g.aim
 	g._click(g._hud_btn_rect(1).get_center())
-	_ok("「설정」 → 일시정지(조준)", g.state == g.S.SETTINGS and g.pause_from == g.S.AIM_V)
+	_ok("「일시정지」 → 일시정지(조준)", g.state == g.S.SETTINGS and g.pause_from == g.S.AIM_V
+			and g._set_pg() == "pause")
 	g._settings_back()
 	_ok("조준으로 돌아온다 · 조준이 안 잠겼다", g.state == g.S.AIM_V and g.aim == aim_before,
 			"state %d" % g.state)

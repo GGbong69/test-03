@@ -105,17 +105,26 @@ func _run() -> void:
 		quit(1)
 		return
 
+	#  2026-10-03 — 설정이 쪽으로 갈렸다(「esc를 누르면 일시정지가 되어야지 일시정지에 설정을
+	#  누르면 설정창이 되어야지」). 제목에서 연 설정 쪽의 「뒤로」와 화면 쪽의 「전체화면」을 잰다.
+	#  오르는 문도 하나다(_settings_back) — 갈래 쪽에서 한 단 오를 때도 같은 소리여야 한다.
+	g.pause_from = -1
+	g._set_go("top")
 	var rows: Array = g._set_rows()
 	var i_back: int = rows.find("back")
-	var i_fs: int = rows.find("fs")
-	_ok("설정 줄에 「뒤로」와 「전체화면」이 있다", i_back >= 0 and i_fs >= 0,
+	g._set_go("screen")
+	var i_fs: int = (g._set_rows() as Array).find("fs")
+	var i_sback: int = (g._set_rows() as Array).find("back")
+	_ok("설정 쪽에 「뒤로」 · 화면 쪽에 「전체화면」이 있다", i_back >= 0 and i_fs >= 0,
 			str(rows))
 
 	# ── ① 설정 나가기 ───────────────────────────────────
 	_pair("설정 나가기 — 키와 단추가 같다",
 			func():
 				g.state = g.S.SETTINGS
-				g.pause_from = -1,
+				g.pause_from = -1
+				g._set_go("top")
+				g.set_pg_t = 1.0,
 			func(): _key(KEY_ESCAPE),
 			func(): g._click(_mid(g._set_rect(i_back))))
 
@@ -123,9 +132,21 @@ func _run() -> void:
 	_pair("설정 나가기 — 스페이스도 같다",
 			func():
 				g.state = g.S.SETTINGS
-				g.pause_from = -1,
+				g.pause_from = -1
+				g._set_go("top")
+				g.set_pg_t = 1.0,
 			func(): _key(KEY_SPACE),
 			func(): g._click(_mid(g._set_rect(i_back))))
+
+	# ── ②' 갈래에서 한 단 오르기 — 키와 「뒤로」가 같다 ────
+	_pair("갈래 오르기 — 키와 「뒤로」가 같다",
+			func():
+				g.state = g.S.SETTINGS
+				g.pause_from = -1
+				g._set_go("screen")
+				g.set_pg_t = 1.0,
+			func(): _key(KEY_ESCAPE),
+			func(): g._click(_mid(g._set_rect(i_sback))))
 
 	# ── ③ 전체화면 ─────────────────────────────────────
 	#  ⚠ 여기만 **나가는 소리**(menu_back)로 울고 키로는 소리가 0이었다.
@@ -133,9 +154,13 @@ func _run() -> void:
 	#  둘 다 menu_back 이어도 짝은 맞기 때문이다.
 	g.state = g.S.SETTINGS
 	g.pause_from = -1
+	g._set_go("screen")
+	g.set_pg_t = 1.0
 	var fs_key := _snd(func(): _key(KEY_F11))
 	g.state = g.S.SETTINGS
 	g.pause_from = -1
+	g._set_go("screen")
+	g.set_pg_t = 1.0
 	var fs_tap := _snd(func(): g._click(_mid(g._set_rect(i_fs))))
 	_ok("전체화면 — 키와 줄이 같다", fs_key == fs_tap and not fs_key.is_empty(),
 			"키 %s · 줄 %s" % [str(fs_key), str(fs_tap)])

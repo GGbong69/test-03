@@ -85,6 +85,8 @@ func _run() -> void:
 	# ── ② 설정 「로비로 나가기」 — 겨눔 전 · 겨눔 뒤 ─────────
 	g.pause_from = g.S.PICK
 	g.state = g.S.SETTINGS
+	g._set_go("pause")         # 「로비로 나가기」는 일시정지 쪽에 산다(2026-10-03)
+	g.set_pg_t = 1.0
 	g.set_t = 1.0
 	g.lobby_arm = false
 	g.set_sel = (g._set_rows() as Array).find("lobby")

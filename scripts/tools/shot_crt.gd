@@ -165,6 +165,9 @@ func _run() -> void:
 	g.crt = g.CRT_DEF
 	g._crt_apply()
 	g._pause_open()
+	#  CRT 필터는 일시정지 › 설정 › 화면 쪽에 산다(2026-10-03).
+	g._set_go("screen")
+	g.set_pg_t = 1.0
 	var rows: Array = g._set_rows()
 	g.set_sel = rows.find("crt")
 	g.set_hot = -1
@@ -175,7 +178,8 @@ func _run() -> void:
 	await _settle(6)
 	var st: Image = root.get_texture().get_image()
 	st.save_png("res://shots/crt_settings.png")
-	g._settings_back()
+	while g.state == g.S.SETTINGS:      # 화면 › 설정 › 일시정지 › 상점 — 한 단씩 오른다
+		g._settings_back()
 	g.buy_sel = bi
 
 	#  고해상도 창(4배) — 같은 상점 · 같은 자리.

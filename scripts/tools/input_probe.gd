@@ -107,6 +107,8 @@ func _say(ok: bool, name: String, detail := "") -> void:
 
 
 func _initialize() -> void:
+	#  전역 파일(음량 · CRT · 굴곡)도 도구 자리로 — 일시정지 길에서 설정을 만지면 쓴다.
+	Save.gpath = "user://_probe_input_g.cfg"
 	Save.path = "user://_probe_input.cfg"
 	Save.wipe()
 	for r in GameData.tutor():
@@ -384,9 +386,88 @@ func _run() -> void:
 		_check("사탕 — 누르고 떼기", live, _cons_tap)
 		_check("동전 슬롯 — 끌어서 순서 바꾸기", live, _rack_drag)
 
+	_pause_walk()
+
 	print("\n%s" % ("전부 통과" if fails == 0 else "실패 %d" % fails))
 	OS.remove_logger(catch)
 	quit(fails)
+
+
+# ── 일시정지 › 설정 › 갈래 — 진짜 키 · 진짜 누름으로 ──────────────
+#  「지금 게임안에서 esc를 누르면 일시정지가 되어야지 일시정지에 설정을 누르면 설정창이
+#  되어야지 ㅇㅋ?」(사용자, 2026-10-03). 키와 화면 단추가 같은 쪽을 열고, 줄을 눌러 한 단씩
+#  들어가고, ESC 와 「뒤로」 · 「계속하기」로 한 단씩 오르는지를 **Input 에 밀어 넣은 이벤트**로
+#  잰다 — 위 검사들과 같은 길(parse_input_event → flush → _unhandled_input)이다.
+func _key(code: int) -> void:
+	for down in [true, false]:
+		var e := InputEventKey.new()
+		e.keycode = code
+		e.physical_keycode = code
+		e.pressed = down
+		Input.parse_input_event(e)
+		Input.flush_buffered_events()
+
+
+#  밀려 드는 줄이 제자리에 설 때까지 돌린다(화면 열림 14f · 쪽 갈이 7f).
+func _settle() -> void:
+	for i in 30:
+		g._process(1.0 / 60.0)
+
+
+func _row_tap(key: String) -> bool:
+	var i: int = (g._set_rows() as Array).find(key)
+	if i < 0:
+		return false
+	_tap((g._set_rect(i) as Rect2).get_center())
+	_settle()
+	return true
+
+
+func _pause_walk() -> void:
+	print("\n── 일시정지 · 설정 갈래 — ESC · 화면 단추 · 줄 누름 ──\n")
+	trouble = ""
+	var why := _stage("SHOP")
+	if why != "":
+		_say(false, "화면 세우기", why)
+		return
+	_settle()
+	#  지목이 서 있으면 ESC 는 지목부터 푼다(그 갈래가 앞이다) — 아무것도 안 집은 상점에서 잰다.
+	g.buy_sel = -1
+	g.sell_sel = -1
+	var e0: int = catch.n
+	_key(KEY_ESCAPE)
+	_settle()
+	_say(g.state == _st("SETTINGS") and g._set_pg() == "pause", "ESC → 일시정지",
+			"%s · 쪽 %s" % [_name(g.state), g._set_pg()])
+	_row_tap("set")
+	_say(g._set_pg() == "top", "「설정」 누름 → 설정 쪽", g._set_pg())
+	_row_tap("screen")
+	_say(g._set_pg() == "screen" and (g._set_rows() as Array).has("warp"),
+			"「화면」 누름 → 전체화면 · CRT · 굴곡", "%s" % [g._set_rows()])
+	_key(KEY_ESCAPE)
+	_settle()
+	_say(g._set_pg() == "top", "ESC → 설정 쪽으로 한 단", g._set_pg())
+	_row_tap("sound")
+	_say(g._set_pg() == "sound", "「소리」 누름 → 효과음 · 음악", "%s" % [g._set_rows()])
+	_row_tap("back")
+	_say(g._set_pg() == "top", "「뒤로」 누름 → 설정 쪽", g._set_pg())
+	_key(KEY_ESCAPE)
+	_settle()
+	_say(g._set_pg() == "pause" and g.state == _st("SETTINGS"), "ESC → 일시정지로 한 단",
+			g._set_pg())
+	_key(KEY_ESCAPE)
+	_settle()
+	_say(g.state == _st("SHOP"), "ESC → 판으로(상점)", _name(g.state))
+	#  화면 단추 — 키가 없는 손(모바일)이 같은 쪽을 연다.
+	_tap(g._hud_btn_rect(1).get_center())
+	_settle()
+	_say(g.state == _st("SETTINGS") and g._set_pg() == "pause", "「일시정지」 단추 → 일시정지",
+			"%s · 쪽 %s" % [_name(g.state), g._set_pg()])
+	_row_tap("back")
+	_say(g.state == _st("SHOP"), "「계속하기」 누름 → 판으로", _name(g.state))
+	var ne: int = catch.n - e0
+	_say(ne == 0 and trouble == "", "오류 · 준비 실패 없음",
+			"오류 %d건 %s · %s" % [ne, catch.last if ne > 0 else "", trouble])
 
 
 func _process(_d: float) -> bool:

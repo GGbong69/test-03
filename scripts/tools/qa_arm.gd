@@ -15,7 +15,13 @@ extends SceneTree
 #    · 첫 누름 — 상태가 S.SETTINGS 그대로이고 lobby_arm 이 선다. 소리는
 #      prof_arm 이 쓰는 menu_pick2 다.
 #    · 둘째 누름 — 같은 줄이어야 나간다.
-#    · 풀림 넷 — 딴 줄 · 게이지 홈 · 설정을 닫음 · 화면이 바뀜 · 2.5초 만료.
+#    · 풀림 — 딴 줄 · 게이지 홈 · 설정을 닫음 · 화면이 바뀜 · 쪽을 떠남 · 2.5초 만료.
+#      2026-10-03 부터 「로비로 나가기」는 **일시정지 쪽**에 산다(「esc를 누르면 일시정지가
+#      되어야지 일시정지에 설정을 누르면 설정창이 되어야지」). 같은 쪽의 딴 줄은 「계속하기」
+#      (판으로 돌아간다) · 「설정」(한 단 들어간다) · 「게임 나가기」 셋이고, 「설정」을 누르는
+#      것이 겨눔을 안 들고 딴 쪽으로 가는 길이다. 게이지는 이제 소리 쪽에만 있어 겨눈 채로
+#      게이지를 잡을 길이 구조로 막혔다 — 그래도 「겨눔이 남은 채 게이지를 잡으면 풀린다」는
+#      규약(_click 의 홈 갈래)이 그대로 서 있는지 겨눔을 손으로 세워 잰다.
 #      **풀릴 때는 소리가 안 난다** — 풀림은 사건이 아니다.
 #    · **글자는 한 자도 안 는다** — 겨눈 동안에도 _set_rows 의 줄 수와
 #      _set_info("lobby") 의 이름이 한 글자도 안 바뀐다.
@@ -62,7 +68,7 @@ func _calm() -> void:
 	g.tutor_out = 0.0
 
 
-#  판 중에 연 설정. 여섯 줄이라 「로비로 나가기」가 선다.
+#  판 중의 일시정지 쪽 — 「로비로 나가기」가 선다(제목에서 연 설정에는 없다).
 func _open() -> void:
 	_calm()
 	g.lobby_arm = false
@@ -82,6 +88,7 @@ func _at(key: String) -> Vector2:
 
 
 func _tap(key: String) -> void:
+	g.set_pg_t = 1.0         # 쪽을 간 뒤 줄이 제자리에 선 다음에 누른다
 	g._click(_at(key))
 
 
@@ -111,27 +118,40 @@ func _run() -> void:
 			"state %d" % g.state)
 	_ok("나간 뒤 겨눔이 안 남는다", not g.lobby_arm)
 
-	# ── 풀림 ① 딴 줄 ────────────────────────────────
+	# ── 풀림 ① 딴 줄 — 「설정」(한 단 들어간다) ─────────────
 	_open()
 	_tap("lobby")
-	_tap("vol")
-	_ok("풀림 — 딴 줄을 누르면 풀린다", not g.lobby_arm)
-	_ok("풀림 — 딴 줄을 누른 뒤에는 한 번 더 겨눠야 한다", g.state == g.S.SETTINGS)
+	_tap("set")
+	_ok("풀림 — 딴 줄(설정)을 누르면 풀린다", not g.lobby_arm, "쪽 %s" % g._set_pg())
+	_ok("풀림 — 판은 안 떴다(설정 쪽)", g.state == g.S.SETTINGS and g._set_pg() == "top")
+	g._settings_back()                       # 설정 › 일시정지
+	g.set_pg_t = 1.0
+	_ok("돌아온 일시정지 쪽에 겨눔이 안 남았다", g._set_pg() == "pause" and not g.lobby_arm)
 	_tap("lobby")
 	_ok("풀린 뒤 첫 누름은 다시 겨눔이다",
 			g.lobby_arm and g.state == g.S.SETTINGS)
 
 	# ── 풀림 ② 게이지 홈 ─────────────────────────────
 	_open()
-	_tap("vol")                    # 홈이 효과음을 쥐게 한다
 	_tap("lobby")
 	_ok("게이지 앞 — 겨눔이 섰다", g.lobby_arm)
+	_tap("set")
+	g.set_pg_t = 1.0
+	_tap("sound")                  # 소리 쪽 — 홈이 효과음을 쥔다
+	g.set_pg_t = 1.0
+	_ok("풀림 — 소리 쪽으로 가는 길에 겨눔이 안 따라온다", not g.lobby_arm, g._set_pg())
+	g.lobby_arm = true             # 겨눔이 남았다고 치고(개발자 판의 「로비 겨눔 세우기」)
 	g.set_sel = _row("vol")
 	g.set_hot = -1
 	g._click((g._vol_track() as Rect2).get_center())
 	_ok("풀림 — 소리를 끄는 손이 겨눔을 안 들고 다닌다", not g.lobby_arm,
 			"set_drag %d" % g.set_drag)
 	g._set_slide_end()
+	#  쪽을 떠나면 시계가 스스로 푼다 — 「로비로 나가기」가 안 보이는 쪽에 겨눔이 남으면
+	#  돌아온 일시정지에서 첫 누름이 곧장 나가는 누름이 된다.
+	g.lobby_arm = true
+	g._set_tick(1.0 / 60.0)
+	_ok("풀림 — 일시정지 쪽이 아니면 시계가 푼다", not g.lobby_arm, g._set_pg())
 
 	# ── 풀림 ③ 설정을 닫는다 ──────────────────────────
 	_open()

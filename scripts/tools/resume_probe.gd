@@ -713,6 +713,9 @@ func _pass6() -> void:
 		st.append(String((s.d as Dictionary).get("id", "")))
 	g.pause_from = g.S.SHOP
 	g.state = g.S.SETTINGS
+	#  「로비로 나가기」는 일시정지 쪽에 산다(2026-10-03 — 설정을 갈래로 접었다).
+	g._set_go("pause")
+	g.set_pg_t = 1.0
 	g.lobby_arm = true
 	g._click(g._set_rect(g._set_rows().find("lobby")).get_center())
 	_eq("로비로 나갔다", g.state, g.S.TITLE)

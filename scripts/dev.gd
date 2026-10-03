@@ -625,6 +625,11 @@ static func _names(k: String) -> PackedStringArray:
 		for v in CRT_STEPS:
 			out.append(_crt_name(float(v)))
 		return out
+	#  화면 굴곡 사다리 — _cur_name 과 짝이다(2026-10-03).
+	if k == "warp":
+		for v in WARP_STEPS:
+			out.append(_crt_name(float(v)))
+		return out
 	#  판 깨짐의 층 셋. 표가 아니라 상수라 **_cur_name 과 짝으로** 낸다 —
 	#  한쪽만 내면 값 칸을 눌렀을 때 고르개가 텅 빈 채로 뜬다(빨리 보기
 	#  사다리가 같은 실패를 적어 뒀다). 2026-09-24
@@ -1043,6 +1048,7 @@ static func _rows(g: Node) -> Array:
 			_tune_sync(g)
 			_grow_sync(g)
 			_crt_sync(g)
+			_warp_sync(g)
 			return [
 				{"n1": "조준 게이지 %.2f" % g.gauge_speed, "t": "list",
 						"k": "gauge", "n": (TUNE_STEPS["gauge"] as Array).size()},
@@ -1114,6 +1120,15 @@ static func _rows(g: Node) -> Array:
 				#  열고 홈을 놓으면 그때 그 값이 앉는다. 열넷째 줄이다(한계 열아홉).
 				{"n1": "CRT 필터 %d" % int(roundf(float(g.crt) * 100.0)), "t": "list",
 						"k": "crt", "n": CRT_STEPS.size()},
+				#  ── 화면 굴곡 (2026-10-03) ────────────────────────
+				#  「약간 발라트로 같이 그 화면의 왜곡?」 — 설정 「화면」 갈래의 「화면 굴곡」
+				#  게이지와 **같은 값**(g.warp)을 끔 · 25 · 50(기본) · 75 · 100 다섯 칸으로
+				#  민다. CRT 줄 바로 밑 — 두 손잡이가 한 셰이더를 같이 미므로 나란히 서야
+				#  「주사선은 그대로 굴곡만」을 같은 화면에서 견준다. 저장은 안 한다.
+				#  입력 되짚기도 같은 문(_crt_apply → _warp_live)을 지나 이 칸을 바꾸는 순간
+				#  클릭이 새 굽힘을 따른다. 열다섯째 줄이다(한계 열아홉).
+				{"n1": "화면 굴곡 %d" % int(roundf(float(g.warp) * 100.0)), "t": "list",
+						"k": "warp", "n": WARP_STEPS.size()},
 			]
 
 
@@ -1448,6 +1463,23 @@ static func _crt_sync(g: Node) -> void:
 	pick["crt"] = best
 
 
+#  화면 굴곡 사다리(2026-10-03). 0 이 「끔」(굽힘 · 입력 되짚기가 정확히 항등)이고
+#  셋째(0.50)가 게임 기본값(game.gd 의 WARP_DEF)이다. 값 칸은 CRT 사다리와 같은
+#  규약으로 매번 지금 값에 가장 가까운 칸에 맞춘다(설정 게이지가 0.01 씩 민다).
+const WARP_STEPS := [0.00, 0.25, 0.50, 0.75, 1.00]
+
+
+static func _warp_sync(g: Node) -> void:
+	var best := 0
+	var bd := INF
+	for j in WARP_STEPS.size():
+		var dd: float = absf(float(WARP_STEPS[j]) - float(g.warp))
+		if dd < bd:
+			bd = dd
+			best = j
+	pick["warp"] = best
+
+
 #  그림 표본 다섯 판. game.gd 의 _art_sheet 가 **같은 차례**로 읽는다 —
 #  여기 순서를 바꾸면 거기 match 도 같이 바꾼다. 2026-09-19
 const ART_SHEET := ["끔", "골드", "팩", "제약", "셋 작게"]
@@ -1669,6 +1701,9 @@ static func _cur_name(g: Node, e: Dictionary) -> String:
 	if k == "crt":
 		var jc: int = i % CRT_STEPS.size()
 		return "%d/%d %s" % [jc + 1, CRT_STEPS.size(), _crt_name(float(CRT_STEPS[jc]))]
+	if k == "warp":
+		var jw: int = i % WARP_STEPS.size()
+		return "%d/%d %s" % [jw + 1, WARP_STEPS.size(), _crt_name(float(WARP_STEPS[jw]))]
 	if k == "fglow":
 		var fs: Array = FIRE_STEPS["fglow"]
 		var j9: int = i % fs.size()
@@ -2531,6 +2566,11 @@ static func _run(g: Node, e: Dictionary) -> void:
 			g.crt = float(CRT_STEPS[i % CRT_STEPS.size()])
 			g._crt_apply()
 			_say("CRT 필터 %s" % _crt_name(g.crt))
+		"warp":
+			#  설정 게이지와 같은 문(_crt_apply)을 지난다 — 둘 다 0 이면 층째 숨는다.
+			g.warp = float(WARP_STEPS[i % WARP_STEPS.size()])
+			g._crt_apply()
+			_say("화면 굴곡 %s" % _crt_name(g.warp))
 		"npcact":
 			#  값(골드 · 매물 · leg_no)을 한 톨도 안 건드린다 — 몸짓 시계만 세운다.
 			#  「살핌」만 매물 하나를 상인 손에 건넨다 — 손님이 건넨 것과 같은 길이라
