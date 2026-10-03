@@ -69,6 +69,7 @@ func _run() -> void:
 	var rows: Array = GameData.tutor()
 	_ok("표가 비지 않았다", rows.size() >= 12, "%d걸음" % rows.size())
 	_pop()
+	_voice()
 
 	# ① 표에만 있고 아무도 안 부르는 갈래가 없는가
 	var src := ""
@@ -315,3 +316,26 @@ func _pop() -> void:
 	_ok("보이는 순간 튐이 0 에서 시작해 pop 초 뒤 다 앉는다", bad_at.is_empty(), "%s" % [bad_at])
 	g.tutor_t = 0.0
 	_reset()
+
+
+#  글 읽기(2026-10-03 「소리가 너무 발라트로 글씨 소린데?」) — 글자마다 그 음절의 모음 ·
+#  받침 · 첫소리로 소리를 고른다. 고른 파일이 다 있어야 한다(없으면 말없이 talk 로 떨어진다).
+func _voice() -> void:
+	var want := {"처": ["talk_eo", "talk_s"], "음": ["talk_eun", ""],
+			"손": ["talk_on", "talk_s"], "님": ["talk_in", ""], "가": ["talk_a", "talk_pk"],
+			"빵": ["talk_an", "talk_pp"], "뒤": ["talk_i", "talk_pt"], "흙": ["talk_euk", "talk_h"],
+			"왜": ["talk_e", ""], "A": ["talk", ""], "3": ["talk", ""]}
+	var bad_map := []
+	for ch in want:
+		var got: Array = g._talk_voice(String(ch))
+		if got != (want[ch] as Array):
+			bad_map.append("%s→%s" % [ch, got])
+	_ok("글자 → 모음 · 받침 · 첫소리", bad_map.is_empty(), "%s" % [bad_map])
+	var miss := []
+	for c in range(0xAC00, 0xD7A4, 7):
+		var vo: Array = g._talk_voice(String.chr(c))
+		for nm in vo:
+			if String(nm) != "" and not ResourceLoader.exists("res://sfx/%s.wav" % nm):
+				if not miss.has(nm):
+					miss.append(nm)
+	_ok("고르는 파일이 다 있다(음절 1596자 표본)", miss.is_empty(), "%s" % [miss])

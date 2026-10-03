@@ -880,6 +880,12 @@ func _ready() -> void:
 	tp.bus = "SFX"
 	add_child(tp)
 	talk_pl = tp
+	#  첫소리(터짐 · 갈림 · 숨)는 제 자리 하나에서 모음과 같이 난다(_talk_blip).
+	var to := AudioStreamPlayer.new()
+	to.playback_type = AudioServer.PLAYBACK_TYPE_STREAM
+	to.bus = "SFX"
+	add_child(to)
+	talk_on_pl = to
 
 	# 음악 — 자리가 **하나**다. 겹쳐 넘기지 않고 나갔다 들어오므로 한 번에
 	# 한 곡만 울린다. 예전에는 겹치려고 둘이었다.
@@ -43680,6 +43686,7 @@ const TUTOR := {
 	"pop_tilt": 0.14,    # 처음 기울기(라디안, 약 8°)
 }
 var talk_pl: AudioStreamPlayer = null
+var talk_on_pl: AudioStreamPlayer = null   # 첫소리 자리 — 모음(talk_pl)과 같이 난다
 var tut_sh := Vector2.ZERO  # 말상자를 그리는 동안의 흔들림 — 낱자 변환이 그 위에 선다
 var talk_n := 0            # 낸 말소리 수 — 음을 미는 차례다. 판의 난수를 안 건드린다
 var talk_cool := 0.0       # 다음 말소리까지 남은 시간(초)
@@ -43744,13 +43751,13 @@ func _talk_tick(d: float, n0: int, n1: int) -> void:
 	if n1 <= n0 or talk_cool > 0.0:
 		return
 	var tx := _tutor_text()
-	var said := false
+	var said := ""
 	for i in range(n0, mini(n1, tx.length())):
 		var c := tx.substr(i, 1)
 		if c.strip_edges() != "" and not ".,!?…·~-—()[]「」『』<>'\"".contains(c):
-			said = true
+			said = c                 # 이 글자를 읽는다(_talk_voice)
 			break
-	if not said:
+	if said == "":
 		return
 	talk_cool = float(TUTOR.blip)
 	talk_n += 1
@@ -43759,12 +43766,56 @@ func _talk_tick(d: float, n0: int, n1: int) -> void:
 	#  다음 판의 뽑기를 바꾼다.
 	var p: float = (float(TUTOR.blip_narr) if narr else 1.0) \
 			* (1.0 + float(TUTOR.blip_jit) * sin(float(talk_n) * 2.39996))
-	_talk_blip(p, float(TUTOR.blip_narr_db) if narr else 0.0)
+	_talk_blip(p, float(TUTOR.blip_narr_db) if narr else 0.0, said)
 
 
-#  「웅」 한 알. 파일이 있으면 제 자리(talk_pl)에서, 없으면 합성음으로.
-func _talk_blip(pitch: float, db: float) -> void:
-	var st := _sfx_file("talk")
+#  ── 글 읽기 (2026-10-03) ─────────────────────────────────
+#  「소리가 너무 발라트로 글씨 소린데? 다른거 없어?」 — 한 모음 「웅」 은 발라트로
+#  짐보의 목소리와 결이 같았다. 시안 넷 중 「글 읽기」를 골랐다: 글자마다 **그 음절의
+#  모음**으로 입 모양을 바꾸고, 받침이 끝을 닫고, 첫소리가 앞을 터뜨린다. 상인이
+#  대사를 흉내 내 읽는다. 소리는 sfx_bake 의 _talk_set 이 굽는다(모음 21 · 첫소리 5).
+#  중성 21 → 모음 일곱. 겹모음은 끝 모음으로(ㅘ → ㅏ · ㅝ → ㅓ · ㅟ → ㅣ), ㅐ ㅔ ㅚ 는 ㅔ.
+const TALK_JUNG := ["a", "e", "a", "e", "eo", "e", "eo", "e", "o", "a", "e", "e", "o",
+		"u", "eo", "e", "i", "u", "eu", "eu", "i"]
+
+
+#  글자 하나 → [모음 파일, 첫소리 파일]. 한글 음절이 아니면 ["talk", ""](ㅓ 열림).
+#  받침 ㄴ ㅁ ㅇ 은 콧소리(n), 나머지 받침은 막힘(k). 첫소리 ㄴ ㄹ ㅁ ㅇ 은 터짐이 없다.
+static func _talk_voice(ch: String) -> Array:
+	if ch.length() != 1:
+		return ["talk", ""]
+	var c: int = ch.unicode_at(0) - 0xAC00
+	if c < 0 or c > 11171:
+		return ["talk", ""]
+	var cho: int = c / 588
+	var jung: int = (c % 588) / 28
+	var jong: int = c % 28
+	var coda := ""
+	if jong == 4 or jong == 16 or jong == 21:
+		coda = "n"
+	elif jong != 0:
+		coda = "k"
+	var on := ""
+	if cho in [0, 1, 15]:
+		on = "talk_pk"
+	elif cho in [3, 4, 16]:
+		on = "talk_pt"
+	elif cho in [7, 8, 17]:
+		on = "talk_pp"
+	elif cho in [9, 10, 12, 13, 14]:
+		on = "talk_s"
+	elif cho == 18:
+		on = "talk_h"
+	return ["talk_%s%s" % [TALK_JUNG[jung], coda], on]
+
+
+#  한 글자를 읽는다. 모음은 제 자리(talk_pl)에서, 첫소리는 그 옆 자리에서 같이.
+#  파일이 없으면 talk.wav, 그것도 없으면 합성음으로.
+func _talk_blip(pitch: float, db: float, ch := "") -> void:
+	var vo := _talk_voice(ch)
+	var st := _sfx_file(String(vo[0]))
+	if st == null:
+		st = _sfx_file("talk")
 	if st == null or talk_pl == null:
 		_sfx("talk", float((SFX.talk as Dictionary).f) * pitch)
 		return
@@ -43772,6 +43823,12 @@ func _talk_blip(pitch: float, db: float) -> void:
 	talk_pl.pitch_scale = pitch
 	talk_pl.volume_db = db
 	talk_pl.play()
+	var so: AudioStream = _sfx_file(String(vo[1])) if String(vo[1]) != "" else null
+	if so != null and talk_on_pl != null:
+		talk_on_pl.stream = so
+		talk_on_pl.pitch_scale = pitch
+		talk_on_pl.volume_db = db
+		talk_on_pl.play()
 
 
 #  지금 걸음. 없으면 빈 사전이다.

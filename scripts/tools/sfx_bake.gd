@@ -738,6 +738,8 @@ func _init() -> void:
 		_norm_rms(x, want)
 		var err := _save(nm, x)
 		made[nm] = x
+		if nm == "talk":
+			_talk_set(want)         # 「글 읽기」 스물여섯 — 표에 줄이 없다
 		var got := _rms(x)
 		var say := ""
 		if err != 0:
@@ -2069,63 +2071,125 @@ func _b_menu(nm: String) -> PackedFloat32Array:
 
 
 # ══════════════════════════════════════════════════════════
-#  목소리 — 상인의 말소리 (2026-10-02)
+#  목소리 — 상인의 말소리 (2026-10-02 「웅」 → 2026-10-03 「글 읽기」)
 #
-#  「텍스트가 나올때 한번에 나오지 않고 한글자씩 나오면서 웅웅 소리도
-#   나오잖아」. 여덟째 가족이고 **물체가 아니라 사람**이다. 칩 · 동전 ·
-#  종을 한 알도 안 섞는다 — 말소리에 카지노 쇠가 섞이면 상인이 아니라
-#  기계가 말한다.
+#  여덟째 가족이고 **물체가 아니라 사람**이다. 칩 · 동전 · 종을 한 알도 안 섞는다 —
+#  말소리에 카지노 쇠가 섞이면 상인이 아니라 기계가 말한다.
 #
-#  「웅」 한 알: 성대 떨림(배음 열여섯, 1/k^0.7)을 모음 「ㅜ」 의 포먼트
-#  (F1 330 · F2 780 · F3 2300 · 밝힘 3200)로 거르다가, 뒤 4할에서 받침 「ㅇ」 의
-#  콧소리(250Hz 웅얼거림 · 그 위가 꺼진다)로 넘어간다. 음은 조금 올랐다가
-#  말끝에서 내려앉는다. 부르는 쪽(_talk_blip)이 글자마다 ±6% 밀어
-#  「웅웅」 이 한 음으로 안 붙는다.
+#  처음(2026-10-02 「텍스트가 나올때 … 웅웅 소리도 나오잖아」)에는 모음 ㅜ 하나가 받침 ㅇ
+#  으로 닫히는 「웅」 한 알이었다 — 배음 열여섯을 포먼트 넷(330 · 780 · 2300 · 3200)으로
+#  거르고 뒤 4할에서 콧소리로 넘어갔다. 2026-10-03 「소리가 너무 발라트로 글씨 소린데?
+#  다른거 없어?」 — 한 모음만 웅얼거리면 발라트로 짐보의 목소리와 결이 같다. 시안 넷
+#  (글 읽기 · 카운터 톡 · 유리잔 띵 · 분필)을 상인 대사 박자로 이어 들려 「글 읽기」를
+#  골랐다 — **글자의 모음을 따라 입 모양을 바꾼다.** 상인이 대사를 흉내 내 읽는다.
+#    모음 일곱   ㅏ ㅓ ㅗ ㅜ ㅡ ㅣ ㅔ — 겹모음 · ㅐ 는 게임(_talk_voice)이 접는다
+#    받침 셋     열림 · 콧소리(ㄴ ㅁ ㅇ — 뒤에서 400Hz 밑으로 닫힌다) · 막힘(3/4 에서 끊긴다)
+#    첫소리 다섯 터짐 셋(ㄱ류 1.5k · ㄷ류 3k · ㅂ류 0.9k) · 갈림(ㅅ ㅈ ㅊ 5.2k) · 숨(ㅎ)
+#  talk_<모음><받침>.wav 스물하나와 talk_<첫소리>.wav 다섯은 표에 줄이 없다 — 표의
+#  talk 한 줄이 크기의 자다(_talk_set). talk.wav 자체는 ㅓ 열림이다(한글이 아닌 글자).
+#  성대는 「웅」 을 물려받는다(배음 다발 · 넷째 포먼트 3300 밝힘 — 실제 모음대로 거르면
+#  1kHz 위가 비어 작은 스피커에서 안 들린다).
 # ══════════════════════════════════════════════════════════
-#  둘째 · 셋째 포먼트를 일부러 세게 둔다. 실제 「ㅜ」 대로 0.45 · 0.12 로 두면
-#  1kHz 위가 0% 라 작은 스피커에서 「웅」 이 아니라 안 들리는 둔한 울림이 된다
-#  (구워 재 보니 200~500Hz 에 80%). 셋째를 한 번 올려도 1kHz 위가 3% 라
-#  넷째(3200)를 더 얹었다 — 게임의 말소리는 실제 모음보다 밝게 짓는 것이 보통이다.
-const VOWEL_U := [[330.0, 100.0, 1.00], [780.0, 160.0, 1.10], [2300.0, 320.0, 1.60],
-		[3200.0, 420.0, 0.90]]
-const NASAL_NG := [[250.0, 80.0, 1.10], [780.0, 200.0, 0.40], [2300.0, 340.0, 0.50],
-		[3200.0, 460.0, 0.25]]
+#  모음 F1 · F2 · F3(성인 남자 한국어 모음의 어림값).
+const TALK_V := {
+	"a": [760.0, 1300.0, 2500.0], "eo": [590.0, 1000.0, 2400.0],
+	"o": [430.0, 800.0, 2400.0], "u": [340.0, 850.0, 2300.0],
+	"eu": [370.0, 1450.0, 2400.0], "i": [300.0, 2200.0, 2900.0],
+	"e": [500.0, 1800.0, 2550.0]}
+#  첫소리의 높이 — 여린입천장(ㄱ류) · 잇몸(ㄷ류) · 입술(ㅂ류) · 갈림 · 숨.
+const TALK_ON := {"pk": 1500.0, "pt": 3000.0, "pp": 900.0, "s": 5200.0, "h": 1500.0}
+#  첫소리의 크기 — 모음 봉우리에 대한 비. 시안(talk_demo)과 같다.
+const TALK_ON_W := {"pk": 0.5, "pt": 0.5, "pp": 0.5, "s": 0.35, "h": 0.25}
+
+
+#  모음 한 알. 68ms · 성대(배음 스물아홉, 1/k^0.6)를 포먼트 넷으로 거른다.
+#  음은 150Hz 에서 말끝으로 10% 내려앉는다. 거름값은 16 샘플마다 다시 잰다(음이 천천히 움직인다).
+func _talk_vowel(v: String, coda: String) -> PackedFloat32Array:
+	var fm: Array = TALK_V[v]
+	var forms := [[float(fm[0]), 90.0, 1.0], [float(fm[1]), 140.0, 0.9],
+			[float(fm[2]), 260.0, 0.55], [3300.0, 400.0, 0.3]]
+	var n := _n(68.0)
+	var x := _blank(n)
+	var ph := 0.0
+	var gk := PackedFloat32Array()
+	gk.resize(30)
+	for i in n:
+		var u := float(i) / float(n - 1)
+		var f0: float = 150.0 * (1.05 - 0.10 * u)
+		if i % 16 == 0:
+			for k in range(1, 30):
+				var g := 0.0
+				for f in forms:
+					var dd: float = (f0 * float(k) - float(f[0])) / float(f[1])
+					g += float(f[2]) / (1.0 + dd * dd)
+				gk[k] = g / pow(float(k), 0.6)
+		ph = fmod(ph + TAU * f0 / SR, TAU)
+		var s := 0.0
+		for k in range(1, 30):
+			s += sin(ph * float(k)) * gk[k]
+		x[i] = s
+	_atk(x, 6.0)
+	_dec(x, 0.030)
+	if coda == "n":
+		#  콧소리로 닫힌다 — 뒤 4할에서 400Hz 밑만 남긴다.
+		var lo := x.duplicate()
+		_lp(lo, 400.0)
+		for i in n:
+			var m := clampf((float(i) / float(n - 1) - 0.55) / 0.3, 0.0, 1.0)
+			x[i] = x[i] * (1.0 - 0.6 * m) + lo[i] * 0.8 * m
+	elif coda == "k":
+		#  막혀 끊긴다 — 3/4 에서 0 으로.
+		for i in n:
+			x[i] *= clampf((0.75 - float(i) / float(n - 1)) / 0.15, 0.0, 1.0)
+	_hp(x, 90.0)
+	return _fade(x, 4.0)
+
+
+#  첫소리 한 알. 터짐은 6ms 에 꺼지는 짧은 잡음, 갈림 · 숨은 한닝 창으로 부풀었다 진다.
+func _talk_onset(kind: String) -> PackedFloat32Array:
+	var fc: float = TALK_ON[kind]
+	var ms := 6.0
+	var q := 1.2
+	if kind == "s":
+		ms = 18.0
+		q = 1.5
+	elif kind == "h":
+		ms = 14.0
+		q = 0.7
+	var x := _air(ms, fc, fc, q, 7100 + int(fc) + kind.length())
+	var n := x.size()
+	for i in n:
+		var u := float(i) / float(maxi(n - 1, 1))
+		x[i] *= (1.0 - u) if kind.begins_with("p") else 0.5 - 0.5 * cos(TAU * u)
+	return _unit(x)
+
+
+#  표의 talk 한 줄(want = 그 자리의 크기)로 스물여섯을 굽는다. 모음은 그 크기로,
+#  첫소리는 ㅏ 열림의 봉우리에 대한 비(TALK_ON_W)로 — 둘이 다른 자리(talk_pl ·
+#  talk_on_pl)에서 같이 나므로 그 비가 곧 한 글자 안의 무게다.
+func _talk_set(want: float) -> void:
+	var top := 0.0
+	for v in TALK_V.keys():
+		for coda in ["", "n", "k"]:
+			var x := _talk_vowel(String(v), String(coda))
+			_norm_rms(x, want)
+			var nm := "talk_%s%s" % [v, coda]
+			_save(nm, x)
+			if v == "a" and coda == "":
+				top = _peak(x)
+			print("%-16s %6.0fms %7s %7.3f" % [nm, float(x.size()) / SR * 1000.0, "", _peak(x)])
+	for kind in TALK_ON.keys():
+		var o := _talk_onset(String(kind))
+		_gain(o, top * float(TALK_ON_W[kind]))
+		_save("talk_%s" % kind, o)
+		print("%-16s %6.0fms %7s %7.3f" % ["talk_%s" % kind,
+				float(o.size()) / SR * 1000.0, "", _peak(o)])
 
 
 func _b_voice(nm: String) -> PackedFloat32Array:
 	match nm:
 		"talk":
-			var ms := 75.0
-			var n := _n(ms)
-			var x := _blank(n)
-			var f0: float = float(cur.get("f", 140.0))
-			var ph := 0.0
-			for i in n:
-				var u := float(i) / float(n)
-				#  음높이 — 4% 위에서 들어 가운데서 조금 더 오르고 말끝에서 내려앉는다
-				var f: float = f0 * (1.04 + 0.03 * sin(PI * u) - 0.09 * u)
-				ph = fmod(ph + TAU * f / SR, TAU)
-				var m := clampf((u - 0.45) / 0.35, 0.0, 1.0)     # 모음 → 콧소리
-				var s := 0.0
-				for k in range(1, 17):
-					var fk: float = f * float(k)
-					if fk > 5000.0:
-						break
-					var g := 0.0
-					for j in VOWEL_U.size():
-						var va: Array = VOWEL_U[j]
-						var na: Array = NASAL_NG[j]
-						var fc: float = lerpf(float(va[0]), float(na[0]), m)
-						var bw: float = lerpf(float(va[1]), float(na[1]), m)
-						var am: float = lerpf(float(va[2]), float(na[2]), m)
-						var dd: float = (fk - fc) / bw
-						g += am / (1.0 + dd * dd)
-					s += sin(ph * float(k)) * g / pow(float(k), 0.7)
-				x[i] = s
-			_atk(x, 7.0)
-			_dec(x, 0.022, 32.0)
-			_hp(x, 80.0)
-			_lp(x, 5200.0, 2)
-			return _fade(x, 8.0)
+			#  ㅓ 열림 — 한글이 아닌 글자(숫자 · 영문)와 파일이 빠진 자리가 이것을 쓴다.
+			return _talk_vowel("eo", "")
 		_:
 			return PackedFloat32Array()
