@@ -893,6 +893,15 @@ func _ready() -> void:
 
 	# 저장은 소리 장치를 세운 **뒤**에 읽는다 — _apply_vol 이 버스를 만진다.
 	_load_settings()
+	#  검사 · 촬영 도구(--script 로 돈다)는 CRT 를 끈 채 뜬다 — 인트로를 안 트는
+	#  것(_intro_wanted)과 같은 규약이다. 화소를 재는 프로브(npc_probe 의 실루엣 ·
+	#  qa_art · shot_cups)가 벽 색을 **정확히** 맞춰 배경을 가르는데, 주사선 · 마스크 ·
+	#  모서리 어둠이 그 색을 다 바꿔 상인이 한 덩어리로 잡혔다(일곱 건 실패). 그림을
+	#  보는 촬영 도구도 원본 도트를 받는다. CRT 를 찍을 도구(shot_crt · qa_crt)는
+	#  세기를 손으로 앉힌다. 저장은 안 건드린다 — 값만 이 실행에서 0 이다.
+	if get_tree().get_script() != null:
+		crt = 0.0
+	_crt_open()       # 맨 위 층. 세기는 방금 읽었다
 
 	if _autoplay:
 		_new_run()
@@ -4824,6 +4833,10 @@ func card_pos() -> Vector2:
 
 func _process(d: float) -> void:
 	_view_fit()      # 창이 바뀌면 여백을 다시 잰다. 그대로면 아무것도 안 한다
+	#  모션 끄기가 바뀌면 CRT 의 깜박임 · 낟알을 같이 끈다. 그 값을 미는 길이
+	#  여럿(개발자 판 · 검사 도구)이라 부르는 쪽마다 걸지 않고 여기서 본다.
+	if crt_mo != motion_off:
+		_crt_apply()
 	#  배움 시계는 **실시간**이다. 늦춘 시간으로 제 봉투를 재면 늦출수록
 	#  말상자가 늦게 뜨고, 0.18 배 자리에서는 다섯 배 느리게 뜬다.
 	_tutor_tick(d)
@@ -6309,7 +6322,7 @@ func _click(m: Vector2) -> void:
 						#  맨 밑 menu_back 을 안 먹는다. 2026-09-25
 						_toggle_fullscreen()
 						return
-					"vol", "mus":
+					"vol", "mus", "crt":
 						# 고르기만 한다. 값은 오른쪽 판의 홈에서 끈다 —
 						# 왼쪽은 글줄이라는 규약을 한 줄도 깨지 않는다.
 						_sfx("menu_pick2")
@@ -6485,7 +6498,7 @@ func _wheel(m: Vector2, dir: int) -> void:
 				#  위 = 크게(-dir). 0.05 는 스무 칸이라 휠 한 칸이 손에
 				#  잡히면서 눈에도 보인다 — **끌기의 0.01 은 손대지 않는다**
 				#  (백 칸이라 휠 한 칸으로는 아무것도 안 움직인 것처럼 보인다).
-				var cur: float = vol if key == "vol" else vol_mus
+				var cur: float = _gauge_v(key)
 				var nx := snappedf(clampf(cur - float(dir) * 0.05, 0.0, 1.0), 0.01)
 				if not is_equal_approx(nx, cur):
 					_vol_set(key, nx)
@@ -34734,6 +34747,10 @@ var collect_tab := 0
 # 순간이라, 한 손잡이로 묶으면 한쪽에 맞추면 다른 쪽이 어긋난다.
 var vol := 1.0           # 효과음. 예전 저장 키("vol")를 그대로 물려받는다
 var vol_mus := 0.8       # 음악. 깔개라 기본값이 효과음보다 한 뼘 낮다
+#  CRT 필터 세기 0~1. 0 이면 층째 꺼진다(_crt_apply). 기본 40 — 처음 켠 사람도
+#  브라운관 맛을 보되 글자와 도트가 그대로 읽히는 자리(shots/crt_shop_40).
+const CRT_DEF := 0.4
+var crt := CRT_DEF
 var set_drag := -1       # 끌고 있는 게이지 행. -1 이면 안 끈다
 var set_hot := -1        # 커서가 얹힌 줄. 없으면 -1
 var set_sel := 0         # 눌러서 고른 줄. 커서가 없을 때 오른쪽 판이 이걸 편다
@@ -35110,7 +35127,9 @@ func _load_settings() -> void:
 	GameData.pack = String(Save.get_pick("pack", ""))
 	vol = clampf(float(Save.get_set("vol", 1.0)), 0.0, 1.0)
 	vol_mus = clampf(float(Save.get_set("vol_mus", 0.8)), 0.0, 1.0)
+	crt = clampf(float(Save.get_set("crt", CRT_DEF)), 0.0, 1.0)
 	_apply_vol()
+	_crt_apply()        # 층은 _ready 가 이 뒤에 세운다 — 그때 다시 앉는다
 	if bool(Save.get_set("fullscreen", false)):
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 		var got := DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
@@ -40101,10 +40120,13 @@ func _league_lines() -> Array:
 
 # 설정의 행 — 판 중에 열었을 때만 "로비로 나가기" 가 낀다.
 # 제목에서 연 설정에는 로비 행이 무의미하다 — 이미 로비다.
+#  「CRT 필터」(2026-10-03)는 음악 바로 밑 — 게이지 셋이 한 무리로 붙어 서야
+#  오른쪽 판의 홈이 같은 물건으로 읽힌다. 나가는 무리 앞이라 틈(split)은
+#  그대로 그 밑에 남는다. 이로써 제목 6줄 · 판 중 7줄이다(바닥 326 < 360).
 func _set_rows() -> Array:
 	if pause_from >= 0:
-		return ["back", "fs", "vol", "mus", "lobby", "quit"]
-	return ["back", "fs", "vol", "mus", "quit"]
+		return ["back", "fs", "vol", "mus", "crt", "lobby", "quit"]
+	return ["back", "fs", "vol", "mus", "crt", "quit"]
 
 
 #  설정 화면의 자리 ────────────────────────────────────────
@@ -40213,6 +40235,8 @@ func _set_info(key: String) -> Dictionary:
 			return {"n": "효과음", "d": "던지고 맞고 사고파는 소리", "g": true}
 		"mus":
 			return {"n": "음악", "d": "판 밖에서 도는 곡", "g": true}
+		"crt":
+			return {"n": "CRT 필터", "d": "화면에 브라운관 주사선과 굴곡을 씌운다", "g": true}
 		"lobby":
 			#  「이 런을 버리고」를 뗐다 — 이어하기가 생긴 뒤로 런은 안 버려진다.
 			#  나갔다 돌아와 「계속하기」로 이으면 된다. 글자가 **줄었다.**
@@ -40255,6 +40279,11 @@ func _vol_set(key: String, x: float) -> void:
 		vol = x
 	elif key == "mus":
 		vol_mus = x
+	elif key == "crt":
+		#  CRT 필터도 같은 몸을 탄다 — 끌기 · 휠 · 뗄 때 한 번 저장이 그대로
+		#  따라온다. 소리 톡은 없다: 화면이 끄는 동안 곧바로 바뀌는 것이 대답이다.
+		crt = x
+		_crt_apply()
 	else:
 		return
 	_apply_vol()
@@ -40298,6 +40327,8 @@ func _vol_save() -> void:
 		Save.set_set("vol", vol)
 	elif vol_save_k == "mus":
 		Save.set_set("vol_mus", vol_mus)
+	elif vol_save_k == "crt":
+		Save.set_set("crt", crt)
 	vol_save_k = ""
 
 
@@ -40316,7 +40347,102 @@ func _set_slide_end() -> void:
 			Save.set_set("vol", vol)
 		elif key == "mus":
 			Save.set_set("vol_mus", vol_mus)
+		elif key == "crt":
+			Save.set_set("crt", crt)
 	set_drag = -1
+
+
+#  게이지 줄의 지금 값. 그리기 · 휠 · 수 글이 한 자리에서 읽는다 — 셋이 저마다
+#  `vol if … else vol_mus` 를 들고 있으면 셋째 게이지(CRT)가 음악 값을 읽는다.
+func _gauge_v(key: String) -> float:
+	match key:
+		"vol": return vol
+		"mus": return vol_mus
+		"crt": return crt
+	return 0.0
+
+
+# ══════════════════════════════════════════════════════════
+#  CRT 필터 (2026-10-03)
+# ──────────────────────────────────────────────────────────
+#  「CRT필터 알아? 그거 넣어 보는거 어때? 설정에서 조절할 수 있도록 하고」.
+#  주사선 · 섀도 마스크 · 가장자리 색 어긋남 · 번짐 · 모서리 어둠 · 작은 술통
+#  굽힘과 둥근 모서리 · 옅은 깜박임. 수치와 까닭은 shaders/crt.gdshader 머리말에
+#  있고, 여기는 **세기 하나**만 쥔다 — 게이지 0~100 이 strength 0~1 이다.
+#
+#  ── 층 ───────────────────────────────────────────────────
+#  **맨 위 CanvasLayer** 하나에 온 화면 ColorRect 하나. 게임 · HUD · 설정 앞판 ·
+#  말상자 · 개발자 판이 다 Game 캔버스(층 0)에 그려지므로 그 위에 서기만 하면
+#  전부를 덮는다. 흐림 판(Blur)과 달리 노드 밑에 안 걸고 **층**으로 세우는 것은
+#  Game 이 view_pad 만큼 밀리는 노드라서다 — 층은 안 밀리고 앵커가 보이는 칸
+#  전체를 저절로 잡는다. 화면 읽기 셰이더는 층마다 새로 따므로 흐림 판이 이미
+#  한 번 땄어도 이 층은 설정 글씨까지 다 그려진 화면을 받는다.
+#  클릭은 통과한다(MOUSE_FILTER_IGNORE). **입력을 되짚지 않는다** — 굽힘이
+#  모서리에서도 논리 4px 안이라 손이 안 어긋난다(셰이더 머리말).
+#
+#  ── 0 은 꺼짐 ─────────────────────────────────────────────
+#  세기가 0 이면 층째 숨긴다. 화면 읽기는 후면 복사 한 번에 탭 열둘이라 안
+#  쓰는 동안 켜 두면 매 프레임 그 값을 낸다(흐림 판과 같은 규약).
+#
+#  ── 도구 · 헤드리스 ───────────────────────────────────────
+#  --script 로 도는 도구는 세기 0 으로 뜬다(_ready 의 그 줄 — 인트로와 같은 규약).
+#  층은 헤드리스에서도 세운다 — 노드 둘뿐이고 그리는 일은 렌더러가 없으니 안
+#  일어난다. Blur 가 같은 셰이더 종류로 이미 헤드리스 장면에 서 있다. 그래야
+#  qa_crt 가 「0 이면 숨는다」를 재고, 프로브마다 다른 장면을 안 보게 된다.
+const CRT_SHADER := "res://shaders/crt.gdshader"
+#  모든 층 위. 게임은 층 0(루트 캔버스) 하나뿐이지만 넉넉히 띄운다.
+const CRT_LAYER := 100
+var crt_layer: CanvasLayer = null
+var crt_rect: ColorRect = null
+var crt_mo := false          # 마지막으로 셰이더에 앉힌 motion_off
+
+
+func _crt_open() -> void:
+	if crt_layer != null and is_instance_valid(crt_layer):
+		return
+	var sh: Shader = load(CRT_SHADER) as Shader
+	if sh == null:
+		return
+	var mat := ShaderMaterial.new()
+	mat.shader = sh
+	crt_layer = CanvasLayer.new()
+	crt_layer.name = "Crt"
+	crt_layer.layer = CRT_LAYER
+	crt_rect = ColorRect.new()
+	crt_rect.name = "CrtRect"
+	crt_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	crt_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	crt_rect.material = mat
+	crt_layer.add_child(crt_rect)
+	add_child(crt_layer)
+	#  창 크기 · 전체화면이 바뀌면 보이는 논리 크기를 다시 넣는다 — 주사선이
+	#  논리 행에 서려면 그 수가 지금 화면의 것이어야 한다(16:10 이면 400 행).
+	var vp := get_viewport()
+	if vp != null and not vp.size_changed.is_connected(_crt_apply):
+		vp.size_changed.connect(_crt_apply)
+	_crt_apply()
+
+
+#  세기 · 보이는 크기 · 모션 끄기를 셰이더에 앉힌다. 0 이면 층째 숨긴다.
+func _crt_apply() -> void:
+	crt_mo = motion_off
+	if crt_layer == null or not is_instance_valid(crt_layer):
+		return
+	var on: bool = crt > 0.004
+	crt_layer.visible = on
+	crt_rect.visible = on
+	if not on:
+		return
+	var mat := crt_rect.material as ShaderMaterial
+	if mat == null:
+		return
+	mat.set_shader_parameter("strength", crt)
+	#  창을 내리면 보이는 크기가 0 으로 들어온다 — 그 값으로 나누면 셰이더가
+	#  NaN 을 낸다. 지난 크기를 그대로 두고, 창이 돌아올 때 size_changed 가 다시 부른다.
+	var vs: Vector2 = get_viewport_rect().size
+	if vs.x >= 1.0 and vs.y >= 1.0:
+		mat.set_shader_parameter("logical", vs)
+	mat.set_shader_parameter("motion", 0.0 if motion_off else 1.0)
 
 
 # ══════════════════════════════════════════════════════════
@@ -40647,7 +40773,7 @@ func _draw_settings(c: CanvasItem) -> void:
 				Color(col, e))
 		#  게이지 줄은 수만 곁들인다. 값을 보려고 오른쪽까지 안 가도 되게.
 		if bool(info.get("g", false)):
-			var vv: float = vol if key == "vol" else vol_mus
+			var vv: float = _gauge_v(key)
 			c.draw_string(font, r.position + Vector2(0.0,
 					_menu_base_y(font, 12, 0.0, r.size.y)),
 					"%d" % int(round(vv * 100.0)),
@@ -40696,7 +40822,7 @@ func _set_panel(c: CanvasItem, key: String, e: float) -> void:
 				Color(C_ACC, pe))
 	#  게이지
 	if bool(info.get("g", false)):
-		var v: float = vol if key == "vol" else vol_mus
+		var v: float = _gauge_v(key)
 		var tr := _vol_track()
 		#  짙기 — 올려만 둬도 끄는 때의 그림(넓은 손잡이 · 밝은 채움 · 흰 값)으로
 		#  스민다. 전에는 끄는 동안에만 그랬어서, 누르기 전에는 이 홈이 잡히는

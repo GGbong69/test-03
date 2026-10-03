@@ -1,12 +1,13 @@
 extends SceneTree
 
 # 설정 화면 검사. 2026-09-13 사용자 제보 — "게임 나가기가 잘렸네"
-#   행이 화면 안에 다 든다 (다섯 줄 · 여섯 줄 둘 다)
+#   행이 화면 안에 다 든다 (제목 여섯 줄 · 판 중 일곱 줄 둘 다)
 #   행끼리 안 겹친다 · 게이지 수가 홈 밖에 있다 · 누르는 자리와 그리는 자리가 같다
 #
 #   godot --path . --quit-after 900 --script scripts/tools/qa_settings.gd
 
 const GameData = preload("res://scripts/data.gd")
+const Save = preload("res://scripts/save.gd")
 
 var g = null
 var busy := false
@@ -15,6 +16,10 @@ var fail := 0
 
 
 func _initialize() -> void:
+	#  사람의 저장을 안 건드린다 — 게이지를 끌면 Save.set_set 이 곧바로 쓴다.
+	Save.gpath = "user://_qa_settings_g.cfg"
+	Save.path = "user://_qa_settings.cfg"
+	Save.wipe()
 	g = load("res://scenes/main.tscn").instantiate()
 	root.add_child(g)
 	g.set_process(false)
@@ -89,15 +94,15 @@ func _run() -> void:
 		g._process(1.0 / 60.0)
 	print("\n설정 화면 검사\n")
 
-	# ① 제목에서 연 설정 — 다섯 줄
+	# ① 제목에서 연 설정 — 여섯 줄(2026-10-03 「CRT 필터」가 한 줄 늘렸다)
 	g.pause_from = -1
 	g.state = g.S.SETTINGS if "SETTINGS" in g.S else g.state
-	_check("다섯 줄")
+	_check("여섯 줄")
 
-	# ② 판 중에 연 설정 — 여섯 줄. 「게임 나가기」가 잘리던 자리다
+	# ② 판 중에 연 설정 — 일곱 줄. 「게임 나가기」가 잘리던 자리다
 	print("")
 	g.pause_from = 1
-	_check("여섯 줄")
+	_check("일곱 줄")
 
 	# ③ 두 경우 다 줄 수가 맞다
 	print("")
@@ -105,7 +110,7 @@ func _run() -> void:
 	var n5: int = (g._set_rows() as Array).size()
 	g.pause_from = 1
 	var n6: int = (g._set_rows() as Array).size()
-	_ok("제목 5줄 · 판 중 6줄", n5 == 5 and n6 == 6, "%d · %d" % [n5, n6])
+	_ok("제목 6줄 · 판 중 7줄", n5 == 6 and n6 == 7, "%d · %d" % [n5, n6])
 	_ok("판 중에만 「로비로 나가기」", (g._set_rows() as Array).has("lobby"), "")
 
 	# ④ 밀려 들어오는 중 — 반쯤 들어온 자리가 화면 밖으로 안 나간다
@@ -191,7 +196,7 @@ func _run() -> void:
 	await _shoot("settings_hover")
 	g.set_sel = 2                 # 효과음 — 오른쪽 판에 게이지가 선다
 	await _shoot("settings_vol")
-	g.set_sel = 5                 # 게임 나가기
+	g.set_sel = (g._set_rows() as Array).find("quit")   # 게임 나가기
 	await _shoot("settings_quit")
 	print("
 스크린샷: settings_6.png · settings_vol.png · settings_quit.png")
