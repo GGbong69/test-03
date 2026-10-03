@@ -725,7 +725,8 @@ func _slam() -> void:
 #  주먹 밑면 — 그 틀 손에서 PROP.p_fist 를 낸다(_prop_place 의 역).
 func _fist_pt() -> Vector3:
 	var w: Vector3 = g.prop_lw[1]
-	var b := Basis(Vector3.UP, -float(g.prop_la[1])) * Basis(Vector3.BACK, -float(g.prop_lp[1]))
+	var b := Basis(Vector3.UP, -float(g.prop_la[1])) * Basis(Vector3.BACK, -float(g.prop_lp[1])) \
+			* Basis(Vector3.RIGHT, deg_to_rad(float(g.PROP.p_roll)))
 	var tp: Vector3 = g.PROP.p_fist
 	return w + b * (Vector3(tp.x, tp.y, -tp.z) * float(g.NPC.sc_r))
 
@@ -735,7 +736,7 @@ func _pound_run(sweep: bool) -> Dictionary:
 	var P: Dictionary = g.PROP
 	var r := {"hit": false, "top": -999.0, "hit_h": 999.0, "err": 0.0, "rr": 0.0,
 			"shake": 0.0, "kinds": [0, 0, 0, 0, 0, 0], "pc_before": "", "pc_after": "x",
-			"wb": Vector2.ZERO, "open_t": -1.0, "dealt_t": -1.0}
+			"wb": Vector2.ZERO, "open_t": -1.0, "dealt_t": -1.0, "wmax": 0.0}
 	var tt := 0.0
 	while tt < 2.0:
 		var was: float = g.prop_t[1]
@@ -751,6 +752,8 @@ func _pound_run(sweep: bool) -> Dictionary:
 			r.pc_before = g.pc_id
 		if pt >= float(P.p_up) and pt < float(P.p_hold):
 			r.err = maxf(float(r.err), _fist_pt().distance_to(g._pound3(pt)))
+			var wbn: Vector2 = g.npc_wb[1]
+			r.wmax = maxf(float(r.wmax), maxf(wbn.x, wbn.y))
 			r.rr = maxf(float(r.rr), float(g.prop_rr[1]))
 		if was >= 0.0 and was < float(P.p_hit) and (pt >= float(P.p_hit) or pt < 0.0):
 			r.hit = true
@@ -813,6 +816,10 @@ func _pound() -> void:
 	_ok("⑧ 사탕 — 닿은 틀 흔들림", float(rc.shake) >= float(Q.shake_candy) - 0.6,
 			"%.2fpx" % float(rc.shake))
 	_ok("⑧ 사탕 — 손목이 모든 틀 한도 안", wb_bad == 0, "넘은 틀 %d %s" % [wb_bad, wb_note])
+	#  망치 주먹 — 「왜 손목이 이렇게 휘어져?」(2026-10-04). 치켜든 뒤 · 닿는 틀 · 튄 뒤까지
+	#  손목이 곧다(옆 · 굽힘 다 p_wrist 언저리).
+	_ok("⑧ 사탕 — 주먹 동안 손목이 곧다(망치 주먹)", float(rc.wmax) <= float(P.p_wrist) + 0.6,
+			"최대 꺾임 %.1f°" % float(rc.wmax))
 	_ok("⑧ 사탕 — 몸짓 동안 값이 안 움직인다", _econ() == e1, "%s | %s" % [e1, _econ()])
 	_ok("⑧ 사탕 — 끝나면 쉰다", not g._prop_live(1) and g.prop_pound == "" and g.pc_id == "", "")
 	# 못 서면 옛 길 — 칸에서 팝(몸짓 없음)

@@ -23604,19 +23604,33 @@ const PROP := {
 	"p_hit": 0.44,       # 주먹이 닿는다 — 부서짐 · 판 · 흔들림 · 쾅
 	"p_hold": 0.56,      # 눌러 둔 채 한 번 튀었다 — 빈 테이블 리롤은 여기서 문을 연다
 	"p_end": 1.05,
+	#  ── 망치 주먹(2026-10-04) ──────────────────────────
+	#  「주먹 꽂는게 좀 이상하지 않아? 주먹을 쥐고 내리 쳐야지 지금 왜 손목이 이렇게
+	#   휘어져?」 — 첫 판은 손등을 엎은 주먹(말린 손가락 등이 밑)을 가파른 팔뚝 끝에 붙여
+	#  손목 한도(굽힘 25°)까지 꺾어 댔다. 카메라에서는 팔뚝이 내리꽂히고 손만 수평으로
+	#  꺾여 「주먹을 꽂는」 그림이었다. 테이블을 내리치는 사람은 **망치 주먹**이다(타격 기술
+	#  레퍼런스 — hammer fist): 주먹을 세워(엄지가 위) **새끼손가락 쪽 바닥**으로 치고,
+	#  손목은 곧아 손과 팔뚝이 한 줄이며, 팔꿈치를 축으로 팔뚝이 망치처럼 오르내린다.
+	#  그래서 ① 손을 제 축으로 세우고(p_roll) ② 손목을 팔뚝에 붙이고(p_wrist — 옆 · 굽힘
+	#  둘 다 이 안) ③ 닿는 점을 새끼 쪽 주먹 바닥으로 옮기고(p_fist) ④ 팔꿈치를 아래 · 뒤로
+	#  보낸다(p_pole — 치켜들 때 팔꿈치가 낮게 남아 팔뚝이 선다).
 	#  치켜든 높이(면 h) · 예비 동작 몫 · 치켜들며 몸 쪽(−w)으로 당기는 몫 · 튀는 몫.
-	#  등록기(36 + 6)보다 높다 — 화풀이 주먹은 손바닥 내리치기보다 크게 든다.
-	"p_lift": 46.0, "p_cockup": 10.0, "p_back": 6.0, "p_bounce": 4.0,
-	#  주먹 밑면 — 손 좌표(손목 축에서). 엎은 주먹의 맨 아래는 말린 손가락 첫마디의 등이다:
-	#  너클(x 30.5)에서 첫마디가 86° 굽어 거의 곧장 밑으로(l1 13) 가고 두께 반(3.3)을 더 내린다.
-	"p_fist": Vector3(28.0, -15.5, 0.0),
-	#  손이 기울고 싶은 쪽(도) — 손끝(주먹 앞)이 손님 쪽 · 조금 왼쪽. 치켜들 때 젖히고 칠 때
-	#  숙인다. 다 손목 한도 안에서만 산다(_prop_goal).
+	#  몸 쪽으로 많이 당긴다(26) — 팔꿈치를 축으로 도는 주먹은 오르며 뒤로 온다(호를 그린다).
+	"p_lift": 50.0, "p_cockup": 10.0, "p_back": 26.0, "p_bounce": 4.0,
+	#  주먹 바닥 — 손 좌표(오른손 기준 · 엄지 쪽 −z — 거울 손은 z 를 뒤집는다). 새끼손가락
+	#  쪽(+z) 가장자리: 새끼 줄(fz 11) + 반폭(3.1) · 말린 주먹 두께의 한가운데(y −5) · 너클
+	#  조금 앞(x 24 — 말린 새끼의 첫마디 등). 세운 주먹(p_roll)에서 이 면이 밑이다.
+	"p_fist": Vector3(24.0, -5.0, 14.0),
+	#  굴림(도) — 화면 오른손(거울 손)은 −90° 에서 엄지(+z)가 위를 본다(제 x 축 둘레).
+	"p_roll": -90.0,
+	#  손목 한도(도) — 손이 팔뚝을 따른다. 손각 · 숙임은 아래 값에서 시작해 이 안으로 당겨진다.
+	"p_wrist": 2.5,
 	"p_ang": 100.0, "p_pit0": -12.0, "p_pit1": 8.0,
 	#  몸 — 앞으로 나와 내려앉는다(lean · rise). 등록기만큼 옆으로 안 기운다 — 앞이다.
 	"p_body": [-0.05, -0.05, 12.0, 4.0],
-	#  팔꿈치가 굽는 쪽 — 바깥 위. 치켜든 주먹 밑에서 팔꿈치가 옆으로 들려야 내리치는 팔이다.
-	"p_pole": Vector3(0.6, 1.0, -0.2),
+	#  팔꿈치가 굽는 쪽 — 바깥 조금 · **아래 · 뒤**. 치켜든 주먹 밑에서 팔꿈치가 낮게 남아야
+	#  팔뚝이 망치 자루처럼 선다(바깥 위로 들면 팔뚝이 내리꽂혀 손목이 꺾여 보였다).
+	"p_pole": Vector3(0.45, -0.55, -0.8),
 	#  사탕 — 사탕 칸에서 펠트로 난다(c_fly) · 앉으며 한 번 눌렸다 편다(c_squash).
 	"c_fly": 0.24, "c_hop": 26.0, "c_squash": 0.12,
 }
@@ -24461,6 +24475,8 @@ func _prop_arm(i: int, sh: Vector3, sc: float) -> void:
 		pa_ang = lerp_angle(fa, pg_a, k)
 		pa_pit = lerpf(fp, pg_p, k)
 	pa_rl *= 1.0 - ke
+	if i == 1 and prop_pound != "":
+		pa_rl += deg_to_rad(float(PROP.p_roll)) * ke     # 망치 주먹 — 엄지가 위
 	var pole := e0.lerp(reach_pole, ke)
 	var e := _arm_ik(s3, w, l1, l2, pole)
 	prop_rr[i] = s3.distance_to(w) / maxf(l1 + l2, 1.0)
@@ -24597,6 +24613,10 @@ func _prop_goal(i: int, sc: float, s3: Vector3, l1: float, l2: float, pole: Vect
 		pd = deg_to_rad(_prop_slam_pit(t))
 	var dm: float = deg_to_rad(float(P.dev_in))
 	var fm: float = deg_to_rad(float(P.flex_in))
+	if i == 1 and prop_pound != "":
+		#  망치 주먹 — 손목이 곧다(손이 팔뚝을 따른다).
+		dm = deg_to_rad(float(P.p_wrist))
+		fm = dm
 	var a: float = ad
 	var p: float = pd
 	for _n in 5:
@@ -24617,7 +24637,13 @@ func _prop_goal(i: int, sc: float, s3: Vector3, l1: float, l2: float, pole: Vect
 func _prop_place(i: int, tgt: Vector3, a: float, p: float, sc: float) -> Vector3:
 	var b := Basis(Vector3.UP, -a) * Basis(Vector3.BACK, -p)
 	if i == 1:
-		var tp: Vector3 = PROP.p_fist if prop_pound != "" else PROP.b_palm
+		if prop_pound != "":
+			#  세운 주먹 — 굴림까지 태워 새끼 쪽 바닥을 과녁에 세운다(3D 손과 같은 차례:
+			#  요 → 숙임 → 굴림 · _hand3_sync).
+			var fp: Vector3 = PROP.p_fist
+			var br := b * Basis(Vector3.RIGHT, deg_to_rad(float(PROP.p_roll)))
+			return tgt - br * (Vector3(fp.x, fp.y, -fp.z) * sc)
+		var tp: Vector3 = PROP.b_palm
 		return tgt - b * (Vector3(tp.x, tp.y, -tp.z) * sc)
 	return tgt - _prop_coin_off(a) - b * (Vector3(GIVE.ti) * sc)
 
