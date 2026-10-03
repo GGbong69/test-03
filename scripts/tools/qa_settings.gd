@@ -6,9 +6,10 @@ extends SceneTree
 #
 # 2026-10-03 — 평평한 일곱 줄을 갈래로 접었다(「esc를 누르면 일시정지가 되어야지
 #   일시정지에 설정을 누르면 설정창이 되어야지 ㅇㅋ?」). 같은 날 「설정 UI 좀 더 개선
-#   해봐 레퍼런스 찾아보면서 작업해줘」로 **가운데 뜨는 창 둘**이 됐다 — 발라트로 ·
-#   런 정보의 문법(맨 위 탭 · 줄 안에서 미는 조작 · 맨 밑 「뒤로」).
-#     일시정지 창  계속하기 · 설정 ‖ 로비로 나가기 · 게임 나가기     (판 중에만)
+#   해봐 레퍼런스 찾아보면서 작업해줘」로 설정이 **가운데 뜨는 창**이 됐다 — 발라트로 ·
+#   런 정보의 문법(맨 위 탭 · 줄 안에서 미는 조작 · 맨 밑 「뒤로」). 일시정지는 「이전의
+#   방식이 좀 더 괜찮았는데?」로 옛 글줄 + 오른쪽 판에 돌아왔고, 그 판이 설정 창으로 자란다.
+#     일시정지     계속하기 · 설정 ‖ 로비로 나가기 · 게임 나가기     (판 중에만)
 #     설정 창      [화면] [소리] 탭 · 그 탭의 줄 · 뒤로               (제목은 곧장 여기)
 #                  화면  전체화면 [끔|켬] · CRT 필터 · 화면 굴곡
 #                  소리  효과음 · 음악
@@ -86,8 +87,15 @@ func _check(tag: String) -> void:
 	var w: Rect2 = g._set_win()
 	var lip: float = float(g.PANEL_LIP)
 	var inner := Rect2(w.position, w.size - Vector2(0.0, lip))
-	_ok("%s — 창이 화면 안에 든다" % tag, Rect2(Vector2(6.0, 6.0), v - Vector2(12.0, 12.0))
-			.encloses(w), "%s" % [w])
+	#  설정 창은 윗변에 이름표가 반쯤 걸친다 — 그것까지 화면 안이어야 한다.
+	var wl := w
+	if g._set_pg() != "pause":
+		wl = wl.grow_side(SIDE_TOP, float(g.SETW.plate_h) * 0.5)
+	_ok("%s — 판이 화면 안에 든다" % tag, Rect2(Vector2(6.0, 6.0), v - Vector2(12.0, 12.0))
+			.encloses(wl), "%s" % [wl])
+	if g._set_pg() == "pause":
+		_pause_check(tag, rows)
+		return
 	var bad := PackedStringArray()
 	var prev := Rect2()
 	for i in rows.size():
@@ -127,18 +135,15 @@ func _check(tag: String) -> void:
 				bad.append("%s 켬끔 칸이 이름에 닿는다" % nm)
 	_ok("%s — 줄이 창 안 · 안 겹침 · 누르는 자리 = 그리는 자리" % tag, bad.is_empty(),
 			"%d줄 · %s" % [rows.size(), "없다" if bad.is_empty() else ", ".join(bad)])
-	if g._set_pg() == "pause":
-		_ok("%s — 탭이 없다" % tag, g._set_tab_hit((g._set_rect(0) as Rect2).get_center()) == -1)
-		return
-	#  탭 — 창 안 · 서로 안 겹침 · 머리 칸 밑 · 첫 줄 위. 「뒤로」는 맨 밑.
+	#  탭 — 창 안 · 서로 안 겹침 · 이름표 밑 · 첫 줄 위. 「뒤로」는 맨 밑.
 	var t0: Rect2 = g._set_tab_rect(0)
 	var t1: Rect2 = g._set_tab_rect(1)
 	var r0: Rect2 = g._set_rect(0)
-	var head_end: float = w.position.y + float(g.SETW.title) + 30.0
-	_ok("%s — 탭이 창 안 · 머리와 첫 줄 사이" % tag, inner.encloses(t0) and inner.encloses(t1)
+	var head_end: float = w.position.y + float(g.SETW.plate_h) * 0.5
+	_ok("%s — 탭이 창 안 · 이름표와 첫 줄 사이" % tag, inner.encloses(t0) and inner.encloses(t1)
 			and not t0.intersects(t1) and t0.position.y >= head_end + 6.0
 			and t0.end.y <= r0.position.y,
-			"탭 %.0f~%.0f · 머리 끝 %.0f · 첫 줄 %.0f" % [t0.position.y, t0.end.y, head_end,
+			"탭 %.0f~%.0f · 이름표 끝 %.0f · 첫 줄 %.0f" % [t0.position.y, t0.end.y, head_end,
 				r0.position.y])
 	_ok("%s — 탭 양 끝이 줄 양 끝과 같은 세로선" % tag,
 			is_equal_approx(t0.position.x, r0.position.x) and is_equal_approx(t1.end.x, r0.end.x),
@@ -149,6 +154,39 @@ func _check(tag: String) -> void:
 			and br.end.y <= inner.end.y - 4.0
 			and br.position.y >= (g._set_rect(maxi(bi - 1, 0)) as Rect2).end.y + 6.0,
 			"%s" % [br])
+
+
+#  일시정지 — 옛 자로 잰다: 글줄이 머리(78) 밑 · 화면 안 · 안 겹침 · 오른쪽 판과 안 닿음.
+func _pause_check(tag: String, rows: Array) -> void:
+	var v: Vector2 = g.VIEW
+	var top := 9999.0
+	var bot := -1.0
+	var bad := PackedStringArray()
+	var prev := Rect2()
+	for i in rows.size():
+		var r: Rect2 = g._set_rect(i)
+		top = minf(top, r.position.y)
+		bot = maxf(bot, r.end.y)
+		if i > 0 and r.position.y < prev.end.y:
+			bad.append("%d↔%d" % [i - 1, i])
+		prev = r
+		if g._set_hit(r.get_center()) != i:
+			bad.append("%d 못 누름" % i)
+		if r.end.x > (g.SETP as Rect2).position.x:
+			bad.append("%d 판에 닿음" % i)
+	_ok("%s — 글줄이 화면 안 · 안 겹침 · 판과 안 닿음" % tag, bad.is_empty()
+			and top >= 96.0 and bot <= v.y - 6.0,
+			"%.0f ~ %.0f · %s" % [top, bot, "없다" if bad.is_empty() else ", ".join(bad)])
+	_ok("%s — 판은 오른쪽 판(SETP)" % tag, (g._set_win() as Rect2).is_equal_approx(g.SETP))
+	_ok("%s — 탭이 없다" % tag, g._set_tab_hit((g.SETP as Rect2).get_center()) == -1)
+	#  판의 설명 줄이 판 안 폭에 든다 · 「설정」은 안에 든 갈래를 편다.
+	var long := []
+	for k in rows:
+		var d := String(g._set_info(String(k)).get("d", ""))
+		if g.font.get_string_size(d, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x \
+				> (g.SETP as Rect2).size.x - 40.0:
+			long.append(d)
+	_ok("%s — 설명이 한 줄로 판에 든다" % tag, long.is_empty(), "%s" % [long])
 
 
 #  줄을 화면 그대로 누른다(_click) — 키 길과 같은 문을 지나는지 잰다.
@@ -250,7 +288,19 @@ func _run() -> void:
 			if inf.has("d"):
 				desc.append(String(k))
 	_ok("글줄에 키 이름이 없다", keyname.is_empty(), "%s" % [keyname])
-	_ok("설명 줄이 없다", desc.is_empty(), "%s" % [desc])
+	#  설명은 일시정지 줄만 — 설정 창 줄에는 없다(효과만).
+	var desc_set := []
+	for k in desc:
+		if not (k in ["back", "lobby", "quit"]):
+			desc_set.append(k)
+	_page("screen", g.S.SHOP)
+	if g._set_info("back").has("d"):
+		desc_set.append("back(설정 창)")
+	_ok("설정 창 줄에는 설명이 없다", desc_set.is_empty(), "%s" % [desc_set])
+	_page("pause", g.S.SHOP)
+	_ok("일시정지 줄은 오른쪽 판이 펼 설명을 갖는다", g._set_info("back").has("d")
+			and g._set_info("lobby").has("d") and g._set_info("quit").has("d")
+			and (g._set_info("set").get("kids", []) as Array) == ["screen", "sound"])
 
 	# ③ 오르내림 — 줄 · 탭을 눌러 가고, 「뒤로」 · ESC 로 한 단씩 오른다
 	print("")
@@ -352,7 +402,7 @@ func _run() -> void:
 	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
 	Save.set_set("fullscreen", false)
 
-	# ⑤ 떠오름 · 자람 — 그리는 자리와 누르는 자리가 같이 간다
+	# ⑤ 밀려 듦 · 떠오름 · 자람 — 그리는 자리와 누르는 자리가 같이 간다
 	print("")
 	_page("pause", 1)
 	g.set_t = 0.0
@@ -361,30 +411,41 @@ func _run() -> void:
 	var half: Rect2 = g._set_rect(0)
 	g.set_t = 1.0
 	var done: Rect2 = g._set_rect(0)
-	_ok("밑에서 떠오른다", out0.position.y > half.position.y
-			and half.position.y > done.position.y,
+	_ok("일시정지 글줄은 왼쪽에서 밀려 든다", out0.position.x < half.position.x
+			and half.position.x < done.position.x,
 			"0%% %.0f → 50%% %.0f → 100%% %.0f"
-			% [out0.position.y, half.position.y, done.position.y])
-	var fr: Rect2 = g._set_frame()
-	_ok("다 떠오르면 제자리", is_equal_approx(done.position.y,
-			fr.position.y + float(g.SETW.row_y0)) and is_equal_approx(fr.position.y,
-			(float(g.VIEW.y) - (g.SETW.pause as Vector2).y) * 0.5),
-			"%.0f (창 %.0f)" % [done.position.y, fr.position.y])
-	#  일시정지 → 설정 — 창이 제자리에서 자란다.
+			% [out0.position.x, half.position.x, done.position.x])
+	_ok("다 들어오면 제자리", is_equal_approx(done.position.x, float(g.SET.x)),
+			"%.0f (표 %.0f)" % [done.position.x, g.SET.x])
+	_page("screen", 1)
+	g.set_t = 0.0
+	var wy0: float = (g._set_win() as Rect2).position.y
+	var ry0: float = (g._set_rect(0) as Rect2).position.y
+	g.set_t = 1.0
+	var wy1: float = (g._set_win() as Rect2).position.y
+	var ry1: float = (g._set_rect(0) as Rect2).position.y
+	_ok("설정 창은 밑에서 떠오른다 · 줄이 같이 간다", wy0 > wy1 and is_equal_approx(wy0 - wy1,
+			ry0 - ry1), "창 %.0f → %.0f · 줄 %.0f → %.0f" % [wy0, wy1, ry0, ry1])
+	#  일시정지 → 설정 — 오른쪽 판이 자라 설정 창이 된다.
+	_page("pause", 1)
 	g._set_go("top")
 	var b0: Rect2 = g._set_box()
 	for k in 30:
 		g._set_tick(1.0 / 60.0)
 	var b1: Rect2 = g._set_box()
-	_ok("설정으로 가면 창이 일시정지 크기에서 자란다", b0.size.is_equal_approx(g.SETW.pause)
-			and b1.size.is_equal_approx(g.SETW.set)
-			and b0.get_center().is_equal_approx(b1.get_center()),
-			"%s → %s" % [b0.size, b1.size])
+	_ok("설정으로 가면 오른쪽 판에서 창이 자란다", b0.is_equal_approx(g.SETP)
+			and b1.size.is_equal_approx(g.SETW.set), "%s → %s" % [b0, b1])
 	g._set_go("sound")
 	_ok("탭만 갈면 창은 그대로", (g._set_box() as Rect2).is_equal_approx(b1))
-	g.motion_off = true
 	g._set_go("pause")
-	_ok("모션 끄기면 곧장 제 크기", (g._set_box() as Rect2).size.is_equal_approx(g.SETW.pause))
+	var b2: Rect2 = g._set_box()
+	for k in 30:
+		g._set_tick(1.0 / 60.0)
+	_ok("「뒤로」면 창이 오른쪽 판으로 줄어든다", b2.is_equal_approx(b1)
+			and (g._set_box() as Rect2).is_equal_approx(g.SETP))
+	g.motion_off = true
+	g._set_go("screen")
+	_ok("모션 끄기면 곧장 제 크기", (g._set_box() as Rect2).size.is_equal_approx(g.SETW.set))
 	g.motion_off = false
 
 	# ⑥ 흐림 판이 세기를 따라간다 — 설정이 아니면 꺼져 있어야 한다.

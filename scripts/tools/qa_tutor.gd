@@ -68,6 +68,7 @@ func _reset() -> void:
 func _run() -> void:
 	var rows: Array = GameData.tutor()
 	_ok("표가 비지 않았다", rows.size() >= 12, "%d걸음" % rows.size())
+	_pop()
 
 	# ① 표에만 있고 아무도 안 부르는 갈래가 없는가
 	var src := ""
@@ -283,3 +284,34 @@ func _run() -> void:
 			if not Save.taught(String(tid)):
 				got2 = false
 		_ok("두 번째 상점에서 %s" % " · ".join(want2), got2, "")
+
+
+#  글자가 툭툭 나온다(2026-10-03 「발라트로 같이 툭툭툭 나오면 좋겠어」).
+#  그림은 헤드리스에서 못 재므로 **시계**를 잰다 — 글자가 보이기 시작하는 순간 튐이
+#  0 에서 시작하고(먼저 크게 보였다가 줄면 「툭」이 아니다), pop 초 뒤 다 앉는다.
+func _pop() -> void:
+	var tid := ""
+	for r in GameData.tutor():
+		if String(r.get("who", "")).strip_edges() != "":
+			tid = String(r.get("id", ""))
+			break
+	if tid == "":
+		_skip("글자 튐", "말하는 줄이 없다")
+		return
+	_reset()
+	g.tutor_id = tid
+	g.tutor_i = 0
+	var cps: float = float(g.TUTOR.cps)
+	var pop: float = float(g.TUTOR.pop)
+	_ok("튐이 있다 · 한 글자보다 길다", pop > 1.0 / cps, "%.3f초 · 한 칸 %.3f초" % [pop, 1.0 / cps])
+	var bad_at := []
+	for gi in 8:
+		g.tutor_t = float(gi + 1) / cps + 0.0001
+		if g._tutor_shown() < gi + 1 or absf(g._type_u(gi)) > 0.01:
+			bad_at.append(gi)
+		g.tutor_t = float(gi + 1) / cps + pop
+		if g._type_u(gi) < 0.999:
+			bad_at.append(-gi)
+	_ok("보이는 순간 튐이 0 에서 시작해 pop 초 뒤 다 앉는다", bad_at.is_empty(), "%s" % [bad_at])
+	g.tutor_t = 0.0
+	_reset()

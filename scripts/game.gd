@@ -8864,6 +8864,7 @@ func _draw() -> void:
 	#  배움 띠 — HUD 위, 툴팁 밑이다. 툴팁은 커서를 따라다니므로
 	#  띠를 덮어도 그 순간 손님이 보는 것은 툴팁 쪽이다.
 	if not swap_live and not turn_live:
+		tut_sh = sh               # 툭 나오는 글자가 제 변환에 흔들림을 얹는다(_type_line)
 		_tutor_draw()
 	if not swap_live and not turn_live:
 		_tip_draw(sh)
@@ -34821,7 +34822,8 @@ var warp := WARP_DEF
 #  HUD 가 물러나는 규약이 이미 S.SETTINGS 에 걸려 있어 쪽이 늘어도 한 줄도 안 갈린다.
 var set_page := "screen"
 var set_pg_t := 1.0      # 쪽을 갈아 든 정도 0~1. 창이 자라고 새 줄이 짙어진다
-var set_win_from := Rect2()   # 쪽을 갈 때 떠난 창의 자리 — 새 창이 여기서 자란다
+var set_win_from := Rect2()   # 쪽을 갈 때 떠난 판의 자리 — 새 판이 여기서 자란다
+var set_pg_prev := "pause"    # 떠난 쪽 — 설정 창으로 가는 동안 일시정지 글줄이 빠지며 진다
 var set_drag := -1       # 끌고 있는 게이지 행. -1 이면 안 끈다
 var set_hot := -1        # 커서가 얹힌 줄. 없으면 -1
 var set_sel := 0         # 눌러서 고른 줄. 커서가 없을 때 띠가 이 줄에 선다
@@ -40198,12 +40200,16 @@ func _league_lines() -> Array:
 #  물건, 맨 밑에 「뒤로」. 전에는 왼쪽 글줄을 고른 뒤 오른쪽 판의 홈을 끌어야 해서
 #  값 하나를 바꾸는 데 일시정지 › 설정 › 화면 › 줄 › 홈 다섯 손이었고, 오른쪽 판은
 #  설명 한 줄과 빈자리였다.
-#    일시정지 창  계속하기 · 설정 ‖ 로비로 나가기 · 게임 나가기
+#    일시정지     계속하기 · 설정 ‖ 로비로 나가기 · 게임 나가기  — 왼쪽 글줄 + 오른쪽 판
 #    설정 창      [화면] [소리] 탭 · 그 탭의 줄 · 뒤로
 #                 화면  전체화면 [끔|켬] · CRT 필터 ━━●━ 40 · 화면 굴곡 ━━●━ 50
 #                 소리  효과음 ━━━━● 100 · 음악 ━━━●━ 80
 #  「상위가 있으면 좋겠는데」의 상위는 **탭**이 맡는다 — 한 단 깊던 갈래를 옆으로
 #  눕혔다. 탭을 갈아도 창은 그대로라 화면 ↔ 소리가 한 누름이다.
+#  **일시정지는 옛 글줄로 되돌렸다** — 「일시 정지는 이전의 방식이 좀 더 괜찮았는데?」
+#  (같은 날). 판을 멈춘 자리는 글줄이 멈춘 판 위에 얹히는 편이 낫고, 설정은 창이 낫다.
+#  둘을 잇는 것은 오른쪽 판이다: 「설정」을 누르면 **그 판이 자라 설정 창이 되고**
+#  글줄은 왼쪽으로 빠진다. 「뒤로」면 창이 판으로 줄어들고 글줄이 돌아온다.
 #  **「뒤로」는 맨 밑이다** — 컬렉션 · 런 정보 · 새 런의 자리다. 일시정지만 「계속하기」가
 #  맨 위다 — 판을 멈춘 사람이 가장 많이 누르는 줄이고, ESC 가 하는 일과 같은 줄이다.
 #  제목에서 연 설정은 일시정지를 안 지난다(이미 로비라 멈출 판이 없다).
@@ -40241,6 +40247,7 @@ func _set_go(page: String, sel := 0) -> void:
 	if page != "pause" and not SET_TABS.has(page):
 		page = String(SET_TABS[0])
 	set_win_from = _set_box()
+	set_pg_prev = _set_pg()
 	set_page = page
 	set_sel = maxi(sel, 0)
 	set_hot = -1
@@ -40252,29 +40259,38 @@ func _set_go(page: String, sel := 0) -> void:
 	queue_redraw()
 
 
-#  창의 치수. 둘 다 화면 한가운데에 선다(런 정보와 같은 자리 말).
-#    일시정지  머리 칸 30 · 줄 26 넷(나가는 둘 앞에 틈 10) · 아래 여백
-#    설정      머리 칸 30 · 탭 26 · 줄 30 셋 · 「뒤로」 26
-#  설정 창 높이는 **탭을 갈아도 안 바뀐다** — 줄이 둘인 「소리」는 아래가 빈다. 런 정보가
-#  탭마다 판이 늘었다 줄던 것을 「짜증날 것 같다」로 고친 그 규약이다(2026-09-17).
-#  줄 30 의 오른쪽은 조작 칸이다 — 이름 칸 150 · 홈 · 수 칸 58. 가장 긴 이름
-#  「CRT 필터」(81px)가 150 안에 들고, 「100」(40px)이 수 칸에 든다.
-const SETW := {
-	"pause": Vector2(232.0, 188.0),
-	"set": Vector2(400.0, 234.0),
-	"pad": 12.0,       # 창 안쪽 여백 — 줄 · 탭 · 「뒤로」의 양 끝
-	"title": 10.0,     # 머리 칸(30) 윗변
-	"tab_y": 46.0,     # 탭 윗변. 고른 탭 위 세모(6)가 머리 칸과 탭 사이에 든다
-	"tab_h": 26.0,     # 런 정보 탭과 같다(턱 2 포함)
-	"row_y0": 48.0,    # 일시정지 첫 줄
-	"row_h": 26.0,
+#  일시정지 글줄 — 2026-10-03 앞 쪽 판 그대로(되돌림). 제목 메뉴(TMENU)와 같은 세로선 ·
+#  같은 줄 높이다. 줄 높이 26 은 페이퍼로지 20 의 잉크(17px)가 위아래 4px 을 남기는 값.
+const SET := {
+	"x": SAFE,         # 글줄 왼쪽 끝 — 머리와 같은 세로선
+	"y": 106.0,        # 첫 줄
+	"h": 26.0,         # 줄 높이
 	"gap": 4.0,
-	"split": 10.0,     # 나가는 무리 앞의 틈
-	"row_y": 84.0,     # 설정 첫 줄
+	"split": 14.0,     # 나가는 무리 앞에 두는 틈
+	"w": 148.0,        # 누를 수 있는 폭
+	"slide": 52.0,     # 밀려 들어오는 거리
+}
+#  일시정지의 오른쪽 판 — 고른 줄이 무엇인가. 설정 창은 이 판에서 자란다.
+const SETP := Rect2(214.0, 96.0, 386.0, 176.0)
+#  쪽을 갈 때 글줄이 작게 밀려 드는 거리 — 판은 그대로 서 있고 목록만 바뀐다.
+const SET_PG_SLIDE := 14.0
+#  설정 창의 치수. 화면 한가운데에 선다(런 정보와 같은 자리 말).
+#    이름표(윗변에 반쯤 걸친 금빛 판) · 탭 26 · 줄 30 셋 · 「뒤로」 26
+#  창 높이는 **탭을 갈아도 안 바뀐다** — 줄이 둘인 「소리」는 아래가 빈다. 런 정보가
+#  탭마다 판이 늘었다 줄던 것을 「짜증날 것 같다」로 고친 그 규약이다(2026-09-17).
+#  줄 30 의 오른쪽은 조작 칸이다 — 이름 칸 150 · 홈 · 수 칸 66. 가장 긴 이름
+#  「CRT 필터」(81px)가 150 안에 들고, 「100」(40px)이 수 받침(46)에 든다.
+const SETW := {
+	"set": Vector2(400.0, 206.0),
+	"pad": 12.0,       # 창 안쪽 여백 — 줄 · 탭 · 「뒤로」의 양 끝
+	"plate_h": 22.0,   # 이름표 높이 — 윗변에 반쯤 걸친다(말상자 이름표와 같은 말)
+	"tab_y": 20.0,     # 탭 윗변 — 이름표 밑 9px
+	"tab_h": 26.0,     # 런 정보 탭과 같다(턱 2 포함)
+	"row_y": 58.0,     # 첫 줄
 	"srow_h": 30.0,
 	"sgap": 6.0,
 	"name_w": 150.0,   # 이름 칸 — 홈은 여기서 시작한다
-	"val_w": 58.0,     # 수 칸 — 홈은 여기 앞에서 끝난다
+	"val_w": 66.0,     # 수 칸 — 홈은 여기 앞에서 끝난다. 수 받침(46) + 손잡이 반폭 · 테 + 틈
 	"slide": 10.0,     # 열 때 밑에서 떠오르는 거리
 }
 #  얹힘 띠. n 은 **더 안 쓴다** — 칸을 세는 대신 픽셀마다 한 줄씩 긋는다
@@ -40295,10 +40311,20 @@ func _set_exit(k: String) -> bool:
 func _set_off(rows: Array, i: int) -> float:
 	var y := 0.0
 	for k in i:
-		y += float(SETW.row_h) + float(SETW.gap)
+		y += float(SET.h) + float(SET.gap)
 		if _set_exit(String(rows[k + 1])) and not _set_exit(String(rows[k])):
-			y += float(SETW.split)
+			y += float(SET.split)
 	return y
+
+
+const PAUSE_ROWS := ["back", "set", "lobby", "quit"]
+
+
+#  일시정지 글줄 i 의 자리 — dx 는 밀려 든(나간) 만큼. 쪽이 설정 창이어도 나가는 글줄을
+#  그리려면 이 자가 쪽과 무관하게 서야 한다.
+func _pause_rect(i: int, dx: float) -> Rect2:
+	return Rect2(Vector2(float(SET.x) + dx, float(SET.y) + _set_off(PAUSE_ROWS, i)),
+			Vector2(SET.w, SET.h))
 
 
 #  떠오른 정도. 0 이면 안 보이고, 1 이면 제자리다.
@@ -40310,15 +40336,18 @@ func _set_pg_ease() -> float:
 	return _ease_enter(set_pg_t)
 
 
-func _set_size(pg: String) -> Vector2:
-	return SETW.pause if pg == "pause" else SETW.set
+#  쪽의 판이 다 자란 자리 — 일시정지는 오른쪽 판(SETP), 설정은 가운데 창.
+func _set_to(pg: String) -> Rect2:
+	if pg == "pause":
+		return SETP
+	var s: Vector2 = SETW.set
+	return Rect2((VIEW - s) * 0.5, s)
 
 
-#  창 몸 — 쪽을 갈면 떠난 창(set_win_from)에서 새 창으로 자란다. 여는 동안의 떠오름은
+#  판 몸 — 쪽을 갈면 떠난 판(set_win_from)에서 새 판으로 자란다. 여는 동안의 떠오름은
 #  안 탄다(_set_win 이 얹는다) — 떠난 자리를 적을 때 떠오름이 섞이면 안 된다.
 func _set_box() -> Rect2:
-	var s: Vector2 = _set_size(_set_pg())
-	var to := Rect2((VIEW - s) * 0.5, s)
+	var to := _set_to(_set_pg())
 	var q := _set_pg_ease()
 	if q >= 1.0 or set_win_from.size.x <= 0.0:
 		return to
@@ -40326,19 +40355,22 @@ func _set_box() -> Rect2:
 			set_win_from.size.lerp(to.size, q).round())
 
 
-#  그리는 창 — 몸에 여는 동안의 떠오름을 얹는다.
+#  그리는 판 — 설정 창이면 여는 동안의 떠오름을 얹는다. 일시정지의 판은 안 떠오르고
+#  글줄보다 한 박자 늦게 짙어진다(옛 그대로).
 func _set_win() -> Rect2:
 	var b := _set_box()
-	b.position.y += roundf(float(SETW.slide) * (1.0 - _set_ease()))
+	if _set_pg() != "pause":
+		b.position.y += roundf(float(SETW.slide) * (1.0 - _set_ease()))
 	return b
 
 
 #  창 안 것들의 틀 — **다 자란 창** 기준이다. 창 몸만 자라고 안의 줄은 제자리에서
 #  짙어진다(줄까지 자라면 글자가 늘었다 줄었다 한다). 여는 동안의 떠오름만 같이 탄다.
 func _set_frame() -> Rect2:
-	var s: Vector2 = _set_size(_set_pg())
-	return Rect2((VIEW - s) * 0.5 + Vector2(0.0,
-			roundf(float(SETW.slide) * (1.0 - _set_ease()))), s)
+	var f := _set_to(_set_pg())
+	if _set_pg() != "pause":
+		f.position.y += roundf(float(SETW.slide) * (1.0 - _set_ease()))
+	return f
 
 
 func _set_rect(i: int) -> Rect2:
@@ -40350,8 +40382,9 @@ func _set_rect(i: int) -> Rect2:
 	var x: float = f.position.x + pad
 	var w: float = f.size.x - pad * 2.0
 	if _set_pg() == "pause":
-		return Rect2(x, f.position.y + float(SETW.row_y0) + _set_off(rows, i),
-				w, float(SETW.row_h))
+		#  밀려 들어온다 — 화면이 열릴 때는 52, 설정 창에서 돌아올 때는 14.
+		return _pause_rect(i, -float(SET.slide) * (1.0 - _set_ease())
+				- SET_PG_SLIDE * (1.0 - _set_pg_ease()))
 	if String(rows[i]) == "back":
 		#  런 정보의 「뒤로」와 같은 자리 — 판 아랫변 위 34 · 26 높이(턱 위로 5px 뜬다).
 		return Rect2(x, f.end.y - 34.0, w, 26.0)
@@ -40401,13 +40434,13 @@ func _set_face() -> int:
 #    tg    켬/끔 — 줄 끝에 [끔|켬] 두 칸. 누른 칸으로 간다(v 는 그 글자)
 #    kids  탭 · 갈래 — 안에 든 줄
 #    warn  나가는 줄 — 이름이 붉게 선다
-#  **설명 줄이 없다** — 「효과만, 해설 금지」. 전에는 오른쪽 판이 「화면이 브라운관처럼
-#  둥글게 휜다」 같은 한 줄을 폈는데, 이제 값을 밀면 화면이 곧바로 그렇게 된다.
+#    d     설명 한 줄 — **일시정지 줄만** 갖는다(오른쪽 판이 편다). 설정 창 줄은 없다 —
+#          「효과만, 해설 금지」. 값을 밀면 화면이 곧바로 그렇게 된다.
 func _set_info(key: String) -> Dictionary:
 	match key:
 		"back":
 			if _set_pg() == "pause":
-				return {"n": "계속하기"}
+				return {"n": "계속하기", "d": "판으로 돌아간다"}
 			return {"n": "뒤로"}
 		"set":
 			return {"n": "설정", "kids": SET_TABS}
@@ -40431,9 +40464,9 @@ func _set_info(key: String) -> Dictionary:
 		"lobby":
 			#  warn 과 겨눔(lobby_arm)은 그대로 둔다 — 판 중에 나가면 그 판을 첫머리부터
 			#  다시 던져야 하므로 여전히 값을 치른다. 2026-09-20
-			return {"n": "로비로 나가기", "warn": true}
+			return {"n": "로비로 나가기", "d": "제목 화면으로 돌아간다", "warn": true}
 		"quit":
-			return {"n": "게임 나가기", "warn": true}
+			return {"n": "게임 나가기", "d": "게임을 끝낸다", "warn": true}
 	return {"n": key}
 
 
@@ -40918,8 +40951,10 @@ func _menu_base_y(f: Font, sz: int, top: float, h: float) -> float:
 #  한 자도 안 붙는다 — 왜 못 쓰는지는 부르는 쪽이 값으로 적는다. 2026-09-20
 #  a — 짙기. 기본 1.0 이라 부르는 셋(새 런 · 런 정보 · 컬렉션)이 한 줄도 안 바뀐다.
 #  설정 창이 떠오르고 자라는 동안 탭 · 켬끔 칸이 창과 같이 짙어지려고 낸 인자다.
+#  ox — 글자를 옆으로 미는 몫. 그림을 곁들인 탭(설정 창)이 그림+글자 한 덩이를 가운데에
+#  세우려고 낸 인자다. 기본 0 이라 나머지 셋은 한 줄도 안 바뀐다.
 func _tab_draw(c: CanvasItem, r: Rect2, label: String, on: bool,
-		hot := false, sz := 12, off := false, a := 1.0) -> void:
+		hot := false, sz := 12, off := false, a := 1.0, ox := 0.0) -> void:
 	#  들어설 때의 딸깍만 공용 얹힘에 맡긴다(그림은 이 자리의 것 그대로).
 	#  **뜨는 탭에만** 적는다 — 고른 탭은 얹혀도 안 뜨는데 소리만 나면 무엇이
 	#  대답했는지가 안 보인다. r 도 같이 본다: hot 을 부르는 쪽이 늘 켜 둬도
@@ -40941,7 +40976,7 @@ func _tab_draw(c: CanvasItem, r: Rect2, label: String, on: bool,
 	var tc: Color = C_BG if on else C_DIM.lerp(C_TXT, 0.8 if hot else 0.0)
 	if off and not on:
 		tc = C_OFF
-	c.draw_string(tf, body.position + Vector2(0.0, ly), label,
+	c.draw_string(tf, body.position + Vector2(ox, ly), label,
 			HORIZONTAL_ALIGNMENT_CENTER, body.size.x, sz, Color(tc, a))
 
 
@@ -41027,51 +41062,250 @@ func _draw_settings(c: CanvasItem) -> void:
 
 	#  뒤 그늘. 제목 위에서는 **0.86** — 제목 메뉴 · 로고의 흰 획이 흐림 판으로는 안
 	#  지워진다(0.55 로 먼저 찍어 봤을 때 「하이톤」 「컬렉션」이 읽혔다, 2026-09-24).
-	#  판 위에서는 0.45 — 흐림 판이 이미 뭉갠 판을 한 단 더 눌러 창이 떠 보이게 한다.
-	#  런 정보(0.55)보다 옅다: 멈춘 판이 비쳐야 「잠깐 멈췄다」로 읽힌다.
-	c.draw_rect(_full(), Color(0.0, 0.0, 0.0, (0.86 if _set_over_title() else 0.45) * e))
-	_set_win_draw(c, _set_win(), e)
-	#  안의 것은 창이 거의 다 자란 뒤(85%)에야 짙어진다 — 자라는 창 안에 줄이 먼저 서면
+	#  판 위의 설정 창은 0.45 — 흐림 판이 뭉갠 판을 한 단 더 눌러 창이 떠 보이게 한다.
+	#  일시정지는 그늘을 안 깐다(옛 그대로) — 왼쪽 가장자리 그늘만 글줄을 받친다.
+	#  일시정지 ↔ 설정을 오가는 동안은 그늘도 같이 짙어지고 옅어진다.
+	var sd: float = 0.86 if _set_over_title() else 0.45
+	if pg == "pause":
+		sd *= 1.0 - pq if set_pg_prev != "pause" else 0.0
+	elif set_pg_prev == "pause" and not _set_over_title():
+		sd *= pq
+	c.draw_rect(_full(), Color(0.0, 0.0, 0.0, sd * e))
+	#  일시정지 글줄 — 일시정지 쪽이면 서 있고, 설정 창으로 갔으면 왼쪽으로 빠지며 진다.
+	if pg == "pause":
+		_pause_list_draw(c, e, e * pq, -float(SET.slide) * (1.0 - e)
+				- SET_PG_SLIDE * (1.0 - pq), -1)
+	elif set_pg_prev == "pause" and pq < 1.0:
+		_pause_list_draw(c, e * (1.0 - pq), e * (1.0 - pq), -float(SET.slide) * pq,
+				PAUSE_ROWS.find("set"))
+	#  판 몸. 일시정지의 판은 글줄보다 한 박자 늦게 뜬다(e²).
+	var wa: float = e * e if pg == "pause" else e
+	_set_win_draw(c, _set_win(), wa)
+	#  안의 것은 판이 거의 다 자란 뒤(85%)에야 짙어진다 — 자라는 판 안에 줄이 먼저 서면
 	#  탭 · 줄 끝이 덜 자란 테 밖으로 삐져나와 보인다(shots/settings_grow 에서 4px).
-	var a: float = e * clampf((pq - 0.85) / 0.15, 0.0, 1.0)
+	var a: float = wa * clampf((pq - 0.85) / 0.15, 0.0, 1.0)
 	if a <= 0.0:
 		return
-	var f := _set_frame()
-	#  머리 — 창 맨 위 가운데. 일시정지 · 설정. 지나온 길은 안 적는다 — 깊이가 한 단뿐이라
-	#  「뒤로」가 어디로 가는지는 창 모양이 말한다(작은 창 = 일시정지).
-	c.draw_string(font, Vector2(f.position.x, _menu_base_y(font, 24,
-			f.position.y + float(SETW.title), 30.0)), "일시정지" if pg == "pause" else "설정",
-			HORIZONTAL_ALIGNMENT_CENTER, f.size.x, 24, Color(C_TXT, a))
-	if pg != "pause":
-		for t in SET_TABS.size():
-			var tr := _set_tab_rect(t)
-			var tk := String(SET_TABS[t])
-			_tab_draw(c, tr, String(_set_info(tk).get("n", tk)), tk == pg,
-					_ui_can_hover() and tr.has_point(mouse_at), 20, false, a)
-		#  고른 탭 위 세모 — 런 정보 · 발라트로의 그 신호다.
-		var sr := _set_tab_rect(SET_TABS.find(pg))
-		var tx: float = roundf(sr.get_center().x)
-		c.draw_colored_polygon(PackedVector2Array([
-				Vector2(tx - 4.0, sr.position.y - 6.0), Vector2(tx + 4.0, sr.position.y - 6.0),
-				Vector2(tx, sr.position.y - 1.0)]), Color(C_ACC, a))
+	if pg == "pause":
+		_set_panel(c, String(rows[_set_face()]), a)
+		return
+	_set_deco_draw(c, a)
+	for t in SET_TABS.size():
+		var tr := _set_tab_rect(t)
+		var tk := String(SET_TABS[t])
+		var on: bool = tk == pg
+		var hot: bool = _ui_can_hover() and tr.has_point(mouse_at)
+		#  그림(12) + 틈(6) + 이름을 한 덩이로 가운데에 — 이름이 9px 오른쪽으로 간다.
+		_tab_draw(c, tr, String(_set_info(tk).get("n", tk)), on, hot, 20, false, a, 9.0)
+		_set_tab_icon(c, tr, tk, on, hot, a)
 	for i in rows.size():
 		_set_row_draw(c, i, String(rows[i]), a)
 
 
-#  창 몸 — 런 정보 판(_panel focus)과 같은 말씨: 그림자 · 짙은 턱 · 몸 · 윗모서리 한 줄 빛.
-#  앞판(c)에 그리므로 _panel 을 못 부르고 같은 치수로 여기서 칠한다.
+#  일시정지 글줄 — 머리 · 세로선 · 줄. 옛 그대로다(2026-10-03 되돌림).
+#  a 는 짙기, ra 는 얹힘 띠의 짙기(쪽을 갈아 든 정도까지 곱한 것), dx 는 밀린 만큼.
+#  lit 은 나가는 동안 띠를 꽉 채워 둘 줄(누른 「설정」) — 띠 배열은 새 쪽에서 비었다.
+func _pause_list_draw(c: CanvasItem, a: float, ra: float, dx: float, lit: int) -> void:
+	if a <= 0.004:
+		return
+	#  왼쪽 가장자리 그늘 — 흐린 판 위에서도 글씨가 읽히게 한다.
+	#  띠 여덟 장이면 640x360 에서 이음매가 안 보인다.
+	for k in 8:
+		var f: float = float(k) / 8.0
+		c.draw_rect(Rect2(0.0, 0.0, 26.0 + f * 180.0, VIEW.y),
+				Color(0.03, 0.02, 0.06, 0.14 * a))
+	_hdr(c, "일시정지", "", ra, dx, 78.0)
+	#  글줄을 꿰는 세로선. 무리가 어디서 끊기는지도 이 선이 말한다.
+	var y0: float = float(SET.y) + 4.0
+	var y1: float = float(SET.y) + _set_off(PAUSE_ROWS, PAUSE_ROWS.size() - 1) \
+			+ float(SET.h) - 4.0
+	c.draw_rect(Rect2(float(SET.x) - 10.0 + dx, y0, 1.0, y1 - y0), Color(C_WIRE, 0.30 * a))
+	var live: bool = lit < 0 and _set_pg() == "pause"
+	for i in PAUSE_ROWS.size():
+		var key := String(PAUSE_ROWS[i])
+		var r := _pause_rect(i, dx)
+		var info := _set_info(key)
+		var go: bool = info.has("kids")
+		#  **띠 폭을 글자에 맞춘다.** 148px 고정이라 「설정」 같은 두 글자 줄에서는
+		#  대부분이 빈 금색 판이었다. 갈래 줄은 끝의 › 까지 덮는다.
+		if font_sm != null:
+			var tw: float = font_sm.get_string_size(String(info.get("n", key)),
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
+			if go:
+				tw = r.size.x - 16.0
+			r.size.x = minf(r.size.x, tw + 16.0)
+		var ee: float = 0.0
+		var ew: float = 0.0
+		if live:
+			ee = set_row_e[i] if i < set_row_e.size() else 0.0
+			ew = set_row_w[i] if i < set_row_w.size() else 0.0
+		elif i == lit:
+			ee = 1.0
+			ew = 1.0
+		#  겨눈 줄 — **글자는 한 자도 안 는다.** 채널 넷으로 말한다:
+		#    색     띠가 금(C_ACC) → 붉음(C_MULT). prof_arm 의 겨눈 몸과 같다
+		#    고정   얹힘과 무관하게 다 들어온 채 선다 — 그것이 「아직 서 있다」다
+		#    굵기   띠 끝 마침표 획 1px → 3px. 색 하나로만 말하면 WCAG 1.4.1
+		#    글자색 공짜로 따라온다 — warn 줄이라 아래 col 이 ee 로 붉어진다
+		#  ⚠ 인라인 틴트(draw_string 안의 C_*.lightened)를 쓰지 마라 — qa_ui 가 잡는다.
+		var armed: bool = key == "lobby" and lobby_arm and live
+		if armed:
+			ee = 1.0
+			ew = 1.0
+		_row_band(c, r, ee, ew, ra, C_MULT if armed else C_ACC, 12.0, 3.0 if armed else 1.0)
+		var col: Color = C_DIM.lerp(C_TXT, ee)
+		if bool(info.get("warn", false)):
+			col = C_DIM.lerp(C_RED.lightened(0.35), ee)
+		c.draw_string(font_sm, r.position + Vector2(0.0,
+				_menu_base_y(font_sm, 20, 0.0, r.size.y)),
+				String(info.get("n", key)), HORIZONTAL_ALIGNMENT_LEFT, -1, 20,
+				Color(col, ra))
+		#  갈래 줄 끝의 › — 「누르면 한 단 들어간다」를 글자 없이 말한다.
+		if go:
+			_set_chev(c, Vector2(r.end.x - 9.0, r.get_center().y),
+					Color(C_DIM.lerp(C_TXT, ee * 0.6), ra))
+
+
+#  › 하나 — 오른쪽을 가리키는 꺾쇠. k 는 크기 배율.
+func _set_chev(c: CanvasItem, m: Vector2, col: Color, k := 1.0) -> void:
+	var hw: float = 3.0 * k
+	var hh: float = 4.5 * k
+	var x0: float = roundf(m.x - hw)
+	var yc: float = roundf(m.y)
+	c.draw_polyline(PackedVector2Array([Vector2(x0, yc - hh), Vector2(x0 + hw * 2.0, yc),
+			Vector2(x0, yc + hh)]), col, 2.0 * k)
+
+
+#  일시정지의 오른쪽 판 안 — 고른 줄이 무엇인가(옛 그대로). 「설정」은 설명 대신
+#  **안에 든 것**(화면 · 소리와 그 줄 이름)을 편다.
+func _set_panel(c: CanvasItem, key: String, a: float) -> void:
+	var info := _set_info(key)
+	var p := SETP
+	var warn: bool = bool(info.get("warn", false))
+	#  이름 24. 「나가는 줄이다」는 띠 대신 **이름이 붉게** 말한다.
+	c.draw_string(font, p.position + Vector2(20.0, 42.0),
+			String(info.get("n", key)), HORIZONTAL_ALIGNMENT_LEFT, -1, 24,
+			Color(C_MULT if warn else C_TXT, a))
+	if info.has("kids"):
+		c.draw_rect(Rect2(p.position.x + 20.0, p.position.y + 54.0, p.size.x - 40.0, 1.0),
+				Color(C_WIRE, 0.35 * a))
+		var kids: Array = info["kids"]
+		for j in kids.size():
+			var ki := _set_info(String(kids[j]))
+			var ky: float = p.position.y + 82.0 + float(j) * 28.0
+			c.draw_string(font_sm, Vector2(p.position.x + 20.0, ky), String(ki.get("n", "")),
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(C_TXT, a))
+			var nn := PackedStringArray()
+			for kk in (ki.get("kids", []) as Array):
+				nn.append(String(_set_info(String(kk)).get("n", "")))
+			c.draw_string(font, Vector2(p.position.x + 20.0, ky), " · ".join(nn),
+					HORIZONTAL_ALIGNMENT_RIGHT, p.size.x - 40.0, 12, Color(C_DIM, a))
+		return
+	#  한 줄 설명 12 — 이름 잉크 밑(43)과 17px 띄워 기준선 70 에 선다.
+	c.draw_string(font, p.position + Vector2(20.0, 70.0),
+			String(info.get("d", "")), HORIZONTAL_ALIGNMENT_LEFT, -1, 12,
+			Color(C_DIM, a))
+
+
+#  판 몸 — 런 정보 판(_panel focus)과 같은 말씨: 그림자 · 짙은 턱 · 몸 · 윗모서리 한 줄 빛.
+#  앞판(c)에 그리므로 _panel 을 못 부르고 같은 치수로 여기서 칠한다. 일시정지의 오른쪽
+#  판도 설정 창도 이 몸이다 — 하나가 다른 하나로 자라므로 몸이 같아야 이음매가 없다.
 func _set_win_draw(c: CanvasItem, w: Rect2, a: float) -> void:
 	if a <= 0.0:
 		return
 	_rr(c, Rect2(w.position + Vector2(2.0, 3.0), w.size), Color(0.0, 0.0, 0.0, 0.4 * a))
-	_rr(c, w, Color(C_PANEL.darkened(0.5), a))
+	_rr(c, w, Color(C_PANEL.darkened(0.5), 0.97 * a))
 	var body := Rect2(w.position, w.size - Vector2(0.0, PANEL_LIP))
-	_rr(c, body, Color(C_PANEL, a))
+	_rr(c, body, Color(C_PANEL, 0.97 * a))
 	_rr_top(c, body, 1, Color(C_PANEL.lightened(0.18), a))
 
 
+#  ── 설정 창의 꾸밈(2026-10-03 「ㅇㅋ 좀 더 꾸며 볼까?」) ─────────────
+#  새 말을 들이지 않는다 — 이 게임이 이미 쓰는 꾸밈을 창에 입힌다.
+#    금빛 테    말상자(_tutor_draw)의 그 테. 떠서 말을 거는 판은 금빛 테를 두른다
+#    이름표     말상자 이름표처럼 윗변에 반쯤 걸친 금빛 판 — 「설정」. 꼬리 둘이 리본을 만든다
+#    못 넷     안쪽 모서리의 금빛 점 — 판이 짜 맞춘 물건으로 읽힌다(상점 가구의 놋쇠 못)
+#    줄 사이    옅은 점선 — 줄이 셋뿐이라 선을 그으면 표가 되고, 비우면 떠 보인다
+#    아랫빛    판 아래쪽이 한 단 어두워진다 — 위에서 비추는 술집 조명
+#  탭에는 그림(화면 = 모니터 · 소리 = 확성기), 게이지에는 눈금과 수 받침을 단다.
+func _set_deco_draw(c: CanvasItem, a: float) -> void:
+	var w := _set_win()
+	var body := Rect2(w.position, w.size - Vector2(0.0, PANEL_LIP))
+	#  아랫빛 — 아래 절반에 옅은 그늘 셋을 겹친다(계단이 1px 씩이라 이음매가 안 보인다).
+	for k in 3:
+		var hy: float = body.position.y + body.size.y * (0.5 + 0.16 * float(k))
+		_rr(c, Rect2(body.position.x, hy, body.size.x, body.end.y - hy),
+				Color(0.0, 0.0, 0.0, 0.06 * a))
+	_rr_line(c, body, Color(C_ACC, 0.55 * a))
+	for q in [Vector2(5.0, 5.0), Vector2(body.size.x - 7.0, 5.0),
+			Vector2(5.0, body.size.y - 7.0), Vector2(body.size.x - 7.0, body.size.y - 7.0)]:
+		c.draw_rect(Rect2(body.position + (q as Vector2), Vector2(2.0, 2.0)),
+				Color(C_ACC, 0.45 * a))
+	#  줄 사이 점선 — 설정 줄 사이 틈의 한가운데. 「뒤로」 앞에는 안 긋는다.
+	var rows := _set_rows()
+	for i in range(1, rows.size()):
+		if String(rows[i]) == "back":
+			break
+		var r := _set_rect(i)
+		var ly: float = roundf(r.position.y - float(SETW.sgap) * 0.5)
+		var x: float = r.position.x + 10.0
+		while x < r.end.x - 10.0:
+			c.draw_rect(Rect2(x, ly, 2.0, 1.0), Color(C_WIRE, 0.22 * a))
+			x += 5.0
+	#  이름표 — 「설정」. 꼬리(짙은 금) 둘이 판 뒤로 접혀 들어간 리본이다.
+	var nm := "설정"
+	var nw: float = 64.0
+	if font_sm != null:
+		nw = font_sm.get_string_size(nm, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x + 36.0
+	var ph: float = float(SETW.plate_h)
+	var pl := Rect2(roundf(body.get_center().x - nw * 0.5), body.position.y - ph * 0.5, nw, ph)
+	var tail := C_ACC.darkened(0.45)
+	for sx in [-1.0, 1.0]:
+		var ex: float = pl.position.x - 10.0 if sx < 0.0 else pl.end.x + 10.0
+		var ix: float = pl.position.x + 6.0 if sx < 0.0 else pl.end.x - 6.0
+		var ty: float = pl.position.y + 4.0
+		c.draw_colored_polygon(PackedVector2Array([Vector2(ix, ty), Vector2(ex, ty),
+				Vector2(ex + 4.0 * sx * -1.0, ty + (ph - 4.0) * 0.5), Vector2(ex, pl.end.y + 1.0),
+				Vector2(ix, pl.end.y + 1.0)]), Color(tail, a))
+	_rr(c, Rect2(pl.position + Vector2(0.0, 2.0), pl.size), Color(C_ACC.darkened(0.5), a))
+	_rr(c, pl, Color(C_ACC, a))
+	_rr_top(c, pl, 1, Color(C_ACC.lightened(0.35), a))
+	c.draw_string(font_sm, Vector2(pl.position.x, _menu_base_y(font_sm, 20, pl.position.y,
+			pl.size.y)), nm, HORIZONTAL_ALIGNMENT_CENTER, pl.size.x, 20, Color(C_BG, a))
+
+
+#  탭의 그림 — 이름 왼쪽. 글자와 같은 색이다(고른 탭은 바탕색, 아니면 흐린 글색).
+#  도형으로 그린다 — 640x360 에서 그림 파일보다 획이 고르다.
+func _set_tab_icon(c: CanvasItem, r: Rect2, key: String, on: bool, hot: bool,
+		a: float) -> void:
+	var lift: float = float(TABB.lift) if hot and not on else 0.0
+	var lw: float = 36.0
+	if font_sm != null:
+		lw = font_sm.get_string_size(String(_set_info(key).get("n", key)),
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
+	var body_h: float = r.size.y - float(TABB.lip)
+	var cx: float = roundf(r.get_center().x - lw * 0.5 - 3.0)
+	var cy: float = roundf(r.position.y - lift + body_h * 0.5)
+	var col: Color = C_BG if on else C_DIM.lerp(C_TXT, 0.8 if hot else 0.0)
+	col.a = a
+	if key == "screen":
+		#  모니터 — 화면 테(12x9) · 목 · 받침.
+		c.draw_rect(Rect2(cx - 6.0, cy - 6.0, 12.0, 9.0), col, false, 1.0)
+		c.draw_rect(Rect2(cx - 4.0, cy - 4.0, 8.0, 5.0), Color(col, 0.45 * a))
+		c.draw_rect(Rect2(cx - 1.0, cy + 3.0, 2.0, 2.0), col)
+		c.draw_rect(Rect2(cx - 4.0, cy + 5.0, 8.0, 1.0), col)
+	else:
+		#  확성기 — 몸 · 나팔 · 소리 결 둘.
+		c.draw_rect(Rect2(cx - 6.0, cy - 2.0, 3.0, 4.0), col)
+		c.draw_colored_polygon(PackedVector2Array([Vector2(cx - 3.0, cy - 2.0),
+				Vector2(cx + 1.0, cy - 5.0), Vector2(cx + 1.0, cy + 5.0),
+				Vector2(cx - 3.0, cy + 2.0)]), col)
+		c.draw_rect(Rect2(cx + 3.0, cy - 2.0, 1.0, 4.0), col)
+		c.draw_rect(Rect2(cx + 5.0, cy - 4.0, 1.0, 8.0), Color(col, 0.7 * a))
+
+
 #  줄 하나. 띠는 글줄의 그 띠(왼쪽에서 쓸려 든다), 이름은 20.
-#  일시정지 줄과 「뒤로」는 가운데 — 홀로 서는 길잡이다. 설정 줄은 이름이 왼쪽, 조작이 오른쪽.
+#  「뒤로」는 가운데 — 홀로 서는 길잡이다. 설정 줄은 이름이 왼쪽, 조작이 오른쪽.
 func _set_row_draw(c: CanvasItem, i: int, key: String, a: float) -> void:
 	var r := _set_rect(i)
 	var info := _set_info(key)
@@ -41081,23 +41315,11 @@ func _set_row_draw(c: CanvasItem, i: int, key: String, a: float) -> void:
 	if set_drag == i:
 		ee = 1.0
 		ew = 1.0
-	#  겨눈 줄 — **글자는 한 자도 안 는다.** 채널 넷으로 말한다:
-	#    색     띠가 금(C_ACC) → 붉음(C_MULT). prof_arm 의 겨눈 몸과 같다
-	#    고정   얹힘과 무관하게 다 들어온 채 선다 — 그것이 「아직 서 있다」다
-	#    굵기   띠 끝 마침표 획 1px → 3px. 색 하나로만 말하면 WCAG 1.4.1
-	#    글자색 공짜로 따라온다 — warn 줄이라 아래 col 이 ee 로 붉어진다
-	#  ⚠ 인라인 틴트(draw_string 안의 C_*.lightened)를 쓰지 마라 — qa_ui 가 잡는다.
-	var armed: bool = key == "lobby" and lobby_arm
-	if armed:
-		ee = 1.0
-		ew = 1.0
-	_row_band(c, r, ee, ew, a, C_MULT if armed else C_ACC, 4.0, 3.0 if armed else 1.0)
+	_row_band(c, r, ee, ew, a, C_ACC, 4.0)
 	var col: Color = C_DIM.lerp(C_TXT, ee)
-	if bool(info.get("warn", false)):
-		col = C_DIM.lerp(C_RED.lightened(0.35), ee)
 	var nm := String(info.get("n", key))
 	var by: float = _menu_base_y(font_sm, 20, r.position.y, r.size.y)
-	if _set_pg() == "pause" or key == "back":
+	if key == "back":
 		c.draw_string(font_sm, Vector2(r.position.x, by), nm, HORIZONTAL_ALIGNMENT_CENTER,
 				r.size.x, 20, Color(col, a))
 		return
@@ -41114,8 +41336,8 @@ func _set_row_draw(c: CanvasItem, i: int, key: String, a: float) -> void:
 					false, 20, false, a)
 
 
-#  줄 안의 게이지 — 홈 · 채움 · 손잡이 · 수. 얹히거나 끄는 동안 손잡이가 넓어지고
-#  채움이 밝아진다 — 누르기 전에도 「잡히는 물건」이 보인다.
+#  줄 안의 게이지 — 홈 · 눈금 · 채움 · 손잡이 · 수 받침. 얹히거나 끄는 동안 손잡이가
+#  넓어지고 채움이 밝아진다 — 누르기 전에도 「잡히는 물건」이 보인다.
 func _set_gauge_draw(c: CanvasItem, i: int, key: String, ee: float, a: float) -> void:
 	var tr := _vol_track(i)
 	if tr.size.x <= 0.0:
@@ -41123,22 +41345,40 @@ func _set_gauge_draw(c: CanvasItem, i: int, key: String, ee: float, a: float) ->
 	var r := _set_rect(i)
 	var v: float = _gauge_v(key)
 	var k: float = 1.0 if set_drag == i else ee
-	#  홈 — 판보다 한 단 꺼진 골. 윗변 한 줄 그늘이 「파였다」를 말한다.
+	#  홈 — 판보다 한 단 꺼진 골. 윗변 한 줄 그늘이 「파였다」를, 아랫변 한 줄 빛이
+	#  「턱이 있다」를 말한다.
 	c.draw_rect(tr, Color(C_BG, a))
 	c.draw_rect(Rect2(tr.position, Vector2(tr.size.x, 1.0)), Color(0.0, 0.0, 0.0, 0.35 * a))
+	c.draw_rect(Rect2(tr.position.x, tr.end.y, tr.size.x, 1.0),
+			Color(C_PANEL.lightened(0.16), a))
+	#  눈금 — 25 마다 홈 밑에 점 하나(끝 둘은 조금 길게). 값을 어림하는 자리다.
+	for q in 5:
+		var qx: float = roundf(tr.position.x + tr.size.x * float(q) * 0.25)
+		var qh: float = 3.0 if q == 0 or q == 4 else 2.0
+		c.draw_rect(Rect2(qx, tr.end.y + 3.0, 1.0, qh), Color(C_WIRE, 0.55 * a))
 	var fx: float = roundf(tr.size.x * v)
 	if fx > 0.0:
-		c.draw_rect(Rect2(tr.position, Vector2(fx, tr.size.y)),
-				Color(C_GOLD.darkened(0.2).lerp(C_GOLD, k), a))
-	#  폭은 두 단뿐이다 — 4 와 6 사이(5)는 가운데가 반 픽셀에 걸려 번진다.
-	var kw: float = 4.0 + 2.0 * roundf(k)
-	c.draw_rect(Rect2(tr.position.x + fx - kw * 0.5, tr.position.y - 5.0, kw, 16.0),
-			Color(C_TXT, a))
-	#  수 — 수 칸 오른끝(줄 끝 10px 안). 「100」이 40px 라 44 칸에 든다.
-	c.draw_string(font_sm, Vector2(r.end.x - 10.0 - 44.0,
-			_menu_base_y(font_sm, 20, r.position.y, r.size.y)),
-			"%d" % int(round(v * 100.0)), HORIZONTAL_ALIGNMENT_RIGHT, 44.0, 20,
+		var fc: Color = C_GOLD.darkened(0.2).lerp(C_GOLD, k)
+		c.draw_rect(Rect2(tr.position, Vector2(fx, tr.size.y)), Color(fc, a))
+		#  채움 윗변의 빛 한 줄 — 금속 띠로 읽힌다.
+		c.draw_rect(Rect2(tr.position.x, tr.position.y + 1.0, fx, 1.0),
+				Color(fc.lightened(0.35), a))
+	#  손잡이 — 짙은 테 + 흰 몸 + 가운데 금 한 줄. 폭은 두 단뿐이다(6 · 8) — 홀수는
+	#  가운데가 반 픽셀에 걸려 번진다.
+	var kw: float = 6.0 + 2.0 * roundf(k)
+	var kr := Rect2(tr.position.x + fx - kw * 0.5, tr.position.y - 6.0, kw, 18.0)
+	_rr(c, kr.grow(1.0), Color(C_BG, 0.9 * a), 2)
+	_rr(c, kr, Color(C_TXT, a), 2)
+	c.draw_rect(Rect2(roundf(kr.get_center().x) - 1.0, kr.position.y + 4.0, 2.0,
+			kr.size.y - 8.0), Color(C_ACC.lerp(C_GOLD, k), a))
+	#  수 받침 — 수 칸 오른끝(줄 끝 10px 안)의 꺼진 알약. 「100」이 40px 라 44 칸에 든다.
+	var vb := Rect2(r.end.x - 10.0 - 46.0, r.get_center().y - 11.0, 46.0, 22.0)
+	_rr(c, vb, Color(C_BG, (0.55 + 0.25 * k) * a))
+	c.draw_string(font_sm, Vector2(vb.position.x,
+			_menu_base_y(font_sm, 20, vb.position.y, vb.size.y)),
+			"%d" % int(round(v * 100.0)), HORIZONTAL_ALIGNMENT_CENTER, vb.size.x, 20,
 			Color(C_DIM.lerp(C_TXT, k), a))
+
 
 
 
@@ -43428,8 +43668,19 @@ const TUTOR := {
 	"blip_jit": 0.06,    # 글자마다 음을 미는 폭(±). 같은 음이면 「웅웅」 이 한 줄로 붙는다
 	"blip_narr": 1.22,   # 설명 줄의 음 — 상인 목보다 한 단 위
 	"blip_narr_db": -2.0,  # 설명 줄의 크기(dB). −4 였는데 음악에 묻혀 −2 로(2026-10-03)
+	#  ── 글자가 툭툭 나온다 (2026-10-03) ─────────────────
+	#  「글 한글짜식 나올때 좀 이팩트? 약간 글짜가 나오고 있다 그런걸 좀 있으면 좋겠어」 ·
+	#  「발라트로 같이 툭툭툭 나오면 좋겠어」. 발라트로 DynaText 의 pop_in 은 글자마다
+	#  크기 0 → 1 이다(제 차례 한 칸 동안). 초당 30자에서 한 칸은 33ms 라 눈에 안 걸려
+	#  **여러 칸에 걸쳐** 키우고, 넘쳤다 앉는 되튐(back-out)을 얹어 「툭」 을 만든다.
+	#  위에서 떨어져 앉고 좌우로 조금 기울었다 선다 — 글자마다 기울기 쪽이 번갈아 간다.
+	"pop": 0.16,         # 한 글자가 다 앉기까지(초). 30자/초면 다섯 자가 같이 논다
+	"pop_over": 2.6,     # 되튐 세기 — 2.6 이면 반쯤에서 1.2 배까지 부풀었다 앉는다(3.0 의 1.25 는 글이 덜컥거렸다)
+	"pop_drop": 3.0,     # 떨어지는 높이(px)
+	"pop_tilt": 0.14,    # 처음 기울기(라디안, 약 8°)
 }
 var talk_pl: AudioStreamPlayer = null
+var tut_sh := Vector2.ZERO  # 말상자를 그리는 동안의 흔들림 — 낱자 변환이 그 위에 선다
 var talk_n := 0            # 낸 말소리 수 — 음을 미는 차례다. 판의 난수를 안 건드린다
 var talk_cool := 0.0       # 다음 말소리까지 남은 시간(초)
 var tutor_q := []          # 아직 못 보여 준 갈래
@@ -43535,6 +43786,51 @@ func _tutor_step() -> Dictionary:
 
 func _tutor_text() -> String:
 	return String(_tutor_step().get("text", ""))
+
+
+#  gi 번째 글자(줄 나눔이 먹은 빈칸까지 센 차례)가 앉은 정도 0~1. 그 글자는
+#  tutor_t = (gi + 1) / cps 에 보이기 시작한다(_tutor_shown 과 같은 자).
+func _type_u(gi: int) -> float:
+	return (tutor_t - float(gi + 1) / float(TUTOR.cps)) / float(TUTOR.pop)
+
+
+#  한 줄의 보이는 몫을 그린다. 다 앉은 앞몫은 한 붓, 막 나온 글자는 하나씩
+#  톡 튀어나온다(TUTOR 의 pop 머리말). g0 은 이 줄 첫 글자의 차례다.
+#  흔들림(tut_sh)을 얹은 채로 들어오므로 낱자의 변환에도 그 값을 더하고 되돌린다.
+func _type_line(base: Vector2, ln: String, take: int, g0: int, col: Color) -> void:
+	if take <= 0:
+		return
+	if motion_off or font_sm == null or float(TUTOR.pop) <= 0.0:
+		draw_string(font_sm, base, ln.substr(0, take), HORIZONTAL_ALIGNMENT_LEFT, -1, 20, col)
+		return
+	var p := take
+	while p > 0 and _type_u(g0 + p - 1) < 1.0:
+		p -= 1
+	if p > 0:
+		draw_string(font_sm, base, ln.substr(0, p), HORIZONTAL_ALIGNMENT_LEFT, -1, 20, col)
+	var c1: float = float(TUTOR.pop_over)
+	for k in range(p, take):
+		var ch := ln.substr(k, 1)
+		if ch.strip_edges() == "":
+			continue
+		var u: float = clampf(_type_u(g0 + k), 0.0, 1.0)
+		#  되튐(back-out) — 0 에서 시작해 반쯤에서 넘쳤다가 1 에 앉는다.
+		var q: float = u - 1.0
+		var s: float = maxf(1.0 + (c1 + 1.0) * q * q * q + c1 * q * q, 0.0)
+		if s <= 0.01:
+			continue
+		var x0: float = font_sm.get_string_size(ln.substr(0, k),
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
+		var cw: float = font_sm.get_string_size(ch, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
+		#  글자 잉크의 한가운데(페이퍼로지 20 한글 잉크는 바닥선 위 0~17)를 축으로 돈다.
+		var mid := base + Vector2(x0 + cw * 0.5,
+				-8.5 - float(TUTOR.pop_drop) * (1.0 - u) * (1.0 - u))
+		var tilt: float = float(TUTOR.pop_tilt) * (1.0 - u) * (1.0 - u) \
+				* (1.0 if (g0 + k) % 2 == 0 else -1.0)
+		draw_set_transform(tut_sh + mid, tilt, Vector2(s, s))
+		draw_string(font_sm, Vector2(-cw * 0.5, 8.5), ch, HORIZONTAL_ALIGNMENT_LEFT, -1, 20,
+				Color(col, col.a * minf(u * 4.0, 1.0)))
+	draw_set_transform(tut_sh)
 
 
 #  게임 시간에 곱하는 값. 말상자가 들고 나는 동안에도 같이 오간다 —
@@ -43752,6 +44048,7 @@ func _tutor_draw() -> void:
 		#  맞추면 글이 나오는 내내 옆으로 밀린다. 줄 나눔도 다 나온 글로 한다.
 		var left := _tutor_shown()
 		var iw: float = bw - bp * 2.0
+		var g0 := 0                # 이 줄 첫 글자의 차례 — 글자가 툭 나오는 시계(_type_u)
 		for i in lines.size():
 			var ln := String(lines[i])
 			var take: int = mini(left, ln.length())
@@ -43762,9 +44059,9 @@ func _tutor_draw() -> void:
 				var lw: float = 0.0
 				if font_sm != null:
 					lw = font_sm.get_string_size(ln, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
-				draw_string(font_sm, Vector2(roundf(bx + bp + (iw - lw) * 0.5),
-						by + bp + 19.0 + float(i) * lh), ln.substr(0, take),
-						HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(C_TXT, a))
+				_type_line(Vector2(roundf(bx + bp + (iw - lw) * 0.5),
+						by + bp + 19.0 + float(i) * lh), ln, take, g0, Color(C_TXT, a))
+			g0 += ln.length() + 1
 			if left <= 0:
 				break
 	else:
@@ -43821,6 +44118,7 @@ func _tutor_talk_draw(lines: PackedStringArray, who: String, bx: float, by: floa
 	var left := _tutor_shown()
 	var tx0: float = bx + bp + 6.0
 	var last_end := Vector2.ZERO
+	var g0 := 0                    # 이 줄 첫 글자의 차례 — 글자가 툭 나오는 시계(_type_u)
 	for i in lines.size():
 		var ln := String(lines[i])
 		var take: int = mini(left, ln.length())
@@ -43830,9 +44128,8 @@ func _tutor_talk_draw(lines: PackedStringArray, who: String, bx: float, by: floa
 			left -= 1
 		var part := ln.substr(0, take)
 		var base := Vector2(tx0, by + bp + 19.0 + float(i) * lh)
-		if part != "":
-			draw_string(font_sm, base, part, HORIZONTAL_ALIGNMENT_LEFT, -1, 20,
-					Color(C_TXT, a))
+		_type_line(base, ln, take, g0, Color(C_TXT, a))
+		g0 += ln.length() + 1
 		if take > 0 and font_sm != null:
 			last_end = base + Vector2(font_sm.get_string_size(part,
 					HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x, 0.0)

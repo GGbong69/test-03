@@ -71,4 +71,36 @@ func _run() -> void:
 	if talk != "":
 		for tt in [0.15, 9.0]:
 			await _shoot(talk, tt, "talk_who_%03d" % int(tt * 100.0))
+		await _strip(talk)
 	quit(0)
+
+
+#  글자가 툭툭 나오는 띠(2026-10-03) — 상인 줄 첫 줄을 1/60 초 간격 열두 장, 위에서 아래로.
+#  막 나온 글자가 작게 → 크게(넘쳤다) → 제 크기로 앉고, 떨어지며 기울었다 서는지 본다.
+func _strip(tid: String) -> void:
+	var frames := []
+	for f in 12:
+		g._tutor_close()
+		g.tutor_q.clear()
+		g.tutor_out = 0.0
+		g.tutor_id = tid
+		g.tutor_i = 0
+		g.tutor_pre = 0.0
+		var tt: float = 0.10 + float(f) / 60.0
+		g.tutor_t = tt
+		await _wait(2)
+		g.tutor_t = tt
+		g.queue_redraw()
+		await RenderingServer.frame_post_draw
+		var im: Image = root.get_texture().get_image()
+		var k: float = float(im.get_width()) / 640.0
+		var box: Rect2 = g._tutor_box()
+		var r := Rect2i(int((box.position.x + 4.0) * k), int((box.position.y + 2.0) * k),
+				int(220.0 * k), int(28.0 * k))
+		frames.append(im.get_region(r))
+	var fw: int = (frames[0] as Image).get_width()
+	var fh: int = (frames[0] as Image).get_height()
+	var out := Image.create(fw, fh * frames.size(), false, (frames[0] as Image).get_format())
+	for i in frames.size():
+		out.blit_rect(frames[i], Rect2i(0, 0, fw, fh), Vector2i(0, i * fh))
+	out.save_png("res://shots/talk_pop.png")

@@ -263,3 +263,18 @@ func _run() -> void:
 			strings += 1
 	_ok("설정 줄에 글자가 딱 둘 (이름 가운데 · 왼쪽)", strings == 2,
 			"draw_string %d곳" % strings)
+	#  「로비로 나가기」가 사는 일시정지 글줄(2026-10-03 옛 글줄로 되돌림) — 이름 하나뿐이다.
+	in_fn = false
+	strings = 0
+	for ln in src.split("\n"):
+		var t := String(ln)
+		if t.begins_with("func _pause_list_draw("):
+			in_fn = true
+			continue
+		if in_fn and t.begins_with("func "):
+			break
+		if in_fn and not t.strip_edges().begins_with("#") \
+				and t.contains("draw_string("):
+			strings += 1
+	_ok("일시정지 글줄에 글자가 딱 하나 (이름)", strings == 1,
+			"draw_string %d곳" % strings)
