@@ -26,13 +26,14 @@ func _initialize() -> void:
 	fail += _t_geometry(g)
 	fail += _t_latch(g)
 	fail += _t_props(g)
+	fail += _t_feet(g)
 	fail += _t_buy(g)
 	fail += _t_buy_wrong(g)
 	fail += _t_sell(g)
 	fail += _t_sell_wrong(g)
 	fail += _t_move(g)
 	fail += _t_lanes(g)
-	print("\n%s" % ("실패 %d건" % fail if fail > 0 else "아홉 검사 전부 통과"))
+	print("\n%s" % ("실패 %d건" % fail if fail > 0 else "열 검사 전부 통과"))
 	quit(mini(fail, 125))
 
 
@@ -171,6 +172,33 @@ func _t_props(g: Node) -> int:
 				why += " %d:글이 %s 단추" % [z, k]
 	return _say(bad == 0, "진열대 소품 창구", why if why != "" else "저울 %s · 등록기 %s" % [
 			str(g._prop_rect(0)), str(g._prop_rect(1))])
+
+
+# ②-c 소품 받침이 카운터 위 (2026-10-03)
+#  「수금기가 테이블 끝에 걸터있는데? 좀 위치 조정 해봐」 — 첫 시안 C 자리에서 등록기 받침
+#  왼쪽이 빗변 조각 틀에 7~10px 올라앉고 뒤끝이 먼 턱 너머(w −18)였다(저울도 받침 오른
+#  모서리가 틀 위). 받침 네 귀(Room3D.SELL_FOOT · BUY_FOOT)를 make_table 과 같은
+#  기울임 · 곱으로 면 좌표에 옮겨(Room3D.foot_clear)
+#    · 조각 틀 안쪽 끝(빗변에서 수직 FRAME_W — 먼 모서리 놋쇠 갓 자리는 CAP_OUT)에서
+#      카운터 쪽으로 3 넘게 들어와 있고
+#    · 먼 턱 앞끝(LIP_W)보다 0.5 넘게 앞인지
+#  잰다. 소품 자리 · 곱 · 받침 치수를 고치는 날 받침이 다시 테이블 끝에 걸터앉으면 운다.
+func _t_feet(g: Node) -> int:
+	var R = g.Room3D
+	var bad := 0
+	var why := ""
+	var note := ""
+	for z in 2:
+		var c: Vector2 = R.foot_clear(z, g.VIEW.x, float(g.TBL.fy), float(g.TBL.ny),
+				float(g.CHUTE.back), float(g.TBL.flat))
+		note += " %s 틀 %+.1f · 턱 %+.1f" % ["저울" if z == 0 else "등록기", c.x, c.y]
+		if c.x < 3.0:
+			bad += 1
+			why += " %d:틀 위 %.1f" % [z, c.x]
+		if c.y < 0.5:
+			bad += 1
+			why += " %d:턱 너머 %.1f" % [z, c.y]
+	return _say(bad == 0, "소품 받침이 카운터 위", (why + " |" if why != "" else "") + note)
 
 
 func _shop(g: Node) -> void:

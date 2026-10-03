@@ -6,6 +6,7 @@ extends SceneTree
 #    edge_buy_strip.png   내리치기 여덟 박자 — 오른쪽 반(x 320~640 · y 20~250) 게임 배율(2배)
 #    edge_sell_strip.png  판매 여덟 박자 — 왼쪽 반(x 0~320 · y 20~250) 게임 배율
 #    edge_props_x3.png    두 소품 쉼 3배(왼쪽 저울 · 오른쪽 등록기)
+#    edge_bases_x3.png    두 받침이 테이블 끝(조각 틀 · 먼 턱)에 앉은 자리 3배(2026-10-03)
 #    edge_mark.png        튜토리얼이 「구매」를 밝힌 틀(chute_buy)
 #    edge_slam_x3.png     내리치는 박자(0.31~) 등록기 3배 — 서랍 · 값 깃 · 건반 · 빛살을 가까이
 #  창이 있어야 돈다:
@@ -97,6 +98,16 @@ func _sheet(cells: Array, cols: int) -> Image:
 	return sh
 
 
+#  두 장을 가로로 붙인다(틈 12px · 검정).
+func _pair(a: Image, b: Image) -> Image:
+	var px := Image.create(a.get_width() + b.get_width() + 12, maxi(a.get_height(), b.get_height()),
+			false, a.get_format())
+	px.fill(Color.BLACK)
+	px.blit_rect(a, Rect2i(0, 0, a.get_width(), a.get_height()), Vector2i.ZERO)
+	px.blit_rect(b, Rect2i(0, 0, b.get_width(), b.get_height()), Vector2i(a.get_width() + 12, 0))
+	return px
+
+
 func _shot() -> Image:
 	return root.get_texture().get_image()
 
@@ -152,15 +163,12 @@ func _run() -> void:
 	_shot().save_png("res://shots/edge_shop.png")
 	#  두 소품 3배 — 쉼
 	var im0 := _shot()
-	var px := Image.create(1, 1, false, im0.get_format())
-	var a := _crop(im0, Rect2(0.0, 52.0, 132.0, 150.0), 3.0)
-	var b := _crop(im0, Rect2(508.0, 40.0, 132.0, 162.0), 3.0)
-	px = Image.create(a.get_width() + b.get_width() + 12, maxi(a.get_height(), b.get_height()),
-			false, im0.get_format())
-	px.fill(Color.BLACK)
-	px.blit_rect(a, Rect2i(0, 0, a.get_width(), a.get_height()), Vector2i.ZERO)
-	px.blit_rect(b, Rect2i(0, 0, b.get_width(), b.get_height()), Vector2i(a.get_width() + 12, 0))
-	px.save_png("res://shots/edge_props_x3.png")
+	_pair(_crop(im0, Rect2(0.0, 52.0, 132.0, 150.0), 3.0),
+			_crop(im0, Rect2(508.0, 40.0, 132.0, 162.0), 3.0)).save_png("res://shots/edge_props_x3.png")
+	#  두 받침이 테이블 끝(빗변 조각 틀 · 먼 턱)에 어떻게 앉았나 3배 — 2026-10-03
+	#  「수금기가 테이블 끝에 걸터있는데?」
+	_pair(_crop(im0, Rect2(0.0, 112.0, 120.0, 56.0), 3.0),
+			_crop(im0, Rect2(520.0, 112.0, 120.0, 56.0), 3.0)).save_png("res://shots/edge_bases_x3.png")
 	g.sell_sel = -1
 	g.buy_sel = -1
 	await _settle(4)
@@ -239,5 +247,5 @@ func _run() -> void:
 	g.mouse_at = Vector2(-50, -50)
 	await _wait(30)
 	_shot().save_png("res://shots/edge_leg.png")
-	print("찍었다 — edge_shop · edge_leg · edge_buy_strip · edge_sell_strip · edge_props_x3 · edge_mark")
+	print("찍었다 — edge_shop · edge_leg · edge_buy_strip · edge_sell_strip · edge_props_x3 · edge_bases_x3 · edge_mark")
 	quit(0)
