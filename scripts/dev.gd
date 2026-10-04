@@ -630,6 +630,11 @@ static func _names(k: String) -> PackedStringArray:
 		for v in WARP_STEPS:
 			out.append(_crt_name(float(v)))
 		return out
+	#  VHS 필터 · 도트 팔레트 사다리 — _cur_name 과 짝이다(2026-10-04).
+	if k == "vhs" or k == "dot":
+		for v in (VHS_STEPS if k == "vhs" else DOT_STEPS):
+			out.append(_crt_name(float(v)))
+		return out
 	#  판 깨짐의 층 셋. 표가 아니라 상수라 **_cur_name 과 짝으로** 낸다 —
 	#  한쪽만 내면 값 칸을 눌렀을 때 고르개가 텅 빈 채로 뜬다(빨리 보기
 	#  사다리가 같은 실패를 적어 뒀다). 2026-09-24
@@ -1052,6 +1057,7 @@ static func _rows(g: Node) -> Array:
 			_grow_sync(g)
 			_crt_sync(g)
 			_warp_sync(g)
+			_retro_sync(g)
 			return [
 				{"n1": "조준 게이지 %.2f" % g.gauge_speed, "t": "list",
 						"k": "gauge", "n": (TUNE_STEPS["gauge"] as Array).size()},
@@ -1132,6 +1138,15 @@ static func _rows(g: Node) -> Array:
 				#  클릭이 새 굽힘을 따른다. 열다섯째 줄이다(한계 열아홉).
 				{"n1": "화면 굴곡 %d" % int(roundf(float(g.warp) * 100.0)), "t": "list",
 						"k": "warp", "n": WARP_STEPS.size()},
+				#  ── VHS 필터 · 도트 팔레트 (2026-10-04) ──────────────
+				#  설정 「화면」 갈래의 두 게이지와 **같은 값**(g.vhs · g.dot)을 다섯 칸으로
+				#  민다. CRT · 굴곡 줄 바로 밑 — 넷이 한 화면을 같이 칠하므로 나란히 서야
+				#  겹친 모습을 ◀▶ 한 칸씩 견준다. 같은 문(_crt_apply → _retro_apply)을 지나
+				#  0 이면 층째 숨는다. 저장은 안 한다. 열여섯 · 열일곱째 줄이다(한계 열아홉).
+				{"n1": "VHS 필터 %d" % int(roundf(float(g.vhs) * 100.0)), "t": "list",
+						"k": "vhs", "n": VHS_STEPS.size()},
+				{"n1": "도트 팔레트 %d" % int(roundf(float(g.dot) * 100.0)), "t": "list",
+						"k": "dot", "n": DOT_STEPS.size()},
 			]
 
 
@@ -1486,6 +1501,27 @@ static func _warp_sync(g: Node) -> void:
 	pick["warp"] = best
 
 
+#  VHS 필터 · 도트 팔레트 사다리(2026-10-04). 0 이 「끔」이고 셋째가 게임 기본값
+#  (game.gd 의 VHS_DEF · DOT_DEF)이다. 값 칸은 CRT 사다리와 같은 규약으로 매번 지금 값에
+#  가장 가까운 칸에 맞춘다(설정 게이지가 0.01 씩 민다).
+const VHS_STEPS := [0.00, 0.25, 0.50, 0.75, 1.00]
+const DOT_STEPS := [0.00, 0.30, 0.60, 0.80, 1.00]
+
+
+static func _retro_sync(g: Node) -> void:
+	for k in ["vhs", "dot"]:
+		var st: Array = VHS_STEPS if k == "vhs" else DOT_STEPS
+		var v: float = float(g.vhs) if k == "vhs" else float(g.dot)
+		var best := 0
+		var bd := INF
+		for j in st.size():
+			var dd: float = absf(float(st[j]) - v)
+			if dd < bd:
+				bd = dd
+				best = j
+		pick[k] = best
+
+
 #  그림 표본 다섯 판. game.gd 의 _art_sheet 가 **같은 차례**로 읽는다 —
 #  여기 순서를 바꾸면 거기 match 도 같이 바꾼다. 2026-09-19
 const ART_SHEET := ["끔", "골드", "팩", "제약", "셋 작게"]
@@ -1710,6 +1746,10 @@ static func _cur_name(g: Node, e: Dictionary) -> String:
 	if k == "warp":
 		var jw: int = i % WARP_STEPS.size()
 		return "%d/%d %s" % [jw + 1, WARP_STEPS.size(), _crt_name(float(WARP_STEPS[jw]))]
+	if k == "vhs" or k == "dot":
+		var rs: Array = VHS_STEPS if k == "vhs" else DOT_STEPS
+		var jr: int = i % rs.size()
+		return "%d/%d %s" % [jr + 1, rs.size(), _crt_name(float(rs[jr]))]
 	if k == "fglow":
 		var fs: Array = FIRE_STEPS["fglow"]
 		var j9: int = i % fs.size()
@@ -2580,6 +2620,15 @@ static func _run(g: Node, e: Dictionary) -> void:
 			g.warp = float(WARP_STEPS[i % WARP_STEPS.size()])
 			g._crt_apply()
 			_say("화면 굴곡 %s" % _crt_name(g.warp))
+		"vhs":
+			#  설정 게이지와 같은 문(_crt_apply → _retro_apply)을 지난다 — 0 이면 층째 숨는다.
+			g.vhs = float(VHS_STEPS[i % VHS_STEPS.size()])
+			g._crt_apply()
+			_say("VHS 필터 %s" % _crt_name(g.vhs))
+		"dot":
+			g.dot = float(DOT_STEPS[i % DOT_STEPS.size()])
+			g._crt_apply()
+			_say("도트 팔레트 %s" % _crt_name(g.dot))
 		"npcact":
 			#  값(골드 · 매물 · leg_no)을 한 톨도 안 건드린다 — 몸짓 시계만 세운다.
 			#  「살핌」만 매물 하나를 상인 손에 건넨다 — 손님이 건넨 것과 같은 길이라

@@ -11,8 +11,10 @@ extends SceneTree
 #   방식이 좀 더 괜찮았는데?」로 옛 글줄 + 오른쪽 판에 돌아왔고, 그 판이 설정 창으로 자란다.
 #     일시정지     계속하기 · 설정 ‖ 로비로 나가기 · 게임 나가기     (판 중에만)
 #     설정 창      [화면] [소리] 탭 · 그 탭의 줄 · 뒤로               (제목은 곧장 여기)
-#                  화면  전체화면 [끔|켬] · CRT 필터 · 화면 굴곡
+#                  화면  전체화면 [끔|켬] · CRT 필터 · 화면 굴곡 · VHS 필터 · 도트 팔레트
 #                  소리  효과음 · 음악
+#   2026-10-04 — 화면 탭이 다섯 줄이 되어 창이 자랐다(SETW.set). 다섯 줄 · 「뒤로」 · 이름표가
+#   다 화면 안이고, 새 두 줄도 다른 게이지 줄처럼 누르고 · 끌고 · 휠로 민다.
 #   예전 일곱 줄의 일이 **하나도 안 빠지고** 어딘가에 산다는 것, 키(ESC)와 화면 누름
 #   둘 다로 한 단씩 오르내린다는 것, 조작이 **그 줄 안에서** 된다는 것을 잰다.
 #
@@ -252,7 +254,14 @@ func _run() -> void:
 	_page("top", -1)
 	var rt: Array = g._set_rows()
 	_ok("설정 창은 첫 탭(화면)으로 연다", g._set_pg() == "screen"
-			and rt == ["fs", "crt", "warp", "back"], "%s · %s" % [g._set_pg(), rt])
+			and rt == ["fs", "crt", "warp", "vhs", "dot", "back"], "%s · %s" % [g._set_pg(), rt])
+	var gauges := []
+	for k in ["crt", "warp", "vhs", "dot"]:
+		var inf: Dictionary = g._set_info(k)
+		if bool(inf.get("g", false)) and not inf.has("d"):
+			gauges.append(String(inf.get("n", "")))
+	_ok("화면 탭 게이지 넷 — 이름만", gauges == ["CRT 필터", "화면 굴곡", "VHS 필터", "도트 팔레트"],
+			"%s" % [gauges])
 	_ok("제목에서 연 설정에는 「로비로 나가기」가 없다", not rt.has("lobby"))
 	_page("pause", -1)
 	_ok("판이 없으면 일시정지 쪽도 설정 창으로 읽는다", g._set_pg() == "screen")
@@ -277,7 +286,7 @@ func _run() -> void:
 	#  설명 줄도 없다 — 「효과만, 해설 금지」. 값을 밀면 화면이 곧 그렇게 된다.
 	var keyname := []
 	var desc := []
-	for k in all_keys.keys() + ["set", "screen", "sound", "warp"]:
+	for k in all_keys.keys() + ["set", "screen", "sound", "warp", "vhs", "dot"]:
 		for pg in ["pause", "screen"]:
 			_page(pg, g.S.SHOP)
 			var inf: Dictionary = g._set_info(String(k))
@@ -389,6 +398,30 @@ func _run() -> void:
 	g.wheel_ms = 0
 	g._wheel((g._set_rect((g._set_rows() as Array).find("back")) as Rect2).get_center(), 1)
 	_ok("휠 — 「뒤로」 위는 아무 일 없다", g._set_pg() == "screen" and g.state == g.S.SETTINGS)
+	#  VHS 필터 · 도트 팔레트 — 화면 탭 아래 두 줄도 같은 몸(누름 · 끌기 · 뗌 · 휠).
+	for k in ["vhs", "dot"]:
+		_page("screen", g.S.SHOP)
+		var ki: int = (g._set_rows() as Array).find(k)
+		var kr: Rect2 = g._set_rect(ki)
+		var kt: Rect2 = g._vol_track(ki)
+		g._vol_set(k, 0.5)
+		g._click(kr.position + Vector2(30.0, kr.size.y * 0.5))
+		var sel_only: bool = g.set_drag == -1 and is_equal_approx(g._gauge_v(k), 0.5) \
+				and g.set_sel == ki
+		g._click(Vector2(kt.position.x + kt.size.x * 0.3, kr.get_center().y))
+		var grab: bool = g.set_drag == ki and is_equal_approx(g._gauge_v(k), 0.3)
+		g._set_slide(g.set_drag, Vector2(kt.position.x + kt.size.x * 0.9, 0.0))
+		g._set_slide_end()
+		var saved: bool = is_equal_approx(float(Save.get_set(k, -1.0)), 0.9)
+		g.wheel_ms = 0
+		g._wheel(kr.position + Vector2(30.0, 15.0), 1)
+		g._vol_save_due()
+		var wheel: bool = is_equal_approx(g._gauge_v(k), 0.85) \
+				and is_equal_approx(float(Save.get_set(k, -1.0)), 0.85)
+		_ok("%s — 이름은 고르기 · 홈은 끌기 · 뗌 저장 · 휠" % String(g._set_info(k).n),
+				sel_only and grab and saved and wheel,
+				"%s %s %s %s · %.2f" % [sel_only, grab, saved, wheel, g._gauge_v(k)])
+		g._vol_set(k, 0.0)        # 뒤의 촬영이 원본 그림을 받게 — 도구는 0 으로 뜬다
 	#  켬끔 — 이미 그 값인 칸은 안 뒤집는다(저장 무변경). 다른 칸은 뒤집는다.
 	_page("screen", g.S.SHOP)
 	var fi: int = (g._set_rows() as Array).find("fs")
@@ -542,11 +575,14 @@ func _run() -> void:
 	_page("sound", 1)
 	g.set_sel = 0                 # 효과음 — 줄 안에 게이지가 선다
 	await _shoot("settings_vol")
+	_page("screen", 1)
+	g.set_sel = (g._set_rows() as Array).find("dot")   # 화면 탭 다섯 줄
+	await _shoot("settings_screen5")
 	_page("pause", 1)
 	g.set_sel = (g._set_rows() as Array).find("quit")   # 게임 나가기
 	await _shoot("settings_quit")
 	print("
-스크린샷: settings_pause.png · settings_hover.png · settings_vol.png · settings_quit.png")
+스크린샷: settings_pause.png · settings_hover.png · settings_vol.png · settings_screen5.png · settings_quit.png")
 
 	print("\n%s\n" % ("전부 통과" if fail == 0 else "실패 %d건" % fail))
 	print("통과 %d · 실패 %d" % [okn, fail])

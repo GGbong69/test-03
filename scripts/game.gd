@@ -907,9 +907,13 @@ func _ready() -> void:
 	#  세기를 손으로 앉힌다. 저장은 안 건드린다 — 값만 이 실행에서 0 이다.
 	#  화면 굴곡도 같다 — 굽은 화면은 화소 자리가 통째로 옮겨 앉고 입력이 되짚히므로
 	#  자리를 재는 프로브가 전부 어긋난다. 굴곡을 잴 도구(qa_warp · shot_pause)는 손으로 앉힌다.
+	#  VHS · 도트도 같다 — 색을 바꾸고 행을 민다.
 	if get_tree().get_script() != null:
 		crt = 0.0
 		warp = 0.0
+		vhs = 0.0
+		dot = 0.0
+	_retro_open()     # 도트(97) · VHS(98) — CRT 밑
 	_crt_open()       # 맨 위 층. 세기는 방금 읽었다
 	_wipe_open()      # 장면 전환 덮개(95) — CRT 밑
 	_overc_open()     # 게임 오버 연출(90)
@@ -6403,7 +6407,7 @@ func _click(m: Vector2) -> void:
 						else:
 							_sfx("menu_pick2")
 						return
-					"vol", "mus", "crt", "warp":
+					"vol", "mus", "crt", "warp", "vhs", "dot":
 						#  홈 둘레를 누르면 그 자리로 가고 뗄 때까지 따라온다(_set_grab).
 						#  이름 쪽은 고르기만 한다.
 						if _set_grab(i).has_point(m):
@@ -32118,12 +32122,12 @@ func _tip_wrap(t: String, w: float, sz: int) -> PackedStringArray:
 				out.append(line.substr(0, stop))
 				line = line.substr(stop + 1) + " " + word
 				continue
-		var dot := line.rfind(" · ")
-		if dot > 0 and dot + 3 < line.length() and not line.ends_with(" ·") \
-				and line.substr(0, dot).find(" ") > 0:
-			var nxt := line.substr(dot + 3) + " " + word
+		var dp := line.rfind(" · ")
+		if dp > 0 and dp + 3 < line.length() and not line.ends_with(" ·") \
+				and line.substr(0, dp).find(" ") > 0:
+			var nxt := line.substr(dp + 3) + " " + word
 			if f.get_string_size(nxt, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x <= w:
-				out.append(line.substr(0, dot + 2))
+				out.append(line.substr(0, dp + 2))
 				line = nxt
 				continue
 		#  「·」 로 줄을 열지 않는다. 앞에 점이 없으면 줄 끝 낱말을 데려간다.
@@ -35424,11 +35428,21 @@ var crt := CRT_DEF
 #  CRT 필터와 **따로 민다** — 주사선은 싫고 곡면만 원하는 사람, 그 반대가 다 있다.
 const WARP_DEF := 0.5
 var warp := WARP_DEF
+#  VHS 필터 · 도트 팔레트 0~1(2026-10-04). 0 이면 그 층째 꺼진다(_retro_apply).
+#  CRT 밑에 선다 — 도트(97)가 깨끗한 그림을 줄이고, VHS(98)가 테이프로 흔들고,
+#  CRT(100)가 그것을 브라운관에 띄운다. 기본값은 셋 겹친 화면(shots/retro_final_*)에서
+#  가장 작은 HUD 글이 또렷한 자리다. VHS 30 은 1배 온 화면에서 거의 안 보이면서 값은
+#  다 냈다(화소 평균 차 1.5%) — 50 도 「이자 +4」 · 「사탕·사진」이 30 과 같이 읽힌다.
+const VHS_DEF := 0.5
+var vhs := VHS_DEF
+const DOT_DEF := 0.6
+var dot := DOT_DEF
 #  설정의 쪽(2026-10-03 「설정이 저기서 다 나열되기 보단 … 상위가 있으면 좋겠는데,
 #  esc를 누르면 일시정지가 되어야지 일시정지에 설정을 누르면 설정창이 되어야지」).
 #  같은 날 창 둘로 고쳤다(「설정 UI 좀 더 개선 해봐」 — _set_pg 머리말).
 #    "pause"   일시정지 창 — 판 중에만. 계속하기 · 설정 · 로비로 나가기 · 게임 나가기
-#    "screen"  설정 창의 「화면」 탭 — 전체화면 · CRT 필터 · 화면 굴곡 + 뒤로
+#    "screen"  설정 창의 「화면」 탭 — 전체화면 · CRT 필터 · 화면 굴곡 · VHS 필터 ·
+#              도트 팔레트 + 뒤로
 #    "sound"   설정 창의 「소리」 탭 — 효과음 · 음악 + 뒤로
 #  ("top" 은 쪽이 아니라 「설정 창의 첫 탭」이라는 부름말이다 — _set_go 가 푼다.)
 #  상태(state)는 셋 다 S.SETTINGS 하나다 — 판이 멈추고 · 곡이 뒤 화면을 따르고 ·
@@ -35815,6 +35829,8 @@ func _load_settings() -> void:
 	vol_mus = clampf(float(Save.get_set("vol_mus", 0.8)), 0.0, 1.0)
 	crt = clampf(float(Save.get_set("crt", CRT_DEF)), 0.0, 1.0)
 	warp = clampf(float(Save.get_set("warp", WARP_DEF)), 0.0, 1.0)
+	vhs = clampf(float(Save.get_set("vhs", VHS_DEF)), 0.0, 1.0)
+	dot = clampf(float(Save.get_set("dot", DOT_DEF)), 0.0, 1.0)
 	_apply_vol()
 	_crt_apply()        # 층은 _ready 가 이 뒤에 세운다 — 그때 다시 앉는다
 	if bool(Save.get_set("fullscreen", false)):
@@ -40899,13 +40915,15 @@ const SETP := Rect2(214.0, 96.0, 386.0, 176.0)
 #  쪽을 갈 때 글줄이 작게 밀려 드는 거리 — 판은 그대로 서 있고 목록만 바뀐다.
 const SET_PG_SLIDE := 14.0
 #  설정 창의 치수. 화면 한가운데에 선다(런 정보와 같은 자리 말).
-#    이름표(윗변에 반쯤 걸친 금빛 판) · 탭 26 · 줄 30 셋 · 「뒤로」 26
+#    이름표(윗변에 반쯤 걸친 금빛 판) · 탭 26 · 줄 30 다섯 · 「뒤로」 26
+#  2026-10-04 화면 탭이 다섯 줄(VHS 필터 · 도트 팔레트)이 되어 창이 72 자랐다 — 줄 높이와
+#  틈은 그대로라 손이 쥐는 칸 크기가 안 바뀐다. 위아래로 41 씩 남는다.
 #  창 높이는 **탭을 갈아도 안 바뀐다** — 줄이 둘인 「소리」는 아래가 빈다. 런 정보가
 #  탭마다 판이 늘었다 줄던 것을 「짜증날 것 같다」로 고친 그 규약이다(2026-09-17).
 #  줄 30 의 오른쪽은 조작 칸이다 — 이름 칸 150 · 홈 · 수 칸 66. 가장 긴 이름
-#  「CRT 필터」(81px)가 150 안에 들고, 「100」(40px)이 수 받침(46)에 든다.
+#  「도트 팔레트」도 150 안에 들고(qa_settings 가 잰다), 「100」(40px)이 수 받침(46)에 든다.
 const SETW := {
-	"set": Vector2(400.0, 206.0),
+	"set": Vector2(400.0, 278.0),
 	"pad": 12.0,       # 창 안쪽 여백 — 줄 · 탭 · 「뒤로」의 양 끝
 	"plate_h": 22.0,   # 이름표 높이 — 윗변에 반쯤 걸친다(말상자 이름표와 같은 말)
 	"tab_y": 20.0,     # 탭 윗변 — 이름표 밑 9px
@@ -41069,7 +41087,7 @@ func _set_info(key: String) -> Dictionary:
 		"set":
 			return {"n": "설정", "kids": SET_TABS}
 		"screen":
-			return {"n": "화면", "kids": ["fs", "crt", "warp"]}
+			return {"n": "화면", "kids": ["fs", "crt", "warp", "vhs", "dot"]}
 		"sound":
 			return {"n": "소리", "kids": ["vol", "mus"]}
 		"fs":
@@ -41085,6 +41103,10 @@ func _set_info(key: String) -> Dictionary:
 			return {"n": "CRT 필터", "g": true}
 		"warp":
 			return {"n": "화면 굴곡", "g": true}
+		"vhs":
+			return {"n": "VHS 필터", "g": true}
+		"dot":
+			return {"n": "도트 팔레트", "g": true}
 		"lobby":
 			#  warn 과 겨눔(lobby_arm)은 그대로 둔다 — 판 중에 나가면 그 판을 첫머리부터
 			#  다시 던져야 하므로 여전히 값을 치른다. 2026-09-20
@@ -41162,6 +41184,13 @@ func _vol_set(key: String, x: float) -> void:
 		#  손이 쥔 자리(원본 좌표)는 안 미끄러진다(_warp_src 머리말).
 		warp = x
 		_crt_apply()
+	elif key == "vhs" or key == "dot":
+		#  VHS · 도트도 같은 몸이다. 층은 셋이 한 문(_crt_apply → _retro_apply)을 지난다.
+		if key == "vhs":
+			vhs = x
+		else:
+			dot = x
+		_crt_apply()
 	else:
 		return
 	_apply_vol()
@@ -41209,6 +41238,10 @@ func _vol_save() -> void:
 		Save.set_set("crt", crt)
 	elif vol_save_k == "warp":
 		Save.set_set("warp", warp)
+	elif vol_save_k == "vhs":
+		Save.set_set("vhs", vhs)
+	elif vol_save_k == "dot":
+		Save.set_set("dot", dot)
 	vol_save_k = ""
 
 
@@ -41231,6 +41264,10 @@ func _set_slide_end() -> void:
 			Save.set_set("crt", crt)
 		elif key == "warp":
 			Save.set_set("warp", warp)
+		elif key == "vhs":
+			Save.set_set("vhs", vhs)
+		elif key == "dot":
+			Save.set_set("dot", dot)
 	set_drag = -1
 
 
@@ -41242,6 +41279,8 @@ func _gauge_v(key: String) -> float:
 		"mus": return vol_mus
 		"crt": return crt
 		"warp": return warp
+		"vhs": return vhs
+		"dot": return dot
 	return 0.0
 
 
@@ -41264,8 +41303,8 @@ func _gauge_v(key: String) -> float:
 #  그것이 그리는 대로 **입력을 되짚는다**(아래 「화면 굴곡 — 입력 되짚기」).
 #
 #  ── 0 은 꺼짐 ─────────────────────────────────────────────
-#  세기와 굴곡이 **둘 다** 0 이면 층째 숨긴다. 화면 읽기는 후면 복사 한 번에 탭
-#  열둘이라 안 쓰는 동안 켜 두면 매 프레임 그 값을 낸다(흐림 판과 같은 규약).
+#  세기와 굴곡이 **둘 다** 0 이면 층째 숨긴다. 화면 읽기는 후면 복사 한 번에 밉맵 ·
+#  탭 여덟이라 안 쓰는 동안 켜 두면 매 프레임 그 값을 낸다(흐림 판과 같은 규약).
 #  하나라도 서면 층이 선다 — 굴곡만 켠 화면은 셰이더가 세기 0 으로 돌아 색은 한 톨도
 #  안 바꾸고 자리만 옮긴다.
 #
@@ -41299,6 +41338,14 @@ func _crt_open() -> void:
 	crt_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
 	crt_rect.material = mat
 	crt_layer.add_child(crt_rect)
+	#  잔상 — 한 틀이 다 그려지면 그 화면을 GPU 안에서 복사해 셰이더 prev 에 넣는다
+	#  (scripts/crt_trail.gd). 렌더링 디바이스가 없거나(호환 · 헤드리스) 세기 0 · 모션 끄기 ·
+	#  층이 꺼졌으면 아무것도 안 한다 — prev 가 검정이라 셰이더가 잔상 없이 선다.
+	var tr = preload("res://scripts/crt_trail.gd").new()
+	tr.name = "CrtTrail"
+	tr.mat = mat
+	tr.layer = crt_layer
+	crt_layer.add_child(tr)
 	add_child(crt_layer)
 	#  창 크기 · 전체화면이 바뀌면 보이는 논리 크기를 다시 넣는다 — 주사선이
 	#  논리 행에 서려면 그 수가 지금 화면의 것이어야 한다(16:10 이면 400 행).
@@ -41311,6 +41358,9 @@ func _crt_open() -> void:
 #  세기 · 굴곡 · 보이는 크기 · 모션 끄기를 셰이더에 앉힌다. 둘 다 0 이면 층째 숨긴다.
 func _crt_apply() -> void:
 	crt_mo = motion_off
+	#  밑의 두 층(VHS · 도트)도 같은 문을 지난다 — 창 크기 · 모션 끄기가 바뀌는 길이
+	#  이 함수 하나로 모여 있다(size_changed · _process 의 crt_mo 보기 · 개발자 판).
+	_retro_apply()
 	if crt_layer == null or not is_instance_valid(crt_layer):
 		return
 	var on: bool = crt > 0.004 or warp > 0.004
@@ -41335,6 +41385,88 @@ func _crt_apply() -> void:
 	if vs.x >= 1.0 and vs.y >= 1.0:
 		mat.set_shader_parameter("logical", vs)
 	mat.set_shader_parameter("motion", 0.0 if motion_off else 1.0)
+
+
+# ══════════════════════════════════════════════════════════
+#  VHS 필터 · 도트 팔레트 (2026-10-04)
+# ──────────────────────────────────────────────────────────
+#  「스캔라인이랑 다른 것들도 좀 사용해 볼까?」 — CRT 100 에서도 레트로가 약했다.
+#  CRT 밑에 층 둘을 더 깐다. 수치와 까닭은 셰이더 머리말에 있고 여기는 세기 하나씩만 쥔다.
+#    도트 팔레트  층 97  shaders/dot.gdshader — 다듬은 팔레트 + 논리 픽셀 4x4 디더
+#    VHS 필터     층 98  shaders/vhs.gdshader — 색 번짐 · 흔들림 · 헤드 스위칭 · 낟알
+#  깨끗한 그림을 먼저 줄이고(도트) 테이프로 흔든(VHS) 뒤 브라운관(CRT 100)이 받는다 —
+#  거꾸로 서면 주사선 띠까지 팔레트로 눌려 디더가 가로 줄무늬를 탄다.
+#  덮개(95) · 게임 오버 확대(90)도 이 층들 밑이라 같이 걸린다.
+#  0 이면 층째 숨긴다(CRT 와 같은 규약 — 화면 읽기는 안 쓰는 동안에도 값을 낸다).
+#  입력은 되짚지 않는다 — VHS 의 흔들림은 논리 1px 안이고 헤드 스위칭은 맨 밑 다섯 행뿐이다.
+const DOT_SHADER := "res://shaders/dot.gdshader"
+const VHS_SHADER := "res://shaders/vhs.gdshader"
+const DOT_LAYER := 97
+const VHS_LAYER := 98
+var dot_rect: ColorRect = null
+var vhs_rect: ColorRect = null
+
+
+#  온 화면 ColorRect 하나에 셰이더 하나를 건 층(_crt_open 과 같은 꼴). 셰이더를 못 읽으면 null.
+func _scr_layer(nm: String, path: String, z: int) -> ColorRect:
+	var sh: Shader = load(path) as Shader
+	if sh == null:
+		return null
+	var mat := ShaderMaterial.new()
+	mat.shader = sh
+	var lay := CanvasLayer.new()
+	lay.name = nm
+	lay.layer = z
+	var r := ColorRect.new()
+	r.name = nm + "Rect"
+	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	r.set_anchors_preset(Control.PRESET_FULL_RECT)
+	r.material = mat
+	lay.add_child(r)
+	add_child(lay)
+	return r
+
+
+func _retro_open() -> void:
+	if dot_rect == null or not is_instance_valid(dot_rect):
+		dot_rect = _scr_layer("Dot", DOT_SHADER, DOT_LAYER)
+	if vhs_rect == null or not is_instance_valid(vhs_rect):
+		vhs_rect = _scr_layer("Vhs", VHS_SHADER, VHS_LAYER)
+	#  창 크기 감시는 여기서도 잇는다 — CRT 셰이더를 못 읽어 _crt_open 이 일찍 빠져도
+	#  두 층의 보이는 논리 크기가 창을 따라간다(_crt_apply 가 _retro_apply 를 부른다).
+	var vp := get_viewport()
+	if vp != null and not vp.size_changed.is_connected(_crt_apply):
+		vp.size_changed.connect(_crt_apply)
+	_retro_apply()
+
+
+#  층 하나를 세기 v 로 — 0.004 아래면 층째 숨긴다. 선 층에는 보이는 논리 크기를 넣는다.
+#  돌려주는 것은 그 층의 재질(숨었거나 없으면 null).
+func _retro_one(r: ColorRect, v: float) -> ShaderMaterial:
+	if r == null or not is_instance_valid(r):
+		return null
+	var on: bool = v > 0.004
+	r.visible = on
+	(r.get_parent() as CanvasLayer).visible = on
+	if not on:
+		return null
+	var mat := r.material as ShaderMaterial
+	if mat == null:
+		return null
+	mat.set_shader_parameter("strength", v)
+	#  창을 내리면 보이는 크기가 0 으로 들어온다 — 지난 크기를 그대로 둔다(_crt_apply 와 같다).
+	var vs: Vector2 = get_viewport_rect().size
+	if vs.x >= 1.0 and vs.y >= 1.0:
+		mat.set_shader_parameter("logical", vs)
+	return mat
+
+
+func _retro_apply() -> void:
+	_retro_one(dot_rect, dot)
+	var vm := _retro_one(vhs_rect, vhs)
+	if vm != null:
+		#  모션 끄기 — 테이프 시계가 0 에 선다(흔들림 · 띠 · 낟알이 멎는다).
+		vm.set_shader_parameter("motion", 0.0 if motion_off else 1.0)
 
 
 # ══════════════════════════════════════════════════════════

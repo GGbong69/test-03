@@ -9,7 +9,8 @@ extends SceneTree
 #
 #   ① 셰이더 글에 식이 그대로 있다(warp_src · warp_out 줄) · uniform 이 선다
 #   ② 격자 점마다 game.gd 의 g(d) 가 셰이더 식을 GLSL 그대로 옮긴 계산과 1e-4 안이다
-#   ③ 굴곡 0 은 **정확한** 항등 — 식 · _warp_v · 이벤트 길 · 층이 꺼졌을 때까지
+#   ③ 굴곡 0 은 **정확한** 항등 — 식 · _warp_v · 이벤트 길 · 층이 꺼졌을 때까지.
+#      VHS 필터 · 도트 팔레트(층 98 · 97)는 입력을 되짚지 않는다 — 다 켜도 항등이다
 #   ④ 꼴 — 가운데 · 변 가운데는 제자리 · 모서리는 바깥을 집는다 · 화면 모서리는 테 ·
 #      원본은 둥근 모서리 말고는 다 보인다
 #   ⑤ 단추가 굴곡을 지나 눌린다 — 상점의 「일시정지」 · 「리롤」 · 「다음 판」을 **화면에
@@ -19,7 +20,9 @@ extends SceneTree
 #   ⑧ 일시정지 › 설정 › 화면 › 「화면 굴곡」 게이지를 굴곡 위에서 끈다 — 끄는 동안 굽힘이
 #      바뀌어도 손이 쥔 자리를 안 놓치고, 뗄 때 저장된다
 #   ⑨ (창) GPU 가 그린 화면에서 셰이더가 실제로 따 온 자리를 읽어 g(d) 와 견준다 —
-#      좌표를 색으로 적은 무늬를 깔고 굴곡 0 · 50 · 100 으로 찍어 화소마다 푼다
+#      좌표를 색으로 적은 무늬를 깔고 굴곡 0 · 50 · 100 으로 찍어 화소마다 푼다.
+#      VHS · 도트(2026-10-04) — 움직임 끔이면 멈춘 화면이 두 틀 같고 잔상이 쉰다 ·
+#      VHS 100 의 행 밀림이 맨 밑 다섯 행 위에서 논리 1px 안이다(줄무늬를 깔고 행마다 잰다)
 #
 #   사람의 저장은 안 건드린다 — 전역 · 프로필 둘 다 도구 자리로 돌린다.
 const GameData = preload("res://scripts/data.gd")
@@ -212,6 +215,9 @@ func _run() -> void:
 	_ok("도구 실행은 굴곡 0 · CRT 0 으로 뜬다", is_equal_approx(g.warp, 0.0)
 			and is_equal_approx(g.crt, 0.0) and not g.crt_layer.visible,
 			"굴곡 %.2f · CRT %.2f" % [g.warp, g.crt])
+	_ok("도구 실행은 VHS 0 · 도트 0 으로 뜬다 — 층이 숨었다", is_equal_approx(g.vhs, 0.0)
+			and is_equal_approx(g.dot, 0.0) and not g.vhs_rect.visible and not g.dot_rect.visible,
+			"VHS %.2f · 도트 %.2f" % [g.vhs, g.dot])
 	g._load_settings()
 	_ok("빈 저장의 기본 굴곡 50", is_equal_approx(g.warp, 0.5)
 			and is_equal_approx(float(g.WARP_DEF), 0.5), "%.2f" % g.warp)
@@ -264,6 +270,22 @@ func _run() -> void:
 	_move(Vector2(17.3, 211.9))
 	_ok("굴곡 0 — 움직임 이벤트가 예전 그대로", g.mouse_at == Vector2(17.3, 211.9) - g.view_pad,
 			"%s" % g.mouse_at)
+	#  VHS · 도트를 끝까지 켜도 되짚기는 굴곡만 따른다 — 둘은 그림만 바꾼다.
+	g.vhs = 1.0
+	g.dot = 1.0
+	g.crt = 1.0
+	g._crt_apply()
+	var same: bool = g.vhs_rect.visible and g.dot_rect.visible and g._warp_live() == 0.0
+	for p in [Vector2(3.0, 5.0), Vector2(320.0, 357.0), L - Vector2(1.0, 1.0)]:
+		if g._warp_v(p) != p or not g._warp_hit(p):
+			same = false
+	_move(Vector2(17.3, 211.9))
+	_ok("VHS · 도트 100 · 굴곡 0 — 입력이 제자리", same
+			and g.mouse_at == Vector2(17.3, 211.9) - g.view_pad, "%s" % g.mouse_at)
+	g.vhs = 0.0
+	g.dot = 0.0
+	g.crt = 0.0
+	g._crt_apply()
 
 	# ── ④ 꼴 ─────────────────────────────────────────────
 	_set_w(0.5)
@@ -430,6 +452,7 @@ func _run() -> void:
 		print("  (⑨ 건너뜀 — 창이 있어야 GPU 가 그린다)")
 	else:
 		await _gpu()
+		await _gpu_retro()
 
 	_set_w(0.0)
 	print("\n통과 %d · 실패 %d" % [ok, bad])
@@ -551,3 +574,147 @@ func _fine(coarse: float, f: float) -> float:
 	var fx: float = f * 8.0
 	var k: float = roundf((coarse - fx) / 8.0)
 	return k * 8.0 + fx
+
+
+# ── ⑨ VHS · 도트 ────────────────────────────────────────────
+#  입력은 VHS 를 되짚지 않는다 — 그러니 그림이 논리 1px 넘게 옮겨 앉으면 안 된다. 헤드리스의
+#  「입력이 제자리」는 _warp_v 가 VHS 를 안 보니 늘 맞는다. 여기서는 GPU 가 그린 화면을 잰다.
+#  줄무늬: 논리 3px 폭 회색 띠가 해시로 켜지고 꺼진다(되풀이가 없어 밀림을 하나로 짚는다).
+#  회색이라 VHS 의 색 번짐은 무늬를 안 옮긴다 — 밝기 가장자리만 본다.
+const STRIPES := """shader_type canvas_item;
+uniform vec2 logical = vec2(640.0, 360.0);
+void fragment() {
+	float c = floor(SCREEN_UV.x * logical.x / 3.0);
+	float h = fract(sin(c * 12.9898) * 43758.5453);
+	COLOR = vec4(vec3(h > 0.5 ? 0.85 : 0.15), 1.0);
+}
+"""
+
+
+func _shot() -> Image:
+	await _wait(4)
+	await RenderingServer.frame_post_draw
+	return root.get_texture().get_image()
+
+
+func _gpu_retro() -> void:
+	var L: Vector2 = g.get_viewport_rect().size
+	var mat := g.crt_rect.material as ShaderMaterial
+	var vm := g.vhs_rect.material as ShaderMaterial
+	var tr = g.crt_layer.get_node_or_null("CrtTrail")
+	#  ① 움직임 — 트리를 멈추고 같은 화면을 두 번 찍는다. 끄면 화소까지 같아야 하고, 켜면
+	#  갈려야 한다(갈리지 않으면 이 검사가 아무것도 못 잡는 것이다).
+	var cases := [[0.0, true], [1.0, true], [1.0, false]]
+	paused = true
+	for cs in cases:
+		var on: float = float(cs[0])
+		g.motion_off = bool(cs[1])
+		g.crt = on
+		g.warp = 0.5 * on
+		g.vhs = on
+		g.dot = on
+		g._crt_apply()
+		vm.set_shader_parameter("clock", -1.0)
+		await _wait(8)
+		var a: Image = await _shot()
+		await _wait(7)
+		var b: Image = await _shot()
+		var mx: float = float(a.compute_image_metrics(b, false).get("max", -1.0))
+		if on <= 0.0:
+			_ok("GPU 필터 끔 · 멈춘 화면 — 두 틀이 같다(밑그림이 안 움직인다)", mx == 0.0,
+					"최대 차 %s" % mx)
+		elif bool(cs[1]):
+			_ok("GPU 움직임 끔 — CRT · VHS · 도트 100 · 굴곡 50 에서도 두 틀이 화소까지 같다",
+					mx == 0.0, "최대 차 %s" % mx)
+			_ok("GPU 움직임 끔 — 잔상이 쉰다(prev 비었다)", tr != null and not bool(tr.held)
+					and mat.get_shader_parameter("prev") == null,
+					"held %s · prev %s" % [tr.held if tr != null else null,
+					mat.get_shader_parameter("prev")])
+		else:
+			_ok("GPU 움직임 켬 — 같은 화면이라도 틀마다 갈린다(위 검사가 잡을 수 있다)", mx > 0.0,
+					"최대 차 %s" % mx)
+			_ok("GPU 움직임 켬 — 잔상이 앞 틀을 쥔다", tr != null and bool(tr.held)
+					and mat.get_shader_parameter("prev") != null, "err %s" % [tr.err if tr != null else null])
+	paused = false
+	g.motion_off = false
+	#  ② VHS 100 의 행 밀림 — 줄무늬(층 96 · VHS 밑)를 VHS 0 과 100 으로 찍어 행마다 견준다.
+	g.crt = 0.0
+	g.warp = 0.0
+	g.dot = 0.0
+	g.vhs = 0.0
+	g._crt_apply()
+	var lay := CanvasLayer.new()
+	lay.layer = 96
+	var rect := ColorRect.new()
+	rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var sm := ShaderMaterial.new()
+	var shp := Shader.new()
+	shp.code = STRIPES
+	sm.shader = shp
+	sm.set_shader_parameter("logical", L)
+	rect.material = sm
+	lay.add_child(rect)
+	root.add_child(lay)
+	var a0: Image = await _shot()
+	a0.convert(Image.FORMAT_RGBA8)
+	var da := a0.get_data()
+	var iw := a0.get_width()
+	var ppl: float = float(a0.get_height()) / L.y
+	#  재질에 안 앉힌 uniform 은 null 로 온다 — 셰이더 기본값을 읽는다.
+	var hv = RenderingServer.shader_get_parameter_default(vm.shader.get_rid(), "hs_rows")
+	var hs: int = int(hv) if hv != null else 5
+	#  시계 넷 — 물결 · 떨림이 갈리는 서로 다른 틀.
+	var worst := 0
+	var bot := 0
+	var rows_n := 0
+	for clk in [0.5, 1.37, 2.164, 4.4]:
+		g.vhs = 1.0
+		g._crt_apply()
+		vm.set_shader_parameter("clock", float(clk))
+		var b0: Image = await _shot()
+		b0.convert(Image.FORMAT_RGBA8)
+		var db := b0.get_data()
+		for r in int(L.y):
+			var y := int((float(r) + 0.5) * ppl)
+			var k := _row_shift(da, db, iw, y, int(ceilf(6.0 * ppl)))
+			if r < int(L.y) - hs:
+				worst = maxi(worst, absi(k))
+				rows_n += 1
+			elif r == int(L.y) - 1:
+				bot = maxi(bot, absi(k))
+	vm.set_shader_parameter("clock", -1.0)
+	_ok("GPU VHS 100 — 맨 밑 %d행 위 %d행의 밀림이 논리 1px(기기 %d) 안" % [hs, rows_n,
+			int(ppl)], worst <= int(ppl), "가장 큰 밀림 기기 %d px" % worst)
+	_ok("GPU VHS 100 — 맨 밑 행은 헤드 스위칭으로 밀린다(재는 자가 밀림을 본다)",
+			bot > int(ppl), "기기 %d px" % bot)
+	lay.queue_free()
+	g.vhs = 0.0
+	g._crt_apply()
+
+
+#  기기 행 y 의 밝기(0~255) — 화소를 하나씩 집으면 느려서 바이트(RGBA8)로 읽는다.
+func _lum(d: PackedByteArray, w: int, y: int) -> PackedFloat32Array:
+	var o := PackedFloat32Array()
+	o.resize(w)
+	var base := y * w * 4
+	for x in w:
+		var i := base + x * 4
+		o[x] = 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]
+	return o
+
+
+#  b 가 a 를 몇 기기 px 민 것인지 — 밝기 차 합이 가장 작은 밀림(±m).
+func _row_shift(da: PackedByteArray, db: PackedByteArray, w: int, y: int, m: int) -> int:
+	var la := _lum(da, w, y)
+	var lb := _lum(db, w, y)
+	var best := 0
+	var bs := INF
+	for k in range(-m, m + 1):
+		var sad := 0.0
+		for x in range(m + 2, w - m - 2, 2):
+			sad += absf(lb[x] - la[x + k])
+		if sad < bs:
+			bs = sad
+			best = k
+	return best

@@ -17,6 +17,9 @@ extends SceneTree
 #   ⑥ 저장한 값을 다음 실행이 되읽는다
 #   ⑦ 모션 끄기면 깜박임 · 낟알이 꺼진다 · 보이는 논리 크기가 셰이더에 앉는다
 #   ⑧ 개발자 판 사다리 다섯 칸(0 · 25 · 40 · 60 · 100)이 같은 값을 민다
+#   ⑨ VHS 필터 · 도트 팔레트(2026-10-04 — CRT 밑 층 98 · 97) — 셰이더 구문 · 층 자리 ·
+#      0 이면 숨음 · 혼자 섬 · 논리 크기 · 모션 끄기(VHS) · 설정 줄을 누르고 끌고 떼고 휠 ·
+#      저장 · 되읽기 · 개발자 판 사다리. 잔상 손(crt_trail)이 CRT 층에 붙었는지도 ③ 에서 본다
 #
 #   사람의 저장은 안 건드린다 — 전역 · 프로필 둘 다 도구 자리로 돌린다.
 const GameData = preload("res://scripts/data.gd")
@@ -100,7 +103,8 @@ func _run() -> void:
 			names.append(String((u as Dictionary).get("name", "")))
 		_ok("화면 읽기 셰이더다", (sh as Shader).code.contains("hint_screen_texture"))
 	#  bend 는 없다 — 굽힘이 「화면 굴곡」(warp)으로 갈라 나갔다(qa_warp 가 잰다).
-	var need := ["strength", "logical", "motion", "scan", "mask", "warp", "glow", "vig"]
+	var need := ["strength", "logical", "motion", "scan", "mask", "warp", "glow", "vig",
+			"beam_lo", "beam_hi", "roll", "prev", "trail", "trail_dt"]
 	var miss := []
 	for nm in need:
 		if not names.has(nm):
@@ -119,12 +123,23 @@ func _run() -> void:
 	_ok("도구 실행은 꺼진 채 뜬다", is_equal_approx(float(g.crt), 0.0)
 			and is_equal_approx(float(g.warp), 0.0) and not lay.visible,
 			"CRT %.2f · 굴곡 %.2f · 보임 %s" % [float(g.crt), float(g.warp), lay.visible])
+	_ok("도구 실행은 VHS · 도트도 꺼진 채 뜬다", is_equal_approx(float(g.vhs), 0.0)
+			and is_equal_approx(float(g.dot), 0.0) and g.vhs_rect != null and g.dot_rect != null
+			and not (g.vhs_rect.get_parent() as CanvasLayer).visible
+			and not (g.dot_rect.get_parent() as CanvasLayer).visible,
+			"VHS %.2f · 도트 %.2f" % [float(g.vhs), float(g.dot)])
 	#  게임이 켤 때 읽는 그 길(_load_settings) — 빈 저장이면 40.
 	g._load_settings()
 	_ok("기본값 40", is_equal_approx(float(g.CRT_DEF), 0.4)
 			and is_equal_approx(float(g.crt), 0.4), "CRT_DEF %.2f · 빈 저장에서 읽은 값 %.2f"
 			% [float(g.CRT_DEF), float(g.crt)])
 	_ok("저장에 아직 안 적었다", _disk_crt() == null, "%s" % [_disk_crt()])
+	_ok("VHS · 도트 기본값도 빈 저장에서 앉는다 · 층이 선다", is_equal_approx(float(g.vhs),
+			float(g.VHS_DEF)) and is_equal_approx(float(g.dot), float(g.DOT_DEF))
+			and (g.vhs_rect.get_parent() as CanvasLayer).visible == (float(g.VHS_DEF) > 0.004)
+			and (g.dot_rect.get_parent() as CanvasLayer).visible == (float(g.DOT_DEF) > 0.004),
+			"VHS %.2f(표 %.2f) · 도트 %.2f(표 %.2f)" % [float(g.vhs), float(g.VHS_DEF),
+				float(g.dot), float(g.DOT_DEF)])
 	#  굴곡도 같은 길로 50 이 앉았다. 아래 클릭은 원본 자리를 그대로 누르므로 굴곡을
 	#  0 으로 내리고 잰다 — 굴곡 위의 누름은 qa_warp 가 잰다. 둘 다 서 있는 층에서
 	#  CRT 만 0 이면 층은 **선 채로** 남아야 한다(굴곡이 그리는 중이다).
@@ -143,6 +158,13 @@ func _run() -> void:
 			top = false
 	_ok("맨 위 층이다", top and lay.layer > 0, "layer %d" % lay.layer)
 	_ok("클릭을 안 먹는다", rect.mouse_filter == Control.MOUSE_FILTER_IGNORE)
+	#  잔상 손 — CRT 층에 붙는다. 헤드리스는 렌더링 디바이스가 없어 쉰다(prev 가 빈다).
+	var trn = lay.get_node_or_null("CrtTrail")
+	_ok("잔상 손이 CRT 층에 붙었다", trn != null and trn.mat == rect.material
+			and trn.layer == lay)
+	if DisplayServer.get_name() == "headless":
+		_ok("헤드리스면 잔상이 쉰다 — prev 가 비었다", trn != null and trn.rd == null
+				and (rect.material as ShaderMaterial).get_shader_parameter("prev") == null)
 	_ok("온 화면을 덮는다", is_equal_approx(rect.anchor_right, 1.0)
 			and is_equal_approx(rect.anchor_bottom, 1.0)
 			and rect.anchor_left == 0.0 and rect.anchor_top == 0.0)
@@ -361,3 +383,188 @@ func _run() -> void:
 	Dev.page = pg0
 	g.crt = 0.4
 	g._crt_apply()
+
+	# ── ⑨ VHS 필터 · 도트 팔레트 ──────────────────────────
+	print("")
+	_retro_check("vhs", "VHS 필터", g.VHS_SHADER, float(g.VHS_DEF), int(g.VHS_LAYER),
+			Dev.VHS_STEPS)
+	print("")
+	_retro_check("dot", "도트 팔레트", g.DOT_SHADER, float(g.DOT_DEF), int(g.DOT_LAYER),
+			Dev.DOT_STEPS)
+	#  설정 화면 탭의 차림 — CRT · 굴곡 밑에 VHS · 도트.
+	g.state = g.S.SETTINGS
+	g.pause_from = g.S.SHOP
+	g._set_go("screen")
+	_ok("화면 탭 — 전체화면 · CRT · 굴곡 · VHS · 도트 · 뒤로", (g._set_rows() as Array)
+			== ["fs", "crt", "warp", "vhs", "dot", "back"], "%s" % [g._set_rows()])
+	g.state = g.S.SHOP
+	g.pause_from = -1
+
+
+func _disk(key: String) -> Variant:
+	var c := ConfigFile.new()
+	if c.load(GPATH) != OK:
+		return null
+	return c.get_value("설정", key, null)
+
+
+#  ⑨ 층 하나 — VHS(98) · 도트(97). 같은 자로 잰다.
+func _retro_check(key: String, nm: String, shp: String, def: float, z: int,
+		steps: Array) -> void:
+	var rect: ColorRect = g.vhs_rect if key == "vhs" else g.dot_rect
+	var shx = load(shp)
+	var un := PackedStringArray()
+	if shx is Shader:
+		for u in (shx as Shader).get_shader_uniform_list():
+			un.append(String((u as Dictionary).get("name", "")))
+	var needx := ["strength", "logical"]
+	if key == "vhs":
+		needx.append("motion")
+	var missx := []
+	for u in needx:
+		if not un.has(u):
+			missx.append(u)
+	_ok("%s — 셰이더 구문이 선다(화면 읽기)" % nm, shx is Shader and missx.is_empty()
+			and (shx as Shader).code.contains("hint_screen_texture"),
+			"%d개 · 빠짐 %s" % [un.size(), missx])
+	_ok("%s — 층이 섰다" % nm, rect != null)
+	if rect == null:
+		return
+	var lay := rect.get_parent() as CanvasLayer
+	_ok("%s — 층 %d · 게임 오버(%d) · 덮개(%d) 위 · CRT(%d) 밑" % [nm, lay.layer,
+			g.oc_layer.layer, g.wipe_layer.layer, g.crt_layer.layer], lay.layer == z
+			and lay.layer > g.wipe_layer.layer and lay.layer > g.oc_layer.layer
+			and lay.layer < g.crt_layer.layer)
+	_ok("%s — 클릭을 안 먹는다 · 온 화면" % nm, rect.mouse_filter == Control.MOUSE_FILTER_IGNORE
+			and is_equal_approx(rect.anchor_right, 1.0) and is_equal_approx(rect.anchor_bottom, 1.0)
+			and rect.anchor_left == 0.0 and rect.anchor_top == 0.0)
+	var mat := rect.material as ShaderMaterial
+	g._vol_set(key, 0.0)
+	_ok("%s — 0 이면 층째 숨는다" % nm, not lay.visible and not rect.visible)
+	g._vol_set(key, 0.01)
+	_ok("%s — 1 이면 선다 · 세기가 앉는다" % nm, lay.visible and rect.visible
+			and is_equal_approx(float(mat.get_shader_parameter("strength")), 0.01))
+	#  CRT · 굴곡이 둘 다 꺼져 CRT 층이 숨어도 혼자 선다 — 문은 _crt_apply 하나다.
+	var c0: float = g.crt
+	var w0: float = g.warp
+	g.crt = 0.0
+	g.warp = 0.0
+	g._vol_set(key, 0.5)
+	_ok("%s — CRT 층이 숨어도 혼자 선다" % nm, lay.visible and not g.crt_layer.visible)
+	g.crt = c0
+	g.warp = w0
+	g._crt_apply()
+	var lg = mat.get_shader_parameter("logical")
+	_ok("%s — 보이는 논리 크기가 앉는다" % nm, lg is Vector2
+			and (lg as Vector2).is_equal_approx(g.get_viewport_rect().size), "%s" % [lg])
+	#  창을 16:10 으로 바꾸면 size_changed 길로 다시 앉는다. 바랄 값은 손으로 셈한 것이다
+	#  (640x360 · expand → 640x400) — 넣은 곳과 견주는 곳이 같으면 늘 맞는다.
+	var rs0: Vector2i = root.size
+	root.size = Vector2i(1280, 800)
+	var lg2 = mat.get_shader_parameter("logical")
+	_ok("%s — 16:10 창이면 논리 640x400 이 앉는다(창 크기 감시)" % nm, lg2 is Vector2
+			and (lg2 as Vector2).is_equal_approx(Vector2(640.0, 400.0)),
+			"%s · 창 %s" % [lg2, root.size])
+	root.size = rs0
+	if key == "vhs":
+		g.motion_off = true
+		g._process(1.0 / 60.0)
+		_ok("VHS — 모션 끄기면 테이프 시계가 선다(motion 0)",
+				is_equal_approx(float(mat.get_shader_parameter("motion")), 0.0))
+		g.motion_off = false
+		g._process(1.0 / 60.0)
+		_ok("VHS — 모션 켜면 돌아온다",
+				is_equal_approx(float(mat.get_shader_parameter("motion")), 1.0))
+	# ── 설정 줄 — 누르고 · 끌고 · 떼고 · 휠
+	g.state = g.S.SETTINGS
+	g.pause_from = g.S.SHOP
+	g._set_go("screen")
+	g.set_t = 1.0
+	g.set_pg_t = 1.0
+	g.mouse_at = Vector2(-50.0, -50.0)
+	var rows: Array = g._set_rows()
+	var ri := rows.find(key)
+	var info: Dictionary = g._set_info(key)
+	_ok("%s — 화면 탭의 게이지 줄 · 설명 없음" % nm, ri >= 0 and String(info.get("n", "")) == nm
+			and bool(info.get("g", false)) and not info.has("d"), "%d · %s" % [ri, info])
+	if ri < 0:
+		return
+	var r: Rect2 = g._set_rect(ri)
+	_ok("%s — 줄이 화면 안이다" % nm, r.end.y <= 354.0 and r.position.y >= 6.0, "%s" % [r])
+	var tr: Rect2 = g._vol_track(ri)
+	var p0 := Vector2(tr.position.x + tr.size.x * 0.20, tr.get_center().y)
+	var p1 := Vector2(tr.position.x + tr.size.x * 0.70, tr.get_center().y)
+	_mouse(p0, true)
+	_ok("%s — 홈을 누르면 그 자리 · 끈다" % nm, g.set_drag == ri
+			and is_equal_approx(g._gauge_v(key), 0.2), "drag %d · %.2f" % [g.set_drag,
+			g._gauge_v(key)])
+	_move(p1)
+	_ok("%s — 끌면 따라온다 · 층이 그 값" % nm, is_equal_approx(g._gauge_v(key), 0.7)
+			and is_equal_approx(float(mat.get_shader_parameter("strength")), 0.7),
+			"%.2f" % g._gauge_v(key))
+	_mouse(p1, false)
+	_ok("%s — 떼면 놓고 저장된다" % nm, g.set_drag == -1 and _disk(key) != null
+			and is_equal_approx(float(_disk(key)), 0.7), "디스크 %s" % [_disk(key)])
+	g.wheel_ms = 0
+	g._wheel(r.position + Vector2(30.0, r.size.y * 0.5), -1)
+	_ok("%s — 휠 한 칸 = 5(줄 어디서나)" % nm, is_equal_approx(g._gauge_v(key), 0.75),
+			"%.2f" % g._gauge_v(key))
+	g._vol_save_due()
+	_ok("%s — 휠 값도 저장된다" % nm, _disk(key) != null
+			and is_equal_approx(float(_disk(key)), 0.75))
+	_mouse(p0, true)
+	_move(Vector2(tr.position.x - 30.0, tr.get_center().y))
+	_mouse(Vector2(tr.position.x - 30.0, tr.get_center().y), false)
+	_ok("%s — 왼끝까지 끌면 0 · 숨는다 · 저장" % nm, is_equal_approx(g._gauge_v(key), 0.0)
+			and not lay.visible and _disk(key) != null and is_equal_approx(float(_disk(key)), 0.0))
+	# ── 되읽기
+	Save.set_set(key, 0.42)
+	g._vol_set(key, 0.9)
+	g._load_settings()
+	_ok("%s — 저장한 값을 되읽어 층에 앉힌다" % nm, is_equal_approx(g._gauge_v(key), 0.42)
+			and lay.visible and is_equal_approx(float(mat.get_shader_parameter("strength")), 0.42),
+			"%.2f" % g._gauge_v(key))
+	g.state = g.S.SHOP
+	g.pause_from = -1
+	# ── 개발자 판 — 굴곡 줄 밑
+	var pg0 := Dev.page
+	var hit := -1
+	for pg in Dev.PAGES.size():
+		Dev.page = pg
+		var rs: Array = Dev._rows(g)
+		var wi := -1
+		var ki := -1
+		for i in rs.size():
+			var kk := String((rs[i] as Dictionary).get("k", ""))
+			if kk == key:
+				ki = i
+			elif kk == "warp":
+				wi = i
+		if ki >= 0:
+			hit = pg
+			_ok("%s — 개발자 판 줄이 굴곡 밑 · 열아홉 줄 안" % nm, rs.size() <= 19
+					and ki > wi and wi >= 0,
+					"%d쪽 · %d번째 · 굴곡 %d · %d줄" % [pg, ki, wi, rs.size()])
+			break
+	_ok("%s — 개발자 판에 줄이 있다" % nm, hit >= 0)
+	_ok("%s — 고르개가 안 빈다" % nm, Dev._names(key).size() == steps.size(),
+			"%s" % [Dev._names(key)])
+	var got := []
+	var want := []
+	for j in steps.size():
+		Dev.pick[key] = j
+		Dev._run(g, {"k": key})
+		got.append(int(roundf(g._gauge_v(key) * 100.0)))
+		want.append(int(roundf(float(steps[j]) * 100.0)))
+	_ok("%s — 사다리가 같은 값을 민다 · 셋째가 기본값" % nm, got == want
+			and is_equal_approx(float(steps[2]), def), "%s · 기본 %.2f" % [got, def])
+	Dev.pick[key] = 0
+	Dev._run(g, {"k": key})
+	_ok("%s — 사다리 0 이면 숨는다" % nm, not lay.visible)
+	g._vol_set(key, float(steps[3]))
+	Dev.page = maxi(hit, 0)
+	Dev._rows(g)
+	_ok("%s — 값 칸이 지금 값에 맞는다" % nm, int(Dev.pick.get(key, -1)) == 3,
+			Dev._cur_name(g, {"k": key}))
+	Dev.page = pg0
+	g._vol_set(key, def)
