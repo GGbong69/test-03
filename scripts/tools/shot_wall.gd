@@ -10,8 +10,10 @@ extends SceneTree
 #    wall_swap.png      판 갈이 한가운데(테이블이 빠지고 판이 선다)
 #    wall_swap_b.png    판 갈이 끝무렵
 #    wall_break.png     판 깨짐 — 판이 뜬 자리(벽에 남은 자국)
-#    wall_off.png       벽을 끈 옛 화면(개발자 5쪽 「다트판 벽」)과 맞대기
+#    wall_swap_out.png  정산 → 상점 판 갈이(덮개를 못 트는 길) — 정산의 덮개에서 상점 방으로
+#    wall_shop.png      상점(견줄 거리)
 #    wall_wide.png      1440x900(16:10) — 여백(view_pad)까지 덮는가
+#    wall_1080.png      1920x1080 — 굽는 배율이 창 배율(3)을 따르는가
 #  인자 -- off 이면 벽을 끄고 같은 이름 앞에 off_ 를 붙여 찍는다.
 #  창이 있어야 돈다:  godot --path . --script scripts/tools/shot_wall.gd
 const Save = preload("res://scripts/save.gd")
@@ -183,9 +185,11 @@ func _run() -> void:
 	_step(0.3)
 	await _shot("clear")
 
-	# ── 16:10 창 — 여백까지 ──
+	# ── 정산 → 상점 판 갈이(덮개를 못 트는 길 — 도구 · 움직임 끔) ──
 	g._click(Vector2(-1.0, -1.0))
-	_step(2.5)
+	_step(0.05)
+	await _shot("swap_out")
+	_step(2.45)
 	g._tutor_close()
 	g.tutor_q.clear()
 	await _shot("shop")

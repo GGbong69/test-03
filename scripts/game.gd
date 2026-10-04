@@ -8986,8 +8986,12 @@ func _draw() -> void:
 			# 정산 화면의 스크림(0.94)을 이어받아 푼다. 안 풀면 눌러 넘긴
 			# 첫 프레임이 전환에서 가장 밝은 프레임이 된다 — 이음새가
 			# 아니라 번쩍임이다. 나가는 쪽은 밝은 테이블에서 오므로 안 건다.
-			draw_rect(_full(),
-					Color(C_BG, 0.94 * _swap_rise()))
+			#  다트판 벽이 서 있으면 정산이 벽에 씌운 그 덮개를 이어받는다(_wall3_scrim).
+			if w3:
+				_wall3_scrim(_swap_rise())
+			else:
+				draw_rect(_full(),
+						Color(C_BG, 0.94 * _swap_rise()))
 			# 들어오는 테이블이 나중이다 — 다 누운 판을 덮으며 자리를 잡는다.
 			_swap_screen(sh)
 	else:
@@ -13482,11 +13486,25 @@ func _wall3_clear() -> void:
 	draw_rect(_full(), C_BG)
 	var r := _wall3_rect()
 	draw_texture_rect(wall3_vp.get_texture(), r, false, Color(1.0, 1.0, 1.0, 1.0 - float(WALL3.clear)))
+	_wall3_mid(1.0)
+
+
+#  정산의 덮개를 벽 · 판 위에 k 만큼 — 판 → 상점 판 갈이(덮개를 못 트는 길)가 정산의 그
+#  그림에서 풀려 나간다. 옛 0.94 한 장이면 정산의 옅게 비친 바가 첫 틀에 꺼졌다 켜졌다.
+func _wall3_scrim(k: float) -> void:
+	if k <= 0.0:
+		return
+	draw_rect(_full(), Color(C_BG, float(WALL3.clear) * k))
+	_wall3_mid(k)
+
+
+#  정산 글자 띠 — 가운데를 더 덮고 양옆으로 mid_fade 에 걸쳐 풀린다.
+func _wall3_mid(k: float) -> void:
 	var f := _full()
 	var x0: float = float(WALL3.mid_x0)
 	var x1: float = float(WALL3.mid_x1)
 	var fd: float = float(WALL3.mid_fade)
-	var cm := Color(C_BG, float(WALL3.clear_mid))
+	var cm := Color(C_BG, float(WALL3.clear_mid) * k)
 	var ce := Color(C_BG, 0.0)
 	draw_rect(Rect2(x0, f.position.y, x1 - x0, f.size.y), cm)
 	for sd in [-1.0, 1.0]:

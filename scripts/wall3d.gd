@@ -57,6 +57,7 @@ const LOOK := {
 	#  빛 웅덩이(램프에 비추는 동그란 그러데이션) [반지름 몫, 밝기] — 판 둘레는 고루,
 	#  링 바깥 한 뼘부터 기둥 가장자리 · 위로 진다.
 	"pool": [[0.0, 1.0], [0.30, 0.95], [0.55, 0.55], [0.80, 0.16], [1.0, 0.0]],
+	"holes": 46,              # 링 바깥 판자의 빗나간 촉 구멍 수
 }
 
 
@@ -167,6 +168,20 @@ static func _pillar(root: Node3D) -> void:
 	var pair: Array = Room3D._plank(int((y1 - y0) * S), int(w * S), PLANK, 20261004, 40, 52)
 	var im: Image = pair[0]
 	im.rotate_90(CLOCKWISE)
+	#  빗나간 자국 — 링 바깥 판자에 박혔다 뽑힌 촉 구멍. 링 가까이 촘촘하고 멀수록 성기다.
+	#  텍셀 (u, v) = 판 평면 논리 px 라 판 한가운데가 (PILLAR · S, y1 · S) 다.
+	var hr := RandomNumberGenerator.new()
+	hr.seed = 1004
+	var c0 := Vector2(PILLAR * S, y1 * S)
+	for _k in int(LOOK.holes):
+		var a: float = hr.randf_range(0.0, TAU)
+		var rr: float = RING + 124.0 + absf(hr.randfn(0.0, 26.0))
+		var hp := Vector2i((c0 + Vector2(cos(a), sin(a)) * rr).floor())
+		if hp.x < 1 or hp.y < 1 or hp.x >= im.get_width() - 1 or hp.y >= im.get_height() - 1:
+			continue
+		var base := im.get_pixelv(hp)
+		im.set_pixelv(hp, base.darkened(0.7))
+		im.set_pixelv(hp + Vector2i(1, 1), base.lightened(0.12))
 	var m := StandardMaterial3D.new()
 	m.albedo_texture = ImageTexture.create_from_image(im)
 	m.roughness = 0.82
