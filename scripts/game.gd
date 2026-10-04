@@ -17423,7 +17423,11 @@ const SWEEP := {
 	#  온 연출의 빠르기. 세 박자(뻗기 · 훑기 · 복귀)를 같은 비로 줄인다 — 박자끼리의
 	#  비가 팔의 무게를 정하므로 하나만 줄이면 순간이동으로 읽힌다(아래 reach 주석).
 	#  「딜러 리롤 속도가 조금 높아졌으면」(사용자, 2026-09-17) — 1.08초 → 0.83초.
-	"speed": 1.3,
+	#  1.3 → 1.6(2026-10-04 「NPC의 행동 속도를 좀 높여줘 속도감 있게」) — 뻗기 · 훑기 · 복귀가
+	#  0.83 초에서 0.68 초로. 뻗기(0.26 → 실시간 0.16)는 「순간이동」(0.16 → 0.12)보다 아직 길다.
+	#  1.75 는 물건 하나가 날지 못하고 끌려 벽에 닿았다(qa_smash 「날아와서 닿는다」 49 면px/s).
+	#  조각 수명(SMASH.life_*)도 같은 비로 줄였다 — 새 판이 일찍 떨어지는 만큼.
+	"speed": 1.6,
 	"reach": 0.26,       # 팔을 오른쪽 끝까지 뻗는다. 0.16 은 순간이동으로 읽혔다
 	"rake": 0.52,        # 훑는다. 이 동안만 왼쪽 벽이 열린다
 	#  훑기의 **가속 구간 비**. 앞 9% 에서 최고속(2555 면px/s)까지 치솟고
@@ -17568,7 +17572,9 @@ const SMASH := {
 	#  **프레임 폭마다 따로 잰다**(2026-09-18). 조각은 서브스텝을 안 타는 맨
 	#  오일러라 DROP.sub 로 재면 게임이 안 쓰는 숫자가 나온다. 200롤 실측:
 	#  1/60 에서 0.113초 · DROP.max_d(0.033)에서 0.118초. 문턱은 0.10 이다.
-	"life_lo": 0.24, "life_hi": 0.34,
+	#  2026-10-04 쓸기를 1.3 → 1.6 배로 빠르게 하며(SWEEP.speed) 새 판이 그만큼 일찍 떨어져
+	#  0.24 · 0.34 로는 여유가 0.079초로 줄었다 — 같은 비로 0.22 · 0.30 으로 줄인다.
+	"life_lo": 0.22, "life_hi": 0.30,
 	"sink_t": 0.10,      # 마지막 이 시간 동안 펠트 색으로 가라앉는다
 	"spread": 0.9599,    # 벽 법선 둘레로 흩는 각(rad, 55°). ±90°면 벽을 파고들고 ±25°면 다발로 뭉친다
 	#  ── 부스러기 ──────────────────────────────────
@@ -20631,6 +20637,13 @@ const FORE3 := {
 	#  살 밝은 면(241,192,139) 아래다. 손이 먼저 읽히는 것은 살빛 채도가 맡는다.
 	"cloth": SHIRT3,
 	"fold": Color8(110, 113, 140),  # 접힌 골 — 같은 천 한 단 아래. 주황기를 빼야 놋쇠 띠와 안 섞인다
+	#  손 굴림을 팔뚝이 나눠 받는 비(2026-10-04) — 「지금 손목이 돌아가면 팔 전완도 돌려져야
+	#  좀 자연스럽지 않을까?」. 손을 뒤집는(엎침 · 뒤침) 것은 손목이 아니라 **팔뚝**이다 —
+	#  노뼈가 자뼈 둘레를 돌아 손목 쪽 끝은 손을 거의 다 따라 돌고 팔꿈치 쪽은 조금만 돈다.
+	#  전에는 팔뚝 한 덩어리가 절반(0.5)만 따라 돌아, 망치 주먹(−90°)에서 손만 홱 서고 팔뚝은
+	#  45° 에 남아 손목에서 꺾여 보였다. 이제 세 토막이 팔꿈치에서 손목으로 차례로 더 돈다:
+	#  소매(팔꿈치 위로 걷어 남은 천) · 걷은 단 · 맨살 팔뚝(손목까지).
+	"tw_slv": 0.35, "tw_roll": 0.55, "tw_bare": 0.85,
 	"brass": Color("c89a4a"),       # 진열대 놋쇠(Room3D.COL.brass)와 같은 쇠
 }
 
@@ -21898,10 +21911,15 @@ func _hand3_sync() -> void:
 		var dv3 := wp - ap
 		if dv3.length() > 0.001:
 			ax = ap - dv3.normalized() * float(HAND3.back)
+		#  팔뚝은 손 굴림을 토막마다 나눠 받는다(FORE3.tw_*) — 뿌리(소매)가 가장 적게, 맨살이
+		#  가장 많이 돈다. 뿌리 노드는 소매 몫만 돌고, 걷은 단 · 맨살은 제 축(x — 팔뚝 축)
+		#  둘레로 그 위 몫을 더 돈다.
+		var frl: float = float(ps.get("roll", 0.0))
 		am.transform = _aim3(ax, wp, 1.0,
-				deg_to_rad(float(HAND3.roll)) + float(ps.get("roll", 0.0)) * 0.5)
+				deg_to_rad(float(HAND3.roll)) + frl * float(FORE3.tw_slv))
 		am.visible = true
 		_fore3_fit(rg.fore, (wp - ax).length(), sc)
+		_fore3_twist(rg.fore, frl)
 		#  위팔 — 어깨에서 팔꿈치까지. 어깨는 동전 슬롯 뒤라 화면에서는 슬롯
 		#  밑변에서 나와 옆구리를 따라 팔꿈치로 내려오는 토막만 보인다.
 		#  끝을 팔꿈치 너머로 반 폭 더 내려 팔뚝 뿌리를 덮는다 — 두 상자의 모서리가
@@ -21964,6 +21982,14 @@ func _fore3_fit(fo: Dictionary, ln: float, sc: float) -> void:
 	var sl: float = x0 - float(F.roll) * 0.5
 	sv.visible = sl > 0.5
 	sv.scale = Vector3(maxf(sl, 0.5) * iv, 1.0, 1.0)
+
+
+#  팔뚝 토막을 손 굴림 r(라디안)에 맞춰 더 돌린다 — 뿌리가 이미 소매 몫(tw_slv)을 돌았으므로
+#  그 위의 몫만. 축은 토막의 x(팔뚝 축)라 자리 · 배율(_fore3_fit)과 안 섞인다(y · z 배율이 같다).
+func _fore3_twist(fo: Dictionary, r: float) -> void:
+	var F: Dictionary = FORE3
+	(fo.bare as Node3D).rotation = Vector3(r * (float(F.tw_bare) - float(F.tw_slv)), 0.0, 0.0)
+	(fo.roll as Node3D).rotation = Vector3(r * (float(F.tw_roll) - float(F.tw_slv)), 0.0, 0.0)
 
 
 #  위팔 조각(소매 띠 · 주름 고리)을 길이 ln 에 맞춰 민다 — _fore3_fit 과 같은 까닭.
@@ -23593,6 +23619,12 @@ const PROP := {
 	#  팔뚝 78 이라 화면에서 위팔이 팔뚝의 1.7 배였고, 1.5 면 저울에서 98 : 84 다.
 	#  맨살 길이는 그대로(FORE3.bare)라 늘어난 몫은 걷은 단 위 소매가 채운다.
 	"fore_k": 1.5,
+	#  빠르기(2026-10-04) — 「NPC의 행동 속도를 좀 높여줘 속도감 있게 예로들면 상점 리롤이랑
+	#  카운터 치는 속도? 테이블 내리치는거랑 해서」. 위 박자(초)는 빠르기 1 의 것이고 몸짓 시계
+	#  (prop_t)가 이 배로 돈다 — 손잡이 하나로 몸짓 하나의 속도가 통째로 간다(박자 사이의 비는
+	#  그대로). 판매 1.25(1.30 → 1.04초) · 등록기 1.4(0.90 → 0.64) · 주먹 1.4(1.05 → 0.75).
+	#  쓸기는 SWEEP.speed 가 같은 일을 한다.
+	"tempo_sell": 1.25, "tempo_buy": 1.4, "tempo_pound": 1.4,
 	"snap": 0.12,        # 다시 할 때 앞 자세에서 건너가는 시간
 	"cut": 0.15,         # 끊겨 쉼으로 돌아가는 시간
 	"ghost": 0.12,       # 앞 동전이 졸아드는 시간
@@ -23797,6 +23829,13 @@ func _prop_stop() -> bool:
 
 func _prop_live(i: int) -> bool:
 	return prop_t[i] >= 0.0
+
+
+#  그 손 몸짓의 빠르기(PROP.tempo_*) — 몸짓 시계가 실시간의 이 배로 돈다.
+func _prop_tempo(i: int) -> float:
+	if i == 0:
+		return float(PROP.tempo_sell)
+	return float(PROP.tempo_pound) if prop_pound != "" else float(PROP.tempo_buy)
 
 
 #  판다 — _sell 이 값을 확정하기 **전에** 부른다(판 것은 그 뒤 owned 에서 빠진다).
@@ -24276,7 +24315,7 @@ func _prop_tick(d: float) -> void:
 				_prop_end(i)
 			continue
 		var t0: float = prop_t[i]
-		var t1: float = t0 + d
+		var t1: float = t0 + d * _prop_tempo(i)
 		prop_t[i] = t1
 		if i == 0:
 			_prop_sell_beat(t0, t1, d)

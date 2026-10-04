@@ -277,7 +277,8 @@ func _run() -> void:
 				and bool(rb[0][6]),
 				"몸짓 %s · 번쩍임 %.2f · 서랍 %s · 응수 %s" % [rb[0][2], float(rb[0][3]), rb[0][6],
 				rb[0][5]])
-		var pz: float = float(g.PROP.b_hit)
+		#  몸짓 시계는 빠르기(PROP.tempo_buy)배로 돈다 — 실시간 닿는 순간은 b_hit / 빠르기.
+		var pz: float = float(g.PROP.b_hit) / float(g.PROP.tempo_buy)
 		_ok("구매 — 서랍은 손바닥이 닿는 박자에",
 				bool(rb[1][2]) and float(rb[1][3]) < 0.01
 				and absf(float(rb[1][4]) - pz) <= DT + 0.001,
