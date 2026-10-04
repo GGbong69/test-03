@@ -9,7 +9,10 @@ extends SceneTree
 #    wall_clear.png     판 정산(CLEAR) 덮개
 #    wall_swap.png      판 갈이 한가운데(테이블이 빠지고 판이 선다)
 #    wall_swap_b.png    판 갈이 끝무렵
+#    wall_runinfo.png   런 정보(판 위에 뜨는 판)
+#    wall_pizza.png · wall_clock.png · wall_large.png  옷 입은 판 · 라지 — 링이 판 테를 따라간다
 #    wall_break.png     판 깨짐 — 판이 뜬 자리(벽에 남은 자국)
+#    wall_wipe_strip.png 정산 → 상점 덮개 여섯 박자(보통 길) — 정산의 벽에서 덮인다
 #    wall_swap_out.png  정산 → 상점 판 갈이(덮개를 못 트는 길) — 정산의 덮개에서 상점 방으로
 #    wall_shop.png      상점(견줄 거리)
 #    wall_wide.png      1440x900(16:10) — 여백(view_pad)까지 덮는가
@@ -87,6 +90,64 @@ func _leg_pick() -> void:
 	g.grip_t = 9.0
 
 
+#  판을 끝내고 정산까지 감는다.
+func _to_clear() -> void:
+	g._brk_skip()
+	g.total = g.target
+	g.darts_left = 0
+	g.remaining.clear()
+	g._finish_leg()
+	var guard := 0
+	while g.state != g.S.CLEAR and guard < 900:
+		_calm()
+		g._process(DT)
+		g._swap_skip()
+		guard += 1
+	g.clear_t = 99.0
+	_step(0.3)
+
+
+#  상점에서 「다음 판」 → 판 고르기 → 판.
+func _next_play() -> void:
+	g._click(g._next_rect().get_center())
+	_step(2.0)
+	var guard := 0
+	while g.state == g.S.LEG and guard < 3:
+		g._begin_leg()
+		g._swap_skip()
+		guard += 1
+	_step(1.2)
+	g.grip_t = 9.0
+	await _wait(4)
+
+
+#  덮개 몇 박자를 반 크기로 한 장에 — 3 칸씩 두 줄.
+func _strip(nm: String, at: Array) -> void:
+	var cells := []
+	var tt := 0.0
+	for want in at:
+		while tt < float(want) - 0.0001:
+			_calm()
+			g._process(DT)
+			tt += DT
+		g.queue_redraw()
+		await process_frame
+		await RenderingServer.frame_post_draw
+		var im: Image = root.get_texture().get_image()
+		im.resize(im.get_width() / 2, im.get_height() / 2, Image.INTERPOLATE_BILINEAR)
+		cells.append(im)
+		print("  %s%s %.2f · state %d · 덮개 %.2f" % [pre, nm, tt, g.state, g.wipe_t])
+	var c0: Image = cells[0]
+	var cw: int = c0.get_width()
+	var ch: int = c0.get_height()
+	var gap := 6
+	var sh := Image.create(cw * 3 + gap * 2, ch * 2 + gap, false, c0.get_format())
+	sh.fill(Color.BLACK)
+	for i in cells.size():
+		sh.blit_rect(cells[i], Rect2i(0, 0, cw, ch), Vector2i((i % 3) * (cw + gap), (i / 3) * (ch + gap)))
+	sh.save_png("res://shots/%s%s.png" % [pre, nm])
+
+
 func _run() -> void:
 	await _wait(10)
 	if DisplayServer.get_name() == "headless":
@@ -156,6 +217,43 @@ func _run() -> void:
 	_step(0.25)
 	await _shot("resolve")
 
+	# ── 런 정보 — 판 위에 뜨는 판 ──
+	g._brk_skip()
+	g.state = g.S.PICK
+	g.grip_pick = -1
+	g._runinfo_toggle()
+	_step(0.3)
+	await _shot("runinfo")
+	g._runinfo_toggle()
+	_step(0.2)
+
+	# ── 옷 입은 판 · 라지 — 판 테가 바뀌면 링이 따라간다 ──
+	for m in [["pizz", "pizza"], ["clok", "clock"], ["panb", "large"]]:
+		g.mods_own = [String(m[0])]
+		g._board_bake()
+		g._start_leg()
+		g._swap_skip()
+		g.state = g.S.PICK
+		g.grip_pick = -1
+		_step(0.6)
+		g.grip_t = 9.0
+		_step(0.02)
+		await _wait(14)
+		await _shot(String(m[1]))
+	g.mods_own = []
+	g._board_bake()
+	g._start_leg()
+	g._swap_skip()
+	_step(0.6)
+	g.grip_t = 9.0
+	_step(0.02)
+	await _wait(14)
+	g.darts = [
+		{"p": bc + Vector2(4.0, -r * 0.58), "id": "std", "rot": 0.10},
+		{"p": bc + Vector2(r * 0.50, r * 0.36), "id": "std", "rot": 0.30},
+		{"p": bc + Vector2(-r * 0.44, r * 0.20), "id": "std", "rot": -0.22},
+	]
+
 	# ── 판 깨짐 — 뜬 자리 ──
 	g._brk_skip()
 	g.state = g.S.PICK
@@ -171,37 +269,31 @@ func _run() -> void:
 	g._brk_skip()
 
 	# ── 판 정산 ──
-	g.total = g.target
-	g.darts_left = 0
-	g.remaining.clear()
-	g._finish_leg()
-	guard = 0
-	while g.state != g.S.CLEAR and guard < 900:
-		_calm()
-		g._process(DT)
-		g._swap_skip()
-		guard += 1
-	g.clear_t = 99.0
-	_step(0.3)
+	await _to_clear()
 	await _shot("clear")
 
-	# ── 정산 → 상점 판 갈이(덮개를 못 트는 길 — 도구 · 움직임 끔) ──
+	# ── 정산 → 상점 덮개(보통 길) — 정산의 벽에서 덮이고 상점이 드러난다 ──
+	g.wipe_force = true
+	g._click(Vector2(-1.0, -1.0))
+	await _strip("wipe_strip", [0.06, 0.18, 0.30, 0.70, 0.78, 0.92])
+	g.wipe_force = false
+	_step(1.5)
+	g._tutor_close()
+	g.tutor_q.clear()
+	await _shot("shop")
+
+	# ── 다음 판 → 정산 → 상점 판 갈이(덮개를 못 트는 길 — 움직임 끔 · 도구) ──
+	await _next_play()
+	await _to_clear()
 	g._click(Vector2(-1.0, -1.0))
 	_step(0.05)
 	await _shot("swap_out")
 	_step(2.45)
 	g._tutor_close()
 	g.tutor_q.clear()
-	await _shot("shop")
-	g._click(g._next_rect().get_center())
-	_step(2.0)
-	guard = 0
-	while g.state == g.S.LEG and guard < 3:
-		g._begin_leg()
-		g._swap_skip()
-		guard += 1
-	_step(1.2)
-	g.grip_t = 9.0
+
+	# ── 다음 판 — 창 크기 ──
+	await _next_play()
 	DisplayServer.window_set_size(Vector2i(1440, 900))
 	await _wait(8)
 	g._view_fit()
