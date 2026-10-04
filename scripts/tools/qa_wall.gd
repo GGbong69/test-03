@@ -12,10 +12,13 @@ extends SceneTree
 #    ④ 벽을 안 짓는다(렌더러가 없다 — 판 내내 wall3_vp 가 비어 있다)
 #  창이 있으면:
 #    ⑤ 제목에는 안 짓고 판 고르기에서 미리 짓는다 · settle 틀 뒤에는 굽기를 멈춘다(매 틀 안 굽는다)
-#    ⑥ 화판의 한가운데가 BC 이고 여백까지 덮는다 · 화판 크기 = 논리 크기 × 창 배율
+#       · 다 구우면 그림 한 장(wall3_tex)만 쥐고 화판은 2px 로 놓는다(렌더 버퍼 VRAM)
+#    ⑥ 화판의 한가운데가 BC(반 픽셀 안)이고 여백까지 덮는다 · 한 텍셀 = 창 한 픽셀(비정수 배율)
 #    ⑦ 판 테가 바뀌면 다시 굽고 링이 따라간다
-#    ⑧ 창이 16:10 으로 바뀌면 다시 맞춰 여백까지 덮는다
+#    ⑧ 창이 16:10 으로 바뀌면 다시 맞춰 여백까지 덮는다 · HUD 띠 위 여백이 C_PANEL 판때기가 아니다
 #    ⑨ 화면 픽셀 — 판 옆 판자 자리가 켜면 C_BG 가 아니고 끄면 C_BG 다
+#    ⑩ 정산 → 상점 판 갈이 첫 틀이 정산 그림과 같다(글자 · HUD 밖 열네 점)
+#    ⑪ 판 갈이 첫 틀에는 꽂이를 안 그리고(테이블이 덮고 있다) 테이블이 비켜나면 그린다
 const Save = preload("res://scripts/save.gd")
 const Dev = preload("res://scripts/dev.gd")
 const Wall3D = preload("res://scripts/wall3d.gd")
@@ -164,18 +167,22 @@ func _run() -> void:
 	_ok("굽기가 끝나면 멈춘다(매 틀 안 굽는다)",
 			vp.render_target_update_mode == SubViewport.UPDATE_DISABLED and g.wall3_fresh == 0,
 			"mode %d · 남은 틀 %d" % [vp.render_target_update_mode, g.wall3_fresh])
+	_ok("다 구우면 그림 한 장만 쥐고 화판을 놓는다",
+			g.wall3_tex != null and vp.size == Vector2i(2, 2)
+					and Vector2i(g.wall3_tex.get_size()) == g.wall3_px,
+			"화판 %s · 그림 %s" % [vp.size, g.wall3_tex.get_size() if g.wall3_tex != null else Vector2.ZERO])
 	await _tick(20)
 	_ok("판이 도는 동안에도 멈춰 있다", vp.render_target_update_mode == SubViewport.UPDATE_DISABLED)
 	_ok("벽이 깔린다(_wall3_live)", g._wall3_live())
 
 	# ── ⑥ 자리 · 크기 ──
 	var r: Rect2 = g._wall3_rect()
-	_ok("화판 한가운데가 BC", r.get_center().distance_to(g.BC) < 0.01, str(r.get_center()))
+	var sc: float = root.get_final_transform().get_scale().x
+	var cd: Vector2 = (r.get_center() - g.BC).abs()
+	_ok("화판 한가운데가 BC(창 반 픽셀 안)", cd.x <= 0.5 / sc + 0.001 and cd.y <= 0.5 / sc + 0.001,
+			"%s · 배율 %.3f" % [r.get_center(), sc])
 	_ok("화판이 여백까지 덮는다", r.encloses(g._full()), "%s ⊇ %s" % [r, g._full()])
-	var k: int = g._wall3_k()
-	_ok("화판 크기 = 논리 크기 × 창 배율",
-			vp.size == Vector2i(roundi(r.size.x * k), roundi(r.size.y * k)),
-			"%s · 배율 %d" % [vp.size, k])
+	_ok("한 텍셀 = 창 한 픽셀", _texel_ok(r, sc), "%s · 배율 %.3f / %.3f" % [g.wall3_px, sc, g.wall3_kf])
 
 	# ── ⑦ 판 테가 바뀌면 ──
 	var r0: float = g.R
@@ -217,9 +224,83 @@ func _run() -> void:
 	_ok("16:10 — 여백이 생긴다", g.view_pad.y > 0.0, str(g.view_pad))
 	_ok("16:10 — 화판이 여백까지 덮는다", r.encloses(g._full()), "%s ⊇ %s" % [r, g._full()])
 	_ok("16:10 — 다시 굽고 멈췄다", vp.render_target_update_mode == SubViewport.UPDATE_DISABLED)
+	sc = root.get_final_transform().get_scale().x
+	_ok("16:10 — 한 텍셀 = 창 한 픽셀(배율 %.2f)" % sc, _texel_ok(r, sc), str(g.wall3_px))
+	g.queue_redraw()
+	await RenderingServer.frame_post_draw
+	im = root.get_texture().get_image()
+	var pan: Color = g.C_PANEL
+	var far := 0.0
+	for x in [60.0, 200.0, 320.0, 440.0, 580.0]:
+		var c := _px(im, Vector2(x, -g.view_pad.y * 0.5))
+		far = maxf(far, Vector3(c.r - pan.r, c.g - pan.g, c.b - pan.b).length())
+	_ok("16:10 — HUD 띠 위 여백이 판때기(C_PANEL)가 아니라 벽이다", far > 0.02, "가장 먼 거리 %.3f" % far)
 	DisplayServer.window_set_size(Vector2i(1280, 720))
-	await _wait(4)
+	await _wait(6)
+	g._view_fit()
+	await _tick(st + 4)
+
+	# ── ⑪ 판 갈이의 꽂이 ──
+	g.state = g.S.LEG
+	g.swap_live = true
+	g.swap_in = true
+	g.swap_t = 0.0
+	_ok("판 갈이 첫 틀 — 꽂이를 안 그린다(테이블이 덮고 있다)", not g._wall3_holder_free())
+	g.swap_t = 0.03
+	_ok("테이블이 비켜나면 꽂이가 벽에 있다", g._wall3_holder_free(), "gone %.2f" % g._swap_gone())
+	g.swap_live = false
+	g.swap_t = 0.0
+	g.state = s0
+
+	# ── ⑩ 정산 → 상점 판 갈이 첫 틀 = 정산 ──
+	g._brk_skip()
+	g.total = g.target
+	g.darts_left = 0
+	g.remaining.clear()
+	g._finish_leg()
+	var guard := 0
+	while g.state != g.S.CLEAR and guard < 900:
+		g.mouse_at = Vector2(-50.0, -50.0)
+		g._tutor_close()
+		g.tutor_q.clear()
+		g._process(DT)
+		g._swap_skip()
+		guard += 1
+	g.clear_t = 99.0
+	await _tick(st + 4)
+	g.queue_redraw()
+	await RenderingServer.frame_post_draw
+	var ia: Image = root.get_texture().get_image()
+	g._click(Vector2(-1.0, -1.0))
+	_ok("정산 → 상점이 판 갈이(나가는 쪽)로 간다", g.swap_live and not g.swap_in, "state %d" % g.state)
+	g.queue_redraw()
+	await RenderingServer.frame_post_draw
+	var ib: Image = root.get_texture().get_image()
+	var wd := 0.0
+	var at := ""
+	var ro: float = g._wall3_ro()
+	for p in [Vector2(40, 100), Vector2(40, 250), Vector2(600, 100), Vector2(600, 250),
+			Vector2(110, 330), Vector2(530, 330), Vector2(170, 104), Vector2(470, 104),
+			Vector2(170, 116), Vector2(470, 116), Vector2(220, 256), Vector2(420, 256),
+			g.BC + Vector2(ro * 0.72, ro * 0.72), g.BC + Vector2(-ro * 0.72, ro * 0.72)]:
+		var ca := _px(ia, p)
+		var cb := _px(ib, p)
+		var d: float = Vector3(ca.r - cb.r, ca.g - cb.g, ca.b - cb.b).length()
+		if d > wd:
+			wd = d
+			at = "%s %s/%s" % [p, ca.to_html(false), cb.to_html(false)]
+	_ok("판 갈이 첫 틀이 정산 그림과 같다(턱 위 띠 · 판 자리 · 양옆)", wd < 0.02, "가장 먼 %.3f · %s" % [wd, at])
+	g._swap_skip()
 	_end()
+
+
+#  화판 한 텍셀이 창의 정수 픽셀에 앉는가 — 화판 크기(px) × (창 배율 / 굽는 배율) 가 화면에서
+#  차지하는 픽셀 수와 같고, 그 몫이 정수다.
+func _texel_ok(r: Rect2, sc: float) -> bool:
+	var n: float = sc / float(g.wall3_kf)
+	var px := Vector2(g.wall3_px)
+	return absf(r.size.x * sc - px.x * n) < 0.01 and absf(r.size.y * sc - px.y * n) < 0.01 \
+			and absf(n - roundf(n)) < 0.001
 
 
 func _end() -> void:

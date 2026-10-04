@@ -9,15 +9,20 @@ extends SceneTree
 #    wall_clear.png     판 정산(CLEAR) 덮개
 #    wall_swap.png      판 갈이 한가운데(테이블이 빠지고 판이 선다)
 #    wall_swap_b.png    판 갈이 끝무렵
+#    wall_swap_in_strip.png  판 고르기 → 판 판 갈이 여섯 박자(0 · 1틀 · 0.05 · 0.10 · 0.18 · 0.28초)
+#                       — 상점 방 띠가 테이블과 같이 걷히는가 · 꽂이가 벽에 박혀 있는가
 #    wall_runinfo.png   런 정보(판 위에 뜨는 판)
 #    wall_pizza.png · wall_clock.png · wall_large.png  옷 입은 판 · 라지 — 링이 판 테를 따라간다
 #    wall_break.png     판 깨짐 — 판이 뜬 자리(벽에 남은 자국)
 #    wall_wipe_strip.png 정산 → 상점 덮개 여섯 박자(보통 길) — 정산의 벽에서 덮인다
 #    wall_swap_out.png  정산 → 상점 판 갈이(덮개를 못 트는 길) — 정산의 덮개에서 상점 방으로
+#    wall_swap_out0.png 그 첫 틀(판 갈이 시계 0) — 정산(wall_clear2.png)과 같은 그림이어야 한다
+#    wall_swap_out_strip.png 정산 · 0 · 1틀 · 2틀 · 0.10 · 0.25초
 #    wall_shop.png      상점(견줄 거리)
 #    wall_wide.png      1440x900(16:10) — 여백(view_pad)까지 덮는가
 #    wall_1080.png      1920x1080 — 굽는 배율이 창 배율(3)을 따르는가
-#  인자 -- off 이면 벽을 끄고 같은 이름 앞에 off_ 를 붙여 찍는다.
+#    wall_219.png · wall_43.png · wall_1366.png  1920x820 · 1024x768 · 1366x768(배율 2.13)
+#  인자 -- off 이면 벽을 끄고 같은 이름 앞에 off_ 를 붙여 찍는다. -- quick 이면 PICK 한 장만 찍고 끝낸다(빛 · 재질 맞출 때).
 #  창이 있어야 돈다:  godot --path . --script scripts/tools/shot_wall.gd
 const Save = preload("res://scripts/save.gd")
 const DT := 1.0 / 120.0
@@ -25,6 +30,7 @@ var g = null
 var busy := false
 var pre := "wall_"
 var off := false
+var quick := false
 
 
 func _initialize() -> void:
@@ -32,6 +38,7 @@ func _initialize() -> void:
 	if ua.has("off"):
 		off = true
 		pre = "off_wall_"
+	quick = ua.has("quick")
 	Save.gpath = "user://_shot_wall_g.cfg"
 	Save.path = "user://_shot_wall.cfg"
 	Save.wipe()
@@ -72,7 +79,17 @@ func _step(sec: float) -> void:
 		g._process(DT)
 
 
+#  벽 굽기를 끝낸다 — 도구는 g 의 _process 를 손으로 부르므로 그려진 틀마다 한 번씩 민다.
+func _bake() -> void:
+	var guard := 0
+	while g.get("wall3_fresh") != null and int(g.wall3_fresh) > 0 and guard < 60:
+		g._wall3_tick()
+		await process_frame
+		guard += 1
+
+
 func _shot(nm: String) -> void:
+	await _bake()
 	g.queue_redraw()
 	await process_frame
 	await process_frame
@@ -121,9 +138,11 @@ func _next_play() -> void:
 	await _wait(4)
 
 
-#  덮개 몇 박자를 반 크기로 한 장에 — 3 칸씩 두 줄.
-func _strip(nm: String, at: Array) -> void:
+#  덮개 몇 박자를 반 크기로 한 장에 — 3 칸씩 두 줄. first 가 있으면 첫 칸이다.
+func _strip(nm: String, at: Array, first: Image = null) -> void:
 	var cells := []
+	if first != null:
+		cells.append(first)
 	var tt := 0.0
 	for want in at:
 		while tt < float(want) - 0.0001:
@@ -168,13 +187,10 @@ func _run() -> void:
 	await _wait(4)
 
 	# ── 판 갈이 — 판 고르기에서 판으로 ──
+	await _wait(4)
+	await _bake()               # 판 고르기에서 미리 구워 둔다(게임과 같다)
 	g._begin_leg()
-	_step(0.02)
-	await _wait(12)             # 벽이 처음 굽히는 틀 — 잡음 결이 앉을 틈
-	_step(0.12)
-	await _shot("swap")
-	_step(0.12)
-	await _shot("swap_b")
+	await _strip("swap_in_strip", [0.0, 1.0 / 60.0, 0.05, 0.10, 0.18, 0.28])
 	g._swap_skip()
 	_step(1.2)
 	g.grip_t = 9.0
@@ -183,6 +199,9 @@ func _run() -> void:
 	g.state = g.S.PICK
 	g.grip_pick = -1
 	await _shot("pick")
+	if quick:
+		quit(0)
+		return
 
 	# ── 조준 ──
 	g._pick_dart(0)
@@ -285,28 +304,54 @@ func _run() -> void:
 	# ── 다음 판 → 정산 → 상점 판 갈이(덮개를 못 트는 길 — 움직임 끔 · 도구) ──
 	await _next_play()
 	await _to_clear()
+	await _shot("clear2")
 	g._click(Vector2(-1.0, -1.0))
+	await _shot("swap_out0")
 	_step(0.05)
 	await _shot("swap_out")
+	_step(2.45)
+	g._tutor_close()
+	g.tutor_q.clear()
+	#  상점 → 판 고르기 → 판 갈이 한가운데 · 끝무렵
+	g._click(g._next_rect().get_center())
+	_step(2.0)
+	await _wait(4)
+	await _bake()
+	g._begin_leg()
+	_step(0.14)
+	await _shot("swap")
+	_step(0.12)
+	await _shot("swap_b")
+	g._swap_skip()
+	_step(1.2)
+	g.grip_t = 9.0
+	await _wait(4)
+	#  같은 길을 한 번 더 — 여섯 박자 띠(첫 칸이 정산)
+	await _to_clear()
+	await _bake()
+	g.queue_redraw()
+	await process_frame
+	await RenderingServer.frame_post_draw
+	var c0: Image = root.get_texture().get_image()
+	c0.resize(c0.get_width() / 2, c0.get_height() / 2, Image.INTERPOLATE_BILINEAR)
+	g._click(Vector2(-1.0, -1.0))
+	await _strip("swap_out_strip", [0.0, 1.0 / 60.0, 2.0 / 60.0, 0.10, 0.25], c0)
 	_step(2.45)
 	g._tutor_close()
 	g.tutor_q.clear()
 
 	# ── 다음 판 — 창 크기 ──
 	await _next_play()
-	DisplayServer.window_set_size(Vector2i(1440, 900))
-	await _wait(8)
-	g._view_fit()
-	_step(0.02)
-	await _wait(12)
-	await _shot("wide")
-	#  1920x1080 — 굽는 배율이 창 배율(3)을 따라가는가
-	DisplayServer.window_set_size(Vector2i(1920, 1080))
-	await _wait(8)
-	g._view_fit()
-	_step(0.02)
-	await _wait(12)
-	await _shot("1080")
+	g.state = g.S.PICK
+	g.grip_pick = -1
+	for sz in [[Vector2i(1440, 900), "wide"], [Vector2i(1920, 1080), "1080"],
+			[Vector2i(1920, 820), "219"], [Vector2i(1024, 768), "43"], [Vector2i(1366, 768), "1366"]]:
+		DisplayServer.window_set_size(sz[0])
+		await _wait(8)
+		g._view_fit()
+		_step(0.02)
+		await _wait(4)
+		await _shot(String(sz[1]))
 	DisplayServer.window_set_size(Vector2i(1280, 720))
 	await _wait(4)
 	quit(0)
