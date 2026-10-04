@@ -10,6 +10,8 @@ extends SceneTree
 #    legb_pick_strip.png   집기 — 「던진다」 를 누르면 손이 판을 집어 들고 판 갈이로 간다(작은 판)
 #    legb_pick.png         집기 한가운데(든 판) 온 화면
 #    legb_pick_mid.png     집기 — 가운데 큰 판(오른손) · 보스(오른손) 한 장씩
+#    legb_preview_strip.png 개발자 「판 손 · 집기」 미리 보기 — 들었다가 되짚어 내려놓는다
+#    legb_motion_off.png   움직임 끔 — 판을 연 0.1 초 뒤(딜 · 손 없이 제자리)
 #    legb_mods.png         보스 제약마다의 판 얼굴(보스 칸을 2배로)
 #    legb_1440.png         1440x900 창
 #    legb_shop.png         같은 런의 상점(견줌)
@@ -221,6 +223,21 @@ func _run() -> void:
 	mid.append_array(await _strip([0.20, 0.40, 0.56]))
 	g._swap_skip()
 	_sheet(mid, 3).save_png("res://shots/legb_pick_mid.png")
+
+	# ── 개발자 「판 손 · 집기」 미리 보기 — 판을 안 열고 들었다가 되짚어 내려놓는다 ──
+	_leg(1, [])
+	print("미리 보기 — %s" % g._legb_pick_preview())
+	var pv: Array = await _strip([0.20, 0.45, 0.62, 0.85, 1.05, 1.30],
+			Rect2(60.0, 60.0, 300.0, 210.0))
+	_sheet(pv, 3).save_png("res://shots/legb_preview_strip.png")
+	print("미리 보기 뒤 — state %d · 집기 %d · 판 %d" % [g.state, g.legb_pick_i, g.leg_no])
+
+	# ── 움직임 끔 — 손 · 딜 · 숨 없이 그 자리 ──
+	g.motion_off = true
+	_leg(1, [], false)
+	_step(0.1)
+	(await _shot()).save_png("res://shots/legb_motion_off.png")
+	g.motion_off = false
 
 	# ── 보스 제약마다 ──
 	var cells := []

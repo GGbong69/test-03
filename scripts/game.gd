@@ -8303,6 +8303,9 @@ func _fit_sz(txt: String, w: float, sz: int) -> int:
 #  받침 5.5 · 설명 4 로 기울어 59 로 한 칸 올렸다.
 #    누움  받침 y[10,46] · 이름 잉크 [54.5,72] · 그늘 80        — 위 8.5 · 아래 8
 #    섬    받침 y[10,38] · 이름 잉크 [42.5,60] · 설명 잉크 [65,75.5] · 그늘 80 — 4.5 · 5 · 4.5
+#  ⚠ 2026-10-04 판 고르기가 카운터의 다트판(LEGB)이 되며 카드 얼굴은 걷혔다 — 지금 읽히는
+#  것은 칸 줄의 가로(x0 · gap — _row_rect)뿐이다. 위 셈은 옛 간판의 기록이고, 나머지 열쇠는
+#  _card_quad(qa_quad) · turn_probe 의 옛 셈이 아직 읽는다.
 const CARD := {
 	"x0": 76.0, "y": 140.0, "h": 86.0, "gap": 14.0,
 	"icon": 28.0, "icon_r": 17.0, "plate": 18.0, "name": 71.0,
@@ -8634,7 +8637,7 @@ func _swap_pin() -> Vector2:
 
 
 # 나가는(들어오는) 테이블 한 벌. shake_off **자체**를 잠깐 밀었다 되돌린다 —
-# 카드 얼굴(_leg_card)이 draw_set_transform(shake_off) 로
+# 판 고르기의 다트판 · 명판(_legb_draw · _legb_plate)이 draw_set_transform(shake_off) 로
 # 복귀하므로, 오프셋을 새 변수에 담으면 그 복귀가 오프셋을 조용히 떨군다.
 func _swap_screen(sh: Vector2) -> void:
 	shake_off = sh + Vector2(float(SWAP.dx) * _swap_gone(), 0.0)
@@ -17308,8 +17311,9 @@ func _cons_draw() -> void:
 #  _hud_draw 가 _draw_shop 다음이라 남은 scale 은 HUD 를 통째로 누른다.
 #  → 이 구획은 draw_set_transform 을 한 번도 부르지 않는다. 불변식이다.
 #
-#  예외 하나 — _leg_card 의 얼굴. 카드가 면에 누우면 그 위의 아이콘과
-#  글자도 같이 누워야 하는데, 글자는 좌표를 옮겨서는 못 눕힌다. 그래서
+#  예외 하나 — 판 고르기의 다트판 · 명판(_legb_draw · _legb_plate · _legb_etch). 판이 면에
+#  누우면 그 위의 칸 · 숫자 · 새긴 글도 같이 누워야 하는데, 글자는 좌표를 옮겨서는 못
+#  눕힌다. 그래서
 #  거기서만 draw_set_transform_matrix 를 걸고 **같은 함수 안에서**
 #  draw_set_transform(shake_off) 로 되돌린다. 되돌리는 줄이 없으면
 #  남은 변환이 _hud_draw 를 통째로 민다 — 위 문단이 말하는 그 사고다.
@@ -19799,7 +19803,7 @@ func _cover_draw() -> void:
 	# 상인만 위로 더 뺀다. 실루엣은 동전 슬롯 뒤에 잘리는 것을 전제로 그린
 	# 크롭이라(NPC.top), 가로로만 밀면 평평한 절단면이 드러난다. 동전 슬롯이
 	# 퇴장문이다. 구획 규약(draw_set_transform 금지)의 두 번째 예외이고,
-	# _leg_card 와 같은 규칙으로 **같은 함수 안에서** 되돌린다. 배율이
+	# _legb_draw 와 같은 규칙으로 **같은 함수 안에서** 되돌린다. 배율이
 	# 아니라 이동뿐이라 규약이 막는 사고(남은 scale 이 HUD 를 누른다)는
 	# 원리상 못 일어난다.
 	var nd: float = float(SWAP.npc) * _swap_gone()
@@ -25216,7 +25220,7 @@ func _prop_fly_at(t: float) -> void:
 
 #  판 동전 하나 — 동전 슬롯이 쓰는 그 그림(draw_item_sticker)을 sq 로 눌러 눕힌다.
 #  누운 만큼 옆면(같은 실루엣을 어둡게 · 두께만큼 아래)이 비친다. dim 은 졸아들 때.
-#  ⚠ 이 구획(상점 테이블)의 draw_set_transform 금지 불변식의 예외다 — _leg_card ·
+#  ⚠ 이 구획(상점 테이블)의 draw_set_transform 금지 불변식의 예외다 — _legb_draw ·
 #  _cover_draw 처럼 **같은 함수 안에서** draw_set_transform(shake_off) 로 되돌린다.
 #  눕힌 그림은 좌표를 옮겨서는 못 그린다(동전 얼굴이 구운 그림이다).
 func _prop_coin_paint(c: Vector2, r: float, sq: float, it: Dictionary, peel: float,
@@ -32403,8 +32407,8 @@ func _tip_hit(m: Vector2) -> Dictionary:
 				var lper := GameData.legs_per_round()
 				var lbf := _round_first()
 				for i in lper:
-					#  **앞으로 칠 보스만** 대답한다. 넘긴 간판은 두 동강 난
-					#  채 어느 판이었는지만 말하고 얼굴이 없어서, 툴팁만
+					#  **앞으로 칠 보스만** 대답한다. 넘긴 판은 깨졌거나 엎어진
+					#  채 어느 판이었는지만 말하고 제약 얼굴이 없어서, 툴팁만
 					#  뜨면 어느 카드 이야기인지가 화면에서 안 갈린다.
 					#  지금 표에서는 보스가 라운드의 마지막 판이라(검증기가
 					#  강제한다) 이 줄이 실제로 걸리는 일은 없다 — 그 규칙이
@@ -34576,15 +34580,18 @@ func _draw_leg() -> void:
 							_run_rounds()]),
 			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 12,
 			Color(C_TABLE.lightened(0.40), 0.85))
-	#  명판이 먼저다 — 지금 판이 1.12 배로 뜨면 앞끝이 명판 윗변에 걸친다.
-	for i in per:
-		_legb_plate(i, first + i)
+	#  지금 판 밑 펠트에 고인 빛 — 상점 소품의 진열 스포트와 같은 말이다(눈이 갈 판).
+	_legb_pool(cur, first + cur)
 	#  먼 판부터 — 지금 판은 떠 있어 맨 나중이다. 손에 든 판은 손이 그린다(_legb_held_draw).
 	for i in per:
 		if i != cur and not _legb_held(i):
 			_legb_one(i, first + i)
 	if not _legb_held(cur):
 		_legb_one(cur, first + cur)
+	#  명판은 판 **다음**이다 — 뜬 판의 그림자(1.12 배 · 높이만큼 밀림)가 명판 윗변을 5px
+	#  덮어 놋쇠에 얼룩이 졌다(촬영). 판은 명판에 안 닿는다(뜬 지금 판의 앞끝 214 < 명판 226).
+	for i in per:
+		_legb_plate(i, first + i)
 	_cover_draw()
 
 	#  **목표는 _target_at 한 자를 지난다** — 명판이 적은 수와 여기 적는
@@ -34628,6 +34635,9 @@ func _draw_leg() -> void:
 
 
 #  ── 간판 색 ───────────────────────────────────────────
+#  ⚠ 2026-10-04 판 고르기가 다트판(LEGB)이 되며 간판은 걷혔다. 이 한 벌은 이제 보스 칸만
+#  읽힌다 — 상점의 보스 명판(_boss_plaque)과 판 명판의 문장 바탕(_legb_medal). 아래는 옛
+#  간판이 색을 고른 기록이다.
 #  「색감이 좀 너무 안 어울리는데?」(사용자, 2026-09-17). 처음 칠한 파랑 ·
 #  호박 · 빨강이 명도도 채도도 한 단 높아서, 물 빠지고 어두운 펠트(C_TABLE)와
 #  보라 남색 UI 사이에서 간판만 따로 떴다. 모양(테 · 두께 · 두 동강)은 두고
@@ -34652,7 +34662,7 @@ func _draw_leg() -> void:
 #  그림자가 짙다(shadow · shadow_k). 읽는 쪽이 전부 sc.get(열쇠, 기본값)
 #  이라 **덧셈뿐이다** — 작은 판·큰 판 그림은 한 화소도 안 바뀐다.
 #
-#  face 는 **어둡게 하지 않는다.** 어둡게 하면 _sign_cols 의 sink(done
+#  face 는 **어둡게 하지 않는다.** 어둡게 하면 옛 _sign_cols 의 sink(done
 #  0.30)와 충돌해 「끝난 큰 판」과 「아직 안 친 보스 판」이 같은 톤으로
 #  읽힌다. 같은 밝기의 다른 색조로 반 발짝만 민다 — 상대휘도 0.0375 대
 #  383350 의 0.0383 으로 2.1% 차라, sink 의 절반 어둠과 절대 안 헷갈린다.
@@ -34732,6 +34742,7 @@ const LEGB := {
 	"up_v": 7.0,          # 뜨고 내려앉는 빠르기(초당 몫)
 	"hov": 4.0,           # 보스 판에 커서가 얹히면 뜨는 높이(면 h)
 	"sh_a": 0.38,         # 그림자 짙기(펠트에 닿았을 때)
+	"pool": 1.9, "pool_a": 0.20,   # 지금 판 밑 빛 웅덩이 — 반지름(판 배) · 한가운데 짙기
 	#  딜 — 손이 안 드는 판(가운데)은 카운터 턱(w0)에서 h0 만큼 떠 나와 미끄러져 앉는다.
 	#  가로는 제자리와 화면 가운데 사이 pull 만큼에서 출발한다 — 상인 몸 앞이다.
 	"w0": 4.0, "h0": 16.0, "pull": 0.55,
@@ -34786,7 +34797,8 @@ func _legb_rest(i: int, rn: int) -> Vector2:
 #  연출(손이 놓는 딜 · 집기 · 엎기)을 트는가 — 움직임 끔 · 화면 없는 실행 · 검사 도구는
 #  아니다(_cine_ok). 안 틀면 판은 제 길로 미끄러지고 값은 한 톨도 안 바뀐다.
 func _legb_cine() -> bool:
-	return _cine_ok(legb_force)
+	#  트리 밖(검사가 _initialize 에서 _process 를 미는 자리)이면 _cine_ok 의 get_tree() 가 없다.
+	return is_inside_tree() and _cine_ok(legb_force)
 
 
 #  지금 판이 뜬 몫(애니) — 칸 수가 바뀌면 다시 짓는다.
@@ -34842,7 +34854,7 @@ func _legb_pose(i: int, rn: int) -> Vector3:
 		var p := s0.lerp(rest, e)
 		return Vector3(p.x, p.y, h + float(LEGB.h0) * (1.0 - e) * (1.0 - e))
 	var tl: float = t - float(DEAL.dur)
-	if tl < float(LEGB.hop_t):
+	if tl < float(LEGB.hop_t) and not _legh_carries(i):
 		var q: float = tl / float(LEGB.hop_t)
 		h += float(LEGB.hop) * sin(PI * q) * (1.0 - q)
 	return Vector3(rest.x, rest.y, h)
@@ -34856,6 +34868,25 @@ func _legb_hov(i: int, rn: int) -> bool:
 		return false
 	return tip_a > 0.004 and tip_mark == _row_rect(i, GameData.legs_per_round()) \
 			and leg_t >= _deal_time()
+
+
+#  지금 판 밑 빛 웅덩이 — 펠트에 누운 타원 하나(가운데 따뜻한 빛 → 가장자리 0). 뜬 몫만큼
+#  짙다 — 다음 판으로 넘어가면 빛도 같이 옮겨 간다. 꼭짓점 색 번짐이라 한 번 그리기다.
+func _legb_pool(i: int, rn: int) -> void:
+	var up: float = _legb_up(i)
+	if up <= 0.01 or _legb_held(i):
+		return
+	var rest := _legb_rest(i, rn)
+	var c: Vector2 = _p2s(rest.x, rest.y, 0.0) + Vector2(0.0, 4.0)
+	var rx: float = _legb_r(rn) * float(LEGB.pool)
+	var n := 28
+	var pts := PackedVector2Array([c])
+	var cols := PackedColorArray([Color(C_GOLD, float(LEGB.pool_a) * up)])
+	for k in n + 1:
+		var a: float = TAU * float(k) / float(n)
+		pts.append(c + Vector2(cos(a) * rx, sin(a) * rx * float(TBL.flat)))
+		cols.append(Color(C_GOLD, 0.0))
+	draw_polygon(pts, cols)
 
 
 #  판 한 장 — 쉬는 자리 · 딜 · 뜸에서 모습을 셈해 그린다.
@@ -35243,17 +35274,15 @@ func _legb_plate(i: int, rn: int) -> void:
 	var nm := GameData.leg_name(rn)
 	var lx: float = -W * 0.5 + 10.0
 	if not mids.is_empty():
-		#  문장 — 제약 아이콘. 겹치기면 둘, 이름은 「·」 로 잇는다.
+		#  문장 — 제약 아이콘이 판 이름 자리에 서고, 이름은 제약 이름이다(발라트로가 보스 칸에
+		#  「The Wall」 을 적는 그 자리). 겹치기면 문장 둘이 「축이 둘」을 말한다 — 두 이름을
+		#  반 칸에 잘라 넣느니 이름 줄을 걷는다(옛 간판의 판결 그대로).
 		var n2: int = mini(mids.size(), 2)
-		var names := []
 		for mi in n2:
 			var cp: Vector2 = Vector2(lx + 5.5 + float(mi) * 12.0, -D + 11.0)
 			_legb_medal(xf, cp, String(mids[mi]), mvoid, done)
-			names.append(String(_mod_row(String(mids[mi])).get("n", "")))
 		lx += 6.0 + 12.0 * float(n2)
-		#  겹치기면 문장 둘이 「축이 둘」을 말한다 — 두 이름을 반 칸에 잘라 넣느니
-		#  이름 줄을 걷는다(옛 간판의 판결 그대로).
-		nm = String(names[0]) if n2 == 1 else ""
+		nm = String(_mod_row(String(mids[0])).get("n", "")) if n2 == 1 else ""
 	var rw: int = GameData.reward_of(rn)
 	var pip_w: float = 7.0 * float(mini(rw, 8))
 	var nw: float = W * 0.5 - 8.0 - pip_w - 3.0 - lx
@@ -35342,7 +35371,9 @@ const LEGH := {
 	#  9 로는 가운데 판을 집는 오른팔이 펴진 막대였다(촬영) — 어깨가 판 쪽으로 나와야
 	#  팔꿈치가 굽는다.
 	"body": [0.05, 0.03, 15.0, -4.0],
-	#  팔꿈치가 굽는 쪽 — 어깨에서 (바깥 · 위 · 뒤). 펠트로 뻗는 팔은 바깥으로 조금 들린다.
+	#  팔꿈치가 굽는 쪽 — 어깨에서 (바깥 · 위 · 뒤). 바깥 · **아래 · 뒤**다 — 판을 집는 팔은
+	#  팔꿈치가 낮게 남아 팔뚝이 판으로 비스듬히 내려온다. 바깥 위(0.7, 0.35, −0.2)로 들었더니
+	#  가운데 판을 집는 오른팔이 화면을 가로지르는 가로 막대였다(촬영).
 	"pole": Vector3(0.6, -0.5, -0.5),
 }
 var legb_pick_t := -1.0       # 집기 시계 — −1 이면 안 돈다
@@ -35435,14 +35466,21 @@ func _legh_grip(i: int) -> float:
 	return lh_g
 
 
-#  그 칸의 판을 손이 들고 있나 — 판 고르기는 그 판을 안 그리고 손이 그린다.
+#  그 칸의 판을 손이 들고 있나 — 판 고르기는 그 판을 안 그리고 손이 그린다(_legb_held_draw).
 func _legb_held(i: int) -> bool:
 	for h in 2:
 		if _legh_col(h) == i:
 			_legh_w(h)
-			if lh_held and legh_seen[h]:
+			if lh_held:
 				return true
 	return false
+
+
+#  딜에서 그 판을 손이 들고 와 놓는가 — 손이 놓은 판은 안 튄다(내려놓았지 떨어뜨리지 않았다).
+func _legh_carries(i: int) -> bool:
+	if legb_pick_i >= 0 or not _legh_ok():
+		return false
+	return i == _legh_col(0) or i == _legh_col(1)
 
 
 #  매 틀 — 집기 시계. 끝에 닿으면 판을 연다.
@@ -35451,7 +35489,11 @@ func _legh_tick(d: float) -> void:
 		return
 	if state != S.LEG:
 		return
+	var t0: float = legb_pick_t
 	legb_pick_t += d
+	#  테를 집는 틀 — 건네받을 때(_give_begin)와 같은 소리다.
+	if t0 < float(LEGH.reach) and legb_pick_t >= float(LEGH.reach):
+		_sfx("hand_take")
 	if legb_pick_dry:
 		if legb_pick_t >= _legh_pick_len() * 2.0:
 			_legh_reset()
@@ -35677,7 +35719,7 @@ func _legb_held_draw() -> void:
 		return
 	for i in 2:
 		var c := _legh_col(i)
-		if c < 0 or not _legb_held(c):
+		if c < 0 or not _legb_held(c) or not legh_seen[i]:
 			continue
 		var rn: int = _round_first() + c
 		var hp: Vector3 = legh_hold_prev[i]
