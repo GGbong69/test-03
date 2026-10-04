@@ -5026,6 +5026,7 @@ func _process(d: float) -> void:
 		_hand3_close()
 		_body3_close()
 		_room3d_run(false)
+	_wall3_tick()      # 다트판 벽 — 처음 필요한 화면에서 짓고, 바뀔 때만 굽는다
 
 	_fill_audio()
 	_mus_update(d)
@@ -8360,16 +8361,22 @@ func _grip_dy() -> float:
 	return minf(float(GRIP.dy), 236.0 / maxf(float(grip_n) - 1.0, 1.0))
 
 
+#  칸 하나가 벽에 꽂히는 자리(뽑히기 전). 자루(_grip_pose)와 놋쇠 꽂이의 구멍
+#  (_wall3_holder)이 같은 자를 본다 — 빈 칸에도 구멍이 남아야 해서 칸으로 묻는다.
+func _grip_base(slot: int) -> Vector2:
+	# 깊이와 높이도 같이 흔든다. 각도만 흔들면 자로 잰 듯 줄 맞춘 티가 남는다.
+	var dy := _grip_dy()
+	return Vector2(
+			GRIP.x + (_grip_rnd(slot, 12.77) - 0.5) * 2.0 * GRIP.deep,
+			GRIP.cy - float(maxi(grip_n, 1) - 1) * dy * 0.5 + float(slot) * dy
+					+ (_grip_rnd(slot, 41.31) - 0.5) * GRIP.sway * 2.0)
+
+
 func _grip_pose(i: int) -> Dictionary:
 	# 칸은 시작 때 배정된 그대로다. 남은 개수가 아니라 시작 개수로 가운데를
 	# 맞추므로, 자루가 빠져도 나머지가 제자리에 그대로 꽂혀 있다.
 	var slot: int = grip_slot[i] if i < grip_slot.size() else i
-	# 깊이와 높이도 같이 흔든다. 각도만 흔들면 자로 잰 듯 줄 맞춘 티가 남는다.
-	var dy := _grip_dy()
-	var base := Vector2(
-			GRIP.x + (_grip_rnd(slot, 12.77) - 0.5) * 2.0 * GRIP.deep,
-			GRIP.cy - float(maxi(grip_n, 1) - 1) * dy * 0.5 + float(slot) * dy
-					+ (_grip_rnd(slot, 41.31) - 0.5) * GRIP.sway * 2.0)
+	var base := _grip_base(slot)
 	var rot: float = _grip_tilt(slot)
 	# 뽑히는 방향은 자루 축을 따라 꼬리 쪽이다. 옆으로 밀면 뽑는 것으로 안 보인다.
 	var axis := Vector2(6.0, -10.0).normalized().rotated(rot)
@@ -8919,10 +8926,16 @@ func _draw() -> void:
 	shake_off = sh
 	draw_set_transform(sh)
 
+	#  다트판 벽(WALL3) — 판이 선 화면 · 정산 · 판 갈이의 바닥. 판 갈이 동안은 상점
+	#  방에서 이 벽으로 녹아든다(_wall3_back). 흔들림 변환 안이다 — 판과 같이 흔들린다.
+	var w3 := _wall3_live() and _wall3_here()
+	if w3:
+		_wall3_back(_full().position.y, _full().end.y)
 	if swap_live:
 		# 방이 맨 밑이다. 카운터만 옆으로 빠지고 방은 그대로 있는 것이
 		# 실제로 일어나는 일이다. _felt_draw 의 전면 사각은 이때 쉰다.
-		draw_rect(_full(), _swap_wall(C_WOOD))
+		if not w3:
+			draw_rect(_full(), _swap_wall(C_WOOD))
 		# 테이블이 다 빠진 **뒤에** 판이 뜬다. 그래서 두 층이 안 겹치고,
 		# 나가는 쪽만 테이블을 먼저 그리면 된다.
 		if swap_in:
@@ -13312,6 +13325,227 @@ func _modplate_draw() -> void:
 			String(GameData.mod_of(mid).get("n", "")), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, C_TXT)
 
 
+# ══════════════════════════════════════════════════════════
+#  다트판 벽 — 던지는 화면의 배경 (2026-10-04 · scripts/wall3d.gd)
+# ──────────────────────────────────────────────────────────
+#  「상점의 퀄리티가 너무 좋아 그래서 그런지 다트판 인게임 화면이랑 판 선택이
+#   비교적으로 빈약한거 같아」 — 고른 길 「상점과 같은 3D 바 방을 다트판 정면으로
+#   찍어 배경에 깝니다. 판자 벽, 판 둘레 검은 고무 링, 위 램프의 빛 웅덩이와 판
+#   그림자, 양옆에 흐린 술병 선반과 네온이 들어갑니다. 왼쪽 다트 줄은 벽에 박은
+#   놋쇠 꽂이에 걸립니다.」(2026-10-04)
+#  판은 C_BG 한 장 위에 떠 있었다. 이제 상점 뒷벽에 걸려 있던 그 판 앞에 선다 —
+#  wall3d.gd 가 판자 기둥 · 고무 링 · 램프 빛 웅덩이와 그림자 · 흐린 바 뒷벽을 한 장
+#  굽고, 판(2D)이 그 링 안에 정확히 앉는다(카메라 축이 BC 를 지난다).
+#   · 어디에 까나 — 판이 선 화면(_is_play_deep: 판 · 런 정보 · 판 중 설정) · 정산 ·
+#     판 갈이. 제목 · 로비의 판은 안 건드린다(_wall3_here 가 거짓).
+#   · 읽힘이 먼저다 — HUD 띠 밑(top)과 안내 줄 밑(bot)은 벽을 C_BG 로 더 누른다.
+#     정산은 읽는 화면이라(_draw_clear 「정산은 읽는 화면이지 비치는 화면이 아니다」)
+#     글자 띠는 clear_mid 만큼 덮고, 양옆만 clear 만큼 덮어 바가 비친다.
+#   · 판 갈이 — 상점 방(room_vp)에서 이 벽으로, 판이 서는 만큼(_swap_rise) 녹아든다.
+#     옛 C_WOOD → C_BG 색 건너가기를 그림 건너가기로 바꿨다.
+#   · 프레임 값 — 움직이는 것이 없어 한 번 굽고 멈춘다(settle 틀만 굽는다 — 비동기로
+#     구워지는 잡음 결이 앉을 틈). 창 여백 · 판 테가 바뀔 때만 다시 굽는다.
+#   · 헤드리스(화면 없는 검사)에는 렌더러가 없어 안 짓는다 — 옛 그림 그대로다.
+#   · 개발자 5쪽 「다트판 벽」 이 켜고 끈다(wall3_on).
+const Wall3D = preload("res://scripts/wall3d.gd")
+const WALL3 := {
+	"settle": 10,                  # 짓거나 맞춘 뒤 굽는 틀 수
+	"k_max": 3,                    # 굽는 배율 상한 — 창 배율을 따르되 4K(6배)에서 화판이 커지지 않게
+	"top": 0.55, "top_h": 96.0,    # HUD 띠 밑 그늘 — 위끝 짙기 · 높이(y 0 부터)
+	"bot": 0.45, "bot_h": 52.0,    # 안내 줄 밑 그늘 — 아래끝 짙기 · 높이
+	"clear": 0.62,                 # 정산이 벽을 덮는 짙기(양옆)
+	"clear_mid": 0.70,             # 정산 글자 띠(x mid_x0..mid_x1)에 더 덮는 짙기 — 합쳐 0.89
+	"mid_x0": 150.0, "mid_x1": 490.0, "mid_fade": 48.0,
+	"brass": Color("c89a4a"),      # 꽂이 놋쇠 — 진열대 놋쇠(Room3D.COL.brass)와 같은 쇠
+	"hx": 1.0, "hw": 11.0,         # 꽂이 몸 x · 폭(논리 px) — 자루 촉(x 4~12)이 몸에 든다
+	"hpad": 19.0,                  # 첫 칸 · 끝 칸에서 꽂이 끝까지
+}
+var wall3_on := true          # 개발자 5쪽 — 다트판 벽 켬/끔(옛 단색과 맞대 본다)
+var wall3_vp: SubViewport = null
+var wall3_key := ""           # 마지막으로 맞춘 「여백 · 판 테」
+var wall3_fresh := 0          # 남은 굽기 틀
+var wall3_frame := -1         # 마지막으로 센 그려진 틀(Engine.get_frames_drawn)
+
+
+#  이 화면에 벽이 서는가 — 판이 선 화면 · 정산 · 판 갈이.
+func _wall3_here() -> bool:
+	return _is_play_deep() or state == S.CLEAR or swap_live
+
+
+func _wall3_live() -> bool:
+	return wall3_on and wall3_vp != null and is_instance_valid(wall3_vp)
+
+
+#  링이 두르는 판 테. 맞을 때 부푸는 몫(board_punch)은 안 탄다 — 링은 벽에 박혀 있다.
+func _wall3_ro() -> float:
+	return _board_rim(_theme_ring_w(_board_theme()))
+
+
+#  _process 가 매 틀 부른다(hitstop 조기 반환 위). 처음 필요한 화면에서 짓고,
+#  맞춘 값이 바뀌면 settle 틀만 굽고 멈춘다.
+func _wall3_tick() -> void:
+	if not wall3_on or not _has_renderer():
+		if wall3_vp != null and is_instance_valid(wall3_vp):
+			wall3_vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
+		return
+	if wall3_vp == null:
+		if not _wall3_here():
+			return
+		wall3_vp = Wall3D.make_wall(self)
+		wall3_key = ""
+	var ro := _wall3_ro()
+	var k := _wall3_k()
+	var key := "%d,%d,%.1f,%d" % [int(view_pad.x), int(view_pad.y), ro, k]
+	if key != wall3_key:
+		wall3_key = key
+		Wall3D.wall_fit(wall3_vp, view_pad, ro, BC, k)
+		wall3_fresh = int(WALL3.settle)
+	if wall3_fresh > 0:
+		#  그려진 틀로 센다 — 한 틀에 _process 를 여러 번 부르는 도구에서도 굽기가 안 빠진다.
+		var fd := Engine.get_frames_drawn()
+		if fd != wall3_frame:
+			wall3_frame = fd
+			wall3_fresh -= 1
+		wall3_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+		queue_redraw()
+	else:
+		wall3_vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
+
+
+#  굽는 배율 — 논리 1px 가 창에서 몇 px 인가(1280 창 2 · 1920 창 3). 반올림해 정수로.
+func _wall3_k() -> int:
+	var sc: float = get_tree().root.get_final_transform().get_scale().x
+	return clampi(roundi(sc), 1, int(WALL3.k_max))
+
+
+#  벽 화판이 덮는 화면 사각 — 가운데가 BC 이고 여백 + 흔들림 여유까지 간다.
+func _wall3_rect() -> Rect2:
+	var ls := Wall3D.logical_size(view_pad, BC)
+	return Rect2(BC - ls * 0.5, ls)
+
+
+#  판 갈이 동안 벽이 선 몫 — 판이 서는 만큼. 판 갈이 밖에서는 1.
+func _wall3_a() -> float:
+	return _swap_rise() if swap_live else 1.0
+
+
+#  화면 띠 [top, bot] 에 바닥을 깐다 — 판 갈이면 상점 방(없으면 옛 벽 색) 위에 벽이
+#  녹아든다. 띠는 여백까지 가로로 뻗는다. _draw 의 바닥과 _cover_draw 의 덮개가
+#  같은 이 한 벌을 부른다 — 둘이 갈리면 판 갈이 동안 덮개 아랫변이 줄로 남는다.
+func _wall3_back(top: float, bot: float) -> void:
+	var a := _wall3_a()
+	if a < 1.0:
+		if room3d_on and room_vp != null and is_instance_valid(room_vp):
+			_room3d_band(top, bot)
+		else:
+			draw_rect(Rect2(_full().position.x, top, _full().size.x, bot - top), _swap_wall(C_WOOD))
+	if a > 0.0:
+		var r := _wall3_rect()
+		var t0 := clampf((top - r.position.y) / r.size.y, 0.0, 1.0)
+		var t1 := clampf((bot - r.position.y) / r.size.y, 0.0, 1.0)
+		if t1 > t0:
+			var ts := Vector2(wall3_vp.size)
+			draw_texture_rect_region(wall3_vp.get_texture(),
+					Rect2(r.position.x, r.position.y + r.size.y * t0, r.size.x, r.size.y * (t1 - t0)),
+					Rect2(0.0, ts.y * t0, ts.x, ts.y * (t1 - t0)), Color(1.0, 1.0, 1.0, a))
+		_wall3_shade(top, bot, a)
+
+
+#  읽힘 그늘 — HUD 띠 밑과 안내 줄 밑을 C_BG 로 누른다. 띠 [top, bot] 안만 칠한다.
+func _wall3_shade(top: float, bot: float, a: float) -> void:
+	var f := _full()
+	var th: float = float(WALL3.top_h)
+	_wall3_grad(maxf(f.position.y, top), minf(th, bot), f.position.y, th,
+			float(WALL3.top) * a, 0.0)
+	var b0: float = VIEW.y - float(WALL3.bot_h)
+	_wall3_grad(maxf(b0, top), minf(f.end.y, bot), b0, VIEW.y, 0.0, float(WALL3.bot) * a)
+
+
+#  세로 그러데이션 한 장 — 짙기가 y_a 에서 a0, y_b 에서 a1(그 밖은 끝값). [y0, y1] 만 칠한다.
+func _wall3_grad(y0: float, y1: float, y_a: float, y_b: float, a0: float, a1: float) -> void:
+	if y1 <= y0 or (a0 <= 0.0 and a1 <= 0.0):
+		return
+	var f := _full()
+	var k0: float = clampf((y0 - y_a) / maxf(y_b - y_a, 0.001), 0.0, 1.0)
+	var k1: float = clampf((y1 - y_a) / maxf(y_b - y_a, 0.001), 0.0, 1.0)
+	var c0 := Color(C_BG, lerpf(a0, a1, k0))
+	var c1 := Color(C_BG, lerpf(a0, a1, k1))
+	draw_polygon(PackedVector2Array([Vector2(f.position.x, y0), Vector2(f.end.x, y0),
+			Vector2(f.end.x, y1), Vector2(f.position.x, y1)]),
+			PackedColorArray([c0, c0, c1, c1]))
+
+
+#  정산의 바닥 — 벽을 깔고 덮는다. 글자 띠(가운데)는 판이 안 비치게 짙게, 양옆은 바가
+#  비치게 옅게. 판 층(판 · 조각)은 C_BG 한 장이 먼저 덮는다 — 옛 「알파 없는 덮개」의
+#  약속(조각이 정산 위에 한 픽셀도 못 선다)을 그대로 지킨다.
+func _wall3_clear() -> void:
+	draw_rect(_full(), C_BG)
+	var r := _wall3_rect()
+	draw_texture_rect(wall3_vp.get_texture(), r, false, Color(1.0, 1.0, 1.0, 1.0 - float(WALL3.clear)))
+	var f := _full()
+	var x0: float = float(WALL3.mid_x0)
+	var x1: float = float(WALL3.mid_x1)
+	var fd: float = float(WALL3.mid_fade)
+	var cm := Color(C_BG, float(WALL3.clear_mid))
+	var ce := Color(C_BG, 0.0)
+	draw_rect(Rect2(x0, f.position.y, x1 - x0, f.size.y), cm)
+	for sd in [-1.0, 1.0]:
+		var xa: float = x0 if sd < 0.0 else x1
+		var xb: float = xa + fd * sd
+		draw_polygon(PackedVector2Array([Vector2(xa, f.position.y), Vector2(xb, f.position.y),
+				Vector2(xb, f.end.y), Vector2(xa, f.end.y)]),
+				PackedColorArray([cm, ce, ce, cm]))
+
+
+#  놋쇠 꽂이 — 판자 벽에 나사 둘로 박은 세로 놋쇠 막대. 칸마다 구멍이 나 있고 자루
+#  촉이 그 구멍에 든다(자루 · 판정은 그대로 — _grip_pose). 던져서 빈 칸은 구멍만 남는다.
+#  빛은 왼쪽 위에서 온다(판 · 벽과 같다) — 왼편이 밝고 오른편 · 밑이 그늘이다.
+func _wall3_holder() -> void:
+	var n: int = maxi(grip_n, remaining.size())
+	if n <= 0:
+		return
+	var y0: float = _grip_base(0).y
+	var y1: float = _grip_base(n - 1).y
+	for s in n:
+		var by: float = _grip_base(s).y
+		y0 = minf(y0, by)
+		y1 = maxf(y1, by)
+	var pad: float = float(WALL3.hpad)
+	var x: float = float(WALL3.hx)
+	var w: float = float(WALL3.hw)
+	var top: float = y0 - pad
+	var bot: float = y1 + pad
+	var br: Color = WALL3.brass
+	var mid := br.darkened(0.22)
+	var lit := br.lightened(0.22)
+	var dk := br.darkened(0.62)
+	#  벽에 진 그림자 — 오른쪽 아래로 두 겹(멀리 옅게 · 가까이 짙게)
+	draw_rect(Rect2(x + 3.0, top + 3.0, w + 3.0, bot - top + 4.0), Color(0.0, 0.0, 0.0, 0.22))
+	draw_rect(Rect2(x + 2.0, top + 2.0, w + 1.0, bot - top + 1.0), Color(0.0, 0.0, 0.0, 0.38))
+	#  몸 — 모서리를 한 칸 깎은 막대
+	draw_rect(Rect2(x, top + 1.0, w, bot - top - 2.0), mid)
+	draw_rect(Rect2(x + 1.0, top, w - 2.0, bot - top), mid)
+	draw_rect(Rect2(x + 1.0, top + 1.0, 2.0, bot - top - 2.0), lit)          # 왼편 — 빛 받은 결
+	draw_rect(Rect2(x + 3.0, top + 1.0, 1.0, bot - top - 2.0), br)
+	draw_rect(Rect2(x + w - 2.0, top + 1.0, 1.0, bot - top - 2.0), dk)       # 오른편 — 그늘
+	draw_rect(Rect2(x + 1.0, top, w - 2.0, 1.0), lit)                        # 위 끝
+	draw_rect(Rect2(x + 1.0, bot - 1.0, w - 2.0, 1.0), dk)                   # 밑 끝
+	#  나사 둘 — 위 · 밑 끝
+	for sy in [top + 6.0, bot - 6.0]:
+		var sc := Vector2(x + w * 0.5, sy)
+		draw_circle(sc, 2.5, dk)
+		draw_circle(sc, 2.0, br.darkened(0.08))
+		draw_line(sc + Vector2(-1.5, 1.0), sc + Vector2(1.5, -1.0), dk, 1.0)
+		draw_rect(Rect2(sc.x - 1.5, sc.y - 2.0, 1.0, 1.0), lit)
+	#  칸마다 구멍 — 짙은 구멍과 그 밑 빛 받은 턱
+	for s in n:
+		var hy: float = roundf(_grip_base(s).y)
+		var hx: float = x + w - 5.0
+		draw_rect(Rect2(hx - 1.0, hy - 3.0, 6.0, 6.0), dk)
+		draw_rect(Rect2(hx, hy - 2.0, 5.0, 4.0), Color("0b0807"))
+		draw_rect(Rect2(hx, hy + 2.0, 5.0, 1.0), lit)
+
+
 # 벽을 언제 그리는가는 부르는 쪽(_hud_draw)이 정한다. 여기 있던 조기
 # 반환은 상류 게이트에 가려 한 번도 안 닿던 죽은 가드였고, 두 곳에 같은
 # 규칙을 적어 두면 다음에 조건을 바꾸는 사람이 한 곳만 고친다.
@@ -13320,21 +13554,25 @@ func _grip_draw() -> void:
 	var picking := state == S.PICK
 
 	# 왼쪽 벽. 꽂힐 면이 없으면 다트가 그냥 떠 있는 것으로 읽힌다.
+	#  다트판 벽(WALL3)이 서면 판자 벽에 박은 놋쇠 꽂이가 그 면이다.
 	var w: float = GRIP.wall
-	#  왼쪽 벽은 **여백 쪽으로도** 두껍다. 안 그러면 넓은 화면에서 벽이
-	#  허공에 떠 있는 판때기가 된다.
-	draw_rect(Rect2(-view_pad.x, 18.0, w + view_pad.x,
-			VIEW.y - 18.0 + view_pad.y), C_DARK.lightened(0.06))
-	draw_line(Vector2(w, 18.0), Vector2(w, VIEW.y), C_WIRE.darkened(0.25), 1.0)
-	# 결 — 벽이 면이라는 것만 알리면 된다
-	for gy in range(30, 356, 14):
-		draw_line(Vector2(2.0, float(gy)), Vector2(w - 2.0, float(gy) + 3.0),
-				C_DARK.darkened(0.25), 1.0)
-	# 꽂힌 자리마다 파인 자국
-	for i in n:
-		var ps := _grip_pose(i)
-		if grip_t >= float(i) * GRIP.gap + GRIP.fly:
-			draw_circle(Vector2(w - 1.0, ps.c.y), 2.4, C_BG.darkened(0.25))
+	if _wall3_live():
+		_wall3_holder()
+	else:
+		#  왼쪽 벽은 **여백 쪽으로도** 두껍다. 안 그러면 넓은 화면에서 벽이
+		#  허공에 떠 있는 판때기가 된다.
+		draw_rect(Rect2(-view_pad.x, 18.0, w + view_pad.x,
+				VIEW.y - 18.0 + view_pad.y), C_DARK.lightened(0.06))
+		draw_line(Vector2(w, 18.0), Vector2(w, VIEW.y), C_WIRE.darkened(0.25), 1.0)
+		# 결 — 벽이 면이라는 것만 알리면 된다
+		for gy in range(30, 356, 14):
+			draw_line(Vector2(2.0, float(gy)), Vector2(w - 2.0, float(gy) + 3.0),
+					C_DARK.darkened(0.25), 1.0)
+		# 꽂힌 자리마다 파인 자국
+		for i in n:
+			var ps := _grip_pose(i)
+			if grip_t >= float(i) * GRIP.gap + GRIP.fly:
+				draw_circle(Vector2(w - 1.0, ps.c.y), 2.4, C_BG.darkened(0.25))
 
 	var hov := -1
 	for i in n:
@@ -19779,6 +20017,9 @@ func _cover_draw() -> void:
 	var r3 := _room3d_live()
 	if r3:
 		_room3d_band(_full().position.y, float(TBL.fy) - 20.0)
+	elif swap_live and _wall3_live():
+		#  판 갈이 — 덮개 띠도 바닥(_draw 의 _wall3_back)과 같은 한 벌이라 이음이 없다.
+		_wall3_back(_full().position.y, float(TBL.fy) - 20.0)
 	else:
 		draw_rect(_wide(0.0, TBL.fy, true),
 				_swap_wall(C_WOOD.darkened(0.30).lerp(C_WOOD, _swap_gone())))
@@ -34544,7 +34785,11 @@ const CLR := {"x": 190.0, "w": 260.0, "y": 86.0, "row": 28.0, "name_w": 150.0,
 func _draw_clear() -> void:
 	#  스크림을 1.0 으로. 0.94 라 뒤 다트판의 「20」이 내역 둘째 줄 위에
 	#  앉아 있었다 — 정산은 읽는 화면이지 비치는 화면이 아니다.
-	draw_rect(_full(), C_BG)
+	#  다트판 벽이 서 있으면 판은 그대로 덮고 벽만 옅게 비친다(_wall3_clear).
+	if _wall3_live():
+		_wall3_clear()
+	else:
+		draw_rect(_full(), C_BG)
 	draw_string(font, Vector2(0, 46), "라운드 %d  %s 클리어"
 			% [GameData.round_of(leg_no), GameData.leg_name(leg_no)],
 			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 24, C_ACC)
