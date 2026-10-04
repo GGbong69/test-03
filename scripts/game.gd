@@ -99,7 +99,13 @@ var win_snap_force := false      # 검사 도구용 — 도구 막음 · 커서 
 
 
 func _win_snap() -> void:
-	if (get_tree().get_script() != null and not win_snap_force) or not OS.has_feature("pc") 			or not _has_renderer() 			or DisplayServer.window_get_mode() != DisplayServer.WINDOW_MODE_WINDOWED:
+	#  렌더러부터 본다 — 헤드리스 검사는 노드를 트리에 안 달고 _process 를 부르기도 해서
+	#  get_tree() 가 null 이다. 거기서 멈추면 _process 가 통째로 끊겨 판이 안 돈다
+	#  (input_probe 30 · qa_hold 21 이 그렇게 실패했다).
+	var tr := get_tree() if _has_renderer() else null
+	if tr == null or (tr.get_script() != null and not win_snap_force) \
+			or not OS.has_feature("pc") \
+			or DisplayServer.window_get_mode() != DisplayServer.WINDOW_MODE_WINDOWED:
 		win_seen = Vector2i.ZERO
 		return
 	var ws: Vector2i = DisplayServer.window_get_size()
@@ -113,7 +119,8 @@ func _win_snap() -> void:
 	var was: Vector2i = win_ok
 	if was.x <= 0 or was.y <= 0:
 		was = ws
-	var keep_w: bool = absf(float(ws.x - was.x)) / float(was.x) 			>= absf(float(ws.y - was.y)) / float(was.y)
+	var keep_w: bool = absf(float(ws.x - was.x)) / float(was.x) \
+			>= absf(float(ws.y - was.y)) / float(was.y)
 	var w: float = float(ws.x)
 	var h: float = float(ws.y)
 	if keep_w:
@@ -137,7 +144,8 @@ func _win_snap() -> void:
 		return
 	#  놓았나 — 커서가 창 안쪽에 있어야 한다.
 	var wp: Vector2i = DisplayServer.window_get_position()
-	if not win_snap_force 			and not Rect2i(wp, ws).grow(-int(WIN_SNAP["in"])).has_point(DisplayServer.mouse_get_position()):
+	if not win_snap_force \
+			and not Rect2i(wp, ws).grow(-int(WIN_SNAP["in"])).has_point(DisplayServer.mouse_get_position()):
 		return
 	DisplayServer.window_set_size(want)
 	#  늘어나 화면 밖으로 나갔으면 안으로 민다(테두리째).
@@ -908,6 +916,11 @@ var beep_gap := 0.07
 func _ready() -> void:
 	#  이름을 HIGHTON 으로 옮기며 갈라진 저장 폴더를 한 번 잇는다 — 무엇보다 먼저다.
 	Save.migrate_name()
+	#  헤드리스는 창이 100x100 이라 fractional 이면 배율 0.156 · 논리 640x640 이 되어
+	#  검사가 밀어 넣는 누름 좌표가 6.4 배로 어긋난다(input_probe 30 · qa_hold 21 실패).
+	#  옛 integer 는 배율을 1 아래로 안 내렸다 — 렌더러가 없을 때만 그것으로 돌린다.
+	if not _has_renderer() and get_window() != null:
+		get_window().content_scale_stretch = Window.CONTENT_SCALE_STRETCH_INTEGER
 	_autoplay = OS.get_cmdline_user_args().has("autoplay")
 	drop_fast = _autoplay          # 헤드리스는 낙하를 안 기다린다
 	if _autoplay:
