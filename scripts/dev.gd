@@ -640,6 +640,9 @@ static func _names(k: String) -> PackedStringArray:
 	#  사다리가 같은 실패를 적어 뒀다). 2026-09-24
 	if k == "brk":
 		return PackedStringArray(BRK_TIERS)
+	#  판 손 — _cur_name 과 짝이다(2026-10-04).
+	if k == "legh":
+		return PackedStringArray(LEGH_STEPS)
 	#  오버 금의 단. 표가 아니라 상수 목록이라 **_cur_name 과 짝으로**
 	#  낸다 — 같은 이유, 같은 실패. 2026-09-25
 	if k == "brkdeep":
@@ -1107,6 +1110,13 @@ static func _rows(g: Node) -> Array:
 				#  3D 방(2026-10-01 맛보기) — 옛 단색과 같은 자리에서 맞대 본다.
 				{"n1": "3D 방 %s" % ("켬" if g.room3d_on else "끔"),
 						"t": "act", "a": "room3d"},
+				#  ── 판 고르기 다트판 (2026-10-04 · game.gd LEGB · LEGH) ──────────
+				#  「상인이 판을 내려놓고, 고른 판을 집어 듭니다.」 — 딜은 판 고르기를 열
+				#  때만, 집기는 「던진다」를 눌렀을 때만 돈다. 고치는 동안 판을 넘기며 볼 수
+				#  없어 ◀▶ 로 둘을 골라 그 자리에서 낸다. 집기는 **미리 보기**다 — 판을 안
+				#  열고(_begin_leg 을 안 부른다) 들었던 길로 되짚어 내려놓는다. 런 진도 ·
+				#  값은 한 톨도 안 바뀐다. 열여덟째 줄이다(한계 열아홉).
+				{"n1": "판 손 다시 보기", "t": "list", "k": "legh", "n": LEGH_STEPS.size()},
 				#  ── 상인 몸짓 (2026-10-02) ────────────────────────
 				#  손가락이 선 뒤(주먹 · 짚기 · 두드리기 · 쫙 편 손 · 쥔 손) 그 자세를
 				#  볼 길이 저절로 나는 몸짓을 기다리거나 상인을 누르는 것뿐이었다(검토).
@@ -1330,6 +1340,8 @@ static func _hold_row(ty: String, rar: String) -> Dictionary:
 
 # 판 깨짐의 층 셋. game.gd 의 BRK.small · big · boss 와 **같은 차례**다.
 const BRK_TIERS := ["작은 판", "큰 판", "보스 판"]
+#  판 고르기의 판 손 — 0 딜(내려놓기) · 1 집기(미리 보기). game.gd LEGH 머리말.
+const LEGH_STEPS := ["딜 — 내려놓기", "집기 — 미리 보기"]
 #  오버 금의 단 넷. game.gd 의 BRKDEEP 과 **같은 차례**다.
 #  큰 배율은 손으로 만들기 어렵다 — x3 을 넘기려면 목표의 세 배를 한 발에
 #  내야 하는데 실측 분포에서 6% 다. 이 줄이 3단을 보는 유일한 길이다.
@@ -1671,6 +1683,9 @@ static func _cur_name(g: Node, e: Dictionary) -> String:
 	#  큰 판이 기하에서 같았다).
 	#  ⚠ 이 칸은 화살표 둘 사이라 **스물몇 자에서 끊긴다** — 「오버 금」
 	#  줄이 이미 그렇게 잘린 적이 있다. 넷만 적는다.
+	if k == "legh":
+		var jl: int = i % LEGH_STEPS.size()
+		return "%d/%d %s" % [jl + 1, LEGH_STEPS.size(), LEGH_STEPS[jl]]
 	if k == "brk":
 		var gj: int = i % BRK_TIERS.size()
 		var gt: Dictionary = load("res://scripts/game.gd").BRK[
@@ -2776,6 +2791,21 @@ static func _run(g: Node, e: Dictionary) -> void:
 			g._aim_begin()
 			_aim_sticker(g, am)
 			_say("조준 %s" % GameData.aim_name(am))
+		"legh":
+			#  「라운드 넘김 다시 보기」와 **같은 규약**이다 — 필요하면 화면만 판 고르기로
+			#  맞추고, 값(골드 · 목표 · leg_no · 뱃지)은 한 톨도 안 건드린다.
+			if g.state != g.S.LEG:
+				g._open_leg()
+			if i % LEGH_STEPS.size() == 0:
+				#  딜은 판 고르기의 시계(leg_t)를 되감는 것이 전부다 — 손 · 판 · 숨이
+				#  다 그 시계를 읽는다.
+				g._legh_reset()
+				g.leg_t = 0.0
+				_say("판 손 — 딜")
+				return
+			var why: String = g._legb_pick_preview()
+			_say("판 손 — 집기" if why == "" else "판 손 — %s" % why)
+			return
 		"brk":
 			#  「라운드 넘김 다시 보기」와 **같은 규약**이다 — 필요하면
 			#  화면만 맞춰 주고, 값(골드 · 목표 · 매물 · **leg_no**)은 한
