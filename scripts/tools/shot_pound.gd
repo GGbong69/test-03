@@ -127,6 +127,40 @@ func _run() -> void:
 	await _settle(20)
 	print("주먹 — 진열대 %s · 손 3D %s" % [g._room3d_tbl(), g._hand3_live()])
 
+	# ── 판매 — 들어 올려 오른쪽 벽으로 던진다(2026-10-04) ──
+	var picks := []
+	for it in GameData.items():
+		if String((it as Dictionary).get("rarity", "")) == "rare":
+			picks.append((it as Dictionary).duplicate())
+			break
+	for c in picks:
+		c.gs = 0
+		c.bought = g.leg_no
+		g.owned.append(c)
+	g._panel_reset()
+	await _settle(10)
+	g.sell_sel = 0
+	g._chute_click(g.Z_SELL)
+	print("판매 — 섰다 %s" % g._prop_live(0))
+	var cells := []
+	var rt := 0.0
+	for want in [0.45, 0.53, 0.60, 0.66, 0.72, 0.80, 0.84, 0.95]:
+		while rt < float(want) - 0.0001:
+			_calm()
+			g._process(1.0 / 120.0)
+			rt += 1.0 / 120.0
+		await _settle(3)
+		var im: Image = root.get_texture().get_image()
+		cells.append(_crop(im, Rect2(0.0, 0.0, 640.0, 200.0), 1))
+		print("  sell %.2f · 날기 %d · 조각 %d" % [rt, g.th_fly.size(), g.th_bits.size()])
+		if absf(float(want) - 0.84) < 0.001:
+			im.save_png("res://shots/throw_hit.png")
+	_sheet(cells, 2).save_png("res://shots/throw_strip.png")
+	for k in 120:
+		_calm()
+		g._process(1.0 / 120.0)
+	await _settle(6)
+
 	# ── 사탕 ──
 	for c in GameData.candies():
 		if String((c as Dictionary).get("id", "")) == "c_tr":

@@ -9103,6 +9103,7 @@ func _hud_draw() -> void:
 		_modplate_draw()    # 낀 보드 확장 명판(던지는 동안만)
 		_rack_hold_draw()   # 판 위다 — 끌고 다니는 동전은 무엇에도 안 덮인다
 		_prop_fly_draw()    # 판 동전이 동전 슬롯에서 저울 접시로 난다(판매 몸짓)
+		_throw_draw()       # 던진 판 동전이 오른쪽 벽에 맞아 깨진다(판매 몸짓)
 		_pound_candy_draw(0)   # 사탕이 사탕 칸에서 펠트로 난다(주먹 몸짓)
 		_use_draw()         # 가운데로 끌고 온 사탕·사진과 그 자리
 		# 나가는 전환에서만 같이 들어온다. 돌아오는 쪽은 안 그린다 —
@@ -19664,7 +19665,6 @@ func _cover_draw() -> void:
 		draw_set_transform(shake_off)
 	#  판 동전이 먼 턱 뒤로 떨어진다(판매 몸짓) — 몸통 다음 · 턱(아래 테이블 띠) 앞이라
 	#  턱이 덮어 사라진다.
-	_prop_drop_draw()
 	var t3 := _room3d_tbl()
 	if t3:
 		#  화판 윗끝부터 — 턱 위로 솟은 소품도 벽 띠 위에 다시 선다(나머지는 투명).
@@ -23496,6 +23496,10 @@ func _idle_index(nm: String) -> int:
 #    0.44  든다 — 무게가 떠나 접시가 올라오며 출렁인다. 0.56 부터 먼 턱 너머(상인 쪽)로
 #          당긴다.
 #    0.94  턱 뒤에서 놓는다 — 동전이 떨어져 먼 턱에 가려 사라진다(_prop_drop_draw).
+#    ⇒ 2026-10-04 「아이템 판매할때 판매됐는지 이팩트가 좀 없네? 저울에 놨다가 NPC가 들어
+#      올리고 오른쪽으로 던져버리는건 어때? 그럼 동전은 쓩 날아가서 오른쪽 벽이랑 부딪혀서
+#      부숴지는거지」 — 0.56 에 든 뒤로 바뀌었다(THROW 머리말): 0.66 왼쪽 뒤로 감고 0.74 에
+#      오른쪽 위로 휘두르며 놓는다. 동전은 0.22 초에 다트판 옆 벽까지 날아가 부서진다.
 #          손은 1.30 에 쉼이다.
 #  ── 구매 — 내리치기 (화면 오른손 · 0.90 초) ──────────────────
 #    0.00  손이 등록기 위로 치켜 오른다 — 손바닥은 펴고 손가락은 느슨히(FPOSE.open +
@@ -23549,31 +23553,30 @@ const PROP := {
 	"s_reach": 0.40,     # 손이 접시에 닿는다(뻗기 봉투 끝)
 	"s_g0": 0.30, "s_g1": 0.44,     # 테를 집는다(쥠 0 → 1)
 	"s_lift": 0.56,      # 든다
-	"s_carry": 0.84,     # 먼 턱 너머로 당겼다
-	"s_rel": 0.94,       # 놓는다
-	"s_end": 1.30,       # 손이 쉼이다
+	"s_wind": 0.66,      # 왼쪽 뒤로 감았다(예비 동작) — 여기서 휘두른다
+	"s_rel": 0.74,       # 오른쪽 위로 휘두르며 놓는다 — 동전이 날아간다(THROW)
+	"s_end": 1.10,       # 손이 쉼이다
 	"hop": 22.0,         # 나는 동전 포물선 높이(화면 px)
 	"lift": 14.0,        # 접시에서 드는 높이
-	"arc": 12.0,         # 당길 때 한가운데서 더 드는 높이
+	#  감는 자리 · 놓는 자리 — 든 자리(접시 위 lift)에서 (u, h, w). 감을 때 왼쪽 위 · 몸 쪽으로
+	#  당기고, 놓을 때 오른쪽 위 · 앞으로 뻗는다. 팔은 접시 쪽 왼팔이라 오른쪽으로 많이 못 간다 —
+	#  손목이 46 만 가고 나머지는 동전이 날아간다(손을 떠난 뒤의 속도가 「던짐」이다).
+	"s_wind_d": Vector3(-12.0, 18.0, -10.0),
+	"s_throw_d": Vector3(46.0, 30.0, 6.0),
 	#  접시 위 동전 — 안 접시 테 반지름(10 × 2.0 = 20)보다 한 칸 작다. 옛 10.5(테 11)를
 	#  곱 그대로 두면 두 배 접시 한가운데 점이 된다. 테이블 동전(22)보다 조금 작다 —
 	#  두께는 그 비(5.2 × 17 / 22)다.
 	"coin_r": 17.0,
 	"coin_t": 4.0,
-	"fall_g": 2600.0,    # 놓은 동전이 떨어지는 가속(면/s²) — 0.13 초에 턱 뒤로 든다
 	#  손이 기울고 싶은 쪽(도) — 손목 한도(dev · flex) 안에서만 산다(_prop_goal).
 	#  손각: 접시에서는 손끝이 왼쪽(조금 앞) · 당길 때는 왼쪽 뒤. 숙임: 손끝이 아래로 —
 	#  위에서 내려와 집는 손이다. 판판한 손(10°)은 팔뚝 · 손등이 거의 수평인데 말린 손가락이
 	#  손끝에서 곧장 떨어져 화면에서 손목이 꺾인 것으로 읽혔다(「손이 좀 꺽이네?」).
-	"s_ang0": 170.0, "s_ang1": 200.0, "s_pit": 30.0,
+	"s_ang0": 170.0, "s_ang1": 200.0, "s_ang2": 120.0, "s_pit": 30.0,
 	#  집는 자리 — 검지 끝에서 동전 한가운데로 가는 쪽(손 좌표 · 손끝 앞에서 엄지 쪽으로, 도).
 	#  다가오는 손 쪽 테(안 접시의 상인 쪽 테)를 손가락이 팔 줄 그대로 감싼다. 건네기(GIVE.din
 	#  −50°)는 동전을 화면 가운데로 내미는 자리라 옆으로 크게 튼다 — 여기는 손끝 앞이다.
 	"s_din": -15.0,
-	#  놓는 자리 — 동전 한가운데 (u, h, w). 먼 턱 뒤끝(w −14)보다 뒤라 떨어지면 턱이 가린다.
-	#  턱 바로 위 낮은 자리(화면 y 107)라 0.13 초 만에 턱 뒤로 든다. 저울 오른끝(u 101)
-	#  밖이라 떨어지는 동전이 저울 몸에 안 걸린다.
-	"s_lip": Vector3(132.0, 16.0, -16.0),
 	#  몸 — roll · yaw · lean · rise. 왼쪽으로 기울어(roll +) 왼 어깨가 저울 쪽으로 내려오고,
 	#  조금 앞으로 나온다. 안 접시가 옛 왼 접시보다 상인 쪽으로 60 가깝고 40 높아(시안 C)
 	#  옛 기울기(0.20 · 14)의 반쯤이면 닿는다.
@@ -23692,8 +23695,11 @@ var prop_tilt0 := 0.0             # 날기 전 저울대 — 끌어 대던 동�
 var prop_grab := Vector3.ZERO     # 다 쥔 순간의 동전 자리 (u, h, w) — 그 뒤는 손이 든다
 var prop_hold3 := Vector3.ZERO    # 이 틀 손이 집은 동전 (u, w, h) — _prop_arm 이 적는다
 var prop_grab_ok := false
-var prop_drop := Vector3(0.0, -99.0, 0.0)    # 놓은 동전 (u, h, w)
-var prop_dv := 0.0
+#  던진 동전 · 깨진 조각(THROW) — 몸짓과 따로 산다(다시 팔아도 앞 동전은 끝까지 날아가 깨진다).
+var th_fly := []                  # {it, p0, t, sp} — 화면 자리에서 벽으로 난다
+var th_bits := []                 # {p, v, a, om, c, life, t, k} — 조각(0) · 불티(1)
+var th_marks := []                # {p, t, a} — 벽에 남는 금
+var th_flash := []                # {p, t} — 닿는 순간의 흰 고리
 var prop_ghost := {}              # 앞 동전 {it, c, r, sq, lay, t} — lay 0 HUD 위 · 1 손 층 · 2 턱 뒤
 var prop_force := false           # 그림 없는 판(헤드리스 검사)에서도 몸짓을 돌린다
 #  오른손 몸짓의 갈래 — "" 등록기 내리치기(구매) · "candy" 사탕 부수기 · "table" 빈 테이블
@@ -23856,8 +23862,7 @@ func _prop_sell(it: Dictionary, from: Vector2, peel: float) -> bool:
 	prop_cut[0] = 0.0
 	prop_grab_ok = false
 	prop_tilt0 = scale_tilt
-	prop_drop = Vector3(0.0, -99.0, 0.0)
-	prop_dv = 0.0
+
 	#  집기 치수 — 건네기의 그 값(give_*)에 접시 동전을 적는다. 건네기가 서는 동안은
 	#  이 몸짓이 안 선다(_prop_stop)라 서로 안 덮는다 — 건넬 때 _give_fit 이 다시 적는다.
 	give_depth = float(PROP.coin_r)
@@ -24263,9 +24268,6 @@ func _prop_ghost_take() -> void:
 		var c3 := _prop_coin_now()
 		prop_ghost = {"it": prop_it, "c": _p2s(c3.x, c3.y, c3.z), "r": float(PROP.coin_r),
 				"sq": float(TBL.flat), "lay": 1, "t": 0.0}
-	elif prop_drop.y > -30.0:
-		prop_ghost = {"it": prop_it, "c": _p2s(prop_drop.x, prop_drop.z, prop_drop.y),
-				"r": float(PROP.coin_r), "sq": float(TBL.flat), "lay": 2, "t": 0.0}
 	prop_it = {}
 
 
@@ -24289,7 +24291,6 @@ func _prop_end(i: int) -> void:
 	_prop_snap_clear(i)
 	if i == 0:
 		prop_it = {}
-		prop_drop = Vector3(0.0, -99.0, 0.0)
 	else:
 		prop_pound = ""
 		pc_id = ""
@@ -24298,6 +24299,7 @@ func _prop_end(i: int) -> void:
 #  매 틀 — _process 가 _give_tick 다음에 부른다(늦추기 전 · 상인 시계와 같은 자리).
 func _prop_tick(d: float) -> void:
 	_scale_tick(d)
+	_throw_tick(d)
 	_reg_tick(d)
 	_burst_tick(d)
 	if not prop_ghost.is_empty():
@@ -24353,12 +24355,12 @@ func _prop_sell_beat(t0: float, t1: float, d: float) -> void:
 		prop_grab = _prop_pan3()
 		prop_grab_ok = true
 		_sfx("hand_take")
-	if t0 < float(P.s_rel) and t1 >= float(P.s_rel):
-		prop_drop = P.s_lip
-		prop_dv = 0.0
-	if t1 > float(P.s_rel) and prop_drop.y > -30.0:
-		prop_dv += float(P.fall_g) * d
-		prop_drop.y -= prop_dv * d
+	if t0 < float(P.s_rel) and t1 >= float(P.s_rel) and not prop_it.is_empty():
+		#  놓는다 — 손이 집은 그 자리(prop_hold3)에서 동전이 날아간다.
+		var c3: Vector3 = prop_hold3 if prop_grab_ok else Vector3(prop_grab.x, prop_grab.z,
+				prop_grab.y)
+		_throw_go(prop_it, _p2s(c3.x, c3.y, c3.z))
+		_sfx("sweep_whip", SFX_BASE * float(THROW.whip))
 
 
 #  저울대 — 끌어 대면(창구 불) 왼 접시가 내려앉고(옛 그대로 초당 5), 판 동전이 접시에
@@ -24711,11 +24713,18 @@ func _prop_coin_goal(t: float) -> Vector3:
 	if t < float(P.s_lift):
 		var k: float = _ease_io((t - float(P.s_g1)) / (float(P.s_lift) - float(P.s_g1)))
 		return prop_grab + Vector3(0.0, float(P.lift) * k, 0.0)
-	var k2: float = _ease_io((t - float(P.s_lift)) / (float(P.s_carry) - float(P.s_lift)))
-	prop_ga = lerpf(float(P.s_ang0), float(P.s_ang1), k2)
 	var up: Vector3 = prop_grab + Vector3(0.0, float(P.lift), 0.0)
-	var lip: Vector3 = P.s_lip
-	return up.lerp(lip, k2) + Vector3(0.0, float(P.arc) * sin(k2 * PI), 0.0)
+	var wd: Vector3 = up + P.s_wind_d
+	if t < float(P.s_wind):
+		#  감는다 — 왼쪽 위 · 몸 쪽으로. 손끝이 조금 더 뒤를 본다.
+		var kw: float = _ease_io((t - float(P.s_lift)) / (float(P.s_wind) - float(P.s_lift)))
+		prop_ga = lerpf(float(P.s_ang0), float(P.s_ang1), kw)
+		return up.lerp(wd, kw)
+	#  휘두른다 — 감은 자리에서 오른쪽 위로 가속한다(제곱). 놓은 뒤로도 손은 같은 쪽으로
+	#  조금 더 간다(따라 나가기) — 섞임(pw_k)이 쉼으로 데려가는 동안 손이 거꾸로 안 튄다.
+	var kt: float = clampf((t - float(P.s_wind)) / (float(P.s_rel) - float(P.s_wind)), 0.0, 1.3)
+	prop_ga = lerpf(float(P.s_ang1), float(P.s_ang2), minf(kt, 1.0))
+	return wd.lerp(up + P.s_throw_d, kt * kt * (1.0 if kt <= 1.0 else 1.0 / kt))
 
 
 #  지금 판 동전 (u, w, h) — 그리기 자리. 쥐기 전은 접시(기울기를 따라간다), 쥔 뒤는
@@ -25171,22 +25180,177 @@ func _prop_coin_draw() -> void:
 	_prop_coin_paint(_p2s(c3.x, c3.y, c3.z), float(PROP.coin_r), float(TBL.flat), prop_it, 0.0)
 
 
-#  ③ 턱 뒤 — 놓은 동전이 떨어진다. 상인 몸통 다음 · 먼 턱(테이블 띠) **앞**이라 턱이
-#  나중에 덮어 동전이 턱 뒤로 사라진다. 손 · 팔은 그 뒤에 그린다(손이 동전 위다).
-func _prop_drop_draw() -> void:
-	_prop_ghost_draw(2)
-	if not _prop_live(0) or prop_cut[0] > 0.0 or prop_it.is_empty():
+# ══════════════════════════════════════════════════════════
+#  던진 동전 — 오른쪽 벽에 맞아 깨진다 (2026-10-04)
+# ──────────────────────────────────────────────────────────
+#  「아이템 판매할때 판매됐는지 이팩트가 좀 없네? … 오른쪽으로 던져버리는건 어때? 그럼
+#   동전은 쓩 날아가서 오른쪽 벽이랑 부딪혀서 부숴지는거지」. 판 동전이 손을 떠나(s_rel)
+#  0.22 초에 다트판 옆 벽(THROW.to)까지 포물선으로 난다 — 돌며(옆으로 누웠다 섰다) 작아지고
+#  (멀어진다) 뒤에 금빛 꼬리가 끌린다(「쓩」). 벽에 닿으면 동전 색 조각 열과 금 불티 여섯이
+#  벽에서 튀어 떨어지고, 벽에 금 한 줄이 잠깐 남고, 화면이 조금 흔들리고, 깨지는 소리
+#  하나(coin_break)가 난다. 조각은 카운터 높이(먼 턱)에 닿으면 가라앉는다.
+#  ⚠ 몸짓과 **따로 산다** — 다시 팔아 몸짓이 처음부터 돌아도 앞 동전은 끝까지 날아가 깨진다.
+#  값(골드 · 동전 슬롯)은 옛 그대로 판 순간에 확정이다 — 이것은 그 뒤의 그림이다.
+#  화면 좌표(HUD 위 층)에서 돈다 — 벽은 3D 방의 그림이라 면 좌표가 없다.
+const THROW := {
+	"t": 0.22,           # 나는 시간(실시간)
+	#  닿는 자리 — 벽에 건 다트판(화면 522, 82 · 반지름 18) 오른쪽 벽 한가운데. 다트판 위(58)로
+	#  두었더니 HUD 동전 칸에 붙어 깨지는 것이 HUD 속에서 난 것으로 읽혔다(촬영).
+	"to": Vector2(562.0, 84.0),
+	"hop": 22.0,         # 포물선 높이(화면 px) — 34 면 HUD 동전 칸 밑변을 스쳤다
+	"r0": 13.0, "r1": 8.0,        # 동전 반지름(화면) — 멀어지며 작아진다
+	"spin": 34.0,        # 도는 빠르기(라디안/초) — 납작했다 섰다
+	"trail": 5,          # 꼬리 마디 — 지난 자리 다섯(1/60 초씩)
+	"bits": 12, "sparks": 7,
+	"flash_t": 0.10, "flash_r": 11.0,   # 닿는 순간 흰 고리 — 커지며 사라진다
+	"g": 900.0,          # 조각이 떨어지는 가속(화면 px/s²)
+	"shake": 2.5,
+	"whip": 1.35,        # 휘두르는 바람 — sweep_whip 을 이 배로 올린다(쓸기보다 짧고 가볍다)
+	"crack_t": 0.70,     # 벽의 금이 남는 시간
+}
+
+
+#  놓는다 — 동전 하나를 화면 자리 p0 에서 벽으로 날린다.
+func _throw_go(it: Dictionary, p0: Vector2) -> void:
+	if motion_off:
 		return
-	if prop_t[0] < float(PROP.s_rel) or prop_drop.y <= -30.0:
+	th_fly.append({"it": it, "p0": p0, "t": 0.0, "sp": 0.0})
+
+
+#  그 동전의 t(0..1) 자리 — 포물선(가운데가 hop 만큼 높다).
+func _throw_at(f: Dictionary, k: float) -> Vector2:
+	var p0: Vector2 = f.p0
+	var p1: Vector2 = THROW.to
+	return p0.lerp(p1, k) - Vector2(0.0, float(THROW.hop) * 4.0 * k * (1.0 - k))
+
+
+func _throw_tick(d: float) -> void:
+	if th_fly.is_empty() and th_bits.is_empty() and th_marks.is_empty() and th_flash.is_empty():
 		return
-	#  턱(테이블 띠)은 화면 y fy + 1 까지만 다시 덮는다 — 그 밑은 벨벳이 먼저 깔린 자리라
-	#  동전 밑끝이 거기를 넘으면 턱 **앞** 벨벳 위에 한 줄 비친다(촬영). 그 틀이면 이미
-	#  윗끝까지 턱 갓(y 110.6~) 뒤라 통째로 걷는다.
-	var c := _p2s(prop_drop.x, prop_drop.z, prop_drop.y)
-	if c.y + float(PROP.coin_r) * float(TBL.flat) + float(PROP.coin_t) * float(TBL.tall) \
-			> float(TBL.fy) + 1.0:
+	if state != S.SHOP or swap_live or motion_off:
+		th_fly.clear()
+		th_bits.clear()
+		th_marks.clear()
+		th_flash.clear()
 		return
-	_prop_coin_paint(c, float(PROP.coin_r), float(TBL.flat), prop_it, 0.0)
+	var fk := th_flash.size() - 1
+	while fk >= 0:
+		th_flash[fk].t = float(th_flash[fk].t) + d
+		if float(th_flash[fk].t) >= float(THROW.flash_t):
+			th_flash.remove_at(fk)
+		fk -= 1
+	var k := th_fly.size() - 1
+	while k >= 0:
+		var f: Dictionary = th_fly[k]
+		f.t = float(f.t) + d
+		f.sp = float(f.sp) + d * float(THROW.spin)
+		if float(f.t) >= float(THROW.t):
+			_throw_hit(f)
+			th_fly.remove_at(k)
+		k -= 1
+	var fl: float = float(TBL.fy) - 2.0
+	k = th_bits.size() - 1
+	while k >= 0:
+		var b: Dictionary = th_bits[k]
+		b.t = float(b.t) + d
+		var v: Vector2 = b.v
+		v.y += float(THROW.g) * d
+		b.v = v
+		b.p = (b.p as Vector2) + v * d
+		b.a = float(b.a) + float(b.om) * d
+		#  먼 턱(카운터) 높이에 닿으면 가라앉는다 — 조각은 카운터 뒤로 떨어진다.
+		if float(b.t) >= float(b.life) or (b.p as Vector2).y > fl:
+			th_bits.remove_at(k)
+		k -= 1
+	k = th_marks.size() - 1
+	while k >= 0:
+		var m: Dictionary = th_marks[k]
+		m.t = float(m.t) + d
+		if float(m.t) >= float(THROW.crack_t):
+			th_marks.remove_at(k)
+		k -= 1
+
+
+#  벽에 닿았다 — 조각 · 불티 · 금 · 흔들림 · 소리.
+func _throw_hit(f: Dictionary) -> void:
+	var at: Vector2 = THROW.to
+	var it: Dictionary = f.it
+	var body := Color(STK_TIERS[_stk_ti(String(it.get("rarity", "common")))].body)
+	var gold: bool = String(it.get("g", "")) != ""
+	#  판 위 조각과 같은 두 단(_shard_tone) — 어두운 몸(레어 · 레전더리)은 밝혀서 쓴다.
+	#  몸색 그대로였더니 레어의 남색 조각이 어두운 벽에 통째로 묻혔다(촬영).
+	var tones: Array = _shard_tone(body, gold)
+	var c0: Color = tones[0]
+	var c1: Color = tones[1]
+	var sd: int = th_marks.size() * 97 + int(float(f.sp) * 13.0) + 7
+	var nb: int = int(THROW.bits)
+	for j in nb + int(THROW.sparks):
+		var spark: bool = j >= nb
+		#  벽에서 튄다 — 왼쪽(화면 안 · 온 쪽)으로 부채꼴. 불티는 더 빠르고 위로 뜬다.
+		var a: float = PI + (_gl_rand(j * 5 + 1, sd) - 0.5) * 2.2
+		var sp: float = lerpf(90.0, 260.0, _gl_rand(j * 5 + 2, sd)) * (1.6 if spark else 1.0)
+		th_bits.append({"p": at + Vector2(-2.0, (_gl_rand(j * 5 + 3, sd) - 0.5) * 6.0),
+				"v": Vector2(cos(a), sin(a)) * sp + Vector2(0.0, -80.0 if spark else -40.0),
+				"a": _gl_rand(j * 5 + 4, sd) * TAU,
+				"om": lerpf(-24.0, 24.0, _gl_rand(j * 5 + 5, sd)),
+				"c": C_GOLD.lightened(0.4) if spark else (c0 if j % 2 == 0 else c1),
+				"life": lerpf(0.35, 0.6, _gl_rand(j * 7 + 9, sd)) if spark
+						else lerpf(0.55, 0.85, _gl_rand(j * 7 + 9, sd)),
+				"t": 0.0, "k": 1 if spark else 0})
+	th_marks.append({"p": at, "t": 0.0, "a": _gl_rand(sd, 3) * TAU})
+	th_flash.append({"p": at, "t": 0.0})
+	shake = maxf(shake, float(THROW.shake))
+	_sfx("coin_break", SFX_BASE * 1.08)
+
+
+#  그린다 — HUD 위 층(_prop_fly_draw 자리): 벽의 금 · 나는 동전과 꼬리 · 조각.
+func _throw_draw() -> void:
+	for m in th_marks:
+		var k: float = 1.0 - float(m.t) / float(THROW.crack_t)
+		var p: Vector2 = m.p
+		var a0: float = float(m.a)
+		for j in 5:
+			var aa: float = a0 + TAU * float(j) / 5.0 + 0.3 * sin(float(j) * 2.1)
+			var ln: float = 5.0 + 3.0 * float((j * 3) % 4)
+			var q := p + Vector2(cos(aa), sin(aa)) * ln
+			draw_line(p, q, Color(0.05, 0.03, 0.04, 0.55 * k), 1.0)
+		draw_rect(Rect2(p - Vector2(1.0, 1.0), Vector2(2.0, 2.0)), Color(0.0, 0.0, 0.0, 0.6 * k))
+	for f in th_fly:
+		var kf: float = clampf(float(f.t) / float(THROW.t), 0.0, 1.0)
+		#  꼬리 — 지난 자리를 이어 금빛 줄로. 앞으로 갈수록 짙다.
+		var n: int = int(THROW.trail)
+		var prev := _throw_at(f, kf)
+		for j in range(1, n + 1):
+			var kk: float = clampf(kf - float(j) / 60.0 / float(THROW.t), 0.0, 1.0)
+			var q := _throw_at(f, kk)
+			draw_line(prev, q, Color(C_GOLD, 0.55 * (1.0 - float(j) / float(n + 1))),
+					maxf(3.0 - float(j) * 0.4, 1.0))
+			prev = q
+		var r: float = lerpf(float(THROW.r0), float(THROW.r1), kf)
+		var sq: float = 0.22 + 0.78 * absf(cos(float(f.sp)))
+		_prop_coin_paint(_throw_at(f, kf), r, sq, f.it, 0.0)
+	for b in th_bits:
+		var p: Vector2 = b.p
+		var fade: float = clampf(1.0 - (float(b.t) - float(b.life) * 0.7) / (float(b.life) * 0.3),
+				0.0, 1.0)
+		var c: Color = b.c
+		if int(b.k) == 1:
+			draw_rect(Rect2(p.round(), Vector2(1.0, 1.0)), Color(c, fade))
+			draw_rect(Rect2(p.round() - Vector2(1.0, 0.0), Vector2(3.0, 1.0)),
+					Color(c, 0.5 * fade))
+		else:
+			#  조각 — 4px 키 · 폭이 |cos| 로 숨쉰다(1~4) · 짙은 밑단 · 빛 한 점.
+			var wx: float = 1.0 + roundf(3.0 * absf(cos(float(b.a))))
+			var o := p.round() - Vector2(roundf(wx * 0.5), 2.0)
+			draw_rect(Rect2(o, Vector2(wx + 1.0, 4.0)), Color(c.darkened(0.5), fade))
+			draw_rect(Rect2(o, Vector2(wx, 3.0)), Color(c, fade))
+			draw_rect(Rect2(o, Vector2(1.0, 1.0)), Color(c.lightened(0.5), fade))
+	for fl in th_flash:
+		var kq: float = clampf(float(fl.t) / float(THROW.flash_t), 0.0, 1.0)
+		var rr: float = 3.0 + float(THROW.flash_r) * kq
+		draw_arc(fl.p, rr, 0.0, TAU, 20, Color(1.0, 0.97, 0.88, 0.9 * (1.0 - kq)),
+				maxf(3.0 * (1.0 - kq), 1.0))
+		draw_circle(fl.p, 3.0 * (1.0 - kq), Color(1.0, 1.0, 1.0, 0.9 * (1.0 - kq)))
 
 
 

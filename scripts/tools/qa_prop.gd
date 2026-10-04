@@ -128,6 +128,10 @@ func _clear_acts() -> void:
 	g.reg_open = 0.0
 	g.reg_fx = Vector3.ZERO
 	g._burst_clear()
+	g.th_fly.clear()
+	g.th_bits.clear()
+	g.th_marks.clear()
+	g.th_flash.clear()
 	g.shake = 0.0
 
 
@@ -331,6 +335,49 @@ func _run() -> void:
 	_ok("판 뒤 왼손이 쉼으로 돌아온다", back0 < 0.01 and g._give_grip(0) < 0.001,
 			"어긋남 %.3f · 쥠 %.3f" % [back0, g._give_grip(0)])
 	_ok("판 뒤 남은 동전 그림이 없다", g.prop_it.is_empty() and g.prop_ghost.is_empty(), "")
+	#  던진 동전(2026-10-04 「들어 올리고 오른쪽으로 던져버리는건 어때? 그럼 동전은 쓩 날아가서
+	#  오른쪽 벽이랑 부딪혀서 부숴지는거지」) — 놓는 박자에 날아가 벽에 닿아 조각 · 불티가 튀고,
+	#  다 가라앉는다. 값은 판 순간 그대로다(①).
+	_restore(base)
+	_clear_acts()
+	_calm()
+	g.sell_sel = 0
+	var gth0: int = g.gold
+	g._chute_click(g.Z_SELL)
+	var gth1: int = g.gold
+	var TH: Dictionary = g.THROW
+	var fx_max := 0.0
+	var rel_pt := -1.0
+	var bits_max := 0
+	var flash_seen := false
+	var hit_at := Vector2(-1.0, -1.0)
+	var tth := 0.0
+	while tth < 3.0:
+		var pt0: float = g.prop_t[0]
+		g._prop_tick(DT)
+		tth += DT
+		if rel_pt < 0.0 and not g.th_fly.is_empty():
+			rel_pt = pt0
+		for f in g.th_fly:
+			fx_max = maxf(fx_max, (g._throw_at(f, clampf(float(f.t) / float(TH.t), 0.0, 1.0))
+					as Vector2).x)
+		bits_max = maxi(bits_max, g.th_bits.size())
+		flash_seen = flash_seen or not g.th_flash.is_empty()
+		if not g.th_marks.is_empty():
+			hit_at = g.th_marks[0].p
+		if tth > 0.5 and g.th_fly.is_empty() and g.th_bits.is_empty() and g.th_marks.is_empty() 				and g.th_flash.is_empty() and not g._prop_live(0):
+			break
+	_ok("판매 — 놓는 박자에 동전이 날아간다", rel_pt >= 0.0
+			and absf(rel_pt - float(g.PROP.s_rel)) <= DT * 2.0, "놓은 틀 %.3f (표 %.2f)" % [rel_pt,
+			float(g.PROP.s_rel)])
+	#  날던 마지막 틀은 벽 앞 한 틀(초속 2000px 언저리라 33px 안)이다 — 깨진 자리는 금이 말한다.
+	_ok("판매 — 오른쪽 벽까지 날아가 깨진다(조각 · 불티 · 번쩍임)", fx_max >= (TH.to as Vector2).x - 40.0
+			and hit_at.is_equal_approx(TH.to) and bits_max == int(TH.bits) + int(TH.sparks)
+			and flash_seen, "날던 오른끝 %.0f · 깨진 자리 %s · 조각 %d" % [fx_max, hit_at, bits_max])
+	_ok("판매 — 조각 · 금 · 번쩍임이 다 사라진다", g.th_bits.is_empty() and g.th_marks.is_empty()
+			and g.th_flash.is_empty() and tth < 3.0, "%.2f초" % tth)
+	_ok("판매 — 던지는 동안 값이 안 움직인다(판 순간 그대로)", g.gold == gth1 and gth1 > gth0,
+			"%d → %d → %d" % [gth0, gth1, g.gold])
 	#  가장 먼 박자(접시에서 집는 0.42 · 든 0.50)에서 커서가 어디 있든(몸이 따라본다 —
 	#  끌어 팔면 커서는 저울 위다) · 숨이 어느 박자든 팔이 안 늘어난다.
 	var clk0: float = g.npc_clock
