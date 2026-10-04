@@ -853,6 +853,14 @@ func _ready() -> void:
 	gen.mix_rate = 44100.0
 	gen.buffer_length = 0.08
 	p.stream = gen
+	#  발생기는 오디오 서버가 내려간 **뒤에** 풀려야 한다(2026-10-04 끌 때 세그폴트).
+	#  재생(AudioStreamGeneratorPlayback)은 발생기를 Ref 가 아닌 날 포인터로 쥔다(4.7.2).
+	#  끌 때 트리가 먼저 지워져 이 플레이어와 발생기가 풀리는데, 오디오 스레드는 서버가
+	#  내려갈 때까지(main.cpp cleanup — 스크립트 언어 정리보다도 뒤) 멈춘 재생을 한 번 더
+	#  섞으며 풀린 발생기의 mix_rate 를 읽는다. 그 메모리가 이미 돌려준 쪽이면 터진다 —
+	#  헤드리스 프로브 몇 판에 한 번, 실제 드라이버(WASAPI)로는 여덟 판에 한 번꼴이었다.
+	#  서버의 메타에 쥐여 두면 서버가 지워질 때(스레드가 멈춘 뒤) 같이 풀린다.
+	AudioServer.set_meta("synth_gen", gen)
 	#  웹의 기본 재생 방식은 Sample 이다 — 스트림을 미리 통째로 굽는 방식이라
 	#  매 프레임 채워 넣는 AudioStreamGenerator 를 못 받는다. 브라우저 콘솔에
 	#  "cannot be sampled" 한 줄만 뜨고 소리가 통째로 안 난다.
