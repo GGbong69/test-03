@@ -8988,6 +8988,7 @@ func _draw() -> void:
 			# 아니라 번쩍임이다. 나가는 쪽은 밝은 테이블에서 오므로 안 건다.
 			#  다트판 벽이 서 있으면 정산이 벽에 씌운 그 덮개를 이어받는다(_wall3_scrim).
 			if w3:
+				_wall3_veil(_swap_rise())
 				_wall3_scrim(_swap_rise())
 			else:
 				draw_rect(_full(),
@@ -9260,6 +9261,9 @@ func _hud_draw() -> void:
 			# 왼쪽에서 미끄러져 든다. 테이블이 오른쪽으로 빠지므로 두
 			# 층이 서로를 안 스친다 — 드러난 자리를 벽이 곧바로 메운다.
 			var gx: float = -float(SWAP.grip) * (1.0 - _swap_rise())
+			#  다트판 벽의 놋쇠 꽂이는 벽에 박혀 있다 — 다트만 미끄러져 들어 꽂힌다.
+			if _wall3_live() and _wall3_holder_free():
+				_wall3_holder()
 			if gx < -0.01:
 				draw_set_transform(shake_off + Vector2(gx, 0.0))
 			_grip_draw()
@@ -13344,19 +13348,30 @@ func _modplate_draw() -> void:
 #     판 갈이. 제목 · 로비의 판은 안 건드린다(_wall3_here 가 거짓).
 #   · 읽힘이 먼저다 — HUD 띠 밑(top)과 안내 줄 밑(bot)은 벽을 C_BG 로 더 누른다.
 #     정산은 읽는 화면이라(_draw_clear 「정산은 읽는 화면이지 비치는 화면이 아니다」)
-#     글자 띠는 clear_mid 만큼 덮고, 양옆만 clear 만큼 덮어 바가 비친다.
+#     글자 띠는 clear_mid 만큼 덮고, 양옆만 clear 만큼 덮어 바가 비친다. 판 자리는 빈
+#     받침판 · 걸쇠가 아니라 그늘에 든 판으로 가린다(_wall3_veil) — 걸쇠가 합계 숫자
+#     바로 밑에 앉아 판을 떼어 간 것처럼 읽혔다(검토, 2026-10-04).
 #   · 판 갈이 — 테이블이 비켜나는 자리에 이 벽이 드러나고, 먼 턱 위로 보이던 상점 방
-#     (room_vp)은 판이 서는 만큼(_swap_rise) 걷힌다. 옛 C_WOOD → C_BG 색 건너가기를
-#     그림 건너가기로 바꿨다(_wall3_back).
+#     (room_vp)은 **테이블과 같이**(_swap_gone) 걷힌다. 판이 서는 만큼 걷으면 테이블이
+#     다 나간 뒤에도 0.1~0.2초 상점 방 윗동(벽의 작은 다트판까지)이 새 벽 위에 얹혀
+#     판이 둘 보였다(검토). 정산 → 상점 쪽은 정산 덮개(_wall3_scrim · _wall3_veil)를
+#     바닥과 덮개 띠가 한 벌로 이어받아 첫 틀이 정산과 같다.
 #   · 프레임 값 — 움직이는 것이 없어 한 번 굽고 멈춘다(settle 틀만 굽는다 — 비동기로
-#     구워지는 잡음 결이 앉을 틈). 창 여백 · 판 테가 바뀔 때만 다시 굽는다.
+#     구워지는 잡음 결이 앉을 틈). 다 구우면 그림 한 장(wall3_tex)만 쥐고 화판은 놓는다
+#     — 멈춘 화판도 렌더 버퍼(DOF · 글로우)를 수십 MB 쥐고 있었다. 창 여백 · 판 테 ·
+#     창 배율이 바뀔 때만 다시 굽는다. 배율은 창 배율 그대로(비정수)라 한 텍셀이 한
+#     픽셀이다.
+#   · 놋쇠 꽂이는 왼쪽 판자 벽(wall3d.gd _post)에 박혀 있다 — 판 갈이에 다트만 미끄러져
+#     들고 꽂이는 벽에 그대로다(_hud_draw).
 #   · 헤드리스(화면 없는 검사)에는 렌더러가 없어 안 짓는다 — 옛 그림 그대로다.
 #   · 개발자 5쪽 「다트판 벽」 이 켜고 끈다(wall3_on).
 const Wall3D = preload("res://scripts/wall3d.gd")
 const WALL3 := {
 	"settle": 10,                  # 짓거나 맞춘 뒤 굽는 틀 수
 	"swap_fade": 24.0,             # 판 갈이 — 턱 밑에서 상점 방이 벽으로 풀리는 높이(논리 px)
-	"k_max": 3,                    # 굽는 배율 상한 — 창 배율을 따르되 4K(6배)에서 화판이 커지지 않게
+	#  굽는 배율 상한 — 창 배율을 따르되 넘으면 정수로 나눈다(4K 6배 → 3배 · 한 텍셀 = 두 픽셀).
+	#  2560 창(4배)까지는 한 텍셀이 한 픽셀이다.
+	"k_max": 4.0,
 	"top": 0.55, "top_h": 96.0,    # HUD 띠 밑 그늘 — 위끝 짙기 · 높이(y 0 부터)
 	"bot": 0.45, "bot_h": 52.0,    # 안내 줄 밑 그늘 — 아래끝 짙기 · 높이
 	"clear": 0.62,                 # 정산이 벽을 덮는 짙기(양옆)
@@ -13368,7 +13383,11 @@ const WALL3 := {
 }
 var wall3_on := true          # 개발자 5쪽 — 다트판 벽 켬/끔(옛 단색과 맞대 본다)
 var wall3_vp: SubViewport = null
-var wall3_key := ""           # 마지막으로 맞춘 「여백 · 판 테」
+var wall3_tex: ImageTexture = null   # 다 구운 벽 한 장 — 굽기가 끝나면 화판 대신 이것을 깐다
+var wall3_tex_k := 1.0        # 그 장을 구운 배율
+var wall3_px := Vector2i.ZERO # 지금 맞춘 화판 크기(px)
+var wall3_kf := 1.0           # 지금 맞춘 배율
+var wall3_key := ""           # 마지막으로 맞춘 「여백 · 판 테 · 배율」
 var wall3_fresh := 0          # 남은 굽기 틀
 var wall3_frame := -1         # 마지막으로 센 그려진 틀(Engine.get_frames_drawn)
 var wall3_born := 0           # 지은 틀 — 두 번 구워진 뒤에야 깐다(덮개 없이 판으로 드는 이어하기에서 빈 화판이 한 틀 비친다)
@@ -13406,10 +13425,11 @@ func _wall3_tick() -> void:
 		wall3_key = ""
 	var ro := _wall3_ro()
 	var k := _wall3_k()
-	var key := "%d,%d,%.1f,%d" % [int(view_pad.x), int(view_pad.y), ro, k]
+	var key := "%d,%d,%.1f,%.4f" % [int(view_pad.x), int(view_pad.y), ro, k]
 	if key != wall3_key:
 		wall3_key = key
-		Wall3D.wall_fit(wall3_vp, view_pad, ro, BC, k)
+		wall3_px = Wall3D.wall_fit(wall3_vp, view_pad, ro, BC, k)
+		wall3_kf = k
 		wall3_fresh = int(WALL3.settle)
 	if wall3_fresh > 0:
 		#  그려진 틀로 센다 — 한 틀에 _process 를 여러 번 부르는 도구에서도 굽기가 안 빠진다.
@@ -13417,27 +13437,63 @@ func _wall3_tick() -> void:
 		if fd != wall3_frame:
 			wall3_frame = fd
 			wall3_fresh -= 1
-		wall3_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-		queue_redraw()
+		if wall3_fresh > 0:
+			wall3_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+			queue_redraw()
+			return
+		_wall3_keep()
+	wall3_vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
+
+
+#  다 구운 화판을 그림 한 장으로 옮기고 화판은 2px 로 줄여 렌더 버퍼를 놓는다. 3D 세트는
+#  그대로 둔다 — 다시 맞출 때 판자 그림 · 셰이더를 새로 안 짓는다.
+func _wall3_keep() -> void:
+	var img: Image = wall3_vp.get_texture().get_image()
+	if img == null or img.is_empty():
+		return
+	if wall3_tex != null and Vector2i(wall3_tex.get_size()) == img.get_size():
+		wall3_tex.update(img)
 	else:
-		wall3_vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
+		wall3_tex = ImageTexture.create_from_image(img)
+	wall3_tex_k = wall3_kf
+	wall3_vp.size = Vector2i(2, 2)
+	queue_redraw()
 
 
-#  굽는 배율 — 논리 1px 가 창에서 몇 px 인가(1280 창 2 · 1920 창 3). 반올림해 정수로.
-func _wall3_k() -> int:
+#  굽는 배율 — 논리 1px 가 창에서 몇 px 인가. 창 배율 그대로(1280 창 2 · 1366 창 2.13 ·
+#  1920 창 3). 상한(k_max)을 넘으면 정수로 나눠 한 텍셀이 정확히 n 픽셀이다.
+func _wall3_k() -> float:
 	var sc: float = get_tree().root.get_final_transform().get_scale().x
-	return clampi(roundi(sc), 1, int(WALL3.k_max))
+	var n: float = maxf(ceilf(sc / float(WALL3.k_max) - 0.001), 1.0)
+	return sc / n
 
 
-#  벽 화판이 덮는 화면 사각 — 가운데가 BC 이고 여백 + 흔들림 여유까지 간다.
+#  지금 깔 그림 — 다 구운 장(wall3_tex), 다시 굽는 중이면 화판. 다시 맞춘 첫 틀은 화판이
+#  아직 비어 있을 수 있어 옛 장을 한 틀 더 깐다(제 크기 · 배율로 — _wall3_rect).
+func _wall3_old() -> bool:
+	return wall3_tex != null and (wall3_fresh <= 0 or wall3_fresh >= int(WALL3.settle) - 1)
+
+
+func _wall3_tex() -> Texture2D:
+	return wall3_tex if _wall3_old() else wall3_vp.get_texture()
+
+
+#  벽 화판이 덮는 화면 사각 — 가운데가 BC 이고 여백 + 흔들림 여유까지 간다. 왼쪽 위
+#  모서리를 창 픽셀 격자에 맞춘다 — 한 텍셀이 한 픽셀(또는 정확히 n 픽셀)에 앉는다.
+#  가운데는 BC 에서 반 픽셀 안이다(링 안쪽 끝이 판 테 밑 1px 이라 안 드러난다).
 func _wall3_rect() -> Rect2:
-	var ls := Wall3D.logical_size(view_pad, BC)
-	return Rect2(BC - ls * 0.5, ls)
+	var old := _wall3_old()
+	var px: Vector2 = wall3_tex.get_size() if old else Vector2(wall3_px)
+	var ls: Vector2 = px / (wall3_tex_k if old else wall3_kf)
+	var m: Transform2D = get_tree().root.get_final_transform() * get_global_transform_with_canvas()
+	var p: Vector2 = m.affine_inverse() * (m * (BC - ls * 0.5)).round()
+	return Rect2(p, ls)
 
 
-#  판 갈이 동안 벽이 선 몫 — 판이 서는 만큼. 판 갈이 밖에서는 1.
-func _wall3_a() -> float:
-	return _swap_rise() if swap_live else 1.0
+#  판 갈이 동안 상점 방이 남은 몫 — 테이블과 같이 걷히고(들어갈 때) 같이 선다(나올 때).
+#  판 갈이 밖에서는 0.
+func _wall3_room_k() -> float:
+	return 1.0 - _swap_gone() if swap_live else 0.0
 
 
 #  화면 띠 [top, bot] 에 바닥을 깐다. 띠는 여백까지 가로로 뻗는다. _draw 의 바닥과
@@ -13452,12 +13508,13 @@ func _wall3_back(top: float, bot: float) -> void:
 	var t0 := clampf((top - r.position.y) / r.size.y, 0.0, 1.0)
 	var t1 := clampf((bot - r.position.y) / r.size.y, 0.0, 1.0)
 	if t1 > t0:
-		var ts := Vector2(wall3_vp.size)
-		draw_texture_rect_region(wall3_vp.get_texture(),
+		var tex := _wall3_tex()
+		var ts: Vector2 = tex.get_size()
+		draw_texture_rect_region(tex,
 				Rect2(r.position.x, r.position.y + r.size.y * t0, r.size.x, r.size.y * (t1 - t0)),
 				Rect2(0.0, ts.y * t0, ts.x, ts.y * (t1 - t0)))
 	_wall3_shade(top, bot, 1.0)
-	var k: float = 1.0 - _wall3_a()
+	var k: float = _wall3_room_k()
 	if k <= 0.0:
 		return
 	var cut: float = float(TBL.fy) - 20.0
@@ -13509,45 +13566,102 @@ func _wall3_grad(y0: float, y1: float, y_a: float, y_b: float, a0: float, a1: fl
 			PackedColorArray([c0, c0, c1, c1]))
 
 
-#  정산의 바닥 — 벽을 깔고 덮는다. 글자 띠(가운데)는 판이 안 비치게 짙게, 양옆은 바가
-#  비치게 옅게. 판 층(판 · 조각)은 C_BG 한 장이 먼저 덮는다 — 옛 「알파 없는 덮개」의
-#  약속(조각이 정산 위에 한 픽셀도 못 선다)을 그대로 지킨다.
+#  정산의 바닥 — 벽을 깔고 판 자리를 가리고 덮는다. 글자 띠(가운데)는 판이 안 비치게
+#  짙게, 양옆은 바가 비치게 옅게. 판 층(판 · 조각)은 C_BG 한 장과 벽이 먼저 덮는다 — 옛
+#  「알파 없는 덮개」의 약속(조각이 정산 위에 한 픽셀도 못 선다)을 그대로 지킨다.
+#  정산 → 상점 판 갈이의 바닥(_draw)과 덮개 띠(_cover_draw)가 같은 세 겹(벽 · 가림 ·
+#  덮개)을 같은 차례로 깐다 — 그래서 그 첫 틀이 이 그림과 같다.
 func _wall3_clear() -> void:
 	draw_rect(_full(), C_BG)
-	var r := _wall3_rect()
-	draw_texture_rect(wall3_vp.get_texture(), r, false, Color(1.0, 1.0, 1.0, 1.0 - float(WALL3.clear)))
-	_wall3_mid(1.0)
+	_wall3_back(_full().position.y, _full().end.y)
+	_wall3_veil(1.0)
+	_wall3_scrim(1.0)
+
+
+#  판 가림 — 판 자리를 숫자 고리 빛 원반으로 짙기 a 만큼 덮는다. 정산에서는 판이 그늘에
+#  든 꼴이고(빈 받침판 · 걸쇠가 안 보인다), 정산 → 상점 판 갈이에서는 판과 같이 누우며
+#  덮개와 같이 풀린다(_swap_map — 판 층과 같은 식). y_max 아래는 안 칠한다(덮개 띠가 쓴다).
+#  판 그림자(_draw_board 의 (3, 6) 비낀 원)까지 감싼다 — 판 테만 덮으면 그 그림자가 링
+#  오른쪽 아래에 초승달로 비쳐 판 갈이 첫 틀이 정산과 갈렸다.
+func _wall3_veil(a: float, y_max := INF) -> void:
+	if a <= 0.0:
+		return
+	var sy: float = lerpf(float(SWAP.lie), 1.0, _swap_rise())
+	var rx: float = _wall3_ro() + 1.0
+	var pts := PackedVector2Array()
+	var n := 48
+	for o in [Vector2.ZERO, Vector2(3.0, 6.0)]:
+		var c := Vector2(BC.x + o.x, _swap_map(BC.y + o.y))
+		for i in n:
+			var t: float = TAU * float(i) / float(n)
+			pts.append(c + Vector2(cos(t) * rx, sin(t) * rx * sy))
+	pts = Geometry2D.convex_hull(pts)
+	if pts.size() >= 2 and pts[0].is_equal_approx(pts[pts.size() - 1]):
+		pts.remove_at(pts.size() - 1)          # 닫는 점 — 아래 자르기는 열린 고리를 받는다
+	var lo: float = -INF
+	for q in pts:
+		lo = maxf(lo, q.y)
+	if y_max < lo:
+		pts = _wall3_cut(pts, y_max)
+	if pts.size() >= 3:
+		draw_colored_polygon(pts, Color(BOARDART.ring_col, a))
+
+
+#  볼록 다각형을 y ≤ y_max 쪽만 남긴다(한 변 자르기). 같은 점이 이어 들면 삼각 분할이
+#  실패하므로 거른다.
+func _wall3_cut(pts: PackedVector2Array, y_max: float) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	var n := pts.size()
+	for i in n:
+		var a: Vector2 = pts[i]
+		var b: Vector2 = pts[(i + 1) % n]
+		var ain: bool = a.y <= y_max
+		if ain and (out.is_empty() or not out[out.size() - 1].is_equal_approx(a)):
+			out.append(a)
+		if ain != (b.y <= y_max):
+			var q: Vector2 = a.lerp(b, (y_max - a.y) / (b.y - a.y))
+			if out.is_empty() or not out[out.size() - 1].is_equal_approx(q):
+				out.append(q)
+	if out.size() >= 2 and out[0].is_equal_approx(out[out.size() - 1]):
+		out.remove_at(out.size() - 1)
+	return out
 
 
 #  정산의 덮개를 벽 · 판 위에 k 만큼 — 판 → 상점 판 갈이(덮개를 못 트는 길)가 정산의 그
 #  그림에서 풀려 나간다. 옛 0.94 한 장이면 정산의 옅게 비친 바가 첫 틀에 꺼졌다 켜졌다.
-func _wall3_scrim(k: float) -> void:
+#  [y0, y1] 띠만 칠할 수 있다 — 덮개 띠(_cover_draw)가 제 띠에 같은 덮개를 다시 씌운다.
+func _wall3_scrim(k: float, y0 := -INF, y1 := INF) -> void:
 	if k <= 0.0:
 		return
-	draw_rect(_full(), Color(C_BG, float(WALL3.clear) * k))
-	_wall3_mid(k)
-
-
-#  정산 글자 띠 — 가운데를 더 덮고 양옆으로 mid_fade 에 걸쳐 풀린다.
-func _wall3_mid(k: float) -> void:
 	var f := _full()
+	var a: float = maxf(f.position.y, y0)
+	var b: float = minf(f.end.y, y1)
+	if b <= a:
+		return
+	draw_rect(Rect2(f.position.x, a, f.size.x, b - a), Color(C_BG, float(WALL3.clear) * k))
+	_wall3_mid(k, a, b)
+
+
+#  정산 글자 띠 — 가운데를 더 덮고 양옆으로 mid_fade 에 걸쳐 풀린다. 세로 [ya, yb].
+func _wall3_mid(k: float, ya: float, yb: float) -> void:
 	var x0: float = float(WALL3.mid_x0)
 	var x1: float = float(WALL3.mid_x1)
 	var fd: float = float(WALL3.mid_fade)
 	var cm := Color(C_BG, float(WALL3.clear_mid) * k)
 	var ce := Color(C_BG, 0.0)
-	draw_rect(Rect2(x0, f.position.y, x1 - x0, f.size.y), cm)
+	draw_rect(Rect2(x0, ya, x1 - x0, yb - ya), cm)
 	for sd in [-1.0, 1.0]:
 		var xa: float = x0 if sd < 0.0 else x1
 		var xb: float = xa + fd * sd
-		draw_polygon(PackedVector2Array([Vector2(xa, f.position.y), Vector2(xb, f.position.y),
-				Vector2(xb, f.end.y), Vector2(xa, f.end.y)]),
+		draw_polygon(PackedVector2Array([Vector2(xa, ya), Vector2(xb, ya),
+				Vector2(xb, yb), Vector2(xa, yb)]),
 				PackedColorArray([cm, ce, ce, cm]))
 
 
-#  놋쇠 꽂이 — 판자 벽에 나사 둘로 박은 세로 놋쇠 막대. 칸마다 구멍이 나 있고 자루
-#  촉이 그 구멍에 든다(자루 · 판정은 그대로 — _grip_pose). 던져서 빈 칸은 구멍만 남는다.
-#  빛은 왼쪽 위에서 온다(판 · 벽과 같다) — 왼편이 밝고 오른편 · 밑이 그늘이다.
+#  놋쇠 꽂이 — 왼쪽 판자 벽(wall3d.gd _post)에 나사 둘로 박은 세로 놋쇠 막대. 칸마다
+#  구멍이 나 있고 자루 촉이 그 구멍에 든다(자루 · 판정은 그대로 — _grip_pose). 던져서 빈
+#  칸은 구멍만 남는다. 빛은 왼쪽 위에서 온다(판 · 벽과 같다) — 왼편이 밝고 오른편 · 밑이
+#  그늘이다. 벽에 박혀 있어 판 갈이에 안 미끄러진다(_hud_draw 가 흔들림 변환에만 그린다).
 func _wall3_holder() -> void:
 	var n: int = maxi(grip_n, remaining.size())
 	if n <= 0:
@@ -13594,6 +13708,14 @@ func _wall3_holder() -> void:
 		draw_rect(Rect2(hx, hy + 2.0, 5.0, 1.0), lit)
 
 
+#  판 갈이에 꽂이를 드러내도 되는가 — 나가는 테이블이 꽂이 자리(x 0~hx+hw)를 비켜난 뒤.
+#  첫 틀에는 테이블이 아직 그 자리를 덮고 있다(HUD 는 테이블 위에 그려진다).
+func _wall3_holder_free() -> bool:
+	if not swap_live:
+		return true
+	return swap_in and _swap_gone() * float(SWAP.dx) > float(WALL3.hx) + float(WALL3.hw) + 6.0
+
+
 # 벽을 언제 그리는가는 부르는 쪽(_hud_draw)이 정한다. 여기 있던 조기
 # 반환은 상류 게이트에 가려 한 번도 안 닿던 죽은 가드였고, 두 곳에 같은
 # 규칙을 적어 두면 다음에 조건을 바꾸는 사람이 한 곳만 고친다.
@@ -13602,11 +13724,10 @@ func _grip_draw() -> void:
 	var picking := state == S.PICK
 
 	# 왼쪽 벽. 꽂힐 면이 없으면 다트가 그냥 떠 있는 것으로 읽힌다.
-	#  다트판 벽(WALL3)이 서면 판자 벽에 박은 놋쇠 꽂이가 그 면이다.
+	#  다트판 벽(WALL3)이 서면 판자 벽에 박은 놋쇠 꽂이가 그 면이다 — 꽂이는 벽에 박혀
+	#  있어 _hud_draw 가 미끄럼 변환 밖에서 먼저 그린다(_wall3_holder).
 	var w: float = GRIP.wall
-	if _wall3_live():
-		_wall3_holder()
-	else:
+	if not _wall3_live():
 		#  왼쪽 벽은 **여백 쪽으로도** 두껍다. 안 그러면 넓은 화면에서 벽이
 		#  허공에 떠 있는 판때기가 된다.
 		draw_rect(Rect2(-view_pad.x, 18.0, w + view_pad.x,
@@ -14373,7 +14494,15 @@ func _draw_topbar() -> void:
 	var r: Rect2 = LAY.bar
 	#  띠는 여백까지 간다. 640 에서 끊으면 넓은 화면에서 상단 바가
 	#  화면 가운데에 뜬 판때기가 된다 — 칸의 자리(LAY.bar_cut)는 그대로다.
-	draw_rect(_wide(r.position.y, r.size.y, true), C_PANEL)
+	#  다트판 벽이 선 화면에서는 띠 **위** 여백(16:9 보다 높은 창)을 판때기로 안 채운다 —
+	#  벽이 그림이 되자 그 C_PANEL 한 장이 사용자가 말한 위 레터박스로 읽혔다(검토,
+	#  2026-10-04). 벽이 HUD 그늘(_wall3_shade)을 진 채 창 위끝까지 간다. 판 갈이 동안은
+	#  상점 방과 같이(_wall3_room_k) 건너간다.
+	var ua: float = _wall3_room_k() if _wall3_live() and _wall3_here() else 1.0
+	draw_rect(_wide(r.position.y, r.size.y), C_PANEL)
+	if ua > 0.0 and view_pad.y > 0.0:
+		draw_rect(Rect2(-view_pad.x, r.position.y - view_pad.y, VIEW.x + view_pad.x * 2.0,
+				view_pad.y), Color(C_PANEL, ua))
 	draw_rect(_wide(r.size.y - 1.0, 1.0), C_BG)
 	# 1px 두 줄이 "칸이 나뉘어 있다"를 만드는 전부다. 640x360 에서 테두리는 사치다.
 	for cx in LAY.bar_cut:
@@ -20067,7 +20196,13 @@ func _cover_draw() -> void:
 		_room3d_band(_full().position.y, float(TBL.fy) - 20.0)
 	elif swap_live and _wall3_live():
 		#  판 갈이 — 덮개 띠도 바닥(_draw 의 _wall3_back)과 같은 한 벌이라 이음이 없다.
-		_wall3_back(_full().position.y, float(TBL.fy) - 20.0)
+		#  나가는 쪽은 바닥이 판 위에 씌운 정산 덮개(가림 · 덮개)까지 띠에 다시 씌운다 —
+		#  안 씌우면 첫 틀에 턱 위 띠만 밝은 벽으로 떠 가로 이음이 났다(검토, 2026-10-04).
+		var cut: float = float(TBL.fy) - 20.0
+		_wall3_back(_full().position.y, cut)
+		if not swap_in:
+			_wall3_veil(_swap_rise(), cut)
+			_wall3_scrim(_swap_rise(), _full().position.y, cut)
 	else:
 		draw_rect(_wide(0.0, TBL.fy, true),
 				_swap_wall(C_WOOD.darkened(0.30).lerp(C_WOOD, _swap_gone())))
