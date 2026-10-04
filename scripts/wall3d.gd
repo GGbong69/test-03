@@ -38,7 +38,13 @@ const FACE := -0.04       # 기둥 앞면 z — 받침판 · 링이 4cm 나와 �
 const RECESS := 2.2       # 기둥 앞면에서 바 뒷벽까지(m) — 멀어야 술병이 작고 흐리고 안개에 가라앉는다
 const RING := 16.0        # 고무 링 폭(논리 px) — 판 테 바깥으로
 const PLANK := Color("3d281c")   # 기둥 판자 — 상점 벽(COL.wall)보다 한 단 밝다. 빛 웅덩이 밖은 그 벽으로 가라앉는다
-const RUBBER := Color("0a0909")
+#  왼쪽 꽂이 벽 — 놋쇠 다트 꽂이(game.gd _wall3_holder · x 1~12)가 박힌 판자 벽. 기둥과 같은
+#  면(FACE)이라 초점 안이다. 화판 왼끝에서 이 논리 x 까지 — 넓은 창에서는 여백만큼 넓어진다.
+#  「놋쇠 꽂이가 2.2m 뒤 흐린 바 앞 허공에 떠 있다」(검토, 2026-10-04) — 꽂이가 박힐 면이다.
+const POST_X := 24.0
+const POST_TEX := 256     # 꽂이 벽 판자 그림 폭(텍셀) — 넓은 창에서는 되풀어 깐다
+const POST_D := 0.05      # 꽂이 벽 두께(m)
+const RUBBER := Color("060607")
 const BACKING := Color("1c130e")    # 받침판 — 판자보다 짙어 판이 뜬 자리가 빈자리로 읽힌다
 #  빛의 세기 — 판이 화면에서 가장 밝고, 빛 웅덩이는 판 둘레까지, 뒷벽은 흐린 바.
 const LOOK := {
@@ -47,13 +53,30 @@ const LOOK := {
 	#  가장자리로 지는 굽이 — 엔진 식이 1 − rim^이 값이라 작을수록 한가운데부터 고루
 	#  진다(웅덩이가 부드럽다). 1.8 은 안이 평평하다 끝에서 뚝 끊겨 둥근 스포트 판으로 읽혔다.
 	"lamp_att": 1.0,
-	"lamp_at": Vector3(-0.07, 0.86, 0.74),   # 램프 자리(판 기준 m) — 왼쪽 위 앞
+	#  램프 자리(판 기준 m) — 위 앞, 조금 왼쪽. 웅덩이가 판 한가운데보다 조금 위에 서고 아래로
+	#  진다(검토 「빛 웅덩이가 안 읽힌다 — 가장 밝은 판자가 HUD 밑 · 안내 줄 뒤다」).
+	"lamp_at": Vector3(-0.05, 1.02, 0.66),
+	"lamp_to": Vector2(-0.03, 0.10),         # 램프가 겨누는 판 면 자리(m)
+	"rub_rough": 0.5, "rub_spec": 0.3,       # 고무 링 재질 — 거칠기 · 반사
+	"rub_round": 0.8,                        # 고무 관 단면 납작함(1 = 둥근 관) — 둥글수록 반짝임 줄이 가늘다
 	"bottle_e": 0.14,         # 술병 빛(상점 방 0.25)
 	"under_e": 1.0,           # 선반 밑불(상점 방 1.6)
 	"shelf_l": 0.4,           # 선반 빛(상점 방 1.1)
 	"neon": 0.55,             # 네온 짙기 곱(상점 방 1.0)
 	"neon2": 1.3,             # 쪽빛 네온 잔
 	"neon_l": 0.45,           # 네온이 벽에 뿌리는 빛
+	#  네온 잔 자리(뒷벽 m) — 다트 줄(논리 y 120~300) 위, 금화판(y 52) 밑 빈 칸에 선다.
+	#  y 0.36 이면 잔 대가 드는 다트 뒤에 걸려 고르는 자리가 어지러웠다(검토, 2026-10-04).
+	"glass_at": Vector2(-1.40, 0.58),
+	#  HIGHTON 세로 간판 — 뒷벽에서 이만큼 앞(m)에 매단다(선반 앞이라 술병에 안 가린다).
+	#  일곱 글자가 HUD 단추 밑(논리 y ≈ 84~296)에 다 든다. 옛 자리는 위 두 글자가
+	#  HUD 에 잘려 「G H T ?」 로 읽혔다(검토).
+	"sign_at": Vector3(1.28, 0.02, 0.45),
+	"sign_px": 0.0024,
+	"shadow_blur": 1.0,       # 램프 그림자 번짐
+	"shadow_size": 0.03,      # 램프 크기(m) — 그림자 반그늘 폭
+	"shadow_a": 0.82,         # 그림자 짙기 — 1 이면 판 밑이 칠흑이다
+	"post_l": 0.55,           # 꽂이 벽에 닿는 빛 — 램프 웅덩이 밖이라 그늘이지만 판자 결은 보인다
 	#  빛 웅덩이(램프에 비추는 동그란 그러데이션) [반지름 몫, 밝기] — 판 둘레는 고루,
 	#  링 바깥 한 뼘부터 기둥 가장자리 · 위로 진다.
 	"pool": [[0.0, 1.0], [0.30, 0.95], [0.55, 0.55], [0.80, 0.16], [1.0, 0.0]],
@@ -75,6 +98,9 @@ static func make_wall(host: Node) -> SubViewport:
 	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	vp.msaa_3d = Viewport.MSAA_DISABLED
 	vp.gui_disable_input = true
+	#  판 그림자 결 — 기본 2048 아틀라스에서는 램프 하나의 그림자 가장자리가 거칠게 씹혔다.
+	#  한 번 굽고 멈추는 화판이라 값이 싸다.
+	vp.positional_shadow_atlas_size = 4096
 	host.add_child(vp)
 
 	var root := Node3D.new()
@@ -121,6 +147,7 @@ static func make_wall(host: Node) -> SubViewport:
 	root.add_child(we)
 
 	_pillar(root)
+	_post(root)
 	_back(root)
 	_board_mount(root)
 	_lamp(root)
@@ -130,17 +157,22 @@ static func make_wall(host: Node) -> SubViewport:
 #  창 여백 · 판 크기에 맞춘다. 화판의 한가운데가 판 한가운데(bc)에 앉고, 화판이
 #  여백 + MARGIN 까지 덮는다(아래로는 bc 가 화면 가운데보다 낮은 몫만큼 화면 밖이다).
 #  ro — 판 테 반지름(논리 px). 바뀌면 링과 받침판이 따라간다.
-#  k — 굽는 배율(논리 1px = 화판 k px). 창 배율과 같게 받아 링 가장자리 · 판자 결이
-#  2D 판 테와 같은 결로 선다(1280 창 2 · 1920 창 3).
-static func wall_fit(vp: SubViewport, pad: Vector2, ro: float, bc: Vector2, k: int) -> void:
-	var ls := logical_size(pad, bc)
-	vp.size = Vector2i(roundi(ls.x * float(k)), roundi(ls.y * float(k)))
+#  k — 굽는 배율(논리 1px = 화판 k px). 창 배율 그대로 받는다(비정수 — 1366 창 2.13).
+#  화판 한 텍셀이 화면 한 픽셀이라 판자 결 · 링 가장자리가 늘거나 겹치는 줄 없이 선다.
+#  옛 판은 배율을 반올림해(2.13 → 2) 열다섯 줄마다 한 줄이 두 번 찍혔고, 흔들림에 결이
+#  일렁였다(검토, 2026-10-04). 화판 크기는 짝수로 올린다 — 한가운데가 텍셀 경계에 선다.
+#  돌려주는 값은 화판 크기(px). 덮는 논리 크기는 그 / k 다(logical_size 보다 1px 남짓 크다).
+static func wall_fit(vp: SubViewport, pad: Vector2, ro: float, bc: Vector2, k: float) -> Vector2i:
+	var px := bake_px(pad, bc, k)
+	vp.size = px
+	var ls := Vector2(px) / k
 	var cam := _cam(vp)
 	if cam != null:
 		cam.fov = rad_to_deg(2.0 * atan(ls.y * 0.5 / S / EYE))
 	var root := vp.get_node_or_null("Wall")
 	if root == null:
-		return
+		return px
+	_post_fit(root, bc.x - ls.x * 0.5, bc.x)
 	var ring: MeshInstance3D = root.get_node_or_null("Ring")
 	if ring != null:
 		var tm := ring.mesh as TorusMesh
@@ -151,11 +183,18 @@ static func wall_fit(vp: SubViewport, pad: Vector2, ro: float, bc: Vector2, k: i
 		var cm := bk.mesh as CylinderMesh
 		cm.top_radius = (ro + 3.0) / S
 		cm.bottom_radius = (ro + 3.0) / S
+	return px
 
 
-#  화판이 덮는 논리 크기 — 가운데가 bc 다.
+#  화판이 덮어야 하는 논리 크기 — 가운데가 bc 다.
 static func logical_size(pad: Vector2, bc: Vector2) -> Vector2:
 	return Vector2((bc.x + pad.x + MARGIN) * 2.0, (bc.y + pad.y + MARGIN) * 2.0)
+
+
+#  그 크기를 배율 k 로 구운 화판 크기(px) — 짝수로 올린다.
+static func bake_px(pad: Vector2, bc: Vector2, k: float) -> Vector2i:
+	var ls := logical_size(pad, bc)
+	return Vector2i(int(ceilf(ls.x * k * 0.5)) * 2, int(ceilf(ls.y * k * 0.5)) * 2)
 
 
 # ── 기둥 — 세로 판자 · 니스 안 친 거친 결 ─────────────────
@@ -207,6 +246,88 @@ static func _pillar(root: Node3D) -> void:
 			Room3D._mat(Room3D.COL.trim, 0.6)))
 
 
+# ── 꽂이 벽 — 왼쪽 가장자리의 판자 벽 · 놋쇠 다트 꽂이가 박힌 면 ──
+#  기둥과 같은 판자 · 같은 면(FACE)이라 초점 안이고, 둘 사이로 흐린 바가 보인다. 자리와
+#  폭은 _post_fit 이 화판 왼끝에서 POST_X 까지 잡는다. 판자 그림은 POST_TEX 폭으로 한 장
+#  굽고 넓은 창에서는 되풀어 깐다(오른끝 이음 자리는 창 폭과 무관하게 같다).
+static func _post(root: Node3D) -> void:
+	var y0 := -0.9
+	var y1 := 1.0
+	var pair: Array = Room3D._plank(int((y1 - y0) * S), POST_TEX, PLANK.darkened(0.12), 20261005, 40, 52)
+	var im: Image = pair[0]
+	im.rotate_90(CLOCKWISE)
+	var m := StandardMaterial3D.new()
+	m.albedo_texture = ImageTexture.create_from_image(im)
+	m.roughness = 0.85
+	m.metallic_specular = 0.3
+	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	m.texture_repeat = true
+	var qm := QuadMesh.new()
+	qm.size = Vector2(0.1, y1 - y0)
+	var q := MeshInstance3D.new()
+	q.name = "Post"
+	q.mesh = qm
+	q.material_override = m
+	q.position = Vector3(-1.0, (y0 + y1) * 0.5, FACE)
+	root.add_child(q)
+	#  몸 — 얇은 판벽이다. 카메라 왼쪽에 서서 오른 옆면이 보이는데, 기둥만큼(40cm) 두꺼우면
+	#  그 옆면이 꽂이 오른쪽에 검은 띠(논리 24~68px)로 서서 바와 네온 잔을 가렸다.
+	var body := Room3D._box(Vector3(0.1, y1 - y0, POST_D), Vector3(-1.0, (y0 + y1) * 0.5, FACE - POST_D * 0.5 - 0.001),
+			Room3D._mat(Room3D.COL.wood))
+	body.name = "PostBody"
+	root.add_child(body)
+	#  오른 모서리 — 짙은 테 한 줄과 그 안쪽 빛 받은 한 줄(기둥 모서리와 같은 어법).
+	var ed := Room3D._box(Vector3(0.012, y1 - y0, 0.02), Vector3(-1.0, (y0 + y1) * 0.5, FACE + 0.004),
+			Room3D._mat(Room3D.COL.wood_dk.darkened(0.3)))
+	ed.name = "PostEdge"
+	root.add_child(ed)
+	var hi := Room3D._box(Vector3(0.004, y1 - y0, 0.02), Vector3(-1.0, (y0 + y1) * 0.5, FACE + 0.006),
+			Room3D._mat(Room3D.COL.trim, 0.6))
+	hi.name = "PostLit"
+	root.add_child(hi)
+	#  빛 — 램프 웅덩이 밖이라 그늘이다. 위에서 옅게 스치는 빛 하나로 판자 결만 살린다.
+	var ol := OmniLight3D.new()
+	ol.name = "PostLamp"
+	ol.light_color = Room3D.COL.lamp
+	ol.light_energy = float(LOOK.post_l)
+	ol.omni_range = 1.1
+	ol.omni_attenuation = 1.4
+	ol.position = Vector3(-1.0, 0.55, 0.35)
+	root.add_child(ol)
+
+
+#  꽂이 벽을 화판 왼끝(논리 x lx0)에서 POST_X 까지 맞춘다. 기둥 앞면(FACE)에서 논리 1px 이
+#  몇 m 인가는 판 평면(z 0)과 조금 다르다 — 원근이라 4cm 뒤가 그만큼 작다.
+static func _post_fit(root: Node, lx0: float, bcx: float) -> void:
+	var q: MeshInstance3D = root.get_node_or_null("Post")
+	if q == null:
+		return
+	var ppm: float = S * EYE / (EYE - FACE)          # FACE 면에서 1m = 논리 px
+	var xa: float = (lx0 - 2.0 - bcx) / ppm
+	var xb: float = (POST_X - bcx) / ppm
+	var w: float = xb - xa
+	var cx: float = (xa + xb) * 0.5
+	(q.mesh as QuadMesh).size.x = w
+	q.position.x = cx
+	var m := q.material_override as StandardMaterial3D
+	var k: float = w * ppm / float(POST_TEX)
+	m.uv1_scale = Vector3(k, 1.0, 1.0)
+	m.uv1_offset = Vector3(1.0 - k, 0.0, 0.0)     # 오른끝이 늘 그림의 오른끝이다
+	var body: MeshInstance3D = root.get_node_or_null("PostBody")
+	if body != null:
+		(body.mesh as BoxMesh).size.x = w
+		body.position.x = cx
+	var ed: MeshInstance3D = root.get_node_or_null("PostEdge")
+	if ed != null:
+		ed.position.x = xb - 0.006
+	var hi: MeshInstance3D = root.get_node_or_null("PostLit")
+	if hi != null:
+		hi.position.x = xb - 0.017
+	var ol: OmniLight3D = root.get_node_or_null("PostLamp")
+	if ol != null:
+		ol.position.x = xb + 0.08          # 모서리 바로 오른쪽 앞 — 옆면 · 판자 결을 스친다
+
+
 # ── 바 뒷벽 — 판자 · 선반 · 술병 · 밑불 · 네온 (상점 방 그대로) ──
 #  기둥 너머 RECESS 뒤라 판 평면의 반 남짓으로 작게 서고, 초점 밖이라 흐리고, 깊이
 #  안개에 가라앉는다. 빛나는 것(술병 · 밑불 · 네온)은 상점 방보다 한참 낮춘다 — 판이
@@ -236,23 +357,25 @@ T
 O
 N"
 	neon.font_size = 64
-	neon.pixel_size = 0.0028
+	neon.pixel_size = float(LOOK.sign_px)
 	neon.line_spacing = -18.0
 	neon.modulate = Color(2.4 * nk, 0.55 * nk, 0.85 * nk)
 	neon.outline_size = 0
 	neon.shaded = false
-	neon.position = Vector3(1.42, 0.36, zb + 0.04)
+	var sa: Vector3 = LOOK.sign_at
+	neon.position = Vector3(sa.x, sa.y, zb + sa.z)
 	root.add_child(neon)
 	var nl := OmniLight3D.new()
 	nl.light_color = Room3D.COL.neon
 	nl.light_energy = float(LOOK.neon_l)
 	nl.omni_range = 1.4
-	nl.position = Vector3(1.42, 0.36, zb + 0.35)
+	nl.position = Vector3(sa.x, sa.y, zb + sa.z + 0.3)
 	root.add_child(nl)
 	#  왼편 위 — 쪽빛 네온 잔(술잔 꼴 관). 상점 방의 둘째 네온 색.
 	var gm := Room3D._glow(Room3D.COL.neon2, float(LOOK.neon2))
-	var gx := -1.40
-	var gy := 0.36
+	var ga: Vector2 = LOOK.glass_at
+	var gx: float = ga.x
+	var gy: float = ga.y
 	var gz: float = zb + 0.03
 	for sd in [-1.0, 1.0]:
 		var bar := Room3D._box(Vector3(0.016, 0.17, 0.016), Vector3(gx + float(sd) * 0.055, gy + 0.09, gz), gm)
@@ -334,8 +457,10 @@ static func _board_mount(root: Node3D) -> void:
 		sc.rotation_degrees = Vector3(90.0, 0.0, 0.0)
 		root.add_child(sc)
 	#  고무 링 — 판 테를 두르는 검은 고무. 눌러 납작한 관이라 위쪽이 램프를 받는다.
-	var rm := Room3D._mat(RUBBER, 0.72)
-	rm.metallic_specular = 0.25
+	#  고무는 무채색 검정이다 — 거칠면 램프의 호박빛을 넓게 받아 갈색 테로 떴다(검토).
+	#  반들거리게 하면 놋쇠 테로 읽혀(0.42 · 0.6) 그 사이 — 위쪽에 좁은 반짝임 한 줄만 받는다.
+	var rm := Room3D._mat(RUBBER, float(LOOK.rub_rough))
+	rm.metallic_specular = float(LOOK.rub_spec)
 	var tm := TorusMesh.new()
 	tm.inner_radius = 0.33
 	tm.outer_radius = 0.38
@@ -346,7 +471,7 @@ static func _board_mount(root: Node3D) -> void:
 	ring.mesh = tm
 	ring.material_override = rm
 	ring.rotation_degrees = Vector3(90.0, 0.0, 0.0)
-	ring.scale = Vector3(1.0, 0.55, 1.0)
+	ring.scale = Vector3(1.0, float(LOOK.rub_round), 1.0)
 	ring.position = Vector3(0.0, 0.0, 0.0)
 	root.add_child(ring)
 
@@ -362,13 +487,17 @@ static func _lamp(root: Node3D) -> void:
 	sl.spot_angle = float(LOOK.lamp_ang)
 	sl.spot_angle_attenuation = float(LOOK.lamp_att)
 	sl.shadow_enabled = true
-	sl.shadow_blur = 2.0
-	sl.light_size = 0.06
+	#  그림자 — 가장자리 번짐(blur 2 · 크기 0.06)이 넓으면 PCF 결이 오돌토돌 씹히고 판이
+	#  검은 구덩이에 빠진 것처럼 읽혔다(검토). 좁게 번지고 바닥까지 검지 않게.
+	sl.shadow_blur = float(LOOK.shadow_blur)
+	sl.light_size = float(LOOK.shadow_size)
+	sl.shadow_opacity = float(LOOK.shadow_a)
 	#  빛 웅덩이의 꼴 — 원뿔 감쇠만으로는 판자 기둥이 끝까지 고루 밝았다(위로 갈수록 빛을
 	#  정면으로 받아 감쇠를 되갚는다). 동그란 그러데이션을 램프에 비춰 판 둘레만 밝힌다.
 	sl.light_projector = _pool_tex()
 	var at: Vector3 = LOOK.lamp_at
-	var tgt := Vector3(-0.04, 0.02, FACE)
+	var lt: Vector2 = LOOK.lamp_to
+	var tgt := Vector3(lt.x, lt.y, FACE)
 	sl.transform = Transform3D(Basis.looking_at(tgt - at, Vector3.UP), at)
 	root.add_child(sl)
 
