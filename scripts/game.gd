@@ -33973,8 +33973,17 @@ func _ui_face(c: CanvasItem, key: String, r: Rect2, on: bool, a := 1.0) -> Rect2
 #  (리롤은 오른쪽 · 다음 판은 왼쪽). 빛이 왼쪽 위라 오른쪽을 보는 옆면은 그늘(side_dk) ·
 #  왼쪽을 보는 옆면은 앞면보다 밝다(side_lt). 도트 단추의 결대로 앞면 윗줄에 빛 한 줄 ·
 #  밑줄에 그늘 한 줄을 둔다.
-const SLAB := {"t": 12.0, "lift": 2.0, "shade": Vector2(3.0, 3.0), "shade_a": 0.34, "rad": 4,
-		"bot": 2, "front": 0.45, "side_dk": 0.62, "side_lt": 0.30}
+#  모서리(2026-10-04 「버튼 아래쪽 모서리가 좀 뾰족한데? 근도 좀 같이 누워있는걸로」) — 판은
+#  면에 누운 둥근 네모다. 그래서 네 모서리가 다 둥글고, 그 둥긂도 눕는다 — 세로(깊이)가
+#  눌린 만큼 모서리도 가로로 넓고 세로로 낮은 계단(corner: 모서리 끝 줄부터의 들임)이다.
+#  _rr 의 선 판 모서리(ROUND[4] = 4 · 2 · 1 · 1)를 깊이 쪽으로 누른 꼴이다.
+#  앞면 · 옆면은 따로 그리지 않고 윗면을 두께만큼 밑으로 **쓸어 낸 자리**로 칠한다 — 밑
+#  모서리가 윗면 모서리의 곡선을 그대로 받는다. 옛 판은 윗면 가까운 모서리가 각지고 앞면은
+#  곧은 네모라, 기운 변과 곧은 앞면이 만나는 자리가 뾰족하게 튀어나왔다.
+const SLAB := {"t": 12.0, "lift": 2.0, "shade": Vector2(3.0, 3.0), "shade_a": 0.34,
+		"corner": [6, 3, 1], "front": 0.45, "side_dk": 0.62, "side_lt": 0.30}
+var slab_l := PackedFloat32Array()   # 윗면 줄마다 왼끝 · 오른끝 — 매 틀 새로 안 짓는다
+var slab_r := PackedFloat32Array()
 
 
 #  펠트 빗변의 기울기 — 화면 x 에서 위(먼 쪽)로 1px 갈 때 가운데 쪽으로 가는 몫.
@@ -33982,27 +33991,6 @@ const SLAB := {"t": 12.0, "lift": 2.0, "shade": Vector2(3.0, 3.0), "shade_a": 0.
 func _slab_lean(x: float) -> float:
 	var hx: float = VIEW.x * 0.5
 	return (hx - x) / hx * float(CHUTE.back) / (float(TBL.ny) - float(TBL.fy))
-
-
-#  면 하나를 줄마다 칠한다 — 밑 줄(y1)에서 [x0, x1], 위로 갈수록 lean 이면 기운다.
-#  위 · 밑 모서리를 tk · bk 칸 계단으로 깎는다(ROUND).
-func _slab_rows(c: CanvasItem, x0: float, x1: float, y0: float, y1: float, col: Color,
-		lean: bool, tk: int, bk: int) -> void:
-	var s0: float = _slab_lean(x0) if lean else 0.0
-	var s1: float = _slab_lean(x1) if lean else 0.0
-	var n: int = int(roundf(y1 - y0))
-	for i in n:
-		var y: float = y0 + float(i)
-		var up: float = y1 - y - 0.5
-		var l: float = roundf(x0 + s0 * up)
-		var r: float = roundf(x1 + s1 * up)
-		var ins := 0
-		if i < tk and ROUND.has(tk):
-			ins = int((ROUND[tk] as Array)[i])
-		elif n - 1 - i < bk and ROUND.has(bk):
-			ins = int((ROUND[bk] as Array)[n - 1 - i])
-		if r - l - float(2 * ins) > 0.0:
-			c.draw_rect(Rect2(l + float(ins), y, r - l - float(2 * ins), 1.0), col)
 
 
 #  누운 단추 — _ui_face 와 같은 문(커서 · 누름 · 역할 색)을 지나고, 윗면의 자리를 돌려준다
@@ -34018,45 +34006,67 @@ func _slab(c: CanvasItem, key: String, r: Rect2, on: bool, a := 1.0) -> Rect2:
 	var fill: Color = UIHOV[role] if on else UIHOV.off
 	var t: float = SLAB.t
 	var up: float = roundf(float(SLAB.lift) * h) if not press else 0.0
-	var down: float = t - 2.0 if press else 0.0
+	var down: float = t - 3.0 if press else 0.0
 	var x0: float = r.position.x
 	var x1: float = r.end.x
 	var y0: float = r.position.y - up + down
 	var y1: float = r.end.y - t - up + down
-	var k: int = int(SLAB.rad)
-	#  그림자 — 바닥에 닿은 밑면(윗면을 두께만큼 내린 자리)을 빛 반대쪽으로.
+	var fb: float = r.end.y                      # 바닥 — 들려도 눌려도 밑은 그대로
+	var n: int = int(roundf(y1 - y0))            # 윗면 줄 수
+	var m: int = int(roundf(fb - y0))            # 판 전체 줄 수(윗면 + 지금 두께)
+	var tk: int = m - n
+	#  윗면 줄마다 [왼, 오] — 기운 변에서 누운 모서리 들임을 뺀다.
+	var s0: float = _slab_lean(x0)
+	var s1: float = _slab_lean(x1)
+	var cn: Array = SLAB.corner
+	slab_l.resize(n)
+	slab_r.resize(n)
+	for i in n:
+		var u: float = float(n - i) - 0.5
+		var ins := 0.0
+		if i < cn.size():
+			ins = float(cn[i])
+		elif n - 1 - i < cn.size():
+			ins = float(cn[n - 1 - i])
+		slab_l[i] = roundf(x0 + s0 * u) + ins
+		slab_r[i] = roundf(x1 + s1 * u) - ins
+	#  그림자 — 바닥에 닿은 밑면(윗면 꼴을 바닥에 내린 자리)을 빛 반대쪽으로.
 	var sh: Vector2 = SLAB.shade
-	_slab_rows(c, x0 + sh.x, x1 + sh.x, r.position.y + t + sh.y, r.end.y + sh.y,
-			Color(0.0, 0.0, 0.0, float(SLAB.shade_a) * a), true, k, int(SLAB.bot))
-	#  옆면 — 화면 가운데 쪽 모서리 밑. 윗면의 그 모서리를 두께만큼 내린 평행사변형이다.
+	var shc := Color(0.0, 0.0, 0.0, float(SLAB.shade_a) * a)
+	for i in n:
+		c.draw_rect(Rect2(slab_l[i] + sh.x, fb - float(n - i) + sh.y, slab_r[i] - slab_l[i], 1.0), shc)
+	#  앞면 · 옆면 — 윗면을 0 ~ 두께만큼 내려 쓸어 낸 자리. 가운데 쪽으로 윗면(밑이면 가까운
+	#  변)보다 삐져나온 몫이 옆면이다(오른쪽을 보면 그늘 · 왼쪽을 보면 빛).
 	var right: bool = r.get_center().x < VIEW.x * 0.5
-	var ex: float = x1 if right else x0
-	var es: float = _slab_lean(ex)
-	var fb: float = r.end.y                      # 앞면 밑(바닥)
-	var tt: float = fb - y1                      # 지금 두께(들리면 길고 누르면 짧다)
+	var fc := Color(fill.darkened(float(SLAB.front)), a)
 	var sc := Color(fill.darkened(float(SLAB.side_dk if right else SLAB.side_lt)), a)
-	for i in int(roundf(fb - y0)):
-		var y: float = y0 + float(i) + 0.5
-		var ea: float = ex + es * (y1 - clampf(y, y0, y1))
-		var eb: float = ex + es * (y1 - clampf(y - tt, y0, y1))
-		var l: float = roundf(minf(ea, eb))
-		var rr: float = roundf(maxf(ea, eb))
-		if rr > l:
-			c.draw_rect(Rect2(l, y0 + float(i), rr - l, 1.0), sc)
-	#  앞면 — 가까운 변에서 바닥까지. 들리면 길어지고 누르면 짧아진다. 윗줄 빛 · 밑줄 그늘.
-	var fc: Color = fill.darkened(float(SLAB.front))
-	_slab_rows(c, x0, x1, y1, fb, Color(fc, a), false, 0, int(SLAB.bot))
-	c.draw_rect(Rect2(x0, y1, x1 - x0, 1.0), Color(fc.lightened(0.22), a))
-	if tt > 3.0:
-		_slab_rows(c, x0, x1, fb - 1.0, fb, Color(fc.darkened(0.35), a), false, 0, int(SLAB.bot))
+	var lo_c := Color(fc.darkened(0.35), a)
+	for j in m:
+		var q0: int = maxi(j - tk, 0)
+		var q1: int = mini(j, n - 1)
+		if q0 > q1:
+			continue
+		var l: float = slab_l[q0]
+		var rr: float = slab_r[q0]
+		for q in range(q0 + 1, q1 + 1):
+			l = minf(l, slab_l[q])
+			rr = maxf(rr, slab_r[q])
+		var y: float = y0 + float(j)
+		c.draw_rect(Rect2(l, y, rr - l, 1.0), lo_c if j == m - 1 and tk > 3 else fc)
+		var e: float = slab_r[mini(j, n - 1)] if right else slab_l[mini(j, n - 1)]
+		if right and rr > e:
+			c.draw_rect(Rect2(e, y, rr - e, 1.0), sc)
+		elif not right and l < e:
+			c.draw_rect(Rect2(l, y, e - l, 1.0), sc)
+	#  앞면 윗줄 빛 — 윗면 가까운 변 바로 밑.
+	if n > 0 and tk > 1:
+		c.draw_rect(Rect2(slab_l[n - 1], y1, slab_r[n - 1] - slab_l[n - 1], 1.0),
+				Color(fc.lightened(0.22), a))
 	#  윗면 — 먼 변에 한 줄 빛(_ui_face 의 윗모서리 빛과 같은 말씨).
-	_slab_rows(c, x0, x1, y0, y1, Color(fill.lightened(float(UIHOV.lit) * h), a), true, k, 0)
-	var u0: float = y1 - y0 - 0.5
-	var i0: float = float((ROUND[k] as Array)[0]) if ROUND.has(k) else 0.0
-	var hl: float = roundf(x0 + _slab_lean(x0) * u0) + i0
-	var hr: float = roundf(x1 + _slab_lean(x1) * u0) - i0
-	if hr > hl:
-		c.draw_rect(Rect2(hl, y0, hr - hl, 1.0), Color(fill.lightened(0.25), a))
+	var tc := Color(fill.lightened(float(UIHOV.lit) * h), a)
+	for i in n:
+		c.draw_rect(Rect2(slab_l[i], y0 + float(i), slab_r[i] - slab_l[i], 1.0),
+				Color(fill.lightened(0.25), a) if i == 0 else tc)
 	return Rect2(x0, y0, x1 - x0, y1 - y0)
 
 
