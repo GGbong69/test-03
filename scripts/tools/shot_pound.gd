@@ -1,6 +1,9 @@
 extends SceneTree
 #  주먹 촬영 (2026-10-03) — 사탕을 상점에서 쓰면 사탕이 펠트에 떨어지고 상인이 주먹으로
-#  부순다 · 빈 테이블 리롤은 주먹으로 테이블을 친다(game.gd POUND 머리말). shots/ 에:
+#  부순다 · 빈 테이블 리롤은 주먹으로 테이블을 친다(game.gd POUND 머리말) · 판 동전은 저울
+#  접시에서 왼손 주먹에 부서진다(SELLX). shots/ 에:
+#    sell_smash_strip.png   판매 여덟 박자 — 화면 왼쪽(x 0~320 · y 20~200) 2배
+#    sell_smash_hit.png     닿은 박자의 온 화면
 #    pound_candy_strip.png  사탕 여덟 박자 — 화면 가운데(x 60~520 · y 16~250) 2배
 #    pound_table_strip.png  빈 테이블 여덟 박자 — 같은 자리
 #    pound_candy_hit.png · pound_table_hit.png  닿은 박자의 온 화면
@@ -127,7 +130,7 @@ func _run() -> void:
 	await _settle(20)
 	print("주먹 — 진열대 %s · 손 3D %s" % [g._room3d_tbl(), g._hand3_live()])
 
-	# ── 판매 — 들어 올려 오른쪽 벽으로 던진다(2026-10-04) ──
+	# ── 판매 — 저울 접시의 판 동전을 왼손 주먹으로 부순다(2026-10-04) ──
 	var picks := []
 	for it in GameData.items():
 		if String((it as Dictionary).get("rarity", "")) == "rare":
@@ -144,18 +147,20 @@ func _run() -> void:
 	print("판매 — 섰다 %s" % g._prop_live(0))
 	var cells := []
 	var rt := 0.0
-	for want in [0.45, 0.53, 0.60, 0.66, 0.72, 0.80, 0.84, 0.95]:
+	#  실시간(몸짓 시계는 PROP.tempo_sell 배) — 접시 0.16 · 치켜듦 0.21 · 예비 0.29 · 닿음 0.35.
+	for want in [0.10, 0.20, 0.28, 0.33, 0.36, 0.40, 0.50, 0.75]:
 		while rt < float(want) - 0.0001:
 			_calm()
 			g._process(1.0 / 120.0)
 			rt += 1.0 / 120.0
 		await _settle(3)
 		var im: Image = root.get_texture().get_image()
-		cells.append(_crop(im, Rect2(0.0, 0.0, 640.0, 200.0), 1))
-		print("  sell %.2f · 날기 %d · 조각 %d" % [rt, g.th_fly.size(), g.th_bits.size()])
-		if absf(float(want) - 0.84) < 0.001:
-			im.save_png("res://shots/throw_hit.png")
-	_sheet(cells, 2).save_png("res://shots/throw_strip.png")
+		cells.append(_crop(im, Rect2(0.0, 20.0, 320.0, 180.0), 2))
+		print("  sell %.2f · t %.2f · 팔 %.3f · 손목 %s · 기울기 %.2f · 알 %d" % [rt,
+				float(g.prop_t[0]), float(g.prop_rr[0]), g.npc_wb[0], g.scale_tilt, g.bu_n])
+		if absf(float(want) - 0.36) < 0.001:
+			im.save_png("res://shots/sell_smash_hit.png")
+	_sheet(cells, 4).save_png("res://shots/sell_smash_strip.png")
 	for k in 120:
 		_calm()
 		g._process(1.0 / 120.0)

@@ -1,18 +1,21 @@
 extends SceneTree
-# 판 소품 몸짓(2026-10-02) — 팔면 상인이 판 동전을 저울에서 집어 가고, 사면 등록기를
+# 판 소품 몸짓(2026-10-02) — 팔면 상인이 판 동전을 저울 접시에서 주먹으로 부수고
+# (2026-10-04 「판매하는 물건도 NPC가 물건을 부쉬는걸로 하자」), 사면 등록기를
 # 내리친다(시안 C — 「C 로 바로」 · 「NPC가 수금기 내리 치면 좋겠어」).
 # 몸짓은 그림이다. 못 박는 것:
 #   ① 값이 몸짓과 무관하다 — 몸짓을 켜고 끈 두 판매 · 두 구매가 골드 · 동전 · 매물 · 봉인 ·
 #      매듭에서 글자 하나 안 다르고, 확정 순간도 같다(_sell · _pay_take 가 돌아온 그 줄).
 #      몸짓이 도는 동안 · 판 효과(동전 · 조각)가 다 가라앉을 때까지 값이 한 톨도 안 움직인다.
-#   ② 팔면 · 사면 몸짓이 서고 제 시간(PROP.s_end · b_end) 안에 끝나며, 두 손이 쉼으로
-#      돌아온다(손바닥 자리가 몸짓 전과 같다).
-#   ③ 팔이 안 늘어난다 — 어깨 → 손목 거리가 위팔 + 팔뚝을 안 넘는다. 집은 동전이 손끝을
-#      따라온다(npc_hold = 동전 과녁). 서랍은 손바닥이 닿는 박자에 튀어나온다.
+#   ② 팔면 · 사면 몸짓이 서고 제 시간(PROP.p_end · b_end) 안에 끝나며, 두 손이 쉼으로
+#      돌아온다(손바닥 자리가 몸짓 전과 같다). 팔면 왼손 망치 주먹이 접시 동전을 친다 —
+#      주먹 밑면이 과녁에 닿고 손목이 곧고, 닿는 틀에 동전 그림이 빠지며 조각 · 불티가
+#      튀고 저울대가 쾅 더 내려앉았다 돌아오고 다 가라앉는다.
+#   ③ 팔이 안 늘어난다 — 어깨 → 손목 거리가 위팔 + 팔뚝을 안 넘는다. 서랍은 손바닥이
+#      닿는 박자에 튀어나온다.
 #   ④ 못 서면 옛 응수다 — 움직임 끔 · 건네는 중 · 쓰는 중 · 진열대가 없다(헤드리스 기본).
 #      서던 몸짓도 건네기 · 쓸기가 들면 끊겨 쉼으로 돌아간다.
 #   ⑤ 연달아 팔고 사도 멈춘 손 · 남은 동전 그림이 없다.
-#   ⑥ 개발자 「상인 몸짓」의 두 줄(저울에 올리기 · 등록기 내리치기)이 값을 안 건드린다.
+#   ⑥ 개발자 「상인 몸짓」의 줄(동전 부수기 · 등록기 내리치기 · 사탕 · 테이블)이 값을 안 건드린다.
 #   ⑧ 주먹(2026-10-03) — 사탕을 상점에서 쓰면 값은 그 순간 오르고 사탕이 펠트에 떨어져 주먹에
 #      부서진다(사탕 색 조각 · 설탕 반짝이 · 글). 빈 테이블 리롤은 쓸기 대신 주먹이 테이블을
 #      치고, 판은 닿는 틀에 깔리고, 문(sweep_live)은 눌러 둔 주먹이 튀고 나서 열린다. 주먹
@@ -128,10 +131,6 @@ func _clear_acts() -> void:
 	g.reg_open = 0.0
 	g.reg_fx = Vector3.ZERO
 	g._burst_clear()
-	g.th_fly.clear()
-	g.th_bits.clear()
-	g.th_marks.clear()
-	g.th_flash.clear()
 	g.shake = 0.0
 
 
@@ -306,38 +305,49 @@ func _run() -> void:
 	var t := 0.0
 	var rr := 0.0
 	var far_u := 999.0
-	var hold_err := 0.0
-	var grip_mid := 0.0
+	var fist_err := 0.0
+	var fist_top := -999.0
+	var fist_hit := 999.0
+	var wmax0 := 0.0
+	var grip_max := 0.0
+	var P: Dictionary = g.PROP
 	while g._prop_live(0) and t < 3.0:
 		g._prop_tick(DT)
 		t += DT
 		_pose()
 		rr = maxf(rr, float(g.prop_rr[0]))
 		far_u = minf(far_u, (g.npc_palm[0] as Vector3).x)
+		grip_max = maxf(grip_max, g._give_grip(0))
 		var pt: float = g.prop_t[0]
-		if pt >= float(g.PROP.s_reach) and pt < float(g.PROP.s_g1):
-			#  쥐기 전 — 손의 검지 끝이 접시 동전을 집을 자리에 서 있다(prop_hold3 — 그 틀
-			#  손에서 낸 동전 자리)
-			var c3: Vector3 = g._prop_pan3()
-			var h3: Vector3 = g.prop_hold3
-			hold_err = maxf(hold_err, Vector3(c3.x, c3.z, c3.y).distance_to(h3))
-		if pt >= float(g.PROP.s_g1) and pt < float(g.PROP.s_lift):
-			grip_mid = maxf(grip_mid, g._give_grip(0))
+		var fh: float = _fist_pt(0).y
+		if pt >= float(P.p_up) and pt < float(P.p_hold):
+			#  주먹 밑면이 과녁(_sell3 — 접시 동전 윗면 + 치켜든 몫)에 서 있다.
+			fist_err = maxf(fist_err, _fist_pt(0).distance_to(g._sell3(pt)))
+			var wbn: Vector2 = g.npc_wb[0]
+			wmax0 = maxf(wmax0, maxf(wbn.x, wbn.y))
+		if pt >= float(P.p_up) and pt < float(P.p_hit):
+			fist_top = maxf(fist_top, fh)
+		if pt >= float(P.p_hit) and pt < float(P.p_hit) + 0.03:
+			fist_hit = minf(fist_hit, fh)
+	var tend: float = float(P.p_end) / float(P.tempo_sell)
 	_ok("판매 몸짓이 선다", t > 0.5, "%.2f초" % t)
-	_ok("판매 몸짓이 제 시간 안에 끝난다", t <= float(g.PROP.s_end) + DT * 1.5,
-			"%.3f초 (표 %.2f)" % [t, float(g.PROP.s_end)])
+	_ok("판매 몸짓이 제 시간 안에 끝난다", t <= tend + DT * 1.5, "%.3f초 (표 %.2f)" % [t, tend])
 	_ok("손이 저울까지 간다", far_u < 90.0, "손바닥 u 최소 %.0f" % far_u)
 	_ok("팔이 안 늘어난다", rr <= 1.0, "어깨 → 손목 / 팔 길이 최대 %.3f" % rr)
-	_ok("집는 손이 접시 동전 자리에 선다", hold_err < 0.6, "어긋남 최대 %.2f" % hold_err)
-	_ok("든 동안 다 쥐었다", grip_mid > 0.99, "쥠 %.2f" % grip_mid)
+	_ok("판매 — 주먹 밑면이 접시 과녁에 닿는다", fist_err < 1.0, "어긋남 최대 %.2f" % fist_err)
+	_ok("판매 — 주먹이 치켜 올랐다 내리친다", fist_top - fist_hit >= 30.0,
+			"주먹 밑 h %.1f → %.1f" % [fist_top, fist_hit])
+	_ok("판매 — 주먹 동안 손목이 곧다(망치 주먹)", wmax0 <= float(P.p_wrist) + 0.6,
+			"최대 꺾임 %.1f°" % wmax0)
+	_ok("판매 — 동전을 쥐지 않는다", grip_max < 0.001, "쥠 최대 %.3f" % grip_max)
 	_pose()
 	var back0: float = (g.npc_palm[0] as Vector3).distance_to(rest0)
 	_ok("판 뒤 왼손이 쉼으로 돌아온다", back0 < 0.01 and g._give_grip(0) < 0.001,
 			"어긋남 %.3f · 쥠 %.3f" % [back0, g._give_grip(0)])
 	_ok("판 뒤 남은 동전 그림이 없다", g.prop_it.is_empty() and g.prop_ghost.is_empty(), "")
-	#  던진 동전(2026-10-04 「들어 올리고 오른쪽으로 던져버리는건 어때? 그럼 동전은 쓩 날아가서
-	#  오른쪽 벽이랑 부딪혀서 부숴지는거지」) — 놓는 박자에 날아가 벽에 닿아 조각 · 불티가 튀고,
-	#  다 가라앉는다. 값은 판 순간 그대로다(①).
+	#  부순 동전(2026-10-04 「판매하는 물건도 NPC가 물건을 부쉬는걸로 하자」) — 닿는 박자에
+	#  동전 그림이 빠지고 조각 · 불티가 튀고 저울대가 쾅 더 내려앉았다 돌아오고, 다 가라앉는다.
+	#  값은 판 순간 그대로다(①).
 	_restore(base)
 	_clear_acts()
 	_calm()
@@ -345,45 +355,47 @@ func _run() -> void:
 	var gth0: int = g.gold
 	g._chute_click(g.Z_SELL)
 	var gth1: int = g.gold
-	var TH: Dictionary = g.THROW
-	var fx_max := 0.0
-	var rel_pt := -1.0
-	var bits_max := 0
-	var flash_seen := false
-	var hit_at := Vector2(-1.0, -1.0)
+	var SX: Dictionary = g.SELLX
+	var hit_pt := -1.0
+	var kinds := [0, 0, 0, 0, 0, 0, 0]
+	var sh_hit := 0.0
+	var tilt_pre := 0.0
+	var tilt_max := 0.0
 	var tth := 0.0
 	while tth < 3.0:
 		var pt0: float = g.prop_t[0]
+		var had: bool = not g.prop_it.is_empty()
 		g._prop_tick(DT)
 		tth += DT
-		if rel_pt < 0.0 and not g.th_fly.is_empty():
-			rel_pt = pt0
-		for f in g.th_fly:
-			fx_max = maxf(fx_max, (g._throw_at(f, clampf(float(f.t) / float(TH.t), 0.0, 1.0))
-					as Vector2).x)
-		bits_max = maxi(bits_max, g.th_bits.size())
-		flash_seen = flash_seen or not g.th_flash.is_empty()
-		if not g.th_marks.is_empty():
-			hit_at = g.th_marks[0].p
-		if tth > 0.5 and g.th_fly.is_empty() and g.th_bits.is_empty() and g.th_marks.is_empty() 				and g.th_flash.is_empty() and not g._prop_live(0):
+		if hit_pt < 0.0 and had and g.prop_it.is_empty():
+			hit_pt = pt0
+			sh_hit = g.shake
+			tilt_pre = g.scale_tilt
+			for i in g.bu_t.size():
+				if float(g.bu_t[i]) >= 0.0:
+					kinds[int(g.bu_k[i])] += 1
+		if hit_pt >= 0.0:
+			tilt_max = maxf(tilt_max, g.scale_tilt)
+		if tth > 0.5 and g.bu_n == 0 and not g._prop_live(0) and g.scale_ring <= 0.0:
 			break
-	_ok("판매 — 놓는 박자에 동전이 날아간다", rel_pt >= 0.0
-			and absf(rel_pt - float(g.PROP.s_rel)) <= DT * 2.0, "놓은 틀 %.3f (표 %.2f)" % [rel_pt,
-			float(g.PROP.s_rel)])
-	#  날던 마지막 틀은 벽 앞 한 틀(초속 2000px 언저리라 33px 안)이다 — 깨진 자리는 금이 말한다.
-	_ok("판매 — 오른쪽 벽까지 날아가 깨진다(조각 · 불티 · 번쩍임)", fx_max >= (TH.to as Vector2).x - 40.0
-			and hit_at.is_equal_approx(TH.to) and bits_max == int(TH.bits) + int(TH.sparks)
-			and flash_seen, "날던 오른끝 %.0f · 깨진 자리 %s · 조각 %d" % [fx_max, hit_at, bits_max])
-	_ok("판매 — 조각 · 금 · 번쩍임이 다 사라진다", g.th_bits.is_empty() and g.th_marks.is_empty()
-			and g.th_flash.is_empty() and tth < 3.0, "%.2f초" % tth)
-	_ok("판매 — 던지는 동안 값이 안 움직인다(판 순간 그대로)", g.gold == gth1 and gth1 > gth0,
+	_ok("판매 — 주먹이 닿는 박자에 동전이 부서진다", hit_pt >= 0.0
+			and absf(hit_pt - float(g.PROP.p_hit)) <= DT * 2.0, "부순 틀 %.3f (표 %.2f)" % [hit_pt,
+			float(g.PROP.p_hit)])
+	_ok("판매 — 동전 조각 · 금 불티가 튄다", int(kinds[6]) == int(SX.shard)
+			and int(kinds[4]) == int(SX.spark), "조각 %d · 불티 %d" % [kinds[6], kinds[4]])
+	_ok("판매 — 닿은 틀 흔들림", sh_hit >= float(SX.shake) - 0.6, "%.2fpx" % sh_hit)
+	_ok("판매 — 저울대가 쾅 더 내려앉는다", tilt_max >= 1.15, "닿을 때 %.2f → 최대 %.2f" % [
+			tilt_pre, tilt_max])
+	_ok("판매 — 조각이 다 가라앉고 저울대가 돌아온다", g.bu_n == 0 and absf(g.scale_tilt) < 0.02
+			and tth < 3.0, "%.2f초 · 기울기 %.3f" % [tth, g.scale_tilt])
+	_ok("판매 — 부수는 동안 값이 안 움직인다(판 순간 그대로)", g.gold == gth1 and gth1 > gth0,
 			"%d → %d → %d" % [gth0, gth1, g.gold])
-	#  가장 먼 박자(접시에서 집는 0.42 · 든 0.50)에서 커서가 어디 있든(몸이 따라본다 —
+	#  가장 먼 박자(치켜든 0.30 · 예비 0.36 · 닿는 0.44)에서 커서가 어디 있든(몸이 따라본다 —
 	#  끌어 팔면 커서는 저울 위다) · 숨이 어느 박자든 팔이 안 늘어난다.
 	var clk0: float = g.npc_clock
 	var eye0: float = g.npc_eye
 	var worst := 0.0
-	for pt in [0.42, 0.50]:
+	for pt in [0.30, 0.36, 0.44]:
 		_restore(base)
 		_clear_acts()
 		_calm()
@@ -552,7 +564,7 @@ func _run() -> void:
 	var na: int = (g.IDLE.acts as Array).size() + Dev.NPC_HOLDS.size()
 	var names: PackedStringArray = Dev._names("npcact")
 	_ok("개발자 줄에 소품 몸짓 넷이 있다", names.size() == na + 4
-			and names[na] == "저울에 올리기" and names[na + 1] == "등록기 내리치기"
+			and names[na] == "동전 부수기" and names[na + 1] == "등록기 내리치기"
 			and names[na + 2] == "사탕 부수기" and names[na + 3] == "테이블 내리치기",
 			"%d줄 · %s" % [names.size(), ", ".join(names.slice(na))])
 	Dev.pick["npcact"] = na
@@ -568,7 +580,7 @@ func _run() -> void:
 		g._prop_tick(DT)
 		dtt += DT
 		dburst = maxi(dburst, int(g.bu_n))
-	_ok("개발자 「저울에 올리기」 · 「등록기 내리치기」가 선다", dl0 and dl1, "")
+	_ok("개발자 「동전 부수기」 · 「등록기 내리치기」가 선다", dl0 and dl1, "")
 	_ok("개발자 「등록기 내리치기」가 판 효과까지 낸다", dburst > 0 and g.bu_n == 0,
 			"최대 %d알 · 남은 %d" % [dburst, g.bu_n])
 	_ok("개발자 줄이 값을 안 건드린다", _econ() == dev0, "%s | %s" % [dev0, _econ()])
@@ -576,7 +588,7 @@ func _run() -> void:
 	g._panel_reset()
 	Dev.pick["npcact"] = na
 	Dev._run(g, {"t": "list", "k": "npcact", "n": na + 2})
-	_ok("든 동전이 없어도 저울 몸짓은 선다(매물 · 빈 동전 그림)", g._prop_live(0)
+	_ok("든 동전이 없어도 부수기 몸짓은 선다(매물 · 빈 동전 그림)", g._prop_live(0)
 			and not g.prop_it.is_empty(), String(g.prop_it.get("id", "")))
 	_tick(2.0)
 	g.prop_force = false
@@ -770,20 +782,22 @@ func _slam() -> void:
 	g.prop_force = false
 
 
-#  주먹 밑면 — 그 틀 손에서 PROP.p_fist 를 낸다(_prop_place 의 역).
-func _fist_pt() -> Vector3:
-	var w: Vector3 = g.prop_lw[1]
-	var b := Basis(Vector3.UP, -float(g.prop_la[1])) * Basis(Vector3.BACK, -float(g.prop_lp[1])) \
-			* Basis(Vector3.RIGHT, deg_to_rad(float(g.PROP.p_roll)))
+#  주먹 밑면 — 그 틀 손에서 PROP.p_fist 를 낸다(_prop_place 의 역). 0 화면 왼손(판매) ·
+#  1 오른손(거울 — z 를 뒤집는다).
+func _fist_pt(h := 1) -> Vector3:
+	var w: Vector3 = g.prop_lw[h]
+	var b := Basis(Vector3.UP, -float(g.prop_la[h])) * Basis(Vector3.BACK, -float(g.prop_lp[h])) \
+			* Basis(Vector3.RIGHT, deg_to_rad(g._fist_roll(h)))
 	var tp: Vector3 = g.PROP.p_fist
-	return w + b * (Vector3(tp.x, tp.y, -tp.z) * float(g.NPC.sc_r))
+	var zs: float = -1.0 if h == 1 else 1.0
+	return w + b * (Vector3(tp.x, tp.y, tp.z * zs) * float(g.NPC.sc_r if h == 1 else g.NPC.sc_l))
 
 
 #  주먹 한 번을 끝까지 돌리며 잰다 — 닿기 전 · 닿는 틀 · 끝.
 func _pound_run(sweep: bool) -> Dictionary:
 	var P: Dictionary = g.PROP
 	var r := {"hit": false, "top": -999.0, "hit_h": 999.0, "err": 0.0, "rr": 0.0,
-			"shake": 0.0, "kinds": [0, 0, 0, 0, 0, 0], "pc_before": "", "pc_after": "x",
+			"shake": 0.0, "kinds": [0, 0, 0, 0, 0, 0, 0], "pc_before": "", "pc_after": "x",
 			"wb": Vector2.ZERO, "open_t": -1.0, "dealt_t": -1.0, "wmax": 0.0}
 	var tt := 0.0
 	while tt < 2.0:
