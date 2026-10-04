@@ -1147,6 +1147,12 @@ static func _rows(g: Node) -> Array:
 						"k": "vhs", "n": VHS_STEPS.size()},
 				{"n1": "도트 팔레트 %d" % int(roundf(float(g.dot) * 100.0)), "t": "list",
 						"k": "dot", "n": DOT_STEPS.size()},
+				#  ── 다트판 벽 (2026-10-04) ────────────────────────
+				#  판 화면 뒤 3D 바 벽(game.gd WALL3 · wall3d.gd)을 켜고 끈다 — 옛 단색 바닥 ·
+				#  옛 왼쪽 벽 띠와 같은 자리에서 맞대 본다. 「3D 방」 줄과 같은 어법이다.
+				#  열여덟째 줄이다(한계 열아홉).
+				{"n1": "다트판 벽 %s" % ("켬" if g.wall3_on else "끔"),
+						"t": "act", "a": "wall3"},
 			]
 
 
@@ -2548,6 +2554,11 @@ static func _run(g: Node, e: Dictionary) -> void:
 		"room3d":
 			g.room3d_on = not g.room3d_on
 			_say("3D 방 %s" % ("켬" if g.room3d_on else "끔"))
+			return
+		"wall3":
+			g.wall3_on = not g.wall3_on
+			g.queue_redraw()
+			_say("다트판 벽 %s" % ("켬" if g.wall3_on else "끔"))
 			return
 		"run_drop":
 			Save.run_drop()

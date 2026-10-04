@@ -1,0 +1,357 @@
+extends SceneTree
+#  다트판 벽 촬영 (2026-10-04 · game.gd 의 WALL3 · room3d.gd 의 make_wall).
+#  shots/ 에(1280x720, 마지막 하나만 1440x900):
+#    wall_pick.png      판 첫머리 — 벽 꽂이의 다트 줄을 고르는 화면(PICK)
+#    wall_aimv.png      첫 축 조준(AIM_V)
+#    wall_aimh.png      둘째 축 조준(AIM_H)
+#    wall_fly.png       나는 다트(FLY) — 꽂힌 다트 셋이 판에 있다
+#    wall_resolve.png   착탄 뒤 정산 걸음(RESOLVE)
+#    wall_clear.png     판 정산(CLEAR) 덮개
+#    wall_swap.png      판 갈이 한가운데(테이블이 빠지고 판이 선다)
+#    wall_swap_b.png    판 갈이 끝무렵
+#    wall_swap_in_strip.png  판 고르기 → 판 판 갈이 여섯 박자(0 · 1틀 · 0.05 · 0.10 · 0.18 · 0.28초)
+#                       — 상점 방 띠가 테이블과 같이 걷히는가 · 꽂이가 벽에 박혀 있는가
+#    wall_runinfo.png   런 정보(판 위에 뜨는 판)
+#    wall_pizza.png · wall_clock.png · wall_large.png  옷 입은 판 · 라지 — 링이 판 테를 따라간다
+#    wall_break.png     판 깨짐 — 판이 뜬 자리(벽에 남은 자국)
+#    wall_wipe_strip.png 정산 → 상점 덮개 여섯 박자(보통 길) — 정산의 벽에서 덮인다
+#    wall_swap_out.png  정산 → 상점 판 갈이(덮개를 못 트는 길) — 정산의 덮개에서 상점 방으로
+#    wall_swap_out0.png 그 첫 틀(판 갈이 시계 0) — 정산(wall_clear2.png)과 같은 그림이어야 한다
+#    wall_swap_out_strip.png 정산 · 0 · 1틀 · 2틀 · 0.10 · 0.25초
+#    wall_shop.png      상점(견줄 거리)
+#    wall_wide.png      1440x900(16:10) — 여백(view_pad)까지 덮는가
+#    wall_1080.png      1920x1080 — 굽는 배율이 창 배율(3)을 따르는가
+#    wall_219.png · wall_43.png · wall_1366.png  1920x820 · 1024x768 · 1366x768(배율 2.13)
+#  인자 -- off 이면 벽을 끄고 같은 이름 앞에 off_ 를 붙여 찍는다. -- quick 이면 PICK 한 장만 찍고 끝낸다(빛 · 재질 맞출 때).
+#  창이 있어야 돈다:  godot --path . --script scripts/tools/shot_wall.gd
+const Save = preload("res://scripts/save.gd")
+const DT := 1.0 / 120.0
+var g = null
+var busy := false
+var pre := "wall_"
+var off := false
+var quick := false
+
+
+func _initialize() -> void:
+	var ua := OS.get_cmdline_user_args()
+	if ua.has("off"):
+		off = true
+		pre = "off_wall_"
+	quick = ua.has("quick")
+	Save.gpath = "user://_shot_wall_g.cfg"
+	Save.path = "user://_shot_wall.cfg"
+	Save.wipe()
+	g = load("res://scenes/main.tscn").instantiate()
+	root.add_child(g)
+	seed(20261004)
+
+
+func _process(_d: float) -> bool:
+	if g != null:
+		g.hover_live = false
+		g.tip_pin = {}
+		g.tip_a = 0.0
+	if busy:
+		return false
+	busy = true
+	_run()
+	return false
+
+
+func _wait(n: int) -> void:
+	for _i in n:
+		await process_frame
+
+
+func _calm() -> void:
+	g.idle_act = -1
+	g.idle_wait = 99.0
+	g.mouse_at = Vector2(-50.0, -50.0)
+	g._tutor_close()
+	g.tutor_q.clear()
+
+
+func _step(sec: float) -> void:
+	var n: int = int(ceil(sec / DT))
+	for k in n:
+		_calm()
+		g._process(DT)
+
+
+#  벽 굽기를 끝낸다 — 도구는 g 의 _process 를 손으로 부르므로 그려진 틀마다 한 번씩 민다.
+func _bake() -> void:
+	var guard := 0
+	while g.get("wall3_fresh") != null and int(g.wall3_fresh) > 0 and guard < 60:
+		g._wall3_tick()
+		await process_frame
+		guard += 1
+
+
+func _shot(nm: String) -> void:
+	await _bake()
+	g.queue_redraw()
+	await process_frame
+	await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("res://shots/%s%s.png" % [pre, nm])
+	print("  %s%s · state %d · 벽 %s" % [pre, nm, g.state, str(g.get("wall3_on"))])
+
+
+func _leg_pick() -> void:
+	#  판 고르기 → 판(PICK). 판 갈이는 건너뛴다.
+	g._swap_skip()
+	g._begin_leg()
+	g._swap_skip()
+	_step(1.2)
+	g.grip_t = 9.0
+
+
+#  판을 끝내고 정산까지 감는다.
+func _to_clear() -> void:
+	g._brk_skip()
+	g.total = g.target
+	g.darts_left = 0
+	g.remaining.clear()
+	g._finish_leg()
+	var guard := 0
+	while g.state != g.S.CLEAR and guard < 900:
+		_calm()
+		g._process(DT)
+		g._swap_skip()
+		guard += 1
+	g.clear_t = 99.0
+	_step(0.3)
+
+
+#  상점에서 「다음 판」 → 판 고르기 → 판.
+func _next_play() -> void:
+	g._click(g._next_rect().get_center())
+	_step(2.0)
+	var guard := 0
+	while g.state == g.S.LEG and guard < 3:
+		g._begin_leg()
+		g._swap_skip()
+		guard += 1
+	_step(1.2)
+	g.grip_t = 9.0
+	await _wait(4)
+
+
+#  덮개 몇 박자를 반 크기로 한 장에 — 3 칸씩 두 줄. first 가 있으면 첫 칸이다.
+func _strip(nm: String, at: Array, first: Image = null) -> void:
+	var cells := []
+	if first != null:
+		cells.append(first)
+	var tt := 0.0
+	for want in at:
+		while tt < float(want) - 0.0001:
+			_calm()
+			g._process(DT)
+			tt += DT
+		g.queue_redraw()
+		await process_frame
+		await RenderingServer.frame_post_draw
+		var im: Image = root.get_texture().get_image()
+		im.resize(im.get_width() / 2, im.get_height() / 2, Image.INTERPOLATE_BILINEAR)
+		cells.append(im)
+		print("  %s%s %.2f · state %d · 덮개 %.2f" % [pre, nm, tt, g.state, g.wipe_t])
+	var c0: Image = cells[0]
+	var cw: int = c0.get_width()
+	var ch: int = c0.get_height()
+	var gap := 6
+	var sh := Image.create(cw * 3 + gap * 2, ch * 2 + gap, false, c0.get_format())
+	sh.fill(Color.BLACK)
+	for i in cells.size():
+		sh.blit_rect(cells[i], Rect2i(0, 0, cw, ch), Vector2i((i % 3) * (cw + gap), (i / 3) * (ch + gap)))
+	sh.save_png("res://shots/%s%s.png" % [pre, nm])
+
+
+func _run() -> void:
+	await _wait(10)
+	if DisplayServer.get_name() == "headless":
+		print("  건너뜀 — 창이 있어야 찍힌다")
+		quit(0)
+		return
+	DisplayServer.window_set_size(Vector2i(1280, 720))
+	for id in ["u_leg", "u_skip", "u_boss", "u_score", "u_clear", "u_shop", "u_rack",
+			"u_cons", "u_sell", "u_reroll", "u_give", "u_boot", "u_gift", "u_aim",
+			"u_pick", "u_throw"]:
+		Save.teach(id)
+	g.set_process(false)
+	if off and g.get("wall3_on") != null:
+		g.wall3_on = false
+	g._new_run(true)
+	_calm()
+	_step(1.5)
+	await _wait(4)
+
+	# ── 판 갈이 — 판 고르기에서 판으로 ──
+	await _wait(4)
+	await _bake()               # 판 고르기에서 미리 구워 둔다(게임과 같다)
+	g._begin_leg()
+	await _strip("swap_in_strip", [0.0, 1.0 / 60.0, 0.05, 0.10, 0.18, 0.28])
+	g._swap_skip()
+	_step(1.2)
+	g.grip_t = 9.0
+
+	# ── 판 첫머리(PICK) — 자루가 다 같은 종류면 곧장 조준이라 손으로 세운다 ──
+	g.state = g.S.PICK
+	g.grip_pick = -1
+	await _shot("pick")
+	if quick:
+		quit(0)
+		return
+
+	# ── 조준 ──
+	g._pick_dart(0)
+	g._aim_begin()
+	for i in 22:
+		g._aim_tick(1.0 / 60.0)
+	await _shot("aimv")
+	g._advance()
+	for i in 30:
+		g._aim_tick(1.0 / 60.0)
+	await _shot("aimh")
+
+	# ── 꽂힌 다트를 깔고 나는 다트 ──
+	var bc: Vector2 = g.BC
+	var r: float = g.R
+	g.darts = [
+		{"p": bc + Vector2(4.0, -r * 0.58), "id": "std", "rot": 0.10},
+		{"p": bc + Vector2(r * 0.50, r * 0.36), "id": "std", "rot": 0.30},
+		{"p": bc + Vector2(-r * 0.44, r * 0.20), "id": "std", "rot": -0.22},
+	]
+	g._advance()
+	var guard := 0
+	while g.state != g.S.FLY and guard < 600:
+		g._process(DT)
+		guard += 1
+	_step(0.05)
+	await _shot("fly")
+	guard = 0
+	while g.state != g.S.RESOLVE and guard < 600:
+		g._process(DT)
+		guard += 1
+	_step(0.25)
+	await _shot("resolve")
+
+	# ── 런 정보 — 판 위에 뜨는 판 ──
+	g._brk_skip()
+	g.state = g.S.PICK
+	g.grip_pick = -1
+	g._runinfo_toggle()
+	_step(0.3)
+	await _shot("runinfo")
+	g._runinfo_toggle()
+	_step(0.2)
+
+	# ── 옷 입은 판 · 라지 — 판 테가 바뀌면 링이 따라간다 ──
+	for m in [["pizz", "pizza"], ["clok", "clock"], ["panb", "large"]]:
+		g.mods_own = [String(m[0])]
+		g._board_bake()
+		g._start_leg()
+		g._swap_skip()
+		g.state = g.S.PICK
+		g.grip_pick = -1
+		_step(0.6)
+		g.grip_t = 9.0
+		_step(0.02)
+		await _wait(14)
+		await _shot(String(m[1]))
+	g.mods_own = []
+	g._board_bake()
+	g._start_leg()
+	g._swap_skip()
+	_step(0.6)
+	g.grip_t = 9.0
+	_step(0.02)
+	await _wait(14)
+	g.darts = [
+		{"p": bc + Vector2(4.0, -r * 0.58), "id": "std", "rot": 0.10},
+		{"p": bc + Vector2(r * 0.50, r * 0.36), "id": "std", "rot": 0.30},
+		{"p": bc + Vector2(-r * 0.44, r * 0.20), "id": "std", "rot": -0.22},
+	]
+
+	# ── 판 깨짐 — 뜬 자리 ──
+	g._brk_skip()
+	g.state = g.S.PICK
+	g._brk_arm(2)
+	g.brk_free = true
+	guard = 0
+	while not g.brk_fired and guard < 600:
+		g._brk_tick(1.0 / 60.0)
+		guard += 1
+	for i in 26:
+		g._brk_tick(1.0 / 60.0)
+	await _shot("break")
+	g._brk_skip()
+
+	# ── 판 정산 ──
+	await _to_clear()
+	await _shot("clear")
+
+	# ── 정산 → 상점 덮개(보통 길) — 정산의 벽에서 덮이고 상점이 드러난다 ──
+	g.wipe_force = true
+	g._click(Vector2(-1.0, -1.0))
+	await _strip("wipe_strip", [0.06, 0.18, 0.30, 0.70, 0.78, 0.92])
+	g.wipe_force = false
+	_step(1.5)
+	g._tutor_close()
+	g.tutor_q.clear()
+	await _shot("shop")
+
+	# ── 다음 판 → 정산 → 상점 판 갈이(덮개를 못 트는 길 — 움직임 끔 · 도구) ──
+	await _next_play()
+	await _to_clear()
+	await _shot("clear2")
+	g._click(Vector2(-1.0, -1.0))
+	await _shot("swap_out0")
+	_step(0.05)
+	await _shot("swap_out")
+	_step(2.45)
+	g._tutor_close()
+	g.tutor_q.clear()
+	#  상점 → 판 고르기 → 판 갈이 한가운데 · 끝무렵
+	g._click(g._next_rect().get_center())
+	_step(2.0)
+	await _wait(4)
+	await _bake()
+	g._begin_leg()
+	_step(0.14)
+	await _shot("swap")
+	_step(0.12)
+	await _shot("swap_b")
+	g._swap_skip()
+	_step(1.2)
+	g.grip_t = 9.0
+	await _wait(4)
+	#  같은 길을 한 번 더 — 여섯 박자 띠(첫 칸이 정산)
+	await _to_clear()
+	await _bake()
+	g.queue_redraw()
+	await process_frame
+	await RenderingServer.frame_post_draw
+	var c0: Image = root.get_texture().get_image()
+	c0.resize(c0.get_width() / 2, c0.get_height() / 2, Image.INTERPOLATE_BILINEAR)
+	g._click(Vector2(-1.0, -1.0))
+	await _strip("swap_out_strip", [0.0, 1.0 / 60.0, 2.0 / 60.0, 0.10, 0.25], c0)
+	_step(2.45)
+	g._tutor_close()
+	g.tutor_q.clear()
+
+	# ── 다음 판 — 창 크기 ──
+	await _next_play()
+	g.state = g.S.PICK
+	g.grip_pick = -1
+	for sz in [[Vector2i(1440, 900), "wide"], [Vector2i(1920, 1080), "1080"],
+			[Vector2i(1920, 820), "219"], [Vector2i(1024, 768), "43"], [Vector2i(1366, 768), "1366"]]:
+		DisplayServer.window_set_size(sz[0])
+		await _wait(8)
+		g._view_fit()
+		_step(0.02)
+		await _wait(4)
+		await _shot(String(sz[1]))
+	DisplayServer.window_set_size(Vector2i(1280, 720))
+	await _wait(4)
+	quit(0)
