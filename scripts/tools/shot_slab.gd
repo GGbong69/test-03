@@ -2,7 +2,8 @@ extends SceneTree
 #  누운 단추 · 판 ↔ 상점 덮개 촬영 (2026-10-04 · game.gd 의 SLAB · _clear_go · _shop_go).
 #  shots/ 에:
 #    slab_shop.png · slab_leg.png       상점 · 판 고르기 온 화면(1280x720)
-#    slab_zoom.png                      단추 줄을 2배로 — 쉼 · 커서 · 누름(상점), 쉼(판 고르기)
+#    slab_zoom.png                      단추 줄을 2배로 — 쉼 · 커서(상점), 쉼(판 고르기)
+#    slab_chute.png                     창구 이름 「판매」 · 「구매」(카운터에 누운 글씨) 2배
 #    wipe_shop_strip.png                정산 → 상점 덮개 여덟 박자
 #    wipe_next_strip.png                상점 → 다음 판 덮개 여덟 박자
 #  창이 있어야 돈다:  godot --path . --script scripts/tools/shot_slab.gd
@@ -127,7 +128,7 @@ func _run() -> void:
 	var im_leg: Image = await _shot()
 	im_leg.save_png("res://shots/slab_leg.png")
 	print("판 고르기 — state %d" % g.state)
-	var zl: Image = _crop(im_leg, Rect2(0.0, 272.0, 640.0, 72.0))
+	var zl: Image = _crop(im_leg, Rect2(0.0, 272.0, 640.0, 88.0))
 
 	# ── 판 → 정산 → 상점(덮개) ──
 	g._swap_skip()
@@ -158,13 +159,16 @@ func _run() -> void:
 	# ── 상점 단추 — 쉼 · 커서 · 누름 ──
 	var im_shop: Image = await _shot()
 	im_shop.save_png("res://shots/slab_shop.png")
-	var row := Rect2(0.0, 272.0, 640.0, 72.0)
+	var row := Rect2(0.0, 272.0, 640.0, 88.0)
 	var z0: Image = _crop(im_shop, row)
 	g.ui_hov["btn:리롤"] = 1.0
 	g.ui_hov["btn:다음 판 →"] = 1.0
 	var z1: Image = _crop(await _shot(), row)
 	g.ui_hov.clear()
 	_sheet([z0, z1, zl], 1).save_png("res://shots/slab_zoom.png")
+	#  창구 이름(누운 글씨) — 왼끝 「판매」 · 오른끝 「구매」.
+	_sheet([_crop(im_shop, Rect2(0.0, 130.0, 150.0, 100.0)),
+			_crop(im_shop, Rect2(490.0, 130.0, 150.0, 100.0))], 2).save_png("res://shots/slab_chute.png")
 
 	# ── 상점 → 다음 판(덮개) ──
 	g._click(g._next_rect().get_center())
