@@ -6,6 +6,9 @@ extends SceneTree
 #    legb_deal.png         딜 한가운데 — 두 손이 판을 들고 와 내려놓는다
 #    legb_deal_strip.png   딜 여덟 박자
 #    legb_done.png         라운드 1 의 보스 — 첫 판은 깨져 다트가 꽂혔고 둘째 판은 엎었다
+#    legb_big_now.png      라운드 1 둘째 판 — 큰 판이 지금 판(뜸 · 1.12 배) · 라운드 표시는 앞치마
+#    legb_skip_pop.png     첫 판을 건너뛴 0.25 초 뒤 — 뱃지 팝이 건너뛴 판 위에 두 줄로 쌓인다
+#    legb_wide.png         목표가 다섯 자리인 라운드(8) — 명판이 같이 넓어진다
 #    legb_flip_strip.png   건너뛰기 — 판을 엎는다
 #    legb_pick_strip.png   집기 — 「던진다」 를 누르면 손이 판을 집어 들고 판 갈이로 간다(작은 판)
 #    legb_pick.png         집기 한가운데(든 판) 온 화면
@@ -195,6 +198,25 @@ func _run() -> void:
 	_leg(3, [2])
 	(await _shot()).save_png("res://shots/legb_done.png")
 
+	# ── 큰 판이 지금 판 ──
+	_leg(2, [])
+	(await _shot()).save_png("res://shots/legb_big_now.png")
+
+	# ── 건너뛰기 팝 ──
+	_leg(1, [])
+	g.leg_tag = {"kind": "track", "v": 1, "when": "now", "name": "트랙 강화"}
+	g._skip_leg()
+	_step(0.25)
+	(await _shot()).save_png("res://shots/legb_skip_pop.png")
+	g.pops.clear()
+
+	# ── 긴 목표(라운드 8) ──
+	var keep_mods: Dictionary = g.boss_mods.duplicate()
+	_leg(22, [])
+	(await _shot()).save_png("res://shots/legb_wide.png")
+	print("라운드 8 — 목표 %s · %s · %s" % [g._target_at(22), g._target_at(23), g._target_at(24)])
+	g.boss_mods = keep_mods
+
 	# ── 건너뛰기 — 엎는다 ──
 	_leg(1, [])
 	g._skip_leg()
@@ -205,22 +227,24 @@ func _run() -> void:
 	# ── 집기 ──
 	_leg(1, [])
 	g._leg_commit()
-	var pick: Array = await _strip([0.02, 0.10, 0.18, 0.24, 0.32, 0.42, 0.52, 0.60, 0.66, 0.74])
+	var pick: Array = await _strip([0.02, 0.08, 0.14, 0.20, 0.24, 0.28, 0.31, 0.34, 0.38, 0.44,
+			0.56, 0.70])
 	_sheet(pick, 4).save_png("res://shots/legb_pick_strip.png")
+	print("집기 뒤 — state %d · 집기 칸 %d · 갈이 %s" % [g.state, g.legb_pick_i, g.swap_live])
 	g._swap_skip()
 	_leg(1, [])
 	g._leg_commit()
-	_step(0.47)
+	_step(0.27)
 	(await _shot()).save_png("res://shots/legb_pick.png")
 	g._swap_skip()
 	var mid := []
 	_leg(2, [])
 	g._leg_commit()
-	mid.append_array(await _strip([0.20, 0.40, 0.56]))
+	mid.append_array(await _strip([0.12, 0.22, 0.32]))
 	g._swap_skip()
 	_leg(3, [])
 	g._leg_commit()
-	mid.append_array(await _strip([0.20, 0.40, 0.56]))
+	mid.append_array(await _strip([0.12, 0.22, 0.32]))
 	g._swap_skip()
 	_sheet(mid, 3).save_png("res://shots/legb_pick_mid.png")
 
