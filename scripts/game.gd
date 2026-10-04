@@ -3958,6 +3958,28 @@ func _reroll() -> void:
 	_sfx("reroll")
 
 
+#  정산 → 상점(「큰손」 의 보스 아닌 판이면 곧장 다음 판). 덮개(_wipe)가 다 덮은 틀에
+#  불린다 — 「다트판 화면에서 상점을 갈때도 화면 전환 연출이 나오면 좋겠는데?」
+#  (2026-10-04). 덮개를 못 틀면(움직임 끔 · 검사 도구) 누른 틀에 곧장 불리고, 그때만 옛
+#  판 갈이(테이블이 들어온다)가 돈다. 덮개 밑에서 판 갈이를 돌리면 다 덮인 동안 끝나 버린다.
+func _clear_go() -> void:
+	if state != S.CLEAR:
+		return
+	if GameData.chal_on("shop_round") and not GameData.is_boss(leg_no):
+		_next_leg()
+		return
+	_open_shop()
+	if wipe_t < 0.0:
+		_swap_begin(false)   # 상점이 선 뒤라야 들어오는 테이블에 그릴 것이 있다
+
+
+#  상점 → 다음 판(「다음 판」). 덮개가 다 덮은 틀에 불린다(_clear_go 와 같은 문).
+func _shop_go() -> void:
+	if state != S.SHOP:
+		return
+	_next_leg()
+
+
 func _next_leg() -> void:
 	_hand_abort()
 	#  팩에서 쏟은 것을 다 안 집고 판을 넘기면 그 몫은 여기서 끝난다.
@@ -4860,7 +4882,7 @@ func _process(d: float) -> void:
 		_crt_apply()
 	#  배움 시계는 **실시간**이다. 늦춘 시간으로 제 봉투를 재면 늦출수록
 	#  말상자가 늦게 뜨고, 0.18 배 자리에서는 다섯 배 느리게 뜬다.
-	_tutor_tick(d)
+	_tutor_tick(_wipe_hold(d))
 	#  여기서부터가 게임 시간이다. 설명하는 동안 늦춘다 —
 	#  느린 시간이 인지부하를 낮춘다는 실험을 따른 것이다(TUTOR 머리말).
 	#  **상인과 커서 따라보기는 늦추기 전에 민다.** 저 둘까지 늦추면
@@ -5101,7 +5123,8 @@ func _process(d: float) -> void:
 	if bd_vp != null and not _is_play() and not swap_live:
 		_bd3_close()
 	Dev.tick(self, d)          # DEV
-	_drop_update(d)
+	#  덮개가 다 덮은 동안은 판 깔기 · 매물 낙하 · 판 갈이 · 라운드 경계 시계를 멈춘다(_wipe_hold).
+	_drop_update(_wipe_hold(d))
 	_ui_hover_tick(d)
 	#  조준 어둠의 짙기. 꽂힐 칸이 정해지면 오르고, 날아가는 순간부터 걷힌다.
 	var dim_to: float = 1.0 if _aim_glow_at().x > -9000.0 else 0.0
@@ -6111,11 +6134,7 @@ func _click(m: Vector2) -> void:
 			# 「큰손」은 라운드마다 한 번만 연다. 라운드의 마지막 판(보스)을
 			# 넘긴 뒤에만 상점이 서고 나머지는 곧장 다음 판이다 — 값이 0 인
 			# 대신 고를 기회가 셋에서 하나로 준다.
-			if GameData.chal_on("shop_round") and not GameData.is_boss(leg_no):
-				_next_leg()
-				return
-			_open_shop()
-			_swap_begin(false)   # 상점이 선 뒤라야 들어오는 테이블에 그릴 것이 있다
+			_wipe(_clear_go)
 			return
 		S.LEG:
 			#  누름은 상점에만 있는 것이 아니다. 판·제약 고르기에서도 상인이
@@ -6152,7 +6171,7 @@ func _click(m: Vector2) -> void:
 				return
 			if _next_rect().has_point(m):
 				_hand_abort()
-				_next_leg()
+				_wipe(_shop_go)
 				return
 			if _drop_busy():
 				# 커서 밑에서 물건이 움직이는 동안 구매가 성립하면 "누른 것" 과
@@ -33914,6 +33933,96 @@ func _ui_face(c: CanvasItem, key: String, r: Rect2, on: bool, a := 1.0) -> Rect2
 	return body
 
 
+#  ── 누운 단추 (2026-10-04) ──────────────────────────────────
+#  「던지리. 건너뛰기, 리롤 , 다음판 버튼이 좀 누워있는? 왜냐면 지금 게임 카메라가 거의
+#   45도 각도 아래를 보는 느낌이잖아? 근데 이 2버튼들은 약간 정면이어서 좀 공중에
+#   뛰여져 있는 느낌이란 말이야?」. 테이블 화면의 단추(_btn 의 lie)는 펠트와 같은 면에
+#  누운 판이다 —
+#    · 윗면은 펠트 빗변과 같은 기울기로 먼 변이 화면 가운데 쪽으로 모인다(_slab_lean —
+#      펠트 사다리꼴의 두 빗변이 모이는 소실점). 가까운 변은 r 의 밑 그대로라 누르는
+#      자리(r)는 옛 단추와 같다.
+#    · 앞면(두께 SLAB.t)은 가까운 변 밑에 곧게 선다 — 선 면은 안 기운다.
+#    · 바닥 그림자가 오른쪽 아래로 진다(빛은 왼쪽 위 — 상인 손 그림자와 같은 쪽). 공중에
+#      뜬 판과 바닥에 놓인 판을 가르는 것이 이 한 조각이다.
+#  커서가 얹히면 판이 들려 앞면이 길어지고(밑은 바닥에 남는다 — _ui_face 의 턱과 같은
+#  말씨), 누르면 앞면만큼 가라앉는다. 글자는 안 눕는다 — 「카드는 눕고 카드 위의 인쇄는
+#  안 눕는다」(화면 어법). 다만 줄마다 그 높이의 윗면 한가운데에 선다(_slab_dx).
+#  모서리는 _rr 과 같은 계단 표(ROUND)를 줄마다 깎는다 — 기운 변도 논리 1px 계단이다.
+const SLAB := {"t": 6.0, "lift": 2.0, "shade": Vector2(3.0, 3.0), "shade_a": 0.34, "rad": 4,
+		"bot": 2}
+
+
+#  펠트 빗변의 기울기 — 화면 x 에서 위(먼 쪽)로 1px 갈 때 가운데 쪽으로 가는 몫.
+#  왼쪽 반은 +(오른쪽으로) · 오른쪽 반은 −. 펠트 왼 빗변(x 0 → CHUTE.back)이 그 끝값이다.
+func _slab_lean(x: float) -> float:
+	var hx: float = VIEW.x * 0.5
+	return (hx - x) / hx * float(CHUTE.back) / (float(TBL.ny) - float(TBL.fy))
+
+
+#  면 하나를 줄마다 칠한다 — 밑 줄(y1)에서 [x0, x1], 위로 갈수록 lean 이면 기운다.
+#  위 · 밑 모서리를 tk · bk 칸 계단으로 깎는다(ROUND).
+func _slab_rows(c: CanvasItem, x0: float, x1: float, y0: float, y1: float, col: Color,
+		lean: bool, tk: int, bk: int) -> void:
+	var s0: float = _slab_lean(x0) if lean else 0.0
+	var s1: float = _slab_lean(x1) if lean else 0.0
+	var n: int = int(roundf(y1 - y0))
+	for i in n:
+		var y: float = y0 + float(i)
+		var up: float = y1 - y - 0.5
+		var l: float = roundf(x0 + s0 * up)
+		var r: float = roundf(x1 + s1 * up)
+		var ins := 0
+		if i < tk and ROUND.has(tk):
+			ins = int((ROUND[tk] as Array)[i])
+		elif n - 1 - i < bk and ROUND.has(bk):
+			ins = int((ROUND[bk] as Array)[n - 1 - i])
+		if r - l - float(2 * ins) > 0.0:
+			c.draw_rect(Rect2(l + float(ins), y, r - l - float(2 * ins), 1.0), col)
+
+
+#  누운 단추 — _ui_face 와 같은 문(커서 · 누름 · 역할 색)을 지나고, 윗면의 자리를 돌려준다
+#  (가로는 가까운 변 그대로 — 기운 몫은 _slab_dx 가 줄마다 더한다).
+func _slab(c: CanvasItem, key: String, r: Rect2, on: bool, a := 1.0) -> Rect2:
+	r = _pr(r)
+	var hot: bool = on and _ui_can_hover() and r.has_point(mouse_at)
+	if hot:
+		ui_hot = key
+	var h: float = _ui_hov(key) if on else 0.0
+	var press: bool = hot and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
+	var role := _ui_role(key)
+	var fill: Color = UIHOV[role] if on else UIHOV.off
+	var t: float = SLAB.t
+	var up: float = roundf(float(SLAB.lift) * h) if not press else 0.0
+	var down: float = t - 2.0 if press else 0.0
+	var x0: float = r.position.x
+	var x1: float = r.end.x
+	var y0: float = r.position.y - up + down
+	var y1: float = r.end.y - t - up + down
+	var k: int = int(SLAB.rad)
+	#  그림자 — 바닥에 닿은 밑면(윗면을 두께만큼 내린 자리)을 빛 반대쪽으로.
+	var sh: Vector2 = SLAB.shade
+	_slab_rows(c, x0 + sh.x, x1 + sh.x, r.position.y + t + sh.y, r.end.y + sh.y,
+			Color(0.0, 0.0, 0.0, float(SLAB.shade_a) * a), true, k, int(SLAB.bot))
+	#  앞면 — 가까운 변에서 바닥까지. 들리면 길어지고 누르면 짧아진다.
+	_slab_rows(c, x0, x1, y1, r.end.y, Color(fill.darkened(0.5), a), false, 0, int(SLAB.bot))
+	#  윗면 — 먼 변에 한 줄 빛(_ui_face 의 윗모서리 빛과 같은 말씨).
+	_slab_rows(c, x0, x1, y0, y1, Color(fill.lightened(float(UIHOV.lit) * h), a), true, k, 0)
+	var u0: float = y1 - y0 - 0.5
+	var i0: float = float((ROUND[k] as Array)[0]) if ROUND.has(k) else 0.0
+	var hl: float = roundf(x0 + _slab_lean(x0) * u0) + i0
+	var hr: float = roundf(x1 + _slab_lean(x1) * u0) - i0
+	if hr > hl:
+		c.draw_rect(Rect2(hl, y0, hr - hl, 1.0), Color(fill.lightened(0.25), a))
+	return Rect2(x0, y0, x1 - x0, y1 - y0)
+
+
+#  누운 단추 윗면에서 바닥선 by(윗면 위에서 잰 값) · 크기 sz 인 글줄의 가로 덤 — 그 줄
+#  잉크 한가운데 높이에서 윗면 한가운데가 가까운 변 한가운데보다 가운데 쪽으로 간 몫.
+func _slab_dx(b: Rect2, by: float, sz: int) -> float:
+	var up: float = b.size.y - (by - float(sz) * 0.4)
+	return (_slab_lean(b.position.x) + _slab_lean(b.end.x)) * 0.5 * up
+
+
 func _ui_hover_tick(d: float) -> void:
 	if ui_hot != ui_hot_was:
 		if ui_hot != "":
@@ -34193,13 +34302,14 @@ func _elide_word(t: String, w: float, sz: int) -> String:
 
 
 func _btn(r: Rect2, label: String, sub: String, on: bool,
-		sub_col: Color = C_GOLD, mid := false) -> Rect2:
+		sub_col: Color = C_GOLD, mid := false, lie := false) -> Rect2:
 	#  판 위 조작(던진다 · 건너뛴다 · 상점으로 · 리롤 · 다음 판). 몸은 _ui_face 가
 	#  역할 색으로 칠한다. 돌려주는 것은 몸이 선 자리 — 값을 따로 얹는 쪽(리롤)이
 	#  몸을 따라 뜨고 앉게 한다.
 	#  mid 면 둘째 줄이 없는 단추라 이름을 세로 가운데에 앉힌다. 리롤은 값이
 	#  이름 밑에 따로 그려지므로 안 쓴다.
-	var b := _ui_face(self, "btn:" + label, r, on)
+	#  lie 면 펠트 앞에 누운 판이다(테이블 화면 — _slab 머리말).
+	var b := _slab(self, "btn:" + label, r, on) if lie else _ui_face(self, "btn:" + label, r, on)
 	#  글자 — 이름 20(SemiBold) · 부제 12(Bold). 이름 11 · 부제 9 였을 때
 	#  「UI 크기에 비해 텍스트가 너무 작다」 는 말을 듣고(2026-09-17) 11 · 18 · 22 를
 	#  나란히 찍어 사용자가 18 을 골랐고, 도트 격자에 맞춰 20 · 12 로 옮겼다.
@@ -34211,12 +34321,14 @@ func _btn(r: Rect2, label: String, sub: String, on: bool,
 	var cy: float = (b.size.y + 1.0) * 0.5
 	var ys: Array = _ink_stack(cy, [20, 12], 3.0)
 	var ly: float = _ink_mid_y(cy, 20) if mid else float(ys[0])
-	draw_string(font_sm, b.position + Vector2(0, ly), label,
+	var lx: float = roundf(_slab_dx(b, ly, 20)) if lie else 0.0
+	draw_string(font_sm, b.position + Vector2(lx, ly), label,
 			HORIZONTAL_ALIGNMENT_CENTER, b.size.x, 20, _ui_ink("btn:" + label, on))
 	if sub != "":
 		#  부제는 단추 폭에서 자른다(양옆 8px). 부르는 쪽이 옛 크기로 잘라 넘겨도
 		#  단추 밖으로 새지 않는다.
-		draw_string(font, b.position + Vector2(0, float(ys[1])), _elide_word(sub, b.size.x - 16.0, 12),
+		var sx: float = roundf(_slab_dx(b, float(ys[1]), 12)) if lie else 0.0
+		draw_string(font, b.position + Vector2(sx, float(ys[1])), _elide_word(sub, b.size.x - 16.0, 12),
 				HORIZONTAL_ALIGNMENT_CENTER, b.size.x, 12,
 				_ui_ink("btn:" + label, on, true))
 	return b
@@ -34367,7 +34479,8 @@ func _draw_leg() -> void:
 
 	#  **목표는 _target_at 한 자를 지난다** — 카드가 적은 수와 여기 적는
 	#  수와 판정이 쓰는 수가 갈리면 화면이 판을 속인다.
-	_btn(_leg_go(), "던진다", "목표 %s" % GameData.big(_target_at(leg_no)), true)
+	_btn(_leg_go(), "던진다", "목표 %s" % GameData.big(_target_at(leg_no)), true, C_GOLD,
+			false, true)
 	#  보스 판은 못 건너뛴다. 단추를 걷지 않고 띠를 끈다 — 자리가 비면
 	#  「이 판은 왜 건너뛰기가 없지」 를 화면이 말해 주지 않는다.
 	#  부제는 _btn 이 12 로 그린다 — 자르는 자도 12 로 잰다(작게 재면 긴 효과가
@@ -34376,9 +34489,9 @@ func _draw_leg() -> void:
 	#  남는다 — 자르는 자리를 _btn 과 한 줄로 되돌린다.
 	if GameData.skippable(leg_no):
 		_btn(_leg_skip(), "건너뛴다", _elide(_tag_text(leg_tag),
-				_leg_skip().size.x - 16.0, 12), true)
+				_leg_skip().size.x - 16.0, 12), true, C_GOLD, false, true)
 	else:
-		_btn(_leg_skip(), "못 건너뛴다", "보스 판", false)
+		_btn(_leg_skip(), "못 건너뛴다", "보스 판", false, C_GOLD, false, true)
 	# 쌓아 둔 뱃지 — 언제 쓰이는지는 이름이 말한다
 	#
 	#  누르는 것이 아니라 읽는 것이다(툴팁만 뜬다). 그래도 커서를 올리면
@@ -34962,15 +35075,17 @@ func _draw_shop() -> void:
 	_scrim()
 	_table_draw()
 	var rr := _btn(_reroll_rect(), "리롤", "무료" if reroll_cost == 0 else "",
-			gold >= reroll_cost)
+			gold >= reroll_cost, C_GOLD, false, true)
 	#  값은 「무료」 부제와 **같은 바닥선**(_btn 의 37)에 선다. 페이퍼로지는 숫자 잉크
 	#  (바닥선 위 0.79em)와 한글 잉크(위 0.83em · 밑 0.04em)의 가운데가 같은 바닥선에서
 	#  겹친다 — 수 [27.5,37] · 「무료」 [27,37.5]. 옛 바닥선 36 그대로면 수가 「리롤」 잉크
 	#  밑에 2.5px 로 붙고 몸 밑이 6px 비었다.
 	if reroll_cost > 0:
-		draw_gold(rr.position.x + rr.size.x * 0.5, rr.position.y + 37.0,
+		#  바닥선은 _btn 의 부제 줄 그대로 — 누운 단추는 윗면이 앞면만큼 낮다(_slab).
+		var py: float = float(_ink_stack((rr.size.y + 1.0) * 0.5, [20, 12], 3.0)[1])
+		draw_gold(rr.position.x + rr.size.x * 0.5 + roundf(_slab_dx(rr, py, 12)), rr.position.y + py,
 				str(reroll_cost), 12, C_GOLD if gold >= reroll_cost else C_DIM.darkened(0.3))
-	_btn(_next_rect(), "다음 판 →", "", true, C_GOLD, true)
+	_btn(_next_rect(), "다음 판 →", "", true, C_GOLD, true, true)
 	_hold_draw()
 	_fly_draw()
 	# 팩을 뜯는 중이면 모든 것 위에 얹는다 — 눈앞으로 오는 물건이다.
@@ -41277,6 +41392,15 @@ func _cine_ok(force: bool) -> bool:
 	if motion_off or not _has_renderer():
 		return false
 	return get_tree().get_script() == null or force
+
+
+#  덮개가 화면을 다 덮은 동안(cb 를 부른 뒤 · 걷히기 전)이면 0 — 새 화면의 시계(판 깔기 ·
+#  매물 낙하 · 라운드 경계 · 배움 말상자)를 이 동안 멈춰, 걷힐 때 처음부터 보이게 한다.
+#  안 멈추면 상점 매물이 덮인 0.32 초 동안 떨어져 다 앉은 뒤에야 드러났다.
+func _wipe_hold(d: float) -> float:
+	if wipe_t >= 0.0 and wipe_went and wipe_t < float(WIPE.off):
+		return 0.0
+	return d
 
 
 #  덮고, 다 덮였을 때 cb 를 부르고, 걷는다. 덮을 수 없으면 cb 를 곧장 부른다.
