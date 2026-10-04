@@ -9431,11 +9431,13 @@ func _board_rim(gap: float) -> float:
 func _num_draw(i: int, col: Color, push := 1.0, off := Vector2.ZERO) -> void:
 	var a := float(i) * _sec_w()
 	var q := (BC + Vector2(sin(a), -cos(a)) * _board_rim(_theme_ring_w(_board_theme()) * 0.5) * push).round()
-	#  판 숫자는 18 이다 — 크기 다섯 단 밖의 유일한 자리로, 고리 폭(23.5px)이 정한다.
+	#  판 숫자는 16 이다 — 크기 다섯 단 밖의 유일한 자리로, 고리 폭(23.5px)이 정한다.
 	#  페이퍼로지 숫자는 갈무리보다 넓어 20 에서는 「10 · 14 · 11」 이 고리 가장자리에
-	#  닿았다(2026-09-17). 숫자 잉크는 바닥선 위 ascent × INK.num 이라 그 절반만큼
-	#  바닥선을 내리면 잉크 한가운데가 고리 한가운데에 선다.
-	var sz := 18
+	#  닿았다(2026-09-17). 18 도 옆(9시 · 3시)의 두 자리 수는 가로 폭이 고리 폭에 차서
+	#  「14」 가 바깥 테에 걸쳤다(2026-10-04 「글씨가 살짝 삐져 나가는거 같은데」).
+	#  숫자 잉크는 바닥선 위 ascent × INK.num 이라 그 절반만큼 바닥선을 내리면 잉크
+	#  한가운데가 고리 한가운데에 선다.
+	var sz := 16
 	var asc: float = font_sm.get_ascent(sz) if font_sm != null else float(sz)
 	draw_string(font_sm, q + off + Vector2(-20.0, _ink_half(asc * float(INK.num) * 0.5)),
 			_num_text(i), HORIZONTAL_ALIGNMENT_CENTER, 40, sz, col)
