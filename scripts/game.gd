@@ -16,12 +16,18 @@ const VIEW := Vector2(640, 360)
 # ══════════════════════════════════════════════════════════
 #  화면 여백 — 16:9 가 아닌 화면에서 남는 자리
 # ──────────────────────────────────────────────────────────
-#  640x360 을 **정수배**로 늘인다(project.godot 의 integer). 16:9 화면에서는
-#  딱 나눠떨어져 꽉 찬다 — 1280x720 은 2배 · 1920x1080 은 3배 · 2560x1440 은
-#  4배 · 3840x2160 은 6배. 문제는 16:9 가 아닌 화면뿐이다:
+#  640x360 을 창에 맞춰 **비정수 배율까지** 늘인다(project.godot 의 fractional).
+#  16:9 정수배 창은 예전과 똑같다 — 1280x720 은 2배 · 1920x1080 은 3배 ·
+#  2560x1440 은 4배 · 3840x2160 은 6배.
+#  옛 integer 는 배율을 내림해 창이 배수에서 1px 만 모자라도 한 단 작게 그리고
+#  나머지를 검은 띠로 두었다 — 1279x720 은 1배(창의 절반이 검다) · 1366x768 은
+#  2배에 좌우 86 · 위아래 48px. 「창모드에서 늘리기 줄이기 하면 … 검은색
+#  레터박스?가 계속 생기더라고」(2026-10-04). 비정수 배율에서 논리 1px 가 기기
+#  2 · 3px 로 갈리는 들쭉날쭉은 CRT · 도트 필터 밑에서 안 보였다
+#  (scripts/tools/qa_winfit.gd · shot_winfit.gd).
+#  16:9 가 아닌 화면은 짧은 쪽에 맞추고 긴 쪽은
 #    1920x1200 (16:10)  3배 · 위아래 60px
 #    3440x1440 (21:9)   4배 · 좌우 440px
-#
 #  검은 띠를 두는 대신 **방을 더 보여준다**(stretch/aspect = expand).
 #
 #  ── 어떻게 ──────────────────────────────────────────────
@@ -70,6 +76,81 @@ func _view_fit() -> void:
 	if bl != null:
 		bl.position = -p
 		bl.size = VIEW + p * 2.0
+
+#  창 비율 맞춤 — 창 모드에서 테두리를 끌어 16:9 를 벗어나면, 손을 떼고 커서가 창
+#  안으로 들어올 때 16:9 로 되맞춘다. 비정수 배율로 화면은 늘 창을 채우지만, 창 비율이
+#  어긋나면 그만큼 방 여백(view_pad)이 위아래나 좌우에 띠로 남는다 — 1000x700 이면
+#  위아래 44 논리 px. 창 비율을 고정하는 API 가 엔진에 없어서(WM_SIZING 을 안 내준다)
+#  끄는 동안은 그대로 두고 **놓은 뒤에** 맞춘다.
+#    · 끄는 동안 커서는 늘 창 테두리(클라이언트 영역 밖)에 있다 — 커서가 창 안
+#      (가장자리에서 in px 안쪽)에 들고 크기가 still 초 그대로일 때만 맞춘다. 끌다가
+#      멈춰 쥐고만 있으면 안 튄다.
+#    · 더 많이 바뀐 쪽(가로 · 세로)을 지키고 다른 쪽을 맞춘다. 화면 밖으로 나가면
+#      줄이고 창을 화면 안으로 민다.
+#    · 최대화 · 전체 화면은 손대지 않는다(16:10 모니터면 여백이 남는다 — 그것은 방이다).
+#    · 검사 도구(SceneTree 스크립트)에서는 안 돈다 — 촬영 도구가 일부러 비튼 창을 되돌린다.
+#      win_snap_force 를 켠 도구(qa_winfit)만 돌린다 — 커서 보기도 건너뛴다(진짜 커서를
+#      옮기면 사용자 마우스를 뺏는다).
+const WIN_SNAP := {"still": 0.15, "in": 6}
+var win_ok := Vector2i.ZERO      # 마지막으로 맞던(또는 맞춘) 창 크기
+var win_seen := Vector2i.ZERO    # 지난 틀에 본 창 크기
+var win_ms := 0                  # win_seen 이 그대로였던 시작(ms)
+var win_snap_force := false      # 검사 도구용 — 도구 막음 · 커서 보기를 건너뛴다
+
+
+func _win_snap() -> void:
+	if (get_tree().get_script() != null and not win_snap_force) or not OS.has_feature("pc") 			or not _has_renderer() 			or DisplayServer.window_get_mode() != DisplayServer.WINDOW_MODE_WINDOWED:
+		win_seen = Vector2i.ZERO
+		return
+	var ws: Vector2i = DisplayServer.window_get_size()
+	var now: int = Time.get_ticks_msec()
+	if ws != win_seen:
+		win_seen = ws
+		win_ms = now
+		return
+	if ws == win_ok or now - win_ms < int(float(WIN_SNAP.still) * 1000.0):
+		return
+	var was: Vector2i = win_ok
+	if was.x <= 0 or was.y <= 0:
+		was = ws
+	var keep_w: bool = absf(float(ws.x - was.x)) / float(was.x) 			>= absf(float(ws.y - was.y)) / float(was.y)
+	var w: float = float(ws.x)
+	var h: float = float(ws.y)
+	if keep_w:
+		h = w * VIEW.y / VIEW.x
+	else:
+		w = h * VIEW.x / VIEW.y
+	#  화면(작업 표시줄 뺀 자리)에 테두리째 들어가게.
+	var scr: int = DisplayServer.window_get_current_screen()
+	var ur: Rect2i = DisplayServer.screen_get_usable_rect(scr)
+	var deco: Vector2i = DisplayServer.window_get_size_with_decorations() - ws
+	var mx := Vector2(ur.size - deco)
+	if w > mx.x:
+		w = mx.x
+		h = w * VIEW.y / VIEW.x
+	if h > mx.y:
+		h = mx.y
+		w = h * VIEW.x / VIEW.y
+	var want := Vector2i(roundi(maxf(w, VIEW.x)), roundi(maxf(h, VIEW.y)))
+	if absi(want.x - ws.x) <= 1 and absi(want.y - ws.y) <= 1:
+		win_ok = ws
+		return
+	#  놓았나 — 커서가 창 안쪽에 있어야 한다.
+	var wp: Vector2i = DisplayServer.window_get_position()
+	if not win_snap_force 			and not Rect2i(wp, ws).grow(-int(WIN_SNAP["in"])).has_point(DisplayServer.mouse_get_position()):
+		return
+	DisplayServer.window_set_size(want)
+	#  늘어나 화면 밖으로 나갔으면 안으로 민다(테두리째).
+	var dp: Vector2i = DisplayServer.window_get_position_with_decorations()
+	var dz: Vector2i = DisplayServer.window_get_size_with_decorations()
+	var np := Vector2i(clampi(dp.x, ur.position.x, maxi(ur.end.x - dz.x, ur.position.x)),
+			clampi(dp.y, ur.position.y, maxi(ur.end.y - dz.y, ur.position.y)))
+	if np != dp:
+		DisplayServer.window_set_position(wp + np - dp)
+	#  OS 가 다른 크기를 주면 그것을 맞는 것으로 친다 — 되풀이해 튀지 않게.
+	win_ok = DisplayServer.window_get_size()
+	win_seen = win_ok
+	win_ms = now
 
 #  글꼴 — 프로젝트에 실어 둔다.
 #  OS 글꼴(SystemFont)은 웹에서 빈손으로 돌아와 한글이 전부 네모가 되고,
@@ -4884,6 +4965,7 @@ func card_pos() -> Vector2:
 # ══════════════════════════════════════════════════════════
 
 func _process(d: float) -> void:
+	_win_snap()      # 창 모드에서 끌어 비튼 창을 놓으면 16:9 로 되맞춘다
 	_view_fit()      # 창이 바뀌면 여백을 다시 잰다. 그대로면 아무것도 안 한다
 	#  장면 전환 덮개 · 게임 오버 연출 — **실시간**이다(배움 늦추기 · 멈춤과 무관).
 	_wipe_tick(d)
