@@ -911,6 +911,8 @@ func _ready() -> void:
 		crt = 0.0
 		warp = 0.0
 	_crt_open()       # 맨 위 층. 세기는 방금 읽었다
+	_wipe_open()      # 장면 전환 덮개(95) — CRT 밑
+	_overc_open()     # 게임 오버 연출(90)
 
 	if _autoplay:
 		_new_run()
@@ -2364,12 +2366,15 @@ func _finish_leg() -> void:
 				_leg_end_wear()
 				_settle_clear()
 				return
-		state = S.OVER
 		won = false
 		_pack_unlock_check()
 		Save.run_drop()       # 패배 — 되살릴 런이 없다
 		Save.flush()
 		_sfx("run_lose")
+		#  게임 오버 연출(OVERC) — 다트판이 카메라로 덮쳐 와 검어진 뒤 게임 오버 화면으로
+		#  간다. 못 서면(움직임 끔 · 도구) 곧장 간다. 값은 위에서 이미 다 적었다.
+		if not _over_cine_begin():
+			state = S.OVER
 		return
 
 	# 「NULL」 — 판을 넘긴 그 순간 런이 끝난다. 몇 번째 판이든 상관없다.
@@ -4846,6 +4851,9 @@ func card_pos() -> Vector2:
 
 func _process(d: float) -> void:
 	_view_fit()      # 창이 바뀌면 여백을 다시 잰다. 그대로면 아무것도 안 한다
+	#  장면 전환 덮개 · 게임 오버 연출 — **실시간**이다(배움 늦추기 · 멈춤과 무관).
+	_wipe_tick(d)
+	_over_cine_tick(d)
 	#  모션 끄기가 바뀌면 CRT 의 깜박임 · 낟알을 같이 끈다. 그 값을 미는 길이
 	#  여럿(개발자 판 · 검사 도구)이라 부르는 쪽마다 걸지 않고 여기서 본다.
 	if crt_mo != motion_off:
@@ -4931,6 +4939,10 @@ func _process(d: float) -> void:
 			amp = b.a
 			beep_t = beep_gap
 
+	#  게임 오버 연출 — 게임 오버 화면으로 가기 전까지 판 진행을 얼린다(OVERC 머리말).
+	#  안 얼리면 정산 걸음이 빈 큐에서 다시 돌아 _finish_leg 가 두 번 불린다.
+	if over_cine >= 0.0 and not over_went:
+		return
 	if hitstop > 0.0:
 		#  멈춤도 같은 배수로 줄인다. qt 와 함께 줄어야 걸음 벽시계의
 		#  **비율**이 안 변해서, 「큰 값과 작은 값의 걸음 길이 차」를 재는
@@ -5725,6 +5737,9 @@ func _advance() -> void:
 
 
 func _unhandled_input(e: InputEvent) -> void:
+	#  장면 전환 덮개 · 게임 오버 연출 동안은 입력을 통째로 안 받는다(WIPE · OVERC 머리말).
+	if wipe_t >= 0.0 or over_cine >= 0.0:
+		return
 	#  손가락 판별. **return 하지 않는다** — 에뮬레이션된 마우스 이벤트가
 	#  그대로 흘러야 기존 길이 한 줄도 안 상한다. 한 번 꺼지면 다시 안 켠다
 	#  (톡의 규약 ⑤ · hover_live 머리말). 2026-09-19
@@ -5827,7 +5842,7 @@ func _unhandled_input(e: InputEvent) -> void:
 						if newrun_tab == 0 and not _pack_open(newrun_pip):
 							_deny()
 						elif _start_go():
-							_new_run(true)
+							_wipe(_new_run.bind(true))
 					elif state == S.SETTINGS:
 						_settings_back()
 					elif state == S.COLLECT or state == S.PROFILE:
@@ -6239,7 +6254,7 @@ func _click(m: Vector2) -> void:
 				#  ⚠ 여기가 런을 **덮는** 자리다(start_arm 머리말).
 				if not _start_go():
 					return
-				_new_run(true)
+				_wipe(_new_run.bind(true))      # 덮고 런을 연다(WIPE)
 				_sfx("run_start")
 				return
 			if _newrun_back().has_point(m):
@@ -6261,7 +6276,9 @@ func _click(m: Vector2) -> void:
 							#  그래도 되살리기가 실패하면 조용히 돌아간다 —
 							#  거절은 「눌러도 되는데 지금은 안 된다」는 뜻이라
 							#  여기 안 맞는다.
-							if not _run_load():
+							if _cine_ok(wipe_force):
+								_wipe(_run_load)     # 덮고 이어 연다(WIPE)
+							elif not _run_load():
 								return
 						"컬렉션":
 							#  옛 프로필이 저장에 이미 남긴 것을 한 번 읽는다.
@@ -6403,8 +6420,7 @@ func _click(m: Vector2) -> void:
 							_knot("shop")
 						elif pause_from == S.LEG:
 							_knot("leg")
-						pause_from = -1
-						state = S.TITLE
+						_wipe(_to_lobby)     # 덮고 로비로(WIPE)
 					"quit":
 						_vol_save_due()
 						get_tree().quit()
@@ -9103,7 +9119,6 @@ func _hud_draw() -> void:
 		_modplate_draw()    # 낀 보드 확장 명판(던지는 동안만)
 		_rack_hold_draw()   # 판 위다 — 끌고 다니는 동전은 무엇에도 안 덮인다
 		_prop_fly_draw()    # 판 동전이 동전 슬롯에서 저울 접시로 난다(판매 몸짓)
-		_throw_draw()       # 던진 판 동전이 오른쪽 벽에 맞아 깨진다(판매 몸짓)
 		_pound_candy_draw(0)   # 사탕이 사탕 칸에서 펠트로 난다(주먹 몸짓)
 		_use_draw()         # 가운데로 끌고 온 사탕·사진과 그 자리
 		# 나가는 전환에서만 같이 들어온다. 돌아오는 쪽은 안 그린다 —
@@ -13222,7 +13237,8 @@ func _grip_draw() -> void:
 	for i in n:
 		if i != top:
 			_grip_one(i, picking)
-	if top >= 0:
+	#  게임 오버 연출이 판을 얼려 둔 사이에는 자루가 다 비어도 고른 번호(grip_pick)가 남는다.
+	if top >= 0 and top < n:
 		_grip_one(top, picking)
 
 
@@ -19651,6 +19667,8 @@ func _cover_draw() -> void:
 				_swap_wall(C_WOOD.darkened(0.30).lerp(C_WOOD, _swap_gone())))
 	if swap_live:
 		draw_set_transform(shake_off)
+	#  상인이 뒤로 던진 판 동전 — 벽 바로 위 · 상인 몸 밑(THROW).
+	_throw_draw()
 	# 상인만 위로 더 뺀다. 실루엣은 동전 슬롯 뒤에 잘리는 것을 전제로 그린
 	# 크롭이라(NPC.top), 가로로만 밀면 평평한 절단면이 드러난다. 동전 슬롯이
 	# 퇴장문이다. 구획 규약(draw_set_transform 금지)의 두 번째 예외이고,
@@ -23558,11 +23576,12 @@ const PROP := {
 	"s_end": 1.10,       # 손이 쉼이다
 	"hop": 22.0,         # 나는 동전 포물선 높이(화면 px)
 	"lift": 14.0,        # 접시에서 드는 높이
-	#  감는 자리 · 놓는 자리 — 든 자리(접시 위 lift)에서 (u, h, w). 감을 때 왼쪽 위 · 몸 쪽으로
-	#  당기고, 놓을 때 오른쪽 위 · 앞으로 뻗는다. 팔은 접시 쪽 왼팔이라 오른쪽으로 많이 못 간다 —
-	#  손목이 46 만 가고 나머지는 동전이 날아간다(손을 떠난 뒤의 속도가 「던짐」이다).
-	"s_wind_d": Vector3(-12.0, 18.0, -10.0),
-	"s_throw_d": Vector3(46.0, 30.0, 6.0),
+	#  감는 자리 · 놓는 자리 — 든 자리(접시 위 lift)에서 (u, h, w). **뒤로 던진다**(2026-10-04
+	#  「판매한 물건은 뒤로 던져줘야지」): 손님 쪽 · 아래로 조금 감았다가(앞 +w) 어깨 너머 위 ·
+	#  몸 쪽(−w)으로 휘두르며 놓는다. 처음 판(오른쪽 위로 휘두름)은 동전이 상인 몸 **앞**을
+	#  가로질러 손님 쪽으로 던진 것으로 읽혔다.
+	"s_wind_d": Vector3(-6.0, 2.0, 12.0),
+	"s_throw_d": Vector3(18.0, 40.0, -26.0),
 	#  접시 위 동전 — 안 접시 테 반지름(10 × 2.0 = 20)보다 한 칸 작다. 옛 10.5(테 11)를
 	#  곱 그대로 두면 두 배 접시 한가운데 점이 된다. 테이블 동전(22)보다 조금 작다 —
 	#  두께는 그 비(5.2 × 17 / 22)다.
@@ -23572,7 +23591,7 @@ const PROP := {
 	#  손각: 접시에서는 손끝이 왼쪽(조금 앞) · 당길 때는 왼쪽 뒤. 숙임: 손끝이 아래로 —
 	#  위에서 내려와 집는 손이다. 판판한 손(10°)은 팔뚝 · 손등이 거의 수평인데 말린 손가락이
 	#  손끝에서 곧장 떨어져 화면에서 손목이 꺾인 것으로 읽혔다(「손이 좀 꺽이네?」).
-	"s_ang0": 170.0, "s_ang1": 200.0, "s_ang2": 120.0, "s_pit": 30.0,
+	"s_ang0": 170.0, "s_ang1": 160.0, "s_ang2": 215.0, "s_pit": 30.0,
 	#  집는 자리 — 검지 끝에서 동전 한가운데로 가는 쪽(손 좌표 · 손끝 앞에서 엄지 쪽으로, 도).
 	#  다가오는 손 쪽 테(안 접시의 상인 쪽 테)를 손가락이 팔 줄 그대로 감싼다. 건네기(GIVE.din
 	#  −50°)는 동전을 화면 가운데로 내미는 자리라 옆으로 크게 튼다 — 여기는 손끝 앞이다.
@@ -25184,21 +25203,23 @@ func _prop_coin_draw() -> void:
 #  던진 동전 — 오른쪽 벽에 맞아 깨진다 (2026-10-04)
 # ──────────────────────────────────────────────────────────
 #  「아이템 판매할때 판매됐는지 이팩트가 좀 없네? … 오른쪽으로 던져버리는건 어때? 그럼
-#   동전은 쓩 날아가서 오른쪽 벽이랑 부딪혀서 부숴지는거지」. 판 동전이 손을 떠나(s_rel)
-#  0.22 초에 다트판 옆 벽(THROW.to)까지 포물선으로 난다 — 돌며(옆으로 누웠다 섰다) 작아지고
-#  (멀어진다) 뒤에 금빛 꼬리가 끌린다(「쓩」). 벽에 닿으면 동전 색 조각 열과 금 불티 여섯이
+#   동전은 쓩 날아가서 오른쪽 벽이랑 부딪혀서 부숴지는거지」 · 「판매한 물건은 뒤로
+#   던져줘야지」. 상인이 어깨 너머 **뒤로** 던진다 — 판 동전이 손을 떠나(s_rel) 0.26 초에
+#  상인 뒤 벽(다트판 옆 · THROW.to)까지 포물선으로 난다. 상인 몸 **뒤**를 지나므로 몸 ·
+#  팔 · 카운터에 가린다(그리는 차례가 벽 바로 위 · 상인 몸 밑 — _cover_draw). 돌며(옆으로
+#  누웠다 섰다) 크게 작아지고(방 안쪽으로 멀어진다) 뒤에 금빛 꼬리가 끌린다(「쓩」). 벽에 닿으면 동전 색 조각 열과 금 불티 여섯이
 #  벽에서 튀어 떨어지고, 벽에 금 한 줄이 잠깐 남고, 화면이 조금 흔들리고, 깨지는 소리
 #  하나(coin_break)가 난다. 조각은 카운터 높이(먼 턱)에 닿으면 가라앉는다.
 #  ⚠ 몸짓과 **따로 산다** — 다시 팔아 몸짓이 처음부터 돌아도 앞 동전은 끝까지 날아가 깨진다.
 #  값(골드 · 동전 슬롯)은 옛 그대로 판 순간에 확정이다 — 이것은 그 뒤의 그림이다.
 #  화면 좌표(HUD 위 층)에서 돈다 — 벽은 3D 방의 그림이라 면 좌표가 없다.
 const THROW := {
-	"t": 0.22,           # 나는 시간(실시간)
+	"t": 0.26,           # 나는 시간(실시간) — 몸 뒤로 가려지는 몫만큼 0.22 에서 늘렸다
 	#  닿는 자리 — 벽에 건 다트판(화면 522, 82 · 반지름 18) 오른쪽 벽 한가운데. 다트판 위(58)로
 	#  두었더니 HUD 동전 칸에 붙어 깨지는 것이 HUD 속에서 난 것으로 읽혔다(촬영).
 	"to": Vector2(562.0, 84.0),
 	"hop": 22.0,         # 포물선 높이(화면 px) — 34 면 HUD 동전 칸 밑변을 스쳤다
-	"r0": 13.0, "r1": 8.0,        # 동전 반지름(화면) — 멀어지며 작아진다
+	"r0": 12.0, "r1": 6.0,        # 동전 반지름(화면) — 방 안쪽으로 멀어지며 반으로
 	"spin": 34.0,        # 도는 빠르기(라디안/초) — 납작했다 섰다
 	"trail": 5,          # 꼬리 마디 — 지난 자리 다섯(1/60 초씩)
 	"bits": 12, "sparks": 7,
@@ -25303,7 +25324,8 @@ func _throw_hit(f: Dictionary) -> void:
 	_sfx("coin_break", SFX_BASE * 1.08)
 
 
-#  그린다 — HUD 위 층(_prop_fly_draw 자리): 벽의 금 · 나는 동전과 꼬리 · 조각.
+#  그린다 — 벽 바로 위 · 상인 몸 밑(_cover_draw): 벽의 금 · 나는 동전과 꼬리 · 조각.
+#  뒤로 던진 것이라 상인 몸 · 팔 · 카운터 띠가 나중에 덮는다.
 func _throw_draw() -> void:
 	for m in th_marks:
 		var k: float = 1.0 - float(m.t) / float(THROW.crack_t)
@@ -40302,7 +40324,18 @@ func _newrun_leave() -> void:
 
 
 # 저장에 남은 다트통을 화면의 지금 자리로 맞춘 뒤 연다.
+#  일시정지 「로비로 나가기」의 끝 — 덮개가 다 덮었을 때 부른다(매듭은 그 전에 적었다).
+func _to_lobby() -> void:
+	pause_from = -1
+	state = S.TITLE
+
+
 func _open_newrun() -> void:
+	#  게임 오버에서 새 런으로 — 판을 떠나 메뉴로 가는 길이라 덮는다(WIPE). 덮개가 다
+	#  덮었을 때 이 함수를 다시 부른다(그때는 덮는 중이라 아래로 간다).
+	if state == S.OVER and wipe_t < 0.0 and _cine_ok(wipe_force):
+		_wipe(_open_newrun)
+		return
 	#  ⚠ **로비에 들어서는 순간 이 런의 챌린지는 없는 것이다.**
 	#  안 지우면 실제 버그다 — 챌린지 런을 이어하기로 부르면 _run_load 가
 	#  값을 박고, 로비로 나가 기본 탭에서 「시작」을 눌러도 그 값이 살아
@@ -41365,6 +41398,291 @@ func _crt_apply() -> void:
 	if vs.x >= 1.0 and vs.y >= 1.0:
 		mat.set_shader_parameter("logical", vs)
 	mat.set_shader_parameter("motion", 0.0 if motion_off else 1.0)
+
+
+# ══════════════════════════════════════════════════════════
+#  장면 전환 — 발라트로의 덮개 (2026-10-04)
+# ──────────────────────────────────────────────────────────
+#  「장면 전환 연출 … 발라트로 같은 느낌을 원하고」. 발라트로 원본(functions/
+#  button_callbacks.lua 의 G.FUNCS.wipe_on · wipe_off · engine/particles.lua)을 읽었다:
+#    · 화면 한가운데에서 **배경 소용돌이 색의 거대한 네모**(입자 하나 · 크기 40 배)가
+#      기울어진 채 천천히 돌며 커져 화면을 덮는다(수명의 4분의 1에 다 큰다)
+#    · 그 가운데에 카드 뒷면이 꿀렁이고(juice_up) 0.7 초에 뒤집힌다(cardFan2)
+#    · 덮인 동안 화면을 갈고, 걷을 때는 0.3 초 쉬었다가 0.3 초에 색이 빠진다
+#    · 쓰는 자리 — 런 시작 · 메인 메뉴로 · 프로필 · 다시 시작. 메뉴끼리(새 런 고르기 ·
+#      컬렉션)는 덮지 않는다
+#  이 게임으로 옮긴 것: 네모 둘(밤보라 · 벨벳 포도주 — 패널과 테이블의 두 색)이 서로
+#  반대로 돌며 커진다 · 테두리 금줄 한 겹(이 게임의 강조색) · 가운데는 카드 대신
+#  **다트판**: 뒷면(나무판 · 금테 · H)이 튀어나와 뒤집혀 앞면(백색 · 흑색 칸)이 된다.
+#  박자는 발라트로보다 짧다(0.9 초 — 「속도감 있게」).
+#    0.00  네모 둘이 돌며 커진다(바람 소리 — sweep_whip 을 낮춰)
+#    0.24  가운데 판 뒷면이 튀어나온다
+#    0.34  다 덮였다 — **화면을 간다**(부르는 쪽이 넘긴 일)
+#    0.44  판이 뒤집힌다(pack_flip)
+#    0.66  걷기 시작 — 0.24 초에 다 빠진다
+#  쓰는 자리: 새 런 「시작」 · 제목 「계속하기」 · 일시정지 「로비로 나가기」 · 게임 오버 →
+#  새 런. 덮는 동안 입력은 통째로 안 받는다. 움직임 끔 · 화면 없는 실행 · 검사 도구에서는
+#  덮지 않고 곧장 간다(인트로 · CRT 와 같은 규약 — 도구는 wipe_force 로 켠다).
+const WIPE := {
+	"on": 0.34, "lag": 0.06, "pop": 0.24, "flip": 0.44, "flip_t": 0.16,
+	"off": 0.66, "off_t": 0.24,
+	"rot": 0.6, "a0": 0.35,       # 도는 빠르기(rad/s) · 첫 기울기
+	"emb_r": 30.0,                # 가운데 판 반지름(논리 px)
+	"col": [Color("2b2042"), Color("5c1c2a")],
+	"whoosh": 0.8,                # 바람 소리 — sweep_whip 을 이 배로
+}
+var wipe_t := -1.0           # 흐른 시간. −1 이면 안 덮는다
+var wipe_cb := Callable()    # 다 덮였을 때 부를 일(화면을 간다)
+var wipe_went := false
+var wipe_force := false      # 검사 도구가 덮개를 찍을 때
+var wipe_layer: CanvasLayer = null
+var wipe_node: Node2D = null
+
+
+func _wipe_open() -> void:
+	if wipe_layer != null and is_instance_valid(wipe_layer):
+		return
+	wipe_layer = CanvasLayer.new()
+	wipe_layer.name = "Wipe"
+	wipe_layer.layer = 95
+	wipe_node = Node2D.new()
+	wipe_node.set_script(load("res://scripts/wipe.gd"))
+	wipe_node.set("g", self)
+	wipe_layer.add_child(wipe_node)
+	add_child(wipe_layer)
+
+
+#  연출을 틀 수 있나 — 움직임 끔 · 화면 없는 실행 · 검사 도구(force 가 없으면)는 아니다.
+func _cine_ok(force: bool) -> bool:
+	if motion_off or not _has_renderer():
+		return false
+	return get_tree().get_script() == null or force
+
+
+#  덮고, 다 덮였을 때 cb 를 부르고, 걷는다. 덮을 수 없으면 cb 를 곧장 부른다.
+#  이미 덮는 중이면 아무것도 안 한다(누름 연타).
+func _wipe(cb: Callable) -> void:
+	if wipe_t >= 0.0:
+		return
+	if not _cine_ok(wipe_force) or wipe_node == null:
+		if cb.is_valid():
+			cb.call()
+		return
+	wipe_t = 0.0
+	wipe_cb = cb
+	wipe_went = false
+	_sfx("sweep_whip", SFX_BASE * float(WIPE.whoosh))
+
+
+func _wipe_tick(d: float) -> void:
+	if wipe_t < 0.0:
+		return
+	var t0 := wipe_t
+	wipe_t += d
+	if not wipe_went and wipe_t >= float(WIPE.on):
+		wipe_went = true
+		var cb := wipe_cb
+		wipe_cb = Callable()
+		if cb.is_valid():
+			cb.call()
+	if t0 < float(WIPE.flip) and wipe_t >= float(WIPE.flip):
+		_sfx("pack_flip")
+	if wipe_t >= float(WIPE.off) + float(WIPE.off_t):
+		wipe_t = -1.0
+	if wipe_node != null:
+		wipe_node.queue_redraw()
+
+
+#  되튐(back-out) — 0 에서 넘쳤다가 1 에 앉는다.
+static func _back_out(q: float) -> float:
+	var k := clampf(q, 0.0, 1.0) - 1.0
+	return 1.0 + 2.70158 * k * k * k + 1.70158 * k * k
+
+
+#  덮개 — 덮개 층(wipe.gd)이 부른다. 좌표는 보이는 화면(여백까지) 그대로다.
+func wipe_draw(c: CanvasItem) -> void:
+	if wipe_t < 0.0:
+		return
+	var W: Dictionary = WIPE
+	var vs: Vector2 = get_viewport_rect().size
+	var ctr := vs * 0.5
+	var full: float = vs.length() * 1.08
+	var a := 1.0
+	if wipe_t > float(W.off):
+		a = clampf(1.0 - (wipe_t - float(W.off)) / float(W.off_t), 0.0, 1.0)
+	var cols: Array = W.col
+	for k in 2:
+		var t0: float = float(k) * float(W.lag)
+		var q: float = clampf((wipe_t - t0) / (float(W.on) - t0), 0.0, 1.0)
+		var s: float = full * _back_out(q) * (1.0 if k == 0 else 0.96)
+		if s <= 0.5:
+			continue
+		var sd: float = 1.0 if k == 0 else -1.0
+		var ang: float = float(W.a0) * sd + wipe_t * float(W.rot) * sd
+		var pts := PackedVector2Array()
+		for j in 4:
+			var aa: float = ang + PI * 0.25 + PI * 0.5 * float(j)
+			pts.append(ctr + Vector2(cos(aa), sin(aa)) * s * 0.7071)
+		c.draw_colored_polygon(pts, Color(cols[k], a))
+		var rim := pts.duplicate()
+		rim.append(pts[0])
+		c.draw_polyline(rim, Color(C_ACC, 0.55 * a), 2.0)
+	if wipe_t < float(W.pop):
+		return
+	#  가운데 판 — 튀어나와(되튐) 뒤집힌다(가로 배율이 |cos| — 반 바퀴에 앞면이 선다).
+	var sc: float = _back_out(clampf((wipe_t - float(W.pop)) / 0.14, 0.0, 1.0))
+	var kf: float = clampf((wipe_t - float(W.flip)) / float(W.flip_t), 0.0, 1.0)
+	var sx: float = maxf(absf(cos(kf * PI)), 0.04)
+	var r: float = float(W.emb_r) * sc
+	if r <= 0.5:
+		return
+	c.draw_set_transform(ctr + Vector2(3.0, 4.0), 0.0, Vector2(sx, 1.0))
+	c.draw_circle(Vector2.ZERO, r * 1.04, Color(0.0, 0.0, 0.0, 0.35 * a))
+	c.draw_set_transform(ctr, 0.0, Vector2(sx, 1.0))
+	if kf < 0.5:
+		_wipe_back(c, r, a)
+	else:
+		_wipe_board(c, r, a)
+	c.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+#  판 뒷면 — 나무판 · 금테 · 가운데 H(HIGHTON).
+func _wipe_back(c: CanvasItem, r: float, a: float) -> void:
+	c.draw_circle(Vector2.ZERO, r, Color(C_WOOD, a))
+	c.draw_circle(Vector2.ZERO, r * 0.82, Color(C_WOOD.darkened(0.25), a))
+	c.draw_arc(Vector2.ZERO, r - 1.5, 0.0, TAU, 40, Color(C_ACC, a), 3.0)
+	c.draw_arc(Vector2.ZERO, r * 0.82, 0.0, TAU, 40, Color(C_ACC, 0.6 * a), 1.0)
+	if font != null:
+		c.draw_string(font, Vector2(-r, _ink_mid_y(0.0, 24)), "H", HORIZONTAL_ALIGNMENT_CENTER,
+				r * 2.0, 24, Color(C_ACC, a))
+
+
+#  판 앞면 — 스무 칸(백색 · 흑색) · 더블 · 트리플 고리(붉음 · 초록) · 불 · 금테.
+func _wipe_board(c: CanvasItem, r: float, a: float) -> void:
+	c.draw_circle(Vector2.ZERO, r, Color(C_BG, a))
+	for j in 20:
+		var a0: float = -PI * 0.5 - PI / 20.0 + TAU * float(j) / 20.0
+		var a1: float = a0 + TAU / 20.0
+		var wcol: Color = C_LIGHT if j % 2 == 0 else Color("1c1816")
+		var rcol: Color = C_RED if j % 2 == 0 else C_GREEN
+		c.draw_colored_polygon(annulus_at(Vector2.ZERO, r * 0.12, r * 0.86, a0, a1, 3),
+				Color(wcol, a))
+		c.draw_colored_polygon(annulus_at(Vector2.ZERO, r * 0.86, r * 0.95, a0, a1, 3),
+				Color(rcol, a))
+		c.draw_colored_polygon(annulus_at(Vector2.ZERO, r * 0.50, r * 0.58, a0, a1, 3),
+				Color(rcol, a))
+	c.draw_circle(Vector2.ZERO, r * 0.12, Color(C_GREEN, a))
+	c.draw_circle(Vector2.ZERO, r * 0.06, Color(C_RED, a))
+	c.draw_arc(Vector2.ZERO, r - 0.5, 0.0, TAU, 40, Color(C_ACC, a), 2.0)
+
+
+# ══════════════════════════════════════════════════════════
+#  게임 오버 — 다트판이 카메라로 덮쳐 온다 (2026-10-04)
+# ──────────────────────────────────────────────────────────
+#  「게임 오버는 다트판이 플레이어 카메라를 향해 다가오면서 검은 화면이 되고 자연스럽게
+#   게임 오버 화면? 정산? 으로 넘어 가면 좋겠어」. 레퍼런스(구도 · 박자만): 영화 · 게임의
+#  「물체가 카메라로 날아와 화면을 덮고 암전」(crash zoom · smash to black). 다가오는 것은
+#  가속한다(처음엔 느리고 끝에 빠르다) — 일정한 속도면 카메라가 미는 것으로 읽힌다.
+#    0.00  진 판의 마지막 틀이 언다(판 진행이 멈춘다 — 정산 걸음이 다시 안 돈다)
+#    0.25  다트판 한가운데를 중심으로 화면이 커지기 시작 — 가속(지수 2.6)하며 조금 돌고
+#          (0.30 rad), 방사로 번지고, 가장자리부터 어두워진다
+#    1.15  다 덮었다 — 검다. 쿵(board_thud 를 낮춰) · **게임 오버 화면으로 간다**
+#    1.30  검은 데서 게임 오버 화면이 떠오른다(0.55 초)
+#  값(런 지움 · 저장)은 진 순간 그대로다 — 연출은 그 뒤의 그림이다. 이긴 끝(완주)은 이
+#  길을 안 탄다. 움직임 끔 · 화면 없는 실행 · 검사 도구는 곧장 간다(over_cine_force 로 켠다).
+#  층은 CanvasLayer 90 의 화면 읽기 셰이더(shaders/over_zoom.gdshader) — 덮개(95) · CRT(100) 밑.
+const OVERC := {
+	"hold": 0.25, "zoom_t": 0.90, "black": 0.15, "in": 0.55,
+	"zoom": 7.0, "pow": 2.6, "spin": 0.30, "blur": 0.55,
+	"thud": 0.70,                 # 다 덮는 쿵 — board_thud 를 이 배로 낮춘다
+}
+var over_cine := -1.0        # 흐른 시간. −1 이면 안 돈다
+var over_went := false       # 게임 오버 화면으로 갔나
+var over_cine_force := false
+var oc_layer: CanvasLayer = null
+var oc_rect: ColorRect = null
+
+
+func _overc_open() -> void:
+	if oc_layer != null and is_instance_valid(oc_layer):
+		return
+	var sh: Shader = load("res://shaders/over_zoom.gdshader") as Shader
+	if sh == null:
+		return
+	var mat := ShaderMaterial.new()
+	mat.shader = sh
+	oc_layer = CanvasLayer.new()
+	oc_layer.name = "OverZoom"
+	oc_layer.layer = 90
+	oc_layer.visible = false
+	oc_rect = ColorRect.new()
+	oc_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	oc_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	oc_rect.material = mat
+	oc_layer.add_child(oc_rect)
+	add_child(oc_layer)
+
+
+#  진 순간 — 연출을 연다. 못 열면 거짓(부르는 쪽이 곧장 게임 오버 화면으로 간다).
+func _over_cine_begin() -> bool:
+	if not _cine_ok(over_cine_force) or oc_rect == null:
+		return false
+	over_cine = 0.0
+	over_went = false
+	hitstop = 0.0
+	_over_cine_apply()
+	return true
+
+
+func _over_cine_tick(d: float) -> void:
+	if over_cine < 0.0:
+		return
+	over_cine += d
+	var O: Dictionary = OVERC
+	var t_hit: float = float(O.hold) + float(O.zoom_t)
+	if not over_went and over_cine >= t_hit:
+		over_went = true
+		state = S.OVER
+		_sfx("board_thud", SFX_BASE * float(O.thud))
+		queue_redraw()
+	if over_cine >= t_hit + float(O.black) + float(O["in"]):
+		over_cine = -1.0
+		if oc_layer != null:
+			oc_layer.visible = false
+		return
+	_over_cine_apply()
+
+
+func _over_cine_apply() -> void:
+	if oc_rect == null:
+		return
+	var O: Dictionary = OVERC
+	var mat := oc_rect.material as ShaderMaterial
+	if mat == null:
+		return
+	oc_layer.visible = true
+	var vs: Vector2 = get_viewport_rect().size
+	var t_hit: float = float(O.hold) + float(O.zoom_t)
+	var z := 1.0
+	var sp := 0.0
+	var bl := 0.0
+	var dk := 0.0
+	if not over_went:
+		var k: float = clampf((over_cine - float(O.hold)) / float(O.zoom_t), 0.0, 1.0)
+		var e: float = pow(k, float(O.pow))
+		z = lerpf(1.0, float(O.zoom), e)
+		sp = float(O.spin) * e
+		bl = float(O.blur) * k
+		dk = smoothstep(0.35, 1.0, k)
+	else:
+		var kb: float = clampf((over_cine - t_hit - float(O.black)) / float(O["in"]), 0.0, 1.0)
+		dk = 1.0 - smoothstep(0.0, 1.0, kb)
+	mat.set_shader_parameter("center", (BC + view_pad) / Vector2(maxf(vs.x, 1.0), maxf(vs.y, 1.0)))
+	mat.set_shader_parameter("zoom", z)
+	mat.set_shader_parameter("spin", sp)
+	mat.set_shader_parameter("blur", bl)
+	mat.set_shader_parameter("dark", dk)
+	mat.set_shader_parameter("aspect", vs.x / maxf(vs.y, 1.0))
 
 
 # ══════════════════════════════════════════════════════════
