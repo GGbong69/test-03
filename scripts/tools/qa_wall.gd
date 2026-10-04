@@ -11,7 +11,7 @@ extends SceneTree
 #  헤드리스면:
 #    ④ 벽을 안 짓는다(렌더러가 없다 — 판 내내 wall3_vp 가 비어 있다)
 #  창이 있으면:
-#    ⑤ 판에서 벽을 짓고, settle 틀 뒤에는 굽기를 멈춘다(매 틀 안 굽는다)
+#    ⑤ 제목에는 안 짓고 판 고르기에서 미리 짓는다 · settle 틀 뒤에는 굽기를 멈춘다(매 틀 안 굽는다)
 #    ⑥ 화판의 한가운데가 BC 이고 여백까지 덮는다 · 화판 크기 = 논리 크기 × 창 배율
 #    ⑦ 판 테가 바뀌면 다시 굽고 링이 따라간다
 #    ⑧ 창이 16:10 으로 바뀌면 다시 맞춰 여백까지 덮는다
@@ -97,6 +97,14 @@ func _run() -> void:
 	if win:
 		DisplayServer.window_set_size(Vector2i(1280, 720))
 		await _wait(6)
+		# ── ⑤ 앞 — 제목에는 안 짓고, 판 고르기에서 미리 짓는다 ──
+		await _tick(2)
+		_ok("제목에서는 벽을 안 짓는다", g.wall3_vp == null, "state %d" % g.state)
+		g.state = g.S.TITLE
+		g._new_run()
+		await _tick(2)
+		_ok("판 고르기에서 미리 짓는다(판 갈이 첫 틀에 구워져 있다)",
+				g.wall3_vp != null and g._wall3_live(), "state %d" % g.state)
 	_open()
 	print("판 — state %d · 창 %s" % [g.state, win])
 

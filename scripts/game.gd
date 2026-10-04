@@ -13345,8 +13345,9 @@ func _modplate_draw() -> void:
 #   · 읽힘이 먼저다 — HUD 띠 밑(top)과 안내 줄 밑(bot)은 벽을 C_BG 로 더 누른다.
 #     정산은 읽는 화면이라(_draw_clear 「정산은 읽는 화면이지 비치는 화면이 아니다」)
 #     글자 띠는 clear_mid 만큼 덮고, 양옆만 clear 만큼 덮어 바가 비친다.
-#   · 판 갈이 — 상점 방(room_vp)에서 이 벽으로, 판이 서는 만큼(_swap_rise) 녹아든다.
-#     옛 C_WOOD → C_BG 색 건너가기를 그림 건너가기로 바꿨다.
+#   · 판 갈이 — 테이블이 비켜나는 자리에 이 벽이 드러나고, 먼 턱 위로 보이던 상점 방
+#     (room_vp)은 판이 서는 만큼(_swap_rise) 걷힌다. 옛 C_WOOD → C_BG 색 건너가기를
+#     그림 건너가기로 바꿨다(_wall3_back).
 #   · 프레임 값 — 움직이는 것이 없어 한 번 굽고 멈춘다(settle 틀만 굽는다 — 비동기로
 #     구워지는 잡음 결이 앉을 틈). 창 여백 · 판 테가 바뀔 때만 다시 굽는다.
 #   · 헤드리스(화면 없는 검사)에는 렌더러가 없어 안 짓는다 — 옛 그림 그대로다.
@@ -13354,6 +13355,7 @@ func _modplate_draw() -> void:
 const Wall3D = preload("res://scripts/wall3d.gd")
 const WALL3 := {
 	"settle": 10,                  # 짓거나 맞춘 뒤 굽는 틀 수
+	"swap_fade": 24.0,             # 판 갈이 — 턱 밑에서 상점 방이 벽으로 풀리는 높이(논리 px)
 	"k_max": 3,                    # 굽는 배율 상한 — 창 배율을 따르되 4K(6배)에서 화판이 커지지 않게
 	"top": 0.55, "top_h": 96.0,    # HUD 띠 밑 그늘 — 위끝 짙기 · 높이(y 0 부터)
 	"bot": 0.45, "bot_h": 52.0,    # 안내 줄 밑 그늘 — 아래끝 짙기 · 높이
@@ -13395,7 +13397,9 @@ func _wall3_tick() -> void:
 			wall3_vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
 		return
 	if wall3_vp == null:
-		if not _wall3_here():
+		#  판 고르기에서 미리 짓는다 — 판으로 드는 보통 길(판 갈이)의 첫 틀에 벽이 구워져
+		#  있어야 한다. 판 갈이 첫 틀에 지으면 두 틀 동안 옛 벽 색이 번쩍인다(wall3_born).
+		if not (_wall3_here() or state == S.LEG):
 			return
 		wall3_vp = Wall3D.make_wall(self)
 		wall3_born = Engine.get_frames_drawn()
@@ -13436,26 +13440,49 @@ func _wall3_a() -> float:
 	return _swap_rise() if swap_live else 1.0
 
 
-#  화면 띠 [top, bot] 에 바닥을 깐다 — 판 갈이면 상점 방(없으면 옛 벽 색) 위에 벽이
-#  녹아든다. 띠는 여백까지 가로로 뻗는다. _draw 의 바닥과 _cover_draw 의 덮개가
-#  같은 이 한 벌을 부른다 — 둘이 갈리면 판 갈이 동안 덮개 아랫변이 줄로 남는다.
+#  화면 띠 [top, bot] 에 바닥을 깐다. 띠는 여백까지 가로로 뻗는다. _draw 의 바닥과
+#  _cover_draw 의 덮개가 같은 이 한 벌을 부른다 — 둘이 갈리면 판 갈이 동안 덮개
+#  아랫변이 줄로 남는다.
+#  판 갈이 — 벽은 처음부터 깔려 있고, 테이블 먼 턱(TBL.fy − 20) 위로 보이던 상점
+#  방만 판이 서는 만큼 걷힌다. 턱 밑은 테이블이 비켜나는 자리에 곧장 벽이 드러난다 —
+#  방 화판을 통째로 녹이면 늘 테이블에 가려 있던 방 바닥(램프 웅덩이 둘)이 비쳤다.
+#  턱 밑 swap_fade 동안은 방이 벽으로 풀린다(가로 이음선이 안 남게).
 func _wall3_back(top: float, bot: float) -> void:
-	var a := _wall3_a()
-	if a < 1.0:
-		if room3d_on and room_vp != null and is_instance_valid(room_vp):
-			_room3d_band(top, bot)
-		else:
-			draw_rect(Rect2(_full().position.x, top, _full().size.x, bot - top), _swap_wall(C_WOOD))
-	if a > 0.0:
-		var r := _wall3_rect()
-		var t0 := clampf((top - r.position.y) / r.size.y, 0.0, 1.0)
-		var t1 := clampf((bot - r.position.y) / r.size.y, 0.0, 1.0)
-		if t1 > t0:
-			var ts := Vector2(wall3_vp.size)
-			draw_texture_rect_region(wall3_vp.get_texture(),
-					Rect2(r.position.x, r.position.y + r.size.y * t0, r.size.x, r.size.y * (t1 - t0)),
-					Rect2(0.0, ts.y * t0, ts.x, ts.y * (t1 - t0)), Color(1.0, 1.0, 1.0, a))
-		_wall3_shade(top, bot, a)
+	var r := _wall3_rect()
+	var t0 := clampf((top - r.position.y) / r.size.y, 0.0, 1.0)
+	var t1 := clampf((bot - r.position.y) / r.size.y, 0.0, 1.0)
+	if t1 > t0:
+		var ts := Vector2(wall3_vp.size)
+		draw_texture_rect_region(wall3_vp.get_texture(),
+				Rect2(r.position.x, r.position.y + r.size.y * t0, r.size.x, r.size.y * (t1 - t0)),
+				Rect2(0.0, ts.y * t0, ts.x, ts.y * (t1 - t0)))
+	_wall3_shade(top, bot, 1.0)
+	var k: float = 1.0 - _wall3_a()
+	if k <= 0.0:
+		return
+	var cut: float = float(TBL.fy) - 20.0
+	_wall3_room(top, minf(cut, bot), k)
+	var fd: float = float(WALL3.swap_fade)
+	var n: int = 6
+	for i in n:
+		var y0: float = maxf(cut + fd * float(i) / float(n), top)
+		var y1: float = minf(cut + fd * float(i + 1) / float(n), bot)
+		_wall3_room(y0, y1, k * (1.0 - (float(i) + 0.5) / float(n)))
+
+
+#  상점 방 띠 [y0, y1] 를 짙기 a 로 — 방 화판이 없으면(3D 방 끔) 옛 벽 색이다.
+func _wall3_room(y0: float, y1: float, a: float) -> void:
+	if y1 <= y0 or a <= 0.0:
+		return
+	var f := _full()
+	if not (room3d_on and room_vp != null and is_instance_valid(room_vp)):
+		draw_rect(Rect2(f.position.x, y0, f.size.x, y1 - y0), Color(C_WOOD, a))
+		return
+	var ts := Vector2(Room3D.ROOM_PX)
+	var k0: float = clampf((y0 - f.position.y) / f.size.y, 0.0, 1.0)
+	var k1: float = clampf((y1 - f.position.y) / f.size.y, 0.0, 1.0)
+	draw_texture_rect_region(room_vp.get_texture(), Rect2(f.position.x, y0, f.size.x, y1 - y0),
+			Rect2(0.0, ts.y * k0, ts.x, ts.y * (k1 - k0)), Color(1.0, 1.0, 1.0, a))
 
 
 #  읽힘 그늘 — HUD 띠 밑과 안내 줄 밑을 C_BG 로 누른다. 띠 [top, bot] 안만 칠한다.
