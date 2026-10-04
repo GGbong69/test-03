@@ -13369,6 +13369,7 @@ var wall3_vp: SubViewport = null
 var wall3_key := ""           # 마지막으로 맞춘 「여백 · 판 테」
 var wall3_fresh := 0          # 남은 굽기 틀
 var wall3_frame := -1         # 마지막으로 센 그려진 틀(Engine.get_frames_drawn)
+var wall3_born := 0           # 지은 틀 — 두 번 구워진 뒤에야 깐다(덮개 없이 판으로 드는 이어하기에서 빈 화판이 한 틀 비친다)
 
 
 #  이 화면에 벽이 서는가 — 판이 선 화면 · 정산 · 판 갈이.
@@ -13377,7 +13378,8 @@ func _wall3_here() -> bool:
 
 
 func _wall3_live() -> bool:
-	return wall3_on and wall3_vp != null and is_instance_valid(wall3_vp)
+	return wall3_on and wall3_vp != null and is_instance_valid(wall3_vp) \
+			and Engine.get_frames_drawn() > wall3_born + 1
 
 
 #  링이 두르는 판 테. 맞을 때 부푸는 몫(board_punch)은 안 탄다 — 링은 벽에 박혀 있다.
@@ -13396,6 +13398,7 @@ func _wall3_tick() -> void:
 		if not _wall3_here():
 			return
 		wall3_vp = Wall3D.make_wall(self)
+		wall3_born = Engine.get_frames_drawn()
 		wall3_key = ""
 	var ro := _wall3_ro()
 	var k := _wall3_k()
