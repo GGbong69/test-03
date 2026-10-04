@@ -8334,12 +8334,14 @@ func _sell_btn_rect() -> Rect2:
 	return Rect2(b.position.x, b.end.y + 2.0, b.size.x, 22.0)
 
 
+#  높이 52 — 누운 단추(_slab)의 앞면 두께 12 를 밑으로 더한 것이다. 윗면(글자가 서는 면)은
+#  옛 단추의 몸 40 그대로라 글줄 자리가 안 바뀐다.
 func _reroll_rect() -> Rect2:
-	return Rect2(Vector2(32.0, 288.0), Vector2(152.0, 46.0))
+	return Rect2(Vector2(32.0, 288.0), Vector2(152.0, 52.0))
 
 
 func _next_rect() -> Rect2:
-	return Rect2(Vector2(432.0, 288.0), Vector2(176.0, 46.0))
+	return Rect2(Vector2(432.0, 288.0), Vector2(176.0, 52.0))
 
 
 # ══════════════════════════════════════════════════════════
@@ -19975,11 +19977,26 @@ func _chute_label() -> void:
 				C_GOLD if ok else C_DIM.darkened(0.25))
 
 
-#  창구 이름 한 줄(20). 진열대에서는 나무 카운터 위에 서므로 1px 그늘을 먼저 깐다.
+#  창구 이름 한 줄(20). 진열대에서는 나무 카운터에 **누운** 글씨다(2026-10-04 「판매랑 구매
+#  글도 좀 누워있는 느낌이면 좋겠는데」) — 깊이 쪽(화면 위)을 TBL.flat 로 누르고, 그 자리
+#  펠트 빗변의 기울기(_slab_lean)만큼 위로 갈수록 화면 가운데로 민다. 바닥선이 축이라 글줄
+#  자리는 그대로다. 1px 그늘을 먼저 깐다. 진열대가 없는 판(헤드리스)은 옛 그대로 선다.
+#  ⚠ 이 구획(상점 테이블)의 draw_set_transform 금지 불변식의 예외다 — _prop_coin_paint 처럼
+#  **같은 함수 안에서** draw_set_transform(shake_off) 로 되돌린다.
 func _chute_name(at: Vector2, s: String, al: HorizontalAlignment, w: float, c: Color) -> void:
-	if _room3d_tbl():
-		draw_string(font_sm, at + Vector2(1.0, 1.0), s, al, w, 20, Color(0.0, 0.0, 0.0, 0.6))
-	draw_string(font_sm, at, s, al, w, 20, c)
+	if not _room3d_tbl():
+		draw_string(font_sm, at, s, al, w, 20, c)
+		return
+	var tw: float = font_sm.get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
+	var x0: float = at.x if al == HORIZONTAL_ALIGNMENT_LEFT else at.x + w - tw
+	var ln: float = _slab_lean(x0 + tw * 0.5)
+	var k: float = float(TBL.flat)
+	draw_set_transform_matrix(Transform2D(Vector2(1.0, 0.0), Vector2(-ln * k, k),
+			shake_off + Vector2(roundf(x0), at.y)))
+	draw_string(font_sm, Vector2(1.0, 1.0), s, HORIZONTAL_ALIGNMENT_LEFT, -1, 20,
+			Color(0.0, 0.0, 0.0, 0.6))
+	draw_string(font_sm, Vector2.ZERO, s, HORIZONTAL_ALIGNMENT_LEFT, -1, 20, c)
+	draw_set_transform(shake_off)
 
 
 # 상인 몸통 — 카운터 위로 올라온 부분만. 동전 슬롯이 이 위에 얹혀 트레이로 읽힌다.
@@ -33950,8 +33967,14 @@ func _ui_face(c: CanvasItem, key: String, r: Rect2, on: bool, a := 1.0) -> Rect2
 #  말씨), 누르면 앞면만큼 가라앉는다. 글자는 안 눕는다 — 「카드는 눕고 카드 위의 인쇄는
 #  안 눕는다」(화면 어법). 다만 줄마다 그 높이의 윗면 한가운데에 선다(_slab_dx).
 #  모서리는 _rr 과 같은 계단 표(ROUND)를 줄마다 깎는다 — 기운 변도 논리 1px 계단이다.
-const SLAB := {"t": 6.0, "lift": 2.0, "shade": Vector2(3.0, 3.0), "shade_a": 0.34, "rad": 4,
-		"bot": 2}
+#  두께 12(2026-10-04 「버튼이 약간 측면이 없네? 좀 버튼 두겁게 해봐 3D 느낌으로」) — 6 은
+#  앞면이 화면 3px 띠라 판이 종이로 읽혔다. 옆면은 비스듬히 내려다보는 투영(oblique ·
+#  cabinet projection)의 규칙대로 깊이 축이 기우는 쪽 — 화면 가운데 쪽 — 하나만 드러난다
+#  (리롤은 오른쪽 · 다음 판은 왼쪽). 빛이 왼쪽 위라 오른쪽을 보는 옆면은 그늘(side_dk) ·
+#  왼쪽을 보는 옆면은 앞면보다 밝다(side_lt). 도트 단추의 결대로 앞면 윗줄에 빛 한 줄 ·
+#  밑줄에 그늘 한 줄을 둔다.
+const SLAB := {"t": 12.0, "lift": 2.0, "shade": Vector2(3.0, 3.0), "shade_a": 0.34, "rad": 4,
+		"bot": 2, "front": 0.45, "side_dk": 0.62, "side_lt": 0.30}
 
 
 #  펠트 빗변의 기울기 — 화면 x 에서 위(먼 쪽)로 1px 갈 때 가운데 쪽으로 가는 몫.
@@ -34005,8 +34028,27 @@ func _slab(c: CanvasItem, key: String, r: Rect2, on: bool, a := 1.0) -> Rect2:
 	var sh: Vector2 = SLAB.shade
 	_slab_rows(c, x0 + sh.x, x1 + sh.x, r.position.y + t + sh.y, r.end.y + sh.y,
 			Color(0.0, 0.0, 0.0, float(SLAB.shade_a) * a), true, k, int(SLAB.bot))
-	#  앞면 — 가까운 변에서 바닥까지. 들리면 길어지고 누르면 짧아진다.
-	_slab_rows(c, x0, x1, y1, r.end.y, Color(fill.darkened(0.5), a), false, 0, int(SLAB.bot))
+	#  옆면 — 화면 가운데 쪽 모서리 밑. 윗면의 그 모서리를 두께만큼 내린 평행사변형이다.
+	var right: bool = r.get_center().x < VIEW.x * 0.5
+	var ex: float = x1 if right else x0
+	var es: float = _slab_lean(ex)
+	var fb: float = r.end.y                      # 앞면 밑(바닥)
+	var tt: float = fb - y1                      # 지금 두께(들리면 길고 누르면 짧다)
+	var sc := Color(fill.darkened(float(SLAB.side_dk if right else SLAB.side_lt)), a)
+	for i in int(roundf(fb - y0)):
+		var y: float = y0 + float(i) + 0.5
+		var ea: float = ex + es * (y1 - clampf(y, y0, y1))
+		var eb: float = ex + es * (y1 - clampf(y - tt, y0, y1))
+		var l: float = roundf(minf(ea, eb))
+		var rr: float = roundf(maxf(ea, eb))
+		if rr > l:
+			c.draw_rect(Rect2(l, y0 + float(i), rr - l, 1.0), sc)
+	#  앞면 — 가까운 변에서 바닥까지. 들리면 길어지고 누르면 짧아진다. 윗줄 빛 · 밑줄 그늘.
+	var fc: Color = fill.darkened(float(SLAB.front))
+	_slab_rows(c, x0, x1, y1, fb, Color(fc, a), false, 0, int(SLAB.bot))
+	c.draw_rect(Rect2(x0, y1, x1 - x0, 1.0), Color(fc.lightened(0.22), a))
+	if tt > 3.0:
+		_slab_rows(c, x0, x1, fb - 1.0, fb, Color(fc.darkened(0.35), a), false, 0, int(SLAB.bot))
 	#  윗면 — 먼 변에 한 줄 빛(_ui_face 의 윗모서리 빛과 같은 말씨).
 	_slab_rows(c, x0, x1, y0, y1, Color(fill.lightened(float(UIHOV.lit) * h), a), true, k, 0)
 	var u0: float = y1 - y0 - 0.5
