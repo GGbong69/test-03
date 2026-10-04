@@ -35656,7 +35656,8 @@ func _legb_one(i: int, rn: int) -> void:
 
 
 #  판 하나 — p 는 판 윗면 한가운데(면 u, w, h) · s 배율 · up 지금 판 몫.
-func _legb_draw(p: Vector3, s: float, rn: int, i: int, up: float) -> void:
+#  veil — 판 위에 막 색을 이만큼 씌운다(손에 든 다른 판 · _legb_held_draw).
+func _legb_draw(p: Vector3, s: float, rn: int, i: int, up: float, veil := 0.0) -> void:
 	var r: float = _legb_r(rn)
 	var kind := _leg_kind(rn)
 	var fl: float = float(TBL.flat)
@@ -35721,6 +35722,18 @@ func _legb_draw(p: Vector3, s: float, rn: int, i: int, up: float) -> void:
 	#  ── 지난 판 — 그늘로 가라앉는다(만화식 금은 걷었다 — 상태는 명도와 자세로 말한다) ──
 	if done:
 		draw_circle(Vector2.ZERO, r + 0.5, Color(C.veil, float(LEGB.sink)))
+	if veil > 0.004:
+		#  윗면 + 옆면을 한 다각형으로(겹쳐 칠하면 겹친 자리만 두 번 어두워진다) — 윗면 원의 위
+		#  반 · 밑 원의 아래 반을 잇는다.
+		var vp := PackedVector2Array()
+		var rv: float = r + 0.5
+		for k in 33:
+			var t: float = PI + PI * float(k) / 32.0
+			vp.append(Vector2(cos(t), sin(t)) * rv)
+		for k in 33:
+			var t: float = PI * float(k) / 32.0
+			vp.append(Vector2(0.0, thl) + Vector2(cos(t), sin(t)) * rv)
+		draw_colored_polygon(vp, Color(C.veil, veil))
 	draw_set_transform(shake_off)
 	if broken:
 		_legb_darts(at, r, s, rn)
@@ -36463,7 +36476,14 @@ func _legb_held_draw() -> void:
 		var rn: int = _round_first() + c
 		var hp: Vector3 = legh_hold_prev[i]
 		var up: float = _legb_up(c)
-		_legb_draw(hp, 1.0 + (float(LEGB.gs) - 1.0) * up, rn, c, up)
+		#  손에 든 판은 막(_legb_dim) **위**다(손과 같은 층). 지금 판이 아니면 막이 그 자리에 줄
+		#  그늘을 판에 직접 씌운다 — 안 씌우면 딜에서 다른 판이 손에서는 밝다가 펠트에 닿는 틀에
+		#  막 밑으로 들어가며 툭 어두워졌다(촬영, 2026-10-04).
+		var vl := 0.0
+		if rn != leg_no:
+			var at: Vector2 = _p2s(hp.x, hp.y, hp.z)
+			vl = _legb_band_a(at.y) * _legb_mask(at, _legb_hole()) * _legb_dim_k()
+		_legb_draw(hp, 1.0 + (float(LEGB.gs) - 1.0) * up, rn, c, up, vl)
 
 
 # 화면 x 를 펠트 폭에 맞춰 좁힌다. 펠트는 y 마다 폭이 다르고(창구 빗변),
