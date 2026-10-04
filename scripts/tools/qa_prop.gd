@@ -132,6 +132,13 @@ func _clear_acts() -> void:
 	g.reg_fx = Vector3.ZERO
 	g._burst_clear()
 	g.shake = 0.0
+	#  뜯던 팩도 걷는다 — 헤드리스는 _process 가 안 돌아 _boost_tick 이 boost_t 를 영영 못
+	#  내린다. ① 구매가 팩을 집으면(매물은 전역 randi) 그 뒤 매듭이 문지기(_knot_ok)에 걸려
+	#  말없이 안 적혔다 — ⑧ 빈 테이블 매듭이 서넛에 하나꼴로 진 까닭이다(2026-10-04).
+	g.boost_t = -1.0
+	g.boost_card = {}
+	g.boost_spill.clear()
+	g.boost_pick = 0
 
 
 func _ids(a: Array) -> String:
