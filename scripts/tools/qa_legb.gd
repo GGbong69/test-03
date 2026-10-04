@@ -3,7 +3,7 @@ extends SceneTree
 #  다른 검사는 전부 _cine_ok 가 거짓이라 집기 · 엎기 · 손 딜을 한 번도 안 지난다 — 그 틈으로
 #  집기가 판 갈이 뒤까지 남아 판 중 · 상점의 누름이 다 죽은 고장이 빠져나갔다(검토).
 #  못 박는 것:
-#    ① 딜 — 명판은 제 판이 닿기 전엔 없다 · 손은 딜 + 놓기 + 돌아가기 안에 걷힌다
+#    ① 딜 — 판 밑 글은 제 판이 닿기 전엔 없다(옛 놋쇠 명판 — 2026-10-04 「한 줄기 빛」에서 글 두 줄이 됐다) · 손은 딜 + 놓기 + 돌아가기 안에 걷힌다
 #    ② 「던진다」 — 집는 동안은 판 고르기의 누름을 삼키고, LEGH.go 틀에 판을 **한 번** 연다
 #    ③ 판 갈이가 끝나면 집기를 거둔다 — 판 중 사탕 칸 · 상점 매물 · 상점 사탕 칸 누름이 산다
 #    ④ 집는 동안 누르면 그 틀에 판을 연다
@@ -92,14 +92,14 @@ func _run() -> void:
 	# ① 딜
 	_leg(1, false)
 	_ok("3D 손이 선다(연출 길)", g._legh_ok(), "")
-	_ok("딜 첫 틀 — 명판이 아직 없다", g._legb_plate_a(0) == 0.0 and g._legb_plate_a(2) == 0.0, "")
+	_ok("딜 첫 틀 — 판 밑 글이 아직 없다", g._legb_label_a(0) == 0.0 and g._legb_label_a(2) == 0.0, "")
 	_step(0.2)
 	_ok("딜 한가운데 — 왼손이 첫 판을 들고 온다", g._legb_held(0) and g._legh_live(0), "")
 	var rel_end: float = g._deal_time() + float(L.rel) + float(L.ret)
 	_step(rel_end - g.leg_t + DT * 2.0)
 	_ok("딜 + 놓기 + 돌아가기 안에 손이 걷힌다", not g._legh_any(), "leg_t %.3f" % g.leg_t)
-	_ok("딜 뒤 — 명판 셋이 다 섰다", g._legb_plate_a(0) == 1.0 and g._legb_plate_a(1) == 1.0
-			and g._legb_plate_a(2) == 1.0, "")
+	_ok("딜 뒤 — 판 밑 글 셋이 다 섰다", g._legb_label_a(0) == 1.0 and g._legb_label_a(1) == 1.0
+			and g._legb_label_a(2) == 1.0, "")
 
 	# ② 「던진다」 — 집기
 	g.cons.clear()
@@ -193,7 +193,7 @@ func _run() -> void:
 	_ok("— 두 줄 이상이면 한 줄씩 쌓인다", pys.size() >= 2 and apart, "")
 	_step(float(g.LEGB.flip) + 0.1)
 	_ok("엎기가 끝나면 내린다", g.legb_flip_rn == -1 and g.legb_flip_t < 0.0, "")
-	_ok("건너뛴 뒤 딜은 다시 안 돈다", not g._legh_any() and g._legb_plate_a(0) == 1.0, "")
+	_ok("건너뛴 뒤 딜은 다시 안 돈다", not g._legh_any() and g._legb_label_a(0) == 1.0, "")
 
 	# ⑥ 움직임 끔
 	g.motion_off = true
