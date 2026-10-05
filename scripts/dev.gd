@@ -866,6 +866,8 @@ static func _rows(g: Node) -> Array:
 				#  장면 전환 덮개(2026-10-04 · game.gd WIPE) — 화면은 안 간다(덮었다 걷기만).
 				#  게임 오버 연출은 위 「즉시 실패」가 진짜 길로 튼다.
 				{"n1": "장면 전환 다시 보기", "t": "act", "a": "scene_wipe"},
+				#  불스아이 반전(2026-10-06 · game.gd INV) — 판정 · 점수는 안 건드리고 반전만 연다.
+				{"n1": "불스아이 반전 보기", "t": "act", "a": "bull_invert"},
 				{"n1": "매물 아홉으로 쓸기", "t": "act", "a": "sweep9"},
 				{"n1": "부딪힘 한 번", "t": "act", "a": "smash1"},
 				#  여섯 재질을 **한 줄에 나란히 댄다** — ◀▶ 로 짚으면
@@ -2099,6 +2101,9 @@ static func _run(g: Node, e: Dictionary) -> void:
 		"scene_wipe":
 			g._wipe(Callable())
 			_say("장면 전환")
+		"bull_invert":
+			g._invert_kick(true)
+			_say("불스아이 반전")
 		"turn":
 			#  「쓸기 다시 보기」와 **같은 규약**이다 — 필요하면 화면만
 			#  맞춰 주고, 값(골드 · 목표 · 매물 · leg_no)은 한 톨도 안

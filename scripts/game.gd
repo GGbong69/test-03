@@ -1016,6 +1016,7 @@ func _ready() -> void:
 		vhs = 0.0
 		dot = 0.0
 	_retro_open()     # 도트(97) · VHS(98) — CRT 밑
+	_inv_open()       # 불스아이 반전(96) — 숨겨 두고 꽂힐 때만 선다
 	_crt_open()       # 맨 위 층. 세기는 방금 읽었다
 	_wipe_open()      # 장면 전환 덮개(95) — CRT 밑
 	_overc_open()     # 게임 오버 연출(90)
@@ -5006,6 +5007,7 @@ func _process(d: float) -> void:
 	#  장면 전환 덮개 · 게임 오버 연출 — **실시간**이다(배움 늦추기 · 멈춤과 무관).
 	_wipe_tick(d)
 	_over_cine_tick(d)
+	_inv_tick()      # 불스아이 반전 — 실시간 ms 로 끈다
 	#  모션 끄기가 바뀌면 CRT 의 깜박임 · 낟알을 같이 끈다. 그 값을 미는 길이
 	#  여럿(개발자 판 · 검사 도구)이라 부르는 쪽마다 걸지 않고 여기서 본다.
 	if crt_mo != motion_off:
@@ -6978,6 +6980,7 @@ func _impact(info: Dictionary, hit_mult: int, land_base: int = -1) -> void:
 			hitstop = 0.15
 			hit_flash_amt = 1.0
 			screen_flash = 1.0
+			_invert_kick()           # 불스아이 반전 — INV 머리말
 			add_wave(BC, R * rt_bull_i, R * 1.35, C_RED.lightened(0.45), 0.90, 2.5, 0.60)
 			add_wave(BC, R * rt_bull_i, R * 0.90, C_ACC, 0.80, 2.0, 0.45)
 			add_wave(BC, 3.0, 52.0, C_TXT, 0.80, 1.5, 0.32)
@@ -42955,6 +42958,23 @@ const VHS_LAYER := 98
 var dot_rect: ColorRect = null
 var vhs_rect: ColorRect = null
 
+#  ── 불스아이 반전 (2026-10-06) ─────────────────────────────
+#  「다트의 볼스아이를 맞췄을때 진짜 짧게 색상 반전 주는거 어때? 시작 화면 말고 인게임
+#  플레이에서만」. 안쪽 불(50 — _impact 의 5단)이 꽂힌 틀부터 INV.ms 동안 온 화면의 색을
+#  뒤집는다. 층 96(shaders/invert.gdshader) — 도트 · VHS · CRT 밑이라 뒤집힌 그림도 필터를
+#  지난다.
+#    · 시계는 실시간(ms)이다 — 꽂힌 순간의 멈춤(hitstop 0.15)과 배움 늦추기에 안 끌린다.
+#      70ms 는 60fps 로 네 틀이다.
+#    · 판 위 흰 번쩍임(screen_flash)은 그대로 두고 그 위를 뒤집는다 — 뒤집힌 동안은 검은 번쩍.
+#    · 시작 화면의 판 던지기는 _impact 를 안 지난다(_egg_count). 그래도 제목 · 인트로 상태면
+#      한 번 더 막는다(force 여도). 모션 끔 · 검사 도구에서는 안 뒤집는다(_cine_ok) — 온 화면
+#      반전은 번쩍임 가운데 가장 세다. 개발자 판 「불스아이 반전 보기」는 force 로 연다.
+const INV := {"ms": 70}
+const INV_SHADER := "res://shaders/invert.gdshader"
+const INV_LAYER := 96
+var inv_rect: ColorRect = null
+var inv_until := 0       # 반전이 꺼지는 시각(Time.get_ticks_msec)
+
 
 #  온 화면 ColorRect 하나에 셰이더 하나를 건 층(_crt_open 과 같은 꼴). 셰이더를 못 읽으면 null.
 func _scr_layer(nm: String, path: String, z: int) -> ColorRect:
@@ -42974,6 +42994,41 @@ func _scr_layer(nm: String, path: String, z: int) -> ColorRect:
 	lay.add_child(r)
 	add_child(lay)
 	return r
+
+
+func _inv_open() -> void:
+	if not _has_renderer() or (inv_rect != null and is_instance_valid(inv_rect)):
+		return
+	inv_rect = _scr_layer("Invert", INV_SHADER, INV_LAYER)
+	_inv_show(false)
+
+
+func _inv_show(on: bool) -> void:
+	if inv_rect == null or not is_instance_valid(inv_rect):
+		return
+	inv_rect.visible = on
+	(inv_rect.get_parent() as CanvasLayer).visible = on
+
+
+#  안쪽 불이 꽂혔다 — INV.ms 동안 뒤집는다.
+func _invert_kick(force := false) -> void:
+	if not _cine_ok(force):
+		return
+	if state == S.TITLE or state == S.INTRO:
+		return
+	_inv_open()
+	if inv_rect == null:
+		return
+	inv_until = Time.get_ticks_msec() + int(INV.ms)
+	_inv_show(true)
+
+
+func _inv_tick() -> void:
+	if inv_rect == null or not is_instance_valid(inv_rect):
+		return
+	var on: bool = Time.get_ticks_msec() < inv_until
+	if inv_rect.visible != on:
+		_inv_show(on)
 
 
 func _retro_open() -> void:
