@@ -15,6 +15,7 @@ extends SceneTree
 #  덤(맞춰 볼 거리 — hybrid_x_ 앞붙이):
 #    x_wide          라운드 8(목표 다섯 자리) 판 고르기
 #    x_bignow        라운드 1 둘째 판 — 큰 판이 지금 판(뜸 · 1.08 배)일 때 판과 밑 글
+#    x_dealflip      딜 네 박자 · 건너뛰기(판을 엎는다) 네 박자
 #    x_over · x_title  런 끝 · 제목의 판(같은 BOARDART 숫자 고리 · 테)
 #    x_mods          보스 제약마다의 판 얼굴 · 긴 보스 이름
 #    x_swapmid       판 갈이 한가운데(테이블이 빠지고 판이 아직 누워 있다 — 받침판 · 걸쇠)
@@ -284,6 +285,13 @@ func _run() -> void:
 		await _shot("legdone")
 		_leg(2, [])
 		await _shot("x_bignow")
+		#  딜 넷 · 엎기 넷 — 손이 판을 놓는 틀 · 판을 엎는 한가운데(뒷면이 서는 틀)
+		_leg(1, [], false)
+		var df: Array = await _strip([0.08, 0.20, 0.36, 0.60])
+		_leg(1, [])
+		g._skip_leg()
+		df.append_array(await _strip([0.06, 0.12, 0.18, 0.40]))
+		_sheet(df, 4).save_png("res://shots/%s_x_dealflip.png" % pre)
 		#  라운드 8 — 목표 다섯 자리
 		var keep_mods: Dictionary = g.boss_mods.duplicate()
 		_leg(22, [])
