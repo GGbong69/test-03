@@ -34860,13 +34860,14 @@ func _ui_face(c: CanvasItem, key: String, r: Rect2, on: bool, a := 1.0) -> Rect2
 #   45도 각도 아래를 보는 느낌이잖아? 근데 이 2버튼들은 약간 정면이어서 좀 공중에
 #   뛰여져 있는 느낌이란 말이야?」. 테이블 화면의 단추(_btn 의 lie)는 펠트와 같은 면에
 #  누운 판이다 —
-#    · 윗면은 먼 변이 화면 가운데 쪽으로 밀린 평행사변형이다. 기울기는 단추 한가운데
-#      x 의 펠트 빗변 기울기(_slab_lean) 하나를 두 옆변이 같이 쓴다. 가까운 변은 r 의 밑
-#      그대로라 누르는 자리(r)는 옛 단추와 같다.
-#      처음에는 옆변마다 제 x 의 기울기를 써서(펠트 사다리꼴의 소실점으로 모였다) 두 옆변의
-#      각이 달랐다 — 리롤은 왼변 0.5 · 오른변 0.25 쯤. 밑의 카운터 앞판은 이음이 수직이라
-#      단추만 비뚤어진 사다리꼴로 읽혔다(2026-10-05 「버튼의 기울기가 안 맞는거 같은데」).
-#      모임 · 평행 · 곧게 셋을 찍어 견주고 사용자가 평행을 골랐다.
+#    · 윗면의 두 옆변은 **테이블 소실점**(_tbl_vp — 펠트 두 빗변이 만나는 점)으로 간다.
+#      한 점 원근 그대로라 옆변마다 각이 다르고(가운데에서 먼 변일수록 더 기운다), 단추가
+#      펠트보다 아래(가까이)라 같은 x 의 펠트 빗변보다 조금 덜 기운다(_vp_lean). 가까운 변은
+#      r 의 밑 그대로라 누르는 자리(r)는 옛 단추와 같다.
+#      지나온 길(2026-10-05 ~ 06): ① 옆변마다 _slab_lean(x) — 소실점까지의 거리를 펠트
+#      밑변(ny)에서 재서 펠트 밑의 단추는 10% 남짓 더 가팔랐고, 「버튼의 기울기가 안 맞는거
+#      같은데」 → ② 두 옆변 평행 → 「좀 테이블 원근이랑 맞춰서 버튼의 원근을 계산하고 기울기를
+#      만드는게 어때?」(사용자가 펠트 빗변을 단추까지 늘여 그은 그림) → 지금의 소실점 계산.
 #    · 앞면(두께 SLAB.t)은 가까운 변 밑에 곧게 선다 — 선 면은 안 기운다.
 #    · 바닥 그림자가 오른쪽 아래로 진다(빛은 왼쪽 위 — 상인 손 그림자와 같은 쪽). 공중에
 #      뜬 판과 바닥에 놓인 판을 가르는 것이 이 한 조각이다.
@@ -34896,8 +34897,21 @@ var slab_r := PackedFloat32Array()
 #  펠트 빗변의 기울기 — 화면 x 에서 위(먼 쪽)로 1px 갈 때 가운데 쪽으로 가는 몫.
 #  왼쪽 반은 +(오른쪽으로) · 오른쪽 반은 −. 펠트 왼 빗변(x 0 → CHUTE.back)이 그 끝값이다.
 func _slab_lean(x: float) -> float:
+	return _vp_lean(x, float(TBL.ny))
+
+
+#  테이블 소실점 — 펠트 사다리꼴의 두 빗변(위로 갈수록 CHUTE.back 만큼 모인다)이 만나는 점.
+#  논리 (320, −292) — 화면 위 바깥이다. 1280 화면에서 잰 펠트 왼 빗변(0.58)과 같다.
+func _tbl_vp() -> Vector2:
 	var hx: float = VIEW.x * 0.5
-	return (hx - x) / hx * float(CHUTE.back) / (float(TBL.ny) - float(TBL.fy))
+	return Vector2(hx, float(TBL.ny) - hx * (float(TBL.ny) - float(TBL.fy)) / float(CHUTE.back))
+
+
+#  화면 (x, y) 에서 소실점으로 가는 선의 기울기 — 위로 1px 갈 때 가로로 가는 몫(가운데 쪽 +).
+#  y 가 소실점에서 멀수록(화면 아래 · 가까운 것일수록) 덜 기운다.
+func _vp_lean(x: float, y: float) -> float:
+	var vp := _tbl_vp()
+	return (vp.x - x) / maxf(y - vp.y, 1.0)
 
 
 #  누운 단추 — _ui_face 와 같은 문(커서 · 누름 · 역할 색)을 지나고, 윗면의 자리를 돌려준다
@@ -34923,8 +34937,10 @@ func _slab(c: CanvasItem, key: String, r: Rect2, on: bool, a := 1.0) -> Rect2:
 	var m: int = int(roundf(fb - y0))            # 판 전체 줄 수(윗면 + 지금 두께)
 	var tk: int = m - n
 	#  윗면 줄마다 [왼, 오] — 기운 변에서 누운 모서리 들임을 뺀다.
-	var s0: float = _slab_lean((x0 + x1) * 0.5)     # 두 옆변이 같은 기울기 — SLAB 머리말
-	var s1: float = s0
+	#  옆변마다 테이블 소실점으로 가는 선 — 쉴 때의 가까운 변(r 밑 − 두께)에서 잰다. 들리고
+	#  눌려도 판 꼴은 그대로다.
+	var s0: float = _vp_lean(x0, r.end.y - t)
+	var s1: float = _vp_lean(x1, r.end.y - t)
 	var cn: Array = SLAB.corner
 	slab_l.resize(n)
 	slab_r.resize(n)
@@ -34981,7 +34997,7 @@ func _slab(c: CanvasItem, key: String, r: Rect2, on: bool, a := 1.0) -> Rect2:
 #  잉크 한가운데 높이에서 윗면 한가운데가 가까운 변 한가운데보다 가운데 쪽으로 간 몫.
 func _slab_dx(b: Rect2, by: float, sz: int) -> float:
 	var up: float = b.size.y - (by - float(sz) * 0.4)
-	return _slab_lean(b.get_center().x) * up
+	return _vp_lean(b.get_center().x, b.end.y) * up
 
 
 func _ui_hover_tick(d: float) -> void:
