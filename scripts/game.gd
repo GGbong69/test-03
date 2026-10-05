@@ -9589,20 +9589,138 @@ func _board_rim(gap: float) -> float:
 	return R * (rt_dbl_out + gap)
 
 
+#  ── 숫자는 고리 **안에** 맞춘다 ─────────────────────────────
+#  판 숫자는 크기 다섯 단 밖의 유일한 자리로, 고리 폭(23.5px)이 크기를 정한다.
+#  크기만 내려서는 못 풀었다 — 20 에서 「10 · 14 · 11」 이 가장자리에 닿아(2026-09-17)
+#  18 → 16 으로 내렸고(2026-10-04 「글씨가 살짝 삐져 나가는거 같은데」), 그래도 「글씨
+#  삐져 나가는건 아직도 마찬가지네」(2026-10-05). 1280 에서 잰 값 — 고리 안 폭 22px 에
+#  「12」 가 바깥 테에 닿고 「15 · 10 · 14 · 13」 은 바깥 여유 1px 미만, 안쪽도 2px 였다.
+#  까닭이 둘이다.
+#    · 옆(3시 · 9시 언저리)의 두 자리 수는 가로 폭이 곧 고리를 가로지르는 길이다 — 16 의
+#      「10」 은 잉크 19px 남짓이다.
+#    · 글자를 진행 폭(advance) 가운데에 놓았다. 페이퍼로지 「1」 은 잉크가 한쪽으로 쏠려
+#      9시의 「11 · 9」 가 바깥으로 1~2px 밀려 있었다.
+#  그래서 수마다 **잉크 상자**를 재서 ① 상자 한가운데를 고리 안 · 밖 여유가 같아지는
+#  반지름에 놓고 ② 스무 수가 다 gap 이상 남기는 가장 큰 크기를 판 전체에 하나로 쓴다
+#  (수마다 크기가 다르면 숫자판이 들쭉날쭉하다). 두 자리 수는 자간을 track 만큼 좁힌다 —
+#  진짜 다트판 숫자도 좁은 글자다.
+#  pad — TextServer 의 글리프 사각에는 사방에 래스터 여백이 붙어 있다(16 의 「11」 사각
+#  17.7 × 15 · 화면에서 잰 잉크 14.6 × 12). 줄여도 가운데는 그대로라 놓는 자리는
+#  정확하다. 1.5 는 화면에서 잰 잉크와 맞춘 값이다.
+const NUMFIT := {"max": 16, "min": 11, "gap": 1.5, "track": -1.0, "pad": 1.5}
+var num_fit := {}        # {"k": 판 모양 열쇠, "sz": 크기, "c": 수마다 반지름, "o": 상자 가운데 → 그리기 원점}
+var num_fit_f := -1      # num_fit 을 본 틀 — 한 틀에 한 번만 열쇠를 짓는다
+var num_ink := {}        # "글|크기" → 잉크 상자(원점 = 첫 글자 바닥선 왼끝)
+
+
 #  칸 i 의 숫자. 판과 조준 밝힘(_cell_glow)이 같은 자리에 같은 글자를 쓴다.
 func _num_draw(i: int, col: Color, push := 1.0, off := Vector2.ZERO) -> void:
+	var lay := _num_layout()
+	var cs: PackedFloat32Array = lay.c
+	if i < 0 or i >= cs.size():
+		return
 	var a := float(i) * _sec_w()
-	var q := (BC + Vector2(sin(a), -cos(a)) * _board_rim(_theme_ring_w(_board_theme()) * 0.5) * push).round()
-	#  판 숫자는 16 이다 — 크기 다섯 단 밖의 유일한 자리로, 고리 폭(23.5px)이 정한다.
-	#  페이퍼로지 숫자는 갈무리보다 넓어 20 에서는 「10 · 14 · 11」 이 고리 가장자리에
-	#  닿았다(2026-09-17). 18 도 옆(9시 · 3시)의 두 자리 수는 가로 폭이 고리 폭에 차서
-	#  「14」 가 바깥 테에 걸쳤다(2026-10-04 「글씨가 살짝 삐져 나가는거 같은데」).
-	#  숫자 잉크는 바닥선 위 ascent × INK.num 이라 그 절반만큼 바닥선을 내리면 잉크
-	#  한가운데가 고리 한가운데에 선다.
-	var sz := 16
-	var asc: float = font_sm.get_ascent(sz) if font_sm != null else float(sz)
-	draw_string(font_sm, q + off + Vector2(-20.0, _ink_half(asc * float(INK.num) * 0.5)),
-			_num_text(i), HORIZONTAL_ALIGNMENT_CENTER, 40, sz, col)
+	var p := BC + Vector2(sin(a), -cos(a)) * cs[i] * push
+	var o: Vector2 = (p + (lay.o as PackedVector2Array)[i]).round() + off
+	var txt := _num_text(i)
+	var sz: int = lay.sz
+	var x := 0.0
+	for ch in txt:
+		draw_string(font_sm, o + Vector2(x, 0.0), ch, HORIZONTAL_ALIGNMENT_LEFT, -1, sz, col)
+		x += _num_adv(ch, sz) + _num_track(txt)
+
+
+func _num_track(txt: String) -> float:
+	return float(NUMFIT.track) if txt.length() >= 2 else 0.0
+
+
+func _num_adv(ch: String, sz: int) -> float:
+	return font_sm.get_char_size(ch.unicode_at(0), sz).x if font_sm != null else float(sz) * 0.6
+
+
+#  글 txt 를 크기 sz 로(두 자리면 좁힌 자간으로) 그릴 때의 잉크 상자.
+func _num_ink(txt: String, sz: int) -> Rect2:
+	var k := "%s|%d" % [txt, sz]
+	if num_ink.has(k):
+		return num_ink[k]
+	#  글리프를 못 읽는 글꼴이면 대강 — 숫자 폭 0.6em · 높이 0.75em.
+	var w: float = 0.0
+	for ch in txt:
+		w += _num_adv(ch, sz) + _num_track(txt)
+	var box := Rect2(0.0, -float(sz) * 0.75, w - _num_track(txt), float(sz) * 0.75)
+	var ff := font_sm as FontFile
+	if ff != null and not ff.get_rids().is_empty():
+		var ts := TextServerManager.get_primary_interface()
+		var rid: RID = ff.get_rids()[0]
+		var gsz := Vector2i(sz, 0)
+		var x := 0.0
+		var first := true
+		for ch in txt:
+			var gi: int = ts.font_get_glyph_index(rid, sz, ch.unicode_at(0), 0)
+			ts.font_render_glyph(rid, gsz, gi)
+			var r := Rect2(Vector2(x, 0.0) + ts.font_get_glyph_offset(rid, gsz, gi),
+					ts.font_get_glyph_size(rid, gsz, gi))
+			box = r if first else box.merge(r)
+			first = false
+			x += _num_adv(ch, sz) + _num_track(txt)
+		box = box.grow(-float(NUMFIT.pad))
+	num_ink[k] = box
+	return box
+
+
+#  원점 BC 에서 본, 가운데 p · 반폭 hs 인 상자의 가장 먼 모서리 · 가장 가까운 점.
+func _num_far(p: Vector2, hs: Vector2) -> float:
+	return Vector2(absf(p.x) + hs.x, absf(p.y) + hs.y).length()
+
+
+func _num_near(p: Vector2, hs: Vector2) -> float:
+	return Vector2(maxf(absf(p.x) - hs.x, 0.0), maxf(absf(p.y) - hs.y, 0.0)).length()
+
+
+#  판 모양(칸 수 · 고리 안팎 반지름 · 글)이 바뀌면 크기와 자리를 다시 잰다.
+func _num_layout() -> Dictionary:
+	var fr: int = Engine.get_process_frames()
+	if fr == num_fit_f and not num_fit.is_empty():
+		return num_fit
+	num_fit_f = fr
+	var n: int = _sec_n()
+	var rin: float = _board_rim(0.0)
+	#  바깥 테 한 줄(_theme_board 의 ro − 1, 폭 1)의 안쪽 끝까지.
+	var rout: float = _board_rim(_theme_ring_w(_board_theme())) - 1.5
+	var txts := PackedStringArray()
+	for i in n:
+		txts.append(_num_text(i))
+	var key := "%d|%.2f|%.2f|%s" % [n, rin, rout, ",".join(txts)]
+	if String(num_fit.get("k", "")) == key:
+		return num_fit
+	var best := {}
+	for sz in range(int(NUMFIT.max), int(NUMFIT.min) - 1, -1):
+		var cs := PackedFloat32Array()
+		var os := PackedVector2Array()
+		var worst := INF
+		for i in n:
+			var a := float(i) * _sec_w()
+			var u := Vector2(sin(a), -cos(a))
+			var bx := _num_ink(txts[i], sz)
+			var hs := bx.size * 0.5
+			#  안 여유는 반지름과 같이 늘고 밖 여유는 준다 — 둘이 같아지는 자리를 반으로 찾는다.
+			var lo := rin
+			var hi := rout
+			for _k in 18:
+				var c := (lo + hi) * 0.5
+				if _num_near(u * c, hs) - rin < rout - _num_far(u * c, hs):
+					lo = c
+				else:
+					hi = c
+			var cc := (lo + hi) * 0.5
+			worst = minf(worst, minf(_num_near(u * cc, hs) - rin, rout - _num_far(u * cc, hs)))
+			cs.append(cc)
+			os.append(-(bx.position + hs))
+		best = {"k": key, "sz": sz, "c": cs, "o": os, "gap": worst}
+		if worst >= float(NUMFIT.gap):
+			break
+	num_fit = best
+	return num_fit
 
 
 #  칸마다 [칸 색, 띠 색]. 죽은 칸은 여기서 한 번 가라앉힌다 — 칸 · 구멍이 같은 값을 쓴다.
