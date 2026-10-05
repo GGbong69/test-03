@@ -41,8 +41,6 @@ const FACE := -0.04       # 벽 앞면 z — 받침판 · 링이 4cm 나와 있�
 #  실물 LED 서라운드처럼 얇고 무광으로 간다(2026-10-04).
 const RING := 10.0
 const PLANK := Color("2c1508")   # 벽 판자 — 도트 팔레트 「나무 1」. 빛 밖에서는 140904 → 어둠으로 진다
-#  꽂이 빛 자리 — 왼쪽 다트 줄의 놋쇠 아닌 검은 레일(game.gd _wall3_holder) 곁, 이 논리 x.
-const POST_X := 24.0
 const RUBBER := Color("080707")
 const BACKING := Color("040303")    # 받침판 — 판이 뜬 자리가 빈자리로 읽힌다
 const HOOK := Color("0d0b0b")       # 걸쇠 — 무광 검은 쇠(놋쇠는 램프 밑에서 금빛 단추로 튀었다)
@@ -63,13 +61,18 @@ const LOOK := {
 	"shadow_blur": 1.5,       # 램프 그림자 번짐
 	"shadow_size": 0.05,      # 램프 크기(m) — 그림자 반그늘 폭
 	"shadow_a": 0.70,         # 그림자 짙기 — 링 밑 초승달 하나
-	"post_l": 0.05,           # 꽂이 곁 판자에 스치는 빛 — 결만 겨우 보이게
 	#  방 빛(환경광) — 빛 밖의 판자가 어둠으로 지되 이음이 겨우 읽힌다(기본 필터에서 L* 8~12 ·
 	#  140904 ~ 2c1508 언저리). 0.06 은 양옆이 칠흑이라 「덜 만든 화면」 · 무대 허공으로 읽혔다
 	#  (검토, 2026-10-05). 판보다 밝아지거나 무늬가 생기면 안 된다.
 	"amb": 0.65,
-	#  벽 재질(_wall_mat) — 옅은 결 · 판 톤의 대비 몫 · 채도 몫.
-	"grain": 0.4, "sat": 0.55,
+	#  램프 끈 벽(lamp_on false — 판 갈이)의 방 빛. 상점 불이 아직 다 안 꺼진 방이라 램프 켠 벽의
+	#  빛 밖보다 한 단 밝다 — 0.65 그대로면 상점(가운데 밝기 40 남짓)에서 17 로 떨어져 판 갈이가
+	#  깜빡임으로 읽혔다(촬영, 2026-10-05). 램프가 켜지는 만큼 이 빛이 빠진다.
+	"amb_off": 1.15,
+	#  벽 재질(_wall_mat) — 옅은 결 · 판 톤의 대비 몫 · 채도 몫. 0.4 · 0.55 로도 웅덩이 속 판자가
+	#  주황 라미네이트였다(기본 필터 채도 0.56~0.60 · 끄면 0.62~0.72, 검토 2026-10-05) — 한 단 더
+	#  눌러 따뜻하되 무채색에 가까운 나무로 간다. 이음 · 못 · 옹이와 빛 밖 판자는 그대로다.
+	"grain": 0.25, "sat": 0.38,
 	"bg": Color("050404"),    # 아무것도 없는 자리 · 안개
 	#  빛 웅덩이(램프에 비추는 동그란 그러데이션) [반지름 몫, 밝기] — 판 둘레는 고루,
 	#  링 바깥 한 뼘을 지나면 빠르게 진다.
@@ -110,6 +113,7 @@ static func make_wall(host: Node) -> SubViewport:
 	root.add_child(cam)
 
 	var we := WorldEnvironment.new()
+	we.name = "Env"
 	var env := Environment.new()
 	env.background_mode = Environment.BG_COLOR
 	env.background_color = LOOK.bg
@@ -130,7 +134,6 @@ static func make_wall(host: Node) -> SubViewport:
 	root.add_child(we)
 
 	_wall(root)
-	_rail_lamp(root)
 	_board_mount(root)
 	_lamp(root)
 	return vp
@@ -152,7 +155,6 @@ static func wall_fit(vp: SubViewport, pad: Vector2, ro: float, bc: Vector2, k: f
 	var root := vp.get_node_or_null("Wall")
 	if root == null:
 		return px
-	_rail_fit(root, bc.x)
 	var ring: MeshInstance3D = root.get_node_or_null("Ring")
 	if ring != null:
 		var tm := ring.mesh as TorusMesh
@@ -240,28 +242,8 @@ static func _wall_mat(tex: Texture2D) -> ShaderMaterial:
 	return m
 
 
-# ── 꽂이 곁 빛 — 왼쪽 다트 줄 뒤 판자에 스치는 옅은 빛 하나 ──
-#  램프 웅덩이 밖이라 그늘이다. 이것이 없으면 검은 레일이 검은 허공에 떠 있다 — 판자 결만
-#  겨우 보이게(post_l). 자리는 _rail_fit 이 화면 x POST_X 곁에 잡는다.
-static func _rail_lamp(root: Node3D) -> void:
-	var ol := OmniLight3D.new()
-	ol.name = "PostLamp"
-	ol.light_color = LOOK.lamp_c
-	ol.light_energy = float(LOOK.post_l)
-	ol.omni_range = 0.35
-	ol.omni_attenuation = 1.4
-	ol.position = Vector3(-1.0, -0.08, 0.30)
-	root.add_child(ol)
-
-
-#  꽂이 곁 빛을 화면 x POST_X 곁에 — 벽 앞면(FACE)에서 논리 1px 이 몇 m 인가는 판 평면(z 0)과
-#  조금 다르다(원근이라 4cm 뒤가 그만큼 작다). 높이는 다트 줄 가운데(GRIP.cy 224 = BC 아래 28px).
-static func _rail_fit(root: Node, bcx: float) -> void:
-	var ol: OmniLight3D = root.get_node_or_null("PostLamp")
-	if ol == null:
-		return
-	var ppm: float = S * EYE / (EYE - FACE)          # FACE 면에서 1m = 논리 px
-	ol.position.x = (POST_X - bcx) / ppm
+#  꽂이 곁 빛(PostLamp · 0.05)은 걷었다 — 환경광 0.65 밑에서는 아무 일도 안 했다(검토, 2026-10-05).
+#  레일은 제 빛 받는 변(game.gd WALL3.rail_*)으로 선다.
 
 
 # ── 판 자리 — 고무 링 · 받침판 · 걸쇠 ─────────────────────
@@ -294,12 +276,14 @@ static func _board_mount(root: Node3D) -> void:
 	var hm := Room3D._mat(HOOK, 1.0, 0.0)
 	hm.metallic_specular = 0.0
 	var hook := Room3D._cyl(0.034, 0.034, 0.012, Vector3(0.0, 0.0, 0.004), hm, 20)
+	hook.name = "Hook"
 	hook.rotation_degrees = Vector3(90.0, 0.0, 0.0)
 	root.add_child(hook)
 	for k in 3:
 		var a: float = TAU * float(k) / 3.0 - PI * 0.5
 		var sc := Room3D._cyl(0.008, 0.008, 0.006, Vector3(cos(a) * 0.024, -sin(a) * 0.024, 0.011),
 				hm, 8)
+		sc.name = "Screw%d" % k
 		sc.rotation_degrees = Vector3(90.0, 0.0, 0.0)
 		root.add_child(sc)
 	#  고무 링 — 판 테를 두르는 낮은 무광 검은 서라운드. 반들거리면 위쪽에 반짝임 줄이 서서
@@ -343,6 +327,21 @@ static func _lamp(root: Node3D) -> void:
 	var tgt := Vector3(lt.x, lt.y, FACE)
 	sl.transform = Transform3D(Basis.looking_at(tgt - at, Vector3.UP), at)
 	root.add_child(sl)
+
+
+#  램프를 켜고 끈다 — game.gd _wall3_tick 이 램프 켠 벽을 구운 뒤 끄고 한 장 더 굽는다(판 갈이에서
+#  램프가 꺼진 벽 · 환경광만). 굽기가 끝나면 다시 켠다. 끈 장에는 판 자리(받침판 · 고무 링 ·
+#  걸쇠 · 나사)도 없다 — 어둠 속 검은 받침판이 판보다 큰 검은 원반으로 남아, 누운 판이 일어서는
+#  동안 판이 둘로 읽혔다(촬영, 2026-10-05). 불 꺼진 방에서 검은 고무 링은 판자와 안 갈린다 —
+#  램프가 켜지는 만큼 판 자리가 드러나고 그 앞을 판이 덮는다.
+static func lamp_on(vp: SubViewport, on: bool) -> void:
+	for nm in ["Lamp", "Backing", "Ring", "Hook", "Screw0", "Screw1", "Screw2"]:
+		var n: Node3D = vp.get_node_or_null("Wall/" + nm) as Node3D
+		if n != null:
+			n.visible = on
+	var we: WorldEnvironment = vp.get_node_or_null("Wall/Env") as WorldEnvironment
+	if we != null and we.environment != null:
+		we.environment.ambient_light_energy = float(LOOK.amb if on else LOOK.amb_off)
 
 
 #  램프가 비추는 그림 — 한가운데 흰빛에서 가장자리 어둠으로. 점은 LOOK.pool [자리, 밝기].

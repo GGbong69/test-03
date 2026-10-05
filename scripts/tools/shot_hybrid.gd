@@ -22,6 +22,12 @@ extends SceneTree
 #    x_break         판 깨짐 — 판이 뜬 자리(받침판 · 걸쇠)
 #    x_shake         흔들림 한가운데 — 1:1 벽 결이 안 일렁이는가
 #    x_43 · x_1080   1024x768 · 1920x1080 던지기
+#    x_swapfine      「던진다」 뒤 판 갈이 여덟 박자(0.03 초 간격) — 빛이 한 번에 옮겨 가는가
+#    x_swap1610 · x_swap219 · x_swap43   16:10 · 21:9 · 4:3 판 갈이 세 박자(0.06 · 0.12 · 0.18) —
+#                    여백에 카운터 조각 · 누운 판이 안 남는가
+#    x_throwboss     보스 판(막힌 칸)을 던지는 화면 — 벽 판의 참나무 쪽
+#    x_shopwipe      상점 → 판 고르기 덮개가 걷히는 세 박자 — 가운데 판이 먼저 빠진다
+#    x_revswap       움직임 끔 — 정산 → 상점이 거꾸로 타는 판 갈이 여덟 박자(램프가 판과 같이 꺼진다)
 #  인자 only=leg · only=throw · only=strip · only=size — 한 갈래만 찍는다(빛 · 재질 맞출 때).
 #  창이 있어야 돈다:  godot --path . --script scripts/tools/shot_hybrid.gd
 const GameData = preload("res://scripts/data.gd")
@@ -249,6 +255,28 @@ func _size(sz: Vector2i, nm: String) -> void:
 	await _shot(nm)
 
 
+#  지금 창에서 판 갈이(손 없이 곧장 — _begin_leg)를 연 뒤 times 박자마다 찍어 한 장으로.
+func _swapmid(nm: String, times: Array) -> void:
+	_leg(1, [])
+	await _bake()
+	g.legb_force = false
+	g._begin_leg()
+	_filt(true)
+	var cells := []
+	var tt := 0.0
+	for want in times:
+		while tt < float(want) - 0.0001:
+			_calm()
+			g._process(DT)
+			tt += DT
+		cells.append(_half(await _grab()))
+		print("  %s %.2f · 갈이 %s %.3f · 선 %.2f · 빠진 %.2f" % [nm, tt, g.swap_live, g.swap_t,
+				g._swap_rise(), g._swap_gone()])
+	_sheet(cells, cells.size()).save_png("res://shots/%s_%s.png" % [pre, nm])
+	g._swap_skip()
+	g.legb_force = true
+
+
 func _run() -> void:
 	await _wait(10)
 	if DisplayServer.get_name() == "headless":
@@ -338,6 +366,13 @@ func _run() -> void:
 		await _shot("x_swapmid")
 		g._swap_skip()
 		g.legb_force = true
+		#  「던진다」 뒤 판 갈이를 촘촘히 — 들기 시작한 틀(LEGH.go 0.30)에 판 갈이가 열린다
+		_leg(1, [])
+		await _bake()
+		g._leg_commit()
+		var fine: Array = await _strip([0.30, 0.33, 0.36, 0.39, 0.42, 0.45, 0.50, 0.58])
+		_sheet(fine, 4).save_png("res://shots/%s_x_swapfine.png" % pre)
+		g._swap_skip()
 
 	# ── 던지기 ──
 	if only == "" or only == "throw" or only == "strip":
@@ -365,6 +400,10 @@ func _run() -> void:
 			g._brk_tick(1.0 / 60.0)
 		await _shot("x_break")
 		g._brk_skip()
+		#  보스 판(막힌 칸)을 던진다 — 벽 판의 참나무 쪽
+		await _play(3)
+		_aim()
+		await _shot("x_throwboss")
 
 	# ── 마지막 다트 → 정산 → 덮개 → 상점 ──
 	if only == "" or only == "strip":
@@ -432,6 +471,28 @@ func _run() -> void:
 		cells.append(_half(await _grab()))
 		_sheet(cells, 4).save_png("res://shots/%s_clear_strip.png" % pre)
 		print("  정산 띠 — state %d" % g.state)
+		#  움직임 끔 — 정산 → 상점은 덮개 대신 거꾸로 판 갈이를 탄다
+		await _play(1)
+		g._brk_skip()
+		g.total = g.target
+		g.darts_left = 0
+		g.remaining.clear()
+		g._finish_leg()
+		guard = 0
+		while g.state != g.S.CLEAR and guard < 900:
+			_calm()
+			g._process(DT)
+			g._swap_skip()
+			guard += 1
+		g.clear_t = 99.0
+		_step(0.1)
+		g.motion_off = true
+		g._click(Vector2(-1.0, -1.0))
+		print("  거꾸로 판 갈이 — 갈이 %s · 들어감 %s · state %d" % [g.swap_live, g.swap_in, g.state])
+		var rv: Array = await _strip([0.0, 0.03, 0.07, 0.11, 0.16, 0.22, 0.30, 0.40])
+		_sheet(rv, 4).save_png("res://shots/%s_x_revswap.png" % pre)
+		g.motion_off = false
+		g._swap_skip()
 
 	# ── 상점(견줌) ──
 	if only == "":
@@ -444,6 +505,15 @@ func _run() -> void:
 		g._open_shop()
 		_step(2.5)
 		await _shot("shop")
+		#  상점 → 판 고르기 덮개가 걷히는 세 박자
+		g.wipe_force = true
+		g._wipe(Callable(g, "_shop_go"))
+		var sw: Array = await _strip([0.70, 0.76, 0.82])
+		_sheet(sw, 3).save_png("res://shots/%s_x_shopwipe.png" % pre)
+		_step(0.6)
+		g.wipe_force = false
+		g._tutor_close()
+		g.tutor_q.clear()
 		#  제목 · 런 끝 — 같은 판 그림(BOARDART 숫자 고리 · 테)을 쓴다
 		g.state = g.S.OVER
 		g.over_t = 9.0
@@ -459,9 +529,18 @@ func _run() -> void:
 		await _play(1)
 		_aim()
 		await _size(Vector2i(1440, 900), "1440")
+		await _swapmid("x_swap1610", [0.06, 0.12, 0.18])
+		await _play(1)
+		_aim()
 		await _size(Vector2i(1920, 820), "219")
+		await _swapmid("x_swap219", [0.06, 0.12, 0.18])
 		if only != "throw":
+			await _play(1)
+			_aim()
 			await _size(Vector2i(1024, 768), "x_43")
+			await _swapmid("x_swap43", [0.06, 0.12, 0.18])
+			await _play(1)
+			_aim()
 			await _size(Vector2i(1920, 1080), "x_1080")
 		DisplayServer.window_set_size(Vector2i(1280, 720))
 		await _wait(6)
