@@ -8349,16 +8349,17 @@ const CARD := {
 # 히트 칸과 툴팁 앵커가 이걸 읽으므로 반드시 쉬는 모습이어야 한다.
 # 뜬 모습을 주면 아직 안 뜬 판의 허공을 눌러도 잡힌다. 뜨면서 커지는
 # 쪽은 위로만 자라므로, 쉬는 칸에 커서가 있는 한 계속 떠 있다(떨림이 없다).
-# 세로는 판 고르기의 다트판 한 칸 — 큰 판 윗끝(LEGB.foot − 2r·flat)부터 옛 놋쇠 명판
-# 앞면 자리까지다(2026-10-04 — 판과 그 밑 글을 한 칸으로 짚어야 글 위의 커서도 보스를 잡는다.
-# 명판은 걷혔고 그 자리에 글 두 줄(_legb_label)이 선다 — 칸은 그대로다).
+# 세로는 판 고르기의 다트판 한 칸 — 큰 판 윗끝(LEGB.foot − 2r·flat)부터 판 밑 글
+# 아래까지다(2026-10-04 — 판과 그 밑 글을 한 칸으로 짚어야 글 위의 커서도 보스를 잡는다).
+# 아랫끝은 옛 놋쇠 명판 앞면 자리 그대로 잰다(LEGB.hit_gap · hit_d · hit_t) — 칸이 한 픽셀도
+# 안 움직인다.
 func _row_rect(i: int, cnt: int) -> Rect2:
 	var n: float = maxf(float(cnt), 1.0)
 	var span: float = VIEW.x - CARD.x0 * 2.0
 	var w: float = (span - CARD.gap * (n - 1.0)) / n
 	var y0: float = float(LEGB.foot) - float(LEGB.r_big) * 2.0 * float(TBL.flat)
-	var y1: float = float(LEGB.foot) + float(LEGB.th_boss) + float(LEGB.plate_gap) \
-			+ float(LEGB.plate_d) * float(TBL.flat) + float(LEGB.plate_t)
+	var y1: float = float(LEGB.foot) + float(LEGB.th_boss) + float(LEGB.hit_gap) \
+			+ float(LEGB.hit_d) * float(TBL.flat) + float(LEGB.hit_t)
 	return Rect2(Vector2(CARD.x0 + float(i) * (w + CARD.gap), y0), Vector2(w, y1 - y0))
 
 
@@ -17875,8 +17876,9 @@ func _cons_draw() -> void:
 #  _hud_draw 가 _draw_shop 다음이라 남은 scale 은 HUD 를 통째로 누른다.
 #  → 이 구획은 draw_set_transform 을 한 번도 부르지 않는다. 불변식이다.
 #
-#  예외 하나 — 판 고르기의 다트판(_legb_draw). 판이 면에 누우면 그 위의 칸 · 눈금 · (돌린
-#  판의) 숫자도 같이 누워야 하는데, 글자는 좌표를 옮겨서는 못 눕힌다. 그래서
+#  예외 하나 — 판 고르기의 다트판(_legb_draw). 판이 면에 누우면 그 위의 칸 · (돌린 판의)
+#  숫자도 같이 누워야 하는데, 글자는 좌표를 옮겨서는 못 눕힌다(판 밑 글 _legb_label 은 화면에
+#  똑바로 서서 변환을 안 건다). 그래서
 #  거기서만 draw_set_transform_matrix 를 걸고 **같은 함수 안에서**
 #  draw_set_transform(shake_off) 로 되돌린다. 되돌리는 줄이 없으면
 #  남은 변환이 _hud_draw 를 통째로 민다 — 위 문단이 말하는 그 사고다.
@@ -20393,9 +20395,6 @@ func _cover_draw() -> void:
 		draw_rect(_wide(TBL.fy - 1.0, 1.0), C_WOOD.lightened(0.18))
 	#  저울 접시의 판 동전 — 카운터 띠 다음 · 팔 앞(내려오는 주먹이 덮는다 · 판매 몸짓).
 	_prop_coin_draw()
-	#  판 고르기의 막 — 방 띠 · 상인 몸 · 턱 위 소품 다음, 팔 · 손 앞(_legb_dim).
-	if legb_dim_on:
-		_legb_dim()
 	if nd > 0.01:
 		draw_set_transform(shake_off - Vector2(0.0, nd))
 	_npc_arms()
@@ -35158,21 +35157,18 @@ func _draw_leg() -> void:
 	var first := _round_first()
 	var per: int = GameData.legs_per_round()
 	var cur: int = clampi(GameData.leg_idx(leg_no), 0, per - 1)
-	#  지금 판 자리에 떨어진 램프 빛 — 판 밑 펠트에 한 겹(_legb_lamp).
-	_legb_lamp()
+	#  지금 판 밑 펠트에 고인 빛 — 상점 소품의 진열 스포트와 같은 말이다(눈이 갈 판).
+	_legb_pool(cur, first + cur)
 	#  먼 판부터 — 지금 판은 떠 있어 맨 나중이다. 손에 든 판은 손이 그린다(_legb_held_draw).
 	for i in per:
 		if i != cur and not _legb_held(i):
 			_legb_one(i, first + i)
 	if not _legb_held(cur):
 		_legb_one(cur, first + cur)
-	#  불 끄기 — 덮개가 방 띠 · 턱 위 소품을 다시 깐 다음, 팔 · 손 앞에 막을 깐다(_legb_dim).
-	legb_dim_on = true
-	_cover_draw()
-	legb_dim_on = false
-	#  판 밑 글 두 줄 — 막 **위**다(막에 안 묻힌다). 손은 판 윗변 쪽에서만 놀아 글과 안 겹친다.
+	#  판 밑 글은 판 **다음**이다 — 뜬 판의 그림자가 글 윗줄에 닿아도 글이 위에 선다.
 	for i in per:
 		_legb_label(i, first + i)
+	_cover_draw()
 	#  라운드 표시 — 앞치마 가운데, 「건너뛴다」와 「던진다」 사이다. 상점이 보스 예고
 	#  (_boss_plaque)를 적는 그 자리 · 그 줄(바닥선 314 · 12)이라 두 화면이 한 말씨다.
 	#  ⚠ 펠트 인쇄(판 윗줄 y 141)로 두었더니 지금 판이 된 큰 판(1.12 배 · 뜸)의 윗끝이 142 까지
@@ -35225,7 +35221,7 @@ func _draw_leg() -> void:
 
 #  ── 간판 색 ───────────────────────────────────────────
 #  ⚠ 2026-10-04 판 고르기가 다트판(LEGB)이 되며 간판은 걷혔다. 이 한 벌은 이제 보스 칸만
-#  읽힌다 — 상점의 보스 명판(_boss_plaque). 아래는 옛
+#  읽힌다 — 상점의 보스 명판(_boss_plaque)과 판 밑 글의 제약 아이콘 바탕(_legb_label). 아래는 옛
 #  간판이 색을 고른 기록이다.
 #  「색감이 좀 너무 안 어울리는데?」(사용자, 2026-09-17). 처음 칠한 파랑 ·
 #  호박 · 빨강이 명도도 채도도 한 단 높아서, 물 빠지고 어두운 펠트(C_TABLE)와
@@ -35281,71 +35277,63 @@ func _leg_kind(rn: int) -> String:
 #  판 고르기 — 카운터에 놓인 작은 다트판 셋 (2026-10-04)
 # ──────────────────────────────────────────────────────────
 #  「상점의 퀄리티가 너무 좋아 그래서 그런지 다트판 인게임 화면이랑 판 선택이 비교적으로
-#   빈약한거 같아」(사용자, 2026-10-04). 고른 방향 —
-#  「남색 카드를 카운터에 놓인 작은 다트판 셋으로 바꿉니다. 큰 판은 크게, 막힌 칸은 칸에
-#   판자를 덧대서 종류가 모양으로 보입니다. 목표는 판 밑 놋쇠 명판에 적힙니다. 상인이 판을
-#   내려놓고, 고른 판을 집어 듭니다.」
-#  그 판결 「아... 좀 촌스러운데..? 좀 세련된 디자인 없어?」(사용자, 2026-10-04). 다시 고른 길
-#  「한 줄기 빛」 — 「방 불을 끄고 다트판 하나에만 위에서 좁은 빛을 떨어뜨립니다. 네온과 술병,
-#   금빛 명판을 걷어 내고, 고른 판만 빛 안에 두고 나머지는 그늘로 물러나게 합니다.」
-#   · 걷은 것 — 금 명판(트로피 상패 · 금괴로 읽혔다 — 판이 명판에 딸린 소품이 됐다), 눌리고
-#     기운 새김 글, 명판 귀퉁이 금괴 아이콘, 미니 판의 6px 숫자 예순 개(글이 아니라 자글자글한
-#     무늬였다), 지금 판의 금테 · 금빛 웅덩이(UI 선택 테두리 · 탁한 주황 얼룩), 보스의 징 ·
-#     못 박은 판자(공작 소품 · 할로윈 장식), 이긴 판의 만화식 금, 엎은 판 뒷면의 딱지 · 죔쇠.
-#   · 고른 것은 테두리가 아니라 빛과 높이로 — 방 불이 꺼지고(막 _legb_dim) 지금 판 자리만
-#     빛이 떨어진다(_legb_lamp). 판은 뜨고 나머지는 그늘로 물러난다.
-#   · 정보는 소품이 아니라 글씨로 — 판 밑에 두 줄(_legb_label). 글은 언제나 화면에 똑바로 선다.
+#   빈약한거 같아」(사용자, 2026-10-04) — 남색 카드를 카운터에 놓인 작은 다트판 셋으로
+#  바꿨다(놋쇠 명판 · 붉은 쇠테 · 못 박은 판자 · 금 간 판). 그것을 본 말:
+#  「아... 좀 촌스러운데..? 좀 세련된 디자인 없어?」(2026-10-04). 금 명판은 판보다 넓고
+#  화면에서 가장 밝은 노란 플라스틱 상패였고, 눌리고 기운 새김 글 · 5px 금괴 · 6px 숫자
+#  예순 개 · 1px 금테 · 징 박은 분홍 쇠테 · 만화식 금이 한 상 위에 섞였다.
+#  고른 길 「맞춤 다트 장」 — **판은 상점 매물이다.** 펠트 위에는 판과 그 밑 글만 두고,
+#  명판이라는 물건은 없다. 정보는 상점이 매물 밑에 값을 적는 그 말씨(_bill_at)로 적는다.
 #
 #  ── 판은 펠트 위의 물건이다 ─────────────────────────────
 #  상점 매물과 같은 세계의 물건으로 눕힌다 — 면 좌표(u, w, h)에 놓여 _p2s 로 그려지고,
 #  매물과 같은 그림자(빛 TBL.light · 뜬 만큼 밀리고 옅어진다)를 진다. 누운 원판이라
 #  세로만 TBL.flat 로 눌린다(동전과 같다 — 원반은 안 기운다).
-#  얼굴은 본판의 말씨에서 작은 것을 덜어 냈다 — 백색 · 흑색 스무 칸(colors.csv 0 · 1),
-#  붉음 · 초록 띠, 초록 · 붉은 불, 철사, 숫자 고리(숫자 대신 칸 경계 눈금), 판 두께.
+#  얼굴은 본판의 말씨 그대로다 — 백색 · 흑색 스무 칸(colors.csv 0 · 1), 붉음 · 초록 띠,
+#  초록 · 붉은 불, 철사. 작은 것은 덜어 낸다 — 6px 숫자는 글이 아니라 자글자글한 무늬라
+#  지웠다(돌린 판만 숫자가 제약의 얼굴이라 남긴다). 숫자 고리는 깎은 참나무 링이다 — 바깥
+#  테 그늘 1px · 빛 받는 왼쪽 위 사분호 · 칸 끝의 놋쇠 비드 1px. 판 두께는 나무 옆면이다.
+#  색은 다 도트 팔레트 단 1(나무 · 벨벳 · 금)이다.
 #
 #  ── 종류는 모양으로 ───────────────────────────────────
 #    작은 판   r 32 — 맨 판
 #    큰 판     r 41 — 같은 판이 한 뼘 크다(1.28 배). 글을 안 읽어도 「큰 판」이다
-#    보스      r 38 — 짙은 붉은 쇠테 한 줄, 제약이 판 얼굴에 모양으로 앉는다(_legb_mod_on):
-#              막힌 칸은 그 칸을 검게 지우고 · 그늘은 흑색 칸이 꺼지고 · 홀대는
-#              홀수 칸이 반쯤 꺼지고 · 실띠는 띠가 가늘고 · 민짜는 트리플 띠가 잿빛이고 ·
-#              돌린 판은 숫자가 뒤섞인다(이 판만 숫자를 쓴다 — 숫자가 곧 얼굴이다). 얼굴이 안
-#              바뀌는 제약(역풍 · 단벌 · 먹통 · 문턱)은 글 줄의 제약 아이콘과 이름이 말한다.
+#    보스      r 38 — 바깥에 가죽 띠(상점 COL.leather 집안)와 놋쇠 베젤을 둘렀고, 제약이 판
+#              얼굴에 모양으로 앉는다(_legb_mod_on): 막힌 칸은 그 칸에 맞춰 끼운 참나무 쪽 ·
+#              그늘은 흑색 칸이 꺼지고 · 홀대는 홀수 칸이 반쯤 꺼지고 · 실띠는 띠가 가늘고 ·
+#              민짜는 트리플 띠가 잿빛이고 · 돌린 판은 숫자가 뒤섞인다. 얼굴이 안 바뀌는
+#              제약(역풍 · 단벌 · 먹통 · 문턱)은 판 밑 글의 제약 아이콘과 이름이 말한다.
 #  ── 지난 판 ────────────────────────────────────────────
-#  상태는 명도와 자세로 말한다. 이긴 판은 다트가 꽂힌 채 그늘에, 건너뛴 판은 **엎어 둔 채**
-#  그늘에 둔다(뒷면 — 무광 원판 · 고리 · 걸쇠 막대 하나). 둘 다 sink 만큼 가라앉는다.
+#  이긴 판은 다트가 꽂힌 채 그늘에 든다. 건너뛴 판은 **엎어 둔다**(참나무 뒷판 · 나이테 ·
+#  놋쇠 걸쇠판). 상태는 명도와 자세로 말한다 — 금 · 딱지 같은 장식은 없다.
 #  ── 지금 판 ────────────────────────────────────────────
-#  펠트에서 뜨고(LEGB.lift) 1.06 배로 서며 빛 안에 든다. 테는 다른 판과 같다.
+#  고른 것은 테두리가 아니라 빛과 높이로 보인다 — 펠트에서 뜨고(LEGB.lift) 1.08 배로 서며,
+#  상점 진열 스포트와 같은 램프 빛이 그 밑 펠트에 고인다(_legb_pool).
 #  ── 보스의 숨 ──────────────────────────────────────────
-#  앞으로 칠 보스만 쇠테 바깥 줄과 그림자가 숨 쉰다(2.2 · 3.4 초 — 옛 간판 그대로). 화면에
-#  상시 맥동은 이것 하나뿐이어야 보스가 무겁다. 움직임을 끄면 안 돈다.
+#  앞으로 칠 보스만 가죽 띠의 밝기가 숨 쉰다(±8% · 2.2 초). 화면에 상시 맥동은 이것
+#  하나뿐이어야 보스가 무겁다. 움직임을 끄면 안 돈다.
 #
-#  히트 칸 · 툴팁 앵커 · 배움의 밝힘은 _row_rect(판 + 글 두 줄 한 칸)다 — 판이 뜨고 딜로
+#  히트 칸 · 툴팁 앵커 · 배움의 밝힘은 _row_rect(판 + 밑 글 한 칸)다 — 판이 뜨고 딜로
 #  미끄러져도 칸은 쉬는 자리 그대로다(옛 규약 그대로).
 # ══════════════════════════════════════════════════════════
 const LEGB := {
 	"r_small": 32.0, "r_big": 41.0, "r_boss": 38.0,   # 판 반지름(숫자 고리 바깥 테까지)
-	#  세 판의 가까운 끝(화면 y). 앞끝이 한 줄에 서야 그 밑 명판 줄이 곧다 — 큰 판은 뒤로
+	#  세 판의 가까운 끝(화면 y). 앞끝이 한 줄에 서야 그 밑 글 줄이 곧다 — 큰 판은 뒤로
 	#  물러나 윗끝이 152.4 다. 라운드 표시는 앞치마로 갔다(_draw_leg) — 판 윗줄은 비어 있다.
 	"foot": 217.0,
-	"th": 4.0, "th_boss": 5.0,   # 판 두께(화면 px) — 숫자 고리 밑으로 비치는 옆면
-	"play": 0.78,         # 칸이 끝나는 반지름(판 배). 바깥 0.22 가 숫자 고리다
-	#  작은 판(r 36 밑)은 숫자 고리를 넓히고 숫자를 한 단 줄인다 — r 32 에서 0.22 고리(7px)에
-	#  7 짜리 「13」 · 「10」 이 안 들어 테와 띠를 넘었고, 밑의 「19 3 17」 이 한 덩어리였다(검토).
+	"th": 4.0, "th_boss": 5.0,   # 판 두께(화면 px) — 링 밑으로 비치는 나무 옆면
+	"play": 0.78,         # 칸이 끝나는 반지름(판 배). 바깥 0.22 가 참나무 링이다
+	#  작은 판(r 36 밑)은 링을 넓힌다 — 칸이 작은 판에서 큰 판과 같은 비로 서면 링이 실처럼
+	#  가늘어 판이 테 없는 과녁으로 읽혔다(돌린 판의 숫자도 이 폭에 든다).
 	"play_s": 0.75,
-	#  보스는 쇠테가 고리 바깥 3.2 를 덮어 칸을 한 단 더 좁힌다 — 0.78 이면 3 · 9 시 숫자가
-	#  쇠띠 밑에 묻혔다(1440 촬영).
+	#  보스는 가죽 띠가 링 바깥 3px 을 덮어 칸을 한 단 더 좁힌다.
 	"play_b": 0.72,
-	#  숫자 크기 — 큰 판 / 작은 판 · 보스. **돌린 판(turn)만 쓴다** — 그 판은 숫자가 곧 얼굴이다.
-	#  나머지 판은 숫자 대신 칸 경계 눈금(_legb_front)이다. 한 판에 스물, 세 판에 예순 개인 6px
-	#  숫자는 글이 아니라 자글자글한 무늬였다(「아... 좀 촌스러운데..?」, 2026-10-04).
-	"nsz": 7, "nsz_s": 6,
+	"nsz": 7, "nsz_s": 6,   # 숫자 크기 — 돌린 판만 쓴다. 칸마다 제 폭을 재어 링 안에 앉힌다
 	#  띠 · 불 반지름(칸 끝 배). 실물(170 · 162 · 107 · 99 · 15.9 · 6.35mm)보다 띠가 넓다 —
 	#  r 32 에서 실물 비면 띠가 화면 1.5px 라 붉음 · 초록이 철사에 먹힌다.
 	"dbl": 0.88, "trp0": 0.54, "trp1": 0.64, "bull_o": 0.13, "bull_i": 0.06,
 	"lift": 10.0,         # 지금 판이 뜨는 높이(면 h — 화면 6.2px)
-	#  지금 판 배율 — 1.12 는 금테와 같이 「고른 것」을 크기로 소리쳤다. 이제 빛이 말한다.
-	"gs": 1.06,
+	"gs": 1.08,           # 지금 판 배율 — 1.12 는 이웃 판보다 한 뼘 커서 금화처럼 튀었다
 	"up_v": 7.0,          # 뜨고 내려앉는 빠르기(초당 몫)
 	"hov": 4.0,           # 보스 판에 커서가 얹히면 뜨는 높이(면 h)
 	"sh_a": 0.38,         # 그림자 짙기(펠트에 닿았을 때)
@@ -35353,66 +35341,52 @@ const LEGB := {
 	#  에서 멈추고, 짙기는 커진 넓이(배²)로 나눈다. 한 빛깔 타원은 손에 든 판 밑에서 1.6 배까지
 	#  커진 검은 원반 — 펠트에 뚫린 구멍으로 읽혔다(검토).
 	"sh_grow": 0.010, "sh_max": 1.3, "sh_core": 0.97, "sh_soft": 0.13,
-	#  ── 불 끄기 — 막 · 빛 구멍(_legb_dim · _legb_lamp) ─────────────
-	#  「아... 좀 촌스러운데..? 좀 세련된 디자인 없어?」(사용자, 2026-10-04) — 지금 판의 금테 ·
-	#  금빛 웅덩이를 걷고 방 불을 끈다. 화면 위끝부터 먼 턱(TBL.fy)까지 dim_top, 펠트에
-	#  dim_felt 만큼 막(LEGB_COL.veil)을 깔고, 지금 판 자리만 부드러운 타원으로 뚫는다. 위끝은
-	#  HUD 가 막 위에 다시 서므로 HUD 칸 사이로 비치는 방도 같이 꺼진다(HUD 밑 y 64 에서 끊으면
-	#  칸 사이에 밝은 방이 가로 이음으로 남는다). 0.30 · 0.42 로는 다른 판이 지금 판과 거의 같은
-	#  밝기로 남아 「빛 하나」가 안 읽혀 한 단 짙게 했다(촬영, 2026-10-04). 먼 턱
-	#  위 막은 턱 밑 dim_seam 에 걸쳐 펠트 짙기로 이어진다 — 턱에 걸친 저울 · 등록기에 이음이
-	#  안 진다. 구멍은 판 윗끝부터 글 둘째 줄 밑까지를 감싸고(hole_pad 더), 가로는 판 반지름의
-	#  hole_rx 배, 가장자리 hole_fe 에 걸쳐 0 에서 막 짙기로 간다. 구멍 안 펠트에는 램프 빛
-	#  (LEGB_COL.lamp)을 lamp_a 한 겹 깐다 — 판 밑이라 판 그림자가 그 빛 위에 진다.
-	#  막은 딜 동안(지금 판이 닿는 틀까지) 차오른다 — 판을 깔고 불을 끈다.
-	"dim_top": 0.34, "dim_felt": 0.48, "dim_seam": 16.0,
-	"hole_rx": 1.7, "hole_pad": 6.0, "hole_fe": 22.0, "lamp_a": 0.12,
+	#  지금 판 밑 빛 웅덩이 — 상점 진열 스포트와 같은 램프 빛(COL.lamp). 반지름(판 배) ·
+	#  한가운데 짙기. 금빛(C_GOLD 0.20 · 1.9 배)은 벨벳 위에서 탁한 주황 얼룩이었다.
+	"pool": 1.6, "pool_a": 0.16,
 	#  딜 — 손이 안 드는 판(가운데)은 카운터 턱(w0)에서 h0 만큼 떠 나와 미끄러져 앉는다.
 	#  가로는 제자리와 화면 가운데 사이 pull 만큼에서 출발한다 — 상인 몸 앞이다.
 	"w0": 4.0, "h0": 16.0, "pull": 0.55,
 	"hop": 3.0, "hop_t": 0.12,   # 미끄러져 앉은 판이 한 번 튀는 높이(면 h) · 시간
 	"flip": 0.30, "flip_h": 16.0,   # 건너뛴 판을 엎는 시간 · 그동안 드는 높이
-	"sink": 0.50,         # 지난 판이 그늘로 가라앉는 몫(LEGB_COL.veil 로 덮는 짙기)
-	#  판정 칸의 깊이 — 옛 놋쇠 명판이 서던 자리(틈 · 깊이 · 앞면 두께)다. 명판은 걷혔고 그
-	#  자리에 글 두 줄이 선다. 히트 칸(_row_rect)이 이 셋으로 아랫변을 잡으므로 값은 그대로 둔다.
-	"plate_d": 36.0, "plate_t": 3.0, "plate_gap": 5.0,
-	#  ── 글 두 줄(_legb_label) ─────────────────────────────
-	#  금 명판(트로피 상패로 읽혔다) 대신 판 밑 펠트 위에 글씨로 — Paperlogy 두 굵기만, 크기
-	#  계단은 이름 11 · 목표 18. 글은 화면에 똑바로 선다(누운 변환에 눌리거나 기울지 않는다).
-	#  바닥선은 판 앞끝(foot) + 보스 판 두께 아래 nm_dy · tg_dy — 세 판의 글 줄이 한 줄이다.
-	"nm_dy": 15.0, "tg_dy": 35.0,
-	"nm_sz": 11, "tg_sz": 18, "done_sz": 12,
-	"lab_gap": 4.0,       # 「목표」 와 숫자 사이
-	"dot": 3.0, "dot_gap": 5.0,   # 보상 — 3x3 점 n 개 · 간격(이름 줄 오른쪽)
-	"ico_w": 13.0,        # 제약 아이콘 한 칸 폭(MODK.r_lo 6 + 틈)
-	"plate_in": 0.14,     # 판이 닿은 뒤 글이 서는 시간 — 놓은 판 밑에 이름이 붙는다
+	"sink": 0.45,         # 지난 판 덮개 짙기(LEGB_COL.cover)
+	#  아직 안 친 다음 판의 그늘 — 고른 것은 테두리가 아니라 빛과 높이로 보인다. 지금 판만
+	#  빛 웅덩이에 뜨고, 나머지는 이만큼 그늘로 물러난다(뜬 몫만큼 걷힌다).
+	"rest": 0.22,
+	"breath": 0.08,       # 보스 가죽 띠의 숨 — 밝기 ± 몫
+	#  판 밑 글 — 상점 값표(_bill_at)의 말씨. 바닥선은 판 앞끝(foot + th_boss — 한 줄의 판이 다
+	#  같은 줄에 서게 가장 두꺼운 판으로 잰다)에서 l1(이름 · 보상) · l2(목표). 이름은 font_sm 11,
+	#  보상은 상점 값과 같은 금화 글리프 11 에 「+」, 목표는 font(Bold) 16. 이름과 보상 사이
+	#  gap · 보스 제약 아이콘(앞치마 보스 표 _boss_plaque 의 그 원) 지름 ico · 뒤 틈 ico_gap.
+	"l1": 15.0, "l2": 34.0, "name_sz": 11, "goal_sz": 16, "gap": 6.0, "ico": 16.0,
+	"ico_gap": 4.0,
+	"label_in": 0.14,     # 판이 닿은 뒤 글이 서는 시간 — 놓은 판 밑에 값이 붙는다
+	#  히트 칸 아랫끝(_row_rect) — 옛 명판 앞면 자리 그대로다(판 앞끝 foot + th_boss 에서 틈
+	#  hit_gap + 깊이 hit_d × TBL.flat + 두께 hit_t). 글 둘째 줄 잉크가 이 안에 들고, 칸이 안
+	#  움직여 툴팁 · 히트 · 배움의 밝힘이 한 픽셀도 안 바뀐다.
+	"hit_gap": 5.0, "hit_d": 36.0, "hit_t": 3.0,
 }
 
 const LEGB_COL := {
-	#  「아... 좀 촌스러운데..? 좀 세련된 디자인 없어?」(사용자, 2026-10-04) — 판 둘레는 따뜻한
-	#  무채 검정으로(보랏빛 1d1a25 · 6d6878 은 빛 받는 물건이 아니라 UI 스티커로 떴다). 놋쇠는
-	#  보상 점에만 쓴다. 2D 로 칠하는 면과 1px 선은 도트 팔레트 단 0 · 1 색만 쓴다(dot_pal.py —
-	#  팔레트 밖 색은 디더 점으로 지글거린다).
-	"ring": Color("1f1719"),       # 숫자 고리(잿빛 0)
-	"num": Color("c9bfae"),        # 숫자 — 돌린 판만. 백색 칸보다 한 단 눌렀다(흰 1)
-	"tick": Color("3c383a"),       # 칸 경계 눈금 — 숫자 대신(잿빛 1)
-	"edge": Color("3c383a"), "edge_hi": Color("c9bfae"),   # 바깥 테 · 빛 받는 왼쪽 위 사분호
-	"side": Color("0b0912"),
+	#  참나무 링 · 옆면 · 뒷판(나무 2 · 1 · 3 · 결)과 놋쇠(금 1 · 게이지 금) — 도트 팔레트 단 1.
+	"ring": Color("5e3317"),       # 숫자 고리 자리 — 깎은 참나무 링
+	"edge": Color("2c1508"), "edge_hi": Color("8a5636"),   # 바깥 테 그늘 · 빛 받는 왼쪽 위
+	"bead": Color("a8762a"),       # 칸 끝(rp)의 놋쇠 비드
+	"side": Color("2c1508"),       # 판 두께 — 나무 옆면
+	"grain": Color("402e1a"),      # 뒷판 나이테
+	"brass": Color("a8762a"), "brass_hi": Color("c2a13d"),
+	"leather": Color("4a1412"),    # 보스 가죽 띠 — 상점 COL.leather 집안(벨벳 2)
+	"num": Color("d8d0bc"),        # 숫자(돌린 판) — 백색 칸보다 한 단 눌렀다
 	"wire": Color(0.86, 0.84, 0.90, 0.55),
-	#  보스 쇠테 — 짙은 붉은 띠(벨벳 2) 한 줄에 바깥 1px 붉은 그늘(빨강 그늘)이 왼쪽 위 반호만.
-	"iron": Color("4a1412"), "iron_hi": Color("b03a32"),
-	#  막힌 칸 — 무광 검은 띠에 길이 방향 1px 두 줄. 「검게 지운 칸」이다.
-	"blk": Color("1f1719"), "blk_line": Color("3c383a"),
-	#  엎은 판 뒷면 — 무광 원판 · 고리 · 걸쇠 막대 하나.
-	"back": Color("1f1719"), "back_line": Color("3c383a"),
 	"hatch": Color(0.80, 0.77, 0.88, 0.55),   # 죽은 칸 결 — 흑색 칸 위에서도 보이는 밝은 획
 	"dead_ring": Color("4a4552"),             # 죽은 칸의 띠 — 붉음 · 초록을 뺀 잿빛
-	"veil": Color("0b0912"),       # 막 · 지난 판 덮개(밤 0)
-	"lamp": Color("ffd9a0"),       # 구멍 안 램프 빛 — 던지기 화면의 램프(wall3d.gd LOOK.lamp_c)와 같다
-	#  글 — 지금 판 숫자 · 나머지 · 지난 판 · 문턱(목표가 밀린 판).
-	"txt_now": Color("f4efe2"), "txt": Color("c9bfae"), "txt_off": Color("6b647e"),
-	"txt_hot": Color("e8705c"),
-	"pip": Color("a8762a"), "pip_now": Color("c2a13d"),   # 보상 점 — 놋쇠는 여기에만
+	"cover": Color("140904"),      # 지난 판 덮개(나무 0) — 그늘에 든다
+	"pool": Color("ffcf8a"),       # 지금 판 밑 램프 빛 — Room3D.COL.lamp
+	#  판 밑 글 — 이름 · 목표 · 지금 판 목표 · 문턱(목표가 밀렸다) · 지난 판.
+	#  지난 판 글은 C_WIRE — 꺼짐(C_OFF 6b647e)은 벨벳(≈ 46191e)에서 2.6:1 이라 꺼진 글
+	#  하한(3:1)을 밑돌았다. 이 색이 3.2:1 이다.
+	"name": Color("c9bfae"), "goal": Color("e8dfc8"), "goal_now": Color("f4efe2"),
+	"goal_hot": Color("e8705c"), "past": Color("7a7192"),
 }
 
 var legb_up := PackedFloat32Array()    # 칸마다 뜬 몫 0..1 — 지금 판이 뜨고 내려앉는다
@@ -35438,7 +35412,7 @@ func _legb_rest(i: int, rn: int) -> Vector2:
 	return Vector2(cx, (float(LEGB.foot) - float(TBL.fy)) / float(TBL.flat) - _legb_r(rn))
 
 
-#  칸이 끝나는 반지름의 배 — 작은 판 · 보스는 숫자 고리가 넓다(LEGB.play_s · play_b).
+#  칸이 끝나는 반지름의 배 — 작은 판 · 보스는 링이 넓다(LEGB.play_s · play_b).
 func _legb_play(r: float, kind: String) -> float:
 	if kind == "boss":
 		return float(LEGB.play_b)
@@ -35521,7 +35495,7 @@ func _legb_pose(i: int, rn: int) -> Vector3:
 
 
 #  얹히면 판이 대답한다 — **할 말이 있는 판만**(툴팁이 뜨는 보스). 칸은 _row_rect 다.
-#  쇠테가 달아오르고 한 뼘 뜬다(LEGB.hov). 옛 간판은 S.LEG 에 얹힘 상태가 0개라 툴팁만
+#  놋쇠 베젤이 밝아지고 한 뼘 뜬다(LEGB.hov). 옛 간판은 S.LEG 에 얹힘 상태가 0개라 툴팁만
 #  뜨고 카드가 가만히 있어 「어느 카드 이야기인지」가 안 보였다 — 그 판결 그대로다.
 func _legb_hov(i: int, rn: int) -> bool:
 	if _leg_kind(rn) != "boss" or boss_mods.get(rn, PackedStringArray()).is_empty():
@@ -35530,233 +35504,36 @@ func _legb_hov(i: int, rn: int) -> bool:
 			and leg_t >= _deal_time()
 
 
-#  ── 불 끄기 — 막과 빛 구멍 ─────────────────────────────────
-#  「아... 좀 촌스러운데..? 좀 세련된 디자인 없어?」(사용자, 2026-10-04). 지금 판은 금테 ·
-#  금빛 웅덩이가 아니라 빛으로 고른다 — 방 불을 끄고(막) 지금 판 자리에만 빛을 남긴다.
-#  막은 덮개(_cover_draw)가 방 띠 · 상인 몸 · 턱 위 소품을 다시 깐 **다음**, 팔 · 손 **앞**에
-#  깐다(legb_dim_on) — 방 띠가 막 위에 다시 깔리면 방은 안 꺼진다. 손(3D)과 든 판은 막 위다.
-#  판 밑 글(_legb_label)은 막 위에 다시 쓴다 — 막에 안 묻힌다.
-
-#  빛 구멍 — [한가운데, 가로 반지름, 세로 반지름](바깥 테 · 번짐 hole_fe 포함). 칸마다 뜬
-#  몫(legb_up)으로 판 사이를 미끄러진다 — 다음 판으로 넘어가면 빛도 같이 옮겨 간다.
-#  세로는 지금 판 윗끝부터 글 둘째 줄 밑까지를 맑게 감싼다.
-func _legb_hole() -> Array:
-	var first := _round_first()
-	var per: int = GameData.legs_per_round()
-	var cur: int = clampi(GameData.leg_idx(leg_no), 0, per - 1)
-	var sw := 0.0
-	var cx := 0.0
-	var top := 0.0
-	var r := 0.0
-	for i in per:
-		var u: float = _legb_up(i)
-		if u <= 0.001:
-			continue
-		sw += u
-		cx += _legb_rest(i, first + i).x * u
-		top += _legb_top(i, first + i).y * u
-		r += _legb_r(first + i) * u
-	if sw <= 0.001:
-		sw = 1.0
-		cx = _legb_rest(cur, first + cur).x
-		top = _legb_top(cur, first + cur).y
-		r = _legb_r(first + cur)
-	cx /= sw
-	top /= sw
-	r /= sw
-	var fe: float = float(LEGB.hole_fe)
-	var y0: float = top - float(LEGB.hole_pad)
-	var y1: float = _legb_lab_y(1) + 4.0 + float(LEGB.hole_pad)
-	return [Vector2(cx, (y0 + y1) * 0.5), r * float(LEGB.gs) * float(LEGB.hole_rx) + fe,
-			(y1 - y0) * 0.5 + fe]
-
-
-#  구멍 마스크 0(맑음)..1(막) — 바깥 테에서 1, 번짐 hole_fe 안쪽에서 0. 타원 거리는 가로 ·
-#  세로 반지름의 평균으로 번짐 폭을 잰다(가로 · 세로가 달라도 번짐이 한 결이다).
-func _legb_mask(p: Vector2, h: Array) -> float:
-	var c: Vector2 = h[0]
-	var rx: float = h[1]
-	var ry: float = h[2]
-	var d: float = Vector2((p.x - c.x) / rx, (p.y - c.y) / ry).length()
-	var k0: float = 1.0 - float(LEGB.hole_fe) / ((rx + ry) * 0.5)
-	return smoothstep(k0, 1.0, d)
-
-
-#  막이 차오른 몫 — 딜 동안(지금 판이 닿는 틀까지) 0 → 1, 판 갈이로 나가는 동안 1 → 0.
-func _legb_dim_k() -> float:
-	var k := 1.0
-	if not motion_off:
-		var cur: int = clampi(GameData.leg_idx(leg_no), 0, GameData.legs_per_round() - 1)
-		k = smoothstep(0.0, 1.0, clampf(leg_t / (_legh_land(cur) + 0.05), 0.0, 1.0))
-	if swap_live:
-		k *= 1.0 - _swap_gone()
-	return k
-
-
-#  막 짙기(세로) — 먼 턱 위 dim_top, 턱 밑 dim_seam 에 걸쳐 펠트 짙기 dim_felt 로.
-func _legb_band_a(y: float) -> float:
-	var fy: float = float(TBL.fy)
-	var sm: float = float(LEGB.dim_seam)
-	return lerpf(float(LEGB.dim_top), float(LEGB.dim_felt), clampf((y - (fy - sm)) / sm, 0.0, 1.0))
-
-
-var legb_dim_on := false            # _draw_leg 가 덮개(_cover_draw)를 부르는 동안 — 막을 깐다
-var legb_dim_key := ""              # 막 격자를 마지막으로 지은 「구멍 · 여백」
-var legb_dim_k := -1.0              # 그 격자 색을 마지막으로 매긴 차오름 몫
-var legb_dim_pts := PackedVector2Array()
-var legb_dim_base := PackedFloat32Array()   # 꼭짓점마다 차오름 1 의 짙기
-var legb_dim_cols := PackedColorArray()
-var legb_dim_idx := PackedInt32Array()
-var legb_dim_n := Vector2i.ZERO     # 격자 가로 · 세로 점 수 — 바뀌면 삼각형 차례를 다시 짓는다
-
-
-#  막 — 화면 위끝(HUD 가 그 위에 다시 선다)부터 펠트 앞 턱(TBL.ny)까지. 한 번 그리기의 격자
-#  (꼭짓점 색)다. 줄은 dim_seam 꺾임 두 곳에 맞춰 세로 짙기가 그대로 서고, 구멍 번짐은 촘촘한
-#  칸 사이에서 선형으로 이어진다. 구멍이 안 움직이면 지은 격자를 그대로 내고, 차오름(딜 · 판
-#  갈이)만 바뀌면 색만 다시 매긴다 — 쉬는 동안 매 틀 짓지 않는다. 판 갈이로 테이블이 빠지면
-#  (변환이 오른쪽으로 민다) 막도 같이 밀리므로 왼쪽을 SWAP.dx 만큼 더 덮는다.
-func _legb_dim() -> void:
-	var k: float = _legb_dim_k()
-	if k <= 0.004:
+#  지금 판 밑 빛 웅덩이 — 펠트에 누운 타원 하나(판 테까지 램프 빛 → 가장자리 0). 뜬 몫만큼
+#  짙다 — 다음 판으로 넘어가면 빛도 같이 옮겨 간다. 꼭짓점 색 번짐이라 한 번 그리기다.
+func _legb_pool(i: int, rn: int) -> void:
+	var up: float = _legb_up(i)
+	if up <= 0.01 or _legb_held(i):
 		return
-	var f := _full()
-	var h: Array = _legb_hole()
-	var hc: Vector2 = h[0]
-	var x0: float = f.position.x - 2.0
-	var x1: float = f.end.x + 2.0
-	var y0: float = f.position.y - 2.0
-	var y1: float = float(TBL.ny)
-	var key := "%.1f,%.1f,%.1f,%.1f,%.1f,%.1f" % [hc.x, hc.y, float(h[1]), float(h[2]), x0, y0]
-	if key != legb_dim_key:
-		legb_dim_key = key
-		_legb_dim_build(h, x0, x1, y0, y1)
-		legb_dim_k = -1.0
-	if absf(k - legb_dim_k) > 0.0005:
-		legb_dim_k = k
-		legb_dim_cols.resize(legb_dim_base.size())
-		for i in legb_dim_base.size():
-			legb_dim_cols[i] = Color(LEGB_COL.veil, legb_dim_base[i] * k)
-	RenderingServer.canvas_item_add_triangle_array(get_canvas_item(), legb_dim_idx,
-			legb_dim_pts, legb_dim_cols)
-	if swap_live:
-		#  나가는 테이블이 비운 왼쪽 — 구멍 없는 막(세로 짙기 그대로)
-		var xa: float = x0 - float(SWAP.dx)
-		var fy: float = float(TBL.fy)
-		var sm: float = float(LEGB.dim_seam)
-		var ys := [y0, fy - sm, fy, y1]
-		for j in 3:
-			var ca := Color(LEGB_COL.veil, _legb_band_a(float(ys[j])) * k)
-			var cb := Color(LEGB_COL.veil, _legb_band_a(float(ys[j + 1])) * k)
-			draw_polygon(PackedVector2Array([Vector2(xa, ys[j]), Vector2(x0 + 0.5, ys[j]),
-					Vector2(x0 + 0.5, ys[j + 1]), Vector2(xa, ys[j + 1])]),
-					PackedColorArray([ca, ca, cb, cb]))
-
-
-#  격자 한 축 — [a0, a1] 을 성기게(coarse), 구멍 곁 [d0, d1] 만 촘촘히(fine) 나누고 꺾임(brk)을
-#  끼운다. 구멍에서 먼 칸은 짙기가 한 값이라 성겨도 같은 그림이다.
-func _legb_axis(a0: float, a1: float, d0: float, d1: float, coarse: float, fine: float,
-		brk: Array) -> PackedFloat32Array:
-	var vs: Array = [a0, a1]
-	var v := a0
-	while v < a1:
-		if v < d0 or v > d1:
-			vs.append(v)
-		v += coarse
-	v = maxf(d0, a0)
-	while v < minf(d1, a1):
-		vs.append(v)
-		v += fine
-	for q in brk:
-		if float(q) > a0 and float(q) < a1:
-			vs.append(float(q))
-	vs.sort()
-	var out := PackedFloat32Array()
-	for q in vs:
-		if out.is_empty() or float(q) - out[out.size() - 1] > 0.5:
-			out.append(float(q))
-	return out
-
-
-#  막 격자를 짓는다 — 구멍 곁은 6px 칸, 그 밖은 32 · 24px 칸. 세로 줄은 꺾임(fy − dim_seam ·
-#  fy)에 맞춘다. 꼭짓점마다 차오름 1 의 짙기(legb_dim_base)를 적어 둔다.
-func _legb_dim_build(h: Array, x0: float, x1: float, y0: float, y1: float) -> void:
-	var c: Vector2 = h[0]
-	var rx: float = h[1]
-	var ry: float = h[2]
-	var fy: float = float(TBL.fy)
-	var xs := _legb_axis(x0, x1, c.x - rx - 6.0, c.x + rx + 6.0, 32.0, 6.0, [])
-	var ys := _legb_axis(y0, y1, c.y - ry - 6.0, c.y + ry + 6.0, 24.0, 6.0,
-			[fy - float(LEGB.dim_seam), fy])
-	var nx := xs.size()
-	var ny := ys.size()
-	legb_dim_pts.resize(nx * ny)
-	legb_dim_base.resize(nx * ny)
-	for j in ny:
-		var ba: float = _legb_band_a(ys[j])
-		for i in nx:
-			var q := Vector2(xs[i], ys[j])
-			legb_dim_pts[j * nx + i] = q
-			legb_dim_base[j * nx + i] = ba * _legb_mask(q, h)
-	if legb_dim_n != Vector2i(nx, ny):
-		legb_dim_n = Vector2i(nx, ny)
-		legb_dim_idx.resize((nx - 1) * (ny - 1) * 6)
-		var n := 0
-		for j in ny - 1:
-			for i in nx - 1:
-				var a: int = j * nx + i
-				legb_dim_idx[n] = a
-				legb_dim_idx[n + 1] = a + 1
-				legb_dim_idx[n + 2] = a + nx + 1
-				legb_dim_idx[n + 3] = a
-				legb_dim_idx[n + 4] = a + nx + 1
-				legb_dim_idx[n + 5] = a + nx
-				n += 6
-
-
-#  구멍 안 빛 — 펠트에 램프 빛을 한 겹(lamp_a). 판 **밑**이라 판 그림자가 그 빛 위에 진다.
-#  맑은 자리(번짐 안쪽)는 고루 lamp_a, 번짐을 지나 바깥 테에서 0. 꼭짓점 색 한 번 그리기다.
-func _legb_lamp() -> void:
-	var k: float = _legb_dim_k()
-	if k <= 0.004:
-		return
-	var h: Array = _legb_hole()
-	var c: Vector2 = h[0]
-	var rx: float = h[1]
-	var ry: float = h[2]
-	var fe: float = float(LEGB.hole_fe)
-	var lc := Color(LEGB_COL.lamp, float(LEGB.lamp_a) * k)
-	var n := 40
-	var pts := PackedVector2Array([c])
-	var cols := PackedColorArray([lc])
-	var idx := PackedInt32Array()
-	for j in n:
-		var t: float = TAU * float(j) / float(n)
-		var e := Vector2(cos(t), sin(t))
-		pts.append(c + Vector2(e.x * (rx - fe), e.y * (ry - fe)))
-		cols.append(lc)
-		pts.append(c + Vector2(e.x * rx, e.y * ry))
-		cols.append(Color(lc, 0.0))
-	for j in n:
-		var i0: int = 1 + j * 2
-		var i1: int = 1 + ((j + 1) % n) * 2
-		idx.append_array(PackedInt32Array([0, i0, i1, i0, i0 + 1, i1 + 1, i0, i1 + 1, i1]))
-	RenderingServer.canvas_item_add_triangle_array(get_canvas_item(), idx, pts, cols)
+	var rest := _legb_rest(i, rn)
+	var c: Vector2 = _p2s(rest.x, rest.y, 0.0) + Vector2(0.0, 4.0)
+	var rx: float = _legb_r(rn) * float(LEGB.pool)
+	#  속은 판 테까지 고르게 밝고 그 밖에서 0 으로 진다 — 한가운데에서 바로 지면 판 밖에
+	#  남는 몫이 짙기의 6% 라 웅덩이가 안 보였다.
+	_legb_soft(c, rx, rx * float(TBL.flat), float(LEGB.pool_a) * up, 1.0 / float(LEGB.pool),
+			LEGB_COL.pool)
 
 
 #  번진 그림자 — 속(core 몫까지)은 짙기 a 그대로, 그 밖 띠는 테에서 0 으로 번진다. 꼭짓점 색
-#  삼각형 한 묶음이라 한 번 그리기다(지금 그리기 변환을 탄다).
-func _legb_soft(c: Vector2, rx: float, ry: float, a: float, core: float) -> void:
+#  삼각형 한 묶음이라 한 번 그리기다(지금 그리기 변환을 탄다). col 을 주면 빛 웅덩이다.
+func _legb_soft(c: Vector2, rx: float, ry: float, a: float, core: float,
+		col := Color.BLACK) -> void:
 	var n := 32
 	var pts := PackedVector2Array([c])
-	var cols := PackedColorArray([Color(0, 0, 0, a)])
+	var cols := PackedColorArray([Color(col, a)])
 	var idx := PackedInt32Array()
 	for k in n:
 		var t: float = TAU * float(k) / float(n)
 		var e := Vector2(cos(t) * rx, sin(t) * ry)
 		pts.append(c + e * core)
-		cols.append(Color(0, 0, 0, a))
+		cols.append(Color(col, a))
 		pts.append(c + e)
-		cols.append(Color(0, 0, 0, 0))
+		cols.append(Color(col, 0))
 	for k in n:
 		var i0: int = 1 + k * 2
 		var i1: int = 1 + ((k + 1) % n) * 2
@@ -35774,8 +35551,7 @@ func _legb_one(i: int, rn: int) -> void:
 
 
 #  판 하나 — p 는 판 윗면 한가운데(면 u, w, h) · s 배율 · up 지금 판 몫.
-#  veil — 판 위에 막 색을 이만큼 씌운다(손에 든 다른 판 · _legb_held_draw).
-func _legb_draw(p: Vector3, s: float, rn: int, i: int, up: float, veil := 0.0) -> void:
+func _legb_draw(p: Vector3, s: float, rn: int, i: int, up: float) -> void:
 	var r: float = _legb_r(rn)
 	var kind := _leg_kind(rn)
 	var fl: float = float(TBL.flat)
@@ -35785,18 +35561,14 @@ func _legb_draw(p: Vector3, s: float, rn: int, i: int, up: float, veil := 0.0) -
 	var broken: bool = done and not skipped
 	#  ── 보스의 상시 채널 ───────────────────────────────
 	#  앞으로 칠 보스만 살아 있다. 이미 친 판과 무효가 된 판은 숨을 안 쉰다.
+	#  딜이 끝난 뒤부터 센다. 미끄러져 들어오는 동안 숨 쉬면 딜과 싸운다.
 	var mids: PackedStringArray = boss_mods.get(rn, PackedStringArray()) \
 			if kind == "boss" else PackedStringArray()
 	var mvoid: bool = kind == "boss" and boss_void.has(rn)
 	var boss_live: bool = kind == "boss" and not done and not mvoid and not mids.is_empty()
-	#  2.2 와 3.4 는 서로 약수가 아니다 — 합성 리듬이 메트로놈으로 안 굳는다(옛 간판 그대로).
-	#  딜이 끝난 뒤부터 센다. 미끄러져 들어오는 동안 숨 쉬면 딜과 싸운다.
-	var pt: float = maxf(leg_t - _deal_time(), 0.0)
 	var beat := 0.5
-	var soot := 0.5
 	if boss_live and not motion_off:
-		beat = 0.5 + 0.5 * sin(TAU * pt / 2.2)
-		soot = 0.5 + 0.5 * sin(TAU * pt / 3.4)
+		beat = 0.5 + 0.5 * sin(TAU * maxf(leg_t - _deal_time(), 0.0) / 2.2)
 	var hov: bool = _legb_hov(i, rn)
 	#  엎기 — 가로가 접혔다 펴지며 반을 넘으면 뒷면이다.
 	var fx := 1.0
@@ -35811,53 +35583,41 @@ func _legb_draw(p: Vector3, s: float, rn: int, i: int, up: float, veil := 0.0) -
 	#  ── 그림자 — 매물(_obj_shadow)처럼 빛 쪽으로 밀리고, 떠오르면 커지며 옅어진다 ─────
 	#  속은 판 테까지 짙어 닿은 자리가 서고, 그 밖은 번진다(_legb_soft). 번짐은 뜬 만큼 넓다.
 	var hk: float = minf(1.0 + p.z * float(LEGB.sh_grow), float(LEGB.sh_max))
-	var sa: float = (float(LEGB.sh_a) + (0.06 * soot if boss_live else 0.0)) / (hk * hk)
+	var sa: float = float(LEGB.sh_a) / (hk * hk)
 	var sc: Vector2 = ground + Vector2(0.0, th) + TBL.light * (3.35 + p.z * 0.10)
 	var ro: float = r * s * (hk + float(LEGB.sh_soft) + (hk - 1.0) * 0.8)
 	_legb_soft(sc, ro * fx, ro * fl, sa, r * s * hk * float(LEGB.sh_core) / ro)
 	#  ── 판 몸 ─────────────────────────────────────────
 	#  제 좌표(반지름 r 의 원)를 TBL.flat 로 눌러 판 윗면에 앉힌다 — 이 변환 안의 원 ·
-	#  다각형 · 글자가 다 눕는다.
+	#  다각형이 다 눕는다(글은 판 밑에 똑바로 선다 — _legb_label).
 	var xf := Transform2D(Vector2(s * fx, 0.0), Vector2(0.0, s * fl), at)
 	draw_set_transform_matrix(Transform2D(0.0, shake_off) * xf)
 	var thl: float = th / (s * fl)
-	#  옆면 — 밑 원 + 두 원 사이 띠. 윗면이 덮고 남는 밑 반달이 두께다.
+	#  옆면 — 밑 원 + 두 원 사이 띠. 윗면이 덮고 남는 밑 반달이 두께(나무 옆면)다.
 	var sd_c: Color = C.side
 	draw_circle(Vector2(0.0, thl), r, sd_c)
 	draw_rect(Rect2(-r, 0.0, r * 2.0, thl), sd_c)
 	if face_down:
-		_legb_back(r, rn)
+		_legb_back(r)
 	else:
 		_legb_front(r, rn, kind, mids, mvoid)
-	#  ── 바깥 테 ──────────────────────────────────────
-	#  테는 지금 판도 같다 — 고른 판은 금테가 아니라 빛과 높이로 보인다(막 _legb_dim). 빛 받는
-	#  모서리는 왼쪽 위 사분호 한 줄뿐이다.
+	#  ── 바깥 테 — 그늘 한 줄 · 빛 받는 왼쪽 위 사분호. 보스는 가죽 띠 · 놋쇠 베젤 ────
 	if kind == "boss" and not face_down:
-		_legb_iron(r, beat, hov)
+		_legb_leather(r, beat, hov)
 	else:
 		draw_arc(Vector2.ZERO, r - 0.5, 0.0, TAU, 48, C.edge, 1.0)
 		draw_arc(Vector2.ZERO, r - 0.5, PI, PI * 1.5, 16, C.edge_hi, 1.0)
-	#  ── 지난 판 — 그늘로 가라앉는다(만화식 금은 걷었다 — 상태는 명도와 자세로 말한다) ──
+	#  ── 지난 판 — 그늘에 든다 · 다음 판은 지금 판보다 한 단 물러난다 ────
 	if done:
-		draw_circle(Vector2.ZERO, r + 0.5, Color(C.veil, float(LEGB.sink)))
-	if veil > 0.004:
-		#  윗면 + 옆면을 한 다각형으로(겹쳐 칠하면 겹친 자리만 두 번 어두워진다) — 윗면 원의 위
-		#  반 · 밑 원의 아래 반을 잇는다.
-		var vp := PackedVector2Array()
-		var rv: float = r + 0.5
-		for k in 33:
-			var t: float = PI + PI * float(k) / 32.0
-			vp.append(Vector2(cos(t), sin(t)) * rv)
-		for k in 33:
-			var t: float = PI * float(k) / 32.0
-			vp.append(Vector2(0.0, thl) + Vector2(cos(t), sin(t)) * rv)
-		draw_colored_polygon(vp, Color(C.veil, veil))
+		draw_circle(Vector2.ZERO, r + 0.5, Color(C.cover, float(LEGB.sink)))
+	elif up < 1.0:
+		draw_circle(Vector2.ZERO, r + 0.5, Color(C.cover, float(LEGB.rest) * (1.0 - up)))
 	draw_set_transform(shake_off)
 	if broken:
 		_legb_darts(at, r, s, rn)
 
 
-#  앞면 — 숫자 고리(눈금) · 스무 칸 · 띠 · 불 · 철사 · 보스 제약의 모양.
+#  앞면 — 참나무 링 · 스무 칸 · 띠 · 불 · 철사 · 놋쇠 비드 · 보스 제약의 모양.
 func _legb_front(r: float, rn: int, kind: String, mids: PackedStringArray, mvoid: bool) -> void:
 	var C: Dictionary = LEGB_COL
 	var rp: float = r * _legb_play(r, kind)
@@ -35916,46 +35676,41 @@ func _legb_front(r: float, rn: int, kind: String, mids: PackedStringArray, mvoid
 	#  빛 — 왼쪽 위가 밝고 오른쪽 아래가 어둡다(본판 _board_light 의 말씨를 한 겹으로).
 	draw_arc(Vector2.ZERO, rp * 0.5, PI * 1.05, PI * 1.45, 10, Color(1, 1, 1, 0.07), rp * 0.9)
 	draw_arc(Vector2.ZERO, rp * 0.5, PI * 0.05, PI * 0.45, 10, Color(0, 0, 0, 0.12), rp * 0.9)
-	#  숫자 고리 — 숫자 대신 칸 경계마다 1px 눈금(칸 리듬만 남긴다). 한 판에 스물, 세 판에 예순
-	#  개인 6px 숫자는 글이 아니라 자글자글한 무늬였다(「아... 좀 촌스러운데..? 좀 세련된 디자인
-	#  없어?」, 2026-10-04). 보스는 쇠테(_legb_iron — r − 3 까지) 안쪽에서 멈춘다.
-	var hi: float = r - (3.4 if kind == "boss" else 1.5)
-	var turn: bool = on and _legb_mod_on(mids, "turn")
-	if not turn:
-		for j in 20:
-			var a: float = TAU * float(j) / 20.0 - PI / 20.0
-			var dv := Vector2(sin(a), -cos(a))
-			draw_line(dv * (rp + 1.0), dv * hi, C.tick, 1.0)
-	else:
-		#  돌린 판만 숫자를 쓴다 — 뒤섞인 숫자가 곧 그 판의 얼굴이다. 고리 한가운데에 서되
-		#  **제 폭을 재어** 고리 안에 앉힌다(ext 는 글자 상자를 반지름 방향에 비춘 반 길이).
-		#  판 번호를 씨로 뒤섞는다.
-		var nums: Array = GameData.SECTORS_BASE.duplicate()
-		var rg := RandomNumberGenerator.new()
-		rg.seed = rn * 9137 + 5
-		for j in range(nums.size() - 1, 0, -1):
-			var q: int = rg.randi() % (j + 1)
-			var tmp = nums[j]
-			nums[j] = nums[q]
-			nums[q] = tmp
-		var nsz: int = int(LEGB.nsz) if kind == "big" else int(LEGB.nsz_s)
-		var asc: float = font_sm.get_ascent(nsz) if font_sm != null else float(nsz)
-		var hh: float = asc * float(INK.num) * 0.5
-		var lo: float = rp + 0.6
-		for j in 20:
-			var a: float = TAU * float(j) / 20.0
-			var dv := Vector2(sin(a), -cos(a))
-			var ns: String = str(nums[j])
-			var ext: float = _legb_num_w(ns, nsz) * 0.5 * absf(dv.x) + hh * absf(dv.y)
-			var d: float = (lo + hi) * 0.5
-			if lo + ext <= hi - ext:
-				d = clampf(d, lo + ext, hi - ext)
-			var q := dv * d
-			draw_string(font_sm, q + Vector2(-12.0, hh), ns,
-					HORIZONTAL_ALIGNMENT_CENTER, 24.0, nsz, C.num)
-	#  막힌 칸 — 검게 지운다.
+	#  놋쇠 비드 — 칸이 끝나고 링이 시작하는 자리 1px.
+	draw_arc(Vector2.ZERO, rp + 0.5, 0.0, TAU, 48, C.bead, 1.0)
+	#  막힌 칸 — 맞춰 끼운 참나무 쪽.
 	if on and _legb_mod_on(mids, "dead"):
-		_legb_plank(r, rp, _legb_mod_v(mids, "dead"))
+		_legb_plank(rp, _legb_mod_v(mids, "dead"))
+	#  숫자 — 돌린 판만. 제약이 판 얼굴(숫자 차례)을 바꾸는 유일한 경우라 남긴다. 링 한가운데에
+	#  서되 **제 폭을 재어** 링 안에 앉힌다. 3 · 9 시의 두 자리 수는 가로가 길어 안쪽으로
+	#  당기고, 6 · 12 시는 높이만 본다(ext 는 글자 상자를 반지름 방향에 비춘 반 길이). 판 번호를
+	#  씨로 뒤섞는다.
+	if not (on and _legb_mod_on(mids, "turn")):
+		return
+	var nums: Array = GameData.SECTORS_BASE.duplicate()
+	var rg := RandomNumberGenerator.new()
+	rg.seed = rn * 9137 + 5
+	for j in range(nums.size() - 1, 0, -1):
+		var q: int = rg.randi() % (j + 1)
+		var tmp = nums[j]
+		nums[j] = nums[q]
+		nums[q] = tmp
+	var nsz: int = int(LEGB.nsz) if kind == "big" else int(LEGB.nsz_s)
+	var asc: float = font_sm.get_ascent(nsz) if font_sm != null else float(nsz)
+	var hh: float = asc * float(INK.num) * 0.5
+	var lo: float = rp + 0.6
+	#  보스는 가죽 띠(_legb_leather — r − 3 까지)가 링 바깥을 덮는다 — 그 안쪽까지만 쓴다.
+	var hi: float = r - (3.6 if kind == "boss" else 1.4)
+	for j in 20:
+		var a: float = TAU * float(j) / 20.0
+		var dv := Vector2(sin(a), -cos(a))
+		var ns: String = str(nums[j])
+		var ext: float = _legb_num_w(ns, nsz) * 0.5 * absf(dv.x) + hh * absf(dv.y)
+		var d: float = (lo + hi) * 0.5
+		if lo + ext <= hi - ext:
+			d = clampf(d, lo + ext, hi - ext)
+		draw_string(font_sm, dv * d + Vector2(-12.0, hh), ns,
+				HORIZONTAL_ALIGNMENT_CENTER, 24.0, nsz, C.num)
 
 
 #  숫자 하나의 잉크 폭 — 처음 한 번 재어 둔다(legb_geo 에 크기 · 글자 열쇠로).
@@ -35983,55 +35738,63 @@ func _legb_hatch(j: int, rp: float, n: int, col: Color) -> void:
 		draw_line(c - nv * hw - dv * hw, c + nv * hw + dv * hw, col, 0.8)
 
 
-#  뒷면 — 엎어 둔 판(건너뜀). 무광 원판에 숫자 고리 자리의 1px 고리 하나, 한가운데 거는
-#  걸쇠 막대 하나. 섬유 결 · 쇠판 · 죔쇠 · 딱지를 붙인 갈색 원판은 맨홀 · 냄비 뚜껑으로
-#  읽혔다(「아... 좀 촌스러운데..? 좀 세련된 디자인 없어?」, 2026-10-04). 엎은 자세가 이미
-#  「건너뛴 판」을 말한다 — 더 얹을 것이 없다.
-func _legb_back(r: float, _rn: int) -> void:
+#  뒷면 — 엎어 둔 판(건너뜀). 참나무 뒷판에 나이테 호 셋(반원씩 엇갈려 돈다)과 한가운데
+#  놋쇠 걸쇠판 하나. 옛 뒷면(삼 섬유 · 쇠판 · 죔쇠 넷 · 제조 딱지)은 갈색 원판에 쇠붙이를
+#  붙여 맨홀 · 냄비 뚜껑으로 읽혔다.
+func _legb_back(r: float) -> void:
 	var C: Dictionary = LEGB_COL
-	draw_circle(Vector2.ZERO, r, C.back)
-	draw_arc(Vector2.ZERO, r * 0.88, 0.0, TAU, 40, C.back_line, 1.0)
-	draw_rect(Rect2(-4.0, -1.0, 8.0, 2.0), C.back_line)
+	draw_circle(Vector2.ZERO, r, C.ring)
+	for ra in [[0.35, 0.1], [0.60, 0.9], [0.82, 1.45]]:
+		var a0: float = PI * float(ra[1])
+		draw_arc(Vector2.ZERO, r * float(ra[0]), a0, a0 + PI, 24, C.grain, 1.0)
+	#  걸쇠판 8x3 — 윗줄이 빛을 받는다.
+	draw_rect(Rect2(-4.0, -1.5, 8.0, 3.0), C.brass)
+	draw_rect(Rect2(-4.0, -1.5, 8.0, 1.0), C.brass_hi)
 
 
-#  보스 쇠테 — 짙은 붉은 띠(2px) 한 줄과 그 바깥 1px 붉은 그늘. 바깥 줄은 빛이 오는 왼쪽 위
-#  반호만 밝다. 숨(beat)은 그 바깥 줄 밝기만 ±10% 민다. 커서가 얹히면 띠가 상아(txt) 쪽으로
-#  25% 밝아진다. 징 열 개 · 분홍 띠는 공작 소품 · 할로윈 장식으로 읽혀 걷었다(2026-10-04).
-func _legb_iron(r: float, beat: float, hov: bool) -> void:
+#  보스 띠 — 판 바깥을 두른 가죽 띠(2.5px)와 그 바깥 놋쇠 베젤 1px. 숨(beat)은 띠의 밝기만
+#  ±LEGB.breath 로 민다. 커서가 얹히면 베젤이 밝은 놋쇠다. 옛 쇠테(분홍빛 붉은 띠 · 연어색 징
+#  열 · 심장처럼 뛰는 그림자)는 공작 소품 · 할로윈 장식으로 읽혔다.
+func _legb_leather(r: float, beat: float, hov: bool) -> void:
 	var C: Dictionary = LEGB_COL
-	var band: Color = C.iron
-	var hi: Color = Color(C.iron_hi)
-	if beat >= 0.5:
-		hi = hi.lightened(0.10 * (beat - 0.5) * 2.0)
-	else:
-		hi = hi.darkened(0.10 * (0.5 - beat) * 2.0)
-	if hov:
-		band = band.lerp(C.txt, 0.25)
-		hi = hi.lerp(C.txt, 0.25)
-	draw_arc(Vector2.ZERO, r - 2.0, 0.0, TAU, 56, band, 2.0)
-	draw_arc(Vector2.ZERO, r - 0.5, 0.0, TAU, 56, band, 1.0)
-	draw_arc(Vector2.ZERO, r - 0.5, PI * 0.75, PI * 1.75, 28, hi, 1.0)
+	var b: float = float(LEGB.breath) * (beat * 2.0 - 1.0)
+	var band: Color = Color(C.leather).lightened(b) if b >= 0.0 else Color(C.leather).darkened(-b)
+	draw_arc(Vector2.ZERO, r - 2.25, 0.0, TAU, 56, band, 2.5)
+	draw_arc(Vector2.ZERO, r - 0.5, 0.0, TAU, 56, C.brass_hi if hov else C.brass, 1.0)
 
 
-#  막힌 칸 — 그 칸을 검게 지운다. 무광 검은 띠(칸 길이대로 · 폭은 옛 판자 그대로)에 길이 방향
-#  1px 두 줄, 그림자는 1px 만 비킨다. 못 박은 주황 판자는 공작 소품으로 읽혔다(2026-10-04).
-func _legb_plank(r: float, rp: float, j: int) -> void:
+#  막힌 칸 — 그 칸에 맞춰 끼운 참나무 쪽(칸 폭 그대로 · 불 바깥에서 칸 끝까지). 빛 쪽 변
+#  1px 이 밝고, 양 끝에 놋쇠 핀 둘. 그림자는 1px 만 비킨다. 옛 판자(칸보다 넓게 테 밖까지
+#  삐져나오고 못 둘)는 덧댄 공작 소품이었다.
+func _legb_plank(rp: float, j: int) -> void:
 	var C: Dictionary = LEGB_COL
-	var a: float = TAU * float(j) / 20.0
-	var dv := Vector2(sin(a), -cos(a))
-	var nv := Vector2(-dv.y, dv.x)
-	var hw: float = rp * 0.20
-	var r0: float = rp * 0.20
-	var r1: float = r - 1.5
-	var pts := PackedVector2Array([dv * r0 - nv * hw, dv * r1 - nv * hw,
-			dv * r1 + nv * hw, dv * r0 + nv * hw])
+	var a0: float = TAU * float(j) / 20.0 - PI / 20.0
+	var a1: float = a0 + TAU / 20.0
+	var r0: float = rp * float(LEGB.bull_o)
+	var pts: PackedVector2Array = annulus_at(Vector2.ZERO, r0, rp, a0, a1, 4)
 	var sh := PackedVector2Array()
 	for q in pts:
 		sh.append(q + Vector2(1.0, 1.0))
-	draw_colored_polygon(sh, Color(0, 0, 0, 0.45))
-	draw_colored_polygon(pts, C.blk)
-	for g in [-0.45, 0.45]:
-		draw_line(dv * (r0 + 1.5) + nv * hw * g, dv * (r1 - 1.5) + nv * hw * g, C.blk_line, 1.0)
+	draw_colored_polygon(sh, Color(C.cover, 0.6))
+	draw_colored_polygon(pts, C.ring)
+	#  빛 쪽 변 — 바깥 호 · 두 옆변 가운데 바깥 법선이 왼쪽 위(빛)를 가장 많이 보는 변 하나.
+	var dm := Vector2(sin((a0 + a1) * 0.5), -cos((a0 + a1) * 0.5))
+	var e0 := Vector2(sin(a0), -cos(a0))
+	var e1 := Vector2(sin(a1), -cos(a1))
+	var lit := func(n: Vector2) -> float: return n.y + n.x * 0.5
+	var s_out: float = lit.call(dm)
+	var s0: float = lit.call(-Vector2(cos(a0), sin(a0)))
+	var s1: float = lit.call(Vector2(cos(a1), sin(a1)))
+	if s_out <= s0 and s_out <= s1:
+		draw_arc(Vector2.ZERO, rp - 0.5, a0 - PI * 0.5, a1 - PI * 0.5, 6, C.edge_hi, 1.0)
+	elif s0 <= s1:
+		draw_line(e0 * r0, e0 * rp, C.edge_hi, 1.0)
+	else:
+		draw_line(e1 * r0, e1 * rp, C.edge_hi, 1.0)
+	#  놋쇠 핀 둘 — 칸 한가운데 줄의 안 · 바깥 끝.
+	for t in [0.22, 0.86]:
+		var c: Vector2 = dm * lerpf(r0, rp, float(t))
+		draw_rect(Rect2(c - Vector2(0.5, 0.5), Vector2(1.0, 1.0)), C.brass_hi)
 
 
 #  꽂힌 다트 — 이긴 판에 둘 · 셋(판 번호가 씨). 촉이 판에 박히고 자루가 위(화면 위)로 선다.
@@ -36095,106 +35858,92 @@ func _legb_mod_v(mids: PackedStringArray, id: String) -> int:
 	return int(_mod_row(id).get("v", 0))
 
 
-#  ── 판 밑 글 두 줄 ─────────────────────────────────────
-#  금 명판(트로피 상패 · 금괴로 읽혔다)과 거기 새긴 눌린 글 대신, 판 밑 펠트 위에 글씨로
-#  쓴다(「아... 좀 촌스러운데..? 좀 세련된 디자인 없어?」, 2026-10-04). 정보는 소품이 아니라
-#  글씨로 준다 — Paperlogy 두 굵기만(이름 SemiBold 11 · 목표 수 Bold 18).
-#    1줄  이름 — 보스는 제약 아이콘(MODK.r_lo)이 앞에 선다(겹치기면 아이콘 둘 · 이름 없음).
-#         오른쪽에 보상 — 3x3 놋쇠 점 n 개(지금 판은 한 단 밝다).
-#    2줄  「목표」 + 수. 수는 지금 판이 가장 밝다(txt_now) · 문턱(목표가 밀린 판)은 붉다.
-#  지난 판은 두 줄 다 꺼진 글(txt_off) — 2줄이 「클리어」 · 「건너뜀」 이고 점은 없다.
-#  글은 판 칸 가운데에 화면에 똑바로 선다(누운 변환 · 기울기 없음 — 찌그러진 글꼴은 늘 싸
-#  보였다). 막(_legb_dim) 위에 쓰므로 막에 안 묻힌다. 바닥선은 정수 px 다.
-#  **목표는 _target_at 한 자를 지난다** — 「던진다」 단추 · 판정과 같은 수다.
+#  ── 판 밑 글 — 상점 값표의 말씨 ─────────────────────────
+#  판 칸 가운데 x 에 가운데 정렬하고 화면에 **똑바로** 쓴다 — 누운 변환에 눌리거나 기운
+#  글꼴은 언제나 싸 보였다(옛 명판의 「목표 42」 가 세로 0.79 배 · 빗변 기울기를 탔다).
+#    1줄  이름(font_sm 11 · 상아 그늘) · gap · 보상(상점 값과 같은 금화 글리프 11 에 「+」 —
+#         값 대신 「받는 돈」 으로 읽힌다). 보스는 이름 앞에 앞치마 보스 표(_boss_plaque)와
+#         같은 제약 아이콘. 겹치기면 아이콘 둘이 「축이 둘」을 말하고 이름 줄은 걷는다.
+#    2줄  「목표 N」(font Bold 16) — 지금 판은 C_TXT, 문턱이 걸리면 배수 붉음.
+#  지난 판은 「클리어」 · 「건너뜀」 한 줄만 꺼진 글로 — 금화는 지운다(받을 돈이 아니다).
+#  **목표는 _target_at 한 자를 지난다** — 「문턱」이 걸리면 이 수가 밀리고 붉다.
+#  폭은 _row_rect 칸 안에서 자른다(_elide).
 func _legb_label(i: int, rn: int) -> void:
-	var la: float = _legb_label_a(i)
-	if la <= 0.0:
+	var pa: float = _legb_label_a(i)
+	if pa <= 0.0:
 		return
 	var C: Dictionary = LEGB_COL
-	var rr := _row_rect(i, GameData.legs_per_round())
-	var cx: float = roundf(rr.get_center().x)
-	var w: float = rr.size.x
+	var cell: Rect2 = _row_rect(i, GameData.legs_per_round())
+	var cx: float = cell.get_center().x
+	var cw: float = cell.size.x
+	var base: float = float(LEGB.foot) + float(LEGB.th_boss)
+	var y1: float = base + float(LEGB.l1)
+	var y2: float = base + float(LEGB.l2)
 	var kind := _leg_kind(rn)
 	var done: bool = rn < leg_no
-	var now: bool = rn == leg_no
-	var rise: float = roundf(3.0 * (1.0 - la))
-	var y1: float = _legb_lab_y(0) + rise
-	var y2: float = _legb_lab_y(1) + rise
 	var mids: PackedStringArray = boss_mods.get(rn, PackedStringArray()) \
 			if kind == "boss" else PackedStringArray()
 	var mvoid: bool = kind == "boss" and boss_void.has(rn)
-	var nsz: int = int(LEGB.nm_sz)
-	#  ── 1줄 — [제약 아이콘] 이름 · 보상 점 ──
-	var n_ico: int = mini(mids.size(), 2)
+	var nsz: int = int(LEGB.name_sz)
+	var gsz: int = int(LEGB.goal_sz)
+	#  ── 1줄 — [아이콘] 이름 · 보상 ──
 	var nm := GameData.leg_name(rn)
-	if n_ico > 0:
-		nm = String(_mod_row(String(mids[0])).get("n", "")) if n_ico == 1 else ""
-	var rw: int = 0 if done else mini(GameData.reward_of(rn), 8)
-	var dot: float = float(LEGB.dot)
-	var dg: float = float(LEGB.dot_gap)
-	var dots_w: float = (dg * float(rw - 1) + dot) if rw > 0 else 0.0
-	var ico_w: float = float(LEGB.ico_w) * float(n_ico)
-	var room: float = w - 8.0 - ico_w - (dots_w + 6.0 if rw > 0 else 0.0)
+	var n2: int = mini(mids.size(), 2)
+	if n2 == 1:
+		nm = String(_mod_row(String(mids[0])).get("n", ""))
+	elif n2 == 2:
+		nm = ""
+	var ico: float = float(LEGB.ico)
+	var iw: float = (ico * float(n2) + float(LEGB.ico_gap)) if n2 > 0 else 0.0
+	var rt := "+%d" % GameData.reward_of(rn)
+	var rw: float = 0.0 if done else gold_w(rt, nsz)
+	var gap: float = float(LEGB.gap) if (nm != "" and rw > 0.0) else 0.0
+	var room: float = cw - iw - gap - rw
 	nm = _elide(nm, room, nsz) if nm != "" else ""
-	var nm_w: float = 0.0
-	if nm != "" and font_sm != null:
-		nm_w = ceilf(font_sm.get_string_size(nm, HORIZONTAL_ALIGNMENT_LEFT, -1, nsz).x)
-	var sep: float = 6.0 if rw > 0 and (nm_w > 0.0 or n_ico > 0) else 0.0
-	var tot: float = ico_w + nm_w + sep + dots_w
-	var x: float = roundf(cx - tot * 0.5)
-	var c1: Color = Color(C.txt_off if done else C.txt, la)
-	for mi in n_ico:
-		var cp := Vector2(x + 6.0, y1 - 4.0)
-		_icon_modifier(cp, float(MODK.r_lo), String(mids[mi]), 0.55 if (mvoid or done) else 0.0,
-				la, float(MODK.r_lo))
+	var nw: float = font_sm.get_string_size(nm, HORIZONTAL_ALIGNMENT_LEFT, -1, nsz).x \
+			if (font_sm != null and nm != "") else 0.0
+	var x: float = roundf(cx - (iw + nw + gap + rw) * 0.5)
+	var dim: bool = done or mvoid
+	var asc: float = font_sm.get_ascent(nsz) if font_sm != null else float(nsz)
+	var my: float = y1 - asc * (float(INK.top) - float(INK.bot)) * 0.5
+	for k in n2:
+		var c := Vector2(x + ico * float(k) + ico * 0.5, my)
+		draw_circle(c, ico * 0.5, Color(Color(SIGN_COL.boss.rim).darkened(0.15), pa))
+		draw_circle(c, ico * 0.5 - 1.5, Color(Color(SIGN_COL.boss.face).darkened(0.45), pa))
+		_icon_modifier(c, float(MODK.r_lo), String(mids[k]), 0.55 if dim else 0.0, pa)
 		if mvoid:
-			draw_line(cp + Vector2(-5.0, 5.0), cp + Vector2(5.0, -5.0), Color(C.txt, la), 1.0)
-		x += float(LEGB.ico_w)
+			draw_line(c + Vector2(-7.0, 7.0), c + Vector2(7.0, -7.0), Color(C_TXT, 0.7 * pa), 1.5)
+	x += iw
 	if nm != "":
-		draw_string(font_sm, Vector2(x, y1), nm, HORIZONTAL_ALIGNMENT_LEFT, -1, nsz, c1)
-		x += nm_w
-	if rw > 0:
-		x += sep
-		var pc: Color = Color(C.pip_now if now else C.pip, la)
-		for k in rw:
-			draw_rect(Rect2(x + float(k) * dg, y1 - 6.0, dot, dot), pc)
-	#  ── 2줄 — 목표(또는 클리어 · 건너뜀) ──
-	if done:
-		var t2: String = "건너뜀" if bool(leg_skipped.get(rn, false)) else "클리어"
-		draw_string(font_sm, Vector2(rr.position.x, y2), t2, HORIZONTAL_ALIGNMENT_CENTER, w,
-				int(LEGB.done_sz), Color(C.txt_off, la))
-		return
-	var hot := false
-	for m in _leg_mods(rn):
-		if String(m.k) == "target_mul":
-			hot = true
-	var lab := "목표"
-	var num: String = GameData.big(_target_at(rn))
-	var tsz: int = int(LEGB.tg_sz)
-	var gap: float = float(LEGB.lab_gap)
-	var lw: float = 22.0
-	var nw: float = float(num.length()) * 11.0
-	if font_sm != null and font != null:
-		lw = ceilf(font_sm.get_string_size(lab, HORIZONTAL_ALIGNMENT_LEFT, -1, nsz).x)
-		nw = ceilf(font.get_string_size(num, HORIZONTAL_ALIGNMENT_LEFT, -1, tsz).x)
-	var nc: Color = C.txt_hot if hot else (C.txt_now if now else C.txt)
-	var x2: float = roundf(cx - (lw + gap + nw) * 0.5)
-	draw_string(font_sm, Vector2(x2, y2), lab, HORIZONTAL_ALIGNMENT_LEFT, -1, nsz, Color(C.txt, la))
-	draw_string(font, Vector2(x2 + lw + gap, y2), num, HORIZONTAL_ALIGNMENT_LEFT, -1, tsz,
-			Color(nc, la))
+		draw_string(font_sm, Vector2(x, y1), nm, HORIZONTAL_ALIGNMENT_LEFT, -1, nsz,
+				Color(C.past if done else C.name, pa))
+	x += nw + gap
+	if rw > 0.0:
+		draw_gold_at(x, y1, rt, nsz, Color(C_GOLD, pa))
+	#  ── 2줄 — 목표 · 클리어 · 건너뜀 ──
+	var c2: Color = C.past if done else (C.goal_now if rn == leg_no else C.goal)
+	if not done:
+		for m in _leg_mods(rn):
+			if String(m.k) == "target_mul":
+				c2 = C.goal_hot
+	draw_string(font, Vector2(cx - cw * 0.5, y2), _elide(_legb_goal(rn), cw, gsz),
+			HORIZONTAL_ALIGNMENT_CENTER, cw, gsz, Color(c2, pa))
 
 
-#  글 줄의 바닥선(화면 y) — 0 이름 · 1 목표. 세 판이 한 줄에 서게 판 두께는 보스 것으로 잰다.
-func _legb_lab_y(line: int) -> float:
-	var b: float = float(LEGB.foot) + float(LEGB.th_boss)
-	return roundf(b + float(LEGB.tg_dy if line == 1 else LEGB.nm_dy))
+#  판 밑 둘째 줄 — 목표 · 클리어 · 건너뜀.
+func _legb_goal(rn: int) -> String:
+	if rn < leg_no:
+		return "건너뜀" if bool(leg_skipped.get(rn, false)) else "클리어"
+	return "목표 %s" % GameData.big(_target_at(rn))
 
 
-#  글이 선 몫 0..1 — 제 판이 닿는 틀(_legh_land)부터 plate_in 동안. 움직임을 끄면 늘 1.
+#  판 밑 글이 선 몫 0..1 — 제 판이 닿는 틀(_legh_land)부터 label_in 동안. 움직임을 끄면 늘 1.
+#  딜 — 판이 아직 손에 있는데 글부터 깔려 있으면 판을 놓는 것이 아니라 인쇄된 자리에 카드를
+#  돌리는 것으로 읽혔다(검토).
 func _legb_label_a(i: int) -> float:
 	if motion_off:
 		return 1.0
-	return clampf((leg_t - _legh_land(i)) / float(LEGB.plate_in), 0.0, 1.0)
+	return clampf((leg_t - _legh_land(i)) / float(LEGB.label_in), 0.0, 1.0)
 
 # ══════════════════════════════════════════════════════════
 #  판 손 — 상인이 판을 내려놓고, 고른 판을 집어 든다 (2026-10-04)
@@ -36594,14 +36343,7 @@ func _legb_held_draw() -> void:
 		var rn: int = _round_first() + c
 		var hp: Vector3 = legh_hold_prev[i]
 		var up: float = _legb_up(c)
-		#  손에 든 판은 막(_legb_dim) **위**다(손과 같은 층). 지금 판이 아니면 막이 그 자리에 줄
-		#  그늘을 판에 직접 씌운다 — 안 씌우면 딜에서 다른 판이 손에서는 밝다가 펠트에 닿는 틀에
-		#  막 밑으로 들어가며 툭 어두워졌다(촬영, 2026-10-04).
-		var vl := 0.0
-		if rn != leg_no:
-			var at: Vector2 = _p2s(hp.x, hp.y, hp.z)
-			vl = _legb_band_a(at.y) * _legb_mask(at, _legb_hole()) * _legb_dim_k()
-		_legb_draw(hp, 1.0 + (float(LEGB.gs) - 1.0) * up, rn, c, up, vl)
+		_legb_draw(hp, 1.0 + (float(LEGB.gs) - 1.0) * up, rn, c, up)
 
 
 # 화면 x 를 펠트 폭에 맞춰 좁힌다. 펠트는 y 마다 폭이 다르고(창구 빗변),
