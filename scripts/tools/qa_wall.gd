@@ -13,12 +13,23 @@ extends SceneTree
 #  창이 있으면:
 #    ⑤ 제목에는 안 짓고 판 고르기에서 미리 짓는다 · settle 틀 뒤에는 굽기를 멈춘다(매 틀 안 굽는다)
 #       · 다 구우면 그림 한 장(wall3_tex)만 쥐고 화판은 2px 로 놓는다(렌더 버퍼 VRAM)
-#    ⑥ 화판의 한가운데가 BC(반 픽셀 안)이고 여백까지 덮는다 · 한 텍셀 = 창 한 픽셀(비정수 배율)
-#    ⑦ 판 테가 바뀌면 다시 굽고 링이 따라간다
+#    ⑥ 화판의 한가운데가 BC(논리 반 px 안)이고 여백까지 덮는다 · 한 텍셀 = 논리 한 px
+#       (2026-10-04 「한 줄기 빛」 — 상점 테이블과 같은 밀도로 굽는다. 옛 검사는 「한 텍셀 = 창
+#       한 픽셀」 이었다 — 창 해상도로 구운 매끈한 벽이 촌스러움의 첫째였다)
+#    ⑦ 판 테가 바뀌면 다시 굽고 링이 따라간다(안쪽 끝이 판 테 밑 2px — 1:1 계단을 판 테가 덮는다)
 #    ⑧ 창이 16:10 으로 바뀌면 다시 맞춰 여백까지 덮는다 · HUD 띠 위 여백이 C_PANEL 판때기가 아니다
 #    ⑨ 화면 픽셀 — 판 옆 판자 자리가 켜면 C_BG 가 아니고 끄면 C_BG 다
 #    ⑩ 정산 → 상점 판 갈이 첫 틀이 정산 그림과 같다(글자 · HUD 밖 열네 점)
 #    ⑪ 판 갈이 첫 틀에는 꽂이를 안 그리고(테이블이 덮고 있다) 테이블이 비켜나면 그린다
+#    ⑫ 판 갈이의 벽 램프(2026-10-05 「① 던지기 + ② 판 고르기」) — 들어갈 때 테이블이 다 빠질
+#       때까지 꺼져 있다가 판이 서는 만큼 켜지고, 나올 때 첫 틀은 켜진 채(정산과 같은 그림)다.
+#       상점 불(_wall3_dim)은 첫 틀 · 끝 틀 0 이고 lamp_dark 를 안 넘는다 — 첫 틀이 상점 그대로다.
+#       램프는 덮개가 아니라 램프 끈 벽 한 장(wall3_off)으로 꺼진다(창이 있을 때 — 켠 장과 같은
+#       크기 · 판 자리 위 판자가 켠 장보다 어둡다 · 굽기가 끝나면 램프를 다시 켰다).
+#    ⑬ 넓은 · 높은 창의 판 갈이(16:10 · 21:9 · 4:3) — 테이블이 다 빠진 틀에 테이블 왼끝이 화면
+#       오른끝 밖이고, 판이 누운 틀에 누운 판 윗변이 화면 아랫끝 밖이다(여백을 센 이동 — 옛 값은
+#       21:9 에서 카운터 조각 41px 이, 4:3 에서 누운 판이 남았다)
+#    ⑥ 에 덧붙여 — 흔들림의 소수 몫을 타도 벽이 논리 px 격자에 앉는다
 const Save = preload("res://scripts/save.gd")
 const Dev = preload("res://scripts/dev.gd")
 const Wall3D = preload("res://scripts/wall3d.gd")
@@ -179,10 +190,17 @@ func _run() -> void:
 	var r: Rect2 = g._wall3_rect()
 	var sc: float = root.get_final_transform().get_scale().x
 	var cd: Vector2 = (r.get_center() - g.BC).abs()
-	_ok("화판 한가운데가 BC(창 반 픽셀 안)", cd.x <= 0.5 / sc + 0.001 and cd.y <= 0.5 / sc + 0.001,
+	_ok("화판 한가운데가 BC(논리 반 px 안)", cd.x <= 0.5 + 0.001 and cd.y <= 0.5 + 0.001,
 			"%s · 배율 %.3f" % [r.get_center(), sc])
 	_ok("화판이 여백까지 덮는다", r.encloses(g._full()), "%s ⊇ %s" % [r, g._full()])
-	_ok("한 텍셀 = 창 한 픽셀", _texel_ok(r, sc), "%s · 배율 %.3f / %.3f" % [g.wall3_px, sc, g.wall3_kf])
+	_ok("한 텍셀 = 논리 한 px(상점 테이블과 같은 밀도)", _texel_ok(r), "%s · 굽는 배율 %.3f" % [g.wall3_px, g.wall3_kf])
+	#  흔들림 — 반 px 흔들림을 그대로 타면 nearest 결이 틀마다 다른 줄에서 두 번 찍혀 일렁인다.
+	var grid := true
+	for off in [Vector2(0.3, 0.7), Vector2(-1.4, 2.6), Vector2(5.5, -3.25)]:
+		var rr: Rect2 = g._wall3_rect(off)
+		var q: Vector2 = rr.position + off
+		grid = grid and absf(q.x - roundf(q.x)) < 0.001 and absf(q.y - roundf(q.y)) < 0.001
+	_ok("흔들려도 벽이 논리 px 격자에 앉는다(결이 안 일렁인다)", grid)
 
 	# ── ⑦ 판 테가 바뀌면 ──
 	var r0: float = g.R
@@ -190,8 +208,8 @@ func _run() -> void:
 	await _tick(1)
 	_ok("판 테가 바뀌면 다시 굽는다", g.wall3_fresh > 0, "남은 틀 %d" % g.wall3_fresh)
 	var ring: MeshInstance3D = vp.get_node("Wall/Ring")
-	var want: float = (g._wall3_ro() - 1.0) / Wall3D.S
-	_ok("링 안쪽 끝이 판 테 밑 1px", absf((ring.mesh as TorusMesh).inner_radius - want) < 0.0001,
+	var want: float = (g._wall3_ro() - 2.0) / Wall3D.S
+	_ok("링 안쪽 끝이 판 테 밑 2px", absf((ring.mesh as TorusMesh).inner_radius - want) < 0.0001,
 			"%.4f / %.4f" % [(ring.mesh as TorusMesh).inner_radius, want])
 	g.R = r0
 	await _tick(st + 4)
@@ -224,8 +242,7 @@ func _run() -> void:
 	_ok("16:10 — 여백이 생긴다", g.view_pad.y > 0.0, str(g.view_pad))
 	_ok("16:10 — 화판이 여백까지 덮는다", r.encloses(g._full()), "%s ⊇ %s" % [r, g._full()])
 	_ok("16:10 — 다시 굽고 멈췄다", vp.render_target_update_mode == SubViewport.UPDATE_DISABLED)
-	sc = root.get_final_transform().get_scale().x
-	_ok("16:10 — 한 텍셀 = 창 한 픽셀(배율 %.2f)" % sc, _texel_ok(r, sc), str(g.wall3_px))
+	_ok("16:10 — 한 텍셀 = 논리 한 px", _texel_ok(r), str(g.wall3_px))
 	g.queue_redraw()
 	await RenderingServer.frame_post_draw
 	im = root.get_texture().get_image()
@@ -235,6 +252,27 @@ func _run() -> void:
 		var c := _px(im, Vector2(x, -g.view_pad.y * 0.5))
 		far = maxf(far, Vector3(c.r - pan.r, c.g - pan.g, c.b - pan.b).length())
 	_ok("16:10 — HUD 띠 위 여백이 판때기(C_PANEL)가 아니라 벽이다", far > 0.02, "가장 먼 거리 %.3f" % far)
+	# ── ⑬ 넓은 · 높은 창의 판 갈이 ──
+	for sz in [Vector2i(1440, 900), Vector2i(1920, 820), Vector2i(1024, 768)]:
+		if sz != Vector2i(1440, 900):
+			DisplayServer.window_set_size(sz)
+			await _wait(6)
+			g._view_fit()
+			await _tick(2)
+		var s1: int = g.state
+		g.swap_live = true
+		g.swap_in = true
+		g.swap_t = float(g.SWAP.out) + 0.001
+		var gone_x: float = g._swap_dx() * g._swap_gone()
+		g.swap_t = 0.0
+		var lie_y: float = g._swap_map(g.BC.y - g.R * 1.13)
+		g.swap_live = false
+		g.swap_t = 0.0
+		g.state = s1
+		_ok("%dx%d — 다 빠진 테이블 왼끝이 화면 오른끝 밖" % [sz.x, sz.y], gone_x >= g._full().end.x,
+				"%.1f ≥ %.1f" % [gone_x, g._full().end.x])
+		_ok("%dx%d — 누운 판 윗변이 화면 아랫끝 밖" % [sz.x, sz.y], lie_y >= g._full().end.y,
+				"%.1f ≥ %.1f" % [lie_y, g._full().end.y])
 	DisplayServer.window_set_size(Vector2i(1280, 720))
 	await _wait(6)
 	g._view_fit()
@@ -248,6 +286,54 @@ func _run() -> void:
 	_ok("판 갈이 첫 틀 — 꽂이를 안 그린다(테이블이 덮고 있다)", not g._wall3_holder_free())
 	g.swap_t = 0.03
 	_ok("테이블이 비켜나면 꽂이가 벽에 있다", g._wall3_holder_free(), "gone %.2f" % g._swap_gone())
+
+	# ── ⑫ 판 갈이의 벽 램프 — 상점 방이 꺼진 뒤 판이 서는 만큼 켜진다 ──
+	var lamp := []
+	for t in [0.0, 0.10, 0.15, 0.20, 0.25, 0.30, 0.36]:
+		g.swap_t = t
+		lamp.append(g._wall3_lamp_off())
+	var mono := true
+	for i in range(1, lamp.size()):
+		mono = mono and float(lamp[i]) <= float(lamp[i - 1]) + 0.0001
+	g.swap_t = float(g.SWAP.out)
+	_ok("들어갈 때 — 테이블이 다 빠질 때까지 램프는 꺼져 있다", g._wall3_lamp_off() > 0.99,
+			"%.3f" % g._wall3_lamp_off())
+	_ok("판이 서는 만큼 켜지고(줄곧 줄어든다) 다 서면 다 켜진다", mono and float(lamp[lamp.size() - 1]) < 0.001,
+			str(lamp))
+	g.swap_in = false
+	g.swap_t = 0.0
+	_ok("나올 때 첫 틀은 램프가 켜진 채다(정산과 같은 그림)", g._wall3_lamp_off() < 0.001)
+	_ok("나올 때는 상점 불 덮개를 안 깐다(정산 덮개가 한다)", g._wall3_dim() == 0.0)
+	g.swap_in = true
+	var dims := []
+	for t in [0.0, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.36]:
+		g.swap_t = t
+		dims.append(g._wall3_dim())
+	var dmax := 0.0
+	for v in dims:
+		dmax = maxf(dmax, float(v))
+	_ok("상점 불 — 첫 틀 0(상점 그대로) · 끝 틀 0 · 1 을 안 넘는다",
+			float(dims[0]) == 0.0 and float(dims[dims.size() - 1]) < 0.001 and dmax <= 1.0 and dmax > 0.5,
+			str(dims))
+	g.swap_live = false
+	_ok("판 갈이 밖에서는 늘 켜져 있다", g._wall3_lamp_off() == 0.0 and g._wall3_dim() == 0.0)
+	#  램프 끈 벽 한 장 — 켠 장과 같은 크기 · 판 자리 위 판자가 켠 장보다 어둡다
+	var t_on: Image = g.wall3_tex.get_image() if g.wall3_tex != null else null
+	var t_off: Image = g.wall3_off.get_image() if g.wall3_off != null else null
+	var same: bool = t_on != null and t_off != null and t_on.get_size() == t_off.get_size()
+	_ok("램프 끈 벽 한 장이 켠 장과 같은 크기로 구워져 있다", same,
+			"%s / %s" % [t_on.get_size() if t_on != null else Vector2i.ZERO,
+				t_off.get_size() if t_off != null else Vector2i.ZERO])
+	if same:
+		var wr: Rect2 = g._wall3_rect()
+		var q: Vector2 = g.BC + Vector2(0.0, -g._wall3_ro() - 16.0) - wr.position
+		var lon: float = t_on.get_pixelv(Vector2i(q)).get_luminance()
+		var loff: float = t_off.get_pixelv(Vector2i(q)).get_luminance()
+		_ok("끈 장은 램프 웅덩이(판 위 판자)가 켠 장보다 어둡다", loff < lon * 0.8,
+				"켠 %.3f · 끈 %.3f" % [lon, loff])
+	var lamp_vis: bool = (g.wall3_vp.get_node("Wall/Lamp") as Node3D).visible \
+			and (g.wall3_vp.get_node("Wall/Ring") as Node3D).visible
+	_ok("굽기가 끝나면 램프 · 판 자리를 다시 켰다", lamp_vis and g.wall3_dark == 0)
 	g.swap_live = false
 	g.swap_t = 0.0
 	g.state = s0
@@ -294,13 +380,15 @@ func _run() -> void:
 	_end()
 
 
-#  화판 한 텍셀이 창의 정수 픽셀에 앉는가 — 화판 크기(px) × (창 배율 / 굽는 배율) 가 화면에서
-#  차지하는 픽셀 수와 같고, 그 몫이 정수다.
-func _texel_ok(r: Rect2, sc: float) -> bool:
-	var n: float = sc / float(g.wall3_kf)
+#  화판 한 텍셀이 논리 한 px 인가 — 굽는 배율이 1 이고 화판 크기(px)가 덮는 논리 크기와 같으며,
+#  왼쪽 위 모서리가 논리 px 격자에 앉는다(흔들림 없을 때).
+func _texel_ok(r: Rect2) -> bool:
 	var px := Vector2(g.wall3_px)
-	return absf(r.size.x * sc - px.x * n) < 0.01 and absf(r.size.y * sc - px.y * n) < 0.01 \
-			and absf(n - roundf(n)) < 0.001
+	var k_ok: bool = absf(float(g.wall3_kf) - 1.0) < 0.0001
+	var sz_ok: bool = absf(r.size.x - px.x) < 0.01 and absf(r.size.y - px.y) < 0.01
+	var at_ok: bool = absf(r.position.x - roundf(r.position.x)) < 0.001 \
+			and absf(r.position.y - roundf(r.position.y)) < 0.001
+	return k_ok and sz_ok and at_ok
 
 
 func _end() -> void:
