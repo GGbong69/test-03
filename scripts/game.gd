@@ -4845,6 +4845,9 @@ const SFX := {
 	#  팔이 펠트를 가른다. **seq 가 아니다** — 여러 음을 주면 음정이 서고,
 	#  공기 가르는 소리에 음정이 서면 휘파람이 된다.
 	"sweep_whip":     {"f": 147.0, "d": 0.12, "a": 0.10},
+	#  장면 전환 지지직(WIPE) — 덮고 걷히는 0.9 초 내내 지지직거린다. 판 밖 연출이라 바람
+	#  소리(sweep_whip)와 같은 크기 자리에 선다.
+	"tv_static":      {"f": 147.0, "d": 0.12, "a": 0.08},
 	"drop_skip":      {"f": 330.0, "d": 0.05, "a": 0.10},
 	"chute_enter":    {"f": 523.0, "d": 0.04, "a": 0.10},
 
@@ -43074,55 +43077,59 @@ func _retro_apply() -> void:
 
 
 # ══════════════════════════════════════════════════════════
-#  장면 전환 — 발라트로의 덮개 (2026-10-04)
+#  장면 전환 — TV 지지직 (2026-10-06)
 # ──────────────────────────────────────────────────────────
-#  「장면 전환 연출 … 발라트로 같은 느낌을 원하고」. 발라트로 원본(functions/
-#  button_callbacks.lua 의 G.FUNCS.wipe_on · wipe_off · engine/particles.lua)을 읽었다:
-#    · 화면 한가운데에서 **배경 소용돌이 색의 거대한 네모**(입자 하나 · 크기 40 배)가
-#      기울어진 채 천천히 돌며 커져 화면을 덮는다(수명의 4분의 1에 다 큰다)
-#    · 그 가운데에 카드 뒷면이 꿀렁이고(juice_up) 0.7 초에 뒤집힌다(cardFan2)
-#    · 덮인 동안 화면을 갈고, 걷을 때는 0.3 초 쉬었다가 0.3 초에 색이 빠진다
-#    · 쓰는 자리 — 런 시작 · 메인 메뉴로 · 프로필 · 다시 시작. 메뉴끼리(새 런 고르기 ·
-#      컬렉션)는 덮지 않는다
-#  이 게임으로 옮긴 것: 네모 둘(밤보라 · 벨벳 포도주 — 패널과 테이블의 두 색)이 서로
-#  반대로 돌며 커진다 · 테두리 금줄 한 겹(이 게임의 강조색) · 가운데는 카드 대신
-#  **다트판**: 뒷면(나무판 · 금테 · H)이 튀어나와 뒤집혀 앞면(백색 · 흑색 칸)이 된다.
-#  박자는 발라트로보다 짧다(0.9 초 — 「속도감 있게」).
-#    0.00  네모 둘이 돌며 커진다(바람 소리 — sweep_whip 을 낮춰)
-#    0.24  가운데 판 뒷면이 튀어나온다
+#  「화면전환 연출을 그 TV 찌지직으로 넣어도 될거 같은데?」 · 「세로 가로 랜덤으로 나오도록
+#  할 수 없어?」. 수신이 끊긴 TV 의 줄무늬 잡음(shaders/static.gdshader)이 화면을 타고
+#  지나간다 — 한쪽 끝에서 차올라 덮고, 덮인 동안 화면을 가고, 같은 쪽부터 걷힌다. 띠 앞머리
+#  앞쪽의 화면은 줄마다 옆으로 밀려 찢긴다(덮이기 직전 · 걷힌 직후 — 신호를 잃고 되찾는다).
+#  전환마다 줄 방향을 뽑는다 — 가로 줄(띠가 밑에서 위로) · 세로 줄(왼쪽에서 오른쪽으로).
+#  뽑는 난수는 wipe_rng 하나다 — 판 · 상점 난수의 흐름을 안 건드린다.
+#  층 95 — 도트(97) · VHS(98) · CRT(100) 밑이라 지지직도 브라운관을 지난다.
+#    0.00  지지직이 차오른다(tv_static — 다 걷힐 때까지 지지직거린다)
 #    0.34  다 덮였다 — **화면을 간다**(부르는 쪽이 넘긴 일)
-#    0.44  판이 뒤집힌다(pack_flip)
 #    0.66  걷기 시작 — 0.24 초에 다 빠진다
+#  옛 덮개(2026-10-04 — 발라트로식으로 밤보라 · 포도주 네모 둘이 돌며 덮고 가운데 다트판이
+#  뒤집혔다)를 갈음한다. 박자(on · off · off_t)는 그대로라 덮인 동안 새 화면의 시계를
+#  멈추는 일(_wipe_hold)과 검사(qa_wipe)가 그대로 선다.
 #  쓰는 자리: 새 런 「시작」 · 제목 「계속하기」 · 일시정지 「로비로 나가기」 · 게임 오버 →
-#  새 런. 덮는 동안 입력은 통째로 안 받는다. 움직임 끔 · 화면 없는 실행 · 검사 도구에서는
-#  덮지 않고 곧장 간다(인트로 · CRT 와 같은 규약 — 도구는 wipe_force 로 켠다).
+#  새 런 · 정산 → 상점 · 상점 → 다음 판. 덮는 동안 입력은 통째로 안 받는다. 움직임 끔 ·
+#  화면 없는 실행 · 검사 도구에서는 덮지 않고 곧장 간다(인트로 · CRT 와 같은 규약 — 도구는
+#  wipe_force 로 켠다).
 const WIPE := {
-	"on": 0.34, "lag": 0.06, "pop": 0.24, "flip": 0.44, "flip_t": 0.16,
-	"off": 0.66, "off_t": 0.24,
-	"rot": 0.6, "a0": 0.35,       # 도는 빠르기(rad/s) · 첫 기울기
-	"emb_r": 30.0,                # 가운데 판 반지름(논리 px)
-	"emb_lead": 0.03, "emb_out": 0.07,   # 가운데 판이 빠지는 때(off 보다 이만큼 앞) · 길이(wipe_draw)
-	"col": [Color("2b2042"), Color("5c1c2a")],
-	"whoosh": 0.8,                # 바람 소리 — sweep_whip 을 이 배로
+	"on": 0.34, "off": 0.66, "off_t": 0.24,
+	"vert_p": 0.5,                # 세로 줄이 뽑힐 몫
 }
 var wipe_t := -1.0           # 흐른 시간. −1 이면 안 덮는다
 var wipe_cb := Callable()    # 다 덮였을 때 부를 일(화면을 간다)
 var wipe_went := false
 var wipe_force := false      # 검사 도구가 덮개를 찍을 때
 var wipe_layer: CanvasLayer = null
-var wipe_node: Node2D = null
+const STATIC_SHADER := "res://shaders/static.gdshader"
+var wipe_rect: ColorRect = null      # 지지직 판(shaders/static.gdshader)
+var wipe_vert := 0.0                 # 이번 전환의 줄 방향 — 0 가로 · 1 세로(_wipe 가 뽑는다)
+var wipe_rng := RandomNumberGenerator.new()
 
 
 func _wipe_open() -> void:
 	if wipe_layer != null and is_instance_valid(wipe_layer):
 		return
+	var sh: Shader = load(STATIC_SHADER) as Shader
+	if sh == null:
+		return
+	wipe_rng.randomize()
 	wipe_layer = CanvasLayer.new()
 	wipe_layer.name = "Wipe"
 	wipe_layer.layer = 95
-	wipe_node = Node2D.new()
-	wipe_node.set_script(load("res://scripts/wipe.gd"))
-	wipe_node.set("g", self)
-	wipe_layer.add_child(wipe_node)
+	var mat := ShaderMaterial.new()
+	mat.shader = sh
+	wipe_rect = ColorRect.new()
+	wipe_rect.name = "Static"
+	wipe_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	wipe_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	wipe_rect.material = mat
+	wipe_rect.visible = false
+	wipe_layer.add_child(wipe_rect)
 	add_child(wipe_layer)
 
 
@@ -43147,20 +43154,20 @@ func _wipe_hold(d: float) -> float:
 func _wipe(cb: Callable) -> void:
 	if wipe_t >= 0.0:
 		return
-	if not _cine_ok(wipe_force) or wipe_node == null:
+	if not _cine_ok(wipe_force) or wipe_rect == null:
 		if cb.is_valid():
 			cb.call()
 		return
 	wipe_t = 0.0
 	wipe_cb = cb
 	wipe_went = false
-	_sfx("sweep_whip", SFX_BASE * float(WIPE.whoosh))
+	wipe_vert = 1.0 if wipe_rng.randf() < float(WIPE.vert_p) else 0.0
+	_sfx("tv_static")
 
 
 func _wipe_tick(d: float) -> void:
 	if wipe_t < 0.0:
 		return
-	var t0 := wipe_t
 	wipe_t += d
 	if not wipe_went and wipe_t >= float(WIPE.on):
 		wipe_went = true
@@ -43168,102 +43175,27 @@ func _wipe_tick(d: float) -> void:
 		wipe_cb = Callable()
 		if cb.is_valid():
 			cb.call()
-	if t0 < float(WIPE.flip) and wipe_t >= float(WIPE.flip):
-		_sfx("pack_flip")
 	if wipe_t >= float(WIPE.off) + float(WIPE.off_t):
 		wipe_t = -1.0
-	if wipe_node != null:
-		wipe_node.queue_redraw()
+	_wipe_static()
 
 
-#  되튐(back-out) — 0 에서 넘쳤다가 1 에 앉는다.
-static func _back_out(q: float) -> float:
-	var k := clampf(q, 0.0, 1.0) - 1.0
-	return 1.0 + 2.70158 * k * k * k + 1.70158 * k * k
-
-
-#  덮개 — 덮개 층(wipe.gd)이 부른다. 좌표는 보이는 화면(여백까지) 그대로다.
-func wipe_draw(c: CanvasItem) -> void:
-	if wipe_t < 0.0:
+#  지지직 판을 박자에 맞춘다 — 차오름(cov_in) · 걷힘(cov_out) · 시계 · 이번 줄 방향.
+func _wipe_static() -> void:
+	if wipe_rect == null or not is_instance_valid(wipe_rect):
 		return
-	var W: Dictionary = WIPE
+	var on: bool = wipe_t >= 0.0
+	wipe_rect.visible = on
+	if not on:
+		return
+	var mat := wipe_rect.material as ShaderMaterial
 	var vs: Vector2 = get_viewport_rect().size
-	var ctr := vs * 0.5
-	var full: float = vs.length() * 1.08
-	var a := 1.0
-	if wipe_t > float(W.off):
-		a = clampf(1.0 - (wipe_t - float(W.off)) / float(W.off_t), 0.0, 1.0)
-	var cols: Array = W.col
-	for k in 2:
-		var t0: float = float(k) * float(W.lag)
-		var q: float = clampf((wipe_t - t0) / (float(W.on) - t0), 0.0, 1.0)
-		var s: float = full * _back_out(q) * (1.0 if k == 0 else 0.96)
-		if s <= 0.5:
-			continue
-		var sd: float = 1.0 if k == 0 else -1.0
-		var ang: float = float(W.a0) * sd + wipe_t * float(W.rot) * sd
-		var pts := PackedVector2Array()
-		for j in 4:
-			var aa: float = ang + PI * 0.25 + PI * 0.5 * float(j)
-			pts.append(ctr + Vector2(cos(aa), sin(aa)) * s * 0.7071)
-		c.draw_colored_polygon(pts, Color(cols[k], a))
-		var rim := pts.duplicate()
-		rim.append(pts[0])
-		c.draw_polyline(rim, Color(C_ACC, 0.55 * a), 2.0)
-	if wipe_t < float(W.pop):
-		return
-	#  가운데 판 — 튀어나와(되튐) 뒤집힌다(가로 배율이 |cos| — 반 바퀴에 앞면이 선다).
-	var sc: float = _back_out(clampf((wipe_t - float(W.pop)) / 0.14, 0.0, 1.0))
-	var kf: float = clampf((wipe_t - float(W.flip)) / float(W.flip_t), 0.0, 1.0)
-	var sx: float = maxf(absf(cos(kf * PI)), 0.04)
-	var r: float = float(W.emb_r) * sc
-	if r <= 0.5:
-		return
-	#  걷힐 때 판은 덮개보다 먼저 빠진다 — 덮개가 걷히기 직전(off − emb_lead)부터 emb_out 동안,
-	#  거의 다 덮인 덮개 위에서. 덮개와 같은 a 로 옅어지면 0.15 초쯤 새 화면의 판(판 고르기 가운데
-	#  판 · 상점 매물) 바로 곁에 금테 판이 겹쳐 서서 판이 두 장 포개졌다(검토, 2026-10-05).
-	a = minf(a, clampf(1.0 - (wipe_t - (float(W.off) - float(W.emb_lead))) / float(W.emb_out),
-			0.0, 1.0))
-	if a <= 0.004:
-		return
-	c.draw_set_transform(ctr + Vector2(3.0, 4.0), 0.0, Vector2(sx, 1.0))
-	c.draw_circle(Vector2.ZERO, r * 1.04, Color(0.0, 0.0, 0.0, 0.35 * a))
-	c.draw_set_transform(ctr, 0.0, Vector2(sx, 1.0))
-	if kf < 0.5:
-		_wipe_back(c, r, a)
-	else:
-		_wipe_board(c, r, a)
-	c.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-
-
-#  판 뒷면 — 나무판 · 금테 · 가운데 H(HIGHTON).
-func _wipe_back(c: CanvasItem, r: float, a: float) -> void:
-	c.draw_circle(Vector2.ZERO, r, Color(C_WOOD, a))
-	c.draw_circle(Vector2.ZERO, r * 0.82, Color(C_WOOD.darkened(0.25), a))
-	c.draw_arc(Vector2.ZERO, r - 1.5, 0.0, TAU, 40, Color(C_ACC, a), 3.0)
-	c.draw_arc(Vector2.ZERO, r * 0.82, 0.0, TAU, 40, Color(C_ACC, 0.6 * a), 1.0)
-	if font != null:
-		c.draw_string(font, Vector2(-r, _ink_mid_y(0.0, 24)), "H", HORIZONTAL_ALIGNMENT_CENTER,
-				r * 2.0, 24, Color(C_ACC, a))
-
-
-#  판 앞면 — 스무 칸(백색 · 흑색) · 더블 · 트리플 고리(붉음 · 초록) · 불 · 금테.
-func _wipe_board(c: CanvasItem, r: float, a: float) -> void:
-	c.draw_circle(Vector2.ZERO, r, Color(C_BG, a))
-	for j in 20:
-		var a0: float = -PI * 0.5 - PI / 20.0 + TAU * float(j) / 20.0
-		var a1: float = a0 + TAU / 20.0
-		var wcol: Color = C_LIGHT if j % 2 == 0 else Color("1c1816")
-		var rcol: Color = C_RED if j % 2 == 0 else C_GREEN
-		c.draw_colored_polygon(annulus_at(Vector2.ZERO, r * 0.12, r * 0.86, a0, a1, 3),
-				Color(wcol, a))
-		c.draw_colored_polygon(annulus_at(Vector2.ZERO, r * 0.86, r * 0.95, a0, a1, 3),
-				Color(rcol, a))
-		c.draw_colored_polygon(annulus_at(Vector2.ZERO, r * 0.50, r * 0.58, a0, a1, 3),
-				Color(rcol, a))
-	c.draw_circle(Vector2.ZERO, r * 0.12, Color(C_GREEN, a))
-	c.draw_circle(Vector2.ZERO, r * 0.06, Color(C_RED, a))
-	c.draw_arc(Vector2.ZERO, r - 0.5, 0.0, TAU, 40, Color(C_ACC, a), 2.0)
+	if vs.x >= 1.0 and vs.y >= 1.0:
+		mat.set_shader_parameter("logical", vs)
+	mat.set_shader_parameter("cov_in", clampf(wipe_t / float(WIPE.on), 0.0, 1.0))
+	mat.set_shader_parameter("cov_out", clampf((wipe_t - float(WIPE.off)) / float(WIPE.off_t), 0.0, 1.0))
+	mat.set_shader_parameter("clock", wipe_t)
+	mat.set_shader_parameter("vert", wipe_vert)
 
 
 # ══════════════════════════════════════════════════════════
