@@ -44,7 +44,8 @@ const PLANK := Color("2c1508")   # 벽 판자 — 도트 팔레트 「나무 1�
 #  꽂이 빛 자리 — 왼쪽 다트 줄의 놋쇠 아닌 검은 레일(game.gd _wall3_holder) 곁, 이 논리 x.
 const POST_X := 24.0
 const RUBBER := Color("080707")
-const BACKING := Color("0b0908")    # 받침판 — 판이 뜬 자리가 빈자리로 읽힌다
+const BACKING := Color("040303")    # 받침판 — 판이 뜬 자리가 빈자리로 읽힌다
+const HOOK := Color("0d0b0b")       # 걸쇠 — 무광 검은 쇠(놋쇠는 램프 밑에서 금빛 단추로 튀었다)
 #  빛 — 램프 하나. 판이 화면에서 가장 밝고, 링 바깥 한 뼘까지만 판자 결이 보이고, 링 반지름
 #  1.6 배쯤에서 거의 검다. 판 밖에 채도 높은 색은 없다(「아... 좀 촌스러운데..? 좀 세련된
 #  디자인 없어?」, 2026-10-04 — 네온 · 발광 술병 · DOF 빛망울을 걷었다).
@@ -63,7 +64,12 @@ const LOOK := {
 	"shadow_size": 0.05,      # 램프 크기(m) — 그림자 반그늘 폭
 	"shadow_a": 0.70,         # 그림자 짙기 — 링 밑 초승달 하나
 	"post_l": 0.05,           # 꽂이 곁 판자에 스치는 빛 — 결만 겨우 보이게
-	"amb": 0.06,              # 방 빛(환경광) — 빛 밖은 거의 검다
+	#  방 빛(환경광) — 빛 밖의 판자가 어둠으로 지되 이음이 겨우 읽힌다(기본 필터에서 L* 8~12 ·
+	#  140904 ~ 2c1508 언저리). 0.06 은 양옆이 칠흑이라 「덜 만든 화면」 · 무대 허공으로 읽혔다
+	#  (검토, 2026-10-05). 판보다 밝아지거나 무늬가 생기면 안 된다.
+	"amb": 0.65,
+	#  벽 재질(_wall_mat) — 옅은 결 · 판 톤의 대비 몫 · 채도 몫.
+	"grain": 0.4, "sat": 0.55,
 	"bg": Color("050404"),    # 아무것도 없는 자리 · 안개
 	#  빛 웅덩이(램프에 비추는 동그란 그러데이션) [반지름 몫, 밝기] — 판 둘레는 고루,
 	#  링 바깥 한 뼘을 지나면 빠르게 진다.
@@ -180,15 +186,12 @@ static func _wall(root: Node3D) -> void:
 	var y0 := -0.9
 	var y1 := 1.0
 	#  판자는 1 텍셀 = 판 평면 논리 1px 로 굽는다(상점 카운터와 같은 결의 크기).
-	#  _plank 는 누운 판을 짓는다 — 90° 돌려 세운다.
+	#  _plank 는 누운 판을 짓는다 — 90° 돌려 세운다. 결은 이 벽 재질(_wall_mat)에서만 누른다 —
+	#  상점 방 · 카운터의 판자(Room3D._plank)는 그대로다.
 	var pair: Array = Room3D._plank(int((y1 - y0) * S), int(w * S), PLANK, 20261004, 40, 52)
 	var im: Image = pair[0]
 	im.rotate_90(CLOCKWISE)
-	var m := StandardMaterial3D.new()
-	m.albedo_texture = ImageTexture.create_from_image(im)
-	m.roughness = 0.92
-	m.metallic_specular = 0.2
-	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	var m := _wall_mat(ImageTexture.create_from_image(im))
 	var qm := QuadMesh.new()
 	qm.size = Vector2(w, y1 - y0)
 	var q := MeshInstance3D.new()
@@ -197,6 +200,44 @@ static func _wall(root: Node3D) -> void:
 	q.material_override = m
 	q.position = Vector3(0.0, (y0 + y1) * 0.5, FACE)
 	root.add_child(q)
+
+
+#  벽 판자 재질 — 결 대비 · 채도만 누른다. 램프 웅덩이 속에서 판자 세로 결이 채도 높은 주황
+#  줄로 서서 필터를 켜면 긁힌 라미네이트처럼 지글거렸다(검토, 2026-10-05 「① 던지기 + ② 판
+#  고르기」). 판 바탕 색에서 벗어난 몫이 작은 결(옅은 결 · 판마다 톤)만 grain 몫으로 줄이고,
+#  크게 짙은 이음 · 못 · 옹이(바탕의 반 밑)는 그대로 둔다 — 빛 밖 어둠에서도 판자 이음이 읽혀야
+#  「불 꺼진 방의 판자 벽」이다. 그 뒤 채도를 sat 몫으로 — 따뜻하되 무채색에 가까운 나무.
+const WALL_SHADER := """
+shader_type spatial;
+uniform sampler2D tex : source_color, filter_nearest;
+uniform vec3 base : source_color;
+uniform float grain = 0.4;
+uniform float sat = 0.55;
+void fragment() {
+	vec3 c = texture(tex, UV).rgb;
+	vec3 lw = vec3(0.2126, 0.7152, 0.0722);
+	float lb = max(dot(base, lw), 0.0001);
+	float d = dot(c, lw) / lb - 1.0;
+	float k = mix(grain, 1.0, smoothstep(0.40, 0.60, -d));
+	c = base + (c - base) * k;
+	c = mix(vec3(dot(c, lw)), c, sat);
+	ALBEDO = c;
+	ROUGHNESS = 0.92;
+	SPECULAR = 0.2;
+}
+"""
+
+
+static func _wall_mat(tex: Texture2D) -> ShaderMaterial:
+	var sh := Shader.new()
+	sh.code = WALL_SHADER
+	var m := ShaderMaterial.new()
+	m.shader = sh
+	m.set_shader_parameter("tex", tex)
+	m.set_shader_parameter("base", PLANK)
+	m.set_shader_parameter("grain", float(LOOK.grain))
+	m.set_shader_parameter("sat", float(LOOK.sat))
+	return m
 
 
 # ── 꽂이 곁 빛 — 왼쪽 다트 줄 뒤 판자에 스치는 옅은 빛 하나 ──
@@ -227,8 +268,11 @@ static func _rail_fit(root: Node, bcx: float) -> void:
 #  치수는 wall_fit 이 판 테(ro)에서 잡는다. 여기서는 모양과 재질만.
 static func _board_mount(root: Node3D) -> void:
 	#  받침판 — 판을 떼어 내면 보이는 자리. 짙은 섬유판에 걸쇠 하나 · 나사 셋.
+	#  판 갈이 · 판 깨짐에 판이 벽에서 떠 있는 동안 램프 한가운데에 드러난다 — 얼룩진 섬유
+	#  (잡음 0.55~1)와 놋쇠 걸쇠가 램프 밑에서 베이지 원판 · 금빛 단추로 튀어, 일어서는 판 곁에
+	#  판이 하나 더 있는 것으로 읽혔다(검토, 2026-10-05). 결은 겨우 · 걸쇠는 무광 검은 쇠다.
 	var bm := Room3D._mat(BACKING, 0.95)
-	bm.albedo_texture = Room3D._noise_tex(0.09, 0.55, 1.0, 31)
+	bm.albedo_texture = Room3D._noise_tex(0.09, 0.88, 1.0, 31)
 	#  반사는 끈다 — 기본 반사(0.5)로는 램프 한가운데에서 거친 반짝임이 넓게 얹혀 검은 받침판이
 	#  베이지 코르크판으로 떴다(실험 — 받침판을 초록으로 칠해도 붉음 · 푸름이 0.38 · 0.21 남았다).
 	bm.metallic_specular = 0.0
@@ -245,14 +289,17 @@ static func _board_mount(root: Node3D) -> void:
 	bk.rotation_degrees = Vector3(90.0, 0.0, 0.0)
 	bk.position = Vector3(0.0, 0.0, FACE + 0.02)
 	root.add_child(bk)
-	var hook := Room3D._cyl(0.034, 0.034, 0.012, Vector3(0.0, 0.0, 0.004),
-			Room3D._mat(Room3D.COL.brass.darkened(0.74), 0.6, 0.35), 20)
+	#  걸쇠 · 나사는 반사를 끈다 — 기본 반사로는 램프 한가운데에서 반짝임이 얹혀 짙은 쇠가
+	#  금빛 단추로 떴다(촬영, 2026-10-05).
+	var hm := Room3D._mat(HOOK, 1.0, 0.0)
+	hm.metallic_specular = 0.0
+	var hook := Room3D._cyl(0.034, 0.034, 0.012, Vector3(0.0, 0.0, 0.004), hm, 20)
 	hook.rotation_degrees = Vector3(90.0, 0.0, 0.0)
 	root.add_child(hook)
 	for k in 3:
 		var a: float = TAU * float(k) / 3.0 - PI * 0.5
 		var sc := Room3D._cyl(0.008, 0.008, 0.006, Vector3(cos(a) * 0.024, -sin(a) * 0.024, 0.011),
-				Room3D._mat(Color("1a1410"), 0.5, 0.5), 8)
+				hm, 8)
 		sc.rotation_degrees = Vector3(90.0, 0.0, 0.0)
 		root.add_child(sc)
 	#  고무 링 — 판 테를 두르는 낮은 무광 검은 서라운드. 반들거리면 위쪽에 반짝임 줄이 서서

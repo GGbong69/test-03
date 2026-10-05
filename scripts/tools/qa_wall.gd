@@ -21,6 +21,9 @@ extends SceneTree
 #    ⑨ 화면 픽셀 — 판 옆 판자 자리가 켜면 C_BG 가 아니고 끄면 C_BG 다
 #    ⑩ 정산 → 상점 판 갈이 첫 틀이 정산 그림과 같다(글자 · HUD 밖 열네 점)
 #    ⑪ 판 갈이 첫 틀에는 꽂이를 안 그리고(테이블이 덮고 있다) 테이블이 비켜나면 그린다
+#    ⑫ 판 갈이의 벽 램프(2026-10-05 「① 던지기 + ② 판 고르기」) — 들어갈 때 테이블이 다 빠질
+#       때까지 꺼져 있다가 판이 서는 만큼 켜지고, 나올 때 첫 틀은 켜진 채(정산과 같은 그림)다
+#    ⑥ 에 덧붙여 — 흔들림의 소수 몫을 타도 벽이 논리 px 격자에 앉는다
 const Save = preload("res://scripts/save.gd")
 const Dev = preload("res://scripts/dev.gd")
 const Wall3D = preload("res://scripts/wall3d.gd")
@@ -185,6 +188,13 @@ func _run() -> void:
 			"%s · 배율 %.3f" % [r.get_center(), sc])
 	_ok("화판이 여백까지 덮는다", r.encloses(g._full()), "%s ⊇ %s" % [r, g._full()])
 	_ok("한 텍셀 = 논리 한 px(상점 테이블과 같은 밀도)", _texel_ok(r), "%s · 굽는 배율 %.3f" % [g.wall3_px, g.wall3_kf])
+	#  흔들림 — 반 px 흔들림을 그대로 타면 nearest 결이 틀마다 다른 줄에서 두 번 찍혀 일렁인다.
+	var grid := true
+	for off in [Vector2(0.3, 0.7), Vector2(-1.4, 2.6), Vector2(5.5, -3.25)]:
+		var rr: Rect2 = g._wall3_rect(off)
+		var q: Vector2 = rr.position + off
+		grid = grid and absf(q.x - roundf(q.x)) < 0.001 and absf(q.y - roundf(q.y)) < 0.001
+	_ok("흔들려도 벽이 논리 px 격자에 앉는다(결이 안 일렁인다)", grid)
 
 	# ── ⑦ 판 테가 바뀌면 ──
 	var r0: float = g.R
@@ -249,6 +259,26 @@ func _run() -> void:
 	_ok("판 갈이 첫 틀 — 꽂이를 안 그린다(테이블이 덮고 있다)", not g._wall3_holder_free())
 	g.swap_t = 0.03
 	_ok("테이블이 비켜나면 꽂이가 벽에 있다", g._wall3_holder_free(), "gone %.2f" % g._swap_gone())
+
+	# ── ⑫ 판 갈이의 벽 램프 — 상점 방이 꺼진 뒤 판이 서는 만큼 켜진다 ──
+	var lamp := []
+	for t in [0.0, 0.10, 0.15, 0.20, 0.25, 0.30, 0.36]:
+		g.swap_t = t
+		lamp.append(g._wall3_lamp_off())
+	var mono := true
+	for i in range(1, lamp.size()):
+		mono = mono and float(lamp[i]) <= float(lamp[i - 1]) + 0.0001
+	g.swap_t = float(g.SWAP.out)
+	_ok("들어갈 때 — 테이블이 다 빠질 때까지 램프는 꺼져 있다", g._wall3_lamp_off() > 0.99,
+			"%.3f" % g._wall3_lamp_off())
+	_ok("판이 서는 만큼 켜지고(줄곧 줄어든다) 다 서면 다 켜진다", mono and float(lamp[lamp.size() - 1]) < 0.001,
+			str(lamp))
+	g.swap_in = false
+	g.swap_t = 0.0
+	_ok("나올 때 첫 틀은 램프가 켜진 채다(정산과 같은 그림)", g._wall3_lamp_off() < 0.001)
+	g.swap_in = true
+	g.swap_live = false
+	_ok("판 갈이 밖에서는 늘 켜져 있다", g._wall3_lamp_off() == 0.0)
 	g.swap_live = false
 	g.swap_t = 0.0
 	g.state = s0
