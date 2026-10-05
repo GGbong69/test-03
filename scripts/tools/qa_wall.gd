@@ -13,8 +13,10 @@ extends SceneTree
 #  창이 있으면:
 #    ⑤ 제목에는 안 짓고 판 고르기에서 미리 짓는다 · settle 틀 뒤에는 굽기를 멈춘다(매 틀 안 굽는다)
 #       · 다 구우면 그림 한 장(wall3_tex)만 쥐고 화판은 2px 로 놓는다(렌더 버퍼 VRAM)
-#    ⑥ 화판의 한가운데가 BC(반 픽셀 안)이고 여백까지 덮는다 · 한 텍셀 = 창 한 픽셀(비정수 배율)
-#    ⑦ 판 테가 바뀌면 다시 굽고 링이 따라간다
+#    ⑥ 화판의 한가운데가 BC(논리 반 px 안)이고 여백까지 덮는다 · 한 텍셀 = 논리 한 px
+#       (2026-10-04 「한 줄기 빛」 — 상점 테이블과 같은 밀도로 굽는다. 옛 검사는 「한 텍셀 = 창
+#       한 픽셀」 이었다 — 창 해상도로 구운 매끈한 벽이 촌스러움의 첫째였다)
+#    ⑦ 판 테가 바뀌면 다시 굽고 링이 따라간다(안쪽 끝이 판 테 밑 2px — 1:1 계단을 판 테가 덮는다)
 #    ⑧ 창이 16:10 으로 바뀌면 다시 맞춰 여백까지 덮는다 · HUD 띠 위 여백이 C_PANEL 판때기가 아니다
 #    ⑨ 화면 픽셀 — 판 옆 판자 자리가 켜면 C_BG 가 아니고 끄면 C_BG 다
 #    ⑩ 정산 → 상점 판 갈이 첫 틀이 정산 그림과 같다(글자 · HUD 밖 열네 점)
@@ -179,10 +181,10 @@ func _run() -> void:
 	var r: Rect2 = g._wall3_rect()
 	var sc: float = root.get_final_transform().get_scale().x
 	var cd: Vector2 = (r.get_center() - g.BC).abs()
-	_ok("화판 한가운데가 BC(창 반 픽셀 안)", cd.x <= 0.5 / sc + 0.001 and cd.y <= 0.5 / sc + 0.001,
+	_ok("화판 한가운데가 BC(논리 반 px 안)", cd.x <= 0.5 + 0.001 and cd.y <= 0.5 + 0.001,
 			"%s · 배율 %.3f" % [r.get_center(), sc])
 	_ok("화판이 여백까지 덮는다", r.encloses(g._full()), "%s ⊇ %s" % [r, g._full()])
-	_ok("한 텍셀 = 창 한 픽셀", _texel_ok(r, sc), "%s · 배율 %.3f / %.3f" % [g.wall3_px, sc, g.wall3_kf])
+	_ok("한 텍셀 = 논리 한 px(상점 테이블과 같은 밀도)", _texel_ok(r), "%s · 굽는 배율 %.3f" % [g.wall3_px, g.wall3_kf])
 
 	# ── ⑦ 판 테가 바뀌면 ──
 	var r0: float = g.R
@@ -190,8 +192,8 @@ func _run() -> void:
 	await _tick(1)
 	_ok("판 테가 바뀌면 다시 굽는다", g.wall3_fresh > 0, "남은 틀 %d" % g.wall3_fresh)
 	var ring: MeshInstance3D = vp.get_node("Wall/Ring")
-	var want: float = (g._wall3_ro() - 1.0) / Wall3D.S
-	_ok("링 안쪽 끝이 판 테 밑 1px", absf((ring.mesh as TorusMesh).inner_radius - want) < 0.0001,
+	var want: float = (g._wall3_ro() - 2.0) / Wall3D.S
+	_ok("링 안쪽 끝이 판 테 밑 2px", absf((ring.mesh as TorusMesh).inner_radius - want) < 0.0001,
 			"%.4f / %.4f" % [(ring.mesh as TorusMesh).inner_radius, want])
 	g.R = r0
 	await _tick(st + 4)
@@ -224,8 +226,7 @@ func _run() -> void:
 	_ok("16:10 — 여백이 생긴다", g.view_pad.y > 0.0, str(g.view_pad))
 	_ok("16:10 — 화판이 여백까지 덮는다", r.encloses(g._full()), "%s ⊇ %s" % [r, g._full()])
 	_ok("16:10 — 다시 굽고 멈췄다", vp.render_target_update_mode == SubViewport.UPDATE_DISABLED)
-	sc = root.get_final_transform().get_scale().x
-	_ok("16:10 — 한 텍셀 = 창 한 픽셀(배율 %.2f)" % sc, _texel_ok(r, sc), str(g.wall3_px))
+	_ok("16:10 — 한 텍셀 = 논리 한 px", _texel_ok(r), str(g.wall3_px))
 	g.queue_redraw()
 	await RenderingServer.frame_post_draw
 	im = root.get_texture().get_image()
@@ -294,13 +295,15 @@ func _run() -> void:
 	_end()
 
 
-#  화판 한 텍셀이 창의 정수 픽셀에 앉는가 — 화판 크기(px) × (창 배율 / 굽는 배율) 가 화면에서
-#  차지하는 픽셀 수와 같고, 그 몫이 정수다.
-func _texel_ok(r: Rect2, sc: float) -> bool:
-	var n: float = sc / float(g.wall3_kf)
+#  화판 한 텍셀이 논리 한 px 인가 — 굽는 배율이 1 이고 화판 크기(px)가 덮는 논리 크기와 같으며,
+#  왼쪽 위 모서리가 논리 px 격자에 앉는다(흔들림 없을 때).
+func _texel_ok(r: Rect2) -> bool:
 	var px := Vector2(g.wall3_px)
-	return absf(r.size.x * sc - px.x * n) < 0.01 and absf(r.size.y * sc - px.y * n) < 0.01 \
-			and absf(n - roundf(n)) < 0.001
+	var k_ok: bool = absf(float(g.wall3_kf) - 1.0) < 0.0001
+	var sz_ok: bool = absf(r.size.x - px.x) < 0.01 and absf(r.size.y - px.y) < 0.01
+	var at_ok: bool = absf(r.position.x - roundf(r.position.x)) < 0.001 \
+			and absf(r.position.y - roundf(r.position.y)) < 0.001
+	return k_ok and sz_ok and at_ok
 
 
 func _end() -> void:
