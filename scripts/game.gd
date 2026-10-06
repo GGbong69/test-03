@@ -761,6 +761,8 @@ var score_div := 2.60          # 이 걸음의 굴림 나눗수. 창 = qt × jsp
 var tick_n := 0                # 이 굴림의 톡 수(0 이면 안 센다). _tally_arm 이 세운다
 var tick_i := 0                # 난 칸 수. tick_n 에 닿은 칸이 떨어지는 동전이다
 var tick_f0 := 0               # 첫 칸의 반음 — 걸음 사다리가 멎은 자리(상한 12)
+var cross_cut := false         # 이 굴림이 목표에서 갈린다 — score_from → target → total
+var cross_live := false        # 목표 달성이 아직 안 났다. 띠가 목표에 닿는 프레임에 _cross_fire 가 낸다
 
 # ── 값이 어디서 왔는가 (2026-09-26) ────────────────────────
 #  걸음이 올린 수의 **출처**에서 카드의 그 칸으로 한 획을 긋는다. 여태 판과
@@ -5491,28 +5493,46 @@ func _tick_score(d: float) -> void:
 	#  안 난다. 창이 프레임보다 짧아 score_roll 이 hold 를 건너 0 에 닿아도 이
 	#  갈래가 그 프레임에 한 번 더 돌아 total 에 서고 동전을 낸다(tick_i < tick_n).
 	#  모션 끄기: 값이 곧장 서므로 떨어지는 동전 하나만 난다.
-	if score_roll > 0.0 or tick_i < tick_n:
+	#
+	#  ── 돌파 굴림은 목표에서 갈린다 (2026-10-06) ──
+	#  cross_cut 이면 값이 k 0 ~ TALLY.cross 에 score_from → target, 그 뒤 target →
+	#  total 을 오른다(진행 p 의 꺾는 점 = cross^ease). 목표에 닿는 프레임에
+	#  _cross_fire 가 목표 달성을 낸다. 모션 끄기는 값이 곧장 서도 같은 k 에서 낸다 —
+	#  빛 · 소리의 때가 켠 쪽과 같다.
+	if score_roll > 0.0 or tick_i < tick_n or cross_live:
+		var k := clampf(((1.0 - score_roll) - float(TALLY.lead))
+				/ (float(GROW.hold) - float(TALLY.lead)), 0.0, 1.0)
 		if motion_off:
 			shown = float(total)
 			if tick_i < tick_n:
 				tick_i = tick_n
 				_tick_snd(tick_n)
 		else:
-			var k := clampf(((1.0 - score_roll) - float(TALLY.lead))
-					/ (float(GROW.hold) - float(TALLY.lead)), 0.0, 1.0)
 			var p := pow(k, float(TALLY.ease))
-			shown = lerpf(score_from, float(total), p)
+			if cross_cut:
+				var pc := pow(float(TALLY.cross), float(TALLY.ease))
+				if p < pc:
+					shown = lerpf(score_from, float(target), p / pc)
+				else:
+					shown = lerpf(float(target), float(total), (p - pc) / maxf(1.0 - pc, 0.0001))
+			else:
+				shown = lerpf(score_from, float(total), p)
 			if k >= 1.0:
 				#  ⚠ 무한 R34 목표가 18자리(최악 19자리)인데 float64 의 정수 정확
 				#  구간은 9.0e15 까지다. lerp 왕복이 남긴 오차가 int(round(shown))
 				#  에서 total 과 갈릴 수 있으므로 여기서 한 번 더 못 박는다.
 				shown = float(total)
-			#  칸은 오른 몫(p)으로 센다 — (shown − score_from) ÷ (total − score_from)
-			#  과 같은 값이고, 이득이 0 · 음수인 걸음에서도 끝 칸에 닿는다.
+			#  칸은 오른 몫(p)으로 센다 — 갈리지 않는 굴림에서는 (shown − score_from) ÷
+			#  (total − score_from) 과 같은 값이고, 이득이 0 · 음수인 걸음에서도 끝 칸에
+			#  닿는다. 돌파 굴림에서도 톡 박자가 목표에서 안 끊긴다.
 			var j := mini(int(floor(p * float(tick_n))), tick_n)
 			if j > tick_i:
 				tick_i = j
 				_tick_snd(j)
+		#  걸음 밖(판 중의 설정 · 로비로 나가기)에서는 안 낸다 — 굴림 시계는 안 멎으므로
+		#  설정을 닫고 돌아온 프레임에 내고, 로비로 나가면 다음 판의 _card_reset 이 접는다.
+		if cross_live and k >= float(TALLY.cross) and state == S.RESOLVE:
+			_cross_fire()
 		return
 	#  정산 밖(상점 정산 · 개발자 줄 · 되살리기)은 손대기 전 그대로다. 이 줄을
 	#  지우면 걸음을 안 거치고 total 이 바뀌는 자리에서 띠가 영영 안 따라간다 —
@@ -7671,6 +7691,11 @@ func _fast_rate() -> float:
 
 
 func _next_step() -> void:
+	#  목표 달성이 못 난 채 돌파 걸음이 끝났다(시계 없이 _next_step 을 부르는 도구 ·
+	#  프레임 반올림) — 판 끝(_finish_leg) · 다음 연발(_land 의 _card_reset)보다 먼저
+	#  낸다. 한 번의 돌파에 한 번이다(2026-10-06).
+	if cross_live:
+		_cross_fire()
 	if queue.is_empty():
 		card_target = 0.0
 		# 반동은 한 발이 여러 발이다. 남은 작은 다트가 있으면 다음 발을
@@ -7962,9 +7987,9 @@ func _next_step() -> void:
 			#  ── 달아오르는 가장자리 (2026-09-26) ──
 			#  ⚠ 돌파 걸음에서도 **테두리는 뜬다.** 테두리는 값 크기를 잇는 읽기라
 			#  가장 큰 순간에 꺼지면 거짓말이 된다. 프레임을 0개 더하고 소리를 0개
-			#  더하므로 qa_break 의 단언 셋(shake 13.0 · hitstop <= CARDFX.stop ·
-			#  qt == beat*TALLY.brk − hitstop)을 한 톨도 안 건드린다. 돌파를 비켜 가는
-			#  것은 「빈 박」 쪽(4단의 깊은 멈춤과 침묵)뿐이다.
+			#  더하므로 qa_break 의 단언 셋(넘는 프레임의 shake 13.0 · 내리치는 프레임의
+			#  hitstop <= CARDFX.stop · qt == beat*TALLY.brk − hitstop)을 한 톨도 안
+			#  건드린다. 돌파를 비켜 가는 것은 「빈 박」 쪽(4단의 깊은 멈춤과 침묵)뿐이다.
 			#  ⚠ 위 shake 두 줄(gn · lerpf)은 **한 글자도 안 고쳤다.**
 			var brk: bool = was_short and total >= target
 			_fire_arm(gn, brk)
@@ -7992,54 +8017,58 @@ func _next_step() -> void:
 			#  길이다. 굴림 · 톡 수 · 첫 음은 _tally_arm 한 곳이 세운다(2026-10-06).
 			_tally_arm(gn, shown)
 			_card_kick(float(CARDFX.kick_total), float(CARDFX.press_total))
-			if was_short and total >= target:
+			if brk:
 				# 목표 돌파 — 판이 여기서 끝난다.
 				# 카드 쪽에 새 연출을 **따로 안 얹는다.** 큰 연출은 드문 순간에
 				# 묶는다 — 여기는 이미 screen_flash · shake 13 · pop 이 쥐고 있고
 				# 아래 「한 방」 단이 저절로 걸린다. 화면 전체가 반응하는 순간을
 				# 판이 끝나는 자리 하나에 묶어 두는 것이 한 런 수백 번을 견디는
 				# 선이다(2026-09-18).
-				_sfx("target_hit")
-				screen_flash = 0.7
-				shake = 13.0
-				pop(BC + Vector2(0.0, -46.0), "목표 달성", C_ACC, 24, 1.2)
+				#  ── 띠가 목표를 넘는 프레임으로 미룬다 (2026-10-06) ──
+				#  머리는 보통 합계처럼 내리친다(아래 settle_total · 멈춤 1.0 · 흔들림 gn).
+				#  target_hit · screen_flash 0.7 · shake 13 · 「목표 달성」 · 판 깨짐 도안은
+				#  상단 띠가 목표에 닿는 프레임(k = TALLY.cross)에 _cross_fire 가 낸다.
+				cross_live = true
+				cross_cut = true
+			#  큰 값일수록 낮게 깔린다(2026-09-26). **새로 굽지 않는다** —
+			#  sfx 파일 67개 그대로고 README 두 곳도 안 건드린다. _sfx 가 f
+			#  인자를 이미 받아 pitch_scale = clampf(f / SFX_BASE, 0.25, 4.0)
+			#  로 쓰므로, 392 를 그대로 넘기면 pitch 1.000 = **손대기 전과 한
+			#  톨도 안 다른 소리**다(n=0 인 흔한 발이 그렇다).
+			#  ⚠ 돌파 걸음도 이 소리로 내리친다(2026-10-06). target_hit 은 띠가 목표에
+			#  닿을 때(beat 0.38 · 1배에서 내리친 뒤 0.56 ~ 0.85초)라 0.42초 쏟아짐과
+			#  안 겹친다 — 「판이 끝났다」가 안 흐려진다.
+			#  과장은 소리가 아니라 0.060초의 침묵이라는 위 주석 그대로,
+			#  낮은 음이 그 침묵 뒤에 깔리는 것이 이 층의 전부다.
+			#  ⚠ settle_total 은 표 밑음이 196 이라 **wav 가 없는 날**에는
+			#  beep 갈래가 f 를 절대 Hz 로 받아 한 옥타브 위로 난다. 이건
+			#  board_thud(131) · shop_smash(262) · shop_smash_lo(196) 가
+			#  이미 지고 있는 같은 어긋남이고, probe_sfx 의 「합성음 0」이
+			#  그 갈래를 통째로 막는다. _sfx 는 저쪽 일감과도 겹치므로
+			#  고치지 않고 qa_total ⑨ 가 파일과 표를 같이 못 박는다.
+			#  ── 빈 박 (2026-09-26) ──
+			#  4단만 이 소리를 **멈춤이 풀리는 프레임**으로 늦춘다. 앞
+			#  7.2프레임(pace 1.00)이 무음이다. 새로 굽는 파일 0개 · const SFX
+			#  표 0줄 · sfx/README.md 의 「67」 두 곳 0줄 — 67개를 먼저 읽고
+			#  내린 결론이다: 종은 sfx_bake.gd 가 run_win · target_hit 의
+			#  「이겼다」로 못 박았고, 저음은 위 GROW.semi 가 이미 낸다(gn=1 에서
+			#  196 × 0.6674 = 130.8Hz), sfx_pool 이 넷뿐이라 한 겹을 더 얹으면
+			#  가장 붐비는 프레임에서 앞 소리 꼬리를 자른다.
+			#  **얹는 것은 소리가 아니라 그 자리다.** 바로 위 주석이 이미
+			#  「과장은 소리가 아니라 0.060초의 침묵이다」를 적어 놨으므로 이것은
+			#  새로 짓는 것이 아니라 **그 틀의 배수를 한 칸 올린 것**이다.
+			#  ⚠ 모션 끄기에서는 멈춤이 없으니 늦출 무대도 없다 — 그 자리에서
+			#  그대로 낸다(「움직임만 꺼지고 빛·소리는 남는다」).
+			#  ⚠ 돌파는 늦추지 않는다 — 돌파 멈춤은 stop_fire 를 안 세워 풀리는
+			#  프레임에 소리를 낼 자리가 없다(4단은 개발자 단 강제로만 온다).
+			#  ⚠ 사다리 열세 칸(settle_step · settle_pierce · settle_item)은 한
+			#  음도 안 건드린다. 4단에서 **그 사다리를 한 칸 끊는 것**이 이 층의
+			#  소리 전부다 — 새로 만드는 소리가 아니라 없애는 소리다.
+			var pit := SFX_BASE * pow(2.0, -float(GROW.semi) * gn / 12.0)
+			if fire_hot >= 4 and not motion_off and not brk:
+				fire_snd = pit
 			else:
-				#  큰 값일수록 낮게 깔린다(2026-09-26). **새로 굽지 않는다** —
-				#  sfx 파일 67개 그대로고 README 두 곳도 안 건드린다. _sfx 가 f
-				#  인자를 이미 받아 pitch_scale = clampf(f / SFX_BASE, 0.25, 4.0)
-				#  로 쓰므로, 392 를 그대로 넘기면 pitch 1.000 = **손대기 전과 한
-				#  톨도 안 다른 소리**다(n=0 인 흔한 발이 그렇다).
-				#  ⚠ 이 줄은 목표돌파 갈래의 else: 안이라 target_hit 의 제 사다리와
-				#  구조적으로 안 섞인다 — 「판이 끝났다」가 안 흐려진다.
-				#  과장은 소리가 아니라 0.060초의 침묵이라는 위 주석 그대로,
-				#  낮은 음이 그 침묵 뒤에 깔리는 것이 이 층의 전부다.
-				#  ⚠ settle_total 은 표 밑음이 196 이라 **wav 가 없는 날**에는
-				#  beep 갈래가 f 를 절대 Hz 로 받아 한 옥타브 위로 난다. 이건
-				#  board_thud(131) · shop_smash(262) · shop_smash_lo(196) 가
-				#  이미 지고 있는 같은 어긋남이고, probe_sfx 의 「합성음 0」이
-				#  그 갈래를 통째로 막는다. _sfx 는 저쪽 일감과도 겹치므로
-				#  고치지 않고 qa_total ⑨ 가 파일과 표를 같이 못 박는다.
-				#  ── 빈 박 (2026-09-26) ──
-				#  4단만 이 소리를 **멈춤이 풀리는 프레임**으로 늦춘다. 앞
-				#  7.2프레임(pace 1.00)이 무음이다. 새로 굽는 파일 0개 · const SFX
-				#  표 0줄 · sfx/README.md 의 「67」 두 곳 0줄 — 67개를 먼저 읽고
-				#  내린 결론이다: 종은 sfx_bake.gd 가 run_win · target_hit 의
-				#  「이겼다」로 못 박았고, 저음은 위 GROW.semi 가 이미 낸다(gn=1 에서
-				#  196 × 0.6674 = 130.8Hz), sfx_pool 이 넷뿐이라 한 겹을 더 얹으면
-				#  가장 붐비는 프레임에서 앞 소리 꼬리를 자른다.
-				#  **얹는 것은 소리가 아니라 그 자리다.** 바로 위 주석이 이미
-				#  「과장은 소리가 아니라 0.060초의 침묵이다」를 적어 놨으므로 이것은
-				#  새로 짓는 것이 아니라 **그 틀의 배수를 한 칸 올린 것**이다.
-				#  ⚠ 모션 끄기에서는 멈춤이 없으니 늦출 무대도 없다 — 그 자리에서
-				#  그대로 낸다(「움직임만 꺼지고 빛·소리는 남는다」).
-				#  ⚠ 사다리 열세 칸(settle_step · settle_pierce · settle_item)은 한
-				#  음도 안 건드린다. 4단에서 **그 사다리를 한 칸 끊는 것**이 이 층의
-				#  소리 전부다 — 새로 만드는 소리가 아니라 없애는 소리다.
-				var pit := SFX_BASE * pow(2.0, -float(GROW.semi) * gn / 12.0)
-				if fire_hot >= 4 and not motion_off:
-					fire_snd = pit
-				else:
-					_sfx("settle_total", pit)      # 오늘 그대로
+				_sfx("settle_total", pit)      # 오늘 그대로
 			# 「한 방」 — 목표의 반을 한 발로 냈거나 지금 돌파했다.
 			#
 			# 과장은 소리가 아니라 **0.060초의 침묵**이다. _fill_audio 가 hitstop
@@ -8105,7 +8134,15 @@ func _next_step() -> void:
 			#  돌파에서 안 비워짐을 확인했다.
 			#  **hitstop 을 뺀 뒤의 qt 를 읽어야** 꼬리가 맞으므로 위
 			#  블록보다 반드시 뒤다. 2026-09-24
-			if total >= target and burst_hits.is_empty():
+			#  돌파 걸음은 띠가 목표를 넘는 프레임에 _cross_fire 가 세운다 — 그 프레임의
+			#  남은 qt 를 자로 읽어 금이 넘는 순간부터 꼬리(BRK.tail)까지 번진다. 굴림이
+			#  안 선 띠(grow_roll 0)는 넘는 순간이 따로 없어 여기서 낸다(손대기 전 그대로).
+			#  리볼버가 앞 발에서 넘긴 판의 마지막 발은 돌파가 아니라 여기서 곧장 세운다.
+			#  2026-10-06
+			if cross_live:
+				if score_roll <= 0.0:
+					_cross_fire()
+			elif total >= target and burst_hits.is_empty():
 				_brk_arm()
 
 	#  계산하는 동안 탄다 — 합계 걸음은 _fire_arm 이 제 값으로 선다(2026-09-27).
@@ -8334,9 +8371,11 @@ func _tot_pace() -> float:
 #   · 칸: TALLY.tick0 + TALLY.tick_gn × gn, 4 ~ 24 — gn 0 에서 6 · 0.4 에서 12 · 1 에서 22.
 #   · 첫 칸 음: 걸음 사다리가 멎은 자리(pitch_step − 1), 상한 12반음.
 #  grow_roll 0 이면 아무것도 안 세운다 — 손대기 전 띠(벽시계 lerp)이고 톡이 없다.
+#  굴림은 목표에서 안 갈린다 — 돌파 걸음만 세운 뒤에 cross_cut 을 켠다.
 func _tally_arm(gn: float, from: float) -> void:
 	tick_n = 0
 	tick_i = 0
+	cross_cut = false
 	if grow_roll <= 0.0:
 		return
 	score_from = from
@@ -8385,6 +8424,39 @@ func _fire_release() -> void:
 	if fire_snd > 0.0:
 		_sfx("settle_total", fire_snd)
 		fire_snd = 0.0
+
+
+#  목표를 넘는 순간(2026-10-06). 돌파 걸음의 머리는 보통 합계처럼 내리치고, 이
+#  다섯은 상단 띠가 목표에 닿는 프레임(k = TALLY.cross)에 난다 — target_hit ·
+#  screen_flash 0.7 · shake 13.0 · 「목표 달성」 · 판 깨짐 도안(연발이 다 팔렸을 때).
+#  _brk_arm 은 이 프레임의 남은 qt 를 자로 읽어 금이 여기서부터 꼬리(BRK.tail)까지
+#  번진다. _tick_score 가 부르고, 못 닿은 채 걸음이 끝나면 _next_step 머리가 부른다 —
+#  한 번의 돌파에 한 번이다(cross_live).
+func _cross_fire() -> void:
+	cross_live = false
+	_sfx("target_hit")
+	screen_flash = 0.7
+	shake = 13.0
+	pop(BC + Vector2(0.0, -46.0), "목표 달성", C_ACC, 24, 1.2)
+	if burst_hits.is_empty():
+		_brk_arm()
+
+
+#  돌파 걸음에서 띠가 목표에 닿을 때 남은 qt. 걸음 밖에서 판 깨짐을 다시 볼 때
+#  (_brk_arm 의 qt 0 갈래) 이 값을 자로 쓴다 — 게임은 _cross_fire 가 그 프레임의
+#  qt 를 그대로 읽는다. 걸음 = beat × TALLY.brk − 멈춤(모션 끄기 0) · 창 = 걸음 ×
+#  jspan ÷ score_div · 넘는 자리 = 창의 lead + cross × (hold − lead).
+#  beat 0.38 에서 gn 0 · 0.6 · 1 → 1.116 · 0.975 · 0.825초.
+func _cross_qt(gn: float) -> float:
+	var q := beat * float(TALLY.brk)
+	if not motion_off:
+		q -= minf(float(CARDFX.stop), q * 0.5)
+	if grow_roll <= 0.0:
+		return q
+	var w := q * float(CARDFX.jspan) * grow_roll \
+			/ lerpf(float(GROW.div_lo), float(GROW.div_hi), gn)
+	var u := float(TALLY.lead) + float(TALLY.cross) * (float(GROW.hold) - float(TALLY.lead))
+	return maxf(q - u * w, 0.0)
 
 
 # 합계 걸음에서 보이는 「+n」. **온 값으로 내리친다**(2026-10-06) — 0 에서 굴러오르던
@@ -8469,6 +8541,10 @@ func _card_reset() -> void:
 	#  띠를 앞 total 에 세우고 동전을 낸다. 2026-10-06
 	tick_n = 0
 	tick_i = 0
+	#  못 난 목표 달성도 접는다 — 판 · 런이 바뀌면 앞 돌파가 새 판에서 안 난다.
+	#  정산 안에서는 _next_step 머리가 _land 보다 먼저 낸다. 2026-10-06
+	cross_cut = false
+	cross_live = false
 	#  앞 발 합계 걸음의 배수(_fast_lim)가 이 발 머리 숨의 한도로 안 샌다. 2026-10-06
 	step_pf = 0.0
 	src_t = 0.0
@@ -18810,6 +18886,9 @@ var smash_deal_n := 0    # 그중 안전망(_sweep_deal)이 깬 수 — 프로�
 #  **런 벽시계에 더해지는 초가 0** 이다 — LAND 가 「딜부터 첫 착지까지
 #  0.411초가 이미 비어 있다 · 박자는 전부 0」으로 세운 그 수다.
 #  견줄 값: EGG 를 통째로 옮겼으면 2.40 × 24판 = 57.6초다.
+#  도안은 걸음 머리가 아니라 **상단 띠가 목표를 넘는 프레임**(_cross_fire)에 서고
+#  금은 거기서부터 꼬리까지 번진다 — beat 0.38 · gn 0 · 0.6 · 1 에서 0.70 · 0.55 ·
+#  0.41초(2026-10-06).
 #
 #  ── 왜 _finish_leg 가 아닌가 ────────────────────────────
 #  qa_wreck ⑧(420~424)과 settle_probe ③-b(152)가 `g._finish_leg()` 가
@@ -20041,7 +20120,8 @@ func _brk_band_mix(r0: float, r1: float) -> float:
 	return clampf(hit / w, 0.0, 1.0)
 
 
-# ── 도안을 뜬다 ── 목표를 넘긴 걸음의 끝에서 부른다.
+# ── 도안을 뜬다 ── 띠가 목표를 넘는 프레임(_cross_fire)에서 부른다. 리볼버가 앞
+#  발에서 넘긴 판은 마지막 발 합계 걸음의 끝에서 부른다.
 #  **화면이 한 픽셀도 안 바뀐다** — 배열 셋을 세우고 시계를 연다.
 #  금 그물과 조각 도안이 **같은 기하**다: 금이 그은 그 선을 따라 판이
 #  갈라진다. EGG 는 금(egg_segs)과 조각(egg_shards)이 따로 난 무늬였다.
@@ -20101,9 +20181,12 @@ func _brk_arm(tier := -1, deep := -1) -> void:
 	brk_live = true
 	#  qt 는 바로 위에서 서고 hitstop 만큼 빠진 뒤다. **그 뒤에 읽어야**
 	#  꼬리가 맞으므로 _brk_arm 은 걸음 갈래의 마지막에 선다.
-	#  걸음 밖(개발자 모드 다시 보기)에서는 qt 가 0 이라 표준 돌파 걸음을
-	#  자로 쓴다 — 그래야 다시 보기가 실제와 같은 길이로 돈다.
-	brk_qt0 = qt if qt > 0.001 else beat * float(TALLY.brk)
+	#  돌파 걸음은 띠가 목표를 넘는 프레임(_cross_fire)에 서므로 이 qt 가 그때
+	#  남은 걸음이다 — 금이 넘는 순간부터 번진다(2026-10-06).
+	#  걸음 밖(개발자 모드 다시 보기)에서는 qt 가 0 이라 지금 이득의 크기(gn)로
+	#  넘는 순간의 남은 걸음(_cross_qt)을 자로 쓴다 — 그래야 다시 보기가 실제와
+	#  같은 길이로 돈다.
+	brk_qt0 = qt if qt > 0.001 else _cross_qt(_grow_n())
 	brk_span = maxf(brk_qt0 - _brk_fire_at(), 0.0)
 
 
@@ -35710,6 +35793,10 @@ const TALLY := {
 	"tick0": 6,      # 톡 칸 = tick0 + tick_gn × gn (4 ~ 24). gn 0 · 0.4 · 1 → 6 · 12 · 22
 	"tick_gn": 16,
 	"semi": 12,      # 톡이 오르는 반음 — 사다리가 멎은 자리에서 한 옥타브
+
+	# 돌파 걸음(_tick_score · _cross_fire) — 띠가 k 0 ~ cross 에 목표까지, cross ~ 1 에
+	# total 까지 오르고 목표에 닿는 프레임에 목표 달성이 난다.
+	"cross": 0.45,   # beat 0.38 · gn 0.6 에서 내리친 뒤 0.70초 · 금 0.55초
 }
 
 

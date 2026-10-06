@@ -147,7 +147,10 @@ func _throw(kill := false, cap := 900, deep := -1) -> Dictionary:
 			"shards": 0, "bits": 0, "pops": 0,
 			"shake": -1.0, "qt": -1.0, "hitstop": -1.0,
 			"stage": 0, "dart_gone": -1, "deep": -1,
-			"swap": false, "turn": false}
+			"swap": false, "turn": false,
+			"slam": -1, "slam_qt": -1.0, "slam_hs": -1.0,
+			"pre_shown": -1.0, "arm_shown": -1.0, "gn": -1.0, "qt0": -1.0,
+			"hit": 0, "hit_f": -1}
 	g.target = 1
 	g.total = 0
 	g.state = g.S.CONFIRM
@@ -155,6 +158,8 @@ func _throw(kill := false, cap := 900, deep := -1) -> Dictionary:
 	g.aim = g.BC
 	var prev: int = g.sfx_next
 	var pool: int = maxi((g.sfx_pool as Array).size(), 1)
+	var ps_prev: int = g.pitch_step
+	var shown_prev: float = g.shown
 	for f in cap:
 		#  ⚠ **_process 보다 앞이다.** 삐걱은 그 프레임 안에서 울므로,
 		#  뒤에 적으면 첫 단이 자가 뜬 3단 음으로 난다.
@@ -172,12 +177,18 @@ func _throw(kill := false, cap := 900, deep := -1) -> Dictionary:
 		#  ⚠ **정산 프레임은 안 센다.** 그 프레임에 _settle_clear 가
 		#  leg_clear 를 울리는데 그것은 깨짐의 소리가 아니다.
 		#  도안이 선 프레임도 안 센다(target_hit 이 거기서 운다).
-		if o.arm >= 0 and o.clear < 0 and g.state != g.S.CLEAR:
-			for k in dn:
-				var pi: int = posmod(prev - dn + k, pool)
-				var st = (g.sfx_pool[pi] as AudioStreamPlayer).stream
-				var snm := "" if st == null \
-						else String(st.resource_path).get_file().get_basename()
+		#  target_hit 은 던진 프레임부터 정산까지 **전부** 센다 — 한 번의 돌파에
+		#  한 번이다(2026-10-06).
+		for k in dn:
+			var pi: int = posmod(prev - dn + k, pool)
+			var st = (g.sfx_pool[pi] as AudioStreamPlayer).stream
+			var snm := "" if st == null \
+					else String(st.resource_path).get_file().get_basename()
+			if snm == "target_hit":
+				o.hit += 1
+				if o.hit_f < 0:
+					o.hit_f = f
+			if o.arm >= 0 and o.clear < 0 and g.state != g.S.CLEAR:
 				match snm:
 					"board_thud":
 						o.snd += 1
@@ -185,6 +196,12 @@ func _throw(kill := false, cap := 900, deep := -1) -> Dictionary:
 						o.crack += 1
 					"board_break":
 						o.brk += 1
+		#  내리치는 프레임 — 도안이 서기 전 마지막으로 걸음이 바뀐 프레임이다.
+		if o.arm < 0 and g.pitch_step != ps_prev:
+			o.slam = f
+			o.slam_qt = g.qt
+			o.slam_hs = g.hitstop
+		ps_prev = g.pitch_step
 		if g.brk_live and o.arm < 0:
 			o.arm = f
 			o.shake = g.shake
@@ -192,6 +209,11 @@ func _throw(kill := false, cap := 900, deep := -1) -> Dictionary:
 			o.hitstop = g.hitstop
 			o.pops = (g.pops as Array).size()
 			o.deep = g.brk_deep
+			o.pre_shown = shown_prev
+			o.arm_shown = g.shown
+			o.gn = g._grow_n()
+			o.qt0 = g.brk_qt0
+		shown_prev = g.shown
 		if g.brk_fired and o.fire < 0:
 			o.fire = f
 		if o.arm >= 0:
@@ -214,6 +236,19 @@ func _throw(kill := false, cap := 900, deep := -1) -> Dictionary:
 			o.clear = f
 			break
 	return o
+
+
+#  sfx_next 가 prev 에서 지금까지 돈 자리들의 소리 이름 — _throw 와 같은 셈이다.
+#  자리 넷을 한 바퀴 넘게 돌면 셈이 접히므로 부르는 쪽이 한 걸음씩 끊어 부른다.
+func _snd_since(prev: int) -> Array:
+	var pool: Array = g.sfx_pool
+	var n: int = maxi(pool.size(), 1)
+	var dn: int = posmod(int(g.sfx_next) - prev, n)
+	var out := []
+	for k in dn:
+		var st = (pool[posmod(int(g.sfx_next) - dn + k, n)] as AudioStreamPlayer).stream
+		out.append("" if st == null else String(st.resource_path).get_file().get_basename())
+	return out
 
 
 #  띠 표 — _board_dim_sector 가 쓰는 그 표. 겹이 그것과 같은 칸을 가리키는지
@@ -242,17 +277,60 @@ func _run() -> void:
 	var beat: float = g.beat
 
 	# ── ① 돌파 프레임의 값이 하나도 안 바뀌었다 ──────────────
+	#  돌파 걸음은 머리에서 내리치고(멈춤 · 걸음 길이는 그 프레임에서 잰다) 목표
+	#  달성 · 도안은 상단 띠가 목표에 닿는 프레임에 선다(2026-10-06).
 	_open()
 	var a := _throw()
-	_ok("돌파 프레임에 도안이 섰다", a.arm >= 0, "%d프레임째" % a.arm)
+	_ok("돌파 프레임에 도안이 섰다", a.arm >= 0 and int(a.arm) > int(a.slam),
+			"내리침 %d프레임째 · 도안 %d프레임째" % [a.slam, a.arm])
 	_ok("흔들림은 돌파가 낸 13.0 그대로", is_equal_approx(float(a.shake), 13.0),
 			"shake %.2f — 연출이 한 톨도 안 더했다" % a.shake)
-	_ok("멈춤은 CARDFX.stop 밑", float(a.hitstop) <= stop + 0.0001,
-			"hitstop %.3f / 상한 %.3f" % [a.hitstop, stop])
+	_ok("멈춤은 CARDFX.stop 밑", float(a.slam_hs) <= stop + 0.0001,
+			"hitstop %.3f / 상한 %.3f" % [a.slam_hs, stop])
 	var brk_q: float = beat * float(g.TALLY.brk)
 	_ok("걸음 길이를 안 건드렸다",
-			absf(float(a.qt) - (brk_q - float(a.hitstop))) < 0.002,
-			"qt %.3f / 기대 %.3f" % [a.qt, brk_q - float(a.hitstop)])
+			absf(float(a.slam_qt) - (brk_q - float(a.slam_hs))) < 0.002,
+			"qt %.3f / 기대 %.3f" % [a.slam_qt, brk_q - float(a.slam_hs)])
+	_ok("도안은 띠가 목표에 닿는 프레임에 선다",
+			float(a.pre_shown) < float(g.target) and float(a.arm_shown) >= float(g.target),
+			"앞 프레임 띠 %.3f → %.3f / 목표 %d" % [a.pre_shown, a.arm_shown, g.target])
+	#  금의 자는 그 프레임에 남은 걸음이다 — _cross_qt(개발자 다시 보기의 자)와 한
+	#  프레임 안. 넘는 프레임은 걸음 시계를 이미 한 프레임 탄 뒤에 잡힌다.
+	var cq: float = g._cross_qt(float(a.gn))
+	_ok("금의 자가 넘는 순간의 남은 걸음이다",
+			float(a.qt0) >= cq - 0.0001 and float(a.qt0) <= cq + DT + 0.0001,
+			"brk_qt0 %.4f / _cross_qt(gn %.2f) %.4f" % [a.qt0, a.gn, cq])
+	_ok("목표 달성 소리가 넘는 프레임에 한 번",
+			int(a.hit) == 1 and int(a.hit_f) == int(a.arm),
+			"target_hit %d번 · %d프레임째 (도안 %d)" % [a.hit, a.hit_f, a.arm])
+
+	# ── ①-b 시계 없는 길 — 목표 달성이 한 번 난다 ─────────────
+	#  settle_probe · qa_chal · qa_grow_step 처럼 _next_step 을 시계 없이 부르는
+	#  도구는 띠가 안 오른다. 다음 _next_step 의 머리가 _finish_leg 보다 먼저 낸다.
+	_open()
+	g.target = 100
+	g.total = 99
+	g.shown = 99.0
+	g.cur_chip = 10
+	g.cur_mult = 1
+	g.score_mul = 1.0
+	g.burst_hits = []
+	g.queue = [{"k": "total"}]
+	g.state = g.S.RESOLVE
+	var sn0: int = g.sfx_next
+	g._next_step()
+	var cl_slam := _snd_since(sn0)
+	var cl_live: bool = g.cross_live
+	var sn1: int = g.sfx_next
+	g._next_step()
+	var cl_end := _snd_since(sn1)
+	_ok("시계 없는 길 — 내리칠 때는 아직 안 난다",
+			cl_live and not cl_slam.has("target_hit") and cl_slam.has("settle_total"),
+			"내리침 %s · 남음 %s" % [str(cl_slam), cl_live])
+	_ok("시계 없는 길 — 판 끝보다 먼저 한 번 난다",
+			cl_end.count("target_hit") == 1 and not g.cross_live
+			and g.state == g.S.CLEAR and not g.brk_live,
+			"%s · state %d" % [str(cl_end), g.state])
 
 	# ── ② 글자 0자 ──────────────────────────────────────────
 	#  연출을 통째로 손으로 돌려 놓고 팝업 수를 본다. 던져서 재면 그 발이
@@ -330,8 +408,11 @@ func _run() -> void:
 	g.aim = g.BC
 	var armed_with_burst := false
 	var armed_at_end := false
+	var rv_hit := 0
 	for _f in 900:
+		var rsn: int = g.sfx_next
 		g._process(DT)
+		rv_hit += _snd_since(rsn).count("target_hit")
 		if g.brk_live and not (g.burst_hits as Array).is_empty():
 			armed_with_burst = true
 		if g.brk_live:
@@ -342,6 +423,8 @@ func _run() -> void:
 			"남은 다트가 있는 걸음에서 도안이 선 적 %s"
 			% ("있다" if armed_with_burst else "없다"))
 	_ok("연발이 다 팔린 걸음에서 깨진다", armed_at_end, "")
+	#  첫 발이 넘기고 남은 발은 넘긴 판에 꽂힌다 — 목표 달성은 첫 발에서 한 번이다.
+	_ok("연발 — 목표 달성 소리가 한 번", rv_hit == 1, "target_hit %d번" % rv_hit)
 
 	# ── ⑦ 꼬리 — 걸음 길이가 달라도 정산 앞의 숨이 같다 ─────
 	var breaths := []
@@ -735,6 +818,9 @@ func _run() -> void:
 			int(fr.clear) - int(fr.arm) < int(live.clear) - int(live.arm),
 			"%d프레임 < %d프레임" % [int(fr.clear) - int(fr.arm),
 					int(live.clear) - int(live.arm)])
+	_ok("빨리 보기 — 목표 달성 소리가 넘는 프레임에 한 번",
+			int(fr.hit) == 1 and int(fr.hit_f) == int(fr.arm),
+			"target_hit %d번 · %d프레임째 (도안 %d)" % [fr.hit, fr.hit_f, fr.arm])
 
 	# ── ⑬ 소크 — 그림 0 · 소리 0 · 시간 0 ───────────────────
 	_open()
@@ -765,6 +851,12 @@ func _run() -> void:
 			int(mo.clear) - int(mo.arm) <= int(live.clear) - int(live.arm) + 4,
 			"%d프레임 (켬 %d프레임 — 돌파 멈춤 60ms 가 원래 없다)"
 			% [int(mo.clear) - int(mo.arm), int(live.clear) - int(live.arm)])
+	#  띠는 내리친 프레임 다음에 total 에 서지만 목표 달성은 켠 쪽과 같은 k 에서 난다.
+	_ok("모션 끄기 — 목표 달성이 켠 쪽과 같은 때 한 번",
+			int(mo.hit) == 1 and int(mo.hit_f) == int(mo.arm)
+			and absi((int(mo.arm) - int(mo.slam)) - (int(live.arm) - int(live.slam))) <= 4,
+			"target_hit %d번 · 내리친 뒤 %d프레임 (켬 %d프레임)"
+			% [mo.hit, int(mo.arm) - int(mo.slam), int(live.arm) - int(live.slam)])
 	g.motion_off = false
 
 	# ── ⑮ 손잡이 — 도구 51개가 지나는 문 ────────────────────
@@ -804,8 +896,8 @@ func _run() -> void:
 			"brk_live %s · 조각 %d · _brk_board_dy %.1f"
 			% [g.brk_live, (g.brk_shards as Array).size(), g._brk_board_dy()])
 	#  금만 난 중(발화 전)에 나가도 제목 판에 금이 안 박힌다.
-	#  첫 금이 서는 프레임까지 민다 — 돌파 걸음이 4.4박이 된 뒤(2026-10-06)로
-	#  첫 단이 10프레임째가 아니라 17프레임째에 선다. 발화 전인지도 같이 본다.
+	#  첫 금이 서는 프레임까지 민다 — 금의 길이가 걸음 길이와 넘는 순간(_cross_qt)을
+	#  따라 바뀌므로 프레임 수를 박지 않는다(2026-10-06). 발화 전인지도 같이 본다.
 	_open()
 	g.state = g.S.RESOLVE       # 금이 나려면 걸음 안이어야 한다
 	g._brk_arm(2)
@@ -1139,8 +1231,9 @@ func _run() -> void:
 	_ok("깊이가 층의 것(기하·개수·씨)을 한 톨도 안 만진다", ax_ok, ax_txt)
 
 	# ── ⑳ 길이 0 — 이번 일의 유일한 치명상 ──────────────────
-	#  돌파 걸음 101프레임(beat 0.38 · 4.4박) 중 0~100 을 BRK 가 이미 쓴다.
-	#  **빈 프레임이 1** 이라 깊이가 한 프레임이라도 늘리면 정산(S.CLEAR)으로 샌다.
+	#  돌파 걸음(beat 0.38 · 4.4박)에서 BRK 는 띠가 목표를 넘는 프레임부터 걸음 끝까지
+	#  (이 던지기 gn 1 에서 49프레임)를 쓴다(2026-10-06). **빈 프레임이 1** 이라 깊이가
+	#  한 프레임이라도 늘리면 정산(S.CLEAR)으로 샌다.
 	#  ⚠ **1.0배로만 보면 절대 안 드러난다** — 2.5배에서는 마지막 조각이
 	#  지는 프레임과 걸음 끝이 0프레임 차다. 박자 셋 × 빨리 보기까지 댄다.
 	var len_ok := true
@@ -1402,7 +1495,7 @@ func _run() -> void:
 	#  ⚠ **자가 없는 축이었다.** ③(70프레임)과 ⑳(70/54/4/29)은 프레임
 	#  **수**를 재지 한 프레임의 벽시계를 안 잰다. `_brk_arm` 은 프레임 0 에
 	#  그물을 통째로 짓는다 — 실측 3.6~7.1ms(60fps 예산 16.67ms)다. 그
-	#  자리는 hitstop 을 qt 에서 뺀 바로 뒤라 여유가 있지만, **재는 자가
+	#  자리는 띠가 목표를 넘는 보통 프레임이라(2026-10-06) **재는 자가
 	#  없으면 나중에 눈치 못 챈 채 는다.**
 	#  벽시계로 걸면 느린 기계에서 제 손으로 빨개지므로 **셈의 크기**를
 	#  못 박는다 — 결정적이고, 실제로 시간을 미는 것이 이 넷이다.

@@ -2870,7 +2870,8 @@ static func _run(g: Node, e: Dictionary) -> void:
 			#  깊이는 바로 밑 「오버 금 다시 보기」가 쥔다. 2026-09-25
 			g._brk_arm(i % BRK_TIERS.size(), 0)
 			#  걸음(S.RESOLVE) 밖이라 제 시계로 돌게 푼다. _brk_arm 이
-			#  qt 가 0 인 것을 보고 표준 돌파 걸음을 자로 삼는다.
+			#  qt 가 0 인 것을 보고 게임 쪽 한 함수(_cross_qt)로 띠가 목표를
+			#  넘을 때 남은 걸음을 자로 삼는다 — 금이 게임과 같은 길이로 번진다.
 			g.brk_free = true
 			_brk_replay = true
 			_say("판 깨짐 — %s" % BRK_TIERS[i % BRK_TIERS.size()])
