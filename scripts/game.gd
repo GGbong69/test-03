@@ -28221,17 +28221,20 @@ func _drop_leave(i: int) -> void:
 	# 동전 슬롯 칸은 이륙 시점에 굳힌다. 도착할 때 다시 계산하면 그 사이 판매·구매로
 	# owned 가 바뀌어 엉뚱한 칸이 튄다. 튐 자체는 _drop_arrive 로 옮겼다 —
 	# 물건이 아직 테이블에 있는데 동전 슬롯이 먼저 반응하면 인과가 뒤집힌다.
+	#  쪽지(보드 확장 · 탄창 교체)도 _drop_arrive 하나에서만 뜬다. 여기서도 띄우면
+	#  0.46초 사이를 두고 같은 말이 두 번 뜬다.
 	it.slot = -1
 	match stock[i].type:
 		"item":
 			it.slot = clampi(owned.size() - 1, 0, GameData.max_items() - 1)
 			it.to = _slot_rect(it.slot).get_center()
-		"mod":
-			it.to = p + Vector2(0.0, -30.0)
-			pop(p + Vector2(0.0, -8.0), "보드 확장", C_CHIP.lightened(0.25), 12, 0.9)
+		"cons", "fix":
+			#  사탕 · 사진은 사탕·사진 칸으로 난다. _buy 가 막 cons 끝에 붙였으니
+			#  끝 칸이 제 칸이다 — 동전처럼 이륙 때 굳힌다. 쪽지는 없다.
+			it.slot = clampi(cons.size() - 1, 0, GameData.cons_slots() - 1)
+			it.to = _cons_rect(it.slot).get_center()
 		_:
 			it.to = p + Vector2(0.0, -30.0)
-			pop(p + Vector2(0.0, -8.0), "탄창 교체", C_GREEN.lightened(0.3), 12, 0.9)
 
 
 # ══════════════════════════════════════════════════════════
@@ -32974,13 +32977,15 @@ func _fly_draw() -> void:
 func _drop_arrive(i: int) -> void:
 	# 도착에서 튄다. 이륙에서 튀면 동전이 도착하기 0.46초 전에 동전 슬롯이 먼저 튄다 —
 	# 지금 있는 연출의 유일한 거짓말이었다.
+	#  「탄창 교체」는 다트만의 말이다. 기본 갈래에 두었더니 사탕 · 사진 · 팩도
+	#  이 말을 달고 떴다.
 	var it: Dictionary = drop[i]
 	match stock[i].type:
 		"item":
 			_panel_fire(it.slot)
 		"mod":
 			pop(it.to, "보드 확장", C_CHIP.lightened(0.25), 12, 0.9)
-		_:
+		"dart":
 			pop(it.to, "탄창 교체", C_GREEN.lightened(0.3), 12, 0.9)
 
 # ══════════════════════════════════════════════════════════
