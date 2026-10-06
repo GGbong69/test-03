@@ -3401,25 +3401,9 @@ func _order_board_draw() -> void:
 	if not _order_board_on():
 		return
 	var box: Rect2 = ORDER.box
-	var fr: Rect2 = box.grow(float(ORDER.frame))
-	var ink: Color = DOORT.chalk_ink
-	draw_rect(Rect2(fr.position + Vector2(2.0, 3.0), fr.size), Color(0.0, 0.0, 0.0, 0.40))
-	draw_rect(fr, DOORT.frame)
-	draw_rect(Rect2(fr.position, Vector2(fr.size.x, 1.0)), DOORT.frame_hi)
-	draw_rect(Rect2(fr.position.x, fr.position.y, 1.0, fr.size.y), Color(DOORT.frame_hi, 0.6))
-	draw_rect(Rect2(fr.position.x, fr.end.y - 1.0, fr.size.x, 1.0), Color(0.0, 0.0, 0.0, 0.5))
-	draw_rect(box, DOORT.chalk)
-	#  지운 자국 셋 — 분필 가루가 옅게 번진 얼룩(씨앗 해시라 늘 같은 자리)
-	for k in 3:
-		var w := roundf(lerpf(10.0, 24.0, _gl_rand(k * 5 + 3, 4421)))
-		var h := roundf(lerpf(2.0, 4.0, _gl_rand(k * 5 + 4, 4421)))
-		var px := roundf(box.position.x + _gl_rand(k * 5 + 1, 4421) * (box.size.x - w))
-		var py := roundf(box.position.y + _gl_rand(k * 5 + 2, 4421) * (box.size.y - h))
-		draw_rect(Rect2(px, py, w, h), Color(ink, 0.045))
-	#  받침 — 테 밑 나무 턱에 분필 한 토막
-	draw_rect(Rect2(fr.position.x, fr.end.y, fr.size.x, 3.0), DOORT.frame)
-	draw_rect(Rect2(fr.end.x - 16.0, fr.end.y - 1.0, 8.0, 2.0), Color(ink, 0.85))
-	_order_chalk(box, ink)
+	#  칠판 한 벌(_chalk_board — 제목 칠판과 같은 붓) — 지운 자국 셋 · 받침 오른쪽에 분필 한 토막.
+	_chalk_board(self, box, float(ORDER.frame), CHALKB.order)
+	_order_chalk(box, DOORT.chalk_ink)
 
 
 #  칠판 위 — 보상 그림 · 눈금(남은 발) · 동그라미 / X · 지우개.
@@ -10979,14 +10963,18 @@ func _draw_screen(scr: int) -> void:
 		ui_under = true
 		_draw_screen(pause_from if pause_from >= 0 else S.TITLE)
 		ui_under = false
-	elif scr == S.PROFILE:
-		_draw_profile()
-	elif scr == S.COLLECT:
-		_draw_collect()
+	elif scr == S.PROFILE or scr == S.COLLECT or scr == S.NEWRUN:
+		#  메뉴 재질(MENUM) — 이 셋을 그리는 동안만 같이 쓰는 붓이 분필 · 나무 · 놋쇠로 칠한다.
+		mat_draw = menu_mat_on
+		if scr == S.PROFILE:
+			_draw_profile()
+		elif scr == S.COLLECT:
+			_draw_collect()
+		else:
+			_draw_newrun()
+		mat_draw = false
 	elif scr == S.RUNINFO:
 		_draw_runinfo()
-	elif scr == S.NEWRUN:
-		_draw_newrun()
 	else:
 		_draw_hint()
 
@@ -10996,6 +10984,7 @@ func _draw_screen(scr: int) -> void:
 func draw_front(c: CanvasItem) -> void:
 	if state == S.SETTINGS or set_t > 0.0:
 		_draw_settings(c)
+		mat_draw = false          # 창이 세운 재질(MENUM)을 걷는다 — 앞판 밖으로 안 샌다
 
 
 func _draw() -> void:
@@ -11020,6 +11009,9 @@ func _draw() -> void:
 	#  방에서 이 벽으로 녹아든다(_wall3_back). 흔들림 변환 안이다 — 판과 같이 흔들린다.
 	var w3 := _wall3_live() and _wall3_here()
 	if w3:
+		_wall3_back(_full().position.y, _full().end.y, sh)
+	elif _mat_wall():
+		#  메뉴 재질(MENUM) — 새 런 · 컬렉션 · 프로필의 바닥도 이 벽이다(덮개는 _menu_back).
 		_wall3_back(_full().position.y, _full().end.y, sh)
 	if swap_live:
 		# 방이 맨 밑이다. 카운터만 옆으로 빠지고 방은 그대로 있는 것이
@@ -15838,7 +15830,8 @@ func _wall3_tick() -> void:
 	if wall3_vp == null:
 		#  판 고르기에서 미리 짓는다 — 판으로 드는 보통 길(판 갈이)의 첫 틀에 벽이 구워져
 		#  있어야 한다. 판 갈이 첫 틀에 지으면 두 틀 동안 옛 벽 색이 번쩍인다(wall3_born).
-		if not (_wall3_here() or state == S.LEG):
+		#  메뉴 재질(MENUM)이 서는 화면(새 런 · 컬렉션 · 프로필)도 이 벽을 바닥으로 쓴다.
+		if not (_wall3_here() or state == S.LEG or (menu_mat_on and _mat_here())):
 			return
 		wall3_vp = Wall3D.make_wall(self)
 		wall3_born = Engine.get_frames_drawn()
@@ -35020,10 +35013,16 @@ func _mod_bar(c: Vector2, r: float, x0: float, w: float, col: Color) -> void:
 #  늘린다. 2026-09-19
 func _icon_unfound(c: Vector2, r: float, dim := 0.0, a := 1.0) -> void:
 	var grey := Color(C_WIRE.lightened(0.18).darkened(dim), a)
+	if mat_draw:
+		grey = Color(DOORT.chalk_ink, 0.5 * a)      # 메뉴 재질 — 분필(MENUM)
 	var w1: float = maxf(r * float(LIM.thin), float(LIM.thin_lo))
 	#  반지름은 제약 원형 가족과 **같은 키라인**(KEY.cir)을 쓴다. 손으로 적은
 	#  0.82 를 두면 같은 화면에 반지름이 둘이 된다(2026-09-20 합칠 때 맞췄다).
 	draw_arc(c, r * float(KEY.cir), 0.0, TAU, 20, grey, w1)
+	if mat_draw:
+		#  분필로 그은 원 — 한 바퀴를 조금 덜 돈 둘째 획이 1px 어긋나 겹친다(손으로 그은 결).
+		draw_arc(c + Vector2(1.0, 0.0), r * float(KEY.cir), 0.6, TAU - 0.3, 20,
+				Color(grey, grey.a * 0.4), w1)
 	#  「?」 는 10(곁말). 잉크 가운데를 원반 가운데에 앉힌다.
 	draw_string(font_sm, Vector2(c.x - r, _ink_mid_y(c.y, 10)), "?",
 			HORIZONTAL_ALIGNMENT_CENTER, r * 2.0, 10, grey)
@@ -40850,7 +40849,7 @@ func _prof_del_rect() -> Rect2:
 #  얹힘 짙기와 딸깍이 끊기지 않는다 — 첫 누름이 겨눔이라 앉는 그림이 붉은 면이다.
 func _prof_del_face(r: Rect2, armed: bool) -> Rect2:
 	var key := "hud:지우기"
-	if not armed:
+	if not armed and not mat_draw:
 		return _ui_face(self, key, r, true)
 	var hot: bool = state == S.PROFILE and _ui_can_hover() and r.has_point(mouse_at)
 	if hot:
@@ -40861,6 +40860,11 @@ func _prof_del_face(r: Rect2, armed: bool) -> Rect2:
 	var up: float = float(UIHOV.lift) if hot and not press else 0.0
 	var down: float = lip - 1.0 if press else 0.0
 	var body := Rect2(r.position + Vector2(0.0, down - up), r.size - Vector2(0.0, lip))
+	if not armed:
+		#  메뉴 재질(MENUM) — 나무 패. 뜨고 앉는 치수는 _ui_face 그대로다.
+		_plaque(self, Rect2(r.position + Vector2(0.0, lip - up),
+				r.size - Vector2(0.0, lip - up)), body, false, h)
+		return body
 	_rr(self, Rect2(r.position + Vector2(0.0, lip - up),
 			r.size - Vector2(0.0, lip - up)), C_MULT.darkened(0.5))
 	_rr(self, body, C_MULT.lightened(float(UIHOV.lit) * h))
@@ -40892,9 +40896,12 @@ func _use_profile(i: int) -> void:
 
 
 func _draw_profile() -> void:
-	_scrim()
+	_menu_back()
 	_hdr(self, "프로필")
 	var cur := Save.slot()
+	#  띠의 왼쪽 여백 — 메뉴 재질이면 칠판 석판 왼끝(MENUM.board x8)에서 띠가 선다(제목 칠판
+	#  줄의 띠가 석판 왼끝에서 서는 것과 같다). 쓰는 줄 표식도 이 여백의 띠 끝에 선다.
+	var bp: float = 8.0 if mat_draw else 12.0
 	for i in Save.SLOTS:
 		var sl := i + 1
 		var r := _prof_rect(i)
@@ -40913,17 +40920,17 @@ func _draw_profile() -> void:
 		#  이름 20 · 밑줄 12. 11 · 9 였을 때 「UI 에 비해 글자가 작다」 는 말을
 		#  들었다(2026-09-17). 이름은 띠 24px 의 한가운데(_menu_base_y — 기준선 20)에 서고,
 		#  밑줄은 이름 잉크 밑(21)에서 7px 띄워 앉는다(기준선 38 · 칸 높이 44).
-		_row_band(self, Rect2(r.position, Vector2(r.size.x, 24.0)), ee, ew, 1.0)
+		_row_band(self, Rect2(r.position, Vector2(r.size.x, 24.0)), ee, ew, 1.0, C_ACC, bp)
 		draw_string(font_sm, r.position + Vector2(0.0, _menu_base_y(font_sm, 20, 0.0, 24.0)),
 				"프로필 %d" % sl, HORIZONTAL_ALIGNMENT_LEFT, -1, 20,
-				C_DIM.lerp(C_TXT, ee))
+				_mtx(ee))
 		var inf := Save.slot_info(sl)
 		var line := "빈 자리"
 		if bool(inf.get("used", false)):
 			line = "완주 %d · 최고 라운드 %d" % [int(inf.get("wins", 0)),
 					GameData.round_of(maxi(int(inf.get("best_leg", 1)), 1))]
 		draw_string(font, r.position + Vector2(0.0, 38.0), line,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 12, C_OFF.lerp(C_DIM, ee))
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 12, _mtx_off(ee))
 		#  지금 쓰는 프로필에만 표식. 고른 줄과 쓰는 줄은 다른 말이다 —
 		#  훑는 동안 쓰는 자리가 어디인지가 안 흔들려야 한다.
 		#  **띠의 마침표와 같은 자리에 선다.** 전에는 r.end.x-6 이라 띠가 다
@@ -40934,7 +40941,7 @@ func _draw_profile() -> void:
 		#  달렸다 — 겹쳐 세운 두 획은 한쪽이 다른 쪽을 **완전히 덮어야**
 		#  하나로 읽힌다(2026-09-16 제보).
 		if on:
-			draw_rect(Rect2(_band_end_x(r) - 3.0, r.position.y, 3.0,
+			draw_rect(Rect2(_band_end_x(r, bp) - 3.0, r.position.y, 3.0,
 					r.size.y), C_ACC)
 
 	#  오른쪽 — 고른 줄의 속. 머리와 줄을 20 으로 — 11 일 때 판 폭 300 에 가장 긴 줄
@@ -40945,13 +40952,16 @@ func _draw_profile() -> void:
 	var px := 232.0
 	draw_string(font_sm, Vector2(px, _menu_base_y(font_sm, 20, PROW.y, 24.0)),
 			"프로필 %d" % sel,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 20, C_TXT)
-	draw_rect(Rect2(px, 124.0, 300.0, 1.0), Color(C_WIRE, 0.35))
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 20, _mtx(1.0))
+	if mat_draw:
+		_chalk_rule(self, px, 124.0, 300.0)
+	else:
+		draw_rect(Rect2(px, 124.0, 300.0, 1.0), Color(C_WIRE, 0.35))
 	if not bool(inf2.get("used", false)):
 		draw_string(font_sm, Vector2(px, 150.0), "아직 아무것도 없다",
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 20, C_DIM)
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 20, _mtx(0.0))
 		draw_string(font, Vector2(px, 172.0), "고르면 여기서부터 쌓인다",
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 12, C_OFF)
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 12, _mtx_off(0.0))
 	else:
 		var rows := [
 			["런", "%d회" % int(inf2.get("runs", 0))],
@@ -40966,9 +40976,9 @@ func _draw_profile() -> void:
 		for k in rows.size():
 			var y := 150.0 + float(k) * 26.0
 			draw_string(font_sm, Vector2(px, y), String(rows[k][0]),
-					HORIZONTAL_ALIGNMENT_LEFT, -1, 20, C_DIM)
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 20, _mtx(0.0))
 			draw_string(font_sm, Vector2(px, y), String(rows[k][1]),
-					HORIZONTAL_ALIGNMENT_RIGHT, 300.0, 20, C_TXT)
+					HORIZONTAL_ALIGNMENT_RIGHT, 300.0, 20, _mtx(1.0))
 		#  지우기 — 겨눈 동안에만 붉다. 몸은 _prof_del_face 가 칠한다(칠한 덩어리 +
 		#  턱). 이름은 20 으로 몸 29px 의 한가운데에 선다(_menu_base_y — 기준선 22.5).
 		var dr := _prof_del_rect()
@@ -40977,7 +40987,7 @@ func _draw_profile() -> void:
 		draw_string(font_sm, Vector2(db.position.x,
 				_menu_base_y(font_sm, 20, db.position.y, db.size.y)),
 				"정말 지운다" if armed else "지우기",
-				HORIZONTAL_ALIGNMENT_CENTER, db.size.x, 20, C_TXT)
+				HORIZONTAL_ALIGNMENT_CENTER, db.size.x, 20, C_TXT if armed else _mtx(1.0))
 	_back_row(self, _menu_back_rect(), "뒤로", "",
 			_menu_back_rect().has_point(mouse_at))
 
@@ -41558,28 +41568,12 @@ func _title_chalk() -> void:
 	var box := Rect2(r0.position.x - pad.x, r0.position.y - pad.y,
 			r0.size.x + pad.x * 2.0, pr.end.y - r0.position.y + pad.y + 6.0)
 	box = Rect2(box.position.round(), box.size.round())
-	var fr: Rect2 = box.grow(4.0)
-	#  그늘 — 칠판이 벽에서 떠 있다(빛은 오른쪽 위 문 램프에서 온다)
-	draw_rect(Rect2(fr.position + Vector2(-3.0, 4.0), fr.size), Color(0.0, 0.0, 0.0, 0.45))
-	#  테 — 짙은 나무 · 윗변 밝게 · 밑변 그늘
-	draw_rect(fr, DOORT.frame)
-	draw_rect(Rect2(fr.position, Vector2(fr.size.x, 1.0)), DOORT.frame_hi)
-	draw_rect(Rect2(fr.end.x - 1.0, fr.position.y, 1.0, fr.size.y), Color(DOORT.frame_hi, 0.6))
-	draw_rect(Rect2(fr.position.x, fr.end.y - 1.0, fr.size.x, 1.0), Color(0.0, 0.0, 0.0, 0.5))
-	#  판 · 지운 자국(분필 가루가 옅게 번진 얼룩)
+	#  칠판 한 벌(_chalk_board — 메뉴 칠판 · 주문 칠판과 같은 붓). 빛은 오른쪽 위 문 램프에서
+	#  온다 — 그늘은 왼쪽 아래, 테는 오른변이 밝다. 받침에 분필 한 토막.
+	_chalk_board(self, box, 4.0, CHALKB.title)
 	var ink: Color = DOORT.chalk_ink
-	draw_rect(box, DOORT.chalk)
-	for k in 8:
-		var w: float = roundf(lerpf(16.0, 44.0, _gl_rand(k * 5 + 3, 4407)))
-		var h: float = roundf(lerpf(2.0, 5.0, _gl_rand(k * 5 + 4, 4407)))
-		var px: float = roundf(box.position.x + _gl_rand(k * 5 + 1, 4407) * (box.size.x - w))
-		var py: float = roundf(box.position.y + _gl_rand(k * 5 + 2, 4407) * (box.size.y - h))
-		draw_rect(Rect2(px, py, w, h), Color(ink, 0.045))
-	#  머리 — 이름 · 분필 밑줄 한 획
-	var hx: float = r0.position.x
-	draw_string(font, Vector2(hx, r0.position.y - 16.0), "하이톤", HORIZONTAL_ALIGNMENT_LEFT,
-			-1, 24, Color(ink, 0.94))
-	draw_rect(Rect2(hx, r0.position.y - 10.0, 64.0, 1.0), Color(ink, 0.32))
+	#  머리 — 이름 · 분필 밑줄 한 획(메뉴 머리와 같은 붓 — _chalk_head)
+	_chalk_head(self, Vector2(r0.position.x, r0.position.y - 16.0), "하이톤", 1.0, 64.0)
 	#  줄 — 분필 글씨
 	for i in range(1, trows.size()):
 		var r := _menu_rect(i)
@@ -41595,12 +41589,8 @@ func _title_chalk() -> void:
 				Color(ink, lerpf(0.66, 1.0, ee)))
 	#  가름줄 — 줄과 프로필 사이 분필 한 획(끝이 조금 흐리다)
 	var gy: float = roundf(float(DOORT.rows_bot) + float(DOORT.prof_gap) * 0.5)
-	draw_rect(Rect2(r0.position.x, gy, r0.size.x - 8.0, 1.0), Color(ink, 0.22))
-	draw_rect(Rect2(r0.position.x + r0.size.x - 8.0, gy, 6.0, 1.0), Color(ink, 0.10))
+	_chalk_rule(self, r0.position.x, gy, r0.size.x)
 	_prof_chalk_draw()
-	#  분필 받침 — 테 밑 나무 턱에 분필 한 토막
-	draw_rect(Rect2(fr.position.x, fr.end.y, fr.size.x, 3.0), DOORT.frame)
-	draw_rect(Rect2(fr.position.x + 14.0, fr.end.y - 1.0, 11.0, 2.0), Color(ink, 0.85))
 
 
 #  칠판 맨 밑 프로필 줄 — 사람 그림 · 「프로필 N」 · 자리 셋(쓰는 자리는 분필로 칠하고 · 쌓인
@@ -41638,6 +41628,250 @@ func _prof_chalk_draw() -> void:
 			draw_rect(q, Color(ink, 0.38))
 		else:
 			draw_rect(q, Color(ink, 0.45), false, 1.0)
+
+
+# ══════════════════════════════════════════════════════════
+#  메뉴 재질 — 문 안의 술집 (2026-10-06)
+# ──────────────────────────────────────────────────────────
+#  「메뉴 재질 맞추기」. 문을 지나 들어선 메뉴(새 런 · 컬렉션 · 프로필 · 설정 창)가 남색 판 ·
+#  유령 다트판 · 금빛 알약 탭이라, 문 앞의 재질(벽 · 나무 테 칠판 · 분필 · 놋쇠 손잡이)이 문턱을
+#  넘자마자 끊겼다.
+#   · 바닥 — 판 화면이 구운 다트판 벽(WALL3) 한 장을 깔고(_draw) 따뜻한 검정(WALL3.scrim_col)을
+#     veil 만큼 덮는다. 벽이 아직 안 구워졌거나 헤드리스 · 벽 끔이면 옛 스크림 그대로다.
+#   · 판 — 화면마다 칠판 한 장(board)을 벽에 건다. 제목 칠판 · 주문 칠판과 같은 붓(_chalk_board)
+#     이다. 빛은 판 화면 램프 쪽(왼쪽 위)이라 그늘은 오른쪽 아래, 테는 윗변 · 왼변이 밝다.
+#     설정 창도 칠판이다 — 일시정지의 오른쪽 판이 자라 그 창이 되므로 그 판도 같은 칠판이고,
+#     「설정」 이름표는 놋쇠 패다.
+#   · 글 — 분필(DOORT.chalk_ink). 글 1층은 분필 그대로, 2층은 dim, 꺼진 것은 off 만큼 옅다
+#     (_mtx · _mtx_off). 뜻을 지닌 색(금 · 등급 · 리그 색 · 붉은 겨눔)은 그대로다. 얹힘 · 고름은
+#     제목 칠판과 같은 띠(_row_band)다. 머리는 분필 글씨에 밑줄 한 획(_chalk_head — 「하이톤」).
+#   · 탭 · 켬끔 · 지우기 — 나무 패. 고른 탭 · 켜진 칸은 놋쇠 판(door3d COL.brass)에 새긴 글씨다.
+#     게이지는 분필 줄 위의 놋쇠 손잡이, 새 런의 다트통 그림은 나무 액자다.
+#   · 누르는 사각 · 글 자리는 한 px 도 안 옮겼다 — 칠과 테만 갈았다.
+#  개발자 3쪽 「메뉴 재질」이 켜고 끈다(menu_mat_on — 옛 남색 판과 맞대 본다).
+const MENUM := {
+	"veil": 0.62,                  # 벽 위 덮개의 짙기
+	#  화면 칠판의 석판 — 머리(x16 · 잉크 y14~) · 탭(y14~ · x~624) · 뒤로(~y352)가 다 든다. 테 4px
+	#  가 밖으로 둘러 화면 끝 2~4px 에 벽이 남는다(넓은 창에서는 양옆이 통째로 벽이다).
+	"board": Rect2(8.0, 6.0, 624.0, 349.0),
+	"dim": 0.66, "off": 0.40,      # 글 2층 · 꺼진 글의 분필 짙기(제목 칠판 줄의 0.66 과 같다)
+	#  나무 패 — 몸 · 턱 · 윗변 빛 · 얹힌 몸 · 얹힌 윗변(도트 팔레트 나무 결 · 0 · 2 · 2b · 3)
+	"wood": Color("402e1a"), "wood_lo": Color("140904"), "wood_hi": Color("5e3317"),
+	"wood_hot": Color("553222"), "wood_hot_hi": Color("8a5636"),
+	#  놋쇠 판 — 몸은 문 손잡이 놋쇠(Door3D.COL.brass). 턱 · 윗변 빛 · 새긴 글씨(나무 1)
+	"brass_lo": Color("5c3a1a"), "brass_hi": Color("fdeaa0"), "engrave": Color("2c1508"),
+}
+#  칠판 한 벌의 칸 값(_chalk_board). sh 그늘 밀림 · sh_a 그 짙기 · lit 빛 쪽 옆변(1 오른쪽 ·
+#  −1 왼쪽) · n 지운 자국 수 · w · h 자국 폭 · 높이 범위 · seed 자국 씨 · stick 받침의 분필 토막
+#  (x — 음수면 오른끝에서 잰다 · 폭 — 0 이면 받침이 없다) · soft 면 자국이 위아래로 좁아지는 덩이
+#  (세 줄 — 넓은 칠판에서 납작한 자국이 글줄 밑줄 · 가름줄로 읽혔다) · ink 자국 짙기.
+const CHALKB := {
+	#  제목 — 문 옆 벽돌 벽. 빛은 오른쪽 위 문 램프에서 온다.
+	"title": {"sh": Vector2(-3.0, 4.0), "sh_a": 0.45, "lit": 1.0, "n": 8,
+			"w": Vector2(16.0, 44.0), "h": Vector2(2.0, 5.0), "seed": 4407,
+			"stick": Vector2(14.0, 11.0), "soft": false, "ink": 0.045},
+	#  판 왼쪽 벽 주문 칠판 — 빛은 왼쪽 위(판 · 자루와 같은 쪽).
+	"order": {"sh": Vector2(2.0, 3.0), "sh_a": 0.40, "lit": -1.0, "n": 3,
+			"w": Vector2(10.0, 24.0), "h": Vector2(2.0, 4.0), "seed": 4421,
+			"stick": Vector2(-16.0, 8.0), "soft": false, "ink": 0.045},
+	#  메뉴 화면 칠판 — 판 화면 벽에 건다. 받침은 화면 밖이라 없다.
+	"menu": {"sh": Vector2(3.0, 4.0), "sh_a": 0.50, "lit": -1.0, "n": 16,
+			"w": Vector2(40.0, 110.0), "h": Vector2(6.0, 14.0), "seed": 4433,
+			"stick": Vector2(0.0, 0.0), "soft": true, "ink": 0.028},
+	#  설정 창 · 일시정지의 오른쪽 판 — 받침 오른쪽에 분필 한 토막.
+	"win": {"sh": Vector2(3.0, 4.0), "sh_a": 0.45, "lit": -1.0, "n": 7,
+			"w": Vector2(36.0, 90.0), "h": Vector2(6.0, 12.0), "seed": 4447,
+			"stick": Vector2(-30.0, 12.0), "soft": true, "ink": 0.028},
+}
+var menu_mat_on := true        # 개발자 3쪽 — 메뉴 재질 켬/끔(옛 남색 판과 맞대 본다)
+#  지금 재질로 그리는 중인가 — _draw_screen(새 런 · 컬렉션 · 프로필)과 _draw_settings(창)가
+#  세우고 그 화면을 다 그리면 걷는다. 같이 쓰는 붓(_hdr · _tab_draw · _back_row …)이 이것을 본다.
+var mat_draw := false
+
+
+#  칠판 한 장 — 그늘 · 나무 테(fw 폭 · 윗변 밝게 · 빛 쪽 옆변 반만 · 밑변 그늘) · 짙은 석판 ·
+#  지운 자국(분필 가루가 옅게 번진 얼룩 — 씨 해시라 늘 같은 자리) · 받침(테 밑 나무 턱에 분필
+#  한 토막). 제목 칠판 · 주문 칠판 · 메뉴 칠판 · 설정 창이 이 붓 하나를 칸 값(CHALKB)만 달리해
+#  부른다. avoid — 자국을 안 두는 자리(새 런의 다트통 판 — 통 가림(_cup_mask)이 석판 색을 다시
+#  깔아 그 변에서 자국이 잘려 보인다). a 는 짙기(설정 창이 뜨는 동안). 테 사각을 돌려준다.
+func _chalk_board(c: CanvasItem, box: Rect2, fw: float, k: Dictionary, a := 1.0,
+		avoid := Rect2()) -> Rect2:
+	var fr: Rect2 = box.grow(fw)
+	var ink: Color = DOORT.chalk_ink
+	var sh: Vector2 = k.sh
+	c.draw_rect(Rect2(fr.position + sh, fr.size), Color(0.0, 0.0, 0.0, float(k.sh_a) * a))
+	c.draw_rect(fr, Color(DOORT.frame, a))
+	c.draw_rect(Rect2(fr.position, Vector2(fr.size.x, 1.0)), Color(DOORT.frame_hi, a))
+	var lx: float = fr.end.x - 1.0 if float(k.lit) > 0.0 else fr.position.x
+	c.draw_rect(Rect2(lx, fr.position.y, 1.0, fr.size.y), Color(DOORT.frame_hi, 0.6 * a))
+	c.draw_rect(Rect2(fr.position.x, fr.end.y - 1.0, fr.size.x, 1.0), Color(0.0, 0.0, 0.0, 0.5 * a))
+	c.draw_rect(box, Color(DOORT.chalk, a))
+	var sw: Vector2 = k.w
+	var sv: Vector2 = k.h
+	var sd: int = int(k.seed)
+	for i in int(k.n):
+		var w: float = roundf(lerpf(sw.x, sw.y, _gl_rand(i * 5 + 3, sd)))
+		var h: float = roundf(lerpf(sv.x, sv.y, _gl_rand(i * 5 + 4, sd)))
+		var px: float = roundf(box.position.x + _gl_rand(i * 5 + 1, sd) * (box.size.x - w))
+		var py: float = roundf(box.position.y + _gl_rand(i * 5 + 2, sd) * (box.size.y - h))
+		var q := Rect2(px, py, w, h)
+		if avoid.size.x > 0.0 and q.intersects(avoid):
+			continue
+		var sc := Color(ink, float(k.ink) * a)
+		if not bool(k.soft):
+			c.draw_rect(q, sc)
+			continue
+		#  덩이 — 가운데 줄이 가장 넓고 위 · 아래 줄은 좁게, 좌우로 조금 비껴 선다.
+		var t3: float = roundf(h / 3.0)
+		var jx: float = roundf((_gl_rand(i * 5 + 5, sd) - 0.5) * w * 0.3)
+		c.draw_rect(Rect2(px + roundf(w * 0.2) + jx, py, roundf(w * 0.55), t3), sc)
+		c.draw_rect(Rect2(px, py + t3, w, h - t3 * 2.0), sc)
+		c.draw_rect(Rect2(px + roundf(w * 0.3) - jx, py + h - t3, roundf(w * 0.5), t3), sc)
+	var st: Vector2 = k.stick
+	if st.y > 0.0:
+		c.draw_rect(Rect2(fr.position.x, fr.end.y, fr.size.x, 3.0), Color(DOORT.frame, a))
+		var sx: float = fr.position.x + st.x if st.x >= 0.0 else fr.end.x + st.x
+		c.draw_rect(Rect2(sx, fr.end.y - 1.0, st.y, 2.0), Color(ink, 0.85 * a))
+	return fr
+
+
+#  분필 머리 — 24 글씨 · 기준선 6px 밑에 밑줄 한 획. w 는 밑줄 폭(음수면 글 폭 − 2).
+#  제목 칠판의 「하이톤」과 메뉴 머리(_hdr)가 같이 쓴다.
+func _chalk_head(c: CanvasItem, at: Vector2, t: String, a := 1.0, w := -1.0) -> void:
+	var ink: Color = DOORT.chalk_ink
+	c.draw_string(font, at, t, HORIZONTAL_ALIGNMENT_LEFT, -1, 24, Color(ink, 0.94 * a))
+	var uw: float = w
+	if uw < 0.0:
+		uw = 64.0
+		if font != null:
+			uw = roundf(font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, 24).x) - 2.0
+	c.draw_rect(Rect2(at.x, at.y + 6.0, uw, 1.0), Color(ink, 0.32 * a))
+
+
+#  분필 가름줄 한 획 — 끝 8px 앞에서 한 단 옅어진다(분필이 떨어지는 끝).
+func _chalk_rule(c: CanvasItem, x: float, y: float, w: float, a := 1.0) -> void:
+	var ink: Color = DOORT.chalk_ink
+	c.draw_rect(Rect2(x, y, w - 8.0, 1.0), Color(ink, 0.22 * a))
+	c.draw_rect(Rect2(x + w - 8.0, y, 6.0, 1.0), Color(ink, 0.10 * a))
+
+
+#  메뉴 글자색 — 글 2층(e 0) ~ 1층(e 1). 재질로 그리는 중이면 분필(MENUM.dim ~ 1), 아니면 옛
+#  C_DIM ~ C_TXT 그대로다. a 는 짙기를 곱한다.
+func _mtx(e: float, a := 1.0) -> Color:
+	if mat_draw:
+		return Color(DOORT.chalk_ink, lerpf(float(MENUM.dim), 1.0, e) * a)
+	return Color(C_DIM.lerp(C_TXT, e), a)
+
+
+#  꺼진 글(e 0) ~ 글 2층(e 1) — 옛 C_OFF ~ C_DIM.
+func _mtx_off(e: float, a := 1.0) -> Color:
+	if mat_draw:
+		return Color(DOORT.chalk_ink, lerpf(float(MENUM.off), float(MENUM.dim), e) * a)
+	return Color(C_OFF.lerp(C_DIM, e), a)
+
+
+#  석판 위의 뜻 있는 색(리그 이름) — 색은 그대로 두되 석판(DOORT.chalk) 위 대비가 큰 글씨 3:1
+#  (WCAG — 20 글씨)에 못 미치면 한 단씩 밝힌다. 남색 판 위에서 읽히던 파랑(4a6fa5) · 보라(7a4f9e)
+#  리그가 초록 석판에서는 2.6 · 2.2 로 묻혔다(qa_menumat ④).
+func _on_chalk(c: Color) -> Color:
+	var out := c
+	for i in 8:
+		if _wcag(out, DOORT.chalk) >= 3.0:
+			break
+		out = out.lightened(0.1)
+	return out
+
+
+#  WCAG 대비 — 선형 휘도로 잰다(Color.get_luminance 는 sRGB 값을 선형화 없이 섞는다).
+static func _wcag(a: Color, b: Color) -> float:
+	var la := a.srgb_to_linear()
+	var lb := b.srgb_to_linear()
+	var ya: float = 0.2126 * la.r + 0.7152 * la.g + 0.0722 * la.b
+	var yb: float = 0.2126 * lb.r + 0.7152 * lb.g + 0.0722 * lb.b
+	return (maxf(ya, yb) + 0.05) / (minf(ya, yb) + 0.05)
+
+
+#  재질 칠판이 서는 화면 — 새 런 · 컬렉션 · 프로필(설정 창은 제 붓 — _set_win_draw).
+func _mat_here() -> bool:
+	return state == S.NEWRUN or state == S.COLLECT or state == S.PROFILE
+
+
+#  그 화면 바닥에 다트판 벽이 서는가 — 재질 켬 · 벽이 구워졌다(_wall3_tick 이 이 화면에서도 짓는다).
+func _mat_wall() -> bool:
+	return menu_mat_on and _mat_here() and _wall3_live()
+
+
+#  메뉴 바닥 — 벽이 서면(_draw 가 판 밑에 깔았다) 따뜻한 검정을 덮고, 아니면 옛 스크림이다.
+#  재질로 그리는 중이면 그 위에 화면 칠판을 건다. avoid — _chalk_board.
+func _menu_back(avoid := Rect2()) -> void:
+	if _mat_wall():
+		draw_rect(_full(), Color(WALL3.scrim_col, float(MENUM.veil)))
+	else:
+		_scrim()
+	if mat_draw:
+		_chalk_board(self, MENUM.board, 4.0, CHALKB.menu, 1.0, avoid)
+
+
+#  나무 액자 — 안쪽 사각 r 둘레에 w 폭 테. r 의 둥근 모서리(_rr 계단) 안쪽 틈은 테 색으로 메워
+#  창이 둥글게 파인 액자가 된다. 빛은 왼쪽 위 — 윗변 · 왼변이 밝고 그늘은 오른쪽 아래로 진다.
+func _wood_frame(c: CanvasItem, r: Rect2, w: float, a := 1.0) -> void:
+	r = _pr(r)
+	var o: Rect2 = r.grow(w)
+	#  그늘 — 오른쪽 1 · 아래 2(오른쪽 곁에 글이 붙는 자리라 — 새 런 다트통 이름 — 얕게).
+	var shc := Color(0.0, 0.0, 0.0, 0.40 * a)
+	c.draw_rect(Rect2(o.end.x, o.position.y + 2.0, 1.0, o.size.y - 2.0), shc)
+	c.draw_rect(Rect2(o.position.x + 1.0, o.end.y, o.size.x, 2.0), shc)
+	var fc := Color(DOORT.frame, a)
+	c.draw_rect(Rect2(o.position, Vector2(o.size.x, w)), fc)
+	c.draw_rect(Rect2(o.position.x, r.end.y, o.size.x, w), fc)
+	c.draw_rect(Rect2(o.position.x, r.position.y, w, r.size.y), fc)
+	c.draw_rect(Rect2(r.end.x, r.position.y, w, r.size.y), fc)
+	var k := _rad(r, -1)
+	if k > 0:
+		var ins: Array = ROUND[k]
+		for i in k:
+			var d := float(ins[i])
+			for yy in [r.position.y + float(i), r.end.y - 1.0 - float(i)]:
+				c.draw_rect(Rect2(r.position.x, yy, d, 1.0), fc)
+				c.draw_rect(Rect2(r.end.x - d, yy, d, 1.0), fc)
+	c.draw_rect(Rect2(o.position, Vector2(o.size.x, 1.0)), Color(DOORT.frame_hi, a))
+	c.draw_rect(Rect2(o.position.x, o.position.y, 1.0, o.size.y), Color(DOORT.frame_hi, 0.6 * a))
+	c.draw_rect(Rect2(o.position.x, o.end.y - 1.0, o.size.x, 1.0), Color(0.0, 0.0, 0.0, 0.5 * a))
+
+
+#  패 한 장 — 몸(body)과 그 밑에 드러난 두께(base). brass 면 놋쇠 판, 아니면 나무 패(hot 0..1
+#  만큼 한 단 밝다). 몸 윗변에 빛 한 줄, 나무면 결 두 토막(자리는 패 x 가 씨 — 늘 같은 자리).
+#  결은 몸 위 · 아래 끝 가까이에만 — 가운데에 두면 글자를 가로지르는 줄(취소선)로 읽혔다.
+func _plaque(c: CanvasItem, base: Rect2, body: Rect2, brass: bool, hot: float, a := 1.0) -> void:
+	if brass:
+		_rr(c, base, Color(MENUM.brass_lo, a))
+		_rr(c, body, Color(Door3D.COL.brass, a))
+		_rr_top(c, body, 1, Color(MENUM.brass_hi, 0.85 * a))
+		return
+	var w0: Color = MENUM.wood
+	var h0: Color = MENUM.wood_hi
+	_rr(c, base, Color(MENUM.wood_lo, a))
+	_rr(c, body, Color(w0.lerp(MENUM.wood_hot, hot), a))
+	var r := _pr(body)
+	if r.size.y >= 10.0:
+		for j in 2:
+			var gy: float = roundf(r.position.y + r.size.y * (0.15 + 0.73 * float(j)))
+			var gx: float = roundf(r.position.x + 4.0
+					+ _gl_rand(int(r.position.x) + j * 7, 4459) * r.size.x * 0.4)
+			var gw: float = minf(roundf(r.size.x * (0.3 + 0.25
+					* _gl_rand(int(r.position.x) + j * 7 + 1, 4459))), r.end.x - 4.0 - gx)
+			if gw > 0.0:
+				c.draw_rect(Rect2(gx, gy, gw, 1.0), Color(MENUM.wood_lo, 0.45 * a))
+	_rr_top(c, body, 1, Color(h0.lerp(MENUM.wood_hot_hi, hot), a))
+
+
+#  새긴 글씨 — 놋쇠 판에 판 글씨(가운데 맞춤 · 폭 w). 판 자국의 아랫변이 빛을 받아 1px 밑에
+#  밝은 한 줄이 비친다.
+func _engrave(c: CanvasItem, f: Font, at: Vector2, t: String, w: float, sz: int,
+		a := 1.0) -> void:
+	c.draw_string(f, at + Vector2(0.0, 1.0), t, HORIZONTAL_ALIGNMENT_CENTER, w, sz,
+			Color(MENUM.brass_hi, 0.55 * a))
+	c.draw_string(f, at, t, HORIZONTAL_ALIGNMENT_CENTER, w, sz, Color(MENUM.engrave, a))
 
 
 #  제목 — 술집 문 앞. 바닥(문 · 벽돌 · 빛)은 _draw 가 판 밑에 깔았다.
@@ -42117,7 +42351,8 @@ func _cup_one(pi: int, dx: float) -> void:
 # 없으므로 이 네 조각이 곧 클립이다 — 판의 나머지(이름·효과 칸)는 이
 # 뒤에 그려지므로 덮여도 상관없다.
 func _cup_mask(stage: Rect2, pr: Rect2) -> void:
-	var col: Color = C_PANEL.lightened(0.10)
+	#  메뉴 재질이면 판 바탕이 칠판 석판이다(MENUM — 판을 따로 안 깐다).
+	var col: Color = DOORT.chalk if mat_draw else C_PANEL.lightened(0.10)
 	var y0: float = pr.position.y + 2.0          # 머리띠는 남긴다
 	draw_rect(Rect2(pr.position.x, y0, stage.position.x - pr.position.x,
 			pr.end.y - y0), col)
@@ -45721,7 +45956,10 @@ func _cup_draw(pr: Rect2) -> void:
 	if glow:
 		_cup_halo(stage, _cup3_skin(newrun_pip).body, true)
 	_cup_mask(stage, pr)
-	_rr_line(self, stage, C_PANEL.darkened(0.42))
+	if mat_draw:
+		_wood_frame(self, stage, 3.0)        # 메뉴 재질 — 칠판에 건 나무 액자(MENUM)
+	else:
+		_rr_line(self, stage, C_PANEL.darkened(0.42))
 
 
 
@@ -46062,33 +46300,47 @@ func _draw_newrun_chal() -> void:
 			ui_hot = key
 		#  얹힘은 리그 칩과 **같은 몸**이다(_menu_lift + _rr).
 		var b := _menu_lift(key, r, hot)
-		if b.position.y < r.position.y:
-			_rr(self, r, C_PANEL.darkened(0.45))
-		_rr(self, b, C_PANEL.lightened(0.16 if hot else 0.07))
-		_rr_bottom(self, b, C_PANEL.darkened(0.3))
-		#  고른 줄 — 리그 칩이 고른 것을 말하는 그 어법 그대로.
-		if i == newrun_chal:
-			_rr_line(self, b.grow(2.0), C_TXT)
+		if mat_draw:
+			#  메뉴 재질(MENUM) — 줄은 칠판에 쓴 글줄이다. 고른 줄은 띠가 다 들어온 채 서고,
+			#  얹힌 줄은 반 짙기 띠가 쓸려 든다(제목 칠판 줄과 같은 띠). 줄 사이는 분필 가름줄.
+			b = r
+			var hv: float = _ui_hov(key)
+			if i == newrun_chal:
+				_row_band(self, r, 1.0, 1.0, 1.0, C_ACC, 4.0)
+			elif hv > 0.0:
+				_row_band(self, r, hv, hv, 0.5, C_ACC, 4.0)
+			if i < rows.size() - 1:
+				_chalk_rule(self, r.position.x + 8.0, r.end.y + 2.0, r.size.x - 16.0)
+		else:
+			if b.position.y < r.position.y:
+				_rr(self, r, C_PANEL.darkened(0.45))
+			_rr(self, b, C_PANEL.lightened(0.16 if hot else 0.07))
+			_rr_bottom(self, b, C_PANEL.darkened(0.3))
+			#  고른 줄 — 리그 칩이 고른 것을 말하는 그 어법 그대로.
+			if i == newrun_chal:
+				_rr_line(self, b.grow(2.0), C_TXT)
 		var row: Dictionary = rows[i]
 		#  이름 20pt. 가장 긴 3글자(「깜깜이」·「목표물」·「겹치기」)가 51px 라
 		#  104px 칸에 든다.
 		draw_string(font_sm, Vector2(b.position.x + 8.0,
 				_menu_base_y(font_sm, 20, b.position.y, b.size.y)),
-				String(row.n), HORIZONTAL_ALIGNMENT_LEFT, 96.0, 20, C_TXT)
+				String(row.n), HORIZONTAL_ALIGNMENT_LEFT, 96.0, 20, _mtx(1.0))
 		#  ⚠ **새로 쓸 글이 한 자도 없다.** 기획서 P.16 의 일곱 줄이 이미
 		#  「제약 · 보상」 한 쌍의 꼴이고 challenges.csv 의 desc 열이 그것을
 		#  글자 그대로 들고 있다. 가장 긴 효과 29글자가 12pt 에서 290px 라
 		#  480px 칸(x120~600)에 든다 — 접을 필요도 두 열로 가를 이유도 없다.
 		draw_string(font, Vector2(b.position.x + 104.0,
 				_menu_base_y(font, 12, b.position.y, b.size.y)),
-				String(row.d), HORIZONTAL_ALIGNMENT_LEFT, 480.0, 12, C_DIM)
+				String(row.d), HORIZONTAL_ALIGNMENT_LEFT, 480.0, 12, _mtx(0.0))
 		#  깬 챌린지. 아이작이 깬 챌린지를 목록에서 안 보여 줘 모드로
 		#  보완한 그 반면교사를 여기서 받는다.
 		if Save.unlocked("chal:" + String(row.id)):
 			_chal_check(Vector2(b.position.x + 588.0, b.get_center().y))
 
 func _draw_newrun() -> void:
-	_scrim()
+	#  메뉴 재질이면 다트통 판 자리(_pack_rect)에는 칠판 자국을 안 둔다 — 통 가림이 석판 색을
+	#  다시 깔아 자국이 그 변에서 잘린다(_chalk_board). 두 탭이 같은 칠판이다.
+	_menu_back(_pack_rect().grow(2.0))
 	_hdr(self, "NEW RUN")
 	#  탭 한 쌍 — **세로를 한 픽셀도 안 쓴다.** 머리글 잉크(x16~111)와
 	#  가로로 안 겹치고 다트통 판(y52~)과 세로로 안 겹친다.
@@ -46124,7 +46376,7 @@ func _draw_newrun() -> void:
 		#  12pt 잉크 10px 이 탭 밑 빈 띠(y36~51) 안에 든다. 2026-09-20
 		draw_string(font, Vector2(0.0, 46.0),
 				"완주 %d / 1" % mini(Save.stat("wins"), 1),
-				HORIZONTAL_ALIGNMENT_RIGHT, VIEW.x - SAFE, 12, C_DIM)
+				HORIZONTAL_ALIGNMENT_RIGHT, VIEW.x - SAFE, 12, _mtx(0.0))
 	if newrun_tab == 1:
 		_draw_newrun_chal()
 		_back_row(self, _newrun_go(), "시작", "",
@@ -46141,12 +46393,15 @@ func _draw_newrun() -> void:
 
 	# 다트통 패널 — 왼쪽에 통(다트통의 얼굴), 오른쪽에 이름과 값
 	var pr := _pack_rect()
-	_rr(self, pr, C_PANEL.lightened(0.10))
+	#  메뉴 재질이면 판을 따로 안 깐다 — 칠판에 건 나무 액자(통)와 분필 글이다(MENUM).
+	if not mat_draw:
+		_rr(self, pr, C_PANEL.lightened(0.10))
 	var open: bool = _pack_open(newrun_pip)
 	var row: Dictionary = packs[newrun_pip] if newrun_pip < packs.size() else {}
 	# 통이 먼저다. 마스크가 판 바탕을 다시 깔므로 테두리와 글은 그 뒤에 온다.
 	_cup_draw(pr)
-	_newrun_rim(pr)
+	if not mat_draw:
+		_newrun_rim(pr)
 	# 잠긴 히든은 이름도 안 보인다 — 그게 히든이다. 기본은 "잠김" 으로
 	# 무엇이 남았는지는 보인다(다음에 무엇이 열리는지가 완주의 값이다).
 	var hid: bool = not open and GameData.pack_kind(row) == "hidden"
@@ -46158,10 +46413,10 @@ func _draw_newrun() -> void:
 	if hid:
 		#  통만 깨지고 글자는 말짱하면 「그림이 고장났다」로 읽힌다.
 		#  깨진 것은 신호고, 신호에는 글자도 들어 있다.
-		_gl_string(Vector2(230, 82), nm, 24, C_DIM)
+		_gl_string(Vector2(230, 82), nm, 24, _mtx(0.0))
 	else:
 		draw_string(font, Vector2(230, 82), nm,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 24, C_TXT if open else C_DIM)
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 24, _mtx(1.0 if open else 0.0))
 	# 다섯 줄까지 든다. 넷일 때는 아래가 비지만, 다트통마다 칸 높이가
 	# 출렁이면 넘길 때 눈이 자리를 다시 잡아야 한다.
 	#  판 안에 판을 또 깔지 않는다. 이름 밑에 가는 획 하나면 "여기서부터가
@@ -46169,18 +46424,21 @@ func _draw_newrun() -> void:
 	#  자리(높이 86)는 그대로 잡아 둔다. 다트통마다 칸이 출렁이면 넘길 때
 	#  눈이 자리를 다시 잡아야 한다.
 	var eb := Rect2(Vector2(230.0, 94.0), Vector2(310.0, 86.0))
-	draw_rect(Rect2(eb.position + Vector2(0.0, -6.0), Vector2(eb.size.x, 1.0)),
-			Color(C_WIRE, 0.35))
+	if mat_draw:
+		_chalk_rule(self, eb.position.x, eb.position.y - 6.0, eb.size.x)
+	else:
+		draw_rect(Rect2(eb.position + Vector2(0.0, -6.0), Vector2(eb.size.x, 1.0)),
+				Color(C_WIRE, 0.35))
 	var lines := _pack_lines(row) if open else [_pack_cond(row)]
 	#  설명 12 · 줄 간격 16 — 잉크 10 에 6 을 띄운다. 첫 줄 잉크(100~)가 밑획(88)과
 	#  12px, 다섯째 줄 기준선이 174 라 판의 턱(181~) 위에 든다.
 	for li in mini(lines.size(), 5):
 		if hid:
-			_gl_string(Vector2(232, 110 + li * 16), lines[li], 12, C_DIM)
+			_gl_string(Vector2(232, 110 + li * 16), lines[li], 12, _mtx(0.0))
 			continue
 		draw_string(font, Vector2(232, 110 + li * 16), lines[li],
 				HORIZONTAL_ALIGNMENT_LEFT, eb.size.x - 8.0, 12,
-				C_TXT if open else C_DIM)
+				_mtx(1.0 if open else 0.0))
 	# 이 다트통으로 넘긴 가장 높은 리그 — 한 번도 못 넘겼으면 안 그린다
 	var best := -1
 	for k in GameData.leagues().size():
@@ -46194,8 +46452,10 @@ func _draw_newrun() -> void:
 		for k in packs.size():
 			#  둥근 점 — UI 가 둥글어진 뒤로 네모 점만 뾰족하게 남아 있었다.
 			#  자리는 _pack_pip 하나다(누르는 쪽과 같은 자).
-			draw_circle(_pack_pip(k), 2.2,
-					C_TXT if k == newrun_pip else C_PANEL.lightened(0.06))
+			var pc: Color = C_PANEL.lightened(0.06)
+			if mat_draw:
+				pc = Color(DOORT.chalk_ink, 0.22)
+			draw_circle(_pack_pip(k), 2.2, _mtx(1.0) if k == newrun_pip else pc)
 
 	# 리그 사다리 — 왼쪽이 약한 단이다. 가로로 눕혔으니 읽는 방향을 따른다.
 	var st := GameData.leagues()
@@ -46230,23 +46490,33 @@ func _draw_newrun() -> void:
 			if lhot:
 				ui_hot = lkey
 			var lr := Rect2(r.position.x + 10.0, r.position.y, 13.0, r.size.y)
-			_rr(self, lr, C_PANEL.lightened(0.06))
-			_rr_line(self, lr, C_WIRE.darkened(0.3).lerp(C_DIM, lh))
+			if mat_draw:
+				#  메뉴 재질 — 분필로 그은 빈 칸(MENUM)
+				_rr(self, lr, Color(DOORT.chalk_ink, 0.05))
+				_rr_line(self, lr, Color(DOORT.chalk_ink, lerpf(0.24, 0.6, lh)))
+			else:
+				_rr(self, lr, C_PANEL.lightened(0.06))
+				_rr_line(self, lr, C_WIRE.darkened(0.3).lerp(C_DIM, lh))
 		if String(st[i].get("id", "")) == String(cur.get("id", "")):
-			_rr_line(self, b.grow(2.0), C_TXT)
+			_rr_line(self, b.grow(2.0), _mtx(1.0))
 	#  이름을 단의 색으로 쓰되, 어두운 단은 밝혀서 쓴다 — 검정 리그가
 	#  제 색(3a3450)으로는 배경에 묻혀 이름이 안 보였다. 색을 버리면
 	#  어느 단인지가 안 읽히므로, 색은 지키고 밝기만 끌어올린다.
 	var lc := Color(String(cur.get("color", "cfc9bd")))
 	if lc.get_luminance() < 0.34:
 		lc = lc.lightened(0.55)
+	if mat_draw:
+		lc = _on_chalk(lc)       # 메뉴 재질 — 초록 석판 위에서 파랑 · 보라 리그가 묻혔다
 	#  리그 이름 11 → 18 → 20. 칩 밑의 완주 금줄(221~223)과 밑획(248) 사이 한가운데 —
 	#  잉크 227~244 가 위아래로 4px 씩 띄워 선다(기준선 243.5).
 	draw_string(font_sm, Vector2(0, 243.5), String(cur.get("name", "")),
 			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 20, lc)
 	#  여기도 상자 대신 획 하나다.
-	draw_rect(Rect2(Vector2(160.0, 248.0), Vector2(320.0, 1.0)),
-			Color(C_WIRE, 0.35))
+	if mat_draw:
+		_chalk_rule(self, 160.0, 248.0, 320.0)
+	else:
+		draw_rect(Rect2(Vector2(160.0, 248.0), Vector2(320.0, 1.0)),
+				Color(C_WIRE, 0.35))
 	var sl := _league_lines()
 	for li in sl.size():
 		#  줄에 들어서면 딸깍하고 왼쪽에 금빛 한 획이 선다. 글자는 이미 C_TXT
@@ -46262,7 +46532,7 @@ func _draw_newrun() -> void:
 			draw_rect(Rect2(llr.position.x - 3.0, llr.position.y + 2.0, 1.0,
 					llr.size.y - 4.0), Color(C_ACC, llh))
 		draw_string(font, _league_line_at(li),
-				String(sl[li].n), HORIZONTAL_ALIGNMENT_LEFT, 150.0, 12, C_TXT)
+				String(sl[li].n), HORIZONTAL_ALIGNMENT_LEFT, 150.0, 12, _mtx(1.0))
 
 	#  「시작」은 던지러 가는 이동이라 글줄로 둔다 — 판 위의 조작 단추와
 	#  무게가 다르다. 못 누르는 동안은 띠가 안 선다.
@@ -47654,12 +47924,16 @@ const HDR := {"x": SAFE, "y": 34.0, "sz": 24, "sub_dy": 16.0, "sub_sz": 12}
 func _hdr(c: CanvasItem, t: String, sub := "", a := 1.0, dx := 0.0,
 		y := -1.0) -> void:
 	var yy: float = float(HDR.y) if y < 0.0 else y
-	c.draw_string(font, Vector2(float(HDR.x) + dx, yy), t,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, int(HDR.sz), Color(C_TXT, a))
+	if mat_draw:
+		#  메뉴 재질 — 칠판에 분필로 쓴 머리에 밑줄 한 획(제목 칠판 「하이톤」과 같은 붓).
+		_chalk_head(c, Vector2(float(HDR.x) + dx, yy), t, a)
+	else:
+		c.draw_string(font, Vector2(float(HDR.x) + dx, yy), t,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, int(HDR.sz), Color(C_TXT, a))
 	if sub != "":
 		c.draw_string(font, Vector2(float(HDR.x) + dx, yy + float(HDR.sub_dy)),
 				sub, HORIZONTAL_ALIGNMENT_LEFT, -1, int(HDR.sub_sz),
-				Color(C_DIM, a))
+				_mtx(0.0, a))
 
 
 #  탭 한 칸 — 발라트로식 단추. 칸마다 둥근 단추가 서고, 고른 탭은 금빛으로
@@ -47714,13 +47988,23 @@ func _tab_draw(c: CanvasItem, r: Rect2, label: String, on: bool,
 	var body := Rect2(r.position - Vector2(0.0, lift), r.size - Vector2(0.0, lip))
 	var base := Rect2(r.position + Vector2(0.0, lip - lift),
 			r.size - Vector2(0.0, lip - lift))
-	var bc: Color = C_ACC.darkened(0.08) if on 			else C_PANEL.lightened(0.16 if hot else 0.07)
-	_rr(c, base, Color(bc.darkened(0.45), a))
-	_rr(c, body, Color(bc, a))
 	var big: bool = sz == 20
 	var tf: Font = font_sm if big else font
 	#  몸 한가운데 — 런 정보 탭(몸 24 · 20)은 기준선 20, 컬렉션 탭(몸 20 · 12)은 14.5.
 	var ly: float = _menu_base_y(tf, sz, 0.0, body.size.y)
+	if mat_draw:
+		#  메뉴 재질 — 나무 패(얹히면 한 단 밝다) · 고른 탭은 놋쇠 판에 새긴 글씨(MENUM).
+		_plaque(c, base, body, on, 1.0 if hot and not on else 0.0, a)
+		if on:
+			_engrave(c, tf, body.position + Vector2(ox, ly), label, body.size.x, sz, a)
+			return
+		var mc: Color = _mtx_off(0.0, a) if off else _mtx(0.8 if hot else 0.0, a)
+		c.draw_string(tf, body.position + Vector2(ox, ly), label,
+				HORIZONTAL_ALIGNMENT_CENTER, body.size.x, sz, mc)
+		return
+	var bc: Color = C_ACC.darkened(0.08) if on 			else C_PANEL.lightened(0.16 if hot else 0.07)
+	_rr(c, base, Color(bc.darkened(0.45), a))
+	_rr(c, body, Color(bc, a))
 	var tc: Color = C_BG if on else C_DIM.lerp(C_TXT, 0.8 if hot else 0.0)
 	if off and not on:
 		tc = C_OFF
@@ -47753,7 +48037,7 @@ func _arrow_btn(c: CanvasItem, r: Rect2, right: bool, hot: bool) -> void:
 	c.draw_colored_polygon(PackedVector2Array([
 			Vector2(m.x - 5.0 * sx, m.y - 6.0),
 			Vector2(m.x - 5.0 * sx, m.y + 6.0),
-			Vector2(m.x + 5.0 * sx, m.y)]), C_DIM.lerp(C_TXT, e))
+			Vector2(m.x + 5.0 * sx, m.y)]), _mtx(e))
 
 
 #  뒤로 한 줄. 화면마다 다른 상자였던 것을 한 어법으로 모은다.
@@ -47787,7 +48071,7 @@ func _back_row(c: CanvasItem, r: Rect2, label: String, key: String,
 	var x0: float = r.position.x + (r.size.x - lw - kw) * 0.5
 	var y: float = _menu_base_y(font_sm, 20, r.position.y, r.size.y)
 	c.draw_string(font_sm, Vector2(x0, y), label, HORIZONTAL_ALIGNMENT_LEFT,
-			-1, 20, Color(C_DIM.lerp(C_TXT, e), a))
+			-1, 20, _mtx(e, a))
 	if key != "":
 		c.draw_string(font, Vector2(x0 + lw, y), "   " + key,
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 12,
@@ -47807,6 +48091,7 @@ func _draw_settings(c: CanvasItem) -> void:
 	var pq := _set_pg_ease()
 	var pg := _set_pg()
 	var rows := _set_rows()
+	mat_draw = false          # 일시정지 글줄은 옛 그대로 — 재질은 창(판 몸)부터 선다
 
 	#  뒤 그늘. 제목 위에서는 **0.86** — 제목 메뉴 · 로고의 흰 획이 흐림 판으로는 안
 	#  지워진다(0.55 로 먼저 찍어 봤을 때 「하이톤」 「컬렉션」이 읽혔다, 2026-09-24).
@@ -47827,6 +48112,8 @@ func _draw_settings(c: CanvasItem) -> void:
 		_pause_list_draw(c, e * (1.0 - pq), e * (1.0 - pq), -float(SET.slide) * pq,
 				PAUSE_ROWS.find("set"))
 	#  판 몸. 일시정지의 판은 글줄보다 한 박자 늦게 뜬다(e²).
+	#  메뉴 재질(MENUM)은 여기서부터 — 창(일시정지의 오른쪽 판이 자라 된다)이 나무 테 칠판이다.
+	mat_draw = menu_mat_on
 	var wa: float = e * e if pg == "pause" else e
 	_set_win_draw(c, _set_win(), wa)
 	#  안의 것은 판이 거의 다 자란 뒤(85%)에야 짙어진다 — 자라는 판 안에 줄이 먼저 서면
@@ -47930,29 +48217,33 @@ func _set_panel(c: CanvasItem, key: String, a: float) -> void:
 	var info := _set_info(key)
 	var p := SETP
 	var warn: bool = bool(info.get("warn", false))
-	#  이름 24. 「나가는 줄이다」는 띠 대신 **이름이 붉게** 말한다.
+	#  이름 24. 「나가는 줄이다」는 띠 대신 **이름이 붉게** 말한다. 메뉴 재질이면 판이
+	#  칠판이라 글이 분필이다(_mtx) — 붉은 이름은 그대로다.
 	c.draw_string(font, p.position + Vector2(20.0, 42.0),
 			String(info.get("n", key)), HORIZONTAL_ALIGNMENT_LEFT, -1, 24,
-			Color(C_MULT if warn else C_TXT, a))
+			Color(C_MULT, a) if warn else _mtx(1.0, a))
 	if info.has("kids"):
-		c.draw_rect(Rect2(p.position.x + 20.0, p.position.y + 54.0, p.size.x - 40.0, 1.0),
-				Color(C_WIRE, 0.35 * a))
+		if mat_draw:
+			_chalk_rule(c, p.position.x + 20.0, p.position.y + 54.0, p.size.x - 40.0, a)
+		else:
+			c.draw_rect(Rect2(p.position.x + 20.0, p.position.y + 54.0, p.size.x - 40.0, 1.0),
+					Color(C_WIRE, 0.35 * a))
 		var kids: Array = info["kids"]
 		for j in kids.size():
 			var ki := _set_info(String(kids[j]))
 			var ky: float = p.position.y + 82.0 + float(j) * 28.0
 			c.draw_string(font_sm, Vector2(p.position.x + 20.0, ky), String(ki.get("n", "")),
-					HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(C_TXT, a))
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 20, _mtx(1.0, a))
 			var nn := PackedStringArray()
 			for kk in (ki.get("kids", []) as Array):
 				nn.append(String(_set_info(String(kk)).get("n", "")))
 			c.draw_string(font, Vector2(p.position.x + 20.0, ky), " · ".join(nn),
-					HORIZONTAL_ALIGNMENT_RIGHT, p.size.x - 40.0, 12, Color(C_DIM, a))
+					HORIZONTAL_ALIGNMENT_RIGHT, p.size.x - 40.0, 12, _mtx(0.0, a))
 		return
 	#  한 줄 설명 12 — 이름 잉크 밑(43)과 17px 띄워 기준선 70 에 선다.
 	c.draw_string(font, p.position + Vector2(20.0, 70.0),
 			String(info.get("d", "")), HORIZONTAL_ALIGNMENT_LEFT, -1, 12,
-			Color(C_DIM, a))
+			_mtx(0.0, a))
 
 
 #  판 몸 — 런 정보 판(_panel focus)과 같은 말씨: 그림자 · 짙은 턱 · 몸 · 윗모서리 한 줄 빛.
@@ -47960,6 +48251,10 @@ func _set_panel(c: CanvasItem, key: String, a: float) -> void:
 #  판도 설정 창도 이 몸이다 — 하나가 다른 하나로 자라므로 몸이 같아야 이음매가 없다.
 func _set_win_draw(c: CanvasItem, w: Rect2, a: float) -> void:
 	if a <= 0.0:
+		return
+	if mat_draw:
+		#  메뉴 재질 — 나무 테 칠판(_chalk_board). 테는 창 밖으로 두른다 — 안의 자리는 그대로다.
+		_chalk_board(c, w, 4.0, CHALKB.win, a)
 		return
 	_rr(c, Rect2(w.position + Vector2(2.0, 3.0), w.size), Color(0.0, 0.0, 0.0, 0.4 * a))
 	_rr(c, w, Color(C_PANEL.darkened(0.5), 0.97 * a))
@@ -47978,6 +48273,9 @@ func _set_win_draw(c: CanvasItem, w: Rect2, a: float) -> void:
 #  탭에는 그림(화면 = 모니터 · 소리 = 확성기), 게이지에는 눈금과 수 받침을 단다.
 func _set_deco_draw(c: CanvasItem, a: float) -> void:
 	var w := _set_win()
+	if mat_draw:
+		_set_deco_mat(c, w, a)
+		return
 	var body := Rect2(w.position, w.size - Vector2(0.0, PANEL_LIP))
 	#  아랫빛 — 아래 절반에 옅은 그늘 셋을 겹친다(계단이 1px 씩이라 이음매가 안 보인다).
 	for k in 3:
@@ -48002,11 +48300,8 @@ func _set_deco_draw(c: CanvasItem, a: float) -> void:
 			x += 5.0
 	#  이름표 — 「설정」. 꼬리(짙은 금) 둘이 판 뒤로 접혀 들어간 리본이다.
 	var nm := "설정"
-	var nw: float = 64.0
-	if font_sm != null:
-		nw = font_sm.get_string_size(nm, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x + 36.0
-	var ph: float = float(SETW.plate_h)
-	var pl := Rect2(roundf(body.get_center().x - nw * 0.5), body.position.y - ph * 0.5, nw, ph)
+	var pl := _set_plate(body)
+	var ph: float = pl.size.y
 	var tail := C_ACC.darkened(0.45)
 	for sx in [-1.0, 1.0]:
 		var ex: float = pl.position.x - 10.0 if sx < 0.0 else pl.end.x + 10.0
@@ -48022,6 +48317,48 @@ func _set_deco_draw(c: CanvasItem, a: float) -> void:
 			pl.size.y)), nm, HORIZONTAL_ALIGNMENT_CENTER, pl.size.x, 20, Color(C_BG, a))
 
 
+#  이름표 「설정」의 자리 — 창(w) 윗변에 반쯤 걸친다. 폭은 글 + 36.
+func _set_plate(w: Rect2) -> Rect2:
+	var nw: float = 64.0
+	if font_sm != null:
+		nw = font_sm.get_string_size("설정", HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x + 36.0
+	var ph: float = float(SETW.plate_h)
+	return Rect2(roundf(w.get_center().x - nw * 0.5), w.position.y - ph * 0.5, nw, ph)
+
+
+#  메뉴 재질의 창 꾸밈(MENUM) — 아랫빛 · 테 네 모서리의 놋쇠 못 · 줄 사이 분필 점선 · 놋쇠
+#  이름표(테 윗변에 박은 판 · 나사 둘 · 새긴 「설정」). 금빛 테 · 리본 꼬리는 없다 — 테가 나무다.
+func _set_deco_mat(c: CanvasItem, w: Rect2, a: float) -> void:
+	#  아랫빛 — 가운데부터 밑변까지 한 장의 그러데이션(계단 없이 진다).
+	var hy: float = roundf(w.position.y + w.size.y * 0.5)
+	var c0 := Color(0.0, 0.0, 0.0, 0.0)
+	var c1 := Color(0.0, 0.0, 0.0, 0.16 * a)
+	c.draw_polygon(PackedVector2Array([Vector2(w.position.x, hy), Vector2(w.end.x, hy),
+			Vector2(w.end.x, w.end.y), Vector2(w.position.x, w.end.y)]),
+			PackedColorArray([c0, c0, c1, c1]))
+	var fr: Rect2 = w.grow(4.0)
+	for q in [fr.position + Vector2(1.0, 1.0), Vector2(fr.end.x - 3.0, fr.position.y + 1.0),
+			Vector2(fr.position.x + 1.0, fr.end.y - 3.0), fr.end - Vector2(3.0, 3.0)]:
+		c.draw_rect(Rect2(q as Vector2, Vector2(2.0, 2.0)), Color(Door3D.COL.brass, a))
+		c.draw_rect(Rect2(q as Vector2, Vector2(1.0, 1.0)), Color(MENUM.brass_hi, a))
+	var rows := _set_rows()
+	for i in range(1, rows.size()):
+		if String(rows[i]) == "back":
+			break
+		var r := _set_rect(i)
+		var ly: float = roundf(r.position.y - float(SETW.sgap) * 0.5)
+		var x: float = r.position.x + 10.0
+		while x < r.end.x - 10.0:
+			c.draw_rect(Rect2(x, ly, 2.0, 1.0), Color(DOORT.chalk_ink, 0.12 * a))
+			x += 5.0
+	var pl := _set_plate(w)
+	_plaque(c, Rect2(pl.position + Vector2(0.0, 2.0), pl.size), pl, true, 0.0, a)
+	for sx in [pl.position.x + 5.0, pl.end.x - 7.0]:
+		c.draw_rect(Rect2(sx, roundf(pl.get_center().y) - 1.0, 2.0, 2.0), Color(MENUM.brass_lo, a))
+	_engrave(c, font_sm, Vector2(pl.position.x, _menu_base_y(font_sm, 20, pl.position.y,
+			pl.size.y)), "설정", pl.size.x, 20, a)
+
+
 #  탭의 그림 — 이름 왼쪽. 글자와 같은 색이다(고른 탭은 바탕색, 아니면 흐린 글색).
 #  도형으로 그린다 — 640x360 에서 그림 파일보다 획이 고르다.
 func _set_tab_icon(c: CanvasItem, r: Rect2, key: String, on: bool, hot: bool,
@@ -48034,8 +48371,10 @@ func _set_tab_icon(c: CanvasItem, r: Rect2, key: String, on: bool, hot: bool,
 	var body_h: float = r.size.y - float(TABB.lip)
 	var cx: float = roundf(r.get_center().x - lw * 0.5 - 3.0)
 	var cy: float = roundf(r.position.y - lift + body_h * 0.5)
-	var col: Color = C_BG if on else C_DIM.lerp(C_TXT, 0.8 if hot else 0.0)
-	col.a = a
+	#  메뉴 재질이면 놋쇠 판(고른 탭)에 새긴 색 · 나무 패에는 분필(_mtx).
+	var col: Color = (MENUM.engrave if mat_draw else C_BG) if on \
+			else _mtx(0.8 if hot else 0.0)
+	col.a *= a
 	if key == "screen":
 		#  모니터 — 화면 테(12x9) · 목 · 받침.
 		c.draw_rect(Rect2(cx - 6.0, cy - 6.0, 12.0, 9.0), col, false, 1.0)
@@ -48064,15 +48403,15 @@ func _set_row_draw(c: CanvasItem, i: int, key: String, a: float) -> void:
 		ee = 1.0
 		ew = 1.0
 	_row_band(c, r, ee, ew, a, C_ACC, 4.0)
-	var col: Color = C_DIM.lerp(C_TXT, ee)
+	var col: Color = _mtx(ee, a)            # 메뉴 재질이면 분필(MENUM)
 	var nm := String(info.get("n", key))
 	var by: float = _menu_base_y(font_sm, 20, r.position.y, r.size.y)
 	if key == "back":
 		c.draw_string(font_sm, Vector2(r.position.x, by), nm, HORIZONTAL_ALIGNMENT_CENTER,
-				r.size.x, 20, Color(col, a))
+				r.size.x, 20, col)
 		return
 	c.draw_string(font_sm, Vector2(r.position.x + 10.0, by), nm, HORIZONTAL_ALIGNMENT_LEFT,
-			-1, 20, Color(col, a))
+			-1, 20, col)
 	if bool(info.get("g", false)):
 		_set_gauge_draw(c, i, key, ee, a)
 	elif info.has("tg"):
@@ -48093,39 +48432,60 @@ func _set_gauge_draw(c: CanvasItem, i: int, key: String, ee: float, a: float) ->
 	var r := _set_rect(i)
 	var v: float = _gauge_v(key)
 	var k: float = 1.0 if set_drag == i else ee
-	#  홈 — 판보다 한 단 꺼진 골. 윗변 한 줄 그늘이 「파였다」를, 아랫변 한 줄 빛이
-	#  「턱이 있다」를 말한다.
-	c.draw_rect(tr, Color(C_BG, a))
-	c.draw_rect(Rect2(tr.position, Vector2(tr.size.x, 1.0)), Color(0.0, 0.0, 0.0, 0.35 * a))
-	c.draw_rect(Rect2(tr.position.x, tr.end.y, tr.size.x, 1.0),
-			Color(C_PANEL.lightened(0.16), a))
+	#  메뉴 재질(MENUM) — 홈은 칠판에 그은 분필 줄(빈 몫 옅게 · 찬 몫 진하게), 손잡이는 놋쇠,
+	#  수 칸은 석판이 한 단 꺼진 자리다. 자리(홈 · 손잡이 · 수 칸)는 그대로다.
+	var mat := mat_draw
+	var ink: Color = DOORT.chalk_ink
+	if mat:
+		c.draw_rect(Rect2(tr.position.x, tr.position.y + 2.0, tr.size.x, 2.0),
+				Color(ink, 0.20 * a))
+	else:
+		#  홈 — 판보다 한 단 꺼진 골. 윗변 한 줄 그늘이 「파였다」를, 아랫변 한 줄 빛이
+		#  「턱이 있다」를 말한다.
+		c.draw_rect(tr, Color(C_BG, a))
+		c.draw_rect(Rect2(tr.position, Vector2(tr.size.x, 1.0)), Color(0.0, 0.0, 0.0, 0.35 * a))
+		c.draw_rect(Rect2(tr.position.x, tr.end.y, tr.size.x, 1.0),
+				Color(C_PANEL.lightened(0.16), a))
 	#  눈금 — 25 마다 홈 밑에 점 하나(끝 둘은 조금 길게). 값을 어림하는 자리다.
+	var tkc := Color(ink, 0.32 * a) if mat else Color(C_WIRE, 0.55 * a)
 	for q in 5:
 		var qx: float = roundf(tr.position.x + tr.size.x * float(q) * 0.25)
 		var qh: float = 3.0 if q == 0 or q == 4 else 2.0
-		c.draw_rect(Rect2(qx, tr.end.y + 3.0, 1.0, qh), Color(C_WIRE, 0.55 * a))
+		c.draw_rect(Rect2(qx, tr.end.y + 3.0, 1.0, qh), tkc)
 	var fx: float = roundf(tr.size.x * v)
-	if fx > 0.0:
+	if fx > 0.0 and mat:
+		c.draw_rect(Rect2(tr.position.x, tr.position.y + 2.0, fx, 2.0),
+				Color(ink, lerpf(0.72, 0.92, k) * a))
+	elif fx > 0.0:
 		var fc: Color = C_GOLD.darkened(0.2).lerp(C_GOLD, k)
 		c.draw_rect(Rect2(tr.position, Vector2(fx, tr.size.y)), Color(fc, a))
 		#  채움 윗변의 빛 한 줄 — 금속 띠로 읽힌다.
 		c.draw_rect(Rect2(tr.position.x, tr.position.y + 1.0, fx, 1.0),
 				Color(fc.lightened(0.35), a))
 	#  손잡이 — 짙은 테 + 흰 몸 + 가운데 금 한 줄. 폭은 두 단뿐이다(6 · 8) — 홀수는
-	#  가운데가 반 픽셀에 걸려 번진다.
+	#  가운데가 반 픽셀에 걸려 번진다. 메뉴 재질이면 놋쇠 몸 · 윗변 빛 · 가운데 홈.
 	var kw: float = 6.0 + 2.0 * roundf(k)
 	var kr := Rect2(tr.position.x + fx - kw * 0.5, tr.position.y - 6.0, kw, 18.0)
-	_rr(c, kr.grow(1.0), Color(C_BG, 0.9 * a), 2)
-	_rr(c, kr, Color(C_TXT, a), 2)
-	c.draw_rect(Rect2(roundf(kr.get_center().x) - 1.0, kr.position.y + 4.0, 2.0,
-			kr.size.y - 8.0), Color(C_ACC.lerp(C_GOLD, k), a))
+	if mat:
+		var brs: Color = Door3D.COL.brass
+		_rr(c, kr.grow(1.0), Color(MENUM.engrave, 0.9 * a), 2)
+		_rr(c, kr, Color(brs.lerp(MENUM.brass_hi, 0.25 * k), a), 2)
+		_rr_top(c, kr, 1, Color(MENUM.brass_hi, 0.9 * a), 2)
+		c.draw_rect(Rect2(roundf(kr.get_center().x) - 1.0, kr.position.y + 4.0, 2.0,
+				kr.size.y - 8.0), Color(MENUM.brass_lo, a))
+	else:
+		_rr(c, kr.grow(1.0), Color(C_BG, 0.9 * a), 2)
+		_rr(c, kr, Color(C_TXT, a), 2)
+		c.draw_rect(Rect2(roundf(kr.get_center().x) - 1.0, kr.position.y + 4.0, 2.0,
+				kr.size.y - 8.0), Color(C_ACC.lerp(C_GOLD, k), a))
 	#  수 받침 — 수 칸 오른끝(줄 끝 10px 안)의 꺼진 알약. 「100」이 40px 라 44 칸에 든다.
 	var vb := Rect2(r.end.x - 10.0 - 46.0, r.get_center().y - 11.0, 46.0, 22.0)
-	_rr(c, vb, Color(C_BG, (0.55 + 0.25 * k) * a))
+	_rr(c, vb, Color(0.0, 0.0, 0.0, (0.22 + 0.12 * k) * a) if mat
+			else Color(C_BG, (0.55 + 0.25 * k) * a))
 	c.draw_string(font_sm, Vector2(vb.position.x,
 			_menu_base_y(font_sm, 20, vb.position.y, vb.size.y)),
 			"%d" % int(round(v * 100.0)), HORIZONTAL_ALIGNMENT_CENTER, vb.size.x, 20,
-			Color(C_DIM.lerp(C_TXT, k), a))
+			_mtx(k, a))
 
 
 
@@ -50299,7 +50659,7 @@ const COL_TABS := [
 
 
 func _draw_collect() -> void:
-	_scrim()
+	_menu_back()
 	_hdr(self, "컬렉션")
 	#  「본 것 / 전부」. 숫자는 값이라 해설이 아니다 — 발라트로는 탭에 느낌표만
 	#  띄우고 수를 안 적어 공략이 외부 도구를 쓴다. 그 자리를 메운다.
@@ -50325,7 +50685,10 @@ func _draw_collect() -> void:
 		if _ui_can_hover() and cell.has_point(mouse_at):
 			ui_hot = ckey
 		var chv: float = _ui_hov(ckey)
-		if chv > 0.0:
+		#  메뉴 재질이면 받침이 분필 가루를 옅게 문지른 자리다(MENUM).
+		if chv > 0.0 and mat_draw:
+			_rr(self, cell.grow(-4.0), Color(DOORT.chalk_ink, 0.07 * chv))
+		elif chv > 0.0:
 			_rr(self, cell.grow(-4.0), Color(C_PANEL, 0.6 * chv))
 		#  그림은 칸 한가운데보다 11px 위다(8 → 11). 두 줄로 접히는 긴 이름(아래)이
 		#  그림과 안 닿게 세 칸 올렸다 — 가장 큰 그림인 사진이 칸 위에서 2~34(그늘 34)라
@@ -50339,6 +50702,9 @@ func _draw_collect() -> void:
 		#  죽는다. 그림 중심 c 도 찾은 칸과 **같다** — 발견으로 뒤집혀도 한
 		#  픽셀도 안 흔들린다. 2026-09-19
 		if not _col_found(collect_tab, gi):
+			#  메뉴 재질이면 칠판에 분필로 그린 빈 카드 — 테 · 물음표 원(_icon_unfound).
+			if mat_draw:
+				_rr_line(self, cell.grow(-6.0), Color(DOORT.chalk_ink, 0.13))
 			_icon_unfound(c, 13.0)
 			nm = "???"
 		else:
@@ -50379,7 +50745,7 @@ func _draw_collect() -> void:
 		#  44 · 55 — 페이퍼로지 10 의 잉크(8~9px) 둘이 3px 띄워 36~44 · 47~55 에 선다.
 		#  사진(칸 위 2~34)과 2px, 얹힘 테(칸 맨 아래 줄 57)와 1.5px 로 위아래가 고르다
 		#  (45 · 56 이면 둘째 줄 밑이 테에 붙었다).
-		var ncol: Color = C_DIM.lerp(C_TXT, chv)
+		var ncol: Color = _mtx(chv)
 		var nw: float = cell.size.x - 4.0
 		if font != null and font.get_string_size(nm, HORIZONTAL_ALIGNMENT_LEFT,
 				-1, 12).x <= nw:
@@ -50402,7 +50768,7 @@ func _draw_collect() -> void:
 			_arrow_btn(self, ca, right, ca.has_point(mouse_at))
 		#  쪽 번호 9 → 11 → 12(갈무리11). 격자 끝(304)과 화살표 · 뒤로(322~) 사이다.
 		draw_string(font, Vector2(0, 318), "%d / %d" % [collect_page + 1, _col_pages()],
-				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 12, C_DIM)
+				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 12, _mtx(0.0))
 	_back_row(self, _menu_back_rect(), "뒤로", "",
 			_menu_back_rect().has_point(mouse_at))
 

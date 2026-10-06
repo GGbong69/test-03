@@ -975,9 +975,15 @@ static func _rows(g: Node) -> Array:
 				#  켜고 끈다. 끄면 옛 제목(단색 바탕 · 왼쪽 글줄)이다. 조작감 쪽이 열아홉 줄로 차서
 				#  같은 켬 · 끔 줄(튜토리얼 런) 밑으로 왔다(qa_crt 가 쪽마다 열아홉을 잰다).
 				{"n1": "술집 문 %s" % ("켬" if g.door_on else "끔"), "t": "act", "a": "door"},
+				#  메뉴 재질(2026-10-06) — 새 런 · 컬렉션 · 프로필 · 설정 창의 술집 재질(game.gd MENUM —
+				#  다트판 벽 바닥 · 나무 테 칠판 · 분필 글 · 나무 패와 놋쇠 탭)을 켜고 끈다. 끄면 옛
+				#  남색 판 · 금빛 탭이다. 술집 문 바로 밑 — 문 밖과 문 안을 같은 쪽에서 맞대 본다.
+				{"n1": "메뉴 재질 %s" % ("켬" if g.menu_mat_on else "끔"), "t": "act",
+						"a": "menumat"},
 				#  ── 판 사건 (2026-10-06 · game.gd _ev_roll) ─────────────
 				#  불씨 · 주문 · 단골 셋이 이 밑에 나란히 선다. 0쪽 열여덟 · 2쪽 · 5쪽 열아홉이라
-				#  셋이 같이 들 자리가 이 쪽뿐이다 — 단골까지 열여섯(qa_crt 가 쪽마다 열아홉을 잰다).
+				#  셋이 같이 들 자리가 이 쪽뿐이다 — 단골까지 열일곱(메뉴 재질 포함 · qa_crt 가 쪽마다
+				#  열아홉을 잰다).
 				#  「불씨 피우기」 — 지금 판의 무작위 칸 · 띠에 곧장 피운다. 게임의 _ember_light ·
 				#  _ember_band_pick 을 그대로 부른다. 칸 · 띠는 전역 난수다 — run_rng 를 건드리면
 				#  이 판을 되감을 때 다음 판 사건이 달라진다.
@@ -2594,6 +2600,11 @@ static func _run(g: Node, e: Dictionary) -> void:
 			g.door_on = not g.door_on
 			g.queue_redraw()
 			_say("술집 문 %s" % ("켬" if g.door_on else "끔"))
+			return
+		"menumat":
+			g.menu_mat_on = not g.menu_mat_on
+			g.queue_redraw()
+			_say("메뉴 재질 %s" % ("켬" if g.menu_mat_on else "끔"))
 			return
 		"ember":
 			if not g._is_play():
