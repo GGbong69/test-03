@@ -442,8 +442,12 @@ def write_ai(ai_path: str, pdf_path: str | None, key: str, art: Image.Image,
     px2pt = 72.0 / d
     doc, page = _pdf_page(W, H)
     b = BLEED_MM * pt
-    page.set_bleedbox(pymupdf.Rect(0, 0, W, H))
-    page.set_trimbox(pymupdf.Rect(b, b, W - b, H - b))
+    #  상자는 **페이지가 실제로 잡힌 크기**에서 잰다. MuPDF 가 페이지를 float32 로 쥐어
+    #  A1(1700.8 x 2401.0pt)은 넘긴 값보다 0.0001pt 작게 잡히고, 넘긴 값으로 BleedBox 를
+    #  세우면 「BleedBox not in MediaBox」 로 멈췄다(A3 · X배너는 우연히 맞았다).
+    mb = page.mediabox
+    page.set_bleedbox(mb)
+    page.set_trimbox(pymupdf.Rect(mb.x0 + b, mb.y0 + b, mb.x1 - b, mb.y1 - b))
 
     oc_art = doc.add_ocg("그림", on=True)
     oc_title = doc.add_ocg("제목", on=True)
