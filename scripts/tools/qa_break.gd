@@ -153,7 +153,7 @@ func _throw(kill := false, cap := 900, deep := -1) -> Dictionary:
 			"hit": 0, "hit_f": -1, "flash": -1.0, "from": -1.0, "tot": -1,
 			"land": -1, "land_hs": -1.0, "land_drop": -1.0, "land_norm": -1.0,
 			"st_f": -1, "clear_shk": -1.0,
-			"crack_f": [], "crack_p": [], "near_f": []}
+			"crack_f": [], "crack_p": [], "near_f": [], "stage_f": []}
 	g.target = 1
 	g.total = 0
 	g.state = g.S.CONFIRM
@@ -255,6 +255,10 @@ func _throw(kill := false, cap := 900, deep := -1) -> Dictionary:
 			o.shards = maxi(o.shards, (g.brk_shards as Array).size())
 			o.bits = maxi(o.bits, (g.brk_bits as Array).size())
 			o.stage = maxi(o.stage, g.brk_stage)
+			#  금의 단이 처음 보인 프레임 — 단마다 하나(한 방이 한꺼번에 채운 단은 같은 프레임).
+			if g.brk_live and o.clear < 0:
+				while (o.stage_f as Array).size() < int(g.brk_stage):
+					(o.stage_f as Array).append(f)
 			if g.swap_live: o.swap = true
 			if g.turn_live: o.turn = true
 		if o.fire >= 0 and o.gone < 0 \
@@ -298,6 +302,27 @@ func _crack_self(o: Dictionary) -> int:
 	for k in range(1, cf.size()):
 		best = mini(best, int(cf[k]) - int(cf[k - 1]))
 	return best
+
+
+#  금의 단과 삐걱이 한 몸인가 (2026-10-06) — 한 방 앞에 선 단 수 = 삐걱 수, 삐걱 i 가 단 i 가
+#  처음 보인 프레임에서 2프레임 안, 한 방 프레임과 그 뒤에는 삐걱이 없다(조각 위). 한 방이
+#  채운 단(한 방 프레임에 선 것)은 board_break 가 그 소리다. [맞는가, 한 방 앞 단 수, 가장 먼 차]
+func _crack_tied(o: Dictionary) -> Array:
+	var sf: Array = o.stage_f
+	var cf: Array = o.crack_f
+	var fire: int = int(o.fire)
+	var pre := 0
+	for v in sf:
+		if fire < 0 or int(v) < fire:
+			pre += 1
+	var far := 0
+	var ok := cf.size() == pre
+	for i in cf.size():
+		if fire >= 0 and int(cf[i]) >= fire:
+			ok = false
+		if i < sf.size():
+			far = maxi(far, absi(int(cf[i]) - int(sf[i])))
+	return [ok and far <= 2, pre, far]
 
 
 #  삐걱 음이 단 차례로 내려가는가 — 뒤 알이 앞 알보다 낮다.
@@ -904,7 +929,6 @@ func _run() -> void:
 	var snd_ok := true
 	var crk_txt := ""
 	var crk_ok := true
-	var post_all := 0
 	for t in 3:
 		_open()
 		g.leg_no = t + 1          # 작은 1 · 큰 2 · 보스 3
@@ -920,33 +944,28 @@ func _run() -> void:
 		#  작은 판은 꼬리 톡이 0회라, 이 줄이 없으면 런에서 맨 처음 듣는 깨짐이 0.30초짜리
 		#  한 방뿐이었다(2026-09-24 · 단마다 한 알). 굴림이 생긴 뒤로는 그 0.68초를 띠 톡이
 		#  같이 채운다.
-		#  ── 톡 · 착지 · 한 방과 안 겹치고 단마다 한 알 (2026-10-06) ──
-		#  합계 굴림이 목표를 넘은 뒤라 금이 번지는 동안 띠 톡 · 착지가 같이 난다. 삐걱은
-		#  그 소리들(넘기 · 톡 · 착지 · 한 방 · 꼬리 톡)과 2프레임(TALLY.tick_gap) 넘게 떨어진
-		#  프레임에만 나고 삐걱끼리도 2프레임 넘게 떨어진다. 못 난 것은 착지 뒤 · 한 방 뒤로
-		#  이어 나서 **삐걱 수 = 단 수 = 층 표의 stages**(작은 · 큰 넷 · 보스 여섯)이고 음은 단
-		#  차례로 내려간다. 한때 못 난 것을 한 방이 덮어 넷 중 셋 · 여섯 중 셋만 났다(검토).
+		#  ── 단과 삐걱이 한 몸 · 톡 · 착지 · 한 방과 안 겹친다 (2026-10-06) ──
+		#  합계 굴림이 목표를 넘은 뒤라 금이 번지는 동안 띠 톡 · 착지가 같이 난다. 금의 단은
+		#  그 삐걱이 날 수 있는 프레임 — 넘기 · 톡 · 착지 · 한 방 · 꼬리 톡과 2프레임
+		#  (TALLY.tick_gap) 넘게 떨어진 프레임 — 에만 서고 그 프레임에 삐걱이 같이 난다(단이 처음
+		#  보인 프레임에서 2프레임 안). 한 방 앞에 선 단 수 = 삐걱 수이고, 한 방까지 못 선 단은
+		#  한 방이 채운다 — 조각 위로 삐걱이 뒤따르지 않는다. 삐걱끼리도 2프레임 넘게 떨어지고
+		#  음은 단 차례로 내려간다. 한때 단은 시계대로 서고 삐걱만 줄에 서서 착지 · 한 방 뒤로
+		#  밀려 났다 — 소리 없는 금이 서고 조각 위로 삐걱이 났다(검토).
 		var cg := _crack_gap(r)
 		var cs := _crack_self(r)
 		var gap2: int = int(ceil(float(g.TALLY.tick_gap) - 0.001))
 		var down := _crack_down(r)
-		#  한 방 뒤로 이어 난 알 — 한 방이 덮던 그 몫이다.
-		var post := 0
-		for cf2 in r.crack_f:
-			if int(r.fire) >= 0 and int(cf2) > int(r.fire):
-				post += 1
-		post_all += post
-		crk_txt += "%s 단%d(표 %d)·삐걱%d · 한 방 뒤 %d(가장 가까운 소리 %d프레임 · 삐걱끼리 %d · 음 %s)  " % [
-				["작은", "큰", "보스"][t], int(r.stage), int(row.stages), int(r.crack), post, cg, cs,
-				"내림" if down else str(r.crack_p)]
-		if int(r.crack) != int(r.stage) or int(r.stage) != int(row.stages) \
-				or cg < gap2 or cs < gap2 or not down:
+		var tie := _crack_tied(r)
+		crk_txt += "%s 단 %d(표 %d · 한 방 앞 %d) · 삐걱 %d %s(단과 가장 먼 차 %d · 가장 가까운 소리 %d프레임 · 삐걱끼리 %d · 음 %s)  " % [
+				["작은", "큰", "보스"][t], int(r.stage), int(row.stages), int(tie[1]), int(r.crack),
+				r.crack_f, int(tie[2]), cg, cs, "내림" if down else str(r.crack_p)]
+		if not bool(tie[0]) or int(r.stage) != int(row.stages) or cg < gap2 or cs < gap2 \
+				or (int(r.crack) > 1 and not down):
 			crk_ok = false
 	_ok("판이 뜨는 소리가 층대로 1·2·3 — 한 방 + 꼬리 톡", snd_ok, snd_txt)
-	#  한 방 뒤 갈래가 실제로 돈다 — 이 던지기(굴림 끝의 톡 · 착지가 금과 겹친다)에서 한 방까지
-	#  못 난 알이 하나도 없으면 위 줄이 그 갈래를 안 잰 것이다.
-	_ok("삐걱 수 = 단 수 · 톡 · 착지 · 한 방 · 꼬리 톡 · 삐걱끼리 2프레임 떨어진다 · 음이 내려간다",
-			crk_ok and post_all > 0, crk_txt)
+	_ok("금의 단마다 그 프레임에 삐걱 · 한 방 앞 단 수 = 삐걱 수 · 한 방 뒤 0 · 소리끼리 2프레임 · 음 내림",
+			crk_ok, crk_txt)
 	_ok("board_crack 이 SFX 표에 있고 파일이 있다",
 			(g.SFX as Dictionary).has("board_crack")
 			and ResourceLoader.exists("res://sfx/board_crack.wav"),

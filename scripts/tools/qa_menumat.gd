@@ -12,6 +12,14 @@ extends SceneTree
 #      판 위 · 일시정지)을 한 틀씩 그린 뒤에 늘 내려가 있다. 재질 끔이면 옛 글자색 그대로다.
 #   ⑥ 벽이 안 구워지는 자리(헤드리스)에서는 메뉴 바닥이 옛 스크림이다 — 벽을 안 짓는다.
 #   ⑦ 개발자 판 — 「메뉴 재질」 줄이 열아홉 줄 안의 쪽에 서고 같은 값을 켜고 끈다.
+#   ⑧ 나무 패의 결이 글(설정 탭은 그림까지)의 잉크 밖이다 — 잉크는 이 도구가 TextServer 의
+#      글리프 그림으로 따로 잰다(게임의 _ink_box 를 안 빌린다). 2026-10-06
+#   ⑨ 새 런 다트통 액자 — 테 · 그늘이 다트통 이름 잉크와 5px 넘게 떨어진다.
+#   ⑩ 일시정지 글줄 · 런 정보도 같은 재질이다 — 분필 글 · 따뜻한 흐림 · 나무 테 칠판 · 나무 패
+#      탭. 칠판 테가 화면 안이고 누르는 사각이 석판 위다. 재질을 끄면 옛 그대로다.
+#   ⑪ 제목 칠판에서 밀고 들어간다 — 컬렉션 · 프로필 · 설정이 컷이 아니라 PUSH.t 초 동안 칠판이
+#      커진다. 누르는 사각은 그동안도 · 뒤에도 그대로이고, 누름 · 키는 밀기를 끝내고 삼킨다.
+#      모션 끄기 · 재질 끔 · 문이 안 선 제목은 옛 컷이다. 헤드리스라 문 한 장을 빈 그림으로 세운다.
 #   godot --headless --path . --script scripts/tools/qa_menumat.gd
 const GameData = preload("res://scripts/data.gd")
 const Save = preload("res://scripts/save.gd")
@@ -171,13 +179,27 @@ func _run() -> void:
 	var rows := [
 		["글 1층 분필 · 석판", _over(ink, chalk), chalk, 7.0],
 		["글 2층 분필 · 석판", _over(Color(ink, dim), chalk), chalk, 4.5],
-		["꺼진 글 분필 · 석판", _over(Color(ink, off), chalk), chalk, 2.5],
+		["꺼진 글 분필 · 석판", _over(Color(ink, off), chalk), chalk, 3.5],
 		["새긴 글씨 · 놋쇠 판", g.MENUM.engrave, g.Door3D.COL.brass, 4.5],
 		["분필 2층 · 나무 패", _over(Color(ink, dim), g.MENUM.wood), g.MENUM.wood, 4.5],
 	]
 	var hot_bg: Color = g.MENUM.wood_hot
 	rows.append(["얹힌 패 분필 · 얹힌 나무", _over(Color(ink, lerpf(dim, 1.0, 0.8)), hot_bg),
 			hot_bg, 4.5])
+	#  램프 웅덩이가 가장 밝은 석판(_menu_light — 석판을 촘촘히 짚어 찾는다) 위에서도 2층 ·
+	#  꺼진 글이 읽힌다. 그늘은 석판을 어둡게만 하므로 밝은 글의 대비를 올린다.
+	var lamp: Color = g.Door3D.COL.lamp
+	var pool := 0.0
+	var mb: Rect2 = g.MENUM.board
+	for yy in 21:
+		for xx in 41:
+			var lp: Vector2 = g._menu_light_at(mb, mb.position + mb.size * Vector2(
+					float(xx) / 40.0, float(yy) / 20.0))
+			pool = maxf(pool, lp.x)
+	var lit_s := _over(Color(lamp, pool), chalk)
+	rows.append(["글 2층 분필 · 가장 밝은 석판(웅덩이 %.3f)" % pool, _over(Color(ink, dim), lit_s),
+			lit_s, 4.5])
+	rows.append(["꺼진 글 분필 · 가장 밝은 석판", _over(Color(ink, off), lit_s), lit_s, 3.5])
 	var band := _over(Color(g.C_ACC, float(g.SETB.a)), chalk)
 	rows.append(["고른 줄 분필 · 띠 위", _over(ink, band), band, 4.5])
 	for r in rows:
@@ -193,6 +215,15 @@ func _run() -> void:
 		if cr < 3.0:
 			weak.append("%s %.2f" % [lg.get("name", ""), cr])
 	_ok("④ 리그 이름이 석판 위에서 3:1 넘는다", weak.is_empty(), "%s" % [weak])
+	#  런 정보의 뜻 색(레벨 초록 · 점수 파랑 · 배수 붉음 · 맞힘 금)도 석판 위에서 3:1 이다.
+	var weak2 := []
+	for nc in [["레벨", g.C_GREEN.lightened(0.2)], ["점수", g.C_CHIP], ["배수", g.C_MULT],
+			["맞힘", g.C_GOLD]]:
+		var c2: Color = g._on_chalk(nc[1] as Color)
+		var cr2 := _contrast(c2, chalk)
+		if cr2 < 3.0:
+			weak2.append("%s %.2f" % [nc[0], cr2])
+	_ok("④ 런 정보의 뜻 색이 석판 위에서 3:1 넘는다", weak2.is_empty(), "%s" % [weak2])
 
 	# ── ⑤ 붓이 안 샌다 ──────────────────────────────────
 	g.menu_mat_on = true
@@ -270,3 +301,367 @@ func _run() -> void:
 	Dev._run(g, row)
 	_ok("⑦ 누르면 끄고 다시 누르면 켠다", off1 and g.menu_mat_on)
 	Dev.page = pg0
+	await _run2()
+
+
+#  글 한 줄의 잉크 사각 — TextServer 가 구운 글리프 그림에서 알파가 선 픽셀(> 0.02)만 모은다
+#  (그림 가장자리의 1px 여백은 뺀다). x0 은 글의 왼끝, by 는 기준선이다.
+func _ink_rect(f: Font, t: String, sz: int, x0: float, by: float) -> Rect2:
+	var ts := TextServerManager.get_primary_interface()
+	var sh := ts.create_shaped_text()
+	ts.shaped_text_add_string(sh, t, f.get_rids(), sz)
+	var gl: Array = ts.shaped_text_get_glyphs(sh)
+	var pen := 0.0
+	var out := Rect2()
+	var first := true
+	var fs := Vector2i(sz, 0)
+	for gd in gl:
+		var rid: RID = gd.get("font_rid", RID())
+		var idx: int = int(gd.get("index", 0))
+		var go: Vector2 = gd.get("offset", Vector2.ZERO)
+		if rid.is_valid():
+			ts.font_render_glyph(rid, fs, idx)
+			var off: Vector2 = ts.font_get_glyph_offset(rid, fs, idx)
+			var uv: Rect2 = ts.font_get_glyph_uv_rect(rid, fs, idx)
+			var tix: int = ts.font_get_glyph_texture_idx(rid, fs, idx)
+			var img: Image = ts.font_get_texture_image(rid, fs, tix) if tix >= 0 else null
+			var l := 9999
+			var r := -1
+			var tp := 9999
+			var bt := -1
+			if img != null:
+				for y in int(uv.size.y):
+					for x in int(uv.size.x):
+						if img.get_pixel(int(uv.position.x) + x, int(uv.position.y) + y).a > 0.02:
+							l = mini(l, x)
+							r = maxi(r, x)
+							tp = mini(tp, y)
+							bt = maxi(bt, y)
+			if r >= l:
+				var q := Rect2(x0 + pen + go.x + off.x + float(l), by + go.y + off.y + float(tp),
+						float(r - l + 1), float(bt - tp + 1))
+				out = q if first else out.merge(q)
+				first = false
+		pen += float(gd.get("advance", 0.0))
+	ts.free_rid(sh)
+	return out
+
+
+#  결 토막들이 잉크 사각과 안 겹치는가 — [겹친 수, 결 수].
+func _grain_hits(body: Rect2, ink_game: Rect2, ink_meas: Rect2) -> Vector2i:
+	var gr: Array = g._plaque_grain(body, ink_game)
+	var hit := 0
+	for q in gr:
+		if (q as Rect2).intersects(ink_meas):
+			hit += 1
+	return Vector2i(hit, gr.size())
+
+
+func _run2() -> void:
+	# ── ⑧ 결이 글의 잉크 밖이다 ─────────────────────────
+	#  탭 몸 = 누르는 사각에서 턱(TABB.lip)을 뺀 것(얹히지 않은 채). 글은 몸 가운데 · _menu_base_y.
+	var lip: float = float(g.TABB.lip)
+	var cases := []           # [이름, 몸, 글꼴, 글, 크기, ox, 그림 사각]
+	g.state = g.S.TITLE
+	g.pause_from = -1
+	g._set_go("screen")
+	g.set_pg_t = 1.0
+	g.set_t = 1.0
+	g.state = g.S.SETTINGS
+	for t in g.SET_TABS.size():
+		var tr: Rect2 = g._set_tab_rect(t)
+		var nm := String(g._set_info(String(g.SET_TABS[t])).get("n", ""))
+		var lw: float = g.font_sm.get_string_size(nm, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
+		var bh: float = tr.size.y - lip
+		#  그림(_set_tab_icon) — 가운데 cx · cy 둘레 12 × 12 안이다.
+		var cx: float = roundf(tr.get_center().x - lw * 0.5 - 3.0)
+		var cy: float = roundf(tr.position.y + bh * 0.5)
+		cases.append(["설정 탭 " + nm, Rect2(tr.position, tr.size - Vector2(0.0, lip)), g.font_sm,
+				nm, 20, 9.0, Rect2(cx - 6.0, cy - 6.0, 12.0, 12.0)])
+	var rows: Array = g._set_rows()
+	for i in rows.size():
+		if not g._set_info(String(rows[i])).has("tg"):
+			continue
+		for k in 2:
+			var sr: Rect2 = g._set_seg_rect(i, k)
+			cases.append(["켬끔 " + ("켬" if k == 1 else "끔"), Rect2(sr.position,
+					sr.size - Vector2(0.0, lip)), g.font_sm, "켬" if k == 1 else "끔", 20, 0.0, Rect2()])
+	g.state = g.S.TITLE
+	for t in 2:
+		var nr: Rect2 = g._nr_tab(t)
+		cases.append(["새 런 탭 %d" % t, Rect2(nr.position, nr.size - Vector2(0.0, lip)), g.font,
+				"기본" if t == 0 else "챌린지", 12, 0.0, Rect2()])
+	for t in g.COL_TABS.size():
+		var cr: Rect2 = g._col_tab_rect(t)
+		var lb := "%s %d/%d" % [g.COL_TABS[t].n, g._col_rows(t).size(), g._col_rows(t).size()]
+		cases.append(["컬렉션 탭 " + lb, Rect2(cr.position, cr.size - Vector2(0.0, lip)), g.font,
+				lb, 12, 0.0, Rect2()])
+	for t in g.RI_TABS.size():
+		var rr: Rect2 = g._ri_tab_rect(t)
+		cases.append(["런 정보 탭 " + String(g.RI_TABS[t]), Rect2(rr.position,
+				rr.size - Vector2(0.0, lip)), g.font_sm, String(g.RI_TABS[t]), 20, 0.0, Rect2()])
+	var bad := []
+	var with_grain := 0
+	for cs in cases:
+		var body: Rect2 = cs[1]
+		var f: Font = cs[2]
+		var lb2 := String(cs[3])
+		var sz: int = int(cs[4])
+		var ox: float = float(cs[5])
+		var tw: float = f.get_string_size(lb2, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x
+		var by: float = body.position.y + g._menu_base_y(f, sz, 0.0, body.size.y)
+		var meas := _ink_rect(f, lb2, sz, body.position.x + ox + (body.size.x - tw) * 0.5, by)
+		var icon: Rect2 = cs[6]
+		if icon.size.x > 0.0:
+			meas = meas.merge(icon)
+		var hv := _grain_hits(body, g._tab_ink(body, f, lb2, sz, ox), meas)
+		if hv.y > 0:
+			with_grain += 1
+		if hv.x > 0:
+			bad.append("%s 결 %d 중 %d" % [cs[0], hv.y, hv.x])
+	#  지우기 — 몸은 누르는 사각에서 턱(UIHOV.lip_hud)을 뺀 것. 글은 몸 가운데 · 20.
+	var dr: Rect2 = g._prof_del_rect()
+	var db := Rect2(dr.position, dr.size - Vector2(0.0, float(g.UIHOV.lip_hud)))
+	var dw: float = g.font_sm.get_string_size("지우기", HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
+	var dmeas := _ink_rect(g.font_sm, "지우기", 20, db.position.x + (db.size.x - dw) * 0.5,
+			g._menu_base_y(g.font_sm, 20, db.position.y, db.size.y))
+	var dh := _grain_hits(db, g._prof_del_ink(db), dmeas)
+	if dh.y > 0:
+		with_grain += 1
+	if dh.x > 0:
+		bad.append("지우기 결 %d 중 %d" % [dh.y, dh.x])
+	_ok("⑧ 나무 패 %d장의 결이 글 잉크(그림 포함) 밖이다" % (cases.size() + 1), bad.is_empty(),
+			"%s · 결이 선 패 %d장" % [bad, with_grain])
+	#  잉크 상자(_ink_box)가 잰 잉크를 품는다 — 결을 거르는 자가 잉크보다 작으면 위 줄이 운이다.
+	var small := []
+	for cs in cases:
+		var body2: Rect2 = cs[1]
+		var f2: Font = cs[2]
+		var lb3 := String(cs[3])
+		var sz2: int = int(cs[4])
+		var tw2: float = f2.get_string_size(lb3, HORIZONTAL_ALIGNMENT_LEFT, -1, sz2).x
+		var by2: float = body2.position.y + g._menu_base_y(f2, sz2, 0.0, body2.size.y)
+		var m2 := _ink_rect(f2, lb3, sz2, body2.position.x + float(cs[5]) + (body2.size.x - tw2) * 0.5,
+				by2)
+		var gi: Rect2 = g._tab_ink(body2, f2, lb3, sz2, float(cs[5]))
+		if not gi.grow(1.0).encloses(m2):
+			small.append("%s 상자 %s · 잉크 %s" % [cs[0], gi, m2])
+	_ok("⑧ 잉크 상자가 글리프 그림을 품는다(1px 안)", small.is_empty(), "%s" % [small])
+
+	# ── ⑨ 다트통 액자와 이름 ─────────────────────────────
+	var src := FileAccess.get_file_as_string("res://scripts/game.gd")
+	var stg: Rect2 = g._cup_stage()
+	var fo: Rect2 = (g._cup_frame() as Rect2).grow(3.0)       # 테 바깥(_wood_frame 의 o)
+	var paint_end: float = fo.end.x + 1.0                       # 오른쪽 그늘 1px
+	var names := ["잠김", "???"]
+	for pk in GameData.packs():
+		names.append(String(pk.get("name", "")))
+	var gap_min := INF
+	var gap_nm := ""
+	for nm in names:
+		var ir := _ink_rect(g.font, String(nm), 24, 230.0, 82.0)
+		if ir.position.x - paint_end < gap_min:
+			gap_min = ir.position.x - paint_end
+			gap_nm = String(nm)
+	_ok("⑨ 액자가 무대 안쪽이다(바깥 테두리 = 무대)", fo.is_equal_approx(stg), "%s / %s" % [fo, stg])
+	_ok("⑨ 액자 · 그늘과 다트통 이름 잉크 사이가 5px 넘는다", gap_min >= 5.0,
+			"가장 좁은 「%s」 %.1fpx (그늘 끝 x%.0f)" % [gap_nm, gap_min, paint_end])
+	_ok("⑨ 이름 자리 · 액자 붓이 이 셈과 같다",
+			_body(src, "_draw_newrun").contains("Vector2(230, 82), nm")
+			and _body(src, "_cup_draw").contains("_wood_frame(self, _cup_frame(), 3.0)"))
+	await _run3(src)
+
+
+func _run3(src: String) -> void:
+	# ── ⑩ 일시정지 글줄 · 런 정보 ───────────────────────
+	var view := Rect2(Vector2.ZERO, g.VIEW)
+	var ink: Color = g.DOORT.chalk_ink
+	var ds := _body(src, "_draw_settings")
+	var pl := _body(src, "_pause_list_draw")
+	_ok("⑩ 일시정지 글줄을 재질로 그린다(_draw_settings 가 글줄 앞에서 붓을 세운다)",
+			ds.find("mat_draw = menu_mat_on") >= 0
+			and ds.find("mat_draw = menu_mat_on") < ds.find("_pause_list_draw("))
+	_ok("⑩ 일시정지 글 · 꺾쇠가 메뉴 글자색(_mtx) · 그늘이 따뜻한 검정이다",
+			pl.contains("_mtx(ee, ra)") and pl.contains("_mtx(ee * 0.6, ra)")
+			and pl.contains("WALL3.scrim_col if mat_draw") and not pl.contains("C_DIM.lerp(C_TXT"))
+	#  흐림 판의 잠기는 색 — 일시정지를 열고 한 틀 민 뒤 셰이더 값을 읽는다.
+	g._new_run()
+	g._tutor_close()
+	g.tutor_q.clear()
+	g.state = g.S.PICK
+	g.menu_mat_on = true
+	g._pause_open()
+	g._process(1.0 / 60.0)
+	var blur = g.get_node_or_null("Blur")
+	var tint_on: Color = blur.material.get_shader_parameter("tint") if blur != null else Color()
+	await _frame()
+	var leak_p: bool = g.mat_draw
+	g.menu_mat_on = false
+	g._process(1.0 / 60.0)
+	var tint_off: Color = blur.material.get_shader_parameter("tint") if blur != null else Color()
+	g.menu_mat_on = true
+	_ok("⑩ 흐림 판이 따뜻한 검정에 잠긴다 · 재질 끄면 옛 보라",
+			tint_on.is_equal_approx(g.WALL3.scrim_col) and tint_off.is_equal_approx(g.MENUM.blur_old),
+			"켬 %s · 끔 %s" % [tint_on, tint_off])
+	_ok("⑩ 일시정지를 그린 뒤 재질 붓이 내려가 있다", not leak_p)
+	g._settings_back()
+	for i in 30:
+		g._process(1.0 / 60.0)
+	#  런 정보 — 나무 테 칠판 · 탭 · 「뒤로」 · 동전 칸이 석판 위 · 테가 화면 안.
+	var p: Rect2 = g._ri_panel()
+	var out := []
+	for t in g.RI_TABS.size():
+		if not p.encloses(g._ri_tab_rect(t)):
+			out.append("탭 %d" % t)
+	if not p.encloses(g._runinfo_back_rect()):
+		out.append("뒤로")
+	for i in maxi((g.owned as Array).size(), 1):
+		if not p.encloses(g._ri_coin_rect(i)):
+			out.append("동전 %d" % i)
+	_ok("⑩ 런 정보 칠판 테가 화면 안 · 누르는 사각이 석판 위", view.encloses(p.grow(4.0))
+			and out.is_empty(), "%s %s" % [p, out])
+	var dr := _body(src, "_draw_runinfo")
+	_ok("⑩ 런 정보 판이 칠판 붓(_chalk_board · CHALKB.win) · 고른 탭 표지가 놋쇠다",
+			dr.contains("_chalk_board(self, p, 4.0, CHALKB.win)")
+			and dr.contains("Door3D.COL.brass if mat_draw else C_ACC"))
+	g.mat_draw = true
+	var hc_on: Color = g._ri_head_col()
+	var rc_on: Color = g._ri_row_col()
+	g.mat_draw = false
+	var hc_off: Color = g._ri_head_col()
+	var rc_off: Color = g._ri_row_col()
+	_ok("⑩ 런 정보 머리 · 줄이 분필 1층 · 2층이다(끄면 옛 금 · 흰 글)",
+			hc_on == Color(ink, 1.0) and rc_on == Color(ink, float(g.MENUM.dim))
+			and hc_off == g.C_ACC and rc_off == g.C_TXT,
+			"%s %s / %s %s" % [hc_on, rc_on, hc_off, rc_off])
+	g.state = g.S.PICK
+	g._runinfo_toggle()
+	var ri_open: bool = g.state == g.S.RUNINFO
+	await _frame()
+	var leak_r: bool = g.mat_draw
+	g._runinfo_toggle()
+	_ok("⑩ 런 정보를 그린 뒤 재질 붓이 내려가 있다", ri_open and not leak_r)
+
+	# ── ⑪ 제목 칠판에서 밀고 들어간다 ───────────────────
+	#  헤드리스라 문(3D)을 못 굽는다 — _door_live 가 보는 셋(켬 · 화판 · 구운 그림)만 빈 것으로
+	#  세운다. 문 화판은 트리에 안 붙어 굽지 않는다(_door_tick 은 렌더러가 없으면 물러선다).
+	g.state = g.S.TITLE
+	g.pause_from = -1
+	g.motion_off = false
+	g.menu_mat_on = true
+	g.mouse_at = Vector2(-50.0, -50.0)
+	var dvp := SubViewport.new()
+	g.door_on = true
+	g.door_vp = dvp
+	g.door_tex = ImageTexture.create_from_image(Image.create(4, 4, false, Image.FORMAT_RGBA8))
+	g.door_t = -1.0
+	_ok("⑪ 문이 선다(빈 그림)", g._door_live())
+	var trows: Array = g._title_rows()
+	var ri_col := -1
+	var ri_set := -1
+	for i in trows.size():
+		if String(trows[i].n) == "컬렉션":
+			ri_col = i
+		if String(trows[i].n) == "설정":
+			ri_set = i
+	var cbox: Rect2 = g._title_chalk_box()
+	#  컬렉션 — 밀기가 서고 칠판이 제목 칠판 석판에서 출발해 화면 칠판에 선다.
+	g._click(g._menu_rect(ri_col).get_center())
+	var live0: bool = g._push_live() and g.state == g.S.COLLECT
+	var b0: Rect2 = g._push_box(g.MENUM.board)
+	var n := 0
+	var grows := true
+	var prev := b0
+	while g._push_live() and n < 200:
+		g._process(1.0 / 60.0)
+		n += 1
+		var b: Rect2 = g._push_box(g.MENUM.board)
+		if not b.encloses(prev):
+			grows = false
+		prev = b
+		if n == 6:
+			await _frame()             # 밀리는 틀을 한 번 그린다(_push_draw)
+	var want_n: int = int(ceil(float(g.PUSH.t) * 60.0 - 0.001))
+	_ok("⑪ 컬렉션 — 제목 칠판 석판에서 출발한다", live0 and b0 == cbox, "%s / %s" % [b0, cbox])
+	_ok("⑪ PUSH.t 동안 커지기만 하고 화면 칠판에 선다", absi(n - want_n) <= 1 and grows
+			and prev == g.MENUM.board and g.state == g.S.COLLECT and not g.mat_draw,
+			"%d프레임(바라는 값 %d) · 끝 %s" % [n, want_n, prev])
+	#  밀리는 동안의 누름 · 키 — 밀기를 끝내고 삼킨다(「뒤로」 · ESC 가 제목으로 안 간다).
+	g.state = g.S.TITLE
+	g._click(g._menu_rect(ri_col).get_center())
+	g._process(1.0 / 60.0)
+	g._click(g._menu_back_rect().get_center())
+	var eat_click: bool = g.state == g.S.COLLECT and not g._push_live()
+	g.state = g.S.TITLE
+	g._click(g._menu_rect(ri_col).get_center())
+	var ev := InputEventKey.new()
+	ev.keycode = KEY_ESCAPE
+	ev.pressed = true
+	g._unhandled_input(ev)
+	var eat_key: bool = g.state == g.S.COLLECT and not g._push_live()
+	_ok("⑪ 밀리는 동안 누름 · 키는 밀기를 끝내고 삼킨다", eat_click and eat_key)
+	#  프로필 — 프로필 줄(제목 칠판 맨 밑)도 같은 밀기다.
+	g.state = g.S.TITLE
+	g._click(g._prof_badge_rect().get_center())
+	var prof_ok: bool = g._push_live() and g.state == g.S.PROFILE
+	g._push_skip()
+	_ok("⑪ 프로필 줄도 밀고 들어간다", prof_ok and not g._push_live())
+	#  설정 — 창이 제목 칠판에서 제 자리로 커진다. 누르는 사각(줄 · 탭)은 첫 틀부터 다 선
+	#  자리 그대로다(떠오름을 안 탄다).
+	g.state = g.S.TITLE
+	g.set_t = 0.0
+	g._click(g._menu_rect(ri_set).get_center())
+	var set_live: bool = g._push_live() and g.state == g.S.SETTINGS
+	var w0: Rect2 = g._set_win()
+	var rects := []
+	var moved := 0
+	var fr_n := 0
+	while fr_n < 200:
+		var now := []
+		for i in (g._set_rows() as Array).size():
+			now.append(g._set_rect(i))
+		for t in g.SET_TABS.size():
+			now.append(g._set_tab_rect(t))
+		if not rects.is_empty() and now != rects:
+			moved += 1
+		rects = now
+		if not g._push_live():
+			break
+		g._process(1.0 / 60.0)
+		fr_n += 1
+	var fin := []
+	for i in 40:
+		g._process(1.0 / 60.0)
+	for i in (g._set_rows() as Array).size():
+		fin.append(g._set_rect(i))
+	for t in g.SET_TABS.size():
+		fin.append(g._set_tab_rect(t))
+	_ok("⑪ 설정 — 창이 제목 칠판 석판에서 출발해 창 자리에 선다",
+			set_live and w0 == cbox and (g._set_win() as Rect2) == g._set_to(g._set_pg()),
+			"%s → %s" % [w0, g._set_win()])
+	_ok("⑪ 설정 — 누르는 사각이 밀기 동안 · 뒤에 한 px 도 안 움직인다",
+			moved == 0 and fin == rects, "%d프레임 · 움직인 틀 %d" % [fr_n, moved])
+	g._settings_back()
+	for i in 30:
+		g._process(1.0 / 60.0)
+	#  옛 컷 — 모션 끄기 · 재질 끔 · 문이 안 선 제목.
+	var cut := []
+	for k in 3:
+		g.state = g.S.TITLE
+		g.motion_off = k == 0
+		g.menu_mat_on = k != 1
+		if k == 2:
+			g.door_tex = null
+		if k == 2:
+			g._click(g._prof_badge_rect().get_center())
+		else:
+			g._click(g._menu_rect(ri_col).get_center())
+		cut.append(g._push_live())
+	g.motion_off = false
+	g.menu_mat_on = true
+	_ok("⑪ 모션 끄기 · 재질 끔 · 문이 안 선 제목은 옛 컷이다", cut == [false, false, false],
+			"%s" % [cut])
+	g.door_vp = null
+	g.door_tex = null
+	dvp.free()
+	g.state = g.S.TITLE

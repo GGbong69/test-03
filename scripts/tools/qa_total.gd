@@ -963,7 +963,7 @@ func _tick_play(r: float, fast: bool, mo: bool, above: bool, gr := 1.0) -> Dicti
 			"start": -1, "land": -1, "lands": 0, "st": [], "end": -1, "moved": false,
 			"in_pool": false, "gn": -1.0, "hs": 0.0, "qt_drop": 0.0, "rate": 1.0,
 			"shk_land": -1.0, "shk_start": -1.0, "shk_pre": 0.0, "st_start": false,
-			"sync": 0, "gain_n": 0, "big": false}
+			"sync": 0, "gain_n": 0, "big": false, "lead_f": -1}
 	var key0 := _tick_key(tp)
 	var f := 0
 	var live0 := false
@@ -993,6 +993,10 @@ func _tick_play(r: float, fast: bool, mo: bool, above: bool, gr := 1.0) -> Dicti
 			o.rose += 1
 			if g.tick_i - ti0 >= 2:
 				o.jump = true
+		#  lead 가 끝난 첫 프레임 — 굴림 시계(score_roll)로 잰다(⑭-k 와 같은 자).
+		if int(o.start) >= 0 and int(o.lead_f) < 0 and g.card_mode == 1 \
+				and (1.0 - float(g.score_roll)) > float(g.TALLY.lead) + 0.000001:
+			o.lead_f = f
 		if live0 and not g.land_live:
 			o.lands += 1
 			o.land = f
@@ -1358,6 +1362,30 @@ func _run_tick() -> void:
 	_ok("⑮-a 머리는 소리 · 흔들림 · 멈춤이 없고 착지 프레임에 내리친다 · 카드와 띠가 한 몫",
 			la_ok, la_txt)
 	_ok("⑮-b 착지가 걸음의 land 몫에 서고 뒤를 0.18 ~ 0.28초 선다", at_ok, at_txt)
+
+	#  ── ⑮-b2 이득 1 — 걸음이 lead + 보통 착지 뒤 꼬리다 (2026-10-06) ──
+	#  검토: 이득 1 은 lead 끝 프레임이 착지인데 걸음은 다른 이득과 같은 길이라, 착지 뒤 0.82초
+	#  (gn 0)가 비어 다음 다트가 0.6초 늦게 왔다. 같은 gn(0 — 이득 1 · 2 둘 다 자 바닥 밑)의 이득 2
+	#  걸음과 대어 ① 착지가 이득 2 의 lead 끝 프레임에 서고 ② 착지 뒤 꼬리(끝 − 착지)가 이득 2 의
+	#  꼬리와 1프레임 안이고 ③ 걸음 전체가 둘의 합(lead + 꼬리)과 1프레임 안이다.
+	#  모션 끄기는 옛 길이 그대로다(움직임만 끈다 — ④).
+	var g1 := _tick_play(0.001, false, false, false)
+	var g2 := _tick_play(0.002, false, false, false)
+	var lead2: int = int(g2.lead_f) - int(g2.start)
+	var tail1: int = int(g1.end) - int(g1.land)
+	var tail2: int = int(g2.end) - int(g2.land)
+	var all1: int = int(g1.end) - int(g1.start)
+	var g1m := _tick_play(0.001, false, true, false)
+	var g2m := _tick_play(0.002, false, true, false)
+	var mo_same: bool = int(g1m.end) - int(g1m.start) == int(g2m.end) - int(g2m.start)
+	_ok("⑮-b2 이득 1 — 착지 = lead 끝 · 착지 뒤 꼬리 = 이득 2 의 꼬리 · 걸음 = lead + 꼬리 (모션 끄기는 그대로)",
+			int(g1.land) - int(g1.start) == lead2 and absi(tail1 - tail2) <= 1
+			and absi(all1 - (lead2 + tail2)) <= 1 and int(g1.gn * 1000.0) == int(g2.gn * 1000.0)
+			and mo_same,
+			"이득 1 착지 +%d · 꼬리 %d · 전체 %d / 이득 2 lead +%d · 꼬리 %d · 전체 %d · gn %.3f · %.3f · 모션 끄기 %d · %d"
+			% [int(g1.land) - int(g1.start), tail1, all1, lead2, tail2,
+			int(g2.end) - int(g2.start), float(g1.gn), float(g2.gn),
+			int(g1m.end) - int(g1m.start), int(g2m.end) - int(g2m.start)])
 
 	#  ── ⑮-c 이득 0 은 조용하다 — 칸 · 착지 · 소리가 없고 카드가 0 을 적는다 ──
 	var oz := _tick_play(0.0, false, false, false)

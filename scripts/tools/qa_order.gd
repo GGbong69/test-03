@@ -193,6 +193,24 @@ func _board_px(r: float, an: float, cols: Array) -> Color:
 	return cols[i][1] if ring else cols[i][0]
 
 
+#  조각이 홑 띠(불 밖 · 트리플 · 더블 · 둘째 트리플 띠가 아닌 고리)인가 — 조각 한가운데
+#  반지름을 판 고리 자(rt_*)에 댄다(_board_px 와 같은 갈래).
+func _single(pc: Array) -> bool:
+	var r: float = (float(pc[0]) + float(pc[1])) * 0.5
+	if r < g.R * g.rt_bull_o or r >= g.R * g.rt_dbl_in:
+		return false
+	if r >= g.R * g.rt_trp_in and r < g.R * g.rt_trp_out:
+		return false
+	return not (r >= g.R * g.rt_trp2_in and r < g.R * g.rt_trp2_out)
+
+
+#  조각 한가운데 각이 든 칸 번호(_board_px 와 같은 식).
+func _pc_sec(pc: Array) -> int:
+	var sw: float = g._sec_w()
+	var an: float = (float(pc[2]) + float(pc[3])) * 0.5
+	return int(floor(fposmod(an + sw * 0.5, TAU) / sw)) % int(g._sec_n())
+
+
 #  조각 목록이 그려진 결과의 넓이 가중 평균 밝기 [sRGB 루마, 선형 상대 휘도] — 대용 셈
 #  (⑯ 의 「영역이 밝은 쪽이다」 머리말). 조각마다 극좌표 4 × 4 점(넓이 r · dr · da). 판 색 위에
 #  판 빛(_board_light: 한가운데 0 에서 테로 갈수록 왼쪽 위 흰빛 light_hi · 오른쪽 아래 그늘
@@ -1188,6 +1206,45 @@ func _run() -> void:
 	_ok("흑색 칸뿐인 영역(흑색 칸 · 흑색 칸 하나)만 빛 · 어둠이 세다", dk_ok
 			and float(g.ORDER.dk_lit) > float(g.ORDER.lit_a)
 			and float(g.ORDER.dk_dim) > float(g.ORDER.dim_a))
+	#  ── 홑 띠만으로도 갈린다 (2026-10-06) ──
+	#  검토: 흑색 칸 주문의 영역 평균은 띠(트리플 · 더블의 빨강 · 초록)가 끌어올려 나머지를 넘었지만,
+	#  판에서 가장 넓은 홑 띠만 놓고 보면 밝힌 흑색 홑 띠와 가라앉은 백색 홑 띠가 거의 같은
+	#  밝기였다(dk_dim 0.58 — 1.4:1 밑). 숨 바닥에서 밝힌 흑색 홑 띠 조각(order_in) : 가라앉은
+	#  백색 홑 띠 조각(order_off 중 칸 색 0)의 대비 — 선형 상대 휘도의 WCAG 식 — 가 1.5:1 을
+	#  넘고 영역 쪽이 밝아야 한다. 흑색 칸(col:1)과 흑색 칸 하나(이 판의 흑색 칸 값 전부).
+	#  셈은 위 「영역이 밝은 쪽이다」의 대용(_lum_of)을 홑 띠 조각에만 건다.
+	var sg_ok := true
+	var sg_txt := ""
+	var sg_conds := ["col:1"]
+	for si in g._sec_n():
+		if g._sec_col(si) == 1 and not sg_conds.has("sec:%d" % int(g.sectors[si])):
+			sg_conds.append("sec:%d" % int(g.sectors[si]))
+	var sg_worst := INF
+	var sg_worst_txt := ""
+	for sgc in sg_conds:
+		_plain()
+		g._order_open(String(sgc), 3, _tag("t_gold"), 1)
+		var tn2: Vector2 = g._order_tone()
+		var lit_s := []
+		var dim_s := []
+		for pc in g.order_in:
+			if _single(pc):
+				lit_s.append(pc)
+		for pc in g.order_off:
+			if _single(pc) and g._sec_col(_pc_sec(pc)) == 0:
+				dim_s.append(pc)
+		var yi: float = _lum_of(lit_s, g.DOORT.chalk_ink, tn2.x * br_lo).y
+		var yo: float = _lum_of(dim_s, Color.BLACK, tn2.y).y
+		var crs: float = (yi + 0.05) / (yo + 0.05)
+		if lit_s.is_empty() or dim_s.is_empty() or not g.order_dk or crs < 1.5:
+			sg_ok = false
+			sg_txt += "%s %.2f:1 ✗ · " % [sgc, crs]
+		if crs < sg_worst:
+			sg_worst = crs
+			sg_worst_txt = "%s 휘도 %.4f / %.4f = %.2f:1" % [sgc, yi, yo, crs]
+	sg_txt += "%d가지 중 가장 좁은 %s (dk_lit %.2f · dk_dim %.2f)" % [sg_conds.size(), sg_worst_txt,
+			float(g.ORDER.dk_lit), float(g.ORDER.dk_dim)]
+	_ok("흑색 칸 · 흑색 칸 하나 — 밝힌 흑색 홑 띠 : 가라앉은 백색 홑 띠 ≥ 1.5:1 (숨 바닥)", sg_ok, sg_txt)
 	var src := FileAccess.get_file_as_string("res://scripts/game.gd")
 	var i0: int = src.find("func _order_lit_e")
 	var i1: int = src.find("func _to_pick", i0)
