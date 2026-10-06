@@ -48602,6 +48602,17 @@ func _draw_settings(c: CanvasItem) -> void:
 		_set_panel(c, String(rows[_set_face()]), a)
 		return
 	_set_deco_draw(c, a)
+	#  제목 칠판에서 밀고 들어오는 끝 — 안의 것(탭 · 줄 · 게이지)은 다 자란 창에 맞춰 서 있어서
+	#  짙어지기 시작하는 PUSH.ink 뒤 두 틀 동안 덜 자란 테 밖으로 14~32px 삐져나왔다(검토).
+	#  다가가는 카메라처럼 안의 것도 창과 같은 비로 커진다 — 다 자란 창(_set_to)을 지금 창
+	#  (_set_win)에 맞추는 변환. 테 · 이름표 · 못(위의 꾸밈)은 이미 지금 창으로 그렸다.
+	#  누르는 사각은 그대로다(밀기 동안 누름은 밀기를 끝내고 삼킨다 — _push_skip).
+	if _push_live() and push_scr == S.SETTINGS:
+		var full := _set_to(_set_pg())
+		var cur := _set_win()
+		if full.size.x > 0.0 and full.size.y > 0.0:
+			var sc := cur.size / full.size
+			c.draw_set_transform(cur.position - full.position * sc, 0.0, sc)
 	for t in SET_TABS.size():
 		var tr := _set_tab_rect(t)
 		var tk := String(SET_TABS[t])
