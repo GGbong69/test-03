@@ -1021,6 +1021,10 @@ func _ready() -> void:
 	_crt_open()       # 맨 위 층. 세기는 방금 읽었다
 	_wipe_open()      # 장면 전환 덮개(95) — CRT 밑
 	_overc_open()     # 게임 오버 연출(90)
+	_pwr_open()       # 브라운관 켜기 · 끄기(110) — 맨 위
+	#  창 닫기도 브라운관을 끄고 닫는다(_notification). 틀 수 없는 실행은 엔진이 곧장 닫는다.
+	if _cine_ok(false):
+		get_tree().set_auto_accept_quit(false)
 
 	if _autoplay:
 		_new_run()
@@ -1030,6 +1034,7 @@ func _ready() -> void:
 		state = S.TITLE
 		if _intro_wanted():
 			_intro_begin()
+	_pwr_start(true)
 
 
 # ══════════════════════════════════════════════════════════
@@ -1140,6 +1145,9 @@ func _intro_tick(d: float) -> void:
 		intro_out = maxf(intro_out - d / float(INTRO.out), 0.0)
 		queue_redraw()
 	if state != S.INTRO:
+		return
+	#  브라운관이 켜지는 동안은 기다린다 — 그림이 다 벌어진 뒤 어둠부터 시작한다.
+	if pwr_t >= 0.0 and pwr_on:
 		return
 	intro_t += d * (float(INTRO.ff) if intro_ff else 1.0)
 	var t := intro_t
@@ -4884,6 +4892,10 @@ const SFX := {
 	#  술집 문(제목) — 걸쇠 딸깍 둘 · 문이 풀리는 쿵 · 경첩 삐걱 · 문 너머 웅성임.
 	"door_open": {"f": 196.0, "d": 0.10, "a": 0.08},
 	"tv_static":      {"f": 147.0, "d": 0.12, "a": 0.08},
+	#  브라운관 켜기 · 끄기(PWR) — 켤 때 릴레이 딸깍 · 낮은 웅(자기 지우기) · 지직 한 줌 ·
+	#  가는 고음, 끌 때 퐁 하고 고음이 내려앉는다. 판 밖 연출이라 지지직과 같은 자리다.
+	"tv_on":          {"f": 147.0, "d": 0.12, "a": 0.08},
+	"tv_off":         {"f": 147.0, "d": 0.10, "a": 0.07},
 	"drop_skip":      {"f": 330.0, "d": 0.05, "a": 0.10},
 	"chute_enter":    {"f": 523.0, "d": 0.04, "a": 0.10},
 
@@ -5045,6 +5057,7 @@ func _process(d: float) -> void:
 	_view_fit()      # 창이 바뀌면 여백을 다시 잰다. 그대로면 아무것도 안 한다
 	#  장면 전환 덮개 · 게임 오버 연출 — **실시간**이다(배움 늦추기 · 멈춤과 무관).
 	_wipe_tick(d)
+	_pwr_tick(d)
 	_over_cine_tick(d)
 	_inv_tick()      # 불스아이 반전 — 실시간 ms 로 끈다
 	#  모션 끄기가 바뀌면 CRT 의 깜박임 · 낟알을 같이 끈다. 그 값을 미는 길이
@@ -5934,7 +5947,8 @@ func _advance() -> void:
 
 func _unhandled_input(e: InputEvent) -> void:
 	#  장면 전환 덮개 · 게임 오버 연출 동안은 입력을 통째로 안 받는다(WIPE · OVERC 머리말).
-	if wipe_t >= 0.0 or over_cine >= 0.0:
+	#  브라운관을 끄는 동안도 같다 — 곧 닫힌다.
+	if wipe_t >= 0.0 or over_cine >= 0.0 or (pwr_t >= 0.0 and not pwr_on):
 		return
 	#  손가락 판별. **return 하지 않는다** — 에뮬레이션된 마우스 이벤트가
 	#  그대로 흘러야 기존 길이 한 줄도 안 상한다. 한 번 꺼지면 다시 안 켠다
@@ -6495,7 +6509,7 @@ func _click(m: Vector2) -> void:
 							set_pg_t = 1.0      # 들어오는 것은 화면 열림(set_t)이 말한다
 							state = S.SETTINGS
 						"종료":
-							get_tree().quit()
+							_pwr_quit()
 					_sfx("menu_pick")
 					return
 			if _prof_badge_rect().has_point(m):
@@ -6625,7 +6639,7 @@ func _click(m: Vector2) -> void:
 						_wipe(_to_lobby)     # 덮고 로비로(WIPE)
 					"quit":
 						_vol_save_due()
-						get_tree().quit()
+						_pwr_quit()
 					"back":
 						#  소리는 _settings_back 안에 있다 — ESC·스페이스도
 						#  같은 문을 지난다. 2026-09-25
@@ -44598,6 +44612,107 @@ func _crt_apply() -> void:
 	if vs.x >= 1.0 and vs.y >= 1.0:
 		mat.set_shader_parameter("logical", vs)
 	mat.set_shader_parameter("motion", 0.0 if motion_off else 1.0)
+
+
+# ══════════════════════════════════════════════════════════
+#  브라운관 켜기 · 끄기 (2026-10-06)
+# ──────────────────────────────────────────────────────────
+#  「브라운관 켜고 끄기」. 켤 때 — 검은 화면 가운데에 흰 실 한 줄이 뻗고, 그 줄이 위아래로
+#  벌어지며 그림이 선다. 끌 때 — 그림이 가운데 한 줄로 눌려 밝아지고, 줄이 점으로 줄어
+#  사그라진다(꼴은 shaders/power.gdshader 머리말).
+#  게임을 켤 때 한 번(인트로는 그동안 멈춰 기다린다) · 「종료」 두 자리와 창 닫기에서 한 번.
+#  맨 위 층(PWR_LAYER)이라 CRT 필터 세기와 상관없이 선다 — 도는 동안만 층이 보인다.
+#  모션 끄기 · 화면 없는 실행 · 검사 도구에서는 안 튼다(_cine_ok) — 끄기는 곧장 cb 다.
+#  시계는 한 틀에 1/30 초까지만 민다 — 켜자마자 굽기 · 셰이더 첫 틀이 길게 걸려도 줄이
+#  뻗는 것을 건너뛰지 않는다.
+const PWR_SHADER := "res://shaders/power.gdshader"
+const PWR_LAYER := 110
+const PWR := {"on_t": 0.62, "off_t": 0.58}
+var pwr_layer: CanvasLayer = null
+var pwr_rect: ColorRect = null
+var pwr_t := -1.0              # 흐른 시간(초). 안 돌면 −1
+var pwr_on := true             # 켜는 중인가(거짓이면 끄는 중)
+var pwr_cb := Callable()       # 끄기가 다 끝나면 부른다
+
+
+func _pwr_open() -> void:
+	if pwr_layer != null and is_instance_valid(pwr_layer):
+		return
+	var sh: Shader = load(PWR_SHADER) as Shader
+	if sh == null:
+		return
+	var mat := ShaderMaterial.new()
+	mat.shader = sh
+	pwr_layer = CanvasLayer.new()
+	pwr_layer.name = "Power"
+	pwr_layer.layer = PWR_LAYER
+	pwr_layer.visible = false
+	pwr_rect = ColorRect.new()
+	pwr_rect.name = "PowerRect"
+	pwr_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pwr_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	pwr_rect.material = mat
+	pwr_layer.add_child(pwr_rect)
+	add_child(pwr_layer)
+
+
+#  켠다(on) · 끈다. 끄기는 다 끝난 뒤 cb 를 부른다 — 틀 수 없으면 곧장 부른다.
+func _pwr_start(on: bool, cb := Callable()) -> void:
+	if not _cine_ok(false) or pwr_rect == null:
+		pwr_t = -1.0
+		if cb.is_valid():
+			cb.call()
+		return
+	pwr_t = 0.0
+	pwr_on = on
+	pwr_cb = cb
+	_pwr_set(0.0)
+	pwr_layer.visible = true
+	_sfx("tv_on" if on else "tv_off")
+
+
+func _pwr_set(k: float) -> void:
+	var mat := pwr_rect.material as ShaderMaterial
+	if mat == null:
+		return
+	mat.set_shader_parameter("p", clampf(k, 0.0, 1.0))
+	mat.set_shader_parameter("on", 1.0 if pwr_on else 0.0)
+	var vs: Vector2 = get_viewport_rect().size
+	if vs.x >= 1.0 and vs.y >= 1.0:
+		mat.set_shader_parameter("logical", vs)
+
+
+func _pwr_tick(d: float) -> void:
+	if pwr_t < 0.0 or pwr_rect == null:
+		return
+	pwr_t += minf(d, 1.0 / 30.0)
+	var k: float = pwr_t / float(PWR.on_t if pwr_on else PWR.off_t)
+	_pwr_set(k)
+	if k < 1.0:
+		return
+	pwr_t = -1.0
+	if pwr_on:
+		pwr_layer.visible = false
+		return
+	#  끈 화면은 검게 남는다(p 1 의 마지막 틀) — cb 가 게임을 닫거나 다시 켠다.
+	var cb := pwr_cb
+	pwr_cb = Callable()
+	if cb.is_valid():
+		cb.call()
+
+
+#  「종료」 · 창 닫기 — 끄고 닫는다. 끄는 중에 한 번 더 오면(창 닫기 연타) 곧장 닫는다.
+func _pwr_quit() -> void:
+	if pwr_t >= 0.0 and not pwr_on:
+		get_tree().quit()
+		return
+	_pwr_start(false, func() -> void: get_tree().quit())
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST and not get_tree().auto_accept_quit:
+		_vol_save_due()
+		_pwr_quit()
 
 
 # ══════════════════════════════════════════════════════════

@@ -1015,6 +1015,10 @@ static func _rows(g: Node) -> Array:
 				#  상점이면 선물을 그 자리에서 다시 깐다.
 				{"n1": "튜토리얼 런 %s" % ("켬" if g.tut_run else "끔"),
 						"t": "act", "a": "boot"},
+				#  술집 문(2026-10-06) — 제목 화면의 문 · 칠판 · 네온 간판(game.gd DOORT · door3d.gd)을
+				#  켜고 끈다. 끄면 옛 제목(단색 바탕 · 왼쪽 글줄)이다. 조작감 쪽이 열아홉 줄로 차서
+				#  같은 켬 · 끔 줄(튜토리얼 런) 밑으로 왔다(qa_crt 가 쪽마다 열아홉을 잰다).
+				{"n1": "술집 문 %s" % ("켬" if g.door_on else "끔"), "t": "act", "a": "door"},
 			]
 		4:
 			#  ⚠ 여기 쪽 번호를 **적어 둔다.** 여태 `_:` 기본 갈래였는데,
@@ -1035,6 +1039,10 @@ static func _rows(g: Node) -> Array:
 				{"n1": "착탄 사다리 여섯", "t": "act", "a": "sfx_hit"},
 				{"n1": "손 짝 넷", "t": "act", "a": "sfx_pair"},
 				{"n1": "표 전부 차례로", "t": "act", "a": "sfx_all"},
+				#  브라운관 켜기 · 끄기(2026-10-06 · game.gd PWR) — 화면과 소리를 같이 본다.
+				#  끄기는 다 끈 뒤 게임을 안 닫고 다시 켠다.
+				{"n1": "브라운관 켜기 보기", "t": "act", "a": "pwr_on"},
+				{"n1": "브라운관 끄기 보기", "t": "act", "a": "pwr_off"},
 				{"n1": "그치기", "t": "act", "a": "sfx_stop"},
 			]
 		_:
@@ -1174,9 +1182,6 @@ static func _rows(g: Node) -> Array:
 				#  열여덟째 줄이다(한계 열아홉).
 				{"n1": "다트판 벽 %s" % ("켬" if g.wall3_on else "끔"),
 						"t": "act", "a": "wall3"},
-				#  술집 문(2026-10-06) — 제목 화면의 문 · 칠판 · 네온 간판(game.gd DOORT · door3d.gd)을
-				#  켜고 끈다. 끄면 옛 제목(단색 바탕 · 왼쪽 글줄)이다. 열아홉째 줄(한계).
-				{"n1": "술집 문 %s" % ("켬" if g.door_on else "끔"), "t": "act", "a": "door"},
 			]
 
 
@@ -2130,6 +2135,12 @@ static func _run(g: Node, e: Dictionary) -> void:
 		"scene_wipe":
 			g._wipe(Callable())
 			_say("장면 전환")
+		"pwr_on":
+			g._pwr_start(true)
+			_say("브라운관 켜기")
+		"pwr_off":
+			g._pwr_start(false, func() -> void: g._pwr_start(true))
+			_say("브라운관 끄기")
 		"bull_invert":
 			g._invert_kick(true)
 			_say("불 반전")

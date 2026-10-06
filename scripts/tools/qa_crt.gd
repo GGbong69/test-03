@@ -152,11 +152,15 @@ func _run() -> void:
 	g._vol_set("crt", 0.4)
 
 	# ── ③ 층 ───────────────────────────────────────────
+	#  브라운관 켜기 · 끄기 층(PWR · 2026-10-06)만 그 위다 — 켜고 끄는 동안만 서서 CRT 가
+	#  그린 화면을 통째로 눌렀다 편다. 늘 서 있는 층 가운데서는 CRT 가 맨 위다.
 	var top := true
 	for n in g.find_children("*", "CanvasLayer", true, false):
-		if n != lay and (n as CanvasLayer).layer >= lay.layer:
+		if n != lay and n != g.pwr_layer and (n as CanvasLayer).layer >= lay.layer:
 			top = false
-	_ok("맨 위 층이다", top and lay.layer > 0, "layer %d" % lay.layer)
+	_ok("맨 위 층이다(켜기 · 끄기 층 빼고)", top and lay.layer > 0, "layer %d" % lay.layer)
+	_ok("켜기 · 끄기 층은 CRT 위 · 평소엔 숨는다", g.pwr_layer != null
+			and g.pwr_layer.layer > lay.layer and not g.pwr_layer.visible)
 	_ok("클릭을 안 먹는다", rect.mouse_filter == Control.MOUSE_FILTER_IGNORE)
 	#  잔상 손 — CRT 층에 붙는다. 헤드리스는 렌더링 디바이스가 없어 쉰다(prev 가 빈다).
 	var trn = lay.get_node_or_null("CrtTrail")
