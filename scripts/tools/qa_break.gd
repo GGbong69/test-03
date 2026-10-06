@@ -153,7 +153,7 @@ func _throw(kill := false, cap := 900, deep := -1) -> Dictionary:
 			"hit": 0, "hit_f": -1, "flash": -1.0, "from": -1.0, "tot": -1,
 			"land": -1, "land_hs": -1.0, "land_drop": -1.0, "land_norm": -1.0,
 			"st_f": -1, "clear_shk": -1.0,
-			"crack_f": [], "near_f": []}
+			"crack_f": [], "crack_p": [], "near_f": []}
 	g.target = 1
 	g.total = 0
 	g.state = g.S.CONFIRM
@@ -197,8 +197,8 @@ func _throw(kill := false, cap := 900, deep := -1) -> Dictionary:
 					o.hit_f = f
 			if snm == "settle_total" and o.st_f < 0:
 				o.st_f = f
-			#  삐걱과 떨어져야 할 정산 소리 — 넘기 · 착지 · 한 방(2026-10-06).
-			if snm in ["target_hit", "settle_total", "board_break"]:
+			#  삐걱과 떨어져야 할 소리 — 넘기 · 착지 · 한 방 · 꼬리 톡(2026-10-06).
+			if snm in ["target_hit", "settle_total", "board_break", "board_thud"]:
 				(o.near_f as Array).append(f)
 			if o.arm >= 0 and o.clear < 0 and g.state != g.S.CLEAR:
 				match snm:
@@ -209,9 +209,12 @@ func _throw(kill := false, cap := 900, deep := -1) -> Dictionary:
 		#  ⚠ **삐걱은 제 자리 하나(crack_pl)에서 난다**(2026-10-06) — 자리 넷을 안 돌므로 위
 		#  이름 셈에 안 잡힌다. 그 프레임에 났으면 crack_t 가 0 이다(_crack_snd 가 그 프레임
 		#  시계를 민 뒤 0 으로 내린다). 띠 톡도 제 자리(tick_pl)라 열쇠가 바뀐 프레임으로 센다.
+		#  음은 삐걱 자리의 pitch_scale 이다(_crack_snd 가 f ÷ SFX_BASE 로 박는다).
 		if g.crack_t == 0.0 and o.arm >= 0 and o.clear < 0 and g.state != g.S.CLEAR:
 			o.crack += 1
 			(o.crack_f as Array).append(f)
+			var cpl: AudioStreamPlayer = g.crack_pl
+			(o.crack_p as Array).append(cpl.pitch_scale if cpl != null else -1.0)
 		var tk := _tick_key()
 		if tk != tk_prev:
 			tk_prev = tk
@@ -279,13 +282,31 @@ func _tick_key() -> String:
 	return "%s@%.6f" % [String(tp.stream.resource_path), tp.pitch_scale]
 
 
-#  삐걱 프레임마다 가장 가까운 정산 소리(톡 · 넘기 · 착지 · 한 방)까지의 프레임 — 가장 작은 것.
+#  삐걱 프레임마다 가장 가까운 소리(톡 · 넘기 · 착지 · 한 방 · 꼬리 톡)까지의 프레임 — 가장 작은 것.
 func _crack_gap(o: Dictionary) -> int:
 	var best := 999
 	for cf in o.crack_f:
 		for nf in o.near_f:
 			best = mini(best, absi(int(cf) - int(nf)))
 	return best
+
+
+#  삐걱끼리의 가장 좁은 사이(프레임). 하나뿐이면 999.
+func _crack_self(o: Dictionary) -> int:
+	var cf: Array = o.crack_f
+	var best := 999
+	for k in range(1, cf.size()):
+		best = mini(best, int(cf[k]) - int(cf[k - 1]))
+	return best
+
+
+#  삐걱 음이 단 차례로 내려가는가 — 뒤 알이 앞 알보다 낮다.
+func _crack_down(o: Dictionary) -> bool:
+	var cp: Array = o.crack_p
+	for k in range(1, cp.size()):
+		if float(cp[k]) >= float(cp[k - 1]):
+			return false
+	return not cp.is_empty() and float(cp[0]) > 0.0
 
 
 #  sfx_next 가 prev 에서 지금까지 돈 자리들의 소리 이름 — _throw 와 같은 셈이다.
@@ -365,7 +386,7 @@ func _run() -> void:
 	#  프레임 안. pc 는 넘는 자리가 이득의 몇 몫인가다. 넘는 프레임은 걸음 시계를 이미
 	#  한 프레임 탄 뒤에 잡힌다.
 	var pc: float = (float(g.target) - float(a.from)) / maxf(float(a.tot) - float(a.from), 1.0)
-	var cq: float = g._cross_qt(pc)
+	var cq: float = g._cross_qt(pc, int(a.tot) - int(round(float(a.from))))
 	_ok("금의 자가 넘는 순간의 남은 걸음이다",
 			float(a.qt0) >= cq - 0.0001 and float(a.qt0) <= cq + DT + 0.0001,
 			"brk_qt0 %.4f / _cross_qt(pc %.3f) %.4f" % [a.qt0, pc, cq])
@@ -883,6 +904,7 @@ func _run() -> void:
 	var snd_ok := true
 	var crk_txt := ""
 	var crk_ok := true
+	var post_all := 0
 	for t in 3:
 		_open()
 		g.leg_no = t + 1          # 작은 1 · 큰 2 · 보스 3
@@ -898,19 +920,33 @@ func _run() -> void:
 		#  작은 판은 꼬리 톡이 0회라, 이 줄이 없으면 런에서 맨 처음 듣는 깨짐이 0.30초짜리
 		#  한 방뿐이었다(2026-09-24 · 단마다 한 알). 굴림이 생긴 뒤로는 그 0.68초를 띠 톡이
 		#  같이 채운다.
-		#  ── 톡 · 착지와 안 겹친다 (2026-10-06) ──
+		#  ── 톡 · 착지 · 한 방과 안 겹치고 단마다 한 알 (2026-10-06) ──
 		#  합계 굴림이 목표를 넘은 뒤라 금이 번지는 동안 띠 톡 · 착지가 같이 난다. 삐걱은
-		#  그 소리들(넘기 · 톡 · 착지 · 한 방)에서 2프레임(TALLY.tick_gap) 넘게 떨어진
-		#  프레임에만 나고 — 못 난 것은 한 방이 덮는다 — 단보다 많지 않다. 이 도구의
-		#  던지기(목표 1 · 굴림이 걸음 머리에서 넘는다)에서 넷 중 셋 · 여섯 중 셋이 난다.
+		#  그 소리들(넘기 · 톡 · 착지 · 한 방 · 꼬리 톡)과 2프레임(TALLY.tick_gap) 넘게 떨어진
+		#  프레임에만 나고 삐걱끼리도 2프레임 넘게 떨어진다. 못 난 것은 착지 뒤 · 한 방 뒤로
+		#  이어 나서 **삐걱 수 = 단 수 = 층 표의 stages**(작은 · 큰 넷 · 보스 여섯)이고 음은 단
+		#  차례로 내려간다. 한때 못 난 것을 한 방이 덮어 넷 중 셋 · 여섯 중 셋만 났다(검토).
 		var cg := _crack_gap(r)
-		crk_txt += "%s 단%d·삐걱%d(가장 가까운 정산 소리 %d프레임)  " % [["작은", "큰", "보스"][t],
-				int(r.stage), int(r.crack), cg]
-		if int(r.crack) > int(r.stage) or int(r.stage) <= 0 or int(r.crack) < 2 \
-				or cg < int(ceil(float(g.TALLY.tick_gap) - 0.001)):
+		var cs := _crack_self(r)
+		var gap2: int = int(ceil(float(g.TALLY.tick_gap) - 0.001))
+		var down := _crack_down(r)
+		#  한 방 뒤로 이어 난 알 — 한 방이 덮던 그 몫이다.
+		var post := 0
+		for cf2 in r.crack_f:
+			if int(r.fire) >= 0 and int(cf2) > int(r.fire):
+				post += 1
+		post_all += post
+		crk_txt += "%s 단%d(표 %d)·삐걱%d · 한 방 뒤 %d(가장 가까운 소리 %d프레임 · 삐걱끼리 %d · 음 %s)  " % [
+				["작은", "큰", "보스"][t], int(r.stage), int(row.stages), int(r.crack), post, cg, cs,
+				"내림" if down else str(r.crack_p)]
+		if int(r.crack) != int(r.stage) or int(r.stage) != int(row.stages) \
+				or cg < gap2 or cs < gap2 or not down:
 			crk_ok = false
 	_ok("판이 뜨는 소리가 층대로 1·2·3 — 한 방 + 꼬리 톡", snd_ok, snd_txt)
-	_ok("금이 번지는 동안 삐걱이 톡 · 착지 · 한 방과 2프레임 떨어져 난다", crk_ok, crk_txt)
+	#  한 방 뒤 갈래가 실제로 돈다 — 이 던지기(굴림 끝의 톡 · 착지가 금과 겹친다)에서 한 방까지
+	#  못 난 알이 하나도 없으면 위 줄이 그 갈래를 안 잰 것이다.
+	_ok("삐걱 수 = 단 수 · 톡 · 착지 · 한 방 · 꼬리 톡 · 삐걱끼리 2프레임 떨어진다 · 음이 내려간다",
+			crk_ok and post_all > 0, crk_txt)
 	_ok("board_crack 이 SFX 표에 있고 파일이 있다",
 			(g.SFX as Dictionary).has("board_crack")
 			and ResourceLoader.exists("res://sfx/board_crack.wav"),

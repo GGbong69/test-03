@@ -1052,7 +1052,7 @@ func _tick_key(tp: AudioStreamPlayer) -> String:
 
 
 #  칸 수의 식 — TALLY.tick0 + TALLY.tick_gn × gn 을 4 ~ 24 로 묶는다. 게임은 이득으로 한 번 더
-#  누른다(mini(…, last_gain) · ⑭-k) — 여기 쓰는 걸음은 이득이 20 이상이라 안 걸린다.
+#  누른다(mini(…, maxi(last_gain − 1, 1)) · ⑭-k) — 여기 쓰는 걸음은 이득이 20 이상이라 안 걸린다.
 func _tick_want(gn: float) -> int:
 	var tl: Dictionary = g.TALLY
 	return clampi(int(round(float(tl.tick0) + float(tl.tick_gn) * gn)), 4, 24)
@@ -1225,14 +1225,20 @@ func _run_tick() -> void:
 			int(o0.n) == 0 and (o0.heard as Array).is_empty() and bool(o0.st_start),
 			"칸 %d · %d번 · 머리 소리 %s" % [int(o0.n), (o0.heard as Array).size(), o0.st_start])
 
-	#  ── ⑭-k 작은 이득 — 칸이 이득보다 많지 않고 톡마다 「+n」이 오른다 (2026-10-06) ──
+	#  ── ⑭-k 작은 이득 — 칸이 이득 − 1 보다 많지 않고 톡마다 「+n」이 오른다 (2026-10-06) ──
 	#  검토: 이득 1 에서 톡이 다섯 번 나는 동안 카드는 「+0」이었고(칸 바닥 4 > 이득), 상단 띠는
-	#  반올림이라 「1」을 먼저 찍었다. 이제 칸 = mini(식, 이득) — 이득 1 · 2 · 3 은 칸 1 · 2 · 3
-	#  (톡 0 · 1 · 2 + 착지)이고, 카드는 내림이라 톡마다 한 칸 이상 오른다. 상단 띠의 수
-	#  (_bar_val)는 굴리는 동안 떠난 자리 + 카드 「+n」이다 — 매 프레임 잰다. 끝값은 착지
-	#  프레임에 처음 선다.
+	#  반올림이라 「1」을 먼저 찍었다. 그 뒤 0 → 이득을 굴리자 이득 2 · 3 이 굴림의 앞 절반을
+	#  「+0」에 서 있었다(검토 둘째). 이제
+	#   · lead 가 끝난 첫 프레임부터 카드는 1 이상이다 — 굴림은 1 → 이득(1 + (이득 − 1) × 몫의
+	#     내림)이고, 이득 1 은 lead 끝 프레임이 곧 착지다(모션 끄기 길).
+	#   · 칸 = mini(식, maxi(이득 − 1, 1)) — 이득 2 · 3 · 5 는 칸 1 · 2 · 4(톡 0 · 1 · 3 + 착지).
+	#     톡마다 카드가 앞 톡(첫 톡은 lead 끝의 「+1」)보다 오른다.
+	#   · 상단 띠의 수(_bar_val)는 굴리는 동안 띠의 굴림 값 shown 의 내림과 같고 total − 1 을
+	#     안 넘는다 — 둘은 따로 셈한다(_tick_score 의 lerp · 떠난 자리 + 카드). 끝값은 착지
+	#     프레임에 처음 선다. 상단 띠는 _bar_val 로 그린다(_draw_topbar 원문).
 	var sm_ok := true
 	var sm_txt := ""
+	var lead_f: float = float(tl.lead)
 	for gv in [1, 2, 3, 5, 7, 40]:
 		_stage_total(float(gv) / 1000.0, 1)
 		tp.stream = null
@@ -1240,18 +1246,37 @@ func _run_tick() -> void:
 		var kk0 := _tick_key(tp)
 		var heard_v := []
 		var bar_bad := 0
+		var bar_txt := ""
 		var early := false
 		var lvk := false
 		var land_v := -1
+		var land_f := -1
 		var n_k := -1
+		var past := false
+		var first_f := -1
+		var first_v := -1
+		var zero_after := 0
+		var fk := 0
 		for _fk in 4000:
 			if g.state != g.S.RESOLVE:
 				break
 			g._process(1.0 / 60.0)
+			fk += 1
+			#  lead 뒤 — 굴림 시계(score_roll)로 잰다. 착지 뒤 · 굴림이 0 에 닿은 뒤도 뒤다.
+			var after: bool = g.card_mode == 1 and (1.0 - float(g.score_roll)) > lead_f + 0.000001
+			if after and not past:
+				past = true
+				first_f = fk
+				first_v = g._card_gain()
+			if past and g._card_gain() < 1:
+				zero_after += 1
 			if g.land_live:
 				n_k = g.tick_n
-				if g._bar_val() - int(round(g.score_from)) != g._card_gain():
+				var bv: int = g._bar_val()
+				if bv != int(floor(float(g.shown))) or bv > int(g.total) - 1:
 					bar_bad += 1
+					if bar_txt == "":
+						bar_txt = "띠 %d · 굴림 %.3f · total %d" % [bv, float(g.shown), int(g.total)]
 				if g._card_gain() >= g.last_gain:
 					early = true
 			var kk := _tick_key(tp)
@@ -1260,22 +1285,37 @@ func _run_tick() -> void:
 				heard_v.append(g._card_gain())
 			if lvk and not g.land_live:
 				land_v = g._card_gain()
+				land_f = fk
 			lvk = g.land_live
-		var want_n: int = mini(_tick_want(g._grow_n()), int(gv))
+		var want_n: int = mini(_tick_want(g._grow_n()), maxi(int(gv) - 1, 1))
 		var rises := true
-		var pv := 0
+		var pv := 1
 		for v in heard_v:
 			if int(v) <= pv:
 				rises = false
 			pv = int(v)
 		var cnt_ok: bool = heard_v.size() == want_n - 1 if int(gv) <= 7 \
 				else heard_v.size() <= want_n - 1
-		if n_k != want_n or not cnt_ok or not rises or bar_bad > 0 or early or land_v != int(gv):
+		#  이득 1 — lead 끝 프레임이 착지다(톡 없음). 그 밖은 lead 끝 프레임에 「+1」이 선다.
+		var head_ok: bool = (land_f == first_f and first_v == 1 and heard_v.is_empty()) \
+				if int(gv) == 1 else (first_v == 1 and land_f > first_f)
+		if n_k != want_n or not cnt_ok or not rises or bar_bad > 0 or early \
+				or land_v != int(gv) or zero_after > 0 or not head_ok:
 			sm_ok = false
-		sm_txt += "+%d 칸 %d(식 %d) · 톡에 선 값 %s · 착지 +%d · 띠 어긋남 %d · " % [int(gv), n_k,
-				want_n, heard_v, land_v, bar_bad]
-	_ok("⑭-k 작은 이득 — 칸 ≤ 이득 · 톡마다 「+n」이 오른다 · 띠와 카드가 같은 내림 · 끝값은 착지",
+		sm_txt += "+%d 칸 %d(식 %d) · lead 끝 %d프레임 +%d · 톡에 선 값 %s · 착지 %d프레임 +%d · 「+0」 %d · 띠 어긋남 %d%s · " \
+				% [int(gv), n_k, want_n, first_f, first_v, heard_v, land_f, land_v, zero_after,
+				bar_bad, "" if bar_txt == "" else "(" + bar_txt + ")"]
+	_ok("⑭-k 작은 이득 — lead 뒤 「+0」 없음 · 칸 ≤ 이득 − 1 · 톡마다 오른다 · 띠 = 굴림의 내림 · 끝값은 착지",
 			sm_ok, sm_txt)
+	#  상단 띠가 그리는 수는 _bar_val 이다 — 위 줄이 잰 값이 화면에 서는 값이라는 원문 증거.
+	var gsrc := FileAccess.get_file_as_string("res://scripts/game.gd")
+	var t0: int = gsrc.find("func _draw_topbar")
+	var t1: int = gsrc.find("\nfunc ", t0 + 10)
+	var tb: String = gsrc.substr(t0, t1 - t0) if t0 >= 0 and t1 > t0 else ""
+	_ok("⑭-k 상단 띠는 _bar_val 을 그린다 · shown 을 바로 안 적는다",
+			tb.find("_bar_val()") > 0 and tb.find("round(shown)") < 0
+			and tb.find("str(shown") < 0 and tb.find("big(shown") < 0,
+			"_draw_topbar %d자" % tb.length())
 
 	# ── ⑮ 착지 — 머리는 조용하고 끝값에서 내리친다 (2026-10-06) ──────
 	#  머리에서 하던 것(settle_total · 흔들림 · 멈춤 · 크기 봉우리)이 전부 착지 프레임으로

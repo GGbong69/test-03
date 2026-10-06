@@ -362,6 +362,15 @@ func _pass1() -> void:
 			shape = false
 	_say(shape and ow.size() > 0, "동전은 **열쇠 셋만** 적는다",
 			"%d장 · %s" % [ow.size(), str(ow[0]) if ow.size() > 0 else ""])
+	#  상점에서 산 동전의 방식이 그 자리에서 섰는가 — 되살린 런은 owned 로 다시 읽는다
+	#  (_run_load → _modes_refresh). 안 섰으면 2차의 aim_mode 가 산 매물이 조준 동전인
+	#  씨앗에서만 붉었다(2026-10-06). 이 씨앗이 무엇을 샀든 같은 길이라 늘 댄다.
+	var si: int = g._score_item()
+	_eq("산 뒤 조준 방식이 owned 를 다시 읽은 것과 같다", g.aim_mode, g._aim_from_items())
+	_eq("산 뒤 계산 방식이 owned 를 다시 읽은 것과 같다", g.score_mode,
+			String(g.owned[si].get("score", "")) if si >= 0 else GameData.score_mode())
+	print("  런 씨앗 %d · 동전 %s · 조준 '%s' · 계산 '%s'" % [g.run_seed,
+			str(_ids(g.owned)), g.aim_mode, g.score_mode])
 
 	_dump(_snap())
 	print("  … 상점 매듭을 남기고 죽는다. 2차를 돌려라")

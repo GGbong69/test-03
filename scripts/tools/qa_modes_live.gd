@@ -132,6 +132,31 @@ func _run() -> void:
 	_ok("상점에서 팔면 상태는 그대로 · 방식은 기본", g.state == g.S.SHOP and g.aim_mode == "std",
 			"state %d · '%s'" % [g.state, g.aim_mode])
 
+	# ── 상점에서 산다 — 그 자리에서 산 동전의 방식이 선다 (2026-10-06) ──
+	#  산 동전의 방식이 다음 판 첫머리까지 안 섰고, 상점 매듭에서 되살린 런은 owned 로 다시
+	#  읽어 산 런과 갈렸다(resume_probe 2차가 씨앗에 따라 붉었다). 팔기 · 순서 바꾸기와 같은 길.
+	g.owned.clear()
+	g.sealed = -1
+	g._panel_reset()
+	g.aim_mode = "std"
+	g.score_mode = GameData.score_mode()
+	g.state = g.S.SHOP
+	g.gold = 999
+	g.stock = [{"type": "item", "d": cow.duplicate(), "cost": 1, "sold": false},
+			{"type": "item", "d": dec.duplicate(), "cost": 1, "sold": false}]
+	g._buy(0)
+	var buy_aim: String = g.aim_mode
+	g._buy(1)
+	_ok("상점에서 조준 · 계산 동전을 사면 그 자리에서 그 방식이다",
+			g.owned.size() == 2 and buy_aim == cow_aim and g.aim_mode == cow_aim
+			and g.score_mode == sm and g.state == g.S.SHOP,
+			"조준 '%s' · 계산 '%s' · state %d" % [g.aim_mode, g.score_mode, g.state])
+	_ok("산 뒤의 방식이 owned 를 다시 읽은 것과 같다(되살리기가 읽는 길)",
+			g.aim_mode == g._aim_from_items()
+			and g.score_mode == String(g.owned[g._score_item()].get("score", "")))
+	g.owned.clear()
+	g._modes_refresh(false)
+
 	# ── 판 시작은 조준을 다시 세우지 않는다 ──────────────
 	#  (빗각의 축 뽑기가 전역 난수를 한 칸 밀면 같은 씨의 런이 갈라진다)
 	g.owned = [_item("r15")]

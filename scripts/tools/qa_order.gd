@@ -21,7 +21,8 @@ extends SceneTree
 #        안내 줄 · 목표 달성과 안 겹친다 · 판 갈이 · 판 밖 화면에서는 안 선다
 #     ⑭ 되살리기(판 매듭)가 같은 주문을 다시 낸다
 #     ⑮ 개발자 판 「주문 걸기」 — 열아홉 줄 안 · 게임 함수 · 한 판에 사건 하나
-#     ⑯ 그림 — 글자 0 · 새 색 0 · 난수 0 · 모션 끄기면 숨을 안 쉰다
+#     ⑯ 그림 — 글자 0 · 새 색 0 · 난수 0 · 모션 끄기면 숨을 안 쉰다 · 테두리 그늘은 영역 밖에만 ·
+#        아홉 영역 다 영역이 나머지보다 밝다(헤드리스 대용 셈 — 그린 조각 · 판 색 · 판 빛 · 숨 바닥)
 #
 #   godot --headless --path . --script scripts/tools/qa_order.gd
 
@@ -174,6 +175,59 @@ func _truth(cond: String, p: Vector2) -> bool:
 			"mult": int(hi.mult), "miss": int(hi.mult) == 0, "missp": false,
 			"left": p.x < g.BC.x, "col": int(hi.get("col", -1))}
 	return GameData.check(cond, x)
+
+
+#  판 위 한 점(반지름 r · 각 an — 0 이 위 · 시계 방향)의 판 색. 판 구멍(_board_holes)과 같은
+#  갈래 — 안쪽 불 C_RED · 바깥 불 C_GREEN · 트리플 · 더블 띠는 칸의 띠 색 · 그 밖은 칸 색
+#  (_board_cols — 죽은 칸 가라앉힘까지).
+func _board_px(r: float, an: float, cols: Array) -> Color:
+	if r < g.R * g.rt_bull_i:
+		return g.C_RED
+	if r < g.R * g.rt_bull_o:
+		return g.C_GREEN
+	var sw: float = g._sec_w()
+	var i: int = int(floor(fposmod(an + sw * 0.5, TAU) / sw)) % int(g._sec_n())
+	var ring: bool = (r >= g.R * g.rt_trp_in and r < g.R * g.rt_trp_out) \
+			or r >= g.R * g.rt_dbl_in \
+			or (r >= g.R * g.rt_trp2_in and r < g.R * g.rt_trp2_out)
+	return cols[i][1] if ring else cols[i][0]
+
+
+#  조각 목록이 그려진 결과의 넓이 가중 평균 밝기 [sRGB 루마, 선형 상대 휘도] — 대용 셈
+#  (⑯ 의 「영역이 밝은 쪽이다」 머리말). 조각마다 극좌표 4 × 4 점(넓이 r · dr · da). 판 색 위에
+#  판 빛(_board_light: 한가운데 0 에서 테로 갈수록 왼쪽 위 흰빛 light_hi · 오른쪽 아래 그늘
+#  light_lo)을 얹고 그 위에 over 를 짙기 a 로 얹는다 — 2D 캔버스는 sRGB 값으로 섞는다.
+func _lum_of(pcs: Array, over: Color, a: float) -> Vector2:
+	var cols: Array = g._board_cols()
+	var rim: float = g.R * g.rt_dbl_out
+	var lt := Vector2(-0.6, -0.8)
+	var hi: float = float(g.BOARDART.light_hi)
+	var lo: float = float(g.BOARDART.light_lo)
+	var s_l := 0.0
+	var s_y := 0.0
+	var s_w := 0.0
+	for pc in pcs:
+		var ri := float(pc[0])
+		var ro := float(pc[1])
+		var a0 := float(pc[2])
+		var a1 := float(pc[3])
+		for u in 4:
+			var r := lerpf(ri, ro, (float(u) + 0.5) / 4.0)
+			for v in 4:
+				var an := lerpf(a0, a1, (float(v) + 0.5) / 4.0)
+				var w := r * (ro - ri) * (a1 - a0) / 16.0
+				var t := Vector2(sin(an), -cos(an)).dot(lt)
+				var k := clampf(r / rim, 0.0, 1.0)
+				var c := _board_px(r, an, cols)
+				c = c.lerp(Color.WHITE, k * maxf(t, 0.0) * hi)
+				c = c.lerp(Color.BLACK, k * maxf(-t, 0.0) * lo)
+				c = c.lerp(over, a)
+				s_l += c.get_luminance() * w
+				s_y += c.srgb_to_linear().get_luminance() * w
+				s_w += w
+	if s_w <= 0.0:
+		return Vector2.ZERO
+	return Vector2(s_l / s_w, s_y / s_w)
 
 
 func _run() -> void:
@@ -1048,6 +1102,92 @@ func _run() -> void:
 	_ok("영역 아홉 다 테두리가 서고 토막마다 한쪽만 영역이다", rim_ok, rim_txt)
 	_ok("나머지를 0.16 보다 세게 누르고 테두리 선 · 그늘이 선다", float(g.ORDER.dim_a) > 0.16
 			and float(g.ORDER.rim_a) > 0.5 and float(g.ORDER.rim_dk) > 0.0)
+	#  ── 그늘은 선의 밖에만 깔린다 (2026-10-06) ──
+	#  양옆에 깔던 그늘은 영역 쪽 1px 도 눌러 선이 안팎을 못 갈랐다(검토). 그늘 토막은 선
+	#  토막과 짝이고(수가 같다), 그늘 토막의 한가운데는 짝 선에서 1.5px 떨어진 영역 **밖**이다
+	#  (판의 진실 _truth — 판 밖도 영역 밖이다).
+	var sh_ok := true
+	var sh_txt := ""
+	for rc2 in ["double", "triple", "bull", "col:1", "col:0", "sec:20", "left", "right", "small"]:
+		_plain()
+		g._order_open(String(rc2), 3, _tag("t_gold"), 1)
+		var ln: Array = g.order_rim
+		var sh: Array = g.order_rim_sh
+		var in_n := 0
+		var far_n := 0
+		if ln.size() != sh.size() or ln.is_empty():
+			sh_ok = false
+		for j in mini(ln.size(), sh.size()):
+			var la: PackedVector2Array = ln[j]
+			var sa: PackedVector2Array = sh[j]
+			var mi2: int = sa.size() / 2
+			var sm: Vector2 = (sa[maxi(mi2 - 1, 0)] + sa[mi2]) * 0.5
+			var lm: Vector2 = (la[maxi(mi2 - 1, 0)] + la[mi2]) * 0.5
+			if _truth(String(rc2), sm):
+				in_n += 1
+			if absf(sm.distance_to(lm) - 1.5) > 0.25:
+				far_n += 1
+		if in_n > 0 or far_n > 0:
+			sh_ok = false
+		sh_txt += "%s %d/%d%s · " % [rc2, sh.size(), ln.size(),
+				"" if in_n + far_n == 0 else " 안 %d · 거리 %d" % [in_n, far_n]]
+	_ok("테두리 그늘은 선마다 하나 · 영역 밖 1.5px 에만 깔린다", sh_ok, sh_txt)
+	#  ── 영역이 밝은 쪽이다 (2026-10-06) ──
+	#  검토: 흑색 칸 주문은 영역(먹 2b2438)에 분필빛을 얹어도 가라앉은 나머지(백색 칸 크림)보다
+	#  어두워, 판이 영역을 **어두운 쪽**으로 말했다. 아홉 영역(칸 하나는 이 판의 칸 값 전부)에서
+	#  영역의 평균 밝기가 나머지보다 높아야 한다. 헤드리스라 화면을 못 찍으므로 **그린 결과를
+	#  셈으로 짓는 대용**이다(_lum_of): 그리는 조각 목록(order_in · order_off) 그대로, 조각마다
+	#  극좌표 4 × 4 점을 넓이로 달아 판 색(칸 · 띠 · 불 — 판 구멍과 같은 갈래) 위에 판 빛
+	#  (_board_light 의 왼쪽 위 밝힘 · 오른쪽 아래 그늘)을 얹고, 영역은 분필빛(_order_tone 의 빛 ×
+	#  숨이 가장 얕을 때 1 − breathe), 나머지는 어둠을 얹는다. 밝기는 sRGB 루마
+	#  (Color.get_luminance)와 선형 상대 휘도 둘 다 잰다. 테두리 선 · 그늘 · 구멍 · 철사는
+	#  안 넣는다 — 창으로 찍은 실제 화면(저장소 밖 캡처, 2026-10-06)의 판 픽셀 평균과 아홉 영역 ·
+	#  흑색 칸 하나의 대소가 같았다(흑색 칸: 영역 루마 0.507 · 나머지 0.270, 옛 세기는 0.389 ·
+	#  0.416 으로 거꾸로 — 이 셈도 옛 세기에서 붉다).
+	var lu_ok := true
+	var lu_txt := ""
+	var lu_conds := ["double", "triple", "bull", "col:1", "col:0", "left", "right", "small"]
+	var sv_seen := {}
+	for sv in g.sectors:
+		if not sv_seen.has(int(sv)):
+			sv_seen[int(sv)] = true
+			lu_conds.append("sec:%d" % int(sv))
+	var br_lo: float = 1.0 - float(g.ORDER.breathe)
+	var sec_worst := ""
+	var sec_gap := INF
+	for lcd in lu_conds:
+		_plain()
+		g._order_open(String(lcd), 3, _tag("t_gold"), 1)
+		var tn: Vector2 = g._order_tone()
+		var li: Vector2 = _lum_of(g.order_in, g.DOORT.chalk_ink, tn.x * br_lo)
+		var lo: Vector2 = _lum_of(g.order_off, Color.BLACK, tn.y)
+		var good: bool = li.x > lo.x and li.y > lo.y
+		if not good or g.order_in.is_empty():
+			lu_ok = false
+		if String(lcd).begins_with("sec:"):
+			if li.x - lo.x < sec_gap:
+				sec_gap = li.x - lo.x
+				sec_worst = "%s 루마 %.3f / %.3f · 휘도 %.3f / %.3f%s" % [lcd, li.x, lo.x, li.y, lo.y,
+						"" if good else " ✗"]
+			if not good:
+				lu_txt += "%s ✗ · " % lcd
+		else:
+			lu_txt += "%s 루마 %.3f / %.3f · 휘도 %.3f / %.3f%s · " % [lcd, li.x, lo.x, li.y, lo.y,
+					"" if good else " ✗"]
+	lu_txt += "칸 하나 %d가지 중 가장 좁은 %s" % [sv_seen.size(), sec_worst]
+	_ok("아홉 영역 다 영역이 나머지보다 밝다 (영역 / 나머지 · 숨 바닥 · 대용 셈)", lu_ok, lu_txt)
+	#  흑색 칸뿐인 영역만 세게 민다 — 그 밖은 lit_a · dim_a 그대로다.
+	var dk_ok := true
+	for dc in [["col:1", true], ["col:0", false], ["double", false], ["small", false],
+			["sec:%d" % int(g.sectors[1]), g._sec_col(1) == 1],
+			["sec:%d" % int(g.sectors[0]), g._sec_col(0) == 1]]:
+		_plain()
+		g._order_open(String(dc[0]), 3, _tag("t_gold"), 1)
+		if bool(g.order_dk) != bool(dc[1]):
+			dk_ok = false
+	_ok("흑색 칸뿐인 영역(흑색 칸 · 흑색 칸 하나)만 빛 · 어둠이 세다", dk_ok
+			and float(g.ORDER.dk_lit) > float(g.ORDER.lit_a)
+			and float(g.ORDER.dk_dim) > float(g.ORDER.dim_a))
 	var src := FileAccess.get_file_as_string("res://scripts/game.gd")
 	var i0: int = src.find("func _order_lit_e")
 	var i1: int = src.find("func _to_pick", i0)
