@@ -20,7 +20,7 @@ extends SceneTree
 #     ⑬ 걸음이 _pace 를 탄다 · 카드에 글이 안 선다
 #     ⑭ 판이 끝나면 사라진다 · 판이 새로 서면 비운다
 #     ⑮ 되살리기(판 매듭)가 같은 사건 · 같은 칸을 다시 낸다
-#     ⑯ 주문 · 단골은 뽑혀도 아직 사건 없는 판과 같다
+#     ⑯ 주문 판에는 불씨가 없다(주문은 qa_order) · 단골은 뽑혀도 아직 사건 없는 판과 같다
 #     ⑰ 개발자 판 「불씨 피우기」 — 열아홉 줄 안 · 게임 함수로 곧장 핀다
 #     ⑱ 그림 — 글자 0 · 새 색 0 · 난수 0 · 모션 끄기면 일렁임이 없다
 #
@@ -470,6 +470,8 @@ func _run() -> void:
 				"%s ← %s" % [str(_tuple()), str(want)])
 
 	# ── ⑯ 주문 · 단골 ────────────────────────────────
+	#  주문은 제 갈래가 섰다(2026-10-06 · qa_order 가 잰다) — 여기서는 불씨가 안 서는지만
+	#  본다. 단골은 아직 갈래가 없어 걸음도 안 는다.
 	print("⑯ 주문 · 단골")
 	_fresh()
 	for kd in ["order", "regular"]:
@@ -481,8 +483,12 @@ func _run() -> void:
 				break
 		_throw(3, "t")
 		var kq := _kinds(g.queue)
-		_ok("%s 판 — 불씨가 없고 걸음이 안 는다" % kd, sk > 0 and g.ember_idx < 0
-				and not kq.has("ember") and not kq.has(kd), "씨앗 %d · %s" % [sk, str(kq)])
+		if kd == "order":
+			_ok("order 판 — 불씨가 없다 · 주문이 걸렸다", sk > 0 and g.ember_idx < 0
+					and not kq.has("ember") and g.order_cond != "", "씨앗 %d · %s" % [sk, str(kq)])
+		else:
+			_ok("%s 판 — 불씨가 없고 걸음이 안 는다" % kd, sk > 0 and g.ember_idx < 0
+					and not kq.has("ember") and not kq.has(kd), "씨앗 %d · %s" % [sk, str(kq)])
 		_settle()
 
 	# ── ⑰ 개발자 판 ──────────────────────────────────

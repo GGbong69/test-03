@@ -1,5 +1,5 @@
 ﻿id,name,kind,weight,min_round,legs,v,v2,_note
 none,없음,none,2,1,small;big,0,0,사건 없는 판 · 뽑기에 든다
 ember,불씨,ember,3,1,small;big,1,3,v 맞힐 때마다 골드 · v2 피는 때의 끝 발(첫 발 전 아니면 1~v2 번째 발 정산 뒤 · 첫 발 전 몫은 game.gd EMBER.pre)
-order,칠판 주문,order,2,1,small;big,2,3,v~v2 남은 발 눈금 · 아직 갈래가 없어 사건 없는 판과 같다
+order,칠판 주문,order,2,1,small;big,2,3,v~v2 남은 발 눈금(1~5) · 영역 · 보상(tags.csv 의 when=now 줄)과 함께 판이 열릴 때 뽑는다 · 영역 가중치는 game.gd ORDER.regions
 regular,단골,regular,2,1,small;big,9,2,v 가로채기 반지름(px) · v2 자루를 뽑아 가기까지 발 · 아직 갈래가 없어 사건 없는 판과 같다

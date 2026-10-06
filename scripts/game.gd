@@ -551,7 +551,7 @@ var clok_mul := 1.0      # 차례인 칸에 붙는 배수(mods.csv 의 v1)
 var clok_lap := 0        # 이 판에 돈 바퀴 수 — 개발자 판과 자가 읽는다
 #  ── 판 사건 (2026-10-06 · data/events.csv) ──────────────────
 #  작은 판 · 큰 판이 열릴 때 _ev_roll 이 run_rng 로 하나를 뽑는다. 보스 판은 없다.
-#  "" 없음 · "ember" 불씨 · "order" 칠판 주문 · "regular" 단골. 주문 · 단골은 아직
+#  "" 없음 · "ember" 불씨 · "order" 칠판 주문 · "regular" 단골. 단골은 아직
 #  갈래가 없어 뽑혀도 사건 없는 판과 같다 — 그 갈래는 _ev_roll 의 match 에 선다.
 #  판 중간 상태는 안 적는다: 판 매듭(pick)이 판 첫머리에서 되살려 같은 run_rng 로
 #  같은 사건 · 같은 칸이 다시 선다(resume_probe 9 · 10차가 잰다).
@@ -569,6 +569,19 @@ var ember_hits := 0      # 이 판에 맞힌 수
 var ember_from := -1     # 맞혀 옮겨 가는 중 — 「불씨」 걸음이 서기 전까지 그림은 이 칸이다
 var ember_t := 0.0       # 지금 칸에 선 뒤 흐른 시간 — 피는 불꽃 · 일렁임이 읽는다
 var ember_puff := []     # 꺼진 자리 {p, idx, band, t} — 연기 한 줌
+#  칠판 주문. 영역 · 눈금 · 보상 · 보상 안의 씨앗을 판이 열릴 때 미리 뽑는다(run_rng).
+#  영역은 판 위에 빛으로 그릴 수 있는 GameData.check 조건뿐이다(ORDER.regions).
+var order_cond := ""     # 영역 조건 — "" 면 주문이 없다
+var order_n := 0         # 처음 눈금(남은 발)
+var order_left := 0      # 남은 눈금. 발마다 하나씩 지운다 — 연발은 한 발이다
+var order_tag := {}      # 보상 — tags.csv 의 when=now 한 줄
+var order_u := 0         # 보상 안의 뽑기(트랙 · 동전 · 사탕) 씨앗
+var order_st := ""       # "open" 걸림 · "won" 맞혔다(걸음 앞) · "done" 동그라미 · "miss" X
+var order_thr := -1      # 눈금을 지운 발(leg_throws) — 연발의 작은 다트가 또 안 지운다
+var order_t := 0.0       # 지금 상태에 든 뒤 흐른 시간 — 쓰기 · 동그라미 · X · 지우기가 읽는다
+var order_rub := 9.0     # 마지막 눈금을 지운 뒤 흐른 시간
+var order_in := []       # 영역 조각 [안, 밖, 각0, 각1] — 열 때 한 번 굽는다
+var order_off := []      # 판 안의 나머지 조각 — 옅게 가라앉힌다
 var paint_mul := 1.0
 var score_mode := "std"         # 이 런의 점수 계산 방식. 든 동전이 먼저 쥔다
 # 다트통이 미는 최종 점수 배율. 계산 방식과 같이 판 시작에 한 번 읽는다.
@@ -2343,6 +2356,7 @@ func _ev_clear() -> void:
 	ember_from = -1
 	ember_t = 0.0
 	ember_puff.clear()
+	_order_clear()
 
 
 #  판이 열릴 때 한 번. 가중치 뽑기 한 번이 사건을 정하고, 갈래가 제 것을 미리 뽑는다.
@@ -2377,7 +2391,9 @@ func _ev_roll() -> void:
 	match kind:
 		"ember":
 			_ember_roll()
-		#  "order" · "regular" — 갈래가 서면 여기서 제 것을 미리 뽑는다. 그전까지는
+		"order":
+			_order_roll()
+		#  "regular" — 갈래가 서면 여기서 제 것을 미리 뽑는다. 그전까지는
 		#  이름만 남고 판은 사건 없는 판과 같다.
 
 
@@ -2466,9 +2482,7 @@ func _ember_cell() -> int:
 func _ember_light(idx: int, band: String) -> void:
 	if idx < 0:
 		return
-	if leg_ev != "ember":
-		leg_ev = "ember"
-		leg_ev_row = GameData.event_of("ember")
+	_ev_take("ember")
 	ember_idx = idx % _sec_n()
 	ember_band = band
 	ember_out = false
@@ -2513,6 +2527,11 @@ func _ev_after_throw() -> void:
 	if leg_ev == "ember" and ember_idx < 0 and not ember_out \
 			and ember_k > 0 and leg_throws >= ember_k:
 		_ember_light(_ember_cell(), ember_band)
+	#  칠판 주문 — 눈금이 다 했는데 못 채웠다. X 치고 지운다. 판이 끝났으면 여기 안
+	#  온다 — _finish_leg 의 _ev_clear 가 칠판째 걷는다(못 채운 주문은 그냥 사라진다).
+	if order_st == "open" and order_left <= 0:
+		order_st = "miss"
+		order_t = 0.0
 
 
 #  칸 · 띠의 한가운데.
@@ -2520,6 +2539,483 @@ func _ember_at(idx: int, band: String) -> Vector2:
 	var rr := _ember_band_r(band)
 	var a := float(idx) * _sec_w()
 	return BC + Vector2(sin(a), -cos(a)) * (rr.x + rr.y) * 0.5
+
+
+#  판 사건 하나를 이 판의 것으로 세운다. 판마다 사건은 하나라 다른 갈래의 것을 걷는다 —
+#  개발자 판이 불씨 판에 주문을 걸거나 그 반대일 때만 실제로 걷을 것이 있다.
+func _ev_take(kind: String) -> void:
+	if leg_ev == kind:
+		return
+	if kind != "ember":
+		ember_idx = -1
+		ember_k = -1
+		ember_from = -1
+	if kind != "order":
+		_order_clear()
+	leg_ev = kind
+	leg_ev_row = GameData.event_of(kind)
+
+
+# ══════════════════════════════════════════════════════════
+#  칠판 주문 (2026-10-06 · data/events.csv 의 order 줄)
+# ──────────────────────────────────────────────────────────
+#  판 옆 벽 칠판에 분필 눈금(남은 발)과 보상 그림이 서고, 판 위 영역 하나가 분필빛으로
+#  옅게 밝다. 눈금 안에 그 영역에 꽂으면 「주문」 걸음(동전 · 불씨 뒤 · 저울 · 모음 · 합계
+#  앞)이 보상 한 장을 낸다 — 칠판에 동그라미를 치고 지운다. 눈금이 다 하면 X 치고 지운다.
+#  판이 목표를 넘어 끝나면 주문도 끝난다(못 채웠으면 그냥 사라진다).
+#  ⚠ **run_rng 만 쓴다.** 영역 · 칸 · 눈금 · 보상 줄 · 보상 안의 뽑기 씨앗을 판이 열릴 때
+#  다섯 번 뽑아 둔다. 보상 안의 뽑기(트랙 · 동전 · 사탕)는 그 씨앗을 심은 제 줄기로
+#  굴린다(_take_tag 의 rng) — 전역 randi() 를 타면 되감기가 다른 보상이 된다.
+#  ⚠ 영역은 **판이 그린 그대로** 잰다 — 다트 특성 · 트랙 강화가 주무르기 전의 날값이다
+#  (_order_ctx). 동전 조건 「트리플」은 트랙 강화가 배수를 올리면 안 서지만, 판에 밝힌
+#  트리플 띠에 꽂았는데 주문이 안 차면 빛이 거짓말을 한다.
+# ══════════════════════════════════════════════════════════
+#    regions  영역과 가중치 — 판 위에 빛으로 그릴 수 있는 GameData.check 조건만. "sec" 은
+#             칸 하나(그 칸의 값 sec:N), col:1 흑색 칸 · col:0 백색 칸(colors.csv), small 은
+#             5 이하. 이 판에 조각이 없는 영역(피자의 띠 · 5 이하가 없는 판)은 빠진다
+#    kinds    보상 갈래 — tags.csv 의 when=now 줄 중 이것만. 쌍둥이 · 발품 · 주력 트랙은
+#             건너뛰기를 세거나 다음 뱃지를 거는 것이라 주문 보상이 아니다
+#    box      칠판 판(분필 면) — 판 왼쪽 벽, 자루 걸이(뽑힌 자루 끝 x88)와 조준 가로선
+#             (x169~) 사이 · 왼쪽 점수 카드(y74~170) 밑이다. frame 은 나무 테 두께
+#    ico      보상 그림 반지름 · tick 눈금 한 획 [폭, 높이] · tick_dx 획 사이
+#    lit_a    영역 분필빛의 짙기 · dim_a 판의 나머지를 가라앉히는 짙기
+#    breathe  분필빛이 숨 쉬는 깊이 · breathe_hz 그 빠르기(모션 끄기면 안 쉰다)
+#    write_t  주문을 쓰는 시간 — 그림이 서고 눈금이 한 획씩 그어진다 · 빛이 차오른다
+#    rub_t    눈금 하나가 지워지는 시간
+#    mark_t   동그라미 · X 를 긋는 시간(빛은 이 동안 식는다) · hold_t 그대로 두는 시간 ·
+#             erase_t 칠판을 지우는 시간
+#    pop_dy   보상 팝 자리 — 칠판 테 윗변에서 위로(px). 팝은 24px 오르고 둘째 팝은 14 위다
+const ORDER := {
+	"regions": [["double", 1.0], ["triple", 1.0], ["bull", 1.0], ["col:1", 1.0],
+			["col:0", 1.0], ["sec", 1.0], ["left", 1.0], ["right", 1.0], ["small", 1.0]],
+	"kinds": ["gold", "track", "candy", "photo", "item"],
+	"box": Rect2(100.0, 238.0, 56.0, 34.0), "frame": 3.0,
+	"ico": 7.0, "tick": Vector2(2.0, 14.0), "tick_dx": 6.0,
+	"lit_a": 0.22, "dim_a": 0.16, "breathe": 0.35, "breathe_hz": 0.55,
+	"write_t": 0.45, "rub_t": 0.28, "mark_t": 0.30, "hold_t": 0.55, "erase_t": 0.40,
+	"pop_dy": 6.0,
+}
+
+
+func _order_clear() -> void:
+	order_cond = ""
+	order_n = 0
+	order_left = 0
+	order_tag = {}
+	order_u = 0
+	order_st = ""
+	order_thr = -1
+	order_t = 0.0
+	order_rub = 9.0
+	order_in = []
+	order_off = []
+
+
+#  영역 · 칸 · 눈금 · 보상 · 보상 씨앗. 뽑는 수가 늘 다섯이라 run_rng 가 판마다 같은 만큼 간다.
+#  그릴 영역이나 받을 보상이 하나도 없으면 사건 없는 판이 된다.
+func _order_roll() -> void:
+	var ru := run_rng.randf()
+	var cu := int(run_rng.randi() & 0x3fffffff)
+	var nu := run_rng.randf()
+	var tu := run_rng.randf()
+	var su := int(run_rng.randi() & 0x3fffffff)
+	var cond := _order_region(ru, cu)
+	var tag := _order_tag_pick(tu)
+	if cond == "" or tag.is_empty():
+		leg_ev = ""
+		leg_ev_row = {}
+		return
+	var lo := maxi(int(GameData.event_v(leg_ev_row, "v", 2.0)), 1)
+	var hi := maxi(int(GameData.event_v(leg_ev_row, "v2", 3.0)), lo)
+	_order_open(cond, lo + mini(int(nu * float(hi - lo + 1)), hi - lo), tag, su)
+
+
+#  영역 하나를 u(0~1)로 고른다. 이 판에 조각이 없는 영역은 빠진다. "sec" 은 칸 씨앗 cu 로
+#  칸 하나를 골라 그 칸의 값(sec:N)이 된다.
+func _order_region(u: float, cu: int) -> String:
+	var keys := []
+	var sum := 0.0
+	for e in ORDER.regions:
+		var c := String(e[0])
+		if float(e[1]) <= 0.0:
+			continue
+		if c != "sec" and (_order_pieces(c)[0] as Array).is_empty():
+			continue
+		#  칸 값이 다 같은 판(피자 — 서른둘 한 값)의 「칸 하나」는 판 통째라 주문이 아니다.
+		if c == "sec" and (sectors.is_empty() or sectors.min() == sectors.max()):
+			continue
+		keys.append(e)
+		sum += float(e[1])
+	if keys.is_empty() or sectors.is_empty():
+		return ""
+	var t := clampf(u, 0.0, 0.9999) * sum
+	var pick := String(keys[keys.size() - 1][0])
+	for e in keys:
+		t -= float(e[1])
+		if t < 0.0:
+			pick = String(e[0])
+			break
+	if pick == "sec":
+		return "sec:%d" % int(sectors[cu % sectors.size()])
+	return pick
+
+
+#  보상 한 줄을 u(0~1)로 고른다 — 표의 가중치 그대로. 지금 못 받는 갈래는 빠진다.
+func _order_tag_pick(u: float) -> Dictionary:
+	var pool := []
+	var sum := 0.0
+	for r in GameData.tag_pool(GameData.round_of(leg_no), "now", ORDER.kinds):
+		if not _order_tag_ok(r):
+			continue
+		pool.append(r)
+		sum += GameData.tag_w(r)
+	if pool.is_empty() or sum <= 0.0:
+		return {}
+	var t := clampf(u, 0.0, 0.9999) * sum
+	for r in pool:
+		t -= GameData.tag_w(r)
+		if t < 0.0:
+			return r
+	return pool[pool.size() - 1]
+
+
+#  지금 받을 수 있는 보상인가 — 판 첫머리의 상태라 되살려도 같은 답이다. 사탕 · 사진 칸이
+#  꽉 찼으면 사탕 · 사진, 동전 슬롯이 꽉 찼거나 남은 동전이 없으면 동전, 「빈손」이면 골드가
+#  빠진다(뱃지 골드는 빈손을 지나가는 길이라 — _gold_add 머리말 — 주문으로 새면 안 된다).
+func _order_tag_ok(t: Dictionary) -> bool:
+	match String(t.get("kind", "")):
+		"gold":
+			return not GameData.chal_on("gold_off")
+		"candy", "photo":
+			return cons.size() < GameData.cons_slots()
+		"item":
+			return owned.size() < GameData.max_items() \
+					and not _tag_items(String(t.get("rarity", ""))).is_empty()
+		"track":
+			return not _track_ids().is_empty()
+	return false
+
+
+#  주문을 건다. 판이 뽑은 것과 개발자 판 「주문 걸기」가 같은 길이다.
+func _order_open(cond: String, n: int, tag: Dictionary, u: int) -> void:
+	if cond == "" or tag.is_empty():
+		return
+	_ev_take("order")
+	order_cond = cond
+	order_n = clampi(n, 1, 5)
+	order_left = order_n
+	order_tag = tag
+	order_u = u
+	order_st = "open"
+	order_thr = -1
+	order_t = 0.0
+	order_rub = 9.0
+	var pcs := _order_pieces(cond)
+	order_in = pcs[0]
+	order_off = pcs[1]
+
+
+#  판이 그린 그대로의 문맥 — GameData.check 가 영역 조건에서 읽는 칸만 싣는다. mult 는
+#  hit_info 의 날값이다(다트 특성 · 트랙 강화 · 링 죽이기 앞).
+func _order_ctx(info: Dictionary, raw_mult: int, p: Vector2) -> Dictionary:
+	return {"sector": int(info.get("sector", -1)), "bull": bool(info.get("bull", false)),
+			"mult": raw_mult, "miss": raw_mult == 0, "missp": false,
+			"left": p.x < BC.x, "col": int(info.get("col", -1))}
+
+
+#  착탄 한 발. 이 발의 첫 착탄이 눈금 하나를 지운다 — 연발은 작은 다트 여럿이 한 발이라
+#  첫 다트만 지운다(order_thr). 눈금 안에 영역에 꽂으면 참이고 「주문」 걸음이 선다.
+#  연발의 작은 다트도 영역을 채운다 — 그 발의 어느 다트든 영역에 꽂히면 채운 것이고,
+#  채운 뒤의 다트는 아무 일이 없다. 값은 한 톨도 안 바꾼다.
+func _order_land(info: Dictionary, raw_mult: int, p: Vector2) -> bool:
+	if order_st != "open":
+		return false
+	if order_thr != leg_throws:
+		order_thr = leg_throws
+		order_left = maxi(order_left - 1, 0)
+		order_rub = 0.0
+	if GameData.check(order_cond, _order_ctx(info, raw_mult, p)):
+		order_st = "won"
+		return true
+	return false
+
+
+#  「주문」 걸음 — 보상 한 장. 걸음이 서기 전에 판이 끝났거나(그 걸음은 늘 판 끝보다
+#  앞이다) 이미 받았으면 아무 일이 없다. 팝은 칠판 위에 서고(tag_pop) 뱃지 이름 줄은
+#  안 선다 — 값(트랙 레벨 · 골드)만 뜬다.
+func _order_grant() -> void:
+	if order_st != "won" or order_tag.is_empty():
+		return
+	var g0 := gold
+	var rr := RandomNumberGenerator.new()
+	rr.seed = order_u
+	tag_pop = _order_pop_at()
+	_take_tag(order_tag, rr)
+	tag_pop = Vector2.INF
+	if gold > g0:
+		pop(_bank_rect().get_center() + Vector2(0.0, 30.0), "+%d" % (gold - g0),
+				C_GOLD, 12, 0.8)
+	_sfx("stage_pick")
+	order_st = "done"
+	order_t = 0.0
+
+
+#  보상 팝 자리 — 칠판 테 윗변 바로 위 한가운데(_tag_at 이 둘째 팝부터 14 씩 올린다).
+func _order_pop_at() -> Vector2:
+	var box: Rect2 = ORDER.box
+	return Vector2(box.get_center().x,
+			box.position.y - float(ORDER.frame) - float(ORDER.pop_dy))
+
+
+#  영역 조각 — [영역 조각, 판 안의 나머지 조각]. 조각 하나는 [안, 밖, 각0, 각1](px · 라디안,
+#  각 0 이 위 · 시계 방향 — annulus 의 규약)이다. 불 둘과 칸마다 띠 넷(천체 고리가 있으면
+#  여섯)을 반 칸씩 갈라 한가운데 점의 hit_info 를 GameData.check 에 댄다. 띠 경계 · 반 칸
+#  경계가 hit_info 의 경계 · 왼쪽 반의 경계(x = BC.x — 칸 0 과 n/2 의 한가운데이거나 경계)와
+#  같아 조각 하나 안은 한 판정이다(qa_order ③ 이 판 위 점으로 잰다). 두 반이 같으면 한 칸
+#  조각으로 붙인다. 폭 없는 띠(피자)는 빠진다.
+func _order_pieces(cond: String) -> Array:
+	var on := []
+	var off := []
+	var sw := _sec_w()
+	var bands := [[0.0, rt_bull_i], [rt_bull_i, rt_bull_o], [rt_bull_o, rt_trp_in],
+			[rt_trp_in, rt_trp_out], [rt_trp_out, rt_dbl_in], [rt_dbl_in, rt_dbl_out]]
+	if rt_trp2_out > 0.0:
+		bands[2] = [rt_bull_o, rt_trp2_in]
+		bands.append([rt_trp2_in, rt_trp2_out])
+		bands.append([rt_trp2_out, rt_trp_in])
+	for b in bands:
+		var ri := R * float(b[0])
+		var ro := R * float(b[1])
+		if ro - ri < 0.5:
+			continue
+		for i in _sec_n():
+			var a0 := float(i) * sw - sw * 0.5
+			var hv := []
+			for h in 2:
+				var am := a0 + sw * (0.25 + 0.5 * float(h))
+				var pm := BC + Vector2(sin(am), -cos(am)) * (ri + ro) * 0.5
+				var hi := hit_info(pm)
+				hv.append(GameData.check(cond, _order_ctx(hi, int(hi.mult), pm)))
+			if hv[0] == hv[1]:
+				(on if hv[0] else off).append([ri, ro, a0, a0 + sw])
+				continue
+			for h in 2:
+				(on if hv[h] else off).append([ri, ro, a0 + sw * 0.5 * float(h),
+						a0 + sw * 0.5 * float(h + 1)])
+	return [on, off]
+
+
+#  점 p 가 영역 조각 안인가 — 그림과 같은 조각을 잰다(qa_order 가 GameData.check 와 댄다).
+func _order_has(p: Vector2) -> bool:
+	var v := p - BC
+	var r := v.length()
+	var sw := _sec_w()
+	var a := fposmod(atan2(v.x, -v.y) + sw * 0.5, TAU) - sw * 0.5
+	for pc in order_in:
+		if r >= float(pc[0]) and r <= float(pc[1]) and a >= float(pc[2]) and a < float(pc[3]):
+			return true
+	return false
+
+
+#  칠판이 서 있는가 — 주문이 걸린 판을 던지는 동안. 판 갈이(상인이 서는 때)에는 판과
+#  같이 쉰다 — 갈이가 끝나고 판이 다 선 뒤에 주문이 쓰인다.
+func _order_board_on() -> bool:
+	return leg_ev == "order" and order_n > 0 and not swap_live and _is_play_deep()
+
+
+#  칠판이 차지하는 자리 — 테 · 그늘 · 받침까지. qa_order 가 HUD · 판 · 카드 · 자루와 댄다.
+func _order_foot() -> Rect2:
+	var fr: Rect2 = (ORDER.box as Rect2).grow(float(ORDER.frame))
+	return fr.merge(Rect2(fr.position + Vector2(2.0, 3.0), fr.size)) \
+			.merge(Rect2(fr.position.x, fr.end.y, fr.size.x, 3.0))
+
+
+#  ── 칠판 주문 그림 (2026-10-06) ──────────────────────────
+#  글자 0자 · 새 색 0 — 칠판 · 테 · 분필은 제목 칠판(DOORT)의 색 그대로, 보상 그림은 뱃지
+#  그림(_icon_tag) 그대로다. 난수를 안 굴린다 — 분필 결 · 얼룩은 _gl_rand(씨앗 해시)다.
+#  모션 끄기면 획이 그어지지 않고 선 채로 서며(쓰기 · 동그라미 · X) 지우개가 안 지나간다 —
+#  짙기만 바뀐다(빛 · 지움).
+
+#  영역 빛의 몫 0..1 — 쓰는 동안 차오르고, 동그라미 · X 를 긋는 동안 식는다.
+func _order_lit_e() -> float:
+	match order_st:
+		"open", "won":
+			return clampf(order_t / float(ORDER.write_t), 0.0, 1.0)
+		"done", "miss":
+			return 1.0 - clampf(order_t / float(ORDER.mark_t), 0.0, 1.0)
+	return 0.0
+
+
+#  분필빛의 숨 — [1 − breathe, 1]. 모션 끄기면 늘 1 이다.
+func _order_breathe() -> float:
+	if motion_off:
+		return 1.0
+	var k := 0.5 - 0.5 * cos(order_t * TAU * float(ORDER.breathe_hz))
+	return 1.0 - float(ORDER.breathe) * k
+
+
+#  판 위 영역 빛. layer 0 은 조준 어둠 **앞** — 판의 나머지를 옅게 가라앉힌다. layer 1 은
+#  조준 어둠 **뒤** — 영역에 분필빛을 얹는다(겨누는 동안에도 영역이 안 가라앉는다).
+#  분필 잉크가 백색 칸과 같은 색(e8dfc8)이라 빛만으로는 백색 칸 위에서 안 읽힌다 — 시계
+#  차례가 찍어 본 그 문제(_board_lit_sector)라 나머지를 같이 누른다.
+func _order_lit(layer: int) -> void:
+	if order_in.is_empty() or not _is_play_deep():
+		return
+	var e := _order_lit_e()
+	if e <= 0.0:
+		return
+	if layer == 0:
+		var dc := Color(0.0, 0.0, 0.0, float(ORDER.dim_a) * e)
+		for pc in order_off:
+			_order_piece(pc, dc)
+		return
+	var lc := Color(DOORT.chalk_ink, float(ORDER.lit_a) * e * _order_breathe())
+	for pc in order_in:
+		_order_piece(pc, lc)
+
+
+#  조각 하나. 안쪽 반지름이 0 이면(안쪽 불) 부채꼴로 긋는다 — 안쪽 점을 한 점에 겹쳐 찍은
+#  고리는 넓이 없는 꼭짓점이 몰려 삼각분할이 튄다(_band_draw 머리말).
+func _order_piece(pc: Array, col: Color) -> void:
+	var ri := float(pc[0])
+	var ro := float(pc[1])
+	var a0 := float(pc[2])
+	var a1 := float(pc[3])
+	if ri >= 0.5:
+		_band_draw(ri, ro, a0, a1, col)
+		return
+	var pts := PackedVector2Array([BC])
+	for k in 5:
+		var a := lerpf(a0, a1, float(k) / 4.0)
+		pts.append(BC + Vector2(sin(a), -cos(a)) * ro)
+	draw_colored_polygon(pts, col)
+
+
+#  지우는 몫 0..1 — 동그라미 · X 를 긋고 hold_t 동안 둔 뒤 erase_t 동안 지운다.
+func _order_erase_k() -> float:
+	if order_st != "done" and order_st != "miss":
+		return 0.0
+	return clampf((order_t - float(ORDER.mark_t) - float(ORDER.hold_t))
+			/ float(ORDER.erase_t), 0.0, 1.0)
+
+
+#  칠판 — 판 왼쪽 벽. 나무 테 · 짙은 석판 · 분필(DOORT). 빛은 왼쪽 위에서 온다(판 · 자루와
+#  같은 방향) — 그늘은 오른쪽 아래, 테는 윗변 · 왼변이 밝다.
+func _order_board_draw() -> void:
+	if not _order_board_on():
+		return
+	var box: Rect2 = ORDER.box
+	var fr: Rect2 = box.grow(float(ORDER.frame))
+	var ink: Color = DOORT.chalk_ink
+	draw_rect(Rect2(fr.position + Vector2(2.0, 3.0), fr.size), Color(0.0, 0.0, 0.0, 0.40))
+	draw_rect(fr, DOORT.frame)
+	draw_rect(Rect2(fr.position, Vector2(fr.size.x, 1.0)), DOORT.frame_hi)
+	draw_rect(Rect2(fr.position.x, fr.position.y, 1.0, fr.size.y), Color(DOORT.frame_hi, 0.6))
+	draw_rect(Rect2(fr.position.x, fr.end.y - 1.0, fr.size.x, 1.0), Color(0.0, 0.0, 0.0, 0.5))
+	draw_rect(box, DOORT.chalk)
+	#  지운 자국 셋 — 분필 가루가 옅게 번진 얼룩(씨앗 해시라 늘 같은 자리)
+	for k in 3:
+		var w := roundf(lerpf(10.0, 24.0, _gl_rand(k * 5 + 3, 4421)))
+		var h := roundf(lerpf(2.0, 4.0, _gl_rand(k * 5 + 4, 4421)))
+		var px := roundf(box.position.x + _gl_rand(k * 5 + 1, 4421) * (box.size.x - w))
+		var py := roundf(box.position.y + _gl_rand(k * 5 + 2, 4421) * (box.size.y - h))
+		draw_rect(Rect2(px, py, w, h), Color(ink, 0.045))
+	#  받침 — 테 밑 나무 턱에 분필 한 토막
+	draw_rect(Rect2(fr.position.x, fr.end.y, fr.size.x, 3.0), DOORT.frame)
+	draw_rect(Rect2(fr.end.x - 16.0, fr.end.y - 1.0, 8.0, 2.0), Color(ink, 0.85))
+	_order_chalk(box, ink)
+
+
+#  칠판 위 — 보상 그림 · 눈금(남은 발) · 동그라미 / X · 지우개.
+func _order_chalk(box: Rect2, ink: Color) -> void:
+	var er := _order_erase_k()
+	var ca := 1.0 - er if order_st == "done" or order_st == "miss" else 1.0
+	#  쓰는 시계 — 쓰는 중(open · won)만 흐르고, 모션 끄기면 다 쓴 채로 선다.
+	var wt := order_t if (order_st == "open" or order_st == "won") and not motion_off else 99.0
+	var ic := Vector2(box.position.x + 14.0, box.get_center().y)
+	var tk: Vector2 = ORDER.tick
+	var dx := float(ORDER.tick_dx)
+	var x0 := box.position.x + 30.0
+	var ty := roundf(box.get_center().y - tk.y * 0.5)
+	#  지운 칠판에 남는 가루 — 지운 몫만큼 짙어진다
+	if er > 0.0:
+		draw_rect(Rect2(box.position.x + 3.0, box.position.y + 7.0, box.size.x - 6.0,
+				box.size.y - 14.0), Color(ink, 0.05 * er))
+		#  지우개 — 가루 띠 하나가 왼쪽에서 오른쪽으로 지나간다
+		if er < 1.0 and not motion_off:
+			var ex := roundf(lerpf(box.position.x - 6.0, box.end.x - 4.0, er))
+			var ex0 := maxf(ex, box.position.x)
+			var ex1 := minf(ex + 10.0, box.end.x)
+			if ex1 > ex0:
+				draw_rect(Rect2(ex0, box.position.y + 2.0, ex1 - ex0, box.size.y - 4.0),
+						Color(ink, 0.12 * sin(er * PI)))
+	if ca <= 0.0:
+		return
+	#  보상 그림 — 뱃지 그림 그대로(갈래 · 등급색). 쓰는 첫 0.18초에 선다.
+	var ia := ca * clampf(wt / 0.18, 0.0, 1.0)
+	if ia > 0.0:
+		_icon_tag(ic, float(ORDER.ico), String(order_tag.get("kind", "")), ia,
+				String(order_tag.get("rarity", "")))
+	#  눈금 — 오른쪽 것부터 지운다. 다섯째는 넷을 가로지르는 빗금이다. 한 획씩 그어진다.
+	for i in order_n:
+		var x := x0 + dx * float(mini(i, 3))
+		if i >= order_left:
+			#  지운 자국 — 옅은 가루 한 줄. 막 지운 것은 획이 식으며 가루가 번진다.
+			var rk := clampf(order_rub / float(ORDER.rub_t), 0.0, 1.0) \
+					if i == order_left else 1.0
+			if i < 4:
+				draw_rect(Rect2(x - 1.0, ty + 2.0, tk.x + 2.0, tk.y - 4.0),
+						Color(ink, 0.06 * rk * ca))
+			if rk < 1.0:
+				_order_tick(i, x0, ty, 1.0, Color(ink, 0.92 * ca * (1.0 - rk)))
+			continue
+		var gk := clampf((wt - 0.16 - 0.07 * float(i)) / 0.06, 0.0, 1.0)
+		if gk > 0.0:
+			_order_tick(i, x0, ty, gk, Color(ink, 0.92 * ca))
+	#  동그라미(채웠다) · X(눈금이 다 했다) — 보상 그림 위에 긋는다.
+	if order_st == "done" or order_st == "miss":
+		var mk := 1.0 if motion_off else clampf(order_t / float(ORDER.mark_t), 0.0, 1.0)
+		var mc := Color(ink, 0.95 * ca)
+		if order_st == "done":
+			var rx := float(ORDER.ico) + 5.0
+			var ry := float(ORDER.ico) + 4.0
+			var sweep := (TAU + 0.5) * mk
+			var pts := PackedVector2Array()
+			var seg := maxi(int(ceilf(sweep / 0.2)), 1)
+			for k in seg + 1:
+				var a := -2.4 + sweep * float(k) / float(seg)
+				pts.append(ic + Vector2(cos(a) * rx, sin(a) * ry))
+			if pts.size() >= 2:
+				draw_polyline(pts, mc, 2.0)
+		else:
+			var d := float(ORDER.ico) + 3.0
+			var k1 := clampf(mk * 2.0, 0.0, 1.0)
+			var k2 := clampf(mk * 2.0 - 1.0, 0.0, 1.0)
+			if k1 > 0.0:
+				draw_line(ic + Vector2(-d, -d), ic + Vector2(-d, -d).lerp(Vector2(d, d), k1),
+						mc, 2.0)
+			if k2 > 0.0:
+				draw_line(ic + Vector2(d, -d), ic + Vector2(d, -d).lerp(Vector2(-d, d), k2),
+						mc, 2.0)
+
+
+#  눈금 한 획. 넷은 세로 획(2px 마디마다 결이 다르다 — 분필이 고르게 안 묻는다), 다섯째는
+#  넷을 왼쪽 아래에서 오른쪽 위로 긋는 빗금이다. gk 는 그어진 몫이다.
+func _order_tick(i: int, x0: float, ty: float, gk: float, col: Color) -> void:
+	var tk: Vector2 = ORDER.tick
+	var dx := float(ORDER.tick_dx)
+	if i >= 4:
+		var p0 := Vector2(x0 - 3.0, ty + tk.y - 3.0)
+		var p1 := Vector2(x0 + dx * 3.0 + tk.x + 3.0, ty + 3.0)
+		draw_line(p0, p0.lerp(p1, gk), col, 2.0)
+		return
+	var x := x0 + dx * float(i)
+	var seg := int(tk.y / 2.0)
+	for j in seg:
+		if float(j) >= float(seg) * gk:
+			break
+		draw_rect(Rect2(x, ty + 2.0 * float(j), tk.x, 2.0),
+				Color(col, col.a * lerpf(0.72, 1.0, _gl_rand(i * 13 + j, 4423))))
 
 
 func _to_pick() -> void:
@@ -4651,7 +5147,11 @@ func _tag_text(t: Dictionary) -> String:
 #
 # 쌓인 것은 **쓰는 순간 비운다.** 안 비우면 다음 뱃지도 같이 두 번 걸려
 # 「다음 하나」가 「그 뒤로 전부」가 된다.
-func _take_tag(t: Dictionary) -> void:
+#
+# rng 를 주면 뱃지 안의 뽑기(트랙 · 동전 · 사탕 · 사진)가 그 줄기로 굴러간다. 칠판 주문이
+# 판이 열릴 때 뽑아 둔 씨앗을 심어 넘긴다 — 판 중간의 보상이 전역 randi() 를 타면 되감기가
+# 다른 보상을 낸다(run_rng 머리말). 건너뛰기는 안 넘긴다 — 옛 길 그대로 전역이다(2026-10-06).
+func _take_tag(t: Dictionary, rng: RandomNumberGenerator = null) -> void:
 	if String(t.get("kind", "")) == "copy":
 		tag_copy += int(t.get("v", 1))
 		tag_n = 0
@@ -4662,10 +5162,28 @@ func _take_tag(t: Dictionary) -> void:
 	var times: int = 1 + tag_copy
 	tag_copy = 0
 	for _c in times:
-		_take_tag_once(t)
+		_take_tag_once(t, rng)
 
 
-func _take_tag_once(t: Dictionary) -> void:
+#  뱃지 안의 뽑기 한 번 — rng 가 있으면 그 줄기, 없으면 전역(옛 길).
+func _tag_ri(rng: RandomNumberGenerator) -> int:
+	return int(rng.randi()) if rng != null else randi()
+
+
+#  「견본」이 줄 수 있는 동전 — 안 든 것 · 이 판까지 풀린 것 · 등급이 적혀 있으면 그 등급.
+#  칠판 주문이 판이 열릴 때 「줄 것이 남았나」를 같은 식으로 묻는다(_order_tag_ok).
+func _tag_items(want: String) -> Array:
+	var pool := []
+	for it in GameData.items():
+		if _has_item(it.id) or GameData.item_min_leg(it) > leg_no:
+			continue
+		if want != "" and String(it.get("rarity", "common")) != want:
+			continue
+		pool.append(it)
+	return pool
+
+
+func _take_tag_once(t: Dictionary, rng: RandomNumberGenerator = null) -> void:
 	var kind := String(t.get("kind", ""))
 	var v := int(t.get("v", 0))
 	var when := String(t.get("when", "now"))
@@ -4693,7 +5211,7 @@ func _take_tag_once(t: Dictionary) -> void:
 			else:
 				# v 만큼 올린다. 표에는 +1 뿐이지만 값을 무시하고 있었다.
 				for _k in maxi(v, 1):
-					var tk: int = tkl[randi() % tkl.size()]
+					var tk: int = tkl[_tag_ri(rng) % tkl.size()]
 					track_lv[tk] = int(track_lv.get(tk, 0)) + 1
 					_peak("best_track", int(track_lv[tk]))
 					# 무엇이 올랐는지 말한다. 이 뱃지만 아무 말이 없었다 —
@@ -4702,20 +5220,13 @@ func _take_tag_once(t: Dictionary) -> void:
 					pop(_tag_at(TBL.fy + 40.0), "%s 강화 Lv.%d" % [_track_name(tk),
 							int(track_lv[tk]) + 1], C_GREEN.lightened(0.2), 12, 1.3)
 		"candy":
-			_take_cons(GameData.candies(), v, "사탕·사진 칸이 꽉 찼다")
+			_take_cons(GameData.candies(), v, "사탕·사진 칸이 꽉 찼다", rng)
 		"photo":
-			_take_cons(GameData.fixtures(), v, "사탕·사진 칸이 꽉 찼다")
+			_take_cons(GameData.fixtures(), v, "사탕·사진 칸이 꽉 찼다", rng)
 		"item":
 			# 등급 칸이 비어 있으면 안 거른다. 표가 비운 적은 없지만,
 			# 비웠을 때 아무것도 안 주는 것보다 아무거나 주는 쪽이 맞다.
-			var want := String(t.get("rarity", ""))
-			var pool := []
-			for it in GameData.items():
-				if _has_item(it.id) or GameData.item_min_leg(it) > leg_no:
-					continue
-				if want != "" and String(it.get("rarity", "common")) != want:
-					continue
-				pool.append(it)
+			var pool := _tag_items(String(t.get("rarity", "")))
 			for i in v:
 				if owned.size() >= GameData.max_items():
 					_tag_void("동전 슬롯이 꽉 찼다")
@@ -4723,7 +5234,7 @@ func _take_tag_once(t: Dictionary) -> void:
 				if pool.is_empty():
 					_tag_void("남은 동전이 없다")
 					break
-				var pick: Dictionary = pool[randi() % pool.size()].duplicate()
+				var pick: Dictionary = pool[_tag_ri(rng) % pool.size()].duplicate()
 				pick.gs = 0
 				pick.bought = leg_no
 				owned.append(pick)
@@ -4750,7 +5261,11 @@ func _take_tag_once(t: Dictionary) -> void:
 					_peak("best_track", int(track_lv[tk2]))
 				pop(_tag_at(TBL.fy + 40.0), "%s 강화 Lv.%d" % [_track_name(tk2),
 						int(track_lv[tk2]) + 1], C_GREEN.lightened(0.2), 12, 1.3)
-	pop(_tag_at(TBL.fy + 40.0), "%s" % t.get("name", ""), C_ACC, 12, 1.4)
+	#  이름 줄 — 칠판 주문(tag_pop 이 선 때)은 안 띄운다. 무엇을 받는지는 칠판의 뱃지 그림이
+	#  이미 말했고, 판 화면에는 값(트랙 레벨 · 자금판 「+n」)과 그림만 선다 — 받은 사탕 ·
+	#  사진 · 동전은 제 칸에 앉는 것이 곧 값이다(2026-10-06).
+	if not tag_pop.is_finite():
+		pop(_tag_at(TBL.fy + 40.0), "%s" % t.get("name", ""), C_ACC, 12, 1.4)
 
 
 #  뱃지 팝 자리. 판 고르기에서는 건너뛴 판(지금 판) 윗끝 바로 위에 서고, 한 뱃지가 낸
@@ -4759,9 +5274,16 @@ func _take_tag_once(t: Dictionary) -> void:
 #  라운드 표시 셋이 한 점에 겹쳐 아무것도 안 읽혔다(검토, 2026-10-04). 판 고르기 밖
 #  (개발자 모드 · 검사)은 옛 자리 그대로다.
 var tag_n := 0
+#  칠판 주문이 보상을 받는 동안의 팝 자리 — 판 옆 칠판 위(_order_pop_at). 그 밖에는 INF 라
+#  옛 자리 그대로다. 상점 테이블 좌표(TBL.fy)는 판 화면에서 판 한복판이다.
+var tag_pop := Vector2.INF
 
 
 func _tag_at(y0: float) -> Vector2:
+	if tag_pop.is_finite():
+		var tp := tag_pop - Vector2(0.0, 14.0 * float(tag_n))
+		tag_n += 1
+		return tp
 	if state != S.LEG:
 		return Vector2(VIEW.x * 0.5, y0)
 	var at := _legb_top(GameData.leg_idx(leg_no), leg_no) - Vector2(0.0, 4.0 + 14.0 * float(tag_n))
@@ -4770,7 +5292,8 @@ func _tag_at(y0: float) -> Vector2:
 
 
 #  사탕·사진 칸에 넣는다. 사탕과 사진이 같은 칸을 쓰므로 자리 판정도 하나다.
-func _take_cons(pool: Array, v: int, full: String) -> void:
+func _take_cons(pool: Array, v: int, full: String,
+		rng: RandomNumberGenerator = null) -> void:
 	for i in v:
 		if cons.size() >= GameData.cons_slots():
 			_tag_void(full)
@@ -4780,7 +5303,7 @@ func _take_cons(pool: Array, v: int, full: String) -> void:
 			return
 		#  고른 줄을 먼저 받는다 — append 안에서 randi 를 굴리면 무엇이
 		#  들어갔는지를 다시 물을 길이 없다. 2026-09-19
-		var got: Dictionary = pool[randi() % pool.size()].duplicate()
+		var got: Dictionary = pool[_tag_ri(rng) % pool.size()].duplicate()
 		cons.append(got)
 		_found("cons", String(got.get("id", "")))
 
@@ -5591,6 +6114,9 @@ func _process(d: float) -> void:
 		for ep in ember_puff:
 			ep.t += d
 		ember_puff = ember_puff.filter(func(ep): return ep.t < float(EMBER.out_t))
+		#  칠판 주문 시계 — 같은 까닭으로 판 갈이 동안 쉰다. 주문은 판이 다 선 뒤에 쓰인다.
+		order_t += d
+		order_rub += d
 	#  **d * fast_rate 를 탄다**(2026-09-26 수선). 빨리 보기는 정산에서만 서므로
 	#  (_fast_on 이 state != S.RESOLVE 에서 1.0 을 돌려준다) 정산 밖 팝은 한 톨도
 	#  안 달라진다. 안 태우면 걸음만 2.5배 빨라지고 팝은 실시간이라 **같은 자리에
@@ -7477,6 +8003,10 @@ func _land(mark := true) -> void:
 	#  ⚠ **불씨** — 시계 차례 바로 뒤, 같은 mult 로 옮겨 붙는다. 값은 안 바꾼다:
 	#  맞혔으면 동전 걸음 뒤에 「불씨」 걸음 하나가 골드를 낸다(아래 큐). 2026-10-06
 	var ember_hit := _ember_land(info, mark)
+	#  ⚠ **칠판 주문** — 이 발의 첫 착탄이 눈금 하나를 지우고, 영역에 꽂혔으면 동전 걸음
+	#  뒤에 「주문」 걸음 하나가 보상을 낸다(아래 큐). 영역은 판이 그린 그대로라 날값
+	#  (raw_mult · 꽂힌 자리)으로 잰다. 연발의 작은 다트도 채운다. 2026-10-06
+	var order_hit := _order_land(info, raw_mult, aim)
 	# 「빨강, 파랑, 노랑」이 칠한 칸. 죽이는 축을 다 지난 뒤에 곱한다 — 금줄이 죽인 칸을
 	# 칠했으면 0 에 곱해 0 이다. 두 장을 같이 쓴 결과가 그것이 맞다.
 	if paint_sec >= 0 and info.idx == paint_sec:
@@ -7792,6 +8322,9 @@ func _land(mark := true) -> void:
 		#  걸음이라 _pace · 빨리 보기 · 반음 사다리를 저절로 탄다. 2026-10-06
 		if ember_hit:
 			queue.append({"k": "ember", "v": _ember_gold()})
+		#  칠판 주문 — 불씨 뒤 · 같은 자리. 연발이면 영역을 채운 그 작은 다트의 큐에 선다.
+		if order_hit:
+			queue.append({"k": "order"})
 		# 저울은 곱하기 **전에** 걸음이 하나 더 선다. 연출을 정산 밖에서
 		# 따로 돌리지 않고 큐에 세우는 이유는 순서다 — 배속도 박자도
 		# 소리도 다른 걸음과 같은 규약을 타야 한다. 이 걸음이 없으면 두
@@ -8246,6 +8779,15 @@ func _next_step() -> void:
 				ember_from = -1
 				ember_t = 0.0
 			#  카드 칸은 안 튄다 — 바뀐 값이 없다. 몸만 채인다(걸음은 걸음이다).
+			_card_kick(float(CARDFX.kick), 0.0)
+		"order":
+			#  ── 칠판 주문 (2026-10-06) ──
+			#  보상 한 장을 _take_tag 길로 받는다 — 판이 열릴 때 뽑은 줄 · 씨앗 그대로다.
+			#  값 팝(트랙 레벨)은 칠판 위에서 오르고(_order_pop_at), 골드면 자금판 밑에 「+n」.
+			#  뱃지 이름 줄은 안 띄운다. 소리는 판 밖 — 팩에서 한 장 담는 stage_pick.
+			#  칠판에 동그라미를 치고 지운다.
+			#  점수 · 배수는 안 바꾼다 — 카드 칸은 안 튀고 몸만 채인다(불씨와 같다).
+			_order_grant()
 			_card_kick(float(CARDFX.kick), 0.0)
 		"wind":
 			#  ── 모음 (2026-10-06) ──
@@ -9710,6 +10252,10 @@ func _draw() -> void:
 	#  문지기다). _swap_board 가 swap_live 아닐 때 곧장 물러서므로 변환은
 	#  여기서도 그대로 sh 다. 2026-09-24
 	if not swap_live:
+		#  칠판 주문의 칠판 — 판 왼쪽 벽의 물건이라 판과 같이 흔들리고, 조준선(기울인
+		#  조준의 선은 판 밖 151px 까지 간다 · 당김의 끈) · 꽂힌 자루 · 조각 · 카드 · 팝
+		#  밑이다. 판 갈이(상인이 서는 때)에는 판과 같이 쉰다. 2026-10-06
+		_order_board_draw()
 		_draw_aim()
 	_brk_crack_draw()               # 금은 판 위, 판 효과 앞
 	_draw_fx()
@@ -15228,6 +15774,10 @@ func _draw_aim() -> void:
 	#  그 칸 하나만 밝힌다. 색은 **새로 안 만든다** — C_LIGHT 를 옅게 깐다.
 	if clok_at >= 0 and _is_play_deep():
 		_board_lit_sector(clok_at)
+	#  칠판 주문의 영역 — 판의 나머지를 옅게 가라앉힌다(조준 어둠 앞). 판이 깨지는 동안은
+	#  안 그린다 — 판이 끝나면 주문도 끝난다. 2026-10-06
+	if not brk_live:
+		_order_lit(0)
 	#  지금 꽂힐 칸을 밝히고 판의 나머지를 가라앉힌다 — 제목 판에서 커서가 든
 	#  칸이 밝아지는 그것을 판 위로 가져왔다(사용자, 2026-09-17). 조준선보다
 	#  먼저 그려 선이 위에 선다. 걷히는 동안(날아가는 중)은 마지막 칸을 쓴다.
@@ -15244,6 +15794,9 @@ func _draw_aim() -> void:
 		_cell_glow(aim_glow_last, Color(C_ACC, aim_dim), 1.8 * aim_dim)
 	#  불씨 — 조준 어둠 **뒤**다. 앞이면 다른 칸을 겨누는 동안 불씨 칸이 같이 가라앉아
 	#  노릴지 고르는 바로 그때 흐려진다. 판이 깨지는 동안은 안 그린다(판이 끝난다).
+	#  칠판 주문의 영역에 얹는 분필빛도 조준 어둠 뒤다 — 같은 까닭이다. 불씨가 그 위에 선다.
+	if not brk_live:
+		_order_lit(1)
 	if not brk_live and _is_play_deep():
 		_ember_draw()
 	if brk_live:

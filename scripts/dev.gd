@@ -971,11 +971,14 @@ static func _rows(g: Node) -> Array:
 				{"n1": "술집 문 %s" % ("켬" if g.door_on else "끔"), "t": "act", "a": "door"},
 				#  ── 판 사건 (2026-10-06 · game.gd _ev_roll) ─────────────
 				#  불씨 · 주문 · 단골 셋이 이 밑에 나란히 선다. 0쪽 열여덟 · 2쪽 · 5쪽 열아홉이라
-				#  셋이 같이 들 자리가 이 쪽(열셋)뿐이다(qa_crt 가 쪽마다 열아홉을 잰다).
+				#  셋이 같이 들 자리가 이 쪽뿐이다 — 주문까지 열다섯(qa_crt 가 쪽마다 열아홉을 잰다).
 				#  「불씨 피우기」 — 지금 판의 무작위 칸 · 띠에 곧장 피운다. 게임의 _ember_light ·
 				#  _ember_band_pick 을 그대로 부른다. 칸 · 띠는 전역 난수다 — run_rng 를 건드리면
 				#  이 판을 되감을 때 다음 판 사건이 달라진다.
 				{"n1": "불씨 피우기", "t": "act", "a": "ember"},
+				#  「주문 걸기」 — 지금 판에 무작위 주문(영역 · 눈금 · 보상)을 곧장 건다. 게임의
+				#  _order_region · _order_tag_pick · _order_open 을 그대로 부른다(2026-10-06).
+				{"n1": "주문 걸기", "t": "act", "a": "order"},
 			]
 		4:
 			#  ⚠ 여기 쪽 번호를 **적어 둔다.** 여태 `_:` 기본 갈래였는데,
@@ -2589,6 +2592,24 @@ static func _run(g: Node, e: Dictionary) -> void:
 			g._ember_light(randi() % g._sec_n(), g._ember_band_pick(randf()))
 			_say("불씨 %s %d" % [{"t": "트리플", "d": "더블", "s": "싱글"}.get(g.ember_band, ""),
 					int(g.sectors[g.ember_idx])])
+			return
+		"order":
+			if not g._is_play():
+				_say("판 위가 아니다")
+				return
+			#  고르는 식은 게임의 것(_order_region · _order_tag_pick · _order_open) 그대로고 씨앗만
+			#  전역 난수다 — run_rng 를 건드리면 이 판을 되감을 때 다음 판 사건이 달라진다.
+			var orow: Dictionary = GameData.event_of("order")
+			var olo: int = maxi(int(GameData.event_v(orow, "v", 2.0)), 1)
+			var ohi: int = maxi(int(GameData.event_v(orow, "v2", 3.0)), olo)
+			g._order_open(g._order_region(randf(), randi() & 0x3fffffff),
+					olo + randi() % (ohi - olo + 1), g._order_tag_pick(randf()),
+					randi() & 0x3fffffff)
+			if g.order_st != "open":
+				_say("걸 주문이 없다")
+				return
+			_say("주문 %s · 눈금 %d · %s" % [g.order_cond, g.order_n,
+					String(g.order_tag.get("name", ""))])
 			return
 		"run_drop":
 			Save.run_drop()

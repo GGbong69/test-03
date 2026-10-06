@@ -1202,13 +1202,36 @@ static func tags() -> Array:
 	return _raw.get("tags", [])
 
 
+#  라운드 rd 에 설 수 있는 뱃지 줄. when 이 비지 않으면 그 때만 · kinds 가 비지 않으면
+#  그 갈래만 남긴다. 가중치 0 · 라운드 미달은 빠진다. 칠판 주문의 보상(when=now)이
+#  이 줄에서 run_rng 로 하나를 뽑는다(game.gd _order_roll · 2026-10-06).
+static func tag_pool(rd: int, when := "", kinds := []) -> Array:
+	var out := []
+	for r in tags():
+		if _i(r, "min_round", "tags", 1) > rd:
+			continue
+		if _f(r, "weight", "tags", 1.0) <= 0.0:
+			continue
+		if when != "" and String(r.get("when", "now")) != when:
+			continue
+		if not kinds.is_empty() and not kinds.has(String(r.get("kind", ""))):
+			continue
+		out.append(r)
+	return out
+
+
+static func tag_w(r: Dictionary) -> float:
+	return _f(r, "weight", "tags", 1.0)
+
+
 # ── 판 사건 (2026-10-06) ──────────────────────────────────
 #  작은 판 · 큰 판이 열릴 때 game.gd 의 _ev_roll 이 **run_rng** 로 한 줄을 뽑는다
 #  (none 줄도 뽑기에 든다). 보스 판은 사건이 없다 — legs 칸에 보스 판 id 를 못 적는다.
 #    none     사건 없는 판
 #    ember    불씨 — 칸 하나 · 띠 하나에 불씨가 선다. 맞힐 때마다 골드 v
-#    order    칠판 주문 — 아직 갈래가 없다(뽑혀도 사건 없는 판과 같다)
-#    regular  단골 — 아직 갈래가 없다(같다)
+#    order    칠판 주문 — 판 위 영역 하나 · 눈금 v~v2 · 보상 한 장(tags.csv when=now).
+#             눈금 안에 그 영역에 꽂으면 「주문」 걸음이 보상을 낸다
+#    regular  단골 — 아직 갈래가 없다(뽑혀도 사건 없는 판과 같다)
 #  갈래를 새로 내면 game.gd 의 _ev_roll match 와 그 갈래의 걸음(_next_step)을 같이 낸다.
 const EVENT_KINDS := ["none", "ember", "order", "regular"]
 
@@ -2589,6 +2612,10 @@ static func _v_events() -> void:
 			"order":
 				if v < 1.0 or v2 < v:
 					_errs.append("%s — 눈금은 1 ≤ v ≤ v2 다" % who)
+				#  칠판의 눈금 칸은 다섯이다(넷은 세로 · 다섯째는 빗금) — game.gd _order_board_draw.
+				if v2 > 5.0 or not is_equal_approx(v, roundf(v)) \
+						or not is_equal_approx(v2, roundf(v2)):
+					_errs.append("%s — 눈금은 1~5 정수다(칠판 칸이 다섯이다)" % who)
 			"regular":
 				if v <= 0.0:
 					_errs.append("%s — v(가로채기 반지름)가 0 이하다" % who)
