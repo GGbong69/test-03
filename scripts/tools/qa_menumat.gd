@@ -12,13 +12,17 @@ extends SceneTree
 #      판 위 · 일시정지)을 한 틀씩 그린 뒤에 늘 내려가 있다. 재질 끔이면 옛 글자색 그대로다.
 #   ⑥ 벽이 안 구워지는 자리(헤드리스)에서는 메뉴 바닥이 옛 스크림이다 — 벽을 안 짓는다.
 #   ⑦ 개발자 판 — 「메뉴 재질」 줄이 열아홉 줄 안의 쪽에 서고 같은 값을 켜고 끈다.
-#   ⑧ 나무 패의 결이 글(설정 탭은 그림까지)의 잉크 밖이다 — 잉크는 이 도구가 TextServer 의
-#      글리프 그림으로 따로 잰다(게임의 _ink_box 를 안 빌린다). 2026-10-06
+#   ⑧ 나무 패의 결이 글(설정 탭은 그림까지)의 잉크에서 1.5px 넘게 떨어진다 — 잉크는 이 도구가
+#      TextServer 의 글리프 그림으로 따로 재고(게임의 _ink_box 를 안 빌린다) 1px 키운다(2배 창은
+#      글을 두 배로 구워 잉크가 캔버스 반 칸 더 나온다). 2026-10-06
 #   ⑨ 새 런 다트통 액자 — 테 · 그늘이 다트통 이름 잉크와 5px 넘게 떨어진다.
 #   ⑩ 일시정지 글줄 · 런 정보도 같은 재질이다 — 분필 글 · 따뜻한 흐림 · 나무 테 칠판 · 나무 패
 #      탭. 칠판 테가 화면 안이고 누르는 사각이 석판 위다. 재질을 끄면 옛 그대로다.
 #   ⑪ 제목 칠판에서 밀고 들어간다 — 컬렉션 · 프로필 · 설정이 컷이 아니라 PUSH.t 초 동안 칠판이
 #      커진다. 누르는 사각은 그동안도 · 뒤에도 그대로이고, 누름 · 키는 밀기를 끝내고 삼킨다.
+#      칠판은 제목 칠판에서 출발하고(첫 틀 = 제목 칠판 붓), 제목 칠판 글은 넉 틀 안에 지며 밑의
+#      제목 칠판에서는 빠진다. 컬렉션 · 프로필의 화면은 PUSH.ink 뒤에 커지는 칠판 안으로 잘려
+#      짙어지고, 밀고 들어간 설정이 떠 있는 동안 제목 칠판 글이 그늘 밑에 안 남는다.
 #      모션 끄기 · 재질 끔 · 문이 안 선 제목은 옛 컷이다. 헤드리스라 문 한 장을 빈 그림으로 세운다.
 #   godot --headless --path . --script scripts/tools/qa_menumat.gd
 const GameData = preload("res://scripts/data.gd")
@@ -125,7 +129,8 @@ func _run() -> void:
 	for fn in ["_title_chalk", "_order_board_draw", "_menu_back", "_set_win_draw"]:
 		_ok("① %s 가 그 붓을 부른다" % fn, _body(src, fn).contains("_chalk_board("))
 	_ok("① 머리 붓도 하나 — 「하이톤」과 메뉴 머리",
-			_body(src, "_title_chalk").contains("_chalk_head(")
+			_body(src, "_title_chalk_ink").contains("_chalk_head(")
+			and _body(src, "_title_chalk").contains("_title_chalk_ink(")
 			and _body(src, "_hdr").contains("_chalk_head("))
 
 	# ── ② 화면 칠판 ─────────────────────────────────────
@@ -196,6 +201,8 @@ func _run() -> void:
 			var lp: Vector2 = g._menu_light_at(mb, mb.position + mb.size * Vector2(
 					float(xx) / 40.0, float(yy) / 20.0))
 			pool = maxf(pool, lp.x)
+	#  웅덩이 가운데도 짚는다 — 가운데가 석판 안이면 거기가 가장 밝다(격자에 안 걸릴 수 있다).
+	pool = maxf(pool, g._menu_light_at(mb, mb.position + mb.size * (g.MENUM.lamp_c as Vector2)).x)
 	var lit_s := _over(Color(lamp, pool), chalk)
 	rows.append(["글 2층 분필 · 가장 밝은 석판(웅덩이 %.3f)" % pool, _over(Color(ink, dim), lit_s),
 			lit_s, 4.5])
@@ -347,14 +354,22 @@ func _ink_rect(f: Font, t: String, sz: int, x0: float, by: float) -> Rect2:
 	return out
 
 
-#  결 토막들이 잉크 사각과 안 겹치는가 — [겹친 수, 결 수].
-func _grain_hits(body: Rect2, ink_game: Rect2, ink_meas: Rect2) -> Vector2i:
+#  결 토막들이 잉크에서 떨어진 거리 — 잰 잉크를 1px 키운 사각에서 결 토막까지(가로 · 세로 중
+#  큰 쪽). 1.5px 밑이면 붙었다. [붙은 수, 결 수, 가장 가까운 거리(결이 없으면 99)]
+func _grain_hits(body: Rect2, ink_game: Rect2, ink_meas: Rect2) -> Array:
 	var gr: Array = g._plaque_grain(body, ink_game)
+	var b := ink_meas.grow(1.0)
 	var hit := 0
-	for q in gr:
-		if (q as Rect2).intersects(ink_meas):
+	var near := 99.0
+	for q0 in gr:
+		var q: Rect2 = q0
+		var dx: float = maxf(maxf(b.position.x - q.end.x, q.position.x - b.end.x), 0.0)
+		var dy: float = maxf(maxf(b.position.y - q.end.y, q.position.y - b.end.y), 0.0)
+		var clr: float = maxf(dx, dy)
+		near = minf(near, clr)
+		if clr < 1.5:
 			hit += 1
-	return Vector2i(hit, gr.size())
+	return [hit, gr.size(), near]
 
 
 func _run2() -> void:
@@ -402,6 +417,7 @@ func _run2() -> void:
 				rr.size - Vector2(0.0, lip)), g.font_sm, String(g.RI_TABS[t]), 20, 0.0, Rect2()])
 	var bad := []
 	var with_grain := 0
+	var near_all := 99.0
 	for cs in cases:
 		var body: Rect2 = cs[1]
 		var f: Font = cs[2]
@@ -415,10 +431,11 @@ func _run2() -> void:
 		if icon.size.x > 0.0:
 			meas = meas.merge(icon)
 		var hv := _grain_hits(body, g._tab_ink(body, f, lb2, sz, ox), meas)
-		if hv.y > 0:
+		if int(hv[1]) > 0:
 			with_grain += 1
-		if hv.x > 0:
-			bad.append("%s 결 %d 중 %d" % [cs[0], hv.y, hv.x])
+			near_all = minf(near_all, float(hv[2]))
+		if int(hv[0]) > 0:
+			bad.append("%s 결 %d 중 %d(%.1fpx)" % [cs[0], int(hv[1]), int(hv[0]), float(hv[2])])
 	#  지우기 — 몸은 누르는 사각에서 턱(UIHOV.lip_hud)을 뺀 것. 글은 몸 가운데 · 20.
 	var dr: Rect2 = g._prof_del_rect()
 	var db := Rect2(dr.position, dr.size - Vector2(0.0, float(g.UIHOV.lip_hud)))
@@ -426,13 +443,15 @@ func _run2() -> void:
 	var dmeas := _ink_rect(g.font_sm, "지우기", 20, db.position.x + (db.size.x - dw) * 0.5,
 			g._menu_base_y(g.font_sm, 20, db.position.y, db.size.y))
 	var dh := _grain_hits(db, g._prof_del_ink(db), dmeas)
-	if dh.y > 0:
+	if int(dh[1]) > 0:
 		with_grain += 1
-	if dh.x > 0:
-		bad.append("지우기 결 %d 중 %d" % [dh.y, dh.x])
-	_ok("⑧ 나무 패 %d장의 결이 글 잉크(그림 포함) 밖이다" % (cases.size() + 1), bad.is_empty(),
-			"%s · 결이 선 패 %d장" % [bad, with_grain])
+		near_all = minf(near_all, float(dh[2]))
+	if int(dh[0]) > 0:
+		bad.append("지우기 결 %d 중 %d(%.1fpx)" % [int(dh[1]), int(dh[0]), float(dh[2])])
+	_ok("⑧ 나무 패 %d장의 결이 글 잉크(그림 포함 · 1px 키움)에서 1.5px 넘게 떨어진다" % (cases.size() + 1),
+			bad.is_empty(), "%s · 결이 선 패 %d장 · 가장 가까운 %.1fpx" % [bad, with_grain, near_all])
 	#  잉크 상자(_ink_box)가 잰 잉크를 품는다 — 결을 거르는 자가 잉크보다 작으면 위 줄이 운이다.
+	#  게임의 상자는 글리프 그림의 1px 테까지 넣으므로 키우지 않고 품어야 한다.
 	var small := []
 	for cs in cases:
 		var body2: Rect2 = cs[1]
@@ -444,9 +463,9 @@ func _run2() -> void:
 		var m2 := _ink_rect(f2, lb3, sz2, body2.position.x + float(cs[5]) + (body2.size.x - tw2) * 0.5,
 				by2)
 		var gi: Rect2 = g._tab_ink(body2, f2, lb3, sz2, float(cs[5]))
-		if not gi.grow(1.0).encloses(m2):
+		if not gi.encloses(m2):
 			small.append("%s 상자 %s · 잉크 %s" % [cs[0], gi, m2])
-	_ok("⑧ 잉크 상자가 글리프 그림을 품는다(1px 안)", small.is_empty(), "%s" % [small])
+	_ok("⑧ 잉크 상자가 글리프 그림을 품는다", small.is_empty(), "%s" % [small])
 
 	# ── ⑨ 다트통 액자와 이름 ─────────────────────────────
 	var src := FileAccess.get_file_as_string("res://scripts/game.gd")
@@ -569,6 +588,13 @@ func _run3(src: String) -> void:
 	g._click(g._menu_rect(ri_col).get_center())
 	var live0: bool = g._push_live() and g.state == g.S.COLLECT
 	var b0: Rect2 = g._push_box(g.MENUM.board)
+	var ttl0: float = g._push_ttl_a()
+	var ttl_gone := -1          # 커지는 칠판 위 제목 글이 0 이 된 틀
+	var under_max := 0.0        # 밀기 동안 밑의 제목 칠판 글 짙기
+	var ink_first := -1         # 화면이 짙어지기 시작한 틀
+	var ink_k := 0.0            # 그 틀의 밀린 몫
+	var ink_before := 0.0       # PUSH.ink 앞에서 화면 짙기의 가장 큰 값
+	var clip_on := false        # 화면이 짙어지는 틀에 자르기가 섰다
 	var n := 0
 	var grows := true
 	var prev := b0
@@ -579,6 +605,18 @@ func _run3(src: String) -> void:
 		if not b.encloses(prev):
 			grows = false
 		prev = b
+		if ttl_gone < 0 and g._push_ttl_a() <= 0.0:
+			ttl_gone = n
+		if g._push_live():
+			under_max = maxf(under_max, g._ttl_ink_a())
+		var ia: float = g._push_ink_a()
+		if g._push_k() <= float(g.PUSH.ink):
+			ink_before = maxf(ink_before, ia)
+		if ink_first < 0 and ia > 0.0:
+			ink_first = n
+			ink_k = g._push_k()
+			await _frame()             # 화면이 짙어지는 틀을 그린다 — 자르기가 선다
+			clip_on = g.push_clip and g._push_live()
 		if n == 6:
 			await _frame()             # 밀리는 틀을 한 번 그린다(_push_draw)
 	var want_n: int = int(ceil(float(g.PUSH.t) * 60.0 - 0.001))
@@ -586,6 +624,17 @@ func _run3(src: String) -> void:
 	_ok("⑪ PUSH.t 동안 커지기만 하고 화면 칠판에 선다", absi(n - want_n) <= 1 and grows
 			and prev == g.MENUM.board and g.state == g.S.COLLECT and not g.mat_draw,
 			"%d프레임(바라는 값 %d) · 끝 %s" % [n, want_n, prev])
+	_ok("⑪ 커지는 칠판 · 창이 제목 칠판 붓에서 출발한다(_chalk_board 의 from = 제목)",
+			_body(src, "_push_draw").contains("CHALKB.menu, 1.0, Rect2(), CHALKB.title, k)")
+			and _body(src, "_set_win_draw").contains("CHALKB.title, _push_k())"))
+	_ok("⑪ 제목 칠판 글이 커지는 칠판 위에서 넉 틀 안에 지고 밑에서는 빠진다",
+			ttl0 >= 1.0 and ttl_gone >= 3 and ttl_gone <= 4 and under_max <= 0.0,
+			"첫 틀 %.2f · 0 이 된 틀 %d · 밑 %.2f" % [ttl0, ttl_gone, under_max])
+	await _frame()
+	_ok("⑪ 컬렉션 화면이 PUSH.ink 뒤에 짙어지고 그동안 칠판 안으로 잘린다 · 끝나면 자르기를 걷는다",
+			ink_before <= 0.0 and ink_first > 0 and ink_k > float(g.PUSH.ink) and clip_on
+			and not g.push_clip,
+			"짙어진 틀 %d(밀린 몫 %.3f) · 자르기 %s → %s" % [ink_first, ink_k, clip_on, g.push_clip])
 	#  밀리는 동안의 누름 · 키 — 밀기를 끝내고 삼킨다(「뒤로」 · ESC 가 제목으로 안 간다).
 	g.state = g.S.TITLE
 	g._click(g._menu_rect(ri_col).get_center())
@@ -641,9 +690,18 @@ func _run3(src: String) -> void:
 			"%s → %s" % [w0, g._set_win()])
 	_ok("⑪ 설정 — 누르는 사각이 밀기 동안 · 뒤에 한 px 도 안 움직인다",
 			moved == 0 and fin == rects, "%d프레임 · 움직인 틀 %d" % [fr_n, moved])
+	#  밀고 들어간 설정이 떠 있는 동안 제목 칠판 글은 그늘 밑에 안 남고, 닫히면 돌아온다.
+	var open_a: float = g._ttl_ink_a()
 	g._settings_back()
+	var mid_a := -1.0
 	for i in 30:
 		g._process(1.0 / 60.0)
+		if i == 3:
+			mid_a = g._ttl_ink_a()
+	_ok("⑪ 설정 — 밀고 들어간 창이 떠 있는 동안 제목 칠판 글이 그늘 밑에 없고, 닫히면 돌아온다",
+			open_a <= 0.0 and mid_a > 0.0 and mid_a < 1.0 and g._ttl_ink_a() >= 1.0
+			and not g.push_ttl,
+			"뜬 동안 %.2f · 닫히는 넷째 틀 %.2f · 닫힌 뒤 %.2f" % [open_a, mid_a, g._ttl_ink_a()])
 	#  옛 컷 — 모션 끄기 · 재질 끔 · 문이 안 선 제목.
 	var cut := []
 	for k in 3:

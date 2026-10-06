@@ -141,7 +141,9 @@ func _hit(hf: float, s: int) -> void:
 #  적는 것이 실제 판과 똑같다. 이 도구의 던지기는 target 1 · total 0 이라
 #  자가 통째로 3단으로 뜨므로, 네 단을 재려면 이 문이 있어야 한다.
 #  2026-09-25
-func _throw(kill := false, cap := 900, deep := -1) -> Dictionary:
+#  tgt 는 목표다. 1 이면 굴림 머리(lead 끝)에서 넘고, 이득의 몫으로 주면 굴림 끝의 촘촘한
+#  톡 한가운데서 넘는다 — 금이 번지는 동안 톡이 2~3프레임 사이로 붙는 자리(2026-10-06).
+func _throw(kill := false, cap := 900, deep := -1, tgt := 1) -> Dictionary:
 	var o := {"arm": -1, "fire": -1, "gone": -1, "clear": -1,
 			"snd": 0, "crack": 0, "brk": 0,
 			"shards": 0, "bits": 0, "pops": 0,
@@ -153,8 +155,9 @@ func _throw(kill := false, cap := 900, deep := -1) -> Dictionary:
 			"hit": 0, "hit_f": -1, "flash": -1.0, "from": -1.0, "tot": -1,
 			"land": -1, "land_hs": -1.0, "land_drop": -1.0, "land_norm": -1.0,
 			"st_f": -1, "clear_shk": -1.0,
-			"crack_f": [], "crack_p": [], "near_f": [], "stage_f": []}
-	g.target = 1
+			"crack_f": [], "crack_p": [], "near_f": [], "stage_f": [],
+			"due_f": [], "hs_f": [], "big_f": [], "span0": -1.0}
+	g.target = tgt
 	g.total = 0
 	g.state = g.S.CONFIRM
 	g.confirm_t = 99.0
@@ -172,6 +175,9 @@ func _throw(kill := false, cap := 900, deep := -1) -> Dictionary:
 		#  뒤에 적으면 첫 단이 자가 뜬 3단 음으로 난다.
 		if deep >= 0 and g.brk_live:
 			g.brk_deep = deep
+		#  멈춤 프레임 — _process 가 멈춤 조기 반환으로 금 시계를 안 민다.
+		if g.hitstop > 0.0:
+			(o.hs_f as Array).append(f)
 		g._process(DT)
 		var now: int = g.sfx_next
 		var dn: int = posmod(now - prev, pool)
@@ -200,6 +206,7 @@ func _throw(kill := false, cap := 900, deep := -1) -> Dictionary:
 			#  삐걱과 떨어져야 할 소리 — 넘기 · 착지 · 한 방 · 꼬리 톡(2026-10-06).
 			if snm in ["target_hit", "settle_total", "board_break", "board_thud"]:
 				(o.near_f as Array).append(f)
+				(o.big_f as Array).append(f)
 			if o.arm >= 0 and o.clear < 0 and g.state != g.S.CLEAR:
 				match snm:
 					"board_thud":
@@ -247,6 +254,7 @@ func _throw(kill := false, cap := 900, deep := -1) -> Dictionary:
 			o.arm_shown = g.shown
 			o.gn = g._grow_n()
 			o.qt0 = g.brk_qt0
+			o.span0 = g.brk_span
 			o.flash = g.screen_flash
 		shown_prev = g.shown
 		if g.brk_fired and o.fire < 0:
@@ -259,6 +267,13 @@ func _throw(kill := false, cap := 900, deep := -1) -> Dictionary:
 			if g.brk_live and o.clear < 0:
 				while (o.stage_f as Array).size() < int(g.brk_stage):
 					(o.stage_f as Array).append(f)
+			#  단이 시계에 찬 프레임 — 금의 시계(brk_c)가 그 단을 부른 첫 프레임. 게임의 셈
+			#  (_brk_st)을 안 빌리고 따로 센다 — 단은 금 길이(brk_span)의 0.90 에서 다 찬다.
+			if g.brk_live and not g.brk_fired:
+				var top: int = maxi(int(g._brk_row().stages), 1)
+				var kk: float = clampf(float(g.brk_c) / maxf(float(g.brk_span) * 0.90, 0.001), 0.0, 1.0)
+				while (o.due_f as Array).size() < clampi(int(kk * float(top)), 0, top):
+					(o.due_f as Array).append(f)
 			if g.swap_live: o.swap = true
 			if g.turn_live: o.turn = true
 		if o.fire >= 0 and o.gone < 0 \
@@ -305,8 +320,8 @@ func _crack_self(o: Dictionary) -> int:
 
 
 #  금의 단과 삐걱이 한 몸인가 (2026-10-06) — 한 방 앞에 선 단 수 = 삐걱 수, 삐걱 i 가 단 i 가
-#  처음 보인 프레임에서 2프레임 안, 한 방 프레임과 그 뒤에는 삐걱이 없다(조각 위). 한 방이
-#  채운 단(한 방 프레임에 선 것)은 board_break 가 그 소리다. [맞는가, 한 방 앞 단 수, 가장 먼 차]
+#  처음 보인 **그 프레임**에 난다, 한 방 프레임과 그 뒤에는 삐걱이 없다(조각 위). 한 방이 채운
+#  단(한 방 프레임에 선 것)은 board_break 가 그 소리다. [맞는가, 한 방 앞 단 수, 가장 먼 차]
 func _crack_tied(o: Dictionary) -> Array:
 	var sf: Array = o.stage_f
 	var cf: Array = o.crack_f
@@ -322,7 +337,42 @@ func _crack_tied(o: Dictionary) -> Array:
 			ok = false
 		if i < sf.size():
 			far = maxi(far, absi(int(cf[i]) - int(sf[i])))
-	return [ok and far <= 2, pre, far]
+		else:
+			ok = false
+	return [ok and far == 0, pre, far]
+
+
+#  금의 시계가 단을 부른 뒤 그 단이 서기까지 **까닭 없이** 기다린 프레임 — 한 방 앞에 선 단
+#  가운데 가장 긴 것(2026-10-06). 기다린 프레임 가운데 다음은 까닭이 있다: 멈춤(금 시계가 언다),
+#  넘기 · 착지 · 한 방 · 꼬리 톡의 둘레 ±1프레임(그 넷은 안 비킨다), 앞 삐걱 뒤 2프레임(삐걱끼리의
+#  바닥), 한 방 바로 앞 프레임. 띠 톡은 까닭이 아니다 — 톡이 비킨다(_tick_yield). 단이 부른 뒤
+#  톡이 바로 앞 프레임에 났으면 한 프레임 기다린다 — 그래서 2 까지다. [가장 긴 것, 단마다 [부름, 섬]]
+func _crack_lag(o: Dictionary) -> Array:
+	var sf: Array = o.stage_f
+	var df: Array = o.due_f
+	var cf: Array = o.crack_f
+	var fire: int = int(o.fire)
+	var worst := 0
+	var rows := []
+	for i in sf.size():
+		var fs: int = int(sf[i])
+		if (fire >= 0 and fs >= fire) or i >= df.size():
+			continue
+		var ds: int = int(df[i])
+		rows.append([ds, fs])
+		var lag := 0
+		for f in range(ds, fs):
+			var why: bool = (o.hs_f as Array).has(f) or (fire >= 0 and f >= fire - 1)
+			for n in o.big_f:
+				if absi(f - int(n)) <= 1:
+					why = true
+			for c in cf:
+				if f - int(c) >= 0 and f - int(c) <= 1:
+					why = true
+			if not why:
+				lag += 1
+		worst = maxi(worst, lag)
+	return [worst, rows]
 
 
 #  삐걱 음이 단 차례로 내려가는가 — 뒤 알이 앞 알보다 낮다.
@@ -929,6 +979,13 @@ func _run() -> void:
 	var snd_ok := true
 	var crk_txt := ""
 	var crk_ok := true
+	var pre_txt := ""
+	var pre_ok := true
+	var first_txt := ""
+	var first_ok := true
+	var lag_txt := ""
+	var lag_ok := true
+	var gap2: int = int(ceil(float(g.TALLY.tick_gap) - 0.001))
 	for t in 3:
 		_open()
 		g.leg_no = t + 1          # 작은 1 · 큰 2 · 보스 3
@@ -941,31 +998,70 @@ func _run() -> void:
 				int(r.brk), int(r.snd), int(row.snd)]
 		if int(r.brk) + int(r.snd) != int(row.snd):
 			snd_ok = false
+		#  같은 던지기를 이득의 0.65 에 목표를 걸어 다시 — 굴림 끝의 촘촘한 톡 한가운데서 넘는다.
+		_open()
+		g.leg_no = t + 1
+		var gain: int = int(r.tot)
+		var late := _throw(false, 900, -1, maxi(int(round(float(gain) * 0.65)), 2))
 		#  작은 판은 꼬리 톡이 0회라, 이 줄이 없으면 런에서 맨 처음 듣는 깨짐이 0.30초짜리
 		#  한 방뿐이었다(2026-09-24 · 단마다 한 알). 굴림이 생긴 뒤로는 그 0.68초를 띠 톡이
 		#  같이 채운다.
-		#  ── 단과 삐걱이 한 몸 · 톡 · 착지 · 한 방과 안 겹친다 (2026-10-06) ──
+		#  ── 단과 삐걱이 한 몸 · 띠 톡이 비킨다 (2026-10-06) ──
 		#  합계 굴림이 목표를 넘은 뒤라 금이 번지는 동안 띠 톡 · 착지가 같이 난다. 금의 단은
 		#  그 삐걱이 날 수 있는 프레임 — 넘기 · 톡 · 착지 · 한 방 · 꼬리 톡과 2프레임
-		#  (TALLY.tick_gap) 넘게 떨어진 프레임 — 에만 서고 그 프레임에 삐걱이 같이 난다(단이 처음
-		#  보인 프레임에서 2프레임 안). 한 방 앞에 선 단 수 = 삐걱 수이고, 한 방까지 못 선 단은
-		#  한 방이 채운다 — 조각 위로 삐걱이 뒤따르지 않는다. 삐걱끼리도 2프레임 넘게 떨어지고
-		#  음은 단 차례로 내려간다. 한때 단은 시계대로 서고 삐걱만 줄에 서서 착지 · 한 방 뒤로
-		#  밀려 났다 — 소리 없는 금이 서고 조각 위로 삐걱이 났다(검토).
-		var cg := _crack_gap(r)
-		var cs := _crack_self(r)
-		var gap2: int = int(ceil(float(g.TALLY.tick_gap) - 0.001))
-		var down := _crack_down(r)
-		var tie := _crack_tied(r)
-		crk_txt += "%s 단 %d(표 %d · 한 방 앞 %d) · 삐걱 %d %s(단과 가장 먼 차 %d · 가장 가까운 소리 %d프레임 · 삐걱끼리 %d · 음 %s)  " % [
-				["작은", "큰", "보스"][t], int(r.stage), int(row.stages), int(tie[1]), int(r.crack),
-				r.crack_f, int(tie[2]), cg, cs, "내림" if down else str(r.crack_p)]
-		if not bool(tie[0]) or int(r.stage) != int(row.stages) or cg < gap2 or cs < gap2 \
-				or (int(r.crack) > 1 and not down):
-			crk_ok = false
+		#  (TALLY.tick_gap) 넘게 떨어진 프레임 — 에만 서고 **그 프레임에** 삐걱이 같이 난다. 한 방
+		#  앞에 선 단 수 = 삐걱 수이고, 한 방까지 못 선 단은 한 방이 채운다 — 조각 위로 삐걱이
+		#  뒤따르지 않는다. 삐걱끼리도 2프레임 넘게 떨어지고 음은 단 차례로 내려간다.
+		#  시계가 단을 부르면 그 단을 막는 톡이 비킨다 — 그래서 (a) 한 방 앞에 단이 표의 단 수
+		#  − 1 이상 서고(마지막 단은 시계가 0.90 에서 부르니 한 방 바로 앞이라 못 설 수 있다),
+		#  (b) 첫 단이 넘은 뒤 시계(넘기 + 금 길이 × 0.90 ÷ 단 수) + 2프레임 안에 서고, 단마다
+		#  시계에 찬 뒤 까닭 없이 2프레임 넘게 안 기다린다(_crack_lag). 삐걱이 0개면 (a) 에서
+		#  붉다 — 「한 방 앞 단 수 = 삐걱 수」 는 둘 다 0 이어도 맞았다.
+		#  한때 단은 시계대로 서고 삐걱만 줄에 서서 착지 · 한 방 뒤로 밀려 났다(검토). 그 뒤
+		#  톡이 비키지 않던 동안은 굴림 끝의 톡이 날 수 있는 프레임을 다 먹어, 넘은 뒤 금이
+		#  19프레임 안 보이다가 착지 뒤 4프레임에 셋이 몰려 서고 나머지는 한 방이 채웠다(검토).
+		for pr in [["머리", r], ["끝", late]]:
+			var o: Dictionary = pr[1]
+			var nm: String = "%s·%s" % [["작은", "큰", "보스"][t], pr[0]]
+			var top: int = int(row.stages)
+			var cg := _crack_gap(o)
+			var cs := _crack_self(o)
+			var down := _crack_down(o)
+			var tie := _crack_tied(o)
+			crk_txt += "%s 단 %d(표 %d · 한 방 앞 %d) · 삐걱 %d %s(단과 가장 먼 차 %d · 가장 가까운 소리 %d프레임 · 삐걱끼리 %d · 음 %s)  " % [
+					nm, int(o.stage), top, int(tie[1]), int(o.crack),
+					o.crack_f, int(tie[2]), cg, cs, "내림" if down else str(o.crack_p)]
+			if not bool(tie[0]) or int(o.stage) != top or cg < gap2 or cs < gap2 \
+					or (int(o.crack) > 1 and not down):
+				crk_ok = false
+			#  (a) 한 방 앞에 선 단
+			pre_txt += "%s %d/%d  " % [nm, int(tie[1]), top]
+			if int(tie[1]) < top - 1 or int(o.crack) < top - 1:
+				pre_ok = false
+			#  (b) 첫 단 — 넘은 프레임(도안)에서
+			var due1: float = 60.0 * float(o.span0) * 0.90 / float(maxi(top, 1))
+			var nmax: int = int(ceil(due1)) + 2
+			var sf: Array = o.stage_f
+			var first: int = int(sf[0]) - int(o.arm) if not sf.is_empty() else 999
+			first_txt += "%s +%d(시계 %.1f · 넘지 말 것 %d)  " % [nm, first, due1, nmax]
+			if int(o.arm) < 0 or first > nmax:
+				first_ok = false
+			#  단마다 시계에서 까닭 없이 기다린 프레임
+			var lg := _crack_lag(o)
+			var rel := []
+			for q in lg[1]:
+				rel.append("%d→%d" % [int(q[0]) - int(o.arm), int(q[1]) - int(o.arm)])
+			lag_txt += "%s 가장 긴 %d [%s]  " % [nm, int(lg[0]), " ".join(rel)]
+			if int(lg[0]) > 2 or (lg[1] as Array).size() < top - 1:
+				lag_ok = false
 	_ok("판이 뜨는 소리가 층대로 1·2·3 — 한 방 + 꼬리 톡", snd_ok, snd_txt)
 	_ok("금의 단마다 그 프레임에 삐걱 · 한 방 앞 단 수 = 삐걱 수 · 한 방 뒤 0 · 소리끼리 2프레임 · 음 내림",
 			crk_ok, crk_txt)
+	_ok("(a) 1배 — 한 방 앞에 단 · 삐걱이 표의 단 수 − 1 이상 선다(넘기가 굴림 머리 · 끝)",
+			pre_ok, pre_txt)
+	_ok("(b) 첫 단이 넘은 뒤 시계 + 2프레임 안에 선다", first_ok, first_txt)
+	_ok("단이 시계에 찬 뒤 까닭 없이 2프레임 넘게 안 기다린다 — 띠 톡이 비킨다(부름→섬, 넘기에서)",
+			lag_ok, lag_txt)
 	_ok("board_crack 이 SFX 표에 있고 파일이 있다",
 			(g.SFX as Dictionary).has("board_crack")
 			and ResourceLoader.exists("res://sfx/board_crack.wav"),

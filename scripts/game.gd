@@ -6327,10 +6327,11 @@ var sfx_next := 0
 var tick_pl: AudioStreamPlayer = null
 # 판 금 삐걱의 제 자리 하나(_crack_snd). 위 넷을 안 문다.
 var crack_pl: AudioStreamPlayer = null
-# 정산 소리 간격 시계(초) — 톡 · 착지 · 넘기가 난 뒤 · 삐걱이 난 뒤 · 한 방(board_break) ·
-# 꼬리 톡(board_thud)이 난 뒤. 삐걱이 그 둘레 2프레임(TALLY.tick_gap) 안에 안 붙는다
-# (_brk_crack_ok · 2026-10-06).
+# 정산 소리 간격 시계(초) — 착지 · 넘기가 난 뒤 · 띠 톡이 난 뒤 · 삐걱이 난 뒤 · 한 방
+# (board_break) · 꼬리 톡(board_thud)이 난 뒤. 삐걱이 그 둘레 2프레임(TALLY.tick_gap) 안에 안
+# 붙는다(_brk_crack_ok · 2026-10-06). 띠 톡은 삐걱에게 비킨다(_tick_yield).
 var tally_snd_t := 9.0
+var tick_snd_t := 9.0
 var crack_t := 9.0
 var brk_bang_t := 9.0
 # 이름 → AudioStream. **없다는 것도 기억한다** — 소리마다 파일 시스템을
@@ -6367,7 +6368,7 @@ func _sfx(name: String, f := 0.0) -> void:
 func _tick_snd(j: int) -> void:
 	#  띠 점수가 톡마다 흰 쪽으로 한 번 밝는다 — 색이라 모션 끄기도 남는다.
 	tick_flash = 1.0
-	tally_snd_t = 0.0
+	tick_snd_t = 0.0
 	var n := maxi(tick_n, 1)
 	var semi := float(tick_f0) + float(TALLY.semi) * float(j) / float(n)
 	var nm := "score_tick"
@@ -6582,6 +6583,7 @@ func _process(d: float) -> void:
 	#  그래서 아래 멈춤 조기 반환 앞이다. 일시정지에서 멎는다(2026-10-06).
 	if not sp:
 		tally_snd_t += d
+		tick_snd_t += d
 		crack_t += d
 		brk_bang_t += d
 	if hitstop > 0.0 and not sp:
@@ -6933,11 +6935,13 @@ func _tick_score(d: float) -> void:
 			var s0 := score_from + (1.0 if land_live and gain_p > 0.0 else 0.0)
 			shown = lerpf(s0, float(total), gain_p)
 		#  칸은 오른 몫(gain_p)으로 센다. 이득이 0 · 음수인 걸음은 칸이 없다(tick_n 0).
+		#  판 금의 단이 설 차례면 그 톡은 비킨다(_tick_yield) — 그 칸은 소리 없이 넘는다.
 		if land_live and not snap:
 			var j := mini(int(floor(gain_p * float(tick_n))), tick_n)
 			if j > tick_i:
 				tick_i = j
-				if j < tick_n and tick_t + 0.0001 >= float(TALLY.tick_gap) / 60.0:
+				if j < tick_n and tick_t + 0.0001 >= float(TALLY.tick_gap) / 60.0 \
+						and not _tick_yield(d):
 					tick_t = 0.0
 					_tick_snd(j)
 		if cross_live and shown >= float(target) and state == S.RESOLVE:
@@ -9966,23 +9970,16 @@ func _settle_paused() -> bool:
 	return state == S.SETTINGS and pause_from == S.RESOLVE
 
 
-#  다음 프레임에 톡이나 착지가 나는가 — _tick_score 의 식을 한 프레임(d) 앞으로 민다
-#  (score_roll 은 _process 가 _tick_score 앞에서 깎는다). 판 금 삐걱이 그 프레임 바로 앞에
-#  안 붙게 묻는다(_brk_crack_ok). 2026-10-06
-func _tally_soon(d: float) -> bool:
+#  다음 프레임에 착지가 나는가 — _tick_score 의 식을 한 프레임(d) 앞으로 민다(score_roll 은
+#  _process 가 _tick_score 앞에서 깎는다). 판 금 삐걱이 착지 바로 앞에 안 붙게 묻는다
+#  (_brk_crack_ok). 띠 톡은 안 묻는다 — 톡이 삐걱에게 비킨다(_tick_yield). 2026-10-06
+func _land_soon(d: float) -> bool:
 	if not land_live:
 		return false
 	var sr := maxf(score_roll - d * fast_rate * card_jrate * score_div, 0.0)
 	var k := clampf(((1.0 - sr) - float(TALLY.lead))
 			/ (float(GROW.hold) - float(TALLY.lead)), 0.0, 1.0)
-	var snap := _tally_snap()
-	if k >= 1.0 or (snap and k > 0.0):
-		return true
-	if snap:
-		return false
-	var j := mini(int(floor(pow(k, float(TALLY.ease)) * float(tick_n))), tick_n)
-	return j > tick_i and j < tick_n \
-			and tick_t + d + 0.0001 >= float(TALLY.tick_gap) / 60.0
+	return k >= 1.0 or (_tally_snap() and k > 0.0)
 
 
 #  굴림 없이 lead 끝 프레임에 끝값에 서는가 — 모션 끄기 · 이득 1(2026-10-06). 이득 1 은
@@ -11030,6 +11027,7 @@ func draw_front(c: CanvasItem) -> void:
 
 func _draw() -> void:
 	ui_hot = ""      # 단추가 그려지며 다시 적는다(_ui_face)
+	_push_clip_set() # 밀기 끝의 화면만 커지는 칠판 안으로 자른다 — 첫 그리기 앞이어야 한다
 	#  여백까지 덮는다. 노드가 밀려 있으므로 왼쪽 위로 그만큼 되밀어 시작한다.
 	draw_rect(Rect2(-view_pad, VIEW + view_pad * 2.0), C_BG)
 	# 툴팁이 대상 테두리만 같이 흔들고 판은 고정하려면 이 값을 알아야 한다
@@ -22191,18 +22189,53 @@ func _brk_arm(tier := -1, deep := -1) -> void:
 	brk_span = maxf(brk_qt0 - _brk_fire_at(), 0.0)
 
 
-#  금 한 단과 그 삐걱을 지금 내도 되는가 — 톡 · 착지 · 넘기 뒤 2프레임(TALLY.tick_gap) ·
-#  앞 삐걱 뒤 2프레임이 지났고, 다음 프레임에 톡이나 착지가 안 오며(_tally_soon), 이 프레임 ·
-#  다음 프레임이 한 방(_brk_fire)이 아니다. 둘레 2프레임(33ms)은 띠 톡이 쓰는 그 바닥이다 —
-#  삐걱(36ms)과 톡(32ms)이 그만큼 떨어져야 두 소리로 들린다. 한 방 뒤는 늘 거짓이다 — 날아가는
-#  조각 위에서는 삐걱이 안 난다(_brk_tick 의 단 갈래). 2026-10-06
+#  금 한 단과 그 삐걱을 지금 내도 되는가 — 띠 톡 뒤 2프레임(TALLY.tick_gap)이 지났고 그 밖의
+#  소리도 비켰으며(_brk_room), 이 프레임 · 다음 프레임이 한 방(_brk_fire)이 아니다. 둘레
+#  2프레임(33ms)은 띠 톡이 쓰는 그 바닥이다 — 삐걱(36ms)과 톡(32ms)이 그만큼 떨어져야 두 소리로
+#  들린다. 다음 프레임의 띠 톡은 안 묻는다 — 삐걱이 나면 그 뒤 2프레임의 톡이 비킨다(_tick_yield).
+#  한 방 뒤는 늘 거짓이다 — 날아가는 조각 위에서는 삐걱이 안 난다(_brk_tick 의 단 갈래). 2026-10-06
 func _brk_crack_ok(d: float) -> bool:
 	if brk_fired:
 		return false
-	var gap := float(TALLY.tick_gap) / 60.0 - 0.0001
-	if tally_snd_t < gap or crack_t < gap or brk_bang_t < gap or _tally_soon(d):
+	if tick_snd_t < _snd_gap() or not _brk_room(d):
 		return false
 	return brk_c + d * fast_rate < brk_span
+
+
+#  소리끼리 떨어질 바닥(초) — TALLY.tick_gap 프레임(33ms).
+func _snd_gap() -> float:
+	return float(TALLY.tick_gap) / 60.0 - 0.0001
+
+
+#  띠 톡 말고는 삐걱을 막는 것이 없는가 — 착지 · 넘기 · 앞 삐걱 · 한 방 · 꼬리 톡 뒤 2프레임이
+#  지났고 다음 프레임에 착지가 안 온다(_land_soon). 이 넷은 안 비킨다 — 삐걱이 비킨다.
+func _brk_room(d: float) -> bool:
+	var gap := _snd_gap()
+	return tally_snd_t >= gap and crack_t >= gap and brk_bang_t >= gap and not _land_soon(d)
+
+
+#  금의 시계 c 에서 그어져 있어야 할 단 수. 단은 발화보다 조금 먼저(0.90) 다 찬다(_brk_tick).
+func _brk_st(c: float) -> int:
+	var top: int = maxi(int(_brk_row().stages), 1)
+	var k: float = clampf(c / maxf(brk_span * 0.90, 0.001), 0.0, 1.0)
+	return clampi(int(k * float(top)), 0, top)
+
+
+#  이 프레임의 띠 톡이 판 금 삐걱에게 비키는가 (2026-10-06). 금이 번지는 동안(1배) 앞 삐걱 뒤
+#  2프레임 안이거나, 금의 시계가 다음 단을 불렀는데(_brk_st) 그 단을 막는 것이 띠 톡뿐이면
+#  (_brk_room) 그 톡은 소리 없이 넘는다 — 단과 그 삐걱이 시계 곁 2프레임 안에 선다. 굴림 끝은
+#  톡이 2~3프레임 사이라 비키지 않으면 넘은 뒤 금이 한참 안 보이다가 착지 뒤에 몰려 섰다(검토).
+#  _tick_score 가 _brk_tick 보다 먼저 돌므로 금의 시계를 이 프레임 몫만큼 앞당겨 읽는다.
+#  이 프레임 · 다음 프레임이 한 방이면 삐걱이 없으니 안 비킨다.
+func _tick_yield(d: float) -> bool:
+	if not brk_live or brk_fired or fast_rate > 1.0 or (not brk_free and state != S.RESOLVE):
+		return false
+	if crack_t < _snd_gap():
+		return true
+	var c: float = brk_c + d * fast_rate
+	if c + d * fast_rate >= brk_span:
+		return false
+	return brk_stage < _brk_st(c) and _brk_room(d)
 
 
 #  단 하나의 삐걱 음(Hz) — 층 음(row.pitch) × 깊이(BRKDEEP.pit) × 단마다 ×1.05 → ×0.92 로
@@ -22274,14 +22307,13 @@ func _brk_tick(d: float) -> void:
 		#  ⚠ **단은 발화보다 조금 먼저 다 찬다(0.90).** 꼭 맞춰 두면 마지막
 		#  단이 k == 1.0 에서만 서는데 그 프레임이 곧 발화라 **파단선이
 		#  다 그어진 그림을 아무도 못 본다** — 찍어 보고 잡았다. 0.90 이면
-		#  마지막 단이 넉 프레임쯤 서 있다가 그 선대로 갈라진다.
-		var k: float = clampf(brk_c / maxf(brk_span * 0.90, 0.001), 0.0, 1.0)
+		#  마지막 단이 넉 프레임쯤 서 있다가 그 선대로 갈라진다(_brk_st).
 		#  ⚠ **단 수가 `rings * 2` 라는 식에서 표의 `stages` 로 옮겨졌다**
 		#  (2026-09-25). 겹이 조각 기하에서 빠지는 순간 그 식은 거짓말이
 		#  된다 — 겹은 이제 색 띠 표일 뿐이다. 값은 4/4/6 그대로라 보스 단
 		#  간격 0.608 ÷ 6 = 0.101초 > SMASH.snd_gap 0.040 이 안 바뀐다.
 		var top: int = maxi(int(_brk_row().stages), 1)
-		var st: int = clampi(int(k * float(top)), 0, top)
+		var st: int = _brk_st(brk_c)
 		#  ⚠ **금이 번지는 앞 0.68초에 소리가 한 알도 없었다.**
 		#  깨짐의 소리는 발화 한 방(board_break)과 꼬리 톡뿐인데,
 		#  층 표의 row[3] 이 작은 판에서 1 이라 톡이 0회다 — 런에서
@@ -22297,16 +22329,21 @@ func _brk_tick(d: float) -> void:
 		#  깊이는 **음만** 민다(BRKDEEP.pit) — 알 수는 한 알도 안 는다.
 		#  삐걱의 수가 곧 단 수(층의 것)라, 깊이가 거기 손대면 두 축이
 		#  같은 채널에서 싸운다. 2026-09-25
-		#  ── 단과 삐걱이 한 프레임이다 (2026-10-06) ──
+		#  ── 단과 삐걱이 한 프레임 · 띠 톡이 비킨다 (2026-10-06) ──
 		#  합계 굴림이 목표를 넘은 뒤라 금이 번지는 동안 띠 톡(2~7프레임 사이)과 착지
-		#  (settle_total)가 같이 난다. 그래서 금의 단은 시계(st)가 찬 뒤에도 **그 삐걱이 날 수
-		#  있는 프레임에만** 한 단씩 선다(_brk_crack_ok — 톡 · 착지 · 넘기 · 앞 삐걱 뒤 2프레임 ·
-		#  다음 프레임에 톡 · 착지 · 한 방이 안 온다). 그 프레임에 단이 서고 삐걱이 같이 난다 —
-		#  보이는 금과 들리는 알이 한 몸이다. 굴림 끝은 톡이 3프레임 사이라 그동안 찬 단은 착지
-		#  뒤로 밀려 2프레임 사이로 선다. 한 방까지 못 선 단은 한 방(_brk_fire)이 소리 없이 채운다 —
-		#  board_break 가 그 단들의 소리다. 날아가는 조각 위에서는 삐걱이 안 난다.
+		#  (settle_total)가 같이 난다. 금의 단은 **그 삐걱이 날 수 있는 프레임에만** 한 단씩
+		#  서고 그 프레임에 삐걱이 같이 난다 — 보이는 금과 들리는 알이 한 몸이다. 날 수 있는
+		#  프레임은 착지 · 넘기 · 띠 톡 · 앞 삐걱 · 한 방 · 꼬리 톡 뒤 2프레임이 지났고 다음
+		#  프레임에 착지 · 한 방이 안 오는 프레임이다(_brk_crack_ok). 시계(st)가 단을 부르면 그
+		#  단을 막는 띠 톡이 비킨다(_tick_yield — 붐비는 굴림의 톡 하나는 안 들린다) — 단과 삐걱이
+		#  시계 곁 2프레임 안에 서고, 그 뒤 2프레임의 톡도 비킨다. 착지 · 넘기 · 한 방은 안
+		#  비킨다 — 그 둘레에 찬 단은 그 뒤로 2프레임 사이로 선다. 한 방까지 못 선 단은 한 방
+		#  (_brk_fire)이 소리 없이 채운다 — board_break 가 그 단들의 소리다. 날아가는 조각 위에서는
+		#  삐걱이 안 난다.
 		#  한때는 단이 시계대로 서고 삐걱만 줄에 서서 착지 · 한 방 뒤로 밀려 났다 — 굴림 동안
-		#  소리 없이 금이 서고, 한 방 뒤 조각 위로 삐걱이 났다(검토).
+		#  소리 없이 금이 서고, 한 방 뒤 조각 위로 삐걱이 났다(검토). 그 뒤로 톡이 비키지 않던
+		#  동안은 굴림 끝의 톡(3프레임 사이)이 날 수 있는 프레임을 다 먹어, 넘은 뒤 금이 한참
+		#  안 보이다가 착지 뒤에 몰려 섰다(검토).
 		#  빨리 보기는 소리가 없으니 단이 시계대로 선다. 굴림이 없는 모션 끄기는 톡이 없어 단이
 		#  넘기 · 착지 2프레임 뒤부터 2프레임 사이로 선다(qa_break ⑭).
 		#  삐걱은 제 자리 하나(crack_pl)라 settle_total · target_hit · board_break 꼬리를 안 자른다.
@@ -41597,14 +41634,24 @@ func _title_chalk() -> void:
 	var trows := _title_rows()
 	if trows.size() <= 1:
 		return
-	var r0 := _menu_rect(1)
 	var box := _title_chalk_box()
 	#  칠판 한 벌(_chalk_board — 메뉴 칠판 · 주문 칠판과 같은 붓). 빛은 오른쪽 위 문 램프에서
 	#  온다 — 그늘은 왼쪽 아래, 테는 오른변이 밝다. 받침에 분필 한 토막.
 	_chalk_board(self, box, 4.0, CHALKB.title)
+	_title_chalk_ink(self, _ttl_ink_a())
+
+
+#  제목 칠판의 글 — 머리 · 줄 · 가름줄 · 프로필 줄을 c 에 a 만큼. 밀기 첫 넉 틀에는 커지는
+#  칠판 위에서 지고(_push_ttl_a), 그동안 · 밀고 들어간 설정이 떠 있는 동안은 제목 칠판에서
+#  빠진다(_ttl_ink_a) — 글은 칠판을 따라 들어갔다.
+func _title_chalk_ink(c: CanvasItem, a: float) -> void:
+	var trows := _title_rows()
+	if a <= 0.0 or trows.size() <= 1:
+		return
+	var r0 := _menu_rect(1)
 	var ink: Color = DOORT.chalk_ink
 	#  머리 — 이름 · 분필 밑줄 한 획(메뉴 머리와 같은 붓 — _chalk_head)
-	_chalk_head(self, Vector2(r0.position.x, r0.position.y - 16.0), "하이톤", 1.0, 64.0)
+	_chalk_head(c, Vector2(r0.position.x, r0.position.y - 16.0), "하이톤", a, 64.0)
 	#  줄 — 분필 글씨
 	for i in range(1, trows.size()):
 		var r := _menu_rect(i)
@@ -41614,20 +41661,20 @@ func _title_chalk() -> void:
 		if font_sm != null:
 			br.size.x = minf(r.size.x, font_sm.get_string_size(String(trows[i].n),
 					HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x + 16.0)
-		_row_band(self, br, ee, ew, 1.0)
-		draw_string(font_sm, r.position + Vector2(0.0, _menu_base_y(font_sm, 20, 0.0, r.size.y)),
+		_row_band(c, br, ee, ew, a)
+		c.draw_string(font_sm, r.position + Vector2(0.0, _menu_base_y(font_sm, 20, 0.0, r.size.y)),
 				String(trows[i].n), HORIZONTAL_ALIGNMENT_LEFT, -1, 20,
-				Color(ink, lerpf(0.66, 1.0, ee)))
+				Color(ink, lerpf(0.66, 1.0, ee) * a))
 	#  가름줄 — 줄과 프로필 사이 분필 한 획(끝이 조금 흐리다)
 	var gy: float = roundf(float(DOORT.rows_bot) + float(DOORT.prof_gap) * 0.5)
-	_chalk_rule(self, r0.position.x, gy, r0.size.x)
-	_prof_chalk_draw()
+	_chalk_rule(c, r0.position.x, gy, r0.size.x, a)
+	_prof_chalk_draw(c, a)
 
 
 #  칠판 맨 밑 프로필 줄 — 사람 그림 · 「프로필 N」 · 자리 셋(쓰는 자리는 분필로 칠하고 · 쌓인
 #  자리는 옅게 · 빈 자리는 테만). 얹히면 다른 줄과 같은 띠가 쓸려 든다. 딸깍은 공용 얹힘이
 #  낸다 — 패(_ui_face)가 하던 대로 ui_hot 을 적는다.
-func _prof_chalk_draw() -> void:
+func _prof_chalk_draw(c: CanvasItem, ia := 1.0) -> void:
 	var r := _prof_badge_rect()
 	var ink: Color = DOORT.chalk_ink
 	var hot: bool = state == S.TITLE and not ui_under and r.has_point(mouse_at) and door_t < 0.0
@@ -41636,13 +41683,13 @@ func _prof_chalk_draw() -> void:
 	prof_chalk_e = move_toward(prof_chalk_e, 1.0 if hot else 0.0, 0.12)
 	var ee: float = prof_chalk_e
 	if ee > 0.004:
-		_row_band(self, Rect2(r.position, Vector2(r.size.x, r.size.y)), ee, ee, 1.0)
-	var a: float = lerpf(0.66, 1.0, ee)
+		_row_band(c, Rect2(r.position, Vector2(r.size.x, r.size.y)), ee, ee, ia)
+	var a: float = lerpf(0.66, 1.0, ee) * ia
 	var ic := Vector2(r.position.x + 6.0, r.position.y + r.size.y * 0.5)
-	draw_circle(ic + Vector2(0.0, -4.0), 3.0, Color(ink, a))
-	draw_rect(Rect2(ic.x - 5.0, ic.y + 1.0, 10.0, 5.0), Color(ink, a))
+	c.draw_circle(ic + Vector2(0.0, -4.0), 3.0, Color(ink, a))
+	c.draw_rect(Rect2(ic.x - 5.0, ic.y + 1.0, 10.0, 5.0), Color(ink, a))
 	var cur := Save.slot()
-	draw_string(font_sm, Vector2(r.position.x + 18.0,
+	c.draw_string(font_sm, Vector2(r.position.x + 18.0,
 			_menu_base_y(font_sm, 20, r.position.y, r.size.y)),
 			"프로필 %d" % cur, HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(ink, a))
 	var pw: float = float(PROFB.pip)
@@ -41654,11 +41701,11 @@ func _prof_chalk_draw() -> void:
 		var sl := i + 1
 		var q := Rect2(x0 + float(i) * (pw + pg), py, pw, pw)
 		if sl == cur:
-			draw_rect(q, Color(ink, 0.92))
+			c.draw_rect(q, Color(ink, 0.92 * ia))
 		elif Save.slot_used(sl):
-			draw_rect(q, Color(ink, 0.38))
+			c.draw_rect(q, Color(ink, 0.38 * ia))
 		else:
-			draw_rect(q, Color(ink, 0.45), false, 1.0)
+			c.draw_rect(q, Color(ink, 0.45 * ia), false, 1.0)
 
 
 # ══════════════════════════════════════════════════════════
@@ -41692,18 +41739,18 @@ const MENUM := {
 	"board": Rect2(8.0, 6.0, 624.0, 349.0),
 	#  글 2층 · 꺼진 글의 분필 짙기(2층은 제목 칠판 줄의 0.66 과 같다). 꺼진 글 0.40 은 석판 위
 	#  2.9:1 이라 잠긴 탭 · 「완주 0 / 1」이 묻혔다(검토). 맨 석판에서는 0.48 이 3.5:1 이지만
-	#  램프 웅덩이(lamp_a)가 가장 밝은 자리에서는 3.35 라 0.51 이다 — 거기서 3.59 · 맨 석판
-	#  3.82 이고 2층(0.66)과는 한 단 떨어진다(qa_menumat ④).
-	"dim": 0.66, "off": 0.51,
+	#  램프 웅덩이(lamp_a 0.08)가 가장 밝은 자리에서는 0.51 도 3.42 라 0.53 이다 — 거기서 3.56 · 맨
+	#  석판 4.01 이고 2층(0.66 — 가장 밝은 자리 4.62 · 맨 석판 5.35)과는 한 단 떨어진다(qa_menumat ④).
+	"dim": 0.66, "off": 0.53,
 	#  나무 패 — 몸 · 턱 · 윗변 빛 · 얹힌 몸 · 얹힌 윗변(도트 팔레트 나무 결 · 0 · 2 · 2b · 3)
 	"wood": Color("402e1a"), "wood_lo": Color("140904"), "wood_hi": Color("5e3317"),
 	"wood_hot": Color("553222"), "wood_hot_hi": Color("8a5636"),
 	#  놋쇠 판 — 몸은 문 손잡이 놋쇠(Door3D.COL.brass). 턱 · 윗변 빛 · 새긴 글씨(나무 1)
 	"brass_lo": Color("5c3a1a"), "brass_hi": Color("fdeaa0"), "engrave": Color("2c1508"),
-	#  석판의 빛(_menu_light) — 램프 웅덩이의 짙기(석판 윗변 한가운데) · 반지름(석판 폭 · 높이의
-	#  몫) · 램프가 석판 윗변 위로 매달린 높이(높이의 몫) · 그늘이 서는 타원 거리 · 모서리 짙기 ·
-	#  칸(px). 웅덩이 0.05 에서 꺼진 글(off)이 가장 밝은 석판 위 3.5:1 을 넘는다(qa_menumat ④).
-	"lamp_a": 0.05, "lamp_r": Vector2(0.42, 0.95), "lamp_y": 0.15,
+	#  석판의 빛(_menu_light) — 램프 웅덩이의 짙기(가운데) · 가운데(석판 폭 · 높이의 몫 — 머리 줄
+	#  밑) · 반지름(석판 폭 · 높이의 몫) · 그늘이 서는 타원 거리 · 모서리 짙기 · 칸(px). 웅덩이
+	#  0.08 에서 꺼진 글(off)이 가장 밝은 석판 위 3.5:1 · 2층 글이 4.5:1 을 넘는다(qa_menumat ④).
+	"lamp_a": 0.08, "lamp_c": Vector2(0.5, 0.30), "lamp_r": Vector2(0.42, 0.72),
 	"vig_in": 0.62, "vig_a": 0.30, "light_cell": 40.0,
 	#  흐림 판(일시정지 · 설정 뒤)이 잠기는 옛 보라 — 재질을 끄면 이 색으로 돌아간다(main.tscn).
 	#  재질이면 판 벽 덮개의 따뜻한 검정(WALL3.scrim_col)이다(_set_tick).
@@ -41742,18 +41789,46 @@ var mat_draw := false
 #  한 토막). 제목 칠판 · 주문 칠판 · 메뉴 칠판 · 설정 창이 이 붓 하나를 칸 값(CHALKB)만 달리해
 #  부른다. avoid — 자국을 안 두는 자리(새 런의 다트통 판 — 통 가림(_cup_mask)이 석판 색을 다시
 #  깔아 그 변에서 자국이 잘려 보인다). a 는 짙기(설정 창이 뜨는 동안). 테 사각을 돌려준다.
+#  from · m — 밀기(_push_begin)가 제목 칠판(from)에서 k 로 m 만큼 간 칠판을 그린다: 그늘 밀림 ·
+#  짙기가 옮겨 가고, 빛 쪽 옆변 · 지운 자국 · 받침은 두 벌이 몫대로 겹친다. m 0 이면 from 그대로라
+#  밀기 첫 틀이 제목 칠판과 한 픽셀도 안 갈린다(2026-10-06). slate — 석판과 자국만(밀기의 덮개).
 func _chalk_board(c: CanvasItem, box: Rect2, fw: float, k: Dictionary, a := 1.0,
-		avoid := Rect2()) -> Rect2:
+		avoid := Rect2(), from := {}, m := 1.0, slate := false) -> Rect2:
 	var fr: Rect2 = box.grow(fw)
-	var ink: Color = DOORT.chalk_ink
-	var sh: Vector2 = k.sh
-	c.draw_rect(Rect2(fr.position + sh, fr.size), Color(0.0, 0.0, 0.0, float(k.sh_a) * a))
-	c.draw_rect(fr, Color(DOORT.frame, a))
-	c.draw_rect(Rect2(fr.position, Vector2(fr.size.x, 1.0)), Color(DOORT.frame_hi, a))
-	var lx: float = fr.end.x - 1.0 if float(k.lit) > 0.0 else fr.position.x
-	c.draw_rect(Rect2(lx, fr.position.y, 1.0, fr.size.y), Color(DOORT.frame_hi, 0.6 * a))
-	c.draw_rect(Rect2(fr.position.x, fr.end.y - 1.0, fr.size.x, 1.0), Color(0.0, 0.0, 0.0, 0.5 * a))
+	var mk: float = 1.0 if from.is_empty() else clampf(m, 0.0, 1.0)
+	var k0: Dictionary = k if from.is_empty() else from
+	if not slate:
+		var sh: Vector2 = (k0.sh as Vector2).lerp(k.sh as Vector2, mk)
+		var sha: float = lerpf(float(k0.sh_a), float(k.sh_a), mk)
+		c.draw_rect(Rect2(fr.position + sh, fr.size), Color(0.0, 0.0, 0.0, sha * a))
+		c.draw_rect(fr, Color(DOORT.frame, a))
+		c.draw_rect(Rect2(fr.position, Vector2(fr.size.x, 1.0)), Color(DOORT.frame_hi, a))
+		#  빛 쪽 옆변(lit 1 오른쪽 · −1 왼쪽) — 밀기에서는 두 쪽이 몫대로 갈린다.
+		for side in [1.0, -1.0]:
+			var wl: float = (1.0 - mk) * (1.0 if float(k0.lit) * side > 0.0 else 0.0)
+			wl += mk * (1.0 if float(k.lit) * side > 0.0 else 0.0)
+			if wl > 0.0:
+				var lx: float = fr.end.x - 1.0 if side > 0.0 else fr.position.x
+				c.draw_rect(Rect2(lx, fr.position.y, 1.0, fr.size.y),
+						Color(DOORT.frame_hi, 0.6 * wl * a))
+		c.draw_rect(Rect2(fr.position.x, fr.end.y - 1.0, fr.size.x, 1.0),
+				Color(0.0, 0.0, 0.0, 0.5 * a))
 	c.draw_rect(box, Color(DOORT.chalk, a))
+	_chalk_marks(c, box, k, a * mk, avoid)
+	if mk < 1.0:
+		_chalk_marks(c, box, k0, a * (1.0 - mk), avoid)
+	if not slate:
+		_chalk_stick(c, fr, k, a * mk)
+		if mk < 1.0:
+			_chalk_stick(c, fr, k0, a * (1.0 - mk))
+	return fr
+
+
+#  칠판의 지운 자국 — 칸 값 k 의 씨 · 수 · 크기로 석판(box)에 a 만큼(_chalk_board).
+func _chalk_marks(c: CanvasItem, box: Rect2, k: Dictionary, a: float, avoid: Rect2) -> void:
+	if a <= 0.0:
+		return
+	var ink: Color = DOORT.chalk_ink
 	var sw: Vector2 = k.w
 	var sv: Vector2 = k.h
 	var sd: int = int(k.seed)
@@ -41775,12 +41850,16 @@ func _chalk_board(c: CanvasItem, box: Rect2, fw: float, k: Dictionary, a := 1.0,
 		c.draw_rect(Rect2(px + roundf(w * 0.2) + jx, py, roundf(w * 0.55), t3), sc)
 		c.draw_rect(Rect2(px, py + t3, w, h - t3 * 2.0), sc)
 		c.draw_rect(Rect2(px + roundf(w * 0.3) - jx, py + h - t3, roundf(w * 0.5), t3), sc)
+
+
+#  칠판 받침 — 테(fr) 밑 나무 턱에 분필 한 토막(칸 값 k 의 stick · 폭 0 이면 없다).
+func _chalk_stick(c: CanvasItem, fr: Rect2, k: Dictionary, a: float) -> void:
 	var st: Vector2 = k.stick
-	if st.y > 0.0:
-		c.draw_rect(Rect2(fr.position.x, fr.end.y, fr.size.x, 3.0), Color(DOORT.frame, a))
-		var sx: float = fr.position.x + st.x if st.x >= 0.0 else fr.end.x + st.x
-		c.draw_rect(Rect2(sx, fr.end.y - 1.0, st.y, 2.0), Color(ink, 0.85 * a))
-	return fr
+	if st.y <= 0.0 or a <= 0.0:
+		return
+	c.draw_rect(Rect2(fr.position.x, fr.end.y, fr.size.x, 3.0), Color(DOORT.frame, a))
+	var sx: float = fr.position.x + st.x if st.x >= 0.0 else fr.end.x + st.x
+	c.draw_rect(Rect2(sx, fr.end.y - 1.0, st.y, 2.0), Color(DOORT.chalk_ink, 0.85 * a))
 
 
 #  분필 머리 — 24 글씨 · 기준선 6px 밑에 밑줄 한 획. w 는 밑줄 폭(음수면 글 폭 − 2).
@@ -41853,6 +41932,8 @@ func _mat_wall() -> bool:
 #  재질로 그리는 중이면 그 위에 화면 칠판을 걸고 석판에 램프 빛을 얹는다(_menu_light).
 #  avoid — _chalk_board.
 func _menu_back(avoid := Rect2()) -> void:
+	if push_body:
+		return          # 밀기 끝 — 바닥 · 칠판 · 빛은 _push_draw 가 커지는 칠판으로 깔았다
 	if _mat_wall():
 		draw_rect(_full(), Color(WALL3.scrim_col, float(MENUM.veil)))
 	else:
@@ -41865,15 +41946,18 @@ func _menu_back(avoid := Rect2()) -> void:
 #  ── 술집의 빛 (2026-10-06) ──
 #  화면 칠판이 평평한 초록 화면으로 읽혔다(검토) — 불 켠 방 벽에 건 칠판으로 읽히게 석판에
 #  빛 두 겹을 얹는다. 둘 다 석판(box) 안에만 깔고 테 · 벽은 안 건드린다.
-#   · 램프 웅덩이 — 칠판 윗변 한가운데 위(화면 밖)에 매단 램프가 위에서 비춘다. 빛은 제목 문
-#     램프와 같은 따뜻한 빛(Door3D.COL.lamp)이고 석판 윗변 한가운데에서 lamp_a 만큼, 타원 거리
-#     d(반지름 lamp_r — 석판 폭 · 높이의 몫)로 (1 − d²)² 만큼 잦아든다.
+#   · 램프 웅덩이 — 칠판 앞에 매단 램프가 석판 윗부분을 비춘다. 빛은 제목 문 램프와 같은 따뜻한
+#     빛(Door3D.COL.lamp)이고 가운데(lamp_c — 머리 줄 밑, 석판 높이의 0.30)에서 lamp_a 만큼,
+#     타원 거리 d(반지름 lamp_r — 석판 폭 · 높이의 몫)로 (1 − d²)² 만큼 잦아든다 — 윗변
+#     한가운데 0.68 · 석판 한가운데 0.85 · 옆변 · 밑변 0 배다. 가운데를 석판 윗변 위(화면 밖)에
+#     두고 0.05 로 깔았을 때는 머리 줄이 가장 밝고 석판이 고르게 평평했다(검토, 2026-10-06).
 #   · 그늘 — 석판 한가운데에서 잰 타원 거리(모서리 √2)가 vig_in 을 넘으면 테 쪽으로 제곱으로
 #     짙어져 모서리에서 vig_a 다.
 #  칸(light_cell px)마다 네 꼭짓점에 세기를 셈해 꼭짓점 색으로 칠한다 — 칸 사이가 매끈하다.
 #  clip 이 있으면 그 안만 다시 깐다(새 런의 통 가림이 석판 색을 다시 깐 자리 — _cup_mask).
 #  웅덩이가 가장 밝은 자리에서도 꺼진 글이 3.5:1 · 2층 글이 4.5:1 을 넘는다(qa_menumat ④).
-func _menu_light(c: CanvasItem, box: Rect2, clip := Rect2()) -> void:
+#  a 는 짙기를 곱한다(밀기의 석판 덮개 — _push_ink_cover).
+func _menu_light(c: CanvasItem, box: Rect2, clip := Rect2(), a := 1.0) -> void:
 	var q0: Rect2 = box if clip.size.x <= 0.0 else clip.intersection(box)
 	if q0.size.x <= 0.0 or q0.size.y <= 0.0:
 		return
@@ -41891,8 +41975,8 @@ func _menu_light(c: CanvasItem, box: Rect2, clip := Rect2()) -> void:
 				var dc := PackedColorArray()
 				for p in pts:
 					var l := _menu_light_at(box, p)
-					lc.append(Color(lamp, l.x))
-					dc.append(Color(0.0, 0.0, 0.0, l.y))
+					lc.append(Color(lamp, l.x * a))
+					dc.append(Color(0.0, 0.0, 0.0, l.y * a))
 				c.draw_polygon(pts, lc)
 				c.draw_polygon(pts, dc)
 			gx += cell
@@ -41903,7 +41987,7 @@ func _menu_light(c: CanvasItem, box: Rect2, clip := Rect2()) -> void:
 func _menu_light_at(box: Rect2, p: Vector2) -> Vector2:
 	var u: Vector2 = (p - box.position) / box.size
 	var lr: Vector2 = MENUM.lamp_r
-	var dv := (u - Vector2(0.5, -float(MENUM.lamp_y))) / lr
+	var dv := (u - (MENUM.lamp_c as Vector2)) / lr
 	var pool: float = float(MENUM.lamp_a) * pow(maxf(1.0 - dv.length_squared(), 0.0), 2.0)
 	var vin: float = float(MENUM.vig_in)
 	var t: float = clampf((((u - Vector2(0.5, 0.5)) * 2.0).length() - vin) / (sqrt(2.0) - vin),
@@ -41914,17 +41998,26 @@ func _menu_light_at(box: Rect2, p: Vector2) -> Vector2:
 #  ── 제목 칠판에서 밀고 들어간다 (2026-10-06) ──
 #  제목 칠판의 「컬렉션」 · 「설정」 · 프로필 줄을 누르면 컷이 아니라 PUSH.t 초 동안 그 칠판이
 #  제 자리에서 화면 칠판(MENUM.board — 설정은 창 _set_to)으로 커진다 — 카메라가 칠판 앞으로
-#  다가가는 몸이다(「시작」은 문을 지나는 카메라가 따로 있다). 칠판은 처음부터 불투명하고 안의
-#  것(글 · 탭 · 칸)은 다 커진 뒤에 선다(설정 창은 ink 몫부터 짙어진다 — 창이 자랄 때와 같다).
+#  다가가는 몸이다(「시작」은 문을 지나는 카메라가 따로 있다). 칠판은 처음부터 불투명하고 첫 틀은
+#  제목 칠판 그대로다 — 그늘 · 빛 쪽 옆변 · 지운 자국 · 받침이 밀린 몫만큼 제목 칠판의 것에서 그
+#  화면 칠판의 것으로 옮겨 가고(_chalk_board 의 from · m) 램프 빛도 그만큼 찬다. 제목 칠판의 글은
+#  커지는 칠판 위에서 첫 PUSH.out 몫(넉 프레임 안)에 진다(_push_ttl_a). 안의 것(글 · 탭 · 칸)은
+#  밀린 몫이 PUSH.ink 를 넘은 뒤 짙어진다 — 설정 창은 제 짙기로, 컬렉션 · 프로필은 커지는 칠판
+#  안으로 잘라 그린 화면 위에 석판을 1 − 짙기만큼 다시 덮는다(_push_ink_a · _push_clip_set).
 #  뒤에는 문 앞 벽이 그대로 서고(_door_here) 판 벽 덮개(MENUM.veil)가 같은 시간에 차오른다 —
-#  끝 프레임에 바닥이 판 벽으로 갈리는 자리를 칠판이 거의 다 덮는다.
+#  끝 프레임에 바닥이 판 벽으로 갈리는 자리를 칠판이 거의 다 덮는다. 제목 칠판의 글은 칠판을
+#  따라 들어갔으니 밑의 제목 칠판에서 빠진다 — 설정은 창이 떠 있는 동안 내내, 닫히는 동안
+#  그늘과 같이 돌아온다(_ttl_ink_a). 한때 설정 창 곁의 그늘 밑에 제목 칠판 글이 그대로 남았다(검토).
 #  누르는 사각은 한 px 도 안 움직인다(그리는 판만 커진다 · 설정 창은 떠오름을 안 탄다). 그동안
 #  누름 · 키는 밀기를 끝내고 삼킨다(판 갈이와 같은 규약 — _push_skip). 모션 끄기 · 문이 안 선
 #  제목(헤드리스 · 문 끔) · 도구가 화면을 곧장 여는 길(_open_profile · state 대입)은 옛 컷이다.
-const PUSH := {"t": 0.30, "ink": 0.85}
+const PUSH := {"t": 0.30, "ink": 0.85, "out": 0.20}
 var push_t := 1.0        # 밀기 0 → 1. 1 이면 안 민다
 var push_from := Rect2() # 밀기가 떠나는 제목 칠판 석판
 var push_scr := -1       # 밀고 들어가는 화면
+var push_ttl := false    # 제목 칠판의 글이 설정 창으로 밀려 들어갔다 — 그 창이 닫힐 때까지
+var push_body := false   # 밀기 끝의 화면을 그리는 중 — 바닥 · 칠판은 밀기가 깔았다(_menu_back)
+var push_clip := false   # 게임 판의 그림 자르기가 서 있다(_push_clip_set)
 
 
 #  제목 칠판의 석판 — _title_chalk 가 그리고 밀기(_push_begin)가 떠나는 자리.
@@ -41941,11 +42034,13 @@ func _title_chalk_box() -> Rect2:
 func _push_begin(scr: int) -> void:
 	push_t = 1.0
 	push_scr = -1
+	push_ttl = false
 	if motion_off or not menu_mat_on or state != S.TITLE or door_t >= 0.0 or not _door_live():
 		return
 	push_from = _title_chalk_box()
 	push_t = 0.0
 	push_scr = scr
+	push_ttl = scr == S.SETTINGS
 
 
 func _push_live() -> bool:
@@ -41967,6 +42062,11 @@ func _push_skip() -> void:
 
 
 func _push_tick(d: float) -> void:
+	#  밀고 들어간 설정이 다 닫혔으면(제목 · 설정 시계 0) 제목 칠판의 글이 제자리다.
+	var ttl_open: bool = (state == S.SETTINGS and pause_from < 0) \
+			or (state == S.TITLE and set_t > 0.0)
+	if push_ttl and not ttl_open:
+		push_ttl = false
 	if push_t >= 1.0:
 		return
 	if state != push_scr:
@@ -41976,6 +42076,51 @@ func _push_tick(d: float) -> void:
 	queue_redraw()
 
 
+#  제목 칠판 글의 짙기 — 밀기 동안(그 위에서 따로 진다 — _push_ttl_a)과 밀고 들어간 설정이 떠
+#  있는 동안은 0, 그 설정이 닫히는 동안 창 · 그늘이 걷히는 만큼 돌아온다.
+func _ttl_ink_a() -> float:
+	if _push_live():
+		return 0.0
+	if push_ttl:
+		if state == S.SETTINGS and pause_from < 0:
+			return 0.0
+		if state == S.TITLE and set_t > 0.0:
+			return 1.0 - _set_ease()
+	return 1.0
+
+
+#  밀기 머리에서 커지는 칠판 위의 제목 칠판 글 — 첫 PUSH.out 몫에 1 → 0(18틀 중 넉 틀 안).
+func _push_ttl_a() -> float:
+	if not _push_live():
+		return 0.0
+	return clampf(1.0 - push_t / float(PUSH.out), 0.0, 1.0)
+
+
+#  밀기 끝의 화면 짙기 — 밀린 몫이 PUSH.ink 를 넘은 뒤 0 → 1(설정 창 안과 같은 몫).
+func _push_ink_a() -> float:
+	if not _push_live():
+		return 0.0
+	return clampf((_push_k() - float(PUSH.ink)) / (1.0 - float(PUSH.ink)), 0.0, 1.0)
+
+
+#  컬렉션 · 프로필로 밀리는 끝 — 그 화면을 커지는 칠판(석판) 안으로만 그린다. 게임 판의 그림
+#  자르기를 그 석판에 세우고 화면 말고는 다 자르기를 비킨다(clip_ignore) — 그 화면만 석판 밖으로
+#  안 샌다. _draw 첫머리가 부른다. 앞판(설정)이 그리는 중이면 안 세운다(앞판도 같이 잘린다).
+func _push_clip_set() -> void:
+	var rid := get_canvas_item()
+	var on: bool = _push_ink_a() > 0.0 and (push_scr == S.COLLECT or push_scr == S.PROFILE) \
+			and set_t <= 0.0
+	if on:
+		RenderingServer.canvas_item_set_custom_rect(rid, true, _push_box(MENUM.board))
+		RenderingServer.canvas_item_set_clip(rid, true)
+		RenderingServer.canvas_item_add_clip_ignore(rid, true)
+		push_clip = true
+	elif push_clip:
+		RenderingServer.canvas_item_set_clip(rid, false)
+		RenderingServer.canvas_item_set_custom_rect(rid, false)
+		push_clip = false
+
+
 #  밀리는 동안 그리는 칠판 — 제목 칠판 석판에서 to 로.
 func _push_box(to: Rect2) -> Rect2:
 	var k := _push_k()
@@ -41983,9 +42128,13 @@ func _push_box(to: Rect2) -> Rect2:
 			push_from.size.lerp(to.size, k).round())
 
 
-#  컬렉션 · 프로필로 밀리는 동안의 한 틀 — 제목(얹힘 없이) · 차오르는 덮개 · 커지는 칠판.
+#  컬렉션 · 프로필로 밀리는 동안의 한 틀 — 제목(얹힘 없이 · 칠판 글 없이) · 차오르는 덮개 ·
+#  커지는 칠판(제목 칠판에서 화면 칠판으로 옮겨 간다) · 그 위에서 지는 제목 칠판 글.
 #  뒤 절반에는 그 화면의 바닥(판 벽 — _mat_wall)이 문 앞 벽 위로 차오른다 — 넓은 창에서
 #  칠판 양옆에 남는 벽이 끝 틀에 벽돌에서 판자로 툭 갈리지 않게.
+#  밀린 몫이 PUSH.ink 를 넘으면 그 화면을 석판 안으로 잘라 그리고(_push_clip_set) 석판 속을
+#  1 − 짙기만큼 다시 덮는다 — 화면이 짙기만큼 비친다(_push_ink_a). 화면 그리기에는 짙기
+#  인자가 없어서 덮개로 짙기를 낸다.
 func _push_draw() -> void:
 	var k := _push_k()
 	ui_under = true
@@ -41997,8 +42146,26 @@ func _push_draw() -> void:
 			draw_texture_rect(_wall3_tex(), _wall3_rect(shake_off), false, Color(1.0, 1.0, 1.0, wk))
 	draw_rect(_full(), Color(WALL3.scrim_col, float(MENUM.veil) * k))
 	var b := _push_box(MENUM.board)
-	_chalk_board(self, b, 4.0, CHALKB.menu)
-	_menu_light(self, b)
+	_chalk_board(self, b, 4.0, CHALKB.menu, 1.0, Rect2(), CHALKB.title, k)
+	_menu_light(self, b, Rect2(), k)
+	var ca := _push_ink_a()
+	if ca > 0.0:
+		var rid := get_canvas_item()
+		if push_clip:
+			RenderingServer.canvas_item_add_clip_ignore(rid, false)
+		push_body = true
+		mat_draw = menu_mat_on
+		if push_scr == S.PROFILE:
+			_draw_profile()
+		else:
+			_draw_collect()
+		mat_draw = false
+		push_body = false
+		if push_clip:
+			RenderingServer.canvas_item_add_clip_ignore(rid, true)
+		_chalk_board(self, b, 4.0, CHALKB.menu, 1.0 - ca, Rect2(), CHALKB.title, k, true)
+		_menu_light(self, b, Rect2(), k * (1.0 - ca))
+	_title_chalk_ink(self, _push_ttl_a())
 
 
 #  나무 액자 — 안쪽 사각 r 둘레에 w 폭 테. r 의 둥근 모서리(_rr 계단) 안쪽 틈은 테 색으로 메워
@@ -42047,11 +42214,15 @@ func _plaque(c: CanvasItem, base: Rect2, body: Rect2, brass: bool, hot: float, a
 
 
 #  나무 패의 결 — 위 · 아래 한 토막씩(가로 자리 · 폭은 패 x 가 씨라 늘 같다). 결은 글의 잉크
-#  상자(ink — 부르는 쪽이 _ink_box 로 잰다) 밖에만 선다: 몸 윗변 빛 줄과 잉크 사이 · 잉크와
-#  몸 밑변 사이가 3줄 이상 비면 그 틈 한가운데 줄에, 모자라면 그 쪽 결은 안 긋는다 — 몸 24 의
-#  20 글자는 밑 틈이 2줄이라 위 결만 서고, 키 큰 글(「소리」 · 「트랙」)은 위 결도 빠진다. 몸 위 ·
-#  아래 끝에 박아 두던 결이 글자 윗변 · 밑변에 붙어 취소선 · 밑줄로 읽혔다(검토, 2026-10-06).
-#  ink 가 비면 옛 자리(몸의 0.15 · 0.88)다.
+#  상자(ink — 부르는 쪽이 _ink_box 로 잰다 · 글리프 그림의 1px 테까지)에서 늘 3줄 넘게 비운다:
+#   · 몸 윗변 빛 줄과 잉크 사이 · 잉크와 몸 밑변 사이의 틈(lo..hi)이 5줄 이상이면 그 틈의 **잉크에서
+#     먼 쪽**(위는 빛 줄 밑 한 줄 띄워 · 아래는 몸 밑 줄 바로 위)에 긋는다.
+#   · 틈이 모자라면(글이 몸을 거의 채운다 — 메뉴의 패가 다 그렇다) 같은 줄에서 글 **옆**으로
+#     비킨다 — 위 결은 글 왼쪽 · 아래 결은 글 오른쪽, 패 끝 쪽에 붙여 잉크 상자에서 3칸 넘게
+#     띄운다. 그 옆자리가 5px 이 안 되면 그 결은 안 긋는다.
+#  2배 창은 글을 두 배로 구워 잉크가 캔버스 반 칸 더 나오는데, 틈 한가운데에 긋던 결이 거기서
+#  잉크와 반 칸으로 붙었다(검토, 2026-10-06). 그 앞에는 몸 위 · 아래 끝에 박아 두던 결이 글자
+#  윗변 · 밑변에 붙어 취소선 · 밑줄로 읽혔다. ink 가 비면 옛 자리(몸의 0.15 · 0.88)다.
 func _plaque_grain(body: Rect2, ink := Rect2()) -> Array:
 	var out := []
 	var r := _pr(body)
@@ -42059,16 +42230,24 @@ func _plaque_grain(body: Rect2, ink := Rect2()) -> Array:
 		return out
 	for j in 2:
 		var gy: float = roundf(r.position.y + r.size.y * (0.15 + 0.73 * float(j)))
-		if ink.size.x > 0.0:
-			var lo: float = r.position.y + 1.0 if j == 0 else ceilf(ink.end.y)
-			var hi: float = floorf(ink.position.y) if j == 0 else r.end.y - 1.0
-			if hi - lo < 3.0:
-				continue
-			gy = lo + floorf((hi - lo) * 0.5)
 		var gx: float = roundf(r.position.x + 4.0
 				+ _gl_rand(int(r.position.x) + j * 7, 4459) * r.size.x * 0.4)
 		var gw: float = minf(roundf(r.size.x * (0.3 + 0.25
 				* _gl_rand(int(r.position.x) + j * 7 + 1, 4459))), r.end.x - 4.0 - gx)
+		if ink.size.x > 0.0:
+			var lo: float = r.position.y + 1.0 if j == 0 else ceilf(ink.end.y)
+			var hi: float = floorf(ink.position.y) if j == 0 else r.end.y - 1.0
+			if hi - lo >= 5.0:
+				gy = lo + 1.0 if j == 0 else hi - 1.0
+			else:
+				gy = r.position.y + 2.0 if j == 0 else r.end.y - 2.0
+				var a: float = r.position.x + 4.0 if j == 0 else ceilf(ink.end.x) + 3.0
+				var b: float = floorf(ink.position.x) - 3.0 if j == 0 else r.end.x - 4.0
+				gw = minf(roundf(r.size.x * (0.10 + 0.08
+						* _gl_rand(int(r.position.x) + j * 7 + 1, 4459))), b - a)
+				if gw < 5.0:
+					continue
+				gx = a if j == 0 else b - gw
 		if gw > 0.0:
 			out.append(Rect2(gx, gy, gw, 1.0))
 	return out
@@ -42093,8 +42272,9 @@ func _ink_box(f: Font, t: String, sz: int, x: float, by: float) -> Rect2:
 
 
 #  글의 잉크 — 글 왼끝 · 기준선에서 잰 사각. TextServer 가 그 크기로 구운 글리프 그림의 자리를
-#  모으되 그림 가장자리의 여백 1px 을 뺀다(구운 그림의 알파를 세어 보면 잉크가 그 안쪽 한 칸부터
-#  선다 — qa_menumat ⑧ 이 알파로 따로 잰다).
+#  모은다 — 그림 가장자리의 여백 1px 까지 넣는다. 구운 그림의 알파를 세면 잉크가 그 안쪽 한
+#  칸부터 서지만(qa_menumat ⑧ 이 알파로 따로 잰다), 2배 창은 글을 두 배로 구워 잉크가 캔버스
+#  반 칸 더 나온다 — 그 테가 그 몫이다(검토, 2026-10-06).
 func _ink_measure(f: Font, t: String, sz: int) -> Rect2:
 	var ts := TextServerManager.get_primary_interface()
 	var sh := ts.create_shaped_text()
@@ -42112,7 +42292,7 @@ func _ink_measure(f: Font, t: String, sz: int) -> Rect2:
 			if gs.x > 2.0 and gs.y > 2.0:
 				var off: Vector2 = ts.font_get_glyph_offset(rid, fs, idx)
 				var go: Vector2 = gd.get("offset", Vector2.ZERO)
-				var q := Rect2(pen + go.x + off.x + 1.0, go.y + off.y + 1.0, gs.x - 2.0, gs.y - 2.0)
+				var q := Rect2(pen + go.x + off.x, go.y + off.y, gs.x, gs.y)
 				out = q if first else out.merge(q)
 				first = false
 		pen += float(gd.get("advance", 0.0))
@@ -48411,6 +48591,8 @@ func _draw_settings(c: CanvasItem) -> void:
 		wa = 1.0
 		gk = _push_k()
 	_set_win_draw(c, _set_win(), wa)
+	#  밀기 머리 — 커지는 창 위에서 제목 칠판 글이 진다(_push_ttl_a). 밑의 제목 칠판에서는 빠졌다.
+	_title_chalk_ink(c, _push_ttl_a())
 	#  안의 것은 판이 거의 다 자란 뒤(85%)에야 짙어진다 — 자라는 판 안에 줄이 먼저 서면
 	#  탭 · 줄 끝이 덜 자란 테 밖으로 삐져나와 보인다(shots/settings_grow 에서 4px).
 	var a: float = wa * clampf((gk - float(PUSH.ink)) / (1.0 - float(PUSH.ink)), 0.0, 1.0)
@@ -48553,7 +48735,11 @@ func _set_win_draw(c: CanvasItem, w: Rect2, a: float) -> void:
 		return
 	if mat_draw:
 		#  메뉴 재질 — 나무 테 칠판(_chalk_board). 테는 창 밖으로 두른다 — 안의 자리는 그대로다.
-		_chalk_board(c, w, 4.0, CHALKB.win, a)
+		#  제목 칠판에서 밀고 들어오는 동안은 제목 칠판에서 창 칠판으로 옮겨 간다(_push_begin).
+		if _push_live():
+			_chalk_board(c, w, 4.0, CHALKB.win, a, Rect2(), CHALKB.title, _push_k())
+		else:
+			_chalk_board(c, w, 4.0, CHALKB.win, a)
 		return
 	_rr(c, Rect2(w.position + Vector2(2.0, 3.0), w.size), Color(0.0, 0.0, 0.0, 0.4 * a))
 	_rr(c, w, Color(C_PANEL.darkened(0.5), 0.97 * a))

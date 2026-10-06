@@ -947,6 +947,8 @@ func _run() -> void:
 #    shk_land  착지 프레임의 shake · shk_start  걸음이 선 프레임의 shake · shk_pre  그 앞 프레임
 #    st_start  걸음이 선 프레임에 settle_total 이 났나 · sync  카드 「+n」과 띠가 같은 몫을
 #            벗어난 프레임 수 · gain_n  카드가 지난 값 가짓수
+#    crk     판 금 삐걱이 난 프레임들(판이 끝나는 걸음은 금이 번진다 — 그 단을 막는 톡이
+#            비킨다 · 2026-10-06)
 #  gr 은 grow_roll 이다(_stage_total 의 _calm 이 1 로 되돌리므로 세운 뒤에 민다).
 func _tick_play(r: float, fast: bool, mo: bool, above: bool, gr := 1.0) -> Dictionary:
 	_stage_total(r, 1)
@@ -963,7 +965,7 @@ func _tick_play(r: float, fast: bool, mo: bool, above: bool, gr := 1.0) -> Dicti
 			"start": -1, "land": -1, "lands": 0, "st": [], "end": -1, "moved": false,
 			"in_pool": false, "gn": -1.0, "hs": 0.0, "qt_drop": 0.0, "rate": 1.0,
 			"shk_land": -1.0, "shk_start": -1.0, "shk_pre": 0.0, "st_start": false,
-			"sync": 0, "gain_n": 0, "big": false, "lead_f": -1}
+			"sync": 0, "gain_n": 0, "big": false, "lead_f": -1, "crk": []}
 	var key0 := _tick_key(tp)
 	var f := 0
 	var live0 := false
@@ -1013,6 +1015,8 @@ func _tick_play(r: float, fast: bool, mo: bool, above: bool, gr := 1.0) -> Dicti
 				if absf(bar - card) > 1.0 / float(maxi(g.last_gain, 1)) + 0.0001:
 					o.sync += 1
 		live0 = g.land_live
+		if g.crack_t == 0.0:
+			(o.crk as Array).append(f)
 		var nm := _tick_name(tp)
 		var key := _tick_key(tp)
 		if key != key0:
@@ -1109,21 +1113,35 @@ func _run_tick() -> void:
 		if int(o.n) != _tick_want(float(o.gn)):
 			n_ok = false
 		one_txt += "r%.2f %d/%d칸 " % [float(rr[0]), hd.size(), int(o.n)]
-		var h := floori(gaps.size() / 2.0)
-		var s_lo := 0
-		var s_hi := 0
+		#  판이 끝나는 걸음(목표를 넘는다 · 이미 넘었다)은 금이 번지고, 단이 설 차례의 톡은
+		#  삐걱에게 비킨다(_tick_yield) — 그 사이에 삐걱이 낀 톡 사이는 넓어져도 된다. 좁아지는지는
+		#  삐걱이 안 낀 톡 사이로 잰다. 2프레임 바닥은 다 지킨다.
+		var plain := []
+		var yld := 0
 		for i in gaps.size():
 			if int(gaps[i]) < gap_min:
 				gap_ok = false
-			if i > 0 and int(gaps[i]) > int(gaps[i - 1]) + 1:
+			var crk_in := false
+			for c in o.crk:
+				if int(c) > int(hd[i]) and int(c) < int(hd[i + 1]):
+					crk_in = true
+			if crk_in:
+				yld += 1
+				continue
+			if not plain.is_empty() and int(gaps[i]) > int(plain[plain.size() - 1]) + 1:
 				gap_ok = false
+			plain.append(int(gaps[i]))
+		var h := floori(plain.size() / 2.0)
+		var s_lo := 0
+		var s_hi := 0
+		for i in plain.size():
 			if i < h:
-				s_lo += int(gaps[i])
-			elif i >= gaps.size() - h:
-				s_hi += int(gaps[i])
+				s_lo += int(plain[i])
+			elif i >= plain.size() - h:
+				s_hi += int(plain[i])
 		if h < 2 or s_hi >= s_lo:
 			gap_ok = false
-		gap_txt += "%s " % [gaps]
+		gap_txt += "%s%s " % [gaps, (" 삐걱에 비킴 %d" % yld) if yld > 0 else ""]
 		if bool(o.in_pool) or not bool(rr[1]) and float(rr[0]) < 1.0 and bool(o.moved):
 			pool_ok = false
 			pool_txt += "r%.2f 돎 %s · 앉음 %s " % [float(rr[0]), o.moved, o.in_pool]
@@ -1131,7 +1149,8 @@ func _run_tick() -> void:
 	_ok("⑭-b 칸 수가 식이다 (gn 0 → 6 · 1 → 22)",
 			n_ok and _tick_want(0.0) == 6 and _tick_want(1.0) == 22,
 			"식 %d · %d" % [_tick_want(0.0), _tick_want(1.0)])
-	_ok("⑭-c 1배 톡 사이가 %d프레임 밑으로 안 가고 갈수록 좁아진다" % gap_min, gap_ok, gap_txt)
+	_ok("⑭-c 1배 톡 사이가 %d프레임 밑으로 안 가고 갈수록 좁아진다(삐걱에 비킨 사이 빼고)" % gap_min,
+			gap_ok, gap_txt)
 	#  2.5배 — 칸을 소리 없이 넘는 프레임이 실제로 있어야(rose > heard) 이 줄이 뜻이 있다.
 	var fast_ok := true
 	var skipped := false
