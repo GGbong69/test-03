@@ -381,6 +381,7 @@ static func _card_big(g: Node) -> void:
 	g.card_item = ""
 	g.calc_lit = false
 	g.roll_t = -1.0
+	g.wind_on = false            # 앞 모음 걸음을 닫는다 — _next_step 머리와 같은 줄
 	g.last_gain = g._score_combine(g.cur_chip, g.cur_mult)
 	g.total_flash = 1.0
 	g.gain_roll = 1.0
@@ -3010,6 +3011,9 @@ static func _run(g: Node, e: Dictionary) -> void:
 					# 더해지고 Save.peak("best_gain") 이 앉는다(전설 동전 해금
 					# 문턱이 100,000 이다). 마지막 걸음이 끝나는 프레임에
 					# _card_big 이 합계 카드를 손으로 놓는다(2026-09-18).
+			# 모음 걸음 — 게임 큐처럼 합계 앞 마지막 걸음이다. 셈이 없는 걸음이라
+			# 그대로 큐에 넣어 _next_step 이 그린다(2026-10-06).
+			g.queue.append({"k": "wind"})
 			# _pace() 가 읽는 두 값이다. 안 놓으면 앞 정산의 값이 남아 배속이
 			# 틀린 채로 돈다. 배속은 걸음의 자리(settle_n − 남은 큐 − 1)로
 			# 서므로 큐 길이 그대로 놓아야 자리가 게임과 같다. 「한 방」의 합계

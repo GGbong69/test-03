@@ -741,7 +741,9 @@ var mult_j := 0.0              # 배수 칸의 춤 시계. 바뀐 칸만 튀어�
 var chip_amt := 0.30           # 그 춤의 크기. 「얼마나 바뀌었나 × 얼마나 큰 수인가」
 var mult_amt := 0.30
 var card_burst := 0.0          # 「한 방」의 금빛 테두리(판 뒤에 깔린다)
-var gain_roll := 0.0           # 합계의 수 굴리기(1 → 0 이면 0 → last_gain)
+var gain_roll := 0.0           # 합계 「+n」의 부풂(1 = 봉우리 · 0 = 36px). _gain_sz 가 읽는다
+var wind_t := 0.0              # 모음 걸음 시계(1 → 0). 걸음의 78% 에서 0 에 닿는다
+var wind_on := false           # 지금 걸음이 모음인가. _next_step 머리에서 내린다
 var card_jrate := 4.0          # 위 시계들의 감쇠. _next_step 끝에서 qt 에 맨다
 
 # ── 늦게 도착한 총합 · 잇는 선 (2026-09-26) ──────────────────
@@ -5216,7 +5218,8 @@ func _process(d: float) -> void:
 	# 매단 값(card_jrate)으로 바꿨다 — 고정 rate 는 양쪽 끝에서 다 틀린다.
 	# pace 0.30(걸음 0.102초)에서는 창 0.25초가 걸음 2.5개를 덮어 칸이 영영 부푼 채
 	# 앉고, total 걸음(0.884초)에서는 0.33초 만에 죽어 나머지 0.55초가 빈다.
-	# 굴림만 세 배로 깎는다 — 수가 다 서는 프레임이 봉우리와 같아야 한다(2026-09-18).
+	# 「+n」 부풂(gain_roll)만 세 배로 깎는다 — 내리친 봉우리가 걸음의 26% 안에
+	# 36px 로 앉는다(2026-10-06).
 	# **빨리 보기가 걸리면 춤도 같이 빨라진다.** 안 태우면 rate 2.5 에서 글자춤이
 	# 걸음보다 2.5배 길어져 다음 걸음으로 새어 나간다 — 걸음 시계와 이 다섯은
 	# 반드시 한 커밋에 있어야 하는 짝이다. card_jrate 의 식(_next_step 끝)은
@@ -5227,6 +5230,9 @@ func _process(d: float) -> void:
 	chip_j = maxf(chip_j - d * fast_rate * card_jrate, 0.0)
 	mult_j = maxf(mult_j - d * fast_rate * card_jrate, 0.0)
 	gain_roll = maxf(gain_roll - d * fast_rate * card_jrate * 3.0, 0.0)
+	#  모음 걸음도 같은 rate 다 — 걸음의 78% 에서 다 모이고 나머지 22% 는 모인
+	#  채 선다(wind_on 이 그 걸음 끝까지 참이다). 2026-10-06
+	wind_t = maxf(wind_t - d * fast_rate * card_jrate, 0.0)
 	#  상단 띠 굴림과 잇는 선도 **같은 시계**를 탄다(2026-09-26). 새 벽시계
 	#  상수가 0개인 근거가 이 두 줄이다 — card_jrate 가 qt 에 매여 있으므로
 	#  창이 걸음에 비례해 줄고, fast_rate 를 타므로 빨리 보기에서도 어긋날
@@ -7432,6 +7438,11 @@ func _land(mark := true) -> void:
 			queue.append({"k": "bal"})
 		elif score_mode == "rand":
 			queue.append({"k": "rnd"})
+		#  모음 — 합계 앞 한 걸음(0.7박). 두 칸이 「×」 쪽으로 모이고 소리가 없다.
+		#  연발은 남은 작은 다트가 있으면 안 세운다 — 마지막 발의 합계 앞에만 선다.
+		#  2026-10-06
+		if burst_hits.is_empty():
+			queue.append({"k": "wind"})
 		queue.append({"k": "total"})
 
 	# 통계는 해금 조건보다 **먼저** 세기 시작한다. 조건을 나중에 달면
@@ -7541,7 +7552,7 @@ const FAST := {"mul": 2.5, "floor": 4.0}
 var fast_mul := 2.5      # 개발자 사다리가 1.0 / 2.0 / 2.5 / 3.0 으로 민다
 var fast_lock := false   # 개발자 모드 전용 고정 — 안 눌러도 걸린다
 var fast_rate := 1.0     # 이번 프레임의 배수. _process 가 매 프레임 덮는다
-var step_pf := 0.0       # 이 걸음이 _fast_lim 에 대는 배수. 합계 걸음은 _tot_pace() · 그 밖 0
+var step_pf := 0.0       # _fast_lim 이 쓰는 이 걸음의 배수(0 이면 _pace()). 합계 _tot_pace() · 모음 × TALLY.wind
 
 #  개발자 손잡이 셋(2026-09-26). **게임 기본은 전부 「오늘 그대로」가 아니라
 #  「이 커밋 그대로」**다 — grow_roll 0 이 손대기 전 띠(벽시계 lerp)로 돌리는
@@ -7558,12 +7569,17 @@ var link_mode := 3       # 잇는 선 0 끔 · 1 판에서만 · 2 동전에서�
 #  (miss 1.4 · bal 1.6 · total 2.6~4.4 · 목표돌파 4.4배).
 #  합계 걸음은 _pace() 를 안 타므로 step_pf 가 그 걸음의 배수(_tot_pace)를 쥔다 —
 #  안 쥐면 열네 걸음 끝의 1.06초짜리 합계가 바닥 걸음 한도 1.71배에 묶인다.
+#  모음 걸음(0.7박 × _tot_pace)은 beat*_pace() 보다 **짧은** 유일한 갈래라 step_pf 가
+#  서면 _pace() 대신 그 값을 쓴다(maxf 가 아니다). maxf 면 앞자리(_pace 1)에서
+#  beat 0.24 밑의 2.5배 모음이 4프레임 밑으로 간다. 합계는 두 식이 같은 값이다
+#  (_tot_pace 가 연발 중간 발이면 _pace() · 아니면 1 ≥ _pace()). 2026-10-06
 #  곱하는 지점이 「프레임당 깎는 양」 한 축뿐이라 _pace 와 곱해져 9배가 되는
 #  사고가 구조적으로 없다 — _pace 는 qt 를 **세울 때** 쓰인다.
 #  curve_probe 가 beat 를 0.015 로 누르면 한도가 0.225 → maxf 로 1.0 이 되어
 #  **가속이 통째로 꺼진다**(정산이 900초를 넘기던 그 자리다). 2026-09-19
 func _fast_lim() -> float:
-	return maxf(beat * maxf(_pace(), step_pf) / (float(FAST.floor) / 60.0), 1.0)
+	var m := step_pf if step_pf > 0.0 else _pace()
+	return maxf(beat * m / (float(FAST.floor) / 60.0), 1.0)
 
 
 #  문지기 목록은 _ui_can_hover 의 표를 **그대로 빌린다** — 배움 · 연출 ·
@@ -7635,6 +7651,8 @@ func _next_step() -> void:
 	#  「선이 걸음을 못 넘는다」의 구조적 보장이기도 하다.
 	src_t = 0.0
 	src_slot = -1
+	#  모음은 제 걸음에서만 선다 — 합계 걸음이 서는 프레임에 내려 다음 발로 안 샌다.
+	wind_on = false
 
 	match st.k:
 		"miss":
@@ -7830,6 +7848,19 @@ func _next_step() -> void:
 			roll_t = 0.0
 			_sfx("settle_bal")
 			shake = 6.0
+		"wind":
+			#  ── 모음 (2026-10-06) ──
+			#  합계가 내리치기 전 한 걸음. 값도 소리도 안 바꾼다 — 침묵이 예비다.
+			#  두 칸이 「×」 쪽으로 10px 씩 모이고 「×」가 24 → 36px 로 자라며
+			#  밝아진다(_wind_e · _draw_card). 몸은 눌러만 두고 다음 합계 걸음의
+			#  채기가 띄운다. 이름 줄 · 출처 빛은 위 머리에서 이미 지웠다.
+			#  _pace() 를 안 타고 합계와 같은 배수(_tot_pace)다 — 긴 정산 끝에서도
+			#  0.7박(beat 0.38 에서 0.266초)이다. 4단은 이 침묵에 합계의 멈춤(0.120)이
+			#  이어져 0.39초 동안 소리가 없다.
+			qt = beat * float(TALLY.wind) * _tot_pace()
+			wind_t = 1.0
+			wind_on = true
+			_card_kick(0.0, float(CARDFX.press_total))
 		"total":
 			var was_short := total < target
 			last_gain = _score_combine(cur_chip, cur_mult)
@@ -7846,7 +7877,7 @@ func _next_step() -> void:
 			card_mode = 1
 			total_flash = 1.0
 			#  여태 +14 든 +1476 이든 9.0 이었다(2026-09-26). **카드는 이미 크기를
-			#  안다** — kick_big 34.0 으로 몸이 더 튀고 글자가 47~55px 로 자라며
+			#  안다** — kick_big 34.0 으로 몸이 더 튀고 글자가 46~61px 로 자라며
 			#  card_burst 가 걸린다. 모르는 것은 **화면 흔들림 하나뿐**이라 축이
 			#  하나 빠져 있었다. 조사는 「흔들림이 점수를 모른다」고 적었는데
 			#  정확히는 「카드는 아는데 화면만 모른다」다.
@@ -7878,9 +7909,9 @@ func _next_step() -> void:
 			#  4.4박 고정이다. 같은 함수를 dev 의 「한 방」 · 「총합 걸음 다시 보기」가
 			#  부른다(2026-10-06).
 			qt = _tot_qt(gn, brk)
-			# 런 통틀어 카드가 가장 크게 사는 자리다. 「+n」이 0 에서 굴러오르고
-			# 글자가 36 → 최대 55px 로 자라며, **굴림이 끝나는 프레임에 봉우리가
-			# 온다.** 수가 다 서는 그 프레임이 카드가 제일 큰 프레임이다.
+			# 런 통틀어 카드가 가장 크게 사는 자리다. 「+n」이 **온 값으로 내리치고**
+			# 그 프레임에 글자가 가장 크다(36 → 최대 61px · _gain_sz). 걸음의 26%
+			# 안에 36px 로 앉는다. 멈춤(hitstop) 동안은 봉우리에 선 채다. 2026-10-06
 			gain_roll = 1.0
 			#  ── 상단 띠 총합이 **처음으로 정산 시계를 탄다** (2026-09-26) ──
 			#  손대기 전 _tick_score 는 날것의 d 를 쓰는 벽시계 lerp 라 반감기
@@ -8018,20 +8049,24 @@ func _next_step() -> void:
 	#  계산하는 동안 탄다 — 합계 걸음은 _fire_arm 이 제 값으로 선다(2026-09-27).
 	if String(st.k) != "total":
 		_fire_live()
-	#  빨리 보기 한도가 읽는 이 걸음의 배수. 합계 걸음만 _pace() 를 안 타므로
-	#  그 배수를 따로 쥔다(_fast_lim). 2026-10-06
-	step_pf = _tot_pace() if String(st.k) == "total" else 0.0
+	#  빨리 보기 한도가 읽는 이 걸음의 배수. 합계 · 모음 걸음만 _pace() 를 안
+	#  타므로 그 배수를 따로 쥔다(_fast_lim). 2026-10-06
+	step_pf = 0.0
+	if String(st.k) == "total":
+		step_pf = _tot_pace()
+	elif String(st.k) == "wind":
+		step_pf = float(TALLY.wind) * _tot_pace()
 
 	# ── 카드 시계를 이 걸음의 **실제 길이**에 맨다 ────────────────────
 	# 이 설계에서 가장 중요한 한 줄이고, **반드시 함수의 마지막 줄**이어야 한다 —
-	# 위 match 에서 qt 를 덮는 갈래가 다섯(miss · bal · rnd · total · 목표돌파)이라
-	# 중간에 두면 그 다섯이 전부 틀린 창을 쓴다.
+	# 위 match 에서 qt 를 덮는 갈래가 여섯(miss · bal · rnd · wind · total · 목표돌파)이라
+	# 중간에 두면 그 여섯이 전부 틀린 창을 쓴다.
 	#
 	# 실시간 상수(0.25 같은)로 박으면 curve_probe 가 beat 를 0.015 로 눌렀을 때
 	# 창만 안 줄어 2026-09-15 의 「16런이 900초를 넘김」이 되살아난다. qt 를 곱하면
 	# 창도 같이 0.012초로 줄어 그 길이 막힌다.
 	#
-	# 회귀(beat 0.38): pace 1.0 chip 걸음 → 3.37 · 저울 → 2.11 ·
+	# 회귀(beat 0.38): pace 1.0 chip 걸음 → 3.37 · 저울 → 2.11 · 모음 → 4.82 ·
 	# 합계 → 1.21(gn 0) ~ 0.77(gn 1) · 목표돌파 → 0.80.
 	#
 	# 빨리 보기(fast_rate)는 이 식을 **안 고친다**. qt 는 이름값 그대로 서고
@@ -8272,13 +8307,35 @@ func _fire_release() -> void:
 		fire_snd = 0.0
 
 
-# 합계 걸음에서 보이는 「+n」. 0 에서 굴러올라 **봉우리와 같은 프레임에 선다** —
-# 수가 다 서는 그 프레임이 카드가 제일 큰 프레임이다. floor 라 정수만 보인다.
+# 합계 걸음에서 보이는 「+n」. **온 값으로 내리친다**(2026-10-06) — 0 에서 굴러오르던
+# 0.23초는 칸이 값을 다 세우기도 전에 끝나 오름이 안 읽혔다. 오름은 상단 띠가 맡고
+# 카드는 크기(_gain_sz)로 친다.
 func _card_gain() -> int:
+	return last_gain
+
+
+# 「+n」의 글자 크기. 내리치는 프레임(gain_roll 1)이 봉우리고 걸음의 26% 안에 36 으로
+# 앉는다 — 36 × (1 + amt × gain_roll²). amt 는 크기(gn)와 자릿수가 같이 고른다:
+# amt_tot0 + amt_tot_gn × gn + amt_tot × 자릿수, 상한 amt_tot_cap(61px).
+# 모션 끄기는 36 고정이다. 순수 함수라 qa_total 이 그리는 쪽과 같은 답을 읽는다.
+func _gain_sz() -> int:
 	if motion_off:
-		return last_gain
-	var k := 1.0 - clampf(gain_roll, 0.0, 1.0)
-	return int(floor(float(last_gain) * (1.0 - pow(1.0 - k, 3.0))))
+		return 36
+	var mag := clampf(floor(log(maxf(float(absi(last_gain)), 1.0)) / log(10.0)), 0.0, 6.0)
+	var amt := clampf(float(CARDFX.amt_tot0) + float(CARDFX.amt_tot_gn) * _grow_n()
+			+ float(CARDFX.amt_tot) * mag,
+			float(CARDFX.amt_tot0), float(CARDFX.amt_tot_cap))
+	var k := clampf(gain_roll, 0.0, 1.0)
+	return int(36.0 * (1.0 + amt * k * k))
+
+
+# 모음 걸음의 진행(0 → 1). ease-in 이라 끝으로 갈수록 빨리 모이고, 시계가 0 에 닿은
+# 뒤(걸음의 마지막 22%)는 1 에 선다. 모음 걸음 밖이면 0 이다(wind_on).
+func _wind_e() -> float:
+	if not wind_on:
+		return 0.0
+	var u := 1.0 - clampf(wind_t, 0.0, 1.0)
+	return u * u
 
 
 # 몸에 한 번 채기. **대입이 아니라 덧셈이다** — 걸음이 촘촘하면 쌓여서 저절로
@@ -8319,6 +8376,8 @@ func _card_reset() -> void:
 	gain_roll = 0.0
 	card_jrate = 4.0
 	total_flash = 0.0
+	wind_t = 0.0
+	wind_on = false
 	#  ⚠ 안 적으면 total_flash 가 겪은 사고(바로 위 주석: 「어디서도 안 지워졌다」)를
 	#  그대로 되풀이한다 — 판이 바뀌거나 런이 바뀔 때 앞 정산의 굴림과 선이 남는다.
 	#  settle_probe ④ 가 score_roll 0 을 전제로 _tick_score 를 600번 직접 부르는
@@ -35374,6 +35433,20 @@ func _card_box_ys() -> Array:
 	return [_ink_half(top + nh), _ink_half(top + nh + gap + la * float(INK.top))]
 
 
+#  두 칸 사이의 「×」. 쉴 때는 24px · C_DIM 으로 수의 바닥선에 선다. 모음 걸음(e)에서
+#  24 → 36px 로 자라고 C_LIGHT 쪽으로 밝는다. 잉크 가운데(바닥선 위 ascent × INK.num
+#  ÷ 2)를 24 의 자리에 붙들어 커져도 제자리에서 자란다. 모션 끄기는 색만 바뀐다.
+#  두 칸 **뒤에** 그린다 — 모인 칸 판이 「×」를 덮지 않는다. 2026-10-06
+func _card_times(p: Vector2, e: float) -> void:
+	var sz := 24 if motion_off else int(24.0 * (1.0 + float(CARDFX.wind_x) * e))
+	var y := float(_card_box_ys()[0])
+	if font != null:
+		y += (font.get_ascent(sz) - font.get_ascent(24)) * float(INK.num) * 0.5
+	var cx := (float(CARDTXT.box_x1) + float(CARDTXT.box_w) + float(CARDTXT.box_x2)) * 0.5
+	draw_string(font, p + Vector2(cx - float(sz) * 0.5, _ink_half(y)), "×",
+			HORIZONTAL_ALIGNMENT_CENTER, float(sz), sz, C_DIM.lerp(C_LIGHT, e))
+
+
 #  카드 밑 한 줄(발동한 동전 · 셈의 출처). 11 → 18(갈무리9 두 배)로 올리되,
 #  카드 폭(CARD_W − 20 = 224)에 안 들면 작은 단으로 둔다. fit 은 크기를 재는 말이다 —
 #  구르는 동안 말이 「버린다」 → 「버리고 새로 뽑았다」 로 길어지는 자리에서
@@ -35425,9 +35498,15 @@ const CARDFX := {
 	# 상한 0.45 는 오늘 calc_flash 의 24 × 1.45 = 34 와 **같은 자리**라
 	# 칸 잘림 위험이 한 픽셀도 안 는다.
 	"amt0": 0.15, "amt_share": 0.22, "amt_mag": 0.030, "amt_cap": 0.45,
-	# 총점 — 두 자리 47 · 네 자리 52 · 다섯 자리 55. 상한 0.55 도 오늘 값 그대로고
-	# shot_text_a 가 이미 "+99999" × 1.55 를 찍어 두었다.
-	"amt_tot0": 0.26, "amt_tot": 0.07, "amt_tot_cap": 0.55,
+	# 총점 「+n」 봉우리(_gain_sz) — 바닥 0.30 + 크기(gn) 0.30 + 자릿수마다 0.03 ·
+	# 상한 0.70. 두 자리 gn 0 → 47 · 세 자리 gn 0.4 → 53 · gn 1 네 자리 → 60 ·
+	# 다섯 자리 → 61px(「+99999」는 폭 CARD_W − 16 에 걸려 _fit_sz 가 57 로 내린다).
+	# 61 의 잉크 윗변은 카드 판 윗변 밑 7.6px 다(ascent 60 × INK.num 0.79 = 47.4 ·
+	# 바닥선 55 · qa_total ①-f). shot_text_a 가 card_y 74 · 206 리프트 7px 로 찍는다.
+	# 2026-10-06
+	"amt_tot0": 0.30, "amt_tot": 0.03, "amt_tot_gn": 0.30, "amt_tot_cap": 0.70,
+	# 모음 걸음 — 두 칸이 「×」 쪽으로 다가가는 px · 「×」가 자라는 몫(24 → 36).
+	"wind_dx": 10.0, "wind_x": 0.5,
 
 	# 몸에 넣는 힘. 위 0.03805 를 곱하면 뜨는 픽셀이 나온다.
 	"kick": 16.0,        # 보통 걸음 → pop 0.609 → 4px
@@ -35539,6 +35618,7 @@ const TALLY := {
 	"tot_gn": 1.6,   # gn 1 에서 더하는 박 — 합 4.4박 · 1.672초
 	"mid": 2.6,      # 연발 중간 발의 합계. × _pace() — 바닥에서 0.296초
 	"brk": 4.4,      # 목표를 넘기는 걸음. 크기와 무관 — 1.672초
+	"wind": 0.7,     # 합계 앞 모음 걸음. × _tot_pace() — 0.266초
 }
 
 
@@ -35717,6 +35797,10 @@ func _draw_card() -> void:
 	_panel(Rect2(p, Vector2(CARD_W, CARD_H)), true)
 
 	if card_mode == 0:
+		#  모음 걸음(2026-10-06) — 두 칸이 「×」 쪽으로 wind_dx 씩 다가간다. 모션을
+		#  끄면 안 움직이고 「×」 색만 밝는다(_card_times).
+		var we := _wind_e()
+		var wdx := 0.0 if motion_off else roundf(float(CARDFX.wind_dx) * we)
 		if calc_lit:
 			# 저울 — 두 칸이 다트통 색을 입고 두 수가 같아진다. 바뀐 순간만
 			# 희게 달아오르고 글자가 한 번 부푼다. 그 둘이 「방금 바뀌었다」를
@@ -35753,12 +35837,11 @@ func _draw_card() -> void:
 				s2 = _roll_sz(rk, float(RND.lock2))
 				d1 = 0.0
 				d2 = 0.0
-			_card_box(p, float(CARDTXT.box_x1), float(CARDTXT.box_w),
+			_card_box(p, float(CARDTXT.box_x1) + wdx, float(CARDTXT.box_w),
 					bcol, f1, "점수", s1, d1)
-			draw_string(font, p + Vector2(110, float(_card_box_ys()[0])), "×",
-					HORIZONTAL_ALIGNMENT_CENTER, 24, 24, C_DIM)
-			_card_box(p, float(CARDTXT.box_x2), float(CARDTXT.box_w),
+			_card_box(p, float(CARDTXT.box_x2) - wdx, float(CARDTXT.box_w),
 					bcol, f2, "배수", s2, d2)
+			_card_times(p, we)
 			# 이 수가 어디서 왔는지는 이 한 줄에만 있다. 동전 이름이 서던
 			# 자리를 빌린다 — 이 걸음에는 발동하는 동전이 없다.
 			var cl := "%d + %d ÷ 2" % [calc_c, calc_m]
@@ -35782,37 +35865,30 @@ func _draw_card() -> void:
 			#  옆 칸은 제 색으로 가만있는다 — 그 대비가 정보량의 전부다(2026-09-18).
 			var jc := _card_juice(chip_j)
 			var jm := _card_juice(mult_j)
-			_card_box(p, float(CARDTXT.box_x1), float(CARDTXT.box_w),
+			_card_box(p, float(CARDTXT.box_x1) + wdx, float(CARDTXT.box_w),
 					C_CHIP.lerp(Color(1.0, 1.0, 1.0), float(CARDFX.warm) * chip_j),
 					str(cur_chip), "점수",
 					_fit_sz(str(cur_chip), 94.0,
 							int(24.0 * (1.0 + chip_amt * maxf(jc, 0.0)))),
 					roundf(float(CARDFX.squash) * maxf(-jc, 0.0)))
-			draw_string(font, p + Vector2(110, float(_card_box_ys()[0])), "×",
-					HORIZONTAL_ALIGNMENT_CENTER, 24, 24, C_DIM)
-			_card_box(p, float(CARDTXT.box_x2), float(CARDTXT.box_w),
+			_card_box(p, float(CARDTXT.box_x2) - wdx, float(CARDTXT.box_w),
 					C_MULT.lerp(Color(1.0, 1.0, 1.0), float(CARDFX.warm) * mult_j),
 					str(cur_mult), "배수",
 					_fit_sz(str(cur_mult), 94.0,
 							int(24.0 * (1.0 + mult_amt * maxf(jm, 0.0)))),
 					roundf(float(CARDFX.squash) * maxf(-jm, 0.0)))
+			_card_times(p, we)
 			if card_item != "":
 				_card_line(p, float(CARDTXT.line_mid), card_item, card_item)
 	else:
-		#  총점 34 → 36 — 달아오르는 순간만 커졌다 돌아온다. 바닥선은 멎은 크기(36)로
-		#  두 칸 자리의 가운데(total_mid)에서 잰다 — 55 · 잉크 y[26.5,55]. 부풀 때는 위로 자란다.
-		#  자릿수가 크기를 고른다 — 두 자리 47 · 네 자리 52 · 다섯 자리 55.
-		#  상한 0.55 는 오늘 값 그대로라 shot_text_a 가 이미 "+99999" × 1.55 를
-		#  찍어 검증해 뒀다. **숫자로 더 올리려면 font.get_ascent × INK.num 으로
-		#  재야 한다** — 박아 두면 글꼴이 바뀔 때 카드 위로 샌다(2026-09-18).
-		var mag := clampf(floor(log(maxf(float(absi(last_gain)), 1.0)) / log(10.0)), 0.0, 6.0)
-		var amt := clampf(float(CARDFX.amt_tot0) + float(CARDFX.amt_tot) * mag,
-				float(CARDFX.amt_tot0), float(CARDFX.amt_tot_cap))
-		var jt := _card_juice(total_flash)
-		#  수가 0 에서 굴러오른다. 굴림이 끝나는 프레임이 곧 봉우리다 —
-		#  **수가 다 서는 그 프레임에 카드가 제일 크다.**
+		#  총점 34 → 36 — 내리치는 프레임에 가장 크고 걸음의 26% 안에 36 으로 앉는다.
+		#  바닥선은 멎은 크기(36)로 두 칸 자리의 가운데(total_mid)에서 잰다 — 55 · 잉크 y[26.5,55].
+		#  부풀 때는 위로 자란다. 봉우리는 크기(gn)와 자릿수가 고른다(_gain_sz ·
+		#  46~61px). 상한 61px 의 잉크 윗변을 font.get_ascent × INK.num 으로 재 카드
+		#  안에 드는 것을 qa_total ①-f 가 잠근다 — 박아 두면 글꼴이 바뀔 때 카드 위로
+		#  샌다(2026-09-18). 예비 눌림은 앞 모음 걸음이 맡는다(2026-10-06).
 		var gtxt := "+" + str(_card_gain())
-		var sz := _fit_sz(gtxt, CARD_W - 16.0, int(36.0 * (1.0 + amt * maxf(jt, 0.0))))
+		var sz := _fit_sz(gtxt, CARD_W - 16.0, _gain_sz())
 		#  C_ACC → C_LIGHT (2026-09-26). C_ACC(f2b134)가 한 화면에서 셋을 말하고
 		#  있었다 — 여기 「+n」 · 「목표 달성」 팝 · 판 위 강조. 게다가 C_ACC(39.5°)와
 		#  C_GOLD(45.2°)는 5.7° 차 · 대비 1.19:1 이라 **총합과 돈이 같은 호박색**이다.
@@ -35821,10 +35897,9 @@ func _draw_card() -> void:
 		#  배경 대비 14.00:1 로 카드 위 무엇보다 밝고(C_ACC 9.84 · C_GOLD 11.71)
 		#  색상 정보를 안 쓰므로 색각 이상에서 불변이다.
 		#  **고정색이다** — 세기를 C_TXT 로 lerp 하는 길은 두 끝 상호 대비가
-		#  1.16:1(문턱 밑)이라 뺐다. 세기는 크기(36→55px)·굴림·흔들림 셋이
+		#  1.16:1(문턱 밑)이라 뺐다. 세기는 크기(36→61px)·흔들림·띠 굴림 셋이
 		#  이미 말하고, 그 순간 눈이 1.16:1 을 읽을 수 없다.
-		draw_string(font, p + Vector2(0, _ink_mid_y(float(CARDTXT.total_mid), 36)
-				+ roundf(float(CARDFX.squash) * maxf(-jt, 0.0))), gtxt,
+		draw_string(font, p + Vector2(0, _ink_mid_y(float(CARDTXT.total_mid), 36)), gtxt,
 				HORIZONTAL_ALIGNMENT_CENTER, CARD_W, sz, C_LIGHT)
 		# 저울은 곱한 두 수가 같아서 「53 × 53」만 적으면 어디서 온 값인지가
 		# 사라진다. 방금 지나간 걸음을 한 줄로 되짚어 준다 — 카드가 닫히기

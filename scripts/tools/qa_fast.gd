@@ -127,8 +127,17 @@ func _stage(n: int, sn := -1) -> void:
 #    steps    걸음마다 쓴 프레임 수
 #    two      한 프레임에 두 걸음이 난 적이 있나
 #    leak     걸음 안에서 chip_j 가 0 에 못 닿은 적이 있나(카드 춤이 샜다)
-func _play(n: int, hold: bool, sn := -1) -> Dictionary:
+#    wind_leak · wind_top   모음 시계(wind_t)가 걸음 안에서 0 에 못 닿은 적이
+#             있나 · 그 시계가 선 가장 큰 값
+#  q 를 주면 chip 줄 대신 그 큐를 세운다(목표는 안 넘기게 올린다).
+func _play(n: int, hold: bool, sn := -1, q := []) -> Dictionary:
 	_stage(n, sn)
+	if not q.is_empty():
+		g.queue = q.duplicate(true)
+		g.settle_n = sn if sn > 0 else q.size()
+		g.target = 100000
+		g.total = 0
+		g.qt = g.beat * g._pace()
 	#  골드는 **차이로 잰다.** _start_leg 가 판마다 이자를 얹으므로 절대값은
 	#  검사를 거듭할수록 는다 — 그것은 게임이 아니라 이 자의 박자다.
 	var gold0: int = g.gold
@@ -142,6 +151,9 @@ func _play(n: int, hold: bool, sn := -1) -> Dictionary:
 	var danced := false
 	var src_leak := false
 	var src_danced := false
+	var wind_leak := false
+	var wind_danced := false
+	var wind_top := 0.0
 	while g.state == g.S.RESOLVE and frames < 4000:
 		var ps0: int = g.pitch_step
 		g._process(1.0 / 60.0)
@@ -149,6 +161,9 @@ func _play(n: int, hold: bool, sn := -1) -> Dictionary:
 		cur += 1
 		if g.chip_j <= 0.0:
 			danced = true
+		#  모음 시계(wind_t)도 같은 자로 잰다. 2026-10-06
+		if g.wind_t <= 0.0:
+			wind_danced = true
 		#  출처 빛도 같은 시계를 탄다 — 카드 춤과 **같은 자로** 잰다.
 		#  2026-09-25
 		if g.src_t <= 0.0:
@@ -161,24 +176,29 @@ func _play(n: int, hold: bool, sn := -1) -> Dictionary:
 			if steps.size() > 0 and not src_danced:
 				src_leak = true
 			src_danced = false
+			if steps.size() > 0 and not wind_danced:
+				wind_leak = true
+			wind_danced = false
 			if g.pitch_step - ps0 > 1:
 				two = true
 			steps.append(cur)
 			cur = 0
 			danced = false
+		wind_top = maxf(wind_top, g.wind_t)
 	if hold:
 		_btn(false)
 	return {"frames": frames, "steps": steps, "two": two, "leak": leak,
-			"src_leak": src_leak,
+			"src_leak": src_leak, "wind_leak": wind_leak, "wind_top": wind_top,
 			"pitch": g.pitch_step, "total": g.total, "gold": g.gold - gold0,
 			"chip": g.cur_chip, "mult": g.cur_mult, "shown": g.shown,
 			#  ⚠ 「정산이 끝나면 카드 시계가 다 0」을 재는 그물이 **넷만 보고**
 			#  있었다. score_roll·src_t 를 안 적으면 정산 뒤에 굴림과 선이 남는
 			#  것을 아무도 못 본다 — total_flash 가 이미 한 번 겪은 사고다
 			#  (_card_reset 주석: 「어디서도 안 지워졌다」). 2026-09-26
+			#  모음 시계(wind_t)도 같은 그물에 든다. 2026-10-06
 			"flash": maxf(maxf(maxf(g.total_flash, g.chip_j),
 					maxf(g.mult_j, g.gain_roll)),
-					maxf(g.score_roll, g.src_t))}
+					maxf(maxf(g.score_roll, g.src_t), g.wind_t))}
 
 
 func _min_step(steps: Array) -> int:
@@ -313,6 +333,62 @@ func _run() -> void:
 	_ok("ⓞ 바닥 자리의 합계 걸음이 2.5배다",
 			is_equal_approx(rt_tot, 2.5) and lim_cnt < 2.5,
 			"합계 %.2f배 · 같은 자리 셈 걸음 한도 %.2f배" % [rt_tot, lim_cnt])
+
+	# ── ⓟ 모음 걸음 — 시계가 걸음 안에서 끝나고 2.5배를 그대로 탄다 (2026-10-06) ──
+	#  [점수 · 배수 · 모음 · 합계] 를 보통 · 빨리 보기로 돌린다. steps[3] 이 모음
+	#  걸음이다(steps[0] 은 머리 숨). 모음 걸음은 _pace() 를 안 타므로 바닥 자리
+	#  (자리 38)에서도 step_pf 가 한도를 쥔다 — 합계 걸음 ⓞ 와 같은 자리다.
+	var wq := [{"k": "chip", "v": 40}, {"k": "mult", "v": 3}, {"k": "wind"},
+			{"k": "total"}]
+	var wslow := _play(0, false, -1, wq)
+	var wfast := _play(0, true, -1, wq)
+	_ok("ⓟ 모음 시계가 걸음 안에서 끝난다 (1배 · 2.5배)",
+			wslow.wind_top >= 1.0 - 0.0001 and wfast.wind_top >= 1.0 - 0.0001
+			and not wslow.wind_leak and not wfast.wind_leak,
+			"최대 %.2f · %.2f" % [wslow.wind_top, wfast.wind_top])
+	_ok("ⓟ-b 정산이 끝나면 모음 시계도 0", wslow.flash <= 0.0001
+			and wfast.flash <= 0.0001 and g.wind_t <= 0.0001,
+			"최대 %.4f · %.4f" % [wslow.flash, wfast.flash])
+	var wf_want: int = int(ceil(g.beat * float(g.TALLY.wind) * 60.0))
+	var wf_fast: int = int(ceil(g.beat * float(g.TALLY.wind) * 60.0 / 2.5))
+	_ok("ⓟ-c 모음 걸음이 이름값 그대로 서고 2.5배로 준다",
+			(wslow.steps as Array).size() >= 4 and (wfast.steps as Array).size() >= 4
+			and absi(int(wslow.steps[3]) - wf_want) <= 1
+			and absi(int(wfast.steps[3]) - wf_fast) <= 1,
+			"%d → %d프레임 (식 %d → %d)" % [int(wslow.steps[3]),
+					int(wfast.steps[3]), wf_want, wf_fast])
+	_stage(1, 40)
+	g.queue = [{"k": "wind"}, {"k": "total"}]
+	g.cur_chip = 40
+	g.cur_mult = 1
+	g.target = 100000
+	g.total = 0
+	g._next_step()                   # 자리 38
+	_btn(true)
+	var rt_wd: float = g._fast_rate()
+	_btn(false)
+	_ok("ⓟ-d 바닥 자리의 모음 걸음이 2.5배다", is_equal_approx(rt_wd, 2.5),
+			"모음 %.2f배 · 그 자리 배수 %.2f" % [rt_wd, g._pace()])
+	#  모음은 beat*_pace() 보다 짧은 걸음이라 한도가 _pace() 가 아니라 제 배수로
+	#  서야 바닥(4프레임)이 산다. 앞자리(_pace 1)에서 박자를 0.20 으로 눌러 잰다 —
+	#  maxf(_pace(), …) 로 서면 2.5배에서 3.4프레임이 된다.
+	var b_wd: float = g.beat
+	g.beat = 0.20
+	_stage(1, 3)
+	g.queue = [{"k": "wind"}, {"k": "total"}]
+	g.cur_chip = 40
+	g.cur_mult = 1
+	g.target = 100000
+	g.total = 0
+	g._next_step()                   # 자리 1 · _pace() 1.0
+	_btn(true)
+	var rt_lo: float = g._fast_rate()
+	_btn(false)
+	var wd_fr: float = g.qt * 60.0 / maxf(rt_lo, 1.0)
+	g.beat = b_wd
+	_ok("ⓟ-e 눌린 박자의 모음 걸음도 4프레임 밑으로 안 간다",
+			wd_fr >= float(g.FAST.floor) - 0.001 and rt_lo > 1.0,
+			"%.2f배 → %.2f프레임 (그 자리 배수 %.2f)" % [rt_lo, wd_fr, g._pace()])
 
 	# ── ⓖ 떼면 그 프레임부터 제 속도 ──────────────────────
 	_stage(8)

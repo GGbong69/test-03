@@ -203,6 +203,87 @@ func _run() -> void:
 			_spread(fr_hi) <= 1 and hi_fit,
 			"r %s → %s프레임 · 식 %.1f" % [hi_r, fr_hi, want_hi * 60.0])
 
+	# ── ①-c 모음 걸음이 합계 앞에 제 길이만큼 선다 (2026-10-06) ──
+	#  [합계] 와 [모음, 합계] 를 같은 값으로 돌린다. 걸음별 프레임은 pitch_step 으로
+	#  가른다(0 머리 숨 · 1 · 2). 합계 걸음은 두 큐에서 같은 프레임이고, 전체는
+	#  그 위에 모음 걸음(beat × TALLY.wind)만큼 는다.
+	#  「+n」은 내리치는 프레임에 **온 값**이다 — 0 에서 굴러오르지 않는다.
+	var segs := []
+	var slam_ok := true
+	var slam_txt := ""
+	for wq in [false, true]:
+		_stage_total(0.40, 1)
+		if wq:
+			g.queue.push_front({"k": "wind"})
+			g.settle_n = 2
+		var seg := [0, 0, 0]
+		var cf := 0
+		while g.state == g.S.RESOLVE and cf < 4000:
+			var ps1: int = g.pitch_step
+			g._process(1.0 / 60.0)
+			cf += 1
+			seg[mini(g.pitch_step, 2)] += 1
+			if g.pitch_step > ps1 and g.card_mode == 1:
+				if g.last_gain <= 0 or g._card_gain() != g.last_gain \
+						or not is_equal_approx(g.gain_roll, 1.0):
+					slam_ok = false
+				slam_txt += "+%d/%d · " % [g._card_gain(), g.last_gain]
+		segs.append(seg)
+	var tot_bare: int = int(segs[0][1])
+	var wd_f: int = int(segs[1][1])
+	var tot_wd: int = int(segs[1][2])
+	var wd_want: float = g.beat * float(tl.wind) * 60.0
+	_ok("①-c 모음 걸음이 합계 앞에 제 길이로 선다",
+			tot_wd == tot_bare and int(segs[1][0]) == int(segs[0][0])
+			and wd_f >= int(floor(wd_want)) and wd_f <= int(ceil(wd_want)) + 1,
+			"머리 %d · 모음 %d (식 %.1f) · 합계 %d ↔ 모음 없이 %d"
+			% [segs[1][0], wd_f, wd_want, tot_wd, tot_bare])
+	_ok("①-d 「+n」이 내리치는 프레임에 온 값이다", slam_ok and slam_txt != "",
+			slam_txt)
+
+	# ── ①-e 「+n」 봉우리가 크기를 따라 안 줄고 카드 안에 든다 (2026-10-06) ──
+	#  크기 = 36 × (1 + amt × gain_roll²) · amt = amt_tot0 + amt_tot_gn × gn +
+	#  amt_tot × 자릿수(상한 amt_tot_cap). 봉우리는 gain_roll 1 의 프레임이다.
+	#  잉크 윗변은 바닥선(total_mid 의 36 자리) − ascent × INK.num 으로 잰다 —
+	#  카드 판 윗변(0) 밑이어야 한다. 몸이 뜨면 판과 글자가 같이 뜨므로 이 차는
+	#  카드 자리(74 · 206)와 리프트에 안 매인다.
+	#  ⚠ 이 도구는 _initialize 에서 돌아 _ready 전이라 g.font 가 비어 있다 — 그러면
+	#  _ink_mid_y 가 ascent 를 크기로 어림한다. 재는 동안만 진짜 글꼴을 쥐여 준다.
+	var font0 = g.font
+	if g.font == null:
+		g.font = load(g.FONT_PATH)
+	var pk_prev := 0
+	var pk_mono := true
+	var pk_max := 0
+	var pk_txt := ""
+	g.target = 1000
+	g.gain_roll = 1.0
+	for rr in [0.001, 0.01, 0.05, 0.10, 0.216, 0.50, 1.0, 2.0, 10.0, 100.0, 1000.0]:
+		g.last_gain = int(round(float(rr) * 1000.0))
+		var pz: int = g._gain_sz()
+		if pz < pk_prev:
+			pk_mono = false
+		pk_prev = pz
+		pk_max = maxi(pk_max, pz)
+		pk_txt += "%d " % pz
+	var cap_sz: int = int(36.0 * (1.0 + float(g.CARDFX.amt_tot_cap)))
+	var base_y: float = g._ink_mid_y(float(g.CARDTXT.total_mid), 36)
+	var ink_top: float = -1.0
+	if g.font != null:
+		ink_top = base_y - g.font.get_ascent(pk_max) * float(g.INK.num)
+	g.font = font0
+	_ok("①-e 봉우리가 크기를 따라 안 준다 · 상한 안이다",
+			pk_mono and pk_max <= cap_sz and pk_max > 36, "%s(상한 %d)" % [pk_txt, cap_sz])
+	_ok("①-f 가장 큰 봉우리의 잉크가 카드 안이다", ink_top >= 0.0,
+			"%dpx · 바닥선 %.1f − 잉크 %.1f = 윗변 %.1f"
+			% [pk_max, base_y, base_y - ink_top, ink_top])
+	g.motion_off = true
+	var mo_sz: int = g._gain_sz()
+	g.motion_off = false
+	g.gain_roll = 0.0
+	_ok("①-g 모션 끄기 · 앉은 뒤에는 36px 이다",
+			mo_sz == 36 and g._gain_sz() == 36, "모션 끔 %d · 앉음 %d" % [mo_sz, g._gain_sz()])
+
 	# ── ② 굴림 창이 언제나 걸음 안에서 끝난다 ────────────
 	#  창÷qt 를 스무 갈래에서 잰다. **새 벽시계 상수가 하나라도 박혔으면
 	#  beat 0.015 에서만 터진다** — curve_probe 가 그 값을 쓴다.

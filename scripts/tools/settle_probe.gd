@@ -292,6 +292,39 @@ func _initialize() -> void:
 	_say(String(g.card_item) != "", "제 라벨을 세우는 갈래는 그대로",
 			"'%s'" % g.card_item)
 
+	# ── 모음 걸음(wind)은 값도 소리도 안 바꾼다 (2026-10-06) ──────
+	#  합계 앞 한 걸음이다. 두 칸 · 총점을 그대로 두고, 앞 걸음의 이름 줄과
+	#  출처 빛을 지우고, 소리를 한 번도 안 낸다. 소리는 두 길로 센다 — 파일 자리가
+	#  있으면 sfx_next 가 돌고, 없으면(_initialize 라 _ready 전이다) 합성음 env 가
+	#  선다. 바로 앞 pierce 걸음이 그 둘 중 하나를 세우는 것을 먼저 봐 자가 사는지 댄다.
+	g.cur_chip = 40
+	g.cur_mult = 3
+	g.total = 7
+	g.queue = [{"k": "pierce", "v": 4}, {"k": "wind"}]
+	g.env = 0.0
+	var sn_p: int = g.sfx_next
+	g._next_step()
+	var p_snd: bool = g.sfx_next != sn_p or g.env > 0.0
+	var w_c: int = g.cur_chip
+	var w_m: int = g.cur_mult
+	var w_lbl := String(g.card_item)
+	var w_ps: int = g.pitch_step
+	g.env = 0.0
+	var sn_w: int = g.sfx_next
+	g._next_step()
+	var w_snd: bool = g.sfx_next != sn_w or g.env > 0.0
+	_say(g.cur_chip == w_c and g.cur_mult == w_m and g.total == 7
+			and w_lbl != "" and String(g.card_item) == "" and is_zero_approx(g.src_t)
+			and g.pitch_step == w_ps + 1 and g.card_mode == 0
+			and is_equal_approx(g.wind_t, 1.0)
+			and is_equal_approx(g.qt, g.beat * float(g.TALLY.wind)),
+			"모음 걸음은 값을 안 바꾸고 이름 줄 · 빛을 지운다",
+			"%d × %d · 총점 %d · 줄 '%s' → '%s' · 빛 %.2f · 시계 %.2f · qt %.3f"
+			% [g.cur_chip, g.cur_mult, g.total, w_lbl, g.card_item, g.src_t,
+					g.wind_t, g.qt])
+	_say(p_snd and not w_snd, "모음 걸음은 소리를 안 낸다",
+			"앞 걸음 소리 %s · 모음 걸음 소리 %s" % [p_snd, w_snd])
+
 	# ── 출처가 **맞는 물건**을 짚는가 (2026-09-25) ─────────────
 	#  이 일의 치명상이 여기다 — 틀린 칸이나 틀린 고리를 밝히면 연출이
 	#  거짓말을 하는 것이고, 그건 아무것도 안 밝히는 것보다 나쁘다.
@@ -443,5 +476,5 @@ func _initialize() -> void:
 	_say(geo_ok, "넓은 띠만 안팎 경계로 갈린다 — 트리플 · 더블은 통째로",
 			"경계 %.1fpx · %s" % [ew, " · ".join(geo)])
 
-	print("\n%s" % ("실패 %d건" % fails if fails > 0 else "스물여덟 검사 전부 통과"))
+	print("\n%s" % ("실패 %d건" % fails if fails > 0 else "스물아홉 검사 전부 통과"))
 	quit(mini(fails, 125))

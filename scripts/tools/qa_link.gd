@@ -190,6 +190,24 @@ func _run() -> void:
 	_stage([{"k": "rnd"}])
 	var wr := _walk()
 	_ok("⑭-c 물음표에 선이 안 난다", wr.calls == 0, "%d 호출" % wr.calls)
+	#  모음 걸음(2026-10-06)도 출처가 없다. 바로 앞 chip 걸음이 선을 세운 채
+	#  넘어가므로, 모음 걸음(pitch_step 2) 프레임에서만 센다.
+	_stage([_chip(40), {"k": "wind"}])
+	var wd_calls := 0
+	var wd_fr := 0
+	var ch_calls := 0
+	while g.state == g.S.RESOLVE and wd_fr < 900:
+		g._process(1.0 / 60.0)
+		wd_fr += 1
+		var pw: Dictionary = g._link_plan()
+		if pw.is_empty():
+			continue
+		if g.pitch_step == 1:
+			ch_calls += 1
+		elif g.pitch_step == 2:
+			wd_calls += 1
+	_ok("⑭-g 모음 걸음에 선이 안 난다", ch_calls > 0 and wd_calls == 0,
+			"앞 chip 걸음 %d프레임 · 모음 걸음 %d프레임" % [ch_calls, wd_calls])
 
 	# ── ⑭-d 0 만큼 바뀐 걸음은 선을 안 낸다 ───────────────
 	#  판 칸 춤과 **같은 가드**를 물려받았는지. mult_rand 는 0 을 실제로 굴린다.

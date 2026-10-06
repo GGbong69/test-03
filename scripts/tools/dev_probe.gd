@@ -653,8 +653,15 @@ func _card(g: Node) -> void:
 		var st0: int = g.state
 		Dev.pick["cardfx"] = ci
 		Dev.click(g, run_at)
-		var fr := _card_spin(g)
 		var nm := String(Dev.CARDFX_STEPS[ci])
+		#  게임 큐처럼 마지막 걸음이 모음(wind)이다 — 합계 앞 그 걸음이
+		#  미리보기에도 선다(2026-10-06).
+		var qk := []
+		for e in g.queue:
+			qk.append(String(e.get("k", "")))
+		_say(not qk.is_empty() and String(qk[qk.size() - 1]) == "wind",
+				"%s — 마지막 걸음이 모음이다" % nm, str(qk))
+		var fr := _card_spin(g)
 		_say(fr < 1200, "%s — 미리보기가 스스로 끝난다" % nm, "%d 프레임" % fr)
 		_say(g.total == tot0, "%s — 판 점수가 안 오른다" % nm,
 				"%d → %d" % [tot0, g.total])

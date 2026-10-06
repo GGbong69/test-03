@@ -113,9 +113,10 @@ func _run() -> void:
 	g.queue.clear()
 	g._land()
 
-	# ① 앞 — 저울 걸음과 합산만 남은 순간이 「아직 안 고른」 마지막 프레임이다
+	# ① 앞 — 저울 걸음과 합산만 남은 순간이 「아직 안 고른」 마지막 프레임이다.
+	#  남은 큐는 [저울, 모음, 합계] 셋이다(모음은 2026-10-06).
 	var guard := 0
-	while g.queue.size() > 2 and guard < 900:
+	while g.queue.size() > 3 and guard < 900:
 		await process_frame
 		guard += 1
 	await _shot("1_앞")

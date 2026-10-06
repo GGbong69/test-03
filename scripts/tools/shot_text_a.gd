@@ -166,7 +166,7 @@ func _run() -> void:
 	keep["cur_chip"] = 5499
 	keep["cur_mult"] = 5499
 	await _shot("card_total")
-	#  달아오른 순간 — 저울 두 수가 한 번 부푼다(24 × 1.45) · 총점이 부푼다(36 × 1.55)
+	#  달아오른 순간 — 저울 두 수가 한 번 부푼다(24 × 1.45) · 총점이 부푼다(36 × 1.70 → 「+99999」는 폭에 걸려 57px)
 	#
 	#  **시계를 1.0 이 아니라 0.662 에 꽂는다**(2026-09-18). 춤이 생기면서 시계 1.0 의
 	#  뜻이 「다 부풀었다」에서 「막 시작했다(예비 눌림 직전)」로 바뀌었다 — 봉우리는
@@ -200,7 +200,20 @@ func _run() -> void:
 	keep["card_mode"] = 1
 	keep["last_gain"] = 99999
 	keep["total_flash"] = f_top
+	#  「+n」 봉우리는 이제 gain_roll 1 의 프레임(내리침)이고 크기(gn)도 같이 고른다
+	#  (2026-10-06). 목표를 낮춰 gn 1 · 다섯 자리 → 상한 0.70 으로 세우고, 몸을
+	#  clamp 1.20(7px)로 띄운 채 카드 자리 둘(206 · 74)에서 찍는다. 잉크가 96px 판
+	#  안이어야 한다 — 74 자리는 판 윗변이 67 이라 동전 슬롯 밑변(64)과 3px 다.
+	var tg_keep: int = g.target
+	keep["gain_roll"] = 1.0
+	keep["target"] = 100
+	keep["card_pop"] = 1.20
+	keep["card_y"] = 206.0
 	await _shot("card_total_flash")
+	keep["card_y"] = 74.0
+	await _shot("card_total_flash_top")
+	keep = {}
+	g.target = tg_keep            # 뒤 컷들의 상단 띠가 앞과 같은 목표로 선다
 
 	# ── 5. 가운데에 놓아 쓰기 — 이름 · 거절 ──────────────
 	g.cons = [_cons("v_moth"), _cons("v_par")]

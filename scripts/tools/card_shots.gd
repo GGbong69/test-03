@@ -15,14 +15,17 @@ extends SceneTree
 #     4_작은뉴스  같은 봉우리인데 160→168 이라 24 → 29 밖에 안 큰다
 #     5_배수만    **바뀐 칸만 튄다** — 왼쪽은 제 색으로 가만있다
 #     6_저울      두 수가 진짜로 같이 바뀌는 유일한 걸음. 색은 calc_flash 가 쥔다
-#     7_합계      36 → 55px. 런 통틀어 카드가 가장 크게 사는 자리
-#     8_굴림      「+n」이 아직 굴러오르는 중
+#     7_합계      「+n」이 온 값으로 내리친 프레임(gain_roll 1). 상한 61px 이 「+40920」
+#                 폭에 걸려 57px
+#     8_앉음      봉우리에서 36 으로 앉는 중(gain_roll 0.55)
 #     9_한방      금빛 테두리가 판 뒤에 물었다. 글자를 한 픽셀도 안 가려야 한다
 #     10_모션끔   축을 다 달궈 놓고 모션만 끈다. **자리와 글자 크기가 1_참 과
 #                 한 픽셀도 달라선 안 된다** — 판도 그림자도 금빛도 안 뜬다.
 #                 칸 색만 다르다: 달아오름은 움직임이 아니라 색이라 motion_off
 #                 가 안 끈다. calc_flash · total_flash · screen_flash 도 원래
 #                 그렇다 — 새 축만 끄면 오히려 어법이 갈린다(2026-09-18).
+#     16_모음     합계 앞 모음 걸음의 끝 — 두 칸이 「×」 쪽으로 10px 씩 · 「×」 36px
+#     17_모음_모션끔  같은 걸음에 모션만 끈다 — 칸은 1_참 자리 · 「×」는 24px 에 색만 밝다
 #
 #   그리고 마지막에 **살아 있는 정산**을 두 번 돌려 숫자로 잰다 —
 #   몸이 쌓이는가 · 7px 에서 멎는가 · 걸음 길이가 안 늘었는가.
@@ -94,6 +97,7 @@ func _base() -> Dictionary:
 			"card_pop": 0.0, "card_vel": 0.0, "chip_j": 0.0, "mult_j": 0.0,
 			"chip_amt": 0.30, "mult_amt": 0.30, "card_burst": 0.0,
 			"gain_roll": 0.0, "card_jrate": 4.0, "motion_off": false,
+			"wind_t": 0.0, "wind_on": false,
 			#  출처 빛은 **꺼 둔다** — 1~10 은 카드의 춤을 재는 장이라
 			#  판 쪽 신호가 끼면 「1_참 이 고치기 전과 한 픽셀도 같은가」가
 			#  흐려진다. 켜는 장은 11~15 뿐이다. 2026-09-25
@@ -180,18 +184,18 @@ func _run() -> void:
 	keep["card_pop"] = 0.761         # kick 20
 	await _shot("6_저울")
 
-	# ── 7. 합계 — 36 → 55px. 굴림은 끝났다 ───────────────
+	# ── 7. 합계 — 내리친 프레임. gn 1 · 다섯 자리 → 상한 0.70(61 · 폭에 걸려 57px) ──
 	keep = _base()
 	keep["card_mode"] = 1
 	keep["cur_chip"] = 1240
 	keep["cur_mult"] = 33
 	keep["last_gain"] = 40920
 	keep["total_flash"] = F_TOP
-	keep["gain_roll"] = 0.0
+	keep["gain_roll"] = 1.0
 	keep["card_pop"] = 0.989         # kick 26
 	await _shot("7_합계")
 
-	# ── 8. 굴림 — 수가 아직 올라오는 중 ──────────────────
+	# ── 8. 앉음 — 봉우리에서 36 으로 돌아가는 중 ─────────────
 	keep = _base()
 	keep["card_mode"] = 1
 	keep["cur_chip"] = 1240
@@ -200,7 +204,7 @@ func _run() -> void:
 	keep["total_flash"] = 0.86
 	keep["gain_roll"] = 0.55
 	keep["card_pop"] = 0.60
-	await _shot("8_굴림")
+	await _shot("8_앉음")
 
 	# ── 9. 한 방 — 금빛이 판 뒤에 물었다 ─────────────────
 	keep = _base()
@@ -209,6 +213,7 @@ func _run() -> void:
 	keep["cur_mult"] = 33
 	keep["last_gain"] = 40920
 	keep["total_flash"] = F_TOP
+	keep["gain_roll"] = 1.0
 	keep["card_burst"] = 1.0
 	keep["card_pop"] = 1.20          # clamp
 	await _shot("9_한방")
@@ -260,6 +265,17 @@ func _run() -> void:
 	keep["mult_j"] = F_TOP
 	keep["card_pop"] = 1.20
 	await _shot("15_출처_모션끔")
+
+	# ── 16 · 17. 모음 — 합계 앞 한 걸음의 끝(시계 0 · 진행 1) ──────
+	#  두 칸이 「×」 쪽으로 다가가고 「×」가 자라 밝다. 모인 칸 판이 「×」를 안
+	#  덮어야 한다. 모션을 끄면 칸이 1_참 자리 그대로고 「×」 색만 밝다. 2026-10-06
+	keep = _base()
+	keep["wind_on"] = true
+	keep["wind_t"] = 0.0
+	keep["card_pop"] = -0.35         # press_total — 눌린 채 다음 채기를 기다린다
+	await _shot("16_모음")
+	keep["motion_off"] = true
+	await _shot("17_모음_모션끔")
 
 	keep = {}
 	live = true
