@@ -1017,6 +1017,7 @@ func _ready() -> void:
 		dot = 0.0
 	_retro_open()     # 도트(97) · VHS(98) — CRT 밑
 	_inv_open()       # 불스아이 반전(96) — 숨겨 두고 꽂힐 때만 선다
+	look_rng.randomize()   # 팩의 겉(PACK_LOOKS) — 판의 뽑기와 따로 돈다
 	_crt_open()       # 맨 위 층. 세기는 방금 읽었다
 	_wipe_open()      # 장면 전환 덮개(95) — CRT 밑
 	_overc_open()     # 게임 오버 연출(90)
@@ -1614,7 +1615,9 @@ func _run_save(at: String) -> void:
 			st.append({"t": String(s.type), "id": String((s.d as Dictionary).get("id", "")),
 					"cost": int(s.cost), "sold": bool(s.sold),
 					"free": bool(s.get("free", false)),
-					"pack": bool(s.get("pack", false))})
+					"pack": bool(s.get("pack", false)),
+					#  팩의 겉(PACK_LOOKS) — 껐다 켜도 같은 팩이 같은 겉으로 돌아온다.
+					"look": String((s.d as Dictionary).get("look", ""))})
 		Save.run_set("stock", st)
 		#  무료 리롤 뱃지를 먹었으면 음수로 시작한다.
 		Save.run_set("reroll_cost", reroll_cost)
@@ -1912,7 +1915,11 @@ func _stock_restore() -> void:
 			it["free"] = true
 		if bool(s.get("pack", false)):
 			it["pack"] = true
+		if kind == "boost" and PACK_LOOKS.has(String(s.get("look", ""))):
+			it.d["look"] = String(s.look)
 		stock.append(it)
+	#  옛 매듭(겉을 안 적던 때)의 팩은 여기서 겉을 입는다.
+	_pack_dress()
 
 
 # ══════════════════════════════════════════════════════════
@@ -3539,6 +3546,8 @@ func _roll_stock() -> void:
 			stock[k].cost = 0
 			tag_free -= 1
 
+	#  팩마다 겉을 굴린다(포일 · 편지봉투 · 깡통 — PACK_LOOKS). 판의 뽑기 뒤라 매물이 안 갈린다.
+	_pack_dress()
 	# 상인이 판을 쓸고 다시 던진다. 리롤이 배치를 안 바꾸면 낙하가 배치를
 	# 결정한다는 전제 자체가 거짓말이 된다.
 	_drop_roll()
@@ -9368,8 +9377,8 @@ func _hud_draw() -> void:
 #    ① 골드 — 잉크 가운데선과 플라크 덩어리 상자가 다섯 크기 전부에서
 #       겹치는가. **1.22 파생 관계를 재는 유일한 그물이다** — 어긋나도
 #       아무 검사가 안 터진다.
-#    ② 팩 — 다섯 상태 전부에 눈금이 있는가 · rise=0 이 판 위와 한 픽셀도
-#       안 다른가 · 크림프가 psi 90° 에서도 남는가.
+#    ② 팩 — rise=0 이 판 위와 한 픽셀도 안 다른가 · 겉마다(포일 크림프 · 편지봉투
+#       너덜한 결 · 깡통 둥근 귀와 옆벽) 실루엣이 psi 를 돌려도 남는가.
 #    ③ 제약 — 키라인 밖으로 삐져나온 것이 하나도 없는가 · 문턱 8.0 이
 #       세로로 무엇을 바꾸는가.
 #  마지막 쪽은 셋을 **작게** 모아 광학 무게를 본다(회색조 변환은 그림을
@@ -9470,39 +9479,61 @@ func _art_gold(gd: bool) -> void:
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, C_TXT)
 
 
-#  ② 팩 — 판 위 넷과 여는 넷. 사진을 곁에 세워 비가 갈리는지 본다.
-#  psi 0° 와 90° 를 같이 찍는 이유: 비 하나에만 기대면 90° 에서 가로
-#  네모가 되어 사진과 다시 붙는다. **크림프가 돌아가도 남는지**가
-#  여기서만 판정된다.
+#  ② 팩 — 판 위 일곱과 여는 넷. 사진을 곁에 세워 실루엣이 갈리는지 본다.
+#  psi 를 여럿 찍는 이유: 비 하나에만 기대면 90° 에서 가로 네모가 되어 사진과
+#  다시 붙는다. **크림프 · 너덜한 결 · 둥근 귀와 옆벽이 돌아가도 남는지**가 여기서만
+#  판정된다. 판 위 칸은 qa_art ⑤ 가 그린 픽셀로 잰다(잉크가 잡히는 칸 안에 드는가) —
+#  그래서 art_cells 에 psi 와 크기를 같이 적는다.
+#  겉(PACK_LOOKS)은 하나씩 본다 — 개발자 「팩 겉」(pack_look_force)이 고른 것, 무작위면 포일.
+const ART_PACK_ROW := [[2, 0.0, 34.0], [2, 1.2217, 96.0], [2, 2.7925, 158.0],
+		[4, 0.0, 226.0], [4, 1.2217, 292.0], [4, 2.7925, 358.0], [4, PI * 0.5, 424.0]]
+
+
 func _art_pack(gd: bool) -> void:
-	var small := {"size": 2, "pick": 1}
 	var bigp := {"size": 4, "pick": 1}
-	var row := [[small, 0.0, 46.0], [small, PI * 0.5, 120.0],
-			[bigp, 0.0, 196.0], [bigp, PI * 0.5, 270.0]]
-	for e in row:
+	var lk := _pack_look(bigp)
+	for e in ART_PACK_ROW:
+		var bd := {"size": int(e[0]), "pick": 1}
 		var cc := Vector2(float(e[2]), 62.0)
-		_boost_flat(cc, e[0], float(e[1]), 0.0)
-		art_cells.append({"k": "pack", "r": float(e[1]), "c": cc})
-	_fix_flat(Vector2(370.0, 62.0), {}, 0.0, 0.0, GOODS_K)
-	_fix_flat(Vector2(450.0, 62.0), {}, PI * 0.5, 0.0, GOODS_K)
+		_boost_flat(cc, bd, float(e[1]), 0.0)
+		art_cells.append({"k": "pack", "r": float(e[1]), "c": cc, "n": int(e[0])})
+	_fix_flat(Vector2(500.0, 62.0), {}, 0.0, 0.0, GOODS_K)
+	_fix_flat(Vector2(580.0, 62.0), {}, PI * 0.5, 0.0, GOODS_K)
 	if gd:
-		#  이음매 반두께와 띠 반높이가 같은 비로 자라는가. **눈금자를 물건
-		#  옆에 세운다** — 위에 그었더니 자가 재려던 뜯는 실을 덮어 버렸다.
-		var sm: float = float(PACK.seam) * GOODS_K
-		var bh: float = sm * float(PACK.band)
-		for v in [-bh, -sm, sm, bh]:
-			draw_rect(Rect2(14.0, 62.0 + float(v) * TBL.flat, 14.0, 1.0),
-					ART_G2 if absf(float(v)) > sm else ART_G1)
+		#  **눈금자를 물건 옆에 세운다** — 위에 그었더니 자가 재려던 것을 덮어 버렸다.
+		match lk:
+			"tin":
+				#  벽 높이 — 깡통 바닥(c)에서 뚜껑 윗면까지.
+				for sz in [2, 4]:
+					var zt: float = float(_tin_of({"size": sz}).z) * GOODS_K * TBL.tall
+					draw_rect(Rect2(6.0 if sz == 2 else 14.0, 62.0 - zt, 5.0, 1.0), ART_G2)
+				draw_rect(Rect2(6.0, 62.0, 13.0, 1.0), ART_G1)
+			"env":
+				#  너덜한 결의 깊이 — 겉 끝(±h)과 결이 무는 데까지(±(h−deckle)).
+				var ph: float = float(PACK.h) * GOODS_K
+				var dp: float = float(ENV.deckle) * GOODS_K
+				for v in [-ph, -ph + dp, ph - dp, ph]:
+					draw_rect(Rect2(6.0, 62.0 + float(v) * TBL.flat, 14.0, 1.0),
+							ART_G2 if absf(float(v)) > ph - 0.01 else ART_G1)
+			_:
+				#  이음매 반두께와 띠 반높이가 같은 비로 자라는가.
+				var sm: float = float(PACK.seam) * GOODS_K
+				var bh: float = sm * float(PACK.band)
+				for v in [-bh, -sm, sm, bh]:
+					draw_rect(Rect2(6.0, 62.0 + float(v) * TBL.flat, 14.0, 1.0),
+							ART_G2 if absf(float(v)) > sm else ART_G1)
 	draw_string(font, Vector2(24.0, 108.0),
-			"판 위  작은 0°/90°  큰 0°/90°        사진 0°/90°",
+			"%s · 판 위  작은 0°/70°/160°  큰 0°/70°/160°/90°   사진 0°/90°"
+			% {"foil": "포일", "env": "편지봉투", "tin": "깡통"}[lk],
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, C_TXT)
 	#  여는 넷. rise=0 은 **판 위와 한 픽셀도 안 달라야 한다.**
 	for e in [[0.0, 0.0, 60.0], [0.35, 0.0, 165.0], [0.7, 0.0, 300.0],
 			[1.0, 0.5, 480.0]]:
-		var cc := Vector2(float(e[2]), 215.0)
-		_boost_open(cc, bigp, float(e[0]), float(e[1]))
+		var cc := Vector2(float(e[2]), 250.0)
+		_boost_open(cc, bigp, float(e[0]), float(e[1]),
+				Color(C_ACC, clampf(float(e[1]) * 3.0, 0.0, 1.0)))
 		art_cells.append({"k": "open", "r": float(e[0]), "c": cc})
-	draw_string(font, Vector2(24.0, 330.0),
+	draw_string(font, Vector2(24.0, 340.0),
 			"여는 중  rise 0 / 0.35 / 0.7        rise 1 tear 0.5",
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, C_TXT)
 
@@ -23882,11 +23913,22 @@ func _give_fit(s: Dictionary) -> void:
 		"mod":
 			give_depth = float(TBL.mod_r)
 		"boost":
-			#  팩 — 윗변(크림프)이 손을 보게 돌리고(give_rot 1) 그 가운데를 집는다. 동전보다
-			#  얇아 엄지가 덜 내려간다.
+			#  팩 — 윗변(포일 크림프 · 편지봉투 윗날개 쪽 · 깡통 큰 팩은 경첩 쪽)이 손을 보게
+			#  돌리고(give_rot 1) 그 가운데를 집는다. 봉투는 동전보다 얇아 엄지가 덜 내려간다.
+			#  깡통은 **바닥이 c 에 앉고 뚜껑이 벽 높이만큼 위로 선다**(_tin_body) — 그 높이만큼
+			#  내려 잡아야 검지 끝이 뚜껑 윗면에 얹힌다(give_pad). 엄지는 벽 밑을 받치므로
+			#  동전 두께(chip_t) 대신 깡통 높이만큼 내려간다(2026-10-06).
+			var gb: Dictionary = s.get("d", {})
 			give_rot = 1
-			give_depth = float(PACK.h) * GOODS_K
-			give_tdrop = GIVE.tdrop - 2.0
+			if _pack_look(gb) == "tin":
+				var gt := _tin_of(gb)
+				var gz: float = float(gt.z) * GOODS_K
+				give_depth = float(PACK.h) * float(gt.k) * GOODS_K
+				give_pad = GIVE.pad + gz
+				give_tdrop = GIVE.tdrop + gz - float(TBL.chip_t)
+			else:
+				give_depth = float(PACK.h) * GOODS_K * _pack_s(gb)
+				give_tdrop = GIVE.tdrop - 2.0
 		"fix":
 			#  사진 — 윗 테두리가 손을 보게. 종이라 엄지가 더 붙는다.
 			give_rot = 1
@@ -26740,6 +26782,17 @@ func _shard_burst(it: Dictionary, s: Dictionary, k: float, radial := false) -> v
 	var cuts := _shard_cut(s, int(CRUSH.shard) if radial else _shard_n(stock.size()), sd,
 			float(it.psi))
 	var cl := _shard_cols(s)
+	#  포일 팩은 **겉 그림째** 깨진다(2026-10-06) — 조각마다 제 자리의 박 · 띠 · 봉인 조각을
+	#  진다. 단색 조각이면 깨지는 순간 은박 봉투가 회색 판때기로 바뀐다. 조각 꼭짓점은
+	#  _shard_cut 이 내는 면 좌표 그대로라 _foil_uv 에 바로 들어간다. 편지봉투 · 깡통은
+	#  종이색 · 에나멜 단색으로 깨진다(_shard_cols).
+	var ptex: Texture2D = null
+	var pw: float = 1.0
+	var ph: float = 1.0
+	if String(s.type) == "boost" and _pack_look(s.d) == "foil":
+		ptex = _foil_tex(s.d)
+		pw = float(PACK.w) * GOODS_K * _pack_s(s.d)
+		ph = float(PACK.h) * GOODS_K * _pack_s(s.d)
 	var nv := Vector2.ZERO if radial else _smash_nv()
 	var anc := _p2s(float(it.u), float(it.w), float(it.h))
 	var sp: float = clampf(float(SMASH.sp_k) * absf(float(it.vu)) * k,
@@ -26755,8 +26808,11 @@ func _shard_burst(it: Dictionary, s: Dictionary, k: float, radial := false) -> v
 			ctr += q
 		ctr /= float(maxi(pts.size(), 1))
 		var loc := PackedVector2Array()
+		var uvs := PackedVector2Array()
 		for q in pts:
 			loc.append(q - ctr)
+			if ptex != null:
+				uvs.append(_foil_uv(ptex, q.x, q.y, pw, ph, 0))
 		var off := ctr.rotated(float(it.psi))
 		#  ── 왜 벽 법선만으로는 안 되는가 ────────────────
 		#  법선 하나에 ±55° 만 얹으면 조각이 **통째로 같은 쪽으로 옮겨 간다** —
@@ -26796,7 +26852,9 @@ func _shard_burst(it: Dictionary, s: Dictionary, k: float, radial := false) -> v
 			"ax": anc.x, "ay": anc.y,
 			"life": lerpf(float(CRUSH.life_lo if radial else SMASH.life_lo),
 					float(CRUSH.life_hi if radial else SMASH.life_hi), _gl_rand(j * 11 + 5, sd)),
-			"bounced": false})
+			"bounced": false,
+			#  겉 그림 조각(포일 팩만). 없으면 빈 배열 — _smash_draw 가 단색으로 칠한다.
+			"tex": ptex, "uv": uvs, "lit": j % 2 == 0})
 
 
 # 조각 도형. 입구 하나에서 _obj_paint 의 갈래 지도를 그대로 따라간다.
@@ -26853,7 +26911,22 @@ func _shard_cut(s: Dictionary, n: int, sd: int, psi := 0.0) -> Array:
 			#  그리고 3행에 못 박으면 팩마다 조각이 늘 여섯이라 qa_smash 의
 			#  「동시 조각 상한 40」이 **42 로 깨진다**(실제로 터뜨려 봤다).
 			#  상한은 연출 예산이라 그림 일감이 건드릴 자리가 아니다.
-			return _shard_grid(float(PACK.w) * GOODS_K, float(PACK.h) * GOODS_K,
+			#  2026-10-06 — 겉이 셋이다. 포일 큰 팩은 몸 배율(_pack_s)을 타고, 깡통은 **둥근
+			#  귀로 한 번 더 깎는다**(_coin_clip — 레전더리 플라크의 선례). 안 깎으면 언 한
+			#  프레임의 흰 실루엣이 각진 네모로 되돌아가 사진이 된다. 칸 수는 그대로다 — 귀는
+			#  칸 귀퉁이만 덜어 내고 칸을 통째로 지우지 않는다.
+			var pb: Dictionary = s.get("d", {})
+			if _pack_look(pb) == "tin":
+				var te := _tin_ext(pb, GOODS_K)
+				var tbody := _tin_loc(te.x, te.y, float(_tin_of(pb).r) * GOODS_K)
+				var tout := []
+				for p in _shard_grid(te.x, te.y, 2, clampi(n - 2, 2, 3), sd):
+					var tcl := _coin_clip(p, tbody)
+					if tcl.size() >= 3:
+						tout.append(tcl)
+				return tout
+			var ps: float = _pack_s(pb)
+			return _shard_grid(float(PACK.w) * GOODS_K * ps, float(PACK.h) * GOODS_K * ps,
 					2, clampi(n - 2, 2, 3), sd)
 		"dart":
 			return _shard_rod(TBL.dart_l, 2.4 * GOODS_K, maxi(n - 1, 3), sd)
@@ -26975,7 +27048,16 @@ func _shard_cols(s: Dictionary) -> Array:
 		"fix":
 			return _shard_tone(C_LIGHT.lightened(0.30), false)
 		"boost":
-			return _shard_tone(C_PANEL.lightened(0.34), false)
+			match _pack_look(d):
+				"tin":
+					#  깡통 에나멜 바탕(e1) — 작은 팩은 병초록 · 큰 팩은 쪽빛으로 깨진다.
+					return _shard_tone(Color(_tin_of(d).e1), false)
+				"env":
+					#  봉투 종이색 — 담황 · 크라프트(ENV_ART.body).
+					return _shard_tone(Color(ENV_ART[_env_kind(d)].body), false)
+			#  박의 가운데 단(make_pack_foil FOIL[2]) — 겉 그림이 없을 때 조각이 이 색이다.
+			#  그림이 있으면 조각이 그 그림을 제 자리째 지고 깨진다(_shard_burst).
+			return _shard_tone(Color("8a5636") if _pack_big(d) else Color("a3abbb"), false)
 		"cons":
 			#  사탕만 색 출처가 3D 뷰포트 텍스처(_candy_tex_live)라 _draw 에서
 			#  못 딴다. 헤드리스 대체 실루엣의 이 색이 유일하게 손에 잡히는
@@ -27256,6 +27338,12 @@ func _smash_draw() -> void:
 			var ol := PackedVector2Array(pts)
 			ol.append(pts[0])
 			draw_polyline(ol, Color(C_TABLE, 0.9), 1.0)
+		elif s.get("tex") != null and (s.uv as PackedVector2Array).size() == pts.size():
+			#  짝수 · 홀수 조각을 한 단 갈라 깨진 금이 그림 위에서도 읽히게 한다.
+			var sm: Color = (Color(1.0, 1.0, 1.0) if bool(s.get("lit", true))
+					else Color(0.84, 0.84, 0.84))
+			draw_colored_polygon(pts, _smash_fade(sm, float(s.t), float(s.life)),
+					s.uv, s.tex)
 		else:
 			draw_colored_polygon(pts,
 					_smash_fade(s.col, float(s.t), float(s.life)))
@@ -28174,6 +28262,12 @@ func _drop_extras(d: float) -> void:
 		#  내려가야 껐다 켜는 프레임이 없어 광과민 계약이 산다.
 		if float(it.get("lg", 0.0)) > 0.0:
 			it.lg = maxf(float(it.lg) - d / maxf(float(it.lgt), 0.0001), 0.0)
+		#  팩 박 위의 빛(2026-10-06 · 포일) — 얹히거나(hov) · 손님이 쥐거나(held) · 상인이 들면
+		#  흐르고, 놓으면 0 으로 돌아가 다음 얹힘이 첫 쓸기부터 다시 선다. sold · give_i
+		#  갈래보다 앞이라 상인 손 안에서도 흐른다. 움직임을 끈 손님에게는 안 흐른다.
+		if i < stock.size() and String(stock[i].type) == "boost":
+			var glon: bool = (i == hov or bool(it.held) or i == give_i) and not motion_off
+			it["gl"] = (float(it.get("gl", 0.0)) + d) if glon else 0.0
 		# stock 을 읽는 곳 셋 중 하나. _buy 는 "건드리면 안 됨" 이라 폴링한다.
 		#  부술 팩 물건(doom)은 값만 닫혔다 — 계산대로 안 날고 주먹을 기다린다(CRUSH).
 		if it.sold <= 0.0 and i < stock.size() and stock[i].sold and not it.has("doom"):
@@ -28273,7 +28367,10 @@ func _obj_box(i: int) -> Rect2:
 			var ed := Vector2(absf(dn.x) * dl + 5.0, absf(dn.y) * dl + 5.0)
 			return Rect2(c - ed, ed * 2.0)
 		"boost":
-			var br: float = maxf(float(PACK.w), float(PACK.h)) * GOODS_K + 3.0
+			#  여유 3.0 도 배율을 탄다 — 포일 큰 팩(×1.10)의 외접 28.85 가 광역 덮개(+2)
+			#  28.91 안에 들어야 어느 각에서도 귀퉁이 끝이 잡힌다. 나머지는 s=1 이라 그대로다.
+			var br: float = ((maxf(float(PACK.w), float(PACK.h)) * GOODS_K + 3.0)
+					* _pack_s(stock[i].d))
 			var eb := Vector2(br, br * TBL.flat + 3.0)
 			return Rect2(c - eb, eb * 2.0)
 		"fix":
@@ -28303,9 +28400,9 @@ func _obj_shape(i: int, m: Vector2) -> bool:
 			#  **잡히는 것이 그림과 정반대였다** — 26.43 × 21.77 로 가로가
 			#  넓고 세로가 좁은데 팩은 세로로 긴 물건이다. 허공이 잡히고
 			#  가장자리가 안 잡혔다. 그리는 것과 같은 밑값에 여유만 곱한다.
+			var hs: float = float(PACK.hit) * GOODS_K * _pack_s(stock[i].d)
 			return _in_poly(m, _quad_at(c, it.psi,
-					float(PACK.w) * float(PACK.hit) * GOODS_K,
-					float(PACK.h) * float(PACK.hit) * GOODS_K))
+					float(PACK.w) * hs, float(PACK.h) * hs))
 		"fix":
 			# 그리는 것과 같은 네 귀퉁이를 쓴다 — 둘이 어긋날 수가 없다.
 			return _in_poly(m, _fix_quad(c, it.psi, 1.14 * GOODS_K))
@@ -28572,8 +28669,16 @@ func _obj_shadow(i: int) -> void:
 		"boost":
 			#  팩도 네모다. **사진의 상수 크기를 쓰고 있었다**(_fix_quad) —
 			#  이 한 줄을 안 옮기면 그림과 그림자가 다른 비로 어긋난다.
-			draw_colored_polygon(_quad_at(g, it.psi,
-					float(PACK.w) * k * GOODS_K, float(PACK.h) * k * GOODS_K), col)
+			#  깡통은 둥근 귀라 그림자도 그 둘레다(_tin_loc — 그리는 것과 같은 함수).
+			var sbd: Dictionary = stock[i].d
+			if _pack_look(sbd) == "tin":
+				var se := _tin_ext(sbd, GOODS_K * k)
+				draw_colored_polygon(_tin_ring(g, cos(float(it.psi)), sin(float(it.psi)),
+						_tin_loc(se.x, se.y, float(_tin_of(sbd).r) * GOODS_K * k), 0.0), col)
+			else:
+				var bs: float = k * GOODS_K * _pack_s(sbd)
+				draw_colored_polygon(_quad_at(g, it.psi,
+						float(PACK.w) * bs, float(PACK.h) * bs), col)
 		"mod":
 			#  와펜은 방패 모양 그림자. 그림이 없으면 옛 타원이다.
 			var mtx := _mod_art(String(stock[i].d.id))
@@ -28659,7 +28764,9 @@ func _obj_paint(it: Dictionary, s: Dictionary, dim: float) -> void:
 				draw_rect(Rect2(c - ce, ce * 2.0), C_WIRE.darkened(0.2), false, 1.0)
 				_icon_cons(c, ce.y * 0.56, String(s.d.id), 1.0 - dim)
 		"boost":
-			_boost_flat(c, s.d, it.psi, dim)
+			#  얹히거나 쥔 동안 흐른 시간(gl)이 포일 박 위의 빛 장을 고른다(_drop_extras 가
+			#  센다). 창구로 빠진 사본(waste)에는 gl 이 없을 수 있다 — get 으로 읽는다.
+			_boost_flat(c, s.d, it.psi, dim, _foil_fr(float(it.get("gl", 0.0))))
 		"fix":
 			_fix_flat(c, it, it.psi, dim, GOODS_K, String(s.d.get("id", "")))
 		"mod":
@@ -28721,6 +28828,10 @@ const FIX_H := 14.0      # 반높이(누르기 전)
 #  한 물건」은 말이 아니라 **상수와 코드 공유**다. 한 곳만 고치면 나머지
 #  다섯이 어긋나는데 그림자·히트·조각은 특정 상황에서만 떠서 화면에서
 #  바로 안 보인다 — 지금 배율이 다섯으로 갈려 있는 것 자체가 그 자국이다.
+#
+#  2026-10-06 — 겉이 셋이 됐다(아래 「팩의 겉 셋」). 위 두 규칙은 셋 다 지킨다 — 포일은
+#  크림프 톱니 · 편지봉투는 너덜한 결 · 깡통은 둥근 귀와 옆벽이 「돌아가도 안 없어지는
+#  실루엣 차이」다. 치수(w · h · hit)는 셋이 같이 읽는다.
 const PACK := {
 	"w": 13.0,      # 면 반폭(밑값). 테이블은 GOODS_K 를 곱한다
 	"h": 18.5,      # 면 반높이(밑값)
@@ -28730,7 +28841,260 @@ const PACK := {
 	"teeth": 9,     # 크림프 톱니 수
 	"pip": 0.115,   # 눈금 반지름 / 면 반폭
 	"pitch": 3.2,   # 눈금 피치 / 눈금 반지름. **n 과 무관하게 고정이다**
+	#  큰 팩의 몸 배율(2026-10-06 「일단 지금 다른 아이템에 비해 팩의 퀄리티가 그대로 잖아?」).
+	#  작은 팩과 큰 팩이 눈금 수로만 갈렸다 — 같은 회색 네모 둘이었다. 큰 팩은 **한눈에
+	#  크다.** 1.10 이면 화면 33x37 · 넓이 약 1230px² 로 동전(1202)과 나란하고 사진보다
+	#  한 치 크다. 위의 밑값은 작은 팩 그대로라 qa_art ⑤ 의 「사진과 1% 안」은 작은 팩이 진다.
+	#  **여섯 자리가 같은 배율을 읽는다**(_pack_s) — 그림 · 그림자 · 히트 · 모양 · 조각 · 쥠.
+	"big": 1.10,
+	"pip_y": 0.58,  # 눈금 자리 / 면 반높이 — 아래 블럭, 봉인과 아래 봉합 띠 사이
 }
+
+
+#  ── 팩의 겉 셋 (2026-10-06) ─────────────────────────────────
+#  「일단 지금 다른 아이템에 비해 팩의 퀄리티가 그대로 잖아?」로 세 갈래를 지어 보이자
+#  「3가지 랜덤으로 나오도록 해줄수 있어?」 — **팩마다 겉을 하나 굴린다.**
+#    foil  포일 봉투   — 은박(작은 팩) · 청동박(큰 팩 · 1.10배) · 뜯는 띠 · 다트판 봉인
+#    env   봉인 편지봉투 — 담황 편지(작은 팩) · 노끈 묶은 크라프트 소포(큰 팩) · 밀랍 봉인
+#    tin   놋쇠 깡통   — 병초록 끼움 뚜껑(작은 팩 · 0.9배) · 쪽빛 경첩 뚜껑(큰 팩)
+#  겉은 **그림일 뿐이다.** 값 · 안에 든 것 · 몫 · 쏟는 흐름은 하나도 안 갈린다.
+#  굴리는 자리는 상점에 깔리는 순간(_pack_dress)이고, 겉은 매물 사본(s.d)의 look 에
+#  박혀 판 위 · 상인 손 · 여는 연출 · 부서짐까지 따라간다. 매듭(저장)에도 적는다 —
+#  껐다 켜면 같은 팩이 같은 겉으로 돌아온다.
+#  난수는 look_rng 다 — 판의 뽑기(randi)를 안 건드린다(장면 전환의 wipe_rng 와 같은 수법).
+#  look 이 없는 팩(그림 표본 · 검사 · 촬영 도구)은 pack_look_force(개발자 「팩 겉」)를,
+#  그것도 비면 foil 을 입는다.
+const PACK_LOOKS := ["foil", "env", "tin"]
+var pack_look_force := ""
+var look_rng := RandomNumberGenerator.new()
+
+
+func _pack_look(bd: Dictionary) -> String:
+	var lk := String(bd.get("look", ""))
+	if PACK_LOOKS.has(lk):
+		return lk
+	return pack_look_force if PACK_LOOKS.has(pack_look_force) else "foil"
+
+
+func _pack_look_roll() -> String:
+	if PACK_LOOKS.has(pack_look_force):
+		return pack_look_force
+	return String(PACK_LOOKS[look_rng.randi() % PACK_LOOKS.size()])
+
+
+#  상점 팩에 겉을 입힌다 — 표의 줄은 GameData 캐시라 **사본에만** 박는다(튜토리얼 선물
+#  팩이 pool 을 박는 것과 같은 규약). 이미 입은 팩(되살린 매듭)은 그대로 둔다.
+func _pack_dress() -> void:
+	for s in stock:
+		if String((s as Dictionary).get("type", "")) != "boost":
+			continue
+		var d: Dictionary = s.d
+		if PACK_LOOKS.has(String(d.get("look", ""))):
+			continue
+		d = d.duplicate()
+		d["look"] = _pack_look_roll()
+		s.d = d
+
+
+#  큰 팩인가. 표의 id 가 아니라 **안에 든 수**로 가른다 — 그림 표본(_art_pack)은 id 없이
+#  {"size": 4} 만 넘긴다.
+func _pack_big(bd: Dictionary) -> bool:
+	return int(bd.get("size", 2)) > 2
+
+
+#  판 위 몸 배율 — 포일 큰 팩만 PACK.big 배다. 깡통 작은 팩의 0.9 는 _tin_ext 가 쥔다
+#  (잡히는 칸은 깡통 둘 다 큰 팩 네모 그대로다 — TIN 머리말).
+func _pack_s(bd: Dictionary) -> float:
+	return float(PACK.big) if _pack_look(bd) == "foil" and _pack_big(bd) else 1.0
+
+
+#  ── 포일 봉투의 겉 (2026-10-06) ─────────────────────────────
+#  「일단 지금 다른 아이템에 비해 팩의 퀄리티가 그대로 잖아?」 — 동전은 구운 얼굴,
+#  사진은 구운 인화면, 사탕은 3D 인데 팩만 C_PANEL 회색 다각형 둘이었다.
+#  겉은 **구운 그림 한 장**(make_pack_foil.py → assets/pack/foil_<크기>.png)이고, 지금의 다각형
+#  (블럭 둘 · 띠 둘)에 **면 좌표 그대로** UV 를 얹는다. 모양은 한 픽셀도 안 바뀐다 —
+#  크림프 톱니 · 찢긴 이 · 뜯는 홈 · 그림자 · 히트 · 조각이 다 지금 그 꼴이고,
+#  그림만 박이 된다. 찢어지면 봉인(다트판)이 그 자리에서 둘로 갈라진다.
+#    은박 = 작은 팩 · 청동박 = 큰 팩 — PACK.big 배로 크고, 봉인에 놋쇠 고리 한 줄 ·
+#    뜯는 실 두 줄(띠 위아래) · 봉합 띠 안쪽에 리본 한 줄이 더 선다. 와인 그늘은 방의 되비침.
+#  빛 — 한 파일에 f 장이 가로로 선다. 0 은 쉬는 장, 1.. 은 박 위를 미끄러지는 빛이다.
+#  얹거나 쥐면(손님 손 · 상인 손) sweep 초 동안 한 번 쓸고 rest 초 쉰다. 여는 동안은
+#  눈앞으로 오는 박자(rise)에 맞춰 한 번 쓴다. **움직임을 끈 손님에게는 안 흐른다.**
+#  3D 뷰포트가 아니다 — 매 틀 다시 굽는 것이 없고 헤드리스에서도 같은 다각형이 선다.
+#  med · ring — 봉인 반지름 · 큰 팩의 놋쇠 고리 폭(밑값). make_pack_foil.MED 와 짝이다 —
+#  뜯는 실이 봉인 자리에서 끊기는 자리를 이 수로 잰다.
+const FOIL_ART := {"f": 9, "sweep": 0.9, "rest": 1.6, "med": 5.9, "ring": 0.95,
+		"brass": Color("a8762a")}
+var _foil_tex_cache := {}
+
+
+#  구운 겉. 갓 구운 장은 .ctex 가 아직 없을 수 있어 PNG 를 직접 읽는 길을 둔다(_coin_art 와 같다).
+func _foil_tex(bd: Dictionary) -> Texture2D:
+	var id := "foil_big" if _pack_big(bd) else "foil_small"
+	if _foil_tex_cache.has(id):
+		return _foil_tex_cache[id]
+	var path := "res://assets/pack/%s.png" % id
+	var t: Texture2D = load(path) if ResourceLoader.exists(path) else null
+	if t == null and FileAccess.file_exists(path):
+		var im := Image.load_from_file(path)
+		if im != null and not im.is_empty():
+			t = ImageTexture.create_from_image(im)
+	_foil_tex_cache[id] = t
+	return t
+
+
+#  빛 장 번호. t 는 얹히거나 쥔 뒤 흐른 시간(0 이하면 쉬는 장).
+func _foil_fr(t: float) -> int:
+	if t <= 0.0:
+		return 0
+	var sw: float = float(FOIL_ART.sweep)
+	var ph: float = fmod(t, sw + float(FOIL_ART.rest)) / sw
+	if ph >= 1.0:
+		return 0
+	return 1 + mini(int(ph * float(int(FOIL_ART.f) - 1)), int(FOIL_ART.f) - 2)
+
+
+#  면 좌표(가운데 0 · 반폭 w · 반높이 h — 배율 k 를 탄 값) 한 점의 UV. fr 장의 칸 안이다.
+#  칸마다 둘레 1px 덧댐이 있다(make_pack_foil.atlas).
+func _foil_uv(tex: Texture2D, x: float, y: float, w: float, h: float, fr: int) -> Vector2:
+	var aw: float = float(tex.get_width())
+	var ah: float = float(tex.get_height())
+	var cw: float = aw / float(FOIL_ART.f)
+	return Vector2((float(fr) * cw + 1.0 + (x / (2.0 * w) + 0.5) * (cw - 2.0)) / aw,
+			(1.0 + (y / (2.0 * h) + 0.5) * (ah - 2.0)) / ah)
+
+
+#  ── 봉인 편지봉투 (2026-10-06) ──────────────────────────
+#  「일단 지금 다른 아이템에 비해 팩의 퀄리티가 그대로 잖아?」 — 피자 동전 · 폴라로이드 ·
+#  젤리 곰 곁에서 팩만 회색 네모에 금줄 하나, 눈금 점 몇 개였다. 상인의 카운터
+#  (와인 벨벳 · 놋쇠 저울 · 등록기)에 놓일 물건으로 다시 짓는다 — **밀랍으로 봉한
+#  편지봉투**다. 작은 팩은 담황 편지봉투, 큰 팩은 노끈으로 묶은 두툼한 크라프트
+#  봉투. 둘 다 윗날개(V)가 한가운데까지 내려와 그 끝을 다트판이 찍힌 밀랍이 누른다.
+#  그림은 scripts/tools/make_pack_env.py 가 굽는다(종이 30x43 · 봉인 32x32).
+#  「팩의 치수」의 두 규칙은 그대로 산다.
+#    ① 비 0.703 · 넓이 · 외접 반지름 · 히트 · 그림자 · 조각 — **w · h 를 안 건드렸다.**
+#    ② 크림프 톱니 → **너덜한 종이 결(deckle)**. 손으로 뜬 종이의 가장자리가 네 변을
+#       다 문다. 크림프는 위 · 아래 두 변뿐이라 psi 90° 에서 옆으로 누웠는데, 결은
+#       어느 각에서도 사방이 너덜하다. 결도 **안으로만** 문다(외접 반지름 그대로).
+#  눈금 점(size · pick)은 걷었다. 작은 팩과 큰 팩은 이제 **물건이 다르다** — 종이색
+#  (담황 · 크라프트) · 노끈 · 두께가 한눈에 가른다. 몇 장 중 몇 장은 툴팁이 말한다.
+#
+#  봉투의 치수 — 결과 봉인(밑값 · 배율 k 를 탄다). 찢긴 자리의 이 수는 PACK.teeth 다.
+const ENV := {
+	#  너덜한 결의 깊이(밑값 · 안으로만). **배율 k 를 탄다.** 판 위에서 화면
+	#  1.05px(세로) · 1.33px(가로) — 1px 밑으로 내리면 640x360 에서 결이 사라져
+	#  사진과 같은 곧은 변이 된다(qa_art ⑤).
+	"deckle": 1.15,
+	"dstep": 2.3,   # 결 한 마디의 길이(밑값). 판 위에서 2.7px
+	"seal": 0.60,   # 봉인 그림 반폭 / 면 반폭 — 판 위 18px 네모에 밀랍 지름 14.6px
+}
+
+#  봉투 두 벌. 그림 밖에서 코드가 칠하는 색 셋은 그 그림의 램프에서 땄다 — 다 도트
+#  팔레트(dot_pal.py)의 색이라 기본 필터에서 디더로 안 쪼개진다(살 · 나무 · 흰).
+#    side   종이 두께(가장자리 밑면)   core   찢긴 자리의 속살(결이 일어나 밝다)
+#    body   그림이 없을 때의 몸 · 조각의 밑색
+#    thick  종이 두께(판 위 화면 px). 큰 팩은 속이 차서 두 배로 두툼하다
+const ENV_ART := {
+	"small": {"tex": "env_small", "side": Color("a8634f"), "core": Color("fbf6ea"),
+			"body": Color("f5cda3"), "thick": 1.0},
+	"big": {"tex": "env_big", "side": Color("5e3317"), "core": Color("f5cda3"),
+			"body": Color("c48b5a"), "thick": 2.0},
+}
+var _env_tex_cache := {}
+
+
+#  봉투 그림 하나(env_small · env_big · env_seal). 없는 것도 기억한다 — _coin_art 와 같은 규약.
+#  갓 구운 장은 .ctex 가 아직 없을 수 있어(워크트리 · 헤드리스 갈무리) 원본 PNG 를
+#  직접 읽는 길을 남긴다. 내보낸 판에는 PNG 가 안 실리므로 개발 중에만 탄다.
+func _env_tex(id: String) -> Texture2D:
+	if _env_tex_cache.has(id):
+		return _env_tex_cache[id]
+	var t: Texture2D = null
+	var path := "res://assets/pack/%s.png" % id
+	if ResourceLoader.exists(path):
+		t = load(path)
+	if t == null and FileAccess.file_exists(path):
+		var im := Image.load_from_file(path)
+		if im != null and not im.is_empty():
+			t = ImageTexture.create_from_image(im)
+	_env_tex_cache[id] = t
+	return t
+
+
+#  어느 봉투인가. 표(boosters.csv)의 size 로 가른다 — 그림 표본(_art_pack)은 id 없이
+#  size 만 넘긴다. 둘을 넘게 넣는 팩이 큰 팩이다.
+func _env_kind(bd: Dictionary) -> String:
+	return "big" if int(bd.get("size", 2)) > 2 else "small"
+
+
+#  ── 놋쇠 깡통 (2026-10-06) ─────────────────────────────────
+#  2026-10-06 「일단 지금 다른 아이템에 비해 팩의 퀄리티가 그대로 잖아?」 — 동전은 그린
+#  얼굴에 테를 두르고, 사진은 그림을 붙이고, 사탕은 3D 로 굽는데 팩만 회색 봉투에 호박색
+#  실 한 획이었다. **옛 사탕 깡통**으로 바꾼다 — 에나멜 뚜껑 위에 다트판 메달(백색 · 흑색
+#  칸, 빨강 · 초록 띠) · 백색 라벨 띠 · 놋쇠 실선, 둥근 귀 · 옆벽 · 뚜껑 턱.
+#  뚜껑 윗면 한 장만 그림이고(assets/tin · make_tin_art.py) 옆벽 · 테 빛 · 경첩 · 여닫이는
+#  여기서 그린다 — **빛이 화면 쪽에서 와야** 깡통이 어느 각으로 누워도 맞다.
+#  놋쇠는 실선 · 경첩 · 메달 테로만 쓴다. 면으로 깔면 값표의 금과 붙어 깡통이 「돈」으로
+#  읽힌다(옛 봉인띠가 C_ACC 로 그렇게 읽혔다 — 2026-09-19).
+#
+#  ── 사진과 갈리는 법 ──
+#  팩은 판 위에서 psi 로 **한 바퀴 다 돈다**(_drop_one 의 randf()*TAU). 비 하나에만
+#  기대면 psi 90° 에서 가로 네모가 되어 사진과 다시 붙는다(2026-09-19 에 실제로 그랬다).
+#  그래서 **돌아가도 안 없어지는** 차이를 셋 건다 — 옛 크림프 톱니가 하던 일이다.
+#    ① 둥근 귀. 사진은 각진 종이다. 귀 반지름이 면 반폭의 3~4 할이라 어느 각에서도
+#       네 귀가 둥글다.
+#    ② 옆벽. 사진은 종이 두께(그림자 1.2px)뿐인데 깡통은 화면 3~5px 의 벽이 선다 —
+#       돌려도 늘 화면 아래쪽에 선다.
+#    ③ 색. 사진은 백색 종이, 깡통은 짙은 에나멜이다.
+#  세로 주머니 비(0.703 대 사진 1.214 — 비의 비 1.73)는 그대로 둔다. 넷째 겹이다.
+#
+#  ── 크기 ──
+#  **깡통 큰 팩이 사진과 나란히 선다** — 화면 면적 30.16×33.82 ≈ 1020px² 로 사진 1010 과
+#  1% 안이다. 「배율은 그대로인데 밑값이 바뀌면」 팩이 테이블에서 제일 큰 물건이 됐던
+#  사고(_boost_flat 옛 주석, 1.18 → 1.06)를 안 되풀이한다. 외접 반지름 26.23(TBL.chip_r
+#  22.04 위인 것은 전부터 그랬다).
+#  작은 팩과 큰 팩은 **한눈에** 갈려야 한다. 눈금(2 · 4)만으로는 30px 물건 위 점 두 개의
+#  차이였다. 넷을 겹친다 — 크기(작은 팩 0.9배) · 높이(벽 화면 2.9 대 4.6px) · 색(병초록
+#  대 쪽빛) · 경첩(큰 팩만 — 뒤 변에 놋쇠 마디 둘). 눈금은 라벨 띠 위로 옮겨 그대로 산다.
+#
+#  ── 잡히는 칸은 안 바꾼다 ──
+#  히트(_obj_shape)는 **큰 팩 네모 × hit 그대로**다. 깡통은 바닥이 c 에 앉고 뚜껑이 벽
+#  높이만큼 위로 선다 — 위로 솟은 4.6px 는 _shop_hit 의 들림 덮개(lz 9.86px)가 덮고,
+#  바닥 둘레는 네모 × 1.2 안이다. 작은 팩은 그 칸이 넉넉하다. qa_art ⑤ 가 둘레를 psi
+#  한 바퀴(5° 마다) 재고, 0 · 70 · 160 · 90 은 **그린 픽셀로** 한 번 더 잰다.
+#
+#  깡통 둘 — 작은 팩(s) · 큰 팩(b). 길이는 면 밑값이다(테이블은 GOODS_K 를 곱한다).
+#    k      PACK 에 곱하는 배율 — 작은 팩이 한 뼘 작다
+#    r      귀 반지름. 작은 팩이 더 둥글다(사탕 깡통) · 큰 팩은 각진 경첩 상자
+#    z      높이(바닥 → 뚜껑 윗면). 테이블 화면 벽 = z · GOODS_K · TBL.tall
+#    skirt  뚜껑 턱 — 뚜껑이 몸통을 덮고 내려온 높이
+#    hinge  경첩 뚜껑인가. 아니면 끼우는 뚜껑이다(몸통이 턱 안으로 한 뼘 들어간다)
+#    band   그림 속 라벨 띠의 행(첫 · 끝) · th 그림의 행 수 — 눈금이 띠 가운데에 선다.
+#           그림을 못 읽는 헤드리스에서도 자리가 같도록 수로 쥔다(make_tin_art.py 와 같은 수)
+#    medal  그림 속 메달의 가운데 행 · 반지름(도트) · tw 그림의 열 수 — 젖힌 뚜껑 안쪽에
+#           메달을 찍어 낸 자국이 그 자리에 선다
+#    e0~e2  에나멜 값 셋(그늘 · 바탕 · 볼록) — 그림과 **같은 수**다
+const TIN := {
+	"s": {"k": 0.90, "r": 5.0, "z": 4.0, "skirt": 1.7, "hinge": false,
+			"band": [25.0, 30.0], "th": 39.0, "tex": "tin_s",
+			"medal": [15.0, 8.6], "tw": 27.0,
+			"e0": Color("1c3a2d"), "e1": Color("2c5a45"), "e2": Color("3e765b")},
+	"b": {"k": 1.00, "r": 3.6, "z": 6.5, "skirt": 2.2, "hinge": true,
+			"band": [29.0, 35.0], "th": 43.0, "tex": "tin_b",
+			"medal": [16.5, 9.6], "tw": 30.0,
+			"e0": Color("1d3150"), "e1": Color("2f4f78"), "e2": Color("426a98")},
+}
+#  놋쇠 — 그림(make_tin_art.py)과 같은 수. 금(C_GOLD)보다 한참 낮고 누렇다.
+const C_BRASS := Color("b48a48")
+const C_BRASS_D := Color("7a5a2e")
+#  깡통 속 · 뚜껑 안쪽 — 칠 안 한 양철. 놋쇠보다 희고 차다.
+const C_TINPLATE := Color("b9b2a0")
+#  화면에서 오는 빛 — 왼쪽 위. 테 빛(_tin_rim)과 벽(_tin_wall)이 같은 방향을 본다.
+const TIN_LIGHT := Vector2(-0.6, -0.8)
+#  귀 하나를 몇 마디로 굽히나 · 눈금 반지름 / 면 반폭(라벨 띠 안에 넷이 든다).
+const TIN_SEG := 4
+const TIN_PIP := 0.10
+var _tin_tex_cache := {}
 
 
 # 면에 누운 네모의 네 귀퉁이. 크기를 받는 쪽이다 — _fix_quad 는 사진의
@@ -28788,17 +29152,44 @@ func _pack_quad(c: Vector2, rot: float, ex: float, ey_out: float, ey_in: float,
 		teeth: int, crimp: float, bite: float) -> PackedVector2Array:
 	var co := cos(rot)
 	var si := sin(rot)
+	var pts := PackedVector2Array()
+	for q in _foil_loc(ex, ey_out, ey_in, teeth, crimp, bite):
+		pts.append(_pack_pt(c, co, si, q.x, q.y))
+	return pts
+
+
+#  같은 꼭짓점을 **면 좌표로** 낸다 — 화면 자리(_pack_quad)와 그림 자리(UV)가 한 목록에서
+#  나와야 톱니 하나하나에 박이 제 자리로 붙는다(2026-10-06).
+func _foil_loc(ex: float, ey_out: float, ey_in: float, teeth: int, crimp: float,
+		bite: float) -> PackedVector2Array:
 	var sg: float = signf(ey_out - ey_in)      # 바깥이 어느 쪽인가
 	var pts := PackedVector2Array()
 	for i in teeth + 1:
 		var d: float = crimp if (i % 2 == 0) else 0.0
-		pts.append(_pack_pt(c, co, si,
-				lerpf(-ex, ex, float(i) / float(teeth)), ey_out - sg * d))
+		pts.append(Vector2(lerpf(-ex, ex, float(i) / float(teeth)), ey_out - sg * d))
 	for i in teeth + 1:
 		var d: float = bite if (i % 2 == 0) else -bite
-		pts.append(_pack_pt(c, co, si,
-				lerpf(ex, -ex, float(i) / float(teeth)), ey_in + sg * d))
+		pts.append(Vector2(lerpf(ex, -ex, float(i) / float(teeth)), ey_in + sg * d))
 	return pts
+
+
+#  팩 조각 하나를 칠한다. loc 는 블럭 제 좌표, yo 는 그 블럭 가운데의 면 자리(뜯기 전 팩
+#  가운데에서) — UV 는 **뜯기 전의 면 좌표**로 매기므로 두 쪽이 벌어져도 그림이 제 쪽을
+#  따라간다. 겉 그림이 없으면(지운 판 · 굽기 전) 옛 단색으로 선다.
+func _foil_fill(cc: Vector2, rt: float, loc: PackedVector2Array, yo: float,
+		w: float, h: float, tex: Texture2D, fr: int, col: Color, dim: float) -> void:
+	var co := cos(rt)
+	var si := sin(rt)
+	var pts := PackedVector2Array()
+	for q in loc:
+		pts.append(_pack_pt(cc, co, si, q.x, q.y))
+	if tex == null:
+		draw_colored_polygon(pts, col)
+		return
+	var uvs := PackedVector2Array()
+	for q in loc:
+		uvs.append(_foil_uv(tex, q.x, q.y + yo, w, h, fr))
+	draw_colored_polygon(pts, Color(1.0, 1.0, 1.0).darkened(dim), uvs, tex)
 
 
 # 펠트에 누운 팩 — 봉인된 **세로 주머니**다. 사진과 비로 갈리고(0.703 대
@@ -28838,8 +29229,10 @@ func _pack_quad(c: Vector2, rot: float, ex: float, ey_out: float, ey_in: float,
 #  파인 이가 띠의 바깥 변보다 깊어져 **바탕이 비친다**(지금 그랬다).
 #  띠의 이 깊이는 seam 으로 막는다 — 그보다 깊으면 파인 자리에서 띠가
 #  블럭보다 물러나 종이 속살이 드러난다. 1.7·k 대신 1.6·k 라 6% 얕다.
-func _pack_body(c: Vector2, rot: float, k: float, bd: Dictionary,
-		tear: float, dim: float) -> void:
+#  fr 은 겉 그림의 빛 장(FOIL_ART) — 0 이 쉬는 장이다.
+func _foil_body(c: Vector2, rot: float, k: float, bd: Dictionary,
+		tear: float, dim: float, fr := 0) -> void:
+	var tex := _foil_tex(bd)
 	var w: float = float(PACK.w) * k          # 판 위 15.08
 	var h: float = float(PACK.h) * k          # 판 위 21.46
 	var seam: float = float(PACK.seam) * k    # 면이다 — 배율을 탄다
@@ -28868,10 +29261,11 @@ func _pack_body(c: Vector2, rot: float, k: float, bd: Dictionary,
 		#  있어서 색이 달라도 한 물건으로 보였다. 가장자리는 크림프가 말한다.
 		#  안쪽 변은 **곧다.** 띠가 통째로 덮는 자리라 톱니를 물려 봐야
 		#  안 보이고, 깊어지면 띠 바깥으로 삐져나와 바탕이 비친다.
-		draw_colored_polygon(
-				_pack_quad(cc, rt, w, sgn * lo, -sgn * lo,
-						int(PACK.teeth), crimp, 0.0),
-				Color(C_PANEL.lightened(0.34 if kk == 0 else 0.24).darkened(dim), 1.0))
+		#  블럭 가운데의 면 자리 — UV 는 뜯기 전 팩 가운데에서 잰다(_pack_fill).
+		var yo: float = sgn * (seam + lo)
+		_foil_fill(cc, rt, _foil_loc(w, sgn * lo, -sgn * lo, int(PACK.teeth), crimp, 0.0),
+				yo, w, h, tex, fr,
+				Color(C_PANEL.lightened(0.34 if kk == 0 else 0.24).darkened(dim), 1.0), dim)
 		#  이음매를 지나는 띠 — **눌린 자리**다. 여태 C_ACC 가 가운데를 통으로
 		#  덮었는데(41.8 × 4.25 ≈ 178px²), C_ACC 대 C_GOLD 가 **1.191:1** 이라
 		#  640×360 에서 같은 호박색이다 — 팩이 값표 옆에 서면 봉인이 「돈」으로
@@ -28886,9 +29280,11 @@ func _pack_body(c: Vector2, rot: float, k: float, bd: Dictionary,
 		#  옛 네모와 **한 픽셀도 안 다르다.**
 		var bo: float = -sgn * (lo - bite_in)       # 띠 바깥 변
 		var bi: float = -sgn * (lo + seam)          # 띠 안쪽 변 = 팩 가운데
-		draw_colored_polygon(
-				_pack_quad(cc, rt, w, bo, bi, int(PACK.teeth), 0.0, bite),
-				Color(C_PANEL.lightened(0.10).darkened(dim), 1.0))
+		#  겉 그림에서는 이 띠가 **뜯는 띠**(먹빛 리본)이고 다트판 봉인이 그 위에
+		#  앉는다 — 찢기면 봉인이 이 톱니를 따라 둘로 갈린다(2026-10-06).
+		_foil_fill(cc, rt, _foil_loc(w, bo, bi, int(PACK.teeth), 0.0, bite),
+				yo, w, h, tex, fr,
+				Color(C_PANEL.lightened(0.10).darkened(dim), 1.0), dim)
 		#  뜯는 홈 — 봉인띠 왼쪽 귀의 삼각 결각. 닫힌 채로 「뜯는 물건」임을
 		#  말하고 찢어질 자리를 미리 가리킨다. 반쪽씩 두 블럭이 나눠 지므로
 		#  tear=0 에서 온전한 삼각이 되고, 갈라지면 같이 갈라진다.
@@ -28903,28 +29299,41 @@ func _pack_body(c: Vector2, rot: float, k: float, bd: Dictionary,
 				_pack_pt(cc, co, si, -w, ny + sgn * nt),
 				_pack_pt(cc, co, si, -w + nt, ny),
 				_pack_pt(cc, co, si, -w, ny)]),
-				Color(C_PANEL.darkened(0.55 + dim * 0.3), 1.0))
-		if kk != 0:
-			continue
-		#  호박색 실과 눈금은 **위 쪽만** 진다. 눈금은 겉을 말하던 유일한
-		#  표시라 열 때 사라지면 안 된다 — 떠난 블럭 안에서 **팩 가운데를
-		#  되짚어** 넘기므로 판 위와 글자 그대로 같은 식이다.
+				Color((C_BG if tex != null else C_PANEL.darkened(0.55)).darkened(dim * 0.3), 1.0))
 		#  실은 띠의 **바깥** 가장자리다(가운데가 아니다). 가운데에 두면
 		#  찢긴 뒤 그 실이 너덜한 변에 얹혀 「날것으로 찢긴 자리」가 안
 		#  읽힌다 — 바깥에 두면 실은 성하고 안쪽만 찢긴다.
-		draw_colored_polygon(_quad_at(
-				_pack_pt(cc, co, si, 0.0, -sgn * (lo - bite_in + th * 0.5)),
-				rt, w, th * 0.5),
-				Color(C_ACC.darkened(dim), 1.0))
-		_pack_pips(_pack_pt(cc, co, si, 0.0, seam + lo), co, si, bd, w, h,
-				dim, 1.0 - tear)
-
-
-func _boost_flat(c: Vector2, bd: Dictionary, rot: float, dim: float) -> void:
-	draw_colored_polygon(_quad_at(c + Vector2(0.0, 1.2), rot,
-			float(PACK.w) * GOODS_K, float(PACK.h) * GOODS_K),
-			Color(0.0, 0.0, 0.0, 0.35))
-	_pack_body(c, rot, GOODS_K, bd, 0.0, dim)
+		#  2026-10-06 — 실은 **봉인 밑으로 지난다**(봉인 자리에서 끊는다). 한 줄로
+		#  긋던 때는 다트판 한가운데를 놋쇠 금이 가로질렀다. 색은 C_ACC 호박이 아니라
+		#  가라앉은 놋쇠(FOIL_ART.brass) — 놋쇠는 가는 줄로만 쓴다. 작은 팩은 위 띠 끝
+		#  한 줄, 큰 팩은 아래 띠 끝에도 한 줄 더(띠 두 줄 — 겉이 한 겹 더 공들였다).
+		if kk == 0 or (tex != null and _pack_big(bd)):
+			var ty: float = -sgn * (lo - bite_in + th * 0.5)
+			#  봉인 반지름(면) · 실이 지나는 높이(뜯기 전 팩 가운데에서)에서의 반현
+			var mr: float = (float(FOIL_ART.med)
+					+ (float(FOIL_ART.ring) if _pack_big(bd) else 0.0)) * k
+			var fy: float = absf(ty + yo)
+			var hx: float = sqrt(maxf(mr * mr - fy * fy, 0.0)) if tex != null else 0.0
+			var tc := Color((FOIL_ART.brass if tex != null else C_ACC).darkened(dim), 1.0)
+			if hx <= 0.0:
+				draw_colored_polygon(_quad_at(_pack_pt(cc, co, si, 0.0, ty),
+						rt, w, th * 0.5), tc)
+			else:
+				var sx: float = (w + hx) * 0.5
+				for sd in [-1.0, 1.0]:
+					draw_colored_polygon(_quad_at(_pack_pt(cc, co, si, sd * sx, ty),
+							rt, (w - hx) * 0.5, th * 0.5), tc)
+		#  눈금은 겉을 말하던 유일한 표시라 열 때 사라지면 안 된다 — 떠난 블럭
+		#  안에서 **팩 가운데를 되짚어** 넘기므로 판 위와 글자 그대로 같은 식이다.
+		#  2026-10-06 — 위 블럭에서 **아래 블럭**으로 옮겼다. 가운데가 봉인이고 위는
+		#  박의 빛 띠가 지나는 자리라, 「안에 든 수」는 봉인 밑 빈 박에 찍힌다.
+		#  겉 그림이 없으면(굽기 전) 옛 자리 그대로 위 블럭에 크림 점이다.
+		if tex != null and kk == 1:
+			_pack_pips(_pack_pt(cc, co, si, 0.0, -(seam + lo)), co, si, bd, w, h,
+					dim, 1.0 - tear, true)
+		elif tex == null and kk == 0:
+			_pack_pips(_pack_pt(cc, co, si, 0.0, seam + lo), co, si, bd, w, h,
+					dim, 1.0 - tear)
 
 
 #  눈금 — 안에 든 수(size)와 가져갈 수(pick)를 **한 채널에** 얹는다.
@@ -28936,18 +29345,562 @@ func _boost_flat(c: Vector2, bd: Dictionary, rot: float, dim: float) -> void:
 #  크기를 JUMBO·MEGA **글자로** 말하는데 우리는 글자를 못 쓴다.
 #  **둘 다 채운 원이다** — 외곽선을 쓰면 16px 아래에서 죽는다.
 #  겉면이 30×34px 뿐이라 장식은 안 얹는다. 정보는 한 채널에만.
-#  c 는 **팩 가운데**다(블럭 가운데가 아니다) — 여는 연출에서 위 블럭이
+#  c 는 **팩 가운데**다(블럭 가운데가 아니다) — 여는 연출에서 블럭이
 #  떠난 뒤에도 같은 식을 쓰려면 떠나기 전의 팩 가운데를 되짚어 넘긴다.
+#  ink — 박 위에 **찍힌 점**이다(2026-10-06). 크림 점은 은박 위에서 안 보였다 —
+#  밑은 먹 한 점, 가져갈 몫은 그 안에 빨강(다트판 불과 같은 단 하나의 강조색).
 func _pack_pips(c: Vector2, co: float, si: float, bd: Dictionary,
-		w: float, h: float, dim: float, a: float) -> void:
+		w: float, h: float, dim: float, a: float, ink := false) -> void:
 	var n: int = maxi(1, int(bd.get("size", 2)))
 	var pk: int = clampi(int(bd.get("pick", 1)), 0, n)
 	var pr: float = maxf(float(PACK.pip) * w, 1.5)
 	var pitch: float = float(PACK.pitch) * pr
+	var y: float = float(PACK.pip_y) * h if ink else -0.62 * h
 	for i in n:
 		var x: float = (float(i) - float(n - 1) * 0.5) * pitch
-		draw_circle(_pack_pt(c, co, si, x, -0.62 * h), pr,
-				Color(C_TXT.darkened(dim), (0.9 if i < pk else 0.30) * a))
+		var p := _pack_pt(c, co, si, x, y)
+		if not ink:
+			draw_circle(p, pr, Color(C_TXT.darkened(dim), (0.9 if i < pk else 0.30) * a))
+			continue
+		draw_circle(p, pr, Color(C_BG.darkened(dim * 0.3), 0.92 * a))
+		if i < pk:
+			draw_circle(p, pr * 0.58, Color(C_RED.darkened(dim), a))
+
+
+#  결 한 마디의 깊이(0.25~1). **변과 마디 번호로만** 정해진다 — 판 위 · 여는 연출의
+#  두 쪽이 같은 변을 같은 결로 깎아야 tear=0 에서 두 쪽이 한 장으로 맞물린다.
+func _env_dk(edge: int, i: int) -> float:
+	return 0.25 + 0.75 * _gl_rand(edge * 31 + i * 7 + 3, 977)
+
+
+#  찢긴 자리 한 줄(면 좌표). 양 끝은 0 에 붙고 안쪽 이는 위아래로 번갈아 문다 —
+#  깊이는 이마다 조금씩 달라 「자로 자른 톱니」가 아니라 「손으로 찢은 종이」다.
+#  **두 쪽이 같은 줄을 나눠 진다** — 위 쪽의 아랫변과 아래 쪽의 윗변이 글자 그대로
+#  같은 점이라, 벌어진 두 쪽을 다시 붙이면 이가 맞물린다. off 는 그 줄을 통째로
+#  미는 몫(속살 테가 겉보다 밖으로 나오는 자리)이고, back 이면 오른쪽에서 왼쪽으로 낸다.
+func _env_rip(w: float, k: float, bite: float, off: float,
+		back: bool) -> PackedVector2Array:
+	var n: int = int(PACK.teeth) + 1
+	var ex: float = w - float(ENV.deckle) * k * 0.5
+	var pts := PackedVector2Array()
+	for j in n + 1:
+		var i: int = (n - j) if back else j
+		var d := 0.0
+		if i > 0 and i < n:
+			d = bite * (1.0 if i % 2 == 1 else -1.0) * (0.55 + 0.45 * _gl_rand(i, 4711))
+		pts.append(Vector2(lerpf(-ex, ex, float(i) / float(n)), d + off))
+	return pts
+
+
+#  종이 한 장의 둘레 — 면 좌표(팩 가운데 기준 · 돌리기 전). 세로 [ya, yb] 를 덮는다.
+#  ±h 에 닿는 변은 너덜한 결, 0 에 닿는 변은 찢긴 자리(_pack_rip)다.
+#  판 위는 [-h, h] 한 장이고 여는 연출은 [-h, 0] · [0, h] 두 장이다. 결은 변 위의
+#  **자리**로만 정해지므로(_pack_dk) 두 장을 붙이면 판 위 한 장과 같은 둘레가 된다.
+#  결은 **안으로만** 문다 — 겉 크기 w · h 가 그대로라 외접 반지름 · 히트 · 그림자가
+#  한 톨도 안 움직인다. 귀는 두 변의 결이 겹쳐 둥글게 먹힌다.
+func _env_sheet(w: float, h: float, k: float, ya: float, yb: float,
+		bite: float, off := 0.0) -> PackedVector2Array:
+	var dp: float = float(ENV.deckle) * k
+	var st: float = float(ENV.dstep) * k
+	var nx: int = maxi(2, int(roundf(w * 2.0 / st)))
+	var ny: int = maxi(2, int(roundf(h * 2.0 / st)))
+	var cx: float = w - dp * 0.5
+	var pts := PackedVector2Array()
+	if ya <= -h + 0.001:
+		for i in nx + 1:
+			pts.append(Vector2(lerpf(-cx, cx, float(i) / float(nx)), -h + dp * _env_dk(0, i)))
+	else:
+		pts.append_array(_env_rip(w, k, bite, -off, false))
+	for j in range(1, ny):
+		var y: float = lerpf(-h, h, float(j) / float(ny))
+		if y > ya + 0.001 and y < yb - 0.001:
+			pts.append(Vector2(w - dp * _env_dk(1, j), y))
+	if yb >= h - 0.001:
+		for i in range(nx, -1, -1):
+			pts.append(Vector2(lerpf(-cx, cx, float(i) / float(nx)), h - dp * _env_dk(2, i)))
+	else:
+		pts.append_array(_env_rip(w, k, bite, off, true))
+	for j in range(ny - 1, 0, -1):
+		var y: float = lerpf(-h, h, float(j) / float(ny))
+		if y > ya + 0.001 and y < yb - 0.001:
+			pts.append(Vector2(-w + dp * _env_dk(3, j), y))
+	return pts
+
+
+#  면 좌표 → 화면. 쪽 하나의 몸(cc · 각)과 그 쪽 가운데의 면 높이(oy)를 받는다.
+func _env_xf(pts: PackedVector2Array, cc: Vector2, co: float, si: float,
+		oy: float) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	for p in pts:
+		out.append(_pack_pt(cc, co, si, p.x, p.y - oy))
+	return out
+
+
+#  면 좌표 → 그림 좌표. 그림이 덮는 면 네모(x0, y0, sw, sh)에 대어 0~1 로 편다 —
+#  둘레를 어떻게 깎든 그림은 면에 붙어 있다(찢긴 두 쪽이 한 그림을 나눠 진다).
+func _env_uv(pts: PackedVector2Array, x0: float, y0: float, sw: float,
+		sh: float) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	for p in pts:
+		out.append(Vector2((p.x - x0) / sw, (p.y - y0) / sh))
+	return out
+
+
+#  봉투 종이 한 장(또는 찢긴 한 쪽). 밑에서부터 두께 → 찢긴 속살 → 종이 그림.
+#    cc · rt · oy   그 쪽의 몸(_pack_xf)        ya · yb   면에서 덮는 세로
+#    bite           찢긴 이의 깊이(0 이면 곧다)  tear      속살 테가 자라는 몫
+#  봉인은 _pack_seal 이 따로 얹는다 — 찢기면 위 쪽 봉인이 종이 밖으로 삐져나오므로
+#  두 쪽의 종이를 다 깐 **다음에** 얹어야 아래 쪽 종이에 안 덮인다.
+func _env_piece(cc: Vector2, rt: float, oy: float, k: float, kind: String,
+		ya: float, yb: float, bite: float, tear: float, dim: float) -> void:
+	var w: float = float(PACK.w) * k
+	var h: float = float(PACK.h) * k
+	var co := cos(rt)
+	var si := sin(rt)
+	var art: Dictionary = ENV_ART[kind]
+	var face := _env_sheet(w, h, k, ya, yb, bite)
+	var scr := _env_xf(face, cc, co, si, oy)
+	#  종이 두께 — 같은 둘레를 화면 아래로 민다. 판 위 1px(작은 팩) · 2px(큰 팩).
+	var th: float = float(art.thick) * k / GOODS_K
+	var side := PackedVector2Array()
+	for p in scr:
+		side.append(p + Vector2(0.0, th))
+	draw_colored_polygon(side, Color(art.side).darkened(dim))
+	#  찢긴 자리의 속살 — 종이 결이 일어나 겉보다 밝다. 겉보다 fr 만큼 밖으로 문
+	#  같은 이빨이라, 겉이 덮고 남은 테가 찢긴 줄을 그대로 따라간다.
+	if tear > 0.0:
+		var fr: float = 0.9 * k * sqrt(tear)
+		draw_colored_polygon(_env_xf(_env_sheet(w, h, k, ya, yb, bite, fr),
+				cc, co, si, oy), Color(art.core).darkened(dim))
+	var mod := Color(1.0, 1.0, 1.0).darkened(dim)
+	var tex := _env_tex(String(art.tex))
+	if tex != null:
+		draw_colored_polygon(scr, mod, _env_uv(face, -w, -h, w * 2.0, h * 2.0), tex)
+	else:
+		draw_colored_polygon(scr, Color(art.body).darkened(dim))
+
+
+#  밀랍 봉인. 몸(cc · rt · oy)은 그것이 붙은 종이와 같다. 찢기면(tear > 0) **위 쪽
+#  (윗날개)만 부른다** — 봉인은 날개 끝에 앉아 있으니 날개를 따라간다.
+#  처음 판은 봉인을 종이의 찢긴 이빨 둘레로 한가운데에서 둘로 잘라 두 쪽에 나눠
+#  줬더니, 반원 둘이 찢긴 속살(흰 테)을 물고 「눈」 · 「이를 드러낸 입」으로 읽혔다.
+#  둘째 판은 금을 아래로 내려 아래 쪽에 초승달만 줬는데 그것이 「웃는 입」이 됐다
+#  (2026-10-06 — 여는 연출을 찍어 봤다). 그래서 깨짐은 **금 한 줄**로만 말한다:
+#  봉인은 통째로 위 쪽에 남고, 그 아래쪽(0.38·sr)을 가로지르는 금이 벌어진다.
+func _env_seal(cc: Vector2, rt: float, oy: float, k: float,
+		tear: float, dim: float) -> void:
+	var stx := _env_tex("env_seal")
+	if stx == null:
+		return
+	var sr: float = float(ENV.seal) * float(PACK.w) * k
+	var parts := [PackedVector2Array([Vector2(-sr, -sr), Vector2(sr, -sr),
+			Vector2(sr, sr), Vector2(-sr, sr)])]
+	if tear > 0.0:
+		parts = [_env_crack(sr, k, tear, true), _env_crack(sr, k, tear, false)]
+	for q in parts:
+		var sq := q as PackedVector2Array
+		draw_colored_polygon(_env_xf(sq, cc, cos(rt), sin(rt), oy),
+				Color(1.0, 1.0, 1.0).darkened(dim),
+				_env_uv(sq, -sr, -sr, sr * 2.0, sr * 2.0), stx)
+
+
+#  금 한쪽의 봉인 조각(면 좌표). 굴곡 · 벌어짐이 tear 0 에서 0 으로 시작해 찢기는 첫
+#  프레임이 판 위와 안 갈린다. 다 벌어져도 금은 화면 2px 남짓이다 — 깨졌다는 말이지
+#  떨어져 나갔다는 말이 아니다.
+func _env_crack(sr: float, k: float, tear: float, upper: bool) -> PackedVector2Array:
+	var yc: float = 0.38 * sr
+	var amp: float = 0.35 * k * minf(tear * 3.0, 1.0)
+	var gw: float = 0.45 * k * tear
+	var cr := [0.0, 0.9, -0.6, 0.7, -0.3, 0.0]
+	var sg: float = -1.0 if upper else 1.0
+	var pts := PackedVector2Array()
+	pts.append(Vector2(-sr, sg * sr))
+	pts.append(Vector2(sr, sg * sr))
+	for j in cr.size():
+		pts.append(Vector2(lerpf(sr, -sr, float(j) / float(cr.size() - 1)),
+				yc + float(cr[cr.size() - 1 - j]) * amp + sg * gw))
+	return pts
+
+
+#  팩 몸통 하나. **판 위와 여는 연출이 글자 그대로 같은 함수다** — tear 가 0 이면
+#  한 장이 판 위 그림이 되고, 자라면 한가운데(봉인 자리)에서 두 쪽으로 찢긴다.
+#  「겉과 열림이 한 물건」이 말이 아니라 **한 함수**인 자리가 여기다.
+#  찢기는 줄이 봉인을 지난다 — 봉인이 깨지고 윗날개 쪽이 위로, 아랫쪽이 아래로
+#  간다. 벌어지는 거리(BOOST.gap) · 두 쪽이 반대로 기우는 각(±0.24) · 이 깊이
+#  (1.7·k·tear, 1.6·k 에서 멈춘다)는 옛 두 블럭 그대로다 — 시간도 그대로다.
+func _env_body(c: Vector2, rot: float, k: float, bd: Dictionary,
+		tear: float, dim: float) -> void:
+	var kind := _env_kind(bd)
+	var h: float = float(PACK.h) * k
+	if tear <= 0.0:
+		_env_piece(c, rot, 0.0, k, kind, -h, h, 0.0, 0.0, dim)
+		_env_seal(c, rot, 0.0, k, 0.0, dim)
+		return
+	var bite: float = minf(1.7 * k * tear, 1.6 * k)
+	# 벌어지는 거리. 처음에 빠르게 뜯기고 끝에서 느려진다 — 손으로 뜯는 결이다.
+	var gap: float = float(BOOST.gap) * (1.0 - pow(1.0 - tear, 2.4))
+	var bco := cos(rot)
+	var bsi := sin(rot)
+	var top := []
+	for kk in 2:
+		var sgn: float = -1.0 if kk == 0 else 1.0
+		# 위쪽은 위로, 아래쪽은 아래로. 갈라지면서 서로 반대로 기운다.
+		var rt: float = rot + sgn * tear * 0.24
+		var cc := _pack_pt(c, bco, bsi, 0.0, sgn * h * 0.5) \
+				+ Vector2(gap * sgn * 0.16, sgn * gap * TBL.flat)
+		_env_piece(cc, rt, sgn * h * 0.5, k, kind,
+				-h if kk == 0 else 0.0, 0.0 if kk == 0 else h, bite, tear, dim)
+		if kk == 0:
+			top = [cc, rt]
+	#  봉인은 두 쪽의 종이를 다 깐 **다음에** 위 쪽 몸으로 얹는다 — 찢긴 종이 밖으로
+	#  삐져나온 아래 반이 아래 쪽 종이에 덮이면 안 된다.
+	_env_seal(top[0], float(top[1]), -h * 0.5, k, tear, dim)
+
+
+
+func _tin_of(bd: Dictionary) -> Dictionary:
+	return TIN.b if int(bd.get("size", 2)) >= 4 else TIN.s
+
+
+#  깡통 바닥의 면 반폭 · 반깊이(배율 k 까지 곱한 값). 그림 · 그림자 · 조각 · 상인 손이 이
+#  하나를 읽는다 — 작은 팩의 0.9 를 한 자리에서만 곱한다.
+func _tin_ext(bd: Dictionary, k: float) -> Vector2:
+	return Vector2(float(PACK.w), float(PACK.h)) * float(_tin_of(bd).k) * k
+
+
+#  뚜껑 그림. 없으면 null — 그 자리에는 에나멜 단색 뚜껑이 선다.
+#  갓 구운 장은 .ctex 가 아직 없을 수 있다(워크트리 · 헤드리스) — _coin_art 와 같이
+#  원본 PNG 를 직접 읽는다.
+func _tin_tex(id: String) -> Texture2D:
+	if _tin_tex_cache.has(id):
+		return _tin_tex_cache[id]
+	var path := "res://assets/tin/%s.png" % id
+	var t: Texture2D = load(path) if ResourceLoader.exists(path) else null
+	if t == null and FileAccess.file_exists(path):
+		var im := Image.load_from_file(path)
+		if im != null and not im.is_empty():
+			t = ImageTexture.create_from_image(im)
+	_tin_tex_cache[id] = t
+	return t
+
+
+#  둥근 네모의 둘레 — **면 좌표**(반폭 ex · 반깊이 ey · 귀 r). 12시에서 시작해 화면 시계
+#  방향(y 아래)으로 돈다 — 그래서 변 e 의 바깥 법선이 (e.y, −e.x) 다. 그림 · 그림자 ·
+#  조각 · 여닫이가 전부 이 둘레 하나다.
+func _tin_loc(ex: float, ey: float, r: float) -> PackedVector2Array:
+	var rr: float = clampf(r, 0.0, minf(ex, ey))
+	var n: int = int(TIN_SEG)
+	var cs := [Vector2(ex - rr, -ey + rr), Vector2(ex - rr, ey - rr),
+			Vector2(-ex + rr, ey - rr), Vector2(-ex + rr, -ey + rr)]
+	var out := PackedVector2Array()
+	for q in 4:
+		for j in n + 1:
+			var a: float = PI * 0.5 * (float(q) + float(j) / float(n) - 1.0)
+			out.append((cs[q] as Vector2) + Vector2(cos(a), sin(a)) * rr)
+	return out
+
+
+# 깡통의 한 점을 화면으로 옮긴다 — 면 좌표 (x, y) 를 돌리고 눕힌 뒤 높이 z(면 단위)만큼
+# 올린다. _p2s 와 같은 투영이다(깊이는 TBL.flat · 높이는 TBL.tall). 깡통을 이루는 모든
+# 조각이 **이 한 변환만** 쓴다.
+func _tin_p3(c: Vector2, co: float, si: float, x: float, y: float, z: float) -> Vector2:
+	return c + Vector2(x * co - y * si, (x * si + y * co) * TBL.flat - z * TBL.tall)
+
+
+func _tin_ring(c: Vector2, co: float, si: float, loc: PackedVector2Array,
+		z: float) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	for p in loc:
+		out.append(_tin_p3(c, co, si, p.x, p.y, z))
+	return out
+
+
+#  화면 다각형의 감김. 양수가 처음 둘레(_tin_loc)와 같은 쪽이다 — 젖힌 뚜껑이 이 부호를
+#  뒤집으면 윗면이 등을 돌린 것이다(안쪽 양철이 보인다).
+func _tin_wind(pts: PackedVector2Array) -> float:
+	var s := 0.0
+	for i in pts.size():
+		var a: Vector2 = pts[i]
+		var b: Vector2 = pts[(i + 1) % pts.size()]
+		s += a.x * b.y - b.x * a.y
+	return s
+
+
+#  벽 — 둘레 loc 를 높이 z0..z1 로 세운 띠. **화면 쪽을 보는 변만** 그린다 — 둘레가
+#  볼록이라 그것만으로 실루엣이 찬다(뒤 변은 뚜껑 밑에 깔린다). 왼쪽을 보는 변이 밝고
+#  오른쪽을 보는 변이 어둡다 — 귀 마디마다 한 단씩 갈려 둥근 벽이 계단 빛으로 읽힌다.
+func _tin_wall(c: Vector2, co: float, si: float, loc: PackedVector2Array,
+		z0: float, z1: float, col: Color, a: float) -> void:
+	var n := loc.size()
+	for i in n:
+		var p: Vector2 = loc[i]
+		var q: Vector2 = loc[(i + 1) % n]
+		var p0 := _tin_p3(c, co, si, p.x, p.y, z0)
+		var q0 := _tin_p3(c, co, si, q.x, q.y, z0)
+		var e := q0 - p0
+		if e.length_squared() < 0.0001:
+			continue
+		var nv := Vector2(e.y, -e.x).normalized()
+		if nv.y <= 0.02:
+			continue
+		var lit: float = -nv.x
+		var cc: Color = col.lightened(0.20 * lit) if lit > 0.0 else col.darkened(-0.32 * lit)
+		draw_colored_polygon(PackedVector2Array([
+				_tin_p3(c, co, si, p.x, p.y, z1), _tin_p3(c, co, si, q.x, q.y, z1), q0, p0]),
+				Color(cc, a))
+
+
+#  같은 앞 변들을 따라 한 줄 — 뚜껑과 몸통이 맞물린 금, 바닥 테.
+func _tin_seam(c: Vector2, co: float, si: float, loc: PackedVector2Array,
+		z: float, col: Color) -> void:
+	var n := loc.size()
+	for i in n:
+		var p := _tin_p3(c, co, si, loc[i].x, loc[i].y, z)
+		var q := _tin_p3(c, co, si, loc[(i + 1) % n].x, loc[(i + 1) % n].y, z)
+		var e := q - p
+		if e.length_squared() < 0.0001 or Vector2(e.y, -e.x).y <= 0.02:
+			continue
+		draw_line(p, q, col, 1.0)
+
+
+#  뚜껑 테의 빛 — 빛을 보는 변에 밝은 한 줄, 등진 변에 그늘 한 줄. 그림(뚜껑 윗면)은
+#  둘레 빛을 고르게 구웠고(돌려도 안 틀리게) 방향은 여기서 얹는다.
+func _tin_rim(pts: PackedVector2Array, hi: Color, lo: Color) -> void:
+	var n := pts.size()
+	for i in n:
+		var p: Vector2 = pts[i]
+		var q: Vector2 = pts[(i + 1) % n]
+		var e := q - p
+		if e.length_squared() < 0.0001:
+			continue
+		var d: float = Vector2(e.y, -e.x).normalized().dot(TIN_LIGHT)
+		if d > 0.30:
+			draw_line(p, q, hi, 1.0)
+		elif d < -0.62:
+			draw_line(p, q, lo, 1.0)
+
+
+#  뚜껑 자세 — 여는 정도 op(0 닫힘 → 1 다 열림)에서 (들림 dz · 젖힘 θ · 물러남 dy).
+#  길이는 면 밑값(배율 전)이다.
+#  큰 팩은 경첩이라 안 뜬다 — 뒤 윗변을 축으로 곧장 젖혀 104° 에 서고 끝에서 한 번
+#  출렁인다(곧추선 것보다 한 뼘 더 — 경첩 상자가 제 무게로 뒤로 기대는 자리다).
+#  작은 팩은 끼우는 뚜껑이라 먼저 **톡 뜬다**(턱을 넘을 만큼) — 그 틈으로 속의 빛이
+#  새고, 그다음 뒤로 젖혀 넘어간다.
+func _tin_pose(tn: Dictionary, op: float) -> Vector3:
+	if op <= 0.0:
+		return Vector3.ZERO
+	if bool(tn.hinge):
+		var u: float = clampf((op - 0.04) / 0.70, 0.0, 1.0)
+		var s := 1.6
+		var e: float = 1.0 + (s + 1.0) * pow(u - 1.0, 3.0) + s * pow(u - 1.0, 2.0)
+		return Vector3(0.0, deg_to_rad(104.0) * e, 0.0)
+	var up: float = clampf(op / 0.22, 0.0, 1.0)
+	var dz: float = float(tn.skirt) * 1.6 * (1.0 - pow(1.0 - up, 2.0))
+	var u2: float = clampf((op - 0.16) / 0.66, 0.0, 1.0)
+	var e2: float = 1.0 - pow(1.0 - u2, 3.0)
+	return Vector3(dz, deg_to_rad(124.0) * e2, -float(PACK.h) * 0.16 * e2)
+
+
+#  뚜껑의 한 점(면 x, y · 높이 z)을 자세대로 옮겨 화면으로. 축은 뒤 윗변
+#  (y = −ey · z = zt)이다. 들림 · 물러남은 축째 옮긴다.
+func _tin_lidp(c: Vector2, co: float, si: float, x: float, y: float, z: float,
+		ey: float, zt: float, ps: Vector3, k: float) -> Vector2:
+	var yy: float = y + ey
+	var zz: float = z - zt
+	var cs := cos(ps.y)
+	var sn := sin(ps.y)
+	return _tin_p3(c, co, si, x, yy * cs - zz * sn - ey + ps.z * k,
+			yy * sn + zz * cs + zt + ps.x * k)
+
+
+#  경첩 — 뒤 변(면 y = −ey)에 놋쇠 마디 둘. 뚜껑 턱 높이에 걸려 뒤 변 밖으로 한 뼘
+#  나온다 — psi 0 에서는 뚜껑 위 끝에 놋쇠 둔덕 둘로, 돌아가면 옆 · 앞 벽의 마디로 선다.
+#  닫힌 자세에서만 그린다(여는 동안은 뚜껑 축 속에 묻힌다).
+func _tin_hinge(c: Vector2, co: float, si: float, ex: float, ey: float,
+		z0: float, z1: float, k: float, dim: float, a: float) -> void:
+	for sx in [-1.0, 1.0]:
+		var xm: float = float(sx) * ex * 0.46
+		var hw: float = ex * 0.15
+		var loc := PackedVector2Array([Vector2(xm - hw, -ey - 1.3 * k),
+				Vector2(xm + hw, -ey - 1.3 * k), Vector2(xm + hw, -ey + 0.4 * k),
+				Vector2(xm - hw, -ey + 0.4 * k)])
+		_tin_wall(c, co, si, loc, z0, z1, C_BRASS_D.darkened(dim), a)
+		draw_colored_polygon(_tin_ring(c, co, si, loc, z1),
+				Color(C_BRASS.darkened(dim), a))
+
+
+#  깡통 한 통 — **판 위 · 상인 손 · 여는 연출이 글자 그대로 같은 함수다.** op 가 0 이면
+#  닫힌 깡통(판 위 그림)이고, 자라면 뚜껑이 뜨고 젖혀진다. 「겉과 열림이 한 물건」이
+#  말이 아니라 **한 함수**인 자리가 여기다.
+#    c     바닥 한가운데(펠트에 닿는 자리). 뚜껑 윗면은 벽 높이만큼 위다
+#    k     배율 — 테이블은 GOODS_K, 여는 연출은 _boost_k(rise)
+#    glow  속에서 새는 빛(열린 만큼 알파를 실어 넘긴다). 닫히면 안 쓴다
+#    a     통째 알파 — 여는 연출의 끝에서만 1 밑으로 간다
+func _tin_body(c: Vector2, rot: float, k: float, bd: Dictionary, op: float,
+		dim: float, a := 1.0, glow := Color(0.0, 0.0, 0.0, 0.0)) -> void:
+	var tn := _tin_of(bd)
+	var e := _tin_ext(bd, k)
+	var ex: float = e.x
+	var ey: float = e.y
+	var r: float = float(tn.r) * k
+	var zt: float = float(tn.z) * k
+	var sk: float = float(tn.skirt) * k
+	var co := cos(rot)
+	var si := sin(rot)
+	var loc := _tin_loc(ex, ey, r)
+	var e1: Color = Color(tn.e1).darkened(dim)
+	var e0: Color = Color(tn.e0).darkened(dim)
+	#  닿는 그림자 — 바닥 둘레를 한 뼘 내린다. 벽 밑이 펠트에 앉는다.
+	draw_colored_polygon(_tin_ring(c + Vector2(0.0, 1.2), co, si, loc, 0.0),
+			Color(0.0, 0.0, 0.0, 0.35 * a))
+	#  몸통 — 끼우는 뚜껑(작은 팩)은 몸통이 턱 안으로 한 뼘 들어가 맞물린 금이 계단이 된다.
+	var ins: float = 0.0 if bool(tn.hinge) else 0.45 * k
+	var bl := _tin_loc(ex - ins, ey - ins, r - ins)
+	var ps := _tin_pose(tn, op)
+	var shut: bool = ps == Vector3.ZERO
+	#  닫히면 몸통은 턱 밑까지만 — 그 위는 뚜껑 턱이 덮는다. 열리면 몸통 테가 턱 속에서 드러난다.
+	var zb: float = zt - sk if shut else zt - sk * 0.35
+	_tin_wall(c, co, si, bl, 0.0, zb, e0.lerp(e1, 0.45), a)
+	_tin_seam(c, co, si, bl, 0.0, Color(e0.darkened(0.45), a))
+	if not shut:
+		#  속 — 몸통 윗둘레(말린 테 · 양철)에서 벽 두께만큼 안. 멀리 선 안벽은 빛을 받아
+		#  양철로 한 단 밝고, 바닥은 그늘이다 — 같은 둘레를 높이만큼 내린 것과 **겹친 데가
+		#  곧 보이는 바닥**이다(정사영이라 근사가 아니다).
+		var rim := _tin_ring(c, co, si, bl, zb)
+		draw_colored_polygon(rim, Color(C_TINPLATE.darkened(0.12 + dim), a))
+		var th: float = 0.7 * k
+		var ix: float = ex - ins - th
+		var iy: float = ey - ins - th
+		var il := _tin_loc(ix, iy, r - ins - th)
+		var mouth := _tin_ring(c, co, si, il, zb)
+		draw_colored_polygon(mouth, Color(C_TINPLATE.darkened(0.52 + dim), a))
+		for part in Geometry2D.intersect_polygons(mouth, _tin_ring(c, co, si, il, 0.0)):
+			draw_colored_polygon(part, Color(C_DARK.darkened(0.30 + dim), a))
+		#  속의 빛 — 입 한가운데에서 퍼진다. 겹마다 옅게 다섯 겹을 쌓아 한가운데만 짙다.
+		#  입을 통째로 한 색으로 칠했더니 빛이 아니라 **칠한 상자**로 읽혔다(2026-10-06).
+		if glow.a > 0.0:
+			var gc := _tin_p3(c, co, si, 0.0, 0.0, zb)
+			for j in range(5, 0, -1):
+				var f: float = float(j) / 5.0
+				draw_colored_polygon(_e_pts(gc, ix * 0.94 * f, iy * 0.94 * f * TBL.flat),
+						Color(glow, glow.a * 0.30 * a))
+	_tin_lid(c, co, si, tn, bd, loc, ex, ey, zt, sk, ps, k, dim, a, glow)
+
+
+#  뚜껑 — 턱(옆)과 윗면. 닫힌 자세는 벽과 같은 법으로 턱을 세우고 윗면 그림을 얹는다.
+#  젖히는 동안은 두 둘레(윗면 · 턱 밑)의 껍질 하나로 턱을 깔고, 윗면이 등을 돌리면
+#  (감김이 뒤집히면) 그림 대신 **안쪽 양철**을 보인다.
+func _tin_lid(c: Vector2, co: float, si: float, tn: Dictionary, bd: Dictionary,
+		loc: PackedVector2Array, ex: float, ey: float, zt: float, sk: float,
+		ps: Vector3, k: float, dim: float, a: float,
+		glow := Color(0.0, 0.0, 0.0, 0.0)) -> void:
+	var e1: Color = Color(tn.e1).darkened(dim)
+	var e0: Color = Color(tn.e0).darkened(dim)
+	var e2: Color = Color(tn.e2).darkened(dim)
+	var shut: bool = ps == Vector3.ZERO
+	var top := PackedVector2Array()
+	var uv := PackedVector2Array()
+	for p in loc:
+		top.append(_tin_lidp(c, co, si, p.x, p.y, zt, ey, zt, ps, k))
+		uv.append(Vector2((p.x + ex) / (2.0 * ex), (p.y + ey) / (2.0 * ey)))
+	if shut:
+		_tin_wall(c, co, si, loc, zt - sk, zt, e1.darkened(0.12), a)
+		_tin_seam(c, co, si, loc, zt - sk, Color(e0.darkened(0.55), a))
+		if bool(tn.hinge):
+			_tin_hinge(c, co, si, ex, ey, zt - sk - 0.5 * k, zt - 0.4 * k, k, dim, a)
+	else:
+		var bot := PackedVector2Array()
+		for p in loc:
+			bot.append(_tin_lidp(c, co, si, p.x, p.y, zt - sk, ey, zt, ps, k))
+		draw_colored_polygon(Geometry2D.convex_hull(top + bot), Color(e1.darkened(0.22), a))
+		if _tin_wind(top) <= 0.0:
+			#  등을 돌린 뚜껑 — 안쪽 양철. 턱 안벽(그늘) 위에 윗면 안쪽(한 단 밝다)이 겹친
+			#  데만 선다. 속의 빛이 비쳐 같은 색으로 물들고, 메달을 찍어 낸 자리가 안에서는
+			#  오목한 고리로 남는다. 양철을 밝게 깔았더니 화면에서 제일 큰 흰 판이 되어
+			#  터지는 빛보다 먼저 눈에 들어왔다 — 그늘 쪽 값으로 둔다(2026-10-06).
+			#  빛은 경첩 쪽(속에 가까운 끝)에서 짙고 먼 끝으로 갈수록 그늘이다 — 꼭짓점마다
+			#  색을 줘 한 판이 아니라 빛이 닿는 면으로 읽히게 한다.
+			draw_colored_polygon(bot, Color(C_TINPLATE.darkened(0.66 + dim), a))
+			var md: Array = tn.medal
+			var my: float = float(md[0]) / float(tn.th) * 2.0 * ey - ey
+			var mr: float = float(md[1]) / float(tn.tw) * 2.0 * ex
+			var hy: float = _tin_lidp(c, co, si, 0.0, -ey, zt, ey, zt, ps, k).y
+			var fy: float = _tin_lidp(c, co, si, 0.0, ey, zt, ey, zt, ps, k).y
+			for part in Geometry2D.intersect_polygons(top, bot):
+				var cols := PackedColorArray()
+				for p in part:
+					var u: float = clampf((p.y - fy) / maxf(hy - fy, 1.0), 0.0, 1.0)
+					var lc: Color = C_TINPLATE.darkened(0.62 - 0.26 * u + dim)
+					if glow.a > 0.0:
+						lc = lc.lerp(glow, glow.a * 0.34 * u)
+					cols.append(Color(lc, a))
+				draw_polygon(part, cols)
+			var ring := PackedVector2Array()
+			for j in 17:
+				var aa: float = TAU * float(j) / 16.0
+				ring.append(_tin_lidp(c, co, si, cos(aa) * mr, my + sin(aa) * mr,
+						zt - 0.3 * k, ey, zt, ps, k))
+			draw_polyline(ring, Color(C_TINPLATE.darkened(0.25 + dim), 0.8 * a), 1.0)
+			return
+	var tex := _tin_tex(String(tn.tex))
+	if tex != null:
+		draw_colored_polygon(top, Color(Color(1.0, 1.0, 1.0).darkened(dim), a), uv, tex)
+	else:
+		draw_colored_polygon(top, Color(e1, a))
+	_tin_rim(top, Color(e2.lightened(0.30), 0.85 * a), Color(e0.darkened(0.40), 0.9 * a))
+	#  에나멜 윤 — 빛 쪽(왼쪽 위) 귀를 비스듬히 지나는 옅은 띠 하나. 화면에 붙은 빛이라
+	#  깡통이 돌아도 늘 왼쪽 위에 선다(그림에 구워 넣으면 깡통과 같이 돌아 빛이 거꾸로
+	#  든다). 칠한 종이와 구운 에나멜이 이 한 줄로 갈린다.
+	if shut:
+		var bb := Rect2(top[0], Vector2.ZERO)
+		for p in top:
+			bb = bb.expand(p)
+		var gw: float = 2.4 * k / GOODS_K
+		var g0 := bb.position + Vector2(0.0, bb.size.y * 0.34)
+		var g1 := bb.position + Vector2(bb.size.x * 0.34, 0.0)
+		var gn := (g1 - g0).orthogonal().normalized() * gw
+		for part in Geometry2D.intersect_polygons(top,
+				PackedVector2Array([g0 - gn, g1 - gn, g1 + gn, g0 + gn])):
+			draw_colored_polygon(part, Color(1.0, 1.0, 1.0, 0.13 * a * (1.0 - dim)))
+	#  눈금 — 안에 든 수(size)와 가져갈 수(pick)를 **한 채널에** 얹는다(옛 _pack_pips).
+	#  피치가 **고정**이라 2 와 4 가 「같은 자의 절반」으로 즉시 읽힌다 — n 과 무관하게 양 끝을
+	#  꽉 채우면 n=2 는 리벳 둘 · n=4 는 줄로 **다른 배치**로 읽혔다. pick 개만 짙고 나머지는
+	#  옅다 — 「4 중 1」이 글자 없이 선다. **둘 다 채운 원이다**(외곽선은 16px 아래에서 죽는다).
+	#  자리는 **라벨 띠 한가운데**(그림의 band 행)다. 띠가 백색이라 눈금은 흑색 잉크다.
+	#  뚜껑 윗면에 박힌 것이라 뚜껑과 같이 젖혀지고, 젖혀질수록 옅어진다(옛 1 − tear).
+	var pa: float = a * clampf(1.0 - ps.y / deg_to_rad(60.0), 0.0, 1.0)
+	if pa > 0.01:
+		var n: int = maxi(1, int(bd.get("size", 2)))
+		var pk: int = clampi(int(bd.get("pick", 1)), 0, n)
+		var pr: float = maxf(float(TIN_PIP) * ex, 1.5)
+		var pitch: float = float(PACK.pitch) * pr
+		var bd2: Array = tn.band
+		var yb: float = (float(bd2[0]) + float(bd2[1]) + 1.0) * 0.5 / float(tn.th) \
+				* 2.0 * ey - ey
+		for i in n:
+			var x: float = (float(i) - float(n - 1) * 0.5) * pitch
+			draw_circle(_tin_lidp(c, co, si, x, yb, zt, ey, zt, ps, k), pr,
+					Color(C_DARK.darkened(dim), (0.92 if i < pk else 0.30) * pa))
+
+
+
+#  판 위의 팩 — 겉(_pack_look)대로 그린다. fr 은 포일의 빛 장(_foil_fr) — 판 위에서
+#  얹히거나 쥐면 _obj_paint 가 넘긴다. 깡통은 제 닿는 그림자를 _tin_body 가 깐다.
+func _boost_flat(c: Vector2, bd: Dictionary, rot: float, dim: float, fr := 0) -> void:
+	match _pack_look(bd):
+		"tin":
+			_tin_body(c, rot, GOODS_K, bd, 0.0, dim)
+		"env":
+			draw_colored_polygon(_quad_at(c + Vector2(0.0, 1.2), rot,
+					float(PACK.w) * GOODS_K, float(PACK.h) * GOODS_K),
+					Color(0.0, 0.0, 0.0, 0.35))
+			_env_body(c, rot, GOODS_K, bd, 0.0, dim)
+		_:
+			var s: float = _pack_s(bd)
+			draw_colored_polygon(_quad_at(c + Vector2(0.0, 1.2), rot,
+					float(PACK.w) * GOODS_K * s, float(PACK.h) * GOODS_K * s),
+					Color(0.0, 0.0, 0.0, 0.35))
+			_foil_body(c, rot, GOODS_K * s, bd, 0.0, dim, fr)
 
 
 # 펠트에 누운 사진 — 폴라로이드다. 테두리가 두껍고 아래가 더 두껍다.
@@ -45770,40 +46723,68 @@ func _boost_sweep() -> void:
 		_crush_begin(ks)
 
 
-# 눈앞으로 온 팩. 다 오면 **두 블럭이 갈라진다** — 투명도로 빼지 않는다.
-# 사라지는 것과 찢어지는 것은 다른 일이고, 종이는 찢어져도 안 옅어진다.
-# 갈라진 자리에 톱니를 남겨 "뜯겼다" 를 그림이 말하게 한다.
+# 눈앞으로 온 팩. 다 오면 **열린다** — 투명도로 빼지 않는다. 사라지는 것과 열리는 것은
+# 다른 일이다. 겉(PACK_LOOKS)마다 여는 법이 다르다(2026-10-06).
+#   foil  두 블럭이 갈라진다. 갈라진 자리에 톱니를 남겨 "뜯겼다" 를 그림이 말한다.
+#         다가오는 동안 박 위로 빛이 한 번 쓸고 간다.
+#   env   봉인이 금 가고 종이가 가운데에서 찢긴다. 찢긴 자리에 종이 속살 테가 선다.
+#   tin   뚜껑이 뜨고 젖혀진다(_tin_pose). 젖힌 자리로 속의 빛이 새고 끝 2할에
+#         빛 속으로 스러진다. 뚜껑이 솟는 만큼 여는 자리가 낮다(0.56).
+#  시간은 셋 다 같다 — rise 0.34초에 눈앞으로 오고 tear 0.30초에 열린다. 이름(tear)은
+#  옛 봉투의 것이지만 쓰는 자리가 많아 안 바꾼다 — 「여는 정도」로 읽는다.
 #
-#  2026-09-19 — 판 위와 여기가 **다른 물건이었다.** 셋을 이어 붙인다.
-#   ① 밑배율. 판 위가 ×1.06×GOODS_K = 1.2296 인데 여기는 ×1.18×k 이고
-#      k 가 1.0 에서 시작해 첫 프레임이 판 위의 **0.960배**였다 — 눈앞으로
+#  2026-09-19 — 판 위와 여기가 **다른 물건이었다.** 셋을 이어 붙였다(지금도 산다).
+#   ① 밑배율. k 가 1.0 에서 시작해 첫 프레임이 판 위의 **0.960배**였다 — 눈앞으로
 #      오면서 한 번 쪼그라들었다가 커졌다. k 의 시작을 GOODS_K 로 옮기면
 #      **rise=0 에서 판 위와 한 픽셀도 안 다르다.** 끝은 판 위의 2.586배다.
 #      (밑값만 1.18 → 1.06 으로 낮추는 길은 첫 프레임을 13.8% 작게 만들어
 #      더 나빠진다. 고칠 자리는 밑값이 아니라 **k 의 시작**이다.)
-#   ② 눈금이 **열 때 사라졌다** — 겉을 말하던 유일한 표시인데. 같은 식을
-#      k 태워 위 블럭에 그리고 알파 (1−tear)로 스러뜨린다.
-#   ③ 이음매와 띠가 **다른 법칙으로 자랐다**(flat 은 seam 1.6 고정에 띠
-#      seam+1.1, 여기는 seam·k 에 띠 seam·0.5). 둘 다 PACK.seam·k 와
-#      seam·PACK.band 로 묶는다. 찢긴 뒤 각 쪽이 지는 띠 반쪽은 **유도값**
-#      이다 — 반높이 (band−1)·seam·0.5, 블럭 중심에서 lo 만큼 안쪽.
-#  BOOST.big 3.0 은 안 건드린다. 세로가 길어졌어도 다 벌어져서 가로 78px ·
-#  두 쪽 세로 합 약 157px 로 화면 안에 남는다 — 가로는 오히려 120 → 78 로
-#  좁아졌다.
+#   ② 눈금이 **열 때 사라졌다** — 겉을 말하던 유일한 표시인데. 포일은 같은 식을
+#      k 태워 아래 블럭에, 깡통은 뚜껑 위에 그리고 열리는 만큼 스러뜨린다.
+#   ③ 판 위와 여기가 **한 함수**다(_foil_body · _env_body · _tin_body) — 두 법칙으로
+#      따로 자랄 자리가 없다.
+#  BOOST.big 3.0 은 안 건드린다. 봉투는 다 벌어져도 가로 78px · 두 쪽 세로 합 약
+#  157px 로 화면 안에 남고, 깡통 큰 팩 뚜껑은 104° 로 젖혀서면 경첩 위로 88px 솟는다.
 #  여는 중의 배율. **시작이 GOODS_K 다** — 1.0 에서 시작하면 첫 프레임이
 #  판 위의 0.960배라 눈앞으로 오면서 한 번 쪼그라들었다 커진다.
 #  뒤에서 앞으로 — 세제곱으로 빼면 마지막에 훅 다가온다.
-func _boost_k(rise: float) -> float:
-	return GOODS_K + (float(BOOST.big) - GOODS_K) * (1.0 - pow(1.0 - rise, 3.0))
+#  s — 팩 몸 배율(_pack_s). 포일 큰 팩은 판 위에서도 눈앞에서도 그만큼 크다 — 시작이 판
+#  위의 GOODS_K·s 라 rise=0 이 여전히 판 위와 한 픽셀도 안 다르다.
+func _boost_k(rise: float, s := 1.0) -> float:
+	return (GOODS_K + (float(BOOST.big) - GOODS_K) * (1.0 - pow(1.0 - rise, 3.0))) * s
 
 
-#  벌어지는 두 쪽. **그림 표본(_art_pack)도 이 함수를 그대로 부른다** —
+#  여는 팩 — 겉대로. **그림 표본(_art_pack)도 이 함수를 그대로 부른다** —
 #  「rise=0 이 판 위와 한 픽셀도 안 다른가」를 손으로 볼 길이 그것뿐이다.
+#  glow · a 는 깡통만 쓴다 — 속에서 새는 빛(열린 만큼 알파를 실어 넘긴다) · 끝의 스러짐.
+#  포일은 눈앞으로 오는 동안 박 위로 빛이 한 번 쓸고 간다 — rise 0 과 1 은 쉬는 장이라
+#  판 위 첫 틀 · 찢기는 틀이 그대로다. 움직임을 끈 손님은 안 흐른다.
 #  돌려주는 것은 반높이 h — 이름 받침이 그 밑에 선다.
-func _boost_open(c: Vector2, bd: Dictionary, rise: float, tear: float) -> float:
-	var k: float = _boost_k(rise)
-	_pack_body(c, 0.0, k, bd, tear, 0.0)
+func _boost_open(c: Vector2, bd: Dictionary, rise: float, tear: float,
+		glow := Color(0.0, 0.0, 0.0, 0.0), a := 1.0) -> float:
+	match _pack_look(bd):
+		"tin":
+			var kt: float = _boost_k(rise)
+			_tin_body(c, 0.0, kt, bd, tear, 0.0, a, glow)
+			return _tin_ext(bd, kt).y
+		"env":
+			var ke: float = _boost_k(rise)
+			_env_body(c, 0.0, ke, bd, tear, 0.0)
+			return float(PACK.h) * ke
+	var k: float = _boost_k(rise, _pack_s(bd))
+	var fr := 0
+	if rise > 0.0 and rise < 1.0 and not motion_off:
+		fr = 1 + mini(int(rise * float(int(FOIL_ART.f) - 1)), int(FOIL_ART.f) - 2)
+	_foil_body(c, 0.0, k, bd, tear, 0.0, fr)
 	return float(PACK.h) * k
+
+
+#  여는 깡통의 입 한가운데(화면). 터지는 빛이 거기서 난다 — 높이는 _tin_body 가 연
+#  몸통 테(zt − skirt·0.35)와 같다. 속의 빛(다섯 겹)과 원이 한 점에서 퍼진다.
+func _boost_mouth(c: Vector2, bd: Dictionary, rise: float) -> Vector2:
+	var tn := _tin_of(bd)
+	return c - Vector2(0.0, (float(tn.z) - float(tn.skirt) * 0.35) * _boost_k(rise)
+			* TBL.tall)
 
 
 func _boost_draw() -> void:
@@ -45813,35 +46794,67 @@ func _boost_draw() -> void:
 	var tear: float = clampf((boost_t - float(BOOST.rise)) / float(BOOST.tear), 0.0, 1.0)
 	draw_rect(_full(),
 			Color(0.0, 0.0, 0.0, 0.5 * rise * (1.0 - tear * 0.55)))
+	var lk := _pack_look(boost_card)
+	var c := Vector2(VIEW.x * 0.5, VIEW.y * (0.56 if lk == "tin" else 0.46))
+	#  깡통 — 뚜껑이 뜨기 직전 속의 것이 깡통을 두어 번 흔든다. 오는 길의 마지막 3할만,
+	#  1px 언저리로. 움직임을 끈 손님에게는 안 흔든다(시간은 그대로다).
+	if lk == "tin" and not motion_off and tear <= 0.0 and rise > 0.7:
+		c.x += sin(boost_t * 95.0) * 1.1 * (rise - 0.7) / 0.3
 
-	var c := Vector2(VIEW.x * 0.5, VIEW.y * 0.46)
-	var h: float = _boost_open(c, boost_card, rise, tear)
+	# 터지는 빛 — 열리는 순간에만 잠깐. 안의 것이 나오는 자리를 말한다.
+	#  봉투가 뜯기는 원. **안에 레전더리가 있을 때만** ef86c6 로 터진다
+	#  (2026-09-20) — 봉투가 뜯기기 전에 내용을 예고하는 유일한 자리다.
+	#  C_ACC(308행)는 **f2b134 = 레어의 등급색 그대로**라 팩은 이미 레어
+	#  색으로 터지고 있었다. 희귀(3f8fd8)로도 갈지 마라 — 파란 봉투가
+	#  되고, 일반은 _glow_of 가 α0 이라 원이 통째로 사라진다.
+	#  **조건 하나 · 색 하나 · 새 그림 0 · 새 시간 0.** 겉마다 그리는 자리만 다르다 —
+	#  포일은 봉투 위에 다섯 겹 · 편지봉투는 봉투 밑(찢긴 틈으로 샌다) · 깡통은 입에서
+	#  터지고 같은 색이 속의 빛에도 실린다(2026-10-06).
+	#  boost_spill 은 **읽기만 한다** — 딜링 갈래(_boost_one ·
+	#  legend_pack_w · pool)는 다른 워크플로우가 쥐고 있다.
+	var tc := C_ACC
+	for e in boost_spill:
+		if (String(e.get("type", "")) == "item"
+				and String(e.get("d", {}).get("rarity", "")) == "legendary"):
+			tc = GameData.rarity_color("legendary")
+			break
+	var fa: float = (1.0 - tear) * tear * 4.0
+	var br: float = 8.0 + 46.0 * tear
+	var h := 0.0
+	match lk:
+		"tin":
+			#  끝 2할 — 터지는 빛 속으로 깡통이 스러진다. 쏟는 순간(_boost_spill) 깡통이 한
+			#  프레임에 통째로 사라지던 끊김을, 빛이 아직 남은 자리 뒤로 묻는다.
+			var fade: float = 1.0 - smoothstep(0.80, 1.0, tear)
+			h = _boost_open(c, boost_card, rise, tear,
+					Color(tc, clampf(tear * 3.0, 0.0, 1.0)), fade)
+			if tear > 0.0:
+				draw_circle(_boost_mouth(c, boost_card, rise), br, Color(tc, 0.34 * fa))
+		"env":
+			#  **봉투 밑에** 깐다. 봉인이 위 쪽에 붙어 찢긴 틈 위로 삐져나오는데, 원을 위에
+			#  얹으면 그 봉인(다트판)을 반쯤 덮어 흐렸다. 밑에 깔면 빛이 찢긴 틈과 두 쪽
+			#  둘레로 새어 나온다 — 「안의 것이 나오는 자리」 그대로다.
+			if tear > 0.0:
+				draw_circle(c, br, Color(tc, 0.34 * fa))
+			h = _boost_open(c, boost_card, rise, tear)
+		_:
+			h = _boost_open(c, boost_card, rise, tear)
+			#  한 장짜리 반투명 원은 어두운 막 위에서 흙빛 원판으로 읽혔다(포일 곁에서
+			#  특히). 빛은 가장자리가 흐리고 가운데가 밝다 — **같은 원**(반지름 · 색 · 시간
+			#  그대로)을 다섯 겹으로 쌓아 가운데로 갈수록 짙게 한다.
+			if tear > 0.0:
+				for j in 5:
+					var q: float = float(j) / 4.0                 # 0 바깥 → 1 가운데
+					draw_circle(c, br * (1.0 - 0.72 * q),
+							Color(tc.lightened(0.28 * q), 0.34 * fa * (0.30 + 0.25 * q)))
 
-	# 터지는 빛 — 찢기는 순간에만 잠깐. 안의 것이 나오는 자리를 말한다.
-	if tear > 0.0:
-		var fa: float = (1.0 - tear) * tear * 4.0
-		#  봉투가 뜯기는 원. **안에 레전더리가 있을 때만** ef86c6 로 터진다
-		#  (2026-09-20) — 봉투가 뜯기기 전에 내용을 예고하는 유일한 자리다.
-		#  C_ACC(308행)는 **f2b134 = 레어의 등급색 그대로**라 팩은 이미 레어
-		#  색으로 터지고 있었다. 희귀(3f8fd8)로도 갈지 마라 — 파란 봉투가
-		#  되고, 일반은 _glow_of 가 α0 이라 원이 통째로 사라진다.
-		#  **조건 하나 · 색 하나 · 새 그림 0 · 새 시간 0.**
-		#  boost_spill 은 **읽기만 한다** — 딜링 갈래(_boost_one ·
-		#  legend_pack_w · pool)는 다른 워크플로우가 쥐고 있다.
-		var tc := C_ACC
-		for e in boost_spill:
-			if (String(e.get("type", "")) == "item"
-					and String(e.get("d", {}).get("rarity", "")) == "legendary"):
-				tc = GameData.rarity_color("legendary")
-				break
-		draw_circle(c, 8.0 + 46.0 * tear, Color(tc, 0.34 * fa))
-
-	#  팩 이름 11 → 18 → 20. 「작은 팩」 이 58px 다.
+#  팩 이름 11 → 18 → 20. 「작은 팩」 이 58px 다.
 	#  **받침을 깐다.** 이름이 서는 자리는 테이블 한가운데라 매물의 값표(플라크 + 수)가
 	#  바로 밑에 깔려 있다 — 스크림이 반만 덮어 두 글줄이 한 덩어리로 겹쳐 읽혔다.
 	#  놓아 쓰기 말(_use_draw)과 같은 받침(짙은 바탕 0.9 · 긴 줄 + 양옆 8px)이다.
 	#  잉크(한글 20 · y[−16.5,+1])를 높이 26 받침의 가운데에 앉힌다. 받침은 찢기는 동안
-	#  이름보다 빨리 걷힌다 — 흩어지는 두 조각 위에 짙은 네모가 남으면 조각을 가린다.
+	#  이름보다 빨리 걷힌다 — 흩어지는 두 조각(봉투) · 열리는 뚜껑(깡통) 밑에 짙은 네모가
+	#  남으면 조각과 터지는 빛을 가린다.
 	var na: float = 1.0 - tear * 0.7
 	var nm := String(boost_card.get("n", ""))
 	var nw: float = ceilf((font_sm.get_string_size(nm, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x

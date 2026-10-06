@@ -635,6 +635,11 @@ static func _names(k: String) -> PackedStringArray:
 		for v in (VHS_STEPS if k == "vhs" else DOT_STEPS):
 			out.append(_crt_name(float(v)))
 		return out
+	#  팩 겉 — _cur_name 과 짝이다(2026-10-06).
+	if k == "packlook":
+		for st in PACK_LOOK_STEPS:
+			out.append(String(st[0]))
+		return out
 	#  판 깨짐의 층 셋. 표가 아니라 상수라 **_cur_name 과 짝으로** 낸다 —
 	#  한쪽만 내면 값 칸을 눌렀을 때 고르개가 텅 빈 채로 뜬다(빨리 보기
 	#  사다리가 같은 실패를 적어 뒀다). 2026-09-24
@@ -847,6 +852,10 @@ static func _rows(g: Node) -> Array:
 						"n": GameData.tags().size()},
 				{"n1": "팩 열기", "t": "list", "k": "boost",
 						"n": GameData.boosters().size()},
+				#  팩의 겉 셋(2026-10-06 「3가지 랜덤으로 나오도록 해줄수 있어?」) — 무작위가
+				#  게임 그대로다. 하나를 고르면 앞으로 깔릴 팩 · 지금 테이블의 팩 · 「팩 열기」 ·
+				#  그림 표본(②)이 다 그 겉을 입는다.
+				{"n1": "팩 겉", "t": "list", "k": "packlook", "n": PACK_LOOK_STEPS.size()},
 				#  **보는 줄이다. 누르는 줄이 아니다.** 다른 list 줄은 click() 의
 				#  「고른 것이 곧 적용」을 따르는데 이 줄만 다르다 — "a" 키가 없고
 				#  _run 의 match k 에도 "aimw" 가 없어 ◀▶ 를 눌러도 게임 상태가
@@ -1276,9 +1285,12 @@ static func _npc_acts() -> Array:
 static var _npc_side := 0
 #  「살핌 · 종류」 — 이름 · 매물 종류(stock type) · 동전이면 등급. 동전은 등급 빛이 있는
 #  레어로 고른다(빛이 손 **밑**에 깔리는지 — 너클이 안 바래는지를 같이 본다).
+#  팩이면 셋째 칸이 표의 id 다 — 「큰 팩」은 한 치 큰 몸(포일) · 경첩 깡통이 상인 손에서
+#  어떻게 서는지(쥔 동안 박 위로 미끄러지는 빛까지)를 본다. 겉은 「팩 겉」 줄이 고른다
+#  (2026-10-06).
 const NPC_HOLDS := [["동전", "item", "rare"], ["플라크", "item", "legendary"],
-		["다트", "dart", ""], ["사탕", "cons", ""], ["팩", "boost", ""], ["사진", "fix", ""],
-		["와펜", "mod", ""]]
+		["다트", "dart", ""], ["사탕", "cons", ""], ["팩", "boost", ""],
+		["큰 팩", "boost", "b_big"], ["사진", "fix", ""], ["와펜", "mod", ""]]
 #  판 소품 몸짓 — 차례가 곧 소품 번호다(0 저울 · 1 금전등록기 · 2 사탕 · 3 테이블 —
 #  game.gd 의 _prop_preview).
 #  판매는 든 동전의 그림 사본을 날려 큰 저울 안 접시에 올리고, 구매는 등록기를 내리쳐
@@ -1311,7 +1323,8 @@ static func _npc_hold_kind(g: Node, h: Array) -> void:
 		if free < 0:
 			free = j
 		var sj: Dictionary = g.stock[j]
-		if String(sj.type) == ty and (rar == "" or String(sj.d.get("rarity", "")) == rar):
+		if String(sj.type) == ty and (rar == "" or String(sj.d.get("rarity", "")) == rar
+				or String(sj.d.get("id", "")) == rar):
 			gi = j
 			break
 	if gi < 0:
@@ -1337,7 +1350,11 @@ static func _hold_row(ty: String, rar: String) -> Dictionary:
 		"item": rows = _rar_items(rar)
 		"dart": rows = GameData.darts().slice(1)
 		"cons": rows = GameData.candies()
-		"boost": rows = GameData.boosters()
+		"boost":
+			rows = GameData.boosters()
+			for r in rows:
+				if rar != "" and String(r.get("id", "")) == rar:
+					return r
 		"fix": rows = GameData.fixtures()
 		"mod": rows = GameData.mods()
 	return rows[0] if not rows.is_empty() else {}
@@ -1529,6 +1546,9 @@ static func _warp_sync(g: Node) -> void:
 #  가장 가까운 칸에 맞춘다(설정 게이지가 0.01 씩 민다).
 const VHS_STEPS := [0.00, 0.25, 0.50, 0.75, 1.00]
 const DOT_STEPS := [0.00, 0.30, 0.60, 0.80, 1.00]
+#  팩 겉 — 이름 · game.gd 의 PACK_LOOKS 열쇠(빈 글은 무작위).
+const PACK_LOOK_STEPS := [["무작위", ""], ["포일 봉투", "foil"], ["봉인 편지봉투", "env"],
+		["놋쇠 깡통", "tin"]]
 
 
 static func _retro_sync(g: Node) -> void:
@@ -1776,6 +1796,9 @@ static func _cur_name(g: Node, e: Dictionary) -> String:
 		var rs: Array = VHS_STEPS if k == "vhs" else DOT_STEPS
 		var jr: int = i % rs.size()
 		return "%d/%d %s" % [jr + 1, rs.size(), _crt_name(float(rs[jr]))]
+	if k == "packlook":
+		var jl: int = i % PACK_LOOK_STEPS.size()
+		return "%d/%d %s" % [jl + 1, PACK_LOOK_STEPS.size(), String(PACK_LOOK_STEPS[jl][0])]
 	if k == "fglow":
 		var fs: Array = FIRE_STEPS["fglow"]
 		var j9: int = i % fs.size()
@@ -3018,8 +3041,23 @@ static func _run(g: Node, e: Dictionary) -> void:
 			# 게임과 같은 길(_boost_deal)로 편다 — 여기서 상태를 직접
 			# 만들면 검사한 것이 실제로 도는 것과 갈라진다.
 			if not rows.is_empty():
-				g._boost_deal(rows[i % rows.size()])
-				_say("팩 %s" % String(rows[i % rows.size()].get("n", "?")))
+				#  겉은 상점이 까는 것과 같은 길(_pack_look_roll)로 굴린다 — 표의 줄은
+				#  캐시라 사본에 박는다(_pack_dress 와 같은 규약).
+				var bd: Dictionary = (rows[i % rows.size()] as Dictionary).duplicate()
+				bd["look"] = g._pack_look_roll()
+				g._boost_deal(bd)
+				_say("팩 %s" % String(bd.get("n", "?")))
+		"packlook":
+			var st: Array = PACK_LOOK_STEPS[i % PACK_LOOK_STEPS.size()]
+			g.pack_look_force = String(st[1])
+			#  지금 테이블의 팩도 갈아입힌다 — 값 · 자리는 그대로, 겉만.
+			for sk in g.stock:
+				if String((sk as Dictionary).get("type", "")) == "boost" and not bool(sk.sold):
+					var sd: Dictionary = (sk.d as Dictionary).duplicate()
+					sd["look"] = g._pack_look_roll()
+					sk.d = sd
+			g.queue_redraw()
+			_say("팩 겉 — %s" % String(st[0]))
 		"mod":
 			if not rows.is_empty():
 				var mid := String(rows[i % rows.size()].id)

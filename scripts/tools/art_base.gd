@@ -78,10 +78,21 @@ func _run() -> void:
 			% [pw * 2.0 * ph * 2.0 * g.TBL.flat,
 			g.FIX_W * gk * 2.0 * g.FIX_H * gk * 2.0 * g.TBL.flat,
 			sqrt(pw * pw + ph * ph)])
-	print("  이음매 반두께 %.3f · 띠 반높이 %.3f · 뜯는 실 화면 %.3fpx"
+	#  겉 셋(2026-10-06) — 포일 봉투 · 봉인 편지봉투 · 놋쇠 깡통.
+	print("  포일   이음매 반두께 %.3f · 띠 반높이 %.3f · 뜯는 실 화면 %.3fpx · 큰 팩 ×%.2f"
 			% [float(g.PACK.seam) * gk,
 			float(g.PACK.seam) * float(g.PACK.band) * gk,
-			g._pack_thread(gk) * g.TBL.flat])
+			g._pack_thread(gk) * g.TBL.flat, float(g.PACK.big)])
+	print("  편지봉투 너덜한 결 면 %.3f · 화면 세로 %.3fpx · 봉인 반폭 %.3f"
+			% [float(g.ENV.deckle) * gk,
+			float(g.ENV.deckle) * gk * g.TBL.flat,
+			float(g.ENV.seal) * float(g.PACK.w) * gk])
+	for key in ["s", "b"]:
+		var tn: Dictionary = g.TIN[key]
+		print("  깡통 %s  면 %.2f x %.2f · 벽 화면 %.2fpx · 귀 %.2f · 경첩 %s"
+				% [key, pw * float(tn.k) * 2.0, ph * float(tn.k) * 2.0,
+				float(tn.z) * gk * g.TBL.tall, float(tn.r) * gk,
+				"있음" if bool(tn.hinge) else "없음"])
 	print("  _obj_box(boost) 반폭 %.3f · 히트 %.2f x %.2f"
 			% [maxf(float(g.PACK.w), float(g.PACK.h)) * gk + 3.0,
 			pw * float(g.PACK.hit) * 2.0, ph * float(g.PACK.hit) * 2.0])

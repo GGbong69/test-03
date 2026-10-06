@@ -28,8 +28,11 @@ const Dev = preload("res://scripts/dev.gd")
 #  ④ 제약 키라인. **그린 그림을 픽셀로 재서** 잉크가 제 키라인 안에 드는지,
 #     상자 가운데가 칸 가운데에 서는지를 본다. 수를 베끼지 않는다 —
 #     게임이 실제로 칠한 픽셀만 본다.
-#  ⑤ 팩. 사진과 비가 갈리는가 · 넓이가 비슷한가 · 잡히는 모양이 그림과
-#     같은 방향인가 · rise=0 이 판 위와 한 픽셀도 안 다른가.
+#  ⑤ 팩(겉 셋 — 포일 봉투 · 봉인 편지봉투 · 놋쇠 깡통, 2026-10-06). 사진과 비가 갈리는가 ·
+#     넓이가 비슷한가 · 잡히는 모양이 그림과 같은 방향인가 · rise=0 이 판 위와 같은가 ·
+#     겉마다 — 뜯는 실 1px(포일) · 너덜한 결 1px · 그림이 면 크기(편지봉투) · 작은/큰 팩
+#     갈림 · 뚜껑 그림 1:1 · 잡히는 칸이 깡통 둘레를 덮는가(깡통). 창이 있으면 셋 다
+#     **그린 잉크가 잡히는 칸 안에 드는가**와 찢긴 변의 톱니(봉투) · 일어서는 뚜껑(깡통).
 #  ⑥ 대비. 다섯 표식과 두 충돌(C_ACC 대 C_GOLD · loss 대 grey)을 잰다.
 # ══════════════════════════════════════════════════════════
 
@@ -190,7 +193,7 @@ func _run() -> void:
 	Dev.pick["artsheet"] = 0
 
 	# ── ⑤ 팩 ────────────────────────────────────────
-	print("\n⑤ 팩 — 사진에게서 갈라져 나왔나")
+	print("\n⑤ 팩 — 사진에게서 갈라져 나왔나 · 겉 셋이 한 물건인가")
 	var gk: float = g.GOODS_K
 	var pr: float = float(g.PACK.w) / float(g.PACK.h)
 	var fr: float = float(g.FIX_W) / float(g.FIX_H)
@@ -206,47 +209,213 @@ func _run() -> void:
 	_ok("잡히는 모양이 그림과 같은 방향", hw < hh,
 			"히트 %.2f x %.2f · 그림 %.2f x %.2f"
 			% [hw * 2.0, hh * 2.0, float(g.PACK.w) * gk * 2.0, float(g.PACK.h) * gk * 2.0])
-	#  여는 연출의 첫 프레임이 판 위와 같은가 — k 의 시작이 GOODS_K 다.
-	var k0: float = gk + (float(g.BOOST.big) - gk) * (1.0 - pow(1.0, 3.0))
-	_ok("rise=0 이 판 위와 같다", absf(k0 - gk) < 0.0005,
-			"%.4f (판 위 %.4f)" % [k0, gk])
-	#  외접 반지름 — qa_rank 의 안전선과 같은 자다. 크림프가 밖으로 물면 는다.
+	#  여는 연출의 첫 프레임이 판 위와 같은가 — k 의 시작이 GOODS_K(·몸 배율)다.
+	var k0: float = g._boost_k(0.0)
+	var k0b: float = g._boost_k(0.0, g._pack_s({"size": 4, "look": "foil"}))
+	_ok("rise=0 이 판 위와 같다", absf(k0 - gk) < 0.0005
+			and absf(k0b - gk * float(g.PACK.big)) < 0.0005,
+			"%.4f · 포일 큰 팩 %.4f (판 위 %.4f · %.4f)" % [k0, k0b, gk, gk * float(g.PACK.big)])
+	#  외접 반지름 — qa_rank 의 안전선과 같은 자다. 크림프 · 결이 밖으로 물면 는다.
 	var rad: float = sqrt(pow(float(g.PACK.w) * gk, 2.0) + pow(float(g.PACK.h) * gk, 2.0))
 	_ok("외접 반지름이 안 늘었다", rad <= 27.08,
 			"%.2f (옛 27.08 · chip_r %.2f)" % [rad, g.TBL.chip_r])
+	#  포일 큰 팩(×1.10)의 귀퉁이 끝도 넓은 판정 칸(_obj_box + 2)에 든다.
+	var bigr: float = rad * float(g.PACK.big)
+	var boxr: float = (maxf(float(g.PACK.w), float(g.PACK.h)) * gk + 3.0) * float(g.PACK.big) + 2.0
+	_ok("포일 큰 팩 귀퉁이가 판정 칸 안", bigr <= boxr, "%.2f ≤ %.2f" % [bigr, boxr])
+
+	print("  ── 포일 봉투")
 	#  뜯는 실이 화면에서 1px 로 선다 — 면 1.0 으로 두면 0.79px 이라 사라진다.
 	_ok("뜯는 실이 화면 1px 이상",
 			g._pack_thread(gk) * g.TBL.flat >= 0.999,
 			"%.3fpx" % (g._pack_thread(gk) * g.TBL.flat))
+	for sz in [2, 4]:
+		var ft: Texture2D = g._foil_tex({"size": sz})
+		_ok("포일 %s 그림이 있다" % ("작은" if sz == 2 else "큰"), ft != null,
+				"없다" if ft == null else "%d x %d" % [ft.get_width(), ft.get_height()])
 
-	#  ⑤-2 **찢긴 자리가 톱니인가 — 그린 픽셀로 본다.**
-	#  수로는 못 잡는다. 여태 봉인띠가 블럭 끝에서 seam 만큼 더 나간
-	#  **곧은 턱**으로 톱니를 통째로 덮고 있었는데(파인 이가 나오려면
-	#  tear > 0.659, 뻗은 이는 > 0.941) ⑤ 의 단언 여섯이 전부 초록이었다.
-	#  두 쪽은 ±0.12rad 로 기울어 있으므로 **곧은 자를 맞춰 본다** —
-	#  기울기는 직선이 다 먹고 톱니만 잔차로 남는다.
+	print("  ── 봉인 편지봉투")
+	#  너덜한 결이 화면에서 1px 로 선다 — 사진과 실루엣을 가르는 것이 이 결이다.
+	#  눌리는 세로(flat)에서 재야 한다. 1px 밑이면 640x360 에서 곧은 변이 된다.
+	var dk: float = float(g.ENV.deckle) * gk * g.TBL.flat
+	_ok("너덜한 결이 화면 1px 이상", dk >= 0.999, "%.3fpx" % dk)
+	#  봉투 그림은 테이블에서 **도트 하나가 화면 한 칸**이다(동전 · 사진과 같은 결).
+	#  면 크기와 1px 넘게 어긋나면 늘어나거나 줄어든 도트가 섞인다.
+	for pid in ["env_small", "env_big"]:
+		var tx: Texture2D = g._env_tex(pid)
+		var tw: float = float(g.PACK.w) * gk * 2.0
+		var th: float = float(g.PACK.h) * gk * 2.0
+		_ok("%s 그림이 면 크기로 구워졌다" % pid,
+				tx != null and absf(tx.get_width() - tw) < 1.0
+						and absf(tx.get_height() - th) < 1.0,
+				"그림 %s · 면 %.2f x %.2f" % ["없다" if tx == null
+						else "%d x %d" % [tx.get_width(), tx.get_height()], tw, th])
+
+	print("  ── 놋쇠 깡통")
+	#  작은 팩 · 큰 팩이 **한눈에** 갈리는가 — 크기 · 벽 높이 · 경첩 · 색. 넷 중 하나만
+	#  남으면 30px 물건 위에서 눈금 두 점의 차이로 되돌아간다.
+	var ts: Dictionary = g.TIN.s
+	var tb: Dictionary = g.TIN.b
+	_ok("작은 팩이 한 뼘 작다", float(ts.k) < float(tb.k) and float(tb.k) == 1.0,
+			"%.2f 대 %.2f" % [float(ts.k), float(tb.k)])
+	_ok("작은 팩 벽이 낮다", float(ts.z) < float(tb.z),
+			"화면 %.2f 대 %.2fpx" % [float(ts.z) * gk * g.TBL.tall, float(tb.z) * gk * g.TBL.tall])
+	_ok("경첩은 큰 팩만", not bool(ts.hinge) and bool(tb.hinge))
+	_ok("에나멜 색상이 갈린다", absf(Color(ts.e1).h - Color(tb.e1).h) > 0.15,
+			"색상 차 %.2f" % absf(Color(ts.e1).h - Color(tb.e1).h))
+	#  뚜껑 그림 도트 하나 = 테이블 화면 한 칸 — 놋쇠 실선(1도트)이 판 위에서 안 죽는다.
+	#  표의 th · tw(헤드리스에서 띠 · 메달 자리를 재는 수)가 그림과 같은지도 본다.
+	for key in ["s", "b"]:
+		var tn: Dictionary = g.TIN[key]
+		var im := Image.load_from_file("res://assets/tin/%s.png" % String(tn.tex))
+		var want := Vector2(float(g.PACK.w), float(g.PACK.h)) * float(tn.k) * gk * 2.0
+		var ok: bool = im != null and not im.is_empty() \
+				and absf(float(im.get_width()) - want.x) <= 1.0 \
+				and absf(float(im.get_height()) - want.y) <= 1.0 \
+				and im.get_width() == int(tn.tw) and im.get_height() == int(tn.th)
+		_ok("뚜껑 그림이 면에 1:1 (%s)" % key, ok,
+				"그림 %s · 면 %.1f x %.1f" % ["없음" if im == null or im.is_empty()
+				else "%d x %d" % [im.get_width(), im.get_height()], want.x, want.y])
+	#  **잡히는 칸이 깡통 둘레를 덮는가** — 히트(_obj_shape)는 큰 팩 네모 × hit 그대로다.
+	#  깡통이 그리는 둘레(바닥 · 닿는 그림자 · 뚜껑 윗면 · 경첩)를 psi 한 바퀴(5° 마다)
+	#  돌려, 점마다 「네모 안 · 또는 들림 덮개(lz)만큼 올린 네모 안」인지 잰다 —
+	#  _shop_hit 의 두 점 OR 과 같은 자다. 테 빛 한 줄(1px)이 밖으로 반 칸 나가므로
+	#  네모를 0.5px 씩 넓혀 본다. 넓은 판정 칸(_obj_box + 덮개)도 같이 본다.
+	var lz: float = (float(g.DROP.lift_hov) + float(g.DROP.knock_h)) * float(g.TBL.tall)
+	var nout := 0
+	var npt := 0
+	var worst_n := ""
+	for key in ["s", "b"]:
+		var tn: Dictionary = g.TIN[key]
+		var bd := {"size": 4 if key == "b" else 2, "pick": 1}
+		var e: Vector2 = g._tin_ext(bd, gk)
+		var zt: float = float(tn.z) * gk
+		var sk: float = float(tn.skirt) * gk
+		var loc: PackedVector2Array = g._tin_loc(e.x, e.y, float(tn.r) * gk)
+		for d in 72:
+			var psi: float = TAU * float(d) / 72.0
+			var co := cos(psi)
+			var si := sin(psi)
+			var c := Vector2(320.0, 180.0)
+			var pts := PackedVector2Array()
+			for q in loc:
+				pts.append(g._tin_p3(c, co, si, q.x, q.y, 0.0) + Vector2(0.0, 1.2))
+				pts.append(g._tin_p3(c, co, si, q.x, q.y, zt))
+			if bool(tn.hinge):
+				for sx in [-1.0, 1.0]:
+					for xx in [-0.15, 0.15]:
+						var hx: float = (float(sx) * 0.46 + float(xx)) * e.x
+						for hz in [zt - sk - 0.5 * gk, zt - 0.4 * gk]:
+							pts.append(g._tin_p3(c, co, si, hx, -e.y - 1.3 * gk, float(hz)))
+			var poly: PackedVector2Array = g._quad_at(c, psi, hw + 0.5, hh + 0.5)
+			var br: float = maxf(float(g.PACK.w), float(g.PACK.h)) * gk + 3.0
+			var eb := Vector2(br, br * g.TBL.flat + 3.0)
+			var box := Rect2(c - eb, eb * 2.0).grow_individual(2.0, 2.0 + lz, 2.0, 2.0)
+			for p in pts:
+				npt += 1
+				if box.has_point(p) and (g._in_poly(p, poly)
+						or g._in_poly(p + Vector2(0.0, lz), poly)):
+					continue
+				nout += 1
+				if worst_n == "":
+					worst_n = "%s psi %d° (%.1f, %.1f)" % [key, d * 5, p.x - c.x, p.y - c.y]
+	_ok("잡히는 칸이 깡통을 덮는다 (psi 한 바퀴)", nout == 0,
+			"둘레 점 %d · 밖 %d%s" % [npt, nout, "" if worst_n == "" else " — 첫 자리 " + worst_n])
+
+	#  ⑤-2 **그린 픽셀로 본다** — 겉 하나씩 그림 표본 ②를 그려 잰다.
+	#  필터(CRT · 굴곡 · VHS · 도트)를 잠깐 끈다 — 굴곡이 가장자리를 몇 px 씩 옮기고
+	#  낟알이 바탕을 흔들어 잉크 경계가 자가 아니라 필터가 된다.
 	if img != null:
+		var keep := [g.crt, g.warp, g.vhs, g.dot]
+		g.crt = 0.0
+		g.warp = 0.0
+		g.vhs = 0.0
+		g.dot = 0.0
+		g._crt_apply()
 		g.art_guide = false
-		Dev.pick["artsheet"] = 2
-		g.queue_redraw()
-		await process_frame
-		await process_frame
-		img = root.get_texture().get_image()
-		img.save_png("res://shots/art_pack_raw.png")
-		var sp: float = float(img.get_width()) / g.VIEW.x
-		#  판 ②의 마지막 칸 — rise 1 · tear 0.5. 아래 쪽의 **찢긴 변**이다.
-		var kb: float = g._boost_k(1.0)
-		var sm: float = float(g.PACK.seam) * kb
-		var lo: float = (float(g.PACK.h) * kb - sm) * 0.5
-		var gp: float = float(g.BOOST.gap) * (1.0 - pow(0.5, 2.4))
-		var bt: float = minf(1.7 * kb * 0.5, sm) * g.TBL.flat
-		var cx: float = 480.0 + gp * 0.16
-		var cy: float = 215.0 + (sm + lo) * g.TBL.flat + gp * g.TBL.flat
-		var ey: float = cy - (lo + sm) * g.TBL.flat
-		var dev: float = _edge_dev(cx, float(g.PACK.w) * kb * 0.78, ey, 20.0, sp)
-		#  톱니 진폭의 절반은 넘어야 「곧은 변이 아니다」라고 말할 수 있다.
-		_ok("찢긴 변이 톱니다", dev >= bt * 0.5,
-				"잔차 %.2fpx (이 진폭 ±%.2fpx)" % [dev, bt])
+		var bg: Color = g.C_BG
+		for lk in ["foil", "env", "tin"]:
+			g.pack_look_force = lk
+			Dev.pick["artsheet"] = 2
+			g.queue_redraw()
+			for i in 4:
+				await process_frame
+			img = root.get_texture().get_image()
+			img.save_png("res://shots/art_pack_%s_raw.png" % lk)
+			var sp: float = float(img.get_width()) / g.VIEW.x
+			var nm: String = {"foil": "포일", "env": "편지봉투", "tin": "깡통"}[lk]
+			#  그린 잉크가 잡히는 칸 안에 든다 — 히트 네모(포일 큰 팩은 ×1.10) 또는 들림
+			#  덮개만큼 올린 네모. 위 수의 자가 정말 그려지는 그것을 재는지를 본다.
+			var outs := 0
+			var inks := 0
+			var wn := ""
+			for cell in g.art_cells:
+				if String(cell.k) != "pack":
+					continue
+				var c: Vector2 = cell.c
+				var psi: float = float(cell.r)
+				var hs: float = g._pack_s({"size": int(cell.n), "look": lk})
+				var poly: PackedVector2Array = g._quad_at(c, psi, hw * hs + 1.0, hh * hs + 1.0)
+				for py in range(int((c.y - 34.0) * sp), int((c.y + 30.0) * sp)):
+					for px in range(int((c.x - 31.0) * sp), int((c.x + 31.0) * sp)):
+						var col := img.get_pixel(px, py)
+						if absf(col.r - bg.r) + absf(col.g - bg.g) + absf(col.b - bg.b) < 0.05:
+							continue
+						inks += 1
+						var m := Vector2((float(px) + 0.5) / sp, (float(py) + 0.5) / sp)
+						if not (g._in_poly(m, poly) or g._in_poly(m + Vector2(0.0, lz), poly)):
+							outs += 1
+							if wn == "":
+								wn = "%d칸 psi %.0f° (%.1f, %.1f)" % [int(cell.n),
+										rad_to_deg(psi), m.x - c.x, m.y - c.y]
+			_ok("%s — 그린 잉크가 잡히는 칸 안에 든다" % nm, outs == 0 and inks > 2000,
+					"잉크 %d 화소 · 밖 %d%s" % [inks, outs, "" if wn == "" else " — 첫 자리 " + wn])
+			#  여는 칸(rise 1 · tear 0.5 — 그림 표본 ② 의 마지막 칸, 가운데 (480, 250)).
+			var gp: float = float(g.BOOST.gap) * (1.0 - pow(0.5, 2.4))
+			match lk:
+				"foil":
+					#  **찢긴 자리가 톱니인가.** 수로는 못 잡는다 — 봉인띠가 곧은 턱으로 톱니를
+					#  통째로 덮고 있었는데(파인 이가 나오려면 tear > 0.659) 수의 단언은 전부
+					#  초록이었다. 두 쪽은 기울어 있으므로 **곧은 자를 맞춰 본다** — 기울기는
+					#  직선이 다 먹고 톱니만 잔차로 남는다. 아래 쪽의 **찢긴 변**이다.
+					var kb: float = g._boost_k(1.0, g._pack_s({"size": 4, "look": "foil"}))
+					var sm: float = float(g.PACK.seam) * kb
+					var lo: float = (float(g.PACK.h) * kb - sm) * 0.5
+					var bt: float = minf(1.7 * kb * 0.5, sm) * g.TBL.flat
+					var cy: float = 250.0 + (sm + lo) * g.TBL.flat + gp * g.TBL.flat
+					var dev: float = _edge_dev(480.0 + gp * 0.16, float(g.PACK.w) * kb * 0.78,
+							cy - (lo + sm) * g.TBL.flat, 20.0, sp)
+					_ok("포일 — 찢긴 변이 톱니다", dev >= bt * 0.5,
+							"잔차 %.2fpx (이 진폭 ±%.2fpx)" % [dev, bt])
+				"env":
+					#  아래 쪽의 찢긴 변은 팩 가운데(봉인 자리)에서 벌어진 만큼 내려와 있다.
+					var kv: float = g._boost_k(1.0)
+					var bv: float = minf(1.7 * kv * 0.5, 1.6 * kv) * g.TBL.flat
+					var dv: float = _edge_dev(480.0 + gp * 0.16, float(g.PACK.w) * kv * 0.78,
+							250.0 + gp * g.TBL.flat, 20.0, sp)
+					_ok("편지봉투 — 찢긴 변이 톱니다", dv >= bv * 0.5,
+							"잔차 %.2fpx (이 진폭 ±%.2fpx)" % [dv, bv])
+				"tin":
+					#  뚜껑이 일어선다 — 잉크 맨 위가 닫힌 깡통 윗면보다 한참 위다. 여닫이가
+					#  말없이 0 으로 돌아가면(자세가 안 먹으면) 여기가 먼저 터진다.
+					var oc := Vector2(480.0, 250.0)
+					var kt: float = g._boost_k(1.0)
+					var shut_top: float = oc.y - g._tin_ext({"size": 4}, kt).y * g.TBL.flat \
+							- float(tb.z) * kt * g.TBL.tall
+					var top := 1e9
+					for py in range(int(80.0 * sp), int(shut_top * sp)):
+						for px in range(int((oc.x - 30.0) * sp), int((oc.x + 30.0) * sp)):
+							var col2 := img.get_pixel(px, py)
+							if absf(col2.r - bg.r) + absf(col2.g - bg.g) + absf(col2.b - bg.b) >= 0.05:
+								top = minf(top, float(py) / sp)
+					_ok("깡통 — 뚜껑이 일어선다", top < shut_top - 40.0,
+							"잉크 맨 위 %.1f · 닫힌 윗면 %.1f" % [top, shut_top])
+		g.pack_look_force = ""
+		g.crt = keep[0]
+		g.warp = keep[1]
+		g.vhs = keep[2]
+		g.dot = keep[3]
+		g._crt_apply()
 		g.art_guide = true
 		Dev.pick["artsheet"] = 0
 
