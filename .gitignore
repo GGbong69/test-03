@@ -49,3 +49,8 @@ __pycache__/
 # tmp/pdfs 는 눈으로 확인하려고 pdf 를 png 로 되뽑은 것이라 더 임시다.
 /output/
 /tmp/
+
+# 포스터 원본 — psd · ai · pdf · 고해상도 렌더는 결과물이라 안 들인다(굽는 도구만 들인다).
+# .gdignore 는 들인다 — 고닷이 7680px 렌더를 가져오기(import)하지 않게 막는다.
+/outputs/poster/*
+!/outputs/poster/.gdignore
