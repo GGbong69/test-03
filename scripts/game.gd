@@ -549,6 +549,26 @@ var mark_sec := -1       # 「목표물」 챌린지가 이 판에 뽑은 칸
 var clok_at := -1
 var clok_mul := 1.0      # 차례인 칸에 붙는 배수(mods.csv 의 v1)
 var clok_lap := 0        # 이 판에 돈 바퀴 수 — 개발자 판과 자가 읽는다
+#  ── 판 사건 (2026-10-06 · data/events.csv) ──────────────────
+#  작은 판 · 큰 판이 열릴 때 _ev_roll 이 run_rng 로 하나를 뽑는다. 보스 판은 없다.
+#  "" 없음 · "ember" 불씨 · "order" 칠판 주문 · "regular" 단골. 주문 · 단골은 아직
+#  갈래가 없어 뽑혀도 사건 없는 판과 같다 — 그 갈래는 _ev_roll 의 match 에 선다.
+#  판 중간 상태는 안 적는다: 판 매듭(pick)이 판 첫머리에서 되살려 같은 run_rng 로
+#  같은 사건 · 같은 칸이 다시 선다(resume_probe 9 · 10차가 잰다).
+var leg_ev := ""
+var leg_ev_row := {}     # 뽑힌 표 줄 — v · v2 를 읽는다
+var leg_throws := 0      # 이 판에 정산이 끝난 발 수 — 연발은 한 발이다
+#  불씨. 띠 · 피는 때 · 칸 씨앗을 판이 열릴 때 미리 뽑고(run_rng), 칸은 피는 순간
+#  그 씨앗으로 고른다 — 이 판에서 가장 많이 맞힌 칸(sec_cnt)을 뺀 나머지에서.
+var ember_idx := -1      # 불씨가 앉은 칸(sectors 의 자리). −1 이면 안 서 있다
+var ember_band := ""     # "t" 트리플 · "d" 더블 · "s" 바깥 싱글
+var ember_k := -1        # 피는 때 — 0 첫 발 전 · k 는 k 번째 발 정산 뒤 · −1 안 핀다
+var ember_u := 0         # 칸 씨앗
+var ember_out := false   # 꺼졌다 — 이 판에 다시 안 선다
+var ember_hits := 0      # 이 판에 맞힌 수
+var ember_from := -1     # 맞혀 옮겨 가는 중 — 「불씨」 걸음이 서기 전까지 그림은 이 칸이다
+var ember_t := 0.0       # 지금 칸에 선 뒤 흐른 시간 — 피는 불꽃 · 일렁임이 읽는다
+var ember_puff := []     # 꺼진 자리 {p, idx, band, t} — 연기 한 줌
 var paint_mul := 1.0
 var score_mode := "std"         # 이 런의 점수 계산 방식. 든 동전이 먼저 쥔다
 # 다트통이 미는 최종 점수 배율. 계산 방식과 같이 판 시작에 한 번 읽는다.
@@ -621,11 +641,12 @@ var cur_dart := {}              # 지금 던지는 다트
 
 # ── 런 줄기 — 되감을 때 다시 굴리는 것만 여기서 뽑는다 ─────────
 #  이어하기의 매듭 하나가 **판 첫머리**(_begin_leg 들머리)다. 거기서 되살리면
-#  _begin_leg → _start_leg 이 다시 도는데, 그때 아래 셋이 새로 뽑히면
+#  _begin_leg → _start_leg 이 다시 도는데, 그때 아래 넷이 새로 뽑히면
 #  껐다 켜기 한 번이 곧 **다시 뽑기**가 된다:
 #      mark_sec   「목표물」 챌린지가 이 판에 뽑는 칸   (_start_leg)
 #      sealed     둔화·리그이 봉인하는 동전 자리         (_start_leg)
 #      칸 섞기    _board_shuffle 의 sh.shuffle()
+#      판 사건    작은 판 · 큰 판의 사건과 그 안의 칸 · 띠 · 때 (_ev_roll · 2026-10-06)
 #  봉인이 핵심 동전에 걸렸을 때 껐다 켜서 다시 뽑는 길이 열리는 것이
 #  세이브 스커밍이다. 셋만 제 줄기로 옮기면 되감기가 **무르기**로 남고
 #  **리롤**이 안 된다 — 사용자가 낸 값은 다트 한 발이지 다른 판이 아니다.
@@ -1518,11 +1539,15 @@ func _rows_of(pool: Array, ids: PackedStringArray) -> Array:
 
 
 #  런 줄기를 새로 심는다. 전역에서 씨앗 하나만 받는다.
+#  ⚠ **state 를 0 으로 박지 않는다**(2026-10-06). 고도의 RandomNumberGenerator 는
+#  seed 가 곧 첫 state 를 정하고(inc 는 고정값이다) state 를 덮으면 씨앗이 통째로
+#  지워진다 — 여태 `state = 0` 한 줄 때문에 **모든 런이 같은 줄기**였다. 판 사건을
+#  붙이고 재 보니 450 씨앗의 첫 판이 전부 같은 사건이었다(qa_ember ②). 되살리기는
+#  적힌 state 를 그대로 다시 박으므로(_run_load) 이 줄과 무관하다.
 func _run_seed_new() -> void:
 	run_seed = randi()
 	run_rng.seed = run_seed
-	run_rng.state = 0
-	knot_rng = 0
+	knot_rng = int(run_rng.state)
 
 
 #  차례를 지키는 섞기. Array.shuffle() 은 전역을 쓰므로 못 쓴다.
@@ -1801,7 +1826,7 @@ func _run_load() -> bool:
 	GameData.challenge = String(Save.run_get("challenge", ""))
 	GameData.endless = bool(Save.run_get("endless", false))
 	run_seed = int(Save.run_get("seed", 0))
-	run_rng.seed = run_seed          # seed 를 세우면 state 가 0 으로 돌아간다
+	run_rng.seed = run_seed          # seed 가 state 를 새로 깐다 — 아래 줄이 적힌 값으로 덮는다
 	run_rng.state = int(Save.run_get("rng", 0))
 	knot_rng = int(run_rng.state)
 	for e in RUN_PLAIN:
@@ -2265,8 +2290,236 @@ func _start_leg() -> void:
 	#  원리적으로 안 오른다**(문턱만으로는 절대 얻을 수 없는 보장이다).
 	fire_used = false
 	fire_peak = 0
+	#  판 사건 — 판의 기하(rt_*)와 sec_cnt 를 비운 **뒤**다. 불씨의 띠는 이 판에
+	#  폭이 있는 띠에서만 뽑는다(피자는 싱글만 남는다).
+	_ev_roll()
 	_panel_reset()
 	_to_pick()
+
+
+# ══════════════════════════════════════════════════════════
+#  판 사건 (2026-10-06 · data/events.csv)
+# ──────────────────────────────────────────────────────────
+#  사용자: 「지금 게임에 너무 갑작스러운 도전성이 없는거 같아 변수가 없으니 하면
+#  할수록 좀 재미가 적어지거든?」 — 작은 판 · 큰 판이 열릴 때 사건 하나를 뽑는다.
+#  ⚠ **run_rng 만 쓴다**(run_rng 머리말). 사건 안의 뽑기(칸 · 띠 · 피는 때)도
+#  전부 여기서 미리 뽑는다 — 판 중간에 굴리면 되감기가 다른 판이 된다.
+#  튜토리얼 런은 둘째 판부터 불씨만 선다(LEGEV). 첫 발이 목표의 약 65배라 판이
+#  한 발에 끝나므로 첫 발 전에 핀다.
+# ══════════════════════════════════════════════════════════
+const LEGEV := {"tut_from": 2, "tut_kinds": ["ember"]}
+
+#  불씨 수치. 맞힐 때마다 골드 · 피는 때의 끝 발은 표(events.csv 의 v · v2)가 쥔다.
+#    pre      첫 발 전에 필 몫. 나머지는 1~v2 번째 발 정산 뒤에 고르게 핀다
+#    band_w   띠 가중치 — 트리플 · 더블 · 바깥 싱글. 폭이 없는 띠(피자)는 빠진다
+#    a        빛의 짙기(띠 한 칸). flick 은 일렁임의 바닥 — 1/12 초마다 a×[flick, 1]
+#             0.46 으로 찍어 보니 빨강 트리플 위에서 주황이 묻히고 초록 더블 위에서는
+#             올리브로 읽혔다 — 칸을 거의 덮고 금빛 테(1px)를 두른다
+#    halo     칸 둘레로 번지는 빛(px) · halo_a 그 짙기. 피는 순간 두 배로 번진다
+#    lit_t    피는 불꽃의 길이(초). lit_a 는 그 머리에 더 얹는 빛 — 칸이 흰빛으로 달아오른다
+#    out_t    꺼지는 연기의 길이(초)
+#    sparks   불티 수 · spark_t 한 알이 오르는 시간 · spark_h 오르는 높이(px)
+#    burst    피는 순간 튀는 불꽃 수 · burst_r 튀는 거리(px)
+#    snd_top  「불씨」 걸음 소리(coin_land)의 천장 음(Hz). 사다리는 3.78배까지 가지만
+#             이 파일은 상점이 이미 쓰는 587(×1.5)에서 멎는다 — 6kHz 로 덮어 구운 파일이다
+const EMBER := {"pre": 0.4, "band_w": {"t": 0.4, "d": 0.4, "s": 0.2},
+		"a": 0.88, "flick": 0.72, "halo": 2.5, "halo_a": 0.24,
+		"lit_t": 0.36, "lit_a": 0.60, "out_t": 0.70,
+		"sparks": 5, "spark_t": 0.9, "spark_h": 16.0, "burst": 8, "burst_r": 20.0,
+		"snd_top": 587.0}
+
+
+#  판 사건을 비운다. 판이 서는 자리(_ev_roll)와 판이 끝나는 자리(_finish_leg) 둘이 부른다.
+func _ev_clear() -> void:
+	leg_ev = ""
+	leg_ev_row = {}
+	leg_throws = 0
+	ember_idx = -1
+	ember_band = ""
+	ember_k = -1
+	ember_u = 0
+	ember_out = false
+	ember_hits = 0
+	ember_from = -1
+	ember_t = 0.0
+	ember_puff.clear()
+
+
+#  판이 열릴 때 한 번. 가중치 뽑기 한 번이 사건을 정하고, 갈래가 제 것을 미리 뽑는다.
+func _ev_roll() -> void:
+	_ev_clear()
+	if GameData.is_boss(leg_no):
+		return
+	var pool: Array
+	if tut_run:
+		if leg_no < int(LEGEV.tut_from):
+			return
+		pool = GameData.event_pool(leg_no, LEGEV.tut_kinds)
+	else:
+		pool = GameData.event_pool(leg_no)
+	var sum := 0.0
+	for r in pool:
+		sum += GameData.event_w(r)
+	if pool.is_empty() or sum <= 0.0:
+		return
+	var t := run_rng.randf() * sum
+	var row: Dictionary = pool[pool.size() - 1]
+	for r in pool:
+		t -= GameData.event_w(r)
+		if t <= 0.0:
+			row = r
+			break
+	var kind := String(row.get("kind", "none"))
+	if kind == "none":
+		return
+	leg_ev = kind
+	leg_ev_row = row
+	match kind:
+		"ember":
+			_ember_roll()
+		#  "order" · "regular" — 갈래가 서면 여기서 제 것을 미리 뽑는다. 그전까지는
+		#  이름만 남고 판은 사건 없는 판과 같다.
+
+
+#  불씨의 띠 · 피는 때 · 칸 씨앗. 뽑는 수가 늘 셋이라 run_rng 가 판마다 같은 만큼 간다.
+func _ember_roll() -> void:
+	var bu := run_rng.randf()
+	var pu := run_rng.randf()
+	ember_u = int(run_rng.randi() & 0x3fffffff)
+	ember_band = _ember_band_pick(bu)
+	var kmax := maxi(int(GameData.event_v(leg_ev_row, "v2", 0.0)), 0)
+	ember_k = 0
+	if not tut_run and kmax > 0 and pu >= float(EMBER.pre):
+		#  pre 위의 몫을 1..kmax 로 고르게 가른다 — 씨앗 하나로 두 뜻을 안 섞는다.
+		var q := (pu - float(EMBER.pre)) / maxf(1.0 - float(EMBER.pre), 0.0001)
+		ember_k = 1 + mini(int(q * float(kmax)), kmax - 1)
+	if ember_k == 0:
+		_ember_light(_ember_cell(), ember_band)
+
+
+#  띠 하나를 u(0~1)로 고른다. 폭이 없는 띠는 빠진다 — 피자는 트리플 · 더블이 없다.
+func _ember_band_pick(u: float) -> String:
+	var keys := []
+	var sum := 0.0
+	for b in ["t", "d", "s"]:
+		var rr := _ember_band_r(b)
+		if rr.y - rr.x < 1.0:
+			continue
+		keys.append(b)
+		sum += float((EMBER.band_w as Dictionary).get(b, 0.0))
+	if keys.is_empty():
+		return "s"
+	var t := clampf(u, 0.0, 0.9999) * sum
+	for b in keys:
+		t -= float((EMBER.band_w as Dictionary).get(b, 0.0))
+		if t < 0.0:
+			return b
+	return String(keys[keys.size() - 1])
+
+
+#  띠의 반지름 [안, 밖](px). 싱글은 바깥 싱글 하나다(트리플 밖 ~ 더블 안) — hit_info 의
+#  r0 · r1 과 같은 값이라 맞았는지를 그 둘로 댄다.
+func _ember_band_r(band: String) -> Vector2:
+	match band:
+		"t":
+			return Vector2(R * rt_trp_in, R * rt_trp_out)
+		"d":
+			return Vector2(R * rt_dbl_in, R * rt_dbl_out)
+		"s":
+			return Vector2(R * rt_trp_out, R * rt_dbl_in)
+	return Vector2.ZERO
+
+
+#  착탄 하나가 어느 불씨 띠인가. 불 · 빗나감 · 안쪽 싱글 · 둘째 트리플은 "" 다.
+func _ember_band_of(info: Dictionary) -> String:
+	if int(info.get("idx", -1)) < 0 or int(info.get("mult", 0)) <= 0:
+		return ""
+	var r0 := float(info.get("r0", 0.0))
+	var r1 := float(info.get("r1", 0.0))
+	for b in ["t", "d", "s"]:
+		var rr := _ember_band_r(b)
+		if is_equal_approx(r0, rr.x) and is_equal_approx(r1, rr.y):
+			return b
+	return ""
+
+
+#  피는 칸 — 씨앗으로 고른다. 이 판에서 가장 많이 맞힌 칸(sec_cnt 의 값 열쇠)은 뺀다.
+#  다 빠지면(칸 값을 눕힌 판) 전부에서 고른다. 불은 칸 배열 밖이라 애초에 안 든다.
+func _ember_cell() -> int:
+	var n := _sec_n()
+	var top := 0
+	for kx in sec_cnt:
+		top = maxi(top, int(sec_cnt[kx]))
+	var cand := []
+	for i in n:
+		var sv := int(sectors[i]) if i < sectors.size() else -1
+		if top > 0 and int(sec_cnt.get(sv, 0)) == top:
+			continue
+		cand.append(i)
+	if cand.is_empty():
+		for i in n:
+			cand.append(i)
+	return int(cand[ember_u % cand.size()])
+
+
+#  불씨를 그 칸 · 그 띠에 피운다. 개발자 판 「불씨 피우기」도 이 길이다.
+func _ember_light(idx: int, band: String) -> void:
+	if idx < 0:
+		return
+	if leg_ev != "ember":
+		leg_ev = "ember"
+		leg_ev_row = GameData.event_of("ember")
+	ember_idx = idx % _sec_n()
+	ember_band = band
+	ember_out = false
+	ember_from = -1
+	ember_t = 0.0
+
+
+#  맞힐 때마다 오는 골드(표의 v).
+func _ember_gold() -> int:
+	return maxi(int(GameData.event_v(leg_ev_row, "v", 1.0)), 1)
+
+
+#  착탄 한 발 — 맞혔으면 참이고 불씨가 맞힌 링만큼 옆 칸으로 옮겨 붙는다(시계 차례와
+#  같은 규칙 · 같은 자리의 mult). 다른 데 꽂거나 빗나가면 꺼진다.
+#  ⚠ **연발의 작은 다트(mark=false)는 안 친다** — 시계 차례와 같은 규약이다. 맞히지도
+#  끄지도 않는다. 값은 한 톨도 안 바꾼다 — 골드는 「불씨」 걸음이 낸다.
+func _ember_land(info: Dictionary, mark: bool) -> bool:
+	if not mark or ember_idx < 0:
+		return false
+	if int(info.idx) == ember_idx and _ember_band_of(info) == ember_band:
+		var step: int = maxi(int(info.mult), 1)
+		ember_from = ember_idx
+		ember_idx = (ember_idx + step) % _sec_n()
+		ember_hits += 1
+		return true
+	_ember_douse()
+	return false
+
+
+func _ember_douse() -> void:
+	if ember_idx < 0:
+		return
+	ember_puff.append({"p": _ember_at(ember_idx, ember_band), "idx": ember_idx,
+			"band": ember_band, "t": 0.0})
+	ember_idx = -1
+	ember_from = -1
+	ember_out = true
+
+
+#  한 발의 정산이 다 끝나고 다음 고르기로 가는 자리(_next_step). 피는 때를 센다.
+func _ev_after_throw() -> void:
+	if leg_ev == "ember" and ember_idx < 0 and not ember_out \
+			and ember_k > 0 and leg_throws >= ember_k:
+		_ember_light(_ember_cell(), ember_band)
+
+
+#  칸 · 띠의 한가운데.
+func _ember_at(idx: int, band: String) -> Vector2:
+	var rr := _ember_band_r(band)
+	var a := float(idx) * _sec_w()
+	return BC + Vector2(sin(a), -cos(a)) * (rr.x + rr.y) * 0.5
 
 
 func _to_pick() -> void:
@@ -2414,6 +2667,8 @@ func _finish_leg() -> void:
 	#  shake 도 hitstop 도 안 건드리므로 qa_wreck ⑧ ⑨ 와 settle_probe ③-b
 	#  가 전부 초록이다. 2026-09-24
 	_brk_skip()
+	#  판 사건도 여기서 내린다 — 나가는 길 여섯이 다 지난다. 불씨는 판이 끝나면 사라진다.
+	_ev_clear()
 	# 「녹는 시계」 — 판 종료시 남은 다트를 다음 판으로 넘긴다(기획서 s27).
 	carry_darts = 0
 	for o in owned:
@@ -5329,6 +5584,13 @@ func _process(d: float) -> void:
 	for rf in ring_fx:
 		rf.t += d
 	ring_fx = ring_fx.filter(func(rf): return rf.t < rf.life)
+	#  불씨 시계 — 판 갈이 동안은 판이 눕는 중이라 안 그리므로(_draw 의 swap_live 문)
+	#  같이 쉰다. 첫 발 전에 핀 불씨의 피는 불꽃이 판이 다 선 뒤에 난다.
+	if not swap_live:
+		ember_t += d
+		for ep in ember_puff:
+			ep.t += d
+		ember_puff = ember_puff.filter(func(ep): return ep.t < float(EMBER.out_t))
 	#  **d * fast_rate 를 탄다**(2026-09-26 수선). 빨리 보기는 정산에서만 서므로
 	#  (_fast_on 이 state != S.RESOLVE 에서 1.0 을 돌려준다) 정산 밖 팝은 한 톨도
 	#  안 달라진다. 안 태우면 걸음만 2.5배 빨라지고 팝은 실시간이라 **같은 자리에
@@ -7212,6 +7474,9 @@ func _land(mark := true) -> void:
 		var cn: int = maxi(_sec_n(), 1)
 		clok_lap += (clok_at + cstep) / cn
 		clok_at = (clok_at + cstep) % cn
+	#  ⚠ **불씨** — 시계 차례 바로 뒤, 같은 mult 로 옮겨 붙는다. 값은 안 바꾼다:
+	#  맞혔으면 동전 걸음 뒤에 「불씨」 걸음 하나가 골드를 낸다(아래 큐). 2026-10-06
+	var ember_hit := _ember_land(info, mark)
 	# 「빨강, 파랑, 노랑」이 칠한 칸. 죽이는 축을 다 지난 뒤에 곱한다 — 금줄이 죽인 칸을
 	# 칠했으면 0 에 곱해 0 이다. 두 장을 같이 쓴 결과가 그것이 맞다.
 	if paint_sec >= 0 and info.idx == paint_sec:
@@ -7523,6 +7788,10 @@ func _land(mark := true) -> void:
 					and int(info.get("track", 0)) > 0:
 				track_lv[info.track] = int(track_lv.get(info.track, 0)) + 1
 				pop(BC + Vector2(0.0, -52.0), "트랙 강화 +1", C_ACC, 10, 0.9)
+		#  불씨 — 동전 걸음 뒤 · 저울 · 물음표 · 모음 · 합계 앞. 판 사건의 보상은 큐
+		#  걸음이라 _pace · 빨리 보기 · 반음 사다리를 저절로 탄다. 2026-10-06
+		if ember_hit:
+			queue.append({"k": "ember", "v": _ember_gold()})
 		# 저울은 곱하기 **전에** 걸음이 하나 더 선다. 연출을 정산 밖에서
 		# 따로 돌리지 않고 큐에 세우는 이유는 순서다 — 배속도 박자도
 		# 소리도 다른 걸음과 같은 규약을 타야 한다. 이 걸음이 없으면 두
@@ -7717,10 +7986,13 @@ func _next_step() -> void:
 			return
 		burst_n = 0               # 연발이 다 팔렸다. 이제 보통 걸음이다
 		_wear_spent()             # 다 쓴 동전을 치운다
+		#  한 발이 다 끝났다 — 연발도 여기서 한 번이다(판 사건의 피는 때가 센다).
+		leg_throws += 1
 		# 목표를 넘긴 순간 판 종료 — 남은 다트는 골드로 환산된다
 		if total >= target or darts_left <= 0:
 			_finish_leg()
 		else:
+			_ev_after_throw()
 			_to_pick()
 		return
 
@@ -7957,6 +8229,24 @@ func _next_step() -> void:
 			roll_t = 0.0
 			_sfx("settle_bal")
 			shake = 6.0
+		"ember":
+			#  ── 불씨 (2026-10-06) ──
+			#  골드 v(표) — 점수 · 배수는 안 바꾼다. 판 밖 소리(동전이 펠트에 앉는
+			#  coin_land)를 반음 사다리 음으로 내고(천장 EMBER.snd_top), 「+1」이 자금판
+			#  밑에서 뜬다.
+			#  불씨 그림이 맞힌 칸에서 옮겨 간 칸으로 넘어가고 거기서 다시 핀다.
+			#  빈손 챌린지는 _gold_add 가 막는다 — 막힌 골드는 안 띄운다.
+			var eg := _gold_add(int(st.get("v", 1)), "ember")
+			_earn(eg)
+			if eg > 0:
+				pop(_bank_rect().get_center() + Vector2(0.0, 30.0), "+%d" % eg,
+						C_GOLD, 12, 0.8)
+			_sfx("coin_land", minf(f, float(EMBER.snd_top)))
+			if ember_from >= 0:
+				ember_from = -1
+				ember_t = 0.0
+			#  카드 칸은 안 튄다 — 바뀐 값이 없다. 몸만 채인다(걸음은 걸음이다).
+			_card_kick(float(CARDFX.kick), 0.0)
 		"wind":
 			#  ── 모음 (2026-10-06) ──
 			#  합계가 내리치기 전 한 걸음. 값도 소리도 안 바꾼다 — 침묵이 예비다.
@@ -14952,6 +15242,10 @@ func _draw_aim() -> void:
 	if aim_dim > 0.0 and not brk_live:
 		_board_dim_except(aim_glow_last, float(AIMDIM.a) * aim_dim)
 		_cell_glow(aim_glow_last, Color(C_ACC, aim_dim), 1.8 * aim_dim)
+	#  불씨 — 조준 어둠 **뒤**다. 앞이면 다른 칸을 겨누는 동안 불씨 칸이 같이 가라앉아
+	#  노릴지 고르는 바로 그때 흐려진다. 판이 깨지는 동안은 안 그린다(판이 끝난다).
+	if not brk_live and _is_play_deep():
+		_ember_draw()
 	if brk_live:
 		return
 	if state == S.AIM_V or state == S.AIM_H:
@@ -15018,6 +15312,99 @@ func _board_lit_sector(sec: int) -> void:
 	#  저쪽은 판 하나에 한 칸이 고정이라 세게 눌러도 되지만, 이쪽은 발마다
 	#  옮겨 다녀서 세게 누르면 판이 깜빡이는 것으로 읽힌다. 2026-09-26
 	_board_dim_sector(sec, float(CLOK_DIM))
+
+
+#  ── 불씨 그림 (2026-10-06) ──────────────────────────────
+#  글자 0자 · 새 색 0 — 가장자리 불의 불씨 색(C_GOLD 에 C_MULT 를 섞은 것 · _fire_tongues)을
+#  띠 한 칸에 깔고, 띠 가운데에 금빛 속불을 한 단 얹는다. 1/12 초마다 짙기가 일렁이고
+#  (도트는 끊겨야 불로 읽힌다) 불티 몇 알이 칸에서 오른다. 피는 순간 칸이 확 밝고 불꽃이
+#  튄다. 꺼지면 빛이 식고 연기 한 줌이 오른다.
+#  모션 끄기면 일렁임 · 불티 · 튀는 불꽃 · 연기가 없고 **빛만** 선다(피는 빛 · 식는 빛 포함).
+#  ⚠ 난수를 한 번도 안 굴린다 — 흔들림은 _gl_rand(씨앗 해시)다. run_rng 를 건드리면
+#  되감기가 다른 판이 된다.
+func _ember_col() -> Color:
+	return C_GOLD.lerp(C_MULT, 0.55)
+
+
+#  일렁임 — 1/12 초 칸마다 [flick, 1]. 모션 끄기면 늘 1 이다.
+func _ember_flick() -> float:
+	if motion_off:
+		return 1.0
+	return lerpf(float(EMBER.flick), 1.0, _gl_rand(int(ember_t * 12.0), 613))
+
+
+#  피는 불꽃 — 핀 순간 1 에서 lit_t 동안 0 으로.
+func _ember_lit_k() -> float:
+	return clampf(1.0 - ember_t / float(EMBER.lit_t), 0.0, 1.0)
+
+
+func _ember_draw() -> void:
+	var col := _ember_col()
+	var sw := _sec_w()
+	#  꺼진 자리 — 빛이 식고(빛이라 모션 끄기에도 난다) 연기 네 덩이가 오르며 퍼진다.
+	for ep in ember_puff:
+		var k := clampf(float(ep.t) / float(EMBER.out_t), 0.0, 1.0)
+		var pr := _ember_band_r(String(ep.band))
+		var pa0 := float(int(ep.idx)) * sw - sw * 0.5
+		_band_draw(pr.x, pr.y, pa0, pa0 + sw,
+				Color(col, float(EMBER.a) * (1.0 - k) * (1.0 - k)))
+		if motion_off:
+			continue
+		var pp: Vector2 = ep.p
+		for j in 4:
+			var dx := (float(j) - 1.5) * 3.0 + sin(k * 5.0 + float(j)) * 1.5
+			var rise := k * (10.0 + float(j) * 4.0)
+			draw_circle(pp + Vector2(dx, -rise), 3.0 + k * (3.0 + float(j)),
+					Color(C_DIM, 0.72 * (1.0 - k)))
+	var idx := ember_idx if ember_from < 0 else ember_from
+	if idx < 0:
+		return
+	var rr := _ember_band_r(ember_band)
+	var a0 := float(idx) * sw - sw * 0.5
+	var a1 := a0 + sw
+	var lit := _ember_lit_k()
+	var fl := _ember_flick()
+	#  번짐 — 칸보다 halo px · 각 8% 넓게 옅게 깐다. 피는 순간 두 배로 번지고 짙다.
+	var gr := float(EMBER.halo) * (1.0 + lit)
+	var ga := sw * 0.08 * (1.0 + lit)
+	_band_draw(rr.x - gr, rr.y + gr, a0 - ga, a1 + ga,
+			Color(col, (float(EMBER.halo_a) + 0.25 * lit) * fl))
+	#  몸 — 피는 순간은 흰빛으로 달아올랐다가 불씨 색으로 식는다.
+	var a := minf(float(EMBER.a) * fl + float(EMBER.lit_a) * lit, 0.95)
+	_band_draw(rr.x, rr.y, a0, a1, Color(col.lerp(C_TXT, 0.6 * lit), a))
+	#  속불 — 띠 가운데 3분의 1 폭 · 칸 가운데 5분의 3 각이 금빛으로 한 단 짙다.
+	var rm := (rr.x + rr.y) * 0.5
+	var hw := maxf((rr.y - rr.x) / 6.0, 1.0)
+	_band_draw(rm - hw, rm + hw, a0 + sw * 0.2, a0 + sw * 0.8, Color(C_GOLD, a * 0.8))
+	#  테 — 칸 가장자리 1px 금빛. 바탕이 빨강이든 초록이든 칸 모양이 선다.
+	var rim := annulus(rr.x, rr.y, a0, a1)
+	rim.append(rim[0])
+	draw_polyline(rim, Color(C_GOLD, minf(0.85 * fl + 0.15 * lit, 1.0)), 1.0)
+	if motion_off:
+		return
+	var c := _ember_at(idx, ember_band)
+	#  피는 불꽃 — 칸 한가운데에서 여덟 알이 튀어 나가며 식는다.
+	if lit > 0.0:
+		var n := int(EMBER.burst)
+		var bs := 2.0 + lit
+		for i in n:
+			var ang := TAU * float(i) / float(n) + _gl_rand(i, 619) * 0.5
+			var q := c + Vector2(cos(ang), sin(ang)) * float(EMBER.burst_r) * (1.0 - lit * lit)
+			draw_rect(Rect2((q - Vector2(bs, bs) * 0.5).floor(), Vector2(bs, bs)),
+					Color(C_GOLD, lit))
+	#  불티 — 칸 안 한 점에서 위로 오르며 식는다. 알마다 자리 · 위상이 갈린다.
+	var sn := int(EMBER.sparks)
+	var stt := float(EMBER.spark_t)
+	for i in sn:
+		var ph0 := ember_t / stt + float(i) / float(sn)
+		var ph := fmod(ph0, 1.0)
+		var cyc := int(ph0)
+		var ang2 := float(idx) * sw + (_gl_rand(i * 31 + cyc, 621) - 0.5) * sw * 0.7
+		var ur := lerpf(rr.x, rr.y, _gl_rand(i * 37 + cyc, 623))
+		var q2 := BC + Vector2(sin(ang2), -cos(ang2)) * ur 				+ Vector2(sin((ph + float(i)) * TAU) * 1.5, -ph * float(EMBER.spark_h))
+		var sz := 2.0 if ph < 0.6 else 1.0
+		draw_rect(Rect2(q2.floor(), Vector2(sz, sz)),
+				Color(C_GOLD.lerp(col, ph), 0.95 * (1.0 - ph * ph)))
 
 
 func _board_dim_sector(sec: int, a: float) -> void:

@@ -24,8 +24,8 @@ const Save = preload("res://scripts/save.gd")
 #    6차 — 지우는 자리 넷과 「로비로 나가기」 · 슬롯
 #    7차 — 제목 자리와 겨눔 · 「글자가 안 늘었다」
 #    8차 — 값은 나갔는데 매듭이 안 적히던 자리들 (2026-09-20 검토)
-#    9차 — **무한 x 챌린지 런**을 적고 죽는다 (2026-09-20)
-#   10차 — 새 프로세스에서 그 런을 되살려 한 칸씩 댄다
+#    9차 — **무한 x 챌린지 런**을 적고 죽는다 (2026-09-20) · 불씨가 핀 판 (2026-10-06)
+#   10차 — 새 프로세스에서 그 런을 되살려 한 칸씩 댄다 · 판 사건이 같은가
 #
 #  ⚠ 비교는 **한 칸씩** 한다. 통째로 대면 어느 칸이 어긋났는지가 로그에
 #  안 남아, 붉어진 다음에 다시 사람이 읽어야 한다.
@@ -1219,14 +1219,28 @@ func _pass9() -> void:
 	g.leg_no = 61                     # 라운드 21 · 작은 판
 	g.gold = 137
 	g._open_leg()                     # 매듭 ① 판 선택
-	g._begin_leg()                    # 매듭 ② 판 첫머리 — 여기서 칸을 뽑는다
+	#  매듭 ② 판 첫머리 — 여기서 칸을 뽑는다. **판 사건**도 여기서 뽑힌다(2026-10-06):
+	#  불씨가 첫 발 전에 피는 줄기를 고른다 — 판 중간 상태는 안 적으므로 되살린 런이
+	#  같은 run_rng 로 같은 사건 · 같은 칸을 다시 세워야 한다(10차가 댄다).
+	var es := -1
+	for s in range(1, 4000):
+		g.run_seed = s
+		g.run_rng.seed = s
+		g._begin_leg()
+		if g.leg_ev == "ember" and g.ember_idx >= 0:
+			es = s
+			break
+	_say(es > 0, "불씨가 첫 발 전에 핀 판이다", "씨앗 %d · 칸 %d" % [es, g.ember_idx])
 	_eq("② 판 첫머리에서 적혔다", String(Save.run_get("at", "")), "pick")
 	_eq("무한 칸이 적혔다", bool(Save.run_get("endless", false)), true)
 	_eq("챌린지도 적혔다", String(Save.run_get("challenge", "")), "mark")
 	_eq("판 번호가 적혔다", int(Save.run_get("leg_no", 0)), 61)
 	_say(g.mark_sec >= 0, "「목표물」이 칸을 뽑았다", "칸 %d" % g.mark_sec)
 	_say(g._run_ok(), "문지기가 무한 런을 받는다")
-	_dump(_snap())
+	var sn := _snap()
+	sn["leg_ev"] = g.leg_ev
+	sn["ember"] = [g.ember_band, g.ember_k, g.ember_u, g.ember_idx]
+	_dump(sn)
 	print("  … 무한 매듭을 남기고 죽는다. 10차를 돌려라")
 
 
@@ -1243,6 +1257,10 @@ func _pass10() -> void:
 		if k == "runs":
 			continue
 		_eq(k, got[k], w.get_value(WS, String(k), null))
+	#  판 사건 — 적지 않은 판 중간 상태를 판 매듭이 같은 run_rng 로 다시 세운다.
+	_eq("판 사건이 같다", g.leg_ev, w.get_value(WS, "leg_ev", null))
+	_eq("불씨 띠 · 때 · 씨앗 · 칸이 같다",
+			[g.ember_band, g.ember_k, g.ember_u, g.ember_idx], w.get_value(WS, "ember", null))
 	print("")
 	#  ⚠ 되살린 런이 **무한인가** — 이 칸이 안 돌아오면 상한이 24 로 내려가
 	#  다음 판에서 런이 통째로 끝난다.

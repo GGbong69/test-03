@@ -969,6 +969,13 @@ static func _rows(g: Node) -> Array:
 				#  켜고 끈다. 끄면 옛 제목(단색 바탕 · 왼쪽 글줄)이다. 조작감 쪽이 열아홉 줄로 차서
 				#  같은 켬 · 끔 줄(튜토리얼 런) 밑으로 왔다(qa_crt 가 쪽마다 열아홉을 잰다).
 				{"n1": "술집 문 %s" % ("켬" if g.door_on else "끔"), "t": "act", "a": "door"},
+				#  ── 판 사건 (2026-10-06 · game.gd _ev_roll) ─────────────
+				#  불씨 · 주문 · 단골 셋이 이 밑에 나란히 선다. 0쪽 열여덟 · 2쪽 · 5쪽 열아홉이라
+				#  셋이 같이 들 자리가 이 쪽(열셋)뿐이다(qa_crt 가 쪽마다 열아홉을 잰다).
+				#  「불씨 피우기」 — 지금 판의 무작위 칸 · 띠에 곧장 피운다. 게임의 _ember_light ·
+				#  _ember_band_pick 을 그대로 부른다. 칸 · 띠는 전역 난수다 — run_rng 를 건드리면
+				#  이 판을 되감을 때 다음 판 사건이 달라진다.
+				{"n1": "불씨 피우기", "t": "act", "a": "ember"},
 			]
 		4:
 			#  ⚠ 여기 쪽 번호를 **적어 둔다.** 여태 `_:` 기본 갈래였는데,
@@ -2574,6 +2581,14 @@ static func _run(g: Node, e: Dictionary) -> void:
 			g.door_on = not g.door_on
 			g.queue_redraw()
 			_say("술집 문 %s" % ("켬" if g.door_on else "끔"))
+			return
+		"ember":
+			if not g._is_play():
+				_say("판 위가 아니다")
+				return
+			g._ember_light(randi() % g._sec_n(), g._ember_band_pick(randf()))
+			_say("불씨 %s %d" % [{"t": "트리플", "d": "더블", "s": "싱글"}.get(g.ember_band, ""),
+					int(g.sectors[g.ember_idx])])
 			return
 		"run_drop":
 			Save.run_drop()

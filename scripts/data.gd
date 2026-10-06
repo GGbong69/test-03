@@ -66,6 +66,8 @@ const FILES := {
 	#  수정하게」). 튜토리얼 **문장**은 tutor.csv 가 그대로 쥔다.
 	"texts": "texts.csv",
 	"boosters": "boosters.csv",
+	#  판 사건 — 작은 판 · 큰 판이 열릴 때 하나를 뽑는다(2026-10-06 · game.gd _ev_roll).
+	"events": "events.csv",
 	"tuning": "tuning.csv",
 	# ── HIGHTON 스펙(2026-08-23 통합 컨텍스트)에서 온 표 ──
 	# areas 는 전부 확정이라 게임이 직접 읽는다. 나머지는 상태 열이 문이다 —
@@ -1200,6 +1202,65 @@ static func tags() -> Array:
 	return _raw.get("tags", [])
 
 
+# ── 판 사건 (2026-10-06) ──────────────────────────────────
+#  작은 판 · 큰 판이 열릴 때 game.gd 의 _ev_roll 이 **run_rng** 로 한 줄을 뽑는다
+#  (none 줄도 뽑기에 든다). 보스 판은 사건이 없다 — legs 칸에 보스 판 id 를 못 적는다.
+#    none     사건 없는 판
+#    ember    불씨 — 칸 하나 · 띠 하나에 불씨가 선다. 맞힐 때마다 골드 v
+#    order    칠판 주문 — 아직 갈래가 없다(뽑혀도 사건 없는 판과 같다)
+#    regular  단골 — 아직 갈래가 없다(같다)
+#  갈래를 새로 내면 game.gd 의 _ev_roll match 와 그 갈래의 걸음(_next_step)을 같이 낸다.
+const EVENT_KINDS := ["none", "ember", "order", "regular"]
+
+
+static func events() -> Array:
+	boot()
+	return _raw.get("events", [])
+
+
+#  판 n 에 설 수 있는 줄. kinds 가 비지 않으면 그 갈래만 남긴다(튜토리얼 런은 ember 만).
+#  가중치 0 · 라운드 미달 · 그 판 종류(small · big)가 legs 칸에 없는 줄은 빠진다.
+static func event_pool(n: int, kinds := []) -> Array:
+	var lid := String(leg_of(n).get("id", ""))
+	var rd := round_of(n)
+	var out := []
+	for r in events():
+		if _f(r, "weight", "events", 0.0) <= 0.0:
+			continue
+		if _i(r, "min_round", "events", 1) > rd:
+			continue
+		if not _event_legs(r).has(lid):
+			continue
+		if not kinds.is_empty() and not kinds.has(String(r.get("kind", ""))):
+			continue
+		out.append(r)
+	return out
+
+
+static func event_w(r: Dictionary) -> float:
+	return _f(r, "weight", "events", 0.0)
+
+
+#  v · v2 — 갈래마다 뜻이 다르다(표의 _note).
+static func event_v(r: Dictionary, col: String, dflt := 0.0) -> float:
+	return _f(r, col, "events", dflt)
+
+
+#  그 갈래의 첫 줄. 개발자 판처럼 뽑기를 안 지나고 사건을 세우는 자리가 값을 읽는다.
+static func event_of(kind: String) -> Dictionary:
+	for r in events():
+		if String(r.get("kind", "")) == kind:
+			return r
+	return {}
+
+
+static func _event_legs(r: Dictionary) -> PackedStringArray:
+	var out := PackedStringArray()
+	for s in String(r.get("legs", "")).split(";", false):
+		out.append(s.strip_edges())
+	return out
+
+
 # ── 배움 ────────────────────────────────────────────────
 #  처음 만난 것을 **걸음으로 나눠** 가르친다. 한 줄이 한 걸음이고
 #  id 가 갈래, step 이 그 안의 차례다. id 를 게임이 부른다(_tutor).
@@ -2080,6 +2141,7 @@ static func _validate() -> void:
 	_v_packs()
 	_v_colors()
 	_v_tags()
+	_v_events()
 	_v_tutor()
 	_v_texts()
 	_v_item_aim()
@@ -2478,6 +2540,63 @@ static func _v_tags() -> void:
 		_v_desc(who, r.get("desc", ""), ["v"])
 	if not first:
 		_errs.append("tags — 라운드 1 에 뜰 수 있는 뱃지가 없다. 첫 건너뛰기가 빈손이 된다")
+
+
+#  판 사건. 모르는 갈래 · 모르는 판 종류는 **잠자코 안 뜨는** 줄이 되므로 여기서 짚는다.
+static func _v_events() -> void:
+	var raw: Array = _raw.get("events", [])
+	if raw.is_empty():
+		_errs.append("events — 표가 비었다. 판 사건이 하나도 안 선다")
+		return
+	var seen := {}
+	var ember := false
+	for r in raw:
+		var who := "events:%d %s" % [r.get("_line", 0), r.get("name", "")]
+		var id: String = r.get("id", "")
+		if id == "" or seen.has(id):
+			_errs.append("%s — id 가 비었거나 중복이다" % who)
+		seen[id] = true
+		var kind := String(r.get("kind", ""))
+		if not EVENT_KINDS.has(kind):
+			_errs.append("%s — 모르는 갈래 '%s'" % [who, kind])
+		var w := _f(r, "weight", "events", 0.0)
+		if w < 0.0:
+			_errs.append("%s — 가중치가 음수다" % who)
+		if _i(r, "min_round", "events", 1) < 1:
+			_errs.append("%s — min_round 는 1 이상이다" % who)
+		var ls := _event_legs(r)
+		if ls.is_empty():
+			_errs.append("%s — legs 가 비었다. 어느 판에도 안 선다" % who)
+		for lid in ls:
+			var lr := {}
+			for lw in _raw.get("legs", []):
+				if String(lw.get("id", "")) == lid:
+					lr = lw
+			if lr.is_empty():
+				_errs.append("%s — 모르는 판 종류 '%s'" % [who, lid])
+			elif _b(lr, "boss", "legs"):
+				_errs.append("%s — 보스 판(%s)에는 사건이 없다" % [who, lid])
+		var v := _f(r, "v", "events", 0.0)
+		var v2 := _f(r, "v2", "events", 0.0)
+		match kind:
+			"ember":
+				if w > 0.0:
+					ember = true
+				if v < 1.0 or not is_equal_approx(v, roundf(v)):
+					_errs.append("%s — v(맞힐 때마다 골드)는 1 이상 정수다" % who)
+				if v2 < 0.0 or not is_equal_approx(v2, roundf(v2)):
+					_errs.append("%s — v2(피는 때의 끝 발)는 0 이상 정수다" % who)
+			"order":
+				if v < 1.0 or v2 < v:
+					_errs.append("%s — 눈금은 1 ≤ v ≤ v2 다" % who)
+			"regular":
+				if v <= 0.0:
+					_errs.append("%s — v(가로채기 반지름)가 0 이하다" % who)
+				if v2 < 1.0:
+					_errs.append("%s — v2(뽑아 가기까지 발)는 1 이상이다" % who)
+	#  튜토리얼 런의 둘째 판은 불씨만 뽑는다 — 줄이 없으면 그 판이 잠자코 빈다.
+	if not ember:
+		_warns.append("events — 가중치가 있는 불씨 줄이 없다. 튜토리얼 런에 판 사건이 안 선다")
 
 
 # 사진. 모르는 축·모르는 연산·범위 밖 값이 셋 다 같은 얼굴을 한다 —
