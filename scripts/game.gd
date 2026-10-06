@@ -24878,7 +24878,7 @@ func _prop1_flush(to_pound: bool) -> void:
 
 #  주먹이 닿을 자리 (u, h, w) — 오른손 앞 펠트. 판 위 물건이 있으면 후보 다섯 중 가장 빈
 #  자리(가장 가까운 물건이 가장 먼 곳)를 고른다 — 주먹이 물건 위로 떨어지면 무엇을 부수는지
-#  안 읽힌다.
+#  안 읽힌다. 부술 팩 물건(doom — 값은 sold 로 이미 닫혔다)도 판 위에 있으니 피한다.
 func _pound_spot() -> Vector3:
 	var best: Vector2 = POUND_SPOTS[0]
 	var bd := -1.0
@@ -24886,7 +24886,8 @@ func _pound_spot() -> Vector3:
 		var md := 1.0e9
 		for i in mini(drop.size(), stock.size()):
 			var it: Dictionary = drop[i]
-			if bool(it.gone) or float(it.sold) > 0.0 or bool(stock[i].get("sold", false)):
+			if bool(it.gone) or float(it.sold) > 0.0 \
+					or (bool(stock[i].get("sold", false)) and not it.has("doom")):
 				continue
 			md = minf(md, Vector2(float(it.u), float(it.w)).distance_to(sp))
 		if md > bd:
@@ -24969,6 +24970,10 @@ func _pound_land(fx: bool) -> void:
 		#  새 판 — 쓸기의 _sweep_deal 자리다. _roll_stock 끝의 _drop_roll 이 물건을 떨군다.
 		sweep_dealt = true
 		_roll_stock()
+	#  팩 남은 것(CRUSH) — 하나면 그 자리에서 부서지고 · 여럿이면 튀어 올랐다 떨어지며 부서진다.
+	#  끊겨도(fx 거짓) 물건은 그 자리에서 부서진다 — 값은 이미 닫혔고 남은 것은 그림뿐이다.
+	if kind == "crush" or kind == "slam":
+		_crush_hit(kind == "slam" and fx and not motion_off)
 	var col: Color = C_ACC
 	if kind == "candy" and pc_id != "":
 		col = CANDY.get(pc_id, C_ACC)
@@ -24977,7 +24982,7 @@ func _pound_land(fx: bool) -> void:
 		pc_id = ""
 	if not fx or motion_off:
 		return
-	shake = maxf(shake, float(POUND.shake_table if kind == "table" else POUND.shake_candy))
+	shake = maxf(shake, float(POUND.shake_candy if kind == "candy" else POUND.shake_table))
 	_sfx("shop_smash", SFX_BASE * float(POUND.thud))
 	if kind == "candy":
 		_sfx("coin_break_glass", SFX_BASE * float(POUND.crunch))
@@ -24985,9 +24990,10 @@ func _pound_land(fx: bool) -> void:
 	bu_ray_at = s
 	bu_ray_t = 0.0
 	#  판이 울린다 — 판 위 물건이 튄다. 가까울수록 세게(빈 테이블은 새 판이 아직 공중이다).
+	#  부술 팩 물건은 _crush_hit 이 이미 띄웠다.
 	for i in mini(drop.size(), stock.size()):
 		var it: Dictionary = drop[i]
-		if bool(it.gone) or float(it.sold) > 0.0:
+		if bool(it.gone) or float(it.sold) > 0.0 or it.has("doom"):
 			continue
 		var dd: float = Vector2(float(it.u) - at.x, float(it.w) - at.z).length()
 		_knock(i, float(POUND.knock) * lerpf(1.0, 0.3,
@@ -25113,6 +25119,196 @@ func _oval_pts(c: Vector2, rx: float, ry: float) -> PackedVector2Array:
 	return p
 
 
+# ══════════════════════════════════════════════════════════
+#  팩 남은 것 부수기 (2026-10-06)
+# ──────────────────────────────────────────────────────────
+#  「플레이어가 아이템을 고른후 남은 아이템들은 NPC가 부쉬는걸로 해줄래? 2개 짜리 팩이면
+#   하나만 부쉬면 되겠고 4개 짜리는 NPC가 테이블을 내리치고 아이템들이 위로 올라갔다가
+#   테이블에 떨어지면서 부숴지는걸로 하자」. 전에는 남은 것이 산 것처럼 계산대를 지나
+#  동전 슬롯으로 날아갔다(_drop_leave).
+#  고를 몫을 다 쓰면(_boost_sweep) 남은 것의 값은 그 자리에서 닫힌다(stock.sold — 저장도
+#  그 값을 적는다). 판 위 물건(drop)만 doom 을 달고 남아 주먹을 기다린다 — doom 이 붙은
+#  것은 못 집고(_shop_hit) · 계산대로 안 날고(_drop_extras) · 값표가 없다(sold).
+#    하나 — 「crush」 오른 주먹이 그 물건 위로 떨어진다(닿기 전까지 물건을 따라간다 ·
+#           _crush_aim). 닿는 틀에 그 자리에서 부서진다 — 조각이 사방으로 튄다(쓸기는 턱
+#           법선 쪽이다).
+#    여럿 — 「slam」 빈 자리(_pound_spot)를 내리친다. 닿는 틀에 남은 것이 다 뜨고(doom 2)
+#           높이가 제각각이라 하나씩 떨어진다 — 펠트에 닿는 서브스텝에 부서진다(_drop_step).
+#  하나라도 오른 주먹이 못 닿는 자리면 slam 이다(CRUSH.reach_*). 몸짓이 못 서면(헤드리스 ·
+#  움직임 끔 · 상인이 바쁘다) · 끊기면 그 자리에서 부서진다 — 움직임을 끈 손님에게는 조용히
+#  사라진다. 조각 · 부스러기 · 먼지 · 소리는 쓸기의 것(SMASH · _shard_burst)을 그대로 탄다.
+#  주먹 박자 · 손 · 몸은 POUND 의 것 그대로다(빠르기 1.4 — 닿기까지 0.31초).
+const CRUSH := {
+	#  뜨는 세기(면 h/초) — 정점 32~69(화면 20~43px) · 체공 0.43~0.63초. 차례(씨로 섞는다)
+	#  대로 나눠 줘서 떨어지는 틀이 갈린다 — 한 틀에 다 깨지면 소리 하나 · 조각 한 무더기다.
+	"vh": Vector2(300.0, 440.0),
+	"sp": Vector2(30.0, 80.0),   # 주먹에서 멀어지는 옆 속도(면px/s)
+	"om": Vector2(5.0, 11.0),    # 도는 빠르기(rad/s)
+	"squash": 0.55,              # 뜰 때 한 번 눌린다(SMASH.squash 와 같은 값)
+	#  조각 — 수명은 쓸기(0.22~0.30)보다 길다. 쓸기는 새 판이 곧장 떨어져 빨리 걷혀야 했고,
+	#  여기는 판이 그대로라 부서진 것이 펠트에 잠깐 남아야 「부쉈다」가 읽힌다.
+	"shard": 6, "sp_lo": 120.0, "sp_hi": 230.0, "vh_lo": 140.0, "vh_hi": 300.0,
+	"life_lo": 0.50, "life_hi": 0.70, "spread": 0.45, "grit": 6,
+	"shake": 6.0,
+	#  오른 주먹이 그 물건 위로 닿는 자리 — 오른 어깨(u 398 · w −44) 둘레 면 거리. 판 위
+	#  격자(u 116~524 · w 28~122)에서 닿는 틀까지 팔 늘어남(prop_rr — 어깨 → 손목 ÷ 위팔 +
+	#  팔뚝)을 재 보니 거리 174 에서 0.98 · 182 에서 0.98~1.03 · 185 에서 0.95~1.03 이었다
+	#  (왼쪽 앞이 먼저 넘는다). 178 이면 넘는 칸이 없다 — 밖은 slam 이 맡는다.
+	"reach_c": Vector2(398.0, -44.0), "reach_r": 178.0,
+}
+var crush_n := 0             # 부서진 수(누적) — 검사가 읽는다
+
+
+#  고를 몫을 다 썼다 — 남은 것을 부순다. ks 는 남은 팩 물건 자리다(값은 부르는 쪽이 닫았다).
+func _crush_begin(ks: Array) -> void:
+	for i in ks:
+		drop[i]["doom"] = 1
+		if buy_sel == int(i):
+			buy_sel = -1
+	var kind := "slam"
+	var at := _pound_spot()
+	if ks.size() == 1 and _crush_reach(int(ks[0])):
+		kind = "crush"
+		at = Vector3(float(drop[ks[0]].u), 0.0, float(drop[ks[0]].w))
+	if not _prop_pound(kind, at):
+		_crush_hit(false)
+
+
+#  주먹이 닿기 전까지 부술 것을 따라간다 — 쏟은 것이 아직 미끄러지는 중일 수 있다.
+func _crush_aim() -> void:
+	for i in mini(drop.size(), stock.size()):
+		var it: Dictionary = drop[i]
+		if int(it.get("doom", 0)) == 1 and not bool(it.gone):
+			prop_pound_at = Vector3(float(it.u), 0.0, float(it.w))
+			return
+
+
+func _crush_reach(i: int) -> bool:
+	var it: Dictionary = drop[i]
+	return Vector2(float(it.u), float(it.w)).distance_to(CRUSH.reach_c) \
+			<= float(CRUSH.reach_r)
+
+
+#  부서짐 셈을 새로 연다 — 소리 문 · 소리 상한 · 씨(_sweep_reset 에서 조각은 안 걷는 몫).
+func _crush_reset() -> void:
+	smash_n = 0
+	smash_snd_t = 0.0
+	smash_snd_n = 0
+	smash_seed += 1
+
+
+#  주먹이 닿았다(또는 끊겼다). toss 면 띄우고 · 아니면 그 자리에서 부순다.
+func _crush_hit(toss: bool) -> void:
+	var ks := []
+	for i in mini(drop.size(), stock.size()):
+		var it: Dictionary = drop[i]
+		if int(it.get("doom", 0)) == 1 and not bool(it.gone):
+			ks.append(i)
+	if ks.is_empty():
+		return
+	_crush_reset()
+	if not toss:
+		for i in ks:
+			_crush_at(i)
+		return
+	#  떨어지는 차례 — 씨로 섞는다. 자리 차례는 레인 차례라 그대로 두면 왼쪽부터 깨진다.
+	var sd := smash_seed
+	ks.sort_custom(func(a, b): return _gl_rand(int(a) * 13 + 5, sd) < _gl_rand(int(b) * 13 + 5, sd))
+	var at := prop_pound_at
+	var n: int = ks.size()
+	for j in n:
+		var i: int = ks[j]
+		var it: Dictionary = drop[i]
+		var r0: float = _gl_rand(i * 7 + 1, sd)
+		var r1: float = _gl_rand(i * 7 + 2, sd)
+		var away := Vector2(float(it.u) - at.x, float(it.w) - at.z)
+		if away.length() < 0.5:
+			away = Vector2.RIGHT.rotated(r0 * TAU)
+		away = away.normalized()
+		var sp: float = lerpf(float(CRUSH.sp.x), float(CRUSH.sp.y), r1)
+		it["doom"] = 2
+		it.vh = lerpf(float(CRUSH.vh.x), float(CRUSH.vh.y), (float(j) + 0.3 + r0 * 0.4) / float(n))
+		it.vu = away.x * sp
+		it.vw = away.y * sp * 0.6
+		it.om = lerpf(float(CRUSH.om.x), float(CRUSH.om.y), r1) * (1.0 if r0 < 0.5 else -1.0)
+		it.wob = maxf(float(it.wob), float(CRUSH.squash))
+		it.air = true
+		it.sleep = false
+		it.rest = 0.0
+	#  물리를 다시 연다. drop_t 를 0 으로 되감으면 입장 시차(t0) 뒤의 매물이 「아직 안
+	#  들어온」 것이 되어 짝 충돌에서 빠진다 — 가장 늦은 입장으로 되감는다. 정착 상한
+	#  (DROP.t_max 2.15)까지 체공(0.63)이 넉넉히 든다.
+	var t0m := 0.0
+	for e in drop:
+		t0m = maxf(t0m, float(e.t0))
+	drop_t = t0m
+	drop_acc = 0.0
+	drop_awake = true
+
+
+#  그 자리에서 부서진다 — 조각이 사방으로. 움직임을 껐거나 상점 밖이면 조용히 사라진다.
+func _crush_at(i: int) -> void:
+	if i < 0 or i >= drop.size() or i >= stock.size():
+		return
+	var it: Dictionary = drop[i]
+	if bool(it.gone):
+		return
+	it.gone = true
+	crush_n += 1
+	if motion_off or state != S.SHOP:
+		return
+	_smash_dust(_p2s(float(it.u), float(it.w), 0.0))
+	_shard_burst(it, stock[i], 1.0, true)
+	_grit_burst(it, 1.0, true)
+	shake = maxf(shake, float(CRUSH.shake if smash_n == 0 else SMASH.shake1))
+	_smash_sfx(it)
+	smash_n += 1
+	it.vu = 0.0
+	it.vw = 0.0
+	it.om = 0.0
+
+
+#  뜬 것을 지금 부순다 — 정착(_drop_settle)이 h 를 0 에 못 박기 전에.
+func _crush_flush() -> void:
+	for i in mini(drop.size(), stock.size()):
+		if int(drop[i].get("doom", 0)) == 2:
+			_crush_at(i)
+
+
+#  개발자 「팩 하나 부수기 · 팩 셋 내리치기」 — 고르고 남은 팩 물건을 n 개 지어 판에 앉히고
+#  곧장 부순다. 매물 끝에 값이 닫힌(sold) 팩 줄로 붙는다 — 사고팔 수 없고 다음 판에 걷힌다.
+func _crush_preview(n: int) -> String:
+	var spots := [Vector2(436.0, 70.0)] if n == 1 \
+			else [Vector2(300.0, 64.0), Vector2(372.0, 98.0), Vector2(452.0, 72.0)]
+	var rows := [GameData.items(), GameData.candies(), GameData.fixtures()]
+	var types := ["item", "cons", "fix"]
+	var ks := []
+	for j in mini(n, spots.size()):
+		var pool: Array = rows[j % 3]
+		if pool.is_empty():
+			continue
+		stock.append({"type": types[j % 3], "d": (pool[j % pool.size()] as Dictionary).duplicate(),
+				"cost": 0, "sold": true, "pack": true})
+		var d := _drop_one(stock.size() - 1, stock.size())
+		d.u = (spots[j] as Vector2).x
+		d.w = (spots[j] as Vector2).y
+		d.h = 0.0
+		d.vu = 0.0
+		d.vw = 0.0
+		d.vh = 0.0
+		d.om = 0.0
+		d.air = false
+		d.sleep = true
+		d.into = true
+		d.land = true
+		drop.append(d)
+		ks.append(stock.size() - 1)
+	if ks.is_empty():
+		return "부술 것이 없다"
+	_crush_begin(ks)
+	return ""
+
+
 #  개발자 「상인 몸짓」 줄 — 값(골드 · 동전 · 매물)을 한 톨도 안 건드리고 몸짓만 본다.
 #  판매는 든 동전 하나의 그림 사본(없으면 판 위 동전 매물 · 그것도 없으면 빈 동전)을
 #  동전 슬롯 첫 칸에서 날린다. 못 서면 그 까닭을 돌려준다(빈 글이면 섰다).
@@ -25143,6 +25339,9 @@ func _prop_preview(z: int) -> String:
 		if not _prop_pound("table", _pound_spot()):
 			return "상인이 바쁘다"
 		return ""
+	if z == 4 or z == 5:
+		#  팩 남은 것 부수기 — 하나(주먹이 그 위로) · 셋(테이블을 내리쳐 띄운다).
+		return _crush_preview(1 if z == 4 else 3)
 	var it: Dictionary = {}
 	if not owned.is_empty():
 		it = (owned[0] as Dictionary).duplicate()
@@ -25248,6 +25447,8 @@ func _prop_tick(d: float) -> void:
 			#  주먹 — 사탕이 펠트에 앉는 톡 · 닿는 틀의 쾅(_pound_land).
 			if prop_pound == "candy" and t0 < float(PROP.c_fly) and t1 >= float(PROP.c_fly):
 				_sfx("hand_drop")
+			if prop_pound == "crush" and t1 < float(PROP.p_hit):
+				_crush_aim()
 			if t0 < float(PROP.p_hit) and t1 >= float(PROP.p_hit):
 				_pound_land(true)
 			if t1 >= float(PROP.p_end):
@@ -26532,14 +26733,19 @@ func _smash_nv() -> Vector2:
 	return Vector2(1.0, float(SWEEP.tilt)).normalized()
 
 
-func _shard_burst(it: Dictionary, s: Dictionary, k: float) -> void:
+#  radial — 팩 남은 것을 부술 때(CRUSH). 턱이 없으니 법선 없이 제 자리에서 사방으로 ·
+#  조각이 많고(CRUSH.shard) 더 높이 뜨고 더 오래 남는다. 세기는 물건 속도가 아니라 k 다.
+func _shard_burst(it: Dictionary, s: Dictionary, k: float, radial := false) -> void:
 	var sd: int = smash_seed * 131 + smash_n * 17 + 1
-	var cuts := _shard_cut(s, _shard_n(stock.size()), sd, float(it.psi))
+	var cuts := _shard_cut(s, int(CRUSH.shard) if radial else _shard_n(stock.size()), sd,
+			float(it.psi))
 	var cl := _shard_cols(s)
-	var nv := _smash_nv()
+	var nv := Vector2.ZERO if radial else _smash_nv()
 	var anc := _p2s(float(it.u), float(it.w), float(it.h))
 	var sp: float = clampf(float(SMASH.sp_k) * absf(float(it.vu)) * k,
 			float(SMASH.sp_lo), float(SMASH.sp_hi))
+	if radial:
+		sp = lerpf(float(CRUSH.sp_lo), float(CRUSH.sp_hi), k)
 	for j in cuts.size():
 		var pts: PackedVector2Array = cuts[j]
 		#  무게중심을 빼 조각의 **제 축**을 돌게 한다. 안 빼면 조각 전부가
@@ -26560,8 +26766,10 @@ func _shard_burst(it: Dictionary, s: Dictionary, k: float) -> void:
 		#  큰 조각이 새지 않는다), 벽을 등진 조각은 합벡터가 짧아져 저절로
 		#  느려진다 — 접시가 깨질 때 뒤쪽 조각이 늦게 나오는 것과 같다.
 		var rad: Vector2 = off.normalized() if off.length() > 0.01 else nv
-		var vv: Vector2 = nv + rad * 0.85
-		var a: float = vv.angle() + (_gl_rand(j * 5 + 1, sd) - 0.5) * 2.0 * float(SMASH.spread)
+		if radial and off.length() <= 0.01:
+			rad = Vector2.RIGHT.rotated(_gl_rand(j * 5 + 9, sd) * TAU)
+		var vv: Vector2 = rad * 1.35 if radial else nv + rad * 0.85
+		var a: float = vv.angle() + (_gl_rand(j * 5 + 1, sd) - 0.5) * 2.0 				* float(CRUSH.spread if radial else SMASH.spread)
 		var kv: float = (clampf(vv.length() / 1.35, 0.45, 1.25)
 				* lerpf(0.82, 1.18, _gl_rand(j * 5 + 2, sd)))
 		var om: float = lerpf(float(SMASH.om_lo), float(SMASH.om_hi),
@@ -26575,8 +26783,8 @@ func _shard_burst(it: Dictionary, s: Dictionary, k: float) -> void:
 			#  w 성분에 0.6 — 트레이가 얕다(w 28~122). 그대로 두면 조각이
 			#  먼 벽과 앞 레일로 곧장 빠져 펠트 위에 아무것도 안 남는다.
 			"vw": sin(a) * sp * kv * 0.6,
-			"vh": lerpf(float(SMASH.vh_lo), float(SMASH.vh_hi),
-					_gl_rand(j * 9 + 3, sd)),
+			"vh": lerpf(float(CRUSH.vh_lo if radial else SMASH.vh_lo),
+					float(CRUSH.vh_hi if radial else SMASH.vh_hi), _gl_rand(j * 9 + 3, sd)),
 			"psi": float(it.psi), "om": om, "pts": loc,
 			"col": cl[j % 2],
 			#  **음수에서 시작한다**(_egg_bit 의 wait 어법). 그동안 조각이
@@ -26586,8 +26794,8 @@ func _shard_burst(it: Dictionary, s: Dictionary, k: float) -> void:
 			#  통째로 없앤 자리다).
 			"t": -float(SMASH.hold),
 			"ax": anc.x, "ay": anc.y,
-			"life": lerpf(float(SMASH.life_lo), float(SMASH.life_hi),
-					_gl_rand(j * 11 + 5, sd)),
+			"life": lerpf(float(CRUSH.life_lo if radial else SMASH.life_lo),
+					float(CRUSH.life_hi if radial else SMASH.life_hi), _gl_rand(j * 11 + 5, sd)),
 			"bounced": false})
 
 
@@ -26793,21 +27001,25 @@ func _shard_tone(bb: Color, gold: bool) -> Array:
 # 가루. **절반은 왼쪽으로 찬다** — 턱을 넘어 창구로 샌다.
 # 큰 조각은 판에 떨어지고 가루는 구멍으로 새므로 「버려지는 길」이라는
 # 읽기가 그림으로 유지된다.
-func _grit_burst(it: Dictionary, k: float) -> void:
+#  radial — 팩 남은 것(CRUSH): 창구로 새는 몫 없이 둘레로 고르게.
+func _grit_burst(it: Dictionary, k: float, radial := false) -> void:
 	var sd: int = smash_seed * 131 + smash_n * 17 + 997
 	var base := _smash_nv().angle()
 	var col: Color = C_LIGHT.darkened(0.15)
-	for j in _grit_n(stock.size()):
+	var gn: int = int(CRUSH.grit) if radial else _grit_n(stock.size())
+	for j in gn:
 		#  홀수는 180° 쪽 — 창구로 새는 몫이다. 25° 로 좁게 모아 던져야
 		#  가루가 흩어지지 않고 턱 너머로 **떨어져 들어간다**.
 		var back: bool = j % 2 == 1
 		var a0: float = PI if back else base
 		var sw: float = 0.4363 if back else float(SMASH.spread)
 		var a: float = a0 + (_gl_rand(j * 5 + 13, sd) - 0.5) * 2.0 * sw
+		if radial:
+			a = TAU * (float(j) + _gl_rand(j * 5 + 13, sd) * 0.8) / float(gn)
 		var sp: float = lerpf(float(SMASH.grit_sp_lo), float(SMASH.grit_sp_hi),
 				_gl_rand(j * 7 + 17, sd)) * k
 		grit.append({
-			"u": float(it.u) - float(it.hw) * 0.5, "w": float(it.w),
+			"u": float(it.u) - (0.0 if radial else float(it.hw) * 0.5), "w": float(it.w),
 			"h": maxf(float(it.h), 0.0) + 2.0,
 			"vu": cos(a) * sp, "vw": sin(a) * sp * 0.6,
 			"vh": lerpf(60.0, 190.0, _gl_rand(j * 9 + 19, sd)),
@@ -27555,6 +27767,10 @@ func _drop_step(dt: float) -> void:
 
 		if it.h <= 0.0:
 			it.h = 0.0
+			#  팩 남은 것(CRUSH) — 내리친 테이블에서 떴다가 펠트에 닿는 서브스텝에 부서진다.
+			if int(it.get("doom", 0)) == 2 and it.vh < 0.0:
+				_crush_at(i)
+				continue
 			# 반발 "후" 속도로 가른다. 충돌 속도로 가르면 e=0.16 짜리 보드 확장이
 			# 0.02px 짜리 안 보이는 호를 한 번 더 그리고 호 개수 증명이 틀어진다.
 			var rv: float = -it.vh * it.e
@@ -27804,8 +28020,10 @@ func _drop_sub(it: Dictionary, k: int) -> Vector2:
 	return c + (dir if k == 2 else -dir)
 
 
+#  뜬 팩 물건(doom 2)은 짝 충돌에서 빠진다 — 면 위 원끼리만 보는 솔버라 높이 뜬 것이
+#  밑의 물건을 옆으로 밀어낸다.
 func _drop_live(it: Dictionary) -> bool:
-	return not it.gone and it.sold <= 0.0 and drop_t >= it.t0 and not it.held
+	return not it.gone and it.sold <= 0.0 and drop_t >= it.t0 and not it.held 			and int(it.get("doom", 0)) != 2
 
 
 # 4물체 → 쌍 6개 → 원-원 검사 12회. 브로드페이즈를 붙이면 코드만 는다.
@@ -27891,6 +28109,7 @@ func _drop_lock() -> void:
 # 실측 최대 199 서브스텝 (예산 424).
 func _drop_settle() -> void:
 	_hand_abort()
+	_crush_flush()          # 뜬 팩 물건은 h 를 0 에 못 박기 전에 부순다
 	var guard := int(DROP.t_max / DROP.sub) + 8
 	while drop_awake and guard > 0:
 		guard -= 1
@@ -27956,7 +28175,8 @@ func _drop_extras(d: float) -> void:
 		if float(it.get("lg", 0.0)) > 0.0:
 			it.lg = maxf(float(it.lg) - d / maxf(float(it.lgt), 0.0001), 0.0)
 		# stock 을 읽는 곳 셋 중 하나. _buy 는 "건드리면 안 됨" 이라 폴링한다.
-		if it.sold <= 0.0 and i < stock.size() and stock[i].sold:
+		#  부술 팩 물건(doom)은 값만 닫혔다 — 계산대로 안 날고 주먹을 기다린다(CRUSH).
+		if it.sold <= 0.0 and i < stock.size() and stock[i].sold and not it.has("doom"):
 			it.sold = 0.0001
 			_drop_leave(i)
 		if it.sold > 0.0:
@@ -28175,7 +28395,8 @@ func _shop_hit(m: Vector2) -> int:
 	var z := _z_order()
 	for k in range(z.size() - 1, -1, -1):
 		var i: int = z[k]
-		if drop[i].sold > 0.0:
+		#  부술 팩 물건(doom)도 못 집는다 — 값이 닫혔고 주먹이 그리로 온다.
+		if drop[i].sold > 0.0 or drop[i].has("doom"):
 			continue
 		#  상인이 든 것은 못 집는다. 집으면 손 둘이 같은 물건을 끌어
 		#  자리가 프레임마다 두 곳으로 튄다.
@@ -32601,12 +32822,19 @@ func _pay_click() -> void:
 #  판 효과는 손바닥이 건반에 닿는 순간으로 미룬다(_prop_slam) — 그림일 뿐이라 값과 안
 #  얽힌다. 못 서면 옛 끄덕 · 바로 번쩍임 · 서랍만 조용히 연다(_reg_open_now(false) — 동전 ·
 #  흔들림 없이). 값(_buy)은 아래 그대로 · 이 순간 확정된다(사는 소리 buy 도 여기서 난다).
+#  팩의 마지막 몫(값 0)은 등록기를 안 친다 — 그 손이 곧장 남은 것을 부수러 간다
+#  (_buy → _boost_sweep → _crush_begin). 주먹이 못 섰으면 옛 끄덕 · 서랍이다.
 func _pay_take(i: int) -> void:
-	var acted := _prop_buy()
-	if not acted:
+	var last: bool = bool(stock[i].get("pack", false)) and boost_pick <= 1
+	var acted := false if last else _prop_buy()
+	if not acted and not last:
 		_npc_react("끄덕")
 	var cost: int = stock[i].cost
 	_buy(i)
+	if last:
+		acted = _prop_live(1) and prop_pound != ""
+		if not acted:
+			_npc_react("끄덕")
 	if not acted:
 		pay_flash = 1.0
 		_reg_open_now(false)
@@ -45524,17 +45752,17 @@ func _boost_spill() -> void:
 	_knot_shop()
 
 
-# 고르기가 끝났다. 팩에서 쏟은 것 중 안 집은 것을 쓸어 낸다.
-# 지우지 않고 sold 를 세운다 — 낙하(drop)가 stock.sold 를 따라가므로
-# 파는 연출이 그대로 붙고, 두 배열의 인덱스도 안 어긋난다.
+# 고르기가 끝났다. 팩에서 쏟은 것 중 안 집은 것을 상인이 부순다(CRUSH).
+# 지우지 않고 sold 를 세운다 — 값은 여기서 닫히고(저장도 이 값을 적는다) 두 배열의
+# 인덱스도 안 어긋난다. 판 위 물건은 doom 을 달고 주먹을 기다린다.
 func _boost_sweep() -> void:
-	var n := 0
+	var ks := []
 	for k in mini(stock.size(), drop.size()):
 		if bool(stock[k].get("pack", false)) and not stock[k].sold:
 			stock[k].sold = true
-			n += 1
-	if n > 0:
-		_sfx("sweep_sink")
+			ks.append(k)
+	if not ks.is_empty():
+		_crush_begin(ks)
 
 
 # 눈앞으로 온 팩. 다 오면 **두 블럭이 갈라진다** — 투명도로 빼지 않는다.

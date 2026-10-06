@@ -15,7 +15,7 @@ extends SceneTree
 #   ④ 못 서면 옛 응수다 — 움직임 끔 · 건네는 중 · 쓰는 중 · 진열대가 없다(헤드리스 기본).
 #      서던 몸짓도 건네기 · 쓸기가 들면 끊겨 쉼으로 돌아간다.
 #   ⑤ 연달아 팔고 사도 멈춘 손 · 남은 동전 그림이 없다.
-#   ⑥ 개발자 「상인 몸짓」의 줄(동전 부수기 · 등록기 내리치기 · 사탕 · 테이블)이 값을 안 건드린다.
+#   ⑥ 개발자 「상인 몸짓」의 줄(동전 부수기 · 등록기 내리치기 · 사탕 · 테이블 · 팩 둘)이 값을 안 건드린다.
 #   ⑧ 주먹(2026-10-03) — 사탕을 상점에서 쓰면 값은 그 순간 오르고 사탕이 펠트에 떨어져 주먹에
 #      부서진다(사탕 색 조각 · 설탕 반짝이 · 글). 빈 테이블 리롤은 쓸기 대신 주먹이 테이블을
 #      치고, 판은 닿는 틀에 깔리고, 문(sweep_live)은 눌러 둔 주먹이 튀고 나서 열린다. 주먹
@@ -570,9 +570,11 @@ func _run() -> void:
 	var dev0 := _econ()
 	var na: int = (g.IDLE.acts as Array).size() + Dev.NPC_HOLDS.size()
 	var names: PackedStringArray = Dev._names("npcact")
-	_ok("개발자 줄에 소품 몸짓 넷이 있다", names.size() == na + 4
+	#  2026-10-06 — 팩 고르고 남은 것을 부수는 주먹 둘이 더해졌다(qa_crush ⑦ 이 그 둘을 잰다).
+	_ok("개발자 줄에 소품 몸짓 여섯이 있다", names.size() == na + 6
 			and names[na] == "동전 부수기" and names[na + 1] == "등록기 내리치기"
-			and names[na + 2] == "사탕 부수기" and names[na + 3] == "테이블 내리치기",
+			and names[na + 2] == "사탕 부수기" and names[na + 3] == "테이블 내리치기"
+			and names[na + 4] == "팩 하나 부수기" and names[na + 5] == "팩 셋 내리치기",
 			"%d줄 · %s" % [names.size(), ", ".join(names.slice(na))])
 	Dev.pick["npcact"] = na
 	Dev._run(g, {"t": "list", "k": "npcact", "n": na + 2})
