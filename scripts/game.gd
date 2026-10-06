@@ -11082,7 +11082,11 @@ func _draw() -> void:
 		elif edy != 0.0:
 			draw_set_transform(sh + Vector2(0.0, edy))
 		if not dr or _door_board_vis():
+			if dr:
+				_door_board_under()
 			_draw_board()
+			if dr:
+				_door_board_over()
 		if dr:
 			_door_shade()
 		if edy != 0.0 or dr:
@@ -41558,6 +41562,87 @@ func _door_set_xf(sh: Vector2, edy := 0.0) -> void:
 	var c: Vector2 = xf[0]
 	var sc: Vector2 = xf[1]
 	draw_set_transform(sh + c - sc * BC + Vector2(0.0, edy * sc.y), 0.0, sc)
+
+
+#  ── 문에 건 판의 그늘 · 빛 (2026-10-07) ─────────────────────────
+#  「시작화면에 다트보드가 그냥 공중에 떠 있는거 같네 라이팅이랑 쉐이딩 조금만 해줄수 있어?」.
+#  판 그림은 판 화면(다트판 벽)의 빛으로 그렸다 — 문 위에서 0.76 배로 줄면 제 그림자(3 · 6)가
+#  2~4px 로 딱 붙고, 따뜻한 램프 웅덩이 속에서 판만 중립 빛이라 문에 붙은 물건이 아니라 얹은
+#  그림으로 떴다. 문 장면의 램프(door3d LOOK.lamp_at — 판 위 · 앞 · 조금 왼쪽)를 그대로 따른다.
+#    밑  문에 진 그림자 — 판이 문에서 뜬 두께만큼 아래로 번진 부드러운 원(겹 sh_n),
+#        테가 문에 닿은 자리의 좁은 그늘(ao) — 이 한 줄이 「걸려 있다」를 말한다
+#    위  램프 빛 — 위는 램프 색이 얹히고(top_a) 아래로 갈수록 가라앉는다(bot_a),
+#        테 윗호의 반사 한 획(spec_a), 간판 네온이 윗가에 비친 분홍(neon_a — 제목에서만)
+#  전부 판 자리에서 그린다(_door_set_xf 변환 안) — 문이 열리면 문짝과 같이 돈다.
+const DOORB := {
+	"sh_off": Vector2(-3.0, 15.0), "sh_a": 0.50, "sh_n": 7, "sh_grow": 13.0,
+	"ao_a": 0.55, "ao_w": 3.0,
+	"top_a": 0.12, "bot_a": 0.34,
+	"spec_a": 0.32, "spec_from": -158.0, "spec_to": -40.0,
+	"neon_a": 0.10, "neon_h": 0.42,
+}
+
+
+func _door_board_under() -> void:
+	var ro := _wall3_ro()
+	var n := int(DOORB.sh_n)
+	var off: Vector2 = DOORB.sh_off
+	for i in n:
+		var q: float = float(i) / float(maxi(n - 1, 1))
+		draw_circle(BC + off * (0.55 + 0.45 * q), ro + float(DOORB.sh_grow) * q,
+				Color(0.0, 0.0, 0.0, float(DOORB.sh_a) / float(n)))
+	draw_arc(BC + Vector2(0.0, 1.0), ro + float(DOORB.ao_w) * 0.5, 0.0, TAU, 72,
+			Color(0.0, 0.0, 0.0, float(DOORB.ao_a)), float(DOORB.ao_w))
+
+
+#  원 위에 세로로 곧게 바뀌는 덮개 — 꼭짓점 색이 y 의 일차식이라 삼각형 어디서도 그 식 그대로다.
+func _door_disc_grad(ro: float, y0: float, y1: float, c0: Color, c1: Color, n := 72) -> void:
+	var pts := PackedVector2Array()
+	var cs := PackedColorArray()
+	for i in n:
+		var a: float = TAU * float(i) / float(n)
+		var p := BC + Vector2(cos(a), sin(a)) * ro
+		if p.y < y0 - 0.01 or p.y > y1 + 0.01:
+			continue
+		pts.append(p)
+		cs.append(c0.lerp(c1, clampf((p.y - y0) / maxf(y1 - y0, 1.0), 0.0, 1.0)))
+	#  잘린 활꼴이면 현의 두 끝을 더해 닫는다.
+	if y1 < BC.y + ro - 0.5:
+		var hw: float = sqrt(maxf(ro * ro - (y1 - BC.y) * (y1 - BC.y), 0.0))
+		pts.append(Vector2(BC.x - hw, y1))
+		cs.append(c1)
+		pts.append(Vector2(BC.x + hw, y1))
+		cs.append(c1)
+		var cen := Vector2(BC.x, (y0 + y1) * 0.5)
+		var order := range(pts.size())
+		order.sort_custom(func(i, j): return (pts[i] - cen).angle() < (pts[j] - cen).angle())
+		var p2 := PackedVector2Array()
+		var c2 := PackedColorArray()
+		for i in order:
+			p2.append(pts[i])
+			c2.append(cs[i])
+		pts = p2
+		cs = c2
+	if pts.size() >= 3:
+		draw_polygon(pts, cs)
+
+
+func _door_board_over() -> void:
+	var ro := _wall3_ro()
+	var top: float = BC.y - ro
+	var bot: float = BC.y + ro
+	var lamp: Color = Door3D.COL.lamp
+	#  램프 빛이 위에서 얹히고 아래로 가라앉는다 — 두 겹 모두 y 의 일차식.
+	_door_disc_grad(ro, top, bot, Color(lamp, float(DOORB.top_a)), Color(lamp, 0.0))
+	_door_disc_grad(ro, top, bot, Color(0.0, 0.0, 0.0, 0.0),
+			Color(0.0, 0.0, 0.0, float(DOORB.bot_a)))
+	#  간판 네온 — 윗가에만 비친다. 인트로는 네온을 제 박자로 켜므로 제목에서만.
+	if state != S.INTRO:
+		_door_disc_grad(ro, top, top + ro * 2.0 * float(DOORB.neon_h),
+				Color(Door3D.COL.neon, float(DOORB.neon_a)), Color(Door3D.COL.neon, 0.0))
+	#  테 윗호의 반사 한 획 — 램프가 판 위 앞에 있다.
+	draw_arc(BC, ro - 1.0, deg_to_rad(float(DOORB.spec_from)), deg_to_rad(float(DOORB.spec_to)),
+			40, Color(lamp, float(DOORB.spec_a)), 1.5)
 
 
 #  문짝이 램프에서 등을 돌리는 만큼 판에 그늘이 진다 — _door_set_xf 변환 안에서 부른다.
