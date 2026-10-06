@@ -500,6 +500,19 @@ static func teach(id: String) -> bool:
 	return true
 
 
+#  여럿을 한꺼번에 배운 것으로 적는다 — 쓰기는 한 번. 새로 적은 수를 돌려준다.
+static func teach_all(ids: Array) -> int:
+	boot()
+	var n := 0
+	for id in ids:
+		if not taught(String(id)):
+			_cfg.set_value(S_TUT, String(id), true)
+			n += 1
+	if n > 0:
+		flush()
+	return n
+
+
 #  한 갈래만 다시 배우게 한다. 개발자 판(「첫 손님 두 장 다시」)만 부른다.
 static func forget(id: String) -> void:
 	boot()

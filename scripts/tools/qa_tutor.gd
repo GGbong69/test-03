@@ -14,6 +14,7 @@ func _initialize() -> void:
 	g = load("res://scenes/main.tscn").instantiate()
 	root.add_child(g)
 	_run()
+	_once()
 	print("통과 %d · 실패 %d" % [ok, bad])
 	quit(1 if bad > 0 else 0)
 
@@ -339,3 +340,36 @@ func _voice() -> void:
 				if not miss.has(nm):
 					miss.append(nm)
 	_ok("고르는 파일이 다 있다(음절 1596자 표본)", miss.is_empty(), "%s" % [miss])
+
+
+#  튜토리얼은 한 번(2026-10-07 「튜토리얼을 한번 하고 다시 시작 하니까 또 튜토리얼이 나와?」).
+#  튜토리얼 런을 지난 프로필의 다음 보통 런은 남은 갈래를 다 배운 것으로 적고 선다 — 건너뛰기
+#  같은 갈래가 둘째 런 첫 판에서 말상자로 떠 튜토리얼이 또 도는 것으로 읽혔다.
+func _once() -> void:
+	print("
+튜토리얼은 한 번")
+	Save.wipe()
+	_reset()
+	var ids: Array = g._tutor_ids()
+	_ok("말상자 갈래 이름을 다 모은다", ids.size() >= 12 and ids.has("u_skip"), "%d갈래" % ids.size())
+	g._new_run(true)
+	_ok("빈 저장의 첫 사람 런은 튜토리얼 런이다", g.tut_run and Save.taught("u_boot"))
+	_ok("튜토리얼 런은 남은 갈래를 미리 안 지운다 — 제자리에서 가르친다",
+			not Save.taught("u_skip") and not Save.taught("u_shop"))
+	g._tut_end()
+	g._new_run(true)
+	var left := []
+	for id in ids:
+		if not Save.taught(String(id)):
+			left.append(id)
+	_ok("튜토리얼 뒤 보통 런은 남은 갈래가 없다", not g.tut_run and left.is_empty(), "%s" % [left])
+	g._open_leg()
+	_ok("그 런 첫 판에서 말상자가 안 선다(건너뛰기 포함)", g.tutor_q.is_empty() and g.tutor_id == "",
+			"q %s · id %s" % [g.tutor_q, g.tutor_id])
+	#  튜토리얼을 안 거친 프로필(자동플레이 · 도구가 곧장 연 런)은 그대로 배운다.
+	Save.wipe()
+	_reset()
+	g._new_run()
+	#  첫 판은 제 갈래(건너뛰기 등)를 제자리에서 가르치며 적는다 — 아직 안 연 상점 것은 남는다.
+	_ok("사람 길이 아닌 런은 남은 갈래를 한꺼번에 안 지운다",
+			not Save.taught("u_shop") and not Save.taught("u_sell"))

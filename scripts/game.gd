@@ -2079,6 +2079,12 @@ func _new_run(human := false) -> void:
 	#  튜토리얼 런은 그대로 튜토리얼이다(tut_run 이 매듭에 실려 온다).
 	if tut_run:
 		Save.teach("u_boot")
+	#  튜토리얼은 한 번이다(2026-10-07 「튜토리얼을 한번 하고 다시 시작 하니까 또 튜토리얼이
+	#  나와?」). 튜토리얼 런이 못 보여 준 갈래 — 건너뛰기(튜토리얼 런은 못 건너뛴다) 같은 것 —
+	#  가 다음 런 첫 판에서 시간을 늦추고 말상자로 떠, 튜토리얼이 또 도는 것으로 읽혔다.
+	#  튜토리얼 런을 지난 프로필의 보통 런은 남은 갈래를 다 배운 것으로 적고 시작한다.
+	elif human and Save.taught("u_boot"):
+		Save.teach_all(_tutor_ids())
 	tut_rr = false
 	tut_got = []
 	#  지난 런에 열린 것을 새 런까지 끌고 가면 안 된다.
@@ -4133,6 +4139,16 @@ func _tut_due() -> bool:
 
 func _boot_due() -> bool:
 	return tut_run
+
+
+#  말상자 표의 갈래 이름 전부(켜진 줄만 — tutor_steps 가 빈 갈래는 뺀다).
+func _tutor_ids() -> Array:
+	var out := []
+	for r in GameData.tutor():
+		var id := String((r as Dictionary).get("id", ""))
+		if id != "" and not out.has(id) and not GameData.tutor_steps(id).is_empty():
+			out.append(id)
+	return out
 
 
 #  튜토리얼 선물인가. 머리 — 없음 동전 · m: 보드 확장 · b: 팩 · c: 사탕 · f: 사진.
