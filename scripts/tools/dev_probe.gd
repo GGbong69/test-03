@@ -707,6 +707,32 @@ func _card(g: Node) -> void:
 				"%d × %d · +%d" % [g.cur_chip, g.cur_mult, g.last_gain])
 		g.owned.clear()
 
+	#  일시정지 — 미리보기 위에 연 설정 뒤에서는 미리보기도 게임 정산과 같이 멎고, 닫으면
+	#  이어 돌아 제자리로 돌아온다. 손을 떼던 때는 닫은 뒤 큐가 빈 채 진짜 빈 큐 갈래로 가서
+	#  판 사건이 없는 발을 하나 셌다(leg_throws · 검토, 2026-10-06).
+	g._start_leg()
+	g._swap_skip()
+	g.state = g.S.AIM_V
+	var th0: int = g.leg_throws
+	Dev.pick["cardfx"] = 2
+	Dev.click(g, run_at)
+	for _k in 20:
+		g._process(1.0 / 60.0)
+	var ph_mid: int = Dev.card_ph
+	g._pause_open()
+	var paused: bool = g.state == g.S.SETTINGS
+	for _k in 240:
+		g._process(1.0 / 60.0)
+	var ph_p: int = Dev.card_ph
+	g.state = g.pause_from
+	g.pause_from = -1
+	var frp := _card_spin(g)
+	_say(paused and ph_mid > 0 and ph_p == ph_mid and frp < 1200 and g.leg_throws == th0
+			and g.state == g.S.AIM_V,
+			"「한 방」 — 일시정지 뒤에서 멎고 닫으면 제자리로 · 발을 안 센다",
+			"단 %d → 쉬는 동안 %d · 발 %d → %d · state %d" % [ph_mid, ph_p, th0, g.leg_throws,
+					g.state])
+
 	# 진행 중인 진짜 정산 위에서 누르면 그 발의 남은 걸음이 통째로 날아간다.
 	g._start_leg()
 	g._swap_skip()

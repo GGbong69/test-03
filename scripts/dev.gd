@@ -355,6 +355,12 @@ static func _card_tick(g: Node, d: float) -> void:
 			return
 		_card_nums(g)
 		return
+	# 정산 위에 일시정지가 떠 있다 — 미리보기도 게임 정산과 같이 멎는다(손을 안 뗀다).
+	# 여기서 손을 떼면 닫은 뒤 큐가 빈 채 _next_step 의 진짜 빈 큐 갈래로 가서 판 사건이
+	# 없는 발을 하나 센다(leg_throws · 불씨가 피는 때 · 단골이 뽑아 가기까지 · 칠판 X).
+	# 2026-10-06
+	if g._settle_paused():
+		return
 	# 다른 줄이 화면을 옮겼다 — 되돌릴 자리가 이미 없으니 손을 뗀다.
 	if g.state != g.S.RESOLVE:
 		card_ph = 0

@@ -585,6 +585,9 @@ var order_t := 0.0       # 지금 상태에 든 뒤 흐른 시간 — 쓰기 · 
 var order_rub := 9.0     # 마지막 눈금을 지운 뒤 흐른 시간
 var order_in := []       # 영역 조각 [안, 밖, 각0, 각1] — 열 때 한 번 굽는다
 var order_off := []      # 판 안의 나머지 조각 — 옅게 가라앉힌다
+var order_rim := []      # 영역 테두리 분필 선 [PackedVector2Array] — 열 때 한 번 굽는다
+var order_fly := {}      # 받은 사탕 · 사진 · 동전이 칠판에서 제 칸으로 난다 {k, i, t} · 모션 끄기면 없다
+var modes_due := false   # 칠판 주문이 정산 중에 동전을 줬다 — 이 발이 끝나면 _modes_refresh
 #  단골. 들어오는 때 · 자리 씨앗을 판이 열릴 때 미리 뽑는다(run_rng). 자리는 들어오는 순간
 #  그 씨앗으로 고른다 — 내가 방금 점수를 낸 칸 · 띠 안, 꽂힌 자루와 비킨 자리.
 #  이름은 rgl_ 이다 — reg_ 는 상인 등록기(REG)가 먼저 쓴다.
@@ -603,7 +606,7 @@ var rgl_side := 1.0      # 날아오는 쪽 — 1 오른쪽 · −1 왼쪽(꽂�
 var rgl_ph := ""         # 그림 — "" · "in" 날아온다 · "on" 꽂혀 있다 · "fall" 떨어진다 · "out" 빠져나간다
 var rgl_vt := 0.0        # 그 그림에 든 뒤 흐른 시간(빨리 보기를 탄다)
 var rgl_fly := 0.0       # 이번에 날거나 빠지는 시간(초) — 걸음 길이의 몫
-var rgl_pa := 0.0        # 참나무 쪽의 짙기 — 꽂히는 프레임에 서고 막힘이 풀리면 걷힌다
+var rgl_pa := 0.0        # 참나무 쪽의 짙기 — 꽂히는 프레임에 서고 자루가 떨어지거나 빠지면 걷힌다
 var paint_mul := 1.0
 var score_mode := "std"         # 이 런의 점수 계산 방식. 든 동전이 먼저 쥔다
 # 다트통이 미는 최종 점수 배율. 계산 방식과 같이 판 시작에 한 번 읽는다.
@@ -874,6 +877,7 @@ var pops := []
 var slot_pop := []              # 아이템 패널 참고 — 아래 "아이템 패널" 구획
 var slot_vel := []
 var shake := 0.0
+var shake_k := 34.0      # 흔들림 감쇠(px/초) — 1배 착지만 남은 걸음에 맞춰 가파르다(_shk_tail_k)
 var board_punch := 0.0
 var pitch_step := 0
 var hit_flash := 0.0
@@ -1065,6 +1069,13 @@ func _ready() -> void:
 	kp.bus = "SFX"
 	add_child(kp)
 	tick_pl = kp
+	#  판 금 삐걱 — 자리가 **하나**다(_crack_snd). 착지 뒤로 밀린 삐걱이 2프레임 사이로 이어
+	#  나도 자리 넷의 settle_total · target_hit 꼬리를 안 자른다(2026-10-06).
+	var cp := AudioStreamPlayer.new()
+	cp.playback_type = AudioServer.PLAYBACK_TYPE_STREAM
+	cp.bus = "SFX"
+	add_child(cp)
+	crack_pl = cp
 
 	# 음악 — 자리가 **하나**다. 겹쳐 넘기지 않고 나갔다 들어오므로 한 번에
 	# 한 곡만 울린다. 예전에는 겹치려고 둘이었다.
@@ -2382,6 +2393,7 @@ func _ev_clear() -> void:
 	_rgl_clear()
 	rgl_last = {}
 	ev_tail = false
+	modes_due = false
 
 
 #  판이 열릴 때 한 번. 가중치 뽑기 한 번이 사건을 정하고, 갈래가 제 것을 미리 뽑는다.
@@ -2396,6 +2408,10 @@ func _ev_roll() -> void:
 		pool = GameData.event_pool(leg_no, LEGEV.tut_kinds)
 	else:
 		pool = GameData.event_pool(leg_no)
+	#  「빈손」은 불씨를 안 뽑는다 — 불씨가 주는 것은 골드뿐이라 빈손 판에서는 맞혀도 소리만
+	#  나고 0 이다(_gold_add 가 막는다). 거른 줄은 가중치째 빠지고 뽑기는 그대로 한 번이다.
+	if GameData.chal_on("gold_off"):
+		pool = pool.filter(func(r): return String(r.get("kind", "")) != "ember")
 	var sum := 0.0
 	for r in pool:
 		sum += GameData.event_w(r)
@@ -2603,8 +2619,9 @@ func _ev_take(kind: String) -> void:
 #  자리). 그 띠 한 칸은 참나무 쪽으로 메워져 꽂혀도 0점이다 — 금줄(dead_idx)과 같은 길 ·
 #  띠 한정. 불이면 그 불(안쪽 · 바깥)을 반지름으로 막는다.
 #  가로채기 — 내 자루가 단골 자루 점에서 반지름 v(표 · px) 안에 꽂히면 단골 자루가 툭
-#  떨어지고 「단골」 걸음(동전 · 불씨 · 주문 뒤 · 저울 · 모음 · 합계 앞)이 그 칸의 값(칸 값
-#  × 띠 배수)을 점수 칸에 얹는다. 막힘이 풀린다. 연발의 작은 다트도 가로챈다(한 번뿐이다).
+#  떨어지고 막힘이 같이 풀린다(참나무 쪽이 그 프레임에 걷힌다). 「단골」 걸음(동전 · 불씨 ·
+#  주문 뒤 · 저울 · 모음 · 합계 앞)이 그 칸의 값(칸 값 × 띠 배수)을 점수 칸에 얹는다.
+#  연발의 작은 다트도 가로챈다(한 번뿐이다).
 #  가로챈 발 자체는 막힌 자리에 꽂혔으면 0점으로 셈한다 — 값은 「단골」 걸음이 낸다.
 #  뽑아 가기 — 꽂힌 뒤 내가 v2(표) 발을 더 던지면 단골이 자루를 뽑아 간다(옆으로 빠져
 #  나간다). 막힘이 풀린다. 연발은 한 발이다.
@@ -2703,8 +2720,11 @@ func _rgl_note(p: Vector2, raw_mult: int, land_base: int) -> void:
 
 #  꽂힌 자리가 막힌 띠 한 칸인가 — 칸 번호와 띠가 같다. 불은 칸이 없어 반지름(안쪽 불 ·
 #  바깥 불)으로 잰다. 빗나감은 칸도 불도 아니다.
+#  자루가 꽂혀 있는 동안("on")만 막는다 — 떨어지는 순간("hit") 참나무 쪽과 같이 풀린다.
+#  가로챈 발 자체는 _land 가 이 물음을 _rgl_land 보다 먼저 던지므로 막힌 채로 잰다(0점).
+#  2026-10-06
 func _rgl_blocks(info: Dictionary) -> bool:
-	if rgl_st != "on" and rgl_st != "hit":
+	if rgl_st != "on":
 		return false
 	if int(info.get("idx", -1)) != rgl_idx:
 		return false
@@ -2820,8 +2840,8 @@ func _rgl_land(p: Vector2, raw_mult: int) -> bool:
 	return true
 
 
-#  「단골」 걸음 — 떨어뜨린 자루의 값을 내고 막힘을 푼다. 걸음이 서기 전에 판이 끝났거나
-#  이미 받았으면 0 이다.
+#  「단골」 걸음 — 떨어뜨린 자루의 값을 낸다(막힘은 떨어지는 프레임에 이미 풀렸다). 걸음이
+#  서기 전에 판이 끝났거나 이미 받았으면 0 이다.
 func _rgl_take() -> int:
 	if rgl_st != "hit":
 		return 0
@@ -2844,9 +2864,11 @@ func _rgl_out(fly: float) -> void:
 
 
 #  그림 시계 — _process 가 빨리 보기 배수를 태워 민다(걸음 안의 비행이라 걸음과 같이 준다).
-#  참나무 쪽은 꽂힌 프레임부터 막힘이 풀릴 때까지 선다. 모션 끄기면 짙기만 곧장 바뀐다.
+#  참나무 쪽은 꽂힌 프레임부터 자루가 꽂혀 있는 동안 선다 — 가로채 자루가 떨어지는 프레임에
+#  같이 걷힌다(값은 그 뒤 「단골」 걸음이 낸다). 「단골」 걸음까지 기다렸더니 자루 없는 참나무
+#  쪽만 0.5초쯤 남았다(검토, 2026-10-06). 모션 끄기면 짙기만 곧장 바뀐다.
 func _rgl_tick(d: float) -> void:
-	var on := (rgl_st == "on" or rgl_st == "hit") and rgl_ph != "in"
+	var on := rgl_st == "on" and rgl_ph != "in"
 	if motion_off:
 		rgl_pa = 1.0 if on else 0.0
 	else:
@@ -2914,22 +2936,31 @@ func _rgl_pose() -> Transform3D:
 #    box      칠판 판(분필 면) — 판 왼쪽 벽, 자루 걸이(뽑힌 자루 끝 x88)와 조준 가로선
 #             (x169~) 사이 · 왼쪽 점수 카드(y74~170) 밑이다. frame 은 나무 테 두께
 #    ico      보상 그림 반지름 · tick 눈금 한 획 [폭, 높이] · tick_dx 획 사이
-#    lit_a    영역 분필빛의 짙기 · dim_a 판의 나머지를 가라앉히는 짙기
+#    lit_a    영역 분필빛의 짙기 · dim_a 판의 나머지를 가라앉히는 짙기. 0.16 이었을 때 백색 칸
+#             주문은 영역(크림)에 분필빛(크림)을 얹어도 색이 그대로고 나머지 흑색 칸은 원래 어두워
+#             판이 거의 안 바뀌었다(검토, 2026-10-06) — 나머지를 더 누르고 테두리를 긋는다
+#    rim_a    영역 테두리 분필 선(1px)의 짙기 · rim_dk 그 밑에 까는 그늘(3px)의 짙기. 그늘이
+#             선의 양옆 1px 을 눌러 크림 바탕(백색 칸) 위에서도 선이 선다
 #    breathe  분필빛이 숨 쉬는 깊이 · breathe_hz 그 빠르기(모션 끄기면 안 쉰다)
 #    write_t  주문을 쓰는 시간 — 그림이 서고 눈금이 한 획씩 그어진다 · 빛이 차오른다
 #    rub_t    눈금 하나가 지워지는 시간
 #    mark_t   동그라미 · X 를 긋는 시간(빛은 이 동안 식는다) · hold_t 그대로 두는 시간 ·
 #             erase_t 칠판을 지우는 시간
 #    pop_dy   보상 팝 자리 — 칠판 테 윗변에서 위로(px). 팝은 24px 오르고 둘째 팝은 14 위다
+#    fly_t    받은 사탕 · 사진 · 동전이 칠판 그림 자리에서 제 칸으로 나는 시간(초 · 빨리 보기를
+#             탄다) · fly_arc 그 길이 판 반대쪽(왼쪽)으로 휘는 높이(px) · fly_ring 앉은 칸에
+#             분필빛 고리 하나가 식는 시간(초). 모션 끄기면 날지 않고 제 칸에 곧장 선다
 const ORDER := {
 	"regions": [["double", 1.0], ["triple", 1.0], ["bull", 1.0], ["col:1", 1.0],
 			["col:0", 1.0], ["sec", 1.0], ["left", 1.0], ["right", 1.0], ["small", 1.0]],
 	"kinds": ["gold", "track", "candy", "photo", "item"],
 	"box": Rect2(100.0, 238.0, 56.0, 34.0), "frame": 3.0,
 	"ico": 7.0, "tick": Vector2(2.0, 14.0), "tick_dx": 6.0,
-	"lit_a": 0.22, "dim_a": 0.16, "breathe": 0.35, "breathe_hz": 0.55,
+	"lit_a": 0.22, "dim_a": 0.32, "rim_a": 0.90, "rim_dk": 0.55,
+	"breathe": 0.35, "breathe_hz": 0.55,
 	"write_t": 0.45, "rub_t": 0.28, "mark_t": 0.30, "hold_t": 0.55, "erase_t": 0.40,
 	"pop_dy": 6.0,
+	"fly_t": 0.30, "fly_arc": 16.0, "fly_ring": 0.20,
 }
 
 
@@ -2945,6 +2976,8 @@ func _order_clear() -> void:
 	order_rub = 9.0
 	order_in = []
 	order_off = []
+	order_rim = []
+	order_fly = {}
 
 
 #  영역 · 칸 · 눈금 · 보상 · 보상 씨앗. 뽑는 수가 늘 다섯이라 run_rng 가 판마다 같은 만큼 간다.
@@ -3015,18 +3048,23 @@ func _order_tag_pick(u: float) -> Dictionary:
 	return pool[pool.size() - 1]
 
 
-#  지금 받을 수 있는 보상인가 — 판 첫머리의 상태라 되살려도 같은 답이다. 사탕 · 사진 칸이
-#  꽉 찼으면 사탕 · 사진, 동전 슬롯이 꽉 찼거나 남은 동전이 없으면 동전, 「빈손」이면 골드가
-#  빠진다(뱃지 골드는 빈손을 지나가는 길이라 — _gold_add 머리말 — 주문으로 새면 안 된다).
+#  지금 받을 수 있는 보상인가 — 판 첫머리의 상태라 되살려도 같은 답이다. 사탕 · 사진 칸에
+#  v 장이 안 들어가면 사탕 · 사진, 동전 슬롯에 v 장이 안 들어가거나 줄 동전이 v 장 안 남았으면
+#  동전, 「빈손」이면 골드가 빠진다(뱃지 골드는 빈손을 지나가는 길이라 — _gold_add 머리말 —
+#  주문으로 새면 안 된다). 받는 걸음(_order_grant)이 한 번 더 묻는다 — 들어가는 것만 뽑았으니
+#  칠판에서 「꽉 찼다」 팝이 날 길이 없다.
 func _order_tag_ok(t: Dictionary) -> bool:
+	var vn := maxi(int(t.get("v", 1)), 1)
 	match String(t.get("kind", "")):
 		"gold":
 			return not GameData.chal_on("gold_off")
-		"candy", "photo":
-			return cons.size() < GameData.cons_slots()
+		"candy":
+			return cons.size() + vn <= GameData.cons_slots() and not GameData.candies().is_empty()
+		"photo":
+			return cons.size() + vn <= GameData.cons_slots() and not GameData.fixtures().is_empty()
 		"item":
-			return owned.size() < GameData.max_items() \
-					and not _tag_items(String(t.get("rarity", ""))).is_empty()
+			return owned.size() + vn <= GameData.max_items() \
+					and _tag_items(String(t.get("rarity", ""))).size() >= vn
 		"track":
 			return not _track_ids().is_empty()
 	return false
@@ -3049,6 +3087,8 @@ func _order_open(cond: String, n: int, tag: Dictionary, u: int) -> void:
 	var pcs := _order_pieces(cond)
 	order_in = pcs[0]
 	order_off = pcs[1]
+	order_rim = _order_rim_bake()
+	order_fly = {}
 
 
 #  판이 그린 그대로의 문맥 — GameData.check 가 영역 조건에서 읽는 칸만 싣는다. mult 는
@@ -3078,22 +3118,40 @@ func _order_land(info: Dictionary, raw_mult: int, p: Vector2) -> bool:
 
 #  「주문」 걸음 — 보상 한 장. 걸음이 서기 전에 판이 끝났거나(그 걸음은 늘 판 끝보다
 #  앞이다) 이미 받았으면 아무 일이 없다. 팝은 칠판 위에 서고(tag_pop) 뱃지 이름 줄은
-#  안 선다 — 값(트랙 레벨 · 골드)만 뜬다.
+#  안 선다 — 값(트랙 레벨 · 골드)만 뜬다. 사탕 · 사진 · 동전은 칠판 그림 자리에서 제 칸으로
+#  난다(_order_fly_go).
+#  ⚠ **_take_tag 가 아니라 _take_tag_once 다** — 쌓인 「쌍둥이」(tag_copy)는 건너뛰기 뱃지의
+#  것이라 판 중간의 주문 보상이 쓰면 안 된다(쓰면 보상이 두 장이 되고 다음 뱃지는 한 장이다).
+#  ⚠ 그 사이 칸이 찼으면(판 중간에 쓴 사진의 복제 등 — 뽑을 때는 들어가는 것만 골랐다)
+#  **보상 없이 조용히** 동그라미만 친다. 「꽉 찼다」 팝 · 거절 소리가 칠판에 안 뜬다.
+#  동전을 받았으면 이 발이 제 방식대로 끝난 뒤 조준 · 계산 방식을 다시 읽는다(modes_due ·
+#  _modes_refresh 머리말의 정산 중 규약). 2026-10-06
 func _order_grant() -> void:
 	if order_st != "won" or order_tag.is_empty():
 		return
+	order_st = "done"
+	order_t = 0.0
+	if not _order_tag_ok(order_tag):
+		return
 	var g0 := gold
+	var c0 := cons.size()
+	var o0 := owned.size()
 	var rr := RandomNumberGenerator.new()
 	rr.seed = order_u
 	tag_pop = _order_pop_at()
-	_take_tag(order_tag, rr)
+	tag_n = 0
+	_take_tag_once(order_tag, rr)
 	tag_pop = Vector2.INF
 	if gold > g0:
 		pop(_bank_rect().get_center() + Vector2(0.0, 30.0), "+%d" % (gold - g0),
 				C_GOLD, 12, 0.8)
+	if owned.size() != o0:
+		modes_due = true
+	if cons.size() > c0:
+		_order_fly_go("cons", cons.size() - 1)
+	elif owned.size() > o0:
+		_order_fly_go("item", owned.size() - 1)
 	_sfx("stage_pick")
-	order_st = "done"
-	order_t = 0.0
 
 
 #  보상 팝 자리 — 칠판 테 윗변 바로 위 한가운데(_tag_at 이 둘째 팝부터 14 씩 올린다).
@@ -3153,6 +3211,45 @@ func _order_has(p: Vector2) -> bool:
 	return false
 
 
+#  영역 테두리 — 영역 조각의 네 변 가운데 1px 밖이 영역이 아닌 토막만 모은다(_order_has 로
+#  댄다). 둥근 변은 반 칸(_sec_w ÷ 2)씩 잘라 댄다 — 조각은 늘 반 칸 격자 위라 이웃이 반 칸
+#  안에서 안 갈린다. 곧은 변은 그 띠 하나라 띠 가운데 한 점으로 댄다. 판 밖(더블 띠 밖)은
+#  영역이 아니라 바깥 테가 서고, 안쪽 불의 한가운데(반지름 0)는 변이 아니다. 열 때 한 번 굽는다.
+func _order_rim_bake() -> Array:
+	var out := []
+	var hs := _sec_w() * 0.5
+	for pc in order_in:
+		var ri := float(pc[0])
+		var ro := float(pc[1])
+		var a0 := float(pc[2])
+		var a1 := float(pc[3])
+		var n := maxi(int(round((a1 - a0) / maxf(hs, 0.0001))), 1)
+		for e in [[ro, 1.0], [ri, -1.0]]:
+			var rr := float(e[0])
+			if rr < 0.5:
+				continue
+			for h in n:
+				var b0 := lerpf(a0, a1, float(h) / float(n))
+				var b1 := lerpf(a0, a1, float(h + 1) / float(n))
+				var bm := (b0 + b1) * 0.5
+				if _order_has(BC + Vector2(sin(bm), -cos(bm)) * (rr + float(e[1]))):
+					continue
+				var pts := PackedVector2Array()
+				for k in 5:
+					var a := lerpf(b0, b1, float(k) / 4.0)
+					pts.append(BC + Vector2(sin(a), -cos(a)) * rr)
+				out.append(pts)
+		var rm := (ri + ro) * 0.5
+		for e2 in [[a0, -1.0], [a1, 1.0]]:
+			var ae := float(e2[0])
+			var ao := ae + float(e2[1]) / maxf(rm, 1.0)
+			if _order_has(BC + Vector2(sin(ao), -cos(ao)) * rm):
+				continue
+			var dv := Vector2(sin(ae), -cos(ae))
+			out.append(PackedVector2Array([BC + dv * ri, BC + dv * ro]))
+	return out
+
+
 #  칠판이 서 있는가 — 주문이 걸린 판을 던지는 동안. 판 갈이(상인이 서는 때)에는 판과
 #  같이 쉰다 — 갈이가 끝나고 판이 다 선 뒤에 주문이 쓰인다.
 func _order_board_on() -> bool:
@@ -3190,10 +3287,15 @@ func _order_breathe() -> float:
 	return 1.0 - float(ORDER.breathe) * k
 
 
-#  판 위 영역 빛. layer 0 은 조준 어둠 **앞** — 판의 나머지를 옅게 가라앉힌다. layer 1 은
-#  조준 어둠 **뒤** — 영역에 분필빛을 얹는다(겨누는 동안에도 영역이 안 가라앉는다).
+#  판 위 영역 빛. layer 0 은 조준 어둠 **앞** — 판의 나머지를 가라앉힌다. layer 1 은
+#  조준 어둠 **뒤** — 영역에 분필빛을 얹고 테두리를 긋는다(겨누는 동안에도 영역이 안
+#  가라앉는다).
 #  분필 잉크가 백색 칸과 같은 색(e8dfc8)이라 빛만으로는 백색 칸 위에서 안 읽힌다 — 시계
-#  차례가 찍어 본 그 문제(_board_lit_sector)라 나머지를 같이 누른다.
+#  차례가 찍어 본 그 문제(_board_lit_sector)라 나머지를 같이 누른다. 그래도 백색 칸 주문은
+#  나머지(흑색 칸)가 원래 어두워 판이 거의 안 바뀌었다(검토, 2026-10-06) — 그래서 영역
+#  둘레에 분필 선(1px)을 짙은 그늘(3px) 위에 긋는다. 그늘이 선의 양옆을 눌러 바탕이 크림이든
+#  먹이든 빨강 · 초록 띠든 선이 선다. 분필 결은 토막마다 짙기가 다르다(_gl_rand). 선도
+#  분필빛과 같이 숨을 쉬고 쓰는 동안 차오르며 동그라미 · X 뒤 식는다.
 func _order_lit(layer: int) -> void:
 	if order_in.is_empty() or not _is_play_deep():
 		return
@@ -3205,9 +3307,16 @@ func _order_lit(layer: int) -> void:
 		for pc in order_off:
 			_order_piece(pc, dc)
 		return
-	var lc := Color(DOORT.chalk_ink, float(ORDER.lit_a) * e * _order_breathe())
+	var br := _order_breathe()
+	var lc := Color(DOORT.chalk_ink, float(ORDER.lit_a) * e * br)
 	for pc in order_in:
 		_order_piece(pc, lc)
+	var dk := Color(0.0, 0.0, 0.0, float(ORDER.rim_dk) * e)
+	for pl in order_rim:
+		draw_polyline(pl, dk, 3.0)
+	for j in order_rim.size():
+		draw_polyline(order_rim[j], Color(DOORT.chalk_ink, float(ORDER.rim_a) * e * br
+				* lerpf(0.72, 1.0, _gl_rand(j, 4429))), 1.0)
 
 
 #  조각 하나. 안쪽 반지름이 0 이면(안쪽 불) 부채꼴로 긋는다 — 안쪽 점을 한 점에 겹쳐 찍은
@@ -3352,6 +3461,85 @@ func _order_tick(i: int, x0: float, ty: float, gk: float, col: Color) -> void:
 			break
 		draw_rect(Rect2(x, ty + 2.0 * float(j), tk.x, 2.0),
 				Color(col, col.a * lerpf(0.72, 1.0, _gl_rand(i * 13 + j, 4423))))
+
+
+#  ── 받은 것이 제 칸으로 난다 (2026-10-06) ──────────────────
+#  사탕 · 사진 · 동전 보상은 칠판 그림 자리(_order_ico_at)에서 제 칸 가운데로 ORDER.fly_t
+#  동안 난다 — 판 반대쪽(왼쪽)으로 fly_arc 만큼 휘고, 칠판 그림 크기에서 칸 그림 크기로
+#  자란다. 나는 동안 그 칸은 비어 있고(_order_fly_hides), 앉는 프레임에 동전은 발동 스프링을
+#  한 번 받으며(이름 줄 없이) 칸 둘레에 분필빛 고리가 fly_ring 동안 식는다. 칠판과 칸은
+#  200px 둘레 떨어져 있어 날지 않으면 「0/2 → 1/2」 숫자 하나만 바뀌었다(검토).
+#  시계는 정산 걸음과 같이 빨리 보기를 타고 정산 위 일시정지에서 멎는다. 모션 끄기면 날지
+#  않고 제 칸에 곧장 선다.
+func _order_fly_go(k: String, i: int) -> void:
+	order_fly = {} if motion_off else {"k": k, "i": i, "t": 0.0}
+
+
+func _order_fly_tick(d: float) -> void:
+	if order_fly.is_empty():
+		return
+	var ft := float(ORDER.fly_t)
+	var t0 := float(order_fly.t)
+	var t1 := t0 + d
+	order_fly.t = t1
+	if t0 < ft and t1 >= ft and String(order_fly.k) == "item":
+		_panel_ensure()
+		var i := int(order_fly.i)
+		if i < slot_vel.size():
+			slot_vel[i] += float(PANEL.kick)
+	if t1 >= ft + float(ORDER.fly_ring):
+		order_fly = {}
+
+
+#  그 칸이 아직 나는 중이라 비워 두는가.
+func _order_fly_hides(k: String, i: int) -> bool:
+	return not order_fly.is_empty() and String(order_fly.k) == k and int(order_fly.i) == i \
+			and float(order_fly.t) < float(ORDER.fly_t)
+
+
+#  칠판 그림의 한가운데 — _order_chalk 의 ic 와 같은 식이다.
+func _order_ico_at() -> Vector2:
+	var box: Rect2 = ORDER.box
+	return Vector2(box.position.x + 14.0, box.get_center().y)
+
+
+#  앉을 칸의 한가운데와 그림 반지름 — 그리는 쪽(_cons_draw · _panel_slot)의 식 그대로다.
+func _order_fly_to(k: String, i: int) -> Array:
+	if k == "item":
+		return [_slot_rect(i).get_center() + Vector2(0.0, float(PANEL.chip_dy)), float(PANEL.r)]
+	var r := _cons_rect(i).grow(-3.0)
+	return [r.get_center(), minf(r.size.x, r.size.y) * 0.42]
+
+
+func _order_fly_draw() -> void:
+	if order_fly.is_empty() or not _is_play_deep():
+		return
+	var k := String(order_fly.k)
+	var i := int(order_fly.i)
+	if (k == "item" and i >= owned.size()) or (k == "cons" and i >= cons.size()):
+		return
+	var to: Array = _order_fly_to(k, i)
+	var dst: Vector2 = to[0]
+	var r1: float = to[1]
+	var t := float(order_fly.t)
+	var ft := float(ORDER.fly_t)
+	if t >= ft:
+		var u := clampf((t - ft) / float(ORDER.fly_ring), 0.0, 1.0)
+		draw_arc(dst, r1 + 2.0 + 3.0 * u, 0.0, TAU, 24,
+				Color(DOORT.chalk_ink, 0.9 * (1.0 - u)), 1.0)
+		return
+	var s := clampf(t / ft, 0.0, 1.0)
+	s = s * s * (3.0 - 2.0 * s)
+	var src := _order_ico_at()
+	var nv := (dst - src).orthogonal().normalized()
+	if nv.x > 0.0:
+		nv = -nv
+	var p := src.lerp(dst, s) + nv * float(ORDER.fly_arc) * 4.0 * s * (1.0 - s)
+	var rr := lerpf(float(ORDER.ico), r1, s)
+	if k == "item":
+		draw_item_sticker(p, rr, owned[i], 0.0, 0.0, 0.0, 12)
+	else:
+		_icon_cons(p, rr, String(cons[i].id))
 
 
 func _to_pick() -> void:
@@ -5575,7 +5763,18 @@ func _take_tag_once(t: Dictionary, rng: RandomNumberGenerator = null) -> void:
 				pick.bought = leg_no
 				owned.append(pick)
 				_found("item", String(pick.id))
-				_panel_reset()
+				#  판 위(칠판 주문 · 정산 중)는 앞 동전들의 발동 스프링이 살아 있다 — 통째로
+				#  0 으로 돌리면 방금 발동한 동전의 튐 · 빛이 그 자리에서 끊긴다(_panel_pull
+				#  머리말). 새 칸 하나만 세운다. 판 밖(판 고르기 · 상점)은 옛 길 그대로다.
+				if _is_play_deep():
+					_panel_ensure()
+					var ni := owned.size() - 1
+					if ni < slot_pop.size():
+						slot_pop[ni] = 0.0
+						slot_vel[ni] = 0.0
+						slot_hot[ni] = 0.0
+				else:
+					_panel_reset()
 		#  건너뛴 판마다. **이 뱃지를 준 건너뛰기까지 센다** — _skip_leg 이
 		#  leg_skipped 를 먼저 적고 나서 이 함수를 부른다. 그래서 최소 한 판,
 		#  즉 빈손으로 끝나는 경우가 없다.
@@ -6081,6 +6280,12 @@ var sfx_pool := []
 var sfx_next := 0
 # 띠 톡의 제 자리 하나(_tick_snd). 위 넷을 안 문다.
 var tick_pl: AudioStreamPlayer = null
+# 판 금 삐걱의 제 자리 하나(_crack_snd). 위 넷을 안 문다.
+var crack_pl: AudioStreamPlayer = null
+# 정산 소리 간격 시계(초) — 톡 · 착지 · 넘기가 난 뒤 · 삐걱이 난 뒤. 삐걱이 그 둘레
+# 2프레임(TALLY.tick_gap) 안에 안 붙는다(_brk_crack_ok · 2026-10-06).
+var tally_snd_t := 9.0
+var crack_t := 9.0
 # 이름 → AudioStream. **없다는 것도 기억한다** — 소리마다 파일 시스템을
 # 두드리면 정산 한 걸음마다 디스크를 때린다.
 var sfx_cache := {}
@@ -6115,6 +6320,7 @@ func _sfx(name: String, f := 0.0) -> void:
 func _tick_snd(j: int) -> void:
 	#  띠 점수가 톡마다 흰 쪽으로 한 번 밝는다 — 색이라 모션 끄기도 남는다.
 	tick_flash = 1.0
+	tally_snd_t = 0.0
 	var n := maxi(tick_n, 1)
 	var semi := float(tick_f0) + float(TALLY.semi) * float(j) / float(n)
 	var nm := "score_tick"
@@ -6324,6 +6530,11 @@ func _process(d: float) -> void:
 	#  정산 위에 연 일시정지 뒤에서는 정산이 통째로 선다 — qt · 금(_brk_tick)과 같이
 	#  착지 멈춤 · 띠 굴림 · 톡 · 카드 시계가 다 멎고, 닫은 프레임부터 잇는다(2026-10-06).
 	var sp := _settle_paused()
+	#  정산 소리 간격 시계 — 실시간이다(소리는 빨리 보기를 안 타고 멈춤 동안에도 울린다).
+	#  그래서 아래 멈춤 조기 반환 앞이다. 일시정지에서 멎는다(2026-10-06).
+	if not sp:
+		tally_snd_t += d
+		crack_t += d
 	if hitstop > 0.0 and not sp:
 		#  멈춤도 같은 배수로 줄인다. qt 와 함께 줄어야 걸음 벽시계의
 		#  **비율**이 안 변해서, 「큰 값과 작은 값의 걸음 길이 차」를 재는
@@ -6381,7 +6592,11 @@ func _process(d: float) -> void:
 
 	screen_flash = maxf(screen_flash - d * 5.0, 0.0)
 	deny_flash = maxf(deny_flash - d * 2.6, 0.0)
-	shake = maxf(shake - d * 34.0, 0.0)
+	#  감쇠는 34/초다. 1배 · 판이 이어지는 착지만 그 흔들림이 다 죽을 때까지 가파르다
+	#  (shake_k · _shk_tail_k) — 0 에 닿으면 34 로 돌아온다(2026-10-06).
+	shake = maxf(shake - d * shake_k, 0.0)
+	if shake <= 0.0:
+		shake_k = 34.0
 	mod_shed_t = maxf(mod_shed_t - d, 0.0)
 	board_punch = maxf(board_punch - d * 3.4, 0.0)
 	hit_flash = maxf(hit_flash - d * 2.6, 0.0)
@@ -6456,6 +6671,8 @@ func _process(d: float) -> void:
 		#  단골 시계 — 나는 · 떨어지는 · 빠지는 자루가 걸음 안에서 끝나야 해서 빨리 보기를 탄다
 		#  (카드 시계와 같은 축). 정산 위 일시정지(sp)에서는 멎는다.
 		_rgl_tick((0.0 if sp else d) * fast_rate)
+		#  주문 보상이 칠판에서 제 칸으로 나는 시계 — 같은 축이다(2026-10-06).
+		_order_fly_tick((0.0 if sp else d) * fast_rate)
 	#  **d * fast_rate 를 탄다**(2026-09-26 수선). 빨리 보기는 정산에서만 서므로
 	#  (_fast_on 이 state != S.RESOLVE 에서 1.0 을 돌려준다) 정산 밖 팝은 한 톨도
 	#  안 달라진다. 안 태우면 걸음만 2.5배 빨라지고 팝은 실시간이라 **같은 자리에
@@ -8879,6 +9096,12 @@ func _next_step() -> void:
 			return
 		burst_n = 0               # 연발이 다 팔렸다. 이제 보통 걸음이다
 		_wear_spent()             # 다 쓴 동전을 치운다
+		#  칠판 주문이 이 발의 정산 중에 동전을 줬다 — 이 발은 제 방식대로 끝났고, 조준 ·
+		#  계산 방식을 지금 다시 읽어 다음 발부터 선다(_modes_refresh 머리말의 정산 중 규약).
+		#  안 읽으면 그 판 끝까지 새 동전의 방식이 안 섰다(검토, 2026-10-06).
+		if modes_due:
+			modes_due = false
+			_modes_refresh()
 		#  한 발이 다 끝났다 — 연발도 여기서 한 번이다(판 사건의 피는 때가 센다).
 		leg_throws += 1
 		# 목표를 넘긴 순간 판 종료 — 남은 다트는 골드로 환산된다
@@ -9158,8 +9381,9 @@ func _next_step() -> void:
 		"regular":
 			#  ── 단골 (2026-10-06) ──
 			#  단골 자루를 맞혀 떨어뜨렸다 — 그 칸의 값(칸 값 × 띠 배수 · 단골이 꽂힐 때 잰 판의
-			#  날값)이 점수 칸에 통째로 얹힌다(연발의 작은 다트가 가로채도 안 깎는다). 막힘이
-			#  풀리고 참나무 쪽이 걷힌다. 글은 「+n」 하나 · 소리는 양옆 칸과 같은 settle_pierce.
+			#  날값)이 점수 칸에 통째로 얹힌다(연발의 작은 다트가 가로채도 안 깎는다). 막힘 ·
+			#  참나무 쪽은 자루가 떨어지는 프레임에 이미 걷혔다(_rgl_tick). 글은 「+n」 하나 ·
+			#  소리는 양옆 칸과 같은 settle_pierce.
 			#  판의 출처 빛은 안 세운다 — 내 자루가 꽂힌 칸과 단골의 칸이 다를 수 있다.
 			var rg := _rgl_take()
 			if rg > 0:
@@ -9504,6 +9728,10 @@ func _tot_pace() -> float:
 #   · 굴림: 카드 「+n」 0 → last_gain · 상단 띠 from → total 이 한 몫(gain_p)을 탄다.
 #     창 = qt × jspan ÷ score_div(_tally_div) — 착지가 걸음의 TALLY.land_* 자리에 선다.
 #   · 칸: TALLY.tick0 + TALLY.tick_gn × gn, 4 ~ 24 — gn 0 에서 6 · 0.4 에서 12 · 1 에서 22.
+#     **이득보다 많지 않다**(mini(…, last_gain)) — 이득 1 · 2 · 3 은 칸 1 · 2 · 3(끝 칸이
+#     착지라 톡은 0 · 1 · 2)이다. 칸 j 는 굴림 몫 j ÷ tick_n 에 서고 카드는 내림
+#     (_card_gain)이라, 칸이 이득 이하면 톡마다 「+n」이 한 칸 이상 오른다 — 숫자가 안
+#     바뀐 톡이 없다(2026-10-06).
 #   · 첫 칸 음: 걸음 사다리가 멎은 자리(pitch_step − 1), 상한 12반음.
 #   · 이득 0 · 음수: 칸도 착지도 없다 — 카드가 그 값을 조용히 적고 가장자리 창이 빠진다.
 #  grow_roll 0 이면 굴림을 안 세운다 — 손대기 전 띠(벽시계 lerp)이고 톡이 없으며, 머리에서
@@ -9528,7 +9756,8 @@ func _tally_arm(gn: float, from: float, brk := false, peek := false) -> void:
 	score_roll = 1.0
 	score_div = _tally_div(gn, brk)
 	if land_live:
-		tick_n = clampi(int(round(float(TALLY.tick0) + float(TALLY.tick_gn) * gn)), 4, 24)
+		tick_n = mini(clampi(int(round(float(TALLY.tick0) + float(TALLY.tick_gn) * gn)), 4, 24),
+				last_gain)
 	tick_f0 = clampi(pitch_step - 1, 0, 12)
 
 
@@ -9598,6 +9827,7 @@ func _tally_land(freeze := true) -> void:
 		fire_snd = pit
 	else:
 		_sfx("settle_total", pit)
+		tally_snd_t = 0.0
 	# 「한 방」 — 목표의 반을 한 발로 냈거나 지금 돌파했다.
 	# 과장은 소리가 아니라 **멈춤**이다. _fill_audio 가 hitstop 조기 반환보다 **앞**이라
 	# 멈춘 동안 settle_total 의 저음만 남고 화면은 얼어 있다.
@@ -9630,9 +9860,16 @@ func _tally_land(freeze := true) -> void:
 	#  8.0 이라 「작은 값은 조용하다」가 안 읽힌다.
 	#  ⚠ **대입(=) 을 유지한다 — maxf 로 바꾸지 마라.** 연발은 합계 걸음이 여섯 번 나는데
 	#  maxf 면 1.6초를 끊김 없이 1~3Hz 로 흔들어 멀미 대역의 연속 패닝이 된다.
-	#  빨리 보기이거나 이 걸음 뒤에 판이 끝나면 남은 걸음 안에서 죽게 묶는다(_shk_room).
+	#  빨리 보기이거나 이 걸음 뒤에 판이 끝나면(목표 · 다트 소진 · 리볼버 마지막 발) 남은
+	#  걸음 안에서 죽게 진폭을 묶고(_shk_room), 1배로 판이 이어지면 진폭은 그대로 두고 멈춤
+	#  뒤 감쇠를 가파르게 해 다음 고르기로 TALLY.shk_tail 까지만 샌다(_shk_tail_k).
+	#  돌파 착지는 넘기(TALLY.cross_shk)보다 안 세다 — 0.2초 사이 둘째 흔들림이 더 세면
+	#  상단 띠의 목표 · 점수가 화면 위로 반쯤 잘린다(2026-10-06). 단 · 멈춤 · 테두리는 그대로다.
 	shake = minf(lerpf(float(GROW.shk_lo), float(GROW.shk_hi), gn * gn) * grow_shake,
 			_shk_room())
+	if brk:
+		shake = minf(shake, float(TALLY.cross_shk))
+	shake_k = _shk_tail_k()
 	var rem := qt if state == S.RESOLVE else qt * maxf(1.0 - _tally_at(), 0.05)
 	card_jrate = 1.0 / maxf(rem * float(CARDFX.jspan), 0.02)
 
@@ -9642,16 +9879,62 @@ func _settle_paused() -> bool:
 	return state == S.SETTINGS and pause_from == S.RESOLVE
 
 
-#  남은 걸음 안에서 다 죽는 흔들림 상한(px). shake 감쇠(34/초)는 fast_rate 를 안 타므로
-#  빨리 보기이거나 이 걸음 뒤에 판이 끝나면(정산 화면 · 판 고르기로 샌다) 남은 qt 로
-#  묶는다 — 한 프레임 몫을 빼 두어 걸음이 끝나는 프레임에 0 이다. ahead 는 그 뒤에
-#  빠질 멈춤이다(넘기 뒤의 돌파 착지). 연발이 남았거나 걸음 밖이면 안 묶는다.
+#  다음 프레임에 톡이나 착지가 나는가 — _tick_score 의 식을 한 프레임(d) 앞으로 민다
+#  (score_roll 은 _process 가 _tick_score 앞에서 깎는다). 판 금 삐걱이 그 프레임 바로 앞에
+#  안 붙게 묻는다(_brk_crack_ok). 2026-10-06
+func _tally_soon(d: float) -> bool:
+	if not land_live:
+		return false
+	var sr := maxf(score_roll - d * fast_rate * card_jrate * score_div, 0.0)
+	var k := clampf(((1.0 - sr) - float(TALLY.lead))
+			/ (float(GROW.hold) - float(TALLY.lead)), 0.0, 1.0)
+	if k >= 1.0 or (motion_off and k > 0.0):
+		return true
+	if motion_off:
+		return false
+	var j := mini(int(floor(pow(k, float(TALLY.ease)) * float(tick_n))), tick_n)
+	return j > tick_i and j < tick_n \
+			and tick_t + d + 0.0001 >= float(TALLY.tick_gap) / 60.0
+
+
+#  남은 걸음 안에서 다 죽는 흔들림 상한(px). shake 감쇠(34/초)는 fast_rate 를 안 타고
+#  1배 멈춤 동안은 안 깎이므로, 착지(걸음의 0.78 ~ 0.82)가 낸 흔들림이 걸음 밖으로 샐 수
+#  있다. 빨리 보기이거나 이 걸음 뒤에 판이 끝나면(_leg_ends — 목표를 넘었다 · 다트가 다
+#  했다 · 리볼버 마지막 발) 남은 qt(멈춤은 이미 뺐다)로 묶는다 — 한 프레임 몫을 빼 둔다.
+#  멈춤은 프레임 단위로 얼어 그 끝 프레임이 qt 에 안 잡히므로(0.120 이면 여덟 프레임) 그
+#  몫이다. 그래서 정산 화면 · 게임 오버 연출(흔들림 감쇠보다 먼저 조기 반환한다)로 안 샌다.
+#  1배로 판이 이어지면 진폭은 안 묶는다 — 다 묶으면 큰 발의 펀치가 3~4px 로 죽는다.
+#  대신 멈춤이 풀린 뒤의 감쇠를 가파르게 해 다음 고르기로 TALLY.shk_tail 까지만 샌다
+#  (_shk_tail_k). ahead 는 그 뒤에 빠질 멈춤이다(넘기 뒤의 돌파 착지). 연발이 남았거나
+#  (다음 발이 정산 안이다) 걸음 밖이면 안 묶는다.
 func _shk_room(ahead := 0.0) -> float:
 	if state != S.RESOLVE or not burst_hits.is_empty():
 		return INF
-	if fast_rate <= 1.0 and total < target:
+	if fast_rate <= 1.0 and not _leg_ends():
 		return INF
 	return 34.0 * maxf((qt - ahead) / maxf(fast_rate, 1.0) - 1.0 / 60.0, 0.0)
+
+
+#  1배 · 판이 이어지는 착지 흔들림의 감쇠(px/초). 34 로 다 죽는 데 걸리는 시간이 남은 걸음
+#  (멈춤은 이미 뺐다) + TALLY.shk_tail − 한 프레임을 넘으면 그 안에 죽게 가파르게 한다 —
+#  다음 고르기로 0.1초까지만 샌다. **진폭은 안 깎는다**: 멈춤 동안은 가득 찬 진폭으로 얼고
+#  (_process 의 멈춤 블록) 풀린 프레임도 그 진폭에서 출발한다. 진폭을 남은 시간으로 묶으면
+#  멈춤이 깊은 단일수록 덜 흔들려 화면이 크기를 거꾸로 말한다(2026-09-26 의 그 자리).
+#  그 밖(빨리 보기 · 판이 끝나는 걸음 · 연발 중간 · 걸음 밖)은 34 다 — 진폭을 _shk_room 이
+#  묶는다. 판이 이어지는 가장 큰 착지(목표 바로 밑 r 0.99 · 식 11.65 · 남은 걸음 0.257초)는
+#  멈춤이 없으면 34 그대로고, 4단(0.120)이면 약 54/초다. qa_total ⑦-a2 가 고르기 뒤 6프레임
+#  안에 0 인지 잰다(2026-10-06).
+func _shk_tail_k() -> float:
+	if state != S.RESOLVE or not burst_hits.is_empty() or fast_rate > 1.0 or _leg_ends():
+		return 34.0
+	var life := qt + float(TALLY.shk_tail) - 1.0 / 60.0
+	return maxf(34.0, shake / maxf(life, 1.0 / 60.0))
+
+
+#  지금 걸음이 끝나면 판이 끝나는가 — _next_step 의 빈 큐 갈래가 _finish_leg 로 가는 그
+#  조건이다(연발이 다 팔렸고 · 목표를 넘었거나 다트가 다 했다). 합계 걸음은 큐의 끝이다.
+func _leg_ends() -> bool:
+	return burst_hits.is_empty() and (total >= target or darts_left <= 0)
 
 
 #  계산 걸음(점수 · 배수 · 동전 · 저울 · 물음표)이 끝날 때마다 부른다.
@@ -9692,6 +9975,7 @@ func _fire_release() -> void:
 	stop_fire = false
 	if fire_snd > 0.0:
 		_sfx("settle_total", fire_snd)
+		tally_snd_t = 0.0
 		fire_snd = 0.0
 
 
@@ -9705,6 +9989,7 @@ func _fire_release() -> void:
 func _cross_fire() -> void:
 	cross_live = false
 	_sfx("target_hit")
+	tally_snd_t = 0.0
 	screen_flash = float(TALLY.cross_flash)
 	#  뒤에 착지 멈춤(돌파 ×1 · CARDFX.stop)이 남은 qt 에서 빠지고 그 동안 흔들림이
 	#  안 준다 — 그 몫을 빼고 묶는다.
@@ -9753,25 +10038,63 @@ func _card_gain() -> int:
 	return last_gain
 
 
+# 상단 띠가 적는 점수(2026-10-06). 굴리는 동안(land_live)은 카드 「+n」과 **같은 내림**이다 —
+# 떠난 자리(score_from) + _card_gain(). 반올림으로 적었더니 이득 1 에서 띠가 「1」을 먼저 찍고
+# 카드는 착지까지 「+0」이었다(검토). 이제 둘이 한 프레임에 같은 칸을 넘고, 끝값은 둘 다
+# 착지 프레임에 처음 선다. 목표를 넘는 프레임(shown ≥ target)도 이 값이 목표에 닿는 그
+# 프레임이다 — 떠난 자리와 목표가 정수라서다. 굴림 밖은 shown 의 반올림 그대로다.
+func _bar_val() -> int:
+	if land_live:
+		return int(round(score_from)) + _card_gain()
+	return int(round(shown))
+
+
+# 「+n」 크기의 봉우리 몫 amt — 크기(gn)와 자릿수가 같이 고른다: amt_tot0 + amt_tot_gn × gn +
+# amt_tot × 자릿수, 상한 amt_tot_cap(61px).
+func _gain_amt() -> float:
+	var mag := clampf(floor(log(maxf(float(absi(last_gain)), 1.0)) / log(10.0)), 0.0, 6.0)
+	return clampf(float(CARDFX.amt_tot0) + float(CARDFX.amt_tot_gn) * _grow_n()
+			+ float(CARDFX.amt_tot) * mag,
+			float(CARDFX.amt_tot0), float(CARDFX.amt_tot_cap))
+
+
+# 지금 봉우리 몫의 얼마가 섰나 — 세는 동안 TALLY.grow × gain_p, 착지 뒤 gain_roll².
+func _gain_e() -> float:
+	if land_live:
+		return float(TALLY.grow) * clampf(gain_p, 0.0, 1.0)
+	var k := clampf(gain_roll, 0.0, 1.0)
+	return k * k
+
+
 # 「+n」의 글자 크기. 세는 동안 굴림 몫을 따라 36 × (1 + amt × TALLY.grow × gain_p) 로
 # 자라고, 착지 프레임(gain_roll 1)이 봉우리 36 × (1 + amt) 다 — 그 뒤 남은 걸음의
-# 78% 안에 36 으로 앉는다(36 × (1 + amt × gain_roll²)). amt 는 크기(gn)와 자릿수가
-# 같이 고른다: amt_tot0 + amt_tot_gn × gn + amt_tot × 자릿수, 상한 amt_tot_cap(61px).
+# 78% 안에 36 으로 앉는다(36 × (1 + amt × gain_roll²)). amt 는 _gain_amt.
 # 모션 끄기는 36 고정이다. 순수 함수라 qa_total 이 그리는 쪽과 같은 답을 읽는다.
+# 카드 폭은 안 본다 — 그리는 크기는 _gain_px 가 끝값 글자로 눌러 낸다.
 func _gain_sz() -> int:
 	if motion_off:
 		return 36
-	var mag := clampf(floor(log(maxf(float(absi(last_gain)), 1.0)) / log(10.0)), 0.0, 6.0)
-	var amt := clampf(float(CARDFX.amt_tot0) + float(CARDFX.amt_tot_gn) * _grow_n()
-			+ float(CARDFX.amt_tot) * mag,
-			float(CARDFX.amt_tot0), float(CARDFX.amt_tot_cap))
-	var e: float
-	if land_live:
-		e = float(TALLY.grow) * clampf(gain_p, 0.0, 1.0)
-	else:
-		var k := clampf(gain_roll, 0.0, 1.0)
-		e = k * k
-	return int(36.0 * (1.0 + amt * e))
+	return int(36.0 * (1.0 + _gain_amt() * _gain_e()))
+
+
+# 「+n」을 그리는 크기(2026-10-06). 크기 사다리(_gain_sz)를 **끝값 글자** fin 으로 한 번 잰
+# 비 k 로 눌러 그린다 — 봉우리 36 × (1 + amt) 에서 끝값이 카드 폭(CARD_W − 16)에 드는
+# 크기를 먼저 정하고(_fit_sz), 쉬는 · 세는 크기를 같은 비로 내린다. 지금 글자로 재던
+# 때는 여섯 자리부터 봉우리가 폭에 잘려 착지 펀치가 몇 px 로 줄었고(일곱 자리는 세는
+# 크기 = 봉우리), 세는 도중 자릿수가 늘면 글자가 자라다 2~4px 줄었다(검토). 이제
+# 봉우리 ÷ 쉬는 크기 = 1 + amt 가 남고, 크기가 끝값에서 나므로 세는 동안 줄지 않는다.
+# 쉬는 크기는 CARDFX.rest_min(24)에서 멎는다 — 그 밑이 되는 아홉 자리 둘레부터는 봉우리가
+# 끝값의 폭에서 멎어 비가 그만큼 준다. 모션 끄기는 36 을 끝값에 맞춘다.
+func _gain_px(fin: String) -> int:
+	var w := CARD_W - 16.0
+	if motion_off:
+		return _fit_sz(fin, w, 36)
+	var amt := _gain_amt()
+	var pk := int(36.0 * (1.0 + amt))
+	var fp := _fit_sz(fin, w, pk)
+	var k := maxf(float(fp) / float(maxi(pk, 1)),
+			float(mini(_fit_sz(fin, w, 36), int(CARDFX.rest_min))) / 36.0)
+	return mini(int(36.0 * k * (1.0 + amt * _gain_e())), fp)
 
 
 # 모음 걸음의 진행(0 → 1). ease-in 이라 끝으로 갈수록 빨리 모이고, 시계가 0 에 닿은
@@ -10942,6 +11265,7 @@ func _hud_draw() -> void:
 		_prop_fly_draw()    # 판 동전이 동전 슬롯에서 저울 접시로 난다(판매 몸짓)
 		_pound_candy_draw(0)   # 사탕이 사탕 칸에서 펠트로 난다(주먹 몸짓)
 		_use_draw()         # 가운데로 끌고 온 사탕·사진과 그 자리
+		_order_fly_draw()   # 칠판 주문이 준 사탕 · 사진 · 동전이 제 칸으로 난다
 		# 나가는 전환에서만 같이 들어온다. 돌아오는 쪽은 안 그린다 —
 		# HUD 는 스크림 위라, 벽만 어두운 화면에 홀로 밝게 뜬다.
 		# 스크림이 0.94 로 시작하므로 사라지는 것도 안 보인다.
@@ -12242,7 +12566,9 @@ func _board_plank(push: float) -> void:
 #  그 불 한 바퀴(안쪽 불은 원판 · 바깥 불은 고리)다. 자루가 꽂히는 프레임에 서고 막힘이
 #  풀리면 걷힌다(rgl_pa). 옷 입은 판(테마) 위에도 같은 참나무다.
 func _rgl_plank(push: float) -> void:
-	if rgl_pa <= 0.0:
+	#  판 위인지를 같이 묻는다 — 「목표물」(mark_sec)의 칸 어둠과 같은 문이다. 이 함수는
+	#  _draw_board 가 state 를 안 보고 부른다(제목 판 · 판 고르기 판).
+	if rgl_pa <= 0.0 or not _is_play_deep():
 		return
 	if rgl_idx >= 0:
 		var sw := _sec_w()
@@ -16124,7 +16450,7 @@ var bd_rgl: Node3D = null
 
 
 func _bd3_rgl() -> void:
-	if rgl_ph == "":
+	if not _rgl_seen():
 		if is_instance_valid(bd_rgl):
 			bd_rgl.queue_free()
 			bd_rgl = null
@@ -16159,7 +16485,7 @@ func _draw_darts(a := 1.0) -> void:
 	# 프로브가 간헐적으로 세그폴트했다(settle · league · mod 가 번갈아 죽었다).
 	# 매번 다른 프로브가 죽어서 원인이 안 보였다. 화면 서버 이름이 그것을
 	# 정확히 말하는 유일한 값이다.
-	var want3 := not darts.is_empty() or state == S.FLY or rgl_ph != ""
+	var want3 := not darts.is_empty() or state == S.FLY or _rgl_seen()
 	if not _bd3_live() and _has_renderer() and want3:
 		_bd3_open()
 	# **비어도 맞춘다.** 판이 바뀌면 darts 만 비고 3D 자루는 뒤에 남아,
@@ -16170,7 +16496,7 @@ func _draw_darts(a := 1.0) -> void:
 		_bd3_fly()
 		_bd3_rgl()
 	# 첫 발은 꽂힌 자루가 없다. 나는 자루만 있어도 무대를 그려야 한다.
-	if darts.is_empty() and not _bd3_flying() and rgl_ph == "":
+	if darts.is_empty() and not _bd3_flying() and not _rgl_seen():
 		return
 	#  그림자가 먼저다 — 3D 한 장이든 2D 받침이든 그 **밑**에 깔린다.
 	_dart_shade_2d(a)
@@ -16189,9 +16515,14 @@ func _draw_darts(a := 1.0) -> void:
 #  판에 꽂혀 선 자루 — 내 자루(darts)에 꽂혀 있는 단골 자루를 얹는다. 그림자 · 2D 받침이
 #  읽는다. 단골 자루가 날거나 떨어지거나 빠지는 동안은 안 든다(3D 무대만 그린다).
 func _darts_stuck() -> Array:
-	if rgl_ph != "on":
+	if rgl_ph != "on" or not _is_play_deep():
 		return darts
 	return darts + [{"p": rgl_p, "id": "std", "rot": rgl_rot}]
+
+
+#  단골 자루 그림이 서 있는가 — 판 위에서만(_rgl_plank 와 같은 문).
+func _rgl_seen() -> bool:
+	return rgl_ph != "" and _is_play_deep()
 
 
 #  꽂힌 자루의 그림자. **3D 자루 밑에 2D 로 깐다.**
@@ -16798,8 +17129,9 @@ func _draw_topbar() -> void:
 	#  띠 바탕(C_BG) 대비도 9.6:1 → 14.0:1 이다. 색이 아니라 밝기로 가른다.
 	#  톡마다 흰 쪽으로 TALLY.flash(0.6)만큼 밝았다 걸음 안에서 돌아온다(tick_flash ·
 	#  2026-10-06). 색이라 모션 끄기도 남는다.
+	#  수는 굴리는 동안 카드 「+n」과 같은 내림이다(_bar_val · 2026-10-06).
 	draw_string(font, Vector2(float(LAY.bar_score_r) - 64.0, ty),
-			GameData.big(int(round(shn))), HORIZONTAL_ALIGNMENT_RIGHT, 64.0, 12,
+			GameData.big(0 if state == S.LEG else _bar_val()), HORIZONTAL_ALIGNMENT_RIGHT, 64.0, 12,
 			C_LIGHT.lerp(Color(1.0, 1.0, 1.0), float(TALLY.flash) * tick_flash))
 
 	# 3칸 x[584,640] — 이번 판 제약 수. 이름 전체는 하단 y341 줄이 갖는다.
@@ -18436,6 +18768,8 @@ func _panel_draw() -> void:
 		if i < owned.size():
 			if hand_st == H.CARRY and hand_src == 1 and i == hand_i:
 				_panel_gap(i)     # 지금 손에 들려 있다. 자리에는 자국만 남는다
+			elif _order_fly_hides("item", i):
+				_slot_ghost(i)    # 칠판 주문이 준 동전이 날아오는 중이다(_order_fly_draw)
 			else:
 				_panel_slot(i)
 		else:
@@ -19880,7 +20214,8 @@ func _cons_draw() -> void:
 	_panel(box)
 	for i in GameData.cons_slots():
 		var r := _cons_rect(i).grow(-3.0)
-		var live: bool = i < cons.size()
+		#  칠판 주문이 준 것이 날아오는 동안은 빈 칸이다(_order_fly_draw 가 그린다).
+		var live: bool = i < cons.size() and not _order_fly_hides("cons", i)
 		if live:
 			# 뒤에 회색 네모를 안 깐다. 물건이 곧 칸이다 — 동전 슬롯이
 			# 이미 그 규약이라(_panel_slot 은 스티커만 놓는다) 여기만
@@ -21432,6 +21767,7 @@ var brk_chords := []     # 쐐기마다의 테 [{t, m, seg}]
 var brk_spoke_n := 0     # 이번 판의 살 수. 상한에 걸리면 여기서만 줄인다
 var brk_stage := 0       # 그어진 금의 단
 var brk_snd := 0         # 낸 꼬리 톡 수
+var brk_cq := []         # 단이 났는데 아직 안 낸 삐걱의 음(Hz) — 톡 · 착지를 비켜 난다(_brk_crack_ok)
 var brk_dart := -1.0     # 꽂힌 다트가 손을 놓은 뒤 흐른 시간. 음수면 아직
 var brk_rings := []      # [[r0, r1], ...] 지금 판의 띠 표에서 뜬 겹
 var brk_born := PackedFloat32Array()   # 단마다 난 때(brk_c)
@@ -21727,6 +22063,29 @@ func _brk_arm(tier := -1, deep := -1) -> void:
 	brk_span = maxf(brk_qt0 - _brk_fire_at(), 0.0)
 
 
+#  삐걱 하나를 지금 내도 되는가 — 톡 · 착지 · 넘기 뒤 2프레임(TALLY.tick_gap) · 앞 삐걱 뒤
+#  2프레임이 지났고, 다음 프레임에 톡이나 착지가 안 오며(_tally_soon), 이 프레임 · 다음
+#  프레임이 한 방(_brk_fire)이 아니다. 둘레 2프레임(33ms)은 띠 톡이 쓰는 그 바닥이다 —
+#  삐걱(36ms)과 톡(32ms)이 그만큼 떨어져야 두 소리로 들린다. 2026-10-06
+func _brk_crack_ok(d: float) -> bool:
+	var gap := float(TALLY.tick_gap) / 60.0 - 0.0001
+	return tally_snd_t >= gap and crack_t >= gap and not _tally_soon(d) \
+			and brk_c + d * fast_rate < brk_span
+
+
+#  삐걱 한 알 — 제 자리 하나(crack_pl)에서 난다. 파일이 없는 날 · 자리가 서기 전은 _sfx 의
+#  합성음 갈래다.
+func _crack_snd(f: float) -> void:
+	crack_t = 0.0
+	var st := _sfx_file("board_crack")
+	if st != null and crack_pl != null:
+		crack_pl.stream = st
+		crack_pl.pitch_scale = clampf(f / SFX_BASE, 0.25, 4.0)
+		crack_pl.play()
+		return
+	_sfx("board_crack", f)
+
+
 #  이 걸음에서 조각이 뜨는 qt. 걸음이 세 길이로 오는데(돌파 beat × TALLY.brk ·
 #  연발 마지막 발 _tot_qt · 눌린 박자 beat 0.015) 절대 꼬리로 물면 정산 앞의
 #  숨이 언제나 같다. 상한은 비율이라 아주 짧은 걸음에서도 반은 남는다.
@@ -21801,12 +22160,31 @@ func _brk_tick(d: float) -> void:
 			#  깊이는 **음만** 민다(BRKDEEP.pit) — 알 수는 한 알도 안 는다.
 			#  삐걱의 수가 곧 단 수(층의 것)라, 깊이가 거기 손대면 두 축이
 			#  같은 채널에서 싸운다. 2026-09-25
+			#  ── 톡 · 착지와 안 겹친다 (2026-10-06) ──
+			#  단이 나는 프레임에 곧장 안 내고 줄(brk_cq)에 세운다 — 합계 굴림이 목표를 넘은
+			#  뒤라 이 동안 띠 톡(2~7프레임 사이)과 착지(settle_total)가 같이 난다. 재 보니
+			#  (1배 · 작은 · 큰 · 보스 판 × 경우 넷, 걸음 머리에서 잰 프레임) 삐걱 넷 중 둘셋 ·
+			#  여섯 중 셋넷이 톡과 같은 프레임이거나 한 프레임 안이었고, 착지 프레임(+66)에도
+			#  얹혔다(작은 판 c: 톡 +57 · +63 = 삐걱 +57 · +63, 착지 +66 = 삐걱 +66).
+			#  줄의 머리는 _brk_crack_ok 가 참인 프레임에 난다: 톡 · 착지 · 넘기 뒤 2프레임
+			#  (TALLY.tick_gap) · 앞 삐걱 뒤 2프레임 · 다음 프레임에 톡이나 착지가 안 올 때
+			#  (_tally_soon) · 다음 프레임이 한 방이 아닐 때. 굴림 끝은 톡이 2~3프레임 사이라
+			#  그 동안의 단은 착지 멈춤 뒤로 밀려 2프레임 사이로 이어 난다(+71 · +73 · +75).
+			#  한 방(board_break)까지 못 난 것은 한 방이 덮는다 — 같은 자로 넷 중 둘셋 · 여섯 중
+			#  둘셋이 난다. 굴림이 없는 모션 끄기는 톡이 없어 단마다 한 알이 다 난다(qa_break ⑭).
+			#  삐걱은 제 자리 하나(crack_pl)라 착지 뒤로 몰려도 settle_total · target_hit 꼬리를
+			#  안 자른다.
 			if fast_rate <= 1.0:
-				_sfx("board_crack", SFX_BASE * float(_brk_row().pitch)
+				brk_cq.append(SFX_BASE * float(_brk_row().pitch)
 						* float(BRKDEEP.pit[brk_deep])
 						* lerpf(1.05, 0.92, float(brk_stage - 1)
 								/ maxf(float(top - 1), 1.0)))
+		if fast_rate > 1.0:
+			brk_cq.clear()
+		elif not brk_cq.is_empty() and _brk_crack_ok(d):
+			_crack_snd(float(brk_cq.pop_front()))
 		if brk_c >= brk_span:
+			brk_cq.clear()
 			_brk_fire()
 		return
 	brk_t += dd
@@ -22039,6 +22417,7 @@ func _brk_skip() -> void:
 	brk_dart = -1.0
 	brk_stage = 0
 	brk_snd = 0
+	brk_cq.clear()
 	#  ⚠ 도구 쉰하나가 지나는 문이라 **여기서 안 내리면 앞 판의 단이 다음
 	#  그림에 샌다.** brk_stage · brk_snd 와 같은 자리다. 2026-09-25
 	brk_deep = 0
@@ -37217,6 +37596,9 @@ const CARDFX := {
 	# 바닥선 55 · qa_total ①-f). shot_text_a 가 card_y 74 · 206 리프트 7px 로 찍는다.
 	# 2026-10-06
 	"amt_tot0": 0.30, "amt_tot": 0.03, "amt_tot_gn": 0.30, "amt_tot_cap": 0.70,
+	# 「+n」 크기는 끝값 글자로 잰 비로 눌러 그린다(_gain_px) — 봉우리가 카드 폭에 들게
+	# 쉬는 크기를 내리되 이 밑으로는 안 내린다(px). 2026-10-06
+	"rest_min": 24,
 	# 모음 걸음 — 두 칸이 「×」 쪽으로 다가가는 px · 「×」가 자라는 몫(24 → 30).
 	# 칸 사이 24px 이 18px 로 좁고 30px 「×」의 잉크(약 14px)가 양쪽 칸과 2px 씩 뜬다
 	# (10 · 0.5 에서는 사이 4px 에 잉크 17px 라 양쪽 칸을 6px 씩 덮었다 · 2026-10-06).
@@ -37301,7 +37683,9 @@ const GROW := {
 	#     판이 끝나는 걸음의 세기는 넘기 · 착지 · 판 깨짐이 나눠 쥔다.
 	#  ② shake 감쇠(_process 의 `shake - d * 34.0`)는 fast_rate 를 **안 탄다.**
 	#     흔들림은 착지(걸음의 TALLY.land_* 자리)에서 서므로, 빨리 보기이거나
-	#     이 걸음 뒤에 판이 끝나면 남은 걸음 안에서 죽게 묶는다(_shk_room).
+	#     이 걸음 뒤에 판이 끝나면(목표 · 다트 소진 · 리볼버 마지막 발) 남은 걸음 안에서
+	#     죽게 묶고(_shk_room), 1배로 판이 이어지면 진폭은 두고 멈춤 뒤 감쇠를 가파르게 해
+	#     다음 고르기로 TALLY.shk_tail 까지만 샌다(_shk_tail_k). 돌파 착지는 cross_shk 밑이다.
 	#     qa_total ⑦ 이 gn 0 · 0.5 · 1 의 걸음 끝 프레임에서 잰다(2026-10-06).
 	"shk_lo": 6.0, "shk_hi": 12.0,
 
@@ -37349,7 +37733,8 @@ const TALLY := {
 	"tick_gap": 2.0, # 톡 사이 최소 프레임(33ms) — 밑이면 그 칸은 소리 없이 넘는다
 
 	# 돌파(_cross_fire) — 띠가 목표를 넘는 프레임.
-	"cross_shk": 7.0,    # 흔들림 — 남은 걸음 안에서 죽게 묶인다(_shk_room)
+	"cross_shk": 7.0,    # 흔들림 — 남은 걸음 안에서 죽게 묶인다(_shk_room). 돌파 착지도 이 밑이다
+	"shk_tail": 0.1,     # 1배 · 판이 이어지는 착지 흔들림이 다음 고르기로 새도 되는 길이(초) — 감쇠가 맞춘다
 	"cross_flash": 0.45, # 섬광
 	"cross_pc": 0.5,     # 개발자 판 깨짐 다시 보기가 쓰는 넘는 자리(이득의 몫)
 	"pop_gap": 6.0,      # 「목표 달성」과 카드 사이 px
@@ -37629,8 +38014,10 @@ func _draw_card() -> void:
 		#  46~61px). 상한 61px 의 잉크 윗변을 font.get_ascent × INK.num 으로 재 카드
 		#  안에 드는 것을 qa_total ①-f 가 잠근다 — 박아 두면 글꼴이 바뀔 때 카드 위로
 		#  샌다(2026-09-18). 예비 눌림은 앞 모음 걸음이 맡는다(2026-10-06).
+		#  크기는 지금 글자가 아니라 끝값 글자로 잰다(_gain_px) — 봉우리가 카드 폭에 들고
+		#  세는 동안 자릿수가 늘어도 안 준다(2026-10-06).
 		var gtxt := "+" + str(_card_gain())
-		var sz := _fit_sz(gtxt, CARD_W - 16.0, _gain_sz())
+		var sz := _gain_px("+" + str(last_gain))
 		#  C_ACC → C_LIGHT (2026-09-26). C_ACC(f2b134)가 한 화면에서 셋을 말하고
 		#  있었다 — 여기 「+n」 · 「목표 달성」 팝 · 판 위 강조. 게다가 C_ACC(39.5°)와
 		#  C_GOLD(45.2°)는 5.7° 차 · 대비 1.19:1 이라 **총합과 돈이 같은 호박색**이다.
@@ -45376,6 +45763,9 @@ func _to_lobby() -> void:
 	#  남은 톡과 착지 소리가 난다(2026-10-06).
 	_card_reset()
 	hitstop = 0.0
+	#  판 사건도 걷는다 — 단골의 참나무 쪽 · 자루, 불씨, 칠판이 제목 판에 안 남는다. 이어하기는
+	#  판 머리 매듭에서 같은 run_rng 로 같은 사건을 다시 뽑는다(_ev_roll). 2026-10-06
+	_ev_clear()
 
 
 func _open_newrun() -> void:

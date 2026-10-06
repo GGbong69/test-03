@@ -201,6 +201,24 @@ func _run() -> void:
 		randi()
 	_roll_at(1, 77)
 	_ok("전역 난수가 밀려도 같다", _tuple() == b77, str(b77))
+	#  「빈손」(gold_off)은 불씨를 안 뽑는다 — 불씨가 주는 것은 골드뿐이라 빈손 판에서는 맞혀도
+	#  소리만 나고 0 이었다(검토). 거른 줄은 가중치째 빠지고 뽑기는 그대로 한 번이라 같은
+	#  씨앗이면 같은 판이다. 2026-10-06
+	GameData.challenge = "empty"
+	var em_on: bool = GameData.chal_on("gold_off")
+	var em_cnt := {}
+	var em_same := true
+	for s in range(1, 301):
+		_roll_at(2, s)
+		var ea := _tuple()
+		em_cnt[g.leg_ev] = int(em_cnt.get(g.leg_ev, 0)) + 1
+		_roll_at(2, s)
+		if _tuple() != ea:
+			em_same = false
+	GameData.challenge = ""
+	_ok("빈손은 불씨를 안 뽑는다 · 다른 사건은 뽑힌다 · 같은 씨앗이면 같은 판", em_on
+			and int(em_cnt.get("ember", 0)) == 0 and int(em_cnt.get("order", 0)) > 0
+			and int(em_cnt.get("regular", 0)) > 0 and em_same, str(em_cnt))
 
 	# ── ③ 보스 판 ────────────────────────────────────
 	print("③ 보스 판")
@@ -443,6 +461,14 @@ func _run() -> void:
 	g.total = g.target
 	g._finish_leg()
 	_ok("판이 끝나면 사라진다", g.ember_idx < 0 and g.leg_ev == "", "state %d" % g.state)
+	#  판 중에 로비로 나가면 걷힌다 — 불씨 그림이 제목 판에 안 남는다(2026-10-06).
+	_roll_at(1, 3)
+	g._ember_light(4, "t")
+	g.state = g.S.PICK
+	g._pause_open()
+	g._to_lobby()
+	_ok("로비로 나가면 사라진다", g.ember_idx < 0 and g.leg_ev == "" and g.ember_puff.is_empty(),
+			"state %d · 칸 %d" % [g.state, g.ember_idx])
 
 	# ── ⑮ 되살리기 ───────────────────────────────────
 	print("⑮ 되살리기")

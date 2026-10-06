@@ -462,6 +462,13 @@ func _run() -> void:
 	var kq := _kinds(g.queue)
 	_ok("반지름 안(−0.3px)이면 떨어진다 — 「단골」 걸음 하나", kq.count("regular") == 1
 			and g.rgl_st == "hit" and g.rgl_ph == "fall", str(kq))
+	#  자루가 떨어지는 프레임에 막힘 · 참나무 쪽이 같이 풀린다 — 「단골」 걸음(값)을 기다리면
+	#  자루 없는 참나무 쪽만 0.5초쯤 남았다(검토, 2026-10-06). 값은 아래 걸음이 그대로 낸다.
+	g.rgl_pa = 1.0
+	g._rgl_tick(float(g.REGULAR.plank_t) + 0.01)
+	_ok("떨어지는 순간 막힘이 풀리고 참나무 쪽이 걷힌다(걸음 전)", g.rgl_st == "hit"
+			and g.rgl_pa == 0.0 and not g._rgl_blocks(g.hit_info(rp)),
+			"st %s · 짙기 %.2f" % [g.rgl_st, g.rgl_pa])
 	var ri := kq.find("regular")
 	_ok("동전 걸음 뒤 · 모음 · 합계 앞", ri > kq.rfind("item") and kq.rfind("item") >= 0
 			and ri < kq.find("wind") and ri < kq.find("total"), str(kq))
@@ -790,6 +797,25 @@ func _run() -> void:
 	g._rgl_tick(0.0)
 	_ok("모션 끄기 — 참나무 쪽이 곧장 걷힌다", g.rgl_pa == 0.0)
 	g.motion_off = false
+	#  판 중에 로비로 나가면 걷힌다 — 참나무 쪽 · 자루가 제목 판에 안 남는다(검토, 2026-10-06).
+	#  그리는 문도 판 위인지를 묻는다(_rgl_plank · _darts_stuck · _rgl_seen — 「목표물」과 같은 문).
+	_enter(_aim(i20, "t"), 11)
+	g._rgl_tick(float(g.REGULAR.plank_t) + 0.01)
+	g.state = g.S.PICK
+	var lob_on: bool = g.rgl_pa > 0.0 and g._rgl_seen() and g._darts_stuck().size() == g.darts.size() + 1
+	g.state = g.S.TITLE
+	var gate: bool = not g._rgl_seen() and g._darts_stuck().size() == g.darts.size()
+	g.state = g.S.PICK
+	g._pause_open()
+	g._to_lobby()
+	for _k in 30:
+		g._rgl_tick(1.0 / 60.0)
+	_ok("로비로 나가면 단골이 걷힌다 · 판 밖에서는 그리는 문이 닫힌다", lob_on and gate
+			and g.rgl_st == "" and g.rgl_pa == 0.0 and g.leg_ev == "" and not g._rgl_seen()
+			and g._darts_stuck().size() == g.darts.size(),
+			"st %s · 짙기 %.2f · 자루 %d/%d" % [g.rgl_st, g.rgl_pa, g._darts_stuck().size(),
+					g.darts.size()])
+	g.state = g.S.PICK
 	#  색
 	var cr: Color = g._dart3_col("reg")
 	var others := []

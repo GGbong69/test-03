@@ -328,6 +328,55 @@ func _run() -> void:
 	_ok("①-g 모션 끄기 · 앉은 뒤에는 36px 이다",
 			mo_sz == 36 and g._gain_sz() == 36, "모션 끔 %d · 앉음 %d" % [mo_sz, g._gain_sz()])
 
+	# ── ①-h 그리는 크기는 끝값 글자로 잰다 — 봉우리가 폭에 들고 세는 동안 안 준다 (2026-10-06) ──
+	#  _gain_px(끝값) 이 크기 사다리(_gain_sz)를 끝값이 봉우리에서 카드 폭(CARD_W − 16)에 드는
+	#  비로 눌러 그린다. 다섯 자리 ~ 아홉 자리 끝값마다:
+	#   · 세는 동안(gain_p 0 → 1, 글자는 그 프레임의 「+n」) 크기가 한 번도 안 줄고 글자가 폭 안이다.
+	#   · 착지 봉우리(gain_roll 1)의 끝값 글자가 폭 안이다.
+	#   · 쉬는 크기가 CARDFX.rest_min 밑이 아닌 동안 봉우리 ÷ 쉬는 크기가 1 + amt 에서 2px 안이다
+	#     — 일곱 자리에서 세는 크기와 봉우리가 같던 것(검토)이 다시 안 생긴다.
+	if g.font == null:
+		g.font = load(g.FONT_PATH)
+	var fw: float = g.CARD_W - 16.0
+	var fx_ok := true
+	var fx_txt := ""
+	g.target = 1000
+	for gv in [11440, 309999, 1234567, 12345678, 123456789]:
+		g.last_gain = int(gv)
+		var fin := "+" + str(gv)
+		var amt_h: float = g._gain_amt()
+		g.land_live = true
+		var prev_sz := 0
+		var grow_ok := true
+		var wide_ok := true
+		for q in 41:
+			g.gain_p = float(q) / 40.0
+			var szq: int = g._gain_px(fin)
+			var txq := "+" + str(g._card_gain())
+			if szq < prev_sz:
+				grow_ok = false
+			prev_sz = szq
+			if g.font.get_string_size(txq, HORIZONTAL_ALIGNMENT_LEFT, -1, szq).x > fw + 0.5:
+				wide_ok = false
+		g.land_live = false
+		g.gain_p = 1.0
+		g.gain_roll = 1.0
+		var pk_h: int = g._gain_px(fin)
+		g.gain_roll = 0.0
+		var rs_h: int = g._gain_px(fin)
+		var fits: bool = g.font.get_string_size(fin, HORIZONTAL_ALIGNMENT_LEFT, -1, pk_h).x <= fw + 0.5
+		var want_pk: float = float(rs_h) * (1.0 + amt_h)
+		var ratio_ok: bool = rs_h <= int(g.CARDFX.rest_min) or absf(float(pk_h) - want_pk) <= 2.0
+		if not (grow_ok and wide_ok and fits and ratio_ok and pk_h > rs_h):
+			fx_ok = false
+		fx_txt += "%s 쉼 %d → 봉우리 %d(× %.2f · 1 + amt %.2f)%s · " % [fin, rs_h, pk_h,
+				float(pk_h) / maxf(float(rs_h), 1.0), 1.0 + amt_h, "" if grow_ok else " 세다 줄었다"]
+	g.font = font0
+	g.gain_p = 0.0
+	g.gain_roll = 0.0
+	_ok("①-h 「+n」 크기를 끝값으로 잰다 — 봉우리가 폭 안 · 세는 동안 안 준다 · 비가 남는다",
+			fx_ok, fx_txt)
+
 	# ── ② 굴림 창이 언제나 걸음 안에서 끝난다 ────────────
 	#  창÷qt 를 스무 갈래에서 잰다. **새 벽시계 상수가 하나라도 박혔으면
 	#  beat 0.015 에서만 터진다** — curve_probe 가 그 값을 쓴다.
@@ -459,6 +508,31 @@ func _run() -> void:
 	_ok("⑤-b 목표를 넘는 프레임 흔들림이 착지 천장 밑이다",
 			float(g.TALLY.cross_shk) < hi and float(g.TALLY.cross_shk) > 0.0,
 			"넘기 %.2f < 천장 %.2f" % [float(g.TALLY.cross_shk), hi])
+	#  ── ⑤-c 돌파 착지는 넘기보다 안 세다 (2026-10-06) ──
+	#  돌파 걸음은 넘기(cross_shk) 뒤 0.2초 안에 착지가 또 흔든다 — 둘째가 더 세면 상단 띠의
+	#  목표 · 점수가 위로 잘린다(검토 e: 7.00 → 10.96). 1배 · r 2.0 · 10.0 으로 넘겨 넘는
+	#  프레임과 착지 프레임의 shake 를 잰다.
+	var bl_ok := true
+	var bl_txt := ""
+	for rb in [2.0, 10.0]:
+		_stage_total(float(rb), 1)
+		var lvb := false
+		var crs := -1.0
+		var lnd := -1.0
+		for _fb in 4000:
+			if g.state != g.S.RESOLVE:
+				break
+			var cl0: bool = g.cross_live
+			g._process(1.0 / 60.0)
+			if cl0 and not g.cross_live and crs < 0.0:
+				crs = g.shake
+			if lvb and not g.land_live and lnd < 0.0:
+				lnd = g.shake
+			lvb = g.land_live
+		if crs <= 0.0 or lnd <= 0.0 or lnd > float(g.TALLY.cross_shk) + 0.0001:
+			bl_ok = false
+		bl_txt += "r%.1f 넘기 %.2f · 착지 %.2f · " % [float(rb), crs, lnd]
+	_ok("⑤-c 돌파 착지 흔들림이 넘기(cross_shk) 밑이다", bl_ok, bl_txt)
 
 	# ── ⑥ 작은 값이 조용하다 — **제곱을 잠근다** ───────────
 	#  선형으로 되돌리면 이 줄이 깨진다. 제곱이 이 설계의 주장이다.
@@ -481,8 +555,8 @@ func _run() -> void:
 	# ── ⑦ 흔들림이 걸음을 안 넘긴다 — 정산이 끝나는 프레임에서 잰다 (2026-10-06) ──
 	#  shake 감쇠는 fast_rate 를 **안 탄다**(그 규약은 착탄·거절·판 깨짐이
 	#  같이 쓰므로 안 바꾼다). 흔들림은 착지(걸음의 0.78 ~ 0.82 · 돌파 0.65)와 목표를
-	#  넘는 프레임에 서므로, 빨리 보기이거나 판이 끝나는 걸음에서는 _shk_room 이 남은
-	#  걸음으로 묶는다. gn 0 · 0.5 · 1(돌파) · 1(목표 위에서 출발 — 판이 끝나는 보통
+	#  넘는 프레임에 서므로, 빨리 보기이거나 판이 끝나는 걸음(목표 · 다트 소진 · 리볼버
+	#  마지막 발)에서는 _shk_room 이 남은 걸음으로 묶는다. gn 0 · 0.5 · 1(돌파) · 1(목표 위에서 출발 — 판이 끝나는 보통
 	#  합계)을 2.5배로, 판이 끝나는 둘은 1배로도 돌려 정산이 끝나는 프레임의 shake 를 잰다.
 	var life: float = 12.0 / 34.0
 	var sh_ok := true
@@ -500,23 +574,68 @@ func _run() -> void:
 				"(위)" if bool(cs[1]) else "", " 2.5배" if bool(cs[2]) else " 1배",
 				float(st7a.shk), g.shake]
 	_ok("⑦ 빨리 보기 · 판이 끝나는 걸음은 정산이 끝나는 프레임에 흔들림이 0", sh_ok, sh_txt)
-	#  ── ⑦-a 1배 · 판이 안 끝나는 걸음은 착지 흔들림을 안 묶는다 ──
-	#  착지 프레임(land_live 가 내려가는 프레임)의 shake 가 lerp(shk_lo, shk_hi, gn²) 그대로다.
-	_stage_total(0.316, 1)
-	var lv7 := false
-	var shk7 := -1.0
-	var gn7 := -1.0
-	for _f7 in 4000:
-		if g.state != g.S.RESOLVE:
-			break
-		g._process(1.0 / 60.0)
-		if lv7 and not g.land_live and shk7 < 0.0:
-			shk7 = g.shake
-			gn7 = g._grow_n()
-		lv7 = g.land_live
-	var want7: float = lerpf(float(g.GROW.shk_lo), float(g.GROW.shk_hi), gn7 * gn7)
-	_ok("⑦-a 1배 · 판이 안 끝나는 착지 흔들림은 식 그대로다", gn7 > 0.0
-			and absf(shk7 - want7) < 0.001, "gn %.2f · 착지 %.3f · 식 %.3f" % [gn7, shk7, want7])
+	#  ── ⑦-a 1배에서도 판이 끝나는 걸음은 묶는다 — 다트가 다 했을 때 (2026-10-06) ──
+	#  예전 이 줄은 「1배 · 판이 안 끝나면 착지 흔들림을 안 묶는다」를 단언해 누수를 잠갔다
+	#  (검토: 다트가 다 한 실패 판은 판이 끝나는데도 안 묶여, 실제 게임에서는 게임 오버 연출이
+	#  흔들림 감쇠보다 먼저 조기 반환해 그 값이 얼어 남았다). 목표 밑 · darts_left 0 으로 1배
+	#  r 0.316 · 0.90 을 돌려 착지 흔들림이 서고 정산이 끝나는 프레임에 0 인지 잰다.
+	var do_ok := true
+	var do_txt := ""
+	for rd in [0.316, 0.90]:
+		_stage_total(float(rd), 1)
+		g.darts_left = 0
+		var lvd := false
+		var shd := -1.0
+		for _fd in 4000:
+			if g.state != g.S.RESOLVE:
+				break
+			g._process(1.0 / 60.0)
+			if lvd and not g.land_live and shd < 0.0:
+				shd = g.shake
+			lvd = g.land_live
+		if shd <= 0.0 or g.shake > 0.0001 or g.state == g.S.RESOLVE:
+			do_ok = false
+		do_txt += "r%.2f 착지 %.2f → 끝 %.3f · " % [float(rd), shd, g.shake]
+		g.over_cine = -1.0
+	_ok("⑦-a 1배 · 다트가 다 한 걸음은 정산이 끝나는 프레임에 흔들림이 0", do_ok, do_txt)
+	#  ── ⑦-a2 1배 · 판이 이어지면 다음 고르기로 TALLY.shk_tail(0.1초)까지만 샌다 ──
+	#  진폭은 식 그대로다(묶으면 깊은 단일수록 덜 흔들린다) — 멈춤 뒤 감쇠가 가파라져
+	#  (_shk_tail_k) 고르기로 넘어간 뒤 shake 가 6프레임(0.1초) 안에 0 이다. r 0.316(멈춤
+	#  없음 · 감쇠 34 그대로)과 r 0.90 4단(멈춤 0.120 — 손대기 전에는 11프레임 샜다).
+	var tl_ok := true
+	var tl_txt := ""
+	for c7 in [[0.316, -1], [0.90, 4]]:
+		_stage_total(float(c7[0]), 1)
+		g.fire_lock = int(c7[1])
+		var lv7 := false
+		var shk7 := -1.0
+		var gn7 := -1.0
+		for _f7 in 4000:
+			if g.state != g.S.RESOLVE:
+				break
+			g._process(1.0 / 60.0)
+			if lv7 and not g.land_live and shk7 < 0.0:
+				shk7 = g.shake
+				gn7 = g._grow_n()
+			lv7 = g.land_live
+		var tail7 := 0
+		for _t7 in 120:
+			if g.shake <= 0.0001:
+				break
+			g._process(1.0 / 60.0)
+			tail7 += 1
+		g.fire_lock = -1
+		var want7: float = lerpf(float(g.GROW.shk_lo), float(g.GROW.shk_hi), gn7 * gn7)
+		#  고르기 — 자루가 다 같으면 _to_pick 이 곧장 쥐어 조준으로 간다. 판 위면 된다.
+		if gn7 <= 0.0 or g.state == g.S.RESOLVE or not g._is_play() or tail7 > 6 \
+				or shk7 <= 0.0 or shk7 > want7 + 0.001:
+			tl_ok = false
+		if absf(shk7 - want7) > 0.001:
+			tl_ok = false
+		tl_txt += "r%.2f%s 착지 %.2f(식 %.2f) · 고르기 뒤 %d프레임 · " % [float(c7[0]),
+				" 4단" if int(c7[1]) > 0 else "", shk7, want7, tail7]
+		g.state = g.S.PICK
+	_ok("⑦-a2 1배 · 판이 이어지는 착지 흔들림은 고르기로 0.1초까지만 샌다", tl_ok, tl_txt)
 	#  ── ⑦-b 멈춤이 만든 누수의 크기 (2026-09-26) ───────────
 	#  ⚠ **고치기 전 모형을 그때 리터럴로 남긴다**(beat 0.34 · 합계 2.6박) — 수선의
 	#  까닭을 적는 줄이라 지금 박자로 바꾸면 이유 없이 빨개진다. 그 모형에
@@ -932,7 +1051,8 @@ func _tick_key(tp: AudioStreamPlayer) -> String:
 	return "%s@%.6f" % [_tick_name(tp), tp.pitch_scale]
 
 
-#  칸 수의 식 — TALLY.tick0 + TALLY.tick_gn × gn 을 4 ~ 24 로 묶는다.
+#  칸 수의 식 — TALLY.tick0 + TALLY.tick_gn × gn 을 4 ~ 24 로 묶는다. 게임은 이득으로 한 번 더
+#  누른다(mini(…, last_gain) · ⑭-k) — 여기 쓰는 걸음은 이득이 20 이상이라 안 걸린다.
 func _tick_want(gn: float) -> int:
 	var tl: Dictionary = g.TALLY
 	return clampi(int(round(float(tl.tick0) + float(tl.tick_gn) * gn)), 4, 24)
@@ -1104,6 +1224,58 @@ func _run_tick() -> void:
 	_ok("⑭-j 굴림을 끄면(grow_roll 0) 톡이 없고 머리에서 착지한다",
 			int(o0.n) == 0 and (o0.heard as Array).is_empty() and bool(o0.st_start),
 			"칸 %d · %d번 · 머리 소리 %s" % [int(o0.n), (o0.heard as Array).size(), o0.st_start])
+
+	#  ── ⑭-k 작은 이득 — 칸이 이득보다 많지 않고 톡마다 「+n」이 오른다 (2026-10-06) ──
+	#  검토: 이득 1 에서 톡이 다섯 번 나는 동안 카드는 「+0」이었고(칸 바닥 4 > 이득), 상단 띠는
+	#  반올림이라 「1」을 먼저 찍었다. 이제 칸 = mini(식, 이득) — 이득 1 · 2 · 3 은 칸 1 · 2 · 3
+	#  (톡 0 · 1 · 2 + 착지)이고, 카드는 내림이라 톡마다 한 칸 이상 오른다. 상단 띠의 수
+	#  (_bar_val)는 굴리는 동안 떠난 자리 + 카드 「+n」이다 — 매 프레임 잰다. 끝값은 착지
+	#  프레임에 처음 선다.
+	var sm_ok := true
+	var sm_txt := ""
+	for gv in [1, 2, 3, 5, 7, 40]:
+		_stage_total(float(gv) / 1000.0, 1)
+		tp.stream = null
+		tp.pitch_scale = 1.0
+		var kk0 := _tick_key(tp)
+		var heard_v := []
+		var bar_bad := 0
+		var early := false
+		var lvk := false
+		var land_v := -1
+		var n_k := -1
+		for _fk in 4000:
+			if g.state != g.S.RESOLVE:
+				break
+			g._process(1.0 / 60.0)
+			if g.land_live:
+				n_k = g.tick_n
+				if g._bar_val() - int(round(g.score_from)) != g._card_gain():
+					bar_bad += 1
+				if g._card_gain() >= g.last_gain:
+					early = true
+			var kk := _tick_key(tp)
+			if kk != kk0:
+				kk0 = kk
+				heard_v.append(g._card_gain())
+			if lvk and not g.land_live:
+				land_v = g._card_gain()
+			lvk = g.land_live
+		var want_n: int = mini(_tick_want(g._grow_n()), int(gv))
+		var rises := true
+		var pv := 0
+		for v in heard_v:
+			if int(v) <= pv:
+				rises = false
+			pv = int(v)
+		var cnt_ok: bool = heard_v.size() == want_n - 1 if int(gv) <= 7 \
+				else heard_v.size() <= want_n - 1
+		if n_k != want_n or not cnt_ok or not rises or bar_bad > 0 or early or land_v != int(gv):
+			sm_ok = false
+		sm_txt += "+%d 칸 %d(식 %d) · 톡에 선 값 %s · 착지 +%d · 띠 어긋남 %d · " % [int(gv), n_k,
+				want_n, heard_v, land_v, bar_bad]
+	_ok("⑭-k 작은 이득 — 칸 ≤ 이득 · 톡마다 「+n」이 오른다 · 띠와 카드가 같은 내림 · 끝값은 착지",
+			sm_ok, sm_txt)
 
 	# ── ⑮ 착지 — 머리는 조용하고 끝값에서 내리친다 (2026-10-06) ──────
 	#  머리에서 하던 것(settle_total · 흔들림 · 멈춤 · 크기 봉우리)이 전부 착지 프레임으로

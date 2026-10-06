@@ -102,6 +102,12 @@ func _plain() -> void:
 	g._ev_clear()
 
 
+#  줄 동전이 있는 판(둘째 판)의 사건 없는 판 — 첫 판은 「견본」이 안 뽑힌다(rarity min_leg).
+func _plain2() -> void:
+	_roll_at(2, 3)
+	g._ev_clear()
+
+
 func _tag(id: String) -> Dictionary:
 	for r in GameData.tags():
 		if String(r.get("id", "")) == id:
@@ -577,12 +583,15 @@ func _run() -> void:
 	_fresh()
 	_plain()
 	GameData.challenge = "empty"
+	#  빈손이 실제로 켜진 채 뽑았는지를 루프 안에서 잡는다 — 되돌린 뒤에 물으면 늘 참이다
+	#  (검토, 2026-10-06).
+	var empty_on: bool = GameData.chal_on("gold_off")
 	var empty_gold := false
 	for k in 300:
 		if String(g._order_tag_pick(float(k) / 300.0).get("kind", "")) == "gold":
 			empty_gold = true
 	GameData.challenge = ""
-	_ok("빈손은 골드 보상을 안 뽑는다", GameData.chal_on("gold_off") == false and not empty_gold)
+	_ok("빈손은 골드 보상을 안 뽑는다", empty_on and not empty_gold)
 	var any_gold := false
 	for k in 300:
 		if String(g._order_tag_pick(float(k) / 300.0).get("kind", "")) == "gold":
@@ -643,6 +652,187 @@ func _run() -> void:
 	_ok("골드는 자금판 밑에 「+6」 하나", bank_pop and g.pops.size() == 1,
 			str(g.pops.map(func(p): return p.txt)))
 	_settle()
+
+	# ── ⑫-b 받기 (2026-10-06) ────────────────────────
+	print("⑫-b 받기")
+	#  쌓인 「쌍둥이」는 건너뛰기 뱃지의 것이다 — 주문 보상이 안 쓴다(_take_tag_once).
+	_fresh()
+	_plain()
+	g.tag_copy = 1
+	g.gold = 4
+	g._order_open("triple", 3, _tag("t_gold"), 9)
+	_throw(_aim(i20, "t"))
+	_settle()
+	_ok("쌍둥이를 안 쓴다 — 「삯」 한 장(+6) · 쌍둥이 그대로", g.gold == 10 and g.tag_copy == 1,
+			"골드 %d · 쌍둥이 %d" % [g.gold, g.tag_copy])
+	g.tag_copy = 0
+	#  뽑을 때는 들어가는 것만 고른다 — 그 사이 칸이 찼으면(판 중간에 쓴 사진의 복제 등)
+	#  보상 없이 조용히 동그라미만 친다. 「꽉 찼다」 팝 · 거절이 칠판에 안 뜬다.
+	_plain()
+	g._order_open("triple", 3, _tag("t_candy"), 5)
+	while g.cons.size() < GameData.cons_slots():
+		g.cons.append(GameData.candies()[0].duplicate())
+	var cn0: int = g.cons.size()
+	_throw(_aim(i20, "t"))
+	var full_txt := []
+	var full_seen := false
+	while not g.queue.is_empty():
+		var fk := String((g.queue[0] as Dictionary).get("k", ""))
+		if fk == "order":
+			g.pops.clear()
+		g._next_step()
+		if fk == "order":
+			full_seen = true
+			for pp in g.pops:
+				full_txt.append(String(pp.txt))
+			break
+	_ok("그 사이 칸이 찼으면 조용히 — 팝 0 · 칸 그대로 · 동그라미", full_seen and full_txt.is_empty()
+			and g.cons.size() == cn0 and g.order_st == "done" and g.order_fly.is_empty(),
+			"팝 %s · 칸 %d → %d · %s" % [str(full_txt), cn0, g.cons.size(), g.order_st])
+	_settle()
+	g.cons.clear()
+	#  사탕 v 장이 안 들어가면 뽑지 않는다 — 한 칸 남은 사탕 · 사진 칸에 두 장짜리는 안 뽑힌다.
+	var two := _tag("t_candy").duplicate()
+	two["v"] = "2"
+	while g.cons.size() < GameData.cons_slots() - 1:
+		g.cons.append(GameData.candies()[0].duplicate())
+	_ok("v 장이 안 들어가면 안 뽑는다", g._order_tag_ok(_tag("t_candy"))
+			and not g._order_tag_ok(two))
+	g.cons.clear()
+	#  동전을 받으면 이 발은 제 방식대로 끝나고, 발이 끝나는 자리에서 조준 · 계산 방식을
+	#  다시 읽는다 — 다음 발부터 그 동전의 방식이다(_modes_refresh 의 정산 중 규약).
+	#  견본 씨앗을 조준 동전(aim 칸이 찬 것)이 나오는 것으로 고른다.
+	_fresh()
+	_plain2()
+	var it_pool: Array = g._tag_items("common")
+	var u_aim := -1
+	var aim_id := ""
+	for u in range(1, 4000):
+		var rq := RandomNumberGenerator.new()
+		rq.seed = u
+		var pk: Dictionary = it_pool[rq.randi() % it_pool.size()]
+		if String(pk.get("aim", "")) != "":
+			u_aim = u
+			aim_id = String(pk.get("id", ""))
+			break
+	_ok("조준 동전이 나오는 견본 씨앗을 찾았다", u_aim > 0, "씨앗 %d · %s" % [u_aim, aim_id])
+	if u_aim > 0:
+		g.aim_mode = "std"
+		g._order_open("triple", 3, _tag("t_item"), u_aim)
+		_throw(_aim(i20, "t"))
+		var mid_aim := ""
+		while not g.queue.is_empty():
+			var mk := String((g.queue[0] as Dictionary).get("k", ""))
+			g._next_step()
+			if mk == "order":
+				mid_aim = g.aim_mode
+		_ok("받은 발은 제 방식으로 끝난다 — 걸음 동안 조준 방식 그대로", mid_aim == "std"
+				and g.owned.size() == 1 and String(g.owned[0].get("id", "")) == aim_id,
+				"걸음 뒤 %s · 동전 %d" % [mid_aim, g.owned.size()])
+		_settle()
+		_ok("발이 끝나면 새 동전의 조준 방식이 선다", g.aim_mode == g._aim_from_items()
+				and g.aim_mode != "std" and not g.modes_due, "%s" % g.aim_mode)
+	#  판 위에서는 동전 칸 스프링을 통째로 안 돌린다 — 방금 발동한 동전의 튐 · 빛이 산다.
+	_fresh()
+	_plain2()
+	_give_c01()
+	g._panel_reset()
+	g._order_open("triple", 3, _tag("t_item"), 7)
+	_throw(_aim(i20, "t"))
+	var hot0 := -1.0
+	var hot1 := -1.0
+	var new_sp := []
+	while not g.queue.is_empty():
+		var sk := String((g.queue[0] as Dictionary).get("k", ""))
+		if sk == "order":
+			hot0 = float(g.slot_hot[0])
+		g._next_step()
+		if sk == "order":
+			hot1 = float(g.slot_hot[0])
+			var ni: int = g.owned.size() - 1
+			new_sp = [g.slot_pop[ni], g.slot_vel[ni], g.slot_hot[ni]]
+			break
+	_ok("판 위 보상 동전 — 앞 동전 스프링이 그대로 · 새 칸만 0 에서", hot0 > 0.0
+			and is_equal_approx(hot0, hot1) and g.owned.size() == 2 and new_sp == [0.0, 0.0, 0.0],
+			"앞 동전 빛 %.2f → %.2f · 새 칸 %s" % [hot0, hot1, str(new_sp)])
+	#  ── 제 칸으로 난다 — 칠판 그림 자리에서 사탕 · 사진 칸 · 동전 칸으로 ──
+	#  나는 동안 그 칸은 비어 있고(_order_fly_hides), 앉는 프레임에 동전은 발동 스프링을
+	#  받는다. 시계는 빨리 보기를 탄다(_process). 모션 끄기면 날지 않는다.
+	_settle()
+	_plain()
+	g.cons.clear()
+	g._order_open("triple", 3, _tag("t_candy"), 5)
+	_throw(_aim(i20, "t"))
+	while not g.queue.is_empty():
+		var ck := String((g.queue[0] as Dictionary).get("k", ""))
+		g._next_step()
+		if ck == "order":
+			break
+	var ci: int = g.cons.size() - 1
+	var fly0: bool = String(g.order_fly.get("k", "")) == "cons" and int(g.order_fly.get("i", -9)) == ci
+	var hide0: bool = g._order_fly_hides("cons", ci)
+	g._order_fly_tick(float(g.ORDER.fly_t) * 0.5)
+	var hide1: bool = g._order_fly_hides("cons", ci)
+	g._order_fly_tick(float(g.ORDER.fly_t) * 0.5 + 0.001)
+	var hide2: bool = g._order_fly_hides("cons", ci)
+	var ring: bool = not g.order_fly.is_empty()
+	g._order_fly_tick(float(g.ORDER.fly_ring))
+	_ok("사탕이 칠판에서 사탕 칸으로 난다 — 나는 동안 칸이 비고 앉으면 서고 고리가 식는다",
+			fly0 and hide0 and hide1 and not hide2 and ring and g.order_fly.is_empty(),
+			"%s %s %s %s 고리 %s" % [fly0, hide0, hide1, hide2, ring])
+	var to_c: Array = g._order_fly_to("cons", ci)
+	var cr0: Rect2 = g._cons_rect(ci)
+	_ok("앉는 자리는 그 사탕 칸의 한가운데 · 칠판에서 떠난다",
+			cr0.has_point(to_c[0]) and g._order_foot().has_point(g._order_ico_at()),
+			"%s · %s" % [str(to_c[0]), str(g._order_ico_at())])
+	_settle()
+	_plain2()
+	g.owned.clear()
+	g._panel_reset()
+	g._order_open("triple", 3, _tag("t_item"), 7)
+	_throw(_aim(i20, "t"))
+	while not g.queue.is_empty():
+		var ik := String((g.queue[0] as Dictionary).get("k", ""))
+		g._next_step()
+		if ik == "order":
+			break
+	var ii: int = g.owned.size() - 1
+	var ifly: bool = String(g.order_fly.get("k", "")) == "item" and g._order_fly_hides("item", ii)
+	var v0: float = float(g.slot_vel[ii])
+	g._order_fly_tick(float(g.ORDER.fly_t) + 0.001)
+	_ok("동전이 동전 칸으로 난다 — 앉는 프레임에 발동 스프링 한 번(이름 줄 없이)", ifly
+			and float(g.slot_vel[ii]) > v0 and float(g.slot_hot[ii]) == 0.0,
+			"튐 %.2f → %.2f · 이름 %.2f" % [v0, float(g.slot_vel[ii]), float(g.slot_hot[ii])])
+	var to_i: Array = g._order_fly_to("item", ii)
+	_ok("동전 칸 한가운데로 앉는다", g._slot_rect(ii).has_point(to_i[0]), str(to_i[0]))
+	_settle()
+	#  빨리 보기를 탄다 — _process 가 그 배수를 태워 민다
+	g._order_fly_go("cons", 0)
+	g.state = g.S.RESOLVE
+	g.queue = [{"k": "wind"}]
+	g.qt = 99.0
+	g.hitstop = 0.0
+	g.pause_from = -1
+	g.fast_lock = true
+	g.fast_mul = 2.5
+	g._process(0.05)
+	var frate: float = g.fast_rate
+	var ft1: float = float(g.order_fly.get("t", -1.0))
+	g.fast_lock = false
+	g.queue = []
+	g.state = g.S.PICK
+	_ok("나는 시계가 빨리 보기 배수를 탄다", frate > 1.0 and absf(ft1 - 0.05 * frate) < 0.0001,
+			"배 %.2f · %.3f" % [frate, ft1])
+	g.order_fly = {}
+	g.motion_off = true
+	_plain()
+	g.cons.clear()
+	g._order_open("triple", 3, _tag("t_candy"), 5)
+	_throw(_aim(i20, "t"))
+	_settle()
+	_ok("모션 끄기면 날지 않고 곧장 선다", g.order_fly.is_empty() and g.cons.size() == 1
+			and not g._order_fly_hides("cons", 0))
+	g.motion_off = false
 
 	# ── ⑬ 칠판 자리 ─────────────────────────────────
 	print("⑬ 칠판 자리")
@@ -824,6 +1014,40 @@ func _run() -> void:
 	var e2: float = g._order_lit_e()
 	_ok("빛은 쓰는 동안 차오르고 동그라미 뒤 식는다", e0 == 0.0 and e1 == 1.0 and e2 == 0.0,
 			"%.2f %.2f %.2f" % [e0, e1, e2])
+	#  ── 영역 테두리 (2026-10-06) ──
+	#  백색 칸 주문은 영역(크림)에 분필빛(크림)을 얹어도 판이 거의 안 바뀌었다(검토) — 영역
+	#  둘레에 분필 선을 긋는다. 영역 아홉 다 선이 서고, 선 토막마다 한가운데에서 1.5px 양쪽이
+	#  하나는 영역 · 하나는 영역 밖이다(판의 진실 _truth 로 댄다 — 판 밖은 영역이 아니다).
+	#  더블 · 불은 둘레 길이가 원 둘레와 2% 안이다(빠진 토막이 없다).
+	var rim_ok := true
+	var rim_txt := ""
+	for rc in ["double", "triple", "bull", "col:1", "col:0", "sec:20", "left", "right", "small"]:
+		_plain()
+		g._order_open(String(rc), 3, _tag("t_gold"), 1)
+		var segs: Array = g.order_rim
+		var bad_seg := 0
+		var len_sum := 0.0
+		for pl in segs:
+			var pa2: PackedVector2Array = pl
+			for k in pa2.size() - 1:
+				len_sum += pa2[k].distance_to(pa2[k + 1])
+			var mi: int = pa2.size() / 2
+			var m: Vector2 = (pa2[maxi(mi - 1, 0)] + pa2[mi]) * 0.5
+			var dv: Vector2 = (pa2[mi] - pa2[maxi(mi - 1, 0)]).normalized().orthogonal()
+			if _truth(String(rc), m + dv * 1.5) == _truth(String(rc), m - dv * 1.5):
+				bad_seg += 1
+		var circ := -1.0
+		if rc == "double":
+			circ = TAU * g.R * (g.rt_dbl_in + g.rt_dbl_out)
+		elif rc == "bull":
+			circ = TAU * g.R * g.rt_bull_o
+		if segs.is_empty() or bad_seg > 0 or (circ > 0.0 and absf(len_sum - circ) > circ * 0.02):
+			rim_ok = false
+		rim_txt += "%s %d토막 %.0fpx%s · " % [rc, segs.size(), len_sum,
+				"" if bad_seg == 0 else " 어긋남 %d" % bad_seg]
+	_ok("영역 아홉 다 테두리가 서고 토막마다 한쪽만 영역이다", rim_ok, rim_txt)
+	_ok("나머지를 0.16 보다 세게 누르고 테두리 선 · 그늘이 선다", float(g.ORDER.dim_a) > 0.16
+			and float(g.ORDER.rim_a) > 0.5 and float(g.ORDER.rim_dk) > 0.0)
 	var src := FileAccess.get_file_as_string("res://scripts/game.gd")
 	var i0: int = src.find("func _order_lit_e")
 	var i1: int = src.find("func _to_pick", i0)
