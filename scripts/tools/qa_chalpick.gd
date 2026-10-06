@@ -67,16 +67,14 @@ func _process(_d: float) -> bool:
 	print("챌린지 고르는 길\n")
 
 	# ── ① 잠금 ────────────────────────────────────────────
-	print("① 잠금 — 완주 한 번")
+	print("① 잠금 없음 — 처음부터 열린다(2026-10-06)")
 	Save.wipe()
-	_ok("완주 0 이면 잠겨 있다", not g._chal_unlocked(),
+	_ok("완주 0 이어도 열려 있다", g._chal_unlocked(),
 			"완주 %d" % Save.stat("wins"))
 	g._open_newrun()
 	g._click(g._nr_tab(1).get_center())
-	_ok("잠긴 탭을 눌러도 안 열린다", g.newrun_tab == 0, "탭 %d" % g.newrun_tab)
-	_ok("거절이 울었다", g.deny_flash > 0.0)
-	Save.bump("wins")
-	_ok("완주 1 이면 열린다", g._chal_unlocked())
+	_ok("완주 0 에서 탭을 누르면 열린다", g.newrun_tab == 1, "탭 %d" % g.newrun_tab)
+	g._nr_tab_set(0)
 
 	# ── ② 표의 글자 그대로 ────────────────────────────────
 	print("\n② 목록 — 새로 쓴 글이 한 자도 없다")
