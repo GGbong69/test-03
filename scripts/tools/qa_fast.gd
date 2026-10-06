@@ -129,8 +129,8 @@ func _stage(n: int, sn := -1) -> void:
 #    leak     걸음 안에서 chip_j 가 0 에 못 닿은 적이 있나(카드 춤이 샜다)
 #    wind_leak · wind_top   모음 시계(wind_t)가 걸음 안에서 0 에 못 닿은 적이
 #             있나 · 그 시계가 선 가장 큰 값
-#    tick_n · tick_left   띠 톡 칸을 세운 수 · 정산이 끝난 프레임에 끝 칸(떨어지는
-#             동전)이 아직 안 났나
+#    tick_n · tick_left   띠 톡 칸을 세운 수 · 정산이 끝난 프레임에 끝 칸(착지)에
+#             아직 안 닿았나
 #    tf_top   띠 점수 톡 빛(tick_flash)이 선 가장 큰 값
 #  q 를 주면 chip 줄 대신 그 큐를 세운다(목표는 tgt — 기본은 안 넘기게 올린다).
 func _play(n: int, hold: bool, sn := -1, q := [], tgt := 100000) -> Dictionary:
@@ -192,8 +192,8 @@ func _play(n: int, hold: bool, sn := -1, q := [], tgt := 100000) -> Dictionary:
 			danced = false
 		wind_top = maxf(wind_top, g.wind_t)
 		#  띠 톡도 걸음 안에서 끝난다(2026-10-06). 합계가 마지막 걸음이라 정산이
-		#  끝나는 프레임이 그 걸음의 끝이다 — 그 프레임까지 끝 칸이 났어야 한다.
-		#  _tick_score 가 _next_step 앞이라 같은 프레임에 난 동전도 안이다.
+		#  끝나는 프레임이 그 걸음의 끝이다 — 그 프레임까지 끝 칸(착지)에 닿았어야 한다.
+		#  _tick_score 가 _next_step 앞이라 같은 프레임의 착지도 안이다.
 		if g.tick_n > 0:
 			tick_n = g.tick_n
 			tick_left = g.tick_i < g.tick_n
@@ -363,15 +363,15 @@ func _run() -> void:
 	_ok("ⓟ-b 정산이 끝나면 모음 시계도 0", wslow.flash <= 0.0001
 			and wfast.flash <= 0.0001 and g.wind_t <= 0.0001,
 			"최대 %.4f · %.4f" % [wslow.flash, wfast.flash])
-	#  띠 톡 — 합계 걸음 안에서 끝 칸(떨어지는 동전)까지 난다(1배 · 2.5배). 2026-10-06
+	#  띠 톡 — 합계 걸음 안에서 끝 칸(착지)까지 닿는다(1배 · 2.5배). 2026-10-06
 	_ok("ⓟ-f 띠 톡이 합계 걸음 안에서 끝난다 (1배 · 2.5배)",
 			int(wslow.tick_n) >= 4 and int(wfast.tick_n) >= 4
 			and not bool(wslow.tick_left) and not bool(wfast.tick_left),
 			"칸 %d · %d · 남은 칸 %s · %s" % [int(wslow.tick_n), int(wfast.tick_n),
 					wslow.tick_left, wfast.tick_left])
-	#  띠 점수 톡 빛(tick_flash)도 합계 걸음 안에서 0 에 닿는다 — 가장 긴 굴림 창
-	#  (gn 1 · GROW.div_hi)을 목표를 넘기는 발로 세워 보통 · 빨리 보기로 돌린다.
-	#  끝 칸이 걸음의 87.5% 에 나고 빛 창이 9.75% 다(TALLY.flash_r). 2026-10-06
+	#  띠 점수 톡 빛(tick_flash)도 합계 걸음 안에서 0 에 닿는다 — gn 1 을 목표를
+	#  넘기는 발로 세워 보통 · 빨리 보기로 돌린다. 착지 프레임에 빛이 1 로 서고 착지가
+	#  카드 시계를 남은 걸음에 다시 매므로 그 걸음 안에서 걷힌다(TALLY.flash_r). 2026-10-06
 	var gq := [{"k": "chip", "v": 2000}, {"k": "mult", "v": 1}, {"k": "wind"},
 			{"k": "total"}]
 	var tslow := _play(0, false, -1, gq, 1000)

@@ -134,20 +134,21 @@ func _stage_many(r: float, n: int, tgt := 1000) -> void:
 		g.queue.append({"k": "total"})
 
 
-#  합계 걸음이 **나는 프레임마다** 단·멈춤·침묵을 적는다(total 이 오르는
-#  프레임 하나로 잡는다 — grow_dist 가 쓰는 그 검출이다).
+#  합계 걸음이 **착지하는 프레임마다** 단·멈춤·침묵을 적는다(land_live 가 내려가는
+#  프레임 하나로 잡는다 — 걸음 머리는 조용하고 그 셋은 착지에서 선다, 2026-10-06).
 func _walk(n: int) -> Array:
 	var out := []
-	var prev: int = int(g.total)
+	var live := false
 	var fr := 0
 	while g.state == g.S.RESOLVE and out.size() < n and fr < 6000:
 		g._process(1.0 / 60.0)
 		fr += 1
-		if int(g.total) != prev:
-			prev = int(g.total)
+		#  단 · 멈춤 · 늦춘 소리는 착지 프레임(land_live 가 내려간 프레임)에 선다(2026-10-06).
+		if live and not g.land_live:
 			out.append({"hot": int(g.fire_hot), "lay": int(g.fire_lay),
 					"stop": snappedf(float(g.hitstop), 0.001),
 					"snd": float(g.fire_snd) > 0.0})
+		live = g.land_live
 	return out
 
 
@@ -463,27 +464,28 @@ func _run() -> void:
 	#  오르는데 겹이 내려갔다 — 실측으로 r 0.55 겹 2 → r 0.62 겹 3 → r 0.70 겹 2.
 	#  점수를 읽게 하려고 만든 층이 「작아졌다」고 말한 것이다. 같은 걸음 셋을
 	#  같은 판에서 이어 재고, **겹이 한 번도 안 내려가는지**를 잰다.
-	#  ⚠ 걸음 경계는 **total 이 오르는 프레임**으로 잡는다(grow_dist 와 같은 검출).
-	#  _play() 는 큐가 빌 때까지 도므로 걸음 셋을 한 번에 삼켜 버린다 — 처음에 그렇게
-	#  적어서 gn 이 셋 다 0.65 로 찍혔다.
+	#  ⚠ 걸음 경계는 **착지 프레임**(land_live 가 내려가는 프레임)으로 잡는다 — 겹은
+	#  착지에서 선다(2026-10-06). 다음 걸음의 값은 그 프레임에 미리 세운다(다음 걸음
+	#  머리가 cur_chip 을 읽는다). _play() 는 큐가 빌 때까지 도므로 걸음 셋을 한 번에
+	#  삼켜 버린다 — 처음에 그렇게 적어서 gn 이 셋 다 0.65 로 찍혔다.
 	var rs := [0.55, 0.62, 0.70]
 	_stage_many(float(rs[0]), 3)
 	var lay_seq := []
 	var gn_seq := []
 	var pi := 0
-	var prev_t: int = int(g.total)
+	var live5 := false
 	var fr5 := 0
 	while g.state == g.S.RESOLVE and fr5 < 4000:
 		g._process(1.0 / 60.0)
 		fr5 += 1
-		if int(g.total) != prev_t:
-			prev_t = int(g.total)
+		if live5 and not g.land_live:
 			lay_seq.append(int(g.fire_lay))
 			gn_seq.append(snappedf(g._grow_n(), 0.001))
 			pi += 1
 			if pi < rs.size():
 				g.cur_chip = int(round(float(rs[pi]) * float(g.target)))
 				g.cur_mult = 1
+		live5 = g.land_live
 	var mono := true
 	for j in range(1, lay_seq.size()):
 		if int(lay_seq[j]) < int(lay_seq[j - 1]):
@@ -851,60 +853,79 @@ func _run() -> void:
 			% [Dev.pick["ftier"], Dev.pick["fglow"], want_g])
 	g.fire_lock = -1
 	g.fire_mul = 1.0
-	#  「총합 걸음 다시 보기」 넷이 **가장자리도 같이** 세운다.
+	#  「총합 걸음 다시 보기」 넷이 **가장자리도 같이** 세운다 — 착지가 세우므로 착지
+	#  프레임까지 돌린다. 걸음 밖(판 고르기)에서 누르는 줄이라 큐 없이 세운다.
 	_stage(0.90, 1)
+	g.queue.clear()
+	g.state = g.S.PICK
 	g.fire_t = 0.0
 	g.fire_hot = 0
 	g.fire_lay = 0
 	Dev.pick["grow"] = 3              # 천장 2.00
 	Dev._run(g, {"k": "grow"})
-	_ok("⑭-e 「총합 걸음 다시 보기」가 테두리도 세운다",
+	_land_wait()
+	_ok("⑭-e 「총합 걸음 다시 보기」가 착지에서 테두리도 세운다",
 		int(g.fire_hot) >= 1 and int(g.fire_lay) >= 1 and float(g.fire_t) > 0.0,
 		"%d단 · 겹 %d단 · 창 %.2f" % [g.fire_hot, g.fire_lay, g.fire_t])
-	#  「한 방」(_card_big)도 같은 한 함수를 부른다 — 사본을 안 늘렸다.
+	#  「한 방」(_card_big)도 같은 착지(_tally_land)를 탄다 — 사본을 안 늘렸다.
 	_stage(0.90, 1)
+	g.queue.clear()
 	g.fire_t = 0.0
 	g.fire_hot = 0
 	g.fire_lay = 0
 	Dev._card_big(g)
-	_ok("⑭-f 「한 방」도 테두리와 멈춤 배수를 같이 세운다",
+	_land_wait()
+	_ok("⑭-f 「한 방」도 착지에서 테두리와 멈춤 배수를 같이 세운다",
 		int(g.fire_hot) >= 1 and int(g.fire_lay) >= 1
 		and float(g.fire_t) > 0.0 and float(g.hitstop) > 0.0,
 		"%d단 · 겹 %d단 · 창 %.2f · 멈춤 %.3f"
 		% [g.fire_hot, g.fire_lay, g.fire_t, g.hitstop])
-	#  ⚠ 부르는 이름이 _fire_arm → **_fire_peek** 으로 바뀌었다(2026-09-26).
-	#  살아 있는 판의 fire_used · fire_peak 을 태우던 것을 그 문 하나로 막았다 —
-	#  ⑭-h 가 그 장부를 직접 잰다. 여기서 재는 것은 여전히 「사본을 안 늘렸다」다:
-	#  dev 쪽에 _fire_tier 사본이 0개이고 게임 쪽 함수를 두 자리가 같이 부른다.
-	_ok("⑭-g dev 쪽이 게임 식을 새로 베끼지 않았다(_fire_peek 을 부른다)",
-		_dev_count("g._fire_arm(") == 1 and _dev_peeks() >= 2
-		and not _dev_has("_fire_tier"),
-		"g._fire_arm( %d곳(문 안 하나) · _fire_peek %d곳"
-			% [_dev_count("g._fire_arm("), _dev_peeks()])
+	Dev.card_ph = 0
+	Dev.card_back = {}
+	g.hitstop = 0.0
+	#  ⚠ 부르는 이름이 _fire_arm → _fire_peek(2026-09-26) → **게임 쪽 착지**(2026-10-06)로
+	#  바뀌었다. 미리보기 둘은 _tally_arm 에 peek 참을 넘기고, 착지(_tally_land)가
+	#  「판에 한 번」 장부를 떠 두고 되돌린다 — ⑭-h 가 그 장부를 직접 잰다. 여기서 재는
+	#  것은 「사본을 안 늘렸다」다: dev 쪽에 _fire_tier 사본이 0개이고 _fire_arm 을 직접
+	#  부르는 자리도 0개이며, 미리보기 둘이 게임 쪽 함수를 peek 로 부른다.
+	_ok("⑭-g dev 쪽이 게임 식을 새로 베끼지 않았다(착지는 게임 쪽 한 함수)",
+		_dev_count("g._fire_arm(") == 0 and _dev_count("g._tally_arm(") >= 2
+		and _dev_count("false, true)") >= 2
+		and not _dev_has("_fire_tier") and not _dev_has("_fire_peek"),
+		"g._fire_arm( %d곳 · g._tally_arm( %d곳 · peek 참 %d곳"
+			% [_dev_count("g._fire_arm("), _dev_count("g._tally_arm("),
+			_dev_count("false, true)")])
 	#  ⑭-h **미리보기가 「판에 한 번」 장부를 안 태운다.** (2026-09-26 · 되짚어 고침)
 	#  실측으로 「다시 보기」 천장 2.00 한 번에 fire_used true · fire_peak 2000 이
 	#  되고 되돌리는 자리가 없었다 — 그러면 그 판의 나머지 걸음이 진짜로 4단 자격을
 	#  얻어도 안 나고 문 ②(판 최고 기록)가 그 판 내내 죽는다. ⑭-c 의 snap 다섯이
 	#  target·total·last_gain·leg_no·gold 뿐이라 이 둘을 구조적으로 못 잡았다.
+	#  착지 프레임까지 돌려서 잰다 — 장부를 건드리는 자리가 착지다(2026-10-06).
 	_stage(0.90, 1)
+	g.queue.clear()
+	g.state = g.S.PICK
 	g.fire_used = false
 	g.fire_peak = 0
 	g.last_gain = 0
 	Dev.pick["grow"] = 3              # 천장 2.00 — last_gain 이 2 × 목표로 선다
 	Dev._run(g, {"k": "grow"})
+	var landed1: bool = _land_wait()
 	var burn1 := [bool(g.fire_used), int(g.fire_peak)]
 	_stage(0.90, 1)
+	g.queue.clear()
 	g.fire_used = false
 	g.fire_peak = 0
 	g.last_gain = 0
 	Dev._card_big(g)
+	var landed2: bool = _land_wait()
 	Dev._card_done(g)
 	Dev._card_nums(g)
+	g.hitstop = 0.0
 	var burn2 := [bool(g.fire_used), int(g.fire_peak)]
-	_ok("⑭-h 미리보기 둘이 「판에 한 번」 장부를 안 태운다",
-		burn1 == [false, 0] and burn2 == [false, 0],
-		"다시 보기 %s · 한 방 %s (둘 다 [false, 0] 이어야 한다)"
-		% [burn1, burn2])
+	_ok("⑭-h 미리보기 둘이 착지에서도 「판에 한 번」 장부를 안 태운다",
+		landed1 and landed2 and burn1 == [false, 0] and burn2 == [false, 0],
+		"다시 보기 %s · 한 방 %s (둘 다 [false, 0] 이어야 한다) · 착지 %s · %s"
+		% [burn1, burn2, landed1, landed2])
 
 	# ── ⑮ 글자 0자 · 밸런스 불변 · 입력 ──────────────────────
 	print("\n── ⑮ 글자 0자 · 밸런스 불변 · 입력 ──────────")
@@ -953,6 +974,17 @@ func _run() -> void:
 			"%.3f초" % (float(g.CARDFX.stop) * float(F.stop_mul[2])))
 
 
+#  착지 프레임(land_live 가 내려가는 프레임)까지 돌린다. 착지했으면 참.
+func _land_wait() -> bool:
+	var live: bool = g.land_live
+	for _f in 600:
+		g._process(1.0 / 60.0)
+		if live and not g.land_live:
+			return true
+		live = g.land_live
+	return false
+
+
 #  ── 소스 훑기 ────────────────────────────────────────────
 #  「글자 0자」와 「가드를 안 베꼈다」를 재는 길이 소스 훑기밖에 없다 —
 #  qa_words 가 같은 어법을 쓴다.
@@ -984,12 +1016,6 @@ func _dev_calls(needle: String) -> int:
 		n += 1
 		i = txt.find("g." + needle, i + 1)
 	return n
-
-
-#  dev.gd 안에서 미리보기 문을 부르는 자리 수. `g.` 접두가 없는 static 호출이라
-#  _dev_calls 로는 못 센다 — 셈하는 자를 따로 둔다.
-func _dev_peeks() -> int:
-	return _dev_count("_fire_peek(g,")
 
 
 #  dev.gd 가 게임 쪽 식을 손으로 베낀 자리가 있는가(사본 수를 잠그는 자).

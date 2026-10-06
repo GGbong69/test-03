@@ -150,7 +150,9 @@ func _throw(kill := false, cap := 900, deep := -1) -> Dictionary:
 			"swap": false, "turn": false,
 			"slam": -1, "slam_qt": -1.0, "slam_hs": -1.0,
 			"pre_shown": -1.0, "arm_shown": -1.0, "gn": -1.0, "qt0": -1.0,
-			"hit": 0, "hit_f": -1}
+			"hit": 0, "hit_f": -1, "flash": -1.0, "from": -1.0, "tot": -1,
+			"land": -1, "land_hs": -1.0, "land_drop": -1.0, "land_norm": -1.0,
+			"st_f": -1, "clear_shk": -1.0}
 	g.target = 1
 	g.total = 0
 	g.state = g.S.CONFIRM
@@ -160,7 +162,10 @@ func _throw(kill := false, cap := 900, deep := -1) -> Dictionary:
 	var pool: int = maxi((g.sfx_pool as Array).size(), 1)
 	var ps_prev: int = g.pitch_step
 	var shown_prev: float = g.shown
+	var live_prev: bool = false
+	var drop_prev := 0.0
 	for f in cap:
+		var qt_prev: float = g.qt
 		#  ⚠ **_process 보다 앞이다.** 삐걱은 그 프레임 안에서 울므로,
 		#  뒤에 적으면 첫 단이 자가 뜬 3단 음으로 난다.
 		if deep >= 0 and g.brk_live:
@@ -188,6 +193,8 @@ func _throw(kill := false, cap := 900, deep := -1) -> Dictionary:
 				o.hit += 1
 				if o.hit_f < 0:
 					o.hit_f = f
+			if snm == "settle_total" and o.st_f < 0:
+				o.st_f = f
 			if o.arm >= 0 and o.clear < 0 and g.state != g.S.CLEAR:
 				match snm:
 					"board_thud":
@@ -201,7 +208,18 @@ func _throw(kill := false, cap := 900, deep := -1) -> Dictionary:
 			o.slam = f
 			o.slam_qt = g.qt
 			o.slam_hs = g.hitstop
+			o.from = g.score_from
+			o.tot = g.total
 		ps_prev = g.pitch_step
+		#  착지 — 「+n」 · 띠가 끝값에 닿아 내리치는 프레임(2026-10-06).
+		#  qt 가 준 몫을 바로 앞 프레임(보통 프레임 — 배움 늦추기 · 빨리 보기가 탄 값)과 댄다.
+		if live_prev and not g.land_live and o.land < 0:
+			o.land = f
+			o.land_hs = g.hitstop
+			o.land_drop = qt_prev - g.qt
+			o.land_norm = drop_prev
+		live_prev = g.land_live
+		drop_prev = qt_prev - g.qt
 		if g.brk_live and o.arm < 0:
 			o.arm = f
 			o.shake = g.shake
@@ -213,6 +231,7 @@ func _throw(kill := false, cap := 900, deep := -1) -> Dictionary:
 			o.arm_shown = g.shown
 			o.gn = g._grow_n()
 			o.qt0 = g.brk_qt0
+			o.flash = g.screen_flash
 		shown_prev = g.shown
 		if g.brk_fired and o.fire < 0:
 			o.fire = f
@@ -234,6 +253,7 @@ func _throw(kill := false, cap := 900, deep := -1) -> Dictionary:
 			g._brk_skip()
 		if g.state == g.S.CLEAR:
 			o.clear = f
+			o.clear_shk = g.shake
 			break
 	return o
 
@@ -277,36 +297,116 @@ func _run() -> void:
 	var beat: float = g.beat
 
 	# ── ① 돌파 프레임의 값이 하나도 안 바뀌었다 ──────────────
-	#  돌파 걸음은 머리에서 내리치고(멈춤 · 걸음 길이는 그 프레임에서 잰다) 목표
-	#  달성 · 도안은 상단 띠가 목표에 닿는 프레임에 선다(2026-10-06).
+	#  돌파 걸음은 머리가 조용하고(소리 · 멈춤 없음) 목표 달성 · 도안은 상단 띠가
+	#  목표를 넘는 프레임에, 내리침(settle_total · 멈춤)은 끝값에 닿는 착지 프레임에
+	#  선다 — 넘기가 착지보다 먼저다(2026-10-06).
 	_open()
 	var a := _throw()
 	_ok("돌파 프레임에 도안이 섰다", a.arm >= 0 and int(a.arm) > int(a.slam),
-			"내리침 %d프레임째 · 도안 %d프레임째" % [a.slam, a.arm])
-	_ok("흔들림은 돌파가 낸 13.0 그대로", is_equal_approx(float(a.shake), 13.0),
-			"shake %.2f — 연출이 한 톨도 안 더했다" % a.shake)
-	_ok("멈춤은 CARDFX.stop 밑", float(a.slam_hs) <= stop + 0.0001,
-			"hitstop %.3f / 상한 %.3f" % [a.slam_hs, stop])
+			"걸음 %d프레임째 · 도안 %d프레임째" % [a.slam, a.arm])
+	#  넘는 프레임의 흔들림 · 섬광은 TALLY.cross_shk · cross_flash 다 — 흔들림은 남은
+	#  걸음(착지 멈춤을 뺀) 안에서 죽게 묶일 수 있다(_shk_room).
+	var cshk: float = float(g.TALLY.cross_shk)
+	_ok("흔들림 · 섬광은 넘기가 낸 값 그대로",
+			float(a.shake) <= cshk + 0.0001 and float(a.shake) > 0.0
+			and is_equal_approx(float(a.flash), float(g.TALLY.cross_flash)),
+			"shake %.2f(상한 %.2f) · 섬광 %.2f — 연출이 한 톨도 안 더했다"
+			% [a.shake, cshk, a.flash])
+	_ok("걸음 머리는 소리 · 멈춤이 없다",
+			float(a.slam_hs) <= 0.0 and int(a.st_f) > int(a.slam),
+			"머리 멈춤 %.3f · settle_total %d프레임째 (걸음 %d)" % [a.slam_hs, a.st_f, a.slam])
 	var brk_q: float = beat * float(g.TALLY.brk)
 	_ok("걸음 길이를 안 건드렸다",
-			absf(float(a.slam_qt) - (brk_q - float(a.slam_hs))) < 0.002,
-			"qt %.3f / 기대 %.3f" % [a.slam_qt, brk_q - float(a.slam_hs)])
-	_ok("도안은 띠가 목표에 닿는 프레임에 선다",
+			absf(float(a.slam_qt) - brk_q) < 0.002,
+			"qt %.3f / 기대 %.3f" % [a.slam_qt, brk_q])
+	#  착지 멈춤은 CARDFX.stop(돌파 ×1) 밑이고 그 프레임의 qt 에서 빠진다 — qt 가 멈춤
+	#  + 한 프레임만큼 준다. settle_total 이 그 프레임에 난다.
+	_ok("착지 멈춤은 CARDFX.stop 밑이고 qt 에서 빠진다",
+			int(a.land) > int(a.arm) and float(a.land_hs) > 0.0
+			and float(a.land_hs) <= stop + 0.0001
+			and absf(float(a.land_drop) - float(a.land_hs) - float(a.land_norm)) < 0.0005
+			and int(a.st_f) == int(a.land),
+			"착지 %d프레임째 · 멈춤 %.3f / 상한 %.3f · qt 준 몫 %.4f(보통 프레임 %.4f) · settle_total %d"
+			% [a.land, a.land_hs, stop, a.land_drop, a.land_norm, a.st_f])
+	_ok("도안은 띠가 목표를 넘는 프레임에 선다",
 			float(a.pre_shown) < float(g.target) and float(a.arm_shown) >= float(g.target),
 			"앞 프레임 띠 %.3f → %.3f / 목표 %d" % [a.pre_shown, a.arm_shown, g.target])
 	#  금의 자는 그 프레임에 남은 걸음이다 — _cross_qt(개발자 다시 보기의 자)와 한
-	#  프레임 안. 넘는 프레임은 걸음 시계를 이미 한 프레임 탄 뒤에 잡힌다.
-	var cq: float = g._cross_qt(float(a.gn))
+	#  프레임 안. pc 는 넘는 자리가 이득의 몇 몫인가다. 넘는 프레임은 걸음 시계를 이미
+	#  한 프레임 탄 뒤에 잡힌다.
+	var pc: float = (float(g.target) - float(a.from)) / maxf(float(a.tot) - float(a.from), 1.0)
+	var cq: float = g._cross_qt(pc)
 	_ok("금의 자가 넘는 순간의 남은 걸음이다",
 			float(a.qt0) >= cq - 0.0001 and float(a.qt0) <= cq + DT + 0.0001,
-			"brk_qt0 %.4f / _cross_qt(gn %.2f) %.4f" % [a.qt0, a.gn, cq])
+			"brk_qt0 %.4f / _cross_qt(pc %.3f) %.4f" % [a.qt0, pc, cq])
 	_ok("목표 달성 소리가 넘는 프레임에 한 번",
 			int(a.hit) == 1 and int(a.hit_f) == int(a.arm),
 			"target_hit %d번 · %d프레임째 (도안 %d)" % [a.hit, a.hit_f, a.arm])
+	#  ── ①-a 목표가 이득의 가운데 · 끝에 걸려도 넘기가 그 프레임에 · 착지 앞에 선다 ──
+	#  이득 200 · 목표가 앞 total 에서 100(가운데) · 200(끝) 위다. 한 굴림이 목표를
+	#  지나간다(꺾는 점 없음) — 넘는 프레임 앞뒤로 띠가 목표 밑 · 위에 선다.
+	var mid_ok := true
+	var mid_txt := ""
+	for gap_t in [100, 200]:
+		_open()
+		g.target = 1000
+		g.total = 1000 - gap_t
+		g.shown = float(g.total)
+		g.cur_chip = 200
+		g.cur_mult = 1
+		g.score_mul = 1.0
+		g.score_mode = "std"
+		g.burst_hits = []
+		g.queue = [{"k": "total"}]
+		g.state = g.S.RESOLVE
+		g.qt = 0.0
+		var pv: float = g.shown
+		var lv := false
+		var cr_f := -1
+		var ld_f := -1
+		var cr_ok := false
+		for f2 in 400:
+			g._process(DT)
+			if g.state != g.S.RESOLVE:
+				break
+			if g.brk_live and cr_f < 0:
+				cr_f = f2
+				cr_ok = pv < 1000.0 and g.shown >= 1000.0
+			if lv and not g.land_live:
+				ld_f = f2
+			lv = g.land_live
+			pv = g.shown
+		if cr_f < 0 or ld_f < 0 or cr_f > ld_f or not cr_ok:
+			mid_ok = false
+		mid_txt += "목표가 이득의 %d/200 → 넘기 %d · 착지 %d · " % [gap_t, cr_f, ld_f]
+	_ok("①-a 목표가 이득 어디에 걸려도 넘는 프레임에 · 착지 앞에 선다", mid_ok, mid_txt)
+	#  ── ①-c 「목표 달성」이 카드와 안 겹친다 — 카드 두 쪽 · 두 높이 ──
+	#  처음 부푼 크기(×1.45)의 글자 상자로 잰다. 카드는 7px 까지 떠오른다.
+	var pop_ok := true
+	var pop_txt := ""
+	var psz := int(24.0 * 1.45)
+	var pw: float = g.font.get_string_size("목표 달성", HORIZONTAL_ALIGNMENT_LEFT, -1, psz).x
+	var pa: float = g.font.get_ascent(psz)
+	for side in [-1, 1]:
+		for cy in [74.0, 206.0]:
+			g.card_side = side
+			g.card_y = cy
+			g.card_p = 1.0
+			var pp: Vector2 = g._goal_pop_at()
+			var prc := Rect2(pp.x - pw * 0.5, pp.y - pa - 24.0, pw, pa + 24.0 + 4.0)
+			var crc := Rect2(g.card_pos() + Vector2(0.0, -7.0),
+					Vector2(g.CARD_W, g.CARD_H + 7.0)).grow(float(g.CARDFX.burst))
+			var scr := Rect2(Vector2.ZERO, g.VIEW)
+			if prc.intersects(crc) or not scr.encloses(prc):
+				pop_ok = false
+			pop_txt += "%s%d 글자 x[%.0f,%.0f] · 카드 x[%.0f,%.0f] · " % ["왼" if side < 0
+					else "오른", int(cy), prc.position.x, prc.end.x, crc.position.x, crc.end.x]
+	_ok("①-c 「목표 달성」이 카드와 안 겹친다", pop_ok, pop_txt)
 
-	# ── ①-b 시계 없는 길 — 목표 달성이 한 번 난다 ─────────────
+	# ── ①-b 시계 없는 길 — 목표 달성 · 착지가 한 번씩 난다 ─────────────
 	#  settle_probe · qa_chal · qa_grow_step 처럼 _next_step 을 시계 없이 부르는
-	#  도구는 띠가 안 오른다. 다음 _next_step 의 머리가 _finish_leg 보다 먼저 낸다.
+	#  도구는 띠가 안 오른다. 다음 _next_step 의 머리가 _finish_leg 보다 먼저 넘기 ·
+	#  착지를 낸다(걸음이 끝났으니 착지는 안 멈춘다).
 	_open()
 	g.target = 100
 	g.total = 99
@@ -320,17 +420,18 @@ func _run() -> void:
 	var sn0: int = g.sfx_next
 	g._next_step()
 	var cl_slam := _snd_since(sn0)
-	var cl_live: bool = g.cross_live
+	var cl_live: bool = g.cross_live and g.land_live
 	var sn1: int = g.sfx_next
 	g._next_step()
 	var cl_end := _snd_since(sn1)
-	_ok("시계 없는 길 — 내리칠 때는 아직 안 난다",
-			cl_live and not cl_slam.has("target_hit") and cl_slam.has("settle_total"),
-			"내리침 %s · 남음 %s" % [str(cl_slam), cl_live])
-	_ok("시계 없는 길 — 판 끝보다 먼저 한 번 난다",
-			cl_end.count("target_hit") == 1 and not g.cross_live
+	_ok("시계 없는 길 — 걸음 머리에서는 둘 다 안 난다",
+			cl_live and not cl_slam.has("target_hit") and not cl_slam.has("settle_total"),
+			"머리 %s · 남음 %s" % [str(cl_slam), cl_live])
+	_ok("시계 없는 길 — 판 끝보다 먼저 한 번씩 난다",
+			cl_end.count("target_hit") == 1 and cl_end.count("settle_total") == 1
+			and not g.cross_live and not g.land_live and g.hitstop <= 0.0
 			and g.state == g.S.CLEAR and not g.brk_live,
-			"%s · state %d" % [str(cl_end), g.state])
+			"%s · state %d · 멈춤 %.3f" % [str(cl_end), g.state, g.hitstop])
 
 	# ── ② 글자 0자 ──────────────────────────────────────────
 	#  연출을 통째로 손으로 돌려 놓고 팝업 수를 본다. 던져서 재면 그 발이
@@ -821,6 +922,10 @@ func _run() -> void:
 	_ok("빨리 보기 — 목표 달성 소리가 넘는 프레임에 한 번",
 			int(fr.hit) == 1 and int(fr.hit_f) == int(fr.arm),
 			"target_hit %d번 · %d프레임째 (도안 %d)" % [fr.hit, fr.hit_f, fr.arm])
+	#  넘기 · 착지 흔들림은 남은 걸음 안에서 죽게 묶인다 — 정산 화면으로 안 샌다(2026-10-06).
+	_ok("넘기 · 착지 흔들림이 정산 화면으로 안 샌다 (1배 · 빨리 보기)",
+			float(fr.clear_shk) <= 0.0001 and float(live.clear_shk) <= 0.0001,
+			"정산 프레임 shake 1배 %.3f · 2.5배 %.3f" % [live.clear_shk, fr.clear_shk])
 
 	# ── ⑬ 소크 — 그림 0 · 소리 0 · 시간 0 ───────────────────
 	_open()
@@ -847,16 +952,20 @@ func _run() -> void:
 			int(mo.brk) + int(mo.snd) == 3 and int(mo.crack) == int(mo.stage),
 			"한방 %d + 톡 %d = 3 · 삐걱 %d(단 %d)"
 			% [int(mo.brk), int(mo.snd), int(mo.crack), int(mo.stage)])
+	#  걸음 머리부터 잰다 — 넘는 프레임이 켠 쪽과 다르다(아래 줄).
 	_ok("모션 끄기 — 프레임 수가 그대로",
-			int(mo.clear) - int(mo.arm) <= int(live.clear) - int(live.arm) + 4,
+			int(mo.clear) - int(mo.slam) <= int(live.clear) - int(live.slam) + 4,
 			"%d프레임 (켬 %d프레임 — 돌파 멈춤 60ms 가 원래 없다)"
-			% [int(mo.clear) - int(mo.arm), int(live.clear) - int(live.arm)])
-	#  띠는 내리친 프레임 다음에 total 에 서지만 목표 달성은 켠 쪽과 같은 k 에서 난다.
-	_ok("모션 끄기 — 목표 달성이 켠 쪽과 같은 때 한 번",
+			% [int(mo.clear) - int(mo.slam), int(live.clear) - int(live.slam)])
+	#  굴림이 없다 — lead 가 끝나는 프레임에 띠가 끝값에 서고 그 프레임에 목표 달성 ·
+	#  착지(settle_total)가 같이 난다(2026-10-06).
+	_ok("모션 끄기 — 목표 달성 · 착지가 lead 끝 한 프레임에 한 번씩",
 			int(mo.hit) == 1 and int(mo.hit_f) == int(mo.arm)
-			and absi((int(mo.arm) - int(mo.slam)) - (int(live.arm) - int(live.slam))) <= 4,
-			"target_hit %d번 · 내리친 뒤 %d프레임 (켬 %d프레임)"
-			% [mo.hit, int(mo.arm) - int(mo.slam), int(live.arm) - int(live.slam)])
+			and int(mo.land) == int(mo.arm) and int(mo.st_f) == int(mo.arm)
+			and int(mo.arm) > int(mo.slam),
+			"target_hit %d번 · 걸음 뒤 %d프레임 · 착지 %d · settle_total %d"
+			% [mo.hit, int(mo.arm) - int(mo.slam), int(mo.land) - int(mo.slam),
+			int(mo.st_f) - int(mo.slam)])
 	g.motion_off = false
 
 	# ── ⑮ 손잡이 — 도구 51개가 지나는 문 ────────────────────

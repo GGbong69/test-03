@@ -384,69 +384,18 @@ static func _card_big(g: Node) -> void:
 	g.wind_on = false            # 앞 모음 걸음을 닫는다 — _next_step 머리와 같은 줄
 	g.last_gain = g._score_combine(g.cur_chip, g.cur_mult)
 	g.total_flash = 1.0
-	g.gain_roll = 1.0
-	g.card_burst = 1.0
-	#  ⚠ 흔들림·음정·띠 굴림을 **게임 쪽과 같은 식으로** 세운다(2026-09-26).
-	#  9.0 고정과 인자 없는 소리를 그대로 두면 이 미리보기가 거짓말을 한다 —
-	#  「미리보기의 걸음 길이가 큼 단과 같다」는 아래 주석이 세운 계약을
-	#  세기 축에도 그대로 물린다.
+	g.gain_roll = 0.0
 	var gn: float = g._grow_n()
-	g.shake = lerpf(float(g.GROW.shk_lo), float(g.GROW.shk_hi), gn * gn) * g.grow_shake
-	g.board_punch = 1.0
 	#  걸음 길이도 게임 쪽 한 함수로 — 손으로 베끼면 크기로 자라는 길이가 갈린다.
 	g.qt = g._tot_qt(gn, false)
 	g.step_pf = g._tot_pace()
-	#  띠 굴림 · 톡도 게임 쪽 한 함수로 — 합계 걸음과 같은 줄이다(2026-10-06).
-	g._tally_arm(gn, g.shown)
-	g._card_kick(float(g.CARDFX.kick_total), float(g.CARDFX.press_total))
-	g._card_kick(float(g.CARDFX.kick_big) - float(g.CARDFX.kick_total),
-			float(g.CARDFX.press_big))
-	#  ⚠ 가장자리와 멈춤 깊이도 **게임 쪽 한 함수로** 세운다(2026-09-26). 여기서
-	#  식을 또 베끼면 사본이 셋이 된다 — game.gd 의 _fire_arm 이 그 사본을 **줄이려고**
-	#  있는 함수다. 돌파가 아니므로 brk = false 다.
-	_fire_peek(g, gn)
-	#  4단이면 소리를 멈춤이 풀리는 프레임으로 늦춘다 — 게임 쪽과 같은 갈림이라야
-	#  미리보기가 거짓말을 안 한다.
-	var pit: float = g.SFX_BASE * pow(2.0, -float(g.GROW.semi) * gn / 12.0)
-	if int(g.fire_hot) >= 4 and not g.motion_off:
-		g.fire_snd = pit
-	else:
-		g._sfx("settle_total", pit)
-	# 멈춤도 걸음의 절반으로 묶는다 — 게임 쪽(총점 걸음)과 같은 뺄셈이라야
-	# 미리보기의 걸음 길이가 「큼」 단과 같다. 배수는 단이 쥔다(FIRE.stop_mul).
-	if not g.motion_off:
-		var sm: float = float(g.FIRE.stop_mul[clampi(int(g.fire_hot) - 2, 0, 2)])
-		g.hitstop = minf(float(g.CARDFX.stop) * sm, g.qt * 0.5)
-		g.qt -= g.hitstop
-		g.stop_fire = true
-		if g.hitstop <= 0.0:
-			g._fire_release()
-	elif g.fire_snd > 0.0:
-		g._fire_release()
+	#  「+0」에서 세어 올라 끝값에서 내리치는 것까지 게임 쪽 한 함수(_tally_arm)가
+	#  세운다 — 굴림 · 톡 · 착지(소리 · 흔들림 · 가장자리 · 금빛 테두리 · 멈춤)가 합계
+	#  걸음과 같은 줄이다(2026-10-06). 판 점수를 안 더하므로 **떠난 자리**를 이번
+	#  이득만큼 내려 둔다 — 카드와 띠가 같이 (총점 − 이득) → 총점으로 오른다(「총합
+	#  걸음 다시 보기」와 같은 자리). peek 참 — 착지가 「판에 한 번」 장부를 안 태운다.
+	g._tally_arm(gn, maxf(g.shown - float(g.last_gain), 0.0), false, true)
 	g.card_jrate = 1.0 / maxf(g.qt * float(g.CARDFX.jspan), 0.02)
-
-
-#  ══ 미리보기가 「판에 한 번」 장부를 태우지 않게 하는 문 ══ (2026-09-26)
-#  ⚠ g._fire_arm 은 fire_lock 이 −1(살아 있는 값)이면 _fire_tier 를 지나며
-#  **fire_used 를 세우고 fire_peak 을 미리보기 이득으로 못 박는다.** 실측으로
-#  「총합 걸음 다시 보기」 천장 2.00 한 번에 used true · peak 2000 이 되고,
-#  「한 방」은 peak 이 그 판 아무도 못 넘는 수(4900 × 90 = 441,000)로 섰다.
-#  _card_done · _card_nums 는 last_gain 만 되돌려서 이 둘이 샜다. 그러면
-#   · 그 판의 나머지 걸음이 진짜로 4단 자격을 얻어도 3단에 머문다(깊은 멈춤
-#     0.120 도 침묵도 안 난다),
-#   · fire_peak 이 박혀 문 ②(판 최고 기록)가 그 판 내내 죽는다.
-#  「개발자 모드가 런 진도를 한 톨도 안 만진다」는 이 쪽 규약이 새 멤버 둘에서만
-#  샌 것이다(qa_break 의 「목표 42→42」 · 아래 「다시 보기」 머리말). 미리보기가
-#  쓰는 것은 fire_hot · fire_lay · fire_t 뿐이므로 장부는 떠 두고 되돌린다.
-#  ⚠ 단 강제(fire_lock >= 0)에서는 _fire_tier 가 맨 앞에서 돌아 장부를 안 읽지만,
-#  이 문은 그 갈래에서도 값이 같으므로 조건을 안 갈라 둔다 — 갈라 두면 나중에
-#  한쪽만 고치게 된다.
-static func _fire_peek(g: Node, gn: float) -> void:
-	var fu: bool = g.fire_used
-	var fp: int = g.fire_peak
-	g._fire_arm(gn, false)
-	g.fire_used = fu
-	g.fire_peak = fp
 
 
 #  누르기 전 자리로 되돌린다. card_target 0 은 빈 큐 갈래가 하던 그 한 줄이다 —
@@ -2789,40 +2738,31 @@ static func _run(g: Node, e: Dictionary) -> void:
 			g.card_mode = 1
 			g.card_target = 1.0
 			g.total_flash = 1.0
-			g.gain_roll = 1.0
+			g.gain_roll = 0.0
 			g.qt = g._tot_qt(gn, false)     # 게임 쪽 한 함수 — 크기로 자라는 길이 그대로
 			g.card_jrate = 1.0 / maxf(g.qt * float(g.CARDFX.jspan), 0.02)
-			g.shake = lerpf(float(g.GROW.shk_lo), float(g.GROW.shk_hi), gn * gn) \
-					* g.grow_shake
-			g.board_punch = 1.0
 			#  **떠난 자리**를 이번 이득만큼 내려 둔다(2026-09-26 수선).
 			#  score_from = shown 이면 shown 이 이미 total 이라 띠가 한
-			#  픽셀도 안 굴러, 이 줄이 재생한다고 적어 둔 네 층 중 ①번이
+			#  픽셀도 안 굴러, 이 줄이 재생한다고 적어 둔 층 중 띠 굴림이
 			#  미리보기에서 통째로 안 보였다. total 은 그대로다 — 굴림이
 			#  끝나면 shown 이 제자리로 돌아온다. 0 에서 막는 것은 이득이
 			#  총점보다 큰 판 초반에 띠가 잠깐 마이너스를 찍기 때문이다.
-			#  굴림 · 톡은 게임 쪽 한 함수가 세운다(grow_roll 0 이면 안 세운다).
-			g._tally_arm(gn, maxf(g.shown - float(g.last_gain), 0.0))
-			g._card_kick(float(g.CARDFX.kick_total), float(g.CARDFX.press_total))
-			#  ⚠ **가장자리도 같이 세운다**(2026-09-26). 안 붙이면 이 줄이
-			#  재생한다고 적어 둔 층 중 가장자리만 미리보기에서 통째로 안 보인다 —
-			#  굴림이 score_from = shown 때문에 안 보였던 바로 위의 그 사고와 같은
-			#  꼴이다. 식을 베끼지 않고 게임 쪽 한 함수를 부른다.
-			#  ⚠ 여기서는 멈춤을 안 건다 — 이 줄은 **그 걸음만** 재생하는 자리라
-			#  화면을 얼리면 ◀▶ 로 넷을 잇달아 견주는 일이 끊긴다. 그래서 4단을
-			#  골라도 침묵이 안 난다(소리는 그대로 낸다) — 단 강제로 깊은 멈춤까지
-			#  보려면 위 「빈 박 단」 줄과 「한 방」(_card_big)을 쓴다.
-			#  ⚠ **_fire_peek 이다** — 바로 이 줄이 살아 있는 판의 fire_used ·
-			#  fire_peak 을 태웠다(위 _fire_peek 머리말에 실측을 적었다). 「런
-			#  진도를 한 톨도 안 만진다」는 이 줄의 규약이 새 멤버 둘에서 샜다.
-			_fire_peek(g, gn)
-			g._sfx("settle_total",
-					g.SFX_BASE * pow(2.0, -float(g.GROW.semi) * gn / 12.0))
-			#  ⚠ 겹 수를 같이 찍는다 — 단(fire_hot)과 겹(fire_lay)이 갈린 뒤로는
-			#  단만 찍으면 화면이 거짓말을 한다(4단이라도 겹은 gn 이 정한다).
-			_say("총합 걸음 %s · 세기 %.2f · 흔들림 %.1f · 빈 박 %d단 · 겹 %d"
-					% [GROW_R_NAMES[i % GROW_R.size()], gn, g.shake,
-					int(g.fire_hot), int(g.fire_lay)])
+			#  「+0」에서 세어 올라 끝값에서 내리치는 것까지 게임 쪽 한 함수(_tally_arm)가
+			#  세운다 — 굴림 · 톡 · 착지의 흔들림 · 판 움찔 · 몸 채기 · 가장자리 · 음정이
+			#  합계 걸음과 같은 줄이다(grow_roll 0 이면 머리에서 곧장 착지한다). peek 참 —
+			#  착지가 살아 있는 판의 「판에 한 번」 장부를 안 태운다(2026-10-06).
+			#  ⚠ 여기서는 멈춤을 안 건다 — 걸음(S.RESOLVE) 밖이라 착지가 안 얼린다.
+			#  ◀▶ 로 넷을 잇달아 견주는 줄이라 화면을 얼리면 그 일이 끊긴다. 4단을 골라도
+			#  침묵이 안 난다(소리는 그대로 낸다) — 깊은 멈춤까지 보려면 「한 방」을 쓴다.
+			#  ⚠ **런 진도를 한 톨도 안 만진다** — _brk_arm 도 안 부르고 넘기도 안 선다.
+			g._tally_arm(gn, maxf(g.shown - float(g.last_gain), 0.0), false, true)
+			#  ⚠ 겹 수를 같이 찍는다 — 단(fire_hot)과 겹(fire_lay)이 갈린 뒤로는 단만
+			#  찍으면 화면이 거짓말을 한다(4단이라도 겹은 gn 이 정한다). 착지 전이라
+			#  흔들림 · 겹은 착지가 세울 값이다.
+			_say("총합 걸음 %s · 세기 %.2f · 흔들림 %.1f · 겹 %d"
+					% [GROW_R_NAMES[i % GROW_R.size()], gn,
+					lerpf(float(g.GROW.shk_lo), float(g.GROW.shk_hi), gn * gn) * g.grow_shake,
+					int(g._fire_lay_of(gn))])
 			return
 		"fast":
 			#  배수만 민다. 바닥(걸음 4프레임)은 _fast_rate 가 씌우므로
@@ -3008,8 +2948,10 @@ static func _run(g: Node, e: Dictionary) -> void:
 					# 문턱이 100,000 이다). 마지막 걸음이 끝나는 프레임에
 					# _card_big 이 합계 카드를 손으로 놓는다(2026-09-18).
 			# 모음 걸음 — 게임 큐처럼 합계 앞 마지막 걸음이다. 셈이 없는 걸음이라
-			# 그대로 큐에 넣어 _next_step 이 그린다(2026-10-06).
-			g.queue.append({"k": "wind"})
+			# 그대로 큐에 넣어 _next_step 이 그린다(2026-10-06). 합계 카드가 오는
+			# 「한 방」에만 선다 — 게임에서 모음 뒤에는 언제나 합계가 내리친다.
+			if ci == 2:
+				g.queue.append({"k": "wind"})
 			# _pace() 가 읽는 두 값이다. 안 놓으면 앞 정산의 값이 남아 배속이
 			# 틀린 채로 돈다. 배속은 걸음의 자리(settle_n − 남은 큐 − 1)로
 			# 서므로 큐 길이 그대로 놓아야 자리가 게임과 같다. 「한 방」의 합계

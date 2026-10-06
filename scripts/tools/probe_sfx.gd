@@ -172,16 +172,16 @@ func _init() -> void:
 	#  여기 없는 이름은 1.0 — _sfx 가 f 를 안 주거나 SFX_BASE 그대로다.
 	#    page       _turn_f      min(1.05946^7, 1.50) = 1.4983 (R8)
 	#    leg_open   _leg_open_f  같은 식 = 1.4983
-	#    coin_land  띠가 total 에 닿는 동전(_tick_snd) 2^(12/12) = 2.0 — 꼭대기 반음
-	#               tick_f0 + semi(최대 24)의 한 옥타브 아래(2026-10-06). 판 소품
-	#               몸짓 587/392 = 1.4974 · 등급 예고 523/392 = 1.3342 는 그 밑이다
+	#    coin_land  판 소품 몸짓 587/392 = 1.4974 (판 동전이 저울 접시에 얹힌다 —
+	#               _prop_sell_beat · 2026-10-02). 등급 예고는 523/392 = 1.3342 (레어).
+	#               띠 끝 칸은 이제 동전이 아니라 착지(settle_total)다(2026-10-06)
 	#    score_tick _tick_snd    2^(24/12) = 4.0 — tick_f0 상한 12 + semi 12
 	#    coin_break _wreck_sfx   1.18 * (1 + WRECK.jit 0.06) = 1.2508
 	#    shop_smash _smash_sfx   1.14 * 1.04 = 1.1856
 	#    settle_*   _settle_f    3.78 — 위 정산 사다리가 따로 본다
 	print("")
 	print("- 지붕 -")
-	var push := {"page": 1.4983, "leg_open": 1.4983, "coin_land": 2.0,
+	var push := {"page": 1.4983, "leg_open": 1.4983, "coin_land": 1.4974,
 			"score_tick": 4.0, "coin_break": 1.2508, "shop_smash": 1.1856}
 	var rows := []
 	for nm3 in names:
@@ -210,9 +210,9 @@ func _init() -> void:
 	print("가장 밝은 %s %.1f%% / 문턱 %.0f%% · 잰 이름 %d"
 			% [String(rows[0][1]), float(rows[0][0]) * 100.0, HIGH * 100.0,
 					rows.size()])
-	#  띠 톡 둘(2026-10-06) — 이 표에서 가장 세게 미는 자리라 이름으로 찍는다.
+	#  띠 톡(2026-10-06) — 이 표에서 가장 세게 미는 자리라 이름으로 찍는다.
 	#  파일이 없으면 _tick_snd 가 합성음으로 난다.
-	for nm5 in ["score_tick", "coin_land"]:
+	for nm5 in ["score_tick"]:
 		var seen := false
 		for r5 in rows:
 			if String(r5[1]) == nm5:

@@ -609,17 +609,29 @@ func _score(g: Node) -> void:
 #  spin_mid — 미리보기 동안 칸에 적힌 수(_card_num)가 셈 값과 달랐던 프레임 수.
 #  칸이 앞 값에서 센다는 것이 미리보기에서도 서는지를 잰다(2026-10-06).
 var spin_mid := 0
+#  spin_up — 합계 카드가 착지 전에 적은 「+n」 가짓수 · spin_land — 착지 수(2026-10-06).
+var spin_up := 0
+var spin_land := 0
 
 
 func _card_spin(g: Node, cap := 1200) -> int:
 	var n := 0
 	spin_mid = 0
+	spin_land = 0
+	var ups := {}
+	var live: bool = g.land_live
 	while Dev.card_ph > 0 and n < cap:
 		g._process(1.0 / 60.0)
 		n += 1
 		if g.card_mode == 0 and (g._card_num(g.chip_from, g.cur_chip, g.chip_j) != g.cur_chip
 				or g._card_num(g.mult_from, g.cur_mult, g.mult_j) != g.cur_mult):
 			spin_mid += 1
+		if g.card_mode == 1 and g.land_live:
+			ups[g._card_gain()] = true
+		if live and not g.land_live:
+			spin_land += 1
+		live = g.land_live
+	spin_up = ups.size()
 	return n
 
 
@@ -663,14 +675,19 @@ func _card(g: Node) -> void:
 		Dev.pick["cardfx"] = ci
 		Dev.click(g, run_at)
 		var nm := String(Dev.CARDFX_STEPS[ci])
-		#  게임 큐처럼 마지막 걸음이 모음(wind)이다 — 합계 앞 그 걸음이
-		#  미리보기에도 선다(2026-10-06).
+		#  게임 큐처럼 합계 앞 마지막 걸음이 모음(wind)이다 — 합계 카드가 오는 「한 방」만
+		#  모음이 서고, 합계가 없는 둘은 모음 없이 끝난다(2026-10-06).
 		var qk := []
 		for e in g.queue:
 			qk.append(String(e.get("k", "")))
-		_say(not qk.is_empty() and String(qk[qk.size() - 1]) == "wind",
-				"%s — 마지막 걸음이 모음이다" % nm, str(qk))
+		var wind_last: bool = not qk.is_empty() and String(qk[qk.size() - 1]) == "wind"
+		_say(wind_last == (ci == 2) and qk.count("wind") == (1 if ci == 2 else 0),
+				"%s — 모음은 합계 카드 앞에만 선다" % nm, str(qk))
 		var fr := _card_spin(g)
+		#  「한 방」은 카드가 「+0」에서 세어 올라 착지한다 — 게임 쪽 _tally_arm 이 세운다.
+		if ci == 2:
+			_say(spin_up > 3 and spin_land == 1, "%s — 「+n」이 세어 올라 착지한다" % nm,
+					"센 값 %d가지 · 착지 %d번" % [spin_up, spin_land])
 		_say(fr < 1200, "%s — 미리보기가 스스로 끝난다" % nm, "%d 프레임" % fr)
 		#  칸 수가 앞 값에서 센다 — 게임 쪽 _next_step 이 세우는 그대로다.
 		_say(spin_mid > 0, "%s — 칸이 앞 값에서 새 값으로 센다" % nm,
