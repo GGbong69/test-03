@@ -835,6 +835,10 @@ func _pass7() -> void:
 	_game()
 	Save.wipe()
 	Save.run_drop()
+	#  지운 저장에서 사람 길(새 런 화면 「시작」)로 연 런은 튜토리얼 런이다(_tut_due ·
+	#  2026-09-27). 튜토리얼 런은 기록을 안 남기므로(_rec_off) 아래 겨눔 검사가 세는
+	#  「runs」가 안 오른다 — 튜토리얼은 이미 배운 것으로 두고 보통 런의 확정을 잰다.
+	Save.teach("u_boot")
 
 	# ── 자리 ──
 	_eq("표에는 다섯 줄이다", g.TITLE_ROWS.size(), 5)
