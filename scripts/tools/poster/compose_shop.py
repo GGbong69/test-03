@@ -64,25 +64,25 @@ GOODS_A = {
     ("dart", ""): (346.0, 238.0, 1.06, 20.0),
 }
 #  X배너 — 든 동전을 꼭짓점으로 아래로 벌어지는 V(Λ): 동전 곁(팩 · 사탕) → 한 단 아래(동전 둘)
-#  → 맨 아래 귀퉁이(저울 · 등록기). 다트는 V 한가운데에서 동전을 겨눈다.
+#  → 맨 아래 다트. 앞일수록 크게(원근). 저울 · 등록기는 진열대 뒤 귀퉁이(2026-10-07).
 GOODS_X = {
-    ("boost", "b_big"): (300.0, 222.0, 1.12, 12.0),
-    ("cons", "c_bl"): (404.0, 218.0, 1.10, 0.0),
-    ("item", "l04"): (270.0, 272.0, 1.22, 0.0),
-    ("item", "l05"): (422.0, 274.0, 1.22, 0.0),
-    ("dart", ""): (344.0, 318.0, 1.30, 30.0),
+    ("boost", "b_big"): (288.0, 242.0, 1.25, 12.0),
+    ("cons", "c_bl"): (410.0, 236.0, 1.22, 0.0),
+    ("item", "l04"): (276.0, 318.0, 1.45, 0.0),
+    ("item", "l05"): (404.0, 322.0, 1.45, 0.0),
+    ("dart", ""): (342.0, 404.0, 1.60, 30.0),
 }
 
 #  판형마다 배치. x0 · x1 = 캔버스 너비에 맞추는 게임 화면 논리 x 범위.
 #  y0 = 게임 화면 윗변(논리 y 0)이 서는 자리(캔버스 높이 비).
 LAYOUT = {
     "A": {
-        "x0": 160.0, "x1": 480.0, "y0": 0.300, "table": "A",
+        "x0": 175.0, "x1": 465.0, "y0": 0.240, "table": "A",
         "ko_base": 0.138, "ko_w": 0.54,         # 하이톤 — 기준선 · 글줄 너비(캔버스 너비 비)
         "en_base": 0.194, "en_w": 0.38, "en_track": 0.34,
-        #  다트판 — 가운데 축 · 제목 바로 밑 뒤 벽. 아랫변(0.364H)과 몸통 · 소매가 드러나는 자리(0.40H ·
-        #  0.42H) 사이에 어둠을 둬 상인 머리가 아니라 벽에 걸린 판으로 읽힌다.
-        "board": (0.500, 0.2895, 0.105),        # 다트판 한가운데 x(W) · y(H) · 바깥 숫자 고리 반지름(W)
+        #  다트판은 뺐다(2026-10-07 「상점 NPC 얼굴쪽에 다트판에 왜 넣은거야? 넣지마 그냥」). 빈 자리는
+        #  띠를 175~465 로 좁혀(장면 1.1배) 상인을 끌어올려 메운다 — 앞판은 그대로 0.1H 안팎.
+        "board": None,                          # 다트판 한가운데 x(W) · y(H) · 바깥 숫자 고리 반지름(W) — 2026-10-07 뺐다
         #  벽 램프 웅덩이 — 판 반지름 배 · 세로 배 · 한가운데(판 반지름 단위, + 아래). A 는 판 둘레에만 —
         #  밑으로 번지면 조끼 V 깃이 빛을 받아 판이 상인 머리로 읽혔다.
         "lamp_r": 2.6, "lamp_v": 0.9, "lamp_dy": -0.2,
@@ -90,8 +90,9 @@ LAYOUT = {
         "neck": (320.0, 34.0, 72.0, 40.0, 0.85),
         "hand_k": 1.0,                          # 든 팔 원근 휨(1 이면 게임 비율 그대로)
         "goods": GOODS_A,
-        #  소품 — 몸 한가운데 x(W) · 받침 밑 논리 y · 크기 배
-        "props": {"scale": (0.125, 266.0, 0.58), "register": (0.885, 266.0, 0.58)},
+        #  소품 — 몸 한가운데 x(W) · 받침 밑 논리 y · 크기 배. 게임처럼 진열대 뒤 귀퉁이 · 상인 양옆 —
+        #  「저울이랑 수금기가 왜 밑에 있어?」(2026-10-07). 손 · 물건 뒤 층이다.
+        "props": {"scale": (0.120, 150.0, 0.62), "register": (0.890, 150.0, 0.62)},
         "top_dark": (0.04, 0.20, 0.70),         # 위 어둠 — 다 어두운 끝 · 풀리는 끝(높이 비) · 짙기
         "bot_dark": (296.0, 370.0, 0.62),       # 아래 어둠 — 논리 y 시작 · 끝 · 짙기
         "lamp": (340.0, 205.0, 185.0, 105.0),   # 램프 웅덩이 — 가운데 x · y · 가로 · 세로 반지름(논리)
@@ -99,17 +100,17 @@ LAYOUT = {
         "vig": (0.62, 0.55),
     },
     "XB": {
-        #  1:3 — 위에 제목, 그 밑 벽에 다트판, 상인 · 늘린 펠트 · 물건이 세로를 채운다.
+        #  1:3 — 위에 제목, 그 밑에 상인 · 늘린 펠트 · 물건이 세로를 채운다.
         #  네 모서리 고리 구멍(50mm) 안에는 아무것도 안 둔다.
-        "x0": 175.0, "x1": 465.0, "y0": 0.372, "table": "X",
+        "x0": 200.0, "x1": 440.0, "y0": 0.200, "table": "X",
         "ko_base": 0.092, "ko_w": 0.70,
         "en_base": 0.122, "en_w": 0.50, "en_track": 0.34,
-        "board": (0.50, 0.244, 0.31),
+        "board": None,
         "lamp_r": 2.3, "lamp_v": 1.35, "lamp_dy": 0.30,
         "neck": (320.0, 26.0, 70.0, 44.0, 0.85),   # 판 밑 · 몸통 위 가운데 어둠(논리 x · y · 가로 · 세로 반지름 · 짙기)
         "hand_k": 1.0,
         "goods": GOODS_X,
-        "props": {"scale": (0.20, 440.0, 0.84), "register": (0.80, 440.0, 0.84)},
+        "props": {"scale": (0.120, 150.0, 0.70), "register": (0.880, 150.0, 0.70)},
         "top_dark": (0.04, 0.16, 0.80),
         "bot_dark": (466.0, 560.0, 0.62),
         "lamp": (340.0, 250.0, 165.0, 170.0),
@@ -340,11 +341,13 @@ def build_one(key: str, dpi: int | None, quick: bool = False) -> None:
     ])
 
     # ── 다트판 — 뒤 판자 벽 ─────────────────────────────────
-    g_board = board_group(key, Wc, Hc, L, room_soft, ry)
+    #  2026-10-07 「상점 NPC 얼굴쪽에 다트판에 왜 넣은거야? 넣지마 그냥」 — 판형에 board 가
+    #  없으면 안 짓는다. board_group 은 시안 「다트판 정면」 가족이 다시 쓸 수 있게 남긴다.
+    g_board = board_group(key, Wc, Hc, L, room_soft, ry) if L.get("board") else None
 
     #  판 밑 · 몸통 위 가운데 어둠 — 벽 램프 웅덩이 위 · 판 밑 층(판은 안 어두워진다)
     nk = L.get("neck")
-    if nk is not None:
+    if nk is not None and g_board is not None:
         nx, ny_, nrx, nry, na = nk
         ncx, ncy, nrxp, nryp = cx(nx), cy(ny_), nrx * S, nry * S
         ny0, ny1 = int(max(0, ncy - nryp * 1.8)), int(min(Hc, ncy + nryp * 1.8))
@@ -529,7 +532,7 @@ def build_one(key: str, dpi: int | None, quick: bool = False) -> None:
         hfront,
     ] if x is not None])
 
-    # ── 소품 — 저울 · 등록기, 펠트 앞 귀퉁이 ─────────────────
+    # ── 소품 — 저울 · 등록기, 진열대 뒤 귀퉁이(게임처럼 상인 양옆) ─────────
     prop_items = []
     for fn, nm, pk in (("shop_scale.png", "저울", "scale"), ("shop_register.png", "금전 등록기", "register")):
         fx, by, ks = L["props"][pk]
@@ -610,7 +613,9 @@ def build_one(key: str, dpi: int | None, quick: bool = False) -> None:
     titles = [ko, en]
     g_neon = neon_group(Wc, Hc, titles)
 
-    items = [g_bg, g_board, g_npc, g_tbl, g_goods, g_hands, g_props, g_front, g_light, g_neon]
+    #  소품(저울 · 등록기)은 진열대 뒤 귀퉁이에 서므로 손 · 물건보다 뒤 — 진열대 바로 위.
+    items = [x for x in [g_bg, g_board, g_npc, g_tbl, g_props, g_goods, g_hands, g_front, g_light, g_neon]
+             if x is not None]
     os.makedirs(OUT, exist_ok=True)
     stem = os.path.join(OUT, f"{key}_shop" + ("_quick" if quick else ""))
     if quick:
@@ -630,10 +635,11 @@ def build_one(key: str, dpi: int | None, quick: bool = False) -> None:
     y0 = int(np.clip(hy - hw * 0.8, 0, Hc - 2 * hw))
     flat.crop((x0, y0, x0 + 2 * hw, y0 + 2 * hw)).save(stem + "_detail.png")
     #  다트판 1:1
-    bx, by_, br = L["board"]
-    bc = (int(bx * Wc), int(by_ * Hc))
-    bx0 = int(np.clip(bc[0] - hw, 0, Wc - 2 * hw))
-    flat.crop((bx0, bc[1] - hw, bx0 + 2 * hw, bc[1] + hw)).save(stem + "_board.png")
+    if L.get("board"):
+        bx, by_, br = L["board"]
+        bc = (int(bx * Wc), int(by_ * Hc))
+        bx0 = int(np.clip(bc[0] - hw, 0, Wc - 2 * hw))
+        flat.crop((bx0, bc[1] - hw, bx0 + 2 * hw, bc[1] + hw)).save(stem + "_board.png")
     #  상인 왼 어깨 · 소매 1:1 — 테두리 빛 보기
     nx0 = int(np.clip(cx(250.0) - hw, 0, Wc - 2 * hw))
     ny0 = int(np.clip(cy(70.0) - hw, 0, Hc - 2 * hw))
