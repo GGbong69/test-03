@@ -1231,7 +1231,9 @@ static func tag_w(r: Dictionary) -> float:
 #    ember    불씨 — 칸 하나 · 띠 하나에 불씨가 선다. 맞힐 때마다 골드 v
 #    order    칠판 주문 — 판 위 영역 하나 · 눈금 v~v2 · 보상 한 장(tags.csv when=now).
 #             눈금 안에 그 영역에 꽂으면 「주문」 걸음이 보상을 낸다
-#    regular  단골 — 아직 갈래가 없다(뽑혀도 사건 없는 판과 같다)
+#    regular  단골 — 내가 점수를 낸 칸 · 띠에 단골 자루가 꽂혀 그 띠 한 칸을 막는다(0점).
+#             자루 점에서 반지름 v(px) 안에 꽂으면 떨어뜨리고 「단골」 걸음이 그 칸의 값을 낸다.
+#             v2 발 뒤에 뽑아 간다
 #  갈래를 새로 내면 game.gd 의 _ev_roll match 와 그 갈래의 걸음(_next_step)을 같이 낸다.
 const EVENT_KINDS := ["none", "ember", "order", "regular"]
 
@@ -2619,8 +2621,8 @@ static func _v_events() -> void:
 			"regular":
 				if v <= 0.0:
 					_errs.append("%s — v(가로채기 반지름)가 0 이하다" % who)
-				if v2 < 1.0:
-					_errs.append("%s — v2(뽑아 가기까지 발)는 1 이상이다" % who)
+				if v2 < 1.0 or not is_equal_approx(v2, roundf(v2)):
+					_errs.append("%s — v2(뽑아 가기까지 발)는 1 이상 정수다" % who)
 	#  튜토리얼 런의 둘째 판은 불씨만 뽑는다 — 줄이 없으면 그 판이 잠자코 빈다.
 	if not ember:
 		_warns.append("events — 가중치가 있는 불씨 줄이 없다. 튜토리얼 런에 판 사건이 안 선다")

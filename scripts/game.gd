@@ -551,13 +551,16 @@ var clok_mul := 1.0      # 차례인 칸에 붙는 배수(mods.csv 의 v1)
 var clok_lap := 0        # 이 판에 돈 바퀴 수 — 개발자 판과 자가 읽는다
 #  ── 판 사건 (2026-10-06 · data/events.csv) ──────────────────
 #  작은 판 · 큰 판이 열릴 때 _ev_roll 이 run_rng 로 하나를 뽑는다. 보스 판은 없다.
-#  "" 없음 · "ember" 불씨 · "order" 칠판 주문 · "regular" 단골. 단골은 아직
-#  갈래가 없어 뽑혀도 사건 없는 판과 같다 — 그 갈래는 _ev_roll 의 match 에 선다.
+#  "" 없음 · "ember" 불씨 · "order" 칠판 주문 · "regular" 단골. 갈래마다 제 것을
+#  _ev_roll 의 match 에서 미리 뽑는다.
 #  판 중간 상태는 안 적는다: 판 매듭(pick)이 판 첫머리에서 되살려 같은 run_rng 로
 #  같은 사건 · 같은 칸이 다시 선다(resume_probe 9 · 10차가 잰다).
 var leg_ev := ""
 var leg_ev_row := {}     # 뽑힌 표 줄 — v · v2 를 읽는다
 var leg_throws := 0      # 이 판에 정산이 끝난 발 수 — 연발은 한 발이다
+#  한 발이 다 끝난 뒤 판 사건이 큐 걸음을 세웠다(단골이 들어온다 · 뽑아 간다). 그 걸음이
+#  끝나면 발 끝 셈 없이 곧장 고르기다 — _next_step 의 빈 큐 갈래가 읽는다.
+var ev_tail := false
 #  불씨. 띠 · 피는 때 · 칸 씨앗을 판이 열릴 때 미리 뽑고(run_rng), 칸은 피는 순간
 #  그 씨앗으로 고른다 — 이 판에서 가장 많이 맞힌 칸(sec_cnt)을 뺀 나머지에서.
 var ember_idx := -1      # 불씨가 앉은 칸(sectors 의 자리). −1 이면 안 서 있다
@@ -582,6 +585,25 @@ var order_t := 0.0       # 지금 상태에 든 뒤 흐른 시간 — 쓰기 · 
 var order_rub := 9.0     # 마지막 눈금을 지운 뒤 흐른 시간
 var order_in := []       # 영역 조각 [안, 밖, 각0, 각1] — 열 때 한 번 굽는다
 var order_off := []      # 판 안의 나머지 조각 — 옅게 가라앉힌다
+#  단골. 들어오는 때 · 자리 씨앗을 판이 열릴 때 미리 뽑는다(run_rng). 자리는 들어오는 순간
+#  그 씨앗으로 고른다 — 내가 방금 점수를 낸 칸 · 띠 안, 꽂힌 자루와 비킨 자리.
+#  이름은 rgl_ 이다 — reg_ 는 상인 등록기(REG)가 먼저 쓴다.
+var rgl_st := ""         # "" 없음 · "wait" 기다림 · "in" 들어오는 걸음 앞 · "on" 꽂혀 막는다 ·
+                         # "hit" 맞혀 떨어졌다(「단골」 걸음 앞) · "done" 끝(가로챘거나 뽑아 갔다)
+var rgl_k := -1          # 들어오는 때 — k 번째 발 정산 뒤 · −1 안 들어온다
+var rgl_u := 0           # 자리 씨앗
+var rgl_p := Vector2.ZERO    # 단골 자루의 착탄점
+var rgl_idx := -1        # 막은 칸(sectors 의 자리) · 불이면 −1
+var rgl_r := Vector2.ZERO    # 막은 띠 [안, 밖](px) — 불은 안쪽 불 [0, 안] · 바깥 불 [안, 밖]
+var rgl_val := 0         # 그 칸의 값(칸 값 × 띠 배수) — 가로채면 점수 칸에 든다
+var rgl_left := 0        # 뽑아 가기까지 남은 발
+var rgl_last := {}       # 이 판에 마지막으로 칸에 점수를 낸 다트 {p, idx, band, thr} — 들어올 자리
+var rgl_rot := 0.0       # 단골 자루의 기울기 — 자리 씨앗에서
+var rgl_side := 1.0      # 날아오는 쪽 — 1 오른쪽 · −1 왼쪽(꽂힐 자리에 가까운 쪽)
+var rgl_ph := ""         # 그림 — "" · "in" 날아온다 · "on" 꽂혀 있다 · "fall" 떨어진다 · "out" 빠져나간다
+var rgl_vt := 0.0        # 그 그림에 든 뒤 흐른 시간(빨리 보기를 탄다)
+var rgl_fly := 0.0       # 이번에 날거나 빠지는 시간(초) — 걸음 길이의 몫
+var rgl_pa := 0.0        # 참나무 쪽의 짙기 — 꽂히는 프레임에 서고 막힘이 풀리면 걷힌다
 var paint_mul := 1.0
 var score_mode := "std"         # 이 런의 점수 계산 방식. 든 동전이 먼저 쥔다
 # 다트통이 미는 최종 점수 배율. 계산 방식과 같이 판 시작에 한 번 읽는다.
@@ -2357,6 +2379,9 @@ func _ev_clear() -> void:
 	ember_t = 0.0
 	ember_puff.clear()
 	_order_clear()
+	_rgl_clear()
+	rgl_last = {}
+	ev_tail = false
 
 
 #  판이 열릴 때 한 번. 가중치 뽑기 한 번이 사건을 정하고, 갈래가 제 것을 미리 뽑는다.
@@ -2393,8 +2418,8 @@ func _ev_roll() -> void:
 			_ember_roll()
 		"order":
 			_order_roll()
-		#  "regular" — 갈래가 서면 여기서 제 것을 미리 뽑는다. 그전까지는
-		#  이름만 남고 판은 사건 없는 판과 같다.
+		"regular":
+			_rgl_roll()
 
 
 #  불씨의 띠 · 피는 때 · 칸 씨앗. 뽑는 수가 늘 셋이라 run_rng 가 판마다 같은 만큼 간다.
@@ -2532,6 +2557,17 @@ func _ev_after_throw() -> void:
 	if order_st == "open" and order_left <= 0:
 		order_st = "miss"
 		order_t = 0.0
+	#  단골 — k 번째 발 뒤 · 그 발이 칸에 점수를 냈으면 들어온다(못 냈으면 다음 점수 낸 발로
+	#  미룬다). 꽂힌 뒤로는 발을 세어 v2 발째 정산 뒤에 뽑아 간다. 둘 다 다음 고르기 앞의 큐
+	#  걸음이다(_next_step 의 ev_tail) — 판이 그 발에 끝났으면 여기 안 온다.
+	if rgl_st == "wait" and rgl_k > 0 and leg_throws >= rgl_k \
+			and int(rgl_last.get("thr", -1)) == leg_throws:
+		_rgl_open(rgl_last, rgl_u)
+		queue.append({"k": "reg_in"})
+	elif rgl_st == "on":
+		rgl_left -= 1
+		if rgl_left <= 0:
+			queue.append({"k": "reg_out"})
 
 
 #  칸 · 띠의 한가운데.
@@ -2552,8 +2588,308 @@ func _ev_take(kind: String) -> void:
 		ember_from = -1
 	if kind != "order":
 		_order_clear()
+	if kind != "regular":
+		_rgl_clear()
 	leg_ev = kind
 	leg_ev_row = GameData.event_of(kind)
+
+
+# ══════════════════════════════════════════════════════════
+#  단골 (2026-10-06 · data/events.csv 의 regular 줄)
+# ──────────────────────────────────────────────────────────
+#  판 중간에 옆자리 단골이 자루 하나를 던진다. k 번째 발 정산 뒤 — 그 발이 칸에 점수를
+#  냈으면 다음 고르기 전에 들어온다(빗나감이면 다음 점수 낸 발로 미룬다). 색이 다른 자루가
+#  옆에서 날아와 **내가 방금 점수를 낸 그 칸 · 그 띠**에 꽂힌다(꽂힌 자루와 gap 넘게 비킨
+#  자리). 그 띠 한 칸은 참나무 쪽으로 메워져 꽂혀도 0점이다 — 금줄(dead_idx)과 같은 길 ·
+#  띠 한정. 불이면 그 불(안쪽 · 바깥)을 반지름으로 막는다.
+#  가로채기 — 내 자루가 단골 자루 점에서 반지름 v(표 · px) 안에 꽂히면 단골 자루가 툭
+#  떨어지고 「단골」 걸음(동전 · 불씨 · 주문 뒤 · 저울 · 모음 · 합계 앞)이 그 칸의 값(칸 값
+#  × 띠 배수)을 점수 칸에 얹는다. 막힘이 풀린다. 연발의 작은 다트도 가로챈다(한 번뿐이다).
+#  가로챈 발 자체는 막힌 자리에 꽂혔으면 0점으로 셈한다 — 값은 「단골」 걸음이 낸다.
+#  뽑아 가기 — 꽂힌 뒤 내가 v2(표) 발을 더 던지면 단골이 자루를 뽑아 간다(옆으로 빠져
+#  나간다). 막힘이 풀린다. 연발은 한 발이다.
+#  들어오기 · 뽑아 가기는 한 발이 다 끝나고 다음 고르기 전에 서는 큐 걸음이다(ev_tail) —
+#  박자 · 빨리 보기를 탄다. 판이 그 발에 끝나면 안 선다.
+#  소리 — 판 위라 다트 소리 그대로다: 나는 소리 dart_fly · 꽂힐 때 board_thud + hit_single ·
+#  떨어뜨릴 때 board_thud 를 knock_p 배로 · 뽑아 갈 때 dart_pick. 「단골」 걸음은 양옆 칸과
+#  같은 settle_pierce 다. 새로 구운 파일은 없다.
+#  ⚠ **run_rng 만 쓴다.** 들어오는 때 · 자리 씨앗을 판이 열릴 때 두 번 뽑는다. 자리는
+#  들어오는 순간 그 씨앗과 판에 꽂힌 자루로 고른다 — 되감아 같은 자리에 던지면 같은 자리다.
+#  캐릭터 그림은 없다 — 자루 색(_dart3_col 의 "reg")만이다.
+# ══════════════════════════════════════════════════════════
+#    k        들어오는 때의 끝 발 — 1..k 번째 발 정산 뒤를 고르게 뽑는다
+#    gap      단골 자루와 판에 꽂힌 자루 사이의 바닥(px). 다 가까우면 가장 먼 자리
+#    edge     띠 한 칸 가장자리에서 띄우는 거리(px)
+#    in_b     들어오는 걸음(박) · in_k 그중 나는 몫(나머지는 꽂힌 채 선다)
+#    out_b    뽑아 가는 걸음(박) · out_k 그중 빠져나가는 몫
+#    side     날아오는 출발점 — 화면에서 판 가운데로부터 가로(px · 꽂힐 자리에 가까운 쪽 · 340 이면
+#             화면 끝 바로 밖) · 꽂힐 자리보다 위로(px) · 눈 쪽 깊이(눈 거리의 몫 — 그 깊이에서
+#             화면 1px 이 월드 1 − z 다). 처음 찍어 본 값(월드 230 · 위 40)은 화면 밖 418px 위쪽에서
+#             떠나 비행의 반을 화면 밖에서 보냈다
+#    arc      나는 길이 위로 휘는 높이(px)
+#    fall_t   떨어지는 시간(초) · fall_v 처음에 위로 튀는 속도(px/s) · fall_g 중력(px/s²) ·
+#             fall_x 날아온 쪽으로 밀리는 거리(px) · fall_rot 화면에서 기우는 각 · fall_pitch 촉이
+#             밑으로 가게 눕는 각(라디안). 판을 보는 자루는 정면이라 눕지 않으면 떨어지며 점이 된다
+#             (찍어 봤다) — 판 아래까지 떨어진다
+#    plank_t  참나무 쪽이 서고 걷히는 시간(초)
+#    knock_p  자루끼리 부딪는 소리 — board_thud 를 이 배로 올린다
+const REGULAR := {"k": 3, "gap": 5.0, "edge": 1.5,
+		"in_b": 2.0, "in_k": 0.45, "out_b": 1.6, "out_k": 0.6,
+		"side": Vector3(340.0, 24.0, 0.45), "arc": 18.0,
+		"fall_t": 0.55, "fall_v": 50.0, "fall_g": 1600.0, "fall_x": 8.0, "fall_rot": 0.9,
+		"fall_pitch": -1.1,
+		"plank_t": 0.14, "knock_p": 1.5}
+
+
+#  단골을 걷는다 — 판 사건을 비우는 자리(_ev_clear)와 다른 사건을 세우는 자리(_ev_take).
+#  들어올 자리(rgl_last)는 판의 기록이라 _ev_clear 만 지운다.
+func _rgl_clear() -> void:
+	rgl_st = ""
+	rgl_k = -1
+	rgl_u = 0
+	rgl_p = Vector2.ZERO
+	rgl_idx = -1
+	rgl_r = Vector2.ZERO
+	rgl_val = 0
+	rgl_left = 0
+	rgl_rot = 0.0
+	rgl_side = 1.0
+	rgl_ph = ""
+	rgl_vt = 0.0
+	rgl_fly = 0.0
+	rgl_pa = 0.0
+
+
+#  들어오는 때 · 자리 씨앗. 뽑는 수가 늘 둘이라 run_rng 가 판마다 같은 만큼 간다.
+func _rgl_roll() -> void:
+	var ku := run_rng.randf()
+	rgl_u = int(run_rng.randi() & 0x3fffffff)
+	var kmax := maxi(int(REGULAR.k), 1)
+	rgl_k = 1 + mini(int(ku * float(kmax)), kmax - 1)
+	rgl_st = "wait"
+
+
+#  가로채기 반지름(표의 v · px).
+func _rgl_rad() -> float:
+	return maxf(GameData.event_v(leg_ev_row, "v", 9.0), 0.0)
+
+
+#  착탄 하나의 띠 [안, 밖](px). 칸은 hit_info 의 r0 · r1 그대로고, 불은 안쪽 불 [0, 안] ·
+#  바깥 불 [안, 밖]이다 — hit_info 는 두 불 다 r0 가 0 이라 바깥 불의 안을 여기서 세운다.
+func _rgl_band(info: Dictionary) -> Vector2:
+	if bool(info.get("bull", false)):
+		var ri := R * rt_bull_i
+		if float(info.r1) <= ri + 0.001:
+			return Vector2(0.0, ri)
+		return Vector2(ri, float(info.r1))
+	return Vector2(float(info.get("r0", 0.0)), float(info.get("r1", 0.0)))
+
+
+#  판 위 한 점이 단골이 들어올 자리로 무엇인가 — {p, idx, band, thr}. thr 는 지금 던지는 발의
+#  차례(1 부터)다. 개발자 판 「단골 던지기」도 이 길로 짓는다.
+func _rgl_at(p: Vector2) -> Dictionary:
+	var hi := hit_info(p)
+	return {"p": p, "idx": int(hi.idx), "band": _rgl_band(hi), "thr": leg_throws + 1}
+
+
+#  착탄 한 발이 칸에 점수를 냈으면 적어 둔다 — 단골이 들어올 자리다. 칸 죽이기(금줄 · 색 ·
+#  「목표물」 · 단골 자신)가 0 으로 만든 발은 점수를 안 낸 발이다. 연발은 작은 다트 하나하나가
+#  적는다 — 그 발의 마지막으로 점수 낸 것이 남는다.
+func _rgl_note(p: Vector2, raw_mult: int, land_base: int) -> void:
+	if raw_mult <= 0 or land_base <= 0:
+		return
+	rgl_last = _rgl_at(p)
+
+
+#  꽂힌 자리가 막힌 띠 한 칸인가 — 칸 번호와 띠가 같다. 불은 칸이 없어 반지름(안쪽 불 ·
+#  바깥 불)으로 잰다. 빗나감은 칸도 불도 아니다.
+func _rgl_blocks(info: Dictionary) -> bool:
+	if rgl_st != "on" and rgl_st != "hit":
+		return false
+	if int(info.get("idx", -1)) != rgl_idx:
+		return false
+	if rgl_idx < 0 and not bool(info.get("bull", false)):
+		return false
+	return _rgl_band(info).is_equal_approx(rgl_r)
+
+
+#  들어온다 — 판이 뽑은 때가 왔거나(_ev_after_throw) 개발자 판 「단골 던지기」. tg 는 _rgl_at
+#  의 자리다. 자루 점은 그 칸 · 그 띠 안에서 씨앗 u 로 고르고, 값은 그 점의 날값(칸 값 × 띠
+#  배수)이다. 막힘은 들어오는 걸음 머리(_rgl_in)에서 선다.
+func _rgl_open(tg: Dictionary, u: int) -> void:
+	if tg.is_empty():
+		return
+	_ev_take("regular")
+	rgl_idx = int(tg.get("idx", -1))
+	rgl_r = tg.get("band", Vector2.ZERO)
+	rgl_p = _rgl_spot(rgl_idx, rgl_r, u)
+	var hi := hit_info(rgl_p)
+	rgl_val = int(hi.base) * maxi(int(hi.mult), 1)
+	rgl_rot = (_gl_rand(u, 631) - 0.5) * 0.52
+	rgl_side = 1.0 if rgl_p.x >= BC.x else -1.0
+	rgl_st = "in"
+	rgl_ph = ""
+	rgl_pa = 0.0
+
+
+#  자루 점 — 그 칸 · 그 띠 안의 점(칸은 각 다섯 × 깊이 다섯, 불은 방위 여덟 × 원판이면 깊이 둘)
+#  가운데 판에 꽂힌 자루와 gap 넘게 떨어진 것을 씨앗으로 고른다. 없으면 가장 먼 점이다.
+#  점은 전부 hit_info 로 그 칸 · 그 띠인지 댄다 — 막힌 자리와 단골 자루가 안 어긋난다.
+func _rgl_spot(idx: int, band: Vector2, u: int) -> Vector2:
+	var pts := []
+	if idx < 0:
+		var rs := [lerpf(band.x, band.y, 0.5)] if band.x > 0.0 \
+				else [band.y * 0.35, band.y * 0.7]
+		for rr in rs:
+			for k in 8:
+				var a := TAU * float(k) / 8.0 + 0.2
+				pts.append(BC + Vector2(sin(a), -cos(a)) * float(rr))
+	else:
+		var sw := _sec_w()
+		var e := float(REGULAR.edge)
+		var r0 := band.x + e
+		var r1 := band.y - e
+		if r1 < r0:
+			r0 = (band.x + band.y) * 0.5
+			r1 = r0
+		for qa in [-0.32, -0.16, 0.0, 0.16, 0.32]:
+			for qr in [0.0, 0.25, 0.5, 0.75, 1.0]:
+				var a2 := (float(idx) + float(qa)) * sw
+				pts.append(BC + Vector2(sin(a2), -cos(a2)) * lerpf(r0, r1, float(qr)))
+	var ok := []
+	var best := Vector2.INF
+	var bd := -1.0
+	for q in pts:
+		var hq := hit_info(q)
+		if int(hq.idx) != idx or not _rgl_band(hq).is_equal_approx(band):
+			continue
+		var md := INF
+		for dp in darts:
+			md = minf(md, (q as Vector2).distance_to(dp.p))
+		if md >= float(REGULAR.gap):
+			ok.append(q)
+		if md > bd:
+			bd = md
+			best = q
+	if not ok.is_empty():
+		return ok[u % ok.size()]
+	if best.is_finite():
+		return best
+	#  점이 하나도 그 칸 · 그 띠가 아니다(폭 없는 띠) — 띠 한가운데.
+	var am := float(maxi(idx, 0)) * _sec_w()
+	return BC + Vector2(sin(am), -cos(am)) * (band.x + band.y) * 0.5
+
+
+#  꽂힌다 — 들어오는 걸음 머리. 막힘은 여기서 선다(나는 동안 던질 발이 없다). fly 초 동안
+#  옆에서 날아와 꽂히고 그 프레임에 다트 착탄 소리가 난다(_reg_tick). 모션 끄기면 날지 않고
+#  곧장 꽂힌다.
+func _rgl_in(fly: float) -> void:
+	rgl_st = "on"
+	rgl_left = maxi(int(GameData.event_v(leg_ev_row, "v2", 2.0)), 1)
+	rgl_ph = "in"
+	rgl_vt = 0.0
+	rgl_fly = 0.0 if motion_off else maxf(fly, 0.0)
+	if rgl_fly > 0.0:
+		_sfx("dart_fly")
+	else:
+		_rgl_stick()
+
+
+#  꽂히는 프레임 — 판 위라 다트 착탄 소리 그대로(몸소리 + 싱글). 등급 소리는 싱글로 둔다 —
+#  불의 종은 「이겼다」라 남의 자루에 안 운다. 착탄 물결은 빗나감의 가장 옅은 그 물결이다.
+func _rgl_stick() -> void:
+	rgl_ph = "on"
+	rgl_vt = 0.0
+	_thud()
+	_sfx("hit_single")
+	board_punch = maxf(board_punch, 0.3)
+	add_wave(rgl_p, 3.0, 18.0, C_TXT, 0.22, 1.0, 0.22)
+
+
+#  착탄 한 발 — 단골 자루 점에서 반지름 안이면 참이고 자루가 툭 떨어진다. 판 밖(빗나감)은
+#  안 친다. 값은 한 톨도 안 바꾼다 — 「단골」 걸음이 낸다.
+func _rgl_land(p: Vector2, raw_mult: int) -> bool:
+	if rgl_st != "on" or raw_mult <= 0:
+		return false
+	if p.distance_to(rgl_p) > _rgl_rad():
+		return false
+	rgl_st = "hit"
+	rgl_ph = "fall"
+	rgl_vt = 0.0
+	_sfx("board_thud", SFX_BASE * float(REGULAR.knock_p))
+	return true
+
+
+#  「단골」 걸음 — 떨어뜨린 자루의 값을 내고 막힘을 푼다. 걸음이 서기 전에 판이 끝났거나
+#  이미 받았으면 0 이다.
+func _rgl_take() -> int:
+	if rgl_st != "hit":
+		return 0
+	rgl_st = "done"
+	return rgl_val
+
+
+#  뽑아 간다 — 뽑아 가는 걸음 머리. 막힘이 풀리고 자루가 fly 초 동안 날아온 쪽으로 빠져
+#  나간다. 모션 끄기면 곧장 없어진다.
+func _rgl_out(fly: float) -> void:
+	if rgl_st != "on":
+		return
+	rgl_st = "done"
+	rgl_ph = "out"
+	rgl_vt = 0.0
+	rgl_fly = 0.0 if motion_off else maxf(fly, 0.0)
+	_sfx("dart_pick")
+	if rgl_fly <= 0.0:
+		rgl_ph = ""
+
+
+#  그림 시계 — _process 가 빨리 보기 배수를 태워 민다(걸음 안의 비행이라 걸음과 같이 준다).
+#  참나무 쪽은 꽂힌 프레임부터 막힘이 풀릴 때까지 선다. 모션 끄기면 짙기만 곧장 바뀐다.
+func _rgl_tick(d: float) -> void:
+	var on := (rgl_st == "on" or rgl_st == "hit") and rgl_ph != "in"
+	if motion_off:
+		rgl_pa = 1.0 if on else 0.0
+	else:
+		rgl_pa = move_toward(rgl_pa, 1.0 if on else 0.0, d / float(REGULAR.plank_t))
+	if rgl_ph == "":
+		return
+	rgl_vt += d
+	match rgl_ph:
+		"in":
+			if rgl_vt >= rgl_fly:
+				_rgl_stick()
+		"fall":
+			if motion_off or rgl_vt >= float(REGULAR.fall_t):
+				rgl_ph = ""
+		"out":
+			if rgl_vt >= rgl_fly:
+				rgl_ph = ""
+
+
+#  단골 자루의 3D 자세. 꽂힌 자세는 내 자루와 같은 _bd3_pose 다. 나는 길은 내 자루가 나는
+#  그 식(_bd3_fly_tf)에 옆 출발점을 준다 — 빠져나갈 때는 같은 길을 거꾸로 간다. 떨어질 때는
+#  위로 살짝 튀었다가 중력으로 지며 촉이 밑으로 눕고 날아온 쪽으로 기운다.
+func _rgl_pose() -> Transform3D:
+	var end := _bd3_pose({"p": rgl_p, "rot": rgl_rot})
+	var sd: Vector3 = REGULAR.side
+	var kz := 1.0 - sd.z
+	var beg := Vector3(rgl_side * sd.x * kz, (end.origin.y + sd.y) * kz, _bd3_eye() * sd.z)
+	match rgl_ph:
+		"in":
+			return _bd3_fly_tf(end, beg, clampf(rgl_vt / maxf(rgl_fly, 0.001), 0.0, 1.0),
+					float(REGULAR.arc))
+		"out":
+			return _bd3_fly_tf(end, beg, 1.0 - clampf(rgl_vt / maxf(rgl_fly, 0.001), 0.0, 1.0),
+					float(REGULAR.arc))
+		"fall":
+			var t := minf(rgl_vt, float(REGULAR.fall_t))
+			var k := t / float(REGULAR.fall_t)
+			var dy := -float(REGULAR.fall_v) * t + 0.5 * float(REGULAR.fall_g) * t * t
+			var b := end.basis.rotated(Vector3.RIGHT, float(REGULAR.fall_pitch) * k)
+			b = b.rotated(Vector3(0.0, 0.0, 1.0), -rgl_side * float(REGULAR.fall_rot) * k)
+			return Transform3D(b, end.origin
+					+ Vector3(rgl_side * float(REGULAR.fall_x) * k, -dy, 0.0))
+	return end
 
 
 # ══════════════════════════════════════════════════════════
@@ -6117,6 +6453,9 @@ func _process(d: float) -> void:
 		#  칠판 주문 시계 — 같은 까닭으로 판 갈이 동안 쉰다. 주문은 판이 다 선 뒤에 쓰인다.
 		order_t += d
 		order_rub += d
+		#  단골 시계 — 나는 · 떨어지는 · 빠지는 자루가 걸음 안에서 끝나야 해서 빨리 보기를 탄다
+		#  (카드 시계와 같은 축). 정산 위 일시정지(sp)에서는 멎는다.
+		_rgl_tick((0.0 if sp else d) * fast_rate)
 	#  **d * fast_rate 를 탄다**(2026-09-26 수선). 빨리 보기는 정산에서만 서므로
 	#  (_fast_on 이 state != S.RESOLVE 에서 1.0 을 돌려준다) 정산 밖 팝은 한 톨도
 	#  안 달라진다. 안 태우면 걸음만 2.5배 빨라지고 팝은 실시간이라 **같은 자리에
@@ -7956,6 +8295,10 @@ func _land(mark := true) -> void:
 	# 칸을 죽이는 축 셋. 번호 · 색 · 홀짝 순으로 좁아진다.
 	if dead_idx >= 0 and info.idx == dead_idx:
 		info.base = 0
+	#  ⚠ **단골 자루가 막은 띠 한 칸** — 금줄과 같은 길이고 그 띠 한 칸만이다(불은 반지름).
+	#  가로채는 발도 막힌 자리에 꽂혔으면 여기서 0 이다 — 값은 「단골」 걸음이 낸다. 2026-10-06
+	if _rgl_blocks(info):
+		info.base = 0
 	if dead_col >= 0 and int(info.col) == dead_col:
 		info.base = 0
 	if not is_equal_approx(odd_mul, 1.0) and info.idx >= 0 			and int(info.base) % 2 == 1:
@@ -8007,6 +8350,10 @@ func _land(mark := true) -> void:
 	#  뒤에 「주문」 걸음 하나가 보상을 낸다(아래 큐). 영역은 판이 그린 그대로라 날값
 	#  (raw_mult · 꽂힌 자리)으로 잰다. 연발의 작은 다트도 채운다. 2026-10-06
 	var order_hit := _order_land(info, raw_mult, aim)
+	#  ⚠ **단골** — 단골 자루 점에서 반지름 v 안에 꽂으면 자루가 떨어지고, 동전 걸음 뒤에
+	#  「단골」 걸음 하나가 그 칸의 값을 낸다(아래 큐). 판 밖은 안 친다. 연발의 작은 다트도
+	#  가로챈다 — 자루가 떨어진 뒤로는 아무 일이 없다. 2026-10-06
+	var rgl_hit := _rgl_land(aim, raw_mult)
 	# 「빨강, 파랑, 노랑」이 칠한 칸. 죽이는 축을 다 지난 뒤에 곱한다 — 금줄이 죽인 칸을
 	# 칠했으면 0 에 곱해 0 이다. 두 장을 같이 쓴 결과가 그것이 맞다.
 	if paint_sec >= 0 and info.idx == paint_sec:
@@ -8033,6 +8380,9 @@ func _land(mark := true) -> void:
 	#  한 번 틀렸던 자리다 — _land_val 머리말에 무엇이 깨졌는지 적었다.
 	#  2026-09-25
 	var land_base: int = int(info.base)
+	#  단골이 들어올 자리 — 이 발이 칸에 점수를 냈나. 죽이는 축을 다 지난 값이라 죽은 칸은
+	#  점수를 안 낸 칸이다. 2026-10-06
+	_rgl_note(aim, raw_mult, land_base)
 
 	# 다트 특성
 	var pierce_gain := 0
@@ -8234,6 +8584,7 @@ func _land(mark := true) -> void:
 	pitch_step = 0
 	_card_reset()
 	queue.clear()
+	ev_tail = false
 
 	card_side = -1 if aim.x > BC.x else 1
 	# 왼쪽 카드는 반드시 위로 간다. 아래 왼쪽은 손 부채가 통째로 쓴다.
@@ -8325,6 +8676,9 @@ func _land(mark := true) -> void:
 		#  칠판 주문 — 불씨 뒤 · 같은 자리. 연발이면 영역을 채운 그 작은 다트의 큐에 선다.
 		if order_hit:
 			queue.append({"k": "order"})
+		#  단골 — 주문 뒤 · 같은 자리. 연발이면 자루를 떨어뜨린 그 작은 다트의 큐에 선다.
+		if rgl_hit:
+			queue.append({"k": "regular"})
 		# 저울은 곱하기 **전에** 걸음이 하나 더 선다. 연출을 정산 밖에서
 		# 따로 돌리지 않고 큐에 세우는 이유는 순서다 — 배속도 박자도
 		# 소리도 다른 걸음과 같은 규약을 타야 한다. 이 걸음이 없으면 두
@@ -8517,6 +8871,12 @@ func _next_step() -> void:
 			aim = burst_hits.pop_front()
 			_land(false)
 			return
+		#  판 사건의 걸음(단골이 들어온다 · 뽑아 간다)이 끝났다 — 발 끝 셈은 그 걸음을 세우기
+		#  전에 이미 했다. 곧장 고르기다.
+		if ev_tail:
+			ev_tail = false
+			_to_pick()
+			return
 		burst_n = 0               # 연발이 다 팔렸다. 이제 보통 걸음이다
 		_wear_spent()             # 다 쓴 동전을 치운다
 		#  한 발이 다 끝났다 — 연발도 여기서 한 번이다(판 사건의 피는 때가 센다).
@@ -8526,6 +8886,12 @@ func _next_step() -> void:
 			_finish_leg()
 		else:
 			_ev_after_throw()
+			#  판 사건이 걸음을 세웠다(단골) — 카드는 물러났고 그 걸음이 끝나면 고르기다.
+			#  걸음 수를 새로 세워 _pace 가 이 걸음을 머리(1배)로 읽는다.
+			if not queue.is_empty():
+				ev_tail = true
+				settle_n = queue.size()
+				return
 			_to_pick()
 		return
 
@@ -8789,6 +9155,35 @@ func _next_step() -> void:
 			#  점수 · 배수는 안 바꾼다 — 카드 칸은 안 튀고 몸만 채인다(불씨와 같다).
 			_order_grant()
 			_card_kick(float(CARDFX.kick), 0.0)
+		"regular":
+			#  ── 단골 (2026-10-06) ──
+			#  단골 자루를 맞혀 떨어뜨렸다 — 그 칸의 값(칸 값 × 띠 배수 · 단골이 꽂힐 때 잰 판의
+			#  날값)이 점수 칸에 통째로 얹힌다(연발의 작은 다트가 가로채도 안 깎는다). 막힘이
+			#  풀리고 참나무 쪽이 걷힌다. 글은 「+n」 하나 · 소리는 양옆 칸과 같은 settle_pierce.
+			#  판의 출처 빛은 안 세운다 — 내 자루가 꽂힌 칸과 단골의 칸이 다를 수 있다.
+			var rg := _rgl_take()
+			if rg > 0:
+				var rc0 := cur_chip
+				cur_chip += rg
+				pop(cc, "+%d" % rg, C_CHIP, 20, _pop_life())
+				_sfx("settle_pierce", f)
+				chip_amt = _card_amt(rc0, cur_chip)
+				chip_from = rc0
+				chip_j = 1.0
+			_card_kick(float(CARDFX.kick), float(CARDFX.press))
+		"reg_in":
+			#  ── 단골이 들어온다 (2026-10-06) ──
+			#  한 발이 다 끝나고 다음 고르기 전(ev_tail) — 카드는 이미 물러났다. 걸음은
+			#  REGULAR.in_b 박이고 그 앞 in_k 몫 동안 자루가 옆에서 날아와 꽂힌다(_reg_tick 이
+			#  빨리 보기를 태워 민다). 막힘은 걸음 머리에서 선다.
+			qt = beat * float(REGULAR.in_b)
+			_rgl_in(qt * float(REGULAR.in_k))
+		"reg_out":
+			#  ── 단골이 뽑아 간다 (2026-10-06) ──
+			#  같은 자리 · REGULAR.out_b 박. 막힘이 풀리고 out_k 몫 동안 자루가 날아온 쪽으로
+			#  빠져나간다.
+			qt = beat * float(REGULAR.out_b)
+			_rgl_out(qt * float(REGULAR.out_k))
 		"wind":
 			#  ── 모음 (2026-10-06) ──
 			#  합계가 내리치기 전 한 걸음. 값도 소리도 안 바꾼다 — 침묵이 예비다.
@@ -8859,7 +9254,8 @@ func _next_step() -> void:
 				_brk_arm()
 
 	#  계산하는 동안 탄다 — 합계 걸음은 _fire_arm 이 제 값으로 선다(2026-09-27).
-	if String(st.k) != "total":
+	#  단골이 들어오고 뽑아 가는 걸음은 카드가 물러난 뒤라 안 탄다.
+	if not ["total", "reg_in", "reg_out"].has(String(st.k)):
 		_fire_live()
 	#  빨리 보기 한도가 읽는 이 걸음의 배수. 합계 · 모음 걸음만 _pace() 를 안
 	#  타므로 그 배수를 따로 쥔다(_fast_lim). 2026-10-06
@@ -8871,8 +9267,8 @@ func _next_step() -> void:
 
 	# ── 카드 시계를 이 걸음의 **실제 길이**에 맨다 ────────────────────
 	# 이 설계에서 가장 중요한 한 줄이고, **반드시 함수의 마지막 줄**이어야 한다 —
-	# 위 match 에서 qt 를 덮는 갈래가 여섯(miss · bal · rnd · wind · total · 목표돌파)이라
-	# 중간에 두면 그 여섯이 전부 틀린 창을 쓴다.
+	# 위 match 에서 qt 를 덮는 갈래가 여덟(miss · bal · rnd · wind · total · 목표돌파 · 단골이
+	# 들어오고 뽑아 가는 둘)이라 중간에 두면 그 여덟이 전부 틀린 창을 쓴다.
 	#
 	# 실시간 상수(0.25 같은)로 박으면 curve_probe 가 beat 를 0.015 로 눌렀을 때
 	# 창만 안 줄어 2026-09-15 의 「16런이 900초를 넘김」이 되살아난다. qt 를 곱하면
@@ -11837,42 +12233,110 @@ func _board_ring(ro: float) -> void:
 func _board_plank(push: float) -> void:
 	if dead_idx < 0 or dead_idx >= _sec_n():
 		return
-	var C: Dictionary = LEGB_COL
 	var sw := _sec_w()
 	var a0: float = float(dead_idx) * sw - sw * 0.5
-	var a1: float = a0 + sw
-	var r0: float = R * rt_bull_o * push + 0.5
-	var r1: float = R * rt_dbl_out * push
+	_plank_draw(a0, a0 + sw, R * rt_bull_o * push + 0.5, R * rt_dbl_out * push)
+
+
+#  단골이 막은 띠 한 칸 — 막힌 칸의 참나무 쪽(_plank_draw)을 그 띠 한 칸으로 좁혔다. 불이면
+#  그 불 한 바퀴(안쪽 불은 원판 · 바깥 불은 고리)다. 자루가 꽂히는 프레임에 서고 막힘이
+#  풀리면 걷힌다(rgl_pa). 옷 입은 판(테마) 위에도 같은 참나무다.
+func _rgl_plank(push: float) -> void:
+	if rgl_pa <= 0.0:
+		return
+	if rgl_idx >= 0:
+		var sw := _sec_w()
+		var a0: float = float(rgl_idx) * sw - sw * 0.5
+		_plank_draw(a0, a0 + sw, rgl_r.x * push + 0.5, rgl_r.y * push, rgl_pa)
+	else:
+		_plank_draw(0.0, TAU, rgl_r.x * push, rgl_r.y * push, rgl_pa)
+
+
+#  참나무 쪽 한 장 — 판 각 a0~a1(0 이 위 · 시계 방향) · 반지름 r0~r1. 막힌 칸과 단골이 막은
+#  띠가 같이 쓴다. a 는 짙기다(단골 쪽이 서고 걷힌다 — 막힌 칸은 늘 1).
+#  한 바퀴(불)면 옆변이 없다 — 테는 바깥 · 안 둥근 변을 빛 쪽 · 그늘 쪽으로 가르고 결은 가운데
+#  호 하나 · 핀은 하나다. 띠가 좁으면(16px 밑) 안 둥근 변을 하나 더 긋고 핀 둘이 띠 가운데
+#  줄에 칸 폭으로 선다.
+func _plank_draw(a0: float, a1: float, r0: float, r1: float, a := 1.0) -> void:
+	var C: Dictionary = LEGB_COL
+	var fa := func(c: Color) -> Color: return Color(c, c.a * a)
+	if a1 - a0 >= TAU - 0.001:
+		_plank_round(r0, r1, a)
+		return
 	var pts: PackedVector2Array = annulus_at(BC, r0, r1, a0, a1, 6)
 	var sh := PackedVector2Array()
 	for q in pts:
 		sh.append(q + Vector2(1.0, 1.0))
-	draw_colored_polygon(sh, Color(C.cover, 0.75))
-	draw_colored_polygon(pts, C.wedge)
+	draw_colored_polygon(sh, Color(C.cover, 0.75 * a))
+	draw_colored_polygon(pts, fa.call(C.wedge))
 	var dm := Vector2(sin((a0 + a1) * 0.5), -cos((a0 + a1) * 0.5))
 	var e0 := Vector2(sin(a0), -cos(a0))
 	var e1 := Vector2(sin(a1), -cos(a1))
-	#  결 — 칸 길이로 두 줄(칸 폭의 ⅓ · ⅔ 자리)
-	for t in [0.36, 0.66]:
-		var aa: float = lerpf(a0, a1, float(t))
-		var dv := Vector2(sin(aa), -cos(aa))
-		draw_line(BC + dv * (r0 + 3.0), BC + dv * (r1 - 3.0), C.wedge_grain, 1.0)
+	#  결 — 칸 길이로 두 줄(칸 폭의 ⅓ · ⅔ 자리). 띠가 7px 밑이면 결 자리가 없다.
+	if r1 - r0 > 7.0:
+		for t in [0.36, 0.66]:
+			var aa: float = lerpf(a0, a1, float(t))
+			var dv := Vector2(sin(aa), -cos(aa))
+			draw_line(BC + dv * (r0 + 3.0), BC + dv * (r1 - 3.0), fa.call(C.wedge_grain), 1.0)
 	#  빛 쪽 · 그늘 쪽 변 — 두 옆변 가운데 바깥 법선이 왼쪽 위(빛)를 더 보는 쪽이 밝다.
 	var lit := func(n: Vector2) -> float: return n.y + n.x * 0.5
 	var n0 := -Vector2(cos(a0), sin(a0))
 	var n1 := Vector2(cos(a1), sin(a1))
 	var hi_e: Vector2 = e0 if lit.call(n0) <= lit.call(n1) else e1
 	var lo_e: Vector2 = e1 if hi_e == e0 else e0
-	draw_line(BC + hi_e * r0, BC + hi_e * r1, C.wedge_hi, 1.0)
-	draw_line(BC + lo_e * r0, BC + lo_e * r1, C.cover, 1.0)
+	draw_line(BC + hi_e * r0, BC + hi_e * r1, fa.call(C.wedge_hi), 1.0)
+	draw_line(BC + lo_e * r0, BC + lo_e * r1, fa.call(C.cover), 1.0)
 	#  바깥 호 — 위쪽이면 빛, 아래쪽이면 그늘
 	draw_arc(BC, r1 - 0.5, a0 - PI * 0.5, a1 - PI * 0.5, 6,
-			C.wedge_hi if lit.call(dm) < 0.0 else C.edge, 1.0)
-	#  놋쇠 핀 둘 — 칸 한가운데 줄의 안 · 바깥 끝(2x2)
-	for t in [0.24, 0.86]:
-		var c: Vector2 = (BC + dm * lerpf(r0, r1, float(t))).round()
-		draw_rect(Rect2(c - Vector2(1.0, 1.0), Vector2(2.0, 2.0)), C.brass)
-		draw_rect(Rect2(c - Vector2(1.0, 1.0), Vector2(1.0, 1.0)), C.brass_hi)
+			fa.call(C.wedge_hi if lit.call(dm) < 0.0 else C.edge), 1.0)
+	var narrow := r1 - r0 < 16.0
+	#  띠 한 칸 — 안 호도 긋는다(빛은 바깥 호와 반대 쪽이다 — 안 변은 판 가운데를 본다)
+	if narrow:
+		draw_arc(BC, r0 + 0.5, a0 - PI * 0.5, a1 - PI * 0.5, 6,
+				fa.call(C.edge if lit.call(dm) < 0.0 else C.wedge_hi), 1.0)
+	#  놋쇠 핀 둘 — 칸 한가운데 줄의 안 · 바깥 끝(2x2). 좁은 띠는 띠 가운데 줄의 양 끝이다.
+	var pins: Array = [0.22, 0.78] if narrow else [0.24, 0.86]
+	for t in pins:
+		var c: Vector2
+		if narrow:
+			var ap: float = lerpf(a0, a1, float(t))
+			c = (BC + Vector2(sin(ap), -cos(ap)) * (r0 + r1) * 0.5).round()
+		else:
+			c = (BC + dm * lerpf(r0, r1, float(t))).round()
+		draw_rect(Rect2(c - Vector2(1.0, 1.0), Vector2(2.0, 2.0)), fa.call(C.brass))
+		draw_rect(Rect2(c - Vector2(1.0, 1.0), Vector2(1.0, 1.0)), fa.call(C.brass_hi))
+
+
+#  둥근 참나무 쪽 — 불 한 바퀴. r0 이 0 이면 원판(안쪽 불), 아니면 고리(바깥 불)다. 고리는
+#  한 다각형으로 그리면 이음매가 겹쳐 쪼개기가 실패하므로 반으로 나눠 긋는다
+#  (_board_dim_except 와 같은 까닭).
+func _plank_round(r0: float, r1: float, a: float) -> void:
+	var C: Dictionary = LEGB_COL
+	var fa := func(c: Color) -> Color: return Color(c, c.a * a)
+	var o := Vector2(1.0, 1.0)
+	if r0 <= 0.5:
+		draw_circle(BC + o, r1, Color(C.cover, 0.75 * a))
+		draw_circle(BC, r1, fa.call(C.wedge))
+	else:
+		for h in 2:
+			var h0 := PI * float(h)
+			draw_colored_polygon(annulus_at(BC + o, r0, r1, h0, h0 + PI, 8),
+					Color(C.cover, 0.75 * a))
+		for h in 2:
+			var h1 := PI * float(h)
+			draw_colored_polygon(annulus_at(BC, r0, r1, h1, h1 + PI, 8), fa.call(C.wedge))
+		#  결 — 고리 가운데 호 하나(위 반쪽)
+		draw_arc(BC, (r0 + r1) * 0.5, PI * 1.1, PI * 1.9, 8, fa.call(C.wedge_grain), 1.0)
+		#  안 둥근 변 — 판 가운데를 보므로 빛이 반대다(위가 그늘 · 아래가 빛)
+		draw_arc(BC, r0 + 0.5, PI * 0.75, PI * 1.75, 8, fa.call(C.edge), 1.0)
+		draw_arc(BC, r0 + 0.5, PI * -0.25, PI * 0.75, 8, fa.call(C.wedge_hi), 1.0)
+	#  바깥 둥근 변 — 왼쪽 위가 빛 · 오른쪽 아래가 그늘
+	draw_arc(BC, r1 - 0.5, PI * 0.75, PI * 1.75, 10, fa.call(C.wedge_hi), 1.0)
+	draw_arc(BC, r1 - 0.5, PI * -0.25, PI * 0.75, 10, fa.call(C.edge), 1.0)
+	#  놋쇠 핀 하나 — 원판은 한가운데 · 고리는 위 한가운데
+	var c := (BC + Vector2(0.0, -(r0 + r1) * 0.5 if r0 > 0.5 else 0.0)).round()
+	draw_rect(Rect2(c - Vector2(1.0, 1.0), Vector2(2.0, 2.0)), fa.call(C.brass))
+	draw_rect(Rect2(c - Vector2(1.0, 1.0), Vector2(1.0, 1.0)), fa.call(C.brass_hi))
 
 
 # ── 피자 한 벌 ──
@@ -14677,6 +15141,7 @@ func _draw_board() -> void:
 		_board_plank(push)
 	else:
 		_theme_board(th, ro, push, cols)
+	_rgl_plank(push)        # 단골이 막은 띠 한 칸 — 판 사건(2026-10-06)
 	_board_light(push)
 	_theme_over(th, push)
 
@@ -15547,6 +16012,7 @@ func _bd3_open() -> void:
 
 func _bd3_close() -> void:
 	bd_nodes.clear()
+	bd_rgl = null           # 무대의 자식이라 같이 지워진다
 	if _bd3_live():
 		bd_vp.queue_free()
 	bd_vp = null
@@ -15613,10 +16079,16 @@ func _bd3_fly() -> void:
 	var beg := Vector3(end.origin.x * 0.15 - 18.0, end.origin.y * 0.15 - 46.0,
 			_bd3_eye() * 0.86)
 	var t := clampf(fly_t / maxf(GameData.tune("fly_time"), 0.001), 0.0, 1.0)
-	# 끝에서 살짝 붙는다 — 등속이면 원근 때문에 뒤로 갈수록 느려 보인다.
-	var e := t * t * (3.0 - 2.0 * t)
-	bd_fly.transform = Transform3D(end.basis, beg.lerp(end.origin, e))
+	bd_fly.transform = _bd3_fly_tf(end, beg, t)
 	_dart3_face_u(bd_fly, Vector3(0.0, 0.0, _bd3_eye()))
+
+
+#  나는 자루 한 프레임 — beg 에서 꽂힌 자세 end 로, t 는 0..1. 끝에서 살짝 붙는다 — 등속이면
+#  원근 때문에 뒤로 갈수록 느려 보인다. arc 는 길 한가운데에서 위로 휘는 높이(px)다.
+#  내 자루(_bd3_fly)와 옆에서 날아오는 단골 자루(_rgl_pose)가 같은 식을 쓴다.
+func _bd3_fly_tf(end: Transform3D, beg: Vector3, t: float, arc := 0.0) -> Transform3D:
+	var e := t * t * (3.0 - 2.0 * t)
+	return Transform3D(end.basis, beg.lerp(end.origin, e) + Vector3(0.0, arc * sin(PI * e), 0.0))
 
 
 func _bd3_sync() -> void:
@@ -15645,6 +16117,36 @@ func _bd3_sync() -> void:
 			_dart3_face_u(bd_nodes[i], Vector3(0.0, 0.0, _bd3_eye()))
 
 
+#  단골 자루 한 벌 — darts 밖이다(darts 는 내 자루만 센다 · 판 깨짐 · 검사 도구가 읽는다).
+#  그림(rgl_ph)이 있는 동안만 산다. 자세가 바뀐 프레임에만 무대를 한 번 다시 굽는다 —
+#  내 자루가 나는 동안(UPDATE_ALWAYS)은 그대로 둔다.
+var bd_rgl: Node3D = null
+
+
+func _bd3_rgl() -> void:
+	if rgl_ph == "":
+		if is_instance_valid(bd_rgl):
+			bd_rgl.queue_free()
+			bd_rgl = null
+			_bd3_dirty()
+		return
+	if not is_instance_valid(bd_rgl):
+		bd_rgl = Node3D.new()
+		#  몸은 표준 자루 · 색만 단골 색이다(캐릭터 그림 없음).
+		_dart3_meshes(bd_rgl, float(BD3.len) * 0.5, float(BD3.r), float(BD3.fin),
+				_dart3_col("reg"))
+		bd_vp.add_child(bd_rgl)
+	var tf := _rgl_pose()
+	if bd_rgl.transform != tf:
+		bd_rgl.transform = tf
+		_bd3_dirty()
+
+
+func _bd3_dirty() -> void:
+	if bd_vp.render_target_update_mode != SubViewport.UPDATE_ALWAYS:
+		bd_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+
+
 #  a 는 층 전체의 짙기다. 판 깨짐이 꽂힌 다트를 떨어뜨리며 지울 때만
 #  1.0 이 아니고, 3D 길은 모듈레이트가 · 2D 길은 _icon_dart 의 a 가 받는다 —
 #  한 갈래에 한 줄씩이라 헤드리스와 창 있는 실행이 같다. 2026-09-24
@@ -15657,7 +16159,8 @@ func _draw_darts(a := 1.0) -> void:
 	# 프로브가 간헐적으로 세그폴트했다(settle · league · mod 가 번갈아 죽었다).
 	# 매번 다른 프로브가 죽어서 원인이 안 보였다. 화면 서버 이름이 그것을
 	# 정확히 말하는 유일한 값이다.
-	if not _bd3_live() and _has_renderer() and (not darts.is_empty() or state == S.FLY):
+	var want3 := not darts.is_empty() or state == S.FLY or rgl_ph != ""
+	if not _bd3_live() and _has_renderer() and want3:
 		_bd3_open()
 	# **비어도 맞춘다.** 판이 바뀌면 darts 만 비고 3D 자루는 뒤에 남아,
 	# 새 판 위에 지난 판의 다트가 그대로 꽂혀 있었다(프로브가 잡았다).
@@ -15665,8 +16168,9 @@ func _draw_darts(a := 1.0) -> void:
 	if _bd3_live():
 		_bd3_sync()
 		_bd3_fly()
+		_bd3_rgl()
 	# 첫 발은 꽂힌 자루가 없다. 나는 자루만 있어도 무대를 그려야 한다.
-	if darts.is_empty() and not _bd3_flying():
+	if darts.is_empty() and not _bd3_flying() and rgl_ph == "":
 		return
 	#  그림자가 먼저다 — 3D 한 장이든 2D 받침이든 그 **밑**에 깔린다.
 	_dart_shade_2d(a)
@@ -15682,6 +16186,14 @@ func _draw_darts(a := 1.0) -> void:
 	_draw_darts_2d(a)
 
 
+#  판에 꽂혀 선 자루 — 내 자루(darts)에 꽂혀 있는 단골 자루를 얹는다. 그림자 · 2D 받침이
+#  읽는다. 단골 자루가 날거나 떨어지거나 빠지는 동안은 안 든다(3D 무대만 그린다).
+func _darts_stuck() -> Array:
+	if rgl_ph != "on":
+		return darts
+	return darts + [{"p": rgl_p, "id": "std", "rot": rgl_rot}]
+
+
 #  꽂힌 자루의 그림자. **3D 자루 밑에 2D 로 깐다.**
 #
 #  자루 몸이 밝은 회색이라 **백색 칸 위에서는 바탕과 대비가 없어** 어디
@@ -15694,7 +16206,7 @@ func _draw_darts(a := 1.0) -> void:
 #  나란히 같은 셈을 한다는 위 구획 주석의 계약이라, 3D 자루가 서는 자리와
 #  한 자에서 난다. 2026-09-24
 func _dart_shade_2d(a := 1.0) -> void:
-	for e in darts:
+	for e in _darts_stuck():
 		var v: Vector2 = e.p - BC
 		var r := v.length()
 		var dl := clampf(r * float(DART_PERSP) * 0.5,
@@ -15713,7 +16225,7 @@ func _dart_shade_2d(a := 1.0) -> void:
 # 3D 가 없을 때의 받침. 같은 투영을 손으로 계산한다 — 자세한 근거는
 # 위 구획 주석과 DART_PERSP 에 있다.
 func _draw_darts_2d(a := 1.0) -> void:
-	for e in darts:
+	for e in _darts_stuck():
 		var v: Vector2 = e.p - BC
 		var r := v.length()
 		var dl := clampf(r * float(DART_PERSP) * 0.5,
@@ -33113,7 +33625,7 @@ const ART_PAL := {
 const ART_HUES := ["red", "orange", "gold", "green", "teal", "blue",
 		"violet", "pink"]
 
-#  coin_paint.PAL 에서 다트가 쓰는 램프 여섯만 옮겼다. 0 어둠 → 3 밝음.
+#  coin_paint.PAL 에서 다트가 쓰는 램프 일곱만 옮겼다. 0 어둠 → 3 밝음.
 #  **ART_PAL 의 부분집합이다** — 값이 갈리면 2D 다트와 3D 통이 다른 팔레트로
 #  칠해진다. cup_probe 가 두 표가 같은지를 지킨다.
 const DK_PAL := {
@@ -33123,6 +33635,8 @@ const DK_PAL := {
 	"steel": [Color("3a3f52"), Color("687085"), Color("a3abbb"), Color("dde3ec")],
 	"red":   [Color("4a1426"), Color("8c2233"), Color("d8483d"), Color("f27d63")],
 	"green": [Color("1d3326"), Color("2f6340"), Color("479a58"), Color("94d68e")],
+	#  단골 자루(_dart3_col 의 "reg") — ART_PAL 의 blue 그대로
+	"blue":  [Color("1a2150"), Color("2b4a95"), Color("3f7fd8"), Color("91cbf5")],
 }
 
 #  부품 한 줄 = [램프, 바탕 단, 구름(spin)을 타는가, 프로파일]
@@ -43181,6 +43695,9 @@ func _dart3_col(id: String) -> Color:
 		"hvy": return DK_PAL["dusk"][3]       # b3abc8
 		"lgt": return DK_PAL["green"][3]      # 94d68e
 		"mag": return DK_PAL["red"][3]        # f27d63
+		#  단골 자루(판 사건 · 2026-10-06) — 내 다트 넷(크림 · 어스름 · 초록 · 빨강)에도 판(빨강 ·
+		#  초록 띠 · 백색 · 흑색 칸)에도 없는 파랑이다. 캐릭터 그림 없이 이 색이 곧 단골이다.
+		"reg": return DK_PAL["blue"][3]       # 91cbf5
 	return DK_PAL["cream"][3]                 # fbf6ea
 
 

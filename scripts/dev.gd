@@ -971,7 +971,7 @@ static func _rows(g: Node) -> Array:
 				{"n1": "술집 문 %s" % ("켬" if g.door_on else "끔"), "t": "act", "a": "door"},
 				#  ── 판 사건 (2026-10-06 · game.gd _ev_roll) ─────────────
 				#  불씨 · 주문 · 단골 셋이 이 밑에 나란히 선다. 0쪽 열여덟 · 2쪽 · 5쪽 열아홉이라
-				#  셋이 같이 들 자리가 이 쪽뿐이다 — 주문까지 열다섯(qa_crt 가 쪽마다 열아홉을 잰다).
+				#  셋이 같이 들 자리가 이 쪽뿐이다 — 단골까지 열여섯(qa_crt 가 쪽마다 열아홉을 잰다).
 				#  「불씨 피우기」 — 지금 판의 무작위 칸 · 띠에 곧장 피운다. 게임의 _ember_light ·
 				#  _ember_band_pick 을 그대로 부른다. 칸 · 띠는 전역 난수다 — run_rng 를 건드리면
 				#  이 판을 되감을 때 다음 판 사건이 달라진다.
@@ -979,6 +979,10 @@ static func _rows(g: Node) -> Array:
 				#  「주문 걸기」 — 지금 판에 무작위 주문(영역 · 눈금 · 보상)을 곧장 건다. 게임의
 				#  _order_region · _order_tag_pick · _order_open 을 그대로 부른다(2026-10-06).
 				{"n1": "주문 걸기", "t": "act", "a": "order"},
+				#  「단골 던지기」 — 지금 판의 마지막으로 점수 낸 칸 · 띠(없으면 무작위 칸 · 띠)에 단골
+				#  자루를 곧장 날려 꽂는다. 게임의 _rgl_at · _rgl_open · _rgl_in 을 그대로 부른다 —
+				#  막힘 · 가로채기 · 뽑아 가기는 게임과 같이 던져서 본다(2026-10-06).
+				{"n1": "단골 던지기", "t": "act", "a": "regular"},
 			]
 		4:
 			#  ⚠ 여기 쪽 번호를 **적어 둔다.** 여태 `_:` 기본 갈래였는데,
@@ -2610,6 +2614,20 @@ static func _run(g: Node, e: Dictionary) -> void:
 				return
 			_say("주문 %s · 눈금 %d · %s" % [g.order_cond, g.order_n,
 					String(g.order_tag.get("name", ""))])
+			return
+		"regular":
+			if not g._is_play():
+				_say("판 위가 아니다")
+				return
+			#  자리 · 씨앗은 전역 난수다 — run_rng 를 건드리면 이 판을 되감을 때 다음 판 사건이
+			#  달라진다. 무작위 칸 · 띠는 불씨와 같은 띠 고르기(_ember_band_pick)다.
+			var tg: Dictionary = g.rgl_last
+			if tg.is_empty():
+				tg = g._rgl_at(g._ember_at(randi() % g._sec_n(), g._ember_band_pick(randf())))
+			g._rgl_open(tg, randi() & 0x3fffffff)
+			g._rgl_in(g.beat * float(g.REGULAR.in_b) * float(g.REGULAR.in_k))
+			_say("단골 %s · 값 %d" % ["불" if g.rgl_idx < 0 else str(int(g.sectors[g.rgl_idx])),
+					g.rgl_val])
 			return
 		"run_drop":
 			Save.run_drop()
