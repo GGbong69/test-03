@@ -2907,10 +2907,15 @@ const TUT := {
 	#  2026-09-27: 「동전 두 개로는 우리 게임의 매력을 충분히 못 보여 줄 것 같아」).
 	#  3판이라 상점이 둘뿐이다. 사탕은 첫 상점에서 줘 둘째 판에 쓰게 하고(칸이
 	#  빈다), 둘째 상점의 보드 확장 · 팩 · 사진이 셋째(마지막) 판을 채운다.
+	#  2026-10-06 「튜토리얼 할 때 석양이 진다를 2라운드 상점에서 주자」 — 둘째 상점에
+	#  석양이 진다(r05 · 한 발이 다섯 발)가 더 놓인다. 동전 다섯 칸이 첫 상점에서 다
+	#  차므로 **하나를 팔아야** 집힌다(사용자가 고른 길 — 「하나 팔고 받기」). 둘째 상점이
+	#  동전을 쥐고 여는 첫 상점이라 판매 말상자(u_sell)가 그 자리에서 창구를 가리킨다.
+	#  선물이 넷이라 그 상점 테이블은 선물로 찬다(첫 상점 리롤 뒤와 같다).
 	"pages": [
 		{"shop": 1, "ids": ["r14", "u26"]},
 		{"shop": 1, "rr": true, "ids": ["u11", "c03", "c06", "c:c_tr"]},
-		{"shop": 2, "ids": ["m:dnut", "b:b_small", "f:c_again"]},
+		{"shop": 2, "ids": ["r05", "m:dnut", "b:b_small", "f:c_again"]},
 	],
 }
 
@@ -4126,8 +4131,8 @@ func _next_leg() -> void:
 func _open_leg() -> void:
 	_tutor("u_leg")
 	#  건너뛸 수 있는 첫 판에서만. 못 건너뛰는 판에서 말하면 없는 단추를
-	#  가리키는 셈이다.
-	if GameData.skippable(leg_no):
+	#  가리키는 셈이다(튜토리얼 런은 못 건너뛴다 — _can_skip).
+	if _can_skip(leg_no):
 		_tutor("u_skip")
 	sealed = -1
 	sell_sel = -1
@@ -4145,7 +4150,7 @@ func _open_leg() -> void:
 		var bf := _round_first()
 		for k in GameData.legs_per_round():
 			var brn: int = bf + k
-			if GameData.skippable(brn):
+			if _can_skip(brn):
 				leg_tags[brn] = GameData.tag_roll(bta)
 	leg_tag = _leg_tag(leg_no)
 	#  뱃지와 **같은 이유로** 보스 제약도 여기서 미리 정한다 — 바로 위
@@ -4232,9 +4237,17 @@ func _leg_skip() -> Rect2:
 	return Rect2(Vector2(VIEW.x - go.end.x, go.position.y), go.size)
 
 
+#  그 판을 건너뛸 수 있는가 — 표(legs.csv 의 skippable)가 허락하고 튜토리얼 런이 아닐 때.
+#  튜토리얼 런은 3판이 곧 선물 상점 둘이라 한 판만 건너뛰어도 선물 한 쪽과 빌드가
+#  통째로 빠진다(2026-10-06 「튜토리얼때 건너뛰기가 가능한가? 가능하면 안되게 막아주고」).
+#  못 건너뛰는 판에는 뱃지도 안 굴린다 — 받을 수 없는 보상을 단추에 적지 않는다.
+func _can_skip(rn: int) -> bool:
+	return GameData.skippable(rn) and not tut_run
+
+
 # 건너뛴다 — 점수도 골드도 없다. 뱃지를 받고 다음 판으로 넘어간다.
 func _skip_leg() -> void:
-	if not GameData.skippable(leg_no):
+	if not _can_skip(leg_no):
 		_deny()
 		return
 	leg_skipped[leg_no] = true
@@ -5423,7 +5436,7 @@ func _auto_step() -> void:
 	match state:
 		S.LEG:
 			# 열에 하나꼴로 건너뛴다 — 두 길이 다 돌아야 소크가 뜻이 있다
-			if GameData.skippable(leg_no) and randf() < 0.1:
+			if _can_skip(leg_no) and randf() < 0.1:
 				_skip_leg()
 			else:
 				_begin_leg()
@@ -36602,11 +36615,12 @@ func _draw_leg() -> void:
 	#  단추 밖으로 샌다). 갈무리 때는 가장 긴 「가장 많이 맞힌 트랙 강화 +2」 가 161 이라
 	#  양옆을 7 씩만 비웠다. 페이퍼로지 Bold 로 135 라 _btn 과 같은 8 씩(160)에 25px 이
 	#  남는다 — 자르는 자리를 _btn 과 한 줄로 되돌린다.
-	if GameData.skippable(leg_no):
+	if _can_skip(leg_no):
 		_btn(_leg_skip(), "건너뛴다", _elide(_tag_text(leg_tag),
 				_leg_skip().size.x - 16.0, 12), true, C_GOLD, false, true)
 	else:
-		_btn(_leg_skip(), "못 건너뛴다", "보스 판", false, C_GOLD, false, true)
+		_btn(_leg_skip(), "못 건너뛴다", "튜토리얼" if tut_run and GameData.skippable(leg_no)
+				else "보스 판", false, C_GOLD, false, true)
 	# 쌓아 둔 뱃지 — 언제 쓰이는지는 이름이 말한다
 	#
 	#  누르는 것이 아니라 읽는 것이다(툴팁만 뜬다). 그래도 커서를 올리면
