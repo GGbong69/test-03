@@ -177,10 +177,17 @@ func _play(hold_fast := false) -> Dictionary:
 	var hot := 0
 	var lay := 0
 	var stop0 := 0.0
+	var step_f := 0            # 합계 걸음만의 프레임(걸음이 선 다음 프레임부터)
+	var nom := -1.0            # 걸음이 선 프레임의 이름값 qt + hitstop
 	g.fast_lock = hold_fast
 	while g.state == g.S.RESOLVE and frames < 6000:
+		var ps0: int = g.pitch_step
 		g._process(1.0 / 60.0)
 		frames += 1
+		if nom >= 0.0:
+			step_f += 1
+		elif g.pitch_step > ps0:
+			nom = float(g.qt) + float(g.hitstop)
 		hot = maxi(hot, int(g.fire_hot))
 		lay = maxi(lay, int(g.fire_lay))
 		stop0 = maxf(stop0, float(g.hitstop))
@@ -195,7 +202,8 @@ func _play(hold_fast := false) -> Dictionary:
 	g.fast_lock = false
 	return {"frames": frames, "stop": stop_f, "fire": fire_f,
 			"quiet": quiet_f, "shk": shk_hi, "hot": hot, "lay": lay,
-			"env": env_hi, "stop0": stop0, "shake_end": float(g.shake)}
+			"env": env_hi, "stop0": stop0, "shake_end": float(g.shake),
+			"step": step_f, "nom": nom}
 
 
 func _spread(a: Array) -> int:
@@ -259,8 +267,8 @@ func _run() -> void:
 	# ── ① 박자 0 — 단이 걸음 프레임을 한 개도 안 더한다 ──────
 	#  「빈 박」의 본체다. 멈춤을 2단 0.060 · 3단 0.090 · 4단 0.120 으로 갈랐는데
 	#  **같은 줄에서 qt 에서 빼므로** 걸음 벽시계가 다섯 단에서 글자 하나까지
-	#  같아야 한다. r 0.90 을 쓴다 — 목표(1000)를 안 넘기므로 qt 가 2.6 갈래로
-	#  서고, 0.50 을 넘으므로 「한 방」 블록에 들어 멈춤이 실제로 걸린다.
+	#  같아야 한다. r 0.90 을 쓴다 — 목표(1000)를 안 넘기므로 qt 가 _tot_qt 의
+	#  크기 갈래로 서고, 0.50 을 넘으므로 「한 방」 블록에 들어 멈춤이 실제로 걸린다.
 	print("\n── ① 박자 0 ────────────────────────────────────")
 	var beat0: float = g.beat
 	for pl in [1, 40]:
@@ -276,15 +284,31 @@ func _run() -> void:
 					"%s프레임" % [fr])
 	#  값이 아무리 커도 같은가 — 무한 런의 큰 수에서 안 터지는지를 같이 잰다.
 	#  ⚠ **갈래를 갈라서 잰다.** qa_total ① 이 먼저 겪은 함정이다: r ≥ 1.0 은
-	#  이 걸음에서 목표를 넘기므로 게임이 **손대기 전부터** qt 를 2.6 → 3.4 로
-	#  늘린다(판이 끝나는 자리라 길게 둔 것이다). 안 가르고 재면 75 ↔ 91 이
-	#  나오는데 그건 내 층이 아니라 그 갈래다 — 처음 돌렸을 때 실제로 그랬다.
+	#  이 걸음에서 목표를 넘기므로 qt 가 beat × TALLY.brk 로 선다(판이 끝나는
+	#  자리라 길게 둔 것이다).
+	#  안 넘기는 걸음은 크기(gn)만큼 길어진다(2026-10-06) — 걸음 프레임이 r 을
+	#  따라 안 줄고, 하나하나가 60 × beat × (TALLY.tot + TALLY.tot_gn × gn) 에서
+	#  1 안이다(멈춤 프레임의 올림 하나까지 +1). 단이 프레임을 더했으면 터진다.
 	var frv := []
+	var want_v := []
+	var v_mono := true
+	var v_fit := true
+	var TL: Dictionary = g.TALLY
 	for r in [0.02, 0.32, 0.60, 0.90]:
 		_stage(float(r), 1)
-		frv.append(int(_play().frames))
-	_ok("①-b 안 넘기는 걸음이 r 0.02~0.90 에서 같다", _spread(frv) <= 1,
-			"%s프레임" % [frv])
+		var gv: float = g._grow_of(int(round(float(r) * 1000.0)))
+		var wv: float = g.beat * (float(TL.tot) + float(TL.tot_gn) * gv)
+		var sv := _play()
+		var fv: int = int(sv.step)
+		if not frv.is_empty() and fv < int(frv[frv.size() - 1]):
+			v_mono = false
+		if fv < int(floor(wv * 60.0)) or fv > int(ceil(wv * 60.0)) + 1 \
+				or absf(float(sv.nom) - wv) > 0.0005:
+			v_fit = false
+		frv.append(fv)
+		want_v.append(snappedf(wv * 60.0, 0.1))
+	_ok("①-b 안 넘기는 걸음이 r 0.02~0.90 에서 식 그대로 자란다", v_mono and v_fit,
+			"%s프레임 · 식 %s" % [frv, want_v])
 	var frh := []
 	for r in [1.00, 2.00, 1.00e6, 1.00e12]:
 		_stage(float(r), 1)
@@ -544,12 +568,12 @@ func _run() -> void:
 
 	# ── ⑦ 창이 걸음을 못 넘는다 — 부등식으로 증명한다 ────────
 	#  「새 벽시계 상수 0개」를 검사가 대신 증명하는 자리다. 창 = qt × jspan
-	#  이므로 beat 가 0.34 든 0.015 든 · pace 가 1.00 이든 0.30 이든 · 빨리
+	#  이므로 beat 가 표의 값이든 0.015 든 · 짐이 1 이든 40 이든 · 빨리
 	#  보기가 1.0 이든 2.5 든 구조적으로 걸음을 못 넘는다.
 	print("\n── ⑦ 창 ÷ 걸음 ───────────────────────────────")
 	var worst := 0.0
 	var wnote := ""
-	for bt in [0.34, 0.015]:
+	for bt in [beat0, 0.015]:
 		for pl in [1, 40]:
 			for ff in [false, true]:
 				g.beat = bt

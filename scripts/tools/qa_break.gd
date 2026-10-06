@@ -249,9 +249,10 @@ func _run() -> void:
 			"shake %.2f — 연출이 한 톨도 안 더했다" % a.shake)
 	_ok("멈춤은 CARDFX.stop 밑", float(a.hitstop) <= stop + 0.0001,
 			"hitstop %.3f / 상한 %.3f" % [a.hitstop, stop])
+	var brk_q: float = beat * float(g.TALLY.brk)
 	_ok("걸음 길이를 안 건드렸다",
-			absf(float(a.qt) - (beat * 3.4 - float(a.hitstop))) < 0.002,
-			"qt %.3f / 기대 %.3f" % [a.qt, beat * 3.4 - float(a.hitstop)])
+			absf(float(a.qt) - (brk_q - float(a.hitstop))) < 0.002,
+			"qt %.3f / 기대 %.3f" % [a.qt, brk_q - float(a.hitstop)])
 
 	# ── ② 글자 0자 ──────────────────────────────────────────
 	#  연출을 통째로 손으로 돌려 놓고 팝업 수를 본다. 던져서 재면 그 발이
@@ -344,7 +345,7 @@ func _run() -> void:
 
 	# ── ⑦ 꼬리 — 걸음 길이가 달라도 정산 앞의 숨이 같다 ─────
 	var breaths := []
-	for bt in [0.34, 0.26, 0.015]:
+	for bt in [0.38, 0.26, 0.015]:
 		_open()
 		g.beat = bt
 		var r := _throw()
@@ -803,17 +804,22 @@ func _run() -> void:
 			"brk_live %s · 조각 %d · _brk_board_dy %.1f"
 			% [g.brk_live, (g.brk_shards as Array).size(), g._brk_board_dy()])
 	#  금만 난 중(발화 전)에 나가도 제목 판에 금이 안 박힌다.
+	#  첫 금이 서는 프레임까지 민다 — 돌파 걸음이 4.4박이 된 뒤(2026-10-06)로
+	#  첫 단이 10프레임째가 아니라 17프레임째에 선다. 발화 전인지도 같이 본다.
 	_open()
 	g.state = g.S.RESOLVE       # 금이 나려면 걸음 안이어야 한다
 	g._brk_arm(2)
-	for _k in 10:
+	for _k in 120:
 		g._brk_tick(DT)
+		if g.brk_stage > 0:
+			break
 	var mid_stage: int = g.brk_stage
+	var pre_fire: bool = not g.brk_fired
 	g.state = g.S.TITLE
 	g._brk_tick(DT)
 	_ok("금만 난 중에 나가도 금이 안 남는다",
-			mid_stage > 0 and not g.brk_live and g.brk_stage == 0,
-			"나가기 전 단 %d → 단 %d" % [mid_stage, g.brk_stage])
+			mid_stage > 0 and pre_fire and not g.brk_live and g.brk_stage == 0,
+			"나가기 전 단 %d(발화 전 %s) → 단 %d" % [mid_stage, pre_fire, g.brk_stage])
 	#  ⚠ **판 중에 연 설정은 얼기 그대로다.** _is_play_deep() 이 밑에 깔린
 	#  화면을 보므로 여기서 갈리면 안 된다 — 닫고 돌아온 손님이 깨지던
 	#  판을 이어서 본다.
@@ -1133,13 +1139,13 @@ func _run() -> void:
 	_ok("깊이가 층의 것(기하·개수·씨)을 한 톨도 안 만진다", ax_ok, ax_txt)
 
 	# ── ⑳ 길이 0 — 이번 일의 유일한 치명상 ──────────────────
-	#  돌파 걸음 70프레임 중 0~69 를 BRK 가 이미 쓴다. **빈 프레임이 1** 이라
-	#  깊이가 한 프레임이라도 늘리면 정산(S.CLEAR)으로 샌다.
+	#  돌파 걸음 101프레임(beat 0.38 · 4.4박) 중 0~100 을 BRK 가 이미 쓴다.
+	#  **빈 프레임이 1** 이라 깊이가 한 프레임이라도 늘리면 정산(S.CLEAR)으로 샌다.
 	#  ⚠ **1.0배로만 보면 절대 안 드러난다** — 2.5배에서는 마지막 조각이
 	#  지는 프레임과 걸음 끝이 0프레임 차다. 박자 셋 × 빨리 보기까지 댄다.
 	var len_ok := true
 	var len_txt := ""
-	for bt2 in [0.34, 0.26, 0.015]:
+	for bt2 in [0.38, 0.26, 0.015]:
 		var lwant := -1
 		for t in 4:
 			_open()
@@ -1451,21 +1457,23 @@ func _run() -> void:
 	#  바닥 maxf(qt × 0.78, 0.02)가 걸음(0.015초)보다 길어지기 때문인데,
 	#  **카드 시계 여섯이 이미 같은 바닥을 같은 이유로 쓴다** — 그래서
 	#  자를 「chip_j 보다 늦게 안 죽는다」로 적는다. 새 상수가 0개라는 것이
-	#  곧 이 자다. 사람이 보는 박자(0.34)에서는 둘 다 걸음 안에서 죽는다.
+	#  곧 이 자다. 사람이 보는 박자(0.38)에서는 둘 다 걸음 안에서 죽는다.
 	#  2026-09-25
 	var win_ok := true
 	var win_txt := ""
-	for c3 in [[0.34, 1, 1.0], [0.34, 20, 1.0], [0.015, 1, 1.0],
-			[0.34, 1, 2.5]]:
+	#  [박자, 큐 길이, 빨리 보기, settle_n]
+	for c3 in [[0.38, 1, 1.0, 1], [0.38, 20, 1.0, 40], [0.015, 1, 1.0, 1],
+			[0.38, 1, 2.5, 1]]:
 		_open()
 		g.state = g.S.RESOLVE
 		g.beat = float(c3[0])
 		g.fast_lock = float(c3[2]) > 1.0
 		g.fast_mul = float(c3[2])
-		#  ⚠ **_pace() 는 큐 길이가 아니라 settle_n 을 읽는다**(_land 가
-		#  세운다). 큐만 길게 세우면 걸음이 하나도 안 눌려 「눌린 박자」
-		#  자리가 자를 못 댄다 — 여기서 직접 세운다.
-		g.settle_n = int(c3[1])
+		#  ⚠ **_pace() 는 걸음의 자리(settle_n − 남은 큐 − 1)를 읽는다**(settle_n 은
+		#  _land 가 세운다). 앞 네 자리는 배수 1 이라 settle_n 을 큐 길이로 두면
+		#  첫 걸음이 안 눌려 「눌린 박자」 자리가 자를 못 댄다 — settle_n 40 ·
+		#  큐 20 이면 첫 걸음이 자리 20 으로 바닥(0.30)이다. 여기서 직접 세운다.
+		g.settle_n = int(c3[3])
 		g.queue = [{"k": "chip", "v": 7, "mx": 0}]
 		#  꼬리는 **적어도 하나** — 걸음이 갈리는 프레임이 있어야 잰다.
 		for _q in maxi(int(c3[1]) - 1, 1):

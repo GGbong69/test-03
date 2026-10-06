@@ -90,7 +90,9 @@ func _btn(down: bool) -> void:
 
 
 #  card_shots 의 「살아 있는 정산」과 같은 세움이다. 자를 두 개 만들지 않는다.
-func _stage(n: int) -> void:
+#  sn 은 settle_n — 안 주면 큐 길이다. _pace() 가 걸음의 자리(settle_n − 남은
+#  큐 − 1)를 읽으므로 sn 을 크게 주면 첫 걸음부터 눌린 자리에 선다.
+func _stage(n: int, sn := -1) -> void:
 	g.set_process(false)
 	g._start_leg()
 	g._card_reset()
@@ -103,8 +105,9 @@ func _stage(n: int) -> void:
 	g.queue.clear()
 	for i in n:
 		g.queue.append({"k": "chip", "v": 40 + i * 13})
-	g.settle_n = g.queue.size()
+	g.settle_n = sn if sn > 0 else g.queue.size()
 	g.burst_n = 0
+	g.burst_hits.clear()
 	g.card_side = 1
 	g.card_y = 74.0
 	g.card_p = 1.0
@@ -124,8 +127,8 @@ func _stage(n: int) -> void:
 #    steps    걸음마다 쓴 프레임 수
 #    two      한 프레임에 두 걸음이 난 적이 있나
 #    leak     걸음 안에서 chip_j 가 0 에 못 닿은 적이 있나(카드 춤이 샜다)
-func _play(n: int, hold: bool) -> Dictionary:
-	_stage(n)
+func _play(n: int, hold: bool, sn := -1) -> Dictionary:
+	_stage(n, sn)
 	#  골드는 **차이로 잰다.** _start_leg 가 판마다 이자를 얹으므로 절대값은
 	#  검사를 거듭할수록 는다 — 그것은 게임이 아니라 이 자의 박자다.
 	var gold0: int = g.gold
@@ -230,9 +233,10 @@ func _run() -> void:
 			"최대 %.4f" % fast.flash)
 
 	# ── 눌린 박자에서도 바닥이 지켜진다 ────────────────────
-	#  pace 0.30 은 걸음 0.102초 = 6.1프레임. 한도가 1.53 이라 딱 4프레임이다.
-	var pslow := _play(20, false)
-	var pfast := _play(20, true)
+	#  pace 0.30 은 걸음 0.114초 = 6.8프레임. 한도가 1.71 이라 딱 4프레임이다.
+	#  settle_n 40 · 큐 20 이면 첫 걸음이 자리 20 이라 전부 바닥이다.
+	var pslow := _play(20, false, 40)
+	var pfast := _play(20, true, 40)
 	_ok("눌린 박자 — 걸음 수가 같다",
 			pslow.pitch == pfast.pitch, "%d ↔ %d" % [pslow.pitch, pfast.pitch])
 	_ok("눌린 박자 — 걸음이 4프레임 밑으로 안 간다",
@@ -243,6 +247,72 @@ func _run() -> void:
 			and pslow.chip == pfast.chip,
 			"점수 %d/%d · 골드 %d/%d · 기본 %d/%d" % [pslow.total, pfast.total,
 					pslow.gold, pfast.gold, pslow.chip, pfast.chip])
+
+	# ── ⓜ 긴 정산은 앞에서 셈해 뒤로 갈수록 잰다 (2026-10-06) ──────
+	#  앞 네 걸음(자리 0~3)은 온 박이고 그 뒤로 한 걸음도 안 길어진다.
+	#  steps[0] 은 머리 숨이고 steps[k] 가 자리 k−1 의 걸음이다(마지막 걸음은
+	#  정산이 끝나는 프레임에 루프가 멎어 안 적힌다).
+	var ramp := _play(16, false)
+	var rs: Array = (ramp.steps as Array).slice(1)
+	var r_mono := true
+	for k in range(1, rs.size()):
+		if int(rs[k]) > int(rs[k - 1]):
+			r_mono = false
+	var floor_f: int = int(ceil(g.beat * float(g.PACE.min) * 60.0))
+	_ok("ⓜ 걸음이 자리를 따라 한 번도 안 길어진다", r_mono, "%s" % [rs])
+	_ok("ⓜ-b 앞 네 걸음이 같고 다섯째부터 짧아진다",
+			rs.size() >= 5 and int(rs[0]) == int(rs[3]) and int(rs[4]) < int(rs[3]),
+			"%s" % [rs.slice(0, 6)])
+	_ok("ⓜ-c 꼬리 걸음은 바닥(PACE.min)에 닿는다",
+			rs.size() >= 12 and absi(int(rs[rs.size() - 1]) - floor_f) <= 1,
+			"자리 %d → %d프레임 · 바닥 %d프레임" % [rs.size() - 1,
+					int(rs[rs.size() - 1]), floor_f])
+
+	# ── ⓝ 합계 걸음은 정산이 길어도 안 줄어든다 ──────────────
+	#  같은 값의 합계 걸음을 자리 2 와 자리 14 에 세운다. 셈 걸음이면 자리 14 는
+	#  바닥(0.30)인데 합계 걸음은 두 자리에서 같은 이름값이다.
+	#  목표를 안 넘기고 「한 방」 문턱 밑이라 멈춤도 없다.
+	var tq := []
+	var tp := []
+	for sn2 in [3, 15]:
+		_stage(1, sn2)
+		g.queue = [{"k": "total"}]
+		g.cur_chip = 40
+		g.cur_mult = 1
+		g.score_mul = 1.0
+		g.score_mode = "std"
+		g.target = 100000
+		g.total = 0
+		g._next_step()
+		tq.append(float(g.qt) + float(g.hitstop))
+		tp.append(g._pace())
+	_ok("ⓝ 합계 걸음이 자리 2 와 14 에서 같은 길이다",
+			absf(float(tq[0]) - float(tq[1])) < 0.0001
+			and absf(float(tq[0]) - g.beat * float(g.TALLY.tot)) < 0.0005
+			and float(tp[1]) <= float(g.PACE.min) + 0.0001,
+			"%.4f초 ↔ %.4f초 (그 자리의 셈 걸음 배수 %.2f ↔ %.2f)"
+			% [tq[0], tq[1], tp[0], tp[1]])
+
+	# ── ⓞ 바닥 자리의 합계 걸음도 2.5배를 그대로 탄다 ─────────
+	#  한도는 걸음 배수로 서는데 합계 걸음은 _pace() 를 안 타므로 step_pf 가 그
+	#  배수를 쥔다. 안 쥐면 긴 정산 끝의 합계가 바닥 걸음 한도에 묶인다.
+	_stage(1, 40)
+	g.queue = [{"k": "total"}]
+	g.cur_chip = 40
+	g.cur_mult = 1
+	g.target = 100000
+	g.total = 0
+	g._next_step()                   # 자리 39
+	_btn(true)
+	var rt_tot: float = g._fast_rate()
+	var pf_keep: float = g.step_pf
+	g.step_pf = 0.0                  # 같은 자리의 셈 걸음이 받는 한도
+	var lim_cnt: float = g._fast_lim()
+	g.step_pf = pf_keep
+	_btn(false)
+	_ok("ⓞ 바닥 자리의 합계 걸음이 2.5배다",
+			is_equal_approx(rt_tot, 2.5) and lim_cnt < 2.5,
+			"합계 %.2f배 · 같은 자리 셈 걸음 한도 %.2f배" % [rt_tot, lim_cnt])
 
 	# ── ⓖ 떼면 그 프레임부터 제 속도 ──────────────────────
 	_stage(8)
@@ -330,12 +400,14 @@ func _run() -> void:
 			"%.2f" % g._fast_lim())
 
 	# ── 사다리 — 3배를 골라도 바닥이 이긴다 ────────────────
-	_stage(20)                       # pace 0.30
+	_stage(20, 40)                   # pace 0.30
 	g.fast_mul = 3.0
 	_btn(true)
+	#  한도가 2.5 밑이어야 「바닥이 이긴다」다 — 앞 합계 걸음의 step_pf 가
+	#  세움(_card_reset)에서 안 내려가면 한도가 5.70 으로 서서 여기서 진다.
 	_ok("사다리 3배도 바닥에 눌린다",
 			g._fast_rate() <= g._fast_lim() + 0.0001
-			and g._fast_rate() < 3.0,
+			and g._fast_lim() < float(g.FAST.mul),
 			"rate %.2f · 한도 %.2f" % [g._fast_rate(), g._fast_lim()])
 	_btn(false)
 	g.fast_mul = 2.5

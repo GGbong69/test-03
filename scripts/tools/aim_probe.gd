@@ -489,21 +489,30 @@ func _kick(g: Node) -> void:
 	# 있게 재어 둔다. 실패로 안 만드는 것은 아직 정한 값이 없어서다.
 	# 걸음 빠르기. **짧은 정산은 안 건드린다** — 맨 다트 한 발이 갑자기
 	# 빨라지면 게임 전체의 박자가 바뀐 것이고, 그건 부탁받은 일이 아니다.
+	# _pace() 는 걸음의 자리(settle_n − 남은 큐 − 1)를 읽는다(2026-10-06). 여기서는
+	# 마지막 작은 다트의 큐가 막 선 참이라 큐를 비워 두고 settle_n 으로 자리를
+	# 세운 뒤 되돌린다 — 큐 길이(빗나감이면 하나)에 따라 값이 갈리지 않게.
+	var q_keep: Array = (g.queue as Array).duplicate()
+	var sn_keep: int = g.settle_n
+	var bn_keep: int = g.burst_n
+	g.queue.clear()
 	g.burst_n = 0
-	g.settle_n = 3
+	g.settle_n = 3                      # 맨 다트 한 발의 마지막 걸음(자리 2)
 	var p_bare: float = g._pace()
-	g.settle_n = 14
+	g.settle_n = 8                      # 동전 줄의 여덟째 걸음(자리 7)
 	var p_many: float = g._pace()
-	g.settle_n = 3
+	g.settle_n = 1                      # 연발 작은 다트의 첫 걸음(자리 0)
 	g.burst_n = GameData.tune_i("kick_n")
 	var p_kick: float = g._pace()
-	g.burst_n = 0
+	g.burst_n = bn_keep
+	g.settle_n = sn_keep
+	g.queue = q_keep
 	_say(is_equal_approx(p_bare, 1.0), "맨 다트 한 발은 박자가 그대로다",
 			"걸음 셋 → 배수 %.2f" % p_bare)
 	_say(p_many < 0.7 and p_many > p_kick, "동전이 줄줄이면 걸음이 재진다",
-			"걸음 열넷 → 배수 %.2f" % p_many)
+			"여덟째 걸음 → 배수 %.2f" % p_many)
 	_say(p_kick <= float(g.PACE.min) + 0.001, "연발은 가장 재게 돈다",
-			"배수 %.2f (바닥 %.2f)" % [p_kick, g.PACE.min])
+			"첫 걸음부터 배수 %.2f (바닥 %.2f)" % [p_kick, g.PACE.min])
 
 	_say(true, "연발 한 번을 정산하는 데 걸리는 시간",
 			"%.1f초 (한 발당 %.1f초 · 발마다 카드가 뜬다)"

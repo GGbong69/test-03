@@ -388,7 +388,8 @@ func _age(t: float) -> void:
 #    ① 걸음이 촘촘하면 몸이 **쌓이는가**
 #    ② 그 쌓임이 clamp 1.20(7px)에서 **멎는가** — 안 멎으면 카드 윗변이
 #       동전 슬롯 밑변 64 를 밟는다
-#    ③ 걸음 벽시계 길이가 **안 늘었는가** — 한 방의 60ms 를 qt 에서 뺐으므로
+#    ③ 한 방의 60ms 를 qt 에서 뺐는가 — 두 값의 걸음 길이 차가 _tot_qt 의
+#       크기 몫(beat × TALLY.tot_gn × gn 차)과 같아야 한다
 func _live() -> void:
 	print("── 살아 있는 정산 ──")
 	for n in [4, 20]:
@@ -433,20 +434,22 @@ func _live() -> void:
 			print("  ★ 카드 윗변이 동전 슬롯 밑변 64 를 밟았다")
 
 	# 한 방의 멈춤이 걸음을 늘리는지. **목표는 양쪽 다 안 넘긴다** — 넘기면
-	# qt 가 beat×2.6 에서 beat×3.4 로 갈아 끼워져(원래 그렇다) 멈춤이 아니라
-	# 그 갈래를 재게 된다. 값만 크고 작게 해서 big 문턱만 가른다.
+	# qt 가 beat × TALLY.brk 갈래로 서서 멈춤이 아니라 그 갈래를 재게 된다.
+	# 값만 크고 작게 해서 big 문턱만 가른다. 합계 걸음은 크기(gn)만큼
+	# 길어지므로(2026-10-06) 두 길이의 차가 그 몫과 같은지를 본다.
 	#
 	# **보통 박자와 눌린 박자(0.015)를 둘 다 잰다.** 눌린 쪽이 curve_probe ·
 	# score_probe 가 도는 조건이고, 2026-09-15 의 「16런이 900초를 넘김」이
 	# 났던 자리다. 멈춤을 상수 0.06 으로 박으면 거기서 걸음(0.012초)보다 멈춤이
 	# 길어져 발마다 60ms 가 통째로 얹힌다 — 프레임 수가 갈리면 그것이다.
-	for bt in [0.34, 0.015]:
+	for bt in [0.38, 0.015]:
 		await _stop_test(bt)
 
 
 func _stop_test(bt: float) -> void:
 	print("── 한 방의 멈춤이 걸음을 늘리는가 (박자 %.3f) ──" % bt)
 	var got := []
+	var gns := []
 	for hi in [false, true]:
 		g.set_process(false)
 		g._start_leg()
@@ -475,12 +478,16 @@ func _stop_test(bt: float) -> void:
 			secs += 1.0 / 60.0
 			fr += 1
 			burst = maxf(burst, float(g.card_burst))
-		print("  %s (+%d) → %.3f초 · %d프레임 · burst %.2f"
-				% ["큰 값" if hi else "작은 값", g.last_gain, secs, fr, burst])
+		var gn: float = g._grow_n()
+		print("  %s (+%d · gn %.3f) → %.3f초 · %d프레임 · burst %.2f"
+				% ["큰 값" if hi else "작은 값", g.last_gain, gn, secs, fr, burst])
 		got.append(secs)
-	if abs(got[0] - got[1]) > 0.02:
-		print("  ★ 두 길이가 %.3f초 다르다 — 멈춤을 qt 에서 안 뺀 것이다"
-				% abs(got[0] - got[1]))
+		gns.append(gn)
+	var want: float = bt * float(g.TALLY.tot_gn) * (float(gns[1]) - float(gns[0]))
+	var diff: float = float(got[1]) - float(got[0])
+	if absf(diff - want) > 0.02:
+		print("  ★ 길이 차 %.3f초가 크기 몫 %.3f초와 %.3f초 다르다 — 멈춤을 qt 에서 안 뺀 것이다"
+				% [diff, want, absf(diff - want)])
 	else:
-		print("  걸음 길이 차 %.3f초 — 멈춤을 qt 에서 뺀 것이 맞다"
-				% abs(got[0] - got[1]))
+		print("  걸음 길이 차 %.3f초 = 크기 몫 %.3f초 — 멈춤을 qt 에서 뺀 것이 맞다"
+				% [diff, want])

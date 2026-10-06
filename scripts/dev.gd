@@ -392,7 +392,9 @@ static func _card_big(g: Node) -> void:
 	var gn: float = g._grow_n()
 	g.shake = lerpf(float(g.GROW.shk_lo), float(g.GROW.shk_hi), gn * gn) * g.grow_shake
 	g.board_punch = 1.0
-	g.qt = g.beat * 2.6 * g._pace()
+	#  걸음 길이도 게임 쪽 한 함수로 — 손으로 베끼면 크기로 자라는 길이가 갈린다.
+	g.qt = g._tot_qt(gn, false)
+	g.step_pf = g._tot_pace()
 	if g.grow_roll > 0.0:
 		g.score_from = g.shown
 		g.score_roll = 1.0
@@ -1400,7 +1402,7 @@ const FAST_NAMES := ["1배", "2배", "2.5배", "3배"]
 #  **키 이름을 그대로 찍었다.** 모바일이 예정돼 있어 키 전용 길은 길이 아니다.
 #
 #  ⚠ **tuning.csv 를 한 톨도 안 고친다.** 사다리는 표의 기본값 **둘레**를 훑는
-#  눈금일 뿐이고, 셋째 칸이 표의 값(0.7 · 0.34 · 0.45 · 0.2)이다. 범위도
+#  눈금일 뿐이고, 셋째 칸이 표의 값(0.7 · 0.38 · 0.45 · 0.2)이다. 범위도
 #  표의 min·max 안에 든다(0.15~4.0 · 0.05~1.5 · 0.0~1.5 · 0.05~1.0).
 #  줄 이름이 **지금 값을 그대로 적으므로**(_rows 참조) 칸과 실제가 어긋나도
 #  화면이 거짓말을 안 한다 — 옛 「fast」 줄이 1배를 가리킨 채 게임은 2.5인
@@ -1429,7 +1431,7 @@ static func _tune_sync(g: Node) -> void:
 
 const TUNE_STEPS := {
 	"gauge": [0.35, 0.50, 0.70, 1.00, 1.40, 2.00],
-	"beat":  [0.15, 0.25, 0.34, 0.45, 0.60, 0.85],
+	"beat":  [0.15, 0.25, 0.38, 0.45, 0.60, 0.85],
 	"chold": [0.00, 0.20, 0.45, 0.70, 1.00, 1.50],
 	"fly":   [0.05, 0.12, 0.20, 0.32, 0.50, 0.80],
 }
@@ -2789,7 +2791,7 @@ static func _run(g: Node, e: Dictionary) -> void:
 			g.card_target = 1.0
 			g.total_flash = 1.0
 			g.gain_roll = 1.0
-			g.qt = g.beat * 2.6
+			g.qt = g._tot_qt(gn, false)     # 게임 쪽 한 함수 — 크기로 자라는 길이 그대로
 			g.card_jrate = 1.0 / maxf(g.qt * float(g.CARDFX.jspan), 0.02)
 			g.shake = lerpf(float(g.GROW.shk_lo), float(g.GROW.shk_hi), gn * gn) \
 					* g.grow_shake
@@ -3009,9 +3011,11 @@ static func _run(g: Node, e: Dictionary) -> void:
 					# 문턱이 100,000 이다). 마지막 걸음이 끝나는 프레임에
 					# _card_big 이 합계 카드를 손으로 놓는다(2026-09-18).
 			# _pace() 가 읽는 두 값이다. 안 놓으면 앞 정산의 값이 남아 배속이
-			# 틀린 채로 돈다. 「한 방」은 큐 밖의 합계 카드가 한 걸음 더라
-			# 하나를 더한다 — 안 더하면 배속이 「큼」과 갈린다.
-			g.settle_n = g.queue.size() + (1 if ci == 2 else 0)
+			# 틀린 채로 돈다. 배속은 걸음의 자리(settle_n − 남은 큐 − 1)로
+			# 서므로 큐 길이 그대로 놓아야 자리가 게임과 같다. 「한 방」의 합계
+			# 카드는 큐 밖이지만 _tot_qt 가 배속을 안 타므로 더하지 않는다
+			# (2026-10-06).
+			g.settle_n = g.queue.size()
 			g.burst_n = 0
 			g.card_target = 1.0
 			g.state = g.S.RESOLVE

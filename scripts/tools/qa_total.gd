@@ -6,15 +6,16 @@ extends SceneTree
 #  종료 코드 = 실패 개수
 #
 #  왜 있는가
-#    합계 걸음에 층을 넷 얹었다(띠 굴림 · 흔들림 · 음정 · 색). 넷 다 「이미
-#    비어 있던 시간 안에서만」 난다는 것이 계약이고, 한 판에 정산 걸음이
-#    수십 번 나므로 **걸음이 한 프레임이라도 늘면 런 전체가 늘어진다.**
-#    그래서 이 자의 본문은 「좋아 보이는가」가 아니라 **「걸음 벽시계 길이가
-#    크기와 무관하게 같은가」**다.
+#    합계 걸음에 층을 넷 얹었다(띠 굴림 · 흔들림 · 음정 · 색). 넷 다 「걸음
+#    시간 안에서만」 난다는 것이 계약이고, 한 판에 정산 걸음이 수십 번 나므로
+#    **층이 걸음을 한 프레임이라도 늘리면 런 전체가 늘어진다.**
+#    걸음 길이는 _tot_qt 한 곳이 정한다(2026-10-06) — 크기(gn)만큼 길어지고
+#    (beat × (TALLY.tot + TALLY.tot_gn × gn)) 돌파는 beat × TALLY.brk 고정이다.
+#    그래서 이 자의 본문은 **「걸음 벽시계 길이가 그 식 그대로인가」**다.
 #
 #  무엇이 기계적 증거인가
 #    넷 중 qt 를 건드리는 줄이 하나도 없다는 것은 ① 이 프레임으로 증명한다 —
-#    r 을 0.02 에서 50.0 까지 밀어도 걸음 프레임이 서로 1 안이면 qt 에 손댄
+#    r 을 0.02 에서 50.0 까지 밀어도 걸음 프레임이 식에서 1 안이면 qt 에 손댄
 #    줄이 없다는 뜻이다. 그리고 ② 가 「창 ÷ qt」를 부등식으로 재므로
 #    **새 벽시계 상수가 하나라도 박혔으면 beat 0.015 에서만 터진다** —
 #    curve_probe 가 실제로 그 값을 쓴다.
@@ -107,16 +108,26 @@ func _stage_total(r: float, pace_load: int) -> void:
 
 #  한 걸음을 끝까지 돌린다. 걸음이 바뀌는 프레임(pitch_step 증가) 하나로만
 #  잰다 — qa_fast 가 세운 자와 같다.
+#    frames   머리 숨 + 합계 걸음 전체 프레임
+#    step     합계 걸음만의 프레임(걸음이 선 프레임 다음부터 끝 프레임까지)
+#    nom      걸음이 선 프레임의 이름값 qt + hitstop(멈춤은 qt 에서 빠진다)
 func _play_step(hold_fast: bool) -> Dictionary:
 	var frames := 0
 	var roll_f := 0            # score_roll 이 살아 있던 프레임
 	var shake_f := 0           # shake 가 살아 있던 프레임
 	var shk_max := 0.0
 	var qt0: float = g.qt
+	var step_f := 0
+	var nom := -1.0
 	g.fast_lock = hold_fast
 	while g.state == g.S.RESOLVE and frames < 4000:
+		var ps0: int = g.pitch_step
 		g._process(1.0 / 60.0)
 		frames += 1
+		if nom >= 0.0:
+			step_f += 1
+		elif g.pitch_step > ps0:
+			nom = float(g.qt) + float(g.hitstop)
 		if g.score_roll > 0.0:
 			roll_f += 1
 		if g.shake > 0.0:
@@ -125,7 +136,7 @@ func _play_step(hold_fast: bool) -> Dictionary:
 	g.fast_lock = false
 	return {"frames": frames, "roll": roll_f, "shake": shake_f,
 			"shk": shk_max, "qt0": qt0, "shown": g.shown, "total": g.total,
-			"score_roll": g.score_roll}
+			"score_roll": g.score_roll, "step": step_f, "nom": nom}
 
 
 func _spread(a: Array) -> int:
@@ -141,53 +152,105 @@ func _run() -> void:
 	g._new_run()
 	_calm()
 
-	# ── ① 걸음 벽시계 길이가 크기와 무관하다 ─────────────
-	#  「박자 0」의 본체다. 다섯 층 중 하나라도 qt 를 건드렸으면 여기서 터진다.
+	# ── ① 걸음 벽시계 길이가 _tot_qt 의 식 그대로다 ─────────
+	#  다섯 층 중 하나라도 qt 를 건드렸으면 여기서 터진다.
+	#  안 넘기는 걸음은 크기(gn)만큼 길어진다(2026-10-06): 프레임이 r 을 따라
+	#  **안 줄고**, 하나하나가 60 × beat × (TALLY.tot + TALLY.tot_gn × gn) 에서
+	#  1 안이다(멈춤 프레임의 올림 하나까지 +1). 이름값(qt + hitstop)은 식과 같다.
 	#
 	#  ⚠ **갈래를 갈라서 잰다 — 처음엔 안 갈랐다가 한 번 틀렸다.** r ≥ 1.0 은
-	#  이 걸음에서 목표를 넘기므로 게임이 **손대기 전부터** qt 를 2.6 → 3.4 로
-	#  늘린다(판이 끝나는 자리라 길게 둔 것이다). 다섯 크기를 한 줄에 놓고
-	#  재면 75 ↔ 91 프레임이 나오는데 그건 내 층이 아니라 그 갈래다.
-	#  갈래 안에서 서로 1 안이면 「내가 더한 프레임이 0」이 증명된다.
+	#  이 걸음에서 목표를 넘기므로 qt 가 beat × TALLY.brk 로 선다(판이 끝나는
+	#  자리라 크기와 무관하게 길게 둔다). 그 갈래 안에서는 서로 1 안이다.
 	#  덤: 안 넘기는 무리 안에 「한 방」 문턱(0.50)이 들어 있어 **hitstop 이
 	#  걸음 벽시계에 중립**이라는 계약(qt 에서 같은 값을 뺀다)도 같이 잠긴다.
 	var sizes := [0.02, 0.50, 1.00, 2.00, 50.0]
 	var lo_r := [0.02, 0.10, 0.49, 0.90]     # 목표를 안 넘긴다
 	var hi_r := [1.00, 2.00, 50.0]           # 이 걸음에서 목표를 넘긴다
+	var tl: Dictionary = g.TALLY
 	var fr_lo := []
-	var fr_hi := []
+	var want_lo := []
+	var lo_mono := true
+	var lo_fit := true
+	var nom_ok := true
 	for r in lo_r:
 		_stage_total(float(r), 1)
-		fr_lo.append(int(_play_step(false).frames))
+		var gn_r: float = g._grow_of(int(round(float(r) * 1000.0)))
+		var want: float = g.beat * (float(tl.tot) + float(tl.tot_gn) * gn_r)
+		var st1 := _play_step(false)
+		var f1: int = int(st1.step)
+		if not fr_lo.is_empty() and f1 < int(fr_lo[fr_lo.size() - 1]):
+			lo_mono = false
+		if f1 < int(floor(want * 60.0)) or f1 > int(ceil(want * 60.0)) + 1:
+			lo_fit = false
+		if absf(float(st1.nom) - want) > 0.0005:
+			nom_ok = false
+		fr_lo.append(f1)
+		want_lo.append(snappedf(want * 60.0, 0.1))
+	var fr_hi := []
+	var want_hi: float = g.beat * float(tl.brk)
+	var hi_fit := true
 	for r in hi_r:
 		_stage_total(float(r), 1)
-		fr_hi.append(int(_play_step(false).frames))
-	_ok("① 안 넘기는 합계 걸음 길이가 크기와 무관하다", _spread(fr_lo) <= 1,
+		var st2 := _play_step(false)
+		fr_hi.append(int(st2.step))
+		if absf(float(st2.nom) - want_hi) > 0.0005:
+			hi_fit = false
+	_ok("① 안 넘기는 합계 걸음이 크기를 따라 안 준다", lo_mono,
 			"r %s → %s프레임" % [lo_r, fr_lo])
-	_ok("①-b 목표를 넘기는 걸음도 크기와 무관하다", _spread(fr_hi) <= 1,
-			"r %s → %s프레임" % [hi_r, fr_hi])
+	_ok("①-a 그 프레임이 _tot_qt 의 식에서 1 안이다", lo_fit and nom_ok,
+			"%s프레임 · 식 %s" % [fr_lo, want_lo])
+	_ok("①-b 목표를 넘기는 걸음은 크기와 무관하다",
+			_spread(fr_hi) <= 1 and hi_fit,
+			"r %s → %s프레임 · 식 %.1f" % [hi_r, fr_hi, want_hi * 60.0])
 
 	# ── ② 굴림 창이 언제나 걸음 안에서 끝난다 ────────────
 	#  창÷qt 를 스무 갈래에서 잰다. **새 벽시계 상수가 하나라도 박혔으면
 	#  beat 0.015 에서만 터진다** — curve_probe 가 그 값을 쓴다.
+	#  합계 걸음은 짐(load)을 안 탄다 — 짐 40 은 머리 숨만 누른다. pace 바닥의
+	#  합계 걸음은 연발 중간 발 하나뿐이라(TALLY.mid × _pace()) 그 갈래를 따로
+	#  세운다: 남은 작은 다트를 하나 두고, 그 다트가 꽂히는 프레임(burst_hits 가
+	#  비는 프레임)에서 끊는다. total 을 목표 위에서 출발시켜 돌파 갈래를 뺀다.
 	var beat0: float = g.beat
 	var worst := 0.0
 	var best := 9.9
 	var where := ""
 	for r in sizes:
-		for bt in [0.34, 0.015]:
-			for ld in [1, 40]:
+		for bt in [beat0, 0.015]:
+			for ld in [1, 40, -1]:
 				g.beat = bt
-				_stage_total(float(r), int(ld))
+				_stage_total(float(r), maxi(int(ld), 1))
 				g.beat = bt
-				var st := _play_step(false)
-				var ratio: float = float(st.roll) / maxf(float(st.frames), 1.0)
+				var roll_n := 0
+				var len_n := 0
+				if int(ld) > 0:
+					var st := _play_step(false)
+					roll_n = int(st.roll)
+					len_n = int(st.frames)
+				else:
+					g.total = g.target * 5
+					g.shown = float(g.total)
+					g.burst_hits = [g.BC]
+					g.burst_n = GameData.tune_i("kick_n")
+					var on := false
+					for _f in 4000:
+						var ps0: int = g.pitch_step
+						g._process(1.0 / 60.0)
+						if (g.burst_hits as Array).is_empty():
+							break
+						if not on and g.pitch_step > ps0:
+							on = true
+						if on:
+							len_n += 1
+							if g.score_roll > 0.0:
+								roll_n += 1
+				var ratio: float = float(roll_n) / maxf(float(len_n), 1.0)
 				if ratio > worst:
 					worst = ratio
-					where = "r%.2f beat%.3f load%d" % [r, bt, ld]
+					where = "r%.2f beat%.3f %s" % [r, bt,
+							"연발 중간" if int(ld) < 0 else "load%d" % ld]
 				best = minf(best, ratio)
 	g.beat = beat0
-	_ok("② 굴림 창이 걸음 안에서 끝난다", worst <= 1.0,
+	_ok("② 굴림 창이 걸음 안에서 끝난다", worst <= 1.0 and best > 0.0,
 			"최대 %.3f (%s) · 최소 %.3f" % [worst, where, best])
 
 	# ── ③ 정산이 끝나면 굴림이 0 이고 띠가 total 에 **정확히** 선다 ──
@@ -290,15 +353,23 @@ func _run() -> void:
 
 	# ── ⑦ 빨리 보기에서 흔들림이 걸음을 안 넘긴다 ───────────
 	#  shake 감쇠는 fast_rate 를 **안 탄다**(그 규약은 착탄·거절·판 깨짐이
-	#  같이 쓰므로 안 바꾼다). 12.0 수명 0.353초 ≤ 빨리 보기 합계 걸음
-	#  0.354초 — **여유가 0 이다.** 13.0 을 넣으면 여기서 실패한다.
+	#  같이 쓰므로 안 바꾼다). 흔들림도 걸음도 gn 으로 자라므로(2026-10-06)
+	#  gn 0 · 0.5 · 1 에서 그 gn 의 수명 ≤ 그 gn 의 빨리 보기 걸음을 잰다 —
+	#  gn 1 에서 12.0 수명 0.353초 ≤ 4.4박 ÷ 2.5 = 0.669초.
 	var life: float = 12.0 / 34.0
-	var stepw: float = g.beat * 2.6 / 2.5
-	_ok("⑦ 빨리 보기에서 흔들림이 걸음을 안 넘긴다", life <= stepw + 0.0001,
-			"수명 %.4f초 ≤ 걸음 %.4f초" % [life, stepw])
+	var sh_ok := true
+	var sh_txt := ""
+	for gq in [0.0, 0.5, 1.0]:
+		var lq: float = lerpf(float(g.GROW.shk_lo), float(g.GROW.shk_hi), gq * gq) / 34.0
+		var wq: float = g.beat * (float(tl.tot) + float(tl.tot_gn) * gq) / 2.5
+		if lq > wq + 0.0001:
+			sh_ok = false
+		sh_txt += "gn%.1f %.3f≤%.3f  " % [gq, lq, wq]
+	_ok("⑦ 빨리 보기에서 흔들림이 걸음을 안 넘긴다", sh_ok, sh_txt)
 	#  ── ⑦-b 멈춤이 만든 누수의 크기 (2026-09-26) ───────────
-	#  ⚠ **위 ⑦ 의 리터럴은 한 글자도 안 고쳤다** — 그것은 계약이다. 그런데
-	#  그 모형에 hitstop 이 **없다**: 멈춤이 걸린 프레임에서 _process 가 통째로
+	#  ⚠ **고치기 전 모형을 그때 리터럴로 남긴다**(beat 0.34 · 합계 2.6박) — 수선의
+	#  까닭을 적는 줄이라 지금 박자로 바꾸면 이유 없이 빨개진다. 그 모형에
+	#  hitstop 이 **없다**: 멈춤이 걸린 프레임에서 _process 가 통째로
 	#  조기 반환하므로 그 동안 shake 감쇠가 안 돌고, _draw 는 randf_range 를
 	#  계속 굴린다.
 	#
@@ -312,6 +383,7 @@ func _run() -> void:
 	#  `if stop_fire: shake = maxf(shake - d * 34.0, 0.0)` 한 줄을 넣어
 	#  수명을 멈춤과 무관하게 만들었다.
 	var stop4: float = float(g.CARDFX.stop) * 2.0        # 4단 = ×2.0
+	var stepw: float = 0.34 * 2.6 / 2.5                  # 그때의 빨리 보기 합계 걸음
 	var leak: float = stop4 / 2.5 + life - stepw
 	_ok("⑦-b 손대기 전 모형은 4단에서 실제로 샌다(수선의 까닭)", leak > 0.0,
 			"수명 %.4f초 − 걸음 %.4f초 = 적자 %.4f초(%.2f프레임)"
@@ -324,15 +396,22 @@ func _run() -> void:
 	#  초록**이었다(실측 · 고친 뒤 끝 0.0000 · 손대기 전 끝도 0.0000). 갈리는 자리는
 	#  shake 가 천장(12.0)에 붙는 r ≳ 1.6 이고 **돌파가 아닌** 걸음이다. total 을
 	#  목표 **위**에서 출발시켜 was_short 를 거짓으로 만든다(돌파는 shake 13.0 과
-	#  qt 3.4 갈래라 이 줄이 재려는 것과 섞인다). qa_fire ⑥ 도 같은 날 같이 고쳤다.
+	#  qt TALLY.brk 갈래라 이 줄이 재려는 것과 섞인다). qa_fire ⑥ 도 같은 날 같이 고쳤다.
+	#  ⚠ 합계 걸음이 gn 으로 길어진 뒤(2026-10-06)로는 지금 박자에서 수선이 없어도
+	#  다 죽는다. 그래서 **박자를 눌러 걸음을 그때 길이(0.34 × 2.6박 = 0.884초)에
+	#  맞춘다** — 여유 0 인 자리에서 재야 수선이 빠졌을 때 빨개진다.
+	var beat7: float = g.beat
 	_stage_total(1.90, 1)
+	g.beat = 0.34 * 2.6 / (float(tl.tot) + float(tl.tot_gn) * g._grow_of(1900))
 	g.total = g.target * 5
 	g.shown = float(g.total)
 	g.fire_lock = 4
 	var st7 := _play_step(true)
 	g.fire_lock = -1
+	g.beat = beat7
 	_ok("⑦-c 4단 · 빨리 보기에서 걸음 끝 흔들림이 0 이다",
-			g.shake <= 0.0001, "끝 shake %.3f · 걸음 %d프레임" % [g.shake, st7.frames])
+			g.shake <= 0.0001, "끝 shake %.3f · 걸음 %d프레임 (이름값 %.3f초)"
+			% [g.shake, st7.step, st7.nom])
 
 	# ── ⑧ 연발 — 대입(=) 규약이 지켜진다 ─────────────────
 	#  maxf 로 바꾸면 걸음마다 쌓여 천장을 넘긴다. 대입이면 걸음마다 다시
@@ -361,8 +440,9 @@ func _run() -> void:
 	#  _chip_gain 이 kick_share 를 먹여 작은 다트의 r 을 그만큼 떨어뜨린다.
 	#  그래서 **음정이 내려가는 발과 박자가 눌리는 발이 반비례**한다.
 	#  그리고 그 크기에서는 흔들림 수명이 눌린 걸음보다 **짧아** 걸음 사이에
-	#  화면이 한 번 선다 — 오늘 9.0 고정은 수명 0.2647초가 눌린 걸음
-	#  0.2652초와 사실상 같아서 **한 번도 안 서던 자리**다.
+	#  화면이 한 번 선다 — 옛 9.0 고정은 수명 0.2647초가 그때 눌린 걸음
+	#  (0.34 × 2.6 × 0.30 = 0.2652초)과 사실상 같아서 **한 번도 안 서던 자리**다.
+	#  눌린 합계 걸음은 이제 연발 중간 발(TALLY.mid × PACE.min)이다(2026-10-06).
 	var share: float = float(GameData.tune("kick_share"))
 	g.target = 1000
 	g.last_gain = 216                      # 실측 중앙값 r 0.216
@@ -370,31 +450,33 @@ func _run() -> void:
 	g.last_gain = int(round(216.0 * share))
 	var n_burst: float = g._grow_n()
 	var s_burst: float = lerpf(6.0, 12.0, n_burst * n_burst)
-	var step_lo: float = g.beat * 2.6 * float(g.PACE.min)
+	var step_lo: float = g.beat * float(tl.mid) * float(g.PACE.min)
+	var step_old: float = 0.34 * 2.6 * 0.30
 	_ok("⑧-b 연발 작은 다트가 더 조용하다", n_burst < n_base,
 			"n %.3f → %.3f (share %.2f)" % [n_base, n_burst, share])
 	_ok("⑧-c 그 크기에서는 걸음 사이에 화면이 선다",
-			s_burst / 34.0 < step_lo and 9.0 / 34.0 >= step_lo - 0.001,
-			"수명 %.4f초 < 눌린 걸음 %.4f초 (오늘 9.0 은 %.4f초)"
-			% [s_burst / 34.0, step_lo, 9.0 / 34.0])
+			s_burst / 34.0 < step_lo and 9.0 / 34.0 >= step_old - 0.001,
+			"수명 %.4f초 < 눌린 걸음 %.4f초 (옛 9.0 은 %.4f초 · 그때 걸음 %.4f초)"
+			% [s_burst / 34.0, step_lo, 9.0 / 34.0, step_old])
 
 	# ── ⑨ 음정 — 새로 굽지 않았고 n=0 이 오늘 그대로다 ───────
 	var p0 := pow(2.0, -float(g.GROW.semi) * 0.0 / 12.0)
 	var p1 := pow(2.0, -float(g.GROW.semi) * 1.0 / 12.0)
 	_ok("⑨ n=0 의 음정이 정확히 1.000", is_equal_approx(p0, 1.0), "%.4f" % p0)
 	_ok("⑨-b n=1 이 완전5도(0.667) 위다", p1 > 0.66 and p1 < 0.67, "%.4f" % p1)
+	#  가장 짧은 합계 걸음 = gn 0 의 beat × TALLY.tot(연발 중간 발 빼고).
+	var tot_lo: float = g.beat * float(tl.tot)
 	_ok("⑨-c 꼬리가 가장 짧은 합계 걸음 안이다",
-			0.34 / p1 < g.beat * 2.6, "%.3f초 < %.3f초" % [0.34 / p1, g.beat * 2.6])
+			0.34 / p1 < tot_lo, "%.3f초 < %.3f초" % [0.34 / p1, tot_lo])
 	#  ── ⑨-c2 빈 박이 늦춘 만큼 꼬리가 밀린다 (2026-09-26) ───
 	#  4단은 이 소리를 멈춤이 풀리는 프레임으로 늦춘다(0.120초 = 7.2프레임).
-	#  그만큼 꼬리가 뒤로 밀리므로 **여유 수를 새로 적는다** — pace 1.00 에서
-	#  시작 f7.2 · 끝 f37.7 이라 걸음 53.0 안이지만 위 ⑨-c 의 여유가
-	#  2.9프레임 준다. 통과는 하지만 근거가 달라졌으므로 따로 잠근다.
+	#  그만큼 꼬리가 뒤로 밀리므로 **여유 수를 따로 적는다** — 위 ⑨-c 의 여유가
+	#  7.2프레임 준다. 근거가 다르므로 따로 잠근다.
 	var tail4: float = float(g.CARDFX.stop) * 2.0 + 0.34 / p1
-	_ok("⑨-c2 늦춘 꼬리도 합계 걸음 안이다", tail4 < g.beat * 2.6,
+	_ok("⑨-c2 늦춘 꼬리도 합계 걸음 안이다", tail4 < tot_lo,
 			"멈춤 %.3f + 꼬리 %.3f = %.3f초 < 걸음 %.3f초 (여유 %.1f프레임)"
-			% [float(g.CARDFX.stop) * 2.0, 0.34 / p1, tail4, g.beat * 2.6,
-			(g.beat * 2.6 - tail4) * 60.0])
+			% [float(g.CARDFX.stop) * 2.0, 0.34 / p1, tail4, tot_lo,
+			(tot_lo - tail4) * 60.0])
 	#  ⚠ settle_total 은 표 밑음이 196 이라 wav 가 없으면 beep 갈래가 f 를
 	#  절대 Hz 로 받아 한 옥타브 위로 난다(board_thud · shop_smash 와 같은
 	#  어긋남이다). 파일이 사는 한 그 갈래가 죽어 있으므로 여기서 못 박는다.
@@ -459,3 +541,31 @@ func _run() -> void:
 	_ok("⑫ 자가 점수와 목표를 안 건드린다",
 			g.last_gain == lg0 and g.target == tg0,
 			"%d / %d" % [g.last_gain, g.target])
+
+	# ── ⑬ 개발자 미리보기 둘이 게임과 같은 걸음 길이를 세운다 (2026-10-06) ──
+	#  「한 방」(_card_big)과 「총합 걸음 다시 보기」가 식을 손으로 베끼면 크기로
+	#  자라는 길이가 미리보기에서만 갈린다. 같은 값(r 0.90 · 목표 안 넘김)을 게임
+	#  걸음과 _card_big 에 태워 이름값(qt + hitstop)을 대고, 다시 보기 네 단은
+	#  _tot_qt 의 식과 댄다.
+	_stage_total(0.90, 1)
+	var nom_game: float = float(_play_step(false).nom)
+	_stage_total(0.90, 1)
+	Dev._card_big(g)
+	var nom_dev: float = float(g.qt) + float(g.hitstop)
+	Dev.card_ph = 0
+	Dev.card_back = {}
+	var gr_ok := true
+	var gr_txt := ""
+	for ci in (Dev.GROW_R as Array).size():
+		_stage_total(0.90, 1)
+		Dev.pick["grow"] = ci
+		Dev._run(g, {"k": "grow"})
+		var gw: float = g.beat * (float(tl.tot) + float(tl.tot_gn) * g._grow_n())
+		if absf(float(g.qt) - gw) > 0.0005:
+			gr_ok = false
+		gr_txt += "%.3f/%.3f " % [g.qt, gw]
+	g._card_reset()
+	_ok("⑬ 「한 방」이 게임 걸음과 같은 길이를 세운다",
+			nom_game > 0.0 and absf(nom_dev - nom_game) < 0.0005,
+			"게임 %.4f초 · 한 방 %.4f초" % [nom_game, nom_dev])
+	_ok("⑬-b 「총합 걸음 다시 보기」 네 단이 _tot_qt 의 식이다", gr_ok, gr_txt)
