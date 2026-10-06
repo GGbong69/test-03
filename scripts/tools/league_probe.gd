@@ -131,6 +131,9 @@ func _initialize() -> void:
 	Save.wipe()
 	GameData.league = "white"
 	GameData.pack = "base"
+	#  위의 「시작」이 연 런은 첫 런 — 튜토리얼 런이다(2026-09-27). 튜토리얼 런은 기록을
+	#  안 남기므로(_rec_off) 여기서 세는 완주는 보통 런의 것이어야 한다.
+	g.tut_run = false
 	var opened := {}
 	for n in 8:
 		g._league_unlock_next()

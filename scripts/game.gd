@@ -1238,26 +1238,30 @@ func _draw_intro() -> void:
 	#  제목 스크림의 짙기로 가라앉는다.
 	var da: float = minf(lerpf(1.0, float(INTRO.lit), light),
 			lerpf(1.0, float(INTRO.neon_lit), neon))
-	da = lerpf(da, float(INTRO.scrim), st)
+	da = lerpf(da, _title_dim(), st)
 	draw_rect(_full(), Color(INTRO.dark, da))
 	#  네온 빛 — 간판 쪽(위)에서 판으로 번진다
+	#  판이 선 자리 — 술집 문이면 줄어 오른쪽으로 옮겨 섰다(_title_c).
+	var tc := _title_c()
 	if neon > 0.0 and st < 1.0:
 		var pk: Color = INTRO.neon
 		for k in 6:
-			draw_circle(Vector2(BC.x, 70.0), 190.0 - float(k) * 24.0,
+			draw_circle(Vector2(tc.x, 70.0), 190.0 - float(k) * 24.0,
 					Color(pk, 0.018 * neon * (1.0 - st)))
 	#  벽에 고인 빛 · 원뿔
 	var warm: Color = INTRO.warm
 	if glow > 0.0:
 		for k in 7:
-			draw_circle(BC, 170.0 - float(k) * 16.0, Color(warm, 0.022 * glow))
-		var top := Vector2(BC.x, 22.0)
+			draw_circle(tc, 170.0 - float(k) * 16.0, Color(warm, 0.022 * glow))
+		var top := Vector2(tc.x, 22.0)
 		draw_polygon(PackedVector2Array([top + Vector2(-18.0, 0.0), top + Vector2(18.0, 0.0),
-				Vector2(BC.x + 150.0, 350.0), Vector2(BC.x - 150.0, 350.0)]),
+				Vector2(tc.x + 150.0, 350.0), Vector2(tc.x - 150.0, 350.0)]),
 				PackedColorArray([Color(warm, 0.16 * glow), Color(warm, 0.16 * glow),
 				Color(warm, 0.0), Color(warm, 0.0)]))
 	#  자루 — 제목 판의 것
+	_door_set_xf(shake_off)
 	_ttl_draw()
+	draw_set_transform(shake_off)
 	_intro_lamp(light, st)
 	_intro_sign(t, 1.0 - st)
 	_intro_count(t, 1.0 - st)
@@ -1273,7 +1277,7 @@ func _intro_lamp(light: float, st: float) -> void:
 	var a: float = (1.0 - st) * (maxf(light, 0.35) if intro_t < float(INTRO.off) else light)
 	if a <= 0.0:
 		return
-	var cx: float = BC.x
+	var cx: float = _title_c().x
 	draw_line(Vector2(cx, -view_pad.y), Vector2(cx, 12.0), Color("3a3350", a), 1.0)
 	draw_colored_polygon(PackedVector2Array([Vector2(cx - 8.0, 11.0), Vector2(cx + 8.0, 11.0),
 			Vector2(cx + 19.0, 23.0), Vector2(cx - 19.0, 23.0)]), Color("2a2436", a))
@@ -1298,7 +1302,8 @@ func _intro_sign(t: float, a: float) -> void:
 	var snapped: bool = ks >= 1.0
 	var y: float = float(INTRO.sign_y)
 	#  두 낱말이 가운데로 모인다 — 빈칸만큼 TON 이 더 온다
-	var x0: float = lerpf(BC.x - w0 * 0.5, BC.x - w1 * 0.5, close)
+	var sx: float = _title_c().x
+	var x0: float = lerpf(sx - w0 * 0.5, sx - w1 * 0.5, close)
 	var neon: Color = INTRO.neon
 	var core: Color = INTRO.neon_core
 	var dead: Color = INTRO.neon_dead
@@ -1343,15 +1348,22 @@ func _intro_count(t: float, a: float) -> void:
 	var col: Color = C_TXT
 	if n >= 180:
 		col = C_ACC if int(t * 8.0) % 2 == 0 or t > float(INTRO.sign) else C_TXT
-	draw_string(font, Vector2(0.0, 350.0), str(n), HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 24,
-			Color(col, a))
+	#  판 한가운데 밑 — 술집 문이면 판이 오른쪽으로 옮겨 섰다(_title_c).
+	var w := 120.0
+	draw_string(font, Vector2(_title_c().x - w * 0.5, 350.0), str(n), HORIZONTAL_ALIGNMENT_CENTER,
+			w, 24, Color(col, a))
 
 
 #  제목으로 넘긴 뒤 — 왼쪽 글줄 기둥을 제목 바탕색 막으로 덮었다가 걷는다.
 #  판은 인트로 끝에 이미 스크림 짙기라 안 덮는다.
 func _intro_over(k: float) -> void:
 	var under: Color = C_BG.lerp(Color(INTRO.dark), float(INTRO.scrim))
-	draw_rect(Rect2(-view_pad.x, -view_pad.y, 196.0 + view_pad.x, VIEW.y + view_pad.y * 2.0),
+	var w := 196.0
+	if _door_live():
+		#  술집 문 — 칠판이 선 왼쪽 벽돌 자리(문틀 앞)만 덮는다.
+		under = Color(INTRO.dark)
+		w = float(DOORT.wall_w)
+	draw_rect(Rect2(-view_pad.x, -view_pad.y, w + view_pad.x, VIEW.y + view_pad.y * 2.0),
 			Color(under, k))
 
 
@@ -4869,6 +4881,8 @@ const SFX := {
 	"sweep_whip":     {"f": 147.0, "d": 0.12, "a": 0.10},
 	#  장면 전환 지지직(WIPE) — 덮고 걷히는 0.9 초 내내 지지직거린다. 판 밖 연출이라 바람
 	#  소리(sweep_whip)와 같은 크기 자리에 선다.
+	#  술집 문(제목) — 걸쇠 딸깍 둘 · 문이 풀리는 쿵 · 경첩 삐걱 · 문 너머 웅성임.
+	"door_open": {"f": 196.0, "d": 0.10, "a": 0.08},
 	"tv_static":      {"f": 147.0, "d": 0.12, "a": 0.08},
 	"drop_skip":      {"f": 330.0, "d": 0.05, "a": 0.10},
 	"chute_enter":    {"f": 523.0, "d": 0.04, "a": 0.10},
@@ -5090,6 +5104,7 @@ func _process(d: float) -> void:
 		_body3_close()
 		_room3d_run(false)
 	_wall3_tick()      # 다트판 벽 — 처음 필요한 화면에서 짓고, 바뀔 때만 굽는다
+	_door_tick(d)      # 술집 문(제목) — 같은 길로 굽고, 여는 동안만 굴린다
 
 	_fill_audio()
 	_mus_update(d)
@@ -6015,7 +6030,7 @@ func _unhandled_input(e: InputEvent) -> void:
 					if hand_st != H.NONE:
 						_hand_abort()
 					elif state == S.TITLE:
-						_open_newrun()
+						_door_open()
 					elif state == S.NEWRUN:
 						#  ⚠ 키도 **같은 문**을 지난다(_start_go). 손가락에만
 						#  겨눔을 달면 그 문으로 사고가 그대로 돌아온다 —
@@ -6443,6 +6458,10 @@ func _click(m: Vector2) -> void:
 				state = S.TITLE
 				return
 		S.TITLE:
+			#  문이 열리는 동안 누르면 곧장 덮는다(기다리지 않는 손) — 다른 일은 안 받는다.
+			if door_t >= 0.0:
+				_door_open()
+				return
 			#  **줄 수를 표에서 센다.** 4 를 박아 두었더니 줄을 하나 늘렸을 때
 			#  마지막 줄이 그려지기만 하고 안 눌렸다.
 			var trows := _title_rows()
@@ -6450,7 +6469,9 @@ func _click(m: Vector2) -> void:
 				if _menu_rect(i).has_point(m):
 					match String(trows[i].n):
 						"시작":
-							_open_newrun()
+							#  문 손잡이 — 문이 열리고 새 런 화면으로(DOORT). 소리는 문이 낸다.
+							_door_open()
+							return
 						"계속하기":
 							#  이 줄은 이어할 것이 있을 때만 선다(_title_rows).
 							#  그래도 되살리기가 실패하면 조용히 돌아간다 —
@@ -6487,13 +6508,14 @@ func _click(m: Vector2) -> void:
 			#  자루를 누른 손이 그 자리에 또 하나를 꽂는 일이 없다.
 			if egg_t >= 0.0:
 				return
-			var pick := _ttl_hit(m)
+			var mb := _ttl_m(m)          # 문 판은 줄어 옮겨 섰다 — 판 자리로 되돌린다
+			var pick := _ttl_hit(mb)
 			if pick >= 0:
 				ttl_stuck.remove_at(pick)
 				_sfx("dart_pick")
 				return
-			if m.distance_to(BC) <= R * rt_dbl_out:
-				_ttl_throw(m)
+			if mb.distance_to(BC) <= R * rt_dbl_out:
+				_ttl_throw(mb)
 		S.PROFILE:
 			if _menu_back_rect().has_point(m):
 				state = S.TITLE
@@ -9030,6 +9052,10 @@ func _draw() -> void:
 		if swap_in:
 			_swap_screen(sh)
 
+	#  술집 문(제목 · DOORT) — 판 밑 바닥. 흔들림 변환 안이다 — 판과 같이 흔들린다.
+	var dr := _door_live() and _door_here()
+	if dr:
+		_door_back(sh)
 	_swap_board(sh)
 	#  제목의 이스터에그(EGG) — 판이 깨져 없는 동안은 안 그리고, 새 판이
 	#  오르는 동안은 아래로 밀어 그린다. 그 밖에는 0 이라 아무 일도 없다.
@@ -9038,10 +9064,18 @@ func _draw() -> void:
 	#  조각이 빈틈없이 타일링한 채 흰색으로 얼어 있다. 2026-09-24
 	var bdy := _brk_board_dy()
 	if not is_inf(edy) and not is_inf(bdy):
-		if edy != 0.0:
+		#  문이 열리는 동안 판은 문짝을 따라 돈다(_door_xf) — 문에 걸린 판이다.
+		#  문 판 — 줄어 문 한가운데에 서고, 열리는 동안은 문짝을 따라 돈다(_door_xf).
+		#  이스터에그의 새 판이 오르는 몫(edy)은 판 자리에서 더한다.
+		if dr:
+			_door_set_xf(sh, edy)
+		elif edy != 0.0:
 			draw_set_transform(sh + Vector2(0.0, edy))
-		_draw_board()
-		if edy != 0.0:
+		if not dr or _door_board_vis():
+			_draw_board()
+		if dr:
+			_door_shade()
+		if edy != 0.0 or dr:
 			draw_set_transform(sh)
 	else:
 		_brk_hole_draw()            # 판이 뜬 자리 — 벽에 남은 자국
@@ -38360,13 +38394,23 @@ const TMENU := {"x": SAFE, "bot": 300.0, "h": 26.0, "gap": 4.0, "w": 148.0}
 
 
 #  글줄 윗변. 줄 높이 = n·h + (n−1)·gap 이라 밑변에서 빼면 나온다.
+#  술집 문이 서면 「시작」(0번)은 문 손잡이라 칠판 줄에서 빠진다.
 func _menu_top() -> float:
-	var n: int = _title_rows().size()
-	return float(TMENU.bot) - (float(n) * (float(TMENU.h) + float(TMENU.gap))
-			- float(TMENU.gap))
+	var n: int = _title_rows().size() - (1 if _door_live() else 0)
+	var bot: float = float(DOORT.rows_bot) if _door_live() else float(TMENU.bot)
+	return bot - (float(n) * (float(TMENU.h) + float(TMENU.gap)) - float(TMENU.gap))
 
 
+#  술집 문이 서면 0번(「시작」)은 손잡이를 누르는 칸이고 나머지는 칠판 줄이다(DOORT).
+#  번호는 그대로라 0번을 「시작」으로 누르는 도구 · 키 길이 그대로 산다.
 func _menu_rect(i: int) -> Rect2:
+	if _door_live():
+		if i == 0:
+			var hp: Vector2 = DOORT.hit
+			return Door3D.handle_rect(BC).grow_individual(hp.x, hp.y, hp.x, hp.y)
+		return Rect2(Vector2(float(DOORT.row_x),
+				_menu_top() + float(i - 1) * (float(TMENU.h) + float(TMENU.gap))),
+				Vector2(float(DOORT.row_w), TMENU.h))
 	return Rect2(Vector2(float(TMENU.x),
 			_menu_top() + float(i) * (float(TMENU.h) + float(TMENU.gap))),
 			Vector2(TMENU.w, TMENU.h))
@@ -38667,7 +38711,8 @@ func _ttl_draw() -> void:
 	#  커서 밑의 자루. 살짝 들어 올리고 테를 두른다 — 「이걸 집는다」 를
 	#  말하는 것이 이 둘이고, 커서 자리에 점만 찍으면 무엇을 집는지가
 	#  자루 여럿 사이에서 안 갈린다.
-	var hov: int = _ttl_hit(mouse_at) if state == S.TITLE else -1
+	var mb := _ttl_m(mouse_at)      # 문 판은 줄어 옮겨 섰다 — 판 자리로 되돌린다
+	var hov: int = _ttl_hit(mb) if state == S.TITLE else -1
 	for i in ttl_stuck.size():
 		var s: Dictionary = ttl_stuck[i]
 		var sp: Vector2 = s.p
@@ -38705,8 +38750,8 @@ func _ttl_draw() -> void:
 	_draw_pops()
 	#  커서가 얹힌 자리. 판 위에서만 뜬다 — 화면 아무 데나 떠 있으면
 	#  그것은 커서지 과녁이 아니다.
-	if state != S.TITLE or egg_t >= 0.0 \
-			or mouse_at.distance_to(BC) > R * rt_dbl_out:
+	if state != S.TITLE or egg_t >= 0.0 or door_t >= 0.0 \
+			or mb.distance_to(BC) > R * rt_dbl_out:
 		return
 	#  꽂힌 자루 위에 있으면 **뽑는 손**이다(테는 위에서 둘렀다). 과녁을
 	#  같이 띄우면 누르면 꽂히는 것으로 읽힌다 — 한 자리에 두 뜻을 실을
@@ -38716,8 +38761,8 @@ func _ttl_draw() -> void:
 	#  얹힌 칸을 밝히고 그 숫자를 띄운다. 「누를 수 있다」 와 「여기는
 	#  몇 점이다」 를 한 번에 말한다 — 글줄을 하나도 안 보태고 판 읽는
 	#  법이 손에 붙는 자리다.
-	_cell_glow(mouse_at)
-	_aim_dot(mouse_at, Color(C_ACC, 0.40 + 0.20 * sin(ttl_t * 5.0)))
+	_cell_glow(mb)
+	_aim_dot(mb, Color(C_ACC, 0.40 + 0.20 * sin(ttl_t * 5.0)))
 
 
 #  칸 밝히기 — 점 p 가 든 칸을 밝히고 그 숫자를 띄운다. 제목 판(커서)과
@@ -38774,6 +38819,10 @@ const PROFB := {"w": 148.0, "h": 30.0, "pip": 6.0, "pip_gap": 5.0}
 
 func _prof_badge_rect() -> Rect2:
 	var h: float = float(PROFB.h)
+	#  술집 문이 서면 칠판 맨 밑 한 줄이다(_title_chalk · _prof_chalk_draw).
+	if _door_live():
+		return Rect2(float(DOORT.row_x), float(DOORT.rows_bot) + float(DOORT.prof_gap),
+				float(DOORT.row_w), float(DOORT.prof_h))
 	return Rect2(SAFE, VIEW.y - 12.0 - h, float(PROFB.w), h)
 
 
@@ -38830,7 +38879,413 @@ func _prof_badge_draw() -> void:
 			draw_rect(pr, Color(C_OFF, 0.9), false, 1.0)
 
 
+# ══════════════════════════════════════════════════════════
+#  술집 문 — 제목 화면 (2026-10-06 · door3d.gd 머리말)
+# ──────────────────────────────────────────────────────────
+#  「…시작화면이 문앞인거야 문에 다트판이 걸려 있고 문 손잡이를 만들자 그리고 문 손잡이를
+#   게임 시작 으로 만들면 어떨까?」. 문 장면(벽돌 · 판자 문 · 간판 판 · 쇠 띠 · 놋쇠 손잡이 ·
+#  램프 빛)을 다트판 벽과 같은 길로 한 번 굽고 멈춘다. 판은 그 위 제자리(BC)에 그대로 서서
+#  문에 걸린 것이 된다 — 제목 판 던지기 · 이스터에그 · 인트로가 한 줄도 안 바뀐다.
+#   · 손잡이가 곧 「시작」 줄이다(_menu_rect(0)). 누르면(키는 스페이스) 문이 경첩째 열리고,
+#     카메라가 문턱을 지나 안의 불빛 속으로 들어간 뒤 지지직이 덮어 새 런 화면으로 간다
+#     (「문 열고 카메라가 문 안으로 들어가는 연출 까지 넣어줘」). 판과 꽂힌 자루는 문짝을
+#     따라 돈다(_door_xf — 경첩 둘레 회전 · 다가가는 카메라를 화면의 눌림 · 배율로 옮긴다).
+#     간판 · 칠판 · 프로필 패는 벽에 붙은 것이라 카메라가 다가가는 만큼 커지며 화면 밖으로
+#     밀려난다(_door_wall_xf). 연출 중에 한 번 더 누르면 곧장 지지직이다.
+#   · 나머지 줄(계속하기 · 컬렉션 · 설정 · 종료)은 벽에 건 칠판이다. 이름(하이톤)이 칠판
+#     머리에 서고, 영문 이름은 문 위 간판의 네온이다(인트로가 켠 그 네온이 그대로 남는다).
+#     프로필은 칠판 맨 밑 한 줄이다 — 「프로필을 위에 UI랑 합치고」(2026-10-06). 따로 선 보라
+#     패는 벽돌 벽 위에서 혼자 화면 단추로 떠 있었다.
+#   · 문은 판보다 오른쪽 · 판보다 크다(door3d DOOR 머리말 — 「다트판에 비해 문이 너무 작어」).
+#     판은 제목에서만 board_k 배로 줄어 문 한가운데(화면 392, 205)에 선다 — 그리는 쪽은
+#     _door_set_xf 변환 하나, 누르는 쪽은 _ttl_m(화면 → 판 자리) 하나다. 판 안의 셈(칸 ·
+#     자루 · 금 · 인트로의 세 발)은 판 자리 그대로라 한 줄도 안 바뀐다.
+#   · 스크림을 걷는다 — 판이 램프 빛 안에서 제 빛으로 선다(옛 제목은 0.72 로 판을 유령으로
+#     눌렀다). 문이 아직 안 구워졌거나 헤드리스 · 문 끔이면 옛 제목 그대로다(_draw_title_flat —
+#     검사 도구가 그 길을 잰다).
+const Door3D = preload("res://scripts/door3d.gd")
+const DOORT := {
+	"settle": 10,            # 짓거나 맞춘 뒤 굽는 틀 수
+	"open_t": 0.50,          # 문이 다 열리는 시간(초)
+	#  카메라가 문 안으로 — 문이 반쯤 열린 때(dolly_at) 다가가기 시작해 dolly_t 초에 문턱을
+	#  지나 안까지 dolly_m 만큼 간다(눈 2.37m → 문 뒤 0.33m). 처음엔 느리고 끝에서 빠르다 —
+	#  걸어 들어가는 몸이다.
+	"dolly_at": 0.16, "dolly_t": 0.82, "dolly_m": 2.70,
+	#  지지직이 덮기 시작하는 때 — 문턱을 막 지나 안의 불빛이 화면을 채운 뒤다. 덮이는
+	#  0.34 초 동안 카메라가 마저 들어간다.
+	"wipe_at": 0.80,
+	"warm": 0.55,            # 다 들어갔을 때 화면에 얹는 안의 불빛(따뜻한 막)의 짙기
+	"hit": Vector2(12.0, 8.0),   # 손잡이 누르는 칸 여유(가로 · 세로) — 막대는 8px 폭이다
+	"glint": 3.4,            # 손잡이 위로 빛이 한 번 미끄러지는 사이(초)
+	"glint_t": 0.45,         # 미끄러지는 시간
+	#  칠판 — 화면 왼끝에서 한 뼘 들인다(브라운관 굴곡이 왼끝을 먹는다). 줄 x · 폭 · 줄 밑변 ·
+	#  프로필 줄(높이 · 줄과의 사이 — 분필 가름줄이 그 가운데).
+	"row_x": 30.0, "row_w": 128.0, "rows_bot": 290.0, "prof_h": 26.0, "prof_gap": 14.0,
+	"wall_w": 184.0,         # 문틀 앞 벽돌 자리 폭(화면 x 0 ~ 184) — 인트로 막이 덮는다
+	#  칠판 — 짙은 석판 · 나무 테 · 분필(도트 팔레트 색)
+	"chalk": Color("1d3326"), "chalk_ink": Color("e8dfc8"),
+	"frame": Color("2c1508"), "frame_hi": Color("5e3317"),
+	"pad": Vector2(12.0, 46.0),   # 칠판 안 여백(옆 · 위 머리)
+	"shade": 0.55,           # 문이 다 열렸을 때 판에 진 그늘(램프에서 등을 돌린다)
+}
+var door_on := true            # 개발자 5쪽 — 술집 문 켬/끔(옛 제목과 맞대 본다)
+var door_vp: SubViewport = null
+var door_tex: ImageTexture = null   # 다 구운 문 한 장 — 닫힌 문은 이것을 깐다
+var door_key := ""             # 마지막으로 맞춘 「여백」
+var door_fresh := 0            # 남은 굽기 틀
+var door_frame := -1           # 마지막으로 센 그려진 틀
+var door_t := -1.0             # 문이 열리는 중이면 0 부터 흐른다
+var door_went := false         # 지지직을 불렀는가
+var prof_chalk_e := 0.0        # 칠판 프로필 줄의 얹힘 짙기
+
+
+#  문이 서는 화면 — 제목 · 인트로 · 제목에서 연 설정(흐림 판 뒤가 제목이다).
+func _door_here() -> bool:
+	return state == S.TITLE or state == S.INTRO or (state == S.SETTINGS and pause_from < 0)
+
+
+func _door_live() -> bool:
+	return door_on and door_vp != null and is_instance_valid(door_vp) and door_tex != null
+
+
+#  _process 가 매 틀 부른다. 처음 필요한 화면에서 짓고, 여백이 바뀌면 settle 틀만 굽고
+#  멈춘다. 여는 동안은 화판을 굴려 문짝이 도는 것을 그대로 깐다.
+func _door_tick(d: float) -> void:
+	if not door_on or not _has_renderer():
+		return
+	if door_vp == null:
+		if not _door_here():
+			return
+		door_vp = Door3D.make_door(self)
+		door_key = ""
+	var key := "%d,%d" % [int(view_pad.x), int(view_pad.y)]
+	if key != door_key:
+		door_key = key
+		Door3D.door_fit(door_vp, view_pad, BC, 1.0)
+		door_fresh = int(DOORT.settle)
+	if door_t >= 0.0:
+		door_t += d
+		Door3D.door_pose(door_vp, _door_k())
+		Door3D.cam_dolly(door_vp, _door_dz(), _door_cam())
+		door_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+		if not door_went and door_t >= float(DOORT.wipe_at):
+			door_went = true
+			_wipe(_door_through)
+		queue_redraw()
+		return
+	if door_fresh > 0:
+		var fd := Engine.get_frames_drawn()
+		if fd != door_frame:
+			door_frame = fd
+			door_fresh -= 1
+			if door_fresh <= 0:
+				var img: Image = door_vp.get_texture().get_image()
+				if img != null and not img.is_empty():
+					if door_tex != null and Vector2i(door_tex.get_size()) == img.get_size():
+						door_tex.update(img)
+					else:
+						door_tex = ImageTexture.create_from_image(img)
+		door_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+		queue_redraw()
+		return
+	door_vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
+
+
+#  여는 정도 0..1 — 끝에서 늦춘다(문이 제 무게로 멎는다).
+func _door_k() -> float:
+	if door_t < 0.0:
+		return 0.0
+	var k: float = clampf(door_t / float(DOORT.open_t), 0.0, 1.0)
+	return 1.0 - pow(1.0 - k, 2.2)
+
+
+#  카메라가 문 쪽으로 다가간 몫 0..1 — 처음엔 느리고 끝에서 빠르다(제곱).
+func _door_walk() -> float:
+	if door_t < 0.0:
+		return 0.0
+	var k: float = clampf((door_t - float(DOORT.dolly_at)) / float(DOORT.dolly_t), 0.0, 1.0)
+	return k * k * (1.6 - 0.6 * k)
+
+
+#  그 몫의 거리(m).
+func _door_dz() -> float:
+	return float(DOORT.dolly_m) * _door_walk()
+
+
+#  문 바닥 — 닫힌 문은 구운 한 장, 여는 동안은 화판. 왼쪽 위가 논리 px 격자에 앉게
+#  반올림한다(_wall3_rect 와 같은 까닭 — 흔들림의 소수 몫에 nearest 결이 일렁인다).
+func _door_back(sh: Vector2) -> void:
+	var tex: Texture2D = door_vp.get_texture() if door_t >= 0.0 else door_tex
+	var ls := Vector2(tex.get_size())
+	var p: Vector2 = (BC - ls * 0.5 + sh).round() - sh
+	draw_texture_rect(tex, Rect2(p, ls), false)
+
+
+#  문짝을 따라 도는 판의 화면 변환 [자리, 배율]. 판 한가운데(경첩에서 문 폭 반 · 문 앞으로
+#  문 두께 + 3cm)를 경첩 축 둘레로 돌려 투영하고, 가로는 cos 만큼 눌린다. 원근의 사다리꼴은
+#  버린다 — 0.6 초 안의 일이고 지지직이 곧 덮는다.
+func _door_xf() -> Array:
+	var D: Dictionary = Door3D.DOOR
+	var th: float = deg_to_rad(float(D.open_deg) * _door_k())
+	var hx: float = float(D.x0)
+	var hz: float = float(D.face) - float(D.thick)
+	var rx: float = float(D.bx) - hx
+	var rz: float = -hz
+	var x: float = hx + rx * cos(th) + rz * sin(th)
+	var z: float = hz - rx * sin(th) + rz * cos(th)
+	var dz := _door_dz()
+	var f: float = Door3D.scale_at(z, dz) * float(D.board_k)
+	return [Door3D.proj(Vector3(x, float(D.by), z), BC, dz, _door_cam()), Vector2(cos(th) * f, f)]
+
+
+#  카메라가 옆으로 옮긴 몫(m) — 들어가는 만큼 문 한가운데로 간다.
+func _door_cam() -> float:
+	return float(Door3D.DOOR.cx) * _door_walk()
+
+
+#  화면 한 점 → 판 자리. 문 판은 줄어 옮겨 섰으므로 누름 · 커서를 판 안의 셈에 넘기기 전에
+#  되돌린다(닫힌 문 — 여는 동안은 누름을 안 받는다). 문이 안 서면 그대로다.
+func _ttl_m(m: Vector2) -> Vector2:
+	if not (_door_live() and _door_here()):
+		return m
+	var xf := _door_xf()
+	var c: Vector2 = xf[0]
+	var sc: Vector2 = xf[1]
+	return BC + Vector2((m.x - c.x) / maxf(sc.x, 0.01), (m.y - c.y) / maxf(sc.y, 0.01))
+
+
+#  닫힌 문의 판이 서는 화면 자리 — 램프 · 빛 · 간판 네온이 이 자리를 본다. 문이 돌아도
+#  안 따라간다(간판은 벽에 붙었다 — 카메라가 옮긴 몫은 _door_wall_xf 가 더한다).
+func _title_c() -> Vector2:
+	if not (_door_live() and _door_here()):
+		return BC
+	return Door3D.proj(Vector3(float(Door3D.DOOR.bx), float(Door3D.DOOR.by), 0.0), BC)
+
+
+#  판이 아직 카메라 앞인가 — 카메라가 문턱을 지나면 열린 문짝(과 판)은 눈 옆 · 뒤로 빠진다.
+func _door_board_vis() -> bool:
+	if door_t < 0.0:
+		return true
+	var D: Dictionary = Door3D.DOOR
+	var th: float = deg_to_rad(float(D.open_deg) * _door_k())
+	var hz: float = float(D.face) - float(D.thick)
+	var z: float = hz - (float(D.bx) - float(D.x0)) * sin(th) - hz * cos(th)
+	return Door3D.EYE - _door_dz() - z > 0.35
+
+
+#  벽에 붙은 것(간판 · 칠판 · 프로필 패)의 화면 변환 — 카메라가 다가가는 만큼 판 한가운데(BC)
+#  둘레로 커진다. 깊이는 문틀 앞면 하나로 친다(벽과 4cm 차이는 안 보인다).
+func _door_wall_xf(sh: Vector2) -> void:
+	var f: float = Door3D.scale_at(float(Door3D.DOOR.face), _door_dz())
+	draw_set_transform(sh + BC - BC * f - Vector2(_door_cam() * Door3D.S * f, 0.0), 0.0,
+			Vector2(f, f))
+
+
+#  edy — 판 자리에서 더하는 세로 밀림(이스터에그의 새 판이 밑에서 오른다).
+#  문이 안 서면(헤드리스 · 문 끔 · 판 화면) 판은 제자리다 — 밀림만 더한다.
+func _door_set_xf(sh: Vector2, edy := 0.0) -> void:
+	if not (_door_live() and _door_here()):
+		draw_set_transform(sh + Vector2(0.0, edy))
+		return
+	var xf := _door_xf()
+	var c: Vector2 = xf[0]
+	var sc: Vector2 = xf[1]
+	draw_set_transform(sh + c - sc * BC + Vector2(0.0, edy * sc.y), 0.0, sc)
+
+
+#  문짝이 램프에서 등을 돌리는 만큼 판에 그늘이 진다 — _door_set_xf 변환 안에서 부른다.
+func _door_shade() -> void:
+	if door_t < 0.0:
+		return
+	var k := _door_k()
+	if k <= 0.0:
+		return
+	draw_circle(BC, _wall3_ro() + 3.0, Color(0.0, 0.0, 0.0, float(DOORT.shade) * k))
+
+
+#  손잡이 — 누르면 문이 열린다. 연출을 못 틀면(움직임 끔 · 검사 · 헤드리스 · 문이 아직 안
+#  구워졌다) 곧장 새 런 화면이다(옛 「시작」 그대로).
+func _door_open() -> void:
+	if door_t >= 0.0:
+		#  들어가는 중에 한 번 더 — 기다리지 않고 곧장 덮는다.
+		if not door_went:
+			door_went = true
+			_wipe(_door_through)
+		return
+	if not (_door_live() and _cine_ok(wipe_force)):
+		_sfx("menu_pick")
+		_open_newrun()
+		return
+	door_t = 0.0
+	Door3D.cam_dolly(door_vp, 0.0)
+	door_went = false
+	_sfx("door_open")
+	queue_redraw()
+
+
+#  지지직이 다 덮었다 — 새 런 화면으로. 문은 닫아 둔다(제목으로 돌아오면 닫힌 문이다).
+func _door_through() -> void:
+	door_t = -1.0
+	door_went = false
+	if door_vp != null and is_instance_valid(door_vp):
+		Door3D.door_pose(door_vp, 0.0)
+		Door3D.cam_dolly(door_vp, 0.0)
+	_open_newrun()
+
+
+#  인트로 끝에서 가라앉는 짙기 · 제목의 짙기. 문이 서면 0 — 판이 램프 빛 안에 선다.
+func _title_dim() -> float:
+	return 0.0 if _door_live() else float(INTRO.scrim)
+
+
+#  손잡이 — 3D 가 구운 놋쇠 막대 위에 얹는다. 얹히면(0번 줄) 막대가 빛을 받아 밝아지고
+#  둘레에 옅은 빛이 선다. 안 얹혀도 몇 초마다 빛 한 점이 막대를 타고 미끄러진다 — 「이것을
+#  잡는다」를 글 없이 말한다(글줄에 「시작」이 없다).
+func _door_handle_draw() -> void:
+	if door_t >= 0.0:
+		return
+	var r := Door3D.handle_rect(BC)
+	var gl := Color(1.0, 0.86, 0.55)
+	var hot: float = ttl_e[0] if ttl_e.size() > 0 else 0.0
+	if hot > 0.004:
+		for k in 3:
+			draw_rect(r.grow(1.0 + float(k)), Color(gl, 0.16 * hot * (1.0 - float(k) / 3.0)),
+					false, 1.0)
+		draw_rect(r, Color(gl, 0.30 * hot))
+	if motion_off:
+		return
+	var ph: float = fmod(ttl_t, float(DOORT.glint)) / float(DOORT.glint_t)
+	if ph < 1.0:
+		var gy: float = lerpf(r.position.y + 2.0, r.end.y - 5.0, ph)
+		draw_rect(Rect2(r.position.x + 1.0, gy, maxf(r.size.x - 2.0, 1.0), 3.0),
+				Color(1.0, 0.96, 0.82, 0.60 * sin(ph * PI)))
+
+
+#  칠판 — 계속하기 · 컬렉션 · 설정 · 종료(「시작」은 손잡이다). 벽돌 벽에 건 나무 테 칠판.
+#  얹힘 띠 · 글자 크기 · 기준선은 옛 글줄 그대로다(_row_band · 20 · _menu_base_y).
+func _title_chalk() -> void:
+	var trows := _title_rows()
+	if trows.size() <= 1:
+		return
+	var r0 := _menu_rect(1)
+	var pr := _prof_badge_rect()
+	var pad: Vector2 = DOORT.pad
+	var box := Rect2(r0.position.x - pad.x, r0.position.y - pad.y,
+			r0.size.x + pad.x * 2.0, pr.end.y - r0.position.y + pad.y + 6.0)
+	box = Rect2(box.position.round(), box.size.round())
+	var fr: Rect2 = box.grow(4.0)
+	#  그늘 — 칠판이 벽에서 떠 있다(빛은 오른쪽 위 문 램프에서 온다)
+	draw_rect(Rect2(fr.position + Vector2(-3.0, 4.0), fr.size), Color(0.0, 0.0, 0.0, 0.45))
+	#  테 — 짙은 나무 · 윗변 밝게 · 밑변 그늘
+	draw_rect(fr, DOORT.frame)
+	draw_rect(Rect2(fr.position, Vector2(fr.size.x, 1.0)), DOORT.frame_hi)
+	draw_rect(Rect2(fr.end.x - 1.0, fr.position.y, 1.0, fr.size.y), Color(DOORT.frame_hi, 0.6))
+	draw_rect(Rect2(fr.position.x, fr.end.y - 1.0, fr.size.x, 1.0), Color(0.0, 0.0, 0.0, 0.5))
+	#  판 · 지운 자국(분필 가루가 옅게 번진 얼룩)
+	var ink: Color = DOORT.chalk_ink
+	draw_rect(box, DOORT.chalk)
+	for k in 8:
+		var w: float = roundf(lerpf(16.0, 44.0, _gl_rand(k * 5 + 3, 4407)))
+		var h: float = roundf(lerpf(2.0, 5.0, _gl_rand(k * 5 + 4, 4407)))
+		var px: float = roundf(box.position.x + _gl_rand(k * 5 + 1, 4407) * (box.size.x - w))
+		var py: float = roundf(box.position.y + _gl_rand(k * 5 + 2, 4407) * (box.size.y - h))
+		draw_rect(Rect2(px, py, w, h), Color(ink, 0.045))
+	#  머리 — 이름 · 분필 밑줄 한 획
+	var hx: float = r0.position.x
+	draw_string(font, Vector2(hx, r0.position.y - 16.0), "하이톤", HORIZONTAL_ALIGNMENT_LEFT,
+			-1, 24, Color(ink, 0.94))
+	draw_rect(Rect2(hx, r0.position.y - 10.0, 64.0, 1.0), Color(ink, 0.32))
+	#  줄 — 분필 글씨
+	for i in range(1, trows.size()):
+		var r := _menu_rect(i)
+		var ee: float = ttl_e[i] if i < ttl_e.size() else 0.0
+		var ew: float = ttl_w[i] if i < ttl_w.size() else 0.0
+		var br := r
+		if font_sm != null:
+			br.size.x = minf(r.size.x, font_sm.get_string_size(String(trows[i].n),
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x + 16.0)
+		_row_band(self, br, ee, ew, 1.0)
+		draw_string(font_sm, r.position + Vector2(0.0, _menu_base_y(font_sm, 20, 0.0, r.size.y)),
+				String(trows[i].n), HORIZONTAL_ALIGNMENT_LEFT, -1, 20,
+				Color(ink, lerpf(0.66, 1.0, ee)))
+	#  가름줄 — 줄과 프로필 사이 분필 한 획(끝이 조금 흐리다)
+	var gy: float = roundf(float(DOORT.rows_bot) + float(DOORT.prof_gap) * 0.5)
+	draw_rect(Rect2(r0.position.x, gy, r0.size.x - 8.0, 1.0), Color(ink, 0.22))
+	draw_rect(Rect2(r0.position.x + r0.size.x - 8.0, gy, 6.0, 1.0), Color(ink, 0.10))
+	_prof_chalk_draw()
+	#  분필 받침 — 테 밑 나무 턱에 분필 한 토막
+	draw_rect(Rect2(fr.position.x, fr.end.y, fr.size.x, 3.0), DOORT.frame)
+	draw_rect(Rect2(fr.position.x + 14.0, fr.end.y - 1.0, 11.0, 2.0), Color(ink, 0.85))
+
+
+#  칠판 맨 밑 프로필 줄 — 사람 그림 · 「프로필 N」 · 자리 셋(쓰는 자리는 분필로 칠하고 · 쌓인
+#  자리는 옅게 · 빈 자리는 테만). 얹히면 다른 줄과 같은 띠가 쓸려 든다. 딸깍은 공용 얹힘이
+#  낸다 — 패(_ui_face)가 하던 대로 ui_hot 을 적는다.
+func _prof_chalk_draw() -> void:
+	var r := _prof_badge_rect()
+	var ink: Color = DOORT.chalk_ink
+	var hot: bool = state == S.TITLE and not ui_under and r.has_point(mouse_at) and door_t < 0.0
+	if hot:
+		ui_hot = "hud:프로필"
+	prof_chalk_e = move_toward(prof_chalk_e, 1.0 if hot else 0.0, 0.12)
+	var ee: float = prof_chalk_e
+	if ee > 0.004:
+		_row_band(self, Rect2(r.position, Vector2(r.size.x, r.size.y)), ee, ee, 1.0)
+	var a: float = lerpf(0.66, 1.0, ee)
+	var ic := Vector2(r.position.x + 6.0, r.position.y + r.size.y * 0.5)
+	draw_circle(ic + Vector2(0.0, -4.0), 3.0, Color(ink, a))
+	draw_rect(Rect2(ic.x - 5.0, ic.y + 1.0, 10.0, 5.0), Color(ink, a))
+	var cur := Save.slot()
+	draw_string(font_sm, Vector2(r.position.x + 18.0,
+			_menu_base_y(font_sm, 20, r.position.y, r.size.y)),
+			"프로필 %d" % cur, HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(ink, a))
+	var pw: float = float(PROFB.pip)
+	var pg: float = float(PROFB.pip_gap)
+	var n := Save.SLOTS
+	var x0: float = r.end.x - float(n) * pw - float(n - 1) * pg
+	var py: float = roundf(r.position.y + (r.size.y - pw) * 0.5)
+	for i in n:
+		var sl := i + 1
+		var q := Rect2(x0 + float(i) * (pw + pg), py, pw, pw)
+		if sl == cur:
+			draw_rect(q, Color(ink, 0.92))
+		elif Save.slot_used(sl):
+			draw_rect(q, Color(ink, 0.38))
+		else:
+			draw_rect(q, Color(ink, 0.45), false, 1.0)
+
+
+#  제목 — 술집 문 앞. 바닥(문 · 벽돌 · 빛)은 _draw 가 판 밑에 깔았다.
 func _draw_title() -> void:
+	if not _door_live():
+		_draw_title_flat()
+		return
+	#  조각 · 꽂힌 자루 · 날아오는 자루도 판과 같은 변환이다(줄어 문에 서고 · 문짝을 따른다).
+	var dxf := door_t >= 0.0
+	_door_set_xf(shake_off)
+	_egg_shards_draw()
+	if _door_board_vis():
+		_ttl_draw()
+	draw_set_transform(shake_off)
+	if dxf:
+		_door_wall_xf(shake_off)
+	#  간판 — 인트로가 켠 네온이 그대로 남는다(두 낱말이 붙은 뒤 · TON 은 금빛).
+	_intro_sign(float(INTRO.end), 1.0)
+	_door_handle_draw()
+	_title_chalk()
+	if dxf:
+		draw_set_transform(shake_off)
+		#  안의 불빛 — 문턱을 지나는 만큼 화면이 따뜻한 막으로 찬다.
+		var wk: float = smoothstep(0.55, 1.0, _door_walk())
+		if wk > 0.0:
+			draw_rect(_full(), Color(Door3D.COL.inside, float(DOORT.warm) * wk))
+	if CREDITS != "":
+		draw_string(font, Vector2(0, 355), CREDITS, HORIZONTAL_ALIGNMENT_CENTER,
+				VIEW.x, 12, C_DIM)
+
+
+#  옛 제목(단색 바탕 · 스크림 · 왼쪽 글줄) — 문이 아직 안 구워졌거나 헤드리스 · 문 끔.
+func _draw_title_flat() -> void:
 	#  조각은 **스크림 밑**이다. 판도 스크림 밑에 있으니 같은 층이어야 깨진
 	#  판의 조각으로 읽힌다 — 위에 그리면 판보다 밝은 딴 물건이 튀어나온다.
 	_egg_shards_draw()

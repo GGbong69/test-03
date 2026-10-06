@@ -1174,6 +1174,9 @@ static func _rows(g: Node) -> Array:
 				#  열여덟째 줄이다(한계 열아홉).
 				{"n1": "다트판 벽 %s" % ("켬" if g.wall3_on else "끔"),
 						"t": "act", "a": "wall3"},
+				#  술집 문(2026-10-06) — 제목 화면의 문 · 칠판 · 네온 간판(game.gd DOORT · door3d.gd)을
+				#  켜고 끈다. 끄면 옛 제목(단색 바탕 · 왼쪽 글줄)이다. 열아홉째 줄(한계).
+				{"n1": "술집 문 %s" % ("켬" if g.door_on else "끔"), "t": "act", "a": "door"},
 			]
 
 
@@ -2605,6 +2608,11 @@ static func _run(g: Node, e: Dictionary) -> void:
 			g.wall3_on = not g.wall3_on
 			g.queue_redraw()
 			_say("다트판 벽 %s" % ("켬" if g.wall3_on else "끔"))
+			return
+		"door":
+			g.door_on = not g.door_on
+			g.queue_redraw()
+			_say("술집 문 %s" % ("켬" if g.door_on else "끔"))
 			return
 		"run_drop":
 			Save.run_drop()
