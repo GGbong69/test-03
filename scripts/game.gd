@@ -8049,7 +8049,8 @@ func _next_step() -> void:
 				cross_live = true
 				cross_cut = true
 			#  큰 값일수록 낮게 깔린다(2026-09-26). **새로 굽지 않는다** —
-			#  sfx 파일 67개 그대로고 README 두 곳도 안 건드린다. _sfx 가 f
+			#  이 층이 더하는 sfx 파일은 0개다(표 73개 · wav 99개 — 띠 톡 score_tick
+			#  은 _tick_snd 몫이다, 2026-10-06). _sfx 가 f
 			#  인자를 이미 받아 pitch_scale = clampf(f / SFX_BASE, 0.25, 4.0)
 			#  로 쓰므로, 392 를 그대로 넘기면 pitch 1.000 = **손대기 전과 한
 			#  톨도 안 다른 소리**다(n=0 인 흔한 발이 그렇다).
@@ -8067,7 +8068,7 @@ func _next_step() -> void:
 			#  ── 빈 박 (2026-09-26) ──
 			#  4단만 이 소리를 **멈춤이 풀리는 프레임**으로 늦춘다. 앞
 			#  7.2프레임(pace 1.00)이 무음이다. 새로 굽는 파일 0개 · const SFX
-			#  표 0줄 · sfx/README.md 의 「67」 두 곳 0줄 — 67개를 먼저 읽고
+			#  표 0줄 · sfx/README.md 의 수 0줄 — 그날 표의 67개를 먼저 읽고
 			#  내린 결론이다: 종은 sfx_bake.gd 가 run_win · target_hit 의
 			#  「이겼다」로 못 박았고, 저음은 위 GROW.semi 가 이미 낸다(gn=1 에서
 			#  196 × 0.6674 = 130.8Hz), sfx_pool 이 넷뿐이라 한 겹을 더 얹으면

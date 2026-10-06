@@ -13,6 +13,7 @@ var g = null
 var busy := false
 var okn := 0
 var fail := 0
+var enter_fr := -1    # 확인에서 CLEAR 까지 걸린 프레임
 
 
 func _initialize() -> void:
@@ -47,9 +48,13 @@ func _enter() -> void:
 	g.state = g.S.CONFIRM
 	g.confirm_t = 99.0
 	g.aim = g.BC
-	for k in 600:
+	#  확인에서 CLEAR 까지 696프레임이다 — 배움 말상자가 게임 시간을 0.30배로 묶고,
+	#  합계 걸음이 4.4박 · 모음 걸음 0.7박으로 길어졌다(2026-10-06). 600 이면 돌파
+	#  걸음 안에서 끊겨 state 5(RESOLVE)로 운다.
+	for k in 1500:
 		g._process(1.0 / 60.0)
 		if g.state == g.S.CLEAR:
+			enter_fr = k + 1
 			return
 
 
@@ -59,7 +64,8 @@ func _run() -> void:
 	print("\n정산 연출 검사\n")
 
 	_enter()
-	_ok("정산으로 들어왔다", g.state == g.S.CLEAR, "state %d" % g.state)
+	_ok("정산으로 들어왔다", g.state == g.S.CLEAR,
+			"state %d · %d프레임" % [g.state, enter_fr])
 	_ok("내역이 섰다", (g.clear_gold_detail as Array).size() >= 3,
 			"%d줄" % (g.clear_gold_detail as Array).size())
 	#  ⚠ **화면 글을 여기 다시 적지 않는다.** 전에는 "클리어 보상" 을 글자로
