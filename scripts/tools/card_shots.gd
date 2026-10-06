@@ -26,6 +26,8 @@ extends SceneTree
 #                 그렇다 — 새 축만 끄면 오히려 어법이 갈린다(2026-09-18).
 #     16_모음     합계 앞 모음 걸음의 끝 — 두 칸이 「×」 쪽으로 10px 씩 · 「×」 36px
 #     17_모음_모션끔  같은 걸음에 모션만 끈다 — 칸은 1_참 자리 · 「×」는 24px 에 색만 밝다
+#     40~45_띠    합계 카드 턱 위 게이지 띠(목표의 30 · 80 · 100%) — 카드 자리 206 · 74.
+#                 셈 줄 잉크와 턱에 안 닿는다 · 굴리는 중이라 채움 끝에 머리 2px
 #
 #   그리고 마지막에 **살아 있는 정산**을 두 번 돌려 숫자로 잰다 —
 #   몸이 쌓이는가 · 7px 에서 멎는가 · 걸음 길이가 안 늘었는가.
@@ -276,6 +278,29 @@ func _run() -> void:
 	await _shot("16_모음")
 	keep["motion_off"] = true
 	await _shot("17_모음_모션끔")
+
+	# ── 40~45. 게이지 띠 — 합계 카드 턱 위 3px 가 판 목표까지 오른 몫을 채운다 ──
+	#  0.3 · 0.8(C_GOLD 로 넘어가는 자리) · 1.0 을 두 카드 자리(206 · 74)에서 찍는다.
+	#  띠가 셈 줄 잉크(20 · 밑변 87.3)와 턱(93)에 안 닿아야 한다. 1.0 은 한글이 든
+	#  셈 줄(「무작위」)이라 잉크가 가장 낮다. 굴리는 중(score_roll 0.5)이라 채움 끝에
+	#  C_LIGHT 머리 2px 가 서고 상단 띠도 같은 그림이다. 2026-10-06
+	var sn := 40
+	for cy in [206.0, 74.0]:
+		for fk in [0.3, 0.8, 1.0]:
+			keep = _base()
+			keep["card_mode"] = 1
+			keep["card_y"] = cy
+			keep["cur_chip"] = 60
+			keep["cur_mult"] = 5
+			keep["last_gain"] = 300
+			keep["shown"] = 1000.0 * float(fk)
+			keep["score_roll"] = 0.5
+			keep["card_pop"] = 0.989
+			if float(fk) >= 1.0:
+				keep["score_mode"] = "rand"
+			await _shot("%d_띠_%s_%d" % [sn, "위" if cy < 100.0 else "아래",
+					int(round(float(fk) * 100.0))])
+			sn += 1
 
 	keep = {}
 	live = true

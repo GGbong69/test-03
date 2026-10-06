@@ -740,6 +740,8 @@ var chip_j := 0.0              # 점수 칸의 춤 시계(1 → 0). **칸마다 
 var mult_j := 0.0              # 배수 칸의 춤 시계. 바뀐 칸만 튀어야 뭐가 바뀐지 읽힌다
 var chip_amt := 0.30           # 그 춤의 크기. 「얼마나 바뀌었나 × 얼마나 큰 수인가」
 var mult_amt := 0.30
+var chip_from := 0             # 점수 칸이 세기 시작한 값. chip_j 를 세우는 자리에서 같이 선다
+var mult_from := 0             # 배수 칸이 세기 시작한 값. 칸에 적히는 수만 센다(_card_num)
 var card_burst := 0.0          # 「한 방」의 금빛 테두리(판 뒤에 깔린다)
 var gain_roll := 0.0           # 합계 「+n」의 부풂(1 = 봉우리 · 0 = 36px). _gain_sz 가 읽는다
 var wind_t := 0.0              # 모음 걸음 시계(1 → 0). 걸음의 78% 에서 0 에 닿는다
@@ -761,6 +763,7 @@ var score_div := 2.60          # 이 걸음의 굴림 나눗수. 창 = qt × jsp
 var tick_n := 0                # 이 굴림의 톡 수(0 이면 안 센다). _tally_arm 이 세운다
 var tick_i := 0                # 난 칸 수. tick_n 에 닿은 칸이 떨어지는 동전이다
 var tick_f0 := 0               # 첫 칸의 반음 — 걸음 사다리가 멎은 자리(상한 12)
+var tick_flash := 0.0          # 톡마다 1 로 선다(1 → 0). 띠 점수가 흰 쪽으로 TALLY.flash 만큼 밝는다
 var cross_cut := false         # 이 굴림이 목표에서 갈린다 — score_from → target → total
 var cross_live := false        # 목표 달성이 아직 안 났다. 띠가 목표에 닿는 프레임에 _cross_fire 가 낸다
 
@@ -4994,6 +4997,8 @@ func _sfx(name: String, f := 0.0) -> void:
 #  coin_land 는 6kHz 위가 2.99% 라 probe_sfx 지붕(2%)을 넘는다(×2 는 0.51%).
 #  제 자리 하나(tick_pl)에서 난다 — 자리 넷(sfx_pool · sfx_next)을 안 돈다.
 func _tick_snd(j: int) -> void:
+	#  띠 점수가 톡마다 흰 쪽으로 한 번 밝는다 — 색이라 모션 끄기도 남는다.
+	tick_flash = 1.0
 	var n := maxi(tick_n, 1)
 	var semi := float(tick_f0) + float(TALLY.semi) * float(j) / float(n)
 	var nm := "score_tick"
@@ -5283,6 +5288,10 @@ func _process(d: float) -> void:
 	#  창이 걸음에 비례해 줄고, fast_rate 를 타므로 빨리 보기에서도 어긋날
 	#  자리가 구조적으로 없다. score_div 는 걸음마다 세워지는 나눗수다.
 	score_roll = maxf(score_roll - d * fast_rate * card_jrate * score_div, 0.0)
+	#  띠 점수의 톡 빛도 같은 시계다 — 창이 걸음의 78% ÷ TALLY.flash_r. 끝 칸(동전)이
+	#  굴림 창의 92%(걸음의 87.5% 이하 · div_hi 0.82)에 나므로 창 9.75% 를 더해도
+	#  걸음 안에서 0 에 닿는다. 2026-10-06
+	tick_flash = maxf(tick_flash - d * fast_rate * card_jrate * float(TALLY.flash_r), 0.0)
 	card_burst = maxf(card_burst - d * float(CARDFX.burst_fade), 0.0)
 	#  출처 빛도 **같은 시계를 탄다** — 새 벽시계 상수를 한 개도 안 박는다.
 	#  card_jrate = 1/(qt × jspan 0.78)(_next_step 의 마지막 줄)라 창이 언제나
@@ -7769,6 +7778,7 @@ func _next_step() -> void:
 			# 걸음은 걸음이고 소리도 났다(2026-09-18).
 			if cur_chip != c0:
 				chip_amt = _card_amt(c0, cur_chip)
+				chip_from = c0
 				chip_j = 1.0
 				#  **판의 그 부채 한 칸**이 밝는다 — 칸이 점수를 낸다.
 				#  ⚠ 갈래 **안**이다. 밖에 두면 빗나간 발의 info.base 가 0 인
@@ -7795,6 +7805,7 @@ func _next_step() -> void:
 			pop(cc, "+%d" % pg, C_CHIP, 20, _pop_life())
 			_sfx("settle_pierce", f)
 			chip_amt = _card_amt(c0, cur_chip)
+			chip_from = c0
 			chip_j = 1.0
 			#  양옆 칸도 판이 낸 값이다 — 출발점은 꽂힌 칸 하나뿐이라 선도 하나다.
 			src_t = 1.0
@@ -7808,6 +7819,7 @@ func _next_step() -> void:
 			# 규칙을 갈래마다 같게 두어야 나중에 한 자리만 어긋나지 않는다.
 			if cur_mult != m0:
 				mult_amt = _card_amt(m0, cur_mult)
+				mult_from = m0
 				mult_j = 1.0
 				#  **판의 그 띠 한 고리**가 통째로 밝는다 — 고리(싱글 ·
 				#  더블 · 트리플 · 불)가 배수를 낸다. 갈래 안인 근거는
@@ -7840,6 +7852,7 @@ func _next_step() -> void:
 					cur_chip += _chip_gain(st.v)
 					if cur_chip != c0:
 						chip_amt = _card_amt(c0, cur_chip)
+						chip_from = c0
 						chip_j = 1.0
 						src_t = 1.0
 						src_ring = false
@@ -7849,6 +7862,7 @@ func _next_step() -> void:
 					cur_mult += st.v
 					if cur_mult != m0:
 						mult_amt = _card_amt(m0, cur_mult)
+						mult_from = m0
 						mult_j = 1.0
 						src_t = 1.0
 						src_ring = true
@@ -7858,6 +7872,7 @@ func _next_step() -> void:
 					cur_mult *= st.v
 					if cur_mult != m1:
 						mult_amt = _card_amt(m1, cur_mult)
+						mult_from = m1
 						mult_j = 1.0
 						src_t = 1.0
 						src_ring = true
@@ -7905,6 +7920,9 @@ func _next_step() -> void:
 			# 갈라 두면 한 걸음이 두 가지를 말한다(2026-09-18).
 			chip_amt = _card_amt(calc_c, cur_chip)
 			mult_amt = _card_amt(calc_m, cur_mult)
+			#  저울은 안 센다 — 갈아 끼우는 걸음이라 고른 값이 곧장 선다(_card_num).
+			chip_from = cur_chip
+			mult_from = cur_mult
 			chip_j = 1.0
 			mult_j = 1.0
 			_card_kick(float(CARDFX.kick_bal), float(CARDFX.press))
@@ -8246,6 +8264,30 @@ func _card_amt(a: int, b: int) -> float:
 			float(CARDFX.amt0), float(CARDFX.amt_cap))
 
 
+# 칸에 적히는 수 — 앞 값(v0)에서 새 값(v1)으로 센다(2026-10-06). 춤 시계 j 의 진행
+# u = 1 − j 가 ARC.drain(0.34)에 닿는 프레임에 v1 에 선다 — 칸 봉우리(u 0.338) ·
+# 잇는 선 꼬리가 닿는 그 프레임이다. 1 − (1 − k)² 로 빨리 떠나 천천히 앉는다.
+# 그림만 센다 — cur_chip · cur_mult 는 걸음이 서는 프레임에 이미 새 값이다.
+# 모션 끄기 · 시계 0 이면 곧장 v1 이다.
+func _card_num(v0: int, v1: int, j: float) -> int:
+	if motion_off or j <= 0.0:
+		return v1
+	var k := clampf((1.0 - j) / float(ARC.drain), 0.0, 1.0)
+	if k >= 1.0:
+		return v1
+	var e := 1.0 - (1.0 - k) * (1.0 - k)
+	return v0 + int(round(float(v1 - v0) * e))
+
+
+# 세는 칸의 글자 크기를 재는 말 — 세는 동안은 앞 값 · 새 값 중 긴 쪽이라 크기가 세는
+# 도중에 안 뛰고, 줄어드는 걸음(음수 효과)도 칸을 안 깬다. 시계가 0 이면 새 값이다.
+func _card_num_fit(v0: int, v1: int, j: float) -> String:
+	var a := str(v1)
+	if j > 0.0 and not motion_off and str(v0).length() > a.length():
+		return str(v0)
+	return a
+
+
 # 이 발이 「얼마나 큰가」. 0 = 조용히 지나갈 값 · 1 = 이 런에서 손꼽는 한 방.
 # **띠 굴림 · 흔들림 · 음정 셋이 이 하나를 읽는다** — 세기 축을 셋 만들면 셋이
 # 언젠가 갈라진다.
@@ -8541,6 +8583,7 @@ func _card_reset() -> void:
 	#  띠를 앞 total 에 세우고 동전을 낸다. 2026-10-06
 	tick_n = 0
 	tick_i = 0
+	tick_flash = 0.0
 	#  못 난 목표 달성도 접는다 — 판 · 런이 바뀌면 앞 돌파가 새 판에서 안 난다.
 	#  정산 안에서는 _next_step 머리가 _land 보다 먼저 낸다. 2026-10-06
 	cross_cut = false
@@ -15239,7 +15282,6 @@ func _draw_topbar() -> void:
 	draw_string(font, Vector2(103, ty), GameData.leg_name(leg_no),
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 12,
 			C_ACC if GameData.is_boss(leg_no) else C_DIM)
-	draw_rect(g, C_BG)
 	#  판 고르기 — 띠는 **고를 판**을 말한다. 정산 → 상점 → 판 고르기로 오면 target · shown 이
 	#  지난 판의 것이라, 다음 판 이름 옆에 꽉 찬 금빛 게이지와 「42 42」 가 남았다가 판 갈이가
 	#  열리는 틀에 「63 0」 으로 툭 바뀌었다(검토, 2026-10-05). 그림만 바꾼다 — 상태는 그대로다.
@@ -15255,8 +15297,8 @@ func _draw_topbar() -> void:
 	#  낸다. 등급 배수를 말하던 곁말은 등급 시스템과 같이 걷혔다(2026-09-18).
 	var gk := clampf(shn / float(maxi(tgt, 1)), 0.0, 1.0)
 	#  다 차 갈 때 달아오른다. 막판에 눈이 게이지로 돌아오는 값이다.
-	draw_rect(Rect2(g.position, Vector2(g.size.x * gk, g.size.y)),
-			C_GOLD if gk >= 0.8 else C_ACC)
+	#  카드의 게이지 띠와 같은 그림이다(_score_gauge · 2026-10-06).
+	_score_gauge(g, gk)
 	#  **슬래시를 지운다.** 색과 자리가 이미 둘을 갈랐다 — 내 것은
 	#  점수색이고 넘어야 할 것은 흐린 곁말이다. 같은 색 같은 크기로
 	#  나란히 두면 「내 것」과 「넘을 것」이 한 덩어리로 읽힌다.
@@ -15275,9 +15317,11 @@ func _draw_topbar() -> void:
 	#  ⚠ 「점수색과 흐린 곁말이 둘을 가른다」는 전제는 **세진다** — 목표(C_DIM,
 	#  L 0.308)와의 상호 대비가 C_CHIP 1.65:1 에서 C_LIGHT 2.21:1 로 오르고,
 	#  띠 바탕(C_BG) 대비도 9.6:1 → 14.0:1 이다. 색이 아니라 밝기로 가른다.
+	#  톡마다 흰 쪽으로 TALLY.flash(0.6)만큼 밝았다 걸음 안에서 돌아온다(tick_flash ·
+	#  2026-10-06). 색이라 모션 끄기도 남는다.
 	draw_string(font, Vector2(float(LAY.bar_score_r) - 64.0, ty),
 			GameData.big(int(round(shn))), HORIZONTAL_ALIGNMENT_RIGHT, 64.0, 12,
-			C_LIGHT)
+			C_LIGHT.lerp(Color(1.0, 1.0, 1.0), float(TALLY.flash) * tick_flash))
 
 	# 3칸 x[584,640] — 이번 판 제약 수. 이름 전체는 하단 y341 줄이 갖는다.
 	# active_mods 는 _begin_leg 가 판마다 다시 세운다 — 보통 판이면 비고
@@ -15311,6 +15355,19 @@ func _draw_topbar() -> void:
 			draw_string(font, Vector2(LAY.bar_mod + 2.0 + 2.0 * 16.0, ty),
 					"+%d" % (active_mods.size() - 2),
 					HORIZONTAL_ALIGNMENT_LEFT, -1, 12, C_DIM)
+
+
+#  판 목표 게이지 — 상단 띠(LAY.bar_gauge 300×7)와 합계 카드 턱 위 띠(3px)가 같이 쓴다.
+#  바탕 C_BG · 채움은 0.8 밑 C_ACC · 0.8 부터 C_GOLD. 띠가 굴러 오르는 동안(score_roll
+#  > 0) 채움 끝에 C_LIGHT 머리 TALLY.cap(2px)이 선다. 색과 채움뿐이라 모션 끄기도 남는다.
+#  2026-10-06
+func _score_gauge(r: Rect2, gk: float) -> void:
+	draw_rect(r, C_BG)
+	var w := r.size.x * gk
+	draw_rect(Rect2(r.position, Vector2(w, r.size.y)), C_GOLD if gk >= 0.8 else C_ACC)
+	if score_roll > 0.0 and w > 0.0:
+		var cw := minf(float(TALLY.cap), w)
+		draw_rect(Rect2(r.position + Vector2(w - cw, 0.0), Vector2(cw, r.size.y)), C_LIGHT)
 
 
 #  런 진행 칸 여덟. at 은 첫 칸의 왼쪽 위다. 런 바(_draw_topbar)와, 런 바가
@@ -35625,12 +35682,18 @@ func _card_times(p: Vector2, e: float) -> void:
 #  칸과 6 · 턱과 5.5px, 12 는 y[73,83.5] 다. 갈무리 때는 바닥선 하나(87)를 두 크기가 같이
 #  써서 12 로 접히면 한 줄이 턱 쪽으로 쏠렸다.
 #  총점(36)은 두 칸이 서던 자리의 가운데(total_mid 41)에 선다 — 카드가 걸음을 넘겨도
-#  큰 수의 가운데가 안 흔들리고, 밑 셈 줄(math)은 동전 이름 줄과 같은 가운데다.
+#  큰 수의 가운데가 안 흔들리고, 밑 셈 줄(math)은 동전 이름 줄보다 1px 위(math_mid 77.5)다 —
+#  밑에 게이지 띠가 선다(2026-10-06).
 #  칸의 가로 자리도 여기 둔다(2026-09-26 수선). 그리는 쪽에 12 · 98 · 134 를 박아
 #  두었더니 잇는 선이 도착점을 「12 + 98÷2 = 61」처럼 **손으로 더해** 갖고 있었다 —
 #  카드 폭이 바뀌면 선만 조용히 어긋나는 자리다. 한 곳에서 꺼낸다.
+#  합계 카드의 게이지 띠(2026-10-06) — x 10 ~ CARD_W − 10 · y 88 ~ 91. 판 목표까지 오른
+#  몫(shown ÷ target)을 상단 띠와 같은 그림(_score_gauge)으로 채운다. 셈 줄(20)을 1px 올려
+#  (math_mid 77.5 · 바닥선 85.5) 잉크 밑변이 숫자 85.5 · 한글 86.3 — 띠와 2.5 · 1.7px,
+#  띠와 턱(93) 사이 2px. line_mid 그대로면 한글 잉크가 띠에 0.5px 로 붙었다(찍어 쟀다).
 const CARDTXT := {"box_y": 18.0, "box_h": 46.0, "gap": 5.0, "line_mid": 78.5, "total_mid": 41.0,
-		"box_x1": 12.0, "box_x2": 134.0, "box_w": 98.0}
+		"box_x1": 12.0, "box_x2": 134.0, "box_w": 98.0,
+		"math_mid": 77.5, "strip_x": 10.0, "strip_y": 88.0, "strip_h": 3.0}
 
 
 # 카드가 걸음에 반응하는 세기. **감각 조정은 이 표에서만 한다** — PANEL 이 동전
@@ -35797,6 +35860,11 @@ const TALLY := {
 	# 돌파 걸음(_tick_score · _cross_fire) — 띠가 k 0 ~ cross 에 목표까지, cross ~ 1 에
 	# total 까지 오르고 목표에 닿는 프레임에 목표 달성이 난다.
 	"cross": 0.45,   # beat 0.38 · gn 0.6 에서 내리친 뒤 0.70초 · 금 0.55초
+
+	# 띠가 오르는 것을 보이는 자리(_score_gauge · _draw_topbar) — 2026-10-06
+	"flash": 0.6,    # 톡마다 띠 점수가 흰 쪽으로 가는 몫(tick_flash 1 에서)
+	"flash_r": 8.0,  # tick_flash 감쇠 = card_jrate × 8 — 창이 걸음의 9.75%
+	"cap": 2.0,      # 굴리는 동안 게이지 채움 끝에 서는 C_LIGHT 머리 폭(px)
 }
 
 
@@ -36041,18 +36109,21 @@ func _draw_card() -> void:
 			#  lerp)을 절반 세기(0.25)로 들인다. 저울이 이 게임에서 제일 큰 색
 			#  사건이라 보통 걸음이 그만큼 희어지면 위계가 무너진다.
 			#  옆 칸은 제 색으로 가만있는다 — 그 대비가 정보량의 전부다(2026-09-18).
+			#  수는 앞 값에서 센다(_card_num) — 봉우리 프레임에 새 값에 선다. 크기는
+			#  세는 두 값 중 긴 글자(_card_num_fit)로 재서 세는 동안 칸의 글자 크기가
+			#  안 뛴다(2026-10-06).
 			var jc := _card_juice(chip_j)
 			var jm := _card_juice(mult_j)
 			_card_box(p, float(CARDTXT.box_x1) + wdx, float(CARDTXT.box_w),
 					C_CHIP.lerp(Color(1.0, 1.0, 1.0), float(CARDFX.warm) * chip_j),
-					str(cur_chip), "점수",
-					_fit_sz(str(cur_chip), 94.0,
+					str(_card_num(chip_from, cur_chip, chip_j)), "점수",
+					_fit_sz(_card_num_fit(chip_from, cur_chip, chip_j), 94.0,
 							int(24.0 * (1.0 + chip_amt * maxf(jc, 0.0)))),
 					roundf(float(CARDFX.squash) * maxf(-jc, 0.0)))
 			_card_box(p, float(CARDTXT.box_x2) - wdx, float(CARDTXT.box_w),
 					C_MULT.lerp(Color(1.0, 1.0, 1.0), float(CARDFX.warm) * mult_j),
-					str(cur_mult), "배수",
-					_fit_sz(str(cur_mult), 94.0,
+					str(_card_num(mult_from, cur_mult, mult_j)), "배수",
+					_fit_sz(_card_num_fit(mult_from, cur_mult, mult_j), 94.0,
 							int(24.0 * (1.0 + mult_amt * maxf(jm, 0.0)))),
 					roundf(float(CARDFX.squash) * maxf(-jm, 0.0)))
 			_card_times(p, we)
@@ -36087,7 +36158,13 @@ func _draw_card() -> void:
 			math = "%d + %d ÷ 2 → %d × %d" % [calc_c, calc_m, cur_chip, cur_mult]
 		elif score_mode == "rand":
 			math = "무작위 %d × %d" % [cur_chip, cur_mult]
-		_card_line(p, float(CARDTXT.line_mid), math, math, true)
+		_card_line(p, float(CARDTXT.math_mid), math, math, true)
+		#  판 목표까지 오른 몫 — 상단 띠와 같은 게이지가 카드 턱 위에 선다. 띠가
+		#  오르는 동안 눈이 머무는 카드에서 목표에 다가가는 것이 읽힌다(2026-10-06).
+		var sx := float(CARDTXT.strip_x)
+		_score_gauge(Rect2(p + Vector2(sx, float(CARDTXT.strip_y)),
+				Vector2(CARD_W - sx * 2.0, float(CARDTXT.strip_h))),
+				clampf(shown / float(maxi(target, 1)), 0.0, 1.0))
 
 
 #  떠오르는 글자. 크기가 굵기를 고른다 — 10 · 20 은 곁말(SemiBold), 12 · 24 · 36 은

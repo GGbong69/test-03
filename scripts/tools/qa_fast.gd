@@ -131,13 +131,14 @@ func _stage(n: int, sn := -1) -> void:
 #             있나 · 그 시계가 선 가장 큰 값
 #    tick_n · tick_left   띠 톡 칸을 세운 수 · 정산이 끝난 프레임에 끝 칸(떨어지는
 #             동전)이 아직 안 났나
-#  q 를 주면 chip 줄 대신 그 큐를 세운다(목표는 안 넘기게 올린다).
-func _play(n: int, hold: bool, sn := -1, q := []) -> Dictionary:
+#    tf_top   띠 점수 톡 빛(tick_flash)이 선 가장 큰 값
+#  q 를 주면 chip 줄 대신 그 큐를 세운다(목표는 tgt — 기본은 안 넘기게 올린다).
+func _play(n: int, hold: bool, sn := -1, q := [], tgt := 100000) -> Dictionary:
 	_stage(n, sn)
 	if not q.is_empty():
 		g.queue = q.duplicate(true)
 		g.settle_n = sn if sn > 0 else q.size()
-		g.target = 100000
+		g.target = tgt
 		g.total = 0
 		g.qt = g.beat * g._pace()
 	#  골드는 **차이로 잰다.** _start_leg 가 판마다 이자를 얹으므로 절대값은
@@ -158,6 +159,7 @@ func _play(n: int, hold: bool, sn := -1, q := []) -> Dictionary:
 	var wind_top := 0.0
 	var tick_n := 0
 	var tick_left := false
+	var tf_top := 0.0
 	while g.state == g.S.RESOLVE and frames < 4000:
 		var ps0: int = g.pitch_step
 		g._process(1.0 / 60.0)
@@ -195,21 +197,22 @@ func _play(n: int, hold: bool, sn := -1, q := []) -> Dictionary:
 		if g.tick_n > 0:
 			tick_n = g.tick_n
 			tick_left = g.tick_i < g.tick_n
+		tf_top = maxf(tf_top, g.tick_flash)
 	if hold:
 		_btn(false)
 	return {"frames": frames, "steps": steps, "two": two, "leak": leak,
 			"src_leak": src_leak, "wind_leak": wind_leak, "wind_top": wind_top,
-			"tick_n": tick_n, "tick_left": tick_left,
-			"pitch": g.pitch_step, "total": g.total, "gold": g.gold - gold0,
+			"tick_n": tick_n, "tick_left": tick_left, "tf_top": tf_top,
+			"tf_end": g.tick_flash, "gn": g._grow_n(), "pitch": g.pitch_step, "total": g.total, "gold": g.gold - gold0,
 			"chip": g.cur_chip, "mult": g.cur_mult, "shown": g.shown,
 			#  ⚠ 「정산이 끝나면 카드 시계가 다 0」을 재는 그물이 **넷만 보고**
 			#  있었다. score_roll·src_t 를 안 적으면 정산 뒤에 굴림과 선이 남는
 			#  것을 아무도 못 본다 — total_flash 가 이미 한 번 겪은 사고다
 			#  (_card_reset 주석: 「어디서도 안 지워졌다」). 2026-09-26
-			#  모음 시계(wind_t)도 같은 그물에 든다. 2026-10-06
+			#  모음 시계(wind_t) · 띠 점수 톡 빛(tick_flash)도 같은 그물에 든다. 2026-10-06
 			"flash": maxf(maxf(maxf(g.total_flash, g.chip_j),
 					maxf(g.mult_j, g.gain_roll)),
-					maxf(maxf(g.score_roll, g.src_t), g.wind_t))}
+					maxf(maxf(g.score_roll, g.src_t), maxf(g.wind_t, g.tick_flash)))}
 
 
 func _min_step(steps: Array) -> int:
@@ -366,6 +369,22 @@ func _run() -> void:
 			and not bool(wslow.tick_left) and not bool(wfast.tick_left),
 			"칸 %d · %d · 남은 칸 %s · %s" % [int(wslow.tick_n), int(wfast.tick_n),
 					wslow.tick_left, wfast.tick_left])
+	#  띠 점수 톡 빛(tick_flash)도 합계 걸음 안에서 0 에 닿는다 — 가장 긴 굴림 창
+	#  (gn 1 · GROW.div_hi)을 목표를 넘기는 발로 세워 보통 · 빨리 보기로 돌린다.
+	#  끝 칸이 걸음의 87.5% 에 나고 빛 창이 9.75% 다(TALLY.flash_r). 2026-10-06
+	var gq := [{"k": "chip", "v": 2000}, {"k": "mult", "v": 1}, {"k": "wind"},
+			{"k": "total"}]
+	var tslow := _play(0, false, -1, gq, 1000)
+	var tfast := _play(0, true, -1, gq, 1000)
+	_ok("ⓟ-g 띠 톡 빛이 합계 걸음 안에서 0 에 닿는다 (gn 1 · 1배 · 2.5배)",
+			float(tslow.gn) >= 1.0 - 0.0001 and float(tfast.gn) >= 1.0 - 0.0001
+			and float(tslow.tf_top) >= 1.0 - 0.0001 and float(tfast.tf_top) >= 1.0 - 0.0001
+			and float(tslow.tf_end) <= 0.0001 and float(tfast.tf_end) <= 0.0001
+			and not bool(tslow.tick_left) and not bool(tfast.tick_left)
+			and float(wslow.tf_top) >= 1.0 - 0.0001,
+			"gn %.2f · 끝 빛 %.4f · %.4f · %d → %d프레임" % [float(tslow.gn),
+					float(tslow.tf_end), float(tfast.tf_end), int(tslow.frames),
+					int(tfast.frames)])
 	var wf_want: int = int(ceil(g.beat * float(g.TALLY.wind) * 60.0))
 	var wf_fast: int = int(ceil(g.beat * float(g.TALLY.wind) * 60.0 / 2.5))
 	_ok("ⓟ-c 모음 걸음이 이름값 그대로 서고 2.5배로 준다",

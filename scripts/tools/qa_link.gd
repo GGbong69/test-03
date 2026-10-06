@@ -284,10 +284,15 @@ func _run() -> void:
 	# ── ⑯ 꼬리가 닿는 프레임이 칸 봉우리와 같다 ─────────────
 	#  ARC.drain 0.34 를 고른 유일한 까닭이다. 선의 마지막 픽셀이 빨려 드는
 	#  그 프레임에 칸이 가장 크다 — 이 층의 유일한 주장이라 그것을 잠근다.
+	#  칸에 적히는 수(_card_num)도 같은 프레임에 새 값에 선다(2026-10-06) — 봉우리
+	#  프레임의 센 값이 cur_chip 이고, 그 앞에 앞 값과 새 값 **사이**의 수가 적힌
+	#  프레임이 있어야 한다(늘 새 값을 돌려주는 함수는 여기서 걸린다).
 	_stage([_chip(40)])
 	var f_tail := -1
 	var f_peak := -1
 	var peak := -9.0
+	var n_peak := -1
+	var n_mid := false
 	var fi := 0
 	while g.state == g.S.RESOLVE and fi < 600:
 		g._process(1.0 / 60.0)
@@ -296,12 +301,62 @@ func _run() -> void:
 			if f_tail < 0 and g._link_plan().is_empty():
 				f_tail = fi
 			var j: float = g._card_juice(g.chip_j)
+			var nv: int = g._card_num(g.chip_from, g.cur_chip, g.chip_j)
+			if nv > g.chip_from and nv < g.cur_chip:
+				n_mid = true
 			if j > peak:
 				peak = j
 				f_peak = fi
+				n_peak = nv
 	_ok("⑯ 꼬리 도착과 칸 봉우리가 같은 프레임이다",
 			f_tail > 0 and f_peak > 0 and absi(f_tail - f_peak) <= 1,
 			"꼬리 %d프레임 · 봉우리 %d프레임(%.3f)" % [f_tail, f_peak, peak])
+	_ok("⑯-b 점수 칸이 봉우리 프레임에 새 값까지 센다",
+			n_mid and n_peak == g.cur_chip and g.cur_chip == 40,
+			"봉우리 %d · 새 값 %d · 사이 값 %s" % [n_peak, g.cur_chip, n_mid])
+	#  배수 칸 — 1 → 5 · 동전 ×3 이 15 로 세운다. 걸음마다 제 봉우리에서 선다.
+	_stage([{"k": "mult", "v": 5}, _item(0, "xmult", 3)])
+	var m_ok := 0
+	var m_mid := 0
+	var m_note := []
+	var mpk := -9.0
+	var mnv := -1
+	var mps: int = g.pitch_step
+	fi = 0
+	while g.state == g.S.RESOLVE and fi < 600:
+		g._process(1.0 / 60.0)
+		fi += 1
+		if g.pitch_step != mps:
+			mps = g.pitch_step
+			mpk = -9.0
+		if g.mult_j <= 0.0:
+			continue
+		var jm: float = g._card_juice(g.mult_j)
+		var mv: int = g._card_num(g.mult_from, g.cur_mult, g.mult_j)
+		if mv > g.mult_from and mv < g.cur_mult:
+			m_mid += 1
+		if jm > mpk:
+			mpk = jm
+			mnv = mv
+		elif mpk > 0.9 and mnv >= 0:
+			#  봉우리를 막 지났다 — 그 프레임의 센 값을 적는다.
+			m_note.append("%d→%d:%d" % [g.mult_from, g.cur_mult, mnv])
+			if mnv == g.cur_mult:
+				m_ok += 1
+			mnv = -1
+	_ok("⑯-c 배수 칸도 봉우리 프레임에 새 값까지 센다 (1→5 · 5→15)",
+			m_ok == 2 and m_mid >= 2, "%s · 사이 값 %d프레임" % [m_note, m_mid])
+	#  그림만 센다 — 걸음이 서는 프레임에 셈 값은 이미 새 값이다.
+	_stage([_chip(40)])
+	var c_at := -1
+	fi = 0
+	while g.state == g.S.RESOLVE and fi < 600 and c_at < 0:
+		g._process(1.0 / 60.0)
+		fi += 1
+		if g.chip_j >= 1.0 - 0.0001:
+			c_at = g.cur_chip
+	_ok("⑯-d 셈 값은 걸음이 서는 프레임에 이미 새 값이다",
+			c_at == 40 and g._card_num(0, 40, 1.0) == 0, "cur_chip %d" % c_at)
 
 	# ── ⑰ 눌린 박자 · 빨리 보기에서도 안 새고 안 사라진다 ────
 	_stage([_chip(40), {"k": "mult", "v": 5}, _chip(80)], 40)

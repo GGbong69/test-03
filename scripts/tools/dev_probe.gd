@@ -606,11 +606,20 @@ func _score(g: Node) -> void:
 #  「점수 카드 걸음」은 진짜 정산 큐를 빌려 탄다. 빌린 것을 **돌려놓는지**가
 #  여기서 갈린다 — 안 돌려놓으면 판 점수가 오르고, 다 쓴 동전이 지워지고,
 #  Save 가 디스크에 앉는다.
+#  spin_mid — 미리보기 동안 칸에 적힌 수(_card_num)가 셈 값과 달랐던 프레임 수.
+#  칸이 앞 값에서 센다는 것이 미리보기에서도 서는지를 잰다(2026-10-06).
+var spin_mid := 0
+
+
 func _card_spin(g: Node, cap := 1200) -> int:
 	var n := 0
+	spin_mid = 0
 	while Dev.card_ph > 0 and n < cap:
 		g._process(1.0 / 60.0)
 		n += 1
+		if g.card_mode == 0 and (g._card_num(g.chip_from, g.cur_chip, g.chip_j) != g.cur_chip
+				or g._card_num(g.mult_from, g.cur_mult, g.mult_j) != g.cur_mult):
+			spin_mid += 1
 	return n
 
 
@@ -663,6 +672,9 @@ func _card(g: Node) -> void:
 				"%s — 마지막 걸음이 모음이다" % nm, str(qk))
 		var fr := _card_spin(g)
 		_say(fr < 1200, "%s — 미리보기가 스스로 끝난다" % nm, "%d 프레임" % fr)
+		#  칸 수가 앞 값에서 센다 — 게임 쪽 _next_step 이 세우는 그대로다.
+		_say(spin_mid > 0, "%s — 칸이 앞 값에서 새 값으로 센다" % nm,
+				"%d 프레임" % spin_mid)
 		_say(g.total == tot0, "%s — 판 점수가 안 오른다" % nm,
 				"%d → %d" % [tot0, g.total])
 		_say(Save.stat("best_gain") == 0 and Save.stat("best_score") == 0,
