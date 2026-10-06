@@ -46057,13 +46057,11 @@ func _cup_glitch(tex: Texture2D, stage: Rect2) -> void:
 		#  안 어긋난 줄에까지 덧대면 화면 전체가 물든다.
 		if absf(dx) > 0.5:
 			var fa: float = float(GLITCH.fringe)
-			draw_texture_rect_region(tex,
-					Rect2(dst.position - Vector2(2.0, 0.0), dst.size), src,
+			_stage_tex(stage, tex, Rect2(dst.position - Vector2(2.0, 0.0), dst.size), src,
 					Color(C_MULT, fa))
-			draw_texture_rect_region(tex,
-					Rect2(dst.position + Vector2(2.0, 0.0), dst.size), src,
+			_stage_tex(stage, tex, Rect2(dst.position + Vector2(2.0, 0.0), dst.size), src,
 					Color(C_CHIP, fa))
-		draw_texture_rect_region(tex, dst, src)
+		_stage_tex(stage, tex, dst, src, Color.WHITE)
 		y += bh
 		i += 1
 	#  한바탕에는 덮은 어둠이 걷힌다 — 깨질 때 밝아지는 것이 브라운관의
@@ -46341,12 +46339,12 @@ func _cup_backdrop(stage: Rect2, k: float, lcol: Color) -> void:
 func _cup_shadow(stage: Rect2, dx: float, wide: float) -> void:
 	var fpx: float = (float(CUP3.r) * wide + float(CUP3.wall)) * _cup3_ppu()
 	var cx: float = stage.get_center().x + dx
-	draw_colored_polygon(_e_pts(Vector2(cx + float(STAGE.sh_dx),
+	_stage_poly(stage, _e_pts(Vector2(cx + float(STAGE.sh_dx),
 			float(STAGE.sh_y)), fpx + 3.0, float(STAGE.sh_ry), 22),
 			Color(STAGE.sh))
 	#  닿은 자리 1px. 통 앞호 바로 밑이다 — 이 한 줄이 없으면 통이 그림자
 	#  위에 1px 떠 있는 것으로 보인다.
-	draw_colored_polygon(_e_pts(Vector2(cx, _cup_foot() + fpx * 0.309 + 1.0),
+	_stage_poly(stage, _e_pts(Vector2(cx, _cup_foot() + fpx * 0.309 + 1.0),
 			fpx * 0.92, 2.0, 22), Color(STAGE.ct))
 	#  도착 먼지. 통 발치 **밖**에 선다 — 안에 두면 통에 가려 안 보인다.
 	#  **들어오는 통에만** 인다. 넘기는 동안 통이 둘이고 나가는 통은 이미
@@ -46364,6 +46362,29 @@ func _cup_shadow(stage: Rect2, dx: float, wide: float) -> void:
 			#  받으므로 나무의 가장 밝은 단에서 시작해 웅덩이로 잦아든다.
 			draw_rect(Rect2(roundf(px), roundf(py), 2.0, 1.0),
 					Color(ART_PAL["wood"][3]).lerp(Color(STAGE.p1), 1.0 - a))
+
+
+#  무대 안으로 잘라 칠한다. 넘기는 동안 나가는 통의 그림자가 무대 밖 124px 까지 미끄러지는데,
+#  통 가림(_cup_mask)은 다트통 판(_pack_rect) 안만 덮어서 판 왼쪽 밖(화살표 밑)에 검은 타원이
+#  몇 틀 남았다(「다트통 바꿀때 이런게 남네」, 2026-10-07).
+func _stage_poly(stage: Rect2, pts: PackedVector2Array, col: Color) -> void:
+	var box := PackedVector2Array([stage.position, Vector2(stage.end.x, stage.position.y),
+			stage.end, Vector2(stage.position.x, stage.end.y)])
+	for p in Geometry2D.intersect_polygons(pts, box):
+		if (p as PackedVector2Array).size() >= 3:
+			draw_colored_polygon(p, col)
+
+
+#  어긋난 조각을 무대 안으로 잘라 붙인다 — 찢김(GLITCH.tear)이 무대 밖으로 밀어낸 몫이 통 가림
+#  (_cup_mask) 밖, 화살표 곁 석판 위에 흰 · 푸른 부스러기로 남았다(2026-10-07).
+func _stage_tex(stage: Rect2, tex: Texture2D, dst: Rect2, src: Rect2, col: Color) -> void:
+	var x0: float = maxf(dst.position.x, stage.position.x)
+	var x1: float = minf(dst.end.x, stage.end.x)
+	if x1 - x0 < 0.5:
+		return
+	var cut: float = x0 - dst.position.x
+	draw_texture_rect_region(tex, Rect2(x0, dst.position.y, x1 - x0, dst.size.y),
+			Rect2(src.position.x + cut, src.position.y, x1 - x0, src.size.y), col)
 
 
 func _cup_draw(pr: Rect2) -> void:
@@ -48496,10 +48517,16 @@ func _arrow_btn(c: CanvasItem, r: Rect2, right: bool, hot: bool) -> void:
 	if hot and _ui_can_hover() and r.has_point(mouse_at):
 		ui_hot = "arr:%s:%d" % [right, int(r.position.x)]
 	var e: float = 1.0 if hot else 0.0
-	#  ew 를 1.0 으로 박는다 — 칸을 꽉 채운 띠만 이 크기에서 읽힌다.
-	_row_band(c, r, e, 1.0, 1.0, C_ACC, 2.0)
 	var m := r.get_center()
 	var sx: float = 1.0 if right else -1.0
+	#  메뉴 재질(칠판)에서는 띠를 안 깐다 — 26px 단추에 깐 금빛 띠가 석판 위에서 탁한 네모와
+	#  밝은 끝선(세로줄)으로 세모 곁에 서서 찌꺼기처럼 읽혔다(「다트통 바꿀때 이런게 남네」,
+	#  2026-10-07). 얹히면 세모가 분필로 짙어지고 가는 쪽으로 1px 나선다.
+	if mat_draw:
+		m.x += sx * e
+	else:
+		#  ew 를 1.0 으로 박는다 — 칸을 꽉 채운 띠만 이 크기에서 읽힌다.
+		_row_band(c, r, e, 1.0, 1.0, C_ACC, 2.0)
 	c.draw_colored_polygon(PackedVector2Array([
 			Vector2(m.x - 5.0 * sx, m.y - 6.0),
 			Vector2(m.x - 5.0 * sx, m.y + 6.0),
