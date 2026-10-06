@@ -748,5 +748,9 @@ func _growrow(g: Node) -> void:
 	_say(g.score_roll > 0.0 and absf(g.score_from - float(g.total)) > 1.0,
 			"띠가 미리보기에서 실제로 구른다",
 			"떠난 자리 %.0f → 총점 %d" % [g.score_from, g.total])
+	#  ② 띠 톡도 게임 쪽 한 함수(_tally_arm)로 선다 — 천장 단(gn 1)은 22칸이다.
+	#  2026-10-06
+	_say(g.tick_n == 22 and g.tick_i == 0, "띠 톡이 미리보기에서도 선다 (천장 22칸)",
+			"칸 %d · 난 칸 %d" % [g.tick_n, g.tick_i])
 	g._card_reset()
 	Dev.page = page0

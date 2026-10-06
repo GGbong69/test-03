@@ -129,6 +129,8 @@ func _stage(n: int, sn := -1) -> void:
 #    leak     걸음 안에서 chip_j 가 0 에 못 닿은 적이 있나(카드 춤이 샜다)
 #    wind_leak · wind_top   모음 시계(wind_t)가 걸음 안에서 0 에 못 닿은 적이
 #             있나 · 그 시계가 선 가장 큰 값
+#    tick_n · tick_left   띠 톡 칸을 세운 수 · 정산이 끝난 프레임에 끝 칸(떨어지는
+#             동전)이 아직 안 났나
 #  q 를 주면 chip 줄 대신 그 큐를 세운다(목표는 안 넘기게 올린다).
 func _play(n: int, hold: bool, sn := -1, q := []) -> Dictionary:
 	_stage(n, sn)
@@ -154,6 +156,8 @@ func _play(n: int, hold: bool, sn := -1, q := []) -> Dictionary:
 	var wind_leak := false
 	var wind_danced := false
 	var wind_top := 0.0
+	var tick_n := 0
+	var tick_left := false
 	while g.state == g.S.RESOLVE and frames < 4000:
 		var ps0: int = g.pitch_step
 		g._process(1.0 / 60.0)
@@ -185,10 +189,17 @@ func _play(n: int, hold: bool, sn := -1, q := []) -> Dictionary:
 			cur = 0
 			danced = false
 		wind_top = maxf(wind_top, g.wind_t)
+		#  띠 톡도 걸음 안에서 끝난다(2026-10-06). 합계가 마지막 걸음이라 정산이
+		#  끝나는 프레임이 그 걸음의 끝이다 — 그 프레임까지 끝 칸이 났어야 한다.
+		#  _tick_score 가 _next_step 앞이라 같은 프레임에 난 동전도 안이다.
+		if g.tick_n > 0:
+			tick_n = g.tick_n
+			tick_left = g.tick_i < g.tick_n
 	if hold:
 		_btn(false)
 	return {"frames": frames, "steps": steps, "two": two, "leak": leak,
 			"src_leak": src_leak, "wind_leak": wind_leak, "wind_top": wind_top,
+			"tick_n": tick_n, "tick_left": tick_left,
 			"pitch": g.pitch_step, "total": g.total, "gold": g.gold - gold0,
 			"chip": g.cur_chip, "mult": g.cur_mult, "shown": g.shown,
 			#  ⚠ 「정산이 끝나면 카드 시계가 다 0」을 재는 그물이 **넷만 보고**
@@ -349,6 +360,12 @@ func _run() -> void:
 	_ok("ⓟ-b 정산이 끝나면 모음 시계도 0", wslow.flash <= 0.0001
 			and wfast.flash <= 0.0001 and g.wind_t <= 0.0001,
 			"최대 %.4f · %.4f" % [wslow.flash, wfast.flash])
+	#  띠 톡 — 합계 걸음 안에서 끝 칸(떨어지는 동전)까지 난다(1배 · 2.5배). 2026-10-06
+	_ok("ⓟ-f 띠 톡이 합계 걸음 안에서 끝난다 (1배 · 2.5배)",
+			int(wslow.tick_n) >= 4 and int(wfast.tick_n) >= 4
+			and not bool(wslow.tick_left) and not bool(wfast.tick_left),
+			"칸 %d · %d · 남은 칸 %s · %s" % [int(wslow.tick_n), int(wfast.tick_n),
+					wslow.tick_left, wfast.tick_left])
 	var wf_want: int = int(ceil(g.beat * float(g.TALLY.wind) * 60.0))
 	var wf_fast: int = int(ceil(g.beat * float(g.TALLY.wind) * 60.0 / 2.5))
 	_ok("ⓟ-c 모음 걸음이 이름값 그대로 서고 2.5배로 준다",

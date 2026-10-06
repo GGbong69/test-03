@@ -22,6 +22,9 @@ extends SceneTree
 #
 #  ⚠ 오토플레이는 beat 를 0.10 으로 눌러 도니 도구가 찍는 프레임 수를
 #    그대로 인용하면 3.4배 틀린다. 여기는 전부 손으로 큐를 세운다.
+#
+#  ①~⑬ 은 _initialize 에서, ⑭(띠 톡 · 2026-10-06)는 첫 틀에서 돈다 — 톡을
+#  tick_pl 에서 들어야 하는데 그 자리는 Game 의 _ready 가 세운다.
 # ══════════════════════════════════════════════════════════
 const GameData = preload("res://scripts/data.gd")
 const Save = preload("res://scripts/save.gd")
@@ -39,8 +42,24 @@ func _initialize() -> void:
 	g = load("res://scenes/main.tscn").instantiate()
 	root.add_child(g)
 	_run()
+	#  ⑭ 는 첫 틀에서 잰다 — 소리 자리(sfx_pool · tick_pl)는 Game 의 _ready 가
+	#  세우는데, _initialize 안에서는 루트가 아직 나무에 안 들어가 그것이 안 돌았다
+	#  (qa_power 와 같은 길).
+
+
+var busy := false
+
+
+func _process(_d: float) -> bool:
+	if g != null:
+		g.set_process(false)
+	if busy:
+		return false
+	busy = true
+	_run_tick()
 	print("\n통과 %d · 실패 %d" % [ok, bad])
 	quit(bad)
+	return false
 
 
 func _ok(nm: String, cond: bool, note := "") -> void:
@@ -650,3 +669,229 @@ func _run() -> void:
 			nom_game > 0.0 and absf(nom_dev - nom_game) < 0.0005,
 			"게임 %.4f초 · 한 방 %.4f초" % [nom_game, nom_dev])
 	_ok("⑬-b 「총합 걸음 다시 보기」 네 단이 _tot_qt 의 식이다", gr_ok, gr_txt)
+
+
+#  합계 걸음 하나를 돌리며 띠 톡을 **tick_pl 에서 듣는다.** 칸마다 음이 다르고 끝 칸은
+#  파일이 다르므로(coin_land) (stream · pitch_scale) 이 바뀐 프레임이 곧 소리가 난
+#  프레임이다. above 면 total 을 목표 위에서 출발시켜 돌파 갈래(판 깨짐 소리)를 뺀다.
+#    heard   소리가 난 프레임들 · lands  coin_land 가 난 수 · land  그 프레임
+#    n       세운 칸 수 · rose  tick_i 가 오른 프레임 수 · jump  한 프레임에 칸이 둘
+#            넘게 넘어간 적이 있나
+#    end     합계 걸음이 끝난 프레임 · moved  소리가 난 프레임에 sfx_next 가 돌았나
+#            (판이 끝나는 걸음은 판 깨짐 소리가 같은 프레임에 날 수 있다)
+#    in_pool 자리 넷에서 score_tick · coin_land 가 난 적이 있나
+#  gr 은 grow_roll 이다(_stage_total 의 _calm 이 1 로 되돌리므로 세운 뒤에 민다).
+func _tick_play(r: float, fast: bool, mo: bool, above: bool, gr := 1.0) -> Dictionary:
+	_stage_total(r, 1)
+	if above:
+		g.total = g.target * 5
+		g.shown = float(g.total)
+	g.motion_off = mo
+	g.fast_lock = fast
+	g.grow_roll = gr
+	var tp: AudioStreamPlayer = g.tick_pl
+	tp.stream = null
+	tp.pitch_scale = 1.0
+	var o := {"heard": [], "lands": 0, "land": -1, "n": 0, "rose": 0,
+			"jump": false, "end": -1, "moved": false, "in_pool": false,
+			"gn": -1.0}
+	var key0 := _tick_key(tp)
+	var f := 0
+	while g.state == g.S.RESOLVE and f < 4000:
+		var sn0: int = g.sfx_next
+		var ti0: int = g.tick_i
+		var ps0: int = g.pitch_step
+		g._process(1.0 / 60.0)
+		f += 1
+		if g.pitch_step > ps0:
+			o.n = g.tick_n
+			o.gn = g._grow_n()
+		elif g.tick_i > ti0:
+			o.rose += 1
+			if g.tick_i - ti0 >= 2:
+				o.jump = true
+		var nm := _tick_name(tp)
+		var key := _tick_key(tp)
+		if key != key0:
+			key0 = key
+			(o.heard as Array).append(f)
+			if nm == "coin_land":
+				o.lands += 1
+				o.land = f
+			if g.sfx_next != sn0:
+				o.moved = true
+		#  이 프레임에 자리 넷에서 새로 난 소리를 이름으로 본다(qa_break 와 같은 셈).
+		var pool: Array = g.sfx_pool
+		var dn: int = posmod(int(g.sfx_next) - sn0, pool.size())
+		for k in dn:
+			var sp: AudioStreamPlayer = pool[posmod(int(g.sfx_next) - dn + k, pool.size())]
+			var pn := "" if sp.stream == null 					else String(sp.stream.resource_path).get_file().get_basename()
+			if pn == "score_tick" or pn == "coin_land":
+				o.in_pool = true
+	o.end = f
+	g.fast_lock = false
+	g.motion_off = false
+	g.grow_roll = 1.0
+	return o
+
+
+func _tick_name(tp: AudioStreamPlayer) -> String:
+	return "" if tp.stream == null \
+			else String(tp.stream.resource_path).get_file().get_basename()
+
+
+#  칸마다 음이 다르고 끝 칸은 파일이 다르다 — 이 열쇠가 바뀐 프레임에 소리가 났다.
+func _tick_key(tp: AudioStreamPlayer) -> String:
+	return "%s@%.6f" % [_tick_name(tp), tp.pitch_scale]
+
+
+#  칸 수의 식 — TALLY.tick0 + TALLY.tick_gn × gn 을 4 ~ 24 로 묶는다.
+func _tick_want(gn: float) -> int:
+	var tl: Dictionary = g.TALLY
+	return clampi(int(round(float(tl.tick0) + float(tl.tick_gn) * gn)), 4, 24)
+
+
+func _run_tick() -> void:
+	g._new_run()
+	_calm()
+
+	# ── ⑭ 띠 톡 — 칸마다 하나 · 한 프레임에 하나 · 자리 넷 밖 (2026-10-06) ──
+	#  상단 띠는 창의 앞 TALLY.lead 를 선 채로 있다가 pow(k, TALLY.ease)로 올라 total 에
+	#  닿고, 값으로 고르게 놓인 칸을 넘을 때마다 톡이 난다. 마지막 칸은 coin_land 다.
+	#   · 1배: 칸마다 정확히 하나 — tick_n 번 · 동전 하나 · 걸음 안에서 끝난다.
+	#   · 2.5배: 칸을 건너뛸 수 있으나 tick_i 가 오른 프레임마다 소리는 하나고
+	#     동전은 반드시 난다(칸이 둘 넘게 넘어간 프레임이 실제로 있어야 이 줄이 뜻이 있다).
+	#   · 모션 끄기: 동전 하나.
+	#   · 1배 톡 사이가 안 넓어진다(프레임 올림 1 안) · 뒤 절반이 앞 절반보다 짧다.
+	#   · 톡 · 동전이 자리 넷에서 한 번도 안 난다. 판이 안 끝나는 걸음(판 깨짐 소리가
+	#     없다)에서는 톡이 난 프레임에 sfx_next 가 아예 안 돈다.
+	var tp = g.tick_pl
+	var pool: Array = g.sfx_pool
+	_ok("⑭ 띠 톡 자리가 섰고 자리 넷 밖이다",
+			tp != null and pool.size() == 4 and not pool.has(tp),
+			"tick_pl %s · 자리 %d" % [tp != null, pool.size()])
+	if tp == null:
+		return
+	var one_ok := true
+	var one_txt := ""
+	var n_ok := true
+	var gap_ok := true
+	var gap_txt := ""
+	var pool_ok := true
+	var pool_txt := ""
+	for rr in [[0.02, false], [0.216, false], [0.90, false], [2.0, true], [1.5, false]]:
+		var o := _tick_play(float(rr[0]), false, false, bool(rr[1]))
+		var hd: Array = o.heard
+		if hd.size() != int(o.n) or int(o.lands) != 1 or int(o.land) != int(hd[hd.size() - 1]) \
+				or int(o.land) > int(o.end) or int(o.rose) != hd.size() or int(o.n) < 4:
+			one_ok = false
+		if int(o.n) != _tick_want(float(o.gn)):
+			n_ok = false
+		one_txt += "r%.2f %d/%d칸 " % [float(rr[0]), hd.size(), int(o.n)]
+		var gaps := []
+		for i in range(1, hd.size()):
+			gaps.append(int(hd[i]) - int(hd[i - 1]))
+		var h := floori(gaps.size() / 2.0)
+		var s_lo := 0
+		var s_hi := 0
+		for i in gaps.size():
+			if i > 0 and int(gaps[i]) > int(gaps[i - 1]) + 1:
+				gap_ok = false
+			if i < h:
+				s_lo += int(gaps[i])
+			elif i >= gaps.size() - h:
+				s_hi += int(gaps[i])
+		if h < 2 or s_hi >= s_lo:
+			gap_ok = false
+		gap_txt += "%s " % [gaps]
+		if bool(o.in_pool) or not bool(rr[1]) and float(rr[0]) < 1.0 and bool(o.moved):
+			pool_ok = false
+			pool_txt += "r%.2f 돎 %s · 앉음 %s " % [float(rr[0]), o.moved, o.in_pool]
+	_ok("⑭-a 1배 — 칸마다 톡 하나 · 끝 칸이 동전 · 걸음 안", one_ok, one_txt)
+	_ok("⑭-b 칸 수가 식이다 (gn 0 → 6 · 1 → 22)",
+			n_ok and _tick_want(0.0) == 6 and _tick_want(1.0) == 22,
+			"식 %d · %d" % [_tick_want(0.0), _tick_want(1.0)])
+	_ok("⑭-c 1배 톡 사이가 갈수록 좁아진다", gap_ok, gap_txt)
+	#  2.5배 — 큰 값(gn 1 · 22칸)이 한 프레임에 칸을 둘 넘게 넘는다.
+	var fast_ok := true
+	var jumped := false
+	var fast_txt := ""
+	for rr2 in [[0.216, false], [2.0, true]]:
+		var o2 := _tick_play(float(rr2[0]), true, false, bool(rr2[1]))
+		var hd2: Array = o2.heard
+		if hd2.is_empty() or hd2.size() > int(o2.n) or int(o2.lands) != 1 \
+				or int(o2.rose) != hd2.size() or int(o2.land) > int(o2.end):
+			fast_ok = false
+		if bool(o2.jump):
+			jumped = true
+		if bool(o2.in_pool) or not bool(rr2[1]) and bool(o2.moved):
+			pool_ok = false
+			pool_txt += "2.5배 r%.2f 돎 %s · 앉음 %s " % [float(rr2[0]), o2.moved, o2.in_pool]
+		fast_txt += "r%.2f %d/%d칸 · 걸음 %d프레임 " % [float(rr2[0]), hd2.size(),
+				int(o2.n), int(o2.end)]
+	_ok("⑭-d 2.5배 — 칸을 건너도 한 프레임에 하나 · 동전은 난다",
+			fast_ok and jumped, fast_txt + ("· 건넘 있음" if jumped else "· 건넘 없음"))
+	var om := _tick_play(0.90, false, true, false)
+	_ok("⑭-e 모션 끄기 — 동전 하나만 난다",
+			(om.heard as Array).size() == 1 and int(om.lands) == 1,
+			"%d번 · 동전 %d" % [(om.heard as Array).size(), int(om.lands)])
+	_ok("⑭-f 톡은 자리 넷을 안 돈다", pool_ok, pool_txt)
+
+	#  ── ⑭-g 연발 중간 발(가장 짧은 합계 걸음 · 2.5배)에서도 동전이 걸음 안에서 난다 ──
+	#  score_roll 이 한 프레임에 0.2 씩 줄어 hold(마지막 0.08)를 건너 0 에 닿을 수 있는
+	#  자리다. 다음 다트가 꽂히면(_land → _card_reset) 칸이 접히므로 그 프레임까지
+	#  동전이 났어야 한다. 동전은 tick_pl 에서 듣는다 — 칸이 접힌 그 프레임에 난
+	#  동전도 소리로는 남는다.
+	_stage_total(0.216, 1)
+	g.total = g.target * 5
+	g.shown = float(g.total)
+	g.burst_hits = [g.BC]
+	g.burst_n = GameData.tune_i("kick_n")
+	g.fast_lock = true
+	tp.stream = null
+	tp.pitch_scale = 1.0
+	var mk0 := _tick_key(tp)
+	var mid_land := false
+	var mid_n := 0
+	for _f in 4000:
+		g._process(1.0 / 60.0)
+		if int(g.tick_n) > 0:
+			mid_n = int(g.tick_n)
+		var mk := _tick_key(tp)
+		if mk != mk0:
+			mk0 = mk
+			if _tick_name(tp) == "coin_land":
+				mid_land = true
+		if (g.burst_hits as Array).is_empty():
+			break
+	g.fast_lock = false
+	_ok("⑭-g 연발 중간 발 2.5배 — 다음 다트까지 동전이 난다", mid_land and mid_n >= 4,
+			"칸 %d" % mid_n)
+
+	#  ── ⑭-h 개발자 미리보기 둘이 같은 칸을 세운다 · 접으면 칸도 접힌다 ──
+	var o_g := _tick_play(0.90, false, false, false)
+	_stage_total(0.90, 1)
+	Dev._card_big(g)
+	var big_n: int = g.tick_n
+	var big_ok: bool = big_n == int(o_g.n) and g.tick_i == 0 and g.score_roll == 1.0
+	Dev.card_ph = 0
+	Dev.card_back = {}
+	var gr_ok := true
+	var gr_txt := ""
+	for ci in (Dev.GROW_R as Array).size():
+		_stage_total(0.90, 1)
+		Dev.pick["grow"] = ci
+		Dev._run(g, {"k": "grow"})
+		if int(g.tick_n) != _tick_want(g._grow_n()) or int(g.tick_i) != 0:
+			gr_ok = false
+		gr_txt += "%d " % int(g.tick_n)
+	g._card_reset()
+	_ok("⑭-h 「한 방」 · 「총합 걸음 다시 보기」가 게임과 같은 칸을 세운다",
+			big_ok and gr_ok, "한 방 %d (게임 %d) · 다시 보기 %s" % [big_n, int(o_g.n), gr_txt])
+	_ok("⑭-i 접으면 칸도 접힌다", g.tick_n == 0 and g.tick_i == 0,
+			"칸 %d · 난 칸 %d" % [g.tick_n, g.tick_i])
+	#  grow_roll 0 은 손대기 전 띠다 — 굴림도 칸도 안 선다.
+	var o0 := _tick_play(0.90, false, false, false, 0.0)
+	_ok("⑭-j 굴림을 끄면(grow_roll 0) 톡이 없다",
+			int(o0.n) == 0 and (o0.heard as Array).is_empty(),
+			"칸 %d · %d번" % [int(o0.n), (o0.heard as Array).size()])

@@ -396,10 +396,8 @@ static func _card_big(g: Node) -> void:
 	#  걸음 길이도 게임 쪽 한 함수로 — 손으로 베끼면 크기로 자라는 길이가 갈린다.
 	g.qt = g._tot_qt(gn, false)
 	g.step_pf = g._tot_pace()
-	if g.grow_roll > 0.0:
-		g.score_from = g.shown
-		g.score_roll = 1.0
-		g.score_div = lerpf(float(g.GROW.div_lo), float(g.GROW.div_hi), gn) / g.grow_roll
+	#  띠 굴림 · 톡도 게임 쪽 한 함수로 — 합계 걸음과 같은 줄이다(2026-10-06).
+	g._tally_arm(gn, g.shown)
 	g._card_kick(float(g.CARDFX.kick_total), float(g.CARDFX.press_total))
 	g._card_kick(float(g.CARDFX.kick_big) - float(g.CARDFX.kick_total),
 			float(g.CARDFX.press_big))
@@ -2797,17 +2795,14 @@ static func _run(g: Node, e: Dictionary) -> void:
 			g.shake = lerpf(float(g.GROW.shk_lo), float(g.GROW.shk_hi), gn * gn) \
 					* g.grow_shake
 			g.board_punch = 1.0
-			if g.grow_roll > 0.0:
-				#  **떠난 자리**를 이번 이득만큼 내려 둔다(2026-09-26 수선).
-				#  score_from = shown 이면 shown 이 이미 total 이라 띠가 한
-				#  픽셀도 안 굴러, 이 줄이 재생한다고 적어 둔 네 층 중 ①번이
-				#  미리보기에서 통째로 안 보였다. total 은 그대로다 — 굴림이
-				#  끝나면 shown 이 제자리로 돌아온다. 0 에서 막는 것은 이득이
-				#  총점보다 큰 판 초반에 띠가 잠깐 마이너스를 찍기 때문이다.
-				g.score_from = maxf(g.shown - float(g.last_gain), 0.0)
-				g.score_roll = 1.0
-				g.score_div = lerpf(float(g.GROW.div_lo), float(g.GROW.div_hi), gn) \
-						/ g.grow_roll
+			#  **떠난 자리**를 이번 이득만큼 내려 둔다(2026-09-26 수선).
+			#  score_from = shown 이면 shown 이 이미 total 이라 띠가 한
+			#  픽셀도 안 굴러, 이 줄이 재생한다고 적어 둔 네 층 중 ①번이
+			#  미리보기에서 통째로 안 보였다. total 은 그대로다 — 굴림이
+			#  끝나면 shown 이 제자리로 돌아온다. 0 에서 막는 것은 이득이
+			#  총점보다 큰 판 초반에 띠가 잠깐 마이너스를 찍기 때문이다.
+			#  굴림 · 톡은 게임 쪽 한 함수가 세운다(grow_roll 0 이면 안 세운다).
+			g._tally_arm(gn, maxf(g.shown - float(g.last_gain), 0.0))
 			g._card_kick(float(g.CARDFX.kick_total), float(g.CARDFX.press_total))
 			#  ⚠ **가장자리도 같이 세운다**(2026-09-26). 안 붙이면 이 줄이
 			#  재생한다고 적어 둔 층 중 가장자리만 미리보기에서 통째로 안 보인다 —

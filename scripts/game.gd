@@ -758,6 +758,9 @@ var card_jrate := 4.0          # 위 시계들의 감쇠. _next_step 끝에서 q
 var score_roll := 0.0          # 상단 띠 총합 굴리기(1 → 0 이면 score_from → total)
 var score_from := 0.0          # 그 굴림이 떠난 자리
 var score_div := 2.60          # 이 걸음의 굴림 나눗수. 창 = qt × jspan ÷ 이 값
+var tick_n := 0                # 이 굴림의 톡 수(0 이면 안 센다). _tally_arm 이 세운다
+var tick_i := 0                # 난 칸 수. tick_n 에 닿은 칸이 떨어지는 동전이다
+var tick_f0 := 0               # 첫 칸의 반음 — 걸음 사다리가 멎은 자리(상한 12)
 
 # ── 값이 어디서 왔는가 (2026-09-26) ────────────────────────
 #  걸음이 올린 수의 **출처**에서 카드의 그 칸으로 한 획을 긋는다. 여태 판과
@@ -990,6 +993,13 @@ func _ready() -> void:
 	to.bus = "SFX"
 	add_child(to)
 	talk_on_pl = to
+	#  띠 톡 — 자리가 **하나**다(_tick_snd). 새 톡이 앞 톡을 끊는다. 자리 넷에
+	#  태우면 오름 끝의 톡이 settle_total · target_hit 의 꼬리를 자른다.
+	var kp := AudioStreamPlayer.new()
+	kp.playback_type = AudioServer.PLAYBACK_TYPE_STREAM
+	kp.bus = "SFX"
+	add_child(kp)
+	tick_pl = kp
 
 	# 음악 — 자리가 **하나**다. 겹쳐 넘기지 않고 나갔다 들어오므로 한 번에
 	# 한 곡만 울린다. 예전에는 겹치려고 둘이었다.
@@ -4797,6 +4807,11 @@ const SFX := {
 	"settle_pierce":  {"f": SFX_BASE, "d": 0.11, "a": 0.18},
 	"settle_item":    {"f": SFX_BASE, "d": 0.11, "a": 0.18},
 	"settle_total":   {"f": 196.0, "d": 0.34, "a": 0.26},
+	#  상단 띠가 오르는 동안 값을 한 칸씩 센다(_tick_snd · 제 자리 tick_pl).
+	#  카드 · 띠 쪽이라 판 밖이다 — 점토 칩 한 장 + 짧은 혀. 사다리처럼 f 를
+	#  받아 ×4 까지 오르므로 밑음이 SFX_BASE 다. a 0.06 은 settle_step 0.16 ·
+	#  board_crack 0.07 밑이다. 2026-10-06
+	"score_tick":     {"f": SFX_BASE, "d": 0.03, "a": 0.06},
 	"target_hit":     {"seq": [392.0, 523.0, 659.0, 784.0], "gap": 0.08, "d": 0.26, "a": 0.26},
 
 	# ── 저울(bal) — 소리가 곧 셈이다 ──────────────
@@ -4941,6 +4956,8 @@ const SFX := {
 # 파일을 낼 자리들. 겹쳐 나는 소리가 서로를 안 끊게 몇 개 돌려 쓴다.
 var sfx_pool := []
 var sfx_next := 0
+# 띠 톡의 제 자리 하나(_tick_snd). 위 넷을 안 문다.
+var tick_pl: AudioStreamPlayer = null
 # 이름 → AudioStream. **없다는 것도 기억한다** — 소리마다 파일 시스템을
 # 두드리면 정산 한 걸음마다 디스크를 때린다.
 var sfx_cache := {}
@@ -4965,6 +4982,32 @@ func _sfx(name: String, f := 0.0) -> void:
 		beep_seq(e.seq, e.gap, e.d, e.a)
 	else:
 		beep(f if f > 0.0 else float(e.f), e.d, e.a)
+
+
+#  상단 띠가 j 칸째를 넘었다(2026-10-06). 칸은 값으로 고르게 놓이므로 오름이
+#  빨라질수록 톡 사이가 좁아진다. 음은 tick_f0 에서 TALLY.semi(한 옥타브)를
+#  오른다 — 걸음 사다리가 멎은 자리에서 잇는다.
+#  마지막 칸(j == tick_n)은 coin_land — 동전이 등록기에 떨어진다. 그 옥타브
+#  꼭대기의 **한 옥타브 아래**(×1 ~ ×2)로 낸다: 꼭대기는 ×4 까지 가는데 ×4 의
+#  coin_land 는 6kHz 위가 2.99% 라 probe_sfx 지붕(2%)을 넘는다(×2 는 0.51%).
+#  제 자리 하나(tick_pl)에서 난다 — 자리 넷(sfx_pool · sfx_next)을 안 돈다.
+func _tick_snd(j: int) -> void:
+	var n := maxi(tick_n, 1)
+	var semi := float(tick_f0) + float(TALLY.semi) * float(j) / float(n)
+	var nm := "score_tick"
+	if j >= n:
+		nm = "coin_land"
+		semi -= 12.0
+	var f := SFX_BASE * pow(2.0, semi / 12.0)
+	var st := _sfx_file(nm)
+	if st != null and tick_pl != null:
+		tick_pl.stream = st
+		tick_pl.pitch_scale = clampf(f / SFX_BASE, 0.25, 4.0)
+		tick_pl.play()
+		return
+	#  파일이 없는 날 · 자리가 서기 전(_ready 앞)은 합성음이다 — _sfx 와 같은 갈래.
+	var e: Dictionary = SFX[nm]
+	beep(f, float(e.d), float(e.a))
 
 
 func _sfx_file(name: String) -> AudioStream:
@@ -5438,17 +5481,38 @@ func _tick_score(d: float) -> void:
 	#  창의 마지막 8%(hold)는 최종값에 세워 둔다 — 슬롯의 마지막 릴 홀드를 ms 가
 	#  아니라 **비**로 빌렸다. ms 로 박으면 빨리 보기에서 창보다 홀드가 길어진다.
 	#  모션 끄기에서는 즉시 선다 — _card_gain 이 오늘 쓰는 규약과 같게 맞춘다.
-	if score_roll > 0.0:
+	#
+	#  ── 늦게 떠나 빨라지며 닿는다 (2026-10-06) ──
+	#  창의 앞 TALLY.lead(18%)는 그대로 서고 — 내리친 「+n」을 먼저 읽는다 — 그 뒤
+	#  pow(k, TALLY.ease 1.6)로 오른다(손대기 전은 ease-out 1.8 이라 창의 첫 4분의
+	#  1 에 값의 40% 가 섰다). 칸 tick_n 개가 **값으로** 고르게 놓여 오름이 빨라질수록
+	#  톡이 촘촘해지고, 마지막 칸이 total 에 닿는 프레임에 동전이 떨어진다.
+	#  한 프레임에 _tick_snd 는 한 번뿐이다 — 빨리 보기에서 칸을 건너뛰면 그 칸은
+	#  안 난다. 창이 프레임보다 짧아 score_roll 이 hold 를 건너 0 에 닿아도 이
+	#  갈래가 그 프레임에 한 번 더 돌아 total 에 서고 동전을 낸다(tick_i < tick_n).
+	#  모션 끄기: 값이 곧장 서므로 떨어지는 동전 하나만 난다.
+	if score_roll > 0.0 or tick_i < tick_n:
 		if motion_off:
 			shown = float(total)
+			if tick_i < tick_n:
+				tick_i = tick_n
+				_tick_snd(tick_n)
 		else:
-			var k := clampf((1.0 - score_roll) / float(GROW.hold), 0.0, 1.0)
-			shown = lerpf(score_from, float(total), 1.0 - pow(1.0 - k, float(GROW.ease)))
+			var k := clampf(((1.0 - score_roll) - float(TALLY.lead))
+					/ (float(GROW.hold) - float(TALLY.lead)), 0.0, 1.0)
+			var p := pow(k, float(TALLY.ease))
+			shown = lerpf(score_from, float(total), p)
 			if k >= 1.0:
 				#  ⚠ 무한 R34 목표가 18자리(최악 19자리)인데 float64 의 정수 정확
 				#  구간은 9.0e15 까지다. lerp 왕복이 남긴 오차가 int(round(shown))
 				#  에서 total 과 갈릴 수 있으므로 여기서 한 번 더 못 박는다.
 				shown = float(total)
+			#  칸은 오른 몫(p)으로 센다 — (shown − score_from) ÷ (total − score_from)
+			#  과 같은 값이고, 이득이 0 · 음수인 걸음에서도 끝 칸에 닿는다.
+			var j := mini(int(floor(p * float(tick_n))), tick_n)
+			if j > tick_i:
+				tick_i = j
+				_tick_snd(j)
 		return
 	#  정산 밖(상점 정산 · 개발자 줄 · 되살리기)은 손대기 전 그대로다. 이 줄을
 	#  지우면 걸음을 안 거치고 total 이 바뀌는 자리에서 띠가 영영 안 따라간다 —
@@ -7924,11 +7988,9 @@ func _next_step() -> void:
 			#  굴림이 안 끝난 채 다음 합계가 오면 값이 튄다. 지금 화면에 선
 			#  수(shown)에서 출발한다.
 			#  grow_roll 0 은 개발자 모드가 굴림을 통째로 끄는 자리다(손대기 전
-			#  띠로 돌아간다) — 전·후를 같은 발에서 눈으로 대는 유일한 길이다.
-			if grow_roll > 0.0:
-				score_from = shown
-				score_roll = 1.0
-				score_div = lerpf(float(GROW.div_lo), float(GROW.div_hi), gn) / grow_roll
+			#  띠로 돌아간다 · 톡도 없다) — 전·후를 같은 발에서 눈으로 대는 유일한
+			#  길이다. 굴림 · 톡 수 · 첫 음은 _tally_arm 한 곳이 세운다(2026-10-06).
+			_tally_arm(gn, shown)
 			_card_kick(float(CARDFX.kick_total), float(CARDFX.press_total))
 			if was_short and total >= target:
 				# 목표 돌파 — 판이 여기서 끝난다.
@@ -8266,6 +8328,24 @@ func _tot_pace() -> float:
 	return _pace() if not burst_hits.is_empty() else 1.0
 
 
+#  상단 띠 굴림을 세운다(2026-10-06). _tot_qt 와 같은 까닭으로 **한 함수로 모은다** —
+#  _next_step 의 합계 걸음과 dev 의 「한 방」 · 「총합 걸음 다시 보기」가 같이 부른다.
+#   · 굴림: from → total. 창 = qt × jspan ÷ score_div(GROW.div_lo ~ div_hi).
+#   · 칸: TALLY.tick0 + TALLY.tick_gn × gn, 4 ~ 24 — gn 0 에서 6 · 0.4 에서 12 · 1 에서 22.
+#   · 첫 칸 음: 걸음 사다리가 멎은 자리(pitch_step − 1), 상한 12반음.
+#  grow_roll 0 이면 아무것도 안 세운다 — 손대기 전 띠(벽시계 lerp)이고 톡이 없다.
+func _tally_arm(gn: float, from: float) -> void:
+	tick_n = 0
+	tick_i = 0
+	if grow_roll <= 0.0:
+		return
+	score_from = from
+	score_roll = 1.0
+	score_div = lerpf(float(GROW.div_lo), float(GROW.div_hi), gn) / grow_roll
+	tick_n = clampi(int(round(float(TALLY.tick0) + float(TALLY.tick_gn) * gn)), 4, 24)
+	tick_f0 = clampi(pitch_step - 1, 0, 12)
+
+
 #  계산 걸음(점수 · 배수 · 동전 · 저울 · 물음표)이 끝날 때마다 부른다.
 #  합계 걸음이 더할 값을 **지금 카드에 선 두 수로** 미리 셈해 같은 자(gn)로
 #  단을 낸다 — 값이 오르는 동안 테두리가 달아오르고, 값이 판 목표를 훌쩍
@@ -8385,6 +8465,10 @@ func _card_reset() -> void:
 	score_roll = 0.0
 	score_from = 0.0
 	score_div = float(GROW.div_lo)
+	#  굴림을 접으면 남은 칸도 접는다 — 안 접으면 _tick_score 가 다음 프레임에
+	#  띠를 앞 total 에 세우고 동전을 낸다. 2026-10-06
+	tick_n = 0
+	tick_i = 0
 	#  앞 발 합계 걸음의 배수(_fast_lim)가 이 발 머리 숨의 한도로 안 샌다. 2026-10-06
 	step_pf = 0.0
 	src_t = 0.0
@@ -35597,8 +35681,7 @@ const GROW := {
 	"hold": 0.92,   # 창의 마지막 8% 는 최종값에 세워 둔다. 슬롯의 마지막 릴
 	                # 홀드를 ms 가 아니라 **비**로 빌렸다 — ms 로 박으면 빨리
 	                # 보기 2.5 에서 창보다 홀드가 길어진다
-	"ease": 1.8,    # 띠는 카드 굴림(3.0)보다 **평평하다**. 그래야 카드가 먼저
-	                # 서고 띠가 뒤따르는 순서가 읽힌다
+	                # (오르는 꼴은 TALLY.lead · ease 가 쥔다 — 2026-10-06)
 
 	# 음정 — settle_total 을 최대 7반음(완전5도) 내린다. n=0 이 **정확히 오늘
 	# 값**(pitch 1.000)이라 흔한 발은 한 톨도 안 다르다. 새로 굽는 파일 0개.
@@ -35612,13 +35695,21 @@ const GROW := {
 
 #  【합계 걸음의 길이】 박(beat)의 배수다 — 초가 아니다(GROW 머리말의 규약).
 #  (2026-10-06 · 사용자: 「점수 정산이 너무 빨라서 … 점수가 올라가는 뽕맛을 못 느끼네」)
-#  _tot_qt 하나가 읽는다. 값은 beat 0.38 에서.
+#  걸음 길이는 _tot_qt 가, 띠 굴림 · 톡은 _tally_arm · _tick_score · _tick_snd 가 읽는다.
+#  초는 beat 0.38 에서.
 const TALLY := {
 	"tot": 2.8,      # 합계 걸음 바닥(gn 0) — 1.064초
 	"tot_gn": 1.6,   # gn 1 에서 더하는 박 — 합 4.4박 · 1.672초
 	"mid": 2.6,      # 연발 중간 발의 합계. × _pace() — 바닥에서 0.296초
 	"brk": 4.4,      # 목표를 넘기는 걸음. 크기와 무관 — 1.672초
 	"wind": 0.7,     # 합계 앞 모음 걸음. × _tot_pace() — 0.266초
+
+	# 상단 띠 굴림(_tick_score) — 창의 비다. _tally_arm 이 세운다.
+	"lead": 0.18,    # 창의 앞 18% 는 띠가 선다. gn 0 에서 내리친 뒤 0.115초
+	"ease": 1.6,     # 그 뒤 pow(k, 1.6) — 느리게 떠나 빨라지며 total 에 닿는다
+	"tick0": 6,      # 톡 칸 = tick0 + tick_gn × gn (4 ~ 24). gn 0 · 0.4 · 1 → 6 · 12 · 22
+	"tick_gn": 16,
+	"semi": 12,      # 톡이 오르는 반음 — 사다리가 멎은 자리에서 한 옥타브
 }
 
 
