@@ -87,6 +87,8 @@ const TUNE_KEYS := [
 	"board_r", "aim_swing", "sector_max", "val_max_mul",
 	"gauge_speed", "resolve_beat", "bal_beats", "confirm_hold", "fly_time",
 	"aim_click_r", "legend_pack_w",
+	# 2026-10-07 · 리롤 잭팟 — game.gd 의 _jp_roll 이 읽는다.
+	"jackpot_p",
 	"cons_slots", "cons_price_tmp",
 	"kick_n", "kick_share",
 	"track_score", "track_mult",

@@ -995,6 +995,10 @@ static func _rows(g: Node) -> Array:
 				#  자루를 곧장 날려 꽂는다. 게임의 _rgl_at · _rgl_open · _rgl_in 을 그대로 부른다 —
 				#  막힘 · 가로채기 · 뽑아 가기는 게임과 같이 던져서 본다(2026-10-06).
 				{"n1": "단골 던지기", "t": "act", "a": "regular"},
+				#  「레전더리 잭팟」(2026-10-07) — 리롤 2000 번에 한 번이라 줄이 없으면 구운 다음 날
+				#  아무도 못 본다(「레전더리 등장」 줄과 같은 이유). 상점에서 쓸기를 다시 열고 그
+				#  딜링에 잭팟 자격만 세운다 — 칸을 바꾸는 것은 게임의 _jp_place 그대로다. 열여덟 줄.
+				{"n1": "레전더리 잭팟", "t": "act", "a": "jackpot"},
 			]
 		4:
 			#  ⚠ 여기 쪽 번호를 **적어 둔다.** 여태 `_:` 기본 갈래였는데,
@@ -2097,6 +2101,18 @@ static func _run(g: Node, e: Dictionary) -> void:
 			g._drop_settle()
 			g._sweep_begin()
 			_say("쓸기 다시")
+			return
+		"jackpot":
+			#  리롤 잭팟(game.gd JP). **_reroll 을 안 부른다** — 「쓸기 다시」와 같은 규약이다
+			#  (골드 · 리롤 값을 안 건드린다). 자격(jp_due)만 세우고 쓸기를 연다 — 끝에서
+			#  _sweep_deal → _roll_stock 이 게임과 같은 _jp_place 를 탄다. 가진 장 · 테이블에
+			#  선 장을 빼고 남은 레전더리가 없으면 보통 딜링이 된다.
+			if g.state != g.S.SHOP:
+				g._open_shop()
+			g._drop_settle()
+			g.jp_due = true
+			g._sweep_begin()
+			_say("레전더리 잭팟")
 			return
 		"clok":
 			#  시계 판의 차례를 한 칸 민다. **판 위 값은 한 톨도 안 건드린다** —

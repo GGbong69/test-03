@@ -4727,6 +4727,7 @@ func _open_shop() -> void:
 	if leg_no + 1 <= GameData.legs_top():
 		_roll_boss_mods(_round_boss(leg_no + 1))
 	tut_rr = false
+	jp_due = false            # 상점을 처음 여는 딜링은 잭팟이 아니다(JP) — 리롤만 연다
 	_roll_stock()
 	#  선물이 선 테이블에서만 — 값 설명(u_shop) 바로 뒤에 온다.
 	if _mark_rect("gift").size.x >= 2.0:
@@ -4908,6 +4909,11 @@ func _roll_stock() -> void:
 		stock.append({"type": kind, "d": d,
 				"cost": _league_cost(int(d.get("cost", 0))), "sold": false})
 		n += 1
+	#  리롤 잭팟(JP) — 리롤이 뽑았을 때만 한 칸이 레전더리가 된다. 「외상」 앞이라 그 뱃지가
+	#  잭팟 칸에 떨어질 수도 있다.
+	if jp_due:
+		jp_due = false
+		_jp_place()
 
 	# 뱃지 "외상" — 앞에서부터 몇 개를 0골드로 만든다. 안 팔린 것만 고른다.
 	for k in stock.size():
@@ -5443,6 +5449,8 @@ func _reroll() -> void:
 	rerolls_used += 1
 	tut_rr = true             # 튜토리얼 런 — 리롤 뒤 선물 쪽이 열린다(TUT.pages)
 	reroll_cost = _reroll_price()
+	#  잭팟 — 값을 치른 이 자리에서 뽑고, 새 테이블을 까는 자리(_roll_stock)가 한 칸을 바꾼다(JP).
+	jp_due = _jp_roll()
 	if drop_fast:
 		_roll_stock()            # 헤드리스는 팔을 안 기다린다. 새 판이 곧 결과다
 		#  **리롤이 끝나는 그 순간** 결과를 적는다 — 이것이 없으면 「리롤 →
@@ -6264,6 +6272,12 @@ const SFX := {
 	#  소리**라 README 의 「0.3초 넘는 소리는 한 번만 나는 자리에만」 규약 안이다.
 	#  a 0.20 은 buy 와 같고 run_win 0.26 아래다 — 상점의 사건이지 런의 승리가 아니다.
 	"coin_plaque":    {"f": 262.0, "d": 0.22, "a": 0.20},
+	#  리롤 잭팟(JP · 2026-10-07) — **상점에서 종이 우는 유일한 자리다.** 위 머리말이 종을
+	#  「이겼다」에 묶어 등장에서 뺐는데, 잭팟은 나타난 것이 아니라 이긴 것이다(리롤 2000 번에
+	#  한 번). 종 넷이 523-659-784-1047 로 오르고 동전이 1.2초 쏟아진다 — run_win 이 C 장조
+	#  아래에서(262~659) 울리므로 한 옥타브 위에 앉아 둘이 안 겹친다. 1.6초라 판 하나에 한 번만
+	#  나는 자리 규약 안이다. a 는 run_win 과 같은 0.26 — 상점의 가장 큰 사건이다.
+	"jackpot":        {"seq": [523.0, 659.0, 784.0, 1047.0], "gap": 0.07, "d": 0.24, "a": 0.26},
 	"buy":            {"seq": [523.0, 659.0], "gap": 0.07, "d": 0.11, "a": 0.20},
 	# 사는 쪽이 올라가므로(523→659) 파는 쪽은 **내려간다.** 둘 다 올라가면
 	# 값을 내는 것과 받는 것이 같은 손짓이 된다 — 실제로 그래서 안 갈렸다.
@@ -30184,6 +30198,14 @@ func _drop_roll() -> void:
 		if not drop_fast:
 			leg_cue_t = 0.0
 			leg_cue_n = 0
+	#  리롤 잭팟(JP) — 딜링마다 다시 잡는다(이 함수가 위 여섯을 누르는 것과 같은 이유 —
+	#  상점을 떠난 판에 얼어붙은 값이 다음 상점의 첫 딜링에서 되살아나지 않게).
+	#  예고 톡 셋은 그 장을 이미 본 적이 있어도 다시 탄다 — 잭팟은 드러냄이 아니라 사건이다.
+	_jp_reset()
+	jp_i = _jp_stage()
+	if jp_i >= 0 and not drop_fast:
+		leg_cue_t = 0.0
+		leg_cue_n = 0
 	if drop_fast:
 		_drop_settle()
 
@@ -30444,6 +30466,9 @@ func _land_fx(i: int) -> void:
 		if not motion_off:
 			_knock(i, 1.0)
 			shake = maxf(shake, float(LAND.shake))
+	#  리롤 잭팟(JP) — 그 장이 앉은 이 프레임에 불이 꺼진다. 드러냄 한 벌 위에 얹힌다.
+	if leg and i == jp_i and jp_t < 0.0:
+		_jp_begin(i)
 
 	#  ── 소리 ───────────────────────────────────────
 	#  **레전더리는 문을 건너뛴다** — 딜링에 최대 한 장이라 넘칠 수 없고,
@@ -30677,6 +30702,7 @@ func _drop_extras(d: float) -> void:
 			leg_vig_up = false
 	elif leg_vig > 0.0:
 		leg_vig = maxf(leg_vig - d / float(LAND.vig_out), 0.0)
+	_jp_tick(d)              # 리롤 잭팟(JP) — 실시간 d 로 민다(위 시계 셋과 같다)
 
 	var hov: int = tip_spot if tip_a > 0.004 else -1
 	for i in drop.size():
@@ -31049,6 +31075,341 @@ func _land_floor(i: int) -> void:
 	draw_colored_polygon(
 			_e_pts(Vector2(float(it.u), _p2g(float(it.w))), r, r * TBL.flat),
 			Color(col, minf(float(LAND.floor_a) * peak, 1.0)))
+
+
+#  ══ 레전더리 잭팟 — 리롤에만 서는 아주 드문 한 칸 ══ (2026-10-07)
+#  사용자: 「레전더리 동전 … 진짜진짜 낮은 확률로 그냥 리롤에서 등장 하는거 어때? …
+#  그럴때 좀 엄청난 이팩트를 주는거 어때?」
+#
+#  레전더리는 저울로는 안 뜬다(rarity 0.00 — 다트통 · 해금 · 팩으로만 온다). 리롤에만
+#  문이 하나 더 있다: 리롤 한 번에 tuning 의 jackpot_p 로 테이블 한 칸이 아직 안 가진
+#  레전더리가 된다. **뽑는 자리는 리롤(_reroll)이고 바꾸는 자리는 딜링(_roll_stock)이다** —
+#  리롤은 쓸기가 끝나야 새 테이블을 까는데(_sweep_deal), 판정을 그때로 미루면 상점을
+#  여는 길 · 개발자 「테이블 다시」도 같은 문을 지난다. 상점을 처음 열 때는 안 선다.
+#  상점의 난수는 원래 전역 randf 다(_roll_stock) — 매물은 매듭이 값으로 적으므로
+#  run_rng 를 안 쓴다(되살린 상점은 같은 테이블이다).
+#
+#  ── 연출 — 앉는 레전더리의 「드러냄 한 벌」 위에 한 층을 더 얹는다 ──
+#    딜링   방이 미리 가라앉는다(pre) · 떨어지는 그 장을 빛 구멍이 따라간다 ·
+#           예고 톡 셋은 그 장을 이미 본 적이 있어도 다시 탄다
+#    착지   불이 꺼진다(dim) · 그 장에만 빛이 모인다(구멍 · 바닥 빛) · 등급색 섬광 한 번 ·
+#           빛살이 돈다 · 펠트에 파문 둘 · 금화가 솟아 펠트에 쏟아진다 · 반짝이 ·
+#           잭팟 종(jackpot) · 상인이 움찔 · 흔들림
+#    걷힘   2.5초 뒤 불이 돌아온다. 그 뒤로는 보통 레전더리의 맥동이 그대로 잇는다
+#  **흔들림이 리롤(6.0)을 넘는 유일한 상점 사건이다**(LAND 머리말의 눈금) — 「물건을 부수는
+#  사건보다 조용히 나타나는 사건이 세면 어긋난다」는 계약은 보통 등장의 것이고, 잭팟은
+#  나타나는 것이 아니라 **이긴 것**이라 상점에서 종이 우는 유일한 자리이기도 하다.
+#  광과민 계약: 섬광은 봉우리 하나 · 어둠은 들고 나는 페이드 하나 · 반짝이는 각자 봉우리
+#  하나. 껐다 켜는 프레임이 없다. 움직임을 끈 손님에게는 흔들림 · 금화 · 파문 · 빛살
+#  돌기가 빠지고 어둠 · 빛 · 섬광 · 반짝이(알파)만 남는다. 글자는 한 자도 없다.
+const JP := {
+	"pre_a": 0.26, "pre_in": 0.35,          # 착지 전 가라앉음
+	"dim_a": 0.60,                          # 불이 꺼진 깊이
+	"in": 0.12, "hold": 1.45, "out": 0.95,  # 착지 뒤 어둠의 사다리꼴(초)
+	"spot_rx": 34.0, "spot_ry": 28.0,       # 빛 구멍 — 이 안은 안 어둡다
+	"spot_soft": 2.1,                       # 구멍 가장자리가 이만큼 바깥까지 번진다
+	"pool_rx": 74.0, "pool_a": 0.30,        # 펠트에 고인 등급색 빛
+	"flash_a": 0.50, "flash_t": 0.45,       # 섬광 봉우리 하나
+	"rays": 14, "ray_r0": 22.0, "ray_len": 240.0, "ray_w": 0.070,
+	"ray_a": 0.36, "ray_spin": 0.22, "ray_in": 0.20,
+	#  둘째 빛살 — 금빛으로 거꾸로 돈다. 등급색 하나면 「레전더리가 앉았다」로만 읽히는데,
+	#  금이 겹쳐야 「터졌다」가 된다(쏟아지는 금화와 같은 색).
+	"rays2": 10, "ray2_len": 205.0, "ray2_w": 0.050, "ray2_a": 0.22, "ray2_spin": -0.14,
+	"rings": 2, "ring_gap": 0.14, "ring_t": 0.85, "ring_r": 176.0, "ring_a": 0.55,
+	#  금화는 한 번에 안 터지고 0.55초 동안 솟는다(c_t0) — 분수가 이어져야 쏟아진다로 읽힌다.
+	"coins": 56, "c_vx": Vector2(40.0, 250.0), "c_vy": Vector2(280.0, 560.0), "c_t0": 0.55,
+	"c_g": 900.0, "c_floor": Vector2(6.0, 44.0), "c_bounce": 0.32,
+	"c_r": 4.4, "c_life": 2.4, "c_fade": 0.5,
+	"sparks": 18, "sp_r": 86.0, "sp_t": 0.55, "sp_end": 1.9,
+	"shake": 9.0,
+}
+var jp_due := false      # 이번 리롤이 잭팟을 뽑았다 — 딜링(_roll_stock)이 한 칸을 바꾸고 끈다
+var jp_force := false    # 개발자 · 검사 — 다음 리롤은 잭팟이다
+var jp_i := -1           # 연출이 붙은 매물 색인. −1 이면 이번 딜링에 잭팟이 없다
+var jp_t := -1.0         # 착지 뒤 경과. −1 이 「아직 안 앉았다」
+var jp_pre := 0.0        # 착지 전 가라앉음 [0,1]
+var jp_at := Vector2.ZERO
+var jp_coins := []
+var jp_sparks := []
+
+
+#  리롤 한 번의 판정. 튜토리얼 런은 선물로 테이블을 나눠 쓰므로 안 선다.
+func _jp_roll() -> bool:
+	if jp_force:
+		jp_force = false
+		return true
+	if tut_run:
+		return false
+	return randf() < GameData.tune("jackpot_p")
+
+
+#  잭팟으로 설 수 있는 레전더리 — 들고 있는 장 · 이미 테이블에 선 장(해금 공짜 칸)은 뺀다.
+#  **해금 여부는 안 본다.** 잭팟이 곧 「따로 얻는 길」 하나라, 아직 안 열린 장도 선다 —
+#  사면 다른 길과 같이 itemgot 이 서서 그 뒤로 팩에서도 온다(_buy).
+func _jp_pool() -> Array:
+	var on := {}
+	for s in stock:
+		if String(s.get("type", "")) == "item":
+			on[String((s.d as Dictionary).get("id", ""))] = true
+	var out := []
+	for it in GameData.items():
+		if String(it.get("rarity", "")) != "legendary":
+			continue
+		if _has_item(String(it.id)) or on.has(String(it.id)):
+			continue
+		out.append(it)
+	return out
+
+
+#  딜링 안에서 한 칸을 바꾼다. 공짜 칸(해금 · 튜토리얼 선물)은 안 건드린다.
+#  값은 표 그대로(리그 배수는 탄다) — 「외상」 뱃지가 뒤에서 깎을 수는 있다.
+func _jp_place() -> void:
+	var pool := _jp_pool()
+	var slots := []
+	for k in stock.size():
+		if not bool(stock[k].get("free", false)):
+			slots.append(k)
+	if pool.is_empty() or slots.is_empty():
+		return
+	var d: Dictionary = pool[randi() % pool.size()]
+	var k: int = slots[randi() % slots.size()]
+	stock[k] = {"type": "item", "d": d, "cost": _league_cost(int(d.get("cost", 0))),
+			"sold": false, "jackpot": true}
+
+
+#  이번 딜링의 잭팟 칸. jp_done 은 연출을 한 번 탄 칸이다 — 사진이 테이블을 치웠다가
+#  다시 깔 때(_photo_open) 같은 칸이 또 터지지 않게 한다.
+func _jp_stage() -> int:
+	for k in stock.size():
+		var s: Dictionary = stock[k]
+		if not bool(s.get("jackpot", false)) or bool(s.get("jp_done", false)):
+			continue
+		if bool(s.get("sold", false)) or s.has("own"):
+			continue
+		return k
+	return -1
+
+
+func _jp_reset() -> void:
+	jp_i = -1
+	jp_t = -1.0
+	jp_pre = 0.0
+	jp_coins.clear()
+	jp_sparks.clear()
+
+
+func _jp_len() -> float:
+	return float(JP["in"]) + float(JP.hold) + float(JP.out)
+
+
+#  그 장이 앉은 프레임(_land_fx). 그 장은 이미 보통 레전더리의 드러냄도 받는다.
+func _jp_begin(i: int) -> void:
+	jp_t = 0.0
+	stock[i]["jp_done"] = true
+	var it: Dictionary = drop[i]
+	jp_at = _p2s(float(it.u), float(it.w), float(it.h))
+	_sfx("jackpot")
+	_npc_react("움찔")
+	if not motion_off:
+		shake = maxf(shake, float(JP.shake))
+		var vx: Vector2 = JP.c_vx
+		var vy: Vector2 = JP.c_vy
+		var fl: Vector2 = JP.c_floor
+		for _k in int(JP.coins):
+			var sx: float = -1.0 if randf() < 0.5 else 1.0
+			jp_coins.append({
+				"p": jp_at + Vector2(randf_range(-6.0, 6.0), -4.0),
+				"v": Vector2(sx * randf_range(vx.x, vx.y), -randf_range(vy.x, vy.y)),
+				"fy": jp_at.y + randf_range(fl.x, fl.y),
+				"ph": randf() * TAU, "om": randf_range(9.0, 16.0),
+				"b": 0, "t0": randf_range(0.0, float(JP.c_t0))})
+	for _k in int(JP.sparks):
+		var a := randf() * TAU
+		var rr := sqrt(randf()) * float(JP.sp_r)
+		jp_sparks.append({"o": Vector2(cos(a) * rr, sin(a) * rr * 0.75 - 18.0),
+				"t0": randf_range(0.05, float(JP.sp_end)), "s": randf_range(3.5, 7.5)})
+
+
+#  _drop_extras 가 매 프레임 부른다(상점에서만 — 판 갈이 · 다른 화면은 _drop_update 앞에서 선다).
+func _jp_tick(d: float) -> void:
+	if jp_i < 0:
+		return
+	#  그 장을 따라간다 — 떨어지는 동안 · 튀는 동안. 손님이나 상인이 집으면 그 자리에 둔다.
+	if jp_i < drop.size():
+		var it: Dictionary = drop[jp_i]
+		if not bool(it.gone) and float(it.sold) <= 0.0 and not bool(it.held) and give_i != jp_i:
+			jp_at = _p2s(float(it.u), float(it.w), float(it.h))
+	if jp_t < 0.0:
+		jp_pre = minf(jp_pre + d / float(JP.pre_in), 1.0)
+		return
+	jp_t += d
+	var g: float = float(JP.c_g)
+	for c in jp_coins:
+		if jp_t < float(c.t0):
+			continue
+		c.ph = float(c.ph) + float(c.om) * d
+		if int(c.b) >= 2:
+			continue
+		var v: Vector2 = c.v
+		v.y += g * d
+		var p: Vector2 = c.p + v * d
+		if p.y >= float(c.fy) and v.y > 0.0:
+			p.y = float(c.fy)
+			v = Vector2(v.x * 0.55, -v.y * float(JP.c_bounce))
+			c.b = int(c.b) + 1
+			if int(c.b) >= 2:
+				v = Vector2.ZERO
+		c.v = v
+		c.p = p
+	if jp_t >= _jp_len():
+		_jp_reset()
+
+
+#  방의 어둠 [0,1] — 착지 전에는 pre 까지만 가라앉고, 착지에서 dim 으로 내려앉아
+#  hold 동안 머문 뒤 out 에 걸쳐 걷힌다. 전부 페이드다.
+func _jp_dim() -> float:
+	if jp_i < 0:
+		return 0.0
+	var pre: float = float(JP.pre_a) * _ease_io(jp_pre)
+	if jp_t < 0.0:
+		return pre
+	var k := clampf(jp_t / float(JP["in"]), 0.0, 1.0)
+	var a := lerpf(pre, float(JP.dim_a), _ease_io(k))
+	var to := jp_t - float(JP["in"]) - float(JP.hold)
+	if to > 0.0:
+		a *= 1.0 - _ease_io(clampf(to / float(JP.out), 0.0, 1.0))
+	return a
+
+
+#  _draw_shop 의 끝 — 테이블 · 단추 · 손 위, 상단 HUD · 배움 · 툴팁 밑이다. 그 장을 들여다보는
+#  툴팁이 어둠에 안 묻힌다. 흔들림 변환 안이라 구멍이 흔들리는 그 장을 그대로 따라간다.
+func _jp_draw() -> void:
+	if jp_i < 0 or state != S.SHOP or swap_live:
+		return
+	var dim := _jp_dim()
+	var c := jp_at
+	var lc := _glow_of("legendary")
+	#  ── 어둠 — 구멍 하나를 남기고 방을 덮는다 ──
+	if dim > 0.003:
+		var dk := Color(0.015, 0.008, 0.03, dim)
+		var clr := Color(dk, 0.0)
+		var rv := Vector2(float(JP.spot_rx), float(JP.spot_ry))
+		var sf: float = float(JP.spot_soft)
+		var n := 40
+		for k in n:
+			var a0 := TAU * float(k) / float(n)
+			var a1 := TAU * float(k + 1) / float(n)
+			var d0 := Vector2(cos(a0), sin(a0))
+			var d1 := Vector2(cos(a1), sin(a1))
+			var i0 := c + d0 * rv
+			var i1 := c + d1 * rv
+			var m0 := c + d0 * rv * sf
+			var m1 := c + d1 * rv * sf
+			draw_polygon(PackedVector2Array([i0, i1, m1, m0]),
+					PackedColorArray([clr, clr, dk, dk]))
+			draw_polygon(PackedVector2Array([m0, m1, c + d1 * 1600.0, c + d0 * 1600.0]),
+					PackedColorArray([dk, dk, dk, dk]))
+	if jp_t < 0.0:
+		return
+	var t := jp_t
+	#  걷힘과 같이 빠지는 봉투 — 빛 · 빛살 · 고인 빛이 어둠과 함께 간다.
+	var env := clampf(t / float(JP.ray_in), 0.0, 1.0)
+	var to := t - float(JP["in"]) - float(JP.hold)
+	if to > 0.0:
+		env *= 1.0 - clampf(to / float(JP.out), 0.0, 1.0)
+	#  ── 펠트에 고인 빛 ──
+	var g0 := Vector2(c.x, c.y + 2.0)
+	var prx: float = float(JP.pool_rx)
+	_jp_glow(g0, prx, prx * TBL.flat * 0.62, Color(lc, float(JP.pool_a) * env))
+	#  ── 빛살 — 구멍 바깥에서 시작해 그 장을 안 덮는다 ──
+	var nr := int(JP.rays)
+	var spin: float = 0.0 if motion_off else t * float(JP.ray_spin)
+	var r0: float = float(JP.ray_r0)
+	for k in nr:
+		var big: bool = k % 2 == 0
+		var w: float = float(JP.ray_w) * (1.0 if big else 0.55)
+		var ln: float = float(JP.ray_len) * (1.0 if big else 0.68)
+		var a := TAU * float(k) / float(nr) + spin
+		var ca := Color(lc.lerp(Color.WHITE, 0.35), float(JP.ray_a) * env * (1.0 if big else 0.7))
+		draw_polygon(PackedVector2Array([
+				c + Vector2(cos(a - w), sin(a - w)) * r0,
+				c + Vector2(cos(a + w), sin(a + w)) * r0,
+				c + Vector2(cos(a + w * 1.7), sin(a + w * 1.7)) * ln,
+				c + Vector2(cos(a - w * 1.7), sin(a - w * 1.7)) * ln]),
+				PackedColorArray([ca, ca, Color(ca, 0.0), Color(ca, 0.0)]))
+	var spin2: float = 0.0 if motion_off else t * float(JP.ray2_spin)
+	var gc := Color(C_GOLD.lerp(Color.WHITE, 0.25), float(JP.ray2_a) * env)
+	for k in int(JP.rays2):
+		var a2 := TAU * (float(k) + 0.5) / float(JP.rays2) + spin2
+		var w2: float = float(JP.ray2_w)
+		var l2: float = float(JP.ray2_len)
+		draw_polygon(PackedVector2Array([
+				c + Vector2(cos(a2 - w2), sin(a2 - w2)) * r0,
+				c + Vector2(cos(a2 + w2), sin(a2 + w2)) * r0,
+				c + Vector2(cos(a2 + w2 * 1.5), sin(a2 + w2 * 1.5)) * l2,
+				c + Vector2(cos(a2 - w2 * 1.5), sin(a2 - w2 * 1.5)) * l2]),
+				PackedColorArray([gc, gc, Color(gc, 0.0), Color(gc, 0.0)]))
+	#  ── 파문 — 펠트에 누운 둘 ──
+	if not motion_off:
+		for k in int(JP.rings):
+			var tk := t - float(k) * float(JP.ring_gap)
+			if tk <= 0.0 or tk >= float(JP.ring_t):
+				continue
+			var u := tk / float(JP.ring_t)
+			var rr: float = float(JP.ring_r) * (1.0 - pow(1.0 - u, 2.6))
+			var rp := _e_pts(g0, rr, rr * TBL.flat, 48)
+			rp.append(rp[0])
+			draw_polyline(rp, Color(lc.lerp(Color.WHITE, 0.5), float(JP.ring_a) * (1.0 - u)), 2.0)
+	#  ── 금화 ──
+	var cr: float = float(JP.c_r)
+	var life: float = float(JP.c_life)
+	var fade: float = float(JP.c_fade)
+	for co in jp_coins:
+		if t < float(co.t0):
+			continue
+		var al := clampf((life - t) / fade, 0.0, 1.0)
+		if al <= 0.0:
+			continue
+		var sp := absf(cos(float(co.ph)))
+		var rx := maxf(cr * sp, 0.7)
+		var p: Vector2 = co.p
+		draw_colored_polygon(_e_pts(p, rx, cr, 12), Color(C_GOLD.darkened(0.35), al))
+		draw_colored_polygon(_e_pts(p, maxf(rx - 0.9, 0.4), cr - 0.9, 12), Color(C_GOLD, al))
+		if sp > 0.5:
+			draw_circle(p + Vector2(-rx * 0.3, -cr * 0.35), 1.1, Color(1.0, 1.0, 0.92, al))
+	#  ── 반짝이 — 각자 봉우리 하나 ──
+	var spt: float = float(JP.sp_t)
+	for s in jp_sparks:
+		var u2 := (t - float(s.t0)) / spt
+		if u2 <= 0.0 or u2 >= 1.0:
+			continue
+		var pk := sin(u2 * PI)
+		var sz: float = float(s.s) * (0.6 + 0.4 * pk)
+		var sc := Color(Color.WHITE.lerp(lc, 0.25), pk * env)
+		var o: Vector2 = c + (s.o as Vector2)
+		draw_colored_polygon(PackedVector2Array([o + Vector2(0, -sz), o + Vector2(sz * 0.18, 0),
+				o + Vector2(0, sz), o + Vector2(-sz * 0.18, 0)]), sc)
+		draw_colored_polygon(PackedVector2Array([o + Vector2(-sz * 0.7, 0), o + Vector2(0, sz * 0.13),
+				o + Vector2(sz * 0.7, 0), o + Vector2(0, -sz * 0.13)]), sc)
+	#  ── 섬광 — 착지 프레임의 봉우리 하나 ──
+	var ft: float = float(JP.flash_t)
+	if t < ft:
+		var fk := 1.0 - t / ft
+		draw_rect(_full(), Color(lc.lerp(Color.WHITE, 0.6), float(JP.flash_a) * fk * fk))
+
+
+#  가운데가 밝고 가장자리가 0 인 타원 빛. 부채꼴 하나라 가장자리에 계단이 없다.
+func _jp_glow(c: Vector2, rx: float, ry: float, col: Color) -> void:
+	if col.a <= 0.003:
+		return
+	var n := 32
+	var edge := Color(col, 0.0)
+	for k in n:
+		var a0 := TAU * float(k) / float(n)
+		var a1 := TAU * float(k + 1) / float(n)
+		draw_polygon(PackedVector2Array([c, c + Vector2(cos(a0) * rx, sin(a0) * ry),
+				c + Vector2(cos(a1) * rx, sin(a1) * ry)]),
+				PackedColorArray([col, edge, edge]))
 
 
 # 그림자가 없으면 높이 h 와 깊이 w 가 화면 y 하나로 뭉개져 구분이 안 된다.
@@ -40383,6 +40744,7 @@ func _draw_shop() -> void:
 				HORIZONTAL_ALIGNMENT_CENTER, 240.0, 12, Color(C_MULT, ma))
 	else:
 		_boss_plaque()
+	_jp_draw()               # 리롤 잭팟(JP) — 상점 위 · HUD · 툴팁 밑
 
 
 #  이 라운드 보스에 무엇이 걸리는가. **상점이 빌드를 짜는 자리인데
