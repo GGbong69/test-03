@@ -180,6 +180,41 @@ func _run() -> void:
 	_ok("옮기는 것은 한 번뿐", Save.slot() == 2 and Save.stat("wins") == 1,
 			"슬롯 %d · 완주 %d" % [Save.slot(), Save.stat("wins")])
 
+	# (10) 내보낸 빌드는 user://build/ 에 따로 쌓는다(2026-10-07). 길만 재고 파일은
+	#      안 연다 — allow_real 을 켠 동안 아무것도 안 쓴다(사람 · 빌드 저장 그대로).
+	print("")
+	_ok("편집기 바이너리는 빌드가 아니다", not Save._build_run(),
+			"template %s" % OS.has_feature("template"))
+	Save.as_build = 1
+	var fmt_keep := Save.prof_fmt
+	Save.prof_fmt = Save.PROF
+	_ok("빌드여도 도구는 도구 자리", Save.slot_path(1) == Save.TOOL_PROF % 1
+			and Save._home(Save.PATH, Save.TOOL_GPATH) == Save.TOOL_GPATH, Save.slot_path(1))
+	Save.prof_fmt = fmt_keep
+	Save.allow_real = true
+	var b_g := Save._home(Save.PATH, Save.TOOL_GPATH)
+	var b_p := Save._home(Save.PROF, Save.TOOL_PROF)
+	Save.as_build = 0
+	var e_g := Save._home(Save.PATH, Save.TOOL_GPATH)
+	var e_p := Save._home(Save.PROF, Save.TOOL_PROF)
+	Save.allow_real = false
+	Save.as_build = -1
+	_ok("빌드 전역은 build/ 밑", b_g == "user://build/highton.cfg", b_g)
+	_ok("빌드 프로필은 build/ 밑", b_p == "user://build/profile_%d.cfg", b_p)
+	_ok("편집기 실행은 그 자리 그대로", e_g == Save.PATH and e_p == Save.PROF,
+			"%s · %s" % [e_g, e_p])
+	#  build/ 는 처음엔 없다 — 쓸 때 폴더를 세운다
+	var dfp := "user://_qa_prof_dir/sub/p.cfg"
+	erase_file(dfp)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://_qa_prof_dir/sub"))
+	var dc := ConfigFile.new()
+	dc.set_value("통계", "wins", 2)
+	var de := Save._save_cfg(dc, dfp)
+	_ok("없는 폴더에도 쓴다", de == OK and FileAccess.file_exists(dfp), "err %d" % de)
+	erase_file(dfp)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://_qa_prof_dir/sub"))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://_qa_prof_dir"))
+
 	# 뒷정리
 	for i in range(1, Save.SLOTS + 1):
 		Save.erase_slot(i)

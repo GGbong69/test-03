@@ -96,6 +96,42 @@ static func _tool_run() -> bool:
 		return false
 	var ml := Engine.get_main_loop()
 	return ml != null and ml.get_script() != null
+
+
+#  ── 내보낸 빌드는 제 자리에 ───────────────────────────────
+#  편집기에서 돌린 게임과 내보낸 빌드가 같은 user://(app_userdata/HIGHTON)를 써서,
+#  만드는 PC 에서 빌드를 켜면 개발하며 쌓은 해금 · 프로필 · 튜토리얼 마침이 그대로
+#  떴다(2026-10-07 사용자: 「빌드한거에 왜 플레이 기록이 있어? 다 잠겨 있고 프로필에도
+#  깔끔해야」). 내보낸 빌드(template 특성)는 전역 · 프로필을 user://build/ 밑에 따로
+#  둔다 — 처음 켜면 빈 프로필 · 다 잠김 · 튜토리얼 런부터다. 이 폴더를 지우면 빌드가
+#  처음 상태로 돌아간다. 도구 자리가 이것보다 먼저다(도구는 빌드 저장도 안 건드린다).
+#  project.godot 의 use_custom_user_dir 로 폴더째 가르지 않은 것은, 열려 있는 편집기가
+#  제 설정을 되쓰며 그 줄을 지울 수 있고 그러면 편집기에서 내보낸 빌드에 안 실리기 때문이다.
+const BUILD_DIR := "user://build/"
+static var as_build := -1        # -1 이면 OS 에게 묻는다. 검사가 0 · 1 로 박는다
+
+
+static func _build_run() -> bool:
+	if as_build >= 0:
+		return as_build == 1
+	return OS.has_feature("template")
+
+
+#  기본 자리(PATH · PROF)를 지금 도는 것에 맞춘다. 파일은 안 건드린다.
+static func _home(p: String, tool_p: String) -> String:
+	if _tool_run():
+		return tool_p
+	if _build_run():
+		return BUILD_DIR + p.get_file()
+	return p
+
+
+#  쓰기 전에 그 폴더를 세운다 — ConfigFile.save 는 폴더를 안 만든다(BUILD_DIR).
+static func _save_cfg(c: ConfigFile, fp: String) -> int:
+	var d := fp.get_base_dir()
+	if not DirAccess.dir_exists_absolute(d):
+		DirAccess.make_dir_recursive_absolute(d)
+	return c.save(fp)
 #  비어 있으면 슬롯에서 낸다. 검사·프로브가 여기에 제 자리를 박으면
 #  그것이 이긴다 — 슬롯이 생겨도 그 규약은 안 바뀐다.
 static var path := ""
@@ -218,8 +254,8 @@ static func gboot() -> void:
 	if _gloaded:
 		return
 	_gloaded = true
-	if gpath == PATH and _tool_run():
-		gpath = TOOL_GPATH
+	if gpath == PATH:
+		gpath = _home(PATH, TOOL_GPATH)
 	_gcfg = _read(gpath)
 	_migrate()
 
@@ -251,9 +287,9 @@ static func _migrate() -> void:
 		if _gcfg.has_section_key(S_SET, k2):
 			c.set_value(S_PIK, k2, _gcfg.get_value(S_SET, k2))
 			_gcfg.erase_section_key(S_SET, k2)
-	c.save(slot_path(1))
+	_save_cfg(c, slot_path(1))
 	_gcfg.set_value(S_SET, "slot", 1)
-	_gcfg.save(gpath)
+	_save_cfg(_gcfg, gpath)
 	print("저장: 옛 저장을 프로필 1 로 옮겼다")
 
 
@@ -266,8 +302,8 @@ static func slot() -> int:
 
 static func slot_path(i: int) -> String:
 	var fmt := prof_fmt
-	if fmt == PROF and _tool_run():
-		fmt = TOOL_PROF
+	if fmt == PROF:
+		fmt = _home(PROF, TOOL_PROF)
 	return fmt % clampi(i, 1, SLOTS)
 
 
@@ -311,7 +347,7 @@ static func boot() -> void:
 #  워크플로우가 만지는 자리라 이번 턴에 안 건드린다.
 static func flush() -> void:
 	boot()
-	var e := _cfg.save(_at)
+	var e := _save_cfg(_cfg, _at)
 	if e != OK:
 		_err = "저장 실패 (%d)" % e
 		push_warning(_err)
@@ -319,7 +355,7 @@ static func flush() -> void:
 
 static func gflush() -> void:
 	gboot()
-	var e := _gcfg.save(gpath)
+	var e := _save_cfg(_gcfg, gpath)
 	if e != OK:
 		_err = "저장 실패 (%d)" % e
 		push_warning(_err)
