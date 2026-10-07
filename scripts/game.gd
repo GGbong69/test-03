@@ -8145,6 +8145,18 @@ func _click(m: Vector2) -> void:
 						else:
 							_sfx("menu_pick2")
 						return
+					"wipe":
+						#  「전체화면」 줄과 같은 손 — 누른 칸으로 가고 이름 쪽은 뒤집는다. 그 자리에서
+						#  저장한다(창 모드처럼 한 번 누름이 한 값이다).
+						var want2: bool = not wipe_snow
+						if _set_seg_rect(i, 0).has_point(m):
+							want2 = false
+						elif _set_seg_rect(i, 1).has_point(m):
+							want2 = true
+						wipe_snow = want2
+						Save.set_set("wipe_snow", wipe_snow)
+						_sfx("menu_pick2")
+						return
 					"vol", "mus", "crt", "warp", "vhs", "dot":
 						#  홈 둘레를 누르면 그 자리로 가고 뗄 때까지 따라온다(_set_grab).
 						#  이름 쪽은 고르기만 한다.
@@ -41477,6 +41489,7 @@ func _load_settings() -> void:
 	warp = clampf(float(Save.get_set("warp", WARP_DEF)), 0.0, 1.0)
 	vhs = clampf(float(Save.get_set("vhs", VHS_DEF)), 0.0, 1.0)
 	dot = clampf(float(Save.get_set("dot", DOT_DEF)), 0.0, 1.0)
+	wipe_snow = bool(Save.get_set("wipe_snow", true))
 	_apply_vol()
 	_crt_apply()        # 층은 _ready 가 이 뒤에 세운다 — 그때 다시 앉는다
 	if bool(Save.get_set("fullscreen", false)):
@@ -47733,7 +47746,8 @@ const SET_PG_SLIDE := 14.0
 #  줄 30 의 오른쪽은 조작 칸이다 — 이름 칸 150 · 홈 · 수 칸 66. 가장 긴 이름
 #  「도트 팔레트」도 150 안에 들고(qa_settings 가 잰다), 「100」(40px)이 수 받침(46)에 든다.
 const SETW := {
-	"set": Vector2(400.0, 278.0),
+	#  2026-10-08 화면 탭이 여섯 줄(전환 지지직)이 되어 창이 36(줄 30 + 틈 6) 자랐다 — 위아래 23 씩 남는다.
+	"set": Vector2(400.0, 314.0),
 	"pad": 12.0,       # 창 안쪽 여백 — 줄 · 탭 · 「뒤로」의 양 끝
 	"plate_h": 22.0,   # 이름표 높이 — 윗변에 반쯤 걸친다(말상자 이름표와 같은 말)
 	"tab_y": 20.0,     # 탭 윗변 — 이름표 밑 9px
@@ -47901,7 +47915,7 @@ func _set_info(key: String) -> Dictionary:
 		"set":
 			return {"n": "설정", "kids": SET_TABS}
 		"screen":
-			return {"n": "화면", "kids": ["fs", "crt", "warp", "vhs", "dot"]}
+			return {"n": "화면", "kids": ["fs", "crt", "warp", "vhs", "dot", "wipe"]}
 		"sound":
 			return {"n": "소리", "kids": ["vol", "mus"]}
 		"fs":
@@ -47912,6 +47926,9 @@ func _set_info(key: String) -> Dictionary:
 			return {"n": "효과음", "g": true}
 		"mus":
 			return {"n": "음악", "g": true}
+		"wipe":
+			#  장면 전환의 지지직(WIPE · 2026-10-08). 끄면 어두운 막이 덮고 걷힌다.
+			return {"n": "전환 지지직", "tg": wipe_snow, "v": "켬" if wipe_snow else "끔"}
 		"crt":
 			#  굴곡은 「화면 굴곡」으로 갈라 나갔다 — 이 줄은 주사선 · 번짐만 민다.
 			return {"n": "CRT 필터", "g": true}
@@ -48468,6 +48485,10 @@ var wipe_layer: CanvasLayer = null
 const STATIC_SHADER := "res://shaders/static.gdshader"
 var wipe_rect: ColorRect = null      # 지지직 판(shaders/static.gdshader)
 var wipe_vert := 0.0                 # 이번 전환의 줄 방향 — 0 가로 · 1 세로(_wipe 가 뽑는다)
+#  설정 「전환 지지직」(2026-10-08 「살짝 눈이 아프다는 평」). 끄면 줄무늬 · 지지직 소리 없이
+#  어두운 막이 같은 박자로 덮고 걷힌다(static.gdshader 의 plain) — 덮인 동안 화면을 가는 일과
+#  새 화면의 시계를 멈추는 일(_wipe_hold)은 그대로다. 켜도 예전보다 순하다(셰이더 머리말).
+var wipe_snow := true
 var wipe_rng := RandomNumberGenerator.new()
 
 
@@ -48522,7 +48543,8 @@ func _wipe(cb: Callable) -> void:
 	wipe_cb = cb
 	wipe_went = false
 	wipe_vert = 1.0 if wipe_rng.randf() < float(WIPE.vert_p) else 0.0
-	_sfx("tv_static")
+	if wipe_snow:
+		_sfx("tv_static")
 
 
 func _wipe_tick(d: float) -> void:
@@ -48556,6 +48578,7 @@ func _wipe_static() -> void:
 	mat.set_shader_parameter("cov_out", clampf((wipe_t - float(WIPE.off)) / float(WIPE.off_t), 0.0, 1.0))
 	mat.set_shader_parameter("clock", wipe_t)
 	mat.set_shader_parameter("vert", wipe_vert)
+	mat.set_shader_parameter("plain", 0.0 if wipe_snow else 1.0)
 
 
 # ══════════════════════════════════════════════════════════

@@ -399,8 +399,8 @@ func _run() -> void:
 	g.state = g.S.SETTINGS
 	g.pause_from = g.S.SHOP
 	g._set_go("screen")
-	_ok("화면 탭 — 전체화면 · CRT · 굴곡 · VHS · 도트 · 뒤로", (g._set_rows() as Array)
-			== ["fs", "crt", "warp", "vhs", "dot", "back"], "%s" % [g._set_rows()])
+	_ok("화면 탭 — 전체화면 · CRT · 굴곡 · VHS · 도트 · 전환 지지직 · 뒤로", (g._set_rows() as Array)
+			== ["fs", "crt", "warp", "vhs", "dot", "wipe", "back"], "%s" % [g._set_rows()])
 	g.state = g.S.SHOP
 	g.pause_from = -1
 

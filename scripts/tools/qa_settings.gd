@@ -11,7 +11,8 @@ extends SceneTree
 #   방식이 좀 더 괜찮았는데?」로 옛 글줄 + 오른쪽 판에 돌아왔고, 그 판이 설정 창으로 자란다.
 #     일시정지     계속하기 · 설정 ‖ 로비로 나가기 · 게임 나가기     (판 중에만)
 #     설정 창      [화면] [소리] 탭 · 그 탭의 줄 · 뒤로               (제목은 곧장 여기)
-#                  화면  전체화면 [끔|켬] · CRT 필터 · 화면 굴곡 · VHS 필터 · 도트 팔레트
+#                  화면  전체화면 [끔|켬] · CRT 필터 · 화면 굴곡 · VHS 필터 · 도트 팔레트 ·
+#                        전환 지지직 [끔|켬](2026-10-08 — 창이 한 줄만큼 더 자랐다)
 #                  소리  효과음 · 음악
 #   2026-10-04 — 화면 탭이 다섯 줄이 되어 창이 자랐다(SETW.set). 다섯 줄 · 「뒤로」 · 이름표가
 #   다 화면 안이고, 새 두 줄도 다른 게이지 줄처럼 누르고 · 끌고 · 휠로 민다.
@@ -254,7 +255,7 @@ func _run() -> void:
 	_page("top", -1)
 	var rt: Array = g._set_rows()
 	_ok("설정 창은 첫 탭(화면)으로 연다", g._set_pg() == "screen"
-			and rt == ["fs", "crt", "warp", "vhs", "dot", "back"], "%s · %s" % [g._set_pg(), rt])
+			and rt == ["fs", "crt", "warp", "vhs", "dot", "wipe", "back"], "%s · %s" % [g._set_pg(), rt])
 	var gauges := []
 	for k in ["crt", "warp", "vhs", "dot"]:
 		var inf: Dictionary = g._set_info(k)
@@ -434,6 +435,30 @@ func _run() -> void:
 			"저장 %s" % [Save.get_set("fullscreen", on0)])
 	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
 	Save.set_set("fullscreen", false)
+	#  전환 지지직(2026-10-08) — 같은 손 · 누르는 자리에서 저장 · 덮개 판이 그 값을 받는다.
+	var wi: int = (g._set_rows() as Array).find("wipe")
+	g.wipe_snow = true
+	Save.set_set("wipe_snow", true)
+	g._click((g._set_seg_rect(wi, 1) as Rect2).get_center())
+	_ok("전환 지지직 — 켬 칸을 누르면 그대로", g.wipe_snow and bool(Save.get_set("wipe_snow", false)))
+	g._click((g._set_seg_rect(wi, 0) as Rect2).get_center())
+	_ok("전환 지지직 — 끔 칸을 누르면 끄고 저장한다", not g.wipe_snow
+			and not bool(Save.get_set("wipe_snow", true)) and g._set_info("wipe").get("v", "") == "끔")
+	g._click((g._set_rect(wi) as Rect2).position + Vector2(20.0, 15.0))
+	_ok("전환 지지직 — 이름 쪽을 누르면 뒤집는다", g.wipe_snow and bool(Save.get_set("wipe_snow", false)))
+	#  되살리기 — _load_settings 는 게이지 넷도 저장값으로 되돌리므로 앞뒤로 쥐었다 놓는다.
+	var keep := [g.vol, g.vol_mus, g.crt, g.warp, g.vhs, g.dot]
+	g.wipe_snow = false
+	g._load_settings()
+	_ok("전환 지지직 — 저장에서 되살린다", g.wipe_snow)
+	g.vol = keep[0]
+	g.vol_mus = keep[1]
+	g.crt = keep[2]
+	g.warp = keep[3]
+	g.vhs = keep[4]
+	g.dot = keep[5]
+	g._apply_vol()
+	g._crt_apply()
 
 	# ⑤ 밀려 듦 · 떠오름 · 자람 — 그리는 자리와 누르는 자리가 같이 간다
 	print("")

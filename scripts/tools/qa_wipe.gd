@@ -6,6 +6,7 @@ extends SceneTree
 #    ② 다 덮인 동안 새 화면의 시계(매물 낙하 drop_t · 판 깔기 leg_t)가 멈췄다가 걷히면서 돈다.
 #    ③ 덮개가 도는 동안 누름은 아무것도 안 한다.
 #    ④ 움직임 끔이면 덮개 없이 누른 틀에 바뀐다.
+#    ⑤ 설정 「전환 지지직」을 끄면 줄무늬 대신 어두운 막이 같은 박자로 덮고 지지직 소리가 없다.
 #  창이 있어야 돈다(덮개는 렌더러가 있어야 선다):
 #    godot --path . --script scripts/tools/qa_wipe.gd
 const Save = preload("res://scripts/save.gd")
@@ -138,6 +139,35 @@ func _run() -> void:
 	_ok("상점 → 다음 판 — 덮인 동안 판 깔기가 멈췄다 걷히며 돈다", float(b.c_cover) <= float(b.c0) + 0.0001
 			and float(b.c_end) > float(b.c0) + 0.1, "덮인 동안 %.3f · 끝 %.3f" % [float(b.c_cover),
 			float(b.c_end)])
+
+	# ⑤ 설정 「전환 지지직」 끔(2026-10-08) — 줄무늬 대신 어두운 막 · 지지직 소리 없음 · 박자 그대로
+	_step(2.0)
+	g._tutor_close()
+	g.tutor_q.clear()
+	g.wipe_snow = false
+	var mat := g.wipe_rect.material as ShaderMaterial
+	_to_clear()
+	var st_n := 0
+	for sp in g.sfx_pool:
+		var asp := sp as AudioStreamPlayer
+		if asp.stream != null and asp.stream.resource_path.get_file().get_basename() == "tv_static":
+			asp.stream = null
+	g._click(Vector2(-1.0, -1.0))
+	for sp in g.sfx_pool:
+		var asp2 := sp as AudioStreamPlayer
+		if asp2.stream != null and asp2.stream.resource_path.get_file().get_basename() == "tv_static":
+			st_n += 1
+	_step(DT)
+	_ok("지지직 끔 — 덮개 판이 어두운 막이다", float(mat.get_shader_parameter("plain")) == 1.0
+			and g.wipe_t >= 0.0, "plain %s" % [mat.get_shader_parameter("plain")])
+	_ok("지지직 끔 — 지지직 소리가 안 난다", st_n == 0, "%d" % st_n)
+	var c := _run_wipe(g.S.SHOP, "drop_t")
+	_ok("지지직 끔 — 같은 박자에 바뀐다", int(c.state) == g.S.SHOP
+			and absf(float(c.at) - float(W.on)) <= DT * 1.5, "바뀐 틀 %.3f" % float(c.at))
+	g.wipe_snow = true
+	_step(2.0)
+	g._tutor_close()
+	g.tutor_q.clear()
 
 	# ④ 움직임 끔
 	g.motion_off = true
