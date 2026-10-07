@@ -135,7 +135,8 @@ func _process(_d: float) -> bool:
 	#  걸린 굴림에서 105 가 나와 검사가 들쭉날쭉했다(2026-09-20). 표의 값과
 	#  제약을 얹은 값을 따로 묻는다 — 재려던 것은 「무한을 끄면 본편 곡선이
 	#  그대로 돌아온다」이고 그것은 표의 값 쪽이다.
-	_ok("본편 판 3 의 목표가 84 다", GameData.target_of(3) == 84,
+	#  2026-10-07 곡선(첫 50)에서 84 → 100.
+	_ok("본편 판 3 의 목표가 100 이다", GameData.target_of(3) == 100,
 			str(GameData.target_of(3)))
 	_ok("걸린 목표가 제약까지 얹은 값이다", g.target == g._target_at(3),
 			"%d / %d" % [g.target, g._target_at(3)])
