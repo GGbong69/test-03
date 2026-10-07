@@ -21,8 +21,10 @@ const Save = preload("res://scripts/save.gd")
 
 #  ── 고치기 **전**의 값. 2026-09-20 에 _base_data.gd(HEAD 의 data.gd)로
 #  찍어서 박았다. 흰 리그 · 기본 다트통 · 챌린지 없음.
-const TGT0 := [42, 63, 84, 123, 185, 246, 327, 491, 654, 788, 1182, 1576,
-		1722, 2583, 3444, 3413, 5120, 6827, 6135, 9202, 12270, 10000, 15000, 20000]
+#  2026-10-07 곡선을 올리며(curve_last 10000 → 50000 · curve_bow 0.26 → 0.12)
+#  다시 찍었다. 첫 라운드 셋(42 · 63 · 84)은 그대로다.
+const TGT0 := [42, 63, 84, 132, 198, 265, 398, 597, 796, 1145, 1718, 2291,
+		3150, 4725, 6301, 8282, 12423, 16565, 20814, 31221, 41628, 50000, 75000, 100000]
 const IDX0 := [0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 2]
 const BOSS0 := [0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1]
 
@@ -85,12 +87,17 @@ func _process(_d: float) -> bool:
 	var b8 := GameData.round_base_endless(8)
 	var b9 := GameData.round_base_endless(9)
 	var step := b9 / b8
-	#  ⚠ 지수가 m(m−1)/2 인가를 재는 자리다. m(m+1)/2 면 1.724 가 나와 운다.
-	_ok("R8→R9 걸음이 step 그대로다(1.630)", absf(step - 1.63) < 0.001,
-			"걸음 %.4f" % step)
+	#  ⚠ 지수가 m(m−1)/2 인가를 재는 자리다. m(m+1)/2 면 가속이 첫 걸음에 붙어
+	#  step x accel 이 나와 운다. 견주는 값은 **본편의 마지막 걸음**이다 — 표의
+	#  endless_step 이 곡선을 따라왔는지도 같이 잰다(곡선만 고치고 step 을 두면
+	#  「계속」을 누른 라운드에 벽이나 턱이 선다).
+	var last_step := GameData.round_base(8) / GameData.round_base(7)
+	_ok("R8→R9 걸음이 본편 마지막 걸음 그대로다", absf(step - last_step) < 0.001,
+			"걸음 %.4f · 본편 %.4f" % [step, last_step])
 	var b16 := GameData.round_base_endless(16)
-	_ok("R16/R8 = 238 (무한 한 바퀴 = 본편 한 바퀴)",
-			absf(b16 / b8 - 238.0) < 1.0, "%.2f" % (b16 / b8))
+	var lap := GameData.round_base(8) / GameData.round_base(1)
+	_ok("R16/R8 = R8/R1 (무한 한 바퀴 = 본편 한 바퀴)",
+			absf(b16 / b8 - lap) < lap * 0.005, "%.2f · 본편 %.2f" % [b16 / b8, lap])
 	_ok("round_base_endless(a<=8) 가 round_base(a) 그대로다",
 			GameData.round_base_endless(5) == GameData.round_base(5))
 	#  ⚠ **라운드 기본**이 단조증가하는가를 본다. 판 목표는 본편에서도

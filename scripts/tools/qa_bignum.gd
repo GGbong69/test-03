@@ -68,9 +68,11 @@ func _process(_d: float) -> bool:
 			same = false
 			bad = t
 	_ok("판 스물넷의 목표가 str(v) 그대로다", same, str(bad))
-	#  본편 최악 = 20000 x 검정 4.00 x 제약 1.25 = 100,000
-	_ok("본편 최악 목표(10만)도 그대로다", GameData.big(100000) == "100000",
-			GameData.big(100000))
+	#  본편 최악 = 100000 x 검정 4.00 x 제약 1.25 = 500,000(2026-10-07 곡선 · 그전 100,000).
+	#  상수로 안 박고 곡선에서 잰다 — 곡선을 또 올려 문턱을 넘으면 여기서 운다.
+	var worst_main := int(round(GameData.round_base(GameData.rounds_n()) * 2.0 * 4.0 * 1.25))
+	_ok("본편 최악 목표(%d)도 그대로다" % worst_main, GameData.big(worst_main) == str(worst_main),
+			GameData.big(worst_main))
 	_ok("문턱 바로 아래도 그대로다", GameData.big(999999) == "999999")
 	_ok("문턱부터 깎인다", GameData.big(1000000) == "100만",
 			GameData.big(1000000))
@@ -79,8 +81,8 @@ func _process(_d: float) -> bool:
 
 	# ── ② 폭 ──────────────────────────────────────────────
 	print("\n② 폭 — 목표 칸 60px · 점수 칸 64px")
-	_ok("본편 최악이 칸에 든다", _w("100000") <= 60.0,
-			"%.0fpx" % _w("100000"))
+	_ok("본편 최악이 칸에 든다", _w(str(worst_main)) <= 60.0,
+			"%.0fpx" % _w(str(worst_main)))
 	var over := ""
 	var widest := 0.0
 	var widest_s := ""
