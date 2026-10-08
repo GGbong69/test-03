@@ -11538,6 +11538,7 @@ func _hud_draw() -> void:
 			draw_rect(_wide(0.0, 64.0 + _hud_dy(), true),
 					Color(C_BG, 0.45))
 		_modplate_draw()    # 낀 보드 확장 명판(던지는 동안만)
+		_rulep_draw()       # 판 규칙 명판 — 보스 제약 · 판 사건(오른쪽 벽)
 		_rack_hold_draw()   # 판 위다 — 끌고 다니는 동전은 무엇에도 안 덮인다
 		_prop_fly_draw()    # 판 동전이 동전 슬롯에서 저울 접시로 난다(판매 몸짓)
 		_pound_candy_draw(0)   # 사탕이 사탕 칸에서 펠트로 난다(주먹 몸짓)
@@ -15899,6 +15900,360 @@ func _modplate_draw() -> void:
 
 
 # ══════════════════════════════════════════════════════════
+#  판 규칙 명판 — 이 판에 걸린 것 (2026-10-08)
+# ──────────────────────────────────────────────────────────
+#  「지금 인게임 안에 미션이랑 라이벌의 칸막기? 그런 요소가 있잖아? 그거랑 보스판 제약? 그거를
+#  인게임 안에 표시를 해야 할거 같은데? 미션이랑 라이벌은 이미지로 되어있지만 설명이 없고 제약은
+#  아예 인게임에 아이콘도 없고 설명도 없잖아」(사용자, 2026-10-08). 제약은 상단 띠 오른끝의
+#  반지름 6 아이콘뿐이라 눈에 안 들었고(올려야 이름이 떴다), 칠판 · 단골 자루 · 불씨는 그림뿐이었다.
+#  오른쪽 벽(HUD 밑 · 오른쪽 점수 카드 위)에 이 판의 규칙을 명판 한 장씩 세운다 — 그림 · 이름 · 효과.
+#    · 보스 제약(active_mods)은 한 장마다 — 그림은 상단 띠 · 보스 카드와 같은 _icon_modifier,
+#      효과는 modifiers.csv 의 desc 그대로다.
+#    · 판 사건은 판 위에 서 있는 동안 한 장 — 칠판 주문(걸린 뒤 보상을 받기까지) · 단골(자루가
+#      꽂혀 막는 동안) · 불씨(핀 동안). 효과는 events.csv 의 desc 가 쥔다({cond} · {reward} ·
+#      {cell} · {val} · {name} · {v} 를 채운다). 「 · 」가 줄을 가른다.
+#    · 남은 발(칠판 눈금 · 단골이 뽑아 가기까지)은 이름 줄 오른끝에 칠판과 같은 분필 눈금으로 선다.
+#  새로 서는 명판은 오른끝에서 미끄러져 들며 한 번 밝았다 앉는다(봉우리 하나 · 깜빡임 없음) —
+#  여럿이면 차례로 든다. 내려갈 때는 옅어지며 오른쪽으로 빠지고, 밑의 명판이 올라와 메운다.
+#  올리면 툴팁(태그 [제약] · [사건] · [남은 n발])이 같은 것을 말한다 — 칠판에 올려도 주문 툴팁이다.
+#  조준하는 동안은 HUD 처럼 물러난다. 모션 끄기면 미끄러지지 않는다(짙기만 바뀐다).
+#  점수 카드 위(bot)에 다 안 들어가면 효과 줄을 접고 그림 · 이름만 세운다 — 효과는 툴팁이 말한다.
+#  글은 효과 · 값만이다. 그림 · 판정은 안 바꾼다.
+#    y · bot   첫 명판 윗변(_hud_dy 를 탄다) · 명판이 내려갈 수 있는 끝(오른쪽 점수 카드 y205 위)
+#    w · w_min 명판 폭의 끝 · 바닥 — 다 같은 폭(가장 긴 줄)이라 왼끝이 한 줄로 선다. 넘치는 효과
+#              줄은 접는다 · right 화면 오른끝에서(HUD 오른칸 menu 의 오른끝과 같은 선)
+#    pad · icon_r · gap   안쪽 여백 · 그림 반지름 · 그림과 글 사이
+#    name_h · line_h · step   이름 줄 · 효과 줄 높이 · 명판 사이
+#    in_t · out_t · slide · stagger   드는 · 빠지는 시간(초) · 미끄러지는 거리(px) · 여럿이 차례로 드는 사이(초)
+#    flash · flash_a   드는 빛의 길이(초) · 짙기
+#    dim       조준 중에 물러나는 몫 · follow 밑 명판이 올라와 메우는 빠르기
+#    tick · tick_dx   남은 발 눈금 한 획 [폭, 높이] · 획 사이 · tick_off 지운 획의 짙기
+const RULEP := {"y": 70.0, "bot": 200.0, "w": 184.0, "w_min": 112.0, "right": 4.0,
+		"pad": 6.0, "icon_r": 8.0, "gap": 6.0, "name_h": 14.0, "line_h": 13.0, "step": 4.0,
+		"in_t": 0.34, "out_t": 0.26, "slide": 40.0, "stagger": 0.12,
+		"flash": 0.5, "flash_a": 0.28, "dim": 0.35, "follow": 14.0,
+		"tick": Vector2(1.0, 7.0), "tick_dx": 3.0, "tick_off": 0.22}
+#  명판 — 열쇠 → {"row": 지금 줄, "t": 든 뒤 흐른 시간(음수면 차례를 기다린다),
+#  "o": 빠지기 시작한 뒤 흐른 시간(−1 이면 서 있다), "y": 보이는 윗변(NAN 이면 아직 안 잡았다)}.
+#  차례는 넣은 차례다(사전은 넣은 차례를 지킨다).
+var rulep := {}
+var rulep_dim := 0.0             # 조준 중에 물러난 몫 0..1
+
+
+#  지금 판에 걸린 규칙 — 명판 차례. 줄 하나는 {key, k("mod" · 사건 갈래), id, n, d(효과 줄들),
+#  left(남은 발 · −1 없음), max(눈금 칸)}.
+func _rulep_rows() -> Array:
+	var out := []
+	for mo in active_mods:
+		var mid := String(mo.get("id", ""))
+		out.append({"key": "m:" + mid, "k": "mod", "id": mid, "n": String(mo.get("n", "")),
+				"d": [String(mo.get("d", ""))], "left": -1, "max": 0})
+	var ev := _rulep_ev()
+	if not ev.is_empty():
+		out.append(ev)
+	return out
+
+
+#  판 사건의 줄 — 판 위에 서 있는 동안만. 효과는 events.csv 의 desc 를 채운다.
+func _rulep_ev() -> Dictionary:
+	var vals := {"v": GameData.event_v(leg_ev_row, "v", 0.0),
+			"v2": GameData.event_v(leg_ev_row, "v2", 0.0),
+			"name": String(leg_ev_row.get("name", ""))}
+	var left := -1
+	var mx := 0
+	match leg_ev:
+		"order":
+			if order_st != "open" and order_st != "won":
+				return {}
+			vals["cond"] = GameData.cond_text(order_cond)
+			vals["reward"] = _tag_text(order_tag)
+			left = order_left
+			mx = order_n
+		"regular":
+			if rgl_st != "on" or rgl_ph != "on":
+				return {}
+			vals["cell"] = _rgl_cell()
+			vals["val"] = rgl_val
+			left = rgl_left
+			mx = maxi(int(GameData.event_v(leg_ev_row, "v2", 2.0)), 1)
+		"ember":
+			if ember_idx < 0:
+				return {}
+			vals["v"] = _ember_gold()
+		_:
+			return {}
+	var d := GameData.fill(String(leg_ev_row.get("desc", "")), vals)
+	return {"key": "ev:" + leg_ev, "k": leg_ev, "id": leg_ev,
+			"n": String(leg_ev_row.get("name", "")), "d": Array(d.split(" · ", false)),
+			"left": left, "max": mx}
+
+
+#  단골이 막은 자리의 이름 — 「20 트리플」 · 「이너 불」. 띠는 반지름으로 댄다(천체 고리의 둘째
+#  트리플도 트리플이다).
+func _rgl_cell() -> String:
+	if rgl_idx < 0:
+		return "이너 불" if rgl_r.x <= 0.0 else "아우터 불"
+	var sv: int = int(sectors[rgl_idx]) if rgl_idx < sectors.size() else 0
+	var bn := "싱글"
+	if rgl_r.is_equal_approx(_ember_band_r("t")) or (rt_trp2_out > 0.0
+			and rgl_r.is_equal_approx(Vector2(R * rt_trp2_in, R * rt_trp2_out))):
+		bn = "트리플"
+	elif rgl_r.is_equal_approx(_ember_band_r("d")):
+		bn = "더블"
+	return "%d %s" % [sv, bn]
+
+
+#  판이 서 있는 화면에서만 — 판 갈이 동안은 안 선다(판이 다 선 뒤에 든다).
+func _rulep_on() -> bool:
+	return _is_play() and not swap_live
+
+
+#  명판 시계 — 실시간 d(빨리 보기와 무관). 판이 안 서 있으면 비운다 — 다음 판에서 다시 든다.
+#  런 정보 · 판 중 설정이 덮은 동안은 그대로 둔다(닫으면 그 자리 그대로다).
+func _rulep_tick(d: float) -> void:
+	rulep_dim = move_toward(rulep_dim, 1.0 if _is_aim_stage() else 0.0, d * 4.0)
+	if not _is_play_deep() or swap_live:
+		rulep.clear()
+		return
+	if not _is_play():
+		return
+	var live := {}
+	var fresh := 0
+	for rw in _rulep_rows():
+		var k := String(rw.key)
+		live[k] = true
+		if rulep.has(k):
+			var e0: Dictionary = rulep[k]
+			e0.row = rw
+			e0.o = -1.0          # 빠지던 것이 되돌아왔다 — 그 자리에서 다시 선다
+		else:
+			rulep[k] = {"row": rw, "t": -float(RULEP.stagger) * float(fresh), "o": -1.0, "y": NAN}
+			fresh += 1
+	for k in rulep.keys():
+		var e: Dictionary = rulep[k]
+		if live.has(k):
+			e.t = float(e.t) + d
+			continue
+		e.o = maxf(float(e.o), 0.0) + d
+		if motion_off or float(e.o) >= float(RULEP.out_t):
+			rulep.erase(k)
+	for it in _rulep_layout():
+		var e2: Dictionary = rulep[it.key]
+		var ty: float = (it.rect as Rect2).position.y
+		if is_nan(float(e2.y)) or motion_off:
+			e2.y = ty
+		else:
+			e2.y = lerpf(float(e2.y), ty, 1.0 - exp(-float(RULEP.follow) * d))
+
+
+func _rulep_tw(t: String) -> float:
+	if font == null:
+		return float(t.length()) * 12.0
+	return font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
+
+
+func _rulep_ticks_w(rw: Dictionary) -> float:
+	var mx := int(rw.get("max", 0))
+	return 0.0 if mx <= 0 else float(mx) * float(RULEP.tick_dx) + 6.0
+
+
+func _rulep_h(lines: int) -> float:
+	return float(RULEP.pad) * 2.0 - 2.0 + float(RULEP.name_h) \
+			+ float(RULEP.line_h) * float(lines) + PANEL_LIP
+
+
+#  명판 자리 — 넣은 차례 그대로 [{key, rect, lines}]. rect 는 서 있을 자리다(보이는 윗변 · 미끄러짐은
+#  그리기가 얹는다). 빠지는 명판도 다 빠질 때까지 제 자리를 쥔다.
+func _rulep_layout() -> Array:
+	var out := []
+	if rulep.is_empty():
+		return out
+	var ip: float = float(RULEP.pad) + float(RULEP.icon_r) * 2.0 + float(RULEP.gap)
+	var tw: float = float(RULEP.w) - ip - float(RULEP.pad)
+	var top: float = float(RULEP.y) + _hud_dy()
+	var bot: float = float(RULEP.bot) + _hud_dy()
+	var wrapped := []
+	var need := -float(RULEP.step)
+	var wmax := 0.0
+	for k in rulep:
+		var rw: Dictionary = rulep[k].row
+		var ls := []
+		for s0 in rw.d:
+			for w2 in _tip_wrap(String(s0), tw, 12):
+				ls.append(w2)
+				wmax = maxf(wmax, _rulep_tw(w2))
+		wmax = maxf(wmax, _rulep_tw(String(rw.n)) + _rulep_ticks_w(rw))
+		wrapped.append(ls)
+		need += _rulep_h(ls.size()) + float(RULEP.step)
+	var compact := top + need > bot
+	var w: float = clampf(ceilf(ip + wmax + float(RULEP.pad)), float(RULEP.w_min), float(RULEP.w))
+	var x: float = VIEW.x - float(RULEP.right) + _ui_pad().x - w
+	var y := top
+	var j := 0
+	for k in rulep:
+		var ls2: Array = [] if compact else wrapped[j]
+		var h := _rulep_h(ls2.size())
+		out.append({"key": k, "rect": Rect2(x, y, w, h), "lines": ls2})
+		y += h + float(RULEP.step)
+		j += 1
+	return out
+
+
+#  명판 하나가 지금 보이는 자리(보이는 윗변을 얹는다 · 미끄러짐은 뺀다) — 툴팁 · 얹힘이 댄다.
+func _rulep_at(it: Dictionary) -> Rect2:
+	var r: Rect2 = it.rect
+	var e: Dictionary = rulep.get(it.key, {})
+	if not e.is_empty() and not is_nan(float(e.y)):
+		r.position.y = float(e.y)
+	return _pr(r)
+
+
+func _rulep_rect(key: String) -> Rect2:
+	for it in _rulep_layout():
+		if String(it.key) == key:
+			return _rulep_at(it)
+	return Rect2()
+
+
+#  커서 밑의 명판 — {k "rulep", i(_rulep_rows 의 차례), src}. 서 있는 명판만 잡는다(드는 · 빠지는
+#  것은 안 잡는다). 칠판에 올려도 주문 줄이다(src "board").
+func _rulep_hit(m: Vector2) -> Dictionary:
+	if not _rulep_on():
+		return {}
+	var key := ""
+	var src := ""
+	for it in _rulep_layout():
+		var e: Dictionary = rulep[it.key]
+		if float(e.t) < float(RULEP.in_t) * 0.5 or float(e.o) >= 0.0:
+			continue
+		if _rulep_at(it).has_point(m):
+			key = String(it.key)
+	if key == "" and _order_board_on() and _order_foot().has_point(m):
+		key = "ev:order"
+		src = "board"
+	if key == "":
+		return {}
+	var rows := _rulep_rows()
+	for j in rows.size():
+		if String(rows[j].key) == key:
+			return {"k": "rulep", "i": j, "src": src}
+	return {}
+
+
+func _rulep_draw() -> void:
+	if not _rulep_on() or rulep.is_empty() or font == null:
+		return
+	var back := 1.0 - float(RULEP.dim) * rulep_dim
+	for it in _rulep_layout():
+		var e: Dictionary = rulep[it.key]
+		var t: float = float(e.t)
+		if t < 0.0:
+			continue
+		var rw: Dictionary = e.row
+		var r := _rulep_at(it)
+		var u: float = clampf(t / float(RULEP.in_t), 0.0, 1.0)
+		var a: float = back * clampf(u * 3.0, 0.0, 1.0)
+		var dx := 0.0
+		if not motion_off:
+			dx = float(RULEP.slide) * (1.0 - _ease_enter(u))
+		var leaving := float(e.o) >= 0.0
+		if leaving:
+			var q: float = clampf(float(e.o) / float(RULEP.out_t), 0.0, 1.0)
+			a *= 1.0 - q
+			if not motion_off:
+				dx += float(RULEP.slide) * _ease_exit(q)
+		if a <= 0.003:
+			continue
+		r.position.x += _px(dx)
+		#  얹힘 — 상단 띠 제약 아이콘(onmod)과 같은 옅은 받침 · 밑줄.
+		var hk := "rulep:" + String(it.key)
+		if not leaving and u >= 0.5 and _ui_can_hover() and r.has_point(mouse_at):
+			ui_hot = hk
+		var mh := _ui_hov(hk)
+		_panel(r, true, a)
+		var body := Rect2(r.position, r.size - Vector2(0.0, PANEL_LIP))
+		if mh > 0.0:
+			_rr(self, body, Color(C_TXT, 0.08 * mh * a))
+			_rr_bottom(self, r, Color(C_ACC, mh * a))
+		#  드는 빛 — 한 봉우리로 식는다.
+		var fk: float = clampf(t / float(RULEP.flash), 0.0, 1.0)
+		if fk < 1.0:
+			_rr(self, body, Color(C_TXT, float(RULEP.flash_a) * (1.0 - fk) * (1.0 - fk) * a))
+		var ic := Vector2(r.position.x + float(RULEP.pad) + float(RULEP.icon_r),
+				r.position.y + body.size.y * 0.5)
+		_rulep_icon(rw, ic, float(RULEP.icon_r), a)
+		var tx: float = ic.x + float(RULEP.icon_r) + float(RULEP.gap)
+		var ny: float = r.position.y + float(RULEP.pad) + float(RULEP.name_h) * 0.5 - 1.0
+		draw_string(font, Vector2(tx, _ink_mid_y(ny, 12)), String(rw.n),
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(C_TXT, a))
+		#  남은 발 — 칠판 눈금과 같은 분필 획. 지운 획은 옅게 남는다.
+		var mx := int(rw.get("max", 0))
+		if mx > 0:
+			var lf := int(rw.get("left", 0))
+			var tk: Vector2 = RULEP.tick
+			var x1: float = r.end.x - float(RULEP.pad) - tk.x
+			for k2 in mx:
+				var xk: float = x1 - float(mx - 1 - k2) * float(RULEP.tick_dx)
+				var on := k2 < lf
+				draw_rect(Rect2(xk, roundf(ny - tk.y * 0.5), tk.x, tk.y),
+						Color(DOORT.chalk_ink, (0.9 if on else float(RULEP.tick_off)) * a))
+		var ec: Color = C_MULT.lightened(0.18) if String(rw.k) == "mod" else C_LIGHT
+		var lines: Array = it.lines
+		for j in lines.size():
+			var ly: float = ny + float(RULEP.name_h) * 0.5 + 1.0 + float(RULEP.line_h) * (float(j) + 0.5)
+			draw_string(font, Vector2(tx, _ink_mid_y(ly, 12)), String(lines[j]),
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(ec, a))
+
+
+#  명판 그림 — 제약은 _icon_modifier 그대로. 사건은 판 위 그림을 줄인 것: 칠판 · 참나무 쪽에
+#  꽂힌 단골 자루(파랑) · 불씨 불꽃.
+func _rulep_icon(rw: Dictionary, c: Vector2, r: float, a: float) -> void:
+	match String(rw.k):
+		"mod":
+			_icon_modifier(c, r, String(rw.id), 0.0, a)
+		"order":
+			#  칠판 — 나무 테 · 석판 · 분필 눈금 셋(칠판 주문의 그것).
+			var fr := _pr(Rect2(c - Vector2(r, r * 0.74), Vector2(r * 2.0, r * 1.48)))
+			draw_rect(fr, Color(MENUM.wood, a))
+			draw_rect(Rect2(fr.position, Vector2(fr.size.x, 1.0)), Color(MENUM.wood_hi, a))
+			var sl := fr.grow(-2.0)
+			draw_rect(sl, Color(DOORT.chalk, a))
+			for k in 3:
+				draw_rect(Rect2(sl.position.x + 3.0 + float(k) * 3.0, sl.position.y + 2.0,
+						1.0, sl.size.y - 4.0), Color(DOORT.chalk_ink, 0.9 * a))
+			draw_rect(Rect2(fr.position.x + 2.0, fr.end.y, fr.size.x - 4.0, 1.0),
+					Color(MENUM.wood_lo, a))
+		"regular":
+			#  참나무 쪽 하나 · 거기 비스듬히 꽂힌 파란 자루.
+			var pk := _pr(Rect2(c + Vector2(-r, r * 0.05), Vector2(r * 1.5, r * 0.85)))
+			draw_rect(pk, Color(MENUM.wood_hot, a))
+			draw_rect(Rect2(pk.position, Vector2(pk.size.x, 1.0)), Color(MENUM.wood_hot_hi, a))
+			var tip := pk.get_center() + Vector2(0.0, -1.0)
+			var dir := Vector2(0.62, -0.78)
+			var col := _dart3_col("reg")
+			draw_line(tip, tip + dir * r * 0.55, Color(C_LIGHT.darkened(0.25), a), 1.0)
+			draw_line(tip + dir * r * 0.55, tip + dir * r * 1.25, Color(col, a), 2.0)
+			var tl := tip + dir * r * 1.25
+			var nr := Vector2(-dir.y, dir.x)
+			#  날개 — 뒤끝이 갈라진 깃(제비꼬리). 세모 한 장은 촉으로 읽혔다(찍어 봤다).
+			draw_colored_polygon(PackedVector2Array([tl - dir * r * 0.1,
+					tl + dir * r * 0.7 + nr * r * 0.42, tl + dir * r * 0.48,
+					tl + dir * r * 0.7 - nr * r * 0.42]), Color(col.darkened(0.2), a))
+		"ember":
+			#  불꽃 — 불씨 빛(_ember_col) 겉불 · 금빛 속불. 물방울꼴(x = sin t · sin t/2)이라 위가
+			#  뾰족하고 밑이 둥글다.
+			var outer := PackedVector2Array()
+			var inner := PackedVector2Array()
+			for k in 18:
+				var th := TAU * float(k) / 18.0
+				var bx := sin(th) * sin(th * 0.5)
+				outer.append(c + Vector2(bx * r * 0.82, -cos(th) * r * 0.98 + r * 0.06))
+				inner.append(c + Vector2(bx * r * 0.42, -cos(th) * r * 0.5 + r * 0.46))
+			draw_colored_polygon(outer, Color(_ember_col(), a))
+			draw_colored_polygon(inner, Color(C_GOLD.lerp(C_TXT, 0.35), a))
+
+
+# ══════════════════════════════════════════════════════════
 #  다트판 벽 — 던지는 화면의 배경 (2026-10-04 · scripts/wall3d.gd)
 # ──────────────────────────────────────────────────────────
 #  「상점의 퀄리티가 너무 좋아 그래서 그런지 다트판 인게임 화면이랑 판 선택이
@@ -18527,6 +18882,7 @@ func _panel_update(d: float, rate := 1.0) -> void:
 	float_t += d                 # 슬롯 물건의 둥실거림(FLOAT)
 	_coin_fx_tick(d)             # 성장 · 소모형 동전의 보이는 값(COINFX)
 	_bean_tick(d)                # 잭과 콩나무의 쑥 크기 · 먹은 칸 빛
+	_rulep_tick(d)               # 판 규칙 명판 — 드는 · 빠지는 · 메우는(RULEP)
 
 
 # 칸 폭. 다섯까지는 62 고정이고, 그 위로는 좁혀서 이웃을 안 밟는다.
@@ -37996,6 +38352,10 @@ func _tip_hit(m: Vector2) -> Dictionary:
 	if not active_mods.is_empty() and not _bar_hidden():
 		if _bar_mod_rect().has_point(m):
 			return {"k": "onmod", "i": 0}
+	#  판 규칙 명판 — 오른쪽 벽(RULEP). 칠판에 올려도 주문 명판의 툴팁이다.
+	var rph := _rulep_hit(m)
+	if not rph.is_empty():
+		return rph
 	#  낀 보드 확장 명판 — 던지는 동안 오른쪽 아래
 	if _modplate_on() and _modplate_rect().has_point(m):
 		return {"k": "ownmod", "i": 0}
@@ -38345,6 +38705,20 @@ func _tip_build(hit: Dictionary) -> void:
 			tip_title = fx.n
 			_tip_add(fx.d, 20, C_TXT)
 			_tip_tag(GameData.use_at_name(String(fx.get("use_at", "any"))), C_ACC)
+		"rulep":
+			#  판 규칙 명판(RULEP) — 이름 · 효과 줄 그대로. 남은 발은 태그 줄이다.
+			var rrows := _rulep_rows()
+			if i >= rrows.size():
+				return
+			var rw: Dictionary = rrows[i]
+			_tip_set_tag("제약" if String(rw.k) == "mod" else "사건")
+			tip_mark = _order_foot() if String(hit.get("src", "")) == "board" \
+					else _rulep_rect(String(rw.key))
+			tip_title = String(rw.n)
+			for ln in rw.d:
+				_tip_add(String(ln), 20, C_TXT)
+			if int(rw.left) >= 0:
+				_tip_tag("남은 %d발" % int(rw.left), C_DIM)
 		"onmod":
 			#  걸린 것을 **전부** 낸다. 셋만 그리고 넷째부터 조용히 자르던
 			#  자리가 여기다 — 자른 것은 화면에서 사라졌지 판에서 사라진
@@ -38439,6 +38813,8 @@ func _tip_set_tag(k: String) -> void:
 			tip_tag_c = C_GOLD
 		"제약":
 			tip_tag_c = C_RED.lightened(0.20)
+		"사건":
+			tip_tag_c = C_GOLD
 		_:
 			tip_tag_c = C_DIM
 	_tip_tag(k, tip_tag_c)

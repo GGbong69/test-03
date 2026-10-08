@@ -2603,6 +2603,9 @@ static func _v_events() -> void:
 				_errs.append("%s — 모르는 판 종류 '%s'" % [who, lid])
 			elif _b(lr, "boss", "legs"):
 				_errs.append("%s — 보스 판(%s)에는 사건이 없다" % [who, lid])
+		#  판 위 명판(game.gd RULEP)의 효과 줄 — 사건이 서는 갈래는 비면 안 된다.
+		if kind != "none" and String(r.get("desc", "")).strip_edges() == "":
+			_errs.append("%s — desc(명판 효과 줄)가 비었다. 판 위 명판에 효과가 안 선다" % who)
 		var v := _f(r, "v", "events", 0.0)
 		var v2 := _f(r, "v2", "events", 0.0)
 		match kind:
