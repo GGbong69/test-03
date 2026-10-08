@@ -9536,6 +9536,18 @@ func _next_step() -> void:
 			if bi >= 0 and bi < owned.size():
 				_panel_fire(bi)
 				card_item = "%s  다트가 커진다" % String(owned[bi].get("n", ""))
+				#  덩굴에 잎이 하나 돋는다 — 방금 오른 걸음의 자리(gs 는 큐를 세울 때 이미 올랐다).
+				var gk: int = int(owned[bi].get("gs", 0)) - 1
+				if gk >= 0 and gk < int(BEAN.cap) and not motion_off:
+					bean_leaf = {"k": gk, "t": 0.0}
+			#  꽂힌 자루에서 잎이 흩날린다 — 자란다는 것이 판 위에서도 보인다.
+			if dk >= 0 and dk < darts.size() and not motion_off:
+				var lp: Vector2 = (darts[dk].p as Vector2) + Vector2(0.0, -6.0)
+				for _q in int(BEAN.leaves):
+					var an := randf_range(-PI * 0.95, -PI * 0.05)
+					bean_bits.append({"p": lp, "v": Vector2(cos(an), sin(an)) * randf_range(50.0, 120.0),
+							"rot": randf() * TAU, "w": randf_range(-9.0, 9.0), "t": 0.0,
+							"s": randf_range(2.2, 3.4)})
 			_sfx("settle_pierce", f)
 			_card_kick(float(CARDFX.kick), 0.0)
 		"ember":
@@ -11246,6 +11258,7 @@ func _draw() -> void:
 		_draw_darts(bda)
 		if bdd != 0.0:
 			draw_set_transform(sh)
+	_bean_bits_draw()               # 잭과 콩나무 — 자라는 걸음에 자루에서 흩날리는 잎
 	draw_set_transform(sh)          # 눕힘을 반드시 되돌린다
 	if swap_live:
 		if not swap_in:
@@ -16449,7 +16462,7 @@ func _grip_one(i: int, picking: bool) -> void:
 	#  잭과 콩나무 — 꽂이의 자루도 지금 던질 크기다(BEAN). 촉 끝은 벽에 박힌 그대로 두고
 	#  몸만 늘린다(_icon_dart 는 tip = c + dir·dl).
 	var dl0: float = GRIP.dl + (3.0 if i == grip_pick else 0.0)
-	var dlb: float = dl0 * _bean_now()
+	var dlb: float = dl0 * (bean_show if _bean_i() >= 0 else 1.0)
 	var dirb := Vector2(6.0, -10.0).normalized().rotated(rr)
 	_icon_dart(from.lerp(ps.c, e) - dirb * (dlb - dl0), dlb, remaining[i].id, dim, rr, 1.0)
 
@@ -16550,9 +16563,27 @@ const BEAN := {
 	"k": 0.12, "cap": 10,          # 한 걸음에 12% · 열 걸음(양옆 반 바퀴)에서 2.2 배로 멈춘다
 	"grow_t": 0.34, "over": 1.9,   # 쑥 크는 시간 · 넘침(back-out)
 	"glow_t": 0.62, "glow_a": 0.42,
+	#  ── 자라는 과정을 보인다 (2026-10-08 「성장 하는 과정을 보여줄 수 있으면 좋겠는데? …
+	#  성장을 계속 할 수 있다는걸 어필하자」) ──
+	#  동전 슬롯의 그 동전 둘레를 덩굴이 아래에서 위로 타고 오른다 — 칸(잎 자리)이 cap 개라
+	#  아직 안 자란 자리가 빈 잎 자리로 보이고(더 자란다), 한 걸음마다 잎이 하나 톡 돋는다.
+	#  다 자라면 꼭대기에 콩꼬투리가 연다. 꽂이의 자루는 한 틀에 툭 안 커지고 스르르 자란다
+	#  (rail_k · rail_d 스프링), 자라는 걸음에 꽂힌 자루에서 잎이 흩날린다.
+	"vine_gap": 4.5,               # 동전 테에서 덩굴까지(px)
+	"leaf_pop": 0.42,              # 새 잎이 톡 돋는 시간
+	"rail_k": 90.0, "rail_d": 11.0,  # 꽂이 자루 크기 스프링 — 0.5초쯤에 걸쳐 자란다
+	"leaves": 10, "leaf_life": 0.85,
+}
+const BEAN_COL := {
+	"stem": Color("4f8f3c"), "leaf": Color("8fd66a"), "leaf_dk": Color("3f7a30"),
+	"empty": Color(0.0, 0.0, 0.0, 0.42), "pod": Color("c8d94a"),
 }
 var bean_grow := {}              # {dk, from, to, t} — 쑥 크는 자루 하나
 var bean_glow := {}              # {idx, reach, t} — 먹은 칸들의 빛
+var bean_show := 1.0             # 꽂이 자루의 보이는 크기 — _bean_now() 로 스르르 간다
+var bean_show_v := 0.0
+var bean_leaf := {}              # {k, t} — 동전 덩굴에 막 돋은 잎(k 번째)
+var bean_bits := []              # 꽂힌 자루에서 흩날리는 잎 {p, v, rot, w, t}
 
 
 #  콩나무 동전의 자리(봉인이면 안 친다). 없으면 −1.
@@ -16587,6 +16618,28 @@ func _dart_sc(e: Dictionary) -> float:
 
 #  쑥 크기 · 먹은 칸 빛의 시계. 크는 동안은 3D 판을 틀마다 다시 굽는다(_bd3_dirty).
 func _bean_tick(d: float) -> void:
+	#  꽂이 자루 크기 — 지금 던질 크기(_bean_now)로 스프링이 끈다. 움직임 끄기면 곧장.
+	var want := _bean_now()
+	if motion_off or d <= 0.0:
+		bean_show = want if motion_off else bean_show
+		bean_show_v = 0.0
+	else:
+		bean_show_v = (bean_show_v + (want - bean_show) * float(BEAN.rail_k) * d) \
+				* exp(-float(BEAN.rail_d) * d)
+		bean_show += bean_show_v * d
+	if not bean_leaf.is_empty():
+		bean_leaf.t = float(bean_leaf.t) + d
+		if float(bean_leaf.t) >= float(BEAN.leaf_pop):
+			bean_leaf = {}
+	for b in bean_bits:
+		b.t = float(b.t) + d
+		var v: Vector2 = b.v
+		v.y += 140.0 * d
+		v *= exp(-1.8 * d)
+		b.v = v
+		b.p = (b.p as Vector2) + v * d
+		b.rot = float(b.rot) + float(b.w) * d
+	bean_bits = bean_bits.filter(func(b): return float(b.t) < float(BEAN.leaf_life))
 	if not bean_grow.is_empty():
 		bean_grow.t = float(bean_grow.t) + d
 		if _bd3_live():
@@ -16599,6 +16652,102 @@ func _bean_tick(d: float) -> void:
 		bean_glow.t = float(bean_glow.t) + d
 		if float(bean_glow.t) >= float(BEAN.glow_t):
 			bean_glow = {}
+
+
+#  동전 슬롯의 콩나무 동전을 덩굴이 타고 오른다(BEAN 머리말). c · r 은 동전 그림의 중심 · 반지름 —
+#  둥실거림 · 비켜서기를 그대로 탄다. 패(플라크)면 패 테두리를 따라 **오른쪽 변을 오르고 윗변을
+#  건너간다**(원 둘레로 그리면 세로로 긴 패에서 덩굴이 떨어져 떴고 밑이 동전 슬롯 판 밖으로 샜다).
+#  원반이면 오른쪽 테를 따라 6시에서 12시까지. 잎 자리는 cap 개 — 빈 자리가 「더 자란다」를 말한다.
+func _bean_vine(c: Vector2, r: float, it: Dictionary) -> void:
+	var n: int = int(BEAN.cap)
+	var g: int = clampi(int(it.get("gs", 0)), 0, n)
+	var gap: float = float(BEAN.vine_gap)
+	var form := _coin_form(it, STK_TIERS[_stk_ti(String(it.get("rarity", "common")))])
+	var fm: Dictionary = FORMS.get(form, {})
+	var plaque: bool = String(fm.get("fam", "disc")) == "plaque"
+	var hw := 0.0
+	var hh := 0.0
+	if plaque:
+		var k: float = r / float(TBL.chip_r)
+		hw = float(fm.get("a", 12.0)) * k + gap * 0.6
+		hh = float(fm.get("bt", 14.0)) * k + gap * 0.6
+	#  덩굴 위의 한 점(u 0 → 1)과 그 자리의 바깥쪽.
+	var at := func(u: float) -> Array:
+		if plaque:
+			var l1: float = hh * 2.0
+			var l2: float = hw * 2.0
+			var dd: float = u * (l1 + l2)
+			if dd <= l1:
+				return [c + Vector2(hw, hh - dd), Vector2(1.0, 0.0)]
+			return [c + Vector2(hw - (dd - l1), -hh), Vector2(0.0, -1.0)]
+		var th: float = PI * 0.5 - u * PI
+		var o := Vector2(cos(th), sin(th))
+		return [c + o * (r + gap), o]
+	#  줄기 — 자란 만큼. 막 돋는 잎이 있으면 그 자리까지 조금씩 뻗는다.
+	var grow_u: float = float(g) / float(n)
+	if not bean_leaf.is_empty():
+		var e: float = clampf(float(bean_leaf.t) / float(BEAN.leaf_pop), 0.0, 1.0)
+		grow_u = (float(int(bean_leaf.k)) + e) / float(n)
+	if grow_u > 0.0:
+		var seg := maxi(int(grow_u * 30.0), 2)
+		var pts := PackedVector2Array()
+		for j in seg + 1:
+			var u := grow_u * float(j) / float(seg)
+			var a2: Array = at.call(u)
+			#  조금 굽이친다 — 곧으면 테두리 한 줄로 읽힌다.
+			pts.append((a2[0] as Vector2) + (a2[1] as Vector2) * sin(u * TAU * 3.0) * 0.9)
+		draw_polyline(pts, BEAN_COL.stem, 1.4)
+	#  잎 자리 — 돋은 잎 · 빈 자리.
+	for k2 in n:
+		var u2 := (float(k2) + 0.5) / float(n)
+		var a3: Array = at.call(u2)
+		var p: Vector2 = a3[0]
+		var out: Vector2 = a3[1]
+		var lp := p + out * 2.0
+		if k2 < g:
+			var sc := 1.0
+			if not bean_leaf.is_empty() and int(bean_leaf.k) == k2:
+				var e2: float = clampf(float(bean_leaf.t) / float(BEAN.leaf_pop), 0.0, 1.0)
+				var q := e2 - 1.0
+				sc = maxf(0.0, 1.0 + 2.7 * q * q * q + 1.7 * q * q)       # 톡 — 넘쳤다 앉는다
+			if sc <= 0.01:
+				continue
+			#  잎은 바깥으로 비스듬히 — 번갈아 위 · 아래로 눕는다.
+			var tilt: float = 0.75 if k2 % 2 == 0 else -0.75
+			var ax := out.rotated(tilt)
+			var ay := Vector2(-ax.y, ax.x)
+			var lw: float = 2.5 * sc
+			var lh: float = 1.3 * sc
+			var lc := lp + ax * lw * 0.6
+			var leaf := PackedVector2Array()
+			for j in 10:
+				var t := TAU * float(j) / 10.0
+				leaf.append(lc + ax * cos(t) * lw + ay * sin(t) * lh)
+			draw_colored_polygon(leaf, BEAN_COL.leaf)
+			draw_line(lc - ax * lw * 0.8, lc + ax * lw * 0.8, BEAN_COL.leaf_dk, 1.0)
+		else:
+			draw_circle(lp, 1.0, BEAN_COL.empty)
+	#  다 자랐다 — 덩굴 끝에 콩꼬투리.
+	if g >= n:
+		var a4: Array = at.call(1.0)
+		var top: Vector2 = (a4[0] as Vector2) + (a4[1] as Vector2) * 1.5 + Vector2(-1.5, 0.0)
+		draw_circle(top, 2.6, BEAN_COL.pod.darkened(0.25))
+		draw_circle(top + Vector2(-0.6, -0.6), 1.8, BEAN_COL.pod)
+
+
+#  꽂힌 자루에서 흩날리는 잎 — 자루 위.
+func _bean_bits_draw() -> void:
+	for b in bean_bits:
+		var k := 1.0 - clampf(float(b.t) / float(BEAN.leaf_life), 0.0, 1.0)
+		var s: float = float(b.get("s", 2.0))
+		var ax := Vector2(cos(float(b.rot)), sin(float(b.rot)))
+		var ay := Vector2(-ax.y, ax.x)
+		var p: Vector2 = b.p
+		var leaf := PackedVector2Array()
+		for j in 8:
+			var t := TAU * float(j) / 8.0
+			leaf.append(p + ax * cos(t) * s * 1.6 + ay * sin(t) * s * 0.8)
+		draw_colored_polygon(leaf, Color(BEAN_COL.leaf, k))
 
 
 #  먹은 칸들 — 꽂힌 칸에서 양옆 reach 칸까지 부채꼴 하나가 빛나다 진다(판 위 · 자루 밑).
@@ -19275,6 +19424,9 @@ func _panel_slot(i: int) -> void:
 
 	draw_item_sticker(c, r, it, bounce * PANEL.spin + _float_rot(i), up * PANEL.lift,
 			0.55 if lock else 0.0, 12)
+	#  성장형 「잭과 콩나무」 — 둘레에 덩굴이 자란 만큼 타고 오른다(BEAN).
+	if String(it.get("side", "")) == "bigdart":
+		_bean_vine(c, r, it)
 
 	# 호버 링 — 리프트는 안 쓴다. 발동 스프링의 실제 최대 리프트가 3px 뿐이라
 	# 호버까지 들어올리면 두 어휘가 뒤집힌다. 링은 하나만 그린다 — 폭 1.0 짜리
@@ -36817,6 +36969,8 @@ func _rack_hold_draw() -> void:
 		#  판매 창구 위 — 놓으면 팔린다는 것만 금빛 고리로 말한다.
 		_e_ring_w(hand_m, hr + 4.0, (hr + 4.0) * TBL.flat, 1.0, Color(C_ACC, 0.75))
 	draw_item_sticker(hand_m, hr, owned[hand_i], hold_tilt, 0.0, 0.0, 12)
+	if String(owned[hand_i].get("side", "")) == "bigdart":
+		_bean_vine(hand_m, hr, owned[hand_i])
 
 
 #  끄는 동전이 지금 떨어질 칸 — 뗄 때(_hand_release)와 **같은 식**이다(빈 칸에 떨구면 맨 뒤로

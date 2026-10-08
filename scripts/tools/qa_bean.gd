@@ -8,6 +8,9 @@ extends SceneTree
 #   ④ 3D 자루는 촉 끝이 착탄점 그대로인 채 통째로 커진다.
 #   ⑤ 쑥 크기는 넘쳤다가 제 크기에 앉는다 · 움직임 끄기면 곧장 선다.
 #   ⑥ 둥실거림은 칸마다 박자가 다르고 FLOAT.amp 안이다 · 움직임 끄기면 0 · 칸(판정)은 안 움직인다.
+#   ⑦ 자라는 과정이 보인다 — bean 걸음에서 덩굴에 그 걸음의 잎이 돋고(bean_leaf) 꽂힌 자루에서
+#      잎이 흩날린다(bean_bits). 꽂이 자루는 한 틀에 툭 안 커지고 스프링으로 다음 크기에 닿는다.
+#      움직임 끄기면 잎 · 흩날림이 없고 꽂이 자루가 곧장 선다.
 #   godot --headless --path . --script scripts/tools/qa_bean.gd
 const Save = preload("res://scripts/save.gd")
 const GameData = preload("res://scripts/data.gd")
@@ -171,6 +174,42 @@ func _run() -> void:
 		g._next_step()
 	_ok("⑤ 움직임 끄기 — 곧장 제 크기에 선다", g.bean_grow.is_empty()
 			and is_equal_approx(float(g.darts[g.darts.size() - 1].get("sc", 0.0)), g._bean_sc(4)))
+
+	# ⑦ 자라는 과정
+	g.motion_off = false
+	g.owned[0].gs = 4
+	g.bean_show = g._bean_sc(4)
+	g.bean_show_v = 0.0
+	g.bean_bits.clear()
+	ks = _throw(pt)
+	var saw_leaf := -1
+	var saw_bits := 0
+	while not (g.queue as Array).is_empty():
+		var nk3 := String((g.queue as Array)[0].get("k", ""))
+		g._next_step()
+		if nk3 == "bean":
+			saw_leaf = int(g.bean_leaf.get("k", -1))
+			saw_bits = g.bean_bits.size()
+	_ok("⑦ 덩굴에 그 걸음의 잎(다섯째)이 돋는다", saw_leaf == 4, str(saw_leaf))
+	_ok("⑦ 꽂힌 자루에서 잎이 흩날린다", saw_bits == int(g.BEAN.leaves), str(saw_bits))
+	var want: float = g._bean_now()
+	g._bean_tick(1.0 / 60.0)
+	var first: float = g.bean_show
+	_ok("⑦ 꽂이 자루는 한 틀에 툭 안 커진다", first < want - 0.05,
+			"%.3f → 목표 %.3f" % [first, want])
+	for k in 90:
+		g._bean_tick(1.0 / 60.0)
+	_ok("⑦ 1.5초 안에 다음 크기에 닿는다", absf(g.bean_show - want) < 0.01, "%.3f" % g.bean_show)
+	_ok("⑦ 흩날린 잎은 진다", g.bean_bits.is_empty() and g.bean_leaf.is_empty())
+	g.motion_off = true
+	g.bean_bits.clear()
+	g.bean_leaf = {}
+	ks = _throw(pt)
+	while not (g.queue as Array).is_empty():
+		g._next_step()
+	g._bean_tick(1.0 / 60.0)
+	_ok("⑦ 움직임 끄기 — 잎 · 흩날림 없이 꽂이 자루가 곧장 선다", g.bean_bits.is_empty()
+			and g.bean_leaf.is_empty() and is_equal_approx(g.bean_show, g._bean_now()))
 
 	# ⑥ 둥실거림
 	g.motion_off = false
