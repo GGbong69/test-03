@@ -36959,9 +36959,7 @@ const HAND := {
 	#  호버는 +6 으로 뜬다 — 뜸/눌림이 정반대라 두 상태가 안 헷갈린다.
 
 	# ── 계산대 ───────────────────────────────────────
-	"back_v": 900.0,
-	#  창구 도크로 붙고 떨어지는 속도(면px/s). 도크가 손이 아니라 판의 동작이라
-	#  손 속도(v_cap)와 갈라 뒀다. 계단 클램프였다면 경계에서 순간이동이 난다.
+	#  (옛 back_v — 창구 도크로 붙는 속도 — 는 걷었다. 창구 위에서도 손을 따라간다 · _hand_update)
 	"latch_gap": 6.0,
 	#  창구 래치 히스테리시스(화면 px). 진입은 빗변 그대로, 이탈은 +6.
 	#  경계에서 손이 떨려도 523Hz 가 연타되지 않고 창구 얼굴이 안 깜빡인다.
@@ -37538,11 +37536,16 @@ func _hand_update(d: float) -> void:
 	var ut: float = hand_m.x + hand_off.x
 	var wt: float = clampf(_g2w(hand_m.y) + hand_off.y, DROP.w_lo, DROP.w_hi)
 	if hand_zone >= 0:
-		# 창구는 문이 아니라 도크다. 붙는 것은 판의 동작이라 손 속도와 무관하다.
-		ut = _chute_dock_u(hand_zone, wt)
+		#  창구 위에서도 물건은 손을 그대로 따라간다 — 펠트 밖(빗변 · 소품 위)까지 나가 커서 밑에
+		#  선다. 놓으면 사고(팔고), 못 사면 펠트 안으로 돌아간다(_hand_release 의 clamp).
+		#  옛 판은 창구에 들면 물건을 빗변 도크(_chute_dock_u)로 끌어 붙이고 손을 안 따라가게
+		#  했다 — 「물건을 잡고 구매하려고 하면 특정 구간에서 약간 걸린단 말이야? 그게 영역이 너무
+		#  넓은 것도 문제인 뿐더러 좀 짜증나」(사용자, 2026-10-08). 창구가 넓은 위쪽(빗변 80px)에서는
+		#  테이블 끝에 닿기도 전에 물건이 멎었다.
+		ut = clampf(ut, it.hw, VIEW.x - it.hw)
 	else:
 		ut = clampf(ut, DROP.u_lo + it.hw, DROP.u_hi - it.hw)
-	var lim: float = HAND.back_v if hand_zone >= 0 else HAND.v_cap
+	var lim: float = HAND.v_cap
 	var was := Vector2(it.u, it.w)
 	var p := was.move_toward(Vector2(ut, wt), lim * d)
 	it.u = p.x
