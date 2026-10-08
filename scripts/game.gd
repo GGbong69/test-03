@@ -16212,17 +16212,13 @@ func _rulep_icon(rw: Dictionary, c: Vector2, r: float, a: float) -> void:
 		"mod":
 			_icon_modifier(c, r, String(rw.id), 0.0, a)
 		"order":
-			#  칠판 — 나무 테 · 석판 · 분필 눈금 셋(칠판 주문의 그것).
-			var fr := _pr(Rect2(c - Vector2(r, r * 0.74), Vector2(r * 2.0, r * 1.48)))
-			draw_rect(fr, Color(MENUM.wood, a))
-			draw_rect(Rect2(fr.position, Vector2(fr.size.x, 1.0)), Color(MENUM.wood_hi, a))
-			var sl := fr.grow(-2.0)
-			draw_rect(sl, Color(DOORT.chalk, a))
+			#  칠판 — 칠판 한 붓(_chalk_board · CHALKB.icon)에 분필 눈금 셋(칠판 주문의 그것).
+			var sl := _pr(Rect2(c - Vector2(r - 2.0, r * 0.74 - 2.0),
+					Vector2(r * 2.0 - 4.0, r * 1.48 - 4.0)))
+			_chalk_board(self, sl, 2.0, CHALKB.icon, a)
 			for k in 3:
-				draw_rect(Rect2(sl.position.x + 3.0 + float(k) * 3.0, sl.position.y + 2.0,
-						1.0, sl.size.y - 4.0), Color(DOORT.chalk_ink, 0.9 * a))
-			draw_rect(Rect2(fr.position.x + 2.0, fr.end.y, fr.size.x - 4.0, 1.0),
-					Color(MENUM.wood_lo, a))
+				draw_rect(Rect2(sl.position.x + 2.0 + float(k) * 3.0, sl.position.y + 1.0,
+						1.0, sl.size.y - 2.0), Color(DOORT.chalk_ink, 0.9 * a))
 		"regular":
 			#  참나무 쪽 하나 · 거기 비스듬히 꽂힌 파란 자루.
 			var pk := _pr(Rect2(c + Vector2(-r, r * 0.05), Vector2(r * 1.5, r * 0.85)))
@@ -42797,9 +42793,264 @@ func _title_rows() -> Array:
 #  같은 28% 가 되어 날아온 것이 안 읽힌다. 판은 배경이고 자루는 지금
 #  일어나는 일이라 두 층의 밝기가 달라야 한다.
 #  글줄(x16~164)과 판(x222~418)이 안 겹치므로 이 층이 메뉴를 안 먹는다.
+# ══════════════════════════════════════════════════════════
+#  제목 판의 자루 — 3D (2026-10-08)
+# ──────────────────────────────────────────────────────────
+#  외부 피드백(2026-10-08) 「시작 화면에서 다트 꼽히는 방향이 이상함 버그 같음」 · 「시작시
+#  문열때 다트 그대로 남아있음」. 제목 판의 자루는 2D 그림(_icon_dart)을 날아온 길의 각으로
+#  눕혀 그렸다 — 판 위에 납작하게 누운 막대가 화면 아래쪽으로 늘어져 판에 꽂힌 것이 아니라 판에
+#  붙은 그림으로 읽혔고(판 화면의 자루는 3D 라 눈 쪽으로 서 있다), 문이 열리면 판과 같이 가로로만
+#  눌려 스티커처럼 납작해진 채 따라 돌았다.
+#  이제 판 화면과 같은 3D 자루(_dart3_meshes · _bd3_pose)를 문 장면과 같은 카메라로 따로 굽는다
+#  (ttl_vp — 투명 바탕 · 빛은 판 화면 자루 무대와 같다). 꽂힌 자루는 문 경첩(Door3D 의 Hinge 와
+#  같은 자리 · 같은 각)에 달려 문이 열리면 문짝과 같이 원근 그대로 돈다. 나는 자루는 판 화면처럼
+#  눈앞 아래에서 출발해 착탄점으로 날아든다(_bd3_fly_tf). 지는 자루는 흘러내리며 옅어진다
+#  (GeometryInstance3D.transparency). 문이 열리기 시작하면 나는 자루는 그 자리에서 꽂힌다.
+#  자세는 판 화면과 같게 읽혀야 한다(_ttl3_pose). 문 카메라는 판에서 2.37m 라 실물대로 두면 자루가
+#  거의 끝으로만 보여 점 하나로 뭉쳤다(찍어 봤다) — 판 화면은 일부러 눈을 가까이 둬 원근을 키운다
+#  (DART_PERSP). 그래서 판 화면 카메라에서 꽁지가 서는 판 자리를 재고, 문 카메라로 봐도 꽁지가 그
+#  자리에 오도록 자루 축을 기울인다(길이는 그대로 — 굳은 자루 한 자루라 문이 돌면 그대로 돈다).
+#  헤드리스 · 문 끔 · 문이 안 선 화면은 옛 2D 그림 그대로다(검사 도구가 그 길을 잰다).
+# ══════════════════════════════════════════════════════════
+var ttl_vp: SubViewport = null
+var ttl_nodes := []          # ttl_stuck 과 차례를 같이하는 자루(경첩 자식)
+var ttl_fnodes := []         # ttl_fly 와 차례를 같이하는 나는 자루(무대 자식)
+var ttl_sig := ""            # 지은 자루 벌의 표지(id 줄) — 바뀌면 다시 짓는다
+var ttl_key := ""            # 마지막으로 구운 자세의 표지 — 같으면 안 굽는다
+
+
+func _ttl3_want() -> bool:
+	return _has_renderer() and _door_live() and _door_here()
+
+
+func _ttl3_on() -> bool:
+	return _ttl3_want() and ttl_vp != null and is_instance_valid(ttl_vp)
+
+
+#  판 화면 카메라(_bd3_eye)로 본 꽁지 끝의 판 자리 — 착탄점 p · 손떨림 j.
+func _ttl3_tail_b(p: Vector2, j: float) -> Vector2:
+	var tw: Vector3 = _bd3_pose({"p": p, "rot": j}) * Vector3(0.0, float(BD3.len) * 0.5, 0.0)
+	var d := _bd3_eye()
+	return BC + Vector2(tw.x, -tw.y) * d / maxf(d - tw.z, 1.0)
+
+
+#  자루 자세 → 문 세계(닫힌 문 · m). 1m = S px · 판은 board_k 배 · 판 한가운데가 (bx, by, 0).
+#  촉은 착탄점, 꽁지는 문 카메라로 봐도 _ttl3_tail_b 자리에 서는 깊이 — 길이가 L 이 되게 몇 번
+#  되짚는다(옆으로 나간 만큼 깊이가 준다).
+func _ttl3_pose(p: Vector2, j: float) -> Transform3D:
+	var D: Dictionary = Door3D.DOOR
+	var bk: float = float(D.board_k)
+	var k: float = bk / Door3D.S
+	var c0 := Door3D.proj(Vector3(float(D.bx), float(D.by), 0.0), BC)
+	var tip := Vector3(float(D.bx) + (p.x - BC.x) * k, float(D.by) - (p.y - BC.y) * k, 0.0)
+	var st: Vector2 = c0 + (_ttl3_tail_b(p, j) - BC) * bk
+	var ln: float = float(BD3.len) * k
+	var zt := ln
+	var tail := tip
+	for it in 4:
+		var f: float = Door3D.S * Door3D.scale_at(zt)
+		tail = Vector3((st.x - BC.x) / f, -(st.y - BC.y) / f, zt)
+		var lat := Vector2(tail.x - tip.x, tail.y - tip.y).length()
+		zt = sqrt(maxf(ln * ln - lat * lat, ln * ln * 0.04))
+	var yv := (tail - tip).normalized()
+	var xv := Vector3.UP.cross(yv)
+	if xv.length() < 0.01:
+		xv = Vector3.RIGHT
+	xv = xv.normalized()
+	return Transform3D(Basis(xv * k, yv * k, xv.cross(yv) * k), tip + yv * ln * 0.5)
+
+
+#  경첩 축 — Door3D._slab 의 Hinge 와 같은 자리(문 왼변 · 문 뒷면).
+func _ttl3_hinge_at() -> Vector3:
+	var D: Dictionary = Door3D.DOOR
+	return Vector3(float(D.x0), 0.0, float(D.face) - float(D.thick))
+
+
+#  자루마다의 손떨림(_bd3_pose 의 rot) — 착탄점에서 낸다. 자루 사전을 짓는 자리가 셋(던지기 ·
+#  꽂기 · 인트로 끝)이라 한 곳에서 낸다. 판 화면의 fly_rot 과 같은 폭(±0.26)이다.
+func _ttl3_jit(p: Vector2) -> float:
+	return (fposmod(sin(p.x * 12.9898 + p.y * 78.233) * 43758.5453, 1.0) - 0.5) * 0.52
+
+
+func _ttl3_open() -> void:
+	ttl_vp = SubViewport.new()
+	ttl_vp.name = "TtlDart3"
+	ttl_vp.size = Vector2i(16, 16)
+	ttl_vp.own_world_3d = true
+	ttl_vp.transparent_bg = true
+	ttl_vp.msaa_3d = Viewport.MSAA_DISABLED
+	ttl_vp.gui_disable_input = true
+	ttl_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+	add_child(ttl_vp)
+	var cam := Camera3D.new()
+	cam.name = "Cam"
+	cam.near = 0.05
+	cam.far = 30.0
+	cam.keep_aspect = Camera3D.KEEP_HEIGHT
+	ttl_vp.add_child(cam)
+	var hinge := Node3D.new()
+	hinge.name = "Hinge"
+	ttl_vp.add_child(hinge)
+	#  빛 · 환경 — 판 화면의 자루 무대(_bd3_open)와 같다. 같은 자루로 읽혀야 한다.
+	var lt := DirectionalLight3D.new()
+	lt.rotation_degrees = Vector3(-38.0, -30.0, 0.0)
+	lt.light_energy = 1.15
+	lt.shadow_enabled = false
+	ttl_vp.add_child(lt)
+	var we := WorldEnvironment.new()
+	var env := Environment.new()
+	env.background_mode = Environment.BG_CANVAS
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = C_PANEL.lightened(0.50)
+	env.ambient_light_energy = 1.10
+	we.environment = env
+	ttl_vp.add_child(we)
+	ttl_nodes.clear()
+	ttl_fnodes.clear()
+	ttl_sig = ""
+	ttl_key = ""
+
+
+func _ttl3_close() -> void:
+	ttl_nodes.clear()
+	ttl_fnodes.clear()
+	ttl_sig = ""
+	ttl_key = ""
+	if ttl_vp != null and is_instance_valid(ttl_vp):
+		ttl_vp.queue_free()
+	ttl_vp = null
+
+
+#  자루 벌을 ttl_stuck · ttl_fly 에 맞추고 카메라 · 경첩을 문 장면에 맞춘다. _ttl_draw 가 부른다.
+#  움직이는 것(나는 · 지는 자루 · 여는 문)이 있으면 매 틀, 아니면 자세가 바뀐 틀에만 굽는다.
+func _ttl3_sync() -> void:
+	if not _ttl3_want():
+		if ttl_vp != null:
+			_ttl3_close()
+		return
+	if ttl_stuck.is_empty() and ttl_fly.is_empty() and ttl_vp == null:
+		return
+	if not _ttl3_on():
+		_ttl3_open()
+	var cam: Camera3D = ttl_vp.get_node("Cam")
+	var dcam := door_vp.get_node_or_null("Door/Cam") as Camera3D
+	if ttl_vp.size != door_vp.size:
+		ttl_vp.size = door_vp.size
+	if dcam != null:
+		cam.fov = dcam.fov
+		cam.position = dcam.position
+	var hinge: Node3D = ttl_vp.get_node("Hinge")
+	hinge.transform = Transform3D(Basis(Vector3.UP,
+			deg_to_rad(float(Door3D.DOOR.open_deg) * _door_k())), _ttl3_hinge_at())
+	var sig := ""
+	for sd in ttl_stuck:
+		sig += String(sd.id) + ","
+	sig += "|"
+	for fd in ttl_fly:
+		sig += String(fd.id) + ","
+	if sig != ttl_sig:
+		ttl_sig = sig
+		for n in ttl_nodes + ttl_fnodes:
+			if is_instance_valid(n):
+				(n as Node).queue_free()
+		ttl_nodes.clear()
+		ttl_fnodes.clear()
+		for sd in ttl_stuck:
+			ttl_nodes.append(_ttl3_dart(hinge, String(sd.id)))
+		for fd in ttl_fly:
+			ttl_fnodes.append(_ttl3_dart(ttl_vp, String(fd.id)))
+	var hinv := Transform3D(Basis(), _ttl3_hinge_at()).affine_inverse()
+	var eye_h: Vector3 = hinge.transform.affine_inverse() * cam.position
+	var moving := not ttl_fly.is_empty() or door_t >= 0.0
+	for i in mini(ttl_nodes.size(), ttl_stuck.size()):
+		var e: Dictionary = ttl_stuck[i]
+		var n0: Node3D = ttl_nodes[i]
+		var gk: float = clampf((float(e.t) - float(TTL.life)) / float(TTL.gone), 0.0, 1.0)
+		var lp: Vector2 = e.p
+		if not motion_off:
+			lp.y += gk * gk * float(TTL.drop)
+		n0.transform = hinv * _ttl3_pose(lp, _ttl3_jit(e.p))
+		_dart3_face_u(n0, eye_h)
+		_ttl3_fade(n0, gk)
+		if gk > 0.0:
+			moving = true
+	for i in mini(ttl_fnodes.size(), ttl_fly.size()):
+		var f: Dictionary = ttl_fly[i]
+		var end := _ttl3_pose(f.b, _ttl3_jit(f.b))
+		#  판 화면(_bd3_fly)과 같은 출발점 — 눈 바로 앞 · 화면 아래쪽(-18 · -46 px 를 m 로).
+		var beg := Vector3(end.origin.x * 0.15 - 18.0 / Door3D.S,
+				end.origin.y * 0.15 - 46.0 / Door3D.S, Door3D.EYE * 0.86)
+		var n1: Node3D = ttl_fnodes[i]
+		n1.transform = _bd3_fly_tf(end, beg, clampf(float(f.t) / float(TTL.fly), 0.0, 1.0))
+		_dart3_face_u(n1, cam.position)
+	if moving:
+		ttl_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+		ttl_key = ""
+		return
+	var key := "%s|%s|%d" % [sig, str(ttl_vp.size), ttl_stuck.size()]
+	if key != ttl_key or ttl_vp.render_target_update_mode == SubViewport.UPDATE_ALWAYS:
+		ttl_key = key
+		ttl_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+
+
+func _ttl3_dart(parent: Node, id: String) -> Node3D:
+	var n := Node3D.new()
+	_dart3_meshes(n, float(BD3.len) * 0.5, float(BD3.r), float(BD3.fin), _dart3_col(id), id)
+	parent.add_child(n)
+	return n
+
+
+#  지는 자루 — 몸 전체를 옅게(GeometryInstance3D.transparency). 날개 축(mag_u) 밑까지 간다.
+func _ttl3_fade(n: Node, a: float) -> void:
+	for c in n.get_children():
+		if c is GeometryInstance3D:
+			(c as GeometryInstance3D).transparency = a
+		if c.get_child_count() > 0:
+			_ttl3_fade(c, a)
+
+
+#  꽂힌 자루의 꽁지 끝(판 자리) — 얹힘 · 뽑기(몸 한가운데)와 2D 그림자가 쓴다.
+func _ttl3_tail(e: Dictionary) -> Vector2:
+	return _ttl3_tail_b(e.p, _ttl3_jit(e.p))
+
+
+#  자루 몸 한가운데(판 자리) — 3D 면 착탄점과 꽁지 끝의 가운데, 2D 면 옛 셈.
+func _ttl_body(e: Dictionary) -> Vector2:
+	if _ttl3_want():
+		return ((e.p as Vector2) + _ttl3_tail(e)) * 0.5
+	return (e.p as Vector2) - (e.u as Vector2) * float(TTL.dl1)
+
+
+#  구운 자루 한 장 — 문 바닥(_door_back)과 같은 자리 · 같은 반올림. 판 자리 변환(_door_set_xf)
+#  안에서 불리므로 화면 변환으로 잠깐 바꿨다 되돌린다.
+func _ttl3_draw() -> void:
+	if ttl_stuck.is_empty() and ttl_fly.is_empty():
+		return
+	var tex: Texture2D = ttl_vp.get_texture()
+	if tex == null:
+		return
+	#  그림자 — 판 화면(_dart_shade_2d)과 같은 한 획. 꽁지 쪽으로 몸 반 길이 · 판 그림자 색.
+	var sc: Color = BOARDART.shadow
+	for e in ttl_stuck:
+		var gk: float = clampf((float(e.t) - float(TTL.life)) / float(TTL.gone), 0.0, 1.0)
+		var o := Vector2(1.0, 2.0)
+		var tp: Vector2 = e.p
+		draw_line(tp + o, tp + (_ttl3_tail(e) - tp) * 0.5 + o, Color(sc, sc.a * (1.0 - gk)), 2.0)
+	draw_set_transform(shake_off)
+	var ls := Vector2(tex.get_size())
+	var at: Vector2 = (BC - ls * 0.5 + shake_off).round() - shake_off
+	draw_texture_rect(tex, Rect2(at, ls), false)
+	_door_set_xf(shake_off)
+
+
 func _ttl_draw() -> void:
 	#  금은 스크림 **위**다. 밑에 두면 어두운 판 위의 어두운 선이라 안 보인다.
 	_egg_crack_draw()
+	#  술집 문이 서 있으면 자루는 3D 한 장이다(위 구획). 고리 · 뜬 값 · 겨눔은 그대로 2D 다.
+	_ttl3_sync()
+	var d3 := _ttl3_on()
+	if d3:
+		_ttl3_draw()
 	#  커서 밑의 자루. 살짝 들어 올리고 테를 두른다 — 「이걸 집는다」 를
 	#  말하는 것이 이 둘이고, 커서 자리에 점만 찍으면 무엇을 집는지가
 	#  자루 여럿 사이에서 안 갈린다.
@@ -42817,10 +43068,11 @@ func _ttl_draw() -> void:
 		var dy: float = 0.0 if motion_off else gk * gk * float(TTL.drop)
 		if i == hov:
 			dy -= 2.0
-			draw_arc(sp - su * dl + Vector2(0.0, dy), 11.0, 0.0, TAU, 20,
+			draw_arc(_ttl_body(s) + Vector2(0.0, dy), 11.0, 0.0, TAU, 20,
 					Color(C_TXT, 0.42 + 0.26 * sin(ttl_t * 5.0)), 1.0)
-		_icon_dart(sp - su * dl + Vector2(0.0, dy), dl, String(s.id), 0.0,
-				float(s.rot), 1.0 - gk)
+		if not d3:
+			_icon_dart(sp - su * dl + Vector2(0.0, dy), dl, String(s.id), 0.0,
+					float(s.rot), 1.0 - gk)
 		#  착탄 고리. waves 를 안 빌린다 — 저쪽은 스크림 **밑**에서 그려져
 		#  여기서는 28% 로 깔린다.
 		#  고리는 착탄 직후(0.34초)뿐이고 자루가 지는 것은 5초 뒤라,
@@ -42830,6 +43082,8 @@ func _ttl_draw() -> void:
 			draw_arc(sp, lerpf(3.0, 27.0, 1.0 - pow(1.0 - kt, 2.6)), 0.0, TAU,
 					24, Color(C_ACC, (1.0 - kt) * 0.5), 1.0)
 	for f in ttl_fly:
+		if d3:
+			break
 		var t: float = clampf(float(f.t) / float(TTL.fly), 0.0, 1.0)
 		#  끝에서 붙는다. 등속이면 착탄이 언제인지가 안 보인다.
 		var e := t * t * (3.0 - 2.0 * t)
@@ -43294,6 +43548,10 @@ func _door_open() -> void:
 	door_t = 0.0
 	Door3D.cam_dolly(door_vp, 0.0)
 	door_went = false
+	#  나는 자루는 그 자리에서 꽂힌다 — 꽂힌 자루만 경첩에 달려 문짝과 같이 돈다(_ttl3_sync).
+	for f in ttl_fly:
+		_ttl_stick(f)
+	ttl_fly.clear()
 	_sfx("door_open")
 	queue_redraw()
 
@@ -43477,6 +43735,10 @@ const CHALKB := {
 	"order": {"sh": Vector2(2.0, 3.0), "sh_a": 0.40, "lit": -1.0, "n": 3,
 			"w": Vector2(10.0, 24.0), "h": Vector2(2.0, 4.0), "seed": 4421,
 			"stick": Vector2(-16.0, 8.0), "soft": false, "ink": 0.045},
+	#  판 규칙 명판의 칠판 그림(RULEP) — 지운 자국 · 받침 없이 테와 석판만.
+	"icon": {"sh": Vector2(1.0, 1.0), "sh_a": 0.30, "lit": -1.0, "n": 0,
+			"w": Vector2(1.0, 1.0), "h": Vector2(1.0, 1.0), "seed": 4441,
+			"stick": Vector2(0.0, 0.0), "soft": false, "ink": 0.0},
 	#  메뉴 화면 칠판 — 판 화면 벽에 건다. 받침은 화면 밖이라 없다.
 	"menu": {"sh": Vector2(3.0, 4.0), "sh_a": 0.50, "lit": -1.0, "n": 16,
 			"w": Vector2(40.0, 110.0), "h": Vector2(6.0, 14.0), "seed": 4433,
@@ -51068,6 +51330,7 @@ func _title_tick(d: float) -> void:
 		#  지난번 자국이 그대로 남아, 제목이 이어지는 화면으로 읽힌다.
 		ttl_stuck.clear()
 		ttl_fly.clear()
+		_ttl3_close()
 	#  제목을 뜨면 이스터에그도 처음부터다. 「잇달아」 는 한 자리에 앉아서
 	#  하는 일이다 — 컬렉션을 보고 와서 이어지면 잇단 것이 아니다.
 	if not bg and (egg_streak != 0 or egg_t >= 0.0 or egg_stage > 0):
@@ -51181,7 +51444,7 @@ func _ttl_hit(m: Vector2) -> int:
 	var bd := 12.0
 	for i in range(ttl_stuck.size() - 1, -1, -1):
 		var e: Dictionary = ttl_stuck[i]
-		var c: Vector2 = (e.p as Vector2) - (e.u as Vector2) * float(TTL.dl1)
+		var c: Vector2 = _ttl_body(e)
 		var dd := c.distance_to(m)
 		if dd < bd:
 			bd = dd
