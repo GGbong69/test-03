@@ -11,6 +11,10 @@ extends SceneTree
 #   ⑦ 자라는 과정이 보인다 — bean 걸음에서 덩굴에 그 걸음의 잎이 돋고(bean_leaf) 꽂힌 자루에서
 #      잎이 흩날린다(bean_bits). 꽂이 자루는 한 틀에 툭 안 커지고 스프링으로 다음 크기에 닿는다.
 #      움직임 끄기면 잎 · 흩날림이 없고 꽂이 자루가 곧장 선다.
+#   ⑧ 콩나무를 든 발이 칸에 꽂히면 그 자리에서 뿌리가 판을 따라 양옆으로 뻗는다 — 자란 만큼
+#      (양옆 칸 수 + 반 칸) 멀리. 없으면 · 불이면 안 뻗는다. 머물다 진다.
+#   ⑨ 성장 · 소모형 동전 다섯(COINFX)의 보이는 값 — 처음 본 값은 곧장 서고, 값이 바뀌면 스르르
+#      따라간다(한 틀에 툭 안 간다) · 움직임 끄기면 곧장 · 실제 값은 item_amt 와 같다.
 #   godot --headless --path . --script scripts/tools/qa_bean.gd
 const Save = preload("res://scripts/save.gd")
 const GameData = preload("res://scripts/data.gd")
@@ -210,6 +214,72 @@ func _run() -> void:
 	g._bean_tick(1.0 / 60.0)
 	_ok("⑦ 움직임 끄기 — 잎 · 흩날림 없이 꽂이 자루가 곧장 선다", g.bean_bits.is_empty()
 			and g.bean_leaf.is_empty() and is_equal_approx(g.bean_show, g._bean_now()))
+
+	# ⑧ 뿌리
+	g.motion_off = false
+	g.owned[0].gs = 4
+	g.bean_roots = {}
+	ks = _throw(pt)
+	var lines: Array = g.bean_roots.get("lines", [])
+	_ok("⑧ 꽂히면 뿌리가 선다", lines.size() >= 2, "%d갈래" % lines.size())
+	var span_want: float = 4.5 * g._sec_w()
+	var th0: float = atan2((pt - g.BC).x, -(pt - g.BC).y)
+	var spans := []
+	#  줄기 둘 — 한쪽 줄기 뒤에 그쪽 곁뿌리(ROOTS.branches)가 이어 선다.
+	for k in [0, 1 + int(g.ROOTS.branches)]:
+		var ln: PackedVector2Array = lines[k]
+		var ev: Vector2 = ln[ln.size() - 1] - g.BC
+		spans.append(absf(wrapf(atan2(ev.x, -ev.y) - th0, -PI, PI)))
+	_ok("⑧ 양옆으로 자란 칸 수 + 반 칸까지 뻗는다", absf(float(spans[0]) - span_want) < 0.02
+			and absf(float(spans[1]) - span_want) < 0.02, "%s · 목표 %.3f" % [spans, span_want])
+	var tot: float = float(g.ROOTS.grow) + float(g.ROOTS.hold) + float(g.ROOTS.fade)
+	for k in int(tot * 60.0) + 4:
+		g._bean_tick(1.0 / 60.0)
+	_ok("⑧ 머물다 진다", g.bean_roots.is_empty())
+	while not (g.queue as Array).is_empty():
+		g._next_step()
+	g.bean_roots = {}
+	var bull: Vector2 = g.BC
+	ks = _throw(bull)
+	_ok("⑧ 불에 꽂히면 안 뻗는다(양옆 칸이 없다)", g.bean_roots.is_empty())
+	while not (g.queue as Array).is_empty():
+		g._next_step()
+	var keep: Array = g.owned
+	g.owned = []
+	g.bean_roots = {}
+	ks = _throw(pt)
+	_ok("⑧ 콩나무가 없으면 안 뻗는다", g.bean_roots.is_empty())
+	while not (g.queue as Array).is_empty():
+		g._next_step()
+	g.owned = keep
+
+	# ⑨ 성장 · 소모형의 보이는 값
+	var pizza: Dictionary = {}
+	for it in GameData.items():
+		if String(it.id) == "c04":
+			pizza = (it as Dictionary).duplicate()
+	pizza.gs = 0
+	pizza.bought = 0
+	g.owned = [pizza]
+	g.motion_off = false
+	g._coin_fx_tick(1.0 / 60.0)
+	_ok("⑨ 처음 본 값은 곧장 선다(피자 여덟 조각)", float(g.owned[0].get("_fxs", -1.0)) == 8.0)
+	g.owned[0].gs = 1
+	_ok("⑨ 실제 값은 item_amt 와 같다", g._grow_amt(g.owned[0])
+			== float(GameData.item_amt(g.owned[0], {})), "%.1f" % g._grow_amt(g.owned[0]))
+	g._coin_fx_tick(1.0 / 60.0)
+	var mid: float = float(g.owned[0]._fxs)
+	_ok("⑨ 값이 바뀌면 한 틀에 툭 안 간다(조각이 흐려지며 빠진다)", mid < 8.0 and mid > 7.5,
+			"%.3f" % mid)
+	for k in 120:
+		g._coin_fx_tick(1.0 / 60.0)
+	_ok("⑨ 그리고 실제 값에 닿는다", float(g.owned[0]._fxs) == 7.0)
+	g.motion_off = true
+	g.owned[0].gs = 3
+	g._coin_fx_tick(1.0 / 60.0)
+	_ok("⑨ 움직임 끄기면 곧장", float(g.owned[0]._fxs) == 5.0)
+	g.motion_off = false
+	g.owned = keep
 
 	# ⑥ 둥실거림
 	g.motion_off = false

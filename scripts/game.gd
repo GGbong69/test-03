@@ -8761,6 +8761,10 @@ func _land(mark := true) -> void:
 	# 다트 특성
 	var pierce_gain := 0
 	var bean_reach := 0             # 먹은 칸 수(양옆 하나씩) — 판 위 빛(_bean_glow_draw)이 쓴다
+	#  콩나무를 든 발이 판에 꽂히면 그 자리에서 뿌리가 뻗는다(ROOTS) — 칸에 꽂힌 발만(불 · 빗나감은
+	#  양옆 칸이 없다). 연발의 작은 다트는 마지막 것만 뻗는다(덮어 쓴다).
+	if info.idx >= 0 and info.mult > 0 and _bean_i() >= 0:
+		_bean_roots_make(aim, mini(int(owned[_bean_i()].get("gs", 0)), sectors.size() / 2))
 	if info.mult > 0:
 		if cur_dart.get("mult", 0) != 0:
 			info.mult = maxi(1, info.mult + cur_dart.mult)
@@ -11243,6 +11247,7 @@ func _draw() -> void:
 		_order_board_draw()
 		_draw_aim()
 		_bean_glow_draw()            # 잭과 콩나무가 먹은 칸 — 판 위 · 자루 밑
+		_bean_roots_draw()           # 잭과 콩나무의 뿌리 — 꽂힌 자리에서 판을 따라 뻗는다
 	_brk_crack_draw()               # 금은 판 위, 판 효과 앞
 	_draw_fx()
 	_brk_shards_draw()              # 조각은 다트 **밑**이다
@@ -16584,6 +16589,19 @@ var bean_show := 1.0             # 꽂이 자루의 보이는 크기 — _bean_n
 var bean_show_v := 0.0
 var bean_leaf := {}              # {k, t} — 동전 덩굴에 막 돋은 잎(k 번째)
 var bean_bits := []              # 꽂힌 자루에서 흩날리는 잎 {p, v, rot, w, t}
+#  ── 뿌리 (2026-10-08 「잭과 콩나무를 들고 다트를 쏘면 다트가 찍힌 자리를 기준으로 뿌리가
+#  뻗어 나가는 연출」) ──
+#  콩나무를 든 발이 판에 꽂히는 순간 그 자리에서 뿌리가 판을 따라 양옆으로 뻗는다 — 자란 만큼
+#  (양옆 칸 수) 멀리 가서, 먹을 칸까지 닿는다(갓 든 콩나무는 짧은 뿌리). 곁뿌리가 몇 갈래 갈라지고,
+#  다 뻗으면 잠깐 머물다 진다. 그림만이다(판정 · 점수는 그대로).
+const ROOTS := {
+	"grow": 0.55, "hold": 0.9, "fade": 0.6,
+	"wig": 3.2,                    # 뿌리 굽이(px)
+	"stub": 0.6,                   # 갓 든 콩나무(양옆 0칸)의 뿌리 — 칸 폭의 이만큼
+	"branches": 4,                 # 한쪽 곁뿌리 수
+	"col": Color("2e2010"), "hi": Color("b89a5a"),
+}
+var bean_roots := {}             # {lines: [PackedVector2Array], t}
 
 
 #  콩나무 동전의 자리(봉인이면 안 친다). 없으면 −1.
@@ -16640,6 +16658,10 @@ func _bean_tick(d: float) -> void:
 		b.p = (b.p as Vector2) + v * d
 		b.rot = float(b.rot) + float(b.w) * d
 	bean_bits = bean_bits.filter(func(b): return float(b.t) < float(BEAN.leaf_life))
+	if not bean_roots.is_empty():
+		bean_roots.t = float(bean_roots.t) + d
+		if float(bean_roots.t) >= float(ROOTS.grow) + float(ROOTS.hold) + float(ROOTS.fade):
+			bean_roots = {}
 	if not bean_grow.is_empty():
 		bean_grow.t = float(bean_grow.t) + d
 		if _bd3_live():
@@ -16733,6 +16755,83 @@ func _bean_vine(c: Vector2, r: float, it: Dictionary) -> void:
 		var top: Vector2 = (a4[0] as Vector2) + (a4[1] as Vector2) * 1.5 + Vector2(-1.5, 0.0)
 		draw_circle(top, 2.6, BEAN_COL.pod.darkened(0.25))
 		draw_circle(top + Vector2(-0.6, -0.6), 1.8, BEAN_COL.pod)
+
+
+#  꽂힌 자리 p 에서 뿌리를 짓는다 — 판을 따라 양옆으로 reach 칸(+반 칸)까지. 굽이 · 곁뿌리는
+#  그림 난수(randf)다 — 판 · 런 난수를 안 건드린다.
+func _bean_roots_make(p: Vector2, reach: int) -> void:
+	var v := p - BC
+	var r0: float = clampf(v.length(), 10.0, R * 0.96)
+	var th0: float = atan2(v.x, -v.y)
+	var w := _sec_w()
+	var span: float = (float(reach) + 0.5) * w if reach > 0 else float(ROOTS.stub) * w
+	span = minf(span, PI * 0.98)
+	var lines := []
+	var pt := func(rr: float, th: float) -> Vector2:
+		return BC + Vector2(sin(th), -cos(th)) * clampf(rr, 8.0, R * 0.97)
+	for sd in [-1.0, 1.0]:
+		var main := PackedVector2Array()
+		var n := maxi(int(span * r0 / 3.0), 6)
+		var ph := randf() * TAU
+		var drift := randf_range(-0.12, 0.12) * r0
+		for j in n + 1:
+			var u := float(j) / float(n)
+			var rr := r0 + sin(u * PI * 3.0 + ph) * float(ROOTS.wig) * u + drift * u
+			main.append(pt.call(rr, th0 + float(sd) * span * u))
+		lines.append(main)
+		#  곁뿌리 — 줄기에서 판 안 · 밖으로 비스듬히.
+		for b in int(ROOTS.branches):
+			var u0 := randf_range(0.2, 0.85)
+			var k0 := int(u0 * float(n))
+			var base: Vector2 = main[k0]
+			var out := 1.0 if randf() < 0.5 else -1.0
+			var bl := randf_range(6.0, 14.0) * (0.6 + 0.4 * minf(span / w, 3.0))
+			var br := PackedVector2Array([base])
+			var bth := th0 + float(sd) * span * u0
+			for q in 4:
+				var uq := float(q + 1) / 4.0
+				br.append(pt.call(r0 + out * bl * uq + sin(uq * 5.0) * 1.2,
+						bth + float(sd) * span * 0.08 * uq))
+			lines.append(br)
+	#  꽂힌 자리 둘레 실뿌리 — 짧게 사방으로.
+	for q2 in 4:
+		var an := randf() * TAU
+		lines.append(PackedVector2Array([p, p + Vector2(cos(an), sin(an)) * randf_range(4.0, 7.0)]))
+	bean_roots = {"lines": lines, "t": 0.0}
+
+
+#  뿌리 — 판 위 · 자루 밑. 뻗는 동안은 앞에서부터 그만큼만, 다 뻗으면 머물다 진다.
+func _bean_roots_draw() -> void:
+	if bean_roots.is_empty():
+		return
+	var t: float = float(bean_roots.t)
+	var g: float = 1.0 if motion_off else clampf(t / float(ROOTS.grow), 0.0, 1.0)
+	g = 1.0 - pow(1.0 - g, 2.0)
+	var fa: float = clampf((t - float(ROOTS.grow) - float(ROOTS.hold)) / float(ROOTS.fade), 0.0, 1.0)
+	var a: float = 1.0 - fa
+	if a <= 0.003:
+		return
+	for ln in bean_roots.lines:
+		var pts := ln as PackedVector2Array
+		var m := int(ceil(float(pts.size() - 1) * g)) + 1
+		if m < 2:
+			continue
+		var part := pts.slice(0, mini(m, pts.size()))
+		#  굵기는 뿌리 끝으로 갈수록 가늘다 — 앞 셋째는 3px · 가운데 2px · 끝 1px. 위쪽 1px 에
+		#  밝은 결(빛 받는 쪽)을 얹어 판 위에서 떠 보이게 한다.
+		var n3 := part.size()
+		var c1 := maxi(n3 / 3, 2)
+		var c2 := maxi(n3 * 2 / 3, c1 + 1)
+		draw_polyline(part.slice(0, c1), Color(ROOTS.col, 0.92 * a), 3.0)
+		if n3 > c1 - 1:
+			draw_polyline(part.slice(c1 - 1, mini(c2, n3)), Color(ROOTS.col, 0.88 * a), 2.0)
+		if n3 > c2 - 1:
+			draw_polyline(part.slice(c2 - 1), Color(ROOTS.col, 0.8 * a), 1.0)
+		var hi := PackedVector2Array()
+		for q in part.slice(0, mini(c2, n3)):
+			hi.append((q as Vector2) + Vector2(-0.5, -0.8))
+		if hi.size() >= 2:
+			draw_polyline(hi, Color(ROOTS.hi, 0.55 * a), 1.0)
 
 
 #  꽂힌 자루에서 흩날리는 잎 — 자루 위.
@@ -18426,6 +18525,7 @@ func _panel_update(d: float, rate := 1.0) -> void:
 		slot_hot[i] = maxf(slot_hot[i] - dd, 0.0)
 	_rack_vis_tick(d)            # 끄기 · 비켜서기 — 실시간 d(빨리 보기와 무관한 손의 시계)
 	float_t += d                 # 슬롯 물건의 둥실거림(FLOAT)
+	_coin_fx_tick(d)             # 성장 · 소모형 동전의 보이는 값(COINFX)
 	_bean_tick(d)                # 잭과 콩나무의 쑥 크기 · 먹은 칸 빛
 
 
@@ -18810,6 +18910,232 @@ func _ring_i(c: Vector2, rx: float, ry: float, col: Color) -> void:
 
 
 # 아이템 하나를 동전로 그린다. 동전 슬롯과 상점이 같은 그림을 쓰도록 여기 하나로 모았다.
+#  ══ 동전마다 지금 상태가 얼굴에 보인다 (2026-10-08) ══════════════════════
+#  「저런 동전마다의 이팩트? … 위대한 피자 같은 동전도 감소되잖아? 그럼 그것도 피자가 한 조각씩
+#  사라질수 있겠지?」(잭과 콩나무 덩굴을 보고). 값이 자라거나 닳는 동전 다섯이 얼굴 위에 지금
+#  상태를 그림으로 얹는다 — 글자는 없다(얼굴에는 글자를 안 얹는다 · draw_item_sticker 머리말).
+#    c04 위대한 피자   배수 +8 에서 판마다 −1 — 남은 배수만큼 조각이 남고 먹은 조각 자리는 빈 판이다
+#    c34 아이스그림    점수 +100 에서 발마다 −5 — 녹은 만큼 위가 꺼지고 흘러내려 밑에 고인다
+#    c35 quite my tempo 명중 +1 · 빗나감 −1 — 쌓인 만큼 북이 빨리 울린다(울림 고리)
+#    c45 삼미신        칠 때마다 +15 — 칠 때마다 꽃잎 하나가 둘레를 돈다(열둘까지 보인다)
+#    r13 88날어        8 을 칠 때마다 +8 — 둘레 보석 자리 여덟이 하나씩 켜지고, 한 바퀴를 채우면
+#                      다음 바퀴는 다른 빛으로 다시 켜진다
+#  보이는 값(_fxs)은 실제 값으로 스르르 간다(_coin_fx_tick) — 조각이 툭 없어지지 않고 흐려지며
+#  빠지고, 꽃잎 · 보석은 서서히 돋는다. 상점 테이블 · 컬렉션의 동전은 갓 산 상태(키가 없으면 실제 값)다.
+#  너무 작은 그림(얼굴 반지름 6 밑 — 툴팁의 작은 동전)에서는 안 얹는다. 움직임 끄기면 곧장 선다.
+const COINFX := {
+	"ids": ["c04", "c34", "c35", "c45", "r13"],
+	"rate": 3.2,                   # 보이는 값이 실제 값으로 가는 빠르기(초당)
+	"min_r": 6.0,
+	"plate": Color("3a2a22"), "crumb": Color("c99a52"), "cut": Color(0.0, 0.0, 0.0, 0.38),
+	"ice_bg": Color("3f7fd8"), "ice_drip": Color("f2d45c"), "ice_drip2": Color("f5a3cb"),
+	"drum": Color("f27d63"),         # 울림 고리 — 흰 북 가죽 위라 북 테의 붉은빛이다
+	"petal": Color("f5a3cb"), "petal_dk": Color("d86f9c"),
+	"gem_off": Color(0.0, 0.0, 0.0, 0.45),
+	"gem_laps": [Color("f2c94c"), Color("7fe0c8"), Color("8fb8ff"), Color("ef86c6")],
+}
+
+
+#  성장 · 소모형의 실제 값 — GameData.item_amt 의 성장 갈래와 같은 식(문맥이 필요 없는 몫).
+func _grow_amt(it: Dictionary) -> float:
+	var g := String(it.get("grow", ""))
+	if g == "fire" or g == "hitmiss":
+		return float(int(it.get("gs", 0)))
+	if g == "tdec" or g == "rdec":
+		return float(maxi(0, int(it.get("v", 0)) - int(it.get("gstep", 0)) * int(it.get("gs", 0))))
+	return 0.0
+
+
+#  보이는 값 — 동전 슬롯의 동전은 스르르 따라간 값(_fxs), 아니면 실제 값.
+func _fx_val(it: Dictionary) -> float:
+	return float(it.get("_fxs", _grow_amt(it)))
+
+
+#  동전 슬롯의 성장 · 소모형 동전마다 보이는 값을 실제 값으로 민다(_panel_update 가 부른다).
+#  _fxs 는 그림만의 값이라 매듭에 안 적힌다(owned 는 id · gs · bought 만 적는다).
+func _coin_fx_tick(d: float) -> void:
+	for it in owned:
+		if not (COINFX.ids as Array).has(String(it.get("id", ""))):
+			continue
+		var want := _grow_amt(it)
+		if not it.has("_fxs") or motion_off:
+			it["_fxs"] = want
+			continue
+		var cur: float = float(it["_fxs"])
+		cur = lerpf(cur, want, 1.0 - exp(-float(COINFX.rate) * d))
+		if absf(cur - want) < 0.01:
+			cur = want
+		it["_fxs"] = cur
+
+
+func _coin_fx(c: Vector2, fr: float, it: Dictionary, dim: float) -> void:
+	if fr < float(COINFX.min_r):
+		return
+	var id := String(it.get("id", ""))
+	if not (COINFX.ids as Array).has(id):
+		return
+	var v := _fx_val(it)
+	var a: float = 1.0 - dim
+	match id:
+		"c04": _fx_pizza(c, fr, v, a)
+		"c34": _fx_ice(c, fr, v / maxf(float(int(it.get("v", 100))), 1.0), a)
+		"c35": _fx_tempo(c, fr, v, a)
+		"c45": _fx_petals(c, fr, v / maxf(float(int(it.get("gstep", 15))), 1.0), a)
+		"r13": _fx_gems(c, fr, v / maxf(float(int(it.get("gstep", 8))), 1.0), a)
+
+
+#  위대한 피자 — 여덟 조각. 남은 배수만큼 남고(12시부터 시계 방향으로 먹는다) 먹은 자리는 빈 판에
+#  부스러기. 막 먹히는 조각은 흐려지며 빠진다. 조각 사이 칼자국.
+func _fx_pizza(c: Vector2, fr: float, v: float, a: float) -> void:
+	var n := 8
+	var w := TAU / float(n)
+	var rr := fr * 0.98
+	for k in n:
+		#  남은 조각은 끝(8번째)부터 앞으로 — 먹는 차례는 12시부터 시계 방향.
+		var left: float = clampf(v - float(n - 1 - k), 0.0, 1.0)     # 이 조각이 남은 몫
+		var gone: float = 1.0 - left
+		if gone <= 0.001:
+			continue
+		var a0 := -PI * 0.5 + float(k) * w
+		var pts := PackedVector2Array([c])
+		for j in 7:
+			var th := a0 + w * float(j) / 6.0
+			pts.append(c + Vector2(cos(th), sin(th)) * rr)
+		draw_colored_polygon(pts, Color(COINFX.plate, gone * a))
+		if gone > 0.6:
+			#  부스러기 둘 — 조각마다 같은 자리(칸 번호로 정한다).
+			for q in 2:
+				var th2 := a0 + w * (0.3 + 0.4 * float(q))
+				var rd := rr * (0.45 + 0.25 * float((k + q) % 2))
+				draw_circle(c + Vector2(cos(th2), sin(th2)) * rd, 0.8,
+						Color(COINFX.crumb, (gone - 0.6) / 0.4 * a))
+	#  칼자국 — 조각이 읽히게. 남은 조각 둘레만.
+	if v > 0.0:
+		for k in n:
+			var th3 := -PI * 0.5 + float(k) * w
+			draw_line(c, c + Vector2(cos(th3), sin(th3)) * rr * 0.9, Color(COINFX.cut, COINFX.cut.a * a), 1.0)
+
+
+#  아이스그림 — f 는 남은 몫(1 → 0). 녹은 만큼 위가 꺼지고(배경 파랑이 물결로 내려온다)
+#  콘을 따라 흘러내려 밑에 고인다.
+func _fx_ice(c: Vector2, fr: float, f: float, a: float) -> void:
+	var melt: float = clampf(1.0 - f, 0.0, 1.0)
+	if melt <= 0.001:
+		return
+	#  꺼진 위 — 동그라미(얼굴) ∩ 물결선 위.
+	var top: float = -0.92
+	var bot: float = 0.15                     # 덩이 밑(콘이 시작하는 자리)
+	var cut: float = lerpf(top, bot, melt * 0.92)
+	var circ := PackedVector2Array()
+	for j in 24:
+		var th := TAU * float(j) / 24.0
+		circ.append(Vector2(cos(th), sin(th)) * fr * 0.97)
+	var box := PackedVector2Array([Vector2(-fr * 1.2, -fr * 1.2), Vector2(fr * 1.2, -fr * 1.2)])
+	for j in 9:
+		var x := lerpf(1.2, -1.2, float(j) / 8.0)
+		var wv := sin(x * 7.0 + float_t * (0.0 if motion_off else 1.4)) * 0.05
+		box.append(Vector2(x * fr, (cut + wv) * fr))
+	for poly in Geometry2D.intersect_polygons(circ, box):
+		var pp := PackedVector2Array()
+		for q in (poly as PackedVector2Array):
+			pp.append(c + q)
+		if pp.size() >= 3:
+			draw_colored_polygon(pp, Color(COINFX.ice_bg, a))
+	#  흘러내림 — 콘 양옆으로 줄 셋, 녹은 만큼 길다.
+	for k in 3:
+		var x0 := (-0.30 + 0.30 * float(k)) * fr
+		var ln := fr * (0.15 + 0.55 * melt) * (0.7 + 0.3 * float(k % 2))
+		var y0 := bot * fr
+		draw_line(c + Vector2(x0, y0), c + Vector2(x0 * 0.85, y0 + ln),
+				Color(COINFX.ice_drip, 0.9 * a), 1.6)
+		draw_circle(c + Vector2(x0 * 0.85, y0 + ln), 1.1, Color(COINFX.ice_drip, 0.9 * a))
+	#  고인 것 — 얼굴 밑에 납작한 웅덩이.
+	var pw := fr * (0.25 + 0.6 * melt)
+	var pud := PackedVector2Array()
+	for j in 12:
+		var th4 := TAU * float(j) / 12.0
+		pud.append(c + Vector2(cos(th4) * pw, 0.80 * fr + sin(th4) * pw * 0.22))
+	draw_colored_polygon(pud, Color(COINFX.ice_drip2, 0.85 * a))
+
+
+#  quite my tempo — 쌓인 만큼 북이 빨리 울린다. 박자마다 북 가죽에 울림 고리가 퍼진다.
+#  0 이면 안 울린다. 움직임 끄기면 고리가 쌓인 수만큼(셋까지) 멈춰 선다.
+func _fx_tempo(c: Vector2, fr: float, v: float, a: float) -> void:
+	if v < 0.5:
+		return
+	var head := c + Vector2(0.0, fr * 0.30)
+	var rx := fr * 0.55
+	var ry := fr * 0.17
+	if motion_off:
+		for k in mini(int(v), 3):
+			var s2 := 0.45 + 0.25 * float(k)
+			_fx_ell(head, rx * s2, ry * s2, Color(COINFX.drum, 0.55 * a))
+		return
+	var bpm: float = minf(50.0 + 14.0 * v, 260.0)
+	var ph: float = fmod(float_t * bpm / 60.0, 1.0)
+	#  고리 둘 — 이번 박자 · 반 박자 뒤.
+	for k in 2:
+		var u: float = fmod(ph + 0.5 * float(k), 1.0)
+		var s3 := 0.25 + 0.95 * u
+		_fx_ell(head, rx * s3, ry * s3, Color(COINFX.drum, (1.0 - u) * 0.75 * a))
+	#  치는 순간 — 북채 끝 두 자리에 작은 빛.
+	if ph < 0.18:
+		var k2 := 1.0 - ph / 0.18
+		draw_circle(head + Vector2(-rx * 0.45, -ry * 0.4), 1.4 * k2, Color(1.0, 1.0, 1.0, 0.8 * a * k2))
+		draw_circle(head + Vector2(rx * 0.45, -ry * 0.4), 1.4 * k2, Color(1.0, 1.0, 1.0, 0.8 * a * k2))
+
+
+func _fx_ell(c: Vector2, rx: float, ry: float, col: Color) -> void:
+	var pts := PackedVector2Array()
+	for j in 21:
+		var th := TAU * float(j) / 20.0
+		pts.append(c + Vector2(cos(th) * rx, sin(th) * ry))
+	draw_polyline(pts, col, 1.0)
+
+
+#  삼미신 — 칠 때마다 꽃잎 하나가 둘레를 돈다(열둘까지 · 막 돋는 꽃잎은 서서히).
+func _fx_petals(c: Vector2, fr: float, n: float, a: float) -> void:
+	if n <= 0.0:
+		return
+	var m := minf(n, 12.0)
+	var spin: float = 0.0 if motion_off else float_t * 0.6
+	var rr := fr * 1.12
+	for k in int(ceil(m)):
+		var al: float = clampf(m - float(k), 0.0, 1.0)
+		var th := spin + TAU * float(k) / 12.0
+		var p := c + Vector2(cos(th), sin(th)) * rr
+		var ax := Vector2(cos(th + 1.2), sin(th + 1.2))
+		var ay := Vector2(-ax.y, ax.x)
+		var leaf := PackedVector2Array()
+		for j in 8:
+			var t := TAU * float(j) / 8.0
+			leaf.append(p + ax * cos(t) * 2.4 * al + ay * sin(t) * 1.3 * al)
+		draw_colored_polygon(leaf, Color(COINFX.petal, a * al))
+		draw_circle(p, 0.6 * al, Color(COINFX.petal_dk, a * al))
+
+
+#  88날어 — 둘레 보석 자리 여덟. 8 을 칠 때마다 하나씩 켜지고, 한 바퀴를 채우면 다음 바퀴는
+#  다음 빛으로 처음부터 다시 켜진다(앞 바퀴 빛이 바탕으로 남는다).
+func _fx_gems(c: Vector2, fr: float, n: float, a: float) -> void:
+	var laps: Array = COINFX.gem_laps
+	var lap: int = int(floor(n / 8.0))
+	var within: float = n - float(lap) * 8.0
+	var rr := fr * 0.86
+	for k in 8:
+		var th := -PI * 0.5 + TAU * float(k) / 8.0
+		var p := c + Vector2(cos(th), sin(th)) * rr
+		var base: Color = COINFX.gem_off
+		if lap > 0:
+			base = laps[mini(lap - 1, laps.size() - 1)]
+		draw_circle(p, 1.7, Color(0.0, 0.0, 0.0, 0.5 * a))
+		draw_circle(p, 1.3, Color(base, base.a * a))
+		var on: float = clampf(within - float(k), 0.0, 1.0)
+		if on > 0.0:
+			var col: Color = laps[mini(lap, laps.size() - 1)]
+			draw_circle(p, 1.3 + 0.5 * (1.0 - on), Color(col, on * a))
+			draw_circle(p + Vector2(-0.4, -0.4), 0.5, Color(1.0, 1.0, 1.0, 0.8 * on * a))
+
+
 func draw_item_sticker(c: Vector2, r: float, it: Dictionary, rot: float, lift: float,
 		dim: float, num_sz: int, peel := 0.0) -> void:
 	var ti := _stk_ti(String(it.get("rarity", "common")))
@@ -18842,6 +19168,7 @@ func draw_item_sticker(c: Vector2, r: float, it: Dictionary, rot: float, lift: f
 	var fr: float = fv.z
 	if _mat_of(it) != "hollow" and fr > 2.0:
 		_icon_item(fcp, fr, fr, String(it.get("id", "")), dim)
+		_coin_fx(fcp, fr, it, dim)       # 성장 · 소모형의 지금 상태(COINFX)
 	#  ── 얼굴에는 글자도 표시도 안 얹는다 ──────────────────
 	#  그림이 생기기 전에는 값과 방식 이름이 얼굴의 전부였다. 값 숫자는
 	#  2026-09-16 에 걷었고, 남아 있던 조건 표시(「4·10」「8」「1」「6」 같은
