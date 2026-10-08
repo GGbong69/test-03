@@ -7373,7 +7373,7 @@ func _kick_fire() -> void:
 	#  싫다고 적어 둔 그림이 정작 여기 있었다. 이을 각이 없으므로(비행 0프레임)
 	#  꽂는 자리에서 굴리는 것이 맞다. 2026-09-24
 	darts.append({"p": aim, "id": String(cur_dart.get("id", "std")),
-			"rot": randf_range(-0.26, 0.26)})
+			"rot": randf_range(-0.26, 0.26), "sc": _bean_now()})
 	_sfx("kick_shot")
 	kick_o += Vector2(aim_rng.randf_range(-float(KICK.side), float(KICK.side)),
 			-float(KICK.up))
@@ -8760,6 +8760,7 @@ func _land(mark := true) -> void:
 
 	# 다트 특성
 	var pierce_gain := 0
+	var bean_reach := 0             # 먹은 칸 수(양옆 하나씩) — 판 위 빛(_bean_glow_draw)이 쓴다
 	if info.mult > 0:
 		if cur_dart.get("mult", 0) != 0:
 			info.mult = maxi(1, info.mult + cur_dart.mult)
@@ -8779,6 +8780,7 @@ func _land(mark := true) -> void:
 				# 자란 걸음 수만큼 양옆으로 뻗는다. 판을 한 바퀴 다 먹지
 				# 않게 반 바퀴에서 멈춘다.
 				var reach: int = mini(int(bg.get("gs", 0)), sectors.size() / 2)
+				bean_reach = maxi(bean_reach, reach)
 				var n2: int = sectors.size()
 				for k in range(1, reach + 1):
 					pierce_gain += sectors[(info.idx + n2 - k) % n2]
@@ -8808,7 +8810,7 @@ func _land(mark := true) -> void:
 	#  보통 발은 비행이 있으므로 그 각을 그대로 잇는다. 2026-09-24
 	if mark:
 		darts.append({"p": aim, "id": String(cur_dart.get("id", "std")),
-				"rot": fly_rot})
+				"rot": fly_rot, "sc": _bean_now()})
 	# 연출에는 **꽂힌 자리의 배수**를 넘긴다. info.mult 는 이 위에서
 	# 다트와 트랙이 이미 주무른 값이라, 그걸 넘기면 연출이 점수를 따라간다.
 	_impact(info, land_mult, land_base)
@@ -8998,7 +9000,7 @@ func _land(mark := true) -> void:
 			queue.append({"k": "chip", "v": info.base, "mx": mx_c})
 			queue.append({"k": "mult", "v": info.mult, "mx": mx_m})
 		if pierce_gain > 0:
-			queue.append({"k": "pierce", "v": pierce_gain})
+			queue.append({"k": "pierce", "v": pierce_gain, "idx": info.idx, "reach": bean_reach})
 		for i in fired:
 			var it: Dictionary = owned[i]
 			if it.k == "save":
@@ -9006,6 +9008,11 @@ func _land(mark := true) -> void:
 			# fire 성장은 발동 자체가 걸음이다 — 먼저 오르고 그 값으로 낸다.
 			if String(it.get("grow", "")) == "fire":
 				it.gs = int(it.get("gs", 0)) + int(it.get("gstep", 0))
+				#  잭과 콩나무 — 이 차례에 방금 꽂힌 자루가 쑥 커진다(BEAN). 연발의 작은 다트는
+				#  자루가 이미 다 꽂혀 있어 어느 것인지 안 가리므로 크기만 오른다(다음 발부터).
+				if String(it.get("side", "")) == "bigdart":
+					queue.append({"k": "bean", "i": i, "dk": darts.size() - 1 if mark else -1,
+							"to": _bean_sc(int(it.gs))})
 			# rackval 은 자기 몫을 뺀다 — 자기 판매가로 자기가 커지면 순환이다.
 			ctx.rackval_others = ctx.rackval_all - GameData.sell_value(it)
 			var amt: int = GameData.item_amt(it, ctx)
@@ -9351,6 +9358,9 @@ func _next_step() -> void:
 				src_mix = int(st.get("mx", 0)) == 1 or cg != int(st.v)
 			_card_kick(float(CARDFX.kick), float(CARDFX.press))
 		"pierce":
+			#  잭과 콩나무가 먹은 칸들이 판 위에서 빛난다(BEAN).
+			if int(st.get("reach", 0)) > 0:
+				bean_glow = {"idx": int(st.get("idx", 0)), "reach": int(st.reach), "t": 0.0}
 			var pg := _chip_gain(st.v)
 			var c0 := cur_chip
 			cur_chip += pg
@@ -9508,6 +9518,26 @@ func _next_step() -> void:
 			roll_t = 0.0
 			_sfx("settle_bal")
 			shake = 6.0
+		"bean":
+			#  ── 잭과 콩나무가 자란다 (2026-10-08 · BEAN) ──
+			#  방금 꽂힌 자루가 쑥 커진다(넘쳤다 앉는다). 점수 · 배수는 안 바꾼다 — 카드 칸은 안 튀고
+			#  몸만 채인다(불씨와 같다). 동전 슬롯의 그 동전이 발동으로 튄다. 소리는 양옆 칸과 같은
+			#  settle_pierce 를 사다리 음으로.
+			var bi := int(st.get("i", -1))
+			var dk := int(st.get("dk", -1))
+			if dk >= 0 and dk < darts.size():
+				bean_grow = {"dk": dk, "from": float(darts[dk].get("sc", 1.0)),
+						"to": float(st.get("to", 1.0)), "t": 0.0}
+				darts[dk]["sc"] = float(st.get("to", 1.0))
+				if motion_off:
+					bean_grow = {}
+				if _bd3_live():
+					_bd3_dirty()
+			if bi >= 0 and bi < owned.size():
+				_panel_fire(bi)
+				card_item = "%s  다트가 커진다" % String(owned[bi].get("n", ""))
+			_sfx("settle_pierce", f)
+			_card_kick(float(CARDFX.kick), 0.0)
 		"ember":
 			#  ── 불씨 (2026-10-06) ──
 			#  골드 v(표) — 점수 · 배수는 안 바꾼다. 판 밖 소리(동전이 펠트에 앉는
@@ -11200,6 +11230,7 @@ func _draw() -> void:
 		#  밑이다. 판 갈이(상인이 서는 때)에는 판과 같이 쉰다. 2026-10-06
 		_order_board_draw()
 		_draw_aim()
+		_bean_glow_draw()            # 잭과 콩나무가 먹은 칸 — 판 위 · 자루 밑
 	_brk_crack_draw()               # 금은 판 위, 판 효과 앞
 	_draw_fx()
 	_brk_shards_draw()              # 조각은 다트 **밑**이다
@@ -16415,8 +16446,12 @@ func _grip_one(i: int, picking: bool) -> void:
 	if not (picking or i == grip_pick):
 		var gh: float = grip_hov[i] if i < grip_hov.size() and _grip_swap_ok() else 0.0
 		dim = lerpf(0.26, 0.0, gh)
-	_icon_dart(from.lerp(ps.c, e), GRIP.dl + (3.0 if i == grip_pick else 0.0),
-			remaining[i].id, dim, rr, 1.0)
+	#  잭과 콩나무 — 꽂이의 자루도 지금 던질 크기다(BEAN). 촉 끝은 벽에 박힌 그대로 두고
+	#  몸만 늘린다(_icon_dart 는 tip = c + dir·dl).
+	var dl0: float = GRIP.dl + (3.0 if i == grip_pick else 0.0)
+	var dlb: float = dl0 * _bean_now()
+	var dirb := Vector2(6.0, -10.0).normalized().rotated(rr)
+	_icon_dart(from.lerp(ps.c, e) - dirb * (dlb - dl0), dlb, remaining[i].id, dim, rr, 1.0)
 
 
 #  벽의 자루를 지금 눌러 갈아탈 수 있나. _click 의 PICK · AIM_V 가지와 같은
@@ -16502,6 +16537,94 @@ const BD3 := {
 	"rise":  0.06,
 	"jit":   0.13,     # 자루마다의 손떨림(rad)
 }
+
+
+#  ── 잭과 콩나무 — 다트가 진짜로 커진다 (2026-10-08) ──────────────────
+#  「잭과 콩나무 … 너무 쓰는맛이 없어 다트가 좀 커져야 쓰는 맛이 있지 지금은 그냥 점수를 좀 더 줄
+#  뿐이잖아」. 동전(side bigdart)이 자란 걸음(gs)만큼 다트 그림이 커진다 — 꽂이의 자루 · 나는 자루 ·
+#  꽂힌 자루가 다 같은 자(_bean_sc)를 쓴다. 꽂힌 자루는 **던질 때의 크기**로 남는다(sc).
+#  동전이 발동하는 차례에 정산 걸음 「bean」이 서서 방금 꽂힌 자루가 쑥 커진다(넘쳤다 앉는다).
+#  양옆 칸을 먹는 걸음(pierce)에서는 먹은 칸들이 판 위에서 빛난다(_bean_glow_draw).
+#  자는 그림뿐이다 — 판정(칸 · 양옆 칸 수)은 옛 그대로 gs 가 쥔다.
+const BEAN := {
+	"k": 0.12, "cap": 10,          # 한 걸음에 12% · 열 걸음(양옆 반 바퀴)에서 2.2 배로 멈춘다
+	"grow_t": 0.34, "over": 1.9,   # 쑥 크는 시간 · 넘침(back-out)
+	"glow_t": 0.62, "glow_a": 0.42,
+}
+var bean_grow := {}              # {dk, from, to, t} — 쑥 크는 자루 하나
+var bean_glow := {}              # {idx, reach, t} — 먹은 칸들의 빛
+
+
+#  콩나무 동전의 자리(봉인이면 안 친다). 없으면 −1.
+func _bean_i() -> int:
+	for k in owned.size():
+		if k != sealed and String(owned[k].get("side", "")) == "bigdart":
+			return k
+	return -1
+
+
+func _bean_sc(gs: int) -> float:
+	return 1.0 + float(BEAN.k) * float(clampi(gs, 0, int(BEAN.cap)))
+
+
+#  지금 던지면 이 크기다 — 꽂이의 자루 · 나는 자루가 쓴다.
+func _bean_now() -> float:
+	var k := _bean_i()
+	return 1.0 if k < 0 else _bean_sc(int(owned[k].get("gs", 0)))
+
+
+#  꽂힌 자루 하나의 크기 — 쑥 크는 중이면 그 한 틀의 값이다.
+func _dart_sc(e: Dictionary) -> float:
+	var dk := int(bean_grow.get("dk", -1))
+	if dk >= 0 and dk < darts.size() and is_same(darts[dk], e):
+		var u := clampf(float(bean_grow.t) / float(BEAN.grow_t), 0.0, 1.0)
+		var o: float = float(BEAN.over)
+		var q := u - 1.0
+		var eb := 1.0 + (o + 1.0) * q * q * q + o * q * q      # back-out — 넘쳤다 앉는다
+		return lerpf(float(bean_grow.from), float(bean_grow.to), eb)
+	return float(e.get("sc", 1.0))
+
+
+#  쑥 크기 · 먹은 칸 빛의 시계. 크는 동안은 3D 판을 틀마다 다시 굽는다(_bd3_dirty).
+func _bean_tick(d: float) -> void:
+	if not bean_grow.is_empty():
+		bean_grow.t = float(bean_grow.t) + d
+		if _bd3_live():
+			_bd3_dirty()
+		if float(bean_grow.t) >= float(BEAN.grow_t):
+			bean_grow = {}
+			if _bd3_live():
+				_bd3_dirty()
+	if not bean_glow.is_empty():
+		bean_glow.t = float(bean_glow.t) + d
+		if float(bean_glow.t) >= float(BEAN.glow_t):
+			bean_glow = {}
+
+
+#  먹은 칸들 — 꽂힌 칸에서 양옆 reach 칸까지 부채꼴 하나가 빛나다 진다(판 위 · 자루 밑).
+func _bean_glow_draw() -> void:
+	if bean_glow.is_empty():
+		return
+	var k := 1.0 - clampf(float(bean_glow.t) / float(BEAN.glow_t), 0.0, 1.0)
+	var a: float = float(BEAN.glow_a) * k * k
+	if a <= 0.003:
+		return
+	var n := _sec_n()
+	var w := _sec_w()
+	var rc: int = int(bean_glow.reach)
+	var idx: int = int(bean_glow.idx)
+	var a0: float = float(idx - rc) * w - w * 0.5
+	var a1: float = float(idx + rc) * w + w * 0.5
+	if rc * 2 + 1 >= n:
+		a0 = 0.0
+		a1 = TAU
+	var col := Color(C_ACC, a)
+	var pts := PackedVector2Array([BC])
+	var seg := maxi(int((a1 - a0) / 0.08), 4)
+	for j in seg + 1:
+		var th := lerpf(a0, a1, float(j) / float(seg))
+		pts.append(BC + Vector2(sin(th), -cos(th)) * R)
+	draw_colored_polygon(pts, col)
 
 var bd_vp: SubViewport = null
 var bd_nodes := []          # darts 와 인덱스를 공유하는 Node3D 들
@@ -16596,8 +16719,10 @@ func _bd3_pose(e: Dictionary) -> Transform3D:
 		xv = Vector3.RIGHT
 	xv = xv.normalized()
 	# 촉 끝이 로컬 −dl 이라는 _dart3_meshes 의 약속을 여기서 읽는다.
-	return Transform3D(Basis(xv, yv, xv.cross(yv)),
-			land + yv * float(BD3.len) * 0.5)
+	#  잭과 콩나무 — 자루 통째로 sc 배(촉 끝은 착탄점 그대로 · BEAN).
+	var sc: float = _dart_sc(e)
+	return Transform3D(Basis(xv * sc, yv * sc, xv.cross(yv) * sc),
+			land + yv * float(BD3.len) * 0.5 * sc)
 
 
 # darts 배열과 3D 노드를 맞춘다. 수가 달라졌을 때만 다시 세운다 —
@@ -16629,7 +16754,7 @@ func _bd3_fly() -> void:
 				_dart3_col(fid), fid)
 		bd_vp.add_child(bd_fly)
 	bd_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-	var end := _bd3_pose({"p": aim, "rot": fly_rot})
+	var end := _bd3_pose({"p": aim, "rot": fly_rot, "sc": _bean_now()})
 	# 출발점은 눈 바로 앞, 화면 아래쪽이다 — 손에서 떠난 것처럼 읽힌다.
 	# 원근이 알아서 크게 잡아 주므로 자루를 따로 키우지 않는다.
 	# 눈에 바짝 붙여 둔다. 0.62 로 두었더니 출발부터 판 앞이라 "날아왔다" 가
@@ -16793,7 +16918,7 @@ func _draw_darts_2d(a := 1.0) -> void:
 		var v: Vector2 = e.p - BC
 		var r := v.length()
 		var dl := clampf(r * float(DART_PERSP) * 0.5,
-				float(DART_MIN), float(DART_MAX))
+				float(DART_MIN), float(DART_MAX)) * _dart_sc(e)
 		# _icon_dart 의 dir 은 촉이 보는 쪽이다. 촉이 판에 박혀 있고 몸통이
 		# 바깥으로 뻗으므로 dir 은 **안쪽**을 본다.
 		var u := (-v).normalized() if r > 0.001 else Vector2(0.0, 1.0)
@@ -18151,6 +18276,8 @@ func _panel_update(d: float, rate := 1.0) -> void:
 		slot_pop[i] = clampf(slot_pop[i] + slot_vel[i] * dd, -0.6, 1.4)
 		slot_hot[i] = maxf(slot_hot[i] - dd, 0.0)
 	_rack_vis_tick(d)            # 끄기 · 비켜서기 — 실시간 d(빨리 보기와 무관한 손의 시계)
+	float_t += d                 # 슬롯 물건의 둥실거림(FLOAT)
+	_bean_tick(d)                # 잭과 콩나무의 쑥 크기 · 먹은 칸 빛
 
 
 # 칸 폭. 다섯까지는 62 고정이고, 그 위로는 좁혀서 이웃을 안 밟는다.
@@ -19135,17 +19262,18 @@ func _panel_slot(i: int) -> void:
 	var sel: bool = i == sell_sel and _can_sell()
 	var c := cell.get_center() + Vector2(0.0,
 			PANEL.chip_dy - bounce * PANEL.rise - (4.0 if sel else 0.0))
-	#  그려지는 자리 — 끄는 동안 비켜서고 놓으면 내려앉는다(RACKF).
+	#  그려지는 자리 — 끄는 동안 비켜서고 놓으면 내려앉는다(RACKF). 제자리에서 둥실거린다(FLOAT).
 	if i < rack_vx.size():
 		c.x = float(rack_vx[i])
 		c.y += float(rack_vy[i])
+	c.y += _float_dy(i)
 	var r: float = PANEL.r * (1.0 + bounce * PANEL.swell)
 
 	if up > 0.01:
 		draw_circle(c + Vector2(1.5, 3.0 + up * PANEL.lift), r,
 				Color(0.0, 0.0, 0.0, up * PANEL.shadow))
 
-	draw_item_sticker(c, r, it, bounce * PANEL.spin, up * PANEL.lift,
+	draw_item_sticker(c, r, it, bounce * PANEL.spin + _float_rot(i), up * PANEL.lift,
 			0.55 if lock else 0.0, 12)
 
 	# 호버 링 — 리프트는 안 쓴다. 발동 스프링의 실제 최대 리프트가 3px 뿐이라
@@ -20529,7 +20657,8 @@ func _cons_draw() -> void:
 			elif h > 0.0:
 				_rr(self, _cons_rect(i).grow(-2.0), Color(C_TXT, 0.07 * h))
 				up = roundf(h)
-			_icon_cons(r.get_center() - Vector2(0.0, up),
+			#  둥실거린다(FLOAT) — 동전 슬롯과 박자가 안 맞게 칸마다 결을 비킨다.
+			_icon_cons(r.get_center() - Vector2(0.0, up - _float_dy(i, 0.9)),
 					minf(r.size.x, r.size.y) * 0.42, String(cons[i].id))
 	# 이름과 수 — 동전 슬롯 밑은 상인 자리라 못 쓰지만 이 자리는 벽이다.
 	# 「사탕」이라고만 적고 있었는데 이 칸에는 사진도 들어간다 — 사진을
@@ -35924,6 +36053,29 @@ var hand_far := 0.0              # 누름 이후 |m - p0| 의 **누적 최대**.
 var hand_off := Vector2.ZERO     # 면 좌표 잡기 오프셋. ramp 로 0 에 녹는다
 var hand_zone := -1              # 지금 켜진 창구 (-1 없음 · 0 판매 · 1 구매)
 var hand_src := 0                # 무엇을 들었나 (0 = 테이블 물건 · 1 = 동전 슬롯 동전)
+#  ── 슬롯의 물건이 둥실거린다 (2026-10-08) ──────────────────────────
+#  「동전이랑 아이템들이 걍 슬롯에서 가만히 있으니까 너무 재미 없는데? 좀 공중에 떠다니듯 살짝
+#  둥실둥실」. 동전 슬롯의 동전과 사탕·사진 칸의 물건이 제자리에서 위아래로 살짝 뜨고 조금
+#  기운다. 칸마다 박자가 달라(phase) 한꺼번에 안 뛴다. 그림만이다 — 칸 · 툴팁 · 판정은 안 움직인다.
+#  움직임 끄기면 선다.
+const FLOAT := {"amp": 1.6, "hz": 0.36, "tilt": 0.05, "phase": 2.1}
+var float_t := 0.0
+
+
+func _float_dy(i: int, salt := 0.0) -> float:
+	if motion_off:
+		return 0.0
+	return sin(TAU * float(FLOAT.hz) * float_t + float(i) * float(FLOAT.phase) + salt) \
+			* float(FLOAT.amp)
+
+
+func _float_rot(i: int, salt := 0.0) -> float:
+	if motion_off:
+		return 0.0
+	return sin(TAU * float(FLOAT.hz) * 0.83 * float_t + float(i) * float(FLOAT.phase) * 1.37
+			+ salt + 1.1) * float(FLOAT.tilt)
+
+
 #  ── 동전 슬롯 끌기 — 발라트로처럼 비켜선다 (2026-10-08) ──────────────────
 #  「동전 자리 옮기는게 좀 … 딱딱하단 말이야? 발라트로는 … 조커를 마우스로 쥐고 움직일때 다른
 #  조커들도 좀 피하거나 그런 움직임이 있잖아?」 · 「동전을 옮길때 스티커 같이 밑에 가 뜯어지는
