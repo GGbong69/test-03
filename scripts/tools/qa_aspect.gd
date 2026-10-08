@@ -10,6 +10,7 @@ extends SceneTree
 #   ⑥ 툴팁은 화면 전체(여백까지) 안에 선다 — 끝에 붙은 단추의 툴팁이 640 안으로 밀려 떨어지지 않는다.
 #   ⑦ 상점 테이블 화판은 화면 끝 · 밑까지 덮는다.
 #   ⑧ HUD 사각들이 서로 안 겹치고 화면 안이다(모든 비율).
+#   ⑨ 다트 꽂이(자루를 고르는 자리)는 화면 왼끝을 따라간다 — 모니터 테두리에 꽂힌다.
 #   godot --headless --path . --script scripts/tools/qa_aspect.gd
 const Save = preload("res://scripts/save.gd")
 var g = null
@@ -93,6 +94,8 @@ func _run() -> void:
 	_ok("① 16:9 — 상단 띠 · 첫 줄이 안 오른다", g._bar_y() == 0.0 and g._hud_dy() == 0.0)
 	_ok("① 16:9 — 테이블 화판이 640 폭", g._room3d_rect().size.x == VIEW.x
 			and g._room3d_rect().position.x == 0.0)
+	var m0: Rect2 = g._mag_rect(0)
+	_ok("① 16:9 — 다트 꽂이가 그대로", g._grip_dx() == 0.0 and g.remaining.size() > 0, str(m0))
 
 	# ② 21:9 (1720x720 → 860x360)
 	_pad(Vector2(110.0, 0.0))
@@ -114,6 +117,10 @@ func _run() -> void:
 		if not _inside(h1[k]):
 			hh = k
 	_ok("⑧ 21:9 — HUD 가 화면 안 · 안 겹친다", hh == "" and nov == "", "%s %s" % [hh, nov])
+	var m1: Rect2 = g._mag_rect(0)
+	_ok("⑨ 21:9 — 다트 꽂이가 왼끝을 따라간다(테두리에서 떨어진 거리가 16:9 와 같다)",
+			absf((m1.position.x - f.position.x) - m0.position.x) < 0.01 and _inside(m1),
+			"%s · 화면 왼끝 %.1f" % [m1, f.position.x])
 
 	# ③ 단추
 	_ok("③ 21:9 — 리롤이 왼끝 · 다음 판이 오른끝을 따라간다",
@@ -145,6 +152,10 @@ func _run() -> void:
 			"x %.1f" % (g._bank_rect() as Rect2).position.x)
 	_ok("④ 32:9 — 일시정지도 UIW 에서 멈춘다", (g._hud_btn_rect(1) as Rect2).position.x
 			== (LAY.menu as Rect2).position.x + cap)
+	var m2: Rect2 = g._mag_rect(0)
+	_ok("⑨ 32:9 — 다트 꽂이는 UIW 에서 안 멈추고 테두리까지 간다",
+			absf((m2.position.x - (g._full() as Rect2).position.x) - m0.position.x) < 0.01,
+			"%s" % m2)
 	var h2 := _hud()
 	hh = ""
 	for k in h2:

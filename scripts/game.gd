@@ -10540,11 +10540,18 @@ func _grip_dy() -> float:
 
 #  칸 하나가 벽에 꽂히는 자리(뽑히기 전). 자루(_grip_pose)와 검은 레일 꽂이의 구멍
 #  (_wall3_holder)이 같은 자를 본다 — 빈 칸에도 구멍이 남아야 해서 칸으로 묻는다.
+#  꽂이는 **화면 왼끝**에 박혀 있다 — 넓은 화면에서도 모니터 테두리에 붙는다(2026-10-08
+#  「이 다트가 꽂히는 곳은 모니터의 테두리면 좋겠는데?」). HUD 와 달리 UIW 에서 안 멈춘다 —
+#  32:9 에서도 테두리다(여백 전부 · _fill_pad).
+func _grip_dx() -> float:
+	return -_fill_pad().x
+
+
 func _grip_base(slot: int) -> Vector2:
 	# 깊이와 높이도 같이 흔든다. 각도만 흔들면 자로 잰 듯 줄 맞춘 티가 남는다.
 	var dy := _grip_dy()
 	return Vector2(
-			GRIP.x + (_grip_rnd(slot, 12.77) - 0.5) * 2.0 * GRIP.deep,
+			GRIP.x + _grip_dx() + (_grip_rnd(slot, 12.77) - 0.5) * 2.0 * GRIP.deep,
 			GRIP.cy - float(maxi(grip_n, 1) - 1) * dy * 0.5 + float(slot) * dy
 					+ (_grip_rnd(slot, 41.31) - 0.5) * GRIP.sway * 2.0)
 
@@ -16293,7 +16300,7 @@ func _wall3_holder() -> void:
 		y0 = minf(y0, by)
 		y1 = maxf(y1, by)
 	var pad: float = float(WALL3.hpad)
-	var x: float = float(WALL3.hx)
+	var x: float = float(WALL3.hx) + _grip_dx()       # 화면 왼끝을 따라간다
 	var w: float = float(WALL3.hw)
 	var top: float = roundf(y0 - pad)
 	var bot: float = roundf(y1 + pad)
@@ -16330,6 +16337,8 @@ func _grip_wait() -> bool:
 func _wall3_holder_free() -> bool:
 	if not swap_live:
 		return true
+	#  꽂이는 화면 왼끝을 따라가고(_grip_dx) 테이블 화판도 화면 왼끝에서 시작하므로(_room3d_rect)
+	#  비킬 거리는 16:9 그대로다.
 	return swap_in and _swap_gone() * _swap_dx() > float(WALL3.hx) + float(WALL3.hw) + 6.0
 
 
@@ -16347,18 +16356,20 @@ func _grip_draw() -> void:
 	if not _wall3_live():
 		#  왼쪽 벽은 **여백 쪽으로도** 두껍다. 안 그러면 넓은 화면에서 벽이
 		#  허공에 떠 있는 판때기가 된다.
-		draw_rect(Rect2(-view_pad.x, 18.0, w + view_pad.x,
+		#  벽은 화면 왼끝을 따라간다(_grip_dx) — 끝 쪽은 여백까지 두껍다.
+		var wx: float = w + _grip_dx()
+		draw_rect(Rect2(-view_pad.x, 18.0, wx + view_pad.x,
 				VIEW.y - 18.0 + view_pad.y), C_DARK.lightened(0.06))
-		draw_line(Vector2(w, 18.0), Vector2(w, VIEW.y), C_WIRE.darkened(0.25), 1.0)
+		draw_line(Vector2(wx, 18.0), Vector2(wx, VIEW.y), C_WIRE.darkened(0.25), 1.0)
 		# 결 — 벽이 면이라는 것만 알리면 된다
 		for gy in range(30, 356, 14):
-			draw_line(Vector2(2.0, float(gy)), Vector2(w - 2.0, float(gy) + 3.0),
+			draw_line(Vector2(wx - w + 2.0, float(gy)), Vector2(wx - 2.0, float(gy) + 3.0),
 					C_DARK.darkened(0.25), 1.0)
 		# 꽂힌 자리마다 파인 자국
 		for i in n:
 			var ps := _grip_pose(i)
 			if grip_t >= float(i) * GRIP.gap + GRIP.fly:
-				draw_circle(Vector2(w - 1.0, ps.c.y), 2.4, C_BG.darkened(0.25))
+				draw_circle(Vector2(wx - 1.0, ps.c.y), 2.4, C_BG.darkened(0.25))
 
 	var hov := -1
 	for i in n:
@@ -17505,7 +17516,8 @@ func _bank_draw() -> void:
 	var vis := r
 	if _is_play() or (swap_live and swap_in):
 		#  판이 벽보다 왼쪽(넓은 화면에서 왼끝을 따라간 자리 — _ui_pad)이면 벽이 안 덮는다.
-		var cut: float = float(GRIP.wall) + 1.0 - r.position.x if r.end.x > 0.0 else 0.0
+		#  벽은 화면 왼끝을 따라간다(_grip_dx) — 자금판도 같이 가므로 덮는 몫은 16:9 그대로다.
+		var cut: float = float(GRIP.wall) + _grip_dx() + 1.0 - r.position.x 				if r.end.x > _grip_dx() else 0.0
 		if cut > 0.0:
 			vis = Rect2(r.position.x + cut, r.position.y, r.size.x - cut, r.size.y)
 	var gt := str(gold)
