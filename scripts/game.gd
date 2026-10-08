@@ -38756,6 +38756,10 @@ func _tip_eff(it: Dictionary) -> String:
 	if c == "" or c == "always":
 		return eff
 	var ct := GameData.cond_text(c)
+	#  쌓이는 동전(fire)은 「~맞힌 발부터」가 아니라 「~맞히면」이다 — 뒤의 「+15 · 이후 발동마다
+	#  추가 +15」가 첫 발동과 그 뒤를 이미 가른다(사용자 문장, 2026-10-08 삼미신).
+	if String(it.get("grow", "")) == "fire" and ct.ends_with("맞힌 발부터"):
+		ct = ct.trim_suffix("맞힌 발부터") + "맞히면"
 	if ct == "" or eff == "":
 		return ct if eff == "" else eff
 	return ct + " " + eff

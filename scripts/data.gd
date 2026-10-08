@@ -1943,13 +1943,16 @@ static func eff_line(it: Dictionary) -> String:
 		return ""     # 골드 카드 — 효과는 골드 줄이 이미 말한다
 	var g: String = String(it.get("grow", ""))
 	# 성장형 넷은 한 틀이다 — 「[점수|배수] +X에서 시작 · [주기] ±Y (· 0이면 파괴)」.
+	# fire 만 「+X · 이후 발동마다 추가 +Y」다 — 사용자 문장(2026-10-08 삼미신 「이번 판에 다른
+	# 숫자를 3개를 맞추면 +15 이후 발동 마다 추가 +15」). 「+15에서 시작」은 첫 발동 값이
+	# 무엇에서 시작하는지가 안 읽혔다.
 	# hitmiss 는 gs 가 0 에서 쌓이고, fire 는 발동 전에 gs 를 올려 첫 발동이 gstep 이다.
 	# tdec 은 _wear_spent 가, rdec 은 판 끝이 0 에서 지운다.
 	var stat: String = "점수" if it.k == "chip" else "배수"
 	if g == "hitmiss":
 		return "%s +0에서 시작 · 맞히면 +%d · 빗나가면 −%d" % [stat, it.gstep, it.gstep]
 	if g == "fire":
-		return "%s +%d에서 시작 · 발동할 때마다 +%d" % [stat, it.gstep, it.gstep]
+		return "%s +%d · 이후 발동마다 추가 +%d" % [stat, it.gstep, it.gstep]
 	if g == "tdec":
 		return "%s +%d에서 시작 · 던질 때마다 −%d · 0이면 파괴" % [stat, it.v, it.gstep]
 	if g == "rdec":
