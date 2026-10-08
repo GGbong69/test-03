@@ -22,7 +22,15 @@ extends RefCounted
 #  끄기에서 멈춘다. 헤드리스에서는 만들지 않는다(부르는 쪽이 막는다).
 # ══════════════════════════════════════════════════════════
 
-const ROOM_PX := Vector2i(320, 180)     # 방은 반 해상도 — 두 배로 붙인다
+const ROOM_PX := Vector2i(320, 180)     # 방은 반 해상도 — 두 배로 붙인다(16:9 일 때의 크기)
+const ROOM_FOV := 50.0                    # 16:9 에서의 세로 시야(도)
+#  ── 16:9 가 아닌 화면 (2026-10-08) ──────────────────────────
+#  방 화판은 화면 비 그대로 굽는다(room_fit) — 16:9 로 구운 것을 온 화면에 늘여 붙이면 21:9 에서
+#  술병 · 간판이 옆으로 퍼지고 4:3 에서 위아래로 늘었다. 넓은 화면은 세로 시야를, 높은 화면은
+#  가로 시야를 16:9 그대로 지킨다 — 가운데 640x360 은 한 점도 안 바뀌고 남는 쪽에 방이 더 보인다.
+#  테이블은 벨벳(640)을 그대로 두고 카운터 · 턱 · 난간 · 앞판만 양옆으로 TBL_EXT 씩 더 짓는다 —
+#  화판(table_fit)이 화면 끝까지 넓어지면 카운터가 거기까지 이어진다.
+const TBL_EXT := 400.0
 
 #  색 — 방은 어둡고 따뜻하게, 빛나는 것만 채도를 쓴다.
 const COL := {
@@ -165,7 +173,7 @@ static func make_room(host: Node) -> SubViewport:
 
 	var cam := Camera3D.new()
 	cam.name = "Cam"
-	cam.fov = 50.0
+	cam.fov = ROOM_FOV
 	cam.near = 0.05
 	cam.far = 40.0
 	#  선반(높이 1.4~2.3)이 화면 위 12~30% — HUD 밑과 테이블 먼 턱 사이의 띠에
@@ -196,18 +204,19 @@ static func make_room(host: Node) -> SubViewport:
 	var wall := _mat(COL.wall, 0.9)
 	wall.albedo_texture = _noise_tex(0.02, 0.75, 1.0, 11)
 	wall.uv1_scale = Vector3(6.0, 1.0, 1.0)
-	root.add_child(_box(Vector3(14.0, 5.0, 0.2), Vector3(0.0, 2.0, -2.6), wall))
+	#  벽 · 천장 · 바닥 폭 40 — 32:9 에서도 끝이 안 보인다(room_fit 머리말).
+	root.add_child(_box(Vector3(40.0, 5.0, 0.2), Vector3(0.0, 2.0, -2.6), wall))
 	#  판자 이음 — 세로 줄을 몇 줄 앞에 세운다.
-	for k in range(-12, 13):
+	for k in range(-36, 37):
 		root.add_child(_box(Vector3(0.025, 5.0, 0.02), Vector3(float(k) * 0.55, 2.0, -2.49),
 				_mat(COL.wall.darkened(0.35))))
 	#  허리 몰딩
-	root.add_child(_box(Vector3(14.0, 0.08, 0.06), Vector3(0.0, 0.95, -2.46), _mat(COL.trim, 0.5)))
-	root.add_child(_box(Vector3(14.0, 0.2, 8.0), Vector3(0.0, 3.4, 0.0), _mat(COL.ceil)))
+	root.add_child(_box(Vector3(40.0, 0.08, 0.06), Vector3(0.0, 0.95, -2.46), _mat(COL.trim, 0.5)))
+	root.add_child(_box(Vector3(40.0, 0.2, 8.0), Vector3(0.0, 3.4, 0.0), _mat(COL.ceil)))
 	# 천장 들보
-	for k in range(-3, 4):
+	for k in range(-12, 13):
 		root.add_child(_box(Vector3(0.18, 0.16, 6.0), Vector3(float(k) * 1.6, 3.15, 0.0), _mat(COL.wood_dk)))
-	root.add_child(_box(Vector3(14.0, 0.2, 8.0), Vector3(0.0, -0.1, 0.0), _mat(Color("140d0b"))))
+	root.add_child(_box(Vector3(40.0, 0.2, 8.0), Vector3(0.0, -0.1, 0.0), _mat(Color("140d0b"))))
 
 	# ── 뒤 선반과 술병 ──
 	var rng := RandomNumberGenerator.new()
@@ -677,26 +686,26 @@ static func make_table(host: Node, r: Rect2, fy: float, ny: float, back: float,
 	root.name = "Table"
 	vp.add_child(root)
 
-	#  카메라 — 상인 손(_stage3_make)과 같은 식. 1 월드 단위 = 화면 1px.
+	#  카메라 — 상인 손(_stage3_make)과 같은 식. 1 월드 단위 = 화면 1px. 자리 · 크기는
+	#  table_fit 이 화판과 같이 세운다(화면 비가 바뀌면 다시 부른다).
 	var cam := Camera3D.new()
+	cam.name = "Cam"
 	cam.projection = Camera3D.PROJECTION_ORTHOGONAL
 	cam.keep_aspect = Camera3D.KEEP_HEIGHT
-	cam.size = r.size.y
 	cam.near = 1.0
 	cam.far = 4000.0
-	var pit: float = deg_to_rad(pitch_deg)
-	cam.rotation = Vector3(pit, 0.0, 0.0)
-	var mid := Vector3(r.position.x + r.size.x * 0.5, 0.0,
-			(r.position.y + r.size.y * 0.5 - fy) / flat)
-	cam.position = mid + Vector3(0.0, -sin(pit), cos(pit)) * 900.0
 	root.add_child(cam)
+	table_fit(vp, r, fy, flat, pitch_deg)
 
 	var we := WorldEnvironment.new()
 	we.environment = lamp_env()
 	root.add_child(we)
 
 	var W: float = (ny - fy) / flat          # 벨벳 깊이(면 단위)
-	var X: float = r.size.x
+	#  벨벳 폭은 화면 640 그대로다 — 화판이 넓어져도(table_fit) 판 위 판정(창구 · 낙하 레인)이
+	#  640 위에 서 있다. 넓어진 자리는 카운터(E)가 채운다.
+	var X: float = 640.0
+	var E: float = TBL_EXT
 	var brass := _mat(COL.brass, 0.3, 0.55)
 
 	# ── 나무 그림 — 화면 1px = 1텍셀. 판자(이음 · 못) 하나, 통나무(결만) 둘 ──
@@ -715,10 +724,10 @@ static func make_table(host: Node, r: Rect2, fy: float, ny: float, back: float,
 			Vector3(X, 0.0, W), Vector3(0.0, 0.0, W)], vel))
 
 	# ── 옆 카운터 — 옛 창구 자리. 니스 칠한 밤나무 판자, 벨벳보다 한 단 위 ──
-	root.add_child(_face([Vector3(-TEX_U, TOP_H, -2.0), Vector3(back, TOP_H, -2.0),
-			Vector3(0.0, TOP_H, W), Vector3(-TEX_U, TOP_H, W)], plank, Vector3.UP, tex))
-	root.add_child(_face([Vector3(X - back, TOP_H, -2.0), Vector3(X + TEX_U, TOP_H, -2.0),
-			Vector3(X + TEX_U, TOP_H, W), Vector3(X, TOP_H, W)], plank, Vector3.UP, tex))
+	root.add_child(_face([Vector3(-E, TOP_H, -2.0), Vector3(back, TOP_H, -2.0),
+			Vector3(0.0, TOP_H, W), Vector3(-E, TOP_H, W)], plank, Vector3.UP, tex))
+	root.add_child(_face([Vector3(X - back, TOP_H, -2.0), Vector3(X + E, TOP_H, -2.0),
+			Vector3(X + E, TOP_H, W), Vector3(X, TOP_H, W)], plank, Vector3.UP, tex))
 
 	# ── 조각 틀 — 빗변 몰딩(나무 두 단) + 벨벳 쪽 금실 + 모서리 놋쇠 갓 ──
 	var carve := _mat(WOOD.carve, 0.45)
@@ -755,15 +764,15 @@ static func make_table(host: Node, r: Rect2, fy: float, ny: float, back: float,
 		root.add_child(_quad([e0, e1, e2], brass))
 
 	# ── 먼 턱 — 상인 앞 카운터 끝. 니스 칠한 통나무 갓 · 이빨 장식 · 놋쇠 줄 ──
-	root.add_child(_face([Vector3(-TEX_U, 8.0, 0.0), Vector3(X + TEX_U, 8.0, 0.0),
-			Vector3(X + TEX_U, 0.0, 0.0), Vector3(-TEX_U, 0.0, 0.0)], ledge_f, Vector3.BACK, tex))
+	root.add_child(_face([Vector3(-E, 8.0, 0.0), Vector3(X + E, 8.0, 0.0),
+			Vector3(X + E, 0.0, 0.0), Vector3(-E, 0.0, 0.0)], ledge_f, Vector3.BACK, tex))
 	#  갓 — 앞으로 1.5 내민 윗판(윗면 · 앞면)과 그 앞 놋쇠 줄
-	_slab(root, -TEX_U, X + TEX_U, -14.0, 1.5, 8.0, 10.4, ledge, ledge_f, tex)
-	root.add_child(_box(Vector3(X + 40.0, 0.9, 1.0), Vector3(X * 0.5, 10.2, 1.0), brass))
-	#  이빨 장식(덴틸) — 갓 밑에 작은 토막이 6 간격으로
+	_slab(root, -E, X + E, -14.0, 1.5, 8.0, 10.4, ledge, ledge_f, tex)
+	root.add_child(_box(Vector3(X + E * 2.0, 0.9, 1.0), Vector3(X * 0.5, 10.2, 1.0), brass))
+	#  이빨 장식(덴틸) — 갓 밑에 작은 토막이 6 간격으로(옛 자리 −14 의 6 칸 격자 그대로 넓힌다)
 	var dent := _mat(WOOD.beam.lightened(0.04), 0.5)
-	var du := -14.0
-	while du < X + 14.0:
+	var du := -14.0 - floorf((E - 14.0) / 6.0) * 6.0
+	while du < X + E:
 		root.add_child(_box(Vector3(3.0, 3.6, 1.4), Vector3(du, 5.6, 0.5), dent))
 		du += 6.0
 	#  벨벳 먼 끝 금실
@@ -774,12 +783,12 @@ static func make_table(host: Node, r: Rect2, fy: float, ny: float, back: float,
 	var railm := _mat(WOOD.beam, 0.42)
 	railm.metallic_specular = 0.35
 	railm.albedo_texture = _noise_tex(0.05, 0.7, 1.0, 9)
-	var rail := _cyl(8.5, 8.5, X + 60.0, Vector3(X * 0.5, 4.0, W + 8.0), railm, 20)
+	var rail := _cyl(8.5, 8.5, X + E * 2.0, Vector3(X * 0.5, 4.0, W + 8.0), railm, 20)
 	rail.rotation_degrees = Vector3(0.0, 0.0, 90.0)
 	root.add_child(rail)
-	root.add_child(_box(Vector3(X + 60.0, 1.4, 1.4), Vector3(X * 0.5, -5.0, W + 16.0), brass))
-	var bu := -8.0
-	while bu < X + 8.0:
+	root.add_child(_box(Vector3(X + E * 2.0, 1.4, 1.4), Vector3(X * 0.5, -5.0, W + 16.0), brass))
+	var bu := -8.0 - floorf((E - 8.0) / 7.0) * 7.0
+	while bu < X + E:
 		var bb := _ball(2.2, Vector3(bu, -8.6, W + 18.6), carve)
 		bb.scale = Vector3(1.4, 1.0, 1.0)
 		root.add_child(bb)
@@ -789,7 +798,7 @@ static func make_table(host: Node, r: Rect2, fy: float, ny: float, back: float,
 	var apron := _mat(WOOD.apron, 0.75)
 	apron.albedo_texture = _noise_tex(0.04, 0.55, 1.0, 13)
 	apron.uv1_scale = Vector3(2.0, 1.0, 1.0)
-	root.add_child(_box(Vector3(X + 60.0, 260.0, 4.0), Vector3(X * 0.5, -136.0, W + 16.0), apron))
+	root.add_child(_box(Vector3(X + E * 2.0, 260.0, 4.0), Vector3(X * 0.5, -136.0, W + 16.0), apron))
 	var zf: float = W + 18.0
 	var frame := _mat(WOOD.ledge, 0.55)
 	frame.albedo_texture = _noise_tex(0.05, 0.65, 1.0, 17)
@@ -797,13 +806,15 @@ static func make_table(host: Node, r: Rect2, fy: float, ny: float, back: float,
 	field.albedo_texture = _noise_tex(0.04, 0.6, 1.0, 19)
 	field.uv1_scale = Vector3(2.0, 1.0, 1.0)
 	#  위 띠
-	root.add_child(_box(Vector3(X + 60.0, 4.0, 2.4), Vector3(X * 0.5, -13.0, zf + 1.2), frame))
+	root.add_child(_box(Vector3(X + E * 2.0, 4.0, 2.4), Vector3(X * 0.5, -13.0, zf + 1.2), frame))
 	var pw := 128.0
-	for k in range(0, 6):
+	var k0: int = -int(ceilf(E / pw))
+	var k1: int = int(ceilf((X + E) / pw))
+	for k in range(k0, k1 + 1):
 		var su: float = float(k) * pw
 		#  선대(세로 테)
 		root.add_child(_box(Vector3(7.0, 200.0, 2.4), Vector3(su, -115.0, zf + 1.2), frame))
-		if k == 5:
+		if k == k1:
 			break
 		var cu: float = su + pw * 0.5
 		#  돋은 판 — 테 안쪽에서 한 단 나온다
@@ -848,6 +859,41 @@ static func make_table(host: Node, r: Rect2, fy: float, ny: float, back: float,
 		og.position = Vector3(tg.x, tg.y + 150.0, tg.z - 150.0 * 0.78)
 		root.add_child(og)
 	return vp
+
+
+#  테이블 화판을 화면 사각 r 에 맞춘다 — 화판 크기 · 카메라 크기 · 자리. 1 월드 단위 = 화면 1px
+#  이라 r 이 넓어지면 카메라가 그만큼 더 본다(벨벳 자리는 안 움직인다).
+static func table_fit(vp: SubViewport, r: Rect2, fy: float, flat: float, pitch_deg: float) -> void:
+	var sz := Vector2i(maxi(int(round(r.size.x)), 2), maxi(int(round(r.size.y)), 2))
+	if vp.size != sz:
+		vp.size = sz
+	var cam := vp.get_node_or_null("Table/Cam") as Camera3D
+	if cam == null:
+		return
+	cam.size = r.size.y
+	var pit: float = deg_to_rad(pitch_deg)
+	cam.rotation = Vector3(pit, 0.0, 0.0)
+	var mid := Vector3(r.position.x + r.size.x * 0.5, 0.0,
+			(r.position.y + r.size.y * 0.5 - fy) / flat)
+	cam.position = mid + Vector3(0.0, -sin(pit), cos(pit)) * 900.0
+
+
+#  방 화판을 화면 크기(논리 px)에 맞춘다 — 반 해상도. 넓은 화면은 세로 시야, 높은 화면은
+#  가로 시야를 16:9 그대로 지켜 가운데가 안 바뀐다(ROOM_FOV 머리말).
+static func room_fit(vp: SubViewport, logical: Vector2) -> void:
+	var sz := Vector2i(maxi(int(round(logical.x * 0.5)), 2), maxi(int(round(logical.y * 0.5)), 2))
+	if vp.size != sz:
+		vp.size = sz
+	var cam := vp.get_node_or_null("Room/Cam") as Camera3D
+	if cam == null:
+		return
+	var a169: float = 16.0 / 9.0
+	if logical.x / maxf(logical.y, 1.0) >= a169 - 0.001:
+		cam.keep_aspect = Camera3D.KEEP_HEIGHT
+		cam.fov = ROOM_FOV
+	else:
+		cam.keep_aspect = Camera3D.KEEP_WIDTH
+		cam.fov = rad_to_deg(2.0 * atan(tan(deg_to_rad(ROOM_FOV * 0.5)) * a169))
 
 
 #  진열 스포트 둘(SellLamp · BuyLamp) — 소품마다 왼쪽 위에서 좁게. pool 이면 그 옆에 꺼 둔

@@ -59,6 +59,46 @@ func _wide(y: float, h: float, up := false, dn := false) -> Rect2:
 	return Rect2(-view_pad.x, y0, VIEW.x + view_pad.x * 2.0, hh)
 
 
+#  ── UI 가 화면 끝을 따라간다 (2026-10-08) ─────────────────────
+#  「와이드모니터나 다른 모니터에서 작동 할 떄 좀 그 모니터에 맞는 UI」. 여백(view_pad)이
+#  생기면 HUD 가 판을 따라 가운데 640 에 몰리지 않고 화면 끝으로 간다 —
+#    왼끝   자금판 · 사탕·사진 칸 · 판매 단추 · 상단 띠 왼칸(라운드 · 판 이름)
+#    오른끝 동전 · 다트 꼬리표 · 정보 · 일시정지 · 상단 띠 오른칸(목표 · 점수 · 제약)
+#    가운데 동전 슬롯(상인 머리를 가리는 자리라 가운데를 지킨다) · 목표 게이지는 양쪽으로 길어진다
+#    위끝   첫 줄 전부(16:10 · 4:3 처럼 위아래가 남는 화면)
+#  너무 넓은 화면(32:9)에서는 끝까지 안 가고 UIW 에서 멈춘다 — 눈이 양 끝을 오가지 않게
+#  (가로 160 이면 24:9 까지 끝에 닿는다). **16:9 는 여백이 0 이라 한 픽셀도 안 바뀐다** —
+#  640x360 위에 선 검사 도구의 좌표가 다 그대로다. 그리는 쪽과 누르는 쪽이 같은 rect 함수를
+#  지나므로 둘이 같이 간다.
+#  ⚠ **화면 없는 실행(헤드리스 검사)에서는 0 이다.** 그 창은 640x640 이라 여백이 위아래 140 씩
+#  생기는데, 검사 도구 수백 개가 640x360 좌표(표의 자리)로 짜여 있다 — 켜 두면 첫 줄이 60 올라
+#  qa_hold 의 톡 · 끌기가 빈자리를 눌렀다. 비율을 재는 검사(qa_aspect)만 ui_pad_force 로 켠다
+#  (wipe_force · win_snap_force 와 같은 문).
+const UIW := {"x": 160.0, "y": 60.0}
+var ui_pad_force := false
+
+
+func _ui_pad() -> Vector2:
+	var p := _fill_pad()
+	return Vector2(minf(p.x, float(UIW.x)), minf(p.y, float(UIW.y)))
+
+
+#  화면 끝까지 채우는 것(HUD · 상점 테이블 화판)이 보는 여백 — 화면 없는 실행에서는 0(위 머리말).
+func _fill_pad() -> Vector2:
+	if ui_pad_force or _has_renderer():
+		return view_pad
+	return Vector2.ZERO
+
+
+#  첫 줄이 위끝으로 오르는 몫(음수). **상인이 서는 화면(판 고르기 · 상점)은 안 오른다** —
+#  동전 슬롯이 상인 머리를 가리는 자리다(_panel_rect 머리말 · 얼굴 숨김). 4:3 에서 올렸더니
+#  슬롯 밑으로 조끼 윗동이 잘린 채 드러났다. 그 화면은 위 여백에 방이 더 보인다.
+func _ui_top() -> float:
+	if state == S.LEG or state == S.SHOP:
+		return 0.0
+	return -_ui_pad().y
+
+
 #  창 크기가 바뀔 때마다 여백을 다시 잰다. 값이 그대로면 아무것도 안 한다.
 func _view_fit() -> void:
 	var vs: Vector2 = get_viewport_rect().size
@@ -70,6 +110,7 @@ func _view_fit() -> void:
 		return
 	view_pad = p
 	position = p
+	_room3d_fit()            # 상점 방 · 테이블 화판을 새 화면 비에 맞춘다
 	#  흐림 판은 **온 화면**을 덮어야 한다. 노드와 같이 밀리므로 그만큼
 	#  되밀고 키운다 — 안 그러면 여백만 또렷하게 남아 판이 액자가 된다.
 	var bl := get_node_or_null("Blur")
@@ -322,7 +363,8 @@ func _bar_hidden() -> bool:
 
 
 func _hud_dy() -> float:
-	return HUD_UP if _bar_hidden() else 0.0
+	#  위끝을 따라간다(_ui_top) — 위아래가 남는 화면에서 첫 줄이 화면 윗변에 붙는다.
+	return (HUD_UP if _bar_hidden() else 0.0) + _ui_top()
 
 
 # 자금판은 상점·스테이지에서 이자 줄과 런 진행 칸이 붙어 BANK.tall 로 자란다.
@@ -339,6 +381,7 @@ const BANK := {"tall": 54.0, "gold_mid": 14.0, "itr_y": 39.0, "pip_y": 44.0}
 func _bank_rect() -> Rect2:
 	var r: Rect2 = LAY.bank
 	r.position.y += _hud_dy()
+	r.position.x -= _ui_pad().x          # 왼끝을 따라간다
 	if _bar_hidden() or state == S.CLEAR:
 		r.size.y = float(BANK.tall)
 	return r
@@ -10571,12 +10614,13 @@ func _sell_btn_rect() -> Rect2:
 
 #  높이 52 — 누운 단추(_slab)의 앞면 두께 12 를 밑으로 더한 것이다. 윗면(글자가 서는 면)은
 #  옛 단추의 몸 40 그대로라 글줄 자리가 안 바뀐다.
+#  넓은 화면에서는 양끝을 따라간다(_ui_pad) — 카운터 앞판이 화면 끝까지 이어진다(_room3d_rect).
 func _reroll_rect() -> Rect2:
-	return Rect2(Vector2(32.0, 288.0), Vector2(152.0, 52.0))
+	return Rect2(Vector2(32.0 - _ui_pad().x, 288.0), Vector2(152.0, 52.0))
 
 
 func _next_rect() -> Rect2:
-	return Rect2(Vector2(432.0, 288.0), Vector2(176.0, 52.0))
+	return Rect2(Vector2(432.0 + _ui_pad().x, 288.0), Vector2(176.0, 52.0))
 
 
 # ══════════════════════════════════════════════════════════
@@ -10951,7 +10995,8 @@ func _turn_cell(i: int, k: float) -> Rect2:
 	var sc: float = lerpf(1.0, float(TURN.k), k)
 	var dx: float = float(LAY.bar_pip_dx) * sc
 	var w: float = dx * (n - 1.0) + pip.size.x * sc
-	var home := pip.position + Vector2(
+	#  바의 제자리는 띠를 따라 왼끝 · 위끝으로 간다(_bar_pip_at).
+	var home := _bar_pip_at() + Vector2(
 			float(LAY.bar_pip_dx) * (n - 1.0) + pip.size.x, pip.size.y) * 0.5
 	var c := home.lerp(TURN.to, k)
 	return Rect2(roundf(c.x - w * 0.5 + float(i) * dx),
@@ -11294,7 +11339,9 @@ func _fire_edge() -> void:
 	var g2: float = float(FIRE.gain[fire_lay]) * fire_mul * _fire_env()
 	if g2 <= 0.0:
 		return
-	var top: float = float(LAY.bar.size.y)
+	#  화면 **끝**을 두른다(여백까지 — _ui_pad 머리말). 위는 띠 밑에서 시작한다.
+	var fr := _full()
+	var top: float = float(LAY.bar.size.y) + _bar_y()
 	var w: float = float(FIRE.w)
 	for k in int(FIRE.lay[fire_lay]):
 		var a: float = float(FIRE.a[k]) * g2
@@ -11302,10 +11349,10 @@ func _fire_edge() -> void:
 			continue
 		var col := Color(C_GOLD, a)
 		var o: float = float(k) * w      # 바깥에서 안으로 한 겹씩
-		var x0: float = o
+		var x0: float = fr.position.x + o
 		var y0: float = top + o
-		var sw: float = VIEW.x - o * 2.0
-		var sh2: float = VIEW.y - top - o * 2.0
+		var sw: float = fr.size.x - o * 2.0
+		var sh2: float = fr.end.y - top - o * 2.0
 		if sw <= 0.0 or sh2 <= 0.0:
 			break
 		draw_rect(Rect2(x0, y0, sw, w), col)                          # 위
@@ -11345,15 +11392,17 @@ func _fire_tongues(g2: float, top: float) -> void:
 	#  값이 클수록 높이 탄다(fire_heat · FIRE.heat_* 주석).
 	var h_lo := 5.0 * fire_heat
 	var h_hi := 17.0 * fire_heat
-	var W: float = VIEW.x
-	var H: float = VIEW.y
+	var fr := _full()
+	var X0: float = fr.position.x
+	var W: float = fr.end.x
+	var H: float = fr.end.y
 	#  ⚠ **위 가장자리에는 혀를 안 세운다.** 처음에는 네 변 다 세웠는데 찍어
 	#  보니 위 혀가 동전 슬롯 · 다트 칸의 이름(「동전」「다트」「정보」)을
 	#  갉아먹었다 — 점수를 읽게 하려고 만든 층이 정보를 덮으면 진 것이다.
 	#  불은 아래에서 타오르므로 아래와 옆만으로 「탄다」가 선다. 위는 겹의
 	#  달아오름만 남는다.
-	for i in int(W / step):
-		var x := float(i) * step
+	for i in int((W - X0) / step):
+		var x := X0 + float(i) * step
 		var hb: float = lerpf(h_lo, h_hi, _gl_rand(i * 7 + bucket * 131, 911))
 		draw_rect(Rect2(x, H - hb * 0.45, step, hb * 0.45), cg)
 		draw_rect(Rect2(x, H - hb * 0.80, step, hb * 0.35), ce)
@@ -11365,9 +11414,9 @@ func _fire_tongues(g2: float, top: float) -> void:
 		var up: float = lerpf(0.30, 1.0, float(j) / maxf((H - top) / step, 1.0))
 		var hl: float = lerpf(h_lo, h_hi, _gl_rand(j * 13 + bucket * 139, 917)) * up
 		var hr: float = lerpf(h_lo, h_hi, _gl_rand(j * 17 + bucket * 149, 919)) * up
-		draw_rect(Rect2(0.0, y, hl * 0.45, step), cg)
-		draw_rect(Rect2(hl * 0.45, y, hl * 0.35, step), ce)
-		draw_rect(Rect2(hl * 0.80, y + 1.0, hl * 0.20, step - 2.0), cm)
+		draw_rect(Rect2(X0, y, hl * 0.45, step), cg)
+		draw_rect(Rect2(X0 + hl * 0.45, y, hl * 0.35, step), ce)
+		draw_rect(Rect2(X0 + hl * 0.80, y + 1.0, hl * 0.20, step - 2.0), cm)
 		draw_rect(Rect2(W - hr * 0.45, y, hr * 0.45, step), cg)
 		draw_rect(Rect2(W - hr * 0.80, y, hr * 0.35, step), ce)
 		draw_rect(Rect2(W - hr, y + 1.0, hr * 0.20, step - 2.0), cm)
@@ -16096,7 +16145,7 @@ func _wall3_room(y0: float, y1: float, a: float) -> void:
 	if not (room3d_on and room_vp != null and is_instance_valid(room_vp)):
 		draw_rect(Rect2(f.position.x, y0, f.size.x, y1 - y0), Color(C_WOOD, a))
 		return
-	var ts := Vector2(Room3D.ROOM_PX)
+	var ts := Vector2(room_vp.size)          # 화면 비로 굽는다(Room3D.room_fit)
 	var k0: float = clampf((y0 - f.position.y) / f.size.y, 0.0, 1.0)
 	var k1: float = clampf((y1 - f.position.y) / f.size.y, 0.0, 1.0)
 	draw_texture_rect_region(room_vp.get_texture(), Rect2(f.position.x, y0, f.size.x, y1 - y0),
@@ -17214,8 +17263,31 @@ func _aim_v_line(x: float, col: Color) -> void:
 	_aim_stroke(Vector2(x, BC.y + cut), Vector2(x, 334.0), col)
 
 
+#  상단 띠의 윗변 — **어느 화면에서나** 위끝을 따라간다. 상인이 서는 화면(판 고르기)에서도
+#  띠는 오른다 — 첫 줄(동전 슬롯)만 상인 머리를 가리려고 제자리를 지키고(_ui_top), 띠와 첫 줄
+#  사이에 방이 보인다. 띠까지 제자리면 그 위 여백이 짙은 판 한 장(레터박스)으로 막혔다.
+func _bar_y() -> float:
+	return -_ui_pad().y
+
+
+#  상단 띠 왼칸의 라운드 칸 여덟 — 왼끝 · 위끝을 따라간다. 띠(_draw_topbar)와 라운드 경계
+#  연출(_turn_cell)이 같이 쓴다.
+func _bar_pip_at() -> Vector2:
+	return (LAY.bar_pip as Rect2).position + Vector2(-_ui_pad().x, _bar_y())
+
+
+#  상단 띠 오른칸의 제약 아이콘 자리 — 오른끝 · 위끝을 따라간다. 얹힘(그리기)과 툴팁이 같이 쓴다.
+func _bar_mod_rect() -> Rect2:
+	return Rect2(float(LAY.bar_mod) - 4.0 + _ui_pad().x, _bar_y(), 60.0, 18.0)
+
+
 func _draw_topbar() -> void:
 	var r: Rect2 = LAY.bar
+	#  띠는 위끝을, 칸은 양끝을 따라간다(_ui_pad). 왼칸(라운드 · 판 이름)은 왼끝으로, 오른칸
+	#  (목표 · 점수 · 제약)은 오른끝으로 가고 가운데 게이지가 그만큼 길어진다.
+	var ul: float = -_ui_pad().x
+	var ur: float = _ui_pad().x
+	r.position.y += _bar_y()
 	#  띠는 여백까지 간다. 640 에서 끊으면 넓은 화면에서 상단 바가
 	#  화면 가운데에 뜬 판때기가 된다 — 칸의 자리(LAY.bar_cut)는 그대로다.
 	#  다트판 벽이 선 화면에서는 띠 **위** 여백(16:9 보다 높은 창)을 판때기로 안 채운다 —
@@ -17224,13 +17296,18 @@ func _draw_topbar() -> void:
 	#  상점 방과 같이(_wall3_room_k) 건너간다.
 	var ua: float = _wall3_room_k() if _wall3_live() and _wall3_here() else 1.0
 	draw_rect(_wide(r.position.y, r.size.y), C_PANEL)
-	if ua > 0.0 and view_pad.y > 0.0:
-		draw_rect(Rect2(-view_pad.x, r.position.y - view_pad.y, VIEW.x + view_pad.x * 2.0,
-				view_pad.y), Color(C_PANEL, ua))
-	draw_rect(_wide(r.size.y - 1.0, 1.0), C_BG)
+	#  띠 위로 남은 여백(위끝을 UIW 까지만 따라간 화면) — 띠가 위끝에 붙으면 0 이다.
+	var above: float = r.position.y + view_pad.y
+	if ua > 0.0 and above > 0.0:
+		draw_rect(Rect2(-view_pad.x, -view_pad.y, VIEW.x + view_pad.x * 2.0, above),
+				Color(C_PANEL, ua))
+	draw_rect(_wide(r.position.y + r.size.y - 1.0, 1.0), C_BG)
+	#  아래 칸 · 글자는 띠의 자리(위끝)로 한 번에 옮겨 그린다 — y 는 띠 안의 값 그대로다.
+	draw_set_transform(shake_off + Vector2(0.0, _bar_y()))
 	# 1px 두 줄이 "칸이 나뉘어 있다"를 만드는 전부다. 640x360 에서 테두리는 사치다.
-	for cx in LAY.bar_cut:
-		draw_line(Vector2(cx, 3.0), Vector2(cx, 15.0), C_BG, 1.0)
+	var cuts: Array = LAY.bar_cut
+	draw_line(Vector2(float(cuts[0]) + ul, 3.0), Vector2(float(cuts[0]) + ul, 15.0), C_BG, 1.0)
+	draw_line(Vector2(float(cuts[1]) + ur, 3.0), Vector2(float(cuts[1]) + ur, 15.0), C_BG, 1.0)
 
 	#  글자 — 「UI 크기에 비해 글자가 작다」(2026-09-17)를 듣고 판 이름 · 목표 ·
 	#  넘친 제약 수를 9 → 12 로 올렸다. 띠가 18px 라 12 가 끝이다 — 20 은 띠를
@@ -17242,7 +17319,7 @@ func _draw_topbar() -> void:
 	# 1칸 x[0,100] — 런 진행
 	#  ⚠ **무한에는 분모가 없다.** 끝이 없는데 「/8」을 찍으면 화면이
 	#  거짓말한다 — 분모가 없는 것이 곧 「본편을 지났다」이다. 2026-09-20
-	draw_string(font, Vector2(8, ty),
+	draw_string(font, Vector2(8.0 + ul, ty),
 			("R%d" % GameData.round_of(leg_no)) if GameData.endless 			else ("R%d/%d" % [GameData.round_of(leg_no), _run_rounds()]),
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, C_TXT)
 	#  ⚠ 라운드 경계가 도는 동안에는 **여기서 안 그린다.** 그 연출의 큰 줄이
@@ -17254,15 +17331,17 @@ func _draw_topbar() -> void:
 	#  샜다. 화소로 쟀다: 칸 x[72,77) y[7,12) 의 속은 14111F 인데 x=77 의
 	#  y7~11 과 y=12 의 x72~77 이 F2B134 로 남는다. 2026-09-20
 	if not turn_live:
-		_run_pips(LAY.bar_pip.position)
+		_run_pips((LAY.bar_pip as Rect2).position + Vector2(ul, 0.0))
 
 	# 2칸 x[100,584] — 목표. 진행바 좌표는 기존 그대로다.
 	#  판 이름은 12 에서 「보스 판」 이 잉크 40px 이다. x104 에서는 게이지(146)와
 	#  2px 만 남아 x103 으로 한 칸 당겼다 — 칸 선(100)과 2px · 게이지와 3px.
 	var g: Rect2 = LAY.bar_gauge
+	g.position.x += ul
+	g.size.x += ur - ul               # 양끝이 벌어진 만큼 길어진다
 	#  판 이름 — C_OFF(6b647e)는 기본 필터에서 띠 위 2.25:1 이라 1280 에서 안 읽혔다(검토,
 	#  2026-10-05). 목표와 같은 글 2층(C_DIM)이다.
-	draw_string(font, Vector2(103, ty), GameData.leg_name(leg_no),
+	draw_string(font, Vector2(103.0 + ul, ty), GameData.leg_name(leg_no),
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 12,
 			C_ACC if GameData.is_boss(leg_no) else C_DIM)
 	#  판 고르기 — 띠는 **고를 판**을 말한다. 정산 → 상점 → 판 고르기로 오면 target · shown 이
@@ -17286,7 +17365,7 @@ func _draw_topbar() -> void:
 	#  점수색이고 넘어야 할 것은 흐린 곁말이다. 같은 색 같은 크기로
 	#  나란히 두면 「내 것」과 「넘을 것」이 한 덩어리로 읽힌다.
 	#  목표 12 는 다섯 자리가 40px — x[466,506] 이라 게이지 끝(446)과 20px 떨어진다.
-	draw_string(font, Vector2(float(LAY.bar_tgt_r) - 60.0, ty),
+	draw_string(font, Vector2(float(LAY.bar_tgt_r) - 60.0 + ur, ty),
 			GameData.big(tgt), HORIZONTAL_ALIGNMENT_RIGHT, 60.0, 12, C_DIM)
 	#  점수는 12 에 둔다. 18(갈무리9 두 배)은 수의 획이 16px 라 18px 띠에서 화면
 	#  윗변(y 0)까지 닿았다 — 찍어 보고 걷었다(2026-09-17).
@@ -17303,7 +17382,7 @@ func _draw_topbar() -> void:
 	#  톡마다 흰 쪽으로 TALLY.flash(0.6)만큼 밝았다 걸음 안에서 돌아온다(tick_flash ·
 	#  2026-10-06). 색이라 모션 끄기도 남는다.
 	#  수는 굴리는 동안 카드 「+n」과 같은 내림이다(_bar_val · 2026-10-06).
-	draw_string(font, Vector2(float(LAY.bar_score_r) - 64.0, ty),
+	draw_string(font, Vector2(float(LAY.bar_score_r) - 64.0 + ur, ty),
 			GameData.big(0 if state == S.LEG else _bar_val()), HORIZONTAL_ALIGNMENT_RIGHT, 64.0, 12,
 			C_LIGHT.lerp(Color(1.0, 1.0, 1.0), float(TALLY.flash) * tick_flash))
 
@@ -17321,24 +17400,25 @@ func _draw_topbar() -> void:
 		#  뒤에 옅은 받침 한 장과 밑줄 한 획을 깐다. 18px 띠라 아이콘은 안 뜬다.
 		#  받침은 화면 오른끝(640)에서 끊는다 — 사각이 4px 넘어가 있어 그대로
 		#  깎으면 오른쪽 모서리만 잘린다.
-		var hr := Rect2(float(LAY.bar_mod) - 4.0, 0.0, 60.0, 18.0)
+		var hr := _bar_mod_rect()          # 누르는 자리 — 화면 좌표
 		if _ui_can_hover() and hr.has_point(mouse_at):
 			ui_hot = "onmod"
 		var mh := _ui_hov("onmod")
 		if mh > 0.0:
 			var back := Rect2(hr.position.x + 2.0, 2.0,
-					minf(hr.end.x, VIEW.x) - hr.position.x - 4.0, 14.0)
+					minf(hr.end.x, VIEW.x + view_pad.x) - hr.position.x - 4.0, 14.0)
 			_rr(self, back, Color(C_TXT, 0.08 * mh))
 			_rr_bottom(self, back, Color(C_ACC, mh))
 		var shown_n: int = mini(active_mods.size(), 3 if active_mods.size() <= 3 else 2)
 		for k in shown_n:
-			_icon_modifier(Vector2(LAY.bar_mod + 8.0 + float(k) * 16.0, 9.0),
+			_icon_modifier(Vector2(LAY.bar_mod + 8.0 + ur + float(k) * 16.0, 9.0),
 					6.0, active_mods[k].id, 0.0)
 		#  「+2」 는 12 에서 잉크 15px — x[623,638] 이라 화면 끝(640) 안이다.
 		if active_mods.size() > 3:
-			draw_string(font, Vector2(LAY.bar_mod + 2.0 + 2.0 * 16.0, ty),
+			draw_string(font, Vector2(LAY.bar_mod + 2.0 + ur + 2.0 * 16.0, ty),
 					"+%d" % (active_mods.size() - 2),
 					HORIZONTAL_ALIGNMENT_LEFT, -1, 12, C_DIM)
+	draw_set_transform(shake_off)
 
 
 #  판 목표 게이지 — 상단 띠(LAY.bar_gauge 300×7)와 합계 카드 턱 위 띠(3px)가 같이 쓴다.
@@ -17424,7 +17504,8 @@ func _bank_draw() -> void:
 	#  선다. 틈 · 플라크를 줄여 억지로 넣으면 벽과 판 끝에 붙는다.
 	var vis := r
 	if _is_play() or (swap_live and swap_in):
-		var cut: float = float(GRIP.wall) + 1.0 - r.position.x
+		#  판이 벽보다 왼쪽(넓은 화면에서 왼끝을 따라간 자리 — _ui_pad)이면 벽이 안 덮는다.
+		var cut: float = float(GRIP.wall) + 1.0 - r.position.x if r.end.x > 0.0 else 0.0
 		if cut > 0.0:
 			vis = Rect2(r.position.x + cut, r.position.y, r.size.x - cut, r.size.y)
 	var gt := str(gold)
@@ -17503,6 +17584,7 @@ func _darts_draw() -> void:
 		return
 	var r: Rect2 = LAY.darts
 	r.position.y += _hud_dy()
+	r.position.x += _ui_pad().x          # 오른끝을 따라간다
 	_panel(r)
 	#  동전 꼬리표(_cap_draw)와 같은 꼴 — 이름 위 · 수 아래, 둘 다 가운데.
 	#  둘이 나란히 서므로 한 벌로 읽혀야 한다. 크기도 같이 간다(_tag_num_sz).
@@ -17551,6 +17633,7 @@ func _tag_num_sz(t: String, w: float) -> int:
 func _cap_draw() -> void:
 	var r: Rect2 = LAY.cap
 	r.position.y += _hud_dy()
+	r.position.x += _ui_pad().x          # 오른끝을 따라간다
 	_panel(r)
 	draw_string(font, r.position + Vector2(0.0, float(TAGBOX.name_y)), "동전",
 			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 12, C_OFF)
@@ -20052,7 +20135,7 @@ var track_hits := {}            # 이 런에서 그 트랙을 몇 번 맞혔나 
 func _cons_rect(i: int) -> Rect2:
 	var c: Rect2 = LAY.cons
 	var w: float = (c.size.x - 4.0) * 0.5
-	return Rect2(c.position.x + float(i) * (w + 4.0), c.position.y + _hud_dy(),
+	return Rect2(c.position.x - _ui_pad().x + float(i) * (w + 4.0), c.position.y + _hud_dy(),
 			w, c.size.y)
 
 
@@ -20381,6 +20464,7 @@ func _cons_draw() -> void:
 	# 동전 슬롯과 같은 재질로 깐다 — 같은 재질이 "여기도 물건 두는 자리다" 를 말한다.
 	var box: Rect2 = LAY.cons
 	box.position.y += _hud_dy()
+	box.position.x -= _ui_pad().x        # 왼끝을 따라간다(_cons_rect 와 같이)
 	#  판 위에서는 펠트를 안 쓴다. 재질이 곧 장소다 — 테이블이 없는 화면에
 	#  초록 덩어리가 있으면 상단에서 그것이 제일 먼저 눈에 든다.
 	#  역할 구분은 재질이 아니라 12px 라벨이 진다.
@@ -24096,8 +24180,12 @@ var room_t := 0.0            # 방의 시계 — 게임 시간이라 모션 끄�
 #  윗동이 화판 밖으로 잘린다(shop_probe
 #  「진열대 소품 창구」가 잰다). 턱 위는 투명이라 방이 비치고, 덮개(_cover_draw)가
 #  이 윗끝부터 턱까지 화판을 상인 몸통 위에 한 번 더 붙여 소품이 상인 앞에 선다.
+#  16:9 가 아닌 화면에서는 화면 끝까지 — 양옆 · 밑 여백(view_pad)까지 덮는다. 카운터가 거기까지
+#  지어져 있다(Room3D.TBL_EXT). 벨벳 · 창구 · 소품 자리는 그대로다(_room3d_fit).
 func _room3d_rect() -> Rect2:
-	return Rect2(0.0, float(TBL.fy) - 84.0, VIEW.x, VIEW.y - float(TBL.fy) + 84.0)
+	var p := _fill_pad()
+	return Rect2(-p.x, float(TBL.fy) - 84.0, VIEW.x + p.x * 2.0,
+			VIEW.y + p.y - float(TBL.fy) + 84.0)
 
 
 func _room3d_live() -> bool:
@@ -24117,6 +24205,16 @@ func _room3d_open() -> void:
 	room_vp = Room3D.make_room(self)
 	tbl3_vp = Room3D.make_table(self, _room3d_rect(), float(TBL.fy), float(TBL.ny),
 			float(CHUTE.back), float(TBL.flat), float(TBL.tall), float(HAND3.pitch))
+	_room3d_fit()
+
+
+#  화면 비가 바뀌면(_view_fit) 방 화판은 그 비로 다시 굽고, 테이블 화판은 화면 끝까지 넓힌다.
+func _room3d_fit() -> void:
+	if room_vp != null and is_instance_valid(room_vp):
+		Room3D.room_fit(room_vp, VIEW + view_pad * 2.0)
+	if tbl3_vp != null and is_instance_valid(tbl3_vp):
+		Room3D.table_fit(tbl3_vp, _room3d_rect(), float(TBL.fy), float(TBL.flat),
+				float(HAND3.pitch))
 
 
 #  안 보일 때는 굽기를 멈춘다 — 지우지는 않는다(다시 지으면 한 박자 걸린다).
@@ -24133,7 +24231,7 @@ func _room3d_band(top: float, bot: float) -> void:
 	var f := _full()
 	var t0: float = clampf((top - f.position.y) / f.size.y, 0.0, 1.0)
 	var t1: float = clampf((bot - f.position.y) / f.size.y, 0.0, 1.0)
-	var ts := Vector2(Room3D.ROOM_PX)
+	var ts := Vector2(room_vp.size)          # 화면 비로 굽는다(Room3D.room_fit)
 	draw_texture_rect_region(room_vp.get_texture(),
 			Rect2(f.position.x, top, f.size.x, bot - top),
 			Rect2(0.0, ts.y * t0, ts.x, ts.y * (t1 - t0)))
@@ -37141,7 +37239,7 @@ func _tip_hit(m: Vector2) -> Dictionary:
 	#  「이름 전체는 하단 y341 줄이 갖는다」고 했는데 그런 줄이 없다.
 	#  상태를 안 가린다. 띠가 떠 있으면 언제나 읽을 수 있어야 한다.
 	if not active_mods.is_empty() and not _bar_hidden():
-		if Rect2(float(LAY.bar_mod) - 4.0, 0.0, 60.0, 18.0).has_point(m):
+		if _bar_mod_rect().has_point(m):
 			return {"k": "onmod", "i": 0}
 	#  낀 보드 확장 명판 — 던지는 동안 오른쪽 아래
 	if _modplate_on() and _modplate_rect().has_point(m):
@@ -37683,11 +37781,14 @@ func _tip_pos(sz: Vector2) -> Vector2:
 		t = _slot_rect(tip_slot)
 	elif tip_spot >= 0 and tip_spot < drop.size():
 		t = _obj_box(tip_spot)
-	var x: float = clampf(t.get_center().x - sz.x * 0.5, 4.0, VIEW.x - sz.x - 4.0)
+	#  화면 **전체**(여백까지) 안에 민다 — HUD 가 화면 끝을 따라가므로(_ui_pad) 640 안으로
+	#  밀면 끝에 선 것의 툴팁이 제 물건에서 떨어진다.
+	var f := _full()
+	var x: float = clampf(t.get_center().x - sz.x * 0.5, f.position.x + 4.0, f.end.x - sz.x - 4.0)
 	var y: float = t.end.y + TIP.gap
-	if y + sz.y > VIEW.y - 4.0:
+	if y + sz.y > f.end.y - 4.0:
 		y = t.position.y - TIP.gap - sz.y
-	return Vector2(x, maxf(y, 4.0))
+	return Vector2(x, maxf(y, f.position.y + 4.0))
 
 
 func _tip_update(d: float) -> void:
@@ -51259,6 +51360,7 @@ func _hud_btns_on() -> bool:
 func _hud_btn_rect(i: int) -> Rect2:
 	var m: Rect2 = LAY.menu
 	m.position.y += _hud_dy()
+	m.position.x += _ui_pad().x          # 오른끝을 따라간다
 	var gap: float = float(HUDBTN.gap)
 	var h: float = (m.size.y - gap) * 0.5
 	return Rect2(m.position.x, m.position.y + float(i) * (h + gap), m.size.x, h)
@@ -51888,6 +51990,10 @@ const TUTOR := {
 	#  보여 주고, 한 번 더 눌러야 넘어간다. 글은 왼쪽에 붙는다(대화체).
 	"cps": 30.0,         # 한 자씩 — 초당 글자 수. 「이건 서비스야 가져가」(11자)가 0.37초
 	"plate_h": 20.0,     # 이름표 높이 — 말상자 윗변에 반쯤 걸친다
+	#  이름표가 상자 안으로 10px 내려오는데 글 첫 줄 잉크 윗변이 상자 위 9.5 라 둘이 0.5px 로
+	#  붙었다(2026-10-08 「대사가 [상인]랑 너무 가까워서 좀 불안정」). 말하는 줄만 글을 이만큼
+	#  내리고 상자를 그만큼 키운다 — 이름표 밑 7px 가 빈다. 설명 줄(이름표 없음)은 그대로다.
+	"talk_top": 7.0,
 	#  ── 말소리 (2026-10-02) ──────────────────────────
 	#  「텍스트가 나올때 한번에 나오지 않고 한글자씩 나오면서 웅웅 소리도
 	#   나오잖아」. 이제 **설명 줄도** 한 자씩 나오고, 글자가 나올 때마다
@@ -52247,7 +52353,10 @@ func _mark_rect(k: String) -> Rect2:
 		#  ⚠ 자금판으로 돌리지 마라. 정산 화면(S.CLEAR)에서는 _hud_draw 가
 		#  자금판을 아예 안 그리므로(「정산 화면은 그 자체가 명세다」) 그때 밝히면
 		#  빈 자리를 가리킨다. 상단 바는 상점(_bar_hidden)에서만 숨는다.
-		"score": return Rect2(144.0, 2.0, 436.0, 14.0)
+		"score":
+			#  띠가 양끝 · 위끝을 따라가므로(_ui_pad) 이 사각도 같이 벌어진다.
+			var up := _ui_pad()
+			return Rect2(144.0 - up.x, 2.0 + _bar_y(), 436.0 + up.x * 2.0, 14.0)
 		#  진열대에서는 소품(화면으로 자른 사각)과 그 밑 이름 · 값(_chute_txt_rect)을 감싼다 —
 		#  시안 C 의 큰 소품은 벽 띠까지 솟아 구멍이 화면 끝에 붙은 세로 판이 된다.
 		"chute_buy":
@@ -52408,7 +52517,7 @@ func _tutor_talk_draw(lines: PackedStringArray, who: String, bx: float, by: floa
 		if i < lines.size() - 1:
 			left -= 1
 		var part := ln.substr(0, take)
-		var base := Vector2(tx0, by + bp + 19.0 + float(i) * lh)
+		var base := Vector2(tx0, by + bp + float(TUTOR.talk_top) + 19.0 + float(i) * lh)
 		_type_line(base, ln, take, g0, Color(C_TXT, a))
 		g0 += ln.length() + 1
 		if take > 0 and font_sm != null:
@@ -52496,6 +52605,8 @@ func _tutor_box() -> Rect2:
 	var bp: float = float(TUTOR.box_pad)
 	var lines := _tutor_wrap(tx, bw - bp * 2.0)
 	var bh: float = bp + float(lines.size()) * float(TUTOR.line) + float(TUTOR.foot)
+	if _tutor_who() != "":
+		bh += float(TUTOR.talk_top)          # 이름표 밑 숨(말하는 줄만)
 	var bx: float = (VIEW.x - bw) * 0.5
 	var mk := _mark_rect(String(_tutor_step().get("mark", "")))
 	var hole := Rect2()
