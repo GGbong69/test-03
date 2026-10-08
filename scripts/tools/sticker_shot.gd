@@ -70,11 +70,9 @@ func _process(_d: float) -> bool:
 		g.hand_m = Vector2(320.0, 150.0)
 		g.hand_zone = -1
 		g.queue_redraw()
-	if frames == 40:
-		g.peel_t = 0.0
+	#  2026-10-08 든 동전은 더는 안 말린다(game.gd RACKF) — 든 모습 두 장(막 든 · 든 채로).
 	if frames == 42:
-		_save("stk_peel.png")     # 떼는 순간 (튕김 최대)
-		g.peel_t = 0.6            # 0.1초 상수의 여섯 배 — 완전히 정착한 값
+		_save("stk_peel.png")
 	if frames == 45:
 		_save("stk_peel2.png")    # 손에서 정착한 말림
 		g.hand_st = g.H.NONE

@@ -513,11 +513,12 @@ func _forms_run() -> void:
 		_ok("%s 접는 선 안쪽에서 윗조각이 남는다" % f, empty <= 1, "빈 단 %d" % empty)
 
 	# ── ⓗ-c′ **든 것이 실제로 말리는가 · 원반과 같은 몫으로**
-	print("  ── ⓗ-c 말림 (peel 은 _peel_now 의 진짜 두 값) ──")
+	#  2026-10-08 동전 슬롯 동전은 더는 안 말린다(game.gd RACKF) — 말림 기하는 스티커 그림에 남아
+	#  있으므로 옛 _peel_now 의 두 값(뗀 순간 0.60 · 정착 0.28)으로 그대로 잰다.
+	print("  ── ⓗ-c 말림 (peel 은 옛 _peel_now 의 두 값) ──")
 	var pr := 19.0
-	for pt in [0.0, 1.0]:
-		g.peel_t = pt
-		var pl: float = g._peel_now()
+	for pl0 in [0.60, 0.28]:
+		var pl: float = float(pl0)
 		var fd: float = (pr - g._peel_y(pr, pl)) / (2.0 * pr)
 		for f in _forms():
 			var fs := String(f)
@@ -530,15 +531,13 @@ func _forms_run() -> void:
 					"접는 선 %.2f < 반높이 %.2f · %.1f%% (원반 %.1f%%)"
 					% [yy, half, fq * 100.0, fd * 100.0])
 	#  **어제 값과 한 글자도 안 다른가** — 리팩터가 기존 그림을 안 건드렸다는 증명
-	g.peel_t = 1.0
-	var pl2: float = g._peel_now()
+	var pl2: float = 0.28
 	_ok("slab 말림 = 어제 _plq_peel_y", absf(g._coin_peel_y("slab", pr, pl2)
 			- g._plq_peel_y(pr, pl2)) < 1e-9, "%.6f" % g._coin_peel_y("slab", pr, pl2))
 	_ok("disc·even 말림 = 어제 _peel_y",
 			absf(g._coin_peel_y("disc", pr, pl2) - g._peel_y(pr, pl2)) < 1e-9
 			and absf(g._coin_peel_y("even", pr, pl2) - g._peel_y(pr, pl2)) < 1e-9,
 			"%.6f" % g._coin_peel_y("even", pr, pl2))
-	g.peel_t = 0.0
 	#  **어제 식과 오늘 식을 나란히 부른다.** 증인 셋(_plq_pts · _plq_ang ·
 	#  _plq_face_r)은 게임이 더는 안 부르지만 여기서만 산다 — slab 에서 한
 	#  점도 안 다르다는 것이 「리팩터가 기존 그림을 안 건드렸다」의 유일한 증명이다.

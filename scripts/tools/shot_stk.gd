@@ -77,13 +77,13 @@ func _run() -> void:
 	g.hand_src = 1
 	g.hand_i = 0
 	g.hand_m = Vector2(320.0, 150.0)
-	g.peel_t = 0.0
 	g.rar_t = 0.0
 	g.queue_redraw()
 	await process_frame
 	await process_frame
 	root.get_texture().get_image().save_png("res://shots/stk_peel.png")
-	print("말림 %.2f" % g._peel_now())
+	#  2026-10-08 든 동전은 더는 안 말린다(game.gd RACKF) — 든 모습을 찍는다.
+	print("든 동전(말림 없음)")
 	#  플라크의 말림 — 볼록 자르기(_plq_seg · _plq_fold)가 게임에서 실제로
 	#  도는 **유일한 자리**다. 2026-09-18 이전에는 원반의 자(_peel_y, 반지름
 	#  기준)로 접는 선을 잡는 바람에 접는 선이 판 밖(14.85 대 반높이 11.04)에
@@ -91,12 +91,10 @@ func _run() -> void:
 	#  것을 그림으로 못 봤다. 손 안의 정착 말림(0.28)에서 찍는다.
 	if g.owned.size() >= 4:
 		g.hand_i = 3
-		g.peel_t = 1.0
 		g.rar_t = 0.0
 		g.queue_redraw()
 		await process_frame
 		await process_frame
 		root.get_texture().get_image().save_png("res://shots/stk_peel_plq.png")
-		print("플라크 말림 %.2f · %s"
-				% [g._peel_now(), g.owned[3].get("n", "?")])
+		print("든 플라크 · %s" % g.owned[3].get("n", "?"))
 	quit(0)

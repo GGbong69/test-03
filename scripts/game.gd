@@ -18122,6 +18122,10 @@ func _panel_pull(i: int) -> void:
 	for arr in [slot_pop, slot_vel, slot_hot]:
 		arr.remove_at(i)
 		arr.append(0.0)
+	#  그려지는 자리는 **빼기만** 한다 — 뒤 동전이 지금 자리를 들고 가서 빈 칸으로 미끄러진다.
+	for arr2 in [rack_vx, rack_vy, rack_ux, rack_uy]:
+		if i < arr2.size():
+			arr2.remove_at(i)
 
 
 func _panel_fire(i: int) -> void:
@@ -18134,8 +18138,8 @@ func _panel_fire(i: int) -> void:
 
 #  rate 는 정산 빨리 보기의 배수다. **슬롯 시계 셋만** 탄다 — 발동한 동전의
 #  튐과 달아오름은 걸음에 매인 신호라 걸음이 재지면 같이 재져야 하고
-#  (카드 시계 여섯과 같은 근거), peel_t 는 상점 가판의 시계라 걸음과 아무
-#  상관이 없다. 둘을 한 d 로 묶으면 2.5배에서 상인 가판이 같이 빨라진다.
+#  (카드 시계 여섯과 같은 근거), 끄기 · 비켜서기(_rack_vis_tick)는 손의 시계라 걸음과 아무
+#  상관이 없다. 둘을 한 d 로 묶으면 2.5배에서 손이 같이 빨라진다.
 #  정산 밖에서는 rate 가 언제나 1.0 이라 한 프레임도 안 바뀐다. 2026-09-25
 func _panel_update(d: float, rate := 1.0) -> void:
 	_panel_ensure()
@@ -18146,7 +18150,7 @@ func _panel_update(d: float, rate := 1.0) -> void:
 		slot_vel[i] *= exp(-PANEL.damp * dd)
 		slot_pop[i] = clampf(slot_pop[i] + slot_vel[i] * dd, -0.6, 1.4)
 		slot_hot[i] = maxf(slot_hot[i] - dd, 0.0)
-	peel_t += d
+	_rack_vis_tick(d)            # 끄기 · 비켜서기 — 실시간 d(빨리 보기와 무관한 손의 시계)
 
 
 # 칸 폭. 다섯까지는 62 고정이고, 그 위로는 좁혀서 이웃을 안 밟는다.
@@ -18856,7 +18860,7 @@ func _peel_y(r: float, peel: float) -> float:
 
 
 #  플라크의 접는 선. **원반의 자를 그대로 쓰면 안 된다** — _peel_y 는 반지름
-#  기준인데 플라크의 반높이는 0.581r 이라, 든 동전의 정착 말림(_peel_now 의
+#  기준인데 플라크의 반높이는 0.581r 이라, 든 동전의 정착 말림(옛 _peel_now 의
 #  0.28)에서 접는 선이 판 **밖**에 떨어진다: r=19 에서 y 14.85 대 반높이 11.04.
 #  그래서 레전더리만 **한 픽셀도 안 말렸다**(2026-09-18 실측) — 랙에서 집으면
 #  아흔아홉 장은 이형지가 들리는데 그 한 장만 안 들렸고, 볼록 자르기
@@ -19032,10 +19036,17 @@ func _panel_draw() -> void:
 	var pr := _panel_rect()
 	_panel(pr)
 
+	#  들고 있는 동전이 떨어질 칸 — 나머지가 비켜서서 빈 그 자리에 홈만 보인다(_rack_view_slot).
+	var hole := -1
+	if hand_st == H.CARRY and hand_src == 1 and hand_i >= 0 and hand_i < owned.size():
+		hole = _rack_drop_at()
+		if hole < 0:
+			hole = hand_i
+		_slot_ghost(hole)
 	for i in GameData.max_items():
 		if i < owned.size():
 			if hand_st == H.CARRY and hand_src == 1 and i == hand_i:
-				_panel_gap(i)     # 지금 손에 들려 있다. 자리에는 자국만 남는다
+				pass              # 손에 들려 있다(_rack_hold_draw)
 			elif _order_fly_hides("item", i):
 				_slot_ghost(i)    # 칠판 주문이 준 동전이 날아오는 중이다(_order_fly_draw)
 			else:
@@ -19124,6 +19135,10 @@ func _panel_slot(i: int) -> void:
 	var sel: bool = i == sell_sel and _can_sell()
 	var c := cell.get_center() + Vector2(0.0,
 			PANEL.chip_dy - bounce * PANEL.rise - (4.0 if sel else 0.0))
+	#  그려지는 자리 — 끄는 동안 비켜서고 놓으면 내려앉는다(RACKF).
+	if i < rack_vx.size():
+		c.x = float(rack_vx[i])
+		c.y += float(rack_vy[i])
 	var r: float = PANEL.r * (1.0 + bounce * PANEL.swell)
 
 	if up > 0.01:
@@ -20012,10 +20027,10 @@ func _wreck_text(e: Dictionary, c: Vector2, col: Color, shelf: bool) -> void:
 
 var sell_sel := -1
 var sell_t := 0.0               # 선택 링 맥동에만 쓴다
-#  끌어서 판 동전을 놓은 화면 자리 · 그때 말림 — _hand_release 가 _sell 직전에 적고 _sell 이
-#  읽고 지운다. 판 동전이 거기서 저울로 난다(판 소품 몸짓). 아니면 INF(동전 슬롯 칸에서).
+#  끌어서 판 동전을 놓은 화면 자리 — _hand_release 가 _sell 직전에 적고 _sell 이 읽고 지운다.
+#  판 동전이 거기서 저울로 난다(판 소품 몸짓). 아니면 INF(동전 슬롯 칸에서). 동전은 안 말리므로
+#  (RACKF 머리말) 나는 동전의 말림은 늘 0 이다.
 var sell_drag := Vector2.INF
-var sell_peel := 0.0
 # 이번 프레임의 흔들림 이동. 카드 얼굴이 제 변환을 걸 때 여기에 겹치고,
 # 끝나면 이 값으로 되돌린다 — 안 되돌리면 남은 변환이 HUD 를 통째로 민다.
 var shake_off := Vector2.ZERO
@@ -20100,7 +20115,7 @@ func _sell(i: int) -> void:
 	#  값은 아래 그대로 · 이 순간 확정된다 — 몸짓은 그림이다.
 	var from: Vector2 = sell_drag if sell_drag.is_finite() \
 			else at + Vector2(0.0, float(PANEL.chip_dy) - (4.0 if sell_sel == i else 0.0))
-	if not _prop_sell(owned[i], from, sell_peel if sell_drag.is_finite() else 0.0):
+	if not _prop_sell(owned[i], from, 0.0):
 		_npc_react("손짓", 0)
 	sell_drag = Vector2.INF
 	var v := GameData.sell_value(owned[i])
@@ -35909,7 +35924,29 @@ var hand_far := 0.0              # 누름 이후 |m - p0| 의 **누적 최대**.
 var hand_off := Vector2.ZERO     # 면 좌표 잡기 오프셋. ramp 로 0 에 녹는다
 var hand_zone := -1              # 지금 켜진 창구 (-1 없음 · 0 판매 · 1 구매)
 var hand_src := 0                # 무엇을 들었나 (0 = 테이블 물건 · 1 = 동전 슬롯 동전)
-var peel_t := 0.0                # 동전 슬롯에서 뗀 뒤 지난 시간(초). 말림 감쇠에만 쓴다
+#  ── 동전 슬롯 끌기 — 발라트로처럼 비켜선다 (2026-10-08) ──────────────────
+#  「동전 자리 옮기는게 좀 … 딱딱하단 말이야? 발라트로는 … 조커를 마우스로 쥐고 움직일때 다른
+#  조커들도 좀 피하거나 그런 움직임이 있잖아?」 · 「동전을 옮길때 스티커 같이 밑에 가 뜯어지는
+#  그런게 있거든? 그런거는 삭제해 우리 게임은 이제 동전을 움직이는 거잖아?」
+#  동전마다 그려지는 자리(rack_vx · rack_vy)를 따로 들고 스프링으로 제 칸에 끌려간다. 끄는 동안
+#  다른 동전의 칸은 「든 동전을 빼고 떨어질 칸에 끼운 차례」다(_rack_view_slot) — 떨어질 칸이
+#  비고 나머지가 미끄러져 비켜선다. 놓으면 든 동전이 놓은 자리에서 제 칸으로 내려앉는다(_rack_land).
+#  든 동전은 말리지 않는다(옛 스티커 말림 · 떼어낸 자국을 걷었다) — 조금 커져 그림자를 지고
+#  끄는 쪽으로 기운다. 판정(칸 · 툴팁 · 떨어질 칸)은 칸 자리(_slot_rect) 그대로다 — 그림만 움직인다.
+#  움직임 끄기면 스프링 없이 곧장 선다.
+const RACKF := {
+	"k": 520.0, "damp": 32.0,      # 스프링 — 감쇠비 0.7 언저리라 한 번 살짝 넘쳤다 앉는다
+	"hold_k": 1.12,                # 든 동전 크기
+	"shadow": Vector2(3.0, 6.0), "shadow_a": 0.32,
+	"tilt_k": 0.0011, "tilt_max": 0.32, "tilt_rate": 12.0,
+	"land_pop": 0.22,              # 내려앉을 때 한 번 부푼다(slot_pop)
+}
+var rack_vx := []                # 동전 i 가 그려지는 중심 x
+var rack_vy := []                # 칸 자리에서 어긋난 y
+var rack_ux := []                # x 빠르기
+var rack_uy := []                # y 빠르기
+var hold_tilt := 0.0             # 든 동전의 기울기(라디안)
+var hold_px := Vector2.ZERO      # 지난 틀의 손 자리 — 끄는 빠르기
 var hand_v := Vector2.ZERO       # 든 물체의 평활 속도(면px/s). 놓을 때 이걸 넘긴다
 
 var buy_sel := -1                # 2클릭 구매의 1단계
@@ -36229,7 +36266,8 @@ func _hand_take() -> void:
 		# 동전 슬롯 동전과 사탕은 물리 물체가 아니다. 적분기에 넣을 것이
 		# 없어 커서만 따라간다.
 		hand_off = Vector2.ZERO
-		peel_t = 0.0              # 떼는 순간. 말림이 여기서부터 잦아든다
+		hold_px = hand_m          # 끄는 빠르기는 여기서부터 잰다
+		hold_tilt = 0.0
 		_sfx("hand_take")
 		return
 	var it: Dictionary = drop[hand_i]
@@ -36294,7 +36332,6 @@ func _hand_release(m: Vector2) -> void:
 		if z == Z_SELL and _can_sell() and i >= 0 and i < owned.size():
 			#  판 동전이 놓은 자리에서 저울로 난다(_sell · 판 소품 몸짓).
 			sell_drag = m
-			sell_peel = _peel_now()
 			_sell(i)
 		elif z == Z_BUY:
 			pay_msg = "테이블 물건만 산다"
@@ -36307,10 +36344,12 @@ func _hand_release(m: Vector2) -> void:
 			# _can_rack_move 가 RESOLVE 를 접어서 지킨다 — 큐가 서고 나면
 			# 손이 아예 안 열린다.
 			var j := _slot_at(m)
-			if j >= 0 and i >= 0 and i < owned.size() and j != i:
+			if j >= 0 and i >= 0 and i < owned.size() and mini(j, owned.size() - 1) != i:
 				_rack_reorder(i, j)
+				_rack_land(mini(j, owned.size() - 1), m)
 			else:
 				_sfx("hand_drop")       # 그냥 제자리로 돌아간다
+				_rack_land(i, m)
 		return
 
 	if i < 0 or i >= drop.size():
@@ -36589,6 +36628,11 @@ func _rack_reorder(i: int, j: int) -> void:
 	var sealed_it: Dictionary = owned[sealed] if sealed >= 0 and sealed < owned.size() else {}
 	var it: Dictionary = owned.pop_at(i)
 	owned.insert(j, it)
+	#  그려지는 자리도 같은 차례로 옮긴다 — 비켜선 동전이 지금 자리를 그대로 들고 간다.
+	for arr in [rack_vx, rack_vy, rack_ux, rack_uy]:
+		if i < arr.size() and j < arr.size():
+			var v: Variant = arr.pop_at(i)
+			arr.insert(j, v)
 	if not sealed_it.is_empty():
 		sealed = owned.find(sealed_it)
 	sell_sel = -1
@@ -36596,17 +36640,9 @@ func _rack_reorder(i: int, j: int) -> void:
 	# _panel_update 가 넘어진다 — _sell 과 같은 이유, 같은 처방이다.
 	_panel_reset()
 	_sfx("rack_move")
-	pop(_slot_rect(j).get_center() + Vector2(0.0, 22.0), "순서 변경", C_TXT, 10, 0.8)
+	#  「순서 변경」 글자를 걷었다(2026-10-08) — 동전이 비켜서고 내려앉는 움직임(RACKF)이 이미
+	#  그 말을 하고, 글자는 내려앉는 동전 위에 겹쳤다.
 	_modes_refresh()            # 앞자리가 이긴다 — 순서가 곧 어느 동전이 쥐나다
-
-
-# 든 동전의 말림. 뗄 때 크게 젖혔다가 0.11초 만에 잦아들어 손 안에서
-# 살짝 말린 채로 남는다. 정착값 0.28 은 "떼어져 있다" 를 말하는 최소치이면서,
-# 접는 선을 값 숫자(반지름 13 에서 아래 9.8px)보다 낮게 두는 상한이기도 하다 —
-# r*(1-0.78*0.28) = 10.16 > 9.8. 더 올리면 들고 있는 동안 값이 안 보인다.
-# 0.32 는 떼는 순간의 튕김이라 값을 잠깐 먹는다. 0.1초짜리라 괜찮다.
-func _peel_now() -> float:
-	return 0.28 + 0.32 * exp(-peel_t / 0.10)
 
 
 # 든 동전 슬롯 동전. 물리 물체가 아니라 커서 밑의 그림뿐이다.
@@ -36621,27 +36657,101 @@ func _rack_hold_draw() -> void:
 		return
 	if hand_i < 0 or hand_i >= owned.size():
 		return
-	# 끼워 넣을 자리. 자국(_panel_gap)이 "여기서 뗐다" 를 말하는 동안
-	# 이 고리가 "여기로 간다" 를 말한다 — 둘이 같이 서야 이동이 읽힌다.
-	# 빈 칸에 떨구면 맨 뒤로 가므로 _rack_reorder 와 **같은 식**으로 접는다.
+	#  떨어질 자리는 나머지 동전이 비켜서서 보여 준다(_rack_view_slot) — 고리를 따로 안 긋는다.
+	#  든 동전은 조금 커져 그림자를 지고 끄는 쪽으로 기운다. 말리지 않는다 — 동전이다.
+	var hr: float = float(PANEL.r) * float(RACKF.hold_k)
+	draw_circle(hand_m + (RACKF.shadow as Vector2), hr, Color(0.0, 0.0, 0.0, float(RACKF.shadow_a)))
+	if hand_zone == Z_SELL:
+		#  판매 창구 위 — 놓으면 팔린다는 것만 금빛 고리로 말한다.
+		_e_ring_w(hand_m, hr + 4.0, (hr + 4.0) * TBL.flat, 1.0, Color(C_ACC, 0.75))
+	draw_item_sticker(hand_m, hr, owned[hand_i], hold_tilt, 0.0, 0.0, 12)
+
+
+#  끄는 동전이 지금 떨어질 칸 — 뗄 때(_hand_release)와 **같은 식**이다(빈 칸에 떨구면 맨 뒤로
+#  접는다 · _rack_reorder). 칸 밖이거나 창구 위면 −1 — 그때는 제자리가 빈 채로 기다린다.
+func _rack_drop_at() -> int:
+	if hand_st != H.CARRY or hand_src != 1 or hand_i < 0 or hand_i >= owned.size():
+		return -1
+	if hand_zone == Z_SELL or hand_zone == Z_BUY:
+		return -1
 	var j := _slot_at(hand_m)
-	if j >= 0:
-		j = mini(j, owned.size() - 1)
-		if j != hand_i:
-			draw_arc(_slot_rect(j).get_center() + Vector2(0.0, PANEL.chip_dy),
-					PANEL.r + 2.0, 0.0, TAU, 24, Color(C_ACC, 0.9), 1.0)
-	_e_ring_w(hand_m, PANEL.r + 4.0, (PANEL.r + 4.0) * TBL.flat, 1.0,
-			Color(C_ACC if hand_zone == Z_SELL else C_TXT, 0.55))
-	draw_item_sticker(hand_m, PANEL.r, owned[hand_i], 0.0, 0.0, 0.0, 12,
-			_peel_now())
+	if j < 0:
+		return -1
+	return mini(j, owned.size() - 1)
 
 
-# 떼어낸 자리. 빈 홈(반지름 0.72)이 아니라 동전과 같은 반지름의 자국이다 —
-# "여기 붙어 있었다" 와 "여기는 원래 비어 있다" 가 같은 그림이면 안 된다.
-func _panel_gap(i: int) -> void:
-	var e := _slot_rect(i).get_center() + Vector2(0.0, PANEL.chip_dy)
-	draw_circle(e, PANEL.r, C_FELT.darkened(0.30))
-	draw_arc(e, PANEL.r, 0.0, TAU, 24, C_FELT.lightened(0.22), 1.0)
+#  동전 k 가 지금 서야 할 칸. 끄는 동안은 「든 동전을 빼고 떨어질 칸에 끼운 차례」다 —
+#  _rack_reorder 의 pop_at · insert 와 같은 차례라 놓는 순간 아무것도 안 튄다.
+func _rack_view_slot(k: int) -> int:
+	if hand_st != H.CARRY or hand_src != 1 or hand_i < 0 or hand_i >= owned.size():
+		return k
+	var a := hand_i
+	if k == a:
+		return a                  # 든 동전 — 손에 그려진다(_rack_hold_draw). 자리는 놓을 때 정한다
+	var j := _rack_drop_at()
+	if j < 0:
+		j = a
+	var v := k
+	if k > a:
+		v -= 1
+	if v >= j:
+		v += 1
+	return v
+
+
+#  그려지는 자리의 스프링. 크기가 바뀐 길(사기 · 새 런 · 되살리기 — _panel_pull 을 안 지난 길)은
+#  새 동전만 제 칸에 바로 세운다.
+func _rack_vis_tick(d: float) -> void:
+	var n := owned.size()
+	if rack_vx.size() > n:
+		for arr in [rack_vx, rack_vy, rack_ux, rack_uy]:
+			arr.resize(n)
+	while rack_vx.size() < n:
+		var k := rack_vx.size()
+		rack_vx.append(_slot_rect(_rack_view_slot(k)).get_center().x)
+		rack_vy.append(0.0)
+		rack_ux.append(0.0)
+		rack_uy.append(0.0)
+	var kk: float = float(RACKF.k)
+	var dm: float = exp(-float(RACKF.damp) * d)
+	for k in n:
+		var tx: float = _slot_rect(_rack_view_slot(k)).get_center().x
+		if motion_off:
+			rack_vx[k] = tx
+			rack_vy[k] = 0.0
+			rack_ux[k] = 0.0
+			rack_uy[k] = 0.0
+			continue
+		var ux: float = (float(rack_ux[k]) + (tx - float(rack_vx[k])) * kk * d) * dm
+		var uy: float = (float(rack_uy[k]) - float(rack_vy[k]) * kk * d) * dm
+		rack_ux[k] = ux
+		rack_uy[k] = uy
+		rack_vx[k] = float(rack_vx[k]) + ux * d
+		rack_vy[k] = float(rack_vy[k]) + uy * d
+	#  든 동전의 기울기 — 끄는 빠르기를 따라 눕고 멈추면 선다.
+	if hand_st == H.CARRY and hand_src == 1 and d > 0.0 and not motion_off:
+		var vx: float = (hand_m.x - hold_px.x) / d
+		var want: float = clampf(vx * float(RACKF.tilt_k), -float(RACKF.tilt_max),
+				float(RACKF.tilt_max))
+		hold_tilt = lerpf(hold_tilt, want, 1.0 - exp(-float(RACKF.tilt_rate) * d))
+	else:
+		hold_tilt = 0.0
+	hold_px = hand_m
+
+
+#  놓은 동전이 놓은 자리(m)에서 제 칸 k 로 내려앉는다 — 그려지는 자리만 옮긴다.
+func _rack_land(k: int, m: Vector2) -> void:
+	_rack_vis_tick(0.0)
+	if k < 0 or k >= rack_vx.size() or motion_off:
+		return
+	var cy: float = _slot_rect(k).get_center().y + float(PANEL.chip_dy)
+	rack_vx[k] = m.x
+	rack_vy[k] = m.y - cy
+	rack_ux[k] = 0.0
+	rack_uy[k] = 0.0
+	_panel_ensure()
+	if k < slot_pop.size():
+		slot_pop[k] = float(RACKF.land_pop)
 
 
 # 창구를 눌렀을 때. 방향이 무엇을 뜻하는지는 여기서도 같다.
