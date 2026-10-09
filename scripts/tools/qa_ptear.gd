@@ -1,9 +1,9 @@
 extends SceneTree
 # 사진 찢기(2026-10-08 · game.gd PTEAR) — 못 박는 것:
-#   ① 사진을 칸에서 쓰면 찢기가 하나 서고, 칸 밑으로 빠져나오는 거리(drop)를 단다.
-#   ② 가운데로 끌어 놓아 쓰면 놓은 자리에서 찢기고 빠져나오지 않는다 · 놓은 자리는 한 번만 읽는다.
+#   ① 사진을 칸에서 쓰면 찢기가 하나 서고 칸에서 출발해 화면 가운데로 커지며 온다(팩 뜯기와 같은 흐름).
+#   ② 가운데로 끌어 놓아 쓰면 놓은 자리에서 출발한다 · 놓은 자리는 한 번만 읽는다.
 #   ③ 사탕은 찢기가 안 선다. 못 쓰는 자리(거절)에서도 안 선다.
-#   ④ 찢기는 PTEAR.t 뒤 사라진다.
+#   ④ 오는 · 찢기는 · 사라지는 몫이 차례로 선다 · 다 끝나면 사라진다.
 #   godot --headless --path . --script scripts/tools/qa_ptear.gd
 const Save = preload("res://scripts/save.gd")
 const GameData = preload("res://scripts/data.gd")
@@ -63,17 +63,23 @@ func _run() -> void:
 	_ok("① 사진을 칸에서 쓰면 찢기가 선다", g.ptears.size() == 1)
 	if g.ptears.size() == 1:
 		var e: Dictionary = g.ptears[0]
-		_ok("① 칸 자리에서 · 칸 밑으로 빠져나온다", (e.p as Vector2).is_equal_approx(at)
-				and is_equal_approx(float(e.dy), float(g.PTEAR.drop)), "%s %s" % [e.p, e.dy])
+		var p0: Dictionary = g._ptear_pose(e)
+		_ok("① 칸 자리에서 칸 크기로 출발한다", (p0.c as Vector2).is_equal_approx(at)
+				and is_equal_approx(float(p0.k), float(g.PTEAR.k0)), "%s %.2f" % [p0.c, p0.k])
+		e.t = float(g.PTEAR.rise)
+		var p1: Dictionary = g._ptear_pose(e)
+		var mid := Vector2(g.VIEW.x * 0.5, g.VIEW.y * float(g.PTEAR.cy))
+		_ok("① 가운데로 커지며 온다(팩과 같은 자리)", (p1.c as Vector2).is_equal_approx(mid)
+				and is_equal_approx(float(p1.k), float(g.PTEAR.big)), "%s %.2f" % [p1.c, p1.k])
+		_ok("① 이름을 단다", String(e.get("n", "")) != "", String(e.get("n", "")))
 	g.ptears.clear()
 
 	# ②
 	g.cons = [_row("v_cash")]
 	g.use_from = g.BC + Vector2(5, -3)
 	g._cons_use(0)
-	_ok("② 끌어 놓아 쓰면 놓은 자리 · 안 빠져나온다", g.ptears.size() == 1
-			and (g.ptears[0].p as Vector2).is_equal_approx(g.BC + Vector2(5, -3))
-			and float(g.ptears[0].dy) == 0.0)
+	_ok("② 끌어 놓아 쓰면 놓은 자리에서 출발한다", g.ptears.size() == 1
+			and (g.ptears[0].p as Vector2).is_equal_approx(g.BC + Vector2(5, -3)))
 	_ok("② 놓은 자리는 한 번만 읽는다", not g.use_from.is_finite())
 	g.ptears.clear()
 
@@ -89,6 +95,17 @@ func _run() -> void:
 	# ④
 	g.cons = [_row("v_cash")]
 	g._cons_use(0)
-	for i in int(ceil(float(g.PTEAR.t) * 60.0)) + 2:
+	var e4: Dictionary = g.ptears[0]
+	e4.t = float(g.PTEAR.rise) * 0.5
+	var a: Dictionary = g._ptear_pose(e4)
+	e4.t = float(g.PTEAR.rise) + float(g.PTEAR.tear) * 0.5
+	var b: Dictionary = g._ptear_pose(e4)
+	e4.t = float(g.PTEAR.rise) + float(g.PTEAR.tear) + float(g.PTEAR.out) * 0.5
+	var c: Dictionary = g._ptear_pose(e4)
+	_ok("④ 오는 동안은 안 찢긴다 · 그다음 찢긴다 · 그다음 사라진다",
+			float(a.u) == 0.0 and float(b.u) > 0.0 and float(b.o) == 0.0 and float(c.o) > 0.0
+			and float(c.u) == 1.0, "%s %s %s" % [a.u, b.u, c.o])
+	e4.t = 0.0
+	for i in int(ceil(g._ptear_len() * 60.0)) + 2:
 		g._ptear_tick(1.0 / 60.0)
-	_ok("④ PTEAR.t 뒤 사라진다", g.ptears.is_empty())
+	_ok("④ 다 끝나면 사라진다", g.ptears.is_empty())

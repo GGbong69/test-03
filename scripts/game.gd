@@ -21234,7 +21234,6 @@ func _cons_use(i: int) -> void:
 	var at := _cons_rect(i).get_center()
 	#  사진이 찢기는 자리 — 가운데로 끌어 놓았으면 놓은 자리, 아니면 칸(PTEAR).
 	var tear_at: Vector2 = use_from if use_from.is_finite() else at
-	var tear_slot := not use_from.is_finite()
 	use_from = Vector2.INF
 	var cid := String(c.get("id", ""))
 	var say := ""
@@ -21279,7 +21278,7 @@ func _cons_use(i: int) -> void:
 			shown = 0.0
 			_start_leg()
 			_sfx("cons_use")
-			_ptear_go(tear_at, cid, tear_slot)
+			_ptear_go(tear_at, cid)
 			return
 		"pardon":
 			#  깃발을 세우지 않는다 — 읽고 끄는 자리가 하나뿐이면 그 자리가
@@ -21302,7 +21301,7 @@ func _cons_use(i: int) -> void:
 				cons.remove_at(i)
 				_bump("cons_used")
 				_photo_open(String(c.cat), int(c.get("v", 0)))
-				_ptear_go(tear_at, cid, tear_slot)
+				_ptear_go(tear_at, cid)
 				return
 			# 테이블이 없는 자리다. 동전 슬롯에서 직접 고른다 — 고르기
 			# 전에는 손에서 안 없앤다(잘못 눌러 잃으면 안 된다).
@@ -21319,7 +21318,7 @@ func _cons_use(i: int) -> void:
 			photo = "paint"
 			photo_v = maxi(int(c.get("v", 0)), 2)
 			_sfx("cons_use")
-			_ptear_go(tear_at, cid, tear_slot)
+			_ptear_go(tear_at, cid)
 			return
 		"again":
 			# 덤으로 한 발. 탄창을 안 건드린다(_grip_consume 을 안 부른다).
@@ -21333,7 +21332,7 @@ func _cons_use(i: int) -> void:
 			fly_t = 0.0
 			fly_rot = randf_range(-0.26, 0.26)
 			_sfx("dart_fly")
-			_ptear_go(tear_at, cid, tear_slot)
+			_ptear_go(tear_at, cid)
 			return
 		"peek":
 			#  다시 뽑기. 굴리기 전에 지금 든 것을 avoid 로 넘긴다 —
@@ -21361,7 +21360,7 @@ func _cons_use(i: int) -> void:
 			return _cons_deny(c, "아직 준비 중이다")
 	_bump("cons_used")
 	cons.remove_at(i)
-	_ptear_go(tear_at, cid, tear_slot)
+	_ptear_go(tear_at, cid)
 	#  사탕을 상점에서 쓰면 펠트에 떨어뜨리고 상인이 주먹으로 부순다(POUND 머리말) — 값은
 	#  위에서 이미 올랐고, 글 · 소리는 부수는 틀에 그 자리에서 난다. 못 서면 옛 그대로 칸에서.
 	if not (state == S.SHOP and String(c.get("id", "")).begins_with("c_")
@@ -21389,7 +21388,7 @@ func _photo_rack_click(m: Vector2) -> void:
 		if not _photo_apply(kind, i):
 			return
 		if ci >= 0 and ci < cons.size():
-			_ptear_go(_cons_rect(ci).get_center(), String(cons[ci].get("id", "")), true)
+			_ptear_go(_cons_rect(ci).get_center(), String(cons[ci].get("id", "")))
 			cons.remove_at(ci)
 			_bump("cons_used")
 		return
@@ -37989,29 +37988,38 @@ const USE := {"r": 42.0, "ring": 3.0}
 # ──────────────────────────────────────────────────────────
 #  「사진 찢기 연출」(사용자 필기) — 「지금 게임 안에서 사진을 사용하는거는 이팩트 없던데?」.
 #  사진은 써도 칸 옆에 글 한 줄 · 소리 하나뿐이었다(사탕은 상점에서 상인 주먹이 부순다).
-#  이제 쓴 사진이 쓴 자리(가운데로 끌어 놓은 자리 · 칸에서 쓰면 칸 밑으로 drop 만큼 빠져나온
-#  자리 — 칸은 HUD 라 거기서 찢으면 남은 사진 · 글에 묻혔다)에서 한 번 부풀었다가 세로로 찢겨,
-#  두 쪽이 양옆으로 갈라져 돌며 떨어지고 찢긴 자리에서 종이 부스러기가 튄다. 그림만이다 —
-#  효과 · 글 · 소리(cons_use 「포장을 뜯어 쓴다」)는 그대로다. 찢긴 결 · 부스러기는 그림 난수다
-#  (런 난수를 안 건드린다). 모션 끄기면 제자리에서 갈라진 채 옅어진다.
-#    r        사진 크기(_icon_fix 의 r — 칸 그림 10 보다 크게)
-#    swell · swell_k   찢기 전에 부푸는 시간(초) · 부푸는 몫 · drop 칸에서 쓰면 그동안 빠져나오는 거리
-#    t · fade          전체 길이 · 끝에서 옅어지는 시간(초)
-#    spread · lift · g · spin   두 쪽이 갈라지는 거리 · 처음 솟는 빠르기 · 중력 · 도는 빠르기(rad/s)
-#    teeth · jag       찢긴 결의 마디 수 · 결이 좌우로 흔들리는 폭(px)
-#    bits · bit_v      부스러기 수 · 튀는 빠르기
-const PTEAR := {"r": 14.0, "swell": 0.16, "swell_k": 0.16, "drop": 46.0, "t": 0.85, "fade": 0.30,
-		"spread": 26.0, "lift": 40.0, "g": 420.0, "spin": 2.4, "teeth": 7, "jag": 2.2,
-		"bits": 7, "bit_v": 90.0}
-var ptears := []          # 찢기는 사진 {p, id, t, seed, dy(빠져나오는 거리)}
+#  「사진 찢기는 연출 그 팩 찢는거 같이 넣어줘」(사용자, 같은 날) — 팩 뜯기(BOOST · _boost_draw)와
+#  같은 흐름이다: 쓴 자리(사탕·사진 칸 · 가운데로 끌어 놓은 자리)에서 사진이 화면 가운데로
+#  커지며 오고(rise · 화면이 어두워진다) → 세로로 찢겨 두 쪽이 벌어지며 가운데에서 빛이 터지고
+#  (tear · 팩과 같은 다섯 겹 빛) → 두 쪽이 기울며 떨어져 사라진다(out). 밑에 사진 이름이 팩 이름과
+#  같은 받침으로 선다. 그림만이다 — 효과 · 글 · 소리(cons_use 「포장을 뜯어 쓴다」)는 그대로다.
+#  찢긴 결 · 부스러기는 그림 난수다(런 난수를 안 건드린다). 모션 끄기면 오지 않고 가운데에
+#  선 채로 갈라져 옅어진다.
+#    r        사진 크기의 밑값(_icon_fix 의 r) · k0 칸 · 끌어 놓은 그림(r 10)에서 시작하는 배 · big 가운데 배
+#    rise · tear · out   가운데로 오는 · 찢겨 벌어지는 · 떨어져 사라지는 시간(초) — 팩의 0.34 · 0.30 에 맞췄다
+#    cy       가운데 자리(화면 높이의 몫 — 팩과 같다) · scrim 어두운 막
+#    gap · tilt · drop   다 벌어진 두 쪽 사이(밑값 px — 배를 탄다) · 기울기(rad) · 사라지며 떨어지는 거리
+#    teeth · jag       찢긴 결의 톱니 수(팩 PACK.teeth 와 같다) · 톱니 폭(밑값 px)
+#    bits · bit_v      부스러기 수 · 튀는 빠르기(화면 px/s)
+const PTEAR := {"r": 14.0, "k0": 0.714, "big": 3.0, "rise": 0.30, "tear": 0.30, "out": 0.28,
+		"cy": 0.46, "scrim": 0.5, "gap": 11.0, "tilt": 0.22, "drop": 14.0,
+		"teeth": 9, "jag": 1.4, "bits": 8, "bit_v": 120.0}
+var ptears := []          # 찢기는 사진 {p(출발), id, n(이름), t, seed}
 var use_from := Vector2.INF   # 가운데로 끌어 놓아 쓴 자리 — _cons_use 가 한 번 읽고 지운다
 
 
-func _ptear_go(p: Vector2, id: String, slot := false) -> void:
+func _ptear_go(p: Vector2, id: String) -> void:
 	if not GameData.is_fixture(id):
 		return
-	ptears.append({"p": p, "id": id, "t": 0.0, "seed": randi(),
-			"dy": float(PTEAR.drop) if slot else 0.0})
+	var nm := ""
+	for c in GameData.consumables():
+		if String(c.get("id", "")) == id:
+			nm = String(c.get("n", ""))
+	ptears.append({"p": p, "id": id, "n": nm, "t": 0.0, "seed": randi()})
+
+
+func _ptear_len() -> float:
+	return float(PTEAR.rise) + float(PTEAR.tear) + float(PTEAR.out)
 
 
 func _ptear_tick(d: float) -> void:
@@ -38019,7 +38027,20 @@ func _ptear_tick(d: float) -> void:
 		return
 	for e in ptears:
 		e.t = float(e.t) + d
-	ptears = ptears.filter(func(e): return float(e.t) < float(PTEAR.t))
+	ptears = ptears.filter(func(e): return float(e.t) < _ptear_len())
+
+
+#  한 틀의 자세 — {c 가운데(화면), k 배, r 오는 몫, u 찢기는 몫, o 사라지는 몫}. 오는 길은 팩과
+#  같은 감속(1 − (1 − r)³ — _boost_k).
+func _ptear_pose(e: Dictionary) -> Dictionary:
+	var t: float = float(e.t)
+	var mid := Vector2(VIEW.x * 0.5, VIEW.y * float(PTEAR.cy))
+	var r: float = 1.0 if motion_off else clampf(t / float(PTEAR.rise), 0.0, 1.0)
+	var er: float = 1.0 - pow(1.0 - r, 3.0)
+	var u: float = clampf((t - float(PTEAR.rise)) / float(PTEAR.tear), 0.0, 1.0)
+	var o: float = clampf((t - float(PTEAR.rise) - float(PTEAR.tear)) / float(PTEAR.out), 0.0, 1.0)
+	return {"c": (e.p as Vector2).lerp(mid, er),
+			"k": lerpf(float(PTEAR.k0), float(PTEAR.big), er), "r": er, "u": u, "o": o}
 
 
 #  찢긴 결 — 위끝에서 밑끝까지 x 가 좌우로 흔들리는 꺾은선(사진 자리 · 가운데가 0).
@@ -38078,13 +38099,34 @@ func _ptear_draw() -> void:
 	var frame := Rect2(-w * 0.5, -h * 0.5, w, h)
 	var pad: float = maxf(r * 0.18, 1.0)
 	var inner := Rect2(frame.position + Vector2(pad, pad), Vector2(w - pad * 2.0, h - pad * 3.4))
+	var whole_f := PackedVector2Array([frame.position, Vector2(frame.end.x, frame.position.y),
+			frame.end, Vector2(frame.position.x, frame.end.y)])
+	var whole_i := PackedVector2Array([inner.position, Vector2(inner.end.x, inner.position.y),
+			inner.end, Vector2(inner.position.x, inner.end.y)])
 	for e in ptears:
-		var t: float = float(e.t)
+		var ps := _ptear_pose(e)
+		var c: Vector2 = ps.c
+		var k: float = ps.k
+		var u: float = ps.u
+		var o: float = ps.o
+		var eu: float = 1.0 - pow(1.0 - u, 3.0)
+		var split: bool = u > 0.0 or motion_off
+		#  어두운 막 — 팩과 같다(찢기는 동안 반쯤 걷히고 사라지며 다 걷힌다).
+		draw_set_transform(shake_off)
+		var sa: float = float(PTEAR.scrim) * float(ps.r) * (1.0 - u * 0.55) * (1.0 - o)
+		if sa > 0.003:
+			draw_rect(_full(), Color(0.0, 0.0, 0.0, sa))
+		#  터지는 빛 — 찢기는 동안만, 팩과 같은 다섯 겹(가운데가 짙다).
+		var fa: float = (1.0 - u) * u * 4.0
+		if fa > 0.003:
+			var br: float = 8.0 + 46.0 * u
+			for j2 in 5:
+				var q: float = float(j2) / 4.0
+				draw_circle(c, br * (1.0 - 0.72 * q),
+						Color(C_ACC.lightened(0.28 * q), 0.34 * fa * (0.30 + 0.25 * q)))
 		var tex := _photo_tex(String(e.id))
 		var ln := _ptear_line(w, h, int(e.seed))
-		var a: float = clampf((float(PTEAR.t) - t) / float(PTEAR.fade), 0.0, 1.0)
-		var sw: float = float(PTEAR.swell)
-		var u: float = maxf(t - sw, 0.0)
+		var a: float = 1.0 - o
 		#  인화면에서 자를 그림 자리 — _icon_fix 와 같은 가운데 자르기.
 		var src := Rect2()
 		if tex != null:
@@ -38097,26 +38139,15 @@ func _ptear_draw() -> void:
 			else:
 				src.size.y = ts.x / asp
 				src.position.y = (ts.y - src.size.y) * 0.5
-		var dy: float = float(e.get("dy", 0.0))
 		for sd in [-1.0, 1.0]:
-			var off := Vector2(0.0, dy)
-			var rot := 0.0
-			var sc := 1.0
-			if motion_off:
-				off = Vector2(sd * 1.5, dy)
-				a = clampf(1.0 - t / float(PTEAR.t), 0.0, 1.0)
-			elif t < sw:
-				#  찢기 전 — 칸에서 빠져나오며 부풀고 떤다(한 번 부푼다 · 떨림은 1px).
-				sc = 1.0 + float(PTEAR.swell_k) * sin(PI * t / sw)
-				off = Vector2(sin(t * 90.0) * 0.8, dy * _ease_enter(t / sw))
-			else:
-				off = Vector2(sd * float(PTEAR.spread) * (1.0 - exp(-u * 5.0)),
-						dy - float(PTEAR.lift) * u + 0.5 * float(PTEAR.g) * u * u)
-				rot = sd * float(PTEAR.spin) * u
-			draw_set_transform(shake_off + (e.p as Vector2) + off, rot, Vector2(sc, sc))
-			var fp := _ptear_half(frame, ln, sd)
+			#  벌어지는 몫 · 기울기 · 사라지며 떨어지는 몫(모션 끄기면 틈만 남는다).
+			var off := Vector2(sd * (0.6 if motion_off else float(PTEAR.gap) * eu),
+					0.0 if motion_off else float(PTEAR.drop) * o * o)
+			var rot: float = 0.0 if motion_off else sd * float(PTEAR.tilt) * eu
+			draw_set_transform(shake_off + c + off * k, rot, Vector2(k, k))
+			var fp: PackedVector2Array = _ptear_half(frame, ln, sd) if split else whole_f
 			draw_colored_polygon(fp, Color(C_LIGHT.lightened(0.30), a))
-			var ip := _ptear_half(inner, ln, sd)
+			var ip: PackedVector2Array = _ptear_half(inner, ln, sd) if split else whole_i
 			if tex != null:
 				var uvs := PackedVector2Array()
 				var tsz := Vector2(tex.get_size())
@@ -38126,29 +38157,42 @@ func _ptear_draw() -> void:
 				draw_polygon(ip, PackedColorArray([Color(1.0, 1.0, 1.0, a)]), uvs, tex)
 			else:
 				draw_colored_polygon(ip, Color(C_DARK.lightened(0.10), a))
-			#  테 · 찢긴 결 — 결은 종이 속살이 일어나 밝다.
 			var ol := fp.duplicate()
 			ol.append(fp[0])
-			draw_polyline(ol, Color(C_WIRE.darkened(0.25), 0.55 * a), 1.0)
-			if t >= sw or motion_off:
+			draw_polyline(ol, Color(C_WIRE.darkened(0.25), 0.55 * a), 1.0 / k)
+			#  찢긴 결 — 종이 속살이 일어나 밝다.
+			if split:
 				var cut := PackedVector2Array()
 				for q in ln:
-					cut.append(q + Vector2(sd * 0.5, 0.0))
-				draw_polyline(cut, Color(C_TXT, 0.9 * a), 1.0)
+					cut.append(q + Vector2(sd * 0.3, 0.0))
+				draw_polyline(cut, Color(C_TXT, 0.9 * a), 1.0 / k)
+			else:
+				break           # 찢기기 전에는 한 장이다 — 한 번만 그린다
 		draw_set_transform(shake_off)
-		#  부스러기 — 찢긴 결에서 튄다.
-		if motion_off or t < sw:
-			continue
-		var rng := RandomNumberGenerator.new()
-		rng.seed = int(e.seed) + 17
-		for b in int(PTEAR.bits):
-			var q0: Vector2 = ln[rng.randi_range(0, ln.size() - 1)]
-			var ang := rng.randf_range(-PI, 0.0)
-			var v := Vector2(cos(ang), sin(ang)) * float(PTEAR.bit_v) * rng.randf_range(0.5, 1.0)
-			var bp: Vector2 = (e.p as Vector2) + q0 + v * u + Vector2(0.0, dy + 0.5 * float(PTEAR.g) * u * u)
-			var bs: float = 1.0 if b % 3 else 2.0
-			var ba: float = clampf(1.0 - u / 0.45, 0.0, 1.0)
-			draw_rect(Rect2(bp.round(), Vector2(bs, bs)), Color(C_LIGHT.lightened(0.3), ba))
+		#  부스러기 — 찢기는 순간 결에서 튄다.
+		if not motion_off and u > 0.0 and o < 1.0:
+			var rng := RandomNumberGenerator.new()
+			rng.seed = int(e.seed) + 17
+			var ut: float = float(e.t) - float(PTEAR.rise)
+			for b in int(PTEAR.bits):
+				var q0: Vector2 = ln[rng.randi_range(0, ln.size() - 1)] * k
+				var ang := rng.randf_range(-PI, 0.0)
+				var v := Vector2(cos(ang), sin(ang)) * float(PTEAR.bit_v) * rng.randf_range(0.5, 1.0)
+				var bp: Vector2 = c + q0 + v * ut + Vector2(0.0, 260.0 * ut * ut)
+				var bs: float = 2.0 if b % 3 else 3.0
+				var ba: float = clampf(1.0 - ut / 0.5, 0.0, 1.0)
+				draw_rect(Rect2(bp.round(), Vector2(bs, bs)), Color(C_LIGHT.lightened(0.3), ba))
+		#  이름 — 팩 이름과 같은 받침 · 크기. 찢기는 동안 받침이 먼저 걷힌다.
+		var nm := String(e.get("n", ""))
+		if nm != "" and font_sm != null:
+			var na: float = (1.0 - u * 0.7) * (1.0 - o) * float(ps.r)
+			var nw: float = ceilf((font_sm.get_string_size(nm, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
+					+ 16.0) * 0.5) * 2.0
+			var nmid: float = roundf(c.y + h * 0.5 * k + 26.0)
+			_rr(self, Rect2(c.x - nw * 0.5, nmid - 13.0, nw, 26.0),
+					Color(C_BG, 0.9 * (1.0 - u) * float(ps.r)))
+			draw_string(font_sm, Vector2(c.x - VIEW.x * 0.5, _ink_mid_y(nmid, 20)), nm,
+					HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 20, Color(C_TXT, na))
 
 
 func _use_spot() -> Vector2:
