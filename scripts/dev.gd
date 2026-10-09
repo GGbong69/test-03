@@ -755,6 +755,10 @@ static func _rows(g: Node) -> Array:
 				{"n1": "정산 빨리 보기", "t": "list", "k": "fast", "n": 4},
 				{"n1": "빨리 보기 고정", "t": "act", "a": "fast_lock"},
 				{"n1": "런 끝 잠금 풀기", "t": "act", "a": "over_unlock"},
+				#  런 끝 화면(칠판 · 왕관 · 금화 비 · 박수 · 완주 곡 — game.gd OVERB)을 곧장 연다.
+				#  값 · 저장은 안 건드린다 — 그림만 본다. 2026-10-08
+				{"n1": "완주 화면 보기", "t": "act", "a": "over_win"},
+				{"n1": "실패 화면 보기", "t": "act", "a": "over_lose"},
 			]
 		1:
 			return [
@@ -2227,6 +2231,16 @@ static func _run(g: Node, e: Dictionary) -> void:
 			#  런 끝 잠금 0.40초를 건너뛴다. 갈무리 도구가 쓰는 그 값이다.
 			g.over_t = 9.0
 			_say("런 끝 잠금 풀림")
+			return
+		"over_win", "over_lose":
+			#  런 끝 화면을 처음부터 — 왕관이 커지고 금화가 쏟아지고 박수가 터지는 것까지.
+			g.won = String(e.get("a", "")) == "over_win"
+			g.endless_ok = false
+			g.endless_arm = false
+			g.over_t = 0.0
+			g.state = g.S.OVER
+			g._sfx("run_win" if g.won else "run_lose")
+			_say("완주 화면" if g.won else "실패 화면")
 			return
 		"touch":
 			#  얹힘 길을 통째로 죽인다 — 누름-읽기만 남는다. ⑤의 코드가

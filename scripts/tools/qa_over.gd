@@ -184,11 +184,13 @@ func _run() -> void:
 	var strings := 0
 	for ln in src.split("\n"):
 		var t := String(ln)
-		if t.begins_with("func _draw_over("):
+		#  결과 글은 분필로 한 자씩 쓰는 _over_write 가 그린다(2026-10-08) — 둘을 같이 센다.
+		if t.begins_with("func _draw_over(") or t.begins_with("func _over_write("):
 			in_fn = true
 			continue
 		if in_fn and t.begins_with("func "):
-			break
+			in_fn = false
+			continue
 		if in_fn and not t.strip_edges().begins_with("#") \
 				and t.contains("draw_string("):
 			strings += 1
@@ -269,7 +271,7 @@ func _run() -> void:
 
 	# ── 완주 화면의 갈래 한 쌍 (2026-09-20) ──────────
 	#  기획서 P.17 「무한모드 계속하기와 로비로 가기 중에서 선택」.
-	#  세로로 못 쌓는다 — 해금 쪽지 줄(판바닥 −70 = y245)과 30px 뿐이라
+	#  세로로 못 쌓는다 — 해금 쪽지 줄(판바닥 −70 = y270)과 34px 뿐이라
 	#  한 줄(26) + 틈(12) = 38 이 안 든다. 그래서 가로로 가른다.
 	print("
 완주 화면의 갈래")
@@ -284,8 +286,8 @@ func _run() -> void:
 			l.position.y > g._over_panel().end.y - 70.0,
 			"줄 y %.0f · 쪽지 y %.0f" % [l.position.y, g._over_panel().end.y - 70.0])
 	#  ⚠ **옛 한 줄의 한가운데(x=320)가 틈에 떨어진다** — 습관 탭 방어다.
-	var mid := Vector2(320.0, 288.0)
-	_ok("옛 줄의 한가운데가 18px 틈에 떨어진다",
+	var mid: Vector2 = g._over_newrun_rect().get_center()
+	_ok("옛 줄의 한가운데가 가운데 틈에 떨어진다",
 			not l.has_point(mid) and not r.has_point(mid),
 			"틈 x%.0f~%.0f" % [l.end.x, r.position.x])
 
@@ -322,9 +324,9 @@ func _run() -> void:
 	_over(2.0)
 	g.won = false
 	g.endless_ok = false
-	g._click(Vector2(320.0, 288.0))
+	g._click(g._over_newrun_rect().get_center())
 	_ok("실패 화면은 전폭 한 줄 그대로다", g.state == g.S.NEWRUN,
 			"state %d" % g.state)
 	_ok("전폭 줄이 그 자리다",
-			g._over_newrun_rect() == Rect2(94.0, 275.0, 452.0, 26.0),
+			g._over_newrun_rect() == Rect2(96.0, 304.0, 448.0, 26.0),
 			"%s" % g._over_newrun_rect())
