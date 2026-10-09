@@ -24125,6 +24125,7 @@ func _table_draw() -> void:
 	#  펠트에 앉은 사탕 — 물건 다음 · 상인 손 밑(주먹이 위에서 덮는다).
 	_pound_candy_draw(1)
 	_cover_draw()
+	_bills_top_draw()      # 상인 손을 못 피한 값 — 손 위(bill_top)
 	#  조각은 _cover_draw **다음**이다. _waste_draw 옆에 두면 _cover_draw 가
 	#  그리는 _npc_arms 와 _hand3_draw 가 조각을 덮는다 — 날이 턱에 닿는 것이
 	#  0.512초고 조각은 0.85초까지 사니까, 그 0.34초 동안 마지막 물건의 조각이
@@ -35158,6 +35159,13 @@ func _plaque_flat(c: Vector2, it: Dictionary, t: Dictionary, rot: float,
 #  들어올림(lift)은 안 본다. _obj_box · _obj_shape 가 h 만 쓰므로 커서를
 #  얹어 물건이 떠도 값은 안 움직인다.
 var bill_side := {}            # 물건 번호 → 지난 프레임의 자리
+#  ── 상인 손도 피한다 (2026-10-08) ──
+#  「특정 상황에서 가격이 상점 npc 손에 가려지더라고?」(사용자). 값은 물건을 다 그린 뒤
+#  (_goods_draw) 돌고 상인 팔 · 손(_cover_draw)은 그 **뒤**에 그려져, 손 밑에 앉은 값이 통째로
+#  덮였다. 자리를 고를 때 손 · 팔뚝(누름 판정 _npc_hit 과 같은 자 — 손바닥 반지름 · 팔뚝 반폭)에
+#  닿는 자리를 막힌 자리로 센다(bill_hand). 네 자리 다 손에 닿으면 그 값만 손 **위**에 다시
+#  그린다(bill_top · _bills_top_draw) — 값은 절대 안 가려진다.
+var bill_top := []             # 손 위에 그릴 값 [물건 번호, 사각]
 
 
 #  값표 글자는 12(갈무리11 제 크기 — 설계 격자가 12 였다). 9 였을 때는 값 플라크가
@@ -35218,7 +35226,37 @@ func _bill_block(i: int, r: Rect2, z: Array, placed: Array) -> int:
 		for pt in pts:
 			if _obj_shape(j, pt):
 				n += 1
+	for pt in pts:
+		if _bill_hand(pt):
+			n += 3
 	return n
+
+
+#  화면 점이 상인 손 · 팔뚝 밑인가 — 누름 판정(_npc_hit)과 같은 자. 몸통 · 위팔은 안 본다
+#  (카운터 너머라 값이 거기 설 일이 없다).
+func _bill_hand(pt: Vector2) -> bool:
+	if not _npc_on():
+		return false
+	for k in 2:
+		var pm: Vector3 = npc_palm[k]
+		if pm == Vector3.ZERO:
+			continue
+		var hp := _p2s(pm.x, pm.y, pm.z)
+		if pt.distance_to(hp) <= float(POKE.hand_r):
+			return true
+		var eb: Vector2 = npc_elbow[k]
+		if _seg_near(pt, _p2s(eb.x, eb.y, float(HAND3.h_el)), hp) <= float(POKE.arm_r):
+			return true
+	return false
+
+
+#  사각이 손에 닿는가 — 모서리 넷 · 가운데.
+func _bill_handed(r: Rect2) -> bool:
+	for pt in [r.position, Vector2(r.end.x, r.position.y), r.end,
+			Vector2(r.position.x, r.end.y), r.get_center()]:
+		if _bill_hand(pt):
+			return true
+	return false
 
 
 func _bill_place(i: int, z: Array, placed: Array) -> Rect2:
@@ -35259,6 +35297,7 @@ func _bills_draw(z: Array) -> void:
 	var order := z.duplicate()
 	order.reverse()
 	var placed := []
+	bill_top.clear()
 	for i in order:
 		if i == give_i or i >= mini(drop.size(), stock.size()):
 			continue
@@ -35269,11 +35308,25 @@ func _bills_draw(z: Array) -> void:
 			continue
 		var r := _bill_place(i, z, placed)
 		placed.append(r)
+		#  어느 자리도 손을 못 피했다 — 손 위에 다시 그린다(bill_top).
+		if _bill_handed(r):
+			bill_top.append([i, r])
+			continue
 		_bill_at(i, r)
 	#  떠난 물건의 기억은 버린다
 	for key in bill_side.keys():
 		if int(key) >= drop.size() or drop[int(key)].gone:
 			bill_side.erase(key)
+
+
+#  상인 손을 못 피한 값 — 팔 · 손을 그린 뒤 그 위에. 물건이 그새 팔렸거나 사라졌으면 건너뛴다.
+func _bills_top_draw() -> void:
+	for e in bill_top:
+		var i: int = int(e[0])
+		if i >= mini(drop.size(), stock.size()) or stock[i].sold:
+			continue
+		_bill_at(i, e[1])
+	bill_top.clear()
 
 
 #  값표 한 장을 사각 r 에 그린다. 밑 자리면 옛 글줄과 같은 줄에 선다.
