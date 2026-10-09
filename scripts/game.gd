@@ -24493,13 +24493,12 @@ func _chute_label() -> void:
 		else:
 			_chute_name(Vector2(0.0, ly), lab, HORIZONTAL_ALIGNMENT_RIGHT, VIEW.x - ex,
 					C_TXT if live else C_DIM)
+			#  복제 화면에서도 왼쪽 창구는 동전 슬롯 동전을 판다(_hand_release 의 src 1) — 이름 ·
+			#  판매가도 상점 그대로 선다. 걷어 두었더니 「마릴린 딥틱 사용하고 복재할 때 판매
+			#  문구가 없거든?」(사용자, 2026-10-08) — 파는 자리가 살아 있는데 이름이 없었다.
+			_chute_sell_label(ex, ly, vy)
 		return
-	var si: int = hand_i if (hand_st == H.CARRY and hand_src == 1) else sell_sel
-	var slive: bool = _can_sell() and si >= 0 and si < owned.size()
-	_chute_name(Vector2(ex, ly), "판매", HORIZONTAL_ALIGNMENT_LEFT, -1.0,
-			C_TXT if slive else C_DIM)
-	if slive:
-		draw_gold_at(ex, vy, "+%d" % GameData.sell_value(owned[si]), 12, C_GOLD)
+	_chute_sell_label(ex, ly, vy)
 
 	var bi: int = hand_i if (hand_st == H.CARRY and hand_src == 0) else buy_sel
 	var blive: bool = bi >= 0 and bi < stock.size()
@@ -24510,6 +24509,16 @@ func _chute_label() -> void:
 		var cs := str(stock[bi].cost)
 		draw_gold_at(VIEW.x - ex - gold_w(cs, 12), vy, cs, 12,
 				C_GOLD if ok else C_DIM.darkened(0.25))
+
+
+#  왼쪽 판매 창구의 이름 · 판매가 — 고른(또는 끄는) 동전 슬롯 동전이 있으면 밝고 그 값이 선다.
+func _chute_sell_label(ex: float, ly: float, vy: float) -> void:
+	var si: int = hand_i if (hand_st == H.CARRY and hand_src == 1) else sell_sel
+	var slive: bool = _can_sell() and si >= 0 and si < owned.size()
+	_chute_name(Vector2(ex, ly), "판매", HORIZONTAL_ALIGNMENT_LEFT, -1.0,
+			C_TXT if slive else C_DIM)
+	if slive:
+		draw_gold_at(ex, vy, "+%d" % GameData.sell_value(owned[si]), 12, C_GOLD)
 
 
 #  창구 이름 한 줄(20). 진열대에서는 나무 카운터에 **누운** 글씨다(2026-10-04 「판매랑 구매
