@@ -67,7 +67,7 @@ func _ctx_for(c: String) -> Dictionary:
 		"streak": 0, "warm": false,
 		# item_amt 가 읽는 것들 — 배율원이 0 이면 수량도 0 이 된다
 		"darts_left": 3, "items_n": 4, "gold": 20, "mag_hvy": 2,
-		"leg_base": 6, "leg_darts": 4, "low": 5, "zonehist": 2,
+		"leg_base": 6, "leg_darts": 4, "low": 5, "zonehist": 2, "hkey": 7,
 		"empty_n": 2, "rackval_others": 6, "rand01": 1.0,
 	}
 	match c:
@@ -134,6 +134,9 @@ func _static_checks() -> void:
 		var gw := String(it.get("grow", ""))
 		if gw == "fire" or gw == "hitmiss":
 			probe.gs = int(it.get("gstep", 0))
+		#  숫자별 맞힌 수를 동전이 쥔다(per sechist) — 게임은 ctx 를 짓기 전에 이번 발을 올린다.
+		if String(it.get("per", "")) == "sechist":
+			probe.hist = {int(x.get("hkey", 0)): 2}
 		var amt: int = GameData.item_amt(probe, x)
 		if amt <= 0:
 			_bad(id, nm, "조건은 서는데 수량이 %d 다 (k=%s v=%s per=%s grow=%s)"

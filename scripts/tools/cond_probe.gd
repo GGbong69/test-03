@@ -98,7 +98,7 @@ const PER_KEYS := {
 	"darts_left": ["darts_left"], "items": ["items_n"],
 	"gold": ["gold"], "gold5": ["gold"], "mag_hvy": ["mag_hvy"],
 	"missing": ["leg_base", "leg_darts"], "low": ["low"],
-	"zonehist": ["zonehist"], "rackval": ["rackval_all"],
+	"zonehist": ["zonehist"], "sechist": ["hkey"], "rackval": ["rackval_all"],
 	"empty": ["empty_n"],
 }
 

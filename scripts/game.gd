@@ -1763,8 +1763,12 @@ func _run_save(at: String) -> void:
 	#  지운다. 사전을 통째로 적으면 표가 바뀔 때 옛 수치가 부활한다.
 	var ow := []
 	for o in owned:
-		ow.append({"id": String(o.get("id", "")),
-				"gs": int(o.get("gs", 0)), "bought": int(o.get("bought", 0))})
+		var od := {"id": String(o.get("id", "")),
+				"gs": int(o.get("gs", 0)), "bought": int(o.get("bought", 0))}
+		#  동전이 제 안에 쥔 숫자별 맞힌 수(연속사진 · per sechist) — 있을 때만.
+		if not (o.get("hist", {}) as Dictionary).is_empty():
+			od["hist"] = (o.hist as Dictionary).duplicate()
+		ow.append(od)
 	Save.run_set("owned", ow)
 	#  사탕과 사진은 consumables() **한 표**에 산다. 런 중 변하는 칸이 없어
 	#  id 만으로 온전하다.
@@ -1956,6 +1960,11 @@ func _run_load() -> bool:
 		cp.erase("w")         # _buy 가 지우는 그 칸. owned 의 모양을 같게 둔다
 		cp.gs = int(od.get("gs", 0))
 		cp.bought = int(od.get("bought", 0))
+		if od.has("hist"):
+			var hd := {}
+			for hk in (od.hist as Dictionary):
+				hd[int(hk)] = int(od.hist[hk])
+			cp.hist = hd
 		owned.append(cp)
 	cons = _rows_of(GameData.consumables(), Save.run_get("cons", PackedStringArray()))
 	leg_tags = {}
@@ -8913,6 +8922,19 @@ func _land(mark := true) -> void:
 	var risk1_pre: bool = is_risk and not seen_risk
 	var low_pre := low_hit
 	var zonehist_pre: int = (zone_hist.get(zone, 0) + 1) if zone != "" else 0
+	#  숫자 열쇠 — 칸이면 그 칸의 수, 불이면 안쪽 · 바깥쪽 하나로 25. 띠(싱글 · 더블 · 트리플)를
+	#  안 가린다. 「연속 사진 같은 경우 20을 맞추면 20, 20더블 20 트리플 이 다 성장 되어야 되는데
+	#  더블이랑 트리플이 좀 나눠진걸로 느껴졌어」(사용자, 2026-10-08) — 옛 연속사진은 영역 종류
+	#  (zone_hist)로 쌓아 20 싱글 · 더블 · 트리플이 따로 쌓였다. 이제 동전이 제 안에 숫자별 맞힌
+	#  수를 쥔다(hist — 「동전 자체에 데이터 삽입」). 든 뒤부터 센다 · 이어하기에 적힌다.
+	var hkey: int = 0
+	if zone != "":
+		hkey = 25 if info.idx == -1 else int(info.sector)
+		for o in owned:
+			if String(o.get("per", "")) == "sechist":
+				var hd: Dictionary = o.get("hist", {})
+				hd[hkey] = int(hd.get(hkey, 0)) + 1
+				o["hist"] = hd
 	if zone != "":
 		if info.sector >= 1 and info.sector <= 20:
 			sec_cnt[info.sector] = int(sec_cnt.get(info.sector, 0)) + 1
@@ -8983,6 +9005,7 @@ func _land(mark := true) -> void:
 		"leg_base": leg_base,
 		"low": low_pre,
 		"zonehist": zonehist_pre,
+		"hkey": hkey,
 		"empty_n": GameData.max_items() - owned.size(),
 		"rackval_all": rv_all,
 		"rand01": randf(),

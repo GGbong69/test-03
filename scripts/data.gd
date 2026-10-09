@@ -1905,6 +1905,9 @@ static func item_amt(it: Dictionary, x: Dictionary) -> int:
 				- int(x.get("leg_darts", 6)))
 		"low": v *= int(x.get("low", 0))
 		"zonehist": v *= int(x.get("zonehist", 0))
+		#  동전이 제 안에 쥔 숫자별 맞힌 수(hist — 칸 숫자 · 불은 25 하나) — 띠를 안 가린다.
+		#  이번 발을 포함한다(_land 가 ctx 를 짓기 전에 올린다). 2026-10-08
+		"sechist": v *= int((it.get("hist", {}) as Dictionary).get(int(x.get("hkey", 0)), 0))
 		"rackval": v *= int(x.get("rackval_others", 0))
 	return v
 
@@ -1983,6 +1986,7 @@ static func eff_line(it: Dictionary) -> String:
 		# ⚠ 「그 영역」으로 줄이면 가리킬 말이 줄 안에 없다 — c36 은 cond 가
 		# always 라 앞에 붙는 조건 말이 없고 이 한 줄이 툴팁 전부다.
 		"zonehist": return "맞힌 영역을 이번 런에 맞힌 1발당 " + base
+		"sechist": return "맞힌 숫자를 지금까지 맞힌 1발당 " + base
 		# 값이 v × 다른 동전 판매가 합이다 — 「배수 추가」로만 찍으면 v 가 얼굴에서 사라진다
 		#  「판매가 합 1당」 은 말이 걸렸다 — 판매가는 골드라 「1골드당」 이면 합까지 읽힌다
 		"rackval": return "다른 동전 판매가 1골드당 " + base
