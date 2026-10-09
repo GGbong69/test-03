@@ -2544,6 +2544,9 @@ func _ember_band_r(band: String) -> Vector2:
 		"d":
 			return Vector2(R * rt_dbl_in, R * rt_dbl_out)
 		"s":
+			#  트리플이 없는 판(피자)의 싱글은 조각 하나다 — hit_info 와 같은 구간(_no_trp).
+			if _no_trp():
+				return Vector2(R * rt_bull_o, R * rt_dbl_in)
 			return Vector2(R * rt_trp_out, R * rt_dbl_in)
 	return Vector2.ZERO
 
@@ -8459,12 +8462,15 @@ func hit_info(p: Vector2) -> Dictionary:
 	var trk: int = GameData.area("single").track
 	var r0 := R * rt_bull_o
 	var r1 := R * rt_trp_in
+	var sgl := true
 	if r >= R * rt_dbl_in:
+		sgl = false
 		m = rt_m_dbl
 		trk = GameData.area("double").track
 		r0 = R * rt_dbl_in
 		r1 = R * rt_dbl_out                                   # ← ① 판벌이
-	elif r >= R * rt_trp_in and r <= R * rt_trp_out:
+	elif r >= R * rt_trp_in and r <= R * rt_trp_out and not _no_trp():
+		sgl = false
 		m = rt_m_trp
 		trk = GameData.area("triple").track
 		r0 = R * rt_trp_in
@@ -8486,8 +8492,20 @@ func hit_info(p: Vector2) -> Dictionary:
 		else:
 			r0 = R * rt_trp2_out
 
+	#  트리플 띠가 접혀 없는 판(「피자」)은 안 · 바깥 싱글이 한 조각이다 — 경계 없이 한 구간으로
+	#  낸다. 접힌 자리에서 갈라 내던 때는 조준 밝힘 · 맞은 칸 빛 · 불씨가 조각을 옛 띠 자리에서
+	#  반으로 갈라 비췄다(「피자는 8조각으로 나눠지잖아? 근데 조준 할때 한 조각에 띠에 맞춰서
+	#  나눠지더라고?」 — 사용자, 2026-10-08). 배수 · 값은 그대로다.
+	if sgl and _no_trp():
+		r0 = R * rt_bull_o
+		r1 = R * rt_dbl_in
 	return {"base": val, "mult": m, "sector": val, "idx": idx, "r0": r0, "r1": r1,
 			"track": trk, "col": _sec_col(idx)}
+
+
+#  트리플 띠가 없는 판인가 — 폭이 접혔고 둘째 트리플(천체 고리)도 없다(「피자」).
+func _no_trp() -> bool:
+	return rt_trp_out - rt_trp_in < 0.0005 and rt_trp2_out <= 0.0
 
 # 반환값의 치역:  mult ∈ {0,1,2,3}   sector ∈ {-1} ∪ [1,20] ∪ {25,50}
 #                col ∈ {-1} ∪ [0, colors.csv 행 수)   — 불·아웃은 -1 이다
