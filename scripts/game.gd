@@ -7248,7 +7248,13 @@ const PULL := {
 # 아래 넷은 손맛이다.
 # 정산 걸음의 빠르기. 정산 안 자리로 잰다 — 자리 free 까지는 그대로, 그 뒤로는
 # 걸음마다 acc 배로 짧아지고 min 에서 멎는다. 연발 한 발은 shot 걸음으로 친다.
-const PACE := {"free": 3.0, "acc": 0.86, "min": 0.30, "shot": 4.0}
+#  연발(석양이 진다 · 리볼버)은 작은 다트가 뒤로 갈수록 재진다 — 첫 다트 burst0 에서 마지막
+#  burst1 까지 고르게(2026-10-08 「뒤로 갈수록 빨라져야 한다」). 옛 판은 연발이면 첫 걸음부터
+#  바닥(min)에 붙어 다섯 발이 같은 빠르기였다. 고르게 놓아 다섯 발 합은 옛 바닥과 비슷하다 —
+#  0.45 → 0.20 의 평균 0.325. burst1 0.20 은 beat 0.34 에서 걸음 0.068초 = 4프레임(MO.tap ·
+#  FAST.floor 와 같은 가장 작은 움직임)이라 그 밑으로 안 내린다.
+const PACE := {"free": 3.0, "acc": 0.86, "min": 0.30, "shot": 4.0,
+		"burst0": 0.45, "burst1": 0.20}
 
 const KICK := {
 	"gap": 0.11,      # 발 사이 간격(초)
@@ -9201,6 +9207,10 @@ func _chip_gain(v: int) -> int:
 # _land 는 큐를 다 세운 뒤 부르므로 at 이 −1 — 착탄 뒤 머리 숨은 언제나 온 박이다.
 # 연발 한 발은 걸음 넷으로 쳐서 더한다(burst_n × shot) — 연발은 머리부터 바닥이다.
 func _pace() -> float:
+	#  연발 — 몇째 작은 다트인가(남은 자리 수로 센다)로 burst0 → burst1(PACE 머리말).
+	if burst_n > 1:
+		var k: int = clampi(burst_n - burst_hits.size() - 1, 0, burst_n - 1)
+		return lerpf(float(PACE.burst0), float(PACE.burst1), float(k) / float(burst_n - 1))
 	var at := float(settle_n - queue.size() - 1) + float(burst_n) * float(PACE.shot)
 	return clampf(pow(float(PACE.acc), maxf(at - float(PACE.free), 0.0)),
 			float(PACE.min), 1.0)
