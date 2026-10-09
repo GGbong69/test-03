@@ -115,6 +115,37 @@ func _run() -> void:
 				"%d개" % g.photo_back.size())
 		print("")
 
+	#  ── 복제본은 지금 상태 그대로다 (2026-10-08) ──
+	#  「복제된 동전 2개 있으면 효과가 하나 밖에 적용 안되는거 같더라고」 — 옛 판은 성장값을
+	#  0 으로 비웠다. 쌓인 값 · 숫자별 맞힌 수를 베끼고, 그 뒤로는 따로 쌓인다.
+	print("  ── 복제본의 상태 ──")
+	_shop(0)
+	var grow: Dictionary = {}
+	var hist_c: Dictionary = {}
+	for it2 in GameData.items():
+		if String(it2.get("grow", "")) == "fire" and grow.is_empty() \
+				and String(it2.get("side", "")) == "":
+			grow = (it2 as Dictionary).duplicate()
+		if String(it2.get("per", "")) == "sechist":
+			hist_c = (it2 as Dictionary).duplicate()
+	grow.gs = 45
+	grow.bought = 1
+	hist_c.gs = 0
+	hist_c.bought = 1
+	hist_c.hist = {20: 3}
+	g.owned = [grow, hist_c]
+	g._photo_apply("clone", 0)
+	g._photo_apply("clone", 1)
+	_ok("복제본이 쌓인 성장값을 베낀다", g.owned.size() == 4 and int(g.owned[2].gs) == 45,
+			"gs %s" % (g.owned[2].gs if g.owned.size() > 2 else "-"))
+	_ok("복제본이 숫자별 맞힌 수를 베낀다", g.owned.size() == 4
+			and int((g.owned[3].get("hist", {}) as Dictionary).get(20, 0)) == 3)
+	if g.owned.size() == 4:
+		(g.owned[3].hist as Dictionary)[20] = 9
+		_ok("그 뒤로는 따로 쌓인다(깊은 사본)", int((g.owned[1].hist as Dictionary).get(20, 0)) == 3)
+		_ok("산 판 번호는 새로 적는다", int(g.owned[2].bought) == g.leg_no)
+	print("")
+
 	print("%s\n" % ("전부 통과" if fail == 0 else "실패 %d건" % fail))
 	print("통과 %d · 실패 %d" % [okn, fail])
 	quit(0 if fail == 0 else 1)

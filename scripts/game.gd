@@ -21504,8 +21504,13 @@ func _photo_apply(kind: String, oi: int) -> bool:
 			pay_msg_t = HAND.msg_t
 			_deny()
 			return false
-		var cp: Dictionary = it.duplicate()
-		cp.gs = 0                      # 성장값은 안 따라간다. 새 장이다
+		#  **지금 상태 그대로 베낀다** — 쌓인 성장값(gs) · 연속사진의 숫자별 맞힌 수(hist)까지.
+		#  옛 판은 「새 장」이라 gs 를 0 으로 비워, 쌓이는 동전을 복제하면 복제본이 처음부터 다시
+		#  쌓았다 — 「복제된 동전 2개 있으면 효과가 하나 밖에 적용 안되는거 같더라고」(사용자,
+		#  2026-10-08). 깊은 사본이라 그 뒤로는 따로 쌓인다(얕은 사본이면 hist 를 같이 썼다).
+		#  산 판 번호(bought — 검정 리그 삭음)만 새로 적는다. 보이는 값(_fxs)은 그림이 다시 잡는다.
+		var cp: Dictionary = it.duplicate(true)
+		cp.erase("_fxs")
 		cp.bought = leg_no
 		owned.append(cp)
 		#  이미 든 장을 복제하는 것이라 늘 참이지만, 「owned 로 드는 네 문」을
