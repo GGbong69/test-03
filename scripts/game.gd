@@ -925,6 +925,13 @@ var shake := 0.0
 var shake_k := 34.0      # 흔들림 감쇠(px/초) — 1배 착지만 남은 걸음에 맞춰 가파르다(_shk_tail_k)
 var board_punch := 0.0
 var pitch_step := 0
+#  ── 연발은 작은 다트마다 소리가 오른다 (2026-10-08) ──
+#  「지금 한발의 효과음 끝나면 다음발 효과음이 같잖아? 이왕 여러 발 쏘는거면 효과음이 발라트로
+#  같이 점점 올라가는 효과를 주면 안돼?」(사용자). 정산 사다리(pitch_step)는 작은 다트가 꽂힐
+#  때마다 바닥(392Hz)으로 돌아가 다섯 발이 같은 소리를 되풀이했다. 연발의 다음 작은 다트는 사다리
+#  바닥을 step 반음씩 올려 시작한다(cap 에서 멎는다) — 걸음 소리 · 점수 톡 · 합계 소리가 같이 오른다.
+const BURSTSND := {"step": 2, "cap": 10}
+var burst_pitch := 0     # 이 작은 다트의 사다리 바닥(반음) — 연발이 아니면 0
 var hit_flash := 0.0
 var hit_flash_amt := 0.55
 var hit_idx := -1
@@ -8990,6 +8997,7 @@ func _land(mark := true) -> void:
 	src_t = 0.0
 	card_mode = 0
 	pitch_step = 0
+	burst_pitch = 0
 	_card_reset()
 	queue.clear()
 	ev_tail = false
@@ -9283,8 +9291,12 @@ func _next_step() -> void:
 		if not burst_hits.is_empty():
 			aim = burst_hits.pop_front()
 			fire_carry = true       # 테두리 불은 다음 작은 다트로 이어 탄다(fire_burst 머리말)
+			var bp: int = mini(burst_pitch + int(BURSTSND.step), int(BURSTSND.cap))
 			_land(false)
 			fire_carry = false      # _land 가 _card_reset 앞에서 돌아서도 다음 판에 안 샌다
+			#  정산 소리가 한 단 올라 시작한다(BURSTSND).
+			burst_pitch = bp
+			pitch_step = bp
 			return
 		#  판 사건의 걸음(단골이 들어온다 · 뽑아 간다)이 끝났다 — 발 끝 셈은 그 걸음을 세우기
 		#  전에 이미 했다. 곧장 고르기다.
@@ -9324,7 +9336,9 @@ func _next_step() -> void:
 	# 여기서 하나를 뺀다 — 안 빼면 첫 걸음이 415.31Hz 가 되고 표가
 	# SFX_BASE 로 적어 둔 392 는 한 번도 안 난다(파일이 앉은 뒤로는
 	# pitch_scale 이 1.0 이 아니라 1.0595 로 시작하는 것이기도 하다).
-	var f := 392.0 * pow(2.0, float(pitch_step - 1) / 12.0)
+	#  천장 23반음(3.78배 — sfx/README 「정산 사다리」). 연발은 바닥이 올라 있어(BURSTSND) 긴
+	#  정산에서 그 천장에 닿을 수 있다 — 거기서 멎는다.
+	var f := 392.0 * pow(2.0, float(mini(pitch_step - 1, 23)) / 12.0)
 	var cc := card_pos() + Vector2(CARD_W * 0.5, 12.0)
 	calc_lit = false           # 방식 걸음이 아니면 카드는 보통대로 그린다
 	roll_t = -1.0
@@ -10003,7 +10017,8 @@ func _tally_arm(gn: float, from: float, brk := false, peek := false) -> void:
 	if land_live:
 		tick_n = mini(clampi(int(round(float(TALLY.tick0) + float(TALLY.tick_gn) * gn)), 4, 24),
 				maxi(last_gain - 1, 1))
-	tick_f0 = clampi(pitch_step - 1, 0, 12)
+	#  연발은 사다리 바닥이 올라 있다(BURSTSND) — 상한 12 는 그 바닥 위에서 잰다.
+	tick_f0 = clampi(pitch_step - 1 - burst_pitch, 0, 12) + burst_pitch
 
 
 #  굴림 창의 나눗수 — 착지(창의 GROW.hold 자리)가 걸음의 land 몫에 서게 한다:
@@ -10082,7 +10097,8 @@ func _tally_land(freeze := true) -> void:
 	#  4단만 이 소리를 **멈춤이 풀리는 프레임**으로 늦춘다(_fire_release) — 마지막 톡
 	#  뒤 0.120초가 무음이다. 모션 끄기는 멈춤이 없으니 그 자리에서 낸다. 돌파는
 	#  늦추지 않는다(돌파 멈춤은 stop_fire 를 안 세운다).
-	var pit := SFX_BASE * pow(2.0, -float(GROW.semi) * gn / 12.0)
+	#  연발의 다음 작은 다트는 합계 소리도 그만큼 오른다(BURSTSND).
+	var pit := SFX_BASE * pow(2.0, (float(burst_pitch) - float(GROW.semi) * gn) / 12.0)
 	if fire_hot >= 4 and not motion_off and not brk:
 		fire_snd = pit
 	else:
