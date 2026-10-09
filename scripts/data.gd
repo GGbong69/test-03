@@ -1812,6 +1812,15 @@ static func cond_tag(c: String) -> String:
 	return ""
 
 
+#  수 뒤의 목적격 조사 — 읽는 소리의 끝 받침으로 고른다. 일 · 삼 · 육 · 칠 · 팔 · 십 · 백은 「을」,
+#  이 · 사 · 오 · 구는 「를」(0 으로 끝나면 십 · 백 — 「을」).
+static func _eul(n: int) -> String:
+	var d := absi(n) % 10
+	if d == 0:
+		return "을"
+	return "를" if d == 2 or d == 4 or d == 5 or d == 9 else "을"
+
+
 static func cond_text(c: String) -> String:
 	match c:
 		"always": return "모든 다트"
@@ -1848,8 +1857,12 @@ static func cond_text(c: String) -> String:
 		"zones2": return "이번 판에 다른 영역 2개를 맞힌 발부터"
 		"zones4": return "이번 판에 네 영역을 모두 맞힌 발부터"
 		"rezone": return "이번 판에 이미 맞힌 영역을 다시 맞히면"
+	#  칸 번호 — 「8을 맞히면」. 「8번 맞히면」은 「여덟 번」으로 읽혔다(사용자, 2026-10-08
+	#  「8번 맞히면 이라는 말은 좀 어색하잖아? 그냥 8을 맞추면」). 조사는 마지막 수를 읽는 소리가
+	#  고른다(_eul).
 	if c.begins_with("sec:"):
-		return c.substr(4).replace(",", "·") + "번 맞히면"
+		var ns := c.substr(4).split(",")
+		return "·".join(ns) + _eul(int(ns[ns.size() - 1])) + " 맞히면"
 	if c.begins_with("col:"):
 		var nm := PackedStringArray()
 		for t in c.substr(4).split(","):
