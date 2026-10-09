@@ -21201,6 +21201,29 @@ func _sell(i: int) -> void:
 	_knot_shop()
 
 
+#  사탕·사진을 판다 — 상점에서 판매 창구로 끌어다 놓으면(2026-10-08 「또 같은 아침 판매 안 됨」 ·
+#  「아이템 슬롯에 있는거 판매 할려는데 안 팔려지더라고?」). 설계는 사진 · 사탕도 「사고 팔고
+#  봉인되는 규칙 아래 놓인다」였는데 파는 길이 없었다 — 판에서만 쓰는 사진(또 같은 아침)은 상점에서
+#  칸만 먹었다. 판매가는 동전과 같은 식(sell_value — 구매가에서 내림)이다. 상인은 손짓한다(저울은
+#  동전의 몸짓이다).
+func _cons_sellable() -> bool:
+	return state == S.SHOP and _can_sell() and photo == "" and photo_rack == ""
+
+
+func _sell_cons(i: int) -> void:
+	if i < 0 or i >= cons.size():
+		return
+	var at := _cons_rect(i).get_center()
+	var v := GameData.sell_value(cons[i])
+	v = _gold_add(v, "sell")
+	_earn(v)
+	cons.remove_at(i)
+	_npc_react("손짓", 0)
+	pop(at + Vector2(0.0, 26.0), "+%d" % v, C_GOLD, 12, 0.8)
+	_sfx("sell")
+	_knot_shop()
+
+
 # ══════════════════════════════════════════════════════════
 #  사탕 — 사서 쟁여 뒀다가 한 번 쓰고 사라지는 것
 # ──────────────────────────────────────────────────────────
@@ -24540,6 +24563,12 @@ func _chute_label() -> void:
 
 #  왼쪽 판매 창구의 이름 · 판매가 — 고른(또는 끄는) 동전 슬롯 동전이 있으면 밝고 그 값이 선다.
 func _chute_sell_label(ex: float, ly: float, vy: float) -> void:
+	#  끄는 사탕·사진 — 그 판매가(_sell_cons).
+	if hand_st == H.CARRY and hand_src == 4 and hand_i >= 0 and hand_i < cons.size() \
+			and _cons_sellable():
+		_chute_name(Vector2(ex, ly), "판매", HORIZONTAL_ALIGNMENT_LEFT, -1.0, C_TXT)
+		draw_gold_at(ex, vy, "+%d" % GameData.sell_value(cons[hand_i]), 12, C_GOLD)
+		return
 	var si: int = hand_i if (hand_st == H.CARRY and hand_src == 1) else sell_sel
 	var slive: bool = _can_sell() and si >= 0 and si < owned.size()
 	_chute_name(Vector2(ex, ly), "판매", HORIZONTAL_ALIGNMENT_LEFT, -1.0,
@@ -37481,7 +37510,9 @@ func _hand_release(m: Vector2) -> void:
 
 	# 사탕·사진 — 가운데에 놓으면 쓴다. 그 밖에 놓으면 칸으로 돌아간다.
 	if src == 4:
-		if _use_hit(m) and i >= 0 and i < cons.size():
+		if z == Z_SELL and _cons_sellable() and i >= 0 and i < cons.size():
+			_sell_cons(i)
+		elif _use_hit(m) and i >= 0 and i < cons.size():
 			use_from = m
 			_cons_use(i)
 		else:
@@ -37695,6 +37726,16 @@ func _hand_update(d: float) -> void:
 	#  프레임 색인 오류였고, 상점에서는 같은 번호의 매물이 사탕을 따라
 	#  미끄러졌다(2026-09-17, input_probe). _hand_take · _give_tick 이 4 를 빼는 그 자리다.
 	if hand_src == 4:
+		#  상점에서는 판매 창구에도 판다(_sell_cons) — 왼쪽 창구 래치만 건다. 놓는 자리 그림은
+		#  _use_draw · 창구 이름 · 판매가는 _chute_sell_label 이 맡는다.
+		var pz := -1
+		if _cons_sellable():
+			pz = _chute_at(hand_m, HAND.latch_gap if hand_zone >= 0 else 0.0)
+			if pz != Z_SELL:
+				pz = -1
+		if pz >= 0 and pz != hand_zone:
+			_sfx("chute_enter")
+		hand_zone = pz
 		return
 
 	# 래치는 히스테리시스로 건다 — 경계에서 소리와 창구 얼굴이 연타되지 않는다.
