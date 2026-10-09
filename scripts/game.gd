@@ -1015,6 +1015,16 @@ var fire_mul := 1.0      # 개발자 5쪽 — 테두리 세기 배(0 이 「손�
 #  _fire_arm 에서 내리고, 그 뒤로는 옛 창 그대로 빠진다.
 var fire_hold := false
 var fire_heat := 1.0     # 불의 혀 높이 배. 값이 클수록 높이 탄다(FIRE.heat_*)
+#  ── 연발 동안 이어 탄다 (2026-10-08) ──
+#  「점수가 크게 오를때 테두리가 불타는 효과가 있잖아? 근데 석양이 진다 같은 경우에는 이 이팩트가
+#  계속 끊기더라고? 그래서 좀 안 끊기게?」(사용자). 연발(석양이 진다 · 리볼버)은 한 발이 작은
+#  다트 여럿이라 다트마다 정산이 처음부터 다시 쌓인다 — 다트가 꽂힐 때마다 불이 0 으로 지워지고
+#  (_card_reset → _fire_reset), 새 다트의 값이 다시 커질 때까지 꺼져 있고, 중간 다트의 합계
+#  걸음에서도 빠져 다섯 번 켜졌다 꺼졌다 했다. 연발 안에서는 가장 높았던 단(fire_burst)을 붙들고
+#  다음 작은 다트로 이어 탄다(fire_carry — 그 _land 의 _fire_reset 이 그림을 안 지운다). 마지막
+#  다트의 합계 걸음에서만 옛 창 그대로 빠진다. 멈춤 · 침묵의 단(fire_hot)은 안 건드린다.
+var fire_burst := 0      # 이 연발에서 여태 가장 높았던 그림 단(0~3). 연발이 아니면 0
+var fire_carry := false  # 다음 _fire_reset 이 그림을 지우지 않는다(연발의 다음 작은 다트)
 
 var _autoplay := false
 var _auto_t := 0.0
@@ -9254,7 +9264,9 @@ func _next_step() -> void:
 		# 판다 — 자루는 이미 하나만 썼으므로 판 계산은 안 건드린다.
 		if not burst_hits.is_empty():
 			aim = burst_hits.pop_front()
+			fire_carry = true       # 테두리 불은 다음 작은 다트로 이어 탄다(fire_burst 머리말)
 			_land(false)
+			fire_carry = false      # _land 가 _card_reset 앞에서 돌아서도 다음 판에 안 샌다
 			return
 		#  판 사건의 걸음(단골이 들어온다 · 뽑아 간다)이 끝났다 — 발 끝 셈은 그 걸음을 세우기
 		#  전에 이미 했다. 곧장 고르기다.
@@ -9906,6 +9918,14 @@ func _fire_arm(gn: float, brk: bool) -> void:
 		#  **대입이다.** maxf 로 바꾸면 연발에서 불이 안 꺼져 상시 장식이 된다 —
 		#  바로 위 shake 가 같은 까닭으로 대입인 그 줄과 짝이다.
 		fire_t = 1.0
+	#  연발 — 가장 높았던 단을 붙들고, 작은 다트가 남았으면 빠지지 않고 다음 다트로 이어 탄다.
+	#  마지막 다트의 합계(burst_hits 가 빔)에서만 옛 창 그대로 빠진다(fire_burst 머리말).
+	if burst_n > 0 and fire_lock < 0:
+		fire_burst = maxi(fire_burst, fire_lay)
+		fire_lay = fire_burst
+		if fire_lay > 0:
+			fire_t = 1.0
+			fire_hold = not burst_hits.is_empty()
 
 
 #  합계 걸음의 길이(2026-10-06). _fire_arm 과 같은 까닭으로 **한 함수로 모은다** —
@@ -10172,10 +10192,16 @@ func _fire_live() -> void:
 	if score_mul != 1.0:
 		v = int(round(float(v) * score_mul))
 	fire_lay = _fire_lay_of(_grow_of(v))
+	var heat := _fire_heat_of(v)
+	#  연발 안에서는 가장 높았던 단을 붙든다(fire_burst 머리말).
+	if burst_n > 0:
+		fire_burst = maxi(fire_burst, fire_lay)
+		fire_lay = fire_burst
+		heat = maxf(heat, fire_heat)
 	fire_hold = fire_lay > 0
 	if fire_hold:
 		fire_t = 1.0
-		fire_heat = _fire_heat_of(v)
+		fire_heat = heat
 
 
 #  불의 혀가 얼마나 높이 타는가. 불이 서는 문턱(t3)에서 1배 · 값이 판 목표의
@@ -10428,13 +10454,18 @@ func _card_reset() -> void:
 #     큐를 버리는 길이 없다(_skip_leg 는 판 시작 전이다). 그래도 여기서 0 으로
 #     내린다 — 「어디서도 안 지워졌다」를 두 번 겪지 않는다. 2026-09-26
 func _fire_reset() -> void:
-	fire_t = 0.0
+	stop_fire = false
+	fire_snd = 0.0
 	fire_hot = 0
+	#  연발의 다음 작은 다트 — 그림(창 · 단 · 붙듦 · 혀)은 이어 탄다(fire_burst 머리말).
+	if fire_carry:
+		fire_carry = false
+		return
+	fire_t = 0.0
 	fire_lay = 0
 	fire_hold = false
 	fire_heat = 1.0
-	stop_fire = false
-	fire_snd = 0.0
+	fire_burst = 0
 
 
 func _fit_sz(txt: String, w: float, sz: int) -> int:
