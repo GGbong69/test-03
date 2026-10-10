@@ -8184,13 +8184,17 @@ func _click(m: Vector2) -> void:
 					prof_arm = dsel
 					_sfx("menu_pick2")
 				return
+			#  **한 번 누르면 그 프로필로 간다**(2026-10-10 「프로필을 바꾸려면 클릭을 2번 해야
+			#  바뀌는거 같던데 그게 좀 불편 했거든?」). 옛 판은 첫 누름이 고르고 둘째가 들어갔다.
+			#  갈아타기는 되돌릴 수 있는 누름이라(다시 누르면 돌아온다 · 런은 프로필 파일마다
+			#  따로다) 겨눔을 안 문다 — 두 번 묻는 것은 지우기뿐이다. 쓰는 줄을 또 누르면 톡만.
 			for i in Save.SLOTS:
 				if not _prof_rect(i).has_point(m):
 					continue
 				var sl := i + 1
 				prof_arm = -1
-				if sl == prof_sel:
-					_use_profile(sl)      # 고른 줄을 또 누르면 그 프로필로 간다
+				if sl != Save.slot():
+					_use_profile(sl)
 				else:
 					prof_sel = sl
 					_sfx("menu_pick2")
@@ -8440,9 +8444,8 @@ func _wheel(m: Vector2, dir: int) -> void:
 							vol_save_t = 0.30
 							moved = true
 		S.PROFILE:
-			#  줄 목록이므로 끝에서 **선다**(안 감는다). 고르는 것은 되돌릴 수
-			#  있고, 들어가는 것은 고른 줄을 또 누르는 둘째 클릭이라 휠만으로는
-			#  프로필이 안 바뀐다.
+			#  줄 목록이므로 끝에서 **선다**(안 감는다). 휠은 훑기만 한다(오른쪽에 그 줄의
+			#  속이 선다) — 들어가는 것은 줄을 누르는 클릭이라 휠만으로는 프로필이 안 바뀐다.
 			if _prof_rect(0).merge(_prof_rect(Save.SLOTS - 1)).has_point(m):
 				var ns := clampi(prof_sel + dir, 1, Save.SLOTS)
 				if ns != prof_sel:

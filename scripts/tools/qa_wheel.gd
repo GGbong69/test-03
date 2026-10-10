@@ -607,7 +607,7 @@ func _profile() -> void:
 	for i in 5:
 		_roll(c, -1)
 	_ok("위로도 끝에서 선다", g.prof_sel == 1, "줄 %d" % g.prof_sel)
-	# 쓰는 프로필은 안 바뀐다 — 들어가는 것은 둘째 클릭이다
+	# 쓰는 프로필은 안 바뀐다 — 들어가는 것은 줄을 누르는 클릭이다
 	var slot := Save.slot()
 	g.prof_sel = 1
 	for i in 6:
