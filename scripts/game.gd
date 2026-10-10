@@ -44979,6 +44979,10 @@ const CHALKB := {
 	"menu": {"sh": Vector2(3.0, 4.0), "sh_a": 0.50, "lit": -1.0, "n": 16,
 			"w": Vector2(40.0, 110.0), "h": Vector2(6.0, 14.0), "seed": 4433,
 			"stick": Vector2(0.0, 0.0), "soft": true, "ink": 0.028},
+	#  제목 판 밑에 건 점수 칠판(TTLY) — 작은 판이라 자국 둘 · 받침 없음. 빛은 위 램프.
+	"tally": {"sh": Vector2(-2.0, 4.0), "sh_a": 0.45, "lit": 1.0, "n": 2,
+			"w": Vector2(8.0, 18.0), "h": Vector2(2.0, 3.0), "seed": 4459,
+			"stick": Vector2(0.0, 0.0), "soft": false, "ink": 0.045},
 	#  설정 창 · 일시정지의 오른쪽 판 — 받침 오른쪽에 분필 한 토막.
 	"win": {"sh": Vector2(3.0, 4.0), "sh_a": 0.45, "lit": -1.0, "n": 7,
 			"w": Vector2(36.0, 90.0), "h": Vector2(6.0, 12.0), "seed": 4447,
@@ -45526,6 +45530,7 @@ func _draw_title() -> void:
 	var dxf := door_t >= 0.0
 	_door_set_xf(shake_off)
 	_egg_shards_draw()
+	_ttly_draw()          # 판 밑 점수 칠판 — 판이 깨져 없어도 칠판은 문에 걸려 있다
 	if _door_board_vis():
 		_ttl_draw()
 	draw_set_transform(shake_off)
@@ -45544,6 +45549,54 @@ func _draw_title() -> void:
 	if CREDITS != "":
 		draw_string(font, Vector2(0, 355), CREDITS, HORIZONTAL_ALIGNMENT_CENTER,
 				VIEW.x, 12, C_DIM)
+
+
+# ══════════════════════════════════════════════════════════
+#  제목 판 밑 점수 칠판 (2026-10-10)
+# ──────────────────────────────────────────────────────────
+#  필기 「시작 화면 다트 던진 수 적어놓기 (프로필 저장)」 · 「시작화면에 상호작용 요소로 다트판을
+#  문에 걸어 놨잖아? 그거의 숫자를 어딘가에 표시 해 놓을까? 좀 자연 스러운 방식으로」(사용자).
+#  술집 다트판 밑에 거는 작은 칠판이다 — 판 밑 문에 박은 못에 끈 두 가닥으로 걸리고, 분필로
+#  다트 한 자루와 이 프로필이 제목 판에 던진 수를 적는다. 판 자리(_door_set_xf)에서 그려 문이
+#  열리면 문짝과 같이 돈다. 던질 때마다 수가 한 번 하얗게 선다(flash). 수는 프로필 파일의 세기
+#  열쇠 title:darts 다 — 던질 때 오르고 save 초 뒤 한 번 적는다(던질 때마다 디스크를 안 친다).
+#    y   칠판 윗변(판 한가운데에서 · 판 자리 px) · w · h 칠판 크기 · nail 끈이 칠판 위로 솟는 높이
+#    flash  수가 하얗게 서는 시간(초) · save 적기까지(초)
+const TTLY := {"y": 138.0, "w": 92.0, "h": 40.0, "nail": 10.0, "flash": 0.45, "save": 1.0}
+var ttly_flash := 0.0
+var ttly_save := -1.0
+
+
+func _ttly_box() -> Rect2:
+	return Rect2(BC.x - float(TTLY.w) * 0.5, BC.y + float(TTLY.y), float(TTLY.w), float(TTLY.h))
+
+
+func _ttly_draw() -> void:
+	var box := _ttly_box()
+	var ink: Color = DOORT.chalk_ink
+	var nail := Vector2(box.get_center().x, box.position.y - float(TTLY.nail))
+	#  끈 두 가닥 · 못
+	var cord := Color(DOORT.frame.darkened(0.2), 0.9)
+	draw_line(nail, Vector2(box.position.x + 12.0, box.position.y - 2.0), cord, 1.0)
+	draw_line(nail, Vector2(box.end.x - 12.0, box.position.y - 2.0), cord, 1.0)
+	draw_rect(Rect2(nail - Vector2(1.5, 1.5), Vector2(3.0, 3.0)), Color(Door3D.COL.brass, 1.0))
+	_chalk_board(self, box, 3.0, CHALKB.tally)
+	#  분필 다트 한 자루 — 촉이 오른쪽 위를 본다(판으로 날아가는 결)
+	var a0 := Vector2(box.position.x + 10.0, box.end.y - 10.0)
+	var a1 := Vector2(box.position.x + 30.0, box.position.y + 10.0)
+	var dc := Color(ink, 0.85)
+	draw_line(a0, a1, dc, 2.0)
+	var u := (a1 - a0).normalized()
+	var nrm := Vector2(-u.y, u.x)
+	draw_colored_polygon(PackedVector2Array([a0 + u * 7.0, a0 - u * 2.0 + nrm * 5.0,
+			a0 - u * 2.0 - nrm * 5.0]), Color(ink, 0.6))
+	draw_line(a1, a1 + u * 5.0, Color(ink, 0.95), 1.0)
+	#  수 — 던질 때 한 번 하얗게 선다
+	var n: int = Save.tally("title:darts")
+	var fk: float = ttly_flash / float(TTLY.flash)
+	var nc := Color(ink.lerp(Color.WHITE, 0.6 * fk), lerpf(0.9, 1.0, fk))
+	draw_string(font_sm, Vector2(box.position.x + 36.0, _menu_base_y(font_sm, 20, box.position.y,
+			box.size.y)), str(n), HORIZONTAL_ALIGNMENT_RIGHT, box.size.x - 44.0, 20, nc)
 
 
 #  옛 제목(단색 바탕 · 스크림 · 왼쪽 글줄) — 문이 아직 안 구워졌거나 헤드리스 · 문 끔.
@@ -52760,6 +52813,11 @@ func _ttl_busy() -> bool:
 func _ttl_board(d: float) -> void:
 	ttl_t += d
 	_egg_tick(d)
+	ttly_flash = maxf(ttly_flash - d, 0.0)
+	if ttly_save >= 0.0:
+		ttly_save -= d
+		if ttly_save < 0.0:
+			Save.flush()
 	for f in ttl_fly:
 		f.t += d
 	for s in ttl_stuck:
@@ -52787,6 +52845,9 @@ func _ttl_board(d: float) -> void:
 
 #  한 자루 던진다. p 는 판 좌표의 착탄점이다.
 func _ttl_throw(p: Vector2) -> void:
+	Save.tally_up("title:darts")      # 점수 칠판(TTLY)의 수 — 프로필마다
+	ttly_flash = float(TTLY.flash)
+	ttly_save = float(TTLY.save)
 	var a := Vector2(float(TTL.bx) + randf_range(-float(TTL.spread),
 			float(TTL.spread)), float(TTL.by))
 	var u := (p - a)
