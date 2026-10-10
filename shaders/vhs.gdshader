@@ -41,9 +41,9 @@ render_mode unshaded;
 
 uniform sampler2D scene : hint_screen_texture, filter_linear, repeat_disable;
 uniform float strength : hint_range(0.0, 1.0) = 0.5;
-//  화면 고르기(game.gd FSEL · 2026-10-10) — 화면 UV x 가 split 보다 오른쪽이면 원본을 그대로 낸다.
-//  고르기 밖에서는 2(가름 없음).
-uniform float split = 2.0;
+//  화면 고르기(game.gd FSEL · 2026-10-10) — 이 창(화면 UV x0, y0, x1, y1) 안에만 먹고 창 밖은 원본
+//  그대로다(헤드 스위칭은 창 밑변에서). 고르기 밖에서는 온 화면(0, 0, 1, 1).
+uniform vec4 win = vec4(0.0, 0.0, 1.0, 1.0);
 uniform vec2 logical = vec2(640.0, 360.0);
 uniform float motion : hint_range(0.0, 1.0) = 1.0;
 //  0 이상이면 TIME 대신 이 시계로 돈다 — 촬영 도구가 틀을 못 박는다.
@@ -100,8 +100,9 @@ vec3 yiq_rgb(vec3 d) {
 }
 
 void fragment() {
-	if (SCREEN_UV.x > split) {
-		COLOR = vec4(texture(scene, SCREEN_UV).rgb, 1.0);
+	vec2 uv0 = SCREEN_UV;
+	if (uv0.x < win.x || uv0.x > win.z || uv0.y < win.y || uv0.y > win.w) {
+		COLOR = vec4(texture(scene, uv0).rgb, 1.0);
 	} else {
 	vec2 sps = SCREEN_PIXEL_SIZE;
 	float s = strength;
@@ -121,7 +122,7 @@ void fragment() {
 	}
 	dx = clamp(dx * s, -1.0, 1.0);
 	//  헤드 스위칭 — 맨 밑 hs_rows 행. 밑으로 갈수록 세게, 오른쪽으로. 하얀 눈발은 걷었다.
-	float hz = 1.0 - smoothstep(0.0, hs_rows, logical.y - lp.y);
+	float hz = 1.0 - smoothstep(0.0, hs_rows, win.w * logical.y - lp.y);
 	float hk = hz * hz;
 	float hj = mo ? 0.7 + 0.3 * h12(vec2(row + 41.0, fr)) : 1.0;
 	dx += hs_shift * s * hk * hj;

@@ -91,9 +91,11 @@ uniform sampler2D scene_mip : hint_screen_texture, filter_linear_mipmap, repeat_
 //  앞 틀(다 그린 화면). 넣는 쪽이 없으면 검정 — 잔상이 없다.
 uniform sampler2D prev : hint_default_black, filter_nearest, repeat_disable;
 uniform float strength : hint_range(0.0, 1.0) = 0.4;
-//  화면 고르기(game.gd FSEL · 2026-10-10) — 화면 UV x 가 split 보다 오른쪽이면 원본을 그대로 낸다.
-//  고르기 밖에서는 2(가름 없음).
-uniform float split = 2.0;
+//  화면 고르기(game.gd FSEL · 2026-10-10) — 이 창(화면 UV x0, y0, x1, y1) 안에만 먹고 창 밖은 원본
+//  그대로다. 굽힘 · 모서리 어둠 · 색 어긋남 · 테 · 흐르는 띠는 창을 한 화면으로 보고 건다(창 안의 작은
+//  브라운관). 주사선 · 마스크 · 번짐은 화면 논리 행 그대로다. 고르기 밖에서는 온 화면(0, 0, 1, 1)이라
+//  옛 식과 한 점도 안 다르다.
+uniform vec4 win = vec4(0.0, 0.0, 1.0, 1.0);
 uniform vec2 logical = vec2(640.0, 360.0);
 //  흐르는 띠 · 잔상 · 깜박임 · 낟알을 켤 것인가. 모션 끄기면 0.
 uniform float motion : hint_range(0.0, 1.0) = 1.0;
@@ -152,22 +154,29 @@ float luma(vec3 c) {
 }
 
 void fragment() {
-	if (SCREEN_UV.x > split) {
-		COLOR = vec4(texture(scene, SCREEN_UV).rgb, 1.0);
+	vec2 uv0 = SCREEN_UV;
+	if (uv0.x < win.x || uv0.x > win.z || uv0.y < win.y || uv0.y > win.w) {
+		COLOR = vec4(texture(scene, uv0).rgb, 1.0);
 	} else {
 	vec2 sps = SCREEN_PIXEL_SIZE;
 	float s = strength;
 	//  논리 1px 당 기기 px. 정수배 스트레치라 2 · 3 · 4 … 로 떨어진다.
 	float ppl = (1.0 / sps.y) / logical.y;
-	vec2 uv = SCREEN_UV;
-	vec2 n = uv * 2.0 - 1.0;             // 한가운데 0 · 가장자리 ±1
+	vec2 uv = uv0;
+	//  창 — 안 자리 lu(0..1) · 창의 논리 크기 Lw · 왼쪽 위 wo. 온 화면이면 lu = uv · Lw = logical.
+	vec2 wsz = win.zw - win.xy;
+	vec2 lu = (uv - win.xy) / wsz;
+	vec2 Lw = logical * wsz;
+	vec2 wo = win.xy * logical;
+	vec2 n = lu * 2.0 - 1.0;             // 한가운데 0 · 가장자리 ±1
 	float r2 = dot(n, n) * 0.5;          // 한가운데 0 · 변 가운데 0.5 · 모서리 1
 
 	//  ① 굽힘 — 0 이면 식을 안 지나 제자리를 그대로 집는다(기기 픽셀 가운데 그대로).
-	vec2 src = uv * logical;                        // 논리 좌표
+	vec2 srcw = lu * Lw;                            // 창 안 논리 좌표
 	if (warp > 0.0) {
-		src = warp_src(src, logical, warp);
+		srcw = warp_src(srcw, Lw, warp);
 	}
+	vec2 src = wo + srcw;                           // 화면 논리 좌표
 	vec2 sp = src * ppl;                            // 기기 좌표
 
 	//  ② 뼈대 + 색 어긋남. 한가운데는 0 이라 글자 획이 안 갈린다.
@@ -256,7 +265,7 @@ void fragment() {
 	//  안 보여 바닥을 조금 들어 준다(밝기의 1/4 만큼).
 	if (motion > 0.5) {
 		float yb = fract(TIME / max(roll_t, 0.5)) * 1.5 - 0.25;
-		float dy = (uv.y - yb) / 0.06;
+		float dy = (lu.y - yb) / 0.06;
 		float rb = roll * s * exp(-dy * dy);
 		c = c * (1.0 + rb) + rb * 0.25;
 		float nz = fract(sin(dot(floor(FRAGCOORD.xy / ppl) + floor(TIME * 30.0),
@@ -267,7 +276,7 @@ void fragment() {
 	//  ⑧ 테 — 원본 자리가 둥근 화면 밖이면 검다. 녹이는 폭의 한가운데가 거리 0 이다.
 	//  굴곡이 0 이면 반지름 0 · 폭 기기 1px — 가장자리 기기 픽셀(거리 −½ 기기 px)이
 	//  꼭 1 로 남아 CRT 만 켠 화면은 테가 없다.
-	float dist = warp_out(src, logical, warp_rc * warp);
+	float dist = warp_out(srcw, Lw, warp_rc * warp);
 	float fe = max(warp_fe * warp, 1.0 / ppl);
 	float inb = clamp(0.5 - dist / fe, 0.0, 1.0);
 	//  테 안쪽 그늘 — 거리 0 에서 rim 만큼 어둡고 안으로 10px 에 걸쳐 걷힌다.

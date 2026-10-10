@@ -1193,195 +1193,273 @@ func _ready() -> void:
 
 
 # ══════════════════════════════════════════════════════════
-#  화면 고르기 — 필터 켬 · 끔 (2026-10-10)
+#  화면 고르기 — 끔 · 브라운관 · 비디오테이프 (2026-10-10)
 # ──────────────────────────────────────────────────────────
 #  「게임 시작전에 플레이어들이 화면 구성을 선택 할 수 있도록 하자 · 디아블로나 발더스 게이트는
 #  게임 시작전에 게임 밝기가 어떤지 물어보는것 같이 · 우리도 필터가 있는거랑 없는거를 보여줄수
 #  있는 화면을 하나 만들자」. 처음 켤 때 한 번(전역 설정 "fsel" 이 없으면) 인트로 앞에 선다.
-#   · 바닥은 제목 문 장면이다(문 · 판 · 간판 네온 · 벽돌). 칠판 메뉴 · 손잡이 반짝은 뺀다 —
-#     누를 것은 두 패뿐이다.
-#   · 세로 금 하나가 화면을 가른다 — 왼쪽은 필터를 다 켠 그림(기본값 CRT · 굴곡 · VHS · 도트),
-#     오른쪽은 다 끈 그림. 세 필터 셰이더가 split(화면 UV x) 오른쪽은 원본을 그대로 낸다.
-#     금은 커서를 따라간다(손가락은 끌면 따라온다) — 같은 자리를 두 가지로 견준다. 커서를 움직이기
-#     전에는 한가운데를 천천히 오간다(움직임 끔이면 한가운데에 선다).
-#   · 밑의 두 패(메뉴와 같은 나무 패) — 「필터 켬」에 얹으면 금이 오른끝까지 가 온 화면이 켠
-#     그림, 「필터 끔」에 얹으면 왼끝까지 가 온 화면이 끈 그림이다. 누르면 그대로 정해 저장하고
-#     지지직으로 인트로에 간다. ← → 로 고르고 Enter · Space 로 정한다. ESC 는 안 받는다.
-#   · 고른 것은 설정의 화면 탭 게이지 넷(crt · warp · vhs · dot)에 그대로 앉는다 — 켬은 기본값,
-#     끔은 0. 나중에 설정에서 하나씩 바꾼다. 개발자 판에서 다시 연다(그때는 제목으로 돌아간다).
-#    w · h  패 크기 · gap 두 패 사이 · y 패 윗변 · ease 금이 따라가는 빠르기(1/초) ·
-#    sweep  커서를 움직이기 전 금이 오가는 폭(화면 몫) · sweep_hz 그 빠르기(rad/초)
-const FSEL := {"w": 100.0, "h": 30.0, "gap": 18.0, "y": 314.0, "ease": 12.0,
-		"sweep": 0.22, "sweep_hz": 1.1}
-var fsel_x := 0.5          # 금 자리(보이는 화면 몫 0..1) — 왼쪽이 필터 켬
-var fsel_hot := -1         # 얹힌 패 0 켬 · 1 끔
-var fsel_kb := -1          # 키로 고른 패(커서가 움직이면 풀린다)
-var fsel_pick := -1        # 정한 패 — 지지직이 덮는 동안 금이 그쪽 끝에 선다 · 두 번 안 받는다
-var fsel_first := false    # 처음 켤 때 선 것인가(정하면 인트로로 — 아니면 제목으로)
-var fsel_moved := false    # 커서를 움직였는가
+#  첫 판(a7f4cb3)은 커서를 따르는 금 하나로 켬 · 끔을 갈랐다. 레퍼런스를 찾아 견줬다 — 디아블로 4 의
+#  밝기 보정은 기준 그림을 나란히 두고 설정 › 그래픽에서 다시 연다 · 발더스 게이트 3 은 첫 실행에 고른
+#  밝기를 「옵션에서 다시 바꿀 데가 없다」는 불만을 들었다 · 록맨 레거시 컬렉션은 필터를 끔 · TV ·
+#  모니터 셋 중에 고른다. 사용자가 셋을 다 골랐다 — 「설정에서 다시 열기 · 두 장 나란히 · 셋 중에 고르기」.
+#   · 같은 장면 한 칸(src — 간판 HIGHTON · 판 윗반)을 그림 칸 셋에 1:1 로 나란히 붙인다(층 94 ·
+#     shaders/fsel.gdshader — 칸 밖 바닥은 가라앉힌다). 필터 층은 저마다 제 칸(win)에만 먹는다:
+#     끔(아무것도) · 브라운관(CRT · 굴곡 — 칸이 작은 브라운관으로 굽는다) · 비디오테이프(VHS · 도트).
+#     장면은 살아 있다 — 간판이 흔들리고 네온이 숨 쉰다.
+#   · 칸이나 밑의 나무 패에 얹으면 테가 금빛으로 서고 패가 뜬다. 누르면 그 묶음을 게이지 넷
+#     (crt · warp · vhs · dot)에 앉혀 저장하고 지지직으로 넘어간다. ← → 로 고르고 Enter · Space.
+#   · 처음 켤 때는 인트로로 간다. 설정 「화면」 탭의 「화면 고르기」(제목에서 연 설정에만 선다 — 바닥이
+#     문 장면이다)에서 다시 열면 설정으로 돌아온다 — 그때는 ESC 로 안 고르고 나간다(옛 값 그대로).
+#     개발자 판에서도 연다(제목으로 돌아간다).
+#    pw · ph 그림 칸 · gap 칸 사이 · y 칸 윗변 · src 옮겨 올 장면 칸(논리 px — 칸과 같은 크기) ·
+#    plate 패 크기 · plate_dy 칸 밑에서 패까지 · dim 칸 밖 바닥의 밝기 · frame 테 두께
+const FSEL := {"pw": 192.0, "ph": 176.0, "gap": 14.0, "y": 66.0,
+		"src": Rect2(296.0, 48.0, 192.0, 176.0),
+		"plate": Vector2(124.0, 30.0), "plate_dy": 14.0, "dim": 0.16, "frame": 4.0}
+const FSEL_LAYER := 94
+const FSEL_SHADER := "res://shaders/fsel.gdshader"
+#  묶음 셋 — [이름, 브라운관(CRT · 굴곡)을 켜나, 비디오테이프(VHS · 도트)를 켜나]. 켠 값은 기본값(CRT_DEF …).
+const FSEL_SETS := [["끔", false, false], ["브라운관", true, false], ["비디오테이프", false, true]]
+var fsel_hot := -1         # 얹힌 칸
+var fsel_kb := -1          # 키로 고른 칸(커서가 움직이면 풀린다)
+var fsel_pick := -1        # 정한 칸 — 지지직이 덮는 동안 그 패가 놋쇠로 선다 · 두 번 안 받는다
+var fsel_first := false    # 처음 켤 때 선 것인가(정하면 인트로로)
+var fsel_from := -1        # 다시 연 자리(S.SETTINGS · S.TITLE) — 정하거나 ESC 면 그리로
+var fsel_bak := []         # 열 때의 옛 값 [crt, warp, vhs, dot] — ESC 로 나가면 되돌린다
 var fsel_m0 := Vector2.ZERO
-var fsel_t := 0.0
-var fsel_on := false       # 셰이더에 가름을 앉혔는가(뜬 뒤 한 번 걷는다)
+var fsel_layer: CanvasLayer = null
+var fsel_view: ColorRect = null
+var fsel_ui: Node2D = null
+var fsel_on := false       # 층 · 필터 창을 앉혔는가(뜬 뒤 한 번 걷는다)
 
 
 func _fsel_due() -> bool:
 	return not bool(Save.get_set("fsel", false))
 
 
-func _fsel_begin(first: bool) -> void:
+#  first — 처음 켤 때(정하면 인트로로). from — 다시 연 자리.
+func _fsel_begin(first: bool, from := S.TITLE) -> void:
 	fsel_first = first
+	fsel_from = from
+	fsel_bak = [crt, warp, vhs, dot]
+	#  칸마다 제 묶음을 보이려면 넷 다 켠 값이어야 한다 — 층은 저마다 제 칸 안에만 먹는다.
 	crt = CRT_DEF
 	warp = WARP_DEF
 	vhs = VHS_DEF
 	dot = DOT_DEF
-	_crt_apply()
-	fsel_x = 0.5
 	fsel_hot = -1
 	fsel_kb = -1
 	fsel_pick = -1
-	fsel_moved = false
 	fsel_m0 = mouse_at
-	fsel_t = 0.0
-	pause_from = -1
 	state = S.FSEL
-	_fsel_split()
+	_crt_apply()
+	_fsel_apply()
 	queue_redraw()
 
 
-#  패 i(0 켬 · 1 끔) — 화면 한가운데를 사이에 두고 왼쪽이 켬(금 왼쪽이 켠 그림이다).
+#  그림 칸 i — 화면 가운데에 셋이 나란히.
 func _fsel_rect(i: int) -> Rect2:
-	var w: float = FSEL.w
+	var w: float = FSEL.pw
 	var g: float = FSEL.gap
-	var x: float = VIEW.x * 0.5 - g * 0.5 - w if i == 0 else VIEW.x * 0.5 + g * 0.5
-	return Rect2(x, float(FSEL.y), w, float(FSEL.h))
+	var x0: float = roundf((VIEW.x - w * 3.0 - g * 2.0) * 0.5)
+	return Rect2(x0 + float(i) * (w + g), float(FSEL.y), w, float(FSEL.ph))
+
+
+#  칸 밑 나무 패 i.
+func _fsel_plate(i: int) -> Rect2:
+	var r := _fsel_rect(i)
+	var ps: Vector2 = FSEL.plate
+	return Rect2(roundf(r.get_center().x - ps.x * 0.5), r.end.y + float(FSEL.frame) + float(FSEL.plate_dy),
+			ps.x, ps.y)
 
 
 func _fsel_label(i: int) -> String:
-	return "필터 켬" if i == 0 else "필터 끔"
+	return String(FSEL_SETS[i][0])
 
 
-#  보이는 화면 몫(셰이더 SCREEN_UV 와 같은 잣대 — 여백까지) → 논리 x.
-func _fsel_lx(u: float) -> float:
-	return -view_pad.x + u * (VIEW.x + view_pad.x * 2.0)
+#  누르는 칸 — 그림 칸(테까지)이나 패.
+func _fsel_hit(m: Vector2) -> int:
+	for i in 3:
+		if _fsel_rect(i).grow(float(FSEL.frame)).has_point(m) or _fsel_plate(i).grow(2.0).has_point(m):
+			return i
+	return -1
 
 
-func _fsel_tick(d: float) -> void:
-	if state != S.FSEL:
-		if fsel_on:
-			_fsel_split()
+#  논리 사각 → 화면 UV(x0, y0, x1, y1) — 여백까지 친 보이는 화면이 0..1 이다(셰이더 SCREEN_UV).
+func _fsel_uv(r: Rect2) -> Vector4:
+	var L: Vector2 = VIEW + view_pad * 2.0
+	var a: Vector2 = (r.position + view_pad) / L
+	var b: Vector2 = (r.end + view_pad) / L
+	return Vector4(a.x, a.y, b.x, b.y)
+
+
+func _fsel_open() -> void:
+	if fsel_layer != null and is_instance_valid(fsel_layer):
 		return
-	fsel_t += d
-	if mouse_at != fsel_m0:
-		fsel_m0 = mouse_at
-		fsel_moved = true
-		fsel_kb = -1
-	fsel_hot = fsel_kb
-	if fsel_hot < 0 and fsel_moved:
-		for i in 2:
-			if _fsel_rect(i).grow(2.0).has_point(mouse_at):
-				fsel_hot = i
-	var hot: int = fsel_pick if fsel_pick >= 0 else fsel_hot
-	var want: float
-	if hot == 0:
-		want = 1.0
-	elif hot == 1:
-		want = 0.0
-	elif fsel_moved:
-		want = clampf((mouse_at.x + view_pad.x) / (VIEW.x + view_pad.x * 2.0), 0.0, 1.0)
-	else:
-		want = 0.5 if motion_off else 0.5 + float(FSEL.sweep) * sin(fsel_t * float(FSEL.sweep_hz))
-	fsel_x = lerpf(fsel_x, want, 1.0 - exp(-float(FSEL.ease) * d))
-	if absf(fsel_x - want) < 0.0005:
-		fsel_x = want
-	_fsel_split()
-	queue_redraw()
+	var sh: Shader = load(FSEL_SHADER) as Shader
+	if sh == null:
+		return
+	var mat := ShaderMaterial.new()
+	mat.shader = sh
+	fsel_layer = CanvasLayer.new()
+	fsel_layer.name = "Fsel"
+	fsel_layer.layer = FSEL_LAYER
+	fsel_layer.visible = false
+	fsel_view = ColorRect.new()
+	fsel_view.name = "FselView"
+	fsel_view.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fsel_view.set_anchors_preset(Control.PRESET_FULL_RECT)
+	fsel_view.material = mat
+	fsel_layer.add_child(fsel_view)
+	#  칸 테 · 패는 옮겨 붙인 그림 **위**다 — 같은 층에서 뒤에 선 자식이 나중에 그린다.
+	fsel_ui = Node2D.new()
+	fsel_ui.name = "FselUI"
+	fsel_ui.draw.connect(func() -> void: _fsel_ui_draw(fsel_ui))
+	fsel_layer.add_child(fsel_ui)
+	add_child(fsel_layer)
 
 
-#  세 필터 층의 가름 — 고르기 밖이면 2(가름 없음 · 온 화면에 필터).
-func _fsel_split() -> void:
-	var u: float = 2.0
-	if state == S.FSEL:
-		u = -0.01 if fsel_x <= 0.0 else fsel_x
-	fsel_on = state == S.FSEL
-	for r in [crt_rect, vhs_rect, dot_rect]:
+#  층 · 필터 창을 지금 상태대로 — 고르기면 칸에, 아니면 걷는다(필터는 온 화면).
+func _fsel_apply() -> void:
+	var on: bool = state == S.FSEL
+	fsel_on = on
+	var full := Vector4(0.0, 0.0, 1.0, 1.0)
+	var wc: Vector4 = _fsel_uv(_fsel_rect(1)) if on else full
+	var wv: Vector4 = _fsel_uv(_fsel_rect(2)) if on else full
+	for pr in [[crt_rect, wc], [vhs_rect, wv], [dot_rect, wv]]:
+		var r = pr[0]
 		if r == null or not is_instance_valid(r):
 			continue
 		var m := (r as ColorRect).material as ShaderMaterial
 		if m != null:
-			m.set_shader_parameter("split", u)
+			m.set_shader_parameter("win", pr[1])
+	if on:
+		_fsel_open()
+	if fsel_layer == null or not is_instance_valid(fsel_layer):
+		return
+	fsel_layer.visible = on
+	if not on:
+		return
+	var vm := fsel_view.material as ShaderMaterial
+	vm.set_shader_parameter("src", _fsel_uv(FSEL.src))
+	vm.set_shader_parameter("p0", _fsel_uv(_fsel_rect(0)))
+	vm.set_shader_parameter("p1", _fsel_uv(_fsel_rect(1)))
+	vm.set_shader_parameter("p2", _fsel_uv(_fsel_rect(2)))
+	vm.set_shader_parameter("dim", float(FSEL.dim))
+	fsel_ui.position = view_pad
+	fsel_ui.queue_redraw()
+
+
+func _fsel_tick(_d: float) -> void:
+	if state != S.FSEL:
+		if fsel_on:
+			_fsel_apply()
+		return
+	if mouse_at != fsel_m0:
+		fsel_m0 = mouse_at
+		fsel_kb = -1
+	fsel_hot = fsel_kb if fsel_kb >= 0 else _fsel_hit(mouse_at)
+	if fsel_pick >= 0:
+		fsel_hot = fsel_pick
+	_fsel_apply()               # 창 크기가 바뀌면 칸의 화면 UV 도 바뀐다 — 매 틀 앉힌다
+	queue_redraw()
 
 
 func _fsel_click(m: Vector2) -> void:
-	for i in 2:
-		if _fsel_rect(i).grow(2.0).has_point(m):
-			_fsel_choose(i)
-			return
+	var i := _fsel_hit(m)
+	if i >= 0:
+		_fsel_choose(i)
 
 
 func _fsel_key(kc: int) -> void:
+	var cur: int = fsel_kb if fsel_kb >= 0 else fsel_hot
 	match kc:
 		KEY_LEFT, KEY_A:
-			fsel_kb = 0
+			fsel_kb = 2 if cur < 0 else maxi(cur - 1, 0)
+			fsel_hot = fsel_kb
 		KEY_RIGHT, KEY_D:
-			fsel_kb = 1
+			fsel_kb = 0 if cur < 0 else mini(cur + 1, 2)
+			fsel_hot = fsel_kb
 		KEY_ENTER, KEY_KP_ENTER, KEY_SPACE:
-			if fsel_kb >= 0:
-				_fsel_choose(fsel_kb)
+			var k: int = fsel_kb if fsel_kb >= 0 else fsel_hot
+			if k >= 0:
+				_fsel_choose(k)
+		KEY_ESCAPE:
+			#  다시 연 것만 — 안 고르고 옛 값 그대로 돌아간다. 처음 켤 때는 골라야 넘어간다.
+			if not fsel_first and fsel_pick < 0:
+				crt = float(fsel_bak[0])
+				warp = float(fsel_bak[1])
+				vhs = float(fsel_bak[2])
+				dot = float(fsel_bak[3])
+				_sfx("menu_back")
+				_fsel_go()
 
 
-#  정한다 — 게이지 넷을 켬(기본값) · 끔(0)으로 앉혀 저장하고 다음 화면으로.
+#  정한다 — 묶음 i 를 게이지 넷에 앉혀 저장하고 지지직으로 넘어간다. 층에 앉히는 것은 넘어갈 때다 —
+#  덮이는 동안에도 칸 셋이 제 그림을 지킨다.
 func _fsel_choose(i: int) -> void:
-	if state != S.FSEL or fsel_pick >= 0 or i < 0 or i > 1:
+	if state != S.FSEL or fsel_pick >= 0 or i < 0 or i > 2:
 		return
 	fsel_pick = i
-	var on: bool = i == 0
-	crt = CRT_DEF if on else 0.0
-	warp = WARP_DEF if on else 0.0
-	vhs = VHS_DEF if on else 0.0
-	dot = DOT_DEF if on else 0.0
-	_crt_apply()
+	var st: Array = FSEL_SETS[i]
+	var c_on: bool = st[1]
+	var v_on: bool = st[2]
+	crt = CRT_DEF if c_on else 0.0
+	warp = WARP_DEF if c_on else 0.0
+	vhs = VHS_DEF if v_on else 0.0
+	dot = DOT_DEF if v_on else 0.0
 	Save.set_set("crt", crt)
 	Save.set_set("warp", warp)
 	Save.set_set("vhs", vhs)
 	Save.set_set("dot", dot)
 	Save.set_set("fsel", true)
 	_sfx("menu_pick")
-	_wipe(_fsel_out)
+	_wipe(_fsel_go)
 
 
-func _fsel_out() -> void:
+func _fsel_go() -> void:
 	if state != S.FSEL:
 		return
 	if fsel_first:
 		_intro_begin()
+	elif fsel_from == S.SETTINGS:
+		state = S.SETTINGS
 	else:
 		state = S.TITLE
-	_fsel_split()
+	_crt_apply()
+	_fsel_apply()
 	queue_redraw()
 
 
+#  설정 「화면 고르기」 — 덮고 연다.
+func _fsel_from_settings() -> void:
+	_fsel_begin(false, S.SETTINGS)
+
+
+#  바닥(층 0) — 제목 문 장면 위 간판 네온. 칠판 메뉴 · 손잡이 반짝은 없다(누를 것은 칸 셋뿐이다).
 func _draw_fsel() -> void:
-	#  간판 네온 — 제목과 같은 자리(매단 판자와 같이 흔들린다)
 	_intro_sign(float(INTRO.end), 1.0, _sign_base(shake_off))
 	draw_set_transform(shake_off)
-	var fr := _full()
-	#  패 밑 띠 — 문 · 벽돌 위에서 패가 떠 보이게 밑을 한 단 가라앉힌다
-	var by: float = float(FSEL.y) - 14.0
-	for k in 8:
-		var q: float = float(k) / 8.0
-		draw_rect(Rect2(fr.position.x, by + q * (fr.end.y - by), fr.size.x, (fr.end.y - by) / 8.0 + 1.0),
-				Color(0.0, 0.0, 0.0, 0.10 + 0.40 * q))
-	#  가름 금 — 그늘 한 줄 · 크림 한 줄. 끝에 닿으면 안 그린다.
-	if fsel_x > 0.003 and fsel_x < 0.997:
-		var x: float = roundf(_fsel_lx(fsel_x))
-		draw_rect(Rect2(x + 1.0, fr.position.y, 1.0, fr.size.y), Color(0.0, 0.0, 0.0, 0.45))
-		draw_rect(Rect2(x, fr.position.y, 1.0, fr.size.y), Color(C_LIGHT, 0.85))
-	#  두 패 — 메뉴와 같은 나무 패(얹히면 뜨고 한 단 밝다)
+
+
+#  층 94 의 앞 — 칸 테 · 얹힘 금빛 · 패. c 는 FselUI(view_pad 만큼 밀어 게임 논리 좌표를 쓴다).
+func _fsel_ui_draw(c: CanvasItem) -> void:
+	if state != S.FSEL:
+		return
 	var md := mat_draw
 	mat_draw = true
-	for i in 2:
-		_tab_draw(self, _fsel_rect(i), _fsel_label(i), fsel_pick == i, fsel_hot == i and fsel_pick < 0, 20)
+	var gl := Color(1.0, 0.86, 0.55)
+	for i in 3:
+		var r := _fsel_rect(i)
+		_wood_frame(c, r, float(FSEL.frame))
+		if fsel_hot == i:
+			var o := r.grow(float(FSEL.frame))
+			for k in 3:
+				c.draw_rect(o.grow(1.0 + float(k)), Color(gl, 0.34 * (1.0 - float(k) / 3.0)), false, 1.0)
+		_tab_draw(c, _fsel_plate(i), _fsel_label(i), fsel_pick == i, fsel_hot == i and fsel_pick < 0, 20)
 	mat_draw = md
+	#  얹힘 딸깍은 칸 하나에 한 번 — 패(_tab_draw 가 적는 열쇠)와 칸을 오가도 안 다시 난다.
+	ui_hot = ("fsel:%d" % fsel_hot) if fsel_hot >= 0 and fsel_pick < 0 else ""
 
 
 # ══════════════════════════════════════════════════════════
@@ -8689,6 +8767,11 @@ func _click(m: Vector2) -> void:
 					"set":
 						_set_go("top")
 						_sfx("menu_pick")
+						return
+					"fsel":
+						#  처음 켤 때의 화면 고르기를 다시 연다(FSEL) — 고르면 이 창으로 돌아온다.
+						_sfx("menu_pick")
+						_wipe(_fsel_from_settings)
 						return
 					"lobby":
 						#  겨눔 한 단. 아래 _sfx("menu_back") 을 안 지나야 첫 누름이
@@ -51368,14 +51451,16 @@ const SET_PG_SLIDE := 14.0
 #  「도트 팔레트」도 150 안에 들고(qa_settings 가 잰다), 「100」(40px)이 수 받침(46)에 든다.
 const SETW := {
 	#  2026-10-08 화면 탭이 여섯 줄(전환 지지직)이 되어 창이 36(줄 30 + 틈 6) 자랐다 — 위아래 23 씩 남는다.
-	"set": Vector2(400.0, 314.0),
+	#  2026-10-10 「화면 고르기」 줄이 들어 일곱 줄 — 줄 높이(쥐는 칸)는 그대로 두고 틈을 6 → 2 로
+	#  줄여 창은 12 만 자랐다(위아래 17 씩 · 반쯤 걸친 이름표 윗변이 화면 끝에서 6 — qa_settings 의 여백).
+	"set": Vector2(400.0, 326.0),
 	"pad": 12.0,       # 창 안쪽 여백 — 줄 · 탭 · 「뒤로」의 양 끝
 	"plate_h": 22.0,   # 이름표 높이 — 윗변에 반쯤 걸친다(말상자 이름표와 같은 말)
 	"tab_y": 20.0,     # 탭 윗변 — 이름표 밑 9px
 	"tab_h": 26.0,     # 런 정보 탭과 같다(턱 2 포함)
 	"row_y": 58.0,     # 첫 줄
 	"srow_h": 30.0,
-	"sgap": 6.0,
+	"sgap": 2.0,
 	"name_w": 150.0,   # 이름 칸 — 홈은 여기서 시작한다
 	"val_w": 66.0,     # 수 칸 — 홈은 여기 앞에서 끝난다. 수 받침(46) + 손잡이 반폭 · 테 + 틈
 	"slide": 10.0,     # 열 때 밑에서 떠오르는 거리
@@ -51536,7 +51621,13 @@ func _set_info(key: String) -> Dictionary:
 		"set":
 			return {"n": "설정", "kids": SET_TABS}
 		"screen":
+			#  「화면 고르기」(FSEL)는 제목에서 연 설정에만 — 고르기의 바닥이 문 장면이다. 맨 위 —
+			#  밑의 게이지 넷을 한 번에 앉히는 줄이다(디아블로 4 의 「밝기 보정」도 그래픽 탭 위쪽).
+			if pause_from < 0:
+				return {"n": "화면", "kids": ["fsel", "fs", "crt", "warp", "vhs", "dot", "wipe"]}
 			return {"n": "화면", "kids": ["fs", "crt", "warp", "vhs", "dot", "wipe"]}
+		"fsel":
+			return {"n": "화면 고르기", "go": true}
 		"sound":
 			return {"n": "소리", "kids": ["vol", "mus"]}
 		"fs":
@@ -52511,7 +52602,7 @@ var press_void := false       # 테에서 누른 손 — 짝인 뗌까지 삼킨
 #  그리지 않는 굽힘으로 입력을 되짚으면 그것이 곧 어긋남이다.
 func _warp_live() -> float:
 	if warp <= 0.004 or crt_layer == null or not is_instance_valid(crt_layer) \
-			or not crt_layer.visible:
+			or not crt_layer.visible or state == S.FSEL:
 		return 0.0
 	return warp
 
@@ -53194,6 +53285,10 @@ func _set_row_draw(c: CanvasItem, i: int, key: String, a: float) -> void:
 		return
 	c.draw_string(font_sm, Vector2(r.position.x + 10.0, by), nm, HORIZONTAL_ALIGNMENT_LEFT,
 			-1, 20, col)
+	if bool(info.get("go", false)):
+		#  다른 화면을 여는 줄 — 끝에 › (일시정지의 「설정 ›」과 같은 말)
+		c.draw_string(font_sm, Vector2(r.position.x, by), "›", HORIZONTAL_ALIGNMENT_RIGHT,
+				r.size.x - 10.0, 20, col)
 	if bool(info.get("g", false)):
 		_set_gauge_draw(c, i, key, ee, a)
 	elif info.has("tg"):
@@ -53376,8 +53471,10 @@ func _mus_want() -> String:
 	elif st == S.SETTINGS and pause_from >= 0:
 		st = pause_from
 	match st:
-		S.INTRO, S.FSEL:
+		S.INTRO:
 			return ""
+		S.FSEL:
+			return "" if fsel_first else "lobby"
 		S.OVER:
 			return "win" if won else "lobby"
 		S.TITLE, S.SETTINGS, S.COLLECT, S.NEWRUN, S.PROFILE:

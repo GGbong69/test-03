@@ -255,7 +255,7 @@ func _run() -> void:
 	_page("top", -1)
 	var rt: Array = g._set_rows()
 	_ok("설정 창은 첫 탭(화면)으로 연다", g._set_pg() == "screen"
-			and rt == ["fs", "crt", "warp", "vhs", "dot", "wipe", "back"], "%s · %s" % [g._set_pg(), rt])
+			and rt == ["fsel", "fs", "crt", "warp", "vhs", "dot", "wipe", "back"], "%s · %s" % [g._set_pg(), rt])
 	var gauges := []
 	for k in ["crt", "warp", "vhs", "dot"]:
 		var inf: Dictionary = g._set_info(k)

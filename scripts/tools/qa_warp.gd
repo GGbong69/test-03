@@ -193,8 +193,11 @@ func _run() -> void:
 	var need := ["vec2 n = d / L * 2.0 - 1.0;",
 			"vec2 m = n + n * (n.yx * n.yx) * (warp_k * w);",
 			"return (m + 1.0) * 0.5 * L;",
-			"src = warp_src(src, logical, warp);",
-			"float dist = warp_out(src, logical, warp_rc * warp);",
+			#  2026-10-10 화면 고르기(FSEL)의 창 — 셰이더는 창(win) 안을 한 화면으로 보고 굽힌다.
+			#  고르기 밖에서는 창이 온 화면이라 srcw = uv × logical · Lw = logical — 옛 식 그대로다.
+			"srcw = warp_src(srcw, Lw, warp);",
+			"float dist = warp_out(srcw, Lw, warp_rc * warp);",
+			"uniform vec4 win = vec4(0.0, 0.0, 1.0, 1.0);",
 			"float inb = clamp(0.5 - dist / fe, 0.0, 1.0);"]
 	var miss := []
 	for ln in need:
