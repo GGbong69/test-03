@@ -41123,6 +41123,8 @@ func _draw_link() -> void:
 
 func _draw_pops() -> void:
 	for p in pops:
+		if bool(p.get("ttl", false)):
+			continue          # 문 값은 화면 자리에서 따로 그린다(_ttl_pops_draw)
 		var k: float = p.t / p.life
 		var y: float = p.p.y - k * 24.0
 		var sz: int = int(p.sz * (1.0 + 0.45 * exp(-p.t * 12.0)))
@@ -45705,6 +45707,7 @@ func _draw_title() -> void:
 	if _door_board_vis():
 		_ttl_draw()
 	draw_set_transform(shake_off)
+	_ttl_pops_draw()      # 문 값 — 화면 자리
 	if dxf:
 		_door_wall_xf(shake_off)
 	#  간판 — 인트로가 켠 네온이 그대로 남는다(두 낱말이 붙은 뒤 · TON 은 금빛).
@@ -45783,6 +45786,7 @@ func _draw_title_flat() -> void:
 	#  안 가리고, 대신 평평한 배경에 **세로 이음매 넷**을 남기고 있었다.
 	#  글줄은 x16 이고 판은 x209 라 애초에 안 겹친다 — 스크림 한 장이면 된다.
 	_ttl_draw()
+	_ttl_pops_draw()
 	#  제목은 머리(_hdr)보다 크다. 이 화면에서는 제목이 곧 그림이라
 	#  다른 화면의 머리와 같은 크기로 두면 시작화면이 아니라 목록이 된다.
 	#  제목 33 → 36 — 크기 다섯 단(10 · 12 · 20 · 24 · 36)의 맨 위.
@@ -53033,6 +53037,57 @@ func _ttl_throw(p: Vector2) -> void:
 		_sfx("dart_fly")
 
 
+#  문 값을 띄운다(2026-10-10 「시작 화면에서 던진 다트의 점수가 잘 안보이는데?」). 옛 판은
+#  12 크기 하늘색 글을 판 자리에 띄워 문 위 판처럼 0.76배로 줄었다(9px 남짓) — 판 무늬에 묻혔다.
+#  이제 **화면 자리**(_ttl_scr)에 판 화면 착탄 값(_impact)과 같은 크기 · 등급 색으로 띄우고 짙은
+#  테를 두른다(_ttl_pops_draw) — 싱글 흰 · 더블 · 트리플 주황 · 바깥 불 초록 · 안쪽 불 크게.
+func _ttl_pop(bp: Vector2, val: int, grade: int) -> void:
+	var c: Color = C_OFF
+	var sz := 20
+	var life := 0.9
+	if val > 0:
+		match grade:
+			1:
+				c = C_TXT
+			2, 3:
+				c = C_ACC
+			4:
+				c = C_GREEN.lightened(0.55)
+			_:
+				c = C_ACC
+				sz = 24
+				life = 1.1
+	var sp := _ttl_scr(bp)
+	var up: bool = bp.y > BC.y
+	pops.append({"p": sp + Vector2(0.0, -20.0 if up else 22.0), "txt": str(val), "c": c,
+			"sz": sz, "t": 0.0, "life": life, "ttl": true})
+
+
+#  판 자리 → 화면 자리(_ttl_m 의 반대). 문이 안 서면 그대로다.
+func _ttl_scr(p: Vector2) -> Vector2:
+	if not (_door_live() and _door_here()):
+		return p
+	var xf := _door_xf()
+	return (xf[0] as Vector2) + (p - BC) * (xf[1] as Vector2)
+
+
+#  문 값 — 화면 자리 · 짙은 테. 판 자리 변환 밖에서 부른다.
+func _ttl_pops_draw() -> void:
+	for p in pops:
+		if not bool(p.get("ttl", false)):
+			continue
+		var k: float = p.t / p.life
+		var y: float = p.p.y - k * 18.0
+		var sz: int = int(p.sz * (1.0 + 0.45 * exp(-p.t * 12.0)))
+		var f: Font = font_sm if int(p.sz) % 10 == 0 else font
+		var c: Color = p.c
+		c.a = clampf(1.0 - k * k, 0.0, 1.0)
+		var at := Vector2(p.p.x - 60.0, y)
+		draw_string_outline(f, at, p.txt, HORIZONTAL_ALIGNMENT_CENTER, 120, sz, 5,
+				Color(C_BG, 0.85 * c.a))
+		draw_string(f, at, p.txt, HORIZONTAL_ALIGNMENT_CENTER, 120, sz, c)
+
+
 #  자루가 u 를 보게 하는 회전값. _icon_dart 는 각 없이 부르면 Vector2(6,-10)
 #  쪽으로 눕으므로 그만큼을 빼 준다 — _draw_darts_2d 와 같은 셈이다.
 func _ttl_rot(u: Vector2) -> float:
@@ -53060,8 +53115,7 @@ func _ttl_stick(e: Dictionary) -> void:
 	#  시작 화면에 설명 줄을 하나도 안 보탠다.
 	var bp: Vector2 = e.b
 	var val: int = int(info.base) * maxi(int(info.mult), 0)
-	pop(bp + Vector2(0.0, -17.0 if bp.y > BC.y else 19.0), str(val),
-			C_CHIP if val > 0 else C_OFF, 12, 0.7)
+	_ttl_pop(bp, val, g)
 	#  물린 칸이 하얗게 뜬다. 판을 그리는 쪽(_draw_board)이 이미 하는 일이라
 	#  값만 놓으면 된다 — 제목에서는 스크림 밑이라 옅게 읽히는데, 그 옅음이
 	#  「뒤에 있는 것이 반응했다」 로는 충분하다.
