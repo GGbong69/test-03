@@ -8339,6 +8339,7 @@ func _click(m: Vector2) -> void:
 			var trows := _title_rows()
 			for i in trows.size():
 				if _menu_rect(i).has_point(m):
+					_chalkh_kick(float(CHALKH.kick_press))     # 누른 칠판이 못에서 살짝 흔들린다
 					match String(trows[i].n):
 						"시작":
 							#  문 손잡이 — 문이 열리고 새 런 화면으로(DOORT). 소리는 문이 낸다.
@@ -45202,10 +45203,95 @@ func _title_chalk() -> void:
 	if trows.size() <= 1:
 		return
 	var box := _title_chalk_box()
+	#  벽 못에 철사로 걸려 흔들린다(CHALKH) — 못 · 철사는 제자리 변환, 칠판 · 글은 못 둘레로 돈다.
+	var b0 := _sign_base(shake_off)
+	_chalkh_wire_draw(b0, box)
+	draw_set_transform_matrix(b0 * _chalkh_rot(box))
 	#  칠판 한 벌(_chalk_board — 메뉴 칠판 · 주문 칠판과 같은 붓). 빛은 오른쪽 위 문 램프에서
 	#  온다 — 그늘은 왼쪽 아래, 테는 오른변이 밝다. 받침에 분필 한 토막.
 	_chalk_board(self, box, 4.0, CHALKB.title)
 	_title_chalk_ink(self, _ttl_ink_a())
+	draw_set_transform_matrix(b0)
+
+
+# ══════════════════════════════════════════════════════════
+#  벽에 건 칠판 (2026-10-10)
+# ──────────────────────────────────────────────────────────
+#  「왼쪽 ui는 했어? 그것도 해주면 좋겠는데? 벽에 못 박혀있고 철사로 연결해서 시작 간판이 걸려
+#  있는거지」(사용자). 액자를 거는 그 방식이다 — 벽돌에 박은 못 하나에 철사를 ∧ 로 걸쳐 칠판 테
+#  윗변의 고리 둘을 잡는다. 칠판은 못 둘레로 도는 진자다(SIGNH 와 같은 식 · 더 무겁고 벽에 붙어
+#  있어 느리고 작게 흔들린다). 잔바람 · 돌풍 · 문에 꽂히는 다트 · 메뉴를 누를 때 살짝 흔들린다.
+#  못 · 철사 고리는 칠판과 같이 돌고 못은 제자리다. 누름 칸(_menu_rect)은 안 돈다 — 각이 2° 밑이라
+#  손이 놓치는 일이 없다. 움직임 끔이면 선다.
+#    wire_h  못이 칠판 윗변 위로 솟은 높이(px) · eye 고리가 칠판 끝에서 들어선 몫(폭 비)
+const CHALKH := {
+	"period": 3.4, "damp": 0.9, "wind": 0.004, "gust": 0.018, "gust_t": [6.0, 12.0],
+	"kick_dart": 0.008, "kick_press": 0.020, "max": 0.032, "wire_h": 26.0, "eye": 0.22,
+}
+var chalk_th := 0.0
+var chalk_w := 0.0
+var chalk_gt := 4.0
+var chalk_tt := 0.0
+
+
+func _chalkh_kick(v: float) -> void:
+	if motion_off:
+		return
+	chalk_w += v * (1.0 if randf() < 0.5 else -1.0)
+
+
+func _chalkh_tick(d: float) -> void:
+	if motion_off:
+		chalk_th = 0.0
+		chalk_w = 0.0
+		return
+	var H: Dictionary = CHALKH
+	var om: float = TAU / float(H.period)
+	chalk_tt += d
+	var wind: float = float(H.wind) * (sin(chalk_tt * 0.53 + 2.1) + 0.6 * sin(chalk_tt * 1.37 + 0.2))
+	chalk_gt -= d
+	if chalk_gt <= 0.0:
+		var gr: Array = H.gust_t
+		chalk_gt = randf_range(float(gr[0]), float(gr[1]))
+		chalk_w += float(H.gust) * randf_range(0.5, 1.0) * (1.0 if randf() < 0.5 else -1.0)
+	var acc: float = -om * om * chalk_th - float(H.damp) * chalk_w + wind * om * om
+	chalk_w += acc * d
+	chalk_th = clampf(chalk_th + chalk_w * d, -float(H.max), float(H.max))
+
+
+#  못 — 칠판 테 윗변 한가운데 위로 wire_h.
+func _chalkh_nail(box: Rect2) -> Vector2:
+	return Vector2(box.get_center().x, box.position.y - 4.0 - float(CHALKH.wire_h)).round()
+
+
+func _chalkh_rot(box: Rect2) -> Transform2D:
+	var pv := _chalkh_nail(box)
+	return Transform2D(chalk_th, pv) * Transform2D(0.0, -pv)
+
+
+#  못 · 철사 — 못은 벽에(제자리), 철사 두 가닥은 못에서 칠판 테의 고리(돈 자리)까지.
+func _chalkh_wire_draw(b0: Transform2D, box: Rect2) -> void:
+	draw_set_transform_matrix(b0)
+	var nail := _chalkh_nail(box)
+	var rot := _chalkh_rot(box)
+	var top: float = box.position.y - 4.0
+	var ein: float = box.size.x * float(CHALKH.eye)
+	var wire := Color("8c867c")
+	var wire_lo := Color("2a2622")
+	for sd in [-1.0, 1.0]:
+		var ex: float = (box.position.x + ein) if sd < 0.0 else (box.end.x - ein)
+		var eye: Vector2 = rot * Vector2(ex, top + 1.0)
+		#  철사 — 그늘 한 줄 밑에 빛 받은 한 줄
+		draw_line(nail + Vector2(0.0, 1.0), eye + Vector2(0.0, 1.0), Color(wire_lo, 0.6), 1.0)
+		draw_line(nail, eye, wire, 1.0)
+		#  고리 — 테에 박은 작은 쇠 눈
+		draw_circle(eye, 1.5, Color("4a443d"))
+		draw_rect(Rect2(eye.round() - Vector2(1.0, 1.0), Vector2(1.0, 1.0)), Color("b0a493"))
+	#  못 — 벽돌에 박힌 머리(그늘 · 몸 · 빛 한 점)
+	draw_circle(nail + Vector2(1.0, 1.0), 2.5, Color(0.0, 0.0, 0.0, 0.45))
+	draw_circle(nail, 2.0, Color("3d3832"))
+	draw_circle(nail, 1.2, Color("6a625a"))
+	draw_rect(Rect2(nail - Vector2(1.0, 1.0), Vector2(1.0, 1.0)), Color("d8cfc0"))
 
 
 #  제목 칠판의 글 — 머리 · 줄 · 가름줄 · 프로필 줄을 c 에 a 만큼. 밀기 첫 넉 틀에는 커지는
@@ -53249,6 +53335,7 @@ func _ttl_board(d: float) -> void:
 	ttl_t += d
 	_egg_tick(d)
 	_sign_tick(d)
+	_chalkh_tick(d)
 	if ttly_last_t >= 0.0:
 		ttly_last_t += d
 	for f in ttl_fly:
@@ -53344,8 +53431,9 @@ func _ttl_stick(e: Dictionary) -> void:
 	board_punch = maxf(board_punch, 0.15 + 0.17 * float(g))
 	if g >= 5:
 		shake = maxf(shake, 4.0)
-	#  문에 꽂히는 쿵이 문틀에 건 간판을 흔든다(센 자리일수록 세게)
+	#  문에 꽂히는 쿵이 문틀에 건 간판 · 벽에 건 칠판을 흔든다(센 자리일수록 세게)
 	_sign_kick(float(SIGNH.kick_dart) * (0.6 + 0.12 * float(g)))
+	_chalkh_kick(float(CHALKH.kick_dart) * (0.6 + 0.12 * float(g)))
 	_egg_count(bool(info.get("bull", false)))
 	#  문 값. 글이 아니라 수 하나다 — 판을 읽는 법이 이 한 번으로 붙고,
 	#  시작 화면에 설명 줄을 하나도 안 보탠다.
