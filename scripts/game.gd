@@ -1252,6 +1252,17 @@ const INTRO := {
 	"neon": Color("ff5ca8"), "neon_core": Color("ffe0ef"), "neon_dead": Color("4a2238"),
 	"sign_y": 62.0,                  # 간판 글 기준선 — 판자(문틀 안 · 문 위) 한가운데(+ _door_drop)
 }
+#  인트로 램프(_intro_lamp · _intro_cone) — 2026-10-10 「위에 불빛?이 그냥 세모랑 막대기네? 좀 퀄리티
+#  높여」. 옛 램프는 줄 한 줄 · 사다리꼴 하나 · 원뿔 다각형 하나였다. 이제 술집 펜던트 램프다 —
+#  녹색 법랑 돔 갓(반사 한 줄 · 그늘) · 놋쇠 테 · 갓 안쪽의 따뜻한 속 · 둥근 전구와 빛무리, 그
+#  밑으로 겹 여섯의 무른 빛 원뿔과 그 속을 떠다니는 먼지.
+#    rim_y  갓 테의 높이 · shade_w · shade_h 갓 폭 · 돔 높이 · halo 전구 빛무리 반지름 · motes 먼지 수
+const INTROL := {
+	"rim_y": 22.0, "shade_w": 40.0, "shade_h": 13.0, "halo": 5.0, "motes": 18,
+	"cord": Color("3a3350"), "shade": Color("23402f"), "shade_hi": Color("5f9a74"),
+	"shade_lo": Color("142519"), "brass": Color("8a6a2c"), "brass_hi": Color("d9b45a"),
+	"brass_lo": Color("5a4420"),
+}
 var intro_t := -1.0        # 흐른 시간. 인트로가 아니면 −1
 var intro_out := 0.0       # 제목으로 넘긴 뒤 글줄을 덮은 막(1 → 0)
 var intro_fired := 0       # 던진 자루 수
@@ -1352,6 +1363,11 @@ func _intro_end() -> void:
 	state = S.TITLE
 	intro_t = -1.0
 	intro_out = 1.0
+	#  문은 깨끗이 — 제목은 아무것도 안 적힌 채 선다(「던지지도 않았는데 왜 이미 60점이 표시되어
+	#  있어? 시작 할때는 없어야지」 · 인트로 세 발이 적은 값이 남았다).
+	ttly_last = ""
+	ttly_prev = ""
+	ttly_last_t = -1.0
 	queue_redraw()
 
 
@@ -1412,18 +1428,14 @@ func _draw_intro() -> void:
 	if glow > 0.0:
 		for k in 7:
 			draw_circle(tc, 170.0 - float(k) * 16.0, Color(warm, 0.022 * glow))
-		var top := Vector2(tc.x, 22.0)
-		draw_polygon(PackedVector2Array([top + Vector2(-18.0, 0.0), top + Vector2(18.0, 0.0),
-				Vector2(tc.x + 150.0, 350.0), Vector2(tc.x - 150.0, 350.0)]),
-				PackedColorArray([Color(warm, 0.16 * glow), Color(warm, 0.16 * glow),
-				Color(warm, 0.0), Color(warm, 0.0)]))
-	#  자루 — 제목 판의 것
+		_intro_cone(tc.x, glow, t)
+	#  자루 — 제목 판의 것 · 판 밑 나무에 분필로 쓴 합(_ttl_pop)
 	_door_set_xf(shake_off)
+	_ttly_draw(1.0 - st)
 	_ttl_draw()
 	draw_set_transform(shake_off)
 	_intro_lamp(light, st)
 	_intro_sign(t, 1.0 - st)
-	_intro_count(t, 1.0 - st)
 	#  두 낱말이 붙는 순간 금빛 번쩍
 	var ft: float = t - float(INTRO.snap) - float(INTRO.snap_t)
 	if ft >= 0.0 and ft < float(INTRO.flash):
@@ -1436,13 +1448,71 @@ func _intro_lamp(light: float, st: float) -> void:
 	var a: float = (1.0 - st) * (maxf(light, 0.35) if intro_t < float(INTRO.off) else light)
 	if a <= 0.0:
 		return
+	var L: Dictionary = INTROL
 	var cx: float = _title_c().x
-	draw_line(Vector2(cx, -view_pad.y), Vector2(cx, 12.0), Color("3a3350", a), 1.0)
-	draw_colored_polygon(PackedVector2Array([Vector2(cx - 8.0, 11.0), Vector2(cx + 8.0, 11.0),
-			Vector2(cx + 19.0, 23.0), Vector2(cx - 19.0, 23.0)]), Color("2a2436", a))
-	draw_line(Vector2(cx - 7.0, 12.0), Vector2(cx - 17.0, 22.0), Color("5b536e", a), 1.0)
-	var bulb := Color(INTRO.warm).lerp(Color.WHITE, 0.5)
-	draw_rect(Rect2(cx - 12.0, 23.0, 24.0, 2.0), Color(bulb, a * maxf(light, 0.15)))
+	var ry: float = float(L.rim_y)
+	var rx: float = float(L.shade_w) * 0.5
+	var sh: float = float(L.shade_h)
+	var lit: float = clampf(light, 0.0, 1.0)
+	#  줄 · 받침
+	draw_line(Vector2(cx, -view_pad.y), Vector2(cx, ry - sh - 2.0), Color(L.cord, a), 1.0)
+	draw_rect(Rect2(cx - 2.0, ry - sh - 3.0, 4.0, 2.0), Color(L.brass_lo, a))
+	#  갓 — 반타원 돔(법랑). 테에서 위로 둥글게 오른다.
+	var dome := PackedVector2Array()
+	var n := 14
+	for i in n + 1:
+		var th: float = PI + PI * float(i) / float(n)
+		dome.append(Vector2(cx + cos(th) * rx, ry + sin(th) * sh))
+	draw_colored_polygon(dome, Color(L.shade, a))
+	#  돔 반사 — 왼쪽 위 어깨에 밝은 호 한 줄 · 오른쪽 아래는 그늘
+	var hl := PackedVector2Array()
+	for i in 5:
+		var th2: float = PI * 1.12 + PI * 0.30 * float(i) / 4.0
+		hl.append(Vector2(cx + cos(th2) * (rx - 2.5), ry + sin(th2) * (sh - 2.5)))
+	draw_polyline(hl, Color(L.shade_hi, 0.85 * a), 1.0)
+	draw_line(Vector2(cx + rx * 0.35, ry - 2.0), Vector2(cx + rx - 2.0, ry - 2.0), Color(L.shade_lo, a), 1.0)
+	#  놋쇠 테 — 갓 밑동 두 줄(윗줄이 밝다)
+	draw_rect(Rect2(cx - rx - 1.0, ry - 1.0, rx * 2.0 + 2.0, 1.0), Color(L.brass_hi, a))
+	draw_rect(Rect2(cx - rx - 1.0, ry, rx * 2.0 + 2.0, 2.0), Color(L.brass, a))
+	if lit <= 0.0:
+		return
+	var warm: Color = INTRO.warm
+	var bulb: Color = warm.lerp(Color.WHITE, 0.55)
+	#  갓 안쪽 — 테 밑으로 보이는 따뜻한 속(밑에서 올려다본 둥근 입)
+	draw_rect(Rect2(cx - rx + 1.0, ry + 2.0, rx * 2.0 - 2.0, 1.0), Color(warm, 0.75 * a * lit))
+	#  전구 — 둥근 알 · 둘레 빛무리 넷
+	var bc := Vector2(cx, ry + 4.0)
+	for k in 4:
+		draw_circle(bc, float(L.halo) * (1.0 + float(k) * 0.8), Color(warm, 0.10 * a * lit / float(k + 1)))
+	draw_circle(bc, 3.0, Color(bulb, a * lit))
+	draw_rect(Rect2(cx - 1.0, ry + 2.0, 2.0, 1.0), Color(1.0, 1.0, 1.0, a * lit))
+
+
+#  램프 빛 원뿔 — 겹 여섯이 안쪽부터 좁고 짙게 · 바깥은 넓고 옅게 겹쳐 가장자리가 무르게 진다.
+#  빛 속에 먼지 몇 알이 천천히 떠다니며 반짝인다(움직임 끔이면 그 자리에 선다).
+func _intro_cone(cx: float, glow: float, t: float) -> void:
+	var L: Dictionary = INTROL
+	var warm: Color = INTRO.warm
+	var top: float = float(L.rim_y) + 3.0
+	var bot: float = 350.0
+	for k in 6:
+		var tw: float = float(L.shade_w) * 0.40 + float(k) * 2.5
+		var bw: float = 62.0 + float(k) * 24.0
+		var aa: float = (0.050 - float(k) * 0.006) * glow
+		draw_polygon(PackedVector2Array([Vector2(cx - tw, top), Vector2(cx + tw, top),
+				Vector2(cx + bw, bot), Vector2(cx - bw, bot)]),
+				PackedColorArray([Color(warm, aa), Color(warm, aa), Color(warm, 0.0), Color(warm, 0.0)]))
+	var tt: float = 0.0 if motion_off else t
+	for i in int(L.motes):
+		var u: float = _gl_rand(i * 7 + 1, 971)
+		var y: float = lerpf(top + 20.0, bot - 30.0, fposmod(u + tt * lerpf(0.010, 0.028, _gl_rand(i * 7 + 2, 971)), 1.0))
+		var k2: float = (y - top) / (bot - top)
+		var half: float = lerpf(float(L.shade_w) * 0.4, 110.0, k2)
+		var x: float = cx + (_gl_rand(i * 7 + 3, 971) - 0.5) * 2.0 * half * 0.85 \
+				+ sin(tt * 0.7 + float(i)) * 3.0
+		var tw2: float = 0.55 + 0.45 * sin(tt * 2.3 + float(i) * 1.9)
+		draw_rect(Rect2(roundf(x), roundf(y), 1.0, 1.0),
+				Color(warm.lerp(Color.WHITE, 0.4), 0.45 * glow * tw2 * (1.0 - k2 * 0.6)))
 
 
 #  네온 간판. 글자마다 켜지는 때가 다르고, 막 켜진 동안은 떤다. 다 켜지면
@@ -1500,19 +1570,6 @@ func _intro_glyph(at: Vector2, ch: String, sz: int, halo: Color, core: Color,
 
 
 #  판 밑의 합계 — 꽂힐 때마다 오른다. 180 이 되면 금빛으로 한 번 깜빡인다.
-func _intro_count(t: float, a: float) -> void:
-	var n := _intro_total()
-	if n <= 0 or a <= 0.0:
-		return
-	var col: Color = C_TXT
-	if n >= 180:
-		col = C_ACC if int(t * 8.0) % 2 == 0 or t > float(INTRO.sign) else C_TXT
-	#  판 한가운데 밑 — 술집 문이면 판이 오른쪽으로 옮겨 섰다(_title_c).
-	var w := 120.0
-	draw_string(font, Vector2(_title_c().x - w * 0.5, 350.0), str(n), HORIZONTAL_ALIGNMENT_CENTER,
-			w, 24, Color(col, a))
-
-
 #  제목으로 넘긴 뒤 — 왼쪽 글줄 기둥을 제목 바탕색 막으로 덮었다가 걷는다.
 #  판은 인트로 끝에 이미 스크림 짙기라 안 덮는다.
 func _intro_over(k: float) -> void:
@@ -8175,11 +8232,8 @@ func _click(m: Vector2) -> void:
 			if egg_t >= 0.0:
 				return
 			var mb := _ttl_m(m)          # 문 판은 줄어 옮겨 섰다 — 판 자리로 되돌린다
-			var pick := _ttl_hit(mb)
-			if pick >= 0:
-				ttl_stuck.remove_at(pick)
-				_sfx("dart_pick")
-				return
+			#  꽂힌 자루를 눌러 뽑던 길은 걷었다(2026-10-10 「던진 다트를 마우스로 클릭하면 삭제하는
+			#  기능 걍 빼버려 필요 없어」) — 자루 위를 눌러도 그 자리로 또 던진다.
 			if mb.distance_to(BC) <= R * rt_dbl_out:
 				_ttl_throw(mb)
 		S.PROFILE:
@@ -44408,16 +44462,9 @@ func _ttl3_fade(n: Node, a: float) -> void:
 			_ttl3_fade(c, a)
 
 
-#  꽂힌 자루의 꽁지 끝(판 자리) — 얹힘 · 뽑기(몸 한가운데)와 2D 그림자가 쓴다.
+#  꽂힌 자루의 꽁지 끝(판 자리) — 2D 그림자가 쓴다.
 func _ttl3_tail(e: Dictionary) -> Vector2:
 	return _ttl3_tail_b(e.p, _ttl3_jit(e.p))
-
-
-#  자루 몸 한가운데(판 자리) — 3D 면 착탄점과 꽁지 끝의 가운데, 2D 면 옛 셈.
-func _ttl_body(e: Dictionary) -> Vector2:
-	if _ttl3_want():
-		return ((e.p as Vector2) + _ttl3_tail(e)) * 0.5
-	return (e.p as Vector2) - (e.u as Vector2) * float(TTL.dl1)
 
 
 #  구운 자루 한 장 — 문 바닥(_door_back)과 같은 자리 · 같은 반올림. 판 자리 변환(_door_set_xf)
@@ -44450,11 +44497,7 @@ func _ttl_draw() -> void:
 	var d3 := _ttl3_on()
 	if d3:
 		_ttl3_draw()
-	#  커서 밑의 자루. 살짝 들어 올리고 테를 두른다 — 「이걸 집는다」 를
-	#  말하는 것이 이 둘이고, 커서 자리에 점만 찍으면 무엇을 집는지가
-	#  자루 여럿 사이에서 안 갈린다.
 	var mb := _ttl_m(mouse_at)      # 문 판은 줄어 옮겨 섰다 — 판 자리로 되돌린다
-	var hov: int = _ttl_hit(mb) if state == S.TITLE else -1
 	for i in ttl_stuck.size():
 		var s: Dictionary = ttl_stuck[i]
 		var sp: Vector2 = s.p
@@ -44465,10 +44508,6 @@ func _ttl_draw() -> void:
 		var gk: float = clampf((float(s.t) - float(TTL.life))
 				/ float(TTL.gone), 0.0, 1.0)
 		var dy: float = 0.0 if motion_off else gk * gk * float(TTL.drop)
-		if i == hov:
-			dy -= 2.0
-			draw_arc(_ttl_body(s) + Vector2(0.0, dy), 11.0, 0.0, TAU, 20,
-					Color(C_TXT, 0.42 + 0.26 * sin(ttl_t * 5.0)), 1.0)
 		if not d3:
 			_icon_dart(sp - su * dl + Vector2(0.0, dy), dl, String(s.id), 0.0,
 					float(s.rot), 1.0 - gk)
@@ -44497,11 +44536,6 @@ func _ttl_draw() -> void:
 	#  그것은 커서지 과녁이 아니다.
 	if state != S.TITLE or egg_t >= 0.0 or door_t >= 0.0 \
 			or mb.distance_to(BC) > R * rt_dbl_out:
-		return
-	#  꽂힌 자루 위에 있으면 **뽑는 손**이다(테는 위에서 둘렀다). 과녁을
-	#  같이 띄우면 누르면 꽂히는 것으로 읽힌다 — 한 자리에 두 뜻을 실을
-	#  수 없다.
-	if hov >= 0:
 		return
 	#  얹힌 칸을 밝히고 그 숫자를 띄운다. 「누를 수 있다」 와 「여기는
 	#  몇 점이다」 를 한 번에 말한다 — 글줄을 하나도 안 보태고 판 읽는
@@ -45025,6 +45059,11 @@ func _title_chalk_ink(c: CanvasItem, a: float) -> void:
 	var ink: Color = DOORT.chalk_ink
 	#  머리 — 이름 · 분필 밑줄 한 획(메뉴 머리와 같은 붓 — _chalk_head)
 	_chalk_head(c, Vector2(r0.position.x, r0.position.y - 16.0), "하이톤", a, 64.0)
+	#  분필 결(2026-10-10 「분필로 할거든 시작 화면 왼쪽 ui도 그런 효과 넣어줘」) — 획에 석판 점.
+	var slate: Color = DOORT.chalk
+	if font != null:
+		var hw: float = font.get_string_size("하이톤", HORIZONTAL_ALIGNMENT_LEFT, -1, 24).x
+		_chalk_grit(c, Rect2(r0.position.x, r0.position.y - 34.0, hw, 19.0), slate, a, 961)
 	#  줄 — 분필 글씨
 	for i in range(1, trows.size()):
 		var r := _menu_rect(i)
@@ -45035,9 +45074,16 @@ func _title_chalk_ink(c: CanvasItem, a: float) -> void:
 			br.size.x = minf(r.size.x, font_sm.get_string_size(String(trows[i].n),
 					HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x + 16.0)
 		_row_band(c, br, ee, ew, a)
-		c.draw_string(font_sm, r.position + Vector2(0.0, _menu_base_y(font_sm, 20, 0.0, r.size.y)),
+		var tb: float = _menu_base_y(font_sm, 20, 0.0, r.size.y)
+		c.draw_string(font_sm, r.position + Vector2(0.0, tb),
 				String(trows[i].n), HORIZONTAL_ALIGNMENT_LEFT, -1, 20,
 				Color(ink, lerpf(0.66, 1.0, ee) * a))
+		#  분필 결 — 얹힌 줄(금빛 띠)은 띠 위라 결을 안 찍는다(석판 점이 띠에 박힌다)
+		if font_sm != null and ee < 0.5:
+			var sw: float = font_sm.get_string_size(String(trows[i].n), HORIZONTAL_ALIGNMENT_LEFT,
+					-1, 20).x
+			_chalk_grit(c, Rect2(r.position.x, r.position.y + tb - 15.0, sw, 15.0), slate,
+					a * (1.0 - ee * 2.0), 967 + i * 13)
 	#  가름줄 — 줄과 프로필 사이 분필 한 획(끝이 조금 흐리다)
 	var gy: float = roundf(float(DOORT.rows_bot) + float(DOORT.prof_gap) * 0.5)
 	_chalk_rule(c, r0.position.x, gy, r0.size.x, a)
@@ -45062,9 +45108,15 @@ func _prof_chalk_draw(c: CanvasItem, ia := 1.0) -> void:
 	c.draw_circle(ic + Vector2(0.0, -4.0), 3.0, Color(ink, a))
 	c.draw_rect(Rect2(ic.x - 5.0, ic.y + 1.0, 10.0, 5.0), Color(ink, a))
 	var cur := Save.slot()
-	c.draw_string(font_sm, Vector2(r.position.x + 18.0,
-			_menu_base_y(font_sm, 20, r.position.y, r.size.y)),
-			"프로필 %d" % cur, HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(ink, a))
+	var pb: float = _menu_base_y(font_sm, 20, r.position.y, r.size.y)
+	var pt := "프로필 %d" % cur
+	c.draw_string(font_sm, Vector2(r.position.x + 18.0, pb), pt, HORIZONTAL_ALIGNMENT_LEFT, -1, 20,
+			Color(ink, a))
+	#  분필 결 — 메뉴 줄과 같다(얹히면 띠 위라 안 찍는다)
+	if font_sm != null and ee < 0.5:
+		var pw0: float = font_sm.get_string_size(pt, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
+		_chalk_grit(c, Rect2(ic.x - 5.0, pb - 15.0, pw0 + 23.0, 15.0), DOORT.chalk,
+				ia * (1.0 - ee * 2.0), 991)
 	var pw: float = float(PROFB.pip)
 	var pg: float = float(PROFB.pip_gap)
 	var n := Save.SLOTS
@@ -45744,7 +45796,9 @@ func _ttly_box() -> Rect2:
 	return Rect2(BC.x - float(TTLY.w) * 0.5, BC.y + float(TTLY.y), float(TTLY.w), float(TTLY.h))
 
 
-func _ttly_draw() -> void:
+func _ttly_draw(a := 1.0) -> void:
+	if a <= 0.0:
+		return
 	var box := _ttly_box()
 	var by: float = _menu_base_y(font_sm, 20, box.position.y, box.size.y)
 	var cx: float = box.get_center().x
@@ -45754,7 +45808,7 @@ func _ttly_draw() -> void:
 		if ga > 0.003:
 			var pw: float = font_sm.get_string_size(ttly_prev, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
 			draw_string(font_sm, Vector2(cx - pw * 0.5 + 2.0, by + 1.0), ttly_prev,
-					HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(_ttly_col(ttly_prev_g), ga))
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(_ttly_col(ttly_prev_g), ga * a))
 	if ttly_last == "" or ttly_last_t < 0.0:
 		return
 	var ink: Color = DOORT.chalk_ink
@@ -45771,7 +45825,7 @@ func _ttly_draw() -> void:
 		shown = k + 1
 		var px: float = font_sm.get_string_size(t.substr(0, k), HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
 		draw_string(font_sm, Vector2(x0 + px, by), t.substr(k, 1), HORIZONTAL_ALIGNMENT_LEFT, -1, 20,
-				Color(gc, float(TTLY.ink) * ka))
+				Color(gc, float(TTLY.ink) * ka * a))
 	#  나뭇결 틈 — 분필이 다 안 묻은 자리(획 위에 나무색 점 · 씨 고정이라 안 떤다)
 	var wood: Color = Door3D.COL.door
 	var sw: float = font_sm.get_string_size(t.substr(0, shown), HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
@@ -45780,7 +45834,7 @@ func _ttly_draw() -> void:
 		var gx: float = x0 + _gl_rand(q * 5 + 1, 953) * sw
 		var gy: float = by - 14.0 + _gl_rand(q * 5 + 2, 953) * 14.0
 		var gl: float = 1.0 + roundf(_gl_rand(q * 5 + 3, 953) * 2.0)
-		draw_rect(Rect2(roundf(gx), roundf(gy), gl, 1.0), Color(wood, 0.55))
+		draw_rect(Rect2(roundf(gx), roundf(gy), gl, 1.0), Color(wood, 0.55 * a))
 	#  분필 가루 — 쓰는 동안 글 밑에서 몇 알이 떨어진다
 	var wend: float = wch * float(t.length())
 	if not motion_off and ttly_last_t < wend + 0.35:
@@ -45790,7 +45844,20 @@ func _ttly_draw() -> void:
 				continue
 			var dx: float = x0 + _gl_rand(d * 3 + 1, 947) * tw
 			var dy: float = by + 2.0 + dt * 40.0
-			draw_rect(Rect2(roundf(dx), roundf(dy), 1.0, 1.0), Color(ink, 0.7 * (1.0 - dt / 0.4)))
+			draw_rect(Rect2(roundf(dx), roundf(dy), 1.0, 1.0), Color(ink, 0.7 * (1.0 - dt / 0.4) * a))
+
+
+#  분필 결 — 글 r(잉크 칸)에 바탕색 점을 성기게 찍는다(분필이 다 안 묻은 틈). 씨 sd 고정이라 안 떤다.
+#  n 은 칸 넓이에 맞춘다(넓이 / per). 제목 칠판 글 · 문에 쓴 값(나무색)이 같이 쓴다.
+func _chalk_grit(c: CanvasItem, r: Rect2, bg: Color, a: float, sd: int, per := 26.0) -> void:
+	if a <= 0.0 or r.size.x <= 0.0 or r.size.y <= 0.0:
+		return
+	var n: int = int(r.size.x * r.size.y / per)
+	for q in n:
+		var gx: float = r.position.x + _gl_rand(q * 5 + 1, sd) * r.size.x
+		var gy: float = r.position.y + _gl_rand(q * 5 + 2, sd) * r.size.y
+		var gl: float = 1.0 + roundf(_gl_rand(q * 5 + 3, sd))
+		c.draw_rect(Rect2(roundf(gx), roundf(gy), gl, 1.0), Color(bg, 0.6 * a))
 
 
 #  등급마다 분필 색 — 싱글 흰 · 더블 · 트리플 주황 · 바깥 불 초록 · 안쪽 불 금.
@@ -53074,6 +53141,12 @@ func _ttl_pop(bp: Vector2, val: int, grade: int) -> void:
 	ttly_last = str(val)
 	ttly_last_g = grade if val > 0 else 0
 	ttly_last_t = 0.0
+	#  인트로 — 세 발의 합을 고쳐 쓴다(60 → 120 → 180 · 180 은 금빛 분필). 옛 판은 판 밑에 그냥
+	#  글로 떴다(_intro_count) — 「거기에도 분필 같은 효과 넣고」.
+	if state == S.INTRO:
+		var tot := _intro_total()
+		ttly_last = str(tot)
+		ttly_last_g = 5 if tot >= 180 else 1
 	if not (_door_live() and _door_here()):
 		pop(bp + Vector2(0.0, -17.0 if bp.y > BC.y else 19.0), str(val),
 				C_CHIP if val > 0 else C_OFF, 12, 0.7)
@@ -53124,23 +53197,6 @@ func _ttl_stick(e: Dictionary) -> void:
 	hit_r0 = float(info.r0)
 	hit_r1 = float(info.r1)
 	hit_bull = int(info.idx) == -1 and int(info.mult) > 0
-
-
-#  커서 밑의 꽂힌 자루. 없으면 −1. 촉이 아니라 **몸통 한가운데**를
-#  기준으로 잰다 — 촉만 보면 눌러야 할 자리가 자루 끝의 한 점이 된다.
-#  뒤에서부터 본다. 나중에 꽂힌 것이 위에 그려지므로 겹친 자리는 위엣것이
-#  잡혀야 눈과 손이 같은 것을 가리킨다.
-func _ttl_hit(m: Vector2) -> int:
-	var best := -1
-	var bd := 12.0
-	for i in range(ttl_stuck.size() - 1, -1, -1):
-		var e: Dictionary = ttl_stuck[i]
-		var c: Vector2 = _ttl_body(e)
-		var dd := c.distance_to(m)
-		if dd < bd:
-			bd = dd
-			best = i
-	return best
 
 
 #  꽂힌 한 자루를 센다. 불이면 하나 늘고, 아니면 처음부터다. 금은 여기서

@@ -3,6 +3,7 @@ extends SceneTree
 #   ① 방금 꽂힌 값이 판 밑 나무에 분필로 적힌다(떠다니는 글 · 칠판 대신).
 #   ② 던진 수는 안 센다(「걍 시작 화면에서 던진 발 횟수는 빼자」) — 세기 열쇠를 안 쓴다.
 #   ③ 글 칸은 판 밑 나무에 선다 — 판 테(숫자 고리) 밖 · 판과 같은 가로 한가운데.
+#   ④ 인트로 세 발의 합은 문에 적히고, 제목은 빈 문으로 선다(「시작 할때는 없어야지」).
 #   godot --headless --path . --script scripts/tools/qa_ttly.gd
 const Save = preload("res://scripts/save.gd")
 var g = null
@@ -53,6 +54,20 @@ func _run() -> void:
 	_ok("① 꽂힌 값이 칠판에 적힌다", g.ttly_last == want and g.ttly_last_t >= 0.0,
 			"「%s」 (바란 것 %s)" % [g.ttly_last, want])
 	_ok("② 던진 수를 안 센다", Save.tally("title:darts") == 0)
+
+	# ④ 인트로 — 세 발의 합을 문에 고쳐 쓰고, 제목은 빈 문으로 선다
+	g._intro_begin()
+	var mid := ""
+	for i in 600:
+		g._intro_tick(1.0 / 60.0)
+		g._ttl_board(1.0 / 60.0)
+		if g.state == g.S.INTRO and g.ttly_last != "":
+			mid = g.ttly_last
+		if g.state == g.S.TITLE:
+			break
+	_ok("④ 인트로 중엔 합이 문에 적힌다", mid != "", "「%s」" % mid)
+	_ok("④ 제목은 빈 문으로 선다", g.state == g.S.TITLE and g.ttly_last == "" and g.ttly_prev == "",
+			"「%s」" % g.ttly_last)
 
 	# ③
 	var box: Rect2 = g._ttly_box()

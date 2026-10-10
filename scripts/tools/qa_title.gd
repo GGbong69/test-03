@@ -275,39 +275,16 @@ func _run() -> void:
 	#  것이 걷어 낸 그 방식이다.
 	_ok("넘친 것도 하나씩 진다", w2 <= 2, "가장 많이 준 수 %d" % w2)
 
-	# ── 꽂힌 자루를 집는다 ──────────────────────────────
+	# ── 꽂힌 자루를 눌러도 안 뽑힌다(2026-10-10 「삭제하는 기능 걍 빼버려」) ──
 	_title()
 	g._click(aim)
 	_tick(30)
 	_ok("한 자루 꽂혀 있다", g.ttl_stuck.size() == 1)
-	#  자루 한가운데를 누른다. 촉이 아니라 몸통이 잡히는 자리다.
 	var body: Vector2 = (g.ttl_stuck[0].p as Vector2) 			- (g.ttl_stuck[0].u as Vector2) * float(g.TTL.dl1)
 	g._click(body)
-	_ok("자루를 누르면 뽑힌다", g.ttl_stuck.is_empty() and g.ttl_fly.is_empty(),
+	_tick(30)
+	_ok("자루를 눌러도 안 뽑히고 그 자리로 또 던진다", g.ttl_stuck.size() == 2,
 			"꽂힘 %d · 나는 중 %d" % [g.ttl_stuck.size(), g.ttl_fly.size()])
-	#  뽑는 손이 꽂는 손을 겸하면 안 된다 — 누른 자리에 또 하나가 꽂히면
-	#  자루가 안 없어진 것으로 보인다.
-	_title()
-	g._click(aim)
-	_tick(30)
-	var b2: Vector2 = (g.ttl_stuck[0].p as Vector2) 			- (g.ttl_stuck[0].u as Vector2) * float(g.TTL.dl1)
-	g._click(b2)
-	_tick(30)
-	_ok("뽑은 자리에 새로 안 꽂힌다", g.ttl_stuck.is_empty())
-	#  겹친 자리는 **위엣것**이 잡힌다. 나중에 꽂힌 것이 위에 그려진다.
-	_title()
-	g._ttl_throw(aim)
-	_tick(int(g.TTL.fly / D) + 2)
-	g._ttl_throw(aim + Vector2(2.0, 2.0))
-	_tick(int(g.TTL.fly / D) + 2)
-	_ok("겹쳐도 둘이다", g.ttl_stuck.size() == 2)
-	var keep_p: Vector2 = g.ttl_stuck[0].p
-	g._click((g.ttl_stuck[1].p as Vector2)
-			- (g.ttl_stuck[1].u as Vector2) * float(g.TTL.dl1))
-	_ok("겹친 자리는 위엣것이 잡힌다",
-			g.ttl_stuck.size() == 1
-			and (g.ttl_stuck[0].p as Vector2).is_equal_approx(keep_p),
-			"남은 자리 %s" % g.ttl_stuck[0].p)
 
 	# ── 문 값이 뜬다 ────────────────────────────────────
 	_title()
