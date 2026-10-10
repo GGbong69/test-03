@@ -44569,7 +44569,7 @@ func _ttl3_sync() -> void:
 			ttl_fnodes.append(nf)
 	var hinv := Transform3D(Basis(), _ttl3_hinge_at()).affine_inverse()
 	var eye_h: Vector3 = hinge.transform.affine_inverse() * cam.position
-	var moving := not ttl_fly.is_empty() or door_t >= 0.0
+	var moving := not ttl_fly.is_empty() or door_t >= 0.0 or door_peek > 0.0
 	for i in mini(ttl_nodes.size(), ttl_stuck.size()):
 		var e: Dictionary = ttl_stuck[i]
 		var n0: Node3D = ttl_nodes[i]
@@ -44848,6 +44848,11 @@ const DOORT := {
 	"wipe_at": 0.80,
 	"warm": 0.55,            # 다 들어갔을 때 화면에 얹는 안의 불빛(따뜻한 막)의 짙기
 	"hit": Vector2(12.0, 8.0),   # 손잡이 누르는 칸 여유(가로 · 세로) — 막대는 8px 폭이다
+	#  손잡이에 얹으면 문이 살짝 열린다(2026-10-10 피드백 「문 손잡이가 시작인데 이게 너무 명확하지
+	#  않아서 잘 모르겠다」 → 「손잡이에 마우스를 가져다 대면 문이 진짜 살짝 열리는거 어때?」) —
+	#  peek_deg 까지 peek_in 초에 열리고 · 떼면 peek_out 초에 닫힌다. 문틈으로 안의 불빛이 샌다(3D).
+	#  그대로 누르면 열린 자리에서 이어 열린다(_door_k).
+	"peek_deg": 8.0, "peek_in": 0.22, "peek_out": 0.30,
 	"glint": 3.4,            # 손잡이 위로 빛이 한 번 미끄러지는 사이(초)
 	"glint_t": 0.45,         # 미끄러지는 시간
 	#  칠판 — 화면 왼끝에서 한 뼘 들인다(브라운관 굴곡이 왼끝을 먹는다). 줄 x · 폭 · 줄 밑변 ·
@@ -44868,6 +44873,8 @@ var door_fresh := 0            # 남은 굽기 틀
 var door_frame := -1           # 마지막으로 센 그려진 틀
 var door_t := -1.0             # 문이 열리는 중이면 0 부터 흐른다
 var door_went := false         # 지지직을 불렀는가
+var door_peek := 0.0           # 손잡이 얹힘으로 살짝 열린 몫 0..1(DOORT.peek_*)
+var door_k0 := 0.0             # 열기 시작한 때의 여는 정도 — 살짝 열린 데서 이어 연다
 var prof_chalk_e := 0.0        # 칠판 프로필 줄의 얹힘 짙기
 
 
@@ -44897,6 +44904,19 @@ func _door_tick(d: float) -> void:
 		door_key = key
 		Door3D.door_fit(door_vp, view_pad, BC, 1.0)
 		door_fresh = int(DOORT.settle)
+	#  손잡이 얹힘 — 문이 살짝 열렸다 닫힌다(DOORT.peek_*). 움직이는 동안 · 열린 동안은 화판을 굽는다.
+	if door_t < 0.0:
+		var want: float = 1.0 if (state == S.TITLE and ttl_hot == 0 and not motion_off
+				and door_fresh <= 0) else 0.0
+		var p0 := door_peek
+		var sp: float = float(DOORT.peek_in) if want > door_peek else float(DOORT.peek_out)
+		door_peek = move_toward(door_peek, want, d / maxf(sp, 0.01))
+		if door_peek > 0.0 or p0 > 0.0:
+			Door3D.door_pose(door_vp, _door_k())
+			door_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+			queue_redraw()
+			if door_fresh <= 0:
+				return
 	if door_t >= 0.0:
 		door_t += d
 		Door3D.door_pose(door_vp, _door_k())
@@ -44927,10 +44947,49 @@ func _door_tick(d: float) -> void:
 
 #  여는 정도 0..1 — 끝에서 늦춘다(문이 제 무게로 멎는다).
 func _door_k() -> float:
+	var pk: float = _door_peek_k()
 	if door_t < 0.0:
-		return 0.0
+		return pk
 	var k: float = clampf(door_t / float(DOORT.open_t), 0.0, 1.0)
-	return 1.0 - pow(1.0 - k, 2.2)
+	var e: float = 1.0 - pow(1.0 - k, 2.2)
+	return door_k0 + (1.0 - door_k0) * e
+
+
+#  살짝 열린 문틈의 빛 — 돈 문짝의 끝(경첩 맞은편)과 문틀 안변 사이를 안의 불빛으로 채우고, 문짝
+#  끝으로 번짐을 얹는다. 3D 화판도 틈 안벽을 비추지만 화면 밖 불빛은 안 보여 「샌다」가 약했다.
+func _door_peek_glow() -> void:
+	var D: Dictionary = Door3D.DOOR
+	var th: float = deg_to_rad(float(D.open_deg) * _door_k())
+	var hx: float = float(D.x0)
+	var hz: float = float(D.face) - float(D.thick)
+	var rx: float = float(D.x1) - hx
+	var ex: float = hx + rx * cos(th)
+	var ez: float = hz - rx * sin(th)
+	var y_top: float = float(D.y1)
+	var e0 := Door3D.proj(Vector3(ex, y_top, ez), BC)
+	var f0 := Door3D.proj(Vector3(float(D.x1), y_top, float(D.face)), BC)
+	var gw: float = maxf(f0.x - e0.x, 0.0)
+	if gw <= 0.5:
+		return
+	var k: float = door_peek
+	var warm: Color = Door3D.COL.inside
+	var bot: float = VIEW.y + view_pad.y
+	var top: float = minf(e0.y, f0.y)
+	#  틈 — 빛이 가득(문틀 쪽이 가장 밝다)
+	draw_rect(Rect2(e0.x, top, gw, bot - top), Color(warm, 0.70 * k))
+	draw_rect(Rect2(f0.x - maxf(gw * 0.35, 1.0), top, maxf(gw * 0.35, 1.0), bot - top),
+			Color(warm.lerp(Color.WHITE, 0.45), 0.75 * k))
+	#  번짐 — 문짝 끝 · 문틀로 옅게 퍼진다
+	for i in 4:
+		var w: float = 3.0 + float(i) * 4.0
+		draw_rect(Rect2(e0.x - w, top, w, bot - top), Color(warm, 0.07 * k))
+		draw_rect(Rect2(f0.x, top, w * 0.6, bot - top), Color(warm, 0.05 * k))
+
+
+#  살짝 열린 몫(_door_k 의 단위 — 다 열림이 1). 얹힘 몫 door_peek 을 감속으로 편다.
+func _door_peek_k() -> float:
+	var e: float = door_peek * door_peek * (3.0 - 2.0 * door_peek)
+	return float(DOORT.peek_deg) / float(Door3D.DOOR.open_deg) * e
 
 
 #  카메라가 문 쪽으로 다가간 몫 0..1 — 처음엔 느리고 끝에서 빠르다(제곱).
@@ -44949,10 +45008,13 @@ func _door_dz() -> float:
 #  문 바닥 — 닫힌 문은 구운 한 장, 여는 동안은 화판. 왼쪽 위가 논리 px 격자에 앉게
 #  반올림한다(_wall3_rect 와 같은 까닭 — 흔들림의 소수 몫에 nearest 결이 일렁인다).
 func _door_back(sh: Vector2) -> void:
-	var tex: Texture2D = door_vp.get_texture() if door_t >= 0.0 else door_tex
+	var tex: Texture2D = door_vp.get_texture() if (door_t >= 0.0 or door_peek > 0.0) else door_tex
 	var ls := Vector2(tex.get_size())
 	var p: Vector2 = (BC - ls * 0.5 + sh).round() - sh
 	draw_texture_rect(tex, Rect2(p, ls), false)
+	#  살짝 열린 문틈의 불빛(DOORT.peek_*) — 문짝 끝과 문틀 사이로 안의 빛이 샌다
+	if door_t < 0.0 and door_peek > 0.0:
+		_door_peek_glow()
 	#  매단 간판 — 문 바닥과 같은 층(인트로의 어둠 · 제목의 스크림이 위에 덮인다)
 	_sign_plank_draw(_sign_base(sh))
 	draw_set_transform(sh)
@@ -45033,13 +45095,16 @@ func _door_wall_mat(sh: Vector2) -> Transform2D:
 #  edy — 판 자리에서 더하는 세로 밀림(이스터에그의 새 판이 밑에서 오른다).
 #  문이 안 서면(헤드리스 · 문 끔 · 판 화면) 판은 제자리다 — 밀림만 더한다.
 func _door_set_xf(sh: Vector2, edy := 0.0) -> void:
+	draw_set_transform_matrix(_door_set_mat(sh, edy))
+
+
+func _door_set_mat(sh: Vector2, edy := 0.0) -> Transform2D:
 	if not (_door_live() and _door_here()):
-		draw_set_transform(sh + Vector2(0.0, edy))
-		return
+		return Transform2D(0.0, sh + Vector2(0.0, edy))
 	var xf := _door_xf()
 	var c: Vector2 = xf[0]
 	var sc: Vector2 = xf[1]
-	draw_set_transform(sh + c - sc * BC + Vector2(0.0, edy * sc.y), 0.0, sc)
+	return Transform2D(0.0, sc, 0.0, sh + c - sc * BC + Vector2(0.0, edy * sc.y))
 
 
 #  ── 문에 건 판의 그늘 · 빛 (2026-10-07) ─────────────────────────
@@ -45146,6 +45211,7 @@ func _door_open() -> void:
 		_sfx("menu_pick")
 		_open_newrun()
 		return
+	door_k0 = _door_peek_k()               # 살짝 열린 자리에서 이어 연다
 	door_t = 0.0
 	Door3D.cam_dolly(door_vp, 0.0)
 	door_went = false
@@ -45177,8 +45243,8 @@ func _title_dim() -> float:
 #  둘레에 옅은 빛이 선다. 안 얹혀도 몇 초마다 빛 한 점이 막대를 타고 미끄러진다 — 「이것을
 #  잡는다」를 글 없이 말한다(글줄에 「시작」이 없다).
 func _door_handle_draw() -> void:
-	if door_t >= 0.0:
-		return
+	if door_t >= 0.0 or door_peek > 0.05:
+		return              # 열리는 동안(살짝 열린 것 포함)은 문이 대답이다 — 닫힌 손잡이 자리의 테는 비킨다
 	var r := Door3D.handle_rect(BC)
 	var gl := Color(1.0, 0.86, 0.55)
 	var hot: float = ttl_e[0] if ttl_e.size() > 0 else 0.0
@@ -46030,34 +46096,74 @@ func _draw_title() -> void:
 #    write  값을 한 자 쓰는 시간(초) · dust 분필 가루 알 수
 #    ink    분필 짙기 · grain 나무색 틈 수(글자 하나에) · ghost 옛 값 자국 짙기 ·
 #           ghost_t 그 자국이 지는 시간(초)
+#    spots  쓸 자리 — 판 한가운데에서(판 자리 px) 글 한가운데가 앉는 칸들(2026-10-10 「다트판 밑에
+#           고정으로 나오지 말고 그때그때 마다 좀 다른 위치에 써지면 좋겠어」). 판 밑 · 판 왼쪽(경첩
+#           쇠 띠 둘 사이) · 판과 손잡이 사이 · 아래 왼쪽 · 아래 오른쪽 — 넓이대로 뽑고, 바로 앞 자리와
+#           apart 보다 가까우면 다시 뽑는다. tilt 손으로 쓴 기울기(±rad). 인트로는 판 밑(spot0)에서만.
 const TTLY := {"y": 132.0, "w": 64.0, "h": 38.0, "write": 0.07, "dust": 6,
-		"ink": 0.82, "grain": 14, "ghost": 0.16, "ghost_t": 1.2}
+		"ink": 0.82, "grain": 14, "ghost": 0.16, "ghost_t": 1.2,
+		"spots": [Rect2(-60.0, 146.0, 120.0, 22.0), Rect2(-198.0, -88.0, 46.0, 200.0),
+				Rect2(152.0, -80.0, 18.0, 150.0), Rect2(-192.0, 158.0, 96.0, 16.0),
+				Rect2(84.0, 158.0, 80.0, 16.0)],
+		"spot0": Vector2(0.0, 152.0), "apart": 70.0, "tilt": 0.14}
 var ttly_last := ""            # 방금 꽂힌 값(글)
 var ttly_prev := ""            # 그 앞 값 — 지운 자국으로 잠깐 남는다
 var ttly_prev_g := 0
+var ttly_at: Vector2 = TTLY.spot0      # 지금 값의 글 한가운데(판 한가운데에서 · 판 자리 px)
+var ttly_rot := 0.0                    # 그 기울기
+var ttly_prev_at: Vector2 = TTLY.spot0
+var ttly_prev_rot := 0.0
 var ttly_last_g := 0           # 그 등급(_hit_grade) — 분필 색
 var ttly_last_t := -1.0        # 쓰기 시작한 뒤 흐른 시간 — 음수면 아직 없음
 
 
 func _ttly_box() -> Rect2:
-	return Rect2(BC.x - float(TTLY.w) * 0.5, BC.y + float(TTLY.y), float(TTLY.w), float(TTLY.h))
+	var c: Vector2 = BC + ttly_at
+	return Rect2(c.x - float(TTLY.w) * 0.5, c.y - float(TTLY.h) * 0.5, float(TTLY.w), float(TTLY.h))
+
+
+#  다음 값을 쓸 자리 — spots 를 넓이대로 뽑고 바로 앞 자리와 apart 보다 멀게(여섯 번까지 다시).
+func _ttly_pick() -> Vector2:
+	var spots: Array = TTLY.spots
+	var tot := 0.0
+	for r in spots:
+		tot += (r as Rect2).get_area() + 400.0
+	var best: Vector2 = TTLY.spot0
+	for tries in 6:
+		var u: float = randf() * tot
+		var pick: Rect2 = spots[0]
+		for r in spots:
+			u -= (r as Rect2).get_area() + 400.0
+			if u <= 0.0:
+				pick = r
+				break
+		best = pick.position + Vector2(randf() * pick.size.x, randf() * pick.size.y)
+		if best.distance_to(ttly_at) >= float(TTLY.apart):
+			break
+	return best
 
 
 func _ttly_draw(a := 1.0) -> void:
 	if a <= 0.0:
 		return
-	var box := _ttly_box()
-	var by: float = _menu_base_y(font_sm, 20, box.position.y, box.size.y)
-	var cx: float = box.get_center().x
-	#  옛 값 — 문질러 지운 자국(새 값을 쓰기 시작하면 ghost_t 에 걸쳐 진다)
+	#  글마다 제 자리 · 제 기울기 — 판 자리 변환(m0) 위에서 글 한가운데를 축으로 돈다.
+	var m0 := _door_set_mat(shake_off)
+	#  옛 값 — 문질러 지운 자국(새 값을 쓰기 시작하면 ghost_t 에 걸쳐 진다) · 제 자리에
 	if ttly_prev != "" and ttly_last_t >= 0.0:
 		var ga: float = float(TTLY.ghost) * (1.0 - clampf(ttly_last_t / float(TTLY.ghost_t), 0.0, 1.0))
 		if ga > 0.003:
+			var pc: Vector2 = BC + ttly_prev_at
+			draw_set_transform_matrix(m0 * Transform2D(ttly_prev_rot, pc) * Transform2D(0.0, -pc))
 			var pw: float = font_sm.get_string_size(ttly_prev, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
-			draw_string(font_sm, Vector2(cx - pw * 0.5 + 2.0, by + 1.0), ttly_prev,
+			draw_string(font_sm, Vector2(pc.x - pw * 0.5 + 2.0, pc.y + 8.0), ttly_prev,
 					HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(_ttly_col(ttly_prev_g), ga * a))
+			draw_set_transform_matrix(m0)
 	if ttly_last == "" or ttly_last_t < 0.0:
 		return
+	var cc: Vector2 = BC + ttly_at
+	draw_set_transform_matrix(m0 * Transform2D(ttly_rot, cc) * Transform2D(0.0, -cc))
+	var by: float = cc.y + 7.0
+	var cx: float = cc.x
 	var ink: Color = DOORT.chalk_ink
 	var gc: Color = _ttly_col(ttly_last_g)
 	var t: String = ttly_last
@@ -46092,6 +46198,7 @@ func _ttly_draw(a := 1.0) -> void:
 			var dx: float = x0 + _gl_rand(d * 3 + 1, 947) * tw
 			var dy: float = by + 2.0 + dt * 40.0
 			draw_rect(Rect2(roundf(dx), roundf(dy), 1.0, 1.0), Color(ink, 0.7 * (1.0 - dt / 0.4) * a))
+	draw_set_transform_matrix(m0)
 
 
 #  분필 결 — 글 r(잉크 칸)에 바탕색 점을 성기게 찍는다(분필이 다 안 묻은 틈). 씨 sd 고정이라 안 떤다.
@@ -53387,9 +53494,17 @@ func _ttl_throw(p: Vector2) -> void:
 func _ttl_pop(bp: Vector2, val: int, grade: int) -> void:
 	ttly_prev = ttly_last
 	ttly_prev_g = ttly_last_g
+	ttly_prev_at = ttly_at
+	ttly_prev_rot = ttly_rot
 	ttly_last = str(val)
 	ttly_last_g = grade if val > 0 else 0
 	ttly_last_t = 0.0
+	if state == S.INTRO:
+		ttly_at = TTLY.spot0
+		ttly_rot = 0.0
+	else:
+		ttly_at = _ttly_pick()
+		ttly_rot = randf_range(-float(TTLY.tilt), float(TTLY.tilt))
 	#  인트로 — 세 발의 합을 고쳐 쓴다(60 → 120 → 180 · 180 은 금빛 분필). 옛 판은 판 밑에 그냥
 	#  글로 떴다(_intro_count) — 「거기에도 분필 같은 효과 넣고」.
 	if state == S.INTRO:
