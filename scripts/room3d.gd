@@ -157,6 +157,50 @@ static func _board_tex() -> ImageTexture:
 
 
 # ══ 방 ══════════════════════════════════════════════════════
+const BOTTLE_COLS := [Color("b5651d"), Color("2f6b3a"), Color("8fb8d8"), Color("7a1f2b"),
+		Color("d4a017"), Color("3b2b6b")]
+
+
+#  뒤 선반 셋의 술병 — {x, sy(선반 높이), h, r, c(BOTTLE_COLS 번호), s(선반)}. 씨가 고정이라
+#  늘 같다 — 방(make_room)과 게임(술병 깨기 · 헤드리스에서도)이 같은 표를 읽는다.
+#  뽑는 차례(높이 · 굵기 · 색 · 틈)가 옛 make_room 그대로라 자리가 한 병도 안 바뀌었다.
+static func bottle_layout() -> Array:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20261001
+	var out := []
+	for s in 3:
+		var sy: float = 1.15 + float(s) * 0.48
+		var x := -2.15
+		while x < 2.15:
+			var bh: float = rng.randf_range(0.22, 0.34)
+			var br: float = rng.randf_range(0.04, 0.065)
+			var ci: int = rng.randi() % BOTTLE_COLS.size()
+			out.append({"x": x, "sy": sy, "h": bh, "r": br, "c": ci, "s": s})
+			x += br * 2.0 + rng.randf_range(0.03, 0.12)
+	return out
+
+
+#  술병 k 를 보이거나 숨긴다(깬 병).
+static func bottle_show(vp: SubViewport, k: int, on: bool) -> void:
+	var root := vp.get_node_or_null("Room")
+	if root == null:
+		return
+	var parts: Array = root.get_meta("bottles", [])
+	if k < 0 or k >= parts.size():
+		return
+	for n in parts[k]:
+		(n as Node3D).visible = on
+
+
+#  술병 k 의 몸 한가운데가 방 화판(vp 화소)의 어디에 서는가 — 카메라가 흔들리는 그대로.
+static func bottle_px(vp: SubViewport, b: Dictionary) -> Vector2:
+	var cam := vp.get_node_or_null("Room/Cam") as Camera3D
+	if cam == null:
+		return Vector2(-1.0, -1.0)
+	var at := Vector3(float(b.x), float(b.sy) + 0.025 + float(b.h) * 0.5, -2.32)
+	return cam.unproject_position(at)
+
+
 static func make_room(host: Node) -> SubViewport:
 	var vp := SubViewport.new()
 	vp.size = ROOM_PX
@@ -219,10 +263,11 @@ static func make_room(host: Node) -> SubViewport:
 	root.add_child(_box(Vector3(40.0, 0.2, 8.0), Vector3(0.0, -0.1, 0.0), _mat(Color("140d0b"))))
 
 	# ── 뒤 선반과 술병 ──
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 20261001
-	var bottle_cols := [Color("b5651d"), Color("2f6b3a"), Color("8fb8d8"), Color("7a1f2b"),
-			Color("d4a017"), Color("3b2b6b")]
+	#  술병 자리는 bottle_layout 이 낸다(씨 고정 — 게임의 술병 깨기가 같은 표를 읽는다).
+	#  병마다 몸 · 목 두 조각에 번호(meta "bottle")를 달고 방 뿌리에 그 둘을 적는다(bottle_show).
+	#  조각은 예전처럼 방 뿌리에 바로 선다 — 위치로 선반을 찾는 도구가 있다.
+	var lay := bottle_layout()
+	var parts := []
 	for s in 3:
 		var sy: float = 1.15 + float(s) * 0.48
 		root.add_child(_box(Vector3(4.6, 0.05, 0.34), Vector3(0.0, sy, -2.3), _mat(COL.shelf, 0.6)))
@@ -234,18 +279,25 @@ static func make_room(host: Node) -> SubViewport:
 		ol.omni_range = 1.8
 		ol.position = Vector3(0.0, sy + 0.15, -2.05)
 		root.add_child(ol)
-		var x := -2.15
-		while x < 2.15:
-			var bh: float = rng.randf_range(0.22, 0.34)
-			var br: float = rng.randf_range(0.04, 0.065)
-			var bc: Color = bottle_cols[rng.randi() % bottle_cols.size()]
-			var gm := _mat(bc, 0.15, 0.0)
-			gm.emission_enabled = true
-			gm.emission = bc
-			gm.emission_energy_multiplier = 0.25
-			root.add_child(_cyl(br, br, bh, Vector3(x, sy + 0.025 + bh * 0.5, -2.32), gm, 8))
-			root.add_child(_cyl(br * 0.35, br * 0.4, 0.09, Vector3(x, sy + 0.025 + bh + 0.045, -2.32), gm, 6))
-			x += br * 2.0 + rng.randf_range(0.03, 0.12)
+	for k in lay.size():
+		var b: Dictionary = lay[k]
+		var bh: float = b.h
+		var br: float = b.r
+		var bc: Color = BOTTLE_COLS[int(b.c)]
+		var gm := _mat(bc, 0.15, 0.0)
+		gm.emission_enabled = true
+		gm.emission = bc
+		gm.emission_energy_multiplier = 0.25
+		var x: float = b.x
+		var sy: float = b.sy
+		var body := _cyl(br, br, bh, Vector3(x, sy + 0.025 + bh * 0.5, -2.32), gm, 8)
+		var neck := _cyl(br * 0.35, br * 0.4, 0.09, Vector3(x, sy + 0.025 + bh + 0.045, -2.32), gm, 6)
+		body.set_meta("bottle", k)
+		neck.set_meta("bottle", k)
+		root.add_child(body)
+		root.add_child(neck)
+		parts.append([body, neck])
+	root.set_meta("bottles", parts)
 
 	# ── 네온 · 다트판 ──
 	var neon := Label3D.new()

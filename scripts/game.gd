@@ -458,7 +458,7 @@ const C_ODDS := Color("8fd694")
 #  ⚠ GDScript enum 은 런타임에 풀린다. 이름 하나를 빼도 컴파일이 통과하고
 #  **돌릴 때** 죽으므로, 도구를 다 훑은 뒤 마지막에 뺐다.
 enum S { PICK, AIM_V, AIM_H, CONFIRM, FLY, RESOLVE, CLEAR, SHOP, OVER,
-		TITLE, SETTINGS, COLLECT, NEWRUN, LEG, RUNINFO, BOOST, PROFILE, INTRO }
+		TITLE, SETTINGS, COLLECT, NEWRUN, LEG, RUNINFO, BOOST, PROFILE, INTRO, BDUEL }
 
 # 칸 색 — 길이 20, 값은 colors.csv 의 id. _board_bake 가 굽고
 # 손질·개칠이 고친다. 굽기 전(첫 프레임)에는 비어 있을 수 있으므로
@@ -1584,6 +1584,8 @@ const RUN_PLAIN := [
 	["zone_hist", {}],       # 열쇠가 **String**(zone 이름)이다 — 위 둘과 다르다
 	["run_secs", 0.0],       # 런 시간(초) — 런 끝 화면의 「클리어 시간」
 	["run_unlocked", []],    # [{k, n}] — 이미 원시값이다
+	["btl_gone", []],        # 깬 술병 번호(BTL)
+	["btl_st", 0],           # 술병 이스터에그의 단 — 0 선반 · 1 내리침(대결 앞) · 2 끝
 	# ── 뱃지 ──
 	#  leg_tags_round 가 _open_leg 의 문지기다. **이것이 없으면 되살린 뒤
 	#  라운드 뱃지를 통째로 다시 굴린다.**
@@ -2162,6 +2164,11 @@ func _new_run(human := false) -> void:
 	run_unlocked.clear()
 	#  런 시간도 새로 센다 — 되살리기(_run_load)는 적힌 값을 그대로 잇는다(RUN_PLAIN).
 	run_secs = 0.0
+	#  술병은 런마다 선반에 다시 선다(BTL).
+	btl_gone = []
+	btl_st = 0
+	btl_go = -1.0
+	btl_fx.clear()
 	#  배움도 런 단위로 센다. 줄에 남은 것을 새 런까지 끌고 가면 엉뚱한
 	#  화면에서 뜬다 — 이미 배운 것으로 적혀 있으므로 다시는 안 뜬다.
 	shop_seen = 0
@@ -6608,6 +6615,7 @@ func _process(d: float) -> void:
 	_idle_tick(d)
 	_give_tick(d)
 	_prop_tick(d)            # 판 소품 몸짓(저울 · 등록기)과 저울대 — 상인과 같은 시계
+	_btl_tick(d)             # 술병 — 조각 · 숨김 맞춤 · 대결로 넘어가는 시계
 	d *= _tutor_slow()
 	#  이번 프레임의 빨리 보기 배수. **늦추기 뒤**라 배움 여운에서 늦추기와
 	#  곱해지고, **hitstop 조기 반환보다 앞**이라 멈춤 60ms 동안 통째로
@@ -6901,6 +6909,8 @@ func _process(d: float) -> void:
 	match state:
 		S.AIM_V, S.AIM_H:
 			_aim_tick(d)
+		S.BDUEL:
+			_bduel_tick(d)
 		S.CONFIRM:
 			gt += d * gs()
 			confirm_t += d
@@ -7665,7 +7675,7 @@ func _unhandled_input(e: InputEvent) -> void:
 						#  **아무 일도 안 했다**(2026-09-19).
 						if _over_live():
 							_open_newrun()
-					elif state != S.TITLE and state != S.OVER:
+					elif state != S.TITLE and state != S.OVER and state != S.BDUEL:
 						# 판 중의 ESC 는 일시정지다 — 일시정지 쪽을 열고, 닫으면
 						# 열던 자리로 돌아간다. 진행 상태는 전부 그대로다.
 						# 화면의 「일시정지」 단추와 같은 길이다(_pause_open).
@@ -7876,6 +7886,9 @@ func _click(m: Vector2) -> void:
 	#  잠그면 안 된다.
 	if _hud_btn_click(m):
 		return
+	if state == S.BDUEL:
+		_bduel_click(m)
+		return
 	match state:
 		S.PICK:
 			for i in remaining.size():
@@ -7976,6 +7989,8 @@ func _click(m: Vector2) -> void:
 		S.SHOP:
 			if sweep_live or boost_t >= 0.0:
 				return          # 쓸기·팩 뜯기는 중단 불가다. 클릭을 통째로 삼킨다
+			if btl_st == 1:
+				return          # 상인이 내리치고 대결로 넘어가는 중(BTL) — 상점을 못 떠난다
 			# 창구가 먼저다. 자리가 고정이라 낙하 검사보다 앞이고, _sell_hit
 			# 보다도 앞이어야 한다 — 뒤에 두면 _sell_hit 이 sell_sel 을 지운 뒤
 			# 창구가 "먼저 판에서 팔 동전을 고른다" 로 거절해 2클릭 판매가 통째로
@@ -11266,6 +11281,8 @@ func _draw_screen(scr: int) -> void:
 		else:
 			_draw_newrun()
 		mat_draw = false
+	elif scr == S.BDUEL:
+		_draw_bduel()
 	elif scr == S.RUNINFO:
 		#  런 정보도 같은 재질이다 — 나무 테 칠판 · 나무 패 탭 · 분필 글(MENUM).
 		mat_draw = menu_mat_on
@@ -11637,7 +11654,7 @@ func _is_aim_stage() -> bool:
 func _hud_draw() -> void:
 	if state == S.OVER or state == S.TITLE or state == S.SETTINGS \
 			or state == S.COLLECT or state == S.NEWRUN or state == S.RUNINFO \
-			or state == S.PROFILE or state == S.INTRO:
+			or state == S.PROFILE or state == S.INTRO or state == S.BDUEL:
 		return
 	if not _bar_hidden():
 		_draw_topbar()
@@ -16467,7 +16484,7 @@ var wall3_born := 0           # 지은 틀 — 두 번 구워진 뒤에야 깐�
 
 #  이 화면에 벽이 서는가 — 판이 선 화면 · 정산 · 판 갈이.
 func _wall3_here() -> bool:
-	return _is_play_deep() or state == S.CLEAR or swap_live
+	return _is_play_deep() or state == S.CLEAR or swap_live or state == S.BDUEL
 
 
 func _wall3_live() -> bool:
@@ -24280,6 +24297,7 @@ func _cover_draw() -> void:
 	var r3 := _room3d_live()
 	if r3:
 		_room3d_band(_full().position.y, float(TBL.fy) - 20.0)
+		_btl_draw()          # 깨진 술병의 조각 · 방울 — 벽 위 · 상인 뒤
 	elif swap_live and _wall3_live():
 		#  판 갈이 — 덮개 띠도 바닥(_draw 의 _wall3_back)과 같은 한 벌이라 이음이 없다.
 		#  나가는 쪽은 바닥이 판 위에 씌운 정산 덮개(가림 · 덮개)까지 띠에 다시 씌운다 —
@@ -25364,6 +25382,7 @@ func _room3d_open() -> void:
 	if room_vp != null or not _has_renderer():
 		return
 	room_vp = Room3D.make_room(self)
+	btl_synced = -1          # 새 방은 술병이 다 서 있다 — 깬 병을 다시 숨긴다(_btl_tick)
 	tbl3_vp = Room3D.make_table(self, _room3d_rect(), float(TBL.fy), float(TBL.ny),
 			float(CHUTE.back), float(TBL.flat), float(TBL.tall), float(HAND3.pitch))
 	_room3d_fit()
@@ -28659,6 +28678,595 @@ func _shop_bare() -> bool:
 	return true
 
 
+# ══════════════════════════════════════════════════════════
+#  술병 — 이스터에그 (2026-10-10)
+# ──────────────────────────────────────────────────────────
+#  「상점 장면에 npc 뒤에 술들이 있잖아? 거기에 이스터에그 요소를 넣고 싶거든? 술을 클릭하면
+#  한 몆개씩 깨지고 다 깨지면 npc가 테이블을 쿵 내리치고 이스터에그 스테이지로 가는거지」
+#  (사용자 · 필기 「술 상호작용」). 상인 뒤 선반 셋의 술병(Room3D.bottle_layout — 씨 고정 ·
+#  일흔 병 남짓)을 누르면 누른 자리에서 가장 가까운 병과 그 이웃이 per 병 깨진다 — 유리 조각 ·
+#  술 방울이 튀고 상인이 움찔한다. 동전 슬롯 띠에 가린 병도 이웃으로 깨지고, 선반 자리를 눌러도
+#  남은 병 가운데 가장 가까운 것이 깨진다(가린 병만 남아도 끝을 볼 수 있다). 다 깨면 상인이
+#  주먹으로 테이블을 내리치고(_prop_pound "rage") 쾅 뒤 rage_wait 에 술병 대결로 간다(BDUEL).
+#  런마다 한 번 — 다 깬 런은 선반이 빈 채 간다. 튜토리얼 런에는 없다. 판 고르기 화면에도 같은
+#  방이 비치므로 깬 병은 거기서도 없다. 깬 병 · 단은 이어하기에 적힌다(RUN_PLAIN).
+#    per        한 번 누를 때 깨지는 병 수(작은 · 큰)
+#    grab       병 자리를 둘러싼 사각을 이만큼 넓혀 받는다(px)
+#    shard · drop  병 하나에 유리 조각 · 술 방울 수
+#    v · g      튀는 빠르기(px/초) · 떨어지는 무게(px/초²) · life 사는 시간(초)
+#    pitch      coin_break_glass 를 이 배로(술병은 사탕 유리보다 두껍고 무겁다)
+#    rage_wait  주먹이 닿고 대결로 넘어가기까지(초)
+const BTL := {
+	"per": [3, 5], "grab": 8.0, "shard": 7, "drop": 5,
+	"v": 95.0, "g": 520.0, "life": 0.75,
+	"pitch": [0.70, 0.90], "rage_wait": 0.55,
+}
+var btl_gone := []           # 깬 술병 번호
+var btl_st := 0              # 0 선반 · 1 내리침(대결 앞) · 2 끝
+var btl_go := -1.0           # 대결로 넘어가는 시계(초) — 음수면 안 간다
+var btl_fx := []             # 조각 · 방울 {p, v, c, t, life, k(0 조각 · 1 방울 · 2 반짝), w}
+var btl_synced := -1         # 3D 방에 맞춘 깬 수 — 다르면 다시 맞춘다
+var btl_lay := []
+var btl_rng := RandomNumberGenerator.new()
+
+
+func _btl_layout() -> Array:
+	if btl_lay.is_empty():
+		btl_lay = Room3D.bottle_layout()
+	return btl_lay
+
+
+#  술병을 깰 수 있나 — 상점 · 선반 단 · 튜토리얼 아님 · 쓸기 · 팩 뜯기 밖.
+func _btl_open() -> bool:
+	return state == S.SHOP and btl_st == 0 and not tut_run and not sweep_live \
+			and boost_t < 0.0 and btl_gone.size() < _btl_layout().size()
+
+
+#  술병 k 의 몸 한가운데 — 화면 좌표. 방이 없으면 (−1, −1).
+func _btl_scr(k: int) -> Vector2:
+	if room_vp == null or not is_instance_valid(room_vp):
+		return Vector2(-1.0, -1.0)
+	var f := _full()
+	var px: Vector2 = Room3D.bottle_px(room_vp, _btl_layout()[k])
+	return f.position + px * f.size / Vector2(room_vp.size)
+
+
+#  눌렀다 — 선반 자리면 깨고 참. 상인 · 동전 슬롯 띠 · 카운터 밑은 안 받는다.
+func _btl_press(m: Vector2) -> bool:
+	if not _btl_open() or not _room3d_live():
+		return false
+	if m.y <= _panel_rect().end.y or m.y >= float(TBL.fy) - 20.0:
+		return false
+	var lay := _btl_layout()
+	var box := Rect2()
+	var best := -1
+	var bd := 1.0e9
+	for k in lay.size():
+		var p := _btl_scr(k)
+		box = Rect2(p, Vector2.ZERO) if k == 0 else box.expand(p)
+		if btl_gone.has(k):
+			continue
+		var dd := p.distance_to(m)
+		if dd < bd:
+			bd = dd
+			best = k
+	if best < 0 or not box.grow(float(BTL.grab)).has_point(m):
+		return false
+	_btl_break(best, btl_rng.randi_range(int(BTL.per[0]), int(BTL.per[1])))
+	_npc_react("움찔", _npc_side(m.x))
+	return true
+
+
+#  병 k0 과 그 이웃을 n 병 깬다. 이웃은 같은 선반이 먼저다(선반 사이는 멀게 잰다).
+#  다 깼으면 상인이 내리친다. 화면이 없어도 값은 같다(검사가 부른다).
+func _btl_break(k0: int, n: int) -> void:
+	var lay := _btl_layout()
+	if k0 < 0 or k0 >= lay.size() or btl_gone.has(k0):
+		return
+	var hit := [k0]
+	var b0: Dictionary = lay[k0]
+	while hit.size() < n:
+		var nb := -1
+		var nd := 1.0e9
+		for k in lay.size():
+			if btl_gone.has(k) or hit.has(k):
+				continue
+			var b: Dictionary = lay[k]
+			var dk := Vector2(float(b.x) - float(b0.x), (float(b.sy) - float(b0.sy)) * 2.0).length()
+			if dk < nd:
+				nd = dk
+				nb = k
+		if nb < 0:
+			break
+		hit.append(nb)
+	for k in hit:
+		btl_gone.append(k)
+		var p := _btl_scr(k)
+		if p.x >= 0.0:
+			_btl_burst(p, Room3D.BOTTLE_COLS[int(lay[k].c)])
+	_sfx("coin_break_glass", SFX_BASE * btl_rng.randf_range(float(BTL.pitch[0]), float(BTL.pitch[1])))
+	if btl_gone.size() >= lay.size():
+		_btl_rage()
+
+
+#  유리 조각(병 색 · 밝게) · 술 방울(병 색 · 짙게) · 깨지는 반짝 하나.
+func _btl_burst(p: Vector2, col: Color) -> void:
+	if motion_off:
+		return
+	var v: float = float(BTL.v)
+	for i in int(BTL.shard):
+		var a := btl_rng.randf_range(-PI * 0.95, -PI * 0.05)
+		btl_fx.append({"p": p + Vector2(btl_rng.randf_range(-3.0, 3.0), btl_rng.randf_range(-4.0, 4.0)),
+				"v": Vector2(cos(a), sin(a)) * v * btl_rng.randf_range(0.4, 1.0),
+				"c": col.lightened(0.45), "t": 0.0,
+				"life": float(BTL.life) * btl_rng.randf_range(0.7, 1.0),
+				"k": 0, "w": btl_rng.randf_range(1.0, 2.0)})
+	for i in int(BTL.drop):
+		btl_fx.append({"p": p + Vector2(btl_rng.randf_range(-2.0, 2.0), 0.0),
+				"v": Vector2(btl_rng.randf_range(-0.35, 0.35), btl_rng.randf_range(-0.5, 0.1)) * v,
+				"c": col.darkened(0.15), "t": 0.0, "life": float(BTL.life) * 1.2, "k": 1, "w": 1.5})
+	btl_fx.append({"p": p, "v": Vector2.ZERO, "c": Color(1.0, 0.97, 0.9), "t": 0.0, "life": 0.12,
+			"k": 2, "w": 5.0})
+
+
+#  다 깼다 — 상인이 주먹으로 테이블을 내리친다. 주먹이 못 서면(헤드리스 · 움직임 끔 · 상인이
+#  바쁘다) 쾅만 내고 곧장 시계를 건다.
+func _btl_rage() -> void:
+	btl_st = 1
+	buy_sel = -1
+	_hand_abort()
+	if _prop_pound("rage", _pound_spot()):
+		return          # _pound_land 가 쾅 뒤에 btl_go 를 건다
+	shake = maxf(shake, float(POUND.shake_table))
+	_sfx("shop_smash", SFX_BASE * float(POUND.thud))
+	btl_go = float(BTL.rage_wait)
+
+
+func _btl_tick(d: float) -> void:
+	if room_vp != null and is_instance_valid(room_vp) and btl_synced != btl_gone.size():
+		var n := _btl_layout().size()
+		for k in n:
+			Room3D.bottle_show(room_vp, k, not btl_gone.has(k))
+		btl_synced = btl_gone.size()
+	var g: float = float(BTL.g)
+	for i in range(btl_fx.size() - 1, -1, -1):
+		var f: Dictionary = btl_fx[i]
+		f.t = float(f.t) + d
+		if float(f.t) >= float(f.life):
+			btl_fx.remove_at(i)
+			continue
+		f.v = Vector2(f.v) + Vector2(0.0, g * (1.0 if int(f.k) == 0 else 0.8)) * d
+		f.p = Vector2(f.p) + Vector2(f.v) * d
+	if btl_go >= 0.0:
+		btl_go -= d
+		if btl_go < 0.0:
+			btl_go = -1.0
+			_btl_duel_go()
+	elif btl_st == 1 and state == S.SHOP and not _prop_live(1):
+		btl_go = float(BTL.rage_wait)       # 되살린 런 · 끊긴 주먹 — 대결 앞에서 멈춰 있지 않는다
+
+
+#  조각 · 방울 — 카운터 턱(TBL.fy − 20) 밑은 카운터 뒤로 떨어져 안 보인다.
+func _btl_draw() -> void:
+	var cut: float = float(TBL.fy) - 20.0
+	for f in btl_fx:
+		var p: Vector2 = f.p
+		if p.y >= cut:
+			continue
+		var a: float = 1.0 - float(f.t) / float(f.life)
+		var c: Color = f.c
+		match int(f.k):
+			0:
+				var w: float = f.w
+				var vv: Vector2 = Vector2(f.v).normalized() * w
+				draw_line(p - vv, p + vv, Color(c, a), 1.0)
+			1:
+				draw_rect(Rect2(p - Vector2(0.75, 0.75), Vector2(1.5, 2.0 + a)), Color(c, 0.9 * a))
+			2:
+				var r: float = float(f.w) * (0.6 + 0.4 * a)
+				draw_line(p - Vector2(r, 0.0), p + Vector2(r, 0.0), Color(c, a), 1.0)
+				draw_line(p - Vector2(0.0, r), p + Vector2(0.0, r), Color(c, a), 1.0)
+
+
+# ══════════════════════════════════════════════════════════
+#  술병 대결 · 비밀 상점 (2026-10-10)
+# ──────────────────────────────────────────────────────────
+#  술병을 다 깨면(BTL) 상인이 내리치고 이리로 온다 — 「이스터에그 스테이지는 술병 던지는걸로
+#  하자, 상인이랑 대결도 하고 이스테에그 스테이지를 클리어 하면 비밀 상점도 나오는걸로」 ·
+#  대결 방식 「내가 술병을 던짐」(사용자). 다트판 벽 앞에서 상인이 먼저 술병 n 개를 판에 던지고,
+#  내가 n 개를 던진다 — 조준은 판 위와 같다(높이 · 좌우를 잡는다). 점수는 판의 수 그대로
+#  (칸 수 × 띠 배수 · 불 · 빗나감 0) — 동전 · 사진 · 사건 · 제약은 안 탄다. 합이 상인보다 크면
+#  이긴다(같으면 상인 — 집이 이긴다). 병은 판에 부딪혀 깨진다 — 유리 조각 · 술 방울이 튀고
+#  얼룩이 판에 남는다. 이기면 비밀 상점(_secret_deal — 테이블이 아직 안 가진 레전더리 동전으로만
+#  깔린다), 지면 상점으로 돌아간다. 어느 쪽이든 런마다 한 번이다(btl_st 2).
+#  상인의 병은 런 줄기(run_rng)로 겨눈다 — 이기고 짐이 런을 가른다(run_rng 머리말). 상인은
+#  aims 의 자리(칸 숫자 · 띠)를 겨누고 판 반지름 × spread 만큼 흩어진다.
+#  대결 동안 판 상태(꽂힌 다트 · 제약 · 판 기하 · 칸 표시)를 비켜 두고(_bduel_stash) 영구 판
+#  그대로 보인다 — 나올 때 되돌린다. 일시정지 · 런 정보는 없다(ESC 도 안 연다).
+#    n          한 사람이 던지는 병 수
+#    intro      판이 서고 상인이 던지기까지(초) · turn 상인 차례 뒤 내 차례까지 · gap 병 사이
+#    fly · fly_me  병이 나는 시간(상인 · 나)
+#    arc · arc_me  나는 길의 솟음(px) · k0 · k0_me 나기 시작할 때 병 크기(판에 닿으면 1)
+#    spread     상인 겨눔 흩어짐(판 반지름 비 · 표준편차)
+#    aims       상인이 겨누는 자리 — [칸 숫자, 띠(3 트리플 · 0 불)]
+#    swing      게이지 빠르기 배(gauge_speed 에) · end_wait 마지막 병 뒤 결과까지(초)
+#    shard · drop · stain  조각 · 방울 수 · 얼룩 짙기 · pitch 깨지는 소리 배(coin_break_glass)
+const BDUEL := {
+	"n": 3, "intro": 1.1, "turn": 0.8, "gap": 0.45,
+	"fly": 0.42, "fly_me": 0.32, "arc": 34.0, "arc_me": 56.0, "k0": 1.7, "k0_me": 2.6,
+	"spread": 0.22, "aims": [[20, 3], [19, 3], [25, 0], [20, 3]],
+	"swing": 1.0, "end_wait": 0.9,
+	"shard": 14, "drop": 9, "stain": 0.55, "pitch": 0.62,
+}
+#  대결 동안 비켜 두는 판 상태 — 나올 때 그대로 되돌린다.
+const BDUEL_KEEP := ["darts", "active_mods", "sealed", "mark_sec", "paint_sec", "aim", "gt",
+	"rt_dbl_out", "rt_dbl_in", "rt_trp_in", "rt_trp_out", "rt_trp2_in", "rt_trp2_out",
+	"rt_bull_o", "rt_bull_i", "rt_m_sgl", "rt_m_dbl", "rt_m_trp", "rt_m_bull"]
+var bd_ph := ""              # intro · fly · gap · turn · aim_v · aim_h · wait · end
+var bd_t := 0.0
+var bd_who := 0              # 0 상인 · 1 나
+var bd_i := [0, 0]           # 던진 병 수
+var bd_sc := [0, 0]          # 합
+var bd_hits := [[], []]      # 병마다 점수
+var bd_from := Vector2.ZERO
+var bd_to := Vector2.ZERO
+var bd_col := Color.WHITE
+var bd_spin := 0.0
+var bd_fx := []              # 조각 · 방울 {p, v, c, t, life, k(0 조각 · 1 방울), w, r}
+var bd_stains := []          # 판에 남는 얼룩 {p, c, r}
+var bd_keep := {}
+var bd_won := false
+var bd_rng := RandomNumberGenerator.new()
+
+
+#  쾅 뒤 — 덮개를 덮고 대결로 간다.
+func _btl_duel_go() -> void:
+	_wipe(_bduel_enter)
+
+
+func _bduel_enter() -> void:
+	if state != S.SHOP:
+		return
+	_hand_abort()
+	_bduel_stash()
+	state = S.BDUEL
+	bd_ph = "intro"
+	bd_t = 0.0
+	bd_who = 0
+	bd_i = [0, 0]
+	bd_sc = [0, 0]
+	bd_hits = [[], []]
+	bd_fx.clear()
+	bd_stains.clear()
+	bd_won = false
+	aim = BC
+	gt = 0.0
+	queue_redraw()
+
+
+func _bduel_stash() -> void:
+	bd_keep = {}
+	for k in BDUEL_KEEP:
+		var v: Variant = get(k)
+		bd_keep[k] = v.duplicate(true) if (v is Array or v is Dictionary) else v
+	darts = []
+	active_mods = []
+	sealed = -1
+	mark_sec = -1
+	paint_sec = -1
+	rt_dbl_out = dbl_out
+	rt_dbl_in = dbl_in
+	rt_trp_in = trp_in
+	rt_trp_out = trp_out
+	rt_trp2_in = trp2_in
+	rt_trp2_out = trp2_out
+	rt_bull_o = bull_o
+	rt_bull_i = bull_i
+	rt_m_sgl = m_sgl
+	rt_m_dbl = m_dbl
+	rt_m_trp = m_trp
+	rt_m_bull = m_bull
+
+
+func _bduel_unstash() -> void:
+	for k in bd_keep:
+		set(String(k), bd_keep[k])
+	bd_keep = {}
+
+
+#  칸 숫자 num · 띠(3 트리플 · 0 불)의 한가운데. 그 숫자가 판에 없으면 불.
+func _bduel_spot(num: int, band: int) -> Vector2:
+	if band == 0 or num == 25:
+		return BC
+	var idx := sectors.find(num)
+	if idx < 0:
+		return BC
+	var a: float = float(idx) * _sec_w()
+	var r: float = R * (rt_trp_in + rt_trp_out) * 0.5 if band == 3 else R * (rt_dbl_in + rt_dbl_out) * 0.5
+	return BC + Vector2(sin(a), -cos(a)) * r
+
+
+#  병 하나를 던진다 — 상인은 런 줄기로 겨누고, 나는 잡은 자리(aim)로.
+func _bduel_throw(who: int) -> void:
+	bd_who = who
+	bd_ph = "fly"
+	bd_t = 0.0
+	bd_col = Room3D.BOTTLE_COLS[bd_rng.randi() % Room3D.BOTTLE_COLS.size()]
+	bd_spin = (1.0 if bd_rng.randf() < 0.5 else -1.0) * bd_rng.randf_range(7.0, 10.0)
+	if who == 0:
+		var aims: Array = BDUEL.aims
+		var a: Array = aims[run_rng.randi() % aims.size()]
+		var sp: float = R * float(BDUEL.spread)
+		bd_to = _bduel_spot(int(a[0]), int(a[1])) \
+				+ Vector2(run_rng.randfn(0.0, sp), run_rng.randfn(0.0, sp))
+		bd_from = Vector2(VIEW.x + 36.0, 18.0)
+	else:
+		bd_to = aim
+		bd_from = Vector2(BC.x + 70.0, VIEW.y + 50.0)
+	_sfx("dart_fly", SFX_BASE * 0.72)
+
+
+func _bduel_fly_len() -> float:
+	return float(BDUEL.fly if bd_who == 0 else BDUEL.fly_me)
+
+
+#  나는 병의 자리 · 크기 — t 0..1.
+func _bduel_fly_at(t: float) -> Vector2:
+	var arc: float = float(BDUEL.arc if bd_who == 0 else BDUEL.arc_me)
+	return bd_from.lerp(bd_to, t) + Vector2(0.0, -arc * 4.0 * t * (1.0 - t))
+
+
+func _bduel_fly_k(t: float) -> float:
+	var k0: float = float(BDUEL.k0 if bd_who == 0 else BDUEL.k0_me)
+	return lerpf(k0, 1.0, 1.0 - (1.0 - t) * (1.0 - t))
+
+
+#  병의 점수 — 판의 수 그대로(칸 × 띠 배수 · 불). 빗나가면 0.
+func _bduel_score(p: Vector2) -> int:
+	var info := hit_info(p)
+	return maxi(int(info.base) * int(info.mult), 0)
+
+
+#  병이 닿았다.
+func _bduel_land() -> void:
+	var p := bd_to
+	var sc := _bduel_score(p)
+	var on: bool = p.distance_to(BC) <= R * rt_dbl_out
+	bd_sc[bd_who] = int(bd_sc[bd_who]) + sc
+	(bd_hits[bd_who] as Array).append(sc)
+	bd_i[bd_who] = int(bd_i[bd_who]) + 1
+	_bduel_shatter(p, bd_col)
+	_sfx("coin_break_glass", SFX_BASE * float(BDUEL.pitch) * bd_rng.randf_range(0.94, 1.06))
+	if on:
+		_thud()
+		board_punch = 1.0
+		add_wave(p, 4.0, 34.0, bd_col.lightened(0.3), 0.7, 2.0, 0.35)
+	shake = maxf(shake, 3.0 if on else 2.0)
+	pop(p + Vector2(0.0, -16.0), str(sc), C_GOLD if sc > 0 else C_LIGHT, 16, 0.9)
+	bd_t = 0.0
+	if bd_who == 0:
+		bd_ph = "gap" if int(bd_i[0]) < int(BDUEL.n) else "turn"
+	else:
+		bd_ph = "gap" if int(bd_i[1]) < int(BDUEL.n) else "wait"
+
+
+#  깨진다 — 조각(병 색 · 밝게)이 둘레로 · 방울(짙게)이 아래로 · 얼룩이 남는다.
+func _bduel_shatter(p: Vector2, col: Color) -> void:
+	bd_stains.append({"p": p, "c": col.darkened(0.25), "r": bd_rng.randf_range(9.0, 13.0),
+			"s": bd_rng.randi()})
+	if motion_off:
+		return
+	for i in int(BDUEL.shard):
+		var a := bd_rng.randf_range(0.0, TAU)
+		bd_fx.append({"p": p, "v": Vector2(cos(a), sin(a)) * bd_rng.randf_range(60.0, 210.0),
+				"c": col.lightened(0.4), "t": 0.0, "life": bd_rng.randf_range(0.45, 0.8),
+				"k": 0, "w": bd_rng.randf_range(2.0, 4.5), "r": bd_rng.randf_range(0.0, TAU)})
+	for i in int(BDUEL.drop):
+		var a2 := bd_rng.randf_range(-PI, 0.0)
+		bd_fx.append({"p": p, "v": Vector2(cos(a2), sin(a2)) * bd_rng.randf_range(40.0, 140.0),
+				"c": col, "t": 0.0, "life": bd_rng.randf_range(0.5, 0.9), "k": 1,
+				"w": bd_rng.randf_range(1.5, 2.5), "r": 0.0})
+
+
+func _bduel_tick(d: float) -> void:
+	bd_t += d
+	for i in range(bd_fx.size() - 1, -1, -1):
+		var f: Dictionary = bd_fx[i]
+		f.t = float(f.t) + d
+		if float(f.t) >= float(f.life):
+			bd_fx.remove_at(i)
+			continue
+		f.v = Vector2(f.v) + Vector2(0.0, 420.0 if int(f.k) == 0 else 300.0) * d
+		f.p = Vector2(f.p) + Vector2(f.v) * d
+		f.r = float(f.r) + d * 9.0
+	var sw: float = gauge_speed * float(BDUEL.swing)
+	match bd_ph:
+		"intro":
+			if bd_t >= float(BDUEL.intro):
+				_bduel_throw(0)
+		"fly":
+			if bd_t >= _bduel_fly_len():
+				_bduel_land()
+		"gap":
+			if bd_t >= float(BDUEL.gap):
+				if bd_who == 0:
+					_bduel_throw(0)
+				else:
+					_bduel_aim_begin()
+		"turn":
+			if bd_t >= float(BDUEL.turn):
+				_bduel_aim_begin()
+		"aim_v":
+			gt += d * sw
+			aim.y = lerpf(BC.y - SWING, BC.y + SWING, tri(gt))
+		"aim_h":
+			gt += d * sw
+			aim.x = lerpf(BC.x - SWING, BC.x + SWING, tri(gt))
+		"wait":
+			if bd_t >= float(BDUEL.end_wait):
+				bd_ph = "end"
+				bd_t = 0.0
+				bd_won = int(bd_sc[1]) > int(bd_sc[0])
+				_sfx("leg_clear" if bd_won else "run_lose")
+	queue_redraw()
+
+
+func _bduel_aim_begin() -> void:
+	bd_ph = "aim_v"
+	bd_t = 0.0
+	gt = 0.0
+	aim = BC
+
+
+func _bduel_click(_m: Vector2) -> void:
+	match bd_ph:
+		"aim_v":
+			bd_ph = "aim_h"
+			_sfx("aim_lock_first")
+		"aim_h":
+			_sfx("aim_lock_last")
+			_bduel_throw(1)
+		"end":
+			if bd_t >= 0.4:
+				_bduel_leave()
+
+
+func _bduel_leave() -> void:
+	btl_st = 2
+	_wipe(_bduel_win if bd_won else _bduel_back)
+
+
+#  상점으로 돌아간다 — 판 상태를 되돌린다. 상점의 테이블 · 매물은 그대로다.
+func _bduel_back() -> void:
+	if state != S.BDUEL:
+		return
+	_bduel_unstash()
+	bd_fx.clear()
+	state = S.SHOP
+
+
+func _bduel_win() -> void:
+	if state != S.BDUEL:
+		return
+	_bduel_back()
+	_secret_deal()
+
+
+#  비밀 상점 — 테이블을 아직 안 가진 레전더리 동전으로만 다시 깐다(값은 표 그대로 · 리그 배수).
+#  남은 레전더리가 없으면 보통 딜링이다. 리롤하면 보통 상점으로 돌아간다.
+func _secret_deal() -> void:
+	stock.clear()
+	boost_pick = 0
+	var pool := _jp_pool()
+	var n: int = GameData.shop_slots(leg_no)
+	while stock.size() < n and not pool.is_empty():
+		var d: Dictionary = pool[randi() % pool.size()]
+		pool.erase(d)
+		stock.append({"type": "item", "d": d, "cost": _league_cost(int(d.get("cost", 0))),
+				"sold": false, "secret": true})
+	if stock.is_empty():
+		_roll_stock()
+		return
+	_pack_dress()
+	_drop_roll()
+	pop(Vector2(VIEW.x * 0.5, 92.0), "비밀 상점", C_GOLD, 20, 1.8)
+	_sfx("jackpot")
+	_knot_shop()
+
+
+#  대결 화면 — 판(과 벽)은 _draw 가 이미 그렸다. 여기는 얼룩 · 조준 · 나는 병 · 조각 · 머리 ·
+#  결과.
+func _draw_bduel() -> void:
+	var sa: float = float(BDUEL.stain)
+	for st in bd_stains:
+		var c: Color = st.c
+		var r: float = st.r
+		var rr := RandomNumberGenerator.new()
+		rr.seed = int(st.s)
+		draw_circle(Vector2(st.p), r, Color(c, sa * 0.75))
+		for k in 6:
+			var a := rr.randf_range(0.0, TAU)
+			var o := Vector2(cos(a), sin(a)) * r * rr.randf_range(0.6, 1.3)
+			draw_circle(Vector2(st.p) + o, r * rr.randf_range(0.22, 0.42), Color(c, sa))
+	#  조준선 — 판 위와 같은 줄이다.
+	if bd_ph == "aim_v":
+		_aim_h_line(aim.y, C_ACC)
+	elif bd_ph == "aim_h":
+		_aim_h_line(aim.y, Color(C_ACC, 0.45))
+		_aim_v_line(aim.x, C_ACC)
+	#  나는 병
+	if bd_ph == "fly":
+		var t: float = clampf(bd_t / _bduel_fly_len(), 0.0, 1.0)
+		_bduel_bottle(_bduel_fly_at(t), bd_spin * bd_t, _bduel_fly_k(t), bd_col, 1.0)
+	for f in bd_fx:
+		var a2: float = 1.0 - float(f.t) / float(f.life)
+		var fc: Color = f.c
+		if int(f.k) == 0:
+			var w: float = f.w
+			var rot: float = f.r
+			var p0: Vector2 = f.p
+			var pts := PackedVector2Array([p0 + Vector2(cos(rot), sin(rot)) * w,
+					p0 + Vector2(cos(rot + 2.3), sin(rot + 2.3)) * w * 0.7,
+					p0 + Vector2(cos(rot + 4.0), sin(rot + 4.0)) * w * 0.5])
+			draw_colored_polygon(pts, Color(fc, a2))
+		else:
+			draw_circle(Vector2(f.p), float(f.w) * 0.5, Color(fc, 0.9 * a2))
+	#  머리 — 제목과 두 사람의 합 · 병
+	draw_string(font_sm, Vector2(0.0, 30.0), "술병 대결", HORIZONTAL_ALIGNMENT_CENTER,
+			VIEW.x, 20, C_LIGHT)
+	_bduel_plate(Rect2(20.0, 42.0, 150.0, 58.0), "상인", 0)
+	_bduel_plate(Rect2(VIEW.x - 170.0, 42.0, 150.0, 58.0), "나", 1)
+	if bd_ph == "aim_v" or bd_ph == "aim_h":
+		draw_string(font_sm, Vector2(0.0, 350.0), _aim_hint(0 if bd_ph == "aim_v" else 1),
+				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 20, C_LIGHT)
+	if bd_ph == "end":
+		var e: float = clampf(bd_t / 0.25, 0.0, 1.0)
+		var box := Rect2(VIEW.x * 0.5 - 110.0, 150.0, 220.0, 64.0)
+		_rr(self, box.grow(2.0), Color(0.0, 0.0, 0.0, 0.55 * e))
+		_rr(self, box, Color(C_PANEL, 0.96 * e))
+		draw_string(font, Vector2(box.position.x, box.position.y + 44.0),
+				"승리" if bd_won else "패배", HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 36,
+				Color(C_GOLD if bd_won else C_MULT, e))
+		if bd_t >= 0.4:
+			draw_string(font_sm, Vector2(0.0, 350.0), "계속", HORIZONTAL_ALIGNMENT_CENTER,
+					VIEW.x, 20, C_LIGHT)
+
+
+#  한 사람의 판 — 이름 · 합 · 병 n 개(던진 병은 병 색 · 아직은 테만).
+func _bduel_plate(r: Rect2, nm: String, who: int) -> void:
+	var on: bool = (bd_who == who and (bd_ph == "fly" or bd_ph == "gap")) \
+			or (who == 1 and (bd_ph == "aim_v" or bd_ph == "aim_h"))
+	_rr(self, r.grow(1.0), Color(0.0, 0.0, 0.0, 0.5))
+	_rr(self, r, C_PANEL)
+	if on:
+		_rr(self, Rect2(r.position, Vector2(r.size.x, 2.0)), C_ACC)
+	draw_string(font, Vector2(r.position.x + 10.0, r.position.y + 18.0), nm,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, C_TXT)
+	draw_string(font_sm, Vector2(r.position.x, r.position.y + 24.0), str(int(bd_sc[who])),
+			HORIZONTAL_ALIGNMENT_RIGHT, r.size.x - 10.0, 20, C_GOLD)
+	var hits: Array = bd_hits[who]
+	for k in int(BDUEL.n):
+		var c := Vector2(r.position.x + 16.0 + float(k) * 18.0, r.position.y + 42.0)
+		if k < hits.size():
+			_bduel_bottle(c, 0.0, 0.62, C_ACC if int(hits[k]) > 0 else C_LIGHT.darkened(0.4), 1.0)
+		else:
+			_bduel_bottle(c, 0.0, 0.62, Color(C_LIGHT, 0.25), 1.0)
+
+
+#  술병 한 개(2D) — 몸 · 어깨 · 목 · 마개 · 빛 한 줄 · 상표. 한가운데 p · 크기 k(1 이면 판 위 크기).
+func _bduel_bottle(p: Vector2, rot: float, k: float, col: Color, a: float) -> void:
+	draw_set_transform(shake_off + p, rot, Vector2(k, k))
+	var body := Rect2(-5.0, -6.0, 10.0, 15.0)
+	draw_rect(body.grow(1.0), Color(0.0, 0.0, 0.0, 0.45 * a))
+	draw_rect(body, Color(col, a))
+	draw_rect(Rect2(-4.0, -9.0, 8.0, 3.0), Color(col, a))
+	draw_rect(Rect2(-1.5, -15.0, 3.0, 6.0), Color(col.darkened(0.1), a))
+	draw_rect(Rect2(-2.0, -17.0, 4.0, 2.0), Color(C_WOOD.lightened(0.2), a))
+	draw_rect(Rect2(-3.0, -1.0, 6.0, 5.0), Color(C_LIGHT.darkened(0.15), 0.85 * a))
+	draw_rect(Rect2(-3.5, -5.0, 1.0, 13.0), Color(1.0, 1.0, 1.0, 0.35 * a))
+	draw_set_transform(shake_off)
+
+
 #  빈 테이블 리롤 — 쓸 것이 없으니 주먹으로 친다. 판은 닿는 틀에 깔린다(_pound_land).
 #  섰으면 참 — 거짓이면 _reroll 이 옛 쓸기로 간다.
 func _pound_table() -> bool:
@@ -28729,6 +29337,8 @@ func _pound_land(fx: bool) -> void:
 	#  끊겨도(fx 거짓) 물건은 그 자리에서 부서진다 — 값은 이미 닫혔고 남은 것은 그림뿐이다.
 	if kind == "crush" or kind == "slam":
 		_crush_hit(kind == "slam" and fx and not motion_off)
+	if kind == "rage":
+		btl_go = float(BTL.rage_wait)       # 술병을 다 깼다 — 쾅 뒤에 대결로(BTL)
 	var col: Color = C_ACC
 	if kind == "candy" and pc_id != "":
 		col = CANDY.get(pc_id, C_ACC)
@@ -37350,8 +37960,10 @@ func _rack_grab(m: Vector2) -> bool:
 func _hand_press(m: Vector2) -> bool:
 	if not _hand_press_at(m):
 		#  아무것도 안 잡혔다 — 상인을 누른 것일 수 있다. 응수만 내고
-		#  **안 삼킨다**(POKE 머리말).
-		_npc_press(m)
+		#  **안 삼킨다**(POKE 머리말). 상인이 아니면 그 뒤 선반의 술병일 수 있다(BTL) —
+		#  역시 안 삼킨다(밑의 _click 은 고른 것을 놓을 뿐이다).
+		if not _npc_press(m):
+			_btl_press(m)
 		return false
 	_npc_react("눈길", _npc_side(m.x))
 	if hand_src == 0:
@@ -37373,7 +37985,7 @@ func _hand_press_at(m: Vector2) -> bool:
 	#  판 손이 판을 집는 동안도(LEGH) — **판 고르기에서만**이다. 화면을 안 가렸더니 집기가
 	#  판 갈이 뒤 판 중 · 상점까지 남아 사탕 · 동전 칸 · 매물 누름이 다음 판 고르기까지
 	#  죽어 있었다(검토, 2026-10-04). 판 갈이 뒤에는 _drop_update 가 집기를 거둔다.
-	if swap_live or turn_live or (state == S.LEG and legb_pick_i >= 0):
+	if swap_live or turn_live or (state == S.LEG and legb_pick_i >= 0) or state == S.BDUEL:
 		return false
 	if _autoplay:
 		return false                          # 좌표 입력은 오토플레이의 어휘가 아니다
@@ -42613,7 +43225,7 @@ func _over_coin_rect(i: int) -> Rect2:
 #      그 밑에 라운드 · 판 · 챌린지 한 줄 · 분필 가름줄.
 #    · 완주면 머리 위에 놋쇠 왕관이 커지며 선다(crown_* — 넘쳤다 앉고, 앉는 순간 반짝 별 여섯이
 #      한 번 튄다).
-#    · 왼쪽 — 이번 런의 수: 클리어한 판 · 클리어 시간(실패면 플레이 시간 · run_secs) · 최고 판 점수 ·
+#    · 왼쪽 — 이번 런의 수: 클리어한 판 · 클리어 시간(실패면 런 시간 · run_secs) · 최고 판 점수 ·
 #      던진 다트 · 마지막 판/무한 판. 이름은 분필 2층 · 수는 분필 1층.
 #    · 오른쪽 — 마지막까지 든 동전 · 다트통.
 #    · 그 밑 — 이번 런에 열린 것(쪽지) · 맨 밑 「새 런」(완주 · 무한이 열리면 「무한 런」과 둘).
@@ -42696,7 +43308,7 @@ func _draw_over() -> void:
 	var rows := [
 		["클리어한 판", ("%d" % cleared) if GameData.endless
 				else ("%d / %d" % [cleared, int(TUT.legs) if tut_run else GameData.legs_n()])],
-		["클리어 시간" if won else "플레이 시간", _fmt_secs(run_secs)],
+		["클리어 시간" if won else "런 시간", _fmt_secs(run_secs)],
 	]
 	#  ⚠ **밑의 두 줄은 프로필을 읽는다** — 챌린지 · 무한 런은 그 둘을 안 미므로(_rec_off) 안 센
 	#  런에서는 안 세운다(옛 판 그대로 · 2026-09-20).
@@ -51881,6 +52493,8 @@ func _mus_want() -> String:
 			return "lobby"
 		S.SHOP, S.LEG, S.CLEAR:
 			return "select"
+		S.BDUEL:
+			return "boss"
 	return "boss" if GameData.is_boss(leg_no) else "game"
 
 

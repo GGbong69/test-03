@@ -761,6 +761,10 @@ static func _rows(g: Node) -> Array:
 				{"n1": "실패 화면 보기", "t": "act", "a": "over_lose"},
 				#  보스 판 등장의 흑백 TV(game.gd BOSSTV)를 지금 판 위에서 곧장 튼다. 2026-10-10
 				{"n1": "보스 흑백 TV 보기", "t": "act", "a": "boss_tv"},
+				#  술병 이스터에그(game.gd BTL · BDUEL) — 상점에서. 2026-10-10
+				{"n1": "술병 다 깨기", "t": "act", "a": "btl_all"},
+				{"n1": "술병 대결 열기", "t": "act", "a": "bduel"},
+				{"n1": "비밀 상점 열기", "t": "act", "a": "secret"},
 			]
 		1:
 			return [
@@ -2243,6 +2247,27 @@ static func _run(g: Node, e: Dictionary) -> void:
 			g.state = g.S.OVER
 			g._sfx("run_win" if g.won else "run_lose")
 			_say("완주 화면" if g.won else "실패 화면")
+			return
+		"btl_all", "bduel", "secret":
+			if g.state != g.S.SHOP:
+				_say("상점에서만")
+				return
+			match String(e.get("a", "")):
+				"btl_all":
+					g.btl_st = 0
+					var lay: Array = g._btl_layout()
+					for bk in lay.size():
+						if not g.btl_gone.has(bk):
+							g._btl_break(bk, lay.size())
+							break
+					_say("술병 다 깸")
+				"bduel":
+					g.btl_st = 1
+					g._bduel_enter()
+					_say("술병 대결")
+				_:
+					g._secret_deal()
+					_say("비밀 상점")
 			return
 		"boss_tv":
 			if not g._is_play():
