@@ -11568,25 +11568,39 @@ func _fire_edge() -> void:
 #  · 새 색 0 — C_GOLD 에 C_MULT 를 섞은 불씨가 바깥, C_GOLD 가 속.
 #  · 위 가장자리는 띠(LAY.bar) 밑에서 시작한다 — 점수를 덮지 않는다.
 func _fire_tongues(g2: float, top: float) -> void:
-	var step := 4.0
-	var bucket: int = 0 if motion_off else int(Time.get_ticks_msec() / 83)
-	var ember := C_GOLD.lerp(C_MULT, 0.55)
-	#  혀 하나가 세 토막이다 — 밑동 45% 금빛 · 가운데 35% 불씨 · 끝 20% 붉고
-	#  가늘다. 처음엔 두 토막(불씨 겉 · 금빛 속)이라 찍어 보니 막대그래프처럼
-	#  읽혔다(2026-09-27). 불은 뿌리가 가장 뜨겁고 끝이 붉게 뾰족하다.
+	#  ── 2026-10-10 다시 지었다 — 필기 「테두리 불 이팩트 개선」 · 「저렴한 느낌」 ──
+	#  옛 혀는 4px 막대를 1/12초마다 새로 뽑아 세 토막으로 칠했다 — 막대그래프가 튀는 것처럼
+	#  읽혔다. 이제 2px 기둥이 **이어지는 결**(사인 세 겹 + 값 소음 — _fire_h)을 따라 솟았다
+	#  가라앉고 결이 흘러간다(옆은 위로 흐른다 — 불은 옆에서도 위로 탄다). 뿌리가 가장 뜨겁다:
+	#  거의 흰 금빛 → 금빛 → 불씨 → 붉은 끝(끝은 가늘고 옅다). 밑에서 불티가 솟아 흔들리며
+	#  식는다(_fire_sparks). 새 색 0 — 다 C_LIGHT · C_GOLD · C_MULT 의 섞음이다.
+	#  모션을 끄면 결이 멈춘 채 선 채로 탄다(불티도 그 자리에 선다).
+	var tt: float = 0.0 if motion_off else float(Time.get_ticks_msec()) / 1000.0
 	var a: float = clampf(0.85 * g2, 0.0, 0.85)
 	if a <= 0.01:
 		return
+	var hot := Color(C_GOLD.lightened(0.45), a)
 	var cg := Color(C_GOLD, a)
+	var ember := C_GOLD.lerp(C_MULT, 0.55)
 	var ce := Color(ember, a)
-	var cm := Color(C_MULT, a)
+	var cm := Color(C_MULT, a * 0.75)
 	#  값이 클수록 높이 탄다(fire_heat · FIRE.heat_* 주석).
-	var h_lo := 5.0 * fire_heat
-	var h_hi := 17.0 * fire_heat
+	var h_lo := 3.0 * fire_heat
+	var h_hi := 30.0 * fire_heat
 	var fr := _full()
 	var X0: float = fr.position.x
 	var W: float = fr.end.x
 	var H: float = fr.end.y
+	var step := 2.0
+	#  불빛 — 혀 밑에 불씨색이 옅게 번진다(겹마다 아주 옅게 · 가장자리에서 짙다). 판이 불빛을
+	#  받는다 — 혀만 서면 종이를 오린 띠로 읽혔다.
+	for gk in 4:
+		var gh: float = (8.0 + float(gk) * 10.0) * fire_heat
+		var ga := Color(ember, 0.05 * a)
+		draw_rect(Rect2(X0, H - gh, W - X0, gh), ga)
+		var gw: float = (4.0 + float(gk) * 6.0) * fire_heat
+		draw_rect(Rect2(X0, top, gw, H - top), ga)
+		draw_rect(Rect2(W - gw, top, gw, H - top), ga)
 	#  ⚠ **위 가장자리에는 혀를 안 세운다.** 처음에는 네 변 다 세웠는데 찍어
 	#  보니 위 혀가 동전 슬롯 · 다트 칸의 이름(「동전」「다트」「정보」)을
 	#  갉아먹었다 — 점수를 읽게 하려고 만든 층이 정보를 덮으면 진 것이다.
@@ -11594,23 +11608,78 @@ func _fire_tongues(g2: float, top: float) -> void:
 	#  달아오름만 남는다.
 	for i in int((W - X0) / step):
 		var x := X0 + float(i) * step
-		var hb: float = lerpf(h_lo, h_hi, _gl_rand(i * 7 + bucket * 131, 911))
-		draw_rect(Rect2(x, H - hb * 0.45, step, hb * 0.45), cg)
-		draw_rect(Rect2(x, H - hb * 0.80, step, hb * 0.35), ce)
-		draw_rect(Rect2(x + 1.0, H - hb, step - 2.0, hb * 0.20), cm)
+		var hb: float = roundf(_fire_h(float(i) - tt * 9.0, tt, h_lo, h_hi, 0.0))
+		if hb < 1.0:
+			continue
+		#  색 경계가 기둥마다 조금씩 어긋난다 — 가지런한 띠가 아니라 불의 결이다.
+		var jb: float = (_gl_rand(i * 3 + int(tt * 12.0) * 17, 931) - 0.5) * 0.10
+		var b0: float = roundf(hb * (0.28 + jb))
+		var b1: float = roundf(hb * (0.55 + jb))
+		var b2: float = roundf(hb * (0.80 + jb * 0.5))
+		draw_rect(Rect2(x, H - b0, step, b0), hot)
+		draw_rect(Rect2(x, H - b1, step, b1 - b0), cg)
+		draw_rect(Rect2(x, H - b2, step, b2 - b1), ce)
+		draw_rect(Rect2(x + 0.5, H - hb, step - 1.0, hb - b2), cm)
 	#  옆 혀는 **아래로 갈수록 높다** — 불이 바닥에서 올라가는 모양이고, 위쪽
-	#  HUD 옆에서는 짧아져 자금판 · 메뉴 칸을 덜 씻는다.
-	for j in int((H - top) / step):
+	#  HUD 옆에서는 짧아져 자금판 · 메뉴 칸을 덜 씻는다. 결은 위로 흐른다.
+	var nrow: int = int((H - top) / step)
+	for j in nrow:
 		var y := top + float(j) * step
-		var up: float = lerpf(0.30, 1.0, float(j) / maxf((H - top) / step, 1.0))
-		var hl: float = lerpf(h_lo, h_hi, _gl_rand(j * 13 + bucket * 139, 917)) * up
-		var hr: float = lerpf(h_lo, h_hi, _gl_rand(j * 17 + bucket * 149, 919)) * up
-		draw_rect(Rect2(X0, y, hl * 0.45, step), cg)
-		draw_rect(Rect2(X0 + hl * 0.45, y, hl * 0.35, step), ce)
-		draw_rect(Rect2(X0 + hl * 0.80, y + 1.0, hl * 0.20, step - 2.0), cm)
-		draw_rect(Rect2(W - hr * 0.45, y, hr * 0.45, step), cg)
-		draw_rect(Rect2(W - hr * 0.80, y, hr * 0.35, step), ce)
-		draw_rect(Rect2(W - hr, y + 1.0, hr * 0.20, step - 2.0), cm)
+		var up: float = lerpf(0.30, 1.0, float(j) / maxf(float(nrow), 1.0))
+		for sd in 2:
+			var hl: float = roundf(_fire_h(float(j) + tt * 14.0, tt, h_lo, h_hi,
+					37.0 + float(sd) * 53.0) * up)
+			if hl < 1.0:
+				continue
+			var l0: float = roundf(hl * 0.30)
+			var l1: float = roundf(hl * 0.56)
+			var l2: float = roundf(hl * 0.82)
+			if sd == 0:
+				draw_rect(Rect2(X0, y, l0, step), hot)
+				draw_rect(Rect2(X0 + l0, y, l1 - l0, step), cg)
+				draw_rect(Rect2(X0 + l1, y, l2 - l1, step), ce)
+				draw_rect(Rect2(X0 + l2, y + 0.5, hl - l2, step - 1.0), cm)
+			else:
+				draw_rect(Rect2(W - l0, y, l0, step), hot)
+				draw_rect(Rect2(W - l1, y, l1 - l0, step), cg)
+				draw_rect(Rect2(W - l2, y, l2 - l1, step), ce)
+				draw_rect(Rect2(W - hl, y + 0.5, hl - l2, step - 1.0), cm)
+	_fire_sparks(tt, a, X0, W, H)
+
+
+#  불의 혀 높이 — u 자리(기둥 차례) · t 시각에서 lo ~ hi. 사인 세 겹(긴 물결 · 중간 · 잔 떨림)에
+#  값 소음(6칸마다 씨 · 부드럽게 잇는다)을 섞고, 위로 뾰족하게 세운다(봉우리가 혀가 된다).
+#  sd 는 변마다 다른 결.
+func _fire_h(u: float, t: float, lo: float, hi: float, sd: float) -> float:
+	var n: float = 0.45 * sin(u * 0.19 + t * 4.1 + sd) \
+			+ 0.30 * sin(u * 0.47 - t * 6.7 + sd * 1.7) \
+			+ 0.12 * sin(u * 1.31 + t * 12.3 + sd * 0.6)
+	var c: float = floorf(u / 6.0)
+	var f: float = u / 6.0 - c
+	f = f * f * (3.0 - 2.0 * f)
+	var v0: float = _gl_rand(int(c) * 7 + int(sd), 913)
+	var v1: float = _gl_rand(int(c + 1.0) * 7 + int(sd), 913)
+	n += (lerpf(v0, v1, f) - 0.5) * 0.7
+	var k: float = clampf(0.5 + 0.5 * n, 0.0, 1.0)
+	return lerpf(lo, hi, pow(k, 2.2))
+
+
+#  불티 — 밑변에서 솟아 좌우로 흔들리며 식는다(금빛 → 불씨 → 붉게 · 옅게). 알마다 제 씨 ·
+#  빠르기 · 솟는 높이를 갖고 시각만으로 자리가 정해진다(상태가 없다 — 모션 끄기면 선다).
+func _fire_sparks(tt: float, a: float, X0: float, W: float, H: float) -> void:
+	var n: int = 40
+	for i in n:
+		var r0: float = _gl_rand(i * 11 + 1, 929)
+		var r1: float = _gl_rand(i * 11 + 2, 929)
+		var r2: float = _gl_rand(i * 11 + 3, 929)
+		var ph: float = fposmod(tt * lerpf(0.45, 0.95, r1) + r0, 1.0)
+		var rise: float = lerpf(28.0, 70.0, r2) * fire_heat
+		var x: float = X0 + _gl_rand(i * 11 + 4, 929) * (W - X0) \
+				+ sin(tt * 3.1 + float(i) * 1.7) * 4.0 * ph
+		var y: float = H - 6.0 - ph * rise
+		var c: Color = C_GOLD.lerp(C_MULT, smoothstep(0.2, 0.9, ph))
+		var sz: float = 2.0 if ph < 0.45 else 1.0
+		draw_rect(Rect2(roundf(x), roundf(y), sz, sz), Color(c, a * (1.0 - ph)))
 
 
 # ══════════════════════════════════════════════════════════
