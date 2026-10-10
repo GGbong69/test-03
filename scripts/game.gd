@@ -1171,6 +1171,7 @@ func _ready() -> void:
 	_crt_open()       # 맨 위 층. 세기는 방금 읽었다
 	_wipe_open()      # 장면 전환 덮개(95) — CRT 밑
 	_overc_open()     # 게임 오버 연출(90)
+	_btv_open()       # 보스 판 흑백 TV(93)
 	_pwr_open()       # 브라운관 켜기 · 끄기(110) — 맨 위
 	#  창 닫기도 브라운관을 끄고 닫는다(_notification). 틀 수 없는 실행은 엔진이 곧장 닫는다.
 	if _cine_ok(false):
@@ -6197,6 +6198,7 @@ func _begin_leg() -> void:
 		_found("modf", String(mo.get("id", "")))
 	target = _target_at(leg_no)
 	_start_leg()
+	_btv_begin()        # 보스 판이 선다 — 흑백 TV(BOSSTV)
 
 
 # ══════════════════════════════════════════════════════════
@@ -6589,6 +6591,7 @@ func _process(d: float) -> void:
 	_wipe_tick(d)
 	_pwr_tick(d)
 	_over_cine_tick(d)
+	_btv_tick(d)
 	_inv_tick()      # 불스아이 반전 — 실시간 ms 로 끈다
 	#  모션 끄기가 바뀌면 CRT 의 깜박임 · 낟알을 같이 끈다. 그 값을 미는 길이
 	#  여럿(개발자 판 · 검사 도구)이라 부르는 쪽마다 걸지 않고 여기서 본다.
@@ -50824,6 +50827,136 @@ func _over_cine_apply() -> void:
 	mat.set_shader_parameter("blur", bl)
 	mat.set_shader_parameter("dark", dk)
 	mat.set_shader_parameter("aspect", vs.x / maxf(vs.y, 1.0))
+
+
+# ══════════════════════════════════════════════════════════
+#  보스 판 등장 — 흑백 TV (2026-10-10)
+# ──────────────────────────────────────────────────────────
+#  필기 「흑백 TV 효과」 → 「특정 순간 연출」 · 「보스 판 등장」(사용자). 보스 판이 다 선 순간
+#  (판 갈이 SWAP.dur 뒤) 화면이 옛 흑백 브라운관으로 떨어진다 — 신호가 보스에게 넘어간다.
+#    0.00  흑백으로 툭 떨어진다(in) · 수직 동기를 놓쳐 그림이 위로 미끄러졌다 돌아오고(slip ·
+#          slip_t) · 줄마다 가로로 떨린다(jit · jit_t 동안 잦아들어 jit_hold 로 남는다) ·
+#          지지직(tv_static)
+#    in~   흑백 그대로(hold) · 밝은 띠가 위에서 아래로 굴러 내려간다(roll_t 에 한 번)
+#    out   색이 돌아오려다(flick — 그 몫 동안 bw 가 back 까지 빠진다) 다시 꺼지고, 그 뒤
+#          천천히 돈다
+#  판 밖에서 보는 연출이라 값을 하나도 안 만진다. 던지기는 그동안에도 된다. 판을 떠나면
+#  (일시정지 · 런 정보 · 화면이 바뀜) 곧장 걷힌다. 움직임 끔 · 화면 없는 실행 · 검사
+#  도구는 안 탄다(_cine_ok · btv_force 로 켠다). 「전환 지지직」을 끄면 낟알 · 띠 · 떨림 ·
+#  줄결 · 지지직 소리 없이 흑백만 든다. 층은 CanvasLayer 93(shaders/bosstv.gdshader) —
+#  덮개(95) · CRT(100) 밑.
+const BOSSTV := {
+	"in": 0.06, "hold": 0.62, "out": 0.45,
+	"slip": 0.08, "slip_t": 0.20, "jit": 3.0, "jit_t": 0.30, "jit_hold": 0.6,
+	"roll_t": 0.95, "flick": [0.10, 0.22], "back": 0.15,
+}
+var btv_t := 0.0             # 흐른 시간 — 음수면 아직 기다린다(판 갈이)
+var btv_live := false
+var btv_force := false
+var btv_layer: CanvasLayer = null
+var btv_rect: ColorRect = null
+
+
+func _btv_open() -> void:
+	if btv_layer != null and is_instance_valid(btv_layer):
+		return
+	var sh: Shader = load("res://shaders/bosstv.gdshader") as Shader
+	if sh == null:
+		return
+	var mat := ShaderMaterial.new()
+	mat.shader = sh
+	btv_layer = CanvasLayer.new()
+	btv_layer.name = "BossTV"
+	btv_layer.layer = 93
+	btv_layer.visible = false
+	btv_rect = ColorRect.new()
+	btv_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	btv_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	btv_rect.material = mat
+	btv_layer.add_child(btv_rect)
+	add_child(btv_layer)
+
+
+#  연출을 연다. wait 음수면 판 갈이(SWAP.dur)를 기다린다 — 판이 다 선 뒤에 떨어진다.
+func _btv_begin(wait := -1.0) -> void:
+	if drop_fast or not _cine_ok(btv_force) or btv_rect == null:
+		return
+	btv_t = -(float(SWAP.dur) if wait < 0.0 else wait)
+	btv_live = true
+
+
+func _btv_len() -> float:
+	return float(BOSSTV["in"]) + float(BOSSTV.hold) + float(BOSSTV.out)
+
+
+func _btv_end() -> void:
+	btv_live = false
+	btv_t = 0.0
+	if btv_layer != null:
+		btv_layer.visible = false
+
+
+func _btv_tick(d: float) -> void:
+	if not btv_live:
+		return
+	if not _is_play():
+		_btv_end()
+		return
+	var t0 := btv_t
+	btv_t += d
+	if t0 < 0.0 and btv_t >= 0.0 and wipe_snow:
+		_sfx("tv_static")
+	if btv_t >= _btv_len():
+		_btv_end()
+		return
+	_btv_apply()
+
+
+#  흐른 시간 e(0 부터)의 모양 — 흑백 · 미끄럼 · 떨림 · 띠 자리. 그림이 없는 검사도 읽는다.
+func _btv_pose(e: float) -> Dictionary:
+	var B: Dictionary = BOSSTV
+	var t_in: float = float(B["in"])
+	var t_out: float = t_in + float(B.hold)
+	var bw := 1.0
+	if e < t_in:
+		bw = clampf(e / maxf(t_in, 0.001), 0.0, 1.0)
+	elif e >= t_out:
+		var k: float = clampf((e - t_out) / float(B.out), 0.0, 1.0)
+		var fl: Array = B.flick
+		if k >= float(fl[0]) and k < float(fl[1]):
+			bw = float(B.back)
+		elif k >= float(fl[1]):
+			bw = 1.0 - smoothstep(float(fl[1]), 1.0, k)
+	var ks: float = clampf(1.0 - e / float(B.slip_t), 0.0, 1.0)
+	var kj: float = clampf(1.0 - e / float(B.jit_t), 0.0, 1.0)
+	return {
+		"bw": bw,
+		"slip": float(B.slip) * ks * ks,
+		"jit": (float(B.jit_hold) + (float(B.jit) - float(B.jit_hold)) * kj) * bw,
+		"roll": lerpf(-0.15, 1.15, clampf(e / float(B.roll_t), 0.0, 1.0)),
+	}
+
+
+func _btv_apply() -> void:
+	if btv_rect == null:
+		return
+	var mat := btv_rect.material as ShaderMaterial
+	if mat == null:
+		return
+	var on: bool = btv_t >= 0.0
+	btv_layer.visible = on
+	if not on:
+		return
+	var ps := _btv_pose(btv_t)
+	var vs: Vector2 = get_viewport_rect().size
+	if vs.x >= 1.0 and vs.y >= 1.0:
+		mat.set_shader_parameter("logical", vs)
+	mat.set_shader_parameter("bw", ps.bw)
+	mat.set_shader_parameter("slip", ps.slip)
+	mat.set_shader_parameter("jit", ps.jit)
+	mat.set_shader_parameter("roll", ps.roll)
+	mat.set_shader_parameter("clock", btv_t)
+	mat.set_shader_parameter("snow", 1.0 if wipe_snow else 0.0)
 
 
 # ══════════════════════════════════════════════════════════

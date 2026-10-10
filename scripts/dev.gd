@@ -759,6 +759,8 @@ static func _rows(g: Node) -> Array:
 				#  값 · 저장은 안 건드린다 — 그림만 본다. 2026-10-08
 				{"n1": "완주 화면 보기", "t": "act", "a": "over_win"},
 				{"n1": "실패 화면 보기", "t": "act", "a": "over_lose"},
+				#  보스 판 등장의 흑백 TV(game.gd BOSSTV)를 지금 판 위에서 곧장 튼다. 2026-10-10
+				{"n1": "보스 흑백 TV 보기", "t": "act", "a": "boss_tv"},
 			]
 		1:
 			return [
@@ -2241,6 +2243,13 @@ static func _run(g: Node, e: Dictionary) -> void:
 			g.state = g.S.OVER
 			g._sfx("run_win" if g.won else "run_lose")
 			_say("완주 화면" if g.won else "실패 화면")
+			return
+		"boss_tv":
+			if not g._is_play():
+				_say("판 위에서만")
+				return
+			g._btv_begin(0.0)
+			_say("보스 흑백 TV" if g.btv_live else "움직임 끔 · 못 튼다")
 			return
 		"touch":
 			#  얹힘 길을 통째로 죽인다 — 누름-읽기만 남는다. ⑤의 코드가
