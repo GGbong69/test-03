@@ -765,8 +765,6 @@ static func _rows(g: Node) -> Array:
 				{"n1": "술병 다 깨기", "t": "act", "a": "btl_all"},
 				{"n1": "술병 대결 열기", "t": "act", "a": "bduel"},
 				{"n1": "비밀 상점 열기", "t": "act", "a": "secret"},
-				#  제목 판 밑 점수 칠판(game.gd TTLY)의 수를 지운다 — 이 프로필만. 2026-10-10
-				{"n1": "제목 던진 수 지우기", "t": "act", "a": "ttly_wipe"},
 			]
 		1:
 			return [
@@ -2249,11 +2247,6 @@ static func _run(g: Node, e: Dictionary) -> void:
 			g.state = g.S.OVER
 			g._sfx("run_win" if g.won else "run_lose")
 			_say("완주 화면" if g.won else "실패 화면")
-			return
-		"ttly_wipe":
-			Save.tally_drop("title:darts")
-			Save.flush()
-			_say("제목 던진 수 0")
 			return
 		"btl_all", "bduel", "secret":
 			if g.state != g.S.SHOP:

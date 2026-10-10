@@ -45725,20 +45725,14 @@ func _draw_title() -> void:
 # ══════════════════════════════════════════════════════════
 #  제목 판 밑 점수 칠판 (2026-10-10)
 # ──────────────────────────────────────────────────────────
-#  필기 「시작 화면 다트 던진 수 적어놓기 (프로필 저장)」 · 「시작화면에 상호작용 요소로 다트판을
-#  문에 걸어 놨잖아? 그거의 숫자를 어딘가에 표시 해 놓을까? 좀 자연 스러운 방식으로」(사용자).
-#  술집 다트판 밑에 거는 작은 칠판이다 — 판 밑 문에 박은 못에 끈 두 가닥으로 걸리고, 분필로
-#  다트 한 자루와 이 프로필이 제목 판에 던진 수를 적는다. 판 자리(_door_set_xf)에서 그려 문이
-#  열리면 문짝과 같이 돈다. 던질 때마다 수가 한 번 하얗게 선다(flash). 수는 프로필 파일의 세기
-#  열쇠 title:darts 다 — 던질 때 오르고 save 초 뒤 한 번 적는다(던질 때마다 디스크를 안 친다).
+#  술집 다트판 밑에 거는 작은 칠판이다 — 판 밑 문에 박은 못에 끈 두 가닥으로 걸리고, 방금 꽂힌
+#  값을 분필로 적는다(_ttl_pop). 판 자리(_door_set_xf)에서 그려 문이 열리면 문짝과 같이 돈다.
+#  처음엔 던진 수를 적었다(필기 「시작 화면 다트 던진 수 적어놓기」) — 「걍 시작 화면에서 던진 발
+#  횟수는 빼자 쓸모 없다 이쁘지도 않고」로 걷었다. 아직 안 던졌으면 빈 칠판이다.
 #    y   칠판 윗변(판 한가운데에서 · 판 자리 px) · w · h 칠판 크기 · nail 끈이 칠판 위로 솟는 높이
-#    flash  수가 하얗게 서는 시간(초) · save 적기까지(초)
-#    write  방금 꽂힌 값(오른쪽 칸)을 한 자 쓰는 시간(초) · dust 분필 가루 알 수
-const TTLY := {"y": 132.0, "w": 128.0, "h": 38.0, "nail": 8.0, "flash": 0.45, "save": 1.0,
-		"write": 0.07, "dust": 6}
-var ttly_flash := 0.0
-var ttly_save := -1.0
-var ttly_last := ""            # 방금 꽂힌 값(글) — 칠판 오른쪽 칸
+#    write  값을 한 자 쓰는 시간(초) · dust 분필 가루 알 수
+const TTLY := {"y": 132.0, "w": 64.0, "h": 38.0, "nail": 8.0, "write": 0.07, "dust": 6}
+var ttly_last := ""            # 방금 꽂힌 값(글)
 var ttly_last_g := 0           # 그 등급(_hit_grade) — 분필 색
 var ttly_last_t := -1.0        # 쓰기 시작한 뒤 흐른 시간 — 음수면 아직 없음
 
@@ -45753,32 +45747,12 @@ func _ttly_draw() -> void:
 	var nail := Vector2(box.get_center().x, box.position.y - float(TTLY.nail))
 	#  끈 두 가닥 · 못
 	var cord := Color(DOORT.frame.darkened(0.2), 0.9)
-	draw_line(nail, Vector2(box.position.x + 12.0, box.position.y - 2.0), cord, 1.0)
-	draw_line(nail, Vector2(box.end.x - 12.0, box.position.y - 2.0), cord, 1.0)
+	draw_line(nail, Vector2(box.position.x + 10.0, box.position.y - 2.0), cord, 1.0)
+	draw_line(nail, Vector2(box.end.x - 10.0, box.position.y - 2.0), cord, 1.0)
 	draw_rect(Rect2(nail - Vector2(1.5, 1.5), Vector2(3.0, 3.0)), Color(Door3D.COL.brass, 1.0))
 	_chalk_board(self, box, 3.0, CHALKB.tally)
-	#  분필 다트 한 자루 — 촉이 오른쪽 위를 본다(판으로 날아가는 결)
-	var a0 := Vector2(box.position.x + 10.0, box.end.y - 10.0)
-	var a1 := Vector2(box.position.x + 30.0, box.position.y + 10.0)
-	var dc := Color(ink, 0.85)
-	draw_line(a0, a1, dc, 2.0)
-	var u := (a1 - a0).normalized()
-	var nrm := Vector2(-u.y, u.x)
-	draw_colored_polygon(PackedVector2Array([a0 + u * 7.0, a0 - u * 2.0 + nrm * 5.0,
-			a0 - u * 2.0 - nrm * 5.0]), Color(ink, 0.6))
-	draw_line(a1, a1 + u * 5.0, Color(ink, 0.95), 1.0)
-	#  던진 수 — 던질 때 한 번 하얗게 선다. 칠판 왼쪽 칸(다트 그림 오른쪽 · 가름 획 왼쪽).
-	var mid: float = box.position.x + 72.0
-	var n: int = Save.tally("title:darts")
-	var fk: float = ttly_flash / float(TTLY.flash)
-	var nc := Color(ink.lerp(Color.WHITE, 0.6 * fk), lerpf(0.9, 1.0, fk))
 	var by: float = _menu_base_y(font_sm, 20, box.position.y, box.size.y)
-	draw_string(font_sm, Vector2(box.position.x + 34.0, by), str(n),
-			HORIZONTAL_ALIGNMENT_RIGHT, mid - box.position.x - 40.0, 20, nc)
-	#  가름 획 — 분필 세로 한 획(끝이 옅다)
-	draw_line(Vector2(mid, box.position.y + 6.0), Vector2(mid - 1.0, box.end.y - 6.0),
-			Color(ink, 0.55), 1.0)
-	#  방금 꽂힌 값 — 오른쪽 칸에 한 자씩 쓴다(_ttl_pop)
+	#  방금 꽂힌 값 — 한 자씩 쓴다(_ttl_pop)
 	if ttly_last == "" or ttly_last_t < 0.0:
 		return
 	var gc: Color = ink
@@ -45791,7 +45765,7 @@ func _ttly_draw() -> void:
 			gc = ink.lerp(C_GOLD, 0.8)
 	var t: String = ttly_last
 	var tw: float = font_sm.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
-	var x0: float = (mid + box.end.x) * 0.5 - tw * 0.5
+	var x0: float = box.get_center().x - tw * 0.5
 	var wch: float = float(TTLY.write)
 	for k in t.length():
 		var ka: float = 1.0 if motion_off else clampf((ttly_last_t - float(k) * wch) / wch, 0.0, 1.0)
@@ -53026,13 +53000,8 @@ func _ttl_busy() -> bool:
 func _ttl_board(d: float) -> void:
 	ttl_t += d
 	_egg_tick(d)
-	ttly_flash = maxf(ttly_flash - d, 0.0)
 	if ttly_last_t >= 0.0:
 		ttly_last_t += d
-	if ttly_save >= 0.0:
-		ttly_save -= d
-		if ttly_save < 0.0:
-			Save.flush()
 	for f in ttl_fly:
 		f.t += d
 	for s in ttl_stuck:
@@ -53060,9 +53029,6 @@ func _ttl_board(d: float) -> void:
 
 #  한 자루 던진다. p 는 판 좌표의 착탄점이다.
 func _ttl_throw(p: Vector2) -> void:
-	Save.tally_up("title:darts")      # 점수 칠판(TTLY)의 수 — 프로필마다
-	ttly_flash = float(TTLY.flash)
-	ttly_save = float(TTLY.save)
 	var a := Vector2(float(TTL.bx) + randf_range(-float(TTL.spread),
 			float(TTL.spread)), float(TTL.by))
 	var u := (p - a)
@@ -53079,7 +53045,7 @@ func _ttl_throw(p: Vector2) -> void:
 
 #  문 값 — 판 밑 점수 칠판에 분필로 적는다(2026-10-10). 「시작 화면에서 던진 다트의 점수가 잘
 #  안보이는데?」 → 화면 자리에 짙은 테의 큰 숫자로 띄웠다가 「저거는 너무 구리지 않아?」 →
-#  「칠판에 분필로」. 판 위에 떠다니는 글은 없다 — 칠판(TTLY) 오른쪽 칸에 방금 꽂힌 값이 한 자씩
+#  「칠판에 분필로」. 판 위에 떠다니는 글은 없다 — 칠판(TTLY)에 방금 꽂힌 값이 한 자씩
 #  쓰인다(write · 분필 가루가 날린다). 등급마다 분필 색이 다르다(싱글 흰 · 더블 · 트리플 주황 ·
 #  바깥 불 초록 · 안쪽 불 금). 헤드리스 · 문 끔(옛 제목)이면 칠판이 없어 옛 떠오르는 값을 낸다.
 func _ttl_pop(bp: Vector2, val: int, grade: int) -> void:
