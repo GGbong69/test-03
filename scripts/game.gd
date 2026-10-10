@@ -8254,7 +8254,7 @@ func _click(m: Vector2) -> void:
 						#  이름 쪽은 고르기만 한다.
 						if _set_grab(i).has_point(m):
 							set_drag = i
-							_set_slide(i, m)
+							_set_slide(i, m, true)
 						_sfx("menu_pick2")
 						return
 					"set":
@@ -50099,21 +50099,42 @@ func _set_seg_rect(i: int, k: int) -> Rect2:
 #  끊는 단위는 0.01 이다 — 예전 0.05 는 스무 칸이라 끄는 동안 계단이 손에
 #  그대로 느껴졌다. 백 칸이면 홈 폭보다 촘촘해 눈에는 이어져 보이고,
 #  그래도 끊어 두는 것은 소수점이 저장에 그대로 들어가지 않게 하려는 것이다.
-func _set_slide(i: int, m: Vector2) -> void:
+#
+#  **10 마다 걸린다**(2026-10-10 필기 「설정 창 수치 조정 좀 걸리게」). 백 칸이 매끈하니 손에
+#  잡히는 자리가 없었다 — 10 · 20 · … 둘레(SETDET.pull) 안으로 들면 그 값에 앉고, 앉는 순간
+#  톡 한 알(게이지 넷 다 — 걸림은 값이 아니라 손의 대답이다). 그 사이는 1 단위로 그대로 흐른다.
+#  음량의 「미는 동안 톡」(_vol_set)은 끌기에서는 걸림 톡이 맡는다 — 둘이면 겹친다.
+#  quiet 는 누르는 순간 — 누름 톡(menu_pick2)이 이미 나므로 걸림만 적고 소리는 안 낸다.
+func _set_slide(i: int, m: Vector2, quiet := false) -> void:
 	var rows := _set_rows()
 	if i < 0 or i >= rows.size():
 		return
 	var tr := _vol_track(i)
 	if tr.size.x <= 0.0:
 		return
-	_vol_set(String(rows[i]),
-			snappedf(clampf((m.x - tr.position.x) / tr.size.x, 0.0, 1.0), 0.01))
+	var raw: float = clampf((m.x - tr.position.x) / tr.size.x, 0.0, 1.0)
+	var st: float = float(SETDET.step)
+	var n: int = roundi(raw / st)
+	var det := -1
+	var x: float = snappedf(raw, 0.01)
+	if absf(raw - float(n) * st) <= float(SETDET.pull):
+		x = snappedf(float(n) * st, 0.01)
+		det = n
+	_vol_set(String(rows[i]), x, false)
+	if det >= 0 and det != set_det and not quiet:
+		_sfx("menu_pick2")
+	set_det = det
+
+
+#  게이지 걸림 — step 걸리는 간격(값) · pull 붙는 둘레(값 · 홈 폭 160px 에서 4px).
+const SETDET := {"step": 0.10, "pull": 0.025}
+var set_det := -1        # 끄는 동안 마지막으로 앉은 걸림(10 단위 칸 번호). -1 이면 걸림 밖
 
 
 #  값 하나를 앉힌다. 끌기와 휠이 **같은 몸**을 쓴다 — 둘로 갈리면 한쪽만
 #  Front 를 다시 안 그려 게이지가 멎은 채로 남는다. 끊는 단위는 부르는 쪽이
-#  정한다(끌기 0.01 · 휠 0.05). 2026-09-19
-func _vol_set(key: String, x: float) -> void:
+#  정한다(끌기 0.01 · 휠 0.05). 2026-09-19 · snd 거짓이면 음량 톡을 안 낸다(끌기 — 걸림 톡이 맡는다).
+func _vol_set(key: String, x: float, snd := true) -> void:
 	if key == "vol":
 		vol = x
 	elif key == "mus":
@@ -50149,7 +50170,7 @@ func _vol_set(key: String, x: float) -> void:
 	#  _vol_set 을 부르므로 안 막으면 한 번 미는 데 톡이 수십 알 난다.
 	#  그 상수가 「page 소리보다 길어 빠른 굴림에서도 안 겹친다」로 이미
 	#  서 있고 menu_pick2 는 그보다 짧다. 2026-09-25
-	if key == "vol":
+	if key == "vol" and snd:
 		var vnow := Time.get_ticks_msec()
 		if vnow - vol_snd_ms >= WHEEL_MS:
 			vol_snd_ms = vnow
@@ -50214,6 +50235,7 @@ func _set_slide_end() -> void:
 		elif key == "dot":
 			Save.set_set("dot", dot)
 	set_drag = -1
+	set_det = -1
 
 
 #  게이지 줄의 지금 값. 그리기 · 휠 · 수 글이 한 자리에서 읽는다 — 셋이 저마다
@@ -51569,11 +51591,13 @@ func _set_gauge_draw(c: CanvasItem, i: int, key: String, ee: float, a: float) ->
 		c.draw_rect(Rect2(tr.position, Vector2(tr.size.x, 1.0)), Color(0.0, 0.0, 0.0, 0.35 * a))
 		c.draw_rect(Rect2(tr.position.x, tr.end.y, tr.size.x, 1.0),
 				Color(C_PANEL.lightened(0.16), a))
-	#  눈금 — 25 마다 홈 밑에 점 하나(끝 둘은 조금 길게). 값을 어림하는 자리다.
+	#  눈금 — 걸리는 자리(SETDET · 10 마다)에 홈 밑 점 하나(끝 둘 · 가운데는 조금 길게).
+	#  값을 어림하는 자리이자 손이 걸리는 자리다.
 	var tkc := Color(ink, 0.32 * a) if mat else Color(C_WIRE, 0.55 * a)
-	for q in 5:
-		var qx: float = roundf(tr.position.x + tr.size.x * float(q) * 0.25)
-		var qh: float = 3.0 if q == 0 or q == 4 else 2.0
+	var tn: int = roundi(1.0 / float(SETDET.step))
+	for q in tn + 1:
+		var qx: float = roundf(tr.position.x + tr.size.x * float(q) / float(tn))
+		var qh: float = 3.0 if q == 0 or q == tn or q * 2 == tn else 2.0
 		c.draw_rect(Rect2(qx, tr.end.y + 3.0, 1.0, qh), tkc)
 	var fx: float = roundf(tr.size.x * v)
 	if fx > 0.0 and mat:
