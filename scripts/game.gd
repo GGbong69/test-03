@@ -41123,8 +41123,6 @@ func _draw_link() -> void:
 
 func _draw_pops() -> void:
 	for p in pops:
-		if bool(p.get("ttl", false)):
-			continue          # 문 값은 화면 자리에서 따로 그린다(_ttl_pops_draw)
 		var k: float = p.t / p.life
 		var y: float = p.p.y - k * 24.0
 		var sz: int = int(p.sz * (1.0 + 0.45 * exp(-p.t * 12.0)))
@@ -45707,7 +45705,6 @@ func _draw_title() -> void:
 	if _door_board_vis():
 		_ttl_draw()
 	draw_set_transform(shake_off)
-	_ttl_pops_draw()      # 문 값 — 화면 자리
 	if dxf:
 		_door_wall_xf(shake_off)
 	#  간판 — 인트로가 켠 네온이 그대로 남는다(두 낱말이 붙은 뒤 · TON 은 금빛).
@@ -45736,9 +45733,14 @@ func _draw_title() -> void:
 #  열쇠 title:darts 다 — 던질 때 오르고 save 초 뒤 한 번 적는다(던질 때마다 디스크를 안 친다).
 #    y   칠판 윗변(판 한가운데에서 · 판 자리 px) · w · h 칠판 크기 · nail 끈이 칠판 위로 솟는 높이
 #    flash  수가 하얗게 서는 시간(초) · save 적기까지(초)
-const TTLY := {"y": 132.0, "w": 92.0, "h": 38.0, "nail": 8.0, "flash": 0.45, "save": 1.0}
+#    write  방금 꽂힌 값(오른쪽 칸)을 한 자 쓰는 시간(초) · dust 분필 가루 알 수
+const TTLY := {"y": 132.0, "w": 128.0, "h": 38.0, "nail": 8.0, "flash": 0.45, "save": 1.0,
+		"write": 0.07, "dust": 6}
 var ttly_flash := 0.0
 var ttly_save := -1.0
+var ttly_last := ""            # 방금 꽂힌 값(글) — 칠판 오른쪽 칸
+var ttly_last_g := 0           # 그 등급(_hit_grade) — 분필 색
+var ttly_last_t := -1.0        # 쓰기 시작한 뒤 흐른 시간 — 음수면 아직 없음
 
 
 func _ttly_box() -> Rect2:
@@ -45765,12 +45767,49 @@ func _ttly_draw() -> void:
 	draw_colored_polygon(PackedVector2Array([a0 + u * 7.0, a0 - u * 2.0 + nrm * 5.0,
 			a0 - u * 2.0 - nrm * 5.0]), Color(ink, 0.6))
 	draw_line(a1, a1 + u * 5.0, Color(ink, 0.95), 1.0)
-	#  수 — 던질 때 한 번 하얗게 선다
+	#  던진 수 — 던질 때 한 번 하얗게 선다. 칠판 왼쪽 칸(다트 그림 오른쪽 · 가름 획 왼쪽).
+	var mid: float = box.position.x + 72.0
 	var n: int = Save.tally("title:darts")
 	var fk: float = ttly_flash / float(TTLY.flash)
 	var nc := Color(ink.lerp(Color.WHITE, 0.6 * fk), lerpf(0.9, 1.0, fk))
-	draw_string(font_sm, Vector2(box.position.x + 36.0, _menu_base_y(font_sm, 20, box.position.y,
-			box.size.y)), str(n), HORIZONTAL_ALIGNMENT_RIGHT, box.size.x - 44.0, 20, nc)
+	var by: float = _menu_base_y(font_sm, 20, box.position.y, box.size.y)
+	draw_string(font_sm, Vector2(box.position.x + 34.0, by), str(n),
+			HORIZONTAL_ALIGNMENT_RIGHT, mid - box.position.x - 40.0, 20, nc)
+	#  가름 획 — 분필 세로 한 획(끝이 옅다)
+	draw_line(Vector2(mid, box.position.y + 6.0), Vector2(mid - 1.0, box.end.y - 6.0),
+			Color(ink, 0.55), 1.0)
+	#  방금 꽂힌 값 — 오른쪽 칸에 한 자씩 쓴다(_ttl_pop)
+	if ttly_last == "" or ttly_last_t < 0.0:
+		return
+	var gc: Color = ink
+	match ttly_last_g:
+		2, 3:
+			gc = ink.lerp(C_ACC, 0.75)
+		4:
+			gc = ink.lerp(C_GREEN, 0.6)
+		5:
+			gc = ink.lerp(C_GOLD, 0.8)
+	var t: String = ttly_last
+	var tw: float = font_sm.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
+	var x0: float = (mid + box.end.x) * 0.5 - tw * 0.5
+	var wch: float = float(TTLY.write)
+	for k in t.length():
+		var ka: float = 1.0 if motion_off else clampf((ttly_last_t - float(k) * wch) / wch, 0.0, 1.0)
+		if ka <= 0.0:
+			break
+		var px: float = font_sm.get_string_size(t.substr(0, k), HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
+		draw_string(font_sm, Vector2(x0 + px, by), t.substr(k, 1), HORIZONTAL_ALIGNMENT_LEFT, -1, 20,
+				Color(gc, 0.95 * ka))
+	#  분필 가루 — 쓰는 동안 글 밑에서 몇 알이 떨어진다
+	var wend: float = wch * float(t.length())
+	if not motion_off and ttly_last_t < wend + 0.35:
+		for d in int(TTLY.dust):
+			var dt: float = ttly_last_t - float(d % maxi(t.length(), 1)) * wch
+			if dt < 0.0 or dt > 0.4:
+				continue
+			var dx: float = x0 + _gl_rand(d * 3 + 1, 947) * tw
+			var dy: float = by + 2.0 + dt * 40.0
+			draw_rect(Rect2(roundf(dx), roundf(dy), 1.0, 1.0), Color(ink, 0.7 * (1.0 - dt / 0.4)))
 
 
 #  옛 제목(단색 바탕 · 스크림 · 왼쪽 글줄) — 문이 아직 안 구워졌거나 헤드리스 · 문 끔.
@@ -45786,7 +45825,6 @@ func _draw_title_flat() -> void:
 	#  안 가리고, 대신 평평한 배경에 **세로 이음매 넷**을 남기고 있었다.
 	#  글줄은 x16 이고 판은 x209 라 애초에 안 겹친다 — 스크림 한 장이면 된다.
 	_ttl_draw()
-	_ttl_pops_draw()
 	#  제목은 머리(_hdr)보다 크다. 이 화면에서는 제목이 곧 그림이라
 	#  다른 화면의 머리와 같은 크기로 두면 시작화면이 아니라 목록이 된다.
 	#  제목 33 → 36 — 크기 다섯 단(10 · 12 · 20 · 24 · 36)의 맨 위.
@@ -52989,6 +53027,8 @@ func _ttl_board(d: float) -> void:
 	ttl_t += d
 	_egg_tick(d)
 	ttly_flash = maxf(ttly_flash - d, 0.0)
+	if ttly_last_t >= 0.0:
+		ttly_last_t += d
 	if ttly_save >= 0.0:
 		ttly_save -= d
 		if ttly_save < 0.0:
@@ -53037,30 +53077,18 @@ func _ttl_throw(p: Vector2) -> void:
 		_sfx("dart_fly")
 
 
-#  문 값을 띄운다(2026-10-10 「시작 화면에서 던진 다트의 점수가 잘 안보이는데?」). 옛 판은
-#  12 크기 하늘색 글을 판 자리에 띄워 문 위 판처럼 0.76배로 줄었다(9px 남짓) — 판 무늬에 묻혔다.
-#  이제 **화면 자리**(_ttl_scr)에 판 화면 착탄 값(_impact)과 같은 크기 · 등급 색으로 띄우고 짙은
-#  테를 두른다(_ttl_pops_draw) — 싱글 흰 · 더블 · 트리플 주황 · 바깥 불 초록 · 안쪽 불 크게.
+#  문 값 — 판 밑 점수 칠판에 분필로 적는다(2026-10-10). 「시작 화면에서 던진 다트의 점수가 잘
+#  안보이는데?」 → 화면 자리에 짙은 테의 큰 숫자로 띄웠다가 「저거는 너무 구리지 않아?」 →
+#  「칠판에 분필로」. 판 위에 떠다니는 글은 없다 — 칠판(TTLY) 오른쪽 칸에 방금 꽂힌 값이 한 자씩
+#  쓰인다(write · 분필 가루가 날린다). 등급마다 분필 색이 다르다(싱글 흰 · 더블 · 트리플 주황 ·
+#  바깥 불 초록 · 안쪽 불 금). 헤드리스 · 문 끔(옛 제목)이면 칠판이 없어 옛 떠오르는 값을 낸다.
 func _ttl_pop(bp: Vector2, val: int, grade: int) -> void:
-	var c: Color = C_OFF
-	var sz := 20
-	var life := 0.9
-	if val > 0:
-		match grade:
-			1:
-				c = C_TXT
-			2, 3:
-				c = C_ACC
-			4:
-				c = C_GREEN.lightened(0.55)
-			_:
-				c = C_ACC
-				sz = 24
-				life = 1.1
-	var sp := _ttl_scr(bp)
-	var up: bool = bp.y > BC.y
-	pops.append({"p": sp + Vector2(0.0, -20.0 if up else 22.0), "txt": str(val), "c": c,
-			"sz": sz, "t": 0.0, "life": life, "ttl": true})
+	ttly_last = str(val)
+	ttly_last_g = grade if val > 0 else 0
+	ttly_last_t = 0.0
+	if not (_door_live() and _door_here()):
+		pop(bp + Vector2(0.0, -17.0 if bp.y > BC.y else 19.0), str(val),
+				C_CHIP if val > 0 else C_OFF, 12, 0.7)
 
 
 #  판 자리 → 화면 자리(_ttl_m 의 반대). 문이 안 서면 그대로다.
@@ -53069,23 +53097,6 @@ func _ttl_scr(p: Vector2) -> Vector2:
 		return p
 	var xf := _door_xf()
 	return (xf[0] as Vector2) + (p - BC) * (xf[1] as Vector2)
-
-
-#  문 값 — 화면 자리 · 짙은 테. 판 자리 변환 밖에서 부른다.
-func _ttl_pops_draw() -> void:
-	for p in pops:
-		if not bool(p.get("ttl", false)):
-			continue
-		var k: float = p.t / p.life
-		var y: float = p.p.y - k * 18.0
-		var sz: int = int(p.sz * (1.0 + 0.45 * exp(-p.t * 12.0)))
-		var f: Font = font_sm if int(p.sz) % 10 == 0 else font
-		var c: Color = p.c
-		c.a = clampf(1.0 - k * k, 0.0, 1.0)
-		var at := Vector2(p.p.x - 60.0, y)
-		draw_string_outline(f, at, p.txt, HORIZONTAL_ALIGNMENT_CENTER, 120, sz, 5,
-				Color(C_BG, 0.85 * c.a))
-		draw_string(f, at, p.txt, HORIZONTAL_ALIGNMENT_CENTER, 120, sz, c)
 
 
 #  자루가 u 를 보게 하는 회전값. _icon_dart 는 각 없이 부르면 Vector2(6,-10)

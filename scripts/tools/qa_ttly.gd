@@ -4,6 +4,7 @@ extends SceneTree
 #   ② 수는 프로필마다 따로다 — 다른 프로필로 가면 그 프로필의 수다.
 #   ③ 던질 때마다 디스크를 안 친다 — save 초 뒤 한 번 적는다.
 #   ④ 칠판은 판 밑에 걸린다 — 판 테(숫자 고리) 밖 · 판과 같은 가로 한가운데.
+#   ⑤ 방금 꽂힌 값이 칠판 오른쪽 칸에 적힌다(떠다니는 글 대신).
 #   godot --headless --path . --script scripts/tools/qa_ttly.gd
 const Save = preload("res://scripts/save.gd")
 var g = null
@@ -60,6 +61,16 @@ func _run() -> void:
 	g._ttl_throw(g.BC)
 	g._use_profile(1)
 	_ok("② 돌아오면 그 프로필의 수 그대로", Save.tally("title:darts") == 2, "%d" % Save.tally("title:darts"))
+
+	# ⑤ 방금 꽂힌 값이 칠판 오른쪽 칸에 적힌다(2026-10-10 「칠판에 분필로」)
+	var tg: Vector2 = g.BC + Vector2(0.0, -g.R * 0.61)
+	g._ttl_throw(tg)
+	for i in 30:
+		g._ttl_board(1.0 / 60.0)
+	var inf: Dictionary = g.hit_info(tg)
+	var want := str(int(inf.base) * maxi(int(inf.mult), 0))
+	_ok("⑤ 꽂힌 값이 칠판에 적힌다", g.ttly_last == want and g.ttly_last_t >= 0.0,
+			"「%s」 (바란 것 %s)" % [g.ttly_last, want])
 
 	# ④
 	var box: Rect2 = g._ttly_box()
