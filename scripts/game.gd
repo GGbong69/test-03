@@ -43655,11 +43655,14 @@ const TTL := {
 	#  2026-10-10 「지금 시작화면에서 다트 던지는게 왜 딜레이 생겼어?」 — 3D 자루(2026-10-08)가
 	#  판 화면의 출발점(눈앞 86% 깊이)을 그대로 빌려, 문 카메라에서는 누른 뒤 네 틀 동안 화면 밑
 	#  밖에 있었고(안 보였다) 처음이 느린 곡선(smoothstep)이라 손을 늦게 떠났다. 문 장면에서는
-	#  fly_z 깊이에서 떠나 첫 틀부터 화면 밑에 보이고, fly_e 로 손을 떠나자마자 빠르게 나가며,
-	#  판 화면과 같은 0.20초에 꽂힌다.
+	#  손(화면 오른쪽 아래 끝)에서 첫 틀부터 보이며 떠나 같은 빠르기로 날아(_ttl3_fly_at) 판 화면과
+	#  같은 0.20초에 꽂힌다.
 	"fly": 0.20,                     # 나는 시간(초) — 판 화면 fly_time 과 같다
-	"fly_z": 0.62,                   # 3D 자루가 떠나는 깊이(눈까지의 몫) — 첫 틀부터 화면 밑에 선다
-	"fly_e": 1.8,                    # 3D 자루의 나가는 곡선 — 1 - (1 - t)^e(손을 떠나자마자 빠르다)
+	#  3D 자루의 손(_ttl3_fly_at) — 눈앞 fly_z 깊이 · 눈 축에서 오른쪽 hand_x · 아래 hand_y(px —
+	#  화면 오른쪽 아래 끝) · 가운데 솟음 fly_arc(m).
+	#  같은 빠르기다 — 2026-10-10 처음 고친 판(나가는 곡선 · 얕은 출발)은 판 위를 미끄러지는 것처럼
+	#  보였다(「다트 날아가는거 왠지 모르게 너무 어색해」).
+	"fly_z": 0.78, "hand_x": 120.0, "hand_y": 150.0, "fly_arc": 0.035,
 	"dl0": 30.0, "dl1": 16.0,        # 손끝의 반길이 → 꽂힌 반길이
 	"bx": 292.0, "by": 402.0,        # 출발점. 글줄(x16~164) 오른쪽이라 안 스친다
 	"spread": 34.0,                  # 출발점이 좌우로 흔들리는 폭
@@ -44127,7 +44130,19 @@ func _title_rows() -> Array:
 var ttl_vp: SubViewport = null
 var ttl_nodes := []          # ttl_stuck 과 차례를 같이하는 자루(경첩 자식)
 var ttl_fnodes := []         # ttl_fly 와 차례를 같이하는 나는 자루(무대 자식)
-var ttl_sig := ""            # 지은 자루 벌의 표지(id 줄) — 바뀌면 다시 짓는다
+var ttl_sig := ""            # 지금 선 자루 벌의 표지(번호 줄) — 굽기 표지(ttl_key)에 든다
+#  자루 번호 → 3D 자루(2026-10-10 「아니 계속 끊겨」). 옛 판은 자루 하나가 날거나 꽂힐 때마다
+#  **판의 자루 전부**를 지우고 새로 지어(_dart3_meshes — 부품 넷 · 재질 넷) 그 틀이 14~24ms 로
+#  늘었다(꽂힌 수에 비례 · 평소 10ms) — 60Hz 에서 던질 때 · 꽂힐 때마다 한 틀씩 빠졌다.
+#  이제 자루마다 번호(사전의 k)를 달고 한 번 지은 자루를 끝까지 쓴다 — 던질 때 새 자루 하나만
+#  짓고, 꽂힐 때는 나는 자루를 경첩으로 옮겨 붙인다(같은 번호).
+var ttl_nmap := {}
+var ttl_serial := 0
+#  데우는 자루 — 무대를 처음 열 때 자루 종류마다 하나씩(하나는 지는 자루처럼 옅게) 세워 한 번
+#  굽고 걷는다. 첫 던짐에서 무대 · 재질을 처음 굽느라 한 틀이 22ms 로 늘던 것을 제목이 뜰 때로
+#  옮긴다. 자루가 없으면 무대를 안 그리므로(_ttl3_draw) 화면에는 안 보인다.
+var ttl_warm := []
+var ttl_warm_n := 0
 var ttl_key := ""            # 마지막으로 구운 자세의 표지 — 같으면 안 굽는다
 
 
@@ -44219,18 +44234,62 @@ func _ttl3_open() -> void:
 	ttl_vp.add_child(we)
 	ttl_nodes.clear()
 	ttl_fnodes.clear()
+	ttl_nmap.clear()
 	ttl_sig = ""
 	ttl_key = ""
 
 
+func _ttl3_warm() -> void:
+	ttl_warm.clear()
+	var ids: Array = TTL.ids
+	for i in ids.size():
+		var n := _ttl3_dart(ttl_vp, String(ids[i]))
+		n.transform = _ttl3_pose(BC + Vector2(float(i) * 12.0 - 12.0, 0.0), 0.0)
+		if i == 0:
+			_ttl3_fade(n, 0.5)
+		ttl_warm.append(n)
+	ttl_warm_n = 3
+	ttl_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+
+
 func _ttl3_close() -> void:
+	for wn in ttl_warm:
+		if is_instance_valid(wn):
+			(wn as Node).queue_free()
+	ttl_warm.clear()
+	ttl_warm_n = 0
 	ttl_nodes.clear()
 	ttl_fnodes.clear()
+	ttl_nmap.clear()
 	ttl_sig = ""
 	ttl_key = ""
 	if ttl_vp != null and is_instance_valid(ttl_vp):
 		ttl_vp.queue_free()
 	ttl_vp = null
+
+
+#  나는 자루의 자리(문 세계 · m) — 손(화면 오른쪽 아래 끝 · 눈앞 fly_z 깊이)에서 떠나 판 위
+#  끝점(end)까지 **같은 빠르기**로 곧게 난다 · 가운데에서 fly_arc 만큼 솟는다. 원근이 그대로
+#  먹어서 처음엔 크게 · 빠르게 다가오다 판 가까이에서 작아지며 붙는다(눈으로 던진 그대로).
+#  출발점은 화면 자리(hand_x · hand_y — 눈 축에서)로 잡아 깊이에서 되짚는다 — 첫 틀부터 화면
+#  밑 끝에 선다.
+func _ttl3_fly_at(end: Vector3, t: float) -> Vector3:
+	var z0: float = Door3D.EYE * float(TTL.fly_z)
+	var k0: float = Door3D.S * Door3D.scale_at(z0)
+	#  손의 화면 자리(눈 축에서 px) → 그 깊이의 세계 자리. 손은 늘 같은 자리다 — 과녁이 어디든
+	#  같은 손에서 던진다.
+	var beg := Vector3(float(TTL.hand_x) / k0, Door3D.CAM_Y - float(TTL.hand_y) / k0, z0)
+	var p: Vector3 = beg.lerp(end, t)
+	p.y += float(TTL.fly_arc) * sin(PI * t)
+	return p
+
+
+#  자루 사전의 번호 — 없으면 단다(인트로 · 옛 사전도 처음 보는 틀에 받는다).
+func _ttl3_key(e: Dictionary) -> int:
+	if not e.has("k"):
+		e["k"] = ttl_serial
+		ttl_serial += 1
+	return int(e["k"])
 
 
 #  자루 벌을 ttl_stuck · ttl_fly 에 맞추고 카메라 · 경첩을 문 장면에 맞춘다. _ttl_draw 가 부른다.
@@ -44240,10 +44299,17 @@ func _ttl3_sync() -> void:
 		if ttl_vp != null:
 			_ttl3_close()
 		return
-	if ttl_stuck.is_empty() and ttl_fly.is_empty() and ttl_vp == null:
-		return
 	if not _ttl3_on():
 		_ttl3_open()
+		_ttl3_warm()
+	if ttl_warm_n > 0:
+		ttl_warm_n -= 1
+		if ttl_warm_n == 0 or not ttl_stuck.is_empty() or not ttl_fly.is_empty():
+			for wn in ttl_warm:
+				if is_instance_valid(wn):
+					(wn as Node).queue_free()
+			ttl_warm.clear()
+			ttl_warm_n = 0
 	var cam: Camera3D = ttl_vp.get_node("Cam")
 	var dcam := door_vp.get_node_or_null("Door/Cam") as Camera3D
 	if ttl_vp.size != door_vp.size:
@@ -44255,22 +44321,45 @@ func _ttl3_sync() -> void:
 	hinge.transform = Transform3D(Basis(Vector3.UP,
 			deg_to_rad(float(Door3D.DOOR.open_deg) * _door_k())), _ttl3_hinge_at())
 	var sig := ""
+	var want := {}
 	for sd in ttl_stuck:
-		sig += String(sd.id) + ","
+		var ks: int = _ttl3_key(sd)
+		want[ks] = true
+		sig += str(ks) + ","
 	sig += "|"
 	for fd in ttl_fly:
-		sig += String(fd.id) + ","
+		var kf: int = _ttl3_key(fd)
+		want[kf] = true
+		sig += str(kf) + ","
 	if sig != ttl_sig:
 		ttl_sig = sig
-		for n in ttl_nodes + ttl_fnodes:
-			if is_instance_valid(n):
-				(n as Node).queue_free()
+		#  빠진 자루만 지우고, 새 자루만 짓고, 꽂힌 자루는 경첩으로 옮긴다(ttl_nmap 머리말).
+		for kk in ttl_nmap.keys():
+			if not want.has(kk):
+				var gone: Node = ttl_nmap[kk]
+				if is_instance_valid(gone):
+					gone.queue_free()
+				ttl_nmap.erase(kk)
 		ttl_nodes.clear()
 		ttl_fnodes.clear()
 		for sd in ttl_stuck:
-			ttl_nodes.append(_ttl3_dart(hinge, String(sd.id)))
+			var ks2: int = int(sd["k"])
+			var ns: Node3D = ttl_nmap.get(ks2, null)
+			if ns == null or not is_instance_valid(ns):
+				ns = _ttl3_dart(hinge, String(sd.id))
+				ttl_nmap[ks2] = ns
+			elif ns.get_parent() != hinge:
+				ns.reparent(hinge, false)
+			ttl_nodes.append(ns)
 		for fd in ttl_fly:
-			ttl_fnodes.append(_ttl3_dart(ttl_vp, String(fd.id)))
+			var kf2: int = int(fd["k"])
+			var nf: Node3D = ttl_nmap.get(kf2, null)
+			if nf == null or not is_instance_valid(nf):
+				nf = _ttl3_dart(ttl_vp, String(fd.id))
+				ttl_nmap[kf2] = nf
+			elif nf.get_parent() != ttl_vp:
+				nf.reparent(ttl_vp, false)
+			ttl_fnodes.append(nf)
 	var hinv := Transform3D(Basis(), _ttl3_hinge_at()).affine_inverse()
 	var eye_h: Vector3 = hinge.transform.affine_inverse() * cam.position
 	var moving := not ttl_fly.is_empty() or door_t >= 0.0
@@ -44289,14 +44378,9 @@ func _ttl3_sync() -> void:
 	for i in mini(ttl_fnodes.size(), ttl_fly.size()):
 		var f: Dictionary = ttl_fly[i]
 		var end := _ttl3_pose(f.b, _ttl3_jit(f.b))
-		#  판 화면(_bd3_fly)과 같은 출발점 — 눈 바로 앞 · 화면 아래쪽(-18 · -46 px 를 m 로).
-		var beg := Vector3(end.origin.x * 0.15 - 18.0 / Door3D.S,
-				Door3D.CAM_Y + (end.origin.y - Door3D.CAM_Y) * 0.15 - 46.0 / Door3D.S,
-				Door3D.EYE * float(TTL.fly_z))
 		var n1: Node3D = ttl_fnodes[i]
 		var ft: float = clampf(float(f.t) / float(TTL.fly), 0.0, 1.0)
-		var fe: float = 1.0 - pow(1.0 - ft, float(TTL.fly_e))
-		n1.transform = Transform3D(end.basis, beg.lerp(end.origin, fe))
+		n1.transform = Transform3D(end.basis, _ttl3_fly_at(end.origin, ft))
 		_dart3_face_u(n1, cam.position)
 	if moving:
 		ttl_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
@@ -52958,7 +53042,10 @@ func _ttl_rot(u: Vector2) -> float:
 #  꽂는다. 소리는 판과 같은 사다리(_hit_grade)에서 온다 — 제목에서 불을
 #  물면 판에서 불을 문 소리가 나야 그 소리가 무엇인지 배워진다.
 func _ttl_stick(e: Dictionary) -> void:
-	ttl_stuck.append({"p": e.b, "u": e.u, "id": e.id, "rot": e.rot, "t": 0.0})
+	var st := {"p": e.b, "u": e.u, "id": e.id, "rot": e.rot, "t": 0.0}
+	if e.has("k"):
+		st["k"] = e["k"]          # 나던 그 자루가 그대로 꽂힌다(ttl_nmap)
+	ttl_stuck.append(st)
 	var info := hit_info(e.b)
 	var g := _hit_grade(info, int(info.mult))
 	_thud()
