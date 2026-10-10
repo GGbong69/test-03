@@ -65,7 +65,9 @@ uniform float pair_pen : hint_range(0.0, 2.0) = 0.4;   // 먼 짝을 섞는 벌
 uniform float snap_lo : hint_range(0.0, 0.5) = 0.25;   // 세기 0 쪽의 snap — 이 안쪽 몫은 점을 안 놓는다
 uniform float snap_hi : hint_range(0.0, 0.5) = 0.05;   // 세기 1 의 snap
 uniform float fade_in : hint_range(0.0, 1.0) = 0.15;   // 이 세기까지 원본과 섞어 켠다
-uniform float edge_cut : hint_range(0.0, 1.0) = 0.2;   // 이 휘도 대비를 넘으면 원본을 낸다
+//  2026-10-10 1.01(끔) — 「폰트에는 필터나 라이팅이 안되어 잇는거 같아서 좀 어색하다는 평」. 옛 0.2 는
+//  글자 획 테두리를 원본으로 남겨 글자만 팔레트 · 디더를 안 탔다. 이제 글자도 그림과 같이 탄다.
+uniform float edge_cut : hint_range(0.0, 1.01) = 1.01; // 이 휘도 대비를 넘으면 원본을 낸다
 
 vec3 to_lin(vec3 c) {
 	return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c));

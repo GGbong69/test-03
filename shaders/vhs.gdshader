@@ -59,6 +59,10 @@ uniform float grain = 0.06;              // 밝기 낟알
 uniform float cgrain = 0.07;             // 색 낟알(가로로 길쭉한 얼룩)
 uniform float hs_rows = 5.0;             // 헤드 스위칭 — 맨 밑 몇 행
 uniform float hs_shift = 3.0;            // 맨 밑 행의 밀림
+//  밝기 띠 폭(논리 px · strength 1) — 테이프는 밝기도 가로로 조금 무른다(색보다는 훨씬 덜).
+//  2026-10-10 「폰트에는 필터나 라이팅이 안되어 잇는거 같아서 좀 어색하다는 평」 — 옛 판은 밝기를
+//  날카롭게만 집어 창 해상도 글자가 테이프를 안 지난 것처럼 떴다. 이제 글자도 그림과 같이 무른다.
+uniform float luma_w = 1.0;
 
 const vec3 LY = vec3(0.299, 0.587, 0.114);
 const vec3 LI = vec3(0.5959, -0.2746, -0.3213);
@@ -122,9 +126,17 @@ void fragment() {
 	//  (밝은 획 바로 오른쪽이 어두워지고 어두운 데서 밝은 데로 넘는 자리가 조금 솟는다).
 	vec3 c0 = sharp(sp, sps);
 	float y0 = dot(c0, LY);
+	//  밝기 띠 — 가로 다섯 탭(1 · 4 · 6 · 4 · 1). 세기 0 이면 폭이 0 이라 y0 그대로다.
+	float lw = luma_w * s * 0.5 * ppl;
+	float yb = y0 * 6.0;
+	yb += dot(texture(scene, (sp + vec2(-lw, 0.0)) * sps).rgb, LY) * 4.0;
+	yb += dot(texture(scene, (sp + vec2(lw, 0.0)) * sps).rgb, LY) * 4.0;
+	yb += dot(texture(scene, (sp + vec2(-2.0 * lw, 0.0)) * sps).rgb, LY);
+	yb += dot(texture(scene, (sp + vec2(2.0 * lw, 0.0)) * sps).rgb, LY);
+	yb /= 16.0;
 	vec2 iq0 = vec2(dot(c0, LI), dot(c0, LQ));
 	float yl = dot(texture(scene, (sp - vec2(ring_d * ppl, 0.0)) * sps).rgb, LY);
-	float y = y0 + ring * s * (y0 - yl);
+	float y = yb + ring * s * (yb - yl);
 
 	//  ④ 색 — I · Q 만 가로로. 탭 여덟이 왼쪽으로 늘어서고 멀수록 가볍다 → 왼쪽의 색이
 	//  오른쪽으로 끌려온다(꼬리). 전체가 chroma_d 만큼 왼쪽을 집으니 색이 오른쪽으로 밀린다.
