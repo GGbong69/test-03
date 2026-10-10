@@ -58,6 +58,9 @@ render_mode unshaded;
 uniform sampler2D scene : hint_screen_texture, filter_nearest, repeat_disable;
 //  설정 게이지가 민다. 기본 0.6 — 단 2 가 반쯤 빠져 그늘 · 3D 손에 무늬가 또렷이 선다.
 uniform float strength : hint_range(0.0, 1.0) = 0.6;
+//  화면 고르기(game.gd FSEL · 2026-10-10) — 화면 UV x 가 split 보다 오른쪽이면 원본을 그대로 낸다.
+//  고르기 밖에서는 2(가름 없음).
+uniform float split = 2.0;
 //  지금 보이는 논리 크기(expand 라 16:10 이면 640x400). 부르는 쪽이 창이 바뀔 때마다 넣는다.
 uniform vec2 logical = vec2(640.0, 360.0);
 
@@ -265,6 +268,9 @@ void pal_scan(int pass, vec3 x, int K,
 //  ── 팔레트 끝 ──
 
 void fragment() {
+	if (SCREEN_UV.x > split) {
+		COLOR = vec4(texture(scene, SCREEN_UV).rgb, 1.0);
+	} else {
 	vec3 c = texture(scene, SCREEN_UV).rgb;
 	float s = strength;
 	vec3 o = c;
@@ -322,4 +328,5 @@ void fragment() {
 		}
 	}
 	COLOR = vec4(o, 1.0);
+	}
 }

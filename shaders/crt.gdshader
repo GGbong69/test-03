@@ -91,6 +91,9 @@ uniform sampler2D scene_mip : hint_screen_texture, filter_linear_mipmap, repeat_
 //  앞 틀(다 그린 화면). 넣는 쪽이 없으면 검정 — 잔상이 없다.
 uniform sampler2D prev : hint_default_black, filter_nearest, repeat_disable;
 uniform float strength : hint_range(0.0, 1.0) = 0.4;
+//  화면 고르기(game.gd FSEL · 2026-10-10) — 화면 UV x 가 split 보다 오른쪽이면 원본을 그대로 낸다.
+//  고르기 밖에서는 2(가름 없음).
+uniform float split = 2.0;
 uniform vec2 logical = vec2(640.0, 360.0);
 //  흐르는 띠 · 잔상 · 깜박임 · 낟알을 켤 것인가. 모션 끄기면 0.
 uniform float motion : hint_range(0.0, 1.0) = 1.0;
@@ -149,6 +152,9 @@ float luma(vec3 c) {
 }
 
 void fragment() {
+	if (SCREEN_UV.x > split) {
+		COLOR = vec4(texture(scene, SCREEN_UV).rgb, 1.0);
+	} else {
 	vec2 sps = SCREEN_PIXEL_SIZE;
 	float s = strength;
 	//  논리 1px 당 기기 px. 정수배 스트레치라 2 · 3 · 4 … 로 떨어진다.
@@ -276,4 +282,5 @@ void fragment() {
 		o = max(o, texture(prev, uv).rgb * tk);
 	}
 	COLOR = vec4(o, 1.0);
+	}
 }

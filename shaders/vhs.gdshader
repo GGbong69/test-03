@@ -41,6 +41,9 @@ render_mode unshaded;
 
 uniform sampler2D scene : hint_screen_texture, filter_linear, repeat_disable;
 uniform float strength : hint_range(0.0, 1.0) = 0.5;
+//  화면 고르기(game.gd FSEL · 2026-10-10) — 화면 UV x 가 split 보다 오른쪽이면 원본을 그대로 낸다.
+//  고르기 밖에서는 2(가름 없음).
+uniform float split = 2.0;
 uniform vec2 logical = vec2(640.0, 360.0);
 uniform float motion : hint_range(0.0, 1.0) = 1.0;
 //  0 이상이면 TIME 대신 이 시계로 돈다 — 촬영 도구가 틀을 못 박는다.
@@ -97,6 +100,9 @@ vec3 yiq_rgb(vec3 d) {
 }
 
 void fragment() {
+	if (SCREEN_UV.x > split) {
+		COLOR = vec4(texture(scene, SCREEN_UV).rgb, 1.0);
+	} else {
 	vec2 sps = SCREEN_PIXEL_SIZE;
 	float s = strength;
 	float ppl = (1.0 / sps.y) / logical.y;
@@ -167,4 +173,5 @@ void fragment() {
 	//  원본 + 차이. 세기 0 이면 dy · diq 가 정확히 0 이다.
 	vec3 c = c0 + yiq_rgb(vec3(y - y0, iq - iq0));
 	COLOR = vec4(clamp(c, 0.0, 1.0), 1.0);
+	}
 }
