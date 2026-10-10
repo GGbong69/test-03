@@ -276,8 +276,17 @@ func _run() -> void:
 	_ok("갈래 저울이 안 흔들린다", kmax < 3.0,
 			"가장 벌어진 갈래가 %.3f%%p — 이론상 정확히 같아야 한다" % kmax)
 	var it0 := _pct(int(A[0].get("k_item", 0)), int(A[0]["slots"]))
-	_ok("동전 갈래가 표대로 60.9% 언저리", it0 > 58.0 and it0 < 64.0,
-			"R1 %.3f%% (shop.csv 여섯 값의 몫) — 사진 0.5%% 도 여기서 안 흔들린다" % it0)
+	#  기대값은 표에서 낸다 — 60.9% 를 손으로 박아 두었다가 보드 확장 가중치가 0.18 → 0.27 로
+	#  오르며(2026-10-02) 표의 몫이 57.7% 로 내려간 것을 이 줄이 못 따라가고 울었다(2026-10-10).
+	var wsum := 0.0
+	var witem := 0.0
+	for kk in GameData.shop_kinds():
+		wsum += float(kk.w)
+		if String(kk.id) == "item":
+			witem = float(kk.w)
+	var want: float = 100.0 * witem / maxf(wsum, 0.0001)
+	_ok("동전 갈래가 표대로 %.1f%% 언저리" % want, absf(it0 - want) < 3.0,
+			"R1 %.3f%% (shop.csv 여섯 값의 몫 %.3f%%) — 사진 0.5%% 도 여기서 안 흔들린다" % [it0, want])
 
 	# ⑧ **등급 사이의 비가 보존된다** — 「한 톨도 안 건드렸다」의 검사.
 	#    비조준 동전은 가중치가 전혀 안 움직이고 분모만 커지므로, 비조준
