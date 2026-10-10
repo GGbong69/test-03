@@ -1986,7 +1986,6 @@ func _run_load() -> bool:
 	#  안 적는다. 되살린 런은 아직 완주 화면을 안 봤다. 2026-09-20
 	endless_ok = false
 	over_t = 0.0
-	run_secs = 0.0
 	leg_t = 0.0
 	sealed = -1
 	sell_sel = -1
@@ -2161,6 +2160,8 @@ func _new_run(human := false) -> void:
 	tut_got = []
 	#  지난 런에 열린 것을 새 런까지 끌고 가면 안 된다.
 	run_unlocked.clear()
+	#  런 시간도 새로 센다 — 되살리기(_run_load)는 적힌 값을 그대로 잇는다(RUN_PLAIN).
+	run_secs = 0.0
 	#  배움도 런 단위로 센다. 줄에 남은 것을 새 런까지 끌고 가면 엉뚱한
 	#  화면에서 뜬다 — 이미 배운 것으로 적혀 있으므로 다시는 안 뜬다.
 	shop_seen = 0
