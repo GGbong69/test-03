@@ -812,9 +812,16 @@ func _run() -> void:
 
 	# ── ⑭ 개발자 모드 ─────────────────────────────────────
 	print("\n── ⑭ 개발자 모드 ─────────────────────────────")
-	_ok("⑭ 쪽 수가 여섯 그대로다(탭 폭 %.1fpx)"
-			% ((Dev.W - 12.0) / float(Dev.PAGES.size())),
-			Dev.PAGES.size() == 6 and (Dev.W - 12.0) / float(Dev.PAGES.size()) >= 54.0)
+	#  여섯 쪽 · 고른 탭 54px 를 잤던 자리 — 여덟 쪽이 되며 탭을 이름 폭에 맞췄다
+	#  (2026-10-10 · dev.gd _tab). 잴 것은 쪽 수가 아니라 이름이 칸에 드는가다.
+	var tab_bad := []
+	for t in Dev.PAGES.size():
+		var tw: float = (load(g.FONT_PATH) as Font).get_string_size(String(Dev.PAGES[t]),
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
+		if Dev._tab(t).size.x < tw:
+			tab_bad.append("%s %.0f<%.0f" % [Dev.PAGES[t], Dev._tab(t).size.x, tw])
+	_ok("⑭ 탭 이름이 칸에 다 든다(%d쪽)" % Dev.PAGES.size(), tab_bad.is_empty(),
+			"잘린 탭 %s" % [tab_bad])
 	var page0: int = Dev.page
 	Dev.page = 5
 	var rows5: int = Dev._rows(g).size()

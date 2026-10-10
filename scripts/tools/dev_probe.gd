@@ -18,7 +18,8 @@ const Dev = preload("res://scripts/dev.gd")
 #
 #  그래서 여기서는 **좌표를 만들어 Dev.click 을 부른다.** 값을 직접 박으면
 #  이 결함이 안 잡힌다. 못 박는 것:
-#    ① 그려지는 화살표 칸과 값 칸이 줄 안에서 안 겹치고 안 삐져나온다
+#    ① 그려지는 화살표 칸과 값 칸이 줄 안에서 안 겹치고 안 삐져나온다 ·
+#       쪽마다 마지막 줄까지 판 안이다 · 탭 이름이 칸 안에 다 든다
 #    ② ◀ 는 뒤로, ▶ 는 앞으로 — 방향이 안 뒤집힌다
 #    ③ 누르는 그 순간 게임에 반영된다 (따로 적용을 안 눌러도)
 #    ④ 반영된 조준이 판을 넘겨도 남는다 — _start_leg 가 든 동전을
@@ -431,6 +432,31 @@ func _geometry(g: Node) -> void:
 				bad.append(who + "(좌우 뒤바뀜)")
 	Dev.page = 2
 	_say(bad.is_empty(), "화살표·값 칸이 줄 안에서 안 겹친다", "어긋난 줄 " + str(bad))
+	#  쪽마다 마지막 줄까지 판 안에 그려진다 — 판 밑으로 내려간 줄은 그려지지도
+	#  눌리지도 않는다. 1쪽이 마흔세 줄이라 스물넷이 그 꼴이었다(2026-10-10).
+	var over := []
+	for pg in Dev.PAGES.size():
+		Dev.page = pg
+		var n: int = Dev._rows(g).size()
+		if n > 0 and not Dev._panel().encloses(Dev._row(n - 1)):
+			over.append("%d쪽 %s %d줄" % [pg, Dev.PAGES[pg], n])
+	Dev.page = 2
+	_say(over.is_empty(), "쪽마다 마지막 줄까지 판 안이다", "넘친 쪽 " + str(over))
+	#  탭 — 이름이 칸 안에 다 들고 · 이웃과 안 겹치고 · 판 안이다. 고른 폭이던 때
+	#  48px 칸에서 「경제·진행」이 「경제·진」으로 잘려 찍혔다(W 머리말).
+	var f: Font = load(g.FONT_PATH)       # g.font 는 아직 비어 있다 — 같은 파일을 집는다
+	var tb := []
+	for t in Dev.PAGES.size():
+		var r: Rect2 = Dev._tab(t)
+		var lw: float = f.get_string_size(String(Dev.PAGES[t]),
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
+		if r.size.x < lw:
+			tb.append("%s(칸 %.0f < 글 %.0f)" % [Dev.PAGES[t], r.size.x, lw])
+		if not Dev._panel().encloses(r):
+			tb.append("%s(판 밖)" % Dev.PAGES[t])
+		if t > 0 and Dev._tab(t - 1).intersects(r):
+			tb.append("%s(겹침)" % Dev.PAGES[t])
+	_say(tb.is_empty(), "탭 이름이 칸 안에 다 든다", "어긋난 탭 " + str(tb))
 
 
 # ── ②③④⑤ 조준 ─────────────────────────────────────────
@@ -511,10 +537,12 @@ func _aim(g: Node) -> void:
 #  못 박는다. 턱 자국은 sweep_live 가 아니라 open(상점 안인가)으로 걸리므로
 #  쓸기를 안 열어도 뜬다(game.gd _chute_draw).
 func _smash1(g: Node) -> void:
-	Dev.page = 1
+	#  1쪽 「물건」에서 「다시 보기」 쪽으로 옮겼다 — 1쪽 스무째 밑이라 화면 밖이었다.
+	#  쪽 번호가 아니라 이름으로 찾는다(뒤에 쪽이 붙어도 안 밀린다). 2026-10-10
+	Dev.page = Dev.PAGES.find("다시 보기")
 	var i := _find(g, "부딪힘 한 번")
 	if i < 0:
-		_say(false, "물건 쪽에 부딪힘 줄이 있다")
+		_say(false, "다시 보기 쪽에 부딪힘 줄이 있다")
 		Dev.page = 2
 		return
 	var c: Vector2 = Dev._row(i).get_center()
@@ -553,7 +581,7 @@ func _wreck(g: Node) -> void:
 	Dev.page = 0
 	for label in ["판 끝 마모 한 번", "선반 여섯 채우기"]:
 		_wreck_row(g, label)
-	Dev.page = 1
+	Dev.page = Dev.PAGES.find("다시 보기")      # _smash1 과 같은 까닭(2026-10-10)
 	for label in ["부서짐 재질", "굴림 남았다 한 번"]:
 		_wreck_row(g, label)
 	Dev.page = 2
