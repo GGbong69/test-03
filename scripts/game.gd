@@ -43652,7 +43652,14 @@ var ttl_w := []          # 그 줄 띠가 쓸려 든 폭
 # ══════════════════════════════════════════════════════════
 
 const TTL := {
-	"fly": 0.26,                     # 나는 시간(초)
+	#  2026-10-10 「지금 시작화면에서 다트 던지는게 왜 딜레이 생겼어?」 — 3D 자루(2026-10-08)가
+	#  판 화면의 출발점(눈앞 86% 깊이)을 그대로 빌려, 문 카메라에서는 누른 뒤 네 틀 동안 화면 밑
+	#  밖에 있었고(안 보였다) 처음이 느린 곡선(smoothstep)이라 손을 늦게 떠났다. 문 장면에서는
+	#  fly_z 깊이에서 떠나 첫 틀부터 화면 밑에 보이고, fly_e 로 손을 떠나자마자 빠르게 나가며,
+	#  판 화면과 같은 0.20초에 꽂힌다.
+	"fly": 0.20,                     # 나는 시간(초) — 판 화면 fly_time 과 같다
+	"fly_z": 0.62,                   # 3D 자루가 떠나는 깊이(눈까지의 몫) — 첫 틀부터 화면 밑에 선다
+	"fly_e": 1.8,                    # 3D 자루의 나가는 곡선 — 1 - (1 - t)^e(손을 떠나자마자 빠르다)
 	"dl0": 30.0, "dl1": 16.0,        # 손끝의 반길이 → 꽂힌 반길이
 	"bx": 292.0, "by": 402.0,        # 출발점. 글줄(x16~164) 오른쪽이라 안 스친다
 	"spread": 34.0,                  # 출발점이 좌우로 흔들리는 폭
@@ -44285,9 +44292,11 @@ func _ttl3_sync() -> void:
 		#  판 화면(_bd3_fly)과 같은 출발점 — 눈 바로 앞 · 화면 아래쪽(-18 · -46 px 를 m 로).
 		var beg := Vector3(end.origin.x * 0.15 - 18.0 / Door3D.S,
 				Door3D.CAM_Y + (end.origin.y - Door3D.CAM_Y) * 0.15 - 46.0 / Door3D.S,
-				Door3D.EYE * 0.86)
+				Door3D.EYE * float(TTL.fly_z))
 		var n1: Node3D = ttl_fnodes[i]
-		n1.transform = _bd3_fly_tf(end, beg, clampf(float(f.t) / float(TTL.fly), 0.0, 1.0))
+		var ft: float = clampf(float(f.t) / float(TTL.fly), 0.0, 1.0)
+		var fe: float = 1.0 - pow(1.0 - ft, float(TTL.fly_e))
+		n1.transform = Transform3D(end.basis, beg.lerp(end.origin, fe))
 		_dart3_face_u(n1, cam.position)
 	if moving:
 		ttl_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
