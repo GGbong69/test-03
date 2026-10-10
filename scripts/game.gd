@@ -45150,10 +45150,6 @@ const CHALKB := {
 	"menu": {"sh": Vector2(3.0, 4.0), "sh_a": 0.50, "lit": -1.0, "n": 16,
 			"w": Vector2(40.0, 110.0), "h": Vector2(6.0, 14.0), "seed": 4433,
 			"stick": Vector2(0.0, 0.0), "soft": true, "ink": 0.028},
-	#  제목 판 밑에 건 점수 칠판(TTLY) — 작은 판이라 자국 둘 · 받침 없음. 빛은 위 램프.
-	"tally": {"sh": Vector2(-2.0, 4.0), "sh_a": 0.45, "lit": 1.0, "n": 2,
-			"w": Vector2(8.0, 18.0), "h": Vector2(2.0, 3.0), "seed": 4459,
-			"stick": Vector2(0.0, 0.0), "soft": false, "ink": 0.045},
 	#  설정 창 · 일시정지의 오른쪽 판 — 받침 오른쪽에 분필 한 토막.
 	"win": {"sh": Vector2(3.0, 4.0), "sh_a": 0.45, "lit": -1.0, "n": 7,
 			"w": Vector2(36.0, 90.0), "h": Vector2(6.0, 12.0), "seed": 4447,
@@ -45723,16 +45719,23 @@ func _draw_title() -> void:
 
 
 # ══════════════════════════════════════════════════════════
-#  제목 판 밑 점수 칠판 (2026-10-10)
+#  제목 판 밑 분필 점수 (2026-10-10)
 # ──────────────────────────────────────────────────────────
-#  술집 다트판 밑에 거는 작은 칠판이다 — 판 밑 문에 박은 못에 끈 두 가닥으로 걸리고, 방금 꽂힌
-#  값을 분필로 적는다(_ttl_pop). 판 자리(_door_set_xf)에서 그려 문이 열리면 문짝과 같이 돈다.
-#  처음엔 던진 수를 적었다(필기 「시작 화면 다트 던진 수 적어놓기」) — 「걍 시작 화면에서 던진 발
-#  횟수는 빼자 쓸모 없다 이쁘지도 않고」로 걷었다. 아직 안 던졌으면 빈 칠판이다.
-#    y   칠판 윗변(판 한가운데에서 · 판 자리 px) · w · h 칠판 크기 · nail 끈이 칠판 위로 솟는 높이
+#  판 밑 나무 문에 방금 꽂힌 값을 분필로 쓴다(_ttl_pop) — 「그냥 나무문에 분필로 쓴거 같이 할까?」.
+#  처음엔 못에 건 작은 칠판에 던진 수까지 적었다 — 「던진 발 횟수는 빼자 · 이쁘지도 않고」 ·
+#  「저렇게 판을 해놓으니까 너무 못 생겼네」로 칠판 · 수를 다 걷었다. 분필은 나뭇결에 다 안 묻는다 —
+#  획 위로 나무색 틈(grain)이 성기게 난다. 새 값을 쓰면
+#  옛 값은 손으로 문질러 지운 듯 옅은 자국(ghost)으로 남았다 진다. 판 자리(_door_set_xf)에서 그려
+#  문이 열리면 문짝과 같이 돈다. 아직 안 던졌으면 아무것도 없다.
+#    y   글 칸 윗변(판 한가운데에서 · 판 자리 px) · w · h 글 칸 크기
 #    write  값을 한 자 쓰는 시간(초) · dust 분필 가루 알 수
-const TTLY := {"y": 132.0, "w": 64.0, "h": 38.0, "nail": 8.0, "write": 0.07, "dust": 6}
+#    ink    분필 짙기 · grain 나무색 틈 수(글자 하나에) · ghost 옛 값 자국 짙기 ·
+#           ghost_t 그 자국이 지는 시간(초)
+const TTLY := {"y": 132.0, "w": 64.0, "h": 38.0, "write": 0.07, "dust": 6,
+		"ink": 0.82, "grain": 14, "ghost": 0.16, "ghost_t": 1.2}
 var ttly_last := ""            # 방금 꽂힌 값(글)
+var ttly_prev := ""            # 그 앞 값 — 지운 자국으로 잠깐 남는다
+var ttly_prev_g := 0
 var ttly_last_g := 0           # 그 등급(_hit_grade) — 분필 색
 var ttly_last_t := -1.0        # 쓰기 시작한 뒤 흐른 시간 — 음수면 아직 없음
 
@@ -45743,37 +45746,41 @@ func _ttly_box() -> Rect2:
 
 func _ttly_draw() -> void:
 	var box := _ttly_box()
-	var ink: Color = DOORT.chalk_ink
-	var nail := Vector2(box.get_center().x, box.position.y - float(TTLY.nail))
-	#  끈 두 가닥 · 못
-	var cord := Color(DOORT.frame.darkened(0.2), 0.9)
-	draw_line(nail, Vector2(box.position.x + 10.0, box.position.y - 2.0), cord, 1.0)
-	draw_line(nail, Vector2(box.end.x - 10.0, box.position.y - 2.0), cord, 1.0)
-	draw_rect(Rect2(nail - Vector2(1.5, 1.5), Vector2(3.0, 3.0)), Color(Door3D.COL.brass, 1.0))
-	_chalk_board(self, box, 3.0, CHALKB.tally)
 	var by: float = _menu_base_y(font_sm, 20, box.position.y, box.size.y)
-	#  방금 꽂힌 값 — 한 자씩 쓴다(_ttl_pop)
+	var cx: float = box.get_center().x
+	#  옛 값 — 문질러 지운 자국(새 값을 쓰기 시작하면 ghost_t 에 걸쳐 진다)
+	if ttly_prev != "" and ttly_last_t >= 0.0:
+		var ga: float = float(TTLY.ghost) * (1.0 - clampf(ttly_last_t / float(TTLY.ghost_t), 0.0, 1.0))
+		if ga > 0.003:
+			var pw: float = font_sm.get_string_size(ttly_prev, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
+			draw_string(font_sm, Vector2(cx - pw * 0.5 + 2.0, by + 1.0), ttly_prev,
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(_ttly_col(ttly_prev_g), ga))
 	if ttly_last == "" or ttly_last_t < 0.0:
 		return
-	var gc: Color = ink
-	match ttly_last_g:
-		2, 3:
-			gc = ink.lerp(C_ACC, 0.75)
-		4:
-			gc = ink.lerp(C_GREEN, 0.6)
-		5:
-			gc = ink.lerp(C_GOLD, 0.8)
+	var ink: Color = DOORT.chalk_ink
+	var gc: Color = _ttly_col(ttly_last_g)
 	var t: String = ttly_last
 	var tw: float = font_sm.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
-	var x0: float = box.get_center().x - tw * 0.5
+	var x0: float = cx - tw * 0.5
 	var wch: float = float(TTLY.write)
+	var shown := 0
 	for k in t.length():
 		var ka: float = 1.0 if motion_off else clampf((ttly_last_t - float(k) * wch) / wch, 0.0, 1.0)
 		if ka <= 0.0:
 			break
+		shown = k + 1
 		var px: float = font_sm.get_string_size(t.substr(0, k), HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
 		draw_string(font_sm, Vector2(x0 + px, by), t.substr(k, 1), HORIZONTAL_ALIGNMENT_LEFT, -1, 20,
-				Color(gc, 0.95 * ka))
+				Color(gc, float(TTLY.ink) * ka))
+	#  나뭇결 틈 — 분필이 다 안 묻은 자리(획 위에 나무색 점 · 씨 고정이라 안 떤다)
+	var wood: Color = Door3D.COL.door
+	var sw: float = font_sm.get_string_size(t.substr(0, shown), HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
+	var gn: int = int(TTLY.grain) * maxi(shown, 1)
+	for q in gn:
+		var gx: float = x0 + _gl_rand(q * 5 + 1, 953) * sw
+		var gy: float = by - 14.0 + _gl_rand(q * 5 + 2, 953) * 14.0
+		var gl: float = 1.0 + roundf(_gl_rand(q * 5 + 3, 953) * 2.0)
+		draw_rect(Rect2(roundf(gx), roundf(gy), gl, 1.0), Color(wood, 0.55))
 	#  분필 가루 — 쓰는 동안 글 밑에서 몇 알이 떨어진다
 	var wend: float = wch * float(t.length())
 	if not motion_off and ttly_last_t < wend + 0.35:
@@ -45784,6 +45791,19 @@ func _ttly_draw() -> void:
 			var dx: float = x0 + _gl_rand(d * 3 + 1, 947) * tw
 			var dy: float = by + 2.0 + dt * 40.0
 			draw_rect(Rect2(roundf(dx), roundf(dy), 1.0, 1.0), Color(ink, 0.7 * (1.0 - dt / 0.4)))
+
+
+#  등급마다 분필 색 — 싱글 흰 · 더블 · 트리플 주황 · 바깥 불 초록 · 안쪽 불 금.
+func _ttly_col(g: int) -> Color:
+	var ink: Color = DOORT.chalk_ink
+	match g:
+		2, 3:
+			return ink.lerp(C_ACC, 0.75)
+		4:
+			return ink.lerp(C_GREEN, 0.6)
+		5:
+			return ink.lerp(C_GOLD, 0.8)
+	return ink
 
 
 #  옛 제목(단색 바탕 · 스크림 · 왼쪽 글줄) — 문이 아직 안 구워졌거나 헤드리스 · 문 끔.
@@ -53045,10 +53065,12 @@ func _ttl_throw(p: Vector2) -> void:
 
 #  문 값 — 판 밑 점수 칠판에 분필로 적는다(2026-10-10). 「시작 화면에서 던진 다트의 점수가 잘
 #  안보이는데?」 → 화면 자리에 짙은 테의 큰 숫자로 띄웠다가 「저거는 너무 구리지 않아?」 →
-#  「칠판에 분필로」. 판 위에 떠다니는 글은 없다 — 칠판(TTLY)에 방금 꽂힌 값이 한 자씩
+#  「칠판에 분필로」 → 「그냥 나무문에 분필로 쓴거 같이」. 떠다니는 글은 없다 — 판 밑 나무에 방금 꽂힌 값이 한 자씩
 #  쓰인다(write · 분필 가루가 날린다). 등급마다 분필 색이 다르다(싱글 흰 · 더블 · 트리플 주황 ·
 #  바깥 불 초록 · 안쪽 불 금). 헤드리스 · 문 끔(옛 제목)이면 칠판이 없어 옛 떠오르는 값을 낸다.
 func _ttl_pop(bp: Vector2, val: int, grade: int) -> void:
+	ttly_prev = ttly_last
+	ttly_prev_g = ttly_last_g
 	ttly_last = str(val)
 	ttly_last_g = grade if val > 0 else 0
 	ttly_last_t = 0.0

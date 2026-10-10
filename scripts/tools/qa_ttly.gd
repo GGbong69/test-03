@@ -1,8 +1,8 @@
 extends SceneTree
-# 제목 판 밑 점수 칠판(2026-10-10 · game.gd TTLY) — 못 박는 것:
-#   ① 방금 꽂힌 값이 칠판에 적힌다(떠다니는 글 대신 · 「칠판에 분필로」).
+# 제목 판 밑 분필 점수(2026-10-10 · game.gd TTLY) — 못 박는 것:
+#   ① 방금 꽂힌 값이 판 밑 나무에 분필로 적힌다(떠다니는 글 · 칠판 대신).
 #   ② 던진 수는 안 센다(「걍 시작 화면에서 던진 발 횟수는 빼자」) — 세기 열쇠를 안 쓴다.
-#   ③ 칠판은 판 밑에 걸린다 — 판 테(숫자 고리) 밖 · 판과 같은 가로 한가운데.
+#   ③ 글 칸은 판 밑 나무에 선다 — 판 테(숫자 고리) 밖 · 판과 같은 가로 한가운데.
 #   godot --headless --path . --script scripts/tools/qa_ttly.gd
 const Save = preload("res://scripts/save.gd")
 var g = null
