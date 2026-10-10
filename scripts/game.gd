@@ -1250,7 +1250,7 @@ const INTRO := {
 	"scrim": 0.72,                   # 제목 스크림(_draw_title)
 	"warm": Color("ffd9a0"),
 	"neon": Color("ff5ca8"), "neon_core": Color("ffe0ef"), "neon_dead": Color("4a2238"),
-	"sign_y": 58.0,
+	"sign_y": 62.0,                  # 간판 글 기준선 — 판자(문틀 안 · 문 위) 한가운데(+ _door_drop)
 }
 var intro_t := -1.0        # 흐른 시간. 인트로가 아니면 −1
 var intro_out := 0.0       # 제목으로 넘긴 뒤 글줄을 덮은 막(1 → 0)
@@ -1405,7 +1405,7 @@ func _draw_intro() -> void:
 	if neon > 0.0 and st < 1.0:
 		var pk: Color = INTRO.neon
 		for k in 6:
-			draw_circle(Vector2(tc.x, 70.0), 190.0 - float(k) * 24.0,
+			draw_circle(Vector2(tc.x, 70.0 + _door_drop()), 190.0 - float(k) * 24.0,
 					Color(pk, 0.018 * neon * (1.0 - st)))
 	#  벽에 고인 빛 · 원뿔
 	var warm: Color = INTRO.warm
@@ -1459,7 +1459,7 @@ func _intro_sign(t: float, a: float) -> void:
 	var ks: float = clampf((t - float(INTRO.snap)) / float(INTRO.snap_t), 0.0, 1.0)
 	var close: float = ks * ks
 	var snapped: bool = ks >= 1.0
-	var y: float = float(INTRO.sign_y)
+	var y: float = float(INTRO.sign_y) + _door_drop()
 	#  두 낱말이 가운데로 모인다 — 빈칸만큼 TON 이 더 온다
 	var sx: float = _title_c().x
 	var x0: float = lerpf(sx - w0 * 0.5, sx - w1 * 0.5, close)
@@ -44085,7 +44085,7 @@ func _ttl3_pose(p: Vector2, j: float) -> Transform3D:
 	var tail := tip
 	for it in 4:
 		var f: float = Door3D.S * Door3D.scale_at(zt)
-		tail = Vector3((st.x - BC.x) / f, -(st.y - BC.y) / f, zt)
+		tail = Vector3((st.x - BC.x) / f, Door3D.CAM_Y - (st.y - BC.y) / f, zt)
 		var lat := Vector2(tail.x - tip.x, tail.y - tip.y).length()
 		zt = sqrt(maxf(ln * ln - lat * lat, ln * ln * 0.04))
 	var yv := (tail - tip).normalized()
@@ -44215,7 +44215,8 @@ func _ttl3_sync() -> void:
 		var end := _ttl3_pose(f.b, _ttl3_jit(f.b))
 		#  판 화면(_bd3_fly)과 같은 출발점 — 눈 바로 앞 · 화면 아래쪽(-18 · -46 px 를 m 로).
 		var beg := Vector3(end.origin.x * 0.15 - 18.0 / Door3D.S,
-				end.origin.y * 0.15 - 46.0 / Door3D.S, Door3D.EYE * 0.86)
+				Door3D.CAM_Y + (end.origin.y - Door3D.CAM_Y) * 0.15 - 46.0 / Door3D.S,
+				Door3D.EYE * 0.86)
 		var n1: Node3D = ttl_fnodes[i]
 		n1.transform = _bd3_fly_tf(end, beg, clampf(float(f.t) / float(TTL.fly), 0.0, 1.0))
 		_dart3_face_u(n1, cam.position)
@@ -44640,6 +44641,14 @@ func _ttl_m(m: Vector2) -> Vector2:
 
 #  닫힌 문의 판이 서는 화면 자리 — 램프 · 빛 · 간판 네온이 이 자리를 본다. 문이 돌아도
 #  안 따라간다(간판은 벽에 붙었다 — 카메라가 옮긴 몫은 _door_wall_xf 가 더한다).
+#  문 장면이 내려선 몫(px) — 간판 글 · 네온 빛처럼 화면에 박은 자리가 따라 내린다(Door3D.CAM_Y).
+#  문이 안 서면 0 이다(옛 제목 · 헤드리스).
+func _door_drop() -> float:
+	if not (_door_live() and _door_here()):
+		return 0.0
+	return Door3D.CAM_Y * Door3D.S
+
+
 func _title_c() -> Vector2:
 	if not (_door_live() and _door_here()):
 		return BC
@@ -45562,7 +45571,7 @@ func _draw_title() -> void:
 #  열쇠 title:darts 다 — 던질 때 오르고 save 초 뒤 한 번 적는다(던질 때마다 디스크를 안 친다).
 #    y   칠판 윗변(판 한가운데에서 · 판 자리 px) · w · h 칠판 크기 · nail 끈이 칠판 위로 솟는 높이
 #    flash  수가 하얗게 서는 시간(초) · save 적기까지(초)
-const TTLY := {"y": 138.0, "w": 92.0, "h": 40.0, "nail": 10.0, "flash": 0.45, "save": 1.0}
+const TTLY := {"y": 132.0, "w": 92.0, "h": 38.0, "nail": 8.0, "flash": 0.45, "save": 1.0}
 var ttly_flash := 0.0
 var ttly_save := -1.0
 

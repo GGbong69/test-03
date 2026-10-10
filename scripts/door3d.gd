@@ -26,6 +26,11 @@ const Room3D = preload("res://scripts/room3d.gd")
 const S := 360.0          # 판 평면(z 0)에서 1m = 논리 px(wall3d 와 같다)
 const EYE := 2.37         # 눈 — 문 앞에서 판까지(m). 던지는 줄과 같은 거리
 const MARGIN := 14.0      # 흔들림 여유(논리 px)
+#  카메라 높이(m) — 문 장면이 화면에서 CAM_Y × S 만큼 내려선다(2026-10-10 필기 「시작화면 HIGHTON
+#  글짜 좀 내리기」 · 「간판이 너무 위」). 간판만 내리면 문 윗머리와 겹치므로 카메라를 올려 문 ·
+#  간판 · 판을 통째로 내린다 — 문틀 윗변 위로 벽돌이 보인다. 판 평면의 한 점은 이 높이만큼
+#  위에서 보이므로 화면 BC 는 세계 (0, CAM_Y) 다(proj · 2D 의 되짚기가 같은 값을 쓴다).
+const CAM_Y := 0.045
 
 #  문 치수(m) — 카메라 축(화면 BC)이 (0, 0)이다. 문은 그보다 오른쪽(cx)에 서고 판은 문 한가운데
 #  (bx · by)에 걸린다. 2026-10-06 「프로필을 위에 UI랑 합치고 문이랑 조금 오른쪽으로 오고 문을
@@ -108,7 +113,7 @@ static func _cam(vp: SubViewport) -> Camera3D:
 #  여닫이의 판 자리를 재는 데 쓴다(카메라와 같은 투영). dz — 카메라가 문 쪽으로 다가간 몫(m).
 #  cam — 카메라가 옆으로 옮긴 몫(m · 문 안으로 들어갈 때 문 한가운데로 간다).
 static func proj(p: Vector3, bc: Vector2, dz := 0.0, cam := 0.0) -> Vector2:
-	return bc + Vector2(p.x - cam, -p.y) * S * scale_at(p.z, dz)
+	return bc + Vector2(p.x - cam, CAM_Y - p.y) * S * scale_at(p.z, dz)
 
 
 #  깊이 z 의 화면 배율 — 카메라가 dz 만큼 다가가면 커진다(z 0 · dz 0 에서 1).
@@ -121,7 +126,7 @@ static func scale_at(z: float, dz := 0.0) -> float:
 static func cam_dolly(vp: SubViewport, dz: float, cx := 0.0) -> void:
 	var cam := _cam(vp)
 	if cam != null:
-		cam.position = Vector3(cx, 0.0, EYE - dz)
+		cam.position = Vector3(cx, CAM_Y, EYE - dz)
 
 
 #  손잡이 막대가 덮는 화면 사각(논리 px) — 누르는 칸은 부르는 쪽이 넓힌다.
@@ -154,7 +159,7 @@ static func make_door(host: Node) -> SubViewport:
 	cam.name = "Cam"
 	cam.near = 0.05
 	cam.far = 30.0
-	cam.position = Vector3(0.0, 0.0, EYE)
+	cam.position = Vector3(0.0, CAM_Y, EYE)
 	cam.keep_aspect = Camera3D.KEEP_HEIGHT
 	root.add_child(cam)
 
