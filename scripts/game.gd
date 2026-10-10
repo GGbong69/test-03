@@ -1328,6 +1328,7 @@ func _intro_tick(d: float) -> void:
 		if not intro_rang.has("snap_shake"):
 			intro_rang["snap_shake"] = true
 			shake = maxf(shake, 3.0)
+			_sign_kick(float(SIGNH.kick_snap))   # 두 낱말이 쾅 붙으면 간판이 흔들린다
 	if t >= float(INTRO.end):
 		_intro_end()
 		return
@@ -1435,7 +1436,7 @@ func _draw_intro() -> void:
 	_ttl_draw()
 	draw_set_transform(shake_off)
 	_intro_lamp(light, st)
-	_intro_sign(t, 1.0 - st)
+	_intro_sign(t, 1.0 - st, _sign_base(shake_off))
 	#  두 낱말이 붙는 순간 금빛 번쩍
 	var ft: float = t - float(INTRO.snap) - float(INTRO.snap_t)
 	if ft >= 0.0 and ft < float(INTRO.flash):
@@ -1515,13 +1516,163 @@ func _intro_cone(cx: float, glow: float, t: float) -> void:
 				Color(warm.lerp(Color.WHITE, 0.4), 0.45 * glow * tw2 * (1.0 - k2 * 0.6)))
 
 
+# ══════════════════════════════════════════════════════════
+#  매단 간판 (2026-10-10)
+# ──────────────────────────────────────────────────────────
+#  「그 간판 있지? 약긴 좀 걸린거 같이 연출되면 좋겠거든? 좌우로 흔들리고 그런거 · 레퍼런스 찾으면서
+#  작업해봐」(사용자). 레퍼런스(생각만 가져왔다) — 술집 간판은 문틀 · 까치발에 박은 고리에서 짧은
+#  사슬로 매달린다(짧을수록 옆 흔들림이 작다) · 바람에 흔들리는 간판은 위의 축을 중심으로 도는 감쇠
+#  진자다(지수로 줄어드는 진폭 × 사인 — 두세 번 흔들리고 잦아든다) · 바람은 늘 부는 잔바람 + 가끔
+#  오는 돌풍이고 돌풍은 각을 곧장 바꾸지 않고 **힘**으로 줘서 흔들림이 차올랐다 가라앉는다 · 사슬은
+#  간판과 같이 움직인다(blendernation 「Swinging Pub Sign」 · LPC 시계 진자 · 감쇠 진자 식).
+#  판자(Door3D.sign_plank — 옛 3D 간판과 같은 결)는 2D 로 그린다 — 문 장면은 한 장으로 구워 두므로
+#  3D 판자는 못 흔든다. 3D 에는 한 단 어두운 뒷판(Transom)만 남았다. 판자 위 한가운데를 축으로 돌고,
+#  문틀 머리의 고리 둘에서 내려온 사슬 두 가닥이 판자 위 두 모서리를 잡아 같이 기운다. 판자 둘레엔
+#  나무 테 · 뒷판에 드리운 그늘. 네온 글(_intro_sign)도 같은 회전을 받는다.
+#  흔들림: 고유 주기 period · 감쇠 damp · 잔바람(사인 셋) · 돌풍(gust_t 초마다 · 세기 gust) ·
+#  두드림(꽂히는 다트 · 두 낱말이 붙는 쾅 · 빗장 · kick_*) · 각은 max 에서 자른다. 움직임 끔이면
+#  선 채로 있다.
+const SIGNH := {
+	"period": 2.6, "damp": 0.8, "wind": 0.010, "gust": 0.045, "gust_t": [5.0, 10.0],
+	"kick_dart": 0.020, "kick_snap": 0.060, "kick_door": 0.050, "max": 0.055,
+	"frame": 2.0, "shadow": Vector2(2.0, 3.0), "shadow_a": 0.45, "link": 3.0,
+}
+var sign_th := 0.0           # 간판 각(rad · + 시계 방향)
+var sign_w := 0.0            # 각속도
+var sign_gt := 3.0           # 다음 돌풍까지(초)
+var sign_tt := 0.0           # 잔바람 시계
+var sign_tex: ImageTexture = null
+
+
+func _sign_kick(v: float) -> void:
+	if motion_off:
+		return
+	sign_w += v * (1.0 if randf() < 0.5 else -1.0)
+
+
+func _sign_tick(d: float) -> void:
+	if motion_off:
+		sign_th = 0.0
+		sign_w = 0.0
+		return
+	var H: Dictionary = SIGNH
+	var om: float = TAU / float(H.period)
+	sign_tt += d
+	var wind: float = float(H.wind) * (sin(sign_tt * 0.7) + 0.6 * sin(sign_tt * 1.9 + 1.3)
+			+ 0.3 * sin(sign_tt * 3.7 + 0.4))
+	sign_gt -= d
+	if sign_gt <= 0.0:
+		var gr: Array = H.gust_t
+		sign_gt = randf_range(float(gr[0]), float(gr[1]))
+		sign_w += float(H.gust) * randf_range(0.5, 1.0) * (1.0 if randf() < 0.5 else -1.0)
+	var acc: float = -om * om * sign_th - float(H.damp) * sign_w + wind * om * om
+	sign_w += acc * d
+	sign_th = clampf(sign_th + sign_w * d, -float(H.max), float(H.max))
+
+
+#  흔들림 변환의 바닥 — 문이 열려 카메라가 다가가는 동안은 벽 변환(_door_wall_mat), 아니면 흔들림.
+func _sign_base(sh: Vector2) -> Transform2D:
+	if door_t >= 0.0:
+		return _door_wall_mat(sh)
+	return Transform2D(0.0, sh)
+
+
+#  축(판자 위 한가운데 · 화면 자리) 둘레로 sign_th 만큼 돈다.
+func _sign_pivot() -> Vector2:
+	var D: Dictionary = Door3D.DOOR
+	return Door3D.proj(Vector3((float(D.x0) + float(D.x1)) * 0.5, float(D.hang_y1),
+			float(D.face)), BC)
+
+
+func _sign_rot() -> Transform2D:
+	var pv := _sign_pivot()
+	return Transform2D(sign_th, pv) * Transform2D(0.0, -pv)
+
+
+#  판자의 화면 사각(돌기 전).
+func _sign_rect() -> Rect2:
+	var D: Dictionary = Door3D.DOOR
+	var z: float = float(D.face)
+	var a := Door3D.proj(Vector3(float(D.x0) + float(D.hang_in), float(D.hang_y1), z), BC)
+	var b := Door3D.proj(Vector3(float(D.x1) - float(D.hang_in), float(D.hang_y0), z), BC)
+	return Rect2(a, b - a)
+
+
+#  네온 글의 기준선 — 판자 한가운데에서 글 반 높이만큼 내린다.
+func _sign_text_y() -> float:
+	if not (_door_live() and _door_here()):
+		return float(INTRO.sign_y)
+	return _sign_rect().get_center().y + 13.0
+
+
+func _sign_plank_draw(base: Transform2D) -> void:
+	var H: Dictionary = SIGNH
+	var D: Dictionary = Door3D.DOOR
+	if sign_tex == null:
+		sign_tex = ImageTexture.create_from_image(Door3D.sign_plank())
+	var r := _sign_rect()
+	var rot := _sign_rot()
+	var fw: float = float(H.frame)
+	#  그늘 — 뒷판에 드리운다(판자와 같이 돈다 · 조금 밀려)
+	draw_set_transform_matrix(base * Transform2D(0.0, H.shadow as Vector2) * rot)
+	draw_rect(r.grow(fw), Color(0.0, 0.0, 0.0, float(H.shadow_a)))
+	#  사슬 — 문틀 머리의 고리(제자리)에서 판자 위 두 모서리(돈 자리)까지
+	draw_set_transform_matrix(base)
+	var z: float = float(D.face)
+	var hk_in: float = float(D.hook_in)
+	for sd in [-1.0, 1.0]:
+		var hx: float = (float(D.x0) + hk_in) if sd < 0.0 else (float(D.x1) - hk_in)
+		var hook := Door3D.proj(Vector3(hx, float(D.hook_y), z), BC)
+		var att: Vector2 = rot * Vector2(hook.x, r.position.y - fw)
+		_sign_chain(hook, att)
+		#  고리 — 문틀 머리에 박은 놋쇠 눈(둥근 테 · 빛 한 점)
+		draw_circle(hook, 2.0, Color("1c1916"))
+		draw_circle(hook, 1.5, Color(Door3D.COL.brass, 1.0))
+		draw_rect(Rect2(hook.round() - Vector2(1.0, 1.0), Vector2(1.0, 1.0)), Color(1.0, 0.9, 0.6))
+	#  판자 · 나무 테
+	draw_set_transform_matrix(base * rot)
+	var case_c: Color = Door3D.COL.case
+	draw_rect(r.grow(fw), case_c)
+	draw_rect(Rect2(r.position - Vector2(fw, fw), Vector2(r.size.x + fw * 2.0, 1.0)),
+			case_c.lightened(0.35))
+	draw_texture_rect(sign_tex, r, false, Color(0.82, 0.78, 0.80))
+	#  판자 아래는 램프 빛이 덜 닿는다 — 아래로 갈수록 옅게 어둡다
+	draw_rect(Rect2(r.position.x, r.position.y + r.size.y * 0.55, r.size.x, r.size.y * 0.45),
+			Color(0.0, 0.0, 0.0, 0.18))
+	draw_rect(Rect2(r.position.x, r.end.y - 1.0, r.size.x, 1.0), Color(0.0, 0.0, 0.0, 0.35))
+
+
+#  사슬 한 가닥 — 고리 a 에서 b 까지 고리 알(link px)을 엇갈려 늘어세운다.
+func _sign_chain(a: Vector2, b: Vector2) -> void:
+	var L: float = a.distance_to(b)
+	var lk: float = float(SIGNH.link)
+	var n: int = maxi(int(L / lk), 1)
+	var u: Vector2 = (b - a) / float(n)
+	#  쇠 — 어두운 뒷판 위에서 읽히게 밝은 쇠 · 빛 받은 윗변. 알은 납작한 것(앞에서 본 고리)과
+	#  선 것(옆에서 본 고리)이 엇갈린다.
+	var iron := Color("5a5249")
+	var hi := Color("b0a493")
+	var lo := Color("1c1916")
+	for i in n:
+		var c: Vector2 = (a + u * (float(i) + 0.5)).round()
+		if i % 2 == 0:
+			draw_rect(Rect2(c - Vector2(1.5, 1.5), Vector2(3.0, 3.0)), lo)
+			draw_rect(Rect2(c - Vector2(1.0, 1.0), Vector2(2.0, 2.0)), iron)
+			draw_rect(Rect2(c - Vector2(1.0, 1.0), Vector2(1.0, 1.0)), hi)
+		else:
+			draw_rect(Rect2(c - Vector2(0.5, 1.5), Vector2(1.0, 3.0)), iron)
+			draw_rect(Rect2(c - Vector2(0.5, 1.5), Vector2(1.0, 1.0)), hi)
+
+
 #  네온 간판. 글자마다 켜지는 때가 다르고, 막 켜진 동안은 떤다. 다 켜지면
 #  두 낱말이 점점 빨라지며 모여 쾅 붙고, 붙은 뒤로 TON 은 금빛이다
 #  (세 발 180 — 톤 에이티).
-func _intro_sign(t: float, a: float) -> void:
+func _intro_sign(t: float, a: float, xf0 := Transform2D.IDENTITY) -> void:
 	#  꺼진 관은 램프가 꺼져야 보인다 — 램프가 켠 동안에는 갓과 겹친다
 	if a <= 0.0 or t < float(INTRO.off):
 		return
+	#  글은 매단 판자와 같이 돈다(SIGNH) — 다 쓰고 xf0 으로 되돌린다
+	draw_set_transform_matrix(xf0 * _sign_rot())
 	var sz := 36
 	var base := "HIGH TON"
 	var w0: float = font.get_string_size(base, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x
@@ -1529,7 +1680,7 @@ func _intro_sign(t: float, a: float) -> void:
 	var ks: float = clampf((t - float(INTRO.snap)) / float(INTRO.snap_t), 0.0, 1.0)
 	var close: float = ks * ks
 	var snapped: bool = ks >= 1.0
-	var y: float = float(INTRO.sign_y) + _door_drop()
+	var y: float = _sign_text_y()
 	#  두 낱말이 가운데로 모인다 — 빈칸만큼 TON 이 더 온다
 	var sx: float = _title_c().x
 	var x0: float = lerpf(sx - w0 * 0.5, sx - w1 * 0.5, close)
@@ -1555,6 +1706,7 @@ func _intro_sign(t: float, a: float) -> void:
 			_intro_glyph(Vector2(x, y), ch, sz, C_ACC, C_GOLD, dead, true, a)
 		else:
 			_intro_glyph(Vector2(x, y), ch, sz, neon, core, dead, lit, a)
+	draw_set_transform_matrix(xf0)
 
 
 func _intro_glyph(at: Vector2, ch: String, sz: int, halo: Color, core: Color,
@@ -44800,6 +44952,9 @@ func _door_back(sh: Vector2) -> void:
 	var ls := Vector2(tex.get_size())
 	var p: Vector2 = (BC - ls * 0.5 + sh).round() - sh
 	draw_texture_rect(tex, Rect2(p, ls), false)
+	#  매단 간판 — 문 바닥과 같은 층(인트로의 어둠 · 제목의 스크림이 위에 덮인다)
+	_sign_plank_draw(_sign_base(sh))
+	draw_set_transform(sh)
 
 
 #  문짝을 따라 도는 판의 화면 변환 [자리, 배율]. 판 한가운데(경첩에서 문 폭 반 · 문 앞으로
@@ -44865,9 +45020,13 @@ func _door_board_vis() -> bool:
 #  벽에 붙은 것(간판 · 칠판 · 프로필 패)의 화면 변환 — 카메라가 다가가는 만큼 판 한가운데(BC)
 #  둘레로 커진다. 깊이는 문틀 앞면 하나로 친다(벽과 4cm 차이는 안 보인다).
 func _door_wall_xf(sh: Vector2) -> void:
+	draw_set_transform_matrix(_door_wall_mat(sh))
+
+
+func _door_wall_mat(sh: Vector2) -> Transform2D:
 	var f: float = Door3D.scale_at(float(Door3D.DOOR.face), _door_dz())
-	draw_set_transform(sh + BC - BC * f - Vector2(_door_cam() * Door3D.S * f, 0.0), 0.0,
-			Vector2(f, f))
+	return Transform2D(0.0, Vector2(f, f), 0.0,
+			sh + BC - BC * f - Vector2(_door_cam() * Door3D.S * f, 0.0))
 
 
 #  edy — 판 자리에서 더하는 세로 밀림(이스터에그의 새 판이 밑에서 오른다).
@@ -44989,6 +45148,7 @@ func _door_open() -> void:
 	door_t = 0.0
 	Door3D.cam_dolly(door_vp, 0.0)
 	door_went = false
+	_sign_kick(float(SIGNH.kick_door))      # 빗장이 풀리는 쿵에 간판이 흔들린다
 	#  나는 자루는 그 자리에서 꽂힌다 — 꽂힌 자루만 경첩에 달려 문짝과 같이 돈다(_ttl3_sync).
 	for f in ttl_fly:
 		_ttl_stick(f)
@@ -45755,8 +45915,9 @@ func _draw_title() -> void:
 	draw_set_transform(shake_off)
 	if dxf:
 		_door_wall_xf(shake_off)
-	#  간판 — 인트로가 켠 네온이 그대로 남는다(두 낱말이 붙은 뒤 · TON 은 금빛).
-	_intro_sign(float(INTRO.end), 1.0)
+	#  간판 — 인트로가 켠 네온이 그대로 남는다(두 낱말이 붙은 뒤 · TON 은 금빛). 매단 판자와
+	#  같이 흔들린다(SIGNH).
+	_intro_sign(float(INTRO.end), 1.0, _sign_base(shake_off))
 	_door_handle_draw()
 	_title_chalk()
 	if dxf:
@@ -53087,6 +53248,7 @@ func _ttl_busy() -> bool:
 func _ttl_board(d: float) -> void:
 	ttl_t += d
 	_egg_tick(d)
+	_sign_tick(d)
 	if ttly_last_t >= 0.0:
 		ttly_last_t += d
 	for f in ttl_fly:
@@ -53182,6 +53344,8 @@ func _ttl_stick(e: Dictionary) -> void:
 	board_punch = maxf(board_punch, 0.15 + 0.17 * float(g))
 	if g >= 5:
 		shake = maxf(shake, 4.0)
+	#  문에 꽂히는 쿵이 문틀에 건 간판을 흔든다(센 자리일수록 세게)
+	_sign_kick(float(SIGNH.kick_dart) * (0.6 + 0.12 * float(g)))
 	_egg_count(bool(info.get("bull", false)))
 	#  문 값. 글이 아니라 수 하나다 — 판을 읽는 법이 이 한 번으로 붙고,
 	#  시작 화면에 설명 줄을 하나도 안 보탠다.

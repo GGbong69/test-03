@@ -50,7 +50,10 @@ const DOOR := {
 	"open_deg": 72.0,         # 다 열린 각(안쪽으로)
 	"case_w": 0.07,           # 문틀 폭
 	"case_z": 0.018,          # 문틀 앞면 z(벽보다 나온다)
-	"sign_y0": 0.335, "sign_y1": 0.47,   # 간판 판(문틀 안 · 문 위)
+	"sign_y0": 0.335, "sign_y1": 0.47,   # 간판 자리(문틀 안 · 문 위) — 이제 뒷판(Transom)이다
+	#  매단 간판(game.gd SIGNH · 2026-10-10) — 판자 아래 · 위(m) · 좌우를 문 폭에서 들이는 몫 · 고리
+	#  높이(문틀 머리 밑변) · 고리가 판자 끝에서 들어선 몫. 판자는 2D 로 그려 흔들린다.
+	"hang_y0": 0.322, "hang_y1": 0.437, "hang_in": 0.02, "hook_y": 0.47, "hook_in": 0.07,
 	"head_y1": 0.54,          # 문틀 윗변
 	"wall_z": -0.065,         # 벽돌 면 z
 	"reveal": 0.20,           # 문 자리 안벽 깊이(문이 열리면 보인다)
@@ -289,6 +292,13 @@ static func _vplank(wpx: int, hpx: int, base: Color, seed: int, lo: int, hi: int
 	return im
 
 
+#  매단 간판의 판자 그림(2D) — 옛 3D 간판과 같은 결 · 같은 씨.
+static func sign_plank() -> Image:
+	var w: float = float(DOOR.x1) - float(DOOR.x0) - float(DOOR.hang_in) * 2.0
+	var h: float = float(DOOR.hang_y1) - float(DOOR.hang_y0)
+	return _hplank(int(w * S), int(h * S), COL.sign, 7203, 18, 22)
+
+
 static func _hplank(wpx: int, hpx: int, base: Color, seed: int, lo: int, hi: int) -> Image:
 	var pair: Array = Room3D._plank(wpx, hpx, base, seed, lo, hi, false)
 	return pair[0]
@@ -413,12 +423,13 @@ static func _frame(root: Node3D) -> void:
 	_panel(root, Vector3(x1 - x0 + cw * 2.0, hd, dep + 0.01),
 			Vector3(mx, hy - hd * 0.5, wz + dep * 0.5 + 0.005), _lit_mat(hi, null, 0.8, 3.0, COL.case),
 			COL.case, "Head")
-	#  간판 판 — 문틀 안 · 문 위. 거의 검은 판자 한 장(네온이 그 위에 선다).
+	#  간판 자리의 뒷판 — 문틀 안 · 문 위. 간판 판자는 여기 걸려 흔들린다(2D · game.gd SIGNH).
+	#  간판보다 한 단 어둡게 두어 흔들릴 때 드러나는 가장자리 · 드리운 그늘이 읽힌다.
 	var sh: float = float(DOOR.sign_y1) - float(DOOR.sign_y0)
-	var si := _hplank(int((x1 - x0) * S), int(sh * S), COL.sign, 7203, 18, 22)
+	var si := _hplank(int((x1 - x0) * S), int(sh * S), COL.sign.darkened(0.35), 7203, 18, 22)
 	_panel(root, Vector3(x1 - x0, sh, 0.03),
 			Vector3(mx, (float(DOOR.sign_y0) + float(DOOR.sign_y1)) * 0.5,
-			float(DOOR.face) - 0.005), _lit_mat(si, null, 0.7, 4.0, COL.sign), COL.sign, "Sign")
+			float(DOOR.face) - 0.012), _lit_mat(si, null, 0.7, 4.0, COL.sign), COL.sign, "Transom")
 	#  문 자리 안벽(벽돌 두께) — 문이 열리면 양옆에 드러난다
 	var rv: float = float(DOOR.reveal)
 	var rm := Room3D._mat(COL.reveal, 0.95)
