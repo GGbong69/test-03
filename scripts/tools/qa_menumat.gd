@@ -478,7 +478,7 @@ func _run2() -> void:
 	var gap_min := INF
 	var gap_nm := ""
 	for nm in names:
-		var ir := _ink_rect(g.font, String(nm), 24, 230.0, 82.0)
+		var ir := _ink_rect(g._fz(g.font, 24), String(nm), 24, 230.0, 82.0)   # 그리는 벌로 잰다(24 는 딱딱한 도트 · 2026-10-11)
 		if ir.position.x - paint_end < gap_min:
 			gap_min = ir.position.x - paint_end
 			gap_nm = String(nm)
