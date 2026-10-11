@@ -61,6 +61,9 @@ uniform float strength : hint_range(0.0, 1.0) = 0.6;
 //  화면 고르기(game.gd FSEL · 2026-10-10) — 이 창(화면 UV x0, y0, x1, y1) 안에만 먹고 창 밖은 원본
 //  그대로다. 고르기 밖에서는 온 화면(0, 0, 1, 1).
 uniform vec4 win = vec4(0.0, 0.0, 1.0, 1.0);
+//  창 안을 몇 배로 키워 보이나(화면 고르기 — 장면을 2배로 옮겨 붙인 칸). 논리 1px 결(주사선 · 번짐 ·
+//  격자)이 그만큼 커져 키운 장면과 맞는다. 고르기 밖에서는 1.
+uniform float zoom = 1.0;
 //  지금 보이는 논리 크기(expand 라 16:10 이면 640x400). 부르는 쪽이 창이 바뀔 때마다 넣는다.
 uniform vec2 logical = vec2(640.0, 360.0);
 
@@ -319,7 +322,8 @@ void fragment() {
 					t = clamp((t - sn) / max(1.0 - 2.0 * sn, 0.001), 0.0, 1.0);
 					//  ⑤ 논리 칸의 문턱 — 몫이 문턱을 넘으면 짝을 놓는다.
 					float ppl = (1.0 / sps.y) / logical.y;
-					float th = bayer4(ivec2(floor(FRAGCOORD.xy / ppl)));
+					//  격자 한 칸 = 창 안 논리 1px(키운 배율까지) · 창 왼쪽 위에서 센다
+					float th = bayer4(ivec2(floor((FRAGCOORD.xy - win.xy / sps) / (ppl * zoom))));
 					if (th < t) {
 						q = c2;
 					}

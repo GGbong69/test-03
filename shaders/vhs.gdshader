@@ -44,6 +44,9 @@ uniform float strength : hint_range(0.0, 1.0) = 0.5;
 //  화면 고르기(game.gd FSEL · 2026-10-10) — 이 창(화면 UV x0, y0, x1, y1) 안에만 먹고 창 밖은 원본
 //  그대로다(헤드 스위칭은 창 밑변에서). 고르기 밖에서는 온 화면(0, 0, 1, 1).
 uniform vec4 win = vec4(0.0, 0.0, 1.0, 1.0);
+//  창 안을 몇 배로 키워 보이나(화면 고르기 — 장면을 2배로 옮겨 붙인 칸). 논리 1px 결(주사선 · 번짐 ·
+//  격자)이 그만큼 커져 키운 장면과 맞는다. 고르기 밖에서는 1.
+uniform float zoom = 1.0;
 uniform vec2 logical = vec2(640.0, 360.0);
 uniform float motion : hint_range(0.0, 1.0) = 1.0;
 //  0 이상이면 TIME 대신 이 시계로 돈다 — 촬영 도구가 틀을 못 박는다.
@@ -107,9 +110,11 @@ void fragment() {
 	vec2 sps = SCREEN_PIXEL_SIZE;
 	float s = strength;
 	float ppl = (1.0 / sps.y) / logical.y;
+	//  결의 자 — 창 안 논리 1px(키운 배율까지)의 기기 px. 온 화면 · 배율 1 이면 pz = ppl.
+	float pz = ppl * zoom;
 	bool mo = motion > 0.5;
 	float t = mo ? (clock >= 0.0 ? clock : TIME) : 0.0;
-	vec2 lp = FRAGCOORD.xy / ppl;           // 화면 논리 좌표
+	vec2 lp = (FRAGCOORD.xy - win.xy / sps) / pz;   // 창 안 논리 좌표(온 화면이면 화면 논리 좌표)
 	float row = floor(lp.y);
 	float fr = mod(floor(t * 20.0), 509.0);  // 떨림 · 찢김은 초당 20 번 갈린다
 	float fg = mod(floor(t * 30.0), 467.0);  // 낟알은 30 번
@@ -122,19 +127,19 @@ void fragment() {
 	}
 	dx = clamp(dx * s, -1.0, 1.0);
 	//  헤드 스위칭 — 맨 밑 hs_rows 행. 밑으로 갈수록 세게, 오른쪽으로. 하얀 눈발은 걷었다.
-	float hz = 1.0 - smoothstep(0.0, hs_rows, win.w * logical.y - lp.y);
+	float hz = 1.0 - smoothstep(0.0, hs_rows, (win.w - win.y) * logical.y / zoom - lp.y);
 	float hk = hz * hz;
 	float hj = mo ? 0.7 + 0.3 * h12(vec2(row + 41.0, fr)) : 1.0;
 	dx += hs_shift * s * hk * hj;
 
-	vec2 sp = FRAGCOORD.xy + vec2(dx * ppl, 0.0);   // 기기 좌표
+	vec2 sp = FRAGCOORD.xy + vec2(dx * pz, 0.0);    // 기기 좌표
 
 	//  ③ 밝기 — 날카롭게 집는다. 링잉은 ring_d 왼쪽과의 차이를 조금 더한다
 	//  (밝은 획 바로 오른쪽이 어두워지고 어두운 데서 밝은 데로 넘는 자리가 조금 솟는다).
 	vec3 c0 = sharp(sp, sps);
 	float y0 = dot(c0, LY);
 	//  밝기 띠 — 가로 다섯 탭(1 · 4 · 6 · 4 · 1). 세기 0 이면 폭이 0 이라 y0 그대로다.
-	float lw = luma_w * s * 0.5 * ppl;
+	float lw = luma_w * s * 0.5 * pz;
 	float yb = y0 * 6.0;
 	yb += dot(texture(scene, (sp + vec2(-lw, 0.0)) * sps).rgb, LY) * 4.0;
 	yb += dot(texture(scene, (sp + vec2(lw, 0.0)) * sps).rgb, LY) * 4.0;
@@ -142,7 +147,7 @@ void fragment() {
 	yb += dot(texture(scene, (sp + vec2(2.0 * lw, 0.0)) * sps).rgb, LY);
 	yb /= 16.0;
 	vec2 iq0 = vec2(dot(c0, LI), dot(c0, LQ));
-	float yl = dot(texture(scene, (sp - vec2(ring_d * ppl, 0.0)) * sps).rgb, LY);
+	float yl = dot(texture(scene, (sp - vec2(ring_d * pz, 0.0)) * sps).rgb, LY);
 	float y = yb + ring * s * (yb - yl);
 
 	//  ④ 색 — I · Q 만 가로로. 탭 여덟이 왼쪽으로 늘어서고 멀수록 가볍다 → 왼쪽의 색이
@@ -153,7 +158,7 @@ void fragment() {
 		float a = float(k) / 7.0;
 		float o = -(chroma_d + chroma_w * (a - 0.15)) * s;
 		float w = exp(-2.6 * a);
-		vec3 tc = texture(scene, (sp + vec2(o * ppl, 0.0)) * sps).rgb;
+		vec3 tc = texture(scene, (sp + vec2(o * pz, 0.0)) * sps).rgb;
 		iq += w * vec2(dot(tc, LI), dot(tc, LQ));
 		ws += w;
 	}

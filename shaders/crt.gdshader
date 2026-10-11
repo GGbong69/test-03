@@ -96,6 +96,9 @@ uniform float strength : hint_range(0.0, 1.0) = 0.4;
 //  브라운관). 주사선 · 마스크 · 번짐은 화면 논리 행 그대로다. 고르기 밖에서는 온 화면(0, 0, 1, 1)이라
 //  옛 식과 한 점도 안 다르다.
 uniform vec4 win = vec4(0.0, 0.0, 1.0, 1.0);
+//  창 안을 몇 배로 키워 보이나(화면 고르기 — 장면을 2배로 옮겨 붙인 칸). 논리 1px 결(주사선 · 번짐 ·
+//  격자)이 그만큼 커져 키운 장면과 맞는다. 고르기 밖에서는 1.
+uniform float zoom = 1.0;
 uniform vec2 logical = vec2(640.0, 360.0);
 //  흐르는 띠 · 잔상 · 깜박임 · 낟알을 켤 것인가. 모션 끄기면 0.
 uniform float motion : hint_range(0.0, 1.0) = 1.0;
@@ -162,6 +165,10 @@ void fragment() {
 	float s = strength;
 	//  논리 1px 당 기기 px. 정수배 스트레치라 2 · 3 · 4 … 로 떨어진다.
 	float ppl = (1.0 / sps.y) / logical.y;
+	//  결의 자 — 창 안 논리 1px(키운 배율까지)의 기기 px · 창 왼쪽 위에서 잰 기기 자리.
+	//  온 화면 · 배율 1 이면 pz = ppl · fw = FRAGCOORD 라 옛 식 그대로다.
+	float pz = ppl * zoom;
+	vec2 fw = FRAGCOORD.xy - win.xy / sps;
 	vec2 uv = uv0;
 	//  창 — 안 자리 lu(0..1) · 창의 논리 크기 Lw · 왼쪽 위 wo. 온 화면이면 lu = uv · Lw = logical.
 	vec2 wsz = win.zw - win.xy;
@@ -184,7 +191,7 @@ void fragment() {
 	//  날카로운 탭으로 따로 따면 기기 1px 미만의 어긋남이 반올림돼 어떤 띠에서는
 	//  0 · 어떤 띠에서는 꼭 1px 로 튀었다 — 40 에서도 모서리 HUD 의 「24」가
 	//  초록 · 빨강 테를 둘렀다. 차이로 얹으면 어긋남이 0.3px 면 0.3px 만큼만 번진다.
-	vec2 ca = n * r2 * aberr * s * ppl;
+	vec2 ca = n * r2 * aberr * s * pz;
 	vec3 c = sharp(sp, sps);
 	vec3 l0 = texture(scene, sp * sps).rgb;
 	c.r += texture(scene, (sp + ca) * sps).r - l0.r;
@@ -204,7 +211,7 @@ void fragment() {
 	//  굴곡을 안 따른다(머리말 「주사선은 화면 행에 곧게 선다」).
 	float k = scan * pow(s, 0.75);
 	if (k > 0.0) {
-		float a = abs(fract(FRAGCOORD.y / ppl) - 0.25);
+		float a = abs(fract(fw.y / pz) - 0.25);
 		float br = (max(c.r, max(c.g, c.b)) + luma(c)) * 0.5;
 		float sg = mix(beam_lo, beam_hi, smoothstep(0.0, 0.6, br));
 		float iw = 0.5 / (sg * sg);
@@ -247,7 +254,7 @@ void fragment() {
 	//  깎지 않는다 — 깎으면 덩어리 바로 바깥(H 가 반쯤)부터 문턱 밑이라 둘레로 못 나갔다.
 	float gk = glow * s;
 	if (gk > 0.0) {
-		float lb = log2(max(ppl, 1.0));
+		float lb = log2(max(pz, 1.0));
 		vec2 su = src / logical;
 		vec3 h = textureLod(scene_mip, su, lb + 2.5).rgb * 0.6
 				+ textureLod(scene_mip, su, lb + 3.5).rgb * 0.4;
@@ -268,7 +275,7 @@ void fragment() {
 		float dy = (lu.y - yb) / 0.06;
 		float rb = roll * s * exp(-dy * dy);
 		c = c * (1.0 + rb) + rb * 0.25;
-		float nz = fract(sin(dot(floor(FRAGCOORD.xy / ppl) + floor(TIME * 30.0),
+		float nz = fract(sin(dot(floor(fw / pz) + floor(TIME * 30.0),
 				vec2(12.9898, 78.233))) * 43758.5453) - 0.5;
 		c = c * (1.0 + flick * s * sin(TIME * 37.7)) + nz * flick * s;
 	}

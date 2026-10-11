@@ -2,8 +2,8 @@ extends SceneTree
 # 화면 고르기(2026-10-10 · game.gd FSEL) — 못 박는 것:
 #   ① 처음이면 고를 차례다 · 열면 넷 다 기본값(칸마다 제 묶음이 서려면) · 음악이 없다 · 칸 셋이 화면 안에
 #      겹치지 않고 패는 제 칸 밑이다
-#   ② 필터 층은 제 칸 안에만 — CRT 는 가운데(브라운관) · VHS · 도트는 오른쪽(비디오테이프) · 옮겨 붙이는
-#      장면 칸은 그림 칸과 크기가 같다(1:1)
+#   ② 필터 층은 제 칸 안에만 — CRT 는 가운데(브라운관) · VHS · 도트는 오른쪽(비디오테이프) · 장면은
+#      배율(zoom)만큼 키워 붙이고 필터도 칸 안에서 같은 배율이다
 #   ③ 얹으면 그 칸 — 그림 칸이나 패
 #   ④ 「끔」을 누르면 게이지 넷이 0 으로 저장되고 · 다시 안 묻고 · 처음이면 인트로로 · 층 창이 온 화면으로
 #   ⑤ 「브라운관」 · 「비디오테이프」 — 제 둘만 기본값으로
@@ -97,8 +97,11 @@ func _run() -> void:
 		_ok("② CRT 는 가운데 칸에만", _win(g.crt_rect).is_equal_approx(g._fsel_uv(g._fsel_rect(1))))
 		_ok("② VHS 는 오른쪽 칸에만", _win(g.vhs_rect).is_equal_approx(g._fsel_uv(g._fsel_rect(2))))
 		_ok("② 도트는 오른쪽 칸에만", _win(g.dot_rect).is_equal_approx(g._fsel_uv(g._fsel_rect(2))))
-	_ok("② 옮겨 붙이는 장면 칸은 그림 칸과 크기가 같다(1:1)",
-			(g.FSEL.src as Rect2).size.is_equal_approx((g._fsel_rect(0) as Rect2).size))
+	_ok("② 옮겨 붙이는 장면 칸 × 배율 = 그림 칸(키워 붙인다)",
+			((g.FSEL.src as Rect2).size * float(g.FSEL.zoom)).is_equal_approx((g._fsel_rect(0) as Rect2).size))
+	if g.crt_rect != null:
+		var zm: Variant = ((g.crt_rect as ColorRect).material as ShaderMaterial).get_shader_parameter("zoom")
+		_ok("② 필터도 칸 안에서는 같은 배율이다", is_equal_approx(float(zm), float(g.FSEL.zoom)), "%s" % [zm])
 	_ok("② 층이 선다", g.fsel_layer != null and g.fsel_layer.visible)
 
 	# ③
@@ -123,6 +126,9 @@ func _run() -> void:
 		_ok("④ 층 창이 온 화면으로", _win(g.crt_rect).is_equal_approx(Vector4(0, 0, 1, 1))
 				and _win(g.dot_rect).is_equal_approx(Vector4(0, 0, 1, 1)))
 	_ok("④ 층이 걷힌다", g.fsel_layer == null or not g.fsel_layer.visible)
+	if g.crt_rect != null:
+		var z1: Variant = ((g.crt_rect as ColorRect).material as ShaderMaterial).get_shader_parameter("zoom")
+		_ok("④ 필터 배율이 1 로 돌아온다", is_equal_approx(float(z1), 1.0), "%s" % [z1])
 	g._intro_end()
 
 	# ⑤

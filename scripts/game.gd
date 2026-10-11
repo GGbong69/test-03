@@ -1202,7 +1202,7 @@ func _ready() -> void:
 #  밝기 보정은 기준 그림을 나란히 두고 설정 › 그래픽에서 다시 연다 · 발더스 게이트 3 은 첫 실행에 고른
 #  밝기를 「옵션에서 다시 바꿀 데가 없다」는 불만을 들었다 · 록맨 레거시 컬렉션은 필터를 끔 · TV ·
 #  모니터 셋 중에 고른다. 사용자가 셋을 다 골랐다 — 「설정에서 다시 열기 · 두 장 나란히 · 셋 중에 고르기」.
-#   · 같은 장면 한 칸(src — 간판 HIGHTON · 판 윗반)을 그림 칸 셋에 1:1 로 나란히 붙인다(층 94 ·
+#   · 같은 장면 한 칸(src — 네온 글 · 판 윗머리)을 그림 칸 셋에 키워(zoom) 나란히 붙인다(층 94 ·
 #     shaders/fsel.gdshader — 칸 밖 바닥은 가라앉힌다). 필터 층은 저마다 제 칸(win)에만 먹는다:
 #     끔(아무것도) · 브라운관(CRT · 굴곡 — 칸이 작은 브라운관으로 굽는다) · 비디오테이프(VHS · 도트).
 #     장면은 살아 있다 — 간판이 흔들리고 네온이 숨 쉰다.
@@ -1211,10 +1211,15 @@ func _ready() -> void:
 #   · 처음 켤 때는 인트로로 간다. 설정 「화면」 탭의 「화면 고르기」(제목에서 연 설정에만 선다 — 바닥이
 #     문 장면이다)에서 다시 열면 설정으로 돌아온다 — 그때는 ESC 로 안 고르고 나간다(옛 값 그대로).
 #     개발자 판에서도 연다(제목으로 돌아간다).
-#    pw · ph 그림 칸 · gap 칸 사이 · y 칸 윗변 · src 옮겨 올 장면 칸(논리 px — 칸과 같은 크기) ·
+#   · 2026-10-11 「이거 너무 다 똑같은거 같은데? 좀 잘 보여지는 화면을 보여줘야지 비교 되는걸로」 —
+#     1:1 로 붙이니 필터 결(논리 1px 단위)이 너무 작아 셋이 같아 보였다. 장면을 zoom 배로 키워 붙이고
+#     필터 셋도 칸 안에서는 같은 배율로 먹인다(셰이더 zoom — 주사선 틈 · 색 번짐 · 도트 격자가 두 배).
+#     장면 칸은 네온 글(분홍 · 금 — 번짐 · 색 번짐이 잘 보인다)과 판 숫자 고리 · 더블 띠 · 칸 끝(격자 ·
+#     굽힘이 잘 보인다)이 함께 드는 자리다.
+#    pw · ph 그림 칸 · gap 칸 사이 · y 칸 윗변 · src 옮겨 올 장면 칸(논리 px — 칸의 1/zoom) · zoom 배율 ·
 #    plate 패 크기 · plate_dy 칸 밑에서 패까지 · dim 칸 밖 바닥의 밝기 · frame 테 두께
-const FSEL := {"pw": 192.0, "ph": 176.0, "gap": 14.0, "y": 66.0,
-		"src": Rect2(296.0, 48.0, 192.0, 176.0),
+const FSEL := {"pw": 192.0, "ph": 240.0, "gap": 14.0, "y": 32.0,
+		"src": Rect2(344.0, 52.0, 96.0, 120.0), "zoom": 2.0,
 		"plate": Vector2(124.0, 30.0), "plate_dy": 14.0, "dim": 0.16, "frame": 4.0}
 const FSEL_LAYER := 94
 const FSEL_SHADER := "res://shaders/fsel.gdshader"
@@ -1326,6 +1331,7 @@ func _fsel_apply() -> void:
 	var full := Vector4(0.0, 0.0, 1.0, 1.0)
 	var wc: Vector4 = _fsel_uv(_fsel_rect(1)) if on else full
 	var wv: Vector4 = _fsel_uv(_fsel_rect(2)) if on else full
+	var zk: float = float(FSEL.zoom) if on else 1.0
 	for pr in [[crt_rect, wc], [vhs_rect, wv], [dot_rect, wv]]:
 		var r = pr[0]
 		if r == null or not is_instance_valid(r):
@@ -1333,6 +1339,7 @@ func _fsel_apply() -> void:
 		var m := (r as ColorRect).material as ShaderMaterial
 		if m != null:
 			m.set_shader_parameter("win", pr[1])
+			m.set_shader_parameter("zoom", zk)
 	if on:
 		_fsel_open()
 	if fsel_layer == null or not is_instance_valid(fsel_layer):
