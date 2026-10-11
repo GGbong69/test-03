@@ -20,6 +20,8 @@ extends SceneTree
 #      부서진다(사탕 색 조각 · 설탕 반짝이 · 글). 빈 테이블 리롤은 쓸기 대신 주먹이 테이블을
 #      치고, 판은 닿는 틀에 깔리고, 문(sweep_live)은 눌러 둔 주먹이 튀고 나서 열린다. 주먹
 #      밑면이 과녁에 닿고 · 팔이 안 늘어나고 · 손목이 한도 안이다. 못 서면 옛 길(칸 팝 · 쓸기).
+#   ⑨ 가리키기 — 술병을 다 깬 쾅(rage) 뒤 주먹이 들려 검지로 손님을 가리킨다(손끝 화면 아래 ·
+#      팔 · 손목 한도 · 한마디 · 대결은 가리킨 채 선 뒤).
 #   ⑦ 내리치기 — 손이 치켜 올랐다가 손바닥이 건반에 닿고(손목 한도 안), 그 박자에 서랍이
 #      크게 튀어나오고 값 깃이 솟고 화면이 흔들리고 동전 · 나뭇조각 · 놋쇠 부스러기가 튀어
 #      바닥에 떨어져 다 가라앉는다. 한 사건의 소리가 넷 안이다. 판 효과는 매 틀 새로 안
@@ -612,6 +614,68 @@ func _run() -> void:
 	_ok("진열대가 없으면 개발자 줄도 안 선다", not g._prop_live(1), "")
 	_slam()
 	_pound()
+	_rage_point()
+
+
+# ⑨ 가리키기(2026-10-11) — 「이스터에그 스테이지 진입 할때 NPC가 테이블을 한번 치잖아? 치고나서
+#  NPC가 손가락으로 플레이어를 가리키는 거까지 있으면 좋겠는데」. 술병을 다 깬 쾅(rage) 뒤 주먹이
+#  들려 검지를 펴고 손님(화면 아래)을 가리킨다 — 검지가 다 펴지고 · 손끝이 화면 아래로 뻗고(옆보다
+#  아래가 크다) · 팔이 안 늘어나고 · 손목이 한도 안 · 그때 상인이 한마디(rage) · 대결은 가리킨 채
+#  선 뒤(r_hold)에 연다 · 끝나면 쉼으로 돌아온다.
+func _rage_point() -> void:
+	var P: Dictionary = g.PROP
+	_clear_acts()
+	_calm()
+	g.state = g.S.SHOP
+	g.prop_force = true
+	g.nsay_row = {}
+	g.btl_go = -1.0
+	#  말상자를 막는 것(튜토리얼 말상자 · 화면 갈이 · 팩)을 걷는다 — 이 판은 튜토리얼 런이 섰을 수 있다
+	if g._tutor_live():
+		g._tutor_close()
+	g.tutor_q.clear()
+	g.wipe_t = -1.0
+	g.boost_t = -1.0
+	_ok("⑨ 쾅 몸짓이 선다(rage)", g._prop_pound("rage", g._pound_spot()))
+	var pk := 1.0
+	var rr := 0.0
+	var wb := 0.0
+	var down := true
+	var note := ""
+	var said := false
+	var go := -1.0
+	var tt := 0.0
+	while tt < 3.0 and g._prop_live(1):
+		var was: float = g.prop_t[1]
+		g._prop_tick(DT)
+		tt += DT
+		_pose()
+		var t: float = g.prop_t[1]
+		if was < float(P.p_hit) and t >= float(P.p_hit):
+			go = g.btl_go
+		if String(g.nsay_row.get("when", "")) == "rage":
+			said = true
+		if t >= float(P.r_jab) and t < float(P.r_hold):
+			pk = minf(pk, g._rage_point_k(1))
+			rr = maxf(rr, float(g.prop_rr[1]))
+			var wbn: Vector2 = g.npc_wb[1]
+			wb = maxf(wb, maxf(wbn.x, wbn.y))
+			#  검지 방향(손 +x) — 화면으로 옮기면 아래(손님 쪽)가 옆보다 크다
+			var d: Vector3 = Basis(Vector3.UP, -float(g.prop_la[1])) * Basis(Vector3.BACK, -float(g.prop_lp[1])) * Vector3.RIGHT
+			var sy: float = d.z * float(g.TBL.flat) - d.y * float(g.TBL.tall)
+			if sy <= 0.0 or sy < absf(d.x):
+				down = false
+				note = "%s · 화면 (%.2f, %.2f)" % [d, d.x, sy]
+	_ok("⑨ 가리키는 동안 검지가 다 펴진다", pk > 0.97, "%.3f" % pk)
+	_ok("⑨ 손끝이 화면 아래(손님 쪽)로 — 옆보다 아래가 크다", down, note)
+	_ok("⑨ 팔이 안 늘어난다", rr <= 1.0, "%.3f" % rr)
+	_ok("⑨ 손목이 한도 안(r_wrist + 0.5°)", wb <= float(P.r_wrist) + 0.5, "%.1f°" % wb)
+	_ok("⑨ 가리키며 한마디(rage)", said)
+	_ok("⑨ 대결은 가리킨 채 선 뒤에 연다", is_equal_approx(go,
+			(float(P.r_hold) - float(P.p_hit)) / float(P.tempo_pound)), "btl_go %.3f" % go)
+	_ok("⑨ 끝나면 쉼으로(몸짓이 닫힌다)", not g._prop_live(1) and g._rage_point_k(1) == 0.0)
+	g.prop_force = false
+	g.btl_go = -1.0
 
 
 func _buy_idx() -> int:

@@ -1,5 +1,5 @@
 ﻿id,when,text,enabled,_note
-tip_interest,tip,골드 {interest_per}마다 이자 +1이야. 많아야 +{interest_max},1,상인의 말(game.gd NSAY). when — tip 상점에서 가끔 하는 귀띔 · poke 몸을 누름 · hand 손 · 팔을 누름 · give 물건을 건넴 · btl 뒤 선반 술병이 깨짐 · buy 삼 · sell 팖. {열쇠}는 tuning.csv · areas.csv 값으로 채운다 — 수를 글에 박지 않는다
+tip_interest,tip,골드 {interest_per}마다 이자 +1이야. 많아야 +{interest_max},1,상인의 말(game.gd NSAY). when — tip 상점에서 가끔 하는 귀띔 · poke 몸을 누름 · hand 손 · 팔을 누름 · give 물건을 건넴 · btl 뒤 선반 술병이 깨짐 · buy 삼 · sell 팖 · rage 술병을 다 깬 쾅 뒤 손님을 가리킬 때. {열쇠}는 tuning.csv · areas.csv 값으로 채운다 — 수를 글에 박지 않는다
 tip_dart_left,tip,판을 일찍 끝내면 남은 다트 한 발에 {gold_per_dart}골드씩 쳐 주지,1,
 tip_sell,tip,팔 땐 산 값의 반이야. 그래도 {sell_min}골드는 쳐 주지,1,sell_div 2 · sell_min
 tip_free_reroll,tip,리롤은 들를 때마다 {free_rerolls}번 공짜야,1,
@@ -34,3 +34,5 @@ buy_3,buy,거래 성립,1,
 sell_1,sell,이 값이면 됐지,1,
 sell_2,sell,아깝지 않아?,1,
 sell_3,sell,받아 두지,1,
+rage_1,rage,너. 나랑 한판 하자,1,술병을 다 깨면 쾅 뒤 손님을 가리키며(game.gd PROP r_*) — 바로 술병 대결로 간다
+rage_2,rage,좋아. 술병으로 갚아라,1,

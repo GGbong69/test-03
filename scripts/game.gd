@@ -27836,6 +27836,9 @@ func _fing3(i: int, gk: float) -> void:
 			_fp_mix(o, FPOSE.fist, 0.25 * pr)
 		if pw_n > 0.0005:
 			_fp_mix(o, FPOSE.point, pw_n)
+		var rk: float = _rage_point_k(i)
+		if rk > 0.0005:
+			_fp_mix(o, FPOSE.point, rk)        # 쾅 뒤 손님을 가리킨다(PROP r_*)
 		busy = maxf(busy, pr)
 		sup *= 1.0 - pr
 		yaw *= 1.0 - pr
@@ -29191,7 +29194,7 @@ func _give_grip(i: int) -> float:
 #  없다 — 화면 갈이가 다 1초 안쪽이라 거기 띄운 글은 읽기 전에 진다. 사용자가 고른 자리는 상점
 #  상인의 한마디다(술집 단골에게 하는 귀띔 · 상점에 머무는 동안이라 읽을 시간이 있다). 같은 말상자로
 #  상인을 누르고(몸 poke · 손 · 팔 hand) · 물건을 건네고(give) · 뒤 선반 술병을 깨고(btl) · 사고(buy)
-#  · 팔 때(sell) 상인이 한마디 한다. 문장은 data/npc_say.csv 가 쥔다(when 칸이 갈래) — 사람이 표에서
+#  · 팔 때(sell) 상인이 한마디 한다. 술병을 다 깨면 쾅 뒤 손님을 가리키며 한마디(rage · PROP r_*). 문장은 data/npc_say.csv 가 쥔다(when 칸이 갈래) — 사람이 표에서
 #  고친다. 수는 문장에 안 박고 {tuning 열쇠} · {areas 열쇠}로 채운다(GameData.npc_say_text).
 #  튜토리얼 말상자와 같은 그림(이름표 「상인」 · 한 자씩 툭 · 「웅」 상인 목)이되 **안 막는다** — 어둠 ·
 #  구멍 · 건너뛰기 단추 · ▼ 없이 동전 슬롯 이름 줄 밑(상인 몸 앞)에 서고, 다 나온 뒤 hold 초 머물다
@@ -29208,10 +29211,11 @@ func _give_grip(i: int) -> float:
 #    w_max · w_min   말상자 폭의 끝 · 바닥(글에 맞춘다 · 두 줄까지). w_max 340 이면 이름표가 왼쪽
 #                    「사탕·사진」 글(x ~155)을 비킨다
 #    hold · hold_ch   다 나온 뒤 머무는 초 + 글자마다 · fade 들고 나는 초
+#    rage_dx   가리키며 하는 말(rage)은 말상자를 이만큼 왼쪽으로 — 오른손이 상인 몸 앞에서 가리킨다
 const NSAY := {"chance": 0.6, "delay": [2.0, 4.5], "gap": 24.0, "w_max": 340.0, "w_min": 180.0,
-		"hold": 2.4, "hold_ch": 0.06, "fade": 0.25, "min_gap": 0.45,
+		"hold": 2.4, "hold_ch": 0.06, "fade": 0.25, "min_gap": 0.45, "rage_dx": 70.0,
 		"say": {"poke": [1.0, 0.0], "hand": [1.0, 0.0], "give": [1.0, 0.0], "btl": [0.6, 3.0],
-				"buy": [0.35, 4.0], "sell": [0.35, 4.0]}}
+				"buy": [0.35, 4.0], "sell": [0.35, 4.0], "rage": [1.0, 0.0]}}
 var nsay_rng := RandomNumberGenerator.new()
 var nsay_q := {}          # when → 아직 안 한 말 id(섞은 차례)
 var nsay_cool := {}       # when → 다시 하기까지 남은 초
@@ -29363,7 +29367,12 @@ func _nsay_layout() -> Array:
 	var bw: float = clampf(ceilf(lw + bp * 2.0 + 12.0), float(NSAY.w_min), float(NSAY.w_max))
 	var bh: float = bp * 2.0 + float(TUTOR.talk_top) + 22.0 + float(lines.size() - 1) * float(TUTOR.line)
 	var top: float = (_panel_rect() as Rect2).end.y + float(NSAY.gap)
-	return [Rect2(roundf(float(NPC.cx) - bw * 0.5), top, bw, bh), lines]
+	var cx: float = float(NPC.cx)
+	if String(nsay_row.get("when", "")) == "rage":
+		cx -= float(NSAY.rage_dx)
+	#  왼끝은 「사탕·사진」 글(x ~155)을 비킨다 — 이름표가 bx + 12 에 선다.
+	var bx: float = maxf(roundf(cx - bw * 0.5), float(NPC.cx) - float(NSAY.w_max) * 0.5)
+	return [Rect2(bx, top, bw, bh), lines]
 
 
 func _nsay_click(m: Vector2) -> bool:
@@ -30032,6 +30041,24 @@ const PROP := {
 	"p_pole": Vector3(0.45, -0.55, -0.8),
 	#  사탕 — 사탕 칸에서 펠트로 난다(c_fly) · 앉으며 한 번 눌렸다 편다(c_squash).
 	"c_fly": 0.24, "c_hop": 26.0, "c_squash": 0.12,
+	#  ── 가리키기 — 술병을 다 깬 쾅 뒤(rage · 2026-10-11) ──────────
+	#  「이스터에그 스테이지 진입 할때 NPC가 테이블을 한번 치잖아? 치고나서 NPC가 손가락으로 플레이어를
+	#   가리키는 거까지 있으면 좋겠는데」. 주먹이 닿아 한 번 튄 뒤(p_hold) 그 주먹이 들려 검지를 펴고
+	#  손님을 가리킨다 — 엄지는 망치 주먹 그대로 위(손가락 총 모양)라 검지 한 줄이 손님 쪽(+w)으로
+	#  뻗는다. 이 화면은 위에서 내려다보는 비스듬한 투영이라 손님 쪽 = 화면 아래 — 손끝을 조금
+	#  숙여(r_pit) 화면 아래로 뻗게 둔다(손끝을 들면 깊이와 높이가 서로 지워 손가락이 짧은 혹이
+	#  된다 — 짚기 머리말). 들리자마자 한 번 콕 내밀었다 돌아오고(r_jab) 가리킨 채 서 있다가(r_hold)
+	#  쉼으로 간다. 술병 대결은 가리킨 채 선 뒤에 연다(_pound_land 의 btl_go).
+	#    r_up · r_jab · r_hold · r_end   박자(몸짓 시계 — tempo_pound 배로 돈다)
+	#    r_at   주먹 밑면(PROP.p_fist)이 서는 자리 (u, h, w) · r_jab_w 콕 내미는 몫(+w)
+	#    r_ang · r_pit   손각(손끝이 손님 쪽) · 숙임(도) · r_wrist 가리키는 손목 한도(도)
+	"r_up": 0.86, "r_jab": 1.02, "r_hold": 1.85, "r_end": 2.35,
+	"r_at": Vector3(404.0, 80.0, 36.0), "r_jab_w": 8.0,
+	"r_ang": 90.0, "r_pit": 40.0, "r_wrist": 14.0,
+	#  가리키는 팔꿈치 쪽 — 조금 바깥 · 아래 · 뒤. 손(r_at)을 어깨(u ~406) 바로 앞에 두어 팔뚝이 손님 쪽
+	#  (+w)으로 눕는다 — 손목이 곧아(r_wrist) 검지가 팔뚝을 따른다. 처음 판은 손을 어깨 왼쪽(u 352)에
+	#  두어 팔뚝이 왼쪽으로 누웠고 검지도 왼쪽을 가리켰다(찍어 봤다).
+	"r_pole": Vector3(0.35, 0.45, -0.6),
 }
 #  손마다 — 0 판매(화면 왼손) · 1 구매(오른손). 배열은 처음 한 번 짓고 칸만 고친다.
 var prop_t := [-1.0, -1.0]        # 몸짓 시계. −1 이면 안 돈다
@@ -30981,6 +31008,26 @@ func _pound3(t: float) -> Vector3:
 			-float(PROP.p_back) * minf(r, 1.0))
 
 
+#  가리키기(rage) — 쾅 뒤 들리는 몫 0..1(p_hold → r_up). 그 뒤로는 1 이고 쉼으로 가는 것은 섞임
+#  (_prop_w 의 r_hold → r_end)이 한다.
+func _rage_up(t: float) -> float:
+	return smoothstep(float(PROP.p_hold), float(PROP.r_up), t)
+
+
+#  가리키는 주먹 밑면 자리 (u, h, w) — 들리자마자 손님 쪽으로 한 번 콕(r_jab).
+func _rage3(t: float) -> Vector3:
+	var j: float = clampf((t - float(PROP.r_up)) / (float(PROP.r_jab) - float(PROP.r_up)), 0.0, 1.0)
+	return (PROP.r_at as Vector3) + Vector3(0.0, 0.0, float(PROP.r_jab_w) * sin(j * PI))
+
+
+#  그 손의 검지가 펴진 몫 — 가리키는 동안만(주먹에서 건너가 다시 주먹으로).
+func _rage_point_k(i: int) -> float:
+	if i != 1 or prop_pound != "rage" or not _prop_live(1) or float(prop_cut[1]) > 0.0:
+		return 0.0
+	var t: float = prop_t[1]
+	return _rage_up(t) * (1.0 - smoothstep(float(PROP.r_hold), float(PROP.r_end), t))
+
+
 func _pound_pit(t: float) -> float:
 	var P: Dictionary = PROP
 	return lerpf(float(P.p_pit0), float(P.p_pit1),
@@ -31001,7 +31048,10 @@ func _pound_land(fx: bool) -> void:
 	if kind == "crush" or kind == "slam":
 		_crush_hit(kind == "slam" and fx and not motion_off)
 	if kind == "rage":
-		btl_go = float(BTL.rage_wait)       # 술병을 다 깼다 — 쾅 뒤에 대결로(BTL)
+		#  술병을 다 깼다 — 쾅 뒤에 대결로(BTL). 몸짓이 도는 쾅이면 가리킨 채 선 뒤(r_hold)다.
+		btl_go = float(BTL.rage_wait)
+		if fx and not motion_off:
+			btl_go = (float(PROP.r_hold) - float(PROP.p_hit)) / float(PROP.tempo_pound)
 	var col: Color = C_ACC
 	if kind == "candy" and pc_id != "":
 		col = CANDY.get(pc_id, C_ACC)
@@ -31479,7 +31529,9 @@ func _prop_tick(d: float) -> void:
 				_crush_aim()
 			if t0 < float(PROP.p_hit) and t1 >= float(PROP.p_hit):
 				_pound_land(true)
-			if t1 >= float(PROP.p_end):
+			if prop_pound == "rage" and t0 < float(PROP.r_up) and t1 >= float(PROP.r_up):
+				_nsay("rage", true)      # 가리키며 한마디(NSAY · npc_say.csv 의 rage)
+			if t1 >= float(PROP.r_end if prop_pound == "rage" else PROP.p_end):
 				_prop_end(1)
 				continue
 		else:
@@ -31553,9 +31605,10 @@ func _prop_w(i: int) -> void:
 	#  옛 짚기 검지(pw_n) · 옛 집기(pw_g)는 앞 자세에서 걷기만 하고, 주먹 · 편 손바닥은
 	#  _fing3 이 섞임(_prop_reach) 그대로 얹는다.
 	var pd: bool = _prop_fist(i)
+	var rage: bool = i == 1 and prop_pound == "rage"     # 가리키는 동안 뻗은 채(PROP r_*)
 	var q0: float = P.p_up if pd else P.b_up
-	var q1: float = P.p_hold if pd else P.b_hold
-	var q2: float = P.p_end if pd else P.b_end
+	var q1: float = (P.r_hold if rage else P.p_hold) if pd else P.b_hold
+	var q2: float = (P.r_end if rage else P.p_end) if pd else P.b_end
 	if t < q0:
 		pw_k = _ease_io(t / q0)
 	elif t < q1:
@@ -31635,6 +31688,8 @@ func _prop_arm(i: int, sh: Vector3, sc: float) -> void:
 	pa_ang = fa
 	pa_pit = fp
 	var pv: Vector3 = PROP.p_pole if _prop_fist(i) else PROP.b_pole
+	if i == 1 and prop_pound == "rage":
+		pv = pv.lerp(PROP.r_pole as Vector3, _rage_up(prop_t[1]))     # 가리키는 팔(PROP r_pole)
 	var reach_pole := s3 + Vector3(pv.x * (-1.0 if i == 0 else 1.0), pv.y, pv.z) * 100.0
 	if k > 0.0005:
 		_prop_goal(i, sc, s3, l1, l2, reach_pole)
@@ -31772,6 +31827,13 @@ func _prop_goal(i: int, sc: float, s3: Vector3, l1: float, l2: float, pole: Vect
 		tgt = _pound3(t)
 		ad = deg_to_rad(float(P.p_ang))
 		pd = deg_to_rad(_pound_pit(t))
+		if prop_pound == "rage":
+			#  쾅 뒤 — 주먹이 들려 손님을 가리킨다(PROP r_*).
+			var ru: float = _rage_up(t)
+			if ru > 0.0:
+				tgt = tgt.lerp(_rage3(t), ru)
+				ad = lerp_angle(ad, deg_to_rad(float(P.r_ang)), ru)
+				pd = lerpf(pd, deg_to_rad(float(P.r_pit)), ru)
 	else:
 		tgt = _prop_slam3(t)
 		ad = deg_to_rad(float(P.b_ang))
@@ -31779,8 +31841,9 @@ func _prop_goal(i: int, sc: float, s3: Vector3, l1: float, l2: float, pole: Vect
 	var dm: float = deg_to_rad(float(P.dev_in))
 	var fm: float = deg_to_rad(float(P.flex_in))
 	if _prop_fist(i):
-		#  망치 주먹 — 손목이 곧다(손이 팔뚝을 따른다).
-		dm = deg_to_rad(float(P.p_wrist))
+		#  망치 주먹 — 손목이 곧다(손이 팔뚝을 따른다). 가리키는 손은 조금 더 숙인다(r_wrist).
+		dm = deg_to_rad(lerpf(float(P.p_wrist), float(P.r_wrist),
+				_rage_up(t) if i == 1 and prop_pound == "rage" else 0.0))
 		fm = dm
 	var a: float = ad
 	var p: float = pd

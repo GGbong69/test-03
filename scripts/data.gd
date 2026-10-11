@@ -2335,7 +2335,7 @@ static func _has_row(table: String, id: String) -> bool:
 #  when 갈래의 켜진 줄만 준다. 글의 {열쇠}는 npc_say_text 가 채운다 — tuning.csv 의 열쇠면 그 값,
 #  areas.csv 의 열쇠면 그 영역의 기본 점수(base · 불)나 배수(mult · 더블 · 트리플). 수를 글에 박지
 #  않아 표의 값을 고치면 말이 따라 바뀐다(desc 열의 규약과 같다).
-const NPC_SAY_WHEN := ["tip", "poke", "hand", "give", "btl", "buy", "sell"]
+const NPC_SAY_WHEN := ["tip", "poke", "hand", "give", "btl", "buy", "sell", "rage"]
 
 
 static func npc_say(when: String) -> Array:
