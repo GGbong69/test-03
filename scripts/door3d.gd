@@ -441,7 +441,7 @@ static func _frame(root: Node3D) -> void:
 			Vector3(mx, float(DOOR.sign_y0) + 0.01, wz - rv * 0.5), rm))
 
 
-# ── 안 — 술집 안 (2026-10-10) ────────────────────────────
+# ── 안 — 술집 안 (2026-10-10 · 도트 2026-10-11) ─────────────
 #  「게임 시작할때 문이 열리잖아? 문 안 풍경 만들수 있어?」. 옛 안은 둥근 그러데이션 한 장이라 문이
 #  열리면 화면이 빛으로만 찼다(그 앞에 세웠던 사람 · 선반 덩어리 셋은 카메라가 다가가자 화면을
 #  막아 걷었었다 — 2026-10-06). 이제 HIGHTON 술집 안이다 — 상점 방(room3d)과 같은 어둡고 따뜻한
@@ -456,12 +456,28 @@ static func _frame(root: Node3D) -> void:
 #     둥근 술 테이블(붉은 유리 촛불 · 맥주 둘) — 문간 너머 오른쪽 아래가 빈 벽으로 꺼지던 자리다.
 #   · 안의 것 · 안의 빛은 층 LAYER_IN 에 둔다 — 밖의 빛(램프 · 네온 · 거리)은 안을 안 비추고(cull)
 #     안의 빛은 밖을 안 비춘다. 닫힌 문은 그대로 한 장으로 굽는다(안은 문 뒤라 안 보인다).
-#   · 안은 4~6m 밖이라 반 배쯤으로 보인다 — 그림은 1m 당 BAR.px 텍셀 · 밉맵(nearest)으로 결이
-#     걸어 들어가는 동안 일렁이지 않게 한다.
+#
+#  2026-10-11 「지금 시작화면에서 문 열고 들어가면 보이는 화면이 너무 도트 풍이 아니야」. 밖(한 텍셀
+#  = 1px · 결 노멀 · 팔레트 색)과 달리 안은 매끈한 로우폴리 렌더로 읽혔다 — 1m 180 텍셀 그림을
+#  밉맵으로 줄여 결이 뭉개졌고(안은 반 배쯤으로 보인다), 빛 웅덩이 · 빛무리가 고운 그러데이션이고,
+#  술병 · 의자가 매끈한 원기둥 그늘이었다. 밖과 같은 도트로 다시 짓는다.
+#   · 그림은 깊이마다 화면 배율에 맞춘다(_den — 카메라가 dz_ref 만큼 들어간 때 1 텍셀 = 논리 1px ·
+#     걸어 들어가는 동안 0.9 ~ 1.2 배) · nearest 밉맵 없이. 판자 결은 밖처럼 결에서 노멀을 낸다.
+#   · 빛은 단으로 끊는다(IN_SHADER light() — BAR.bands 단 · 단 사이 한 뼘만 4x4 격자 디더). 웅덩이가
+#     테 진 도트 띠로 진다. 방을 고루 덮던 약한 빛은 걷고(끊으면 넓은 벽에 큰 고리로 선다) 재질마다
+#     같은 몫(fill)을 깐다 — 왼쪽 위 앞에서 오는 셈으로 다섯 단이라 웅덩이 밖에서도 판자 이음 · 상자
+#     윗면이 1px 모서리로 선다. 매끈한 반사는 걷고 놋쇠 · 니스 · 쇠만 끊긴 반짝 한 점(거울에도 두었더니
+#     밑불마다 큰 베이지 원판이 섰다 — 거울은 짙은 바탕으로 술병을 띄운다).
+#   · 원기둥 · 구는 면마다 한 색(flat) · 마디를 줄였다. 술병 · 잔은 도트 그림을 세운다(_bottle_img ·
+#     _glass_img — 몸 · 그늘 · 1px 빛 · 딱지 · 거품). 빛무리는 테 진 고리 셋(_halo).
+#   · 색은 도트 팔레트(dot_pal.py) 안에서 — 나무 0 ~ 4 · 금 · 초록 · 벨벳 · 강철. 화면 오른쪽 칸(안)의 색 수가
+#     만 이천 남짓에서 천백 ~ 천육백으로 줄었다(t 1.00 ~ 1.30).
 const LAYER_IN := 2
 const BAR := {
 	"floor": -1.22, "ceil": 1.30, "back": -5.2, "x0": -2.8, "x1": 3.2,
-	"px": 180.0,
+	"dz_ref": 1.5,                       # 그림 텍셀을 맞추는 카메라 자리(_den)
+	"bands": 4.0,                        # 빛 단 수(IN_SHADER)
+	"fill": Color(0.30, 0.19, 0.12),     # 웅덩이 밖에 고루 까는 빛(재질 몫 · 선형 배수)
 	"rail_y": -0.40,                     # 허리 몰딩 — 위는 판자 벽 · 밑은 짙은 밑판
 	#  바 — 카운터 앞면 z · 깊이 · 윗면 y · 오른끝 x / 뒤 선반 높이들 · 좌우 끝
 	"cnt_z": -3.50, "cnt_d": 0.55, "cnt_y": -0.14, "cnt_x1": 0.62,
@@ -471,9 +487,107 @@ const BAR := {
 	#  다트 장 — 판 한가운데(뒷벽 위) · 판 반지름 · 장 반 폭
 	"board": Vector2(1.58, 0.12), "board_r": 0.22, "cab": 0.34,
 	"table": Vector2(0.98, -4.35),       # 술 테이블 한가운데(x · z)
-	"lamp": Color("ffcf8a"), "enamel": Color("23402f"), "leather": Color("5a2422"),
-	"chalk": Color("1d3326"), "chalk_ink": Color("d8d2c0"), "flight": Color("ff5ca8"),
+	"lamp": Color("ffcf8a"),
+	#  색 — 도트 팔레트
+	"wall": Color("402e1a"), "wall_lo": Color("2c1508"), "trim": Color("8a5636"),
+	"wood": Color("5e3317"), "wood_dk": Color("2c1508"), "oak": Color("553222"),
+	"floor_c": Color("2c1508"), "ceil_c": Color("140904"), "mirror": Color("0d0b16"),
+	"brass": Color("a8762a"), "iron": Color("1f1719"), "enamel": Color("2f6340"),
+	"leather": Color("561916"), "chalk": Color("1d3326"), "chalk_ink": Color("e8dfc8"),
+	"flight": Color("d45a9e"), "steel": Color("687085"),
 }
+#  술병 빛깔 넷씩(끝 · 그늘 · 몸 · 빛) — Room3D.BOTTLE_COLS 차례(호박 · 초록 · 맑은 · 포도주 · 위스키 · 보라).
+const BOTTLE_RAMPS := [
+	[Color("6b2a1c"), Color("b0512a"), Color("e8873a"), Color("f7ba70")],
+	[Color("1d3326"), Color("2f6340"), Color("479a58"), Color("94d68e")],
+	[Color("3a3f52"), Color("687085"), Color("a3abbb"), Color("dde3ec")],
+	[Color("4a1426"), Color("8c2233"), Color("b03a32"), Color("f27d63")],
+	[Color("5c3a1a"), Color("a8762a"), Color("c2a13d"), Color("f2c94c")],
+	[Color("2b1d4f"), Color("523a8f"), Color("8161c9"), Color("bca1ed")],
+]
+
+#  안 재질 — 빛을 단으로 끊는다. 한 빛의 몫(N·L × 감쇠)을 bands 단으로 내리고 단 사이 seam 몫만
+#  4x4 격자 디더로 섞는다(격자는 화면 px — 논리 1px). 반짝(gloss)은 켜짐 · 꺼짐 둘뿐이다.
+#  bump — 그림의 밝기를 높이로 읽어 노멀을 낸다(LIT_SHADER 와 같은 셈 · 높이는 sRGB 값). flat_n — 면마다
+#  한 노멀. fill — 웅덩이 밖 바탕 빛(빛 하나로 방을 덮으면 그것도 테 진 고리가 된다). 바탕 빛도 왼쪽 위
+#  앞에서 오는 셈으로 다섯 단에 끊어 얹는다(FD) — 판자 이음 · 상자 윗면 · 원기둥 면이 빛 웅덩이 밖에서도
+#  1px 모서리로 선다(밖의 벽돌 · 판자가 램프 빛에 서는 그 모양).
+const IN_SHADER := """
+shader_type spatial;
+uniform sampler2D alb : source_color, filter_nearest, repeat_disable;
+uniform sampler2D hgt : filter_nearest, repeat_disable;
+uniform bool use_tex = false;
+uniform vec3 tint : source_color = vec3(1.0);
+uniform float cut = 0.0;
+uniform float bump = 0.0;
+uniform bool flat_n = false;
+uniform float gloss = 0.0;
+uniform float glow_k = 0.0;
+uniform float nup = 0.0;
+uniform vec3 fill = vec3(0.0);
+uniform float bands = 4.0;
+uniform float seam = 0.15;
+const vec3 FD = vec3(-0.352, 0.553, 0.755);
+
+float bayer(vec2 p) {
+	int x = int(mod(p.x, 4.0));
+	int y = int(mod(p.y, 4.0));
+	int M[16] = int[](0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5);
+	return (float(M[x + y * 4]) + 0.5) / 16.0;
+}
+
+float steps(float v, vec2 fc) {
+	float s = v * bands;
+	float k = clamp((fract(s) - 0.5) / seam + 0.5, 0.0, 1.0);
+	return (floor(s) + step(bayer(fc), k)) / bands;
+}
+
+void fragment() {
+	vec4 c = vec4(tint, 1.0);
+	vec3 fn = NORMAL;
+	if (use_tex) {
+		c *= texture(alb, UV);
+		if (c.a < cut) {
+			discard;
+		}
+		if (bump > 0.0) {
+			vec2 ts = 1.0 / vec2(textureSize(hgt, 0));
+			vec3 lw = vec3(0.2126, 0.7152, 0.0722);
+			float l = dot(texture(hgt, UV - vec2(ts.x, 0.0)).rgb, lw);
+			float r = dot(texture(hgt, UV + vec2(ts.x, 0.0)).rgb, lw);
+			float u = dot(texture(hgt, UV - vec2(0.0, ts.y)).rgb, lw);
+			float d = dot(texture(hgt, UV + vec2(0.0, ts.y)).rgb, lw);
+			vec3 tn = normalize(vec3((l - r) * bump, (d - u) * bump, 1.0));
+			NORMAL_MAP = tn * 0.5 + 0.5;
+			fn = tn;    // 앞을 보는 판(뒷벽 · 카운터 앞판)은 접선 틀이 곧 눈 틀이다(카메라는 안 돈다)
+		}
+	}
+	if (flat_n) {
+		vec3 n = normalize(cross(dFdx(VERTEX), dFdy(VERTEX)));
+		NORMAL = dot(n, VIEW) < 0.0 ? -n : n;
+		fn = NORMAL;
+	}
+	if (nup > 0.0) {
+		NORMAL = normalize(NORMAL + vec3(0.0, nup, 0.0));    // 세운 그림 — 위에서 오는 빛도 받는다
+	}
+	float fk = floor(clamp(0.6 + 0.55 * dot(fn, FD), 0.3, 1.2) * 5.0 + 0.5) / 5.0;
+	ALBEDO = c.rgb;
+	EMISSION = c.rgb * (fill * fk + vec3(glow_k));
+	ROUGHNESS = 1.0;
+	SPECULAR = 0.0;
+}
+
+void light() {
+	float v = clamp(dot(NORMAL, LIGHT), 0.0, 1.0) * ATTENUATION;
+	DIFFUSE_LIGHT += steps(v, FRAGCOORD.xy) * LIGHT_COLOR / PI;
+	if (gloss > 0.0) {
+		vec3 h = normalize(VIEW + LIGHT);
+		float sp = pow(clamp(dot(NORMAL, h), 0.0, 1.0), gloss) * ATTENUATION;
+		SPECULAR_LIGHT += step(0.35, sp) * LIGHT_COLOR / PI * 0.5;
+	}
+}
+"""
+static var _in_sh: Shader = null
 
 
 static func _inside(root: Node3D) -> void:
@@ -508,12 +622,30 @@ static func _layer_in(n: Node) -> void:
 		_layer_in(c)
 
 
-#  안 그림 재질 — nearest 밉맵(멀리서 결이 안 일렁인다).
-static func _in_mat(im: Image, rough := 0.85, metal := 0.0) -> StandardMaterial3D:
-	var m := Room3D._mat(Color.WHITE, rough, metal)
-	im.generate_mipmaps()
-	m.albedo_texture = ImageTexture.create_from_image(im)
-	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST_WITH_MIPMAPS
+#  깊이 z 의 그림 텍셀(1m 당) — 카메라가 dz_ref 만큼 들어간 때 그 깊이에서 1 텍셀 = 논리 1px.
+static func _den(z: float) -> float:
+	return S * scale_at(z, float(BAR.dz_ref))
+
+
+#  안 재질(IN_SHADER) — 맨 색 col 이나 그림 im(nearest · 밉맵 없이). gloss 반짝의 좁기(0 이면 없다) ·
+#  bump 결 노멀 세기 · flat 면마다 한 색.
+static func _px(col: Color, im: Image = null, gloss := 0.0, bump := 0.0, flat := false) -> ShaderMaterial:
+	if _in_sh == null:
+		_in_sh = Shader.new()
+		_in_sh.code = IN_SHADER
+	var m := ShaderMaterial.new()
+	m.shader = _in_sh
+	m.set_shader_parameter("tint", col)
+	if im != null:
+		var t := ImageTexture.create_from_image(im)
+		m.set_shader_parameter("alb", t)
+		m.set_shader_parameter("hgt", t)
+		m.set_shader_parameter("use_tex", true)
+	m.set_shader_parameter("gloss", gloss)
+	m.set_shader_parameter("bump", bump)
+	m.set_shader_parameter("flat_n", flat)
+	m.set_shader_parameter("fill", BAR.fill)
+	m.set_shader_parameter("bands", float(BAR.bands))
 	return m
 
 
@@ -526,26 +658,128 @@ static func _in_light(l: Light3D, nm: String, col: Color, e: float) -> Light3D:
 
 
 #  빛무리 — 늘 카메라를 보는 더하기 막(유리알 · 전구 둘레의 번짐). 문 장면은 글로우를 끈다
-#  (밖의 빛 받은 결까지 번진다) — 번짐은 이것으로만.
+#  (밖의 빛 받은 결까지 번진다) — 번짐은 이것으로만. 고운 그러데이션 대신 테 진 고리 셋(그림 1 텍셀 =
+#  그 깊이의 논리 1px). 바깥 고리를 바둑판으로 두었더니 램프 둘레가 그물 친 원판으로 읽혀 고른 짙기로.
 static func _halo(at: Vector3, sz: float, col: Color, a: float) -> MeshInstance3D:
-	var g := Gradient.new()
-	g.offsets = PackedFloat32Array([0.0, 0.3, 1.0])
-	g.colors = PackedColorArray([Color(col, a), Color(col, a * 0.3), Color(col, 0.0)])
-	var gt := GradientTexture2D.new()
-	gt.gradient = g
-	gt.fill = GradientTexture2D.FILL_RADIAL
-	gt.fill_from = Vector2(0.5, 0.5)
-	gt.fill_to = Vector2(1.0, 0.5)
-	gt.width = 64
-	gt.height = 64
+	var n: int = maxi(int(roundf(sz * _den(at.z) * 0.5)) * 2, 8)
+	var im := Image.create(n, n, false, Image.FORMAT_RGBA8)
+	var c := Vector2(n, n) * 0.5
+	for y in n:
+		for x in n:
+			var r: float = (Vector2(x + 0.5, y + 0.5) - c).length() / (float(n) * 0.5)
+			var k := 0.0
+			if r < 0.26:
+				k = 1.0
+			elif r < 0.52:
+				k = 0.42
+			elif r < 0.80:
+				k = 0.16
+			im.set_pixel(x, y, Color(col, a * k))
 	var m := StandardMaterial3D.new()
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
 	m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
 	m.cull_mode = BaseMaterial3D.CULL_DISABLED
-	m.albedo_texture = gt
+	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	m.albedo_texture = ImageTexture.create_from_image(im)
 	return _quad_mesh(Vector2(sz, sz), at, m, "Halo")
+
+
+#  도트 그림 한 장을 세운다 — 밑변 가운데가 at · 문간 쪽을 본다(왼끝 술병도 열이 안 빠진다).
+#  1 텍셀 = 1 / den m. 노멀을 위로 조금 든다 — 펜던트 빛이 곧게 내리꽂혀 카운터 잔이 먹으로 꺼졌다.
+static func _sprite(bar: Node3D, im: Image, at: Vector3, den: float, glow := 0.0) -> MeshInstance3D:
+	var sz := Vector2(im.get_width(), im.get_height()) / den
+	var m := _px(Color.WHITE, im)
+	m.set_shader_parameter("cut", 0.5)
+	m.set_shader_parameter("glow_k", glow)
+	m.set_shader_parameter("nup", 0.6)
+	var q := _quad_mesh(sz, at + Vector3(0.0, sz.y * 0.5, 0.0), m, "Sprite")
+	q.rotation = Vector3(0.0, atan2(float(DOOR.cx) - at.x, -at.z), 0.0)
+	bar.add_child(q)
+	return q
+
+
+#  술병 그림 w × h — 몸 · 어깨 · 목 · 입술 · 마개. 줄마다 왼끝(그늘) · 1px 빛 · 몸 · 오른 그늘 ·
+#  오른끝. 반쯤은 몸에 종이 딱지.
+static func _bottle_img(w: int, h: int, ramp: Array, rng: RandomNumberGenerator) -> Image:
+	var im := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	im.fill(Color(0, 0, 0, 0))
+	var nw: int = maxi(3, int(roundf(float(w) * 0.36)))
+	if (w - nw) % 2 != 0:
+		nw += 1
+	var body: int = int(roundf(float(h) * rng.randf_range(0.50, 0.64)))
+	var cap_c: Color = [Color("a8762a"), Color("8c2233"), Color("1f1719"), ramp[0]][rng.randi() % 4]
+	for y in h:
+		var up: int = h - 1 - y
+		var ww: int = w
+		if up >= body:
+			ww = maxi(w - 2 * (up - body + 1), nw)
+		if y == 2:
+			ww = mini(nw + 2, w)
+		var x0: int = (w - ww) / 2
+		for i in ww:
+			var col: Color = ramp[2]
+			if i == 0:
+				col = ramp[1]
+			elif i == 1 and ww > 3:
+				col = ramp[3]
+			if i >= int(ceilf(float(ww) * 0.64)):
+				col = ramp[1]
+			if i == ww - 1 and ww > 2:
+				col = ramp[0]
+			if y < 2:
+				col = cap_c.lightened(0.25) if i == 1 else cap_c
+			im.set_pixel(x0 + i, y, col)
+	#  딱지 — 몸 가운데 · 오른쪽은 그늘 · 가운데 한 줄 글씨
+	if rng.randf() < 0.6 and w >= 6:
+		var ly0: int = h - body + 2
+		var lh: int = maxi(int(float(body) * rng.randf_range(0.30, 0.45)), 3)
+		var paper: Color = [Color("e8dfc8"), Color("c9bfae"), Color("f2c94c")][rng.randi() % 3]
+		for y in range(ly0, mini(ly0 + lh, h - 2)):
+			for i in range(1, w - 1):
+				var pc: Color = paper
+				if i >= int(ceilf(float(w) * 0.64)):
+					pc = paper.darkened(0.30)
+				if y == ly0 + lh / 2 and i > 1 and i < w - 2:
+					pc = ramp[0]
+				im.set_pixel(i, y, pc)
+	return im
+
+
+#  잔 그림 w × h — 유리 테(왼 밝고 오른 짙다) · 바닥 두 줄. full 이면 맥주(1px 빛 · 오른 그늘) ·
+#  위에 거품(울퉁불퉁한 윗줄). 아니면 밑에 남은 술 한 뼘 — 빈 테만 그렸더니 회색 상자로 읽혔다.
+static func _glass_img(w: int, h: int, full: bool, seed: int) -> Image:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed
+	var im := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	im.fill(Color(0, 0, 0, 0))
+	var foam: int = maxi(int(float(h) * 0.20), 2)
+	var top: int = 0 if full else int(float(h) * 0.62)
+	var sh: int = int(ceilf(float(w) * 0.64))
+	for y in h:
+		for x in w:
+			var col := Color(0, 0, 0, 0)
+			if x == 0:
+				col = Color("a3abbb")
+			elif x == w - 1:
+				col = Color("687085")
+			elif y >= h - 2:
+				col = Color("a3abbb") if x < w - 2 else Color("687085")
+			elif y >= top:
+				col = Color("c2a13d") if full else Color("e8873a")
+				if x == 1:
+					col = Color("f2c94c") if full else Color("f7ba70")
+				elif x >= sh:
+					col = Color("a8762a") if full else Color("b0512a")
+				if full and y < foam:
+					col = Color("fbf6ea") if x < sh else Color("c9bfae")
+					if y == 0 and rng.randf() < 0.35:
+						col = Color(0, 0, 0, 0)
+			elif x == 1 and y % 3 != 2:
+				col = Color("dde3ec")
+			im.set_pixel(x, y, col)
+	return im
 
 
 #  방 — 뒷벽(판자 · 허리 몰딩 · 밑판) · 바닥 판자 · 천장 · 옆벽.
@@ -557,38 +791,32 @@ static func _bar_room(bar: Node3D) -> void:
 	var x0: float = B.x0
 	var x1: float = B.x1
 	var ry: float = B.rail_y
-	var pxm: float = B.px
+	var pxm: float = _den(bz)
 	var W: float = x1 - x0
 	var mx: float = (x0 + x1) * 0.5
-	var up := _vplank(int(W * pxm), int((cy - ry) * pxm), Room3D.COL.wall2, 8101, 20, 28)
-	bar.add_child(_quad_mesh(Vector2(W, cy - ry), Vector3(mx, (cy + ry) * 0.5, bz), _in_mat(up), "BackUp"))
-	var lo := _vplank(int(W * pxm), int((ry - fy) * pxm), Room3D.COL.wall.darkened(0.30), 8102, 44, 60)
-	bar.add_child(_quad_mesh(Vector2(W, ry - fy), Vector3(mx, (ry + fy) * 0.5, bz), _in_mat(lo), "BackLo"))
+	var up := _vplank(int(W * pxm), int((cy - ry) * pxm), B.wall, 8101, 20, 28)
+	bar.add_child(_quad_mesh(Vector2(W, cy - ry), Vector3(mx, (cy + ry) * 0.5, bz), _px(Color.WHITE, up, 0.0, 3.0),
+			"BackUp"))
+	var lo := _vplank(int(W * pxm), int((ry - fy) * pxm), B.wall_lo, 8102, 44, 60)
+	bar.add_child(_quad_mesh(Vector2(W, ry - fy), Vector3(mx, (ry + fy) * 0.5, bz), _px(Color.WHITE, lo, 0.0, 3.0),
+			"BackLo"))
 	#  허리 몰딩 — 윗변이 빛을 받는다
-	bar.add_child(Room3D._box(Vector3(W, 0.05, 0.05), Vector3(mx, ry, bz + 0.025),
-			Room3D._mat(Room3D.COL.trim, 0.5)))
-	#  바닥 — 가로 판자(니스 · 빛 웅덩이가 번들거린다)
+	bar.add_child(Room3D._box(Vector3(W, 0.05, 0.05), Vector3(mx, ry, bz + 0.025), _px(B.trim)))
+	#  바닥 — 가로 판자(니스 · 빛 웅덩이에 반짝이 선다)
 	var dz0: float = float(DOOR.wall_z) - float(DOOR.reveal)
 	var D: float = dz0 - bz
-	var fl := Room3D._plank(int(W * pxm * 0.5), int(D * pxm * 0.5), Color("2a1a10"), 8103, 14, 18, false)
-	var fm := _in_mat(fl[0], 0.45)
-	var fq := _quad_mesh(Vector2(W, D), Vector3(mx, fy, (dz0 + bz) * 0.5), fm, "Floor")
+	var fd: float = _den(-4.0)
+	var fl := Room3D._plank(int(W * fd), int(D * fd * 0.5), B.floor_c, 8103, 14, 18, false)
+	var fq := _quad_mesh(Vector2(W, D), Vector3(mx, fy, (dz0 + bz) * 0.5), _px(Color.WHITE, fl[0], 12.0), "Floor")
 	fq.rotation_degrees = Vector3(-90.0, 0.0, 0.0)
 	bar.add_child(fq)
-	bar.add_child(Room3D._box(Vector3(W, 0.1, D), Vector3(mx, cy + 0.05, (dz0 + bz) * 0.5),
-			Room3D._mat(Room3D.COL.ceil)))
-	var sm := _in_mat(up.duplicate() as Image)
+	bar.add_child(Room3D._box(Vector3(W, 0.1, D), Vector3(mx, cy + 0.05, (dz0 + bz) * 0.5), _px(B.ceil_c)))
+	var sm := _px(Color.WHITE, up.duplicate() as Image, 0.0, 3.0)
 	for sx in [x0, x1]:
 		var q := _quad_mesh(Vector2(D, cy - fy), Vector3(float(sx), (cy + fy) * 0.5, (dz0 + bz) * 0.5), sm,
 				"Side")
 		q.rotation_degrees = Vector3(0.0, 90.0 if float(sx) < 0.0 else -90.0, 0.0)
 		bar.add_child(q)
-	#  방을 고루 덮는 약한 따뜻한 빛 — 빛 웅덩이 밖이 먹으로 안 꺼지게
-	var fill := _in_light(OmniLight3D.new(), "Fill", Color("ffb070"), 0.55) as OmniLight3D
-	fill.omni_range = 5.5
-	fill.omni_attenuation = 1.4
-	fill.position = Vector3(0.4, 0.9, -2.6)
-	bar.add_child(fill)
 
 
 #  뒤 선반 — 거울 판 · 나무 테 · 선반 셋(밑불) · 술병. 밑에 짙은 밑장.
@@ -603,19 +831,18 @@ static func _bar_back(bar: Node3D) -> void:
 	var sy: Array = B.shelf_y
 	var y0: float = float(sy[0]) - 0.05
 	var y1: float = float(sy[sy.size() - 1]) + 0.40
-	var wood := Room3D._mat(Room3D.COL.wood, 0.6)
-	var wood_dk := Room3D._mat(Room3D.COL.wood_dk, 0.7)
-	#  거울 판 — 짙고 매끈하다(밑불 · 술병 빛을 받아 번들거린다)
+	var wood := _px(B.wood)
+	var wood_dk := _px(B.wood_dk)
+	#  거울 판 — 짙다(술병이 앞에 선다 · 반짝을 걷었다 — 밑불마다 큰 베이지 원판이 섰다)
 	bar.add_child(Room3D._box(Vector3(sw, y1 - y0, 0.02), Vector3(smx, (y0 + y1) * 0.5, bz + 0.01),
-			Room3D._mat(Color("1a1a22"), 0.12, 0.6)))
+			_px(B.mirror)))
 	#  테 — 기둥 넷 · 머리 갓
 	for k in 4:
 		var px: float = sx0 + sw * float(k) / 3.0
 		bar.add_child(Room3D._box(Vector3(0.06, y1 - y0 + 0.04, 0.10),
 				Vector3(px, (y0 + y1) * 0.5, bz + 0.05), wood))
 	bar.add_child(Room3D._box(Vector3(sw + 0.20, 0.10, 0.16), Vector3(smx, y1 + 0.05, bz + 0.08), wood))
-	bar.add_child(Room3D._box(Vector3(sw + 0.24, 0.03, 0.19), Vector3(smx, y1 + 0.115, bz + 0.09),
-			Room3D._mat(Room3D.COL.trim, 0.5)))
+	bar.add_child(Room3D._box(Vector3(sw + 0.24, 0.03, 0.19), Vector3(smx, y1 + 0.115, bz + 0.09), _px(B.trim)))
 	#  밑장 — 선반 밑에서 바닥까지
 	bar.add_child(Room3D._box(Vector3(sw + 0.1, y0 - fy, 0.42), Vector3(smx, (y0 + fy) * 0.5, bz + 0.21),
 			wood_dk))
@@ -626,12 +853,12 @@ static func _bar_back(bar: Node3D) -> void:
 		#  밑불 — 선반 앞 끝 밑의 빛 줄 · 술병을 밑에서 비추는 빛 둘
 		bar.add_child(Room3D._box(Vector3(sw - 0.06, 0.008, 0.012), Vector3(smx, y - 0.02, bz + 0.23), glow))
 		for h in 2:
-			var ol := _in_light(OmniLight3D.new(), "Shelf", B.lamp, 0.7) as OmniLight3D
-			ol.omni_range = 1.1
+			var ol := _in_light(OmniLight3D.new(), "Shelf", B.lamp, 0.5) as OmniLight3D
+			ol.omni_range = 0.85
 			ol.omni_attenuation = 1.6
 			ol.position = Vector3(sx0 + sw * (0.25 + 0.5 * float(h)), y + 0.14, bz + 0.34)
 			bar.add_child(ol)
-	#  술병 — 상점 방과 같은 빛깔(BOTTLE_COLS) · 씨 고정
+	#  술병 — 도트 그림(BOTTLE_RAMPS · 상점 방과 같은 빛깔 차례) · 씨 고정
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 20261010
 	for s in sy.size():
@@ -640,14 +867,12 @@ static func _bar_back(bar: Node3D) -> void:
 		while x < sx1 - 0.07:
 			var bh: float = rng.randf_range(0.15, 0.24)
 			var br: float = rng.randf_range(0.032, 0.05)
-			var bc: Color = Room3D.BOTTLE_COLS[rng.randi() % Room3D.BOTTLE_COLS.size()]
-			var gm := Room3D._mat(bc, 0.15, 0.0)
-			gm.emission_enabled = true
-			gm.emission = bc
-			gm.emission_energy_multiplier = 0.18
+			var ci: int = rng.randi() % BOTTLE_RAMPS.size()
 			var z: float = bz + 0.10 + rng.randf_range(-0.02, 0.03)
-			bar.add_child(Room3D._cyl(br, br, bh, Vector3(x, y + bh * 0.5, z), gm, 8))
-			bar.add_child(Room3D._cyl(br * 0.35, br * 0.42, 0.07, Vector3(x, y + bh + 0.035, z), gm, 6))
+			var d: float = _den(z)
+			var im := _bottle_img(maxi(int(roundf(br * 2.0 * d)), 5), int(roundf((bh + 0.07) * d)),
+					BOTTLE_RAMPS[ci], rng)
+			_sprite(bar, im, Vector3(x, y, z), d, 0.12)
 			x += br * 2.0 + rng.randf_range(0.02, 0.09)
 
 
@@ -662,74 +887,64 @@ static func _bar_counter(bar: Node3D) -> void:
 	var x1: float = B.cnt_x1
 	var L: float = x1 - x0
 	var mx: float = (x0 + x1) * 0.5
-	var pxm: float = B.px
+	var pxm: float = _den(cz)
+	var dk := _px(B.wood_dk)
 	#  앞판 — 세로 판자 · 위아래 몰딩
 	var fh: float = cy - 0.03 - fy
-	var fr := _vplank(int(L * pxm), int(fh * pxm), Room3D.COL.wood.darkened(0.12), 8104, 26, 34)
-	bar.add_child(_quad_mesh(Vector2(L, fh), Vector3(mx, fy + fh * 0.5, cz), _in_mat(fr, 0.7), "CntFront"))
-	bar.add_child(Room3D._box(Vector3(L, 0.04, cd), Vector3(mx, fy + fh * 0.5, cz - cd * 0.5),
-			Room3D._mat(Room3D.COL.wood_dk)))
-	bar.add_child(Room3D._box(Vector3(L, fh, 0.04), Vector3(mx, fy + fh * 0.5, cz - cd + 0.02),
-			Room3D._mat(Room3D.COL.wood_dk)))
-	bar.add_child(Room3D._box(Vector3(0.04, fh, cd), Vector3(x1 - 0.02, fy + fh * 0.5, cz - cd * 0.5),
-			Room3D._mat(Room3D.COL.wood_dk)))
-	bar.add_child(Room3D._box(Vector3(L, 0.04, 0.04), Vector3(mx, cy - 0.07, cz + 0.01),
-			Room3D._mat(Room3D.COL.trim, 0.5)))
-	bar.add_child(Room3D._box(Vector3(L, 0.10, 0.03), Vector3(mx, fy + 0.05, cz + 0.015),
-			Room3D._mat(Room3D.COL.wood_dk)))
-	#  윗판 — 니스(빛 웅덩이가 번들거린다) · 앞으로 조금 나온다
-	var tp := Room3D._plank(int((L + 0.06) * pxm), int((cd + 0.08) * pxm), Room3D.COL.oak, 8105, 16, 22, false)
-	var tm := Room3D._varnish(tp)
-	tm.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST_WITH_MIPMAPS
+	var fr := _vplank(int(L * pxm), int(fh * pxm), B.oak, 8104, 26, 34)
+	bar.add_child(_quad_mesh(Vector2(L, fh), Vector3(mx, fy + fh * 0.5, cz), _px(Color.WHITE, fr, 0.0, 3.0),
+			"CntFront"))
+	bar.add_child(Room3D._box(Vector3(L, 0.04, cd), Vector3(mx, fy + fh * 0.5, cz - cd * 0.5), dk))
+	bar.add_child(Room3D._box(Vector3(L, fh, 0.04), Vector3(mx, fy + fh * 0.5, cz - cd + 0.02), dk))
+	bar.add_child(Room3D._box(Vector3(0.04, fh, cd), Vector3(x1 - 0.02, fy + fh * 0.5, cz - cd * 0.5), dk))
+	bar.add_child(Room3D._box(Vector3(L, 0.04, 0.04), Vector3(mx, cy - 0.07, cz + 0.01), _px(B.trim)))
+	bar.add_child(Room3D._box(Vector3(L, 0.10, 0.03), Vector3(mx, fy + 0.05, cz + 0.015), dk))
+	#  윗판 — 니스(빛 웅덩이에 반짝이 선다) · 앞으로 조금 나온다
+	var tp := Room3D._plank(int((L + 0.06) * pxm), int((cd + 0.08) * pxm), B.wood, 8105, 16, 22, false)
 	bar.add_child(Room3D._box(Vector3(L + 0.06, 0.05, cd + 0.08), Vector3(mx, cy - 0.025, cz - cd * 0.5 + 0.04),
-			tm))
+			_px(Color.WHITE, tp[0], 16.0)))
 	#  놋쇠 발 난간 — 앞판 밑에서 한 뼘 뜬다(받침 몇)
-	var brass := Room3D._mat(Room3D.COL.brass, 0.3, 0.8)
-	var rail := Room3D._cyl(0.022, 0.022, L, Vector3(mx, fy + 0.24, cz + 0.12), brass, 10)
+	var brass := _px(B.brass, null, 10.0, 0.0, true)
+	var rail := Room3D._cyl(0.022, 0.022, L, Vector3(mx, fy + 0.24, cz + 0.12), brass, 6)
 	rail.rotation_degrees = Vector3(0.0, 0.0, 90.0)
 	bar.add_child(rail)
 	var k := x0 + 0.4
 	while k < x1:
-		var po := Room3D._cyl(0.012, 0.012, 0.12, Vector3(k, fy + 0.24, cz + 0.06), brass, 8)
+		var po := Room3D._cyl(0.012, 0.012, 0.12, Vector3(k, fy + 0.24, cz + 0.06), brass, 6)
 		po.rotation_degrees = Vector3(90.0, 0.0, 0.0)
 		bar.add_child(po)
 		k += 0.9
 	#  탭 — 놋쇠 기둥 하나에 손잡이 셋
 	var tx: float = -0.95
 	var tz: float = cz - cd * 0.55
-	bar.add_child(Room3D._cyl(0.035, 0.04, 0.26, Vector3(tx, cy + 0.13, tz), brass, 12))
+	bar.add_child(Room3D._cyl(0.035, 0.04, 0.26, Vector3(tx, cy + 0.13, tz), brass, 8))
 	for h in 3:
 		var hx: float = tx - 0.09 + 0.09 * float(h)
-		bar.add_child(Room3D._cyl(0.012, 0.012, 0.07, Vector3(hx, cy + 0.21, tz + 0.05), brass, 8))
+		bar.add_child(Room3D._cyl(0.012, 0.012, 0.07, Vector3(hx, cy + 0.21, tz + 0.05), brass, 6))
 		var hd := Room3D._cyl(0.016, 0.012, 0.11, Vector3(hx, cy + 0.30, tz + 0.06),
-				Room3D._mat([Color("1a1414"), Color("6b1f22"), Color("1f3b2a")][h], 0.5), 8)
+				_px([Color("1a1424"), Color("8c2233"), Color("2f6340")][h], null, 0.0, 0.0, true), 6)
 		hd.rotation_degrees = Vector3(-12.0, 0.0, 0.0)
 		bar.add_child(hd)
-	#  잔 — 맥주 둘 · 빈 잔 하나
-	var gl := Room3D._mat(Color(0.75, 0.80, 0.78), 0.08, 0.3)
-	var beer := Room3D._mat(Color("c98a2a"), 0.2)
-	beer.emission_enabled = true
-	beer.emission = Color("c98a2a")
-	beer.emission_energy_multiplier = 0.25
+	#  잔 — 맥주 둘 · 빈 잔 하나(도트 그림)
 	for gx in [-1.95, -0.30, 0.25]:
-		var full: bool = float(gx) < 0.0
 		var gz: float = cz - 0.18
-		bar.add_child(Room3D._cyl(0.035, 0.03, 0.14, Vector3(float(gx), cy + 0.07, gz), beer if full else gl, 10))
-		if full:
-			bar.add_child(Room3D._cyl(0.036, 0.036, 0.025, Vector3(float(gx), cy + 0.152, gz),
-					Room3D._mat(Color("efe6cf"), 0.9), 10))
-	#  의자 — 가죽 방석 · 기둥 · 발 받침 고리 · 받침판
-	var leather := Room3D._mat(B.leather, 0.55)
-	var iron := Room3D._mat(Color("1b1716"), 0.4, 0.6)
+		var d: float = _den(gz)
+		var im := _glass_img(maxi(int(roundf(0.07 * d)), 5), int(roundf(0.15 * d)), float(gx) < 0.0,
+				8110 + int(float(gx) * 10.0))
+		_sprite(bar, im, Vector3(float(gx), cy, gz), d, 0.40)
+	#  의자 — 가죽 방석 · 기둥 · 발 받침 고리 · 받침판(면마다 한 색)
+	var leather := _px(B.leather, null, 0.0, 0.0, true)
+	var iron := _px(B.iron, null, 8.0, 0.0, true)
+	var ring := _px(B.brass, null, 10.0, 0.0, true)
 	for sx in B.stool_x:
 		var px: float = float(sx)
 		var pz: float = B.stool_z
 		var st: float = fy + 0.76
-		bar.add_child(Room3D._cyl(0.17, 0.16, 0.07, Vector3(px, st, pz), leather, 16))
-		bar.add_child(Room3D._cyl(0.15, 0.15, 0.02, Vector3(px, st - 0.045, pz), iron, 16))
-		bar.add_child(Room3D._cyl(0.025, 0.025, st - fy, Vector3(px, (st + fy) * 0.5, pz), iron, 8))
-		bar.add_child(Room3D._cyl(0.13, 0.13, 0.015, Vector3(px, fy + 0.30, pz), brass, 16))
-		bar.add_child(Room3D._cyl(0.20, 0.21, 0.02, Vector3(px, fy + 0.01, pz), iron, 16))
+		bar.add_child(Room3D._cyl(0.17, 0.16, 0.07, Vector3(px, st, pz), leather, 10))
+		bar.add_child(Room3D._cyl(0.15, 0.15, 0.02, Vector3(px, st - 0.045, pz), iron, 10))
+		bar.add_child(Room3D._cyl(0.025, 0.025, st - fy, Vector3(px, (st + fy) * 0.5, pz), iron, 6))
+		bar.add_child(Room3D._cyl(0.13, 0.13, 0.015, Vector3(px, fy + 0.30, pz), ring, 10))
+		bar.add_child(Room3D._cyl(0.20, 0.21, 0.02, Vector3(px, fy + 0.01, pz), iron, 10))
 
 
 #  펜던트 셋 — 줄 · 녹색 법랑 갓(밑이 트였다 · 안쪽은 전구 빛) · 전구 · 밑으로 빛 · 빛무리.
@@ -739,19 +954,20 @@ static func _bar_lamps(bar: Node3D) -> void:
 	var cy: float = B.ceil
 	var pz: float = B.pend_z
 	var py: float = B.pend_y
-	var en := Room3D._mat(B.enamel, 0.35, 0.2)
-	var inner := Room3D._glow(lamp.lerp(Color("ffe6b0"), 0.4), 0.9)
+	var en := _px(B.enamel, null, 14.0, 0.0, true)
+	var inner := Room3D._glow(Color("fdeaa0"), 0.9)
+	var cord := _px(Color("0d0b16"))
+	var cap := _px(B.brass, null, 10.0, 0.0, true)
 	for lx in B.pend_x:
 		var x: float = float(lx)
-		bar.add_child(Room3D._cyl(0.006, 0.006, cy - py - 0.17, Vector3(x, (cy + py + 0.17) * 0.5, pz),
-				Room3D._mat(Color("0c0a0a"))))
-		bar.add_child(Room3D._cyl(0.03, 0.03, 0.04, Vector3(x, py + 0.17, pz), Room3D._brass(), 10))
+		bar.add_child(Room3D._cyl(0.006, 0.006, cy - py - 0.17, Vector3(x, (cy + py + 0.17) * 0.5, pz), cord, 4))
+		bar.add_child(Room3D._cyl(0.03, 0.03, 0.04, Vector3(x, py + 0.17, pz), cap, 6))
 		for side in 2:
 			var cm := CylinderMesh.new()
 			cm.top_radius = 0.04 if side == 0 else 0.036
 			cm.bottom_radius = 0.19 if side == 0 else 0.183
 			cm.height = 0.15
-			cm.radial_segments = 20
+			cm.radial_segments = 10
 			cm.rings = 1
 			cm.cap_bottom = false
 			cm.cap_top = side == 0
@@ -765,8 +981,10 @@ static func _bar_lamps(bar: Node3D) -> void:
 		var sm := SphereMesh.new()
 		sm.radius = 0.04
 		sm.height = 0.08
+		sm.radial_segments = 8
+		sm.rings = 4
 		bulb.mesh = sm
-		bulb.material_override = Room3D._glow(Color("fff1cf"), 4.0)
+		bulb.material_override = Room3D._glow(Color("fbf6ea"), 4.0)
 		bulb.position = Vector3(x, py + 0.02, pz)
 		bar.add_child(bulb)
 		var sl := _in_light(SpotLight3D.new(), "Pend", lamp, 4.5) as SpotLight3D
@@ -777,7 +995,7 @@ static func _bar_lamps(bar: Node3D) -> void:
 		sl.position = Vector3(x, py + 0.02, pz)
 		sl.rotation_degrees = Vector3(-90.0, 0.0, 0.0)
 		bar.add_child(sl)
-		bar.add_child(_halo(Vector3(x, py + 0.0, pz + 0.05), 0.55, lamp, 0.30))
+		bar.add_child(_halo(Vector3(x, py + 0.0, pz + 0.05), 0.30, lamp, 0.18))
 
 
 #  둥근 술 테이블 — 바 끝과 다트 장 사이 앞(던지는 길은 비킨다). 받침 하나 · 윗판 · 맥주 둘 ·
@@ -787,41 +1005,38 @@ static func _bar_table(bar: Node3D) -> void:
 	var fy: float = B.floor
 	var tc: Vector2 = B.table
 	var ty: float = fy + 1.04
-	var wood := Room3D._mat(Room3D.COL.wood_dk.lightened(0.10), 0.45, 0.1)
-	var iron := Room3D._mat(Color("1b1716"), 0.4, 0.6)
-	bar.add_child(Room3D._cyl(0.30, 0.30, 0.04, Vector3(tc.x, ty - 0.02, tc.y), wood, 24))
-	bar.add_child(Room3D._cyl(0.035, 0.035, ty - fy, Vector3(tc.x, (ty + fy) * 0.5, tc.y), iron, 8))
-	bar.add_child(Room3D._cyl(0.22, 0.24, 0.03, Vector3(tc.x, fy + 0.015, tc.y), iron, 16))
-	var beer := Room3D._mat(Color("c98a2a"), 0.2)
-	beer.emission_enabled = true
-	beer.emission = Color("c98a2a")
-	beer.emission_energy_multiplier = 0.25
-	var foam := Room3D._mat(Color("efe6cf"), 0.9)
+	var wood := _px(B.wood, null, 14.0, 0.0, true)
+	var iron := _px(B.iron, null, 8.0, 0.0, true)
+	bar.add_child(Room3D._cyl(0.30, 0.30, 0.04, Vector3(tc.x, ty - 0.02, tc.y), wood, 14))
+	bar.add_child(Room3D._cyl(0.035, 0.035, ty - fy, Vector3(tc.x, (ty + fy) * 0.5, tc.y), iron, 6))
+	bar.add_child(Room3D._cyl(0.22, 0.24, 0.03, Vector3(tc.x, fy + 0.015, tc.y), iron, 10))
 	for g in [Vector2(-0.14, 0.04), Vector2(0.12, -0.08)]:
-		bar.add_child(Room3D._cyl(0.035, 0.03, 0.14, Vector3(tc.x + g.x, ty + 0.07, tc.y + g.y), beer, 10))
-		bar.add_child(Room3D._cyl(0.036, 0.036, 0.022, Vector3(tc.x + g.x, ty + 0.15, tc.y + g.y), foam, 10))
-	var cup := Room3D._glow(Color("c2402c"), 1.2)
-	bar.add_child(Room3D._cyl(0.035, 0.03, 0.07, Vector3(tc.x + 0.02, ty + 0.035, tc.y + 0.10), cup, 12))
-	var flame := Room3D._glow(Color("ffd890"), 3.0)
-	bar.add_child(Room3D._cyl(0.004, 0.008, 0.025, Vector3(tc.x + 0.02, ty + 0.083, tc.y + 0.10), flame, 6))
+		var gz: float = tc.y + g.y
+		var d: float = _den(gz)
+		var im := _glass_img(maxi(int(roundf(0.07 * d)), 5), int(roundf(0.16 * d)), true, 8120 + int(g.x * 100.0))
+		_sprite(bar, im, Vector3(tc.x + g.x, ty, gz), d, 0.30)
+	var cup := Room3D._glow(Color("b03a32"), 1.2)
+	bar.add_child(Room3D._cyl(0.035, 0.03, 0.07, Vector3(tc.x + 0.02, ty + 0.035, tc.y + 0.10), cup, 8))
+	var flame := Room3D._glow(Color("fdeaa0"), 3.0)
+	bar.add_child(Room3D._cyl(0.004, 0.008, 0.025, Vector3(tc.x + 0.02, ty + 0.083, tc.y + 0.10), flame, 4))
 	var cl := _in_light(OmniLight3D.new(), "Candle", Color("ff9a50"), 0.9) as OmniLight3D
 	cl.omni_range = 0.9
 	cl.omni_attenuation = 1.8
 	cl.position = Vector3(tc.x + 0.02, ty + 0.12, tc.y + 0.10)
 	bar.add_child(cl)
-	bar.add_child(_halo(Vector3(tc.x + 0.02, ty + 0.06, tc.y + 0.14), 0.30, Color("ff9a50"), 0.22))
+	bar.add_child(_halo(Vector3(tc.x + 0.02, ty + 0.06, tc.y + 0.14), 0.22, Color("ff9a50"), 0.18))
 
 
 #  다트 장 — 뒷벽의 나무 장 · 판(그림) · 열어 젖힌 두 문짝(안쪽 칠판에 분필 점수) · 꽂힌 다트 셋 ·
-#  위에서 판을 비추는 그림등(그늘을 낸다).
+#  위에서 판을 비추는 그림등.
 static func _bar_darts(bar: Node3D) -> void:
 	var B: Dictionary = BAR
 	var bz: float = B.back
 	var bc: Vector2 = B.board
 	var R: float = B.board_r
 	var hw: float = B.cab
-	var oak := Room3D._mat(Room3D.COL.oak.lightened(0.08), 0.55)
-	var oak_dk := Room3D._mat(Room3D.COL.oak.darkened(0.25), 0.7)
+	var oak := _px(B.oak.lightened(0.10))
+	var oak_dk := _px(B.wood_dk)
 	#  장 — 뒷판 · 테 넷(앞으로 나온 상자)
 	bar.add_child(Room3D._box(Vector3(hw * 2.0, hw * 2.0, 0.03), Vector3(bc.x, bc.y, bz + 0.015), oak_dk))
 	var dep := 0.11
@@ -829,27 +1044,28 @@ static func _bar_darts(bar: Node3D) -> void:
 			[-hw + 0.02, 0.0, 0.04, hw * 2.0], [hw - 0.02, 0.0, 0.04, hw * 2.0]]:
 		bar.add_child(Room3D._box(Vector3(float(e[2]), float(e[3]), dep),
 				Vector3(bc.x + float(e[0]), bc.y + float(e[1]), bz + dep * 0.5), oak))
-	#  판 — 검은 받침 원 · 판 그림
-	var back := Room3D._cyl(R + 0.02, R + 0.02, 0.04, Vector3(bc.x, bc.y, bz + 0.05), Room3D._mat(Color("15100d")), 32)
+	#  판 — 검은 받침 원 · 판 그림(그 깊이의 1 텍셀 = 1px)
+	var back := Room3D._cyl(R + 0.02, R + 0.02, 0.04, Vector3(bc.x, bc.y, bz + 0.05), _px(Color("140904")), 16)
 	back.rotation_degrees = Vector3(90.0, 0.0, 0.0)
 	bar.add_child(back)
-	var bm := Room3D._mat(Color.WHITE, 0.75)
-	bm.albedo_texture = _board_img(96)
-	bm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+	var bn: int = int(roundf(R * _den(bz + 0.07))) * 2
+	var bm := _px(Color.WHITE, _board_img(bn))
+	bm.set_shader_parameter("cut", 0.5)
 	bar.add_child(_quad_mesh(Vector2(R * 2.0, R * 2.0), Vector3(bc.x, bc.y, bz + 0.0705), bm, "Board"))
 	#  꽂힌 다트 둘 — 20 위 언저리 · 판에서 비스듬히 나온다(앞에서 보면 깃 끝 십자 · 자루 한 획)
-	var steel := Room3D._mat(Color("8c8f96"), 0.3, 0.8)
-	var fl := Room3D._mat(B.flight, 0.6)
-	fl.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var steel := _px(B.steel, null, 10.0, 0.0, true)
+	var fl := _px(B.flight)
+	fl.set_shader_parameter("glow_k", 0.3)
+	var shaft := _px(Color("0d0b16"))
 	for dd in [Vector2(0.010, 0.135), Vector2(-0.045, 0.040)]:
 		var dart := Node3D.new()
 		dart.position = Vector3(bc.x + dd.x, bc.y + dd.y, bz + 0.072)
 		dart.rotation_degrees = Vector3(-14.0, dd.x * 300.0, 0.0)
 		bar.add_child(dart)
-		var brl := Room3D._cyl(0.005, 0.005, 0.04, Vector3(0.0, 0.0, 0.025), steel, 6)
+		var brl := Room3D._cyl(0.005, 0.005, 0.04, Vector3(0.0, 0.0, 0.025), steel, 4)
 		brl.rotation_degrees = Vector3(90.0, 0.0, 0.0)
 		dart.add_child(brl)
-		var sh := Room3D._cyl(0.0025, 0.0025, 0.04, Vector3(0.0, 0.0, 0.065), Room3D._mat(Color("101010")), 6)
+		var sh := Room3D._cyl(0.0025, 0.0025, 0.04, Vector3(0.0, 0.0, 0.065), shaft, 4)
 		sh.rotation_degrees = Vector3(90.0, 0.0, 0.0)
 		dart.add_child(sh)
 		for fr in [Vector3(0.0, 90.0, 0.0), Vector3(90.0, 0.0, 0.0)]:
@@ -857,10 +1073,11 @@ static func _bar_darts(bar: Node3D) -> void:
 			f.rotation_degrees = fr
 			dart.add_child(f)
 	#  문짝 둘 — 경첩(장 양끝)째 활짝(155°) 열려 안쪽 칠판이 앞을 본다
-	var ch := _scoreboard_img(56, 104, 8106)
-	var cm := _in_mat(ch, 0.95)
-	var ch2 := _scoreboard_img(56, 104, 8107)
-	var cm2 := _in_mat(ch2, 0.95)
+	var cd: float = _den(bz + dep)
+	var cw: int = int(roundf((hw - 0.05) * cd))
+	var chh: int = int(roundf((hw * 2.0 - 0.05) * cd))
+	var cm := _px(Color.WHITE, _scoreboard_img(cw, chh, 8106))
+	var cm2 := _px(Color.WHITE, _scoreboard_img(cw, chh, 8107))
 	for sd in [-1.0, 1.0]:
 		var piv := Node3D.new()
 		piv.position = Vector3(bc.x + sd * hw, bc.y, bz + dep)
@@ -873,11 +1090,12 @@ static func _bar_darts(bar: Node3D) -> void:
 				cm if sd < 0.0 else cm2, "Chalk")
 		q.rotation_degrees = Vector3(0.0, 180.0, 0.0)
 		piv.add_child(q)
-	#  그림등 — 장 위 놋쇠 갓 · 판을 비추는 빛(그늘)
-	var lb := Room3D._cyl(0.022, 0.022, 0.30, Vector3(bc.x, bc.y + hw + 0.10, bz + 0.20), Room3D._brass(), 12)
+	#  그림등 — 장 위 놋쇠 갓 · 판을 비추는 빛
+	var brass := _px(B.brass, null, 10.0, 0.0, true)
+	var lb := Room3D._cyl(0.022, 0.022, 0.30, Vector3(bc.x, bc.y + hw + 0.10, bz + 0.20), brass, 6)
 	lb.rotation_degrees = Vector3(0.0, 0.0, 90.0)
 	bar.add_child(lb)
-	var arm := Room3D._cyl(0.008, 0.008, 0.18, Vector3(bc.x, bc.y + hw + 0.08, bz + 0.10), Room3D._brass(), 6)
+	var arm := Room3D._cyl(0.008, 0.008, 0.18, Vector3(bc.x, bc.y + hw + 0.08, bz + 0.10), brass, 4)
 	arm.rotation_degrees = Vector3(90.0, 0.0, 0.0)
 	bar.add_child(arm)
 	bar.add_child(Room3D._box(Vector3(0.26, 0.006, 0.01), Vector3(bc.x, bc.y + hw + 0.08, bz + 0.21),
@@ -893,8 +1111,8 @@ static func _bar_darts(bar: Node3D) -> void:
 
 
 #  판 그림 — 게임 판과 같은 빛깔(game.gd C_LIGHT · C_DARK 칸 · C_RED · C_GREEN 띠 · 숫자 고리 검정).
-#  숫자 고리에 점을 찍었더니 멀리서 시계로 읽혀 맨 고리로 둔다.
-static func _board_img(n: int) -> ImageTexture:
+#  숫자 고리에 점을 찍었더니 멀리서 시계로 읽혀 맨 고리로 둔다. 텍셀은 판이 서는 깊이의 1px 이다.
+static func _board_img(n: int) -> Image:
 	var im := Image.create(n, n, false, Image.FORMAT_RGBA8)
 	var c := Vector2(n * 0.5, n * 0.5)
 	for y in n:
@@ -905,7 +1123,7 @@ static func _board_img(n: int) -> ImageTexture:
 			var sec := int(a / (TAU / 20.0))
 			var col := Color(0, 0, 0, 0)
 			if r <= 1.0:
-				col = Color("16131a")
+				col = Color("211d2b")
 			if r <= 0.80:
 				col = Color("e8dfc8") if sec % 2 == 0 else Color("2b2438")
 				if (r > 0.72 and r <= 0.80) or (r > 0.44 and r <= 0.50):
@@ -915,7 +1133,7 @@ static func _board_img(n: int) -> ImageTexture:
 			if r <= 0.05:
 				col = Color("d8483d")
 			im.set_pixel(x, y, col)
-	return ImageTexture.create_from_image(im)
+	return im
 
 
 #  3 × 5 숫자(분필 점수판)
@@ -925,7 +1143,8 @@ const DIG := ["111101101101111", "010110010010111", "111001111100111", "11100111
 
 
 #  문짝 안쪽 칠판 — 두 칸(둘이 겨룬다)에 501 부터 깎아 내린 점수. 지난 값은 그어 지웠다.
-#  분필은 다 안 묻는다(점이 빠진다) · 옛 글을 문질러 지운 얼룩이 옅게 남았다.
+#  분필은 다 안 묻는다(점이 빠진다) · 옛 글을 문질러 지운 얼룩이 옅게 남았다. 칸마다 가운데에
+#  세 자리(11px)를 앉힌다 — 텍셀이 그 깊이의 1px 이라 칸 폭이 스무 남짓이다.
 static func _scoreboard_img(w: int, h: int, seed: int) -> Image:
 	var B: Dictionary = BAR
 	var rng := RandomNumberGenerator.new()
@@ -933,12 +1152,12 @@ static func _scoreboard_img(w: int, h: int, seed: int) -> Image:
 	var im := Image.create(w, h, false, Image.FORMAT_RGBA8)
 	im.fill(B.chalk)
 	var ink: Color = B.chalk_ink
-	var smear: Color = Color(B.chalk).lerp(ink, 0.10)
-	for _k in 40:
-		im.fill_rect(Rect2i(rng.randi_range(0, w - 6), rng.randi_range(0, h - 2), rng.randi_range(3, 8), 1), smear)
+	var smear: Color = Color("2f6340")
+	for _k in 24:
+		im.fill_rect(Rect2i(rng.randi_range(0, w - 6), rng.randi_range(0, h - 2), rng.randi_range(3, 7), 1), smear)
 	var dot := func(x: int, y: int) -> void:
-		if x >= 0 and y >= 0 and x < w and y < h and rng.randf() > 0.14:
-			im.set_pixel(x, y, ink.darkened(rng.randf_range(0.0, 0.18)))
+		if x >= 0 and y >= 0 and x < w and y < h and rng.randf() > 0.12:
+			im.set_pixel(x, y, ink if rng.randf() < 0.7 else Color("c9bfae"))
 	var num := func(v: int, x: int, y: int) -> void:
 		var t := str(v)
 		for i in t.length():
@@ -948,24 +1167,24 @@ static func _scoreboard_img(w: int, h: int, seed: int) -> Image:
 					if g[gy * 3 + gx] == "1":
 						dot.call(x + i * 4 + gx, y + gy)
 	#  가운데 세로줄 · 머리 밑 가로줄
-	for y in range(3, h - 3):
+	for y in range(2, h - 2):
 		dot.call(w / 2, y)
-	for x in range(3, w - 3):
-		dot.call(x, 10)
+	for x in range(2, w - 2):
+		dot.call(x, 8)
 	for col in 2:
-		var cx: int = 4 + col * (w / 2)
-		num.call(501, cx + 6, 3)
+		var cx: int = col * (w / 2) + maxi((w / 2 - 11) / 2, 1)
+		num.call(501, cx, 2)
 		var v := 501
-		var y := 14
-		while y < h - 8 and v > 40:
+		var y := 11
+		while y < h - 7 and v > 40:
 			v -= rng.randi_range(20, 100)
 			v = maxi(v, 0)
-			num.call(v, cx + 6, y)
+			num.call(v, cx + 4 * (3 - str(v).length()), y)
 			#  지난 값은 그어 지웠다(맨 끝 값만 산다)
-			if y + 9 < h - 8 and v > 40:
-				for x in range(cx + 4, cx + 20):
+			if y + 8 < h - 7 and v > 40:
+				for x in range(cx - 1, cx + 12):
 					dot.call(x, y + 2)
-			y += 8
+			y += 7
 	return im
 
 
