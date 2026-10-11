@@ -8775,6 +8775,13 @@ func _click(m: Vector2) -> void:
 						_set_go("top")
 						_sfx("menu_pick")
 						return
+					"res":
+						#  ◀ · ▶ 는 한 칸씩(끝에서 감는다) · 이름 쪽은 다음 크기로. 전체화면이면 잠겼다.
+						if _res_arrow_rect(i, false).has_point(m):
+							_res_step(-1)
+						else:
+							_res_step(1)
+						return
 					"fsel":
 						#  처음 켤 때의 화면 고르기를 다시 연다(FSEL) — 고르면 이 창으로 돌아온다.
 						_sfx("menu_pick")
@@ -44501,6 +44508,102 @@ func _draw_profile() -> void:
 			_menu_back_rect().has_point(mouse_at))
 
 
+# ══════════════════════════════════════════════════════════
+#  해상도 — 창 크기 (2026-10-11)
+# ──────────────────────────────────────────────────────────
+#  「보통 게임이면 화면 설정에 해상도 옵션 있지 않아?」 → 「줄 따로 두기」(사용자 — 전체화면 줄은 그대로).
+#  설정 「화면」 탭의 「전체화면」 밑에 「해상도 ◀ 1920 × 1080 ▶」 — 창 모드의 창 크기다. 16:9 표준 크기
+#  중 이 모니터의 쓸 수 있는 넓이(작업 표시줄을 뺀 넓이에서 창 테 몫 deco 를 또 뺀다)에 드는 것만 돈다.
+#  고르면 창을 그 크기로 바꾸고 모니터 가운데에 세운다. 전체화면이면 모니터 해상도 그대로라 줄이 어둡게
+#  잠기고(값은 남는다) 창으로 돌아오면 그 크기로 선다. 그림은 논리 640×360 을 창에 맞춰 늘인다
+#  (canvas_items · fractional) — 글자는 창 해상도로 굽는다. 저장 "res"(가로 px · 0 이면 안 골랐다 —
+#  프로젝트 기본 창 1280×720 그대로).
+const RES := {"sizes": [Vector2i(1280, 720), Vector2i(1600, 900), Vector2i(1920, 1080),
+		Vector2i(2560, 1440), Vector2i(3200, 1800), Vector2i(3840, 2160)],
+		"deco": Vector2i(16, 48), "arrow": Vector2(26.0, 22.0)}
+var res_w := 0
+
+
+#  이 모니터에 드는 크기들 — 가장 작은 것은 늘 든다. 모니터를 모르면(헤드리스) 전부.
+func _res_list() -> Array:
+	var all: Array = RES.sizes
+	var us := Vector2i.ZERO
+	if DisplayServer.get_screen_count() > 0:
+		us = DisplayServer.screen_get_usable_rect(DisplayServer.window_get_current_screen()).size
+	if us.x <= 0 or us.y <= 0:
+		return all.duplicate()
+	var deco: Vector2i = RES.deco
+	var out := []
+	for v in all:
+		var q: Vector2i = v
+		if q.x + deco.x <= us.x and q.y + deco.y <= us.y:
+			out.append(q)
+	if out.is_empty():
+		out.append(all[0])
+	return out
+
+
+#  고른 크기의 자리. 안 골랐으면 지금 창 가로로, 목록에 없으면(모니터가 바뀌었다) 그보다 작은 것 중 가장 큰 것.
+func _res_idx() -> int:
+	var ls := _res_list()
+	var w: int = res_w
+	if w <= 0:
+		w = DisplayServer.window_get_size().x if _has_renderer() else (ls[0] as Vector2i).x
+	var best := 0
+	for i in ls.size():
+		var q: Vector2i = ls[i]
+		if q.x == w:
+			return i
+		if q.x <= w:
+			best = i
+	return best
+
+
+func _res_label() -> String:
+	var q: Vector2i = _res_list()[_res_idx()]
+	return "%d × %d" % [q.x, q.y]
+
+
+func _res_fs() -> bool:
+	var md := DisplayServer.window_get_mode()
+	return md == DisplayServer.WINDOW_MODE_FULLSCREEN or md == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN
+
+
+#  한 칸 민다(끝에서 감는다). 전체화면이면 잠겼다 — 막는 소리만.
+func _res_step(dir: int) -> void:
+	if _res_fs():
+		_sfx("deny")
+		return
+	var ls := _res_list()
+	var i := posmod(_res_idx() + dir, ls.size())
+	res_w = (ls[i] as Vector2i).x
+	Save.set_set("res", res_w)
+	_res_apply()
+	_sfx("menu_pick2")
+
+
+#  창을 고른 크기로 · 모니터 가운데에. 전체화면 · 헤드리스면 값만 둔다.
+func _res_apply() -> void:
+	if res_w <= 0 or _res_fs() or not _has_renderer():
+		return
+	var q: Vector2i = _res_list()[_res_idx()]
+	if DisplayServer.window_get_size() != q:
+		DisplayServer.window_set_size(q)
+	var ur := DisplayServer.screen_get_usable_rect(DisplayServer.window_get_current_screen())
+	if ur.size.x > 0:
+		DisplayServer.window_set_position(ur.position + (ur.size - q) / 2)
+
+
+#  해상도 줄의 ◀ · ▶ 단추 — 이름 칸 뒤 조작 칸의 양 끝(줄 세로 한가운데).
+func _res_arrow_rect(i: int, right: bool) -> Rect2:
+	var r := _set_rect(i)
+	var sz: Vector2 = RES.arrow
+	var x0: float = r.position.x + float(SETW.name_w)
+	var x1: float = r.end.x - 10.0
+	var y: float = roundf(r.get_center().y - sz.y * 0.5)
+	return Rect2(Vector2(x1 - sz.x if right else x0, y), sz)
+
+
 func _toggle_fullscreen() -> void:
 	# 에디터에 내장된 실행에서는 창 모드를 못 바꾼다 — 내장 해제나
 	# 내보낸 빌드에서만 실제로 커진다.
@@ -44509,6 +44612,9 @@ func _toggle_fullscreen() -> void:
 			DisplayServer.WINDOW_MODE_WINDOWED if fs
 			else DisplayServer.WINDOW_MODE_FULLSCREEN)
 	Save.set_set("fullscreen", not fs)
+	#  창으로 돌아오면 고른 창 크기로 선다(RES) — 모드가 바뀐 다음 틀에 앉힌다.
+	if fs:
+		call_deferred("_res_apply")
 	#  ⚠ **설정 여섯 줄 중 이 줄만 제 소리가 없었다.** "vol","mus" 는
 	#  menu_pick2 를 내고 return 하는데 "fs" 는 그대로 떨어져 맨 밑
 	#  _sfx("menu_back") 을 먹었다 — 켜고 끄는 토글이 **나가는 소리**로
@@ -44537,11 +44643,15 @@ func _load_settings() -> void:
 	wipe_snow = bool(Save.get_set("wipe_snow", true))
 	_apply_vol()
 	_crt_apply()        # 층은 _ready 가 이 뒤에 세운다 — 그때 다시 앉는다
+	#  창 크기(RES) — 고른 적이 있으면 그 크기로 선다(전체화면이면 값만 들고 있는다).
+	res_w = int(Save.get_set("res", 0))
 	if bool(Save.get_set("fullscreen", false)):
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 		var got := DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
 		if not got:
 			Save.set_set("fullscreen", false)
+	if res_w > 0:
+		_res_apply()
 
 
 #  빌려 온 것의 만든이를 적는 자리. **지금은 빈 줄이다** — 효과음은 빌려
@@ -51460,13 +51570,15 @@ const SETW := {
 	#  2026-10-08 화면 탭이 여섯 줄(전환 지지직)이 되어 창이 36(줄 30 + 틈 6) 자랐다 — 위아래 23 씩 남는다.
 	#  2026-10-10 「화면 고르기」 줄이 들어 일곱 줄 — 줄 높이(쥐는 칸)는 그대로 두고 틈을 6 → 2 로
 	#  줄여 창은 12 만 자랐다(위아래 17 씩 · 반쯤 걸친 이름표 윗변이 화면 끝에서 6 — qa_settings 의 여백).
+	#  2026-10-11 「해상도」 줄이 들어 여덟 줄 — 사용자가 「줄 따로 두기」(줄 높이 30 → 26)를 골랐다.
+	#  창 높이는 그대로다(26 × 8 + 2 × 7 = 30 × 7 + 2 × 6 = 222).
 	"set": Vector2(400.0, 326.0),
 	"pad": 12.0,       # 창 안쪽 여백 — 줄 · 탭 · 「뒤로」의 양 끝
 	"plate_h": 22.0,   # 이름표 높이 — 윗변에 반쯤 걸친다(말상자 이름표와 같은 말)
 	"tab_y": 20.0,     # 탭 윗변 — 이름표 밑 9px
 	"tab_h": 26.0,     # 런 정보 탭과 같다(턱 2 포함)
 	"row_y": 58.0,     # 첫 줄
-	"srow_h": 30.0,
+	"srow_h": 26.0,
 	"sgap": 2.0,
 	"name_w": 150.0,   # 이름 칸 — 홈은 여기서 시작한다
 	"val_w": 66.0,     # 수 칸 — 홈은 여기 앞에서 끝난다. 수 받침(46) + 손잡이 반폭 · 테 + 틈
@@ -51631,10 +51743,13 @@ func _set_info(key: String) -> Dictionary:
 			#  「화면 고르기」(FSEL)는 제목에서 연 설정에만 — 고르기의 바닥이 문 장면이다. 맨 위 —
 			#  밑의 게이지 넷을 한 번에 앉히는 줄이다(디아블로 4 의 「밝기 보정」도 그래픽 탭 위쪽).
 			if pause_from < 0:
-				return {"n": "화면", "kids": ["fsel", "fs", "crt", "warp", "vhs", "dot", "wipe"]}
-			return {"n": "화면", "kids": ["fs", "crt", "warp", "vhs", "dot", "wipe"]}
+				return {"n": "화면", "kids": ["fsel", "fs", "res", "crt", "warp", "vhs", "dot", "wipe"]}
+			return {"n": "화면", "kids": ["fs", "res", "crt", "warp", "vhs", "dot", "wipe"]}
 		"fsel":
 			return {"n": "화면 고르기", "go": true}
+		"res":
+			#  창 크기(RES) — 전체화면이면 모니터 해상도 그대로라 잠긴다(값은 남는다).
+			return {"n": "해상도", "sel": true, "v": _res_label(), "off": _res_fs()}
 		"sound":
 			return {"n": "소리", "kids": ["vol", "mus"]}
 		"fs":
@@ -53296,6 +53411,17 @@ func _set_row_draw(c: CanvasItem, i: int, key: String, a: float) -> void:
 		#  다른 화면을 여는 줄 — 끝에 › (일시정지의 「설정 ›」과 같은 말)
 		c.draw_string(font_sm, Vector2(r.position.x, by), "›", HORIZONTAL_ALIGNMENT_RIGHT,
 				r.size.x - 10.0, 20, col)
+	if bool(info.get("sel", false)):
+		#  ◀ 값 ▶ — 화살표는 새 런 · 컬렉션과 같은 단추(_arrow_btn). 잠기면(전체화면) 값만 꺼진 글로.
+		var off: bool = bool(info.get("off", false))
+		var vc: Color = _mtx_off(0.0, a) if off else _mtx(ee, a)
+		var la := _res_arrow_rect(i, false)
+		var ra := _res_arrow_rect(i, true)
+		if not off:
+			_arrow_btn(c, la, false, la.has_point(mouse_at))
+			_arrow_btn(c, ra, true, ra.has_point(mouse_at))
+		c.draw_string(font_sm, Vector2(la.end.x, by), String(info.get("v", "")),
+				HORIZONTAL_ALIGNMENT_CENTER, ra.position.x - la.end.x, 20, vc)
 	if bool(info.get("g", false)):
 		_set_gauge_draw(c, i, key, ee, a)
 	elif info.has("tg"):

@@ -1022,6 +1022,8 @@ static func _rows(g: Node) -> Array:
 				{"n1": "비밀 상점 열기", "t": "act", "a": "secret"},
 				#  처음 켤 때의 화면 고르기(game.gd FSEL) — 다시 연다. 정하면 제목으로. 2026-10-10
 				{"n1": "화면 고르기 다시", "t": "act", "a": "fsel"},
+				#  설정 「해상도」(game.gd RES)를 한 칸 민다 — 창이 그 크기로 바뀐다. 2026-10-11
+				{"n1": "해상도 다음", "t": "act", "a": "res_next"},
 			]
 		5:
 			#  ── 조작감 (2026-09-24) ──
@@ -2328,6 +2330,10 @@ static func _run(g: Node, e: Dictionary) -> void:
 				_:
 					g._secret_deal()
 					_say("비밀 상점")
+			return
+		"res_next":
+			g._res_step(1)
+			_say("해상도 " + g._res_label())
 			return
 		"fsel":
 			if g._is_play():

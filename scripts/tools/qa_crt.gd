@@ -209,7 +209,7 @@ func _run() -> void:
 		var rows: Array = g._set_rows()
 		var ci := rows.find("crt")
 		_ok("%s에서 연 설정 › 화면에 줄이 있다" % nm, g._set_pg() == "screen" and ci >= 0
-				and ci == rows.find("fs") + 1 and ci == rows.find("warp") - 1,
+				and ci == rows.find("res") + 1 and ci == rows.find("warp") - 1,
 				"%s · %d번째 · %s" % [path, ci, rows])
 		var r: Rect2 = g._set_rect(ci)
 		_ok("%s — 줄이 화면 안이다" % nm, r.end.y <= 354.0, "%.0f" % r.end.y)
@@ -399,8 +399,8 @@ func _run() -> void:
 	g.state = g.S.SETTINGS
 	g.pause_from = g.S.SHOP
 	g._set_go("screen")
-	_ok("화면 탭 — 전체화면 · CRT · 굴곡 · VHS · 도트 · 전환 지지직 · 뒤로", (g._set_rows() as Array)
-			== ["fs", "crt", "warp", "vhs", "dot", "wipe", "back"], "%s" % [g._set_rows()])
+	_ok("화면 탭 — 전체화면 · 해상도 · CRT · 굴곡 · VHS · 도트 · 전환 지지직 · 뒤로", (g._set_rows() as Array)
+			== ["fs", "res", "crt", "warp", "vhs", "dot", "wipe", "back"], "%s" % [g._set_rows()])
 	g.state = g.S.SHOP
 	g.pause_from = -1
 
