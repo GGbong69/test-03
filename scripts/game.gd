@@ -46229,7 +46229,12 @@ const DOORT := {
 	"chalk": Color("1d3326"), "chalk_ink": Color("e8dfc8"),
 	"frame": Color("2c1508"), "frame_hi": Color("5e3317"),
 	"pad": Vector2(12.0, 46.0),   # 칠판 안 여백(옆 · 위 머리)
-	"shade": 0.55,           # 문이 다 열렸을 때 판에 진 그늘(램프에서 등을 돌린다)
+	#  문이 다 열렸을 때 판에 진 그늘(램프에서 등을 돌린다) · 그늘이 다 걷히는 다가간 몫(_door_walk).
+	#  0.55 였다 — 「문이 열리니까 다트판이 왜이렇게 어두워져?」(2026-10-11). 3D 문짝은 열리면 안의 빛
+	#  (Door3D inside)을 받아 거의 안 어두워지고 다가갈수록 오히려 밝아지는데 판만 반 넘게 꺼졌다. 창으로
+	#  재 보니 다 열린 문짝이 닫힌 문의 0.76 · 다가가면 1 을 넘는다 — 그늘을 그만큼(0.24)으로 내리고
+	#  카메라가 다가가는 만큼 걷는다.
+	"shade": 0.24, "shade_walk": 0.45,
 }
 var door_on := true            # 개발자 5쪽 — 술집 문 켬/끔(옛 제목과 맞대 본다)
 var door_vp: SubViewport = null
@@ -46502,8 +46507,9 @@ const DOORB := {
 	"spec_a": 0.32, "spec_from": -158.0, "spec_to": -40.0,
 	"neon_a": 0.10, "neon_h": 0.42,
 	#  옆면(_door_board_rim) — 위(램프 쪽) · 아래 색 · 둘레를 나누는 수 · 두께(m). 두께는 처음 문 앞면까지(3cm ·
-	#  실물 판 비)로 뒀다가 「너무 두껍잖아」로 1.2cm — 판 뒤는 문에서 조금 뜬다(못에 걸린 판이다).
-	"rim_hi": Color("4a3f3c"), "rim_lo": Color("120e10"), "rim_n": 64, "rim_t": 0.012,
+	#  실물 판 비)로 뒀다가 「너무 두껍잖아」로 1.2cm · 「2CM으로 해봐」로 2cm — 판 뒤는 문에서 조금 뜬다
+	#  (못에 걸린 판이다).
+	"rim_hi": Color("4a3f3c"), "rim_lo": Color("120e10"), "rim_n": 64, "rim_t": 0.02,
 }
 
 
@@ -46627,7 +46633,7 @@ func _door_board_over() -> void:
 func _door_shade() -> void:
 	if door_t < 0.0:
 		return
-	var k := _door_k()
+	var k: float = _door_k() * (1.0 - smoothstep(0.0, float(DOORT.shade_walk), _door_walk()))
 	if k <= 0.0:
 		return
 	draw_circle(BC, _wall3_ro() + 3.0, Color(0.0, 0.0, 0.0, float(DOORT.shade) * k))
