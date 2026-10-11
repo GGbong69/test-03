@@ -1138,6 +1138,13 @@ func _ready() -> void:
 	cp.bus = "SFX"
 	add_child(cp)
 	crack_pl = cp
+	#  컬렉션 지우개 — 자리가 **하나**다(_colf_snd). 지우개는 하나라 새로 지우면 앞 소리를
+	#  끊는다. 휠로 쪽을 연달아 넘겨도 자리 넷을 안 문다(2026-10-11).
+	var ep := AudioStreamPlayer.new()
+	ep.playback_type = AudioServer.PLAYBACK_TYPE_STREAM
+	ep.bus = "SFX"
+	add_child(ep)
+	colf_pl = ep
 
 	# 음악 — 자리가 **하나**다. 겹쳐 넘기지 않고 나갔다 들어오므로 한 번에
 	# 한 곡만 울린다. 예전에는 겹치려고 둘이었다.
@@ -6915,6 +6922,9 @@ const SFX := {
 	"menu_back":      {"f": 440.0, "d": 0.05, "a": 0.12},
 	"back":           {"f": 330.0, "d": 0.05, "a": 0.10},
 	"page":           {"f": 392.0, "d": 0.04, "a": 0.08},
+	#  컬렉션 쪽 · 탭 넘김 — 펠트 지우개가 석판을 문지른다(COLF). 음정이 없다. 제 자리
+	#  하나(colf_pl)에서 난다 — 0.42초라 자리 넷을 돌면 휠 한 번 굴림에 넷을 다 문다.
+	"chalk_wipe":     {"f": 330.0, "d": 0.10, "a": 0.06},
 
 	# ── 목소리 ────────────────────────────────────
 	#  상인의 말소리 「웅」 한 알 — 말상자 글이 한 자씩 나올 때(_talk_tick).
@@ -7159,6 +7169,7 @@ func _process(d: float) -> void:
 	_title_tick(d)
 	_fsel_tick(d)
 	_kb_tick(d)
+	_colf_tick(d)        # 컬렉션 넘김 — 칠판을 지우고 다시 쓴다
 	_intro_tick(d)
 	_prof_tick(d)
 	if state == S.CLEAR:
@@ -9264,18 +9275,16 @@ func _click(m: Vector2) -> void:
 		S.COLLECT:
 			for t in COL_TABS.size():
 				if _col_tab_rect(t).has_point(m):
-					collect_tab = t
-					collect_page = 0
+					#  오른쪽 탭은 다음 쪽처럼 · 왼쪽 탭(같은 탭의 첫 쪽도)은 앞 쪽처럼 지운다(COLF).
+					_col_go(t, 0, 1 if t > collect_tab else -1, "")
 					_sfx("menu_pick2")
 					return
 			if _col_pages() > 1:
 				if _col_arrow_rect(false).has_point(m):
-					collect_page = (collect_page - 1 + _col_pages()) % _col_pages()
-					_sfx("page")
+					_col_go(collect_tab, posmod(collect_page - 1, _col_pages()), -1, "page")
 					return
 				if _col_arrow_rect(true).has_point(m):
-					collect_page = (collect_page + 1) % _col_pages()
-					_sfx("page")
+					_col_go(collect_tab, posmod(collect_page + 1, _col_pages()), 1, "page")
 					return
 			if _menu_back_rect().has_point(m):
 				state = S.TITLE
@@ -9305,6 +9314,7 @@ func _click(m: Vector2) -> void:
 
 #  트랙패드 한 번 쓸기가 이벤트 수십 개다. 쿨다운이 없으면 컬렉션 세 쪽이
 #  통째로 감긴다. page 소리(d 0.04)보다 길어 빠른 굴림에서도 소리가 안 겹친다.
+#  지우개 소리(chalk_wipe 0.42초 · COLF)는 제 자리 하나라 새 굴림이 앞 소리를 끊는다.
 const WHEEL_MS := 60
 #  _process 에 쌓지 않고 **시계로 잰다** — hitstop 이 통째로 return 하는
 #  프레임과 배움 중 늦춘 시간에서 감도가 달라진다.
@@ -9333,10 +9343,9 @@ func _wheel(m: Vector2, dir: int) -> void:
 			#  위에서는 언제나 탭이 넘어가 죽은 자리가 안 생긴다.
 			var tb := _col_tab_rect(0).merge(_col_tab_rect(COL_TABS.size() - 1))
 			if tb.has_point(m):
-				collect_tab = posmod(collect_tab + dir, COL_TABS.size())
 				#  탭을 갈면 쪽은 0 — 클릭과 같은 규약이다. 안 따르면
 				#  _col_count 가 clamp 를 해도 쪽 글 「3 / 1」은 못 막는다.
-				collect_page = 0
+				_col_go(posmod(collect_tab + dir, COL_TABS.size()), 0, dir, "")
 				_sfx("menu_pick2")
 				moved = true
 			#  「탭 줄 밖 전부」이되 **화면 안**이다. 이 갈래만 사각이 없었더니
@@ -9344,8 +9353,7 @@ func _wheel(m: Vector2, dir: int) -> void:
 			#  안 그려진 자리 — 에서 굴려도 쪽이 넘어갔다. 나머지 네 화면은
 			#  전부 사각으로 막혀 있다. 2026-09-19
 			elif _col_pages() > 1 and Rect2(Vector2.ZERO, VIEW).has_point(m):
-				collect_page = posmod(collect_page + dir, _col_pages())
-				_sfx("page")
+				_col_go(collect_tab, posmod(collect_page + dir, _col_pages()), dir, "page")
 				moved = true
 		S.RUNINFO:
 			#  넘길 쪽이 없는 화면이라 휠은 탭에만 맨다. 판 높이가 탭을 갈아도
@@ -55056,6 +55064,7 @@ func _settings_back() -> void:
 #  그래서 여섯 탭이 **회색 원반 하나**로 간다. 2026-09-19
 
 const COL_PAGE := 28        # 7 × 4 — 한 쪽에 얹는 수
+const COL_COLS := 7         # 한 줄에 얹는 수(_col_cell) — 넘길 때 지우개가 이 칸줄씩 지운다(COLF)
 var collect_page := 0
 #  컬렉션만 전부 발견으로 그린다. **저장에 한 글자도 안 쓴다** — 기획서 그림
 #  도구 스무남짓이 이 대역 하나로 제 그림을 찍는다(_dev_unlock_all).
@@ -55175,7 +55184,7 @@ func _col_arrow_rect(right: bool) -> Rect2:
 
 
 func _col_cell(i: int) -> Rect2:
-	var cols := 7
+	var cols := COL_COLS
 	var cw := 86.0
 	var ch := 58.0
 	var x0 := (VIEW.x - cw * float(cols)) * 0.5
@@ -56210,7 +56219,12 @@ func _draw_collect() -> void:
 				"%s %d/%d" % [COL_TABS[t].n, _col_found_n(t), _col_rows(t).size()],
 				t == collect_tab, _col_tab_rect(t).has_point(mouse_at))
 
-	var base := collect_page * COL_PAGE
+	#  넘기는 중이면(COLF) 옛 쪽 · 지나간 자리의 얼룩이 먼저 깔리고, 새 칸은 써진 것만 선다.
+	#  안 넘기면 아래 한 줄(_col_item_draw)뿐이다 — 붓을 갈라 낸 것뿐이라 한 픽셀도 안 갈린다.
+	var fl := colf_t >= 0.0
+	if fl:
+		_colf_old_draw()
+		_colf_smear_draw()
 	for i in _col_count():
 		var cell := _col_cell(i)
 		#  얹힌 칸 — 그림 뒤에 옅은 받침이 깔리고 그림이 한 칸 뜨며 이름이
@@ -56222,82 +56236,13 @@ func _draw_collect() -> void:
 		if _ui_can_hover() and cell.has_point(mouse_at):
 			ui_hot = ckey
 		var chv: float = _ui_hov(ckey)
-		#  메뉴 재질이면 받침이 분필 가루를 옅게 문지른 자리다(MENUM).
-		if chv > 0.0 and mat_draw:
-			_rr(self, cell.grow(-4.0), Color(DOORT.chalk_ink, 0.07 * chv))
-		elif chv > 0.0:
-			_rr(self, cell.grow(-4.0), Color(C_PANEL, 0.6 * chv))
-		#  그림은 칸 한가운데보다 11px 위다(8 → 11). 두 줄로 접히는 긴 이름(아래)이
-		#  그림과 안 닿게 세 칸 올렸다 — 가장 큰 그림인 사진이 칸 위에서 2~34(그늘 34)라
-		#  얹힘 테(칸 가장자리)와 1px, 두 줄 이름과 2px 떨어진다.
-		var c := cell.get_center() + Vector2(0.0, -11.0 - roundf(chv))
-		var gi := base + i
-		var nm := ""
-		#  못 본 칸 — 그림 하나, 이름 하나. **자리는 안 움직인다**: 격자가 표
-		#  순서 그대로 돌아 못 본 칸이 제 칸을 지키므로 「몇 개 비었나」가 눈
-		#  으로 세진다. 발견한 것만 앞으로 당기면 물음표를 그리는 뜻이 통째로
-		#  죽는다. 그림 중심 c 도 찾은 칸과 **같다** — 발견으로 뒤집혀도 한
-		#  픽셀도 안 흔들린다. 2026-09-19
-		if not _col_found(collect_tab, gi):
-			#  메뉴 재질이면 칠판에 분필로 그린 빈 카드 — 테 · 물음표 원(_icon_unfound).
-			if mat_draw:
-				_rr_line(self, cell.grow(-6.0), Color(DOORT.chalk_ink, 0.13))
-			_icon_unfound(c, 13.0)
-			nm = "???"
+		if fl:
+			_colf_new_draw(i, chv)
 		else:
-			match collect_tab:
-				0:
-					var it: Dictionary = GameData.items()[gi]
-					draw_item_sticker(c, 13.0, it, 0.0, 0.0, 0.0, 10)
-					nm = it.n
-				1:
-					var md: Dictionary = GameData.mods()[gi]
-					_icon_mod(c, 13.0, md.id, 0.0)
-					nm = md.n
-				2:
-					var dt: Dictionary = GameData.darts()[gi]
-					_icon_dart(c, 15.0, dt.id, 0.0, -0.62)
-					nm = dt.n
-				3:
-					# 테이블에 뜨는 그림 그대로 쓴다 — 두 글자 상자였을 때는
-					# 컬렉션의 사탕과 판 위의 사탕이 다른 물건으로 보였다.
-					var cs: Array = GameData.candies()
-					_icon_cons(c, 11.0, String(cs[gi].id))
-					nm = cs[gi].n
-				4:
-					var fx: Dictionary = GameData.fixtures()[gi]
-					#  세워 보인다 — 도감은 그림을 보는 자리라 눕혀 누르면 줄이 빠진다
-					_fix_flat(c, {}, 0.0, 0.0, GOODS_K, String(fx.id), 1.0)
-					nm = fx.n
-				5:
-					var mo: Dictionary = GameData.modifiers()[gi]
-					_icon_modifier(c, 11.0, mo.id, 0.0)
-					nm = mo.n
-		#  이름 9 → 11 → 12. 칸(86px)에 안 드는 긴 이름만 한 단 내린다 — SemiBold 10
-		#  (「WHITE ALBUM」). 그래도 안 드는 것(「더 굿 더 베드 더 트리플」 · 「It's Not
-		#  About Money」)은 SemiBold 10 **두 줄**로 접는다. 1px 씩 줄여 넣으면 크기 다섯
-		#  단(10 · 12 · 20 · 24 · 36)이 깨지고, 자르면 뜻이 끊기고, 이웃 칸으로 넘치면 두
-		#  이름이 한 줄로 붙는다.
-		#  한 줄은 기준선이 칸 바닥 8px 위(잉크 12 는 칸 위에서 40~50). 두 줄은 기준선
-		#  44 · 55 — 페이퍼로지 10 의 잉크(8~9px) 둘이 3px 띄워 36~44 · 47~55 에 선다.
-		#  사진(칸 위 2~34)과 2px, 얹힘 테(칸 맨 아래 줄 57)와 1.5px 로 위아래가 고르다
-		#  (45 · 56 이면 둘째 줄 밑이 테에 붙었다).
-		var ncol: Color = _mtx(chv)
-		var nw: float = cell.size.x - 4.0
-		if font != null and font.get_string_size(nm, HORIZONTAL_ALIGNMENT_LEFT,
-				-1, 12).x <= nw:
-			draw_string(font, Vector2(cell.position.x, cell.end.y - 8.0), nm,
-					HORIZONTAL_ALIGNMENT_CENTER, cell.size.x, 12, ncol)
-		elif font_sm != null and font_sm.get_string_size(nm,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x <= nw:
-			draw_string(font_sm, Vector2(cell.position.x, cell.end.y - 8.0), nm,
-					HORIZONTAL_ALIGNMENT_CENTER, cell.size.x, 10, ncol)
-		elif font_sm != null:
-			var two := _col_name_split(nm)
-			draw_string(font_sm, Vector2(cell.position.x, cell.end.y - 14.0), two[0],
-					HORIZONTAL_ALIGNMENT_CENTER, cell.size.x, 10, ncol)
-			draw_string(font_sm, Vector2(cell.position.x, cell.end.y - 3.0), two[1],
-					HORIZONTAL_ALIGNMENT_CENTER, cell.size.x, 10, ncol)
+			_col_item_draw(i, collect_tab, collect_page, chv)
+	if fl:
+		_colf_eraser_draw()
+		_colf_dust_draw()
 
 	if _col_pages() > 1:
 		for right in [false, true]:
@@ -56308,6 +56253,414 @@ func _draw_collect() -> void:
 				HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 12, _mtx(0.0))
 	_back_row(self, _menu_back_rect(), "뒤로", "",
 			_menu_back_rect().has_point(mouse_at))
+
+
+#  컬렉션 칸 하나 — 탭 tab · 쪽 page 의 i 째(쪽 안 자리). 받침(얹힘 chv) · 그림 · 이름(짙기 na).
+#  지금 쪽과 넘기는 동안의 옛 쪽(COLF)이 이 붓 하나를 같이 쓴다 — 부르는 쪽이 변환을 걸어
+#  눌러 지우거나 톡 세운다. 안의 그림 붓은 변환을 안 건다(그래서 그 변환이 그대로 먹는다).
+func _col_item_draw(i: int, tab: int, page: int, chv: float, na := 1.0) -> void:
+	var cell := _col_cell(i)
+	#  메뉴 재질이면 받침이 분필 가루를 옅게 문지른 자리다(MENUM).
+	if chv > 0.0 and mat_draw:
+		_rr(self, cell.grow(-4.0), Color(DOORT.chalk_ink, 0.07 * chv))
+	elif chv > 0.0:
+		_rr(self, cell.grow(-4.0), Color(C_PANEL, 0.6 * chv))
+	#  그림은 칸 한가운데보다 11px 위다(8 → 11). 두 줄로 접히는 긴 이름(아래)이
+	#  그림과 안 닿게 세 칸 올렸다 — 가장 큰 그림인 사진이 칸 위에서 2~34(그늘 34)라
+	#  얹힘 테(칸 가장자리)와 1px, 두 줄 이름과 2px 떨어진다.
+	var c := cell.get_center() + Vector2(0.0, -11.0 - roundf(chv))
+	var gi := page * COL_PAGE + i
+	var nm := ""
+	#  못 본 칸 — 그림 하나, 이름 하나. **자리는 안 움직인다**: 격자가 표
+	#  순서 그대로 돌아 못 본 칸이 제 칸을 지키므로 「몇 개 비었나」가 눈
+	#  으로 세진다. 발견한 것만 앞으로 당기면 물음표를 그리는 뜻이 통째로
+	#  죽는다. 그림 중심 c 도 찾은 칸과 **같다** — 발견으로 뒤집혀도 한
+	#  픽셀도 안 흔들린다. 2026-09-19
+	if not _col_found(tab, gi):
+		#  메뉴 재질이면 칠판에 분필로 그린 빈 카드 — 테 · 물음표 원(_icon_unfound).
+		if mat_draw:
+			_rr_line(self, cell.grow(-6.0), Color(DOORT.chalk_ink, 0.13))
+		_icon_unfound(c, 13.0)
+		nm = "???"
+	else:
+		match tab:
+			0:
+				var it: Dictionary = GameData.items()[gi]
+				draw_item_sticker(c, 13.0, it, 0.0, 0.0, 0.0, 10)
+				nm = it.n
+			1:
+				var md: Dictionary = GameData.mods()[gi]
+				_icon_mod(c, 13.0, md.id, 0.0)
+				nm = md.n
+			2:
+				var dt: Dictionary = GameData.darts()[gi]
+				_icon_dart(c, 15.0, dt.id, 0.0, -0.62)
+				nm = dt.n
+			3:
+				# 테이블에 뜨는 그림 그대로 쓴다 — 두 글자 상자였을 때는
+				# 컬렉션의 사탕과 판 위의 사탕이 다른 물건으로 보였다.
+				var cs: Array = GameData.candies()
+				_icon_cons(c, 11.0, String(cs[gi].id))
+				nm = cs[gi].n
+			4:
+				var fx: Dictionary = GameData.fixtures()[gi]
+				#  세워 보인다 — 도감은 그림을 보는 자리라 눕혀 누르면 줄이 빠진다
+				_fix_flat(c, {}, 0.0, 0.0, GOODS_K, String(fx.id), 1.0)
+				nm = fx.n
+			5:
+				var mo: Dictionary = GameData.modifiers()[gi]
+				_icon_modifier(c, 11.0, mo.id, 0.0)
+				nm = mo.n
+	#  이름 9 → 11 → 12. 칸(86px)에 안 드는 긴 이름만 한 단 내린다 — SemiBold 10
+	#  (「WHITE ALBUM」). 그래도 안 드는 것(「더 굿 더 베드 더 트리플」 · 「It's Not
+	#  About Money」)은 SemiBold 10 **두 줄**로 접는다. 1px 씩 줄여 넣으면 크기 다섯
+	#  단(10 · 12 · 20 · 24 · 36)이 깨지고, 자르면 뜻이 끊기고, 이웃 칸으로 넘치면 두
+	#  이름이 한 줄로 붙는다.
+	#  한 줄은 기준선이 칸 바닥 8px 위(잉크 12 는 칸 위에서 40~50). 두 줄은 기준선
+	#  44 · 55 — 페이퍼로지 10 의 잉크(8~9px) 둘이 3px 띄워 36~44 · 47~55 에 선다.
+	#  사진(칸 위 2~34)과 2px, 얹힘 테(칸 맨 아래 줄 57)와 1.5px 로 위아래가 고르다
+	#  (45 · 56 이면 둘째 줄 밑이 테에 붙었다).
+	var ncol: Color = _mtx(chv, na)
+	var nw: float = cell.size.x - 4.0
+	if font != null and font.get_string_size(nm, HORIZONTAL_ALIGNMENT_LEFT,
+			-1, 12).x <= nw:
+		draw_string(font, Vector2(cell.position.x, cell.end.y - 8.0), nm,
+				HORIZONTAL_ALIGNMENT_CENTER, cell.size.x, 12, ncol)
+	elif font_sm != null and font_sm.get_string_size(nm,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x <= nw:
+		draw_string(font_sm, Vector2(cell.position.x, cell.end.y - 8.0), nm,
+				HORIZONTAL_ALIGNMENT_CENTER, cell.size.x, 10, ncol)
+	elif font_sm != null:
+		var two := _col_name_split(nm)
+		draw_string(font_sm, Vector2(cell.position.x, cell.end.y - 14.0), two[0],
+				HORIZONTAL_ALIGNMENT_CENTER, cell.size.x, 10, ncol)
+		draw_string(font_sm, Vector2(cell.position.x, cell.end.y - 3.0), two[1],
+				HORIZONTAL_ALIGNMENT_CENTER, cell.size.x, 10, ncol)
+
+
+# ══════════════════════════════════════════════════════════
+#  컬렉션 넘김 — 칠판을 지우고 다시 쓴다 (2026-10-11)
+# ──────────────────────────────────────────────────────────
+#  「컬랙션 페이지 넘어갈때 좀 모션이 있는게 더 생동감 있을거 같은데?」 — 사용자가 「칠판 지우고
+#  다시 쓰기」를 골랐다. 쪽 · 탭이 바뀌면(화살표 · 휠 · 탭 누름 · 탭 줄 휠) 값은 그 자리에서 새
+#  쪽이다 — 누름 · 툴팁 · 쪽 글이 곧장 새 쪽을 본다. 그림만 옛 쪽에서 새 쪽으로 건너간다.
+#   · 펠트 지우개(나무 등 · 왼쪽 위 빛 · 그늘 · 앞쪽 회색 펠트에 분필 가루)가 넘기는 쪽으로 석판
+#     끝에서 끝까지 sweep 초에 고른 빠르기로 건너가며 네 줄을 위아래로 bob 획 문지른다. 다음 쪽
+#     (오른쪽 화살표 · 오른쪽 탭 · 휠 아래)은 왼쪽에서 오른쪽, 앞 쪽은 거꾸로. 내려앉고(press)
+#     끝에서 들려 나간다(lift — 그늘이 멀어지며 진다).
+#   · 옛 칸은 지우개 앞머리가 닿을 때까지 그대로 있고, 닿으면 그 칸줄이 지우개에 밀려 먼 쪽 변으로
+#     눌려(가로 1 → 0 · 세로 squash 만큼) 사라진다. 이름도 같은 변환 안이라 같이 눌린다.
+#   · 지나간 자리에 분필 얼룩(격자 높이의 옅은 띠 · 지우개가 문지른 길 · 가로 1px 결)이 남아 smear
+#     초에 걷히고, 지우개가 가루 dust 알을 흘린다(떨어지며 dust_t 초에 진다).
+#   · 새 칸은 지우개가 그 칸줄을 다 지나고 lag 초 뒤부터 위에서 아래로 row 초씩 써진다 — pop 초에
+#     0 → 1 + over → 1 로 톡 서며 가루 넉 알이 튀고(puff), 이름은 그림보다 조금 늦게 짙어진다.
+#   · 넘기는 중에 또 넘기면 그때 써지던 쪽을 옛 쪽으로 처음부터 다시 지운다. 모션을 끄면 컷이고
+#     소리도 옛 그대로다(쪽 page · 탭 menu_pick2). 소리 chalk_wipe 는 제 자리 하나(colf_pl)다.
+#   · 얼룩 · 가루는 씨 해시(_gl_rand)라 틀마다 같은 자리다 — 틀마다 굴리는 난수가 없다.
+#    ew · eh 지우개 크기(논리 px) · felt 펠트 폭 · pad 석판 끝에서 띄우는 틈 · squash 다 눌렸을 때
+#    세로 몫 · smear_a 얼룩 짙기 · strip 얼룩 띠 한 칸 폭 · g 가루가 떨어지는 힘(px/s²)
+const COLF := {"sweep": 0.40, "lag": 0.06, "row": 0.03, "pop": 0.14, "over": 0.12,
+		"smear": 0.45, "dust": 24, "dust_t": 0.40, "puff": 0.24, "bob": 2.5,
+		"press": 0.05, "lift": 0.10, "ew": 24.0, "eh": 60.0, "felt": 8.0, "pad": 2.0,
+		"squash": 0.82, "smear_a": 0.075, "strip": 6.0, "g": 320.0,
+		#  지우개 — 나무 등(몸 · 왼쪽 위 빛 · 오른쪽 아래 그늘 · 결) · 펠트(몸 · 나무와 붙은 줄 ·
+		#  털 결과 가루 앉은 끝)
+		"wood": Color("8a5636"), "wood_hi": Color("b98352"), "wood_lo": Color("553222"),
+		"grain": Color("74462b"), "felt_c": Color("66615a"), "felt_lo": Color("2e2a26"),
+		"felt_hi": Color("a39d90")}
+var colf_t := -1.0      # 흐른 시간(−1 이면 안 돈다)
+var colf_dir := 1       # +1 다음 쪽(오른쪽 화살표 · 오른쪽 탭) · −1 앞 쪽
+var colf_tab := 0       # 지우는 옛 쪽의 탭 · 쪽
+var colf_page := 0
+var colf_pl: AudioStreamPlayer = null   # 지우개 소리의 제 자리(_colf_snd)
+
+
+#  컬렉션의 탭 · 쪽을 간다(탭 누름 · 화살표 · 휠) — 바뀌면 칠판을 지우고 다시 쓴다. 값은 곧장
+#  새 것이다. 소리 — 지우면 chalk_wipe, 모션을 꺼 컷이면 옛 소리(snd · 빈 글이면 없음).
+func _col_go(tab: int, page: int, dir: int, snd: String) -> void:
+	var t0 := collect_tab
+	var p0 := collect_page
+	collect_tab = tab
+	collect_page = page
+	if (t0 != tab or p0 != page) and _colf_begin(dir, t0, p0):
+		_colf_snd()
+	elif snd != "":
+		_sfx(snd)
+
+
+#  옛 탭 · 쪽(tab · page)을 지우고 지금 것을 다시 쓴다 — 돌았으면 참. 부르는 쪽이 바꾸기 **전**
+#  값을 넘기므로 넘기는 중이면 그때 써지던 쪽이 옛 쪽이 된다.
+func _colf_begin(dir: int, tab: int, page: int) -> bool:
+	if motion_off:
+		colf_t = -1.0
+		return false
+	colf_t = 0.0
+	colf_dir = 1 if dir >= 0 else -1
+	colf_tab = tab
+	colf_page = page
+	queue_redraw()
+	return true
+
+
+#  지우개 소리 — 제 자리 하나(colf_pl). 파일이 없는 날 · 자리가 서기 전은 _sfx 의 합성음이다.
+func _colf_snd() -> void:
+	var st := _sfx_file("chalk_wipe")
+	if st != null and colf_pl != null:
+		colf_pl.stream = st
+		colf_pl.play()
+		return
+	_sfx("chalk_wipe")
+
+
+func _colf_tick(d: float) -> void:
+	if colf_t < 0.0:
+		return
+	if state != S.COLLECT or motion_off:
+		colf_t = -1.0
+		queue_redraw()
+		return
+	colf_t += d
+	if colf_t >= _colf_end():
+		colf_t = -1.0
+	queue_redraw()
+
+
+#  다 끝나는 때 — 지우개가 들려 나가고 · 얼룩이 걷히고 · 가루가 지고 · 마지막 줄의 이름이 짙어진다.
+func _colf_end() -> float:
+	var rows := float(COL_PAGE / COL_COLS - 1)
+	var wr: float = float(COLF.lag) + float(COLF.row) * rows \
+			+ maxf(float(COLF.pop) * 1.2, float(COLF.puff))
+	return float(COLF.sweep) + maxf(maxf(float(COLF.lift), float(COLF.smear)),
+			maxf(float(COLF.dust_t), wr))
+
+
+#  지우개 가운데 x 의 처음 · 끝 — 석판(MENUM.board) 이 끝에서 저 끝까지, 넘기는 쪽으로.
+func _colf_span() -> Vector2:
+	var b: Rect2 = MENUM.board
+	var e: float = float(COLF.ew) * 0.5 + float(COLF.pad)
+	var l: float = b.position.x + e
+	var r: float = b.end.x - e
+	return Vector2(l, r) if colf_dir > 0 else Vector2(r, l)
+
+
+#  t 초의 지우개 가운데 — x 는 고른 빠르기, y 는 격자 네 줄의 위끝에서 bob 획(반 바퀴)을 오간다.
+func _colf_at(t: float) -> Vector2:
+	var k := clampf(t / float(COLF.sweep), 0.0, 1.0)
+	var sp := _colf_span()
+	var hh: float = float(COLF.eh) * 0.5
+	var y0: float = _col_cell(0).position.y + hh
+	var y1: float = _col_cell(COL_PAGE - 1).end.y - hh
+	return Vector2(lerpf(sp.x, sp.y, k),
+			lerpf(y0, y1, 0.5 - 0.5 * cos(PI * float(COLF.bob) * k)))
+
+
+#  지우개 가운데가 x 에 서는 때.
+func _colf_t_at(x: float) -> float:
+	var sp := _colf_span()
+	return float(COLF.sweep) * clampf((x - sp.x) / (sp.y - sp.x), 0.0, 1.0)
+
+
+#  칸줄 c 의 가까운 변(지우개가 먼저 닿는 쪽).
+func _colf_near(c: int) -> float:
+	var r := _col_cell(c)
+	return r.position.x if colf_dir > 0 else r.end.x
+
+
+#  칸줄 c 가 지금 지워진 몫 0..1 — 지우개 앞머리가 가까운 변에 닿아 0, 먼 변에 닿아 1.
+func _colf_wiped(c: int) -> float:
+	var lead: float = _colf_at(colf_t).x + float(colf_dir) * float(COLF.ew) * 0.5
+	return clampf(float(colf_dir) * (lead - _colf_near(c)) / _col_cell(c).size.x, 0.0, 1.0)
+
+
+#  새 칸 i 가 써지기 시작하는 때 — 지우개 앞머리가 그 칸줄의 먼 변을 지나고 lag 초 뒤, 줄마다 row 초씩.
+func _colf_ta(i: int) -> float:
+	var c := i % COL_COLS
+	var far: float = _colf_near(c) + float(colf_dir) * _col_cell(c).size.x
+	var tp := _colf_t_at(far - float(colf_dir) * float(COLF.ew) * 0.5)
+	return tp + float(COLF.lag) + float(COLF.row) * float(i / COL_COLS)
+
+
+#  톡 서는 배율 — 앞 6할에 0 → 1 + over(감속) · 뒤 4할에 1 + over → 1.
+func _colf_pop(k: float) -> float:
+	var ov: float = 1.0 + float(COLF.over)
+	if k >= 1.0:
+		return 1.0
+	if k < 0.6:
+		var q := k / 0.6
+		return ov * (1.0 - (1.0 - q) * (1.0 - q))
+	return lerpf(ov, 1.0, _ease_move((k - 0.6) / 0.4))
+
+
+#  pv 를 축으로 sc 만큼 — 흔들림(shake_off) 위에 얹는다. 되돌리기는 부르는 쪽이 같은 함수 안에서.
+func _colf_xf(pv: Vector2, sc: Vector2) -> void:
+	draw_set_transform_matrix(Transform2D(0.0, sc, 0.0, shake_off + pv - pv * sc))
+
+
+#  옛 쪽 — 지우개가 닿기 전은 그대로, 닿은 칸줄은 먼 변으로 눌린다. 얹힘은 없다. 9할 넘게 눌린
+#  것은 안 그린다 — 몇 px 폭으로 남은 그림이 세로 점선처럼 끊겨 보였다.
+func _colf_old_draw() -> void:
+	var n := clampi(_col_rows(colf_tab).size() - colf_page * COL_PAGE, 0, COL_PAGE)
+	for i in n:
+		var p := _colf_wiped(i % COL_COLS)
+		if p >= 0.9:
+			continue
+		if p <= 0.0:
+			_col_item_draw(i, colf_tab, colf_page, 0.0)
+			continue
+		var cell := _col_cell(i)
+		var pv := Vector2(cell.end.x if colf_dir > 0 else cell.position.x, cell.get_center().y)
+		_colf_xf(pv, Vector2(1.0 - p, lerpf(1.0, float(COLF.squash), p)))
+		_col_item_draw(i, colf_tab, colf_page, 0.0)
+		draw_set_transform(shake_off)
+
+
+#  새 칸 i — 써질 때가 오면 그림 가운데를 축으로 톡 선다. 이름은 조금 늦게 짙어진다.
+func _colf_new_draw(i: int, chv: float) -> void:
+	var k: float = (colf_t - _colf_ta(i)) / float(COLF.pop)
+	if k <= 0.0:
+		return
+	var na := clampf((k - 0.4) / 0.8, 0.0, 1.0)
+	var s := _colf_pop(k)
+	if s >= 1.0 and k >= 1.0:
+		_col_item_draw(i, collect_tab, collect_page, chv, na)
+		return
+	if s < 0.02:
+		return
+	_colf_xf(_col_cell(i).get_center() + Vector2(0.0, -11.0), Vector2(s, s))
+	_col_item_draw(i, collect_tab, collect_page, chv, na)
+	draw_set_transform(shake_off)
+
+
+#  지나간 자리의 분필 얼룩 — 격자 높이의 옅은 띠(위아래 끝이 칸마다 들쭉날쭉) · 지우개가 문지른
+#  길(그 때의 지우개 높이) · 칸줄마다 가로 1px 결 셋. 지우개 가운데가 지난 때부터 smear 초에 걷힌다.
+func _colf_smear_draw() -> void:
+	var ink: Color = DOORT.chalk_ink
+	var a0: float = float(COLF.smear_a)
+	var sm: float = float(COLF.smear)
+	var st: float = float(COLF.strip)
+	var g0 := _col_cell(0).position
+	var g1 := _col_cell(COL_PAGE - 1).end
+	var hh: float = float(COLF.eh) * 0.5 + 4.0
+	var n := int(ceil((g1.x - g0.x) / st))
+	for j in n:
+		var x: float = g0.x + st * float(j)
+		var w: float = minf(st, g1.x - x)
+		var age := colf_t - _colf_t_at(x + w * 0.5)
+		if age < 0.0 or age >= sm:
+			continue
+		var a: float = a0 * (1.0 - age / sm)
+		var jt: float = roundf(_gl_rand(j, 7311) * 6.0)
+		var jb: float = roundf(_gl_rand(j, 7313) * 6.0)
+		draw_rect(Rect2(x, g0.y + jt, w, g1.y - g0.y - jt - jb), Color(ink, a * 0.5))
+		var ey: float = roundf(_colf_at(_colf_t_at(x + w * 0.5)).y)
+		draw_rect(Rect2(x, ey - hh, w, hh * 2.0), Color(ink, a * 0.6))
+	var ex: float = _colf_at(colf_t).x
+	for c in COL_COLS:
+		var cell := _col_cell(c)
+		for s in 3:
+			var sd := c * 3 + s
+			var sw: float = roundf(lerpf(14.0, 48.0, _gl_rand(sd, 7321)))
+			var sx: float = roundf(cell.position.x + _gl_rand(sd, 7323) * (cell.size.x - sw))
+			var sy: float = roundf(g0.y + 4.0 + _gl_rand(sd, 7327) * (g1.y - g0.y - 8.0))
+			var age := colf_t - _colf_t_at(sx + sw * 0.5)
+			if age < 0.0 or age >= sm:
+				continue
+			#  지우개 가운데가 지난 몫만 — 앞은 아직 지우개 밑이다.
+			var xa: float = sx if colf_dir > 0 else maxf(sx, ex)
+			var xb: float = minf(sx + sw, ex) if colf_dir > 0 else sx + sw
+			if xb > xa:
+				draw_rect(Rect2(xa, sy, xb - xa, 1.0), Color(ink, a0 * 1.6 * (1.0 - age / sm)))
+
+
+#  지우개 한 틀 — 그늘 · 나무 등(모서리를 깎은 토막 · 왼쪽 위 빛 · 오른쪽 아래 그늘 · 세로 결) ·
+#  앞쪽 펠트(나무 밑에 깐 판이라 위아래로 1px 더 나온다 · 나무와 붙은 줄 · 털 결 · 가루가 앉은 바깥
+#  끝 · 가루 점). 빛은 석판 램프 쪽(왼쪽 위)이라 거꾸로 가도 나무 빛은 그대로고 펠트만 앞으로 간다.
+#  내려앉는 동안 · 들려 나가는 동안(h)은 그늘이 멀어지고 몸이 옅어진다.
+func _colf_eraser_draw() -> void:
+	var t := colf_t
+	var sw: float = float(COLF.sweep)
+	var h := 0.0
+	if t < float(COLF.press):
+		h = 1.0 - t / float(COLF.press)
+	elif t > sw:
+		h = clampf((t - sw) / float(COLF.lift), 0.0, 1.0)
+	if h >= 1.0:
+		return
+	var a := 1.0 - h
+	var ew: float = COLF.ew
+	var eh: float = COLF.eh
+	var fw: float = COLF.felt
+	var o := (_colf_at(t) - Vector2(ew, eh) * 0.5 + Vector2(-1.0, -2.0) * h).round()
+	draw_rect(Rect2(o + Vector2(3.0, 4.0) * (1.0 + h), Vector2(ew, eh)), Color(0.0, 0.0, 0.0, 0.40 * a))
+	#  나무 등 — 펠트 반대쪽 ew − felt 폭 · 위아래 1px 들인다.
+	var bw: float = ew - fw
+	var bx: float = o.x if colf_dir > 0 else o.x + fw
+	var by: float = o.y + 1.0
+	var bh: float = eh - 2.0
+	draw_rect(Rect2(bx + 1.0, by, bw - 2.0, bh), Color(COLF.wood, a))
+	draw_rect(Rect2(bx, by + 1.0, bw, bh - 2.0), Color(COLF.wood, a))
+	for k in 4:
+		var gy: float = roundf(lerpf(3.0, 22.0, _gl_rand(k, 7371)))
+		var gl: float = roundf(lerpf(16.0, bh - 6.0 - gy, _gl_rand(k, 7373)))
+		draw_rect(Rect2(bx + 3.0 + 3.0 * float(k), by + gy, 1.0, gl), Color(COLF.grain, a))
+	draw_rect(Rect2(bx + 1.0, by, bw - 2.0, 1.0), Color(COLF.wood_hi, a))
+	draw_rect(Rect2(bx, by + 1.0, 1.0, bh - 2.0), Color(COLF.wood_hi, a))
+	draw_rect(Rect2(bx + 1.0, by + bh - 1.0, bw - 2.0, 1.0), Color(COLF.wood_lo, a))
+	draw_rect(Rect2(bx + bw - 1.0, by + 1.0, 1.0, bh - 2.0), Color(COLF.wood_lo, a))
+	#  펠트 — u 0 이 나무와 붙은 줄 · u fw − 1 이 바깥 끝(넘기는 쪽).
+	var fx: float = o.x + bw if colf_dir > 0 else o.x
+	var f0: float = fx if colf_dir > 0 else fx + fw - 1.0     # u 0 의 x
+	var fs := float(colf_dir)
+	draw_rect(Rect2(fx, o.y, fw, eh), Color(COLF.felt_c, a))
+	draw_rect(Rect2(f0, o.y, 1.0, eh), Color(COLF.felt_lo, a))
+	draw_rect(Rect2(f0 + fs * (fw - 1.0), o.y + 1.0, 1.0, eh - 2.0), Color(COLF.felt_hi, a))
+	for k in 8:
+		var fy: float = roundf(lerpf(2.0, eh - 7.0, _gl_rand(k, 7381)))
+		var fu: float = 1.0 + floorf(_gl_rand(k, 7383) * (fw - 3.0))
+		draw_rect(Rect2(f0 + fs * fu, o.y + fy, 1.0, 2.0 + floorf(_gl_rand(k, 7385) * 4.0)),
+				Color(COLF.felt_hi, 0.45 * a))
+	var ink: Color = DOORT.chalk_ink
+	for i in 12:
+		var q: float = _gl_rand(i, 7361)
+		var pu: float = fw - 1.0 - floorf(q * q * (fw - 2.0))
+		var py: float = 1.0 + floorf(_gl_rand(i, 7363) * (eh - 2.0))
+		draw_rect(Rect2(f0 + fs * pu, o.y + py, 1.0, 1.0),
+				Color(ink, lerpf(0.5, 0.95, _gl_rand(i, 7367)) * a))
+
+
+#  가루 — 지우개가 펠트 쪽에서 흘린 dust 알(흘린 때는 sweep 에 고르게 흩는다)이 떨어지며 지고,
+#  새 칸이 써질 때 그림 둘레에서 넉 알이 튄다(puff). 씨 해시라 틀마다 같은 길을 간다.
+func _colf_dust_draw() -> void:
+	var ink: Color = DOORT.chalk_ink
+	var gv: float = float(COLF.g)
+	var n: int = int(COLF.dust)
+	var hw: float = float(COLF.ew) * 0.5
+	for i in n:
+		var ts: float = float(COLF.sweep) * (float(i) + _gl_rand(i, 7331)) / float(n)
+		var lf: float = float(COLF.dust_t) * lerpf(0.7, 1.0, _gl_rand(i, 7333))
+		var age := colf_t - ts
+		if age < 0.0 or age >= lf:
+			continue
+		var e := _colf_at(ts)
+		var p0 := Vector2(e.x + float(colf_dir) * (hw - float(COLF.felt) * _gl_rand(i, 7337)),
+				e.y + (_gl_rand(i, 7339) - 0.5) * float(COLF.eh))
+		var v := Vector2((_gl_rand(i, 7341) - 0.5) * 50.0, lerpf(-25.0, 10.0, _gl_rand(i, 7343)))
+		var p := p0 + v * age + Vector2(0.0, 0.5 * gv * age * age)
+		var sz := 2.0 if i % 5 == 0 else 1.0
+		draw_rect(Rect2(p.round(), Vector2(sz, sz)), Color(ink, 0.65 * (1.0 - age / lf)))
+	var pf: float = COLF.puff
+	for i in _col_count():
+		var age := colf_t - _colf_ta(i)
+		if age < 0.0 or age >= pf:
+			continue
+		var c := _col_cell(i).get_center() + Vector2(0.0, -11.0)
+		for j in 4:
+			var sd := i * 4 + j
+			var an: float = TAU * (float(j) + _gl_rand(sd, 7351)) / 4.0
+			var sp: float = lerpf(30.0, 55.0, _gl_rand(sd, 7353))
+			var p := c + Vector2(cos(an), sin(an)) * (10.0 + sp * age) \
+					+ Vector2(0.0, 0.2 * gv * age * age)
+			draw_rect(Rect2(p.round(), Vector2.ONE), Color(ink, 0.55 * (1.0 - age / pf)))
 
 
 # ══════════════════════════════════════════════════════════
