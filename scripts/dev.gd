@@ -1024,6 +1024,8 @@ static func _rows(g: Node) -> Array:
 				{"n1": "화면 고르기 다시", "t": "act", "a": "fsel"},
 				#  설정 「해상도」(game.gd RES)를 한 칸 민다 — 창이 그 크기로 바뀐다. 2026-10-11
 				{"n1": "해상도 다음", "t": "act", "a": "res_next"},
+				#  방향키 · Enter 고르기(game.gd KB)를 지금 화면에서 세운다 — 모서리가 어디 서는지 본다. 2026-10-11
+				{"n1": "키보드 고르기 켜기", "t": "act", "a": "kb_wake"},
 			]
 		5:
 			#  ── 조작감 (2026-09-24) ──
@@ -2330,6 +2332,10 @@ static func _run(g: Node, e: Dictionary) -> void:
 				_:
 					g._secret_deal()
 					_say("비밀 상점")
+			return
+		"kb_wake":
+			g._kb_wake()
+			_say("키보드 고르기 " + (g.kb_id if g.kb_id != "" else "(고를 것 없음)"))
 			return
 		"res_next":
 			g._res_step(1)

@@ -261,7 +261,9 @@ func _run() -> void:
 		if in_fn and not t.strip_edges().begins_with("#") \
 				and t.contains("draw_string("):
 			strings += 1
-	_ok("설정 줄에 글자가 딱 둘 (이름 가운데 · 왼쪽)", strings == 2,
+	#  2026-10-10 · 11 줄 내용이 둘 늘었다 — 「화면 고르기 ›」의 › · 해상도 값(「1920 × 1080」). 둘 다 그
+	#  줄이 들고 있는 것이고 겨눔과 무관하다(겨눔 줄 — 로비로 나가기 — 은 둘 다 안 지난다).
+	_ok("설정 줄에 글자가 딱 넷 (이름 가운데 · 왼쪽 · › · 해상도 값)", strings == 4,
 			"draw_string %d곳" % strings)
 	#  「로비로 나가기」가 사는 일시정지 글줄(2026-10-03 옛 글줄로 되돌림) — 이름 하나뿐이다.
 	in_fn = false

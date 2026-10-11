@@ -7158,6 +7158,7 @@ func _process(d: float) -> void:
 	_set_tick(d)
 	_title_tick(d)
 	_fsel_tick(d)
+	_kb_tick(d)
 	_intro_tick(d)
 	_prof_tick(d)
 	if state == S.CLEAR:
@@ -7838,8 +7839,8 @@ func _aim_hint(stage: int) -> String:
 #  뷰포트 좌표다. 그 자리에 그려진 원본(_warp_v)을 다시 지역 좌표로 돌린다.
 #  굴곡이 0 이면 _warp_v 가 항등이라 예전 값 그대로다.
 func _cursor() -> Vector2:
-	if get_viewport() == null:
-		return mouse_at
+	if get_viewport() == null or kb_on:
+		return mouse_at                        # 키보드로 고르는 중이면 고른 자리(KB)
 	if _warp_live() <= 0.0:
 		return get_local_mouse_position()      # 더했다 빼는 반올림도 안 낀다 — 정확한 항등
 	return _warp_v(get_local_mouse_position() + view_pad) - view_pad
@@ -8085,6 +8086,9 @@ func _unhandled_input(e: InputEvent) -> void:
 		hover_live = false
 	if e is InputEventKey:
 		var k := e as InputEventKey
+		#  Enter 를 뗀 것 · 방향키 되풀이 — 눌림만 받는 밑의 갈래가 못 본다(KB)
+		if (not k.pressed or k.echo) and _kb_key(k):
+			return
 		if k.pressed and not k.echo:
 			if Dev.key(self, k.keycode):          # DEV
 				return
@@ -8093,6 +8097,8 @@ func _unhandled_input(e: InputEvent) -> void:
 				return
 			if state == S.FSEL:
 				_fsel_key(k.keycode)
+				return
+			if _kb_key(k):
 				return
 			if swap_live or turn_live:
 				# 연출은 아무 키로나 건너뛴다. 잠긴 채로 못 빠져나가는
@@ -8240,100 +8246,7 @@ func _unhandled_input(e: InputEvent) -> void:
 		#  안 빼면 21:9 에서 커서와 판정이 220px 어긋난다.
 		#  그 앞에 굴곡을 되짚는다 — 누른 자리 d 에 그려진 것은 원본 g(d) 다.
 		var mp: Vector2 = _warp_v(mb.position) - view_pad
-		mouse_at = mp
-		mouse_down = mb.pressed
-		if mb.pressed and state == S.INTRO:
-			_intro_press()
-			return
-		if mb.pressed:
-			#  연출 건너뛰기가 **배움 넘기기보다 앞**이다. 키 갈래는 이미 이
-			#  차례인데(Dev → 인트로 → 연출 → 나머지) 손가락만 뒤에 있었다 —
-			#  배움 띠가 살아 있는 동안 클릭이 _tutor_click 에 통째로 삼켜져
-			#  연출이 안 끝났고, 키로만 빠져나갈 수 있었다. **모바일에는 키가
-			#  없다.** 게다가 띠는 두 연출 동안 안 그려지므로(_draw 의 문지기)
-			#  보이지도 않는 말상자를 넘기려고 누르는 꼴이었다.
-			#  _open_leg 이 _tutor("u_leg") 를 세우는 바로 그 프레임에 경계가
-			#  열리므로 이 겹침은 드문 자리가 아니다 — 실제 이벤트를 먹여
-			#  재서 잡았다. 2026-09-20
-			if swap_live or turn_live:
-				_swap_skip()
-				return
-			#  설명 중이면 클릭이 **넘기기**다. 게임에 안 보낸다 — 배우다 말고
-			#  실수로 물건을 사면 설명이 손해로 끝난다.
-			if _tutor_click(mp):
-				return
-			#  읽기 관문 — **아무것도 안 삼킨다.** 누른 자리와 시각을 적어
-			#  둘 뿐이라 밑의 손 · 클릭이 하던 일이 한 톨도 안 바뀐다.
-			#  읽기 판정은 _process 에서 따로 돈다 — _click 앞머리의 문지기
-			#  다섯(칠하기 · 사진 고르기 · 개발자 판 · 갈아 끼우기 · HUD
-			#  단추)을 지나기 전에 무엇을 하면 개발자 판 줄이 눌린다.
-			press_p0 = mp
-			press_ms = Time.get_ticks_msec()
-			press_read = false
-			press_buy = buy_sel
-			#  **앞 읽기를 여기서 안 지운다**(2026-09-19). 지우면 뗌 갈래가
-			#  「방금 이것을 읽고 있었는가」를 물을 수 없고, 그러면 같은 것을
-			#  또 톡해 깊은 층을 여는 **짧은 길**이 없어진다 — 태그 줄이 길게
-			#  누르기 전용이 되면 그것이 곧 접근성 위반이다(_read_deep 머리말).
-			#  대신 뗄 때 짚은 것과 견줘 지우거나 깊게 연다. 그동안에도 핀은
-			#  _tip_update 가 화면 전환 · 끌기 · 없어진 물건에서 스스로 뜯으므로
-			#  남아 썩지 않는다. 마우스는 핀을 세운 적이 없어 무변경이다.
-			if _hand_press(mp):
-				return                    # 삼킨다 — 탭인지 드래그인지 아직 모른다
-			_click(mp)
-		else:
-			if set_drag >= 0:
-				# 저장은 뗄 때 한 번. 끄는 동안 매 프레임 쓰면 파일을 두드린다.
-				_set_slide_end()
-				return
-			var was_read: bool = press_read
-			press_read = false
-			hold_a = 0.0
-			#  ⚠ 읽은 **뒤에 끌기가 시작됐으면 끌기가 이긴다**(H.CARRY).
-			#  여기서 무르기로 끝내면 「꾹 쥐었다가 끌어서 동전 순서 바꾸기」가
-			#  조용히 아무 일도 안 했다 — 손가락으로 재 보니 슬롯0 을 0.6초
-			#  쥐고 슬롯2 까지 끌어 떼도 c01 c02 c03 그대로였고, 같은 손짓을
-			#  마우스로 하거나 안 쥐고 끌면 바뀌었다. 모바일에서 가장 먼저
-			#  나오는 손짓 하나만 죽어 있던 셈이다. 「끌기가 시작되면 가리키는
-			#  중이 아니라 옮기는 중」이라는 _tip_update 의 규약과 같은
-			#  문장이다. 2026-09-19
-			if was_read and hand_st != H.CARRY:
-				#  읽기가 된 손짓은 아무것도 확정 안 한다 — 소리도 없다
-				#  (톡의 규약 ④ · WCAG 2.5.2 의 임계에서 값이 안 바뀐다).
-				#  지목은 되돌린다: 길게 누르기는 읽기지 취소가 아니다.
-				if hand_st != H.NONE:
-					#  quiet — 바로 위가 적어 둔 「소리도 없다」를 지킨다.
-					#  _hand_abort 가 이제 제 소리를 내므로 여기만 끈다.
-					_hand_abort(true)     # _hand_abort 가 buy_sel 을 지운다
-					buy_sel = press_buy
-				return
-			_hand_release(mp)
-			#  톡 = 지목 = 읽기. **손가락에서만 선다** — 마우스는 얹힘이
-			#  이미 읽으므로 핀이 설 자리가 없다(데스크톱 무변경).
-			if not hover_live and not was_read:
-				var pk := _tip_hit(mp)
-				if pk.is_empty():
-					tip_pin = {}          # 빈 자리를 톡하면 읽기가 닫힌다
-				else:
-					#  **같은 것을 또 톡하면 깊은 층이다.** 길게 누르기를
-					#  유일한 길로 만들면 안 된다(접근성) — 0.45초를 못 쥐는
-					#  손에게도 태그 줄로 가는 길이 있어야 하는데, 이 가지에는
-					#  설계서가 예비 길로 든 런 정보 「보유」 탭이 아직 없어
-					#  (_tip_hit 에 S.RUNINFO 가지가 없다) 런 안에서 태그 줄이
-					#  길게 누르기 전용이 돼 있었다. 톡 두 번은 쥐는 시간을
-					#  안 묻는 길이라 그 구멍을 화면 넷 말고 **전부**에서 메운다.
-					#  한 번 깊어진 핀은 딴 것을 톡할 때까지 깊게 선다 —
-					#  토글이면 세 번째 톡에 도로 얕아져 깜박인다.
-					#  (덤: 같은 동전을 또 톡하면 _rack_tap 이 겨눔을 푼다.
-					#   두 번 읽은 손에 판매 단추가 안 남는 것이 오히려 맞다.)
-					#  2026-09-19
-					var again: bool = not tip_pin.is_empty() \
-							and String(tip_pin.get("k", "")) == String(pk.k) \
-							and int(tip_pin.get("i", -1)) == int(pk.i)
-					pk["st"] = state
-					tip_pin = pk
-					tip_pin_at = mp
-					tip_lite = not _read_deep() and not again
+		_lmb(mp, mb.pressed)
 	elif e is InputEventMouseMotion:
 		#  마우스가 조금이라도 움직이면 읽기 핀이 그 프레임에 풀린다 —
 		#  데스크톱 방어선의 셋째 겹이다(2026-09-19).
@@ -8342,12 +8255,528 @@ func _unhandled_input(e: InputEvent) -> void:
 		# 손 상태와 무관하게 받아 둔다 — _hand_motion 은 쥐고 있을 때만
 		# 갱신하는데, 놓기·당김 조준은 아무것도 안 쥔 채로 자리를 읽는다.
 		#  굴곡을 되짚는다. 테 위면 원본 바로 바깥을 가리켜 아무것도 안 얹힌다.
-		mouse_at = _warp_v((e as InputEventMouseMotion).position) - view_pad
-		# 게이지를 끌고 있으면 손보다 먼저 본다 — 설정 화면에는 손이 없다.
-		if set_drag >= 0:
-			_set_slide(set_drag, mouse_at)
+		#  진짜 마우스가 움직이면 키보드 고르기를 내려놓는다(KB) — 커서가 다시 보이고 얹힘이 커서를 따른다.
+		if kb_on and not (e as InputEventMouseMotion).relative.is_zero_approx():
+			_kb_off()
+		_mmove(_warp_v((e as InputEventMouseMotion).position) - view_pad)
+
+
+#  왼쪽 단추를 누르거나 뗐다 — mp 는 노드 좌표(굴곡 · 여백을 되짚은 뒤). 마우스와 키보드(KB 의
+#  Enter)가 같은 길을 지난다 — 누르는 길을 둘로 두면 한쪽에만 고친 것이 남는다.
+func _lmb(mp: Vector2, pressed: bool) -> void:
+	mouse_at = mp
+	mouse_down = pressed
+	if pressed and state == S.INTRO:
+		_intro_press()
+		return
+	if pressed:
+		#  연출 건너뛰기가 **배움 넘기기보다 앞**이다. 키 갈래는 이미 이
+		#  차례인데(Dev → 인트로 → 연출 → 나머지) 손가락만 뒤에 있었다 —
+		#  배움 띠가 살아 있는 동안 클릭이 _tutor_click 에 통째로 삼켜져
+		#  연출이 안 끝났고, 키로만 빠져나갈 수 있었다. **모바일에는 키가
+		#  없다.** 게다가 띠는 두 연출 동안 안 그려지므로(_draw 의 문지기)
+		#  보이지도 않는 말상자를 넘기려고 누르는 꼴이었다.
+		#  _open_leg 이 _tutor("u_leg") 를 세우는 바로 그 프레임에 경계가
+		#  열리므로 이 겹침은 드문 자리가 아니다 — 실제 이벤트를 먹여
+		#  재서 잡았다. 2026-09-20
+		if swap_live or turn_live:
+			_swap_skip()
 			return
-		_hand_motion(mouse_at)
+		#  설명 중이면 클릭이 **넘기기**다. 게임에 안 보낸다 — 배우다 말고
+		#  실수로 물건을 사면 설명이 손해로 끝난다.
+		if _tutor_click(mp):
+			return
+		#  읽기 관문 — **아무것도 안 삼킨다.** 누른 자리와 시각을 적어
+		#  둘 뿐이라 밑의 손 · 클릭이 하던 일이 한 톨도 안 바뀐다.
+		#  읽기 판정은 _process 에서 따로 돈다 — _click 앞머리의 문지기
+		#  다섯(칠하기 · 사진 고르기 · 개발자 판 · 갈아 끼우기 · HUD
+		#  단추)을 지나기 전에 무엇을 하면 개발자 판 줄이 눌린다.
+		press_p0 = mp
+		press_ms = Time.get_ticks_msec()
+		press_read = false
+		press_buy = buy_sel
+		#  **앞 읽기를 여기서 안 지운다**(2026-09-19). 지우면 뗌 갈래가
+		#  「방금 이것을 읽고 있었는가」를 물을 수 없고, 그러면 같은 것을
+		#  또 톡해 깊은 층을 여는 **짧은 길**이 없어진다 — 태그 줄이 길게
+		#  누르기 전용이 되면 그것이 곧 접근성 위반이다(_read_deep 머리말).
+		#  대신 뗄 때 짚은 것과 견줘 지우거나 깊게 연다. 그동안에도 핀은
+		#  _tip_update 가 화면 전환 · 끌기 · 없어진 물건에서 스스로 뜯으므로
+		#  남아 썩지 않는다. 마우스는 핀을 세운 적이 없어 무변경이다.
+		if _hand_press(mp):
+			return                    # 삼킨다 — 탭인지 드래그인지 아직 모른다
+		_click(mp)
+	else:
+		if set_drag >= 0:
+			# 저장은 뗄 때 한 번. 끄는 동안 매 프레임 쓰면 파일을 두드린다.
+			_set_slide_end()
+			return
+		var was_read: bool = press_read
+		press_read = false
+		hold_a = 0.0
+		#  ⚠ 읽은 **뒤에 끌기가 시작됐으면 끌기가 이긴다**(H.CARRY).
+		#  여기서 무르기로 끝내면 「꾹 쥐었다가 끌어서 동전 순서 바꾸기」가
+		#  조용히 아무 일도 안 했다 — 손가락으로 재 보니 슬롯0 을 0.6초
+		#  쥐고 슬롯2 까지 끌어 떼도 c01 c02 c03 그대로였고, 같은 손짓을
+		#  마우스로 하거나 안 쥐고 끌면 바뀌었다. 모바일에서 가장 먼저
+		#  나오는 손짓 하나만 죽어 있던 셈이다. 「끌기가 시작되면 가리키는
+		#  중이 아니라 옮기는 중」이라는 _tip_update 의 규약과 같은
+		#  문장이다. 2026-09-19
+		if was_read and hand_st != H.CARRY:
+			#  읽기가 된 손짓은 아무것도 확정 안 한다 — 소리도 없다
+			#  (톡의 규약 ④ · WCAG 2.5.2 의 임계에서 값이 안 바뀐다).
+			#  지목은 되돌린다: 길게 누르기는 읽기지 취소가 아니다.
+			if hand_st != H.NONE:
+				#  quiet — 바로 위가 적어 둔 「소리도 없다」를 지킨다.
+				#  _hand_abort 가 이제 제 소리를 내므로 여기만 끈다.
+				_hand_abort(true)     # _hand_abort 가 buy_sel 을 지운다
+				buy_sel = press_buy
+			return
+		_hand_release(mp)
+		#  톡 = 지목 = 읽기. **손가락에서만 선다** — 마우스는 얹힘이
+		#  이미 읽으므로 핀이 설 자리가 없다(데스크톱 무변경).
+		if not hover_live and not was_read:
+			var pk := _tip_hit(mp)
+			if pk.is_empty():
+				tip_pin = {}          # 빈 자리를 톡하면 읽기가 닫힌다
+			else:
+				#  **같은 것을 또 톡하면 깊은 층이다.** 길게 누르기를
+				#  유일한 길로 만들면 안 된다(접근성) — 0.45초를 못 쥐는
+				#  손에게도 태그 줄로 가는 길이 있어야 하는데, 이 가지에는
+				#  설계서가 예비 길로 든 런 정보 「보유」 탭이 아직 없어
+				#  (_tip_hit 에 S.RUNINFO 가지가 없다) 런 안에서 태그 줄이
+				#  길게 누르기 전용이 돼 있었다. 톡 두 번은 쥐는 시간을
+				#  안 묻는 길이라 그 구멍을 화면 넷 말고 **전부**에서 메운다.
+				#  한 번 깊어진 핀은 딴 것을 톡할 때까지 깊게 선다 —
+				#  토글이면 세 번째 톡에 도로 얕아져 깜박인다.
+				#  (덤: 같은 동전을 또 톡하면 _rack_tap 이 겨눔을 푼다.
+				#   두 번 읽은 손에 판매 단추가 안 남는 것이 오히려 맞다.)
+				#  2026-09-19
+				var again: bool = not tip_pin.is_empty() \
+						and String(tip_pin.get("k", "")) == String(pk.k) \
+						and int(tip_pin.get("i", -1)) == int(pk.i)
+				pk["st"] = state
+				tip_pin = pk
+				tip_pin_at = mp
+				tip_lite = not _read_deep() and not again
+
+
+#  커서가 p 로 갔다 — 마우스 움직임과 키보드 조준점(KB)이 같은 길을 지난다.
+func _mmove(p: Vector2) -> void:
+	mouse_at = p
+	# 게이지를 끌고 있으면 손보다 먼저 본다 — 설정 화면에는 손이 없다.
+	if set_drag >= 0:
+		_set_slide(set_drag, mouse_at)
+		return
+	_hand_motion(mouse_at)
+
+
+# ══════════════════════════════════════════════════════════
+#  방향키 · Enter 로 플레이 (2026-10-11)
+# ──────────────────────────────────────────────────────────
+#  「방향키랑 엔터 키로도 게임을 플레이 할 수 있도록 편의성을 더하자」. 누르는 길을 하나도 새로 안
+#  짓는다 — 키보드는 **보이지 않는 마우스**다.
+#   · 고르기 — 화면마다 누를 거리(_kb_targets — 단추 · 줄 · 탭 · 다트 · 물건 · 동전 · 사탕 · 칸)를 모으고,
+#     방향키가 그 방향의 가장 가까운 것으로 옮긴다(가는 쪽 거리 + 옆으로 벗어난 몫 × perp). 고른 것의
+#     한가운데에 커서(mouse_at)를 앉혀 얹힘 · 툴팁 · 딸깍이 마우스와 똑같이 선다. 고른 자리에는 분필
+#     모서리 넷(_kb_draw)이 숨 쉰다. 쥐고 있으면 한 칸씩 이어 간다(키 되풀이).
+#   · Enter — 그 자리를 마우스로 누르고 떼는 것과 같은 길(_lmb)이다. 쥐고 있으면 쥔 것이다(정산 빨리
+#     감기 · 당김 조준). 손 층(사고팔기 · 사탕)도 톡과 똑같다. 말상자가 떠 있으면 넘긴다.
+#   · 줄에 묶인 좌우 — 게이지 줄은 ← → 가 값을 민다(휠과 같은 0.05) · 켬끔 줄은 끔 · 켬 칸 · 해상도는
+#     ◀ ▶. 위아래만 줄을 옮긴다.
+#   · 조준점이 마우스 자리인 조준(떠돌기 · 찍기 · 반동 · 당김)과 칠하기 — 방향키가 커서를 민다(쥐고
+#     있으면 fast_t 뒤에 빨라진다). 커서 자리에 분필 십자가 선다.
+#   · 진짜 마우스가 움직이면 키보드 고르기를 내려놓는다. 키보드로 고르는 동안은 OS 커서를 숨긴다 —
+#     엉뚱한 데 선 커서가 어디를 고른 것인지 헷갈리게 한다.
+#   · Space · ESC · TAB · F11 은 옛 그대로다. 화면 고르기(FSEL) · 인트로 · 연출 건너뛰기 · 개발자 판은
+#     제 키를 먼저 받는다.
+#    speed 커서가 미는 빠르기(논리 px/초) · fast 쥐고 있을 때의 배수 · fast_t 그만큼 쥐면 · perp 옆으로
+#    벗어난 몫의 무게 · pad 모서리가 고른 것 밖으로 나간 몫 · arm 모서리 한 획의 길이(최대)
+const KB := {"speed": 150.0, "fast": 2.4, "fast_t": 0.35, "perp": 2.5, "pad": 3.0, "arm": 9.0}
+var kb_on := false          # 키보드로 고르는 중
+var kb_id := ""             # 고른 것의 열쇠
+var kb_st := -1             # 고른 화면(state) — 바뀌면 다시 고른다
+var kb_down := false        # Enter 를 쥐고 있다
+var kb_hold := 0.0          # 방향키를 쥔 시간(커서 밀기)
+var kb_at := Vector2.ZERO   # Enter 를 누른 자리 — 뗄 때 같은 자리에서 뗀다
+
+
+func _kb_add(out: Array, id: String, r: Rect2, extra := {}) -> void:
+	if r.size.x <= 0.0 or r.size.y <= 0.0:
+		return
+	var t := {"id": id, "r": r}
+	t.merge(extra)
+	out.append(t)
+
+
+#  지금 화면에서 고를 것들 — {id · r(고르고 그리는 사각) · p(누르는 자리 · 없으면 한가운데) ·
+#  lr(좌우가 이 줄 안에서 하는 일) · i(설정 줄 번호) · def(처음 고를 것) · hide(모서리 안 그림) ·
+#  ord(↑ ↓ 가 자리 대신 따르는 차례 — 한 줄로 읽히는데 자리가 흩어진 목록)}.
+#  차례는 _click 앞머리의 문지기와 같다 — 칠하기 · 사진 고르기 · 말상자가 그 밑을 가린다.
+func _kb_targets() -> Array:
+	var out := []
+	if photo == "paint":
+		return out                       # 칸을 칠한다 — 커서를 민다(_kb_free)
+	if photo_rack != "":
+		for i in owned.size():
+			_kb_add(out, "slot:%d" % i, _slot_rect(i), {"def": i == 0})
+		return out
+	if _tutor_live():
+		#  말상자 — Enter 가 넘긴다(누르는 자리는 아무 데나). 건너뛰기 단추도 고른다.
+		_kb_add(out, "tutor", Rect2(Vector2(VIEW.x * 0.5 - 40.0, 8.0), Vector2(80.0, 40.0)),
+				{"def": true, "hide": true})
+		_kb_add(out, "tutor_skip", _tutor_skip_rect())
+		return out
+	match state:
+		S.TITLE:
+			if door_t >= 0.0:
+				return out
+			#  ↑ ↓ 는 글줄 차례(ord) — 「시작」은 문 손잡이(오른쪽)고 나머지는 왼쪽 칠판이라 자리로
+			#  가르면 손잡이에서 ↓ 가 칠판을 건너 프로필로 갔다(촬영, 2026-10-11).
+			var trn := _title_rows().size()
+			for i in trn:
+				_kb_add(out, "ttl:%d" % i, _menu_rect(i), {"def": i == 0, "ord": i})
+			_kb_add(out, "prof", _prof_badge_rect(), {"ord": trn})
+		S.NEWRUN:
+			for t in 2:
+				_kb_add(out, "nrtab:%d" % t, _nr_tab(t))
+			if newrun_tab == 1:
+				for i in _chal_list().size():
+					_kb_add(out, "chal:%d" % i, _chal_row(i))
+			else:
+				for i in GameData.leagues().size():
+					_kb_add(out, "lg:%d" % i, _league_rect(i))
+				if GameData.packs().size() > 1:
+					_kb_add(out, "pk:l", _pack_arrow(false))
+					_kb_add(out, "pk:r", _pack_arrow(true))
+			_kb_add(out, "go", _newrun_go(), {"def": true})
+			_kb_add(out, "back", _newrun_back())
+		S.PROFILE:
+			for i in Save.SLOTS:
+				_kb_add(out, "pf:%d" % i, _prof_rect(i), {"def": i + 1 == Save.slot()})
+			_kb_add(out, "pfdel", _prof_del_rect())
+			_kb_add(out, "back", _menu_back_rect())
+		S.COLLECT:
+			for t in COL_TABS.size():
+				_kb_add(out, "ctab:%d" % t, _col_tab_rect(t))
+			for i in _col_count():
+				_kb_add(out, "cell:%d" % i, _col_cell(i), {"def": i == 0})
+			if _col_pages() > 1:
+				_kb_add(out, "cpg:l", _col_arrow_rect(false))
+				_kb_add(out, "cpg:r", _col_arrow_rect(true))
+			_kb_add(out, "back", _menu_back_rect())
+		S.SETTINGS:
+			if _set_pg() != "pause":
+				for t in SET_TABS.size():
+					_kb_add(out, "stab:%d" % t, _set_tab_rect(t))
+			var rows := _set_rows()
+			for i in rows.size():
+				var key := String(rows[i])
+				var info := _set_info(key)
+				var r := _set_rect(i)
+				var ex := {"def": i == 0, "i": i}
+				var lr := ""
+				if bool(info.get("g", false)):
+					lr = "wheel"
+				elif info.has("tg"):
+					lr = "seg"
+				elif bool(info.get("sel", false)):
+					lr = "res"
+				if lr != "":
+					#  누르는 자리는 이름 쪽 — 게이지 홈 한가운데를 누르면 값이 그리로 튄다
+					ex["lr"] = lr
+					ex["p"] = r.position + Vector2(20.0, r.size.y * 0.5)
+				_kb_add(out, "set:" + key, r, ex)
+		S.RUNINFO:
+			for t in RI_TABS.size():
+				_kb_add(out, "ritab:%d" % t, _ri_tab_rect(t))
+			_kb_add(out, "back", _runinfo_back_rect(), {"def": true})
+		S.OVER:
+			if won and endless_ok:
+				_kb_add(out, "ov:l", _over_row_l(), {"def": true})
+				_kb_add(out, "ov:r", _over_row_r())
+			else:
+				_kb_add(out, "ov", _over_newrun_rect(), {"def": true})
+		S.PICK, S.AIM_V, S.AIM_H, S.CONFIRM, S.FLY, S.RESOLVE:
+			#  다트 — 고르기 · 조준 첫 단계에서 바꿔 들기(당김은 벽 다트를 쥐는 것이 조준이다)
+			if state == S.PICK or (state == S.AIM_V and aim_mode != "pull"):
+				for i in remaining.size():
+					_kb_add(out, "mag:%d" % i, _mag_rect(i), {"def": state == S.PICK and i == 0})
+			if state != S.PICK:
+				#  판 — 조준을 잠그고(판 한가운데를 누른다) · 날아가는 동안 · 정산은 건너뛰기 · 빨리 감기
+				var br := Rect2(BC - Vector2(R, R), Vector2(R, R) * 2.0)
+				_kb_add(out, "board", br, {"def": true, "p": BC})
+			_kb_hand(out)
+		S.CLEAR, S.BDUEL:
+			#  아무 데나 누르면 넘어간다(정산은 굴림 끝 → 다음) · 술병 대결은 자리를 안 본다
+			_kb_add(out, "go", Rect2(Vector2(40.0, 40.0), VIEW - Vector2(80.0, 80.0)),
+					{"def": true, "hide": true})
+		S.LEG:
+			_kb_add(out, "go", _leg_go(), {"def": true})
+			if _can_skip(leg_no):
+				_kb_add(out, "skip", _leg_skip())
+			var lpr := GameData.legs_per_round()
+			for i in lpr:
+				_kb_add(out, "card:%d" % i, _row_rect(i, lpr))
+			_kb_hand(out)
+		S.SHOP:
+			for i in drop.size():
+				if drop[i].sold > 0.0 or drop[i].has("doom") or i == give_i:
+					continue
+				_kb_add(out, "item:%d" % i, _obj_box(i))
+			if room3d_on:
+				_kb_add(out, "chute:0", _prop_rect(0))
+				_kb_add(out, "chute:1", _prop_rect(1))
+			_kb_add(out, "reroll", _reroll_rect())
+			_kb_add(out, "next", _next_rect(), {"def": true})
+			_kb_hand(out)
+	if _hud_btns_on():
+		_kb_add(out, "hud:0", _hud_btn_rect(0))
+		_kb_add(out, "hud:1", _hud_btn_rect(1))
+	return out
+
+
+#  손 층 — 동전 칸(톡하면 판매 겨눔) · 사탕(톡하면 쓴다) · 판매 단추.
+func _kb_hand(out: Array) -> void:
+	for i in owned.size():
+		_kb_add(out, "slot:%d" % i, _slot_rect(i))
+	for i in cons.size():
+		_kb_add(out, "cons:%d" % i, _cons_rect(i))
+	_kb_add(out, "sell", _sell_btn_rect())
+
+
+#  방향키가 고르지 않고 커서를 미는 자리 — 조준점이 커서 자리인 조준 · 칠하기.
+func _kb_free() -> bool:
+	if photo == "paint":
+		return true
+	if state == S.AIM_V or state == S.AIM_H or state == S.CONFIRM:
+		return aim_mode == "drift" or aim_mode == "place" or aim_mode == "kick" or aim_mode == "pull"
+	return false
+
+
+#  방향키 · Enter — 받았으면 참. 방향키는 쥔 키의 되풀이(echo)도 받는다(한 칸씩 이어 간다).
+func _kb_key(k: InputEventKey) -> bool:
+	var kc := k.keycode
+	var arrow: bool = kc == KEY_LEFT or kc == KEY_RIGHT or kc == KEY_UP or kc == KEY_DOWN
+	var enter: bool = kc == KEY_ENTER or kc == KEY_KP_ENTER
+	if not arrow and not enter:
+		return false
+	if Dev.on or state == S.INTRO or state == S.FSEL or swap_live or turn_live or _push_live():
+		return false
+	if enter:
+		if k.echo:
+			return true
+		if k.pressed:
+			_kb_wake()
+			kb_at = _kb_press_at()
+			kb_down = true
+			_lmb(kb_at, true)
+		elif kb_down:
+			kb_down = false
+			_lmb(kb_at, false)
+		return true
+	if not k.pressed:
+		return true
+	var was: bool = kb_on
+	_kb_wake()
+	if _kb_free() or not was:
+		return true                       # 첫 누름은 고르기만 한다 · 커서는 _kb_tick 이 민다
+	var dx: int = int(kc == KEY_RIGHT) - int(kc == KEY_LEFT)
+	var dy: int = int(kc == KEY_DOWN) - int(kc == KEY_UP)
+	var t := _kb_cur()
+	if dx != 0 and not t.is_empty() and t.has("lr"):
+		_kb_lr(t, dx)
+		return true
+	_kb_move(Vector2(float(dx), float(dy)))
+	return true
+
+
+func _kb_wake() -> void:
+	if not kb_on:
+		kb_on = true
+		kb_id = ""
+		kb_st = -1
+		if _has_renderer():
+			Input.mouse_mode = Input.MOUSE_MODE_HIDDEN
+	_kb_sync()
+
+
+func _kb_off() -> void:
+	if kb_down:
+		kb_down = false
+		_lmb(mouse_at, false)
+	kb_on = false
+	kb_id = ""
+	kb_st = -1
+	kb_hold = 0.0
+	if Input.mouse_mode == Input.MOUSE_MODE_HIDDEN:
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	queue_redraw()
+
+
+func _kb_cur() -> Dictionary:
+	if kb_id == "":
+		return {}
+	for t in _kb_targets():
+		if String(t.id) == kb_id:
+			return t
+	return {}
+
+
+func _kb_press_at() -> Vector2:
+	if _kb_free():
+		return mouse_at
+	var t := _kb_cur()
+	if t.is_empty():
+		return mouse_at
+	return t.get("p", (t.r as Rect2).get_center())
+
+
+#  고른 것을 지킨다 — 없어졌으면(산 물건 · 화면이 바뀌었다) 다시 고른다. 화면이 바뀌었으면 그 화면이
+#  처음 고를 것(def), 같은 화면에서 없어졌으면 커서에서 가장 가까운 것.
+func _kb_sync() -> void:
+	if not kb_on or _kb_free():
+		return
+	var ts := _kb_targets()
+	if ts.is_empty():
+		kb_id = ""
+		return
+	var pick: Dictionary = {}
+	for t in ts:
+		if String(t.id) == kb_id:
+			pick = t
+			break
+	if pick.is_empty() and kb_st != state:
+		for t in ts:
+			if bool(t.get("def", false)):
+				pick = t
+				break
+	if pick.is_empty():
+		var bd := INF
+		for t in ts:
+			var dd: float = (t.r as Rect2).get_center().distance_squared_to(mouse_at)
+			if dd < bd:
+				bd = dd
+				pick = t
+	kb_st = state
+	kb_id = String(pick.id)
+	_kb_aim(pick)
+
+
+#  커서를 고른 것의 한가운데로 — 얹힘 · 툴팁이 거기 선다. Enter 를 쥔 동안은 안 옮긴다(끌기가 된다).
+func _kb_aim(t: Dictionary) -> void:
+	if kb_down:
+		return
+	var c: Vector2 = (t.r as Rect2).get_center()
+	if not mouse_at.is_equal_approx(c):
+		_mmove(c)
+
+
+func _kb_move(dir: Vector2) -> void:
+	var cur := _kb_cur()
+	if cur.is_empty():
+		_kb_sync()
+		return
+	#  차례가 있는 목록이면 ↑ ↓ 는 그 차례로(끝에서 멈춘다)
+	if dir.y != 0.0 and cur.has("ord"):
+		var want: int = int(cur.ord) + int(dir.y)
+		for t in _kb_targets():
+			if t.has("ord") and int(t.ord) == want:
+				kb_id = String(t.id)
+				_kb_aim(t)
+				return
+		return
+	var c0: Vector2 = (cur.r as Rect2).get_center()
+	var side := Vector2(-dir.y, dir.x)
+	var best: Dictionary = {}
+	var bs := INF
+	for t in _kb_targets():
+		if String(t.id) == kb_id:
+			continue
+		var d: Vector2 = (t.r as Rect2).get_center() - c0
+		var along: float = d.dot(dir)
+		if along <= 2.0:
+			continue
+		var sc: float = along + absf(d.dot(side)) * float(KB.perp)
+		if sc < bs:
+			bs = sc
+			best = t
+	if best.is_empty():
+		return
+	kb_id = String(best.id)
+	_kb_aim(best)
+
+
+#  줄에 묶인 좌우 — 게이지(휠 위가 크게) · 켬끔(끔 · 켬 칸을 누른다) · 해상도(한 칸).
+func _kb_lr(t: Dictionary, dx: int) -> void:
+	match String(t.lr):
+		"wheel":
+			_wheel((t.r as Rect2).get_center(), -dx)
+		"seg":
+			_click(_set_seg_rect(int(t.get("i", 0)), 1 if dx > 0 else 0).get_center())
+		"res":
+			_res_step(dx)
+
+
+#  _process 가 매 틀 — 커서를 민다(조준 · 칠하기) · 고른 것을 지킨다 · 모서리가 숨 쉰다.
+func _kb_tick(d: float) -> void:
+	if not kb_on:
+		return
+	#  뗌이 지지직 동안 버려졌으면 여기서 뗀다 — 쥔 채로 남으면 정산이 늘 빨리 감긴다
+	if kb_down and not Input.is_key_pressed(KEY_ENTER) and not Input.is_key_pressed(KEY_KP_ENTER):
+		kb_down = false
+		_lmb(kb_at, false)
+	if _kb_free():
+		var v := Vector2(float(Input.is_key_pressed(KEY_RIGHT)) - float(Input.is_key_pressed(KEY_LEFT)),
+				float(Input.is_key_pressed(KEY_DOWN)) - float(Input.is_key_pressed(KEY_UP)))
+		if v == Vector2.ZERO:
+			kb_hold = 0.0
+		else:
+			kb_hold += d
+			var sp: float = float(KB.speed) * (float(KB.fast) if kb_hold >= float(KB.fast_t) else 1.0)
+			_mmove((mouse_at + v.normalized() * sp * d).clamp(Vector2.ZERO, VIEW))
+	else:
+		_kb_sync()
+	queue_redraw()
+	if state == S.SETTINGS:
+		var fr := get_node_or_null("Front")
+		if fr != null:
+			fr.queue_redraw()
+
+
+#  고른 자리 — 분필 모서리 넷(그늘 한 겹) · 커서를 미는 자리면 분필 십자.
+func _kb_draw(c: CanvasItem) -> void:
+	if not kb_on:
+		return
+	var a: float = 1.0 if motion_off else 0.78 + 0.22 * sin(float(Time.get_ticks_msec()) * 0.007)
+	var ink := Color(C_LIGHT, a)
+	var shd := Color(0.0, 0.0, 0.0, 0.5 * a)
+	if _kb_free():
+		var p := mouse_at.round()
+		for k in 2:
+			var o := Vector2(1.0, 1.0) if k == 0 else Vector2.ZERO
+			var col: Color = shd if k == 0 else ink
+			c.draw_rect(Rect2(p + o + Vector2(-8.0, 0.0), Vector2(5.0, 1.0)), col)
+			c.draw_rect(Rect2(p + o + Vector2(4.0, 0.0), Vector2(5.0, 1.0)), col)
+			c.draw_rect(Rect2(p + o + Vector2(0.0, -8.0), Vector2(1.0, 5.0)), col)
+			c.draw_rect(Rect2(p + o + Vector2(0.0, 4.0), Vector2(1.0, 5.0)), col)
+		return
+	var t := _kb_cur()
+	if t.is_empty() or bool(t.get("hide", false)):
+		return
+	var r: Rect2 = (t.r as Rect2).grow(float(KB.pad))
+	r = Rect2(r.position.round(), r.size.round())
+	var L: float = clampf(roundf(minf(r.size.x, r.size.y) * 0.3), 4.0, float(KB.arm))
+	for k in 2:
+		var o := Vector2(1.0, 1.0) if k == 0 else Vector2.ZERO
+		var col: Color = shd if k == 0 else ink
+		for cx in [0, 1]:
+			for cy in [0, 1]:
+				var x: float = r.position.x if cx == 0 else r.end.x - 2.0
+				var y: float = r.position.y if cy == 0 else r.end.y - 2.0
+				var hx: float = r.position.x if cx == 0 else r.end.x - L
+				var vy: float = r.position.y if cy == 0 else r.end.y - L
+				c.draw_rect(Rect2(Vector2(hx, y) + o, Vector2(L, 2.0)), col)
+				c.draw_rect(Rect2(Vector2(x, vy) + o, Vector2(2.0, L)), col)
 
 
 func _click(m: Vector2) -> void:
@@ -9836,8 +10265,8 @@ func _fast_on() -> bool:
 		return true                      # 개발자 고정 — Dev.on 도 지난다
 	if Dev.on or not _ui_can_hover() or hand_st != H.NONE:
 		return false
-	if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-		return false
+	if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and not kb_down:
+		return false                     # Enter 를 쥐어도 빨리 감긴다(KB)
 	return not _hud_btn_rect(0).has_point(mouse_at) \
 			and not _hud_btn_rect(1).has_point(mouse_at)
 
@@ -11807,6 +12236,8 @@ func draw_front(c: CanvasItem) -> void:
 	if state == S.SETTINGS or set_t > 0.0:
 		_draw_settings(c)
 		mat_draw = false          # 창이 세운 재질(MENUM)을 걷는다 — 앞판 밖으로 안 샌다
+	if state == S.SETTINGS:
+		_kb_draw(c)               # 고른 자리(KB) — 흐림 판 위
 
 
 func _draw() -> void:
@@ -11951,6 +12382,8 @@ func _draw() -> void:
 	if not swap_live and not turn_live:
 		tut_sh = sh               # 툭 나오는 글자가 제 변환에 흔들림을 얹는다(_type_line)
 		_tutor_draw()
+	if state != S.SETTINGS:
+		_kb_draw(self)          # 고른 자리(KB) — 설정은 흐림 판 위 앞판이 그린다
 	if not swap_live and not turn_live:
 		_tip_draw(sh)
 	draw_set_transform(Vector2.ZERO)
