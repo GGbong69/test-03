@@ -404,7 +404,9 @@ static func tick_room(vp: SubViewport, t: float) -> void:
 #     반사점 w = 빛 w + 높이 × 0.78 (시점 52°).
 #
 #  r — 화면에서 이 화판이 덮는 사각(논리 px). fy · ny — 벨벳 먼/가까운 모서리.
-#  back — 먼 모서리에서 벨벳이 시작하는 x(옛 창구 빗변). flat · tall — 52° 시점.
+#  side — 가까운 모서리에서 벨벳이 시작하는 x(옆 카운터의 앞 폭 · 2026-10-11 「2 : 6 : 2」).
+#  back — 먼 모서리에서 벨벳이 거기서 더 들어오는 몫(옛 창구 빗변). 먼 모서리의 벨벳은
+#  side + back 에서 시작한다. flat · tall — 52° 시점.
 #
 #  소품 자리 — 면 좌표 (u, h, w), 받침 바닥 가운데. 크기는 곱(K)이다.
 #  소품의 깊이 축은 벨벳 빗변이 모이는 소실점으로 기운다(lean) — 직교 그대로
@@ -426,6 +428,7 @@ static func tick_room(vp: SubViewport, t: float) -> void:
 #    · 아래 — 받침 · 서랍장 앞끝이 y 159~160. 그 밑 카운터에 game.gd 가 이름과
 #      값을 쓴다(CHUTE_TXT) — 소품 몸이 글을 안 덮는다.
 #    · 옆 — 물건 자리(u 116~524) 밖. 저울 오른끝 u 97 · 등록기 왼끝 u 575.
+#  (화면 끝에 걸쳐 잘리는 어법은 2026-10-11 에 걷었다 — 아래 「2 : 6 : 2」.)
 #  ── 받침은 온전히 카운터 위 (2026-10-03) ──
 #  「수금기가 테이블 끝에 걸터있는데? 좀 위치 조정 해봐」 — 첫 자리(등록기 u 602 · w 9 ·
 #  곱 1.95)는 받침 왼쪽이 빗변 조각 틀에 7~10px 올라앉고 뒤끝이 먼 턱 너머(w −18)까지
@@ -445,9 +448,28 @@ static func tick_room(vp: SubViewport, t: float) -> void:
 #  팔뚝 ≈ 180) 안이라야 판 소품 몸짓이 선다. 앞으로 더 내리면(시안 B) 팔이 못 간다.
 #  등록기가 오른쪽으로 21 물러난 몫은 몸이 더 기울고 돌아 메운다(game.gd PROP.b_body).
 #  game.gd 의 판정(prop_rect) · 반응(prop_glow)이 이 표를 그대로 읽는다.
+#  ── 2 : 6 : 2 — 판매 · 구매를 화면 안으로 (2026-10-11) ─────────────
+#  「상점 화면에서 구매랑 판매가 너무 테두리에 있어서 잘 안보인다는 평을 받았어. 테이블 중앙을
+#   좀 줄여도 되니까 판매랑 구매가 확실히 보이도록 만들자」. 앞서 받은 바깥 평이 더 또렷했다 —
+#  판매 · 가운데 · 구매가 화면 폭의 0.5 : 9 : 0.5 쯤이라 양 끝이 작게 잘려 안 읽히고 손도 잘 안
+#  간다, 적어도 2 : 6 : 2 는 되어야 읽히고 다루기 좋다.
+#  옛 판은 벨벳이 가까운 모서리에서 화면 폭(u 0 ~ 640)을 다 쓰고 옆 카운터는 먼 모서리에서만
+#  80 인 삼각형이었다 — 깊이마다 잰 카운터 폭의 평균이 40(0.6 : 8.8 : 0.6). 소품은 그 삼각형의
+#  먼 귀에 서서 화면 끝에 잘렸다(시안 C — 저울은 화면 0 ~ 97 만 · 등록기는 575 ~ 640 만).
+#  이제 벨벳을 양옆에서 들인다(game.gd CHUTE) — 가까운 모서리 side 96 · 먼 모서리 side + back
+#  138. 옆 카운터는 먼 쪽 138 에서 앞 96 으로 좁아지는 사다리꼴이라 평균 117(1.8 : 6.3 : 1.8)
+#  이고, 소품 받침에서 이름 · 값 줄까지(y 128 ~ 199)는 138 ~ 117 — 거기서 2 : 6 : 2 다.
+#  빗변은 80 → 42 로 덜 기운다. 물건 자리(game.gd DROP u 140 ~ 500 · 여섯 칸에도 한 칸 50)가
+#  가장 좁은 먼 모서리의 벨벳 안에 들어야 해서 먼 쪽은 138 에서 멈춘다. 기울기 · 단추의 원근
+#  (game.gd _tbl_vp)은 이 빗변에서 그대로 셈해 나온다.
+#  소품은 화면 안으로 들어와 온 몸이 보인다 — 저울 u 32 → 70(화면 5 ~ 135) · 등록기 u 623 →
+#  574(529 ~ 621). 곱 · 깊이(w) · 받침 · 몸은 그대로라 세로 자리(저울 꼭지 y 62 · 등록기 볏
+#  y 64 · 받침 · 서랍장 앞끝 y 159 · 160)도 그대로다. 상인 쪽으로 38 · 49 다가와 팔은 덜 뻗는다.
+#  받침 네 귀는 넓어진 카운터 한가운데라 틀에서 30 · 18 떨어진다(foot_clear).
+#  이름 · 값은 그 소품 밑 카운터 한가운데에 선다(game.gd CHUTE_TXT · _chute_txt_cx).
 const TOP_H := 3.0                              # 옆 카운터 윗면 — 벨벳보다 한 단 위
-const SELL_AT := Vector3(32.0, TOP_H, 24.0)     # 저울
-const BUY_AT := Vector3(623.0, TOP_H, 19.0)     # 금전등록기
+const SELL_AT := Vector3(70.0, TOP_H, 24.0)     # 저울 — 왼 카운터 한가운데(2 : 6 : 2)
+const BUY_AT := Vector3(574.0, TOP_H, 19.0)     # 금전등록기 — 오른 카운터 한가운데
 const SELL_K := 2.0
 const BUY_K := 1.9
 #  받침 네 귀 — 곱하기 전 (u, h, w). 저울은 놋쇠 띠(받침에서 가장 넓은 단), 등록기는
@@ -482,6 +504,7 @@ const BUY_HULL := [Vector3(-20.6, 0.0, -8.5), Vector3(20.6, 0.0, -8.5),
 		Vector3(26.0, 9.6, -4.0), Vector3(-10.0, 55.0, -5.5), Vector3(10.0, 55.0, -5.5),
 		Vector3(0.0, 58.6, -5.5)]
 const LAMP_E := 1.5                             # 소품 스포트 평소 세기
+const GLINT_SIDE := 0.35                        # 옆 카운터 앞 니스 반사 세기(먼 턱은 3) — make_table
 
 #  나무 — 밤나무(시안 R). 카운터 판자 · 턱 통나무 · 난간 · 앞판 · 조각 틀.
 const WOOD := {
@@ -654,8 +677,9 @@ static func _blob(sz: Vector2, at: Vector3, a: float) -> MeshInstance3D:
 
 #  깊이 기울기 — 그 자리에서 w 가 1 늘 때 u 가 얼마 가는가. 벨벳 사다리꼴의
 #  두 빗변을 이으면 폭이 0 이 되는 w(먼 쪽 소실점)로 모인다. 왼쪽은 −, 오른쪽은 +.
-static func lean(at: Vector3, X: float, W: float, back: float) -> float:
-	var w_vp: float = -W * (X - back * 2.0) / (back * 2.0)
+#  벨벳의 가까운 폭은 X − side × 2 · 먼 폭은 거기서 back × 2 를 덜어 낸 것이다.
+static func lean(at: Vector3, X: float, W: float, back: float, side: float) -> float:
+	var w_vp: float = -W * (X - side * 2.0 - back * 2.0) / (back * 2.0)
 	return (at.x - X * 0.5) / (at.z - w_vp)
 
 
@@ -673,11 +697,11 @@ static func _prop_node(root: Node3D, nm: String, at: Vector3, k: float, sh: floa
 #  소품 하나가 화면에서 차지하는 사각(논리 px). z 0 저울 · 1 금전등록기.
 #  판정이 쓴다 — 턱 위로 솟은 몸까지 창구다.
 #  X — 화면 폭. 나머지는 make_table 과 같다(깊이 기울기를 같은 식으로 낸다).
-static func prop_rect(z: int, X: float, fy: float, ny: float, back: float,
+static func prop_rect(z: int, X: float, fy: float, ny: float, back: float, side: float,
 		flat: float, tall: float) -> Rect2:
 	var at: Vector3 = BUY_AT if z == 1 else SELL_AT
 	var k: float = BUY_K if z == 1 else SELL_K
-	var sh: float = lean(at, X, (ny - fy) / flat, back)
+	var sh: float = lean(at, X, (ny - fy) / flat, back, side)
 	var r := Rect2()
 	var first := true
 	for q in (BUY_HULL if z == 1 else SELL_HULL):
@@ -698,12 +722,12 @@ static func prop_rect(z: int, X: float, fy: float, ny: float, back: float,
 #       놋쇠 갓이 덮는 w(CAP_WZ) 앞까지는 갓 끝(CAP_OUT)에서 잰다. 음수면 틀 위에 걸쳤다.
 #   y — 먼 턱 앞끝(LIP_W)에서 앞으로 나온 가장 작은 w. 음수면 턱 너머다.
 #  shop_probe 「소품 받침이 카운터 위」가 x ≥ 3 · y ≥ 0.5 를 잰다.
-static func foot_clear(z: int, X: float, fy: float, ny: float, back: float,
+static func foot_clear(z: int, X: float, fy: float, ny: float, back: float, side: float,
 		flat: float) -> Vector2:
 	var at: Vector3 = BUY_AT if z == 1 else SELL_AT
 	var k: float = BUY_K if z == 1 else SELL_K
 	var W: float = (ny - fy) / flat
-	var sh: float = lean(at, X, W, back)
+	var sh: float = lean(at, X, W, back, side)
 	var ln: float = Vector2(back, W).length()
 	var cx := 9999.0
 	var cw := 9999.0
@@ -711,8 +735,8 @@ static func foot_clear(z: int, X: float, fy: float, ny: float, back: float,
 		var v: Vector3 = q
 		var u: float = at.x + (v.x + sh * v.z) * k
 		var w: float = at.z + v.z * k
-		#  빗변 u — 먼 모서리 back(왼쪽) · X − back(오른쪽)에서 앞으로 0 · X 로
-		var e: float = back * (1.0 - w / W)
+		#  빗변 u — 먼 모서리 side + back(왼쪽) · X − side − back(오른쪽)에서 앞으로 side · X − side 로
+		var e: float = side + back * (1.0 - w / W)
 		var d: float = (e - u) if z == 0 else (u - (X - e))
 		var perp: float = d * W / ln
 		cx = minf(cx, perp - (CAP_OUT if w < CAP_WZ else FRAME_W))
@@ -720,7 +744,7 @@ static func foot_clear(z: int, X: float, fy: float, ny: float, back: float,
 	return Vector2(cx, cw)
 
 
-static func make_table(host: Node, r: Rect2, fy: float, ny: float, back: float,
+static func make_table(host: Node, r: Rect2, fy: float, ny: float, back: float, side: float,
 		flat: float, tall: float, pitch_deg: float) -> SubViewport:
 	_fl = flat
 	_tl = tall
@@ -768,18 +792,21 @@ static func make_table(host: Node, r: Rect2, fy: float, ny: float, back: float,
 	var ledge_f := _varnish(_plank(tw, 256, WOOD.ledge.darkened(0.30), 47, 64, 64, false))
 
 	# ── 벨벳 — 사다리꼴 한 장. 물건이 눕는 면(h 0) 그대로다 ──
+	#  먼 모서리 fb ~ X − fb · 가까운 모서리 side ~ X − side(2 : 6 : 2 — 머리말).
+	var fb: float = side + back
 	var vel := _mat(COL.velvet, 1.0)
 	#  보풀 — 1~2px 잔결이 밝기 ±15%. 매끈하면 천이 아니라 칠이다.
 	vel.albedo_texture = _noise_tex(0.9, 0.7, 1.0, 7)
 	vel.uv1_scale = Vector3(5.0, 5.0, 1.0)
-	root.add_child(_quad([Vector3(back, 0.0, 0.0), Vector3(X - back, 0.0, 0.0),
-			Vector3(X, 0.0, W), Vector3(0.0, 0.0, W)], vel))
+	root.add_child(_quad([Vector3(fb, 0.0, 0.0), Vector3(X - fb, 0.0, 0.0),
+			Vector3(X - side, 0.0, W), Vector3(side, 0.0, W)], vel))
 
-	# ── 옆 카운터 — 옛 창구 자리. 니스 칠한 밤나무 판자, 벨벳보다 한 단 위 ──
-	root.add_child(_face([Vector3(-E, TOP_H, -2.0), Vector3(back, TOP_H, -2.0),
-			Vector3(0.0, TOP_H, W), Vector3(-E, TOP_H, W)], plank, Vector3.UP, tex))
-	root.add_child(_face([Vector3(X - back, TOP_H, -2.0), Vector3(X + E, TOP_H, -2.0),
-			Vector3(X + E, TOP_H, W), Vector3(X, TOP_H, W)], plank, Vector3.UP, tex))
+	# ── 옆 카운터 — 판매 · 구매 자리. 니스 칠한 밤나무 판자, 벨벳보다 한 단 위 ──
+	#  먼 쪽 fb 에서 앞 side 로 좁아지는 사다리꼴 — 옛 창구 삼각형(앞에서 0)을 앞까지 넓혔다.
+	root.add_child(_face([Vector3(-E, TOP_H, -2.0), Vector3(fb, TOP_H, -2.0),
+			Vector3(side, TOP_H, W), Vector3(-E, TOP_H, W)], plank, Vector3.UP, tex))
+	root.add_child(_face([Vector3(X - fb, TOP_H, -2.0), Vector3(X + E, TOP_H, -2.0),
+			Vector3(X + E, TOP_H, W), Vector3(X - side, TOP_H, W)], plank, Vector3.UP, tex))
 
 	# ── 조각 틀 — 빗변 몰딩(나무 두 단) + 벨벳 쪽 금실 + 모서리 놋쇠 갓 ──
 	var carve := _mat(WOOD.carve, 0.45)
@@ -791,7 +818,7 @@ static func make_table(host: Node, r: Rect2, fy: float, ny: float, back: float,
 		#  빗변 방향 d · 바깥(카운터 쪽) 법선 n — 면 (u, w)
 		var d := Vector3(s * back, 0.0, W) / ln
 		var n := Vector3(s * W, 0.0, -back) / ln
-		var m0 := Vector3(back * 0.5 if s < 0.0 else X - back * 0.5, 0.0, W * 0.5)
+		var m0 := Vector3(side + back * 0.5 if s < 0.0 else X - side - back * 0.5, 0.0, W * 0.5)
 		var yaw := Vector3(0.0, atan2(s * back, W), 0.0)
 		var body := _box(Vector3(FRAME_W, 5.5, ln + 10.0), m0 + n * (FRAME_W * 0.5)
 				+ Vector3(0.0, 2.75, 0.0), carve)
@@ -804,7 +831,7 @@ static func make_table(host: Node, r: Rect2, fy: float, ny: float, back: float,
 		pip.rotation = yaw
 		root.add_child(pip)
 		#  먼 모서리 놋쇠 갓 — 몰딩이 먼 턱에 닿는 자리
-		var c0: Vector3 = Vector3(back if s < 0.0 else X - back, 0.0, 0.0)
+		var c0: Vector3 = Vector3(fb if s < 0.0 else X - fb, 0.0, 0.0)
 		var cap := _box(Vector3(10.0, 7.6, 7.0), c0 + n * 3.5 + Vector3(0.0, 3.8, 2.0), brass)
 		cap.rotation = yaw
 		root.add_child(cap)
@@ -828,7 +855,7 @@ static func make_table(host: Node, r: Rect2, fy: float, ny: float, back: float,
 		root.add_child(_box(Vector3(3.0, 3.6, 1.4), Vector3(du, 5.6, 0.5), dent))
 		du += 6.0
 	#  벨벳 먼 끝 금실
-	root.add_child(_box(Vector3(X - back * 2.0, 1.4, 1.4), Vector3(X * 0.5, 0.7, 1.9), brass))
+	root.add_child(_box(Vector3(X - fb * 2.0, 1.4, 1.4), Vector3(X * 0.5, 0.7, 1.9), brass))
 
 	# ── 가까운 팔걸이 — 둥근 밤나무 난간 + 밑 구슬 줄 ──
 	#  윤은 반만 — 더 매끈하면 머리 위 램프가 쇠막대처럼 흰 줄로 비친다.
@@ -877,8 +904,8 @@ static func make_table(host: Node, r: Rect2, fy: float, ny: float, back: float,
 					-25.5, zf + 1.9), brass))
 
 	# ── 소품 — 저울(판매) · 금전등록기(구매) ──
-	_scale_prop(root, lean(SELL_AT, X, W, back))
-	_register_prop(root, lean(BUY_AT, X, W, back))
+	_scale_prop(root, lean(SELL_AT, X, W, back, side))
+	_register_prop(root, lean(BUY_AT, X, W, back, side))
 
 	# ── 빛 — 머리 위 램프(빛 웅덩이 · 그림자) + 왼쪽 위 채움빛 + 소품 스포트 ──
 	lamp_rig(root, X, W, true)
@@ -897,14 +924,20 @@ static func make_table(host: Node, r: Rect2, fy: float, ny: float, back: float,
 	#  (시안 C — 소품이 커져 옛 반사점(저울 왼 앞 w 38 · 등록기 오른 옆 w 30)이 받침 밑으로
 	#  들어갔다. 이름 · 값 줄(y 163~197) 밑 카운터 앞 귀퉁이로 내린다 — 글 뒤에서 번쩍이면
 	#  글이 묽어진다.)
-	for gl in [["SellGlint", Vector3(8.0, TOP_H, 125.0)], ["BuyGlint", Vector3(632.0, TOP_H, 125.0)],
-			["LipGlintL", Vector3(132.0, 10.4, -6.0)], ["LipGlintR", Vector3(X - 132.0, 10.4, -6.0)]]:
+	#  (2 : 6 : 2 — 옛 판에서 이 두 반사는 화면 x 62 · 578 언저리에 맺혀 벨벳 위(니스 층 밖)라
+	#  거의 안 보였다. 카운터가 앞까지 side 96 폭으로 이어져 그 자리가 니스 판자가 되자 이름 밑에
+	#  둥근 등불처럼 떠 눈이 그리 갔다(촬영 — 세기 1.2 도, 자리를 바깥으로 48 옮겨도 등불이었다).
+	#  세기를 3 → 0.35(GLINT_SIDE)로 깎아 이름 밑에 결 따라 끊기는 윤으로 둔다 — 셋째 값.)
+	for gl in [["SellGlint", Vector3(8.0, TOP_H, 125.0), GLINT_SIDE],
+			["BuyGlint", Vector3(632.0, TOP_H, 125.0), GLINT_SIDE],
+			["LipGlintL", Vector3(132.0, 10.4, -6.0), 3.0],
+			["LipGlintR", Vector3(X - 132.0, 10.4, -6.0), 3.0]]:
 		var tg: Vector3 = gl[1]
 		var og := OmniLight3D.new()
 		og.name = String(gl[0])
 		og.light_color = COL.lamp
 		og.light_energy = 0.8
-		og.light_specular = 3.0
+		og.light_specular = float(gl[2])
 		og.light_cull_mask = WOOD_LAYER
 		og.omni_range = 420.0
 		og.omni_attenuation = 0.5
@@ -955,7 +988,8 @@ static func room_fit(vp: SubViewport, logical: Vector2) -> void:
 #  (촬영). 쉬는 손 · 건네받는 손은 이 원뿔 밖이다.
 #  시안 C 에서 소품이 두 배라 원뿔도 넓혔다(반지름 47 → 95 언저리) — 램프를 그만큼
 #  높이 · 멀리 걸어 빛이 오는 쪽(왼쪽 위)은 그대로다. 저울 원뿔 오른끝 u 150 · 등록기
-#  왼끝 u 495 라 쉬는 손(화면 x 190~450)은 여전히 밖이다.
+#  왼끝 u 495 라 쉬는 손(화면 x 190~450)은 여전히 밖이다. 2 : 6 : 2(2026-10-11)에서 소품이
+#  38 · 49 들어와 원뿔도 따라 들어왔다(오른끝 188 · 왼끝 446) — 쉬는 손 바로 바깥이다.
 static func prop_lamps(root: Node, pool: bool) -> void:
 	for pr in [["SellLamp", SELL_AT + Vector3(16.0, 62.0, 0.0), 19.0],
 			["BuyLamp", BUY_AT + Vector3(-14.0, 56.0, 4.0), 19.0]]:
@@ -1134,6 +1168,8 @@ static func _rod(a: Vector3, b: Vector3, t: float, m: Material) -> MeshInstance3
 #  대면 안 접시가 내려간다(prop_glow). 기울기 폭을 ±8° 에서 +12° / −16° 로 넓혔다 —
 #  곱이 두 배여도 옛 각이면 접시 끝이 화면 4px 만 오르내려 「달았다」가 안 보였다.
 #  이제 평소 ↔ 얹힘이 안 접시에서 화면 13px 이다.
+#  (2 : 6 : 2 · 2026-10-11 — 저울이 화면 안으로 들어와 바깥 접시도 다 보인다. 동전은 상인에게
+#  가까운 안 접시 그대로다.)
 const SCALE_PIV := Vector3(0.0, 56.0, 0.0)
 const SCALE_HL := 22.0                          # 저울대 반 길이
 const SCALE_TILT := [12.0, -16.0]               # 평소(추 쪽 · 바깥) · 팔 것을 댄 때(안 접시)(도)
@@ -1208,9 +1244,10 @@ const PAN_TOP := -24.1
 #  안 접시(PanR) 윗면 한가운데 — 면 좌표 (u, h, w). a 는 저울대 기울기(_scale_set 과 같은 값).
 #  game.gd 의 판매 몸짓(_prop_*)이 판 동전과 그것을 집는 손을 여기 세운다 — 접시를 짓는
 #  _scale_prop 과 같은 상수 · 같은 기울임(lean)이라 그림과 한 점도 안 갈린다.
-#  X 화면 폭 · fy · ny 벨벳 먼/가까운 모서리 · back 빗변 · flat 시점(make_table 과 같다).
-static func pan_top(X: float, fy: float, ny: float, back: float, flat: float, a: float) -> Vector3:
-	var sh: float = lean(SELL_AT, X, (ny - fy) / flat, back)
+#  X 화면 폭 · fy · ny 벨벳 먼/가까운 모서리 · back 빗변 · side 앞 들임 · flat 시점(make_table 과 같다).
+static func pan_top(X: float, fy: float, ny: float, back: float, side: float, flat: float,
+		a: float) -> Vector3:
+	var sh: float = lean(SELL_AT, X, (ny - fy) / flat, back, side)
 	var t: float = deg_to_rad(lerpf(float(SCALE_TILT[0]), float(SCALE_TILT[1]), a))
 	var p: Vector3 = SCALE_PIV + Vector3(SCALE_HL * cos(t), SCALE_HL * sin(t) + PAN_TOP, 0.0)
 	return SELL_AT + Vector3((p.x + sh * p.z) * SELL_K, p.y * SELL_K, p.z * SELL_K)
@@ -1256,8 +1293,9 @@ static func _key_at(row: float, col: float) -> Vector3:
 #  몸짓(내리치기)이 상인 손바닥을 여기 세운다. 등록기를 짓는 식(_prop_node 의 기울임 ·
 #  BUY_K)과 같다 — pan_top 과 같은 까닭. 눌림(_reg_set 의 몸 눌림)은 안 탄다 — 손이
 #  닿는 그 틀에 몸이 눌리기 시작한다.
-static func slam_top(X: float, fy: float, ny: float, back: float, flat: float) -> Vector3:
-	var sh: float = lean(BUY_AT, X, (ny - fy) / flat, back)
+static func slam_top(X: float, fy: float, ny: float, back: float, side: float,
+		flat: float) -> Vector3:
+	var sh: float = lean(BUY_AT, X, (ny - fy) / flat, back, side)
 	var p: Vector3 = _key_at(SLAM_AT.x, SLAM_AT.y) + KEY_N.normalized() * KEY_CAP
 	return BUY_AT + Vector3((p.x + sh * p.z) * BUY_K, p.y * BUY_K, p.z * BUY_K)
 
@@ -1265,14 +1303,14 @@ static func slam_top(X: float, fy: float, ny: float, back: float, flat: float) -
 #  서랍 앞끝 — 면 좌표 (u, h, w). open 은 서랍이 나온 몫(prop_glow 의 act), x 는 서랍 폭
 #  위 자리(곱 전 · 0 이 한가운데 · 서랍은 ±17). game.gd 의 판 효과(동전 · 조각)가 여기서
 #  튄다 — 열린 서랍 안에서 나와야 하므로 앞판보다 조금 안(w −3) · 서랍 윗면 높이다.
-#  등록기가 화면 끝에 걸쳐 서랍 한가운데가 화면 밖(u 646)이라 부르는 쪽이 왼쪽 반(x < 0)
-#  을 고른다.
+#  (시안 C 에서는 서랍 한가운데가 화면 밖(u 646)이라 왼쪽 반만 썼다 — 2 : 6 : 2 에서 등록기가
+#  화면 안으로 들어와 서랍 폭 전부가 보인다. 고르는 것은 부르는 쪽이다 · game.gd BURST.drawer_x.)
 const DRAWER_FRONT := 12.3     # 닫힌 서랍 앞판 앞면(곱 전 w)
 
 
-static func drawer_front(X: float, fy: float, ny: float, back: float, flat: float,
+static func drawer_front(X: float, fy: float, ny: float, back: float, side: float, flat: float,
 		open: float, x := 0.0) -> Vector3:
-	var sh: float = lean(BUY_AT, X, (ny - fy) / flat, back)
+	var sh: float = lean(BUY_AT, X, (ny - fy) / flat, back, side)
 	var p := Vector3(x, 8.4, DRAWER_FRONT - 3.0 + REG_OPEN * maxf(open, 0.0))
 	return BUY_AT + Vector3((p.x + sh * p.z) * BUY_K, p.y * BUY_K, p.z * BUY_K)
 

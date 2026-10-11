@@ -26,6 +26,7 @@ func _initialize() -> void:
 	fail += _t_geometry(g)
 	fail += _t_latch(g)
 	fail += _t_props(g)
+	fail += _t_ratio(g)
 	fail += _t_feet(g)
 	fail += _t_buy(g)
 	fail += _t_buy_wrong(g)
@@ -33,7 +34,7 @@ func _initialize() -> void:
 	fail += _t_sell_wrong(g)
 	fail += _t_move(g)
 	fail += _t_lanes(g)
-	print("\n%s" % ("실패 %d건" % fail if fail > 0 else "열 검사 전부 통과"))
+	print("\n%s" % ("실패 %d건" % fail if fail > 0 else "열한 검사 전부 통과"))
 	quit(mini(fail, 125))
 
 
@@ -104,7 +105,13 @@ func _t_latch(g: Node) -> int:
 #  떨어진다」는 그 고른 그림을 일부러 깬다 — 그래서 이 자는 그 줄을 걷고 이렇게 잰다:
 #    · 판정 사각(_prop_rect)은 화면으로 자른 뒤 화면 안이다(잘린 몫은 누를 수 없다)
 #      — 그리고 정말로 화면 끝에 닿는다(저울 왼끝 0 · 등록기 오른끝 640). 그것이 C 다.
-#    · 물건 자리(u 116~524)를 안 덮는다.
+#  ── 2 : 6 : 2 (2026-10-11) ──
+#  「상점 화면에서 구매랑 판매가 너무 테두리에 있어서 잘 안보인다는 평을 받았어. 테이블 중앙을
+#   좀 줄여도 되니까 판매랑 구매가 확실히 보이도록 만들자」 — 화면 끝에 잘린 소품이 바로 그
+#  평의 까닭이라 위 줄을 거꾸로 잰다:
+#    · 자르기 전 사각(_prop_rect_raw)이 화면 끝에서 2px 넘게 안이다 — 온 몸이 보인다.
+#    · 그 사각이 판매 · 구매 자리(화면 폭의 2할 언저리 — 물건 자리 밖)에 든다.
+#    · 물건 자리(DROP u_lo ~ u_hi)를 안 덮는다.
 #    · 단추(리롤 · 다음 판)를 안 덮는다 — 둘 다 온전히 보이고 눌려야 한다.
 #    · HUD 를 안 덮는다 — 자금판 · 사탕·사진 칸과 그 이름 줄 · 동전 슬롯 · 동전/다트
 #      꼬리표 · 정보/설정 단추(상점 자리 — 위 띠가 숨어 HUD 가 16px 올라와 있다).
@@ -139,10 +146,12 @@ func _t_props(g: Node) -> int:
 		if not scr.encloses(pr):
 			bad += 1
 			why += " %d:화면 밖 %s" % [z, str(pr)]
-		if (z == g.Z_SELL and pr.position.x > 0.5) or (z == g.Z_BUY and pr.end.x < g.VIEW.x - 0.5):
+		var raw: Rect2 = g._prop_rect_raw(z)
+		if not scr.grow(-2.0).encloses(raw):
 			bad += 1
-			why += " %d:화면 끝에 안 걸림 x[%.0f,%.0f]" % [z, pr.position.x, pr.end.x]
-		if (z == g.Z_SELL and pr.end.x > 116.0) or (z == g.Z_BUY and pr.position.x < 524.0):
+			why += " %d:화면 끝에 잘림 x[%.0f,%.0f]" % [z, raw.position.x, raw.end.x]
+		if (z == g.Z_SELL and raw.end.x > float(g.DROP.u_lo)) \
+				or (z == g.Z_BUY and raw.position.x < float(g.DROP.u_hi)):
 			bad += 1
 			why += " %d:물건 자리" % z
 		for k in btn:
@@ -174,6 +183,50 @@ func _t_props(g: Node) -> int:
 			str(g._prop_rect(0)), str(g._prop_rect(1))])
 
 
+# ②-d 판매 : 가운데 : 구매 = 2 : 6 : 2 (2026-10-11)
+#  바깥 평 「0.5 : 9 : 0.5 쯤이라 양 끝이 작게 잘려 안 읽힌다 · 적어도 2 : 6 : 2」. 창구(옆
+#  카운터)의 화면 폭을 깊이마다 잰다 —
+#    · 먼 모서리(소품이 서는 깊이)에서 화면 폭의 2할 넘게
+#    · 이름 줄(바닥선)에서 1할 8푼 넘게 · 깊이 평균이 1할 7푼 넘게(옛 판은 0.06)
+#    · 이름 · 값 사각이 그 줄의 카운터 안(빗변에서 2px 넘게 떨어져)
+func _t_ratio(g: Node) -> int:
+	var X: float = g.VIEW.x
+	var far: float = g._chute_edge(float(g.TBL.fy))
+	var ly: float = float(g.TBL.fy) + float(g.CHUTE_TXT.ly3)
+	var at_ly: float = g._chute_edge(ly)
+	var sum := 0.0
+	var n := 0
+	var y: float = g.TBL.fy
+	while y <= g.TBL.ny + 0.01:
+		sum += g._chute_edge(y)
+		n += 1
+		y += 1.0
+	var avg: float = sum / float(n)
+	var bad := 0
+	var why := ""
+	if far < X * 0.2:
+		bad += 1
+		why += " 먼 쪽 %.0f" % far
+	if at_ly < X * 0.18:
+		bad += 1
+		why += " 이름 줄 %.0f" % at_ly
+	if avg < X * 0.17:
+		bad += 1
+		why += " 평균 %.0f" % avg
+	for z in 2:
+		var tr: Rect2 = g._chute_txt_rect(z)
+		var e: float = g._chute_edge(tr.end.y)
+		if (z == g.Z_SELL and tr.end.x > e - 2.0) or (z == g.Z_BUY and tr.position.x < X - e + 2.0) \
+				or tr.position.x < 2.0 or tr.end.x > X - 2.0:
+			bad += 1
+			why += " %d:글이 카운터 밖 %s" % [z, str(tr)]
+	var k: float = 10.0 / X
+	return _say(bad == 0, "판매 : 가운데 : 구매", (why + " |" if why != "" else "")
+			+ " 먼 쪽 %.1f : %.1f : %.1f · 이름 줄 %.1f : %.1f : %.1f · 평균 %.1f : %.1f : %.1f" % [
+			far * k, (X - far * 2.0) * k, far * k, at_ly * k, (X - at_ly * 2.0) * k, at_ly * k,
+			avg * k, (X - avg * 2.0) * k, avg * k])
+
+
 # ②-c 소품 받침이 카운터 위 (2026-10-03)
 #  「수금기가 테이블 끝에 걸터있는데? 좀 위치 조정 해봐」 — 첫 시안 C 자리에서 등록기 받침
 #  왼쪽이 빗변 조각 틀에 7~10px 올라앉고 뒤끝이 먼 턱 너머(w −18)였다(저울도 받침 오른
@@ -190,7 +243,7 @@ func _t_feet(g: Node) -> int:
 	var note := ""
 	for z in 2:
 		var c: Vector2 = R.foot_clear(z, g.VIEW.x, float(g.TBL.fy), float(g.TBL.ny),
-				float(g.CHUTE.back), float(g.TBL.flat))
+				float(g.CHUTE.back), float(g.CHUTE.side), float(g.TBL.flat))
 		note += " %s 틀 %+.1f · 턱 %+.1f" % ["저울" if z == 0 else "등록기", c.x, c.y]
 		if c.x < 3.0:
 			bad += 1

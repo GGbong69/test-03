@@ -143,6 +143,14 @@ func _process(_d: float) -> bool:
 				g.drop_t += sub
 				g._drop_step(sub)
 				ns += 1
+				#  닿기 직전 속력은 **서브스텝마다** 들고 있는다(2026-10-11 · 2 : 6 : 2).
+				#  펠트를 양옆에서 들여 왼 벽(u_lo 140)과 턱(먼 쪽 빗변 131)의 틈이 옛 49 에서
+				#  9 로 줄었다 — 왼 벽에 붙은 물건은 날린 그 프레임 안에 턱에 닿는다. 프레임
+				#  끝에서만 들고 있으면 날리기 전(0)을 「닿는 순간」으로 읽는다.
+				if not g.sweep_dealt:
+					for i2 in mini(n, g.drop.size()):
+						if not g.drop[i2].gone:
+							vu_pre[i2] = float(g.drop[i2].vu)
 			for i in n:
 				if gone[i]:
 					continue
@@ -151,6 +159,8 @@ func _process(_d: float) -> bool:
 				if g.drop[i].gone:
 					gone[i] = true
 					max_hit_t = maxf(max_hit_t, float(g.sweep_t))
+					#  닿는 순간 vu 는 이미 0 으로 지워진 뒤다(_smash_at) — 위 서브스텝
+					#  고리가 든 한 서브스텝 전 값으로 잰다.
 					min_hit_v = minf(min_hit_v, absf(vu_pre[i]))
 					if not was_flung[i]:
 						n_drag += 1
@@ -159,10 +169,6 @@ func _process(_d: float) -> bool:
 					t_last = t_real
 					if n == 4 and hit_ms.size() < 4:
 						hit_ms.append(t_real)
-				else:
-					#  닿는 순간 vu 는 이미 0 으로 지워진 뒤다(_smash_at) —
-					#  한 스텝 전 값을 들고 있다가 그것으로 잰다.
-					vu_pre[i] = float(g.drop[i].vu)
 			if not deal_seen and g.sweep_dealt:
 				deal_seen = true
 				var lg: float = g.DROP.g
@@ -209,7 +215,8 @@ func _process(_d: float) -> bool:
 	_ok("끌려간 물건이 없다", n_drag == 0,
 			"날린 적 없이 턱에 닿은 물건 %d개" % n_drag)
 	#  문턱은 SMASH.chain 이다. 사슬이 열리는 최소가 곧 「날아간다」의 최소고,
-	#  그 밑으로 닿았다면 날에 끌려 왔다는 뜻이다(실측 최소 802~981).
+	#  그 밑으로 닿았다면 날에 끌려 왔다는 뜻이다(실측 최소 802~981 · 2 : 6 : 2 에서
+	#  서브스텝으로 재어 749).
 	_ok("날아와서 닿는다", min_hit_v >= float(g.SMASH.chain),
 			"닿는 순간 최소 속력 %.0f 면px/s (문턱 %.0f)"
 			% [min_hit_v, float(g.SMASH.chain)])
