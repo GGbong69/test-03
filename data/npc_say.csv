@@ -11,6 +11,10 @@ tip_boss,tip,보스 판은 못 건너뛰어. 뭐가 걸렸는지는 미리 보�
 tip_give,tip,물건을 내 쪽으로 밀어 올리면 한번 봐 주지,1,건네기(game.gd 건네기 머리말)
 tip_cons,tip,사탕 · 사진은 {cons_slots}칸까지 들고 다닐 수 있어,1,
 tip_bottles,tip,뒤 선반 술병 다 깨면 가만 안 둔다,1,술병 이스터에그(BTL · BDUEL)의 귀띔
+tip_bottles_2,tip,내 뒤에 있는 술은 아끼는 술이야,1,술병 이스터에그 암시 — 사용자가 준 말(2026-10-11)
+tip_bottles_3,tip,뒤 선반은 건드리지 마. 한 병도,1,술병 이스터에그 암시
+tip_bottles_4,tip,술병 던지기라면 나도 꽤 하지,1,술병 대결(BDUEL — 상인이 술병 셋을 먼저 던진다) 암시
+tip_bottles_5,tip,나한테 이기는 손님한텐 숨겨 둔 물건을 꺼내지,1,비밀 상점(대결에서 이기면 · _secret_deal) 암시
 poke_1,poke,어이 찌르지 마,1,
 poke_2,poke,뭐 할 말 있어?,1,
 poke_3,poke,간지럽다고,1,
