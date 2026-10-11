@@ -359,11 +359,18 @@ func _initialize() -> void:
 	_say(c0.end.y <= card_top, "선 카드를 안 덮는다",
 			"줄 아래끝 %.1f · 카드 윗변 %.2f · 여유 %.2fpx"
 			% [c0.end.y, card_top, card_top - c0.end.y])
+	#  상단 띠를 걷은 뒤(2026-10-11 · game.gd topbar_on)는 자금판 밑줄 칸이 제자리다.
 	var home: Rect2 = g._turn_cell(0, 0.0)
-	_say(is_equal_approx(home.position.x, g.LAY.bar_pip.position.x)
-			and is_equal_approx(home.position.y, g.LAY.bar_pip.position.y)
+	var bp: Vector2 = g._bank_pip_at()
+	_say(is_equal_approx(home.position.x, bp.x) and is_equal_approx(home.position.y, bp.y)
 			and is_equal_approx(home.size.x, g.LAY.bar_pip.size.x),
-			"k=0 이면 바의 제자리다", str(home))
+			"k=0 이면 자금판 칸의 제자리다", "%s · 자금판 칸 %s" % [home, bp])
+	g.topbar_on = true
+	var hb: Rect2 = g._turn_cell(0, 0.0)
+	_say(is_equal_approx(hb.position.x, g.LAY.bar_pip.position.x)
+			and is_equal_approx(hb.position.y, g.LAY.bar_pip.position.y),
+			"띠를 켜면 바의 제자리다", str(hb))
+	g.topbar_on = false
 
 	# ── ⑧ 드는 문 넷 ──────────────────────────────────
 	print("⑧ 드는 문")

@@ -966,6 +966,9 @@ static func _rows(g: Node) -> Array:
 				#  남색 판 · 금빛 탭이다. 술집 문 바로 밑 — 문 밖과 문 안을 같은 쪽에서 맞대 본다.
 				{"n1": "메뉴 재질 %s" % ("켬" if g.menu_mat_on else "끔"), "t": "act",
 						"a": "menumat"},
+				#  상단 띠(2026-10-11 · game.gd topbar_on) — 점수 칠판 · 규칙 명판 · 자금판 칸이 맡아 걷었다.
+				#  켜면 옛 띠(라운드 · 판 이름 · 게이지 · 목표 · 점수 · 제약)가 다시 서고 첫 줄이 16px 내려간다.
+				{"n1": "상단 띠 %s" % ("켬" if g.topbar_on else "끔"), "t": "act", "a": "topbar"},
 				#  ── 판 사건 (2026-10-06 · game.gd _ev_roll) ─────────────
 				#  불씨 · 주문 · 단골 셋이 이 밑에 나란히 선다. 0쪽 열여덟 · 2쪽 · 5쪽 열아홉이라
 				#  셋이 같이 들 자리가 이 쪽뿐이다 — 단골까지 열일곱(메뉴 재질 포함 · qa_crt 가 쪽마다
@@ -2764,6 +2767,11 @@ static func _run(g: Node, e: Dictionary) -> void:
 			g.door_on = not g.door_on
 			g.queue_redraw()
 			_say("술집 문 %s" % ("켬" if g.door_on else "끔"))
+			return
+		"topbar":
+			g.topbar_on = not g.topbar_on
+			g.queue_redraw()
+			_say("상단 띠 %s" % ("켬" if g.topbar_on else "끔"))
 			return
 		"menumat":
 			g.menu_mat_on = not g.menu_mat_on

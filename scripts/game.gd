@@ -403,10 +403,17 @@ const CARD_H := 96.0
 # 목표·점수 진행은 던지는 중에만 쓸모가 있다. 다음 판 목표는
 # "다음" 버튼이 이미 들고 있다.
 const HUD_UP := -16.0
+#  ⚠ **상단 띠는 이제 어디서도 안 선다**(2026-10-11 「근데 이렇게 옆에 칠판이 있으면 위에 줄은 없어도
+#  되는거 아니야?」). 띠가 말하던 다섯이 다 제 자리를 얻었다 — 라운드 · 판 이름 · 목표 · 점수 · 게이지는
+#  판 오른쪽 벽 점수 칠판(SCOREB)이, 보스 제약은 오른쪽 벽 규칙 명판(RULEP)이, 라운드 칸 여덟은 자금판
+#  밑줄(_bank_draw — 상점에서 쓰던 그 그림)이 진다. 첫 줄(자금 · 사탕 · 동전 · 다트)은 상점과 같은
+#  높이(HUD_UP)로 올라 상점 ↔ 판 고르기 ↔ 판 사이에 HUD 가 더는 16px 오르내리지 않는다. 라운드 넘김
+#  연출의 칸도 자금판 칸에서 들린다(_turn_cell). 개발자 모드 「상단 띠」로 옛 띠를 다시 세워 맞대 본다.
+var topbar_on := false
 
 
 func _bar_hidden() -> bool:
-	return state == S.SHOP
+	return state == S.SHOP or not topbar_on
 
 
 func _hud_dy() -> float:
@@ -4407,35 +4414,86 @@ func _to_pick() -> void:
 #  지금 점수(24 · 걸음마다 띠와 같이 밝았다 돌아온다) · 분필 게이지. 넘으면 목표에 금빛 분필 동그라미.
 #  분필 결(_chalk_grit)은 큰 수에만 — 작은 글은 결이 획을 먹는다. 판과 같이 흔들리는 벽의 물건이다.
 #  판 화면 · 정산(흐림 밑)에서 선다. 점수 카드가 오른쪽에서 들어오면 그 위를 덮는다(카드에도 게이지가 있다).
-#    box 석판(테 안) · frame 테 두께
-const SCOREB := {"box": Rect2(478.0, 122.0, 138.0, 158.0), "frame": 4.0}
+#  ⚠ **규칙 명판(RULEP)과 같은 벽을 쓴다**(2026-10-11 — 상단 띠를 걷으며 찍어 보니 보스 판에서 명판 둘이
+#  칠판 머리「라운드 1/8」을 덮었다 · 칠판을 건 날부터 있던 겹침이다). 명판은 HUD 밑에서 쌓이고 칠판은
+#  마지막 명판 밑으로 내려선다(gap). 칠판이 바닥(floor)을 넘을 만큼 명판이 길면 명판이 먼저 효과 줄을
+#  접는다(_rulep_layout 의 bot — 효과는 툴팁이 말한다). 접어도 넘치면(명판 넷 이상 — 무한 · 챌린지)
+#  칠판이 머리(라운드 · 판 이름 — 자금판 칸이 라운드를 말한다)를 접는다(head). 칠판은 명판의 자리를
+#  따라 미끄러진다(sb_y — 명판 follow 와 같은 빠르기 · 움직임 끔이면 곧장).
+#    box 석판(테 안 · 명판이 없을 때) · frame 테 두께 · gap 명판과의 틈 · floor 테 밑변의 끝(밑 안내 줄 위) ·
+#    head 접히는 머리 높이(가름줄까지)
+const SCOREB := {"box": Rect2(478.0, 122.0, 138.0, 158.0), "frame": 4.0, "gap": 6.0, "floor": 330.0,
+		"head": 47.0}
+var sb_y := NAN                  # 칠판이 보이는 윗변(석판) — 명판 자리를 따라간다
 
 
 func _score_board_on() -> bool:
 	return (_is_play_deep() or state == S.CLEAR) and not swap_live and not turn_live
 
 
+#  칠판이 설 자리(석판) — 명판 밑으로 내려서고, 바닥을 넘으면 머리를 접는다. 윗변은 서야 할 자리다.
+func _score_board_want() -> Rect2:
+	var b: Rect2 = SCOREB.box
+	var fr: float = float(SCOREB.frame)
+	var lay := _rulep_layout() if _rulep_on() else []
+	if lay.is_empty():
+		return b
+	var pb: float = (lay[lay.size() - 1].rect as Rect2).end.y
+	b.position.y = maxf(b.position.y, pb + float(SCOREB.gap) + fr)
+	var fl: float = float(SCOREB.floor) - fr
+	if b.end.y > fl:
+		b.size.y -= float(SCOREB.head)
+		b.position.y = minf(b.position.y, fl - b.size.y)
+	return b
+
+
+#  지금 보이는 자리 — 윗변만 sb_y 로 미끄러진다(높이는 곧장 바뀐다).
+func _score_board_box() -> Rect2:
+	var b := _score_board_want()
+	if not is_nan(sb_y):
+		b.position.y = sb_y
+	return b
+
+
+func _score_board_tick(d: float) -> void:
+	if not _score_board_on():
+		sb_y = NAN
+		return
+	var want: float = _score_board_want().position.y
+	if is_nan(sb_y) or motion_off:
+		sb_y = want
+	else:
+		sb_y = lerpf(sb_y, want, 1.0 - exp(-float(RULEP.follow) * d))
+		if absf(sb_y - want) < 0.25:
+			sb_y = want
+
+
 func _score_board_draw() -> void:
 	if not _score_board_on():
 		return
-	var box: Rect2 = SCOREB.box
+	var box: Rect2 = _pr(_score_board_box())
+	#  머리를 접은 칠판은 머리만큼 짧고 그 밑 줄이 그만큼 올라선다(hy)
+	var full: bool = box.size.y >= (SCOREB.box as Rect2).size.y
+	var hy: float = 0.0 if full else -float(SCOREB.head)
 	_chalk_board(self, box, float(SCOREB.frame), CHALKB.order)
 	var ink: Color = DOORT.chalk_ink
 	var slate: Color = DOORT.chalk
 	var x0: float = box.position.x + 8.0
 	var w: float = box.size.x - 16.0
 	var y: float = box.position.y
-	#  머리 — 라운드(무한에는 분모가 없다 · _draw_topbar 와 같은 말)
-	var rt: String = ("라운드 %d" % GameData.round_of(leg_no)) if GameData.endless \
-			else ("라운드 %d/%d" % [GameData.round_of(leg_no), _run_rounds()])
-	draw_string(_fz(font_sm, 20), Vector2(x0, y + 24.0), rt, HORIZONTAL_ALIGNMENT_LEFT, w, 20,
-			Color(ink, 0.94))
-	#  판 이름 — 보스 판은 금빛 분필
-	var boss: bool = GameData.is_boss(leg_no)
-	draw_string(_fz(font_sm, 12), Vector2(x0, y + 40.0), GameData.leg_name(leg_no),
-			HORIZONTAL_ALIGNMENT_LEFT, w, 12, Color(C_ACC, 0.95) if boss else Color(ink, 0.62))
-	#  가름줄 — 분필 한 획(끝이 조금 흐리다)
-	draw_rect(Rect2(x0, y + 47.0, w, 1.0), Color(ink, 0.30))
+	if full:
+		#  머리 — 라운드(무한에는 분모가 없다 · _draw_topbar 와 같은 말)
+		var rt: String = ("라운드 %d" % GameData.round_of(leg_no)) if GameData.endless \
+				else ("라운드 %d/%d" % [GameData.round_of(leg_no), _run_rounds()])
+		draw_string(_fz(font_sm, 20), Vector2(x0, y + 24.0), rt, HORIZONTAL_ALIGNMENT_LEFT, w, 20,
+				Color(ink, 0.94))
+		#  판 이름 — 보스 판은 금빛 분필
+		var boss: bool = GameData.is_boss(leg_no)
+		draw_string(_fz(font_sm, 12), Vector2(x0, y + 40.0), GameData.leg_name(leg_no),
+				HORIZONTAL_ALIGNMENT_LEFT, w, 12, Color(C_ACC, 0.95) if boss else Color(ink, 0.62))
+		#  가름줄 — 분필 한 획(끝이 조금 흐리다)
+		draw_rect(Rect2(x0, y + 47.0, w, 1.0), Color(ink, 0.30))
+	y += hy
 	#  목표 — 가장 큰 수
 	var tgt: int = target
 	var val: int = _bar_val()
@@ -12423,8 +12481,8 @@ func _turn_cell(i: int, k: float) -> Rect2:
 	var sc: float = lerpf(1.0, float(TURN.k), k)
 	var dx: float = float(LAY.bar_pip_dx) * sc
 	var w: float = dx * (n - 1.0) + pip.size.x * sc
-	#  바의 제자리는 띠를 따라 왼끝 · 위끝으로 간다(_bar_pip_at).
-	var home := _bar_pip_at() + Vector2(
+	#  바의 제자리는 띠를 따라 왼끝 · 위끝으로 간다(_bar_pip_at). 띠가 없으면 자금판 밑줄 칸이다.
+	var home := (_bank_pip_at() if _bar_hidden() else _bar_pip_at()) + Vector2(
 			float(LAY.bar_pip_dx) * (n - 1.0) + pip.size.x, pip.size.y) * 0.5
 	var c := home.lerp(TURN.to, k)
 	return Rect2(roundf(c.x - w * 0.5 + float(i) * dx),
@@ -12782,9 +12840,9 @@ func _fire_edge() -> void:
 	var g2: float = float(FIRE.gain[fire_lay]) * fire_mul * _fire_env()
 	if g2 <= 0.0:
 		return
-	#  화면 **끝**을 두른다(여백까지 — _ui_pad 머리말). 위는 띠 밑에서 시작한다.
+	#  화면 **끝**을 두른다(여백까지 — _ui_pad 머리말). 위는 띠 밑에서 시작한다(띠가 없으면 위끝).
 	var fr := _full()
-	var top: float = float(LAY.bar.size.y) + _bar_y()
+	var top: float = _fire_top()
 	var w: float = float(FIRE.w)
 	for k in int(FIRE.lay[fire_lay]):
 		var a: float = float(FIRE.a[k]) * g2
@@ -12804,6 +12862,11 @@ func _fire_edge() -> void:
 		draw_rect(Rect2(x0 + sw - w, y0 + w, w, sh2 - w * 2.0), col)  # 오른쪽
 	if fire_lay >= 3:
 		_fire_tongues(g2, top)
+
+
+#  불 테두리의 윗변 — 상단 띠가 서 있으면 그 밑(점수를 안 덮는다), 없으면 화면 위끝.
+func _fire_top() -> float:
+	return _full().position.y if _bar_hidden() else float(LAY.bar.size.y) + _bar_y()
 
 
 #  ── 맨 윗단의 불꽃 (2026-09-26) ──────────────────────
@@ -17529,6 +17592,10 @@ func _rulep_layout() -> Array:
 	var tw: float = float(RULEP.w) - ip - float(RULEP.pad)
 	var top: float = float(RULEP.y) + _hud_dy()
 	var bot: float = float(RULEP.bot) + _hud_dy()
+	#  점수 칠판이 서는 판(SCOREB)은 칠판이 바닥 안에 온전히 설 만큼만 — 넘으면 효과 줄을 접는다.
+	if _score_board_on():
+		bot = minf(bot, float(SCOREB.floor) - float(SCOREB.frame) * 2.0 - float(SCOREB.gap)
+				- (SCOREB.box as Rect2).size.y)
 	var wrapped := []
 	var need := -float(RULEP.step)
 	var wmax := 0.0
@@ -19730,10 +19797,18 @@ func _bank_draw() -> void:
 		draw_string(_fz(font, 12), r.position + Vector2(0.0, float(BANK.itr_y)), "이자 +%d" % itr,
 				HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 12,
 				C_OFF if itr > 0 else C_OFF)
-	#  런 진행 — 런 바가 숨는 화면(상점 · 스테이지)에서 몇 판째인지가 여기 남는다.
-	#  칸 여덟 = 7×7 + 5 = 54px, 판 가운데.
+	#  런 진행 — 런 바가 숨는 화면(이제 모든 화면)에서 몇 판째인지가 여기 남는다.
+	#  칸 여덟 = 7×7 + 5 = 54px, 판 가운데. 라운드 넘김이 도는 동안은 그 연출의 큰 줄이 곧 이
+	#  칸이라 안 그린다(_draw_topbar 의 같은 문지기 — 둘이 옛 · 새 라운드를 같이 말하지 않게).
+	if not turn_live:
+		_run_pips(_bank_pip_at())
+
+
+#  자금판 밑줄 칸 여덟의 첫 칸 왼쪽 위 — 그리기(_bank_draw)와 라운드 넘김의 제자리(_turn_cell).
+func _bank_pip_at() -> Vector2:
+	var r := _bank_rect()
 	var pw: float = float(LAY.bar_pip_dx) * float(_run_rounds() - 1) + LAY.bar_pip.size.x
-	_run_pips(Vector2(roundf(r.get_center().x - pw * 0.5), r.position.y + float(BANK.pip_y)))
+	return Vector2(roundf(r.get_center().x - pw * 0.5), r.position.y + float(BANK.pip_y))
 
 
 #  자금판 골드의 폭 · 그리기. 24 · 12 는 draw_gold_at 그대로다(font). 20 은 곁말
@@ -20336,6 +20411,7 @@ func _panel_update(d: float, rate := 1.0) -> void:
 	_coin_fx_tick(d)             # 성장 · 소모형 동전의 보이는 값(COINFX)
 	_bean_tick(d)                # 잭과 콩나무의 쑥 크기 · 먹은 칸 빛
 	_rulep_tick(d)               # 판 규칙 명판 — 드는 · 빠지는 · 메우는(RULEP)
+	_score_board_tick(d)         # 점수 칠판 — 명판 밑으로 미끄러진다(SCOREB)
 	_ptear_tick(d)               # 쓴 사진이 찢긴다(PTEAR)
 
 
