@@ -42699,8 +42699,10 @@ func _ui_face(c: CanvasItem, key: String, r: Rect2, on: bool, a := 1.0) -> Rect2
 #    · 바닥 그림자가 오른쪽 아래로 진다(빛은 왼쪽 위 — 상인 손 그림자와 같은 쪽). 공중에
 #      뜬 판과 바닥에 놓인 판을 가르는 것이 이 한 조각이다.
 #  커서가 얹히면 판이 들려 앞면이 길어지고(밑은 바닥에 남는다 — _ui_face 의 턱과 같은
-#  말씨), 누르면 앞면만큼 가라앉는다. 글자는 안 눕는다 — 「카드는 눕고 카드 위의 인쇄는
-#  안 눕는다」(화면 어법). 다만 줄마다 그 높이의 윗면 한가운데에 선다(_slab_dx).
+#  말씨), 누르면 앞면만큼 가라앉는다. 글자도 윗면에 눕는다(2026-10-11 「건너뛰기랑 던지기 저기의
+#  글들이 원근에 따라 누웠으면 좋겠다고」 — 옛 판은 「카드는 눕고 카드 위의 인쇄는 안 눕는다」로 글만
+#  섰다). 줄마다 그 높이의 윗면 한가운데에 서고(_slab_dx), 카운터의 판매 · 구매 이름(_chute_name)과
+#  같은 변환으로 TBL.flat 만큼 눌리고 옆변처럼 소실점 쪽으로 기운다(_slab_xf).
 #  모서리는 _rr 과 같은 계단 표(ROUND)를 줄마다 깎는다 — 기운 변도 논리 1px 계단이다.
 #  두께 12(2026-10-04 「버튼이 약간 측면이 없네? 좀 버튼 두겁게 해봐 3D 느낌으로」) — 6 은
 #  앞면이 화면 3px 띠라 판이 종이로 읽혔다. 옆면은 비스듬히 내려다보는 투영(oblique ·
@@ -42828,6 +42830,19 @@ func _slab(c: CanvasItem, key: String, r: Rect2, on: bool, a := 1.0) -> Rect2:
 func _slab_dx(b: Rect2, by: float, sz: int) -> float:
 	var up: float = b.size.y - (by - float(sz) * 0.4)
 	return _vp_lean(b.get_center().x, b.end.y) * up
+
+
+#  누운 단추 윗면에 눕힌 글줄의 변환 — 원점은 윗면 왼끝 · 그 줄 잉크 가운데 높이(by − 0.4 sz)를 그
+#  높이의 윗면 한가운데 덤(_slab_dx)만큼 민 자리. 세로 축은 TBL.flat 만큼 눌리고 화면 1px 오를 때
+#  _vp_lean 만큼 가운데로 간다 — 옆변과 같은 기울기라 글의 세로획이 옆변과 나란하다. 이 변환 밑에서는
+#  바닥선을 (0, 0.4 sz)에 둔다. 다 그리면 draw_set_transform(shake_off) 로 되돌린다(_chute_name 과 같은
+#  예외 — 판 갈이 동안은 shake_off 가 미끄러짐을 품는다).
+func _slab_xf(b: Rect2, by: float, sz: int) -> Transform2D:
+	var ln: float = _vp_lean(b.get_center().x, b.end.y)
+	var k: float = float(TBL.flat)
+	var mid: float = by - float(sz) * 0.4
+	return Transform2D(Vector2(1.0, 0.0), Vector2(-ln * k, k),
+			shake_off + Vector2(roundf(b.position.x + _slab_dx(b, by, sz)), roundf(b.position.y + mid)))
 
 
 func _ui_hover_tick(d: float) -> void:
@@ -43067,16 +43082,25 @@ func _btn(r: Rect2, label: String, sub: String, on: bool,
 	var cy: float = (b.size.y + 1.0) * 0.5
 	var ys: Array = _ink_stack(cy, [20, 12], 3.0)
 	var ly: float = _ink_mid_y(cy, 20) if mid else float(ys[0])
-	var lx: float = roundf(_slab_dx(b, ly, 20)) if lie else 0.0
-	draw_string(_fz(font_sm, 20), b.position + Vector2(lx, ly), label,
+	#  누운 판이면 글도 윗면에 눕는다(_slab_xf) — 바닥선은 변환의 (0, 0.4 sz).
+	var at := b.position + Vector2(0.0, ly)
+	if lie:
+		draw_set_transform_matrix(_slab_xf(b, ly, 20))
+		at = Vector2(0.0, 8.0)
+	draw_string(_fz(font_sm, 20), at, label,
 			HORIZONTAL_ALIGNMENT_CENTER, b.size.x, 20, _ui_ink("btn:" + label, on))
 	if sub != "":
 		#  부제는 단추 폭에서 자른다(양옆 8px). 부르는 쪽이 옛 크기로 잘라 넘겨도
 		#  단추 밖으로 새지 않는다.
-		var sx: float = roundf(_slab_dx(b, float(ys[1]), 12)) if lie else 0.0
-		draw_string(_fz(font, 12), b.position + Vector2(sx, float(ys[1])), _elide_word(sub, b.size.x - 16.0, 12),
+		var sat := b.position + Vector2(0.0, float(ys[1]))
+		if lie:
+			draw_set_transform_matrix(_slab_xf(b, float(ys[1]), 12))
+			sat = Vector2(0.0, 12.0 * 0.4)
+		draw_string(_fz(font, 12), sat, _elide_word(sub, b.size.x - 16.0, 12),
 				HORIZONTAL_ALIGNMENT_CENTER, b.size.x, 12,
 				_ui_ink("btn:" + label, on, true))
+	if lie:
+		draw_set_transform(shake_off)
 	return b
 
 
@@ -44472,9 +44496,12 @@ func _draw_shop() -> void:
 	#  밑에 2.5px 로 붙고 몸 밑이 6px 비었다.
 	if reroll_cost > 0:
 		#  바닥선은 _btn 의 부제 줄 그대로 — 누운 단추는 윗면이 앞면만큼 낮다(_slab).
+		#  값도 「리롤」과 같이 윗면에 눕는다(_slab_xf).
 		var py: float = float(_ink_stack((rr.size.y + 1.0) * 0.5, [20, 12], 3.0)[1])
-		draw_gold(rr.position.x + rr.size.x * 0.5 + roundf(_slab_dx(rr, py, 12)), rr.position.y + py,
+		draw_set_transform_matrix(_slab_xf(rr, py, 12))
+		draw_gold(rr.size.x * 0.5, 12.0 * 0.4,
 				str(reroll_cost), 12, C_GOLD if gold >= reroll_cost else C_DIM.darkened(0.3))
+		draw_set_transform(shake_off)
 	_btn(_next_rect(), "다음 판 →", "", true, C_GOLD, true, true)
 	_hold_draw()
 	_fly_draw()
