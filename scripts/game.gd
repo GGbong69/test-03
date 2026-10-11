@@ -46501,14 +46501,15 @@ const DOORB := {
 	"top_a": 0.12, "bot_a": 0.34,
 	"spec_a": 0.32, "spec_from": -158.0, "spec_to": -40.0,
 	"neon_a": 0.10, "neon_h": 0.42,
-	#  옆면(_door_board_rim) — 위(램프 쪽) · 아래 색 · 둘레를 나누는 수
-	"rim_hi": Color("4a3f3c"), "rim_lo": Color("120e10"), "rim_n": 64,
+	#  옆면(_door_board_rim) — 위(램프 쪽) · 아래 색 · 둘레를 나누는 수 · 두께(m). 두께는 처음 문 앞면까지(3cm ·
+	#  실물 판 비)로 뒀다가 「너무 두껍잖아」로 1.2cm — 판 뒤는 문에서 조금 뜬다(못에 걸린 판이다).
+	"rim_hi": Color("4a3f3c"), "rim_lo": Color("120e10"), "rim_n": 64, "rim_t": 0.012,
 }
 
 
 #  판의 두께(2026-10-11 「지금 보니까 시작화면 다트판에 두께가 없네? 그냥 종이네? 두께 좀 만들까?」) —
-#  2D 판 한 장이라 문이 돌면 종이처럼 납작했다. 판 앞면(z 0)에서 문 앞면(DOOR.face)까지가 판의 두께다
-#  (판은 문에 붙어 있다 — 3D 자루의 촉도 그 앞면에 꽂힌다). 뒷면 원(경첩째 돈 판 한가운데에서 법선
+#  2D 판 한 장이라 문이 돌면 종이처럼 납작했다. 판 앞면은 z 0 이다(3D 자루의 촉도 그 앞면에 꽂힌다) —
+#  두께는 그 뒤로 DOORB.rim_t. 뒷면 원(경첩째 돈 판 한가운데에서 법선
 #  반대로 두께만큼 · 그 깊이의 배율)과 앞면 원(_door_xf)을 같이 감싼 볼록 껍질을 옆면 색으로 칠하고 그
 #  위에 판 앞면이 선다 — 문이 도는 만큼 경첩 쪽(왼쪽)에 옆면이 초승달로 드러나고 카메라가 다가가면
 #  원근대로 두꺼워진다. 닫힌 문은 원근 그대로 왼쪽 · 위에 한 줄 남짓이다. 위는 램프 쪽이라 밝다.
@@ -46519,7 +46520,7 @@ func _door_board_rim(sh: Vector2, edy: float) -> void:
 	var c: Vector2 = xf[0]
 	var sc: Vector2 = xf[1]
 	var th: float = deg_to_rad(float(D.open_deg) * _door_k())
-	var t: float = -float(D.face)
+	var t: float = float(DOORB.rim_t)
 	var hx: float = float(D.x0)
 	var hz: float = float(D.face) - float(D.thick)
 	var rx: float = float(D.bx) - hx
