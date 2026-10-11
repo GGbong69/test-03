@@ -11136,8 +11136,11 @@ func _fit_sz(txt: String, w: float, sz: int) -> int:
 #  ⚠ 2026-10-04 판 고르기가 카운터의 다트판(LEGB)이 되며 카드 얼굴은 걷혔다 — 지금 읽히는
 #  것은 칸 줄의 가로(x0 · gap — _row_rect)뿐이다. 위 셈은 옛 간판의 기록이고, 나머지 열쇠는
 #  _card_quad(qa_quad) · turn_probe 의 옛 셈이 아직 읽는다.
+#  x0 76 → 100(2026-10-11 · 2 : 6 : 2) — 펠트를 양옆에서 들여(CHUTE.side) 바깥 두 판이 빗변
+#  조각 틀에 3 ~ 6px 올라앉았다. 판 한가운데가 152.7 · 487.3 → 168.7 · 471.3 으로 들어와 큰 판
+#  (반지름 41)도 그 깊이(y 185)의 빗변(120.9)에서 6px 안이다. 칸 폭은 153 → 137.
 const CARD := {
-	"x0": 76.0, "y": 140.0, "h": 86.0, "gap": 14.0,
+	"x0": 100.0, "y": 140.0, "h": 86.0, "gap": 14.0,
 	"icon": 28.0, "icon_r": 17.0, "plate": 18.0, "name": 71.0,
 	"icon_up": 24.0, "icon_r_up": 13.0, "plate_up": 14.0, "name_up": 59.0,
 	"desc": 75.0,
@@ -22529,6 +22532,12 @@ var npc_clock := 0.0
 #  시작점 u0 = 529 는 반대쪽이다. 물건이 물리적으로 닿을 수 있는 가장
 #  오른쪽 실체가 u_hi − hw + r = 524 − 19 + 19 = 524 이므로(실측 최대는
 #  486) 선이 거기보다 오른쪽에서 출발하면 팔 오른쪽에 남는 물건이 없다.
+#  ── 2 : 6 : 2 (2026-10-11 · CHUTE 머리말) ──
+#  빗변이 80 → 42 · 앞 들임 96 이 되어 셋을 같은 식으로 다시 냈다 —
+#    tilt = 42·0.788/140 = 0.2364
+#    line(w) − e(w) = u1 + tilt·w_hd − (side + back) = 103 + 29.79 − 138 = −5.21
+#  (옛 −5.26 과 같은 자리 — 물건이 턱에 닿는 셈이 그대로다). u0 는 u_hi 500 위 5 인 505.
+#  팔은 화면 끝(u 18)이 아니라 판매 카운터 턱(u 103)에서 멈춘다 — 물건은 거기서 부서진다.
 #
 #  물건이 턱(빗변)에 닿으면 **거기서 부서진다**(_smash_at) — 물리를 떠나
 #  waste 로 흘러 들어가는 것은 이제 motion_off 갈래뿐이다(_smash_at 첫 줄이
@@ -22547,7 +22556,7 @@ const SWEEP := {
 	"speed": 1.6,
 	"reach": 0.26,       # 팔을 오른쪽 끝까지 뻗는다. 0.16 은 순간이동으로 읽혔다
 	"rake": 0.52,        # 훑는다. 이 동안만 왼쪽 벽이 열린다
-	#  훑기의 **가속 구간 비**. 앞 9% 에서 최고속(2555 면px/s)까지 치솟고
+	#  훑기의 **가속 구간 비**. 앞 9% 에서 최고속(2474 면px/s — _sweep_vu)까지 치솟고
 	#  그 뒤로는 끝까지 단조 감속한다 — 이 한 값이 「휙」의 전부다.
 	#  0 으로 두면 시작 속도가 무한이라 60fps 첫 프레임에 손이 42px 을 뛴다
 	#  (reach 0.16 에서 겪은 순간이동과 같은 종류다). 0.09 면 9.9px 이다.
@@ -22557,9 +22566,9 @@ const SWEEP := {
 	#  2026-09-18 요청: 「팔을 휙 휘두르고」.
 	"whip": 0.09,
 	"back": 0.30,        # 복귀. 새 매물은 이 동안 이미 떨어지고 있다
-	"u0": 529.0, "u1": 18.0,
+	"u0": 505.0, "u1": 103.0,     # 2 : 6 : 2 — 옛 529 · 18(머리말)
 	"w_el": 24.0, "w_hd": 126.0,
-	"tilt": 0.450286,    # 창구 빗변의 기울기 그대로. 아래 주석이 이유다
+	"tilt": 0.2364,      # 창구 빗변의 기울기 그대로(42·0.788/140). 아래 주석이 이유다
 	"tilt_deg": 5.0,     # 몸 기울기 — 뻗을 때 +5°(95도), 훑어 끝나면 −5°(85도)
 	"w_wr": 74.0,        # 훑을 때 손목 깊이. 손끝이 미는 선 아래끝(126) 근처를 덮는다
 	#  ── 반대 팔은 비켜선다 ────────────────────────
@@ -22574,8 +22583,8 @@ const SWEEP := {
 	#  그리는 차례로는 못 푼다 — 쓸는 팔이 면 w 74, 쉬는 손이 −2 라
 	#  카메라에 가까운 쪽이 이기는 것이 맞다.
 	#
-	#  **옆으로는 못 피한다.** 쓸기는 u 529 에서 18 까지 화면을 통째로
-	#  지나가므로 쉬는 팔을 어느 u 에 세워도 그 줄이 한 번은 지난다.
+	#  **옆으로는 못 피한다.** 쓸기는 u 529 에서 18 까지(2 : 6 : 2 에서는 505 에서
+	#  103 까지 — 펠트 온 폭) 지나가므로 쉬는 팔을 어느 u 에 세워도 그 줄이 한 번은 지난다.
 	#  앞으로도 못 피한다 — 앞은 물건이 밀려 나가는 길이다. 남은 문은
 	#  위뿐이고, 그 문이 동전 슬롯이다.
 	#  86 은 재서 나온 값이다. 문턱이 82(두 팔 틈 0.5px)인데 1px 틈은
@@ -24821,9 +24830,10 @@ func _felt_draw() -> void:
 		_chute_draw()
 		return
 	# 펠트는 사다리꼴이다. 좌우 빗변이 그대로 창구라 모양이 곧 규칙이다.
+	var fb: float = float(CHUTE.side) + float(CHUTE.back)
 	var felt := PackedVector2Array([
-			Vector2(CHUTE.back, TBL.fy), Vector2(VIEW.x - CHUTE.back, TBL.fy),
-			Vector2(VIEW.x, TBL.ny), Vector2(0.0, TBL.ny)])
+			Vector2(fb, TBL.fy), Vector2(VIEW.x - fb, TBL.fy),
+			Vector2(VIEW.x - CHUTE.side, TBL.ny), Vector2(CHUTE.side, TBL.ny)])
 	draw_colored_polygon(felt, C_TABLE)
 	var ink: Color = C_TABLE.lightened(0.34)
 
@@ -24922,6 +24932,7 @@ func _cover_draw() -> void:
 
 
 # 창구 둘. 펠트 빗변 바깥의 삼각형이 몸통이고, 결이 미끄럼틀이라고 말한다.
+# (2026-10-11 「2 : 6 : 2」부터 앞에서도 CHUTE.side 폭이 남는 사다리꼴이다 — CHUTE 머리말.)
 #
 #  ── 얹힘 · 누름 ────────────────────────────────────────
 #  창구는 두 길로 쓴다 — 물건을 **끌고** 들어가거나(hand_zone 이 켠다),
@@ -24958,14 +24969,19 @@ func _chute_draw() -> void:
 			body = C_WOOD.darkened(0.55)
 		elif hk > 0.0:
 			body = body.lerp(C_WOOD.darkened(0.22), hk)
+		#  창구 — 바깥 위 · 빗변 위 · 빗변 밑 · 바깥 밑(p[1] → p[2] 가 빗변). 앞에서도 side 폭이
+		#  남는 사다리꼴이다(2 : 6 : 2 · CHUTE 머리말).
+		var fb: float = float(CHUTE.side) + float(CHUTE.back)
 		var p := PackedVector2Array()
 		if z == Z_SELL:
 			p.append(Vector2(0.0, TBL.fy))
-			p.append(Vector2(CHUTE.back, TBL.fy))
+			p.append(Vector2(fb, TBL.fy))
+			p.append(Vector2(CHUTE.side, TBL.ny))
 			p.append(Vector2(0.0, TBL.ny))
 		else:
 			p.append(Vector2(VIEW.x, TBL.fy))
-			p.append(Vector2(VIEW.x - CHUTE.back, TBL.fy))
+			p.append(Vector2(VIEW.x - fb, TBL.fy))
+			p.append(Vector2(VIEW.x - CHUTE.side, TBL.ny))
 			p.append(Vector2(VIEW.x, TBL.ny))
 		var r3 := _room3d_tbl()
 		if r3:
@@ -25105,19 +25121,33 @@ func _chute_act(z: int) -> bool:
 #  좁아져 이름이 조각 틀(빗변 몰딩)에 올라앉는다(y 189 에서 3px).
 #  내리친 서랍은 0.5 초 동안 화면 22px 까지 튀어나와 이름 윗단에 걸친다 — 글은 3D 화판
 #  **다음**에 그리므로(_chute_draw 끝) 서랍이 나와도 글이 위에 남아 읽힌다.
+#  ── 2 : 6 : 2 (2026-10-11) ──
+#  「상점 화면에서 구매랑 판매가 너무 테두리에 있어서 잘 안보인다는 평을 받았어」 — 이름 · 값이
+#  화면 끝(왼끝 x 5 · 오른끝 635 맞춤)에 붙어 있었다. 창구가 앞까지 96 넘는 사다리꼴이 되고
+#  소품이 화면 안으로 들어와(room3d.gd 머리말 「2 : 6 : 2」) 이름 · 값은 그 소품 밑 카운터
+#  **한가운데**에 가운데 맞춤으로 선다(_chute_txt_cx — 소품 받침 가운데에서 깊이 축을 따라
+#  글줄까지 내려온 x · 판매 60 · 구매 586). 줄(ly3 · vdy3)과 크기(20 · 12)는 그대로다.
 #  판정 · 튜토리얼 밝힘이 이 글 자리를 같이 쓴다(_chute_txt_rect).
-const CHUTE_TXT := {"ly": 20.0, "vdy": 19.0, "x": 5.0, "ly3": 52.0, "vdy3": 16.0}
+const CHUTE_TXT := {"ly": 20.0, "vdy": 19.0, "ly3": 52.0, "vdy3": 16.0}
 
 
-#  진열대에서 이름 · 값이 차지하는 화면 사각(잉크 둘레 2px) — z 0 판매(왼끝) · 1 구매(오른끝).
+#  이름 · 값의 가운데 x — z 0 판매(저울) · 1 구매(등록기). 소품 받침 가운데(Room3D.SELL_AT ·
+#  BUY_AT)에서 그 소품의 깊이 축(lean — 소실점으로 기운다)을 따라 이름 잉크 한가운데 깊이까지
+#  내려온 자리다. 소품을 옮기면 글이 따라온다.
+func _chute_txt_cx(z: int) -> float:
+	var at: Vector3 = Room3D.BUY_AT if z == Z_BUY else Room3D.SELL_AT
+	var wd: float = (float(TBL.ny) - float(TBL.fy)) / float(TBL.flat)
+	var sh: float = Room3D.lean(at, VIEW.x, wd, float(CHUTE.back), float(CHUTE.side))
+	var w: float = (float(CHUTE_TXT.ly3) - 8.0) / float(TBL.flat)
+	return at.x + sh * (w - at.z)
+
+
+#  진열대에서 이름 · 값이 차지하는 화면 사각(잉크 둘레 2px) — z 0 판매 · 1 구매.
 #  폭 52 는 이름 「판매」(36) · 가장 긴 값(금화 그림 + 세 자리)에 여유를 둔 것이다.
 func _chute_txt_rect(z: int) -> Rect2:
-	var ex: float = CHUTE_TXT.x
 	var y0: float = float(TBL.fy) + float(CHUTE_TXT.ly3) - 18.5
 	var h: float = float(CHUTE_TXT.vdy3) + 21.0
-	if z == Z_SELL:
-		return Rect2(ex - 2.0, y0, 52.0, h)
-	return Rect2(VIEW.x - ex - 50.0, y0, 52.0, h)
+	return Rect2(_chute_txt_cx(z) - 26.0, y0, 52.0, h)
 
 
 func _chute_label() -> void:
@@ -25126,7 +25156,8 @@ func _chute_label() -> void:
 	if _room3d_tbl():
 		ly = TBL.fy + float(CHUTE_TXT.ly3)
 		vy = ly + float(CHUTE_TXT.vdy3)
-	var ex: float = CHUTE_TXT.x
+	var sx: float = _chute_txt_cx(Z_SELL)
+	var bx: float = _chute_txt_cx(Z_BUY)
 	# 사진이 깐 테이블은 창구가 하는 일이 다르다. 「구매」라고 적힌 자리에
 	# 복제를 시키면 무슨 일이 날지 손이 모른다 — 이름이 곧 계약이다.
 	if photo == "burn" or photo == "clone":
@@ -25134,67 +25165,64 @@ func _chute_label() -> void:
 		var lab: String = "판매" if bn else "복제"
 		var live: bool = buy_sel >= 0 and buy_sel < stock.size()
 		if bn:
-			_chute_name(Vector2(ex, ly), lab, HORIZONTAL_ALIGNMENT_LEFT, -1.0,
-					C_TXT if live else C_DIM)
+			_chute_name(sx, ly, lab, C_TXT if live else C_DIM)
 			if live:
 				var oi: int = int(stock[buy_sel].get("own", -1))
 				if oi >= 0 and oi < owned.size():
-					draw_gold_at(ex, vy,
+					draw_gold(sx, vy,
 							"+%d" % (GameData.sell_value(owned[oi]) * photo_v),
 							12, C_GOLD)
 		else:
-			_chute_name(Vector2(0.0, ly), lab, HORIZONTAL_ALIGNMENT_RIGHT, VIEW.x - ex,
-					C_TXT if live else C_DIM)
+			_chute_name(bx, ly, lab, C_TXT if live else C_DIM)
 			#  복제 화면에서도 왼쪽 창구는 동전 슬롯 동전을 판다(_hand_release 의 src 1) — 이름 ·
 			#  판매가도 상점 그대로 선다. 걷어 두었더니 「마릴린 딥틱 사용하고 복재할 때 판매
 			#  문구가 없거든?」(사용자, 2026-10-08) — 파는 자리가 살아 있는데 이름이 없었다.
-			_chute_sell_label(ex, ly, vy)
+			_chute_sell_label(sx, ly, vy)
 		return
-	_chute_sell_label(ex, ly, vy)
+	_chute_sell_label(sx, ly, vy)
 
 	var bi: int = hand_i if (hand_st == H.CARRY and hand_src == 0) else buy_sel
 	var blive: bool = bi >= 0 and bi < stock.size()
 	var ok: bool = blive and _buy_block(bi) == ""
-	_chute_name(Vector2(0.0, ly), "구매", HORIZONTAL_ALIGNMENT_RIGHT, VIEW.x - ex,
-			(C_TXT if ok else C_MULT) if blive else C_DIM)
+	_chute_name(bx, ly, "구매", (C_TXT if ok else C_MULT) if blive else C_DIM)
 	if blive:
-		var cs := str(stock[bi].cost)
-		draw_gold_at(VIEW.x - ex - gold_w(cs, 12), vy, cs, 12,
+		draw_gold(bx, vy, str(stock[bi].cost), 12,
 				C_GOLD if ok else C_DIM.darkened(0.25))
 
 
 #  왼쪽 판매 창구의 이름 · 판매가 — 고른(또는 끄는) 동전 슬롯 동전이 있으면 밝고 그 값이 선다.
-func _chute_sell_label(ex: float, ly: float, vy: float) -> void:
+#  cx 는 글줄 가운데(_chute_txt_cx).
+func _chute_sell_label(cx: float, ly: float, vy: float) -> void:
 	#  끄는 사탕·사진 — 그 판매가(_sell_cons).
 	if hand_st == H.CARRY and hand_src == 4 and hand_i >= 0 and hand_i < cons.size() \
 			and _cons_sellable():
-		_chute_name(Vector2(ex, ly), "판매", HORIZONTAL_ALIGNMENT_LEFT, -1.0, C_TXT)
-		draw_gold_at(ex, vy, "+%d" % GameData.sell_value(cons[hand_i]), 12, C_GOLD)
+		_chute_name(cx, ly, "판매", C_TXT)
+		draw_gold(cx, vy, "+%d" % GameData.sell_value(cons[hand_i]), 12, C_GOLD)
 		return
 	var si: int = hand_i if (hand_st == H.CARRY and hand_src == 1) else sell_sel
 	var slive: bool = _can_sell() and si >= 0 and si < owned.size()
-	_chute_name(Vector2(ex, ly), "판매", HORIZONTAL_ALIGNMENT_LEFT, -1.0,
-			C_TXT if slive else C_DIM)
+	_chute_name(cx, ly, "판매", C_TXT if slive else C_DIM)
 	if slive:
-		draw_gold_at(ex, vy, "+%d" % GameData.sell_value(owned[si]), 12, C_GOLD)
+		draw_gold(cx, vy, "+%d" % GameData.sell_value(owned[si]), 12, C_GOLD)
 
 
-#  창구 이름 한 줄(20). 진열대에서는 나무 카운터에 **누운** 글씨다(2026-10-04 「판매랑 구매
-#  글도 좀 누워있는 느낌이면 좋겠는데」) — 깊이 쪽(화면 위)을 TBL.flat 로 누르고, 그 자리
-#  펠트 빗변의 기울기(_slab_lean)만큼 위로 갈수록 화면 가운데로 민다. 바닥선이 축이라 글줄
-#  자리는 그대로다. 1px 그늘을 먼저 깐다. 진열대가 없는 판(헤드리스)은 옛 그대로 선다.
+#  창구 이름 한 줄(20) — cx 를 가운데로, ly 를 바닥선으로. 진열대에서는 나무 카운터에 **누운**
+#  글씨다(2026-10-04 「판매랑 구매 글도 좀 누워있는 느낌이면 좋겠는데」) — 깊이 쪽(화면 위)을
+#  TBL.flat 로 누르고, 그 자리 펠트 빗변의 기울기(_slab_lean)만큼 위로 갈수록 화면 가운데로
+#  민다. 바닥선이 축이라 글줄 자리는 그대로다. 1px 그늘을 먼저 깐다. 진열대가 없는 판(헤드리스)은
+#  옛 그대로 선다.
 #  ⚠ 이 구획(상점 테이블)의 draw_set_transform 금지 불변식의 예외다 — _prop_coin_paint 처럼
 #  **같은 함수 안에서** draw_set_transform(shake_off) 로 되돌린다.
-func _chute_name(at: Vector2, s: String, al: HorizontalAlignment, w: float, c: Color) -> void:
+func _chute_name(cx: float, ly: float, s: String, c: Color) -> void:
 	if not _room3d_tbl():
-		draw_string(font_sm, at, s, al, w, 20, c)
+		draw_string(font_sm, Vector2(cx - 60.0, ly), s, HORIZONTAL_ALIGNMENT_CENTER, 120.0, 20, c)
 		return
 	var tw: float = font_sm.get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
-	var x0: float = at.x if al == HORIZONTAL_ALIGNMENT_LEFT else at.x + w - tw
-	var ln: float = _slab_lean(x0 + tw * 0.5)
+	var x0: float = cx - tw * 0.5
+	var ln: float = _slab_lean(cx)
 	var k: float = float(TBL.flat)
 	draw_set_transform_matrix(Transform2D(Vector2(1.0, 0.0), Vector2(-ln * k, k),
-			shake_off + Vector2(roundf(x0), at.y)))
+			shake_off + Vector2(roundf(x0), ly)))
 	draw_string(font_sm, Vector2(1.0, 1.0), s, HORIZONTAL_ALIGNMENT_LEFT, -1, 20,
 			Color(0.0, 0.0, 0.0, 0.6))
 	draw_string(font_sm, Vector2.ZERO, s, HORIZONTAL_ALIGNMENT_LEFT, -1, 20, c)
@@ -25273,8 +25301,8 @@ func _npc_body() -> void:
 
 # 팔 — 먼 레일 다음이라 "카운터에 얹혔다" 가 된다.
 # 오른쪽(화면) 팔만 쓸기를 한다. 마주 본 사람이므로 그것이 상인의 **왼팔**
-# 이다 — 쓸기는 u 529 에서 18 로 가는데 529 에 닿는 팔이 그쪽뿐이라
-# 물리가 이미 팔을 골라 놨다.
+# 이다 — 쓸기는 오른쪽(u 505 · SWEEP.u0)에서 왼쪽 턱으로 가는데 거기 닿는 팔이
+# 그쪽뿐이라 물리가 이미 팔을 골라 놨다.
 #
 #  ── 한 곳에서 셈한다 ─────────────────────────────────
 #  어깨 · 팔꿈치 · 손목 · 손각 · 숙임 · 쥠을 **여기서 한 번** 셈한다. 3D
@@ -25948,7 +25976,8 @@ func _room3d_open() -> void:
 	room_vp = Room3D.make_room(self)
 	btl_synced = -1          # 새 방은 술병이 다 서 있다 — 깬 병을 다시 숨긴다(_btl_tick)
 	tbl3_vp = Room3D.make_table(self, _room3d_rect(), float(TBL.fy), float(TBL.ny),
-			float(CHUTE.back), float(TBL.flat), float(TBL.tall), float(HAND3.pitch))
+			float(CHUTE.back), float(CHUTE.side), float(TBL.flat), float(TBL.tall),
+			float(HAND3.pitch))
 	_room3d_fit()
 
 
@@ -28808,7 +28837,8 @@ func _idle_index(nm: String) -> int:
 #  (_reg_open_now — 동전 · 흔들림 없이). 움직임 끔이면 서랍이 한 번에 열렸다 한 번에
 #  닫히고 판 효과 · 흔들림이 없다.
 #  ── 팔이 팔로 읽혀야 한다 ────────────────────────────────
-#  소품은 쉬는 손(화면 x 190~450)에서 멀다(저울 안 접시 x 55~95 · 등록기 건반 x 595~640).
+#  소품은 쉬는 손(화면 x 190~450)에서 멀다(저울 안 접시 x 93~133 · 등록기 건반 x 554~600 —
+#  2026-10-11 「2 : 6 : 2」 전에는 화면 끝 55~95 · 595~640 이라 더 멀었다).
 #  손만 미끄러지면 마술손이다(IDLE 머리말 「모으기」). 그래서
 #   · 손목은 과녁에서 거꾸로 낸다 — 주먹 밑면(p_fist)이 닿는 접시 동전 · 펠트 한 점과
 #     건반에 닿는 손바닥 한가운데(b_palm).
@@ -29039,17 +29069,18 @@ var reg_fx := Vector3.ZERO       # 값 깃 · 몸 눌림 · 건반 — Room3D.pr
 #  켜고 끔에 따라 갈린다(qa_prop ① 이 값 같음을 잰다).
 const BURST := {
 	"coin": 10, "wood": 6, "brass": 4,        # 가짓수 — 동전 · 나뭇조각 · 놋쇠 부스러기
-	#  튀는 속도(면 단위/초). u 는 왼쪽(화면 안 · 물건 쪽)으로 많이 — 오른쪽은 화면 밖이다.
+	#  튀는 속도(면 단위/초). u 는 왼쪽(벨벳 · 물건 쪽)으로 많이 — 오른쪽은 카운터 끝 · 화면 밖이다.
 	#  w 는 앞(손님 쪽), h 는 위. 정점 h 31~73 · 체공 0.5~0.75 초 — 서랍 위로 화면 한
 	#  뼘(15~40px) 솟고 옆으로 40~60px 흩어져야 「튀었다」가 게임 배율에서 보인다.
 	#  ⚠ 앞(w)을 세게 주면 안 된다 — 52° 시점에서 h 는 화면 위로 0.616 · w 는 화면 밑으로
 	#  0.788 이라, 앞으로 200 넘게 던지면 솟는 몫을 앞으로 오는 몫이 먹어 화면에서는 서랍
 	#  앞에 한 덩어리로 머물다 떨어졌다(촬영 — 정점에서 화면 2px 솟았다).
 	"vu": Vector2(-330.0, 10.0), "vw": Vector2(0.0, 90.0), "vh": Vector2(260.0, 400.0),
-	#  튀어나오는 자리 — 열린 서랍 앞끝의 서랍 폭 위 x(곱 전 · Room3D.drawer_front). 서랍
-	#  한가운데가 기울임(lean)과 화면 끝 자리 탓에 화면 밖(u 646)이라 화면 안 왼쪽 반(화면
-	#  x 616~637)에서만 낸다 — 고르게 흩으면 반 넘게 화면 밖에서 태어났다(촬영).
-	"drawer_x": Vector2(-16.0, -5.0),
+	#  튀어나오는 자리 — 열린 서랍 앞끝의 서랍 폭 위 x(곱 전 · Room3D.drawer_front). 시안 C
+	#  에서는 서랍 한가운데가 화면 밖(u 646)이라 왼쪽 반(−16 ~ −5)에서만 냈다 — 고르게 흩으면
+	#  반 넘게 화면 밖에서 태어났다(촬영). 2 : 6 : 2(2026-10-11)에서 등록기가 화면 안(서랍
+	#  화면 x 557 ~ 618)으로 들어와 서랍 폭 전부에서 낸다.
+	"drawer_x": Vector2(-16.0, 16.0),
 	#  중력 — 매물 낙하(DROP.g 1400)보다 가볍다. 작은 것이 조금 오래 떠야 「튀었다」가 보인다.
 	"g": 1100.0,
 	"e": 0.36,           # 바닥에 튀는 비 — 세 번째부터는 안 튄다
@@ -30733,13 +30764,13 @@ func _prop_pan3() -> Vector3:
 #  저울대가 a 만큼 기운 때의 왼 접시 위 동전 윗면 (u, h, w).
 func _pan3_at(a: float) -> Vector3:
 	return Room3D.pan_top(VIEW.x, float(TBL.fy), float(TBL.ny), float(CHUTE.back),
-			float(TBL.flat), a) + Vector3(0.0, float(PROP.coin_t), 0.0)
+			float(CHUTE.side), float(TBL.flat), a) + Vector3(0.0, float(PROP.coin_t), 0.0)
 
 
 #  내리치는 자리 — 손바닥이 닿는 건반 윗면 (u, h, w)(Room3D.slam_top).
 func _prop_slam_at() -> Vector3:
 	return Room3D.slam_top(VIEW.x, float(TBL.fy), float(TBL.ny), float(CHUTE.back),
-			float(TBL.flat))
+			float(CHUTE.side), float(TBL.flat))
 
 
 #  치켜든 몫 0..(1 + 예비) — 0 이 닿음. 뻗는 동안(~b_up)은 치켜든 자리가 과녁이고(섞임이
@@ -30864,10 +30895,9 @@ func _reg_curve(t: float) -> void:
 	reg_fx = Vector3(fl, jo, ky)
 
 
-#  그 자리의 바닥 높이 — 오른 카운터(옛 창구 삼각형) 위면 TOP_H, 벨벳이면 0.
+#  그 자리의 바닥 높이 — 오른 카운터(창구 사다리꼴) 위면 TOP_H, 벨벳이면 0.
 func _burst_floor(u: float, w: float) -> float:
-	var wd: float = (float(TBL.ny) - float(TBL.fy)) / float(TBL.flat)
-	var e: float = float(CHUTE.back) * (1.0 - clampf(w / wd, 0.0, 1.0))
+	var e: float = _chute_edge(_p2g(w))
 	#  옆 카운터 — 오른쪽(등록기) · 왼쪽(저울). 사이는 벨벳이다.
 	return Room3D.TOP_H if u >= VIEW.x - e or u <= e else 0.0
 
@@ -30899,7 +30929,7 @@ func _burst_spawn() -> void:
 		var kind: int = 0 if i < int(B.coin) else (1 if i < int(B.coin) + int(B.wood) else 2)
 		bu_k[i] = kind
 		var f3: Vector3 = Room3D.drawer_front(VIEW.x, float(TBL.fy), float(TBL.ny),
-				float(CHUTE.back), float(TBL.flat), 1.0, lerpf(dx.x, dx.y, r0))
+				float(CHUTE.back), float(CHUTE.side), float(TBL.flat), 1.0, lerpf(dx.x, dx.y, r0))
 		bu_p[i] = Vector3(f3.x, f3.z - r1 * 6.0, f3.y + r2 * 4.0)
 		#  나뭇조각 · 부스러기는 조금 더 세게 · 높이 튄다(부서져 튕긴 것) — 동전은 쏟아진다.
 		var kick: float = 1.0 if kind == 0 else 1.15
@@ -31327,7 +31357,8 @@ func _sweep_whip(t: float) -> float:
 #  날의 **지금** 속도(면px/s, 양수). 위치와 속도가 같은 식의 원함수·도함수라
 #  둘이 절대 못 갈린다. 프레임차(Δu/Δt)로 재면 서브스텝마다 값이 떨고,
 #  그 떨림이 그대로 조각 속도와 소리 게이트에 실린다 — 손으로 적은 도함수를 쓴다.
-#  최고 (529−18)·2·1.3/0.52 = 2555 면px/s.
+#  최고 (529−18)·2·1.3/0.52 = 2555 면px/s 였다 — 지금(빠르기 1.6 · 2 : 6 : 2 의 505 → 103)은
+#  (505−103)·2·1.6/0.52 = 2474.
 func _sweep_vu() -> float:
 	var k := clampf((sweep_t - SWEEP.reach) / SWEEP.rake, 0.0, 1.0)
 	var wp: float = SWEEP.whip
@@ -32308,7 +32339,12 @@ const DROP := {
 	#  물건을 GOODS_K 로 키우면서 둘 다 안으로 4 씩 들였다(24 → 28 · 126 → 122) —
 	#  윗끝이 화면 2.9px 올라오고 값이 3px 내려간 만큼이다. 보드 확장 윗끝
 	#  129.5 · 사탕 129.2, 「고르기」 아래끝 266.1 로 전(129.2 · 128.9 · 266.3)과 같다.
-	"u_lo": 116.0, "u_hi": 524.0, "w_lo": 28.0, "w_hi": 122.0,
+	#  ── 2 : 6 : 2 (2026-10-11 · CHUTE 머리말) ──
+	#  펠트를 양옆에서 들이며 좌우 한계를 u 116 ~ 524(408) 에서 140 ~ 500(360) 으로 좁혔다.
+	#  먼 모서리 빗변이 138 이라 거기서도 물건 바깥 모서리가 펠트 안이다 — 가장 높이 솟는
+	#  보드 확장 윗끝 y 129.5 에서 빗변 x 137.6 · 2.4px 안(shop_probe ①). 폭 360 은 여섯
+	#  칸(넓은 테이블)에도 한 칸이 50 — 동전 지름 44 위다(shop_probe 「테이블이 넓어져도 안 뭉친다」).
+	"u_lo": 140.0, "u_hi": 500.0, "w_lo": 28.0, "w_hi": 122.0,
 	"lane": 0.55,        # 출발 u 의 레인 혼합비. 0=난장 1=정렬. 구석 몰림 손잡이
 
 	# ── 던지기 (먼 레일 뒤 슈트에서 앞으로 던진다) ──
@@ -38416,8 +38452,18 @@ const HAND := {
 # 시절에는 "무엇을 밀었는가" 가 방향을 정했지만, 지금은 방향이 먼저다.
 #
 # 물리로 굴러 들어가는 것은 여전히 부등식 위반이다 — DROP.u_lo/u_hi 주석 참조.
+#
+#  ── 2 : 6 : 2 (2026-10-11) ──
+#  「상점 화면에서 구매랑 판매가 너무 테두리에 있어서 잘 안보인다는 평을 받았어. 테이블 중앙을
+#   좀 줄여도 되니까 판매랑 구매가 확실히 보이도록 만들자」 — 바깥 평은 판매 : 가운데 : 구매가
+#  0.5 : 9 : 0.5 쯤이니 적어도 2 : 6 : 2 로. 옛 창구는 먼 모서리 80 에서 앞 0 으로 가는
+#  삼각형이라 깊이 평균 40 이었다(0.6 : 8.8 : 0.6). 이제 펠트를 양옆에서 side 만큼 들여 창구가
+#  먼 쪽 138 · 앞 96 의 사다리꼴이다 — 평균 117(1.8 : 6.3 : 1.8) · 소품 받침에서 이름 · 값
+#  줄까지(y 128 ~ 199) 138 ~ 117(2 : 6 : 2). back 은 80 → 42 — 먼 모서리가 물건 자리(DROP
+#  u_lo 140)를 안 넘는 데서 멈춘다(room3d.gd 머리말 「2 : 6 : 2」).
 const CHUTE := {
-	"back": 80.0,     # 카운터 높이(TBL.fy)에서 펠트가 시작하는 x. 앞으로 갈수록 0
+	"side": 96.0,     # 앞 레일(TBL.ny)에서 펠트가 시작하는 x — 옆 카운터의 가장 좁은 폭
+	"back": 42.0,     # 카운터 높이(TBL.fy)에서 펠트가 side 보다 더 들어오는 몫. 앞으로 갈수록 0
 	"gap": 6.0,       # 래치 히스테리시스(화면 px). 진입 0 · 이탈 +gap
 }
 const Z_SELL := 0
@@ -38425,9 +38471,10 @@ const Z_BUY := 1
 
 
 # 그 높이에서 펠트가 시작하는 x. 좌우 대칭이라 왼쪽 값 하나로 둘 다 낸다.
+# 먼 모서리 side + back(138) 에서 앞 레일 side(96) 로 — 창구가 앞에서도 side 폭으로 남는다.
 func _chute_edge(y: float) -> float:
 	var t := clampf((y - TBL.fy) / (TBL.ny - TBL.fy), 0.0, 1.0)
-	return CHUTE.back * (1.0 - t)
+	return CHUTE.side + CHUTE.back * (1.0 - t)
 
 
 # 커서가 어느 창구 위인가. pad 로 히스테리시스를 만든다.
@@ -38435,6 +38482,8 @@ func _chute_edge(y: float) -> float:
 #  솟은 접시 · 볏에 대고 떼도 판다 · 산다. 삼각형은 그대로 산다(쓸기의 턱 ·
 #  도크가 그 빗변이다). 그림이 없는 헤드리스에서도 같은 판정이라 자가 잰다.
 #  시안 C 에서 소품 사각이 화면 끝에 걸친 큰 판이 됐다(_prop_rect — 화면으로 자른다).
+#  2 : 6 : 2(2026-10-11)에서 창구는 앞까지 이어진 사다리꼴(_chute_edge)이고 소품 사각은
+#  화면 안 판매 · 구매 자리에 선다 — 끌어 놓을 과녁이 화면 폭의 2할 언저리다.
 func _chute_at(m: Vector2, pad: float) -> int:
 	if room3d_on:
 		for z in 2:
@@ -38451,11 +38500,17 @@ func _chute_at(m: Vector2, pad: float) -> int:
 
 
 #  소품 하나의 화면 사각 — 0 저울(판매) · 1 금전등록기(구매). 화면으로 자른다 —
-#  시안 C 에서 소품이 화면 끝에 걸쳐(저울 바깥 접시 · 등록기 옆구리) 윤곽 사각이 화면
-#  밖으로 나간다. 잘린 몫은 누를 수 없으니 판정에서도 뺀다(shop_probe 「진열대 소품 창구」).
+#  시안 C 에서는 소품이 화면 끝에 걸쳐(저울 바깥 접시 · 등록기 옆구리) 윤곽 사각이 화면
+#  밖으로 나갔다. 2 : 6 : 2(2026-10-11)에서 둘 다 화면 안에 온 몸으로 서지만(shop_probe
+#  「진열대 소품 창구」가 자르기 전 사각을 잰다) 자르기는 남겨 둔다 — 잘린 몫은 누를 수 없다.
 func _prop_rect(z: int) -> Rect2:
+	return _prop_rect_raw(z).intersection(Rect2(Vector2.ZERO, VIEW))
+
+
+#  자르기 전 소품 사각 — 화면 끝에 걸쳤는지 검사가 잰다.
+func _prop_rect_raw(z: int) -> Rect2:
 	return Room3D.prop_rect(z, VIEW.x, float(TBL.fy), float(TBL.ny), float(CHUTE.back),
-			float(TBL.flat), float(TBL.tall)).intersection(Rect2(Vector2.ZERO, VIEW))
+			float(CHUTE.side), float(TBL.flat), float(TBL.tall))
 
 
 # 도킹 목표 u. 물건 중심을 빗변 위에 얹어 반쯤 걸치게 한다 — "건네는 중" 이다.
@@ -41835,16 +41890,19 @@ var slab_r := PackedFloat32Array()
 
 
 #  펠트 빗변의 기울기 — 화면 x 에서 위(먼 쪽)로 1px 갈 때 가운데 쪽으로 가는 몫.
-#  왼쪽 반은 +(오른쪽으로) · 오른쪽 반은 −. 펠트 왼 빗변(x 0 → CHUTE.back)이 그 끝값이다.
+#  왼쪽 반은 +(오른쪽으로) · 오른쪽 반은 −. 펠트 왼 빗변(x side → side + back)이 그 끝값이다.
 func _slab_lean(x: float) -> float:
 	return _vp_lean(x, float(TBL.ny))
 
 
 #  테이블 소실점 — 펠트 사다리꼴의 두 빗변(위로 갈수록 CHUTE.back 만큼 모인다)이 만나는 점.
-#  논리 (320, −292) — 화면 위 바깥이다. 1280 화면에서 잰 펠트 왼 빗변(0.58)과 같다.
+#  옛 판은 논리 (320, −292) 였다(빗변 80 · 앞 0). 2 : 6 : 2(2026-10-11)에서 빗변이 42 · 앞
+#  들임 96 이라 (320, −479) — 빗변이 덜 기운 만큼 멀어지고, 누운 단추 · 누운 이름도 그만큼
+#  덜 기운다(같은 원근 그대로다).
 func _tbl_vp() -> Vector2:
 	var hx: float = VIEW.x * 0.5
-	return Vector2(hx, float(TBL.ny) - hx * (float(TBL.ny) - float(TBL.fy)) / float(CHUTE.back))
+	return Vector2(hx, float(TBL.ny) - (hx - float(CHUTE.side))
+			* (float(TBL.ny) - float(TBL.fy)) / float(CHUTE.back))
 
 
 #  화면 (x, y) 에서 소실점으로 가는 선의 기울기 — 위로 1px 갈 때 가로로 가는 몫(가운데 쪽 +).
@@ -56175,15 +56233,17 @@ func _mark_rect(k: String) -> Rect2:
 			return Rect2(144.0 - up.x, 2.0 + _bar_y(), 436.0 + up.x * 2.0, 14.0)
 		#  진열대에서는 소품(화면으로 자른 사각)과 그 밑 이름 · 값(_chute_txt_rect)을 감싼다 —
 		#  시안 C 의 큰 소품은 벽 띠까지 솟아 구멍이 화면 끝에 붙은 세로 판이 된다.
+		#  진열대가 없으면 창구 사다리꼴의 너른 쪽(side + back) 폭 띠다. 물건 자리는 펠트 앞 폭.
 		"chute_buy":
 			if room3d_on:
 				return _prop_rect(Z_BUY).merge(_chute_txt_rect(Z_BUY))
-			return Rect2(VIEW.x - 86.0, TBL.fy, 86.0, TBL.ny - TBL.fy)
+			var cbw: float = float(CHUTE.side) + float(CHUTE.back)
+			return Rect2(VIEW.x - cbw, TBL.fy, cbw, TBL.ny - TBL.fy)
 		"chute_sell":
 			if room3d_on:
 				return _prop_rect(Z_SELL).merge(_chute_txt_rect(Z_SELL))
-			return Rect2(0.0, TBL.fy, 86.0, TBL.ny - TBL.fy)
-		"goods": return Rect2(96.0, TBL.fy + 6.0, VIEW.x - 192.0,
+			return Rect2(0.0, TBL.fy, float(CHUTE.side) + float(CHUTE.back), TBL.ny - TBL.fy)
+		"goods": return Rect2(CHUTE.side, TBL.fy + 6.0, VIEW.x - float(CHUTE.side) * 2.0,
 				TBL.ny - TBL.fy - 6.0)
 		#  첫 손님의 두 장(공짜 동전)을 감싼다. 없으면 빈 사각 — 안 가르친다.
 		"gift":

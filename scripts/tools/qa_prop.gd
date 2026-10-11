@@ -339,7 +339,10 @@ func _run() -> void:
 	var tend: float = float(P.p_end) / float(P.tempo_sell)
 	_ok("판매 몸짓이 선다", t > 0.5, "%.2f초" % t)
 	_ok("판매 몸짓이 제 시간 안에 끝난다", t <= tend + DT * 1.5, "%.3f초 (표 %.2f)" % [t, tend])
-	_ok("손이 저울까지 간다", far_u < 90.0, "손바닥 u 최소 %.0f" % far_u)
+	#  안 접시 한가운데(_prop_pan3)에서 15 안 — 옛 판(접시 u 75)의 「90 밑」과 같은 자다.
+	#  2 : 6 : 2(2026-10-11)에서 저울이 화면 안으로 38 들어와 접시가 u 113 이다.
+	var pan_u: float = (g._prop_pan3() as Vector3).x
+	_ok("손이 저울까지 간다", far_u < pan_u + 15.0, "손바닥 u 최소 %.0f (접시 %.0f)" % [far_u, pan_u])
 	_ok("팔이 안 늘어난다", rr <= 1.0, "어깨 → 손목 / 팔 길이 최대 %.3f" % rr)
 	_ok("판매 — 주먹 밑면이 접시 과녁에 닿는다", fist_err < 1.0, "어긋남 최대 %.2f" % fist_err)
 	_ok("판매 — 주먹이 치켜 올랐다 내리친다", fist_top - fist_hit >= 30.0,
@@ -441,7 +444,10 @@ func _run() -> void:
 			near_u = maxf(near_u, (g.npc_palm[1] as Vector3).x)
 		_ok("구매 몸짓이 제 시간 안에 끝난다", t > 0.3 and t <= float(g.PROP.b_end) + DT * 1.5,
 				"%.3f초 (표 %.2f — 0.8~1.0 안)" % [t, float(g.PROP.b_end)])
-		_ok("손이 등록기까지 간다", near_u > 540.0, "손바닥 u 최대 %.0f" % near_u)
+		#  내리치는 건반(_prop_slam_at)에서 15 안 — 저울 쪽과 같은 자(2026-10-11 · 2 : 6 : 2).
+		var slam_u: float = (g._prop_slam_at() as Vector3).x
+		_ok("손이 등록기까지 간다", near_u > slam_u - 15.0,
+				"손바닥 u 최대 %.0f (건반 %.0f)" % [near_u, slam_u])
 		_ok("구매 팔도 안 늘어난다", rr <= 1.0, "최대 %.3f" % rr)
 		_pose()
 		var back1: float = (g.npc_palm[1] as Vector3).distance_to(rest1)
