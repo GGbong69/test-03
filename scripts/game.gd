@@ -45091,6 +45091,9 @@ const TTL := {
 	"max": 12,                       # 이보다 많으면 오래된 것부터 재운다
 	"ring": 0.34,                    # 착탄 고리가 사는 시간(초)
 	"ids": ["std", "hvy", "lgt", "mag"],
+	#  문이 열리는 동안 자루 축이 꽁지를 벌린 자세에서 문짝 법선으로 곧게 서는 몫(여는 정도 0 → 이 값에서
+	#  다 선다 · _ttl3_open_pose) · 판에 진 2D 그림자가 다 지는 여는 정도.
+	"open_axis": 0.35, "open_shade": 0.25,
 }
 
 var ttl_stuck := []      # 제목 판에 꽂힌 자루 {p, u, rot, id, t}. t 가 제 나이다
@@ -45702,6 +45705,45 @@ func _ttl3_pose(p: Vector2, j: float) -> Transform3D:
 	return Transform3D(Basis(xv * k, yv * k, xv.cross(yv) * k), tip + yv * ln * 0.5)
 
 
+#  문이 열리는 동안의 자루 자세(문 세계 · 돈 문) — 2026-10-11 「이거 다트 꽂히는게 왜 아직도 안
+#  고쳤어?」 · 「문열면 따라가든 사라지든 해야지」. 옛 판은 닫힌 자세를 경첩째 돌리기만 했다 — 판은
+#  2D 한 장을 가로로만 누른 근사(_door_xf · 원근의 사다리꼴을 버린다)인데 자루는 참 원근이라, 카메라가
+#  문으로 다가갈수록 판 오른쪽(깊은 쪽)의 촉이 판 밖으로 밀려 났고, 판 화면처럼 꽁지를 옆으로 벌린 축
+#  (_ttl3_pose)이 문과 같이 돌아 몸이 판 옆 허공으로 뻗었다(찍어 보니 선반 앞에 뜬 자루).
+#  이제 촉은 **2D 판이 그 착탄점을 그리는 화면 자리**(_door_set_mat)를 지나는 눈의 선이 돈 문 판면과
+#  만나는 점에 꽂고, 몸은 여는 정도 open_axis 까지 문짝 법선으로 곧게 선다 — 촉이 그림 판의 그 칸에
+#  붙은 채 문과 같이 돈다. 닫힌 문(여는 정도 0)은 옛 자세 그대로다.
+func _ttl3_open_pose(p0: Transform3D, lp: Vector2, dk: float, hx: Transform3D) -> Transform3D:
+	var D: Dictionary = Door3D.DOOR
+	var sc: float = p0.basis.x.length()
+	var y0: Vector3 = p0.basis.y.normalized()
+	var ln: float = float(BD3.len) * sc
+	var hz: Vector3 = _ttl3_hinge_at()
+	#  눈의 선 — 화면 자리 s 를 지나는 점들은 깊이 z 의 일차식이다(Door3D.proj 를 거꾸로).
+	var s: Vector2 = _door_set_mat(Vector2.ZERO) * lp
+	var dz := _door_dz()
+	var es: float = Door3D.EYE * Door3D.S
+	var ux: float = s.x - BC.x
+	var uy: float = s.y - BC.y
+	var pa := Vector3(_door_cam() + ux * (Door3D.EYE - dz) / es,
+			Door3D.CAM_Y - uy * (Door3D.EYE - dz) / es, 0.0)
+	var dv := Vector3(-ux / es, uy / es, 1.0)
+	#  돈 판면 — 닫힌 판 한가운데를 경첩째 돌린 점 · 문짝 법선
+	var q: Vector3 = hx * (Vector3(float(D.bx), float(D.by), 0.0) - hz)
+	var nv: Vector3 = hx.basis * Vector3(0.0, 0.0, 1.0)
+	var den: float = nv.dot(dv)
+	var tip: Vector3 = hx * (p0.origin - y0 * ln * 0.5 - hz)
+	if absf(den) > 0.0001:
+		tip = pa + dv * (nv.dot(q - pa) / den)
+	var yl: Vector3 = y0.slerp(Vector3(0.0, 0.0, 1.0), smoothstep(0.0, float(TTL.open_axis), dk))
+	var yv: Vector3 = (hx.basis * yl).normalized()
+	var xv := Vector3.UP.cross(yv)
+	if xv.length() < 0.01:
+		xv = Vector3.RIGHT
+	xv = xv.normalized()
+	return Transform3D(Basis(xv * sc, yv * sc, xv.cross(yv) * sc), tip + yv * ln * 0.5)
+
+
 #  경첩 축 — Door3D._slab 의 Hinge 와 같은 자리(문 왼변 · 문 뒷면).
 func _ttl3_hinge_at() -> Vector3:
 	var D: Dictionary = Door3D.DOOR
@@ -45878,6 +45920,8 @@ func _ttl3_sync() -> void:
 	var hinv := Transform3D(Basis(), _ttl3_hinge_at()).affine_inverse()
 	var eye_h: Vector3 = hinge.transform.affine_inverse() * cam.position
 	var moving := not ttl_fly.is_empty() or door_t >= 0.0 or door_peek > 0.0
+	var dk: float = _door_k()
+	var hxi: Transform3D = hinge.transform.affine_inverse()
 	for i in mini(ttl_nodes.size(), ttl_stuck.size()):
 		var e: Dictionary = ttl_stuck[i]
 		var n0: Node3D = ttl_nodes[i]
@@ -45885,7 +45929,12 @@ func _ttl3_sync() -> void:
 		var lp: Vector2 = e.p
 		if not motion_off:
 			lp.y += gk * gk * float(TTL.drop)
-		n0.transform = hinv * _ttl3_pose(lp, _ttl3_jit(e.p))
+		var pose := _ttl3_pose(lp, _ttl3_jit(e.p))
+		if dk > 0.0:
+			#  문이 열리는 중 — 촉은 그림 판의 그 칸에 붙고 몸은 문짝 법선으로 선다(_ttl3_open_pose).
+			n0.transform = hxi * _ttl3_open_pose(pose, lp, dk, hinge.transform)
+		else:
+			n0.transform = hinv * pose
 		_dart3_face_u(n0, eye_h)
 		_ttl3_fade(n0, gk)
 		if gk > 0.0:
@@ -45937,12 +45986,16 @@ func _ttl3_draw() -> void:
 	if tex == null:
 		return
 	#  그림자 — 판 화면(_dart_shade_2d)과 같은 한 획. 꽁지 쪽으로 몸 반 길이 · 판 그림자 색.
+	#  문이 열리면 자루가 문짝 법선으로 서므로 닫힌 문에서 꽁지 쪽으로 진 그림자는 진다(open_shade).
 	var sc: Color = BOARDART.shadow
+	var sk: float = 1.0 - smoothstep(0.0, float(TTL.open_shade), _door_k())
 	for e in ttl_stuck:
+		if sk <= 0.0:
+			break
 		var gk: float = clampf((float(e.t) - float(TTL.life)) / float(TTL.gone), 0.0, 1.0)
 		var o := Vector2(1.0, 2.0)
 		var tp: Vector2 = e.p
-		draw_line(tp + o, tp + (_ttl3_tail(e) - tp) * 0.5 + o, Color(sc, sc.a * (1.0 - gk)), 2.0)
+		draw_line(tp + o, tp + (_ttl3_tail(e) - tp) * 0.5 + o, Color(sc, sc.a * (1.0 - gk) * sk), 2.0)
 	draw_set_transform(shake_off)
 	var ls := Vector2(tex.get_size())
 	var at: Vector2 = (BC - ls * 0.5 + shake_off).round() - shake_off
