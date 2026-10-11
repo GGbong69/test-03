@@ -1232,6 +1232,9 @@ static func _rows(g: Node) -> Array:
 				{"n1": "굴림 남았다 한 번", "t": "act", "a": "safe1"},
 				{"n1": "테이블에 사진 깔기", "t": "act", "a": "restock_fix"},
 				{"n1": "모션 끄기/켜기", "t": "act", "a": "motion"},
+				#  컬렉션 넘김(2026-10-11 · game.gd COLF) — 컬렉션에서 다음 쪽으로 넘겨 칠판을 지우고
+				#  다시 쓴다. 쪽이 하나뿐인 탭이면 같은 쪽을 지우고 다시 쓴다. 열한째 줄이다(한계 열아홉).
+				{"n1": "컬렉션 넘김 다시 보기", "t": "act", "a": "colf"},
 			]
 
 
@@ -2335,6 +2338,19 @@ static func _run(g: Node, e: Dictionary) -> void:
 				return
 			g._fsel_begin(false)
 			_say("화면 고르기")
+			return
+		"colf":
+			#  쪽 값은 게임의 화살표와 같이 한 칸 민다 — 쪽 글이 그림과 같은 쪽을 적는다.
+			if g.state != g.S.COLLECT:
+				_say("컬렉션에서만")
+				return
+			var p0: int = g.collect_page
+			g.collect_page = posmod(p0 + 1, g._col_pages())
+			if g._colf_begin(1, g.collect_tab, p0):
+				g._colf_snd()
+				_say("컬렉션 넘김")
+			else:
+				_say("움직임 끔 · 못 튼다")
 			return
 		"boss_tv":
 			if not g._is_play():
