@@ -1976,6 +1976,10 @@ func _sign_plank_draw(base: Transform2D) -> void:
 	draw_rect(Rect2(r.position.x, r.position.y + r.size.y * 0.55, r.size.x, r.size.y * 0.45),
 			Color(0.0, 0.0, 0.0, 0.18))
 	draw_rect(Rect2(r.position.x, r.end.y - 1.0, r.size.x, 1.0), Color(0.0, 0.0, 0.0, 0.35))
+	#  램프가 떨면(FLICK) 판자 · 테도 그 몫만큼 어둡다 — 네온 글은 제 빛이라 위에 그대로 선다
+	var fs := _flk_shade()
+	if fs > 0.0:
+		draw_rect(r.grow(fw), Color(0.0, 0.0, 0.0, fs))
 
 
 #  사슬 한 가닥 — 고리 a 에서 b 까지 고리 알(link px)을 엇갈려 늘어세운다.
@@ -2033,15 +2037,17 @@ func _intro_sign(t: float, a: float, xf0 := Transform2D.IDENTITY) -> void:
 		var xb: float = font.get_string_size(pre.replace(" ", ""), HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x
 		var x: float = x0 + lerpf(xa, xb, close)
 		var on_t: float = float(INTRO.sign) + float(shown) * float(INTRO.letter)
+		#  제목의 불 깜박(FLICK) — 사건이 끈 글자는 꺼진 관이다. 사건이 없으면 늘 켜짐(인트로 · 화면 고르기).
+		var fk: bool = _flk_letter(shown)
 		shown += 1
 		var lit: bool = t >= on_t
 		if lit and t < on_t + float(INTRO.buzz):
 			lit = int((t - on_t) * 60.0) % 3 != 1
 		var ton: bool = j > base.find(" ")
 		if snapped and ton:
-			_intro_glyph(Vector2(x, y), ch, sz, C_ACC, C_GOLD, dead, true, a)
+			_intro_glyph(Vector2(x, y), ch, sz, C_ACC, C_GOLD, dead, fk, a)
 		else:
-			_intro_glyph(Vector2(x, y), ch, sz, neon, core, dead, lit, a)
+			_intro_glyph(Vector2(x, y), ch, sz, neon, core, dead, lit and fk, a)
 	draw_set_transform_matrix(xf0)
 
 
@@ -2055,6 +2061,166 @@ func _intro_glyph(at: Vector2, ch: String, sz: int, halo: Color, core: Color,
 		draw_string(_fz(font, sz), at + o, ch, HORIZONTAL_ALIGNMENT_LEFT, -1, sz, Color(halo, 0.22 * a))
 	draw_string(_fz(font, sz), at, ch, HORIZONTAL_ALIGNMENT_LEFT, -1, sz, Color(halo, a))
 	draw_string(_fz(font, sz), at + Vector2(0.0, -1.0), ch, HORIZONTAL_ALIGNMENT_LEFT, -1, sz, Color(core, 0.55 * a))
+
+
+# ══════════════════════════════════════════════════════════
+#  시작화면 불 깜박 (2026-10-11)
+# ──────────────────────────────────────────────────────────
+#  「시작화면에 불 깜박깜박 하는것도 넣자 / 네온사인도 그렇고 라이팅도」. 제목의 간판 · 램프는
+#  인트로가 켠 뒤로 한 번도 안 떨렸다 — 밤 골목의 낡은 술집인데 불이 사진처럼 서 있었다.
+#    간판  몇 초마다 한 번. 대개 낡은 관 하나(flk_weak — 제목에 설 때 하나를 고른다)가 딸깍거리고,
+#          가끔 다른 글자 · 가끔 간판 통째. 꺼진 관은 인트로의 꺼진 관 색이다(_intro_glyph).
+#          문틀 · 문 윗몸의 분홍 번짐(3D Neon) · 판 윗가의 분홍도 켜진 글자 몫만큼 준다.
+#    램프  더 드물게. 문 위 램프가 전압이 떨어진 듯 몇 번 끊긴다(바닥 lamp_lo — 다 꺼지진 않는다).
+#          3D 벽돌 · 문 · 문틀은 램프 빛을 그 몫만큼 내려 다시 굽고(_door_tick — 사건 동안만 화판을
+#          굴린다), 2D 로 얹은 것(판 · 꽂힌 자루 · 매단 간판 · 칠판 · 분필 점수 · 손잡이 반짝)은 같은
+#          몫의 그늘을 덮는다(shade · 칠판은 램프 웅덩이 끝이라 chalk 몫만). 판 위 램프 빛 · 반사 획도 준다.
+#  박자는 켜짐 ↔ 꺼짐이 뒤바뀌는 때의 목록이다(INTRO.flick 과 같은 어법). 개수가 짝수라 켜진 채 끝난다.
+#  제목에서만 · 움직임 끔이면 안 떤다(깜박임이다) · 문이 열리는 동안 · 문을 굽는 동안은 선다.
+#    neon_gap · lamp_gap  사건 사이(초 · 범위) · neon_first · lamp_first  제목에 선 뒤 첫 사건까지
+#    whole  간판 사건 중 통째 몫 · weak  낡은 관 몫(나머지는 아무 글자)
+#    lamp_lo  램프가 떨어지는 바닥(제 빛의 몫 · 범위) · shade  램프가 다 꺼졌을 때 2D 물건의 그늘
+const FLICK := {
+	"neon_gap": [3.0, 7.0], "neon_first": [1.2, 2.4],
+	"lamp_gap": [8.0, 15.0], "lamp_first": [4.0, 6.5],
+	"whole": 0.22, "weak": 0.62,
+	"neon_pat": [
+		[0.0, 0.05, 0.09, 0.14],                               # 딸깍 두 번
+		[0.0, 0.04, 0.07, 0.11, 0.16, 0.20],                   # 지지직
+		[0.0, 0.06, 0.10, 0.55, 0.60, 0.66, 0.70, 0.76],       # 끊겼다 한참 뒤 떨며 붙는다
+	],
+	"whole_pat": [
+		[0.0, 0.04, 0.08, 0.12],
+		[0.0, 0.07, 0.11, 0.32],
+	],
+	"lamp_pat": [
+		[0.0, 0.05, 0.09, 0.16, 0.20, 0.24],
+		[0.0, 0.08, 0.12, 0.42, 0.47, 0.52],
+	],
+	"lamp_lo": [0.18, 0.40], "shade": 0.68, "chalk": 0.55,
+}
+var flk_n := {}          # 간판 사건 {t · pat · who(-1 통째 · 글자 번호)} — 비면 쉰다
+var flk_l := {}          # 램프 사건 {t · pat · lo}
+var flk_ng := 0.0        # 다음 간판 사건까지(초)
+var flk_lg := 0.0        # 다음 램프 사건까지
+var flk_weak := -1       # 낡은 관(HIGHTON 의 글자 번호 0..6) — 제목에 설 때 고른다
+var flk_3d := false      # 지난 틀에 문 화판을 굴렸는가(_door_back 이 구운 한 장 대신 화판을 깐다)
+
+
+func _flk_here() -> bool:
+	return state == S.TITLE and not motion_off and door_t < 0.0 and door_fresh <= 0
+
+
+func _flk_rand(r: Array) -> float:
+	return randf_range(float(r[0]), float(r[1]))
+
+
+func _flk_pick(pats: Array) -> Array:
+	return pats[randi() % pats.size()]
+
+
+func _flk_tick(d: float) -> void:
+	var F: Dictionary = FLICK
+	if not _flk_here():
+		flk_n = {}
+		flk_l = {}
+		flk_weak = -1
+		return
+	if flk_weak < 0:
+		flk_weak = randi() % 7
+		flk_ng = _flk_rand(F.neon_first)
+		flk_lg = _flk_rand(F.lamp_first)
+	var was := not flk_n.is_empty() or not flk_l.is_empty()
+	if flk_n.is_empty():
+		flk_ng -= d
+		if flk_ng <= 0.0:
+			flk_n = _flk_neon_ev()
+	else:
+		flk_n.t = float(flk_n.t) + d
+		var pn: Array = flk_n.pat
+		if float(flk_n.t) >= float(pn[pn.size() - 1]):
+			flk_n = {}
+			flk_ng = _flk_rand(F.neon_gap)
+	if flk_l.is_empty():
+		flk_lg -= d
+		if flk_lg <= 0.0:
+			flk_l = _flk_lamp_ev()
+	else:
+		flk_l.t = float(flk_l.t) + d
+		var pl: Array = flk_l.pat
+		if float(flk_l.t) >= float(pl[pl.size() - 1]):
+			flk_l = {}
+			flk_lg = _flk_rand(F.lamp_gap)
+	if was or not flk_n.is_empty() or not flk_l.is_empty():
+		queue_redraw()
+
+
+func _flk_neon_ev() -> Dictionary:
+	var F: Dictionary = FLICK
+	var u := randf()
+	if u < float(F.whole):
+		return {"t": 0.0, "pat": _flk_pick(F.whole_pat), "who": -1}
+	var who: int = flk_weak if u < float(F.whole) + float(F.weak) else randi() % 7
+	return {"t": 0.0, "pat": _flk_pick(F.neon_pat), "who": who}
+
+
+func _flk_lamp_ev() -> Dictionary:
+	return {"t": 0.0, "pat": _flk_pick(FLICK.lamp_pat), "lo": _flk_rand(FLICK.lamp_lo)}
+
+
+#  개발자 모드 — 간판 통째 · 램프를 지금 떤다. 제목이 아니거나 움직임 끔이면 false.
+func _flk_now() -> bool:
+	if not _flk_here():
+		return false
+	if flk_weak < 0:
+		flk_weak = randi() % 7
+	flk_n = {"t": 0.0, "pat": FLICK.whole_pat[1], "who": -1}
+	flk_l = {"t": 0.0, "pat": FLICK.lamp_pat[1], "lo": float(FLICK.lamp_lo[0])}
+	queue_redraw()
+	return true
+
+
+#  사건이 지금 꺼진 몫인가 — 지난 뒤바뀜이 홀수 번이다.
+func _flk_off(ev: Dictionary) -> bool:
+	if ev.is_empty():
+		return false
+	var n := 0
+	for b in ev.pat:
+		if float(ev.t) >= float(b):
+			n += 1
+	return n % 2 == 1
+
+
+#  간판 글자 i(HIGHTON 순 0..6)가 켜졌는가.
+func _flk_letter(i: int) -> bool:
+	if not _flk_off(flk_n):
+		return true
+	var w: int = int(flk_n.who)
+	return w >= 0 and w != i
+
+
+#  분홍 번짐의 몫 — 켜진 글자 몫.
+func _flk_neon() -> float:
+	if not _flk_off(flk_n):
+		return 1.0
+	return 0.0 if int(flk_n.who) < 0 else 6.0 / 7.0
+
+
+#  램프 빛의 몫.
+func _flk_lamp() -> float:
+	return float(flk_l.lo) if _flk_off(flk_l) else 1.0
+
+
+#  2D 물건에 덮는 그늘 짙기.
+func _flk_shade() -> float:
+	return (1.0 - _flk_lamp()) * float(FLICK.shade)
+
+
+#  판 · 꽂힌 자루의 그늘 — _door_set_xf 변환 안에서 부른다.
+func _flk_board_shade() -> void:
+	var fs := _flk_shade()
+	if fs > 0.0:
+		draw_circle(BC, _wall3_ro() + 3.0, Color(0.0, 0.0, 0.0, fs))
 
 
 #  판 밑의 합계 — 꽂힐 때마다 오른다. 180 이 되면 금빛으로 한 번 깜빡인다.
@@ -7290,6 +7456,7 @@ func _process(d: float) -> void:
 		_body3_close()
 		_room3d_run(false)
 	_wall3_tick()      # 다트판 벽 — 처음 필요한 화면에서 짓고, 바뀔 때만 굽는다
+	_flk_tick(d)       # 제목의 불 깜박(FLICK) — 간판 · 램프 사건. 문 틱 앞이다(빛 몫을 문이 받는다)
 	_door_tick(d)      # 술집 문(제목) — 같은 길로 굽고, 여는 동안만 굴린다
 
 	_fill_audio()
@@ -45889,6 +46056,12 @@ func _door_tick(d: float) -> void:
 		door_key = key
 		Door3D.door_fit(door_vp, view_pad, BC, 1.0)
 		door_fresh = int(DOORT.settle)
+	#  불 깜박(FLICK) — 사건 동안만 밖의 빛(램프 · 네온)을 내리고 화판을 굴린다. 끝나는 틀에 제 빛으로
+	#  돌리고 구운 한 장으로 돌아간다(구운 한 장은 늘 제 빛이다).
+	var fl: bool = _flk_lamp() < 1.0 or _flk_neon() < 1.0
+	if fl or flk_3d:
+		Door3D.door_lights(door_vp, _flk_lamp(), _flk_neon())
+	flk_3d = fl
 	#  손잡이 얹힘 — 문이 살짝 열렸다 닫힌다(DOORT.peek_*). 움직이는 동안 · 열린 동안은 화판을 굽는다.
 	if door_t < 0.0:
 		var want: float = 1.0 if (state == S.TITLE and ttl_hot == 0 and not motion_off
@@ -45924,6 +46097,10 @@ func _door_tick(d: float) -> void:
 						door_tex.update(img)
 					else:
 						door_tex = ImageTexture.create_from_image(img)
+		door_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+		queue_redraw()
+		return
+	if flk_3d:
 		door_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 		queue_redraw()
 		return
@@ -45993,7 +46170,8 @@ func _door_dz() -> float:
 #  문 바닥 — 닫힌 문은 구운 한 장, 여는 동안은 화판. 왼쪽 위가 논리 px 격자에 앉게
 #  반올림한다(_wall3_rect 와 같은 까닭 — 흔들림의 소수 몫에 nearest 결이 일렁인다).
 func _door_back(sh: Vector2) -> void:
-	var tex: Texture2D = door_vp.get_texture() if (door_t >= 0.0 or door_peek > 0.0) else door_tex
+	var tex: Texture2D = door_vp.get_texture() if (door_t >= 0.0 or door_peek > 0.0 or flk_3d) \
+			else door_tex
 	var ls := Vector2(tex.get_size())
 	var p: Vector2 = (BC - ls * 0.5 + sh).round() - sh
 	draw_texture_rect(tex, Rect2(p, ls), false)
@@ -46160,17 +46338,19 @@ func _door_board_over() -> void:
 	var top: float = BC.y - ro
 	var bot: float = BC.y + ro
 	var lamp: Color = Door3D.COL.lamp
+	var lk: float = _flk_lamp()          # 불 깜박(FLICK) — 램프 · 네온이 떨어진 몫만큼 준다
 	#  램프 빛이 위에서 얹히고 아래로 가라앉는다 — 두 겹 모두 y 의 일차식.
-	_door_disc_grad(ro, top, bot, Color(lamp, float(DOORB.top_a)), Color(lamp, 0.0))
+	_door_disc_grad(ro, top, bot, Color(lamp, float(DOORB.top_a) * lk), Color(lamp, 0.0))
 	_door_disc_grad(ro, top, bot, Color(0.0, 0.0, 0.0, 0.0),
 			Color(0.0, 0.0, 0.0, float(DOORB.bot_a)))
 	#  간판 네온 — 윗가에만 비친다. 인트로는 네온을 제 박자로 켜므로 제목에서만.
 	if state != S.INTRO:
 		_door_disc_grad(ro, top, top + ro * 2.0 * float(DOORB.neon_h),
-				Color(Door3D.COL.neon, float(DOORB.neon_a)), Color(Door3D.COL.neon, 0.0))
+				Color(Door3D.COL.neon, float(DOORB.neon_a) * _flk_neon()),
+				Color(Door3D.COL.neon, 0.0))
 	#  테 윗호의 반사 한 획 — 램프가 판 위 앞에 있다.
 	draw_arc(BC, ro - 1.0, deg_to_rad(float(DOORB.spec_from)), deg_to_rad(float(DOORB.spec_to)),
-			40, Color(lamp, float(DOORB.spec_a)), 1.5)
+			40, Color(lamp, float(DOORB.spec_a) * lk), 1.5)
 
 
 #  문짝이 램프에서 등을 돌리는 만큼 판에 그늘이 진다 — _door_set_xf 변환 안에서 부른다.
@@ -46244,7 +46424,7 @@ func _door_handle_draw() -> void:
 	if ph < 1.0:
 		var gy: float = lerpf(r.position.y + 2.0, r.end.y - 5.0, ph)
 		draw_rect(Rect2(r.position.x + 1.0, gy, maxf(r.size.x - 2.0, 1.0), 3.0),
-				Color(1.0, 0.96, 0.82, 0.60 * sin(ph * PI)))
+				Color(1.0, 0.96, 0.82, 0.60 * sin(ph * PI) * _flk_lamp()))
 
 
 #  칠판 — 계속하기 · 컬렉션 · 설정 · 종료(「시작」은 손잡이다). 벽돌 벽에 건 나무 테 칠판.
@@ -46262,6 +46442,10 @@ func _title_chalk() -> void:
 	#  온다 — 그늘은 왼쪽 아래, 테는 오른변이 밝다. 받침에 분필 한 토막.
 	_chalk_board(self, box, 4.0, CHALKB.title)
 	_title_chalk_ink(self, _ttl_ink_a())
+	#  램프가 떨면(FLICK) 칠판도 어둡다 — 램프 웅덩이 끝이라 판보다 덜(chalk 몫)
+	var fs: float = _flk_shade() * float(FLICK.chalk)
+	if fs > 0.0:
+		draw_rect(box.grow(4.0), Color(0.0, 0.0, 0.0, fs))
 	draw_set_transform_matrix(b0)
 
 
@@ -47046,9 +47230,10 @@ func _draw_title() -> void:
 	var dxf := door_t >= 0.0
 	_door_set_xf(shake_off)
 	_egg_shards_draw()
-	_ttly_draw()          # 판 밑 점수 칠판 — 판이 깨져 없어도 칠판은 문에 걸려 있다
+	_ttly_draw(1.0 - _flk_shade())   # 판 밑 분필 점수 — 판이 깨져 없어도 문에 쓰여 있다
 	if _door_board_vis():
 		_ttl_draw()
+		_flk_board_shade()   # 램프가 떨면(FLICK) 판 · 꽂힌 자루가 그 몫만큼 어둡다
 	draw_set_transform(shake_off)
 	if dxf:
 		_door_wall_xf(shake_off)

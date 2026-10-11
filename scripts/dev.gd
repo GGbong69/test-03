@@ -1026,6 +1026,8 @@ static func _rows(g: Node) -> Array:
 				{"n1": "해상도 다음", "t": "act", "a": "res_next"},
 				#  방향키 · Enter 고르기(game.gd KB)를 지금 화면에서 세운다 — 모서리가 어디 서는지 본다. 2026-10-11
 				{"n1": "키보드 고르기 켜기", "t": "act", "a": "kb_wake"},
+				#  제목의 불 깜박(game.gd FLICK) — 간판 통째 · 램프를 지금 떤다. 2026-10-11
+				{"n1": "시작화면 불 깜박", "t": "act", "a": "flk"},
 			]
 		5:
 			#  ── 조작감 (2026-09-24) ──
@@ -2335,6 +2337,9 @@ static func _run(g: Node, e: Dictionary) -> void:
 				_:
 					g._secret_deal()
 					_say("비밀 상점")
+			return
+		"flk":
+			_say("불 깜박" if g._flk_now() else "제목에서 · 움직임 켜고")
 			return
 		"kb_wake":
 			g._kb_wake()

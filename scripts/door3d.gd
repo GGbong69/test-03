@@ -1296,6 +1296,16 @@ static func _lights(root: Node3D) -> void:
 	root.add_child(st)
 
 
+#  밖의 빛 둘의 몫(1 이 제 빛) — 제목의 불 깜박(game.gd FLICK)이 사건 동안만 내린다.
+static func door_lights(vp: SubViewport, lamp_k: float, neon_k: float) -> void:
+	var l := vp.get_node_or_null("Door/Lamp") as Light3D
+	if l != null:
+		l.light_energy = float(LOOK.lamp_e) * lamp_k
+	var n := vp.get_node_or_null("Door/Neon") as Light3D
+	if n != null:
+		n.light_energy = float(LOOK.neon_e) * neon_k
+
+
 static func _pool_tex() -> GradientTexture2D:
 	var g := Gradient.new()
 	g.offsets = PackedFloat32Array()
