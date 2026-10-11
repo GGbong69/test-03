@@ -12666,6 +12666,7 @@ func _draw() -> void:
 		if not dr or _door_board_vis():
 			if dr:
 				_door_board_under()
+				_door_board_rim(sh, edy)     # 판의 옆면(두께) — 판 앞면 밑
 			_draw_board()
 			if dr:
 				_door_board_over()
@@ -46500,7 +46501,61 @@ const DOORB := {
 	"top_a": 0.12, "bot_a": 0.34,
 	"spec_a": 0.32, "spec_from": -158.0, "spec_to": -40.0,
 	"neon_a": 0.10, "neon_h": 0.42,
+	#  옆면(_door_board_rim) — 위(램프 쪽) · 아래 색 · 둘레를 나누는 수
+	"rim_hi": Color("4a3f3c"), "rim_lo": Color("120e10"), "rim_n": 64,
 }
+
+
+#  판의 두께(2026-10-11 「지금 보니까 시작화면 다트판에 두께가 없네? 그냥 종이네? 두께 좀 만들까?」) —
+#  2D 판 한 장이라 문이 돌면 종이처럼 납작했다. 판 앞면(z 0)에서 문 앞면(DOOR.face)까지가 판의 두께다
+#  (판은 문에 붙어 있다 — 3D 자루의 촉도 그 앞면에 꽂힌다). 뒷면 원(경첩째 돈 판 한가운데에서 법선
+#  반대로 두께만큼 · 그 깊이의 배율)과 앞면 원(_door_xf)을 같이 감싼 볼록 껍질을 옆면 색으로 칠하고 그
+#  위에 판 앞면이 선다 — 문이 도는 만큼 경첩 쪽(왼쪽)에 옆면이 초승달로 드러나고 카메라가 다가가면
+#  원근대로 두꺼워진다. 닫힌 문은 원근 그대로 왼쪽 · 위에 한 줄 남짓이다. 위는 램프 쪽이라 밝다.
+#  화면 변환(sh)에서 그리고 판 변환으로 되돌린다.
+func _door_board_rim(sh: Vector2, edy: float) -> void:
+	var D: Dictionary = Door3D.DOOR
+	var xf := _door_xf()
+	var c: Vector2 = xf[0]
+	var sc: Vector2 = xf[1]
+	var th: float = deg_to_rad(float(D.open_deg) * _door_k())
+	var t: float = -float(D.face)
+	var hx: float = float(D.x0)
+	var hz: float = float(D.face) - float(D.thick)
+	var rx: float = float(D.bx) - hx
+	var rz: float = -hz - t
+	var bz: float = hz - rx * sin(th) + rz * cos(th)
+	var dz := _door_dz()
+	var f: float = Door3D.scale_at(bz, dz) * float(D.board_k)
+	var cb := Door3D.proj(Vector3(hx + rx * cos(th) + rz * sin(th), float(D.by), bz), BC, dz, _door_cam())
+	var sb := Vector2(cos(th) * f, f)
+	var ey := Vector2(0.0, edy * sc.y)
+	var ro := _wall3_ro()
+	var n: int = int(DOORB.rim_n)
+	var pts := PackedVector2Array()
+	for i in n:
+		var a: float = TAU * float(i) / float(n)
+		var u := Vector2(cos(a), sin(a)) * ro
+		pts.append(c + sc * u + ey)
+		pts.append(cb + sb * u + Vector2(0.0, edy * sb.y))
+	var hull := Geometry2D.convex_hull(pts)
+	if hull.size() > 1 and hull[0].is_equal_approx(hull[hull.size() - 1]):
+		hull.remove_at(hull.size() - 1)
+	if hull.size() < 3:
+		return
+	var top: float = INF
+	var bot: float = -INF
+	for q in hull:
+		top = minf(top, q.y)
+		bot = maxf(bot, q.y)
+	var hi: Color = DOORB.rim_hi
+	var lo: Color = DOORB.rim_lo
+	var cols := PackedColorArray()
+	for q in hull:
+		cols.append(hi.lerp(lo, clampf((q.y - top) / maxf(bot - top, 1.0), 0.0, 1.0)))
+	draw_set_transform(sh)
+	draw_polygon(hull, cols)
+	_door_set_xf(sh, edy)
 
 
 func _door_board_under() -> void:
