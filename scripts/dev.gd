@@ -1220,6 +1220,8 @@ static func _rows(g: Node) -> Array:
 			#  굴림 남았다를 ↑↓ 한 칸으로 번갈아 누른다).
 			return [
 				{"n1": "쓸기 다시 보기", "t": "act", "a": "sweep"},
+				#  상인의 말(2026-10-11 · game.gd NSAY · data/npc_say.csv) — 다음 귀띔을 지금 세운다(상점 · 판 고르기).
+				{"n1": "상인 귀띔", "t": "act", "a": "nsay"},
 				#  라운드 경계는 런에 일곱 번뿐이라 고치는 동안 매번 런을
 				#  돌 수 없다 — 「쓸기 다시 보기」와 같은 이유다. 위의
 				#  「판」 줄로 라운드를 맞추고 이 줄로 넘김을 보면 손가락
@@ -2168,6 +2170,14 @@ static func _run(g: Node, e: Dictionary) -> void:
 		"restock":
 			g._roll_stock()
 			_say("테이블 다시")
+			return
+		"nsay":
+			if not g._nsay_here():
+				_say("상인이 선 화면에서")
+				return
+			g.nsay_row = {}
+			g.nsay_out = 0.0
+			_say("귀띔 " + (String(g.nsay_row.get("id", "")) if g._nsay("tip", true) else "(못 섰다)"))
 			return
 		"sweep":
 			#  쓸기는 상점에서 리롤을 눌러야만 돌고, 골드가 모자라면 그마저

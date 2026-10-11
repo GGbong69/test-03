@@ -5952,6 +5952,8 @@ func _buy(i: int) -> void:
 		"dart": _bump("darts_bought")
 		"fix": _bump("cons_used")
 		"boost": _bump("boosters_bought")
+	if String(s.type) != "boost":
+		_nsay("buy")             # 팩은 곧장 뜯는다 — 뜯는 동안은 말상자가 진다(NSAY)
 	match s.type:
 		"item":
 			# 사본이다. 성장 상태(gs)가 원본 카탈로그에 붙으면 다음 런까지
@@ -7463,6 +7465,7 @@ func _process(d: float) -> void:
 	#  배움 시계는 **실시간**이다. 늦춘 시간으로 제 봉투를 재면 늦출수록
 	#  말상자가 늦게 뜨고, 0.18 배 자리에서는 다섯 배 느리게 뜬다.
 	_tutor_tick(_wipe_hold(d))
+	_nsay_tick(d)          # 상인의 말(NSAY) — 상점 귀띔 · 누르고 건넬 때의 대사
 	#  여기서부터가 게임 시간이다. 설명하는 동안 늦춘다 —
 	#  느린 시간이 인지부하를 낮춘다는 실험을 따른 것이다(TUTOR 머리말).
 	#  **상인과 커서 따라보기는 늦추기 전에 민다.** 저 둘까지 늦추면
@@ -8652,6 +8655,9 @@ func _lmb(mp: Vector2, pressed: bool) -> void:
 		#  설명 중이면 클릭이 **넘기기**다. 게임에 안 보낸다 — 배우다 말고
 		#  실수로 물건을 사면 설명이 손해로 끝난다.
 		if _tutor_click(mp):
+			return
+		#  상인의 말상자를 누르면 다 보여 주거나 걷는다 — 그 누름만 삼킨다(NSAY).
+		if _nsay_click(mp):
 			return
 		#  읽기 관문 — **아무것도 안 삼킨다.** 누른 자리와 시각을 적어
 		#  둘 뿐이라 밑의 손 · 클릭이 하던 일이 한 톨도 안 바뀐다.
@@ -12739,6 +12745,8 @@ func _draw() -> void:
 		if intro_out > 0.0 and state == S.TITLE:
 			_intro_over(intro_out)
 
+	if state == S.LEG and not swap_live:
+		_nsay_draw()          # 상인의 말 — 판 고르기에서도 상인이 선다(상점은 _draw_shop 이 그린다)
 	# 화면이 바뀌어도 같은 자리에 남는 것만 판이다 — 그래서 스크림 뒤에 그린다.
 	_hud_draw()
 	_mod_shed_draw()
@@ -22615,6 +22623,7 @@ func _sell(i: int) -> void:
 	var v := GameData.sell_value(owned[i])
 	v = _gold_add(v, "sell")
 	_bump("sold")
+	_nsay("sell")
 	_earn(v)
 	owned.remove_at(i)
 	sell_sel = -1
@@ -29175,6 +29184,230 @@ func _give_grip(i: int) -> float:
 
 
 # ══════════════════════════════════════════════════════════
+#  상인의 말 — 상점 귀띔 · 누르고 건넬 때의 대사 (2026-10-11)
+# ──────────────────────────────────────────────────────────
+#  「우리 게임에 도움말 같은 기능을 넣을 곳이 있나? 다른 게임들 보면 로딩 화면이나 그럴때 도움말을
+#  넣잖아」 · 「그거 하는 김에 상인과 상호작용 하면 상인이 대사 치는것도 넣자」. 이 게임은 로딩이
+#  없다 — 화면 갈이가 다 1초 안쪽이라 거기 띄운 글은 읽기 전에 진다. 사용자가 고른 자리는 상점
+#  상인의 한마디다(술집 단골에게 하는 귀띔 · 상점에 머무는 동안이라 읽을 시간이 있다). 같은 말상자로
+#  상인을 누르고(몸 poke · 손 · 팔 hand) · 물건을 건네고(give) · 뒤 선반 술병을 깨고(btl) · 사고(buy)
+#  · 팔 때(sell) 상인이 한마디 한다. 문장은 data/npc_say.csv 가 쥔다(when 칸이 갈래) — 사람이 표에서
+#  고친다. 수는 문장에 안 박고 {tuning 열쇠} · {areas 열쇠}로 채운다(GameData.npc_say_text).
+#  튜토리얼 말상자와 같은 그림(이름표 「상인」 · 한 자씩 툭 · 「웅」 상인 목)이되 **안 막는다** — 어둠 ·
+#  구멍 · 건너뛰기 단추 · ▼ 없이 동전 슬롯 이름 줄 밑(상인 몸 앞)에 서고, 다 나온 뒤 hold 초 머물다
+#  진다. 말상자를 누르면 다 보여 주고, 다 나왔으면 걷는다(그 누름만 삼킨다). 그 밖의 누름은 그대로 간다.
+#    귀띔(tip) — 상점에 들를 때마다 chance 몫으로 한 번 · 상점이 서고 delay 초 뒤. 튜토리얼 런 ·
+#      튜토리얼 말상자가 서 있거나 기다리는 동안 · 팩을 뜯는 동안 · 상인이 물건을 살피는 동안 · 화면
+#      갈이 동안은 안 선다 — 서 있다가 그런 일이 생기면 곧장 진다.
+#    대사(나머지 when) — 상인이 선 화면(상점 · 판 고르기)에서 그 일이 난 틀에 선다(귀띔을 덮는다).
+#      when 마다 [나올 몫, 같은 갈래를 다시 하기까지 쉬는 초](say) · 막 선 말(min_gap 초 안)은 안 덮는다
+#      — 연타에 말이 깜박이지 않게. 튜토리얼 말상자 · 팩 · 화면 갈이 동안은 안 선다.
+#    같은 갈래의 말은 표를 한 바퀴 돌 때까지 안 되풀이한다(갈래마다 섞은 차례 nsay_q). 굴림은 제
+#    줄기(nsay_rng)다 — 전역 난수를 쓰면 시드를 박고 도는 검사의 뽑기가 밀린다.
+#    gap   동전 슬롯 밑에서 말상자 윗변까지(슬롯 밑 이름 줄 y 49~61 을 비킨다)
+#    w_max · w_min   말상자 폭의 끝 · 바닥(글에 맞춘다 · 두 줄까지). w_max 340 이면 이름표가 왼쪽
+#                    「사탕·사진」 글(x ~155)을 비킨다
+#    hold · hold_ch   다 나온 뒤 머무는 초 + 글자마다 · fade 들고 나는 초
+const NSAY := {"chance": 0.6, "delay": [2.0, 4.5], "gap": 24.0, "w_max": 340.0, "w_min": 180.0,
+		"hold": 2.4, "hold_ch": 0.06, "fade": 0.25, "min_gap": 0.45,
+		"say": {"poke": [1.0, 0.0], "hand": [1.0, 0.0], "give": [1.0, 0.0], "btl": [0.6, 3.0],
+				"buy": [0.35, 4.0], "sell": [0.35, 4.0]}}
+var nsay_rng := RandomNumberGenerator.new()
+var nsay_q := {}          # when → 아직 안 한 말 id(섞은 차례)
+var nsay_cool := {}       # when → 다시 하기까지 남은 초
+var nsay_row := {}        # 지금 하는 말 줄 — 비면 없다
+var nsay_txt := ""        # 그 글(채운 것)
+var nsay_t := 0.0         # 선 뒤 흐른 시간(실시간)
+var nsay_out := 0.0       # 지는 중이면 남은 시간
+var nsay_wait := -1.0     # 다음 귀띔까지(초) · 음수면 이번 방문에는 없다
+var nsay_was := false     # 지난 틀에 상점이었는가 — 들어서는 틀을 잡는다
+
+
+func _nsay_rng() -> RandomNumberGenerator:
+	if nsay_rng.seed == 0:
+		nsay_rng.randomize()
+	return nsay_rng
+
+
+#  상인이 말할 수 있는 화면 — 상인이 선 상점 · 판 고르기.
+func _nsay_here() -> bool:
+	return (state == S.SHOP or state == S.LEG) and _npc_on()
+
+
+#  어떤 말도 안 서는 때 — 튜토리얼 말상자 · 팩 · 화면 갈이.
+func _nsay_hush() -> bool:
+	return _tutor_live() or not tutor_q.is_empty() or boost_t >= 0.0 \
+			or swap_live or turn_live or wipe_t >= 0.0
+
+
+#  귀띔만 안 서는 때 — 위에 더해 튜토리얼 런 · 상인이 물건을 살피는 동안.
+func _nsay_tip_block() -> bool:
+	return _nsay_hush() or tut_run or _give_live()
+
+
+func _nsay_tick(d: float) -> void:
+	for k in nsay_cool.keys():
+		nsay_cool[k] = maxf(float(nsay_cool[k]) - d, 0.0)
+	var shop := state == S.SHOP
+	if shop and not nsay_was:
+		nsay_wait = -1.0
+		if _nsay_rng().randf() < float(NSAY.chance):
+			var dl: Array = NSAY.delay
+			nsay_wait = _nsay_rng().randf_range(float(dl[0]), float(dl[1]))
+	nsay_was = shop
+	if nsay_out > 0.0:
+		nsay_out = maxf(nsay_out - d, 0.0)
+		if nsay_out <= 0.0:
+			nsay_row = {}
+		queue_redraw()
+		return
+	if not _nsay_here():
+		nsay_row = {}
+		nsay_wait = -1.0
+		return
+	if not nsay_row.is_empty():
+		var tip := String(nsay_row.get("when", "")) == "tip"
+		var blk: bool = _nsay_tip_block() if tip else _nsay_hush()
+		if blk:
+			_nsay_end()
+			return
+		var n0 := _nsay_shown()
+		nsay_t += d
+		_talk_tick(d, n0, _nsay_shown(), nsay_txt, 0)
+		if nsay_t >= _nsay_full_t() + float(NSAY.hold) + float(NSAY.hold_ch) * float(nsay_txt.length()):
+			_nsay_end()
+		queue_redraw()
+		return
+	if not shop or nsay_wait < 0.0 or _nsay_tip_block():
+		return
+	nsay_wait -= d
+	if nsay_wait <= 0.0:
+		nsay_wait = -1.0
+		_nsay("tip", true)
+
+
+#  when 갈래의 다음 말을 세운다. 대사 갈래는 나올 몫 · 쉬는 초(NSAY.say)를 지나고, 막 선 말(min_gap)은
+#  안 덮는다. force 면 그 둘을 건너뛴다(귀띔 · 개발자 모드). 섰으면 true.
+func _nsay(when: String, force := false) -> bool:
+	if not _nsay_here() or _nsay_hush():
+		return false
+	if not force:
+		var cfg: Array = (NSAY.say as Dictionary).get(when, [1.0, 0.0])
+		if float(nsay_cool.get(when, 0.0)) > 0.0:
+			return false
+		if not nsay_row.is_empty() and nsay_out <= 0.0 and nsay_t < float(NSAY.min_gap):
+			return false
+		if _nsay_rng().randf() >= float(cfg[0]):
+			return false
+		nsay_cool[when] = float(cfg[1])
+	var q: Array = nsay_q.get(when, [])
+	if q.is_empty():
+		for r in GameData.npc_say(when):
+			q.append(String(r.get("id", "")))
+		for i in range(q.size() - 1, 0, -1):
+			var j: int = _nsay_rng().randi_range(0, i)
+			var tmp = q[i]
+			q[i] = q[j]
+			q[j] = tmp
+		nsay_q[when] = q
+	while not q.is_empty():
+		var id := String(q.pop_front())
+		for r in GameData.npc_say(when):
+			if String(r.get("id", "")) == id:
+				nsay_row = r
+				nsay_txt = GameData.npc_say_text(r)
+				nsay_t = 0.0
+				nsay_out = 0.0
+				if when == "tip":
+					_sfx("menu_pick2")
+				queue_redraw()
+				return true
+	return false
+
+
+func _nsay_end() -> void:
+	if nsay_row.is_empty() or nsay_out > 0.0:
+		return
+	nsay_out = float(NSAY.fade)
+
+
+#  글이 다 나오는 때(초) · 지금 나온 글자 수.
+func _nsay_full_t() -> float:
+	return float(nsay_txt.length()) / float(TUTOR.cps)
+
+
+func _nsay_shown() -> int:
+	if motion_off:
+		return nsay_txt.length()
+	return clampi(int(nsay_t * float(TUTOR.cps)), 0, nsay_txt.length())
+
+
+func _nsay_a() -> float:
+	if nsay_row.is_empty():
+		return 0.0
+	var fd: float = maxf(float(NSAY.fade), 0.001)
+	if nsay_out > 0.0:
+		return nsay_out / fd
+	return 1.0 if motion_off else clampf(nsay_t / fd, 0.0, 1.0)
+
+
+#  말상자 — 상인 가운데(NPC.cx)에 글 폭만큼 · 동전 슬롯 밑 gap. [자리, 줄들].
+func _nsay_layout() -> Array:
+	var bp: float = float(TUTOR.box_pad)
+	var inner: float = float(NSAY.w_max) - bp * 2.0 - 12.0
+	var lines := _tutor_wrap(nsay_txt, inner)
+	var lw := 0.0
+	if font_sm != null:
+		for ln in lines:
+			lw = maxf(lw, font_sm.get_string_size(String(ln), HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x)
+	var bw: float = clampf(ceilf(lw + bp * 2.0 + 12.0), float(NSAY.w_min), float(NSAY.w_max))
+	var bh: float = bp * 2.0 + float(TUTOR.talk_top) + 22.0 + float(lines.size() - 1) * float(TUTOR.line)
+	var top: float = (_panel_rect() as Rect2).end.y + float(NSAY.gap)
+	return [Rect2(roundf(float(NPC.cx) - bw * 0.5), top, bw, bh), lines]
+
+
+func _nsay_click(m: Vector2) -> bool:
+	if nsay_row.is_empty() or nsay_out > 0.0:
+		return false
+	var box: Rect2 = _nsay_layout()[0]
+	if not box.grow_individual(0.0, float(TUTOR.plate_h) * 0.5, 0.0, 0.0).has_point(m):
+		return false
+	if _nsay_shown() < nsay_txt.length():
+		nsay_t = _nsay_full_t() + float(TUTOR.pop)       # 다 보여 준다
+	else:
+		_nsay_end()
+	return true
+
+
+func _nsay_draw() -> void:
+	var a := _nsay_a()
+	if a <= 0.004 or font_sm == null:
+		return
+	var lay := _nsay_layout()
+	var box: Rect2 = lay[0]
+	var lines: PackedStringArray = lay[1]
+	_rr(self, box, Color(C_BG, 0.94 * a))
+	_rr_line(self, box, Color(C_ACC, 0.7 * a))
+	_talk_plate("상인", box.position.x, box.position.y, a)
+	var left := _nsay_shown()
+	var g0 := 0
+	var tx0: float = box.position.x + float(TUTOR.box_pad) + 6.0
+	for i in lines.size():
+		var ln := String(lines[i])
+		var take: int = mini(left, ln.length())
+		left -= ln.length()
+		if i < lines.size() - 1:
+			left -= 1
+		var base := Vector2(tx0, box.position.y + float(TUTOR.box_pad) + float(TUTOR.talk_top) + 19.0
+				+ float(i) * float(TUTOR.line))
+		_type_line(base, ln, take, g0, Color(C_TXT, a), nsay_t)
+		g0 += ln.length() + 1
+		if left <= 0:
+			break
+	draw_set_transform(shake_off)
+
+
+# ══════════════════════════════════════════════════════════
 #  상인을 누른다
 # ──────────────────────────────────────────────────────────
 #  2026-09-15 제보: "딜러를 클릭하면 딜러랑 상호작용 할 수 있는거".
@@ -29249,10 +29482,12 @@ func _npc_press(m: Vector2) -> bool:
 		return false
 	if h < 2:
 		_npc_react("빼기", h)
+		_nsay("hand")
 		return true
 	_npc_react(String(POKE.body[npc_poke % POKE.body.size()]),
 			_npc_side(m.x))
 	npc_poke += 1
+	_nsay("poke")
 	return true
 
 
@@ -29487,6 +29722,7 @@ func _give_begin(i: int, m: Vector2) -> void:
 	var it: Dictionary = drop[i]
 	give_i = i
 	give_t = 0.0
+	_nsay("give")
 	give_side = _npc_side(m.x)
 	give_from = Vector3(it.u, it.w, it.h)
 	give_rel = 0.0
@@ -30189,6 +30425,7 @@ func _btl_break(k0: int, n: int) -> void:
 	var lay := _btl_layout()
 	if k0 < 0 or k0 >= lay.size() or btl_gone.has(k0):
 		return
+	_nsay("btl")             # 상인의 말 — 술병이 깨진다(NSAY)
 	var hit := [k0]
 	var b0: Dictionary = lay[k0]
 	while hit.size() < n:
@@ -44504,6 +44741,7 @@ func _draw_shop() -> void:
 				str(reroll_cost), 12, C_GOLD if gold >= reroll_cost else C_DIM.darkened(0.3))
 		draw_set_transform(shake_off)
 	_btn(_next_rect(), "다음 판 →", "", true, C_GOLD, true, true)
+	_nsay_draw()          # 상인의 말 — 상인 몸 앞 · 쥔 물건 밑(NSAY)
 	_hold_draw()
 	_fly_draw()
 	# 팩을 뜯는 중이면 모든 것 위에 얹는다 — 눈앞으로 오는 물건이다.
@@ -57406,11 +57644,12 @@ func _tutor_typing() -> bool:
 #  틀에 나온 몫이다. 그 몫에 글자가 하나라도 있어야 난다 — 빈칸 · 문장부호만
 #  나온 틀은 조용하다. 누르면 한 번에 다 나오는 것은 틱이 아니라 클릭이
 #  하므로 여기로 안 온다(쏟아지는 「웅」 이 없다).
-func _talk_tick(d: float, n0: int, n1: int) -> void:
+#  tx0 · narr0 — 상인의 말(NSAY)이 제 글을 넘긴다(narr0 0 상인 목 · 1 설명 목 · −1 튜토리얼 걸음을 따른다).
+func _talk_tick(d: float, n0: int, n1: int, tx0 := "", narr0 := -1) -> void:
 	talk_cool = maxf(talk_cool - d, 0.0)
 	if n1 <= n0 or talk_cool > 0.0:
 		return
-	var tx := _tutor_text()
+	var tx := _tutor_text() if tx0 == "" else tx0
 	var said := ""
 	for i in range(n0, mini(n1, tx.length())):
 		var c := tx.substr(i, 1)
@@ -57421,7 +57660,7 @@ func _talk_tick(d: float, n0: int, n1: int) -> void:
 		return
 	talk_cool = float(TUTOR.blip)
 	talk_n += 1
-	var narr := _tutor_who() == ""
+	var narr: bool = (_tutor_who() == "") if narr0 < 0 else narr0 == 1
 	#  음 밀기 — 황금각으로 돈다. 판의 난수(randf)를 쓰면 말상자 하나가
 	#  다음 판의 뽑기를 바꾼다.
 	var p: float = (float(TUTOR.blip_narr) if narr else 1.0) \
@@ -57507,21 +57746,23 @@ func _tutor_text() -> String:
 
 #  gi 번째 글자(줄 나눔이 먹은 빈칸까지 센 차례)가 앉은 정도 0~1. 그 글자는
 #  tutor_t = (gi + 1) / cps 에 보이기 시작한다(_tutor_shown 과 같은 자).
-func _type_u(gi: int) -> float:
-	return (tutor_t - float(gi + 1) / float(TUTOR.cps)) / float(TUTOR.pop)
+func _type_u(gi: int, clk := NAN) -> float:
+	var t: float = tutor_t if is_nan(clk) else clk
+	return (t - float(gi + 1) / float(TUTOR.cps)) / float(TUTOR.pop)
 
 
 #  한 줄의 보이는 몫을 그린다. 다 앉은 앞몫은 한 붓, 막 나온 글자는 하나씩
 #  톡 튀어나온다(TUTOR 의 pop 머리말). g0 은 이 줄 첫 글자의 차례다.
 #  흔들림(tut_sh)을 얹은 채로 들어오므로 낱자의 변환에도 그 값을 더하고 되돌린다.
-func _type_line(base: Vector2, ln: String, take: int, g0: int, col: Color) -> void:
+#  clk — 시계(비면 튜토리얼 tutor_t · 상인의 말은 nsay_t 를 넘긴다).
+func _type_line(base: Vector2, ln: String, take: int, g0: int, col: Color, clk := NAN) -> void:
 	if take <= 0:
 		return
 	if motion_off or font_sm == null or float(TUTOR.pop) <= 0.0:
 		draw_string(_fz(font_sm, 20), base, ln.substr(0, take), HORIZONTAL_ALIGNMENT_LEFT, -1, 20, col)
 		return
 	var p := take
-	while p > 0 and _type_u(g0 + p - 1) < 1.0:
+	while p > 0 and _type_u(g0 + p - 1, clk) < 1.0:
 		p -= 1
 	if p > 0:
 		draw_string(_fz(font_sm, 20), base, ln.substr(0, p), HORIZONTAL_ALIGNMENT_LEFT, -1, 20, col)
@@ -57530,7 +57771,7 @@ func _type_line(base: Vector2, ln: String, take: int, g0: int, col: Color) -> vo
 		var ch := ln.substr(k, 1)
 		if ch.strip_edges() == "":
 			continue
-		var u: float = clampf(_type_u(g0 + k), 0.0, 1.0)
+		var u: float = clampf(_type_u(g0 + k, clk), 0.0, 1.0)
 		#  되튐(back-out) — 0 에서 시작해 반쯤에서 넘쳤다가 1 에 앉는다.
 		var q: float = u - 1.0
 		var s: float = maxf(1.0 + (c1 + 1.0) * q * q * q + c1 * q * q, 0.0)
@@ -57827,15 +58068,7 @@ func _tutor_talk_draw(lines: PackedStringArray, who: String, bx: float, by: floa
 		bw: float, a: float) -> void:
 	var bp: float = float(TUTOR.box_pad)
 	var lh: float = TUTOR.line
-	var ph: float = float(TUTOR.plate_h)
-	#  이름표 — 윗변에 반쯤 걸친 금빛 판. 글자는 바탕색으로 판에 박는다.
-	var nw: float = 44.0
-	if font != null:
-		nw = font.get_string_size(who, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x + 20.0
-	var plate := Rect2(bx + 12.0, by - ph * 0.5, nw, ph)
-	_rr(self, plate, Color(C_ACC, a))
-	draw_string(_fz(font, 12), Vector2(plate.position.x, _ink_mid_y(plate.get_center().y, 12)),
-			who, HORIZONTAL_ALIGNMENT_CENTER, plate.size.x, 12, Color(C_BG, a))
+	_talk_plate(who, bx, by, a)
 	#  글 — 이름표 밑에서 왼쪽에 붙는다. 보이는 몫만 줄마다 잘라 그린다.
 	var left := _tutor_shown()
 	var tx0: float = bx + bp + 6.0
@@ -57865,6 +58098,19 @@ func _tutor_talk_draw(lines: PackedStringArray, who: String, bx: float, by: floa
 		var tp := last_end + Vector2(7.0, -10.0)
 		draw_colored_polygon(PackedVector2Array([tp, tp + Vector2(8.0, 0.0),
 				tp + Vector2(4.0, 5.0)]), Color(C_ACC, (0.45 + 0.55 * bl) * a))
+
+
+#  이름표 — 말상자 윗변(by)에 반쯤 걸친 금빛 판. 글자는 바탕색으로 판에 박는다. 튜토리얼 말상자와
+#  상인의 말(NSAY)이 같이 쓴다.
+func _talk_plate(who: String, bx: float, by: float, a: float) -> void:
+	var ph: float = float(TUTOR.plate_h)
+	var nw: float = 44.0
+	if font != null:
+		nw = font.get_string_size(who, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x + 20.0
+	var plate := Rect2(bx + 12.0, by - ph * 0.5, nw, ph)
+	_rr(self, plate, Color(C_ACC, a))
+	draw_string(_fz(font, 12), Vector2(plate.position.x, _ink_mid_y(plate.get_center().y, 12)),
+			who, HORIZONTAL_ALIGNMENT_CENTER, plate.size.x, 12, Color(C_BG, a))
 
 
 #  어둠 한 장에 구멍 하나. 사각 넷으로 두른다 — 구멍 자리에 아무것도 안 그리는

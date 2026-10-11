@@ -65,6 +65,9 @@ const FILES := {
 	#  사람이 표에서 고친다(2026-09-27 「튜토리얼 문구들 다 데이터화 시켜 내가
 	#  수정하게」). 튜토리얼 **문장**은 tutor.csv 가 그대로 쥔다.
 	"texts": "texts.csv",
+	#  상인의 말(game.gd NSAY · 2026-10-11) — 상점 귀띔 · 누르고 건넬 때의 대사. 사람이 표에서
+	#  고친다. 수는 {열쇠}로 채운다.
+	"npc_say": "npc_say.csv",
 	"boosters": "boosters.csv",
 	#  판 사건 — 작은 판 · 큰 판이 열릴 때 하나를 뽑는다(2026-10-06 · game.gd _ev_roll).
 	"events": "events.csv",
@@ -2191,6 +2194,7 @@ static func _validate() -> void:
 	_v_events()
 	_v_tutor()
 	_v_texts()
+	_v_npc_say()
 	_v_item_aim()
 
 
@@ -2327,6 +2331,77 @@ static func _has_row(table: String, id: String) -> bool:
 # 된다 — 히든 다트통이 통째로 아무 일도 안 하는 다트통이 되는 길이다.
 #  배움 표. 빈 문구 하나가 화면에 빈 말상자로 뜨고, 모르는 과녁 하나가
 #  아무 데도 안 밝히는 걸음이 된다 — 둘 다 화면에서는 "고장" 으로 읽힌다.
+#  ── 상인의 말(npc_say.csv) ─────────────────────────────
+#  when 갈래의 켜진 줄만 준다. 글의 {열쇠}는 npc_say_text 가 채운다 — tuning.csv 의 열쇠면 그 값,
+#  areas.csv 의 열쇠면 그 영역의 기본 점수(base · 불)나 배수(mult · 더블 · 트리플). 수를 글에 박지
+#  않아 표의 값을 고치면 말이 따라 바뀐다(desc 열의 규약과 같다).
+const NPC_SAY_WHEN := ["tip", "poke", "hand", "give", "btl", "buy", "sell"]
+
+
+static func npc_say(when: String) -> Array:
+	boot()
+	var out := []
+	for r in _raw.get("npc_say", []):
+		if String(r.get("when", "")) == when and _b(r, "enabled", "npc_say") \
+				and String(r.get("text", "")).strip_edges() != "":
+			out.append(r)
+	return out
+
+
+static func npc_say_text(row: Dictionary) -> String:
+	var t := String(row.get("text", ""))
+	var vals := {}
+	for k in _say_keys(t):
+		var v = _say_val(k)
+		if v != null:
+			vals[k] = v
+	return fill(t, vals) if not vals.is_empty() else t
+
+
+static func _say_keys(t: String) -> Array:
+	var re := RegEx.create_from_string("\\{([a-z_]+)\\}")
+	var out := []
+	for m in re.search_all(t):
+		if not out.has(m.get_string(1)):
+			out.append(m.get_string(1))
+	return out
+
+
+#  {열쇠}의 값 — 모르는 열쇠면 null(글에 {열쇠}가 그대로 남는다 · 검증기가 적는다).
+static func _say_val(k: String):
+	boot()
+	if _tune.has(k):
+		return tune_i(k)
+	for r in _raw.get("areas", []):
+		if String(r.get("key", "")) == k:
+			var a := area(k)
+			return int(a.base) if int(a.base) > 0 else int(a.mult)
+	return null
+
+
+static func _v_npc_say() -> void:
+	var seen := {}
+	for r in _raw.get("npc_say", []):
+		var id: String = r.get("id", "")
+		var ln: int = r.get("_line", 0)
+		if id == "":
+			continue
+		if seen.has(id):
+			_errs.append("npc_say:%d %s — 열쇠가 겹친다" % [ln, id])
+		seen[id] = true
+		_b(r, "enabled", "npc_say")
+		if not NPC_SAY_WHEN.has(String(r.get("when", ""))):
+			_errs.append("npc_say:%d %s — when '%s' 는 %s 중 하나여야 한다. 이 말은 안 나온다"
+					% [ln, id, r.get("when", ""), NPC_SAY_WHEN])
+		var t := String(r.get("text", ""))
+		if t.strip_edges() == "":
+			_errs.append("npc_say:%d %s — 글이 비었다" % [ln, id])
+		for k in _say_keys(t):
+			if _say_val(k) == null:
+				_errs.append("npc_say:%d %s — {%s} 를 채울 값이 tuning · areas 에 없다. 화면에 {%s} 가 그대로 뜬다"
+						% [ln, id, k, k])
+
+
 static func _v_texts() -> void:
 	var seen := {}
 	for r in _raw.get("texts", []):

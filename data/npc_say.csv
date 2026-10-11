@@ -1,0 +1,32 @@
+﻿id,when,text,enabled,_note
+tip_interest,tip,골드 {interest_per}마다 이자 +1이야. 많아야 +{interest_max},1,상인의 말(game.gd NSAY). when — tip 상점에서 가끔 하는 귀띔 · poke 몸을 누름 · hand 손 · 팔을 누름 · give 물건을 건넴 · btl 뒤 선반 술병이 깨짐 · buy 삼 · sell 팖. {열쇠}는 tuning.csv · areas.csv 값으로 채운다 — 수를 글에 박지 않는다
+tip_dart_left,tip,판을 일찍 끝내면 남은 다트 한 발에 {gold_per_dart}골드씩 쳐 주지,1,
+tip_sell,tip,팔 땐 산 값의 반이야. 그래도 {sell_min}골드는 쳐 주지,1,sell_div 2 · sell_min
+tip_free_reroll,tip,리롤은 들를 때마다 {free_rerolls}번 공짜야,1,
+tip_reroll_cost,tip,리롤 값은 {reroll_base}골드부터. 할 때마다 {reroll_step}씩 올라,1,
+tip_rings,tip,트리플은 ×{triple} · 더블은 ×{double}이지,1,areas.csv 의 mult
+tip_bull,tip,이너 불 {bull_i}점 · 아우터 불 {bull_o}점,1,areas.csv 의 base
+tip_skip,tip,작은 판 · 큰 판은 건너뛰면 단추에 적힌 걸 받아,1,
+tip_boss,tip,보스 판은 못 건너뛰어. 뭐가 걸렸는지는 미리 보이지,1,
+tip_give,tip,물건을 내 쪽으로 밀어 올리면 한번 봐 주지,1,건네기(game.gd 건네기 머리말)
+tip_cons,tip,사탕 · 사진은 {cons_slots}칸까지 들고 다닐 수 있어,1,
+tip_bottles,tip,뒤 선반 술병 다 깨면 가만 안 둔다,1,술병 이스터에그(BTL · BDUEL)의 귀띔
+poke_1,poke,어이 찌르지 마,1,
+poke_2,poke,뭐 할 말 있어?,1,
+poke_3,poke,간지럽다고,1,
+poke_4,poke,손님 거긴 내 배야,1,
+hand_1,hand,손은 왜 잡아,1,
+hand_2,hand,이 손 비싼 손이야,1,
+hand_3,hand,악수는 거래 끝나고 하지,1,
+give_1,give,어디 한번 볼까,1,
+give_2,give,흠 쓸 만한데,1,
+give_3,give,눈은 있네,1,
+btl_1,btl,어이 그거 비싼 술이야!,1,
+btl_2,btl,내 술!,1,
+btl_3,btl,그거 다 달아 둔다,1,
+buy_1,buy,좋은 선택이야,1,
+buy_2,buy,후회 안 할 거야,1,
+buy_3,buy,거래 성립,1,
+sell_1,sell,이 값이면 됐지,1,
+sell_2,sell,아깝지 않아?,1,
+sell_3,sell,받아 두지,1,
