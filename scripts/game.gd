@@ -4227,6 +4227,89 @@ func _to_pick() -> void:
 		_pick_dart(0)
 
 
+# ══════════════════════════════════════════════════════════
+#  점수 칠판 — 판 오른쪽 벽 (2026-10-11)
+# ──────────────────────────────────────────────────────────
+#  「라운드랑 목표점수가 잘 안보인다는 평을 받았거든? 이런 UI는 어떻게 수정 할까? 레퍼런스 찾아보고
+#  작업 해보자」. 상단 띠(18px)의 12px 흐린 글 둘이 전부였다. 레퍼런스 —
+#   · 발라트로: 왼쪽 판 맨 위에 넘어야 할 점수를 판에서 가장 큰 수로 두고, 바로 밑에 이번 점수를 큰
+#     상자로 둔다. 라운드 · 안테는 밑에 작게.
+#   · 펍 다트: 점수는 판 옆 벽에 건 칠판에 분필로 적는다(501 을 깎아 내린다). 손글씨는 멀리서 안 보인다는
+#     지적이 있어 기계식은 큰 수로 간다.
+#  사용자가 「둘 다(띠 + 칠판)」를 골랐다 — 띠는 그대로 두고, 판 오른쪽 빈 벽(칠판 주문 HUD 밑)에 점수
+#  칠판을 건다. 머리는 라운드 · 판 이름(보스는 금빛 분필), 가운데에 목표를 가장 크게(36), 그 밑에
+#  지금 점수(24 · 걸음마다 띠와 같이 밝았다 돌아온다) · 분필 게이지. 넘으면 목표에 금빛 분필 동그라미.
+#  분필 결(_chalk_grit)은 큰 수에만 — 작은 글은 결이 획을 먹는다. 판과 같이 흔들리는 벽의 물건이다.
+#  판 화면 · 정산(흐림 밑)에서 선다. 점수 카드가 오른쪽에서 들어오면 그 위를 덮는다(카드에도 게이지가 있다).
+#    box 석판(테 안) · frame 테 두께
+const SCOREB := {"box": Rect2(478.0, 122.0, 138.0, 158.0), "frame": 4.0}
+
+
+func _score_board_on() -> bool:
+	return (_is_play_deep() or state == S.CLEAR) and not swap_live and not turn_live
+
+
+func _score_board_draw() -> void:
+	if not _score_board_on():
+		return
+	var box: Rect2 = SCOREB.box
+	_chalk_board(self, box, float(SCOREB.frame), CHALKB.order)
+	var ink: Color = DOORT.chalk_ink
+	var slate: Color = DOORT.chalk
+	var x0: float = box.position.x + 8.0
+	var w: float = box.size.x - 16.0
+	var y: float = box.position.y
+	#  머리 — 라운드(무한에는 분모가 없다 · _draw_topbar 와 같은 말)
+	var rt: String = ("라운드 %d" % GameData.round_of(leg_no)) if GameData.endless \
+			else ("라운드 %d/%d" % [GameData.round_of(leg_no), _run_rounds()])
+	draw_string(_fz(font_sm, 20), Vector2(x0, y + 24.0), rt, HORIZONTAL_ALIGNMENT_LEFT, w, 20,
+			Color(ink, 0.94))
+	#  판 이름 — 보스 판은 금빛 분필
+	var boss: bool = GameData.is_boss(leg_no)
+	draw_string(_fz(font_sm, 12), Vector2(x0, y + 40.0), GameData.leg_name(leg_no),
+			HORIZONTAL_ALIGNMENT_LEFT, w, 12, Color(C_ACC, 0.95) if boss else Color(ink, 0.62))
+	#  가름줄 — 분필 한 획(끝이 조금 흐리다)
+	draw_rect(Rect2(x0, y + 47.0, w, 1.0), Color(ink, 0.30))
+	#  목표 — 가장 큰 수
+	var tgt: int = target
+	var val: int = _bar_val()
+	draw_string(_fz(font_sm, 12), Vector2(x0, y + 63.0), "목표", HORIZONTAL_ALIGNMENT_LEFT, -1, 12,
+			Color(ink, 0.62))
+	var ts: String = GameData.big(tgt)
+	var tb := Vector2(x0, y + 100.0)
+	draw_string(_fz(font, 36), tb, ts, HORIZONTAL_ALIGNMENT_RIGHT, w, 36, Color(ink, 0.96))
+	if font != null:
+		var tw: float = font.get_string_size(ts, HORIZONTAL_ALIGNMENT_LEFT, -1, 36).x
+		_chalk_grit(self, Rect2(x0 + w - tw, tb.y - 27.0, tw, 27.0), slate, 0.8, 6101, 30.0)
+		#  넘었다 — 목표에 금빛 분필 동그라미(한 획 · 끝이 겹친다)
+		if tgt > 0 and val >= tgt:
+			#  납작한 타원 — 수에 맞춰 옆으로만 넓고 위아래는 수 잉크(27)에 꼭 맞는다(밑의 점수를 안 덮는다)
+			var cc := Vector2(x0 + w - tw * 0.5, tb.y - 13.0)
+			var ell := PackedVector2Array()
+			for q in 41:
+				var an: float = lerpf(-PI * 0.6, PI * 1.5, float(q) / 40.0)
+				ell.append(cc + Vector2(cos(an) * (tw * 0.5 + 6.0), sin(an) * 17.0))
+			draw_polyline(ell, Color(C_GOLD, 0.9), 2.0)
+	#  지금 점수 — 걸음마다 띠의 수와 같이 밝았다 돌아온다(tick_flash)
+	draw_string(_fz(font_sm, 12), Vector2(x0, y + 127.0), "점수", HORIZONTAL_ALIGNMENT_LEFT, -1, 12,
+			Color(ink, 0.62))
+	draw_string(_fz(font, 24), Vector2(x0, y + 131.0), GameData.big(val), HORIZONTAL_ALIGNMENT_RIGHT,
+			w, 24, Color(ink, 0.92).lerp(Color(1.0, 1.0, 1.0), float(TALLY.flash) * tick_flash))
+	#  게이지 — 분필 테 · 찬 몫은 분필 빗금(다 차 가면 금빛)
+	var gk: float = clampf(float(val) / float(maxi(tgt, 1)), 0.0, 1.0)
+	var gr := Rect2(x0, y + 141.0, w, 8.0)
+	draw_rect(gr, Color(ink, 0.35), false, 1.0)
+	var fw: float = floorf((gr.size.x - 2.0) * gk)
+	if fw > 0.0:
+		var gc: Color = C_GOLD if gk >= 1.0 else ink
+		draw_rect(Rect2(gr.position + Vector2(1.0, 1.0), Vector2(fw, gr.size.y - 2.0)), Color(gc, 0.30))
+		var k := 0.0
+		while k < fw:
+			draw_rect(Rect2(gr.position.x + 1.0 + k, gr.position.y + 1.0, 1.0, gr.size.y - 2.0),
+					Color(gc, 0.85))
+			k += 3.0
+
+
 # 고를 때 벽에서 빼지 않는다. 뽑아 든 것으로만 표시하고 실제로 빠지는 것은
 # 던지는 순간이다.
 #
@@ -12376,6 +12459,7 @@ func _draw() -> void:
 		#  조준의 선은 판 밖 151px 까지 간다 · 당김의 끈) · 꽂힌 자루 · 조각 · 카드 · 팝
 		#  밑이다. 판 갈이(상인이 서는 때)에는 판과 같이 쉰다. 2026-10-06
 		_order_board_draw()
+		_score_board_draw()          # 점수 칠판 — 판 오른쪽 벽(라운드 · 목표 · 점수)
 		_draw_aim()
 		_bean_glow_draw()            # 잭과 콩나무가 먹은 칸 — 판 위 · 자루 밑
 		_bean_roots_draw()           # 잭과 콩나무의 뿌리 — 꽂힌 자리에서 판을 따라 뻗는다
