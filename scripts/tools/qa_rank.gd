@@ -247,16 +247,18 @@ func _run() -> void:
 				same = false
 	_ok("STK_TIERS 가 RARITIES 와 같은 순서", same, "%d단" % tiers.size())
 
-	# ⓑ 박음이 성기게 벌어졌는가. 44.1x34.7px 에서 1·2·3·4 는 세다가 놓친다
+	# ⓑ 쇠가 등급을 말한다(2026-10-12 「A안으로 해도 보석 박지마」) — 박음(셈)을 걷고 일반 동 · 언커먼
+	#    은 · 희귀 금(game.gd METAL). 박음이 다시 서면 쇠 테 위에 보석 · 홈이 돌아온다.
 	var sp := []
 	for t in tiers:
 		sp.append(int(t.spots))
-	_ok("박음 수가 0/3/6/온띠", sp == [0, 3, 6, -1], str(sp))
-	var gap_ok := true
-	for i in range(1, 3):
-		if int(sp[i]) - int(sp[i - 1]) < 2:
-			gap_ok = false
-	_ok("이웃 등급의 박음 차가 2 이상", gap_ok, "0→3→6")
+	_ok("박음을 걷었다 — 일반·언커먼·희귀 0", sp.slice(0, 3) == [0, 0, 0], str(sp))
+	var met: Dictionary = g.METAL
+	var crest := []
+	for rr in ["common", "uncommon", "rare"]:
+		crest.append(Color(met[rr][2]))
+	_ok("쇠 셋이 서로 다른 색", crest[0] != crest[1] and crest[1] != crest[2] and crest[0] != crest[2],
+			"동 · 은 · 금")
 
 	# ⓒ **턱 색 != 옆면 색.** 이 한 줄이 그 회귀를 영구히 막는다
 	print("  ── 턱(윗면 모서리) 대 옆면 ──")
@@ -957,8 +959,13 @@ func _grey_run(mill: Array) -> void:
 	for t in g.STK_TIERS:
 		sp.append(int(t.spots))
 		bd.append(int(t.band))
-	_ok("등급 넷이 박음 수로 갈린다", sp.size() == 4 and sp[0] != sp[1]
-			and sp[1] != sp[2] and sp[2] != sp[3], str(sp))
+	#  박음을 걷었다(ⓑ) — 흑백에서는 쇠 밝기(동 · 은)와 실루엣(은 · 금 — 희귀만 물린다)이 가른다.
+	var mt: Dictionary = g.METAL
+	var cbr := _cr(Color(mt.common[2]), Color(mt.uncommon[2]))
+	_ok("흑백에서 동 · 은이 쇠 밝기로 갈린다 (>= 1.5:1)", cbr >= 1.5, "%.2f" % cbr)
+	_ok("흑백에서 은 · 금은 실루엣으로 갈린다",
+			String(g.STK_TIERS[1].shape) == "disc" and String(g.STK_TIERS[2].shape) == "mill",
+			"%s · %s" % [g.STK_TIERS[1].shape, g.STK_TIERS[2].shape])
 	_ok("등급 넷이 밴드 두께로 두 단 이상 갈린다",
 			bd[0] == 0 and bd[3] == 2, str(bd))
 	var circ := []

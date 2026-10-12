@@ -20019,13 +20019,19 @@ const PANEL := {
 #  **이 표 한 줄이 소비자 여덟을 한꺼번에 바꾼다** — 두 자세(_sticker_flat ·
 #  draw_sticker)가 둘 다 여기를 읽으므로, 테이블 22.04 · 팩 · 랙 19 · 손 19 ·
 #  컬렉션 13 · 런 정보 12 · 런 끝 10 · 툴팁 8 이 같이 움직인다.
+#
+#  ── 등급이 쇠를 고른다 (2026-10-12) ────────────────────────
+#  「게임 내 동전 디자인 다시 디자인 하자」 → 시안 A 주화 · 「보석 박지마」. 몸이 동 · 은 · 금(METAL)이
+#  되어 **쇠 색이 등급을 말한다** — 메달 사다리라 배우지 않아도 읽힌다. 그래서 박음(셈)과 밴드(색 띠)를
+#  걷는다(spots 0 · band 0). 남는 신호는 쇠 · 실루엣(레어 물림) · 번짐 · 맥동이다. body 는 그 쇠의
+#  가운데 값이라 몸에서 내던 색(옆면 · 조각)이 쇠를 따라간다.
 const STK_TIERS := [
-	{"rarity": "common", "body": "ded5c0", "fin": 0,
+	{"rarity": "common", "body": "9c5c38", "fin": 0,
 			"shape": "disc", "spots": 0, "band": 0, "pulse": 0.0, "pulse_a": 0.0},
-	{"rarity": "uncommon", "body": "7d5ad0", "fin": 1,
-			"shape": "disc", "spots": 3, "band": 1, "pulse": 0.0, "pulse_a": 0.0},
-	{"rarity": "rare", "body": "241e33", "fin": 2,
-			"shape": "mill", "spots": 6, "band": 1, "pulse": 3.0, "pulse_a": 0.16},
+	{"rarity": "uncommon", "body": "9298ac", "fin": 1,
+			"shape": "disc", "spots": 0, "band": 0, "pulse": 0.0, "pulse_a": 0.0},
+	{"rarity": "rare", "body": "c8902c", "fin": 2,
+			"shape": "mill", "spots": 0, "band": 0, "pulse": 3.0, "pulse_a": 0.16},
 	# 레전더리 — 홀로그램을 부채 셋이 아니라 온 바퀴로 두른다. 같은 어법의
 	# 한 단 위라 새 표식을 배우지 않아도 "홀로보다 더" 로 읽힌다.
 	# spots -1 은 「세는 것이 아니라 덮인 것」이다. 온 둘레를 겹테가 도므로
@@ -21033,6 +21039,10 @@ func _fx_gems(c: Vector2, fr: float, n: float, a: float) -> void:
 
 func draw_item_sticker(c: Vector2, r: float, it: Dictionary, rot: float, lift: float,
 		dim: float, num_sz: int, peel := 0.0) -> void:
+	#  전설 다섯은 구운 그림이 몸 · 얼굴 · 영혼을 다 쥔다(_leg_up 머리말).
+	if _leg_on(it):
+		_leg_up(c, r, it, lift, dim)
+		return
 	var ti := _stk_ti(String(it.get("rarity", "common")))
 	#  **폼을 여기서 한 번만 고른다.** 몸통 · 얼굴 · 조건 자리 · 말림 넷이
 	#  같은 문자열 하나를 받는다 — 어제는 draw_sticker 가 tier 만 받아서
@@ -21064,6 +21074,9 @@ func draw_item_sticker(c: Vector2, r: float, it: Dictionary, rot: float, lift: f
 	if _mat_of(it) != "hollow" and fr > 2.0:
 		_icon_item(fcp, fr, fr, String(it.get("id", "")), dim)
 		_coin_fx(fcp, fr, it, dim)       # 성장 · 소모형의 지금 상태(COINFX)
+	#  움푹한 얼굴 — 쇠 테가 빛 쪽 안 가장자리에 드리운 그늘(얼굴 **뒤**). 도트 재질은 옛 테라 안 둔다.
+	if String(FORMS[form].get("fam", "disc")) != "plaque" and _mat_of(it) != "pixel":
+		_metal_recess(c, r, r, _rim_w(r), dim, _coin_peel_y(form, r, peel))
 	#  ── 얼굴에는 글자도 표시도 안 얹는다 ──────────────────
 	#  그림이 생기기 전에는 값과 방식 이름이 얼굴의 전부였다. 값 숫자는
 	#  2026-09-16 에 걷었고, 남아 있던 조건 표시(「4·10」「8」「1」「6」 같은
@@ -21130,22 +21143,8 @@ func draw_sticker(c: Vector2, r: float, tier: Dictionary, form: String,
 	if lift > 0.05:
 		draw_circle(c + Vector2(0.0, lift), r, Color(0.0, 0.0, 0.0, 0.22))
 
-	if glass:
-		#  **속을 비운다.** 다이컷을 꽉 찬 원반으로 깔고 그 위에 반투명
-		#  인쇄를 얹으면, 비치는 것이 펠트가 아니라 제 테두리다 — 처음에
-		#  그렇게 그려 놓고 "왜 안 비치지" 했다. 유리는 가장자리가 가장
-		#  두꺼우므로 다이컷만 고리로 남는 것이 물리로도 맞다.
-		#  온 고리를 한 폴리곤으로 넘기면 비볼록이라 삼각분할이 튄다
-		#  (annulus 주석) — 넷으로 갈라 넘긴다.
-		if bw > 0.0:
-			for q in 4:
-				draw_colored_polygon(annulus_at(c, r - bw, r,
-						float(q) * (TAU / 4.0), float(q + 1) * (TAU / 4.0), 7),
-						_rank_col(String(tier.rarity), gold_rim, dim))
-		for q in 4:
-			draw_colored_polygon(annulus_at(c, r - rw, r - bw,
-					float(q) * (TAU / 4.0), float(q + 1) * (TAU / 4.0), 7), rim)
-	else:
+	#  유리는 **속을 비운다** — 쇠 테가 고리라(_metal_rim 은 속을 안 채운다) 비치는 것이 펠트다.
+	if pixel:
 		if bw > 0.0:
 			_rank_seg(c, r, y, mdep, slots,
 					_rank_col(String(tier.rarity), gold_rim, dim))
@@ -21155,22 +21154,32 @@ func draw_sticker(c: Vector2, r: float, tier: Dictionary, form: String,
 		#  2026-09-18 — 어두운 몸 둘에서 이 한 줄이 옆면과 **똑같은 색**이었다
 		#  (EDGE 머리말). _bev_col 이 그 예외를 쥔다.
 		_rank_seg(c, r - rw, y, mdep, slots, _bev_col(bb2, dim))
+	else:
+		#  쇠 테(2026-10-12 · _metal_rim 머리말). 도트 재질(r09)만 옛 계단 테로 남는다 —
+		#  「3px 격자 위에 매끈한 결을 얹으면 두 해상도가 섞인다」.
+		_metal_rim(c, r, r, _rim_w(r), mdep, slots, _metal_of(String(tier.rarity), gold_rim), dim, y)
 	#  인쇄면. 누운 자세와 **같은 규칙으로** 갈린다 — 두 자세가 어긋나면
 	#  집어 드는 순간 딴 물건이 된다.
+	var met := _metal_of(String(tier.rarity), gold_rim)
 	if hollow:
 		pass
 	elif pixel:
 		_pix_disc(c, r - rw - 1.0, r - rw - 1.0, body)
 	else:
-		_rank_seg(c, r - rw - 1.0, y, mdep, slots, body)
+		#  움푹한 바닥 — 얼굴 둘레에 드러나는 쇠. 유리는 그 바닥이 비친다.
+		var fcol := _metal_at(met, 0.22).darkened(dim)
+		if glass:
+			fcol = Color(fcol, 0.26)
+		_rank_seg(c, r - _rim_w(r) + 0.3, y, 0.0, 0, fcol)
 	if wax:
 		#  정면이라 흘러내릴 아래가 곧 원의 밑이다. 세 방울.
+		var wcol := _metal_at(met, 0.45).darkened(dim)
 		for k in 3:
 			var wa: float = PI * (0.26 + 0.24 * float(k))
 			var wp := c + Vector2(cos(wa) * r, sin(wa) * r)
 			var wl: float = r * 0.20 + float(k % 2) * 3.0
-			draw_rect(Rect2(wp.x - 1.0, wp.y, 2.0, wl), rim)
-			draw_circle(wp + Vector2(0.0, wl), 1.7, rim)
+			draw_rect(Rect2(wp.x - 1.0, wp.y, 2.0, wl), wcol)
+			draw_circle(wp + Vector2(0.0, wl), 1.7, wcol)
 	if struck:
 		draw_line(c + Vector2(-r * 0.58, -r * 0.28),
 				c + Vector2(r * 0.28, -r * 0.58),
@@ -21179,29 +21188,31 @@ func draw_sticker(c: Vector2, r: float, tier: Dictionary, form: String,
 	# 마감. 각 규약은 annulus_at 그대로다(0 = 12시, 시계 방향) — 둘 다 왼쪽
 	# 위를 향하므로 접는 선(아래) 아래로 새지 않는다. peel 을 안 봐도 된다.
 	var fa := 1.0 - dim
+	#  마감 · 유리 금은 움푹한 바닥 안에서 — 쇠 테(_rim_w)를 덮으면 테의 빛결이 죽는다.
+	var rwf: float = rw if pixel else _rim_w(r) - 0.2
 	match int(tier.fin):
 		1:
 			# 유광 — 왼쪽 위 대각 초승달 하나
-			draw_colored_polygon(annulus_at(c, r * 0.50, r - rw - 0.3,
+			draw_colored_polygon(annulus_at(c, r * 0.50, r - rwf - 0.3,
 					rot - 1.45, rot - 0.35, 6), Color(1.0, 1.0, 1.0, 0.32 * fa))
 		2:
 			# 홀로그램 — 가운데서 퍼지는 무지개 부채 셋
 			for k in 3:
 				var a := rot - 1.85 + float(k) * 0.72
-				draw_colored_polygon(annulus_at(c, r * 0.20, r - rw - 0.3,
+				draw_colored_polygon(annulus_at(c, r * 0.20, r - rwf - 0.3,
 						a, a + 0.46, 4), Color(HOLO[k], 0.55 * fa))
 		3:
 			# 레전더리 — 같은 무지개를 온 바퀴로. 부채가 끊기지 않으므로
 			# 홀로그램 옆에 두면 "다 덮였다" 가 곧 한 단 위로 읽힌다.
 			for k in 6:
 				var a2 := rot + float(k) * (TAU / 6.0)
-				draw_colored_polygon(annulus_at(c, r * 0.20, r - rw - 0.3,
+				draw_colored_polygon(annulus_at(c, r * 0.20, r - rwf - 0.3,
 						a2, a2 + TAU / 6.0, 4),
 						Color(HOLO[k % 3], 0.42 * fa))
 	if glass:
 		#  굴절 — 유광 초승달(fin 1)보다 **좁고 밝다.** 유리는 종이처럼
 		#  넓게 번지지 않는다. 둘을 같은 폭으로 두면 "유광 흔함" 과 안 갈린다.
-		draw_colored_polygon(annulus_at(c, r * 0.62, r - rw - 0.3,
+		draw_colored_polygon(annulus_at(c, r * 0.62, r - rwf - 0.3,
 				rot - 1.15, rot - 0.62, 5), Color(1.0, 1.0, 1.0, 0.55 * fa))
 		#  간 금 둘. 테두리에서 안으로 뻗다 만다 — **이미 간 금**이지 깨진
 		#  자국이 아니다. 끝까지 그으면 조각난 것으로 읽혀서, 아직 쓸 수 있는
@@ -21209,7 +21220,7 @@ func draw_sticker(c: Vector2, r: float, tier: Dictionary, form: String,
 		#  말린 상태에서는 접는 선 위에 있는 금만 긋는다(등급 고리와 같은 규약).
 		for k in 2:
 			var a3: float = rot + 0.75 + float(k) * 2.30
-			var p0 := c + Vector2(cos(a3), sin(a3)) * (r - rw)
+			var p0 := c + Vector2(cos(a3), sin(a3)) * (r - rwf)
 			var p1 := c + Vector2(cos(a3 + 0.55), sin(a3 + 0.55)) * (r * 0.34)
 			if p0.y - c.y <= y and p1.y - c.y <= y:
 				draw_line(p0, p1, Color(1.0, 1.0, 1.0, 0.42 * fa), 1.0)
@@ -35092,6 +35103,13 @@ func _obj_shadow(i: int) -> void:
 			#  플라크가 바닥에서 떠 보인다(2026-09-18). 그리는 것과 같은
 			#  다각형을 k 배로 깐다.
 			var sfm := _stock_form(stock[i])
+			var sd_it: Dictionary = stock[i].get("d", {})
+			if _leg_on(sd_it):
+				#  전설 다섯은 구운 실루엣으로 진다(_leg_flat 의 그림자와 같은 장 · k 배만 다르다).
+				var lh := Vector2(float(LEG.half), float(LEG.half) * TBL.flat) * k
+				draw_texture_rect(_leg_tex(String(sd_it.get("id", "")), "_mask"), Rect2(g - lh, lh * 2.0),
+						false, col)
+				return
 			if String(FORMS[sfm].get("fam", "disc")) == "plaque":
 				#  **그리는 것과 같은 함수에서** 뽑는다 — k 배만 다르다.
 				draw_colored_polygon(_coin_pts_k(sfm, g,
@@ -36621,6 +36639,224 @@ func _front_arc(c: Vector2, rx: float, ry: float, depth: float, slots: int,
 	return pts
 
 
+#  ── 쇠 테 (2026-10-12) ─────────────────────────────────────
+#  「게임 내 동전 디자인 다시 디자인 하자」 → 몸통 · 테는 시안 A 주화(「A안으로 해도 보석 박지마」).
+#  **등급이 쇠를 고른다** — 일반 동 · 언커먼 은 · 희귀 금(메달 사다리라 배우지 않아도 읽힌다). 박음
+#  (테의 보석 · 홈)은 안 찍는다. 테는 솟은 고리다: 바깥 비탈은 빛(왼쪽 위) 쪽이 밝고, 마루가 가장
+#  밝고, 얼굴로 내려가는 안 비탈은 반대쪽이 밝다 — 얼굴이 움푹 들어앉는다. 바깥 비탈에 빗살.
+#  골드를 버는 동전(it.g)은 **테만 금**이다 — 두 쇠를 찍은 주화(바이메탈)라 금박 규약이 산다.
+#  각마다 색을 매겨 삼각형 묶음 **한 번**으로 넘긴다(동전 서른 x 고리 한 벌 — 폴리곤 하나씩이면
+#  프레임마다 수천 번이다).
+const METAL := {
+	"common":   [Color("40221a"), Color("9c5c38"), Color("dc9664"), Color("ffd6b0")],
+	"uncommon": [Color("464a5c"), Color("9298ac"), Color("d4d8e4"), Color("ffffff")],
+	"rare":     [Color("603a0e"), Color("c8902c"), Color("f8ce6c"), Color("fff6c8")],
+}
+#  w 테 폭 / 반지름(바닥 w_lo · 천장 w_hi 면px) · seg 한 바퀴 칸 · reed 빗살 수 · reed_r 이 아래로는
+#  빗살을 안 긋는다(런 끝 10 · 툴팁 8 에서 결이 뭉갠다) · lx, ly 빛(화면 — 왼쪽 위).
+const RIM := {"w": 0.18, "w_lo": 1.4, "w_hi": 3.6, "seg": 48, "reed": 44, "reed_r": 12.0,
+		"lx": -0.62, "ly": -0.78}
+
+
+static func _metal_at(m: Array, t: float) -> Color:
+	var u: float = clampf(t, 0.0, 1.0) * float(m.size() - 1)
+	var i: int = mini(int(u), m.size() - 2)
+	return (m[i] as Color).lerp(m[i + 1] as Color, u - float(i))
+
+
+static func _metal_of(rar: String, gold: bool) -> Array:
+	if gold:
+		return METAL.rare
+	return METAL.get(rar, METAL.common)
+
+
+static func _rim_w(r: float) -> float:
+	return clampf(r * float(RIM.w), float(RIM.w_lo), float(RIM.w_hi))
+
+
+#  솟은 테 한 바퀴 — 바깥선(물린 원반이면 물린 자리째) · 마루 · 안선. ry/rx 가 누운 자세의 눌림이다.
+#  yclip 은 말림의 접는 선(c 에서 아래로) — 그 밑 점은 접는 선으로 모인다(_disc_seg 의 활꼴과 같다).
+func _metal_rim(c: Vector2, rx: float, ry: float, rw: float, mdep: float, slots: int,
+		m: Array, dim: float, yclip := INF) -> void:
+	var n := int(RIM.seg)
+	var lv := Vector2(float(RIM.lx), float(RIM.ly))
+	var sy: float = ry / maxf(rx, 0.001)
+	var yc: float = c.y + yclip
+	var pts := PackedVector2Array()
+	var cols := PackedColorArray()
+	for i in n:
+		var a: float = TAU * float(i) / float(n)
+		var dv := Vector2(cos(a), sin(a))
+		var f: float = _mill_f(a, rx, mdep, slots) if mdep > 0.0 else 1.0
+		var l: float = dv.dot(lv)
+		var band := [[rx * f, 0.42 + 0.34 * l], [rx - rw * 0.45, 0.74 + 0.24 * l],
+				[rx - rw, 0.40 - 0.30 * l]]
+		for pr in band:
+			var p := c + Vector2(dv.x * float(pr[0]), dv.y * float(pr[0]) * sy)
+			p.y = minf(p.y, yc)
+			pts.append(p)
+			cols.append(_metal_at(m, float(pr[1])).darkened(dim))
+	var idx := PackedInt32Array()
+	for i in n:
+		var j: int = (i + 1) % n
+		for b in 2:
+			var a0: int = i * 3 + b
+			var a1: int = j * 3 + b
+			idx.append_array(PackedInt32Array([a0, a1, a1 + 1, a0, a1 + 1, a0 + 1]))
+	RenderingServer.canvas_item_add_triangle_array(get_canvas_item(), idx, pts, cols)
+	#  빗살 — 바깥 비탈에만. 물린 원반은 물린 자리가 곧 빗살의 한 단 위라 안 긋는다(옆면 규약 그대로).
+	if mdep <= 0.0 and rx >= float(RIM.reed_r):
+		var k := int(RIM.reed)
+		var rcol := Color(_metal_at(m, 0.08).darkened(dim), 0.55)
+		for i in k:
+			var a2: float = TAU * (float(i) + 0.5) / float(k)
+			var dv2 := Vector2(cos(a2), sin(a2) * sy)
+			var p0 := c + dv2 * (rx - 0.15)
+			var p1 := c + dv2 * (rx - rw * 0.42)
+			if maxf(p0.y, p1.y) > yc:
+				continue
+			draw_line(p0, p1, rcol, 0.5, true)
+	#  반짝 — 마루 위 왼쪽에 짧은 호 하나. 이 한 줄이 「쇠」를 말한다.
+	var la: float = atan2(lv.y, lv.x)
+	var gl := PackedVector2Array()
+	for i in 7:
+		var a3: float = la - 0.42 + 0.84 * float(i) / 6.0
+		gl.append(c + Vector2(cos(a3), sin(a3) * sy) * (rx - rw * 0.45))
+	if gl[0].y <= yc and gl[6].y <= yc:
+		draw_polyline(gl, Color(_metal_at(m, 1.0), 0.75 * (1.0 - dim)), maxf(rw * 0.22, 0.6), true)
+
+
+#  ── 전설 다섯 — 구운 그림 (2026-10-12) ─────────────────────
+#  「전설 동전들 좀 멋있는 모양이랑 일러로」 → 시안에서 「이대로 + 영혼」. 실루엣이 오목하거나(접은
+#  나비 · 녹는 시계) 구멍이 나서(깨진 고리) 볼록 다각형 판(FORMS · _plaque_*)으로는 못 그린다 —
+#  scripts/tools/make_legend_art.py 가 굽는 넉 장(동전 · 영혼 · 실루엣 · 번짐)을 얹는다.
+#  물리 · 잡기 · 조각 · 콩 덩굴은 FORMS 의 판 다각형을 그대로 쓴다 — 외접이 같은 chip_r 안이다.
+#  영혼은 발라트로 전설 조커의 떠오르는 얼굴이다 — 주인공 한 겹이 판 밖으로 떠 둥실거린다.
+#    half 동전 캔버스 반폭(44칸의 반 · 논리px) · glow 번짐 캔버스 반폭 · side 누운 두께 · up 영혼이 뜨는
+#    높이 · bob 둥실 폭 · hz 둥실 빠르기
+const LEG := {"half": 22.0, "glow": 32.0, "side": 4.0, "up": 2.2, "bob": 1.1, "hz": 0.40}
+const C_LEG_SIDE := [Color("b24a82"), Color("4a1430")]   # 누운 두께 — 위 → 아래(분홍 금의 그늘)
+var _leg_cache := {}
+
+
+#  넉 장 하나. 화면에 4배로 구웠으므로 줄여 그린다 — 기본 거르기(nearest)로 줄이면 테가 계단 진다.
+#  CanvasTexture 로 감싸 이 그림만 선형 + 밉맵으로 거른다.
+func _leg_tex(id: String, part := "") -> Texture2D:
+	var key := id + part
+	if _leg_cache.has(key):
+		return _leg_cache[key]
+	var t := _coin_art("leg/%s%s" % [id, part])
+	var out: Texture2D = null
+	if t != null:
+		var ct := CanvasTexture.new()
+		ct.diffuse_texture = t
+		ct.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		out = ct
+	_leg_cache[key] = out
+	return out
+
+
+func _leg_on(it: Dictionary) -> bool:
+	return not rank_off and String(it.get("rarity", "")) == "legendary" \
+			and _leg_tex(String(it.get("id", ""))) != null
+
+
+#  영혼 한 겹. 다섯이 같은 박자면 판 하나가 같이 숨 쉬어 기계로 보인다 — id 로 위상을 민다.
+#  l03 조각은 화소째 떨고(깨진 것) · l05 방울은 늘어졌다 떨어진다(흐른다) · 나머지는 둥실.
+func _leg_soul(id: String, rc: Rect2, k: float, dim: float, up := 0.0) -> void:
+	var st := _leg_tex(id, "_soul")
+	if st == null:
+		return
+	var t: float = 0.0 if motion_off else float_t
+	var ph: float = float(absi(id.hash()) % 97) / 97.0 * TAU
+	var off := Vector2(0.0, -(float(LEG.up) + up + float(LEG.bob) * sin(t * TAU * float(LEG.hz) + ph)) * k)
+	var a: float = 1.0 - dim
+	match id:
+		"l03":
+			off = Vector2(roundf(sin(floorf(t * 3.0) * 12.9898) * 1.4), -(float(LEG.up) + up) * 0.4) * k
+		"l05":
+			var u: float = fposmod(t * 0.45 + ph, 1.0)
+			off = Vector2(0.0, (u * u * 5.0 - 0.5) * k)
+			a *= 1.0 - smoothstep(0.75, 1.0, u)
+	draw_texture_rect(st, Rect2(rc.position + Vector2(0.7, 1.2) * k, rc.size), false,
+			Color(0.0, 0.0, 0.0, 0.30 * a))
+	draw_texture_rect(st, Rect2(rc.position + off, rc.size), false, Color(Color(1, 1, 1).darkened(dim), a))
+
+
+#  선 자세 — 동전 슬롯 · 랙 · 손 · 툴팁. 말림(이형지)은 없다 — 스티커가 아니라 찍어 낸 메달이다.
+func _leg_up(c: Vector2, r: float, it: Dictionary, lift: float, dim: float) -> void:
+	var id := String(it.get("id", ""))
+	var k: float = r / float(TBL.chip_r)
+	var h: float = float(LEG.half) * k
+	var rc := Rect2(c - Vector2(h, h), Vector2(h, h) * 2.0)
+	var mk := _leg_tex(id, "_mask")
+	if lift > 0.05 and mk != null:
+		draw_texture_rect(mk, Rect2(rc.position + Vector2(0.0, lift), rc.size), false,
+				Color(0.0, 0.0, 0.0, 0.22))
+	draw_texture_rect(_leg_tex(id), rc, false, Color(1, 1, 1).darkened(dim))
+	_leg_soul(id, rc, k, dim)
+
+
+#  누운 자세 — 테이블. 눌림(flat) · 흔들림(wob)은 원반과 같은 식 · 두께는 실루엣을 아래로 쌓는다 ·
+#  번짐은 제 모양(구운 흐린 실루엣)으로 번진다.
+func _leg_flat(c: Vector2, it: Dictionary, dim: float, wob: float, bloom := 0.0) -> void:
+	var id := String(it.get("id", ""))
+	var rar := String(it.get("rarity", "legendary"))
+	var sx: float = 1.0 + wob * 0.05
+	var sy: float = 1.0 - wob * 0.12
+	var hx: float = float(LEG.half) * sx
+	var hy: float = float(LEG.half) * TBL.flat * sy
+	var rc := Rect2(c - Vector2(hx, hy), Vector2(hx, hy) * 2.0)
+	var fa: float = 1.0 - dim
+	var sd: float = float(LEG.side)
+	if glow_pass != 2:
+		var gt := _leg_tex(id, "_glow")
+		var col := _glow_of(rar)
+		if gt != null and col.a > 0.0 and fa > 0.02:
+			var pu: float = _rank_pulse(rar) * (1.0 + bloom)
+			var gx: float = float(LEG.glow) * sx
+			var gy: float = float(LEG.glow) * TBL.flat * sy
+			draw_texture_rect(gt, Rect2(c + Vector2(0.0, sd * 0.5) - Vector2(gx, gy), Vector2(gx, gy) * 2.0),
+					false, Color(col, minf(col.a * 1.8 * pu * fa, 1.0)))
+	if glow_pass == 1:
+		return
+	var mk := _leg_tex(id, "_mask")
+	if mk != null:
+		draw_texture_rect(mk, Rect2(rc.position + Vector2(0.0, sd + 2.0), rc.size), false,
+				Color(0.0, 0.0, 0.0, 0.26 * fa))
+		var n := int(ceil(sd))
+		for j in range(n, 0, -1):
+			var sc: Color = (C_LEG_SIDE[0] as Color).lerp(C_LEG_SIDE[1], float(j) / float(n)).darkened(dim)
+			draw_texture_rect(mk, Rect2(rc.position + Vector2(0.0, float(j)), rc.size), false, sc)
+	draw_texture_rect(_leg_tex(id), rc, false, Color(1, 1, 1).darkened(dim))
+	_leg_soul(id, rc, 1.0, dim, 1.5)
+
+
+#  움푹한 얼굴 — 빛 쪽(왼쪽 위) 안 가장자리에 테가 드리운 그늘 한 줄. **얼굴 뒤에** 얹는다.
+func _metal_recess(c: Vector2, rx: float, ry: float, rw: float, dim: float, yclip := INF) -> void:
+	var n := 32
+	var sy: float = ry / maxf(rx, 0.001)
+	var lv := Vector2(float(RIM.lx), float(RIM.ly))
+	var ri: float = rx - rw
+	var yc: float = c.y + yclip
+	var pts := PackedVector2Array()
+	var cols := PackedColorArray()
+	for i in n:
+		var a: float = TAU * float(i) / float(n)
+		var dv := Vector2(cos(a), sin(a))
+		var l: float = maxf(dv.dot(lv), 0.0)
+		for pr in [[ri + 0.3, 0.60 * l], [ri - 1.7, 0.0]]:
+			var p := c + Vector2(dv.x * float(pr[0]), dv.y * float(pr[0]) * sy)
+			p.y = minf(p.y, yc)
+			pts.append(p)
+			cols.append(Color(0.0, 0.0, 0.0, float(pr[1]) * (1.0 - dim)))
+	var idx := PackedInt32Array()
+	for i in n:
+		var j: int = (i + 1) % n
+		idx.append_array(PackedInt32Array([i * 2, j * 2, j * 2 + 1, i * 2, j * 2 + 1, i * 2 + 1]))
+	RenderingServer.canvas_item_add_triangle_array(get_canvas_item(), idx, pts, cols)
+
+
 #  깎은 사각(플라크)의 여덟 꼭짓점. **면 좌표에서 돌리고 나서 y 를 누른다** —
 #  순서를 바꾸면 기울어진 네모가 원근을 안 탄다.
 #  모서리 넷을 cut 만큼 깎으므로 실제 외접 반지름은 sqrt(a²+(b-cut)²) 이라
@@ -37035,8 +37271,9 @@ func _coin_face(form: String, rx: float, ry: float, rc: float,
 	#  원반·물린 원반 — 어제 draw_item_sticker 가 쓰던 그 식이다(테두리 rw 와
 	#  같은 식이어야 얼굴이 테 밑으로 안 기어든다). 누운 원반은 얼굴을 여기서
 	#  안 뽑는다(타원 rx-1.5 / ry-1.5*flat 로 두 축을 따로 따라간다).
+	#  2026-10-12 — 쇠 테(_rim_w)가 넓어져 얼굴이 그 안 비탈 바로 안에 앉는다(움푹한 바닥 0.5px).
 	var rn: float = minf(rx, ry)
-	return Vector3(0.0, 0.0, rn - clampf(rn * 0.16, 1.0, 2.2) - 1.0)
+	return Vector3(0.0, 0.0, rn - _rim_w(rn) - 0.5)
 
 
 #  접는 선의 높이. 판은 **제 아래 반높이**로 잰다 — _peel_y 는 반지름을
@@ -37235,6 +37472,9 @@ func _sticker_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: floa
 	#  있고, 이제 **표가 그렇게 말한다.**
 	var form := _coin_form(it, t)
 	if String(FORMS[form].get("fam", "disc")) == "plaque":
+		if _leg_on(it):
+			_leg_flat(c, it, dim, wob, bloom)
+			return
 		_plaque_flat(c, it, t, rot, dim, wob, mat, form, bloom)
 		return
 	#  물린 깊이·슬롯. 0 이면 옛 타원 그대로다 — 갈래를 값 하나로 눌러 두면
@@ -37258,6 +37498,12 @@ func _sticker_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: floa
 	#  그대로 쓴다 — 홀로 부채가 모서리까지 닿으면 베벨 한 줄을 덮어 두께가
 	#  다시 안 읽힌다.
 	var rw := 2.2
+	#  쇠 테(2026-10-12 · _metal_rim 머리말) — 도트 재질(r09)만 옛 계단 테로 남는다.
+	var met := _metal_of(rar, it.get("g", "") != "")
+	var metal: bool = not pixel
+	var rwm: float = _rim_w(TBL.chip_r)
+	if metal:
+		rw = rwm - 0.2
 	#  옆면 색. 몸 색에서 낸다 — 같은 쇠를 찍은 물건이므로.
 	#  다만 **어두운 몸은 밝혀서 낸다.** 레어(241e33)를 더 어둡게 하면
 	#  펠트(16281f)에 묻혀 두께가 통째로 사라진다. 실제로도 옆면은 빛을
@@ -37270,6 +37516,8 @@ func _sticker_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: floa
 			else (bb.lightened(0.30) if bb.v < 0.32
 			else bb.darkened(float(EDGE.lo))))
 	var side: Color = side0.darkened(dim)
+	if metal:
+		side = _metal_at(met, 0.16).darkened(dim)      # 옆면 — 같은 쇠의 그늘 진 띠
 	#  주조는 빗살이 촘촘하다. 같은 어법 안에서 "더 깊이 찍혔다" 로 읽힌다
 	var reed: int = int(EDGE.reed) * (2 if struck else 1)
 	var sd: float = TBL.chip_t * TBL.tall              # 옆면 높이 2.77px
@@ -37308,6 +37556,9 @@ func _sticker_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: floa
 	#  **물린 원반에도 안 새긴다**(2026-09-18) — 물린 자리가 곧 빗살의 한 단
 	#  위다. 두 가지 결이 겹치면 둘 다 안 읽힌다.
 	var rf := side.darkened(0.30)
+	if metal:
+		rf = _metal_at(met, 0.0).darkened(dim)
+		reed = reed * 2                                # 쇠 동전은 빗살이 촘촘하다(위 테의 빗살과 결이 맞게)
 	if pixel or mdep > 0.0:
 		reed = 0
 	var spn: int = 0 if rank_off else int(t.get("spots", 0))
@@ -37325,7 +37576,12 @@ func _sticker_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: floa
 	elif pixel:
 		_pix_disc(c, rx, ry, body)
 	else:
-		draw_colored_polygon(_rank_pts(c, rx, ry, mdep, slots), body)
+		#  쇠 테 + 움푹한 바닥. 유리는 바닥이 비친다.
+		_metal_rim(c, rx, ry, rwm, mdep, slots, met, dim)
+		var fcol := _metal_at(met, 0.22).darkened(dim)
+		if glass:
+			fcol = Color(fcol, 0.26)
+		draw_colored_polygon(_e_pts(c, rx - rwm + 0.3, ry - (rwm - 0.3) * TBL.flat), fcol)
 	if wax:
 		#  녹아 흐른다. 방울은 옆면 **밑**에서 시작해야 흘러내린 것으로
 		#  읽힌다 — 윗면에서 시작하면 그냥 무늬다.
@@ -37360,7 +37616,7 @@ func _sticker_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: floa
 	#  뭉쳐 두께가 안 읽힌다 — 모서리에 빛 한 줄이 있어야 면이 갈린다.
 	#  2026-09-18 — 어두운 몸 둘(레어·레전더리)에서 이 한 줄이 옆면과 **똑같은
 	#  색**이라 주석이 스스로 깨져 있었다. _bev_col 이 그 예외를 쥔다.
-	if not hollow and not pixel:
+	if not hollow and not pixel and not metal:
 		if mdep > 0.0:
 			_poly_ring(_rank_pts(c, rx, ry, mdep, slots),
 					_rank_pts(c, rx - 1.0, ry - 1.0, mdep, slots), _bev_col(bb, dim))
@@ -37388,8 +37644,11 @@ func _sticker_flat(c: Vector2, it: Dictionary, rot: float, dim: float, wob: floa
 	#  되는데, 그러면 원형 얼굴이 타원이 되어 두 자세가 딴 그림이 된다.
 	#  **안 누른다** — 면에 새겨진 그림이 아니라 위에서 본 도장으로 둔다.
 	if not hollow:
-		_icon_item(c, rx - 1.5, ry - 1.5 * TBL.flat,
+		var fi: float = (rwm + 0.5) if metal else 1.5
+		_icon_item(c, rx - fi, ry - fi * TBL.flat,
 				String(it.get("id", "")), dim)
+		if metal:
+			_metal_recess(c, rx, ry, rwm, dim)
 	#  누운 자세에도 글자를 안 쓴다. 두 자세가 갈리면 테이블에서는 숫자가
 	#  있고 동전 슬롯에는 없는 동전이 된다(draw_item_sticker 의 얼굴 주석).
 	#  ── 테 한 벌은 **맨 마지막**이다 (2026-09-18) ──────
