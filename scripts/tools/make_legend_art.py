@@ -19,6 +19,7 @@ u"""전설 동전 다섯을 그림으로 굽는다 — assets/coin/leg/<id>{,_so
 물리 원(chip_r 22.04) 안에 다 든다 — 캔버스 반폭 22.0. 번짐만 G 칸 더 넓은 캔버스에 따로 굽는다.
 
   python scripts/tools/make_legend_art.py           굽기 + outputs/coin_redesign/legend_sheet.png
+  python scripts/tools/make_legend_art.py 40 <폴더>  포스터용 큰 판(K 40) — assets 는 안 건드린다
 """
 from __future__ import annotations
 
@@ -399,18 +400,47 @@ def ramp(stops, t):
     return s[i] * (1 - f) + s[i + 1] * f
 
 
+def minf(im, k):
+    u"""ImageFilter.MinFilter(k) 와 같은 네모 깎기 — 가로 · 세로를 따로, 창을 두 배씩 넓힌다.
+    PIL 은 칸마다 k² 를 골라 포스터 굽기(K 40)에선 끝나지 않는다."""
+    a = np.asarray(im, np.float32) / 255.0
+    r = k // 2
+    for _ in range(2):
+        m = np.pad(a, ((r, r), (0, 0)), mode="edge")
+        w = 1
+        while w < k:
+            s = min(w, k - w)
+            m = np.minimum(m[:-s], m[s:])
+            w += s
+        a = m.T
+    return a
+
+
+def boxf(a, r):
+    u"""실수 상자 흐림(가로 · 세로 두 번씩). K 를 키워 구우면 8비트 흐림의 계단이 테 빛에 등고선으로 선다 —
+    기울기를 내기 전에 이것으로 고른다. r 0(K 4 — 게임 그림)은 그대로."""
+    if r < 1:
+        return a
+    for _ in range(2):
+        for _ in range(2):
+            c = np.cumsum(np.pad(a, ((r + 1, r), (0, 0)), mode="edge"), 0)
+            a = (c[2 * r + 1:] - c[:-2 * r - 1]) / (2 * r + 1)
+        a = a.T
+    return a
+
+
 def frame(shape, size):
     u"""분홍 금 테 — 실루엣 가장자리 RIM 폭의 비탈. 빛은 흐린 마스크의 기울기(바깥 법선)로 낸다."""
     m = mask_at(shape, K, size)
     mi = Image.fromarray((m * 255).astype(np.uint8))
-    er = np.asarray(mi.filter(ImageFilter.MinFilter(int(RIM * K * 2) | 1)), np.float32) / 255.0
+    er = minf(mi, int(RIM * K * 2) | 1)
     ring = np.clip(m - er, 0, 1)
     b = np.asarray(mi.filter(ImageFilter.GaussianBlur(RIM * K * .5)), np.float32) / 255.0
-    gy, gx = np.gradient(b)
+    gy, gx = np.gradient(boxf(b, K // 8))
     n = np.sqrt(gx * gx + gy * gy) + 1e-6
     lit = (-(gx / n) * LIGHT[0] - (gy / n) * LIGHT[1]) * .5 + .5
     # 마루(테 한가운데)가 가장 밝다 — 테 안에서의 깊이로 고른다
-    depth = np.asarray(mi.filter(ImageFilter.MinFilter(int(RIM * K * .9) | 1)), np.float32) / 255.0
+    depth = minf(mi, int(RIM * K * .9) | 1)
     crest = np.clip(m - depth, 0, 1) * (1 - np.clip(depth - er, 0, 1) * .0)
     t = .30 + .55 * lit + .12 * (1 - crest)
     col = ramp(ROSE, t)
@@ -426,10 +456,11 @@ def frame(shape, size):
     inner = er
     ib = np.asarray(Image.fromarray((inner * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(K * .8)),
                     np.float32) / 255.0
-    igy, igx = np.gradient(ib)
+    igy, igx = np.gradient(boxf(ib, K // 8))
     ilit = (-(igx) * LIGHT[0] - (igy) * LIGHT[1])
-    shade = np.clip(inner - np.asarray(Image.fromarray((inner * 255).astype(np.uint8)).filter(
-        ImageFilter.MinFilter(int(K * 2.2) | 1)), np.float32) / 255.0, 0, 1) * np.clip(ilit * 40, 0, 1) * .55
+    #  기울기는 K 배로 굽을수록 칸마다 옅다 — 문턱도 K 에 맞춘다(K 4 에서 40)
+    shade = np.clip(inner - minf(Image.fromarray((inner * 255).astype(np.uint8)), int(K * 2.2) | 1), 0, 1) \
+        * np.clip(ilit * 10 * K, 0, 1) * .55
     return out, m, er, shade
 
 
@@ -495,4 +526,10 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) == 3:                          # 포스터용 큰 판: make_legend_art.py <K> <폴더>
+        K, OUT = int(sys.argv[1]), Path(sys.argv[2])
+        for ident in ARTS:
+            bake(ident)
+        print("baked K", K, "→", OUT)
+    else:
+        main()
