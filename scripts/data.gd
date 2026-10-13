@@ -338,7 +338,12 @@ static var lang_track := false
 static var lang_miss := {}
 
 
+#  같은 한국어가 자리마다 다른 말이면 열쇠에 「§자리」를 붙인다 — 「완주§통계」는 영어 Wins(런 끝 머리의
+#  「완주」는 Victory). 한국어로는 § 앞까지만 보인다.
 static func L(s: String) -> String:
+	if s.contains("§"):
+		var tc = _lmap.get(s) if lang != "ko" else null
+		return String(tc) if tc != null else s.get_slice("§", 0)
 	if lang == "ko" or s == "":
 		return s
 	var t = _lmap.get(s)

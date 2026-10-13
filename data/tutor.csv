@@ -17,7 +17,7 @@ u_more,1,다른 것도 한번 봐봐,Have a look at the rest too,他のも見て
 u_sell,1,아이템을 판매하여 골드를 획득하세요,Sell items to earn Gold,アイテムを売ってゴールドを獲得しましょう,,,,chute_sell,0.3,tap,1,팔 것이 생긴 첫 상점
 u_rack,1,획득한 동전은 슬롯에 배치됩니다,Coins you get go into your slots,獲得したコインはスロットに配置されます,,,,rack,0.3,tap,1,첫 동전 획득
 u_rack,2,동전은 왼쪽부터 발동되며 순서를 바꿀 수 있습니다,"Coins trigger from left to right, and you can reorder them",コインは左から発動し 順番を入れ替えられます,,,,rack,0.3,tap,1,이 게임에서 제일 중요한 한 줄이다
-u_info,1,획득한 아이템은 정보 탭을 열어 확인할 수 있습니다,Open the Info tab to see the items you have,獲得したアイテムは情報タブで確認できます,,,,info,0.3,tap,1,튜토리얼 런에서 선물을 다 받은 뒤(첫 상점은 리롤 뒤). 「정보」 단추를 밝힌다(2026-09-27)
+u_info,1,획득한 아이템은 정보 탭을 열어 확인할 수 있습니다,Open the Info tab to see your items,獲得したアイテムは情報タブで確認できます,,,,info,0.3,tap,1,튜토리얼 런에서 선물을 다 받은 뒤(첫 상점은 리롤 뒤). 「정보」 단추를 밝힌다(2026-09-27)
 ,,,,,,,,
 ,,,,,,,,
 u_cons,1,사탕을 먹으면 다트보드가 강화됩니다,Eating Candy upgrades the dartboard,キャンディを食べるとダーツボードが強化されます,,,,cons,0.35,tap,1,첫 사탕

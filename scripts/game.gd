@@ -1145,8 +1145,11 @@ func _ready() -> void:
 			if f != null and f != fb:
 				(f as Font).fallbacks = fbs
 	_font_px_setup()          # 딱딱한 벌은 메움까지 복사한다 — 메움을 먼저 단다
-	#  말 — 고른 적이 없으면 OS 말(셋 밖이면 영어)
-	GameData.set_lang(String(Save.get_set("lang", GameData.os_lang())))
+	#  말 — 고른 적이 없으면 OS 말(셋 밖이면 영어). 환경 변수 HIGHTON_LANG 이 있으면 그것 — 검사를
+	#  다른 말로 통째로 돌려 길어진 글이 판을 넘는지 본다(2026-10-13 「길이가 달라지면서 이상해지는
+	#  부분 꼼꼼히 체크해」). 저장은 안 건드린다.
+	var env_lang := OS.get_environment("HIGHTON_LANG")
+	GameData.set_lang(env_lang if env_lang != "" else String(Save.get_set("lang", GameData.os_lang())))
 
 	_bus_setup()      # 소리 자리를 세우기 전에 버스가 있어야 한다
 
@@ -22925,6 +22928,9 @@ func _photo_rack_click(m: Vector2) -> void:
 # 사진을 쓸 자리가 아니다. 손에서 안 없앤다 — 잘못 눌러 잃으면 안 된다.
 func _cons_deny(c: Dictionary, why: String) -> void:
 	pay_msg = "%s — %s" % [_L(c.n), _L(why)]
+	#  상점 밑줄 한 칸(PAYW · 12)에 안 들면 이름을 떼고 까닭만 — 영어 · 일본어는 이름이 길어 「…」로 잘렸다.
+	if font != null and font.get_string_size(pay_msg, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x > PAYW:
+		pay_msg = _L(why)
 	pay_msg_t = HAND.msg_t
 	_deny()
 
@@ -39788,6 +39794,7 @@ var hand_v := Vector2.ZERO       # 든 물체의 평활 속도(면px/s). 놓을 
 var buy_sel := -1                # 2클릭 구매의 1단계
 var pay_flash := 0.0
 var pay_msg := ""
+const PAYW := 240.0             # 막는 말 한 줄의 폭(상점 밑 리롤 · 다음 판 사이 · 12)
 var pay_msg_t := 0.0
 
 const HAND := {
@@ -41368,16 +41375,27 @@ func _tip_wrap(t: String, w: float, sz: int) -> PackedStringArray:
 		if f.get_string_size(word, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x <= w:
 			line = word
 			continue
-		for ci in word.length():
-			var ch := word[ci]
-			if f.get_string_size(line + ch, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x <= w:
-				line += ch
-			else:
-				if line != "":
-					out.append(line)
-				line = ch
+		#  낱말 하나가 폭을 넘는다(일본어는 늘 그렇다) — 글자 사이 끊는 자리(_jp_first)에서 가른다.
+		var tw := func(x: String) -> float: return f.get_string_size(x, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x
+		var rest := word
+		while rest != "":
+			var k := _jp_first(rest, w, tw)
+			if k >= rest.length():
+				line = rest
+				break
+			out.append(rest.substr(0, k))
+			rest = rest.substr(k)
 	if line != "":
 		out.append(line)
+	#  글자로 끊은 끝줄이 짧게 홀로 남으면(일본어 「…1/10の確率で破 / 壊」) 그 두 줄을 고르게. 낱말 사이에서
+	#  끊은 끝줄은 아래 규칙(낱말 하나를 홀로 두지 않는다)이 맡는다 — 조건 끝 · 「·」 둑을 안 흔든다.
+	var nn := out.size()
+	if nn >= 2 and _wrap_gap(t, out, nn - 2) == 0 \
+			and f.get_string_size(out[nn - 1], HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x < w * float(JPW.widow):
+		var ev := _wrap_even(out[nn - 2], "", out[nn - 1], w,
+				func(x: String) -> float: return f.get_string_size(x, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x)
+		out[nn - 2] = ev[0]
+		out[nn - 1] = ev[1]
 	#  **끝줄에 낱말 하나를 홀로 두지 않는다**(「+1」「파괴」「20)」). 짝 칸의 「칸마다 짝이
 	#  생긴다 · 홀수 칸 / +1」 이 사용자 제보다. 앞 줄 끝 낱말(「·」 면 그 앞 낱말까지)을
 	#  내린다. 앞 줄에 두 낱말 이상이 남고 합친 줄이 폭 안일 때만 한다 — 문구로 못 줄이는
@@ -41390,7 +41408,10 @@ func _tip_wrap(t: String, w: float, sz: int) -> PackedStringArray:
 		var cut := prev.rfind(" ")
 		if cut > 0 and prev.substr(cut + 1) == "·":
 			cut = prev.rfind(" ", cut - 1)
-		if cut > 0 and prev.substr(0, cut).find(" ") > 0:
+		#  앞 줄에 두 낱말 이상이 남거나, 한 낱말이라도 폭의 0.4 넘게 남으면 — 일본어는 띄어쓰기가 드물어
+		#  「5以下のマスに当てると 倍率 / +2」처럼 값만 홀로 섰다(2026-10-13).
+		if cut > 0 and (prev.substr(0, cut).find(" ") > 0 or f.get_string_size(prev.substr(0, cut),
+				HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x >= w * 0.4):
 			var joined := prev.substr(cut + 1) + " " + out[n - 1]
 			if f.get_string_size(joined, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x <= w:
 				out[n - 2] = prev.substr(0, cut)
@@ -43096,8 +43117,14 @@ func _draw_pops() -> void:
 		var f: Font = font_sm if int(p.sz) % 10 == 0 else font
 		var c: Color = p.c
 		c.a = clampf(1.0 - k * k, 0.0, 1.0)
-		draw_string(_fz(f, sz), Vector2(p.p.x - 60.0, y), _L(p.txt),
-				HORIZONTAL_ALIGNMENT_CENTER, 120, sz, c)
+		#  폭은 글에 맞춘다 — 120 칸에 가운데로 그리던 때는 긴 글(「The Good, the Bad and the Triple
+		#  unlocked」 · 「유리 대포 — 부서졌다」)이 낱말째 잘렸다. 화면 밖으로는 안 나간다.
+		var tx := _L(p.txt)
+		var pw: float = 120.0
+		if f != null:
+			pw = maxf(120.0, ceilf(f.get_string_size(tx, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x) + 4.0)
+		var px: float = clampf(p.p.x - pw * 0.5, 4.0, VIEW.x - 4.0 - pw)
+		draw_string(_fz(f, sz), Vector2(px, y), tx, HORIZONTAL_ALIGNMENT_CENTER, pw, sz, c)
 
 
 func _scrim() -> void:
@@ -45124,7 +45151,7 @@ func _draw_shop() -> void:
 	#  314 면 페이퍼로지 12 의 잉크가 [304,314.5] 다. 갈무리 때 바닥선 316 은 잉크
 	#  [305,316] 이었고, 페이퍼로지로 그대로 두면 [306,316.5] 라 몸 가운데보다 2px 아래였다.
 	if msg != "":
-		draw_string(_fz(font, 12), Vector2(188.0, 314.0), _L(_elide(msg, 240.0, 12)),
+		draw_string(_fz(font, 12), Vector2(188.0, 314.0), _L(_elide(msg, PAYW, 12)),
 				HORIZONTAL_ALIGNMENT_CENTER, 240.0, 12, Color(C_MULT, ma))
 	else:
 		_boss_plaque()
@@ -45975,7 +46002,7 @@ func _draw_profile() -> void:
 	else:
 		var rows := [
 			["런", _L("%d회") % int(inf2.get("runs", 0))],
-			["완주", _L("%d회") % int(inf2.get("wins", 0))],
+			["완주§통계", _L("%d회") % int(inf2.get("wins", 0))],
 			["최고 라운드", "%d" % GameData.round_of(
 					maxi(int(inf2.get("best_leg", 1)), 1))],
 			["한 판 최고 점수", "%d" % int(inf2.get("best_score", 0))],
@@ -47465,6 +47492,12 @@ func _prof_chalk_draw(c: CanvasItem, ia := 1.0) -> void:
 	var cur := Save.slot()
 	var pb: float = _menu_base_y(font_sm, 20, r.position.y, r.size.y)
 	var pt := _L("프로필 %d") % cur
+	#  글은 칸 셋(오른쪽 끝 · 지금 프로필이 찬 칸) 앞 6px 까지 — 안 들면 번호를 뗀다. 칸이 이미 몇 번째인지
+	#  말한다(영어 「Profile 1」이 칸에 붙고 일본어는 칸을 덮었다 · 2026-10-13).
+	var room: float = r.end.x - float(Save.SLOTS) * float(PROFB.pip) \
+			- float(Save.SLOTS - 1) * float(PROFB.pip_gap) - 6.0 - (r.position.x + 18.0)
+	if font_sm != null and font_sm.get_string_size(pt, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x > room:
+		pt = _L("프로필")
 	c.draw_string(_fz(font_sm, 20), Vector2(r.position.x + 18.0, pb), _L(pt), HORIZONTAL_ALIGNMENT_LEFT, -1, 20,
 			Color(ink, a))
 	#  분필 결 — 메뉴 줄과 같다(얹히면 띠 위라 안 찍는다)
@@ -52692,6 +52725,13 @@ func _chal_check(c: Vector2) -> void:
 
 func _draw_newrun_chal() -> void:
 	var rows := _chal_list()
+	#  이름 칸 — 가장 긴 이름에 맞춘다(한국어는 96 그대로). 영어 「Empty-Handed」 · 「On Credit」이 96 에서
+	#  잘리고 효과 줄과 붙었다(2026-10-13).
+	var nw := 96.0
+	if font_sm != null:
+		for rw in rows:
+			nw = maxf(nw, font_sm.get_string_size(_L(String((rw as Dictionary).n)),
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x + 8.0)
 	for i in rows.size():
 		var r := _chal_row(i)
 		var key := "chr:%d" % i
@@ -52724,14 +52764,14 @@ func _draw_newrun_chal() -> void:
 		#  104px 칸에 든다.
 		draw_string(_fz(font_sm, 20), Vector2(b.position.x + 8.0,
 				_menu_base_y(font_sm, 20, b.position.y, b.size.y)),
-				_L(String(row.n)), HORIZONTAL_ALIGNMENT_LEFT, 96.0, 20, _mtx(1.0))
+				_L(String(row.n)), HORIZONTAL_ALIGNMENT_LEFT, nw, 20, _mtx(1.0))
 		#  ⚠ **새로 쓸 글이 한 자도 없다.** 기획서 P.16 의 일곱 줄이 이미
 		#  「제약 · 보상」 한 쌍의 꼴이고 challenges.csv 의 desc 열이 그것을
 		#  글자 그대로 들고 있다. 가장 긴 효과 29글자가 12pt 에서 290px 라
 		#  480px 칸(x120~600)에 든다 — 접을 필요도 두 열로 가를 이유도 없다.
-		draw_string(_fz(font, 12), Vector2(b.position.x + 104.0,
+		draw_string(_fz(font, 12), Vector2(b.position.x + 8.0 + nw,
 				_menu_base_y(font, 12, b.position.y, b.size.y)),
-				_L(String(row.d)), HORIZONTAL_ALIGNMENT_LEFT, 480.0, 12, _mtx(0.0))
+				_L(String(row.d)), HORIZONTAL_ALIGNMENT_LEFT, 576.0 - nw, 12, _mtx(0.0))
 		#  깬 챌린지. 아이작이 깬 챌린지를 목록에서 안 보여 줘 모드로
 		#  보완한 그 반면교사를 여기서 받는다.
 		if Save.unlocked("chal:" + String(row.id)):
@@ -56411,6 +56451,13 @@ func _col_name_split(nm: String) -> PackedStringArray:
 	var best := PackedStringArray([nm, ""])
 	if font_sm == null:
 		return best
+	if not nm.contains(" "):
+		#  띄어쓰기 없는 이름(일본어 「バラトロのジョーカー」)은 글자 사이 끊는 자리에서 반으로.
+		var tw := func(x: String) -> float: return font_sm.get_string_size(x, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x
+		var k := _jp_first(nm, float(tw.call(nm)) * 0.5 + 6.0, tw)
+		if k > 0 and k < nm.length():
+			return _wrap_even(nm.substr(0, k), "", nm.substr(k), INF, tw)
+		return best
 	var bw := INF
 	var at := nm.find(" ")
 	while at > 0:
@@ -58603,23 +58650,139 @@ func _tutor_wrap(tx: String, w: float) -> PackedStringArray:
 			cur = word
 		else:
 			cur = try_s
-		#  띄어쓰기 없는 말(일본어 · 2026-10-13)은 한 낱말이 폭을 넘는다 — 그때만 글자 단위로 끊는다.
-		#  끊은 자리는 빈칸을 안 먹는다(_wrap_gap).
+		#  띄어쓰기 없는 말(일본어 · 2026-10-13)은 한 낱말이 폭을 넘는다 — 그때만 글자 사이에서 끊는다
+		#  (_jp_first). 끊은 자리는 빈칸을 안 먹는다(_wrap_gap).
 		while cur.length() > 1 and _tutor_tw(cur) > w:
-			var k := cur.length() - 1
-			while k > 1 and _tutor_tw(cur.substr(0, k)) > w:
-				k -= 1
+			var k := _jp_first(cur, w, _tutor_tw)
 			out.append(cur.substr(0, k))
 			cur = cur.substr(k)
 	if cur != "":
 		out.append(cur)
+	#  끝줄이 짧게 홀로 남으면 두 줄을 고르게(영어 「… items you / have」 · 일본어 「…獲得しま / す」).
+	var n := out.size()
+	if n >= 2 and _tutor_tw(out[n - 1]) < w * float(JPW.widow):
+		var ev := _wrap_even(out[n - 2], " " if _wrap_gap(tx, out, n - 2) == 1 else "", out[n - 1], w,
+				_tutor_tw)
+		out[n - 2] = ev[0]
+		out[n - 1] = ev[1]
 	return out
 
 
 func _tutor_tw(s: String) -> float:
 	if font_sm == null:
 		return float(s.length()) * 20.0
-	return font_sm.get_string_size(_L(s), HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
+	return font_sm.get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
+
+
+# ── 글자 사이에서 끊기(일본어 · 2026-10-13) ───────────────────────
+#  「길이가 달라지면서 이상해지는 부분 꼼꼼히 체크해」 — 띄어쓰기 없는 일본어를 폭에서 그냥 끊으니
+#  「…確率で破 / 壊」「…ゴール / ド」처럼 낱말 한가운데 · 한 자만 남은 끝줄이 섰다.
+#  사이 k(s[k-1] | s[k])마다 끊어도 되는가 —
+#    -1  못 끊는다 — 줄머리에 못 오는 글자(、。ー · 작은 가나 · 닫는 괄호 · 마침표) · 줄꼬리에 못 남는
+#        글자(여는 괄호) · 영숫자 · 기호가 붙은 토막 안(1/10 · +60 · Lv.3)
+#     2  좋은 자리 — 히라가나에서 다른 글자로 넘어가는 곳(조사 · 어미 뒤: 「ごとに|1/10の確率で|破壊」)
+#        · ・ 、 。 뒤
+#     1  그 밖의 글자 사이(한글도 여기다 — 한 낱말이 폭을 넘을 때만 온다)
+#    head · tail 줄머리 · 줄꼬리 금지 · good 좋은 자리를 찾는 몫(폭 안 가장 긴 자리의 이만큼까지 거꾸로) ·
+#    widow 끝줄이 폭의 이만큼 밑이면 두 줄을 고르게 · char_pen 글자 사이에서 끊는 값(빈칸보다 덜 좋다)
+const JPW := {
+	"head": "、。，．・：；？！ー～)）」』】〕〉》ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶ…‥.,:;!?%",
+	"tail": "(（「『【〔〈《",
+	"good": 0.6, "widow": 0.34, "char_pen": 10.0,
+}
+
+
+static func _jp_cut(s: String, k: int) -> int:
+	if k <= 0 or k >= s.length():
+		return -1
+	var a := s[k - 1]
+	var b := s[k]
+	if String(JPW.head).contains(b) or String(JPW.tail).contains(a):
+		return -1
+	if a == " " or b == " ":
+		return 2
+	if a.unicode_at(0) < 0x80 and b.unicode_at(0) < 0x80:
+		return -1
+	if a == "・" or a == "、" or a == "。":
+		return 2
+	var ha := a.unicode_at(0) >= 0x3041 and a.unicode_at(0) <= 0x309F
+	var hb := b.unicode_at(0) >= 0x3041 and b.unicode_at(0) <= 0x309F
+	return 2 if ha and not hb else 1
+
+
+#  s 의 첫 줄 끝 — 폭 안에 드는 가장 긴 자리(kmax)에서 거꾸로, 좋은 자리(2)가 kmax 의 good 몫 안에
+#  있으면 그것, 없으면 끊어도 되는 가장 긴 자리, 그것도 없으면 kmax. tw 는 폭을 재는 Callable.
+func _jp_first(s: String, w: float, tw: Callable) -> int:
+	var lo := 1
+	var hi := s.length()
+	while lo < hi:
+		var mid := (lo + hi + 1) / 2
+		if float(tw.call(s.substr(0, mid))) <= w:
+			lo = mid
+		else:
+			hi = mid - 1
+	var kmax := lo
+	if kmax >= s.length():
+		return s.length()
+	var ok := -1
+	var kata := -1           # 가타카나 낱말 한가운데 — 다른 자리가 없을 때만
+	for k in range(kmax, 0, -1):
+		var c := _jp_cut(s, k)
+		var kr := _kata_run(s, k)
+		if c == 2 and float(k) >= float(kmax) * float(JPW.good) and not kr:
+			return k
+		if c >= 1 and not kr and ok < 0:
+			ok = k
+		if c >= 1 and kata < 0:
+			kata = k
+	if ok > 0:
+		return ok
+	return kata if kata > 0 else kmax
+
+
+#  k 가 가타카나 낱말 한가운데인가 — 「アイテ|ム」처럼 장음 · 가타카나가 양옆에 이어진다. 히라가나 →
+#  가타카나로 넘어가는 자리(「の|アイテム」)는 좋은 자리로 남는다(_jp_cut).
+static func _kata_run(s: String, k: int) -> bool:
+	if k <= 0 or k >= s.length():
+		return false
+	var a := s.unicode_at(k - 1)
+	var b := s.unicode_at(k)
+	return a >= 0x30A1 and a <= 0x30FC and b >= 0x30A1 and b <= 0x30FC
+
+
+#  끝 두 줄 a · b 를 고르게 다시 가른다(sep 는 원문이 둘 사이에 둔 것 — 빈칸 하나 · 글자로 끊었으면 빈 글).
+#  두 줄을 이어 끊을 자리마다 더 넓은 줄의 폭을 재고 가장 좁은 자리 — 빈칸이 먼저고 글자 사이는
+#  char_pen 만큼 덜 좋다(좋은 자리 아니면 그 두 배). 두 줄 다 폭 안이어야 하고, 이보다 나은 자리가
+#  없으면 그대로 둔다. 조각은 원문을 그대로 이은 것이라 _wr_off · _wrap_gap 이 선다.
+func _wrap_even(a: String, sep: String, b: String, w: float, tw: Callable) -> PackedStringArray:
+	var s := a + sep + b
+	var best := PackedStringArray([a, b])
+	var bs: float = maxf(float(tw.call(a)), float(tw.call(b)))
+	for k in range(1, s.length()):
+		var l: String
+		var r: String
+		var pen := 0.0
+		if s[k] == " ":
+			l = s.substr(0, k)
+			r = s.substr(k + 1)
+		else:
+			var c := _jp_cut(s, k)
+			if c < 1 or s[k - 1] == " ":
+				continue
+			l = s.substr(0, k)
+			r = s.substr(k)
+			pen = float(JPW.char_pen) * (1.0 if c == 2 else 2.0)
+			if _kata_run(s, k):
+				continue         # 가타카나 낱말은 안 가른다 — 고를 자리가 없으면 옛 두 줄 그대로
+		var wl: float = tw.call(l)
+		var wr: float = tw.call(r)
+		if wl > w or wr > w:
+			continue
+		var sc: float = maxf(wl, wr) + pen
+		if sc < bs - 0.5:
+			bs = sc
+			best = PackedStringArray([l, r])
+	return best
 
 
 #  접은 줄 i 와 다음 줄 사이에서 원문이 건너뛴 글자 수 — 낱말 사이면 빈칸 한 자(1),

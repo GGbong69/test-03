@@ -8,6 +8,10 @@ extends SceneTree
 #   ⑥ 설정 「게임」 탭의 「언어」 줄 — ◀ ▶ 가 한국어 → 영어 → 일본어로 돌고 전역 저장에 남는다
 #   ⑦ 개발자 모드 「언어」 줄
 #   ⑧ 한국어로 돌아오면 원문 그대로(검증기 · 다른 검사가 한국어를 본다)
+#   ⑨ 길이 — 말 셋마다 고정 칸에 든다(2026-10-13 「다른 언어로 하면 길이가 달라지면서 이상해지는 부분
+#      꼼꼼히 체크해」): 판 단추 · 설정 줄 이름 · 설정 탭 · 제목 칠판 프로필 · 챌린지 줄 · 상인의 말 두 줄 ·
+#      튜토리얼 말상자 · 막는 말 한 줄 · 런 정보 탭 · 트랙 「판 숫자」 칸 · 컬렉션 탭 · 툴팁 접기
+#      (줄머리 금지 글자 · 글자로 끊은 끝줄 한두 자)
 #   godot --headless --path . --script scripts/tools/qa_lang.gd
 const GameData = preload("res://scripts/data.gd")
 const Save = preload("res://scripts/save.gd")
@@ -136,6 +140,17 @@ func _run() -> void:
 			have_pl += 1
 	_ok("④ 일본어 글자가 페이퍼로지 · 갈무리11 에 다 있다", gone.is_empty(), str(gone.keys()))
 	_ok("④ 가나 · 상용 한자는 페이퍼로지가 그린다", have_pl == 8)
+	#  부호(、。！？％～) 말고는 페이퍼로지 — 메움 글꼴(도트)로 그린 한자가 이름 한가운데 섞이면 결이
+	#  갈린다(「天秤」의 秤 · 「オーク樽」의 樽가 그랬다 — 가나로 썼다).
+	var mixed := {}
+	for r in GameData._raw.get("lang", []):
+		_pl_only(String(r.get("ja", "")), mixed)
+	for tb in GameData._raw:
+		for r in GameData._raw[tb]:
+			for k in r:
+				if String(k).ends_with("_ja"):
+					_pl_only(String(r[k]), mixed)
+	_ok("④ 부호 말고는 페이퍼로지 한 글꼴", mixed.is_empty(), str(mixed.keys()))
 	_ok("④ 메움 글꼴이 붙었다", g.font.fallbacks.size() > 0 and g.font_sm.fallbacks.size() > 0)
 
 	# ⑤
@@ -174,6 +189,156 @@ func _run() -> void:
 	g._lang_step(1)
 	_ok("⑧ 한국어로 돌아오면 원문 그대로", GameData.lang == "ko" and GameData.L("뒤로") == "뒤로"
 			and GameData.cond_text("sec:8,16") == "8·16을 맞히면" and GameData.big(12345678) == "1234만")
+	_ok("⑧ 자리 꼬리표(§) — 한국어로는 앞까지만", GameData.L("완주§통계") == "완주")
+
+	# ⑨
+	for l in ["ko", "en", "ja"]:
+		GameData.set_lang(l)
+		_fit(l)
+	GameData.set_lang("ko")
+
+
+func _w(s: String, sz: int) -> float:
+	var f: Font = g.font_sm if sz == 20 else g.font
+	return f.get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x
+
+
+func _fit(l: String) -> void:
+	var L := func(s: String) -> String: return GameData.L(s)
+	#  판 단추 — 이름 20 이 단추 몸 안(양옆 8)
+	var bad := []
+	for p in [[g._leg_go(), "던진다"], [g._leg_skip(), "건너뛴다"], [g._leg_skip(), "못 건너뛴다"],
+			[g._reroll_rect(), "리롤"], [g._next_rect(), "다음 판 →"],
+			[Rect2(232, 290, 176, 42), "상점으로"]]:
+		if _w(L.call(p[1]), 20) > (p[0] as Rect2).size.x - 16.0:
+			bad.append(L.call(p[1]))
+	_ok("⑨ %s 판 단추 이름이 단추 안" % l, bad.is_empty(), str(bad))
+	#  설정 — 게이지 · ◀ ▶ 줄 이름은 이름 칸(홈 앞 8) · 켬끔 줄 이름은 [끔|켬] 앞 8 · 탭 이름(그림 9 · 양옆 6)
+	bad = []
+	g.state = g.S.SETTINGS
+	g.pause_from = -1
+	for tab in g.SET_TABS:
+		g.set_page = tab
+		var rows: Array = g._set_rows()
+		for i in rows.size():
+			var key := String(rows[i])
+			if key == "back":
+				continue
+			var inf: Dictionary = g._set_info(key)
+			var nm: String = L.call(String(inf.get("n", key)))
+			var r: Rect2 = g._set_rect(i)
+			var lim: float = float(g.SETW.name_w) - 8.0
+			if inf.has("tg"):
+				lim = (g._set_seg_rect(i, 0) as Rect2).position.x - r.position.x - 8.0
+			elif bool(inf.get("go", false)):
+				lim = r.size.x - 24.0          # 끝의 「›」 앞
+			if 10.0 + _w(nm, 20) > lim:
+				bad.append(nm)
+		var t := (g.SET_TABS as Array).find(tab)
+		var tnm: String = L.call(String(g._set_info(tab).get("n", tab)))
+		if _w(tnm, 20) + 9.0 + 12.0 > (g._set_tab_rect(t) as Rect2).size.x:
+			bad.append("탭 " + tnm)
+	g.state = g.S.TITLE
+	_ok("⑨ %s 설정 줄 · 탭 이름이 제 칸 안" % l, bad.is_empty(), str(bad))
+	#  제목 칠판 프로필 — 칸 셋 앞(번호가 안 들면 뗀다 — _prof_chalk_draw 와 같은 셈)
+	var room: float = float(g.DOORT.row_w) - 3.0 * float(g.PROFB.pip) - 2.0 * float(g.PROFB.pip_gap) - 6.0 - 18.0
+	var pt: String = L.call("프로필 %d") % 3
+	if _w(pt, 20) > room:
+		pt = L.call("프로필")
+	_ok("⑨ %s 제목 칠판 프로필이 칸 셋 앞" % l, _w(pt, 20) <= room, "%s %.0f/%.0f" % [pt, _w(pt, 20), room])
+	#  챌린지 — 이름 칸(가장 긴 이름) 뒤 효과 줄이 판 안(오른끝 x584)
+	var nw := 96.0
+	for c in GameData.challenges():
+		nw = maxf(nw, _w(L.call(String(c.get("n", ""))), 20) + 8.0)
+	bad = []
+	for c in GameData.challenges():
+		if _w(L.call(String(c.get("d", ""))), 12) > 576.0 - nw:
+			bad.append(c.get("id", ""))
+	_ok("⑨ %s 챌린지 효과 줄이 판 안" % l, bad.is_empty() and nw < 200.0, "이름 칸 %.0f %s" % [nw, bad])
+	#  상인의 말 — 두 줄 안
+	bad = []
+	for wh in GameData.NPC_SAY_WHEN:
+		for r in GameData.npc_say(wh):
+			g.nsay_row = r
+			g.nsay_txt = GameData.npc_say_text(r)
+			if (g._nsay_layout()[1] as PackedStringArray).size() > 2:
+				bad.append(r.id)
+	g.nsay_row = {}
+	_ok("⑨ %s 상인의 말이 두 줄 안" % l, bad.is_empty(), str(bad))
+	#  튜토리얼 — 석 줄 안 · 줄머리 금지 글자 없음 · 끝줄이 한두 자로 홀로 안 남음
+	bad = []
+	var iw: float = float(g.TUTOR.box_w) - float(g.TUTOR.box_pad) * 2.0
+	for r in GameData.tutor():
+		var lines: PackedStringArray = g._tutor_wrap(L.call(String(r.get("text", ""))), iw)
+		if lines.size() > 3 or not _lines_ok(lines):
+			bad.append("%s %s" % [r.get("id", ""), lines])
+	_ok("⑨ %s 튜토리얼 말상자 줄" % l, bad.is_empty(), str(bad))
+	#  막는 말 — 상점 밑줄 한 칸
+	bad = []
+	for s in ["없는 매물", "이미 샀다", "이 팩에서 고를 몫을 다 썼다", "바꿀 표준 다트가 없다",
+			"사탕·사진 칸이 꽉 찼다", "테이블 물건만 산다", "반대쪽 창구다", "가진 것만 판다",
+			"먼저 테이블에서 동전을 고른다", "먼저 판에서 팔 동전을 고른다", "먼저 테이블에서 살 물건을 고른다",
+			"동전 슬롯이 꽉 찼다", "골드가 부족하거나 슬롯이 꽉 찼다", "다음 보스 판이 없다", "손에 동전이 없다",
+			"첫 다트가 꽂힌 뒤에 쓴다", "이미 무효인 보스다", "아직 준비 중이다", "부술 것이 없다", "상점에서만",
+			"움직임을 껐다", "진열대가 없다", "상인이 바쁘다", "판 고르기에서만", "3D 손이 없다"]:
+		if _w(L.call(s), 12) > float(g.PAYW):
+			bad.append(L.call(s))
+	if _w(L.call("골드가 %d 모자란다") % 99, 12) > float(g.PAYW):
+		bad.append("골드가 %d 모자란다")
+	_ok("⑨ %s 막는 말이 한 줄(%d) 안" % [l, int(g.PAYW)], bad.is_empty(), str(bad))
+	#  런 정보 — 탭(20) · 트랙의 「판 숫자」(점수 칸 · 배수 앞 6)
+	bad = []
+	for t in g.RI_TABS.size():
+		if _w(L.call(String(g.RI_TABS[t])), 20) > (g._ri_tab_rect(t) as Rect2).size.x - 8.0:
+			bad.append(L.call(String(g.RI_TABS[t])))
+	if _w(L.call("판 숫자"), 20) > float(g.RI_TRK.mult) - float(g.RI_TRK.score) - 6.0:
+		bad.append(L.call("판 숫자"))
+	_ok("⑨ %s 런 정보 탭 · 트랙 칸" % l, bad.is_empty(), str(bad))
+	#  컬렉션 탭 — 「이름 수/수」 12 가 탭 안
+	bad = []
+	for t in g.COL_TABS.size():
+		var cn: int = (g._col_rows(t) as Array).size()
+		var lab := "%s %d/%d" % [L.call(String(g.COL_TABS[t].n)), cn, cn]
+		if _w(lab, 12) > (g._col_tab_rect(t) as Rect2).size.x - 6.0:
+			bad.append(lab)
+	_ok("⑨ %s 컬렉션 탭 글이 탭 안" % l, bad.is_empty(), str(bad))
+	#  툴팁 접기 — 동전 효과 · 표 글(설명)마다
+	bad = []
+	var tw: float = float(g.TIP.w) - float(g.TIP.pad) * 2.0
+	var texts := []
+	for it in GameData.items():
+		texts.append(g._tip_eff(it))
+	for tb in ["cons", "mods", "darts", "modifiers", "tags", "boosters", "events"]:
+		for r in GameData._raw.get(tb, []):
+			texts.append(L.call(String(r.get("desc", ""))))
+	for s in texts:
+		if s == "":
+			continue
+		var wr: PackedStringArray = g._tip_wrap(s, tw, 20)
+		if not _lines_ok(wr):
+			bad.append(str(wr))
+	_ok("⑨ %s 툴팁 줄 — 줄머리 금지 글자 · 홀로 남은 한두 자 없음" % l, bad.is_empty(), str(bad.slice(0, 3)))
+
+
+#  줄머리에 못 오는 글자가 없고, 가타카나 낱말이 두 줄로 안 갈렸고(「アイテ / ム」), 끝줄이 한두 자로
+#  홀로 남지 않았다(한 줄이면 그대로 된다).
+func _lines_ok(lines: PackedStringArray) -> bool:
+	for i in range(1, lines.size()):
+		var ln := String(lines[i])
+		if ln != "" and String(g.JPW.head).contains(ln[0]):
+			return false
+		var pv := String(lines[i - 1])
+		if ln != "" and pv != "" and g._kata_run(pv + ln, pv.length()):
+			return false
+	var n := lines.size()
+	return n < 2 or String(lines[n - 1]).strip_edges().length() > 2
+
+
+func _pl_only(s: String, out: Dictionary) -> void:
+	for i in s.length():
+		var u := s.unicode_at(i)
+		if u >= 0x80 and not "、。！？％～".contains(s[i]) and not g.font.has_char(u):
+			out[s[i]] = true
 
 
 func _chars(s: String, fb: Font, gone: Dictionary) -> void:

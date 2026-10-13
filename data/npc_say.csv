@@ -1,13 +1,13 @@
 ﻿id,when,text,text_en,text_ja,enabled,_note
 tip_interest,tip,골드 {interest_per}마다 이자 +1이야. 많아야 +{interest_max},Every {interest_per} Gold earns +1 interest. Tops out at +{interest_max},ゴールド{interest_per}ごとに利子+1だ。最大で+{interest_max},1,상인의 말(game.gd NSAY). when — tip 상점에서 가끔 하는 귀띔 · poke 몸을 누름 · hand 손 · 팔을 누름 · give 물건을 건넴 · btl 뒤 선반 술병이 깨짐 · buy 삼 · sell 팖 · rage 술병을 다 깬 쾅 뒤 손님을 가리킬 때. {열쇠}는 tuning.csv · areas.csv 값으로 채운다 — 수를 글에 박지 않는다
-tip_dart_left,tip,판을 일찍 끝내면 남은 다트 한 발에 {gold_per_dart}골드씩 쳐 주지,Finish a leg early and I'll pay {gold_per_dart} Gold per leftover dart,早くレッグを終えれば 残りダーツ1本につき{gold_per_dart}ゴールド払ってやる,1,
+tip_dart_left,tip,판을 일찍 끝내면 남은 다트 한 발에 {gold_per_dart}골드씩 쳐 주지,Finish a leg early and I'll pay {gold_per_dart} Gold per leftover dart,早く終われば 残りダーツ1本に{gold_per_dart}ゴールド払うよ,1,
 tip_sell,tip,팔 땐 산 값의 반이야. 그래도 {sell_min}골드는 쳐 주지,"I buy at half price. Never less than {sell_min} Gold, though",売るときは買値の半分だ。それでも{sell_min}ゴールドは出すよ,1,sell_div 2 · sell_min
 tip_free_reroll,tip,리롤은 들를 때마다 {free_rerolls}번 공짜야,You get {free_rerolls} free rerolls every visit,リロールは来るたびに{free_rerolls}回タダだ,1,
 tip_reroll_cost,tip,리롤 값은 {reroll_base}골드부터. 할 때마다 {reroll_step}씩 올라,Rerolls start at {reroll_base} Gold. +{reroll_step} each time,リロールは{reroll_base}ゴールドから。やるたびに{reroll_step}ずつ上がる,1,
 tip_rings,tip,트리플은 ×{triple} · 더블은 ×{double}이지,Triples are ×{triple} · Doubles ×{double},トリプルは×{triple} · ダブルは×{double}だ,1,areas.csv 의 mult
 tip_bull,tip,이너 불 {bull_i}점 · 아우터 불 {bull_o}점,Inner Bull {bull_i} · Outer Bull {bull_o},インナーブル{bull_i}点 · アウターブル{bull_o}点,1,areas.csv 의 base
-tip_skip,tip,작은 판 · 큰 판은 건너뛰면 단추에 적힌 걸 받아,Skip a Small or Big Leg and you get what's on the button,スモール・ビッグレッグはスキップすると ボタンに書いてある物がもらえる,1,
-tip_boss,tip,보스 판은 못 건너뛰어. 뭐가 걸렸는지는 미리 보이지,"No skipping a Boss Leg. You can see its curse ahead, though",ボスレッグはスキップできない。何がかかってるかは先に見える,1,
+tip_skip,tip,작은 판 · 큰 판은 건너뛰면 단추에 적힌 걸 받아,Skip a Small or Big Leg and you get what's on the button,スモール・ビッグレッグを飛ばすと ボタンの物がもらえる,1,
+tip_boss,tip,보스 판은 못 건너뛰어. 뭐가 걸렸는지는 미리 보이지,No skipping a Boss Leg. Its curse shows early,ボスレッグはスキップできない。何がかかってるかは先に見える,1,
 tip_give,tip,물건을 내 쪽으로 밀어 올리면 한번 봐 주지,Slide something over to me and I'll take a look,品物をこっちに押し上げれば 見てやるよ,1,건네기(game.gd 건네기 머리말)
 tip_cons,tip,사탕 · 사진은 {cons_slots}칸까지 들고 다닐 수 있어,You can carry up to {cons_slots} Candy · Photos,キャンディ・写真は{cons_slots}枠まで持てる,1,
 tip_bottles,tip,뒤 선반 술병 다 깨면 가만 안 둔다,Break every bottle on that back shelf and you'll regret it,後ろの棚の酒瓶を全部割ったら ただじゃおかない,1,술병 이스터에그(BTL · BDUEL)의 귀띔
