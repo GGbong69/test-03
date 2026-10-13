@@ -140,7 +140,7 @@ func _check(tag: String) -> void:
 			"%d줄 · %s" % [rows.size(), "없다" if bad.is_empty() else ", ".join(bad)])
 	#  탭 — 창 안 · 서로 안 겹침 · 이름표 밑 · 첫 줄 위. 「뒤로」는 맨 밑.
 	var t0: Rect2 = g._set_tab_rect(0)
-	var t1: Rect2 = g._set_tab_rect(1)
+	var t1: Rect2 = g._set_tab_rect((g.SET_TABS as Array).size() - 1)    # 끝 탭(2026-10-13 셋째 「게임」)
 	var r0: Rect2 = g._set_rect(0)
 	var head_end: float = w.position.y + float(g.SETW.plate_h) * 0.5
 	_ok("%s — 탭이 창 안 · 이름표와 첫 줄 사이" % tag, inner.encloses(t0) and inner.encloses(t1)
@@ -269,11 +269,12 @@ func _run() -> void:
 	_page("sound", g.S.SHOP)
 	_ok("소리 탭 — 효과음 · 음악 · 뒤로", (g._set_rows() as Array) == ["vol", "mus", "back"],
 			"%s" % [g._set_rows()])
-	_ok("탭은 「화면」 · 「소리」 둘", (g.SET_TABS as Array) == ["screen", "sound"]
+	_ok("탭은 「화면」 · 「소리」 · 「게임」 셋", (g.SET_TABS as Array) == ["screen", "sound", "game"]
 			and String(g._set_info("screen").get("n", "")) == "화면"
-			and String(g._set_info("sound").get("n", "")) == "소리")
+			and String(g._set_info("sound").get("n", "")) == "소리"
+			and String(g._set_info("game").get("n", "")) == "게임")
 	var all_keys := {}
-	for pg in ["pause", "screen", "sound"]:
+	for pg in ["pause", "screen", "sound", "game"]:
 		_page(pg, g.S.SHOP)
 		for k in g._set_rows():
 			all_keys[String(k)] = true
@@ -310,7 +311,7 @@ func _run() -> void:
 	_page("pause", g.S.SHOP)
 	_ok("일시정지 줄은 오른쪽 판이 펼 설명을 갖는다", g._set_info("back").has("d")
 			and g._set_info("lobby").has("d") and g._set_info("quit").has("d")
-			and (g._set_info("set").get("kids", []) as Array) == ["screen", "sound"])
+			and (g._set_info("set").get("kids", []) as Array) == ["screen", "sound", "game"])
 
 	# ③ 오르내림 — 줄 · 탭을 눌러 가고, 「뒤로」 · ESC 로 한 단씩 오른다
 	print("")

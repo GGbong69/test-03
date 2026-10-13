@@ -68,6 +68,8 @@ const FILES := {
 	#  상인의 말(game.gd NSAY · 2026-10-11) — 상점 귀띔 · 누르고 건넬 때의 대사. 사람이 표에서
 	#  고친다. 수는 {열쇠}로 채운다.
 	"npc_say": "npc_say.csv",
+	#  말(2026-10-13 · L) — 코드에 박힌 화면 글의 영어 · 일본어. 표 글의 번역은 그 표 옆 열(name_en …)이다.
+	"lang": "lang.csv",
 	"boosters": "boosters.csv",
 	#  판 사건 — 작은 판 · 큰 판이 열릴 때 하나를 뽑는다(2026-10-06 · game.gd _ev_roll).
 	"events": "events.csv",
@@ -315,6 +317,142 @@ static func _b(row: Dictionary, col: String, who: String) -> bool:
 	return s == "1"
 
 
+# ── 말(언어) ───────────────────────────────────────────────
+#  2026-10-13 「게임에 지금 언어가 한국어 밖에 없잖아? 좀 언어를 해볼까?」 → 영어 + 일본어.
+#  **한국어 원문이 열쇠다.** L("뒤로") 가 고른 말의 글을 준다 — 없으면 원문 그대로.
+#    · 코드에 박힌 글의 번역은 lang.csv(ko · en · ja) 한 표다.
+#    · 표 글(name · desc · text · who)의 번역은 그 표의 옆 열(name_en · desc_ja …)이다 — 사람이 표에서
+#      한국어를 고쳐도 같은 줄의 번역이 그 새 글의 짝이 된다.
+#    · 게임 상태 · 저장에는 늘 한국어가 든다(동전 이름 it.n 은 복사돼 저장까지 간다). 화면에 그리는
+#      자리(game.gd 의 draw_string · get_string_size)가 L 을 지난다 — 말을 바꾸면 들고 있던 것까지
+#      곧바로 바뀐다. 수를 끼우는 글(「라운드 %d」)은 끼우기 **전에** 틀을 L 에 넣는다.
+#    · 채운 표 글(_fd — 「상한 {v}」 → 「상한 3」)도 한국어로 남고, 고른 말로 채운 글을 짝으로 적어 둔다.
+const LANGS := ["ko", "en", "ja"]
+#  말 고르기 줄의 이름 — 그 말 자신의 글로 쓴다(못 읽는 말로 적힌 「언어」를 찾는 사람을 위해).
+const LANG_NAME := {"ko": "한국어", "en": "English", "ja": "日本語"}
+static var lang := "ko"
+static var _lmap := {}                # 한국어 원문 → 고른 말
+static var _fd_seen := []             # 채운 표 글의 [틀, 값] — 말을 바꾸면 짝을 다시 채운다
+#  검사 — 고른 말에 짝이 없는 한국어(qa_lang · cap_lang). 켤 때만 모은다.
+static var lang_track := false
+static var lang_miss := {}
+
+
+static func L(s: String) -> String:
+	if lang == "ko" or s == "":
+		return s
+	var t = _lmap.get(s)
+	if t != null:
+		return t
+	if lang_track and has_ko(s):
+		lang_miss[s] = true
+	return s
+
+
+static func has_ko(s: String) -> bool:
+	for i in s.length():
+		var u := s.unicode_at(i)
+		if u >= 0xAC00 and u <= 0xD7A3:
+			return true
+	return false
+
+
+#  OS 말이 셋 중 하나면 그것, 아니면 영어.
+static func os_lang() -> String:
+	var l := OS.get_locale_language()
+	return l if LANGS.has(l) else "en"
+
+
+#  검증은 한국어로 돈다(부팅이 먼저다) — 얼굴 글 검사가 「다트」「파괴」를 찾는다.
+static func set_lang(l: String) -> void:
+	boot()
+	lang = l if LANGS.has(l) else "ko"
+	_lmap.clear()
+	if lang == "ko":
+		return
+	for r in _raw.get("lang", []):
+		var t := String(r.get(lang, ""))
+		if t != "":
+			_lmap[String(r.get("ko", ""))] = t
+	var suf := "_" + lang
+	for tb in _raw:
+		if tb == "lang":
+			continue
+		for r in _raw[tb]:
+			for k in r:
+				if not String(k).ends_with(suf):
+					continue
+				var src := String(r.get(String(k).trim_suffix(suf), ""))
+				var t2 := String(r[k])
+				if src != "" and t2 != "":
+					_lmap[src] = t2
+	for p in _fd_seen:
+		_fd_pair(String(p[0]), p[1])
+
+
+#  표 글을 채운다 — 돌려주는 것은 한국어(열쇠)고, 고른 말로 채운 글을 짝으로 적는다.
+static func _fd(tpl: String, vals: Dictionary) -> String:
+	_fd_seen.append([tpl, vals])
+	if lang != "ko":
+		_fd_pair(tpl, vals)
+	return fill(tpl, vals)
+
+
+static func _fd_pair(tpl: String, vals: Dictionary) -> void:
+	var t := L(tpl)
+	if t != tpl:
+		_lmap[fill(tpl, vals)] = fill(t, vals)
+
+
+#  번역이 원문의 자리(%d · %s · {v} …)를 그대로 갖는가. % 자리는 **차례까지** 같아야 한다 —
+#  틀에 값을 끼우는 쪽이 차례로 끼우므로 어긋나면 게임이 멎는다.
+static func lang_slots(s: String) -> Array:
+	var re := RegEx.create_from_string("%[-+ 0#]*[0-9]*(?:\\.[0-9]+)?[sdfxXc%]|\\{[a-z_0-9]+(?::\\+)?\\}")
+	var out := []
+	var brace := []
+	for m in re.search_all(s):
+		var k := m.get_string()
+		if k.begins_with("{"):
+			brace.append(k)
+		else:
+			out.append(k)
+	brace.sort()
+	return out + brace
+
+
+static func _v_lang() -> void:
+	var seen := {}
+	var empty := {"en": 0, "ja": 0}
+	for r in _raw.get("lang", []):
+		var ko: String = r.get("ko", "")
+		var ln: int = r.get("_line", 0)
+		if seen.has(ko):
+			_errs.append("lang:%d — 원문이 겹친다: '%s'" % [ln, ko])
+		seen[ko] = true
+		for l in ["en", "ja"]:
+			var t := String(r.get(l, ""))
+			if t == "":
+				empty[l] += 1
+			elif lang_slots(t) != lang_slots(ko):
+				_errs.append("lang:%d %s — 자리가 원문과 다르다: '%s' ↔ '%s'" % [ln, l, ko, t])
+	for l in empty:
+		if int(empty[l]) > 0:
+			_warns.append("lang — %s 번역이 빈 줄 %d — 화면에 한국어로 뜬다" % [l, empty[l]])
+	for tb in _raw:
+		if tb == "lang":
+			continue
+		for r in _raw[tb]:
+			for k in r:
+				var ks := String(k)
+				if not (ks.ends_with("_en") or ks.ends_with("_ja")):
+					continue
+				var t2 := String(r[k])
+				var src := String(r.get(ks.substr(0, ks.length() - 3), ""))
+				if t2 != "" and lang_slots(t2) != lang_slots(src):
+					_errs.append("%s:%d %s — 자리가 원문과 다르다: '%s' ↔ '%s'"
+							% [tb, r.get("_line", 0), ks, src, t2])
+
+
 # ── 표시 문장 ─────────────────────────────────────────────
 #  desc 열은 수치를 문장에 안 박는다. {v0} 는 값을, {v0:+} 는 부호를
 #  붙여 넣는다. 값을 고치면 문장이 따라 바뀌므로 표가 거짓말을 못 한다.
@@ -513,7 +651,7 @@ static func boosters() -> Array:
 			"w": _f(r, "weight", "boosters", 1.0),
 			# 펼치는 수·고르는 수는 size·pick 에서 꽂는다 — 손으로 적은 「2개 중 하나」가
 			# 표와 따로 놀았다.
-			"d": fill(String(r.get("desc", "")), {"size": _i(r, "size", "boosters", 2),
+			"d": _fd(String(r.get("desc", "")), {"size": _i(r, "size", "boosters", 2),
 					"pick": _i(r, "pick", "boosters", 1)}),
 		})
 	_cache["boosters"] = out
@@ -575,7 +713,7 @@ static func consumables() -> Array:
 			"n": r.get("name", ""),
 			# 다른 표처럼 fill 을 지난다. 안 지나서 설명창에 「상한 {v}」가
 			# 글자 그대로 찍히고 있었다(2026-09-13).
-			"d": fill(r.get("desc", ""), {"v": cv}),
+			"d": _fd(r.get("desc", ""), {"v": cv}),
 			"cat": r.get("cat", ""),
 			# 사용조건 — 기획서 s33 이 표로 낸 열(2026-09-13). 전에는
 			# _cons_use 안에 갈래마다 박혀 있었다.
@@ -595,8 +733,8 @@ static func consumables() -> Array:
 # 사용조건의 한국어 이름. 태그에 그대로 적힌다. any 는 붙일 것이 없다.
 static func use_at_name(w: String) -> String:
 	match w:
-		"rest": return "상점·판 선택"
-		"play": return "판에서"
+		"rest": return L("상점·판 선택")
+		"play": return L("판에서")
 	return ""
 
 
@@ -638,7 +776,7 @@ static func mods() -> Array:
 			"v": [v0, v1] if has1 else v0,
 			"excl": r.get("excl", ""),
 			"cost": _i(r, "cost", "mods"),
-			"d": fill(r.get("desc", ""), {"v0": v0, "v1": v1}),
+			"d": _fd(r.get("desc", ""), {"v0": v0, "v1": v1}),
 			"line": r.get("_line", 0),
 		})
 	_cache["mods"] = out
@@ -669,7 +807,7 @@ static func darts() -> Array:
 			"mult": mu,
 			"magnet": mg,
 			"cost": _i(r, "cost", "darts"),
-			"d": fill(r.get("desc", ""),
+			"d": _fd(r.get("desc", ""),
 					{"gauge": g, "mult": mu, "magnet": mg}),
 			"line": r.get("_line", 0),
 		})
@@ -699,7 +837,7 @@ static func modifiers() -> Array:
 			"k": r.get("axis", ""),
 			"v": v,
 			"w": _f(r, "weight", "modifiers", 1.0),
-			"d": fill(r.get("desc", ""), {"v": v}),
+			"d": _fd(r.get("desc", ""), {"v": v}),
 			"line": r.get("_line", 0),
 		})
 	_cache["modifiers"] = out
@@ -882,7 +1020,7 @@ static func pack_desc(row := {}) -> String:
 		return ""
 	var isl := _i(r, "item_slots", "packs", tune_i("max_items"))
 	var csl := _i(r, "cons_slots", "packs", tune_i("cons_slots"))
-	return fill(tpl, {
+	return fill(L(tpl), {
 		"darts": tune_i("darts_base") + _i(r, "darts_add", "packs", 0),
 		"gold": start_gold() + _i(r, "gold_add", "packs", 0),
 		"items": isl,
@@ -1136,9 +1274,16 @@ static func big(v: int) -> String:
 		return str(v)
 	var neg: bool = v < 0
 	var a := absi(v)
-	#  만 1e4 · 억 1e8 · 조 1e12 · 경 1e16 — **가장 큰 단위 하나만** 쓴다.
+	#  만 1e4 · 억 1e8 · 조 1e12 · 경 1e16 — **가장 큰 단위 하나만** 쓴다. 일본어는 같은 자리의
+	#  万 · 億 · 兆 · 京, 영어는 천 단위 K · M · B · T · Q(2026-10-13 · 말).
 	var units := [[10000000000000000, "경"], [1000000000000, "조"],
 			[100000000, "억"], [10000, "만"]]
+	if lang == "ja":
+		units = [[10000000000000000, "京"], [1000000000000, "兆"],
+				[100000000, "億"], [10000, "万"]]
+	elif lang == "en":
+		units = [[1000000000000000, "Q"], [1000000000000, "T"], [1000000000, "B"],
+				[1000000, "M"], [1000, "K"]]
 	for u in units:
 		var d: int = int(u[0])
 		if a < d:
@@ -1347,7 +1492,7 @@ const TUTOR_WAITS := ["tap", "time"]
 #  보인다 — 빈칸으로 사라지는 것보다 무엇이 빠졌는지 화면에서 바로 보인다.
 #  검증기(_v_texts)가 부팅 때 빠진 열쇠를 오류로 적는다.
 static func text(id: String, vals := {}) -> String:
-	var t: String = _texts().get(id, id)
+	var t: String = L(_texts().get(id, id))
 	return fill(t, vals) if not vals.is_empty() else t
 
 
@@ -1771,46 +1916,46 @@ static func check(c: String, x: Dictionary) -> bool:
 # 말을 둘로 나눈다. 긴 쪽이 뜻을 말하고 짧은 쪽이 자리를 지킨다.
 static func cond_tag(c: String) -> String:
 	match c:
-		"always": return "언제나"
-		"triple": return "트리플"
-		"double": return "더블"
-		"band": return "띠"
-		"bull": return "불"
-		"odd": return "홀수"
-		"even": return "짝수"
-		"left": return "왼쪽"
-		"right": return "오른쪽"
-		"big": return "15 이상"
+		"always": return L("언제나")
+		"triple": return L("트리플")
+		"double": return L("더블")
+		"band": return L("띠")
+		"bull": return L("불")
+		"odd": return L("홀수")
+		"even": return L("짝수")
+		"left": return L("왼쪽")
+		"right": return L("오른쪽")
+		"big": return L("15 이상")
 		"mid": return "6~14"
-		"small": return "5 이하"
-		"same": return "같은 칸"
-		"sum11": return "두 수 합 11"
-		"diff": return "다른 칸"
-		"first": return "첫 발"
-		"last": return "막 발"
-		"streak": return "연속"
-		"warm": return "트리플 뒤"
-		"miss": return "빗나감"
-		"missp": return "직전 빗나감"
-		"risk": return "더블·트리플·불"
-		"risk1": return "첫 고난도"
-		"few": return "다트 3 이하"
-		"sixth": return "여섯째"
-		"pair": return "같은 수 2"
-		"trip": return "같은 수 3"
-		"quad": return "같은 수 4"
-		"pair2": return "두 쌍"
-		"spread": return "숫자 셋"
-		"zone3": return "한 영역 3"
-		"zones2": return "두 영역"
-		"zones4": return "네 영역"
-		"rezone": return "다시 그 영역"
+		"small": return L("5 이하")
+		"same": return L("같은 칸")
+		"sum11": return L("두 수 합 11")
+		"diff": return L("다른 칸")
+		"first": return L("첫 발")
+		"last": return L("막 발")
+		"streak": return L("연속")
+		"warm": return L("트리플 뒤")
+		"miss": return L("빗나감")
+		"missp": return L("직전 빗나감")
+		"risk": return L("더블·트리플·불")
+		"risk1": return L("첫 고난도")
+		"few": return L("다트 3 이하")
+		"sixth": return L("여섯째")
+		"pair": return L("같은 수 2")
+		"trip": return L("같은 수 3")
+		"quad": return L("같은 수 4")
+		"pair2": return L("두 쌍")
+		"spread": return L("숫자 셋")
+		"zone3": return L("한 영역 3")
+		"zones2": return L("두 영역")
+		"zones4": return L("네 영역")
+		"rezone": return L("다시 그 영역")
 	if c.begins_with("sec:"):
-		return c.substr(4).replace(",", "·") + "번"
+		return L("%s번") % c.substr(4).replace(",", "·")
 	if c.begins_with("col:"):
 		var nm := PackedStringArray()
 		for t in c.substr(4).split(","):
-			nm.append(color_name(int(t)))
+			nm.append(L(color_name(int(t))))
 		return "·".join(nm)
 	return ""
 
@@ -1824,7 +1969,16 @@ static func _eul(n: int) -> String:
 	return "를" if d == 2 or d == 4 or d == 5 or d == 9 else "을"
 
 
-static func cond_text(c: String) -> String:
+#  고른 말의 글을 준다(L). fire — 쌓이는 동전은 「~맞힌 발부터」가 아니라 「~맞히면」이다
+#  (game.gd _tip_eff · 2026-10-08 삼미신). 갈아 끼우기는 한국어 원문에서 하고 그 뒤에 옮긴다.
+static func cond_text(c: String, fire := false) -> String:
+	var t := _cond_ko(c)
+	if fire and t.ends_with("맞힌 발부터"):
+		t = t.trim_suffix("맞힌 발부터") + "맞히면"
+	return L(t)
+
+
+static func _cond_ko(c: String) -> String:
 	match c:
 		"always": return "모든 다트"
 		"triple": return "트리플 맞히면"
@@ -1863,14 +2017,17 @@ static func cond_text(c: String) -> String:
 	#  칸 번호 — 「8을 맞히면」. 「8번 맞히면」은 「여덟 번」으로 읽혔다(사용자, 2026-10-08
 	#  「8번 맞히면 이라는 말은 좀 어색하잖아? 그냥 8을 맞추면」). 조사는 마지막 수를 읽는 소리가
 	#  고른다(_eul).
+	#  수를 끼우는 글은 여기서 옮긴다 — 한국어만 조사(_eul)를 붙인다.
 	if c.begins_with("sec:"):
 		var ns := c.substr(4).split(",")
+		if lang != "ko":
+			return L("%s 맞히면") % "·".join(ns)
 		return "·".join(ns) + _eul(int(ns[ns.size() - 1])) + " 맞히면"
 	if c.begins_with("col:"):
 		var nm := PackedStringArray()
 		for t in c.substr(4).split(","):
-			nm.append(color_name(int(t)))
-		return "·".join(nm) + " 칸 맞히면"
+			nm.append(L(color_name(int(t))))
+		return L("%s 칸 맞히면") % "·".join(nm)
 	return ""
 
 
@@ -1925,7 +2082,7 @@ static func eff_line(it: Dictionary) -> String:
 		# 무엇을 주고 무엇을 받는지가 카드에서 안 읽힌다.
 		var ad := int(it.get("dadd", 0))
 		if ad != 0:
-			return "%s · 다트 %s" % [am, _sgn(ad)]
+			return L("%s · 다트 %s") % [am, _sgn(ad)]
 		return am
 	# 계산 방식을 쥔 장도 같다 — 조준과 한 갈래라 같은 자리에서 갈린다.
 	# 이 줄이 없으면 「효과가 한 줄도 안 나온다」 검사에 걸린다. 실제로
@@ -1944,21 +2101,21 @@ static func eff_line(it: Dictionary) -> String:
 			#  시작한다는 말은 짧은 쪽이 더 잘 읽힌다. 다만 **조건** 쪽
 			#  (cond_text few)은 「시작 다트가 3개 이하면」으로 「시작」을
 			#  남긴다 — 빼면 「남은 다트」로 읽힌다. 2026-09-25
-			return "다트 " + _sgn(da)
+			return L("다트 %s") % _sgn(da)
 		if String(it.get("side", "")) == "trackup25":
-			return "1/4 확률로 맞힌 트랙 강화 +1"
+			return L("1/4 확률로 맞힌 트랙 강화 +1")
 		if String(it.get("side", "")) == "boardkill":
 			# 런 승리는 화면이 「완주」라 부른다 — 「런 클리어」는 그 말 밖이다
-			return "판을 클리어하면 바로 완주"
+			return L("판을 클리어하면 바로 완주")
 		if String(it.get("side", "")) == "bigdart":
 			# 발동한 발에서만 커지고(빗나가면 안 큰다) 얻는 것은 양옆 칸 값이다(pierce_gain → 점수)
 			# ⚠ 여기만 「때마다」다 — 한 발씩 **쌓인다**. 짝인 「빗나가면」이
 			# 붙은 hitmiss 는 「맞히면」이 그 되풀이를 이미 지지만 이 줄은 짝이
 			# 없어 한 번만 커지는 것으로 읽힌다. 「던질 때마다」 「켜질 때마다」와 한 꼴이다.
-			return "맞힐 때마다 다트가 커진다 · 커진 만큼 양옆 칸 값을 점수에 더한다"
+			return L("맞힐 때마다 다트가 커진다 · 커진 만큼 양옆 칸 값을 점수에 더한다")
 		if String(it.get("side", "")) == "carry":
 			# dadd += carry_darts — 다음 판의 판 시작 다트로 얹힌다. 잔탄 골드는 그대로 받는다
-			return "남은 다트 1개당 다음 판 다트 +1"
+			return L("남은 다트 1개당 다음 판 다트 +1")
 		return ""     # 골드 카드 — 효과는 골드 줄이 이미 말한다
 	var g: String = String(it.get("grow", ""))
 	# 성장형 넷은 한 틀이다 — 「[점수|배수] +X에서 시작 · [주기] ±Y (· 0이면 파괴)」.
@@ -1967,49 +2124,49 @@ static func eff_line(it: Dictionary) -> String:
 	# 무엇에서 시작하는지가 안 읽혔다.
 	# hitmiss 는 gs 가 0 에서 쌓이고, fire 는 발동 전에 gs 를 올려 첫 발동이 gstep 이다.
 	# tdec 은 _wear_spent 가, rdec 은 판 끝이 0 에서 지운다.
-	var stat: String = "점수" if it.k == "chip" else "배수"
+	var stat: String = L("점수") if it.k == "chip" else L("배수")
 	if g == "hitmiss":
-		return "%s +0에서 시작 · 맞히면 +%d · 빗나가면 −%d" % [stat, it.gstep, it.gstep]
+		return L("%s +0에서 시작 · 맞히면 +%d · 빗나가면 −%d") % [stat, it.gstep, it.gstep]
 	if g == "fire":
-		return "%s +%d · 이후 발동마다 추가 +%d" % [stat, it.gstep, it.gstep]
+		return L("%s +%d · 이후 발동마다 추가 +%d") % [stat, it.gstep, it.gstep]
 	if g == "tdec":
-		return "%s +%d에서 시작 · 던질 때마다 −%d · 0이면 파괴" % [stat, it.v, it.gstep]
+		return L("%s +%d에서 시작 · 던질 때마다 −%d · 0이면 파괴") % [stat, it.v, it.gstep]
 	if g == "rdec":
-		return "%s +%d에서 시작 · 판마다 −%d · 0이면 파괴" % [stat, it.v, it.gstep]
+		return L("%s +%d에서 시작 · 판마다 −%d · 0이면 파괴") % [stat, it.v, it.gstep]
 	var base := eff_text(it.k, it.v)
 	match String(it.get("per", "")):
-		"darts_left": return "남은 다트 1개당 " + base
-		"items": return "동전 1장당 " + base
-		"gold": return "골드 1당 " + base
-		"gold5": return "골드 5당 " + base
-		"mag_hvy": return "무거운 다트 1개당 " + base
-		"missing": return "기본에서 줄어든 다트 1개당 " + base
-		"low": return "판에서 맞힌 가장 작은 수 1당 " + base
+		"darts_left": return L("남은 다트 1개당 %s") % base
+		"items": return L("동전 1장당 %s") % base
+		"gold": return L("골드 1당 %s") % base
+		"gold5": return L("골드 5당 %s") % base
+		"mag_hvy": return L("무거운 다트 1개당 %s") % base
+		"missing": return L("기본에서 줄어든 다트 1개당 %s") % base
+		"low": return L("판에서 맞힌 가장 작은 수 1당 %s") % base
 		# zone_hist 는 런 단위이고 맞힌 영역을 따른다.
 		# ⚠ 「그 영역」으로 줄이면 가리킬 말이 줄 안에 없다 — c36 은 cond 가
 		# always 라 앞에 붙는 조건 말이 없고 이 한 줄이 툴팁 전부다.
-		"zonehist": return "맞힌 영역을 이번 런에 맞힌 1발당 " + base
-		"sechist": return "맞힌 숫자를 지금까지 맞힌 1발당 " + base
+		"zonehist": return L("맞힌 영역을 이번 런에 맞힌 1발당 %s") % base
+		"sechist": return L("맞힌 숫자를 지금까지 맞힌 1발당 %s") % base
 		# 값이 v × 다른 동전 판매가 합이다 — 「배수 추가」로만 찍으면 v 가 얼굴에서 사라진다
 		#  「판매가 합 1당」 은 말이 걸렸다 — 판매가는 골드라 「1골드당」 이면 합까지 읽힌다
-		"rackval": return "다른 동전 판매가 1골드당 " + base
-		"empty": return "배수 × 빈 동전 슬롯 수 (최소 ×1)"
+		"rackval": return L("다른 동전 판매가 1골드당 %s") % base
+		"empty": return L("배수 × 빈 동전 슬롯 수 (최소 ×1)")
 	if String(it.get("k2", "")) != "":
 		base += " · " + eff_text(it.k2, it.v2)
 	# 부가 효과는 kind 가 있어도 붙는다. 빈 kind 갈래에서만 읽으면
 	# 다트를 깎는 대가가 얼굴에서 사라진다.
 	var da2 := int(it.get("dadd", 0))
 	if da2 != 0:
-		base += " · 다트 " + _sgn(da2)
+		base += " · " + L("다트 %s") % _sgn(da2)
 	if String(it.get("side", "")) == "trackup25":
-		base += " · 1/4 확률로 맞힌 트랙 강화 +1"
+		base += " · " + L("1/4 확률로 맞힌 트랙 강화 +1")
 	if String(it.get("side", "")) == "boardkill":
-		base += " · 판을 클리어하면 완주"
+		base += " · " + L("판을 클리어하면 완주")
 	if String(it.get("side", "")) == "bigdart":
-		base += " · 맞힐 때마다 다트가 커진다"
+		base += " · " + L("맞힐 때마다 다트가 커진다")
 	var bn := boom_n(String(it.get("boom", "")))
 	if bn > 0:
-		base += " · 판마다 1/%d 확률로 파괴" % bn
+		base += " · " + L("판마다 1/%d 확률로 파괴") % bn
 	return base
 
 
@@ -2028,44 +2185,44 @@ static func boom_n(b: String) -> int:
 
 static func eff_text(k: String, v: int) -> String:
 	match k:
-		"chip": return "점수 +%d" % v
-		"mult": return "배수 +%d" % v
-		"xmult": return "배수 ×%d" % v
-		"mult_streak": return "배수 +%d" % v
-		"mult_rand": return "배수 +0~%d 무작위" % v
+		"chip": return L("점수 +%d") % v
+		"mult": return L("배수 +%d") % v
+		"xmult": return L("배수 ×%d") % v
+		"mult_streak": return L("배수 +%d") % v
+		"mult_rand": return L("배수 +0~%d 무작위") % v
 		# 발동하면 _finish_leg 가 owned 에서 지운다 — 쓰고 사라지는 것까지 적는다
-		"save": return "총점이 목표의 %d%% 이상이면 실패를 막고 파괴" % v
+		"save": return L("총점이 목표의 %d%% 이상이면 실패를 막고 파괴") % v
 	return ""
 
 
 # 계산 방식의 짧은 이름과 하는 일.
 static func score_name(m: String) -> String:
 	match m:
-		"std": return "기본"
-		"bal": return "저울"
-		"rand": return "물음표"
+		"std": return L("기본")
+		"bal": return L("저울")
+		"rand": return L("물음표")
 	return m
 
 
 static func score_text(m: String) -> String:
 	match m:
-		"bal": return "점수와 배수를 둘의 평균으로 맞춘 뒤 곱한다"
+		"bal": return L("점수와 배수를 둘의 평균으로 맞춘 뒤 곱한다")
 		# rnd 걸음은 그 발의 점수·배수만 바꾼다 — 「쌓은」은 총점으로 읽혔다
-		"rand": return "점수와 배수를 버리고 둘 다 1~99 무작위로 다시 뽑는다"
+		"rand": return L("점수와 배수를 버리고 둘 다 1~99 무작위로 다시 뽑는다")
 	return ""
 
 
 # 조준 방식의 짧은 이름. 목록·화면에서 std 같은 속이름을 안 보이게 한다.
 static func aim_name(m: String) -> String:
 	match m:
-		"std": return "기본"
-		"ring": return "원"
-		"tilt": return "멀미"
-		"cross": return "겹"
-		"drift": return "수전증"
-		"place": return "명사수"
-		"pull": return "단검"
-		"kick": return "리볼버"
+		"std": return L("기본")
+		"ring": return L("원")
+		"tilt": return L("멀미")
+		"cross": return L("겹")
+		"drift": return L("수전증")
+		"place": return L("명사수")
+		"pull": return L("단검")
+		"kick": return L("리볼버")
 	return m
 
 
@@ -2086,16 +2243,16 @@ static func aim_name(m: String) -> String:
 static func aim_text(m: String) -> String:
 	match m:
 		# 원과 점은 저절로 돈다 — 손님은 두 번 잠글 뿐이다
-		"ring": return "원의 크기를 잠그고 원 위를 도는 점을 잠근다"
-		"tilt": return "다트마다 다른 각도로 기운 조준선을 잠근다"
-		"cross": return "가로세로 조준선을 함께 잠근다"
-		"drift": return "커서 둘레를 떠도는 조준점을 눌러 던진다"
-		"place": return "원하는 자리를 눌러 바로 던진다"
+		"ring": return L("원의 크기를 잠그고 원 위를 도는 점을 잠근다")
+		"tilt": return L("다트마다 다른 각도로 기운 조준선을 잠근다")
+		"cross": return L("가로세로 조준선을 함께 잠근다")
+		"drift": return L("커서 둘레를 떠도는 조준점을 눌러 던진다")
+		"place": return L("원하는 자리를 눌러 바로 던진다")
 		# _pull_vec 은 놓기 직전 0.12초의 손 속도로 날린다 — 당긴 쪽이 아니라 튕긴 쪽이다
-		"pull": return "벽의 다트를 튕긴 방향과 빠르기대로 던진다"
+		"pull": return L("벽의 다트를 튕긴 방향과 빠르기대로 던진다")
 		"kick":
 			# 손으로 적은 수는 표와 어긋난다 — 표에서 꽂는다
-			return "한 발이 작은 다트 %d발이 된다 · 발마다 점수의 %d%%를 받는다 · 쏠 때마다 조준이 밀린다" % [tune_i("kick_n"), int(round(tune("kick_share") * 100.0))]
+			return L("한 발이 작은 다트 %d발이 된다 · 발마다 점수의 %d%%를 받는다 · 쏠 때마다 조준이 밀린다") % [tune_i("kick_n"), int(round(tune("kick_share") * 100.0))]
 	return ""
 
 
@@ -2128,30 +2285,30 @@ static func gold_dart_hit(it: Dictionary, x: Dictionary) -> bool:
 
 static func gold_text(g: String, gv: int) -> String:
 	match g:
-		"clear": return "판을 클리어하면 골드 +%d" % gv
-		"spare": return "판을 클리어하면 남은 다트 1개당 골드 +%d" % gv
-		"clean": return "한 발도 안 빗나가고 판을 클리어하면 골드 +%d" % gv
-		"blitz": return "남은 다트 %d개 이상으로 판을 클리어하면 골드 +%d" % [gold_blitz(), gv]
+		"clear": return L("판을 클리어하면 골드 +%d") % gv
+		"spare": return L("판을 클리어하면 남은 다트 1개당 골드 +%d") % gv
+		"clean": return L("한 발도 안 빗나가고 판을 클리어하면 골드 +%d") % gv
+		"blitz": return L("남은 다트 %d개 이상으로 판을 클리어하면 골드 +%d") % [gold_blitz(), gv]
 		# ⚠ 여기만 「가진」을 살린다 — 「보유」를 지우니 한 줄에 「골드」가 둘이
 		# 서고 앞은 쥔 골드 · 뒤는 받는 몫이라 「받을 골드가 6 이하면」으로 읽혔다.
-		"broke": return "판을 클리어할 때 가진 골드 %d 이하면 골드 +%d" % [gold_broke(), gv]
-		"leg": return "판마다 골드 +%d" % gv
-		"risk50": return "%s 1/2 확률로 골드 +%d" % [cond_text("risk"), gv]
+		"broke": return L("판을 클리어할 때 가진 골드 %d 이하면 골드 +%d") % [gold_broke(), gv]
+		"leg": return L("판마다 골드 +%d") % gv
+		"risk50": return L("%s 1/2 확률로 골드 +%d") % [cond_text("risk"), gv]
 		# 조건은 _tip_eff 가 앞에 잇는다 — 「백색 칸 맞히면 골드 +1」
-		"hit": return "골드 +%d" % gv
+		"hit": return L("골드 +%d") % gv
 	return ""
 
 
 # 동전 위에 얹는 짧은 태그 (원 안에는 긴 글이 안 들어간다)
 static func gold_tag(g: String) -> String:
 	match g:
-		"clear": return "클리어"
-		"spare": return "잔탄"
-		"clean": return "무실책"
-		"blitz": return "속공"
-		"broke": return "빈털터리"
-		"leg": return "정기"
-		"risk50": return "위험수당"
+		"clear": return L("클리어")
+		"spare": return L("잔탄")
+		"clean": return L("무실책")
+		"blitz": return L("속공")
+		"broke": return L("빈털터리")
+		"leg": return L("정기")
+		"risk50": return L("위험수당")
 	return ""
 
 
@@ -2195,6 +2352,7 @@ static func _validate() -> void:
 	_v_tutor()
 	_v_texts()
 	_v_npc_say()
+	_v_lang()
 	_v_item_aim()
 
 
@@ -2349,7 +2507,7 @@ static func npc_say(when: String) -> Array:
 
 
 static func npc_say_text(row: Dictionary) -> String:
-	var t := String(row.get("text", ""))
+	var t := L(String(row.get("text", "")))
 	var vals := {}
 	for k in _say_keys(t):
 		var v = _say_val(k)

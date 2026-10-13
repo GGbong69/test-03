@@ -1222,6 +1222,9 @@ static func _rows(g: Node) -> Array:
 				{"n1": "쓸기 다시 보기", "t": "act", "a": "sweep"},
 				#  상인의 말(2026-10-11 · game.gd NSAY · data/npc_say.csv) — 다음 귀띔을 지금 세운다(상점 · 판 고르기).
 				{"n1": "상인 귀띔", "t": "act", "a": "nsay"},
+				#  말(2026-10-13 · GameData.L) — 한국어 → 영어 → 일본어로 한 칸씩. 설정 「게임 › 언어」 줄과
+				#  같은 문(game.gd _lang_step)이라 저장(전역 "lang")까지 같다. 해금 쪽이 열아홉으로 차 여기 섰다.
+				{"n1": "언어 %s" % GameData.LANG_NAME.get(GameData.lang, ""), "t": "act", "a": "lang"},
 				#  라운드 경계는 런에 일곱 번뿐이라 고치는 동안 매번 런을
 				#  돌 수 없다 — 「쓸기 다시 보기」와 같은 이유다. 위의
 				#  「판」 줄로 라운드를 맞추고 이 줄로 넘김을 보면 손가락
@@ -2782,6 +2785,10 @@ static func _run(g: Node, e: Dictionary) -> void:
 			g.topbar_on = not g.topbar_on
 			g.queue_redraw()
 			_say("상단 띠 %s" % ("켬" if g.topbar_on else "끔"))
+			return
+		"lang":
+			g._lang_step(1)
+			_say("언어 %s" % GameData.LANG_NAME.get(GameData.lang, ""))
 			return
 		"menumat":
 			g.menu_mat_on = not g.menu_mat_on

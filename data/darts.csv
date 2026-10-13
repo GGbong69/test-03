@@ -1,5 +1,5 @@
-﻿id,name,gauge,mult,magnet,cost,desc,_note
-std,표준,1.00,0,0.00,0,특성 없음,기준선. 이 행을 지우면 dart_of() 의 폴백이 죽는다
-hvy,무거운,0.55,-1,0.00,5,조준 속도 {gauge}배 · 배수 {mult:+} (최소 1),조준선이 0.55배로 느려지는 대가로 배수를 하나 깎는다 — 점수형 동전과 짝
-lgt,가벼운,1.90,3,0.00,6,조준 속도 {gauge}배 · 배수 {mult:+},맞히기 어려운 대신 배수가 셋 는다. 자석과 같이 들면 위험이 사라진다
-mag,자석,1.00,0,0.25,7,중심까지 거리의 {magnet}만큼 당겨 꽂힌다,유효 명중 반지름이 R/0.75 로 넓어져 빗나감이 37.68% → 5.52% 가 된다. 2026-09-11: 기획서에 없는 배수 -1 을 뗐다
+﻿id,name,name_en,name_ja,gauge,mult,magnet,cost,desc,desc_en,desc_ja,_note
+std,표준,Standard,標準,1.00,0,0.00,0,특성 없음,No traits,特性なし,기준선. 이 행을 지우면 dart_of() 의 폴백이 죽는다
+hvy,무거운,Heavy,重い,0.55,-1,0.00,5,조준 속도 {gauge}배 · 배수 {mult:+} (최소 1),Aim speed x{gauge} · Mult {mult:+} (min 1),照準速度{gauge}倍 · 倍率 {mult:+} (最低1),조준선이 0.55배로 느려지는 대가로 배수를 하나 깎는다 — 점수형 동전과 짝
+lgt,가벼운,Light,軽い,1.90,3,0.00,6,조준 속도 {gauge}배 · 배수 {mult:+},Aim speed x{gauge} · Mult {mult:+},照準速度{gauge}倍 · 倍率 {mult:+},맞히기 어려운 대신 배수가 셋 는다. 자석과 같이 들면 위험이 사라진다
+mag,자석,Magnet,磁石,1.00,0,0.25,7,중심까지 거리의 {magnet}만큼 당겨 꽂힌다,Pulled {magnet} of the way toward the center,中心までの距離の{magnet}だけ引き寄せられて刺さる,유효 명중 반지름이 R/0.75 로 넓어져 빗나감이 37.68% → 5.52% 가 된다. 2026-09-11: 기획서에 없는 배수 -1 을 뗐다

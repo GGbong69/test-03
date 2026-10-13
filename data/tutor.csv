@@ -1,24 +1,24 @@
-﻿id,step,text,who,mark,slow,wait,enabled,_note
-u_leg,1,던진다를 눌러 판을 시작하세요,,leg_go,0.3,tap,1,첫 S.LEG. 런의 입구라 여기부터 밝힌다
+﻿id,step,text,text_en,text_ja,who,who_en,who_ja,mark,slow,wait,enabled,_note
+u_leg,1,던진다를 눌러 판을 시작하세요,Press Throw to start the leg,「投げる」を押してレッグを始めましょう,,,,leg_go,0.3,tap,1,첫 S.LEG. 런의 입구라 여기부터 밝힌다
 ,,,,,,,,
-u_skip,1,건너뛰어 아이템을 획득할 수 있습니다,,leg_skip,0.3,tap,1,건너뛸 수 있는 첫 판에서만
-,,,,,,,,
-,,,,,,,,
-u_score,1,꽂힌 칸의 값이 점수가 됩니다,,board,1,tap,1,첫 정산. 여기가 이 게임의 심장이다. 예전엔 0.18 로 제일 느리게 잡았는데 점수가 느려지는 것이 거슬린다는 평에 늦추지 않는다(2026-09-17)
-u_score,2,동전으로 점수와 배수를 획득할 수 있습니다,,rack,1,tap,1,
-u_score,3,점수와 배수를 곱해 목표점수에 도달하세요,,score,1,tap,1,
-u_clear,1,판을 클리어하면 남은 다트당 1골드 획득합니다,,,0.4,tap,1,첫 통과. 남기는 것이 이득이라는 것을 여기서 배운다
-u_shop,1,상점에서는 다양한 아이템을 구매할 수 있습니다,,goods,0.3,tap,1,첫 S.SHOP
-u_shop,2,아이템을 여기로 가져와 구매하세요,,chute_buy,0.3,tap,1,
-u_shop,3,아이템의 가격입니다,,goods,0.3,tap,1,
-u_gift,1,처음 보는 손님이군,상인,dealer,0.3,tap,1,튜토리얼 런의 첫 상점 — 선물(TUT.gifts)이 선 테이블에서만. 값 설명 바로 뒤에 온다. 두 줄 다 사용자가 고른 말(2026-09-27)
-u_gift,2,이건 서비스야 가져가,상인,gift,0.3,tap,1,
-u_more,1,다른 것도 한번 봐봐,상인,reroll,0.3,tap,1,튜토리얼 런 첫 상점에서 첫 두 장을 다 쥔 뒤. 리롤하면 선물 세 장이 더 선다(TUT.pages). 사용자가 고른 말(2026-09-27)
-u_sell,1,아이템을 판매하여 골드를 획득하세요,,chute_sell,0.3,tap,1,팔 것이 생긴 첫 상점
-u_rack,1,획득한 동전은 슬롯에 배치됩니다,,rack,0.3,tap,1,첫 동전 획득
-u_rack,2,동전은 왼쪽부터 발동되며 순서를 바꿀 수 있습니다,,rack,0.3,tap,1,이 게임에서 제일 중요한 한 줄이다
-u_info,1,획득한 아이템은 정보 탭을 열어 확인할 수 있습니다,,info,0.3,tap,1,튜토리얼 런에서 선물을 다 받은 뒤(첫 상점은 리롤 뒤). 「정보」 단추를 밝힌다(2026-09-27)
+u_skip,1,건너뛰어 아이템을 획득할 수 있습니다,You can skip to earn an item,スキップしてアイテムを獲得できます,,,,leg_skip,0.3,tap,1,건너뛸 수 있는 첫 판에서만
 ,,,,,,,,
 ,,,,,,,,
-u_cons,1,사탕을 먹으면 다트보드가 강화됩니다,,cons,0.35,tap,1,첫 사탕
-u_pack,1,팩을 열어 다양한 아이템 중 하나를 골라 획득합니다,,goods,0.35,tap,1,첫 팩
+u_score,1,꽂힌 칸의 값이 점수가 됩니다,The value of the segment you hit becomes your Score,刺さったマスの値がスコアになります,,,,board,1,tap,1,첫 정산. 여기가 이 게임의 심장이다. 예전엔 0.18 로 제일 느리게 잡았는데 점수가 느려지는 것이 거슬린다는 평에 늦추지 않는다(2026-09-17)
+u_score,2,동전으로 점수와 배수를 획득할 수 있습니다,Coins give you Score and Mult,コインでスコアと倍率を獲得できます,,,,rack,1,tap,1,
+u_score,3,점수와 배수를 곱해 목표점수에 도달하세요,Multiply Score by Mult to reach the target score,スコアと倍率を掛けて目標スコアに到達しましょう,,,,score,1,tap,1,
+u_clear,1,판을 클리어하면 남은 다트당 1골드 획득합니다,Clear a leg to earn 1 Gold per leftover dart,レッグをクリアすると残りダーツ1本につき1ゴールド獲得します,,,,,0.4,tap,1,첫 통과. 남기는 것이 이득이라는 것을 여기서 배운다
+u_shop,1,상점에서는 다양한 아이템을 구매할 수 있습니다,You can buy all kinds of items in the shop,ショップではいろいろなアイテムを購入できます,,,,goods,0.3,tap,1,첫 S.SHOP
+u_shop,2,아이템을 여기로 가져와 구매하세요,Bring an item here to buy it,アイテムをここに持ってきて購入しましょう,,,,chute_buy,0.3,tap,1,
+u_shop,3,아이템의 가격입니다,This is the item's price,アイテムの価格です,,,,goods,0.3,tap,1,
+u_gift,1,처음 보는 손님이군,Haven't seen you around before,見ない顔だな,상인,Merchant,店主,dealer,0.3,tap,1,튜토리얼 런의 첫 상점 — 선물(TUT.gifts)이 선 테이블에서만. 값 설명 바로 뒤에 온다. 두 줄 다 사용자가 고른 말(2026-09-27)
+u_gift,2,이건 서비스야 가져가,This one's on the house. Take it,これはサービスだ 持っていきな,상인,Merchant,店主,gift,0.3,tap,1,
+u_more,1,다른 것도 한번 봐봐,Have a look at the rest too,他のも見てみな,상인,Merchant,店主,reroll,0.3,tap,1,튜토리얼 런 첫 상점에서 첫 두 장을 다 쥔 뒤. 리롤하면 선물 세 장이 더 선다(TUT.pages). 사용자가 고른 말(2026-09-27)
+u_sell,1,아이템을 판매하여 골드를 획득하세요,Sell items to earn Gold,アイテムを売ってゴールドを獲得しましょう,,,,chute_sell,0.3,tap,1,팔 것이 생긴 첫 상점
+u_rack,1,획득한 동전은 슬롯에 배치됩니다,Coins you get go into your slots,獲得したコインはスロットに配置されます,,,,rack,0.3,tap,1,첫 동전 획득
+u_rack,2,동전은 왼쪽부터 발동되며 순서를 바꿀 수 있습니다,"Coins trigger from left to right, and you can reorder them",コインは左から発動し 順番を入れ替えられます,,,,rack,0.3,tap,1,이 게임에서 제일 중요한 한 줄이다
+u_info,1,획득한 아이템은 정보 탭을 열어 확인할 수 있습니다,Open the Info tab to see the items you have,獲得したアイテムは情報タブで確認できます,,,,info,0.3,tap,1,튜토리얼 런에서 선물을 다 받은 뒤(첫 상점은 리롤 뒤). 「정보」 단추를 밝힌다(2026-09-27)
+,,,,,,,,
+,,,,,,,,
+u_cons,1,사탕을 먹으면 다트보드가 강화됩니다,Eating Candy upgrades the dartboard,キャンディを食べるとダーツボードが強化されます,,,,cons,0.35,tap,1,첫 사탕
+u_pack,1,팩을 열어 다양한 아이템 중 하나를 골라 획득합니다,Open a pack and pick one of its items,パックを開けて中のアイテムから1つ選んで獲得します,,,,goods,0.35,tap,1,첫 팩

@@ -81,7 +81,8 @@ const TXT_COLS := ["name", "desc", "text"]
 #  값 표(손잡이 설명이 길게 붙는다)는 화면 글이 아니다.
 const SKIP_TABLES := ["tuning"]
 #  사람이 직접 고치는 표 — 「표 글」 검사에서 참고로만 적는다(위 ⑥ 머리말).
-const USER_TABLES := ["tutor", "texts"]
+#  상인의 말(npc_say)도 사람이 고친다(2026-10-11) — 「뒤 선반은 건드리지 마. 한 병도」는 말투다.
+const USER_TABLES := ["tutor", "texts", "npc_say"]
 #  콘솔은 화면이 아니다 — 이 낱말이 든 줄의 글은 ⑤ 가 안 본다.
 const CONSOLE := ["push_warning(", "push_error(", "printerr(", "print("]
 

@@ -1,3 +1,3 @@
-id,name,size,pick,cost,pool,weight,desc,_note
-b_small,작은 팩,2,1,4,item;cons;fix,1.00,동전·사탕·사진 {size}개 중 {pick}개,기획서 16쪽. 값은 사탕 한 알(4)과 같다 — 둘 중 하나를 고르는 값이 사탕 하나의 값과 같은 자리에서 시작한다
-b_big,큰 팩,4,1,7,item;cons;fix,0.55,동전·사탕·사진 {size}개 중 {pick}개,고르는 폭이 두 배라 값도 그만큼 오른다. 가중치는 작은 팩의 절반 — 등급 사다리(1.00/0.58)와 같은 어법이다
+id,name,name_en,name_ja,size,pick,cost,pool,weight,desc,desc_en,desc_ja,_note
+b_small,작은 팩,Small Pack,スモールパック,2,1,4,item;cons;fix,1.00,동전·사탕·사진 {size}개 중 {pick}개,Pick {pick} of {size} Coins·Candy·Photos,コイン・キャンディ・写真 {size}個から{pick}個,기획서 16쪽. 값은 사탕 한 알(4)과 같다 — 둘 중 하나를 고르는 값이 사탕 하나의 값과 같은 자리에서 시작한다
+b_big,큰 팩,Big Pack,ビッグパック,4,1,7,item;cons;fix,0.55,동전·사탕·사진 {size}개 중 {pick}개,Pick {pick} of {size} Coins·Candy·Photos,コイン・キャンディ・写真 {size}個から{pick}個,고르는 폭이 두 배라 값도 그만큼 오른다. 가중치는 작은 팩의 절반 — 등급 사다리(1.00/0.58)와 같은 어법이다
