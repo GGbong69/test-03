@@ -895,7 +895,7 @@ func _table_run() -> void:
 		if a != b:
 			mism.append(id)
 	_ok("동전 열아홉이 두 자세·세 소비자에서 같은 폼", mism.is_empty(), str(mism))
-	_ok("r09 불사의 토템이 양쪽에서 bare",
+	_ok("r09 아홉 목숨이 양쪽에서 bare",
 			String(g._coin_form({"id": "r09", "rarity": "rare"},
 			tier_of["rare"])) == "bare"
 			and String(g._stock_form({"type": "item",

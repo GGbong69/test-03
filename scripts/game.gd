@@ -20223,7 +20223,7 @@ const MATS := {
 	"c06": "wax",        # 이카로스 — 배수 x4, 판마다 1/10 로 녹는다(boom r10)
 	"l05": "wax",        # 녹는 시계 — 남은 다트가 다음 판으로 흘러간다(side carry)
 	"c30": "cast",       # 윅 존 — 한 발도 안 빗나가야 한다. 무를 데가 없다
-	"r09": "pixel",      # 불사의 토템 — 실패 1회 방지(k save). 규격 밖의 물건이다
+	"r09": "pixel",      # 아홉 목숨 — 실패 1회 방지(k save). 규격 밖의 물건이다
 	"l03": "hollow",     # NULL — 목표가 HP 가 되고 판을 부수면 끝난다. 값이 없다
 }
 
@@ -21833,7 +21833,7 @@ func _elide(t: String, w: float, sz: int) -> String:
 # ══════════════════════════════════════════════════════════
 
 #  재질마다 부서지는 꼴이 다르다. MATS 가 이미 재질을 적어 뒀고(유리
-#  대포는 유리 · 이카로스는 밀랍 · 토템은 픽셀) 여기는 그 재질이
+#  대포는 유리 · 이카로스는 밀랍 · 아홉 목숨은 픽셀) 여기는 그 재질이
 #  **어떻게 죽는가**만 쥔다. 표가 둘이고 칸이 안 겹친다.
 #
 #  치수의 근거: 랙 동전은 π·19² = 1134px². _shard_fan 머리말이 실측한
@@ -36494,8 +36494,7 @@ func _rar_glow(c: Vector2, rx: float, ry: float, rar: String, dim: float,
 
 
 #  도트로 찍은 원반. 행마다 폭을 재서 3px 막대를 쌓는다 — 매끈한 타원들
-#  사이에서 **해상도가 다른 물건**으로 읽힌다. 불사의 토템은 원본이
-#  마인크래프트 아이템이라, 레퍼런스와 규칙이 같은 곳을 가리킨다:
+#  사이에서 **해상도가 다른 물건**으로 읽힌다. 아홉 목숨(r09)은
 #  이 판의 규격 밖에서 온 물건이라 한 번은 죽음을 무른다.
 func _pix_disc(c: Vector2, rx: float, ry: float, col: Color) -> void:
 	var q := 3.0
@@ -37727,7 +37726,7 @@ func _rank_edge_flat(c: Vector2, rx: float, ry: float, sd: float, mdep: float,
 		var a: float = PI * (float(k) + 0.5) / float(spn)
 		var f: float = _mill_f(a, rx, mdep, slots) if mdep > 0.0 else 1.0
 		var p := c + Vector2(cos(a) * rx * f, sin(a) * ry * f)
-		#  r09 불사의 토템만 3px 격자에 스냅한다 — 「3px 격자 위에 1px 을
+		#  r09 아홉 목숨만 3px 격자에 스냅한다 — 「3px 격자 위에 1px 을
 		#  얹으면 두 해상도가 한 물건에 섞인다」와 같은 이유다.
 		if snap:
 			p.x = c.x + roundf((p.x - c.x) / 3.0) * 3.0
