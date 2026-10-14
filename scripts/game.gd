@@ -10241,7 +10241,7 @@ func _land(mark := true) -> void:
 
 	var same: bool = info.sector > 0 and info.sector == last_sector
 	streak = streak + 1 if same else 0
-	# 「딱정벌레의 도로」 — 연속으로 맞춘 두 숫자의 합. 칸(1~20)에 둘 다
+	# 「열한 걸음」 — 연속으로 맞춘 두 숫자의 합. 칸(1~20)에 둘 다
 	# 꽂혔을 때만 뜻이 있다. 불과 빗나감은 칸이 아니라 0 으로 죽는다.
 	var pair_sum: int = 0
 	if info.sector > 0 and info.sector < 25 and last_sector > 0 			and last_sector < 25:

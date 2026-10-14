@@ -1,6 +1,6 @@
 extends SceneTree
 
-# 딱정벌레의 도로 — 「연속으로 맞춘 두 숫자의 합이 11이면 배수 ×4」.
+# 열한 걸음 — 「연속으로 맞춘 두 숫자의 합이 11이면 배수 ×4」.
 # 기획서 s25. items.csv u31 · 새 조건 sum11.
 #
 #   godot --path . --headless --script scripts/tools/qa_sum11.gd
@@ -76,7 +76,7 @@ func _run() -> void:
 	for i in 20:
 		g._process(1.0 / 60.0)
 
-	print("\n딱정벌레의 도로 검사 — 합이 11\n")
+	print("\n열한 걸음 검사 — 합이 11\n")
 
 	# ① 조건 자체
 	_ok("합 11 이면 선다", GameData.check("sum11", _ctx(11)))

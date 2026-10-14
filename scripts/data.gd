@@ -1878,7 +1878,7 @@ static func check(c: String, x: Dictionary) -> bool:
 		"mid": return x.sector >= 6 and x.sector <= 14
 		"small": return x.sector >= 1 and x.sector <= 5
 		"same": return x.same
-		# 연속으로 맞춘 두 숫자의 합이 11 — 「딱정벌레의 도로」(기획서 s25)
+		# 연속으로 맞춘 두 숫자의 합이 11 — 「열한 걸음」(기획서 s25 「딱정벌레의 도로」)
 		"sum11": return int(x.get("pair_sum", 0)) == 11
 		"diff": return not x.same
 		"first": return x.first
