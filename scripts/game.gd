@@ -20754,16 +20754,6 @@ func _icon_item(c: Vector2, rx: float, ry: float, id: String,
 			for k in 4:
 				_fc(-0.86 + 0.20 * float(k), -0.16 - 0.16 * float(k), 0.13,
 						c, rx, ry, Color("f3f1e8"))
-		"u19":
-			#  데스 이터스 — 해골에서 뱀이 흘러나온다. 눈 둘이 먼저 읽힌다.
-			_fbg(c, rx, ry, Color("e8e8e6"))
-			_fc(0.0, -0.36, 0.50, c, rx, ry, Color("15151a"))
-			_fr(-0.28, -0.04, 0.28, 0.24, c, rx, ry, Color("15151a"))
-			_fc(-0.19, -0.42, 0.14, c, rx, ry, Color("e8e8e6"))
-			_fc(0.19, -0.42, 0.14, c, rx, ry, Color("e8e8e6"))
-			for k in 3:
-				_fc(-0.36 + 0.36 * float(k), 0.48 + 0.16 * float(k % 2), 0.16,
-						c, rx, ry, Color("15151a"))
 		"u21":
 			#  스포트라이트 — 어둠에서 좁은 꼭지로 퍼지는 빛과 바닥 웅덩이.
 			_fbg(c, rx, ry, Color("14171a"))

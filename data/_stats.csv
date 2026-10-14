@@ -44,7 +44,7 @@ r15,교통카드,common,,,0,4,0.00,0.00,0.00,0.000,0.00,base,uniform_sq,360000,2
 u31,딱정벌레의 도로,uncommon,sum11,xmult,4,8,0.00,0.00,0.00,0.000,0.00,base,uniform_sq,360000,20260821,b85343dcd84b
 u11,슬로 모션,uncommon,always,chip,100,8,62.30,89.31,535.89,11.164,0.00,base,uniform_sq,360000,20260821,b85343dcd84b
 u18,머니건,uncommon,always,chip,2,8,62.30,0.00,0.00,0.000,0.00,base,uniform_sq,360000,20260821,b85343dcd84b
-u19,데스 이터스,uncommon,always,save,50,8,62.30,0.00,0.00,0.000,0.00,base,uniform_sq,360000,20260821,b85343dcd84b
+u19,메멘토 모리,uncommon,always,save,50,8,62.30,0.00,0.00,0.000,0.00,base,uniform_sq,360000,20260821,b85343dcd84b
 u20,그 탑을 잡아라,uncommon,band,chip,20,8,19.40,9.28,55.70,1.160,0.00,base,uniform_sq,360000,20260821,b85343dcd84b
 u21,스포트라이트,uncommon,bull,mult,8,8,1.18,2.79,16.77,0.349,0.00,base,uniform_sq,360000,20260821,b85343dcd84b
 u22,WHITE ALBUM,uncommon,col:0,,0,8,30.54,0.00,0.00,0.000,1.83,base,uniform_sq,360000,20260821,b85343dcd84b
