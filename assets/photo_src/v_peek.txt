@@ -1,39 +1,35 @@
-== v_peek  프리크라임
-= k 14111f
-= n 221c33
-= m 352d4d
-= d 3a3f52
-= s 687085
-= l a3abbb
-= w dde3ec
-= r a8634f
-= t dc9a73
-= u f5cda3
-= b 3f7fd8
-= c 91cbf5
-= o 6e3b39
-= e 2b4a95
-sssssslllllwwwwwwwwwlllllssssssd
-ssssswclllwwwwwwwwwwwllllcwssssd
-sswcsbblwcwwwwmkkkwwwlcwlbbscwsd
-ssbbskklbbwwwmkkkkkwwwbblkksbbsd
-snkkskklkkwwwkkkkkkwwwkklkkskkkd
-snkkkkkkkkwwwkuuttkwwwkkkkkkkkkd
-sskkkkkkkkkwwuutttrwwkkkkkkkkksd
-sskkkkkkkkkbwuottorwbkkkkkkkkksd
-ssskkkkkkklwwuutttrwllkkkkkkkssd
-dssskkkklllllutrrtrlllllkkkkssdd
-dssssutllllllltttrllllllstrsssdd
-ddsssutssllnnnnrrnnnnlssstrssddd
-dddssutsmmmmmnnnnnnnnnnnstrsdddd
-ddddsutttmmmmnnnnnnnkkktttrddddd
-bbbbbtrrmnnnnnnnnnnkkkkkrrrwwwww
-eeeeeessmnnnnnnnnnnkkkkkssllllll
-ceecccsccncnccccnccckcckccwwlwlw
-eeeeeeesnnnnnnnnnnnkkkkkslllllll
-eccceccscnccccncccncckcccwlwlwwl
-deeeeeesnnnnnnnnnnnkkkkkslllllll
-deeeeeeennnnnnnnnnnkkkkkllllllll
-dddeeeeennnnnnnnnnnkkkkkllllllll
-ddddeeeennnnnnnnnnnkkkkkllllllll
-ddddddssnnnnnnnnnnnkkkkkssdddddd
+== v_peek  카산드라
+= a 2b1d4f
+= b 523a8f
+= c 8a5636
+= d fbf6ea
+= e c9bfae
+= f e8dfc8
+= g 4a4160
+= h d8483d
+= i f27d63
+= j 4a1426
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaabbbbbbbbbbbbbbaaaaaaaaa
+aaaccaabbbbbbbbbbbbbbbbbbaaccaaa
+aaadebbbbbbbbbbbbbbbbbbbbbbeeaaa
+aaadebbbbbbbbbbbbbbbbbbbbbbeeaaa
+aaadeddddddddddddddddddddddeeaaa
+aabdeffffffffffffffffffffffeebaa
+aabdefffgggfffgfggffgggffffeebaa
+abbdefffffffggffffgffffffffeebba
+abbdefffggfgfffgggfffffffffeebba
+abbdeffgffffggfffffgfffffffeebba
+abbdefffffggffgggfffgfggfffeebba
+abbdefffffffgfffffggfffffffeebba
+aabdeffffgggffggfffffhhhfffeebaa
+aabdeffgfffffgffffffhiihjffeebaa
+aaadefffffffffffffffhihjhffeeaaa
+aaadefffffffffffffffhhjhhffeeaaa
+aaadeeeeeeeeeeeeeeeeehhheeeeeaaa
+aaadeaabbbbbbbbbbbbbbbbbbaaeeaaa
+aaadeaaaabbbbbbbbbbbbbbaaaaeeaaa
+aaaccaaaaaaaaaaaaaaaaaaaaaaccaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa

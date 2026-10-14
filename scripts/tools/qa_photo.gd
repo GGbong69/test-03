@@ -241,7 +241,7 @@ func _process(_d: float) -> bool:
 	g._start_leg()
 	_ok("빨강, 파랑, 노랑 — 판이 바뀌면 풀린다", g.paint_sec == -1, "칸 %d" % g.paint_sec)
 
-	# ⑨ 프리크라임 — 다시 뽑으면 **실제로 달라진다**
+	# ⑨ 카산드라 — 다시 뽑으면 **실제로 달라진다**
 	#  읽기에서 다시 뽑기로 갈아탔다(2026-09-18). 옛 검사는 「본 것이
 	#  그대로 뜬다」를 쟀는데, 제약이 카드에 상시로 보이는 지금 그 검사는
 	#  통과하면서 게임만 죽은 카드를 쥐고 있게 된다.
@@ -266,11 +266,11 @@ func _process(_d: float) -> bool:
 	var now := []
 	for mid in g.boss_mods.get(pboss, PackedStringArray()):
 		now.append(String(mid))
-	_ok("프리크라임 — 보스 제약이 달라진다", before != now and not now.is_empty(),
+	_ok("카산드라 — 보스 제약이 달라진다", before != now and not now.is_empty(),
 			"%s → %s" % [str(before), str(now)])
-	_ok("프리크라임 — 딱 한 장만 사라진다", g.cons.size() == held - 1,
+	_ok("카산드라 — 딱 한 장만 사라진다", g.cons.size() == held - 1,
 			"%d장 → %d장" % [held, g.cons.size()])
-	_ok("프리크라임 — 옆칸은 그대로 남는다",
+	_ok("카산드라 — 옆칸은 그대로 남는다",
 			g.cons.size() == 1 and String(g.cons[0].get("id", "")) == "v_par",
 			"남은 것 %s" % str(g.cons))
 

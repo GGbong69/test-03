@@ -97,8 +97,8 @@ func _run() -> void:
 			g.owned = [GameData.items()[0].duplicate()]
 			g.state = sp[1]
 			g.pay_msg = ""
-			#  런 값도 같이 되돌린다. GOOD AFTERNOON 이 이 표에서 프리크라임
-			#  **앞줄**이라, 그것이 남긴 무효를 안 지우면 프리크라임이
+			#  런 값도 같이 되돌린다. GOOD AFTERNOON 이 이 표에서 카산드라
+			#  **앞줄**이라, 그것이 남긴 무효를 안 지우면 카산드라가
 			#  「이미 무효인 보스다」로 막혀 자리 검사가 거짓으로 실패한다
 			#  — 여기서 재는 것은 자리(use_at)지 런 상태가 아니다(2026-09-18).
 			g.boss_void.clear()
