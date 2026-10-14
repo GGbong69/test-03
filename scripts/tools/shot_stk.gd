@@ -27,7 +27,7 @@ func _run() -> void:
 	var pick := {}
 	var norm := {}
 	for it in GameData.items():
-		if String(it.get("n", "")) == "더 사일런트":
+		if String(it.get("n", "")) == "소매 속 단검":
 			pick = it
 		if norm.is_empty() and String(it.get("aim", "")) == "" \
 				and String(it.get("c", "")) != "":

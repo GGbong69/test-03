@@ -2838,57 +2838,56 @@ aaaaaaaaaaaaaaaaaaaaaaaaaaaaaggfffff
 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaggffff
 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaggfff
 
-== r03  더 사일런트
+== r03  소매 속 단검
 = a 221c33
-= b fbf6ea
-= c 352d4d
-= d e8dfc8
-= e c9bfae
-= f 94d68e
-= g 479a58
-= h 2f6340
+= b 352d4d
+= c dde3ec
+= d a3abbb
+= e 687085
+= f d8483d
+= g f27d63
+= h 8c2233
 = i 14111f
-= j 1d3326
-= k 1f6570
-= l 8fe0cf
-= m 36a3a0
-= n 8a5636
+= j fdeaa0
+= k f2c94c
+= l 4a1426
+= m a8762a
 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-aaaaaaaaabaaaaccccccccaaaabaaaaaaaaa
-aaaaaaaaabdccccccccccccccbdaaaaaaaaa
-aaaaaaaaaabecccccfccccccbeaaaaaaaaaa
-aaaaaaaaccbdeccffgffcccbdeccaaaaaaaa
-aaaaaaaccccbdefgggggfgbdeccccaaaaaaa
-aaaaaaaccccddeggggggggddeccccaaaaaaa
-aaaaaacccccfggffffffffggccccccaaaaaa
-aaaaaccccccfgffbbbbbbffhcccccccaaaaa
-aaaaacccccfgffbdddddddgghccccccaaaaa
-aaaaacccccfgfbddddddddehhccccccaaaaa
-aaaacccccfgffbiiiddiiiehhhccccccaaaa
-aaaacccccfgfjbffiddiiiejhhccccccaaaa
-aaaacccccfgfjbigiddiiiejhhccccccaaaa
-aaaaccccfggfjbddddddddejghhcccccaaaa
-aaaaccccfggfjjddddeddejjghhcccccaaaa
-aaaaccccfggfjjjbddedejjjgghcccccaaaa
-aaaaccccfggfjjjbddedejjjgghcccccaaaa
-aaaacccfgggffjjbddddejjgggghccccaaaa
-aaaaaccfggggfjjjaddajjjgggghcccaaaaa
-aaaaaccfggggffjjdeeejjggggghcccaaaaa
-aaaaacfggggggffjjjjjjggggggghccaaaaa
-aaaaafgggggbbgbbgbgggggggggghhaaaaaa
-aaaafgggggbddeddedbkggggggggghhaaaaa
-aaaafgggggdddddbbbbkggggggggghhaaaaa
-aaafggggkkddddbddddklllllllllllhaaaa
-aafgggggkkdddddeeeekmmmmmmmmmghhhaaa
-aafgggggggeddddddegkghhhhhhhhgghhaaa
-aafggggggggeeeeeeggkggggggggggghhaaa
-aafgggggggggnnnngggggggggggggggghaaa
-afgggggggggdeeeeeggggggggggggggghhaa
-afgggggggggdeeeeeggggggggggggggghhaa
-aghhhhhhhheeeeeeeehhhhhhhhhhhhhhhhaa
+aaaaaaaaaaaaaabbbbbbbbaaaaaaaaaaaaaa
+aaaaaaaaaaabbbbbbbbbbbbbbaaaaaaaaaaa
+aaaaaaaaaabbbbbbbbbbbbbbbbaaaaaaaaaa
+aaaaaaaabbbbbbbbbbbbbbbbbbbbaaaaaaaa
+aaaaaaabbbbbbbbbbbbbbbbbbbbbbaaaaaaa
+aaaaaaabbbbbbbbbbbbbbbbbbbbbbaaaaaaa
+aaaaaabbbbbbbbbbbbbbbbbbbbbbbbaaaaaa
+aaaaabbbbbbbbbbbbbbbbbbbbbbbbbbaaaaa
+aaaaabbbbbbbbbbbbbbbbbbbbbbbbbbaaaaa
+aaaaabbbbbbbbbbbbbbbbbbbbcccdebaaaaa
+aaaabbbbbbbbfggbbbbbbbbccccdebbbaaaa
+aaaabbbbbbbfhgiijbbbccccdddebbbbaaaa
+aaaabbbbbffhhhgijkccccdddeebbbbbaaaa
+aaaabbbffhhhhhgijkdcdddeebbbbbbbaaaa
+aaaabbfhhhlhhhgiijmddeebbbbbbbbbaaaa
+aaaaffhhhhllhhhgijmeebbbbbbbbbbbaaaa
+aaffhhhhhhhlhhhgiimmbbbbbbbbbbbbaaaa
+afhhhhhhhhhllhhhgimmbbbbbbbbbbbbaaaa
+fhhhhhhhhhhhlhhhfiibbbbbbbbbbbbaaaaa
+fhhhhhhlhhhhhhhhhfihbbbbbbbbbbbaaaaa
+fhhhhhhlhhhhhhhhhhhhbbbbbbbbbbbaaaaa
+fhhhhhhhlhhhhhhhlllbbbbbbbbbbbaaaaaa
+fhhhhhhhlhhhhlllbbbbbbbbbbbbbaaaaaaa
+fhhhhhhhlllllbbbbbbbbbbbbbbbbaaaaaaa
+fhhhhhhlllbbbbbbbbbbbbbbbbbbaaaaaaaa
+fhhhlllaaabbbbbbbbbbbbbbbbaaaaaaaaaa
+hlllaaaaaaabbbbbbbbbbbbbbaaaaaaaaaaa
+haaaaaaaaaaaaabbbbbbbbaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 == r04  카우보이
 = a c9bfae
