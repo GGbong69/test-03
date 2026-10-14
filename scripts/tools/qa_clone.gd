@@ -75,7 +75,7 @@ func _run() -> void:
 		_shop(2)
 		var shop_n: int = g.stock.size()
 		_ok("%s · 상점에 매물이 있다" % path, shop_n > 0, "%d개" % shop_n)
-		#  마릴린 딥틱을 연다
+		#  위조화폐를 연다
 		var fx := _fix("v_fake")
 		g._photo_open("clone", int(fx.get("v", 2)))
 		g._drop_settle()

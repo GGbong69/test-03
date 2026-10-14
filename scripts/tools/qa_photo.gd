@@ -203,17 +203,17 @@ func _process(_d: float) -> bool:
 			"동전 %d장 · 골드 %d (바라는 값 %d)" % [g.owned.size(), g.gold, want_g])
 	_ok("불나방 — 테이블이 돌아온다", g.photo == "", "photo '%s'" % g.photo)
 
-	# ⑦ 마릴린 딥틱 — 복제 창구가 한 장을 더 준다
+	# ⑦ 위조화폐 — 복제 창구가 한 장을 더 준다
 	g.owned.clear()
 	g.owned.append(GameData.items()[0].duplicate())
 	_hold("v_fake")
 	g._cons_use(0)
-	_ok("마릴린 딥틱 — 테이블이 갈린다", g.photo == "clone", "photo '%s'" % g.photo)
+	_ok("위조화폐 — 테이블이 갈린다", g.photo == "clone", "photo '%s'" % g.photo)
 	g.buy_sel = 0
 	g._chute_click(g.Z_BUY)
-	_ok("마릴린 딥틱 — 한 장이 더 생긴다", g.owned.size() == 2,
+	_ok("위조화폐 — 한 장이 더 생긴다", g.owned.size() == 2,
 			"동전 %d장" % g.owned.size())
-	_ok("마릴린 딥틱 — 반대쪽 창구로는 안 된다", g.photo == "", "photo '%s'" % g.photo)
+	_ok("위조화폐 — 반대쪽 창구로는 안 된다", g.photo == "", "photo '%s'" % g.photo)
 
 	# ⑧ 빨강, 파랑, 노랑 — 고른 칸의 점수가 곱해진다
 	g.state = g.S.PICK

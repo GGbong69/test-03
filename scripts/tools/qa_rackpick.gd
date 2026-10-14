@@ -1,6 +1,6 @@
 extends SceneTree
 
-# 상점 밖에서 불나방 · 마릴린 딥틱이 동전 슬롯에서 대상을
+# 상점 밖에서 불나방 · 위조화폐가 동전 슬롯에서 대상을
 # 고르는가. 기획서 s33 이 그 둘을 「상관없음」으로 적었는데 판 위에는
 # 테이블이 없어 고를 자리가 없었다.
 #
@@ -84,13 +84,13 @@ func _run() -> void:
 			"골드 %d/%d · 동전 %d · 손 %d" % [g.gold, want, g.owned.size(), g.cons.size()])
 	_ok("고른 뒤 풀린다", g.photo_rack == "", "'%s'" % g.photo_rack)
 
-	# ③ 마릴린 딥틱 — 복사
+	# ③ 위조화폐 — 복사
 	g.state = g.S.PICK
 	_coin(1)
 	_hold("v_fake")
 	g._cons_use(0)
 	g._photo_rack_click(g._slot_rect(0).get_center())
-	_ok("마릴린 딥틱 — 동전이 하나 는다", g.owned.size() == 2 and g.cons.is_empty(),
+	_ok("위조화폐 — 동전이 하나 는다", g.owned.size() == 2 and g.cons.is_empty(),
 			"동전 %d · 손 %d" % [g.owned.size(), g.cons.size()])
 
 	# ④ 슬롯이 꽉 차면 복사가 안 되고 사진이 남는다

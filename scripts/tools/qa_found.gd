@@ -189,7 +189,7 @@ func _doors() -> void:
 	g._take_cons([(GameData.candies()[1] as Dictionary)], 1, "칸이 꽉 찼다")
 	_ok("_take_cons → 사탕만 1", _only(before, 3, 1), "%s → %s" % [str(before), str(_six())])
 
-	#  마릴린 딥틱 복제 — 이미 든 장이라 수가 안 늘어야 한다(같은 id)
+	#  위조화폐 복제 — 이미 든 장이라 수가 안 늘어야 한다(같은 id)
 	before = _six()
 	if not g.owned.is_empty():
 		g._photo_apply("clone", 0)
