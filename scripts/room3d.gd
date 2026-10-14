@@ -627,6 +627,45 @@ static func _plank(wpx: int, hpx: int, base: Color, seed: int,
 	return [im, orm]
 
 
+#  소실점으로 모이는 판자(2026-10-14 「무늬의 기울기가 이거 맞아? 이 기울기에 맞추고」 → 「펠트 빗변을 따라」) —
+#  옆 카운터 판자가 펠트 빗변처럼 안쪽(상인 쪽)으로 모이며 뻗는다. UV 가 화면 격자 그대로(_face)라 텍스처를 미리
+#  휘어 굽는다: 텍셀 (x, s)(화면 x · 펠트 먼 모서리에서 내려온 y)의 판자 가로 자리는 그 점과 소실점 vp 를 잇는 선이
+#  가까운 모서리(s = sn)와 만나는 x 다. 곧은 판자 한 장(_plank — 판자가 가로 줄 · 결이 가로)을 「길이 = s ·
+#  폭 = 그 x」로 옮겨 찍으므로 이음 · 결 · 못이 다 소실점에서 뻗는 선을 따르고, 판자 폭이 먼 쪽에서 좁아진다.
+#  org 는 텍스처 왼쪽 위의 (x, s), 크기 tw x th.
+static func _plank_vp(tw: int, th: int, org: Vector2, vp: Vector2, sn: float, base: Color,
+		seed: int) -> Array:
+	var k0: float = sn - vp.y
+	var xr := func(x: float, sy: float) -> float:
+		return vp.x + (x - vp.x) * k0 / maxf(sy - vp.y, 1.0)
+	var lo: float = INF
+	var hi: float = -INF
+	for x in [org.x, org.x + float(tw)]:
+		for sy in [org.y, org.y + float(th)]:
+			var v: float = xr.call(x, sy)
+			lo = minf(lo, v)
+			hi = maxf(hi, v)
+	var hs: int = int(ceilf(hi - lo)) + 2
+	var out := []
+	for img in _plank(th, hs, base, seed):
+		#  판자가 세로 띠가 되게 돌린다 — T(r, j) = 곧은 판자의 (길이 j · 폭 r). 그러면 출력 한 줄은 T 의
+		#  같은 줄을 가로로 늘인 것이다(r 이 i 의 일차식) — 줄마다 잘라 늘여 붙인다(픽셀마다 돌면 1초 걸렸다).
+		var t: Image = img
+		t.rotate_90(CLOCKWISE)
+		t.flip_x()
+		var o := Image.create(tw, th, false, Image.FORMAT_RGBA8)
+		for j in th:
+			var f: float = k0 / maxf(org.y + float(j) + 0.5 - vp.y, 1.0)
+			var b: float = vp.x + (org.x - vp.x) * f - lo
+			var x0: int = clampi(int(floorf(b)), 0, hs - 1)
+			var w: int = clampi(int(ceilf(float(tw) * f)), 1, hs - x0)
+			var row: Image = t.get_region(Rect2i(x0, j, w, 1))
+			row.resize(tw, 1, Image.INTERPOLATE_NEAREST)
+			o.blit_rect(row, Rect2i(0, 0, tw, 1), Vector2i(0, j))
+		out.append(o)
+	return out
+
+
 #  니스 칠한 판자 재질 — 반사가 맨나무의 두 배(시안 P 의 상판과 같은 값).
 static func _varnish(pair: Array) -> ORMMaterial3D:
 	var m := ORMMaterial3D.new()
@@ -787,7 +826,12 @@ static func make_table(host: Node, r: Rect2, fy: float, ny: float, back: float, 
 	# ── 나무 그림 — 화면 1px = 1텍셀. 판자(이음 · 못) 하나, 통나무(결만) 둘 ──
 	var tw: int = int(X + TEX_U * 2.0)
 	var tex := Vector2(tw, 256)
-	var plank := _varnish(_plank(tw, 256, WOOD.plank, 41))
+	#  옆 카운터 판자는 카운터 끝(−E · X + E)까지 한 장으로 — 소실점으로 모이는 결은 되풀이하면 끊긴다.
+	var ptw: int = int(X + (E + TEX_U) * 2.0)
+	var ptex := Vector2(ptw, 256)
+	var porg := Vector2(-E - TEX_U, -TEX_V)
+	var pvp := Vector2(X * 0.5, (ny - fy) - (X * 0.5 - side) * (ny - fy) / back)   # 펠트 두 빗변이 만나는 점(game.gd _tbl_vp)
+	var plank := _varnish(_plank_vp(ptw, 256, porg, pvp, ny - fy, WOOD.plank, 41))
 	var ledge := _varnish(_plank(tw, 256, WOOD.ledge, 43, 64, 64, false))
 	var ledge_f := _varnish(_plank(tw, 256, WOOD.ledge.darkened(0.30), 47, 64, 64, false))
 
@@ -804,9 +848,9 @@ static func make_table(host: Node, r: Rect2, fy: float, ny: float, back: float, 
 	# ── 옆 카운터 — 판매 · 구매 자리. 니스 칠한 밤나무 판자, 벨벳보다 한 단 위 ──
 	#  먼 쪽 fb 에서 앞 side 로 좁아지는 사다리꼴 — 옛 창구 삼각형(앞에서 0)을 앞까지 넓혔다.
 	root.add_child(_face([Vector3(-E, TOP_H, -2.0), Vector3(fb, TOP_H, -2.0),
-			Vector3(side, TOP_H, W), Vector3(-E, TOP_H, W)], plank, Vector3.UP, tex))
+			Vector3(side, TOP_H, W), Vector3(-E, TOP_H, W)], plank, Vector3.UP, ptex, porg))
 	root.add_child(_face([Vector3(X - fb, TOP_H, -2.0), Vector3(X + E, TOP_H, -2.0),
-			Vector3(X + E, TOP_H, W), Vector3(X - side, TOP_H, W)], plank, Vector3.UP, tex))
+			Vector3(X + E, TOP_H, W), Vector3(X - side, TOP_H, W)], plank, Vector3.UP, ptex, porg))
 
 	# ── 조각 틀 — 빗변 몰딩(나무 두 단) + 벨벳 쪽 금실 + 모서리 놋쇠 갓 ──
 	var carve := _mat(WOOD.carve, 0.45)
