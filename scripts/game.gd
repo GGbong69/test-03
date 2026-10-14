@@ -20641,18 +20641,6 @@ func _icon_item(c: Vector2, rx: float, ry: float, id: String,
 			for k in 3:
 				_fc(-0.26 + 0.26 * float(k), -0.42 - 0.10 * float(k % 2),
 						0.12, c, rx, ry, Color("b64228"))
-		"c05":
-			#  하키 마스크 — 흰 판에 검은 구멍, 눈 위에 붉은 갈매기.
-			_fbg(c, rx, ry, Color("6b615d"))
-			_fc(0.0, 0.0, 0.92, c, rx, ry, Color("e9e7e0"))
-			_fc(-0.28, -0.14, 0.17, c, rx, ry, Color("2a2622"))
-			_fc(0.28, -0.14, 0.17, c, rx, ry, Color("2a2622"))
-			_fr(-0.26, 0.38, 0.26, 0.52, c, rx, ry, Color("2a2622"))
-			for k in 4:
-				_fc(-0.32 + 0.21 * float(k), -0.62, 0.075, c, rx, ry,
-						Color("2a2622"))
-			_fl(-0.44, -0.40, -0.10, -0.30, 0.10, c, rx, ry, Color("c04a5a"))
-			_fl(0.44, -0.40, 0.10, -0.30, 0.10, c, rx, ry, Color("c04a5a"))
 		"c07":
 			#  BiiiG — 크림 바탕에 굵은 글자꼴 셋. 기둥 셋이 이름이다.
 			_fbg(c, rx, ry, Color("fbf3de"))
