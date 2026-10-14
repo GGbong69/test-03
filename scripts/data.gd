@@ -490,7 +490,7 @@ static func _num(v) -> String:
 
 
 # 부호 붙인 정수 — 감소는 빼기표(U+2212). "%+d" 는 ASCII '-' 를 찍어
-# BULLET TIME 에 「판 시작 다트 -2」가 섰다.
+# 슬로 모션(옛 BULLET TIME)에 「판 시작 다트 -2」가 섰다.
 static func _sgn(n: int) -> String:
 	return ("+%d" % n) if n >= 0 else ("−%d" % -n)
 
