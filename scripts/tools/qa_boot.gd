@@ -4,9 +4,9 @@ extends SceneTree
 #   「튜토리얼을 게임의 매력을 보여 주는 걸로 특화하자 — 개사기 아이템 주는 거」
 #   사용자와 절차대로 정한 흐름:
 #     ① 처음 켠 사람의 첫 런은 1라운드 3판짜리 튜토리얼 런이다
-#     ② 첫 상점 두 장 → 리롤을 가리키고 동전 셋 · 사탕 → 둘째 상점은 석양이 진다 ·
+#     ② 첫 상점 두 장 → 리롤을 가리키고 동전 셋 · 사탕 → 둘째 상점은 패닝 ·
 #        보드 확장 · 팩 · 사진(TUT.pages) · 태그 [서비스]
-#        · 석양이 진다는 동전 칸이 차 있어 하나를 팔아야 집힌다(2026-10-06 「하나 팔고
+#        · 패닝는 동전 칸이 차 있어 하나를 팔아야 집힌다(2026-10-06 「하나 팔고
 #          받기」) — 둘째 상점에 판매 말상자(u_sell)가 선다
 #        · 판을 못 건너뛴다(2026-10-06) — 본편 런은 건너뛴다
 #        · 안 집으면 다음 상점에 다시 · 곱하기는 알아서 오른쪽 끝
@@ -184,7 +184,7 @@ func _run() -> void:
 	_ok("사탕이 칸에 들었다", held.has("c_tr"), str(held))
 	g.cons.clear()          # 둘째 판에 썼다고 친다
 	_shop(2)
-	_ok("둘째 상점에 석양이 진다 · 보드 확장 · 팩 · 사진이 선다",
+	_ok("둘째 상점에 패닝 · 보드 확장 · 팩 · 사진이 선다",
 			_gift_ids() == ["b_small", "c_again", "dnut", "r05"], str(_gift_ids()))
 	_ok("테이블 폭은 그대로다(선물 넷이 네 칸을 다 쓴다)",
 			g.stock.size() == GameData.shop_slots(2), "%d" % g.stock.size())
@@ -193,12 +193,12 @@ func _run() -> void:
 				or String(g.tutor_id) == "u_sell", str(g.tutor_q))
 	else:
 		_skip("둘째 상점에 판매 말상자가 선다", "표에서 u_sell 을 지웠다")
-	#  석양이 진다 — 동전 칸이 차 있어 못 집고, 하나를 팔면 집힌다(「하나 팔고 받기」).
+	#  패닝 — 동전 칸이 차 있어 못 집고, 하나를 팔면 집힌다(「하나 팔고 받기」).
 	var sun := -1
 	for i in _gift_at():
 		if String(g.stock[i].d.id) == "r05":
 			sun = i
-	_ok("석양이 진다는 동전 칸이 차 있어 못 집는다", sun >= 0 and g._buy_block(sun) != "",
+	_ok("패닝는 동전 칸이 차 있어 못 집는다", sun >= 0 and g._buy_block(sun) != "",
 			"「%s」" % (g._buy_block(sun) if sun >= 0 else "없다"))
 	var sold_id := String(g.owned[0].get("id", ""))
 	g._sell(0)
@@ -206,7 +206,7 @@ func _run() -> void:
 			"판 것 %s · 「%s」" % [sold_id, g._buy_block(sun) if sun >= 0 else "없다"])
 	if sun >= 0:
 		g._buy(sun)
-	_ok("석양이 진다가 동전 칸에 든다", _ids().has("r05") and g.owned.size() <= GameData.max_items(),
+	_ok("패닝가 동전 칸에 든다", _ids().has("r05") and g.owned.size() <= GameData.max_items(),
 			str(_ids()))
 	var pk_ok := false
 	for i in _gift_at():
@@ -222,7 +222,7 @@ func _run() -> void:
 	#  규칙만 잰다.
 	_shop(3)
 	#  판 선물 동전은 「가졌는가」로 보므로(_boot_stock — 깨진 유리 대포 · 이카로스가 다시
-	#  서는 그 규칙) 석양이 진다를 받으려고 판 동전도 다시 선다.
+	#  서는 그 규칙) 패닝를 받으려고 판 동전도 다시 선다.
 	var want := ["b_small", sold_id]
 	want.sort()
 	_ok("다음 상점에는 안 받은 팩과 판 동전만 다시 선다", _gift_ids() == want,

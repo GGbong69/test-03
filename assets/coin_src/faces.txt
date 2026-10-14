@@ -2937,7 +2937,7 @@ aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
-== r05  석양이 진다
+== r05  패닝
 = a 8c2233
 = b d8483d
 = c 4a1426
