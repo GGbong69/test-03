@@ -20711,12 +20711,6 @@ func _icon_item(c: Vector2, rx: float, ry: float, id: String,
 			_fc(-0.30, -0.28, 0.28, c, rx, ry, Color("e6ecf4"))
 			_fc(0.26, 0.12, 0.30, c, rx, ry, Color("8a7a52"))
 			_fc(-0.12, 0.54, 0.20, c, rx, ry, Color("e6ecf4"))
-		"c37":
-			#  진열된 수프 — 붉은 위통과 흰 아래통, 가운데 금띠.
-			_fr(-0.52, -0.82, 0.52, 0.82, c, rx, ry, Color("b84347"))
-			_fr(-0.52, 0.04, 0.52, 0.82, c, rx, ry, Color("e7e3d6"))
-			_fr(-0.52, -0.06, 0.52, 0.06, c, rx, ry, Color("d0a93e"))
-			_fc(0.0, -0.82, 0.52, c, rx, ry, Color("9aa0a6"))
 		"c46":
 			#  프리즘 — 검은 바탕, 들어가는 흰 줄, 갈라져 나오는 무지개.
 			_fbg(c, rx, ry, Color("0b0b0e"))

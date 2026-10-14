@@ -140,7 +140,7 @@ func _run() -> void:
 	await _col("coin_c43", 0, its, "c43")      # 골드 곁줄
 	await _col("coin_l05", 0, its, "l05")      # 「~당」 뒤에서 접힘
 	await _col("coin_r05", 0, its, "r05")      # 조준 — 세 줄
-	await _col("coin_c37", 0, its, "c37")      # 진열된 수프
+	await _col("coin_c37", 0, its, "c37")      # 진열장
 	var mds: Array = GameData.mods()
 	await _col("mod_jjak", 1, mds, "jjak")     # 제보 자리
 	await _col("mod_holl", 1, mds, "holl")
