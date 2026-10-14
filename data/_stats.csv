@@ -48,7 +48,7 @@ u19,메멘토 모리,uncommon,always,save,50,8,62.30,0.00,0.00,0.000,0.00,base,u
 u20,그 탑을 잡아라,uncommon,band,chip,20,8,19.40,9.28,55.70,1.160,0.00,base,uniform_sq,360000,20260821,b85343dcd84b
 u21,스포트라이트,uncommon,bull,mult,8,8,1.18,2.79,16.77,0.349,0.00,base,uniform_sq,360000,20260821,b85343dcd84b
 u22,크림 치즈,uncommon,col:0,,0,8,30.54,0.00,0.00,0.000,1.83,base,uniform_sq,360000,20260821,b85343dcd84b
-u23,심장의 색깔은,uncommon,col:1,chip,8,8,30.58,28.69,172.17,3.587,0.00,base,uniform_sq,360000,20260821,b85343dcd84b
+u23,흑심,uncommon,col:1,chip,8,8,30.58,28.69,172.17,3.587,0.00,base,uniform_sq,360000,20260821,b85343dcd84b
 u24,비포 선라이즈,uncommon,diff,chip,12,8,60.75,10.45,62.69,1.306,0.00,base,uniform_sq,360000,20260821,b85343dcd84b
 u25,퍼스트블러드,uncommon,first,chip,44,8,10.35,6.51,39.06,0.814,0.00,base,uniform_sq,360000,20260821,b85343dcd84b
 u26,SAFETY LAST!,uncommon,last,xmult,3,8,10.43,3.22,19.33,0.403,0.00,base,uniform_sq,360000,20260821,b85343dcd84b
