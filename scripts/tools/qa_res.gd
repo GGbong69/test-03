@@ -4,9 +4,11 @@ extends SceneTree
 #   ② 모니터를 모르면(헤드리스) 크기 여섯 다 · 값 글은 「가로 × 세로」
 #   ③ ▶ 는 한 칸 크게 · 끝에서 감는다 · ◀ 는 한 칸 작게 · 고른 가로가 저장된다
 #   ④ ◀ · ▶ 단추가 줄 안 · 조작 칸(이름 칸 뒤) · 서로 안 겹친다 · 누르면 그 쪽으로 민다
-#   ⑤ 여덟 줄이 「뒤로」에 안 닿고 줄 높이 26 이다
+#   ⑤ 일곱 줄이 「뒤로」에 안 닿고 줄 높이 26 이다(2026-10-14 「화면 고르기」 줄을 걷어 여덟 → 일곱)
+#   ⑥ 넓은 화면 — 펠트 · 창구가 넓어지고 저울 · 등록기가 바깥으로(화면 안) · TBL_WIDE 까지
 #   godot --headless --path . --script scripts/tools/qa_res.gd
 const Save = preload("res://scripts/save.gd")
+const Room3D = preload("res://scripts/room3d.gd")
 var g = null
 var ok := 0
 var bad := 0
@@ -92,6 +94,25 @@ func _run() -> void:
 	# ⑤
 	var last: Rect2 = g._set_rect(rows.size() - 2)
 	var back: Rect2 = g._set_rect(rows.size() - 1)
-	_ok("⑤ 여덟 줄이 「뒤로」에 안 닿는다", rows.size() == 9 and last.end.y < back.position.y,
+	_ok("⑤ 일곱 줄이 「뒤로」에 안 닿는다", rows.size() == 8 and last.end.y < back.position.y,
 			"%d줄 · %.0f < %.0f" % [rows.size() - 1, last.end.y, back.position.y])
 	_ok("⑤ 줄 높이 26", is_equal_approx(r.size.y, 26.0), "%.0f" % r.size.y)
+
+	# ⑥ 넓은 화면의 테이블(2026-10-14) — 펠트 · 창구가 양옆으로 넓어지고 저울 · 등록기가 그만큼 바깥으로
+	var s0: Rect2 = g._prop_rect_raw(0)
+	var b0: Rect2 = g._prop_rect_raw(1)
+	var e0: float = g._chute_edge(float(g.TBL.ny))
+	g.view_pad = Vector2(100.0, 0.0)
+	Room3D.wide = g._tbl_wide()
+	_ok("⑥ 넓은 화면 — 펠트 앞 모서리가 100 바깥", is_equal_approx(g._chute_edge(float(g.TBL.ny)), e0 - 100.0),
+			"%.1f → %.1f" % [e0, g._chute_edge(float(g.TBL.ny))])
+	#  소실점이 멀어진 만큼 깊이 축의 기욺(lean)이 조금 달라 1px 안쪽으로 어긋난다
+	_ok("⑥ 저울 · 등록기가 100 씩 바깥으로", absf(g._prop_rect_raw(0).position.x - (s0.position.x - 100.0)) < 2.0
+			and absf(g._prop_rect_raw(1).position.x - (b0.position.x + 100.0)) < 2.0,
+			"%.1f · %.1f" % [g._prop_rect_raw(0).position.x, g._prop_rect_raw(1).position.x])
+	_ok("⑥ 저울 · 등록기가 보이는 화면 안", g._full().encloses(g._prop_rect_raw(0))
+			and g._full().encloses(g._prop_rect_raw(1)))
+	g.view_pad = Vector2(400.0, 0.0)
+	_ok("⑥ 아주 넓어도 TBL_WIDE 까지만(상인 팔이 닿는 자리)", is_equal_approx(g._tbl_wide(), float(g.TBL_WIDE)))
+	g.view_pad = Vector2.ZERO
+	Room3D.wide = 0.0

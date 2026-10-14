@@ -25672,10 +25672,10 @@ func _felt_draw() -> void:
 		_chute_draw()
 		return
 	# 펠트는 사다리꼴이다. 좌우 빗변이 그대로 창구라 모양이 곧 규칙이다.
-	var fb: float = float(CHUTE.side) + float(CHUTE.back)
+	var fb: float = _side() + float(CHUTE.back)
 	var felt := PackedVector2Array([
 			Vector2(fb, TBL.fy), Vector2(VIEW.x - fb, TBL.fy),
-			Vector2(VIEW.x - CHUTE.side, TBL.ny), Vector2(CHUTE.side, TBL.ny)])
+			Vector2(VIEW.x - _side(), TBL.ny), Vector2(_side(), TBL.ny)])
 	draw_colored_polygon(felt, C_TABLE)
 	var ink: Color = C_TABLE.lightened(0.34)
 
@@ -25813,18 +25813,19 @@ func _chute_draw() -> void:
 			body = body.lerp(C_WOOD.darkened(0.22), hk)
 		#  창구 — 바깥 위 · 빗변 위 · 빗변 밑 · 바깥 밑(p[1] → p[2] 가 빗변). 앞에서도 side 폭이
 		#  남는 사다리꼴이다(2 : 6 : 2 · CHUTE 머리말).
-		var fb: float = float(CHUTE.side) + float(CHUTE.back)
+		var fb: float = _side() + float(CHUTE.back)
 		var p := PackedVector2Array()
+		var ox: float = _full().position.x
 		if z == Z_SELL:
-			p.append(Vector2(0.0, TBL.fy))
+			p.append(Vector2(ox, TBL.fy))
 			p.append(Vector2(fb, TBL.fy))
-			p.append(Vector2(CHUTE.side, TBL.ny))
-			p.append(Vector2(0.0, TBL.ny))
+			p.append(Vector2(_side(), TBL.ny))
+			p.append(Vector2(ox, TBL.ny))
 		else:
-			p.append(Vector2(VIEW.x, TBL.fy))
+			p.append(Vector2(VIEW.x - ox, TBL.fy))
 			p.append(Vector2(VIEW.x - fb, TBL.fy))
-			p.append(Vector2(VIEW.x - CHUTE.side, TBL.ny))
-			p.append(Vector2(VIEW.x, TBL.ny))
+			p.append(Vector2(VIEW.x - _side(), TBL.ny))
+			p.append(Vector2(VIEW.x - ox, TBL.ny))
 		var r3 := _room3d_tbl()
 		if r3:
 			#  진열대 — 옛 창구 삼각형은 이제 카운터이고 그 위에 소품이 선다
@@ -25977,9 +25978,9 @@ const CHUTE_TXT := {"ly": 20.0, "vdy": 19.0, "ly3": 52.0, "vdy3": 16.0}
 #  BUY_AT)에서 그 소품의 깊이 축(lean — 소실점으로 기운다)을 따라 이름 잉크 한가운데 깊이까지
 #  내려온 자리다. 소품을 옮기면 글이 따라온다.
 func _chute_txt_cx(z: int) -> float:
-	var at: Vector3 = Room3D.BUY_AT if z == Z_BUY else Room3D.SELL_AT
+	var at: Vector3 = Room3D.buy_at() if z == Z_BUY else Room3D.sell_at()
 	var wd: float = (float(TBL.ny) - float(TBL.fy)) / float(TBL.flat)
-	var sh: float = Room3D.lean(at, VIEW.x, wd, float(CHUTE.back), float(CHUTE.side))
+	var sh: float = Room3D.lean(at, VIEW.x, wd, float(CHUTE.back), _side())
 	var w: float = (float(CHUTE_TXT.ly3) - 8.0) / float(TBL.flat)
 	return at.x + sh * (w - at.z)
 
@@ -26817,8 +26818,9 @@ func _room3d_open() -> void:
 		return
 	room_vp = Room3D.make_room(self)
 	btl_synced = -1          # 새 방은 술병이 다 서 있다 — 깬 병을 다시 숨긴다(_btl_tick)
+	Room3D.wide = _tbl_wide()
 	tbl3_vp = Room3D.make_table(self, _room3d_rect(), float(TBL.fy), float(TBL.ny),
-			float(CHUTE.back), float(CHUTE.side), float(TBL.flat), float(TBL.tall),
+			float(CHUTE.back), _side(), float(TBL.flat), float(TBL.tall),
 			float(HAND3.pitch))
 	_room3d_fit()
 
@@ -26827,6 +26829,13 @@ func _room3d_open() -> void:
 func _room3d_fit() -> void:
 	if room_vp != null and is_instance_valid(room_vp):
 		Room3D.room_fit(room_vp, VIEW + view_pad * 2.0)
+	#  넓은 화면의 펠트 폭이 바뀌었으면 테이블을 다시 짓는다 — 펠트 · 카운터 판자 · 소품 자리가 다 그 폭으로 선다.
+	if tbl3_vp != null and is_instance_valid(tbl3_vp) and absf(Room3D.wide - _tbl_wide()) > 0.5:
+		tbl3_vp.queue_free()
+		Room3D.wide = _tbl_wide()
+		tbl3_vp = Room3D.make_table(self, _room3d_rect(), float(TBL.fy), float(TBL.ny),
+				float(CHUTE.back), _side(), float(TBL.flat), float(TBL.tall),
+				float(HAND3.pitch))
 	if tbl3_vp != null and is_instance_valid(tbl3_vp):
 		Room3D.table_fit(tbl3_vp, _room3d_rect(), float(TBL.fy), float(TBL.flat),
 				float(HAND3.pitch))
@@ -31898,13 +31907,13 @@ func _prop_pan3() -> Vector3:
 #  저울대가 a 만큼 기운 때의 왼 접시 위 동전 윗면 (u, h, w).
 func _pan3_at(a: float) -> Vector3:
 	return Room3D.pan_top(VIEW.x, float(TBL.fy), float(TBL.ny), float(CHUTE.back),
-			float(CHUTE.side), float(TBL.flat), a) + Vector3(0.0, float(PROP.coin_t), 0.0)
+			_side(), float(TBL.flat), a) + Vector3(0.0, float(PROP.coin_t), 0.0)
 
 
 #  내리치는 자리 — 손바닥이 닿는 건반 윗면 (u, h, w)(Room3D.slam_top).
 func _prop_slam_at() -> Vector3:
 	return Room3D.slam_top(VIEW.x, float(TBL.fy), float(TBL.ny), float(CHUTE.back),
-			float(CHUTE.side), float(TBL.flat))
+			_side(), float(TBL.flat))
 
 
 #  치켜든 몫 0..(1 + 예비) — 0 이 닿음. 뻗는 동안(~b_up)은 치켜든 자리가 과녁이고(섞임이
@@ -32063,7 +32072,7 @@ func _burst_spawn() -> void:
 		var kind: int = 0 if i < int(B.coin) else (1 if i < int(B.coin) + int(B.wood) else 2)
 		bu_k[i] = kind
 		var f3: Vector3 = Room3D.drawer_front(VIEW.x, float(TBL.fy), float(TBL.ny),
-				float(CHUTE.back), float(CHUTE.side), float(TBL.flat), 1.0, lerpf(dx.x, dx.y, r0))
+				float(CHUTE.back), _side(), float(TBL.flat), 1.0, lerpf(dx.x, dx.y, r0))
 		bu_p[i] = Vector3(f3.x, f3.z - r1 * 6.0, f3.y + r2 * 4.0)
 		#  나뭇조각 · 부스러기는 조금 더 세게 · 높이 튄다(부서져 튕긴 것) — 동전은 쏟아진다.
 		var kick: float = 1.0 if kind == 0 else 1.15
@@ -39852,11 +39861,26 @@ const Z_SELL := 0
 const Z_BUY := 1
 
 
+#  넓은 화면의 테이블 — 16:9 보다 넓으면(view_pad.x) 펠트가 양옆으로 그만큼 넓어지고 저울 · 등록기도 바깥으로
+#  간다(2026-10-14 「와일드 그니까 양쪽으로 넓은거는 테이블이 넓으면 좋겠어, 판매와 구매도 넓은 만큼 양쪽으로」).
+#  TBL_WIDE 까지 — 더 넓히면 상인 팔이 저울 · 등록기에 안 닿는다. 3D 쪽은 Room3D.wide 가 같은 값을 든다.
+const TBL_WIDE := 120.0
+
+
+func _tbl_wide() -> float:
+	return clampf(view_pad.x, 0.0, TBL_WIDE)
+
+
+#  펠트 앞 모서리가 시작하는 x(옛 CHUTE.side) — 넓은 화면에서는 바깥으로 나간다.
+func _side() -> float:
+	return float(CHUTE.side) - _tbl_wide()
+
+
 # 그 높이에서 펠트가 시작하는 x. 좌우 대칭이라 왼쪽 값 하나로 둘 다 낸다.
 # 먼 모서리 side + back(138) 에서 앞 레일 side(96) 로 — 창구가 앞에서도 side 폭으로 남는다.
 func _chute_edge(y: float) -> float:
 	var t := clampf((y - TBL.fy) / (TBL.ny - TBL.fy), 0.0, 1.0)
-	return CHUTE.side + CHUTE.back * (1.0 - t)
+	return _side() + CHUTE.back * (1.0 - t)
 
 
 # 커서가 어느 창구 위인가. pad 로 히스테리시스를 만든다.
@@ -39886,13 +39910,13 @@ func _chute_at(m: Vector2, pad: float) -> int:
 #  밖으로 나갔다. 2 : 6 : 2(2026-10-11)에서 둘 다 화면 안에 온 몸으로 서지만(shop_probe
 #  「진열대 소품 창구」가 자르기 전 사각을 잰다) 자르기는 남겨 둔다 — 잘린 몫은 누를 수 없다.
 func _prop_rect(z: int) -> Rect2:
-	return _prop_rect_raw(z).intersection(Rect2(Vector2.ZERO, VIEW))
+	return _prop_rect_raw(z).intersection(_full())
 
 
 #  자르기 전 소품 사각 — 화면 끝에 걸쳤는지 검사가 잰다.
 func _prop_rect_raw(z: int) -> Rect2:
 	return Room3D.prop_rect(z, VIEW.x, float(TBL.fy), float(TBL.ny), float(CHUTE.back),
-			float(CHUTE.side), float(TBL.flat), float(TBL.tall))
+			_side(), float(TBL.flat), float(TBL.tall))
 
 
 # 도킹 목표 u. 물건 중심을 빗변 위에 얹어 반쯤 걸치게 한다 — "건네는 중" 이다.
@@ -43307,7 +43331,7 @@ func _slab_lean(x: float) -> float:
 #  덜 기운다(같은 원근 그대로다).
 func _tbl_vp() -> Vector2:
 	var hx: float = VIEW.x * 0.5
-	return Vector2(hx, float(TBL.ny) - (hx - float(CHUTE.side))
+	return Vector2(hx, float(TBL.ny) - (hx - _side())
 			* (float(TBL.ny) - float(TBL.fy)) / float(CHUTE.back))
 
 
@@ -58316,13 +58340,13 @@ func _mark_rect(k: String) -> Rect2:
 		"chute_buy":
 			if room3d_on:
 				return _prop_rect(Z_BUY).merge(_chute_txt_rect(Z_BUY))
-			var cbw: float = float(CHUTE.side) + float(CHUTE.back)
+			var cbw: float = _side() + float(CHUTE.back)
 			return Rect2(VIEW.x - cbw, TBL.fy, cbw, TBL.ny - TBL.fy)
 		"chute_sell":
 			if room3d_on:
 				return _prop_rect(Z_SELL).merge(_chute_txt_rect(Z_SELL))
-			return Rect2(0.0, TBL.fy, float(CHUTE.side) + float(CHUTE.back), TBL.ny - TBL.fy)
-		"goods": return Rect2(CHUTE.side, TBL.fy + 6.0, VIEW.x - float(CHUTE.side) * 2.0,
+			return Rect2(0.0, TBL.fy, _side() + float(CHUTE.back), TBL.ny - TBL.fy)
+		"goods": return Rect2(_side(), TBL.fy + 6.0, VIEW.x - _side() * 2.0,
 				TBL.ny - TBL.fy - 6.0)
 		#  첫 손님의 두 장(공짜 동전)을 감싼다. 없으면 빈 사각 — 안 가르친다.
 		"gift":
