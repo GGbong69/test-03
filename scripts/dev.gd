@@ -1144,7 +1144,7 @@ static func _rows(g: Node) -> Array:
 						"n": (g.IDLE.acts as Array).size() + NPC_HOLDS.size() + NPC_PROPS.size()},
 				#  ── CRT 필터 (2026-10-03) ─────────────────────────
 				#  설정의 「CRT 필터」 게이지와 **같은 값**(g.crt)을 사다리 다섯 칸으로
-				#  민다 — 끔 · 25 · 40(기본) · 60 · 100 을 ◀▶ 한 칸씩 같은 화면에서
+				#  민다 — 끔 · 25 · 50(기본) · 75 · 100 을 ◀▶ 한 칸씩 같은 화면에서
 				#  견준다. 저장은 안 한다(개발자 판의 다른 손잡이와 같다). 설정을
 				#  열고 홈을 놓으면 그때 그 값이 앉는다. 열넷째 줄이다(한계 열아홉).
 				{"n1": "CRT 필터 %d" % int(roundf(float(g.crt) * 100.0)), "t": "list",
@@ -1578,10 +1578,10 @@ static func _grow_sync(g: Node) -> void:
 			bf = j
 	pick["fglow"] = bf
 
-#  CRT 필터 사다리(2026-10-03). 0 이 「끔」이고 셋째(0.40)가 게임 기본값
+#  CRT 필터 사다리(2026-10-03). 0 이 「끔」이고 셋째(0.50 — 2026-10-14 기본값 50)가 게임 기본값
 #  (game.gd 의 CRT_DEF)이다. 값 칸은 매번 지금 값에 가장 가까운 칸으로 맞춘다 —
 #  설정 게이지가 같은 값을 0.01 씩 밀기 때문이다(조작감 넷이 세운 규약).
-const CRT_STEPS := [0.00, 0.25, 0.40, 0.60, 1.00]
+const CRT_STEPS := [0.00, 0.25, 0.50, 0.75, 1.00]
 
 
 static func _crt_name(v: float) -> String:
@@ -1620,7 +1620,7 @@ static func _warp_sync(g: Node) -> void:
 #  (game.gd 의 VHS_DEF · DOT_DEF)이다. 값 칸은 CRT 사다리와 같은 규약으로 매번 지금 값에
 #  가장 가까운 칸에 맞춘다(설정 게이지가 0.01 씩 민다).
 const VHS_STEPS := [0.00, 0.25, 0.50, 0.75, 1.00]
-const DOT_STEPS := [0.00, 0.30, 0.60, 0.80, 1.00]
+const DOT_STEPS := [0.00, 0.25, 0.50, 0.75, 1.00]
 #  팩 겉 — 이름 · game.gd 의 PACK_LOOKS 열쇠(빈 글은 무작위).
 const PACK_LOOK_STEPS := [["무작위", ""], ["포일 봉투", "foil"], ["봉인 편지봉투", "env"],
 		["놋쇠 깡통", "tin"]]

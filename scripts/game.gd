@@ -1266,11 +1266,9 @@ func _ready() -> void:
 		_board_bake()
 		state = S.TITLE
 		if _intro_wanted():
-			#  처음 켤 때 한 번 — 필터를 켤지 끌지 견주어 고른 뒤 인트로로(FSEL).
-			if _fsel_due():
-				_fsel_begin(true)
-			else:
-				_intro_begin()
+			#  처음 켤 때 화면 고르기(FSEL)를 거치지 않는다(2026-10-14 「브라운관 이런거 하지말고 그냥 기본 값을
+			#  다 50으로」) — 필터 넷은 기본값 50 으로 선다. 고르기는 개발자 판에만 남는다.
+			_intro_begin()
 	_pwr_start(true)
 
 
@@ -1318,10 +1316,6 @@ var fsel_layer: CanvasLayer = null
 var fsel_view: ColorRect = null
 var fsel_ui: Node2D = null
 var fsel_on := false       # 층 · 필터 창을 앉혔는가(뜬 뒤 한 번 걷는다)
-
-
-func _fsel_due() -> bool:
-	return not bool(Save.get_set("fsel", false))
 
 
 #  first — 처음 켤 때(정하면 인트로로). from — 다시 연 자리.
@@ -1501,7 +1495,6 @@ func _fsel_choose(i: int) -> void:
 	Save.set_set("warp", warp)
 	Save.set_set("vhs", vhs)
 	Save.set_set("dot", dot)
-	Save.set_set("fsel", true)
 	_sfx("menu_pick")
 	_wipe(_fsel_go)
 
@@ -1518,11 +1511,6 @@ func _fsel_go() -> void:
 	_crt_apply()
 	_fsel_apply()
 	queue_redraw()
-
-
-#  설정 「화면 고르기」 — 덮고 연다.
-func _fsel_from_settings() -> void:
-	_fsel_begin(false, S.SETTINGS)
 
 
 #  바닥(층 0) — 제목 문 장면 위 간판 네온. 칠판 메뉴 · 손잡이 반짝은 없다(누를 것은 칸 셋뿐이다).
@@ -9609,11 +9597,6 @@ func _click(m: Vector2) -> void:
 					"lang":
 						#  말 — 해상도 줄과 같은 ◀ · ▶(끝에서 감는다) · 이름 쪽은 다음 말로.
 						_lang_step(-1 if _res_arrow_rect(i, false).has_point(m) else 1)
-						return
-					"fsel":
-						#  처음 켤 때의 화면 고르기를 다시 연다(FSEL) — 고르면 이 창으로 돌아온다.
-						_sfx("menu_pick")
-						_wipe(_fsel_from_settings)
 						return
 					"lobby":
 						#  겨눔 한 단. 아래 _sfx("menu_back") 을 안 지나야 첫 누름이
@@ -45577,9 +45560,9 @@ var collect_tab := 0
 # 순간이라, 한 손잡이로 묶으면 한쪽에 맞추면 다른 쪽이 어긋난다.
 var vol := 1.0           # 효과음. 예전 저장 키("vol")를 그대로 물려받는다
 var vol_mus := 0.8       # 음악. 깔개라 기본값이 효과음보다 한 뼘 낮다
-#  CRT 필터 세기 0~1. 0 이면 층째 꺼진다(_crt_apply). 기본 40 — 처음 켠 사람도
-#  브라운관 맛을 보되 글자와 도트가 그대로 읽히는 자리(shots/crt_shop_40).
-const CRT_DEF := 0.4
+#  CRT 필터 세기 0~1. 0 이면 층째 꺼진다(_crt_apply). 필터 넷의 기본값은 다 50 이다
+#  (2026-10-14 「그냥 기본 값을 다 50으로 설정해줘」 — 옛 CRT 40 · 도트 60).
+const CRT_DEF := 0.5
 var crt := CRT_DEF
 #  화면 굴곡 0~1(2026-10-03 「약간 발라트로 같이 그 화면의 왜곡?」). 0 이면 평평 —
 #  굽힘이 정확히 항등이다. 기본 50 이 발라트로 기본 화면의 곡면이다(shots/warp_50).
@@ -45593,7 +45576,7 @@ var warp := WARP_DEF
 #  다 냈다(화소 평균 차 1.5%) — 50 도 「이자 +4」 · 「사탕·사진」이 30 과 같이 읽힌다.
 const VHS_DEF := 0.5
 var vhs := VHS_DEF
-const DOT_DEF := 0.6
+const DOT_DEF := 0.5
 var dot := DOT_DEF
 #  설정의 쪽(2026-10-03 「설정이 저기서 다 나열되기 보단 … 상위가 있으면 좋겠는데,
 #  esc를 누르면 일시정지가 되어야지 일시정지에 설정을 누르면 설정창이 되어야지」).
@@ -53387,13 +53370,8 @@ func _set_info(key: String) -> Dictionary:
 		"set":
 			return {"n": "설정", "kids": SET_TABS}
 		"screen":
-			#  「화면 고르기」(FSEL)는 제목에서 연 설정에만 — 고르기의 바닥이 문 장면이다. 맨 위 —
-			#  밑의 게이지 넷을 한 번에 앉히는 줄이다(디아블로 4 의 「밝기 보정」도 그래픽 탭 위쪽).
-			if pause_from < 0:
-				return {"n": "화면", "kids": ["fsel", "fs", "res", "crt", "warp", "vhs", "dot", "wipe"]}
+			#  「화면 고르기」(FSEL) 줄은 걷었다(2026-10-14) — 게이지 넷을 기본값 50 에서 민다.
 			return {"n": "화면", "kids": ["fs", "res", "crt", "warp", "vhs", "dot", "wipe"]}
-		"fsel":
-			return {"n": "화면 고르기", "go": true}
 		"lang":
 			#  말(2026-10-13) — 값은 그 말 자신의 글이다(GameData.LANG_NAME).
 			return {"n": "언어", "sel": true, "v": String(GameData.LANG_NAME.get(GameData.lang, GameData.lang))}

@@ -130,8 +130,8 @@ func _run() -> void:
 			"VHS %.2f · 도트 %.2f" % [float(g.vhs), float(g.dot)])
 	#  게임이 켤 때 읽는 그 길(_load_settings) — 빈 저장이면 40.
 	g._load_settings()
-	_ok("기본값 40", is_equal_approx(float(g.CRT_DEF), 0.4)
-			and is_equal_approx(float(g.crt), 0.4), "CRT_DEF %.2f · 빈 저장에서 읽은 값 %.2f"
+	_ok("기본값 50", is_equal_approx(float(g.CRT_DEF), 0.5)
+			and is_equal_approx(float(g.crt), 0.5), "CRT_DEF %.2f · 빈 저장에서 읽은 값 %.2f"
 			% [float(g.CRT_DEF), float(g.crt)])
 	_ok("저장에 아직 안 적었다", _disk_crt() == null, "%s" % [_disk_crt()])
 	_ok("VHS · 도트 기본값도 빈 저장에서 앉는다 · 층이 선다", is_equal_approx(float(g.vhs),
@@ -343,15 +343,15 @@ func _run() -> void:
 		Dev.pick["crt"] = j
 		Dev._run(g, {"k": "crt"})
 		got.append(int(roundf(g.crt * 100.0)))
-	_ok("사다리 0 · 25 · 40 · 60 · 100", got == [0, 25, 40, 60, 100], "%s" % [got])
+	_ok("사다리 0 · 25 · 50 · 75 · 100", got == [0, 25, 50, 75, 100], "%s" % [got])
 	Dev.pick["crt"] = 0
 	Dev._run(g, {"k": "crt"})
 	_ok("사다리 0 이면 숨는다", not lay.visible)
-	g.crt = 0.6
+	g.crt = 0.75
 	Dev.page = hit
 	Dev._rows(g)
 	_ok("값 칸이 지금 값에 맞는다", int(Dev.pick.get("crt", -1)) == 3
-			and String(Dev._cur_name(g, {"k": "crt"})).contains("60"),
+			and String(Dev._cur_name(g, {"k": "crt"})).contains("75"),
 			Dev._cur_name(g, {"k": "crt"}))
 	#  「화면 굴곡」 줄 — CRT 줄 바로 밑(개발자 모드에 제때 넣기, 2026-10-03).
 	var rs4: Array = Dev._rows(g)

@@ -1,13 +1,14 @@
 extends SceneTree
 # 화면 고르기(2026-10-10 · game.gd FSEL) — 못 박는 것:
-#   ① 처음이면 고를 차례다 · 열면 넷 다 기본값(칸마다 제 묶음이 서려면) · 음악이 없다 · 칸 셋이 화면 안에
+#   ① 열면 넷 다 기본값(칸마다 제 묶음이 서려면) · 음악이 없다 · 칸 셋이 화면 안에
 #      겹치지 않고 패는 제 칸 밑이다
 #   ② 필터 층은 제 칸 안에만 — CRT 는 가운데(브라운관) · VHS · 도트는 오른쪽(비디오테이프) · 장면은
 #      배율(zoom)만큼 키워 붙이고 필터도 칸 안에서 같은 배율이다
 #   ③ 얹으면 그 칸 — 그림 칸이나 패
-#   ④ 「끔」을 누르면 게이지 넷이 0 으로 저장되고 · 다시 안 묻고 · 처음이면 인트로로 · 층 창이 온 화면으로
+#   ④ 「끔」을 누르면 게이지 넷이 0 으로 저장되고 · 처음이면 인트로로 · 층 창이 온 화면으로
 #   ⑤ 「브라운관」 · 「비디오테이프」 — 제 둘만 기본값으로
-#   ⑥ 설정 「화면」 탭 — 제목에서 연 설정에만 「화면 고르기」 줄이 있고, 누르면 고르기 · 고르면 설정으로
+#   ⑥ 설정 「화면」 탭에 「화면 고르기」 줄이 없다(2026-10-14 걷었다 — 처음 켤 때도 안 서고 개발자 판에만 남는다)
+#      · 설정에서 연 고르기는 고르면 설정으로
 #   ⑦ 다시 연 것은 ESC 로 옛 값 그대로 돌아간다 · 처음 켤 때는 ESC 를 안 받는다
 #   ⑧ 키 — ← → 로 고르고 Enter 로 정한다 · 정한 뒤 또 누르면 아무 일도 없다
 #   godot --headless --path . --script scripts/tools/qa_fsel.gd
@@ -73,9 +74,7 @@ func _saved(c: float, w: float, v: float, d: float) -> bool:
 
 
 func _run() -> void:
-	# ① — 검사 전역 파일은 Save.wipe 가 안 비운다(지난 실행이 남긴 "fsel")
-	Save.set_set("fsel", false)
-	_ok("① 처음이면 고를 차례다", g._fsel_due())
+	# ①
 	g._fsel_begin(true)
 	_ok("① 고르기 화면이 선다", g.state == g.S.FSEL)
 	_ok("① 넷 다 기본값으로 선다", is_equal_approx(g.crt, g.CRT_DEF) and is_equal_approx(g.warp, g.WARP_DEF)
@@ -119,7 +118,6 @@ func _run() -> void:
 	g._click((g._fsel_rect(0) as Rect2).get_center())
 	_ok("④ 「끔」 — 게이지 넷이 0", g.crt == 0.0 and g.warp == 0.0 and g.vhs == 0.0 and g.dot == 0.0, _vals())
 	_ok("④ 0 으로 저장된다", _saved(0.0, 0.0, 0.0, 0.0))
-	_ok("④ 다시 안 묻는다", not g._fsel_due())
 	_ok("④ 처음이면 인트로로 간다", g.state == g.S.INTRO, "state %d" % g.state)
 	g._fsel_tick(0.016)
 	if g.crt_rect != null:
@@ -145,16 +143,14 @@ func _run() -> void:
 	g._set_go("screen")
 	g.state = g.S.SETTINGS
 	var rows: Array = g._set_rows()
-	_ok("⑥ 제목에서 연 설정에 「화면 고르기」 줄", rows.has("fsel"))
-	var fi := rows.find("fsel")
-	g._click((g._set_rect(fi) as Rect2).get_center())
-	_ok("⑥ 누르면 고르기", g.state == g.S.FSEL and g.fsel_from == g.S.SETTINGS)
+	_ok("⑥ 제목에서 연 설정에도 「화면 고르기」 줄이 없다", not rows.has("fsel"), str(rows))
+	g._fsel_begin(false, g.S.SETTINGS)
 	_ok("⑥ 설정에서 연 것은 로비 곡 그대로", g._mus_want() == "lobby")
 	g._click((g._fsel_rect(1) as Rect2).get_center())
 	_ok("⑥ 고르면 설정으로 돌아온다", g.state == g.S.SETTINGS, "state %d" % g.state)
 	var last: Rect2 = g._set_rect(rows.size() - 2)
 	var back: Rect2 = g._set_rect(rows.size() - 1)
-	_ok("⑥ 일곱 줄이 「뒤로」에 안 닿는다", last.end.y < back.position.y, "%.0f < %.0f" % [last.end.y, back.position.y])
+	_ok("⑥ 여섯 줄이 「뒤로」에 안 닿는다", last.end.y < back.position.y, "%.0f < %.0f" % [last.end.y, back.position.y])
 	_ok("⑥ 설정 창이 화면 안", Rect2(Vector2.ZERO, g.VIEW).encloses(g._set_to("screen")))
 	g.pause_from = g.S.PICK
 	_ok("⑥ 판 중에 연 설정에는 없다", not (g._set_rows() as Array).has("fsel"))
