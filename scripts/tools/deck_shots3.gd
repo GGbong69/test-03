@@ -135,7 +135,7 @@ func _hit20(name: String, with_item: bool) -> void:
 	g.owned = []
 	if with_item:
 		for it in GameData.items():
-			if String(it.get("n", "")) == "발라트로의 조커":
+			if String(it.get("n", "")) == "어릿광대":
 				g.owned = [it.duplicate(true)]
 				break
 	g.state = g.S.PICK

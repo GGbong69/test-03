@@ -56452,7 +56452,7 @@ func _col_name_split(nm: String) -> PackedStringArray:
 	if font_sm == null:
 		return best
 	if not nm.contains(" "):
-		#  띄어쓰기 없는 이름(일본어 「バラトロのジョーカー」)은 글자 사이 끊는 자리에서 반으로.
+		#  띄어쓰기 없는 이름(일본어 「ジャガイモを食べる人たち」)은 글자 사이 끊는 자리에서 반으로.
 		var tw := func(x: String) -> float: return font_sm.get_string_size(x, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x
 		var k := _jp_first(nm, float(tw.call(nm)) * 0.5 + 6.0, tw)
 		if k > 0 and k < nm.length():

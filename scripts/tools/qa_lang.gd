@@ -103,7 +103,7 @@ func _run() -> void:
 	# ③
 	GameData.set_lang("en")
 	_ok("③ 영어 — 코드 글", GameData.L("뒤로") == "Back", GameData.L("뒤로"))
-	_ok("③ 영어 — 표 이름(동전)", GameData.L("발라트로의 조커") == "Balatro's Joker")
+	_ok("③ 영어 — 표 이름(동전)", GameData.L("어릿광대") == "Jester")
 	_ok("③ 영어 — 표 글(화면 글 열쇠)", GameData.text("tut_skip") == "Skip")
 	var cons: Array = GameData.consumables()
 	var vc: Dictionary = {}

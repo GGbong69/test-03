@@ -1,5 +1,5 @@
 ﻿id,name,name_en,name_ja,rarity,cond,kind,value,cost,gold,gv,per,k2,v2,grow,gstep,boom,dadd,side,aim,score,unlock_stat,unlock_v,secs,weight,min_leg,enabled,_tags,_note
-c01,발라트로의 조커,Balatro's Joker,バラトロのジョーカー,common,always,mult,2,4,,,,,,,,,,,,,,,,,,1,무조건,기준선. 조건 없는 배수 +2 다 (기획서 P.20)
+c01,어릿광대,Jester,道化師,common,always,mult,2,4,,,,,,,,,,,,,,,,,,1,무조건,기준선. 조건 없는 배수 +2 다 (기획서 P.20)
 c02,닌자,Ninja,忍者,common,always,mult,1,4,,,mag_hvy,,,,,,,,,,,,,,,1,무조건;다트,무쇠 다트통과 짝이다. 기획서 P.20 이 무거운 다트 1개당 배수 +1 이다
 c03,유리 대포,Glass Cannon,ガラスの大砲,common,always,mult,15,4,,,,,,,,r2,,,,,,,,,,1,무조건;파괴,판마다 1/2 로 부서진다 · 2026-09-13 기획서 「판마다 1/2 확률로 파괴」. boom 이 rN=1/N 을 받게 되어 r6 에서 내려왔다(첫 마디가 1/6 인 채로 남아 제 뒷마디와 어긋나 있던 것을 2026-09-19 에 맞췄다)
 c04,위대한 피자,The Great Pizza,偉大なるピザ,common,always,mult,8,4,,,,,,rdec,1,,,,,,,,,,,1,무조건;성장,기획서 P.20 — 배수 +8 에서 시작해 판마다 1씩 준다. 여덟 판을 못 넘긴다
