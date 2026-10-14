@@ -1,44 +1,38 @@
-== v_moth  It's Not About Money
+== v_moth  불나방
+= a 221c33
+= b 352d4d
+= c 8a5636
+= d 6b2a1c
+= e e8873a
+= f c48b5a
+= g b0512a
+= h fdeaa0
+= i 553222
+= j fbf6ea
 = k 14111f
-= w 2a1812
-= m 553222
-= M 8a5636
-= B c48b5a
-= r b0512a
-= o e8873a
-= y f2c94c
-= Y fdeaa0
-= c fbf6ea
-= F c9bfae
-= v 2b1d4f
-= V 523a8f
-= g 1d3326
-= G 2f6340
-= h 479a58
-= R d8483d
-= s 687085
-= S dde3ec
-kkkkkkkkkkkkkkkkkkkkBMMMMMMMoyYy
-wwkkkkkkkGhGgkkkkkkkrwmmmmmwMoyo
-wwwwwkkkhhGGGgkkkkBroBMBBMMBMoro
-kkwwwwwGGcccFGgkkkMoyrwmmmmmwmmm
-kkkkkwGhGkckFGggBBryYooBBBMrBBBB
-kkkkkkkGGscsFggkmmoYyrMmmmwommrm
-kkkkkkGGgRccRgGgBBMorBBBrBByBBoB
-kkkkkkkGGcRRFggmmmwmmmmmoMrYMrym
-krkkkkgGggcFgGggMmBBrBBMyooYooYr
-rorkkkVGVVGGvgvmmwMroMMrYoycyyYo
-oyokkVVVvVGgssvMMMBoyrBoYyYcYYcy
-yYyrkVVvvVGgssVvmwryYorycYcccYcY
-YYyoVVvvvVgvvVVvBrBoyroYccccccYy
-YcYoVVvvvVvvvvVvromwrryYcccccYyo
-yYyrVVvvvvvvvvvBoyoBooyYYccYYyor
-oyossVvvvvvvvvvryYyoyroyyYYyormm
-roBssVvvvvvvvvvoyYYyYorooyorBBBB
-mmmvSSvvvkvvvvvoYcYyyoMmrrmwmmmm
-MmMvsSvvvkvvvvvyYccYyorBBMBBBBMm
-wwvvvSsvkkvvvvvyccYYyormmwrmmmmw
-mMvvvvvvkkvvvvvYcccYyyoMBroBBrBB
-wwvvvvvvkkvvvvvYcYccYyowroyororm
-mwvvvvvvkkkvvvvYccMMYyyooyYyoyor
-wvvvvvvvkkkvvvvyYcmmmYyyyYYYyYyo
+= l e8dfc8
+= m c9bfae
+aaaaaaaaaaaaaaaaaaaabbbbbbbaaaaa
+aaaaaaaaaaaaaaaaaabbbbbbbbbbbaaa
+aaaaaaaaaaaaaaaabbbbbbbbbbbbbbba
+aaaaaaaacaaaacabbbbbbddeddbbbbbb
+aaaaaaaaacaacabbbbbddddeddddbbbb
+aaaaaaaaacaacabbbbdddddedddddbbb
+aaaffffffaccffffffdddgehegddddbb
+aafffiifffiiffiifffdggeheggddddb
+aajffjifffiiffijffjggeeheeggdddb
+aafffiffffiifffifffggehhheggdddb
+aaafffffffiiffffffdggehhheggdddb
+aaaaaccccaiiccccdddgggehegggdddb
+aaaacccccciicccccdddggeeeggddddb
+aaaacccccciicccccddddggkggddddbb
+aaaaaccccaiiccccbbdddjllllmddbbb
+aaaaaaaaaaiaaabbbbbddjjljlmdbbbb
+aaaaaaaaaaaaaaabbbbbbjlljlmbbbbb
+aaaaaaaaaaaaaaaabbbbbjllllmbbbba
+aaaaaaaaaaaaaaaaaabbbjllllmbbaaa
+aaaaaaaaaaaaaaaaaaaabjllllmaaaaa
+aaaaaaaaaaaaaaaaaaaaajllllmaaaaa
+aaaaaaaaaaaaaaaaaaaaajllllmaaaaa
+aaaaaaaaaaaaaaaaaaaaajllllmaaaaa
+aaaaaaaaaaaaaaaaaaaaajllllmaaaaa

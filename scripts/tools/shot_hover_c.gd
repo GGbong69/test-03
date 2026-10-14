@@ -150,7 +150,7 @@ func _run() -> void:
 	var gc: Vector2 = g._obj_box(0).get_center()
 	await _shot("hovc_good_hov", gc, {"k": "stock", "i": 0},
 			Rect2(gc.x - 90.0, gc.y - 70.0, 180.0, 140.0))
-	#  ── 사진 테이블(It's Not About Money) — 판매 창구가 표적 ──
+	#  ── 사진 테이블(불나방) — 판매 창구가 표적 ──
 	g._photo_open("burn", 2)
 	await _wait(10)
 	g._drop_settle()

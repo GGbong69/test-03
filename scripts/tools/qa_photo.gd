@@ -164,7 +164,7 @@ func _process(_d: float) -> bool:
 	g._cons_use(0)
 	_ok("빨강, 파랑, 노랑 — 상점에서는 못 쓴다", g.cons.size() == 1 and g.photo == "",
 			"손에 %d장 · photo '%s'" % [g.cons.size(), g.photo])
-	# 기획서 s33 이 It's Not About Money 를 「상관없음」으로 적었다. 판 위에는
+	# 기획서 s33 이 불나방 를 「상관없음」으로 적었다. 판 위에는
 	# 테이블이 없으므로 동전 슬롯에서 고른다 — 고르기 전에는 손에 남는다.
 	g.state = g.S.PICK
 	g.owned.clear()
@@ -173,18 +173,18 @@ func _process(_d: float) -> bool:
 	g.owned.append(c0)
 	_hold("v_moth")
 	g._cons_use(0)
-	_ok("It's Not About Money — 판에서는 동전 슬롯에서 고른다",
+	_ok("불나방 — 판에서는 동전 슬롯에서 고른다",
 			g.photo_rack == "burn" and g.cons.size() == 1,
 			"photo_rack '%s' · 손에 %d장" % [g.photo_rack, g.cons.size()])
 	var wg: int = GameData.sell_value(c0) * 2
 	g.gold = 0
 	g._photo_rack_click(g._slot_rect(0).get_center())
-	_ok("It's Not About Money — 고르면 부수고 판매가 2배",
+	_ok("불나방 — 고르면 부수고 판매가 2배",
 			g.gold == wg and g.owned.is_empty() and g.cons.is_empty(),
 			"골드 %d/%d · 동전 %d · 손 %d" % [g.gold, wg, g.owned.size(), g.cons.size()])
 	g.photo_rack = ""
 
-	# ⑥ It's Not About Money — 테이블이 갈리고 판매 창구가 부순다
+	# ⑥ 불나방 — 테이블이 갈리고 판매 창구가 부순다
 	g.state = g.S.SHOP
 	g.owned.clear()
 	var coin: Dictionary = GameData.items()[0].duplicate()
@@ -193,15 +193,15 @@ func _process(_d: float) -> bool:
 	var want_g: int = GameData.sell_value(coin) * 2
 	_hold("v_moth")
 	g._cons_use(0)
-	_ok("It's Not About Money — 테이블이 내 동전으로 갈린다",
+	_ok("불나방 — 테이블이 내 동전으로 갈린다",
 			g.photo == "burn" and g.stock.size() == 1,
 			"photo '%s' · 테이블 %d개" % [g.photo, g.stock.size()])
 	g.gold = 0
 	g.buy_sel = 0
 	g._chute_click(g.Z_SELL)
-	_ok("It's Not About Money — 부수고 판매가의 곱절", g.owned.is_empty() and g.gold == want_g,
+	_ok("불나방 — 부수고 판매가의 곱절", g.owned.is_empty() and g.gold == want_g,
 			"동전 %d장 · 골드 %d (바라는 값 %d)" % [g.owned.size(), g.gold, want_g])
-	_ok("It's Not About Money — 테이블이 돌아온다", g.photo == "", "photo '%s'" % g.photo)
+	_ok("불나방 — 테이블이 돌아온다", g.photo == "", "photo '%s'" % g.photo)
 
 	# ⑦ 마릴린 딥틱 — 복제 창구가 한 장을 더 준다
 	g.owned.clear()
