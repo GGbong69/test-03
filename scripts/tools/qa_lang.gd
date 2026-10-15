@@ -275,7 +275,7 @@ func _fit(l: String) -> void:
 	_ok("⑨ %s 튜토리얼 말상자 줄" % l, bad.is_empty(), str(bad))
 	#  막는 말 — 상점 밑줄 한 칸
 	bad = []
-	for s in ["없는 매물", "이미 샀다", "이 팩에서 고를 몫을 다 썼다", "바꿀 표준 다트가 없다",
+	for s in ["없는 매물", "이미 샀다", "이 팩에서 고를 몫을 다 썼다",
 			"사탕·사진 칸이 꽉 찼다", "테이블 물건만 산다", "반대쪽 창구다", "가진 것만 판다",
 			"먼저 테이블에서 동전을 고른다", "먼저 판에서 팔 동전을 고른다", "먼저 테이블에서 살 물건을 고른다",
 			"동전 슬롯이 꽉 찼다", "골드가 부족하거나 슬롯이 꽉 찼다", "다음 보스 판이 없다", "손에 동전이 없다",
@@ -285,6 +285,9 @@ func _fit(l: String) -> void:
 			bad.append(L.call(s))
 	if _w(L.call("골드가 %d 모자란다") % 99, 12) > float(g.PAYW):
 		bad.append("골드가 %d 모자란다")
+	for di in ["std", "hvy", "lgt", "mag"]:
+		if _w(L.call("바꿀 %s 다트가 없다") % L.call(GameData.dart_name(di)), 12) > float(g.PAYW):
+			bad.append("바꿀 %s 다트가 없다 · " + di)
 	_ok("⑨ %s 막는 말이 한 줄(%d) 안" % [l, int(g.PAYW)], bad.is_empty(), str(bad))
 	#  런 정보 — 탭(20) · 트랙의 「판 숫자」(점수 칸 · 배수 앞 6)
 	bad = []

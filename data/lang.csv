@@ -31,7 +31,7 @@
 이미 샀다,Already bought,購入済み,
 이 팩에서 고를 몫을 다 썼다,No picks left in this pack,このパックの選択回数を使い切った,
 골드가 %d 모자란다,Need %d more Gold,ゴールドが %d 足りない,
-바꿀 표준 다트가 없다,No standard darts to swap,交換できる標準ダーツがない,
+바꿀 %s 다트가 없다,No %s darts to swap,交換できる%sダーツがない,
 슬롯 %d/%d,Slots %d/%d,スロット %d/%d,
 사탕·사진 %d/%d,Candy·Photo %d/%d,キャンディ・写真 %d/%d,
 사탕·사진 칸이 꽉 찼다,Candy·Photo slots are full,キャンディ・写真枠がいっぱい,

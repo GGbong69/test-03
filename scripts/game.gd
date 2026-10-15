@@ -2503,7 +2503,7 @@ func _run_save(at: String) -> void:
 	#  사탕과 사진은 consumables() **한 표**에 산다. 런 중 변하는 칸이 없어
 	#  id 만으로 온전하다.
 	Save.run_set("cons", _ids_of(cons))
-	#  다트 자루. 상점 dart 매물이 magazine[_std_slot()] 을 덮는 것이 유일한 변화다.
+	#  다트 자루. 상점 dart 매물이 magazine[_base_slot()] 을 덮는 것이 유일한 변화다.
 	Save.run_set("magazine", _ids_of(magazine))
 	#  건너뛰면 받을 뱃지 — 행이 아니라 **id** 다(tags.csv 에 id 열이 있다).
 	var lt := {}
@@ -4509,24 +4509,30 @@ func _score_board_draw() -> void:
 			Color(ink, 0.62))
 	var ts: String = GameData.big(tgt)
 	var tb := Vector2(x0, y + 100.0)
-	draw_string(_fz(font, 36), tb, _L(ts), HORIZONTAL_ALIGNMENT_RIGHT, w, 36, Color(ink, 0.96))
+	#  여섯 자리부터 36 은 칠판 폭(122)을 넘어 잘렸다 — 「6자리수 이상으로는 점수판에 표시가 안돼」
+	#  (2026-10-15). 넘치면 글자를 줄인다(_fit_sz). 잉크 높이(27)도 같은 비로 준다.
+	var tsz: int = _fit_sz(ts, w, 36)
+	var th: float = 27.0 * float(tsz) / 36.0
+	draw_string(_fz(font, tsz), tb, _L(ts), HORIZONTAL_ALIGNMENT_RIGHT, w, tsz, Color(ink, 0.96))
 	if font != null:
-		var tw: float = font.get_string_size(_L(ts), HORIZONTAL_ALIGNMENT_LEFT, -1, 36).x
-		_chalk_grit(self, Rect2(x0 + w - tw, tb.y - 27.0, tw, 27.0), slate, 0.8, 6101, 30.0)
+		var tw: float = font.get_string_size(_L(ts), HORIZONTAL_ALIGNMENT_LEFT, -1, tsz).x
+		_chalk_grit(self, Rect2(x0 + w - tw, tb.y - th, tw, th), slate, 0.8, 6101, 30.0)
 		#  넘었다 — 목표에 금빛 분필 동그라미(한 획 · 끝이 겹친다)
 		if tgt > 0 and val >= tgt:
 			#  납작한 타원 — 수에 맞춰 옆으로만 넓고 위아래는 수 잉크(27)에 꼭 맞는다(밑의 점수를 안 덮는다)
-			var cc := Vector2(x0 + w - tw * 0.5, tb.y - 13.0)
+			var cc := Vector2(x0 + w - tw * 0.5, tb.y - th * 0.5)
 			var ell := PackedVector2Array()
 			for q in 41:
 				var an: float = lerpf(-PI * 0.6, PI * 1.5, float(q) / 40.0)
-				ell.append(cc + Vector2(cos(an) * (tw * 0.5 + 6.0), sin(an) * 17.0))
+				ell.append(cc + Vector2(cos(an) * (tw * 0.5 + 6.0), sin(an) * (th * 0.5 + 3.5)))
 			draw_polyline(ell, Color(C_GOLD, 0.9), 2.0)
 	#  지금 점수 — 걸음마다 띠의 수와 같이 밝았다 돌아온다(tick_flash)
 	draw_string(_fz(font_sm, 12), Vector2(x0, y + 127.0), _L("점수"), HORIZONTAL_ALIGNMENT_LEFT, -1, 12,
 			Color(ink, 0.62))
-	draw_string(_fz(font, 24), Vector2(x0, y + 131.0), _L(GameData.big(val)), HORIZONTAL_ALIGNMENT_RIGHT,
-			w, 24, Color(ink, 0.92).lerp(Color(1.0, 1.0, 1.0), float(TALLY.flash) * tick_flash))
+	var lw: float = font_sm.get_string_size(_L("점수"), HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x if font_sm != null else 0.0
+	var vsz: int = _fit_sz(GameData.big(val), w - lw - 4.0, 24)    # 「점수」 글 옆까지
+	draw_string(_fz(font, vsz), Vector2(x0, y + 131.0), _L(GameData.big(val)), HORIZONTAL_ALIGNMENT_RIGHT,
+			w, vsz, Color(ink, 0.92).lerp(Color(1.0, 1.0, 1.0), float(TALLY.flash) * tick_flash))
 	#  게이지 — 분필 테 · 찬 몫은 분필 빗금(다 차 가면 금빛)
 	var gk: float = clampf(float(val) / float(maxi(tgt, 1)), 0.0, 1.0)
 	var gr := Rect2(x0, y + 141.0, w, 8.0)
@@ -5818,7 +5824,8 @@ func _roll_stock() -> void:
 	var pools := {
 		"item": _stock_items(nxt).filter(func(e): return not gift_ids.has(String(e.id))),
 		"mod": _stock_mods().filter(func(e): return not gift_ids.has(String(e.id))),
-		"dart": GameData.darts().slice(1),
+		#  기본 다트는 안 판다 — 표준 · 다트통의 제 다트(무쇠 통의 무거운)는 같은 것을 갈아 끼울 뿐이다.
+		"dart": GameData.darts().slice(1).filter(func(e): return String(e.id) != _base_dart()),
 		"cons": GameData.candies().filter(func(e): return not gift_ids.has(String(e.id))),
 		# 사진은 이제 선반이 아니라 테이블 위 매물이다. 라운드마다 한 장을
 		# 걸어 두던 자리를 걷었다 — 기획서 P.30 의 0.5% 는 shop.csv 의
@@ -5914,8 +5921,8 @@ func _buy_block(i: int) -> String:
 		return _L("골드가 %d 모자란다") % (s.cost - gold)
 	if s.type == "item" and owned.size() >= GameData.max_items():
 		return _buy_full_tag(s)
-	if s.type == "dart" and _std_slot() < 0:
-		return "바꿀 표준 다트가 없다"
+	if s.type == "dart" and _base_slot() < 0:
+		return _L("바꿀 %s 다트가 없다") % _L(GameData.dart_name(_base_dart()))
 	# 사탕과 사진은 **같은 칸**을 쓴다. 여기서 사탕만 보고 있었다 —
 	# 칸이 꽉 찬 채로 사진을 사면 _buy 가 골드를 먼저 깎고 sold 를 세운
 	# **뒤에** 거절해서, 값을 치르고 물건은 사라졌다. 두 갈래를 같이 본다.
@@ -6014,7 +6021,7 @@ func _buy(i: int) -> void:
 		"mod":
 			_apply_mod(s.d.id)
 		"dart":
-			magazine[_std_slot()] = s.d
+			magazine[_base_slot()] = s.d
 			#  hvy·lgt·mag 를 만나는 **주된 길이 이쪽이다** — p_iron 해금이
 			#  best_dart_hvy >= 3 이라 상점에서 사 봐야 그 통이 열린다.
 			_found("dart", String(s.d.id))
@@ -6066,9 +6073,17 @@ func _buy(i: int) -> void:
 	_knot_shop()
 
 
-func _std_slot() -> int:
+#  상점 다트가 갈아 끼우는 자리 — 다트통의 기본 다트(packs.csv dart_id). 「표준」만 찾았더니
+#  무쇠 · 가벼운 · 자석 다트통은 여섯 발이 다 제 다트라 다트를 하나도 못 샀다(2026-10-15
+#  「무거운 다트통으로 게임을 시작하고 상점에서 다트를 구매하면 안 구매 되거든?」).
+func _base_dart() -> String:
+	return String(GameData.pack_row().get("dart_id", "std"))
+
+
+func _base_slot() -> int:
+	var b := _base_dart()
 	for i in magazine.size():
-		if magazine[i].id == "std":
+		if magazine[i].id == b:
 			return i
 	return -1
 
@@ -25849,8 +25864,12 @@ func _chute_draw() -> void:
 				gk = 1.0
 			elif press:
 				gk = -0.5
-			elif hk > 0.0:
-				gk = 0.6 * hk
+			elif hk > 0.0 or chute_rk[z] > 0.0:
+				#  된다 — 스포트가 내려와 숨 쉰다(움직임 끔이면 숨 없이). 얹힘과 겹치면 큰 쪽.
+				var br: float = 0.0 if motion_off else sin(chute_rt * TAU * float(CHUTE_RDY.hz))
+				var rg: float = float(chute_rk[z]) * (float(CHUTE_RDY.k) + float(CHUTE_RDY.breathe) * br)
+				gk = maxf(0.6 * hk, rg)
+				gc = C_LIGHT.lerp(C_ACC, float(chute_rk[z]))
 			#  저울대는 scale_tilt 그대로다 — 끌어 대면 내려앉고(_scale_tick), 판 동전이 접시에
 			#  얹히면 출렁인다. 접시 동전과 손이 같은 값으로 접시 자리를 셈한다(Room3D.pan_top).
 			#  등록기는 서랍 곡선(reg_open · reg_fx — _reg_curve) 그대로다. 판 효과가 같은 값으로
@@ -25933,6 +25952,26 @@ func _table_hover() -> bool:
 #  창구를 지금 누르면 일이 되는가 — 고른 것이 이 창구로 가는가.
 #  _chute_click 의 갈래를 그대로 따른다. 골드가 모자란 구매도 참이다 —
 #  표적은 표적이고, 왜 안 되는지는 이름 글자(C_MULT)와 거절이 말한다.
+#  지금 이 창구로 사고팔 수 있는가 — 고른(또는 끄는) 것이 그 창구에서 **된다**. 창구 글(_chute_label ·
+#  _chute_sell_label)이 밝아지는 갈래와 같다. 된다면 소품 스포트가 켜진다 — 「구매 할 수 있으면 수금기
+#  구매 쪽에 빛이 내려오고 판매 할 수 있으면 저울에 빛이 들어오는」(2026-10-15).
+const CHUTE_RDY := {"k": 0.8, "breathe": 0.2, "hz": 0.7, "fade": 0.3}
+var chute_rk := [0.0, 0.0]      # 창구 z 의 켜짐 0~1(CHUTE_RDY.fade 초에 들어서고 빠진다)
+var chute_rt := 0.0             # 숨 시계
+
+
+func _chute_ready(z: int) -> bool:
+	if photo == "burn" or photo == "clone":
+		return _chute_act(z)
+	if z == Z_SELL:
+		if hand_st == H.CARRY and hand_src == 4 and hand_i >= 0 and hand_i < cons.size():
+			return _cons_sellable()
+		var si: int = hand_i if (hand_st == H.CARRY and hand_src == 1) else sell_sel
+		return _can_sell() and si >= 0 and si < owned.size()
+	var bi: int = hand_i if (hand_st == H.CARRY and hand_src == 0) else buy_sel
+	return bi >= 0 and bi < stock.size() and _buy_block(bi) == ""
+
+
 func _chute_act(z: int) -> bool:
 	var picked: bool = buy_sel >= 0 and buy_sel < stock.size()
 	if photo == "burn" or photo == "clone":
@@ -31510,6 +31549,10 @@ func _prop_end(i: int) -> void:
 func _prop_tick(d: float) -> void:
 	_scale_tick(d)
 	_reg_tick(d)
+	for z in 2:
+		chute_rk[z] = move_toward(chute_rk[z], 1.0 if state == S.SHOP and _chute_ready(z) else 0.0,
+				d / float(CHUTE_RDY.fade))
+	chute_rt += d
 	_burst_tick(d)
 	if not prop_ghost.is_empty():
 		prop_ghost.t = float(prop_ghost.t) + d
@@ -33548,6 +33591,9 @@ const DROP := {
 	# ── 연출 (전부 그리기 전용. 물리에 한 방울도 안 흘린다) ──
 	"lift_hov": 6.0, "lift_k": 260.0, "lift_c": 22.0,
 	"wob_k": 150.0, "wob_c": 11.0,
+	#  고른 매물(buy_sel)은 공중에 뜬다 — 높이 lift_sel 에서 bob_h 만큼 bob_hz 로 출렁이고 좌우로
+	#  sway(rad)만큼 sway_hz 로 흔들린다(그리기 전용). fa_t 초에 들어서고 빠진다(2026-10-15).
+	"lift_sel": 22.0, "bob_h": 3.0, "bob_hz": 0.55, "sway": 0.12, "sway_hz": 0.38, "fa_t": 0.25,
 	#  ── 누를 때 물건을 미는 세기(_knock) ──────────────
 	#  둘 다 **재서** 잡았다. 셈으로는 안 나온다 — 감쇠(lift_c 22 · wob_c 11)가
 	#  꼭짓점을 예상의 절반 밑으로 깎는다.
@@ -34378,13 +34424,27 @@ func _drop_extras(d: float) -> void:
 			it.roll = it.get("roll", 0.0) + tsp * DROP.tumble_rate * d
 		if not it.held:
 			it.mark = Vector2(it.u, it.w)
+		#  고른 매물은 공중에 떠서 출렁이고 좌우로 흔들린다 — 「상점에서 아이템을 고르면 공중에 띄어
+		#  오르고 … 공중에서 좀 흔들리는? 부유하고 있는 효과」(2026-10-15). 높이는 아래 스프링이
+		#  따라가고, 흔들림(sway)은 그리기 전용이라 _obj_draw 가 psi 에 잠깐 얹는다. 움직임 끔은 뜨기만.
+		var sel: bool = i == buy_sel and not it.held
+		it["fa"] = move_toward(float(it.get("fa", 0.0)), 1.0 if sel and not motion_off else 0.0,
+				d / float(DROP.fa_t))
+		it["fl"] = (float(it.get("fl", 0.0)) + d) if float(it.fa) > 0.0 else 0.0
+		it["sway"] = sin(float(it.fl) * TAU * float(DROP.sway_hz)) * float(DROP.sway) * float(it.fa)
 		# 든 물건은 눌린다 — 들리지 않는 노선이라 이것이 "잡았다" 의 전부다.
 		var tgt: float = -HAND.dip if it.held else (DROP.lift_hov if i == hov else 0.0)
+		if sel:
+			tgt = float(DROP.lift_sel) + sin(float(it.fl) * TAU * float(DROP.bob_hz)) * float(DROP.bob_h) * float(it.fa)
 		it.lv += (tgt - it.lift) * DROP.lift_k * d
 		it.lv *= exp(-DROP.lift_c * d)
 		#  덮개가 knock_h 만큼 넉넉하다 — 누른 물건이 튀는 자리다(DROP 주석).
-		it.lift = clampf(it.lift + it.lv * d, -2.0,
-				DROP.lift_hov + DROP.knock_h)
+		it.lift = clampf(it.lift + it.lv * d, -2.0, _lift_top())
+
+
+#  매물이 오를 수 있는 꼭대기(면px) — 뜬 매물(lift_sel + bob_h) 또는 얹힘, 그 위로 튀는 여유(knock_h).
+func _lift_top() -> float:
+	return maxf(float(DROP.lift_hov), float(DROP.lift_sel) + float(DROP.bob_h)) + float(DROP.knock_h)
 
 
 func _drop_leave(i: int) -> void:
@@ -34425,7 +34485,11 @@ func _z_order() -> Array:
 		if hand_st == H.CARRY and i == hand_i:
 			continue
 		z.append(i)
-	z.sort_custom(func(a, b): return drop[a].w < drop[b].w)
+	#  뜬 매물(buy_sel)은 공중이라 맨 위다 — 앞줄 물건이 그 밑을 덮지 않는다(판정도 먼저 잡힌다).
+	z.sort_custom(func(a, b):
+		if (a == buy_sel) != (b == buy_sel):
+			return b == buy_sel
+		return drop[a].w < drop[b].w)
 	return z
 
 
@@ -34569,7 +34633,7 @@ func _shop_hit(m: Vector2) -> int:
 	#  누른 직후 물건이 화면에서 4px 더 올라가 있는 동안에도 같은 자리를
 	#  다시 누를 수 있어야 **툭툭** 이 된다. 넓히면 판정이 헐거워질 뿐
 	#  빡빡해지지 않으므로 못 누르게 되는 경우가 안 생긴다.
-	var lz: float = (DROP.lift_hov + DROP.knock_h) * TBL.tall
+	var lz: float = _lift_top() * TBL.tall
 	var z := _z_order()
 	for k in range(z.size() - 1, -1, -1):
 		var i: int = z[k]
@@ -35123,7 +35187,11 @@ func _obj_shadow(i: int) -> void:
 
 
 func _obj_draw(i: int, dim: float) -> void:
+	#  뜬 매물의 흔들림 — 그리는 동안만 psi 에 얹는다(물리는 안 본다).
+	var sw: float = float(drop[i].get("sway", 0.0))
+	drop[i].psi = float(drop[i].psi) + sw
 	_obj_paint(drop[i], stock[i], dim)
+	drop[i].psi = float(drop[i].psi) - sw
 
 
 # drop/stock 인덱스에서 떼어 낸 몸통. 창구로 빠진 물건(waste)이 두 번째
