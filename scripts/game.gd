@@ -48190,6 +48190,7 @@ func _draw_title() -> void:
 	_door_set_xf(shake_off)
 	_egg_shards_draw()
 	_ttly_draw(1.0 - _flk_shade())   # 판 밑 분필 점수 — 판이 깨져 없어도 문에 쓰여 있다
+	_ttlg_draw(1.0 - _flk_shade())   # 문 분필 「게임 시작」(TTLG)
 	if _door_board_vis():
 		_ttl_draw()
 		_flk_board_shade()   # 램프가 떨면(FLICK) 판 · 꽂힌 자루가 그 몫만큼 어둡다
@@ -48327,6 +48328,148 @@ func _ttly_draw(a := 1.0) -> void:
 			var dx: float = x0 + _gl_rand(d * 3 + 1, 947) * tw
 			var dy: float = by + 2.0 + dt * 40.0
 			draw_rect(Rect2(roundf(dx), roundf(dy), 1.0, 1.0), Color(ink, 0.7 * (1.0 - dt / 0.4) * a))
+	draw_set_transform_matrix(m0)
+
+
+#  ══ 문 분필 「게임 시작」 (2026-10-15) ══════════════════════════
+#  「문에 게임 시작을 써줘야 할거 같거든? 근데 그냥 게임 시작 글을 쓰면 좀 짜치니까」 — 시안 넷(걸이
+#  팻말 · 놋쇠 판 · 네온 · 금박)을 보고 사용자가 「좀 시간이 지나면 문에 게임 시작이 분필로 써졌다가 잠시후
+#  가루 떨어지면서 지워지는걸로」. 제목에 wait 초 서 있으면 판 오른쪽 아래 나무에 한 자씩 쓰이고(write ·
+#  분필 가루는 판 밑 분필 점수와 같다) 손잡이를 가리키는 화살표가 그어진다(arrow) · hold 초 뒤 왼쪽부터
+#  지워지며(erase) 가루가 떨어진다(글자마다 dust 알 · fall 초 · 중력 g) · 지운 자리에 ghost 자국이 잠깐.
+#  다 지우면 다시 wait 부터. 던지면 할 일을 했다 — 쓰는 중 · 서 있는 중이라도 곧장 지운다(_ttlg_poke).
+#  판 자리(_door_set_xf)에서 그려 문이 열리면 문짝과 같이 돈다. 움직임 끔은 한 번에 쓰고 가루 없이 진다.
+#    at  글 오른끝 · 바닥선(판 한가운데에서 · 판 자리 px) — 손잡이(판 자리 x +188 · y +17~+150) 왼쪽
+#    w   글 폭 상한(넘으면 sz 를 줄인다) · arw 화살표 길이 · tilt 기울기
+const TTLG := {"wait": 4.0, "write": 0.16, "arrow": 0.3, "hold": 3.5, "erase": 1.0,
+		"at": Vector2(156.0, 128.0), "w": 110.0, "sz": 20, "arw": 22.0, "tilt": -0.05,
+		"dust": 9, "fall": 0.7, "g": 170.0, "ghost": 0.14}
+var ttlg_t := 0.0              # 제목에 선 뒤 흐른 시간(한 바퀴 끝나면 0)
+var ttlg_cut := INF            # 쓰다 끊긴 자리(쓴 시간) — 던져서 쓰는 중에 지우기로 넘어갔을 때
+var ttlg_hold := false         # 문이 열렸다 — 다음에 제목에 서면 처음부터
+
+
+#  쓰기 시작 · 지우기 시작 · 끝(ttlg_t 초).
+func _ttlg_span() -> Vector3:
+	var w0: float = float(TTLG.wait)
+	var e0: float = w0 + float(TTLG.write) * float(_L("게임 시작").length()) + float(TTLG.arrow) \
+			+ float(TTLG.hold)
+	return Vector3(w0, e0, e0 + float(TTLG.erase))
+
+
+func _ttlg_tick(d: float) -> void:
+	if door_t >= 0.0:
+		ttlg_hold = true
+		return
+	if state != S.TITLE:
+		return
+	if ttlg_hold:
+		ttlg_hold = false
+		ttlg_t = 0.0
+		ttlg_cut = INF
+	ttlg_t += d
+	if ttlg_t >= _ttlg_span().z:
+		ttlg_t = 0.0
+		ttlg_cut = INF
+
+
+#  던졌다 — 기다리는 중이면 처음부터 기다리고, 쓰는 중 · 서 있는 중이면 쓴 데까지만 남기고 지운다.
+func _ttlg_poke() -> void:
+	var sp := _ttlg_span()
+	if ttlg_t < sp.x:
+		ttlg_t = 0.0
+	elif ttlg_t < sp.y:
+		ttlg_cut = ttlg_t - sp.x
+		ttlg_t = sp.y
+
+
+func _ttlg_draw(a := 1.0) -> void:
+	var sp := _ttlg_span()
+	if a <= 0.0 or ttlg_t < sp.x or font_sm == null:
+		return
+	var t: String = _L("게임 시작")
+	var sz: int = int(TTLG.sz)
+	while sz > 12 and font_sm.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x > float(TTLG.w):
+		sz -= 2
+	var tw: float = font_sm.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x
+	var th: float = 14.0 * float(sz) / 20.0          # 잉크 높이(바닥선 위)
+	var m0 := _door_set_mat(shake_off)
+	var r: Vector2 = BC + (TTLG.at as Vector2)
+	draw_set_transform_matrix(m0 * Transform2D(float(TTLG.tilt), r) * Transform2D(0.0, -r))
+	var x0: float = r.x - tw
+	var by: float = r.y
+	var n: int = t.length()
+	var wch: float = float(TTLG.write)
+	var wt: float = minf(ttlg_t - sp.x, ttlg_cut)     # 쓴 시간
+	var et: float = ttlg_t - sp.y                     # 지운 시간(음수 = 아직)
+	var stag: float = float(TTLG.erase) * 0.45 / float(n + 1)   # 글자마다 지우개가 닿는 간격
+	var fade: float = float(TTLG.erase) * 0.35
+	var gk: float = 1.0 - clampf(et / float(TTLG.erase), 0.0, 1.0)  # 자국이 지는 몫
+	var ink: Color = DOORT.chalk_ink
+	var wood: Color = Door3D.COL.door
+	#  글자 n 개 + 화살표(n 번째)
+	for k in n + 1:
+		var w0k: float = float(k) * wch
+		var wlen: float = wch if k < n else float(TTLG.arrow)
+		var kw: float = 1.0 if motion_off else clampf((wt - w0k) / wlen, 0.0, 1.0)
+		if kw <= 0.0:
+			break
+		var ke: float = 0.0 if et < 0.0 else clampf((et - float(k) * stag) / fade, 0.0, 1.0)
+		var px: float = font_sm.get_string_size(t.substr(0, k), HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x \
+				if k < n else tw + 6.0
+		var cw: float = font_sm.get_string_size(t.substr(k, 1), HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x \
+				if k < n else float(TTLG.arw)
+		var al: float = float(TTLY.ink) * (1.0 - ke) * a
+		var ga: float = float(TTLG.ghost) * ke * gk * a
+		if k < n:
+			if ga > 0.003:
+				draw_string(_fz(font_sm, sz), Vector2(x0 + px, by + 1.0), t.substr(k, 1), HORIZONTAL_ALIGNMENT_LEFT,
+						-1, sz, Color(ink, ga))
+			draw_string(_fz(font_sm, sz), Vector2(x0 + px, by), t.substr(k, 1), HORIZONTAL_ALIGNMENT_LEFT, -1, sz,
+					Color(ink, al * kw))
+			#  나뭇결 틈 — 분필이 다 안 묻은 자리(씨 고정)
+			for q in int(TTLY.grain):
+				var gx: float = x0 + px + _gl_rand(k * 97 + q * 5 + 1, 961) * cw
+				var gy: float = by - th + _gl_rand(k * 97 + q * 5 + 2, 961) * th
+				draw_rect(Rect2(roundf(gx), roundf(gy), 1.0 + roundf(_gl_rand(k * 97 + q * 5 + 3, 961)), 1.0),
+						Color(wood, 0.55 * kw * (1.0 - ke) * a))
+		else:
+			#  화살표 — 손잡이 쪽으로 살짝 휜 한 획 + 촉(다 그어진 뒤)
+			var ay: float = by - th * 0.5
+			var pts := PackedVector2Array()
+			for q in 9:
+				var u: float = float(q) / 8.0 * kw
+				pts.append(Vector2(x0 + px + u * cw, ay - sin(u * PI) * 2.0))
+			var acol := Color(ink, al)
+			if ga > 0.003:
+				draw_polyline(pts, Color(ink, ga), 2.0)
+			draw_polyline(pts, acol, 2.0)
+			if kw >= 1.0:
+				var tip: Vector2 = pts[pts.size() - 1]
+				draw_line(tip, tip + Vector2(-5.0, -4.0), acol, 2.0)
+				draw_line(tip, tip + Vector2(-5.0, 4.0), acol, 2.0)
+		if motion_off:
+			continue
+		#  쓰는 동안 — 글 밑으로 몇 알
+		var dw: float = wt - w0k
+		if et < 0.0 and dw >= 0.0 and dw <= 0.4:
+			for j in 2:
+				var dx: float = x0 + px + _gl_rand(k * 7 + j, 947) * cw
+				draw_rect(Rect2(roundf(dx), roundf(by + 2.0 + dw * 40.0), 1.0, 1.0),
+						Color(ink, 0.7 * (1.0 - dw / 0.4) * a))
+		#  지우는 동안 — 글자 자리에서 가루가 떨어진다
+		if et >= 0.0:
+			for j in int(TTLG.dust):
+				var dt: float = et - float(k) * stag - _gl_rand(k * 31 + j * 3 + 1, 977) * fade
+				if dt < 0.0 or dt > float(TTLG.fall):
+					continue
+				var sx: float = x0 + px + _gl_rand(k * 31 + j * 3 + 2, 977) * cw
+				var sy: float = by - th + _gl_rand(k * 31 + j * 3 + 3, 977) * th
+				var vx: float = (_gl_rand(k * 31 + j, 983) - 0.5) * 14.0
+				var dp := Vector2(sx + vx * dt, sy + 0.5 * float(TTLG.g) * dt * dt)
+				var ds: float = 2.0 if _gl_rand(k * 31 + j, 991) > 0.7 else 1.0
+				draw_rect(Rect2(roundf(dp.x), roundf(dp.y), ds, ds),
+						Color(ink, 0.8 * (1.0 - dt / float(TTLG.fall)) * a))
 	draw_set_transform_matrix(m0)
 
 
@@ -55623,6 +55766,7 @@ func _ttl_board(d: float) -> void:
 	_egg_tick(d)
 	_sign_tick(d)
 	_chalkh_tick(d)
+	_ttlg_tick(d)
 	if ttly_last_t >= 0.0:
 		ttly_last_t += d
 	for f in ttl_fly:
@@ -55659,6 +55803,8 @@ func _ttl_throw(p: Vector2) -> void:
 	var ids: Array = TTL.ids
 	var e := {"a": a, "b": p, "u": u, "id": String(ids[randi() % ids.size()]),
 			"rot": _ttl_rot(u) + randf_range(-0.14, 0.14), "t": 0.0}
+	if state == S.TITLE:
+		_ttlg_poke()
 	if motion_off:
 		_ttl_stick(e)
 	else:

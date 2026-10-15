@@ -1249,6 +1249,8 @@ static func _rows(g: Node) -> Array:
 				#  컬렉션 넘김(2026-10-11 · game.gd COLF) — 컬렉션에서 다음 쪽으로 넘겨 칠판을 지우고
 				#  다시 쓴다. 쪽이 하나뿐인 탭이면 같은 쪽을 지우고 다시 쓴다. 열한째 줄이다(한계 열아홉).
 				{"n1": "컬렉션 넘김 다시 보기", "t": "act", "a": "colf"},
+				#  문 분필 「게임 시작」(game.gd TTLG) — 기다림을 건너뛰고 지금 쓴다. 2026-10-15
+				{"n1": "문 분필 게임 시작", "t": "act", "a": "ttlg"},
 			]
 
 
@@ -2356,6 +2358,14 @@ static func _run(g: Node, e: Dictionary) -> void:
 			return
 		"flk":
 			_say("불 깜박" if g._flk_now() else "제목에서 · 움직임 켜고")
+			return
+		"ttlg":
+			if g.state != g.S.TITLE:
+				_say("제목에서")
+				return
+			g.ttlg_t = float(g.TTLG.wait)
+			g.ttlg_cut = INF
+			_say("문 분필 게임 시작")
 			return
 		"kb_wake":
 			g._kb_wake()

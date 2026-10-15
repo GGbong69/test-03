@@ -469,3 +469,31 @@ func _run() -> void:
 				"등급 %d (바란 것 %d)" % [got, int(want[nm][1])])
 	_ok("등급마다 소리가 있다", g.HIT_SFX.size() == 6,
 			"%d개" % g.HIT_SFX.size())
+
+	# ── 문 분필 「게임 시작」(game.gd TTLG · 2026-10-15) ─────────
+	_title()
+	g.door_t = -1.0
+	g.ttlg_t = 0.0
+	g.ttlg_cut = INF
+	var sp: Vector3 = g._ttlg_span()
+	_ok("분필 — 기다림 < 지우기 < 끝", sp.x > 0.0 and sp.x < sp.y and sp.y < sp.z, str(sp))
+	_tick(int(ceil((sp.x + 0.5) * 60.0)))
+	_ok("분필 — 가만히 서 있으면 쓰기 시작", g.ttlg_t >= sp.x, "%.2f" % g.ttlg_t)
+	g._ttl_throw(g.BC)
+	_ok("분필 — 쓰다 던지면 쓴 데까지 남기고 지운다", g.ttlg_t == sp.y and g.ttlg_cut > 0.0
+			and g.ttlg_cut < sp.y - sp.x, "%.2f · 끊김 %.2f" % [g.ttlg_t, g.ttlg_cut])
+	_tick(int(ceil((sp.z - sp.y) * 60.0)) + 2)
+	_ok("분필 — 다 지우면 다시 기다린다", g.ttlg_t < 0.1 and g.ttlg_cut == INF, "%.2f" % g.ttlg_t)
+	g.ttlg_t = 1.0
+	g._ttl_throw(g.BC)
+	_ok("분필 — 기다리다 던지면 처음부터", g.ttlg_t == 0.0)
+	g.ttlg_t = sp.y - 0.5
+	g.door_t = 0.1
+	for i in 10:
+		g._ttlg_tick(D)
+	_ok("분필 — 문이 열리는 동안은 그대로", is_equal_approx(g.ttlg_t, sp.y - 0.5))
+	g.door_t = -1.0
+	g._ttlg_tick(D)
+	_ok("분필 — 다시 제목에 서면 처음부터", g.ttlg_t < 0.05, "%.2f" % g.ttlg_t)
+	g.ttl_stuck.clear()
+	g.ttl_fly.clear()
