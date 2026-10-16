@@ -13584,8 +13584,19 @@ func annulus(ri: float, ro: float, a0: float, a1: float) -> PackedVector2Array:
 # 판을 고칠 일이 아니다: 없앤 띠는 hit_info 에서도 반지름 한 점이라
 # 안 그리는 것이 곧 맞는 그림이다. 뒤집힌 띠(안 > 밖)도 같이 거르지만
 # 그건 GEO 순서 규칙이 막는 자리라 qa_board 가 먼저 잡는다.
+# 안 반지름은 0 밑으로 안 간다 — 불씨 번짐(halo)처럼 띠를 안쪽으로 넓히다 음수가 되면 안 테가 판
+# 한가운데를 건너 뒤집혀 꼬인 다각형이 됐다(cond_probe 의 「Invalid polygon」 · 2026-10-16). 0 이면
+# 안 테 점이 한 점에 겹치므로 부채꼴로 그린다.
 func _band_draw(ri: float, ro: float, a0: float, a1: float, col: Color) -> void:
-	if ro <= ri:
+	ri = maxf(ri, 0.0)
+	if ro <= ri or a1 <= a0:
+		return
+	if ri <= 0.0:
+		var pts := PackedVector2Array([BC])
+		for i in 9:
+			var a := lerpf(a0, a1, float(i) / 8.0)
+			pts.append(BC + Vector2(sin(a), -cos(a)) * ro)
+		draw_colored_polygon(pts, col)
 		return
 	draw_colored_polygon(annulus(ri, ro, a0, a1), col)
 

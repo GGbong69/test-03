@@ -108,7 +108,7 @@ const KIND_KEYS := {"mult_streak": ["streak"], "mult_rand": ["rand01"]}
 
 # check() 가 읽는 열. 조건 이름 = 열 이름이 규약이라 기본 갈래가 그것을
 # 그대로 쓴다 — 새 조건을 달고 ctx 에 열을 안 실으면 여기서 잡힌다.
-# 아래 다섯 줄은 이름과 열이 다른 예외들이다.
+# 아래 줄들은 이름과 열이 다른 예외들이다.
 func _keys_of(c: String) -> PackedStringArray:
 	if c == "":
 		return PackedStringArray([])          # 조준·골드 전용 장. 조건이 없다
@@ -123,6 +123,7 @@ func _keys_of(c: String) -> PackedStringArray:
 		"left", "right": return PackedStringArray(["left"])
 		"diff": return PackedStringArray(["same"])     # not same 이다
 		"risk": return PackedStringArray(["mult", "sector"])
+		"sum11": return PackedStringArray(["pair_sum"])   # 직전 칸 + 이 칸(_land 의 pair_sum)
 		_: return PackedStringArray([c])
 
 
