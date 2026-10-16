@@ -1734,6 +1734,12 @@ const SC_WEIGHT := [Vector2(0.0, 0.0), Vector2(2.9, 0.0), Vector2(3.0, 0.3), Vec
 		Vector2(1.2, 5.1), Vector2(0.6, 5.5), Vector2(0.0, 5.6)]
 
 
+#  저울 glb — 메시 넷(ScaleBody 몸 · ScaleBeam 저울대 · ScalePan 접시 · ScaleWeight 추)을 Blender 로
+#  짓는다(scripts/tools/blender/scale_body.py · 2026-10-16 「블렌더 깔았으니까 활용해봐」 — 등록기 다음).
+#  좌표는 저울 제 좌표 그대로 · 굴대 · 걸이 · PAN_TOP 도 옛 값 그대로라 움직임 · pan_top 은 안 바뀐다.
+const SCALE_BODY := "res://assets/models/scale_body.glb"
+
+
 static func _scale_prop(root: Node3D, sh: float) -> void:
 	var n := _prop_node(root, "Scale", sell_at(), SELL_K, sh)
 	var brass := _brass()
@@ -1742,35 +1748,57 @@ static func _scale_prop(root: Node3D, sh: float) -> void:
 	var wood2 := _mat(WOOD.beam, 0.35)
 	n.set_meta("glow", brass)
 	n.add_child(_blob(Vector2(34.0, 24.0), Vector3(2.0, 0.15, 2.0), 0.75))
-	#  받침 — 놋쇠 번 발 넷 위에 모깎은 나무 두 단(사이 놋쇠 띠). 아래 단 앞에 놋쇠 패 하나(큰 몸에서
-	#  받침이 민짜면 나무 토막으로 읽힌다). 폭 22(띠 22.8)는 2026-10-03 에 32 에서 좁혔다 — 받침이
-	#  옆 카운터 안에 들어앉아야 해서다(머리말 「받침은 온전히 카운터 위」). 약방 저울처럼
-	#  좁은 받침에 높은 기둥이 서는 꼴이라 저울로는 오히려 더 읽힌다.
-	for fx in [-8.5, 8.5]:
-		for fz in [-6.0, 6.0]:
-			n.add_child(_lmi("sc_foot", PackedVector2Array(SC_FOOT), Vector3(fx, 0.0, fz), brass, 12))
-	n.add_child(_bbox(Vector3(22.0, 3.0, 17.0), 0.7, Vector3(0.0, 3.2, 0.0), wood))
-	n.add_child(_bbox(Vector3(8.0, 1.8, 0.6), 0.25, Vector3(0.0, 3.2, 8.5), brass))
-	n.add_child(_bbox(Vector3(22.8, 0.8, 17.8), 0.3, Vector3(0.0, 5.0, 0.0), brass))
-	n.add_child(_bbox(Vector3(17.0, 2.6, 14.0), 0.7, Vector3(0.0, 6.7, 0.0), wood2))
-	n.add_child(_lmi("sc_col", PackedVector2Array(SC_COL), Vector3.ZERO, brass, 20))
-	var piv: Vector3 = SCALE_PIV
-	#  (기둥 앞 둥근 눈금판은 찍어 보니 기둥 위 머리로 읽혀 걷었다 — 바늘만 남긴다.)
-	n.add_child(_lmi("sc_hub", PackedVector2Array(SC_HUB), Vector3.ZERO, brass, 18))
-	n.add_child(_lmi("sc_tip", PackedVector2Array(SC_TIP), Vector3.ZERO, brass, 14))
+	#  glb 가 있으면 메시를 이름으로 집어 같은 노드 짜임(Arm · PanL · PanR)에 앉힌다. 재질은 이름으로
+	#  이 함수의 재질을 끼운다 — 놋쇠가 prop_glow 가 미는 그 재질이라 빛 · 반짝임이 그대로 탄다.
+	#  청동은 등록기 몸통과 같은 재질 · 같은 결(한 벌로 보인다). 없으면(가져오기 전) 옛 코드 몸이다.
+	var gp: Dictionary = _glb_parts(SCALE_BODY)
+	var gm := {}
+	if gp.has("ScaleBody") and gp.has("ScaleBeam") and gp.has("ScalePan") and gp.has("ScaleWeight"):
+		var bronze := _mat(COL.bronze.darkened(0.45), 0.42, 0.9)
+		bronze.albedo_texture = _noise_tex(0.35, 0.78, 1.0, 31)
+		gm = {"brass": brass, "bronze": bronze, "wood": wood, "wood_lt": wood2, "patina": patina,
+				"ink": _mat(Color("1a1210"), 0.6)}
+		n.add_child(_glb_mi(gp.ScaleBody, gm))
+	if gm.is_empty():
+		#  받침 — 놋쇠 번 발 넷 위에 모깎은 나무 두 단(사이 놋쇠 띠). 아래 단 앞에 놋쇠 패 하나(큰 몸에서
+		#  받침이 민짜면 나무 토막으로 읽힌다). 폭 22(띠 22.8)는 2026-10-03 에 32 에서 좁혔다 — 받침이
+		#  옆 카운터 안에 들어앉아야 해서다(머리말 「받침은 온전히 카운터 위」). 약방 저울처럼
+		#  좁은 받침에 높은 기둥이 서는 꼴이라 저울로는 오히려 더 읽힌다.
+		for fx in [-8.5, 8.5]:
+			for fz in [-6.0, 6.0]:
+				n.add_child(_lmi("sc_foot", PackedVector2Array(SC_FOOT), Vector3(fx, 0.0, fz), brass, 12))
+		n.add_child(_bbox(Vector3(22.0, 3.0, 17.0), 0.7, Vector3(0.0, 3.2, 0.0), wood))
+		n.add_child(_bbox(Vector3(8.0, 1.8, 0.6), 0.25, Vector3(0.0, 3.2, 8.5), brass))
+		n.add_child(_bbox(Vector3(22.8, 0.8, 17.8), 0.3, Vector3(0.0, 5.0, 0.0), brass))
+		n.add_child(_bbox(Vector3(17.0, 2.6, 14.0), 0.7, Vector3(0.0, 6.7, 0.0), wood2))
+		n.add_child(_lmi("sc_col", PackedVector2Array(SC_COL), Vector3.ZERO, brass, 20))
+		#  (기둥 앞 둥근 눈금판은 찍어 보니 기둥 위 머리로 읽혀 걷었다 — 바늘만 남긴다.)
+		n.add_child(_lmi("sc_hub", PackedVector2Array(SC_HUB), Vector3.ZERO, brass, 18))
+		n.add_child(_lmi("sc_tip", PackedVector2Array(SC_TIP), Vector3.ZERO, brass, 14))
 	var arm := Node3D.new()
 	arm.name = "Arm"
-	arm.position = piv
+	arm.position = SCALE_PIV
 	n.add_child(arm)
-	var beam := _lmi("sc_arm", PackedVector2Array(SC_ARM), Vector3.ZERO, brass, 14)
-	beam.rotation = Vector3(0.0, 0.0, -PI * 0.5)
-	arm.add_child(beam)
-	arm.add_child(_lmi("sc_needle", PackedVector2Array(SC_NEEDLE), Vector3(0.0, -1.0, 4.0), patina, 8))
+	if not gm.is_empty():
+		arm.add_child(_glb_mi(gp.ScaleBeam, gm))
+	else:
+		var beam := _lmi("sc_arm", PackedVector2Array(SC_ARM), Vector3.ZERO, brass, 14)
+		beam.rotation = Vector3(0.0, 0.0, -PI * 0.5)
+		arm.add_child(beam)
+		arm.add_child(_lmi("sc_needle", PackedVector2Array(SC_NEEDLE), Vector3(0.0, -1.0, 4.0), patina, 8))
 	for sd in [-1.0, 1.0]:
 		var s: float = float(sd)
 		var pan := Node3D.new()
 		pan.name = "PanL" if s < 0.0 else "PanR"
 		n.add_child(pan)
+		if not gm.is_empty():
+			pan.add_child(_glb_mi(gp.ScalePan, gm))
+			if s < 0.0:
+				pan.add_child(_glb_mi(gp.ScaleWeight, gm, Vector3(2.0, PAN_TOP, 0.0)))
+				var gw := _glb_mi(gp.ScaleWeight, gm, Vector3(-3.8, PAN_TOP, 0.8))
+				gw.scale = Vector3.ONE * 0.7
+				pan.add_child(gw)
+			continue
 		#  사슬 셋 — 고리(저울대 끝 혹)에서 접시 테 세 점으로
 		pan.add_child(_ball(0.9, Vector3(0.0, -1.2, 0.0), patina))
 		for k in 3:
@@ -1785,6 +1813,42 @@ static func _scale_prop(root: Node3D, sh: float) -> void:
 			w2.scale = Vector3.ONE * 0.7
 			pan.add_child(w2)
 	_scale_set(n, 0.0)
+
+
+#  glb 한 벌의 메시를 노드 이름으로 — 없거나 못 읽으면 빈 사전. 한 번 불러 둔다(테이블을 다시 지어도).
+static var _glb_mc := {}
+
+
+static func _glb_parts(path: String) -> Dictionary:
+	if _glb_mc.has(path):
+		return _glb_mc[path]
+	var out := {}
+	var ps: PackedScene = load(path) as PackedScene if ResourceLoader.exists(path) else null
+	if ps != null:
+		var sc := ps.instantiate()
+		var todo: Array = [sc]
+		while not todo.is_empty():
+			var nd: Node = todo.pop_back()
+			todo.append_array(nd.get_children())
+			var mi := nd as MeshInstance3D
+			if mi != null and mi.mesh != null:
+				out[String(mi.name)] = mi.mesh
+		sc.free()
+	_glb_mc[path] = out
+	return out
+
+
+#  glb 메시 하나를 세운다 — 겉마다 재질 이름(Blender 재질 이름)으로 mats 의 재질을 끼운다.
+static func _glb_mi(mesh: Mesh, mats: Dictionary, at := Vector3.ZERO) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	mi.mesh = mesh
+	mi.position = at
+	for i in mesh.get_surface_count():
+		var sm: Material = mesh.surface_get_material(i)
+		var key: String = sm.resource_name if sm != null else ""
+		if mats.has(key):
+			mi.set_surface_override_material(i, mats[key])
+	return mi
 
 
 #  안 접시 윗면 — 접시 노드에서 그 밑 놋쇠 판(−26 · 높이 3)과 짙은 안판(−24.3 · 0.4)의
