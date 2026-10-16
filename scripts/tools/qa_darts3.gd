@@ -6,8 +6,11 @@ extends SceneTree
 #    ④ 세운 벌 — 표준 밖은 낯 축(face) 밑 · 표준은 안 돈다(십자 날개) · 메시마다 칠 표(dk3)
 #    ⑤ 표준 날개는 인쇄(테 · 띠) 질감을 받는다
 #    ⑥ 2D 그림 — 쥘 때 쓰는 배럴 반폭(_dart_barrel)이 넷 다 선다
+#    ⑦ 자석 당김 — 꽂힐 자리가 판 한가운데 쪽으로 magnet 만큼 · 조준 중 밝히는 칸(미리 보기)도 그 자리 ·
+#       패닝 작은 다트도 발마다 당긴다(2026-10-16 · 그 길은 당김이 빠져 있었다) · 표준은 그대로
 #   godot --headless --path . --script scripts/tools/qa_darts3.gd
 const Save = preload("res://scripts/save.gd")
+const GameData = preload("res://scripts/data.gd")
 var g = null
 var ok := 0
 var bad := 0
@@ -101,3 +104,26 @@ func _run() -> void:
 	for id in IDS:
 		bw.append("%s %.1f" % [id, g._dart_barrel(id)])
 	_ok("⑥ 2D 배럴 반폭이 넷 다 선다", IDS.all(func(i): return g._dart_barrel(i) > 0.5), str(bw))
+	# ⑦
+	var mag := {}
+	for dd in GameData.darts():
+		if String(dd.id) == "mag":
+			mag = dd
+	var mk: float = float(mag.get("magnet", 0.0))
+	g.active_mods = []
+	g.cur_dart = mag
+	g.aim = g.BC + Vector2(100.0, 0.0)
+	var want: Vector2 = g.BC + Vector2(100.0 * (1.0 - mk), 0.0)
+	_ok("⑦ 자석은 꽂힐 자리를 가운데로 당긴다", mk > 0.0 and g._magnet_at(g.aim).is_equal_approx(want),
+			"%s → %s" % [str(g.aim - g.BC), str(g._magnet_at(g.aim) - g.BC)])
+	g.state = g.S.CONFIRM
+	_ok("⑦ 조준 중 밝히는 칸도 당긴 자리", g._aim_glow_at().is_equal_approx(want), str(g._aim_glow_at() - g.BC))
+	g.state = g.S.AIM_V
+	g.burst_left = 3
+	g.darts.clear()
+	g.burst_hits.clear()
+	g._kick_fire()
+	_ok("⑦ 패닝 작은 다트도 당긴다", g.darts.size() == 1 and Vector2(g.darts[0].p).is_equal_approx(want)
+			and Vector2(g.burst_hits[0]).is_equal_approx(want), str(g.darts))
+	g.cur_dart = {"id": "std"}
+	_ok("⑦ 표준은 그대로", g._magnet_at(g.aim) == g.aim)

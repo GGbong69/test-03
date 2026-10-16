@@ -8023,8 +8023,7 @@ func _process(d: float) -> void:
 			gt += d * gs()
 			confirm_t += d
 			if confirm_t >= ch():
-				if cur_dart.get("magnet", 0.0) > 0.0:
-					aim = aim.lerp(BC, cur_dart.magnet)
+				aim = _magnet_at(aim)
 				again_aim = aim
 				again_dart = cur_dart.duplicate()
 				_grip_consume()
@@ -8531,7 +8530,9 @@ func _pull_point() -> Vector2:
 
 # 작은 다트 한 발. 꽂고, 반동을 얹고, 마지막이면 정산으로 넘긴다.
 func _kick_fire() -> void:
-	burst_hits.append(aim)
+	#  자석 — 작은 다트도 발마다 당긴다(2026-10-16 · 이 길은 CONFIRM 을 안 지나 당김이 빠져 있었다).
+	var at := _magnet_at(aim)
+	burst_hits.append(at)
 	# 여기서 화면에 꽂는다. 정산은 이미 꽂힌 자리를 읽으므로 그때는
 	# 다시 안 꽂는다(_land 의 mark=false).
 	#  ⚠ **발마다 새로 굴린다.** fly_rot 을 쓰고 있었는데 연발은 S.FLY 를
@@ -8539,7 +8540,7 @@ func _kick_fire() -> void:
 	#  돌려 써서 판에 **자로 잰 듯 나란히** 박혔다. 바로 위 _land 의 주석이
 	#  싫다고 적어 둔 그림이 정작 여기 있었다. 이을 각이 없으므로(비행 0프레임)
 	#  꽂는 자리에서 굴리는 것이 맞다. 2026-09-24
-	darts.append({"p": aim, "id": String(cur_dart.get("id", "std")),
+	darts.append({"p": at, "id": String(cur_dart.get("id", "std")),
 			"rot": randf_range(-0.26, 0.26), "sc": _bean_now()})
 	_sfx("kick_shot")
 	kick_o += Vector2(aim_rng.randf_range(-float(KICK.side), float(KICK.side)),
@@ -19817,6 +19818,7 @@ func _draw_aim() -> void:
 	elif state == S.CONFIRM:
 		_aim_h_line(aim.y, C_ACC)
 		_aim_v_line(aim.x, C_ACC)
+		_magnet_preview()
 		if mod_v("fog", 0.0) <= 0.0:
 			#  ⚠ 곡선을 갈았다. `1 - (1-t)³` 은 **처음이 가장 빠른** 곡선인데
 			#  창이 27프레임이라 꼬리가 통째로 남았다 — 앞 13프레임이 움직임의
@@ -20034,12 +20036,19 @@ func _aim_glow_at() -> Vector2:
 		return none
 	match state:
 		S.CONFIRM:
-			return aim
+			return _magnet_at(aim)
 		S.AIM_V, S.AIM_H:
 			if state == S.AIM_V and _aim_stages() >= 2:
 				return none
-			return aim
+			return _magnet_at(aim)
 	return none
+
+
+#  자석 다트가 꽂히는 자리 — 겨눈 자리 p 를 판 한가운데 쪽으로 거리의 magnet(darts.csv) 만큼 당긴다.
+#  던질 때(CONFIRM 끝 · 패닝 발마다) 쓰고, 조준 중에는 밝히는 칸과 미리 보기 점이 같은 자리를 본다.
+func _magnet_at(p: Vector2) -> Vector2:
+	var m: float = float(cur_dart.get("magnet", 0.0))
+	return p.lerp(BC, m) if m > 0.0 else p
 
 
 # 조준 중의 그림. 방식마다 **무엇이 잠겼고 무엇이 움직이는지**가 다르다 —
@@ -20090,6 +20099,18 @@ func _draw_aim_live() -> void:
 				_aim_v_line(aim.x, C_ACC)
 			else:
 				_aim_h_line(aim.y, C_ACC)
+	_magnet_preview()
+
+
+#  자석 — 실제로 꽂힐 자리(당겨진 자리)를 흐린 점으로 미리 보인다(2026-10-16 「조준 때 미리 보여 준다」).
+#  겨눈 자리에서 그 점까지 옅은 줄 · 밝히는 칸도 그 자리다(_aim_glow_at). 안개 · 겨눌 자리가 아직
+#  안 선 단(2단 조준의 첫 단)에서는 안 보인다 — 칸 밝힘과 같은 규칙이다. 조준 중 · 확정 중 둘 다 부른다.
+func _magnet_preview() -> void:
+	var mp := _aim_glow_at()
+	if mp.x > -9000.0 and mp.distance_to(aim) > 1.0:
+		draw_line(aim, mp, Color(C_ACC, 0.45), 1.0)
+		draw_arc(mp, 3.0, 0.0, TAU, 12, Color(C_BG, 0.6), 3.0)
+		draw_arc(mp, 3.0, 0.0, TAU, 12, Color(C_ACC, 0.75), 1.0)
 
 
 # 당김의 그림. 이 방식의 어려움은 **얼마나 세게 튕겨야 하는지 배울
@@ -31415,6 +31436,9 @@ func _shop_bare() -> bool:
 #  술 방울이 튀고 상인이 움찔한다. 동전 슬롯 띠에 가린 병도 이웃으로 깨지고, 선반 자리를 눌러도
 #  남은 병 가운데 가장 가까운 것이 깨진다(가린 병만 남아도 끝을 볼 수 있다). 다 깨면 상인이
 #  주먹으로 테이블을 내리치고(_prop_pound "rage") 쾅 뒤 rage_wait 에 술병 대결로 간다(BDUEL).
+#  ⚠ 2026-10-16 「상인 뒤 술병은 이스터에그 발동에 필요없도록」 — 쉬는 상인의 몸 · 팔(cover)과 동전 슬롯 띠
+#  (맨 위 선반)가 가린 병은 다 깨기에 안 든다. 누름 · 이웃도 보이는 병만 고르고, 보이는 병을 다 깨면
+#  가린 병도 같이 쏟아진다(선반이 빈 채 가는 것은 그대로). 가린 병 위를 누르면 상인이 받는다.
 #  런마다 한 번 — 다 깬 런은 선반이 빈 채 간다. 튜토리얼 런에는 없다. 판 고르기 화면에도 같은
 #  방이 비치므로 깬 병은 거기서도 없다. 깬 병 · 단은 이어하기에 적힌다(RUN_PLAIN).
 #    per        한 번 누를 때 깨지는 병 수(작은 · 큰)
@@ -31423,10 +31447,13 @@ func _shop_bare() -> bool:
 #    v · g      튀는 빠르기(px/초) · 떨어지는 무게(px/초²) · life 사는 시간(초)
 #    pitch      coin_break_glass 를 이 배로(술병은 사탕 유리보다 두껍고 무겁다)
 #    rage_wait  주먹이 닿고 대결로 넘어가기까지(초)
+#    cover      쉬는 상인의 몸 · 팔이 가리는 선반 구간(방 x · 선반 0 · 1 차례) — 2026-10-16 상점 화면에서 병마다
+#               _npc_hit 로 잰 값(몸통 · 팔 사이 틈의 병은 보인다). 선반 2(맨 위)는 동전 슬롯 띠 밑이라 통째로 가렸다
 const BTL := {
 	"per": [3, 5], "grab": 14.0, "shard": 7, "drop": 5,
 	"v": 95.0, "g": 520.0, "life": 0.75,
 	"pitch": [0.70, 0.90], "rage_wait": 0.55,
+	"cover": [[[-1.68, -0.93], [-0.76, 0.85], [1.03, 1.97]], [[-1.90, -1.32], [-0.81, 0.80], [1.35, 1.88]]],
 }
 var btl_gone := []           # 깬 술병 번호
 var btl_st := 0              # 0 선반 · 1 내리침(대결 앞) · 2 끝
@@ -31441,6 +31468,18 @@ func _btl_layout() -> Array:
 	if btl_lay.is_empty():
 		btl_lay = Room3D.bottle_layout()
 	return btl_lay
+
+
+#  술병 k 가 가렸나 — 상인 몸 · 팔(BTL.cover) 뒤이거나 동전 슬롯 띠 밑(cover 에 없는 선반).
+func _btl_hid(k: int) -> bool:
+	var b: Dictionary = _btl_layout()[k]
+	var cv: Array = BTL.cover
+	if int(b.s) >= cv.size():
+		return true
+	for iv in cv[int(b.s)]:
+		if float(b.x) >= float(iv[0]) and float(b.x) <= float(iv[1]):
+			return true
+	return false
 
 
 #  술병을 깰 수 있나 — 상점 · 선반 단 · 튜토리얼 아님 · 쓸기 · 팩 뜯기 밖.
@@ -31471,13 +31510,16 @@ func _btl_press(m: Vector2) -> bool:
 	for k in lay.size():
 		var p := _btl_scr(k)
 		box = Rect2(p, Vector2.ZERO) if k == 0 else box.expand(p)
-		if btl_gone.has(k):
+		if btl_gone.has(k) or _btl_hid(k):
 			continue
 		var dd := p.distance_to(m)
 		if dd < bd:
 			bd = dd
 			best = k
 	if best < 0 or not box.grow(float(BTL.grab)).has_point(m):
+		return false
+	#  상인 위를 눌렀고 보이는 병이 손 닿는 데(grab) 밖이면 상인이 받는다 — 가린 병은 안 깬다.
+	if bd > float(BTL.grab) and _npc_hit(m) >= 0:
 		return false
 	_btl_break(best, btl_rng.randi_range(int(BTL.per[0]), int(BTL.per[1])))
 	_npc_react("움찔", _npc_side(m.x))
@@ -31497,7 +31539,7 @@ func _btl_break(k0: int, n: int) -> void:
 		var nb := -1
 		var nd := 1.0e9
 		for k in lay.size():
-			if btl_gone.has(k) or hit.has(k):
+			if btl_gone.has(k) or hit.has(k) or _btl_hid(k):
 				continue
 			var b: Dictionary = lay[k]
 			var dk := Vector2(float(b.x) - float(b0.x), (float(b.sy) - float(b0.sy)) * 2.0).length()
@@ -31513,8 +31555,14 @@ func _btl_break(k0: int, n: int) -> void:
 		if p.x >= 0.0:
 			_btl_burst(p, Room3D.BOTTLE_COLS[int(lay[k].c)])
 	_sfx("coin_break_glass", SFX_BASE * btl_rng.randf_range(float(BTL.pitch[0]), float(BTL.pitch[1])))
-	if btl_gone.size() >= lay.size():
-		_btl_rage()
+	#  보이는 병을 다 깼다 — 가린 병도 같이 쏟아진다(선반이 빈다).
+	for k in lay.size():
+		if not btl_gone.has(k) and not _btl_hid(k):
+			return
+	for k in lay.size():
+		if not btl_gone.has(k):
+			btl_gone.append(k)
+	_btl_rage()
 
 
 #  유리 조각(병 색 · 밝게) · 술 방울(병 색 · 짙게) · 깨지는 반짝 하나.

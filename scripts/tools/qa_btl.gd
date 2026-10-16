@@ -3,6 +3,8 @@ extends SceneTree
 #   ① 술병 자리는 씨 고정이다 — 몇 번을 물어도 같은 표 · 일흔 병 남짓 · 선반 셋.
 #   ② 상점(튜토리얼 아님)에서만 깬다. 한 번에 고른 병과 그 이웃이 깨지고, 이웃은 같은 선반이 먼저다.
 #   ③ 다 깨면 상인이 내리치고(단 1) 시계 뒤 술병 대결로 간다 — 그동안 상점을 못 떠난다.
+#   ③′ 상인 몸 · 팔과 동전 슬롯 띠가 가린 병은 다 깨기에 안 든다 — 보이는 병만 깨도 내리치고 선반이 빈다
+#      (2026-10-16 「상인 뒤 술병은 이스터에그 발동에 필요없도록」) · 이웃도 보이는 병만 고른다.
 #   ④ 대결은 판 상태(꽂힌 다트 · 제약 · 판 기하)를 비켜 두고 영구 판으로 한다.
 #   ⑤ 상인이 n 병 · 내가 n 병 — 점수는 판의 수 그대로(칸 × 띠 · 불 · 빗나감 0)이고 합으로 겨룬다.
 #   ⑥ 이기면 비밀 상점 — 테이블이 레전더리 동전으로만 깔린다 · 판 상태가 돌아온다 · 단 2.
@@ -85,8 +87,9 @@ func _run() -> void:
 	g.tut_run = true
 	_ok("② 튜토리얼 런에는 없다", not g._btl_open())
 	g.tut_run = false
-	g._btl_break(0, 4)
-	_ok("② 한 번에 고른 병과 이웃 넷", g.btl_gone.size() == 4 and g.btl_gone.has(0), str(g.btl_gone))
+	#  셋 — 가린 병을 빼면(③′) 0 번 곁의 보이는 같은 선반 병이 둘뿐이라 넷째는 바로 위 선반 끝으로 간다
+	g._btl_break(0, 3)
+	_ok("② 한 번에 고른 병과 이웃 둘", g.btl_gone.size() == 3 and g.btl_gone.has(0), str(g.btl_gone))
 	var same := true
 	for k in g.btl_gone:
 		if int(lay[k].s) != int(lay[0].s):
@@ -102,6 +105,22 @@ func _run() -> void:
 	_ok("③ 다 깼다", g.btl_gone.size() == lay.size(), "%d / %d" % [g.btl_gone.size(), lay.size()])
 	_ok("③ 상인이 내리친다(단 1)", g.btl_st == 1)
 	_ok("③ 대결로 가는 시계가 선다", g.btl_go > 0.0, "%.2f" % g.btl_go)
+	# ③′
+	_shop()
+	var vis := []
+	for k in lay.size():
+		if not g._btl_hid(k):
+			vis.append(k)
+	_ok("③′ 보이는 병은 가린 병보다 적다(선반 셋 중 위는 띠 밑)", vis.size() >= 10 and vis.size() < lay.size() / 2,
+			"%d / %d" % [vis.size(), lay.size()])
+	g._btl_break(int(vis[0]), 4)
+	var hid_hit := (g.btl_gone as Array).filter(func(k): return g._btl_hid(int(k)))
+	_ok("③′ 이웃은 보이는 병만", hid_hit.is_empty(), str(g.btl_gone))
+	for k in vis:
+		if not g.btl_gone.has(k):
+			g._btl_break(int(k), 1)
+	_ok("③′ 보이는 병만 깨도 내리친다 · 선반이 빈다", g.btl_st == 1 and g.btl_gone.size() == lay.size(),
+			"단 %d · %d / %d" % [g.btl_st, g.btl_gone.size(), lay.size()])
 	var leg0: int = g.leg_no
 	g._click(g._next_rect().get_center())
 	_ok("③ 그동안 상점을 못 떠난다", g.state == g.S.SHOP and g.leg_no == leg0)
