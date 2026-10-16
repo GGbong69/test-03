@@ -36,3 +36,7 @@ sell_2,sell,아깝지 않아?,No regrets?,惜しくないのか?,1,
 sell_3,sell,받아 두지,I'll take it,もらっておくよ,1,
 rage_1,rage,너. 나랑 한판 하자,You. Let's go a round,お前。俺と勝負しろ,1,술병을 다 깨면 쾅 뒤 손님을 가리키며(game.gd PROP r_*) — 바로 술병 대결로 간다
 rage_2,rage,좋아. 술병으로 갚아라,Fine. Pay me back in bottles,いいだろう。瓶で払ってもらう,1,
+rival_mine,rival,{cell}? 거긴 내 자리야.,{cell}? That spot's mine.,{cell}？そこは俺の場所だ。,1,라이벌이 던지기 전에 하는 말(game.gd RIVAL · 2026-10-16). {cell} 막을 자리 · {val} 라이벌 다트를 맞히면 받는 점수 — 판이 채운다
+rival_borrow,rival,"{cell}, 잠깐 빌릴게.","Mind if I borrow {cell}?",{cell}、ちょっと借りるぜ。,1,
+rival_dare,rival,내 다트 맞히면 {val}점 줄게.,Knock my dart out and {val} points are yours.,俺のダーツに当てたら{val}点やるよ。,1,
+rival_watch,rival,실력 좀 볼까. {cell} 막아 둔다.,Let's see what you've got. {cell} is mine.,腕前を見せてもらおうか。{cell}は塞ぐぜ。,1,

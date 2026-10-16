@@ -3472,7 +3472,42 @@ const REGULAR := {"k": 3, "gap": 5.0, "edge": 1.5,
 		"side": Vector3(340.0, 24.0, 0.45), "arc": 18.0,
 		"fall_t": 0.55, "fall_v": 50.0, "fall_g": 1600.0, "fall_x": 8.0, "fall_rot": 0.9,
 		"fall_pitch": -1.1,
-		"plank_t": 0.14, "knock_p": 1.5}
+		"plank_t": 0.14, "knock_p": 1.5,
+		#  던지기 전(2026-10-16 「라이벌은 던지기 전 대사를 치고 라이벌의 손이 보이는게 좋겠다」) —
+		#  들어오는 걸음 머리에 say_b 박 동안 말상자가 서고(RIVAL) 그동안 손이 화면 옆 아래에서 들어와
+		#  겨눈다. aim_b 박 동안 당겼다(wind) 튕기고(thrust) 그 손끝에서 다트가 떠난다 — 나는 길은 그대로다.
+		"say_b": 3.0, "aim_b": 0.8}
+
+
+#  라이벌의 손 — 남색 재킷 소매 · 파란 손목 밴드 · 상인과 같은 3D 손(_hand3_build)을 다트 무대(bd3)의
+#  눈 가까운 깊이에 세운다. 같은 카메라라 손에 쥔 다트가 그 자리에서 판의 그 칸으로 날아간다.
+#    ax · ay   겨누는 손목의 화면 자리 — 판 가운데에서 옆(rgl_side 쪽)으로 ax · 화면 y ay
+#    az        그 깊이(눈 거리의 몫 — 그 깊이에서 화면 1px 이 월드 1 − az)
+#    in_dx · in_dy   들어오기 전 자리(겨눈 자리에서 화면 밖으로) · in_t 들어오는 몫(손 시계 · 초)
+#    wind · thrust   당기는 거리(눈 쪽 · 위) · 튕겨 나가는 거리(판 쪽) — 월드 단위 · wind_t · thrust_t 그 시간
+#    out_t     던진 뒤 빠지는 시간 · k 손 · 팔 배율(다트 80 에 손 길이가 맞게) · lift 손목을 든 각(rad)
+#    roll      손등이 바깥 위를 보게 굴리는 각(rad) · grip 다트를 쥔 자리(촉에서 길이의 몫)
+#    fp        손가락 자세(FPOSE 열둘의 차례) — 엄지 · 검지가 배럴을 집고 나머지 셋은 차례로 말린다
+const RIVAL := {
+	"ax": 218.0, "ay": 316.0, "az": 0.42, "in_dx": 140.0, "in_dy": 150.0, "in_t": 0.32,
+	"wind": Vector3(0.0, 6.0, 34.0), "thrust": 40.0, "wind_t": 0.30, "thrust_t": 0.10,
+	"out_t": 0.40, "k": 1.45, "lift": 0.30, "roll": -1.6, "grip": 0.30,
+	"fp": [38.0, 58.0, 84.0, 92.0, 46.0, 76.0, 98.0, 104.0, 2.0, 0.35, 18.0, 14.0],
+	"sleeve": Vector3(78.0, 40.0, 32.0), "band": Vector3(8.0, 31.0, 22.0),
+	#  말상자 — 글 sz · 줄 사이 line · 안 여백 pad · 폭 끝 say_w. 손 쪽 화면 밑(밑변 say_bot)에 서고, 막을
+	#  자리가 그 상자 둘레 say_clear 안이면 판 위 띠(윗변 say_top)로 올라간다. 오른쪽 점수 칠판(SCOREB)과
+	#  왼쪽 자루 걸이는 비킨다.
+	"say_w": 210.0, "say_sz": 16, "say_line": 19.0, "say_pad": 8.0, "say_bot": 350.0, "say_top": 62.0,
+	"say_clear": 14.0,
+	#  손에 붙은 따뜻한 등 — 다트 무대의 주변광(패널 보라)에 살이 보랏빛으로 떠서 손만 데운다
+	"lamp": Vector3(10.0, 60.0, 30.0), "lamp_e": 1.3, "lamp_r": 150.0,
+}
+var rgl_pre := 0.0               # 던지기 전 몫(초) — 말 · 손이 겨누는 동안. 0 이면 곧장 난다
+var rgl_ht := -1.0               # 손 시계(던지기 전 머리부터 · 음수면 손이 없다)
+var rgl_beg := Vector3.ZERO      # 손이 다트를 놓은 자리(무대 월드) — 나는 길의 출발
+var rgl_beg_ok := false
+var rsay_txt := ""               # 라이벌의 말(채운 것) — 비면 없다
+var rsay_t := 0.0                # 말이 선 뒤 흐른 시간
 
 
 #  단골을 걷는다 — 판 사건을 비우는 자리(_ev_clear)와 다른 사건을 세우는 자리(_ev_take).
@@ -3492,6 +3527,10 @@ func _rgl_clear() -> void:
 	rgl_vt = 0.0
 	rgl_fly = 0.0
 	rgl_pa = 0.0
+	rgl_pre = 0.0
+	rgl_ht = -1.0
+	rgl_beg_ok = false
+	rsay_txt = ""
 
 
 #  들어오는 때 · 자리 씨앗. 뽑는 수가 늘 둘이라 run_rng 가 판마다 같은 만큼 간다.
@@ -3620,12 +3659,33 @@ func _rgl_spot(idx: int, band: Vector2, u: int) -> Vector2:
 #  꽂힌다 — 들어오는 걸음 머리. 막힘은 여기서 선다(나는 동안 던질 발이 없다). fly 초 동안
 #  옆에서 날아와 꽂히고 그 프레임에 다트 착탄 소리가 난다(_reg_tick). 모션 끄기면 날지 않고
 #  곧장 꽂힌다.
-func _rgl_in(fly: float) -> void:
+func _rgl_in(fly: float, pre := 0.0) -> void:
 	rgl_st = "on"
 	rgl_left = maxi(int(GameData.event_v(leg_ev_row, "v2", 2.0)), 1)
-	rgl_ph = "in"
 	rgl_vt = 0.0
 	rgl_fly = 0.0 if motion_off else maxf(fly, 0.0)
+	rgl_beg_ok = false
+	#  던지기 전 — 말은 모션 끄기여도 선다(읽을 글이다). 손 · 당김은 모션이라 끄면 곧장 꽂힌다.
+	rgl_pre = 0.0 if motion_off else maxf(pre, 0.0)
+	if pre > 0.0:
+		_rsay_open()
+	if rgl_pre > 0.0:
+		rgl_ph = "pre"
+		rgl_ht = 0.0
+		return
+	rgl_ht = -1.0              # 손 없이 — 앞 라이벌의 손 시계가 남아 있으면 손이 선다
+	rgl_ph = "in"
+	_rgl_release()
+
+
+#  던진다 — 손이 다트를 놓는 프레임(던지기 전이 없으면 걸음 머리). 손이 섰으면 그 손끝이 나는 길의
+#  출발이다(bd_rgl 이 이 프레임까지 손에 들려 있었다).
+func _rgl_release() -> void:
+	rgl_ph = "in"
+	rgl_vt = 0.0
+	if rgl_ht >= 0.0 and is_instance_valid(bd_rgl) and is_instance_valid(bd_rh):
+		rgl_beg = bd_rgl.transform.origin
+		rgl_beg_ok = true
 	if rgl_fly > 0.0:
 		_sfx("dart_fly")
 	else:
@@ -3685,7 +3745,16 @@ func _rgl_out(fly: float) -> void:
 #  같이 걷힌다(값은 그 뒤 「단골」 걸음이 낸다). 「단골」 걸음까지 기다렸더니 자루 없는 참나무
 #  쪽만 0.5초쯤 남았다(검토, 2026-10-06). 모션 끄기면 짙기만 곧장 바뀐다.
 func _rgl_tick(d: float) -> void:
-	var on := rgl_st == "on" and rgl_ph != "in"
+	if rsay_txt != "":
+		rsay_t += d
+		if rsay_t >= rgl_pre + float(RIVAL.out_t) + maxf(_rsay_full_t() - rgl_pre, 0.0) \
+				and rgl_ph != "pre":
+			rsay_txt = ""
+	if rgl_ht >= 0.0:
+		rgl_ht += d
+		if rgl_ht >= rgl_pre + float(RIVAL.out_t):
+			rgl_ht = -1.0
+	var on := rgl_st == "on" and rgl_ph != "in" and rgl_ph != "pre"
 	if motion_off:
 		rgl_pa = 1.0 if on else 0.0
 	else:
@@ -3694,6 +3763,9 @@ func _rgl_tick(d: float) -> void:
 		return
 	rgl_vt += d
 	match rgl_ph:
+		"pre":
+			if rgl_vt >= rgl_pre:
+				_rgl_release()
 		"in":
 			if rgl_vt >= rgl_fly:
 				_rgl_stick()
@@ -3714,9 +3786,14 @@ func _rgl_pose() -> Transform3D:
 	var kz := 1.0 - sd.z
 	var beg := Vector3(rgl_side * sd.x * kz, (end.origin.y + sd.y) * kz, _bd3_eye() * sd.z)
 	match rgl_ph:
+		"pre":
+			#  손에 들려 있다 — 손이 없으면(헤드리스) 화면 밖 출발점에서 기다린다.
+			if is_instance_valid(bd_rh):
+				return _rh_dart_tf(end)
+			return _bd3_fly_tf(end, beg, 0.0)
 		"in":
-			return _bd3_fly_tf(end, beg, clampf(rgl_vt / maxf(rgl_fly, 0.001), 0.0, 1.0),
-					float(REGULAR.arc))
+			return _bd3_fly_tf(end, rgl_beg if rgl_beg_ok else beg,
+					clampf(rgl_vt / maxf(rgl_fly, 0.001), 0.0, 1.0), float(REGULAR.arc))
 		"out":
 			return _bd3_fly_tf(end, beg, 1.0 - clampf(rgl_vt / maxf(rgl_fly, 0.001), 0.0, 1.0),
 					float(REGULAR.arc))
@@ -11184,8 +11261,10 @@ func _next_step() -> void:
 			#  한 발이 다 끝나고 다음 고르기 전(ev_tail) — 카드는 이미 물러났다. 걸음은
 			#  REGULAR.in_b 박이고 그 앞 in_k 몫 동안 자루가 옆에서 날아와 꽂힌다(_reg_tick 이
 			#  빨리 보기를 태워 민다). 막힘은 걸음 머리에서 선다.
-			qt = beat * float(REGULAR.in_b)
-			_rgl_in(qt * float(REGULAR.in_k))
+			#  던지기 전(say_b + aim_b 박) — 말이 서고 손이 들어와 겨눈 뒤 그 손에서 다트가 떠난다.
+			var rpre: float = beat * (float(REGULAR.say_b) + float(REGULAR.aim_b))
+			qt = rpre + beat * float(REGULAR.in_b)
+			_rgl_in(beat * float(REGULAR.in_b) * float(REGULAR.in_k), rpre)
 		"reg_out":
 			#  ── 단골이 뽑아 간다 (2026-10-06) ──
 			#  같은 자리 · REGULAR.out_b 박. 막힘이 풀리고 out_k 몫 동안 자루가 날아온 쪽으로
@@ -12899,6 +12978,7 @@ func _draw() -> void:
 		#  _draw_aim 은 판 바로 위로 올라갔다(꽂힌 자루보다 먼저). 여기에는
 		#  카드부터 남는다 — 카드는 판 위에 뜨는 판이라 자루보다 뒤가 맞다.
 		_draw_card()
+		_rsay_draw()                 # 라이벌이 던지기 전에 하는 말(RIVAL) — 손 위 · 카드 뒤
 		# 런 정보는 화면을 갈아 끼우는 것이 아니라 **판 위에 뜨는 판**이다.
 		# 열던 화면을 먼저 그리고 그 위에 얹어야 "잠깐 확인하고 닫는다" 로
 		# 읽힌다 — 뒤가 검으면 다른 화면으로 넘어간 것처럼 보인다.
@@ -19106,6 +19186,7 @@ var bd_rgl: Node3D = null
 
 
 func _bd3_rgl() -> void:
+	_bd3_rh()
 	if not _rgl_seen():
 		if is_instance_valid(bd_rgl):
 			bd_rgl.queue_free()
@@ -19122,6 +19203,131 @@ func _bd3_rgl() -> void:
 	if bd_rgl.transform != tf:
 		bd_rgl.transform = tf
 		_bd3_dirty()
+
+
+#  ── 라이벌의 손 (2026-10-16 · RIVAL) ─────────────────────────
+#  손 시계(rgl_ht)가 도는 동안만 산다. 소매(남색 재킷) · 손목 밴드(파랑) · 손(상인의 살 · 손가락 ·
+#  엄지 그대로)을 손목(뿌리 원점)에 단다 — 손은 +x 로 뻗고 소매는 −x 로 팔꿈치까지 간다.
+var bd_rh: Node3D = null
+var bd_rh_hand := {}
+
+
+func _bd3_rh() -> void:
+	if rgl_ht < 0.0 or not _is_play_deep():
+		if is_instance_valid(bd_rh):
+			bd_rh.queue_free()
+			bd_rh = null
+			bd_rh_hand = {}
+			_bd3_dirty()
+		return
+	if not is_instance_valid(bd_rh):
+		_rh_build()
+	bd_rh.transform = _rh_tf(rgl_ht)
+	_bd3_dirty()
+
+
+func _rh_build() -> void:
+	var H: Dictionary = RIVAL
+	bd_rh = Node3D.new()
+	var mir := rgl_side < 0.0          # 왼쪽에서 들면 왼손
+	var cloth := _skin3_mat(DK_PAL["blue"][0], 0.06, 0.95)
+	var band := _skin3_mat(DK_PAL["blue"][2], 0.16, 0.7)
+	var sl: Vector3 = H.sleeve
+	#  소매 — 팔꿈치(굵다)에서 손목(가늘다) 쪽으로 · 손목 밴드 뒤 2 에서 끝난다
+	bd_rh.add_child(_mi3(_prism3(sl.x, sl.y, sl.z, sl.y * 0.86, sl.z * 0.86, 5.0), cloth,
+			Vector3(-sl.x - float((H.band as Vector3).x) - 1.0, 0.0, 0.0)))
+	var bd: Vector3 = H.band
+	bd_rh.add_child(_mi3(_prism3(bd.x, bd.y, bd.z, bd.y, bd.z, 2.0), band, Vector3(-bd.x + 1.0, 0.0, 0.0)))
+	var hj := _hand3_build(_hand3_mats(), mir)
+	bd_rh.add_child(hj.root)
+	bd_rh_hand = hj
+	#  손가락 — 쥔 채로 굳는다(겨누는 동안 안 바뀐다)
+	var fp := PackedFloat32Array(H.fp)
+	var sg: float = hj.sg
+	for f in 4:
+		var sp: float = deg_to_rad(fp[8] * float(FING3.fan[f])) * sg
+		(hj.j1[f] as Node3D).basis = Basis(Vector3.UP, sp) * Basis(Vector3.BACK, -deg_to_rad(fp[f]))
+		(hj.j2[f] as Node3D).basis = Basis(Vector3.BACK, -deg_to_rad(fp[4 + f]))
+	_thumb3_pose(sg, fp, 0)
+	_thumb3_set(hj, thumb_mr, Transform3D(thumb_pr, (hj.t1 as Node3D).position),
+			Basis(Vector3.BACK, -deg_to_rad(thumb_cr)), sg, 0.6)
+	var lamp := OmniLight3D.new()
+	lamp.light_color = Color(1.0, 0.86, 0.66)
+	lamp.light_energy = float(H.lamp_e)
+	lamp.omni_range = float(H.lamp_r)
+	lamp.position = H.lamp
+	bd_rh.add_child(lamp)
+	bd_rh.scale = Vector3.ONE * float(H.k)
+	bd_vp.add_child(bd_rh)
+
+
+#  화면 점 sp 를 무대 깊이 z(눈 거리의 몫)에 세운 월드 자리 — 그 깊이에서 화면 1px 이 월드 1 − z.
+func _rh_at(sp: Vector2, zk: float) -> Vector3:
+	var k := 1.0 - zk
+	return Vector3((sp.x - BC.x) * k, -(sp.y - BC.y) * k, _bd3_eye() * zk)
+
+
+#  손 시계 t 의 손목 자세 — 들어와(in_t) 겨누고, 던지기 전 끝 wind_t 동안 눈 쪽 · 위로 당겼다가
+#  thrust_t 동안 판 쪽으로 튕긴다(그 끝 프레임이 놓는 때 · rgl_pre). 놓은 뒤 out_t 동안 밑 · 옆으로 빠진다.
+#  손가락(+x)은 늘 막을 자리를 본다 — 손목을 lift 만큼 들고 손등을 roll 만큼 바깥 위로 굴린다.
+func _rh_tf(t: float) -> Transform3D:
+	var H: Dictionary = RIVAL
+	var zk: float = H.az
+	var aim := Vector2(BC.x + rgl_side * float(H.ax), float(H.ay))
+	var a3 := _rh_at(aim, zk)
+	var s3 := _rh_at(aim + Vector2(rgl_side * float(H.in_dx), float(H.in_dy)), zk)
+	var tgt := Vector3(rgl_p.x - BC.x, -(rgl_p.y - BC.y), 0.0)
+	var fwd := (tgt - a3).normalized()
+	var wd: Vector3 = H.wind
+	var w3 := Vector3(0.0, wd.y, wd.z)
+	var pos := a3
+	var p_end: float = rgl_pre
+	var wt: float = H.wind_t
+	var tt: float = H.thrust_t
+	if t < p_end:
+		var e := clampf(t / float(H.in_t), 0.0, 1.0)
+		e = 1.0 - pow(1.0 - e, 3.0)
+		pos = s3.lerp(a3, e)
+		var w0 := p_end - wt - tt
+		if t > w0:
+			var kw := clampf((t - w0) / wt, 0.0, 1.0)
+			pos += w3 * (kw * kw * (3.0 - 2.0 * kw))
+		if t > p_end - tt:
+			var kt := clampf((t - (p_end - tt)) / tt, 0.0, 1.0)
+			pos = (a3 + w3).lerp(a3 + fwd * float(H.thrust), kt * kt)
+	else:
+		var ko := clampf((t - p_end) / float(H.out_t), 0.0, 1.0)
+		pos = (a3 + fwd * float(H.thrust)).lerp(s3, ko * ko * (3.0 - 2.0 * ko))
+	#  손 기저 — x 는 과녁 쪽(손목을 lift 만큼 든다) · 손등(y)은 위에서 바깥으로 roll 만큼 굴린다
+	var aimv := (tgt - pos).normalized()
+	var lax := aimv.cross(Vector3.UP)
+	var xv := aimv.rotated(lax.normalized(), float(H.lift)) if lax.length() > 0.01 else aimv
+	var up := Vector3.UP - xv * Vector3.UP.dot(xv)
+	up = up.normalized()
+	var yv := up.rotated(xv, -rgl_side * float(H.roll))
+	var zv := xv.cross(yv).normalized()
+	return Transform3D(Basis(xv, yv, zv), pos)
+
+
+#  손에 든 다트 — 엄지 끝과 검지 끝 사이(쥔 자리)에 배럴의 grip 몫이 오고, 촉이 막을 자리를 본다.
+func _rh_dart_tf(end: Transform3D) -> Transform3D:
+	var hj := bd_rh_hand
+	var gp: Vector3 = bd_rh.transform.origin
+	if not hj.is_empty():
+		var it: Vector3 = (hj.tips as Array)[0].global_transform.origin
+		var tt: Vector3 = (hj.ttip as Node3D).global_transform.origin
+		gp = (it + tt) * 0.5
+	var tip := end.origin - end.basis.y.normalized() * float(BD3.len) * 0.5 * end.basis.y.length()
+	var fwd := (tip - gp).normalized()
+	var yv := -fwd
+	var xv := Vector3.UP.cross(yv)
+	if xv.length() < 0.01:
+		xv = Vector3.RIGHT
+	xv = xv.normalized()
+	var ln := float(BD3.len)
+	var sc := end.basis.y.length()
+	return Transform3D(Basis(xv * sc, yv * sc, xv.cross(yv) * sc),
+			gp + yv * ln * sc * (0.5 - float(RIVAL.grip)))
 
 
 func _bd3_dirty() -> void:
@@ -19183,6 +19389,99 @@ func _darts_stuck() -> Array:
 
 
 #  단골 자루 그림이 서 있는가 — 판 위에서만(_rgl_plank 와 같은 문).
+#  ── 라이벌의 말 (2026-10-16 · RIVAL) ─────────────────────────
+#  던지기 전에 한마디 — npc_say.csv 의 rival 줄(상인 말과 같은 표 · 섞은 차례 nsay_q · 제 줄기 nsay_rng).
+#  {cell} 막을 자리 · {val} 라이벌 다트를 맞히면 받는 점수를 판이 채운다. 말상자는 상인 말과 같은 판
+#  (테 · 이름표 · 한 자씩)이고 이름표는 표의 이름(「라이벌」) · 라이벌 다트 색이다. 손 위에 선다.
+func _rsay_open() -> void:
+	var rows := GameData.npc_say("rival")
+	rsay_txt = ""
+	rsay_t = 0.0
+	if rows.is_empty():
+		return
+	var q: Array = nsay_q.get("rival", [])
+	if q.is_empty():
+		for r in rows:
+			q.append(String(r.get("id", "")))
+		for i in range(q.size() - 1, 0, -1):
+			var j: int = _nsay_rng().randi_range(0, i)
+			var tmp = q[i]
+			q[i] = q[j]
+			q[j] = tmp
+		nsay_q["rival"] = q
+	var id := String(q.pop_front())
+	for r in rows:
+		if String(r.get("id", "")) == id:
+			rsay_txt = GameData.fill(GameData.npc_say_text(r), {"cell": _rgl_cell(), "val": rgl_val})
+			return
+
+
+func _rsay_full_t() -> float:
+	return float(rsay_txt.length()) / float(TUTOR.cps)
+
+
+func _rsay_a() -> float:
+	if rsay_txt == "":
+		return 0.0
+	var fd: float = maxf(float(NSAY.fade), 0.001)
+	var a := 1.0 if motion_off else clampf(rsay_t / fd, 0.0, 1.0)
+	if rgl_ph != "pre":
+		var end: float = rgl_pre + float(RIVAL.out_t) + maxf(_rsay_full_t() - rgl_pre, 0.0)
+		a = minf(a, clampf((end - rsay_t) / fd, 0.0, 1.0))
+	return a
+
+
+#  말상자 자리 — [자리, 줄들]. 손 쪽(rgl_side) 화면 밑 · 점수 칠판 왼쪽(오른손) · 자루 걸이 오른쪽(왼손).
+#  막을 자리가 상자 둘레 say_clear 안이면 위 띠로 올린다 — 무엇을 막는지 말하면서 그 칸을 가리면 안 된다.
+func _rsay_layout() -> Array:
+	var H: Dictionary = RIVAL
+	var sz: int = int(H.say_sz)
+	var pd: float = float(H.say_pad)
+	var lines := _tutor_wrap(rsay_txt, float(H.say_w) - pd * 2.0, sz)
+	var lw := 0.0
+	for ln in lines:
+		lw = maxf(lw, _tw_at(String(ln), sz))
+	var bw: float = ceilf(lw + pd * 2.0)
+	var bh: float = pd * 2.0 + float(TUTOR.plate_h) * 0.5 + float(H.say_line) * float(lines.size())
+	var sb: Rect2 = SCOREB.box
+	var gx: float = float(GRIP.x) + float(GRIP.dl) + float(GRIP.pull) + 6.0
+	var bx: float = sb.position.x - 10.0 - bw if rgl_side > 0.0 else gx
+	var box := Rect2(roundf(bx), roundf(float(H.say_bot) - bh), bw, bh)
+	if box.grow(float(H.say_clear)).has_point(rgl_p):
+		box.position.y = float(H.say_top)
+	return [box, lines]
+
+
+func _rsay_draw() -> void:
+	var a := _rsay_a()
+	if a <= 0.004 or font_sm == null or not _is_play_deep():
+		return
+	var lay := _rsay_layout()
+	var box: Rect2 = lay[0]
+	var lines: PackedStringArray = lay[1]
+	var H: Dictionary = RIVAL
+	var sz: int = int(H.say_sz)
+	_rr(self, box, Color(C_BG, 0.94 * a))
+	_rr_line(self, box, Color(_dart3_col("reg"), 0.7 * a))
+	_talk_plate(String(leg_ev_row.get("name", "")), box.position.x - 4.0, box.position.y, a, _dart3_col("reg"))
+	var left: int = rsay_txt.length() if motion_off else clampi(int(rsay_t * float(TUTOR.cps)), 0, rsay_txt.length())
+	var g0 := 0
+	var tx0: float = box.position.x + float(H.say_pad)
+	for i in lines.size():
+		var ln := String(lines[i])
+		var take: int = mini(left, ln.length())
+		var gap := _wrap_gap(rsay_txt, lines, i)
+		left -= ln.length()
+		if i < lines.size() - 1:
+			left -= gap
+		var base := Vector2(tx0, box.position.y + float(H.say_pad) + float(TUTOR.plate_h) * 0.5
+				+ float(H.say_line) * float(i + 1) - 4.0)
+		_type_line(base, ln, take, g0, Color(C_TXT, a), rsay_t, sz)
+		g0 += ln.length() + gap
+		if left <= 0:
+			break
+
+
 func _rgl_seen() -> bool:
 	return rgl_ph != "" and _is_play_deep()
 
@@ -58522,17 +58821,18 @@ func _type_u(gi: int, clk := NAN) -> float:
 #  톡 튀어나온다(TUTOR 의 pop 머리말). g0 은 이 줄 첫 글자의 차례다.
 #  흔들림(tut_sh)을 얹은 채로 들어오므로 낱자의 변환에도 그 값을 더하고 되돌린다.
 #  clk — 시계(비면 튜토리얼 tutor_t · 상인의 말은 nsay_t 를 넘긴다).
-func _type_line(base: Vector2, ln: String, take: int, g0: int, col: Color, clk := NAN) -> void:
+func _type_line(base: Vector2, ln: String, take: int, g0: int, col: Color, clk := NAN, sz := 20) -> void:
+	var hk: float = float(sz) / 20.0          # 잉크 한가운데(20 에서 8.5)가 크기를 따른다
 	if take <= 0:
 		return
 	if motion_off or font_sm == null or float(TUTOR.pop) <= 0.0:
-		draw_string(_fz(font_sm, 20), base, ln.substr(0, take), HORIZONTAL_ALIGNMENT_LEFT, -1, 20, col)
+		draw_string(_fz(font_sm, sz), base, ln.substr(0, take), HORIZONTAL_ALIGNMENT_LEFT, -1, sz, col)
 		return
 	var p := take
 	while p > 0 and _type_u(g0 + p - 1, clk) < 1.0:
 		p -= 1
 	if p > 0:
-		draw_string(_fz(font_sm, 20), base, ln.substr(0, p), HORIZONTAL_ALIGNMENT_LEFT, -1, 20, col)
+		draw_string(_fz(font_sm, sz), base, ln.substr(0, p), HORIZONTAL_ALIGNMENT_LEFT, -1, sz, col)
 	var c1: float = float(TUTOR.pop_over)
 	for k in range(p, take):
 		var ch := ln.substr(k, 1)
@@ -58545,15 +58845,15 @@ func _type_line(base: Vector2, ln: String, take: int, g0: int, col: Color, clk :
 		if s <= 0.01:
 			continue
 		var x0: float = font_sm.get_string_size(ln.substr(0, k),
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
-		var cw: float = font_sm.get_string_size(ch, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
+				HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x
+		var cw: float = font_sm.get_string_size(ch, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x
 		#  글자 잉크의 한가운데(페이퍼로지 20 한글 잉크는 바닥선 위 0~17)를 축으로 돈다.
 		var mid := base + Vector2(x0 + cw * 0.5,
-				-8.5 - float(TUTOR.pop_drop) * (1.0 - u) * (1.0 - u))
+				-8.5 * hk - float(TUTOR.pop_drop) * (1.0 - u) * (1.0 - u))
 		var tilt: float = float(TUTOR.pop_tilt) * (1.0 - u) * (1.0 - u) \
 				* (1.0 if (g0 + k) % 2 == 0 else -1.0)
 		draw_set_transform(tut_sh + mid, tilt, Vector2(s, s))
-		draw_string(_fz(font_sm, 20), Vector2(-cw * 0.5, 8.5), ch, HORIZONTAL_ALIGNMENT_LEFT, -1, 20,
+		draw_string(_fz(font_sm, sz), Vector2(-cw * 0.5, 8.5 * hk), ch, HORIZONTAL_ALIGNMENT_LEFT, -1, sz,
 				Color(col, col.a * minf(u * 4.0, 1.0)))
 	draw_set_transform(tut_sh)
 
@@ -58871,13 +59171,13 @@ func _tutor_talk_draw(lines: PackedStringArray, who: String, bx: float, by: floa
 
 #  이름표 — 말상자 윗변(by)에 반쯤 걸친 금빛 판. 글자는 바탕색으로 판에 박는다. 튜토리얼 말상자와
 #  상인의 말(NSAY)이 같이 쓴다.
-func _talk_plate(who: String, bx: float, by: float, a: float) -> void:
+func _talk_plate(who: String, bx: float, by: float, a: float, col := C_ACC) -> void:
 	var ph: float = float(TUTOR.plate_h)
 	var nw: float = 44.0
 	if font != null:
 		nw = font.get_string_size(_L(who), HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x + 20.0
 	var plate := Rect2(bx + 12.0, by - ph * 0.5, nw, ph)
-	_rr(self, plate, Color(C_ACC, a))
+	_rr(self, plate, Color(col, a))
 	draw_string(_fz(font, 12), Vector2(plate.position.x, _ink_mid_y(plate.get_center().y, 12)),
 			_L(who), HORIZONTAL_ALIGNMENT_CENTER, plate.size.x, 12, Color(C_BG, a))
 

@@ -24,7 +24,11 @@ extends SceneTree
 #     ⑪ 되살리기(판 매듭) — 같은 단골이 다시 기다린다 · 같은 자리에 던지면 같은 자리
 #     ⑫ 그림 — 나는 길(화면 밖 옆에서 꽂힌 자세로 · 내 자루의 식) · 꽂히는 프레임 · 떨어짐 ·
 #        빠짐 · 빨리 보기를 탄다 · 모션 끄기 · 참나무 쪽 · 자루 색 · 글자 0 · 새 색 0 · 난수 0
-#     ⑬ 개발자 판 「단골 던지기」 — 열아홉 줄 안 · 게임 함수 · 한 판에 사건 하나
+#     ⑬ 개발자 판 「라이벌 던지기」 — 열아홉 줄 안 · 게임 함수 · 한 판에 사건 하나
+#     ⑭ 던지기 전(2026-10-16 「라이벌은 던지기 전 대사를 치고 라이벌의 손이 보이는게」) — 들어오는 걸음
+#        머리에 말(rival 줄 · {cell} · {val} 채움)이 서고 손 시계가 돈다 · 던지기 전 동안은 막힘만 서고
+#        참나무 쪽 · 명판은 없다 · 던지기 전이 끝나면 난다 · 손은 던진 뒤 out_t 에 걷힌다 · 말상자는 점수
+#        칠판 · 자루 걸이 · 막을 칸을 비킨다 · 모션 끄기면 손 없이 곧장 꽂히고 말만 선다
 #
 #   godot --headless --path . --script scripts/tools/qa_regular.gd
 
@@ -307,8 +311,9 @@ func _run() -> void:
 			and s2.find("reg_in") > tot_at and s2[s2.size() - 1] == "reg_in", str(s2))
 	_ok("걸음 뒤 고르기 · 발 셈은 한 번", g.state != g.S.RESOLVE and g.leg_throws == 2
 			and not g.ev_tail, "state %d · 발 %d" % [g.state, g.leg_throws])
-	_ok("들어오는 걸음은 REGULAR.in_b 박", absf(float(step_qt.get("reg_in", -1.0))
-			- g.beat * float(g.REGULAR.in_b)) < 0.0001, "%.3f" % float(step_qt.get("reg_in", -1.0)))
+	_ok("들어오는 걸음은 REGULAR.say_b + aim_b + in_b 박", absf(float(step_qt.get("reg_in", -1.0))
+			- g.beat * (float(g.REGULAR.say_b) + float(g.REGULAR.aim_b) + float(g.REGULAR.in_b))) < 0.0001,
+			"%.3f" % float(step_qt.get("reg_in", -1.0)))
 	_ok("꽂혀 막는다 — 방금 점수 낸 칸 · 띠", g.rgl_st == "on" and g.rgl_idx == i19
 			and g.rgl_r.is_equal_approx(Vector2(g.R * g.rt_trp_in, g.R * g.rt_trp_out)),
 			"칸 %d · 띠 %s" % [g.rgl_idx, str(g.rgl_r)])
@@ -839,6 +844,70 @@ func _run() -> void:
 			and bare.find("randf") < 0 and bare.find("randi") < 0
 			and logic.find("draw_string") < 0 and logic.find("pop(") < 0)
 
+	# ── ⑭ 던지기 전 — 말 · 손 ───────────────────────────
+	print("⑭ 던지기 전")
+	var rows: Array = GameData.npc_say("rival")
+	_ok("rival 말이 표에 있다(넷)", rows.size() >= 4, str(rows.size()))
+	var lang0: String = GameData.lang
+	var fill_bad := []
+	for lg in ["ko", "en", "ja"]:
+		GameData.set_lang(lg)
+		for r in rows:
+			var t: String = GameData.fill(GameData.npc_say_text(r), {"cell": "20 트리플", "val": 60})
+			if t.contains("{") or t.strip_edges() == "":
+				fill_bad.append("%s %s %s" % [lg, String(r.get("id", "")), t])
+	GameData.set_lang(lang0)
+	_ok("말의 {cell} · {val} 가 다 찬다(ko · en · ja)", fill_bad.is_empty(), str(fill_bad))
+	_fresh()
+	_plain()
+	g.motion_off = false
+	var tg14: Dictionary = g._rgl_at(_aim(i19, "t"))
+	g._rgl_open(tg14, 31)
+	var pre14: float = g.beat * (float(g.REGULAR.say_b) + float(g.REGULAR.aim_b))
+	g._rgl_in(g.beat * float(g.REGULAR.in_b) * float(g.REGULAR.in_k), pre14)
+	_ok("머리 — 던지기 전 · 손 시계 0 · 말이 선다 · 막힘만 선다", g.rgl_ph == "pre" and g.rgl_ht == 0.0
+			and g.rsay_txt != "" and not g.rsay_txt.contains("{") and g.rgl_st == "on"
+			and g._rgl_blocks(g.hit_info(tg14.p)), "%s · %s" % [g.rgl_ph, g.rsay_txt])
+	g._rgl_tick(pre14 * 0.5)
+	_ok("던지기 전 동안은 참나무 쪽 · 명판이 없다", g.rgl_ph == "pre" and g.rgl_pa == 0.0
+			and g._rulep_ev().is_empty())
+	g._rgl_tick(pre14 * 0.5 + 0.001)
+	_ok("던지기 전이 끝나면 난다", g.rgl_ph == "in", g.rgl_ph)
+	g._rgl_tick(float(g.RIVAL.out_t) + 0.01)
+	_ok("손은 던진 뒤 out_t 에 걷힌다", g.rgl_ht < 0.0, "%.2f" % g.rgl_ht)
+	g._rgl_tick(2.0)
+	_ok("말상자도 진다", g._rsay_a() == 0.0 and g.rsay_txt == "", "%.2f" % g._rsay_a())
+	#  말상자 자리 — 양쪽 · 막을 칸 여러 곳에서
+	var lay_bad := []
+	var sbx: Rect2 = g.SCOREB.box
+	var grip_r: float = float(g.GRIP.x) + float(g.GRIP.dl) + float(g.GRIP.pull)
+	for ci in [i19, i20, i3, g.sectors.find(6), g.sectors.find(11), g.sectors.find(17)]:
+		for band in ["t", "d", "s"]:
+			var tgl: Dictionary = g._rgl_at(_aim(int(ci), band))
+			g._rgl_open(tgl, 5)
+			g._rgl_in(0.3, pre14)
+			var bx: Rect2 = g._rsay_layout()[0]
+			var bad := ""
+			if not Rect2(Vector2.ZERO, g.VIEW).encloses(bx):
+				bad += "화면 밖 "
+			if bx.intersects(sbx.grow(float(g.SCOREB.frame))):
+				bad += "점수 칠판 "
+			if bx.position.x < grip_r:
+				bad += "자루 걸이 "
+			if bx.grow(4.0).has_point(g.rgl_p):
+				bad += "막을 칸 "
+			if bad != "":
+				lay_bad.append("%d%s %s %s" % [int(g.sectors[int(ci)]), band, str(bx), bad])
+	_ok("말상자가 화면 안 · 점수 칠판 · 자루 걸이 · 막을 칸을 비킨다", lay_bad.is_empty(), str(lay_bad))
+	#  모션 끄기 — 손 없이 곧장 꽂히고 말만 선다
+	g.motion_off = true
+	g._rgl_open(tg14, 31)
+	g._rgl_in(0.3, pre14)
+	_ok("모션 끄기 — 손 없이 곧장 꽂히고 말은 선다", g.rgl_ht < 0.0 and g.rgl_ph == "on"
+			and g.rsay_txt != "", "%s · %.2f" % [g.rgl_ph, g.rgl_ht])
+	g.motion_off = false
+	_fresh()
+
 	# ── ⑬ 개발자 판 ──────────────────────────────────
 	print("⑬ 개발자 판")
 	var pg0 := Dev.page
@@ -863,8 +932,8 @@ func _run() -> void:
 	var tg0: int = g.target
 	var rng0: int = g.run_rng.state
 	Dev._run(g, drow)
-	_ok("누르면 마지막으로 점수 낸 칸 · 띠에 곧장 날아든다", g.leg_ev == "regular"
-			and g.rgl_st == "on" and g.rgl_ph == "in" and g.rgl_idx == i19
+	_ok("누르면 마지막으로 점수 낸 칸 · 띠에 말 · 손부터 들어온다", g.leg_ev == "regular"
+			and g.rgl_st == "on" and g.rgl_ph == "pre" and g.rsay_txt != "" and g.rgl_idx == i19
 			and g.rgl_r.is_equal_approx(Vector2(g.R * g.rt_dbl_in, g.R * g.rt_dbl_out)),
 			"칸 %d · %s" % [g.rgl_idx, g.rgl_ph])
 	_ok("골드 · 목표 · run_rng 를 안 건드린다", g.gold == gl0 and g.target == tg0

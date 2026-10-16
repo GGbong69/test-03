@@ -2841,7 +2841,9 @@ static func _run(g: Node, e: Dictionary) -> void:
 			if tg.is_empty():
 				tg = g._rgl_at(g._ember_at(randi() % g._sec_n(), g._ember_band_pick(randf())))
 			g._rgl_open(tg, randi() & 0x3fffffff)
-			g._rgl_in(g.beat * float(g.REGULAR.in_b) * float(g.REGULAR.in_k))
+			#  던지기 전(말 · 손)부터 — 게임의 들어오는 걸음과 같다(2026-10-16)
+			g._rgl_in(g.beat * float(g.REGULAR.in_b) * float(g.REGULAR.in_k),
+					g.beat * (float(g.REGULAR.say_b) + float(g.REGULAR.aim_b)))
 			_say("라이벌 %s · 값 %d" % ["불" if g.rgl_idx < 0 else str(int(g.sectors[g.rgl_idx])),
 					g.rgl_val])
 			return

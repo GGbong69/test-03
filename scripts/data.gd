@@ -2498,7 +2498,9 @@ static func _has_row(table: String, id: String) -> bool:
 #  when 갈래의 켜진 줄만 준다. 글의 {열쇠}는 npc_say_text 가 채운다 — tuning.csv 의 열쇠면 그 값,
 #  areas.csv 의 열쇠면 그 영역의 기본 점수(base · 불)나 배수(mult · 더블 · 트리플). 수를 글에 박지
 #  않아 표의 값을 고치면 말이 따라 바뀐다(desc 열의 규약과 같다).
-const NPC_SAY_WHEN := ["tip", "poke", "hand", "give", "btl", "buy", "sell", "rage"]
+const NPC_SAY_WHEN := ["tip", "poke", "hand", "give", "btl", "buy", "sell", "rage", "rival"]
+#  rival(라이벌이 던지기 전에 하는 말 · 2026-10-16)은 판이 {cell}(막을 자리) · {val}(그 값)을 채운다.
+const NPC_SAY_EV_KEYS := {"rival": ["cell", "val"]}
 
 
 static func npc_say(when: String) -> Array:
@@ -2559,8 +2561,9 @@ static func _v_npc_say() -> void:
 		var t := String(r.get("text", ""))
 		if t.strip_edges() == "":
 			_errs.append("npc_say:%d %s — 글이 비었다" % [ln, id])
+		var evk: Array = NPC_SAY_EV_KEYS.get(String(r.get("when", "")), [])
 		for k in _say_keys(t):
-			if _say_val(k) == null:
+			if _say_val(k) == null and not evk.has(k):
 				_errs.append("npc_say:%d %s — {%s} 를 채울 값이 tuning · areas 에 없다. 화면에 {%s} 가 그대로 뜬다"
 						% [ln, id, k, k])
 
