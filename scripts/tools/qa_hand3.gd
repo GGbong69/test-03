@@ -556,6 +556,26 @@ func _run() -> void:
 	_ok("손 폭 : 팔뚝 0.8~1.0", k_hd >= 0.8 and k_hd <= 1.0, "%.2f" % k_hd)
 	_ok("손 폭 : 손목 1.1~1.3", k_wr >= 1.1 and k_wr <= 1.3, "%.2f" % k_wr)
 	_ok("손 길이 : 손 폭 1.75~2.2", k_ln >= 1.75 and k_ln <= 2.2, "%.2f" % k_ln)
+	# ⑦″ Blender 조각(hand_parts.glb · 2026-10-16) — 손이 그 조각으로 섰고, 조각 치수가 표(FING3 · THUMB3 · HAND3)와
+	#  맞는가. 조각은 scripts/tools/blender/hand_parts.py 가 표의 사본으로 굽는다 — 표만 고치고 다시 안 구우면 손끝이
+	#  손끝 자리(tips · ttip)를 넘거나 못 미쳐, 쥔 손끝 재기(qa_hold)가 그려진 손과 갈린다.
+	var hj0: Dictionary = (g.hand3_rig[0] as Dictionary).hj
+	var pm: Mesh = ((hj0["in"] as Node3D).get_child(0) as MeshInstance3D).mesh
+	_ok("손바닥이 Blender 조각이다", pm != null and pm == g._hand3_glb("palm"),
+			"가져오기(--import) 전이면 옛 둥근 마디로 선다")
+	if pm == g._hand3_glb("palm"):
+		var pa: AABB = pm.get_aabb()
+		_ok("손바닥 조각 폭 = palm_w", absf(pa.size.z - float(H3.palm_w)) <= 1.0,
+				"%.1f (표 %.0f)" % [pa.size.z, float(H3.palm_w)])
+		var tips_ok := true
+		var tl := ""
+		for f in 4:
+			var ex: float = (g._hand3_glb("f2_%d" % f) as Mesh).get_aabb().end.x - float(g.FING3.l2[f])
+			tips_ok = tips_ok and ex >= -0.5 and ex <= 0.3
+			tl += "%+.2f " % ex
+		var et: float = (g._hand3_glb("td") as Mesh).get_aabb().end.x - float(g.THUMB3.ld)
+		_ok("조각 손끝이 손끝 자리에 (−0.5 ~ +0.3)", tips_ok and et >= -0.5 and et <= 0.3,
+				"손가락 %s· 엄지 %+.2f" % [tl, et])
 	_ok("손이 동전보다 크다", float(H3.palm_w) * float(H3.palm_l)
 			>= PI * float(g.TBL.chip_r) * float(g.TBL.chip_r),
 			"손 %.0f · 동전 %.0f" % [float(H3.palm_w) * float(H3.palm_l),

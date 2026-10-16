@@ -28044,6 +28044,40 @@ func _hand3_nail(w: float, ln: float) -> ArrayMesh:
 			8, 0.3, 0.4)
 
 
+#  Blender 로 지은 손 조각(scripts/tools/blender/hand_parts.py → hand_parts.glb · 2026-10-16 「블렌더 깔았으니까
+#  활용해봐」) — 마디마다 제 관절 원점에 맞춘 살 덩어리다(손바닥 너클 · 새끼두덩 · 오목, 마디 부풂 · 볼 · 둥근 손끝 ·
+#  손톱 판, 엄지 세 마디 · 두덩). 관절 노드 짜임 · 마디 길이 · 자세는 그대로 이 파일의 표(FING3 · THUMB3)가 쥐고,
+#  조각은 그 노드에 붙는 모양일 뿐이다. 이름 → 메시를 한 번만 읽는다. 없거나 못 읽으면(가져오기 전) 빈 사전이라
+#  옛 둥근 마디(_hand3_loft)로 짓는다.
+const HAND3_GLB := "res://assets/models/hand_parts.glb"
+var hand3_glb: Variant = null
+
+
+func _hand3_glb(nm: String) -> Mesh:
+	if hand3_glb == null:
+		hand3_glb = {}
+		var ps: PackedScene = load(HAND3_GLB) as PackedScene if ResourceLoader.exists(HAND3_GLB) else null
+		if ps != null:
+			var sh := ps.instantiate()
+			for c in sh.find_children("*", "MeshInstance3D", true, false):
+				(hand3_glb as Dictionary)[String(c.name)] = (c as MeshInstance3D).mesh
+			sh.free()
+	return (hand3_glb as Dictionary).get(nm)
+
+
+#  마디 메시 하나 — 재질이 하나(그림자)면 통째로, 사전이면 겉마다 Blender 재질 이름(skin · nail)으로 끼운다.
+#  material_override 는 겉 재질을 다 덮으므로 사전일 때는 안 쓴다.
+func _hand3_mi(mesh: Mesh, mats: Variant, at := Vector3.ZERO) -> MeshInstance3D:
+	if mats is Material:
+		return _mi3(mesh, mats, at)
+	var md: Dictionary = mats
+	var mi := _mi3(mesh, null, at)
+	for i in mesh.get_surface_count():
+		var sm := mesh.surface_get_material(i)
+		mi.set_surface_override_material(i, md.get(sm.resource_name if sm != null else "skin", md.skin))
+	return mi
+
+
 #  손 하나. 뿌리(손목) → 안쪽 마디(in) → 손바닥 · 너클 · 손가락 넷 · 엄지.
 #  in 은 손에서는 그대로 두고 그림자 사본에서 기울임(빛 방향으로 미는 것)을
 #  받는다(_hand3_sync). 관절은 Node3D 하나씩이고 자세는 basis 만 바꾼다.
@@ -28062,8 +28096,10 @@ func _hand3_build(mats: Variant, mir: bool, ring := false, shadow := false) -> D
 	var inn := Node3D.new()
 	root.add_child(inn)
 	#  손바닥 — 손바닥 쪽 살은 재질이 메시 아래를 보는 면에 한 단 밝게 칠한다(under). 옛 판은 밑면에
-	#  얇은 살 판을 한 겹 더 붙였다.
-	inn.add_child(_mi3(_hand3_loft(_hand3_palm_secs(), 14, 0.0, 1.4), m_skin))
+	#  얇은 살 판을 한 겹 더 붙였다. Blender 조각(HAND3_GLB)은 너클 · 새끼두덩 · 손바닥 오목까지 한 덩어리다 —
+	#  거울 손은 거울 조각이다(새끼두덩이 새끼 쪽에 선다).
+	var gp: Mesh = _hand3_glb("palm_mir" if mir else "palm")
+	inn.add_child(_hand3_mi(gp if gp != null else _hand3_loft(_hand3_palm_secs(), 14, 0.0, 1.4), mats))
 	var j1 := []
 	var j2 := []
 	var tips := []
@@ -28075,7 +28111,7 @@ func _hand3_build(mats: Variant, mir: bool, ring := false, shadow := false) -> D
 		var t: float = F.ft[f]
 		var l1: float = F.l1[f]
 		var l2: float = F.l2[f]
-		if not shadow:
+		if not shadow and gp == null:
 			#  너클 — 손허리뼈 머리. 손등 아치 앞끝에 묻힌 둥근 혹이라 빛 사다리가 그 등에만 한 단
 			#  밝게 선다. 옛 너클은 한 단 밝은 네모 넷이 한 줄로 놓여 건반 · 타일로 읽혔다(검토 B).
 			#  손바닥에 붙어 있어 주먹에서도 남는다 — 쥔 손등의 혹 넷이 주먹을 읽힌다.
@@ -28086,7 +28122,8 @@ func _hand3_build(mats: Variant, mir: bool, ring := false, shadow := false) -> D
 		a.position = Vector3(fx, fy, fz)
 		inn.add_child(a)
 		#  첫 마디는 손바닥 안으로 3 물려 둔다 — 굽힐 때 너클에서 틈이 안 벌어진다.
-		a.add_child(_mi3(_hand3_loft(_hand3_f1_secs(w, t, l1), 10, 0.0, 1.0), m_skin))
+		var g1: Mesh = _hand3_glb("f1_%d" % f)
+		a.add_child(_hand3_mi(g1 if g1 != null else _hand3_loft(_hand3_f1_secs(w, t, l1), 10, 0.0, 1.0), mats))
 		if ring and f == 2 and not shadow:
 			#  금반지 — 첫 마디 뿌리 쪽 허리. 손가락보다 0.4 씩만 솟는 둥근 고리.
 			a.add_child(_mi3(_hand3_loft([[3.3, w * 0.94 + 0.3, t * 0.92 + 0.3, 0.0, 0.0, 2.3],
@@ -28095,9 +28132,11 @@ func _hand3_build(mats: Variant, mir: bool, ring := false, shadow := false) -> D
 		var b := Node3D.new()
 		b.position = Vector3(l1, 0.0, 0.0)
 		a.add_child(b)
-		b.add_child(_mi3(_hand3_loft(_hand3_f2_secs(w, t, l2, shadow), 10, 0.6,
-				0.0 if shadow else 0.3), m_skin))
-		if not shadow:
+		#  Blender 조각은 손톱이 끝 마디 겉에 붙은 판이다(재질 nail) — 그림자 사본은 짧은 끝(f2s).
+		var g2: Mesh = _hand3_glb(("f2s_%d" if shadow else "f2_%d") % f)
+		b.add_child(_hand3_mi(g2 if g2 != null else _hand3_loft(_hand3_f2_secs(w, t, l2, shadow), 10, 0.6,
+				0.0 if shadow else 0.3), mats))
+		if not shadow and g2 == null:
 			var nl := _mi3(_hand3_nail(w, 3.2), md.nail, Vector3(l2 - 4.4, t * 0.36 - 0.3, 0.0))
 			nl.rotation = Vector3(0.0, 0.0, -0.08)
 			b.add_child(nl)
@@ -28115,15 +28154,18 @@ func _hand3_build(mats: Variant, mir: bool, ring := false, shadow := false) -> D
 	inn.add_child(tm)
 	var mbk: float = T.m_back
 	var lm: float = T.lm
-	tm.add_child(_mi3(_hand3_loft([[-mbk, T.mw0, T.mt0, 0.0, 0.0, 2.4],
+	var gm: Mesh = _hand3_glb("tm")
+	tm.add_child(_hand3_mi(gm if gm != null else _hand3_loft([[-mbk, T.mw0, T.mt0, 0.0, 0.0, 2.4],
 			[lm * 0.45, (float(T.mw0) + float(T.mw1)) * 0.5, (float(T.mt0) + float(T.mt1)) * 0.5,
 					0.0, 0.0, 2.4],
 			[lm - 0.4, T.mw1, T.mt1, 0.0, 0.0, 2.4],
-			[lm + 0.5, float(T.mw1) * 0.9, float(T.mt1) * 0.9, 0.0, 0.0, 2.4]], 10, 0.0, 0.6), m_skin))
+			[lm + 0.5, float(T.mw1) * 0.9, float(T.mt1) * 0.9, 0.0, 0.0, 2.4]], 10, 0.0, 0.6), mats))
 	#  엄지 두덩 — 타원체(살). 손허리뼈와 같이 돌고, 맞세우면 손바닥 가운데로 구른다. 이제 손가락도
 	#  둥근 마디라 한 손에 음영 문법이 하나다(옛 판은 이것만 매끈한 공이라 1.45 배 라이벌 손에서
 	#  각진 손에 붙인 매끈한 콩으로 읽혔다 — 검토 B).
-	var then := _mi3(_blob3_mesh(Vector3(0.0, -0.8, 0.0)), m_skin)
+	#  Blender 조각은 반지름 1 꼴의 물방울(뿌리 쪽이 굵다) — 배율 th_r · 자리 th_at 은 그대로 게임이 준다.
+	var gt: Mesh = _hand3_glb("thenar")
+	var then := _hand3_mi(gt if gt != null else _blob3_mesh(Vector3(0.0, -0.8, 0.0)), mats)
 	var tr: Vector3 = T.th_r
 	var ta3: Vector3 = T.th_at
 	then.position = Vector3(lm * ta3.x, ta3.y, ta3.z * sg)
@@ -28133,17 +28175,21 @@ func _hand3_build(mats: Variant, mir: bool, ring := false, shadow := false) -> D
 	ta.position = Vector3(lm, 0.0, 0.0)
 	tm.add_child(ta)
 	var lp: float = T.lp
-	ta.add_child(_mi3(_hand3_loft([[-1.5, T.pw0, T.pt0, 0.0, 0.0, 2.5],
+	var gpp: Mesh = _hand3_glb("tp")
+	ta.add_child(_hand3_mi(gpp if gpp != null else _hand3_loft([[-1.5, T.pw0, T.pt0, 0.0, 0.0, 2.5],
 			[lp * 0.45, float(T.pw0) * 0.93, float(T.pt0) * 0.92, 0.0, 0.0, 2.5],
 			[lp - 0.4, float(T.pw1) * 1.03, float(T.pt1) * 1.03, 0.0, 0.0, 2.5],
-			[lp + 0.7, float(T.pw1) * 0.96, float(T.pt1) * 0.96, 0.0, 0.0, 2.5]], 10, 0.5, 0.6), m_skin))
+			[lp + 0.7, float(T.pw1) * 0.96, float(T.pt1) * 0.96, 0.0, 0.0, 2.5]], 10, 0.5, 0.6), mats))
 	var tb := Node3D.new()
 	tb.position = Vector3(lp, 0.0, 0.0)
 	ta.add_child(tb)
 	var ld: float = T.ld
 	var dw1: float = T.dw1
 	var dt1: float = T.dt1
-	if shadow:
+	var gd: Mesh = _hand3_glb("tds" if shadow else "td")
+	if gd != null:
+		tb.add_child(_hand3_mi(gd, mats))
+	elif shadow:
 		tb.add_child(_mi3(_hand3_loft([[-1.0, float(T.dw0) * 0.9, float(T.dt0) * 0.9],
 				[ld - 3.0, dw1 * 0.8, dt1 * 0.8]], 10, 0.5, 0.0), m_skin))
 	else:
