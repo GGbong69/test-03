@@ -13739,8 +13739,27 @@ const BOARDART := {
 	"hole_dark": 0.42,               # 구멍 = 칸 색을 이만큼 어둡힌 한 점
 	"light_hi": 0.10,                # 왼쪽 위 밝힘
 	"light_lo": 0.22,                # 오른쪽 아래 그늘
+	#  ── 재질 · 빛 (2026-10-16 「진짜 있어보이는 모델링」) ──────────────
+	#  점검: 벽은 램프 웅덩이로 위에서 아래로 54% 지는데 판은 8% 만 지고 숫자 고리는 빛을 아예
+	#  안 받아 웅덩이 위에 붙인 스티커였다 · 철선은 단색 1px 라 쇠가 아니라 그은 선이었다 ·
+	#  고리는 평면 검정 원판 · 칸은 구멍 밖이 한 값인 평면 칠이었다.
+	"lamp_top": 0.05,                # 램프 웅덩이 — 판 윗끝(숫자 고리까지)에 얹는 램프 빛(Wall3D.LOOK.lamp_c)
+	"lamp_bot": 0.30,                # 판 아랫끝 그늘. 더 짙으면 아래 칸의 백색 · 흑색이 흐려진다
+	"wire_dk": Color("5e5a66"),      # 둥근 강선 — 빛을 등진 쪽
+	"wire_hi": Color("eeeaf2"),      # 빛(왼쪽 위)을 보는 쪽
+	"wire_sh": 0.30,                 # 강선이 칸에 지는 그늘(오른쪽 아래 1px)
+	"step_a": 0.45,                  # 판 면과 숫자 고리 사이 단차 그늘(2px)
+	"num": Color("efe4c8"),          # 숫자 — UI 글빛(C_TXT)보다 한 단 따뜻한 쇠 미색
+	"num_sh": 0.60,                  # 숫자 그림자(오른쪽 아래 1px)
+	"fiber": 0.05,                   # 시잘 결 — 칸 색을 위아래로 이만큼. 넘기면 칸 색 읽힘이 흐려진다
 }
-var board_holes := []                # [반지름(px) · 각] — 처음 그릴 때 한 번 굽는다
+#  구멍 — [판 한가운데에서 본 자리 · 갈래(0 안쪽 불 · 1 바깥 불 · 2 칸 · 3 띠) · 칸]. 판 모양마다 한 번 굽는다
+var board_holes := []
+var board_holes_k := ""              # 그 판 모양 열쇠
+var board_fiber: ImageTexture = null # 시잘 결 한 장(_board_fiber)
+var board_fiber_k := ""
+var board_wire_u := PackedVector2Array()   # 강선 고리 — 단위원 꼭짓점과 그 빛 색(한 번 굽는다)
+var board_wire_c := PackedColorArray()
 
 
 # 판 바깥선에서 gap(R 배수)만큼 바깥. 숫자 고리와 그 아래 글이 같은 식을 본다 —
@@ -13902,54 +13921,179 @@ func _board_cols() -> Array:
 
 
 #  구멍 결. 격자는 판 한가운데(정수 좌표)에서 시작해 픽셀에 딱 떨어진다.
-#  라지를 사도 모자라지 않게 넉넉히(1.5R) 굽고 그릴 때 판 바깥을 거른다.
+#  칸마다 따로 박힌 벌집이다(2026-10-16) — 철선 곁(띠 경계 · 방사선에서 1.2px 안)의 구멍을 굽을 때
+#  거른다. 옛 결은 판과 따로 노는 망점 한 장이라 철선을 가로질러 이어지고 칸 가장자리에서 반쪽으로
+#  잘렸다(점검). 판 모양(칸 수 · 띠 반지름)이 바뀔 때만 다시 굽는다.
+#  줄어든 · 눌린 판(문 위 0.76 · 여는 문 · 누운 판)에서도 구멍은 늘 논리 1px(물리 2×2) — 1×1 이
+#  0.76 배로 1px · 2px 번갈아 찍히고 문이 돌면 세로 대시 「| | |」가 됐다. 많이 눌리면 옅어진다.
 func _board_holes(cols: Array, push: float) -> void:
-	if board_holes.is_empty():
-		var st: float = float(BOARDART.hole)
-		var lim: float = R * 1.5
-		var row := 0
-		var y := -lim
-		while y <= lim:
-			var x := -lim + (st * 0.5 if row % 2 == 1 else 0.0)
-			while x <= lim:
-				var v := Vector2(x, y)
-				if v.length() <= lim:
-					board_holes.append([v.length(), fposmod(atan2(v.x, -v.y), TAU)])
-				x += st
-			y += st
-			row += 1
-	var sw := _sec_w()
+	var key := "%d|%.2f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f" % [_sec_n(), R, rt_bull_i,
+			rt_bull_o, rt_trp2_in, rt_trp2_out, rt_trp_in, rt_trp_out, rt_dbl_in, rt_dbl_out]
+	if key != board_holes_k:
+		board_holes_k = key
+		board_holes = _bh_bake()
+	var sc := _bh_scale()
+	var a: float = clampf((minf(sc.x, sc.y) - 0.25) / 0.55, 0.0, 1.0)
+	if a <= 0.0:
+		return
+	var sz := Vector2(1.0 / maxf(sc.x, 0.01), 1.0 / maxf(sc.y, 0.01))
+	var dk: float = float(BOARDART.hole_dark)
 	for e in board_holes:
-		var r: float = e[0]
-		if r >= R * rt_dbl_out or r < R * rt_bull_i * 0.9:
-			continue
-		var c: Color
-		if r < R * rt_bull_i:
-			c = C_RED
-		elif r < R * rt_bull_o:
-			c = C_GREEN
-		else:
-			var i := int(floor(fposmod(float(e[1]) + sw * 0.5, TAU) / sw)) % _sec_n()
-			var ring: bool = (r >= R * rt_trp_in and r < R * rt_trp_out) \
-					or r >= R * rt_dbl_in \
-					or (r >= R * rt_trp2_in and r < R * rt_trp2_out)
-			c = cols[i][1] if ring else cols[i][0]
-		var q := (BC + Vector2(sin(e[1]), -cos(e[1])) * r * push).floor()
-		draw_rect(Rect2(q, Vector2.ONE), c.darkened(float(BOARDART.hole_dark)))
+		var kind: int = e[1]
+		var c: Color = C_RED if kind == 0 else (C_GREEN if kind == 1 else cols[e[2]][kind - 2])
+		draw_rect(Rect2((BC + Vector2(e[0]) * push).floor(), sz), Color(c.darkened(dk), a))
+
+
+#  구멍 자리 — 옛 격자(1.5R 넉넉히 · 줄마다 반 칸 엇갈림) 그대로에서 판 밖 · 철선 곁을 거른다.
+func _bh_bake() -> Array:
+	var out := []
+	var st: float = float(BOARDART.hole)
+	var lim: float = R * 1.5
+	var gap := 1.2
+	var edges := []
+	for rr in [rt_bull_i, rt_bull_o, rt_trp2_in, rt_trp2_out, rt_trp_in, rt_trp_out, rt_dbl_in]:
+		if float(rr) * R > 0.5:
+			edges.append(R * float(rr))
+	var sw := _sec_w()
+	var row := 0
+	var y := -lim
+	while y <= lim:
+		var x := -lim + (st * 0.5 if row % 2 == 1 else 0.0)
+		while x <= lim:
+			var v := Vector2(x, y)
+			x += st
+			var r := v.length()
+			if r >= R * rt_dbl_out - gap or r < R * rt_bull_i * 0.9:
+				continue
+			var near := false
+			for ed in edges:
+				near = near or absf(r - float(ed)) < gap
+			var an := fposmod(atan2(v.x, -v.y), TAU)
+			var da := fposmod(an + sw * 0.5, sw)
+			if near or (r >= R * rt_bull_o and minf(da, sw - da) * r < gap):
+				continue
+			var i := int(floor(fposmod(an + sw * 0.5, TAU) / sw)) % _sec_n()
+			var kind := 2
+			if r < R * rt_bull_i:
+				kind = 0
+			elif r < R * rt_bull_o:
+				kind = 1
+			elif (r >= R * rt_trp_in and r < R * rt_trp_out) or r >= R * rt_dbl_in \
+					or (r >= R * rt_trp2_in and r < R * rt_trp2_out):
+				kind = 3
+			out.append([v, kind, i])
+		y += st
+		row += 1
+	return out
+
+
+#  지금 판이 그려지는 배율 — 문 판(줄어 문짝을 따라 돈다) · 판 갈이(누운 판)만 1 이 아니다.
+func _bh_scale() -> Vector2:
+	if _door_live() and _door_here():
+		return _door_xf()[1]
+	if swap_live:
+		return Vector2(1.0, lerpf(float(SWAP.lie), 1.0, _swap_rise()))
+	return Vector2.ONE
+
+
+#  시잘 결 — 칸 위에 한 장. 반지름 방향으로 3px 늘어진 섬유 끝 명암 세 단(어두움 · 그대로 · 밝음)을
+#  검정 · 흰 반투명으로 굽는다 — 칸 색 위에 ±fiber 만 얹어 평면 칠이 무광 섬유로 읽힌다(점검: 칸 안
+#  값이 구멍 밖은 한 값이라 벡터 클립아트였다). 칠 · 그늘 같은 규칙이 칸 색을 읽으므로 결은 색을
+#  안 바꾸고 흔들기만 한다. 논리 1px = 1텍셀 · 판 끝 반지름이 바뀔 때만 다시 굽는다. 헤드리스는 안 굽는다.
+func _board_fiber(push: float) -> void:
+	if not _has_renderer():
+		return
+	var rim: float = R * rt_dbl_out
+	var key := "%.2f" % rim
+	if board_fiber == null or board_fiber_k != key:
+		board_fiber_k = key
+		board_fiber = ImageTexture.create_from_image(_bf_img(rim))
+	var sz := Vector2(board_fiber.get_size())
+	draw_texture_rect(board_fiber, Rect2(BC - sz * 0.5 * push, sz * push), false)
+
+
+func _bf_img(rim: float) -> Image:
+	var h := int(ceilf(rim)) + 1
+	var im := Image.create(h * 2, h * 2, false, Image.FORMAT_RGBA8)
+	var f: float = float(BOARDART.fiber)
+	var dark := Color(0.0, 0.0, 0.0, f)
+	var lite := Color(1.0, 1.0, 1.0, f * 0.7)
+	for j in h * 2:
+		for i in h * 2:
+			var v := Vector2(float(i - h) + 0.5, float(j - h) + 0.5)
+			var r := v.length()
+			if r >= rim:
+				continue
+			var an := atan2(v.x, -v.y) + PI
+			#  섬유 한 올 = 반지름 3px × 둘레 1px. 둘레 줄마다 반지름 이음매를 엇갈린다.
+			var st: float = float(_gl_rand(int(an * 40.0), 7717)) * 3.0
+			var rb := int(floor((r + st) / 3.0))
+			var tb := int(floor(an * (float(rb) * 3.0 + 1.5 - st)))
+			var u: float = _gl_rand(rb * 7919 + tb, 4211)
+			if u < 0.30:
+				im.set_pixel(i, j, dark)
+			elif u > 0.76:
+				im.set_pixel(i, j, lite)
+	return im
 
 
 #  철사 — 방사선 스물과 띠 경계마다 한 바퀴. 폭이 0 인 띠(피자) · 없는 불(도넛)은
 #  반지름이 겹치거나 0 이라 그어도 티가 안 난다.
-func _board_wires(push: float, col: Color = BOARDART.wire) -> void:
+#  둥근 강선이다(2026-10-16). 오른쪽 아래 칸에 1px 그늘을 지우고, 몸은 선이 빛(왼쪽 위)을
+#  가로지르는 만큼 밝다 — 둥근 쇠는 어디서든 빛 쪽 옆면이 빛난다(고리는 꼭짓점마다 · 방사선은
+#  한 줄씩). 단색 1px(c9c4d4)은 백색 칸 위에서 사라지고(206 : 221) 흑색 칸 위에서 흰 펜 선
+#  (205 : 57)이라 도안으로 읽혔다(점검). 불 테는 한 단 굵다 — 불 인서트의 쇠 테다.
+func _board_wires(push: float) -> void:
 	var sw := _sec_w()
-	for i in _sec_n():
-		var a := float(i) * sw - sw * 0.5
-		var dir := Vector2(sin(a), -cos(a))
-		draw_line(BC + dir * R * rt_bull_o * push, BC + dir * R * rt_dbl_out * push, col, 1.0)
+	var lt := Vector2(-0.6, -0.8)
+	var dk: Color = BOARDART.wire_dk
+	var hi: Color = BOARDART.wire_hi
+	var sh := Color(0.0, 0.0, 0.0, float(BOARDART.wire_sh))
+	var so := Vector2(1.0, 1.0)
+	if board_wire_u.is_empty():
+		for k in 121:
+			var nv := Vector2(cos(TAU * float(k) / 120.0), sin(TAU * float(k) / 120.0))
+			board_wire_u.append(nv)
+			board_wire_c.append(dk.lerp(hi, 0.40 + 0.50 * absf(nv.dot(lt))))
+	var r0: float = R * rt_bull_o * push
+	var r1: float = R * rt_dbl_out * push
+	var rings := []
 	for rr in [rt_bull_i, rt_bull_o, rt_trp2_in, rt_trp2_out, rt_trp_in, rt_trp_out,
 			rt_dbl_in, rt_dbl_out]:
 		if float(rr) * R > 0.5:
-			draw_arc(BC, R * float(rr) * push, 0.0, TAU, 120, col, 1.0)
+			rings.append(R * float(rr) * push)
+	#  그늘 먼저 — 몸이 그 위에 선다
+	for i in _sec_n():
+		var a := float(i) * sw - sw * 0.5
+		var dir := Vector2(sin(a), -cos(a))
+		draw_line(BC + dir * r0 + so, BC + dir * r1 + so, sh, 1.0)
+	for r in rings:
+		draw_arc(BC + so, float(r), 0.0, TAU, 120, sh, 1.0)
+	for i in _sec_n():
+		var a := float(i) * sw - sw * 0.5
+		var dir := Vector2(sin(a), -cos(a))
+		var k: float = absf(Vector2(-dir.y, dir.x).dot(lt))
+		draw_line(BC + dir * r0, BC + dir * r1, dk.lerp(hi, 0.40 + 0.50 * k), 1.0)
+	for r in rings:
+		var w: float = 1.5 if is_equal_approx(float(r), r0) else 1.0
+		draw_polyline_colors(Transform2D(0.0, Vector2(float(r), float(r)), 0.0, BC) * board_wire_u,
+				board_wire_c, w)
+
+
+#  램프 웅덩이 — 숫자 고리까지 판 전체에 위는 램프 빛, 아래는 그늘(제목 판 _door_board_over 와 같은
+#  두 겹 · y 의 일차식). 벽(Wall3D 램프)이 판 위에서 아래로 지는 방향 그대로다 — 옛 판은 빛
+#  (_board_light)이 판 면만 덮고 약해서 벽 웅덩이 위에 붙인 스티커였다(점검: 벽 63 → 29 인데 백색 칸
+#  224 → 207 · 고리 25 → 25). 문 판은 제 램프(_door_board_over)를 받으므로 안 얹는다 — 얹었는가를 돌려준다.
+func _board_lamp(ro: float) -> bool:
+	if _door_live() and _door_here():
+		return false
+	var top: float = BC.y - ro
+	var bot: float = BC.y + ro
+	var lamp: Color = Wall3D.LOOK.lamp_c
+	_door_disc_grad(ro, top, bot, Color(lamp, float(BOARDART.lamp_top)), Color(lamp, 0.0))
+	_door_disc_grad(ro, top, bot, Color(0.0, 0.0, 0.0, 0.0),
+			Color(0.0, 0.0, 0.0, float(BOARDART.lamp_bot)))
+	return true
 
 
 #  빛 — 한가운데는 그대로, 둘레로 갈수록 왼쪽 위는 밝고 오른쪽 아래는 어둡다.
@@ -14661,7 +14805,7 @@ func _theme_num(th: String) -> Color:
 			return _dn_num()
 		"target":
 			return _tg_num()
-	return C_TXT
+	return BOARDART.num
 
 
 func _theme_top(th: String, push: float) -> void:
@@ -14699,19 +14843,36 @@ func _board_cells(cols: Array, push: float) -> void:
 #  빛 받는 호는 끝이 녹는다 — 양 끝 0 에서 10 시 반 1 로 사인꼴. 같은 밝기의 사분호는 9 시
 #  (「11」 곁) · 12 시(「20」 위)에서 칼같이 끊겨 빛이 아니라 그려 넣은 흰 철사로 읽혔다(검토,
 #  2026-10-05). 제목 · 런 끝 판도 이 한 벌을 쓴다.
-func _board_ring(ro: float) -> void:
+#  입체(2026-10-16) — 평면 검정 원판에 고른 밝은 1px 한 가닥이라 그려 넣은 윤곽선이었다(점검).
+#    단차   더블 철선 바로 바깥 2px 그늘 — 판 면이 고리보다 낮게 꺼진다.
+#    경사 테 빛 받는 호를 꼭대기에서 2px 로 두껍히고 안쪽에 짙은 짝 1px — 깎은 모서리.
+func _board_ring(ro: float, push := 1.0) -> void:
 	draw_circle(BC, ro, BOARDART.ring_col)
+	draw_arc(BC, R * rt_dbl_out * push + 1.0, 0.0, TAU, 140,
+			Color(0.0, 0.0, 0.0, float(BOARDART.step_a)), 2.0)
 	draw_arc(BC, ro - 1.0, 0.0, TAU, 140, BOARDART.edge, 1.0)
 	var pts := PackedVector2Array()
 	var cols := PackedColorArray()
+	var pt2 := PackedVector2Array()
+	var co2 := PackedColorArray()
+	var pt3 := PackedVector2Array()
+	var co3 := PackedColorArray()
 	var n := 40
 	var a0: float = PI * 0.9
 	var a1: float = PI * 1.6
 	for k in n + 1:
 		var q: float = float(k) / float(n)
 		var a: float = lerpf(a0, a1, q)
-		pts.append(BC + Vector2(cos(a), sin(a)) * (ro - 1.0))
-		cols.append(Color(BOARDART.edge_hi, sin(PI * q)))
+		var u := Vector2(cos(a), sin(a))
+		var s: float = sin(PI * q)
+		pts.append(BC + u * (ro - 1.0))
+		cols.append(Color(BOARDART.edge_hi, s))
+		pt2.append(BC + u * (ro - 2.0))
+		co2.append(Color(BOARDART.edge_hi, s * s * 0.55))
+		pt3.append(BC + u * (ro - 3.0))
+		co3.append(Color(0.0, 0.0, 0.0, s * s * 0.5))
+	draw_polyline_colors(pt3, co3, 1.0)
+	draw_polyline_colors(pt2, co2, 1.0)
 	draw_polyline_colors(pts, cols, 1.0)
 
 
@@ -17627,8 +17788,9 @@ func _draw_board() -> void:
 	# 띠까지 데이터로 보내면 칸 색과 띠 색이 겹쳐 읽힘이 무너진다.
 	var cols := _board_cols()
 	if th == "":
-		_board_ring(ro)
+		_board_ring(ro, push)
 		_board_cells(cols, push)
+		_board_fiber(push)
 		_board_holes(cols, push)
 		_board_wires(push)
 		_board_plank(push)
@@ -17637,6 +17799,8 @@ func _draw_board() -> void:
 	_rgl_plank(push)        # 단골이 막은 띠 한 칸 — 판 사건(2026-10-06)
 	_board_light(push)
 	_theme_over(th, push)
+	#  램프 웅덩이는 판 물건까지만 — 착탄 섬광 · 정산 짚기(아래)는 신호라 안 가라앉힌다
+	var lamp := _board_lamp(ro)
 
 	if hit_flash > 0.0:
 		var fc := Color(1.0, 1.0, 1.0, hit_flash * hit_flash_amt)
@@ -17712,8 +17876,18 @@ func _draw_board() -> void:
 	var na: float = clampf((_swap_rise() - 0.45) / 0.35, 0.0, 1.0)
 	var ncol := _theme_num(th)
 	if na > 0.01 and ncol.a > 0.0:
+		var cs: PackedFloat32Array = _num_layout().c
 		for i in _sec_n():
-			_num_draw(i, Color(ncol, na * ncol.a), push)
+			#  판에 박힌 숫자 — 오른쪽 아래 1px 그림자(토너먼트 판만 · 옷 입은 판은 제 글빛)
+			if th == "":
+				_num_draw(i, Color(0.0, 0.0, 0.0, float(BOARDART.num_sh) * na), push, Vector2(1.0, 1.0))
+			#  숫자도 램프 웅덩이 속이다 — 덮개(_board_lamp)와 같은 식을 글빛에 바로 건다.
+			var c := ncol
+			if lamp and i < cs.size():
+				var t: float = clampf(0.5 - cos(float(i) * sw) * cs[i] * push / (2.0 * ro), 0.0, 1.0)
+				c = c.lerp(Wall3D.LOOK.lamp_c, float(BOARDART.lamp_top) * (1.0 - t)) \
+						.lerp(Color.BLACK, float(BOARDART.lamp_bot) * t)
+			_num_draw(i, Color(c, na * ncol.a), push)
 	_theme_top(th, push)
 
 
@@ -39240,7 +39414,7 @@ func _icon_mod(c: Vector2, r: float, id: String, dim: float,
 		var a := float(i) * step
 		draw_colored_polygon(_e_band(c, br * MB.di, br * MB.di * fl,
 				br * MB.bo, br * MB.bo * fl, a, a + step, 3),
-				(C_LIGHT if i % 2 == 0 else C_DARK).darkened(d))
+				(C_DARK if i % 2 == 0 else C_LIGHT).darkened(d))   # 맨 위가 흑색 — 실물 배색(GameData.colors_base)
 	var trp_lit := k == "band" or k == "slide" or k == "ring"
 	if not trp_lit:
 		_e_ring_r(c, br, br * fl, MB.ti, MB.to, C_GREEN.darkened(d))
@@ -45292,14 +45466,16 @@ func _legb_front(r: float, kind: String, mids: PackedStringArray, mvoid: bool) -
 	#  결을 긋는다 — 흑색 칸 위에서도 보인다. 본판(_board_cols)의 색 규약은 그대로 둔다.
 	var hatch := PackedInt32Array()
 	var half := PackedInt32Array()
+	#  칸 색은 본판과 같은 기본 배치(20 흑색 — 실물 배색)를 읽는다. 그늘도 그 색 번호로 죽인다.
+	var cb: Array = GameData.colors_base(20)
 	for j in 20:
-		var base_c: Color = wc if j % 2 == 0 else bc
+		var base_c: Color = wc if int(cb[j]) == 0 else bc
 		var ring_c: Color = C_RED if j % 2 == 0 else C_GREEN
 		var trp_c: Color = ring_c
 		if on:
 			#  죽은 칸은 본판(_board_cols)과 같은 곳으로 간다 — 배경 쪽 0.72.
 			var dead: bool = (_legb_mod_on(mids, "dead") and j == _legb_mod_v(mids, "dead")) \
-					or (_legb_mod_on(mids, "shade") and j % 2 == 1)
+					or (_legb_mod_on(mids, "shade") and int(cb[j]) == _legb_mod_v(mids, "shade"))
 			if dead:
 				base_c = base_c.lerp(dim_c, 0.72)
 				ring_c = C.dead_ring

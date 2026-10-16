@@ -196,8 +196,9 @@ func _initialize() -> void:
 			"합 %d → %d" % [base_sum, shuf_sum])
 	# 색은 안 섞는다 — 그늘·홀대가 색과 값을 따로 읽어야 「값이 랜덤」이 된다.
 	var col_keep := true
+	var cb0: Array = GameData.colors_base(g.sec_col.size())
 	for i in g.sec_col.size():
-		if int(g.sec_col[i]) != i % 2:
+		if int(g.sec_col[i]) != int(cb0[i]):
 			col_keep = false
 	_say(col_keep, "색은 제자리에 남는다", "%d칸" % g.sec_col.size())
 
@@ -219,8 +220,9 @@ func _initialize() -> void:
 		if int(g.sectors[i]) != int(GameData.SECTORS_BASE[i]):
 			mixed = true
 	var col_ok := true
+	var cb1: Array = GameData.colors_base(g.sec_col.size())
 	for i in g.sec_col.size():
-		if int(g.sec_col[i]) != i % 2:
+		if int(g.sec_col[i]) != int(cb1[i]):
 			col_ok = false
 	_say(not mixed and col_ok, "되굽기가 판을 안 어긋나게 한다",
 			"숫자 제자리 %s · 색 제자리 %s" % [not mixed, col_ok])
