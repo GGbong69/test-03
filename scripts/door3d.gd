@@ -1541,6 +1541,7 @@ static func _bar_deco(bar: Node3D) -> void:
 
 #  판 그림 — 게임 판과 같은 빛깔(game.gd C_LIGHT · C_DARK 칸 · C_RED · C_GREEN 띠 · 숫자 고리 검정).
 #  숫자 고리에 점을 찍었더니 멀리서 시계로 읽혀 맨 고리로 둔다. 텍셀은 판이 서는 깊이의 1px 이다.
+#  픽셀 셰이더(_px)가 Image 를 받아서 Room3D.board_img(ImageTexture) 와 따로 둔다 — 배색은 같다.
 static func _board_img(n: int) -> Image:
 	var im := Image.create(n, n, false, Image.FORMAT_RGBA8)
 	var c := Vector2(n * 0.5, n * 0.5)
@@ -1554,7 +1555,8 @@ static func _board_img(n: int) -> Image:
 			if r <= 1.0:
 				col = Color("211d2b")
 			if r <= 0.80:
-				col = Color("e8dfc8") if sec % 2 == 0 else Color("2b2438")
+				#  실물 배색 — 20(sec 0)부터 한 칸 걸러 흑색 · 그 띠는 빨강(2026-10-16 · Room3D.board_img 와 같다)
+				col = Color("2b2438") if sec % 2 == 0 else Color("e8dfc8")
 				if (r > 0.72 and r <= 0.80) or (r > 0.44 and r <= 0.50):
 					col = Color("d8483d") if sec % 2 == 0 else Color("479a58")
 			if r <= 0.10:

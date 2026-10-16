@@ -131,9 +131,14 @@ static func _cyl(r0: float, r1: float, h: float, at: Vector3, m: Material, seg :
 	return mi
 
 
-#  벽에 거는 다트판 — 칸 스물 · 백색·흑색 칸 · 주홍·쪽빛 띠를 작은 그림으로 굽는다.
-static func _board_tex() -> ImageTexture:
-	var n := 64
+#  벽에 거는 다트판 — 게임 판과 같은 물건이다(game.gd 칸 C_LIGHT · C_DARK · 띠 C_RED · C_GREEN ·
+#  숫자 고리 BOARDART.ring_col · 테 BOARDART.edge). 20 이 흑색 · 흑색 칸에 빨강 띠 — 실물 배색.
+#  고리 바깥에 밝은 테(화면 1px 남짓 · 왼쪽 위가 빛을 받는다) — 고리(옛 1a1714)와 받침(15100d)이
+#  거의 같아 판 모양 없이 얼룩으로 읽혔다. 옛 그림은 띠도 빨강 · 파랑인 다른 판이었다(점검,
+#  2026-10-16). 띠 경계 철선은 안 긋는다 — 화면 판 지름 45px 남짓에서 1텍셀 철선은 성긴 점으로
+#  흩어지고 굵히면 띠를 먹는다. 상점 뒷벽과 술집 안 다트 장(door3d)이 이 한 장을 쓴다. 숫자 점은
+#  멀리서 시계로 읽혀 안 찍는다. n — 한 변 텍셀(nearest 로 줄어 찍히므로 화면 크기 언저리로).
+static func board_img(n: int) -> ImageTexture:
 	var im := Image.create(n, n, false, Image.FORMAT_RGBA8)
 	var c := Vector2(n * 0.5, n * 0.5)
 	for y in n:
@@ -144,15 +149,18 @@ static func _board_tex() -> ImageTexture:
 			var sec := int(a / (TAU / 20.0))
 			var col := Color(0, 0, 0, 0)
 			if r <= 1.0:
-				col = Color("1a1714")                    # 숫자 고리
+				col = Color("1f1719")
+				if r > 0.94:
+					var lit: float = maxf(d.normalized().dot(Vector2(-0.6, -0.8)), 0.0)
+					col = Color("4a4446").lerp(Color("c9bfae"), lit * 0.55)
 			if r <= 0.80:
-				col = Color("e9dfc6") if sec % 2 == 0 else Color("1b1918")
+				col = Color("2b2438") if sec % 2 == 0 else Color("e8dfc8")
 				if (r > 0.72 and r <= 0.80) or (r > 0.44 and r <= 0.50):
-					col = Color("c8442f") if sec % 2 == 0 else Color("2e5a8c")
+					col = Color("d8483d") if sec % 2 == 0 else Color("479a58")
 			if r <= 0.10:
-				col = Color("2e5a8c")
+				col = Color("479a58")
 			if r <= 0.05:
-				col = Color("c8442f")
+				col = Color("d8483d")
 			im.set_pixel(x, y, col)
 	return ImageTexture.create_from_image(im)
 
@@ -366,7 +374,7 @@ static func make_room(host: Node) -> SubViewport:
 	root.add_child(nl)
 
 	var bm := _mat(Color.WHITE, 0.7)
-	bm.albedo_texture = _board_tex()
+	bm.albedo_texture = board_img(64)
 	bm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
 	var qm := QuadMesh.new()
 	qm.size = Vector2(0.68, 0.68)
@@ -1939,6 +1947,33 @@ static func reg_value(vp: SubViewport, v: int) -> void:
 		(ms[i] as StandardMaterial3D).uv1_offset = Vector3(float(s.unicode_at(i) - 48) * 0.1, 0.0, 0.0)
 
 
+const REG_BODY := "res://assets/models/register_body.glb"
+
+
+#  등록기 몸체 glb — 메시 겉마다 재질 이름(Blender 재질 이름)으로 mats 의 재질을 끼운다. 없으면 null.
+static func _reg_shell(mats: Dictionary) -> Node3D:
+	if not ResourceLoader.exists(REG_BODY):
+		return null
+	var ps := load(REG_BODY) as PackedScene
+	if ps == null:
+		return null
+	var sh := ps.instantiate() as Node3D
+	var todo: Array = [sh]
+	while not todo.is_empty():
+		var nd: Node = todo.pop_back()
+		todo.append_array(nd.get_children())
+		var mi := nd as MeshInstance3D
+		if mi == null or mi.mesh == null:
+			continue
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		for i in mi.mesh.get_surface_count():
+			var sm: Material = mi.mesh.surface_get_material(i)
+			var key: String = sm.resource_name if sm != null else ""
+			if mats.has(key):
+				mi.set_surface_override_material(i, mats[key])
+	return sh
+
+
 static func _register_prop(root: Node3D, sh: float) -> void:
 	var n := _prop_node(root, "Register", buy_at(), BUY_K, sh)
 	n.set_meta("xf0", n.transform)
@@ -1956,12 +1991,20 @@ static func _register_prop(root: Node3D, sh: float) -> void:
 	var coin := _mat(COL.brass.lightened(0.18), 0.3, 1.0)
 	n.set_meta("glow", brass)
 	n.add_child(_blob(Vector2(54.0, 32.0), Vector3(3.0, 0.15, 2.0), 0.75))
-	#  서랍장 (u ±20 · h 0..10 · w −8.5..11.5) + 밑 굽 · 윗모서리 놋쇠 띠 · 앞 두 모서리 놋쇠 갓
-	n.add_child(_bbox(Vector3(40.0, 10.0, 20.0), 0.7, Vector3(0.0, 5.0, 1.5), wood))
-	n.add_child(_bbox(Vector3(41.2, 1.6, 21.2), 0.4, Vector3(0.0, 0.8, 1.5), wood3))
-	n.add_child(_bbox(Vector3(41.0, 0.8, 21.0), 0.3, Vector3(0.0, 10.4, 1.5), brass))
-	for sx in [-1.0, 1.0]:
-		n.add_child(_bbox(Vector3(2.4, 10.0, 1.2), 0.35, Vector3(float(sx) * 19.4, 5.0, 11.6), brass))
+	#  몸체(움직이지 않는 주물 · 나무 · 볏)는 Blender 로 지은 glb 다(REG_BODY · scripts/tools/blender/register_body.py ·
+	#  2026-10-16 「블렌더 깔았으니까 활용해봐」). 재질은 이름으로 이 함수의 재질을 끼운다 — prop_glow 가 미는 놋쇠가
+	#  같은 것이라 빛 · 반짝임이 그대로 탄다. glb 가 없으면(가져오기 전) 옛 코드 몸으로 짓는다.
+	var shell: Node3D = _reg_shell({"brass": brass, "bronze": body, "wood": wood, "wood_dk": wood3,
+			"patina": patina, "ink": ink, "slope": slope})
+	if shell != null:
+		n.add_child(shell)
+	if shell == null:
+		#  서랍장 (u ±20 · h 0..10 · w −8.5..11.5) + 밑 굽 · 윗모서리 놋쇠 띠 · 앞 두 모서리 놋쇠 갓
+		n.add_child(_bbox(Vector3(40.0, 10.0, 20.0), 0.7, Vector3(0.0, 5.0, 1.5), wood))
+		n.add_child(_bbox(Vector3(41.2, 1.6, 21.2), 0.4, Vector3(0.0, 0.8, 1.5), wood3))
+		n.add_child(_bbox(Vector3(41.0, 0.8, 21.0), 0.3, Vector3(0.0, 10.4, 1.5), brass))
+		for sx in [-1.0, 1.0]:
+			n.add_child(_bbox(Vector3(2.4, 10.0, 1.2), 0.35, Vector3(float(sx) * 19.4, 5.0, 11.6), brass))
 	#  서랍 — 서랍장 안에 숨어 있다가 앞으로 미끄러진다(REG_OPEN). 안은 칸막이 쟁반이고
 	#  칸마다 동전이 누웠다 — 열리면 보인다. 앞판은 모깎은 판에 한 단 들어간 속판 · 놋쇠 손잡이.
 	var dr := Node3D.new()
@@ -1985,30 +2028,31 @@ static func _register_prop(root: Node3D, sh: float) -> void:
 		dr.add_child(_cyl(2.6, 2.6, 0.8, Vector3(cu, 8.2, cw), coin, 12))
 		if int(c[2]) == 1:
 			dr.add_child(_cyl(2.6, 2.6, 0.8, Vector3(cu + 0.6, 9.0, cw - 0.4), coin, 12))
-	#  몸통 (u ±18 · h 10.8..31 · w −8.5..0.5)
-	n.add_child(_bbox(Vector3(36.0, 20.2, 9.0), 0.9, Vector3(0.0, 20.9, -4.0), body))
-	#  앞 기둥 둘 · 위 띠 — 놋쇠 테가 몸통 모서리를 짚는다
-	for sx in [-1.0, 1.0]:
-		n.add_child(_lmi("rg_pillar", PackedVector2Array(RG_PILLAR), Vector3(float(sx) * 17.4, 10.8, -0.2),
-				brass, 12))
-	n.add_child(_bbox(Vector3(37.6, 1.6, 10.2), 0.5, Vector3(0.0, 31.6, -4.0), brass))
-	#  건반판 — 몸통 앞(w 0.5, h 29)에서 서랍장 위 앞(w 10.5, h 11)까지 기운 면 · 놋쇠 테 넷
-	var b0: Vector3 = KEY_B0
-	var b1 := Vector3(-KEY_B0.x, KEY_B0.y, KEY_B0.z)
-	var b2 := Vector3(-KEY_B3.x, KEY_B3.y, KEY_B3.z)
-	var b3: Vector3 = KEY_B3
-	n.add_child(_quad([b0, b1, b2, b3], slope))
 	var nrm: Vector3 = KEY_N.normalized()
-	var up: Vector3 = (KEY_B3 - KEY_B0).normalized()
-	var sl: float = (KEY_B3 - KEY_B0).length()
-	var kb := Basis(Vector3.RIGHT, up, nrm)
-	for e in [[Vector3(-KEY_B0.x * 2.0 + 2.4, 1.4, 0.7), (b0 + b1) * 0.5 + up * 0.7],
-			[Vector3(-KEY_B0.x * 2.0 + 2.4, 1.4, 0.7), (b2 + b3) * 0.5 - up * 0.7],
-			[Vector3(1.4, sl, 0.7), (b0 + b3) * 0.5 + Vector3.RIGHT * 0.7],
-			[Vector3(1.4, sl, 0.7), (b1 + b2) * 0.5 - Vector3.RIGHT * 0.7]]:
-		var bar := _bbox(e[0], 0.3, e[1] + nrm * 0.35, brass)
-		bar.basis = kb
-		n.add_child(bar)
+	if shell == null:
+		#  몸통 (u ±18 · h 10.8..31 · w −8.5..0.5)
+		n.add_child(_bbox(Vector3(36.0, 20.2, 9.0), 0.9, Vector3(0.0, 20.9, -4.0), body))
+		#  앞 기둥 둘 · 위 띠 — 놋쇠 테가 몸통 모서리를 짚는다
+		for sx in [-1.0, 1.0]:
+			n.add_child(_lmi("rg_pillar", PackedVector2Array(RG_PILLAR), Vector3(float(sx) * 17.4, 10.8, -0.2),
+					brass, 12))
+		n.add_child(_bbox(Vector3(37.6, 1.6, 10.2), 0.5, Vector3(0.0, 31.6, -4.0), brass))
+		#  건반판 — 몸통 앞(w 0.5, h 29)에서 서랍장 위 앞(w 10.5, h 11)까지 기운 면 · 놋쇠 테 넷
+		var b0: Vector3 = KEY_B0
+		var b1 := Vector3(-KEY_B0.x, KEY_B0.y, KEY_B0.z)
+		var b2 := Vector3(-KEY_B3.x, KEY_B3.y, KEY_B3.z)
+		var b3: Vector3 = KEY_B3
+		n.add_child(_quad([b0, b1, b2, b3], slope))
+		var up: Vector3 = (KEY_B3 - KEY_B0).normalized()
+		var sl: float = (KEY_B3 - KEY_B0).length()
+		var kb := Basis(Vector3.RIGHT, up, nrm)
+		for e in [[Vector3(-KEY_B0.x * 2.0 + 2.4, 1.4, 0.7), (b0 + b1) * 0.5 + up * 0.7],
+				[Vector3(-KEY_B0.x * 2.0 + 2.4, 1.4, 0.7), (b2 + b3) * 0.5 - up * 0.7],
+				[Vector3(1.4, sl, 0.7), (b0 + b3) * 0.5 + Vector3.RIGHT * 0.7],
+				[Vector3(1.4, sl, 0.7), (b1 + b2) * 0.5 - Vector3.RIGHT * 0.7]]:
+			var bar := _bbox(e[0], 0.3, e[1] + nrm * 0.35, brass)
+			bar.basis = kb
+			n.add_child(bar)
 	#  건반 — 대 위 둥근 상아 머리. 경사면 법선으로 세운다(알마다 먹 점을 찍어 봤더니 두 배 몸에서
 	#  도넛 · 눈알로 읽혀 걷었다). 손바닥 밑 여섯(SLAM_KEYS)은 Keys 노드에 들어가 같이 눌린다.
 	var kx: float = atan2(nrm.z, nrm.y)
@@ -2026,12 +2070,13 @@ static func _register_prop(root: Node3D, sh: float) -> void:
 			var key := _lmi("rg_key", PackedVector2Array(RG_KEY), at, ivory, 14)
 			key.rotation = Vector3(kx, 0.0, 0.0)
 			host.add_child(key)
-	#  값 창 — 놋쇠 틀 넷(u ±15 · h 32.4..45 · w −7.5..−3.5)이 짙은 안을 두른다. 안의 숫자 깃 셋은
-	#  평소 창 아래쪽에 앉아 있고 산 순간 REG_POP 만큼 솟는다. 깃은 시점(−52°)만큼 젖혀 카메라를 본다.
-	n.add_child(_bbox(Vector3(30.0, 1.7, 4.0), 0.5, Vector3(0.0, 44.15, -5.5), brass))
-	n.add_child(_bbox(Vector3(30.0, 1.7, 4.0), 0.5, Vector3(0.0, 33.25, -5.5), brass))
-	for sx in [-1.0, 1.0]:
-		n.add_child(_bbox(Vector3(3.0, 9.6, 4.0), 0.5, Vector3(float(sx) * 13.5, 38.7, -5.5), brass))
+	if shell == null:
+		#  값 창 — 놋쇠 틀 넷(u ±15 · h 32.4..45 · w −7.5..−3.5)이 짙은 안을 두른다. 안의 숫자 깃 셋은
+		#  평소 창 아래쪽에 앉아 있고 산 순간 REG_POP 만큼 솟는다. 깃은 시점(−52°)만큼 젖혀 카메라를 본다.
+		n.add_child(_bbox(Vector3(30.0, 1.7, 4.0), 0.5, Vector3(0.0, 44.15, -5.5), brass))
+		n.add_child(_bbox(Vector3(30.0, 1.7, 4.0), 0.5, Vector3(0.0, 33.25, -5.5), brass))
+		for sx in [-1.0, 1.0]:
+			n.add_child(_bbox(Vector3(3.0, 9.6, 4.0), 0.5, Vector3(float(sx) * 13.5, 38.7, -5.5), brass))
 	n.add_child(_box(Vector3(24.0, 9.6, 0.3), Vector3(0.0, 38.7, -7.35), glass))
 	var fl := Node3D.new()
 	fl.name = "Flags"
@@ -2054,28 +2099,29 @@ static func _register_prop(root: Node3D, sh: float) -> void:
 				Vector3(float(fx), 34.1 + RG_FLAG.y * 0.5 * cos(deg_to_rad(52.0)), -5.3))
 		fl.add_child(f)
 	n.set_meta("digits", dms)
-	#  볏 — 축이 w 인 회전체의 윗반(반 바퀴만 돈다). 옛 볏은 온 원통의 아랫반을 통짜 창 틀 속에
-	#  묻었다 — 틀이 넷으로 비어 이제 아랫반은 안 짓는다. 제 좌표 y 가 앞(w) · z 가 위다.
-	var crest := Node3D.new()
-	crest.transform = Transform3D(Basis(Vector3(-1.0, 0.0, 0.0), Vector3(0.0, 0.0, 1.0),
-			Vector3(0.0, 1.0, 0.0)), Vector3(0.0, 45.0, -5.5))
-	n.add_child(crest)
-	crest.add_child(_lmi("rg_crest", PackedVector2Array(RG_CREST), Vector3.ZERO, brass, 16, PI))
-	crest.add_child(_lmi("rg_field", PackedVector2Array(RG_FIELD), Vector3.ZERO, patina, 16, PI))
-	crest.add_child(_lmi("rg_boss", PackedVector2Array(RG_BOSS), Vector3.ZERO, brass, 8, PI))
-	#  햇살 다섯 — 혹에서 속 테로(30° 간격)
-	for k in 5:
-		var a: float = deg_to_rad(30.0 + 30.0 * float(k))
-		var ray := _bbox(Vector3(3.2, 0.6, 1.1), 0.25, Vector3(cos(a) * 4.9, 1.45, sin(a) * 4.9), brass)
-		ray.basis = Basis(Vector3.UP, -a)
-		crest.add_child(ray)
-	n.add_child(_lmi("rg_finial", PackedVector2Array(RG_FINIAL), Vector3(0.0, 0.0, -5.5), brass, 14))
-	#  손잡이 — 오른 옆구리 축에서 비스듬히 내려온 자루와 나무 손잡이 알
-	n.add_child(_ball(3.0, Vector3(19.2, 21.0, -4.0), brass))
-	n.add_child(_rod(Vector3(20.4, 21.0, -4.0), Vector3(23.6, 12.6, -4.0), 1.8, brass))
-	var knob := _lmi("rg_knob", PackedVector2Array(RG_KNOB), Vector3(23.4, 13.2, -4.0), wood2, 12)
-	knob.rotation = Vector3(0.0, 0.0, atan2(3.2, 8.4) - PI)
-	n.add_child(knob)
+	if shell == null:
+		#  볏 — 축이 w 인 회전체의 윗반(반 바퀴만 돈다). 옛 볏은 온 원통의 아랫반을 통짜 창 틀 속에
+		#  묻었다 — 틀이 넷으로 비어 이제 아랫반은 안 짓는다. 제 좌표 y 가 앞(w) · z 가 위다.
+		var crest := Node3D.new()
+		crest.transform = Transform3D(Basis(Vector3(-1.0, 0.0, 0.0), Vector3(0.0, 0.0, 1.0),
+				Vector3(0.0, 1.0, 0.0)), Vector3(0.0, 45.0, -5.5))
+		n.add_child(crest)
+		crest.add_child(_lmi("rg_crest", PackedVector2Array(RG_CREST), Vector3.ZERO, brass, 16, PI))
+		crest.add_child(_lmi("rg_field", PackedVector2Array(RG_FIELD), Vector3.ZERO, patina, 16, PI))
+		crest.add_child(_lmi("rg_boss", PackedVector2Array(RG_BOSS), Vector3.ZERO, brass, 8, PI))
+		#  햇살 다섯 — 혹에서 속 테로(30° 간격)
+		for k in 5:
+			var a: float = deg_to_rad(30.0 + 30.0 * float(k))
+			var ray := _bbox(Vector3(3.2, 0.6, 1.1), 0.25, Vector3(cos(a) * 4.9, 1.45, sin(a) * 4.9), brass)
+			ray.basis = Basis(Vector3.UP, -a)
+			crest.add_child(ray)
+		n.add_child(_lmi("rg_finial", PackedVector2Array(RG_FINIAL), Vector3(0.0, 0.0, -5.5), brass, 14))
+		#  손잡이 — 오른 옆구리 축에서 비스듬히 내려온 자루와 나무 손잡이 알
+		n.add_child(_ball(3.0, Vector3(19.2, 21.0, -4.0), brass))
+		n.add_child(_rod(Vector3(20.4, 21.0, -4.0), Vector3(23.6, 12.6, -4.0), 1.8, brass))
+		var knob := _lmi("rg_knob", PackedVector2Array(RG_KNOB), Vector3(23.4, 13.2, -4.0), wood2, 12)
+		knob.rotation = Vector3(0.0, 0.0, atan2(3.2, 8.4) - PI)
+		n.add_child(knob)
 	_reg_set(n, 0.0, Vector3.ZERO)
 
 

@@ -2066,126 +2066,16 @@ func _intro_sign(t: float, a: float, xf0 := Transform2D.IDENTITY) -> void:
 	draw_set_transform_matrix(xf0)
 
 
-#  네온 관 (2026-10-16) — 「게임의 전체적인 모델링을 다 퀄리티 업」. 옛 간판은 글꼴 면을 채운 분홍 · 금 글에
-#  1px 짙은 테뿐이라 LED 전광판이나 페인트 글로 읽혔다(네온은 빛나는 가는 관과 그 둘레 번짐으로 알아본다).
-#  이제 글자 가운데선을 따라 굽힌 유리관이다 — 판자에 지는 번짐 세 겹 · 관(빛깔 테 1px + 흰 심 2px) · 관을
-#  판자에 잡는 쇠 클립 · 관 끝의 전극(짙은 마개) · 글자 사이를 잇는 검게 칠한 관. 꺼진 관은 회색 유리 + 1px 빛.
-#  글자 자리 · 폭은 글꼴의 것 그대로다(두 낱말이 모여 붙는 셈 · 글자별 켜짐 · 깜박이 안 바뀐다).
-#    cap  관 글자 높이(px — 판자 한가운데에 선다) · pad 글자 칸 옆 여백 · tube · core 관 · 심 굵기
-#    glow  번짐 [굵기, 짙기] 겹 · path 글자 칸(0..1 · y 는 아래로)의 꺾은선 조각들 — 첫 점이 관의 시작,
-#          끝 조각의 끝 점이 관의 끝(전극). 둥근 것(G · O)은 _neon_path 가 호로 짓는다.
-const NEONT := {
-	"cap": 26.0, "pad": 2.0, "tube": 6.0, "core": 2.0,
-	"glow": [[18.0, 0.05], [13.0, 0.08], [9.0, 0.14]],
-	"glass": Color("3a2c36"), "glass_hi": Color("6e5a66"),
-	"clip": Color("8a8478"), "clip_lo": Color("2a2420"), "wire": Color("0d0b10"),
-	"path": {
-		"H": [[Vector2(0, 1), Vector2(0, 0)], [Vector2(0, 0.5), Vector2(1, 0.5)],
-				[Vector2(1, 0), Vector2(1, 1)]],
-		"I": [[Vector2(0.5, 1), Vector2(0.5, 0)]],
-		"T": [[Vector2(0, 0), Vector2(1, 0)], [Vector2(0.5, 0), Vector2(0.5, 1)]],
-		"N": [[Vector2(0, 1), Vector2(0, 0), Vector2(1, 1), Vector2(1, 0)]],
-	},
-}
-var neon_paths := {}         # 글자 → 조각들(PackedVector2Array · 글자 칸 0..1) — 한 번 짓고 둔다
-
-
-func _neon_path(ch: String) -> Array:
-	if neon_paths.has(ch):
-		return neon_paths[ch]
-	var out: Array = []
-	var arc := func(a0: float, a1: float, n: int) -> PackedVector2Array:
-		var p := PackedVector2Array()
-		for i in n + 1:
-			var t: float = deg_to_rad(lerpf(a0, a1, float(i) / float(n)))
-			p.append(Vector2(0.5 + 0.5 * cos(t), 0.5 - 0.5 * sin(t)))
-		return p
-	if ch == "O":
-		out.append(arc.call(-90.0, 270.0, 28))
-	elif ch == "G":
-		#  위 오른쪽에서 시작해 왼쪽으로 돌아 아래를 지나 오른쪽 허리까지 · 거기서 안으로 꺾는다
-		var g: PackedVector2Array = arc.call(40.0, 345.0, 24)
-		g.append(Vector2(1.0, 0.56))
-		g.append(Vector2(0.56, 0.56))
-		out.append(g)
-	else:
-		for pc in (NEONT.path as Dictionary).get(ch, []):
-			out.append(PackedVector2Array(pc))
-	neon_paths[ch] = out
-	return out
-
-
 func _intro_glyph(at: Vector2, ch: String, sz: int, halo: Color, core: Color,
 		dead: Color, lit: bool, a: float) -> void:
-	var N: Dictionary = NEONT
-	var adv: float = font.get_string_size(ch, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x
-	var pad: float = float(N.pad)
-	var tw: float = float(N.tube)
-	#  글자 칸 — 관 바깥 테가 글꼴의 칸 안에 든다. 정수 자리에 앉혀 짝수 굵기의 관이 px 에 맞는다.
-	var o := Vector2(roundf(at.x + pad + tw * 0.5), roundf(at.y - float(N.cap) + tw * 0.5))
-	var box := Vector2(roundf(maxf(adv - pad * 2.0 - tw, 0.0)), roundf(float(N.cap) - tw))
-	var segs: Array = []
-	for pc in _neon_path(ch):
-		var q := PackedVector2Array()
-		for p in pc:
-			q.append((o + p * box).round())
-		segs.append(q)
-	if segs.is_empty():
+	if not lit:
+		draw_string(_fz(font, sz), at, ch, HORIZONTAL_ALIGNMENT_LEFT, -1, sz, Color(dead, a))
 		return
-	#  굵은 꺾은선은 뾰족한 꺾임(N)에서 이음 끝이 가시로 뻗고, 마디마다 따로 그으면 번짐이 겹쳐 호(G · O)에
-	#  바큇살이 선다 — 뾰족한 꺾임에서만 끊어 긋는다. 메운 관은 마디에 둥근 점을 찍어 잇는다.
-	var runs: Array = []
-	for q in segs:
-		var cur := PackedVector2Array([q[0]])
-		for i in range(1, q.size()):
-			cur.append(q[i])
-			if i < q.size() - 1 and absf((q[i] - q[i - 1]).angle_to(q[i + 1] - q[i])) > deg_to_rad(50.0):
-				runs.append(cur)
-				cur = PackedVector2Array([q[i]])
-		runs.append(cur)
-	var line := func(w: float, c: Color, joints: bool) -> void:
-		for q in runs:
-			draw_polyline(q, c, w, false)
-			if joints:
-				for p in q:
-					draw_circle(p, w * 0.5, c, true, -1.0, false)
-	#  검게 칠한 관 — 이 글자 끝에서 다음 글자 쪽으로(판자 뒤로 드는 이음 · 낱말이 붙으면 이어진다)
-	draw_rect(Rect2(o.x + box.x, o.y + box.y + 2.0, roundf(pad * 2.0 + tw), 1.0), Color(N.wire, a))
-	#  클립 — 관을 판자에 잡는 쇠 받침. 첫 조각 · 끝 조각의 3/4 자리에서 관 양옆으로 1px 씩 나온다
-	#  (관 뒤에 서므로 관보다 먼저 긋는다).
-	var clips: Array = [segs[0]]
-	if segs.size() > 1:
-		clips.append(segs[segs.size() - 1])
-	for q in clips:
-		var i: int = clampi(int(roundf(float(q.size() - 1) * 0.75)), 1, q.size() - 1)
-		var p0: Vector2 = q[i - 1]
-		var p1: Vector2 = q[i]
-		var mid: Vector2 = p0.lerp(p1, 0.5 if q.size() > 2 else 0.75).round()
-		var vert: bool = absf(p1.x - p0.x) < absf(p1.y - p0.y)
-		var cr := Rect2(mid.x - tw * 0.5 - 1.0, mid.y - 1.0, tw + 2.0, 2.0) if vert \
-				else Rect2(mid.x - 1.0, mid.y - tw * 0.5 - 1.0, 2.0, tw + 2.0)
-		draw_rect(cr, Color(N.clip_lo, a))
-		draw_rect(Rect2(cr.position, Vector2(cr.size.x, 1.0) if vert else Vector2(1.0, cr.size.y)),
-				Color(N.clip, a))
-	if lit:
-		#  판자에 지는 번짐 — 관 둘레로 겹 셋
-		for gl in N.glow:
-			line.call(float(gl[0]), Color(halo, float(gl[1]) * a), false)
-		#  관 — 짙은 빛깔 테 · 빛깔 · 흰 심(유리 두께 안에서 빛이 심으로 모인다)
-		line.call(tw, Color(halo.darkened(0.30), a), true)
-		line.call(tw - 2.0, Color(halo, a), true)
-		line.call(float(N.core), Color(core.lerp(Color.WHITE, 0.5), a), true)
-	else:
-		line.call(tw, Color(N.glass.lerp(dead, 0.35), a), true)
-		for q in segs:
-			for i in q.size() - 1:
-				draw_line(q[i] + Vector2(-1.0, -1.0), q[i + 1] + Vector2(-1.0, -1.0),
-						Color(N.glass_hi, a), 1.0, false)
-	#  전극 — 관의 시작 · 끝(판자를 뚫고 드는 자리)의 짙은 마개
-	var first: PackedVector2Array = segs[0]
-	var last: PackedVector2Array = segs[segs.size() - 1]
-	for p in [first[0], last[last.size() - 1]]:
-		draw_rect(Rect2(p - Vector2(1.0, 1.0), Vector2(2.0, 2.0)), Color(N.wire, a))
+	for o in [Vector2(-2.0, 0.0), Vector2(2.0, 0.0), Vector2(0.0, -2.0), Vector2(0.0, 2.0),
+			Vector2(-1.0, -1.0), Vector2(1.0, 1.0), Vector2(1.0, -1.0), Vector2(-1.0, 1.0)]:
+		draw_string(_fz(font, sz), at + o, ch, HORIZONTAL_ALIGNMENT_LEFT, -1, sz, Color(halo, 0.22 * a))
+	draw_string(_fz(font, sz), at, ch, HORIZONTAL_ALIGNMENT_LEFT, -1, sz, Color(halo, a))
+	draw_string(_fz(font, sz), at + Vector2(0.0, -1.0), ch, HORIZONTAL_ALIGNMENT_LEFT, -1, sz, Color(core, 0.55 * a))
 
 
 # ══════════════════════════════════════════════════════════
@@ -3601,7 +3491,7 @@ const REGULAR := {"k": 3, "gap": 5.0, "edge": 1.5,
 const RIVAL := {
 	"ax": 218.0, "ay": 316.0, "az": 0.42, "in_dx": 140.0, "in_dy": 150.0, "in_t": 0.32,
 	"wind": Vector3(0.0, 6.0, 34.0), "thrust": 40.0, "wind_t": 0.30, "thrust_t": 0.10,
-	"out_t": 0.40, "k": 1.45, "lift": 0.30, "roll": -1.6, "grip": 0.30,
+	"out_t": 0.40, "k": 1.45, "lift": 0.30, "roll": -1.6, "grip": 0.39,
 	"fp": [38.0, 58.0, 84.0, 92.0, 46.0, 76.0, 98.0, 104.0, 2.0, 0.35, 18.0, 14.0],
 	"sleeve": Vector3(78.0, 40.0, 32.0), "band": Vector3(8.0, 31.0, 22.0),
 	#  소맷부리 단의 두께 · 살빛 · 바탕빛 몫(_rh_build). 살은 상인 살(c4999f — 호박 램프에 맞춰 식힌
@@ -42261,6 +42151,8 @@ func _pay_take(i: int) -> void:
 	if not acted and not last:
 		_npc_react("끄덕")
 	var cost: int = stock[i].cost
+	#  등록기 값 깃 — 깃이 솟을 때 그 매물 값이 선다(Room3D.reg_value · 2026-10-16 상점 모델 다시 짓기)
+	Room3D.reg_value(tbl3_vp, cost)
 	_buy(i)
 	if last:
 		acted = _prop_live(1) and prop_pound != ""
