@@ -808,6 +808,7 @@ static func _inside(root: Node3D) -> void:
 	var bar := Node3D.new()
 	bar.name = "Bar"
 	root.add_child(bar)
+	_bar_mat = _bar_mats()
 	_bar_room(bar)
 	_bar_back(bar)
 	_bar_counter(bar)
@@ -1021,6 +1022,56 @@ static func _glass_img(w: int, h: int, full: bool, seed: int) -> Image:
 	return im
 
 
+#  소품 모양은 Blender 로 짓는다(2026-10-16 「블렌더 깔았으니까 활용해봐」 — scripts/tools/blender/bar_props.py →
+#  BAR_GLB). 의자 · 테이블 · 펜던트 · 카운터 앞 모서리 · 탭 · 다트 장 · 문짝 · 그림등이 한 glb 에 이름으로 든다.
+#  자리 · 방향은 그대로 BAR 상수가 쥐고, 재질은 Blender 재질 이름으로 안 재질(_px — 빛 단 · 디더)을 끼운다.
+#  glb 가 없거나 못 읽으면(가져오기 전) 옛 코드 모양으로 짓는다. 메시는 한 번 불러 둔다.
+#  술병 · 잔은 도트 그림 그대로(_bottle_img · _glass_img) — 회전체 병은 6~9px 폭에서 빛 줄 · 테 그늘이 빠져 밋밋했다.
+const BAR_GLB := "res://assets/models/bar_props.glb"
+static var _bar_mesh := {}          # 이름 → Mesh(처음 부를 때 채운다)
+static var _bar_mat := {}           # 재질 이름 → 안 재질(_inside 가 지을 때마다 새로)
+
+
+static func _bar_model(nm: String) -> MeshInstance3D:
+	if _bar_mesh.is_empty():
+		_bar_mesh[""] = null
+		var ps: PackedScene = load(BAR_GLB) as PackedScene if ResourceLoader.exists(BAR_GLB) else null
+		var sc: Node = ps.instantiate() if ps != null else null
+		if sc != null:
+			for c in sc.find_children("*", "MeshInstance3D", true, false):
+				_bar_mesh[String(c.name)] = (c as MeshInstance3D).mesh
+			sc.free()
+	var me: Mesh = _bar_mesh.get(nm)
+	if me == null:
+		return null
+	var mi := MeshInstance3D.new()
+	mi.name = nm
+	mi.mesh = me
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	for i in me.get_surface_count():
+		var sm: Material = me.surface_get_material(i)
+		var key: String = sm.resource_name if sm != null else ""
+		if _bar_mat.has(key):
+			mi.set_surface_override_material(i, _bar_mat[key])
+	return mi
+
+
+#  재질 이름 → 안 재질. Blender 메시는 매끈한 노멀을 그대로 쓴다(면마다 한 색이면 방석 · 갓이 동심 고리로 끊겼다 —
+#  빛 단이 둥근 면을 몇 단으로 끊는다). 의자 나무는 반짝 없이(곡면에 반짝 칸이 넓게 떠 허연 판으로 읽혔다) ·
+#  니스(테이블 윗판 · 카운터 코)만 반짝인다.
+static func _bar_mats() -> Dictionary:
+	var B: Dictionary = BAR
+	return {
+		"leather": _px(B.leather), "leather_dk": _px(B.leather.darkened(0.4)),
+		"iron": _px(B.iron, null, 8.0), "brass": _px(B.brass, null, 10.0),
+		"wood": _px(B.wood), "varnish": _px(B.wood, null, 14.0), "wood_dk": _px(B.wood_dk), "trim": _px(B.trim),
+		"oak": _px(B.oak.lightened(0.10)), "enamel": _px(B.enamel, null, 14.0),
+		"lamp_in": Room3D._glow(Color("fdeaa0"), 0.9), "bulb": Room3D._glow(Color("fbf6ea"), 4.0),
+		"glow": Room3D._glow(B.lamp, 2.5),
+		"tap0": _px(Color("1a1424")), "tap1": _px(Color("8c2233")), "tap2": _px(Color("2f6340")),
+	}
+
+
 #  방 — 뒷벽(판자 · 허리 몰딩 · 밑판) · 바닥 판자 · 천장 · 옆벽.
 static func _bar_room(bar: Node3D) -> void:
 	var B: Dictionary = BAR
@@ -1196,16 +1247,25 @@ static func _bar_counter(bar: Node3D) -> void:
 	bar.add_child(Room3D._box(Vector3(L, 0.04, cd), Vector3(mx, fy + fh * 0.5, cz - cd * 0.5), dk))
 	bar.add_child(Room3D._box(Vector3(L, fh, 0.04), Vector3(mx, fy + fh * 0.5, cz - cd + 0.02), dk))
 	bar.add_child(Room3D._box(Vector3(0.04, fh, cd), Vector3(x1 - 0.02, fy + fh * 0.5, cz - cd * 0.5), dk))
-	bar.add_child(Room3D._box(Vector3(L, 0.04, 0.04), Vector3(mx, cy - 0.07, cz + 0.01), _px(B.trim)))
 	bar.add_child(Room3D._box(Vector3(L, 0.10, 0.03), Vector3(mx, fy + 0.05, cz + 0.015), dk))
+	#  윗판 앞 모서리 — Blender 쇠시리(BAR_GLB CntNose · 니스 둥근 코 · 밑 오목 쇠시리 · 앞판 위 구슬). 윗판 앞
+	#  10cm 를 이것이 맡아 판자 윗판은 그 뒤에서 끝난다(같은 면이 겹치면 지글거린다).
+	var nm := _bar_model("CntNose")
+	var tf: float = 0.08 if nm == null else -0.02          # 판자 윗판 앞끝(앞판 면에서)
 	#  윗판 — 니스(빛 웅덩이에 반짝이 선다) · 앞으로 조금 나온다
-	var tp := Room3D._plank(int((L + 0.06) * pxm), int((cd + 0.08) * pxm), B.wood, 8105, 16, 22, false)
-	bar.add_child(Room3D._box(Vector3(L + 0.06, 0.05, cd + 0.08), Vector3(mx, cy - 0.025, cz - cd * 0.5 + 0.04),
+	var tp := Room3D._plank(int((L + 0.06) * pxm), int((cd + tf) * pxm), B.wood, 8105, 16, 22, false)
+	bar.add_child(Room3D._box(Vector3(L + 0.06, 0.05, cd + tf), Vector3(mx, cy - 0.025, cz - (cd - tf) * 0.5),
 			_px(Color.WHITE, tp[0], 16.0)))
-	#  윗판 앞 모서리 — 니스 칠한 둥근 끝(면마다 한 색 · 윗면은 빛 1px · 밑면은 그늘 줄)
-	var nose := Room3D._cyl(0.027, 0.027, L + 0.06, Vector3(mx, cy - 0.028, cz + 0.08), _px(B.wood, null, 16.0, 0.0, true), 8)
-	nose.rotation_degrees = Vector3(0.0, 0.0, 90.0)
-	bar.add_child(nose)
+	if nm != null:
+		nm.position = Vector3(mx, cy, cz + 0.08)
+		nm.scale = Vector3(L + 0.06, 1.0, 1.0)
+		bar.add_child(nm)
+	else:
+		bar.add_child(Room3D._box(Vector3(L, 0.04, 0.04), Vector3(mx, cy - 0.07, cz + 0.01), _px(B.trim)))
+		#  윗판 앞 모서리 — 니스 칠한 둥근 끝(면마다 한 색 · 윗면은 빛 1px · 밑면은 그늘 줄)
+		var nose := Room3D._cyl(0.027, 0.027, L + 0.06, Vector3(mx, cy - 0.028, cz + 0.08), _px(B.wood, null, 16.0, 0.0, true), 8)
+		nose.rotation_degrees = Vector3(0.0, 0.0, 90.0)
+		bar.add_child(nose)
 	#  놋쇠 발 난간 — 앞판 밑에서 한 뼘 뜬다(받침 몇)
 	var brass := _px(B.brass, null, 10.0, 0.0, true)
 	var rail := Room3D._cyl(0.022, 0.022, L, Vector3(mx, fy + 0.24, cz + 0.12), brass, 6)
@@ -1217,17 +1277,24 @@ static func _bar_counter(bar: Node3D) -> void:
 		po.rotation_degrees = Vector3(90.0, 0.0, 0.0)
 		bar.add_child(po)
 		k += 0.9
-	#  탭 — 놋쇠 기둥 하나에 손잡이 셋
-	var tx: float = -0.95
+	#  탭 — 놋쇠 기둥 하나에 손잡이 셋. 2026-10-16 x −0.95 → 0.05 — 거기는 걸어 들어가는 내내 문짝 뒤라 한 번도
+	#  안 보였다. 문간 너머 카운터(오른쪽 펜던트 웅덩이 · 빈 잔 왼쪽)로 옮긴다.
+	var tx: float = 0.05
 	var tz: float = cz - cd * 0.55
-	bar.add_child(Room3D._cyl(0.035, 0.04, 0.26, Vector3(tx, cy + 0.13, tz), brass, 8))
-	for h in 3:
-		var hx: float = tx - 0.09 + 0.09 * float(h)
-		bar.add_child(Room3D._cyl(0.012, 0.012, 0.07, Vector3(hx, cy + 0.21, tz + 0.05), brass, 6))
-		var hd := Room3D._cyl(0.016, 0.012, 0.11, Vector3(hx, cy + 0.30, tz + 0.06),
-				_px([Color("1a1424"), Color("8c2233"), Color("2f6340")][h], null, 0.0, 0.0, true), 6)
-		hd.rotation_degrees = Vector3(-12.0, 0.0, 0.0)
-		bar.add_child(hd)
+	#  Blender 탭(BAR_GLB) — 놋쇠 T 기둥 · 아래로 굽은 꼭지 셋 · 빛깔 손잡이 · 물받이
+	var tap := _bar_model("Tap")
+	if tap != null:
+		tap.position = Vector3(tx, cy, tz)
+		bar.add_child(tap)
+	else:
+		bar.add_child(Room3D._cyl(0.035, 0.04, 0.26, Vector3(tx, cy + 0.13, tz), brass, 8))
+		for h in 3:
+			var hx: float = tx - 0.09 + 0.09 * float(h)
+			bar.add_child(Room3D._cyl(0.012, 0.012, 0.07, Vector3(hx, cy + 0.21, tz + 0.05), brass, 6))
+			var hd := Room3D._cyl(0.016, 0.012, 0.11, Vector3(hx, cy + 0.30, tz + 0.06),
+					_px([Color("1a1424"), Color("8c2233"), Color("2f6340")][h], null, 0.0, 0.0, true), 6)
+			hd.rotation_degrees = Vector3(-12.0, 0.0, 0.0)
+			bar.add_child(hd)
 	#  잔 — 맥주 둘 · 빈 잔 하나(도트 그림)
 	for gx in [-1.95, -0.30, 0.25]:
 		var gz: float = cz - 0.18
@@ -1250,10 +1317,17 @@ static func _bar_stool(bar: Node3D, at: Vector3, seat: float, back: bool, yaw :=
 	n.position = at
 	n.rotation = Vector3(0.0, yaw, 0.0)
 	bar.add_child(n)
+	var r: float = 0.17 if seat > 0.6 else 0.20
+	#  Blender 의자(BAR_GLB) — 바 의자(벌어진 쇠 다리 · 놋쇠 발 고리 · 단추 박은 가죽 방석) · 낮은 등받이 ·
+	#  술 의자(깎은 나무 다리 · 가름대 · 살 등받이)
+	var mdl := _bar_model(("StoolBack" if back else "Stool") if seat > 0.6 else "Chair")
+	if mdl != null:
+		n.add_child(mdl)
+		n.add_child(Room3D._blob(Vector2(r * 3.0, r * 3.0), Vector3(0.0, 0.002, 0.0), 0.6))
+		return n
 	var leather := _px(B.leather, null, 0.0, 0.0, true)
 	var iron := _px(B.iron, null, 8.0, 0.0, true)
 	var ring := _px(B.brass, null, 10.0, 0.0, true)
-	var r: float = 0.17 if seat > 0.6 else 0.20
 	n.add_child(Room3D._cyl(r - 0.012, r, 0.06, Vector3(0.0, seat, 0.0), leather, 12))
 	n.add_child(Room3D._cyl(r - 0.004, r - 0.004, 0.014, Vector3(0.0, seat - 0.035, 0.0), _px(B.leather.darkened(0.4)), 12))
 	n.add_child(Room3D._cyl(r * 0.85, r * 0.85, 0.02, Vector3(0.0, seat - 0.05, 0.0), iron, 10))
@@ -1298,44 +1372,52 @@ static func _bar_lamps(bar: Node3D) -> void:
 	var cap := _px(B.brass, null, 10.0, 0.0, true)
 	for lx in B.pend_x:
 		var x: float = float(lx)
-		bar.add_child(Room3D._cyl(0.006, 0.006, cy - py - 0.17, Vector3(x, (cy + py + 0.17) * 0.5, pz), cord, 4))
-		bar.add_child(Room3D._cyl(0.03, 0.03, 0.04, Vector3(x, py + 0.17, pz), cap, 6))
-		for side in 2:
-			var cm := CylinderMesh.new()
-			cm.top_radius = 0.04 if side == 0 else 0.036
-			cm.bottom_radius = 0.19 if side == 0 else 0.183
-			cm.height = 0.15
-			cm.radial_segments = 10
-			cm.rings = 1
-			cm.cap_bottom = false
-			cm.cap_top = side == 0
-			cm.flip_faces = side == 1
-			var mi := MeshInstance3D.new()
-			mi.mesh = cm
-			mi.material_override = en if side == 0 else inner
-			mi.position = Vector3(x, py + 0.075, pz)
-			bar.add_child(mi)
-		#  갓 밑 테 — 말아 접은 법랑 테(2026-10-16 · 갓 끝이 종이처럼 얇았다)
-		var rim := TorusMesh.new()
-		rim.inner_radius = 0.183
-		rim.outer_radius = 0.199
-		rim.rings = 12
-		rim.ring_segments = 4
-		var rmi := MeshInstance3D.new()
-		rmi.mesh = rim
-		rmi.material_override = en
-		rmi.position = Vector3(x, py, pz)
-		bar.add_child(rmi)
-		var bulb := MeshInstance3D.new()
-		var sm := SphereMesh.new()
-		sm.radius = 0.04
-		sm.height = 0.08
-		sm.radial_segments = 8
-		sm.rings = 4
-		bulb.mesh = sm
-		bulb.material_override = Room3D._glow(Color("fbf6ea"), 4.0)
-		bulb.position = Vector3(x, py + 0.02, pz)
-		bar.add_child(bulb)
+		#  Blender 펜던트(BAR_GLB) — 법랑 갓(둥근 머리 · 가는 목 · 넓게 벌어진 치마 · 말아 접은 테) · 놋쇠 소켓 ·
+		#  전구. 줄은 소켓 머리(갓 밑 테에서 0.25)부터 천장까지
+		var lm := _bar_model("Lamp")
+		var top: float = 0.25 if lm != null else 0.17
+		bar.add_child(Room3D._cyl(0.006, 0.006, cy - py - top, Vector3(x, (cy + py + top) * 0.5, pz), cord, 4))
+		if lm != null:
+			lm.position = Vector3(x, py, pz)
+			bar.add_child(lm)
+		else:
+			bar.add_child(Room3D._cyl(0.03, 0.03, 0.04, Vector3(x, py + 0.17, pz), cap, 6))
+			for side in 2:
+				var cm := CylinderMesh.new()
+				cm.top_radius = 0.04 if side == 0 else 0.036
+				cm.bottom_radius = 0.19 if side == 0 else 0.183
+				cm.height = 0.15
+				cm.radial_segments = 10
+				cm.rings = 1
+				cm.cap_bottom = false
+				cm.cap_top = side == 0
+				cm.flip_faces = side == 1
+				var mi := MeshInstance3D.new()
+				mi.mesh = cm
+				mi.material_override = en if side == 0 else inner
+				mi.position = Vector3(x, py + 0.075, pz)
+				bar.add_child(mi)
+			#  갓 밑 테 — 말아 접은 법랑 테(2026-10-16 · 갓 끝이 종이처럼 얇았다)
+			var rim := TorusMesh.new()
+			rim.inner_radius = 0.183
+			rim.outer_radius = 0.199
+			rim.rings = 12
+			rim.ring_segments = 4
+			var rmi := MeshInstance3D.new()
+			rmi.mesh = rim
+			rmi.material_override = en
+			rmi.position = Vector3(x, py, pz)
+			bar.add_child(rmi)
+			var bulb := MeshInstance3D.new()
+			var sm := SphereMesh.new()
+			sm.radius = 0.04
+			sm.height = 0.08
+			sm.radial_segments = 8
+			sm.rings = 4
+			bulb.mesh = sm
+			bulb.material_override = Room3D._glow(Color("fbf6ea"), 4.0)
+			bulb.position = Vector3(x, py + 0.02, pz)
+			bar.add_child(bulb)
 		var sl := _in_light(SpotLight3D.new(), "Pend", lamp, 4.5) as SpotLight3D
 		sl.spot_range = 2.6
 		sl.spot_angle = 40.0
@@ -1357,12 +1439,19 @@ static func _bar_table(bar: Node3D) -> void:
 	var fy: float = B.floor
 	var tc: Vector2 = B.table
 	var ty: float = fy + float(B.table_h)
-	var wood := _px(B.wood, null, 14.0, 0.0, true)
-	var iron := _px(B.iron, null, 8.0, 0.0, true)
-	bar.add_child(Room3D._cyl(0.30, 0.30, 0.04, Vector3(tc.x, ty - 0.02, tc.y), wood, 14))
-	bar.add_child(Room3D._cyl(0.27, 0.27, 0.03, Vector3(tc.x, ty - 0.05, tc.y), _px(B.wood_dk, null, 0.0, 0.0, true), 14))
-	bar.add_child(Room3D._cyl(0.035, 0.035, ty - fy, Vector3(tc.x, (ty + fy) * 0.5, tc.y), iron, 8))
-	bar.add_child(Room3D._cyl(0.22, 0.24, 0.03, Vector3(tc.x, fy + 0.015, tc.y), iron, 10))
+	#  Blender 테이블(BAR_GLB) — 둥근 끝 · 밑 구슬 윗판 · 앞치마 고리 · 깎은 주물 기둥 · 휜 발 넷(윗면 0.75 를 table_h 로)
+	var tm := _bar_model("Table")
+	if tm != null:
+		tm.position = Vector3(tc.x, fy, tc.y)
+		tm.scale = Vector3(1.0, float(B.table_h) / 0.75, 1.0)
+		bar.add_child(tm)
+	else:
+		var wood := _px(B.wood, null, 14.0, 0.0, true)
+		var iron := _px(B.iron, null, 8.0, 0.0, true)
+		bar.add_child(Room3D._cyl(0.30, 0.30, 0.04, Vector3(tc.x, ty - 0.02, tc.y), wood, 14))
+		bar.add_child(Room3D._cyl(0.27, 0.27, 0.03, Vector3(tc.x, ty - 0.05, tc.y), _px(B.wood_dk, null, 0.0, 0.0, true), 14))
+		bar.add_child(Room3D._cyl(0.035, 0.035, ty - fy, Vector3(tc.x, (ty + fy) * 0.5, tc.y), iron, 8))
+		bar.add_child(Room3D._cyl(0.22, 0.24, 0.03, Vector3(tc.x, fy + 0.015, tc.y), iron, 10))
 	bar.add_child(Room3D._blob(Vector2(0.8, 0.8), Vector3(tc.x, fy + 0.002, tc.y), 0.6))
 	for cp in B.chairs:
 		_bar_stool(bar, Vector3(float(cp[0]), fy, float(cp[1])), 0.46, true, float(cp[2]))
@@ -1397,13 +1486,21 @@ static func _bar_darts(bar: Node3D) -> void:
 	var hw: float = B.cab
 	var oak := _px(B.oak.lightened(0.10))
 	var oak_dk := _px(B.wood_dk)
-	#  장 — 뒷판 · 테 넷(앞으로 나온 상자)
-	bar.add_child(Room3D._box(Vector3(hw * 2.0, hw * 2.0, 0.03), Vector3(bc.x, bc.y, bz + 0.015), oak_dk))
 	var dep := 0.11
-	for e in [[0.0, hw - 0.02, hw * 2.0, 0.04], [0.0, -hw + 0.02, hw * 2.0, 0.04],
-			[-hw + 0.02, 0.0, 0.04, hw * 2.0], [hw - 0.02, 0.0, 0.04, hw * 2.0]]:
-		bar.add_child(Room3D._box(Vector3(float(e[2]), float(e[3]), dep),
-				Vector3(bc.x + float(e[0]), bc.y + float(e[1]), bz + dep * 0.5), oak))
+	#  장 — Blender(BAR_GLB Cabinet · 반 폭 0.34 로 지었다) · 앞 끝 액자 쇠시리 · 처마 · 받침 · 놋쇠 경첩. 없으면
+	#  뒷판 · 테 넷(앞으로 나온 상자)
+	var ck: float = hw / 0.34
+	var cab := _bar_model("Cabinet")
+	if cab != null:
+		cab.position = Vector3(bc.x, bc.y, bz)
+		cab.scale = Vector3.ONE * ck
+		bar.add_child(cab)
+	else:
+		bar.add_child(Room3D._box(Vector3(hw * 2.0, hw * 2.0, 0.03), Vector3(bc.x, bc.y, bz + 0.015), oak_dk))
+		for e in [[0.0, hw - 0.02, hw * 2.0, 0.04], [0.0, -hw + 0.02, hw * 2.0, 0.04],
+				[-hw + 0.02, 0.0, 0.04, hw * 2.0], [hw - 0.02, 0.0, 0.04, hw * 2.0]]:
+			bar.add_child(Room3D._box(Vector3(float(e[2]), float(e[3]), dep),
+					Vector3(bc.x + float(e[0]), bc.y + float(e[1]), bz + dep * 0.5), oak))
 	#  판 — 검은 받침 원 · 판 그림(그 깊이의 1 텍셀 = 1px)
 	var back := Room3D._cyl(R + 0.02, R + 0.02, 0.04, Vector3(bc.x, bc.y, bz + 0.05), _px(Color("140904")), 16)
 	back.rotation_degrees = Vector3(90.0, 0.0, 0.0)
@@ -1445,22 +1542,35 @@ static func _bar_darts(bar: Node3D) -> void:
 		bar.add_child(piv)
 		#  닫힌 자리에서 문짝은 경첩에서 장 한가운데 쪽(-sd)으로 뻗는다 · 안쪽(-z)이 칠판
 		var lx: float = -sd * hw * 0.5
-		piv.add_child(Room3D._box(Vector3(hw, hw * 2.0, 0.025), Vector3(lx, 0.0, 0.0125), oak))
+		#  문짝 — Blender(CabDoor · 바깥 솟은 판 · 안쪽 칠판 둘레 나무 테)
+		var dm := _bar_model("CabDoor")
+		if dm != null:
+			dm.position = Vector3(lx, 0.0, 0.0)
+			dm.scale = Vector3.ONE * ck
+			piv.add_child(dm)
+		else:
+			piv.add_child(Room3D._box(Vector3(hw, hw * 2.0, 0.025), Vector3(lx, 0.0, 0.0125), oak))
 		var q := _quad_mesh(Vector2(hw - 0.05, hw * 2.0 - 0.05), Vector3(lx, 0.0, -0.001),
 				cm if sd < 0.0 else cm2, "Chalk")
 		q.rotation_degrees = Vector3(0.0, 180.0, 0.0)
 		piv.add_child(q)
-	#  그림등 — 장 위 놋쇠 갓 · 판을 비추는 빛
-	var brass := _px(B.brass, null, 10.0, 0.0, true)
-	var lb := Room3D._cyl(0.022, 0.022, 0.30, Vector3(bc.x, bc.y + hw + 0.10, bz + 0.20), brass, 6)
-	lb.rotation_degrees = Vector3(0.0, 0.0, 90.0)
-	bar.add_child(lb)
-	#  팔 — 굵기 1.5cm(2026-10-16 · 0.8cm 는 그 깊이에서 1px 밑이라 사라져 갓이 떠 있었다)
-	var arm := Room3D._cyl(0.015, 0.015, 0.18, Vector3(bc.x, bc.y + hw + 0.08, bz + 0.10), brass, 6)
-	arm.rotation_degrees = Vector3(90.0, 0.0, 0.0)
-	bar.add_child(arm)
-	bar.add_child(Room3D._box(Vector3(0.26, 0.006, 0.01), Vector3(bc.x, bc.y + hw + 0.08, bz + 0.21),
-			Room3D._glow(B.lamp, 2.5)))
+	#  그림등 — 장 위 놋쇠 갓 · 판을 비추는 빛. Blender(CabLamp · 벽 판 · 굽은 팔 · 끝 막은 반 원통 갓 · 빛 줄)
+	var cl := _bar_model("CabLamp")
+	if cl != null:
+		cl.position = Vector3(bc.x, bc.y, bz)
+		cl.scale = Vector3.ONE * ck
+		bar.add_child(cl)
+	else:
+		var brass := _px(B.brass, null, 10.0, 0.0, true)
+		var lb := Room3D._cyl(0.022, 0.022, 0.30, Vector3(bc.x, bc.y + hw + 0.10, bz + 0.20), brass, 6)
+		lb.rotation_degrees = Vector3(0.0, 0.0, 90.0)
+		bar.add_child(lb)
+		#  팔 — 굵기 1.5cm(2026-10-16 · 0.8cm 는 그 깊이에서 1px 밑이라 사라져 갓이 떠 있었다)
+		var arm := Room3D._cyl(0.015, 0.015, 0.18, Vector3(bc.x, bc.y + hw + 0.08, bz + 0.10), brass, 6)
+		arm.rotation_degrees = Vector3(90.0, 0.0, 0.0)
+		bar.add_child(arm)
+		bar.add_child(Room3D._box(Vector3(0.26, 0.006, 0.01), Vector3(bc.x, bc.y + hw + 0.08, bz + 0.21),
+				Room3D._glow(B.lamp, 2.5)))
 	var at := Vector3(bc.x, bc.y + hw + 0.06, bz + 0.40)
 	#  원뿔을 장 안으로 좁힌다 — 26° · 2m 이면 장 밑 벽에 빛 단 이음 디더가 갈색 덩어리로 졌다(2026-10-16)
 	var sl := _in_light(SpotLight3D.new(), "Pict", Color("ffe2b8"), 2.6) as SpotLight3D
