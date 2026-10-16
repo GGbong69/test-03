@@ -157,11 +157,11 @@ func _process(_d: float) -> bool:
 			"%d줄 · 넘친 줄 %d · 높이 %.0f > %.0f" % [wrapped, over, tall, short])
 	g._tip_clear()
 
-	# ⑩ 칸 색 — 기본 배치는 실물 다트판대로 교대이고, 화면과 판정이
-	#    같은 배열을 읽는다. 불·아웃은 색이 없다(-1).
+	# ⑩ 칸 색 — 기본 배치는 실물 다트판대로 교대이고(20 흑색 · 1 백색 — 2026-10-16), 화면과
+	#    판정이 같은 배열을 읽는다. 불·아웃은 색이 없다(-1).
 	var base_alt := true
 	for i in g.sec_col.size():
-		if int(g.sec_col[i]) != i % 2:
+		if int(g.sec_col[i]) != (i + 1) % 2:
 			base_alt = false
 	var bull: Dictionary = g.hit_info(g.BC)
 	var out: Dictionary = g.hit_info(g.BC + Vector2(g.R * 2.0, 0.0))

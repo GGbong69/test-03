@@ -1603,10 +1603,13 @@ static func color_name(i: int) -> String:
 
 
 #  기본 칸 색 — 백색 · 흑색이 번갈아 선다. 칸 수를 받는다(피자는 여덟 조각).
+#  첫 칸(맨 위 20)이 흑색이다 — 실물 판 배색(20 흑 · 1 백 · 18 흑 … · 흑색 칸에 빨강 띠 · 백색
+#  칸에 초록 띠). 옛 판은 한 칸 밀려 20 이 백색이었다 — 다트를 아는 눈은 바로 알아본다(사용자
+#  결정, 2026-10-16). 띠 색은 그대로 i % 2(짝 빨강)라 칸 색만 민다.
 static func colors_base(n: int = SECTORS_BASE.size()) -> Array:
 	var out := []
 	for i in n:
-		out.append(i % 2)
+		out.append((i + 1) % 2)
 	return out
 
 
