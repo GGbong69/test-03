@@ -5,6 +5,8 @@ extends SceneTree
 #   ③ 여는 정도 open_axis 부터 몸은 문짝 법선과 나란하다 · 닫힌 문(0)에서는 옛 자세 그대로
 #   ④ 자루 길이 · 굵기(배율)는 그대로다
 #   ⑤ 판에 진 2D 그림자는 open_shade 에서 다 진다
+#   ⑥ 술집 안 Blender 소품(Door3D.BAR_GLB) — 이름 열이 다 들고 겉마다 안 재질이 끼워진다(재질 이름이 어긋나면
+#     흰 기본 재질로 뜬다 · 2026-10-16)
 #   godot --headless --path . --script scripts/tools/qa_dopen.gd
 const Save = preload("res://scripts/save.gd")
 const Door3D = preload("res://scripts/door3d.gd")
@@ -93,3 +95,16 @@ func _run() -> void:
 	_ok("③ 여는 동안만 새 자세 — 닫히면 옛 hinv 자세", src.contains("if dk > 0.0:\n\t\t\t#  문이 열리는 중")
 			and src.contains("n0.transform = hinv * pose"))
 	_ok("⑤ 판 그림자가 open_shade 에서 진다", src.contains("1.0 - smoothstep(0.0, float(TTL.open_shade), _door_k())"))
+	# ⑥
+	Door3D._bar_mat = Door3D._bar_mats()
+	var miss: Array = []
+	for nm in ["Stool", "StoolBack", "Chair", "Table", "Lamp", "CntNose", "Tap", "Cabinet", "CabDoor", "CabLamp"]:
+		var mi: MeshInstance3D = Door3D._bar_model(nm)
+		if mi == null:
+			miss.append(nm)
+			continue
+		for i in mi.mesh.get_surface_count():
+			if mi.get_surface_override_material(i) == null:
+				miss.append("%s:%s" % [nm, mi.mesh.surface_get_material(i).resource_name])
+		mi.free()
+	_ok("⑥ Blender 소품 열 · 재질이 다 끼워진다", miss.is_empty(), str(miss))
