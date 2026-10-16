@@ -5,6 +5,8 @@ extends SceneTree
 #   ③ 여는 정도 open_axis 부터 몸은 문짝 법선과 나란하다 · 닫힌 문(0)에서는 옛 자세 그대로
 #   ④ 자루 길이 · 굵기(배율)는 그대로다
 #   ⑤ 판에 진 2D 그림자는 open_shade 에서 다 진다
+#   ⑥ 문 쇠붙이 glb(2026-10-16 · Door3D._door_piece) — 조각 셋 · 재질 이름(문이 이름으로 제 재질을 끼운다) ·
+#     손잡이 조각이 누름 막대(handle_rect — 문 앞면에서 hz 앞 · hy0..hy1)를 덮는다
 #   godot --headless --path . --script scripts/tools/qa_dopen.gd
 const Save = preload("res://scripts/save.gd")
 const Door3D = preload("res://scripts/door3d.gd")
@@ -93,3 +95,21 @@ func _run() -> void:
 	_ok("③ 여는 동안만 새 자세 — 닫히면 옛 hinv 자세", src.contains("if dk > 0.0:\n\t\t\t#  문이 열리는 중")
 			and src.contains("n0.transform = hinv * pose"))
 	_ok("⑤ 판 그림자가 open_shade 에서 진다", src.contains("1.0 - smoothstep(0.0, float(TTL.open_shade), _door_k())"))
+	# ⑥
+	var want := {"Pull": ["brass", "brass_dk", "brass_hi", "hole"], "Strap": ["iron", "knuck", "stud"],
+			"Pintle": ["iron", "knuck", "stud"]}
+	for nm in want:
+		var mi: MeshInstance3D = Door3D._door_piece(nm, {})
+		var got: Array = []
+		if mi != null:
+			for i in mi.mesh.get_surface_count():
+				got.append(mi.mesh.surface_get_material(i).resource_name)
+		got.sort()
+		_ok("⑥ glb 조각 %s · 재질 이름" % nm, got == want[nm], str(got))
+		if nm == "Pull" and mi != null:
+			var ab: AABB = mi.mesh.get_aabb()
+			var hl: float = (float(D.hy0) - float(D.hy1)) * 0.5
+			_ok("⑥ 손잡이 조각이 누름 막대를 덮는다", ab.position.y <= -hl and ab.end.y >= hl
+					and ab.end.z >= float(D.hz) + float(D.hr) * 0.9, str(ab))
+		if mi != null:
+			mi.free()

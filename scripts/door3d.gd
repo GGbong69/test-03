@@ -1619,6 +1619,47 @@ static func _scoreboard_img(w: int, h: int, seed: int) -> Image:
 	return im
 
 
+#  문 쇠붙이 glb(2026-10-16) — 조각 셋(Pull · Strap · Pintle)을 이름으로 꺼낸다. 한 번 불러 둔다.
+const DOOR_IRON := "res://assets/models/door_iron.glb"
+#  쇠 UV 상자(m · 조각 안 x · y) — door_iron.py IRON_BOX 와 같다. 이 상자에 1 텍셀 = 논리 1px 로 쇠 그림을 굽는다.
+const IRON_BOX := Rect2(-0.08, -1.0 / 24.0, 0.40, 1.0 / 12.0)
+static var _door_iron: PackedScene = null
+
+
+#  조각 하나 — 메시 겉마다 재질 이름(Blender 재질 이름)으로 mats 의 재질을 끼운다. 없거나 못 읽으면 null.
+static func _door_piece(nm: String, mats: Dictionary) -> MeshInstance3D:
+	if _door_iron == null:
+		if not ResourceLoader.exists(DOOR_IRON):
+			return null
+		_door_iron = load(DOOR_IRON) as PackedScene
+		if _door_iron == null:
+			return null
+	var sc := _door_iron.instantiate()
+	var mi := sc.find_child(nm, true, false) as MeshInstance3D
+	if mi == null or mi.mesh == null:
+		sc.free()
+		return null
+	mi.get_parent().remove_child(mi)
+	mi.owner = null
+	sc.free()
+	for i in mi.mesh.get_surface_count():
+		var sm: Material = mi.mesh.surface_get_material(i)
+		var key: String = sm.resource_name if sm != null else ""
+		if mats.has(key):
+			mi.set_surface_override_material(i, mats[key])
+	return mi
+
+
+#  glb 쇠의 재질 — IRON_BOX 를 통째로 채운 망치 자국 · 녹 그림(_iron_img). 테는 상자 끝이라 쇠 밖이고, 쇠의
+#  둥근 테 · 그늘은 모양(Blender 의 둥글린 모서리)이 낸다.
+static func _door_iron_mat(seed: int) -> ShaderMaterial:
+	var b := IRON_BOX
+	var poly := PackedVector2Array([b.position, Vector2(b.end.x, b.position.y), b.end,
+			Vector2(b.position.x, b.end.y)])
+	var ip := _iron_img(poly, b, seed)
+	return _lit_mat(ip[0], ip[1], 0.7, 1.0)
+
+
 # ── 문짝 — 경첩 축(왼변)에 매단다 ───────────────────────────
 #  2026-10-16 「게임의 전체적인 모델링을 다 퀄리티 업 · 진짜 있어보이는 모델링」 — 쇠붙이를 한 벌로 다시
 #  짓는다. 점검(촬영): 손잡이가 주황 플라스틱 관 · 쇠 띠가 경첩 없이 붙은 판 · 같은 쇠가 닫힌 문에서
@@ -1629,6 +1670,9 @@ static func _scoreboard_img(w: int, h: int, seed: int) -> Image:
 #     셋(가운데는 문짝 · 위아래는 문틀에 박은 핀 판) — 문틀에 매달린 문이 된다.
 #   · 손잡이 — 놋쇠를 다섯 단으로 끊는다(BRASS_SHADER). 받침판 둘 대신 세로로 긴 뒤판 하나(모서리 깎음 ·
 #     나사 둘) · 위에 열쇠 구멍 장식판. 막대 치수 · 누름 칸(handle_rect)은 그대로다.
+#   · 2026-10-16 「블렌더 깔았으니까 활용해봐」 — 쇠붙이 모양은 Blender 로 짓는다(DOOR_IRON). 활 손잡이 · 잎 끝 뒤판 ·
+#     물방울 열쇠 구멍판 · 둥글린 망치 쇠 띠(문 앞면에 눕는다 · 경첩 쪽은 통 높이로 좁아져 말아 감은 눈) · 창 날 등 ·
+#     둥근 못 머리 · 문틀 모서리를 감아 든 핀 판. 위 셋은 glb 가 없을 때의 옛 모양이다.
 static func _slab(root: Node3D) -> void:
 	var x0: float = float(DOOR.x0)
 	var x1: float = float(DOOR.x1)
@@ -1668,9 +1712,22 @@ static func _slab(root: Node3D) -> void:
 					bi.set_pixel(nx, ny, bc.lightened(0.25))
 		_panel(hinge, Vector3(dw - 0.02, bh, 0.014), Vector3(dw * 0.5, float(by), th + 0.007),
 				_lit_mat(bi, null, 0.78, 2.0, bc), COL.door.darkened(0.35), "Batten")
-	#  쇠 띠 — 창끝 판 · 둥근 머리 징 셋 · 경첩 통(문짝 쪽 가운데 하나)
+	#  쇠붙이 — glb 조각(_door_piece · scripts/tools/blender/door_iron.py)이면 모양만 그것이고 자리 · 축은 여기 상수,
+	#  재질은 이름으로 여기 것(놋쇠 BRASS_SHADER · 쇠 _door_iron_mat)을 끼운다. 없으면 옛 코드 모양.
 	var stud := Room3D._mat(COL.iron_lit.lightened(0.12), 0.40)
 	var knuck := Room3D._mat(COL.iron_lit, 0.55)
+	var rp: Array = COL.brass_ramp
+	#  놋쇠 셋 — 손이 닳린 막대 가운데(br · 흰 반짝 줄까지) · 손이 덜 닿는 끝 · 받침 · 판(bt · 흰 줄 없이 —
+	#  놋쇠 손때) · 뒤판(pm · 한 단 어둡게 — 막대가 판 위로 떠 보인다)
+	var br := _brass_mat()
+	var bt := _brass_mat()
+	bt.set_shader_parameter("c4", rp[3])
+	var pm := _brass_mat()
+	for i in 3:
+		pm.set_shader_parameter("c%d" % (i + 1), rp[i])
+	var hole := Room3D._glow(Color("0d0b10"), 0.0)
+	var pull := _door_piece("Pull", {"brass_hi": br, "brass": bt, "brass_dk": pm, "hole": hole})
+	#  쇠 띠 — 창끝 판 · 둥근 머리 징 셋 · 경첩 통(문짝 쪽 가운데 하나)
 	var L: float = float(DOOR.strap_l)
 	var shh: float = float(DOOR.strap_h)
 	var xb: float = L - 0.055
@@ -1680,6 +1737,14 @@ static func _slab(root: Node3D) -> void:
 	var kh: float = (shh + 0.016 - 0.006) / 3.0
 	for i in DOOR.strap_y.size():
 		var sy: float = float(DOOR.strap_y[i])
+		var sp := _door_piece("Strap", {"iron": _door_iron_mat(6030 + i), "knuck": knuck, "stud": stud})
+		var pn := _door_piece("Pintle", {"iron": _door_iron_mat(6040 + i), "knuck": knuck, "stud": stud})
+		if sp != null and pn != null:
+			sp.position = Vector3(0.0, sy, th)
+			hinge.add_child(sp)
+			pn.position = Vector3(x0, sy, 0.0)
+			root.add_child(pn)
+			continue
 		_iron_plate(hinge, spear, 0.006, Vector3(0.0, sy, th + 0.016), 6030 + i, "Strap")
 		for k in 3:
 			var sd := Room3D._ball(0.0065, Vector3(0.04 + float(k) * 0.10, sy, th + 0.019), stud, true)
@@ -1700,24 +1765,25 @@ static func _slab(root: Node3D) -> void:
 			var pd := Room3D._ball(0.0055, Vector3(x0 + float(px), sy, float(DOOR.case_z) + 0.005), stud, true)
 			pd.rotation_degrees = Vector3(90.0, 0.0, 0.0)
 			root.add_child(pd)
-	#  손잡이 — 놋쇠 막대 · 받침 둘 · 세로 뒤판(나사 둘) · 위에 열쇠 구멍 장식판. 놋쇠 재질 둘(막대 ·
-	#  판)은 램프가 떨면 같이 어둡다(door_lights — Hinge 의 meta "brass").
-	var br := _brass_mat()
-	var bar := Room3D._cyl(float(DOOR.hr), float(DOOR.hr), hy0 - hy1,
-			Vector3(hx, (hy0 + hy1) * 0.5, th + hz), br, 16)
-	bar.name = "Handle"
-	hinge.add_child(bar)
-	for yy in [hy0 - 0.015, hy1 + 0.015]:
-		var po := Room3D._cyl(0.008, 0.008, hz, Vector3(hx, float(yy), th + hz * 0.5), br, 12)
-		po.rotation_degrees = Vector3(90.0, 0.0, 0.0)
-		hinge.add_child(po)
-	#  뒤판은 막대보다 한 단 어둡게(손이 닿는 막대가 판 위로 떠 보인다)
-	var pm := _brass_mat()
-	var rp: Array = COL.brass_ramp
-	for i in 3:
-		pm.set_shader_parameter("c%d" % (i + 1), rp[i])
-	var pl_h: float = hy0 - hy1 + 0.05
-	hinge.add_child(_bevel_plate(0.036, pl_h, 0.004, 0.003, pm, Vector3(hx, (hy0 + hy1) * 0.5, th)))
+	#  손잡이 — 원점이 문 앞면의 손잡이 한가운데다(곧은 몸이 hy0..hy1 · handle_rect 그대로). 놋쇠 재질은 램프가
+	#  떨면 같이 어둡다(door_lights — Hinge 의 meta "brass").
+	if pull != null:
+		pull.name = "Handle"
+		pull.position = Vector3(hx, (hy0 + hy1) * 0.5, th)
+		hinge.add_child(pull)
+	else:
+		#  (옛 코드 모양) 손잡이 — 놋쇠 막대 · 받침 둘 · 세로 뒤판 · 위에 열쇠 구멍 장식판
+		var bar := Room3D._cyl(float(DOOR.hr), float(DOOR.hr), hy0 - hy1,
+				Vector3(hx, (hy0 + hy1) * 0.5, th + hz), br, 16)
+		bar.name = "Handle"
+		hinge.add_child(bar)
+		for yy in [hy0 - 0.015, hy1 + 0.015]:
+			var po := Room3D._cyl(0.008, 0.008, hz, Vector3(hx, float(yy), th + hz * 0.5), br, 12)
+			po.rotation_degrees = Vector3(90.0, 0.0, 0.0)
+			hinge.add_child(po)
+		#  뒤판은 막대보다 한 단 어둡게(손이 닿는 막대가 판 위로 떠 보인다)
+		var pl_h: float = hy0 - hy1 + 0.05
+		hinge.add_child(_bevel_plate(0.036, pl_h, 0.004, 0.003, pm, Vector3(hx, (hy0 + hy1) * 0.5, th)))
 	#  막대가 뒤판에 드리운 그늘 — 빛이 왼쪽 위 앞에서 오므로 오른쪽 아래로 비켜 진다(놋쇠는 그늘을 안 받는
 	#  재질이라 판 위에 짙은 끝 색 띠로 얹는다)
 	var shd := _brass_mat()
@@ -1725,21 +1791,21 @@ static func _slab(root: Node3D) -> void:
 		shd.set_shader_parameter("c%d" % (i + 1), rp[0])
 	hinge.add_child(Room3D._box(Vector3(0.0055, hy0 - hy1 - 0.02, 0.0004),
 			Vector3(hx + 0.0125, (hy0 + hy1) * 0.5 - 0.03, th + 0.0042), shd))
-	for yy in [hy0 + 0.014, hy1 - 0.014]:
-		var sc := Room3D._ball(0.0042, Vector3(hx, float(yy), th + 0.004), br, true)
-		sc.rotation_degrees = Vector3(90.0, 0.0, 0.0)
-		hinge.add_child(sc)
-	#  열쇠 구멍 장식판 — 둥근 놋쇠 받침(비탈 테) · 짙은 열쇠 구멍(둥근 머리 · 밑으로 좁은 홈)
-	var ky: float = hy0 + 0.065
-	var ro := Room3D._cyl(0.012, 0.017, 0.005, Vector3(hx, ky, th + 0.0025), br, 16)
-	ro.rotation_degrees = Vector3(90.0, 0.0, 0.0)
-	hinge.add_child(ro)
-	var hole := Room3D._glow(Color("0d0b10"), 0.0)
-	var kc := Room3D._cyl(0.0034, 0.0034, 0.001, Vector3(hx, ky + 0.002, th + 0.0055), hole, 10)
-	kc.rotation_degrees = Vector3(90.0, 0.0, 0.0)
-	hinge.add_child(kc)
-	hinge.add_child(Room3D._box(Vector3(0.0028, 0.008, 0.001), Vector3(hx, ky - 0.003, th + 0.0055), hole))
-	hinge.set_meta("brass", [br, pm, shd])
+	if pull == null:
+		for yy in [hy0 + 0.014, hy1 - 0.014]:
+			var sc := Room3D._ball(0.0042, Vector3(hx, float(yy), th + 0.004), br, true)
+			sc.rotation_degrees = Vector3(90.0, 0.0, 0.0)
+			hinge.add_child(sc)
+		#  열쇠 구멍 장식판 — 둥근 놋쇠 받침(비탈 테) · 짙은 열쇠 구멍(둥근 머리 · 밑으로 좁은 홈)
+		var ky: float = hy0 + 0.065
+		var ro := Room3D._cyl(0.012, 0.017, 0.005, Vector3(hx, ky, th + 0.0025), br, 16)
+		ro.rotation_degrees = Vector3(90.0, 0.0, 0.0)
+		hinge.add_child(ro)
+		var kc := Room3D._cyl(0.0034, 0.0034, 0.001, Vector3(hx, ky + 0.002, th + 0.0055), hole, 10)
+		kc.rotation_degrees = Vector3(90.0, 0.0, 0.0)
+		hinge.add_child(kc)
+		hinge.add_child(Room3D._box(Vector3(0.0028, 0.008, 0.001), Vector3(hx, ky - 0.003, th + 0.0055), hole))
+	hinge.set_meta("brass", [br, bt, pm, shd])
 	#  판 걸이 — 판 위 못 하나(판이 그 밑에 걸린다)
 	var nr: float = float(DOOR.by) + 0.255
 	var nail := Room3D._cyl(0.006, 0.006, 0.02, Vector3(float(DOOR.bx) - x0, nr, th + 0.01), stud, 8)
@@ -1956,7 +2022,9 @@ void fragment() {
 	if (s > 0.955) {
 		c = c4;
 	}
-	if (n.z < 0.5 && !(n.y > 0.9)) {
+	//  테(짙은 끝)는 눈에서 비껴 선 면 — 눈 쪽 법선(VIEW)으로 잰다. 손잡이는 카메라 축에서 14° 비껴 있어 n.z < 0.5 로
+	//  재면 굽 · 받침의 왼옆(눈을 향한 면)까지 짙은 덩이로 섰다(2026-10-16 · glb 활 손잡이). 테는 1px 이면 된다.
+	if (dot(n, normalize(VIEW)) < 0.35 && !(n.y > 0.9)) {
 		c = c0;
 	}
 	ALBEDO = c * mix(0.30, 1.0, lk);
