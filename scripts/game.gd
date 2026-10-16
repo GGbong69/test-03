@@ -39450,10 +39450,10 @@ func _icon_mod(c: Vector2, r: float, id: String, dim: float,
 #  보드 확장 = 방패, 사진 = 가로 네모). 다른 무리와는 안 섞이니 넷끼리만 가르면
 #  된다. 회색조로 바꿔도 갈리게 무게중심을 넷으로 나눈다.
 #    표준   균형      곧은 배럴 + 뒤끝이 평평한 방패 날개(T 자). 덧댐이 없는 것이 정체다
-#    무거운 가운데     봄 배럴 + 링 홈 둘 + 좁고 네모진 슬림 날개. 배럴이 날개보다 넓은
-#                      유일한 자루(볼링핀)
-#    가벼운 뒤로 쏠림  바늘 몸 + 자루 절반 길이의 깃(화살 · 깃펜). 끝이 둥글게 닫히고
-#                      그늘 쪽 한 변만 갈라진 깃판
+#    무거운 앞으로 쏠림 쿠나이 — 곧게 벌어진 마름모 날(등날 한쪽이 한 단 어둡다) · 감은
+#                      짧은 자루 · 꽁지의 고리(2026-10-16 · 사용자가 준 사진 비율)
+#    가벼운 뒤로 쏠림  종이비행기 다트 — 바늘 + 꽁지까지 벌어지는 세모 날개 둘(빛 쪽 한 단
+#                      밝다) · 가운데 접힌 줄 · 코에 겹친 세모 깃(2026-10-16)
 #    자석   꼬리가 열림 말굽 U + 은색 극 두 점. 가운데가 빈 꼬리는 이것 하나(소리굽쇠)
 #  종류 표식은 전부 s ≥ 0.47(꽁지 쪽)에 둔다. 통에 꽂히면 촉 쪽 절반이 잠긴다
 #  (CUP.dip 36/76 ≈ 0.47, 3D 도 「절반이 밖」). 촉 쪽 표식(자석 극면 띠)은 덤이다.
@@ -39577,34 +39577,22 @@ const DK_PARTS := {
 		["dusk", 1, false, [[0.56, 0.8], [0.68, 0.8]]],
 		["cream", 1, true, [[0.64, 0.8], [0.90, 4.2], [1.0, 4.2]]],
 	],
-	#  무거운 — 짧고 뭉툭한 촉 · 봄 배럴(최대폭 s 0.50 이 통 아가리 바로 위) ·
-	#  작고 빳빳한 슬림 날개. 날개를 배럴보다 한 단 어둡게 두어 질량이 앞몸에 있다.
-	#  날개 빛 띠(7a7192)가 C_BG · 어두운 칸 위에서 꼬리를 붙잡는다 — dusk 0단으로
-	#  두었더니 날개가 떨어져 떠 보였다(목업 1차).
-	#  날개 뒤끝은 **평평하게 끊는다**(2026-09-17 검토). 처음 안은 가운데가 넓고
-	#  끝이 1.6 으로 오므라드는 연꼴이었는데, 벽(dl 26) · 2D 통에서 날개가 아니라
-	#  둥근 손잡이 혹으로 읽혀 자루 전체가 아령 · 나무 주걱이 됐다. 실제 날개 중에
-	#  뒤로 갈수록 오므라드는 것은 없다. 짧게 벌어진 뒤 거의 곧게(1.9 → 2.5) 가서
-	#  끊기는 좁은 네모(슬림)면 작아도 날개다 — 표준의 긴 세모 T 와도 갈린다.
+	#  무거운 — 쿠나이(2026-10-16 「무거운 다트는 쿠나이로」 · 3D darts.py 와 같은 비율 — 사용자가 준
+	#  사진을 잰 값). 날은 촉에서 곧게 벌어져 s 0.58 에서 가장 넓고 짧게 오므라든다 · 감은 짧은 자루 ·
+	#  고리는 match 가 얹는다(가운데가 빈 고리라 프로파일로는 못 편다). 날 반폭은 3D(0.072 · 2.7px)보다
+	#  조금 넓다 — 2D 는 실루엣을 과장한다(표준 날개도 그렇다).
 	"hvy": [
-		["steel", 2, false, [[0.0, 0.0], [0.26, 1.2]]],
-		["dusk", 2, false, [[0.26, 1.3], [0.31, 2.0], [0.36, 2.6], [0.43, 3.05],
-				[0.50, 3.2], [0.55, 2.95], [0.60, 2.4], [0.63, 1.9], [0.66, 1.2]]],
-		["dusk", 1, false, [[0.65, 0.9], [0.80, 0.9]]],
-		["dusk", 1, true, [[0.77, 0.9], [0.83, 1.9], [1.0, 2.5]]],
+		["dusk", 2, false, [[0.0, 0.0], [0.58, 3.2], [0.64, 2.3], [0.69, 1.2]]],
+		["dusk", 1, false, [[0.69, 1.3], [0.885, 1.3]]],
+		["dusk", 2, false, [[0.88, 0.6], [0.915, 0.6]]],
 	],
-	#  가벼운 — 가장 가는 바늘 촉 · 실오라기 초록 몸 · 자루 절반 길이의 깃판.
-	#  깃판은 밝은 94d68e 바탕에 그늘 쪽 가장자리만 479a58 이다. 빛 띠가 없는 것은
-	#  가운데 깃대(크림)가 하이라이트라서다. 홈(0.775)은 dl ≥ 16 에서만 판다.
-	#  홈은 **그늘 쪽 한 변에만** 판다(2026-09-17 검토). 처음 안은 양쪽에 같이 파서
-	#  깃판이 잎 두 장을 겹친 전나무 · 상추로 읽혔다(벽 dl 26 · 2D 통). 깃털 그림의
-	#  관습은 한쪽 가장자리의 비스듬한 갈라짐 하나다 — 갈라진 깃가지(barb) 사이가
-	#  깃대 쪽으로 파고들고, 꽁지 쪽으로 천천히 다시 차오른다(날카로운 앞 · 느린 뒤).
+	#  가벼운 — 종이비행기 다트(2026-10-16 · 3D darts.py 와 같은 비율). 가장 가는 바늘 · 초록 쥠 테 ·
+	#  코(s 0.33)에서 꽁지까지 곧게 벌어지는 세모 날개. 날개는 구름(spin)을 탄다 — 한 장이 눕는다.
+	#  빛 쪽 날개 한 단 밝음 · 가운데 접힌 줄 · 코에 겹친 세모 깃은 match 가 얹는다.
 	"lgt": [
-		["steel", 2, false, [[0.0, 0.0], [0.32, 0.6]]],
-		["green", 2, false, [[0.32, 0.7], [0.50, 0.7]]],
-		["green", 3, true, [[0.50, 0.5], [0.70, 2.6], [0.76, 3.4], [0.775, 1.7, 2],
-				[0.90, 4.2], [0.95, 3.8], [0.98, 3.0], [1.0, 2.0]]],
+		["steel", 2, false, [[0.0, 0.0], [0.30, 0.6]]],
+		["green", 2, false, [[0.30, 0.8], [0.40, 0.8]]],
+		["green", 2, true, [[0.33, 0.3], [0.97, 4.4], [1.0, 4.4]]],
 	],
 	#  자석 — 각진 어깨의 빨간 막대자석 배럴 · 어두운 목. 말굽 U 는 match 가 얹는다.
 	"mag": [
@@ -39668,6 +39656,9 @@ func _icon_dart(c: Vector2, dl: float, id: String, dim := 0.0,
 	# 틈이 메워지면 「빨간 주걱」이 된다(lospec: 얇은 형태 사이는 선 대신 틈).
 	var mg: float = maxf(2.0 * k * fa, 1.0)            # 축 → 갈래 안쪽
 	var mo: float = mg + maxf(1.4 * k * fa, 1.0)       # 축 → 갈래 바깥쪽(= 다리 반폭)
+	#  쿠나이 고리의 반폭 · 구멍 반폭. 구멍은 작아도 1px — 메워지면 고리가 아니라 혹이다.
+	var ro: float = maxf(1.7 * k, 1.5)
+	var rh: float = maxf(0.6 * k, 0.5)
 
 	# ── 그림자 ─────────────────────────────────────────
 	# 내장 그림자는 고정 오프셋이라 낙하 중 하늘을 같이 난다.
@@ -39678,6 +39669,8 @@ func _icon_dart(c: Vector2, dl: float, id: String, dim := 0.0,
 		var uni := profs.duplicate()
 		if id == "mag":
 			uni.append([[0.66, mo], [0.73, mo]])
+		if id == "hvy":
+			uni.append([[0.90, ro], [0.99, ro]])
 		_dk_quads(so, ax, nrm, _dk_sym(_dk_union(uni)), shd)
 		if id == "mag":
 			for sd in [-1.0, 1.0]:
@@ -39722,20 +39715,45 @@ func _icon_dart(c: Vector2, dl: float, id: String, dim := 0.0,
 				_dk_quads(tip, ax, nrm, _dk_lat(0.62, 1.0, -hw, hw),
 						_dk_c("dusk", 1, dim, a))
 		"hvy":
-			# 링 홈 둘 — 배럴을 둘러 판 기계 홈. 둘 다 통 아가리(≈ s 0.47) 위라
-			# 부채 속에서 볼링핀 윗몸의 띠로 읽힌다. k ≥ 1.5 면 2px.
+			# 등날 — 날의 그늘 쪽 절반이 한 단 어둡다(마름모 단면 · 3D 와 같은 말). 크기와 상관없이 남긴다.
+			var blade: Array = profs[0]
+			var half := []
+			for r in blade:
+				var w: float = float(r[1])
+				half.append([float(r[0]), minf(0.0, -lit * w), maxf(0.0, -lit * w)])
+			_dk_quads(tip, ax, nrm, half, _dk_c("dusk", 1, dim, a))
+			# 감은 끈 — 자루를 가로지르는 한 단 어두운 줄. 1px 줄 · 2px 틈.
 			if lod >= 1:
-				var t: float = (1.0 if k >= 1.5 else 0.5) / (dl * 2.0)
-				for sg in [0.47, 0.56]:
-					var w0: float = _dk_w(profs[1], sg - t) + 0.05
-					var w1: float = _dk_w(profs[1], sg + t) + 0.05
-					_dk_quads(tip, ax, nrm, [[sg - t, -w0, w0], [sg + t, -w1, w1]],
-							_dk_c("night", 2, dim, a))
+				var t: float = 0.5 / (dl * 2.0)
+				var gw: float = _dk_w(profs[1], 0.78) + 0.05
+				var sg := 0.70 + 2.0 * t
+				while sg < 0.875:
+					_dk_quads(tip, ax, nrm, _dk_lat(sg, sg + t * 2.0, -gw, gw), _dk_c("night", 2, dim, a))
+					sg += t * 6.0
+			# 고리 — 네 변(아래 · 위 · 양옆)으로 가운데가 빈 고리. 빛 쪽 옆변은 한 단 밝다.
+			var rt: float = maxf(0.6 / (dl * 2.0), 0.015)
+			_dk_quads(tip, ax, nrm, _dk_lat(0.905, 0.905 + rt * 2.0, -ro, ro), _dk_c("dusk", 2, dim, a))
+			_dk_quads(tip, ax, nrm, _dk_lat(0.99 - rt * 2.0, 0.99, -ro, ro), _dk_c("dusk", 2, dim, a))
+			for sd in [-1.0, 1.0]:
+				_dk_quads(tip, ax, nrm, _dk_lat(0.905, 0.99, minf(rh * sd, ro * sd), maxf(rh * sd, ro * sd)),
+						_dk_c("dusk", 3 if (lod >= 1 and sd == lit) else 2, dim, a))
 		"lgt":
-			# 깃대 — 샤프트 자리를 밝은 깃대가 대신한다. 크기와 상관없이 남긴다
-			# (dl < 10 에서는 초록 쐐기 가운데의 밝은 줄 한 픽셀이 곧 깃이다).
-			_dk_quads(tip, ax, nrm, _dk_lat(0.50, 1.0, -0.5, 0.5),
-					_dk_c("cream", 3, dim, a))
+			# 빛 쪽 날개 한 장이 한 단 밝다(V 로 든 두 장이 다른 빛을 받는다 · 3D 와 같은 말).
+			var wing: Array = profs[2]
+			var lw := []
+			for r in wing:
+				var w: float = float(r[1])
+				lw.append([float(r[0]), minf(0.0, lit * w), maxf(0.0, lit * w)])
+			_dk_quads(tip, ax, nrm, lw, _dk_c("green", 3, dim, a))
+			# 코에 겹친 세모 깃 — 앞변 0.68 → 뿌리 0.87 의 접힌 줄 안쪽이 한 단 어둡다(양쪽).
+			if lod >= 1:
+				var xl: float = _dk_w(wing, 0.68) * 0.92
+				for sd in [-1.0, 1.0]:
+					var st2: int = 2 if sd == lit else 1
+					_dk_quads(tip, ax, nrm, [[0.335, 0.0, 0.0], [0.68, minf(0.0, xl * sd), maxf(0.0, xl * sd)],
+							[0.87, 0.0, 0.0]], _dk_c("green", st2, dim, a))
+			# 접힌 줄 — 날개 뿌리(용골)가 가운데 한 줄로 선다. 크기와 상관없이 남긴다.
+			_dk_quads(tip, ax, nrm, _dk_lat(0.40, 1.0, -0.5, 0.5), _dk_c("green", 1, dim, a))
 		"mag":
 			# 극면 띠 — 막대자석 앞 끝의 칠 안 한 쇠. 통에서는 잠기는 덤 표식이다.
 			if lod >= 1:
@@ -48093,7 +48111,7 @@ func _ttl3_dart(parent: Node, id: String) -> Node3D:
 	return n
 
 
-#  지는 자루 — 몸 전체를 옅게(GeometryInstance3D.transparency). 날개 축(mag_u) 밑까지 간다.
+#  지는 자루 — 몸 전체를 옅게(GeometryInstance3D.transparency). 낯 축(face) 밑까지 간다.
 func _ttl3_fade(n: Node, a: float) -> void:
 	for c in n.get_children():
 		if c is GeometryInstance3D:
@@ -52590,6 +52608,52 @@ const DART3_BD_LIGHT := Vector3(-38.0, -30.0, 0.0)
 var dart3_toon := {}    # 판 · 제목 무대 자루 칠 — 통의 무대 램프(_cup3_lamp)가 안 건드린다
 var dart3_mesh := {}    # 날개 판 · 인쇄 질감 · U 관. 모양마다 한 번만 짓는다
 
+#  Blender 자루 — 종류마다 「종류_번호」 메시(scripts/tools/blender/darts.py · 2026-10-16 「다트들의 외형을 새로
+#  디자인 할까? 무거운 다트는 쿠나이로」). 표준 경기용 다트 · 무거운 쿠나이 · 가벼운 종이비행기 · 자석 말굽.
+#  메시 하나 = 재질 하나 · 재질 이름이 칠이다(_dart3_dk). glb 가 없으면(가져오기 전) 아래 선반 자루로 짓는다.
+const DART3_GLB := "res://assets/models/darts.glb"
+var dart3_glb := {}     # 종류 → [[메시, 재질 이름] …] · 한 번만 읽는다
+
+
+func _dart3_glb_parts(id: String) -> Array:
+	if dart3_glb.is_empty():
+		dart3_glb["_"] = []
+		var ps: PackedScene = load(DART3_GLB) if ResourceLoader.exists(DART3_GLB) else null
+		if ps != null:
+			var sc := ps.instantiate()
+			var todo: Array = [sc]
+			while not todo.is_empty():
+				var nd: Node = todo.pop_back()
+				todo.append_array(nd.get_children())
+				var mi := nd as MeshInstance3D
+				if mi == null or mi.mesh == null:
+					continue
+				var sm: Material = mi.mesh.surface_get_material(0)
+				var kind := String(nd.name).get_slice("_", 0)
+				if not dart3_glb.has(kind):
+					dart3_glb[kind] = []
+				dart3_glb[kind].append([mi.mesh, sm.resource_name if sm != null else ""])
+			sc.free()
+	return dart3_glb.get(id, [])
+
+
+#  glb 재질 이름 「램프_단[_m]」 → 칠 표 [램프, 단, 쇠인가, 인쇄]. body 는 몸 램프 · 몸 단에 더하고, fin 은 날개
+#  단에 더한다. print 는 날개 단 + 인쇄(DART3_FORM 날개 줄 · band — Blender 날개 UV 가 그 줄의 몫이다).
+#  그 밖(steel · dusk · night · cream)은 그 램프 그 단 그대로. _m 이 쇠(광택 문턱)다.
+func _dart3_dk(nm: String, ramp: String, st: int, fb: int, fm: Dictionary) -> Array:
+	var q := nm.split("_")
+	var d := int(q[1]) if q.size() > 1 else 0
+	var metal: bool = q.size() > 2 and q[2] == "m"
+	match q[0]:
+		"body":
+			return [ramp, float(st + d), metal, null]
+		"fin":
+			return [ramp, float(fb + d), metal, null]
+		"print":
+			return [ramp, float(fb + d), metal,
+					_dart3_fin_tex(fm.get("fin", []), false, fm.get("band", Vector2.ZERO))]
+	return [q[0], float(d), metal, null]
+
 
 func _dart3_bd_light() -> Vector3:
 	return Basis.from_euler(DART3_BD_LIGHT * (PI / 180.0), EULER_ORDER_YXZ).z
@@ -52855,6 +52919,26 @@ func _dart3_meshes(b: Node3D, dl: float, _dr: float, _fin: float, col: Color,
 	#  한 색 덩어리로 뭉친다(옛 CUP_ROLE dk3 와 같은 이유).
 	var st := mini(int(rs[1]), 2)
 	var fm: Dictionary = DART3_FORM.get(id, DART3_FORM["std"])
+	#  날개 단. 크림만 배럴보다 한 단 아래다 — 흰 배럴과 흰 날개는 머리 큰 흰 막대 하나로 뭉친다.
+	#  색 날개(금 · 파랑 · 어스름 · 초록)는 배럴과 같은 단이다 — 배럴은 쇠 칠(빛 띠 없이 광택 한
+	#  줄)이라 같은 단이어도 갈린다. 한 단씩 깎았더니 금빛 다트통의 날개가 a8762a 흙빛이 되어
+	#  「남은 자루가 돈」인 금이 나무로 섰고, 깃(밝은 단 3)은 빛 띠가 갈 데가 없어 테 · 결이
+	#  지워졌다(찍어 봤다).
+	var fb := st - 1 if ramp == "cream" else st
+	#  Blender 자루. 납작한 표식(쿠나이 날 · 고리 · 비행기 날개 · 말굽)은 로컬 +Z 를 보므로 온 몸을 낯 축
+	#  (face) 밑에 단다 — 통은 u_yaw 로 · 판 · 나는 자루는 _dart3_face_u 가 눈 쪽으로 돌린다. 표준은 안 돌린다 —
+	#  돌리면 십자 날개 한 장이 눈을 보고 한 장이 접혀 판 위 「+」가 연 한 장으로 읽혔다(찍어 봤다).
+	var gp := _dart3_glb_parts(id)
+	if not gp.is_empty():
+		var par := b
+		if id != "std":
+			par = Node3D.new()
+			par.name = "face"
+			par.rotation = Vector3(0.0, u_yaw, 0.0)
+			b.add_child(par)
+		for p in gp:
+			_dart3_mi(par, p[0], _dart3_dk(String(p[1]), ramp, st, fb, fm)).scale = body
+		return
 	for p in fm.lathe:
 		var paint := String(p[0])
 		var pr := ramp
@@ -52868,18 +52952,12 @@ func _dart3_meshes(b: Node3D, dl: float, _dr: float, _fin: float, col: Color,
 	if fm.has("fin"):
 		var half: bool = fm.get("half", false)
 		var band: Vector2 = fm.get("band", Vector2.ZERO)
-		#  날개 단. 크림만 배럴보다 한 단 아래다 — 흰 배럴과 흰 날개는 머리 큰 흰 막대 하나로 뭉친다.
-		#  색 날개(금 · 파랑 · 어스름 · 초록)는 배럴과 같은 단이다 — 배럴은 쇠 칠(빛 띠 없이 광택 한
-		#  줄)이라 같은 단이어도 갈린다. 한 단씩 깎았더니 금빛 다트통의 날개가 a8762a 흙빛이 되어
-		#  「남은 자루가 돈」인 금이 나무로 섰고, 깃(밝은 단 3)은 빛 띠가 갈 데가 없어 테 · 결이
-		#  지워졌다(찍어 봤다).
-		var fb := float(st - 1 if ramp == "cream" else st)
 		var smooth: Array = (fm.fin as Array).filter(func(r): return (r as Array).size() < 3)
 		var n: int = fm.n
 		for q in n:
 			var rows: Array = fm.fin if q == 0 else smooth
 			var mi := _dart3_mi(b, _dart3_fin_mesh(rows, half),
-					[ramp, fb, false, _dart3_fin_tex(rows, half, band, int(fm.get("barb", 0)))])
+					[ramp, float(fb), false, _dart3_fin_tex(rows, half, band, int(fm.get("barb", 0)))])
 			mi.rotation = Vector3(0.0, (TAU if half else PI) * float(q) / float(n), 0.0)
 			mi.scale = body
 	_dart3_parts(b, body, ramp, st, id, u_yaw)
@@ -52896,7 +52974,7 @@ func _dart3_parts(b: Node3D, body: Vector3, ramp: String, st: int, id: String,
 	if id != "mag":
 		return
 	var u := Node3D.new()
-	u.name = "mag_u"               # _dart3_face_u 가 이 이름으로 찾는다
+	u.name = "face"                # _dart3_face_u 가 이 이름으로 찾는다
 	u.rotation = Vector3(0.0, u_yaw, 0.0)
 	b.add_child(u)
 	var r: float = DART3_U.rad
@@ -52926,9 +53004,10 @@ func _dart3_parts(b: Node3D, body: Vector3, ramp: String, st: int, id: String,
 # 겹쳐 빨간 막대 끝의 흰 점 하나가 됐다 — 판의 절반에서 자석이 자석으로 안 읽혔다.
 # 눈까지의 벡터를 자루 로컬로 옮겨 그 수평 성분 쪽으로 U 의 면(로컬 +Z)을 돌린다.
 # 자세가 바뀔 때마다 부른다(_bd3_sync · _bd3_fly). 통의 자루는 물리가 굴리므로
-# 스폰 때의 u_yaw(PI/2)를 그대로 둔다.
+# 스폰 때의 u_yaw(PI/2)를 그대로 둔다. Blender 자루는 온 몸이 이 낯 축(face) 밑이라
+# 쿠나이 날 · 고리와 종이비행기 날개도 같이 돈다(2026-10-16).
 func _dart3_face_u(n: Node3D, eye: Vector3) -> void:
-	var u := n.get_node_or_null("mag_u") as Node3D
+	var u := n.get_node_or_null("face") as Node3D
 	if u == null:
 		return
 	var v: Vector3 = n.transform.basis.inverse() * (eye - n.transform.origin)
