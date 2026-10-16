@@ -979,11 +979,11 @@ static func _rows(g: Node) -> Array:
 				{"n1": "불씨 피우기", "t": "act", "a": "ember"},
 				#  「주문 걸기」 — 지금 판에 무작위 주문(영역 · 눈금 · 보상)을 곧장 건다. 게임의
 				#  _order_region · _order_tag_pick · _order_open 을 그대로 부른다(2026-10-06).
-				{"n1": "주문 걸기", "t": "act", "a": "order"},
+				{"n1": "미션 걸기", "t": "act", "a": "order"},
 				#  「단골 던지기」 — 지금 판의 마지막으로 점수 낸 칸 · 띠(없으면 무작위 칸 · 띠)에 단골
 				#  자루를 곧장 날려 꽂는다. 게임의 _rgl_at · _rgl_open · _rgl_in 을 그대로 부른다 —
 				#  막힘 · 가로채기 · 뽑아 가기는 게임과 같이 던져서 본다(2026-10-06).
-				{"n1": "단골 던지기", "t": "act", "a": "regular"},
+				{"n1": "라이벌 던지기", "t": "act", "a": "regular"},
 				#  「레전더리 잭팟」(2026-10-07) — 리롤 2000 번에 한 번이라 줄이 없으면 구운 다음 날
 				#  아무도 못 본다(「레전더리 등장」 줄과 같은 이유). 상점에서 쓸기를 다시 열고 그
 				#  딜링에 잭팟 자격만 세운다 — 칸을 바꾸는 것은 게임의 _jp_place 그대로다. 열여덟 줄.
@@ -2826,9 +2826,9 @@ static func _run(g: Node, e: Dictionary) -> void:
 					olo + randi() % (ohi - olo + 1), g._order_tag_pick(randf()),
 					randi() & 0x3fffffff)
 			if g.order_st != "open":
-				_say("걸 주문이 없다")
+				_say("걸 미션이 없다")
 				return
-			_say("주문 %s · 눈금 %d · %s" % [g.order_cond, g.order_n,
+			_say("미션 %s · 눈금 %d · %s" % [g.order_cond, g.order_n,
 					String(g.order_tag.get("name", ""))])
 			return
 		"regular":
@@ -2842,7 +2842,7 @@ static func _run(g: Node, e: Dictionary) -> void:
 				tg = g._rgl_at(g._ember_at(randi() % g._sec_n(), g._ember_band_pick(randf())))
 			g._rgl_open(tg, randi() & 0x3fffffff)
 			g._rgl_in(g.beat * float(g.REGULAR.in_b) * float(g.REGULAR.in_k))
-			_say("단골 %s · 값 %d" % ["불" if g.rgl_idx < 0 else str(int(g.sectors[g.rgl_idx])),
+			_say("라이벌 %s · 값 %d" % ["불" if g.rgl_idx < 0 else str(int(g.sectors[g.rgl_idx])),
 					g.rgl_val])
 			return
 		"run_drop":

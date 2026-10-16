@@ -848,12 +848,12 @@ func _run() -> void:
 	for pg in Dev.PAGES.size():
 		Dev.page = pg
 		for rw in Dev._rows(g):
-			if String((rw as Dictionary).get("n1", "")) == "단골 던지기":
+			if String((rw as Dictionary).get("n1", "")) == "라이벌 던지기":
 				drow = rw
 				rows_n = Dev._rows(g).size()
 			if String((rw as Dictionary).get("n1", "")) == "불씨 피우기":
 				erow = rw
-	_ok("「단골 던지기」 줄이 있다", not drow.is_empty())
+	_ok("「라이벌 던지기」 줄이 있다", not drow.is_empty())
 	_ok("그 쪽이 열아홉 줄 안이다", rows_n <= 19 and rows_n > 0, "%d줄" % rows_n)
 	_fresh()
 	_plain()

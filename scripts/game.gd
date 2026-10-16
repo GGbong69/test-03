@@ -3781,8 +3781,17 @@ const ORDER := {
 	"regions": [["double", 1.0], ["triple", 1.0], ["bull", 1.0], ["col:1", 1.0],
 			["col:0", 1.0], ["sec", 1.0], ["left", 1.0], ["right", 1.0], ["small", 1.0]],
 	"kinds": ["gold", "track", "candy", "photo", "item"],
-	"box": Rect2(100.0, 238.0, 56.0, 34.0), "frame": 3.0,
-	"ico": 7.0, "tick": Vector2(2.0, 14.0), "tick_dx": 6.0,
+	#  칠판(2026-10-16 「미션 UI 를 크게」) — 판 왼쪽 벽의 빈 칸 하나를 다 쓴다: 왼쪽은 자루 걸이(뽑힌
+	#  자루 끝 x 88) · 오른쪽은 조준 가로선(x 169) · 위는 왼쪽 점수 카드(밑 y 178)가 막는다(qa_order ⑬).
+	#  윗줄부터 이름 · 작은 판(영역) · 조건 · 남은 발 · 보상. y 는 칠판 윗변에서 잰 바닥선(작은 판은 한가운데).
+	"box": Rect2(92.0, 184.0, 71.0, 164.0), "frame": 3.0,
+	"ico": 9.0, "tick": Vector2(2.0, 10.0), "tick_dx": 6.0,
+	"lay": {"head": 15.0, "rule1": 20.0, "mini": 39.0, "mini_r": 16.0, "cond": 68.0, "line": 12.0,
+			"left": 95.0, "rule2": 101.0, "ico": 115.0, "rew": 136.0, "rew_line": 11.0},
+	"sz": {"head": 14, "cond": 11, "left": 9, "rew": 10},
+	#  쓰는 차례(초) — 이름 · 작은 판 · 조건(글자마다 cond_ch) · 눈금 · 보상(글자마다 rew_ch)
+	"ink": {"head": 0.0, "mini": 0.10, "cond": 0.24, "cond_ch": 0.03, "left": 0.50, "rew": 0.62,
+			"rew_ch": 0.025, "fade": 0.08},
 	"lit_a": 0.22, "dim_a": 0.32, "dk_lit": 0.55, "dk_dim": 0.70,
 	"rim_a": 0.90, "rim_dk": 0.55,
 	"breathe": 0.35, "breathe_hz": 0.55,
@@ -3989,9 +3998,8 @@ func _order_grant() -> void:
 
 #  보상 팝 자리 — 칠판 테 윗변 바로 위 한가운데(_tag_at 이 둘째 팝부터 14 씩 올린다).
 func _order_pop_at() -> Vector2:
-	var box: Rect2 = ORDER.box
-	return Vector2(box.get_center().x,
-			box.position.y - float(ORDER.frame) - float(ORDER.pop_dy))
+	var at := _order_ico_at()
+	return Vector2(at.x, at.y - float(ORDER.ico) - float(ORDER.pop_dy))
 
 
 #  영역 조각 — [영역 조각, 판 안의 나머지 조각]. 조각 하나는 [안, 밖, 각0, 각1](px · 라디안,
@@ -4222,56 +4230,110 @@ func _order_board_draw() -> void:
 	_order_chalk(box, DOORT.chalk_ink)
 
 
-#  칠판 위 — 보상 그림 · 눈금(남은 발) · 동그라미 / X · 지우개.
+#  칠판 위 — 이름 · 작은 판(영역) · 조건 · 남은 발(눈금) · 보상 그림과 글 · 동그라미 / X · 지우개.
+#  2026-10-16 「미션이랑 라이벌 … 게임에서 설명을 해줘야 할거 같거든? … 미션은 UI를 크게 개선」 →
+#  「칠판으로 하는데 다트판이랑 겹쳐지는거 주의해줘 디테일을 신경 써야지」. 옛 칠판은 글자 0자(보상
+#  그림 · 눈금뿐)라 무엇을 하라는 것인지가 안 읽혔다 — 오른쪽 위 명판과 같은 말(조건 cond_text ·
+#  보상 _tag_text)을 분필로 쓴다. 작은 판은 판 위에 밝힌 그 조각(order_in)을 줄여 칠한다.
+#  열면 위에서부터 한 줄씩 분필로 쓰인다(ORDER.ink) — 모션 끄기면 다 쓴 채로 선다.
 func _order_chalk(box: Rect2, ink: Color) -> void:
 	var er := _order_erase_k()
 	var ca := 1.0 - er if order_st == "done" or order_st == "miss" else 1.0
 	#  쓰는 시계 — 쓰는 중(open · won)만 흐르고, 모션 끄기면 다 쓴 채로 선다.
 	var wt := order_t if (order_st == "open" or order_st == "won") and not motion_off else 99.0
-	var ic := Vector2(box.position.x + 14.0, box.get_center().y)
-	var tk: Vector2 = ORDER.tick
-	var dx := float(ORDER.tick_dx)
-	var x0 := box.position.x + 30.0
-	var ty := roundf(box.get_center().y - tk.y * 0.5)
+	var ly: Dictionary = ORDER.lay
+	var sz: Dictionary = ORDER.sz
+	var ik: Dictionary = ORDER.ink
+	var x0 := box.position.x
+	var y0 := box.position.y
+	var cx := box.get_center().x
+	var iw := box.size.x - 8.0
+	var slate: Color = DOORT.chalk
+	var ic := _order_ico_at()
+	var mc := Vector2(cx, y0 + float(ly.mini))
 	#  지운 칠판에 남는 가루 — 지운 몫만큼 짙어진다
 	if er > 0.0:
-		draw_rect(Rect2(box.position.x + 3.0, box.position.y + 7.0, box.size.x - 6.0,
-				box.size.y - 14.0), Color(ink, 0.05 * er))
+		draw_rect(Rect2(x0 + 3.0, y0 + 7.0, box.size.x - 6.0, box.size.y - 14.0), Color(ink, 0.05 * er))
 		#  지우개 — 가루 띠 하나가 왼쪽에서 오른쪽으로 지나간다
 		if er < 1.0 and not motion_off:
-			var ex := roundf(lerpf(box.position.x - 6.0, box.end.x - 4.0, er))
-			var ex0 := maxf(ex, box.position.x)
+			var ex := roundf(lerpf(x0 - 6.0, box.end.x - 4.0, er))
+			var ex0 := maxf(ex, x0)
 			var ex1 := minf(ex + 10.0, box.end.x)
 			if ex1 > ex0:
-				draw_rect(Rect2(ex0, box.position.y + 2.0, ex1 - ex0, box.size.y - 4.0),
-						Color(ink, 0.12 * sin(er * PI)))
+				draw_rect(Rect2(ex0, y0 + 2.0, ex1 - ex0, box.size.y - 4.0), Color(ink, 0.12 * sin(er * PI)))
 	if ca <= 0.0:
 		return
-	#  보상 그림 — 뱃지 그림 그대로(갈래 · 등급색). 쓰는 첫 0.18초에 선다.
-	var ia := ca * clampf(wt / 0.18, 0.0, 1.0)
-	if ia > 0.0:
-		_icon_tag(ic, float(ORDER.ico), String(order_tag.get("kind", "")), ia,
-				String(order_tag.get("rarity", "")))
-	#  눈금 — 오른쪽 것부터 지운다. 다섯째는 넷을 가로지르는 빗금이다. 한 획씩 그어진다.
+	var fd: float = float(ik.fade)
+	#  이름 — 표의 이름(events.csv · 「미션」) · 판 이름처럼 금빛 분필
+	var ha := ca * clampf((wt - float(ik.head)) / fd, 0.0, 1.0)
+	if ha > 0.0:
+		var hn := _L(String(GameData.event_of("order").get("name", "")))
+		_order_line(hn, cx, y0 + float(ly.head), int(sz.head), Color(C_ACC, 0.95 * ha), slate, 4501, true)
+		_chalk_rule(self, x0 + 6.0, y0 + float(ly.rule1), box.size.x - 12.0, ha)
+	#  작은 판 — 판 위에 밝힌 그 조각
+	var ma := ca * clampf((wt - float(ik.mini)) / (fd * 2.0), 0.0, 1.0)
+	if ma > 0.0:
+		_order_mini(mc, float(ly.mini_r), ink, ma)
+	#  조건 — 한 자씩(줄을 넘어 이어 쓴다)
+	#  두 줄에 안 들면(긴 번역) 한 단씩 줄인다(_wrap_fit).
+	var cf := _wrap_fit(GameData.cond_text(order_cond), iw, [int(sz.cond), int(sz.cond) - 1, int(sz.cond) - 2], 2)
+	var lines: PackedStringArray = cf[0]
+	var csz: int = cf[1]
+	var shown := int(floorf((wt - float(ik.cond)) / float(ik.cond_ch)))
+	for li in lines.size():
+		if shown <= 0:
+			break
+		var t: String = lines[li]
+		_order_line(t.substr(0, mini(shown, t.length())), cx, y0 + float(ly.cond) + float(ly.line) * float(li),
+				csz, Color(ink, 0.94 * ca), slate, 4503 + li, false, _tw_at(t, csz))
+		shown -= t.length()
+	#  남은 발 — 「남은 발」 + 눈금. 오른쪽 것부터 지운다. 다섯째는 넷을 가로지르는 빗금이다.
+	var la := ca * clampf((wt - float(ik.left)) / fd, 0.0, 1.0)
+	var tk: Vector2 = ORDER.tick
+	var dx := float(ORDER.tick_dx)
+	var ty := roundf(y0 + float(ly.left) - tk.y)
+	var tw_all := dx * float(mini(order_n, 4) - 1) + tk.x
+	var lab := _L("남은 발")
+	var lw := _tw_at(lab, int(sz.left))
+	var tx0 := roundf(cx + (lw + 6.0 - tw_all) * 0.5)
+	if la > 0.0:
+		draw_string(_fz(font_sm, int(sz.left)), Vector2(roundf(cx - (lw + 6.0 + tw_all) * 0.5), y0 + float(ly.left)),
+				lab, HORIZONTAL_ALIGNMENT_LEFT, -1, int(sz.left), Color(ink, 0.62 * la))
 	for i in order_n:
-		var x := x0 + dx * float(mini(i, 3))
+		var x := tx0 + dx * float(mini(i, 3))
 		if i >= order_left:
 			#  지운 자국 — 옅은 가루 한 줄. 막 지운 것은 획이 식으며 가루가 번진다.
-			var rk := clampf(order_rub / float(ORDER.rub_t), 0.0, 1.0) \
-					if i == order_left else 1.0
+			var rk := clampf(order_rub / float(ORDER.rub_t), 0.0, 1.0) if i == order_left else 1.0
 			if i < 4:
-				draw_rect(Rect2(x - 1.0, ty + 2.0, tk.x + 2.0, tk.y - 4.0),
-						Color(ink, 0.06 * rk * ca))
+				draw_rect(Rect2(x - 1.0, ty + 2.0, tk.x + 2.0, tk.y - 4.0), Color(ink, 0.06 * rk * ca))
 			if rk < 1.0:
-				_order_tick(i, x0, ty, 1.0, Color(ink, 0.92 * ca * (1.0 - rk)))
+				_order_tick(i, tx0, ty, 1.0, Color(ink, 0.92 * ca * (1.0 - rk)))
 			continue
-		var gk := clampf((wt - 0.16 - 0.07 * float(i)) / 0.06, 0.0, 1.0)
+		var gk := clampf((wt - float(ik.left) - 0.07 * float(i)) / 0.06, 0.0, 1.0)
 		if gk > 0.0:
-			_order_tick(i, x0, ty, gk, Color(ink, 0.92 * ca))
-	#  동그라미(채웠다) · X(눈금이 다 했다) — 보상 그림 위에 긋는다.
+			_order_tick(i, tx0, ty, gk, Color(ink, 0.92 * ca))
+	#  보상 — 뱃지 그림(갈래 · 등급색) 그대로 · 그 밑에 명판과 같은 말(_tag_text)
+	var ra := ca * clampf((wt - float(ik.rew)) / fd, 0.0, 1.0)
+	if ra > 0.0:
+		_chalk_rule(self, x0 + 6.0, y0 + float(ly.rule2), box.size.x - 12.0, ra)
+		_icon_tag(ic, float(ORDER.ico), String(order_tag.get("kind", "")), ra,
+				String(order_tag.get("rarity", "")))
+	#  두 줄에 안 들면 한 단 줄이고, 그래도 넘치면 세 줄까지(칠판 밑이 그만큼 남는다).
+	var rf := _wrap_fit(_tag_text(order_tag), iw, [int(sz.rew), int(sz.rew) - 1], 2, true)
+	var rl: PackedStringArray = rf[0]
+	var rsz: int = rf[1]
+	var rs := int(floorf((wt - float(ik.rew)) / float(ik.rew_ch)))
+	for li in rl.size():
+		if rs <= 0:
+			break
+		var t2: String = rl[li]
+		_order_line(t2.substr(0, mini(rs, t2.length())), cx, y0 + float(ly.rew) + float(ly.rew_line) * float(li),
+				rsz, Color(C_ACC, 0.92 * ca), slate, 4511 + li, false, _tw_at(t2, rsz))
+		rs -= t2.length()
+	#  동그라미(채웠다) — 보상 그림 둘레 · X(눈금이 다 했다) — 작은 판 위.
 	if order_st == "done" or order_st == "miss":
 		var mk := 1.0 if motion_off else clampf(order_t / float(ORDER.mark_t), 0.0, 1.0)
-		var mc := Color(ink, 0.95 * ca)
+		var mcol := Color(ink, 0.95 * ca)
 		if order_st == "done":
 			var rx := float(ORDER.ico) + 5.0
 			var ry := float(ORDER.ico) + 4.0
@@ -4282,17 +4344,97 @@ func _order_chalk(box: Rect2, ink: Color) -> void:
 				var a := -2.4 + sweep * float(k) / float(seg)
 				pts.append(ic + Vector2(cos(a) * rx, sin(a) * ry))
 			if pts.size() >= 2:
-				draw_polyline(pts, mc, 2.0)
+				draw_polyline(pts, mcol, 2.0)
 		else:
-			var d := float(ORDER.ico) + 3.0
+			var d := float(ly.mini_r) + 3.0
 			var k1 := clampf(mk * 2.0, 0.0, 1.0)
 			var k2 := clampf(mk * 2.0 - 1.0, 0.0, 1.0)
 			if k1 > 0.0:
-				draw_line(ic + Vector2(-d, -d), ic + Vector2(-d, -d).lerp(Vector2(d, d), k1),
-						mc, 2.0)
+				draw_line(mc + Vector2(-d, -d), mc + Vector2(-d, -d).lerp(Vector2(d, d), k1), mcol, 2.0)
 			if k2 > 0.0:
-				draw_line(ic + Vector2(d, -d), ic + Vector2(d, -d).lerp(Vector2(-d, d), k2),
-						mc, 2.0)
+				draw_line(mc + Vector2(d, -d), mc + Vector2(d, -d).lerp(Vector2(-d, d), k2), mcol, 2.0)
+
+
+#  폭 w 에 max_n 줄 안으로 들 때까지 크기(sizes 차례)를 줄여 접는다 — [줄들, 쓴 크기]. 끝까지 안 들면
+#  가장 작은 크기로 접은 것(줄이 max_n 을 넘는다). back 이면 뒤에서 접는다(_wrap_back).
+func _wrap_fit(tx: String, w: float, sizes: Array, max_n: int, back := false) -> Array:
+	var lines := PackedStringArray()
+	var used := int(sizes[0])
+	for z in sizes:
+		used = int(z)
+		lines = _wrap_back(tx, w, used) if back else _tutor_wrap(tx, w, used)
+		if lines.size() <= max_n:
+			break
+	return [lines, used]
+
+
+#  뒤에서부터 접는다 — 값이 붙은 끝말을 한 줄로 지킨다(「무작위 / 트랙 강화 +1」 · 앞에서 접으면
+#  「무작위 트랙 / 강화 +1」). 한 낱말이 폭을 넘으면(띄어쓰기 없는 일본어) 앞에서 접는 _tutor_wrap 으로.
+func _wrap_back(tx: String, w: float, sz: int) -> PackedStringArray:
+	var words := tx.split(" ", false)
+	var out := PackedStringArray()
+	var cur := ""
+	for i in range(words.size() - 1, -1, -1):
+		var t: String = words[i] if cur == "" else words[i] + " " + cur
+		if _tw_at(t, sz) > w and cur != "":
+			out.insert(0, cur)
+			cur = words[i]
+		else:
+			cur = t
+	if cur != "":
+		out.insert(0, cur)
+	for ln in out:
+		if _tw_at(ln, sz) > w:
+			return _tutor_wrap(tx, w, sz)
+	return out
+
+
+#  칠판 글 한 줄 — cx 가운데 · by 바닥선. 분필 결(_chalk_grit · 씨 sd 고정)이 획 위에 성기게 난다.
+#  full_w 를 주면 그 폭으로 가운데를 잡는다 — 한 자씩 쓰는 동안 글이 옆으로 안 밀린다.
+func _order_line(t: String, cx: float, by: float, sz: int, col: Color, slate: Color, sd: int,
+		bold := false, full_w := -1.0) -> void:
+	if t == "" or col.a <= 0.0:
+		return
+	var f: Font = font if bold else font_sm
+	var w: float = full_w if full_w >= 0.0 else (f.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x
+			if f != null else float(t.length()) * float(sz))
+	var x := roundf(cx - w * 0.5)
+	draw_string(_fz(f, sz), Vector2(x, by), t, HORIZONTAL_ALIGNMENT_LEFT, -1, sz, col)
+	var tw := f.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x if f != null else w
+	var ih := float(sz) * 0.72
+	_chalk_grit(self, Rect2(x, by - ih, tw, ih), slate, col.a, sd, 34.0)
+
+
+#  작은 판 — 판 위 영역 조각(order_in)을 rm 반지름으로 줄여 금빛 분필로 칠하고, 띠 고리 · 칸 금을
+#  옅은 분필로 긋는다. 판의 테(더블 띠 밖)가 rm 이다. 조각은 판의 규약 그대로 [안, 밖, 각0, 각1].
+func _order_mini(c: Vector2, rm: float, ink: Color, a: float) -> void:
+	var k: float = rm / maxf(R * rt_dbl_out, 1.0)
+	var fill := Color(C_ACC, 0.82 * a)
+	for pc in order_in:
+		var ri := float(pc[0]) * k
+		var ro := float(pc[1]) * k
+		var a0 := float(pc[2])
+		var a1 := float(pc[3])
+		var n := maxi(2, int(ceilf((a1 - a0) / 0.14)))
+		var pts := PackedVector2Array()
+		for q in n + 1:
+			var aa := lerpf(a0, a1, float(q) / float(n))
+			pts.append(c + Vector2(sin(aa), -cos(aa)) * ro)
+		if ri < 0.5:
+			pts.append(c)
+		else:
+			for q in range(n, -1, -1):
+				var ab := lerpf(a0, a1, float(q) / float(n))
+				pts.append(c + Vector2(sin(ab), -cos(ab)) * ri)
+		draw_colored_polygon(pts, fill)
+	var sw := _sec_w()
+	for i in _sec_n():
+		var sa := float(i) * sw - sw * 0.5
+		var dv := Vector2(sin(sa), -cos(sa))
+		draw_line(c + dv * R * rt_bull_o * k, c + dv * rm, Color(ink, 0.20 * a), 1.0)
+	for rr in [rt_dbl_out, rt_dbl_in, rt_trp_out, rt_trp_in, rt_bull_o]:
+		if float(rr) > 0.0:
+			draw_arc(c, R * float(rr) * k, 0.0, TAU, 32, Color(ink, (0.62 if rr == rt_dbl_out else 0.36) * a), 1.0)
 
 
 #  눈금 한 획. 넷은 세로 획(2px 마디마다 결이 다르다 — 분필이 고르게 안 묻는다), 다섯째는
@@ -4351,7 +4493,7 @@ func _order_fly_hides(k: String, i: int) -> bool:
 #  칠판 그림의 한가운데 — _order_chalk 의 ic 와 같은 식이다.
 func _order_ico_at() -> Vector2:
 	var box: Rect2 = ORDER.box
-	return Vector2(box.position.x + 14.0, box.get_center().y)
+	return Vector2(box.get_center().x, box.position.y + float(ORDER.lay.ico))
 
 
 #  앉을 칸의 한가운데와 그림 반지름 — 그리는 쪽(_cons_draw · _panel_slot)의 식 그대로다.
@@ -34633,10 +34775,13 @@ func _shop_hit(m: Vector2) -> int:
 	#  누른 직후 물건이 화면에서 4px 더 올라가 있는 동안에도 같은 자리를
 	#  다시 누를 수 있어야 **툭툭** 이 된다. 넓히면 판정이 헐거워질 뿐
 	#  빡빡해지지 않으므로 못 누르게 되는 경우가 안 생긴다.
-	var lz: float = _lift_top() * TBL.tall
+	#  뜬 매물(buy_sel)만 꼭대기(_lift_top)까지 덮는다 — 모두 덮었더니 덮개가 위 매물까지 닿아 그 매물을
+	#  누르면 밑의 뜬 매물이 가로챘다(click_probe · 2026-10-16). 뜬 것은 지금 그려진 높이도 잰다.
+	var lz0: float = (float(DROP.lift_hov) + float(DROP.knock_h)) * TBL.tall
 	var z := _z_order()
 	for k in range(z.size() - 1, -1, -1):
 		var i: int = z[k]
+		var lz: float = _lift_top() * TBL.tall if i == buy_sel else lz0
 		#  부술 팩 물건(doom)도 못 집는다 — 값이 닫혔고 주먹이 그리로 온다.
 		if drop[i].sold > 0.0 or drop[i].has("doom"):
 			continue
@@ -34648,6 +34793,8 @@ func _shop_hit(m: Vector2) -> int:
 			continue
 		# 순수 수직 평행이동의 스윕이라 두 점 OR 이 정확한 덮개다 (근사가 아니다)
 		if _obj_shape(i, m) or _obj_shape(i, m + Vector2(0.0, lz)):
+			return i
+		if i == buy_sel and _obj_shape(i, m + Vector2(0.0, maxf(float(drop[i].lift), 0.0) * TBL.tall)):
 			return i
 	return -1
 
@@ -58829,7 +58976,8 @@ func _tutor_skip_rect() -> Rect2:
 
 #  폭에 맞춰 접는다. 낱말 사이에서만 자른다 — 한글도 띄어쓰기가 있으므로
 #  글자 단위로 자르면 어절이 두 줄로 찢어진다.
-func _tutor_wrap(tx: String, w: float) -> PackedStringArray:
+func _tutor_wrap(tx: String, w: float, sz := 20) -> PackedStringArray:
+	var tw := func(t: String) -> float: return _tw_at(t, sz)
 	var out := PackedStringArray()
 	var cur := ""
 	for word in tx.split(" ", false):
@@ -58838,33 +58986,38 @@ func _tutor_wrap(tx: String, w: float) -> PackedStringArray:
 		#  넉넉히 잡는다(페이퍼로지 SemiBold 20 의 한글은 18px 안팎) — 재는 자리가
 		#  없다고 검사가 **조용히 통과해 버리는** 것을 막는 쪽이 낫다.
 		#  재는 글꼴 · 크기는 그리는 것(_tutor_draw 의 20)과 같아야 한다.
-		if _tutor_tw(try_s) > w and cur != "":
+		if tw.call(try_s) > w and cur != "":
 			out.append(cur)
 			cur = word
 		else:
 			cur = try_s
 		#  띄어쓰기 없는 말(일본어 · 2026-10-13)은 한 낱말이 폭을 넘는다 — 그때만 글자 사이에서 끊는다
 		#  (_jp_first). 끊은 자리는 빈칸을 안 먹는다(_wrap_gap).
-		while cur.length() > 1 and _tutor_tw(cur) > w:
-			var k := _jp_first(cur, w, _tutor_tw)
+		while cur.length() > 1 and tw.call(cur) > w:
+			var k := _jp_first(cur, w, tw)
 			out.append(cur.substr(0, k))
 			cur = cur.substr(k)
 	if cur != "":
 		out.append(cur)
 	#  끝줄이 짧게 홀로 남으면 두 줄을 고르게(영어 「… items you / have」 · 일본어 「…獲得しま / す」).
 	var n := out.size()
-	if n >= 2 and _tutor_tw(out[n - 1]) < w * float(JPW.widow):
+	if n >= 2 and tw.call(out[n - 1]) < w * float(JPW.widow):
 		var ev := _wrap_even(out[n - 2], " " if _wrap_gap(tx, out, n - 2) == 1 else "", out[n - 1], w,
-				_tutor_tw)
+				tw)
 		out[n - 2] = ev[0]
 		out[n - 1] = ev[1]
 	return out
 
 
 func _tutor_tw(s: String) -> float:
+	return _tw_at(s, 20)
+
+
+#  곁말 글꼴 sz 로 잰 폭 — 글꼴이 없는 판(헤드리스)은 글자 수 × sz 로 넉넉히.
+func _tw_at(s: String, sz: int) -> float:
 	if font_sm == null:
-		return float(s.length()) * 20.0
-	return font_sm.get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
+		return float(s.length()) * float(sz)
+	return font_sm.get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x
 
 
 # ── 글자 사이에서 끊기(일본어 · 2026-10-13) ───────────────────────

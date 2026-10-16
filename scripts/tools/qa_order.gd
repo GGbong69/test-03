@@ -20,8 +20,9 @@ extends SceneTree
 #     ⑬ 칠판 자리 — 판 · HUD · 동전 · 사탕 칸 · 카드 두 자리 · 자루 걸이 · 조준 가로선 ·
 #        안내 줄 · 목표 달성과 안 겹친다 · 판 갈이 · 판 밖 화면에서는 안 선다
 #     ⑭ 되살리기(판 매듭)가 같은 주문을 다시 낸다
-#     ⑮ 개발자 판 「주문 걸기」 — 열아홉 줄 안 · 게임 함수 · 한 판에 사건 하나
-#     ⑯ 그림 — 글자 0 · 새 색 0 · 난수 0 · 모션 끄기면 숨을 안 쉰다 · 테두리 그늘은 영역 밖에만 ·
+#     ⑮ 개발자 판 「미션 걸기」 — 열아홉 줄 안 · 게임 함수 · 한 판에 사건 하나
+#     ⑯ 그림 — 칠판 글은 명판과 같은 말(조건 · 보상) · 팝 0 · 새 색 0 · 난수 0 · 모션 끄기면 숨을 안 쉰다 ·
+#        테두리 그늘은 영역 밖에만 ·
 #        아홉 영역 다 영역이 나머지보다 밝다(헤드리스 대용 셈 — 그린 조각 · 판 색 · 판 빛 · 숨 바닥)
 #
 #   godot --headless --path . --script scripts/tools/qa_order.gd
@@ -1013,12 +1014,12 @@ func _run() -> void:
 	for pg in Dev.PAGES.size():
 		Dev.page = pg
 		for rw in Dev._rows(g):
-			if String((rw as Dictionary).get("n1", "")) == "주문 걸기":
+			if String((rw as Dictionary).get("n1", "")) == "미션 걸기":
 				row = rw
 				rows_n = Dev._rows(g).size()
 			if String((rw as Dictionary).get("n1", "")) == "불씨 피우기":
 				erow = rw
-	_ok("「주문 걸기」 줄이 있다", not row.is_empty())
+	_ok("「미션 걸기」 줄이 있다", not row.is_empty())
 	_ok("그 쪽이 열아홉 줄 안이다", rows_n <= 19 and rows_n > 0, "%d줄" % rows_n)
 	_fresh()
 	_plain()
@@ -1249,8 +1250,40 @@ func _run() -> void:
 	var i0: int = src.find("func _order_lit_e")
 	var i1: int = src.find("func _to_pick", i0)
 	var body: String = src.substr(i0, i1 - i0)
-	_ok("그리는 자가 글을 한 자도 안 띄운다", i0 > 0 and i1 > i0
-			and body.find("draw_string") < 0 and body.find("pop(") < 0)
+	#  2026-10-16 「미션 UI 를 크게」 — 칠판이 글을 쓴다. 말은 명판과 같은 두 자리(cond_text · _tag_text)
+	#  에서만 온다(칠판과 명판이 다른 말을 하면 안 된다). 팝은 여전히 안 띄운다.
+	_ok("칠판 글은 명판과 같은 말(조건 · 보상)이다 · 팝을 안 띄운다", i0 > 0 and i1 > i0
+			and body.find("GameData.cond_text(order_cond)") > 0 and body.find("_tag_text(order_tag)") > 0
+			and body.find("pop(") < 0)
+	#  칠판 글이 칠판 폭 안 · 줄 수 안이다 — 말 셋 × 영역 아홉(칸 하나는 가장 긴 수) × 보상 줄 전부
+	var iw: float = (g.ORDER.box as Rect2).size.x - 8.0
+	var fit_bad := []
+	var lang0: String = GameData.lang
+	for lg in ["ko", "en", "ja"]:
+		GameData.set_lang(lg)
+		var csz: int = int(g.ORDER.sz.cond)
+		for c in ["double", "triple", "bull", "col:1", "col:0", "sec:20", "left", "right", "small"]:
+			var cf: Array = g._wrap_fit(GameData.cond_text(c), iw, [csz, csz - 1, csz - 2], 2)
+			var cw := 0.0
+			for ln in cf[0]:
+				cw = maxf(cw, g._tw_at(ln, int(cf[1])))
+			if (cf[0] as PackedStringArray).size() > 2 or cw > iw:
+				fit_bad.append("%s %s %s" % [lg, c, str(cf[0])])
+		var rsz: int = int(g.ORDER.sz.rew)
+		for t in GameData.tag_pool(8, "now", g.ORDER.kinds):
+			var rf: Array = g._wrap_fit(g._tag_text(t), iw, [rsz, rsz - 1], 2, true)
+			var rw := 0.0
+			for ln in rf[0]:
+				rw = maxf(rw, g._tw_at(ln, int(rf[1])))
+			#  보상 끝줄 바닥선(+ 아래 3px)이 칠판 안이다
+			var bot: float = float(g.ORDER.lay.rew) + float(g.ORDER.lay.rew_line) * float((rf[0] as PackedStringArray).size() - 1) + 3.0
+			if (rf[0] as PackedStringArray).size() > 3 or rw > iw or bot > (g.ORDER.box as Rect2).size.y - 2.0:
+				fit_bad.append("%s %s %s" % [lg, String(t.get("id", "")), str(rf[0])])
+	GameData.set_lang(lang0)
+	_ok("칠판 글이 폭 안 · 조건 두 줄 · 보상 세 줄 안 · 칠판 밑 안(ko · en · ja)", fit_bad.is_empty(), str(fit_bad))
+	#  보상 글은 뒤에서 접는다 — 값이 붙은 끝말이 한 줄
+	var wb: PackedStringArray = g._wrap_back("무작위 트랙 강화 +1", iw, int(g.ORDER.sz.rew))
+	_ok("보상 글은 뒤에서 접는다(「무작위 / 트랙 강화 +1」)", wb.size() == 2 and wb[1] == "트랙 강화 +1", str(wb))
 	_ok("새 색을 안 만든다", body.find("Color(\"") < 0 and body.find("Color.from") < 0)
 	_ok("난수를 안 굴린다", body.find("randf") < 0 and body.find("randi") < 0
 			and body.find("run_rng") < 0)
