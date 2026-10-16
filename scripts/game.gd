@@ -33893,9 +33893,16 @@ func _obj_shadow(i: int) -> void:
 						e.x * dirv.y + e.y * dirv.x))
 			draw_colored_polygon(pts, col)
 		"cons":
-			# 꾸러미는 동전보다 작다 — 동전 반지름 그림자를 깔면 빛무리가 된다.
-			var cr: float = 12.5 * GOODS_K * k
-			draw_colored_polygon(_e_pts(g, cr, cr * TBL.flat, 12), col)
+			#  누운 사탕 그 그림의 실루엣을 깐다 — 모양과 상관없는 원판은 가는
+			#  지팡이 · 막대사탕 뒤에 몸보다 큰 검은 구멍을 냈다(2026-10-16).
+			#  그림이 아직 없는 첫 프레임(헤드리스 포함)은 옛 원판이다.
+			var stx := _candy_lie_tex(String(stock[i].d.id))
+			if stx != null:
+				var ss := Vector2(CANDY_LIE_VP) * k
+				draw_texture_rect(stx, Rect2(g - ss * 0.5, ss), false, col)
+			else:
+				var cr: float = 12.5 * GOODS_K * k
+				draw_colored_polygon(_e_pts(g, cr, cr * TBL.flat, 12), col)
 		"fix":
 			# 사진은 네모라 그림자도 네모다. 타원을 깔면 원반으로 읽힌다.
 			var fq := _fix_quad(g, it.psi, k * GOODS_K)
@@ -33981,11 +33988,10 @@ func _obj_paint(it: Dictionary, s: Dictionary, dim: float) -> void:
 			var ctex := _candy_tex_live(String(s.d.id), float(it.get("roll", 0.0)),
 					float(it.get("wob", 0.0)), not still)
 			if ctex != null:
-				#  사탕은 서 있는 물건이라 세로로 길다 — 그것은 그대로 두되
-				#  크기를 동전에 맞춰 올린다(22x30 → 27x36 → GOODS_K 로 31x42).
-				var ch: float = 36.0 * GOODS_K
-				var cw := ch * float(CANDY_VP.x) / float(CANDY_VP.y)
-				draw_texture_rect(ctex, Rect2(c - Vector2(cw, ch) * 0.5, Vector2(cw, ch)),
+				#  펠트에 누운 그림이다(CANDY_LIE). 텍셀 하나를 화면 한 픽셀로
+				#  그린다 — 늘이면 도트가 반 픽셀씩 어긋나 줄무늬가 끓는다.
+				var cs := Vector2(CANDY_LIE_VP)
+				draw_texture_rect(ctex, Rect2(c - cs * 0.5, cs),
 						false, Color(1.0 - dim * 0.3, 1.0 - dim * 0.3, 1.0 - dim * 0.3,
 								1.0 - dim))
 			else:
@@ -37552,60 +37558,493 @@ const CANDY_VP := Vector2i(34, 46)     # 굽는 크기. 칸(26x38)보다 한 뼘
 var candy_vp := {}                     # id → SubViewport
 
 
-# 무대 하나를 짓는다 — 뷰포트 · 메시 · 빛 · 카메라. 회전은 안 건드린다,
-# 정적 굽기(_candy_tex)와 라이브 스핀(_candy_tex_live)이 각자 정한다.
-func _candy_build(nm: String) -> Dictionary:
-	var mesh: Mesh = load("res://assets/candy/%s.obj" % nm)
-	if mesh == null:
+#  펠트에 누운 사탕을 굽는 크기. 누우면 돌 때마다 긴 축이 가로 · 세로를
+#  오가므로 정사각이다. 텍셀 하나가 화면 한 픽셀이 되게 그린다(_obj_paint).
+const CANDY_LIE_VP := Vector2i(52, 52)
+const CANDY_LIE := {
+	#  직교 카메라 세로 범위. 52텍셀 / 1.24 = 42px — 옛 선 그림(36·GOODS_K 를
+	#  1.18 에 = 35.4px)보다 한 뼘 크다. 누우면 세로가 0.79 로 눌려 같은 배율로는
+	#  매물이 팩 옆에서 콩알만 해졌다. 긴 변 1.0 이 45° 로 돌아도 52 안에 든다.
+	"size": 1.24,
+	#  펠트를 내려다보는 각(TBL.flat = sin 52°). 사탕 틀로 옮기면 카메라가 앞면에서
+	#  38° 아래로 비켜 올려다본다 — 누운 사탕을 52° 로 내려다보는 것과 같은 그림이다.
+	"tilt": 52.0,
+}
+
+var candy_parts := {}      # 이름 → {"ps": 부품 줄, "ab": 온 AABB}. 한 번 짓고 계속 쓴다
+var candy_mat := {}        # (램프|role|둘째|질감|자리|양면) → ShaderMaterial
+var candy_sh := []         # [뒷면 자름, 안 자름]
+var candy_pat := {}        # 질감 이름 → ImageTexture
+var candy_ball: SphereMesh = null
+
+
+# ══════════════════════════════════════════════════════════
+#  사탕 다섯 — 코드로 짓는다(2026-10-16)
+# ──────────────────────────────────────────────────────────
+#  옛 사탕은 밖에서 받은 OBJ 다섯(assets/candy)이었다. 텍스처가 삼각형
+#  오백 개로 쪼갠 아틀라스라 34x46 으로 줄이면 픽셀마다 조각과 틈을 아무렇게나
+#  집어 얼룩이 들끓었고(HUD 곰젤리 730색 · 옆 팩 63색), 칠이 매끈한 램버트라
+#  통 · 팩 · 동전 사이에서 사탕만 사진을 오려 붙인 것처럼 보였다. 출처도
+#  둘은 생성형 AI 였다(prep_candy.py JOBS).
+#
+#  그래서 다트통 통과 같은 어법으로 짓는다 — 원시 메시 · 관 · 원판을 겹치고
+#  네 단 램프(candy_ramp)로 칠한다. 빛은 통과 같은 왼쪽 위 하나다.
+#  파일은 안 지운다. 안 읽을 뿐이다(지울지는 사람이 정한다).
+#
+#  role 은 CUP_ROLE 과 같은 뜻이다(base · t_hi · spec). 더한 것이 둘이다.
+#    glint  흰 점 문턱. 하드 캔디 · 젤리만 받는다
+#    gel    젤리 속 빛 — 그늘 쪽 가장자리를 한 단 올린다
+const CANDY_ROLE := {
+	#  젤리. 빛 띠를 좁혀(0.88) 몸 단이 주황으로 남게 한다 — 0.6 으로는 빛 띠가
+	#  앞면 절반을 먹어 곰이 살구색으로 바랬다. 흰 점은 머리 · 몸에만 선다
+	#  (gel_s 는 흰 점이 없다) — 귀 · 팔 · 다리마다 서면 곰이 점박이가 된다.
+	"gel":   {"base": 2.0, "t_hi": 0.88, "spec": 0.93, "glint": 0.988, "gel": true},
+	"gel_s": {"base": 2.0, "t_hi": 0.88, "spec": 0.95, "gel": true},
+	"hard":  {"base": 2.0, "t_hi": 0.72, "spec": 0.95, "glint": 0.985},
+	#  포장 비닐. 빛 띠를 넓혀 알보다 밝게 앉힌다 — 알과 같은 단이면 귀가 몸에 붙는다.
+	"wrap":  {"base": 2.0, "t_hi": 0.40, "spec": 0.90},
+	"choc":  {"base": 1.0, "t_hi": 0.50, "spec": 0.94},
+	#  은박. 조각마다 법선을 비틀어 두었으므로 단이 조각 단위로 끊겨 반짝인다.
+	#  빛 띠를 넓히면(0.35 · 0.55) 조각 절반이 밝은 금으로 떠서 치즈 덩이로 읽혔다.
+	#  흰 점도 안 준다 — 조각이 평평해 점이 아니라 조각 하나가 통째로 하얘진다.
+	"foil":  {"base": 1.0, "t_hi": 0.72, "spec": 0.96},
+	"stick": {"base": 2.0, "t_hi": 0.55},
+}
+
+
+#  빛으로 가는 방향. hud · stage 는 다트통 무대의 빛(CUP3.light) 그대로다.
+#  lie 는 펠트에 누운 사탕의 틀(앞면 = 탁자 위 · +y = 탁자 안쪽)로 옮긴 왼쪽
+#  위 빛이다 — 그림자(TBL.light)가 오른쪽 아래로 지는 그 빛이다. 앞면에 닿는
+#  세기(z)를 HUD 와 같은 0.5 언저리로 둔다 — 머리 위에서 내리꽂으면(0.77)
+#  누운 앞면이 통째로 빛 띠가 되어 사탕이 하얗게 바랜다.
+func _candy_light(where: String) -> Vector3:
+	if where == "lie":
+		return Vector3(-0.55, 0.62, 0.56).normalized()
+	return _cup3_light_dir()
+
+
+#  사탕 재질 하나. (램프, role, 둘째 램프, 질감, 자리, 양면)마다 한 벌만 굽는다.
+#  자리(where)가 stage 면 다트통 무대의 램프 세기를 받아야 하므로 통 재질
+#  곳간(cup_toon)에 둔다 — _cup3_lamp 가 거기 든 것을 다 돈다. HUD · 펠트의
+#  사탕은 무대 램프와 상관이 없다(잠긴 통을 넘기다 HUD 사탕이 어두워지면 안 된다).
+func _candy_toon(ramp: String, role: String, alt := "", pat := "",
+		where := "hud", two := false) -> ShaderMaterial:
+	var key := "candy|%s|%s|%s|%s|%s|%d" % [ramp, role, alt, pat, where, int(two)]
+	var bin: Dictionary = cup_toon if where == "stage" else candy_mat
+	if bin.has(key):
+		return bin[key]
+	if candy_sh.is_empty():
+		var s0: Shader = load("res://shaders/candy_ramp.gdshader")
+		var s1 := Shader.new()
+		s1.code = String(s0.code).replace("cull_back", "cull_disabled")
+		candy_sh = [s0, s1]
+	var rl: Dictionary = CANDY_ROLE.get(role, CANDY_ROLE["hard"])
+	var m := ShaderMaterial.new()
+	m.shader = candy_sh[1] if two else candy_sh[0]
+	var pa: Array = ART_PAL.get(ramp, ART_PAL["steel"])
+	var pb: Array = ART_PAL.get(alt, pa)
+	for i in 4:
+		m.set_shader_parameter("r%d" % i, pa[i])
+		m.set_shader_parameter("b%d" % i, pb[i])
+	var bs: float = float(rl.get("base", 2.0))
+	m.set_shader_parameter("base", bs)
+	m.set_shader_parameter("base_b", bs)
+	m.set_shader_parameter("t_hi", float(rl.get("t_hi", 0.55)))
+	m.set_shader_parameter("spec_th", float(rl.get("spec", 0.0)))
+	m.set_shader_parameter("glint_th", float(rl.get("glint", 0.0)))
+	m.set_shader_parameter("glint", ART_PAL["cream"][3])
+	m.set_shader_parameter("gel", 1.0 if rl.get("gel", false) else 0.0)
+	m.set_shader_parameter("lamp", cup_lamp if where == "stage" else 1.0)
+	m.set_shader_parameter("to_light", _candy_light(where))
+	if pat != "":
+		m.set_shader_parameter("pat", _candy_pat(pat))
+		m.set_shader_parameter("use_pat", 1.0)
+		m.set_shader_parameter("use_mask", 1.0)
+	bin[key] = m
+	return m
+
+
+#  줄무늬 질감. G 가 켜진 자리가 둘째 램프(흰 줄)로 간다. R 0.5 는 단 그대로다.
+#  u · v 는 부품이 매기는 UV 다 — 관은 (둘레, 길이 비) · 원판은 (각, 반지름 비) ·
+#  알은 SphereMesh 의 (경도, 위도)다.
+func _candy_pat(nm: String) -> ImageTexture:
+	if candy_pat.has(nm):
+		return candy_pat[nm]
+	var w := 32
+	var h := 32
+	var f := func(_u: float, _v: float) -> bool: return false
+	match nm:
+		"cane":      # 지팡이 — 관을 사선으로 감는 띠
+			h = 128
+			f = func(u: float, v: float) -> bool: return fposmod(u + v * 7.0, 1.0) < 0.5
+		"twist":     # 꼬인 사탕 — 두 귀를 잇는 축을 감는 줄
+			f = func(u: float, v: float) -> bool: return fposmod(u * 5.0 + v * 1.6, 1.0) < 0.36
+		"swirl":     # 막대사탕 — 한가운데서 감겨 나오는 소용돌이 한 줄
+			w = 64
+			f = func(u: float, v: float) -> bool: return fposmod(u + v * 2.2, 1.0) < 0.42
+	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	for y in h:
+		for x in w:
+			var on: bool = f.call((float(x) + 0.5) / float(w), (float(y) + 0.5) / float(h))
+			img.set_pixel(x, y, Color(0.5, 1.0 if on else 0.0, 0.0, 1.0))
+	var t := ImageTexture.create_from_image(img)
+	candy_pat[nm] = t
+	return t
+
+
+#  삼각형 하나. 고닷의 앞면은 시계 방향이라(_cup3_lathe 주석) 감는 차례를
+#  법선이 보는 쪽에 맞춰 고른다 — 부품마다 손으로 맞추다 하나라도 틀리면
+#  그 면이 통째로 사라진다.
+func _candy_tri(st: SurfaceTool, p: Array, n: Array, uv: Array) -> void:
+	var gn: Vector3 = (p[1] - p[0]).cross(p[2] - p[0])
+	var ord := [0, 2, 1] if gn.dot(n[0] + n[1] + n[2]) > 0.0 else [0, 1, 2]
+	for k in ord:
+		st.set_normal(n[k])
+		st.set_uv(uv[k])
+		st.add_vertex(p[k])
+
+
+#  네 점(각 [자리, 법선, uv])을 삼각형 둘로.
+func _candy_quad(st: SurfaceTool, q: Array) -> void:
+	_candy_tri(st, [q[0][0], q[1][0], q[2][0]], [q[0][1], q[1][1], q[2][1]],
+			[q[0][2], q[1][2], q[2][2]])
+	_candy_tri(st, [q[0][0], q[2][0], q[3][0]], [q[0][1], q[2][1], q[3][1]],
+			[q[0][2], q[2][2], q[3][2]])
+
+
+#  길(xy 평면)을 따라 쓴 관. 양끝은 반구로 닫는다. UV 는 (둘레, 길이 비)다.
+#  법선은 매끈하게 둔다 — 단은 문턱이 가르므로 둥근 관이 세 띠로 딱 갈린다.
+func _candy_tube(path: PackedVector2Array, rad: float, sides := 10) -> ArrayMesh:
+	var n := path.size()
+	var acc := [0.0]
+	for i in range(1, n):
+		acc.append(float(acc[i - 1]) + path[i].distance_to(path[i - 1]))
+	var L: float = maxf(float(acc[n - 1]), 0.0001)
+	var t0 := (path[1] - path[0]).normalized()
+	var t1 := (path[n - 1] - path[n - 2]).normalized()
+	#  고리 줄 — [중심, 접선, 반지름, 길이 비, 마개 기울기(법선의 접선 성분)]
+	var rings := []
+	var capn := 3
+	for k in capn:
+		var ph := PI * 0.5 * (1.0 - float(k) / float(capn))
+		rings.append([path[0] - t0 * rad * sin(ph), t0, rad * cos(ph), 0.0, -sin(ph)])
+	for i in n:
+		var tg := t0 if i == 0 else (t1 if i == n - 1
+				else (path[i + 1] - path[i - 1]).normalized())
+		rings.append([path[i], tg, rad, float(acc[i]) / L, 0.0])
+	for k in range(1, capn + 1):
+		var ph := PI * 0.5 * float(k) / float(capn)
+		rings.append([path[n - 1] + t1 * rad * sin(ph), t1, rad * cos(ph), 1.0, sin(ph)])
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for j in rings.size() - 1:
+		var q := []
+		for i in sides:
+			q.clear()
+			for e in [[j, i], [j + 1, i], [j + 1, i + 1], [j, i + 1]]:
+				var rg: Array = rings[e[0]]
+				var a := TAU * float(e[1]) / float(sides)
+				var c: Vector2 = rg[0]
+				var tg: Vector2 = rg[1]
+				var nn := Vector3(-tg.y, tg.x, 0.0)
+				var rd := nn * cos(a) + Vector3(0.0, 0.0, 1.0) * sin(a)
+				var lean: float = rg[4]
+				var nrm := (rd * sqrt(maxf(1.0 - lean * lean, 0.0))
+						+ Vector3(tg.x, tg.y, 0.0) * lean).normalized()
+				q.append([Vector3(c.x, c.y, 0.0) + rd * float(rg[2]), nrm,
+						Vector2(float(e[1]) / float(sides), float(rg[3]))])
+			_candy_quad(st, q)
+	return st.commit()
+
+
+#  막대사탕 알. 앞뒤가 살짝 부푼 원판에 둥근 테다(앞면이 +z). UV 는
+#  (각, 반지름 비)라 소용돌이 줄이 한가운데서 감겨 나온다.
+func _candy_disc(R: float, t: float, dome: float, na := 28, nr := 5) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var ht := t * 0.5
+	for sd in [1.0, -1.0]:
+		for i in nr:
+			for j in na:
+				var q := []
+				for e in [[i, j], [i + 1, j], [i + 1, j + 1], [i, j + 1]]:
+					var rr := R * float(e[0]) / float(nr)
+					var a := TAU * float(e[1]) / float(na)
+					var g := 2.0 * dome * rr / (R * R)
+					var nn := Vector3(g * cos(a), g * sin(a), float(sd)).normalized()
+					q.append([Vector3(rr * cos(a), rr * sin(a),
+							float(sd) * (ht + dome * (1.0 - rr * rr / (R * R)))), nn,
+							Vector2(float(e[1]) / float(na), rr / R)])
+				_candy_quad(st, q)
+	var nt := 4
+	for k in nt:
+		for j in na:
+			var q := []
+			for e in [[k, j], [k + 1, j], [k + 1, j + 1], [k, j + 1]]:
+				var ph := PI * float(e[0]) / float(nt)
+				var a := TAU * float(e[1]) / float(na)
+				var rr := R + ht * sin(ph)
+				q.append([Vector3(rr * cos(a), rr * sin(a), ht * cos(ph)),
+						Vector3(sin(ph) * cos(a), sin(ph) * sin(a), cos(ph)),
+						Vector2(float(e[1]) / float(na), 1.0)])
+			_candy_quad(st, q)
+	return st.commit()
+
+
+#  꼬인 사탕의 포장 끝 하나. 목(x0, 반지름 rn)에서 입(x1)으로 벌어지는 원뿔에
+#  주름을 접는다 — 입의 점이 바깥 · 안으로 번갈아 서고 면마다 법선이 하나라
+#  주름 하나하나가 빛 쪽 · 그늘 쪽 단으로 갈린다.
+func _candy_fan(x0: float, x1: float, rn: float, rm: float, n := 7) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var sx := signf(x1 - x0)
+	var m := n * 2
+	for k in m:
+		var a0 := TAU * float(k) / float(m)
+		var a1 := TAU * float(k + 1) / float(m)
+		var o0 := k % 2 == 0
+		var r0 := rm * (1.0 if o0 else 0.68)
+		var r1 := rm * (0.68 if o0 else 1.0)
+		var x0m := x1 - sx * (0.0 if o0 else 0.035)
+		var x1m := x1 - sx * (0.035 if o0 else 0.0)
+		var pn0 := Vector3(x0, rn * cos(a0), rn * sin(a0))
+		var pn1 := Vector3(x0, rn * cos(a1), rn * sin(a1))
+		var pm0 := Vector3(x0m, r0 * cos(a0), r0 * sin(a0))
+		var pm1 := Vector3(x1m, r1 * cos(a1), r1 * sin(a1))
+		var out := Vector3(0.0, cos((a0 + a1) * 0.5), sin((a0 + a1) * 0.5))
+		for tri in [[pn0, pm0, pm1], [pn0, pm1, pn1]]:
+			var gn: Vector3 = (tri[1] - tri[0]).cross(tri[2] - tri[0]).normalized()
+			if gn.dot(out) < 0.0:
+				gn = -gn
+			_candy_tri(st, tri, [gn, gn, gn], [Vector2.ZERO, Vector2.ZERO, Vector2.ZERO])
+	return st.commit()
+
+
+#  초콜릿 한 칸. 밑면 (w, h) 에서 윗면이 bev 만큼 좁아지는 네모뿔대다(앞이 +z).
+#  비탈 넷이 저마다 한 단이라 칸 테두리가 빛 쪽 · 그늘 쪽으로 갈린다.
+func _candy_block(w: float, h: float, d: float, bev: float) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var b := [Vector3(-w, -h, 0.0), Vector3(w, -h, 0.0), Vector3(w, h, 0.0),
+			Vector3(-w, h, 0.0)]
+	var t := [Vector3(-w + bev, -h + bev, d), Vector3(w - bev, -h + bev, d),
+			Vector3(w - bev, h - bev, d), Vector3(-w + bev, h - bev, d)]
+	var z := Vector2.ZERO
+	for i in 4:
+		var j := (i + 1) % 4
+		var mid: Vector3 = (b[i] + b[j]) * 0.5
+		var gn: Vector3 = (b[j] - b[i]).cross(t[i] - b[i]).normalized()
+		if gn.dot(Vector3(mid.x, mid.y, 0.0)) < 0.0:
+			gn = -gn
+		_candy_quad(st, [[b[i], gn, z], [b[j], gn, z], [t[j], gn, z], [t[i], gn, z]])
+	var up := Vector3(0.0, 0.0, 1.0)
+	_candy_quad(st, [[t[0], up, z], [t[1], up, z], [t[2], up, z], [t[3], up, z]])
+	return st.commit()
+
+
+#  초콜릿 아랫도리를 싼 은박. 앞 · 뒤 · 옆 · 밑을 잘게 갈라 조각마다 법선을
+#  비튼다 — 구겨진 은박이 빛을 받는 자리가 조각마다 달라 쇠 광택이 끊겨
+#  반짝인다. 윗변은 찢긴 톱니다. 씨앗이 고정이라 늘 같은 구김이다.
+func _candy_foil(w: float, h: float, d: float) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 31337
+	var hw := w * 0.5
+	var hh := h * 0.5
+	var hd := d * 0.5
+	#  [원점, 가로 축, 세로 축, 면 법선, 가로 칸, 세로 칸]
+	var faces := [
+		[Vector3(-hw, -hh, hd), Vector3(w, 0, 0), Vector3(0, h, 0), Vector3(0, 0, 1), 4, 4],
+		[Vector3(hw, -hh, -hd), Vector3(-w, 0, 0), Vector3(0, h, 0), Vector3(0, 0, -1), 4, 4],
+		[Vector3(-hw, -hh, -hd), Vector3(0, 0, d), Vector3(0, h, 0), Vector3(-1, 0, 0), 2, 4],
+		[Vector3(hw, -hh, hd), Vector3(0, 0, -d), Vector3(0, h, 0), Vector3(1, 0, 0), 2, 4],
+		[Vector3(-hw, -hh, -hd), Vector3(w, 0, 0), Vector3(0, 0, d), Vector3(0, -1, 0), 4, 2],
+	]
+	for f in faces:
+		var o: Vector3 = f[0]
+		var ax: Vector3 = f[1]
+		var ay: Vector3 = f[2]
+		var fn: Vector3 = f[3]
+		var nu: int = f[4]
+		var nv: int = f[5]
+		var top_edge: bool = absf(ay.y) > 0.0
+		var pts := {}
+		for j in nv + 1:
+			for i in nu + 1:
+				var p := o + ax * (float(i) / float(nu)) + ay * (float(j) / float(nv))
+				var inner := i > 0 and i < nu and j > 0 and j < nv
+				if inner:
+					p += fn * rng.randf_range(-0.010, 0.010)
+				if top_edge and j == nv:
+					p.y += 0.022 if (i % 2 == 0) else -0.012
+				pts[Vector2i(i, j)] = p
+		for j in nv:
+			for i in nu:
+				for tri in [[Vector2i(i, j), Vector2i(i + 1, j), Vector2i(i + 1, j + 1)],
+						[Vector2i(i, j), Vector2i(i + 1, j + 1), Vector2i(i, j + 1)]]:
+					var nn := (fn + Vector3(rng.randf_range(-0.4, 0.4),
+							rng.randf_range(-0.4, 0.4),
+							rng.randf_range(-0.4, 0.4)) * (Vector3.ONE - fn.abs())).normalized()
+					_candy_tri(st, [pts[tri[0]], pts[tri[1]], pts[tri[2]]],
+							[nn, nn, nn], [Vector2.ZERO, Vector2.ZERO, Vector2.ZERO])
+	return st.commit()
+
+
+#  부품 하나를 줄에 적는다. 자리 · 돌림 · 크기는 노드 값으로 넣는다 —
+#  Basis 를 통째로 넣는 길은 이 뷰포트 조합에서 렌더가 깨졌다(_candy_tex_live 주석).
+func _candy_part(ps: Array, m: Mesh, ramp: String, role: String, pos: Vector3,
+		sc := Vector3.ONE, rot := Vector3.ZERO, alt := "", pat := "",
+		two := false) -> void:
+	ps.append({"m": m, "ramp": ramp, "role": role, "pos": pos, "sc": sc,
+			"rot": rot, "alt": alt, "pat": pat, "two": two})
+
+
+#  그 사탕의 부품 줄과 온 크기. 이름마다 한 번만 짓는다.
+#  크기는 키 1.0 언저리 · 원점 언저리로 짓는다 — 맞추는 것은 부르는 쪽이 ab 로 한다.
+func _candy_parts(nm: String) -> Dictionary:
+	if candy_parts.has(nm):
+		return candy_parts[nm]
+	if candy_ball == null:
+		candy_ball = SphereMesh.new()
+		candy_ball.radius = 1.0
+		candy_ball.height = 2.0
+		candy_ball.radial_segments = 20
+		candy_ball.rings = 10
+	var sp := candy_ball
+	var ps := []
+	match nm:
+		"gummy":
+			#  곰젤리 — 타원 아홉. 귀 · 팔 · 다리가 몸 밖으로 한 뼘씩 나와야
+			#  34x46 에서 눈사람(구 둘)이 아니라 곰으로 읽힌다.
+			var o := "orange"
+			_candy_part(ps, sp, o, "gel", Vector3(0.0, 0.27, 0.0), Vector3(0.25, 0.215, 0.19))
+			_candy_part(ps, sp, o, "gel_s", Vector3(0.0, 0.205, 0.155), Vector3(0.11, 0.08, 0.075))
+			_candy_part(ps, sp, o, "gel", Vector3(0.0, -0.12, 0.0), Vector3(0.25, 0.28, 0.20))
+			for sd in [-1.0, 1.0]:
+				_candy_part(ps, sp, o, "gel_s", Vector3(sd * 0.175, 0.44, -0.02),
+						Vector3(0.085, 0.08, 0.07))
+				_candy_part(ps, sp, o, "gel_s", Vector3(sd * 0.235, 0.0, 0.06),
+						Vector3(0.085, 0.13, 0.085), Vector3(0.0, 0.0, sd * 0.6))
+				_candy_part(ps, sp, o, "gel_s", Vector3(sd * 0.14, -0.39, 0.05),
+						Vector3(0.115, 0.115, 0.115))
+		"twist":
+			#  꼬인 사탕 — 줄 감은 알 하나에 주름 접은 포장 끝 둘. 알의 극을
+			#  옆으로 눕혀 경도 줄이 두 귀를 잇는 축을 감게 한다.
+			_candy_part(ps, sp, "pink", "hard", Vector3.ZERO, Vector3(0.185, 0.215, 0.185),
+					Vector3(0.0, 0.0, PI * 0.5), "cream", "twist")
+			for sd in [-1.0, 1.0]:
+				var kn := CylinderMesh.new()
+				kn.top_radius = 0.05
+				kn.bottom_radius = 0.05
+				kn.height = 0.05
+				kn.radial_segments = 10
+				_candy_part(ps, kn, "pink", "wrap", Vector3(sd * 0.215, 0.0, 0.0),
+						Vector3.ONE, Vector3(0.0, 0.0, PI * 0.5))
+				_candy_part(ps, _candy_fan(sd * 0.215, sd * 0.43, 0.045, 0.175), "pink",
+						"wrap", Vector3.ZERO, Vector3.ONE, Vector3.ZERO, "", "", true)
+		"cane":
+			#  지팡이 — J 길을 따라 쓴 관 하나. 흰 띠는 둘째 램프(cream)다.
+			var path := PackedVector2Array()
+			for i in 8:
+				path.append(Vector2(0.10, lerpf(-0.50, 0.20, float(i) / 8.0)))
+			for i in 13:
+				var a := PI * float(i) / 12.0
+				path.append(Vector2(-0.075 + cos(a) * 0.175, 0.20 + sin(a) * 0.175))
+			for i in range(1, 3):
+				path.append(Vector2(-0.25, 0.20 - 0.06 * float(i)))
+			_candy_part(ps, _candy_tube(path, 0.072), "red", "hard", Vector3.ZERO,
+					Vector3.ONE, Vector3.ZERO, "cream", "cane")
+		"pop":
+			#  막대사탕 — 부푼 원판 알에 크림색 막대.
+			_candy_part(ps, _candy_disc(0.34, 0.11, 0.03), "red", "hard",
+					Vector3(0.0, 0.15, 0.0), Vector3.ONE, Vector3.ZERO, "cream", "swirl")
+			var stk := CylinderMesh.new()
+			stk.top_radius = 0.032
+			stk.bottom_radius = 0.032
+			stk.height = 0.56
+			stk.radial_segments = 8
+			_candy_part(ps, stk, "cream", "stick", Vector3(0.0, -0.24, -0.01))
+		"bar":
+			#  초콜릿 — 판 하나에 2x4 칸, 아래 절반은 구겨진 금박으로 싼다.
+			#  금박의 쇠 광택이 동전의 쇠 어법과 같은 식구다.
+			var slab := BoxMesh.new()
+			slab.size = Vector3(0.54, 0.96, 0.07)
+			_candy_part(ps, slab, "wood", "choc", Vector3.ZERO)
+			var blk := _candy_block(0.115, 0.10, 0.034, 0.028)
+			for cx in [-0.13, 0.13]:
+				for cy in [-0.36, -0.12, 0.12, 0.36]:
+					_candy_part(ps, blk, "wood", "choc", Vector3(cx, cy, 0.035))
+			_candy_part(ps, _candy_foil(0.58, 0.46, 0.16), "gold", "foil",
+					Vector3(0.0, -0.27, 0.0), Vector3.ONE, Vector3.ZERO, "", "", true)
+	if ps.is_empty():
 		return {}
+	var ab := AABB()
+	for i in ps.size():
+		var p: Dictionary = ps[i]
+		var xf := Transform3D(Basis.from_euler(p.rot) * Basis.from_scale(p.sc), p.pos)
+		var pb: AABB = xf * (p.m as Mesh).get_aabb()
+		ab = pb if i == 0 else ab.merge(pb)
+	var out := {"ps": ps, "ab": ab}
+	candy_parts[nm] = out
+	return out
+
+
+#  사탕 한 알을 세운다. 원점이 그 사탕의 한가운데고 긴 변이 1.0 이다.
+#  where — hud(세운 정면) · lie(펠트에 눕힌다) · stage(다트통 무대 발치)
+func _candy_model(nm: String, where := "hud") -> Node3D:
+	var cp := _candy_parts(nm)
+	if cp.is_empty():
+		return null
+	var ab: AABB = cp.ab
+	var k := 1.0 / maxf(maxf(ab.size.x, ab.size.y), 0.001)
+	var md := Node3D.new()
+	md.scale = Vector3.ONE * k
+	md.position = -ab.get_center() * k
+	for p in cp.ps:
+		var mi := MeshInstance3D.new()
+		mi.mesh = p.m
+		mi.material_override = _candy_toon(String(p.ramp), String(p.role),
+				String(p.alt), String(p.pat), where, bool(p.two))
+		mi.position = p.pos
+		mi.rotation = p.rot
+		mi.scale = p.sc
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		md.add_child(mi)
+	#  돌리는 것은 바깥 마디다. 안 마디(md)가 한가운데를 원점에 맞춰 두므로
+	#  돌려도 제자리에서 돈다.
+	var piv := Node3D.new()
+	piv.add_child(md)
+	return piv
+
+
+# 무대 하나를 짓는다 — 뷰포트 · 모델 · 카메라. 회전은 안 건드린다,
+# 정적 굽기(_candy_tex)와 라이브 스핀(_candy_tex_live)이 각자 정한다.
+# 칠이 unshaded 램프라 빛 노드가 없다 — 빛은 재질의 to_light 하나다.
+func _candy_build(nm: String, where := "hud") -> Dictionary:
+	var mi := _candy_model(nm, where)
+	if mi == null:
+		return {}
+	var lie := where == "lie"
 	var vp := SubViewport.new()
-	vp.size = CANDY_VP
+	vp.size = CANDY_LIE_VP if lie else CANDY_VP
 	vp.own_world_3d = true
 	vp.transparent_bg = true
 	vp.render_target_update_mode = SubViewport.UPDATE_ONCE
 	vp.msaa_3d = Viewport.MSAA_DISABLED
 	vp.gui_disable_input = true
 	add_child(vp)
-
-	var ab := mesh.get_aabb()
-	var mi := MeshInstance3D.new()
-	mi.mesh = mesh
-	# obj 의 mtl 은 pymeshlab 이 텍스처 없는 것으로 덮어 쓴다. 여기서 물린다.
-	var mat := StandardMaterial3D.new()
-	var tex: Texture2D = load("res://assets/candy/%s.jpg" % nm)
-	if tex != null:
-		mat.albedo_texture = tex
-	mat.roughness = 0.55
-	mat.specular = 0.30
-	mi.material_override = mat
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var k := 1.0 / maxf(maxf(ab.size.x, ab.size.y), 0.001)
-	mi.scale = Vector3.ONE * k
-	mi.position = -ab.get_center() * k
 	vp.add_child(mi)
-
-	var lt := DirectionalLight3D.new()
-	lt.rotation_degrees = Vector3(-46.0, -28.0, 0.0)
-	lt.light_energy = 1.5
-	vp.add_child(lt)
-
-	var we := WorldEnvironment.new()
-	var env := Environment.new()
-	env.background_mode = Environment.BG_CLEAR_COLOR
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.72, 0.70, 0.80)
-	env.ambient_light_energy = 0.9
-	we.environment = env
-	vp.add_child(we)
 
 	var cam := Camera3D.new()
 	cam.projection = Camera3D.PROJECTION_ORTHOGONAL
 	cam.keep_aspect = Camera3D.KEEP_HEIGHT
-	cam.size = 1.18                      # 1.0 짜리 물건에 여백 한 뼘
+	cam.size = float(CANDY_LIE.size) if lie else 1.18   # 1.0 짜리 물건에 여백 한 뼘
 	cam.near = 0.01
 	cam.far = 10.0
 	vp.add_child(cam)
-	cam.global_position = Vector3(0.0, 0.0, 3.0)
+	var ta := deg_to_rad(90.0 - float(CANDY_LIE.tilt)) if lie else 0.0
+	cam.global_position = Vector3(0.0, -sin(ta), cos(ta)) * 3.0
 	cam.look_at(Vector3.ZERO, Vector3.UP)
 	return {"vp": vp, "mi": mi}
 
@@ -37622,11 +38061,11 @@ func _candy_tex(id: String) -> Texture2D:
 	if b.is_empty():
 		return null
 	candy_vp[id] = b.vp
-	(b.mi as MeshInstance3D).rotation_degrees = Vector3(0.0, -24.0, 0.0)
+	(b.mi as Node3D).rotation_degrees = Vector3(0.0, -24.0, 0.0)
 	return b.vp.get_texture()
 
 
-var candy_live := {}       # id → {"vp":SubViewport,"mi":MeshInstance3D} — 테이블에 구르는 사탕
+var candy_live := {}       # id → {"vp":SubViewport,"mi":Node3D} — 테이블에 구르는 사탕
 
 
 # 테이블에 떨어진 사탕. 물리가 이미 계산해 둔 값을 그대로 3D 로 옮긴다 —
@@ -37639,11 +38078,17 @@ var candy_live := {}       # id → {"vp":SubViewport,"mi":MeshInstance3D} — �
 # live 가 참인 동안(아직 다 안 멈춤) 매 프레임 다시 굽고, 멈추면 마지막
 # 자세로 얼린다 — _bd3_fly 와 같은 어법이다. 상점엔 사탕이 한 번에
 # 한 장뿐이라(매대 규칙) 인스턴스를 공유해도 겹칠 일이 없다.
+#
+# **펠트에 눕는다**(2026-10-16). 팩 · 깡통 · 편지가 52° 로 누운 펠트 위에서
+# 사탕만 정면으로 구운 그림을 세워 붙여, 지팡이 · 곰젤리가 펠트에 꽂힌
+# 스티커로 읽혔다. 이제 카메라가 펠트 각으로 내려다보고(_candy_build 의 lie)
+# roll 은 앞면 법선(z) — 곧 탁자 법선 — 으로 돈다. 축 하나만 넣는 길이라
+# 아래 주석의 「Basis 통째로」는 여전히 안 탄다.
 func _candy_tex_live(id: String, roll: float, wob: float, live: bool) -> Texture2D:
 	if not candy_live.has(id):
 		if not _has_renderer() or not CANDY3.has(id):
 			return null
-		var b := _candy_build(String(CANDY3[id]))
+		var b := _candy_build(String(CANDY3[id]), "lie")
 		if b.is_empty():
 			return null
 		candy_live[id] = b
@@ -37651,20 +38096,23 @@ func _candy_tex_live(id: String, roll: float, wob: float, live: bool) -> Texture
 	if not is_instance_valid(e.vp):
 		candy_live.erase(id)
 		return null
-	var mi: MeshInstance3D = e.mi
+	var mi: Node3D = e.mi
 	# 다트와 같은 이유 · 같은 길이다 — Basis 를 통째로 assign 하는 길은
 	# 이 뷰포트 조합에서 렌더가 깨졌다(듬성듬성한 점만 찍혔다. 원인은
-	# 못 잡았다). rotation.x/y/z 개별 대입은 그려지는 것을 확인했으므로
-	# 그 길을 쓴다. x·y 는 정지 아이콘과 같은 -24° 로 고정하고 roll 은
-	# z 하나에만 싣는다 — 완전한 길이 불변은 아니지만(실측 26~37px 정도
-	# 왕복) 두 축을 다 돌리던 것보다 훨씬 안정적이다.
-	mi.rotation.x = 0.0
-	mi.rotation.y = deg_to_rad(-24.0)
+	# 못 잡았다). rotation.z 하나만 넣는다.
 	mi.rotation.z = roll + clampf(wob * 2.2, -0.5, 0.5)
 	var vp: SubViewport = e.vp
 	vp.render_target_update_mode = (
 			SubViewport.UPDATE_ALWAYS if live else SubViewport.UPDATE_ONCE)
 	return vp.get_texture()
+
+
+#  펠트에 누운 사탕의 그림이 이미 있으면 그것(그림자가 같은 실루엣을 깐다).
+func _candy_lie_tex(id: String) -> Texture2D:
+	if not candy_live.has(id):
+		return null
+	var vp: SubViewport = candy_live[id].vp
+	return vp.get_texture() if is_instance_valid(vp) else null
 
 
 # 사탕 몸통 색 — 판이 이미 쓰는 색에서 가져온다. 트랙과 색이 같아야
@@ -48080,19 +48528,22 @@ func _cup3_hoops(b: Node3D, r: float, w: float, h: float, ramp: String,
 # ── 극 ──────────────────────────────────────────────
 # 위 절반이 딴 색인 통. 자석의 극이다 — 말굽이든 막대든 자석은 늘
 # 두 색으로 칠해져 있고, 그 두 색이 곧 "자석" 이라는 글자다.
+#  극 띠는 몸보다 한 뼘 **내민다**(CUP_POLE_OUT) — 어깨를 한 번 꺾은 실루엣이
+#  곧은 깡통 아홉 사이에서 자석을 가른다(2026-10-16). 꺾인 자리는 비탈 하나,
+#  윗변은 아가리 테까지 덮는 고리다(안 덮으면 띠와 테 사이에 어둔 틈이 선다).
+const CUP_POLE_OUT := 0.035
+
+
 func _cup3_pole(b: Node3D, r: float, w: float, h: float) -> void:
-	var pl := CylinderMesh.new()
-	pl.top_radius = r + w * 1.04
-	pl.bottom_radius = r + w * 1.04
-	pl.height = h * 0.34
-	pl.cap_top = false
-	pl.cap_bottom = false
-	pl.radial_segments = 48
+	var face := r + w
+	var po := face + CUP_POLE_OUT
+	var pr := PackedVector2Array([Vector2(face, h * 0.64),
+			Vector2(po, h * 0.68), Vector2(po, h), Vector2(face - w * 0.5, h)])
 	# 위 3분의 1. 절반으로 두면 붉은 통 위에 보랏빛 통을 얹은 것으로 읽혀
 	# 제 색(packs.csv)이 어느 쪽인지가 안 갈린다.
 	# 빨강은 **자석의 관습**이다 — 말굽이든 막대든 극은 붉게 칠해져 있고
 	# 칠 안 한 쪽이 은색이다. 그래서 극 띠는 red 램프, 아가리는 steel 이다.
-	_cup3_tmesh(b, pl, "red", "ring", Vector3(0.0, h * 0.83, 0.0))
+	_cup3_tmesh(b, _cup3_lathe(pr, h), "red", "ring", Vector3.ZERO)
 
 
 
@@ -48112,8 +48563,8 @@ func _cup3_pole(b: Node3D, r: float, w: float, h: float) -> void:
 #
 #  한눈에 갈리는 것 — 기본 손잡이 · 여벌 격자 · 일당 어깨와 붉은 목 ·
 #  선물 네모와 끈 · 넓은 동전 슬롯 소켓 줄 · 선금 양파와 졸린 목 ·
-#  무쇠 퍼진 발과 어둠 · 깃털 나팔과 밝음 · 자석 두 색과 압정 ·
-#  외줄 가는 튜브와 금띠 · 저울 두 귀 · [?? ???] 벌어진 컵과 주사위 ·
+#  무쇠 퍼진 발과 어둠 · 깃털 나팔과 밝음 · 자석 두 색 · 꺾인 어깨와 압정 ·
+#  외줄 허리 조인 튜브와 금띠 · 저울 두 귀 · [?? ???] 벌어진 컵과 주사위 ·
 #  0718 체커. 무게는 명도로 가른다.
 # ══════════════════════════════════════════════════════════
 
@@ -48190,14 +48641,17 @@ func _cup3_stein(b: Node3D, r: float, w: float, h: float, ramp: String) -> void:
 	#  통에서 손잡이가 통만큼 커져 주전자가 된다.
 	#  도넛을 세워 XY 평면에 둔다. Rx 90° 뒤 로컬 z 가 세계 y 이므로
 	#  세로로 늘일 때 z 를 늘인다 — y 를 늘이면 관만 굵어진다.
+	#  **굵은 D 다**(2026-10-16). 관 0.045 · 세로 1.25 배로는 손잡이가 2px 고리라
+	#  40px 통 옆에서 귀걸이로 읽혀, 잔이 곧은 깡통 무리에 섞였다. 관을 굵히고
+	#  세로로 늘여 맥주잔 손잡이(D)로 세운다 — 묻히는 몫은 그대로 절반이다.
 	var hd := TorusMesh.new()
-	hd.inner_radius = 0.06
-	hd.outer_radius = 0.105
+	hd.inner_radius = 0.065
+	hd.outer_radius = 0.13
 	hd.rings = 22
 	hd.ring_segments = 8
 	var mi := _cup3_tmesh(b, hd, ramp, "body",
-			Vector3(face + 0.02, h * 0.55, 0.0), Vector3(PI * 0.5, 0.0, 0.0))
-	mi.scale = Vector3(1.0, 1.0, 1.25)
+			Vector3(face + 0.03, h * 0.52, 0.0), Vector3(PI * 0.5, 0.0, 0.0))
+	mi.scale = Vector3(1.0, 1.0, 1.6)
 
 
 # ── 3. 일당 → 바 팁 병(메이슨 병) ───────────────────────
@@ -48206,13 +48660,15 @@ func _cup3_stein(b: Node3D, r: float, w: float, h: float, ramp: String) -> void:
 #  선물 가방(네모)과는 둥근 어깨로, 여벌 철망과는 불투명으로 갈린다.
 func _cup3_jar(b: Node3D, r: float, w: float, h: float) -> void:
 	var face := r + w
+	#  몸을 허용 끝(face+0.05)까지 불린다(2026-10-16). +0.03 으로는 어깨가
+	#  1px 이라 열셋 사이에서 곧은 깡통으로 읽혔다 — 병은 어깨로 병이다.
 	var pr := PackedVector2Array([
 			Vector2(face, 0.0),
-			Vector2(face + 0.02, h * 0.06),
-			Vector2(face + 0.03, h * 0.14),
-			Vector2(face + 0.03, h * 0.66),
-			Vector2(face + 0.026, h * 0.72),
-			Vector2(face + 0.014, h * 0.79),
+			Vector2(face + 0.035, h * 0.05),
+			Vector2(face + 0.05, h * 0.12),
+			Vector2(face + 0.05, h * 0.62),
+			Vector2(face + 0.042, h * 0.70),
+			Vector2(face + 0.022, h * 0.78),
 			Vector2(face, h * 0.84),
 			Vector2(face, h)])
 	#  둘째 램프가 금이다 — 바닥 7px 의 동전층만 그 램프로 간다.
@@ -48379,17 +48835,23 @@ func _cup3_vase(b: Node3D, r: float, w: float, h: float) -> void:
 #  몇 안 되는 귀한 한 발을 담는다. 가는 튜브에 위아래 금띠고, **안감이
 #  벨벳**이다 — 아가리로 들여다보이는 안감이 곧 케이스다.
 #  누운 뚜껑은 기각했다: 튜브 지름이면 45px 짜리 물건이 되어 과하다.
+#  **허리를 조인다**(2026-10-16). 곧은 원통이라 열셋을 늘어놓으면 깡통 아홉과
+#  윤곽이 같았다. 물리 반지름 밑으로는 못 조이므로(촉이 벽을 뚫는다) 거꾸로
+#  위아래 끝을 금띠 자리만큼 벌린다 — 가운데가 face 에 남아 허리가 된다.
 func _cup3_tube(b: Node3D, r: float, w: float, h: float) -> void:
 	var face := r + w
-	var pr := PackedVector2Array([Vector2(face, 0.0), Vector2(face, h)])
+	var fl := 0.03
+	var bf := _cup3_px(h, 4.0)
+	var pr := PackedVector2Array([Vector2(face + fl, 0.0), Vector2(face + fl, h * bf),
+			Vector2(face, h * 0.34), Vector2(face, h * 0.66),
+			Vector2(face + fl, h * (1.0 - bf)), Vector2(face + fl, h)])
 	_cup3_tmesh(b, _cup3_lathe(pr, h), "pink", "lacq", Vector3.ZERO)
 	_cup3_inner(b, r, h, "pink", "vel")
-	_cup3_lip(b, r, face, h, "pink")
-	#  황동 띠 위아래 4px. 위 띠에는 1px 홈이 있다.
-	var bf := _cup3_px(h, 4.0)
-	_cup3_band(b, face, 1.0 - bf, 1.0, h, "gold", "band", 0.006,
-			_cup3_pat_key("neck", face, h))
-	_cup3_band(b, face, 0.0, bf, h, "gold", "band", 0.006)
+	_cup3_lip(b, r, face + fl, h, "pink")
+	#  황동 띠 위아래 4px. 위 띠에는 1px 홈이 있다. 벌린 끝에 감는다.
+	_cup3_band(b, face + fl, 1.0 - bf, 1.0, h, "gold", "band", 0.006,
+			_cup3_pat_key("neck", face + fl, h))
+	_cup3_band(b, face + fl, 0.0, bf, h, "gold", "band", 0.006)
 
 
 # ── 11. 저울(히든) → 러빙 컵 ────────────────────────────
@@ -48510,7 +48972,7 @@ func _cup3_tacks(b: Node3D, r: float, w: float, h: float) -> void:
 		var nn := Vector3(sin(a), 0.0, cos(a))
 		var d := (nn * cos(deg_to_rad(30.0))
 				+ Vector3(0.0, 1.0, 0.0) * sin(deg_to_rad(30.0))).normalized()
-		var p := nn * (face + 0.008) + Vector3(0.0, y, 0.0)
+		var p := nn * (face + CUP_POLE_OUT + 0.008) + Vector3(0.0, y, 0.0)
 		_cup3_tack(b, p, d)
 	#  카운터 위 둘. 통을 향해 눕는다 — 아직 끌려오는 중인 것들이다.
 	for sd in [-1.0, 1.0]:
@@ -48567,33 +49029,25 @@ func _cup3_photo() -> RigidBody3D:
 	return b
 
 
-# 사탕 한 알. **HUD 가 쓰는 그 모델 그대로다**(assets/candy) — 여기서만
-# 손으로 빚으면 같은 사탕이 화면마다 다른 물건이 된다.
-# 모델이 없으면(헤드리스·에셋 빠짐) 아무것도 안 세운다. 네모 한 알로
-# 대신 세우면 그것이 무슨 사탕인지를 틀리게 말한다.
+# 사탕 한 알. **HUD 가 쓰는 그 모델 그대로다**(_candy_model) — 여기서만
+# 손으로 빚으면 같은 사탕이 화면마다 다른 물건이 된다. 칠은 무대 램프를
+# 받는 재질(where stage)이라 통과 같이 어두워지고 밝아진다.
 func _cup3_candy(nm: String) -> RigidBody3D:
-	var mesh: Mesh = load("res://assets/candy/%s.obj" % nm)
-	if mesh == null:
+	var md := _candy_model(nm, "stage")
+	if md == null:
 		return null
-	var ab := mesh.get_aabb()
-	var big: float = maxf(maxf(ab.size.x, ab.size.y), ab.size.z)
-	if big <= 0.0:
-		return null
-	var k: float = float(GOLD3.w) * 1.15 / big
-	var b := _cup3_prop(ab.size * k)
-	var mi := MeshInstance3D.new()
-	mi.mesh = mesh
-	var mat := StandardMaterial3D.new()
-	var tex: Texture2D = load("res://assets/candy/%s.jpg" % nm)
-	if tex != null:
-		mat.albedo_texture = tex
-	mat.roughness = 0.55
-	mat.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
-	mi.material_override = mat
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	mi.scale = Vector3.ONE * k
-	mi.position = -ab.get_center() * k
-	b.add_child(mi)
+	var ab: AABB = _candy_parts(nm).ab
+	#  _candy_model 이 긴 변(가로 · 세로 중)을 1.0 으로 맞춰 둔다.
+	var big: float = maxf(maxf(ab.size.x, ab.size.y), 0.001)
+	var k: float = float(GOLD3.w) * 1.15
+	var b := _cup3_prop(ab.size / big * k)
+	#  선 채로 둔다. 키 큰 상자(14x22px)라 미끄러짐이 멎는 순간 앞으로 엎어져
+	#  통 모서리 뒤로 굴러 들어갔다 — 발치에 서서 「젤리 들고 시작」을 말하는
+	#  것이 이 물건의 일이다. 도는 것은 바닥 법선(y)으로만.
+	b.axis_lock_angular_x = true
+	b.axis_lock_angular_z = true
+	md.scale = Vector3.ONE * k
+	b.add_child(md)
 	return b
 
 
@@ -48694,12 +49148,6 @@ func _cup3_skin(pi: int) -> Dictionary:
 # 때마다 동전이 벽 속에 파묻혀 통째로 사라진다(한 번 당했다).
 func _cup3_face(wall: String, r: float, w: float) -> float:
 	return r + w * 0.5 if wall == "net" else r + w
-
-
-# 벽 바깥면의 색. 동전 그늘이 이것을 보고 제 벽보다 한 단 어두워진다 —
-# 고정색으로 적어 두면 벽이 어두운 겉에서는 그늘이 벽보다 밝아진다.
-func _cup3_wall_col(wall: String, col: Color) -> Color:
-	return col.darkened(0.30 if wall == "net" else 0.44)
 
 
 # 통 몸의 바탕색. 겉 표의 tint 가 고른다. 벽 갈래(민·철망)와 **독립**이라
@@ -48827,8 +49275,14 @@ func _cup3_stk_lift(shape: String) -> float:
 	return 0.0
 
 
-func _cup3_sticker(b: Node3D, rad: float, r: float, h: float, wall: String,
-		col: Color) -> void:
+#  칠은 통과 같은 네 단 램프다(2026-10-16). StandardMaterial 로 빛을 따로
+#  받던 때는 무대 키 라이트 아래서 크림 얼굴이 진흙빛으로 가라앉아, 8px 에서
+#  딱지가 아니라 갈색 구멍 · 녹 자국으로 읽혔다(점검 z_cups4). 종이 셋은
+#  cream 램프에서 단만 갈라 둔다 — 얼굴 1단 · 다이컷 테와 말린 자락 2단(빛 쪽
+#  3단). 테가 얼굴보다 한 단 밝아야 「흰 테 두른 딱지」가 서고, 자락이 한 단
+#  밝아야 「들렸다」가 선다. 자국은 통 램프의 0단이다.
+func _cup3_sticker(b: Node3D, rad: float, r: float, h: float,
+		ramp: String) -> void:
 	var sr: float = r * float(CUP_STK.r)
 	var y0: float = h * float(CUP_STK.y)
 	var at: float = CUP_STK.at
@@ -48838,19 +49292,18 @@ func _cup3_sticker(b: Node3D, rad: float, r: float, h: float, wall: String,
 	# 붙어 있던 자리. 자락이 들리면 여기가 드러난다 — 3D 쪽 그림자맵은
 	# 꺼 두었으므로(_cup3_open) 이 어두운 활꼴 하나가 그림자를 대신한다.
 	# 없으면 자락이 벽에 뜬 게 아니라 벽에 그려진 무늬로 읽힌다.
-	_cup3_mesh(b, _cup3_leaf(rad, at, sr, y0, fy, 2, 0.0, 0.002),
-			_cup3_wall_col(wall, col).darkened(0.16), Vector3.ZERO)
-	_cup3_mesh(b, _cup3_leaf(rad, at, sr, y0, fy, 0, 0.0, 0.004),
-			C_DIECUT, Vector3.ZERO)
-	_cup3_mesh(b, _cup3_leaf(rad, at, sr * float(CUP_STK.face), y0, fy,
-			0, 0.0, 0.008), Color(STK_TIERS[0].body), Vector3.ZERO)
+	_cup3_tmesh(b, _cup3_leaf(rad, at, sr, y0, fy, 2, 0.0, 0.002),
+			ramp, "sunk", Vector3.ZERO)
+	_cup3_tmesh(b, _cup3_leaf(rad, at, sr, y0, fy, 0, 0.0, 0.004),
+			"cream", "prop", Vector3.ZERO)
+	_cup3_tmesh(b, _cup3_leaf(rad, at, sr * float(CUP_STK.face), y0, fy,
+			0, 0.0, 0.008), "cream", "body", Vector3.ZERO)
 	# 뒤집힌 쪽은 이형지라 인쇄가 없다. 그래서 얼굴 위에 겹쳐도 무엇이
 	# 가려졌는지가 안 헷갈린다. 종이는 옆면이 없으니 양면으로 둔다.
 	# 말리면서 위를 보게 되므로 뿌리는 얼굴과 같은 밝기고 끝으로 갈수록
 	# 밝아진다 — 그 그러데이션 하나가 "접혔다" 를 말한다.
-	var fl := _cup3_mesh(b, _cup3_leaf(rad, at, sr, y0, fy, 1, cl, 0.006),
-			C_LINER, Vector3.ZERO)
-	fl.material_override.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_cup3_tmesh(b, _cup3_leaf(rad, at, sr, y0, fy, 1, cl, 0.006),
+			"cream", "prop", Vector3.ZERO, Vector3.ZERO, true)
 
 
 # 통 하나. 원점은 **바닥 한가운데**라 y 0 이 곧 놓인 자리다.
@@ -48862,7 +49315,6 @@ func _cup3_cup(skin: Dictionary) -> AnimatableBody3D:
 	var b := AnimatableBody3D.new()
 	b.sync_to_physics = true
 
-	var col: Color = skin.body
 	var ramp := String(skin.ramp)
 	var role := String(skin.role)
 	match String(skin.wall):
@@ -48877,8 +49329,7 @@ func _cup3_cup(skin: Dictionary) -> AnimatableBody3D:
 		_cup3_tacks(b, r, w, h)
 	if bool(skin.sticker):
 		_cup3_sticker(b, _cup3_face(String(skin.wall), r, w)
-				+ _cup3_stk_lift(String(skin.shape)), r, h,
-				String(skin.wall), col)
+				+ _cup3_stk_lift(String(skin.shape)), r, h, ramp)
 	var fl := CollisionShape3D.new()
 	var fs := CylinderShape3D.new()
 	fs.radius = r
@@ -49786,6 +50237,8 @@ func _cup3_spawn(pi: int, x: float) -> void:
 					lerpf(-r * 0.9, r * 0.9, fposmod(t * 2.37, 1.0)))
 			# 떨어지며 도는 각. 다 같은 각으로 떨구면 카드 다발로 쌓인다.
 			gb.rotation = Vector3(0.0, t * TAU * 0.83, 0.0)
+			#  제 발치 자리(통 중심에서 잰 것). 도로 부를 때 여기로 온다.
+			gb.set_meta("home", gb.position - Vector3(x, 0.0, 0.0))
 			cup_vp.add_child(gb)
 			gold3.append(gb)
 		# 통 안에 못 드는 물건들. 좌우로 갈라 놓는다 — 플라크와 같은 규약이다.
@@ -49795,6 +50248,7 @@ func _cup3_spawn(pi: int, x: float) -> void:
 			ft[i].position = Vector3(x + sd * r * 1.86,
 					float(GOLD3.drop) * 0.7, r * (0.30 - 0.60 * float(i)))
 			ft[i].rotation = Vector3(0.0, -0.5 + 1.1 * float(i), 0.0)
+			ft[i].set_meta("home", ft[i].position - Vector3(x, 0.0, 0.0))
 			cup_vp.add_child(ft[i])
 			gold3.append(ft[i])
 	#  통 높이도 rig 에 적는다. 통마다 다르므로(겉 표의 tall) 물리가
@@ -50028,26 +50482,40 @@ func _cup3_step_rig(rig: Dictionary, x: float, moving: bool, leaving: bool,
 			b.angular_velocity = Vector3.ZERO
 			b.transform = Transform3D(Basis(), Vector3(x, float(CUP3.dl) * 0.8, 0.0))
 
-	# 발치의 골드. 자루와 같은 규약이다 — 통이 끌고 가고, 너무 멀어지면
-	# 발치로 도로 부른다. 다른 것은 바닥이 통 몸에 붙어 있다는 것뿐이라
-	# 가만히 두면 마찰이 알아서 데려간다. 끌기는 그 마찰이 놓치는 몫이다.
+	# 발치의 골드. 자루와 같은 규약이다 — 통이 데려가고, 너무 멀어지면
+	# 발치로 도로 부른다. 다른 것은 바닥이 통 몸에 붙어 있다는 것뿐이다.
 	for gb in rig.get("gold", []):
 		if not is_instance_valid(gb):
 			continue
 		if moving:
 			gb.sleeping = false
-			gb.apply_central_force(Vector3(vx - gb.linear_velocity.x, 0.0, 0.0)
-					* float(CUP3.drag) * gb.mass)
+			#  **미끄러지는 동안은 가로 자리를 제 발치에 못 박는다.** 힘으로 끌면
+			#  (CUP3.drag) 늦는 만큼 뒤처지는데, 통 **앞쪽**에 놓인 것이 뒤처지면
+			#  통 벽이 그것을 따라잡아 한 걸음에 벽 두께(0.1)보다 멀리 넘어와 통
+			#  안에 가둔다 — 선물 통 젤리가 통 속에 갇혀 안 보이던 것이 이것이었다
+			#  (2026-10-16 실측: 발치 x−0.71 → 미끄러진 뒤 −0.14). 속도만 맞춰도
+			#  사진이 벽에 붙어 놓여(바깥면 0.48 · 사진 안쪽 끝 0.52) 한 틱 늦는
+			#  벽에 밀려 들어왔다. 떨어지는 것(y)은 물리에 그대로 맡긴다 —
+			#  미끄러지는 동안 발치 물건은 화면 밖에서 떨어지고 나서 따라온다.
+			#  가로 속도는 0 이다 — 통 속도(vx)를 주면 자리를 박은 뒤 그 틱에
+			#  한 걸음 더 가서 통보다 앞서 그려졌다(실측 0.07~0.15).
+			var hx: float = (gb.get_meta("home", Vector3.ZERO) as Vector3).x
+			gb.global_position.x = x + hx
+			gb.linear_velocity.x = 0.0
 		var go := Vector2(gb.global_position.x - x, gb.global_position.z)
-		if go.length() > r * float(GOLD3.keep) or gb.global_position.y < -0.4:
-			# **있던 쪽으로** 도로 부른다. 오른쪽으로만 부르면 미끄러질 때마다
+		#  통 벽 안으로 들어간 것도 도로 부른다 — 발치 물건이 통 안에 있을
+		#  까닭은 없고, 들어가면 벽에 막혀 제 힘으로는 못 나온다.
+		var inside: bool = go.length() < r + float(CUP3.wall)
+		if inside or go.length() > r * float(GOLD3.keep) or gb.global_position.y < -0.4:
+			# **제 발치 자리로** 부른다. 오른쪽으로만 부르면 미끄러질 때마다
 			# 왼쪽 것이 하나씩 오른쪽으로 넘어가, 몇 번 넘기면 골드가 통
 			# 한쪽에 다 쌓인다(찍어 보고 알았다).
 			var sd2 := -1.0 if go.x < 0.0 else 1.0
+			var hm: Vector3 = gb.get_meta("home",
+					Vector3(sd2 * r * float(GOLD3.spill), float(GOLD3.drop), 0.0))
 			gb.linear_velocity = Vector3.ZERO
 			gb.angular_velocity = Vector3.ZERO
-			gb.global_position = Vector3(x + sd2 * r * float(GOLD3.spill),
-					float(GOLD3.drop), 0.0)
+			gb.global_position = Vector3(x + hm.x, float(GOLD3.drop), hm.z)
 
 
 func _cup3_phys(dt: float) -> void:
