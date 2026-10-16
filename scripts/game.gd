@@ -3494,6 +3494,10 @@ const RIVAL := {
 	"out_t": 0.40, "k": 1.45, "lift": 0.30, "roll": -1.6, "grip": 0.30,
 	"fp": [38.0, 58.0, 84.0, 92.0, 46.0, 76.0, 98.0, 104.0, 2.0, 0.35, 18.0, 14.0],
 	"sleeve": Vector3(78.0, 40.0, 32.0), "band": Vector3(8.0, 31.0, 22.0),
+	#  소맷부리 단의 두께 · 살빛 · 바탕빛 몫(_rh_build). 살은 상인 살(c4999f — 호박 램프에 맞춰 식힌
+	#  장밋빛)을 그대로 쓰면 흰 키 라이트 · 보랏빛 바탕빛인 다트 무대에서 연보라 고무장갑이 됐다(검토 A) —
+	#  다트 무대 빛에 맞춘 따뜻한 살이다.
+	"hem": 1.5, "skin": Color("c98e70"), "amb": 0.7,
 	#  말상자 — 글 sz · 줄 사이 line · 안 여백 pad · 폭 끝 say_w. 손 쪽 화면 밑(밑변 say_bot)에 서고, 막을
 	#  자리가 그 상자 둘레 say_clear 안이면 판 위 띠(윗변 say_top)로 올라간다. 오른쪽 점수 칠판(SCOREB)과
 	#  왼쪽 자루 걸이는 비킨다.
@@ -19230,15 +19234,44 @@ func _rh_build() -> void:
 	var H: Dictionary = RIVAL
 	bd_rh = Node3D.new()
 	var mir := rgl_side < 0.0          # 왼쪽에서 들면 왼손
-	var cloth := _skin3_mat(DK_PAL["blue"][0], 0.06, 0.95)
-	var band := _skin3_mat(DK_PAL["blue"][2], 0.16, 0.7)
+	#  재킷 · 밴드 · 살 모두 상인 손과 같은 빛 사다리다(_hand3_toon). 바탕빛(amb)을 줄인다 — 다트 무대의
+	#  보랏빛 바탕빛이 손을 한 색으로 덮어, 살이 연보라 고무장갑(표본 2000 중 1313 이 한 색)이었다(검토 A).
+	var amb: float = H.amb
+	var cloth := _hand3_toon(DK_PAL["blue"][0], Color(0.0, 0.0, 0.0, 0.0), 0.0, 0.0, amb)
+	#  밴드는 한 단 죽인 파랑 — 화면에서 가장 채도 높은 파랑이라 판보다 먼저 눈이 갔다(검토 D).
+	var bc: Color = DK_PAL["blue"][2]
+	var band := _hand3_toon(Color.from_hsv(bc.h, bc.s * 0.72, bc.v * 0.9), Color(0.0, 0.0, 0.0, 0.0),
+			0.0, 0.0, amb)
 	var sl: Vector3 = H.sleeve
-	#  소매 — 팔꿈치(굵다)에서 손목(가늘다) 쪽으로 · 손목 밴드 뒤 2 에서 끝난다
-	bd_rh.add_child(_mi3(_prism3(sl.x, sl.y, sl.z, sl.y * 0.86, sl.z * 0.86, 5.0), cloth,
-			Vector3(-sl.x - float((H.band as Vector3).x) - 1.0, 0.0, 0.0)))
 	var bd: Vector3 = H.band
-	bd_rh.add_child(_mi3(_prism3(bd.x, bd.y, bd.z, bd.y, bd.z, 2.0), band, Vector3(-bd.x + 1.0, 0.0, 0.0)))
-	var hj := _hand3_build(_hand3_mats(), mir)
+	#  소매 — 팔꿈치(굵다)에서 손목(가늘다) 쪽으로 · 손목 밴드 뒤 1 에서 끝난다. 둘레를 물결로 밀고
+	#  위상을 틀어 비스듬한 주름 둘이 감아 내려가고, 끝에 한 단 두꺼운 소맷부리 단(+1.5)이 선다.
+	#  옛 소매는 단색 남색 상자였다(검토 D).
+	var cw: float = sl.y * 0.86
+	var ct: float = sl.z * 0.86
+	var hem: float = H.hem
+	var sx: float = sl.x
+	bd_rh.add_child(_mi3(_hand3_loft([[0.0, sl.y, sl.z, 0.0, 0.0, 2.4, 0.04, 4.0, 0.3],
+			[sx * 0.35, sl.y * 0.96, sl.z * 0.96, 0.0, 0.0, 2.4, 0.06, 4.0, 1.4],
+			[sx * 0.7, sl.y * 0.91, sl.z * 0.91, 0.0, 0.0, 2.4, 0.065, 4.0, 2.5],
+			[sx - 5.5, cw, ct, 0.0, 0.0, 2.4, 0.03, 4.0, 3.1, 0.3],
+			[sx - 5.0, cw + hem * 2.0, ct + hem * 2.0, 0.0, 0.0, 2.4],
+			[sx - 0.8, cw + hem * 2.0, ct + hem * 2.0, 0.0, 0.0, 2.4],
+			[sx, cw + hem, ct + hem, 0.0, 0.0, 2.4, 0.0, 0.0, 0.0, 0.3]], 16, 0.0, 0.0), cloth,
+			Vector3(-sx - bd.x - 1.0, 0.0, 0.0)))
+	#  소맷부리 단추 — 단 바깥에 하나(겨눌 때 화면을 보는 손바닥 쪽). 무딘 놋쇠.
+	var bt := _mi3(_blob3_mesh(), _hand3_toon(FORE3.brass, Color(0.0, 0.0, 0.0, 0.0), 0.6, 0.05, amb, 0.5),
+			Vector3(-bd.x - 3.4, -(ct + hem * 2.0) * 0.5, 0.0))
+	bt.scale = Vector3(1.6, 0.8, 1.6)
+	bd_rh.add_child(bt)
+	#  밴드 — 가운데에 솔기 한 줄(골).
+	bd_rh.add_child(_mi3(_hand3_loft([[0.0, bd.y - 0.6, bd.z - 0.6, 0.0, 0.0, 2.6],
+			[bd.x * 0.2, bd.y, bd.z, 0.0, 0.0, 2.6], [bd.x * 0.44, bd.y, bd.z, 0.0, 0.0, 2.6],
+			[bd.x * 0.5, bd.y - 0.5, bd.z - 0.5, 0.0, 0.0, 2.6, 0.0, 0.0, 0.0, 0.45],
+			[bd.x * 0.56, bd.y, bd.z, 0.0, 0.0, 2.6], [bd.x * 0.8, bd.y, bd.z, 0.0, 0.0, 2.6],
+			[bd.x, bd.y - 0.6, bd.z - 0.6, 0.0, 0.0, 2.6]], 16, 0.0, 0.0), band,
+			Vector3(-bd.x + 1.0, 0.0, 0.0)))
+	var hj := _hand3_build(_hand3_mats(H.skin, amb), mir)
 	bd_rh.add_child(hj.root)
 	bd_rh_hand = hj
 	#  손가락 — 쥔 채로 굳는다(겨누는 동안 안 바뀐다)
@@ -27009,16 +27042,18 @@ const HAND3 := {
 #  몸 안쪽을 본다.
 #
 #  ── 손가락이 서는 세 가지 ──────────────────────────────
-#   ① 골은 틈이 아니라 **빗면**이다. 손가락 넷은 맞붙어 있고(틈 0.1~0.5), 모서리를
-#      깎은 팔각 기둥이라 왼쪽 위 빛을 등진 오른 빗면이 한 픽셀 어둡다.
-#      면마다 법선이 하나라 음영이 계단으로 떨어진다 — 매끈한 음영은 이
-#      크기에서 손가락 넷을 한 덩어리 얼룩으로 뭉갠다.
+#   ① 골은 틈이 아니라 **빗면**이다. 손가락 넷은 맞붙어 있고(틈 0.1~0.5), 둥근 단면이라
+#      빛을 등진 옆구리가 한 단 어둡다. 2026-10-16 부터 마디는 둥근 단면을 이은 매끈한
+#      법선이고(_hand3_loft) 빛은 문턱으로 고른다(shaders/hand3.gdshader) — 옛 팔각 기둥은
+#      면마다 법선이 하나라 면 안의 램프 감쇠가 1 씩 오르다 면 경계에서 뛰어 손 하나에
+#      살빛이 166 톤이었다(검토). 문턱 셰이더가 매끈한 음영의 「한 덩어리 얼룩」도 막는다.
 #   ② **엄지가 실루엣 밖으로 나온다.** 옛 PALM 다각형이 노치 하나로 덩어리를
 #      손으로 만들던 그 자리다. 손목 가까이에서 몸 안쪽으로 뻗는다.
 #   ③ **굽힘이 실루엣에 나온다.** 손끝이 판으로 내려앉고(쉼), 두드릴 때 하나씩
 #      들리고, 주먹에서 접혀 사라진다. 손끝마다 손톱이 반 단 밝아 손가락 수를
 #      센다.
-#  너클 능선은 한 단 밝은 살 넷이다 — 옛 _npc_ink 의 knuck 이 하던 일.
+#  너클은 손등 아치 앞끝에 묻힌 둥근 혹 넷이다 — 빛 사다리가 그 등에 한 단 밝게 선다(옛
+#  _npc_ink 의 knuck 이 하던 일). 한 단 밝은 네모 넷은 건반 · 타일로 읽혀 걷었다(2026-10-16).
 #
 #  ── 크기는 HAND3 가 쥔다 (2026-10-02) ─────────────────────
 #  손 외곽 58 × 31 × 12 는 세 시안이 같이 쓰는 값이다(HAND3
@@ -27048,11 +27083,10 @@ const FING3 := {
 	#  **바탕은 식은 장밋빛**이다 — 살빛 바탕(c98c6c)을 그대로 넣었더니 램프
 	#  밑에서 호박색(e4944c)으로 탔다(2026-10-02 실측). 장밋빛 바탕이 램프 밑에서
 	#  복숭앗빛 살(dda06e 언저리)로 떨어지고, 그늘 면은 따뜻한 어둠을 받아 밤색이
-	#  된다. 손바닥 · 너클은 한 단 밝고, 손톱은 살과 반 단만 갈린다 — 더 밝으면
+	#  된다. 손바닥은 한 단 밝고(재질의 under — 메시 아래를 보는 면), 손톱은 살과 반 단만 갈린다 — 더 밝으면
 	#  손끝마다 흰 점이 찍혀 손톱이 아니라 발톱으로 읽힌다.
 	"skin": Color("c4999f"),
 	"palm_c": Color("d8b0b0"),
-	"knuck": Color("d6aaae"),
 	"nail": Color("dcb8b8"),
 	"ring": Color("f2c14e"),     # 금반지 — 화면 오른손 약지 하나
 	#  쉬는 화면 오른손이 새끼 쪽 모서리로 기우는 굴림(라디안). 첫 판의 43° 는 손이
@@ -27233,20 +27267,14 @@ const FORE3 := {
 	#  소맷부리 테두리로 읽혔다(촬영) — 띠 밑에 천이 한 뼘 보여야 「묶은 띠」다.
 	#  판 고르기(슬롯 밑변 ≈ 63)에서 가려지는 것은 받아들인다.
 	"gart": 9.0, "gart_up": 4.0, "g_el": 32.0,
-	#  위팔 주름 — 어깨에서 위팔 길이의 비. 고리(둘레를 다 도는 띠)가 아니라 카메라 쪽
-	#  앞면에 **비스듬히 반만** 접힌 골 하나씩이다(fold_a 기울기 · fold_w 앞면 폭의 비).
-	#  둘레 고리 둘이 걷은 단 테두리 · 소매 띠와 같은 간격이라 쓸 때 소매가 마디진 관
-	#  (대나무 · 갑옷 토시)으로 읽혔다(검토 B). 천의 주름은 비스듬하고 일부만 접힌다.
-	"folds": [0.42, 0.7],
-	"fold_a": [24.0, -18.0],
-	"fold_w": 0.42,
+	#  위팔 주름 — 둘레 물결의 위상을 어깨 → 팔꿈치로 틀어 비스듬한 골이 감아 내려간다(_up3_build).
+	#  옛 판의 「앞면에 비스듬히 반만 접힌 골 막대」는 회색 파이프 위 막대 하나로 읽혀 걷었다(2026-10-16).
 	#  크림 셔츠 — SHIRT3(머리말). 이력: d8cbab 는 램프 한가운데에서 (255,229,152) 로
 	#  하얗게 날아가 쓸 때 위팔 소매가 화면에서 가장 크고 밝은 판이 됐고, c2b38f · 그 0.9 배
 	#  (175,161,129) 는 크림이 아니라 낙타색 · 황토로 읽혔다(검토 B). 식은 바탕(SHIRT3)은
 	#  쉬는 소매 L* 45 · a* 4~5 · b* 12~13, 쓸기 램프 한가운데 (195,175,142) — 무채색 크림이고
 	#  살 밝은 면(241,192,139) 아래다. 손이 먼저 읽히는 것은 살빛 채도가 맡는다.
 	"cloth": SHIRT3,
-	"fold": Color8(110, 113, 140),  # 접힌 골 — 같은 천 한 단 아래. 주황기를 빼야 놋쇠 띠와 안 섞인다
 	#  손 굴림을 팔뚝이 나눠 받는 비(2026-10-04) — 「지금 손목이 돌아가면 팔 전완도 돌려져야
 	#  좀 자연스럽지 않을까?」. 손을 뒤집는(엎침 · 뒤침) 것은 손목이 아니라 **팔뚝**이다 —
 	#  노뼈가 자뼈 둘레를 돌아 손목 쪽 끝은 손을 거의 다 따라 돌고 팔꿈치 쪽은 조금만 돈다.
@@ -27516,6 +27544,182 @@ func _mi3(mesh: Mesh, mat: Material, at := Vector3.ZERO) -> MeshInstance3D:
 	return mi
 
 
+# ══════════════════════════════════════════════════════════
+#  손 · 팔 — 둥근 마디와 빛 사다리 (2026-10-16)
+# ──────────────────────────────────────────────────────────
+#  「게임의 전체적인 모델링을 다 퀄리티 업을 끝까지 하면 좋겠거든? 진짜 있어보이는 모델링」 ·
+#  손 검토(2026-10-16): 손 하나에 살빛이 166 톤이고 면 경계마다 계단으로 뛰었다 — 픽셀 그림의
+#  색 덩어리도 매끈한 3D 도 아닌 「저해상도로 찍은 로우폴리」였다. 손가락은 곧은 8각 막대(빗살),
+#  손목은 두께가 다른 두 단면이 만나는 가로 이음매, 너클은 밝은 네모 넷(건반), 엄지 두덩만
+#  매끈한 공이라 한 손에 음영 문법이 둘이었다.
+#  그래서 마디를 **둥근 단면을 이어 짓고(_hand3_loft · 매끈한 법선)** 빛을 **문턱으로 고른다**
+#  (shaders/hand3.gdshader). 곡면을 따라 단이 서므로 손가락 등 · 옆 · 골이 세 덩어리로 갈리고,
+#  너클 줄 하이라이트는 손등 아치에서 저절로 선다. 노드 계층(root · in · j1 · j2 · tips · t1 ·
+#  t2 · thumb · thenar · web · ttip · 마디마다 첫 자식이 그 메시)은 그대로다 — IK · 앞 화판 ·
+#  그림자 사본 · qa_hand3 이 그대로 읽는다.
+#  고해상도 묘사(힘줄 · 주름 · 땀구멍)는 안 넣는다 — 손 폭 31px 에서 1px 도 안 돼 잡음이다.
+const HAND3_SHADER := "res://shaders/hand3.gdshader"
+var hand3_mc := {}        # 지은 메시 — 단면 표 그대로가 열쇠다. 손을 다시 열어도 다시 안 짓는다
+
+
+#  빛 사다리 재질. under 가 있으면 메시 아래(−y — 손바닥 · 손가락 볼)를 보는 면만 그 색이다.
+#  spec 은 문턱을 넘는 반짝임 한 점(쇠 · 손톱), glow 는 제 빛(쇠가 그늘에서 검은 끈이 안 되게),
+#  amb 는 바탕빛을 받는 몫 — 다트 무대처럼 바탕빛이 센 자리에서 손이 한 색 판때기가 안 되게 줄인다.
+func _hand3_toon(col: Color, under := Color(0.0, 0.0, 0.0, 0.0), spec := 0.0, glow := 0.0,
+		amb := 1.0, diff := 1.0) -> ShaderMaterial:
+	var m := ShaderMaterial.new()
+	m.shader = load(HAND3_SHADER) as Shader
+	m.set_shader_parameter("albedo", col)
+	if under.a > 0.0:
+		m.set_shader_parameter("under", under)
+		m.set_shader_parameter("under_k", 1.0)
+	m.set_shader_parameter("spec", spec)
+	m.set_shader_parameter("glow", glow)
+	m.set_shader_parameter("amb", amb)
+	m.set_shader_parameter("diff", diff)
+	#  바탕빛을 줄인 무대(다트 무대)는 해가 키 라이트다 — 해도 단으로 끊는다.
+	m.set_shader_parameter("dir_flat", 1.0 if amb >= 1.0 else 0.0)
+	return m
+
+
+#  둥근 단면을 이은 마디 하나 — 매끈한 법선. 단면 한 줄은
+#    [x, 폭(z), 두께(y), dy, dz, 모서리(2 타원 · 클수록 네모), 주름 폭(반지름의 몫), 주름 수,
+#     주름 위상, 골 어둠(0..1), 손등 아치]
+#  뒤쪽 값은 빼면 0(모서리 2.5). 주름은 둘레를 물결로 밀고 그 골을 꼭짓점 색으로 어둡게 칠한다 —
+#  위상을 단면마다 틀면 비스듬한 주름이 된다. 아치는 윗반 한가운데를 솟게 한다(손등).
+#  끝 c0 · c1: 음수면 열어 둔다(덮인 자리) · 0 이면 평평한 마개 · 양수면 그 길이만큼 둥글게 덮는다.
+#  단면 사이는 seg 간격으로 잘게 나눠 잇는다 — 긴 세모 안에서 법선이 비스듬히 섞이면 빛 단의
+#  경계가 마름모 조각으로 갈라진다(촬영). 같은 표는 한 번만 짓는다(hand3_mc).
+func _hand3_loft(secs: Array, n := 12, c0 := 0.0, c1 := 0.0, seg := 2.5) -> ArrayMesh:
+	var key := "%s|%d|%.2f|%.2f|%.3f" % [str(secs), n, c0, c1, seg]
+	if hand3_mc.has(key):
+		return hand3_mc[key]
+	var df := [0.0, 0.0, 0.0, 0.0, 0.0, 2.5, 0.0, 0.0, 0.0, 0.0, 0.0]
+	var full := []
+	for i in secs.size():
+		var a: Array = (secs[i] as Array).duplicate()
+		for j in range(a.size(), df.size()):
+			a.append(df[j])
+		if i > 0:
+			var p: Array = full[full.size() - 1]
+			var m: int = maxi(int(ceil((float(a[0]) - float(p[0])) / seg)), 1)
+			for j in range(1, m):
+				var q: Array = []
+				for c in df.size():
+					q.append(lerpf(float(p[c]), float(a[c]), float(j) / float(m)) if c != 7 else a[c])
+				full.append(q)
+		full.append(a)
+	var ns: int = full.size()
+	var rp := []
+	var rc := []
+	var ro := []
+	for s in full:
+		var a: Array = s
+		var x: float = a[0]
+		var hw: float = float(a[1]) * 0.5
+		var ht: float = float(a[2]) * 0.5
+		var dy: float = a[3]
+		var dz: float = a[4]
+		var sq: float = a[5]
+		var fa: float = a[6]
+		var fk: float = a[7]
+		var fp: float = a[8]
+		var ao: float = a[9]
+		var ar: float = a[10]
+		var ring := PackedVector3Array()
+		var cr := PackedColorArray()
+		for k in n:
+			var th: float = TAU * float(k) / float(n)
+			var cz := cos(th)
+			var sy := sin(th)
+			var ez: float = signf(cz) * pow(absf(cz), 2.0 / sq)
+			var ey: float = signf(sy) * pow(absf(sy), 2.0 / sq)
+			var f: float = sin(fk * th + fp) if fk > 0.0 else 0.0
+			var rs: float = 1.0 + fa * f
+			var y: float = ey * ht * rs
+			if ar != 0.0 and y > 0.0:
+				y += ar * ey * maxf(0.0, 1.0 - ez * ez)
+			ring.append(Vector3(x, y + dy, ez * hw * rs + dz))
+			var sh: float = clampf((1.0 - ao) * (1.0 - 4.5 * fa * maxf(-f, 0.0)), 0.0, 1.0)
+			cr.append(Color(sh, sh, sh))
+		rp.append(ring)
+		rc.append(cr)
+		ro.append(Vector3(x, dy, dz))
+	var vs := PackedVector3Array()
+	var nm := PackedVector3Array()
+	var cs := PackedColorArray()
+	var ix := PackedInt32Array()
+	#  꼭짓점 법선 — 둘레 접선 × 길이 접선, 단면 한가운데에서 바깥을 보게.
+	for i in ns:
+		var ring: PackedVector3Array = rp[i]
+		var pa: PackedVector3Array = rp[maxi(i - 1, 0)]
+		var pb: PackedVector3Array = rp[mini(i + 1, ns - 1)]
+		var o: Vector3 = ro[i]
+		for k in n:
+			var nn: Vector3 = (ring[(k + 1) % n] - ring[(k + n - 1) % n]).cross(pb[k] - pa[k])
+			var out: Vector3 = ring[k] - o
+			if nn.dot(out) < 0.0:
+				nn = -nn
+			if nn.length_squared() < 0.000001:
+				nn = out
+			vs.append(ring[k])
+			nm.append(nn.normalized())
+			cs.append((rc[i] as PackedColorArray)[k])
+	for i in ns - 1:
+		for k in n:
+			var a0: int = i * n + k
+			var a1: int = i * n + (k + 1) % n
+			var b0: int = a0 + n
+			var b1: int = a1 + n
+			_hand3_tri(ix, vs, nm, a0, b0, b1)
+			_hand3_tri(ix, vs, nm, a0, b1, a1)
+	for e in 2:
+		var cl: float = c0 if e == 0 else c1
+		if cl < 0.0:
+			continue
+		var ri: int = 0 if e == 0 else ns - 1
+		var ax := Vector3(-1.0 if e == 0 else 1.0, 0.0, 0.0)
+		var col: Color = (rc[ri] as PackedColorArray)[0]
+		var b: int = ri * n
+		if cl < 0.001:
+			#  평평한 마개 — 테를 축 쪽 법선으로 한 벌 더 둔다(둥근 둘레와 법선을 안 나눈다).
+			b = vs.size()
+			for k in n:
+				vs.append((rp[ri] as PackedVector3Array)[k])
+				nm.append(ax)
+				cs.append(col)
+		var ap: int = vs.size()
+		vs.append((ro[ri] as Vector3) + ax * cl)
+		nm.append(ax)
+		cs.append(col)
+		for k in n:
+			_hand3_tri(ix, vs, nm, b + k, b + (k + 1) % n, ap)
+	var arr := []
+	arr.resize(Mesh.ARRAY_MAX)
+	arr[Mesh.ARRAY_VERTEX] = vs
+	arr[Mesh.ARRAY_NORMAL] = nm
+	arr[Mesh.ARRAY_COLOR] = cs
+	arr[Mesh.ARRAY_INDEX] = ix
+	var m := ArrayMesh.new()
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+	hand3_mc[key] = m
+	return m
+
+
+#  세모 하나 — 세 꼭짓점 법선 쪽이 앞면이 되게 감는다(고닷은 시계 방향이 앞면 · _tri3 과 같다).
+func _hand3_tri(ix: PackedInt32Array, vs: PackedVector3Array, nm: PackedVector3Array,
+		a: int, b: int, c: int) -> void:
+	var fn: Vector3 = (vs[b] - vs[a]).cross(vs[c] - vs[a])
+	if fn.dot(nm[a] + nm[b] + nm[c]) > 0.0:
+		ix.append(a)
+		ix.append(c)
+		ix.append(b)
+	else:
+		ix.append(a)
+		ix.append(b)
+		ix.append(c)
+
+
 #  살 · 천 재질. _cup3_mat 의 「반사 끔」을 안 따른다 — 너클 · 손등에 램프가
 #  한 점 맺혀야 살이 산다. 대신 거칠게(0.72) 둬서 번들거리는 플라스틱은 막는다.
 #  확산은 **감싼다**(LAMBERT_WRAP) — 빛을 등진 면이 순흑까지 떨어져 손가락 골 ·
@@ -27597,24 +27801,85 @@ func _blob3_mat() -> StandardMaterial3D:
 	return m
 
 
-func _hand3_mats() -> Dictionary:
-	return {"skin": _skin3_mat(FING3.skin), "palm": _skin3_mat(FING3.palm_c, 0.12),
-			"knuck": _skin3_mat(FING3.knuck, 0.34, 0.6), "nail": _skin3_mat(FING3.nail, 0.4, 0.5),
-			"ring": _gold3_mat(FING3.ring, 0.55)}
+#  손 재질 — 살(손바닥 쪽 한 단 밝게) · 손톱 · 금반지. skin 을 주면 그 살빛이다(라이벌 손 · RIVAL).
+#  반지는 쇠다 — 제 빛 0.55 · 굵기 +1.6 은 손에서 가장 채도 높은 노란 스티커로 읽혔다(검토 C).
+#  제 빛은 그늘에서 안 꺼질 만큼만 두고, 빛 사다리가 윗면 금 · 아랫면 짙은 금 두 단과 반짝임
+#  한 점을 낸다(보석 없음).
+func _hand3_mats(skin: Color = FING3.skin, amb := 1.0) -> Dictionary:
+	var pc: Color = FING3.palm_c
+	var nl: Color = FING3.nail
+	if skin != FING3.skin:
+		#  손바닥 · 손톱은 살과 같은 비로 밝힌다 — 살빛만 바꾸면 손바닥이 딴 사람 것이 된다.
+		var k: Color = FING3.skin
+		pc = Color(skin.r * pc.r / k.r, skin.g * pc.g / k.g, skin.b * pc.b / k.b)
+		nl = Color(skin.r * nl.r / k.r, skin.g * nl.g / k.g, skin.b * nl.b / k.b)
+	return {"skin": _hand3_toon(skin, pc, 0.0, 0.0, amb),
+			"nail": _hand3_toon(nl, Color(0.0, 0.0, 0.0, 0.0), 0.35, 0.0, amb),
+			"ring": _hand3_toon(FING3.ring, Color(0.0, 0.0, 0.0, 0.0), 0.9, 0.1, amb, 0.6)}
+
+
+#  손바닥 단면 — 손목(팔뚝 끝과 같은 27 × 16 · 손목 이음매를 지운다)에서 손목뼈 자리로 얇아지고,
+#  손등이 가운데로 솟는 아치(마지막 값)를 지나 너클 줄(palm 32)에서 둥글게 닫힌다.
+#  옛 손바닥은 손목 쪽 단면이 27 × 12 라 팔뚝 끝(27 × 17)과 두께가 달라 손목을 가로지르는
+#  계단이 한 줄 섰다 — 팔 끝에 장갑 손을 꽂아 놓은 부품 경계였다(검토 B).
+func _hand3_palm_secs() -> Array:
+	var H: Dictionary = HAND3
+	var w0: float = H.arm_w1
+	var w1: float = H.palm_w
+	var pl: float = FING3.palm
+	return [[0.0, w0, 16.0, 1.0, 0.0, 2.3],
+			[4.5, lerpf(w0, w1, 0.3), 13.6, 0.7, 0.0, 2.5, 0.0, 0.0, 0.0, 0.0, 0.5],
+			[12.0, lerpf(w0, w1, 0.62), 12.0, 0.4, 0.0, 2.8, 0.0, 0.0, 0.0, 0.0, 1.0],
+			[21.0, w1 - 0.4, 11.0, 0.3, 0.0, 3.0, 0.0, 0.0, 0.0, 0.0, 1.1],
+			[27.5, w1, 10.4, 0.2, 0.0, 3.0, 0.0, 0.0, 0.0, 0.0, 0.8],
+			[pl - 0.5, w1 - 0.8, 9.4, 0.0, 0.0, 2.8, 0.0, 0.0, 0.0, 0.0, 0.3]]
+
+
+#  손가락 첫 마디 — 손바닥 속으로 3 물린 뿌리 · 허리 · 가운데 마디(PIP) 부풂. 끝은 둥글게 닫아
+#  굽힌 마디가 둥근 관절로 읽힌다. 부풂은 폭 +7% — 손가락이 화면 7px 이라 1px 이 한도다(더 키우면
+#  9월 15일의 「틈을 내려면 손을 키워야 한다」 사슬로 돌아간다).
+func _hand3_f1_secs(w: float, t: float, l1: float) -> Array:
+	return [[-3.0, w * 0.98, t * 0.98, 0.0, 0.0, 2.6],
+			[-0.6, w, t * 1.04, 0.2, 0.0, 2.6],
+			[l1 * 0.45, w * 0.91, t * 0.87, 0.0, 0.0, 2.6],
+			[l1 - 0.6, w * 0.98, t * 0.94, 0.0, 0.0, 2.6],
+			[l1 + 0.4, w * 0.95, t * 0.9, 0.0, 0.0, 2.6]]
+
+
+#  끝 마디 — 가운데 마디 · 끝 관절(DIP) · 둥근 손끝(볼이 아래로 처진다). 옛 끝은 곧은 막대의 평평한
+#  마구리라 손가락이 빗살 · 갈퀴로 읽혔다(검토 B). 손끝은 tips 자리(l2)를 0.3 안 넘는다 — 쥔
+#  손끝이 테 안인지 재는 자리다(qa_hand3 · qa_hold).
+#  short 는 그림자 사본 — 끝 마디를 반만 짓는다. 판에 얹힌 손끝 그림자는 손끝 축이 아니라 벨벳에
+#  눕힌 발자국이라 화면에서 손끝보다 4~6px 밑으로 삐져나와 검은 발톱이 됐다(검토 C · 3 만 줄였을 때도
+#  4px 남았다). 손끝 밑은 접지 얼룩이 앉힌다.
+func _hand3_f2_secs(w: float, t: float, l2: float, short := false) -> Array:
+	if short:
+		return [[-1.0, w * 0.82, t * 0.76], [l2 * 0.45, w * 0.62, t * 0.56]]
+	return [[-1.0, w * 0.95, t * 0.9, 0.0, 0.0, 2.6],
+			[l2 * 0.4, w * 0.86, t * 0.79, 0.0, 0.0, 2.6],
+			[l2 * 0.64, w * 0.88, t * 0.8, 0.0, 0.0, 2.6],
+			[l2 - 2.6, w * 0.84, t * 0.76, -0.15, 0.0, 2.5],
+			[l2 - 1.1, w * 0.74, t * 0.66, -0.35, 0.0, 2.3],
+			[l2 - 0.25, w * 0.46, t * 0.42, -0.45, 0.0, 2.2]]
+
+
+#  손톱 — 손가락 폭의 0.45 · 손끝에서 1 물러난 얇은 판. 옛 손톱은 폭 0.56 의 밝은 네모가 끝
+#  마구리에 붙어 흰 골무 · 프렌치 네일 점으로 읽혔다(검토 C).
+func _hand3_nail(w: float, ln: float) -> ArrayMesh:
+	return _hand3_loft([[0.0, w * 0.45, 0.9, 0.0, 0.0, 2.2], [ln, w * 0.42, 0.8, 0.0, 0.0, 2.2]],
+			8, 0.3, 0.4)
 
 
 #  손 하나. 뿌리(손목) → 안쪽 마디(in) → 손바닥 · 너클 · 손가락 넷 · 엄지.
 #  in 은 손에서는 그대로 두고 그림자 사본에서 기울임(빛 방향으로 미는 것)을
 #  받는다(_hand3_sync). 관절은 Node3D 하나씩이고 자세는 basis 만 바꾼다.
-#  mats 는 재질 사전(살 · 손바닥 · 너클 · 손톱 · 반지) 이거나 재질 하나(그림자)다.
+#  mats 는 재질 사전(살 · 손톱 · 반지) 이거나 재질 하나(그림자)다.
 #  mir 는 z 를 뒤집는다(엄지가 몸 안쪽). ring 이면 약지에 금반지를 낀다.
-#  shadow 면 손바닥 살 · 너클 · 손톱 · 반지를 안 짓는다 — 그림자에서는 덩어리만
-#  보이고, 겹친 조각마다 그림자가 한 겹씩 짙어진다(검토).
+#  shadow 면 너클 · 손톱 · 반지를 안 짓고 손끝을 짧게 짓는다(_hand3_f2_secs).
 #  돌려주는 열쇠 중 root · thumb · rest · grip 은 세 시안이 같다(qa_hand3 이 엄지를
-#  thumb 의 첫 자식 메시로 읽는다 — 엄지 첫 마디를 맨 먼저 단다).
+#  thumb 의 첫 자식 메시로 읽는다 — 엄지 첫 마디를 맨 먼저 단다). in 의 첫 자식은 손바닥이다.
 func _hand3_build(mats: Variant, mir: bool, ring := false, shadow := false) -> Dictionary:
 	var F: Dictionary = FING3
-	var H: Dictionary = HAND3
 	var one: Material = mats as Material if mats is Material else null
 	var md: Dictionary = {} if one != null else mats as Dictionary
 	var m_skin: Material = one if one != null else md.skin
@@ -27622,18 +27887,9 @@ func _hand3_build(mats: Variant, mir: bool, ring := false, shadow := false) -> D
 	var root := Node3D.new()
 	var inn := Node3D.new()
 	root.add_child(inn)
-	var pl: float = F.palm
-	var pt0: float = H.palm_t
-	var pt1: float = F.pt1
-	#  손바닥 — 손목 폭(팔뚝 끝 arm_w1)에서 너클 폭(palm_w)으로 벌어진다.
-	inn.add_child(_mi3(_prism3(pl, float(H.arm_w1), pt0, float(H.palm_w), pt1, 3.4),
-			m_skin))
-	if not shadow:
-		#  손바닥 살 — 밑면에 한 겹 밝게. 손을 뒤집으면 손등과 값이 갈려
-		#  「손바닥이 보인다」가 읽힌다.
-		inn.add_child(_mi3(_prism3(pl - 4.0, float(H.arm_w1) - 5.0, 1.4,
-				float(H.palm_w) - 4.0, 1.4, 0.5), md.palm,
-				Vector3(1.5, -(pt0 + pt1) * 0.25 - 0.4, 0.0)))
+	#  손바닥 — 손바닥 쪽 살은 재질이 메시 아래를 보는 면에 한 단 밝게 칠한다(under). 옛 판은 밑면에
+	#  얇은 살 판을 한 겹 더 붙였다.
+	inn.add_child(_mi3(_hand3_loft(_hand3_palm_secs(), 14, 0.0, 1.4), m_skin))
 	var j1 := []
 	var j2 := []
 	var tips := []
@@ -27646,26 +27902,31 @@ func _hand3_build(mats: Variant, mir: bool, ring := false, shadow := false) -> D
 		var l1: float = F.l1[f]
 		var l2: float = F.l2[f]
 		if not shadow:
-			#  너클 — 손등 앞끝에 솟은 살. 한 단 밝다.
-			inn.add_child(_mi3(_prism3(5.5, w - 1.0, 2.6, w - 1.8, 2.0, 0.9), md.knuck,
-					Vector3(fx - 5.5, pt1 * 0.5 - 0.3, fz)))
+			#  너클 — 손허리뼈 머리. 손등 아치 앞끝에 묻힌 둥근 혹이라 빛 사다리가 그 등에만 한 단
+			#  밝게 선다. 옛 너클은 한 단 밝은 네모 넷이 한 줄로 놓여 건반 · 타일로 읽혔다(검토 B).
+			#  손바닥에 붙어 있어 주먹에서도 남는다 — 쥔 손등의 혹 넷이 주먹을 읽힌다.
+			var kn := _mi3(_blob3_mesh(), m_skin, Vector3(fx - 1.8, float(F.pt1) * 0.5 - 0.6, fz))
+			kn.scale = Vector3(3.2, 1.6, w * 0.4)
+			inn.add_child(kn)
 		var a := Node3D.new()
 		a.position = Vector3(fx, fy, fz)
 		inn.add_child(a)
 		#  첫 마디는 손바닥 안으로 3 물려 둔다 — 굽힐 때 너클에서 틈이 안 벌어진다.
-		a.add_child(_mi3(_prism3(l1 + 3.0, w, t, w * 0.94, t * 0.9, 2.0), m_skin,
-				Vector3(-3.0, 0.0, 0.0)))
+		a.add_child(_mi3(_hand3_loft(_hand3_f1_secs(w, t, l1), 10, 0.0, 1.0), m_skin))
 		if ring and f == 2 and not shadow:
-			a.add_child(_mi3(_prism3(3.0, w + 1.6, t + 1.6, w + 1.6, t + 1.6, 1.4),
-					md.ring, Vector3(4.5, 0.0, 0.0)))
+			#  금반지 — 첫 마디 뿌리 쪽 허리. 손가락보다 0.4 씩만 솟는 둥근 고리.
+			a.add_child(_mi3(_hand3_loft([[3.3, w * 0.94 + 0.3, t * 0.92 + 0.3, 0.0, 0.0, 2.3],
+					[4.5, w * 0.93 + 0.8, t * 0.9 + 0.8, 0.0, 0.0, 2.3],
+					[5.7, w * 0.92 + 0.3, t * 0.89 + 0.3, 0.0, 0.0, 2.3]], 12, -1.0, -1.0), md.ring))
 		var b := Node3D.new()
 		b.position = Vector3(l1, 0.0, 0.0)
 		a.add_child(b)
-		b.add_child(_mi3(_prism3(l2 + 1.0, w * 0.94, t * 0.9, w * 0.8, t * 0.74, 1.8),
-				m_skin, Vector3(-1.0, 0.0, 0.0)))
+		b.add_child(_mi3(_hand3_loft(_hand3_f2_secs(w, t, l2, shadow), 10, 0.6,
+				0.0 if shadow else 0.3), m_skin))
 		if not shadow:
-			b.add_child(_mi3(_prism3(4.2, w * 0.56, 0.9, w * 0.5, 0.8, 0.3), md.nail,
-					Vector3(l2 - 4.6, t * 0.38, 0.0)))
+			var nl := _mi3(_hand3_nail(w, 3.2), md.nail, Vector3(l2 - 4.4, t * 0.36 - 0.3, 0.0))
+			nl.rotation = Vector3(0.0, 0.0, -0.08)
+			b.add_child(nl)
 		#  손끝 자리 — 메시가 아니다. qa_hand3 이 쥔 손끝이 물건 테 안인지 잰다.
 		var tp := Node3D.new()
 		tp.position = Vector3(l2, 0.0, 0.0)
@@ -27679,35 +27940,54 @@ func _hand3_build(mats: Variant, mir: bool, ring := false, shadow := false) -> D
 	var tm := Node3D.new()
 	inn.add_child(tm)
 	var mbk: float = T.m_back
-	tm.add_child(_mi3(_prism3(float(T.lm) + mbk, T.mw0, T.mt0, T.mw1, T.mt1, 3.0), m_skin,
-			Vector3(-mbk, 0.0, 0.0)))
-	#  엄지 두덩 — 매끈한 타원체(살). 손허리뼈와 같이 돌고, 맞세우면 손바닥 가운데로 구른다.
-	var then := _mi3(_blob3_mesh(), m_skin)
+	var lm: float = T.lm
+	tm.add_child(_mi3(_hand3_loft([[-mbk, T.mw0, T.mt0, 0.0, 0.0, 2.4],
+			[lm * 0.45, (float(T.mw0) + float(T.mw1)) * 0.5, (float(T.mt0) + float(T.mt1)) * 0.5,
+					0.0, 0.0, 2.4],
+			[lm - 0.4, T.mw1, T.mt1, 0.0, 0.0, 2.4],
+			[lm + 0.5, float(T.mw1) * 0.9, float(T.mt1) * 0.9, 0.0, 0.0, 2.4]], 10, 0.0, 0.6), m_skin))
+	#  엄지 두덩 — 타원체(살). 손허리뼈와 같이 돌고, 맞세우면 손바닥 가운데로 구른다. 이제 손가락도
+	#  둥근 마디라 한 손에 음영 문법이 하나다(옛 판은 이것만 매끈한 공이라 1.45 배 라이벌 손에서
+	#  각진 손에 붙인 매끈한 콩으로 읽혔다 — 검토 B).
+	var then := _mi3(_blob3_mesh(Vector3(0.0, -0.8, 0.0)), m_skin)
 	var tr: Vector3 = T.th_r
 	var ta3: Vector3 = T.th_at
-	then.position = Vector3(float(T.lm) * ta3.x, ta3.y, ta3.z * sg)
+	then.position = Vector3(lm * ta3.x, ta3.y, ta3.z * sg)
 	then.scale = tr
 	tm.add_child(then)
 	var ta := Node3D.new()
-	ta.position = Vector3(T.lm, 0.0, 0.0)
+	ta.position = Vector3(lm, 0.0, 0.0)
 	tm.add_child(ta)
-	ta.add_child(_mi3(_prism3(float(T.lp) + 1.5, T.pw0, T.pt0, T.pw1, T.pt1, 2.6), m_skin,
-			Vector3(-1.5, 0.0, 0.0)))
+	var lp: float = T.lp
+	ta.add_child(_mi3(_hand3_loft([[-1.5, T.pw0, T.pt0, 0.0, 0.0, 2.5],
+			[lp * 0.45, float(T.pw0) * 0.93, float(T.pt0) * 0.92, 0.0, 0.0, 2.5],
+			[lp - 0.4, float(T.pw1) * 1.03, float(T.pt1) * 1.03, 0.0, 0.0, 2.5],
+			[lp + 0.7, float(T.pw1) * 0.96, float(T.pt1) * 0.96, 0.0, 0.0, 2.5]], 10, 0.5, 0.6), m_skin))
 	var tb := Node3D.new()
-	tb.position = Vector3(T.lp, 0.0, 0.0)
+	tb.position = Vector3(lp, 0.0, 0.0)
 	ta.add_child(tb)
-	tb.add_child(_mi3(_prism3(float(T.ld) + 1.0, T.dw0, T.dt0, T.dw1, T.dt1, 2.0), m_skin,
-			Vector3(-1.0, 0.0, 0.0)))
-	if not shadow:
-		tb.add_child(_mi3(_prism3(4.2, float(T.dw1) * 0.7, 0.9, float(T.dw1) * 0.62, 0.8, 0.3),
-				md.nail, Vector3(float(T.ld) - 4.6, float(T.dt1) * 0.5, 0.0)))
+	var ld: float = T.ld
+	var dw1: float = T.dw1
+	var dt1: float = T.dt1
+	if shadow:
+		tb.add_child(_mi3(_hand3_loft([[-1.0, float(T.dw0) * 0.9, float(T.dt0) * 0.9],
+				[ld - 3.0, dw1 * 0.8, dt1 * 0.8]], 10, 0.5, 0.0), m_skin))
+	else:
+		tb.add_child(_mi3(_hand3_loft([[-1.0, T.dw0, T.dt0, 0.0, 0.0, 2.5],
+				[ld * 0.4, float(T.dw0) * 0.95, float(T.dt0) * 0.95, -0.1, 0.0, 2.5],
+				[ld - 2.2, dw1 * 1.02, dt1, -0.25, 0.0, 2.4],
+				[ld - 0.9, dw1 * 0.86, dt1 * 0.82, -0.4, 0.0, 2.3],
+				[ld - 0.2, dw1 * 0.52, dt1 * 0.48, -0.5, 0.0, 2.2]], 10, 0.5, 0.3), m_skin))
+		var tn := _mi3(_hand3_nail(dw1 * 1.5, 3.0), md.nail, Vector3(ld - 4.2, dt1 * 0.5 - 0.35, 0.0))
+		tn.rotation = Vector3(0.0, 0.0, -0.08)
+		tb.add_child(tn)
 	#  엄지 끝 자리 — 손가락 끝(tips)과 같은 것. qa_hand3 이 집은 엄지 끝을 잰다.
 	var ttp := Node3D.new()
-	ttp.position = Vector3(T.ld, 0.0, 0.0)
+	ttp.position = Vector3(ld, 0.0, 0.0)
 	tb.add_child(ttp)
 	#  첫 물갈퀴 — 손 좌표에 선 타원체. 매 틀 첫마디 web_at 자리와 검지 손허리뼈 머리 사이에
 	#  건다(_thumb3_web).
-	var web := _mi3(_blob3_mesh(), m_skin)
+	var web := _mi3(_blob3_mesh(Vector3(0.0, 0.7, 0.0)), m_skin)
 	inn.add_child(web)
 	_thumb3_pose(sg, PackedFloat32Array(FPOSE.rest), 0)
 	tm.transform = thumb_mr
@@ -27717,14 +27997,35 @@ func _hand3_build(mats: Variant, mir: bool, ring := false, shadow := false) -> D
 			"sg": sg, "thumb": tm, "thenar": then, "web": web, "ttip": ttp}
 
 
-#  살 덩어리 하나 — 반지름 1 의 매끈한 공(엄지 두덩 · 물갈퀴). 배율로 타원체가 된다.
-#  손가락 기둥과 달리 법선이 매끈하다 — 살로 읽혀야 하는 자리라서다(THUMB3 머리말).
-func _blob3_mesh() -> SphereMesh:
-	var m := SphereMesh.new()
-	m.radius = 1.0
-	m.height = 2.0
-	m.radial_segments = 12
-	m.rings = 6
+#  살 덩어리 하나 — 반지름 1 의 매끈한 공(엄지 두덩 · 물갈퀴 · 너클 · 자뼈 붓돌기 · 단추). 배율로
+#  타원체가 된다. 둥근 마디(_hand3_loft)와 같은 매끈한 법선이다. bend 를 주면 법선을 그쪽으로
+#  눕힌다 — 손바닥 · 손등에 붙은 살 둔덕이 붙은 면처럼 빛을 받아, 둘레에 그늘 고리가 안 선다.
+#  엄지 두덩이 둘레를 다 두른 그늘 고리 때문에 1.45 배 라이벌 손에서 손바닥에 붙인 콩으로
+#  읽혔다(검토 B). 벌마다 한 번만 짓는다.
+var hand3_blob := {}
+
+
+func _blob3_mesh(bend := Vector3.ZERO) -> Mesh:
+	var key := str(bend)
+	if hand3_blob.has(key):
+		return hand3_blob[key]
+	var sm := SphereMesh.new()
+	sm.radius = 1.0
+	sm.height = 2.0
+	sm.radial_segments = 14
+	sm.rings = 7
+	var m: Mesh = sm
+	if bend != Vector3.ZERO:
+		var arr := sm.get_mesh_arrays()
+		var ns: PackedVector3Array = arr[Mesh.ARRAY_NORMAL]
+		for i in ns.size():
+			ns[i] = (ns[i] + bend).normalized()
+		arr[Mesh.ARRAY_NORMAL] = ns
+		arr[Mesh.ARRAY_TANGENT] = null
+		var am := ArrayMesh.new()
+		am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+		m = am
+	hand3_blob[key] = m
 	return m
 
 
@@ -27844,61 +28145,87 @@ func _arm3_build(mat: Material, w0: float, t0: float, w1: float, t1: float) -> M
 	return root
 
 
-#  위팔 — 셔츠 소매 그대로다(걷은 것은 팔꿈치 밑까지). 길이 1 짜리 8각 기둥을
-#  _aim3 가 어깨에서 팔꿈치로 늘린다(qa_hand3 이 그 축을 읽는다). 소매 띠와 주름
-#  고리는 월드 길이 그대로 서야 하므로 자식으로 달고 _up3_fit 이 1/길이로 되민다.
+#  위팔 — 셔츠 소매 그대로다(걷은 것은 팔꿈치 밑까지). 길이 1 짜리 둥근 소매를
+#  _aim3 가 어깨에서 팔꿈치로 늘린다(qa_hand3 이 그 축을 읽는다). 소매 띠는 월드 길이 그대로
+#  서야 하므로 자식으로 달고 _up3_fit 이 1/길이로 되민다.
+#  주름 — 옛 판은 평평한 8각 통 앞면에 비스듬한 골 막대 하나씩이라 회색 파이프 · 갑옷 토시로
+#  읽혔다(검토 B). 이제 둘레를 물결로 밀고(주름 다섯) 그 위상을 어깨 → 팔꿈치로 틀어서
+#  비스듬한 골이 소매를 감아 내려간다. 팔꿈치 쪽일수록 깊다 — 걷어 올린 천이 거기 뭉친다.
+#  골은 꼭짓점 색으로 한 단 어둡다(옛 FORE3.fold 색의 일).
 func _up3_build(mats: Dictionary) -> Dictionary:
 	var H: Dictionary = HAND3
 	var root := MeshInstance3D.new()
 	root.mesh = null
-	root.add_child(_mi3(_prism3(1.0, H.up_w0, H.up_d, H.up_w1, H.up_d, 8.0), mats.cloth))
-	#  놋쇠 소매 띠 — 걷은 단 위, 팔꿈치 바로 위 위팔에 감는다(셔츠 소매를 걷어
-	#  올려 묶어 두는 그 띠). 소매보다 한 단 더 솟아야 띠로 읽힌다.
-	var ga := _mi3(_prism3(FORE3.gart, float(H.up_w1) + float(FORE3.gart_up),
-			float(H.up_d) + float(FORE3.gart_up), float(H.up_w1) + float(FORE3.gart_up),
-			float(H.up_d) + float(FORE3.gart_up), 8.0), mats.brass)
+	var w0: float = H.up_w0
+	var w1: float = H.up_w1
+	var d: float = H.up_d
+	var secs := []
+	for k in 6:
+		var q: float = float(k) / 5.0
+		secs.append([q, lerpf(w0, w1, q), d, 0.0, 0.0, 2.6, lerpf(0.025, 0.075, q * q), 5.0,
+				0.5 + q * 3.4])
+	root.add_child(_mi3(_hand3_loft(secs, 16, 0.0, 0.0, 0.05), mats.cloth))
+	#  놋쇠 소매 띠 — 걷은 단 위, 팔꿈치 위 위팔에 감는다(셔츠 소매를 걷어 올려 묶어 두는 그 띠).
+	#  소매보다 한 단 더 솟아야 띠로 읽힌다. 두 테가 솟은 둥근 띠 — 옛 8각 띠는 평평한 금테였다.
+	var gw: float = w1 + float(FORE3.gart_up)
+	var gd: float = d + float(FORE3.gart_up)
+	var gl: float = FORE3.gart
+	var ga := _mi3(_hand3_loft([[0.0, gw - 1.6, gd - 1.6, 0.0, 0.0, 2.6],
+			[1.2, gw, gd, 0.0, 0.0, 2.6], [gl * 0.5, gw - 0.5, gd - 0.5, 0.0, 0.0, 2.6],
+			[gl - 1.2, gw, gd, 0.0, 0.0, 2.6], [gl, gw - 1.6, gd - 1.6, 0.0, 0.0, 2.6]],
+			16, 0.0, 0.0), mats.brass)
 	root.add_child(ga)
-	#  주름 — 쓸 때 위팔이 판 위로 길게 누우면 주름 없는 크림 판때기가 화면에서 가장
-	#  크고 밝은 덩어리가 됐다(검토). 천은 접힌다 — 다만 **비스듬히, 반만**(FORE3.folds).
-	#  카메라 쪽 앞면(+y — _aim3 이 위팔 두께 축을 카메라 뒤축으로 세운다)에 얕은 골 막대
-	#  하나를 비스듬히 눕힌다. 받침(fd)은 위팔 길이 배율만 되밀고, 기울임은 그 밑 막대에
-	#  준다 — 늘어난 부모 밑에서 바로 돌리면 막대가 비틀려(밀림) 평행사변형이 된다.
-	var folds := []
-	for k in (FORE3.folds as Array).size():
-		var q: float = FORE3.folds[k]
-		var wq: float = lerpf(float(H.up_w0), float(H.up_w1), q)
-		var fd := Node3D.new()
-		root.add_child(fd)
-		var bar := _mi3(_prism3(1.8, wq * float(FORE3.fold_w), 1.6, wq * float(FORE3.fold_w) * 0.7,
-				1.2, 0.5), mats.fold, Vector3(0.0, float(H.up_d) * 0.5 - 0.1,
-				wq * 0.12 * (1.0 if k % 2 == 0 else -1.0)))
-		bar.rotation_degrees = Vector3(0.0, float(FORE3.fold_a[k]), 0.0)
-		fd.add_child(bar)
-		folds.append(fd)
-	return {"root": root, "gart": ga, "folds": folds}
+	return {"root": root, "gart": ga}
 
 
 #  팔뚝 — 셔츠 소매 · 걷은 단 · 맨 팔뚝(FORE3). 뿌리(팔꿈치 너머 back)가 원점이고
 #  +x 가 손목이다. 뿌리 노드는 _aim3 의 단위 축(길이를 x 에 싣는다 — qa_hand3 이
 #  그 축을 읽는다)이라, 월드 길이 그대로 서야 하는 맨살 · 걷은 단은 _fore3_fit 이
 #  1/길이로 되밀고, 소매만 남은 길이를 채운다 — 맨살이 고무가 안 된다.
-func _fore3_build(mats: Dictionary, bl: float) -> Dictionary:
+#  sg 는 손의 거울(_hand3_build) — 자뼈 붓돌기가 새끼 쪽에 선다.
+func _fore3_build(mats: Dictionary, bl: float, sg := 1.0) -> Dictionary:
 	var F: Dictionary = FORE3
 	var H: Dictionary = HAND3
 	var root := MeshInstance3D.new()
 	root.mesh = null
-	var slv := _mi3(_prism3(1.0, H.arm_w0, H.arm_t0, H.arm_w0, H.arm_t0, 6.5), mats.cloth)
+	var aw: float = H.arm_w0
+	var at: float = H.arm_t0
+	var slv := _mi3(_hand3_loft([[0.0, aw, at, 0.0, 0.0, 2.4, 0.03, 5.0, 0.2],
+			[0.5, aw + 0.6, at + 0.4, 0.0, 0.0, 2.4, 0.04, 5.0, 1.3],
+			[1.0, aw, at, 0.0, 0.0, 2.4, 0.03, 5.0, 2.4]], 16, 0.0, 0.0, 0.1), mats.cloth)
 	root.add_child(slv)
-	var bare := _mi3(_prism3(bl, F.w_in, F.t_in, H.arm_w1, H.arm_t1, 5.5), mats.skin)
+	#  맨 팔뚝 — 걷은 단 밑(팔뚝 살이 가장 굵다) → 팔꿈치 쪽 3 분의 1 의 근육 볼록 → 손목 잘록
+	#  → 손목(손바닥 뿌리와 같은 27 × 17). 옛 팔뚝은 34 → 27 로 곧게 좁아지는 기둥 하나였다.
+	var w1: float = H.arm_w1
+	var t1: float = H.arm_t1
+	var wi: float = F.w_in
+	var ti: float = F.t_in
+	var bare := _mi3(_hand3_loft([[0.0, wi, ti, 0.0, 0.0, 2.2],
+			[bl * 0.28, wi * 1.035, ti * 1.04, 0.3, 0.0, 2.2],
+			[bl * 0.62, lerpf(wi, w1, 0.62), lerpf(ti, t1, 0.6), 0.2, 0.0, 2.2],
+			[bl * 0.86, w1 * 0.95, t1 * 0.94, 0.0, 0.0, 2.3],
+			[bl, w1, t1, 0.0, 0.0, 2.3]], 16, -1.0, 0.0), mats.skin)
 	root.add_child(bare)
-	#  걷은 단 — 두툼한 띠 하나에 접힌 골 한 줄. 골이 없으면 두꺼운 소매로만 읽힌다.
+	#  자뼈 붓돌기 — 손목 새끼 쪽 손등의 뼈 혹. 화면 1px 언저리지만 손목이 관절로 읽힌다.
+	var st := _mi3(_blob3_mesh(), mats.skin, Vector3(bl - 3.4, t1 * 0.3, sg * w1 * 0.4))
+	st.scale = Vector3(3.0, 2.2, 2.4)
+	bare.add_child(st)
+	#  걷은 단 — 두 번 접어 올린 천. 겹 둘이 솟고(볼록 둘) 그 사이 · 위아래로 골이 파이며, 둘레는
+	#  고르지 않게 구겨진다(겹마다 주름 수 · 위상이 다르다). 옛 단은 8각 띠 하나에 접힌 골 띠
+	#  하나라 금테 두른 양동이로 읽혔다(검토 B). 끝 둘은 소매 · 맨살 속으로 접혀 든다.
 	var rl := Node3D.new()
 	root.add_child(rl)
-	rl.add_child(_mi3(_prism3(F.roll, F.w_roll, F.t_roll, float(F.w_roll) - 1.5,
-			float(F.t_roll) - 1.2, 8.0), mats.cloth))
-	rl.add_child(_mi3(_prism3(2.0, float(F.w_roll) + 1.4, float(F.t_roll) + 1.4,
-			float(F.w_roll) + 1.4, float(F.t_roll) + 1.4, 8.4), mats.fold,
-			Vector3(float(F.roll) * 0.42, 0.0, 0.0)))
+	var rr: float = F.roll
+	var ww: float = F.w_roll
+	var tt: float = F.t_roll
+	rl.add_child(_mi3(_hand3_loft([
+			[0.0, aw - 1.0, at - 2.0, 0.0, 0.0, 2.3, 0.02, 6.0, 0.3, 0.3],
+			[rr * 0.12, ww - 1.0, tt - 0.6, 0.0, 0.0, 2.3, 0.035, 6.0, 0.9],
+			[rr * 0.3, ww, tt, 0.2, 0.0, 2.3, 0.04, 6.0, 1.7],
+			[rr * 0.46, ww - 1.6, tt - 1.2, 0.0, 0.0, 2.3, 0.03, 6.0, 2.4, 0.3],
+			[rr * 0.64, ww + 0.6, tt + 0.6, 0.2, 0.0, 2.3, 0.045, 6.0, 3.3],
+			[rr * 0.86, ww - 0.6, tt - 0.4, 0.0, 0.0, 2.3, 0.035, 6.0, 4.1, 0.08],
+			[rr, wi, ti, 0.0, 0.0, 2.3, 0.02, 6.0, 4.6, 0.35]], 16, -1.0, -1.0, 1.0), mats.cloth))
 	return {"root": root, "slv": slv, "bare": bare, "roll": rl, "bl": bl}
 
 
@@ -28069,14 +28396,17 @@ func _hand3_open() -> void:
 	#  Room3D.prop_lamps 머리말). 몸통 무대에는 안 단다(몸은 소품까지 안 간다).
 	Room3D.prop_lamps(hand3_vp, false)
 	var hm := _hand3_mats()
-	var fm := {"skin": _skin3_mat(FING3.skin, 0.16, 0.8),
-			"cloth": _skin3_mat(FORE3.cloth, 0.08, 0.95),
-			"fold": _skin3_mat(FORE3.fold, 0.0, 1.0),
+	#  팔 · 소매도 손과 같은 빛 사다리다 — 살 · 천 · 놋쇠가 한 문법이어야 팔과 손이 한 몸이다.
+	#  접힌 골은 꼭짓점 색이 칠한다(_hand3_loft) — 옛 FORE3.fold 재질은 걷었다.
+	var fm := {"skin": hm.skin,
+			"cloth": _hand3_toon(FORE3.cloth),
 			#  소매 띠의 제 빛(발광)은 반만 — 쉬는 위팔은 램프 밖 그늘이라, 0.18 을
 			#  품게 했더니 띠가 L* 49 로 손 다음 가는 밝은 덩어리가 됐다(npc_probe 「밝은
 			#  덩어리」 4). 0 이면 비출 것 없는 쇠가 검은 가죽끈이 됐다(촬영). 그늘에서는
 			#  무딘 놋쇠, 쓸며 램프 밑으로 오면 반짝임이 맺힌다.
-			"brass": _gold3_mat(FORE3.brass, 0.09)}
+			#  반짝임도 낮게(0.4) — 0.8 이면 쉬는 위팔 띠에 맺힌 금빛 줄(15 × 2px)이 npc_probe 「밝은
+			#  덩어리」의 셋째가 됐다(촬영 · 2026-10-16).
+			"brass": _hand3_toon(FORE3.brass, Color(0.0, 0.0, 0.0, 0.0), 0.4, 0.09, 1.0, 0.5)}
 	if hand3_fp.size() != 24:
 		hand3_fp.resize(24)
 	hand3_rig.clear()
@@ -28106,7 +28436,8 @@ func _hand3_open() -> void:
 		#  아니라 두 동강이 겹쳐 놓인 것으로 읽힌다(2026-09-15 제보).
 		var up3 := _up3_build(fm)
 		hand3_vp.add_child(up3.root)
-		var fo := _fore3_build(fm, float(FORE3.bare_r if i == 1 else FORE3.bare))
+		var fo := _fore3_build(fm, float(FORE3.bare_r if i == 1 else FORE3.bare),
+				-1.0 if i == 1 else 1.0)
 		hand3_vp.add_child(fo.root)
 		#  팔 그림자는 **펠트를 밟는 토막에만** 깐다. 쉬는 자세에서 팔은
 		#  손목(w −22)까지라 통째로 카운터 뒤 — 곧 펠트가 아니라 벽 앞이고,
@@ -28629,7 +28960,7 @@ func _fore3_twist(fo: Dictionary, r: float) -> void:
 	(fo.roll as Node3D).rotation = Vector3(r * (float(F.tw_roll) - float(F.tw_slv)), 0.0, 0.0)
 
 
-#  위팔 조각(소매 띠 · 주름 고리)을 길이 ln 에 맞춰 민다 — _fore3_fit 과 같은 까닭.
+#  위팔 조각(소매 띠)을 길이 ln 에 맞춰 민다 — _fore3_fit 과 같은 까닭.
 #  소매 띠는 팔꿈치(끝에서 up_w1·0.3 안)에서 g_el 위에 선다.
 func _up3_fit(uf: Dictionary, ln: float) -> void:
 	var F: Dictionary = FORE3
@@ -28639,11 +28970,6 @@ func _up3_fit(uf: Dictionary, ln: float) -> void:
 	ga.visible = ge > 0.0
 	ga.position = Vector3(ge * iv, 0.0, 0.0)
 	ga.scale = Vector3(iv, 1.0, 1.0)
-	var fds: Array = uf.folds
-	for k in fds.size():
-		var fd: Node3D = fds[k]
-		fd.position = Vector3(float(F.folds[k]), 0.0, 0.0)
-		fd.scale = Vector3(iv, 1.0, 1.0)
 
 
 #  ① 손 화판 — 손 전부. 든 물건(_give_draw)보다 **먼저**다. 그림자는 그보다 먼저.
