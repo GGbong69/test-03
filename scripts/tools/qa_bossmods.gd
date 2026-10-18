@@ -26,6 +26,8 @@ const Save = preload("res://scripts/save.gd")
 #    ⑦ 새 런이 사전 · 무효 · 기억을 전부 비운다
 #    ⑧ 판을 오갔다 돌아와도 안 바뀐다
 #    ⑨ 봉인 소리가 라운드마다 **한 번** 운다 — 상점을 같이 돌려야 잡힌다
+#    ⑩ 센 제약은 표의 min_round 라운드부터 선다 — 그 앞 보스에는 안 걸린다 · 그 라운드부터는 걸린다
+#       (2026-10-18 발라트로가 센 보스를 늦은 안테부터 내는 그 문)
 # ══════════════════════════════════════════════════════════
 
 var g = null
@@ -238,3 +240,24 @@ func _run() -> void:
 			"안 운 라운드 %s (보스 라운드 %s)" % [str(miss), str(rounds.keys())])
 	_ok("한 라운드에 두 번 안 운다", dupe.is_empty(), "겹친 라운드 %s" % str(dupe))
 	_ok("라운드 첫 판에서만 운다", stray.is_empty(), "첫 판이 아닌 자리 %s" % str(stray))
+
+	# ⑩ 라운드마다 보스 제약을 이백 번 굴려 min_round 앞에 선 것이 없는지 · 그 라운드부터는 서는지
+	var r0 := {}
+	for m in GameData.modifiers():
+		r0[String(m.id)] = int(m.get("r0", 1))
+	var early := []
+	var seen := {}
+	for rd3 in range(1, GameData.rounds_n() + 1):
+		var bn := 0
+		for n3 in range(1, GameData.legs_n() + 1):
+			if GameData.round_of(n3) == rd3 and GameData.is_boss(n3):
+				bn = n3
+		for k in 200:
+			g.boss_seen = []
+			g._roll_boss_mods(bn, true)
+			for mid in _ids(bn):
+				if int(r0.get(mid, 1)) > rd3:
+					early.append("%s@%d" % [mid, rd3])
+				seen[mid] = true
+	_ok("센 제약은 min_round 앞에 안 선다", early.is_empty(), str(early.slice(0, 6)))
+	_ok("본편 안에 제약 열 종이 다 선다", seen.size() == r0.size(), "%d / %d" % [seen.size(), r0.size()])

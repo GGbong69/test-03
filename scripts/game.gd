@@ -7184,7 +7184,9 @@ func _roll_boss_mods(bn: int, force := false,
 		avoid := PackedStringArray()) -> bool:
 	if bn <= 0 or (not force and boss_mods.has(bn)):
 		return false
-	var left := GameData.modifiers().duplicate()
+	#  센 제약은 뒤 라운드부터 — 표의 min_round(발라트로가 센 보스를 늦은 안테부터 내는 그 문 · 2026-10-18).
+	var rd: int = GameData.round_of(bn)
+	var left := GameData.modifiers().filter(func(m): return rd >= int(m.get("r0", 1)))
 	#  지난 보스가 정한 것은 **빼는 것이 아니라 뒤로 미룬다.** 표가 열
 	#  종이라 보통은 남지만, 「겹치기」가 둘을 걸면 모자랄 수 있다 —
 	#  새것만 고집하다 뽑을 것이 없어지는 쪽이 더 나쁘다(2026-09-16).
@@ -7255,7 +7257,7 @@ func _target_at(rn: int) -> int:
 	var t := GameData.target_of(rn)
 	for m in _leg_mods(rn):
 		if String(m.k) == "target_mul":
-			t = int(ceil(float(t) * float(m.v)))
+			t = GameData.round2(float(t) * float(m.v))
 	return t
 
 

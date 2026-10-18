@@ -16,7 +16,7 @@ const Save = preload("res://scripts/save.gd")
 #
 #  재는 것
 #    ① 넷이 같은 수다 (문턱이 걸린 보스와 안 걸린 보스 양쪽에서)
-#    ② 「문턱」이면 맨 목표 × v 의 올림이다
+#    ② 「문턱」이면 맨 목표 × v 를 앞 두 자리만 남기고 버린 수다(GameData.round2 · 2026-10-18)
 #    ③ 무효면 넷이 전부 맨 목표로 돌아오고 _leg_mods 가 빈다
 #    ④ 이름 줄이 칸 84px 을 안 넘고, 명판과 안 겹친다 (열 종 전수)
 #    ⑤ 명판과 글리프가 카드 안쪽 면을 안 넘는다 (열 종 전수)
@@ -79,8 +79,8 @@ func _run() -> void:
 	# ① · ② 문턱을 꽂고 넷을 같이 본다
 	g.boss_mods[boss] = PackedStringArray(["tgt"])
 	var row: Dictionary = g._mod_row("tgt")
-	var want: int = int(ceil(float(bare) * float(row.get("v", 1.0))))
-	_ok("문턱 — 맨 목표 × v 의 올림", g._target_at(boss) == want,
+	var want: int = GameData.round2(float(bare) * float(row.get("v", 1.0)))
+	_ok("문턱 — 맨 목표 × v 를 앞 두 자리로", g._target_at(boss) == want,
 			"%d × %s = %d (실제 %d)"
 			% [bare, str(row.get("v", "?")), want, g._target_at(boss)])
 	g.leg_no = boss

@@ -264,13 +264,28 @@ func _run() -> void:
 			same = false
 		note += "%d " % a0
 	_ok("튜토리얼 런도 본편 목표다", same and not T.has("target"), note)
-	var seen_bad := false
-	for k in 300:
-		g._roll_boss_mods(3, true)
-		for mid in g.boss_mods.get(3, PackedStringArray()):
-			if String(mid) == "tgt" or String(mid) == "dull":
-				seen_bad = true
-	_ok("튜토리얼 보스도 제약 표를 그대로 쓴다", seen_bad, "")
+	#  튜토리얼 보스(1라운드)가 본편 1라운드 보스와 같은 제약을 굴린다 — 따로 무른 목록이 없다.
+	#  2026-10-18 부터 센 제약은 표의 min_round 라운드부터라(문턱 · 먹통 등) 둘 다 그 문을 똑같이 탄다.
+	var pools := []
+	for tut in [true, false]:
+		g.tut_run = tut
+		var seen := {}
+		for k in 300:
+			g.boss_seen = []
+			g._roll_boss_mods(3, true)
+			for mid in g.boss_mods.get(3, PackedStringArray()):
+				seen[String(mid)] = true
+		var ks: Array = seen.keys()
+		ks.sort()
+		pools.append(ks)
+	g.tut_run = true
+	var pool1 := []
+	for m in GameData.modifiers():
+		if int(m.get("r0", 1)) <= 1:
+			pool1.append(String(m.id))
+	pool1.sort()
+	_ok("튜토리얼 보스도 제약 표를 그대로 쓴다", pools[0] == pools[1] and pools[0] == pool1,
+			"%s · %s" % [str(pools[0]), str(pools[1])])
 
 	# ── ⑥ 마지막 판에서 끝난다 ──────────────────────────────
 	print("⑥ 끝")

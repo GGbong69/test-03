@@ -842,6 +842,7 @@ static func modifiers() -> Array:
 			"k": r.get("axis", ""),
 			"v": v,
 			"w": _f(r, "weight", "modifiers", 1.0),
+			"r0": _i(r, "min_round", "modifiers", 1),
 			"d": _fd(r.get("desc", ""), {"v": v}),
 			"line": r.get("_line", 0),
 		})
@@ -1304,8 +1305,18 @@ static func target_of(n: int) -> int:
 	var m := _f(leg_of(n), "mult", "legs", 1.0)
 	# 챌린지가 목표를 통째로 민다(깜깜이 0.7배). 여기 한 자리에 둔다 —
 	# 보스 제약의 「문턱」은 이 위에 game.gd 의 _target_at 가 따로 올린다.
-	return int(round(base * m * league_mul(n) * target_mul()
-			* chal_f("target_mul", 1.0)))
+	return round2(base * m * league_mul(n) * target_mul() * chal_f("target_mul", 1.0))
+
+
+#  목표 숫자 — 앞 두 자리만 남기고 버린다(세 자리부터). 발라트로가 무한 목표에 쓰는 셈이고 1~8 안테도
+#  손으로 고른 둥근 수다(2026-10-18 「발라트로 밸런스 해부」) — 칠판에 164 · 1449 · 22833 대신
+#  160 · 1400 · 22000 이 선다. 두 자리 이하는 반올림 그대로다.
+static func round2(v: float) -> int:
+	var n := int(round(v))
+	if n < 100:
+		return n
+	var p := int(pow(10.0, str(n).length() - 2))
+	return n / p * p
 
 
 static func darts_of(n: int) -> int:
@@ -3263,6 +3274,8 @@ static func _v_modifiers() -> void:
 		axes[ax] = int(axes.get(ax, 0)) + 1
 		if _f(r, "weight", "modifiers") <= 0.0:
 			_errs.append("%s — weight 가 0 이하다" % who)
+		if _i(r, "min_round", "modifiers", 1) < 1:
+			_errs.append("%s — min_round 는 1 이상이다" % who)
 		if seen_id.has(r.get("id", "")):
 			_errs.append("%s — id 중복" % who)
 		seen_id[r.get("id", "")] = true
