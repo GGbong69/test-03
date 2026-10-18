@@ -56097,7 +56097,7 @@ func _crt_open() -> void:
 	tr.mat = mat
 	tr.layer = crt_layer
 	crt_layer.add_child(tr)
-	add_child(crt_layer)
+	_scr_host(true).add_child(crt_layer)
 	#  창 크기 · 전체화면이 바뀌면 보이는 논리 크기를 다시 넣는다 — 주사선이
 	#  논리 행에 서려면 그 수가 지금 화면의 것이어야 한다(16:10 이면 400 행).
 	var vp := get_viewport()
@@ -56276,8 +56276,19 @@ var inv_rect: ColorRect = null
 var inv_until := 0       # 반전이 꺼지는 시각(Time.get_ticks_msec)
 
 
+#  화면 필터 층을 다는 자리. 기기 픽셀로 도는 층(dev — CRT · VHS · 도트 팔레트)은 도트 화판 밖
+#  (boot.gd 가 넣는 screen_host · 창 해상도)에, 나머지는 게임과 같이 화판 안에 선다. 화판 없이 도는
+#  실행(검사 · 촬영 도구가 main.tscn 을 바로 연다)은 둘 다 Game 자신이다.
+var screen_host: Node = null
+
+
+func _scr_host(dev: bool) -> Node:
+	return screen_host if dev and screen_host != null and is_instance_valid(screen_host) else self
+
+
 #  온 화면 ColorRect 하나에 셰이더 하나를 건 층(_crt_open 과 같은 꼴). 셰이더를 못 읽으면 null.
-func _scr_layer(nm: String, path: String, z: int) -> ColorRect:
+#  dev 면 도트 화판 밖(_scr_host).
+func _scr_layer(nm: String, path: String, z: int, dev := false) -> ColorRect:
 	var sh: Shader = load(path) as Shader
 	if sh == null:
 		return null
@@ -56292,7 +56303,7 @@ func _scr_layer(nm: String, path: String, z: int) -> ColorRect:
 	r.set_anchors_preset(Control.PRESET_FULL_RECT)
 	r.material = mat
 	lay.add_child(r)
-	add_child(lay)
+	_scr_host(dev).add_child(lay)
 	return r
 
 
@@ -56333,9 +56344,9 @@ func _inv_tick() -> void:
 
 func _retro_open() -> void:
 	if dot_rect == null or not is_instance_valid(dot_rect):
-		dot_rect = _scr_layer("Dot", DOT_SHADER, DOT_LAYER)
+		dot_rect = _scr_layer("Dot", DOT_SHADER, DOT_LAYER, true)
 	if vhs_rect == null or not is_instance_valid(vhs_rect):
-		vhs_rect = _scr_layer("Vhs", VHS_SHADER, VHS_LAYER)
+		vhs_rect = _scr_layer("Vhs", VHS_SHADER, VHS_LAYER, true)
 	#  창 크기 감시는 여기서도 잇는다 — CRT 셰이더를 못 읽어 _crt_open 이 일찍 빠져도
 	#  두 층의 보이는 논리 크기가 창을 따라간다(_crt_apply 가 _retro_apply 를 부른다).
 	var vp := get_viewport()
