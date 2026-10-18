@@ -103,7 +103,8 @@ const PLASTIC := {"red": Color("a83c30"), "teal": Color("2f8a84"), "graph": Colo
 		"": Color("8c2924")}
 #  더미 — [꼴, x, 앞뒤 z, 돌림(도), 기울기(도), 플라스틱 빛깔, 장면]. 밑에서 위로 — 그 폭 밑의 가장 높은 윗면에
 #  얹는다. 기울면 낮은 귀가 윗면에 닿게 든다. 주인공(TvHero · 장면 game)과 데크는 앞으로 · 엑스트라는 뒤로
-#  물린다. snow0 은 처음부터 켜진 구석 지지직(어둠 속 첫 빛) · maker 는 왼쪽 빨간 휴대용 TV · reel 은 영화 TV.
+#  물린다. maker 는 왼쪽 빨간 휴대용 TV · reel 은 영화 TV · reel0 은 처음부터 지지직으로 켜진 왼쪽 아래 영화 TV
+#  (어둠 속 첫 빛 — REEL.tune 에 채널이 잡혀 영화를 튼다 · 「왜 왼쪽 하단 화면은 안나와?」).
 const PILE := [
 	["TvConsole", -1.02, -0.10, 5.0, 0.0, "", "bars"],
 	["TvConsole", 0.0, -0.02, 0.0, 0.0, "", "sunset"],
@@ -112,7 +113,7 @@ const PILE := [
 	["Speaker", -1.55, -0.12, 8.0, 0.0, "", ""],
 	["Deck", 0.0, 0.04, 0.0, 0.0, "", ""],
 	["TvHero", 0.0, 0.04, 0.0, 0.0, "", "game"],
-	["TvMon", -0.84, -0.12, 8.0, -3.0, "graph", "snow0"],
+	["TvMon", -0.84, -0.12, 8.0, -3.0, "graph", "reel0"],
 	["TvMon", 0.66, -0.12, -8.0, 2.0, "graph", "reel"],
 	["TvPort", -0.69, -0.10, 9.0, 3.0, "red", "maker"],
 	["TvPort", 0.73, -0.14, -7.0, -4.0, "teal", "reel"],
@@ -130,8 +131,8 @@ const KNOB := {"power": -0.12, "ch": 0.45, "step": 30.0, "click": 0.07, "vol": [
 		"slide": [-0.15, 0.5], "slide_lo": -0.125, "led": [0.0, 0.1, 0.2]}
 const HERO_PARTS := ["HeroKnobA", "HeroKnobB", "HeroSlider"]
 #  영화 TV — 그림 크기(칸 = 텍셀) · 밝기 · 채도 · sw 채널이 넘어가는 때(초 · 이 사이에서 TV 마다 아무 때나) ·
-#  snow 넘어갈 때 지지직 동안
-const REEL := {"size": Vector2i(64, 48), "dim": 0.3, "sat": 0.75, "sw": [2.9, 4.6], "snow": 0.14}
+#  snow 넘어갈 때 지지직 동안 · tune 처음부터 켜진 reel0 이 지지직에서 채널을 잡는 때
+const REEL := {"size": Vector2i(64, 48), "dim": 0.3, "sat": 0.75, "sw": [2.9, 4.6], "snow": 0.14, "tune": 1.6}
 const REELS := ["hammer", "rail", "dance", "bow", "exit", "stairs", "field", "lamp", "bullet", "hill", "steps",
 		"monolith", "bench"]
 
@@ -865,7 +866,7 @@ static func make(game: Node, outer: Node) -> Node:
 			if key == "glass":
 				gb = _surf_aabb(me, k)
 				var rt: Texture2D = null
-				if job == "reel":
+				if job.begins_with("reel"):
 					var c0: String = deck[dealt % deck.size()]
 					var c1: String = REELS[(REELS.find(c0) + rng.randi_range(1, REELS.size() - 1)) % REELS.size()]
 					dealt += 1
@@ -916,7 +917,7 @@ static func make(game: Node, outer: Node) -> Node:
 			led.material_override = Room3D._glow(Color("ff3b2e"), 1.2)
 			led.position = Vector3(gb.end.x - 0.02, gb.position.y - 0.012, 0.004)
 			mi.add_child(led)
-		var ton: float = 0.0 if job == "snow0" else (float(ON.maker) if job == "maker" else
+		var ton: float = 0.0 if job == "reel0" else (float(ON.maker) if job == "maker" else
 				(float(ON.hero) if hero else float(ON.tvs) + float(T.stag) * float(tvs.size())))
 		var rl: OmniLight3D = null
 		if hero:
@@ -938,7 +939,7 @@ static func make(game: Node, outer: Node) -> Node:
 		w.add_child(lt)
 		var at: Vector3 = g + n * (gb.size.z * 0.5 + float(SCR_LIT.at))
 		lt.look_at_from_position(at, at + n)
-		if job == "reel":
+		if job.begins_with("reel"):
 			lt.light_color = JOB[String(chans[i][0])][1]
 		tvs.append({"m": gm, "l": lt, "r": rl, "on": ton, "job": job, "i": i, "hero": hero, "ch": chans.get(i, []),
 				"e": float(HERO.light) if hero else (float(MAKER.light) if job == "maker" else float(EXTRA.light))})
@@ -1143,14 +1144,17 @@ static func tick(hn: Node, t: float) -> void:
 	for tv in hn.get_meta("tvs"):
 		var m := tv.m as ShaderMaterial
 		m.set_shader_parameter("tm", t)
-		var p: float = 1.0 if String(tv.job) == "snow0" else _pw(t, float(tv.on))
+		var p: float = 1.0 if String(tv.job) == "reel0" else _pw(t, float(tv.on))
 		if String(tv.job) == "maker":
 			m.set_shader_parameter("mode", 1 if t < float(tv.on) + float(T.snow) else 4)
-		elif String(tv.job) == "reel":
-			#  영화 TV — 넘어가는 때 앞뒤로 지지직 · 그 뒤 둘째 채널
+		elif String(tv.job).begins_with("reel"):
+			#  영화 TV — 넘어가는 때 앞뒤로 지지직 · 그 뒤 둘째 채널 · reel0 은 tune 까지 지지직
 			var ch: Array = tv.ch
 			var cur: String = ch[0] if t < float(ch[2]) else ch[1]
-			m.set_shader_parameter("mode", 1 if absf(t - float(ch[2])) < float(REEL.snow) * 0.5 else 4)
+			var snowy: bool = absf(t - float(ch[2])) < float(REEL.snow) * 0.5
+			if String(tv.job) == "reel0" and t < float(REEL.tune):
+				snowy = true
+			m.set_shader_parameter("mode", 1 if snowy else 4)
 			var rv := (hn.get_meta("reels") as Dictionary)[cur].get_parent() as SubViewport
 			m.set_shader_parameter("tex", rv.get_texture())
 			(tv.l as SpotLight3D).light_color = JOB[cur][1]

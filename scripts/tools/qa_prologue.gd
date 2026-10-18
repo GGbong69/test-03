@@ -10,7 +10,7 @@ extends SceneTree
 #       엑스트라 TV 한 대(흐리지 않다) · 나머지 엑스트라 화면은 어둡다
 #    ⑥ 주인공 조작판 — 다이얼 둘 · 슬라이더가 따로 붙고, 켜지기 전엔 슬라이더가 밑에 있다가 제 자리로 오르고
 #       켜진 뒤로 다이얼 둘이 돌아 있다
-#    ⑦ 영화 TV 다섯 — 첫 채널이 저마다 다르고, 둘째 채널은 첫 채널과 다르다(켤 때마다 섞인다)
+#    ⑦ 영화 TV 여섯(왼쪽 아래 첫 빛 TV 포함) — 첫 채널이 저마다 다르고, 둘째 채널은 첫 채널과 다르다(켤 때마다 섞인다)
 #   godot --path . --script scripts/tools/qa_prologue.gd
 const Save = preload("res://scripts/save.gd")
 var b = null
@@ -84,13 +84,13 @@ func _process(_d: float) -> bool:
 				var firsts := []
 				var two_ok := true
 				for tv in g.plg_vp.get_meta("tvs"):
-					if String(tv.job) == "reel":
+					if String(tv.job).begins_with("reel"):
 						firsts.append(String(tv.ch[0]))
 						two_ok = two_ok and String(tv.ch[0]) != String(tv.ch[1])
 				var uniq := {}
 				for k in firsts:
 					uniq[k] = true
-				_ok("⑦ 영화 TV 다섯 — 첫 채널이 다 다르다", firsts.size() == 5 and uniq.size() == 5, str(firsts))
+				_ok("⑦ 영화 TV 여섯 — 첫 채널이 다 다르다", firsts.size() == 6 and uniq.size() == 6, str(firsts))
 				_ok("⑦ 둘째 채널은 첫 채널과 다르다", two_ok)
 				st = 1
 		1:
