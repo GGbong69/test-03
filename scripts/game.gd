@@ -59933,8 +59933,10 @@ func _col_item_draw(i: int, tab: int, page: int, chv: float, na := 1.0) -> void:
 	#  픽셀도 안 흔들린다. 2026-09-19
 	if not _col_found(tab, gi):
 		#  메뉴 재질이면 칠판에 분필로 그린 빈 카드 — 테 · 물음표 원(_icon_unfound).
+		#  테는 칸 안쪽 4(얹힘 받침과 같은 자리). 6 이면 물음표 원 윗변(칸 위에서 6.5)이 테 줄과 한
+		#  도트에 겹쳐 원이 테를 뚫고 나왔다(2026-10-18 「삐져 나오는거? 살짝 불편하네」 · 도트 화판).
 		if mat_draw:
-			_rr_line(self, cell.grow(-6.0), Color(DOORT.chalk_ink, 0.13))
+			_rr_line(self, cell.grow(-4.0), Color(DOORT.chalk_ink, 0.13))
 		_icon_unfound(c, 13.0)
 		nm = "???"
 	else:
