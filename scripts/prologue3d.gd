@@ -35,6 +35,16 @@ extends RefCounted
 #  흐름 — 어둠(구석 지지직 한 대) → 둘레 TV 가 차례로 깜박이며 흐리게 켜진다 → 크레딧 TV 가 켜진다
 #  (지지직 → 제작자) → 주인공이 깜박이며 켜져 인트로를 튼다 → 카메라가 곧게 다가간다 → 유리 속 그림이 화면을
 #  채우면 층이 걷히고 인트로가 이어진다.
+#  주인공이 켜질 때 조작판이 움직인다(「메인 화면 켜질때 메인tv의 오른쪽 버튼? 레버?들이 움직일수 있나?」) —
+#  채널 다이얼이 딸깍 돌며 켜지고 · 슬라이더가 올라가며 그림이 밝아지고 · 볼륨 다이얼이 스르르 돌고 · 빨강 · 초록 ·
+#  파랑 등이 차례로 든다(KNOB). 도는 몫은 tvs.py 가 따로 낸 HeroKnobA · HeroKnobB · HeroSlider(제 자리 · 처음 각은
+#  glb 노드 변환).
+#  둘레 TV 다섯은 영화 명장면 이스터에그다(REELS — 「여러 영화의 명장면을 도트로 … 저작권은 안 걸리게」 ·
+#  「여러 영화가 랜덤으로 나오면 좋겠고 이스터에그 tv는 밝기 낮춰」). 켤 때마다 다섯 장면을 섞어 나눠 주고, 저마다
+#  한 번 채널이 넘어가며(지지직) 다른 장면이 된다. 밝기는 둘레 엑스트라 언저리 — 찾아야 보인다. 스틸을
+#  따라 그리지 않고 구도 · 상황만 빌려 코드로 새로 그린 실루엣이다 — 얼굴 · 생김새 · 분장 · 제목 · 대사 · 로고는
+#  없다. 복도에서 망치를 든 사람 · 철교 위에서 팔을 벌린 사람 · 경찰차 지붕에서 춤추는 빨간 정장 · 노을 진
+#  뱃머리의 두 사람 · 하늘 그림 벽의 검은 문 앞에서 절하는 사람.
 #  API — make(game, outer) · tick(h, t) · length() · handoff() · feed_at() · ON(소리 때 — hero 는 켜짐 소리).
 
 const Door3D = preload("res://scripts/door3d.gd")
@@ -54,7 +64,7 @@ const FONT_SM := "res://fonts/Galmuri9.ttf"
 #  제작자 그림 — 크레딧 TV 유리가 첫 장면에서 차지하는 논리 px 언저리(1 칸 = 1 px)
 const CARD := Vector2i(120, 108)
 #  카메라 — 주인공 화면 한가운데에서 앞으로 dist(m) · 세로 화각(주인공 폭이 화면 폭의 여섯 몫 언저리)
-const CAM := {"dist": 1.42, "fov": 34.0}
+const CAM := {"dist": 1.55, "fov": 34.0}
 #  빛 — glow 화면 번짐 세기 · 문턱 · vig 둘레 비네트 짙기(가장자리 알파)
 const LIT := {"glow": 0.45, "glow_thr": 0.9, "vig": 0.55}
 #  화면 빛(SCR_LIT) — 유리 앞 at(m)에서 앞으로 원뿔 ang(도) · 닿는 거리 range · 세기는 MAKER · EXTRA 의 light
@@ -68,7 +78,7 @@ const MAKER := {"light": 1.3}
 #  rim_r 그 닿는 거리 · dive 끝 거리 — 유리 폭이 화면 폭을 꼭 채우는 거리의 몫(1 밑이면 유리를 지나 테가 화면
 #  밖으로 빠진다) · portal 다가가는 몫(0~1)의 이 구간에서 유리 속 그림이 화면에 박힌 그림으로 옮겨 간다 ·
 #  flat 이 구간에서 층 안에 화판 그림을 그대로 깐다(필름 톤 · 번짐이 낀 무대 그림과 게임 그림의 톤 차를 잇는다)
-const HERO := {"light": 1.1, "rim": 0.5, "rim_r": 0.32, "dive": 0.78, "portal": [0.45, 0.95], "flat": [0.8, 1.0]}
+const HERO := {"light": 1.1, "rim": 0.4, "rim_r": 0.55, "dive": 0.78, "portal": [0.45, 0.95], "flat": [0.8, 1.0]}
 #  엑스트라 — 점 빛 세기 · 몸 빛깔 배수 · 화면 밝기 · 채도 · 화면 도트(1m 당 칸) · 화면 색 단 수
 const EXTRA := {"light": 0.7, "tone": 0.42, "dim": 0.28, "sat": 0.6, "cells": 110.0, "lv": 8.0}
 #  화면 장면 — 번호(SCR_SHADER mode) · 앞에 둔 점 빛 빛깔. game 은 주인공(지지직 1 → 화판 그림 9) · maker 는
@@ -78,12 +88,15 @@ const JOB := {
 	"snow": [1, Color(0.62, 0.68, 0.80)], "bars": [2, Color(0.72, 0.70, 0.60)],
 	"blue": [3, Color(0.25, 0.40, 1.0)], "wave": [5, Color(0.35, 1.0, 0.50)],
 	"ball": [6, Color(0.60, 0.62, 0.70)], "sunset": [7, Color(1.0, 0.50, 0.38)], "board": [8, Color(0.85, 0.72, 0.60)],
+	"reel": [4, Color(0.7, 0.7, 0.7)],
+	"hammer": [4, Color(0.55, 0.65, 0.52)], "rail": [4, Color(0.78, 0.80, 0.72)], "dance": [4, Color(0.85, 0.45, 0.40)],
+	"bow": [4, Color(1.0, 0.62, 0.38)], "exit": [4, Color(0.50, 0.65, 0.95)],
 }
 const PLASTIC := {"red": Color("a83c30"), "teal": Color("2f8a84"), "graph": Color("2b2f3c"), "slate": Color("3d4456"),
 		"": Color("8c2924")}
 #  더미 — [꼴, x, 앞뒤 z, 돌림(도), 기울기(도), 플라스틱 빛깔, 장면]. 밑에서 위로 — 그 폭 밑의 가장 높은 윗면에
 #  얹는다. 기울면 낮은 귀가 윗면에 닿게 든다. 주인공(TvHero · 장면 game)과 데크는 앞으로 · 엑스트라는 뒤로
-#  물린다. snow0 은 처음부터 켜진 구석 지지직(어둠 속 첫 빛) · maker 는 왼쪽 빨간 휴대용 TV.
+#  물린다. snow0 은 처음부터 켜진 구석 지지직(어둠 속 첫 빛) · maker 는 왼쪽 빨간 휴대용 TV · reel 은 영화 TV.
 const PILE := [
 	["TvConsole", -1.02, -0.10, 5.0, 0.0, "", "bars"],
 	["TvConsole", 0.0, -0.02, 0.0, 0.0, "", "sunset"],
@@ -93,16 +106,26 @@ const PILE := [
 	["Deck", 0.0, 0.04, 0.0, 0.0, "", ""],
 	["TvHero", 0.0, 0.04, 0.0, 0.0, "", "game"],
 	["TvMon", -0.84, -0.12, 8.0, -3.0, "graph", "snow0"],
-	["Speaker", 0.68, -0.10, -6.0, 0.0, "", ""],
+	["TvMon", 0.66, -0.12, -8.0, 2.0, "graph", "reel"],
 	["TvPort", -0.69, -0.10, 9.0, 3.0, "red", "maker"],
-	["TvPort", 0.73, -0.14, -7.0, -4.0, "teal", "ball"],
-	["TvBox", -0.28, -0.16, 6.0, -4.0, "", "wave"],
-	["TvMon", 0.24, -0.18, -5.0, 3.0, "slate", "board"],
+	["TvPort", 0.73, -0.14, -7.0, -4.0, "teal", "reel"],
+	["TvBox", -0.28, -0.16, 6.0, -4.0, "", "reel"],
+	["TvMon", 0.24, -0.18, -5.0, 3.0, "slate", "reel"],
 	["TvPort", -1.28, -0.16, 9.0, 3.0, "teal", "snow"],
 	["TvMon", 1.20, -0.16, -9.0, -4.0, "graph", "bars"],
-	["TvBox", -0.79, -0.16, 12.0, -5.0, "", "blue"],
+	["TvBox", -0.79, -0.16, 12.0, -5.0, "", "reel"],
 ]
 const HERO_KINDS := ["TvHero", "Deck"]
+#  주인공 조작판(ON.hero 에서 잰 초) — power 채널 다이얼이 켜는 딸깍 · ch 그림이 선 뒤 채널 딸깍 · step 딸깍 한 번의
+#  각(도) · click 딸깍이 도는 시간 · vol 볼륨 다이얼이 도는 동안 · 각 · slide 슬라이더가 오르는 동안 · 맨 밑까지의
+#  거리(m) · led 등 셋(빨강 · 초록 · 파랑)이 드는 때
+const KNOB := {"power": -0.12, "ch": 0.45, "step": 30.0, "click": 0.07, "vol": [0.3, 1.1], "vol_a": 70.0,
+		"slide": [-0.15, 0.5], "slide_lo": -0.125, "led": [0.0, 0.1, 0.2]}
+const HERO_PARTS := ["HeroKnobA", "HeroKnobB", "HeroSlider"]
+#  영화 TV — 그림 크기(칸 = 텍셀) · 밝기 · 채도 · sw 채널이 넘어가는 때(초 · 이 사이에서 TV 마다 아무 때나) ·
+#  snow 넘어갈 때 지지직 동안
+const REEL := {"size": Vector2i(64, 48), "dim": 0.3, "sat": 0.75, "sw": [2.9, 4.6], "snow": 0.14}
+const REELS := ["hammer", "rail", "dance", "bow", "exit"]
 
 #  화면 — UV(0,0 왼 위) 를 res 칸으로 끊는다. pw 켜짐(0~1 · 가운데 줄이 위아래로 벌어지고 처음엔 하얗다) ·
 #  dim · sat 엑스트라의 밝기 · 채도. 꺼진 유리는 위가 옅은 짙은 회색 · 귀가 어둡고 · 왼 위에 비스듬한 반짝 띠
@@ -348,6 +371,162 @@ class Card extends Node2D:
 		draw_string(f, Vector2(0.0, y), s, HORIZONTAL_ALIGNMENT_CENTER, float(CARD.x), sz, col)
 
 
+#  영화 TV 그림 — 64 × 48 도트. kind 마다 구도 · 상황만 빌린 실루엣(머리말). t 로 조금씩 움직인다.
+class Reel extends Node2D:
+	var kind := ""
+	var t := 0.0
+
+	func _p(pts: Array, c: Color) -> void:
+		var pv := PackedVector2Array()
+		for q in pts:
+			pv.append(Vector2(q[0], q[1]))
+		draw_colored_polygon(pv, c)
+
+	func _r(x: float, y: float, w: float, h: float, c: Color) -> void:
+		draw_rect(Rect2(x, y, w, h), c)
+
+	func _draw() -> void:
+		match kind:
+			"hammer":
+				_hammer()
+			"rail":
+				_rail()
+			"dance":
+				_dance()
+			"bow":
+				_bow()
+			"exit":
+				_exit()
+
+	#  초록 낡은 복도 · 끝의 문 · 천장 등 · 복도 한가운데 망치를 치켜든 검은 사람(머리가 헝클어졌다)
+	func _hammer() -> void:
+		_r(0, 0, 64, 48, Color("10140f"))
+		_p([[0, 0], [64, 0], [40, 13], [24, 13]], Color("1b211b"))
+		_p([[0, 0], [24, 13], [24, 33], [0, 48]], Color("2c3b2e"))
+		_p([[64, 0], [40, 13], [40, 33], [64, 48]], Color("37483a"))
+		_p([[0, 48], [24, 33], [40, 33], [64, 48]], Color("181d18"))
+		_r(27, 15, 10, 18, Color("7d7a62"))
+		_r(29, 17, 6, 16, Color("5b5946"))
+		_r(29, 13, 6, 1, Color("d8e0c8"))
+		_r(4, 14, 5, 10, Color("26332a"))
+		_r(53, 18, 6, 9, Color("2f3f33"))
+		var k := Color("0b0b0d")
+		var by: float = roundf(sin(t * 2.2))
+		_p([[30, 27], [47, 27], [50, 48], [27, 48]], k)
+		draw_circle(Vector2(39, 22), 5.5, k)
+		_p([[33, 21], [30, 16], [35, 18]], k)
+		_p([[44, 20], [48, 15], [45, 21]], k)
+		_p([[37, 17], [38, 12], [41, 17]], k)
+		_p([[29, 30], [34, 27], [25, 13 + by], [21, 15 + by]], k)
+		_r(20, 11 + by, 5, 4, k)
+		_r(21, 4 + by, 2, 7, Color("d8b02a"))
+		_r(15, 2 + by, 11, 3, Color("7c8086"))
+		_r(15, 2 + by, 11, 1, Color("b8bcc2"))
+
+	#  흐린 하늘 · 초록 산 · 강 · 소실점으로 모이는 철교 · 멀리서 오는 기차 불빛 · 팔을 크게 벌린 회색 양복
+	func _rail() -> void:
+		for y in 18:
+			_r(0, y, 64, 1, Color("cdd5c3").lerp(Color("a7b8a5"), float(y) / 18.0))
+		_p([[0, 16], [8, 11], [18, 14], [28, 9], [40, 13], [52, 8], [64, 12], [64, 26], [0, 26]], Color("4a6b45"))
+		_p([[0, 21], [12, 16], [26, 19], [40, 15], [64, 18], [64, 31], [0, 31]], Color("35512f"))
+		_r(0, 30, 64, 18, Color("6f8c86"))
+		_p([[8, 48], [30, 18], [34, 18], [56, 48]], Color("5d5048"))
+		for i in 10:
+			var y: float = 19.0 + float(i * i) * 0.32
+			var hw: float = 2.0 + (y - 18.0) * 0.8
+			_r(32.0 - hw, roundf(y), hw * 2.0, 1, Color("3f352f"))
+		draw_line(Vector2(19, 48), Vector2(31, 18), Color("b9b2a3"))
+		draw_line(Vector2(45, 48), Vector2(33, 18), Color("b9b2a3"))
+		_r(47, 21, 9, 1, Color("4f78b0"))
+		_r(50, 25, 11, 1, Color("d2bc52"))
+		_r(50, 22, 1, 4, Color("4f78b0"))
+		var g: float = 0.5 + 0.5 * sin(t * 3.0)
+		draw_circle(Vector2(32, 18), 1.2 + g * 1.3, Color(1.0, 0.95, 0.8, 0.85))
+		var suit := Color("6e7280")
+		var ay: float = roundf(sin(t * 1.6) * 0.8)
+		_p([[28, 26], [36, 26], [37, 40], [27, 40]], suit)
+		_r(28, 40, 3, 7, Color("3a3c44"))
+		_r(33, 40, 3, 7, Color("3a3c44"))
+		_p([[28, 26], [28, 29], [13, 24 + ay], [13, 22 + ay]], suit)
+		_p([[36, 26], [36, 29], [51, 24 + ay], [51, 22 + ay]], suit)
+		_r(11, 21 + ay, 3, 3, Color("cbb39b"))
+		_r(51, 21 + ay, 3, 3, Color("cbb39b"))
+		_r(31, 27, 2, 8, Color("e2d79c"))
+		draw_circle(Vector2(32, 22), 3.5, Color("2a2420"))
+
+	#  밤거리 연기 · 번진 불빛 · 사람들 머리 · 경찰차 지붕 위에서 팔을 든 빨간 정장
+	func _dance() -> void:
+		_r(0, 0, 64, 48, Color("0f1a18"))
+		for c in [[10, 10, 9], [50, 14, 11], [30, 4, 8]]:
+			draw_circle(Vector2(c[0], c[1]), c[2], Color(0.35, 0.48, 0.42, 0.18))
+		_r(2, 4, 14, 7, Color("8a7530"))
+		_r(48, 2, 12, 5, Color("2f6a46"))
+		var lights := [[8, 18, Color("f2c14e")], [20, 9, Color("7ad08a")], [44, 20, Color("f2c14e")],
+				[56, 10, Color("e05a4a")], [36, 6, Color("f2c14e")]]
+		for i in lights.size():
+			var L: Array = lights[i]
+			var a: float = 0.55 + 0.45 * sin(t * 2.0 + float(i) * 1.7)
+			draw_circle(Vector2(L[0], L[1]), 1.6, Color(L[2], a))
+		for i in 12:
+			draw_circle(Vector2(float(i) * 6.0 + 2.0, 44.0 + float(i % 2)), 3.2, Color("080a0a"))
+		_r(8, 34, 32, 6, Color("cfd3d8"))
+		var blink: bool = fmod(t * 3.0, 1.0) < 0.5
+		_r(12, 31, 11, 3, Color("d03030") if blink else Color("40181a"))
+		_r(23, 31, 11, 3, Color("2848c8") if not blink else Color("141a40"))
+		var red := Color("a32a2a")
+		var sw: float = sin(t * 2.4) * 2.0
+		_p([[21, 34], [24, 34], [25, 23], [22, 23]], Color("7a1f20"))
+		_p([[26, 34], [29, 34], [27, 23], [24, 23]], Color("7a1f20"))
+		_p([[20, 23], [30, 23], [29, 13], [21, 13]], red)
+		draw_line(Vector2(29, 15), Vector2(37 + sw, 5), red, 3.0)
+		draw_line(Vector2(21, 15), Vector2(14, 24), red, 3.0)
+		draw_circle(Vector2(25, 10), 3.0, Color("2b211a"))
+
+	#  노을 하늘 · 해 · 반짝이는 바다 · 뱃머리 난간 · 서로 안은 두 사람
+	func _bow() -> void:
+		for y in 28:
+			_r(0, y, 64, 1, Color("553a66").lerp(Color("f2a65a"), float(y) / 28.0))
+		draw_circle(Vector2(48, 26), 5.0, Color("ffd38a"))
+		_r(0, 28, 64, 20, Color("2a2340"))
+		for i in 6:
+			var gx: float = 44.0 + sin(t * 2.0 + float(i)) * 3.0
+			_r(roundf(gx), 30.0 + float(i) * 2.0, 6.0 - float(i) * 0.6, 1, Color(1.0, 0.8, 0.5, 0.55))
+		_p([[0, 48], [0, 37], [64, 31], [64, 48]], Color("120d14"))
+		draw_line(Vector2(0, 34), Vector2(64, 27), Color("2c2230"))
+		for i in 11:
+			var x: float = float(i) * 6.0
+			draw_line(Vector2(x, 34.0 - x * 0.11), Vector2(x, 37.0 - x * 0.09), Color("2c2230"))
+		var k := Color("140c12")
+		_p([[24, 35], [31, 35], [31, 19], [24, 19]], k)
+		draw_circle(Vector2(27, 15), 3.2, k)
+		_p([[28, 35], [35, 35], [34, 21], [29, 21]], Color("1d121a"))
+		draw_circle(Vector2(32, 17), 2.8, Color("1d121a"))
+		draw_circle(Vector2(34, 15), 1.6, Color("1d121a"))
+		_p([[24, 22], [33, 26], [33, 28], [24, 24]], k)
+
+	#  하늘 · 구름을 칠한 벽 · 벽에 난 검은 문 · 흰 계단 · 문 앞에서 허리 숙여 절하는 사람
+	func _exit() -> void:
+		for y in 48:
+			_r(0, y, 64, 1, Color("4c7cc2").lerp(Color("8db6e8"), float(y) / 48.0))
+		for c in [[9, 9, 4], [14, 8, 5], [20, 10, 3.5], [48, 16, 4], [53, 15, 5], [58, 17, 3]]:
+			draw_circle(Vector2(c[0], c[1]), c[2], Color(1, 1, 1, 0.85))
+		_r(39, 8, 9, 28, Color("050508"))
+		_r(20, 36, 32, 3, Color("cdd1d8"))
+		_r(16, 39, 40, 3, Color("b5b9c0"))
+		_r(12, 42, 48, 6, Color("9ea3ab"))
+		var k := Color("1c1c22")
+		_r(32, 26, 2, 10, k)
+		_r(35, 26, 2, 10, k)
+		var a: float = 0.9 + 0.45 * (0.5 + 0.5 * sin(t * 1.3))
+		var hip := Vector2(34.5, 26.0)
+		var d := Vector2(-sin(a), -cos(a))
+		var sd := Vector2(-d.y, d.x)
+		var top: Vector2 = hip + d * 9.0
+		var body := PackedVector2Array([hip - sd * 2.0, hip + sd * 2.0, top + sd * 2.0, top - sd * 2.0])
+		draw_colored_polygon(body, k)
+		draw_circle(top + d * 2.5, 2.4, k)
+
+
 static func _hard(path: String) -> Font:
 	var f := load(path) as FontFile
 	if f == null:
@@ -421,6 +600,32 @@ static func make(game: Node, outer: Node) -> Node:
 	var cam_end := {}
 	var cam_start := {}
 	var feed: Texture2D = game.get_viewport().get_texture()
+	#  영화 TV 그림 화판 — 다섯 다 · 채널은 켤 때마다 섞는다(첫 채널은 TV 마다 다르고 둘째는 그와 다른 아무것)
+	var reels := {}
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	var deck: Array = REELS.duplicate()
+	for i in range(deck.size() - 1, 0, -1):
+		var j := rng.randi_range(0, i)
+		var tmp = deck[i]
+		deck[i] = deck[j]
+		deck[j] = tmp
+	var dealt := 0
+	for rk in REELS:
+		if not reels.has(rk):
+			var rv := SubViewport.new()
+			rv.size = REEL.size
+			rv.disable_3d = true
+			rv.gui_disable_input = true
+			rv.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+			rv.canvas_item_default_texture_filter = Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_NEAREST
+			var rn := Reel.new()
+			rn.kind = rk
+			rv.add_child(rn)
+			hn.add_child(rv)
+			reels[rk] = rn
+	var parts := {}
+	var chans := {}            # PILE 차례 → [첫 채널, 둘째 채널, 넘어가는 때]
 	for i in PILE.size():
 		var e: Array = PILE[i]
 		var me: Mesh = _mesh(String(e[0]))
@@ -451,13 +656,37 @@ static func make(game: Node, outer: Node) -> Node:
 			var key: String = sm.resource_name if sm != null else ""
 			if key == "glass":
 				gb = _surf_aabb(me, k)
-				gm = _scr_mat(job, gb, i, cv, hero, feed, sz)
+				var rt: Texture2D = null
+				if job == "reel":
+					var c0: String = deck[dealt % deck.size()]
+					var c1: String = REELS[(REELS.find(c0) + rng.randi_range(1, REELS.size() - 1)) % REELS.size()]
+					dealt += 1
+					chans[i] = [c0, c1, rng.randf_range(float(REEL.sw[0]), float(REEL.sw[1]))]
+					rt = (reels[c0].get_parent() as SubViewport).get_texture()
+				gm = _scr_mat(job, gb, i, cv, hero, feed, sz, rt)
 				mi.set_surface_override_material(k, gm)
 			elif key == "plastic":
 				var pc: Color = PLASTIC.get(String(e[5]), PLASTIC[""])
 				mi.set_surface_override_material(k, _lit(pc * float(EXTRA.tone), null, 0.45, 0.5))
 			elif ms.has(key):
 				mi.set_surface_override_material(k, ms[key])
+		if String(e[0]) == "TvHero":
+			#  조작판의 도는 몫 — glb 노드 변환이 제 자리 · 처음 각이다
+			for pn in HERO_PARTS:
+				var pm: Mesh = _mesh(pn)
+				if pm == null:
+					continue
+				var pi := MeshInstance3D.new()
+				pi.name = pn
+				pi.mesh = pm
+				pi.transform = _tv_xf[pn]
+				for k in pm.get_surface_count():
+					var psm: Material = pm.surface_get_material(k)
+					var pkey: String = psm.resource_name if psm != null else ""
+					if hm.has(pkey):
+						pi.set_surface_override_material(k, hm[pkey])
+				mi.add_child(pi)
+				parts[pn] = {"n": pi, "xf": pi.transform}
 		if gm == null:
 			continue
 		var g: Vector3 = mi.transform * gb.get_center()
@@ -501,12 +730,21 @@ static func make(game: Node, outer: Node) -> Node:
 		w.add_child(lt)
 		var at: Vector3 = g + n * (gb.size.z * 0.5 + float(SCR_LIT.at))
 		lt.look_at_from_position(at, at + n)
-		tvs.append({"m": gm, "l": lt, "r": rl, "on": ton, "job": job, "i": i, "hero": hero,
+		if job == "reel":
+			lt.light_color = JOB[String(chans[i][0])][1]
+		tvs.append({"m": gm, "l": lt, "r": rl, "on": ton, "job": job, "i": i, "hero": hero, "ch": chans.get(i, []),
 				"e": float(HERO.light) if hero else (float(MAKER.light) if job == "maker" else float(EXTRA.light))})
 	hn.set_meta("vp", vp)
 	hn.set_meta("cam", cam)
 	hn.set_meta("tvs", tvs)
 	hn.set_meta("end", cam_end)
+	hn.set_meta("reels", reels)
+	hn.set_meta("parts", parts)
+	var leds := []
+	for nm in ["led_r", "led_g", "led_b"]:
+		var lm := hm[nm] as StandardMaterial3D
+		leds.append({"m": lm, "c": lm.albedo_color, "e": lm.emission_energy_multiplier})
+	hn.set_meta("leds", leds)
 	hn.set_meta("start", cam_start)
 	if not cam_start.is_empty():
 		cam.look_at_from_position(cam_start.at, cam_start.look)
@@ -559,6 +797,7 @@ static func make(game: Node, outer: Node) -> Node:
 
 
 static var _tv_mesh := {}
+static var _tv_xf := {}         # 이름 → glb 노드 변환(움직이는 몫의 제 자리)
 
 
 static func _mesh(nm: String) -> Mesh:
@@ -569,6 +808,7 @@ static func _mesh(nm: String) -> Mesh:
 		if sc != null:
 			for c in sc.find_children("*", "MeshInstance3D", true, false):
 				_tv_mesh[String(c.name)] = (c as MeshInstance3D).mesh
+				_tv_xf[String(c.name)] = (c as MeshInstance3D).transform
 			sc.free()
 	return _tv_mesh.get(nm)
 
@@ -636,7 +876,7 @@ static func _mats(hero: bool) -> Dictionary:
 
 
 static func _scr_mat(job: String, gb: AABB, i: int, cv: SubViewport, hero: bool, feed: Texture2D,
-		sz: Vector2) -> ShaderMaterial:
+		sz: Vector2, reel: Texture2D = null) -> ShaderMaterial:
 	if _scr_sh == null:
 		_scr_sh = Shader.new()
 		_scr_sh.code = SCR_SHADER
@@ -652,6 +892,11 @@ static func _scr_mat(job: String, gb: AABB, i: int, cv: SubViewport, hero: bool,
 	elif job == "maker":
 		m.set_shader_parameter("res", Vector2(CARD))
 		m.set_shader_parameter("tex", cv.get_texture())
+	elif reel != null:
+		m.set_shader_parameter("res", Vector2(REEL.size))
+		m.set_shader_parameter("tex", reel)
+		m.set_shader_parameter("dim", float(REEL.dim))
+		m.set_shader_parameter("sat", float(REEL.sat))
 	else:
 		var k: float = float(EXTRA.cells)
 		m.set_shader_parameter("res", Vector2(maxf(roundf(gb.size.x * k), 10.0), maxf(roundf(gb.size.y * k), 8.0)))
@@ -693,6 +938,14 @@ static func tick(hn: Node, t: float) -> void:
 		var p: float = 1.0 if String(tv.job) == "snow0" else _pw(t, float(tv.on))
 		if String(tv.job) == "maker":
 			m.set_shader_parameter("mode", 1 if t < float(tv.on) + float(T.snow) else 4)
+		elif String(tv.job) == "reel":
+			#  영화 TV — 넘어가는 때 앞뒤로 지지직 · 그 뒤 둘째 채널
+			var ch: Array = tv.ch
+			var cur: String = ch[0] if t < float(ch[2]) else ch[1]
+			m.set_shader_parameter("mode", 1 if absf(t - float(ch[2])) < float(REEL.snow) * 0.5 else 4)
+			var rv := (hn.get_meta("reels") as Dictionary)[cur].get_parent() as SubViewport
+			m.set_shader_parameter("tex", rv.get_texture())
+			(tv.l as SpotLight3D).light_color = JOB[cur][1]
 		if tv.hero:
 			#  주인공 — 깜박이며 켜지면 곧장 화판 그림(첫 그림이 어둠이라 지지직을 안 거친다)
 			(tv.r as OmniLight3D).light_energy = float(HERO.rim) * minf(p * 1.6, 1.0)
@@ -703,6 +956,11 @@ static func tick(hn: Node, t: float) -> void:
 		var fl: float = 0.85 + 0.15 * sin(t * 29.0 + float(tv.i) * 1.7)
 		(tv.l as SpotLight3D).light_energy = float(tv.e) * minf(p * 1.6, 1.0) * fl
 	_layer(hn, t)
+	var reels: Dictionary = hn.get_meta("reels")
+	for rn in reels.values():
+		(rn as Node2D).set("t", t)
+		(rn as CanvasItem).queue_redraw()
+	_panel(hn, t)
 	#  꺼진 유리(주인공 · 아직 안 켜진 엑스트라)는 켜진 TV 몫만큼만 비친다
 	for tv in hn.get_meta("tvs"):
 		(tv.m as ShaderMaterial).set_shader_parameter("amb", 0.04 + 0.3 * lit / float(maxi(nx, 1)))
@@ -734,6 +992,41 @@ static func _layer(hn: Node, t: float) -> void:
 		root.size = box.size
 	(root.get_node("Fade") as ColorRect).color.a = 1.0 - clampf(t / float(FADE["in"]), 0.0, 1.0)
 	root.modulate.a = 1.0 - clampf((t - handoff()) / float(FADE.out), 0.0, 1.0)
+
+
+#  주인공 조작판 — 채널 다이얼(켜는 딸깍 · 채널 딸깍) · 볼륨 다이얼 · 슬라이더 · 등 셋(KNOB).
+static func _panel(hn: Node, t: float) -> void:
+	var ps: Dictionary = hn.get_meta("parts")
+	var u: float = t - float(ON.hero)
+	var ck: float = float(KNOB.click)
+	if ps.has("HeroKnobA"):
+		var a: float = 0.0
+		for c in [KNOB.power, KNOB.ch]:
+			a += float(KNOB.step) * clampf((u - float(c)) / ck, 0.0, 1.0)
+		_spin(ps.HeroKnobA, a)
+	if ps.has("HeroKnobB"):
+		var vr: Array = KNOB.vol
+		_spin(ps.HeroKnobB, float(KNOB.vol_a) * smoothstep(float(vr[0]), float(vr[1]), u))
+	if ps.has("HeroSlider"):
+		var sr: Array = KNOB.slide
+		var dy: float = float(KNOB.slide_lo) * (1.0 - smoothstep(float(sr[0]), float(sr[1]), u))
+		var sp: Dictionary = ps.HeroSlider
+		(sp.n as Node3D).transform = (sp.xf as Transform3D).translated_local(Vector3(0.0, dy, 0.0))
+	var leds: Array = hn.get_meta("leds")
+	for i in leds.size():
+		var L: Dictionary = leds[i]
+		var on: float = 1.0 if u >= float(KNOB.led[i]) else 0.0
+		if u >= float(KNOB.led[i]) and u < float(KNOB.led[i]) + 0.06:
+			on = 0.5
+		var lm := L.m as StandardMaterial3D
+		lm.albedo_color = (L.c as Color).darkened(0.85).lerp(L.c, on)
+		lm.emission_energy_multiplier = float(L.e) * on
+
+
+#  도는 몫을 제 축(앞 — 로컬 z)으로 a 도(시계 방향)
+static func _spin(part: Dictionary, a: float) -> void:
+	(part.n as Node3D).transform = (part.xf as Transform3D) * Transform3D(Basis(Vector3(0, 0, 1), -deg_to_rad(a)),
+			Vector3.ZERO)
 
 
 #  층이 걷히기 시작하는 때 — 게임 필터가 이때 켜진다(game.gd _plg_cover).

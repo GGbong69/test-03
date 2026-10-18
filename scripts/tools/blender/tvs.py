@@ -264,12 +264,16 @@ def turned(ob, x, y, z, ang):
     return ob
 
 
-def grip_knob(x, y, r, ang):
-    """큰 손잡이 다이얼 — 쇠 테(접시) · 검은 둥근 갓 · 갓을 가로지르는 손잡이 막대(젠레스 존 제로 런처 TV)."""
+def grip_knob(x, y, r):
+    """큰 손잡이 다이얼의 쇠 테(접시 — 몸에 붙는다). 도는 갓 · 막대는 knob_cap 이 따로 짓는다(젠레스 존 제로 런처 TV)."""
     lathe_z("kring", [(0.0, 0.006), (r * 0.78, 0.006), (r * 0.80, 0.016), (r * 0.92, 0.018), (r, 0.012), (r, 0.0)],
             (x, y, 0.003), KNOB, 36)
-    lathe_z("kcap", [(0.0, 0.03), (r * 0.5, 0.028), (r * 0.7, 0.02), (r * 0.72, 0.006)], (x, y, 0.003), BEZEL, 28)
-    turned(box("kbar", (0.016, r * 1.62, 0.02), (0.0, 0.0, 0.0), KNOB, 0.005, 2), x, y, 0.034, ang)
+
+
+def knob_cap(r):
+    """다이얼의 도는 몫 — 검은 둥근 갓 · 갓을 가로지르는 손잡이 막대. 원점(돌 축)에 짓는다 — 게임이 돌린다."""
+    lathe_z("kcap", [(0.0, 0.03), (r * 0.5, 0.028), (r * 0.7, 0.02), (r * 0.72, 0.006)], (0.0, 0.0, 0.0), BEZEL, 28)
+    turned(box("kbar", (0.016, r * 1.62, 0.02), (0.0, 0.0, 0.0), KNOB, 0.005, 2), 0.0, 0.0, 0.031, 0.0)
 
 
 def back_hump(w, h, cy, d0, d1, m, r=0.03):
@@ -291,7 +295,8 @@ def finish(name, angle=35.0):
     for o in obs:
         o.select_set(True)
     bpy.context.view_layer.objects.active = obs[0]
-    bpy.ops.object.join()
+    if len(obs) > 1:
+        bpy.ops.object.join()
     ob = bpy.context.view_layer.objects.active
     ob.name = name
     ob.data.name = name
@@ -412,11 +417,10 @@ PX0, PX1 = CX1, W * 0.5 - T
 PXC = (PX0 + PX1) * 0.5
 box("face", (PX1 - PX0 + 0.004, H - 2 * T, 0.012), (PXC, H * 0.5, -0.006), GUN)
 box("cpanel", (PX1 - PX0 - 0.024, H - 2 * T - 0.024, 0.006), (PXC, H * 0.5, 0.0), PANEL, 0.003, 2)
-grip_knob(PXC, 0.495, 0.046, 0.0)
-grip_knob(PXC, 0.385, 0.046, 45.0)
+grip_knob(PXC, 0.495, 0.046)
+grip_knob(PXC, 0.385, 0.046)
 slats(PXC - 0.05, PXC + 0.05, 0.268, 0.33, 6, GUN, 0.006)
 box("slot", (0.014, 0.18, 0.006), (PXC - 0.005, 0.155, 0.003), BEZEL)
-box("slider", (0.026, 0.03, 0.02), (PXC - 0.005, 0.205, 0.012), CAPM, 0.004, 2)
 for k in range(15):
     big = k % 4 == 0
     box("tick", (0.02 if big else 0.012, 0.0025, 0.004), (PXC - 0.04 - (0.004 if big else 0.0), 0.068 + k * 0.0123, 0.004),
@@ -429,6 +433,16 @@ for sx in (-1.0, 1.0):
                 KNOB, 10)
 feet(W, D, PANEL)
 finish("TvHero")
+#  움직이는 몫 — 게임이 켤 때 돌리고 민다(prologue3d.gd HERO_PARTS). 제 자리 · 처음 각은 노드 변환으로 실린다.
+#  채널 다이얼(A · 막대가 곧게) · 볼륨 다이얼(B · 막대가 45°) · 슬라이더 손잡이(맨 위 칸)
+knob_cap(0.046)
+finish("HeroKnobA").location = G(PXC, 0.495, 0.003)
+knob_cap(0.046)
+kb = finish("HeroKnobB")
+kb.location = G(PXC, 0.385, 0.003)
+kb.rotation_euler = (0.0, math.radians(45.0), 0.0)
+box("slider", (0.026, 0.03, 0.02), (0.0, 0.0, 0.0), CAPM, 0.004, 2)
+finish("HeroSlider").location = G(PXC - 0.005, 0.205, 0.012)
 
 # ══ 데크 — 주인공 밑 비디오 데크(전원 단추 · 테이프 문 · 긴 단추 줄 · 재생 단추 · 숨구멍) ═══════════
 W, H, D = 0.98, 0.14, 0.46
@@ -463,10 +477,15 @@ if PREVIEW:
     hero = "--hero" in argv      # 주인공 · 데크만 가까이
     if hero:
         lay = {"TvHero": (0.0, 0.14), "Deck": (0.0, 0.0)}
+    parts = [o for o in obs if o.name.startswith("Hero")]
     for o in obs:
+        if o in parts:
+            continue
         dx, dz = lay.get(o.name, (0, -9))
         o.location = Vector((dx, 0.0, dz))
         o.rotation_euler = (0.0, 0.0, math.radians(-10.0 if hero else -14.0))
+    for o in parts:          # 움직이는 몫은 주인공을 따라간다
+        o.parent = next(h for h in obs if h.name == "TvHero")
     cam = bpy.data.objects.new("cam", bpy.data.cameras.new("cam"))
     scene.collection.objects.link(cam)
     cam.data.type = "ORTHO"

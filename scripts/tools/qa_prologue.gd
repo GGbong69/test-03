@@ -8,6 +8,9 @@ extends SceneTree
 #       인트로가 처음부터(브라운관 켜짐 연출은 검사 도구에서 _cine_ok 가 건너뛴다)
 #    ⑤ 주인공(게임 TV)이 화판 그림을 틀고(mode 9 · 화판 텍스처) 카메라가 그 유리 앞에서 멎는다 · 크레딧은
 #       엑스트라 TV 한 대(흐리지 않다) · 나머지 엑스트라 화면은 어둡다
+#    ⑥ 주인공 조작판 — 다이얼 둘 · 슬라이더가 따로 붙고, 켜지기 전엔 슬라이더가 밑에 있다가 제 자리로 오르고
+#       켜진 뒤로 다이얼 둘이 돌아 있다
+#    ⑦ 영화 TV 다섯 — 첫 채널이 저마다 다르고, 둘째 채널은 첫 채널과 다르다(켤 때마다 섞인다)
 #   godot --path . --script scripts/tools/qa_prologue.gd
 const Save = preload("res://scripts/save.gd")
 var b = null
@@ -19,6 +22,9 @@ var st := 0
 var seen_crt := false
 var seen_pwr := false
 var game_on := false
+var moved := false
+var slid_low := false
+var slid_up := false
 var early_intro := false
 var late_intro := 0.0
 var cam_d := 99.0
@@ -74,6 +80,18 @@ func _process(_d: float) -> bool:
 				_ok("⑤ 크레딧은 엑스트라 TV 한 대 · 흐리지 않다", makers == [1.0], str(makers))
 				_ok("⑤ 나머지 엑스트라 화면은 어둡다", dim_ok)
 				_ok("⑤ 카메라가 다가갈 유리가 있다", not (g.plg_vp.get_meta("end") as Dictionary).is_empty())
+				_ok("⑥ 조작판 — 다이얼 둘 · 슬라이더", (g.plg_vp.get_meta("parts") as Dictionary).size() == 3)
+				var firsts := []
+				var two_ok := true
+				for tv in g.plg_vp.get_meta("tvs"):
+					if String(tv.job) == "reel":
+						firsts.append(String(tv.ch[0]))
+						two_ok = two_ok and String(tv.ch[0]) != String(tv.ch[1])
+				var uniq := {}
+				for k in firsts:
+					uniq[k] = true
+				_ok("⑦ 영화 TV 다섯 — 첫 채널이 다 다르다", firsts.size() == 5 and uniq.size() == 5, str(firsts))
+				_ok("⑦ 둘째 채널은 첫 채널과 다르다", two_ok)
 				st = 1
 		1:
 			if g._plg_live() and g.plg_t > g.Plg.length() - 0.2:
@@ -82,8 +100,19 @@ func _process(_d: float) -> bool:
 						var hm := tv.m as ShaderMaterial
 						var pv = hm.get_shader_parameter("pw")
 						game_on = pv != null and float(pv) > 0.9 and int(hm.get_shader_parameter("mode")) == 9 								and hm.get_shader_parameter("tex") is ViewportTexture
+				var ps: Dictionary = g.plg_vp.get_meta("parts")
+				moved = true
+				for pn in ["HeroKnobA", "HeroKnobB"]:
+					var pd: Dictionary = ps[pn]
+					moved = moved and not (pd.n as Node3D).transform.is_equal_approx(pd.xf)
 				var cam := g.plg_vp.get_meta("cam") as Camera3D
 				cam_d = cam.global_position.distance_to((g.plg_vp.get_meta("end") as Dictionary).at)
+			if g._plg_live() and g.plg_t < g.Plg.feed_at() - 0.3:
+				var sd: Dictionary = (g.plg_vp.get_meta("parts") as Dictionary).HeroSlider
+				slid_low = (sd.n as Node3D).transform.origin.y < (sd.xf as Transform3D).origin.y - 0.05
+			if g._plg_live() and g.plg_t > g.Plg.length() - 0.2:
+				var sd2: Dictionary = (g.plg_vp.get_meta("parts") as Dictionary).HeroSlider
+				slid_up = (sd2.n as Node3D).transform.is_equal_approx(sd2.xf)
 			if g._plg_live():
 				if g._plg_cover():
 					seen_crt = seen_crt or g.crt_layer.visible or g.vhs_rect.visible or g.dot_rect.visible
@@ -94,6 +123,8 @@ func _process(_d: float) -> bool:
 					late_intro = g.intro_t
 			else:
 				_ok("⑤ 주인공이 화판 그림을 튼다", game_on)
+				_ok("⑥ 켜진 뒤 다이얼 둘이 돌아 있다", moved)
+				_ok("⑥ 슬라이더 — 켜지기 전엔 밑 · 끝엔 제 자리", slid_low and slid_up)
 				_ok("⑤ 끝에 카메라가 게임 TV 유리 앞", cam_d < 0.02, "%.3f" % cam_d)
 				_ok("① 층이 걷히기 전엔 CRT · VHS · 도트가 꺼져 있다", not seen_crt)
 				_ok("② 브라운관은 안 켜진다", not seen_pwr)
