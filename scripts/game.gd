@@ -8008,7 +8008,7 @@ func _process(d: float) -> void:
 	#  덮개가 다 덮은 동안은 판 깔기 · 매물 낙하 · 판 갈이 · 라운드 경계 시계를 멈춘다(_wipe_hold).
 	_drop_update(_wipe_hold(d))
 	_ui_hover_tick(d)
-	#  조준 어둠의 짙기. 꽂힐 칸이 정해지면 오르고, 날아가는 순간부터 걷힌다.
+	#  조준 어둠의 짙기. 확정하면 오르고, 날아가는 순간부터 걷힌다.
 	var dim_to: float = 1.0 if _aim_glow_at().x > -9000.0 else 0.0
 	if aim_dim != dim_to:
 		aim_dim = move_toward(aim_dim, dim_to, d / float(AIMDIM.fade))
@@ -20035,13 +20035,19 @@ func _board_dim_except(p: Vector2, a: float) -> void:
 		draw_circle(BC, R * rt_bull_i, col)
 
 
-#  밝힐 자리. 꽂힐 점이 **정해져 있을 때만** 낸다(없으면 x -9999).
+#  밝힐 자리 — 확정(CONFIRM)에서만 낸다(없으면 x -9999). 조준선이 움직이는 동안 밝히면 게이지가
+#  훑는 대로 칸 한 줄이 칸에서 칸으로 튀어 눈에 거슬린다는 평 — 「멈췄을 때만 밝힘」(사용자, 2026-10-18).
+func _aim_glow_at() -> Vector2:
+	return _aim_land_at() if state == S.CONFIRM else Vector2(-9999.0, -9999.0)
+
+
+#  꽂힐 자리(자석이면 당긴 자리). 점이 **정해져 있을 때만** 낸다(없으면 x -9999).
 #    · 두 칸으로 잠그는 방식(기본 · 빗각 · 원)의 첫 칸은 한 축만 움직여서
 #      점이 없다 — 판 가운데 줄의 칸을 밝히면 거기 꽂힌다고 읽힌다
 #    · 당김은 쥐기 전에는 점이 벽(자루 자리)이라 판 밖이고 저절로 안 밝힌다
 #    · 안개(fog)는 판 안의 조준선을 지우는 제약이다. 칸을 밝히면 지운 것을
 #      칸으로 다시 알려 주는 셈이라 안 밝힌다
-func _aim_glow_at() -> Vector2:
+func _aim_land_at() -> Vector2:
 	var none := Vector2(-9999.0, -9999.0)
 	if mod_v("fog", 0.0) > 0.0:
 		return none
@@ -20056,7 +20062,7 @@ func _aim_glow_at() -> Vector2:
 
 
 #  자석 다트가 꽂히는 자리 — 겨눈 자리 p 를 판 한가운데 쪽으로 거리의 magnet(darts.csv) 만큼 당긴다.
-#  던질 때(CONFIRM 끝 · 패닝 발마다) 쓰고, 조준 중에는 밝히는 칸과 미리 보기 점이 같은 자리를 본다.
+#  던질 때(CONFIRM 끝 · 패닝 발마다) 쓰고, 미리 보기 점(조준 중 · 확정)과 확정 때 밝히는 칸이 같은 자리를 본다.
 func _magnet_at(p: Vector2) -> Vector2:
 	var m: float = float(cur_dart.get("magnet", 0.0))
 	return p.lerp(BC, m) if m > 0.0 else p
@@ -20114,10 +20120,10 @@ func _draw_aim_live() -> void:
 
 
 #  자석 — 실제로 꽂힐 자리(당겨진 자리)를 흐린 점으로 미리 보인다(2026-10-16 「조준 때 미리 보여 준다」).
-#  겨눈 자리에서 그 점까지 옅은 줄 · 밝히는 칸도 그 자리다(_aim_glow_at). 안개 · 겨눌 자리가 아직
-#  안 선 단(2단 조준의 첫 단)에서는 안 보인다 — 칸 밝힘과 같은 규칙이다. 조준 중 · 확정 중 둘 다 부른다.
+#  겨눈 자리에서 그 점까지 옅은 줄 · 확정 때 밝히는 칸도 그 자리다(_aim_land_at). 안개 · 겨눌 자리가
+#  아직 안 선 단(2단 조준의 첫 단)에서는 안 보인다. 조준 중 · 확정 중 둘 다 부른다.
 func _magnet_preview() -> void:
-	var mp := _aim_glow_at()
+	var mp := _aim_land_at()
 	if mp.x > -9000.0 and mp.distance_to(aim) > 1.0:
 		draw_line(aim, mp, Color(C_ACC, 0.45), 1.0)
 		draw_arc(mp, 3.0, 0.0, TAU, 12, Color(C_BG, 0.6), 3.0)
@@ -31699,6 +31705,7 @@ var bd_from := Vector2.ZERO
 var bd_to := Vector2.ZERO
 var bd_col := Color.WHITE
 var bd_spin := 0.0
+var bd_ty := 0               # 나는 병의 윤곽(Room3D.BTL_PROF 차례)
 var bd_fx := []              # 조각 · 방울 {p, v, c, t, life, k(0 조각 · 1 방울), w, r}
 var bd_stains := []          # 판에 남는 얼룩 {p, c, r}
 var bd_keep := {}
@@ -31780,6 +31787,7 @@ func _bduel_throw(who: int) -> void:
 	bd_t = 0.0
 	bd_col = Room3D.BOTTLE_COLS[bd_rng.randi() % Room3D.BOTTLE_COLS.size()]
 	bd_spin = (1.0 if bd_rng.randf() < 0.5 else -1.0) * bd_rng.randf_range(7.0, 10.0)
+	bd_ty = bd_rng.randi() % Room3D.BTL_PROF.size()
 	if who == 0:
 		var aims: Array = BDUEL.aims
 		var a: Array = aims[run_rng.randi() % aims.size()]
@@ -31984,7 +31992,7 @@ func _draw_bduel() -> void:
 	#  나는 병
 	if bd_ph == "fly":
 		var t: float = clampf(bd_t / _bduel_fly_len(), 0.0, 1.0)
-		_bduel_bottle(_bduel_fly_at(t), bd_spin * bd_t, _bduel_fly_k(t), bd_col, 1.0)
+		_bduel_bottle(_bduel_fly_at(t), bd_spin * bd_t, _bduel_fly_k(t), bd_col, 1.0, bd_ty)
 	for f in bd_fx:
 		var a2: float = 1.0 - float(f.t) / float(f.life)
 		var fc: Color = f.c
@@ -32035,23 +32043,46 @@ func _bduel_plate(r: Rect2, nm: String, who: int) -> void:
 	for k in int(BDUEL.n):
 		var c := Vector2(r.position.x + 16.0 + float(k) * 18.0, r.position.y + 42.0)
 		if k < hits.size():
-			_bduel_bottle(c, 0.0, 0.62, C_ACC if int(hits[k]) > 0 else C_LIGHT.darkened(0.4), 1.0)
+			_bduel_bottle(c, 0.0, 0.62, C_ACC if int(hits[k]) > 0 else C_LIGHT.darkened(0.4), 1.0, k % 3)
 		else:
-			_bduel_bottle(c, 0.0, 0.62, Color(C_LIGHT, 0.25), 1.0)
+			_bduel_bottle(c, 0.0, 0.62, Color(C_LIGHT, 0.25), 1.0, k % 3)
 
 
-#  술병 한 개(2D) — 몸 · 어깨 · 목 · 마개 · 빛 한 줄 · 상표. 한가운데 p · 크기 k(1 이면 판 위 크기).
-func _bduel_bottle(p: Vector2, rot: float, k: float, col: Color, a: float) -> void:
+#  술병 한 개(2D) — 선반 병과 같은 윤곽(Room3D.BTL_PROF[ty])을 펴서 그린다(2026-10-18 「술병 퀄리티」 — 옛 병은
+#  네모 다섯 겹이었다). 테 · 빈 유리(짙게) · 술(병 색 · BTL_FILL 첫 높이 · 오른쪽 그늘) · 라벨 띠 · 목 캡 · 왼쪽 빛줄.
+#  한가운데 p · 크기 k(1 이면 판 위 크기 — 폭 10 · 키 26). 알파는 col.a × a.
+func _bduel_bottle(p: Vector2, rot: float, k: float, col: Color, a: float, ty := 0) -> void:
+	const W := 5.0
+	const H := 26.0
+	const Y0 := 9.0
+	var aa: float = col.a * a
+	var prof: Array = Room3D.BTL_PROF[ty]
+	var sil := _btl2_poly(prof, W, H, Y0)
 	draw_set_transform(shake_off + p, rot, Vector2(k, k))
-	var body := Rect2(-5.0, -6.0, 10.0, 15.0)
-	draw_rect(body.grow(1.0), Color(0.0, 0.0, 0.0, 0.45 * a))
-	draw_rect(body, Color(col, a))
-	draw_rect(Rect2(-4.0, -9.0, 8.0, 3.0), Color(col, a))
-	draw_rect(Rect2(-1.5, -15.0, 3.0, 6.0), Color(col.darkened(0.1), a))
-	draw_rect(Rect2(-2.0, -17.0, 4.0, 2.0), Color(C_WOOD.lightened(0.2), a))
-	draw_rect(Rect2(-3.0, -1.0, 6.0, 5.0), Color(C_LIGHT.darkened(0.15), 0.85 * a))
-	draw_rect(Rect2(-3.5, -5.0, 1.0, 13.0), Color(1.0, 1.0, 1.0, 0.35 * a))
+	var ring := sil.duplicate()
+	ring.append(sil[0])
+	draw_polyline(ring, Color(0.0, 0.0, 0.0, 0.5 * aa), 2.0)
+	draw_colored_polygon(sil, Color(col.darkened(0.55), aa))
+	var fy: float = Room3D.BTL_FILL[ty][0]
+	draw_colored_polygon(_btl2_poly(Room3D._prof_cut(prof, fy, true), W, H, Y0), Color(col, aa))
+	draw_rect(Rect2(W * 0.4, Y0 - fy * H, W * 0.45, (fy - 0.06) * H), Color(0.0, 0.0, 0.0, 0.2 * aa))
+	var lb: Array = Room3D.BTL_LABEL[ty]
+	draw_rect(Rect2(-W + 1.0, Y0 - lb[1].y * H, W * 2.0 - 2.0, (lb[1].y - lb[0].y) * H),
+			Color(C_LIGHT.darkened(0.15), 0.85 * aa))
+	draw_colored_polygon(_btl2_poly(Room3D.BTL_FOIL[ty], W, H, Y0), Color(C_WOOD.lightened(0.2), aa))
+	draw_line(Vector2(-W * 0.55, Y0 - 0.08 * H), Vector2(-W * 0.55, Y0 - 0.55 * H), Color(1.0, 1.0, 1.0, 0.35 * aa), 1.0)
 	draw_set_transform(shake_off)
+
+
+#  회전체 윤곽(반지름 · 높이 0..1)을 앞에서 본 다각형으로 — 오른쪽을 올라가고 왼쪽(축 위 점은 빼고)을 내려온다.
+func _btl2_poly(prof: Array, w: float, h: float, y0: float) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	for q in prof:
+		out.append(Vector2(q.x * w, y0 - q.y * h))
+	for i in range(prof.size() - 1, -1, -1):
+		if prof[i].x > 0.0:
+			out.append(Vector2(-prof[i].x * w, y0 - prof[i].y * h))
+	return out
 
 
 #  빈 테이블 리롤 — 쓸 것이 없으니 주먹으로 친다. 판은 닿는 틀에 깔린다(_pound_land).

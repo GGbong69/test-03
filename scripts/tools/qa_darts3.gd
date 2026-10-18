@@ -6,7 +6,8 @@ extends SceneTree
 #    ④ 세운 벌 — 표준 밖은 낯 축(face) 밑 · 표준은 안 돈다(십자 날개) · 메시마다 칠 표(dk3)
 #    ⑤ 표준 날개는 인쇄(테 · 띠) 질감을 받는다
 #    ⑥ 2D 그림 — 쥘 때 쓰는 배럴 반폭(_dart_barrel)이 넷 다 선다
-#    ⑦ 자석 당김 — 꽂힐 자리가 판 한가운데 쪽으로 magnet 만큼 · 조준 중 밝히는 칸(미리 보기)도 그 자리 ·
+#    ⑦ 자석 당김 — 꽂힐 자리가 판 한가운데 쪽으로 magnet 만큼 · 확정 때 밝히는 칸 · 미리 보기도 그 자리 ·
+#       칸은 확정에서만 밝힌다(2026-10-18 「멈췄을 때만」) ·
 #       패닝 작은 다트도 발마다 당긴다(2026-10-16 · 그 길은 당김이 빠져 있었다) · 표준은 그대로
 #   godot --headless --path . --script scripts/tools/qa_darts3.gd
 const Save = preload("res://scripts/save.gd")
@@ -117,7 +118,10 @@ func _run() -> void:
 	_ok("⑦ 자석은 꽂힐 자리를 가운데로 당긴다", mk > 0.0 and g._magnet_at(g.aim).is_equal_approx(want),
 			"%s → %s" % [str(g.aim - g.BC), str(g._magnet_at(g.aim) - g.BC)])
 	g.state = g.S.CONFIRM
-	_ok("⑦ 조준 중 밝히는 칸도 당긴 자리", g._aim_glow_at().is_equal_approx(want), str(g._aim_glow_at() - g.BC))
+	_ok("⑦ 확정 때 밝히는 칸도 당긴 자리", g._aim_glow_at().is_equal_approx(want), str(g._aim_glow_at() - g.BC))
+	g.state = g.S.AIM_H
+	_ok("⑦ 움직이는 동안은 칸을 안 밝힌다 · 미리 보기 점은 선다(2026-10-18)",
+			g._aim_glow_at().x < -9000.0 and g._aim_land_at().is_equal_approx(want), str(g._aim_land_at() - g.BC))
 	g.state = g.S.AIM_V
 	g.burst_left = 3
 	g.darts.clear()

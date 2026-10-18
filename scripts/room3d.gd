@@ -207,12 +207,43 @@ const BTL_FOIL := [[Vector2(0.4, 0.84), Vector2(0.47, 0.95), Vector2(0.47, 1.0),
 		[Vector2(0.36, 0.86), Vector2(0.44, 0.95), Vector2(0.44, 1.0), Vector2(0.0, 1.01)]]
 
 
-#  유리 빛줄 — 병 둘레(회전체 u)의 왼 앞(108~137°)만 밝은 빛 그림. 나머지는 옛 은은한 빛(0.25) 그대로.
-static func _btl_stripe() -> ImageTexture:
+#  술이 찬 높이(윤곽 높이) — 윤곽마다 셋(어깨 밑까지 · 반 · 바닥 쪽). 꼭짓점 높이와 안 겹치게 둔다.
+const BTL_FILL := [[0.57, 0.43, 0.29], [0.65, 0.49, 0.33], [0.52, 0.39, 0.27]]
+
+
+#  유리 빛줄 — 병 둘레(회전체 u)의 왼 앞(108~137°)만 밝은 빛 그림. 나머지는 바탕 빛 base.
+static func _btl_stripe(base := 0.33) -> ImageTexture:
 	var im := Image.create(16, 1, false, Image.FORMAT_RGBA8)
-	im.fill(Color(0.33, 0.33, 0.33))
+	im.fill(Color(base, base, base))
 	im.fill_rect(Rect2i(5, 0, 2, 1), Color.WHITE)
 	return ImageTexture.create_from_image(im)
+
+
+#  술 빛 — 둘레를 따라 둥근 명암. 오른 가장자리(u 0) 그늘 · 앞(u 4) · 왼 앞 빛줄(u 5~6)이 가장 밝다 ·
+#  왼 가장자리(u 8) · 뒤는 그늘. 빛만 쓰면 3px 몸이 납작한 색 막대가 된다.
+static func _btl_glow() -> ImageTexture:
+	var v := [0.35, 0.45, 0.6, 0.72, 0.82, 1.0, 1.0, 0.8, 0.6, 0.4, 0.35, 0.35, 0.35, 0.35, 0.35, 0.35]
+	var im := Image.create(16, 1, false, Image.FORMAT_RGBA8)
+	for i in 16:
+		im.set_pixel(i, 0, Color(v[i], v[i], v[i]))
+	return ImageTexture.create_from_image(im)
+
+
+#  윤곽(높이가 안 줄어드는 차례)을 높이 y 에서 자른다 — low 면 아래쪽에 자른 면 뚜껑(축까지)을 덮고,
+#  아니면 자른 자리에서 위로 간다.
+static func _prof_cut(prof: Array, y: float, low: bool) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	for i in prof.size():
+		var p: Vector2 = prof[i]
+		if (p.y <= y) if low else (p.y >= y):
+			out.append(p)
+		if i + 1 < prof.size():
+			var q: Vector2 = prof[i + 1]
+			if (p.y - y) * (q.y - y) < 0.0:
+				out.append(p.lerp(q, (y - p.y) / (q.y - p.y)))
+	if low:
+		out.append(Vector2(0.0, y))
+	return out
 
 
 #  술병 k 를 보이거나 숨긴다(깬 병).
@@ -299,7 +330,7 @@ static func make_room(host: Node) -> SubViewport:
 
 	# ── 뒤 선반과 술병 ──
 	#  술병 자리는 bottle_layout 이 낸다(씨 고정 — 게임의 술병 깨기가 같은 표를 읽는다).
-	#  병마다 몸 · 라벨 · 목 캡 세 조각에 번호(meta "bottle")를 달고 방 뿌리에 그 셋을 적는다(bottle_show).
+	#  병마다 술 · 빈 유리 · 라벨 · 목 캡 네 조각에 번호(meta "bottle")를 달고 방 뿌리에 그 넷을 적는다(bottle_show).
 	#  조각은 예전처럼 방 뿌리에 바로 선다 — 위치로 선반을 찾는 도구가 있다.
 	var lay := bottle_layout()
 	var parts := []
@@ -319,8 +350,12 @@ static func make_room(host: Node) -> SubViewport:
 	#  검은 종이)와 목 캡(금박 · 붉은 · 검은)을 씌우고, 유리 빛줄 하나(_btl_stripe — 왼 앞 세로 줄)를
 	#  빛 그림으로 얹는다. 병마다 한 벌인 윤곽(반지름 1 · 키 1)을 몸 · 목 키(h + 0.09) · 굵기로 늘린다
 	#  — 메시는 셋씩만 짓는다. 자리 · 키 · 굵기 · 색은 bottle_layout 그대로다(깨기 판정이 같은 표).
-	var gms := {}
-	var stripe := _btl_stripe()
+	#  2026-10-18 술 · 빈 유리 — 바 선반 사진처럼(밑불이 술을 뚫고 오른다) 술이 찬 아랫몸은 병 색으로
+	#  빛나고(둥근 명암 _btl_glow), 빈 어깨 · 목은 짙은 유리에 빛줄만 선다. 윤곽을 BTL_FILL 높이에서 잘라
+	#  두 조각으로 돌린다(차는 높이 셋).
+	var gms := {}             # ci → [술 · 빈 유리]
+	var glow := _btl_glow()
+	var stripe := _btl_stripe(0.12)
 	var labs := []
 	for lc in [Color("b4a47f"), Color("c9bfa4"), Color("1d1916")]:
 		var lm := _mat(lc, 0.8)
@@ -334,24 +369,30 @@ static func make_room(host: Node) -> SubViewport:
 		var ci: int = int(b.c)
 		if not gms.has(ci):
 			var bc: Color = BOTTLE_COLS[ci]
-			var gm := _mat(bc, 0.15, 0.0)
-			gm.emission_enabled = true
-			gm.emission = bc.lightened(0.25)
-			gm.emission_texture = stripe
-			gm.emission_operator = BaseMaterial3D.EMISSION_OP_MULTIPLY
-			gm.emission_energy_multiplier = 0.75
-			gms[ci] = gm
+			var gl := []
+			for q in [[bc, 0.15, glow, 1.5], [bc.darkened(0.4), 0.25, stripe, 0.6]]:
+				var gm := _mat(q[0], 0.15, 0.0)
+				gm.emission_enabled = true
+				gm.emission = bc.lightened(q[1])
+				gm.emission_texture = q[2]
+				gm.emission_operator = BaseMaterial3D.EMISSION_OP_MULTIPLY
+				gm.emission_energy_multiplier = q[3]
+				gl.append(gm)
+			gms[ci] = gl
 		var ty: int = (k * 7 + ci) % 3
+		var fi: int = (k * 5 + ci) % 3
+		var fy: float = BTL_FILL[ty][fi]
 		var at := Vector3(float(b.x), float(b.sy) + 0.025, -2.32)
 		var sc := Vector3(float(b.r), float(b.h) + 0.09, float(b.r))
-		var body := _lmi("btl%d" % ty, PackedVector2Array(BTL_PROF[ty]), at, gms[ci], 10)
+		var liq := _lmi("btl%d_lq%d" % [ty, fi], _prof_cut(BTL_PROF[ty], fy, true), at, gms[ci][0], 10)
+		var body := _lmi("btl%d_gl%d" % [ty, fi], _prof_cut(BTL_PROF[ty], fy, false), at, gms[ci][1], 10)
 		var lab := _lmi("btl_lab%d" % ty, PackedVector2Array(BTL_LABEL[ty]), at, labs[k % 3], 10)
 		var foil := _lmi("btl_foil%d" % ty, PackedVector2Array(BTL_FOIL[ty]), at, foils[(k * 5) % 3], 8)
-		for pt in [body, lab, foil]:
+		for pt in [liq, body, lab, foil]:
 			pt.scale = sc
 			pt.set_meta("bottle", k)
 			root.add_child(pt)
-		parts.append([body, lab, foil])
+		parts.append([liq, body, lab, foil])
 	root.set_meta("bottles", parts)
 
 	# ── 네온 · 다트판 ──
