@@ -1251,6 +1251,10 @@ static func _rows(g: Node) -> Array:
 				{"n1": "컬렉션 넘김 다시 보기", "t": "act", "a": "colf"},
 				#  문 분필 「게임 시작」(game.gd TTLG) — 기다림을 건너뛰고 지금 쓴다. 2026-10-15
 				{"n1": "문 분필 게임 시작", "t": "act", "a": "ttlg"},
+				#  술병 대결의 상인 수(game.gd BDUEL.moves)를 하나로 묶는다 — 누를 때마다 잡기 → 깨기 → 쉬기.
+				#  상점이면 잡기로 대결을 열고, 대결 중이면 남은 내 차례가 다 그 수다. 2026-10-18 (「소리·연출」은
+				#  열아홉 줄이 다 차서 이 쪽에 둔다)
+				{"n1": "대결 상인 수 묶기", "t": "act", "a": "bdm_move"},
 			]
 
 
@@ -2334,6 +2338,25 @@ static func _run(g: Node, e: Dictionary) -> void:
 			g.state = g.S.OVER
 			g._sfx("run_win" if g.won else "run_lose")
 			_say("완주 화면" if g.won else "실패 화면")
+			return
+		"bdm_move":
+			var mv := "catch"
+			if g.state == g.S.SHOP:
+				g.btl_st = 1
+				g._bduel_enter()
+			elif g.state == g.S.BDUEL and not g.bd_moves.is_empty():
+				mv = {"catch": "shoot", "shoot": "rest"}.get(String(g.bd_moves[g.bd_moves.size() - 1]), "catch")
+			if g.state != g.S.BDUEL:
+				_say("상점 · 대결에서만")
+				return
+			g.bd_moves = []
+			for _i in int(g.BDUEL.n):
+				g.bd_moves.append(mv)
+			if g.bd_who == 1 and g.bd_ph in ["tell", "aim_v", "aim_h"]:
+				g.bd_move = mv
+				g.bd_ready = false
+				g.bd_cnt = float(g.BDUEL.shoot_t)
+			_say("상인 수 — %s" % {"catch": "잡기", "shoot": "깨기", "rest": "쉬기"}[mv])
 			return
 		"btl_all", "bduel", "secret":
 			if g.state != g.S.SHOP:

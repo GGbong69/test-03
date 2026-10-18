@@ -7,10 +7,13 @@ extends SceneTree
 #      (2026-10-16 「상인 뒤 술병은 이스터에그 발동에 필요없도록」) · 이웃도 보이는 병만 고른다.
 #   ④ 대결은 판 상태(꽂힌 다트 · 제약 · 판 기하)를 비켜 두고 영구 판으로 한다.
 #   ⑤ 상인이 n 병 · 내가 n 병 — 점수는 판의 수 그대로(칸 × 띠 · 불 · 빗나감 0)이고 합으로 겨룬다.
+#      잡기 차례에는 불이 늘 잡힌다(가운데 줄은 어느 반쪽이든 지킨다).
 #   ⑥ 이기면 비밀 상점 — 테이블이 레전더리 동전으로만 깔린다 · 판 상태가 돌아온다 · 단 2.
 #   ⑦ 지면 상점 그대로 돌아간다 · 단 2(런마다 한 번).
 #   ⑧ 깬 병 · 단은 이어하기에 적히고, 새 런은 선반을 다시 세운다.
 #   ⑨ 대결 중에는 일시정지가 안 열린다(ESC).
+#   ⑩ 보스(2026-10-18) — 상인 · 나 번갈아 · 수(잡기 · 깨기 · 쉬기)는 대결마다 셋 다 한 번씩 ·
+#      잡기는 지키는 반쪽으로 던지면 0점 · 반대쪽은 산다 · 깨기는 셈이 끝난 뒤 던지면 0점 · 셈 안에 던지면 산다.
 #   godot --headless --path . --script scripts/tools/qa_btl.gd
 const Save = preload("res://scripts/save.gd")
 const GameData = preload("res://scripts/data.gd")
@@ -59,15 +62,27 @@ func _shop() -> void:
 
 #  대결을 끝까지 민다. mine 은 내 병이 꽂힐 자리.
 func _duel(mine: Vector2) -> void:
-	for i in 2000:
+	_duel_f(func(): return mine)
+
+
+#  대결을 끝까지 민다 — 내 병 자리는 pick(차례마다 부른다) · slow 면 깨기 셈이 끝난 뒤 잡는다.
+#  나는 병이 떠날 때마다 누가 던졌는지를 돌려준다.
+func _duel_f(pick: Callable, slow := false) -> Array:
+	var order := []
+	var ph0 := ""
+	for i in 4000:
 		if g.bd_ph == "end":
 			break
-		if g.bd_ph == "aim_v":
+		if g.bd_ph == "aim_v" and (not slow or g.bd_ready or g.bd_move != "shoot"):
 			g._bduel_click(Vector2(-1.0, -1.0))
 		elif g.bd_ph == "aim_h":
-			g.aim = mine
+			g.aim = pick.call()
 			g._bduel_click(Vector2(-1.0, -1.0))
+		if g.bd_ph == "fly" and ph0 != "fly":
+			order.append(g.bd_who)
+		ph0 = g.bd_ph
 		g._bduel_tick(1.0 / 60.0)
+	return order
 
 
 func _run() -> void:
@@ -149,8 +164,9 @@ func _run() -> void:
 	var s0 := 0
 	for v in g.bd_hits[0]:
 		s0 += int(v)
-	_ok("⑤ 합은 병마다 점수의 합", int(g.bd_sc[0]) == s0 and int(g.bd_sc[1]) == bull * int(g.BDUEL.n),
-			"상인 %d · 나 %d" % [g.bd_sc[0], g.bd_sc[1]])
+	var free: int = (g.bd_moves as Array).filter(func(m): return m != "catch").size()
+	_ok("⑤ 합은 병마다 점수의 합(잡기 차례의 불은 잡힌다)", int(g.bd_sc[0]) == s0
+			and int(g.bd_sc[1]) == bull * free, "상인 %d · 나 %d · 수 %s" % [g.bd_sc[0], g.bd_sc[1], str(g.bd_moves)])
 	_ok("⑤ 큰 쪽이 이긴다", g.bd_won == (int(g.bd_sc[1]) > int(g.bd_sc[0])))
 	g.bd_won = true             # 상인 합이 불 셋을 넘는 판도 있다 — 이긴 길을 못 박는다
 	g.bd_t = 1.0
@@ -200,3 +216,33 @@ func _run() -> void:
 	ev.pressed = true
 	g._unhandled_input(ev)
 	_ok("⑨ 대결 중 ESC 는 일시정지를 안 연다", g.state == g.S.BDUEL, "state %d" % g.state)
+
+	# ⑩
+	_shop()
+	g.btl_st = 1
+	g._bduel_enter()
+	var mv: Array = g.bd_moves
+	_ok("⑩ 수는 대결마다 셋 다 한 번씩", mv.size() == 3 and mv.has("catch") and mv.has("shoot") and mv.has("rest"),
+			str(mv))
+	var order := _duel_f(func(): return g.BC + Vector2(0.0, -g.R * 0.3))
+	_ok("⑩ 상인 · 나 번갈아(상인 먼저)", str(order) == str([0, 1, 0, 1, 0, 1]), str(order))
+	var far := func(): return g.BC + Vector2(-g.bd_side * g.R * 0.5, 0.0)
+	var near := func(): return g.BC + Vector2(g.bd_side * g.R * 0.5, 0.0)
+	for c in [["catch", near, false, true], ["catch", far, false, false],
+			["shoot", near, true, true], ["shoot", near, false, false], ["rest", near, true, false]]:
+		_shop()
+		g.btl_st = 1
+		g._bduel_enter()
+		g.bd_moves = [c[0], c[0], c[0]]
+		_duel_f(c[1], c[2])
+		var hs: Array = g.bd_hits[1]
+		var zero := true
+		var some := true
+		for v in hs:
+			zero = zero and int(v) == 0
+			some = some and int(v) > 0
+		var side: String = ("지키는 쪽" if c[1] == near else "반대쪽") if c[0] == "catch" else "아무 데"
+		var late: String = " · 늦게" if c[2] else ""
+		var want: String = "0점" if c[3] else "산다"
+		var good: bool = zero if c[3] else some
+		_ok("⑩ %s · %s%s → %s" % [c[0], side, late, want], good and hs.size() == 3, str(hs))

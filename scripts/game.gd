@@ -8004,6 +8004,8 @@ func _process(d: float) -> void:
 	# 판 갈이가 도는 동안(swap_live)은 판이 아직 화면에 있으므로 살려 둔다.
 	if bd_vp != null and not _is_play() and not swap_live:
 		_bd3_close()
+	if bdm_vp != null and state != S.BDUEL:
+		_bdm_close()
 	Dev.tick(self, d)          # DEV
 	#  덮개가 다 덮은 동안은 판 깔기 · 매물 낙하 · 판 갈이 · 라운드 경계 시계를 멈춘다(_wipe_hold).
 	_drop_update(_wipe_hold(d))
@@ -31666,8 +31668,8 @@ func _btl_draw() -> void:
 # ──────────────────────────────────────────────────────────
 #  술병을 다 깨면(BTL) 상인이 내리치고 이리로 온다 — 「이스터에그 스테이지는 술병 던지는걸로
 #  하자, 상인이랑 대결도 하고 이스테에그 스테이지를 클리어 하면 비밀 상점도 나오는걸로」 ·
-#  대결 방식 「내가 술병을 던짐」(사용자). 다트판 벽 앞에서 상인이 먼저 술병 n 개를 판에 던지고,
-#  내가 n 개를 던진다 — 조준은 판 위와 같다(높이 · 좌우를 잡는다). 점수는 판의 수 그대로
+#  대결 방식 「내가 술병을 던짐」(사용자). 다트판 벽 앞에서 상인과 내가 한 병씩 번갈아 n 번 던진다
+#  (상인 먼저) — 조준은 판 위와 같다(높이 · 좌우를 잡는다). 점수는 판의 수 그대로
 #  (칸 수 × 띠 배수 · 불 · 빗나감 0) — 동전 · 사진 · 사건 · 제약은 안 탄다. 합이 상인보다 크면
 #  이긴다(같으면 상인 — 집이 이긴다). 병은 판에 부딪혀 깨진다 — 유리 조각 · 술 방울이 튀고
 #  얼룩이 판에 남는다. 이기면 비밀 상점(_secret_deal — 테이블이 아직 안 가진 레전더리 동전으로만
@@ -31676,26 +31678,40 @@ func _btl_draw() -> void:
 #  aims 의 자리(칸 숫자 · 띠)를 겨누고 판 반지름 × spread 만큼 흩어진다.
 #  대결 동안 판 상태(꽂힌 다트 · 제약 · 판 기하 · 칸 표시)를 비켜 두고(_bduel_stash) 영구 판
 #  그대로 보인다 — 나올 때 되돌린다. 일시정지 · 런 정보는 없다(ESC 도 안 연다).
+#  ── 보스 (2026-10-18) ── 「술집 상인이 보스 느낌」 · 「상인 한번 플레이어 한번」 · 「플레이어가 던질 때
+#  상인이 방해 — 던진 술병을 술병으로 깬다 · 손으로 잡는다」 · 「상인이 보이면」(사용자). 상인은 화면 오른쪽
+#  앞에 등을 보이고 선다(BDM · 「앞쪽에 등을 보이고」). 내 차례마다 상인이 수 하나를 몸짓으로 먼저
+#  보인다(「예고하고 피할 길」) — 수는 대결마다 moves 를 런 줄기로 섞은 차례다.
+#    catch  왼손을 판 반쪽 앞에 펴 든다 — 그 반쪽(가운데 줄 · 불 포함)으로 던지면 날아가는 병을 잡는다(0점)
+#    shoot  오른손에 병을 치켜들고 센다 — 셈(shoot_t)이 끝나기 전에 조준을 끝내면 살고, 늦으면 내 병을
+#           공중에서 깬다(0점)
+#    rest   아무것도 안 한다
 #    n          한 사람이 던지는 병 수
-#    intro      판이 서고 상인이 던지기까지(초) · turn 상인 차례 뒤 내 차례까지 · gap 병 사이
+#    intro      판이 서고 상인이 던지기까지(초) · gap 병 사이 · wind 상인이 병을 치켜들고 놓기까지
 #    fly · fly_me  병이 나는 시간(상인 · 나)
-#    arc · arc_me  나는 길의 솟음(px) · k0 · k0_me 나기 시작할 때 병 크기(판에 닿으면 1)
+#    arc · arc_me  나는 길의 솟음(px) · k0_me 내 병이 나기 시작할 때 크기(판에 닿으면 1 · 상인 병은
+#               손에 든 병의 화면 크기에서 시작한다 — _bdm_k0)
 #    spread     상인 겨눔 흩어짐(판 반지름 비 · 표준편차)
 #    aims       상인이 겨누는 자리 — [칸 숫자, 띠(3 트리플 · 0 불)]
 #    swing      게이지 빠르기 배(gauge_speed 에) · end_wait 마지막 병 뒤 결과까지(초)
 #    shard · drop · stain  조각 · 방울 수 · 얼룩 짙기 · pitch 깨지는 소리 배(coin_break_glass)
+#    tell       수를 보이고 내 조준이 서기까지(초) · shoot_t 깨기 셈(초 · 조준이 서는 때부터)
+#    catch_t · hit_t  내 병이 나는 시간의 이 몫에서 잡힌다 · 부딪는다
+#    held       잡거나 깬 뒤 다음 차례까지(초) · guard 잡기 반쪽이 가운데 줄 너머로 먹는 폭(판 반지름 비)
 const BDUEL := {
-	"n": 3, "intro": 1.1, "turn": 0.8, "gap": 0.45,
-	"fly": 0.42, "fly_me": 0.32, "arc": 34.0, "arc_me": 56.0, "k0": 1.7, "k0_me": 2.6,
+	"n": 3, "intro": 1.1, "gap": 0.45, "wind": 0.55,
+	"fly": 0.42, "fly_me": 0.32, "arc": 34.0, "arc_me": 56.0, "k0_me": 2.6,
 	"spread": 0.22, "aims": [[20, 3], [19, 3], [25, 0], [20, 3]],
 	"swing": 1.0, "end_wait": 0.9,
 	"shard": 14, "drop": 9, "stain": 0.55, "pitch": 0.62,
+	"moves": ["catch", "shoot", "rest"], "tell": 0.75, "shoot_t": 2.2,
+	"catch_t": 0.55, "hit_t": 0.5, "held": 0.9, "guard": 0.08,
 }
 #  대결 동안 비켜 두는 판 상태 — 나올 때 그대로 되돌린다.
 const BDUEL_KEEP := ["darts", "active_mods", "sealed", "mark_sec", "paint_sec", "aim", "gt",
 	"rt_dbl_out", "rt_dbl_in", "rt_trp_in", "rt_trp_out", "rt_trp2_in", "rt_trp2_out",
 	"rt_bull_o", "rt_bull_i", "rt_m_sgl", "rt_m_dbl", "rt_m_trp", "rt_m_bull"]
-var bd_ph := ""              # intro · fly · gap · turn · aim_v · aim_h · wait · end
+var bd_ph := ""              # intro · wind · fly · held · gap · tell · aim_v · aim_h · wait · end
 var bd_t := 0.0
 var bd_who := 0              # 0 상인 · 1 나
 var bd_i := [0, 0]           # 던진 병 수
@@ -31706,6 +31722,14 @@ var bd_to := Vector2.ZERO
 var bd_col := Color.WHITE
 var bd_spin := 0.0
 var bd_ty := 0               # 나는 병의 윤곽(Room3D.BTL_PROF 차례)
+var bd_k0 := 1.0             # 나는 병이 나기 시작할 때 크기
+var bd_moves := []           # 내 차례마다 상인의 수(BDUEL.moves 를 섞은 차례)
+var bd_move := ""            # 지금 내 차례의 수 — catch · shoot · rest
+var bd_side := 1.0           # 잡기 — 지키는 반쪽(−1 왼쪽 · 1 오른쪽)
+var bd_cnt := 0.0            # 깨기 — 남은 셈(초)
+var bd_ready := false        # 깨기 — 셈이 끝나 겨눈 채 기다린다
+var bd_cut := ""             # 이번 내 병이 막히는 꼴 — "" · catch · shoot
+var bd_m2 := Vector2.ZERO    # 깨러 던진 상인의 병이 떠나는 자리(화면)
 var bd_fx := []              # 조각 · 방울 {p, v, c, t, life, k(0 조각 · 1 방울), w, r}
 var bd_stains := []          # 판에 남는 얼룩 {p, c, r}
 var bd_keep := {}
@@ -31733,8 +31757,18 @@ func _bduel_enter() -> void:
 	bd_fx.clear()
 	bd_stains.clear()
 	bd_won = false
+	bd_move = ""
+	bd_cut = ""
+	bd_ready = false
+	bd_moves = []
+	var bag: Array = (BDUEL.moves as Array).duplicate()
+	for k in int(BDUEL.n):
+		if bag.is_empty():
+			bag = (BDUEL.moves as Array).duplicate()
+		bd_moves.append(bag.pop_at(run_rng.randi() % bag.size()))
 	aim = BC
 	gt = 0.0
+	_bdm_open()
 	queue_redraw()
 
 
@@ -31780,24 +31814,63 @@ func _bduel_spot(num: int, band: int) -> Vector2:
 	return BC + Vector2(sin(a), -cos(a)) * r
 
 
-#  병 하나를 던진다 — 상인은 런 줄기로 겨누고, 나는 잡은 자리(aim)로.
+#  상인 차례 — 병을 치켜든다(wind). 병의 빛깔 · 윤곽 · 겨눌 자리는 여기서 정한다(손에 든 병이 그 병이다).
+func _bduel_m_turn() -> void:
+	bd_who = 0
+	bd_ph = "wind"
+	bd_t = 0.0
+	_bduel_pick_bottle()
+	var aims: Array = BDUEL.aims
+	var a: Array = aims[run_rng.randi() % aims.size()]
+	var sp: float = R * float(BDUEL.spread)
+	bd_to = _bduel_spot(int(a[0]), int(a[1])) + Vector2(run_rng.randfn(0.0, sp), run_rng.randfn(0.0, sp))
+
+
+func _bduel_pick_bottle() -> void:
+	bd_col = Room3D.BOTTLE_COLS[bd_rng.randi() % Room3D.BOTTLE_COLS.size()]
+	bd_spin = (1.0 if bd_rng.randf() < 0.5 else -1.0) * bd_rng.randf_range(7.0, 10.0)
+	bd_ty = bd_rng.randi() % Room3D.BTL_PROF.size()
+
+
+#  내 차례 — 상인이 수를 몸짓으로 보이고(tell) 조준이 선다.
+func _bduel_tell() -> void:
+	bd_who = 1
+	bd_ph = "tell"
+	bd_t = 0.0
+	bd_cut = ""
+	bd_ready = false
+	bd_move = String(bd_moves[int(bd_i[1]) % bd_moves.size()]) if not bd_moves.is_empty() else "rest"
+	bd_side = 1.0 if run_rng.randf() < 0.5 else -1.0
+	bd_cnt = float(BDUEL.shoot_t)
+
+
+#  잡기가 지키는 자리인가 — 지키는 반쪽에 가운데 줄(불 · 20 · 3)은 guard 폭만큼 늘 든다. 판 밖은 안 잡는다.
+func _bduel_guarded(p: Vector2) -> bool:
+	if p.distance_to(BC) > R * rt_dbl_out:
+		return false
+	return (p.x - BC.x) * bd_side >= -R * float(BDUEL.guard)
+
+
+#  병 하나를 던진다 — 상인은 _bduel_m_turn 이 정한 자리로(손에서 떠난다), 나는 잡은 자리(aim)로.
+#  내 병은 여기서 막힐지가 정해진다 — 잡기 반쪽이면 잡히고, 셈이 끝난 깨기면 공중에서 깨진다.
 func _bduel_throw(who: int) -> void:
 	bd_who = who
 	bd_ph = "fly"
 	bd_t = 0.0
-	bd_col = Room3D.BOTTLE_COLS[bd_rng.randi() % Room3D.BOTTLE_COLS.size()]
-	bd_spin = (1.0 if bd_rng.randf() < 0.5 else -1.0) * bd_rng.randf_range(7.0, 10.0)
-	bd_ty = bd_rng.randi() % Room3D.BTL_PROF.size()
+	bd_cut = ""
 	if who == 0:
-		var aims: Array = BDUEL.aims
-		var a: Array = aims[run_rng.randi() % aims.size()]
-		var sp: float = R * float(BDUEL.spread)
-		bd_to = _bduel_spot(int(a[0]), int(a[1])) \
-				+ Vector2(run_rng.randfn(0.0, sp), run_rng.randfn(0.0, sp))
-		bd_from = Vector2(VIEW.x + 36.0, 18.0)
+		bd_from = _bdm_rel_scr(bd_to)
+		bd_k0 = _bdm_k0()
 	else:
+		_bduel_pick_bottle()
 		bd_to = aim
 		bd_from = Vector2(BC.x + 70.0, VIEW.y + 50.0)
+		bd_k0 = float(BDUEL.k0_me)
+		if bd_move == "catch" and _bduel_guarded(bd_to):
+			bd_cut = "catch"
+		elif bd_move == "shoot" and bd_ready:
+			bd_cut = "shoot"
+			bd_m2 = _bdm_rel_scr(_bduel_fly_at(float(BDUEL.hit_t)))
 	_sfx("dart_fly", SFX_BASE * 0.72)
 
 
@@ -31812,8 +31885,7 @@ func _bduel_fly_at(t: float) -> Vector2:
 
 
 func _bduel_fly_k(t: float) -> float:
-	var k0: float = float(BDUEL.k0 if bd_who == 0 else BDUEL.k0_me)
-	return lerpf(k0, 1.0, 1.0 - (1.0 - t) * (1.0 - t))
+	return lerpf(bd_k0, 1.0, 1.0 - (1.0 - t) * (1.0 - t))
 
 
 #  병의 점수 — 판의 수 그대로(칸 × 띠 배수 · 불). 빗나가면 0.
@@ -31839,16 +31911,43 @@ func _bduel_land() -> void:
 	shake = maxf(shake, 3.0 if on else 2.0)
 	pop(p + Vector2(0.0, -16.0), str(sc), C_GOLD if sc > 0 else C_LIGHT, 16, 0.9)
 	bd_t = 0.0
-	if bd_who == 0:
-		bd_ph = "gap" if int(bd_i[0]) < int(BDUEL.n) else "turn"
+	bd_ph = "gap"
+
+
+#  내 병이 막혔다 — 잡혔거나(held 동안 상인 손에 든 채 서 있다) 공중에서 상인의 병과 부딪혀 깨졌다. 0점.
+func _bduel_cut() -> void:
+	var p := _bduel_fly_at(float(BDUEL.catch_t if bd_cut == "catch" else BDUEL.hit_t))
+	(bd_hits[1] as Array).append(0)
+	bd_i[1] = int(bd_i[1]) + 1
+	if bd_cut == "shoot":
+		_bduel_shatter(p, bd_col, false)
+		_bduel_shatter(p, Room3D.BOTTLE_COLS[bd_rng.randi() % Room3D.BOTTLE_COLS.size()], false)
+		_sfx("coin_break_glass", SFX_BASE * float(BDUEL.pitch) * 1.1)
+		shake = maxf(shake, 3.0)
 	else:
-		bd_ph = "gap" if int(bd_i[1]) < int(BDUEL.n) else "wait"
+		_sfx("hand_take", SFX_BASE)
+		shake = maxf(shake, 1.5)
+	pop(p + Vector2(0.0, -22.0), "0", C_LIGHT, 16, 0.9)
+	bd_ph = "held"
+	bd_t = 0.0
 
 
-#  깨진다 — 조각(병 색 · 밝게)이 둘레로 · 방울(짙게)이 아래로 · 얼룩이 남는다.
-func _bduel_shatter(p: Vector2, col: Color) -> void:
-	bd_stains.append({"p": p, "c": col.darkened(0.25), "r": bd_rng.randf_range(9.0, 13.0),
-			"s": bd_rng.randi()})
+#  한 병이 끝났다 — 상인 다음은 내 차례, 내 다음은 상인(남았으면) 아니면 결과.
+func _bduel_next() -> void:
+	if bd_who == 0:
+		_bduel_tell()
+	elif int(bd_i[0]) < int(BDUEL.n):
+		_bduel_m_turn()
+	else:
+		bd_ph = "wait"
+		bd_t = 0.0
+
+
+#  깨진다 — 조각(병 색 · 밝게)이 둘레로 · 방울(짙게)이 아래로 · 판에 부딪혔으면(stain) 얼룩이 남는다.
+func _bduel_shatter(p: Vector2, col: Color, stain := true) -> void:
+	if stain:
+		bd_stains.append({"p": p, "c": col.darkened(0.25), "r": bd_rng.randf_range(9.0, 13.0),
+				"s": bd_rng.randi()})
 	if motion_off:
 		return
 	for i in int(BDUEL.shard):
@@ -31865,6 +31964,7 @@ func _bduel_shatter(p: Vector2, col: Color) -> void:
 
 func _bduel_tick(d: float) -> void:
 	bd_t += d
+	_bdm_tick(d)
 	for i in range(bd_fx.size() - 1, -1, -1):
 		var f: Dictionary = bd_fx[i]
 		f.t = float(f.t) + d
@@ -31878,25 +31978,37 @@ func _bduel_tick(d: float) -> void:
 	match bd_ph:
 		"intro":
 			if bd_t >= float(BDUEL.intro):
+				_bduel_m_turn()
+		"wind":
+			if bd_t >= float(BDUEL.wind):
 				_bduel_throw(0)
 		"fly":
-			if bd_t >= _bduel_fly_len():
+			var tc: float = float(BDUEL.catch_t if bd_cut == "catch" else BDUEL.hit_t)
+			if bd_cut != "" and bd_t >= _bduel_fly_len() * tc:
+				_bduel_cut()
+			elif bd_t >= _bduel_fly_len():
 				_bduel_land()
+		"held":
+			if bd_t >= float(BDUEL.held):
+				bd_ph = "gap"
+				bd_t = 0.0
 		"gap":
 			if bd_t >= float(BDUEL.gap):
-				if bd_who == 0:
-					_bduel_throw(0)
-				else:
-					_bduel_aim_begin()
-		"turn":
-			if bd_t >= float(BDUEL.turn):
+				_bduel_next()
+		"tell":
+			if bd_t >= float(BDUEL.tell):
 				_bduel_aim_begin()
-		"aim_v":
+		"aim_v", "aim_h":
 			gt += d * sw
-			aim.y = lerpf(BC.y - SWING, BC.y + SWING, tri(gt))
-		"aim_h":
-			gt += d * sw
-			aim.x = lerpf(BC.x - SWING, BC.x + SWING, tri(gt))
+			if bd_ph == "aim_v":
+				aim.y = lerpf(BC.y - SWING, BC.y + SWING, tri(gt))
+			else:
+				aim.x = lerpf(BC.x - SWING, BC.x + SWING, tri(gt))
+			if bd_move == "shoot" and not bd_ready:
+				bd_cnt -= d
+				if bd_cnt <= 0.0:
+					bd_ready = true
+					_sfx("aim_lock_first", SFX_BASE * 0.7)
 		"wait":
 			if bd_t >= float(BDUEL.end_wait):
 				bd_ph = "end"
@@ -31937,6 +32049,7 @@ func _bduel_back() -> void:
 		return
 	_bduel_unstash()
 	bd_fx.clear()
+	_bdm_close()
 	state = S.SHOP
 
 
@@ -31983,16 +32096,36 @@ func _draw_bduel() -> void:
 			var a := rr.randf_range(0.0, TAU)
 			var o := Vector2(cos(a), sin(a)) * r * rr.randf_range(0.6, 1.3)
 			draw_circle(Vector2(st.p) + o, r * rr.randf_range(0.22, 0.42), Color(c, sa))
+	#  상인 — 잡기 반쪽 그늘(판 위) · 잡힌 병(손가락이 덮게 먼저) · 상인 화판
+	if bd_move == "catch" and bd_who == 1:
+		var gk := 0.0
+		match bd_ph:
+			"tell":
+				gk = clampf(bd_t / float(BDUEL.tell), 0.0, 1.0)
+			"aim_v", "aim_h", "fly":
+				gk = 1.0
+		_bdm_guard_draw(gk)
+	if bd_ph == "held" and bd_cut == "catch":
+		_bdm_caught_draw()
+	_bdm_draw()
 	#  조준선 — 판 위와 같은 줄이다.
 	if bd_ph == "aim_v":
 		_aim_h_line(aim.y, C_ACC)
 	elif bd_ph == "aim_h":
 		_aim_h_line(aim.y, Color(C_ACC, 0.45))
 		_aim_v_line(aim.x, C_ACC)
-	#  나는 병
+	if bd_move == "shoot" and bd_who == 1 and bd_ph in ["tell", "aim_v", "aim_h"]:
+		_bdm_count_draw()
+	#  나는 병 · 깨러 던진 상인의 병(손에서 부딪는 자리까지)
 	if bd_ph == "fly":
 		var t: float = clampf(bd_t / _bduel_fly_len(), 0.0, 1.0)
 		_bduel_bottle(_bduel_fly_at(t), bd_spin * bd_t, _bduel_fly_k(t), bd_col, 1.0, bd_ty)
+		if bd_cut == "shoot":
+			var ht: float = float(BDUEL.hit_t)
+			var u: float = clampf(t / ht, 0.0, 1.0)
+			var mp := bd_m2.lerp(_bduel_fly_at(ht), u) + Vector2(0.0, -18.0 * 4.0 * u * (1.0 - u))
+			_bduel_bottle(mp, -bd_spin * bd_t, lerpf(_bdm_k0(), _bduel_fly_k(ht), u), C_MULT, 1.0,
+					(bd_ty + 1) % Room3D.BTL_PROF.size())
 	for f in bd_fx:
 		var a2: float = 1.0 - float(f.t) / float(f.life)
 		var fc: Color = f.c
@@ -32083,6 +32216,581 @@ func _btl2_poly(prof: Array, w: float, h: float, y0: float) -> PackedVector2Arra
 		if prof[i].x > 0.0:
 			out.append(Vector2(-prof[i].x * w, y0 - prof[i].y * h))
 	return out
+
+
+# ══════════════════════════════════════════════════════════
+#  술병 대결의 상인 — 등을 보이고 앞에 선다 (2026-10-18)
+# ──────────────────────────────────────────────────────────
+#  「이스터에그에 좀 상인이 보이면 좋겠거든?」 · 자리 「앞쪽에 등을 보이고」(사용자). 판 무대와 같은
+#  원근(눈 거리 eye · z 0 판 면이 화면 1:1)의 제 무대에 화면 오른쪽 앞에 선다 — 상인의 병이 그의 손에서
+#  떠나 판으로 날고, 잡는 손이 판 반쪽 앞에 선다. 뒤에서 본 바텐더 사진(조끼 등판 · 어깨에 드러난 셔츠 ·
+#  팔꿈치 밑까지 걷은 소매 · 짧은 머리 · 셔츠 깃)과 다트를 겨누는 뒷모습(팔꿈치를 판 쪽으로 들고 손이 귀
+#  옆)을 보고 잰다. 몸은 상점 손 · 팔과 같은 둥근 단면 마디(_hand3_loft) · 빛 사다리(_hand3_toon) · 손
+#  (_hand3_build)이다. 왼손이 잡기, 오른손이 던지기 · 깨기다. 등이라 얼굴은 안 보인다.
+#  자세는 순수 셈(_bdm_pose)이라 헤드리스에서도 선다 — 병이 떠나는 자리 · 셈 점이 그 자세를 읽는다.
+#  몸 좌표 — 뿌리(어깨선 한가운데)가 원점 · x 화면 오른쪽(그의 오른쪽) · y 위 · z 눈 쪽(그의 등).
+#    eye · z · at  눈 거리 · 몸이 서는 깊이 · 뿌리의 화면 자리(1 단위가 화면 eye/(eye−z) px)
+#    sh            오른 어깨 관절(왼쪽은 x 거울) · lu · lf 위팔 · 팔뚝 길이
+#    hz            잡는 손이 서는 깊이 · cock 치켜든 오른 손목(몸 좌표) · reach 놓을 때 뻗는 길이
+#    bh · br       손에 든 병의 키 · 반지름 · amb 바탕빛 몫(다트 무대 라이벌 손과 같다)
+#    hair          머리 빛깔
+const BDM := {
+	"eye": 1000.0, "z": 200.0, "at": Vector2(532.0, 318.0),
+	"sh": Vector3(64.0, -16.0, -4.0), "lu": 96.0, "lf": 84.0,
+	"hz": 250.0, "cock": Vector3(60.0, 64.0, -6.0), "reach": 80.0,
+	"bh": 84.0, "br": 14.0, "amb": 0.7,
+	"hair": Color("1c1411"),
+}
+#  머리선 높이 표 — [경도(라디안 · 0 뒤통수 · π 이마), 머리 좌표 높이]. 귀는 경도 1.5~1.9 언저리다.
+const BDM_HL := [[0.0, -21.0], [0.9, -16.0], [1.25, -9.0], [1.5, 11.0], [2.0, 12.0], [PI, 26.0]]
+#  병을 쥔 손가락(FPOSE 차례) — 목을 감아 쥔 주먹
+const BDM_GRIP := [62.0, 66.0, 70.0, 74.0, 70.0, 76.0, 80.0, 84.0, 0.0, 0.8, 30.0, 20.0]
+var bdm_vp: SubViewport = null
+var bdm := {}                # 노드 — root · body · head · arm[2]{up · fore · hand} · btl · btl_m
+var bdm_cur := {}            # 지금 자세(_bdm_pose 쪽으로 매 틀 다가간다)
+var bdm_clock := 0.0         # 숨 · 떨림 시계 — 단이 바뀌어도 안 끊긴다
+
+
+func _bdm_live() -> bool:
+	return bdm_vp != null and is_instance_valid(bdm_vp)
+
+
+#  화면 자리 sp(논리 px)를 깊이 z 의 무대 월드로 · 거꾸로.
+func _bdm_w(sp: Vector2, z: float) -> Vector3:
+	var k: float = (float(BDM.eye) - z) / float(BDM.eye)
+	return Vector3((sp.x - VIEW.x * 0.5) * k, -(sp.y - VIEW.y * 0.5) * k, z)
+
+
+func _bdm_s(w: Vector3) -> Vector2:
+	var k: float = float(BDM.eye) / maxf(float(BDM.eye) - w.z, 1.0)
+	return Vector2(VIEW.x * 0.5 + w.x * k, VIEW.y * 0.5 - w.y * k)
+
+
+func _bdm_root() -> Vector3:
+	return _bdm_w(BDM.at, float(BDM.z))
+
+
+#  상인 손에서 병이 떠나는 화면 자리 — 치켜든 손목에서 겨눈 자리(to · 판 면) 쪽으로 reach 뻗은 데.
+func _bdm_rel_scr(to: Vector2) -> Vector2:
+	var c: Vector3 = _bdm_root() + (BDM.cock as Vector3)
+	var t := _bdm_w(to, 0.0)
+	return _bdm_s(c + (t - c).normalized() * float(BDM.reach) + Vector3(0.0, 12.0, 0.0))
+
+
+#  상인 병이 나기 시작할 때 크기 — 손에 든 병의 화면 키 ÷ 판 위 병 키(26).
+func _bdm_k0() -> float:
+	var zc: float = float(BDM.z) + (BDM.cock as Vector3).z - float(BDM.reach) * 0.8
+	return float(BDM.bh) * float(BDM.eye) / (float(BDM.eye) - zc) / 26.0
+
+
+#  잡는 손이 펴 드는 화면 자리 — 지키는 반쪽 한가운데.
+func _bdm_guard_scr() -> Vector2:
+	return BC + Vector2(bd_side * R * 0.5, R * 0.05)
+
+
+#  손 기저 — x 손끝(쥐면 너클) 쪽 · z 는 새끼 쪽 × sg(_hand3_build 의 거울).
+func _bdm_hb(xd: Vector3, pinky: Vector3, sg: float) -> Basis:
+	var z := (pinky * sg).normalized()
+	var x := (xd - z * xd.dot(z)).normalized()
+	return Basis(x, z.cross(x), z)
+
+
+#  두 마디 팔 — 어깨 s 에서 손목 w 로. 팔꿈치는 pole 쪽으로 굽는다. [팔꿈치, 닿은 손목]
+func _bdm_ik(s: Vector3, w: Vector3, pole: Vector3) -> Array:
+	var l1: float = BDM.lu
+	var l2: float = BDM.lf
+	var dv := w - s
+	var dist: float = clampf(dv.length(), absf(l1 - l2) + 1.0, l1 + l2 - 0.5)
+	var dir := dv.normalized() if dv.length() > 0.001 else Vector3.DOWN
+	var a: float = acos(clampf((l1 * l1 + dist * dist - l2 * l2) / (2.0 * l1 * dist), -1.0, 1.0))
+	var pn := pole - dir * pole.dot(dir)
+	if pn.length_squared() < 0.0001:
+		pn = Vector3.BACK - dir * dir.z
+	pn = pn.normalized()
+	return [s + dir * cos(a) * l1 + pn * sin(a) * l1, s + dir * dist]
+
+
+#  a 에서 b 로 — x 가 그 길(길이는 안 늘린다) · y 는 ref 쪽.
+func _bdm_seg(a: Vector3, b: Vector3, ref: Vector3) -> Transform3D:
+	var x := (b - a).normalized()
+	var y := ref - x * ref.dot(x)
+	if y.length_squared() < 0.0001:
+		y = Vector3.UP - x * x.y
+	y = y.normalized()
+	return Transform3D(Basis(x, y, x.cross(y)), a)
+
+
+#  지금 자세의 과녁 — 대결의 단 · 시계 · 수가 정한다. 월드 좌표.
+#    w 손목 둘 · pole 팔꿈치 쪽 둘 · xd 손끝 쪽 둘 · pk 새끼 쪽 둘 · fp 손가락 둘 · yaw 몸 비틀림 ·
+#    lean 몸 옮김 · look 머리가 보는 자리 · btl 오른손 병 · rate 다가가는 빠르기(1/초)
+func _bdm_pose() -> Dictionary:
+	var r0 := _bdm_root()
+	var sh: Vector3 = BDM.sh
+	var sl := r0 + Vector3(-sh.x, sh.y, sh.z)
+	var sr := r0 + sh
+	var idle_l := sl + Vector3(-8.0, -168.0, 14.0)
+	var idle_r := sr + Vector3(8.0, -168.0, 14.0)
+	var p := {"w": [idle_l, idle_r], "pole": [Vector3(-0.5, 0.0, 1.0), Vector3(0.5, 0.0, 1.0)],
+			"xd": [Vector3.DOWN, Vector3.DOWN], "pk": [Vector3.BACK, Vector3.BACK],
+			"fp": [FPOSE.rest, FPOSE.rest], "yaw": 0.14, "lean": Vector3.ZERO,
+			"look": _bdm_w(BC, 0.0), "btl": false, "rate": 7.0}
+	var cock: Vector3 = r0 + (BDM.cock as Vector3)
+	var cock_set := func(q: Dictionary, up: float) -> void:
+		q.w[1] = cock + Vector3(0.0, up, 0.0)
+		q.pole[1] = Vector3(0.25, -0.1, -1.0)
+		#  목을 쥐고 몸통은 주먹 밑으로 늘어진다(새끼 쪽이 아래) — 몸통이 뒤(눈 쪽)로 누우면 바닥만 보여
+		#  원판이 됐다(촬영). 술집에서 병을 치켜든 그 꼴이다.
+		q.xd[1] = Vector3(-0.2, 0.25, -1.0)
+		q.pk[1] = Vector3(0.1, -1.0, 0.15)
+		q.fp[1] = BDM_GRIP
+		q.btl = true
+		q.yaw = 0.05
+	var rel_set := func(q: Dictionary, to: Vector3) -> void:
+		var dv := (to - cock).normalized()
+		q.w[1] = cock + dv * float(BDM.reach)
+		q.pole[1] = Vector3(0.3, -0.6, 0.2)
+		q.xd[1] = dv
+		q.pk[1] = Vector3(0.2, 0.2, 0.95)
+		q.fp[1] = FPOSE.open
+		q.yaw = 0.3
+		q.lean = Vector3(-6.0, -2.0, -10.0)
+		q.rate = 26.0
+	var guard_set := func(q: Dictionary, at: Vector3) -> void:
+		q.w[0] = at - Vector3(0.0, 26.0, 0.0)
+		q.pole[0] = Vector3(-1.0, -0.7, 0.3)
+		q.xd[0] = Vector3(0.0, 1.0, -0.15)
+		q.pk[0] = Vector3(-1.0, 0.0, 0.0)
+		q.fp[0] = FPOSE.spread
+		q.yaw = 0.22
+		q.lean = Vector3(-8.0, 0.0, -4.0)
+	match bd_ph:
+		"wind":
+			cock_set.call(p, 0.0)
+			p.look = _bdm_w(bd_to, 0.0)
+			p.rate = 9.0
+		"fly":
+			p.look = _bdm_w(_bduel_fly_at(clampf(bd_t / _bduel_fly_len(), 0.0, 1.0)), 0.0)
+			if bd_who == 0:
+				if bd_t < 0.14:
+					rel_set.call(p, _bdm_w(bd_to, 0.0))
+				else:
+					p.w[1] = sr + Vector3(-24.0, -112.0, -60.0)
+					p.pole[1] = Vector3(0.6, 0.0, 1.0)
+					p.rate = 6.0
+			elif bd_move == "catch":
+				var at := _bdm_w(_bdm_guard_scr(), float(BDM.hz))
+				if bd_cut == "catch":
+					at = _bdm_w(_bduel_fly_at(float(BDUEL.catch_t)), float(BDM.hz))
+				guard_set.call(p, at)
+				if bd_cut == "catch":
+					p.rate = 30.0
+			elif bd_move == "shoot" and bd_cut == "shoot":
+				rel_set.call(p, _bdm_w(_bduel_fly_at(float(BDUEL.hit_t)), float(BDM.hz)))
+			elif bd_move == "shoot":
+				p.btl = true        # 늦었다 — 병을 든 채 손을 내린다
+		"held":
+			if bd_cut == "catch":
+				guard_set.call(p, _bdm_w(_bduel_fly_at(float(BDUEL.catch_t)), float(BDM.hz))
+						+ Vector3(14.0, 18.0, 30.0))
+				p.fp[0] = BDM_GRIP
+				p.xd[0] = Vector3(1.0, 0.3, -0.4)
+				p.pk[0] = Vector3(0.0, -1.0, 0.1)
+				p.rate = 10.0
+			elif bd_cut == "shoot":
+				p.w[1] = sr + Vector3(-24.0, -112.0, -60.0)
+				p.pole[1] = Vector3(0.6, 0.0, 1.0)
+				p.rate = 6.0
+		"tell", "aim_v", "aim_h":
+			p.look = _bdm_w(aim if bd_ph != "tell" else BC, 0.0)
+			if bd_move == "catch":
+				guard_set.call(p, _bdm_w(_bdm_guard_scr(), float(BDM.hz))
+						+ Vector3(0.0, sin(bdm_clock * 2.4) * 2.0, 0.0))
+			elif bd_move == "shoot":
+				cock_set.call(p, 10.0 + (sin(bdm_clock * 30.0) * 1.2 if bd_ready else 0.0))
+	return p
+
+
+#  지금 자세를 과녁 쪽으로 민다 — 헤드리스에서도 돈다(손 자리를 읽는 셈 · 그림이 같은 값을 본다).
+func _bdm_tick(d: float) -> void:
+	bdm_clock += d
+	var tg := _bdm_pose()
+	if bdm_cur.is_empty():
+		bdm_cur = tg.duplicate(true)
+	var k: float = 1.0 - exp(-float(tg.rate) * d)
+	for key in ["w", "pole", "xd", "pk"]:
+		for i in 2:
+			bdm_cur[key][i] = (bdm_cur[key][i] as Vector3).lerp(tg[key][i], k)
+	for i in 2:
+		var fa: Array = bdm_cur.fp[i]
+		var fb: Array = tg.fp[i]
+		var fm := []
+		for j in fa.size():
+			fm.append(lerpf(float(fa[j]), float(fb[j]), k))
+		bdm_cur.fp[i] = fm
+	bdm_cur.yaw = lerpf(float(bdm_cur.yaw), float(tg.yaw), k)
+	bdm_cur.lean = (bdm_cur.lean as Vector3).lerp(tg.lean, k)
+	bdm_cur.look = (bdm_cur.look as Vector3).lerp(tg.look, minf(k * 1.5, 1.0))
+	bdm_cur.btl = tg.btl
+	if _bdm_live():
+		_bdm_apply(d)
+
+
+func _bdm_open() -> void:
+	bdm_cur = {}
+	if _bdm_live() or not _has_renderer():
+		return
+	var f := _full()
+	bdm_vp = SubViewport.new()
+	bdm_vp.size = Vector2i(int(f.size.x), int(f.size.y))
+	bdm_vp.own_world_3d = true
+	bdm_vp.transparent_bg = true
+	bdm_vp.msaa_3d = Viewport.MSAA_DISABLED
+	bdm_vp.gui_disable_input = true
+	bdm_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	add_child(bdm_vp)
+	var e: float = BDM.eye
+	var cam := Camera3D.new()
+	cam.keep_aspect = Camera3D.KEEP_HEIGHT
+	cam.fov = rad_to_deg(2.0 * atan(f.size.y * 0.5 / e))
+	cam.near = 20.0
+	cam.far = e * 2.0
+	var fc := f.get_center()
+	cam.position = Vector3(fc.x - VIEW.x * 0.5, -(fc.y - VIEW.y * 0.5), e)
+	bdm_vp.add_child(cam)
+	#  빛 — 키는 눈 쪽 왼쪽 위(판 화면의 빛과 같은 쪽)에서 등을 비춘다. 판 위 램프가 앞(판 쪽)에서
+	#  어깨 · 머리 위 · 든 팔 가장자리를 따뜻하게 깎는다(보스의 테두리 빛). 바탕은 어두운 술집.
+	var key := DirectionalLight3D.new()
+	key.transform = Transform3D(Basis.looking_at(Vector3(0.55, -0.6, -1.0)), Vector3.ZERO)
+	key.light_color = Color(1.0, 0.88, 0.72)
+	key.light_energy = 0.85
+	bdm_vp.add_child(key)
+	var rim := OmniLight3D.new()
+	rim.light_color = Color(1.0, 0.78, 0.5)
+	rim.light_energy = 3.2
+	rim.omni_range = 420.0
+	rim.position = _bdm_root() + Vector3(-70.0, 110.0, -230.0)
+	bdm_vp.add_child(rim)
+	var we := WorldEnvironment.new()
+	var env := Environment.new()
+	env.background_mode = Environment.BG_CANVAS
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color(0.32, 0.24, 0.22)
+	env.ambient_light_energy = 1.0
+	we.environment = env
+	bdm_vp.add_child(we)
+	_bdm_build()
+
+
+func _bdm_close() -> void:
+	bdm = {}
+	bdm_cur = {}
+	if _bdm_live():
+		bdm_vp.queue_free()
+	bdm_vp = null
+
+
+#  두개골 한 점 — 머리 좌표(귀 사이 한가운데가 원점 · y 위 · z 뒤 = 눈 쪽). 경도 th(0 이 뒤통수) · 위도 ph.
+#  뒤통수가 목 뒤로 나오고(뒤 반쪽이 깊다 · 귀 조금 위에 뒤통수 혹) 아래(턱 · 목덜미)는 짧다. hair 면
+#  타원 법선 쪽으로 부풀린다 — 정수리는 두껍고(4) 옆 · 뒤 아래는 짧다(1.2).
+func _bdm_skull_pt(th: float, ph: float, hair: bool) -> Vector3:
+	var back: float = maxf(cos(th), 0.0)
+	var a := 27.0
+	var b: float = 40.0 if ph > 0.0 else 30.0
+	var c: float = 31.0 + 6.0 * back + 3.0 * back * exp(-pow(ph - 0.15, 2.0) / 0.12)
+	var p := Vector3(a * cos(ph) * sin(th), b * sin(ph), c * cos(ph) * cos(th))
+	if hair:
+		var up: float = smoothstep(-0.3, 0.9, sin(ph))
+		var n := Vector3(p.x / (a * a), p.y / (b * b), p.z / (c * c)).normalized()
+		p += n * (lerpf(0.8, 3.2, up) + 0.6 * up * cos(th * 26.0 + ph * 3.0))
+	return p
+
+
+#  머리선의 위도 — 높이 표(BDM_HL — [경도(0 뒤 · π 이마), 높이])를 잇는다. 목덜미에서 귀 뒤까지는 낮게
+#  가다가(뒷머리가 귀 뒤를 덮는다) 귀 위에서 솟고 이마로 간다 — 짧은 옆머리라 귀가 드러난다(사진).
+#  한 번에 솟던 옛 선(목덜미 → 귀 위)은 귀 뒤 살이 넓게 드러나 머리칼이 비스듬히 쓴 모자로 읽혔다(촬영).
+func _bdm_hl_phi(th: float) -> float:
+	var a: float = absf(wrapf(th, -PI, PI))
+	var y: float = BDM_HL[0][1]
+	for k in BDM_HL.size() - 1:
+		var p0: Array = BDM_HL[k]
+		var p1: Array = BDM_HL[k + 1]
+		if a <= float(p1[0]):
+			y = lerpf(float(p0[1]), float(p1[1]), smoothstep(float(p0[0]), float(p1[0]), a))
+			break
+	return asin(clampf(y / (40.0 if y > 0.0 else 30.0), -1.0, 1.0))
+
+
+#  머리 껍질 메시 — 경도 × 위도 격자 · 매끈한 법선(이웃 점 차분). 머리칼이면 아래끝을 머리선에 맞추고
+#  빗질 결(경도 따라 골 26 줄 · 위로 갈수록 틀어진다)을 꼭짓점 색으로 판다.
+func _bdm_skull(hair: bool) -> ArrayMesh:
+	var key := "bdm_skull_%s" % hair
+	if hand3_mc.has(key):
+		return hand3_mc[key]
+	var nl := 40
+	var nv := 16
+	var pts := []
+	for i in nl + 1:
+		var th: float = TAU * float(i) / float(nl)
+		var f0: float = _bdm_hl_phi(th) if hair else -1.0
+		var col := []
+		for j in nv + 1:
+			var ph: float = lerpf(f0, PI * 0.5 - 0.0005, float(j) / float(nv))
+			var q := _bdm_skull_pt(th, ph, hair)
+			var e := 0.003
+			var dt := _bdm_skull_pt(th + e, ph, hair) - _bdm_skull_pt(th - e, ph, hair)
+			var dp := _bdm_skull_pt(th, ph + e, hair) - _bdm_skull_pt(th, ph - e, hair)
+			var n := dt.cross(dp)
+			n = n.normalized() if n.length() > 0.00001 else Vector3.UP
+			if n.dot(q) < 0.0:
+				n = -n
+			var c := Color.WHITE
+			if hair:
+				#  머리 빛깔 ÷ 살빛 — 결 골(26 줄)은 한 단 더 누르고, 목덜미 아래 세 줄은 살로 옅어진다(짧게 친 뒷머리)
+				#  꼭짓점 색은 선형 공간에서 곱해진다 — 비도 선형으로 잰다(sRGB 비면 머리가 밤색으로 떴다)
+				var hc: Color = (BDM.hair as Color).srgb_to_linear()
+				var sk: Color = (FING3.skin as Color).srgb_to_linear()
+				var g: float = 1.0 - 0.3 * pow(0.5 + 0.5 * cos(th * 26.0 + ph * 3.0), 2.0)
+				c = Color(hc.r / sk.r * g, hc.g / sk.g * g, hc.b / sk.b * g)
+				var fade: float = (1.0 - smoothstep(0.0, 3.0, float(j))) * maxf(cos(th), 0.0)
+				c = c.lerp(Color(0.62, 0.6, 0.58), fade * 0.8)
+			col.append([q, n, c])
+		pts.append(col)
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for i in nl:
+		for j in nv:
+			var quad := [pts[i][j], pts[i + 1][j], pts[i + 1][j + 1], pts[i][j + 1]]
+			for tri in [[0, 2, 1], [0, 3, 2]]:
+				for k in tri:
+					var v: Array = quad[k]
+					st.set_color(v[2])
+					st.set_normal(v[1])
+					st.add_vertex(v[0])
+	if not hair:
+		#  아랫마개 — 턱 높이의 고리를 막는다(목이 덮는다)
+		var c0 := Vector3(0.0, -30.0 * sin(1.0), 0.0)
+		for i in nl:
+			for v in [c0, (pts[i + 1][0] as Array)[0], (pts[i][0] as Array)[0]]:
+				st.set_color(Color.WHITE)
+				st.set_normal(Vector3.DOWN)
+				st.add_vertex(v)
+	var m := st.commit()
+	hand3_mc[key] = m
+	return m
+
+
+#  세로 마디 — _hand3_loft 는 +x 로 잇는다. 그것을 위(+y)로 세운다: 단면의 폭(z)이 앞뒤 깊이, 두께(y)가
+#  좌우 폭이 된다. 단면 한 줄 [높이, 깊이, 좌우 폭, 좌우 밀림(−), 앞뒤 밀림, 모서리, 주름…].
+func _bdm_up(secs: Array, m: Material, c0 := 0.0, c1 := 0.0) -> MeshInstance3D:
+	var mi := _mi3(_hand3_loft(secs, 16, c0, c1), m)
+	mi.basis = Basis(Vector3.BACK, PI * 0.5)
+	return mi
+
+
+func _bdm_build() -> void:
+	var amb: float = BDM.amb
+	var hm := _hand3_mats(FING3.skin, amb)
+	var none := Color(0.0, 0.0, 0.0, 0.0)
+	var cloth := _hand3_toon(SHIRT3, none, 0.0, 0.0, amb)
+	#  조끼 등판 — 깃 빛깔(VEST3.lap). 반짝임 한 점은 넓은 판에 보랏빛 네모로 맺혀 뺐다(촬영).
+	var vest := _hand3_toon(VEST3.lap, none, 0.0, 0.0, amb)
+	#  머리칼 — 바탕은 살빛이고 꼭짓점 색이 머리 빛깔로 누른다(_bdm_skull) — 목덜미에서 살로 옅어진다.
+	var hair := _hand3_toon(FING3.skin, none, 0.0, 0.0, amb)
+	var brass := _hand3_toon(FORE3.brass, none, 0.4, 0.09, amb, 0.5)
+	var root := Node3D.new()
+	bdm_vp.add_child(root)
+	var body := Node3D.new()
+	root.add_child(body)
+	#  몸통 — 조끼 등판. 뒤판이 깃 밑까지 등을 덮고 위끝이 목 쪽으로 좁아져 승모근 비탈이 된다. 셔츠는
+	#  어깨 끝(삼각근)에서만 드러난다(사진 — 조끼 진동둘레 밖).
+	body.add_child(_bdm_up([[-230.0, 64.0, 108.0, 0.0, 0.0, 2.4], [-140.0, 68.0, 114.0, 0.0, 0.0, 2.4],
+			[-70.0, 72.0, 120.0, 0.0, 2.0, 2.4], [-30.0, 70.0, 118.0, 0.0, 3.0, 2.4],
+			[-10.0, 62.0, 110.0, 0.0, 2.0, 2.4], [2.0, 50.0, 90.0, 0.0, 0.0, 2.3],
+			[9.0, 40.0, 62.0, 0.0, -2.0, 2.2]], vest, -1.0, 4.0))
+	#  어깨 끝 — 셔츠 삼각근 둘. 조끼 진동둘레 밖으로 둥글게 솟는다.
+	for sgn in [-1.0, 1.0]:
+		var ds := []
+		for q in [[50.0, 42.0, 30.0, -13.0], [64.0, 46.0, 38.0, -16.0], [78.0, 40.0, 34.0, -20.0],
+				[86.0, 26.0, 22.0, -22.0]]:
+			ds.append([q[0] * sgn, q[1], q[2], q[3], 0.0, 2.3])
+		if sgn < 0.0:
+			ds.reverse()
+		body.add_child(_mi3(_hand3_loft(ds, 16, 6.0, 6.0), cloth))
+	#  목 · 셔츠 깃(목을 감는 고리 — 윗면이 접힌 깃의 날이다)
+	body.add_child(_bdm_up([[-6.0, 44.0, 44.0, 0.0, -4.0, 2.2], [22.0, 40.0, 40.0, 0.0, -5.0, 2.2],
+			[46.0, 38.0, 37.0, 0.0, -6.0, 2.2]], hm.skin, -1.0, -1.0))
+	body.add_child(_bdm_up([[2.0, 52.0, 52.0, 0.0, -4.0, 2.2], [18.0, 50.0, 50.0, 0.0, -4.0, 2.2],
+			[22.0, 51.0, 51.0, 0.0, -4.0, 2.2]], cloth, -1.0, 0.0))
+	#  머리 — 두개골 껍질(_bdm_skull) · 머리칼은 그 껍질을 부풀린 것(위는 두껍고 옆은 짧다)이고 아래끝이
+	#  머리선이다(목덜미에서 귀 뒤를 지나 귀 위로 휘어 오른다). 귀는 머리칼 밖으로 바깥 뒤를 보고 선다.
+	var head := Node3D.new()
+	head.position = Vector3(0.0, 63.0, -4.0)
+	body.add_child(head)
+	head.add_child(_mi3(_bdm_skull(false), hm.skin))
+	head.add_child(_mi3(_bdm_skull(true), hair))
+	for sgn in [-1.0, 1.0]:
+		var ear := _mi3(_blob3_mesh(), hm.skin, Vector3(sgn * 28.5, 1.0, -2.0))
+		ear.scale = Vector3(3.2, 11.0, 7.5)
+		ear.rotation = Vector3(0.0, sgn * 0.6, 0.0)
+		head.add_child(ear)
+	#  팔 둘 — 위팔(셔츠 · 놋쇠 띠) · 팔뚝(걷은 단 · 맨살) · 손. 노드는 월드에 바로 서고 _bdm_apply 가 민다.
+	var lu: float = BDM.lu
+	var lf: float = BDM.lf
+	var arms := []
+	for i in 2:
+		var up := Node3D.new()
+		root.add_child(up)
+		up.add_child(_mi3(_hand3_loft([[0.0, 44.0, 40.0, 0.0, 0.0, 2.6, 0.03, 5.0, 0.5],
+				[lu * 0.5, 40.0, 36.0, 0.0, 0.0, 2.6, 0.05, 5.0, 2.2],
+				[lu, 36.0, 32.0, 0.0, 0.0, 2.6, 0.07, 5.0, 3.9]], 16, 6.0, -1.0), cloth))
+		var gw := 42.0
+		var gd := 38.0
+		up.add_child(_mi3(_hand3_loft([[0.0, gw - 1.6, gd - 1.6, 0.0, 0.0, 2.6],
+				[1.2, gw, gd, 0.0, 0.0, 2.6], [4.5, gw - 0.5, gd - 0.5, 0.0, 0.0, 2.6],
+				[7.8, gw, gd, 0.0, 0.0, 2.6], [9.0, gw - 1.6, gd - 1.6, 0.0, 0.0, 2.6]], 16, 0.0, 0.0),
+				brass, Vector3(lu * 0.5, 0.0, 0.0)))
+		var fo := Node3D.new()
+		root.add_child(fo)
+		fo.add_child(_mi3(_hand3_loft([[-4.0, 37.0, 31.0, 0.0, 0.0, 2.3, 0.03, 6.0, 0.3],
+				[3.0, 40.0, 30.0, 0.2, 0.0, 2.3, 0.04, 6.0, 1.7],
+				[7.0, 38.0, 28.0, 0.0, 0.0, 2.3, 0.03, 6.0, 2.4, 0.3],
+				[11.0, 34.0, 24.0, 0.0, 0.0, 2.3, 0.02, 6.0, 3.3, 0.35]], 16, -1.0, -1.0), cloth))
+		fo.add_child(_mi3(_hand3_loft([[8.0, 34.0, 23.0, 0.0, 0.0, 2.2],
+				[lf * 0.3, 35.0, 24.0, 0.3, 0.0, 2.2], [lf * 0.62, 31.0, 21.0, 0.2, 0.0, 2.2],
+				[lf * 0.88, 27.5, 17.5, 0.0, 0.0, 2.3], [lf + 2.0, 27.0, 17.0, 0.0, 0.0, 2.3]], 16, -1.0, -1.0),
+				hm.skin))
+		var hj := _hand3_build(hm, i == 0, i == 0)
+		root.add_child(hj.root)
+		arms.append({"up": up, "fore": fo, "hand": hj})
+	#  오른손 병 — 목을 쥔다. 몸은 새끼 쪽으로 뻗는다(손 기저의 z). 술 · 빈 유리 · 라벨 · 목 캡(선반 병 윤곽).
+	var bt := Node3D.new()
+	var ty := 1
+	var prof: Array = Room3D.BTL_PROF[ty]
+	var fy: float = Room3D.BTL_FILL[ty][0]
+	var bm := {"lq": _hand3_toon(Color.WHITE, none, 0.2, 0.35, amb),
+			"gl": _hand3_toon(Color.WHITE, none, 0.6, 0.0, amb),
+			"lab": _hand3_toon(C_LIGHT.darkened(0.15), none, 0.0, 0.0, amb),
+			"foil": _hand3_toon(FORE3.brass, none, 0.4, 0.05, amb, 0.6)}
+	bt.add_child(_mi3(Room3D._lathe("bdm_lq", Room3D._prof_cut(prof, fy, true), 12), bm.lq))
+	bt.add_child(_mi3(Room3D._lathe("bdm_gl", Room3D._prof_cut(prof, fy, false), 12), bm.gl))
+	bt.add_child(_mi3(Room3D._lathe("bdm_lab", PackedVector2Array(Room3D.BTL_LABEL[ty]), 12), bm.lab))
+	bt.add_child(_mi3(Room3D._lathe("bdm_foil", PackedVector2Array(Room3D.BTL_FOIL[ty]), 8), bm.foil))
+	var hr: Dictionary = arms[1].hand
+	var sg: float = hr.sg
+	var bh: float = BDM.bh
+	var br: float = BDM.br
+	#  손 좌표: 쥔 자리 (34, −9, 0) · 병 목(윤곽 0.86)이 거기 · 바닥은 새끼 쪽(z × sg)으로.
+	var yb := Vector3(0.0, 0.0, -sg)
+	bt.transform = Transform3D(Basis(Vector3.RIGHT * br, yb * bh, Vector3.RIGHT.cross(yb) * br),
+			Vector3(34.0, -9.0, 0.0) - yb * bh * 0.86)
+	(hr.root as Node3D).add_child(bt)
+	bdm = {"root": root, "body": body, "head": head, "arm": arms, "btl": bt, "btl_m": bm, "col": Color.BLACK}
+
+
+#  지금 자세(bdm_cur)를 노드에 올린다.
+func _bdm_apply(_d: float) -> void:
+	if bdm.is_empty():
+		return
+	var c: Dictionary = bdm_cur
+	var r0 := _bdm_root() + (c.lean as Vector3)
+	var yaw: float = c.yaw
+	var by := Basis(Vector3.UP, yaw)
+	var breath: float = sin(bdm_clock * 1.7) * 1.2
+	(bdm.body as Node3D).transform = Transform3D(by, r0 + Vector3(0.0, breath, 0.0))
+	#  머리 — 보는 자리 쪽으로 조금 돈다(뒤에서 보면 귀가 옮겨 간다)
+	var hd: Node3D = bdm.head
+	var lv: Vector3 = (c.look as Vector3) - (r0 + Vector3(0.0, 66.0, 0.0))
+	var hy: float = clampf(atan2(-lv.x, -lv.z), -0.2, 0.2) - yaw * 0.5
+	var hp: float = clampf(atan2(lv.y, Vector2(lv.x, lv.z).length()), -0.25, 0.25)
+	hd.basis = Basis(Vector3.UP, hy) * Basis(Vector3.RIGHT, hp)
+	var sh: Vector3 = BDM.sh
+	for i in 2:
+		var sg: float = -1.0 if i == 0 else 1.0
+		var s: Vector3 = r0 + Vector3(0.0, breath, 0.0) + by * Vector3(sg * sh.x, sh.y, sh.z)
+		var ik := _bdm_ik(s, c.w[i], c.pole[i])
+		var el: Vector3 = ik[0]
+		var wr: Vector3 = ik[1]
+		var a: Dictionary = bdm.arm[i]
+		var hb := _bdm_hb(c.xd[i], c.pk[i], sg)
+		(a.up as Node3D).transform = _bdm_seg(s, el, c.pole[i])
+		(a.fore as Node3D).transform = _bdm_seg(el, wr, hb.y)
+		var hj: Dictionary = a.hand
+		(hj.root as Node3D).transform = Transform3D(hb, wr)
+		_bdm_fingers(hj, c.fp[i])
+	var bt: Node3D = bdm.btl
+	bt.visible = bool(c.btl)
+	if bt.visible and bdm.col != bd_col:
+		bdm.col = bd_col
+		(bdm.btl_m.lq as ShaderMaterial).set_shader_parameter("albedo", bd_col)
+		(bdm.btl_m.gl as ShaderMaterial).set_shader_parameter("albedo", bd_col.darkened(0.55))
+
+
+#  손가락 — 라이벌 손(_rh_build)과 같은 셈이다.
+func _bdm_fingers(hj: Dictionary, fpa: Array) -> void:
+	var fp := PackedFloat32Array(fpa)
+	var sg: float = hj.sg
+	for f in 4:
+		var sp: float = deg_to_rad(fp[8] * float(FING3.fan[f])) * sg
+		(hj.j1[f] as Node3D).basis = Basis(Vector3.UP, sp) * Basis(Vector3.BACK, -deg_to_rad(fp[f]))
+		(hj.j2[f] as Node3D).basis = Basis(Vector3.BACK, -deg_to_rad(fp[4 + f]))
+	_thumb3_pose(sg, fp, 0)
+	_thumb3_set(hj, thumb_mr, Transform3D(thumb_pr, (hj.t1 as Node3D).position),
+			Basis(Vector3.BACK, -deg_to_rad(thumb_cr)), sg, 0.6)
+
+
+func _bdm_draw() -> void:
+	if not _bdm_live():
+		return
+	var tex: Texture2D = bdm_vp.get_texture()
+	if tex != null:
+		draw_texture_rect(tex, _full(), false)
+
+
+#  잡기 — 지키는 반쪽을 그늘로 덮는다(가운데 줄 너머 guard 폭까지). k 는 짙기 몫.
+func _bdm_guard_draw(k: float) -> void:
+	if k <= 0.0:
+		return
+	var rr: float = R * rt_dbl_out + 4.0
+	var g: float = R * float(BDUEL.guard)
+	var pts := PackedVector2Array()
+	var a0: float = asin(clampf(g / rr, 0.0, 1.0))
+	for j in 33:
+		var a: float = lerpf(-PI * 0.5 - a0, PI * 0.5 + a0, float(j) / 32.0)
+		pts.append(BC + Vector2(cos(a) * bd_side, sin(a)) * rr)
+	draw_colored_polygon(pts, Color(0.0, 0.0, 0.0, 0.4 * k))
+
+
+#  깨기 셈 — 치켜든 병 위에 점 셋이 하나씩 꺼진다. 다 꺼지면(겨눈 채 기다린다) 병이 반짝인다.
+func _bdm_count_draw() -> void:
+	if bdm_cur.is_empty():
+		return
+	var hp := _bdm_s((bdm_cur.w[1] as Vector3) + Vector3(-4.0, 34.0, -10.0))
+	if bd_ready:
+		var r: float = 5.0 + 2.0 * sin(bd_t * 18.0)
+		draw_line(hp - Vector2(r, 0.0), hp + Vector2(r, 0.0), Color(C_GOLD, 0.9), 1.0)
+		draw_line(hp - Vector2(0.0, r), hp + Vector2(0.0, r), Color(C_GOLD, 0.9), 1.0)
+		return
+	var left: float = clampf(bd_cnt / float(BDUEL.shoot_t), 0.0, 1.0)
+	for j in 3:
+		var on: bool = left > float(j) / 3.0
+		var c := hp + Vector2(float(j - 1) * 11.0, -6.0)
+		draw_circle(c, 4.0, Color(0.0, 0.0, 0.0, 0.6))
+		draw_circle(c, 3.0, C_MULT if on else Color(C_LIGHT, 0.25))
+
+
+#  잡힌 병 — 왼손 주먹(쥔 자리)에 목이 들고 몸은 새끼 쪽으로. 상인 화판보다 먼저 그려 손가락이 덮는다.
+func _bdm_caught_draw() -> void:
+	if bdm_cur.is_empty():
+		return
+	var hb := _bdm_hb(bdm_cur.xd[0], bdm_cur.pk[0], -1.0)
+	var g: Vector3 = (bdm_cur.w[0] as Vector3) + hb * Vector3(34.0, -9.0, 0.0)
+	var gs := _bdm_s(g)
+	var dv := _bdm_s(g + hb.z * -1.0 * 12.0) - gs
+	if dv.length() < 0.01:
+		dv = Vector2.DOWN
+	dv = dv.normalized()
+	var k: float = maxf(_bduel_fly_k(float(BDUEL.catch_t)), 1.8)
+	_bduel_bottle(gs + dv * 13.4 * k, atan2(-dv.x, dv.y), k, bd_col, 1.0, bd_ty)
 
 
 #  빈 테이블 리롤 — 쓸 것이 없으니 주먹으로 친다. 판은 닿는 틀에 깔린다(_pound_land).
