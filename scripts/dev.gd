@@ -1255,6 +1255,8 @@ static func _rows(g: Node) -> Array:
 				#  상점이면 잡기로 대결을 열고, 대결 중이면 남은 내 차례가 다 그 수다. 2026-10-18 (「소리·연출」은
 				#  열아홉 줄이 다 차서 이 쪽에 둔다)
 				{"n1": "대결 상인 수 묶기", "t": "act", "a": "bdm_move"},
+				#  켤 때의 프롤로그(game.gd PLGP · scripts/prologue3d.gd)를 다시 튼다 — 끝나면 TV 켜짐 · 인트로 · 제목. 2026-10-18
+				{"n1": "프롤로그 보기", "t": "act", "a": "plg"},
 			]
 
 
@@ -2338,6 +2340,10 @@ static func _run(g: Node, e: Dictionary) -> void:
 			g.state = g.S.OVER
 			g._sfx("run_win" if g.won else "run_lose")
 			_say("완주 화면" if g.won else "실패 화면")
+			return
+		"plg":
+			g._plg_begin()
+			_say("프롤로그")
 			return
 		"bdm_move":
 			var mv := "catch"

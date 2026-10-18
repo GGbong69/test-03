@@ -1268,8 +1268,13 @@ func _ready() -> void:
 		if _intro_wanted():
 			#  처음 켤 때 화면 고르기(FSEL)를 거치지 않는다(2026-10-14 「브라운관 이런거 하지말고 그냥 기본 값을
 			#  다 50으로」) — 필터 넷은 기본값 50 으로 선다. 고르기는 개발자 판에만 남는다.
-			_intro_begin()
-	_pwr_start(true)
+			#  인트로 앞에 프롤로그(PLGP) — 브라운관은 프롤로그가 끝날 때 켠다(_plg_end). 모션 끄기면 없다.
+			if not motion_off:
+				_plg_begin()
+			else:
+				_intro_begin()
+	if not _plg_live():
+		_pwr_start(true)
 
 
 # ══════════════════════════════════════════════════════════
@@ -1540,6 +1545,99 @@ func _fsel_ui_draw(c: CanvasItem) -> void:
 
 
 # ══════════════════════════════════════════════════════════
+#  프롤로그 — 전파상 창고의 TV 더미 (2026-10-18)
+# ──────────────────────────────────────────────────────────
+#  「게임 시작 할 때 프롤로그 애니메이션 … 1인칭 시점으로 여기 저기 둘러보다가 tv더미?가 눈에 들어오고
+#  계속 클로즈업 되서 tv화면이 전체 화면이 되고 그 때 부터 우리가 만든 tv 켜짐 부터 시작」(사용자).
+#  무대 · 카메라 · TV 는 scripts/prologue3d.gd(Plg — 3D 를 논리 화면 격자로) 가 짓고 민다. 여기는 시계 · 누름 · 그리기 · 끝이다.
+#  켜면 인트로 앞에 한 번 — 인트로(INTRO)의 단 안에서 돈다(state INTRO · 인트로 시계는 이 동안 안 간다).
+#  끝나면 브라운관을 켜고(_pwr_start) 인트로가 그 뒤를 잇는다. 프롤로그는 TV 밖(현실)이라 CRT · VHS ·
+#  도트 · 굴곡이 꺼진다(_crt_apply · _retro_apply) — 켜지는 순간 TV 안으로 들어온 것이 된다.
+#  누름은 인트로와 같은 두 걸음(lock 앞은 안 먹는다 · 첫 누름 빨리 감기 · 둘째 누름 곧장 TV 켜짐).
+#  모션 끄기 · 검사 도구 · 화면 없는 실행에서는 안 튼다.
+#    lock · ff  인트로와 같다 · fade_in 어둠에서 떠오르는 시간 · fade_out 끝의 어둠(어두운 유리 → 검정)
+const Plg = preload("res://scripts/prologue3d.gd")
+const PLGP := {"lock": 0.65, "ff": 2.5, "fade_in": 0.9, "fade_out": 0.4}
+var plg_vp: Node = null      # Plg.make 가 낸 묶음(무대 SubViewport · 제작자 그림)
+var plg_t := -1.0            # 흐른 시간(초) — 안 돌면 −1
+var plg_ff := false
+var plg_rang := {}
+
+
+func _plg_live() -> bool:
+	return plg_t >= 0.0
+
+
+func _plg_begin() -> void:
+	_intro_begin()
+	_plg_close()
+	if not _has_renderer():
+		return
+	plg_vp = Plg.make(self)
+	plg_t = 0.0
+	plg_ff = false
+	plg_rang.clear()
+	_crt_apply()
+	queue_redraw()
+
+
+func _plg_close() -> void:
+	if plg_vp != null and is_instance_valid(plg_vp):
+		plg_vp.queue_free()
+	plg_vp = null
+
+
+func _plg_tick(d: float) -> void:
+	plg_t += d * (float(PLGP.ff) if plg_ff else 1.0)
+	if plg_vp != null and is_instance_valid(plg_vp):
+		Plg.tick(plg_vp, plg_t)
+	#  TV 가 켜질 때마다 지지직 · 주인공이 꺼질 때(off) 꺼지는 소리
+	for job in Plg.ON.keys():
+		if plg_t >= float(Plg.ON[job]) and not plg_rang.has(job):
+			plg_rang[job] = true
+			if job == "off":
+				_sfx("tv_off")
+			else:
+				_sfx("tv_static", SFX_BASE * 0.45)
+	if plg_t >= Plg.length():
+		_plg_end()
+		return
+	queue_redraw()
+
+
+func _plg_press() -> void:
+	if plg_t < float(PLGP.lock):
+		return
+	if not plg_ff:
+		plg_ff = true
+		return
+	_plg_end()
+
+
+#  끝 — 무대를 걷고 필터를 되살리고 브라운관을 켠다. 인트로는 켜지는 동안 기다렸다가 처음부터 돈다.
+func _plg_end() -> void:
+	if not _plg_live():
+		return
+	plg_t = -1.0
+	_plg_close()
+	_crt_apply()
+	intro_t = 0.0
+	_pwr_start(true)
+	queue_redraw()
+
+
+func _plg_draw() -> void:
+	var f := _full()
+	draw_rect(f, Color.BLACK)
+	if plg_vp != null and is_instance_valid(plg_vp):
+		Plg.draw(plg_vp, self, f)
+	var a: float = 1.0 - clampf(plg_t / float(PLGP.fade_in), 0.0, 1.0)
+	a = maxf(a, clampf((plg_t - (Plg.length() - float(PLGP.fade_out))) / float(PLGP.fade_out), 0.0, 1.0))
+	if a > 0.0:
+		draw_rect(f, Color(0.0, 0.0, 0.0, a))
+
+
+# ══════════════════════════════════════════════════════════
 #  인트로 — 켜면 제목 앞에 한 번
 # ──────────────────────────────────────────────────────────
 #  「게임들을 보면 실행하고 바로 시작화면이 안 나오고 연출이 나오잖아 —
@@ -1603,17 +1701,10 @@ const INTRO := {
 	"neon": Color("ff5ca8"), "neon_core": Color("ffe0ef"), "neon_dead": Color("4a2238"),
 	"sign_y": 62.0,                  # 간판 글 기준선 — 판자(문틀 안 · 문 위) 한가운데(+ _door_drop)
 }
-#  인트로 램프(_intro_lamp · _intro_cone) — 2026-10-10 「위에 불빛?이 그냥 세모랑 막대기네? 좀 퀄리티
-#  높여」. 옛 램프는 줄 한 줄 · 사다리꼴 하나 · 원뿔 다각형 하나였다. 이제 술집 펜던트 램프다 —
-#  녹색 법랑 돔 갓(반사 한 줄 · 그늘) · 놋쇠 테 · 갓 안쪽의 따뜻한 속 · 둥근 전구와 빛무리, 그
-#  밑으로 겹 여섯의 무른 빛 원뿔과 그 속을 떠다니는 먼지.
-#    rim_y  갓 테의 높이 · shade_w · shade_h 갓 폭 · 돔 높이 · halo 전구 빛무리 반지름 · motes 먼지 수
-const INTROL := {
-	"rim_y": 22.0, "shade_w": 40.0, "shade_h": 13.0, "halo": 5.0, "motes": 18,
-	"cord": Color("3a3350"), "shade": Color("23402f"), "shade_hi": Color("5f9a74"),
-	"shade_lo": Color("142519"), "brass": Color("8a6a2c"), "brass_hi": Color("d9b45a"),
-	"brass_lo": Color("5a4420"),
-}
+#  인트로 빛(_intro_cone) — 위에서 내려오는 겹 여섯의 무른 빛 원뿔과 그 속을 떠다니는 먼지. 판 위에
+#  매달았던 펜던트 램프(2026-10-10)는 2026-10-18 「이 위에 등은 필요 없어」로 걷었다.
+#    shade_w 원뿔 윗목의 폭 · motes 먼지 수
+const INTROL := {"shade_w": 40.0, "motes": 18}
 var intro_t := -1.0        # 흐른 시간. 인트로가 아니면 −1
 var intro_out := 0.0       # 제목으로 넘긴 뒤 글줄을 덮은 막(1 → 0)
 var intro_fired := 0       # 던진 자루 수
@@ -1659,6 +1750,9 @@ func _intro_tick(d: float) -> void:
 		queue_redraw()
 	if state != S.INTRO:
 		return
+	if _plg_live():
+		_plg_tick(d)
+		return
 	#  브라운관이 켜지는 동안은 기다린다 — 그림이 다 벌어진 뒤 어둠부터 시작한다.
 	if pwr_t >= 0.0 and pwr_on:
 		return
@@ -1690,6 +1784,9 @@ func _intro_tick(d: float) -> void:
 #  키든 손가락이든 이 한 문을 지나므로 두 길이 영영 안 갈린다.
 func _intro_press() -> void:
 	if state != S.INTRO:
+		return
+	if _plg_live():
+		_plg_press()
 		return
 	if intro_t < float(INTRO.lock):
 		return                      # 실행 직후에 딸려 온 누름 — 아무 일도 없다
@@ -1755,6 +1852,9 @@ func _intro_total() -> int:
 
 
 func _draw_intro() -> void:
+	if _plg_live():
+		_plg_draw()
+		return
 	var t := intro_t
 	var light := _intro_light(t)
 	var st: float = clampf((t - float(INTRO.settle)) / (float(INTRO.end) - float(INTRO.settle)), 0.0, 1.0)
@@ -1786,7 +1886,6 @@ func _draw_intro() -> void:
 	_ttly_draw(1.0 - st)
 	_ttl_draw()
 	draw_set_transform(shake_off)
-	_intro_lamp(light, st)
 	_intro_sign(t, 1.0 - st, _sign_base(shake_off))
 	#  두 낱말이 붙는 순간 금빛 번쩍
 	var ft: float = t - float(INTRO.snap) - float(INTRO.snap_t)
@@ -1795,57 +1894,14 @@ func _draw_intro() -> void:
 		draw_rect(_full(), Color(C_ACC, 0.16 * fk * fk))
 
 
-func _intro_lamp(light: float, st: float) -> void:
-	#  갓은 램프가 꺼지면 같이 어둠에 묻힌다 — 네온 간판이 그 자리에 선다
-	var a: float = (1.0 - st) * (maxf(light, 0.35) if intro_t < float(INTRO.off) else light)
-	if a <= 0.0:
-		return
-	var L: Dictionary = INTROL
-	var cx: float = _title_c().x
-	var ry: float = float(L.rim_y)
-	var rx: float = float(L.shade_w) * 0.5
-	var sh: float = float(L.shade_h)
-	var lit: float = clampf(light, 0.0, 1.0)
-	#  줄 · 받침
-	draw_line(Vector2(cx, -view_pad.y), Vector2(cx, ry - sh - 2.0), Color(L.cord, a), 1.0)
-	draw_rect(Rect2(cx - 2.0, ry - sh - 3.0, 4.0, 2.0), Color(L.brass_lo, a))
-	#  갓 — 반타원 돔(법랑). 테에서 위로 둥글게 오른다.
-	var dome := PackedVector2Array()
-	var n := 14
-	for i in n + 1:
-		var th: float = PI + PI * float(i) / float(n)
-		dome.append(Vector2(cx + cos(th) * rx, ry + sin(th) * sh))
-	draw_colored_polygon(dome, Color(L.shade, a))
-	#  돔 반사 — 왼쪽 위 어깨에 밝은 호 한 줄 · 오른쪽 아래는 그늘
-	var hl := PackedVector2Array()
-	for i in 5:
-		var th2: float = PI * 1.12 + PI * 0.30 * float(i) / 4.0
-		hl.append(Vector2(cx + cos(th2) * (rx - 2.5), ry + sin(th2) * (sh - 2.5)))
-	draw_polyline(hl, Color(L.shade_hi, 0.85 * a), 1.0)
-	draw_line(Vector2(cx + rx * 0.35, ry - 2.0), Vector2(cx + rx - 2.0, ry - 2.0), Color(L.shade_lo, a), 1.0)
-	#  놋쇠 테 — 갓 밑동 두 줄(윗줄이 밝다)
-	draw_rect(Rect2(cx - rx - 1.0, ry - 1.0, rx * 2.0 + 2.0, 1.0), Color(L.brass_hi, a))
-	draw_rect(Rect2(cx - rx - 1.0, ry, rx * 2.0 + 2.0, 2.0), Color(L.brass, a))
-	if lit <= 0.0:
-		return
-	var warm: Color = INTRO.warm
-	var bulb: Color = warm.lerp(Color.WHITE, 0.55)
-	#  갓 안쪽 — 테 밑으로 보이는 따뜻한 속(밑에서 올려다본 둥근 입)
-	draw_rect(Rect2(cx - rx + 1.0, ry + 2.0, rx * 2.0 - 2.0, 1.0), Color(warm, 0.75 * a * lit))
-	#  전구 — 둥근 알 · 둘레 빛무리 넷
-	var bc := Vector2(cx, ry + 4.0)
-	for k in 4:
-		draw_circle(bc, float(L.halo) * (1.0 + float(k) * 0.8), Color(warm, 0.10 * a * lit / float(k + 1)))
-	draw_circle(bc, 3.0, Color(bulb, a * lit))
-	draw_rect(Rect2(cx - 1.0, ry + 2.0, 2.0, 1.0), Color(1.0, 1.0, 1.0, a * lit))
-
-
 #  램프 빛 원뿔 — 겹 여섯이 안쪽부터 좁고 짙게 · 바깥은 넓고 옅게 겹쳐 가장자리가 무르게 진다.
 #  빛 속에 먼지 몇 알이 천천히 떠다니며 반짝인다(움직임 끔이면 그 자리에 선다).
+#  2026-10-18 「이 위에 등은 필요 없어 그냥 빛이 위에서 내려 오는걸로」 — 갓 · 전구 · 줄(옛 _intro_lamp)을
+#  걷었다. 원뿔은 화면 윗변 밖에서 내려온다(갓 테에서 시작하면 윗변이 각진 띠로 남는다).
 func _intro_cone(cx: float, glow: float, t: float) -> void:
 	var L: Dictionary = INTROL
 	var warm: Color = INTRO.warm
-	var top: float = float(L.rim_y) + 3.0
+	var top: float = -view_pad.y - 4.0
 	var bot: float = 350.0
 	for k in 6:
 		var tw: float = float(L.shade_w) * 0.40 + float(k) * 2.5
@@ -56114,7 +56170,7 @@ func _crt_apply() -> void:
 	_retro_apply()
 	if crt_layer == null or not is_instance_valid(crt_layer):
 		return
-	var on: bool = crt > 0.004 or warp > 0.004
+	var on: bool = (crt > 0.004 or warp > 0.004) and not _plg_live()
 	crt_layer.visible = on
 	crt_rect.visible = on
 	if not on:
@@ -56377,8 +56433,9 @@ func _retro_one(r: ColorRect, v: float) -> ShaderMaterial:
 
 
 func _retro_apply() -> void:
-	_retro_one(dot_rect, dot)
-	var vm := _retro_one(vhs_rect, vhs)
+	var pl: bool = _plg_live()          # 프롤로그는 TV 밖이라 끈다(PLGP)
+	_retro_one(dot_rect, 0.0 if pl else dot)
+	var vm := _retro_one(vhs_rect, 0.0 if pl else vhs)
 	if vm != null:
 		#  모션 끄기 — 테이프 시계가 0 에 선다(흔들림 · 띠 · 낟알이 멎는다).
 		vm.set_shader_parameter("motion", 0.0 if motion_off else 1.0)
