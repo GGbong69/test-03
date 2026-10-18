@@ -1549,16 +1549,18 @@ func _fsel_ui_draw(c: CanvasItem) -> void:
 # ──────────────────────────────────────────────────────────
 #  「게임 시작 할 때 프롤로그 애니메이션 … 1인칭 시점으로 여기 저기 둘러보다가 tv더미?가 눈에 들어오고
 #  계속 클로즈업 되서 tv화면이 전체 화면이 되고 그 때 부터 우리가 만든 tv 켜짐 부터 시작」(사용자).
-#  무대 · 카메라 · TV 는 scripts/prologue3d.gd(Plg — 3D 를 논리 화면 격자로) 가 짓고 민다. 여기는 시계 · 누름 · 그리기 · 끝이다.
-#  켜면 인트로 앞에 한 번 — 인트로(INTRO)의 단 안에서 돈다(state INTRO · 인트로 시계는 이 동안 안 간다).
-#  끝나면 브라운관을 켜고(_pwr_start) 인트로가 그 뒤를 잇는다. 프롤로그는 TV 밖(현실)이라 CRT · VHS ·
-#  도트 · 굴곡이 꺼진다(_crt_apply · _retro_apply) — 켜지는 순간 TV 안으로 들어온 것이 된다.
-#  누름은 인트로와 같은 두 걸음(lock 앞은 안 먹는다 · 첫 누름 빨리 감기 · 둘째 누름 곧장 TV 켜짐).
-#  모션 끄기 · 검사 도구 · 화면 없는 실행에서는 안 튼다.
-#    lock · ff  인트로와 같다 · fade_in 어둠에서 떠오르는 시간 · fade_out 끝의 어둠(어두운 유리 → 검정)
+#  무대 · 카메라 · TV · 층은 scripts/prologue3d.gd(Plg) 가 도트 화판 밖(screen_host)에 짓고 민다. 여기는
+#  시계 · 누름 · 끝이다. 켜면 인트로 앞에 한 번 — 인트로(INTRO)의 단 안에서 돈다(state INTRO). 게임은 그
+#  밑에서 인트로를 그대로 그리고, 주인공 TV 가 켜지는 때(Plg.feed_at)부터 인트로 시계가 간다 — 주인공 유리가
+#  그 화판 그림을 튼다(「TV가 깜박이고 좀 재생되는 중에 클로즈업」). 카메라가 다 다가가면(Plg.handoff) 필터가
+#  켜지고 층이 걷혀 인트로가 그대로 이어진다. 그 전까지는 TV 밖(현실)이라 CRT · VHS · 도트 · 굴곡이 꺼진다
+#  (_plg_cover). 누름은 인트로와 같은 두 걸음(lock 앞은 안 먹는다 · 첫 누름 빨리 감기 — 인트로도 같이 ·
+#  둘째 누름 곧장 끝 — 주인공이 아직 안 켜졌으면 브라운관을 켜고 인트로를 처음부터).
+#  모션 끄기 · 검사 도구 · 화면 없는 실행 · 화판 없는 실행에서는 안 튼다.
+#    lock · ff  인트로와 같다
 const Plg = preload("res://scripts/prologue3d.gd")
-const PLGP := {"lock": 0.65, "ff": 2.5, "fade_in": 0.9, "fade_out": 0.4}
-var plg_vp: Node = null      # Plg.make 가 낸 묶음(무대 SubViewport · 제작자 그림)
+const PLGP := {"lock": 0.65, "ff": 2.5}
+var plg_vp: Node = null      # Plg.make 가 낸 묶음(무대 · 층 — 화판 밖)
 var plg_t := -1.0            # 흐른 시간(초) — 안 돌면 −1
 var plg_ff := false
 var plg_rang := {}
@@ -1568,12 +1570,17 @@ func _plg_live() -> bool:
 	return plg_t >= 0.0
 
 
+#  프롤로그가 화면을 덮고 있나 — handoff 부터는 필터가 켜진다(층이 걷히는 동안 유리 속 그림에도 먹는다).
+func _plg_cover() -> bool:
+	return _plg_live() and plg_t < Plg.handoff()
+
+
 func _plg_begin() -> void:
 	_intro_begin()
 	_plg_close()
-	if not _has_renderer():
+	if not _has_renderer() or screen_host == null or not is_instance_valid(screen_host):
 		return
-	plg_vp = Plg.make(self)
+	plg_vp = Plg.make(self, screen_host)
 	plg_t = 0.0
 	plg_ff = false
 	plg_rang.clear()
@@ -1591,11 +1598,17 @@ func _plg_tick(d: float) -> void:
 	plg_t += d * (float(PLGP.ff) if plg_ff else 1.0)
 	if plg_vp != null and is_instance_valid(plg_vp):
 		Plg.tick(plg_vp, plg_t)
-	#  TV 가 켜질 때마다 지지직
+	#  TV 가 켜질 때마다 지지직 · 주인공은 켜지는 소리
 	for job in Plg.ON.keys():
 		if plg_t >= float(Plg.ON[job]) and not plg_rang.has(job):
 			plg_rang[job] = true
-			_sfx("tv_static", SFX_BASE * 0.45)
+			if job == "hero":
+				_sfx("tv_on")
+			else:
+				_sfx("tv_static", SFX_BASE * 0.45)
+	if plg_t >= Plg.handoff() and not plg_rang.has("handoff"):
+		plg_rang["handoff"] = true
+		_crt_apply()
 	if plg_t >= Plg.length():
 		_plg_end()
 		return
@@ -1607,31 +1620,24 @@ func _plg_press() -> void:
 		return
 	if not plg_ff:
 		plg_ff = true
+		intro_ff = true
 		return
 	_plg_end()
 
 
-#  끝 — 무대를 걷고 필터를 되살리고 브라운관을 켠다. 인트로는 켜지는 동안 기다렸다가 처음부터 돈다.
+#  끝 — 무대 · 층을 걷고 필터를 되살린다. 주인공이 이미 인트로를 틀고 있었으면 그대로 잇고, 아직이면(일찍
+#  건너뜀) 브라운관을 켜고 인트로를 처음부터.
 func _plg_end() -> void:
 	if not _plg_live():
 		return
+	var fed: bool = plg_t >= Plg.feed_at()
 	plg_t = -1.0
 	_plg_close()
 	_crt_apply()
-	intro_t = 0.0
-	_pwr_start(true)
+	if not fed:
+		intro_t = 0.0
+		_pwr_start(true)
 	queue_redraw()
-
-
-func _plg_draw() -> void:
-	var f := _full()
-	draw_rect(f, Color.BLACK)
-	if plg_vp != null and is_instance_valid(plg_vp):
-		Plg.draw(plg_vp, self, f)
-	var a: float = 1.0 - clampf(plg_t / float(PLGP.fade_in), 0.0, 1.0)
-	a = maxf(a, clampf((plg_t - (Plg.length() - float(PLGP.fade_out))) / float(PLGP.fade_out), 0.0, 1.0))
-	if a > 0.0:
-		draw_rect(f, Color(0.0, 0.0, 0.0, a))
 
 
 # ══════════════════════════════════════════════════════════
@@ -1749,7 +1755,8 @@ func _intro_tick(d: float) -> void:
 		return
 	if _plg_live():
 		_plg_tick(d)
-		return
+		if _plg_live() and plg_t < Plg.feed_at():
+			return
 	#  브라운관이 켜지는 동안은 기다린다 — 그림이 다 벌어진 뒤 어둠부터 시작한다.
 	if pwr_t >= 0.0 and pwr_on:
 		return
@@ -1849,9 +1856,6 @@ func _intro_total() -> int:
 
 
 func _draw_intro() -> void:
-	if _plg_live():
-		_plg_draw()
-		return
 	var t := intro_t
 	var light := _intro_light(t)
 	var st: float = clampf((t - float(INTRO.settle)) / (float(INTRO.end) - float(INTRO.settle)), 0.0, 1.0)
@@ -56167,7 +56171,7 @@ func _crt_apply() -> void:
 	_retro_apply()
 	if crt_layer == null or not is_instance_valid(crt_layer):
 		return
-	var on: bool = (crt > 0.004 or warp > 0.004) and not _plg_live()
+	var on: bool = (crt > 0.004 or warp > 0.004) and not _plg_cover()
 	crt_layer.visible = on
 	crt_rect.visible = on
 	if not on:
@@ -56430,7 +56434,7 @@ func _retro_one(r: ColorRect, v: float) -> ShaderMaterial:
 
 
 func _retro_apply() -> void:
-	var pl: bool = _plg_live()          # 프롤로그는 TV 밖이라 끈다(PLGP)
+	var pl: bool = _plg_cover()         # 프롤로그는 TV 밖이라 끈다(PLGP)
 	_retro_one(dot_rect, 0.0 if pl else dot)
 	var vm := _retro_one(vhs_rect, 0.0 if pl else vhs)
 	if vm != null:
