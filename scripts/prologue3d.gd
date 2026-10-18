@@ -118,7 +118,7 @@ const PLASTIC := {"red": Color("a83c30"), "teal": Color("2f8a84"), "graph": Colo
 #  왼쪽 아래 영화 TV(어둠 속 첫 빛 — REEL.tune 에 채널이 잡혀 영화를 튼다 · 「왜 왼쪽 하단 화면은 안나와?」).
 const PILE := [
 	["TvConsole", -1.02, -0.10, 5.0, 0.0, "", "bars"],
-	["TvConsole", 0.0, -0.02, 0.0, 0.0, "", "sunset"],
+	["TvConsole", 0.0, -0.10, 0.0, 0.0, "", "sunset"],
 	["TvWood", 0.98, -0.10, -6.0, 0.0, "", "snow"],
 	["Speaker", 1.50, -0.12, -8.0, 0.0, "", ""],
 	["Speaker", -1.55, -0.12, 8.0, 0.0, "", ""],
