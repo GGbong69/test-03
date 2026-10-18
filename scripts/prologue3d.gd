@@ -9,20 +9,21 @@ extends RefCounted
 #  엄청엄청 높게 하고 안 중요한 tv는 좀 엑스트라? 명도나 밝기도 조금 어둡게」 · 「메인 tv가 가운데 크게 보이도록
 #  사질 나머지는 거의 안보여도 괜찮잖아」(젠레스 존 제로 런처 그림)(사용자).
 #  주인공 TV(TvHero · 비디오 데크 위) 하나가 화면 가운데를 크게 차지하고, 둘레의 TV 더미는 엑스트라 — 몸은
-#  어둡고(EXTRA) 화면은 흐리고 덜 붉고 굵은 도트다. 주인공은 빛 단을 잘게(HERO.bands) · 위 등(깜박이는 그 등)이
-#  주인공만 좁게 비춘다. 주인공은 게임 TV 라 끝까지 꺼져 있다(어두운 유리 · 위가 옅은 결 · 반짝 띠 · 옆 크레딧
-#  TV 의 주황빛). 「제작 김건의」는 왼쪽 빨간 휴대용 TV(maker — 엑스트라지만 흐리지 않다)에 뜬다
+#  어둡고(EXTRA) 화면은 흐리고 덜 붉다. 주인공은 게임 TV 라 끝까지 꺼져 있다(어두운 유리 · 위가 옅은 결 ·
+#  반짝 띠). 「제작 김건의」는 왼쪽 빨간 휴대용 TV(maker — 엑스트라지만 흐리지 않다)에 뜬다
 #  (「이름은 붉은색으로 표시한곳에 표시해도 되잖아」 → 「이름 표시 TV 위치도 왼쪽으로」 · 지지직 → 그림).
 #  카메라는 처음부터 주인공 **화면** 한가운데를 곧게 본다(「tv화면을 진짜 중앙에 배치해 지금 클로즈업 될때
 #  살짝 왼쪽으로 가는게 있잖아」 — 화면이 몸 왼쪽에 있어 몸 한가운데를 보던 카메라가 다가가며 옆으로 흘렀다).
-#  빛 · 그늘(「라이팅이랑 쉐이딩에 힘 써줘」) — 위 등은 왼쪽 앞 위에서 주인공 앞면을 비추고 그림자를 진다 ·
-#  뒤 오른쪽 위의 푸른 테 빛(RIM)이 윗면 · 옆면 실루엣을 긋는다 · 화면 · 등은 번진다(글로우) · 틈은 SSAO 로
-#  어둡다 · 마지막에 EDGE_SHADER 가 깊이로 실루엣에 짙은 외곽선을, 노멀로 위를 보는 모서리에 밝은 선을
-#  긋는다(t3ssel8r 식 3D 도트).
+#  빛 · 그늘 — 「방을 진짜 어둡게 하라고 tv 빛 이외에는 빛도 없도록」 · 「이름 표시 tv는 메인 TV보다 뒤에 있는거
+#  아니야? 근데 왜 메인 TV 앞면까지 빛에 째이는거야」(사용자). 방에는 등 · 환경광이 없다 — 빛은 켜진 화면뿐이다.
+#  화면 빛은 유리 바로 앞에서 앞쪽 반구로만 나가는 원뿔(SCR_LIT)이라 뒤에 선 TV 는 주인공 앞면을 못 비추고
+#  옆면 · 바닥만 물들인다(처음엔 화면 앞 35cm 의 점 빛이라 뒤 TV 빛이 주인공 앞면에 닿았다). 「불이 깜박깜박」은
+#  TV 들이 차례로 깜박이며 켜지는 것이다. 몸은 제목 문(Door3D)과 같은 결 그림 재질(TRI_SHADER — UV 없는
+#  Blender 몸에 앞 · 옆 · 위로 결을 비춘다 · 나무 결은 결 대비 · 채도를 누른다) · 필름 톤 · 둘레 비네트.
 #  TV 는 scripts/tools/blender/tvs.py 가 짓는다(assets/models/tvs.glb). 무대는 논리 화면 크기의 SubViewport
-#  — 게임 도트와 같은 격자에 그려 가장 가까운 점으로 붙인다. 몸 재질은 방과 같은 Door3D._px(빛 단 + 바둑
-#  디더) · 화면은 SCR_SHADER(화면 도트 칸 · 주사선 · 단 나눈 색). 켜진 화면마다 제 빛깔의 점 빛을 앞에 둔다.
-#  흐름 — 어둠(구석 지지직 한 대) → 위 등이 깜박이다 선다 → 둘레 TV 가 흐리게 켜진다 → 크레딧 TV 가 켜진다
+#  — 게임 도트와 같은 격자에 그려 가장 가까운 점으로 붙인다. 화면은 SCR_SHADER(화면 도트 칸 · 주사선).
+#  화면은 tvs.py 에서 귀만 둥근 네모다(「tv의 테두리가 너무 둥글지 않아?」).
+#  흐름 — 어둠(구석 지지직 한 대) → 둘레 TV 가 차례로 깜박이며 흐리게 켜진다 → 크레딧 TV 가 켜진다
 #  (지지직 → 제작자) → 카메라가 꺼진 주인공 화면으로 곧게 다가가 어두운 유리가 화면을 채운다 → game.gd 가
 #  브라운관을 켠다(_plg_end).
 #  API — make(host) · tick(h, t) · draw(h, ci, dest) · length() · ON(지지직 소리 때).
@@ -32,35 +33,25 @@ const Room3D = preload("res://scripts/room3d.gd")
 const TVS_GLB := "res://assets/models/tvs.glb"
 const LEN := 6.0
 const ON := {"tvs": 1.0, "maker": 1.75}
-#  lamp 위 등이 깜박이기 시작하는 때 · LAMP_SW 그 뒤 켜짐/꺼짐이 바뀌는 때(마지막에 켜진 채 선다) ·
 #  stag 둘레 TV 가 차례로 켜지는 사이 · snow 크레딧 TV 가 켜진 뒤 지지직 동안 · push0~push1 다가가는 동안
-const T := {"lamp": 0.55, "stag": 0.05, "snow": 0.45, "push0": 3.7, "push1": 5.6}
-const LAMP_SW := [0.0, 0.06, 0.18, 0.24, 0.50, 0.55, 0.62]
+const T := {"stag": 0.07, "snow": 0.45, "push0": 3.7, "push1": 5.6}
 const FONT_BIG := "res://fonts/Paperlogy-7Bold.ttf"
 const FONT_SM := "res://fonts/Galmuri9.ttf"
 #  제작자 그림 — 크레딧 TV 유리가 첫 장면에서 차지하는 논리 px 언저리(1 칸 = 1 px)
 const CARD := Vector2i(120, 108)
 #  카메라 — 주인공 화면 한가운데에서 앞으로 dist(m) · 세로 화각(주인공 폭이 화면 폭의 여섯 몫 언저리)
 const CAM := {"dist": 1.30, "fov": 34.0}
-#  빛 — lamp 위 등(왼쪽 앞 위 · 주인공 화면을 본다 · 세기 · 원뿔 각) · bounce 밑에서 되튀는 따뜻한 빛(위 등을
-#  따라 켜진다 — 밑을 보는 면 · 다이얼 밑동이 데워진다) · rim 뒤 오른쪽 위 푸른 테 빛(자리 ·
-#  빛깔 · 세기 · 닿는 거리) · glow 번짐(세기 · 문턱) · ao SSAO(반지름 · 세기 · 곧은 빛에 먹는 몫)
-const LIT := {
-	"lamp_at": Vector3(-0.55, 2.5, 1.5), "lamp_e": 2.2, "lamp_ang": 22.0,
-	"bounce_at": Vector3(0.0, 0.45, 0.9), "bounce_col": Color(1.0, 0.72, 0.48), "bounce_e": 0.35, "bounce_range": 1.6,
-	"rim_at": Vector3(0.95, 2.0, -0.75), "rim_col": Color(0.35, 0.55, 1.0), "rim_e": 1.6, "rim_range": 3.2,
-	"glow": 0.6, "glow_thr": 0.85, "ao_r": 0.22, "ao_k": 1.6, "ao_light": 0.6,
-}
-#  외곽선 — d_thr 깊이가 이 몫 넘게 뒤로 뛰면 실루엣(짙게 dark 배) · n_thr 노멀이 이만큼 꺾이고 이쪽이
-#  더 위를 보면 모서리(밝게 1 + lift 배)
-const EDGE := {"d_thr": 0.035, "n_thr": 0.3, "dark": 0.42, "lift": 0.45}
-#  주인공 · 엑스트라 — 몸 바탕 빛(fill) · 빛 단 수 · 점 빛 세기 · (엑스트라) 몸 빛깔 배수 · 화면 밝기 · 채도 ·
-#  화면 도트(1m 당 칸). MAKER — 크레딧 TV 의 점 빛 세기(주인공 오른쪽 몸 · 유리에 주황빛이 번진다).
-#  glass_lv — 주인공의 꺼진 유리를 끊는 단 수(어두운 결이 바둑 점으로 깨지지 않게 잘게).
-const HERO := {"fill": Color(0.07, 0.08, 0.11), "bands": 6.0, "glass_lv": 16.0}
-const MAKER := {"light": 0.4}
-const EXTRA := {"fill": Color(0.018, 0.018, 0.03), "bands": 3.0, "light": 0.12, "tone": 0.4, "dim": 0.16,
-		"sat": 0.5, "cells": 50.0}
+#  빛 — glow 화면 번짐 세기 · 문턱 · vig 둘레 비네트 짙기(가장자리 알파)
+const LIT := {"glow": 0.45, "glow_thr": 0.9, "vig": 0.55}
+#  화면 빛(SCR_LIT) — 유리 앞 at(m)에서 앞으로 원뿔 ang(도) · 닿는 거리 range · 세기는 MAKER · EXTRA 의 light
+const SCR_LIT := {"at": 0.08, "ang": 85.0, "range": 1.3, "att": 1.0}
+#  재질 — den 결 그림 1 텍셀이 첫 장면의 주인공 앞면에서 논리 1px(1m 당 텍셀) · walnut 주인공 몸(짙은 호두
+#  나무) · wood 엑스트라 나무 장
+const MAT := {"den": 450.0, "walnut": Color("3a2414"), "wood": Color("4a2e18")}
+#  MAKER — 크레딧 TV 의 화면 빛 세기(주인공 왼쪽 옆면 · 바닥을 물들인다).
+const MAKER := {"light": 1.6}
+#  엑스트라 — 점 빛 세기 · 몸 빛깔 배수 · 화면 밝기 · 채도 · 화면 도트(1m 당 칸) · 화면 색 단 수
+const EXTRA := {"light": 0.7, "tone": 0.42, "dim": 0.28, "sat": 0.6, "cells": 110.0, "lv": 8.0}
 #  화면 장면 — 번호(SCR_SHADER mode) · 앞에 둔 점 빛 빛깔. game 은 꺼진 주인공 · maker 는 크레딧(지지직 1 →
 #  제작자 그림 4).
 const JOB := {
@@ -96,8 +87,8 @@ const HERO_KINDS := ["TvHero", "Deck"]
 
 #  화면 — UV(0,0 왼 위) 를 res 칸으로 끊는다. pw 켜짐(0~1 · 가운데 줄이 위아래로 벌어지고 처음엔 하얗다) ·
 #  dim · sat 엑스트라의 밝기 · 채도. 꺼진 유리는 위가 옅은 짙은 회색 · 귀가 어둡고 · 왼 위에 비스듬한 반짝 띠
-#  둘 · warm 만큼 왼 가장자리에 옆 크레딧 TV 의 주황빛 · amb 위 등을 따라 옅어진다(등이 꺼지면 유리도 어둡다).
-#  색은 lv 단으로 끊고 바둑 디더를 얹는다.
+#  둘 · amb 켜진 TV 몫을 따라 옅어진다(다 꺼진 어둠에서는 유리도 거의 안 보인다).
+#  lv 가 있으면(엑스트라) 색을 그 단으로 끊는다 — 바둑 점은 안 얹는다(제목에 없는 결).
 const SCR_SHADER := """
 shader_type spatial;
 render_mode unshaded;
@@ -107,21 +98,13 @@ uniform float tm = 0.0;
 uniform float seed = 0.0;
 uniform float dim = 1.0;
 uniform float sat = 1.0;
-uniform float lv = 6.0;
-uniform float warm = 0.0;
+uniform float lv = 0.0;
 uniform float amb = 1.0;
 uniform vec2 res = vec2(40.0, 30.0);
 uniform sampler2D tex : source_color, filter_nearest, repeat_disable;
 
 float hs(vec2 p) {
 	return fract(sin(dot(p, vec2(12.9898, 78.233)) + seed * 17.0) * 43758.5453);
-}
-
-float bayer(vec2 p) {
-	int x = int(mod(p.x, 4.0));
-	int y = int(mod(p.y, 4.0));
-	int M[16] = int[](0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5);
-	return (float(M[x + y * 4]) + 0.5) / 16.0;
 }
 
 vec3 scene(vec2 q) {
@@ -218,9 +201,8 @@ void fragment() {
 	off *= (1.0 - 1.6 * dot(UV - 0.5, UV - 0.5)) * amb;
 	float gd = UV.x * 0.85 + UV.y;
 	if ((abs(gd - 0.42) < 0.045 || abs(gd - 0.56) < 0.012) && UV.x < 0.5) {
-		off += vec3(0.04, 0.045, 0.055);
+		off += vec3(0.03, 0.034, 0.042) * amb * 2.5;
 	}
-	off += vec3(0.12, 0.06, 0.02) * warm * (1.0 - smoothstep(0.0, 0.3, UV.x));
 	vec3 c = off;
 	if (pw > 0.0 && mode > 0) {
 		vec3 s = scene(q);
@@ -235,75 +217,59 @@ void fragment() {
 			c = s;
 		}
 	}
-	if (lv > 8.0) {
-		float l = max(max(c.r, c.g), max(c.b, 1e-4));
-		c *= (floor(l * lv + bayer(FRAGCOORD.xy)) / lv) / l;    // 꺼진 유리 — 밝기만 끊는다(빛깔마다 끊으면 무지개가 났다)
-	} else {
-		c = floor(c * lv + bayer(FRAGCOORD.xy)) / lv;
+	if (lv > 0.0) {
+		c = floor(c * lv + 0.5) / lv;
 	}
 	ALBEDO = c;
 }
 """
 static var _scr_sh: Shader = null
 
-#  외곽선 — 화면 가득 판 한 장(POSITION 을 바로 쓴다)이 그려진 판을 읽어 다시 쓴다. 깊이(역 Z · 0 이 먼 끝)를
-#  선형 거리로 펴고, 네 이웃 중 하나라도 d_thr 몫 넘게 뒤에 있으면 실루엣 · 아니면 노멀이 n_thr 넘게 꺾였고
-#  이쪽이 더 위를 보면 모서리다.
-const EDGE_SHADER := """
+#  몸 — 결 그림을 앞 · 옆 · 위(몸 좌표에서 가장 큰 노멀 축)로 비춘다(Blender 몸은 UV 가 화면 유리에만 있다).
+#  나무는 제목 문(Door3D.LIT_SHADER)과 같이 결 대비(grain) · 채도(sat)를 바탕(base) 쪽으로 누른다 —
+#  안 누르면 결이 주황 줄로 서서 램프 밑에서 지글거렸다(「긁힌 라미네이트」). 빛은 엔진 빛 그대로(단 없음).
+const TRI_SHADER := """
 shader_type spatial;
-render_mode unshaded, depth_draw_never, depth_test_disabled, cull_disabled, fog_disabled;
-uniform sampler2D scr : hint_screen_texture, filter_nearest;
-uniform sampler2D dep : hint_depth_texture, filter_nearest;
-uniform sampler2D nrm : hint_normal_roughness_texture, filter_nearest;
-uniform float d_thr = 0.035;
-uniform float n_thr = 0.3;
-uniform float dark = 0.42;
-uniform float lift = 0.45;
+uniform sampler2D alb : source_color, filter_nearest, repeat_enable;
+uniform bool use_tex = false;
+uniform vec3 tint : source_color = vec3(1.0);
+uniform vec3 base : source_color = vec3(0.5);
+uniform float grain = 1.0;
+uniform float sat = 1.0;
+uniform float den = 450.0;
+uniform vec2 tsz = vec2(256.0);
+uniform float rough = 0.8;
+uniform float spec = 0.3;
+uniform float metal = 0.0;
+varying vec3 op;
+varying vec3 on;
 
 void vertex() {
-	POSITION = vec4(VERTEX.xy, 1.0, 1.0);
-}
-
-float lin(vec2 uv, mat4 ip) {
-	float d = texture(dep, uv).r;
-	if (d <= 0.0) {
-		return 1e4;
-	}
-	vec4 v = ip * vec4(uv * 2.0 - 1.0, d, 1.0);
-	return -v.z / v.w;
-}
-
-vec3 nor(vec2 uv) {
-	return normalize(texture(nrm, uv).xyz * 2.0 - 1.0);
+	op = VERTEX;
+	on = NORMAL;
 }
 
 void fragment() {
-	vec2 px = 1.0 / VIEWPORT_SIZE;
-	vec2 uv = SCREEN_UV;
-	float d0 = lin(uv, INV_PROJECTION_MATRIX);
-	vec3 n0 = nor(uv);
-	vec2 o[4] = vec2[](vec2(px.x, 0.0), vec2(-px.x, 0.0), vec2(0.0, px.y), vec2(0.0, -px.y));
-	float de = 0.0;
-	bool ne = false;
-	for (int i = 0; i < 4; i++) {
-		float d = lin(uv + o[i], INV_PROJECTION_MATRIX);
-		de = max(de, (d - d0) / d0);
-		if (abs(d - d0) / d0 < d_thr) {
-			vec3 n = nor(uv + o[i]);
-			if (1.0 - dot(n0, n) > n_thr && n0.y > n.y + 0.05) {
-				ne = true;
-			}
-		}
+	vec3 c = vec3(1.0);
+	if (use_tex) {
+		vec3 a = abs(on);
+		vec2 uv = (a.z >= a.x && a.z >= a.y) ? op.xy : ((a.x >= a.y) ? op.zy : op.xz);
+		c = texture(alb, vec2(uv.x, -uv.y) * den / tsz).rgb;
+		vec3 lw = vec3(0.2126, 0.7152, 0.0722);
+		float lb = max(dot(base, lw), 0.0001);
+		float dd = dot(c, lw) / lb - 1.0;
+		float k = mix(grain, 1.0, smoothstep(0.40, 0.60, -dd));
+		c = base + (c - base) * k;
+		c = mix(vec3(dot(c, lw)), c, sat);
 	}
-	vec3 c = texture(scr, uv).rgb;
-	if (d0 < 1e3 && de > d_thr) {
-		c *= dark;
-	} else if (ne) {
-		c = c * (1.0 + lift) + vec3(0.015);
-	}
-	ALBEDO = c;
+	ALBEDO = c * tint;
+	ROUGHNESS = rough;
+	SPECULAR = spec;
+	METALLIC = metal;
 }
 """
+static var _tri_sh: Shader = null
+static var _wood_im := {}       # 바탕 빛깔 → 결 그림(처음 부를 때 굽는다)
 
 
 #  제작자 그림 — 다섯 띠 바탕(호박빛 → 짙은 주황) · 「제작」 · 굵은 「김건의」(테 진 글).
@@ -376,9 +342,10 @@ static func make(host: Node) -> Node:
 	var we := WorldEnvironment.new()
 	var env := Environment.new()
 	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color("06060a")
+	env.background_color = Color.BLACK
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_DISABLED
 	env.reflected_light_source = Environment.REFLECTION_SOURCE_DISABLED
+	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	env.glow_enabled = true
 	env.glow_intensity = float(LIT.glow)
 	env.glow_bloom = 0.0
@@ -386,56 +353,16 @@ static func make(host: Node) -> Node:
 	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_ADDITIVE
 	for lvl in 7:
 		env.set_glow_level(lvl, 1.0 if lvl < 3 else 0.0)
-	env.ssao_enabled = true
-	env.ssao_radius = float(LIT.ao_r)
-	env.ssao_intensity = float(LIT.ao_k)
-	env.ssao_light_affect = float(LIT.ao_light)
 	we.environment = env
 	w.add_child(we)
 	var cam := Camera3D.new()
 	cam.fov = float(CAM.fov)
 	w.add_child(cam)
-	#  위 등 — 왼쪽 앞 위에서 주인공을 좁게 비추고 그림자를 진다(등 몸은 화면 밖 · 겨냥은 화면을 찾은 뒤)
-	var lamp := SpotLight3D.new()
-	lamp.light_color = Color(0.85, 0.92, 1.0)
-	lamp.spot_range = 5.0
-	lamp.spot_angle = float(LIT.lamp_ang)
-	lamp.spot_attenuation = 0.8
-	lamp.shadow_enabled = true
-	lamp.light_energy = 0.0
-	w.add_child(lamp)
-	#  푸른 테 빛 — 뒤 오른쪽 위(앞면엔 안 닿고 윗면 · 옆면만 받는다)
-	var rim := OmniLight3D.new()
-	rim.light_color = LIT.rim_col
-	rim.light_energy = float(LIT.rim_e)
-	rim.omni_range = float(LIT.rim_range)
-	rim.position = LIT.rim_at
-	w.add_child(rim)
-	var bounce := OmniLight3D.new()
-	bounce.light_color = LIT.bounce_col
-	bounce.light_energy = 0.0
-	bounce.omni_range = float(LIT.bounce_range)
-	bounce.position = LIT.bounce_at
-	w.add_child(bounce)
-	#  외곽선 판 — 맨 끝에 그려진 판을 읽는다
-	var eq := MeshInstance3D.new()
-	var qm := QuadMesh.new()
-	qm.size = Vector2(2.0, 2.0)
-	eq.mesh = qm
-	eq.extra_cull_margin = 16384.0
-	eq.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var em := ShaderMaterial.new()
-	var es := Shader.new()
-	es.code = EDGE_SHADER
-	em.shader = es
-	for k in EDGE.keys():
-		em.set_shader_parameter(k, float(EDGE[k]))
-	eq.material_override = em
-	w.add_child(eq)
 
-	var hm := _mats(HERO)
-	var xm := _mats(EXTRA)
-	_room(w, xm)
+	var hm := _mats(true)
+	var xm := _mats(false)
+	var dm := hm.duplicate()
+	dm["gun"] = _lit(Color("2c3038"), null, 0.45, 0.45, 0.3)
 	var tvs := []
 	var tops := []      # [x0, x1, 윗면] — 얹힌 것들
 	var cam_end := {}
@@ -462,7 +389,7 @@ static func make(host: Node) -> Node:
 		mi.rotation_degrees = Vector3(0.0, float(e[3]), float(e[4]))
 		w.add_child(mi)
 		var job: String = e[6]
-		var ms: Dictionary = hm if hero else xm
+		var ms: Dictionary = (dm if String(e[0]) == "Deck" else hm) if hero else xm
 		var gm: ShaderMaterial = null
 		var gb := AABB()
 		for k in me.get_surface_count():
@@ -473,7 +400,8 @@ static func make(host: Node) -> Node:
 				gm = _scr_mat(job, gb, i, cv, hero)
 				mi.set_surface_override_material(k, gm)
 			elif key == "plastic":
-				mi.set_surface_override_material(k, _body(PLASTIC.get(String(e[5]), PLASTIC[""]), EXTRA))
+				var pc: Color = PLASTIC.get(String(e[5]), PLASTIC[""])
+				mi.set_surface_override_material(k, _lit(pc * float(EXTRA.tone), null, 0.45, 0.5))
 			elif ms.has(key):
 				mi.set_surface_override_material(k, ms[key])
 		if gm == null:
@@ -496,27 +424,39 @@ static func make(host: Node) -> Node:
 			mi.add_child(led)
 		var ton: float = 0.0 if job == "snow0" else (float(ON.maker) if job == "maker" else
 				float(ON.tvs) + float(T.stag) * float(tvs.size()))
-		var lt: OmniLight3D = null
+		var lt: SpotLight3D = null
 		if not hero:
-			lt = OmniLight3D.new()
+			#  화면 빛 — 유리 바로 앞에서 앞쪽으로만(뒤 · 옆 뒤로는 안 샌다)
+			lt = SpotLight3D.new()
 			lt.light_color = JOB[job.trim_suffix("0")][1]
-			lt.omni_range = 1.1 if job == "maker" else 0.8
-			lt.omni_attenuation = 1.4
+			lt.spot_angle = float(SCR_LIT.ang)
+			lt.spot_range = float(SCR_LIT.range)
+			lt.spot_attenuation = float(SCR_LIT.att)
 			lt.light_energy = 0.0
-			lt.position = g + n * (0.35 if job == "maker" else 0.25)
 			w.add_child(lt)
+			var at: Vector3 = g + n * (gb.size.z * 0.5 + float(SCR_LIT.at))
+			lt.look_at_from_position(at, at + n)
 		tvs.append({"m": gm, "l": lt, "on": ton, "job": job, "i": i, "hero": hero,
 				"e": float(MAKER.light) if job == "maker" else float(EXTRA.light)})
 	hn.set_meta("vp", vp)
 	hn.set_meta("cam", cam)
-	hn.set_meta("lamp", lamp)
-	hn.set_meta("bounce", bounce)
 	hn.set_meta("tvs", tvs)
 	hn.set_meta("end", cam_end)
 	hn.set_meta("start", cam_start)
 	if not cam_start.is_empty():
 		cam.look_at_from_position(cam_start.at, cam_start.look)
-		lamp.look_at_from_position(LIT.lamp_at, cam_start.look)
+	_room(w, xm)
+	var vg := GradientTexture2D.new()
+	var gr := Gradient.new()
+	gr.offsets = PackedFloat32Array([0.0, 0.62, 1.0])
+	gr.colors = PackedColorArray([Color(0, 0, 0, 0), Color(0, 0, 0, 0), Color(0, 0, 0, float(LIT.vig))])
+	vg.gradient = gr
+	vg.fill = GradientTexture2D.FILL_RADIAL
+	vg.fill_from = Vector2(0.5, 0.5)
+	vg.fill_to = Vector2(1.0, 0.5)
+	vg.width = 320
+	vg.height = 180
+	hn.set_meta("vig", vg)
 	tick(hn, 0.0)
 	return hn
 
@@ -544,27 +484,57 @@ static func _surf_aabb(me: Mesh, k: int) -> AABB:
 	return b
 
 
-#  몸 재질 — 방과 같은 빛 단 · 바둑 디더. 바탕 빛(fill) · 빛 단 수는 주인공 · 엑스트라가 다르고, 엑스트라는
-#  빛깔도 tone 배로 어둡다.
-static func _body(col: Color, cf: Dictionary, gloss := 0.0) -> ShaderMaterial:
-	var c: Color = col * float(cf.get("tone", 1.0))
-	c.a = 1.0
-	var m := Door3D._px(c, null, gloss)
-	m.set_shader_parameter("fill", cf.fill)
-	m.set_shader_parameter("bands", float(cf.bands))
+#  몸 재질 — TRI_SHADER. tex 가 있으면 결 그림(나무 — wood 가 바탕이면 결 · 채도를 누른다) · 없으면 맨 색.
+static func _lit(col: Color, tex: Image = null, rough := 0.8, spec := 0.3, metal := 0.0,
+		wood := Color(0, 0, 0, 0)) -> ShaderMaterial:
+	if _tri_sh == null:
+		_tri_sh = Shader.new()
+		_tri_sh.code = TRI_SHADER
+	var m := ShaderMaterial.new()
+	m.shader = _tri_sh
+	m.set_shader_parameter("tint", col)
+	m.set_shader_parameter("rough", rough)
+	m.set_shader_parameter("spec", spec)
+	m.set_shader_parameter("metal", metal)
+	if tex != null:
+		m.set_shader_parameter("alb", ImageTexture.create_from_image(tex))
+		m.set_shader_parameter("use_tex", true)
+		m.set_shader_parameter("tsz", Vector2(tex.get_size()))
+		m.set_shader_parameter("den", float(MAT.den))
+	if wood.a > 0.0:
+		m.set_shader_parameter("base", wood)
+		m.set_shader_parameter("grain", float(Door3D.LOOK.grain))
+		m.set_shader_parameter("sat", float(Door3D.LOOK.sat))
 	return m
 
 
-static func _mats(cf: Dictionary) -> Dictionary:
+#  나무 결 그림 — 제목 문 판자(Room3D._plank)를 판 한 장 높이로(이음이 드물다 · 못 없음). 바탕 빛깔마다 한 번.
+static func _wood(base: Color) -> Image:
+	var key := base.to_html()
+	if not _wood_im.has(key):
+		_wood_im[key] = Room3D._plank(256, 256, base, 2026101 + _wood_im.size(), 200, 256, false)[0]
+	return _wood_im[key]
+
+
+#  주인공(hero) · 엑스트라 재질 — 엑스트라는 빛깔을 tone 배로 어둡게. 나무는 결 · 니스(반짝은 조금),
+#  쇠는 매끈하게.
+static func _mats(hero: bool) -> Dictionary:
+	var k: float = 1.0 if hero else float(EXTRA.tone)
+	var wb: Color = MAT.walnut if hero else MAT.wood
+	var wd := _lit(Color(k, k, k), _wood(wb), 0.55, 0.35, 0.0, wb)
 	return {
-		"wood": _body(Color("5e3a20"), cf), "metal": _body(Color("82878f"), cf, 20.0),
-		"panel": _body(Color("24252c"), cf), "bezel": _body(Color("0e0e12"), cf),
-		"knob": _body(Color("b4b6bc"), cf, 20.0), "grille": _body(Color("16161b"), cf),
-		"trim": _body(Color("9a968c"), cf, 20.0), "gun": _body(Color("2c3038"), cf),
-		"cap": _body(Color("d4d4cc"), cf, 20.0), "lcd": _body(Color("0c1414"), cf, 30.0),
+		"wood": wd, "gun": wd,
+		"metal": _lit(Color("82878f") * k, null, 0.35, 0.5, 0.5),
+		"panel": _lit(Color("24252c") * k, null, 0.6, 0.3),
+		"bezel": _lit(Color("060608") * k, null, 0.7, 0.15),
+		"knob": _lit(Color("c8cacf") * k, null, 0.25, 0.6, 0.6),
+		"grille": _lit(Color("16161b") * k, null, 0.9, 0.1),
+		"trim": _lit(Color("9a968c") * k, null, 0.35, 0.5, 0.5),
+		"cap": _lit(Color("d4d4cc") * k, null, 0.4, 0.4),
+		"lcd": _lit(Color("0c1414"), null, 0.15, 0.6),
 		"led_r": Room3D._glow(Color("ff3b2e"), 1.6), "led_g": Room3D._glow(Color("3cff6a"), 1.6),
 		"led_b": Room3D._glow(Color("3c7bff"), 1.6),
-		"floor": _body(Color("34303a"), cf), "wall": _body(Color("24222e"), cf),
+		"floor": _lit(Color(0.5, 0.5, 0.5), _wood(Color("2a1a10")), 0.7, 0.2, 0.0, Color("2a1a10")),
 	}
 
 
@@ -578,7 +548,6 @@ static func _scr_mat(job: String, gb: AABB, i: int, cv: SubViewport, hero: bool)
 	m.set_shader_parameter("seed", float(i) * 0.37)
 	if hero:
 		m.set_shader_parameter("res", Vector2(CARD) * 2.0)
-		m.set_shader_parameter("lv", float(HERO.glass_lv))
 	elif job == "maker":
 		m.set_shader_parameter("res", Vector2(CARD))
 		m.set_shader_parameter("tex", cv.get_texture())
@@ -587,10 +556,11 @@ static func _scr_mat(job: String, gb: AABB, i: int, cv: SubViewport, hero: bool)
 		m.set_shader_parameter("res", Vector2(maxf(roundf(gb.size.x * k), 10.0), maxf(roundf(gb.size.y * k), 8.0)))
 		m.set_shader_parameter("dim", float(EXTRA.dim))
 		m.set_shader_parameter("sat", float(EXTRA.sat))
+		m.set_shader_parameter("lv", float(EXTRA.lv))
 	return m
 
 
-#  방 — 바닥 · 뒷벽(엑스트라 재질 — 거의 안 보인다). 전선은 주인공 앞을 가로질러 뺐다.
+#  방 — 나무 바닥(화면 빛이 앞으로 나가 바닥에 고인다). 뒤 벽은 빛이 안 닿아 두지 않는다.
 static func _room(w: Node3D, mats: Dictionary) -> void:
 	var fl := MeshInstance3D.new()
 	var pm := PlaneMesh.new()
@@ -598,25 +568,6 @@ static func _room(w: Node3D, mats: Dictionary) -> void:
 	fl.mesh = pm
 	fl.material_override = mats.floor
 	w.add_child(fl)
-	var wl := MeshInstance3D.new()
-	var wm := QuadMesh.new()
-	wm.size = Vector2(12.0, 6.0)
-	wl.mesh = wm
-	wl.material_override = mats.wall
-	wl.position = Vector3(0.0, 3.0, -1.2)
-	w.add_child(wl)
-
-
-#  위 등 — LAMP_SW 마다 켜짐/꺼짐을 뒤집는다(처음은 켜짐) · 마지막 뒤로 켜진 채.
-static func _lamp(t: float) -> float:
-	var u: float = t - float(T.lamp)
-	if u < 0.0:
-		return 0.0
-	var on := false
-	for s in LAMP_SW:
-		if u >= float(s):
-			on = not on
-	return 1.0 if on else 0.0
 
 
 #  TV 켜짐 — 깜박(0.08 켜짐 · 0.1 꺼짐) 뒤 0.45 초에 걸쳐 선다.
@@ -633,11 +584,8 @@ static func _pw(t: float, ton: float) -> float:
 
 static func tick(hn: Node, t: float) -> void:
 	hn.set_meta("t", t)
-	var lamp := hn.get_meta("lamp") as SpotLight3D
-	var lk := _lamp(t)
-	lamp.light_energy = float(LIT.lamp_e) * lk
-	(hn.get_meta("bounce") as OmniLight3D).light_energy = float(LIT.bounce_e) * lk
-	var warm := 0.0
+	var lit := 0.0
+	var nx := 0
 	for tv in hn.get_meta("tvs"):
 		var m := tv.m as ShaderMaterial
 		m.set_shader_parameter("tm", t)
@@ -646,14 +594,14 @@ static func tick(hn: Node, t: float) -> void:
 		var p: float = 1.0 if String(tv.job) == "snow0" else _pw(t, float(tv.on))
 		if String(tv.job) == "maker":
 			m.set_shader_parameter("mode", 1 if t < float(tv.on) + float(T.snow) else 4)
-			warm = minf(p * 1.6, 1.0)
+		lit += minf(p * 1.6, 1.0)
+		nx += 1
 		m.set_shader_parameter("pw", p)
 		var fl: float = 0.85 + 0.15 * sin(t * 29.0 + float(tv.i) * 1.7)
-		(tv.l as OmniLight3D).light_energy = float(tv.e) * minf(p * 1.6, 1.0) * fl
+		(tv.l as SpotLight3D).light_energy = float(tv.e) * minf(p * 1.6, 1.0) * fl
+	#  꺼진 유리(주인공 · 아직 안 켜진 엑스트라)는 켜진 TV 몫만큼만 비친다
 	for tv in hn.get_meta("tvs"):
-		if tv.hero:
-			(tv.m as ShaderMaterial).set_shader_parameter("warm", warm)
-			(tv.m as ShaderMaterial).set_shader_parameter("amb", 0.3 + 0.7 * lk)
+		(tv.m as ShaderMaterial).set_shader_parameter("amb", 0.04 + 0.3 * lit / float(maxi(nx, 1)))
 	var cam := hn.get_meta("cam") as Camera3D
 	var ce: Dictionary = hn.get_meta("end")
 	var cs: Dictionary = hn.get_meta("start")
@@ -666,3 +614,4 @@ static func tick(hn: Node, t: float) -> void:
 static func draw(hn: Node, ci: CanvasItem, dest: Rect2) -> void:
 	var vp := hn.get_meta("vp") as SubViewport
 	ci.draw_texture_rect(vp.get_texture(), dest, false)
+	ci.draw_texture_rect(hn.get_meta("vig") as Texture2D, dest, false)

@@ -16,6 +16,8 @@
 #   Speaker    짙은 통 · 검은 앞판 · 우퍼 둘 · 트위터
 #   TvHero     주인공(게임 TV) — 쇳빛 장 · 꺾여 드는 화면 틀 · 손잡이 다이얼 둘 · 슬라이더 · RGB 등
 #   Deck       주인공 밑 비디오 데크
+# 화면 귀는 초타원 지수 n 으로 — 클수록 네모(주인공 6 · 나머지 5 언저리). 3.8 은 「tv의 테두리가 너무 둥글지
+# 않아?」였다(2026-10-18 · 사용자가 준 젠레스 존 제로 런처 TV 는 귀만 둥근 네모).
 # 화면 UV 는 화면 칸 그대로(0..1) — 게임이 그 위에 꺼짐 · 지지직 · 크레딧을 붙인다.
 # 좌표는 게임 그대로(m · x 오른쪽 · y 위 · z 앞 — 화면이 +z) · 원점은 바닥 한가운데 · 앞면이 z 0.
 # Blender 로는 (x, −z, y). 재질은 이름만 — 게임(prologue3d.gd)이 이름으로 안 재질을 끼운다:
@@ -310,8 +312,8 @@ Y0 = 0.018
 shell(W, H, Y0, D, WOOD)
 back_hump(W * 0.66, H * 0.70, Y0 + H * 0.5, D - 0.02, D + 0.16, WOOD)
 SX, SY, SW, SH = -0.075, Y0 + 0.245, 0.215, 0.195
-front_plate("face", -W * 0.5 + 0.01, W * 0.5 - 0.01, Y0 + 0.01, Y0 + H - 0.01, SX, SY, SW, SH, WOOD, 4.2)
-tube(SX, SY, SW, SH)
+front_plate("face", -W * 0.5 + 0.01, W * 0.5 - 0.01, Y0 + 0.01, Y0 + H - 0.01, SX, SY, SW, SH, WOOD, 5.2)
+tube(SX, SY, SW, SH, 5.2)
 PX = 0.225
 box("panel", (0.125, H - 0.05, 0.006), (PX, Y0 + H * 0.5, 0.003), PANEL)
 dial(PX, Y0 + 0.385, 0.034, KNOB, 0.024, True)
@@ -326,9 +328,9 @@ Y0 = 0.018
 shell(W, H, Y0, D, WOOD, 0.012)
 back_hump(W * 0.66, H * 0.66, Y0 + H * 0.56, D - 0.02, D + 0.18, WOOD)
 SX, SY, SW, SH = 0.0, Y0 + 0.33, 0.315, 0.205
-front_plate("face", -W * 0.5 + 0.012, W * 0.5 - 0.012, Y0 + 0.105, Y0 + H - 0.012, SX, SY, SW, SH, WOOD, 4.2)
+front_plate("face", -W * 0.5 + 0.012, W * 0.5 - 0.012, Y0 + 0.105, Y0 + H - 0.012, SX, SY, SW, SH, WOOD, 5.2)
 box("lip", (W - 0.024, 0.093, 0.006), (0.0, Y0 + 0.058, -0.003), WOOD)
-tube(SX, SY, SW, SH, 4.2, 0.011, 0.022, 0.022)
+tube(SX, SY, SW, SH, 5.2, 0.011, 0.022, 0.022)
 slats(-W * 0.5 + 0.04, 0.16, Y0 + 0.022, Y0 + 0.092, 12, TRIM, 0.002, True)
 dial(0.235, Y0 + 0.057, 0.024)
 dial(0.305, Y0 + 0.057, 0.024)
@@ -340,8 +342,8 @@ W, H, D = 0.44, 0.36, 0.30
 shell(W, H, 0.0, D, PLASTIC, 0.035, 3, 0.03)
 back_hump(W * 0.62, H * 0.62, H * 0.52, D - 0.03, D + 0.10, PLASTIC, 0.04)
 SX, SY, SW, SH = -0.045, 0.185, 0.155, 0.14
-front_plate("face", -W * 0.5 + 0.025, W * 0.5 - 0.025, 0.025, H - 0.025, SX, SY, SW, SH, PLASTIC, 3.6)
-tube(SX, SY, SW, SH, 3.6, 0.010, 0.018, 0.016)
+front_plate("face", -W * 0.5 + 0.025, W * 0.5 - 0.025, 0.025, H - 0.025, SX, SY, SW, SH, PLASTIC, 4.6)
+tube(SX, SY, SW, SH, 4.6, 0.010, 0.018, 0.016)
 PX = 0.163
 box("panel", (0.07, H - 0.07, 0.006), (PX, H * 0.5, 0.003), PANEL)
 dial(PX, 0.25, 0.026, KNOB, 0.026, True)
@@ -357,8 +359,8 @@ W, H, D = 0.46, 0.40, 0.24
 shell(W, H, 0.0, D, PLASTIC, 0.016)
 back_hump(W * 0.72, H * 0.70, H * 0.54, D - 0.02, D + 0.20, PLASTIC, 0.035)
 SX, SY, SW, SH = 0.0, 0.235, 0.205, 0.148
-front_plate("face", -W * 0.5 + 0.016, W * 0.5 - 0.016, 0.06, H - 0.016, SX, SY, SW, SH, PLASTIC, 4.6)
-tube(SX, SY, SW, SH, 4.6, 0.010, 0.02, 0.016)
+front_plate("face", -W * 0.5 + 0.016, W * 0.5 - 0.016, 0.06, H - 0.016, SX, SY, SW, SH, PLASTIC, 5.6)
+tube(SX, SY, SW, SH, 5.6, 0.010, 0.02, 0.016)
 box("strip", (W - 0.04, 0.042, 0.006), (0.0, 0.036, -0.002), PANEL)
 for k in range(3):
     box("btn", (0.024, 0.012, 0.008), (0.11 + k * 0.032, 0.036, 0.003), KNOB)
@@ -370,8 +372,8 @@ W, H, D = 0.34, 0.28, 0.24
 shell(W, H, 0.0, D, METAL)
 back_hump(W * 0.66, H * 0.66, H * 0.52, D - 0.02, D + 0.10, METAL)
 SX, SY, SW, SH = -0.035, 0.14, 0.12, 0.112
-front_plate("face", -W * 0.5 + 0.01, W * 0.5 - 0.01, 0.01, H - 0.01, SX, SY, SW, SH, METAL, 4.2)
-tube(SX, SY, SW, SH, 4.2, 0.008, 0.016, 0.012)
+front_plate("face", -W * 0.5 + 0.01, W * 0.5 - 0.01, 0.01, H - 0.01, SX, SY, SW, SH, METAL, 5.2)
+tube(SX, SY, SW, SH, 5.2, 0.008, 0.016, 0.012)
 box("panel", (0.055, H - 0.04, 0.006), (0.128, H * 0.5, 0.003), PANEL)
 for y in (0.205, 0.145, 0.085):
     dial(0.128, y, 0.014, KNOB, 0.016)
@@ -401,8 +403,8 @@ hw, hh = (CX1 - (-W * 0.5 + T)) * 0.5, H * 0.5 - T
 strip("frame", [ring(cx, cy, hw, hh, 0.002, 16), ring(cx, cy, hw - 0.008, hh - 0.008, 0.002, 16),
                 ring(cx, cy, hw - 0.03, hh - 0.03, -0.014, 16)], GUN)
 SX, SY, SW, SH = cx, cy + 0.002, 0.240, 0.224
-front_plate("mask", cx - hw + 0.03, cx + hw - 0.03, cy - hh + 0.03, cy + hh - 0.03, SX, SY, SW, SH, BEZEL, 3.8, -0.014)
-tube(SX, SY, SW, SH, 3.8, 0.012, 0.03, 0.034, -0.014)
+front_plate("mask", cx - hw + 0.03, cx + hw - 0.03, cy - hh + 0.03, cy + hh - 0.03, SX, SY, SW, SH, BEZEL, 6.0, -0.014)
+tube(SX, SY, SW, SH, 6.0, 0.012, 0.03, 0.034, -0.014)
 PX0, PX1 = CX1, W * 0.5 - T
 PXC = (PX0 + PX1) * 0.5
 box("face", (PX1 - PX0 + 0.004, H - 2 * T, 0.012), (PXC, H * 0.5, -0.006), GUN)
