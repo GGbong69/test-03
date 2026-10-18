@@ -56936,9 +56936,9 @@ func _row_ease(es: Array, ws: Array, n: int, face: int, d: float,
 #
 #  한 장으로 그리면 오른쪽에 딱딱한 끝이 생긴다. 세로 조각 열둘을 왼쪽부터
 #  옅어지게 깔아 오른쪽으로 녹인다.
-#  thick 은 마침표 획의 굵기다. 기본 1.0 이라 **부르는 여섯 자리가 한 줄도
-#  안 바뀐다.** 색 하나로만 상태를 말하면 WCAG 1.4.1 에 걸리므로 모양 한 축이
-#  꼭 필요해서 낸 인자다 — 「로비로 나가기」 겨눔이 이것으로 말한다(2026-09-19).
+#  thick 은 겨눔의 마침표 획 굵기다 — 1 을 넘을 때만 띠 오른끝에 그 획이 선다.
+#  색 하나로만 상태를 말하면 WCAG 1.4.1 에 걸리므로 모양 한 축이 꼭 필요해서 낸
+#  인자다 — 「로비로 나가기」 겨눔이 이것으로 말한다(2026-09-19).
 func _row_band(c: CanvasItem, r: Rect2, ee: float, ew: float, a: float,
 		col := C_ACC, pad := 12.0, thick := 1.0) -> void:
 	if ee <= 0.004:
@@ -56969,9 +56969,11 @@ func _row_band(c: CanvasItem, r: Rect2, ee: float, ew: float, a: float,
 		var f: float = float(k) / span
 		c.draw_rect(Rect2(x0 + float(k), y0, 1.0, hh),
 				Color(col, float(SETB.a) * (1.0 - f) * (1.0 - f) * a))
-	#  쓸려 들어오는 끝을 한 획으로 세운다 — 띠가 어디까지 왔는지가 그 한
-	#  줄로 읽힌다. 다 들어오면 오른쪽 끝에 서서 마침표가 된다.
-	c.draw_rect(Rect2(edge - thick, y0, thick, hh), Color(col, 0.55 * ee * a))
+	#  끝 획(마침표)은 겨눔(thick > 1 — 「로비로 나가기」)에만 세운다. 보통 줄에도 1px 금빛 세로줄을
+	#  띠 오른끝에 세웠더니 띠가 옅은 칠판 메뉴에서 글 옆에 홀로 선 흠으로 읽혔다(2026-10-18
+	#  「이런거 진짜 거슬리거든?」 — 「컬렉션」 옆).
+	if thick > 1.0:
+		c.draw_rect(Rect2(edge - thick, y0, thick, hh), Color(col, 0.55 * ee * a))
 
 
 #  띠가 다 들어왔을 때 마침표가 서는 x. 같은 줄에 제 표식을 세우는 쪽은
