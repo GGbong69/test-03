@@ -44,7 +44,11 @@ extends RefCounted
 #  한 번 채널이 넘어가며(지지직) 다른 장면이 된다. 밝기는 둘레 엑스트라 언저리 — 찾아야 보인다. 스틸을
 #  따라 그리지 않고 구도 · 상황만 빌려 코드로 새로 그린 실루엣이다 — 얼굴 · 생김새 · 분장 · 제목 · 대사 · 로고는
 #  없다. 복도에서 망치를 든 사람 · 철교 위에서 팔을 벌린 사람 · 경찰차 지붕에서 춤추는 빨간 정장 · 노을 진
-#  뱃머리의 두 사람 · 하늘 그림 벽의 검은 문 앞에서 절하는 사람.
+#  뱃머리의 두 사람 · 하늘 그림 벽의 검은 문 앞에서 절하는 사람 · 빗속 긴 사선 계단을 내려가는 식구 · 누런 논의
+#  배수로를 들여다보는 흰 셔츠 · 빗속 가로등에 매달린 우산 든 사람 · 옥상에서 뒤로 젖힌 긴 코트와 총알 물결 ·
+#  보랏빛 언덕 가로등 옆에서 춤추는 노란 옷 · 흰 셔츠 · 새벽 계단 꼭대기에서 두 팔을 든 뒷모습 · 새벽 사막의
+#  검은 석판과 웅크린 유인원 · 공원 벤치 끝의 흰 정장과 떠다니는 깃털(「다른 영화들도 레퍼런스 조사 하고」 —
+#  장면마다 스틸 검색으로 구도를 쟀다).
 #  API — make(game, outer) · tick(h, t) · length() · handoff() · feed_at() · ON(소리 때 — hero 는 켜짐 소리).
 
 const Door3D = preload("res://scripts/door3d.gd")
@@ -91,6 +95,9 @@ const JOB := {
 	"reel": [4, Color(0.7, 0.7, 0.7)],
 	"hammer": [4, Color(0.55, 0.65, 0.52)], "rail": [4, Color(0.78, 0.80, 0.72)], "dance": [4, Color(0.85, 0.45, 0.40)],
 	"bow": [4, Color(1.0, 0.62, 0.38)], "exit": [4, Color(0.50, 0.65, 0.95)],
+	"stairs": [4, Color(0.45, 0.60, 0.58)], "field": [4, Color(0.90, 0.78, 0.45)], "lamp": [4, Color(0.55, 0.62, 0.85)],
+	"bullet": [4, Color(0.60, 0.80, 0.62)], "hill": [4, Color(0.62, 0.50, 0.95)], "steps": [4, Color(0.95, 0.78, 0.70)],
+	"monolith": [4, Color(0.95, 0.75, 0.50)], "bench": [4, Color(0.60, 0.85, 0.55)],
 }
 const PLASTIC := {"red": Color("a83c30"), "teal": Color("2f8a84"), "graph": Color("2b2f3c"), "slate": Color("3d4456"),
 		"": Color("8c2924")}
@@ -125,7 +132,8 @@ const HERO_PARTS := ["HeroKnobA", "HeroKnobB", "HeroSlider"]
 #  영화 TV — 그림 크기(칸 = 텍셀) · 밝기 · 채도 · sw 채널이 넘어가는 때(초 · 이 사이에서 TV 마다 아무 때나) ·
 #  snow 넘어갈 때 지지직 동안
 const REEL := {"size": Vector2i(64, 48), "dim": 0.3, "sat": 0.75, "sw": [2.9, 4.6], "snow": 0.14}
-const REELS := ["hammer", "rail", "dance", "bow", "exit"]
+const REELS := ["hammer", "rail", "dance", "bow", "exit", "stairs", "field", "lamp", "bullet", "hill", "steps",
+		"monolith", "bench"]
 
 #  화면 — UV(0,0 왼 위) 를 res 칸으로 끊는다. pw 켜짐(0~1 · 가운데 줄이 위아래로 벌어지고 처음엔 하얗다) ·
 #  dim · sat 엑스트라의 밝기 · 채도. 꺼진 유리는 위가 옅은 짙은 회색 · 귀가 어둡고 · 왼 위에 비스듬한 반짝 띠
@@ -397,6 +405,206 @@ class Reel extends Node2D:
 				_bow()
 			"exit":
 				_exit()
+			"stairs":
+				_stairs()
+			"field":
+				_field()
+			"lamp":
+				_lamp()
+			"bullet":
+				_bullet()
+			"hill":
+				_hill()
+			"steps":
+				_steps()
+			"monolith":
+				_monolith()
+			"bench":
+				_bench()
+
+	#  빗줄기 — n 가닥이 dx 만큼 비스듬히 떨어진다
+	func _rain(n: int, dx: float, c: Color) -> void:
+		for i in n:
+			var x: float = fmod(float(i) * 13.7 + t * dx * 8.0, 70.0) - 3.0
+			var y: float = fmod(float(i) * 7.3 + t * 60.0, 52.0) - 4.0
+			draw_line(Vector2(x, y), Vector2(x + dx, y + 4.0), c)
+
+	#  빗속 긴 사선 계단 — 짙은 청록 옹벽 · 흰 난간 · 계단을 내려가는 작은 사람 셋
+	func _stairs() -> void:
+		_r(0, 0, 64, 48, Color("1b2828"))
+		for x in [6, 19, 33, 47, 58]:
+			_r(x, 0, 3, 48, Color("172222"))
+		_p([[64, 4], [64, 10], [0, 47], [0, 41]], Color("2e3a38"))
+		for i in 22:
+			var sx: float = 64.0 - float(i) * 3.0
+			_r(sx - 2.0, 4.0 + float(i) * 1.73, 2, 1, Color("4a5654"))
+		draw_line(Vector2(64, 0), Vector2(0, 37), Color("b4bcbc"))
+		for i in 11:
+			var px: float = 64.0 - float(i) * 6.0
+			draw_line(Vector2(px, px * -0.578 + 37.0), Vector2(px, px * -0.578 + 40.0), Color("8a9494"))
+		for k in 3:
+			var u: float = fmod(t * 0.06 + float(k) * 0.08, 1.0)
+			var x: float = 54.0 - u * 46.0
+			var y: float = 47.0 - x * 0.578 - 2.0
+			_r(x, y - 5.0, 2, 5, Color("0a0e0e"))
+			_r(x, y - 7.0, 2, 2, Color("0a0e0e"))
+		_rain(26, -1.5, Color(0.7, 0.8, 0.8, 0.35))
+
+	#  흐린 하늘 · 누런 논 · 콘크리트 배수로 · 그 구멍을 허리 숙여 들여다보는 흰 셔츠
+	func _field() -> void:
+		_r(0, 0, 64, 13, Color("d8d4c0"))
+		_r(0, 12, 64, 36, Color("b8932e"))
+		for y in range(13, 48, 3):
+			var sw: float = roundf(sin(t * 1.4 + float(y) * 0.4))
+			for x in range(0, 64, 2):
+				var hi: bool = (x + y) % 4 == 0
+				_r(float(x) + sw, float(y), 1, 2, Color("e0c25a") if hi else Color("9c7a22"))
+		_r(10, 27, 22, 10, Color("9a978d"))
+		_r(10, 27, 22, 1, Color("bdbab0"))
+		_r(15, 30, 10, 6, Color("0a0a0a"))
+		var k := Color("2a2622")
+		_r(38, 30, 2, 9, k)
+		_r(41, 30, 2, 9, k)
+		_p([[36, 31], [43, 31], [36, 24], [30, 25]], Color("e4e2d6"))
+		draw_circle(Vector2(29, 25), 2.6, Color("1e1a16"))
+		draw_line(Vector2(33, 26), Vector2(30, 31), Color("e4e2d6"), 2.0)
+
+	#  비 오는 밤거리 · 벽돌 가게 창 · 가로등 · 한 손으로 기둥에 매달려 우산을 내뻗은 사람
+	func _lamp() -> void:
+		_r(0, 0, 64, 48, Color("0f1626"))
+		_r(0, 8, 24, 36, Color("2a1c1c"))
+		_r(4, 16, 14, 12, Color("6a5226"))
+		_r(4, 16, 14, 1, Color("8a6e36"))
+		_r(0, 44, 64, 4, Color("1a2232"))
+		_r(37, 6, 2, 40, Color("2c2c34"))
+		draw_circle(Vector2(38, 5), 6.0, Color(1.0, 0.9, 0.6, 0.18))
+		draw_circle(Vector2(38, 5), 2.6, Color("f5e6b0"))
+		_r(35, 44, 6, 2, Color("2c2c34"))
+		var k := Color("48506a")
+		var hl := Color("8a92b0")
+		var lean: float = sin(t * 1.2) * 1.5
+		_r(36, 13, 2, 4, k)
+		_p([[37, 15], [37, 20], [29 + lean, 33], [26 + lean, 31]], k)
+		draw_line(Vector2(36, 15), Vector2(28 + lean, 31), hl, 1.0)
+		draw_line(Vector2(27 + lean, 32), Vector2(33, 44), k, 2.0)
+		draw_line(Vector2(29 + lean, 32), Vector2(37, 44), k, 2.0)
+		draw_circle(Vector2(26 + lean, 26), 2.6, Color("2a2018"))
+		_r(22 + lean, 23, 9, 1, Color("2a2a34"))
+		_r(24 + lean, 21, 5, 2, Color("2a2a34"))
+		draw_line(Vector2(29 + lean, 25), Vector2(14 + lean, 19), Color("1a1a22"), 1.0)
+		_r(13 + lean, 18, 2, 2, Color("1a1a22"))
+		_rain(30, 0.0, Color(0.7, 0.8, 1.0, 0.35))
+		for x in [6, 22, 46]:
+			_r(x, 45, 8, 1, Color(1.0, 0.9, 0.6, 0.25))
+
+	#  초록빛 낀 옥상 · 먼 빌딩 · 거의 눕듯 뒤로 젖힌 긴 코트 · 그 위를 지나는 총알과 물결
+	func _bullet() -> void:
+		for y in 30:
+			_r(0, y, 64, 1, Color("9db29d").lerp(Color("c6d2c2"), float(y) / 30.0))
+		for b in [[0, 16, 8, 14], [9, 12, 7, 18], [18, 18, 10, 12], [44, 14, 9, 16], [54, 10, 10, 20]]:
+			_r(b[0], b[1], b[2], b[3], Color("7f907f"))
+		_p([[0, 30], [64, 30], [64, 48], [0, 48]], Color("3a4a3e"))
+		for x in [8, 24, 40, 56]:
+			draw_line(Vector2(32, 30), Vector2(x * 2 - 32, 48), Color("334236"))
+		var k := Color("0b0d0c")
+		_r(33, 38, 2, 8, k)
+		_r(37, 40, 2, 6, k)
+		_p([[32, 39], [37, 40], [22, 30], [18, 28]], k)
+		_p([[31, 38], [36, 40], [38, 45], [30, 44]], Color("121614"))
+		draw_circle(Vector2(16, 27), 2.4, k)
+		draw_line(Vector2(21, 29), Vector2(15, 22), k, 1.5)
+		draw_line(Vector2(24, 31), Vector2(30, 24), k, 1.5)
+		for i in 3:
+			var bx: float = 70.0 - fmod(t * 22.0 + float(i) * 24.0, 80.0)
+			var by: float = 20.0 + float(i) * 3.0
+			_r(bx, by, 2, 1, Color("d8d0b0"))
+			for r in 3:
+				draw_arc(Vector2(bx + 4.0 + float(r) * 4.0, by), 1.0 + float(r), -1.2, 1.2, 6,
+						Color(0.85, 0.95, 0.85, 0.5 - float(r) * 0.15))
+
+	#  보랏빛 노을 · 반짝이는 도시 불빛 · 언덕 · 가로등 · 춤추는 노란 옷과 흰 셔츠
+	func _hill() -> void:
+		for y in 30:
+			_r(0, y, 64, 1, Color("2a1f5a").lerp(Color("7a5aa8"), float(y) / 30.0))
+		_r(0, 29, 64, 8, Color("18183a"))
+		for i in 24:
+			var lx: float = fmod(float(i) * 11.3, 64.0)
+			var ly: float = 30.0 + fmod(float(i) * 3.7, 6.0)
+			var a: float = 0.5 + 0.5 * sin(t * 3.0 + float(i))
+			_r(roundf(lx), roundf(ly), 1, 1, Color(1.0, 0.95, 0.75, a))
+		_p([[0, 36], [20, 34], [44, 35], [64, 33], [64, 48], [0, 48]], Color("17132a"))
+		_r(54, 14, 1, 21, Color("2a2440"))
+		draw_circle(Vector2(54.5, 13), 4.0, Color(1.0, 0.85, 0.55, 0.2))
+		_r(53, 12, 3, 2, Color("f2dc9a"))
+		var sw: float = sin(t * 2.0) * 2.0
+		_p([[22, 36], [28, 36], [26, 27], [24, 27]], Color("e8c84a"))
+		draw_line(Vector2(25, 28), Vector2(19, 21 + sw), Color("e8c84a"), 1.0)
+		draw_circle(Vector2(25, 25), 1.8, Color("3a2418"))
+		_r(34, 30, 2, 6, Color("202030"))
+		_r(36, 30, 2, 6, Color("202030"))
+		_p([[33, 31], [38, 31], [38, 25], [33, 25]], Color("eeeeee"))
+		draw_line(Vector2(38, 26), Vector2(44, 22 - sw), Color("eeeeee"), 1.0)
+		draw_circle(Vector2(35.5, 23), 1.8, Color("2a2018"))
+
+	#  새벽 하늘 · 먼 도시 · 광장 · 돌계단 꼭대기에서 두 팔을 V 로 든 뒷모습(회색 운동복)
+	func _steps() -> void:
+		for y in 26:
+			_r(0, y, 64, 1, Color("b8c4d8").lerp(Color("e8c0a8"), float(y) / 26.0))
+		for b in [[2, 16, 6, 10], [9, 19, 8, 7], [40, 14, 5, 12], [46, 18, 8, 8], [56, 15, 6, 11]]:
+			_r(b[0], b[1], b[2], b[3], Color("8d97a8"))
+		_r(31, 15, 2, 11, Color("8d97a8"))
+		_r(0, 26, 64, 8, Color("b9b4ae"))
+		for i in 5:
+			_r(0, 34 + i * 3, 64, 3, Color("a7a19c") if i % 2 == 0 else Color("8f8a86"))
+		var k := Color("6e6e72")
+		var hop: float = roundf(absf(sin(t * 3.0)) * -1.5)
+		_r(29, 32 + hop, 2, 5, Color("55555a"))
+		_r(33, 32 + hop, 2, 5, Color("55555a"))
+		_p([[28, 33 + hop], [36, 33 + hop], [35, 25 + hop], [29, 25 + hop]], k)
+		draw_line(Vector2(29, 26 + hop), Vector2(23, 17 + hop), k, 2.0)
+		draw_line(Vector2(35, 26 + hop), Vector2(41, 17 + hop), k, 2.0)
+		draw_circle(Vector2(32, 22 + hop), 2.3, Color("2a2420"))
+
+	#  새벽 사막 하늘 · 바위 · 우뚝 선 검은 석판 · 웅크린 유인원 그림자들
+	func _monolith() -> void:
+		for y in 32:
+			_r(0, y, 64, 1, Color("6f8fb0").lerp(Color("f0c890"), float(y) / 32.0))
+		for c in [[10, 8, 14], [44, 11, 18]]:
+			_r(c[0], c[1], c[2], 1, Color(1, 1, 1, 0.35))
+		_p([[0, 30], [10, 26], [22, 31], [36, 27], [50, 32], [64, 28], [64, 48], [0, 48]], Color("5a4030"))
+		_p([[0, 38], [16, 34], [30, 39], [48, 35], [64, 40], [64, 48], [0, 48]], Color("3d2b20"))
+		_r(16, 6, 7, 30, Color("08080a"))
+		_r(16, 6, 1, 30, Color("3a3a40"))
+		var k := Color("1a120c")
+		for a in [[34, 36, 3.5], [44, 38, 3.0], [9, 40, 3.0]]:
+			var bob: float = roundf(sin(t * 2.0 + float(a[0])) * 0.8)
+			draw_circle(Vector2(a[0], float(a[1]) + bob), a[2], k)
+			draw_circle(Vector2(float(a[0]) + 2.0, float(a[1]) - 2.5 + bob), a[2] * 0.6, k)
+		_p([[52, 48], [52, 34], [58, 30], [64, 32], [64, 48]], Color("0e0a08"))
+
+	#  공원 — 짙은 나무 · 잔디 · 돌바닥 위 나무 벤치 · 오른쪽 끝에 앉은 흰 정장 · 떠다니는 깃털
+	func _bench() -> void:
+		_r(0, 0, 64, 20, Color("24452a"))
+		for c in [[6, 6, 8], [22, 4, 9], [40, 7, 8], [58, 5, 9]]:
+			draw_circle(Vector2(c[0], c[1]), c[2], Color("2f5a32"))
+		_r(0, 20, 64, 16, Color("5a8a40"))
+		_p([[8, 34], [56, 34], [62, 44], [2, 44]], Color("a8a49a"))
+		_r(0, 44, 64, 4, Color("4c7a36"))
+		var w := Color("8a6a40")
+		_r(14, 26, 32, 2, w)
+		_r(14, 29, 32, 2, w)
+		_r(14, 33, 32, 2, w)
+		for x in [15, 44]:
+			_r(x, 35, 1, 4, Color("2a2a2a"))
+		var suit := Color("e8e4d8")
+		_r(38, 33, 5, 2, suit)
+		_r(41, 35, 2, 4, suit)
+		_p([[37, 33], [42, 33], [41, 26], [38, 26]], suit)
+		draw_circle(Vector2(39.5, 24), 2.0, Color("3a2a1c"))
+		_r(36, 31, 3, 2, Color("f2f2f2"))
+		var fx: float = 20.0 + sin(t * 0.9) * 10.0
+		var fy: float = 10.0 + fmod(t * 4.0, 30.0)
+		draw_line(Vector2(fx, fy), Vector2(fx + 2.0, fy + 1.0), Color("ffffff"))
 
 	#  초록 낡은 복도 · 끝의 문 · 천장 등 · 복도 한가운데 망치를 치켜든 검은 사람(머리가 헝클어졌다)
 	func _hammer() -> void:
