@@ -10,7 +10,7 @@ extends SceneTree
 #       엑스트라 TV 한 대(흐리지 않다) · 나머지 엑스트라 화면은 어둡다
 #    ⑥ 주인공 조작판 — 다이얼 둘 · 슬라이더가 따로 붙고, 켜지기 전엔 슬라이더가 밑에 있다가 제 자리로 오르고
 #       켜진 뒤로 다이얼 둘이 돌아 있다
-#    ⑦ 영화 TV(첫 빛 TV 포함) — 첫 채널이 저마다 다르고, 둘째 채널은 첫 채널과 다르다(켤 때마다 섞인다)
+#    ⑦ 영화 TV(첫 빛 TV 포함) — 첫 · 둘째 채널을 다 모아도 겹치는 장면이 없다(켤 때마다 섞인다)
 #    ⑧ 둘레 TV 는 다 제작자 TV 보다 뒤에 선다(초점에서 비켜 살짝 흐리다) · 화면이 주인공 · 제작자보다 어둡다
 #   godot --path . --script scripts/tools/qa_prologue.gd
 const Save = preload("res://scripts/save.gd")
@@ -104,6 +104,15 @@ func _process(_d: float) -> bool:
 				_ok("⑧ 둘레 TV 는 제작자 TV 보다 뒤", back_ok)
 				_ok("⑧ 둘레 화면은 어둡다", float(g.Plg.EXTRA.dim) < 0.2 and float(g.Plg.REEL.dim) < 0.2)
 				_ok("⑦ 둘째 채널은 첫 채널과 다르다", two_ok)
+				var all_ch := {}
+				var n_ch := 0
+				for tv in g.plg_vp.get_meta("tvs"):
+					if String(tv.job).begins_with("reel"):
+						all_ch[String(tv.ch[0])] = true
+						all_ch[String(tv.ch[1])] = true
+						n_ch += 2
+				_ok("⑦ 첫 · 둘째 채널을 다 모아도 겹치는 장면이 없다(어느 때든 두 화면에 같은 장면이 안 뜬다)",
+						all_ch.size() == n_ch, "%d / %d" % [all_ch.size(), n_ch])
 				st = 1
 		1:
 			if g._plg_live() and g.plg_t > g.Plg.length() - 0.2:

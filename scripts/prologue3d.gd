@@ -45,9 +45,10 @@ extends RefCounted
 #  채널 다이얼이 딸깍 돌며 켜지고 · 슬라이더가 올라가며 그림이 밝아지고 · 볼륨 다이얼이 스르르 돌고 · 빨강 · 초록 ·
 #  파랑 등이 차례로 든다(KNOB). 도는 몫은 tvs.py 가 따로 낸 HeroKnobA · HeroKnobB · HeroSlider(제 자리 · 처음 각은
 #  glb 노드 변환).
-#  둘레 TV 다섯은 영화 명장면 이스터에그다(REELS — 「여러 영화의 명장면을 도트로 … 저작권은 안 걸리게」 ·
-#  「여러 영화가 랜덤으로 나오면 좋겠고 이스터에그 tv는 밝기 낮춰」). 켤 때마다 다섯 장면을 섞어 나눠 주고, 저마다
-#  한 번 채널이 넘어가며(지지직) 다른 장면이 된다. 밝기는 둘레 엑스트라 언저리 — 찾아야 보인다. 스틸을
+#  둘레 TV 여섯은 영화 명장면 이스터에그다(REELS 열셋 — 「여러 영화의 명장면을 도트로 … 저작권은 안 걸리게」 ·
+#  「여러 영화가 랜덤으로 나오면 좋겠고 이스터에그 tv는 밝기 낮춰」). 켤 때마다 장면을 섞어 나눠 주고, 저마다
+#  한 번 채널이 넘어가며(지지직) 다른 장면이 된다 — 어느 때든 두 화면에 같은 장면이 안 뜬다. 밝기는 둘레
+#  엑스트라 언저리 — 찾아야 보인다. 스틸을
 #  따라 그리지 않고 구도 · 상황만 빌려 코드로 새로 그린 실루엣이다 — 얼굴 · 생김새 · 분장 · 제목 · 대사 · 로고는
 #  없다. 복도에서 망치를 든 사람 · 철교 위에서 팔을 벌린 사람 · 경찰차 지붕에서 춤추는 빨간 정장 · 노을 진
 #  뱃머리의 두 사람 · 하늘 그림 벽의 검은 문 앞에서 절하는 사람 · 빗속 긴 사선 계단을 내려가는 식구 · 누런 논의
@@ -827,7 +828,9 @@ static func make(game: Node, outer: Node) -> Node:
 	var cam_end := {}
 	var cam_start := {}
 	var feed: Texture2D = game.get_viewport().get_texture()
-	#  영화 TV 그림 화판 — 다섯 다 · 채널은 켤 때마다 섞는다(첫 채널은 TV 마다 다르고 둘째는 그와 다른 아무것)
+	#  영화 TV 그림 화판 — 다 · 채널은 켤 때마다 섞은 한 벌에서 떼어 준다 — 첫 채널 n 장 다음 둘째 채널 n 장(영화
+	#  TV 가 n 대). 장면이 2n 개 이상이면 어느 때든 두 화면에 같은 장면이 안 뜬다(「같은 화면에 곂친 장면이 있오야
+	#  겠어? 안 겹쳐지면 좋겠는데」 — 처음엔 둘째 채널을 아무것으로 뽑아 남의 첫 채널과 겹쳤다).
 	var reels := {}
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
@@ -838,6 +841,10 @@ static func make(game: Node, outer: Node) -> Node:
 		deck[i] = deck[j]
 		deck[j] = tmp
 	var dealt := 0
+	var n_reel := 0
+	for e in PILE:
+		if String(e[6]).begins_with("reel"):
+			n_reel += 1
 	for rk in REELS:
 		if not reels.has(rk):
 			var rv := SubViewport.new()
@@ -886,7 +893,7 @@ static func make(game: Node, outer: Node) -> Node:
 				var rt: Texture2D = null
 				if job.begins_with("reel"):
 					var c0: String = deck[dealt % deck.size()]
-					var c1: String = REELS[(REELS.find(c0) + rng.randi_range(1, REELS.size() - 1)) % REELS.size()]
+					var c1: String = deck[(n_reel + dealt) % deck.size()]
 					dealt += 1
 					chans[i] = [c0, c1, rng.randf_range(float(REEL.sw[0]), float(REEL.sw[1]))]
 					rt = (reels[c0].get_parent() as SubViewport).get_texture()
