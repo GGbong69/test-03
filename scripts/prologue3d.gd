@@ -35,6 +35,12 @@ extends RefCounted
 #  흐름 — 어둠(구석 지지직 한 대) → 둘레 TV 가 차례로 깜박이며 흐리게 켜진다 → 크레딧 TV 가 켜진다
 #  (지지직 → 제작자) → 주인공이 깜박이며 켜져 인트로를 튼다 → 카메라가 곧게 다가간다 → 유리 속 그림이 화면을
 #  채우면 층이 걷히고 인트로가 이어진다.
+#  주인공 · 제작자 TV 만 또렷하다(「진짜 메인 TV 제작자 TV 만 제대로 나오고 남은거는 거의 안 보이게? 그냥 배경
+#  느낌」 → 「그렇다고 진짜 배경으로 넣으라는 소린 아니었다고」 — 더미는 주인공 둘레 탑 그대로). 둘레 TV 는 화면 ·
+#  빛을 낮춰(EXTRA · REEL) 어둠에 잠기고, 제작자 TV 는 주인공 앞면 쪽으로 당겨 섰다. 카메라 초점은 주인공 유리에
+#  있어(DOF) 그 바로 뒤에 붙은 둘레 TV 가 살짝 흐리다 — 초점은 카메라가 다가가는 동안 주인공 거리를 따라간다
+#  (_focus). 주인공 화면 앞에는 먼지가 떠다니며 그 빛을 받아 반짝인다(DUST — 카메라가 다가가는
+#  동안 그 사이를 지나 깊이가 난다).
 #  주인공이 켜질 때 조작판이 움직인다(「메인 화면 켜질때 메인tv의 오른쪽 버튼? 레버?들이 움직일수 있나?」) —
 #  채널 다이얼이 딸깍 돌며 켜지고 · 슬라이더가 올라가며 그림이 밝아지고 · 볼륨 다이얼이 스르르 돌고 · 빨강 · 초록 ·
 #  파랑 등이 차례로 든다(KNOB). 도는 몫은 tvs.py 가 따로 낸 HeroKnobA · HeroKnobB · HeroSlider(제 자리 · 처음 각은
@@ -69,6 +75,11 @@ const FONT_SM := "res://fonts/Galmuri9.ttf"
 const CARD := Vector2i(120, 108)
 #  카메라 — 주인공 화면 한가운데에서 앞으로 dist(m) · 세로 화각(주인공 폭이 화면 폭의 여섯 몫 언저리)
 const CAM := {"dist": 1.55, "fov": 34.0}
+#  초점(_focus) — 주인공 유리까지의 거리 d 에서 d + dof_at 너머가 dof_tr 에 걸쳐 흐려진다(세기 dof_k)
+const FOCUS := {"dof_at": 0.08, "dof_tr": 0.16, "dof_k": 0.12}
+#  먼지 — n 알 · 크기(m) · 상자(주인공 유리 앞 — 가로 · 세로 반폭 · 앞으로 깊이) · 떠도는 빠르기 · 빛 받는 거리(유리
+#  에서 이 안이면 밝다) · 가장 밝을 때 알파
+const DUST := {"n": 70, "size": 0.004, "box": Vector3(0.7, 0.45, 1.1), "drift": 0.025, "lit_r": 0.8, "a": 0.55}
 #  빛 — glow 화면 번짐 세기 · 문턱 · vig 둘레 비네트 짙기(가장자리 알파)
 const LIT := {"glow": 0.45, "glow_thr": 0.9, "vig": 0.55}
 #  화면 빛(SCR_LIT) — 유리 앞 at(m)에서 앞으로 원뿔 ang(도) · 닿는 거리 range · 세기는 MAKER · EXTRA 의 light
@@ -84,7 +95,7 @@ const MAKER := {"light": 1.3}
 #  flat 이 구간에서 층 안에 화판 그림을 그대로 깐다(필름 톤 · 번짐이 낀 무대 그림과 게임 그림의 톤 차를 잇는다)
 const HERO := {"light": 1.1, "rim": 0.4, "rim_r": 0.55, "dive": 0.78, "portal": [0.45, 0.95], "flat": [0.8, 1.0]}
 #  엑스트라 — 점 빛 세기 · 몸 빛깔 배수 · 화면 밝기 · 채도 · 화면 도트(1m 당 칸) · 화면 색 단 수
-const EXTRA := {"light": 0.7, "tone": 0.42, "dim": 0.28, "sat": 0.6, "cells": 110.0, "lv": 8.0}
+const EXTRA := {"light": 0.3, "tone": 0.42, "dim": 0.13, "sat": 0.6, "cells": 110.0, "lv": 8.0}
 #  화면 장면 — 번호(SCR_SHADER mode) · 앞에 둔 점 빛 빛깔. game 은 주인공(지지직 1 → 화판 그림 9) · maker 는
 #  크레딧(지지직 1 → 제작자 그림 4).
 const JOB := {
@@ -101,10 +112,10 @@ const JOB := {
 }
 const PLASTIC := {"red": Color("a83c30"), "teal": Color("2f8a84"), "graph": Color("2b2f3c"), "slate": Color("3d4456"),
 		"": Color("8c2924")}
-#  더미 — [꼴, x, 앞뒤 z, 돌림(도), 기울기(도), 플라스틱 빛깔, 장면]. 밑에서 위로 — 그 폭 밑의 가장 높은 윗면에
-#  얹는다. 기울면 낮은 귀가 윗면에 닿게 든다. 주인공(TvHero · 장면 game)과 데크는 앞으로 · 엑스트라는 뒤로
-#  물린다. maker 는 왼쪽 빨간 휴대용 TV · reel 은 영화 TV · reel0 은 처음부터 지지직으로 켜진 왼쪽 아래 영화 TV
-#  (어둠 속 첫 빛 — REEL.tune 에 채널이 잡혀 영화를 튼다 · 「왜 왼쪽 하단 화면은 안나와?」).
+#  더미 — [꼴, x, 앞뒤 z, 돌림(도), 기울기(도), 플라스틱 빛깔, 장면]. 밑에서 위로 — 같은 깊이 띠(z 가 DEPTH_BAND
+#  안)에서 그 폭 밑의 가장 높은 윗면에 얹는다. 기울면 낮은 귀가 윗면에 닿게 든다. 주인공(TvHero · 장면 game)과
+#  데크 · 제작자 TV(maker)는 앞으로 · 둘레 TV 는 뒤로 물린다. reel 은 영화 TV · reel0 은 처음부터 지지직으로 켜진
+#  왼쪽 아래 영화 TV(어둠 속 첫 빛 — REEL.tune 에 채널이 잡혀 영화를 튼다 · 「왜 왼쪽 하단 화면은 안나와?」).
 const PILE := [
 	["TvConsole", -1.02, -0.10, 5.0, 0.0, "", "bars"],
 	["TvConsole", 0.0, -0.02, 0.0, 0.0, "", "sunset"],
@@ -115,7 +126,7 @@ const PILE := [
 	["TvHero", 0.0, 0.04, 0.0, 0.0, "", "game"],
 	["TvMon", -0.84, -0.12, 8.0, -3.0, "graph", "reel0"],
 	["TvMon", 0.66, -0.12, -8.0, 2.0, "graph", "reel"],
-	["TvPort", -0.69, -0.10, 9.0, 3.0, "red", "maker"],
+	["TvPort", -0.69, -0.02, 9.0, 3.0, "red", "maker"],
 	["TvPort", 0.73, -0.14, -7.0, -4.0, "teal", "reel"],
 	["TvBox", -0.28, -0.16, 6.0, -4.0, "", "reel"],
 	["TvMon", 0.24, -0.18, -5.0, 3.0, "slate", "reel"],
@@ -123,6 +134,8 @@ const PILE := [
 	["TvMon", 1.20, -0.16, -9.0, -4.0, "graph", "bars"],
 	["TvBox", -0.79, -0.16, 12.0, -5.0, "", "reel"],
 ]
+#  같은 깊이 띠 — z 차가 이보다 작은 것끼리만 서로 얹힌다
+const DEPTH_BAND := 0.3
 const HERO_KINDS := ["TvHero", "Deck"]
 #  주인공 조작판(ON.hero 에서 잰 초) — power 채널 다이얼이 켜는 딸깍 · ch 그림이 선 뒤 채널 딸깍 · step 딸깍 한 번의
 #  각(도) · click 딸깍이 도는 시간 · vol 볼륨 다이얼이 도는 동안 · 각 · slide 슬라이더가 오르는 동안 · 맨 밑까지의
@@ -132,7 +145,7 @@ const KNOB := {"power": -0.12, "ch": 0.45, "step": 30.0, "click": 0.07, "vol": [
 const HERO_PARTS := ["HeroKnobA", "HeroKnobB", "HeroSlider"]
 #  영화 TV — 그림 크기(칸 = 텍셀) · 밝기 · 채도 · sw 채널이 넘어가는 때(초 · 이 사이에서 TV 마다 아무 때나) ·
 #  snow 넘어갈 때 지지직 동안 · tune 처음부터 켜진 reel0 이 지지직에서 채널을 잡는 때
-const REEL := {"size": Vector2i(64, 48), "dim": 0.3, "sat": 0.75, "sw": [2.9, 4.6], "snow": 0.14, "tune": 1.6}
+const REEL := {"size": Vector2i(64, 48), "dim": 0.15, "sat": 0.75, "sw": [2.9, 4.6], "snow": 0.14, "tune": 1.6}
 const REELS := ["hammer", "rail", "dance", "bow", "exit", "stairs", "field", "lamp", "bullet", "hill", "steps",
 		"monolith", "bench"]
 
@@ -798,6 +811,11 @@ static func make(game: Node, outer: Node) -> Node:
 	w.add_child(we)
 	var cam := Camera3D.new()
 	cam.fov = float(CAM.fov)
+	var ca := CameraAttributesPractical.new()
+	ca.dof_blur_far_enabled = true
+	ca.dof_blur_far_transition = float(FOCUS.dof_tr)
+	ca.dof_blur_amount = float(FOCUS.dof_k)
+	cam.attributes = ca
 	w.add_child(cam)
 
 	var hm := _mats(true)
@@ -805,7 +823,7 @@ static func make(game: Node, outer: Node) -> Node:
 	var dm := hm.duplicate()
 	dm["gun"] = _lit(Color("2c3038"), null, 0.45, 0.45, 0.3)
 	var tvs := []
-	var tops := []      # [x0, x1, 윗면] — 얹힌 것들
+	var tops := []      # [x0, x1, 윗면, z] — 얹힌 것들
 	var cam_end := {}
 	var cam_start := {}
 	var feed: Texture2D = game.get_viewport().get_texture()
@@ -847,10 +865,10 @@ static func make(game: Node, outer: Node) -> Node:
 		var x1: float = x + bb.end.x
 		var y := 0.0
 		for tp in tops:
-			if minf(x1, float(tp[1])) - maxf(x0, float(tp[0])) > 0.06:
+			if absf(float(tp[3]) - float(e[2])) < DEPTH_BAND and minf(x1, float(tp[1])) - maxf(x0, float(tp[0])) > 0.06:
 				y = maxf(y, float(tp[2]))
 		var lift: float = bb.size.x * 0.5 * absf(sin(deg_to_rad(float(e[4]))))
-		tops.append([x0, x1, y + bb.end.y + lift])
+		tops.append([x0, x1, y + bb.end.y + lift, float(e[2])])
 		var mi := MeshInstance3D.new()
 		mi.mesh = me
 		mi.position = Vector3(x, y + lift, float(e[2]))
@@ -955,6 +973,8 @@ static func make(game: Node, outer: Node) -> Node:
 		leds.append({"m": lm, "c": lm.albedo_color, "e": lm.emission_energy_multiplier})
 	hn.set_meta("leds", leds)
 	hn.set_meta("start", cam_start)
+	hn.set_meta("focus", cam_start.look if not cam_start.is_empty() else Vector3.ZERO)
+	_dust_make(w, hn)
 	if not cam_start.is_empty():
 		cam.look_at_from_position(cam_start.at, cam_start.look)
 	_room(w, xm)
@@ -1159,6 +1179,7 @@ static func tick(hn: Node, t: float) -> void:
 			m.set_shader_parameter("tex", rv.get_texture())
 			(tv.l as SpotLight3D).light_color = JOB[cur][1]
 		if tv.hero:
+			_dust(hn, t, minf(p * 1.6, 1.0))
 			#  주인공 — 깜박이며 켜지면 곧장 화판 그림(첫 그림이 어둠이라 지지직을 안 거친다)
 			(tv.r as OmniLight3D).light_energy = float(HERO.rim) * minf(p * 1.6, 1.0)
 		else:
@@ -1183,6 +1204,7 @@ static func tick(hn: Node, t: float) -> void:
 		var u: float = clampf((t - float(T.push0)) / (float(T.push1) - float(T.push0)), 0.0, 1.0)
 		var e: float = u * u * (3.0 - 2.0 * u)
 		cam.look_at_from_position((cs.at as Vector3).lerp(ce.at, e), (cs.look as Vector3).lerp(ce.look, e))
+		_focus(hn, cam)
 		var pr: Array = HERO.portal
 		var fr: Array = HERO.flat
 		var po: float = smoothstep(float(pr[0]), float(pr[1]), u)
@@ -1204,6 +1226,57 @@ static func _layer(hn: Node, t: float) -> void:
 		root.size = box.size
 	(root.get_node("Fade") as ColorRect).color.a = 1.0 - clampf(t / float(FADE["in"]), 0.0, 1.0)
 	root.modulate.a = 1.0 - clampf((t - handoff()) / float(FADE.out), 0.0, 1.0)
+
+
+#  먼지 — 더하기로 얹는 작은 판(늘 카메라를 본다). 알마다 제 씨로 상자 안에 흩어 둔다.
+static func _dust_make(w: Node3D, hn: Node) -> void:
+	var qm := QuadMesh.new()
+	qm.size = Vector2(float(DUST.size), float(DUST.size))
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	mat.vertex_color_use_as_albedo = true
+	qm.material = mat
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = true
+	mm.mesh = qm
+	mm.instance_count = int(DUST.n)
+	var mi := MultiMeshInstance3D.new()
+	mi.multimesh = mm
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	w.add_child(mi)
+	var seeds := []
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 1018
+	for i in int(DUST.n):
+		seeds.append(Vector3(rng.randf(), rng.randf(), rng.randf()))
+	hn.set_meta("dust", mm)
+	hn.set_meta("dust_seed", seeds)
+
+
+#  먼지 — 상자 안에서 천천히 떠돌고(위로 · 옆으로 흔들) 주인공 유리에 가까울수록 · 주인공이 켜진 만큼 밝다
+static func _dust(hn: Node, t: float, hero_p: float) -> void:
+	var mm := hn.get_meta("dust") as MultiMesh
+	var g: Vector3 = hn.get_meta("focus")
+	var bx: Vector3 = DUST.box
+	var seeds: Array = hn.get_meta("dust_seed")
+	for i in seeds.size():
+		var sd: Vector3 = seeds[i]
+		var y: float = fmod(sd.y + t * float(DUST.drift) * (0.5 + sd.x), 1.0)
+		var pos := g + Vector3((sd.x * 2.0 - 1.0) * bx.x + sin(t * 0.4 + float(i)) * 0.03,
+				(y * 2.0 - 1.0) * bx.y, 0.06 + sd.z * bx.z)
+		mm.set_instance_transform(i, Transform3D(Basis(), pos))
+		var k: float = clampf(1.0 - pos.distance_to(g) / float(DUST.lit_r), 0.0, 1.0)
+		mm.set_instance_color(i, Color(1.0, 0.85, 0.65, float(DUST.a) * k * k * hero_p))
+
+
+#  초점 — 주인공 유리까지의 거리를 따라 옮긴다(다가가는 동안에도 주인공이 또렷하다)
+static func _focus(hn: Node, cam: Camera3D) -> void:
+	var d: float = cam.global_position.distance_to(hn.get_meta("focus"))
+	(cam.attributes as CameraAttributesPractical).dof_blur_far_distance = d + float(FOCUS.dof_at)
 
 
 #  주인공 조작판 — 채널 다이얼(켜는 딸깍 · 채널 딸깍) · 볼륨 다이얼 · 슬라이더 · 등 셋(KNOB).
