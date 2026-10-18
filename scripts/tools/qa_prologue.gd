@@ -5,8 +5,8 @@ extends SceneTree
 #    ③ 끝까지 가면 무대가 걷히고 필터가 되살아나며 인트로가 처음부터 돈다(브라운관 켜짐 연출은 검사 도구에서
 #       _cine_ok 가 건너뛴다 — pwr_t 는 −1 그대로)
 #    ④ 누름 — lock 앞은 안 먹고, 첫 누름은 빨리 감기, 둘째 누름은 곧장 끝
-#    ⑤ 주인공(게임 TV) 한 대가 크레딧을 띄우고, 끝에 꺼지며(줄 → 점) 카메라가 그 유리 앞에서 멎는다 ·
-#       엑스트라 화면은 주인공보다 어둡다
+#    ⑤ 주인공(게임 TV)은 끝까지 꺼져 있고 카메라가 그 유리 앞에서 멎는다 · 크레딧은 엑스트라 TV 한 대
+#       (흐리지 않다) · 나머지 엑스트라 화면은 어둡다
 #   godot --path . --script scripts/tools/qa_prologue.gd
 const Save = preload("res://scripts/save.gd")
 var b = null
@@ -56,21 +56,28 @@ func _process(_d: float) -> bool:
 				g._plg_begin()
 				_ok("① 인트로 단 안에서 돈다", g.state == g.S.INTRO and g._plg_live())
 				var heroes := []
+				var makers := []
 				var dim_ok := true
 				for tv in g.plg_vp.get_meta("tvs"):
+					var dv = (tv.m as ShaderMaterial).get_shader_parameter("dim")
+					var dm: float = 1.0 if dv == null else float(dv)
 					if tv.hero:
 						heroes.append(String(tv.job))
+					elif String(tv.job) == "maker":
+						makers.append(dm)
 					else:
-						dim_ok = dim_ok and float((tv.m as ShaderMaterial).get_shader_parameter("dim")) < 0.5
+						dim_ok = dim_ok and dm < 0.5
 				_ok("⑤ 주인공 하나 — 게임 TV", heroes == ["game"], str(heroes))
-				_ok("⑤ 엑스트라 화면은 어둡다", dim_ok)
+				_ok("⑤ 크레딧은 엑스트라 TV 한 대 · 흐리지 않다", makers == [1.0], str(makers))
+				_ok("⑤ 나머지 엑스트라 화면은 어둡다", dim_ok)
 				_ok("⑤ 카메라가 다가갈 유리가 있다", not (g.plg_vp.get_meta("end") as Dictionary).is_empty())
 				st = 1
 		1:
 			if g._plg_live() and g.plg_t > g.Plg.length() - 0.2:
 				for tv in g.plg_vp.get_meta("tvs"):
 					if tv.hero:
-						game_off = float((tv.m as ShaderMaterial).get_shader_parameter("cl")) >= 1.0
+						var pv = (tv.m as ShaderMaterial).get_shader_parameter("pw")
+						game_off = pv == null or float(pv) == 0.0
 				var cam := g.plg_vp.get_meta("cam") as Camera3D
 				cam_d = cam.global_position.distance_to((g.plg_vp.get_meta("end") as Dictionary).at)
 			if g._plg_live():
@@ -78,7 +85,7 @@ func _process(_d: float) -> bool:
 				seen_pwr = seen_pwr or g.pwr_t >= 0.0
 				seen_intro = seen_intro or g.intro_t > 0.0
 			else:
-				_ok("⑤ 끝에 주인공이 꺼진다", game_off)
+				_ok("⑤ 주인공은 끝까지 꺼져 있다", game_off)
 				_ok("⑤ 끝에 카메라가 게임 TV 유리 앞", cam_d < 0.02, "%.3f" % cam_d)
 				_ok("① 프롤로그 동안 CRT · VHS · 도트가 꺼져 있다", not seen_crt)
 				_ok("② 그동안 브라운관 · 인트로 시계가 안 간다", not seen_pwr and not seen_intro)

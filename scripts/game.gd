@@ -1591,14 +1591,11 @@ func _plg_tick(d: float) -> void:
 	plg_t += d * (float(PLGP.ff) if plg_ff else 1.0)
 	if plg_vp != null and is_instance_valid(plg_vp):
 		Plg.tick(plg_vp, plg_t)
-	#  TV 가 켜질 때마다 지지직 · 주인공이 꺼질 때(off) 꺼지는 소리
+	#  TV 가 켜질 때마다 지지직
 	for job in Plg.ON.keys():
 		if plg_t >= float(Plg.ON[job]) and not plg_rang.has(job):
 			plg_rang[job] = true
-			if job == "off":
-				_sfx("tv_off")
-			else:
-				_sfx("tv_static", SFX_BASE * 0.45)
+			_sfx("tv_static", SFX_BASE * 0.45)
 	if plg_t >= Plg.length():
 		_plg_end()
 		return
