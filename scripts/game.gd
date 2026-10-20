@@ -9863,6 +9863,18 @@ func _click(m: Vector2) -> void:
 						else:
 							_sfx("menu_pick2")
 						return
+					"vsync":
+						#  「전환 지지직」 줄과 같은 손 — 누른 칸으로 가고 이름 쪽은 뒤집는다 · 곧바로 건다.
+						var want3: bool = not vsync_on
+						if _set_seg_rect(i, 0).has_point(m):
+							want3 = false
+						elif _set_seg_rect(i, 1).has_point(m):
+							want3 = true
+						vsync_on = want3
+						Save.set_set("vsync", vsync_on)
+						_vsync_apply()
+						_sfx("menu_pick2")
+						return
 					"wipe":
 						#  「전체화면」 줄과 같은 손 — 누른 칸으로 가고 이름 쪽은 뒤집는다. 그 자리에서
 						#  저장한다(창 모드처럼 한 번 누름이 한 값이다).
@@ -48515,6 +48527,14 @@ func _res_arrow_rect(i: int, right: bool) -> Rect2:
 	return Rect2(Vector2(x1 - sz.x if right else x0, y), sz)
 
 
+#  수직 동기화(설정 「화면」 · Save "vsync") — 켜면 틀을 모니터 주사에 맞춘다(찢김 없음) · 끄면 틀을 안 기다린다.
+var vsync_on := true
+
+
+func _vsync_apply() -> void:
+	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED if vsync_on else DisplayServer.VSYNC_DISABLED)
+
+
 func _toggle_fullscreen() -> void:
 	# 에디터에 내장된 실행에서는 창 모드를 못 바꾼다 — 내장 해제나
 	# 내보낸 빌드에서만 실제로 커진다.
@@ -48552,6 +48572,8 @@ func _load_settings() -> void:
 	vhs = clampf(float(Save.get_set("vhs", VHS_DEF)), 0.0, 1.0)
 	dot = clampf(float(Save.get_set("dot", DOT_DEF)), 0.0, 1.0)
 	wipe_snow = bool(Save.get_set("wipe_snow", true))
+	vsync_on = bool(Save.get_set("vsync", true))
+	_vsync_apply()
 	_apply_vol()
 	_crt_apply()        # 층은 _ready 가 이 뒤에 세운다 — 그때 다시 앉는다
 	#  창 크기(RES) — 고른 적이 있으면 그 크기로 선다(전체화면이면 값만 들고 있는다).
@@ -55861,7 +55883,7 @@ func _set_info(key: String) -> Dictionary:
 			return {"n": "설정", "kids": SET_TABS}
 		"screen":
 			#  「화면 고르기」(FSEL) 줄은 걷었다(2026-10-14) — 게이지 넷을 기본값 50 에서 민다.
-			return {"n": "화면", "kids": ["fs", "res", "crt", "warp", "vhs", "dot", "wipe"]}
+			return {"n": "화면", "kids": ["fs", "res", "vsync", "crt", "warp", "vhs", "dot", "wipe"]}
 		"lang":
 			#  말(2026-10-13) — 값은 그 말 자신의 글이다(GameData.LANG_NAME).
 			return {"n": "언어", "sel": true, "v": String(GameData.LANG_NAME.get(GameData.lang, GameData.lang))}
@@ -55881,6 +55903,10 @@ func _set_info(key: String) -> Dictionary:
 			return {"n": "효과음", "g": true}
 		"mus":
 			return {"n": "음악", "g": true}
+		"vsync":
+			#  수직 동기화(2026-10-20 학원 선생님 피드백 「수직동기화 옵션 넣는게 어떨까요?」) — 켜면 화면
+			#  틀을 모니터 주사에 맞춰 찢김이 없다(기본 켬 — 엔진 기본과 같다).
+			return {"n": "수직 동기화", "tg": vsync_on, "v": "켬" if vsync_on else "끔"}
 		"wipe":
 			#  장면 전환의 지지직(WIPE · 2026-10-08). 끄면 어두운 막이 덮고 걷힌다.
 			return {"n": "전환 지지직", "tg": wipe_snow, "v": "켬" if wipe_snow else "끔"}

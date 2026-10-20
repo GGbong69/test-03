@@ -255,7 +255,7 @@ func _run() -> void:
 	_page("top", -1)
 	var rt: Array = g._set_rows()
 	_ok("설정 창은 첫 탭(화면)으로 연다", g._set_pg() == "screen"
-			and rt == ["fs", "res", "crt", "warp", "vhs", "dot", "wipe", "back"], "%s · %s" % [g._set_pg(), rt])
+			and rt == ["fs", "res", "vsync", "crt", "warp", "vhs", "dot", "wipe", "back"], "%s · %s" % [g._set_pg(), rt])
 	var gauges := []
 	for k in ["crt", "warp", "vhs", "dot"]:
 		var inf: Dictionary = g._set_info(k)
@@ -447,11 +447,22 @@ func _run() -> void:
 			and not bool(Save.get_set("wipe_snow", true)) and g._set_info("wipe").get("v", "") == "끔")
 	g._click((g._set_rect(wi) as Rect2).position + Vector2(20.0, 15.0))
 	_ok("전환 지지직 — 이름 쪽을 누르면 뒤집는다", g.wipe_snow and bool(Save.get_set("wipe_snow", false)))
+	#  수직 동기화(2026-10-20) — 같은 손 · 누르는 자리에서 저장
+	var vsi: int = (g._set_rows() as Array).find("vsync")
+	g.vsync_on = true
+	Save.set_set("vsync", true)
+	g._click((g._set_seg_rect(vsi, 0) as Rect2).get_center())
+	_ok("수직 동기화 — 끔 칸을 누르면 끄고 저장한다", not g.vsync_on
+			and not bool(Save.get_set("vsync", true)) and g._set_info("vsync").get("v", "") == "끔")
+	g._click((g._set_rect(vsi) as Rect2).position + Vector2(20.0, 15.0))
+	_ok("수직 동기화 — 이름 쪽을 누르면 뒤집는다", g.vsync_on and bool(Save.get_set("vsync", false)))
 	#  되살리기 — _load_settings 는 게이지 넷도 저장값으로 되돌리므로 앞뒤로 쥐었다 놓는다.
 	var keep := [g.vol, g.vol_mus, g.crt, g.warp, g.vhs, g.dot]
 	g.wipe_snow = false
+	g.vsync_on = false
 	g._load_settings()
 	_ok("전환 지지직 — 저장에서 되살린다", g.wipe_snow)
+	_ok("수직 동기화 — 저장에서 되살린다", g.vsync_on)
 	g.vol = keep[0]
 	g.vol_mus = keep[1]
 	g.crt = keep[2]
