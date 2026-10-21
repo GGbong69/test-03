@@ -10562,14 +10562,8 @@ func _land(mark := true) -> void:
 	throw6 += 1
 
 	# rackval 배율 — 이 발에서 파는 값이 아니라 지금 동전 슬롯의 값이다.
-	var rv_all := 0
-	for o in owned:
-		rv_all += GameData.sell_value(o)
-
-	var mag_hvy := 0
-	for md in magazine:
-		if String(md.get("id", "")) == "hvy":
-			mag_hvy += 1
+	var rv_all := _rack_val()
+	var mag_hvy := _mag_hvy()
 
 	# ── 이력 갱신 — ctx 를 만들기 **전**이다 ─────────────────────
 	#  패턴 깃발은 완성한 그 발부터 선다. 전에는 이 블록이 ctx 뒤에 있어서
@@ -44045,6 +44039,7 @@ func _tip_build(hit: Dictionary) -> void:
 			if _tut_svc("item", String(it.get("id", ""))):
 				_tip_tag("서비스", C_ACC)
 			_tip_add(_tip_eff(it), 20, C_TXT)
+			_tip_now(it)
 			if i == sealed:
 				_tip_add("이번 판 봉인", 12, C_MULT)
 			#  골드 곁줄은 따로 효과가 있는 동전에만 — 골드만 주면 _tip_eff 가 본문으로 올렸다.
@@ -44298,6 +44293,39 @@ func _tip_eff(it: Dictionary) -> String:
 	if ct == "" or eff == "":
 		return ct if eff == "" else eff
 	return ct + " " + eff
+
+
+#  든 동전의 지금 값 태그 — 쌓이는 동전과 판 밖에서도 정해지는 「~당」 재료만.
+#  남은 다트 · 판 이력(darts_left · low · zonehist · sechist · missing)은 판 중에만 서서 뺀다.
+const TIP_NOW_PER := ["items", "gold", "gold5", "rackval", "empty", "mag_hvy"]
+
+
+func _tip_now(it: Dictionary) -> void:
+	var k := String(it.get("k", ""))
+	if not (k in ["chip", "mult", "xmult"]):
+		return
+	if String(it.get("grow", "")) == "" and not TIP_NOW_PER.has(String(it.get("per", ""))):
+		return
+	var amt := GameData.item_amt(it, {"items_n": owned.size(), "gold": gold,
+			"mag_hvy": _mag_hvy(), "empty_n": GameData.max_items() - owned.size(),
+			"rackval_others": _rack_val() - GameData.sell_value(it)})
+	_tip_tag(_L("지금 %s") % GameData.eff_text(k, amt), C_CHIP if k == "chip" else C_MULT)
+
+
+#  재료 둘 — 정산(ctx)과 툴팁의 지금 값(_tip_now)이 같은 자를 쓴다.
+func _rack_val() -> int:
+	var v := 0
+	for o in owned:
+		v += GameData.sell_value(o)
+	return v
+
+
+func _mag_hvy() -> int:
+	var n := 0
+	for md in magazine:
+		if String(md.get("id", "")) == "hvy":
+			n += 1
+	return n
 
 
 # 태그 한 장. 색이 갈래를 절반쯤 말한다.

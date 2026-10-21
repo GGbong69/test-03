@@ -62,7 +62,19 @@ func _legit(t: String) -> bool:
 	for r in ["common", "uncommon", "rare", "legendary"]:
 		if GameData.rarity_name(r) == t:
 			return true
+	#  든 동전의 지금 값(_tip_now) — 값이라 태그 줄이다(2026-10-21).
+	if t.begins_with(g._L("지금 %s").replace("%s", "")):
+		return true
 	return false
+
+
+func _coin(id: String) -> Dictionary:
+	for it in GameData.items():
+		if String(it.id) == id:
+			var c: Dictionary = it.duplicate()
+			c.gs = 0
+			return c
+	return {}
 
 
 func _check(label: String, hit: Dictionary) -> void:
@@ -119,6 +131,23 @@ func _run() -> void:
 		_check("동전 슬롯", {"k": "rack", "i": 0})
 	if not g.cons.is_empty():
 		_check("손에 든 것", {"k": "held", "i": 0})
+
+	#  든 동전의 지금 값 — 「~당」 · 쌓이는 동전에만, 판 중에만 서는 재료는 뺀다(2026-10-21)
+	var keep_owned: Array = g.owned
+	g.owned = [_coin("c38"), _coin("c33"), _coin("c34")]
+	var now_p: String = g._L("지금 %s").replace("%s", "")
+	g._tip_build({"k": "rack", "i": 0})
+	var want_now: String = g._L("지금 %s") % GameData.eff_text("mult", 2 * 3)
+	_ok("동전 1장당 — 지금 값 태그", _tags().has(want_now), "[%s]" % "][".join(_tags()))
+	g._tip_build({"k": "rack", "i": 2})
+	var want_ice: String = g._L("지금 %s") % GameData.eff_text("chip", 100)
+	_ok("쌓이는 동전 — 지금 값 태그", _tags().has(want_ice), "[%s]" % "][".join(_tags()))
+	g._tip_build({"k": "rack", "i": 1})
+	var leak := false
+	for t in _tags():
+		leak = leak or String(t).begins_with(now_p)
+	_ok("남은 다트 1개당 — 판 중 값이라 태그가 없다", not leak, "[%s]" % "][".join(_tags()))
+	g.owned = keep_owned
 
 	#  ── 못 본 칸이 아무것도 안 샌다 (2026-09-19) ──────
 	#  컬렉션은 이제 못 본 것을 물음표로 가린다. 가린 칸이 **등급을 흘리면**
