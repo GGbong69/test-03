@@ -932,6 +932,23 @@ func _run() -> void:
 	g.grow_roll = 1.0
 	_ok("⑬-d 굴림 배 1.5 · 2 도 착지 · 넘기가 걸음 안이다", gr2_ok, gr2_txt)
 
+	#  ── ⑯ 무한 끝 — int64 를 넘는 곱 · 합은 끝값에 멈춘다 (2026-10-21) ──
+	var top: int = g.SCORE_TOP
+	var half := int(top / 2) + 1
+	_ok("⑯ 넘는 곱은 끝값 · 부호는 그대로 · 보통 곱은 그대로",
+			g._sat_mul(half, 2) == top and g._sat_mul(-3, half) == -top
+			and g._sat_mul(6, 7) == 42 and g._sat_mul(0, top) == 0
+			and g._sat_mul(top, 1) == top, str(g._sat_mul(half, 2)))
+	_stage_total(0.5, 1)
+	g.total = top - 5
+	g.cur_chip = half
+	g.cur_mult = 3
+	g._next_step()
+	_ok("⑯ 넘친 한 발 · 총점 · 띠가 음수로 안 뒤집힌다", g.last_gain == top and g.total == top
+			and int(round(float(g.total))) == top, "%d · %d" % [g.last_gain, g.total])
+	_ok("⑯ 카드 칸은 100만부터 줄인 수", g._card_num_fit(0, 140000000, 0.0) == GameData.big(140000000)
+			and g._card_num_fit(0, 999999, 0.0) == "999999", g._card_num_fit(0, 140000000, 0.0))
+
 
 #  합계 걸음 하나를 돌리며 띠 톡을 **tick_pl 에서 듣는다.** 칸마다 음이 다르므로
 #  (stream · pitch_scale) 이 바뀐 프레임이 곧 톡이 난 프레임이다. 착지 소리(settle_total)는

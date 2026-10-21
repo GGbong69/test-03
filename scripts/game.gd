@@ -8699,12 +8699,21 @@ func _aim_tick(d: float) -> void:
 				aim.x = lerpf(BC.x - SWING, BC.x + SWING, tri(gt))
 
 
+#  무한 끝의 곱 — int64 를 넘어 음수로 뒤집히는 대신 끝값에 멈춘다. 본편 값에서는 그냥 곱이다.
+#  끝값은 int64 끝(9.22e18)이 아니라 9.2e18 — float 로 갔다 와도 정확해서 띠 굴림(shown)이 안 뒤집힌다.
+const SCORE_TOP := 9200000000000000000
+func _sat_mul(a: int, b: int) -> int:
+	if a != 0 and absi(b) > SCORE_TOP / absi(a):
+		return SCORE_TOP if (a < 0) == (b < 0) else -SCORE_TOP
+	return a * b
+
+
 # 이 다트의 점수. 기본 점수와 배수를 어떻게 합치는가 — 그 한 줄이 이 게임의
 # 점수 계산 방식 전부다.
 func _score_combine(chip: int, mult: int) -> int:
 	match score_mode:
 		"std":
-			return chip * mult
+			return _sat_mul(chip, mult)
 		"bal":
 			# 점수와 배수의 수를 수평 맞춘 뒤 곱한다. 같은 합에서 곱이 가장
 			# 큰 자리가 두 값이 같은 자리라, 결과는 **늘 std 이상**이다.
@@ -8721,12 +8730,12 @@ func _score_combine(chip: int, mult: int) -> int:
 			# 점수 360·배수 3 이면 30.7배(33,124점)로 라운드 8 보스(8,000)를
 			# 한 발에 넘긴다. **그 구멍은 아직 안 막았다.**
 			var x := _bal_half(chip, mult)
-			return x * x
+			return _sat_mul(x, x)
 		"rand":
 			# 굴리는 것은 rnd **걸음**이 이미 했다. 여기 오는 두 수는 그
 			# 뽑힌 값이라 곱셈만 남는다 — 이 함수가 순수해야 검산기가 산다.
-			return chip * mult
-	return chip * mult
+			return _sat_mul(chip, mult)
+	return _sat_mul(chip, mult)
 
 
 # 두 값이 고르게 나눠 가진 몫. **반올림하는 자리를 여기 하나로 묶는다** —
@@ -11180,7 +11189,7 @@ func _next_step() -> void:
 						src_slot = st.i
 				"xmult":
 					var m1 := cur_mult
-					cur_mult *= st.v
+					cur_mult = _sat_mul(cur_mult, int(st.v))
 					if cur_mult != m1:
 						mult_amt = _card_amt(m1, cur_mult)
 						mult_from = m1
@@ -11387,8 +11396,9 @@ func _next_step() -> void:
 			# 제곱이 되어 1.6배가 2.56배가 되고 물음표에서는 아무 일도 안
 			# 일어난다(칸 값을 버리므로).
 			if score_mul != 1.0:
-				last_gain = int(round(float(last_gain) * score_mul))
-			total += last_gain
+				last_gain = int(clampf(round(float(last_gain) * score_mul), -9.2e18, 9.2e18))   # float → int 넘침 막기
+			#  끝값에서 멈춘다 — total 이 음수일 때는 더해도 안 넘친다.
+			total = SCORE_TOP if last_gain > SCORE_TOP - maxi(total, 0) else total + last_gain
 			# 「한 번의 투척으로 N점」 조건이 읽는 자리. 판 총점(best_score)과
 			# 다르다 — 저쪽은 여섯 발의 합이고 이쪽은 한 발이다.
 			_peak("best_gain", last_gain)
@@ -11558,9 +11568,9 @@ func _card_num(v0: int, v1: int, j: float) -> int:
 # 세는 칸의 글자 크기를 재는 말 — 세는 동안은 앞 값 · 새 값 중 긴 쪽이라 크기가 세는
 # 도중에 안 뛰고, 줄어드는 걸음(음수 효과)도 칸을 안 깬다. 시계가 0 이면 새 값이다.
 func _card_num_fit(v0: int, v1: int, j: float) -> String:
-	var a := str(v1)
-	if j > 0.0 and not motion_off and str(v0).length() > a.length():
-		return str(v0)
+	var a := GameData.big(v1)          # 칸에 적히는 글과 같은 자 — 100만부터 줄인 수
+	if j > 0.0 and not motion_off and GameData.big(v0).length() > a.length():
+		return GameData.big(v0)
 	return a
 
 
@@ -11935,7 +11945,7 @@ func _leg_ends() -> bool:
 func _fire_live() -> void:
 	var v: int = _score_combine(cur_chip, cur_mult)
 	if score_mul != 1.0:
-		v = int(round(float(v) * score_mul))
+		v = int(clampf(round(float(v) * score_mul), -9.2e18, 9.2e18))
 	fire_lay = _fire_lay_of(_grow_of(v))
 	var heat := _fire_heat_of(v)
 	#  연발 안에서는 가장 높았던 단을 붙든다(fire_burst 머리말).
@@ -45334,13 +45344,13 @@ func _draw_card() -> void:
 			var jm := _card_juice(mult_j)
 			_card_box(p, float(CARDTXT.box_x1) + wdx, float(CARDTXT.box_w),
 					C_CHIP.lerp(Color(1.0, 1.0, 1.0), float(CARDFX.warm) * chip_j),
-					str(_card_num(chip_from, cur_chip, chip_j)), "점수",
+					GameData.big(_card_num(chip_from, cur_chip, chip_j)), "점수",
 					_fit_sz(_card_num_fit(chip_from, cur_chip, chip_j), 94.0,
 							int(24.0 * (1.0 + chip_amt * maxf(jc, 0.0)))),
 					roundf(float(CARDFX.squash) * maxf(-jc, 0.0)))
 			_card_box(p, float(CARDTXT.box_x2) - wdx, float(CARDTXT.box_w),
 					C_MULT.lerp(Color(1.0, 1.0, 1.0), float(CARDFX.warm) * mult_j),
-					str(_card_num(mult_from, cur_mult, mult_j)), "배수",
+					GameData.big(_card_num(mult_from, cur_mult, mult_j)), "배수",
 					_fit_sz(_card_num_fit(mult_from, cur_mult, mult_j), 94.0,
 							int(24.0 * (1.0 + mult_amt * maxf(jm, 0.0)))),
 					roundf(float(CARDFX.squash) * maxf(-jm, 0.0)))
