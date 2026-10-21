@@ -1528,6 +1528,9 @@ static func _texts() -> Dictionary:
 const TEXT_NEED := {
 	"tut_next": [], "tut_skip": [], "tut_count": ["i", "n"],
 	"tut_end": [], "hint_pick": [],
+	#  잠긴 다트통의 조건 한 줄(game.gd _stat_cond)
+	"cond_win_items": ["v"], "cond_win_gold": ["v"], "cond_boss_spare": ["v"],
+	"cond_best_dart_hvy": ["v"], "cond_best_dart_lgt": ["v"], "cond_best_dart_mag": ["v"],
 }
 
 

@@ -10,6 +10,7 @@ const Save = preload("res://scripts/save.gd")
 #  종료 코드 = 실패 개수
 #
 #  ① 「최고 판 점수」는 이번 런 값이다 — 튜토리얼 런 끝에도 선다
+#  ② 통계로 여는 다트통 여섯이 진짜 조건 한 줄과 지금 값을 쓴다
 # ══════════════════════════════════════════════════════════
 
 var g = null
@@ -54,6 +55,13 @@ func _leg(leg: int, sc: int) -> void:
 	g._finish_leg()
 
 
+func _pack(id: String) -> Dictionary:
+	for r in GameData.packs():
+		if String(r.get("id", "")) == id:
+			return r
+	return {}
+
+
 func _row(nm: String) -> String:
 	for r in g._over_rows():
 		if String(r[0]) == nm:
@@ -88,6 +96,18 @@ func _process(_d: float) -> bool:
 	_ok("이어하기에 적힌다(RUN_PLAIN)", keys.has("run_leg_top"))
 	_arm(false)
 	_ok("다음 런은 다시 0", g.run_leg_top == 0)
+
+	print("\n② 통계로 여는 다트통의 조건 글")
+	Save.peak("best_dart_lgt", 2)
+	var lgt: String = g._pack_cond(_pack("p_lgt"))
+	_ok("조건과 지금 값", lgt == "가벼운 다트 3개 이상 들고 완주 · 2 / 3", lgt)
+	var rack: String = g._pack_cond(_pack("p_rack"))
+	_ok("이하 조건은 값 없이 글만", rack == "동전 4개 이하로 완주", rack)
+	for id in ["p_rack", "p_adv", "p_iron", "p_lgt", "p_mgn", "p_solo"]:
+		var c: String = g._pack_cond(_pack(id))
+		_ok("%s — 「완주로 열린다」가 아니다 · 열쇠 글자가 안 샌다" % id,
+				c != "완주로 열린다" and not c.contains("cond_"), c)
+	_ok("히든은 그대로 「조건 미달」", g._pack_cond(_pack("p_x1")) == "조건 미달")
 
 	print("\n통과 %d · 실패 %d" % [ok, bad])
 	quit(bad)

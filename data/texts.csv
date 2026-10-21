@@ -4,6 +4,12 @@ tut_skip,건너뛰기,Skip,スキップ,튜토리얼 말상자의 단추
 tut_count,{i} / {n},,,튜토리얼 말상자 왼쪽 아래 걸음 세기. {i} 지금 걸음 · {n} 모두 — 두 칸을 꼭 남긴다
 tut_end,튜토리얼 끝,Tutorial Complete,チュートリアル終了,튜토리얼 런(첫 런 · 1라운드 3판)을 마친 화면의 제목
 hint_pick,던질 다트 고르기,Pick a dart to throw,投げるダーツを選ぶ,판 아래 안내 — 던질 다트를 고를 때
+cond_win_items,동전 {v}개 이하로 완주,Win holding {v} or fewer coins,コイン{v}枚以下で完走,잠긴 다트통의 조건 — 넓은 동전 슬롯. {v} 는 packs.csv unlock_v
+cond_win_gold,{v}골드 이상 들고 완주,Win holding {v}+ Gold,{v}ゴールド以上持って完走,잠긴 다트통의 조건 — 선금 다트통. 뒤에 「· 지금 / {v}」가 붙는다
+cond_best_dart_hvy,무거운 다트 {v}개 이상 들고 완주,Win holding {v}+ Heavy darts,重いダーツ{v}本以上で完走,잠긴 다트통의 조건 — 무쇠 다트통
+cond_best_dart_lgt,가벼운 다트 {v}개 이상 들고 완주,Win holding {v}+ Light darts,軽いダーツ{v}本以上で完走,잠긴 다트통의 조건 — 깃털 다트통
+cond_best_dart_mag,자석 다트 {v}개 이상 들고 완주,Win holding {v}+ Magnet darts,磁石ダーツ{v}本以上で完走,잠긴 다트통의 조건 — 자석 다트통
+cond_boss_spare,다트 {v}개를 남기고 보스 판 클리어,Clear a Boss Leg with {v} darts left,ダーツを{v}本残してボスレッグをクリア,잠긴 다트통의 조건 — 외줄 다트통
 aim_std_1,높이 잡기,Set height,高さを決める,판 아래 안내 — 기본 조준 첫 잠금
 aim_std_2,좌우 잡기,Set left-right,左右を決める,판 아래 안내 — 기본 조준 둘째 잠금
 aim_ring_1,원 크기 잡기,Set circle size,円の大きさを決める,판 아래 안내 — 태양계 조준 첫 잠금

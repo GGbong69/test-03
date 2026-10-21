@@ -55545,9 +55545,21 @@ func _pack_cond(row: Dictionary) -> String:
 		return "조건 미달"
 	var pq := String(row.get("prereq", ""))
 	if pq == "":
-		return "완주로 열린다"
+		#  통계로 여는 통 — 조건 한 줄과 지금 값. 이하(le)는 최솟값이라 「지금 / 문턱」이 뜻이 없다.
+		var st := String(row.get("unlock_stat", ""))
+		if st == "":
+			return "완주로 열린다"
+		var v := int(String(row.get("unlock_v", "0")))
+		if String(row.get("unlock_cmp", "")) == "le":
+			return _stat_cond(st, v)
+		return "%s · %d / %d" % [_stat_cond(st, v), Save.stat(st), v]
 	# 이름으로 낸다. id 를 그대로 내면 "p_mag 완주" 가 화면에 뜬다.
 	return _L("%s 완주") % _L(GameData.row_name("packs", pq))
+
+
+#  통계 문 한 줄 — 글은 texts.csv 의 cond_<통계>, 값은 표(unlock_v)가 쥔다.
+func _stat_cond(st: String, v: int) -> String:
+	return GameData.text("cond_" + st, {"v": v})
 
 
 # 리그이 미는 값 — 1단부터 지금 단까지 쌓인 결과만 적는다.
