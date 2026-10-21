@@ -8074,6 +8074,7 @@ func _process(d: float) -> void:
 	if aim_dim != dim_to:
 		aim_dim = move_toward(aim_dim, dim_to, d / float(AIMDIM.fade))
 		queue_redraw()
+	aim_lk = move_toward(aim_lk, 0.0, d / 0.1)
 
 	match state:
 		S.AIM_V, S.AIM_H:
@@ -8736,6 +8737,7 @@ func _bal_half(chip: int, mult: int) -> int:
 func _advance() -> void:
 	match state:
 		S.AIM_V:
+			aim_lk = 1.0
 			# 한 번에 잠그는 방식은 두 번째 칸을 건너뛴다. 안 건너뛰면
 			# 이미 정해진 자리를 두고 아무 일도 안 하는 칸을 한 번 더
 			# 눌러야 한다.
@@ -8745,11 +8747,34 @@ func _advance() -> void:
 				_sfx("aim_lock_last")
 				return
 			state = S.AIM_H
-			_sfx("aim_lock_first")
+			_sfx("aim_lock_first", _lock_f(true))
 		S.AIM_H:
+			aim_lk = 1.0
 			state = S.CONFIRM
 			confirm_t = 0.0
-			_sfx("aim_lock_last")
+			_sfx("aim_lock_last", _lock_f(false))
+
+
+#  잠금음 높이(0 은 제 음) — 불 위에서 멈춘 선은 5도 위 · 둘째 잠금에서 두 선 다 불 위면 옥타브 위.
+#  판 위 소리라 잠금음 그대로 높이만 민다.
+func _lock_f(first: bool) -> float:
+	if not _lock_bull(first):
+		return 0.0
+	return SFX_BASE * (2.0 if not first and _lock_bull(true) else 1.5)
+
+
+#  두 단 방식의 잠근 선이 불(바깥 불 반지름 안)을 지나는가 — first 는 첫 선 · 아니면 둘째 선.
+#  첫 선의 축 값은 둘째 단에서도 그대로라 둘째 잠금에서 다시 물어도 같다.
+func _lock_bull(first: bool) -> bool:
+	var rb := R * rt_bull_o
+	var v := aim - BC
+	match aim_mode:
+		"ring":
+			return aim_r <= rb
+		"tilt":
+			var ax := _aim_axes()
+			return absf(v.dot(ax[0] if first else ax[1])) <= rb
+	return absf(v.y if first else v.x) <= rb
 
 
 func _unhandled_input(e: InputEvent) -> void:
@@ -19905,8 +19930,8 @@ func _draw_aim() -> void:
 	if state == S.AIM_V or state == S.AIM_H:
 		_draw_aim_live()
 	elif state == S.CONFIRM:
-		_aim_h_line(aim.y, C_ACC)
-		_aim_v_line(aim.x, C_ACC)
+		_aim_h_line(aim.y, C_ACC.lerp(C_TXT, aim_lk))
+		_aim_v_line(aim.x, C_ACC.lerp(C_TXT, aim_lk))
 		_magnet_preview()
 		if mod_v("fog", 0.0) <= 0.0:
 			#  ⚠ 곡선을 갈았다. `1 - (1-t)³` 은 **처음이 가장 빠른** 곡선인데
@@ -19918,8 +19943,10 @@ func _draw_aim() -> void:
 			#  **confirm_hold 값은 한 톨도 안 건드린다 — 곡선만.** 2026-09-24
 			var t := clampf(confirm_t / maxf(ch(), 0.001), 0.0, 1.0)
 			var e := t * t * (3.0 - 2.0 * t)
-			draw_arc(aim, lerpf(22.0, 7.0, e), 0.0, TAU, 24, C_TXT, 1.0)
-			draw_arc(aim, lerpf(30.0, 11.0, e), 0.0, TAU, 24, Color(C_TXT, 0.3), 1.0)
+			#  고리마다 그늘 3px 위에 1px — 민줄이면 백색 칸 · 밝힌 칸 위에서 흐렸다.
+			for rc in [[lerpf(22.0, 7.0, e), 1.0], [lerpf(30.0, 11.0, e), 0.3]]:
+				draw_arc(aim, rc[0], 0.0, TAU, 24, Color(C_BG, 0.7 * rc[1]), 3.0)
+				draw_arc(aim, rc[0], 0.0, TAU, 24, Color(C_TXT, rc[1]), 1.0)
 	elif state == S.FLY:
 		#  ⚠ 0.2 가 박혀 있었다. tuning.csv 는 fly_time 을 0.05~1.0 으로 여는데
 		#  여기만 그 값을 안 읽어서, 0.2 를 넘기면 k 가 음수로 가고 반지름도
@@ -19938,6 +19965,7 @@ func _draw_aim() -> void:
 #  깜빡임으로 읽힌다.
 const AIMDIM := {"a": 0.28, "fade": 0.12}
 var aim_dim := 0.0
+var aim_lk := 0.0              # 잠근 순간 1 — 잠긴 선이 흰빛에서 0.1초에 잠긴 색으로 가라앉는다(_advance)
 var aim_glow_last := Vector2(-9999.0, -9999.0)
 
 
@@ -20151,11 +20179,12 @@ func _magnet_at(p: Vector2) -> Vector2:
 func _draw_aim_live() -> void:
 	#  어둡힌 강조색(#6d4f17)은 판의 붉은 칸과 거의 같은 색이라 판 위에서
 	#  사라진다. 색을 어둡히지 말고 **투명도로** 물린다.
-	var dim := Color(C_ACC, 0.35)
+	#  잠긴 선은 잠근 순간 흰빛에서 가라앉는다(aim_lk).
+	var dim := Color(C_ACC, 0.35).lerp(C_TXT, aim_lk)
 	var two := state == S.AIM_H
 	match aim_mode:
 		"ring":
-			_aim_circle(BC, aim_r, Color(C_ACC, 0.55) if two else C_ACC)
+			_aim_circle(BC, aim_r, Color(C_ACC, 0.55).lerp(C_TXT, aim_lk) if two else C_ACC)
 			if two:
 				_aim_dot(aim, C_ACC)
 		"tilt":

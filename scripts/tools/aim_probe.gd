@@ -80,6 +80,8 @@ func _initialize() -> void:
 	_pull(g)
 	print("\n── 동전 ────────────────────────────────")
 	_items(g)
+	print("\n── 잠금 ────────────────────────────────")
+	_lock(g)
 
 	print("\n%s" % ("실패 %d건" % fails if fails > 0 else "조준 여덟 전부 통과"))
 	quit(mini(fails, 125))
@@ -631,3 +633,47 @@ func _items(g: Node) -> void:
 			break
 	g.owned = []
 	g.sealed = -1
+
+
+# ── 잠그는 순간 — 선이 번쩍이고, 불 위에서 멈춘 선은 잠금음이 높다 ──────
+func _lock(g: Node) -> void:
+	var rb: float = g.R * g.rt_bull_o
+	g.aim_mode = "std"
+	g.aim = g.BC + Vector2(rb * 3.0, rb * 0.5)
+	_say(g._lock_bull(true) and not g._lock_bull(false), "기본 — 가로선만 불 위",
+			"첫 %s · 둘째 %s" % [g._lock_bull(true), g._lock_bull(false)])
+	g.aim_mode = "tilt"
+	var ax: Array = g._aim_axes()
+	g.aim = g.BC + ax[0] * (rb * 0.5) + ax[1] * (rb * 3.0)
+	_say(g._lock_bull(true) and not g._lock_bull(false), "빗각 — 첫 선만 불 위",
+			"첫 %s · 둘째 %s" % [g._lock_bull(true), g._lock_bull(false)])
+	g.aim_mode = "ring"
+	g.aim_r = rb * 0.5
+	var in_r: bool = g._lock_bull(true)
+	g.aim_r = rb * 3.0
+	_say(in_r and not g._lock_bull(true), "원 — 불 안의 원만 불 위", "")
+	g.aim_mode = "std"
+	var sb: float = g.SFX_BASE
+	g.aim = g.BC + Vector2(rb * 3.0, rb * 3.0)
+	var f0: float = g._lock_f(true)
+	g.aim = g.BC + Vector2(rb * 3.0, rb * 0.5)
+	var f1: float = g._lock_f(true)
+	var f2: float = g._lock_f(false)
+	g.aim = g.BC
+	var f3: float = g._lock_f(false)
+	g.aim = g.BC + Vector2(rb * 0.5, rb * 3.0)
+	var f4: float = g._lock_f(false)
+	_say(f0 == 0.0 and is_equal_approx(f1, sb * 1.5) and f2 == 0.0, "불 위 첫 잠금은 5도 위 · 밖은 제 음",
+			"%.0f · %.0f · %.0f" % [f0, f1, f2])
+	_say(is_equal_approx(f3, sb * 2.0) and is_equal_approx(f4, sb * 1.5), "두 선 다 불 위면 옥타브 · 둘째만이면 5도",
+			"%.0f · %.0f" % [f3, f4])
+	g.state = g.S.AIM_V
+	g._aim_begin()
+	g._advance()
+	_say(g.aim_lk == 1.0, "잠근 순간 선이 번쩍인다", "aim_lk %.2f" % g.aim_lk)
+	g.hitstop = 0.0                # 앞 검사의 착탄 멈춤이 남으면 _process 가 일찍 돌아선다
+	g.tutor_q.clear()
+	g._tutor_close()               # 배움 띠가 떠 있으면 시계가 늦춰진다(_tutor_slow)
+	for i in 7:
+		g._process(FPS)
+	_say(g.aim_lk == 0.0 and g.state == g.S.AIM_H, "번쩍임은 0.1초에 가라앉는다", "aim_lk %.2f" % g.aim_lk)
