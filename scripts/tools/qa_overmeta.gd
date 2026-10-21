@@ -13,6 +13,7 @@ const Save = preload("res://scripts/save.gd")
 #  ② 통계로 여는 다트통 여섯이 진짜 조건 한 줄과 지금 값을 쓴다
 #  ③ 동전마다 이번 런 발동 수 — 정산 걸음이 세고 툴팁 태그가 읽는다
 #  ④ 컬렉션의 잠긴 전설은 [잠김] · 조건 태그 · 런 끝 쪽지는 여는 조건 태그
+#  ⑤ 런 끝 「거의 다 왔다」 쪽지 — ⅔ 넘게 찬 잠긴 것 하나 · 이름과 값
 # ══════════════════════════════════════════════════════════
 
 var g = null
@@ -187,6 +188,25 @@ func _process(_d: float) -> bool:
 		inside = inside and (rr as Rect2).end.x <= p.end.x - 24.0
 	_ok("쪽지가 많아도 칠판 안쪽에서 멎는다", inside)
 	g.run_unlocked = []
+
+	print("\n⑤ 「거의 다 왔다」 쪽지 하나")
+	#  ② 가 깃털(가벼운 다트 3개)을 2 로 올려 두었다
+	var nr: Dictionary = g._over_near()
+	_ok("⅔ 찬 잠긴 다트통 — 이름과 값", String(nr.get("t", "")) == "깃털 다트통 2 / 3", str(nr))
+	_ok("툴팁 태그는 조건 글", String(nr.get("c", "")) == "가벼운 다트 3개 이상 들고 완주")
+	var nts: Array = g._over_notes()
+	_ok("쪽지 줄 끝에 선다", nts.size() == 1 and bool(nts[0].get("near", false)))
+	Save.peak("best_gain", 70000)
+	_ok("더 많이 찬 것 하나 — 못 본 전설은 이름 대신 ???",
+			String(g._over_near().get("t", "")) == "??? 70000 / 100000", str(g._over_near()))
+	Save.unlock("item:" + String(GameData.items()[li].id))
+	_ok("열린 것은 안 고른다", String(g._over_near().get("t", "")) == "깃털 다트통 2 / 3")
+	Save.unlock("pack:p_lgt")
+	_ok("⅔ 밑이면 쪽지가 없다", g._over_near().is_empty(), str(g._over_near()))
+	Save.lock("pack:p_lgt")
+	g.tut_run = true
+	_ok("기록을 안 미는 런(튜토리얼)에서는 안 선다", g._over_near().is_empty())
+	g.tut_run = false
 
 	print("\n통과 %d · 실패 %d" % [ok, bad])
 	quit(bad)

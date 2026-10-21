@@ -47739,13 +47739,45 @@ func _over_coin_rect(i: int) -> Rect2:
 	return Rect2(c - Vector2(12.0, 12.0), Vector2(24.0, 24.0))
 
 
-#  런 끝 쪽지 {t 글, c 여는 조건(툴팁 태그)} — 이번 런에 열린 것. 그리기 · 툴팁이 같은 목록을 쓴다.
+#  런 끝 쪽지 {t 글, c 여는 조건(툴팁 태그)} — 이번 런에 열린 것 · 끝에 「거의 다 왔다」 하나. 그리기 · 툴팁이 같은 목록을 쓴다.
 func _over_notes() -> Array:
 	var out := []
 	for u in run_unlocked:
 		out.append({"t": "%s  %s" % [_L(String(u.get("k", ""))), _L(String(u.get("n", "")))],
 				"c": _unl_cond(u)})
+	var nr := _over_near()
+	if not nr.is_empty():
+		out.append(nr)
 	return out
+
+
+#  「거의 다 왔다」 쪽지 {t, c, near} — 아직 잠긴 다트통(통계 문 · 이하 조건 빼고) · 전설 동전 가운데 가장 많이
+#  찬 하나. 문턱 ⅔ 는 보여 주는 문턱이다(다트 셋 문턱의 2 / 3 이 선다). 기록을 안 미는 런에서는 값이 안 움직여 안 선다.
+func _over_near() -> Dictionary:
+	if _rec_off():
+		return {}
+	var cands := []
+	for r in GameData.packs():
+		if GameData.pack_kind(r) != "hidden" and String(r.get("unlock_cmp", "")) != "le" \
+				and not Save.unlocked("pack:" + String(r.get("id", ""))):
+			cands.append([String(r.get("unlock_stat", "")), int(String(r.get("unlock_v", "0"))),
+					String(r.get("name", ""))])
+	for it in GameData.items():
+		if not Save.unlocked("item:" + String(it.id)):
+			#  못 본 전설은 컬렉션처럼 이름을 안 낸다
+			cands.append([String(it.get("ustat", "")), int(it.get("uv", 0)),
+					String(it.n) if Save.found("item:" + String(it.id)) else "???"])
+	var best := {}
+	var bk := 0.0
+	for c in cands:
+		var st: String = c[0]
+		var v: int = c[1]
+		var cur := Save.stat(st) if st != "" else 0
+		if v <= 0 or cur >= v or cur * 3 < v * 2 or float(cur) / float(v) <= bk:
+			continue
+		bk = float(cur) / float(v)
+		best = {"t": "%s %d / %d" % [_L(String(c[2])), cur, v], "c": _stat_cond(st, v), "near": true}
+	return best
 
 
 #  쪽지 사각 — 판 바닥 70px 위 한 줄에 왼쪽(lx)부터 글 폭대로 늘어선다. 칠판 안쪽을 넘는 쪽지는 안 세운다.
@@ -47919,7 +47951,7 @@ func _draw_over() -> void:
 			_L(GameData.pack_row().get("name", "")), HORIZONTAL_ALIGNMENT_LEFT,
 			-1, 12, _mtx(0.0, e))
 
-	#  ── 이번 런에 열린 것 — 아무것도 안 열렸으면 줄 자체가 없다 ──
+	#  ── 이번 런에 열린 것 · 거의 다 온 것 하나 — 둘 다 없으면 줄 자체가 없다 ──
 	var notes := _over_notes()
 	var nrs := _over_note_rects(notes)
 	for k3 in nrs.size():
@@ -47931,10 +47963,12 @@ func _draw_over() -> void:
 			break
 		var ur: Rect2 = nrs[k3]
 		var back: Color = Color(MENUM.wood, ua) if mat_draw else Color(C_PANEL.darkened(0.3), ua)
+		#  열린 것은 금빛 · 「거의 다 왔다」는 분필
+		var nc: Color = _mtx(1.0, ua) if bool(notes[k3].get("near", false)) else Color(C_GOLD, ua)
 		_rr(self, ur, back)
-		_rr_left(self, ur, Color(C_GOLD, ua))
+		_rr_left(self, ur, nc)
 		draw_string(_fz(font, 12), Vector2(ur.position.x + 6.0, _menu_base_y(font, 12, ur.position.y, 18.0)),
-				_L(String(notes[k3].t)), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(C_GOLD, ua))
+				_L(String(notes[k3].t)), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, nc)
 
 	#  ── 단추 — 잠긴 동안 서서히 떠오른다(_over_lock_a · 2026-09-19) ──
 	if won and endless_ok:
