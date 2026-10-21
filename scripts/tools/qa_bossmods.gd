@@ -28,6 +28,7 @@ const Save = preload("res://scripts/save.gd")
 #    ⑨ 봉인 소리가 라운드마다 **한 번** 운다 — 상점을 같이 돌려야 잡힌다
 #    ⑩ 센 제약은 표의 min_round 라운드부터 선다 — 그 앞 보스에는 안 걸린다 · 그 라운드부터는 걸린다
 #       (2026-10-18 발라트로가 센 보스를 늦은 안테부터 내는 그 문)
+#    ⑪ 튜토리얼 런의 보스는 1라운드 풀에서 「돌린 판」만 뺀다(2026-10-21)
 # ══════════════════════════════════════════════════════════
 
 var g = null
@@ -261,3 +262,20 @@ func _run() -> void:
 				seen[mid] = true
 	_ok("센 제약은 min_round 앞에 안 선다", early.is_empty(), str(early.slice(0, 6)))
 	_ok("본편 안에 제약 열 종이 다 선다", seen.size() == r0.size(), "%d / %d" % [seen.size(), r0.size()])
+
+	# ⑪ 튜토리얼 런의 보스는 1라운드 풀에서 「돌린 판」(shuffle)만 뺀다
+	var tbn: int = g._round_boss(1)
+	var want1 := {}
+	for m in GameData.modifiers():
+		if int(m.get("r0", 1)) <= 1 and String(m.k) != "shuffle":
+			want1[String(m.id)] = true
+	var tseen := {}
+	g.tut_run = true
+	for k in 200:
+		g.boss_seen = []
+		g._roll_boss_mods(tbn, true)
+		for mid in _ids(tbn):
+			tseen[mid] = true
+	g.tut_run = false
+	_ok("튜토리얼 보스 — 돌린 판 없이 1라운드 풀 그대로", tseen.keys().all(func(x): return want1.has(x))
+			and tseen.size() == want1.size(), "%s / %s" % [tseen.keys(), want1.keys()])

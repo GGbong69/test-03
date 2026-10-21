@@ -7270,6 +7270,9 @@ func _roll_boss_mods(bn: int, force := false,
 	#  센 제약은 뒤 라운드부터 — 표의 min_round(발라트로가 센 보스를 늦은 안테부터 내는 그 문 · 2026-10-18).
 	var rd: int = GameData.round_of(bn)
 	var left := GameData.modifiers().filter(func(m): return rd >= int(m.get("r0", 1)))
+	#  튜토리얼 런은 「돌린 판」(칸 값 섞기)을 뺀다 — 처음 보는 판의 숫자가 섞여 규칙이 바뀐 듯 읽힌다(2026-10-21)
+	if tut_run:
+		left = left.filter(func(m): return String(m.k) != "shuffle")
 	#  지난 보스가 정한 것은 **빼는 것이 아니라 뒤로 미룬다.** 표가 열
 	#  종이라 보통은 남지만, 「겹치기」가 둘을 걸면 모자랄 수 있다 —
 	#  새것만 고집하다 뽑을 것이 없어지는 쪽이 더 나쁘다(2026-09-16).
