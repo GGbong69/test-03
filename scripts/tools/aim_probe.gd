@@ -82,6 +82,8 @@ func _initialize() -> void:
 	_items(g)
 	print("\n── 잠금 ────────────────────────────────")
 	_lock(g)
+	print("\n── 정산 손 ──────────────────────────────")
+	_gate(g)
 
 	print("\n%s" % ("실패 %d건" % fails if fails > 0 else "조준 여덟 전부 통과"))
 	quit(mini(fails, 125))
@@ -677,3 +679,36 @@ func _lock(g: Node) -> void:
 	for i in 7:
 		g._process(FPS)
 	_say(g.aim_lk == 0.0 and g.state == g.S.AIM_H, "번쩍임은 0.1초에 가라앉는다", "aim_lk %.2f" % g.aim_lk)
+
+
+# ── 정산을 연타하던 손 — 조준선이 서고 AIMGATE 초 안의 누름은 첫 선을 안 잠근다 ──────
+func _gate(g: Node) -> void:
+	g._start_leg()
+	g.tutor_q.clear()
+	g._tutor_close()
+	g.aim_mode = "std"
+	g.hitstop = 0.0
+	#  정산 중에 눌렀다 → 정산이 끝나 곧장 조준(고를 다트가 한 종류)
+	g.state = g.S.RESOLVE
+	g._click(g.BC)
+	g._to_pick()
+	var opened: bool = g.state == g.S.AIM_V
+	g._click(g.BC)
+	_say(opened and g.state == g.S.AIM_V, "선이 서자마자 누른 손은 안 잠근다",
+			"%s · 문지기 %.2f초" % [_sname(g, g.state), g.aim_gate])
+	var n := 0
+	while g.aim_gate > 0.0 and n < 30:
+		g._process(FPS)
+		n += 1
+	g._click(g.BC)
+	_say(g.state == g.S.AIM_H and n <= int(ceil(g.AIMGATE / FPS)) + 1, "문지기가 지나면 잠근다",
+			"%d틀 뒤 %s" % [n, _sname(g, g.state)])
+	#  정산 중에 안 눌렀으면 문지기가 없다
+	if g.remaining.is_empty():
+		g._start_leg()
+	g.state = g.S.PICK
+	g._click(Vector2(-50.0, -50.0))
+	g._to_pick()
+	g._click(g.BC)
+	_say(g.state == g.S.AIM_H and g.aim_gate == 0.0, "정산 중 누름이 없으면 곧장 잠근다",
+			_sname(g, g.state))

@@ -4843,6 +4843,7 @@ func _pick_dart(i: int) -> void:
 	darts_left = remaining.size() - 1     # 이번 자루를 뺀 나머지
 	if state == S.PICK:
 		state = S.AIM_V
+		aim_gate = AIMGATE if res_press else 0.0
 	_aim_begin()
 	_sfx("dart_pick")
 
@@ -7779,6 +7780,7 @@ func _process(d: float) -> void:
 	_give_tick(d)
 	_prop_tick(d)            # 판 소품 몸짓(저울 · 등록기)과 저울대 — 상인과 같은 시계
 	_btl_tick(d)             # 술병 — 조각 · 숨김 맞춤 · 대결로 넘어가는 시계
+	aim_gate = maxf(aim_gate - d, 0.0)     # 정산 손 문지기(AIMGATE) — 사람의 반응 시간이라 늦추기 앞
 	d *= _tutor_slow()
 	#  이번 프레임의 빨리 보기 배수. **늦추기 뒤**라 배움 여운에서 늦추기와
 	#  곱해지고, **hitstop 조기 반환보다 앞**이라 멈춤 60ms 동안 통째로
@@ -9523,6 +9525,7 @@ func _click(m: Vector2) -> void:
 	if state == S.FSEL:
 		_fsel_click(m)
 		return
+	res_press = state == S.RESOLVE
 	match state:
 		S.PICK:
 			for i in remaining.size():
@@ -9548,6 +9551,8 @@ func _click(m: Vector2) -> void:
 		S.FLY:
 			fly_t = GameData.tune("fly_time")
 		S.AIM_V, S.AIM_H:
+			if state == S.AIM_V and aim_gate > 0.0:
+				return                    # 정산을 누르던 손의 이어진 누름(AIMGATE)
 			# 다트를 갈아타는 것은 **첫 축을 잠그기 전까지**다.
 			# 규칙이 뜻하는 것은 "던질 자루를 무를 수 없다" 가 아니라
 			# "잠근 것을 무를 수 없다" 이므로, 결정의 순간을 잠금에 둔다.
@@ -19966,6 +19971,11 @@ func _draw_aim() -> void:
 const AIMDIM := {"a": 0.28, "fade": 0.12}
 var aim_dim := 0.0
 var aim_lk := 0.0              # 잠근 순간 1 — 잠긴 선이 흰빛에서 0.1초에 잠긴 색으로 가라앉는다(_advance)
+#  정산을 연타하던 손이 조준선이 서자마자 첫 선을 잠갔다(정산 중 누름은 아무 일도 안 해 다음 누름이 곧장 잠금이다).
+#  바로 앞 누름이 정산 중이었으면 선이 서고 AIMGATE 초 동안은 첫 선 누름을 안 받는다 — 선을 본 뒤의 누름만 잠근다.
+const AIMGATE := 0.15
+var res_press := false         # 바로 앞 누름이 정산 중이었다(_click)
+var aim_gate := 0.0            # 남은 문지기 시간(_pick_dart 가 세운다 · 실시간)
 var aim_glow_last := Vector2(-9999.0, -9999.0)
 
 
