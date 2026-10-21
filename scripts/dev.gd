@@ -2335,6 +2335,15 @@ static func _run(g: Node, e: Dictionary) -> void:
 		"over_win", "over_lose":
 			#  런 끝 화면을 처음부터 — 왕관이 커지고 금화가 쏟아지고 박수가 터지는 것까지.
 			g.won = String(e.get("a", "")) == "over_win"
+			#  판을 안 던진 런이면 줄이 비어 보인다 — 가짜 값을 넣는다.
+			if g.run_leg_top <= 0:
+				g.run_leg_top = 12345
+			if g.run_found <= 0:
+				g.run_found = 3
+			g.run_rec0 = 0            # 신기록 도장이 서게(본편 런일 때)
+			if g.run_fires.is_empty():
+				for oi in g.owned.size():
+					g.run_fires[String(g.owned[oi].get("id", ""))] = 3 + oi * 5
 			g.endless_ok = false
 			g.endless_arm = false
 			g.over_t = 0.0
@@ -2729,6 +2738,11 @@ static func _run(g: Node, e: Dictionary) -> void:
 					if Save.unlock(GameData.league_key(String(st.get("id", "")),
 							String(r.get("id", "")))):
 						n += 1
+			#  컬렉션 동전 칸의 리그 색 점 — 동전마다 돌아가며 다른 단으로 심는다.
+			var items := GameData.items()
+			for ii in items.size():
+				Save.tally_max("itemwin:" + String(items[ii].id), ii % GameData.leagues().size() + 1)
+			Save.flush()
 			_say("%d개 열었다" % n)
 			return
 		"unlock_none":
@@ -2736,6 +2750,9 @@ static func _run(g: Node, e: Dictionary) -> void:
 			for key2 in Save.unlock_keys():
 				if Save.lock(String(key2)):
 					n2 += 1
+			for key3 in Save.tally_keys():
+				if String(key3).begins_with("itemwin:"):
+					Save.tally_drop(String(key3))
 			_say("%d개 잠갔다" % n2)
 			return
 		#  ⚠ 바로 위 「해금 전부 잠그기」가 훑는 Save.unlock_keys() 는 **[해금]

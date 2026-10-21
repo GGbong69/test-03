@@ -2373,6 +2373,10 @@ const RUN_PLAIN := [
 	["track_hits", {}],      # 같음
 	["zone_hist", {}],       # 열쇠가 **String**(zone 이름)이다 — 위 둘과 다르다
 	["run_secs", 0.0],       # 런 시간(초) — 런 끝 화면의 「클리어 시간」
+	["run_leg_top", 0],      # 이번 런 최고 판 점수 — 런 끝 「최고 판 점수」
+	["run_fires", {}],       # 동전 id → 이번 런 발동 수 — 런 끝 「×N」 · 툴팁 「발동 N」
+	["run_rec0", -1],        # 런 시작 때 프로필 한 판 최고 점수 — 런 끝 신기록 도장(−1 은 모름 · 옛 저장)
+	["run_found", 0],        # 이번 런에 컬렉션에 새로 든 수 — 런 끝 「새로 찾음」
 	["run_unlocked", []],    # [{k, n}] — 이미 원시값이다
 	["btl_gone", []],        # 깬 술병 번호(BTL)
 	["btl_st", 0],           # 술병 이스터에그의 단 — 0 선반 · 1 내리침(대결 앞) · 2 끝
@@ -2954,6 +2958,10 @@ func _new_run(human := false) -> void:
 	run_unlocked.clear()
 	#  런 시간도 새로 센다 — 되살리기(_run_load)는 적힌 값을 그대로 잇는다(RUN_PLAIN).
 	run_secs = 0.0
+	run_leg_top = 0
+	run_fires = {}
+	run_rec0 = Save.stat("best_score")
+	run_found = 0              # 첫 다트를 쥐여 주는 _found 보다 먼저
 	#  술병은 런마다 선반에 다시 선다(BTL).
 	btl_gone = []
 	btl_st = 0
@@ -4974,6 +4982,8 @@ func _finish_leg() -> void:
 		if String(o.get("side", "")) == "carry":
 			carry_darts = maxi(darts_left, 0)
 			break
+	#  이번 런 값이라 기록을 안 남기는 런(튜토리얼 · 챌린지 · 무한)에서도 센다 — 런 끝 「최고 판 점수」.
+	run_leg_top = maxi(run_leg_top, total)
 	#  ⚠ 챌린지·무한은 여기부터 통째로 건너뛴다(_rec_off 머리말).
 	#  무한 구간의 수는 세기 절(endless:leg · endless:score)이 따로 센다.
 	if _rec_off():
@@ -5543,7 +5553,7 @@ func _pack_unlock_next() -> void:
 		if String(r.get("prereq", "")) != cur:
 			continue
 		if Save.unlock("pack:" + String(r.get("id", ""))):
-			run_unlocked.append(_unl_tag("다트통", String(r.get("name", ""))))
+			run_unlocked.append(_unl_tag("다트통", String(r.get("name", "")), String(r.get("id", ""))))
 			pop(Vector2(VIEW.x * 0.5, 232.0),
 					_L("%s 열렸다") % _L(String(r.get("name", ""))), C_GOLD, 12, 1.6)
 
@@ -5572,6 +5582,9 @@ func _win_peaks() -> void:
 		return
 	_peak("win_gold", gold)
 	_dip("win_items", owned.size())
+	#  완주한 순간 든 동전마다 이 리그 단(1부터) — 컬렉션 칸의 리그 색 점이 가장 높은 것을 읽는다.
+	for it in owned:
+		Save.tally_max("itemwin:" + String(it.get("id", "")), GameData.league_idx() + 1)
 	for it in owned:
 		if String(it.get("side", "")) == "boardkill":
 			_bump("win_null")
@@ -5624,7 +5637,8 @@ func _dart_peaks() -> void:
 func _found(kind: String, id: String) -> void:
 	if id == "":
 		return
-	Save.discover(kind + ":" + id)
+	if Save.discover(kind + ":" + id):
+		run_found += 1             # 런 끝 「새로 찾음」
 
 
 # ── 이미 플레이한 프로필 ──────────────────────────────────
@@ -5749,7 +5763,7 @@ func _league_unlock_next() -> void:
 		if need <= 0 or n < need:
 			continue
 		if Save.unlock(GameData.league_key(String(r.get("id", "")))):
-			run_unlocked.append(_unl_tag("리그", String(r.get("name", ""))))
+			run_unlocked.append(_unl_tag("리그", String(r.get("name", "")), String(r.get("id", ""))))
 			pop(Vector2(VIEW.x * 0.5, 210.0),
 					_L("%s 열렸다") % _L(String(r.get("name", ""))), C_GOLD, 12, 1.6)
 
@@ -7874,6 +7888,9 @@ func _process(d: float) -> void:
 		over_t += d
 		if won and ot0 < float(OVERB.clap_at) and over_t >= float(OVERB.clap_at):
 			_sfx("applause")
+		#  신기록 도장 — 판 밖이라 종이 한 번 운다.
+		if ot0 < float(OVERB.stamp_at) and over_t >= float(OVERB.stamp_at) and _over_rec():
+			_sfx("target_hit")
 		queue_redraw()
 	if _run_clock_on():
 		run_secs += d
@@ -10817,6 +10834,7 @@ func _land(mark := true) -> void:
 			var it: Dictionary = owned[i]
 			if it.k == "save":
 				continue          # 목숨은 정산이 아니라 판 실패가 읽는다
+			var q0 := queue.size()    # 발동 수는 한 발에 한 번 — 복합 동전 · 콩나무는 걸음이 둘이다
 			# fire 성장은 발동 자체가 걸음이다 — 먼저 오르고 그 값으로 낸다.
 			if String(it.get("grow", "")) == "fire":
 				it.gs = int(it.get("gs", 0)) + int(it.get("gstep", 0))
@@ -10860,6 +10878,8 @@ func _land(mark := true) -> void:
 					and int(info.get("track", 0)) > 0:
 				track_lv[info.track] = int(track_lv.get(info.track, 0)) + 1
 				pop(BC + Vector2(0.0, -52.0), "트랙 강화 +1", C_ACC, 10, 0.9)
+			if queue.size() > q0:
+				_fire_count(i)
 		#  불씨 — 동전 걸음 뒤 · 저울 · 물음표 · 모음 · 합계 앞. 판 사건의 보상은 큐
 		#  걸음이라 _pace · 빨리 보기 · 반음 사다리를 저절로 탄다. 2026-10-06
 		if ember_hit:
@@ -44157,6 +44177,11 @@ func _tip_hit(m: Vector2) -> Dictionary:
 			for i in owned.size():
 				if _over_coin_rect(i).has_point(m):
 					return {"k": "rack", "i": i}
+			#  해금 쪽지 — 무엇을 해서 열렸나(태그)
+			var nrs := _over_note_rects(_over_notes())
+			for i in nrs.size():
+				if (nrs[i] as Rect2).has_point(m):
+					return {"k": "unl", "i": i}
 		S.PICK, S.AIM_V, S.AIM_H:
 			var ch2 := _cons_hit(m)
 			if ch2 >= 0:
@@ -44195,6 +44220,12 @@ func _tip_build(hit: Dictionary) -> void:
 	var ct := _col_tab_of(String(hit.k))
 	if ct >= 0 and not _col_found(ct, i):
 		_tip_set_tag(String(COL_TABS[ct].n))
+		#  아직 안 열린 전설 — 그림 · 제목은 ??? 그대로, 밑줄에 [잠김] · 여는 조건.
+		var crow: Dictionary = _col_rows(ct)[i] if ct == 0 and i < _col_rows(ct).size() else {}
+		var cst := String(crow.get("ustat", ""))
+		if cst != "" and not Save.unlocked("item:" + String(crow.get("id", ""))):
+			_tip_tag("잠김", C_DIM)
+			_tip_tag(_stat_cond(cst, int(crow.get("uv", 0))), C_DIM)
 		tip_mark = _col_cell(i % COL_PAGE)
 		tip_title = "???"
 		return
@@ -44225,6 +44256,9 @@ func _tip_build(hit: Dictionary) -> void:
 			#  튜토리얼 선물 — 태그 [서비스](2026-09-27).
 			if _tut_svc("item", String(it.get("id", ""))):
 				_tip_tag("서비스", C_ACC)
+			var fn := int(run_fires.get(String(it.get("id", "")), 0))
+			if fn > 0:
+				_tip_tag(_L("발동 %d") % fn, C_DIM)
 			_tip_add(_tip_eff(it), 20, C_TXT)
 			_tip_now(it)
 			if i == sealed:
@@ -44234,6 +44268,15 @@ func _tip_build(hit: Dictionary) -> void:
 				_tip_add(GameData.gold_text(it.g, it.gv), 12, C_TXT)
 			# 값은 설명창에 안 적는다(2026-09-11 지시 · 2026-09-13 재확인).
 			# 파는 값은 상점 창구가, 사는 값은 테이블의 물건이 이미 말한다.
+		"unl":
+			#  런 끝 쪽지 — 제목은 쪽지 글, 여는 조건은 태그.
+			var nts := _over_notes()
+			var nrs := _over_note_rects(nts)
+			if i >= nrs.size():
+				return
+			tip_mark = nrs[i]
+			tip_title = String(nts[i].t)
+			_tip_tag(String(nts[i].c), C_DIM)
 		"stock":
 			var s: Dictionary = stock[i]
 			# 테이블은 한 자리에 네 갈래가 섞여 뜬다 — 그림만으로는 동전과
@@ -46412,14 +46455,25 @@ var run_unlocked := []
 #  봤다). 겹치지 않는 이름(「넓은 동전 슬롯」)은 한 글자도 안 바뀐다.
 #  뗀 뒤가 비면(이름이 머리 그 자체이면) 이름을 그대로 둔다 — 값이 없는
 #  쪽지를 내느니 겹말이 낫다. 2026-09-24
-static func _unl_tag(k: String, n: String) -> Dictionary:
+static func _unl_tag(k: String, n: String, id := "") -> Dictionary:
 	var v := n.replace(k, "").strip_edges()
-	return {"k": k, "n": n if v == "" else v}
+	return {"k": k, "n": n if v == "" else v, "id": id}     # id — 툴팁이 여는 조건을 찾는다(_unl_cond)
 var over_t := 0.0               # 런 종료 화면이 흐른 시간
 #  이 런을 판 위 · 상점 · 판 고르기 · 정산에서 보낸 시간(초) — 런 끝 화면의 「클리어 시간」
 #  (2026-10-08 필기 「성공 페이지 … 클리어 시간」). 제목 · 설정 · 런 정보는 안 센다. 이어하기에
 #  적힌다(RUN_PLAIN).
 var run_secs := 0.0
+var run_leg_top := 0            # 이번 런에서 가장 높았던 판 점수(RUN_PLAIN)
+var run_fires := {}             # 동전 id → 이번 런 발동 수(RUN_PLAIN)
+var run_rec0 := -1              # 런 시작 때 프로필 한 판 최고 점수(RUN_PLAIN · −1 모름)
+var run_found := 0              # 이번 런에 컬렉션에 새로 든 수(RUN_PLAIN)
+
+
+#  한 발에서 동전이 발동했다(_land — 걸음을 세웠거나 골드를 냈다) — 슬롯 i 의 동전 id 로 센다.
+func _fire_count(i: int) -> void:
+	if i >= 0 and i < owned.size():
+		var id := String(owned[i].get("id", ""))
+		run_fires[id] = int(run_fires.get(id, 0)) + 1
 
 
 #  총액 굴림. 내역이 다 든 뒤부터 0 에서 실제 골드까지 오른다.
@@ -48029,6 +48083,75 @@ func _over_coin_rect(i: int) -> Rect2:
 	return Rect2(c - Vector2(12.0, 12.0), Vector2(24.0, 24.0))
 
 
+#  런 끝 쪽지 {t 글, c 여는 조건(툴팁 태그)} — 이번 런에 열린 것 · 끝에 「거의 다 왔다」 하나. 그리기 · 툴팁이 같은 목록을 쓴다.
+func _over_notes() -> Array:
+	var out := []
+	for u in run_unlocked:
+		out.append({"t": "%s  %s" % [_L(String(u.get("k", ""))), _L(String(u.get("n", "")))],
+				"c": _unl_cond(u)})
+	var nr := _over_near()
+	if not nr.is_empty():
+		out.append(nr)
+	return out
+
+
+#  「거의 다 왔다」 쪽지 {t, c, near} — 아직 잠긴 다트통(통계 문 · 이하 조건 빼고) · 전설 동전 가운데 가장 많이
+#  찬 하나. 문턱 ⅔ 는 보여 주는 문턱이다(다트 셋 문턱의 2 / 3 이 선다). 기록을 안 미는 런에서는 값이 안 움직여 안 선다.
+func _over_near() -> Dictionary:
+	if _rec_off():
+		return {}
+	var cands := []
+	for r in GameData.packs():
+		if GameData.pack_kind(r) != "hidden" and String(r.get("unlock_cmp", "")) != "le" \
+				and not Save.unlocked("pack:" + String(r.get("id", ""))):
+			cands.append([String(r.get("unlock_stat", "")), int(String(r.get("unlock_v", "0"))),
+					String(r.get("name", ""))])
+	for it in GameData.items():
+		if not Save.unlocked("item:" + String(it.id)):
+			#  못 본 전설은 컬렉션처럼 이름을 안 낸다
+			cands.append([String(it.get("ustat", "")), int(it.get("uv", 0)),
+					String(it.n) if Save.found("item:" + String(it.id)) else "???"])
+	var best := {}
+	var bk := 0.0
+	for c in cands:
+		var st: String = c[0]
+		var v: int = c[1]
+		var cur := Save.stat(st) if st != "" else 0
+		if v <= 0 or cur >= v or cur * 3 < v * 2 or float(cur) / float(v) <= bk:
+			continue
+		bk = float(cur) / float(v)
+		best = {"t": "%s %d / %d" % [_L(String(c[2])), cur, v], "c": _stat_cond(st, v), "near": true}
+	return best
+
+
+#  쪽지 사각 — 판 바닥 70px 위 한 줄에 왼쪽(lx)부터 글 폭대로 늘어선다. 칠판 안쪽을 넘는 쪽지는 안 세운다.
+func _over_note_rects(notes: Array) -> Array:
+	var p := _over_panel()
+	var out := []
+	var ux: float = float(OVERB.lx)
+	for nt in notes:
+		var tw: float = font.get_string_size(_L(String(nt.t)), HORIZONTAL_ALIGNMENT_LEFT,
+				-1, 12).x + 12.0 if font != null else 60.0
+		if ux + tw > p.end.x - 24.0:
+			break
+		out.append(Rect2(ux, p.end.y - 70.0, tw, 18.0))
+		ux += tw + 8.0
+	return out
+
+
+#  쪽지를 연 조건 — 다트통은 그 통의 여는 글, 리그는 이 다트통 완주 수. id 없는 옛 쪽지는 빈 글.
+func _unl_cond(u: Dictionary) -> String:
+	var id := String(u.get("id", ""))
+	if String(u.get("k", "")) == "리그":
+		var lr := _row_by_id(GameData.leagues(), id)
+		if lr.is_empty():
+			return ""
+		return _L("%s %d회 완주") % [_L(String(GameData.pack_row().get("name", ""))),
+				int(lr.get("unlock_wins", 0))]
+	var pr := _row_by_id(GameData.packs(), id)
+	return "" if pr.is_empty() else _L(_pack_cond(pr))
+
+
 # ══════════════════════════════════════════════════════════
 #  런 끝 화면 — 완주 · 실패 (2026-10-08 · 메뉴 재질)
 # ──────────────────────────────────────────────────────────
@@ -48054,7 +48177,7 @@ func _over_coin_rect(i: int) -> Rect2:
 #    lx · lw  왼쪽 칸 · 폭          rx · rw  오른쪽 칸 · 폭 · coin_y 동전 한가운데 · coin_step 사이
 #    write_t0 · write_ch  첫 자를 쓰는 때 · 한 자의 시간
 #    rain_n · rain_t · rain_g · rain_life  금화 수 · 쏟아지는 동안 · 중력 · 한 닢이 사는 시간
-#    clap_at  박수가 터지는 때
+#    clap_at  박수가 터지는 때      stamp_at  신기록 도장이 찍히는 때(종 한 번)
 const OVERB := {
 	"crown_y": 46.0, "crown_w": 58.0, "crown_h": 36.0, "crown_t0": 0.20, "crown_t1": 0.70,
 	"title_y": 106.0, "title_y_lose": 84.0, "sub_dy": 28.0, "rule_dy": 14.0,
@@ -48063,6 +48186,7 @@ const OVERB := {
 	"write_t0": 0.08, "write_ch": 0.14,
 	"rain_n": 44, "rain_t": 1.6, "rain_g": 300.0, "rain_life": 3.2,
 	"clap_at": 0.30,
+	"stamp_at": 0.60,
 }
 
 
@@ -48082,6 +48206,33 @@ func _fmt_secs(t: float) -> String:
 	if h > 0:
 		return "%d:%02d:%02d" % [h, m, sec]
 	return "%d:%02d" % [m, sec]
+
+
+#  런 끝 왼쪽 수 줄 [이름, 값]. 「최고 판 점수」는 이번 런 값이라 튜토리얼 · 챌린지 · 무한에서도 선다.
+func _over_rows() -> Array:
+	var cleared: int = maxi(leg_no - (0 if won else 1), 0)
+	var rows := [
+		["클리어한 판", ("%d" % cleared) if GameData.endless
+				else ("%d / %d" % [cleared, int(TUT.legs) if tut_run else GameData.legs_n()])],
+		["클리어 시간" if won else "런 시간", _fmt_secs(run_secs)],
+		["최고 판 점수", GameData.big(run_leg_top)],
+	]
+	if GameData.endless:
+		rows.append(["무한 판", str(Save.tally("endless:leg"))])
+	elif not won:
+		rows.append(["마지막 판", "%s / %s" % [GameData.big(total), GameData.big(target)]])
+	if run_found > 0:
+		rows.append(["새로 찾음", str(run_found)])
+	#  ⚠ 「던진 다트」는 프로필을 읽는다 — 챌린지 · 무한 런은 안 미므로(_rec_off) 안 센 런에서는 안 세운다.
+	#  줄은 다섯까지다(해금 쪽지 줄 y270 과 안 닿게) — 넘치면 프로필 누적인 이 줄이 비킨다.
+	if not _rec_off() and rows.size() < 5:
+		rows.insert(3, ["던진 다트", str(Save.stat("darts"))])
+	return rows
+
+
+#  신기록 — 본편 런의 「최고 판 점수」가 런 시작 때 내 기록을 넘었다.
+func _over_rec() -> bool:
+	return not _rec_off() and run_rec0 >= 0 and run_leg_top > run_rec0
 
 
 func _draw_over() -> void:
@@ -48120,27 +48271,27 @@ func _draw_over() -> void:
 	var lx: float = float(B.lx)
 	var lw: float = float(B.lw)
 	var y: float = float(B.row_y)
-	var cleared: int = maxi(leg_no - (0 if won else 1), 0)
-	var rows := [
-		["클리어한 판", ("%d" % cleared) if GameData.endless
-				else ("%d / %d" % [cleared, int(TUT.legs) if tut_run else GameData.legs_n()])],
-		["클리어 시간" if won else "런 시간", _fmt_secs(run_secs)],
-	]
-	#  ⚠ **밑의 두 줄은 프로필을 읽는다** — 챌린지 · 무한 런은 그 둘을 안 미므로(_rec_off) 안 센
-	#  런에서는 안 세운다(옛 판 그대로 · 2026-09-20).
-	if not _rec_off():
-		rows.append(["최고 판 점수", GameData.big(Save.stat("best_score"))])
-		rows.append(["던진 다트", str(Save.stat("darts"))])
-	if GameData.endless:
-		rows.append(["무한 판", str(Save.tally("endless:leg"))])
-	elif not won:
-		rows.append(["마지막 판", "%s / %s" % [GameData.big(total), GameData.big(target)]])
+	var rows := _over_rows()
 	for k in rows.size():
 		var yy: float = y + float(k) * float(B.row_step)
 		draw_string(_fz(font, 12), Vector2(lx, yy), _L(String(rows[k][0])),
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 12, _mtx(0.0, e))
 		draw_string(_fz(font_sm, 20), Vector2(lx, yy), _L(String(rows[k][1])),
 				HORIZONTAL_ALIGNMENT_RIGHT, lw, 20, _mtx(1.0, e))
+	#  신기록 도장 — 「최고 판 점수」(셋째 줄) 오른쪽 틈에 분필 동그라미가 쾅 크게 왔다 앉는다.
+	if _over_rec():
+		var su: float = 1.0 if motion_off else clampf((over_t - float(B.stamp_at)) / 0.12, 0.0, 1.0)
+		if su > 0.0:
+			var sk: float = 1.0 + 0.5 * (1.0 - su)
+			var sc := Vector2(lx + lw + 22.0, y + 2.0 * float(B.row_step) - 7.0)
+			var pts := PackedVector2Array()
+			for q in 25:
+				var an: float = TAU * float(q) / 24.0
+				pts.append(sc + Vector2(cos(an) * 20.0, sin(an) * 10.0).rotated(-0.12) * sk)
+			var scol := Color(C_GOLD, e * su)
+			draw_polyline(pts, scol, 1.0)
+			draw_string(_fz(font, 12), Vector2(sc.x - 30.0, sc.y + 5.0), _L("신기록"),
+					HORIZONTAL_ALIGNMENT_CENTER, 60.0, 12, scol)
 
 	#  ── 오른쪽 — 마지막까지 든 것 · 다트통 ──
 	var rx: float = float(B.rx)
@@ -48151,33 +48302,40 @@ func _draw_over() -> void:
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 20, _mtx_off(1.0, e))
 	else:
 		#  **자가 하나다** — 그리는 자리와 읽는 자리(툴팁)가 같은 사각이다(_over_coin_rect).
+		#  동전 밑에 이번 런 발동 수 「×N」 — 가장 많이 발동한 동전은 금빛 · 0 이면 안 쓴다.
+		var ftop := 0
+		for o in owned:
+			ftop = maxi(ftop, int(run_fires.get(String(o.get("id", "")), 0)))
 		for k2 in owned.size():
-			draw_item_sticker(_over_coin_rect(k2).get_center(), 11.0, owned[k2], 0.0, 0.0, 0.0, 10)
+			var cr := _over_coin_rect(k2)
+			draw_item_sticker(cr.get_center(), 11.0, owned[k2], 0.0, 0.0, 0.0, 10)
+			var fn := int(run_fires.get(String(owned[k2].get("id", "")), 0))
+			if fn > 0:
+				draw_string(_fz(font_sm, 10), Vector2(cr.position.x - 4.0, cr.end.y + 10.0), "×%d" % fn,
+						HORIZONTAL_ALIGNMENT_CENTER, cr.size.x + 8.0, 10,
+						Color(C_GOLD, e) if fn == ftop else _mtx(0.0, e))
 	draw_string(_fz(font, 12), Vector2(rx, float(B.coin_y) + 34.0),
 			_L(GameData.pack_row().get("name", "")), HORIZONTAL_ALIGNMENT_LEFT,
 			-1, 12, _mtx(0.0, e))
 
-	#  ── 이번 런에 열린 것 — 아무것도 안 열렸으면 줄 자체가 없다 ──
-	if not run_unlocked.is_empty():
-		var uy: float = p.end.y - 70.0
-		var ux: float = lx
-		for k3 in run_unlocked.size():
-			var u: Dictionary = run_unlocked[k3]
-			var ua: float = e
-			if _mo("fast") > 0.0:
-				ua *= clampf((over_t - _mo("panel") - float(k3) * _mo("fast"))
-						/ _mo("fast"), 0.0, 1.0)
-			if ua <= 0.0:
-				break
-			var t := "%s  %s" % [_L(String(u.get("k", ""))), _L(String(u.get("n", "")))]
-			var tw: float = font.get_string_size(_L(t), HORIZONTAL_ALIGNMENT_LEFT,
-					-1, 12).x + 12.0 if font != null else 60.0
-			var back: Color = Color(MENUM.wood, ua) if mat_draw else Color(C_PANEL.darkened(0.3), ua)
-			_rr(self, Rect2(ux, uy, tw, 18.0), back)
-			_rr_left(self, Rect2(ux, uy, tw, 18.0), Color(C_GOLD, ua))
-			draw_string(_fz(font, 12), Vector2(ux + 6.0, _menu_base_y(font, 12, uy, 18.0)), _L(t),
-					HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(C_GOLD, ua))
-			ux += tw + 8.0
+	#  ── 이번 런에 열린 것 · 거의 다 온 것 하나 — 둘 다 없으면 줄 자체가 없다 ──
+	var notes := _over_notes()
+	var nrs := _over_note_rects(notes)
+	for k3 in nrs.size():
+		var ua: float = e
+		if _mo("fast") > 0.0:
+			ua *= clampf((over_t - _mo("panel") - float(k3) * _mo("fast"))
+					/ _mo("fast"), 0.0, 1.0)
+		if ua <= 0.0:
+			break
+		var ur: Rect2 = nrs[k3]
+		var back: Color = Color(MENUM.wood, ua) if mat_draw else Color(C_PANEL.darkened(0.3), ua)
+		#  열린 것은 금빛 · 「거의 다 왔다」는 분필
+		var nc: Color = _mtx(1.0, ua) if bool(notes[k3].get("near", false)) else Color(C_GOLD, ua)
+		_rr(self, ur, back)
+		_rr_left(self, ur, nc)
+		draw_string(_fz(font, 12), Vector2(ur.position.x + 6.0, _menu_base_y(font, 12, ur.position.y, 18.0)),
+				_L(String(notes[k3].t)), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, nc)
 
 	#  ── 단추 — 잠긴 동안 서서히 떠오른다(_over_lock_a · 2026-09-19) ──
 	if won and endless_ok:
@@ -48722,21 +48880,31 @@ func _draw_profile() -> void:
 		draw_string(_fz(font, 12), Vector2(px, 172.0), _L("고르면 여기서부터 쌓인다"),
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 12, _mtx_off(0.0))
 	else:
+		#  한 발 최고 점수(점수뽕)가 맨 위 · 큰 수는 만/억 · 0 인 기록 줄은 안 세운다(처음 생기면 선다).
+		#  컬렉션 총수는 여섯 탭 표의 합 — 표에서 빠진 id 가 저장에 남아도 넘지 않게 자른다.
+		var cn := 0
+		for t in COL_TABS.size():
+			cn += _col_rows(t).size()
+		var gain := int(inf2.get("best_gain", 0))
+		var best := int(inf2.get("best_score", 0))
+		var bl := int(inf2.get("best_leg", 0))
+		var fnd := int(inf2.get("found", 0))
 		var rows := [
-			["런", _L("%d회") % int(inf2.get("runs", 0))],
-			["완주§통계", _L("%d회") % int(inf2.get("wins", 0))],
-			["최고 라운드", "%d" % GameData.round_of(
-					maxi(int(inf2.get("best_leg", 1)), 1))],
-			["한 판 최고 점수", "%d" % int(inf2.get("best_score", 0))],
-			["해금", _L("%d개") % int(inf2.get("unlocks", 0))],
-		]
+			["한 발 최고 점수", gain, GameData.big(gain)],
+			["한 판 최고 점수", best, GameData.big(best)],
+			["최고 라운드", bl, "%d" % GameData.round_of(maxi(bl, 1))],
+			["런", int(inf2.get("runs", 0)), _L("%d회") % int(inf2.get("runs", 0))],
+			["완주§통계", int(inf2.get("wins", 0)), _L("%d회") % int(inf2.get("wins", 0))],
+			["컬렉션", fnd, "%d / %d" % [mini(fnd, cn), cn]],
+		].filter(func(r: Array) -> bool: return int(r[1]) > 0)
 		#  줄 간격 17 → 24 → 26 — 잉크 18 에 8 을 띄운다. 다섯 줄이 150~254 이고
-		#  지우기(272~)와 18px 떨어진다.
+		#  지우기(272~)와 18px 떨어진다. 여섯 줄이면 22 — 150~260 이 지우기와 12px.
+		var step := 22.0 if rows.size() > 5 else 26.0
 		for k in rows.size():
-			var y := 150.0 + float(k) * 26.0
+			var y := 150.0 + float(k) * step
 			draw_string(_fz(font_sm, 20), Vector2(px, y), _L(String(rows[k][0])),
 					HORIZONTAL_ALIGNMENT_LEFT, -1, 20, _mtx(0.0))
-			draw_string(_fz(font_sm, 20), Vector2(px, y), _L(String(rows[k][1])),
+			draw_string(_fz(font_sm, 20), Vector2(px, y), _L(String(rows[k][2])),
 					HORIZONTAL_ALIGNMENT_RIGHT, 300.0, 20, _mtx(1.0))
 		#  지우기 — 겨눈 동안에만 붉다. 몸은 _prof_del_face 가 칠한다(칠한 덩어리 +
 		#  턱). 이름은 20 으로 몸 29px 의 한가운데에 선다(_menu_base_y — 기준선 22.5).
@@ -55870,9 +56038,21 @@ func _pack_cond(row: Dictionary) -> String:
 		return "조건 미달"
 	var pq := String(row.get("prereq", ""))
 	if pq == "":
-		return "완주로 열린다"
+		#  통계로 여는 통 — 조건 한 줄과 지금 값. 이하(le)는 최솟값이라 「지금 / 문턱」이 뜻이 없다.
+		var st := String(row.get("unlock_stat", ""))
+		if st == "":
+			return "완주로 열린다"
+		var v := int(String(row.get("unlock_v", "0")))
+		if String(row.get("unlock_cmp", "")) == "le":
+			return _stat_cond(st, v)
+		return "%s · %d / %d" % [_stat_cond(st, v), Save.stat(st), v]
 	# 이름으로 낸다. id 를 그대로 내면 "p_mag 완주" 가 화면에 뜬다.
 	return _L("%s 완주") % _L(GameData.row_name("packs", pq))
+
+
+#  통계 문 한 줄 — 글은 texts.csv 의 cond_<통계>, 값은 표(unlock_v)가 쥔다.
+func _stat_cond(st: String, v: int) -> String:
+	return GameData.text("cond_" + st, {"v": v})
 
 
 # 리그이 미는 값 — 1단부터 지금 단까지 쌓인 결과만 적는다.
@@ -60394,6 +60574,12 @@ func _col_item_draw(i: int, tab: int, page: int, chv: float, na := 1.0) -> void:
 				var it: Dictionary = GameData.items()[gi]
 				draw_item_sticker(c, 13.0, it, 0.0, 0.0, 0.0, 10)
 				nm = it.n
+				#  이 동전을 들고 완주한 가장 높은 리그 — 칸 오른쪽 위에 그 색 점 하나(동전 그림은 안 건드린다).
+				var lw := Save.tally("itemwin:" + String(it.id))
+				if lw > 0 and lw <= GameData.leagues().size():
+					var lc := Color(String(GameData.leagues()[lw - 1].get("color", "cfc9bd")))
+					draw_circle(Vector2(cell.end.x - 10.0, cell.position.y + 10.0), 2.5,
+							Color(_on_chalk(lc) if mat_draw else lc, na))
 			1:
 				var md: Dictionary = GameData.mods()[gi]
 				_icon_mod(c, 13.0, md.id, 0.0)
