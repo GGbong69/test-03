@@ -10779,10 +10779,8 @@ func _land(mark := true) -> void:
 				#  동전에서만 반쪽이었다. 2026-09-20
 				var gv := int(round(float(it.get("gv", 0))
 						* GameData.chal_f("item_mul", 1.0)))
-				gv = _gold_add(gv, "item")
-				if gv != 0:
-					pop(_slot_rect(mini(i, GameData.max_items() - 1)).get_center()
-							+ Vector2(0.0, 24.0), "+%d" % gv, C_GOLD, 12, 0.8)
+				#  골드는 제 차례 걸음이 낸다 — 무엇이 돈을 냈는지 슬롯 튐 · 짤랑이로 읽힌다.
+				queue.append({"k": "igold", "i": i, "v": gv})
 			# 영역 승급 — 발동 4회 중 1회꼴로 맞은 영역의 강화 트랙이 오른다
 			if String(it.get("side", "")) == "trackup25" and randf() < 0.25 \
 					and int(info.get("track", 0)) > 0:
@@ -11317,6 +11315,15 @@ func _next_step() -> void:
 				ember_from = -1
 				ember_t = 0.0
 			#  카드 칸은 안 튄다 — 바뀐 값이 없다. 몸만 채인다(걸음은 걸음이다).
+			_card_kick(float(CARDFX.kick), 0.0)
+		"igold":
+			#  즉시 골드 동전(황금우상 · 크림 치즈) — 불씨와 같은 꼴에 그 동전 슬롯이 튄다.
+			var ig := _gold_add(int(st.v), "item")
+			if ig != 0:
+				pop(_bank_rect().get_center() + Vector2(0.0, 30.0), "+%d" % ig,
+						C_GOLD, 12, 0.8)
+			_panel_fire(int(st.i))
+			_sfx("coin_land", minf(f, float(EMBER.snd_top)))
 			_card_kick(float(CARDFX.kick), 0.0)
 		"order":
 			#  ── 칠판 주문 (2026-10-06) ──
