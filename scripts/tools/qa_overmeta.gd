@@ -11,6 +11,7 @@ const Save = preload("res://scripts/save.gd")
 #
 #  ① 「최고 판 점수」는 이번 런 값이다 — 튜토리얼 런 끝에도 선다
 #  ② 통계로 여는 다트통 여섯이 진짜 조건 한 줄과 지금 값을 쓴다
+#  ③ 동전마다 이번 런 발동 수 — 정산 걸음이 세고 툴팁 태그가 읽는다
 # ══════════════════════════════════════════════════════════
 
 var g = null
@@ -62,6 +63,13 @@ func _pack(id: String) -> Dictionary:
 	return {}
 
 
+func _plain_has(k: String) -> bool:
+	for kv in g.RUN_PLAIN:
+		if String(kv[0]) == k:
+			return true
+	return false
+
+
 func _row(nm: String) -> String:
 	for r in g._over_rows():
 		if String(r[0]) == nm:
@@ -90,10 +98,7 @@ func _process(_d: float) -> bool:
 	_ok("튜토리얼 런은 프로필 「던진 다트」를 안 세운다", _row("던진 다트") == "")
 	_ok("프로필 최고값은 안 민다(튜토리얼)", Save.stat("best_score") == 0,
 			"%d" % Save.stat("best_score"))
-	var keys := []
-	for kv in g.RUN_PLAIN:
-		keys.append(String(kv[0]))
-	_ok("이어하기에 적힌다(RUN_PLAIN)", keys.has("run_leg_top"))
+	_ok("이어하기에 적힌다(RUN_PLAIN)", _plain_has("run_leg_top"))
 	_arm(false)
 	_ok("다음 런은 다시 0", g.run_leg_top == 0)
 
@@ -108,6 +113,29 @@ func _process(_d: float) -> bool:
 		_ok("%s — 「완주로 열린다」가 아니다 · 열쇠 글자가 안 샌다" % id,
 				c != "완주로 열린다" and not c.contains("cond_"), c)
 	_ok("히든은 그대로 「조건 미달」", g._pack_cond(_pack("p_x1")) == "조건 미달")
+
+	print("\n③ 동전마다 이번 런 발동 수")
+	_arm(false)
+	_ok("새 런은 비어 있다", g.run_fires.is_empty())
+	var it: Dictionary = (GameData.items()[0] as Dictionary).duplicate()
+	g.owned = [it]
+	for n in 2:
+		g.queue = [{"k": "item", "i": 0, "lbl": "", "kind": "chip", "v": 5}]
+		g._next_step()
+	_ok("정산 「item」 걸음마다 하나씩", int(g.run_fires.get(String(it.id), 0)) == 2, str(g.run_fires))
+	g.state = g.S.SHOP
+	g._tip_build({"k": "rack", "i": 0})
+	var tags := []
+	for tg in g.tip_tags:
+		tags.append(String(tg.t))
+	_ok("동전 툴팁에 「발동 2」 태그", tags.has("발동 2"), str(tags))
+	g.run_fires.clear()
+	g._tip_build({"k": "rack", "i": 0})
+	var t0 := true
+	for tg in g.tip_tags:
+		t0 = t0 and not String(tg.t).begins_with("발동")
+	_ok("0 이면 태그가 없다", t0)
+	_ok("이어하기에 적힌다(RUN_PLAIN)", _plain_has("run_fires"))
 
 	print("\n통과 %d · 실패 %d" % [ok, bad])
 	quit(bad)

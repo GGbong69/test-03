@@ -2367,6 +2367,7 @@ const RUN_PLAIN := [
 	["zone_hist", {}],       # 열쇠가 **String**(zone 이름)이다 — 위 둘과 다르다
 	["run_secs", 0.0],       # 런 시간(초) — 런 끝 화면의 「클리어 시간」
 	["run_leg_top", 0],      # 이번 런 최고 판 점수 — 런 끝 「최고 판 점수」
+	["run_fires", {}],       # 동전 id → 이번 런 발동 수 — 런 끝 「×N」 · 툴팁 「발동 N」
 	["run_unlocked", []],    # [{k, n}] — 이미 원시값이다
 	["btl_gone", []],        # 깬 술병 번호(BTL)
 	["btl_st", 0],           # 술병 이스터에그의 단 — 0 선반 · 1 내리침(대결 앞) · 2 끝
@@ -2949,6 +2950,7 @@ func _new_run(human := false) -> void:
 	#  런 시간도 새로 센다 — 되살리기(_run_load)는 적힌 값을 그대로 잇는다(RUN_PLAIN).
 	run_secs = 0.0
 	run_leg_top = 0
+	run_fires = {}
 	#  술병은 런마다 선반에 다시 선다(BTL).
 	btl_gone = []
 	btl_st = 0
@@ -11137,6 +11139,7 @@ func _next_step() -> void:
 			_card_kick(float(CARDFX.kick), float(CARDFX.press))
 		"item":
 			_panel_fire(st.i)
+			_fire_count(st.i)
 			card_item = st.lbl
 			#  첫 손님의 두 장 중 끝이 절정인 장 — 처음 켜질 때 한 줄(u_last).
 			if int(st.i) >= 0 and int(st.i) < owned.size() \
@@ -11279,6 +11282,7 @@ func _next_step() -> void:
 					_bd3_dirty()
 			if bi >= 0 and bi < owned.size():
 				_panel_fire(bi)
+				_fire_count(bi)
 				card_item = _L("%s  다트가 커진다") % _L(String(owned[bi].get("n", "")))
 				#  덩굴에 잎이 하나 돋는다 — 방금 오른 걸음의 자리(gs 는 큐를 세울 때 이미 올랐다).
 				var gk: int = int(owned[bi].get("gs", 0)) - 1
@@ -44031,6 +44035,9 @@ func _tip_build(hit: Dictionary) -> void:
 			#  튜토리얼 선물 — 태그 [서비스](2026-09-27).
 			if _tut_svc("item", String(it.get("id", ""))):
 				_tip_tag("서비스", C_ACC)
+			var fn := int(run_fires.get(String(it.get("id", "")), 0))
+			if fn > 0:
+				_tip_tag(_L("발동 %d") % fn, C_DIM)
 			_tip_add(_tip_eff(it), 20, C_TXT)
 			if i == sealed:
 				_tip_add("이번 판 봉인", 12, C_MULT)
@@ -46134,6 +46141,14 @@ var over_t := 0.0               # 런 종료 화면이 흐른 시간
 #  적힌다(RUN_PLAIN).
 var run_secs := 0.0
 var run_leg_top := 0            # 이번 런에서 가장 높았던 판 점수(RUN_PLAIN)
+var run_fires := {}             # 동전 id → 이번 런 발동 수(RUN_PLAIN)
+
+
+#  정산 걸음에서 동전이 발동했다 — 슬롯 i 의 동전 id 로 센다.
+func _fire_count(i: int) -> void:
+	if i >= 0 and i < owned.size():
+		var id := String(owned[i].get("id", ""))
+		run_fires[id] = int(run_fires.get(id, 0)) + 1
 
 
 #  총액 굴림. 내역이 다 든 뒤부터 0 에서 실제 골드까지 오른다.
@@ -47831,8 +47846,18 @@ func _draw_over() -> void:
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 20, _mtx_off(1.0, e))
 	else:
 		#  **자가 하나다** — 그리는 자리와 읽는 자리(툴팁)가 같은 사각이다(_over_coin_rect).
+		#  동전 밑에 이번 런 발동 수 「×N」 — 가장 많이 발동한 동전은 금빛 · 0 이면 안 쓴다.
+		var ftop := 0
+		for o in owned:
+			ftop = maxi(ftop, int(run_fires.get(String(o.get("id", "")), 0)))
 		for k2 in owned.size():
-			draw_item_sticker(_over_coin_rect(k2).get_center(), 11.0, owned[k2], 0.0, 0.0, 0.0, 10)
+			var cr := _over_coin_rect(k2)
+			draw_item_sticker(cr.get_center(), 11.0, owned[k2], 0.0, 0.0, 0.0, 10)
+			var fn := int(run_fires.get(String(owned[k2].get("id", "")), 0))
+			if fn > 0:
+				draw_string(_fz(font_sm, 10), Vector2(cr.position.x - 4.0, cr.end.y + 10.0), "×%d" % fn,
+						HORIZONTAL_ALIGNMENT_CENTER, cr.size.x + 8.0, 10,
+						Color(C_GOLD, e) if fn == ftop else _mtx(0.0, e))
 	draw_string(_fz(font, 12), Vector2(rx, float(B.coin_y) + 34.0),
 			_L(GameData.pack_row().get("name", "")), HORIZONTAL_ALIGNMENT_LEFT,
 			-1, 12, _mtx(0.0, e))
