@@ -2366,6 +2366,7 @@ const RUN_PLAIN := [
 	["track_hits", {}],      # 같음
 	["zone_hist", {}],       # 열쇠가 **String**(zone 이름)이다 — 위 둘과 다르다
 	["run_secs", 0.0],       # 런 시간(초) — 런 끝 화면의 「클리어 시간」
+	["run_leg_top", 0],      # 이번 런 최고 판 점수 — 런 끝 「최고 판 점수」
 	["run_unlocked", []],    # [{k, n}] — 이미 원시값이다
 	["btl_gone", []],        # 깬 술병 번호(BTL)
 	["btl_st", 0],           # 술병 이스터에그의 단 — 0 선반 · 1 내리침(대결 앞) · 2 끝
@@ -2947,6 +2948,7 @@ func _new_run(human := false) -> void:
 	run_unlocked.clear()
 	#  런 시간도 새로 센다 — 되살리기(_run_load)는 적힌 값을 그대로 잇는다(RUN_PLAIN).
 	run_secs = 0.0
+	run_leg_top = 0
 	#  술병은 런마다 선반에 다시 선다(BTL).
 	btl_gone = []
 	btl_st = 0
@@ -4966,6 +4968,8 @@ func _finish_leg() -> void:
 		if String(o.get("side", "")) == "carry":
 			carry_darts = maxi(darts_left, 0)
 			break
+	#  이번 런 값이라 기록을 안 남기는 런(튜토리얼 · 챌린지 · 무한)에서도 센다 — 런 끝 「최고 판 점수」.
+	run_leg_top = maxi(run_leg_top, total)
 	#  ⚠ 챌린지·무한은 여기부터 통째로 건너뛴다(_rec_off 머리말).
 	#  무한 구간의 수는 세기 절(endless:leg · endless:score)이 따로 센다.
 	if _rec_off():
@@ -46129,6 +46133,7 @@ var over_t := 0.0               # 런 종료 화면이 흐른 시간
 #  (2026-10-08 필기 「성공 페이지 … 클리어 시간」). 제목 · 설정 · 런 정보는 안 센다. 이어하기에
 #  적힌다(RUN_PLAIN).
 var run_secs := 0.0
+var run_leg_top := 0            # 이번 런에서 가장 높았던 판 점수(RUN_PLAIN)
 
 
 #  총액 굴림. 내역이 다 든 뒤부터 0 에서 실제 골드까지 오른다.
@@ -47754,6 +47759,25 @@ func _fmt_secs(t: float) -> String:
 	return "%d:%02d" % [m, sec]
 
 
+#  런 끝 왼쪽 수 줄 [이름, 값]. 「최고 판 점수」는 이번 런 값이라 튜토리얼 · 챌린지 · 무한에서도 선다.
+func _over_rows() -> Array:
+	var cleared: int = maxi(leg_no - (0 if won else 1), 0)
+	var rows := [
+		["클리어한 판", ("%d" % cleared) if GameData.endless
+				else ("%d / %d" % [cleared, int(TUT.legs) if tut_run else GameData.legs_n()])],
+		["클리어 시간" if won else "런 시간", _fmt_secs(run_secs)],
+		["최고 판 점수", GameData.big(run_leg_top)],
+	]
+	#  ⚠ 「던진 다트」는 프로필을 읽는다 — 챌린지 · 무한 런은 안 미므로(_rec_off) 안 센 런에서는 안 세운다.
+	if not _rec_off():
+		rows.append(["던진 다트", str(Save.stat("darts"))])
+	if GameData.endless:
+		rows.append(["무한 판", str(Save.tally("endless:leg"))])
+	elif not won:
+		rows.append(["마지막 판", "%s / %s" % [GameData.big(total), GameData.big(target)]])
+	return rows
+
+
 func _draw_over() -> void:
 	#  바닥 — 메뉴 재질이면 다트판 벽에 건 칠판(_menu_back), 아니면 옛 스크림 위의 판.
 	_menu_back()
@@ -47790,21 +47814,7 @@ func _draw_over() -> void:
 	var lx: float = float(B.lx)
 	var lw: float = float(B.lw)
 	var y: float = float(B.row_y)
-	var cleared: int = maxi(leg_no - (0 if won else 1), 0)
-	var rows := [
-		["클리어한 판", ("%d" % cleared) if GameData.endless
-				else ("%d / %d" % [cleared, int(TUT.legs) if tut_run else GameData.legs_n()])],
-		["클리어 시간" if won else "런 시간", _fmt_secs(run_secs)],
-	]
-	#  ⚠ **밑의 두 줄은 프로필을 읽는다** — 챌린지 · 무한 런은 그 둘을 안 미므로(_rec_off) 안 센
-	#  런에서는 안 세운다(옛 판 그대로 · 2026-09-20).
-	if not _rec_off():
-		rows.append(["최고 판 점수", GameData.big(Save.stat("best_score"))])
-		rows.append(["던진 다트", str(Save.stat("darts"))])
-	if GameData.endless:
-		rows.append(["무한 판", str(Save.tally("endless:leg"))])
-	elif not won:
-		rows.append(["마지막 판", "%s / %s" % [GameData.big(total), GameData.big(target)]])
+	var rows := _over_rows()
 	for k in rows.size():
 		var yy: float = y + float(k) * float(B.row_step)
 		draw_string(_fz(font, 12), Vector2(lx, yy), _L(String(rows[k][0])),

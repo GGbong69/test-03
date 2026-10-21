@@ -2334,6 +2334,9 @@ static func _run(g: Node, e: Dictionary) -> void:
 		"over_win", "over_lose":
 			#  런 끝 화면을 처음부터 — 왕관이 커지고 금화가 쏟아지고 박수가 터지는 것까지.
 			g.won = String(e.get("a", "")) == "over_win"
+			#  판을 안 던진 런이면 줄이 비어 보인다 — 가짜 값을 넣는다.
+			if g.run_leg_top <= 0:
+				g.run_leg_top = 12345
 			g.endless_ok = false
 			g.endless_arm = false
 			g.over_t = 0.0
