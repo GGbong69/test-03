@@ -1531,6 +1531,9 @@ const TEXT_NEED := {
 	#  잠긴 다트통의 조건 한 줄(game.gd _stat_cond)
 	"cond_win_items": ["v"], "cond_win_gold": ["v"], "cond_boss_spare": ["v"],
 	"cond_best_dart_hvy": ["v"], "cond_best_dart_lgt": ["v"], "cond_best_dart_mag": ["v"],
+	#  잠긴 전설 동전의 조건(컬렉션 툴팁 태그)
+	"cond_revo_bull_leg": [], "cond_best_leg_bare": ["v"], "cond_best_gain": ["v"],
+	"cond_clok_out_streak": ["v"],
 }
 
 

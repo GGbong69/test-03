@@ -12,6 +12,7 @@ const Save = preload("res://scripts/save.gd")
 #  ① 「최고 판 점수」는 이번 런 값이다 — 튜토리얼 런 끝에도 선다
 #  ② 통계로 여는 다트통 여섯이 진짜 조건 한 줄과 지금 값을 쓴다
 #  ③ 동전마다 이번 런 발동 수 — 정산 걸음이 세고 툴팁 태그가 읽는다
+#  ④ 컬렉션의 잠긴 전설은 [잠김] · 조건 태그 · 런 끝 쪽지는 여는 조건 태그
 # ══════════════════════════════════════════════════════════
 
 var g = null
@@ -68,6 +69,13 @@ func _plain_has(k: String) -> bool:
 		if String(kv[0]) == k:
 			return true
 	return false
+
+
+func _tags() -> Array:
+	var out := []
+	for tg in g.tip_tags:
+		out.append(String(tg.t))
+	return out
 
 
 func _row(nm: String) -> String:
@@ -136,6 +144,49 @@ func _process(_d: float) -> bool:
 		t0 = t0 and not String(tg.t).begins_with("발동")
 	_ok("0 이면 태그가 없다", t0)
 	_ok("이어하기에 적힌다(RUN_PLAIN)", _plain_has("run_fires"))
+
+	print("\n④ 컬렉션의 잠긴 전설 · 런 끝 쪽지의 여는 조건")
+	var li := -1
+	var ci := -1
+	for k in GameData.items().size():
+		var r: Dictionary = GameData.items()[k]
+		if String(r.get("ustat", "")) == "best_gain":
+			li = k
+		elif ci < 0 and String(r.get("ustat", "")) == "":
+			ci = k
+	g.state = g.S.COLLECT
+	g._tip_build({"k": "citem", "i": li})
+	var lt := _tags()
+	_ok("잠긴 전설 — 제목은 ??? 그대로", g.tip_title == "???", g.tip_title)
+	_ok("잠긴 전설 — [잠김] · 조건 태그", lt == ["동전", "잠김", "한 발 100000점"], str(lt))
+	g._tip_build({"k": "citem", "i": ci})
+	_ok("보통 동전의 못 본 칸은 그대로", _tags() == ["동전"], str(_tags()))
+	Save.unlock("item:" + String(GameData.items()[li].id))
+	g._tip_build({"k": "citem", "i": li})
+	_ok("열렸지만 못 받은 전설은 ??? 뿐", _tags() == ["동전"], str(_tags()))
+	Save.lock("item:" + String(GameData.items()[li].id))
+
+	g.state = g.S.OVER
+	g.over_t = 2.0
+	g.owned = []
+	g.run_unlocked = [g._unl_tag("다트통", "여벌 다트통", "p_mag"), g._unl_tag("리그", "초록 리그", "green")]
+	var nrs: Array = g._over_note_rects(g._over_notes())
+	var hit: Dictionary = g._tip_hit((nrs[0] as Rect2).get_center())
+	_ok("쪽지가 잡힌다", String(hit.get("k", "")) == "unl" and int(hit.get("i", -1)) == 0, str(hit))
+	g._tip_build(hit)
+	_ok("다트통 쪽지 — 여는 조건 태그", _tags() == ["기본 다트통 완주"], str(_tags()))
+	_ok("앵커가 그 쪽지다", g.tip_mark == nrs[0], "%s" % g.tip_mark)
+	g._tip_build(g._tip_hit((nrs[1] as Rect2).get_center()))
+	_ok("리그 쪽지 — 이 다트통 완주 수", _tags() == ["기본 다트통 1회 완주"], str(_tags()))
+	g.run_unlocked = []
+	for r in GameData.packs():
+		g.run_unlocked.append(g._unl_tag("다트통", String(r.get("name", "")), String(r.get("id", ""))))
+	var p: Rect2 = g._over_panel()
+	var inside := true
+	for rr in g._over_note_rects(g._over_notes()):
+		inside = inside and (rr as Rect2).end.x <= p.end.x - 24.0
+	_ok("쪽지가 많아도 칠판 안쪽에서 멎는다", inside)
+	g.run_unlocked = []
 
 	print("\n통과 %d · 실패 %d" % [ok, bad])
 	quit(bad)

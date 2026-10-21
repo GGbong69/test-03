@@ -5540,7 +5540,7 @@ func _pack_unlock_next() -> void:
 		if String(r.get("prereq", "")) != cur:
 			continue
 		if Save.unlock("pack:" + String(r.get("id", ""))):
-			run_unlocked.append(_unl_tag("다트통", String(r.get("name", ""))))
+			run_unlocked.append(_unl_tag("다트통", String(r.get("name", "")), String(r.get("id", ""))))
 			pop(Vector2(VIEW.x * 0.5, 232.0),
 					_L("%s 열렸다") % _L(String(r.get("name", ""))), C_GOLD, 12, 1.6)
 
@@ -5746,7 +5746,7 @@ func _league_unlock_next() -> void:
 		if need <= 0 or n < need:
 			continue
 		if Save.unlock(GameData.league_key(String(r.get("id", "")))):
-			run_unlocked.append(_unl_tag("리그", String(r.get("name", ""))))
+			run_unlocked.append(_unl_tag("리그", String(r.get("name", "")), String(r.get("id", ""))))
 			pop(Vector2(VIEW.x * 0.5, 210.0),
 					_L("%s 열렸다") % _L(String(r.get("name", ""))), C_GOLD, 12, 1.6)
 
@@ -43967,6 +43967,11 @@ func _tip_hit(m: Vector2) -> Dictionary:
 			for i in owned.size():
 				if _over_coin_rect(i).has_point(m):
 					return {"k": "rack", "i": i}
+			#  해금 쪽지 — 무엇을 해서 열렸나(태그)
+			var nrs := _over_note_rects(_over_notes())
+			for i in nrs.size():
+				if (nrs[i] as Rect2).has_point(m):
+					return {"k": "unl", "i": i}
 		S.PICK, S.AIM_V, S.AIM_H:
 			var ch2 := _cons_hit(m)
 			if ch2 >= 0:
@@ -44005,6 +44010,12 @@ func _tip_build(hit: Dictionary) -> void:
 	var ct := _col_tab_of(String(hit.k))
 	if ct >= 0 and not _col_found(ct, i):
 		_tip_set_tag(String(COL_TABS[ct].n))
+		#  아직 안 열린 전설 — 그림 · 제목은 ??? 그대로, 밑줄에 [잠김] · 여는 조건.
+		var crow: Dictionary = _col_rows(ct)[i] if ct == 0 and i < _col_rows(ct).size() else {}
+		var cst := String(crow.get("ustat", ""))
+		if cst != "" and not Save.unlocked("item:" + String(crow.get("id", ""))):
+			_tip_tag("잠김", C_DIM)
+			_tip_tag(_stat_cond(cst, int(crow.get("uv", 0))), C_DIM)
 		tip_mark = _col_cell(i % COL_PAGE)
 		tip_title = "???"
 		return
@@ -44046,6 +44057,15 @@ func _tip_build(hit: Dictionary) -> void:
 				_tip_add(GameData.gold_text(it.g, it.gv), 12, C_TXT)
 			# 값은 설명창에 안 적는다(2026-09-11 지시 · 2026-09-13 재확인).
 			# 파는 값은 상점 창구가, 사는 값은 테이블의 물건이 이미 말한다.
+		"unl":
+			#  런 끝 쪽지 — 제목은 쪽지 글, 여는 조건은 태그.
+			var nts := _over_notes()
+			var nrs := _over_note_rects(nts)
+			if i >= nrs.size():
+				return
+			tip_mark = nrs[i]
+			tip_title = String(nts[i].t)
+			_tip_tag(String(nts[i].c), C_DIM)
 		"stock":
 			var s: Dictionary = stock[i]
 			# 테이블은 한 자리에 네 갈래가 섞여 뜬다 — 그림만으로는 동전과
@@ -46132,9 +46152,9 @@ var run_unlocked := []
 #  봤다). 겹치지 않는 이름(「넓은 동전 슬롯」)은 한 글자도 안 바뀐다.
 #  뗀 뒤가 비면(이름이 머리 그 자체이면) 이름을 그대로 둔다 — 값이 없는
 #  쪽지를 내느니 겹말이 낫다. 2026-09-24
-static func _unl_tag(k: String, n: String) -> Dictionary:
+static func _unl_tag(k: String, n: String, id := "") -> Dictionary:
 	var v := n.replace(k, "").strip_edges()
-	return {"k": k, "n": n if v == "" else v}
+	return {"k": k, "n": n if v == "" else v, "id": id}     # id — 툴팁이 여는 조건을 찾는다(_unl_cond)
 var over_t := 0.0               # 런 종료 화면이 흐른 시간
 #  이 런을 판 위 · 상점 · 판 고르기 · 정산에서 보낸 시간(초) — 런 끝 화면의 「클리어 시간」
 #  (2026-10-08 필기 「성공 페이지 … 클리어 시간」). 제목 · 설정 · 런 정보는 안 센다. 이어하기에
@@ -47719,6 +47739,43 @@ func _over_coin_rect(i: int) -> Rect2:
 	return Rect2(c - Vector2(12.0, 12.0), Vector2(24.0, 24.0))
 
 
+#  런 끝 쪽지 {t 글, c 여는 조건(툴팁 태그)} — 이번 런에 열린 것. 그리기 · 툴팁이 같은 목록을 쓴다.
+func _over_notes() -> Array:
+	var out := []
+	for u in run_unlocked:
+		out.append({"t": "%s  %s" % [_L(String(u.get("k", ""))), _L(String(u.get("n", "")))],
+				"c": _unl_cond(u)})
+	return out
+
+
+#  쪽지 사각 — 판 바닥 70px 위 한 줄에 왼쪽(lx)부터 글 폭대로 늘어선다. 칠판 안쪽을 넘는 쪽지는 안 세운다.
+func _over_note_rects(notes: Array) -> Array:
+	var p := _over_panel()
+	var out := []
+	var ux: float = float(OVERB.lx)
+	for nt in notes:
+		var tw: float = font.get_string_size(_L(String(nt.t)), HORIZONTAL_ALIGNMENT_LEFT,
+				-1, 12).x + 12.0 if font != null else 60.0
+		if ux + tw > p.end.x - 24.0:
+			break
+		out.append(Rect2(ux, p.end.y - 70.0, tw, 18.0))
+		ux += tw + 8.0
+	return out
+
+
+#  쪽지를 연 조건 — 다트통은 그 통의 여는 글, 리그는 이 다트통 완주 수. id 없는 옛 쪽지는 빈 글.
+func _unl_cond(u: Dictionary) -> String:
+	var id := String(u.get("id", ""))
+	if String(u.get("k", "")) == "리그":
+		var lr := _row_by_id(GameData.leagues(), id)
+		if lr.is_empty():
+			return ""
+		return _L("%s %d회 완주") % [_L(String(GameData.pack_row().get("name", ""))),
+				int(lr.get("unlock_wins", 0))]
+	var pr := _row_by_id(GameData.packs(), id)
+	return "" if pr.is_empty() else _L(_pack_cond(pr))
+
+
 # ══════════════════════════════════════════════════════════
 #  런 끝 화면 — 완주 · 실패 (2026-10-08 · 메뉴 재질)
 # ──────────────────────────────────────────────────────────
@@ -47863,26 +47920,21 @@ func _draw_over() -> void:
 			-1, 12, _mtx(0.0, e))
 
 	#  ── 이번 런에 열린 것 — 아무것도 안 열렸으면 줄 자체가 없다 ──
-	if not run_unlocked.is_empty():
-		var uy: float = p.end.y - 70.0
-		var ux: float = lx
-		for k3 in run_unlocked.size():
-			var u: Dictionary = run_unlocked[k3]
-			var ua: float = e
-			if _mo("fast") > 0.0:
-				ua *= clampf((over_t - _mo("panel") - float(k3) * _mo("fast"))
-						/ _mo("fast"), 0.0, 1.0)
-			if ua <= 0.0:
-				break
-			var t := "%s  %s" % [_L(String(u.get("k", ""))), _L(String(u.get("n", "")))]
-			var tw: float = font.get_string_size(_L(t), HORIZONTAL_ALIGNMENT_LEFT,
-					-1, 12).x + 12.0 if font != null else 60.0
-			var back: Color = Color(MENUM.wood, ua) if mat_draw else Color(C_PANEL.darkened(0.3), ua)
-			_rr(self, Rect2(ux, uy, tw, 18.0), back)
-			_rr_left(self, Rect2(ux, uy, tw, 18.0), Color(C_GOLD, ua))
-			draw_string(_fz(font, 12), Vector2(ux + 6.0, _menu_base_y(font, 12, uy, 18.0)), _L(t),
-					HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(C_GOLD, ua))
-			ux += tw + 8.0
+	var notes := _over_notes()
+	var nrs := _over_note_rects(notes)
+	for k3 in nrs.size():
+		var ua: float = e
+		if _mo("fast") > 0.0:
+			ua *= clampf((over_t - _mo("panel") - float(k3) * _mo("fast"))
+					/ _mo("fast"), 0.0, 1.0)
+		if ua <= 0.0:
+			break
+		var ur: Rect2 = nrs[k3]
+		var back: Color = Color(MENUM.wood, ua) if mat_draw else Color(C_PANEL.darkened(0.3), ua)
+		_rr(self, ur, back)
+		_rr_left(self, ur, Color(C_GOLD, ua))
+		draw_string(_fz(font, 12), Vector2(ur.position.x + 6.0, _menu_base_y(font, 12, ur.position.y, 18.0)),
+				_L(String(notes[k3].t)), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(C_GOLD, ua))
 
 	#  ── 단추 — 잠긴 동안 서서히 떠오른다(_over_lock_a · 2026-09-19) ──
 	if won and endless_ok:
