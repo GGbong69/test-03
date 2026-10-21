@@ -88,10 +88,33 @@ func _process(_d: float) -> bool:
 	_done = true
 	print("\n── 점수 카드 걸음 ────────────────────────")
 	_card(_g)
+	print("\n── 새 손님 ───────────────────────────────")
+	_guest(_g)
 
 	print("\n%s" % ("실패 %d건" % fails if fails > 0 else "개발자 판 전부 통과"))
 	quit(mini(fails, 125))
 	return true
+
+
+# ── 새 손님 (2026-10-21) ────────────────────────────────
+#  부스에서 다음 사람을 첫 실행으로 — 프로필(배움 · 이어하기)은 비고 전역 설정은 남고 문 앞에
+#  선다. 맨 끝에 돈다(제목으로 가므로). 슬롯 길(_use_profile)이 박아 둔 자리를 놓으므로 프로필 ·
+#  전역을 이 도구 자리로 옮겨 잰다 — _tool 자리는 다른 도구와 같이 쓴다.
+func _guest(g: Node) -> void:
+	Save.prof_fmt = "user://_dev_probe_p%d.cfg"
+	Save.gpath = "user://_dev_probe_g.cfg"
+	Save.path = ""
+	Save.teach("u_boot")
+	Save.set_set("_probe_keep", 7)
+	g.state = g.S.LEG
+	Dev._run(g, {"a": "run_save"})
+	var live0: bool = Save.run_live()
+	Dev._run(g, {"a": "guest"})
+	_say(live0 and not Save.run_live(), "「새 손님」이 이어하기를 지운다")
+	_say(not Save.taught("u_boot") and g._tut_due() and not g.tut_run,
+			"다음 런이 튜토리얼 런이다")
+	_say(int(Save.get_set("_probe_keep", 0)) == 7, "전역 설정은 남는다")
+	_say(g.state == g.S.TITLE, "문 앞에 선다", String(g.S.find_key(g.state)))
 
 
 # ── 발견 두 줄 (2026-09-19) ─────────────────────────────
@@ -217,7 +240,7 @@ func _newrows(g: Node) -> void:
 	var page0 := Dev.page
 	#  page 0 「경제·진행」
 	Dev.page = 0
-	for nm in ["정산 빨리 보기", "빨리 보기 고정", "런 끝 잠금 풀기"]:
+	for nm in ["정산 빨리 보기", "빨리 보기 고정", "런 끝 잠금 풀기", "새 손님"]:
 		_say(_find(g, nm) >= 0, "page 0 에 「%s」 줄이 있다" % nm)
 	#  page 1 「물건」
 	Dev.page = 1

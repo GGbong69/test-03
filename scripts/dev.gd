@@ -790,6 +790,9 @@ static func _rows(g: Node) -> Array:
 				{"n1": "정산 빨리 보기", "t": "list", "k": "fast", "n": 4},
 				{"n1": "빨리 보기 고정", "t": "act", "a": "fast_lock"},
 				{"n1": "런 끝 잠금 풀기", "t": "act", "a": "over_unlock"},
+				#  부스 — 다음 심사위원을 첫 실행으로(2026-10-21). 지금 프로필만 비운다 — 설정 · 언어 ·
+				#  필터는 전역 파일이라 남는다. 닫힌 문에 서고, 손잡이를 잡으면 다시 튜토리얼 런이다.
+				{"n1": "새 손님", "t": "act", "a": "guest"},
 				#  보기 줄(런 끝 · 흑백 TV · 술병 · 화면 고르기)은 「소리·연출」 쪽으로 옮겼다 — 이 쪽이
 				#  25 줄이 되어 스무째 줄부터 화면(330 높이 · 줄 15)을 넘어 안 눌렸다. 2026-10-10
 			]
@@ -2772,6 +2775,16 @@ static func _run(g: Node, e: Dictionary) -> void:
 		"stat_clear", "wipe":
 			Save.wipe()
 			_say("저장 지움")
+			return
+		"guest":
+			#  프로필을 비우고 그 프로필의 다트통 · 리그를 다시 읽는다(_use_profile — 빈 값이면 첫 행).
+			#  판 · 상점 · 런 끝에서 눌렀으면 일시정지 「로비로 나가기」와 같은 길로 문 앞에 선다.
+			Save.wipe()
+			g._use_profile(Save.slot())
+			g.tut_run = false
+			if g.state != g.S.TITLE:
+				g._wipe(g._to_lobby)
+			_say("새 손님")
 			return
 		"run_save":
 			#  지금 화면에 맞는 매듭으로 적는다. 판 선택 · 상점 말고는 전부
