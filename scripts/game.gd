@@ -8,7 +8,7 @@ const Dev = preload("res://scripts/dev.gd")
 # ── 다트 로그라이트 프로토타입 ──────────────────────────────
 # 흐름: 판 플레이 → 클리어 정산(보너스 3택) → 상점 → 다음 판
 # 조작: 마우스 클릭 / 스페이스 (상하 → 좌우 → 확인 → 발사)
-#       [ ] 조준 속도   - = 정산 속도   ; ' 확인 텀
+#       [ ] 조준 속도   - = 정산 속도   ; ' 확인 텀 — 개발자 모드에서만(Dev.key)
 # 밸런스 수치는 전부 scripts/data.gd 에 있다.
 
 const VIEW := Vector2(640, 360)
@@ -8876,18 +8876,6 @@ func _unhandled_input(e: InputEvent) -> void:
 				_push_skip()          # 제목 칠판에서 밀고 들어가는 동안 — 끝내고 삼킨다
 				return
 			match k.keycode:
-				KEY_BRACKETLEFT:
-					gauge_speed = maxf(gauge_speed - 0.05, 0.15)
-				KEY_BRACKETRIGHT:
-					gauge_speed = minf(gauge_speed + 0.05, 4.0)
-				KEY_MINUS:
-					beat = minf(beat + 0.03, 1.0)
-				KEY_EQUAL:
-					beat = maxf(beat - 0.03, 0.08)
-				KEY_SEMICOLON:
-					confirm_hold = maxf(confirm_hold - 0.05, 0.0)
-				KEY_APOSTROPHE:
-					confirm_hold = minf(confirm_hold + 0.05, 1.5)
 				KEY_TAB:
 					# 런 정보 — 런 안에서만 뜻이 있다. 타이틀·설정·컬렉션에서는
 					# 볼 런이 없고, 연출 중(RESOLVE·전환)에는 입력을 안 받는다.

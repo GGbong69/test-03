@@ -2,6 +2,7 @@ extends SceneTree
 
 const GameData = preload("res://scripts/data.gd")
 const Save = preload("res://scripts/save.gd")
+const Dev = preload("res://scripts/dev.gd")
 
 # ══════════════════════════════════════════════════════════
 #  조작 검사 — 사탕 쓰기와 동전 슬롯 순서 바꾸기가 어느 화면에서 사는가
@@ -474,6 +475,17 @@ func _pause_walk() -> void:
 			"%s · 쪽 %s" % [_name(g.state), g._set_pg()])
 	_row_tap("back")
 	_say(g.state == _st("SHOP"), "「계속하기」 누름 → 판으로", _name(g.state))
+	#  조율 키 ] 는 개발자 모드에서만 먹는다(2026-10-21)
+	var gs0: float = g.gauge_speed
+	_key(KEY_BRACKETRIGHT)
+	var off_ok: bool = is_equal_approx(g.gauge_speed, gs0)
+	Dev.on = true
+	_key(KEY_BRACKETRIGHT)
+	var on_ok: bool = g.gauge_speed > gs0
+	Dev.on = false
+	g.gauge_speed = gs0
+	_say(off_ok and on_ok, "조율 키 ] — 일반 판은 그대로 · 개발자 모드만 빨라진다",
+			"끔 %s · 켬 %s" % [off_ok, on_ok])
 	var ne: int = catch.n - e0
 	_say(ne == 0 and trouble == "", "오류 · 준비 실패 없음",
 			"오류 %d건 %s · %s" % [ne, catch.last if ne > 0 else "", trouble])

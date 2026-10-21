@@ -114,7 +114,23 @@ static func key(g: Node, code: int) -> bool:
 	if code == KEY_TAB:
 		page = (page + 1) % PAGES.size()
 		return true
-	return false
+	#  조율 키 여섯은 개발자 모드에만 — 배포판에서 ] 를 짚어 조준선이 빨라지던 사고를 막는다(2026-10-21)
+	match code:
+		KEY_BRACKETLEFT:
+			g.gauge_speed = maxf(g.gauge_speed - 0.05, 0.15)
+		KEY_BRACKETRIGHT:
+			g.gauge_speed = minf(g.gauge_speed + 0.05, 4.0)
+		KEY_MINUS:
+			g.beat = minf(g.beat + 0.03, 1.0)
+		KEY_EQUAL:
+			g.beat = maxf(g.beat - 0.03, 0.08)
+		KEY_SEMICOLON:
+			g.confirm_hold = maxf(g.confirm_hold - 0.05, 0.0)
+		KEY_APOSTROPHE:
+			g.confirm_hold = minf(g.confirm_hold + 0.05, 1.5)
+		_:
+			return false
+	return true
 
 
 static func click(g: Node, m: Vector2) -> bool:
