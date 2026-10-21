@@ -5385,6 +5385,12 @@ func _tut_due() -> bool:
 	return not GameData.chal_any() and not GameData.endless and not _autoplay 			and not Save.taught("u_boot") and not Save.taught("u_gift")
 
 
+#  처음 켠 사람은 손잡이에서 곧장 튜토리얼 런이다(2026-10-21) — 새 런 화면(챌린지 탭)을
+#  안 지나므로 튜토리얼이 빠질 길이 없다. 덮을 이어하기가 있으면 옛 길(새 런 화면의 겨눔)이다.
+func _tut_first() -> bool:
+	return _tut_due() and not _run_ok()
+
+
 func _boot_due() -> bool:
 	return tut_run
 
@@ -50196,7 +50202,10 @@ func _door_open() -> void:
 		return
 	if not (_door_live() and _cine_ok(wipe_force)):
 		_sfx("menu_pick")
-		_open_newrun()
+		if _tut_first():
+			_wipe(_new_run.bind(true))
+		else:
+			_open_newrun()
 		return
 	door_k0 = _door_peek_k()               # 살짝 열린 자리에서 이어 연다
 	door_t = 0.0
@@ -50211,14 +50220,18 @@ func _door_open() -> void:
 	queue_redraw()
 
 
-#  지지직이 다 덮었다 — 새 런 화면으로. 문은 닫아 둔다(제목으로 돌아오면 닫힌 문이다).
+#  지지직이 다 덮었다 — 새 런 화면으로(처음 켠 사람은 튜토리얼 판 고르기로 · _tut_first).
+#  문은 닫아 둔다(제목으로 돌아오면 닫힌 문이다).
 func _door_through() -> void:
 	door_t = -1.0
 	door_went = false
 	if door_vp != null and is_instance_valid(door_vp):
 		Door3D.door_pose(door_vp, 0.0)
 		Door3D.cam_dolly(door_vp, 0.0)
-	_open_newrun()
+	if _tut_first():
+		_new_run(true)          # 덮개 밑이다 — _wipe 를 또 부르면 안 돈다
+	else:
+		_open_newrun()
 
 
 #  인트로 끝에서 가라앉는 짙기 · 제목의 짙기. 문이 서면 0 — 판이 램프 빛 안에 선다.
@@ -55546,6 +55559,11 @@ func _to_lobby() -> void:
 
 
 func _open_newrun() -> void:
+	#  「튜토리얼 끝」 칠판의 「새 런」은 곧장 본편 1판 고르기다(2026-10-21) — 다트통 · 리그는
+	#  저장된 고름 그대로다. 그다음 런부터 새 런 화면에서 고른다.
+	if state == S.OVER and tut_run and won:
+		_wipe(_new_run.bind(true))
+		return
 	#  게임 오버에서 새 런으로 — 판을 떠나 메뉴로 가는 길이라 덮는다(WIPE). 덮개가 다
 	#  덮었을 때 이 함수를 다시 부른다(그때는 덮는 중이라 아래로 간다).
 	if state == S.OVER and wipe_t < 0.0 and _cine_ok(wipe_force):

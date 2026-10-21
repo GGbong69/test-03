@@ -91,6 +91,9 @@ func _initialize() -> void:
 	GameData.league = ""
 	Save.path = "user://_probe_stake.cfg"
 	Save.wipe()
+	#  처음 켠 사람은 손잡이에서 곧장 튜토리얼 런이다(_tut_first · 2026-10-21) — 새 런 화면은
+	#  튜토리얼을 지난 사람의 길이라 그렇게 둔다.
+	Save.teach("u_boot")
 	var g: Node = load("res://scenes/main.tscn").instantiate()
 	root.add_child(g)
 	g.state = g.S.TITLE
