@@ -10750,6 +10750,7 @@ func _land(mark := true) -> void:
 			var it: Dictionary = owned[i]
 			if it.k == "save":
 				continue          # 목숨은 정산이 아니라 판 실패가 읽는다
+			var q0 := queue.size()    # 발동 수는 한 발에 한 번 — 복합 동전 · 콩나무는 걸음이 둘이다
 			# fire 성장은 발동 자체가 걸음이다 — 먼저 오르고 그 값으로 낸다.
 			if String(it.get("grow", "")) == "fire":
 				it.gs = int(it.get("gs", 0)) + int(it.get("gstep", 0))
@@ -10788,6 +10789,7 @@ func _land(mark := true) -> void:
 						* GameData.chal_f("item_mul", 1.0)))
 				gv = _gold_add(gv, "item")
 				if gv != 0:
+					q0 = -1           # 골드만 내는 동전도 발동이다
 					pop(_slot_rect(mini(i, GameData.max_items() - 1)).get_center()
 							+ Vector2(0.0, 24.0), "+%d" % gv, C_GOLD, 12, 0.8)
 			# 영역 승급 — 발동 4회 중 1회꼴로 맞은 영역의 강화 트랙이 오른다
@@ -10795,6 +10797,8 @@ func _land(mark := true) -> void:
 					and int(info.get("track", 0)) > 0:
 				track_lv[info.track] = int(track_lv.get(info.track, 0)) + 1
 				pop(BC + Vector2(0.0, -52.0), "트랙 강화 +1", C_ACC, 10, 0.9)
+			if queue.size() > q0:
+				_fire_count(i)
 		#  불씨 — 동전 걸음 뒤 · 저울 · 물음표 · 모음 · 합계 앞. 판 사건의 보상은 큐
 		#  걸음이라 _pace · 빨리 보기 · 반음 사다리를 저절로 탄다. 2026-10-06
 		if ember_hit:
@@ -11150,7 +11154,6 @@ func _next_step() -> void:
 			_card_kick(float(CARDFX.kick), float(CARDFX.press))
 		"item":
 			_panel_fire(st.i)
-			_fire_count(st.i)
 			card_item = st.lbl
 			#  첫 손님의 두 장 중 끝이 절정인 장 — 처음 켜질 때 한 줄(u_last).
 			if int(st.i) >= 0 and int(st.i) < owned.size() \
@@ -11293,7 +11296,6 @@ func _next_step() -> void:
 					_bd3_dirty()
 			if bi >= 0 and bi < owned.size():
 				_panel_fire(bi)
-				_fire_count(bi)
 				card_item = _L("%s  다트가 커진다") % _L(String(owned[bi].get("n", "")))
 				#  덩굴에 잎이 하나 돋는다 — 방금 오른 걸음의 자리(gs 는 큐를 세울 때 이미 올랐다).
 				var gk: int = int(owned[bi].get("gs", 0)) - 1
@@ -46177,7 +46179,7 @@ var run_rec0 := -1              # 런 시작 때 프로필 한 판 최고 점수
 var run_found := 0              # 이번 런에 컬렉션에 새로 든 수(RUN_PLAIN)
 
 
-#  정산 걸음에서 동전이 발동했다 — 슬롯 i 의 동전 id 로 센다.
+#  한 발에서 동전이 발동했다(_land — 걸음을 세웠거나 골드를 냈다) — 슬롯 i 의 동전 id 로 센다.
 func _fire_count(i: int) -> void:
 	if i >= 0 and i < owned.size():
 		var id := String(owned[i].get("id", ""))

@@ -11,7 +11,7 @@ const Save = preload("res://scripts/save.gd")
 #
 #  ① 「최고 판 점수」는 이번 런 값이다 — 튜토리얼 런 끝에도 선다
 #  ② 통계로 여는 다트통 여섯이 진짜 조건 한 줄과 지금 값을 쓴다
-#  ③ 동전마다 이번 런 발동 수 — 정산 걸음이 세고 툴팁 태그가 읽는다
+#  ③ 동전마다 이번 런 발동 수 — 한 발에 한 번 세고(_land) 툴팁 태그가 읽는다
 #  ④ 컬렉션의 잠긴 전설은 [잠김] · 조건 태그 · 런 끝 쪽지는 여는 조건 태그
 #  ⑤ 런 끝 「거의 다 왔다」 쪽지 — ⅔ 넘게 찬 잠긴 것 하나 · 이름과 값
 #  ⑥ 신기록 도장(런 시작 때 기록을 넘었나) · 「새로 찾음 N」 · 줄은 다섯까지
@@ -65,6 +65,16 @@ func _pack(id: String) -> Dictionary:
 	for r in GameData.packs():
 		if String(r.get("id", "")) == id:
 			return r
+	return {}
+
+
+func _coin(id: String) -> Dictionary:
+	for r in GameData.items():
+		if String(r.id) == id:
+			var c: Dictionary = (r as Dictionary).duplicate()
+			c.gs = 0
+			c.bought = 0
+			return c
 	return {}
 
 
@@ -141,12 +151,25 @@ func _run() -> void:
 	print("\n③ 동전마다 이번 런 발동 수")
 	_arm(false)
 	_ok("새 런은 비어 있다", g.run_fires.is_empty())
-	var it: Dictionary = (GameData.items()[0] as Dictionary).duplicate()
-	g.owned = [it]
+	#  빌리의 바지(점수 + 배수 · 걸음 둘) · 잭과 콩나무(bean + item 걸음 둘) — 둘 다 무조건이다.
+	g._open_leg()
+	g._begin_leg()
+	g.sealed = -1
+	g.target = 999999
+	var it: Dictionary = _coin("r14")
+	var bn: Dictionary = _coin("l04")
+	g.owned = [it, bn]
+	g._panel_reset()
 	for n in 2:
-		g.queue = [{"k": "item", "i": 0, "lbl": "", "kind": "chip", "v": 5}]
-		g._next_step()
-	_ok("정산 「item」 걸음마다 하나씩", int(g.run_fires.get(String(it.id), 0)) == 2, str(g.run_fires))
+		g.state = g.S.RESOLVE
+		g.aim = g.BC
+		g.queue = []
+		g.burst_hits = []
+		g._land()
+	g.queue = []
+	_ok("한 발에 한 번 — 걸음이 둘인 동전도 (2026-10-21 검토)",
+			int(g.run_fires.get("r14", 0)) == 2 and int(g.run_fires.get("l04", 0)) == 2, str(g.run_fires))
+	g.owned = [it]
 	g.state = g.S.SHOP
 	g._tip_build({"k": "rack", "i": 0})
 	var tags := []
