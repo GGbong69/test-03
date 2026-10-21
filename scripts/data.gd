@@ -2518,7 +2518,9 @@ static func _has_row(table: String, id: String) -> bool:
 #  when 갈래의 켜진 줄만 준다. 글의 {열쇠}는 npc_say_text 가 채운다 — tuning.csv 의 열쇠면 그 값,
 #  areas.csv 의 열쇠면 그 영역의 기본 점수(base · 불)나 배수(mult · 더블 · 트리플). 수를 글에 박지
 #  않아 표의 값을 고치면 말이 따라 바뀐다(desc 열의 규약과 같다).
-const NPC_SAY_WHEN := ["tip", "poke", "hand", "give", "btl", "buy", "sell", "rage", "rival"]
+const NPC_SAY_WHEN := ["tip", "poke", "hand", "give", "btl", "buy", "sell", "rage", "rival",
+		"over_win", "over_lose", "over_close"]
+#  over_*(런 끝 칠판에서 하는 말 · 2026-10-21) — 완주 · 실패 · 목표 가까이 치고 진 런(game.gd NSAY.close).
 #  rival(라이벌이 던지기 전에 하는 말 · 2026-10-16)은 판이 {cell}(막을 자리) · {val}(그 값)을 채운다.
 const NPC_SAY_EV_KEYS := {"rival": ["cell", "val"]}
 

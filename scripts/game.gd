@@ -7891,6 +7891,10 @@ func _process(d: float) -> void:
 		#  신기록 도장 — 판 밖이라 종이 한 번 운다.
 		if ot0 < float(OVERB.stamp_at) and over_t >= float(OVERB.stamp_at) and _over_rec():
 			_sfx("target_hit")
+		#  잠금이 풀리는 틀에 상인 한마디(NSAY 런 끝) — 진 런은 목표 가까이 쳤으면 「아깝다」 묶음.
+		if ot0 < OVER_LOCK and over_t >= OVER_LOCK:
+			_nsay("over_win" if won else ("over_close"
+					if float(total) >= float(target) * float(NSAY.close) else "over_lose"), true)
 		queue_redraw()
 	if _run_clock_on():
 		run_secs += d
@@ -30557,8 +30561,12 @@ func _give_grip(i: int) -> float:
 #                    「사탕·사진」 글(x ~155)을 비킨다
 #    hold · hold_ch   다 나온 뒤 머무는 초 + 글자마다 · fade 들고 나는 초
 #    rage_dx   가리키며 하는 말(rage)은 말상자를 이만큼 왼쪽으로 — 오른손이 상인 몸 앞에서 가리킨다
+#    런 끝(2026-10-21) — 칠판이 서고 잠금(OVER_LOCK)이 풀리는 틀에 한마디. 완주 over_win · 실패 over_lose ·
+#      목표의 close 몫 넘게 치고 진 런 over_close. 무한 런 끝 · 해금 쪽지가 선 끝에는 안 한다(그 줄 자리다).
+#      얼굴 · 손 없이 말상자만 — 칠판 오른쪽 아래, 「새 런」 줄 over_gap 위 · 폭 over_w(왼쪽 수 줄 끝 x 308 을 비킨다)
 const NSAY := {"chance": 0.6, "delay": [2.0, 4.5], "gap": 24.0, "w_max": 340.0, "w_min": 180.0,
 		"hold": 2.4, "hold_ch": 0.06, "fade": 0.25, "min_gap": 0.45, "rage_dx": 70.0,
+		"over_w": 246.0, "over_gap": 6.0, "close": 0.9,
 		"say": {"poke": [1.0, 0.0], "hand": [1.0, 0.0], "give": [1.0, 0.0], "btl": [0.6, 3.0],
 				"buy": [0.35, 4.0], "sell": [0.35, 4.0], "rage": [1.0, 0.0]}}
 var nsay_rng := RandomNumberGenerator.new()
@@ -30578,8 +30586,10 @@ func _nsay_rng() -> RandomNumberGenerator:
 	return nsay_rng
 
 
-#  상인이 말할 수 있는 화면 — 상인이 선 상점 · 판 고르기.
+#  상인이 말할 수 있는 화면 — 상인이 선 상점 · 판 고르기 · 런 끝 칠판(말상자만).
 func _nsay_here() -> bool:
+	if state == S.OVER:
+		return not GameData.endless and run_unlocked.is_empty()
 	return (state == S.SHOP or state == S.LEG) and _npc_on()
 
 
@@ -30703,14 +30713,20 @@ func _nsay_a() -> float:
 #  말상자 — 상인 가운데(NPC.cx)에 글 폭만큼 · 동전 슬롯 밑 gap. [자리, 줄들].
 func _nsay_layout() -> Array:
 	var bp: float = float(TUTOR.box_pad)
-	var inner: float = float(NSAY.w_max) - bp * 2.0 - 12.0
+	var over := state == S.OVER
+	var wm: float = float(NSAY.over_w) if over else float(NSAY.w_max)
+	var inner: float = wm - bp * 2.0 - 12.0
 	var lines := _tutor_wrap(nsay_txt, inner)
 	var lw := 0.0
 	if font_sm != null:
 		for ln in lines:
 			lw = maxf(lw, font_sm.get_string_size(_L(String(ln)), HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x)
-	var bw: float = clampf(ceilf(lw + bp * 2.0 + 12.0), float(NSAY.w_min), float(NSAY.w_max))
+	var bw: float = clampf(ceilf(lw + bp * 2.0 + 12.0), float(NSAY.w_min), wm)
 	var bh: float = bp * 2.0 + float(TUTOR.talk_top) + 22.0 + float(lines.size() - 1) * float(TUTOR.line)
+	if over:
+		#  런 끝 — 칠판 안쪽 오른끝에 붙여 「새 런」 줄 바로 위(든 것 · 다트통 이름 밑).
+		var bot: float = _over_newrun_rect().position.y - float(NSAY.over_gap)
+		return [Rect2(_over_panel().end.x - 24.0 - bw, bot - bh, bw, bh), lines]
 	var top: float = (_panel_rect() as Rect2).end.y + float(NSAY.gap)
 	var cx: float = float(NPC.cx)
 	if String(nsay_row.get("when", "")) == "rage":
@@ -48345,6 +48361,7 @@ func _draw_over() -> void:
 				and _over_row_r().has_point(mouse_at), _over_lock_a(), endless_arm)
 	else:
 		_back_row(self, _over_newrun_rect(), "새 런", "", _over_live(), _over_lock_a())
+	_nsay_draw()          # 상인의 말 — 얼굴 없이 말상자만(NSAY 런 끝)
 
 	#  ── 폭주 — 금화가 쏟아진다(맨 위 · 칠판 앞) ──
 	if won and not motion_off:
