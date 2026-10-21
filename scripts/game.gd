@@ -986,6 +986,10 @@ var slot_pop := []              # 아이템 패널 참고 — 아래 "아이템 
 var slot_vel := []
 var shake := 0.0
 var shake_k := 34.0      # 흔들림 감쇠(px/초) — 1배 착지만 남은 걸음에 맞춰 가파르다(_shk_tail_k)
+var shake_dir := Vector2.ZERO   # 착탄 흔들림의 축(다트가 들어간 쪽) — 0.5 밑으로 죽으면 ZERO(무작위로 돌아간다)
+var shk_v := Vector2.ZERO       # 이 16ms 칸의 떨림 방향(-1..1) — _draw
+var shk_fr := -1
+var throw_kick := 0             # 이 시각(ms)까지 화면이 손 쪽으로 1px 물러난다 — 던지는 순간
 var board_punch := 0.0
 var pitch_step := 0
 #  ── 연발은 작은 다트마다 소리가 오른다 (2026-10-08) ──
@@ -7937,6 +7941,8 @@ func _process(d: float) -> void:
 	#  감쇠는 34/초다. 1배 · 판이 이어지는 착지만 그 흔들림이 다 죽을 때까지 가파르다
 	#  (shake_k · _shk_tail_k) — 0 에 닿으면 34 로 돌아온다(2026-10-06).
 	shake = maxf(shake - d * shake_k, 0.0)
+	if shake < 0.5:
+		shake_dir = Vector2.ZERO   # 정산 걸음 흔들림은 무작위 그대로
 	if shake <= 0.0:
 		shake_k = 34.0
 	mod_shed_t = maxf(mod_shed_t - d, 0.0)
@@ -8092,6 +8098,7 @@ func _process(d: float) -> void:
 					_sfx("dart_fly")      # 리볼버는 발마다 kick_shot 이 난다
 				state = S.FLY
 				fly_t = 0.0
+				throw_kick = Time.get_ticks_msec() + 50    # 손 쪽 1px 킥 — 세 틀
 				# 꽂힐 각을 지금 정한다. 나는 동안과 꽂힌 뒤가 같은 각이라야
 				# 착탄 프레임에서 자루가 홱 돌지 않는다.
 				fly_rot = randf_range(-0.26, 0.26)
@@ -10283,6 +10290,8 @@ func _impact(info: Dictionary, hit_mult: int, land_base: int = -1) -> void:
 	var lv: int = int(info.base) if land_base < 0 else land_base
 	_thud()
 	_sfx(HIT_SFX[grade])
+	#  흔들림 축 — 화면 아래(손)에서 꽂힌 자리로. 크기는 아래 등급이 그대로 쥔다.
+	shake_dir = (aim - Vector2(BC.x, VIEW.y)).normalized()
 
 	match grade:
 		0:
@@ -12944,16 +12953,20 @@ func _draw() -> void:
 	#  여백까지 덮는다. 노드가 밀려 있으므로 왼쪽 위로 그만큼 되밀어 시작한다.
 	draw_rect(Rect2(-view_pad, VIEW + view_pad * 2.0), C_BG)
 	# 툴팁이 대상 테두리만 같이 흔들고 판은 고정하려면 이 값을 알아야 한다
-	var sh := Vector2.ZERO if motion_off else Vector2(
-			randf_range(-shake, shake), randf_range(-shake, shake))
-	#  **쓸기일 때만** 정수로. 640x360 정수배 확대 · nearest 필터에서
-	#  서브픽셀 흔들림은 아지랑이로 보이는데, 부딪힘이 0.09초에 아홉 번까지
-	#  몰리는 화면에서 그것이 제일 잘 드러난다. 흔들림 전체를 정수로 옮기는
-	#  것은 따로 일감이다 — shake 는 화면 통째의 값 하나라 여기서 규약을
-	#  바꾸면 착탄 · 목표 달성 · 거절이 같이 바뀐다. 그 일감 전까지는 이 한
-	#  화면만 정수인 불일치가 남는다(2026-09-18).
-	if sweep_live:
-		sh = sh.round()
+	#  떨림 방향은 실시간 16ms 칸마다 한 번만 뽑는다 — 60Hz · 144Hz · V-Sync 끔이 같은 빠르기로 떤다.
+	var fr := int(Time.get_ticks_msec() / 16.0)
+	if fr != shk_fr:
+		shk_fr = fr
+		shk_v = Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0))
+	var sh := Vector2.ZERO
+	if not motion_off:
+		#  착탄은 다트가 들어간 축으로 떨고 옆은 0.35 — 크기(shake)는 그대로다.
+		var v := shk_v if shake_dir == Vector2.ZERO \
+				else shake_dir * shk_v.x + shake_dir.orthogonal() * (shk_v.y * 0.35)
+		#  정수 px — 640x360 nearest 에서 서브픽셀 흔들림은 도트 글자를 아지랑이로 번지게 한다.
+		sh = (v * shake).round()
+		if Time.get_ticks_msec() < throw_kick:
+			sh.y += 1.0           # 던지는 순간 손 쪽으로 1px
 	shake_off = sh
 	draw_set_transform(sh)
 

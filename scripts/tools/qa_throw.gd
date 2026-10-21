@@ -249,6 +249,48 @@ func _run() -> void:
 		_ok("홀짝이 곱한 칸은 곱해진 값이 뜬다", got3 == want3,
 				"「%s」 want %s · 날것이면 %s" % [got3, want3, raw3])
 
+	# ── ⑤ 화면 흔들림 — 정수 px · 착탄 축 · 던지는 순간 1px (2026-10-21) ──
+	_fresh()
+	g.motion_off = false
+	g.state = g.S.CONFIRM
+	g.confirm_t = g.ch()
+	var k0 := Time.get_ticks_msec()
+	g._process(DT)
+	_ok("던지는 순간 킥이 선다", g.state == g.S.FLY and g.throw_kick >= k0 + 50, str(g.throw_kick - k0))
+	g.aim = g.BC
+	g._land()
+	_ok("착탄 축은 손에서 꽂힌 자리로", g.shake_dir.y < -0.99, str(g.shake_dir))
+	g.throw_kick = 0
+	g.hitstop = 0.0
+	g.shake = 10.0
+	var offs := []
+	var t0 := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - t0 < 400:
+		g.queue_redraw()
+		await process_frame
+		offs.append(g.shake_off)
+	var whole := not offs.is_empty()
+	var side := 0.0
+	var ax := 0.0
+	for o in offs:
+		whole = whole and o == (o as Vector2).round()
+		side = maxf(side, absf((o as Vector2).x))
+		ax = maxf(ax, absf((o as Vector2).y))
+	_ok("흔들림은 정수 px · 축으로 크고 옆은 0.35", whole and side <= 4.0 and ax >= 6.0 and ax <= 10.0,
+			"%d틀 · 옆 %.0f · 축 %.0f" % [offs.size(), side, ax])
+	g.shake = 0.0
+	g.throw_kick = Time.get_ticks_msec() + 1000
+	g.queue_redraw()
+	await process_frame
+	var kick: Vector2 = g.shake_off
+	g.motion_off = true
+	g.queue_redraw()
+	await process_frame
+	_ok("킥은 손 쪽 1px · 모션 끄면 없다", kick == Vector2(0, 1) and g.shake_off == Vector2.ZERO,
+			"%s · %s" % [str(kick), str(g.shake_off)])
+	g.motion_off = false
+	g.throw_kick = 0
+
 	print("\n%s" % ("전부 통과" if fail == 0 else "실패 %d건" % fail))
 	print("통과 %d · 실패 %d" % [okn, fail])
 	quit(0 if fail == 0 else 1)
