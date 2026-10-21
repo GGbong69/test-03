@@ -49000,8 +49000,6 @@ func _draw_profile() -> void:
 	if not bool(inf2.get("used", false)):
 		draw_string(_fz(font_sm, 20), Vector2(px, 150.0), _L("아직 아무것도 없다"),
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 20, _mtx(0.0))
-		draw_string(_fz(font, 12), Vector2(px, 172.0), _L("고르면 여기서부터 쌓인다"),
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 12, _mtx_off(0.0))
 	else:
 		#  한 발 최고 점수(점수뽕)가 맨 위 · 큰 수는 만/억 · 0 인 기록 줄은 안 세운다(처음 생기면 선다).
 		#  컬렉션 총수는 여섯 탭 표의 합 — 표에서 빠진 id 가 저장에 남아도 넘지 않게 자른다.
