@@ -147,6 +147,15 @@ func _run() -> void:
 	for t in _tags():
 		leak = leak or String(t).begins_with(now_p)
 	_ok("남은 다트 1개당 — 판 중 값이라 태그가 없다", not leak, "[%s]" % "][".join(_tags()))
+	#  「홑장」(solo · 동전 효과 ×3) — 정산이 곱하는 값 그대로다
+	var keep_ch: String = GameData.challenge
+	GameData.challenge = "solo"
+	g.owned = [_coin("c38")]
+	g._tip_build({"k": "rack", "i": 0})
+	var want_solo: String = g._L("지금 %s") % GameData.eff_text("mult",
+			int(round(2.0 * GameData.chal_f("item_mul", 1.0))))
+	_ok("홑장 — 지금 값에 챌린지 배율", _tags().has(want_solo), "[%s]" % "][".join(_tags()))
+	GameData.challenge = keep_ch
 	g.owned = keep_owned
 
 	#  ── 못 본 칸이 아무것도 안 샌다 (2026-09-19) ──────

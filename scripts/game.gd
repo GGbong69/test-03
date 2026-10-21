@@ -44333,6 +44333,7 @@ func _tip_now(it: Dictionary) -> void:
 	var amt := GameData.item_amt(it, {"items_n": owned.size(), "gold": gold,
 			"mag_hvy": _mag_hvy(), "empty_n": GameData.max_items() - owned.size(),
 			"rackval_others": _rack_val() - GameData.sell_value(it)})
+	amt = int(round(float(amt) * GameData.chal_f("item_mul", 1.0)))   # 「홑장」 — 정산(_land)과 같은 자
 	_tip_tag(_L("지금 %s") % GameData.eff_text(k, amt), C_CHIP if k == "chip" else C_MULT)
 
 
