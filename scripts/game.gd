@@ -11927,6 +11927,7 @@ func _tally_land(freeze := true) -> void:
 	var pit := SFX_BASE * pow(2.0, (float(burst_pitch) - float(GROW.semi) * gn) / 12.0)
 	if fire_hot >= 4 and not motion_off and not brk:
 		fire_snd = pit
+		_mus_duck()          # 빈 박 — 음악도 비킨다
 	else:
 		_sfx("settle_total", pit)
 		tally_snd_t = 0.0
@@ -12097,6 +12098,7 @@ func _fire_release() -> void:
 #  한 번의 돌파에 한 번이다(cross_live).
 func _cross_fire() -> void:
 	cross_live = false
+	_mus_duck()
 	_sfx("target_hit")
 	tally_snd_t = 0.0
 	if _scr_flash():
@@ -58379,6 +58381,10 @@ const MUS_RUSH_MAX := 0.08    # 마지막 라운드의 보스
 #  곡이 다 넘어갈 즈음 속도도 다 올라 있어야 둘이 한 사건으로 들린다.
 #  툭 바꾸면 계단이 그대로 들리고, 넘김보다 속도가 먼저 눈에 띈다.
 const MUS_PITCH_RATE := 0.06
+#  음악이 비킨다(2026-10-21) — 목표를 넘는 틀 · 4단 빈 박에 −8dB 로 휙 내려갔다 0.6초에 돌아온다
+#  (「목표 달성」 · 판 깨지는 소리가 앞에 선다). 진 런은 판이 덮쳐 오는 동안(OVERC) 판 곡이 늘어진
+#  테이프처럼 반 속도로 처진다 — 실패 칠판에 들어오는 로비 곡은 제 속도다(_mus_load). 이길 때는 안 처진다.
+const MUS_DUCK := {"db": -8.0, "back": 0.6, "tape": 0.5, "tape_rate": 0.5}
 
 # 넘김의 단계. 쉼 → 나감 → 숨 → 들어옴 → 쉼 으로 돈다.
 enum MP { REST, OUT, GAP, IN }
@@ -58395,6 +58401,11 @@ var mus_t := 0.0          # 숨(GAP)이 얼마나 지났는가. 초
 var mus_vol := 0.0
 var mus_warned := {}      # 못 읽은 곡을 한 번만 말하려고 기억한다
 var mus_pitch := 1.0      # 지금 나는 속도. 목표로 천천히 걸어간다
+var mus_duck := 0.0       # 비킨 몫 1 → 0 (MUS_DUCK)
+
+
+func _mus_duck() -> void:
+	mus_duck = 1.0
 
 
 # 지금 화면이 원하는 곡. 덮개 화면은 **뒤 화면을 따른다** — 잠깐 여는 판
@@ -58426,6 +58437,8 @@ func _mus_want() -> String:
 # 라운드를 모르는 자리(로비·상점)는 곡부터 "boss" 가 아니므로 여기 안 든다 —
 # leg_no 를 읽기 전에 _mus_want 로 한 번 거르는 것이 그 뜻이다.
 func _mus_pitch_want() -> float:
+	if over_cine >= 0.0 and not over_went and not won:
+		return float(MUS_DUCK.tape)        # 진 판 — 판이 덮쳐 오는 동안 테이프가 처진다
 	if _mus_want() != "boss":
 		return 1.0
 	var n := GameData.rounds_n()
@@ -58447,8 +58460,10 @@ func _mus_update(d: float) -> void:
 	# 속도는 곡보다 느리게 따라간다. 밀 자리도 하나뿐이다.
 	var wp := _mus_pitch_want()
 	if not is_equal_approx(mus_pitch, wp):
-		mus_pitch = move_toward(mus_pitch, wp, MUS_PITCH_RATE * d)
+		mus_pitch = move_toward(mus_pitch, wp,
+				(float(MUS_DUCK.tape_rate) if wp < 1.0 else MUS_PITCH_RATE) * d)
 		mus_pl.pitch_scale = mus_pitch
+	mus_duck = move_toward(mus_duck, 0.0, d / float(MUS_DUCK.back))
 
 	var want := _mus_want()
 	if want != mus_next:
@@ -58499,7 +58514,7 @@ func _mus_step(d: float) -> void:
 			mus_vol = minf(mus_vol + d / MUS_IN, 1.0)
 			if mus_vol >= 1.0:
 				mus_ph = MP.REST
-	mus_pl.volume_db = _mus_db(mus_vol)
+	mus_pl.volume_db = _mus_db(mus_vol) + float(MUS_DUCK.db) * mus_duck
 
 
 # 적응형 관리자에게 지금 조건을 넘긴다.
@@ -58560,6 +58575,8 @@ func _mus_load(key: String) -> bool:
 	mus_pl.volume_db = _mus_db(mus_vol)
 	# 지금 속도로 **서고 나서** 목표를 향해 걷는다. 1.0 으로 세워 두면
 	# 보스로 들어오는 곡이 첫 프레임에 원래 속도로 튄다.
+	# 처진 테이프(MUS_DUCK.tape)는 나간 곡의 것이다 — 새 곡은 제 속도 밑으로 안 선다.
+	mus_pitch = maxf(mus_pitch, 1.0)
 	mus_pl.pitch_scale = mus_pitch
 	mus_pl.play()
 	return true
