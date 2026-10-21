@@ -48631,7 +48631,7 @@ func _load_settings() -> void:
 	vol = clampf(float(Save.get_set("vol", 1.0)), 0.0, 1.0)
 	vol_mus = clampf(float(Save.get_set("vol_mus", 0.8)), 0.0, 1.0)
 	vol_all = clampf(float(Save.get_set("vol_all", 1.0)), 0.0, 1.0)
-	crt =clampf(float(Save.get_set("crt", CRT_DEF)), 0.0, 1.0)
+	crt = clampf(float(Save.get_set("crt", CRT_DEF)), 0.0, 1.0)
 	warp = clampf(float(Save.get_set("warp", WARP_DEF)), 0.0, 1.0)
 	vhs = clampf(float(Save.get_set("vhs", VHS_DEF)), 0.0, 1.0)
 	dot = clampf(float(Save.get_set("dot", DOT_DEF)), 0.0, 1.0)

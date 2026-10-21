@@ -8,6 +8,7 @@ extends SceneTree
 
 const GameData = preload("res://scripts/data.gd")
 const Save = preload("res://scripts/save.gd")
+const Dev = preload("res://scripts/dev.gd")
 
 var g = null
 var busy := false
@@ -162,6 +163,9 @@ func _run() -> void:
 	g.motion_off = false
 	_ok("모션 끄면 등록기만", sn.filter(func(e): return e[0] == "coin_land").is_empty()
 			and sn.filter(func(e): return e[0] == "buy").size() == 1, "%s" % [sn])
+	Dev._run(g, {"a": "replay"})
+	_ok("개발자 「정산 다시 재생」은 소리도 처음부터", g.clear_snd_i == 0 and g.clear_t == 0.0,
+			"%d" % g.clear_snd_i)
 
 	# ⑤ 표가 화면 한가운데 축에 선다
 	var mid: float = float(g.CLR.x) + float(g.CLR.w) * 0.5
