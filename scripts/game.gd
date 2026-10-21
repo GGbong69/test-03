@@ -7233,6 +7233,14 @@ func mod_v(axis: String, dflt: float) -> float:
 	return dflt
 
 
+#  보스 제약 「반토막」(coin_mul) — 점수 · +배수 동전의 몫만 v 배. ×배수 · 골드는 안 탄다
+#  (×2 가 ×1 로 죽는다 · 2026-10-21). round 는 0 에서 먼 쪽 반올림이라 부호는 그대로다.
+func _coin_cut(kind: String, v: int) -> int:
+	if kind == "xmult":
+		return v
+	return int(round(float(v) * mod_v("coin_mul", 1.0)))
+
+
 func has_axis(axis: String) -> bool:
 	for m in active_mods:
 		if m.k == axis:
@@ -10843,7 +10851,7 @@ func _land(mark := true) -> void:
 			var amt: int = GameData.item_amt(it, ctx)
 			# 「홑장」은 슬롯을 하나로 줄이는 대신 그 한 장을 곱한다.
 			# 수량에 곱하므로 점수든 배수든 같은 자로 커진다.
-			amt = int(round(float(amt) * GameData.chal_f("item_mul", 1.0)))
+			amt = _coin_cut(it.k, int(round(float(amt) * GameData.chal_f("item_mul", 1.0))))
 			if amt != 0:
 				queue.append({"k": "item", "i": i, "kind": it.k, "v": amt,
 						"lbl": "%s  %s" % [it.n, GameData.eff_text(
@@ -10853,8 +10861,8 @@ func _land(mark := true) -> void:
 			#  복합 동전에서 반만 곱해지면 「그 동전 효과 3배」가 거짓말이 된다.
 			#  2026-09-20
 			if String(it.get("k2", "")) != "" and it.v2 != 0:
-				var v2 := int(round(float(it.v2)
-						* GameData.chal_f("item_mul", 1.0)))
+				var v2 := _coin_cut(it.k2, int(round(float(it.v2)
+						* GameData.chal_f("item_mul", 1.0))))
 				queue.append({"k": "item", "i": i, "kind": it.k2, "v": v2,
 						"lbl": "%s  %s" % [it.n, GameData.eff_text(it.k2, v2)]})
 			# 즉시 골드 — 판정은 data.gd 가 쥔다. risk50 만 절반 확률이고
@@ -42289,6 +42297,22 @@ func _icon_modifier(c: Vector2, r: float, id: String, dim: float,
 					tp + Vector2(-th2, -th2 * 0.3),
 					tp + Vector2(th2 * 0.8, -th2 * 1.2),
 					tp + Vector2(th2 * 0.8, th2 * 0.7)]), loss)
+
+		# ── 반토막 ──────────────────────────────────────
+		# 오른쪽 반이 잘려 나간 동전 원반 — 남은 반은 grey 쇠, 잘린 단면은 loss 띠(2026-10-21).
+		# 반원만 두면 왼쪽으로 쏠린다 — 덩어리 x[−kc, hw] 를 통째로 가운데에 앉힌다.
+		# 작은 벌은 테 획을 버린다.
+		"half":
+			var hw: float = maxf(r * 0.16, 1.4)
+			var hx: float = (kc - hw) * 0.5
+			var hp := PackedVector2Array()
+			for k in 13:
+				var ha := lerpf(PI, TAU, float(k) / 12.0)
+				hp.append(c + Vector2(hx + sin(ha) * kc, -cos(ha) * kc))
+			draw_colored_polygon(hp, grey)
+			if big:
+				draw_arc(c + Vector2(hx, 0.0), kc * 0.70, PI * 0.5, PI * 1.5, 10, cut, w1)
+			draw_rect(Rect2(c + Vector2(hx, -kc), Vector2(hw, kc * 2.0)), loss)
 
 		# ── 모르는 제약 ──────────────────────────────────
 		# 표에 id 가 늘면 여기로 온다. 빈 칸이 아니라 **물음표 원반**이

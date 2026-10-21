@@ -187,7 +187,7 @@ const SCORE_MODES := ["std", "bal", "rand"]
 
 const MODIFIER_AXES := ["band_mul", "gauge_mul", "fog", "darts_add",
 		"sector_kill", "seal_items", "target_mul",
-		"color_kill", "ring_kill", "odd_mul", "shuffle", "reward_mul"]
+		"color_kill", "ring_kill", "odd_mul", "shuffle", "reward_mul", "coin_mul"]
 
 static var _raw := {}                # 표 이름 → Array[Dictionary] (전부 문자열)
 static var _tune := {}               # key → int/float

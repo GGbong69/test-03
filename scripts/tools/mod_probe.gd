@@ -251,6 +251,52 @@ func _initialize() -> void:
 		_say(dry_gold < g.gold, "보상 축이 정산에 든다",
 				"제약 %d골드 · 없을 때 %d골드" % [dry_gold, g.gold])
 
+	# ⑦ 동전 축 — 「반토막」은 점수 · +배수 동전(복합 둘째 줄까지)만 반 · ×배수는 그대로
+	var pick := {}
+	for it in GameData.items():
+		var kk := String(it.get("k", ""))
+		if not pick.has(kk) and kk in ["chip", "mult", "xmult"] and int(it.get("v", 0)) > 2:
+			pick[kk] = it
+		if not pick.has("k2") and String(it.get("k2", "")) != "" and int(it.get("v2", 0)) > 2:
+			pick["k2"] = it
+	var coins := []
+	for kk in ["chip", "mult", "xmult", "k2"]:
+		if pick.has(kk):
+			var cd: Dictionary = pick[kk].duplicate(true)
+			cd.c = "always"            # 효과 수만 잰다 — 조건 · 성장 · 곁효과 · 골드는 걷는다
+			cd.grow = ""
+			cd.per = ""
+			cd.side = ""
+			cd.boom = ""
+			cd.erase("g")
+			coins.append(cd)
+	var full := {}
+	var half := {}
+	for arm in ["", "half"]:
+		_arm(g, arm)
+		g.owned = coins.duplicate(true)
+		g.sealed = -1
+		g.aim = _pt(g, 0, 0.55)
+		g.queue.clear()
+		g._land()
+		var got := {}
+		for q in g.queue:
+			if String(q.get("k", "")) == "item":
+				got["%d:%s" % [int(q.i), String(q.kind)]] = int(q.v)
+		if arm == "":
+			full = got
+		else:
+			half = got
+	var cut_ok := coins.size() == 4 and full.size() == half.size() and full.size() >= 5
+	for key in full:
+		var fv: int = int(full[key])
+		var want: int = fv if String(key).ends_with("xmult") else int(round(float(fv) * 0.5))
+		if int(half.get(key, -999)) != want:
+			cut_ok = false
+	_say(cut_ok, "동전 축 — 점수 · +배수만 반 · ×배수 그대로", "없음 %s → 반토막 %s" % [full, half])
+	g.owned = []
+	_arm(g, "")
+
 	print("
 %s" % ("실패 %d건" % fails if fails > 0 else "열 검사 전부 통과"))
 	quit(mini(fails, 125))
