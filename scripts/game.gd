@@ -44582,8 +44582,8 @@ func _tint(t: String, base: Color) -> Array:
 			carry = true
 		#  「골드 +3」 은 금빛 — 받는 값(부호 붙은 수)이 뒤에 설 때만. 「가진 골드 6 이하면」 ·
 		#  「골드 1당」 은 조건 · 재료고 「골드가 12 모자란다」 는 거절 말이다.
-		elif w == _L("골드") and i + 1 < parts.size() \
-				and "+-−".find(String(parts[i + 1]).left(1)) >= 0:
+		elif w == _L("골드") and i + 1 < parts.size() and String(parts[i + 1]) != "" \
+				and "+-−".contains(String(parts[i + 1])[0]):
 			c = C_GOLD
 			role = C_GOLD
 			carry = true
