@@ -5259,6 +5259,7 @@ func _settle_clear() -> void:
 	#  가로질렀고, 폭이 120 고정이라 「유리 대포 — 부서졌」까지만 찍혔다.
 	pops.clear()
 	clear_t = 0.0
+	clear_snd_i = 0
 	state = S.CLEAR
 	_tutor("u_clear")
 	_sfx("leg_clear")
@@ -7838,6 +7839,7 @@ func _process(d: float) -> void:
 	_prof_tick(d)
 	if state == S.CLEAR:
 		clear_t += d
+		_clear_snd()
 		queue_redraw()
 	if state == S.OVER:
 		#  완주 — 박수가 터진다(OVERB.clap_at · 한 번).
@@ -46109,6 +46111,7 @@ func _btn(r: Rect2, label: String, sub: String, on: bool,
 #  정산 표의 자리. 제목 · 합계선 · 총액이 화면 한가운데(320)에 서는데
 #  표만 x[210,384] 중심 297 이라 24px 어긋나 있었다. 한 축으로 모은다.
 var clear_t := 0.0              # 정산이 흐른 시간(초). 0 이면 막 열렸다
+var clear_snd_i := 0            # 소리를 낸 내역 줄 수(_clear_snd). 줄 수를 넘으면 합계까지 냈다
 #  이번 런에 새로 열린 것들의 이름. 해금은 여태 **잠깐 뜨는 토스트로만**
 #  말하고 런 종료 화면에는 한 글자도 안 남았다 — 새 리그가 열려도 그것을
 #  본 사람이 없을 수 있다. 런이 끝날 때 이 줄을 화면에 남긴다.
@@ -46140,6 +46143,29 @@ var run_secs := 0.0
 #  연출이 다 끝났나. 굴림이 멎고 총액이 제값에 닿았으면 참이다.
 func _clear_done() -> bool:
 	return _mo("fast") <= 0.0 or _clear_roll() >= gold
+
+
+#  정산 표 소리(2026-10-21) — 줄이 하나 들 때마다 동전이 펠트에 앉는 짤랑(받은 줄마다 한 온음씩
+#  오른다 · 0 인 줄은 조용히 지나간다) · 총액 굴림이 멎는 틀에 등록기 한 번. 판 밖이라 카지노 소리다.
+#  건너뛰기(clear_t 99) · 모션 끄기는 남은 줄을 걷고 합계만 낸다. 한 틀에 하나만 낸다.
+func _clear_snd() -> void:
+	var n: int = clear_gold_detail.size()
+	if clear_snd_i > n:
+		return
+	var step: float = _mo("fast")
+	if _clear_done() and clear_t >= float(n) * step:
+		clear_snd_i = n + 1
+		_sfx("buy")
+		return
+	if clear_snd_i == n or clear_t < float(clear_snd_i) * step:
+		return
+	var k := 0
+	for j in clear_snd_i:
+		if int(clear_gold_detail[j].v) > 0:
+			k += 1
+	if int(clear_gold_detail[clear_snd_i].v) > 0:
+		_sfx("coin_land", SFX_BASE * pow(2.0, 2.0 * float(k) / 12.0))
+	clear_snd_i += 1
 
 
 func _clear_roll() -> int:
