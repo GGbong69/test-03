@@ -10275,7 +10275,7 @@ func _land_pop(p: Vector2, land_base: int, hit_mult: int, c: Color,
 	var txt := _land_val(land_base, hit_mult)
 	if txt.is_empty():
 		return
-	pop(p, txt, c, sz, life)
+	pop(p, txt, c, sz, life, true)
 
 
 #  land_base 를 안 주면 info.base 를 쓴다 — 축을 아직 안 지난 날판(검사
@@ -11459,8 +11459,9 @@ func _next_step() -> void:
 #  9 · 10 → 10, 11 · 12 · 13 · 15 → 12, 16 · 17 → 20, 20 · 22 → 24.
 #  (불스아이 20 은 20 이 아니라 24 다 — 트리플이 20 으로 올라와 같아지면 판 위 네 단이
 #  한 단 줄어든다.)
-func pop(p: Vector2, txt: String, c: Color, sz: int, life: float) -> void:
-	pops.append({"p": p, "txt": txt, "c": c, "sz": sz, "t": 0.0, "life": life})
+#  rim — 1px 먹색 테(판 위 착탄 값 · 백색 칸에서도 읽힌다).
+func pop(p: Vector2, txt: String, c: Color, sz: int, life: float, rim := false) -> void:
+	pops.append({"p": p, "txt": txt, "c": c, "sz": sz, "t": 0.0, "life": life, "rim": rim})
 
 
 #  정산 걸음이 내는 팝의 수명. **걸음에 맨다**(2026-09-26 수선) — 까닭은
@@ -45516,6 +45517,11 @@ func _draw_pops() -> void:
 		if f != null:
 			pw = maxf(120.0, ceilf(f.get_string_size(tx, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x) + 4.0)
 		var px: float = clampf(p.p.x - pw * 0.5, 4.0, VIEW.x - 4.0 - pw)
+		if bool(p.get("rim", false)):      # 촬영 도구는 pops 를 손으로 짓는다 — 열쇠가 없을 수 있다
+			#  다트 테와 같은 먹색 — 크림 글자가 백색 칸 위에서 묻히지 않는다.
+			for o in [Vector2(-1.0, 0.0), Vector2(1.0, 0.0), Vector2(0.0, -1.0), Vector2(0.0, 1.0)]:
+				draw_string(_fz(f, sz), Vector2(px, y) + o, tx, HORIZONTAL_ALIGNMENT_CENTER, pw, sz,
+						Color(BOARDART.ring_col, c.a * 0.9))
 		draw_string(_fz(f, sz), Vector2(px, y), tx, HORIZONTAL_ALIGNMENT_CENTER, pw, sz, c)
 
 
