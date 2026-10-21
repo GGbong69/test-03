@@ -3,8 +3,16 @@
 ; 버스를 부팅 때부터 세운다. 예전에는 game.gd 의 _bus_setup 이 첫 프레임에
 ; 만들었는데, Autoload 는 그보다 먼저 돌아서 그 자리에서는 Music 버스가
 ; 아직 없었다. _bus_setup 은 이미 있는 버스를 건너뛰므로 그대로 둬도 된다.
+; Master 의 리미터(2026-10-21) — 판이 깨지고 사다리가 꼭대기에 닿는 가장 큰 순간만 찢어지는
+; 대신 -1dB 에서 눌린다. 평소 소리는 그 밑이라 안 닿는다 · 버스 크기는 안 건드린다.
+
+[sub_resource type="AudioEffectHardLimiter" id="AudioEffectHardLimiter_master"]
+resource_name = "HardLimiter"
+ceiling_db = -1.0
 
 [resource]
+bus/0/effect/0/effect = SubResource("AudioEffectHardLimiter_master")
+bus/0/effect/0/enabled = true
 bus/1/name = &"SFX"
 bus/1/solo = false
 bus/1/mute = false

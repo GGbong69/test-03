@@ -1,6 +1,6 @@
 extends SceneTree
 
-#  소리 섞기 검사(2026-10-21) — 질감 소리만 높이를 흔들고 · ×배수 걸음에 5도 겹.
+#  소리 섞기 검사(2026-10-21) — 질감 소리만 높이를 흔들고 · ×배수 걸음에 5도 겹 · Master 리미터.
 #  소리는 sfx_pool 자리에 박힌 stream · pitch_scale · volume_db 로 읽는다(qa_land 의 수법).
 #
 #   godot --path . --headless --script scripts/tools/qa_mix.gd
@@ -109,6 +109,12 @@ func _run() -> void:
 	_pool()
 	g._sfx("settle_item", g.SFX_BASE)
 	_ok("② 돌려 쓴 자리는 0dB 로 돌아온다", is_equal_approx(float(_heard()[0][2]), 0.0))
+
+	# ③ Master 에 리미터 한 장(-1dB) — 버스 크기는 그대로
+	var fx: AudioEffect = AudioServer.get_bus_effect(0, 0) if AudioServer.get_bus_effect_count(0) > 0 else null
+	_ok("③ Master 리미터 -1dB", fx is AudioEffectHardLimiter and AudioServer.is_bus_effect_enabled(0, 0)
+			and is_equal_approx((fx as AudioEffectHardLimiter).ceiling_db, -1.0),
+			"%s" % [fx.get_class() if fx != null else "없음"])
 
 	print("\n%s\n" % ("전부 통과" if fail == 0 else "실패 %d건" % fail))
 	print("통과 %d · 실패 %d" % [okn, fail])
