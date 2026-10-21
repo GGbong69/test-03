@@ -19666,6 +19666,11 @@ func _draw_darts(a := 1.0) -> void:
 			var sz := _bd3_size()
 			# 눕히기 변환이 걸린 채로 그린다 — 판과 같이 눌려야 판 갈이
 			# 연출에서 다트만 서 있는 그림이 안 나온다.
+			#  1px 먹색 테 — 같은 장을 네 쪽으로 1px 밀어 먹색으로 먼저 깐다(무대 바탕이 투명이라 알파가
+			#  곧 실루엣이다). 크림 자루가 백색 칸 위에서 사라졌다(선생님 피드백 2026-10-20).
+			var rim := Color(BOARDART.ring_col, 0.9 * a)
+			for o in [Vector2(1.0, 0.0), Vector2(-1.0, 0.0), Vector2(0.0, 1.0), Vector2(0.0, -1.0)]:
+				draw_texture_rect(tex, Rect2(o, sz), false, rim)
 			draw_texture_rect(tex, Rect2(Vector2.ZERO, sz), false,
 					Color(1.0, 1.0, 1.0, a))
 			return
