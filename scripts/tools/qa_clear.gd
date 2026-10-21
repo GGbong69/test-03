@@ -126,6 +126,14 @@ func _run() -> void:
 			"%d / 합 %d · 지갑 %d" % [at2, sum, g.gold])
 	_ok("멎으면 자금판이 새 지갑", g._bank_shown() == g.gold, "%d / %d" % [g._bank_shown(), g.gold])
 	_ok("다 구르면 끝났다고 말한다", g._clear_done(), "")
+	#  큰 수가 제값에 닿는 그 틀에 끝난다 — 등록기 · 자금판이 수가 멎는 틀과 같다.
+	var stop_ok := true
+	g.clear_t = 0.0
+	for k in 120:
+		g.clear_t += 1.0 / 60.0
+		if (g._clear_roll() == sum) != g._clear_done():
+			stop_ok = false
+	_ok("수가 멎는 틀에 끝난다(등록기 · 자금판)", stop_ok, "")
 
 	# ③ 누르면 즉시 끝난다 — 연출이 입력을 삼키면 안 된다
 	g.clear_t = 0.0
