@@ -6682,6 +6682,9 @@ func _reroll() -> void:
 		return                   # 쓸기는 중단도 재진입도 없다
 	_hand_abort()
 	if gold < reroll_cost:
+		#  사유를 세운다 — 없으면 앞치마에 리롤과 상관없는 「…슬롯이 꽉 찼다」가 뜬다.
+		pay_msg = _L("골드가 %d 모자란다") % (reroll_cost - gold)
+		pay_msg_t = HAND.msg_t
 		_deny()
 		return
 	gold -= reroll_cost

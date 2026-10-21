@@ -34,7 +34,8 @@ func _initialize() -> void:
 	fail += _t_sell_wrong(g)
 	fail += _t_move(g)
 	fail += _t_lanes(g)
-	print("\n%s" % ("실패 %d건" % fail if fail > 0 else "열한 검사 전부 통과"))
+	fail += _t_reroll_short(g)
+	print("\n%s" % ("실패 %d건" % fail if fail > 0 else "열두 검사 전부 통과"))
 	quit(mini(fail, 125))
 
 
@@ -336,6 +337,18 @@ func _t_sell_wrong(g: Node) -> int:
 	_drag(g, g._slot_rect(0).get_center(), _buy_pt(g))
 	return _say(g.owned.size() == 1 and g.gold == before, "동전 슬롯 기본 점수 → 오른쪽 = 거절",
 			"골드 %d · 남은 기본 점수 %d · 사유 '%s'" % [g.gold, g.owned.size(), g.pay_msg])
+
+
+# ⑥-2 골드가 모자란 리롤 — 앞치마 사유가 리롤 값 이야기다(2026-10-21)
+func _t_reroll_short(g: Node) -> int:
+	_shop(g)
+	g.reroll_cost = maxi(int(g.reroll_cost), 3)
+	g.gold = g.reroll_cost - 2
+	var before: int = g.gold
+	g._reroll()
+	var want: String = g._L("골드가 %d 모자란다") % (g.reroll_cost - before)
+	return _say(g.gold == before and g.pay_msg == want and g.pay_msg_t > 0.0,
+			"골드가 모자란 리롤 = 사유", "골드 %d · 사유 '%s'" % [g.gold, g.pay_msg])
 
 
 # ⑦ 펠트에 놓으면 그냥 옮긴다
