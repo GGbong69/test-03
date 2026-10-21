@@ -31,15 +31,16 @@ func _ok(n: String, c: bool, d := "") -> void:
 #  칠이 안 된 것이 아니라 **칠을 못 알아본** 것이었다.
 func _tag_of(c: Color) -> String:
 	if c.is_equal_approx(g.C_CHIP): return "푸"
-	if c.is_equal_approx(g.C_MULT): return "붉"
+	if c.is_equal_approx(g.C_MULT) or c.is_equal_approx(g.C_XMULT): return "붉"
 	if c.is_equal_approx(g.C_ODDS): return "초"
+	if c.is_equal_approx(g.C_GOLD): return "금"
 	return "·"
 
 
 func _paint(t: String) -> String:
 	var out := ""
 	for s in g._tint(t, Color("8f86a8")):
-		out += _tag_of(s.c).repeat(maxi(String(s.s).strip_edges().length(), 1))
+		out += _tag_of(s.get("bg", s.c)).repeat(maxi(String(s.s).strip_edges().length(), 1))
 	return out
 
 
@@ -79,7 +80,7 @@ func _run() -> void:
 			var got := ""
 			for s in seg:
 				if String(s.s).strip_edges() == String(want):
-					got = _tag_of(s.c)
+					got = _tag_of(s.get("bg", s.c))
 			if got == "·" or got == "":
 				bad.append(String(want))
 		_ok("칠해짐 · %s" % t.substr(0, 22), bad.is_empty(),
@@ -131,7 +132,7 @@ func _run() -> void:
 		var got2 := ""
 		for sg in g._tint(t2, Color("8f86a8")):
 			if String(sg.s).strip_edges() == want2:
-				got2 = _tag_of(sg.c)
+				got2 = _tag_of(sg.get("bg", sg.c))
 		_ok("이어감 · %s" % want2, got2 == String(c2[2]),
 				"%s → '%s' 가 %s (바라는 값 %s)"
 				% [_paint(t2), want2, got2 if got2 != "" else "없음", c2[2]])
@@ -158,6 +159,23 @@ func _run() -> void:
 		if _paint(t).find("푸") >= 0 or _paint(t).find("붉") >= 0:
 			over.append("%s → %s" % [t, _paint(t)])
 	_ok("물건의 점수가 아닌 곳은 안 칠한다", over.is_empty(), ", ".join(over))
+
+	# ⑥ ×배수는 알약 위 흰 글자 · 골드는 금빛 (2026-10-21)
+	print("")
+	var seg6: Dictionary = {}
+	for sg6 in g._tint("배수 ×4 · 판마다 1/10 확률로 파괴", Color("8f86a8")):
+		if String(sg6.s).strip_edges() == "×4":
+			seg6 = sg6
+	_ok("×4 는 알약 위 흰 글자", seg6.has("bg") and Color(seg6.c).is_equal_approx(g.C_TXT),
+			str(seg6))
+	var pill_n := 0
+	for sg7 in g._tint("배수 +4 · 배수 × 빈 동전 슬롯 수 (최소 ×1)", Color("8f86a8")):
+		if sg7.has("bg"):
+			pill_n += 1
+	_ok("+배수 · 홀로 선 × 는 알약이 아니다", pill_n == 0, "알약 %d" % pill_n)
+	_ok("골드 +3 은 금빛", _paint("판마다 골드 +3").ends_with("금금금금"), _paint("판마다 골드 +3"))
+	for t6 in ["골드가 12 모자란다", "가진 골드 6 이하면 배수 +2", "골드 1당 배수 +1"]:
+		_ok("받는 골드가 아니면 안 칠한다 · %s" % t6, _paint(t6).find("금") < 0, _paint(t6))
 
 	print("\n통과 %d · 실패 %d" % [okn, fail])
 	quit(mini(fail, 125))

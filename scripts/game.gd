@@ -509,6 +509,8 @@ const C_PANEL := Color("221d33")
 #  1.71:1 이고, 배수는 판 위 4.44 → 5.34:1 로 같이 올라간다.
 const C_CHIP := Color("8fc9f2")
 const C_MULT := Color("e8705c")
+#  ×배수 알약 — 배수 붉음을 한 단 눌렀다. 그 위 흰 글자(C_TXT)가 4.9:1(붉음 그대로는 2.65:1).
+const C_XMULT := Color("a24e40")
 const C_GOLD := Color("f2c94c")
 # 확률. 점수(푸름)·배수(붉음)와 나란한 셋째 색이다 — 「1/10 확률로 파괴」의
 # 그 몫이 눈에 먼저 들어와야 살지 말지가 갈린다. 짙은 툴팁 판 위에서 읽힌다.
@@ -11194,9 +11196,12 @@ func _next_step() -> void:
 			#  수명이 **걸음에 매인다**(2026-09-26 수선). 팝이 전부 카드 윗변
 			#  한 점(cc)에서 나므로 0.9초 붙박이면 동전이 둘만 발동해도
 			#  「점수 +80」 위에 「배수 +4」가 얹혀 한 덩어리가 됐다.
+			#  ×배수는 툴팁과 같은 알약 위 흰 글자다(_tint).
+			var xm: bool = st.kind == "xmult"
 			pop(cc, GameData.eff_text(
 					"mult" if st.kind == "mult_rand" else String(st.kind), st.v),
-					col, 20, _pop_life())
+					C_TXT if xm else col, 20, _pop_life(), false,
+					C_XMULT if xm else Color(0.0, 0.0, 0.0, 0.0))
 			_sfx("settle_item", f)
 			shake = 3.0
 			# 몸은 갈래 밖에서 한 번만 챈다. 모르는 효과(_ 갈래)도 걸음은 걸음이라
@@ -11459,9 +11464,11 @@ func _next_step() -> void:
 #  9 · 10 → 10, 11 · 12 · 13 · 15 → 12, 16 · 17 → 20, 20 · 22 → 24.
 #  (불스아이 20 은 20 이 아니라 24 다 — 트리플이 20 으로 올라와 같아지면 판 위 네 단이
 #  한 단 줄어든다.)
-#  rim — 1px 먹색 테(판 위 착탄 값 · 백색 칸에서도 읽힌다).
-func pop(p: Vector2, txt: String, c: Color, sz: int, life: float, rim := false) -> void:
-	pops.append({"p": p, "txt": txt, "c": c, "sz": sz, "t": 0.0, "life": life, "rim": rim})
+#  rim — 1px 먹색 테(판 위 착탄 값 · 백색 칸에서도 읽힌다). bg — 알약 바탕(×배수 · 알파 0 이면 없다).
+func pop(p: Vector2, txt: String, c: Color, sz: int, life: float, rim := false,
+		bg := Color(0.0, 0.0, 0.0, 0.0)) -> void:
+	pops.append({"p": p, "txt": txt, "c": c, "sz": sz, "t": 0.0, "life": life, "rim": rim,
+			"bg": bg})
 
 
 #  정산 걸음이 내는 팝의 수명. **걸음에 맨다**(2026-09-26 수선) — 까닭은
@@ -44511,6 +44518,13 @@ func _tint(t: String, base: Color) -> Array:
 			c = C_MULT
 			role = C_MULT
 			carry = true
+		#  「골드 +3」 은 금빛 — 받는 값(부호 붙은 수)이 뒤에 설 때만. 「가진 골드 6 이하면」 ·
+		#  「골드 1당」 은 조건 · 재료고 「골드가 12 모자란다」 는 거절 말이다.
+		elif w == _L("골드") and i + 1 < parts.size() \
+				and "+-−".find(String(parts[i + 1]).left(1)) >= 0:
+			c = C_GOLD
+			role = C_GOLD
+			carry = true
 		#  「다트」·「골드」 는 제 수를 따로 갖는다 — 「점수 +100 · 판 시작 다트 −2」 의 −2 가
 		#  점수 파랑으로 칠해졌다. 여기서만 이어감을 끊고, 값 아닌 다른 토막에서는 안 끊는다.
 		elif w.begins_with(_L("다트")) or w.begins_with(_L("골드")):
@@ -44522,7 +44536,11 @@ func _tint(t: String, base: Color) -> Array:
 		#  −1 이 흰 글자였다 — 그 −1 은 배수인데 배수색이 아니었다.
 		#  다음 점수/배수 낱말을 만날 때까지 이어간다.
 		# 사이 공백을 토막에 붙여 둔다 — 폭을 따로 더하면 글꼴마다 어긋난다.
-		out.append({"s": w + (" " if i < parts.size() - 1 else ""), "c": c})
+		var sg := {"s": w + (" " if i < parts.size() - 1 else ""), "c": c}
+		#  ×배수는 알약 위 흰 글자 — 가장 센 효과가 읽기 전에 눈에 든다.
+		if c == C_MULT and w.begins_with("×") and w.substr(1).is_valid_int():
+			sg = {"s": sg.s, "c": C_TXT, "bg": C_XMULT}
+		out.append(sg)
 	return out
 
 
@@ -44589,9 +44607,19 @@ func _draw_tinted_part(x: float, y: float, full: String, part: String,
 		if piece == "":
 			continue
 		var f := _tip_font(sz)
+		if g.has("bg"):
+			_pill(cx, y, f.get_string_size(piece.strip_edges(false, true),
+					HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x, sz, Color(g.bg, tip_a))
 		draw_string(_fz(f, sz), Vector2(cx, y), piece, HORIZONTAL_ALIGNMENT_LEFT,
 				-1, sz, Color(g.c, tip_a))
 		cx += f.get_string_size(piece, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x
+
+
+#  알약 — 글 잉크를 위아래 · 양옆 1px 씩 덮는다. 폭은 안 늘린다(양옆은 앞뒤 공백 안이다).
+func _pill(x: float, by: float, w: float, sz: int, col: Color) -> void:
+	var up: float = roundf(float(sz) * float(TIP.ink_up)) + 1.0
+	_rr(self, Rect2(roundf(x) - 1.0, by - up, ceilf(w) + 2.0,
+			up + ceilf(float(sz) * float(TIP.ink_dn)) + 1.0), col)
 
 
 func _draw_tinted(x: float, y: float, t: String, sz: int, base: Color) -> void:
@@ -45517,6 +45545,10 @@ func _draw_pops() -> void:
 		if f != null:
 			pw = maxf(120.0, ceilf(f.get_string_size(tx, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x) + 4.0)
 		var px: float = clampf(p.p.x - pw * 0.5, 4.0, VIEW.x - 4.0 - pw)
+		var bg: Color = p.get("bg", Color(0.0, 0.0, 0.0, 0.0))
+		if bg.a > 0.0 and f != null:
+			var tw: float = f.get_string_size(tx, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x
+			_pill(px + (pw - tw) * 0.5, y, tw, sz, Color(bg, bg.a * c.a))
 		if bool(p.get("rim", false)):      # 촬영 도구는 pops 를 손으로 짓는다 — 열쇠가 없을 수 있다
 			#  다트 테와 같은 먹색 — 크림 글자가 백색 칸 위에서 묻히지 않는다.
 			for o in [Vector2(-1.0, 0.0), Vector2(1.0, 0.0), Vector2(0.0, -1.0), Vector2(0.0, 1.0)]:
