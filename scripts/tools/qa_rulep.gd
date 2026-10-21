@@ -11,6 +11,7 @@ extends SceneTree
 #   ⑧ 넷이 다 안 들어가면 효과 줄을 접는다 — 그래도 bot 위다.
 #   ⑨ 판이 안 서 있으면(판 갈이 · 상점) 비운다 · 움직임 끄기면 빠지는 명판이 곧장 지워진다.
 #   ⑩ events.csv 의 사건 세 갈래에 desc 가 있다.
+#   ⑪ 판 모양을 바꾼 보드 확장(과녁 등)은 맨 위 한 장 · 효과는 mods.csv · 오른쪽 아래 이름 명판은 접는다.
 #   godot --headless --path . --script scripts/tools/qa_rulep.gd
 const Save = preload("res://scripts/save.gd")
 const GameData = preload("res://scripts/data.gd")
@@ -268,3 +269,24 @@ func _run() -> void:
 		if String(e).begins_with("events"):
 			errs.append(e)
 	_ok("⑩ events 표 오류 없음", errs.is_empty(), str(errs))
+
+	# ⑪ 판 모양을 바꾼 보드 확장 — 맨 위 한 장 · mods.csv 이름 · 효과 · 이름 명판은 접는다
+	_clear()
+	g.mods_own = ["aimb"]
+	var am: Dictionary = GameData.mod_of("aimb")
+	var br0: Array = g._rulep_rows()
+	_ok("⑪ 과녁 — 보드 확장 한 장 · 이름 · 효과 표 그대로", br0.size() == 1 and String(br0[0].k) == "board"
+			and String(br0[0].n) == String(am.n) and String(br0[0].d[0]) == String(am.d), str(br0))
+	_ok("⑪ 과녁이면 오른쪽 아래 이름 명판은 접는다", not g._modplate_on())
+	g.active_mods = [mf[0]]
+	_tick(1.0)
+	_ok("⑪ 제약과 같이 서면 보드 확장이 맨 위", String(g._rulep_rows()[0].k) == "board"
+			and g.rulep.size() == 2)
+	g._tip_build({"k": "rulep", "i": 0, "src": ""})
+	tags = g.tip_tags.map(func(t): return String(t.t))
+	_ok("⑪ 툴팁 태그 [보드 확장]", tags.has("보드 확장") and g.tip_title == String(am.n), str(tags))
+	g.active_mods = []
+	g.mods_own = ["soks"]
+	_ok("⑪ 판 모양을 안 바꾸는 확장(핵심)은 명판 없음 · 이름 명판 그대로",
+			g._rulep_rows().is_empty() and g._modplate_on())
+	g.mods_own = []

@@ -18034,8 +18034,9 @@ func _draw_fx() -> void:
 const MODPLATE := {"y": 322.0, "h": 26.0, "pad": 6.0, "icon_r": 9.0, "gap": 5.0, "right": 8.0}
 
 
+#  판 모양을 바꾼 장은 오른쪽 벽 규칙 명판(RULEP)이 효과까지 싣는다 — 여기서는 접는다.
 func _modplate_on() -> bool:
-	return _is_play() and not mods_own.is_empty() and not swap_live
+	return _is_play() and not mods_own.is_empty() and not swap_live and _board_theme() == ""
 
 
 func _modplate_rect() -> Rect2:
@@ -18072,6 +18073,8 @@ func _modplate_draw() -> void:
 #  오른쪽 벽(HUD 밑 · 오른쪽 점수 카드 위)에 이 판의 규칙을 명판 한 장씩 세운다 — 그림 · 이름 · 효과.
 #    · 보스 제약(active_mods)은 한 장마다 — 그림은 상단 띠 · 보스 카드와 같은 _icon_modifier,
 #      효과는 modifiers.csv 의 desc 그대로다.
+#    · 판 모양을 바꾼 보드 확장(과녁 · 도넛 · 피자 · 시계 — _board_theme)은 맨 위 한 장 — 그림은 와펜,
+#      효과는 mods.csv 의 desc 그대로다(2026-10-21). 오른쪽 아래 이름 명판(MODPLATE)은 그동안 접는다.
 #    · 판 사건은 판 위에 서 있는 동안 한 장 — 칠판 주문(걸린 뒤 보상을 받기까지) · 단골(자루가
 #      꽂혀 막는 동안) · 불씨(핀 동안). 효과는 events.csv 의 desc 가 쥔다({cond} · {reward} ·
 #      {cell} · {val} · {name} · {v} 를 채운다). 「 · 」가 줄을 가른다.
@@ -18107,6 +18110,12 @@ var rulep_dim := 0.0             # 조준 중에 물러난 몫 0..1
 #  left(남은 발 · −1 없음), max(눈금 칸)}.
 func _rulep_rows() -> Array:
 	var out := []
+	#  판 모양을 바꾼 보드 확장(_board_theme) — 과녁은 칸 수가 사라져 무엇이 바뀌었는지 판만으론 모른다.
+	#  보드 확장은 한 칸(mods_own = [id])이라 [0] 이 곧 그 장이다.
+	if _board_theme() != "" and not mods_own.is_empty():
+		var bm := GameData.mod_of(String(mods_own[0]))
+		out.append({"key": "b:" + String(bm.id), "k": "board", "id": String(bm.id), "n": String(bm.n),
+				"d": [String(bm.d)], "left": -1, "max": 0})
 	for mo in active_mods:
 		var mid := String(mo.get("id", ""))
 		out.append({"key": "m:" + mid, "k": "mod", "id": mid, "n": String(mo.get("n", "")),
@@ -18246,7 +18255,8 @@ func _rulep_layout() -> Array:
 		var rw: Dictionary = rulep[k].row
 		var ls := []
 		for s0 in rw.d:
-			for w2 in _tip_wrap(String(s0), tw, 12):
+			#  고른 말로 바꾼 뒤에 접는다 — 한국어로 접은 토막은 번역 짝이 없다(피자 효과 줄)
+			for w2 in _tip_wrap(_L(String(s0)), tw, 12):
 				ls.append(w2)
 				wmax = maxf(wmax, _rulep_tw(w2))
 		wmax = maxf(wmax, _rulep_tw(String(rw.n)) + _rulep_ticks_w(rw))
@@ -18378,6 +18388,8 @@ func _rulep_icon(rw: Dictionary, c: Vector2, r: float, a: float) -> void:
 	match String(rw.k):
 		"mod":
 			_icon_modifier(c, r, String(rw.id), 0.0, a)
+		"board":
+			_icon_mod(c, r, String(rw.id), 0.0, 1.0, a)
 		"order":
 			#  칠판 — 칠판 한 붓(_chalk_board · CHALKB.icon)에 분필 눈금 셋(칠판 주문의 그것).
 			var sl := _pr(Rect2(c - Vector2(r - 2.0, r * 0.74 - 2.0),
@@ -40415,12 +40427,12 @@ func _mod_art_shadow(tx: Texture2D, g: Vector2, r: float, col: Color) -> void:
 # 사라지고, 속살(+0.06)과 겉살(-0.06)의 차이는 1px 여서 안 갈린다.
 # 그래서 방향과 대소만 살리고 폭은 읽히도록 과장한다.
 func _icon_mod(c: Vector2, r: float, id: String, dim: float,
-		fl: float = 1.0) -> void:
+		fl: float = 1.0, alpha: float = 1.0) -> void:
 	#  구운 와펜이 있으면 그것이 이긴다(위 「보드 확장 와펜」 절). 아래 도식은
-	#  그림이 아직 없는 id 의 자리다.
+	#  그림이 아직 없는 id 의 자리다(alpha 를 못 받는다).
 	var mtx := _mod_art(id)
 	if mtx != null:
-		_mod_art_draw(mtx, c, r, dim, fl)
+		_mod_art_draw(mtx, c, r, dim, fl, alpha)
 		return
 	var m := GameData.mod_of(id)
 	var k := String(m.get("k", ""))
@@ -44472,7 +44484,7 @@ func _tip_build(hit: Dictionary) -> void:
 			if i >= rrows.size():
 				return
 			var rw: Dictionary = rrows[i]
-			_tip_set_tag("제약" if String(rw.k) == "mod" else "사건")
+			_tip_set_tag({"mod": "제약", "board": "보드 확장"}.get(String(rw.k), "사건"))
 			tip_mark = _order_foot() if String(hit.get("src", "")) == "board" \
 					else _rulep_rect(String(rw.key))
 			tip_title = String(rw.n)
