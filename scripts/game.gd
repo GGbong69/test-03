@@ -5257,7 +5257,7 @@ func _settle_clear() -> void:
 		#  판 이름은 **제목이 이미 말했다**("라운드 1  작은 판 넘김").
 		#  같은 말을 두 줄 아래에 또 적으면 내역 첫 줄이 정보가 아니다.
 		{"n": "클리어 보상", "v": clear},
-		{"n": _L("남은 다트 %d개") % darts_left, "v": dart_gold},
+		{"n": _L("남은 다트 %d개") % darts_left, "v": dart_gold, "d": darts_left},   # d — 금화로 뒤집히는 다트 수(_clear_darts)
 		{"n": "이자", "v": interest},
 	]
 	if bounty > 0:
@@ -5383,6 +5383,12 @@ func _run_rounds() -> int:
 #  튜토리얼을 또 받지 않게.
 func _tut_due() -> bool:
 	return not GameData.chal_any() and not GameData.endless and not _autoplay 			and not Save.taught("u_boot") and not Save.taught("u_gift")
+
+
+#  처음 켠 사람은 손잡이에서 곧장 튜토리얼 런이다(2026-10-21) — 새 런 화면(챌린지 탭)을
+#  안 지나므로 튜토리얼이 빠질 길이 없다. 덮을 이어하기가 있으면 옛 길(새 런 화면의 겨눔)이다.
+func _tut_first() -> bool:
+	return _tut_due() and not _run_ok()
 
 
 func _boot_due() -> bool:
@@ -11920,6 +11926,7 @@ func _tally_land(freeze := true) -> void:
 	var pit := SFX_BASE * pow(2.0, (float(burst_pitch) - float(GROW.semi) * gn) / 12.0)
 	if fire_hot >= 4 and not motion_off and not brk:
 		fire_snd = pit
+		_mus_duck()          # 빈 박 — 음악도 비킨다
 	else:
 		_sfx("settle_total", pit)
 		tally_snd_t = 0.0
@@ -12090,6 +12097,7 @@ func _fire_release() -> void:
 #  한 번의 돌파에 한 번이다(cross_live).
 func _cross_fire() -> void:
 	cross_live = false
+	_mus_duck()
 	_sfx("target_hit")
 	tally_snd_t = 0.0
 	if _scr_flash():
@@ -13511,8 +13519,9 @@ func _hud_draw() -> void:
 		return
 	if not _bar_hidden():
 		_draw_topbar()
+	#  자금판은 정산에서도 선다(2026-10-21) — 큰 수가 이번 판 몫이라 지갑은 여기가 말한다.
+	_bank_draw()
 	if state != S.CLEAR:            # 정산 화면은 그 자체가 명세다
-		_bank_draw()
 		_cons_draw()
 		_panel_draw()
 		_cap_draw()
@@ -20778,7 +20787,7 @@ func _bank_draw() -> void:
 		var cut: float = float(GRIP.wall) + _grip_dx() + 1.0 - r.position.x 				if r.end.x > _grip_dx() else 0.0
 		if cut > 0.0:
 			vis = Rect2(r.position.x + cut, r.position.y, r.size.x - cut, r.size.y)
-	var gt := str(gold)
+	var gt := str(_bank_shown())
 	var room: float = vis.size.x - 4.0
 	var gsz := 24
 	if _bank_gold_w(gt, 24) > room:
@@ -46531,7 +46540,7 @@ func _fire_count(i: int) -> void:
 		run_fires[id] = int(run_fires.get(id, 0)) + 1
 
 
-#  총액 굴림. 내역이 다 든 뒤부터 0 에서 실제 골드까지 오른다.
+#  총액 굴림. 내역이 다 든 뒤부터 0 에서 이번 판 몫(_clear_sum)까지 오른다.
 #  자릿수가 많을수록 조금 더 오래 — 세 자리와 다섯 자리가 같은 시간에
 #  멎으면 큰 수가 순간이동한 것처럼 보인다.
 #
@@ -46539,7 +46548,63 @@ func _fire_count(i: int) -> void:
 #  다트 그대로다 — 던지기와 착탄에는 카지노 소리를 안 올린다).
 #  연출이 다 끝났나. 굴림이 멎고 총액이 제값에 닿았으면 참이다.
 func _clear_done() -> bool:
-	return _mo("fast") <= 0.0 or _clear_roll() >= gold
+	#  보이는 수가 제값에 닿는 틀이다 — k 1 까지 기다리면 수가 멎고 0.2초 뒤에 등록기 · 자금판이 난다.
+	return _mo("fast") <= 0.0 or _clear_roll() >= _clear_sum()
+
+
+#  이번 판에 번 돈 — 내역 줄의 합(2026-10-21). 합계선 밑 큰 수가 이것이라 줄들과 맞는다.
+#  지갑 전체는 자금판이 말한다(_bank_shown).
+func _clear_sum() -> int:
+	var s := 0
+	for r in clear_gold_detail:
+		s += int(r.v)
+	return s
+
+
+#  총액 굴림의 몫(0~1). 내역이 다 든 뒤부터 오른다 — 모션 끄기 · 건너뛰기(clear_t 99)는 1.
+func _clear_k() -> float:
+	if _mo("fast") <= 0.0:
+		return 1.0
+	var from: float = float(clear_gold_detail.size()) * _mo("fast")
+	var span: float = clampf(0.25 + 0.12 * log(maxf(float(absi(_clear_sum())), 1.0)) / log(10.0),
+			0.25, 0.8)
+	return clampf((clear_t - from) / span, 0.0, 1.0)
+
+
+#  자금판에 찍는 골드 — 정산 굴림이 멎기 전에는 이번 판 몫을 뺀 옛 지갑이고, 멎는 틀(등록기)에 오른다.
+func _bank_shown() -> int:
+	return gold - _clear_sum() if state == S.CLEAR and not _clear_done() else gold
+
+
+#  「남은 다트」 줄의 다트 j(n 자루 중) 가 금화로 뒤집힌 몫(0~1 · 반을 넘으면 금화). 줄 i 가
+#  드는 틀부터 한 자루씩 — 모션 끄기 · 건너뛰기는 다 금화다.
+func _clear_flip(i: int, j: int, n: int) -> float:
+	var step: float = _mo("fast")
+	if step <= 0.0:
+		return 1.0
+	var t0: float = float(i) * step + float(j) * _mo("tap") * minf(1.0, 6.0 / float(maxi(n, 1)))
+	return clampf((clear_t - t0) / step, 0.0, 1.0)
+
+
+#  다트 n 자루를 x[xa, xb] 오른쪽 끝부터 줄 세운다 — 가로로 접혔다 펴지며(cos) 금화가 된다.
+#  쇠 금화 한 닢(테 · 면 · 빛 한 점) — 보석 없음.
+func _clear_darts(i: int, n: int, xa: float, xb: float, cy: float, big: bool, a: float) -> void:
+	var w: float = 12.0 if big else 8.0
+	w = minf(w, (xb - xa) / float(n))
+	if w < 3.0:
+		return              # 이름과 값 사이에 안 든다 — 값이 이미 말한다
+	var r: float = 5.0 if big else 3.5
+	for j in n:
+		var p: float = _clear_flip(i, j, n)
+		var c := Vector2(roundf(xb - w * (float(n - j) - 0.5)), roundf(cy))
+		draw_set_transform(shake_off + c, 0.0, Vector2(maxf(absf(cos(p * PI)), 0.08), 1.0))
+		if p < 0.5:
+			_icon_dart(Vector2.ZERO, 6.0 if big else 4.0, "std", 0.0, 0.0, a, false)
+		else:
+			draw_circle(Vector2.ZERO, r, Color(C_GOLD.darkened(0.4), a))
+			draw_circle(Vector2.ZERO, r - 1.0, Color(C_GOLD, a))
+			draw_rect(Rect2(Vector2(-r * 0.5, -r * 0.5), Vector2.ONE), Color(C_GOLD.lightened(0.6), a))
+	draw_set_transform(shake_off)
 
 
 #  정산 표 소리(2026-10-21) — 줄이 하나 들 때마다 동전이 펠트에 앉는 짤랑(받은 줄마다 한 온음씩
@@ -46566,13 +46631,7 @@ func _clear_snd() -> void:
 
 
 func _clear_roll() -> int:
-	if _mo("fast") <= 0.0:
-		return gold                              # 모션 끄기
-	var from: float = float(clear_gold_detail.size()) * _mo("fast")
-	var span: float = clampf(0.25 + 0.12 * log(maxf(float(gold), 1.0)) / log(10.0),
-			0.25, 0.8)
-	var k: float = clampf((clear_t - from) / span, 0.0, 1.0)
-	return int(round(float(gold) * _ease_enter(k)))
+	return int(round(float(_clear_sum()) * _ease_enter(_clear_k())))
 
 
 #  글자 크기 — 줄이 여섯 이하면 **큰 표**: 이름 20(곁말) · 값 24 · 총액 36 ·
@@ -46636,6 +46695,11 @@ func _draw_clear() -> void:
 		var vt := "+%d" % int(row.v)
 		draw_gold_at(x1 - gold_w(vt, vs), y, vt, vs,
 				Color(C_GOLD if got else C_OFF, a))
+		if got and int(row.get("d", 0)) > 0:
+			var nf: Font = font_sm if big else font
+			var nx: float = x0 + nf.get_string_size(_L(_elide_word(String(row.n), nw, 20 if big else 12)),
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 20 if big else 12).x + 6.0
+			_clear_darts(i, int(row.d), nx, x1 - gold_w(vt, vs) - 6.0, y - float(vs) * 0.4, big, a)
 		y += dy
 
 	#  합계선 — 내역이 다 든 뒤에 그어진다. 마지막 줄 바닥선에서 잰다.
@@ -46646,10 +46710,11 @@ func _draw_clear() -> void:
 	if step <= 0.0 or clear_t >= all_in:
 		var ly: float = y - dy + (10.0 if big else 8.0)
 		draw_rect(Rect2(Vector2(x0, ly), Vector2(tw, 1.0)), Color(C_WIRE, 0.5))
+		var et := "%+d" % _clear_roll()          # 이번 판 몫 — 줄들의 합(지갑은 자금판)
 		if big:
-			draw_gold(VIEW.x * 0.5, ly + 35.0, str(_clear_roll()), 36, C_GOLD)
+			draw_gold(VIEW.x * 0.5, ly + 35.0, et, 36, C_GOLD)
 		else:
-			draw_gold(VIEW.x * 0.5, ly + 25.0, str(_clear_roll()), 24, C_GOLD)
+			draw_gold(VIEW.x * 0.5, ly + 25.0, et, 24, C_GOLD)
 
 	_btn(Rect2(Vector2(232, 290), Vector2(176, 42)), "상점으로", "", true, C_GOLD, true)
 
@@ -50235,7 +50300,10 @@ func _door_open() -> void:
 		return
 	if not (_door_live() and _cine_ok(wipe_force)):
 		_sfx("menu_pick")
-		_open_newrun()
+		if _tut_first():
+			_wipe(_new_run.bind(true))
+		else:
+			_open_newrun()
 		return
 	door_k0 = _door_peek_k()               # 살짝 열린 자리에서 이어 연다
 	door_t = 0.0
@@ -50250,14 +50318,18 @@ func _door_open() -> void:
 	queue_redraw()
 
 
-#  지지직이 다 덮었다 — 새 런 화면으로. 문은 닫아 둔다(제목으로 돌아오면 닫힌 문이다).
+#  지지직이 다 덮었다 — 새 런 화면으로(처음 켠 사람은 튜토리얼 판 고르기로 · _tut_first).
+#  문은 닫아 둔다(제목으로 돌아오면 닫힌 문이다).
 func _door_through() -> void:
 	door_t = -1.0
 	door_went = false
 	if door_vp != null and is_instance_valid(door_vp):
 		Door3D.door_pose(door_vp, 0.0)
 		Door3D.cam_dolly(door_vp, 0.0)
-	_open_newrun()
+	if _tut_first():
+		_new_run(true)          # 덮개 밑이다 — _wipe 를 또 부르면 안 돈다
+	else:
+		_open_newrun()
 
 
 #  인트로 끝에서 가라앉는 짙기 · 제목의 짙기. 문이 서면 0 — 판이 램프 빛 안에 선다.
@@ -55585,6 +55657,11 @@ func _to_lobby() -> void:
 
 
 func _open_newrun() -> void:
+	#  「튜토리얼 끝」 칠판의 「새 런」은 곧장 본편 1판 고르기다(2026-10-21) — 다트통 · 리그는
+	#  저장된 고름 그대로다. 그다음 런부터 새 런 화면에서 고른다.
+	if state == S.OVER and tut_run and won:
+		_wipe(_new_run.bind(true))
+		return
 	#  게임 오버에서 새 런으로 — 판을 떠나 메뉴로 가는 길이라 덮는다(WIPE). 덮개가 다
 	#  덮었을 때 이 함수를 다시 부른다(그때는 덮는 중이라 아래로 간다).
 	if state == S.OVER and wipe_t < 0.0 and _cine_ok(wipe_force):
@@ -58344,6 +58421,10 @@ const MUS_RUSH_MAX := 0.08    # 마지막 라운드의 보스
 #  곡이 다 넘어갈 즈음 속도도 다 올라 있어야 둘이 한 사건으로 들린다.
 #  툭 바꾸면 계단이 그대로 들리고, 넘김보다 속도가 먼저 눈에 띈다.
 const MUS_PITCH_RATE := 0.06
+#  음악이 비킨다(2026-10-21) — 목표를 넘는 틀 · 4단 빈 박에 −8dB 로 휙 내려갔다 0.6초에 돌아온다
+#  (「목표 달성」 · 판 깨지는 소리가 앞에 선다). 진 런은 판이 덮쳐 오는 동안(OVERC) 판 곡이 늘어진
+#  테이프처럼 반 속도로 처진다 — 실패 칠판에 들어오는 로비 곡은 제 속도다(_mus_load). 이길 때는 안 처진다.
+const MUS_DUCK := {"db": -8.0, "back": 0.6, "tape": 0.5, "tape_rate": 0.5}
 
 # 넘김의 단계. 쉼 → 나감 → 숨 → 들어옴 → 쉼 으로 돈다.
 enum MP { REST, OUT, GAP, IN }
@@ -58360,6 +58441,11 @@ var mus_t := 0.0          # 숨(GAP)이 얼마나 지났는가. 초
 var mus_vol := 0.0
 var mus_warned := {}      # 못 읽은 곡을 한 번만 말하려고 기억한다
 var mus_pitch := 1.0      # 지금 나는 속도. 목표로 천천히 걸어간다
+var mus_duck := 0.0       # 비킨 몫 1 → 0 (MUS_DUCK)
+
+
+func _mus_duck() -> void:
+	mus_duck = 1.0
 
 
 # 지금 화면이 원하는 곡. 덮개 화면은 **뒤 화면을 따른다** — 잠깐 여는 판
@@ -58391,6 +58477,8 @@ func _mus_want() -> String:
 # 라운드를 모르는 자리(로비·상점)는 곡부터 "boss" 가 아니므로 여기 안 든다 —
 # leg_no 를 읽기 전에 _mus_want 로 한 번 거르는 것이 그 뜻이다.
 func _mus_pitch_want() -> float:
+	if over_cine >= 0.0 and not over_went and not won:
+		return float(MUS_DUCK.tape)        # 진 판 — 판이 덮쳐 오는 동안 테이프가 처진다
 	if _mus_want() != "boss":
 		return 1.0
 	var n := GameData.rounds_n()
@@ -58412,8 +58500,10 @@ func _mus_update(d: float) -> void:
 	# 속도는 곡보다 느리게 따라간다. 밀 자리도 하나뿐이다.
 	var wp := _mus_pitch_want()
 	if not is_equal_approx(mus_pitch, wp):
-		mus_pitch = move_toward(mus_pitch, wp, MUS_PITCH_RATE * d)
+		mus_pitch = move_toward(mus_pitch, wp,
+				(float(MUS_DUCK.tape_rate) if wp < 1.0 else MUS_PITCH_RATE) * d)
 		mus_pl.pitch_scale = mus_pitch
+	mus_duck = move_toward(mus_duck, 0.0, d / float(MUS_DUCK.back))
 
 	var want := _mus_want()
 	if want != mus_next:
@@ -58464,7 +58554,7 @@ func _mus_step(d: float) -> void:
 			mus_vol = minf(mus_vol + d / MUS_IN, 1.0)
 			if mus_vol >= 1.0:
 				mus_ph = MP.REST
-	mus_pl.volume_db = _mus_db(mus_vol)
+	mus_pl.volume_db = _mus_db(mus_vol) + float(MUS_DUCK.db) * mus_duck
 
 
 # 적응형 관리자에게 지금 조건을 넘긴다.
@@ -58525,6 +58615,8 @@ func _mus_load(key: String) -> bool:
 	mus_pl.volume_db = _mus_db(mus_vol)
 	# 지금 속도로 **서고 나서** 목표를 향해 걷는다. 1.0 으로 세워 두면
 	# 보스로 들어오는 곡이 첫 프레임에 원래 속도로 튄다.
+	# 처진 테이프(MUS_DUCK.tape)는 나간 곡의 것이다 — 새 곡은 제 속도 밑으로 안 선다.
+	mus_pitch = maxf(mus_pitch, 1.0)
 	mus_pl.pitch_scale = mus_pitch
 	mus_pl.play()
 	return true

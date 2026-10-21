@@ -366,6 +366,25 @@ func _once() -> void:
 	g._open_leg()
 	_ok("그 런 첫 판에서 말상자가 안 선다(건너뛰기 포함)", g.tutor_q.is_empty() and g.tutor_id == "",
 			"q %s · id %s" % [g.tutor_q, g.tutor_id])
+	#  처음 켠 사람은 손잡이에서 곧장 튜토리얼 판 고르기 · 「튜토리얼 끝」의 「새 런」은 곧장
+	#  본편 1판 고르기 · 그다음부터 새 런 화면(2026-10-21 · _tut_first).
+	Save.wipe()
+	Save.run_drop()
+	_reset()
+	g.state = g.S.TITLE
+	g._door_open()
+	_ok("빈 저장의 손잡이는 곧장 튜토리얼 판 고르기", g.tut_run and g.state == g.S.LEG,
+			"tut %s · state %s" % [g.tut_run, g.S.find_key(g.state)])
+	g._tut_end()
+	g._open_newrun()
+	_ok("「튜토리얼 끝」의 「새 런」은 곧장 본편 1판 고르기",
+			not g.tut_run and g.state == g.S.LEG and g.leg_no == 1,
+			"tut %s · state %s · 판 %d" % [g.tut_run, g.S.find_key(g.state), g.leg_no])
+	g.state = g.S.TITLE
+	g._door_open()
+	_ok("그다음 손잡이는 새 런 화면", g.state == g.S.NEWRUN, "state %s" % g.S.find_key(g.state))
+	g._newrun_leave()
+	Save.run_drop()
 	#  튜토리얼을 안 거친 프로필(자동플레이 · 도구가 곧장 연 런)은 그대로 배운다.
 	Save.wipe()
 	_reset()
