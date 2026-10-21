@@ -253,3 +253,53 @@ func _run() -> void:
 	# ⑪
 	var dsrc: String = FileAccess.get_file_as_string("res://scripts/dev.gd")
 	_ok("⑪ 개발자 줄 · 갈래", dsrc.contains("\"a\": \"nsay\"") and dsrc.contains("g._nsay(\"tip\", true)"))
+
+	# ⑫ 런 끝 — 잠금이 풀리는 틀에 갈래대로 · 무한 · 해금 쪽지 끝에는 없음 · 세 말 모두 한 줄로 칠판 오른쪽 아래
+	_ok("⑫ 완주 → over_win", _over_say(true, 0, 100) == "over_win")
+	_ok("⑫ 목표 90% 넘게 치고 진 런 → over_close", _over_say(false, 95, 100) == "over_close")
+	_ok("⑫ 진 런 → over_lose", _over_say(false, 10, 100) == "over_lose")
+	GameData.endless = true
+	_ok("⑫ 무한 런 끝 — 없음", _over_say(false, 10, 100) == "")
+	GameData.endless = false
+	g.run_unlocked = [{"k": "다트통", "n": "?"}]
+	_ok("⑫ 해금 쪽지가 선 끝 — 없음", _over_say(true, 0, 100) == "")
+	g.run_unlocked = []
+	var nr: Rect2 = g._over_newrun_rect()
+	var name_y: float = float(g.OVERB.coin_y) + 34.0         # 다트통 이름 줄의 기준선
+	var lx_end: float = float(g.OVERB.lx) + float(g.OVERB.lw)
+	var off := []
+	for l in ["ko", "en", "ja"]:
+		GameData.set_lang(l)
+		for w in ["over_win", "over_lose", "over_close"]:
+			for r in GameData.npc_say(w):
+				g.nsay_row = r
+				g.nsay_txt = GameData.npc_say_text(r)
+				var lay: Array = g._nsay_layout()
+				var b: Rect2 = lay[0]
+				if (lay[1] as PackedStringArray).size() != 1 or b.position.x <= lx_end \
+						or b.end.y > nr.position.y or b.position.y - float(g.TUTOR.plate_h) * 0.5 < name_y + 2.0 \
+						or b.end.x > (g._over_panel() as Rect2).end.x - 24.0:
+					off.append("%s %s %s" % [l, r.id, b])
+	GameData.set_lang("ko")
+	g.nsay_row = {}
+	_ok("⑫ 세 말 다 한 줄 · 왼쪽 수 줄 밖 · 다트통 이름 밑 · 「새 런」 위", off.is_empty(), str(off))
+
+
+#  런 끝 칠판을 처음부터 세우고 잠금이 풀릴 때까지 민다 — 선 말의 갈래(없으면 "").
+func _over_say(win: bool, tot: int, tgt: int) -> String:
+	g.state = g.S.OVER
+	g.won = win
+	g.total = tot
+	g.target = tgt
+	g.over_t = 0.0
+	g.nsay_row = {}
+	g.nsay_out = 0.0
+	g.tutor_q.clear()
+	var early := false
+	for i in 40:
+		g._process(1.0 / 60.0)
+		if g.over_t < float(g.OVER_LOCK) and not g.nsay_row.is_empty():
+			early = true
+	if early or g.state != g.S.OVER:
+		return "early"
+	return String(g.nsay_row.get("when", ""))

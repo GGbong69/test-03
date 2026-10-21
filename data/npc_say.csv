@@ -36,6 +36,15 @@ sell_2,sell,아깝지 않아?,No regrets?,惜しくないのか?,1,
 sell_3,sell,받아 두지,I'll take it,もらっておくよ,1,
 rage_1,rage,너. 나랑 한판 하자,You. Let's go a round,お前。俺と勝負しろ,1,술병을 다 깨면 쾅 뒤 손님을 가리키며(game.gd PROP r_*) — 바로 술병 대결로 간다
 rage_2,rage,좋아. 술병으로 갚아라,Fine. Pay me back in bottles,いいだろう。瓶で払ってもらう,1,
+over_win_1,over_win,오늘 밤은 네 판이다,Tonight's your night,今夜はお前の夜だ,1,런 끝 칠판이 다 서면(game.gd NSAY · 2026-10-21) — over_win 완주 · over_lose 실패 · over_close 목표 90% 넘게 치고 진 런. 무한 런 끝 · 해금 쪽지가 선 끝에는 안 한다. 칠판 오른쪽 아래 한 줄이라 짧게
+over_win_2,over_win,술은 내가 사지,Drinks are on me,酒は俺のおごりだ,1,
+over_win_3,over_win,손님 손이 매섭네,What a sharp hand,鋭い手だな,1,
+over_lose_1,over_lose,오늘은 여기까지,That's it for tonight,今夜はここまでだ,1,
+over_lose_2,over_lose,다트는 또 던지면 돼,Just throw again,ダーツはまた投げればいい,1,
+over_lose_3,over_lose,판은 안 도망가,The board will wait,的は逃げないさ,1,
+over_lose_4,over_lose,한 잔 하고 다시 와,Drink up. Come back,一杯やって また来な,1,
+over_close_1,over_close,아깝다. 거의 다 왔는데,So close this time,惜しい。あと少しだった,1,
+over_close_2,over_close,한 발만 더 있었으면,Just one dart short,あと1本あればな,1,
 rival_mine,rival,{cell}? 거긴 내 자리야.,{cell}? That spot's mine.,{cell}？そこは俺の場所だ。,1,라이벌이 던지기 전에 하는 말(game.gd RIVAL · 2026-10-16). {cell} 막을 자리 · {val} 라이벌 다트를 맞히면 받는 점수 — 판이 채운다
 rival_borrow,rival,"{cell}, 잠깐 빌릴게.","Mind if I borrow {cell}?",{cell}、ちょっと借りるぜ。,1,
 rival_dare,rival,내 다트 맞히면 {val}점 줄게.,Knock my dart out and {val} points are yours.,俺のダーツに当てたら{val}点やるよ。,1,
