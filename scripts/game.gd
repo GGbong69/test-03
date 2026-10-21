@@ -10349,8 +10349,9 @@ func _impact(info: Dictionary, hit_mult: int, land_base: int = -1) -> void:
 			board_punch = 1.75
 			hitstop = 0.15
 			hit_flash_amt = 1.0
-			screen_flash = 1.0
-			_invert_kick()           # 불스아이 반전 — INV 머리말
+			if _scr_flash():         # 연발 불 연타 — 1초 넷째는 흰 덮개 · 반전을 건너뛴다
+				screen_flash = 1.0
+				_invert_kick()           # 불스아이 반전 — INV 머리말
 			add_wave(BC, R * rt_bull_i, R * 1.35, C_RED.lightened(0.45), 0.90, 2.5, 0.60)
 			add_wave(BC, R * rt_bull_i, R * 0.90, C_ACC, 0.80, 2.0, 0.45)
 			add_wave(BC, 3.0, 52.0, C_TXT, 0.80, 1.5, 0.32)
@@ -11967,7 +11968,8 @@ func _cross_fire() -> void:
 	cross_live = false
 	_sfx("target_hit")
 	tally_snd_t = 0.0
-	screen_flash = float(TALLY.cross_flash)
+	if _scr_flash():
+		screen_flash = float(TALLY.cross_flash)
 	#  뒤에 착지 멈춤(돌파 ×1 · CARDFX.stop)이 남은 qt 에서 빠지고 그 동안 흔들림이
 	#  안 준다 — 그 몫을 빼고 묶는다.
 	shake = minf(float(TALLY.cross_shk), _shk_room(float(CARDFX.stop)))
@@ -56404,6 +56406,19 @@ func _inv_show(on: bool) -> void:
 	(inv_rect.get_parent() as CanvasLayer).visible = on
 
 
+#  판 전체 번쩍임(흰 덮개 · 반전)은 1초에 셋까지 — 광과민 기준(초당 3회). 넷째는 false 라
+#  부르는 쪽이 번쩍임만 건너뛰고 소리 · 불꽃 · 멈춤은 그대로 낸다. 실시간이다(빨리 보기도 잰다).
+var flash_ms: Array[int] = []
+func _scr_flash() -> bool:
+	var now := Time.get_ticks_msec()
+	if flash_ms.size() >= 3 and now - flash_ms[0] < 1000:
+		return false
+	flash_ms.append(now)
+	if flash_ms.size() > 3:
+		flash_ms.pop_front()
+	return true
+
+
 #  안쪽 불이 꽂혔다 — INV.ms 동안 뒤집는다.
 func _invert_kick(force := false) -> void:
 	if not _cine_ok(force):
@@ -58466,7 +58481,8 @@ func _egg_bits_tick(d: float) -> void:
 #  서른 번째. 판을 조각으로 가르고 날린다.
 func _egg_shatter() -> void:
 	_sfx("target_hit")
-	screen_flash = maxf(screen_flash, 0.9)
+	if _scr_flash():
+		screen_flash = maxf(screen_flash, 0.9)
 	shake = maxf(shake, 14.0)
 	#  꽂혀 있던 자루는 판과 같이 날아간다 — 판 없이 허공에 남으면 안 된다.
 	ttl_stuck.clear()
