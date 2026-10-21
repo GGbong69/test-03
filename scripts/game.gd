@@ -5267,6 +5267,7 @@ func _settle_clear() -> void:
 	#  가로질렀고, 폭이 120 고정이라 「유리 대포 — 부서졌」까지만 찍혔다.
 	pops.clear()
 	clear_t = 0.0
+	clear_snd_i = 0
 	state = S.CLEAR
 	_tutor("u_clear")
 	_sfx("leg_clear")
@@ -7626,22 +7627,37 @@ var brk_bang_t := 9.0
 # 이름 → AudioStream. **없다는 것도 기억한다** — 소리마다 파일 시스템을
 # 두드리면 정산 한 걸음마다 디스크를 때린다.
 var sfx_cache := {}
+#  손 떠나는 소리 · 판 밖 질감 소리 — 같은 파일이 매번 같은 높이면 기계음이라 f 를 안 받을 때만
+#  ±3% 흔든다(_sfx_jit). 등급음 · 잠금음 · 사다리 · 말소리는 음이 곧 정보라 고정이다.
+const SFX_JIT := ["dart_fly", "dart_pick", "hand_take", "hand_drop", "shop_smash", "shop_smash_lo",
+		"sweep_whip", "sweep_sink", "chalk_wipe", "page", "door_open"]
+var sfx_rng := RandomNumberGenerator.new()   # 제 줄기 — 판 · 상점의 뽑기를 안 민다
 
 
-func _sfx(name: String, f := 0.0) -> void:
+func _sfx_jit() -> float:
+	return sfx_rng.randf_range(0.97, 1.03)
+
+
+#  db — 얇게 겹치는 층(×배수의 5도). 자리를 돌려 쓰므로 매번 덮는다.
+func _sfx(name: String, f := 0.0, db := 0.0) -> void:
 	var st := _sfx_file(name)
 	if st != null and not sfx_pool.is_empty():
 		var pl: AudioStreamPlayer = sfx_pool[sfx_next]
 		sfx_next = (sfx_next + 1) % sfx_pool.size()
 		pl.stream = st
 		# 정산 걸음은 음이 오르는 것이 소리의 내용이다. 파일도 같은 비로 민다.
-		pl.pitch_scale = 1.0 if f <= 0.0 else clampf(f / SFX_BASE, 0.25, 4.0)
+		pl.pitch_scale = clampf(f / SFX_BASE, 0.25, 4.0) if f > 0.0 \
+				else (_sfx_jit() if SFX_JIT.has(name) else 1.0)
+		pl.volume_db = db
 		pl.play()
 		return
 	var e: Dictionary = SFX.get(name, {})
 	if e.is_empty():
 		# 표에 없는 이름은 조용히 무음이 된다 — 그게 제일 찾기 어렵다.
 		push_error("소리: 모르는 이름 '%s' — SFX 표에 먼저 적어라" % name)
+		return
+	#  합성음은 목이 하나라 얇은 겹이 앞 음을 끊는다 — 겹은 파일에서만 난다.
+	if db < 0.0:
 		return
 	if e.has("seq"):
 		beep_seq(e.seq, e.gap, e.d, e.a)
@@ -7850,6 +7866,7 @@ func _process(d: float) -> void:
 	_prof_tick(d)
 	if state == S.CLEAR:
 		clear_t += d
+		_clear_snd()
 		queue_redraw()
 	if state == S.OVER:
 		#  완주 — 박수가 터진다(OVERB.clap_at · 한 번).
@@ -9927,6 +9944,18 @@ func _click(m: Vector2) -> void:
 						_vsync_apply()
 						_sfx("menu_pick2")
 						return
+					"motion":
+						#  같은 손 — CRT 의 흐르는 띠 · 잔상도 곧바로 멎는다(_crt_apply 가 motion 을 넘긴다).
+						var want4: bool = not motion_off
+						if _set_seg_rect(i, 0).has_point(m):
+							want4 = false
+						elif _set_seg_rect(i, 1).has_point(m):
+							want4 = true
+						motion_off = want4
+						Save.set_set("motion", motion_off)
+						_crt_apply()
+						_sfx("menu_pick2")
+						return
 					"wipe":
 						#  「전체화면」 줄과 같은 손 — 누른 칸으로 가고 이름 쪽은 뒤집는다. 그 자리에서
 						#  저장한다(창 모드처럼 한 번 누름이 한 값이다).
@@ -9939,7 +9968,7 @@ func _click(m: Vector2) -> void:
 						Save.set_set("wipe_snow", wipe_snow)
 						_sfx("menu_pick2")
 						return
-					"vol", "mus", "crt", "warp", "vhs", "dot":
+					"all", "vol", "mus", "crt", "warp", "vhs", "dot":
 						#  홈 둘레를 누르면 그 자리로 가고 뗄 때까지 따라온다(_set_grab).
 						#  이름 쪽은 고르기만 한다.
 						if _set_grab(i).has_point(m):
@@ -11251,6 +11280,10 @@ func _next_step() -> void:
 					C_TXT if xm else col, 20, _pop_life(), false,
 					C_XMULT if xm else Color(0.0, 0.0, 0.0, 0.0))
 			_sfx("settle_item", f)
+			#  ×배수는 같은 소리를 5도 위에 얇게 한 겹 — 안 봐도 곱하기가 귀에 걸린다. 위가 막히면(×4)
+			#  한 옥타브 밑의 같은 음(×0.75)이다.
+			if st.kind == "xmult":
+				_sfx("settle_item", f * 1.5 if f * 1.5 <= SFX_BASE * 4.0 else f * 0.75, -9.0)
 			shake = 3.0
 			# 몸은 갈래 밖에서 한 번만 챈다. 모르는 효과(_ 갈래)도 걸음은 걸음이라
 			# 소리가 나므로 몸도 같이 움직이는 쪽이 맞다 — 칸만 안 튄다.
@@ -13174,7 +13207,12 @@ func _draw() -> void:
 	Dev.draw(self)          # DEV
 	draw_set_transform(Vector2.ZERO)
 	if screen_flash > 0.0:
-		draw_rect(_full(), Color(1.0, 1.0, 1.0, screen_flash * 0.34))
+		draw_rect(_full(), Color(1.0, 1.0, 1.0, screen_flash * 0.34 * _flash_k()))
+
+
+#  온 화면 번쩍임의 짙기 — 움직임 줄이기면 1/3(흰 덮개 · 잭팟 섬광). 2026-10-21
+func _flash_k() -> float:
+	return 1.0 / 3.0 if motion_off else 1.0
 
 
 #  ══ 레전더리 가장자리 비네트 ══ (2026-09-20)
@@ -37085,7 +37123,7 @@ func _jp_draw() -> void:
 	var ft: float = float(JP.flash_t)
 	if t < ft:
 		var fk := 1.0 - t / ft
-		draw_rect(_full(), Color(lc.lerp(Color.WHITE, 0.6), float(JP.flash_a) * fk * fk))
+		draw_rect(_full(), Color(lc.lerp(Color.WHITE, 0.6), float(JP.flash_a) * fk * fk * _flash_k()))
 
 
 #  가운데가 밝고 가장자리가 0 인 타원 빛. 부채꼴 하나라 가장자리에 계단이 없다.
@@ -46361,6 +46399,7 @@ func _btn(r: Rect2, label: String, sub: String, on: bool,
 #  정산 표의 자리. 제목 · 합계선 · 총액이 화면 한가운데(320)에 서는데
 #  표만 x[210,384] 중심 297 이라 24px 어긋나 있었다. 한 축으로 모은다.
 var clear_t := 0.0              # 정산이 흐른 시간(초). 0 이면 막 열렸다
+var clear_snd_i := 0            # 소리를 낸 내역 줄 수(_clear_snd). 줄 수를 넘으면 합계까지 냈다
 #  이번 런에 새로 열린 것들의 이름. 해금은 여태 **잠깐 뜨는 토스트로만**
 #  말하고 런 종료 화면에는 한 글자도 안 남았다 — 새 리그가 열려도 그것을
 #  본 사람이 없을 수 있다. 런이 끝날 때 이 줄을 화면에 남긴다.
@@ -46392,6 +46431,29 @@ var run_secs := 0.0
 #  연출이 다 끝났나. 굴림이 멎고 총액이 제값에 닿았으면 참이다.
 func _clear_done() -> bool:
 	return _mo("fast") <= 0.0 or _clear_roll() >= gold
+
+
+#  정산 표 소리(2026-10-21) — 줄이 하나 들 때마다 동전이 펠트에 앉는 짤랑(받은 줄마다 한 온음씩
+#  오른다 · 0 인 줄은 조용히 지나간다) · 총액 굴림이 멎는 틀에 등록기 한 번. 판 밖이라 카지노 소리다.
+#  건너뛰기(clear_t 99) · 모션 끄기는 남은 줄을 걷고 합계만 낸다. 한 틀에 하나만 낸다.
+func _clear_snd() -> void:
+	var n: int = clear_gold_detail.size()
+	if clear_snd_i > n:
+		return
+	var step: float = _mo("fast")
+	if _clear_done() and clear_t >= float(n) * step:
+		clear_snd_i = n + 1
+		_sfx("buy")
+		return
+	if clear_snd_i == n or clear_t < float(clear_snd_i) * step:
+		return
+	var k := 0
+	for j in clear_snd_i:
+		if int(clear_gold_detail[j].v) > 0:
+			k += 1
+	if int(clear_gold_detail[clear_snd_i].v) > 0:
+		_sfx("coin_land", SFX_BASE * pow(2.0, 2.0 * float(k) / 12.0))
+	clear_snd_i += 1
 
 
 func _clear_roll() -> int:
@@ -48265,6 +48327,7 @@ var collect_tab := 0
 # 순간이라, 한 손잡이로 묶으면 한쪽에 맞추면 다른 쪽이 어긋난다.
 var vol := 1.0           # 효과음. 예전 저장 키("vol")를 그대로 물려받는다
 var vol_mus := 0.8       # 음악. 깔개라 기본값이 효과음보다 한 뼘 낮다
+var vol_all := 1.0       # 전체 음량 — Master 버스. 둘의 비는 두고 크기만 한 번에 민다(부스 현장 음량)
 #  CRT 필터 세기 0~1. 0 이면 층째 꺼진다(_crt_apply). 필터 넷의 기본값은 다 50 이다
 #  (2026-10-14 「그냥 기본 값을 다 50으로 설정해줘」 — 옛 CRT 40 · 도트 60).
 const CRT_DEF := 0.5
@@ -48835,12 +48898,16 @@ func _load_settings() -> void:
 	GameData.pack = String(Save.get_pick("pack", ""))
 	vol = clampf(float(Save.get_set("vol", 1.0)), 0.0, 1.0)
 	vol_mus = clampf(float(Save.get_set("vol_mus", 0.8)), 0.0, 1.0)
+	vol_all = clampf(float(Save.get_set("vol_all", 1.0)), 0.0, 1.0)
 	crt = clampf(float(Save.get_set("crt", CRT_DEF)), 0.0, 1.0)
 	warp = clampf(float(Save.get_set("warp", WARP_DEF)), 0.0, 1.0)
 	vhs = clampf(float(Save.get_set("vhs", VHS_DEF)), 0.0, 1.0)
 	dot = clampf(float(Save.get_set("dot", DOT_DEF)), 0.0, 1.0)
 	wipe_snow = bool(Save.get_set("wipe_snow", true))
 	vsync_on = bool(Save.get_set("vsync", true))
+	#  움직임 줄이기 — 검사 · 촬영 도구는 안 읽는다(도구가 손으로 앉히는 값이고, 도구 저장은 함께 쓴다).
+	if get_tree().get_script() == null:
+		motion_off = bool(Save.get_set("motion", false))
 	_vsync_apply()
 	_apply_vol()
 	_crt_apply()        # 층은 _ready 가 이 뒤에 세운다 — 그때 다시 앉는다
@@ -56159,14 +56226,16 @@ func _set_info(key: String) -> Dictionary:
 			#  창 크기(RES) — 전체화면이면 모니터 해상도 그대로라 잠긴다(값은 남는다).
 			return {"n": "해상도", "sel": true, "v": _res_label(), "off": _res_fs()}
 		"sound":
-			return {"n": "소리", "kids": ["vol", "mus"]}
+			return {"n": "소리", "kids": ["all", "vol", "mus"]}
 		"game":
 			#  「일반」은 등급 이름(일반 동전)과 같은 글이라 번역이 「Common」으로 갔다 — 「게임」.
-			return {"n": "게임", "kids": ["lang"]}
+			return {"n": "게임", "kids": ["lang", "motion"]}
 		"fs":
 			var on: bool = DisplayServer.window_get_mode() \
 					== DisplayServer.WINDOW_MODE_FULLSCREEN
 			return {"n": "전체화면", "tg": on, "v": "켬" if on else "끔"}
+		"all":
+			return {"n": "전체 음량", "g": true}
 		"vol":
 			return {"n": "효과음", "g": true}
 		"mus":
@@ -56175,6 +56244,9 @@ func _set_info(key: String) -> Dictionary:
 			#  수직 동기화(2026-10-20 학원 선생님 피드백 「수직동기화 옵션 넣는게 어떨까요?」) — 켜면 화면
 			#  틀을 모니터 주사에 맞춰 찢김이 없다(기본 켬 — 엔진 기본과 같다).
 			return {"n": "수직 동기화", "tg": vsync_on, "v": "켬" if vsync_on else "끔"}
+		"motion":
+			#  움직임 줄이기(2026-10-21) — 개발자 판의 「모션 끄기」(motion_off)를 손님 설정으로. 기본 끔.
+			return {"n": "움직임 줄이기", "tg": motion_off, "v": "켬" if motion_off else "끔"}
 		"wipe":
 			#  장면 전환의 지지직(WIPE · 2026-10-08). 끄면 어두운 막이 덮고 걷힌다.
 			return {"n": "전환 지지직", "tg": wipe_snow, "v": "켬" if wipe_snow else "끔"}
@@ -56270,7 +56342,9 @@ var set_det := -1        # 끄는 동안 마지막으로 앉은 걸림(10 단위
 #  Front 를 다시 안 그려 게이지가 멎은 채로 남는다. 끊는 단위는 부르는 쪽이
 #  정한다(끌기 0.01 · 휠 0.05). 2026-09-19 · snd 거짓이면 음량 톡을 안 낸다(끌기 — 걸림 톡이 맡는다).
 func _vol_set(key: String, x: float, snd := true) -> void:
-	if key == "vol":
+	if key == "all":
+		vol_all = x
+	elif key == "vol":
 		vol = x
 	elif key == "mus":
 		vol_mus = x
@@ -56305,7 +56379,7 @@ func _vol_set(key: String, x: float, snd := true) -> void:
 	#  _vol_set 을 부르므로 안 막으면 한 번 미는 데 톡이 수십 알 난다.
 	#  그 상수가 「page 소리보다 길어 빠른 굴림에서도 안 겹친다」로 이미
 	#  서 있고 menu_pick2 는 그보다 짧다. 2026-09-25
-	if key == "vol" and snd:
+	if (key == "vol" or key == "all") and snd:
 		var vnow := Time.get_ticks_msec()
 		if vnow - vol_snd_ms >= WHEEL_MS:
 			vol_snd_ms = vnow
@@ -56331,7 +56405,9 @@ var vol_save_k := ""
 
 func _vol_save() -> void:
 	vol_save_t = 0.0
-	if vol_save_k == "vol":
+	if vol_save_k == "all":
+		Save.set_set("vol_all", vol_all)
+	elif vol_save_k == "vol":
 		Save.set_set("vol", vol)
 	elif vol_save_k == "mus":
 		Save.set_set("vol_mus", vol_mus)
@@ -56357,7 +56433,9 @@ func _set_slide_end() -> void:
 	var rows := _set_rows()
 	if set_drag >= 0 and set_drag < rows.size():
 		var key := String(rows[set_drag])
-		if key == "vol":
+		if key == "all":
+			Save.set_set("vol_all", vol_all)
+		elif key == "vol":
 			Save.set_set("vol", vol)
 		elif key == "mus":
 			Save.set_set("vol_mus", vol_mus)
@@ -56377,6 +56455,7 @@ func _set_slide_end() -> void:
 #  `vol if … else vol_mus` 를 들고 있으면 셋째 게이지(CRT)가 음악 값을 읽는다.
 func _gauge_v(key: String) -> float:
 	match key:
+		"all": return vol_all
 		"vol": return vol
 		"mus": return vol_mus
 		"crt": return crt
@@ -57973,7 +58052,7 @@ const MUS := {
 }
 #  음악의 기준 크기. 낮출 이유가 없어졌다 — 깔개를 효과음보다 낮게 두는
 #  일은 이제 버스가 따로 맡고(사용자가 직접 정한다), 곡 자체가 조용해서
-#  여기서 더 깎으면 안 들린다. 0 으로 두고 큰 조절은 컴프레서가 한다.
+#  여기서 더 깎으면 안 들린다. 0 으로 두고 봉우리는 Master 리미터(default_bus_layout)가 누른다.
 const MUS_DB := 0.0
 
 #  넘기는 방식 — **겹치지 않고 나갔다 들어온다.**
@@ -58229,8 +58308,10 @@ func _bus_setup() -> void:
 
 
 func _apply_vol() -> void:
-	# Master 는 안 건드린다 — 예전에는 여기를 줄였는데, 그러면 둘을 가른
-	# 뜻이 없다. 각자의 버스만 만진다.
+	# 효과음 · 음악은 각자의 버스다. Master 는 「전체 음량」 하나만 쥔다 — 둘의 비는 그대로 두고
+	# 크기만 한 번에 민다(부스 PC 의 현장 음량 · 2026-10-21).
+	AudioServer.set_bus_volume_db(0, linear_to_db(maxf(vol_all, 0.0001)))
+	AudioServer.set_bus_mute(0, vol_all <= 0.001)
 	var si := AudioServer.get_bus_index("SFX")
 	var mi := AudioServer.get_bus_index("Music")
 	if si >= 0:
@@ -60433,6 +60514,7 @@ func _colf_snd() -> void:
 	var st := _sfx_file("chalk_wipe")
 	if st != null and colf_pl != null:
 		colf_pl.stream = st
+		colf_pl.pitch_scale = _sfx_jit()      # 질감 소리 — _sfx 의 SFX_JIT 와 같다
 		colf_pl.play()
 		return
 	_sfx("chalk_wipe")

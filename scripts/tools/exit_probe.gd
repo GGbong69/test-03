@@ -24,7 +24,9 @@ func _initialize() -> void:
 	Save.gpath = "user://_exit_probe_g.cfg"
 	Save.path = "user://_exit_probe.cfg"
 	Save.wipe()
-	#  스피커로 안 나가게 — 게임은 Master 를 안 만진다(_apply_vol). 섞기는 그대로 돈다.
+	#  스피커로 안 나가게 — 게임이 Master 를 「전체 음량」으로 쥐므로(_apply_vol) 그 값을 0 으로 둔다.
+	#  섞기는 그대로 돈다.
+	Save.set_set("vol_all", 0.0)
 	AudioServer.set_bus_mute(0, true)
 	AudioServer.set_bus_volume_db(0, -80.0)
 	g = load("res://scenes/main.tscn").instantiate()

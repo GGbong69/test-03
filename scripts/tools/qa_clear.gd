@@ -8,6 +8,7 @@ extends SceneTree
 
 const GameData = preload("res://scripts/data.gd")
 const Save = preload("res://scripts/save.gd")
+const Dev = preload("res://scripts/dev.gd")
 
 var g = null
 var busy := false
@@ -56,6 +57,31 @@ func _enter() -> void:
 		if g.state == g.S.CLEAR:
 			enter_fr = k + 1
 			return
+
+
+#  정산을 처음부터 다시 굴리며 난 소리를 [이름, 피치] 로 걷는다 — 풀을 넓혀 깔고(넷이면 돈다)
+#  sfx_next 까지 읽는다(qa_land 의 수법). skip 이면 첫 틀 전에 눌러 건너뛴다.
+func _clear_sounds(frames: int, skip: bool) -> Array:
+	for sp in g.sfx_pool:
+		sp.queue_free()
+	g.sfx_pool.clear()
+	for i in 64:
+		var sp := AudioStreamPlayer.new()
+		g.add_child(sp)
+		g.sfx_pool.append(sp)
+	g.sfx_next = 0
+	g.clear_t = 0.0
+	g.clear_snd_i = 0
+	if skip:
+		g._click(Vector2(320.0, 300.0))
+	for k in frames:
+		g._process(1.0 / 60.0)
+	var out := []
+	for i in g.sfx_next:
+		var pl: AudioStreamPlayer = g.sfx_pool[i]
+		if pl.stream != null:
+			out.append([String(pl.stream.resource_path).get_file().get_basename(), pl.pitch_scale])
+	return out
 
 
 func _run() -> void:
@@ -112,6 +138,34 @@ func _run() -> void:
 	_ok("모션 끄면 곧장 제값", g._clear_roll() == g.gold and g._clear_done(),
 			"%d / %d" % [g._clear_roll(), g.gold])
 	g.motion_off = false
+
+	# ⑥ 소리 — 받은 줄마다 짤랑(한 온음씩 오른다) · 합계에 등록기 한 번 · 건너뛰면 · 모션 끄면 합계만
+	var got := 0
+	for r in g.clear_gold_detail:
+		if int(r.v) > 0:
+			got += 1
+	var sn: Array = _clear_sounds(200, false)
+	var lands: Array = sn.filter(func(e): return e[0] == "coin_land")
+	var steps_ok := true
+	for i in lands.size():
+		if not is_equal_approx(float(lands[i][1]), pow(2.0, 2.0 * float(i) / 12.0)):
+			steps_ok = false
+	var nm: Array = sn.map(func(e): return e[0])
+	_ok("받은 줄마다 짤랑 · 한 온음씩", got > 0 and lands.size() == got and steps_ok,
+			"받은 줄 %d · 짤랑 %d · %s" % [got, lands.size(), lands])
+	_ok("합계에 등록기 한 번 · 짤랑 뒤", nm.count("buy") == 1 and nm.find("buy") > nm.rfind("coin_land"),
+			"%s" % [nm])
+	sn = _clear_sounds(30, true)
+	_ok("건너뛰면 등록기만", sn.filter(func(e): return e[0] == "coin_land").is_empty()
+			and sn.filter(func(e): return e[0] == "buy").size() == 1, "%s" % [sn])
+	g.motion_off = true
+	sn = _clear_sounds(30, false)
+	g.motion_off = false
+	_ok("모션 끄면 등록기만", sn.filter(func(e): return e[0] == "coin_land").is_empty()
+			and sn.filter(func(e): return e[0] == "buy").size() == 1, "%s" % [sn])
+	Dev._run(g, {"a": "replay"})
+	_ok("개발자 「정산 다시 재생」은 소리도 처음부터", g.clear_snd_i == 0 and g.clear_t == 0.0,
+			"%d" % g.clear_snd_i)
 
 	# ⑤ 표가 화면 한가운데 축에 선다
 	var mid: float = float(g.CLR.x) + float(g.CLR.w) * 0.5
