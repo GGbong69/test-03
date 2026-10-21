@@ -7616,22 +7616,37 @@ var brk_bang_t := 9.0
 # 이름 → AudioStream. **없다는 것도 기억한다** — 소리마다 파일 시스템을
 # 두드리면 정산 한 걸음마다 디스크를 때린다.
 var sfx_cache := {}
+#  손 떠나는 소리 · 판 밖 질감 소리 — 같은 파일이 매번 같은 높이면 기계음이라 f 를 안 받을 때만
+#  ±3% 흔든다(_sfx_jit). 등급음 · 잠금음 · 사다리 · 말소리는 음이 곧 정보라 고정이다.
+const SFX_JIT := ["dart_fly", "dart_pick", "hand_take", "hand_drop", "shop_smash", "shop_smash_lo",
+		"sweep_whip", "sweep_sink", "chalk_wipe", "page", "door_open"]
+var sfx_rng := RandomNumberGenerator.new()   # 제 줄기 — 판 · 상점의 뽑기를 안 민다
 
 
-func _sfx(name: String, f := 0.0) -> void:
+func _sfx_jit() -> float:
+	return sfx_rng.randf_range(0.97, 1.03)
+
+
+#  db — 얇게 겹치는 층(×배수의 5도). 자리를 돌려 쓰므로 매번 덮는다.
+func _sfx(name: String, f := 0.0, db := 0.0) -> void:
 	var st := _sfx_file(name)
 	if st != null and not sfx_pool.is_empty():
 		var pl: AudioStreamPlayer = sfx_pool[sfx_next]
 		sfx_next = (sfx_next + 1) % sfx_pool.size()
 		pl.stream = st
 		# 정산 걸음은 음이 오르는 것이 소리의 내용이다. 파일도 같은 비로 민다.
-		pl.pitch_scale = 1.0 if f <= 0.0 else clampf(f / SFX_BASE, 0.25, 4.0)
+		pl.pitch_scale = clampf(f / SFX_BASE, 0.25, 4.0) if f > 0.0 \
+				else (_sfx_jit() if SFX_JIT.has(name) else 1.0)
+		pl.volume_db = db
 		pl.play()
 		return
 	var e: Dictionary = SFX.get(name, {})
 	if e.is_empty():
 		# 표에 없는 이름은 조용히 무음이 된다 — 그게 제일 찾기 어렵다.
 		push_error("소리: 모르는 이름 '%s' — SFX 표에 먼저 적어라" % name)
+		return
+	#  합성음은 목이 하나라 얇은 겹이 앞 음을 끊는다 — 겹은 파일에서만 난다.
+	if db < 0.0:
 		return
 	if e.has("seq"):
 		beep_seq(e.seq, e.gap, e.d, e.a)
@@ -11197,6 +11212,10 @@ func _next_step() -> void:
 					"mult" if st.kind == "mult_rand" else String(st.kind), st.v),
 					col, 20, _pop_life())
 			_sfx("settle_item", f)
+			#  ×배수는 같은 소리를 5도 위에 얇게 한 겹 — 안 봐도 곱하기가 귀에 걸린다. 위가 막히면(×4)
+			#  한 옥타브 밑의 같은 음(×0.75)이다.
+			if st.kind == "xmult":
+				_sfx("settle_item", f * 1.5 if f * 1.5 <= SFX_BASE * 4.0 else f * 0.75, -9.0)
 			shake = 3.0
 			# 몸은 갈래 밖에서 한 번만 챈다. 모르는 효과(_ 갈래)도 걸음은 걸음이라
 			# 소리가 나므로 몸도 같이 움직이는 쪽이 맞다 — 칸만 안 튄다.
@@ -60177,6 +60196,7 @@ func _colf_snd() -> void:
 	var st := _sfx_file("chalk_wipe")
 	if st != null and colf_pl != null:
 		colf_pl.stream = st
+		colf_pl.pitch_scale = _sfx_jit()      # 질감 소리 — _sfx 의 SFX_JIT 와 같다
 		colf_pl.play()
 		return
 	_sfx("chalk_wipe")
