@@ -10313,6 +10313,10 @@ func _impact(info: Dictionary, hit_mult: int, land_base: int = -1) -> void:
 	var lv: int = int(info.base) if land_base < 0 else land_base
 	_thud()
 	_sfx(HIT_SFX[grade])
+	if not kick_pellet and not motion_off and not darts.is_empty():
+		quiv_i = darts.size() - 1         # 방금 꽂힌 자루가 떤다(QUIV)
+		quiv_ms = Time.get_ticks_msec()
+		quiv_g = grade
 
 	match grade:
 		0:
@@ -19446,6 +19450,34 @@ func _bd3_fly_tf(end: Transform3D, beg: Vector3, t: float, arc := 0.0) -> Transf
 	return Transform3D(end.basis, beg.lerp(end.origin, e) + Vector3(0.0, arc * sin(PI * e), 0.0))
 
 
+#  ── 방금 꽂힌 자루가 떤다 (QUIV · 2026-10-21) ──────────────
+#  꽁지가 처음엔 크게 떨다 잦아든다 — 착탄 멈춤 동안 얼어 있던 화면이 「멈췄다」가 아니라 「박혔다」로 읽힌다.
+#  등급(_hit_grade 0~5)마다 a 처음 흔들림(rad) · t 떠는 시간(초) · hz 떨림 빠르기. 실시간 ms 라 멈춤과 무관하다.
+#  darts 사전에 안 넣는다 — 이어하기 저장이 그대로다. 연발의 작은 다트 · 움직임 끄기는 안 떤다(_impact).
+const QUIV := {"a": [0.02, 0.025, 0.035, 0.045, 0.055, 0.065], "t": [0.18, 0.2, 0.26, 0.32, 0.36, 0.42], "hz": 14.0}
+var quiv_i := -1               # 떠는 자루(darts 인덱스) · −1 이면 없다
+var quiv_ms := 0
+var quiv_g := 0
+
+
+func _quiv_u() -> float:
+	return float(Time.get_ticks_msec() - quiv_ms) / (1000.0 * float(QUIV.t[quiv_g]))
+
+
+func _quiv_ang() -> float:
+	var u := _quiv_u()
+	if quiv_i < 0 or u >= 1.0:
+		return 0.0
+	return float(QUIV.a[quiv_g]) * (1.0 - u) * sin(u * float(QUIV.t[quiv_g]) * float(QUIV.hz) * TAU)
+
+
+#  촉 끝을 축으로 자루 옆축(x) 둘레를 ang 만큼 — 촉은 착탄점에 박힌 채 꽁지만 날아온 축을 따라 흔들린다.
+func _quiv_tf(tf: Transform3D, ang: float) -> Transform3D:
+	var tip := tf.origin - tf.basis.y * float(BD3.len) * 0.5
+	var rb := Basis(tf.basis.x.normalized(), ang)
+	return Transform3D(rb * tf.basis, tip + rb * (tf.origin - tip))
+
+
 func _bd3_sync() -> void:
 	if not _bd3_live():
 		return
@@ -19468,8 +19500,14 @@ func _bd3_sync() -> void:
 			bd_nodes.append(n)
 	for i in mini(bd_nodes.size(), darts.size()):
 		if is_instance_valid(bd_nodes[i]):
-			bd_nodes[i].transform = _bd3_pose(darts[i])
+			var tf := _bd3_pose(darts[i])
+			bd_nodes[i].transform = _quiv_tf(tf, _quiv_ang()) if i == quiv_i else tf
 			_dart3_face_u(bd_nodes[i], Vector3(0.0, 0.0, _bd3_eye()))
+	#  떠는 동안 매 틀 굽고, 멎는 틀에 한 번 더 구워 제자리에 앉힌다.
+	if quiv_i >= 0:
+		_bd3_dirty()
+		if _quiv_u() >= 1.0:
+			quiv_i = -1
 
 
 #  단골 자루 한 벌 — darts 밖이다(darts 는 내 자루만 센다 · 판 깨짐 · 검사 도구가 읽는다).

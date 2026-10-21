@@ -249,6 +249,44 @@ func _run() -> void:
 		_ok("홀짝이 곱한 칸은 곱해진 값이 뜬다", got3 == want3,
 				"「%s」 want %s · 날것이면 %s" % [got3, want3, raw3])
 
+	# ── ⑥ 방금 꽂힌 자루가 떤다 ──────────────────────────
+	#  등급 사다리대로 커지고 길어진다 · 촉은 착탄점에 박힌 채 꽁지만 돈다 · 움직임 끄기면 안 떤다.
+	var qa: Array = g.QUIV.a
+	var qt: Array = g.QUIV.t
+	var lad := true
+	for i3 in range(1, qa.size()):
+		if float(qa[i3]) < float(qa[i3 - 1]) or float(qt[i3]) < float(qt[i3 - 1]):
+			lad = false
+	_ok("떨림이 등급마다 크고 길어진다", lad and float(qa[5]) > float(qa[1]) and float(qt[5]) > float(qt[1]),
+			"%s · %s" % [qa, qt])
+	_fresh()
+	g.motion_off = false
+	g.aim = probe[3]
+	g.state = g.S.FLY
+	g._land()
+	var qi: int = g.quiv_i
+	var qg: int = g.quiv_g
+	var a0: float = absf(g._quiv_ang())
+	g.quiv_ms -= int(float(qt[qg]) * 1000.0) + 1
+	_ok("방금 꽂힌 자루가 떨다 잦아든다", qi == g.darts.size() - 1 and qg == 3 and g._quiv_ang() == 0.0,
+			"자루 %d · 등급 %d · 처음 %.3f" % [qi, qg, a0])
+	var tf0: Transform3D = g._bd3_pose(g.darts[qi])
+	var tf1: Transform3D = g._quiv_tf(tf0, float(qa[5]))
+	var half: float = float(g.BD3.len) * 0.5
+	var tip0: Vector3 = tf0.origin - tf0.basis.y * half
+	var tip1: Vector3 = tf1.origin - tf1.basis.y * half
+	var tail_mv: float = (tf1.origin + tf1.basis.y * half).distance_to(tf0.origin + tf0.basis.y * half)
+	_ok("촉은 그 자리 · 꽁지만 돈다", tip0.distance_to(tip1) < 0.001 and tail_mv > 1.0,
+			"촉 %.4f · 꽁지 %.2f" % [tip0.distance_to(tip1), tail_mv])
+	_fresh()
+	g.motion_off = true
+	g.quiv_i = -1
+	g.aim = probe[5]
+	g.state = g.S.FLY
+	g._land()
+	_ok("움직임 끄기면 안 떤다", g.quiv_i == -1, "자루 %d" % g.quiv_i)
+	g.motion_off = false
+
 	print("\n%s" % ("전부 통과" if fail == 0 else "실패 %d건" % fail))
 	print("통과 %d · 실패 %d" % [okn, fail])
 	quit(0 if fail == 0 else 1)
