@@ -43897,6 +43897,12 @@ func _tip_hit(m: Vector2) -> Dictionary:
 			for i in GameData.max_items():
 				if _slot_rect(i).has_point(m):
 					return {"k": "rack", "i": i}
+			#  보스 명판 — 판 고르기의 보스 카드와 같은 툴팁. 거절 문구가 앞치마 가운데를
+			#  쓰는 동안은 명판이 안 선다(_draw_shop).
+			if pay_msg_t <= 0.0 and deny_flash <= 0.0:
+				var pl := _boss_plq_lay()
+				if not pl.is_empty() and Rect2(pl.r).has_point(m):
+					return {"k": "legboss", "i": int(pl.bn), "src": "plq"}
 		S.LEG:
 			# 동전 슬롯과 사탕·사진 칸은 판 선택 화면에도 그대로 떠 있는데(_hud_draw)
 			# 여기만 대상에서 빠져 있었다. 무엇을 들고 있는지가 곧 "던질까
@@ -44146,8 +44152,12 @@ func _tip_build(hit: Dictionary) -> void:
 			# 펠트를 따라 좁아진 사다리꼴이라 흰 테가 몇 px 어긋난다. 카드
 			# 쪽 반응(테가 달아오른다)이 표시를 대신한다 — 테이블(stock)과
 			# 동전 슬롯이 먼저 간 길이다.
-			tip_mark = _row_rect(GameData.leg_idx(i), GameData.legs_per_round())
-			tip_box = false
+			#  상점 명판(src plq)은 반응하는 몸이 없다 — 테를 두른다.
+			if String(hit.get("src", "")) == "plq":
+				tip_mark = Rect2(_boss_plq_lay().get("r", Rect2()))
+			else:
+				tip_mark = _row_rect(GameData.leg_idx(i), GameData.legs_per_round())
+				tip_box = false
 			var braw: PackedStringArray = boss_mods.get(i, PackedStringArray())
 			var bnames := []
 			for bid in braw:
@@ -47599,14 +47609,15 @@ func _draw_shop() -> void:
 #  글자는 **효과와 값만** 쓴다: 제약 이름과 「목표 N」. 「보스」·「제약」
 #  같은 분류어는 안 적는다 — 붉은 명판과 제약 글리프가 갈래를 이미 말한다.
 #  폭 예산 240 — 「실띠  목표 25000」 이 12 에서 ≈90px, 겹치기 둘이라도 든다.
-func _boss_plaque() -> void:
+#  명판의 글과 자리 — 그리기(_boss_plaque)와 툴팁 짚기(_tip_hit)가 같은 자를 쓴다.
+#  안 서면 빈 사전. r 은 원(y 309 ± 8)과 글줄을 2px 넉넉히 두른 사각이다.
+func _boss_plq_lay() -> Dictionary:
 	var bn := _boss_ahead()
 	if bn <= 0:
-		return
+		return {}
 	var ids: PackedStringArray = boss_mods.get(bn, PackedStringArray())
 	if ids.is_empty():
-		return
-	var off: bool = boss_void.has(bn)
+		return {}
 	var names := []
 	for mid in ids:
 		names.append(_L(String(_mod_row(String(mid)).get("n", ""))))
@@ -47616,7 +47627,22 @@ func _boss_plaque() -> void:
 	var gw: float = float(ids.size()) * 16.0
 	var tw: float = font.get_string_size(_L(txt), HORIZONTAL_ALIGNMENT_LEFT,
 			-1, 12).x
-	var x0: float = 308.0 - (gw + 4.0 + minf(tw, 240.0 - gw - 4.0)) * 0.5
+	var w: float = gw + 4.0 + minf(tw, 240.0 - gw - 4.0)
+	var x0: float = 308.0 - w * 0.5
+	return {"bn": bn, "ids": ids, "txt": txt, "gw": gw, "x0": x0,
+			"r": Rect2(x0 - 2.0, 299.0, w + 4.0, 20.0)}
+
+
+func _boss_plaque() -> void:
+	var lay := _boss_plq_lay()
+	if lay.is_empty():
+		return
+	var bn: int = lay.bn
+	var ids: PackedStringArray = lay.ids
+	var off: bool = boss_void.has(bn)
+	var txt: String = lay.txt
+	var gw: float = lay.gw
+	var x0: float = lay.x0
 	for k in ids.size():
 		var c := Vector2(x0 + float(k) * 16.0 + 8.0, 309.0)
 		draw_circle(c, 8.0, Color(SIGN_COL.boss.rim).darkened(0.15))

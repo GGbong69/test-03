@@ -217,3 +217,21 @@ func _run() -> void:
 			str(g.tip_lines[g.tip_lines.size() - 1].get("s", "")).find(
 					str(g._target_at(boss))) >= 0,
 			"%s" % str(g.tip_lines[g.tip_lines.size() - 1].get("s", "")))
+
+	# ⑦ 상점 명판을 짚으면 판 고르기의 보스 카드와 같은 툴팁이 명판 위로 선다(2026-10-21)
+	g.leg_no = boss - 1
+	g.state = g.S.SHOP
+	g.hand_st = g.H.NONE
+	g.pay_msg_t = 0.0
+	g.deny_flash = 0.0
+	var pl: Dictionary = g._boss_plq_lay()
+	var pc: Vector2 = Rect2(pl.get("r", Rect2())).get_center()
+	var ph: Dictionary = g._tip_hit(pc)
+	_ok("명판을 짚으면 그 보스의 툴팁", String(ph.get("k", "")) == "legboss"
+			and int(ph.get("i", -1)) == boss, str(ph))
+	g._tip_build(ph)
+	_ok("명판 툴팁 — 이름 · 테 · 명판에 붙는다", g.tip_title != "" and g.tip_box
+			and g.tip_mark == Rect2(pl.get("r", Rect2())), "제목 '%s'" % g.tip_title)
+	g.pay_msg_t = 1.0
+	_ok("거절 문구가 선 동안은 명판이 안 짚힌다", g._tip_hit(pc).is_empty())
+	g.pay_msg_t = 0.0
