@@ -72,6 +72,8 @@ class Catch extends Logger:
 
 func _initialize() -> void:
 	Save.gpath = "user://_mash_g.cfg"
+	#  지난 돌림이 설정 줄을 눌러 바꾼 말 · 필터 · 창 크기가 다음 돌림 첫 틀에 실리지 않게 — 같은 시드 같은 런
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(Save.gpath))
 	Save.prof_fmt = "user://_mash_p%d.cfg"
 	for i in range(1, Save.SLOTS + 1):
 		Save.erase_slot(i)
