@@ -236,6 +236,9 @@ func _run() -> void:
 	print("")
 	_page("sound", g.S.SHOP)
 	_check("소리 탭")
+	print("")
+	_page("game", g.S.SHOP)
+	_check("게임 탭")
 	#  설정 창의 높이는 탭을 갈아도 그대로다 — 탭 줄과 「뒤로」가 손 밑에서 안 뛴다.
 	_page("screen", g.S.SHOP)
 	var ws: Rect2 = g._set_win()
@@ -469,6 +472,19 @@ func _run() -> void:
 			and not bool(Save.get_set("vsync", true)) and g._set_info("vsync").get("v", "") == "끔")
 	g._click((g._set_rect(vsi) as Rect2).position + Vector2(20.0, 15.0))
 	_ok("수직 동기화 — 이름 쪽을 누르면 뒤집는다", g.vsync_on and bool(Save.get_set("vsync", false)))
+	#  움직임 줄이기(2026-10-21) — 「게임」 탭 · 같은 손 · 누르는 자리에서 저장 · 번쩍임 1/3
+	_page("game", g.S.SHOP)
+	var moi: int = (g._set_rows() as Array).find("motion")
+	g.motion_off = false
+	g._click((g._set_seg_rect(moi, 1) as Rect2).get_center())
+	_ok("움직임 줄이기 — 켬 칸을 누르면 켜고 저장한다 · 번쩍임 1/3", g.motion_off
+			and bool(Save.get_set("motion", false)) and g._set_info("motion").get("v", "") == "켬"
+			and is_equal_approx(g._flash_k(), 1.0 / 3.0))
+	g._click((g._set_rect(moi) as Rect2).position + Vector2(20.0, 15.0))
+	_ok("움직임 줄이기 — 이름 쪽을 누르면 뒤집는다", not g.motion_off
+			and not bool(Save.get_set("motion", true)) and is_equal_approx(g._flash_k(), 1.0))
+	Save.set_set("motion", true)
+	_page("screen", g.S.SHOP)
 	#  되살리기 — _load_settings 는 게이지 넷도 저장값으로 되돌리므로 앞뒤로 쥐었다 놓는다.
 	var keep := [g.vol, g.vol_mus, g.crt, g.warp, g.vhs, g.dot]
 	g.wipe_snow = false
@@ -476,6 +492,8 @@ func _run() -> void:
 	g._load_settings()
 	_ok("전환 지지직 — 저장에서 되살린다", g.wipe_snow)
 	_ok("수직 동기화 — 저장에서 되살린다", g.vsync_on)
+	_ok("움직임 줄이기 — 도구에서는 저장을 안 읽는다", not g.motion_off)
+	Save.set_set("motion", false)
 	g.vol = keep[0]
 	g.vol_mus = keep[1]
 	g.crt = keep[2]
