@@ -989,7 +989,8 @@ var shake_k := 34.0      # 흔들림 감쇠(px/초) — 1배 착지만 남은 �
 var shake_dir := Vector2.ZERO   # 착탄 흔들림의 축(다트가 들어간 쪽) — 0.5 밑으로 죽으면 ZERO(무작위로 돌아간다)
 var shk_v := Vector2.ZERO       # 이 16ms 칸의 떨림 방향(-1..1) — _draw
 var shk_fr := -1
-var throw_kick := 0             # 이 시각(ms)까지 화면이 손 쪽으로 1px 물러난다 — 던지는 순간
+var shk_sg := 1.0               # 착탄 축의 부호 — 칸마다 뒤집혀 밀렸다 되튄다
+var throw_kick := 0            # 이 시각(ms)까지 화면이 손 쪽으로 1px 물러난다 — 던지는 순간
 var board_punch := 0.0
 var pitch_step := 0
 #  ── 연발은 작은 다트마다 소리가 오른다 (2026-10-08) ──
@@ -10301,6 +10302,8 @@ func _impact(info: Dictionary, hit_mult: int, land_base: int = -1) -> void:
 	_sfx(HIT_SFX[grade])
 	#  흔들림 축 — 화면 아래(손)에서 꽂힌 자리로. 크기는 아래 등급이 그대로 쥔다.
 	shake_dir = (aim - Vector2(BC.x, VIEW.y)).normalized()
+	shk_fr = -1                # 다음 틀이 새 칸 — 뒤집혀 +1(미는 쪽)부터 선다
+	shk_sg = -1.0
 
 	match grade:
 		0:
@@ -12975,11 +12978,12 @@ func _draw() -> void:
 	if fr != shk_fr:
 		shk_fr = fr
 		shk_v = Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0))
+		shk_sg = -shk_sg
 	var sh := Vector2.ZERO
 	if not motion_off:
-		#  착탄은 다트가 들어간 축으로 떨고 옆은 0.35 — 크기(shake)는 그대로다.
+		#  착탄은 다트가 들어간 쪽으로 밀렸다 되튀기를 칸마다 번갈아(첫 칸이 미는 쪽) · 옆은 0.35 — 크기(shake)는 그대로다.
 		var v := shk_v if shake_dir == Vector2.ZERO \
-				else shake_dir * shk_v.x + shake_dir.orthogonal() * (shk_v.y * 0.35)
+				else shake_dir * (absf(shk_v.x) * shk_sg) + shake_dir.orthogonal() * (shk_v.y * 0.35)
 		#  정수 px — 640x360 nearest 에서 서브픽셀 흔들림은 도트 글자를 아지랑이로 번지게 한다.
 		sh = (v * shake).round()
 		if Time.get_ticks_msec() < throw_kick:
@@ -23625,6 +23629,7 @@ func _cons_use(i: int) -> void:
 			aim = again_aim
 			state = S.FLY
 			fly_t = 0.0
+			throw_kick = Time.get_ticks_msec() + 50    # 덤 한 발도 던지는 순간 손 쪽 1px
 			fly_rot = randf_range(-0.26, 0.26)
 			_sfx("dart_fly")
 			_ptear_go(tear_at, cid)

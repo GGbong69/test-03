@@ -278,6 +278,21 @@ func _run() -> void:
 		ax = maxf(ax, absf((o as Vector2).y))
 	_ok("흔들림은 정수 px · 축으로 크고 옆은 0.35", whole and side <= 4.0 and ax >= 6.0 and ax <= 10.0,
 			"%d틀 · 옆 %.0f · 축 %.0f" % [offs.size(), side, ax])
+	#  착탄 첫 칸은 다트가 들어간 쪽(위)으로 밀고 다음 칸은 되튄다.
+	g.shake_dir = Vector2(0.0, -1.0)
+	g.shake = 10.0
+	g.shk_fr = -1
+	g.shk_sg = -1.0
+	g.queue_redraw()
+	await process_frame
+	var push: Vector2 = g.shake_off
+	var sg1: float = g.shk_sg
+	g.shk_fr = -1
+	g.queue_redraw()
+	await process_frame
+	_ok("착탄은 미는 쪽부터 · 다음 칸은 되튄다", sg1 == 1.0 and g.shk_sg == -1.0
+			and push.y <= 0.0 and g.shake_off.y >= 0.0, "%s · %s" % [str(push), str(g.shake_off)])
+	g.shake_dir = Vector2.ZERO
 	g.shake = 0.0
 	g.throw_kick = Time.get_ticks_msec() + 1000
 	g.queue_redraw()
