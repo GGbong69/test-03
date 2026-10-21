@@ -16,6 +16,7 @@ const Save = preload("res://scripts/save.gd")
 #  ⑤ 런 끝 「거의 다 왔다」 쪽지 — ⅔ 넘게 찬 잠긴 것 하나 · 이름과 값
 #  ⑥ 신기록 도장(런 시작 때 기록을 넘었나) · 「새로 찾음 N」 · 줄은 다섯까지
 #  ⑦ 런 끝 · 프로필을 한 틀씩 그려 본다 · 프로필이 한 발 최고 점수 · 컬렉션 수를 읽는다
+#  ⑧ 완주 때 든 동전마다 가장 높은 리그 단(itemwin:<id>) · 컬렉션을 그려 본다
 # ══════════════════════════════════════════════════════════
 
 var g = null
@@ -284,6 +285,30 @@ func _run() -> void:
 	_ok("프로필이 섰다", g.state == g.S.PROFILE)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(Save.slot_path(1)))
 	Save.prof_fmt = Save.PROF
+
+	print("\n⑧ 완주 때 든 동전에 리그 단")
+	_arm(false)
+	var wit: Dictionary = (GameData.items()[0] as Dictionary).duplicate()
+	var wk := "itemwin:" + String(wit.id)
+	g.owned = [wit]
+	GameData.league = "green"
+	g._win_peaks()
+	_ok("완주한 리그 단(1부터)을 적는다", Save.tally(wk) == GameData.league_idx("green") + 1, "%d" % Save.tally(wk))
+	GameData.league = "white"
+	g._win_peaks()
+	_ok("가장 높은 단이 남는다", Save.tally(wk) == GameData.league_idx("green") + 1, "%d" % Save.tally(wk))
+	GameData.league = "black"
+	g.tut_run = true
+	g._win_peaks()
+	_ok("기록을 안 미는 런은 안 적는다", Save.tally(wk) == GameData.league_idx("green") + 1, "%d" % Save.tally(wk))
+	g.tut_run = false
+	GameData.league = "white"
+	Save.discover("item:" + String(wit.id))
+	g.state = g.S.COLLECT
+	g.collect_tab = 0
+	g.collect_page = 0
+	await _frame()
+	_ok("컬렉션이 섰다", g.state == g.S.COLLECT)
 
 	print("\n통과 %d · 실패 %d" % [ok, bad])
 	quit(bad)

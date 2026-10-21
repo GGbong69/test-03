@@ -2737,6 +2737,11 @@ static func _run(g: Node, e: Dictionary) -> void:
 					if Save.unlock(GameData.league_key(String(st.get("id", "")),
 							String(r.get("id", "")))):
 						n += 1
+			#  컬렉션 동전 칸의 리그 색 점 — 동전마다 돌아가며 다른 단으로 심는다.
+			var items := GameData.items()
+			for ii in items.size():
+				Save.tally_max("itemwin:" + String(items[ii].id), ii % GameData.leagues().size() + 1)
+			Save.flush()
 			_say("%d개 열었다" % n)
 			return
 		"unlock_none":
@@ -2744,6 +2749,9 @@ static func _run(g: Node, e: Dictionary) -> void:
 			for key2 in Save.unlock_keys():
 				if Save.lock(String(key2)):
 					n2 += 1
+			for key3 in Save.tally_keys():
+				if String(key3).begins_with("itemwin:"):
+					Save.tally_drop(String(key3))
 			_say("%d개 잠갔다" % n2)
 			return
 		#  ⚠ 바로 위 「해금 전부 잠그기」가 훑는 Save.unlock_keys() 는 **[해금]

@@ -5573,6 +5573,9 @@ func _win_peaks() -> void:
 		return
 	_peak("win_gold", gold)
 	_dip("win_items", owned.size())
+	#  완주한 순간 든 동전마다 이 리그 단(1부터) — 컬렉션 칸의 리그 색 점이 가장 높은 것을 읽는다.
+	for it in owned:
+		Save.tally_max("itemwin:" + String(it.get("id", "")), GameData.league_idx() + 1)
 	for it in owned:
 		if String(it.get("side", "")) == "boardkill":
 			_bump("win_null")
@@ -60207,6 +60210,12 @@ func _col_item_draw(i: int, tab: int, page: int, chv: float, na := 1.0) -> void:
 				var it: Dictionary = GameData.items()[gi]
 				draw_item_sticker(c, 13.0, it, 0.0, 0.0, 0.0, 10)
 				nm = it.n
+				#  이 동전을 들고 완주한 가장 높은 리그 — 칸 오른쪽 위에 그 색 점 하나(동전 그림은 안 건드린다).
+				var lw := Save.tally("itemwin:" + String(it.id))
+				if lw > 0 and lw <= GameData.leagues().size():
+					var lc := Color(String(GameData.leagues()[lw - 1].get("color", "cfc9bd")))
+					draw_circle(Vector2(cell.end.x - 10.0, cell.position.y + 10.0), 2.5,
+							Color(_on_chalk(lc) if mat_draw else lc, na))
 			1:
 				var md: Dictionary = GameData.mods()[gi]
 				_icon_mod(c, 13.0, md.id, 0.0)
