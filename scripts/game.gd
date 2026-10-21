@@ -20175,12 +20175,14 @@ func _draw_aim_live() -> void:
 			# 손에서 조준점까지가 **밀린 양**이다. 이 선이 길어질수록 손을
 			# 더 내려야 한다 — 얼마나 눌러야 하는지가 그대로 보인다.
 			if kick_o.length() > 1.5:
-				draw_line(mouse_at, aim, Color(C_ACC, 0.45), 1.0)
+				_aim_stroke(mouse_at, aim, Color(C_ACC, 0.45))
+				draw_arc(mouse_at, 3.0, 0.0, TAU, 12, Color(C_BG, 0.7 * 0.55), 3.0)
 				draw_arc(mouse_at, 3.0, 0.0, TAU, 12, Color(C_ACC, 0.55), 1.0)
-			# 남은 발. 다 쏘기 전에는 조준을 못 놓는다
+			# 남은 발. 다 쏘기 전에는 조준을 못 놓는다 — 1px 그늘 테 위에 선다(백색 칸).
 			for pi in burst_left:
-				draw_rect(Rect2(aim + Vector2(-9.0 + float(pi) * 5.0, 11.0),
-						Vector2(3.0, 3.0)), C_ACC)
+				var br := Rect2(aim + Vector2(-9.0 + float(pi) * 5.0, 11.0), Vector2(3.0, 3.0))
+				draw_rect(br.grow(1.0), Color(C_BG, 0.7))
+				draw_rect(br, C_ACC)
 		"drift":
 			# 떠도는 테두리를 같이 보여 준다 — 어디까지 튈 수 있는지가
 			# 보여야 "그 안에서 언제 누를까" 가 판단이 된다.
@@ -20274,10 +20276,14 @@ func _aim_circle(c: Vector2, r: float, col: Color) -> void:
 
 
 # 선이 없는 방식의 조준점. 원 하나로는 판의 고리와 헷갈려서 십자를 겹친다.
+#  그늘 3px 를 셋 다 먼저 깔고 1px 를 얹는다 — 획마다 깔면 뒤 획의 그늘이 앞 획 가운데를 끊는다.
 func _aim_dot(p: Vector2, col: Color) -> void:
-	draw_arc(p, 4.0, 0.0, TAU, 16, col, 1.0)
-	draw_line(p - Vector2(8.0, 0.0), p + Vector2(8.0, 0.0), col, 1.0)
-	draw_line(p - Vector2(0.0, 8.0), p + Vector2(0.0, 8.0), col, 1.0)
+	for k in 2:
+		var c := Color(C_BG, 0.7 * col.a) if k == 0 else col
+		var w := 3.0 if k == 0 else 1.0
+		draw_arc(p, 4.0, 0.0, TAU, 16, c, w)
+		draw_line(p - Vector2(8.0, 0.0), p + Vector2(8.0, 0.0), c, w)
+		draw_line(p - Vector2(0.0, 8.0), p + Vector2(0.0, 8.0), c, w)
 
 
 # 기울어진 조준선. 가로세로 두 줄이 못 그리는 축을 그린다 — 안개 규칙은
@@ -20288,11 +20294,11 @@ func _aim_ray(p: Vector2, dir: Vector2, col: Color) -> void:
 	var rr: float = R + 8.0
 	var far := 151.0
 	if mod_v("fog", 0.0) <= 0.0 or h >= rr:
-		draw_line(foot - dir * far, foot + dir * far, col, 1.0)
+		_aim_stroke(foot - dir * far, foot + dir * far, col)
 		return
 	var cut: float = sqrt(maxf(rr * rr - h * h, 0.0))
-	draw_line(foot - dir * far, foot - dir * cut, col, 1.0)
-	draw_line(foot + dir * cut, foot + dir * far, col, 1.0)
+	_aim_stroke(foot - dir * far, foot - dir * cut, col)
+	_aim_stroke(foot + dir * cut, foot + dir * far, col)
 
 
 # 조준선 한 줄. 안개가 걸리면 판 원 안쪽이 비고 바깥 꼬리만 남는다 —
