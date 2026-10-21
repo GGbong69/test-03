@@ -509,6 +509,8 @@ const C_PANEL := Color("221d33")
 #  1.71:1 이고, 배수는 판 위 4.44 → 5.34:1 로 같이 올라간다.
 const C_CHIP := Color("8fc9f2")
 const C_MULT := Color("e8705c")
+#  ×배수 알약 — 배수 붉음을 한 단 눌렀다. 그 위 흰 글자(C_TXT)가 4.9:1(붉음 그대로는 2.65:1).
+const C_XMULT := Color("a24e40")
 const C_GOLD := Color("f2c94c")
 # 확률. 점수(푸름)·배수(붉음)와 나란한 셋째 색이다 — 「1/10 확률로 파괴」의
 # 그 몫이 눈에 먼저 들어와야 살지 말지가 갈린다. 짙은 툴팁 판 위에서 읽힌다.
@@ -6688,6 +6690,9 @@ func _reroll() -> void:
 		return                   # 쓸기는 중단도 재진입도 없다
 	_hand_abort()
 	if gold < reroll_cost:
+		#  사유를 세운다 — 없으면 앞치마에 리롤과 상관없는 「…슬롯이 꽉 찼다」가 뜬다.
+		pay_msg = _L("골드가 %d 모자란다") % (reroll_cost - gold)
+		pay_msg_t = HAND.msg_t
 		_deny()
 		return
 	gold -= reroll_cost
@@ -10319,7 +10324,7 @@ func _land_pop(p: Vector2, land_base: int, hit_mult: int, c: Color,
 	var txt := _land_val(land_base, hit_mult)
 	if txt.is_empty():
 		return
-	pop(p, txt, c, sz, life)
+	pop(p, txt, c, sz, life, true)
 
 
 #  land_base 를 안 주면 info.base 를 쓴다 — 축을 아직 안 지난 날판(검사
@@ -10613,14 +10618,8 @@ func _land(mark := true) -> void:
 	throw6 += 1
 
 	# rackval 배율 — 이 발에서 파는 값이 아니라 지금 동전 슬롯의 값이다.
-	var rv_all := 0
-	for o in owned:
-		rv_all += GameData.sell_value(o)
-
-	var mag_hvy := 0
-	for md in magazine:
-		if String(md.get("id", "")) == "hvy":
-			mag_hvy += 1
+	var rv_all := _rack_val()
+	var mag_hvy := _mag_hvy()
 
 	# ── 이력 갱신 — ctx 를 만들기 **전**이다 ─────────────────────
 	#  패턴 깃발은 완성한 그 발부터 선다. 전에는 이 블록이 ctx 뒤에 있어서
@@ -11245,9 +11244,12 @@ func _next_step() -> void:
 			#  수명이 **걸음에 매인다**(2026-09-26 수선). 팝이 전부 카드 윗변
 			#  한 점(cc)에서 나므로 0.9초 붙박이면 동전이 둘만 발동해도
 			#  「점수 +80」 위에 「배수 +4」가 얹혀 한 덩어리가 됐다.
+			#  ×배수는 툴팁과 같은 알약 위 흰 글자다(_tint).
+			var xm: bool = st.kind == "xmult"
 			pop(cc, GameData.eff_text(
 					"mult" if st.kind == "mult_rand" else String(st.kind), st.v),
-					col, 20, _pop_life())
+					C_TXT if xm else col, 20, _pop_life(), false,
+					C_XMULT if xm else Color(0.0, 0.0, 0.0, 0.0))
 			_sfx("settle_item", f)
 			shake = 3.0
 			# 몸은 갈래 밖에서 한 번만 챈다. 모르는 효과(_ 갈래)도 걸음은 걸음이라
@@ -11520,8 +11522,11 @@ func _next_step() -> void:
 #  9 · 10 → 10, 11 · 12 · 13 · 15 → 12, 16 · 17 → 20, 20 · 22 → 24.
 #  (불스아이 20 은 20 이 아니라 24 다 — 트리플이 20 으로 올라와 같아지면 판 위 네 단이
 #  한 단 줄어든다.)
-func pop(p: Vector2, txt: String, c: Color, sz: int, life: float) -> void:
-	pops.append({"p": p, "txt": txt, "c": c, "sz": sz, "t": 0.0, "life": life})
+#  rim — 1px 먹색 테(판 위 착탄 값 · 백색 칸에서도 읽힌다). bg — 알약 바탕(×배수 · 알파 0 이면 없다).
+func pop(p: Vector2, txt: String, c: Color, sz: int, life: float, rim := false,
+		bg := Color(0.0, 0.0, 0.0, 0.0)) -> void:
+	pops.append({"p": p, "txt": txt, "c": c, "sz": sz, "t": 0.0, "life": life, "rim": rim,
+			"bg": bg})
 
 
 #  정산 걸음이 내는 팝의 수명. **걸음에 맨다**(2026-09-26 수선) — 까닭은
@@ -22534,13 +22539,16 @@ func _panel_slot(i: int) -> void:
 		c.x = float(rack_vx[i])
 		c.y += float(rack_vy[i])
 	c.y += _float_dy(i)
-	var r: float = PANEL.r * (1.0 + bounce * PANEL.swell)
+	var key := "rack:%d" % i
+	var hv: float = maxf(tip_a if i == tip_slot else 0.0, _ui_hov(key))
+	var wg := _wig(key, hv)          # 얹힘 — 커졌다 앉고 기울다 선다(HOVW)
+	var r: float = PANEL.r * (1.0 + bounce * PANEL.swell) * wg.x
 
 	if up > 0.01:
 		draw_circle(c + Vector2(1.5, 3.0 + up * PANEL.lift), r,
 				Color(0.0, 0.0, 0.0, up * PANEL.shadow))
 
-	draw_item_sticker(c, r, it, bounce * PANEL.spin + _float_rot(i), up * PANEL.lift,
+	draw_item_sticker(c, r, it, bounce * PANEL.spin + _float_rot(i) + wg.y, up * PANEL.lift,
 			0.55 if lock else 0.0, 12)
 	#  성장형 「잭과 콩나무」 — 둘레에 덩굴이 자란 만큼 타고 오른다(BEAN).
 	if String(it.get("side", "")) == "bigdart":
@@ -22558,13 +22566,11 @@ func _panel_slot(i: int) -> void:
 	#    얹힘      주황 고리. 툴팁 짙기(tip_a)와 얹힘 짙기(ui_hov) 중 큰 쪽이라
 	#              툴팁을 쉬는 때(점수 카드가 떠 있을 때)에도 무엇에 얹혔는지 보인다
 	#  들어설 때 딸깍은 ui_hot 이 낸다 — 동전을 실제로 집을 수 있을 때만이다.
-	var key := "rack:%d" % i
 	var over: bool = _slot_rect(i).has_point(mouse_at)
 	var choosing: bool = photo_rack != "" and not swap_live and not _tutor_live()
 	if over and (choosing or (_ui_can_hover() and _can_rack_move())):
 		ui_hot = key
 	var press: bool = hand_st == H.ARMED and hand_src == 1 and hand_i == i
-	var hv: float = maxf(tip_a if i == tip_slot else 0.0, _ui_hov(key))
 	if choosing and over:
 		draw_arc(c, r + 2.0, 0.0, TAU, 24,
 				C_MULT.lightened(0.25) if photo_rack == "burn" else C_ACC, 1.0)
@@ -23972,8 +23978,16 @@ func _cons_draw() -> void:
 				_rr(self, _cons_rect(i).grow(-2.0), Color(C_TXT, 0.07 * h))
 				up = roundf(h)
 			#  둥실거린다(FLOAT) — 동전 슬롯과 박자가 안 맞게 칸마다 결을 비킨다.
-			_icon_cons(r.get_center() - Vector2(0.0, up - _float_dy(i, 0.9)),
-					minf(r.size.x, r.size.y) * 0.42, String(cons[i].id))
+			var ic := r.get_center() - Vector2(0.0, up - _float_dy(i, 0.9))
+			var wg := _wig(key, h)        # 얹힘 — 동전 슬롯과 같은 출렁임(HOVW)
+			var ir: float = minf(r.size.x, r.size.y) * 0.42 * wg.x
+			if wg.y != 0.0:
+				#  _icon_cons 는 기울기를 안 받는다 — 그 자리에서 돌린다. HUD 는 shake_off 위에 선다.
+				draw_set_transform(shake_off + ic, wg.y)
+				_icon_cons(Vector2.ZERO, ir, String(cons[i].id))
+				draw_set_transform(shake_off)
+			else:
+				_icon_cons(ic, ir, String(cons[i].id))
 	# 이름과 수 — 동전 슬롯 밑은 상인 자리라 못 쓰지만 이 자리는 벽이다.
 	# 「사탕」이라고만 적고 있었는데 이 칸에는 사진도 들어간다 — 사진을
 	# 한 장 들고 있으면 「사탕 1/2」가 거짓말이 된다.
@@ -40101,7 +40115,22 @@ func _bill_at(i: int, r: Rect2) -> void:
 				HORIZONTAL_ALIGNMENT_CENTER, 80.0, 12, C_ACC)
 		return
 	var can: bool = not s.sold and gold >= s.cost
-	draw_gold_at(r.position.x, y, str(s.cost), int(BILL.sz), C_GOLD if can else C_OFF)
+	var bw := draw_gold_at(r.position.x, y, str(s.cost), int(BILL.sz), C_GOLD if can else C_OFF)
+	#  처음 보는 매물 — 값 오른쪽 위에 금빛 점 하나(글자 없음). 수 윗끝에 맞춘다 — 가운데 · 밑이면
+	#  「12.」 의 소수점으로 읽혔다.
+	if _bill_new(s):
+		draw_circle(Vector2(r.position.x + bw + 4.0,
+				y - float(BILL.sz) * float(INK.num) + 1.5), 1.5, C_GOLD)
+
+
+#  아직 컬렉션에 없는 매물인가 — 컬렉션과 같은 열쇠(COL_TABS 의 f · 사진은 cons)로 묻는다.
+#  튜토리얼 런은 전부 새것이라 점이 소음이 된다 — 안 찍는다. 팩은 컬렉션 밖이다.
+func _bill_new(s: Dictionary) -> bool:
+	if tut_run or found_all:
+		return false
+	var f := String({"item": "item", "mod": "mod", "dart": "dart", "cons": "cons",
+			"fix": "cons"}.get(String(s.get("type", "")), ""))
+	return f != "" and not Save.found(f + ":" + String((s.d as Dictionary).get("id", "")))
 
 
 # _table_draw 의 맨 끝 (덮개·레일 뒤) — 가격은 절대 안 잘려야 한다.
@@ -44011,6 +44040,12 @@ func _tip_hit(m: Vector2) -> Dictionary:
 			for i in GameData.max_items():
 				if _slot_rect(i).has_point(m):
 					return {"k": "rack", "i": i}
+			#  보스 명판 — 판 고르기의 보스 카드와 같은 툴팁. 거절 문구가 앞치마 가운데를
+			#  쓰는 동안은 명판이 안 선다(_draw_shop).
+			if pay_msg_t <= 0.0 and deny_flash <= 0.0:
+				var pl := _boss_plq_lay()
+				if not pl.is_empty() and Rect2(pl.r).has_point(m):
+					return {"k": "legboss", "i": int(pl.bn), "src": "plq"}
 		S.LEG:
 			# 동전 슬롯과 사탕·사진 칸은 판 선택 화면에도 그대로 떠 있는데(_hud_draw)
 			# 여기만 대상에서 빠져 있었다. 무엇을 들고 있는지가 곧 "던질까
@@ -44153,6 +44188,7 @@ func _tip_build(hit: Dictionary) -> void:
 			if _tut_svc("item", String(it.get("id", ""))):
 				_tip_tag("서비스", C_ACC)
 			_tip_add(_tip_eff(it), 20, C_TXT)
+			_tip_now(it)
 			if i == sealed:
 				_tip_add("이번 판 봉인", 12, C_MULT)
 			#  골드 곁줄은 따로 효과가 있는 동전에만 — 골드만 주면 _tip_eff 가 본문으로 올렸다.
@@ -44260,8 +44296,12 @@ func _tip_build(hit: Dictionary) -> void:
 			# 펠트를 따라 좁아진 사다리꼴이라 흰 테가 몇 px 어긋난다. 카드
 			# 쪽 반응(테가 달아오른다)이 표시를 대신한다 — 테이블(stock)과
 			# 동전 슬롯이 먼저 간 길이다.
-			tip_mark = _row_rect(GameData.leg_idx(i), GameData.legs_per_round())
-			tip_box = false
+			#  상점 명판(src plq)은 반응하는 몸이 없다 — 테를 두른다.
+			if String(hit.get("src", "")) == "plq":
+				tip_mark = Rect2(_boss_plq_lay().get("r", Rect2()))
+			else:
+				tip_mark = _row_rect(GameData.leg_idx(i), GameData.legs_per_round())
+				tip_box = false
 			var braw: PackedStringArray = boss_mods.get(i, PackedStringArray())
 			var bnames := []
 			for bid in braw:
@@ -44402,6 +44442,40 @@ func _tip_eff(it: Dictionary) -> String:
 	if ct == "" or eff == "":
 		return ct if eff == "" else eff
 	return ct + " " + eff
+
+
+#  든 동전의 지금 값 태그 — 쌓이는 동전과 판 밖에서도 정해지는 「~당」 재료만.
+#  남은 다트 · 판 이력(darts_left · low · zonehist · sechist · missing)은 판 중에만 서서 뺀다.
+const TIP_NOW_PER := ["items", "gold", "gold5", "rackval", "empty", "mag_hvy"]
+
+
+func _tip_now(it: Dictionary) -> void:
+	var k := String(it.get("k", ""))
+	if not (k in ["chip", "mult", "xmult"]):
+		return
+	if String(it.get("grow", "")) == "" and not TIP_NOW_PER.has(String(it.get("per", ""))):
+		return
+	var amt := GameData.item_amt(it, {"items_n": owned.size(), "gold": gold,
+			"mag_hvy": _mag_hvy(), "empty_n": GameData.max_items() - owned.size(),
+			"rackval_others": _rack_val() - GameData.sell_value(it)})
+	amt = int(round(float(amt) * GameData.chal_f("item_mul", 1.0)))   # 「홑장」 — 정산(_land)과 같은 자
+	_tip_tag(_L("지금 %s") % GameData.eff_text(k, amt), C_CHIP if k == "chip" else C_MULT)
+
+
+#  재료 둘 — 정산(ctx)과 툴팁의 지금 값(_tip_now)이 같은 자를 쓴다.
+func _rack_val() -> int:
+	var v := 0
+	for o in owned:
+		v += GameData.sell_value(o)
+	return v
+
+
+func _mag_hvy() -> int:
+	var n := 0
+	for md in magazine:
+		if String(md.get("id", "")) == "hvy":
+			n += 1
+	return n
 
 
 # 태그 한 장. 색이 갈래를 절반쯤 말한다.
@@ -44632,6 +44706,13 @@ func _tint(t: String, base: Color) -> Array:
 			c = C_MULT
 			role = C_MULT
 			carry = true
+		#  「골드 +3」 은 금빛 — 받는 값(부호 붙은 수)이 뒤에 설 때만. 「가진 골드 6 이하면」 ·
+		#  「골드 1당」 은 조건 · 재료고 「골드가 12 모자란다」 는 거절 말이다.
+		elif w == _L("골드") and i + 1 < parts.size() and String(parts[i + 1]) != "" \
+				and "+-−".contains(String(parts[i + 1])[0]):
+			c = C_GOLD
+			role = C_GOLD
+			carry = true
 		#  「다트」·「골드」 는 제 수를 따로 갖는다 — 「점수 +100 · 판 시작 다트 −2」 의 −2 가
 		#  점수 파랑으로 칠해졌다. 여기서만 이어감을 끊고, 값 아닌 다른 토막에서는 안 끊는다.
 		elif w.begins_with(_L("다트")) or w.begins_with(_L("골드")):
@@ -44643,7 +44724,11 @@ func _tint(t: String, base: Color) -> Array:
 		#  −1 이 흰 글자였다 — 그 −1 은 배수인데 배수색이 아니었다.
 		#  다음 점수/배수 낱말을 만날 때까지 이어간다.
 		# 사이 공백을 토막에 붙여 둔다 — 폭을 따로 더하면 글꼴마다 어긋난다.
-		out.append({"s": w + (" " if i < parts.size() - 1 else ""), "c": c})
+		var sg := {"s": w + (" " if i < parts.size() - 1 else ""), "c": c}
+		#  ×배수는 알약 위 흰 글자 — 가장 센 효과가 읽기 전에 눈에 든다.
+		if c == C_MULT and w.begins_with("×") and w.substr(1).is_valid_int():
+			sg = {"s": sg.s, "c": C_TXT, "bg": C_XMULT}
+		out.append(sg)
 	return out
 
 
@@ -44710,9 +44795,19 @@ func _draw_tinted_part(x: float, y: float, full: String, part: String,
 		if piece == "":
 			continue
 		var f := _tip_font(sz)
+		if g.has("bg"):
+			_pill(cx, y, f.get_string_size(piece.strip_edges(false, true),
+					HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x, sz, Color(g.bg, tip_a))
 		draw_string(_fz(f, sz), Vector2(cx, y), piece, HORIZONTAL_ALIGNMENT_LEFT,
 				-1, sz, Color(g.c, tip_a))
 		cx += f.get_string_size(piece, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x
+
+
+#  알약 — 글 잉크를 위아래 · 양옆 1px 씩 덮는다. 폭은 안 늘린다(양옆은 앞뒤 공백 안이다).
+func _pill(x: float, by: float, w: float, sz: int, col: Color) -> void:
+	var up: float = roundf(float(sz) * float(TIP.ink_up)) + 1.0
+	_rr(self, Rect2(roundf(x) - 1.0, by - up, ceilf(w) + 2.0,
+			up + ceilf(float(sz) * float(TIP.ink_dn)) + 1.0), col)
 
 
 func _draw_tinted(x: float, y: float, t: String, sz: int, base: Color) -> void:
@@ -45638,6 +45733,15 @@ func _draw_pops() -> void:
 		if f != null:
 			pw = maxf(120.0, ceilf(f.get_string_size(tx, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x) + 4.0)
 		var px: float = clampf(p.p.x - pw * 0.5, 4.0, VIEW.x - 4.0 - pw)
+		var bg: Color = p.get("bg", Color(0.0, 0.0, 0.0, 0.0))
+		if bg.a > 0.0 and f != null:
+			var tw: float = f.get_string_size(tx, HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x
+			_pill(px + (pw - tw) * 0.5, y, tw, sz, Color(bg, bg.a * c.a))
+		if bool(p.get("rim", false)):      # 촬영 도구는 pops 를 손으로 짓는다 — 열쇠가 없을 수 있다
+			#  다트 테와 같은 먹색 — 크림 글자가 백색 칸 위에서 묻히지 않는다.
+			for o in [Vector2(-1.0, 0.0), Vector2(1.0, 0.0), Vector2(0.0, -1.0), Vector2(0.0, 1.0)]:
+				draw_string(_fz(f, sz), Vector2(px, y) + o, tx, HORIZONTAL_ALIGNMENT_CENTER, pw, sz,
+						Color(BOARDART.ring_col, c.a * 0.9))
 		draw_string(_fz(f, sz), Vector2(px, y), tx, HORIZONTAL_ALIGNMENT_CENTER, pw, sz, c)
 
 
@@ -45734,10 +45838,28 @@ const UIHOV := {"fade": 0.08, "lift": 1.0, "lit": 0.10, "lip": 4.0, "lip_hud": 3
 var ui_hov := {}          # 열쇠 → 짙기 0~1
 var ui_hot := ""          # 이번 프레임에 커서가 든 단추(그리기가 적는다)
 var ui_hot_was := ""      # 지난 프레임의 그것 — 새로 들어서면 딸깍
+var ui_wig := {}          # 열쇠 → 들어선 뒤 지난 초(HOVW · life 를 넘으면 지운다)
 
 
 func _ui_hov(key: String) -> float:
 	return float(ui_hov.get(key, 0.0))
+
+
+#  얹힘 출렁임 — 동전 슬롯 · 사탕 칸에 들어서면 한 치(s) 커졌다 넘쳐(over) 앉고 좌우로 두세 번
+#  기울다(a rad · hz · damp) 선다. 위로는 안 든다 — 뜨는 것은 발동(slot_pop)의 말이다.
+const HOVW := {"s": 0.07, "over": 0.6, "a": 0.08, "hz": 4.0, "damp": 6.0, "life": 0.8}
+
+
+#  (크기 배수, 기울기 rad). hv 는 얹힘 짙기 — 얹힌 동안 한 치 크게 앉아 있다. 움직임 끄기면 없다.
+func _wig(key: String, hv: float) -> Vector2:
+	if motion_off:
+		return Vector2(1.0, 0.0)
+	if not ui_wig.has(key):
+		return Vector2(1.0 + float(HOVW.s) * hv, 0.0)
+	var t: float = ui_wig[key]
+	var e: float = exp(-float(HOVW.damp) * t)
+	return Vector2(1.0 + float(HOVW.s) * hv * (1.0 + float(HOVW.over) * e * sin(PI * float(HOVW.hz) * t)),
+			float(HOVW.a) * e * sin(TAU * float(HOVW.hz) * t))
 
 
 #  덮인 화면을 그리는 중인가. 런 정보는 열던 화면을, 일시정지 설정은 멈춘
@@ -45975,10 +46097,15 @@ func _ui_hover_tick(d: float) -> void:
 	if ui_hot != ui_hot_was:
 		if ui_hot != "":
 			_sfx("menu_pick2")
+			ui_wig[ui_hot] = 0.0      # 들어선 틀 — 얹힘 출렁임(HOVW)이 여기서 시작한다
 		ui_hot_was = ui_hot
 	if ui_hot != "" and not ui_hov.has(ui_hot):
 		ui_hov[ui_hot] = 0.0
-	var moved := false
+	var moved := not ui_wig.is_empty()
+	for key in ui_wig.keys():
+		ui_wig[key] = float(ui_wig[key]) + d
+		if float(ui_wig[key]) >= float(HOVW.life):
+			ui_wig.erase(key)
 	for key in ui_hov.keys():
 		var to: float = 1.0 if key == ui_hot else 0.0
 		var v: float = ui_hov[key]
@@ -47683,14 +47810,15 @@ func _draw_shop() -> void:
 #  글자는 **효과와 값만** 쓴다: 제약 이름과 「목표 N」. 「보스」·「제약」
 #  같은 분류어는 안 적는다 — 붉은 명판과 제약 글리프가 갈래를 이미 말한다.
 #  폭 예산 240 — 「실띠  목표 25000」 이 12 에서 ≈90px, 겹치기 둘이라도 든다.
-func _boss_plaque() -> void:
+#  명판의 글과 자리 — 그리기(_boss_plaque)와 툴팁 짚기(_tip_hit)가 같은 자를 쓴다.
+#  안 서면 빈 사전. r 은 원(y 309 ± 8)과 글줄을 2px 넉넉히 두른 사각이다.
+func _boss_plq_lay() -> Dictionary:
 	var bn := _boss_ahead()
 	if bn <= 0:
-		return
+		return {}
 	var ids: PackedStringArray = boss_mods.get(bn, PackedStringArray())
 	if ids.is_empty():
-		return
-	var off: bool = boss_void.has(bn)
+		return {}
 	var names := []
 	for mid in ids:
 		names.append(_L(String(_mod_row(String(mid)).get("n", ""))))
@@ -47700,7 +47828,22 @@ func _boss_plaque() -> void:
 	var gw: float = float(ids.size()) * 16.0
 	var tw: float = font.get_string_size(_L(txt), HORIZONTAL_ALIGNMENT_LEFT,
 			-1, 12).x
-	var x0: float = 308.0 - (gw + 4.0 + minf(tw, 240.0 - gw - 4.0)) * 0.5
+	var w: float = gw + 4.0 + minf(tw, 240.0 - gw - 4.0)
+	var x0: float = 308.0 - w * 0.5
+	return {"bn": bn, "ids": ids, "txt": txt, "gw": gw, "x0": x0,
+			"r": Rect2(x0 - 2.0, 299.0, w + 4.0, 20.0)}
+
+
+func _boss_plaque() -> void:
+	var lay := _boss_plq_lay()
+	if lay.is_empty():
+		return
+	var bn: int = lay.bn
+	var ids: PackedStringArray = lay.ids
+	var off: bool = boss_void.has(bn)
+	var txt: String = lay.txt
+	var gw: float = lay.gw
+	var x0: float = lay.x0
 	for k in ids.size():
 		var c := Vector2(x0 + float(k) * 16.0 + 8.0, 309.0)
 		draw_circle(c, 8.0, Color(SIGN_COL.boss.rim).darkened(0.15))

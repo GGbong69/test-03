@@ -168,3 +168,28 @@ func _run() -> void:
 			"%.3f · %.3fpx" % [g.hold_tilt, _settled()])
 	g.hand_st = g.H.NONE
 	g.motion_off = false
+
+	# ⑧ 얹힘 — 들어서면 커졌다 넘쳐 앉고 좌우로 기울다 선다 · 위로는 안 든다(2026-10-21)
+	g.ui_wig.clear()
+	g.ui_hot_was = ""
+	g.ui_hot = "rack:1"
+	var peak := 0.0
+	var tilt_l := 0.0
+	var tilt_r := 0.0
+	for _k in 60:
+		g._ui_hover_tick(DT)
+		var w: Vector2 = g._wig("rack:1", g._ui_hov("rack:1"))
+		peak = maxf(peak, w.x)
+		tilt_l = minf(tilt_l, w.y)
+		tilt_r = maxf(tilt_r, w.y)
+	var s: float = g.HOVW.s
+	var rest: Vector2 = g._wig("rack:1", g._ui_hov("rack:1"))
+	_ok("⑧ 들어서면 한 치보다 넘쳐 커진다", peak > 1.0 + s * 1.2, "%.3f" % peak)
+	_ok("⑧ 좌우로 기운다", tilt_l < -0.01 and tilt_r > 0.01, "%.3f ~ %.3f" % [tilt_l, tilt_r])
+	_ok("⑧ 1초 뒤 한 치 큰 채 선다", is_equal_approx(rest.x, 1.0 + s) and rest.y == 0.0, str(rest))
+	g.motion_off = true
+	g.ui_wig["rack:1"] = 0.1
+	_ok("⑧ 움직임 끄기 — 안 커지고 안 기운다", g._wig("rack:1", 1.0) == Vector2(1.0, 0.0))
+	g.motion_off = false
+	g.ui_hot = ""
+	g.ui_wig.clear()

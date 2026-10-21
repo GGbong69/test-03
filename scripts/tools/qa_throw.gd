@@ -157,6 +157,9 @@ func _run() -> void:
 		var want2 := "%d" % (int(hi.sector) * maxi(int(hi.mult), 1))
 		_ok("%s 에 값이 뜬다" % z, got == want2, "「%s」 (칸 %d × 배수 %d)"
 				% [got, int(hi.sector), int(hi.mult)])
+		#  백색 칸 위 크림 글자 — 먹색 테를 두른다(2026-10-21)
+		_ok("%s 값에 테가 있다" % z, not g.pops.is_empty()
+				and bool(g.pops[g.pops.size() - 1].get("rim", false)))
 	#  빗나감만 글자가 없다 — 대신 물결이 하나 인다(등급 1~5 는 전부 있는데
 	#  0 만 없어서 화면에 아무 일도 안 일어났다).
 	g.pops.clear()
