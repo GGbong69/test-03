@@ -9904,7 +9904,7 @@ func _click(m: Vector2) -> void:
 						Save.set_set("wipe_snow", wipe_snow)
 						_sfx("menu_pick2")
 						return
-					"vol", "mus", "crt", "warp", "vhs", "dot":
+					"all", "vol", "mus", "crt", "warp", "vhs", "dot":
 						#  홈 둘레를 누르면 그 자리로 가고 뗄 때까지 따라온다(_set_grab).
 						#  이름 쪽은 고르기만 한다.
 						if _set_grab(i).has_point(m):
@@ -48042,6 +48042,7 @@ var collect_tab := 0
 # 순간이라, 한 손잡이로 묶으면 한쪽에 맞추면 다른 쪽이 어긋난다.
 var vol := 1.0           # 효과음. 예전 저장 키("vol")를 그대로 물려받는다
 var vol_mus := 0.8       # 음악. 깔개라 기본값이 효과음보다 한 뼘 낮다
+var vol_all := 1.0       # 전체 음량 — Master 버스. 둘의 비는 두고 크기만 한 번에 민다(부스 현장 음량)
 #  CRT 필터 세기 0~1. 0 이면 층째 꺼진다(_crt_apply). 필터 넷의 기본값은 다 50 이다
 #  (2026-10-14 「그냥 기본 값을 다 50으로 설정해줘」 — 옛 CRT 40 · 도트 60).
 const CRT_DEF := 0.5
@@ -48612,7 +48613,8 @@ func _load_settings() -> void:
 	GameData.pack = String(Save.get_pick("pack", ""))
 	vol = clampf(float(Save.get_set("vol", 1.0)), 0.0, 1.0)
 	vol_mus = clampf(float(Save.get_set("vol_mus", 0.8)), 0.0, 1.0)
-	crt = clampf(float(Save.get_set("crt", CRT_DEF)), 0.0, 1.0)
+	vol_all = clampf(float(Save.get_set("vol_all", 1.0)), 0.0, 1.0)
+	crt =clampf(float(Save.get_set("crt", CRT_DEF)), 0.0, 1.0)
 	warp = clampf(float(Save.get_set("warp", WARP_DEF)), 0.0, 1.0)
 	vhs = clampf(float(Save.get_set("vhs", VHS_DEF)), 0.0, 1.0)
 	dot = clampf(float(Save.get_set("dot", DOT_DEF)), 0.0, 1.0)
@@ -55936,7 +55938,7 @@ func _set_info(key: String) -> Dictionary:
 			#  창 크기(RES) — 전체화면이면 모니터 해상도 그대로라 잠긴다(값은 남는다).
 			return {"n": "해상도", "sel": true, "v": _res_label(), "off": _res_fs()}
 		"sound":
-			return {"n": "소리", "kids": ["vol", "mus"]}
+			return {"n": "소리", "kids": ["all", "vol", "mus"]}
 		"game":
 			#  「일반」은 등급 이름(일반 동전)과 같은 글이라 번역이 「Common」으로 갔다 — 「게임」.
 			return {"n": "게임", "kids": ["lang"]}
@@ -55944,6 +55946,8 @@ func _set_info(key: String) -> Dictionary:
 			var on: bool = DisplayServer.window_get_mode() \
 					== DisplayServer.WINDOW_MODE_FULLSCREEN
 			return {"n": "전체화면", "tg": on, "v": "켬" if on else "끔"}
+		"all":
+			return {"n": "전체 음량", "g": true}
 		"vol":
 			return {"n": "효과음", "g": true}
 		"mus":
@@ -56047,7 +56051,9 @@ var set_det := -1        # 끄는 동안 마지막으로 앉은 걸림(10 단위
 #  Front 를 다시 안 그려 게이지가 멎은 채로 남는다. 끊는 단위는 부르는 쪽이
 #  정한다(끌기 0.01 · 휠 0.05). 2026-09-19 · snd 거짓이면 음량 톡을 안 낸다(끌기 — 걸림 톡이 맡는다).
 func _vol_set(key: String, x: float, snd := true) -> void:
-	if key == "vol":
+	if key == "all":
+		vol_all = x
+	elif key == "vol":
 		vol = x
 	elif key == "mus":
 		vol_mus = x
@@ -56082,7 +56088,7 @@ func _vol_set(key: String, x: float, snd := true) -> void:
 	#  _vol_set 을 부르므로 안 막으면 한 번 미는 데 톡이 수십 알 난다.
 	#  그 상수가 「page 소리보다 길어 빠른 굴림에서도 안 겹친다」로 이미
 	#  서 있고 menu_pick2 는 그보다 짧다. 2026-09-25
-	if key == "vol" and snd:
+	if (key == "vol" or key == "all") and snd:
 		var vnow := Time.get_ticks_msec()
 		if vnow - vol_snd_ms >= WHEEL_MS:
 			vol_snd_ms = vnow
@@ -56108,7 +56114,9 @@ var vol_save_k := ""
 
 func _vol_save() -> void:
 	vol_save_t = 0.0
-	if vol_save_k == "vol":
+	if vol_save_k == "all":
+		Save.set_set("vol_all", vol_all)
+	elif vol_save_k == "vol":
 		Save.set_set("vol", vol)
 	elif vol_save_k == "mus":
 		Save.set_set("vol_mus", vol_mus)
@@ -56134,7 +56142,9 @@ func _set_slide_end() -> void:
 	var rows := _set_rows()
 	if set_drag >= 0 and set_drag < rows.size():
 		var key := String(rows[set_drag])
-		if key == "vol":
+		if key == "all":
+			Save.set_set("vol_all", vol_all)
+		elif key == "vol":
 			Save.set_set("vol", vol)
 		elif key == "mus":
 			Save.set_set("vol_mus", vol_mus)
@@ -56154,6 +56164,7 @@ func _set_slide_end() -> void:
 #  `vol if … else vol_mus` 를 들고 있으면 셋째 게이지(CRT)가 음악 값을 읽는다.
 func _gauge_v(key: String) -> float:
 	match key:
+		"all": return vol_all
 		"vol": return vol
 		"mus": return vol_mus
 		"crt": return crt
@@ -57993,8 +58004,10 @@ func _bus_setup() -> void:
 
 
 func _apply_vol() -> void:
-	# Master 는 안 건드린다 — 예전에는 여기를 줄였는데, 그러면 둘을 가른
-	# 뜻이 없다. 각자의 버스만 만진다.
+	# 효과음 · 음악은 각자의 버스다. Master 는 「전체 음량」 하나만 쥔다 — 둘의 비는 그대로 두고
+	# 크기만 한 번에 민다(부스 PC 의 현장 음량 · 2026-10-21).
+	AudioServer.set_bus_volume_db(0, linear_to_db(maxf(vol_all, 0.0001)))
+	AudioServer.set_bus_mute(0, vol_all <= 0.001)
 	var si := AudioServer.get_bus_index("SFX")
 	var mi := AudioServer.get_bus_index("Music")
 	if si >= 0:

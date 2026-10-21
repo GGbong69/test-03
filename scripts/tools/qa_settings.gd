@@ -267,7 +267,7 @@ func _run() -> void:
 	_page("pause", -1)
 	_ok("판이 없으면 일시정지 쪽도 설정 창으로 읽는다", g._set_pg() == "screen")
 	_page("sound", g.S.SHOP)
-	_ok("소리 탭 — 효과음 · 음악 · 뒤로", (g._set_rows() as Array) == ["vol", "mus", "back"],
+	_ok("소리 탭 — 전체 음량 · 효과음 · 음악 · 뒤로", (g._set_rows() as Array) == ["all", "vol", "mus", "back"],
 			"%s" % [g._set_rows()])
 	_ok("탭은 「화면」 · 「소리」 · 「게임」 셋", (g.SET_TABS as Array) == ["screen", "sound", "game"]
 			and String(g._set_info("screen").get("n", "")) == "화면"
@@ -394,6 +394,19 @@ func _run() -> void:
 	_ok("휠 — 게이지 줄 어디서 굴려도 그 값 +5", is_equal_approx(g.vol_mus,
 			minf(mus0 + 0.05, 1.0)) and g.set_sel == mi, "%.2f → %.2f" % [mus0, g.vol_mus])
 	g._vol_save_due()
+	#  전체 음량(2026-10-21) — 같은 몸 · 뗌 저장 · Master 버스만 민다(효과음 · 음악 버스는 그대로).
+	var ai: int = (g._set_rows() as Array).find("all")
+	var at: Rect2 = g._vol_track(ai)
+	var sfx_db: float = AudioServer.get_bus_volume_db(AudioServer.get_bus_index("SFX"))
+	g._click(Vector2(at.position.x + at.size.x * 0.5, (g._set_rect(ai) as Rect2).get_center().y))
+	g._set_slide_end()
+	_ok("전체 음량 — 끌기 · 뗌 저장 · Master 만 민다", is_equal_approx(g.vol_all, 0.5)
+			and is_equal_approx(float(Save.get_set("vol_all", -1.0)), 0.5)
+			and is_equal_approx(AudioServer.get_bus_volume_db(0), linear_to_db(0.5))
+			and is_equal_approx(AudioServer.get_bus_volume_db(AudioServer.get_bus_index("SFX")), sfx_db),
+			"%.2f · Master %.1fdB" % [g.vol_all, AudioServer.get_bus_volume_db(0)])
+	g._vol_set("all", 1.0)
+	Save.set_set("vol_all", 1.0)
 	g.wheel_ms = 0
 	g._wheel((g._set_tab_rect(1) as Rect2).get_center(), -1)
 	_ok("휠 — 탭 줄 위는 탭을 간다", g._set_pg() == "screen", g._set_pg())
@@ -610,7 +623,7 @@ func _run() -> void:
 	await _shoot("settings_hover")
 	g.mouse_at = Vector2(-50.0, -50.0)
 	_page("sound", 1)
-	g.set_sel = 0                 # 효과음 — 줄 안에 게이지가 선다
+	g.set_sel = (g._set_rows() as Array).find("vol")   # 효과음 — 줄 안에 게이지가 선다
 	await _shoot("settings_vol")
 	_page("screen", 1)
 	g.set_sel = (g._set_rows() as Array).find("dot")   # 화면 탭 다섯 줄
