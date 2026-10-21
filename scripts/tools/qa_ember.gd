@@ -578,3 +578,43 @@ func _run() -> void:
 	_ok("새 색을 안 만든다", body.find("Color(\"") < 0 and body.find("Color.from") < 0)
 	_ok("난수를 안 굴린다", body.find("randf") < 0 and body.find("randi") < 0
 			and body.find("run_rng") < 0)
+
+	# ── ⑲ 즉시 골드 동전 — 제 차례 걸음 (2026-10-21) ──────
+	#  황금우상(c29 · 트리플이면 반 확률) — 골드는 착탄 순간이 아니라 그 동전 차례
+	#  걸음(igold)에서 오르고, 슬롯이 튀고, 자금판 밑에 「+n」이 뜬다.
+	print("⑲ 즉시 골드")
+	_fresh()
+	for it in GameData.items():
+		if String(it.get("id", "")) == "c29":
+			var cp: Dictionary = it.duplicate()
+			cp.erase("w")
+			cp.gs = 0
+			cp.bought = 1
+			g.owned.append(cp)
+	var ig_i := -1
+	var gold1 := 0
+	for _t in 30:
+		_roll_at(1, 3)
+		gold1 = g.gold
+		_throw(5, "t")
+		ig_i = _kinds(g.queue).find("igold")
+		if ig_i >= 0:
+			break
+		_settle()
+	_ok("트리플이면 「igold」 걸음이 선다", ig_i >= 0, str(_kinds(g.queue)))
+	if ig_i >= 0:
+		var gv1 := int((g.queue[ig_i] as Dictionary).get("v", 0))
+		_ok("착탄 순간에는 골드가 그대로다", g.gold == gold1 and gv1 > 0, "%d · v %d" % [g.gold, gv1])
+		while not g.queue.is_empty():
+			var nk2 := String((g.queue[0] as Dictionary).get("k", ""))
+			g._next_step()
+			if nk2 == "igold":
+				var lp: Dictionary = g.pops[g.pops.size() - 1] if not g.pops.is_empty() else {}
+				_ok("걸음에서 골드가 오르고 슬롯이 튄다", g.gold == gold1 + gv1
+						and is_equal_approx(float(g.slot_vel[0]), float(g.PANEL.kick)),
+						"%d → %d · 튐 %.2f" % [gold1, g.gold, float(g.slot_vel[0])])
+				_ok("자금판 밑에 「+n」", String(lp.get("txt", "")) == "+%d" % gv1
+						and (lp.get("p", Vector2.ZERO) as Vector2).distance_to(
+						g._bank_rect().get_center() + Vector2(0.0, 30.0)) < 0.5, str(lp.get("txt", "")))
+		_settle()
+		_ok("한 발에 한 번", g.gold == gold1 + gv1, "%d → %d" % [gold1, g.gold])

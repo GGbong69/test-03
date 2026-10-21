@@ -986,6 +986,11 @@ var slot_pop := []              # 아이템 패널 참고 — 아래 "아이템 
 var slot_vel := []
 var shake := 0.0
 var shake_k := 34.0      # 흔들림 감쇠(px/초) — 1배 착지만 남은 걸음에 맞춰 가파르다(_shk_tail_k)
+var shake_dir := Vector2.ZERO   # 착탄 흔들림의 축(다트가 들어간 쪽) — 0.5 밑으로 죽으면 ZERO(무작위로 돌아간다)
+var shk_v := Vector2.ZERO       # 이 16ms 칸의 떨림 방향(-1..1) — _draw
+var shk_fr := -1
+var shk_sg := 1.0               # 착탄 축의 부호 — 칸마다 뒤집혀 밀렸다 되튄다
+var throw_kick := 0            # 이 시각(ms)까지 화면이 손 쪽으로 1px 물러난다 — 던지는 순간
 var board_punch := 0.0
 var pitch_step := 0
 #  ── 연발은 작은 다트마다 소리가 오른다 (2026-10-08) ──
@@ -7939,6 +7944,8 @@ func _process(d: float) -> void:
 	#  감쇠는 34/초다. 1배 · 판이 이어지는 착지만 그 흔들림이 다 죽을 때까지 가파르다
 	#  (shake_k · _shk_tail_k) — 0 에 닿으면 34 로 돌아온다(2026-10-06).
 	shake = maxf(shake - d * shake_k, 0.0)
+	if shake < 0.5:
+		shake_dir = Vector2.ZERO   # 정산 걸음 흔들림은 무작위 그대로
 	if shake <= 0.0:
 		shake_k = 34.0
 	mod_shed_t = maxf(mod_shed_t - d, 0.0)
@@ -8095,6 +8102,7 @@ func _process(d: float) -> void:
 					_sfx("dart_fly")      # 리볼버는 발마다 kick_shot 이 난다
 				state = S.FLY
 				fly_t = 0.0
+				throw_kick = Time.get_ticks_msec() + 50    # 손 쪽 1px 킥 — 세 틀
 				# 꽂힐 각을 지금 정한다. 나는 동안과 꽂힌 뒤가 같은 각이라야
 				# 착탄 프레임에서 자루가 홱 돌지 않는다.
 				fly_rot = randf_range(-0.26, 0.26)
@@ -8695,12 +8703,21 @@ func _aim_tick(d: float) -> void:
 				aim.x = lerpf(BC.x - SWING, BC.x + SWING, tri(gt))
 
 
+#  무한 끝의 곱 — int64 를 넘어 음수로 뒤집히는 대신 끝값에 멈춘다. 본편 값에서는 그냥 곱이다.
+#  끝값은 int64 끝(9.22e18)이 아니라 9.2e18 — float 로 갔다 와도 정확해서 띠 굴림(shown)이 안 뒤집힌다.
+const SCORE_TOP := 9200000000000000000
+func _sat_mul(a: int, b: int) -> int:
+	if a != 0 and absi(b) > SCORE_TOP / absi(a):
+		return SCORE_TOP if (a < 0) == (b < 0) else -SCORE_TOP
+	return a * b
+
+
 # 이 다트의 점수. 기본 점수와 배수를 어떻게 합치는가 — 그 한 줄이 이 게임의
 # 점수 계산 방식 전부다.
 func _score_combine(chip: int, mult: int) -> int:
 	match score_mode:
 		"std":
-			return chip * mult
+			return _sat_mul(chip, mult)
 		"bal":
 			# 점수와 배수의 수를 수평 맞춘 뒤 곱한다. 같은 합에서 곱이 가장
 			# 큰 자리가 두 값이 같은 자리라, 결과는 **늘 std 이상**이다.
@@ -8717,12 +8734,12 @@ func _score_combine(chip: int, mult: int) -> int:
 			# 점수 360·배수 3 이면 30.7배(33,124점)로 라운드 8 보스(8,000)를
 			# 한 발에 넘긴다. **그 구멍은 아직 안 막았다.**
 			var x := _bal_half(chip, mult)
-			return x * x
+			return _sat_mul(x, x)
 		"rand":
 			# 굴리는 것은 rnd **걸음**이 이미 했다. 여기 오는 두 수는 그
 			# 뽑힌 값이라 곱셈만 남는다 — 이 함수가 순수해야 검산기가 산다.
-			return chip * mult
-	return chip * mult
+			return _sat_mul(chip, mult)
+	return _sat_mul(chip, mult)
 
 
 # 두 값이 고르게 나눠 가진 몫. **반올림하는 자리를 여기 하나로 묶는다** —
@@ -10317,6 +10334,10 @@ func _impact(info: Dictionary, hit_mult: int, land_base: int = -1) -> void:
 		quiv_i = darts.size() - 1         # 방금 꽂힌 자루가 떤다(QUIV)
 		quiv_ms = Time.get_ticks_msec()
 		quiv_g = grade
+	#  흔들림 축 — 화면 아래(손)에서 꽂힌 자리로. 크기는 아래 등급이 그대로 쥔다.
+	shake_dir = (aim - Vector2(BC.x, VIEW.y)).normalized()
+	shk_fr = -1                # 다음 틀이 새 칸 — 뒤집혀 +1(미는 쪽)부터 선다
+	shk_sg = -1.0
 
 	match grade:
 		0:
@@ -10383,8 +10404,9 @@ func _impact(info: Dictionary, hit_mult: int, land_base: int = -1) -> void:
 			board_punch = 1.75
 			hitstop = 0.15
 			hit_flash_amt = 1.0
-			screen_flash = 1.0
-			_invert_kick()           # 불스아이 반전 — INV 머리말
+			if _scr_flash():         # 연발 불 연타 — 1초 넷째는 흰 덮개 · 반전을 건너뛴다
+				screen_flash = 1.0
+				_invert_kick()           # 불스아이 반전 — INV 머리말
 			add_wave(BC, R * rt_bull_i, R * 1.35, C_RED.lightened(0.45), 0.90, 2.5, 0.60)
 			add_wave(BC, R * rt_bull_i, R * 0.90, C_ACC, 0.80, 2.0, 0.45)
 			add_wave(BC, 3.0, 52.0, C_TXT, 0.80, 1.5, 0.32)
@@ -10803,10 +10825,8 @@ func _land(mark := true) -> void:
 				#  동전에서만 반쪽이었다. 2026-09-20
 				var gv := int(round(float(it.get("gv", 0))
 						* GameData.chal_f("item_mul", 1.0)))
-				gv = _gold_add(gv, "item")
-				if gv != 0:
-					pop(_slot_rect(mini(i, GameData.max_items() - 1)).get_center()
-							+ Vector2(0.0, 24.0), "+%d" % gv, C_GOLD, 12, 0.8)
+				#  골드는 제 차례 걸음이 낸다 — 무엇이 돈을 냈는지 슬롯 튐 · 짤랑이로 읽힌다.
+				queue.append({"k": "igold", "i": i, "v": gv})
 			# 영역 승급 — 발동 4회 중 1회꼴로 맞은 영역의 강화 트랙이 오른다
 			if String(it.get("side", "")) == "trackup25" and randf() < 0.25 \
 					and int(info.get("track", 0)) > 0:
@@ -11206,7 +11226,7 @@ func _next_step() -> void:
 						src_slot = st.i
 				"xmult":
 					var m1 := cur_mult
-					cur_mult *= st.v
+					cur_mult = _sat_mul(cur_mult, int(st.v))
 					if cur_mult != m1:
 						mult_amt = _card_amt(m1, cur_mult)
 						mult_from = m1
@@ -11342,6 +11362,15 @@ func _next_step() -> void:
 				ember_t = 0.0
 			#  카드 칸은 안 튄다 — 바뀐 값이 없다. 몸만 채인다(걸음은 걸음이다).
 			_card_kick(float(CARDFX.kick), 0.0)
+		"igold":
+			#  즉시 골드 동전(황금우상 · 크림 치즈) — 불씨와 같은 꼴에 그 동전 슬롯이 튄다.
+			var ig := _gold_add(int(st.v), "item")
+			if ig != 0:
+				pop(_bank_rect().get_center() + Vector2(0.0, 30.0), "+%d" % ig,
+						C_GOLD, 12, 0.8)
+			_panel_fire(int(st.i))
+			_sfx("coin_land", minf(f, float(EMBER.snd_top)))
+			_card_kick(float(CARDFX.kick), 0.0)
 		"order":
 			#  ── 칠판 주문 (2026-10-06) ──
 			#  보상 한 장을 _take_tag 길로 받는다 — 판이 열릴 때 뽑은 줄 · 씨앗 그대로다.
@@ -11404,8 +11433,9 @@ func _next_step() -> void:
 			# 제곱이 되어 1.6배가 2.56배가 되고 물음표에서는 아무 일도 안
 			# 일어난다(칸 값을 버리므로).
 			if score_mul != 1.0:
-				last_gain = int(round(float(last_gain) * score_mul))
-			total += last_gain
+				last_gain = int(clampf(round(float(last_gain) * score_mul), -9.2e18, 9.2e18))   # float → int 넘침 막기
+			#  끝값에서 멈춘다 — total 이 음수일 때는 더해도 안 넘친다.
+			total = SCORE_TOP if last_gain > SCORE_TOP - maxi(total, 0) else total + last_gain
 			# 「한 번의 투척으로 N점」 조건이 읽는 자리. 판 총점(best_score)과
 			# 다르다 — 저쪽은 여섯 발의 합이고 이쪽은 한 발이다.
 			_peak("best_gain", last_gain)
@@ -11575,9 +11605,9 @@ func _card_num(v0: int, v1: int, j: float) -> int:
 # 세는 칸의 글자 크기를 재는 말 — 세는 동안은 앞 값 · 새 값 중 긴 쪽이라 크기가 세는
 # 도중에 안 뛰고, 줄어드는 걸음(음수 효과)도 칸을 안 깬다. 시계가 0 이면 새 값이다.
 func _card_num_fit(v0: int, v1: int, j: float) -> String:
-	var a := str(v1)
-	if j > 0.0 and not motion_off and str(v0).length() > a.length():
-		return str(v0)
+	var a := GameData.big(v1)          # 칸에 적히는 글과 같은 자 — 100만부터 줄인 수
+	if j > 0.0 and not motion_off and GameData.big(v0).length() > a.length():
+		return GameData.big(v0)
 	return a
 
 
@@ -11952,7 +11982,7 @@ func _leg_ends() -> bool:
 func _fire_live() -> void:
 	var v: int = _score_combine(cur_chip, cur_mult)
 	if score_mul != 1.0:
-		v = int(round(float(v) * score_mul))
+		v = int(clampf(round(float(v) * score_mul), -9.2e18, 9.2e18))
 	fire_lay = _fire_lay_of(_grow_of(v))
 	var heat := _fire_heat_of(v)
 	#  연발 안에서는 가장 높았던 단을 붙든다(fire_burst 머리말).
@@ -12001,7 +12031,8 @@ func _cross_fire() -> void:
 	cross_live = false
 	_sfx("target_hit")
 	tally_snd_t = 0.0
-	screen_flash = float(TALLY.cross_flash)
+	if _scr_flash():
+		screen_flash = float(TALLY.cross_flash)
 	#  뒤에 착지 멈춤(돌파 ×1 · CARDFX.stop)이 남은 qt 에서 빠지고 그 동안 흔들림이
 	#  안 준다 — 그 몫을 빼고 묶는다.
 	shake = minf(float(TALLY.cross_shk), _shk_room(float(CARDFX.stop)))
@@ -12976,16 +13007,21 @@ func _draw() -> void:
 	#  여백까지 덮는다. 노드가 밀려 있으므로 왼쪽 위로 그만큼 되밀어 시작한다.
 	draw_rect(Rect2(-view_pad, VIEW + view_pad * 2.0), C_BG)
 	# 툴팁이 대상 테두리만 같이 흔들고 판은 고정하려면 이 값을 알아야 한다
-	var sh := Vector2.ZERO if motion_off else Vector2(
-			randf_range(-shake, shake), randf_range(-shake, shake))
-	#  **쓸기일 때만** 정수로. 640x360 정수배 확대 · nearest 필터에서
-	#  서브픽셀 흔들림은 아지랑이로 보이는데, 부딪힘이 0.09초에 아홉 번까지
-	#  몰리는 화면에서 그것이 제일 잘 드러난다. 흔들림 전체를 정수로 옮기는
-	#  것은 따로 일감이다 — shake 는 화면 통째의 값 하나라 여기서 규약을
-	#  바꾸면 착탄 · 목표 달성 · 거절이 같이 바뀐다. 그 일감 전까지는 이 한
-	#  화면만 정수인 불일치가 남는다(2026-09-18).
-	if sweep_live:
-		sh = sh.round()
+	#  떨림 방향은 실시간 16ms 칸마다 한 번만 뽑는다 — 60Hz · 144Hz · V-Sync 끔이 같은 빠르기로 떤다.
+	var fr := int(Time.get_ticks_msec() / 16.0)
+	if fr != shk_fr:
+		shk_fr = fr
+		shk_v = Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0))
+		shk_sg = -shk_sg
+	var sh := Vector2.ZERO
+	if not motion_off:
+		#  착탄은 다트가 들어간 쪽으로 밀렸다 되튀기를 칸마다 번갈아(첫 칸이 미는 쪽) · 옆은 0.35 — 크기(shake)는 그대로다.
+		var v := shk_v if shake_dir == Vector2.ZERO \
+				else shake_dir * (absf(shk_v.x) * shk_sg) + shake_dir.orthogonal() * (shk_v.y * 0.35)
+		#  정수 px — 640x360 nearest 에서 서브픽셀 흔들림은 도트 글자를 아지랑이로 번지게 한다.
+		sh = (v * shake).round()
+		if Time.get_ticks_msec() < throw_kick:
+			sh.y += 1.0           # 던지는 순간 손 쪽으로 1px
 	shake_off = sh
 	draw_set_transform(sh)
 
@@ -23681,6 +23717,7 @@ func _cons_use(i: int) -> void:
 			aim = again_aim
 			state = S.FLY
 			fly_t = 0.0
+			throw_kick = Time.get_ticks_msec() + 50    # 덤 한 발도 던지는 순간 손 쪽 1px
 			fly_rot = randf_range(-0.26, 0.26)
 			_sfx("dart_fly")
 			_ptear_go(tear_at, cid)
@@ -45400,13 +45437,13 @@ func _draw_card() -> void:
 			var jm := _card_juice(mult_j)
 			_card_box(p, float(CARDTXT.box_x1) + wdx, float(CARDTXT.box_w),
 					C_CHIP.lerp(Color(1.0, 1.0, 1.0), float(CARDFX.warm) * chip_j),
-					str(_card_num(chip_from, cur_chip, chip_j)), "점수",
+					GameData.big(_card_num(chip_from, cur_chip, chip_j)), "점수",
 					_fit_sz(_card_num_fit(chip_from, cur_chip, chip_j), 94.0,
 							int(24.0 * (1.0 + chip_amt * maxf(jc, 0.0)))),
 					roundf(float(CARDFX.squash) * maxf(-jc, 0.0)))
 			_card_box(p, float(CARDTXT.box_x2) - wdx, float(CARDTXT.box_w),
 					C_MULT.lerp(Color(1.0, 1.0, 1.0), float(CARDFX.warm) * mult_j),
-					str(_card_num(mult_from, cur_mult, mult_j)), "배수",
+					GameData.big(_card_num(mult_from, cur_mult, mult_j)), "배수",
 					_fit_sz(_card_num_fit(mult_from, cur_mult, mult_j), 94.0,
 							int(24.0 * (1.0 + mult_amt * maxf(jm, 0.0)))),
 					roundf(float(CARDFX.squash) * maxf(-jm, 0.0)))
@@ -56492,6 +56529,19 @@ func _inv_show(on: bool) -> void:
 	(inv_rect.get_parent() as CanvasLayer).visible = on
 
 
+#  판 전체 번쩍임(흰 덮개 · 반전)은 1초에 셋까지 — 광과민 기준(초당 3회). 넷째는 false 라
+#  부르는 쪽이 번쩍임만 건너뛰고 소리 · 불꽃 · 멈춤은 그대로 낸다. 실시간이다(빨리 보기도 잰다).
+var flash_ms: Array[int] = []
+func _scr_flash() -> bool:
+	var now := Time.get_ticks_msec()
+	if flash_ms.size() >= 3 and now - flash_ms[0] < 1000:
+		return false
+	flash_ms.append(now)
+	if flash_ms.size() > 3:
+		flash_ms.pop_front()
+	return true
+
+
 #  안쪽 불이 꽂혔다 — INV.ms 동안 뒤집는다.
 func _invert_kick(force := false) -> void:
 	if not _cine_ok(force):
@@ -58554,7 +58604,8 @@ func _egg_bits_tick(d: float) -> void:
 #  서른 번째. 판을 조각으로 가르고 날린다.
 func _egg_shatter() -> void:
 	_sfx("target_hit")
-	screen_flash = maxf(screen_flash, 0.9)
+	if _scr_flash():
+		screen_flash = maxf(screen_flash, 0.9)
 	shake = maxf(shake, 14.0)
 	#  꽂혀 있던 자루는 판과 같이 날아간다 — 판 없이 허공에 남으면 안 된다.
 	ttl_stuck.clear()

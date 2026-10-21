@@ -1931,5 +1931,18 @@ func _run() -> void:
 	g.motion_off = false
 	_ok("모션 끄기에서 출처가 하나도 안 죽는다", mo_ok, mo_txt)
 
+	# ── ㉗ 판 전체 번쩍임은 1초에 셋까지(광과민) ─────────────
+	#  넷째는 돌파 섬광이 안 선다. 1초가 지나면 다시 선다.
+	g.flash_ms.clear()
+	var fl := [g._scr_flash(), g._scr_flash(), g._scr_flash()]
+	g.screen_flash = 0.0
+	g._cross_fire()
+	_ok("1초 넷째 번쩍임은 건너뛴다", fl == [true, true, true] and g.screen_flash <= 0.0,
+			"%s · 섬광 %.2f" % [str(fl), g.screen_flash])
+	for k in g.flash_ms.size():
+		g.flash_ms[k] -= 1000
+	_ok("1초가 지나면 다시 번쩍인다", g._scr_flash())
+	g.flash_ms.clear()
+
 	print("\n통과 %d · 실패 %d" % [okn, fail])
 	quit(1 if fail > 0 else 0)
