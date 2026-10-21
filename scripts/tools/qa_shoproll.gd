@@ -199,6 +199,21 @@ func _run() -> void:
 			leak += 1
 	_ok("팩의 사탕 갈래가 사진을 안 뱉는다", leak == 0, "샌 것 %d개 / 2000" % leak)
 
+	# ⑩ 처음 보는 매물 — 값표 옆 금빛 점 (2026-10-21) · ⚠ 저장은 위 _qa_shoproll 대역이다
+	print("")
+	var tr0: bool = g.tut_run
+	g.tut_run = false
+	g.found_all = false
+	var fix_id := String(GameData.fixtures()[0].id)
+	var fresh := {"type": "fix", "d": {"id": fix_id}}
+	_ok("못 본 사진에 점", g._bill_new(fresh))
+	g._found("cons", fix_id)
+	_ok("본 사진에는 점이 없다", not g._bill_new(fresh))
+	_ok("팩은 컬렉션 밖이라 점이 없다", not g._bill_new({"type": "boost", "d": {"id": "x"}}))
+	g.tut_run = true
+	_ok("튜토리얼 런에는 점이 없다", not g._bill_new({"type": "item", "d": {"id": "zz"}}))
+	g.tut_run = tr0
+
 	print("\n%s\n" % ("전부 통과" if fail == 0 else "실패 %d건" % fail))
 	print("통과 %d · 실패 %d" % [okn, fail])
 	quit(0 if fail == 0 else 1)

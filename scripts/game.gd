@@ -39981,7 +39981,22 @@ func _bill_at(i: int, r: Rect2) -> void:
 				HORIZONTAL_ALIGNMENT_CENTER, 80.0, 12, C_ACC)
 		return
 	var can: bool = not s.sold and gold >= s.cost
-	draw_gold_at(r.position.x, y, str(s.cost), int(BILL.sz), C_GOLD if can else C_OFF)
+	var bw := draw_gold_at(r.position.x, y, str(s.cost), int(BILL.sz), C_GOLD if can else C_OFF)
+	#  처음 보는 매물 — 값 오른쪽 위에 금빛 점 하나(글자 없음). 수 윗끝에 맞춘다 — 가운데 · 밑이면
+	#  「12.」 의 소수점으로 읽혔다.
+	if _bill_new(s):
+		draw_circle(Vector2(r.position.x + bw + 4.0,
+				y - float(BILL.sz) * float(INK.num) + 1.5), 1.5, C_GOLD)
+
+
+#  아직 컬렉션에 없는 매물인가 — 컬렉션과 같은 열쇠(COL_TABS 의 f · 사진은 cons)로 묻는다.
+#  튜토리얼 런은 전부 새것이라 점이 소음이 된다 — 안 찍는다. 팩은 컬렉션 밖이다.
+func _bill_new(s: Dictionary) -> bool:
+	if tut_run or found_all:
+		return false
+	var f := String({"item": "item", "mod": "mod", "dart": "dart", "cons": "cons",
+			"fix": "cons"}.get(String(s.get("type", "")), ""))
+	return f != "" and not Save.found(f + ":" + String((s.d as Dictionary).get("id", "")))
 
 
 # _table_draw 의 맨 끝 (덮개·레일 뒤) — 가격은 절대 안 잘려야 한다.
