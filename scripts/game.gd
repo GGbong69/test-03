@@ -46549,7 +46549,8 @@ func _fire_count(i: int) -> void:
 #  연출이 다 끝났나. 굴림이 멎고 총액이 제값에 닿았으면 참이다.
 func _clear_done() -> bool:
 	#  보이는 수가 제값에 닿는 틀이다 — k 1 까지 기다리면 수가 멎고 0.2초 뒤에 등록기 · 자금판이 난다.
-	return _mo("fast") <= 0.0 or _clear_roll() >= _clear_sum()
+	#  굴림이 시작된 뒤에만(k > 0) — 번 돈이 0 인 표가 줄이 다 서기 전에 「끝」이 되면 첫 누름이 상점으로 샌다.
+	return _mo("fast") <= 0.0 or (_clear_k() > 0.0 and _clear_roll() >= _clear_sum())
 
 
 #  이번 판에 번 돈 — 내역 줄의 합(2026-10-21). 합계선 밑 큰 수가 이것이라 줄들과 맞는다.
@@ -48050,7 +48051,8 @@ func _draw_shop() -> void:
 #  안 서면 빈 사전. r 은 원(y 309 ± 8)과 글줄을 2px 넉넉히 두른 사각이다.
 func _boss_plq_lay() -> Dictionary:
 	var bn := _boss_ahead()
-	if bn <= 0:
+	#  툴팁 짚기가 _process 에서 부르므로 글꼴 없는 판(헤드리스 프로브)에서는 명판이 없다.
+	if bn <= 0 or font == null:
 		return {}
 	var ids: PackedStringArray = boss_mods.get(bn, PackedStringArray())
 	if ids.is_empty():
