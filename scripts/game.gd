@@ -18262,6 +18262,8 @@ func _rulep_layout() -> Array:
 	var wrapped := []
 	var need := -float(RULEP.step)
 	var wmax := 0.0
+	var bk := ""                     # 보드 확장 명판 열쇠
+	var bh := 0.0                    # 그 효과 줄 높이
 	for k in rulep:
 		var rw: Dictionary = rulep[k].row
 		var ls := []
@@ -18273,13 +18275,21 @@ func _rulep_layout() -> Array:
 		wmax = maxf(wmax, _rulep_tw(String(rw.n)) + _rulep_ticks_w(rw))
 		wrapped.append(ls)
 		need += _rulep_h(ls.size()) + float(RULEP.step)
+		if String(rw.k) == "board":
+			bk = k
+			bh = float(RULEP.line_h) * float(ls.size())
+	#  넘치면 보드 확장 효과 줄부터 접는다 — 그 한 장 때문에 보스 제약 효과 줄까지 접히면 안 된다
+	#  (튜토리얼 셋째 판 = 도넛 + 보스 제약 · 2026-10-21). 그래도 넘치면 다 접는다.
+	var fold_b := bk != "" and top + need > bot
+	if fold_b:
+		need -= bh
 	var compact := top + need > bot
 	var w: float = clampf(ceilf(ip + wmax + float(RULEP.pad)), float(RULEP.w_min), float(RULEP.w))
 	var x: float = VIEW.x - float(RULEP.right) + _ui_pad().x - w
 	var y := top
 	var j := 0
 	for k in rulep:
-		var ls2: Array = [] if compact else wrapped[j]
+		var ls2: Array = [] if compact or (fold_b and k == bk) else wrapped[j]
 		var h := _rulep_h(ls2.size())
 		out.append({"key": k, "rect": Rect2(x, y, w, h), "lines": ls2})
 		y += h + float(RULEP.step)
@@ -44583,6 +44593,8 @@ func _tip_now(it: Dictionary) -> void:
 			"mag_hvy": _mag_hvy(), "empty_n": GameData.max_items() - owned.size(),
 			"rackval_others": _rack_val() - GameData.sell_value(it)})
 	amt = int(round(float(amt) * GameData.chal_f("item_mul", 1.0)))   # 「홑장」 — 정산(_land)과 같은 자
+	if _is_play_deep():
+		amt = _coin_cut(k, amt)      # 「반토막」 — 판 중에만(active_mods 가 상점까지 남는다)
 	_tip_tag(_L("지금 %s") % GameData.eff_text(k, amt), C_CHIP if k == "chip" else C_MULT)
 
 

@@ -285,6 +285,18 @@ func _run() -> void:
 	g._tip_build({"k": "rulep", "i": 0, "src": ""})
 	tags = g.tip_tags.map(func(t): return String(t.t))
 	_ok("⑪ 툴팁 태그 [보드 확장]", tags.has("보드 확장") and g.tip_title == String(am.n), str(tags))
+	#  도넛(세 줄) + 보스 제약 — 넘치면 보드 확장 효과 줄만 접고 제약 효과 줄은 선다(튜토리얼 셋째 판)
+	_clear()
+	g.mods_own = ["dnut"]
+	g.active_mods = [mf[0]]
+	_tick(1.0)
+	var dl: Array = g._rulep_layout()
+	var dn := {}
+	for it in dl:
+		dn[String(it.key)] = (it.lines as Array).size()
+	_ok("⑪ 넘치면 보드 확장 효과 줄부터 접는다 · 제약 효과 줄은 선다", dl.size() == 2
+			and int(dn.get("b:dnut", -1)) == 0 and int(dn.get("m:" + String(mf[0].id), 0)) > 0
+			and (g._rulep_at(dl[1]) as Rect2).end.y <= float(RP.bot) + g._hud_dy() + 0.5, str(dn))
 	g.active_mods = []
 	g.mods_own = ["soks"]
 	_ok("⑪ 판 모양을 안 바꾸는 확장(핵심)은 명판 없음 · 이름 명판 그대로",

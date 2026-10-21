@@ -294,6 +294,14 @@ func _initialize() -> void:
 		if int(half.get(key, -999)) != want:
 			cut_ok = false
 	_say(cut_ok, "동전 축 — 점수 · +배수만 반 · ×배수 그대로", "없음 %s → 반토막 %s" % [full, half])
+	#  쌓인 동전 툴팁의 「지금」도 판 중에는 정산과 같은 자다(반토막이 걸린 채)
+	var gc: Dictionary = (pick.get("chip", {}) as Dictionary).duplicate(true)
+	gc.grow = "fire"
+	gc.gs = 40
+	g.tip_tags.clear()
+	g._tip_now(gc)
+	var tnow := "" if g.tip_tags.is_empty() else String(g.tip_tags[0].t)
+	_say(tnow.contains("20") and not tnow.contains("40"), "툴팁 「지금」 — 판 중 반토막이면 반", tnow)
 	g.owned = []
 	_arm(g, "")
 

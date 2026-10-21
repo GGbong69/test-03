@@ -11,7 +11,7 @@ extends SceneTree
 #        · 판을 못 건너뛴다(2026-10-06) — 본편 런은 건너뛴다
 #        · 안 집으면 다음 상점에 다시 · 곱하기는 알아서 오른쪽 끝
 #     ③ 상인 말(표에 있으면) — 문구는 사람이 표에서 고친다
-#     ④ 판 목표 · 보스 제약은 본편 그대로 — 넘치는 점수(「점수뽕」)가 목적이다
+#     ④ 판 목표 · 보스 제약은 본편 그대로(보스는 「돌린 판」만 뺀다) — 넘치는 점수(「점수뽕」)가 목적이다
 #     ⑤ 3판을 클리어하면 「튜토리얼 끝」 → 로비. 그때 배움 표에 적는다
 #     ⑥ 챌린지·무한·검사 도구가 곧장 부르는 _new_run() 에는 안 선다 · 기록 0
 #
@@ -280,11 +280,15 @@ func _run() -> void:
 		pools.append(ks)
 	g.tut_run = true
 	var pool1 := []
+	var tpool := []                  # 튜토리얼은 「돌린 판」만 뺀다(2026-10-21)
 	for m in GameData.modifiers():
 		if int(m.get("r0", 1)) <= 1:
 			pool1.append(String(m.id))
+			if String(m.k) != "shuffle":
+				tpool.append(String(m.id))
 	pool1.sort()
-	_ok("튜토리얼 보스도 제약 표를 그대로 쓴다", pools[0] == pools[1] and pools[0] == pool1,
+	tpool.sort()
+	_ok("튜토리얼 보스도 제약 표를 그대로 쓴다(돌린 판만 뺀다)", pools[0] == tpool and pools[1] == pool1,
 			"%s · %s" % [str(pools[0]), str(pools[1])])
 
 	# ── ⑥ 마지막 판에서 끝난다 ──────────────────────────────
