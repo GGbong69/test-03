@@ -48545,21 +48545,31 @@ func _draw_profile() -> void:
 		draw_string(_fz(font, 12), Vector2(px, 172.0), _L("고르면 여기서부터 쌓인다"),
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 12, _mtx_off(0.0))
 	else:
+		#  한 발 최고 점수(점수뽕)가 맨 위 · 큰 수는 만/억 · 0 인 기록 줄은 안 세운다(처음 생기면 선다).
+		#  컬렉션 총수는 여섯 탭 표의 합 — 표에서 빠진 id 가 저장에 남아도 넘지 않게 자른다.
+		var cn := 0
+		for t in COL_TABS.size():
+			cn += _col_rows(t).size()
+		var gain := int(inf2.get("best_gain", 0))
+		var best := int(inf2.get("best_score", 0))
+		var bl := int(inf2.get("best_leg", 0))
+		var fnd := int(inf2.get("found", 0))
 		var rows := [
-			["런", _L("%d회") % int(inf2.get("runs", 0))],
-			["완주§통계", _L("%d회") % int(inf2.get("wins", 0))],
-			["최고 라운드", "%d" % GameData.round_of(
-					maxi(int(inf2.get("best_leg", 1)), 1))],
-			["한 판 최고 점수", "%d" % int(inf2.get("best_score", 0))],
-			["해금", _L("%d개") % int(inf2.get("unlocks", 0))],
-		]
+			["한 발 최고 점수", gain, GameData.big(gain)],
+			["한 판 최고 점수", best, GameData.big(best)],
+			["최고 라운드", bl, "%d" % GameData.round_of(maxi(bl, 1))],
+			["런", int(inf2.get("runs", 0)), _L("%d회") % int(inf2.get("runs", 0))],
+			["완주§통계", int(inf2.get("wins", 0)), _L("%d회") % int(inf2.get("wins", 0))],
+			["컬렉션", fnd, "%d / %d" % [mini(fnd, cn), cn]],
+		].filter(func(r: Array) -> bool: return int(r[1]) > 0)
 		#  줄 간격 17 → 24 → 26 — 잉크 18 에 8 을 띄운다. 다섯 줄이 150~254 이고
-		#  지우기(272~)와 18px 떨어진다.
+		#  지우기(272~)와 18px 떨어진다. 여섯 줄이면 22 — 150~260 이 지우기와 12px.
+		var step := 22.0 if rows.size() > 5 else 26.0
 		for k in rows.size():
-			var y := 150.0 + float(k) * 26.0
+			var y := 150.0 + float(k) * step
 			draw_string(_fz(font_sm, 20), Vector2(px, y), _L(String(rows[k][0])),
 					HORIZONTAL_ALIGNMENT_LEFT, -1, 20, _mtx(0.0))
-			draw_string(_fz(font_sm, 20), Vector2(px, y), _L(String(rows[k][1])),
+			draw_string(_fz(font_sm, 20), Vector2(px, y), _L(String(rows[k][2])),
 					HORIZONTAL_ALIGNMENT_RIGHT, 300.0, 20, _mtx(1.0))
 		#  지우기 — 겨눈 동안에만 붉다. 몸은 _prof_del_face 가 칠한다(칠한 덩어리 +
 		#  턱). 이름은 20 으로 몸 29px 의 한가운데에 선다(_menu_base_y — 기준선 22.5).

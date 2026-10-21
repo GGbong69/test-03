@@ -80,6 +80,10 @@ func _run() -> void:
 	# ④ 2번에 딴 것을 쌓고 1번으로 돌아가면 1번 것이 그대로
 	Save.unlock("league:green")
 	Save.bump("wins", 7)
+	Save.peak("best_gain", 34567)
+	Save.discover("item:c01")
+	Save.discover("dart:std")
+	Save.found_ready_set()             # 빗장 _v 는 콜론이 없어 컬렉션 수에 안 든다
 	Save.flush()
 	Save.use_slot(1)
 	print("")
@@ -124,6 +128,9 @@ func _run() -> void:
 	_ok("훑은 값이 그 자리의 것", int(i2.get("wins", 0)) == 7,
 			"2번 완주 %d · 지금 자리(1번) 완주 %d"
 					% [int(i2.get("wins", 0)), Save.stat("wins")])
+	_ok("한 발 최고 점수 · 컬렉션 수도 그 자리의 것 (2026-10-21)",
+			int(i2.get("best_gain", 0)) == 34567 and int(i2.get("found", 0)) == 2,
+			"한 발 %d · 컬렉션 %d" % [int(i2.get("best_gain", 0)), int(i2.get("found", 0))])
 	#  2번은 쌓은 것이 있고, 3번은 고르기만 하고 아무것도 안 썼다 —
 	#  고른다고 파일이 생기지는 않는다. 생기면 「빈 자리」가 없어진다.
 	_ok("쌓은 자리는 찼다고, 안 쌓은 자리는 비었다고",

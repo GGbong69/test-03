@@ -15,6 +15,7 @@ const Save = preload("res://scripts/save.gd")
 #  ④ 컬렉션의 잠긴 전설은 [잠김] · 조건 태그 · 런 끝 쪽지는 여는 조건 태그
 #  ⑤ 런 끝 「거의 다 왔다」 쪽지 — ⅔ 넘게 찬 잠긴 것 하나 · 이름과 값
 #  ⑥ 신기록 도장(런 시작 때 기록을 넘었나) · 「새로 찾음 N」 · 줄은 다섯까지
+#  ⑦ 런 끝 · 프로필을 한 틀씩 그려 본다 · 프로필이 한 발 최고 점수 · 컬렉션 수를 읽는다
 # ══════════════════════════════════════════════════════════
 
 var g = null
@@ -91,6 +92,18 @@ func _process(_d: float) -> bool:
 	if done:
 		return false
 	done = true
+	_run()
+	return false
+
+
+#  한 틀 그린다 — 그리는 길에서 멎는 줄이 없는가(SCRIPT ERROR 는 도는 쪽이 센다).
+func _frame() -> void:
+	g.queue_redraw()
+	await process_frame
+	await process_frame
+
+
+func _run() -> void:
 	for i in 8:
 		g._process(1.0 / 60.0)
 	g._autoplay = false
@@ -239,6 +252,38 @@ func _process(_d: float) -> bool:
 	_ok("완주 · 새로 찾음 — 다섯 줄", g._over_rows().size() == 5 and _row("새로 찾음") == "2")
 	_ok("이어하기에 적힌다(RUN_PLAIN)", _plain_has("run_rec0") and _plain_has("run_found"))
 
+	print("\n⑦ 그려 본다 — 런 끝(도장 · 쪽지 · 발동 수) · 프로필(여섯 줄)")
+	g.state = g.S.OVER
+	g.won = true
+	g.owned = []
+	for k in 3:
+		g.owned.append((GameData.items()[k] as Dictionary).duplicate())
+		g.run_fires[String(GameData.items()[k].id)] = k + 1
+	g.run_unlocked = [g._unl_tag("다트통", "여벌 다트통", "p_mag")]
+	g.run_rec0 = 0
+	g.run_leg_top = 501
+	g.over_t = 0.58
+	g._process(0.05)               # 도장 때(0.60)를 지난다 — 종 한 번
+	_ok("도장 때를 지났다", g.over_t >= float(g.OVERB.stamp_at), "%.2f" % g.over_t)
+	await _frame()
+	_ok("쪽지 둘(열린 것 · 거의 다 왔다)", g._over_notes().size() == 2, str(g._over_notes()))
+	#  프로필 — 이 도구만의 자리에 여섯 줄이 다 서는 프로필을 짓는다(남의 _tool_ 파일을 안 건드린다)
+	Save.prof_fmt = "user://_qa_overmeta_prof_%d.cfg"
+	var pc := ConfigFile.new()
+	for kv in [["runs", 4], ["wins", 1], ["best_leg", 9], ["best_score", 23456], ["best_gain", 123456789]]:
+		pc.set_value("통계", String(kv[0]), int(kv[1]))
+	pc.set_value("발견", "item:c01", true)
+	pc.set_value("발견", "_v", 1)
+	pc.save(Save.slot_path(1))
+	var inf: Dictionary = Save.slot_info(1)
+	_ok("프로필 — 한 발 최고 · 컬렉션 수를 읽는다",
+			int(inf.get("best_gain", 0)) == 123456789 and int(inf.get("found", 0)) == 1, str(inf))
+	g._open_profile()
+	g.prof_sel = 1
+	await _frame()
+	_ok("프로필이 섰다", g.state == g.S.PROFILE)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(Save.slot_path(1)))
+	Save.prof_fmt = Save.PROF
+
 	print("\n통과 %d · 실패 %d" % [ok, bad])
 	quit(bad)
-	return false

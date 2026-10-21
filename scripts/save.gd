@@ -388,13 +388,21 @@ static func slot_info(i: int) -> Dictionary:
 		for k in c.get_section_keys(S_UNL):
 			if bool(c.get_value(S_UNL, k, false)):
 				unl += 1
+	#  컬렉션에 든 수 — [발견]의 참인 "<갈래>:<id>" 열쇠(빗장 _v 는 콜론이 없어 안 센다)
+	var fnd := 0
+	if c.has_section(S_FND):
+		for k in c.get_section_keys(S_FND):
+			if String(k).contains(":") and bool(c.get_value(S_FND, k, false)):
+				fnd += 1
 	return {
 		"used": true,
 		"runs": int(c.get_value(S_STA, "runs", 0)),
 		"wins": int(c.get_value(S_STA, "wins", 0)),
 		"best_leg": int(c.get_value(S_STA, "best_leg", 0)),
 		"best_score": int(c.get_value(S_STA, "best_score", 0)),
+		"best_gain": int(c.get_value(S_STA, "best_gain", 0)),
 		"unlocks": unl,
+		"found": fnd,
 	}
 
 
