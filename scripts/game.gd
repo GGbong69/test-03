@@ -22415,13 +22415,16 @@ func _panel_slot(i: int) -> void:
 		c.x = float(rack_vx[i])
 		c.y += float(rack_vy[i])
 	c.y += _float_dy(i)
-	var r: float = PANEL.r * (1.0 + bounce * PANEL.swell)
+	var key := "rack:%d" % i
+	var hv: float = maxf(tip_a if i == tip_slot else 0.0, _ui_hov(key))
+	var wg := _wig(key, hv)          # 얹힘 — 커졌다 앉고 기울다 선다(HOVW)
+	var r: float = PANEL.r * (1.0 + bounce * PANEL.swell) * wg.x
 
 	if up > 0.01:
 		draw_circle(c + Vector2(1.5, 3.0 + up * PANEL.lift), r,
 				Color(0.0, 0.0, 0.0, up * PANEL.shadow))
 
-	draw_item_sticker(c, r, it, bounce * PANEL.spin + _float_rot(i), up * PANEL.lift,
+	draw_item_sticker(c, r, it, bounce * PANEL.spin + _float_rot(i) + wg.y, up * PANEL.lift,
 			0.55 if lock else 0.0, 12)
 	#  성장형 「잭과 콩나무」 — 둘레에 덩굴이 자란 만큼 타고 오른다(BEAN).
 	if String(it.get("side", "")) == "bigdart":
@@ -22439,13 +22442,11 @@ func _panel_slot(i: int) -> void:
 	#    얹힘      주황 고리. 툴팁 짙기(tip_a)와 얹힘 짙기(ui_hov) 중 큰 쪽이라
 	#              툴팁을 쉬는 때(점수 카드가 떠 있을 때)에도 무엇에 얹혔는지 보인다
 	#  들어설 때 딸깍은 ui_hot 이 낸다 — 동전을 실제로 집을 수 있을 때만이다.
-	var key := "rack:%d" % i
 	var over: bool = _slot_rect(i).has_point(mouse_at)
 	var choosing: bool = photo_rack != "" and not swap_live and not _tutor_live()
 	if over and (choosing or (_ui_can_hover() and _can_rack_move())):
 		ui_hot = key
 	var press: bool = hand_st == H.ARMED and hand_src == 1 and hand_i == i
-	var hv: float = maxf(tip_a if i == tip_slot else 0.0, _ui_hov(key))
 	if choosing and over:
 		draw_arc(c, r + 2.0, 0.0, TAU, 24,
 				C_MULT.lightened(0.25) if photo_rack == "burn" else C_ACC, 1.0)
@@ -23852,8 +23853,16 @@ func _cons_draw() -> void:
 				_rr(self, _cons_rect(i).grow(-2.0), Color(C_TXT, 0.07 * h))
 				up = roundf(h)
 			#  둥실거린다(FLOAT) — 동전 슬롯과 박자가 안 맞게 칸마다 결을 비킨다.
-			_icon_cons(r.get_center() - Vector2(0.0, up - _float_dy(i, 0.9)),
-					minf(r.size.x, r.size.y) * 0.42, String(cons[i].id))
+			var ic := r.get_center() - Vector2(0.0, up - _float_dy(i, 0.9))
+			var wg := _wig(key, h)        # 얹힘 — 동전 슬롯과 같은 출렁임(HOVW)
+			var ir: float = minf(r.size.x, r.size.y) * 0.42 * wg.x
+			if wg.y != 0.0:
+				#  _icon_cons 는 기울기를 안 받는다 — 그 자리에서 돌린다. HUD 는 shake_off 위에 선다.
+				draw_set_transform(shake_off + ic, wg.y)
+				_icon_cons(Vector2.ZERO, ir, String(cons[i].id))
+				draw_set_transform(shake_off)
+			else:
+				_icon_cons(ic, ir, String(cons[i].id))
 	# 이름과 수 — 동전 슬롯 밑은 상인 자리라 못 쓰지만 이 자리는 벽이다.
 	# 「사탕」이라고만 적고 있었는데 이 칸에는 사진도 들어간다 — 사진을
 	# 한 장 들고 있으면 「사탕 1/2」가 거짓말이 된다.
@@ -45703,10 +45712,28 @@ const UIHOV := {"fade": 0.08, "lift": 1.0, "lit": 0.10, "lip": 4.0, "lip_hud": 3
 var ui_hov := {}          # 열쇠 → 짙기 0~1
 var ui_hot := ""          # 이번 프레임에 커서가 든 단추(그리기가 적는다)
 var ui_hot_was := ""      # 지난 프레임의 그것 — 새로 들어서면 딸깍
+var ui_wig := {}          # 열쇠 → 들어선 뒤 지난 초(HOVW · life 를 넘으면 지운다)
 
 
 func _ui_hov(key: String) -> float:
 	return float(ui_hov.get(key, 0.0))
+
+
+#  얹힘 출렁임 — 동전 슬롯 · 사탕 칸에 들어서면 한 치(s) 커졌다 넘쳐(over) 앉고 좌우로 두세 번
+#  기울다(a rad · hz · damp) 선다. 위로는 안 든다 — 뜨는 것은 발동(slot_pop)의 말이다.
+const HOVW := {"s": 0.07, "over": 0.6, "a": 0.08, "hz": 4.0, "damp": 6.0, "life": 0.8}
+
+
+#  (크기 배수, 기울기 rad). hv 는 얹힘 짙기 — 얹힌 동안 한 치 크게 앉아 있다. 움직임 끄기면 없다.
+func _wig(key: String, hv: float) -> Vector2:
+	if motion_off:
+		return Vector2(1.0, 0.0)
+	if not ui_wig.has(key):
+		return Vector2(1.0 + float(HOVW.s) * hv, 0.0)
+	var t: float = ui_wig[key]
+	var e: float = exp(-float(HOVW.damp) * t)
+	return Vector2(1.0 + float(HOVW.s) * hv * (1.0 + float(HOVW.over) * e * sin(PI * float(HOVW.hz) * t)),
+			float(HOVW.a) * e * sin(TAU * float(HOVW.hz) * t))
 
 
 #  덮인 화면을 그리는 중인가. 런 정보는 열던 화면을, 일시정지 설정은 멈춘
@@ -45944,10 +45971,15 @@ func _ui_hover_tick(d: float) -> void:
 	if ui_hot != ui_hot_was:
 		if ui_hot != "":
 			_sfx("menu_pick2")
+			ui_wig[ui_hot] = 0.0      # 들어선 틀 — 얹힘 출렁임(HOVW)이 여기서 시작한다
 		ui_hot_was = ui_hot
 	if ui_hot != "" and not ui_hov.has(ui_hot):
 		ui_hov[ui_hot] = 0.0
-	var moved := false
+	var moved := not ui_wig.is_empty()
+	for key in ui_wig.keys():
+		ui_wig[key] = float(ui_wig[key]) + d
+		if float(ui_wig[key]) >= float(HOVW.life):
+			ui_wig.erase(key)
 	for key in ui_hov.keys():
 		var to: float = 1.0 if key == ui_hot else 0.0
 		var v: float = ui_hov[key]
