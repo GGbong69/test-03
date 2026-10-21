@@ -2337,6 +2337,9 @@ static func _run(g: Node, e: Dictionary) -> void:
 			#  판을 안 던진 런이면 줄이 비어 보인다 — 가짜 값을 넣는다.
 			if g.run_leg_top <= 0:
 				g.run_leg_top = 12345
+			if g.run_found <= 0:
+				g.run_found = 3
+			g.run_rec0 = 0            # 신기록 도장이 서게(본편 런일 때)
 			if g.run_fires.is_empty():
 				for oi in g.owned.size():
 					g.run_fires[String(g.owned[oi].get("id", ""))] = 3 + oi * 5

@@ -14,6 +14,7 @@ const Save = preload("res://scripts/save.gd")
 #  ③ 동전마다 이번 런 발동 수 — 정산 걸음이 세고 툴팁 태그가 읽는다
 #  ④ 컬렉션의 잠긴 전설은 [잠김] · 조건 태그 · 런 끝 쪽지는 여는 조건 태그
 #  ⑤ 런 끝 「거의 다 왔다」 쪽지 — ⅔ 넘게 찬 잠긴 것 하나 · 이름과 값
+#  ⑥ 신기록 도장(런 시작 때 기록을 넘었나) · 「새로 찾음 N」 · 줄은 다섯까지
 # ══════════════════════════════════════════════════════════
 
 var g = null
@@ -207,6 +208,36 @@ func _process(_d: float) -> bool:
 	g.tut_run = true
 	_ok("기록을 안 미는 런(튜토리얼)에서는 안 선다", g._over_near().is_empty())
 	g.tut_run = false
+
+	print("\n⑥ 신기록 도장 · 새로 찾음")
+	Save.peak("best_score", 500)
+	_arm(false)
+	_ok("런 시작 때 내 기록을 쥔다", g.run_rec0 == 500, "%d" % g.run_rec0)
+	g.run_leg_top = 500
+	_ok("같으면 신기록이 아니다", not g._over_rec())
+	g.run_leg_top = 501
+	_ok("넘으면 신기록", g._over_rec())
+	g.tut_run = true
+	_ok("기록을 안 미는 런에서는 도장이 없다", not g._over_rec())
+	g.tut_run = false
+	g.run_rec0 = -1
+	_ok("모르는 기준(옛 저장)은 도장이 없다", not g._over_rec())
+	_ok("새 런은 새로 찾음 0", g.run_found == 0, "%d" % g.run_found)
+	var fid := String(GameData.items()[ci].id)
+	g._found("item", fid)
+	g._found("item", fid)
+	_ok("처음 든 것만 센다", g.run_found == 1, "%d" % g.run_found)
+	g.won = false
+	var rs: Array = g._over_rows()
+	_ok("실패 · 새로 찾음 — 줄은 다섯까지(「던진 다트」가 비킨다)",
+			rs.size() == 5 and _row("새로 찾음") == "1" and _row("던진 다트") == "", str(rs))
+	g.run_found = 0
+	_ok("0 이면 줄이 없다 · 「던진 다트」는 넷째 그대로",
+			_row("새로 찾음") == "" and String(g._over_rows()[3][0]) == "던진 다트", str(g._over_rows()))
+	g.won = true
+	g.run_found = 2
+	_ok("완주 · 새로 찾음 — 다섯 줄", g._over_rows().size() == 5 and _row("새로 찾음") == "2")
+	_ok("이어하기에 적힌다(RUN_PLAIN)", _plain_has("run_rec0") and _plain_has("run_found"))
 
 	print("\n통과 %d · 실패 %d" % [ok, bad])
 	quit(bad)

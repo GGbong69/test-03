@@ -2368,6 +2368,8 @@ const RUN_PLAIN := [
 	["run_secs", 0.0],       # 런 시간(초) — 런 끝 화면의 「클리어 시간」
 	["run_leg_top", 0],      # 이번 런 최고 판 점수 — 런 끝 「최고 판 점수」
 	["run_fires", {}],       # 동전 id → 이번 런 발동 수 — 런 끝 「×N」 · 툴팁 「발동 N」
+	["run_rec0", -1],        # 런 시작 때 프로필 한 판 최고 점수 — 런 끝 신기록 도장(−1 은 모름 · 옛 저장)
+	["run_found", 0],        # 이번 런에 컬렉션에 새로 든 수 — 런 끝 「새로 찾음」
 	["run_unlocked", []],    # [{k, n}] — 이미 원시값이다
 	["btl_gone", []],        # 깬 술병 번호(BTL)
 	["btl_st", 0],           # 술병 이스터에그의 단 — 0 선반 · 1 내리침(대결 앞) · 2 끝
@@ -2951,6 +2953,8 @@ func _new_run(human := false) -> void:
 	run_secs = 0.0
 	run_leg_top = 0
 	run_fires = {}
+	run_rec0 = Save.stat("best_score")
+	run_found = 0              # 첫 다트를 쥐여 주는 _found 보다 먼저
 	#  술병은 런마다 선반에 다시 선다(BTL).
 	btl_gone = []
 	btl_st = 0
@@ -5621,7 +5625,8 @@ func _dart_peaks() -> void:
 func _found(kind: String, id: String) -> void:
 	if id == "":
 		return
-	Save.discover(kind + ":" + id)
+	if Save.discover(kind + ":" + id):
+		run_found += 1             # 런 끝 「새로 찾음」
 
 
 # ── 이미 플레이한 프로필 ──────────────────────────────────
@@ -7851,6 +7856,9 @@ func _process(d: float) -> void:
 		over_t += d
 		if won and ot0 < float(OVERB.clap_at) and over_t >= float(OVERB.clap_at):
 			_sfx("applause")
+		#  신기록 도장 — 판 밖이라 종이 한 번 운다.
+		if ot0 < float(OVERB.stamp_at) and over_t >= float(OVERB.stamp_at) and _over_rec():
+			_sfx("target_hit")
 		queue_redraw()
 	if _run_clock_on():
 		run_secs += d
@@ -46162,6 +46170,8 @@ var over_t := 0.0               # 런 종료 화면이 흐른 시간
 var run_secs := 0.0
 var run_leg_top := 0            # 이번 런에서 가장 높았던 판 점수(RUN_PLAIN)
 var run_fires := {}             # 동전 id → 이번 런 발동 수(RUN_PLAIN)
+var run_rec0 := -1              # 런 시작 때 프로필 한 판 최고 점수(RUN_PLAIN · −1 모름)
+var run_found := 0              # 이번 런에 컬렉션에 새로 든 수(RUN_PLAIN)
 
 
 #  정산 걸음에서 동전이 발동했다 — 슬롯 i 의 동전 id 로 센다.
@@ -47833,7 +47843,7 @@ func _unl_cond(u: Dictionary) -> String:
 #    lx · lw  왼쪽 칸 · 폭          rx · rw  오른쪽 칸 · 폭 · coin_y 동전 한가운데 · coin_step 사이
 #    write_t0 · write_ch  첫 자를 쓰는 때 · 한 자의 시간
 #    rain_n · rain_t · rain_g · rain_life  금화 수 · 쏟아지는 동안 · 중력 · 한 닢이 사는 시간
-#    clap_at  박수가 터지는 때
+#    clap_at  박수가 터지는 때      stamp_at  신기록 도장이 찍히는 때(종 한 번)
 const OVERB := {
 	"crown_y": 46.0, "crown_w": 58.0, "crown_h": 36.0, "crown_t0": 0.20, "crown_t1": 0.70,
 	"title_y": 106.0, "title_y_lose": 84.0, "sub_dy": 28.0, "rule_dy": 14.0,
@@ -47842,6 +47852,7 @@ const OVERB := {
 	"write_t0": 0.08, "write_ch": 0.14,
 	"rain_n": 44, "rain_t": 1.6, "rain_g": 300.0, "rain_life": 3.2,
 	"clap_at": 0.30,
+	"stamp_at": 0.60,
 }
 
 
@@ -47872,14 +47883,22 @@ func _over_rows() -> Array:
 		["클리어 시간" if won else "런 시간", _fmt_secs(run_secs)],
 		["최고 판 점수", GameData.big(run_leg_top)],
 	]
-	#  ⚠ 「던진 다트」는 프로필을 읽는다 — 챌린지 · 무한 런은 안 미므로(_rec_off) 안 센 런에서는 안 세운다.
-	if not _rec_off():
-		rows.append(["던진 다트", str(Save.stat("darts"))])
 	if GameData.endless:
 		rows.append(["무한 판", str(Save.tally("endless:leg"))])
 	elif not won:
 		rows.append(["마지막 판", "%s / %s" % [GameData.big(total), GameData.big(target)]])
+	if run_found > 0:
+		rows.append(["새로 찾음", str(run_found)])
+	#  ⚠ 「던진 다트」는 프로필을 읽는다 — 챌린지 · 무한 런은 안 미므로(_rec_off) 안 센 런에서는 안 세운다.
+	#  줄은 다섯까지다(해금 쪽지 줄 y270 과 안 닿게) — 넘치면 프로필 누적인 이 줄이 비킨다.
+	if not _rec_off() and rows.size() < 5:
+		rows.insert(3, ["던진 다트", str(Save.stat("darts"))])
 	return rows
+
+
+#  신기록 — 본편 런의 「최고 판 점수」가 런 시작 때 내 기록을 넘었다.
+func _over_rec() -> bool:
+	return not _rec_off() and run_rec0 >= 0 and run_leg_top > run_rec0
 
 
 func _draw_over() -> void:
@@ -47925,6 +47944,20 @@ func _draw_over() -> void:
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 12, _mtx(0.0, e))
 		draw_string(_fz(font_sm, 20), Vector2(lx, yy), _L(String(rows[k][1])),
 				HORIZONTAL_ALIGNMENT_RIGHT, lw, 20, _mtx(1.0, e))
+	#  신기록 도장 — 「최고 판 점수」(셋째 줄) 오른쪽 틈에 분필 동그라미가 쾅 크게 왔다 앉는다.
+	if _over_rec():
+		var su: float = 1.0 if motion_off else clampf((over_t - float(B.stamp_at)) / 0.12, 0.0, 1.0)
+		if su > 0.0:
+			var sk: float = 1.0 + 0.5 * (1.0 - su)
+			var sc := Vector2(lx + lw + 22.0, y + 2.0 * float(B.row_step) - 7.0)
+			var pts := PackedVector2Array()
+			for q in 25:
+				var an: float = TAU * float(q) / 24.0
+				pts.append(sc + Vector2(cos(an) * 20.0, sin(an) * 10.0).rotated(-0.12) * sk)
+			var scol := Color(C_GOLD, e * su)
+			draw_polyline(pts, scol, 1.0)
+			draw_string(_fz(font, 12), Vector2(sc.x - 30.0, sc.y + 5.0), _L("신기록"),
+					HORIZONTAL_ALIGNMENT_CENTER, 60.0, 12, scol)
 
 	#  ── 오른쪽 — 마지막까지 든 것 · 다트통 ──
 	var rx: float = float(B.rx)
