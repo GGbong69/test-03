@@ -5257,7 +5257,7 @@ func _settle_clear() -> void:
 		#  판 이름은 **제목이 이미 말했다**("라운드 1  작은 판 넘김").
 		#  같은 말을 두 줄 아래에 또 적으면 내역 첫 줄이 정보가 아니다.
 		{"n": "클리어 보상", "v": clear},
-		{"n": _L("남은 다트 %d개") % darts_left, "v": dart_gold},
+		{"n": _L("남은 다트 %d개") % darts_left, "v": dart_gold, "d": darts_left},   # d — 금화로 뒤집히는 다트 수(_clear_darts)
 		{"n": "이자", "v": interest},
 	]
 	if bounty > 0:
@@ -13518,8 +13518,9 @@ func _hud_draw() -> void:
 		return
 	if not _bar_hidden():
 		_draw_topbar()
+	#  자금판은 정산에서도 선다(2026-10-21) — 큰 수가 이번 판 몫이라 지갑은 여기가 말한다.
+	_bank_draw()
 	if state != S.CLEAR:            # 정산 화면은 그 자체가 명세다
-		_bank_draw()
 		_cons_draw()
 		_panel_draw()
 		_cap_draw()
@@ -20763,7 +20764,7 @@ func _bank_draw() -> void:
 		var cut: float = float(GRIP.wall) + _grip_dx() + 1.0 - r.position.x 				if r.end.x > _grip_dx() else 0.0
 		if cut > 0.0:
 			vis = Rect2(r.position.x + cut, r.position.y, r.size.x - cut, r.size.y)
-	var gt := str(gold)
+	var gt := str(_bank_shown())
 	var room: float = vis.size.x - 4.0
 	var gsz := 24
 	if _bank_gold_w(gt, 24) > room:
@@ -46498,7 +46499,7 @@ func _fire_count(i: int) -> void:
 		run_fires[id] = int(run_fires.get(id, 0)) + 1
 
 
-#  총액 굴림. 내역이 다 든 뒤부터 0 에서 실제 골드까지 오른다.
+#  총액 굴림. 내역이 다 든 뒤부터 0 에서 이번 판 몫(_clear_sum)까지 오른다.
 #  자릿수가 많을수록 조금 더 오래 — 세 자리와 다섯 자리가 같은 시간에
 #  멎으면 큰 수가 순간이동한 것처럼 보인다.
 #
@@ -46506,7 +46507,62 @@ func _fire_count(i: int) -> void:
 #  다트 그대로다 — 던지기와 착탄에는 카지노 소리를 안 올린다).
 #  연출이 다 끝났나. 굴림이 멎고 총액이 제값에 닿았으면 참이다.
 func _clear_done() -> bool:
-	return _mo("fast") <= 0.0 or _clear_roll() >= gold
+	return _clear_k() >= 1.0
+
+
+#  이번 판에 번 돈 — 내역 줄의 합(2026-10-21). 합계선 밑 큰 수가 이것이라 줄들과 맞는다.
+#  지갑 전체는 자금판이 말한다(_bank_shown).
+func _clear_sum() -> int:
+	var s := 0
+	for r in clear_gold_detail:
+		s += int(r.v)
+	return s
+
+
+#  총액 굴림의 몫(0~1). 내역이 다 든 뒤부터 오른다 — 모션 끄기 · 건너뛰기(clear_t 99)는 1.
+func _clear_k() -> float:
+	if _mo("fast") <= 0.0:
+		return 1.0
+	var from: float = float(clear_gold_detail.size()) * _mo("fast")
+	var span: float = clampf(0.25 + 0.12 * log(maxf(float(absi(_clear_sum())), 1.0)) / log(10.0),
+			0.25, 0.8)
+	return clampf((clear_t - from) / span, 0.0, 1.0)
+
+
+#  자금판에 찍는 골드 — 정산 굴림이 멎기 전에는 이번 판 몫을 뺀 옛 지갑이고, 멎는 틀(등록기)에 오른다.
+func _bank_shown() -> int:
+	return gold - _clear_sum() if state == S.CLEAR and not _clear_done() else gold
+
+
+#  「남은 다트」 줄의 다트 j(n 자루 중) 가 금화로 뒤집힌 몫(0~1 · 반을 넘으면 금화). 줄 i 가
+#  드는 틀부터 한 자루씩 — 모션 끄기 · 건너뛰기는 다 금화다.
+func _clear_flip(i: int, j: int, n: int) -> float:
+	var step: float = _mo("fast")
+	if step <= 0.0:
+		return 1.0
+	var t0: float = float(i) * step + float(j) * _mo("tap") * minf(1.0, 6.0 / float(maxi(n, 1)))
+	return clampf((clear_t - t0) / step, 0.0, 1.0)
+
+
+#  다트 n 자루를 x[xa, xb] 오른쪽 끝부터 줄 세운다 — 가로로 접혔다 펴지며(cos) 금화가 된다.
+#  쇠 금화 한 닢(테 · 면 · 빛 한 점) — 보석 없음.
+func _clear_darts(i: int, n: int, xa: float, xb: float, cy: float, big: bool, a: float) -> void:
+	var w: float = 12.0 if big else 8.0
+	w = minf(w, (xb - xa) / float(n))
+	if w < 3.0:
+		return              # 이름과 값 사이에 안 든다 — 값이 이미 말한다
+	var r: float = 5.0 if big else 3.5
+	for j in n:
+		var p: float = _clear_flip(i, j, n)
+		var c := Vector2(roundf(xb - w * (float(n - j) - 0.5)), roundf(cy))
+		draw_set_transform(shake_off + c, 0.0, Vector2(maxf(absf(cos(p * PI)), 0.08), 1.0))
+		if p < 0.5:
+			_icon_dart(Vector2.ZERO, 6.0 if big else 4.0, "std", 0.0, 0.0, a, false)
+		else:
+			draw_circle(Vector2.ZERO, r, Color(C_GOLD.darkened(0.4), a))
+			draw_circle(Vector2.ZERO, r - 1.0, Color(C_GOLD, a))
+			draw_rect(Rect2(Vector2(-r * 0.5, -r * 0.5), Vector2.ONE), Color(C_GOLD.lightened(0.6), a))
+	draw_set_transform(shake_off)
 
 
 #  정산 표 소리(2026-10-21) — 줄이 하나 들 때마다 동전이 펠트에 앉는 짤랑(받은 줄마다 한 온음씩
@@ -46533,13 +46589,7 @@ func _clear_snd() -> void:
 
 
 func _clear_roll() -> int:
-	if _mo("fast") <= 0.0:
-		return gold                              # 모션 끄기
-	var from: float = float(clear_gold_detail.size()) * _mo("fast")
-	var span: float = clampf(0.25 + 0.12 * log(maxf(float(gold), 1.0)) / log(10.0),
-			0.25, 0.8)
-	var k: float = clampf((clear_t - from) / span, 0.0, 1.0)
-	return int(round(float(gold) * _ease_enter(k)))
+	return int(round(float(_clear_sum()) * _ease_enter(_clear_k())))
 
 
 #  글자 크기 — 줄이 여섯 이하면 **큰 표**: 이름 20(곁말) · 값 24 · 총액 36 ·
@@ -46603,6 +46653,11 @@ func _draw_clear() -> void:
 		var vt := "+%d" % int(row.v)
 		draw_gold_at(x1 - gold_w(vt, vs), y, vt, vs,
 				Color(C_GOLD if got else C_OFF, a))
+		if got and int(row.get("d", 0)) > 0:
+			var nf: Font = font_sm if big else font
+			var nx: float = x0 + nf.get_string_size(_L(_elide_word(String(row.n), nw, 20 if big else 12)),
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 20 if big else 12).x + 6.0
+			_clear_darts(i, int(row.d), nx, x1 - gold_w(vt, vs) - 6.0, y - float(vs) * 0.4, big, a)
 		y += dy
 
 	#  합계선 — 내역이 다 든 뒤에 그어진다. 마지막 줄 바닥선에서 잰다.
@@ -46613,10 +46668,11 @@ func _draw_clear() -> void:
 	if step <= 0.0 or clear_t >= all_in:
 		var ly: float = y - dy + (10.0 if big else 8.0)
 		draw_rect(Rect2(Vector2(x0, ly), Vector2(tw, 1.0)), Color(C_WIRE, 0.5))
+		var et := "%+d" % _clear_roll()          # 이번 판 몫 — 줄들의 합(지갑은 자금판)
 		if big:
-			draw_gold(VIEW.x * 0.5, ly + 35.0, str(_clear_roll()), 36, C_GOLD)
+			draw_gold(VIEW.x * 0.5, ly + 35.0, et, 36, C_GOLD)
 		else:
-			draw_gold(VIEW.x * 0.5, ly + 25.0, str(_clear_roll()), 24, C_GOLD)
+			draw_gold(VIEW.x * 0.5, ly + 25.0, et, 24, C_GOLD)
 
 	_btn(Rect2(Vector2(232, 290), Vector2(176, 42)), "상점으로", "", true, C_GOLD, true)
 

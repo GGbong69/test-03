@@ -118,14 +118,22 @@ func _run() -> void:
 	_ok("총액이 0 에서 시작한다", at0 == 0, "%d" % at0)
 	_ok("총액이 굴러 오른다", at2 > at1 or at1 > at0,
 			"%d → %d → %d (골드 %d)" % [at0, at1, at2, g.gold])
-	_ok("다 구르면 제값", at2 == g.gold, "%d / %d" % [at2, g.gold])
+	#  큰 수는 이번 판 몫 — 줄들의 합이다(2026-10-21). 지갑 전체는 자금판이 말한다.
+	var sum := 0
+	for r in g.clear_gold_detail:
+		sum += int(r.v)
+	_ok("다 구르면 이번 판 몫(줄들의 합)", at2 == sum and g._clear_sum() == sum and sum > 0,
+			"%d / 합 %d · 지갑 %d" % [at2, sum, g.gold])
+	_ok("멎으면 자금판이 새 지갑", g._bank_shown() == g.gold, "%d / %d" % [g._bank_shown(), g.gold])
 	_ok("다 구르면 끝났다고 말한다", g._clear_done(), "")
 
 	# ③ 누르면 즉시 끝난다 — 연출이 입력을 삼키면 안 된다
 	g.clear_t = 0.0
 	g._process(1.0 / 60.0)
 	_ok("구르는 중에는 안 끝났다", not g._clear_done(),
-			"보이는 값 %d / %d" % [g._clear_roll(), g.gold])
+			"보이는 값 %d / %d" % [g._clear_roll(), sum])
+	_ok("구르는 동안 자금판은 옛 지갑", g._bank_shown() == g.gold - sum,
+			"%d / %d" % [g._bank_shown(), g.gold - sum])
 	var st0: int = g.state
 	g._click(Vector2(320.0, 300.0))
 	_ok("누르면 굴림만 끝내고 화면은 그대로",
@@ -135,9 +143,29 @@ func _run() -> void:
 	# ④ 모션을 끄면 곧장 최종값
 	g.motion_off = true
 	g.clear_t = 0.0
-	_ok("모션 끄면 곧장 제값", g._clear_roll() == g.gold and g._clear_done(),
-			"%d / %d" % [g._clear_roll(), g.gold])
+	_ok("모션 끄면 곧장 제값", g._clear_roll() == sum and g._clear_done() and g._bank_shown() == g.gold,
+			"%d / %d" % [g._clear_roll(), sum])
+	var di := -1
+	for i in g.clear_gold_detail.size():
+		if int(g.clear_gold_detail[i].get("d", 0)) > 0:
+			di = i
+	var dn: int = int(g.clear_gold_detail[di].d) if di >= 0 else 0
+	_ok("모션 끄면 다트가 다 금화", di >= 0 and g._clear_flip(di, 0, dn) >= 1.0
+			and g._clear_flip(di, dn - 1, dn) >= 1.0, "줄 %d · 다트 %d" % [di, dn])
 	g.motion_off = false
+
+	# ⑦ 「남은 다트」 줄 — 줄이 드는 틀부터 다트가 한 자루씩 금화로 뒤집힌다(2026-10-21)
+	var st7: float = g._mo("fast")
+	g.clear_t = float(di) * st7 - 0.001
+	var f0: float = g._clear_flip(di, 0, dn)
+	g.clear_t = float(di) * st7 + st7 * 0.5
+	var fa: float = g._clear_flip(di, 0, dn)
+	var fz: float = g._clear_flip(di, dn - 1, dn)
+	g.clear_t = 99.0
+	var f9: float = g._clear_flip(di, dn - 1, dn)
+	_ok("줄이 들기 전엔 다트 · 들며 하나씩 · 건너뛰면 다 금화",
+			f0 == 0.0 and fa > 0.0 and (dn < 2 or fz < fa) and f9 >= 1.0,
+			"다트 %d · %.2f %.2f %.2f %.2f" % [dn, f0, fa, fz, f9])
 
 	# ⑥ 소리 — 받은 줄마다 짤랑(한 온음씩 오른다) · 합계에 등록기 한 번 · 건너뛰면 · 모션 끄면 합계만
 	var got := 0
