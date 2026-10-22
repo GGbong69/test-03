@@ -536,8 +536,9 @@ func _run() -> void:
 	#  ⚠ 이웃들의 0.55 알파를 쓰면 **못 고친다** — 띠와 0.55 가 수로 같은
 	#  물러남이라 위쪽만 두 번 물러나 이음매가 절반만 옅어진다.
 	sb = g._sell_btn_rect()
-	_ok("단추가 띠 밑변 64 를 가로지른다 (그래서 손을 봐야 한다)",
-			sb.position.y < 64.0 and sb.end.y > 64.0,
+	#  첫 줄이 48 로 자라며(2026-10-22) 단추가 띠 밑변 68 아래로 통째로 내려갔다 — 넘은 몫이 곧 단추 전부다.
+	_ok("단추가 띠 밑변 68 을 넘는다 (그래서 손을 봐야 한다)",
+			sb.end.y > 68.0,
 			"y[%.0f,%.0f]" % [sb.position.y, sb.end.y])
 	var aim_src := FileAccess.get_file_as_string("res://scripts/game.gd")
 	var fn0: int = aim_src.find("func _sell_btn_draw()")
@@ -545,10 +546,10 @@ func _run() -> void:
 	var body: String = aim_src.substr(fn0, fn1 - fn0)
 	_ok("넘은 만큼 띠를 제가 들고 간다",
 			body.contains("if _is_aim_stage():")
-			and body.contains("64.0 + _hud_dy()")
+			and body.contains("68.0 + _hud_dy()")
 			and body.contains("Color(C_BG, 0.45)"))
 	_ok("띠 값이 _hud_draw 의 그것과 같다 (자가 하나다)",
-			aim_src.contains("draw_rect(_wide(0.0, 64.0 + _hud_dy(), true),")
+			aim_src.contains("draw_rect(_wide(0.0, 68.0 + _hud_dy(), true),")
 			and aim_src.contains("Color(C_BG, 0.45))"))
 	_ok("몸과 수에는 알파를 안 물린다 (두 번 물러나면 안 된다)",
 			body.contains("_ui_face(self, \"hud:sell\", r, true)")
