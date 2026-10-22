@@ -10036,18 +10036,6 @@ func _click(m: Vector2) -> void:
 						_vsync_apply()
 						_sfx("menu_pick2")
 						return
-					"motion":
-						#  같은 손 — CRT 의 흐르는 띠 · 잔상도 곧바로 멎는다(_crt_apply 가 motion 을 넘긴다).
-						var want4: bool = not motion_off
-						if _set_seg_rect(i, 0).has_point(m):
-							want4 = false
-						elif _set_seg_rect(i, 1).has_point(m):
-							want4 = true
-						motion_off = want4
-						Save.set_set("motion", motion_off)
-						_crt_apply()
-						_sfx("menu_pick2")
-						return
 					"wipe":
 						#  「전체화면」 줄과 같은 손 — 누른 칸으로 가고 이름 쪽은 뒤집는다. 그 자리에서
 						#  저장한다(창 모드처럼 한 번 누름이 한 값이다).
@@ -49333,9 +49321,6 @@ func _load_settings() -> void:
 	dot = clampf(float(Save.get_set("dot", DOT_DEF)), 0.0, 1.0)
 	wipe_snow = bool(Save.get_set("wipe_snow", true))
 	vsync_on = bool(Save.get_set("vsync", true))
-	#  움직임 줄이기 — 검사 · 촬영 도구는 안 읽는다(도구가 손으로 앉히는 값이고, 도구 저장은 함께 쓴다).
-	if get_tree().get_script() == null:
-		motion_off = bool(Save.get_set("motion", false))
 	_vsync_apply()
 	_apply_vol()
 	_crt_apply()        # 층은 _ready 가 이 뒤에 세운다 — 그때 다시 앉는다
@@ -56681,7 +56666,9 @@ func _set_info(key: String) -> Dictionary:
 			return {"n": "소리", "kids": ["all", "vol", "mus"]}
 		"game":
 			#  「일반」은 등급 이름(일반 동전)과 같은 글이라 번역이 「Common」으로 갔다 — 「게임」.
-			return {"n": "게임", "kids": ["lang", "motion"]}
+			#  「움직임 줄이기」 줄은 걷었다(2026-10-23 「움직임 줄이기 옵션은 필요 없을거 같은데?」) — motion_off 는
+			#  개발자 판 「모션 끄기」에만 남고 저장값(motion)은 안 읽는다.
+			return {"n": "게임", "kids": ["lang"]}
 		"fs":
 			var on: bool = DisplayServer.window_get_mode() \
 					== DisplayServer.WINDOW_MODE_FULLSCREEN
@@ -56696,9 +56683,6 @@ func _set_info(key: String) -> Dictionary:
 			#  수직 동기화(2026-10-20 학원 선생님 피드백 「수직동기화 옵션 넣는게 어떨까요?」) — 켜면 화면
 			#  틀을 모니터 주사에 맞춰 찢김이 없다(기본 켬 — 엔진 기본과 같다).
 			return {"n": "수직 동기화", "tg": vsync_on, "v": "켬" if vsync_on else "끔"}
-		"motion":
-			#  움직임 줄이기(2026-10-21) — 개발자 판의 「모션 끄기」(motion_off)를 손님 설정으로. 기본 끔.
-			return {"n": "움직임 줄이기", "tg": motion_off, "v": "켬" if motion_off else "끔"}
 		"wipe":
 			#  장면 전환의 지지직(WIPE · 2026-10-08). 끄면 어두운 막이 덮고 걷힌다.
 			return {"n": "전환 지지직", "tg": wipe_snow, "v": "켬" if wipe_snow else "끔"}

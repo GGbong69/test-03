@@ -170,7 +170,7 @@ func _run() -> void:
 	# ⑥
 	GameData.set_lang("ko")
 	_ok("⑥ 설정 탭 셋 — 화면 · 소리 · 게임", (g.SET_TABS as Array) == ["screen", "sound", "game"])
-	_ok("⑥ 게임 탭은 「언어」 · 「움직임 줄이기」", (g._set_info("game").kids as Array) == ["lang", "motion"])
+	_ok("⑥ 게임 탭은 「언어」", (g._set_info("game").kids as Array) == ["lang"])
 	var seq := []
 	for i in 3:
 		g._lang_step(1)
