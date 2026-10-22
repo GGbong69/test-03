@@ -56,18 +56,87 @@ extends RefCounted
 #  보랏빛 언덕 가로등 옆에서 춤추는 노란 옷 · 흰 셔츠 · 새벽 계단 꼭대기에서 두 팔을 든 뒷모습 · 새벽 사막의
 #  검은 석판과 웅크린 유인원 · 공원 벤치 끝의 흰 정장과 떠다니는 깃털(「다른 영화들도 레퍼런스 조사 하고」 —
 #  장면마다 스틸 검색으로 구도를 쟀다).
-#  API — make(game, outer) · tick(h, t) · length() · handoff() · feed_at() · ON(소리 때 — hero 는 켜짐 소리).
+#  API — make(game, outer) · tick(h, t) · length() · handoff() · feed_at() · ON(TV 가 켜지는 때) · cues()(소리 때
+#  전부 — 앞 토막 것까지 · game.gd _plg_tick 이 한 번씩 낸다).
+# ──────────────────────────────────────────────────────────
+#  앞 토막 — 비디오테이프를 넣는 손 (2026-10-22)
+#  「시작 하면 애니메이션? 좀 영화같이 씬을 보여줘서 약간 스토리도 챙기고 싶어」 · 「애니메이션은 뭐가 되었든 TV로
+#  이어져야지」(사용자) — 고른 안 「비디오테이프를 넣는 손」. 게임은 TV 안에서 시작하므로 이 토막도 TV 로 든다.
+#  글 · 말 없이 물건이 이야기한다:
+#   · 어둠에 창밖 빗소리만 먹먹하게(game.gd plg_rain · Rain 버스 로패스) → 주인공 TV 밑 데크에 낮고 가깝게 선 눈.
+#     빛은 구석 지지직 TV(차고 깜박인다 — 그 빛 한 줄기가 구멍 둘레만 짚는다 · 깃발로 끊은 촬영 빛)와 데크의
+#     VFD(청록 대시가 1Hz 로 깜박) · 표시등(빨강)뿐이다. 나머지는 검다.
+#   · 상인의 손(얼굴은 안 나온다 — 상점과 같은 Blender 손 · 걷은 소매 · 약지 금반지 · 반지 손 = 왼손)이 오른쪽
+#     앞에서 뻗어 와 표시 없는 카세트의 오른 끝을 쥐고 들어온다. 엄지는 윗면에 눕고 · 검지는 펴서 밑을 받치고 ·
+#     셋은 차례로 더 말린다(엄지두덩 · 물갈퀴째). 눈은 앞 왼쪽 낮게 선다 — 빛이 왼쪽 구석 TV 에서만 오므로 손등 ·
+#     카세트 왼 끝이 빛을 받는 쪽이다(정면에서는 손등이 빛을 등져 검은 덩어리였다 · 첫 촬영). VFD · 표시등은
+#     구멍 왼쪽(손에 안 가린다). 구멍 앞에서 한 박 맞추고(살짝 뺐다가) 민다 — 덮개가 안으로 젖혀지고 카세트가
+#     미끄러져 든다. 절반쯤에서 기계가 받아 끌어들이고 손가락이 풀린다(엄지가 먼저 뜬다) · 손은 오른쪽 앞 밖으로
+#     빠진다(더 밀면 굽힌 손가락이 구멍 밑 앞판에 닿는다 — qa_prologue ⑨ 가 손끝을 잰다). 덮개가 스프링으로
+#     닫히고 철컥 — 표시등이 빨강 → 초록, 대시가 멎어 켜진 채 재생 세모가 든다(탭이 부러진 테이프는 넣기만 하면
+#     저절로 돈다 — 버튼을 누르는 손이 없다). 모터가 돌고 위 TV 유리가 밑에서부터 희미하게 든다.
+#   · 눈이 데크에서 위 · 뒤로 올라 TV 더미 첫 그림(cam_start)에 선다(끊지 않는다) — 그 뒤는 옛 흐름 그대로 때만
+#     TAPE_LEN 뒤(ON · T · LEN · REEL · feed_at · handoff). 손 · 카세트 · 그 빛은 다 쓰면 걷는다(_tape_tick).
+#  때 · 길은 TAPE 한 표 · 소리 때는 cues() 한 표. 손은 game.gd 의 상점 손(_hand3_build · _fore3_build — 같은 조각 ·
+#  같은 빛 사다리)을 데크 좌표에 TAPE.s 배로 세운다(1 단위 = 3.3mm — 손 길이 58 이 190mm · 카세트 폭 187mm 와 같다).
+#  레퍼런스 — VHS 실측 187 × 25 × 103mm · 등 라벨이 손 쪽 · 덮개 변이 먼저(Gough Lui) · 덮개는 안쪽으로만 젖혀지고
+#  비틀림 스프링이 닫는다(US5917675) · 로딩은 감지 → 끌어들임 → 드럼 기동 2 초(EP0339646) · VFD 505nm 청록 · 옛 GaP
+#  초록 표시등 · TV 빛은 약하니 깃발로 끊는다(촬영 관례) · 표시 없는 테이프(Ringu · V/H/S · Lost Highway) · 테이프를
+#  넣는 순간이 문턱(사일런트 힐 2).
 
 const Door3D = preload("res://scripts/door3d.gd")
 const Room3D = preload("res://scripts/room3d.gd")
 const TVS_GLB := "res://assets/models/tvs.glb"
-const LEN := 6.1
+#  앞 토막 길이 — TV 창고의 때(ON · T · LEN · REEL)는 다 이만큼 뒤로 선다
+const TAPE_LEN := 6.0
+const LEN := TAPE_LEN + 6.1
 #  켜지는 때 — tvs 둘레 TV(차례로) · maker 크레딧 TV · hero 주인공(이때 인트로 시계가 출발한다)
-const ON := {"tvs": 1.0, "maker": 1.75, "hero": 2.55}
+const ON := {"tvs": TAPE_LEN + 1.0, "maker": TAPE_LEN + 1.75, "hero": TAPE_LEN + 2.55}
 #  stag 둘레 TV 가 차례로 켜지는 사이 · snow 크레딧 TV 가 켜진 뒤 지지직 동안 · push0~push1 다가가는 동안
-const T := {"stag": 0.07, "snow": 0.45, "push0": 3.55, "push1": 5.65}
-#  어둠에서 떠오르는 시간 · 끝에 층이 걷히는 시간(LEN 앞 out 초부터 — handoff)
-const FADE := {"in": 0.9, "out": 0.45}
+const T := {"stag": 0.07, "snow": 0.45, "push0": TAPE_LEN + 3.55, "push1": TAPE_LEN + 5.65}
+#  끝에 층이 걷히는 시간(LEN 앞 out 초부터 — handoff). 어둠에서 떠오르는 것은 앞 토막(TAPE.black · fade)이 맡는다 —
+#  TV 방은 눈이 데크에서 올라와 이미 보인다.
+const FADE := {"out": 0.45}
+#  앞 토막(초 · 자리는 데크 좌표 m — 원점은 바닥 한가운데 · 앞면 z 0 · 구멍 · 카세트 치수는 tvs.py 사본) —
+#    black 빗소리만 · fade 떠오르는 동안 · cam 눈(앞 왼쪽 낮게 — 빛이 왼쪽 구석 TV 에서 오므로 손등 · 카세트 왼
+#    끝이 그 빛을 받는 쪽에서 본다) · look 보는 데 · fov 화각 · focus 초점(구멍 앞)
+#    crane 눈이 cam_start 로 오르는 동안(끊지 않는다 · 화각 · 초점도 옛 값으로)
+#    slot 구멍 한가운데 · hole 구멍 [폭 · 높이] · tape 카세트 [폭 · 두께 · 깊이] · enter 손이 들어오는 동안 · from 들어
+#    오기 전 카세트 한가운데(오른쪽 앞 — 그림 밖) · tilt 그때의 요 · 굴림(도) · near 구멍 앞에 맞춘 앞변 z ·
+#    align 한 박(back 살짝 빼는 m) · push 미는 동안 · deep 손이 밀어 넣는 앞변 깊이(103mm 의 절반 — 나머지는 기계가
+#    끌어들인다 · 더 밀면 굽힌 손가락이 구멍 밑 앞판에 닿는다) · pull 끌어들이는 동안(빨리 받아 천천히 앉힌다) ·
+#    home 다 든 등 z · drop 내려앉는 m · clunk 철컥(홀더가 앉는다) · lead 철컥 소리 앞의 덮개 딱(deck_clunk 의 28ms)
+#    flap 덮개 젖힘(도) · flap_d 그만큼 들어갈 때 다 젖혀진다(m) · hinge 경첩 z · snap 닫히는 동안 · over 넘쳤다 돈다
+#    led 표시등 [대기 · 동작] · led_gap 바뀔 때 꺼진 동안(두 틀) · vfd 청록 · vfd_e 그 제 빛 · vfd_dim 꺼진 대시 ·
+#    vfd_hz 깜박임 · play 철컥 뒤 재생 세모가 드는 때 · vfd_l 창 빛 [세기 · 닿는 거리 · 자리] · key 구석 TV 빛 한
+#    줄기 [세기 · 원뿔(도) · 닿는 거리] · glow 위 TV 유리가 희미하게 드는 [시작 · 다 든 때 · 그 빛 몫]
+#    s 손 배율(m / 손 단위) · let 손가락이 펴지는 동안(기계가 받는 때 놓는다) · leave 손이 빠지는 동안 · out 빠지는
+#    길(m · 가속) · lift 놓으며 손등 쪽으로 비키는 m · fore 팔뚝 길이(손 단위)
+#    grip 손 자리(카세트 좌표 — knuckle 검지 너클 · yaw · pitch · roll 도) — 상인의 왼손(반지 손)이 오른쪽 앞에서
+#    뻗어 와 카세트 오른 끝을 쥔다: 엄지는 윗면 · 검지는 펴서 밑을 받치고 셋은 차례로 더 말린다(손등이 눈 · 빛 쪽)
+const TAPE := {
+	"black": 1.0, "fade": 0.6,
+	"cam": Vector3(-0.40, 0.19, 0.34), "look": Vector3(-0.10, 0.09, 0.0), "fov": 32.0,
+	"focus": Vector3(-0.08, 0.084, 0.05), "crane": [5.0, 6.0],
+	"slot": Vector3(-0.08, 0.084, 0.0), "hole": Vector2(0.196, 0.032), "tape": Vector3(0.187, 0.025, 0.103),
+	"enter": [1.0, 1.8], "from": Vector3(0.30, 0.15, 0.36), "tilt": [20.0, -8.0], "near": 0.006,
+	"align": [1.8, 2.05], "back": 0.004, "push": [2.05, 2.45], "deep": 0.048,
+	"pull": [2.45, 2.80], "home": -0.012, "drop": 0.012, "clunk": 2.90, "lead": 0.028,
+	"flap": 86.0, "flap_d": 0.02, "hinge": -0.004, "snap": 0.12, "over": 6.0,
+	"led": [Color("ff2a1a"), Color("8cff3a")], "led_gap": 0.035,
+	"vfd": Color("33f2c2"), "vfd_e": 1.0, "vfd_dim": 0.12, "vfd_hz": 1.0, "play": 0.45,
+	"vfd_l": [0.035, 0.12, Vector3(-0.27, 0.085, 0.02)], "key": [1.4, 13.0, 1.8], "glow": [3.9, 5.0, 0.1],
+	"s": 0.00328, "let": [2.45, 2.58], "leave": [2.50, 3.25], "out": Vector3(0.42, 0.08, 0.40),
+	"lift": Vector3(0.0, 0.006, 0.02), "fore": 80.0,
+	"grip": {"knuckle": Vector3(0.045, -0.018, 0.066), "yaw": -30.0, "pitch": 0.0, "roll": 15.0},
+}
+#  손가락 자세 — game.gd FPOSE 차례 [첫 굽힘 ×4 · 끝 굽힘 ×4 · 부채 · 엄지 접기 · 엄지 굽힘 · 엄지 내림].
+#  grip 쥔 손(엄지는 윗면에 눕고 · 검지는 펴서 밑 · 가운데 · 약지 · 새끼는 차례로 더 말린다 — 다섯이 다 일하지 않는다) ·
+#  let 놓은 손(조금 풀린다 · 엄지가 먼저 뜨고 검지가 한 박 늦다)
+const TAPE_POSE := {
+	"grip": [10.0, 40.0, 60.0, 78.0, 15.0, 70.0, 85.0, 95.0, 12.0, 0.0, 30.0, 50.0],
+	"let": [8.0, 30.0, 45.0, 60.0, 10.0, 45.0, 60.0, 75.0, 8.0, 0.0, 10.0, 20.0],
+}
 #  층 — 게임 필터(CRT 100 · VHS 98 · 도트 97 · 반전 96) 밑
 const LAYER := 90
 const FONT_BIG := "res://fonts/Paperlogy-7Bold.ttf"
@@ -146,13 +215,15 @@ const KNOB := {"power": -0.12, "ch": 0.45, "step": 30.0, "click": 0.07, "vol": [
 const HERO_PARTS := ["HeroKnobA", "HeroKnobB", "HeroSlider"]
 #  영화 TV — 그림 크기(칸 = 텍셀) · 밝기 · 채도 · sw 채널이 넘어가는 때(초 · 이 사이에서 TV 마다 아무 때나) ·
 #  snow 넘어갈 때 지지직 동안 · tune 처음부터 켜진 reel0 이 지지직에서 채널을 잡는 때
-const REEL := {"size": Vector2i(64, 48), "dim": 0.15, "sat": 0.75, "sw": [2.9, 4.6], "snow": 0.14, "tune": 1.6}
+const REEL := {"size": Vector2i(64, 48), "dim": 0.15, "sat": 0.75, "sw": [TAPE_LEN + 2.9, TAPE_LEN + 4.6], "snow": 0.14,
+		"tune": TAPE_LEN + 1.6}
 const REELS := ["hammer", "rail", "dance", "bow", "exit", "stairs", "field", "lamp", "bullet", "hill", "steps",
 		"monolith", "bench"]
 
 #  화면 — UV(0,0 왼 위) 를 res 칸으로 끊는다. pw 켜짐(0~1 · 가운데 줄이 위아래로 벌어지고 처음엔 하얗다) ·
 #  dim · sat 엑스트라의 밝기 · 채도. 꺼진 유리는 위가 옅은 짙은 회색 · 귀가 어둡고 · 왼 위에 비스듬한 반짝 띠
-#  둘 · amb 켜진 TV 몫을 따라 옅어진다(다 꺼진 어둠에서는 유리도 거의 안 보인다).
+#  둘 · amb 켜진 TV 몫을 따라 옅어진다(다 꺼진 어둠에서는 유리도 거의 안 보인다). warm 은 켜지기 전에 데워지는
+#  관 — 꺼진 유리가 밑에서부터 희미하게 든다(앞 토막 · 테이프가 먹힌 뒤의 주인공 TV).
 #  lv 가 있으면(엑스트라) 색을 그 단으로 끊는다 — 바둑 점은 안 얹는다(제목에 없는 결).
 #  mode 9(주인공) — tex(게임 화판)를 유리 높이에 꽉 채우고 양옆을 잘라(cw 보이는 폭 몫) 칸 없이 비춘다 ·
 #  feed 화판 크기(주사선 줄). mode 4(크레딧) — 빛깔 번짐(빨강만 한 칸 옆에서 — r · b 둘 다 밀면 작은 글이
@@ -168,6 +239,7 @@ uniform float dim = 1.0;
 uniform float sat = 1.0;
 uniform float lv = 0.0;
 uniform float amb = 1.0;
+uniform float warm = 0.0;
 uniform vec2 res = vec2(40.0, 30.0);
 uniform float cw = 0.6;
 uniform float portal = 0.0;
@@ -281,6 +353,7 @@ void fragment() {
 	vec2 q = (cell + 0.5) / res;
 	vec3 off = mix(vec3(0.05, 0.056, 0.07), vec3(0.016, 0.018, 0.024), smoothstep(0.0, 0.8, UV.y));
 	off *= (1.0 - 1.6 * dot(UV - 0.5, UV - 0.5)) * amb;
+	off += vec3(0.004, 0.005, 0.007) * warm * smoothstep(0.5, 1.0, UV.y);
 	float gd = UV.x * 0.85 + UV.y;
 	if ((abs(gd - 0.42) < 0.045 || abs(gd - 0.56) < 0.012) && UV.x < 0.5) {
 		off += vec3(0.03, 0.034, 0.042) * amb * 2.5;
@@ -823,6 +896,13 @@ static func make(game: Node, outer: Node) -> Node:
 	var xm := _mats(false)
 	var dm := hm.duplicate()
 	dm["gun"] = _lit(Color("2c3038"), null, 0.45, 0.45, 0.3)
+	#  데크의 제 빛 — VFD 대시 · 재생 세모 · 표시등(앞 토막이 켜고 바꾼다 · _tape_deck) · 연기빛 덮개
+	dm["vfd"] = Room3D._glow(TAPE.vfd, float(TAPE.vfd_e))
+	dm["vfd_on"] = Room3D._glow(TAPE.vfd, float(TAPE.vfd_e))
+	dm["led_deck"] = Room3D._glow(TAPE.led[0], 1.8)
+	dm["flap"] = _lit(Color("1c1d22"), null, 0.3, 0.55)
+	var deck_mi: MeshInstance3D = null
+	var flap := {}
 	var tvs := []
 	var tops := []      # [x0, x1, 윗면, z] — 얹힌 것들
 	var cam_end := {}
@@ -921,6 +1001,22 @@ static func make(game: Node, outer: Node) -> Node:
 						pi.set_surface_override_material(k, hm[pkey])
 				mi.add_child(pi)
 				parts[pn] = {"n": pi, "xf": pi.transform}
+		elif String(e[0]) == "Deck":
+			#  카세트 구멍의 덮개 — 윗변 경첩(glb 노드 변환이 제 자리 · 닫힌 각)
+			deck_mi = mi
+			var fm: Mesh = _mesh("DeckFlap")
+			if fm != null:
+				var fi := MeshInstance3D.new()
+				fi.name = "DeckFlap"
+				fi.mesh = fm
+				fi.transform = _tv_xf["DeckFlap"]
+				for k in fm.get_surface_count():
+					var fsm: Material = fm.surface_get_material(k)
+					var fkey: String = fsm.resource_name if fsm != null else ""
+					if dm.has(fkey):
+						fi.set_surface_override_material(k, dm[fkey])
+				mi.add_child(fi)
+				flap = {"n": fi, "xf": fi.transform}
 		if gm == null:
 			continue
 		var g: Vector3 = mi.transform * gb.get_center()
@@ -984,6 +1080,10 @@ static func make(game: Node, outer: Node) -> Node:
 	_dust_make(w, hn)
 	if not cam_start.is_empty():
 		cam.look_at_from_position(cam_start.at, cam_start.look)
+	hn.set_meta("flap", flap)
+	hn.set_meta("deck_m", dm)
+	if deck_mi != null:
+		_tape_make(hn, game, deck_mi, hm, tvs)
 	_room(w, xm)
 	var vg := GradientTexture2D.new()
 	var gr := Gradient.new()
@@ -1194,13 +1294,21 @@ static func tick(hn: Node, t: float) -> void:
 			nx += 1
 		m.set_shader_parameter("pw", p)
 		var fl: float = 0.85 + 0.15 * sin(t * 29.0 + float(tv.i) * 1.7)
-		(tv.l as SpotLight3D).light_energy = float(tv.e) * minf(p * 1.6, 1.0) * fl
+		var wk := 0.0
+		if tv.hero:
+			#  테이프가 먹힌 뒤 데워지는 관 — 켜지기 전부터 유리가 희미하게 들고 그 빛이 앞으로 희미하게 샌다
+			var gw: Array = TAPE.glow
+			wk = smoothstep(float(gw[0]), float(gw[1]), t)
+			m.set_shader_parameter("warm", wk)
+			wk *= float(gw[2])
+		(tv.l as SpotLight3D).light_energy = float(tv.e) * (minf(p * 1.6, 1.0) + wk) * fl
 	_layer(hn, t)
 	var reels: Dictionary = hn.get_meta("reels")
 	for rn in reels.values():
 		(rn as Node2D).set("t", t)
 		(rn as CanvasItem).queue_redraw()
 	_panel(hn, t)
+	_tape_tick(hn, t)
 	#  꺼진 유리(주인공 · 아직 안 켜진 엑스트라)는 켜진 TV 몫만큼만 비친다
 	for tv in hn.get_meta("tvs"):
 		(tv.m as ShaderMaterial).set_shader_parameter("amb", 0.04 + 0.3 * lit / float(maxi(nx, 1)))
@@ -1210,8 +1318,12 @@ static func tick(hn: Node, t: float) -> void:
 	if not ce.is_empty():
 		var u: float = clampf((t - float(T.push0)) / (float(T.push1) - float(T.push0)), 0.0, 1.0)
 		var e: float = u * u * (3.0 - 2.0 * u)
-		cam.look_at_from_position((cs.at as Vector3).lerp(ce.at, e), (cs.look as Vector3).lerp(ce.look, e))
-		_focus(hn, cam)
+		if t < TAPE_LEN and hn.has_meta("deck"):
+			_tape_cam(hn, cam, t)
+		else:
+			cam.fov = float(CAM.fov)
+			cam.look_at_from_position((cs.at as Vector3).lerp(ce.at, e), (cs.look as Vector3).lerp(ce.look, e))
+			_focus(hn, cam)
 		var pr: Array = HERO.portal
 		var fr: Array = HERO.flat
 		var po: float = smoothstep(float(pr[0]), float(pr[1]), u)
@@ -1223,7 +1335,8 @@ static func tick(hn: Node, t: float) -> void:
 		(root.get_node("Feed") as CanvasItem).modulate.a = smoothstep(float(fr[0]), float(fr[1]), u)
 
 
-#  층 — 화판(outer.box) 자리에 맞추고 · 처음 FADE.in 어둠에서 떠오르고 · handoff 뒤 FADE.out 동안 걷힌다.
+#  층 — 화판(outer.box) 자리에 맞추고 · 빗소리만 나는 어둠(TAPE.black) 뒤 TAPE.fade 에 떠오르고 · handoff 뒤
+#  FADE.out 동안 걷힌다.
 static func _layer(hn: Node, t: float) -> void:
 	var root := hn.get_meta("root") as Control
 	var outer: Node = hn.get_meta("outer")
@@ -1231,7 +1344,7 @@ static func _layer(hn: Node, t: float) -> void:
 	if box != null:
 		root.position = box.position
 		root.size = box.size
-	(root.get_node("Fade") as ColorRect).color.a = 1.0 - clampf(t / float(FADE["in"]), 0.0, 1.0)
+	(root.get_node("Fade") as ColorRect).color.a = 1.0 - clampf((t - float(TAPE.black)) / float(TAPE.fade), 0.0, 1.0)
 	root.modulate.a = 1.0 - clampf((t - handoff()) / float(FADE.out), 0.0, 1.0)
 
 
@@ -1319,6 +1432,265 @@ static func _panel(hn: Node, t: float) -> void:
 static func _spin(part: Dictionary, a: float) -> void:
 	(part.n as Node3D).transform = (part.xf as Transform3D) * Transform3D(Basis(Vector3(0, 0, 1), -deg_to_rad(a)),
 			Vector3.ZERO)
+
+
+# ══ 앞 토막 — 비디오테이프를 넣는 손 ═══════════════════════════════
+#  데크(데크 좌표) 밑에 VFD 빛 · 카세트 · 상인의 손(손 단위 공간 Arm — TAPE.s 배) · 구석 TV 빛 한 줄기를 세운다.
+#  손은 game.gd 의 상점 손 그대로다 — _hand3_build(같은 Blender 조각 · 빛 사다리 · 거울 손 = 상인의 왼손 · 약지
+#  금반지) · _fore3_build(맨 팔뚝 · 걷은 단 · 셔츠 소매). 같은 손이어야 같은 사람으로 읽힌다(얼굴은 안 나온다).
+static func _tape_make(hn: Node, game: Node, deck: MeshInstance3D, hm: Dictionary, tvs: Array) -> void:
+	hn.set_meta("deck", deck)
+	#  VFD 창 빛 — 데크가 내는 빛(청록). 구멍 앞의 손가락 · 카세트 등에 밑빛으로 맺힌다.
+	var vl: Array = TAPE.vfd_l
+	var vo := OmniLight3D.new()
+	vo.light_color = TAPE.vfd
+	vo.omni_range = float(vl[1])
+	vo.omni_attenuation = 1.5
+	vo.light_specular = 0.0          # 창 빛은 번지는 빛이다 — 앞판 니스에 둥근 반짝 점을 찍지 않게
+	vo.light_energy = 0.0
+	vo.position = vl[2]
+	deck.add_child(vo)
+	hn.set_meta("vfd_l", vo)
+	#  구석 TV 빛 한 줄기 — 지지직 화면에서 구멍 둘레로만(좁은 원뿔 — 촬영의 깃발). 눈이 오르는 동안 걷힌다.
+	var src := Vector3.ZERO
+	for tv in tvs:
+		if String(tv.job) == "reel0":
+			src = (tv.l as SpotLight3D).position
+	var kk: Array = TAPE.key
+	var key := SpotLight3D.new()
+	key.light_color = JOB.snow[1]
+	key.spot_angle = float(kk[1])
+	key.spot_range = float(kk[2])
+	key.spot_attenuation = 0.5
+	key.light_energy = 0.0
+	(deck.get_parent() as Node3D).add_child(key)
+	key.look_at_from_position(src, deck.transform * (TAPE.slot as Vector3))
+	hn.set_meta("key", key)
+	var tm: Mesh = _mesh("Tape")
+	if tm == null or game == null or not game.has_method("_hand3_build"):
+		return
+	var tp := MeshInstance3D.new()
+	tp.name = "Tape"
+	tp.mesh = tm
+	#  연기빛 창 — 너머의 흰 허브 · 감긴 갈색 테이프가 비친다
+	var win := StandardMaterial3D.new()
+	win.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	win.albedo_color = Color(Color("2a2a2e"), 0.35)
+	win.roughness = 0.1
+	win.metallic_specular = 0.8
+	var cm := {"shell": _lit(Color("19191b"), null, 0.35, 0.5), "hub": _lit(Color("d8d4cc"), null, 0.5, 0.3),
+			"pack": _lit(Color("3a2618"), null, 0.25, 0.6), "label": _lit(Color("e6dcc4"), null, 0.9, 0.15),
+			"ink": _lit(Color("2b2f5a"), null, 0.6, 0.2), "bezel": hm.bezel, "win": win}
+	for k in tm.get_surface_count():
+		var sm: Material = tm.surface_get_material(k)
+		var sk: String = sm.resource_name if sm != null else ""
+		if cm.has(sk):
+			tp.set_surface_override_material(k, cm[sk])
+	deck.add_child(tp)
+	var arm := Node3D.new()
+	arm.name = "Arm"
+	arm.scale = Vector3.ONE * float(TAPE.s)
+	deck.add_child(arm)
+	var mats: Dictionary = game._hand3_mats()
+	var hj: Dictionary = game._hand3_build(mats, true, true)
+	arm.add_child(hj.root)
+	var fm := {"skin": mats.skin, "cloth": game._hand3_toon(game.FORE3.cloth),
+			"brass": game._hand3_toon(game.FORE3.brass, Color(0.0, 0.0, 0.0, 0.0), 0.4, 0.09, 1.0, 0.5)}
+	var fo: Dictionary = game._fore3_build(fm, float(game.FORE3.bare_r), -1.0)
+	arm.add_child(fo.root)
+	hn.set_meta("tape", {"n": tp, "arm": arm, "hj": hj, "fo": fo, "game": game})
+
+
+#  카세트 자리(데크 좌표 · 한가운데) — 들어온다(호를 그리며 기울기가 풀린다) → 구멍 앞 한 박(살짝 뺐다가 댄다) →
+#  민다 → 기계가 끌어들인다(빨리 받아 천천히 앉힌다) → 철컥 앞에 내려앉는다.
+static func _tape_at(t: float) -> Transform3D:
+	var sl: Vector3 = TAPE.slot
+	var hd: float = (TAPE.tape as Vector3).z * 0.5
+	var near := Vector3(sl.x, sl.y, hd + float(TAPE.near))
+	var al: Array = TAPE.align
+	var pu: Array = TAPE.push
+	var pl: Array = TAPE.pull
+	if t < float(al[0]):
+		var en: Array = TAPE.enter
+		var u: float = clampf((t - float(en[0])) / (float(en[1]) - float(en[0])), 0.0, 1.0)
+		var e: float = 1.0 - pow(1.0 - u, 3.0)
+		var tl: Array = TAPE.tilt
+		var p: Vector3 = (TAPE.from as Vector3).lerp(near, e) + Vector3(0.0, 0.02 * sin(PI * e), 0.0)
+		return Transform3D(Basis(Vector3.UP, deg_to_rad(float(tl[0]) * (1.0 - e)))
+				* Basis(Vector3.BACK, deg_to_rad(float(tl[1]) * (1.0 - e))), p)
+	var fe := 0.0      # 앞변 z
+	if t < float(pu[0]):
+		var u: float = clampf((t - float(al[0])) / (float(al[1]) - float(al[0])), 0.0, 1.0)
+		fe = lerpf(float(TAPE.near), 0.0, smoothstep(0.45, 1.0, u)) + float(TAPE.back) * sin(PI * minf(u / 0.6, 1.0))
+	elif t < float(pl[0]):
+		fe = -float(TAPE.deep) * smoothstep(float(pu[0]), float(pu[1]), t)
+	else:
+		var u: float = clampf((t - float(pl[0])) / (float(pl[1]) - float(pl[0])), 0.0, 1.0)
+		fe = lerpf(-float(TAPE.deep), float(TAPE.home) - hd * 2.0, 1.0 - pow(1.0 - u, 2.5))
+	var y: float = sl.y
+	var ck: float = TAPE.clunk
+	if t > ck - 0.05:
+		var d: float = clampf((t - (ck - 0.05)) / 0.05, 0.0, 1.0)
+		y -= float(TAPE.drop) * d * d
+	return Transform3D(Basis(), Vector3(sl.x, y, fe + hd))
+
+
+#  손 자리 — 카세트 좌표의 손 원점(손목) 변환(m). 손 좌표(손끝 +x · 손등 +y · 엄지 쪽 +z — 거울 손)를 카세트의
+#  왼쪽(−x — 오른쪽에서 들어온 손가락이 등을 따라 눕는다) · 카메라 쪽(+z — 손등) · 위(+y — 엄지가 윗면)로 세우고
+#  grip 의 각으로 튼 뒤, 검지 너클이 knuckle 에 앉게 원점을 민다.
+static func _tape_grip(game: Node) -> Transform3D:
+	var gp: Dictionary = TAPE.grip
+	var b := Basis(Vector3(-1.0, 0.0, 0.0), Vector3(0.0, 0.0, 1.0), Vector3(0.0, 1.0, 0.0))
+	b = Basis(Vector3.UP, deg_to_rad(float(gp.yaw))) * Basis(Vector3.BACK, deg_to_rad(float(gp.roll))) \
+			* Basis(Vector3.RIGHT, deg_to_rad(float(gp.pitch))) * b
+	var F: Dictionary = game.FING3
+	var kn := Vector3(float(F.fx[0]), float(F.fy), -float(F.fz[0]))     # 거울 손 — 너클 z 를 뒤집는다
+	return Transform3D(b, (gp.knuckle as Vector3) - b * kn * float(TAPE.s))
+
+
+#  손가락 — 집은 손(grip) → 놓은 손(let)을 k 로. 엄지가 먼저 뜨고(앞 6 할) 검지는 한 박 늦게 빠진다(vhs-18).
+static func _tape_pose(game: Node, hj: Dictionary, k: float) -> void:
+	var a: Array = TAPE_POSE.grip
+	var b: Array = TAPE_POSE.let
+	var p := PackedFloat32Array()
+	p.resize(12)
+	for i in 12:
+		var ki: float = k
+		if i >= 9:
+			ki = minf(k / 0.6, 1.0)
+		elif i == 0 or i == 4:
+			ki = clampf((k - 0.25) / 0.75, 0.0, 1.0)
+		p[i] = lerpf(float(a[i]), float(b[i]), ki)
+	var sg: float = hj.sg
+	var fan: Array = game.FING3.fan
+	for f in 4:
+		(hj.j1[f] as Node3D).basis = Basis(Vector3.UP, deg_to_rad(p[8] * float(fan[f])) * sg) \
+				* Basis(Vector3.BACK, -deg_to_rad(p[f]))
+		(hj.j2[f] as Node3D).basis = Basis(Vector3.BACK, -deg_to_rad(p[4 + f]))
+	game._thumb3_pose(sg, p, 0)
+	game._thumb3_set(hj, game.thumb_mr, Transform3D(game.thumb_pr, Vector3(float(game.THUMB3.lm), 0.0, 0.0)),
+			Basis(Vector3.BACK, -deg_to_rad(float(game.thumb_cr))), sg, clampf(p[9], 0.0, 1.0))
+
+
+#  덮개 각(도 · + 안쪽) — 앞변이 덮개 앞면을 지나면 flap_d 에 걸쳐 다 젖혀지고(윗면에 얹혀 미끄러진다), 등이 지나간
+#  뒤 snap 에 비틀림 스프링으로 닫혀 철컥 소리 앞의 딱(clunk − lead)에 닿고, over 만큼 넘쳤다 돌아온다.
+static func _flap_deg(t: float) -> float:
+	var shut: float = float(TAPE.clunk) - float(TAPE.lead)
+	var c0: float = shut - float(TAPE.snap)
+	var hd: float = (TAPE.tape as Vector3).z * 0.5
+	var fe: float = _tape_at(minf(t, c0)).origin.z - hd
+	var open: float = float(TAPE.flap) * smoothstep(0.0, float(TAPE.flap_d), float(TAPE.hinge) - 0.0015 - fe)
+	if t < c0:
+		return open
+	if t < shut:
+		var q: float = (t - c0) / float(TAPE.snap)
+		return open * (1.0 - q * q)
+	return -float(TAPE.over) * sin(PI * clampf((t - shut) / 0.1, 0.0, 1.0))
+
+
+#  데크의 제 빛 — 표시등(철컥 전 빨강 대기 · 두 틀 꺼졌다 초록) · VFD(철컥 전엔 대시가 1Hz 로 깜박 · 뒤엔 켜진 채 ·
+#  재생 세모가 든다) · 창 빛 · 덮개. TV 방에서도 그 상태로 남는다.
+static func _tape_deck(hn: Node, t: float) -> void:
+	var dm: Dictionary = hn.get_meta("deck_m")
+	var ck: float = TAPE.clunk
+	var lc: Array = TAPE.led
+	var c: Color = lc[0] if t < ck else lc[1]
+	var on: float = 0.0 if (t >= ck and t < ck + float(TAPE.led_gap)) else 1.0
+	var led := dm.led_deck as StandardMaterial3D
+	led.albedo_color = c.darkened(0.85).lerp(c, on)
+	led.emission = c
+	led.emission_energy_multiplier = 1.8 * on
+	var dk: float = float(TAPE.vfd_dim) if (t < ck and fmod(t * float(TAPE.vfd_hz), 1.0) >= 0.5) else 1.0
+	_vfd(dm.vfd, dk)
+	_vfd(dm.vfd_on, 1.0 if t >= ck + float(TAPE.play) else float(TAPE.vfd_dim))
+	if hn.has_meta("vfd_l"):
+		(hn.get_meta("vfd_l") as OmniLight3D).light_energy = float(TAPE.vfd_l[0]) * (0.55 + 0.45 * dk)
+	var fl: Dictionary = hn.get_meta("flap")
+	if not fl.is_empty():
+		(fl.n as Node3D).transform = (fl.xf as Transform3D) * Transform3D(Basis(Vector3.RIGHT, deg_to_rad(_flap_deg(t))),
+				Vector3.ZERO)
+
+
+static func _vfd(m: StandardMaterial3D, k: float) -> void:
+	m.albedo_color = (TAPE.vfd as Color) * k
+	m.emission_energy_multiplier = float(TAPE.vfd_e) * k
+
+
+#  앞 토막 한 틀 — 데크 빛 · 덮개는 늘 · 카세트 · 손 · 빛 한 줄기는 있는 동안만. 다 쓰면 걷는다 — 손 · 카세트는 눈이
+#  오르기 전에(넓어지는 그림에 빠진 손이 다시 들어온다) · 빛 한 줄기는 다 오른 뒤에.
+static func _tape_tick(hn: Node, t: float) -> void:
+	if not hn.has_meta("deck"):
+		return
+	_tape_deck(hn, t)
+	var cr: Array = TAPE.crane
+	if hn.has_meta("key"):
+		var key := hn.get_meta("key") as SpotLight3D
+		if t >= TAPE_LEN:
+			key.queue_free()
+			hn.remove_meta("key")
+		else:
+			key.light_energy = float(TAPE.key[0]) * (0.85 + 0.15 * sin(t * 29.0)) \
+					* (1.0 - smoothstep(float(cr[0]), float(cr[1]), t))
+	if not hn.has_meta("tape"):
+		return
+	var tp: Dictionary = hn.get_meta("tape")
+	if t >= float(cr[0]):
+		(tp.n as Node).queue_free()
+		(tp.arm as Node).queue_free()
+		hn.remove_meta("tape")
+		return
+	(tp.n as Node3D).transform = _tape_at(t)
+	var g: Node = tp.game
+	var hj: Dictionary = tp.hj
+	var lt: Array = TAPE.let
+	var lv: Array = TAPE.leave
+	#  손은 놓을 때까지 카세트를 따른다(끌려드는 한 박 포함) · 그 뒤 손목부터 오른쪽 · 앞으로 빠진다(가속)
+	var hx: Transform3D = _tape_at(minf(t, float(lt[0]))) * _tape_grip(g)
+	var ku: float = clampf((t - float(lv[0])) / (float(lv[1]) - float(lv[0])), 0.0, 1.0)
+	hx.origin += (TAPE.out as Vector3) * ku * ku + (TAPE.lift as Vector3) * smoothstep(float(lt[0]), float(lt[1]), t)
+	hx.basis = Basis(Vector3.UP, deg_to_rad(-25.0) * ku * ku) * hx.basis
+	var s: float = TAPE.s
+	(hj.root as Node3D).transform = Transform3D(hx.basis, hx.origin / s)
+	#  팔뚝 — 손목에서 손등 축 뒤로 fore 만큼(팔꿈치는 화면 밖). 너비 축은 손 폭(엄지 쪽)을 따른다.
+	var wr: Vector3 = hx.origin / s + hx.basis.y * 0.5
+	var el: Vector3 = wr - hx.basis.x * float(TAPE.fore)
+	var ax: Vector3 = el - (wr - el).normalized() * float(g.HAND3.back)
+	(tp.fo.root as Node3D).transform = g._aim3(ax, wr, 1.0, 0.0, hx.basis.y)
+	g._fore3_fit(tp.fo, (wr - ax).length(), 1.0)
+	_tape_pose(g, hj, smoothstep(float(lt[0]), float(lt[1]), t))
+
+
+#  앞 토막의 눈 — 데크 앞 낮고 가까이(TAPE.cam · fov · focus) → crane 동안 TV 더미 첫 그림(cam_start)으로 오른다.
+#  자리 · 보는 데 · 화각 · 초점을 같은 몫(smootherstep)으로 옮긴다 — 끊지 않는다.
+static func _tape_cam(hn: Node, cam: Camera3D, t: float) -> void:
+	var dk := hn.get_meta("deck") as Node3D
+	var cs: Dictionary = hn.get_meta("start")
+	var cr: Array = TAPE.crane
+	var u: float = clampf((t - float(cr[0])) / (float(cr[1]) - float(cr[0])), 0.0, 1.0)
+	var e: float = u * u * u * (u * (u * 6.0 - 15.0) + 10.0)
+	cam.fov = lerpf(float(TAPE.fov), float(CAM.fov), e)
+	cam.look_at_from_position((dk.transform * (TAPE.cam as Vector3)).lerp(cs.at, e),
+			(dk.transform * (TAPE.look as Vector3)).lerp(cs.look, e))
+	var fp: Vector3 = (dk.transform * (TAPE.focus as Vector3)).lerp(hn.get_meta("focus"), e)
+	(cam.attributes as CameraAttributesPractical).dof_blur_far_distance = cam.global_position.distance_to(fp) \
+			+ float(FOCUS.dof_at)
+
+
+#  소리 때 전부(이름 → 초) — TV 가 켜지는 때(ON) · 창밖 비(rain — 제 자리에서 돈다) · 앞 토막의 넷(이름이 곧
+#  sfx 이름 — 달그락은 들어올 때 · 톡과 미끄러짐은 덮개에 닿을 때 · 위잉은 기계가 받을 때 · 딱 · 철컥은 덮개가
+#  닫히는 때 — 철컥은 그 28ms 뒤 TAPE.clunk 에 선다). game.gd _plg_tick 이 한 번씩 낸다.
+static var _cues := {}
+
+
+static func cues() -> Dictionary:
+	if _cues.is_empty():
+		_cues = ON.duplicate()
+		_cues["rain"] = 0.0
+		_cues["tape_rattle"] = float(TAPE.enter[0]) + 0.08
+		_cues["tape_in"] = float(TAPE.push[0]) + 0.03
+		_cues["deck_whir"] = float(TAPE.pull[0])
+		_cues["deck_clunk"] = float(TAPE.clunk) - float(TAPE.lead)
+	return _cues
 
 
 #  층이 걷히기 시작하는 때 — 게임 필터가 이때 켜진다(game.gd _plg_cover).

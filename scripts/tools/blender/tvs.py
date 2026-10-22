@@ -15,13 +15,15 @@
 #   TvBox      작은 쇠 상자 — 화면 · 오른쪽 작은 다이얼 셋
 #   Speaker    짙은 통 · 검은 앞판 · 우퍼 둘 · 트위터
 #   TvHero     주인공(게임 TV) — 쇳빛 장 · 꺾여 드는 화면 틀 · 손잡이 다이얼 둘 · 슬라이더 · RGB 등
-#   Deck       주인공 밑 비디오 데크
+#   Deck       주인공 밑 비디오 데크(카세트 구멍 · 검은 굴 · VFD · 표시등) · DeckFlap 그 덮개(따로 · 윗변 경첩)
+#   Tape       VHS 카세트(따로 · 손이 데크에 넣는다 — prologue3d.gd TAPE)
 # 화면 귀는 초타원 지수 n 으로 — 클수록 네모(주인공 6 · 나머지 5 언저리). 3.8 은 「tv의 테두리가 너무 둥글지
 # 않아?」였다(2026-10-18 · 사용자가 준 젠레스 존 제로 런처 TV 는 귀만 둥근 네모).
 # 화면 UV 는 화면 칸 그대로(0..1) — 게임이 그 위에 꺼짐 · 지지직 · 크레딧을 붙인다.
 # 좌표는 게임 그대로(m · x 오른쪽 · y 위 · z 앞 — 화면이 +z) · 원점은 바닥 한가운데 · 앞면이 z 0.
 # Blender 로는 (x, −z, y). 재질은 이름만 — 게임(prologue3d.gd)이 이름으로 안 재질을 끼운다:
-#   wood · plastic · metal · panel · bezel · glass · knob · grille · trim · gun · cap · led_r/g/b · lcd
+#   wood · plastic · metal · panel · bezel · glass · knob · grille · trim · gun · cap · led_r/g/b · lcd ·
+#   vfd · vfd_on · led_deck · flap(데크) · shell · win · hub · pack · label · ink(카세트)
 import bpy
 import bmesh
 import math
@@ -68,6 +70,16 @@ LEDR = mat("led_r", (0.9, 0.1, 0.1))
 LEDG = mat("led_g", (0.1, 0.8, 0.2))
 LEDB = mat("led_b", (0.1, 0.3, 0.9))
 LCD = mat("lcd", (0.03, 0.05, 0.05))
+VFD = mat("vfd", (0.2, 0.95, 0.76))
+VFDON = mat("vfd_on", (0.2, 0.95, 0.76))
+LEDD = mat("led_deck", (0.9, 0.1, 0.1))
+FLAP = mat("flap", (0.06, 0.06, 0.07), 0.0, 0.3)
+SHELL = mat("shell", (0.08, 0.08, 0.08), 0.0, 0.4)
+WIN = mat("win", (0.16, 0.16, 0.18), 0.0, 0.1)
+HUB = mat("hub", (0.85, 0.83, 0.80))
+PACK = mat("pack", (0.23, 0.15, 0.09), 0.0, 0.3)
+LABEL = mat("label", (0.90, 0.86, 0.77))
+INK = mat("ink", (0.17, 0.18, 0.35))
 
 CUR = []
 
@@ -444,16 +456,42 @@ kb.rotation_euler = (0.0, math.radians(45.0), 0.0)
 box("slider", (0.026, 0.03, 0.02), (0.0, 0.0, 0.0), CAPM, 0.004, 2)
 finish("HeroSlider").location = G(PXC - 0.005, 0.205, 0.012)
 
-# ══ 데크 — 주인공 밑 비디오 데크(전원 단추 · 테이프 문 · 긴 단추 줄 · 재생 단추 · 숨구멍) ═══════════
+# ══ 데크 — 주인공 밑 비디오 데크 ═══════════════════════════════════
+#  「비디오테이프를 넣는 손」(2026-10-22 · 프롤로그 앞 토막 — prologue3d.gd TAPE). 앞판 왼쪽~가운데에 카세트 구멍
+#  (VHS 187 × 25mm 에 좌우 · 위아래 여유를 둔 196 × 32) · 그 안 검은 굴(카세트가 어둠으로 든다 · 몸통은 굴 뒤에서
+#  시작한다) · 구멍 둘레 한 단 솟은 테 · 윗변 경첩의 덮개(DeckFlap — 따로 낸다 · 안쪽으로만 젖혀진다 · US5917675) ·
+#  구멍 왼쪽에 VFD 창(청록 대시 · 재생 세모 — 글자는 없다) · 그 밑 표시등(led_deck — 빨강 대기 → 초록) — 손이
+#  오른쪽에서 들어오므로 둘은 왼쪽에 둔다(손에 안 가린다 · 전원 단추는 오른쪽으로). 밑단에 은빛 띠 한 줄 — 검은
+#  앞판이 구석 TV 빛에 윤곽만 그린다.
 W, H, D = 0.98, 0.14, 0.46
-shell(W, H, 0.0, D, GUN, 0.008, 2, 0.014, 0.03)
-box("face", (W - 0.024, H - 0.024, 0.012), (0.0, H * 0.5, -0.006), GUN)
+SLX, SLY, SLW, SLH = -0.08, 0.084, 0.196, 0.032
+LD = 0.046                                   # 굴 깊이
+shell(W, H, 0.0, D, GUN, 0.008, 2, 0.014, 0.06)
+front_plate("face", -W * 0.5 + 0.012, W * 0.5 - 0.012, 0.012, H - 0.012, SLX, SLY, SLW * 0.5, SLH * 0.5, GUN, 14.0)
+for (sx, sy, cx, cy) in ((SLW + 0.004, 0.002, SLX, SLY + SLH * 0.5 + 0.001), (SLW + 0.004, 0.002, SLX, SLY - SLH * 0.5 - 0.001),
+                         (0.002, SLH, SLX - SLW * 0.5 - 0.001, SLY), (0.002, SLH, SLX + SLW * 0.5 + 0.001, SLY)):
+    box("liner", (sx, sy, LD), (cx, cy, -LD * 0.5), BEZEL)
+box("liner", (SLW, SLH, 0.002), (SLX, SLY, -LD), BEZEL)
+for (sx, sy, cx, cy) in ((SLW + 0.012, 0.004, SLX, SLY + SLH * 0.5 + 0.002), (SLW + 0.012, 0.004, SLX, SLY - SLH * 0.5 - 0.002),
+                         (0.004, SLH + 0.008, SLX - SLW * 0.5 - 0.002, SLY), (0.004, SLH + 0.008, SLX + SLW * 0.5 + 0.002, SLY)):
+    box("rim", (sx, sy, 0.003), (cx, cy, 0.0015), PANEL, 0.0008, 1)
 box("seam", (W - 0.05, 0.003, 0.004), (0.0, H - 0.032, 0.001), BEZEL)
-box("pwr", (0.056, 0.044, 0.014), (-0.40, 0.078, 0.004), PANEL, 0.005, 2)
-lathe_z("pwr_led", [(0.0, 0.004), (0.009, 0.004), (0.011, 0.0)], (-0.40, 0.078, 0.011), LEDG, 12)
-dial(-0.40, 0.03, 0.012, KNOB, 0.012)
-box("door", (0.44, 0.058, 0.006), (-0.02, 0.08, 0.001), BEZEL, 0.002, 2)
-box("lcd", (0.40, 0.034, 0.004), (-0.02, 0.08, 0.004), LCD)
+box("band", (W - 0.05, 0.003, 0.004), (0.0, 0.016, 0.001), TRIM)
+box("pwr", (0.056, 0.044, 0.014), (0.20, 0.078, 0.004), PANEL, 0.005, 2)
+#  VFD — 어두운 연기 창 · 대시 넷과 쌍점(--:--) · 재생 세모. 게임이 vfd · vfd_on 을 제 빛으로 켠다.
+VX, VY = -0.27, 0.085
+box("lcd", (0.15, 0.034, 0.004), (VX, VY, 0.002), LCD)
+for dx in (-0.048, -0.028, 0.002, 0.022):
+    box("dash", (0.013, 0.003, 0.0015), (VX + dx, VY + 0.002, 0.0045), VFD)
+for dy in (-0.003, 0.007):
+    box("colon", (0.0026, 0.0026, 0.0015), (VX - 0.013, VY + dy, 0.0045), VFD)
+bm = bmesh.new()
+tri = [bm.verts.new(G(VX + 0.044, VY - 0.005, 0.0045)), bm.verts.new(G(VX + 0.044, VY + 0.009, 0.0045)),
+       bm.verts.new(G(VX + 0.056, VY + 0.002, 0.0045))]
+bm.faces.new(tri)
+face_front(bm)
+from_bm("play_icon", bm, VFDON, smooth=False)
+lathe_z("led", [(0.0, 0.004), (0.0032, 0.004), (0.0042, 0.0)], (VX + 0.062, VY - 0.032, 0.0), LEDD, 12)
 for k in range(4):
     box("key", (0.095, 0.012, 0.006), (-0.17 + k * 0.105, 0.03, 0.002), PANEL, 0.002, 2)
 box("play", (0.066, 0.052, 0.014), (0.29, 0.078, 0.004), PANEL, 0.005, 2)
@@ -461,6 +499,54 @@ slats(0.355, 0.455, 0.06, 0.104, 5, GUN, 0.004)
 for k in range(3):
     box("btn", (0.03, 0.012, 0.006), (0.37 + k * 0.035, 0.03, 0.002), PANEL, 0.002, 2)
 finish("Deck")
+#  덮개 — 윗변이 경첩(원점) · 밑으로 드리운다 · 앞판보다 2.5mm 물러 앉는다. 게임이 제 x 축으로 안쪽(−z)에 젖힌다.
+box("flap", (SLW - 0.006, SLH - 0.004, 0.003), (0.0, -(SLH - 0.004) * 0.5, 0.0), FLAP, 0.0008, 1)
+box("flap_rib", (SLW * 0.72, 0.0016, 0.0014), (0.0, -0.008, 0.0018), FLAP)
+finish("DeckFlap").location = G(SLX, SLY + SLH * 0.5 - 0.002, -0.004)
+
+# ══ 비디오테이프 — VHS 카세트 한 개(TAPE · 손이 데크에 넣는다) ════════════════════════
+#  실측(Wikipedia 「VHS」) 187 × 25 × 103mm · 원점은 한가운데 · 등(라벨 띠)이 +z(손 · 카메라 쪽) · 덮개 변이 −z(먼저
+#  든다 — Gough Lui) · 창이 위. 윗면은 릴 창 둘(한 단 솟은 테 · 연기빛 유리 · 창 너머 흰 허브와 감긴 갈색 테이프 —
+#  왼쪽 공급 릴이 가득 · 오른쪽 감기 릴이 비었다)과 그 사이 낮은 판(US5054616). 등에는 크림 라벨 — 볼펜 낙서 획만,
+#  글자는 없다(Ringu · Lost Highway 의 표시 없는 테이프) · 왼쪽 아래 귀에 부러진 기록 방지 탭 홈(넣기만 하면 저절로
+#  재생된다 — JVC HR-P500K 설명서) · 양 끝 미끄럼 골.
+TW, TH, TD = 0.187, 0.025, 0.103
+
+
+def disc(name, r, h, at, m, seg=20):
+    bm = bmesh.new()
+    bmesh.ops.create_cone(bm, cap_ends=True, segments=seg, radius1=r, radius2=r, depth=h)
+    bmesh.ops.translate(bm, vec=G(*at), verts=bm.verts)
+    return from_bm(name, bm, m, smooth=False)
+
+
+def stroke(pts, z, m, w=0.0009):
+    """볼펜 한 획 — 점을 잇는 가는 막대들(등 라벨 위 · z 앞면)."""
+    for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
+        L = math.hypot(x1 - x0, y1 - y0)
+        ob = box("ink", (L + w, w, 0.0004), (0.0, 0.0, 0.0), m)
+        turned(ob, (x0 + x1) * 0.5, (y0 + y1) * 0.5, z, -math.degrees(math.atan2(y1 - y0, x1 - x0)))   # Blender Y 축은 게임 −z
+
+
+box("shell", (TW, TH, TD), (0.0, 0.0, 0.0), SHELL, 0.0015, 2)
+for sx, pack in ((-1.0, 0.024), (1.0, 0.014)):
+    cx = sx * 0.047
+    for (rx, rz, ox, oz) in ((0.066, 0.003, 0.0, -0.026), (0.066, 0.003, 0.0, 0.020), (0.003, 0.046, -0.0315, -0.003),
+                             (0.003, 0.046, 0.0315, -0.003)):
+        box("wrim", (rx, 0.0016, rz), (cx + ox, TH * 0.5 + 0.0008, oz), SHELL)
+    disc("pack", pack, 0.0006, (cx, TH * 0.5 + 0.0003, -0.003), PACK, 28)
+    disc("hub", 0.0105, 0.0009, (cx, TH * 0.5 + 0.00045, -0.003), HUB, 18)
+    disc("hubhole", 0.0035, 0.0011, (cx, TH * 0.5 + 0.0005, -0.003), BEZEL, 10)
+    box("win", (0.060, 0.0006, 0.043), (cx, TH * 0.5 + 0.0017, -0.003), WIN)
+box("label", (0.150, 0.018, 0.0006), (0.0, 0.0, TD * 0.5 + 0.0003), LABEL)
+stroke([(-0.058, 0.001), (-0.050, 0.004), (-0.041, -0.001), (-0.030, 0.003), (-0.018, -0.002), (-0.006, 0.002),
+        (0.004, -0.001)], TD * 0.5 + 0.0008, INK)
+stroke([(-0.054, -0.0055), (-0.022, -0.0048)], TD * 0.5 + 0.0008, INK)
+box("tab", (0.010, 0.0055, 0.0008), (-TW * 0.5 + 0.013, -TH * 0.5 + 0.0042, TD * 0.5 + 0.0004), BEZEL)
+for sx in (-1.0, 1.0):
+    for k in range(3):
+        box("grip", (0.0012, TH * 0.56, 0.0010), (sx * (TW * 0.5 - 0.0045 - k * 0.0028), 0.0, TD * 0.5 + 0.0005), SHELL)
+finish("Tape")
 
 # ── 내보낸다 ────────────────────────────────────────────────────
 obs = [o for o in bpy.context.collection.objects if o.get("done") is not None]

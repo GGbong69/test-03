@@ -1565,13 +1565,19 @@ func _fsel_ui_draw(c: CanvasItem) -> void:
 #  (_plg_cover). 누름은 인트로와 같은 두 걸음(lock 앞은 안 먹는다 · 첫 누름 빨리 감기 — 인트로도 같이 ·
 #  둘째 누름 곧장 끝 — 주인공이 아직 안 켜졌으면 브라운관을 켜고 인트로를 처음부터).
 #  모션 끄기 · 검사 도구 · 화면 없는 실행 · 화판 없는 실행에서는 안 튼다.
-#    lock · ff  인트로와 같다
+#  앞에 「비디오테이프를 넣는 손」이 붙었다(2026-10-22 · Plg TAPE). 소리 때는 Plg.cues() 한 표다 — TV 지지직 · 켜짐 ·
+#  창밖 비(plg_rain 제 자리 순환 · Rain 버스 로패스로 먹먹하게 · 처음 rain_in 초에 차오르고 TV 속으로 드는 동안
+#  잦아들어 handoff 에 선다) · 카세트 · 데크 넷(이름이 곧 sfx — 프롤로그 제 자리 plg_aud 에서 난다. 끊으면 같이
+#  걷는다 — 3.6 초 위잉이 인트로에 새지 않게).
+#    lock · ff  인트로와 같다 · rain_db 비 크기 · rain_lp 창 너머 컷오프(Hz)
 const Plg = preload("res://scripts/prologue3d.gd")
-const PLGP := {"lock": 0.65, "ff": 2.5}
+const PLGP := {"lock": 0.65, "ff": 2.5, "rain_in": 1.0, "rain_db": 4.0, "rain_lp": 700.0}
 var plg_vp: Node = null      # Plg.make 가 낸 묶음(무대 · 층 — 화판 밖)
 var plg_t := -1.0            # 흐른 시간(초) — 안 돌면 −1
 var plg_ff := false
 var plg_rang := {}
+var plg_rain: AudioStreamPlayer = null
+var plg_aud := []            # 앞 토막 소리 자리(카세트 · 데크) — _plg_close 가 걷는다
 
 
 func _plg_live() -> bool:
@@ -1592,6 +1598,23 @@ func _plg_begin() -> void:
 	plg_t = 0.0
 	plg_ff = false
 	plg_rang.clear()
+	#  빗소리 · 테이프 소리는 고요 위에 선다 — 제목에서 다시 튼 프롤로그(개발자 판)도 로비 곡을 내보낸다(INTRO 가
+	#  바라는 "" 는 곡 이름이 아니라 _mus_head_to 가 안 받아서, 곡이 프롤로그 밑에 계속 깔렸다 · 녹화)
+	if mus_key != "":
+		mus_next = ""
+		mus_ph = MP.OUT
+	#  창밖 비 — 순환 wav 를 제 자리에(자리 넷을 돌면 다섯째 소리가 끊는다). 사본이다 — 표 소리(_sfx · 개발자 판)가
+	#  원본을 틀면 끝없이 돌았다(골목 검토).
+	var rs := _sfx_file("rain") as AudioStreamWAV
+	if rs != null and AudioServer.get_bus_index("Rain") >= 0:
+		rs = rs.duplicate() as AudioStreamWAV
+		rs.loop_mode = AudioStreamWAV.LOOP_FORWARD
+		rs.loop_begin = 0
+		rs.loop_end = int(rs.get_length() * float(rs.mix_rate))
+		plg_rain = AudioStreamPlayer.new()
+		plg_rain.bus = "Rain"
+		plg_rain.stream = rs
+		add_child(plg_rain)
 	_crt_apply()
 	queue_redraw()
 
@@ -1600,22 +1623,56 @@ func _plg_close() -> void:
 	if plg_vp != null and is_instance_valid(plg_vp):
 		plg_vp.queue_free()
 	plg_vp = null
+	if plg_rain != null and is_instance_valid(plg_rain):
+		plg_rain.queue_free()
+	plg_rain = null
+	for pl in plg_aud:
+		if is_instance_valid(pl):
+			(pl as Node).queue_free()
+	plg_aud.clear()
+
+
+#  앞 토막 소리 하나 — 제 자리에서(끊을 때 같이 걷힌다). 파일이 없으면 표 소리(합성음)로.
+func _plg_snd(nm: String) -> void:
+	var st := _sfx_file(nm)
+	if st == null:
+		_sfx(nm)
+		return
+	var pl := AudioStreamPlayer.new()
+	pl.bus = "SFX"
+	pl.stream = st
+	add_child(pl)
+	pl.play()
+	plg_aud.append(pl)
 
 
 func _plg_tick(d: float) -> void:
 	plg_t += d * (float(PLGP.ff) if plg_ff else 1.0)
 	if plg_vp != null and is_instance_valid(plg_vp):
 		Plg.tick(plg_vp, plg_t)
-	#  TV 가 켜질 때마다 지지직 · 주인공은 켜지는 소리
-	for job in Plg.ON.keys():
-		if plg_t >= float(Plg.ON[job]) and not plg_rang.has(job):
+	#  때마다 한 번 — TV 지지직 · 주인공 켜짐 · 창밖 비 · 카세트 · 데크(Plg.cues — 나머지 이름은 곧 sfx 이름)
+	var cues: Dictionary = Plg.cues()
+	for job in cues:
+		if plg_t >= float(cues[job]) and not plg_rang.has(job):
 			plg_rang[job] = true
-			if job == "hero":
-				_sfx("tv_on")
-			else:
-				_sfx("tv_static", SFX_BASE * 0.45)
+			match String(job):
+				"hero":
+					_sfx("tv_on")
+				"tvs", "maker":
+					_sfx("tv_static", SFX_BASE * 0.45)
+				"rain":
+					if plg_rain != null:
+						plg_rain.play()
+				_:
+					_plg_snd(String(job))
+	if plg_rain != null and plg_rain.playing:
+		var rk: float = clampf(plg_t / float(PLGP.rain_in), 0.05, 1.0) \
+				* (1.0 - clampf((plg_t - float(Plg.T.push0)) / (Plg.handoff() - float(Plg.T.push0)), 0.0, 0.95))
+		plg_rain.volume_db = float(PLGP.rain_db) + linear_to_db(rk)
 	if plg_t >= Plg.handoff() and not plg_rang.has("handoff"):
 		plg_rang["handoff"] = true
+		if plg_rain != null:
+			plg_rain.stop()
 		_crt_apply()
 	if plg_t >= Plg.length():
 		_plg_end()
@@ -7599,6 +7656,14 @@ const SFX := {
 	#  가는 고음, 끌 때 퐁 하고 고음이 내려앉는다. 판 밖 연출이라 지지직과 같은 자리다.
 	"tv_on":          {"f": 147.0, "d": 0.12, "a": 0.08},
 	"tv_off":         {"f": 147.0, "d": 0.10, "a": 0.07},
+	#  프롤로그 앞 토막(2026-10-22 · Plg TAPE — 비디오테이프를 넣는 손) — 창밖 비(순환 · plg_rain 제 자리 · Rain
+	#  버스 로패스로 먹먹하게) · 들고 오는 카세트의 달그락(속 릴) · 덮개에 닿는 톡과 미끄러져 드는 마찰 · 로딩 모터
+	#  웅에서 드럼이 30Hz 로 오르는 위잉 · 덮개가 닫히는 딱과 홀더가 내려앉는 철컥(이 토막에서 가장 크다).
+	"rain":           {"f": 110.0, "d": 0.30, "a": 0.05},
+	"tape_rattle":    {"f": 1800.0, "d": 0.03, "a": 0.08},
+	"tape_in":        {"f": 400.0, "d": 0.05, "a": 0.09},
+	"deck_whir":      {"f": 60.0, "d": 0.10, "a": 0.03},
+	"deck_clunk":     {"f": 110.0, "d": 0.10, "a": 0.22},
 	"drop_skip":      {"f": 330.0, "d": 0.05, "a": 0.10},
 	"chute_enter":    {"f": 523.0, "d": 0.04, "a": 0.10},
 
@@ -58706,6 +58771,15 @@ func _bus_setup() -> void:
 		AudioServer.add_bus(i)
 		AudioServer.set_bus_name(i, nm)
 		AudioServer.set_bus_send(i, "Master")
+	#  창밖 비(프롤로그 · plg_rain) — SFX 밑에 제 버스 · 로패스 하나(창 너머로 먹먹하게 · PLGP.rain_lp)
+	if AudioServer.get_bus_index("Rain") < 0:
+		var ri := AudioServer.bus_count
+		AudioServer.add_bus(ri)
+		AudioServer.set_bus_name(ri, "Rain")
+		AudioServer.set_bus_send(ri, "SFX")
+		var lp := AudioEffectLowPassFilter.new()
+		lp.cutoff_hz = float(PLGP.rain_lp)
+		AudioServer.add_bus_effect(ri, lp)
 
 
 
