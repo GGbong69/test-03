@@ -46292,8 +46292,7 @@ const PANEL_LIP := 3.0
 #    우물    동전 슬롯의 빈 홈 — 어두운 바닥에 놋쇠 테(왼쪽 위가 밝다).
 #  면 밝기는 둘 다 C_PANEL 과 같은 L 0.015 — 잉크 대비표(qa_ui ④ · qa_tip)가 그대로 선다.
 #  보풀의 밝은 점(L 0.024)도 C_DIM 4.9 · C_MULT 4.7 · C_TXT 12.5 다.
-const FELT := {"face": Color("301b25"), "hi": Color("3a2430"), "lo": Color("24121a"),
-		"edge": Color("1f1017"), "per": 14.0}
+const FELT := {"face": Color("301b25"), "hi": Color("3a2430"), "lo": Color("24121a"), "per": 14.0}
 const ENAM := {"face": Color("112420"), "rim": Color("d9cfb4"), "line": Color("0a1612"),
 		"screw": Color("8e8a7a"), "lip": Color("0a1814")}
 const WELL := {"floor": Color("1c0e14"), "brass": Color("7a4a22"), "brass_hi": Color("c88f49")}
@@ -46319,12 +46318,14 @@ func _felt_nap(c: CanvasItem, q: Rect2, a := 1.0) -> void:
 				Color(FELT.hi if _gl_rand(i * 3 + 3, sd) < 0.5 else FELT.lo, a))
 
 
-#  펠트 한 장 — 면 · 어두운 테 · 보풀(모서리 계단 안쪽만 — 계단 밖에 점이 서면 이가 빠진다).
+#  펠트 한 장 — 면 · 놋쇠 테 · 보풀(모서리 계단 안쪽만 — 계단 밖에 점이 서면 이가 빠진다).
+#  테는 홈과 같은 놋쇠다 — 같은 색상의 어두운 테(1f1017)는 필터를 켜면 묻혀 쟁반이 테 없는 면으로
+#  읽혔다(「쟁반에 테가 없다」 2026-10-22).
 func _felt(c: CanvasItem, r: Rect2, a := 1.0, rad := -1) -> void:
 	r = _pr(r)
 	var k := _rad(r, rad)
 	_rr(c, r, Color(FELT.face, a), k)
-	_rr_line(c, r, Color(FELT.edge, a), k)
+	_rr_line(c, r, Color(WELL.brass, a), k)
 	_felt_nap(c, r.grow(-maxf(float(k), 1.0)), a)
 
 
