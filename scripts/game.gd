@@ -20573,12 +20573,15 @@ func _draw_topbar() -> void:
 	#  2026-10-04). 벽이 HUD 그늘(_wall3_shade)을 진 채 창 위끝까지 간다. 판 갈이 동안은
 	#  상점 방과 같이(_wall3_room_k) 건너간다.
 	var ua: float = _wall3_room_k() if _wall3_live() and _wall3_here() else 1.0
-	draw_rect(_wide(r.position.y, r.size.y), C_PANEL)
+	#  띠는 펠트다(FELT) — 테 없이 면과 보풀만. 밑줄 한 획이 벽과 가른다.
+	var band := _wide(r.position.y, r.size.y)
+	draw_rect(band, FELT.face)
+	_felt_nap(self, band)
 	#  띠 위로 남은 여백(위끝을 UIW 까지만 따라간 화면) — 띠가 위끝에 붙으면 0 이다.
 	var above: float = r.position.y + view_pad.y
 	if ua > 0.0 and above > 0.0:
 		draw_rect(Rect2(-view_pad.x, -view_pad.y, VIEW.x + view_pad.x * 2.0, above),
-				Color(C_PANEL, ua))
+				Color(FELT.face, ua))
 	draw_rect(_wide(r.position.y + r.size.y - 1.0, 1.0), C_BG)
 	#  아래 칸 · 글자는 띠의 자리(위끝)로 한 번에 옮겨 그린다 — y 는 띠 안의 값 그대로다.
 	draw_set_transform(shake_off + Vector2(0.0, _bar_y()))
@@ -20872,7 +20875,7 @@ func _darts_draw() -> void:
 	var r: Rect2 = LAY.darts
 	r.position.y += _hud_dy()
 	r.position.x += _ui_pad().x          # 오른끝을 따라간다
-	_panel(r)
+	_panel(r, true)                      # 에나멜 명판 — 수 잉크(~37.5)는 턱(41~) 위다
 	#  동전 꼬리표(_cap_draw)와 같은 꼴 — 이름 위 · 수 아래, 둘 다 가운데.
 	#  둘이 나란히 서므로 한 벌로 읽혀야 한다. 크기도 같이 간다(_tag_num_sz).
 	draw_string(_fz(font, 12), r.position + Vector2(0.0, float(TAGBOX.name_y)), _L("다트"),
@@ -20921,7 +20924,7 @@ func _cap_draw() -> void:
 	var r: Rect2 = LAY.cap
 	r.position.y += _hud_dy()
 	r.position.x += _ui_pad().x          # 오른끝을 따라간다
-	_panel(r)
+	_panel(r, true)                      # 다트 꼬리표와 같은 에나멜 명판
 	draw_string(_fz(font, 12), r.position + Vector2(0.0, float(TAGBOX.name_y)), _L("동전"),
 			HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 12, C_OFF)
 	var t := "%d/%d" % [owned.size(), GameData.max_items()]
@@ -22607,13 +22610,16 @@ func _panel_tilt(i: int) -> float:
 	return sin(float(i) * 2.399963) * 0.5
 
 
-#  빈 동전 칸. 판에 판 홈이다 — 물건이 아니라 자리다.
+#  빈 동전 칸. 펠트 쟁반에 판 우물이다 — 어두운 바닥에 놋쇠 테(빛은 왼쪽 위). 동전 밑에도 깔린다 —
+#  발동에 튀어오르면 우물이 드러난다.
 func _slot_ghost(i: int) -> void:
 	var c := _slot_rect(i).get_center() + Vector2(0.0, PANEL.chip_dy)
 	var r: float = PANEL.r - 2.0
-	draw_circle(c, r, C_PANEL.darkened(0.45))
+	draw_circle(c, r, WELL.floor)
 	#  윗변 한 획 — 파인 것으로 읽히려면 위쪽이 더 어두워야 한다.
 	draw_arc(c, r - 0.5, PI, TAU, 14, C_BG, 1.0)
+	draw_arc(c, r + 0.5, 0.0, TAU, 24, WELL.brass, 1.0)
+	draw_arc(c, r + 0.5, PI * 0.85, PI * 1.65, 10, WELL.brass_hi, 1.0)
 
 
 func _panel_slot(i: int) -> void:
@@ -22636,6 +22642,9 @@ func _panel_slot(i: int) -> void:
 	var wg := _wig(key, hv)          # 얹힘 — 커졌다 앉고 기울다 선다(HOVW)
 	var r: float = PANEL.r * (1.0 + bounce * PANEL.swell) * wg.x
 
+	#  우물 위에 앉은 동전 — 쉬는 그림자 한 장이 우물 테 오른쪽 아래를 덮어 「놓였다」가 읽힌다.
+	_slot_ghost(i)
+	draw_circle(c + Vector2(1.0, 2.0), r, Color(0.0, 0.0, 0.0, 0.25))
 	if up > 0.01:
 		draw_circle(c + Vector2(1.5, 3.0 + up * PANEL.lift), r,
 				Color(0.0, 0.0, 0.0, up * PANEL.shadow))
@@ -45003,34 +45012,32 @@ func _tip_draw(sh: Vector2) -> void:
 	#  판 면은 한 색이다. 여기만 lightened(0.06) 이라 그 위의 배수 붉음이
 	#  3.7:1 까지 떨어져 있었다 — 판이 밝아진 만큼 글자 대비가 깎였다.
 	draw_rect(Rect2(p + Vector2(2.0, 3.0), sz), Color(0.0, 0.0, 0.0, tip_a * 0.4))
-	_panel(Rect2(p, sz), true, tip_a)
 	#  ── 등급이 판에도 남는다 (2026-09-18) ──────────────
-	#  **_panel 은 안 건드린다** — 공용이라 정산 카드·런 정보까지 물든다.
-	#  그 **뒤에** 세 겹을 얹는다: 면 · 밑턱 · 테두리.
+	#  에나멜 명판(_panel focus 와 같은 그림)에 면 · 밑턱 · 테두리 세 겹으로 등급을 얹는다.
 	#  **_tip_size·_tip_pos 는 한 자도 안 고친다.** 글은 pad 7 안쪽이라 2px
 	#  테 뒤에도 5px 이 남는다 — 재는 쪽과 그리는 쪽이 갈리면 글이 판 밖으로
 	#  샌다는 주석 셋의 계약을 아예 안 건드린다.
-	#  **일반은 건너뛴다** — 섞어도 맨 판과 1.13:1 이라 안 보이고, 51장의
-	#  툴팁을 한 픽셀도 안 건드리는 편이 낫다.
+	#  **일반은 안 섞는다** — 섞어도 맨 판과 1.13:1 이라 안 보인다.
+	var whole := Rect2(p, sz)
+	var bd := Rect2(p, sz - Vector2(0.0, PANEL_LIP))
+	var rad := _rad_for(whole)
+	var rc := Color()
+	var bi := 0
+	var face: Color = ENAM.face
 	if tip_rar != "" and tip_rar != "common":
-		var rc := GameData.rarity_color(tip_rar)
-		var bi: int = _stk_ti(tip_rar)
-		var whole := Rect2(p, sz)
-		var bd := Rect2(p, sz - Vector2(0.0, PANEL_LIP))
-		var rad := _rad_for(whole)
-		#  밑턱(PANEL_LIP 3px) — 레어·레전더리만. 글자가 안 앉는 자리라
-		#  (「글자는 턱 위 PANEL_LIP 만큼 비워 둔다」) **대비에 영향이 0** 이고,
-		#  264x3px 짜리 넓은 색면이라 판이 아래에서 한 번 더 말한다.
-		if bi >= 2:
-			_rr(self, whole, Color(rc.darkened(float(TIP_RANK.lip_dk)), tip_a), rad)
+		rc = GameData.rarity_color(tip_rar)
+		bi = _stk_ti(tip_rar)
 		#  면 — 등급색 쪽으로 0.08 만. 색상만 돌고 명도는 그대로라 판 위 잉크
-		#  일곱이 전부 4.5:1 위에 남는다(TIP_RANK 머리말의 그 계산).
-		#  _panel(focus) 의 차례를 그대로 되짚는다 — 면을 덮었으니 윗모서리
-		#  빛도 같이 다시 얹어야 판이 계속 떠 있다.
-		_rr(self, bd, Color(C_PANEL.lerp(rc, float(TIP_RANK.face_mix)), tip_a), rad)
-		_rr_top(self, bd, 1, Color(C_PANEL.lightened(0.18), tip_a), rad)
-		#  테두리 — 판 **몸 사각 안쪽**에 긋는다. .grow() 로 판 밖에 그으면
-		#  _rad 가 커진 사각에서 다른 계단을 골라 모서리에 이가 빠진다.
+		#  일곱이 전부 4.5:1 위에 남는다(TIP_RANK 머리말의 그 계산 — 면 L 이 C_PANEL 과 같다).
+		face = ENAM.face.lerp(rc, float(TIP_RANK.face_mix))
+	#  밑턱(PANEL_LIP 3px) — 레어·레전더리만 등급색. 글자가 안 앉는 자리라
+	#  (「글자는 턱 위 PANEL_LIP 만큼 비워 둔다」) **대비에 영향이 0** 이고,
+	#  264x3px 짜리 넓은 색면이라 판이 아래에서 한 번 더 말한다.
+	_rr(self, whole, Color(rc.darkened(float(TIP_RANK.lip_dk)) if bi >= 2 else ENAM.lip, tip_a), rad)
+	_enamel(self, bd, tip_a, face, 1.0, rad)
+	if bi > 0:
+		#  테두리 — 판 **몸 사각 안쪽**에 긋는다(크림 테 자리를 등급색이 받는다). .grow() 로 판
+		#  밖에 그으면 _rad 가 커진 사각에서 다른 계단을 골라 모서리에 이가 빠진다.
 		#  같은 rad 를 넘겨 안쪽 줄이 바깥 줄의 계단을 그대로 따라 들어간다.
 		var bw: int = int((TIP_RANK.border as Array)[bi])
 		for q in bw:
@@ -46066,6 +46073,13 @@ func _ui_face(c: CanvasItem, key: String, r: Rect2, on: bool, a := 1.0) -> Rect2
 	var up: float = float(UIHOV.lift) if hot and not press else 0.0
 	var down: float = lip - 1.0 if press else 0.0
 	var body := Rect2(r.position + Vector2(0.0, down - up), r.size - Vector2(0.0, lip))
+	if role == "hud":
+		#  정보 · 일시정지 · 판매 — 에나멜 명판(ENAM). 얹히면 면이 한 단 밝고, 못 누르면 테가 흐리다.
+		_rr(c, Rect2(r.position + Vector2(0.0, lip - up), r.size - Vector2(0.0, lip - up)),
+				Color(ENAM.lip, a))
+		_enamel(c, body, a, ENAM.face.lightened(float(UIHOV.lit) * h) if on
+				else ENAM.face.darkened(0.35), 1.0 if on else 0.4)
+		return body
 	#  턱 — 몸보다 뒤, 몸이 뜬 만큼 위로 늘어 두꺼워진다
 	_rr(c, Rect2(r.position + Vector2(0.0, lip - up), r.size - Vector2(0.0, lip - up)),
 			Color(fill.darkened(0.5), a))
@@ -46269,16 +46283,67 @@ func _ui_hover_tick(d: float) -> void:
 #  턱은 r 안에 든다(판이 아래로 안 자란다). 글자는 턱 위 PANEL_LIP 만큼 비워 둔다.
 const PANEL_LIP := 3.0
 
+#  ── 펠트 · 에나멜 명판 (2026-10-22) ──────────────────────────
+#  남색 한 장(C_PANEL)이던 판을 재질 둘로 가른다 — 3D 판자 벽 · 펠트 테이블 곁에서 자리표시로 읽혔다.
+#    펠트    포도주색 모직 — 자금 · 사탕·사진 · 동전 슬롯 · 상단 띠(_panel 바탕). 같은 색상의 어두운 테 한 줄 ·
+#            씨 고정 보풀(밝은 점 · 어두운 점) — 틀마다 같은 자리라 안 떤다.
+#    에나멜  짙은 초록 철판 — 카드 · 툴팁 · 동전 · 다트 · 정보 · 일시정지 · 명판(_panel focus). 크림 테 한 줄 ·
+#            그 안 검은 줄 · 네 귀 나사 점 · 밑턱(PANEL_LIP).
+#    우물    동전 슬롯의 빈 홈 — 어두운 바닥에 놋쇠 테(왼쪽 위가 밝다).
+#  면 밝기는 둘 다 C_PANEL 과 같은 L 0.015 — 잉크 대비표(qa_ui ④ · qa_tip)가 그대로 선다.
+#  보풀의 밝은 점(L 0.024)도 C_DIM 4.9 · C_MULT 4.7 · C_TXT 12.5 다.
+const FELT := {"face": Color("301b25"), "hi": Color("3a2430"), "lo": Color("24121a"),
+		"edge": Color("1f1017"), "per": 14.0}
+const ENAM := {"face": Color("112420"), "rim": Color("d9cfb4"), "line": Color("0a1612"),
+		"screw": Color("8e8a7a"), "lip": Color("0a1814")}
+const WELL := {"floor": Color("1c0e14"), "brass": Color("7a4a22"), "brass_hi": Color("c88f49")}
+
 
 func _panel(r: Rect2, focus := false, a := 1.0) -> void:
 	if not focus:
-		_rr(self, r, Color(C_PANEL, a))
-		_rr_bottom(self, r, Color(C_BG, a))
+		_felt(self, r, a)
 		return
-	_rr(self, r, Color(C_PANEL.darkened(0.5), a))
-	var body := Rect2(r.position, r.size - Vector2(0.0, PANEL_LIP))
-	_rr(self, body, Color(C_PANEL, a))
-	_rr_top(self, body, 1, Color(C_PANEL.lightened(0.18), a))
+	_rr(self, r, Color(ENAM.lip, a))
+	_enamel(self, Rect2(r.position, r.size - Vector2(0.0, PANEL_LIP)), a)
+
+
+#  보풀 — q 안에 1px 점을 성기게 찍는다. 씨는 자리에서 나와 틀마다 같다.
+func _felt_nap(c: CanvasItem, q: Rect2, a := 1.0) -> void:
+	if q.size.x <= 0.0 or q.size.y <= 0.0:
+		return
+	var sd: int = int(q.position.x) * 7 + int(q.position.y) * 131 + 977
+	for i in int(q.size.x * q.size.y / float(FELT.per)):
+		var gx: float = q.position.x + _gl_rand(i * 3 + 1, sd) * q.size.x
+		var gy: float = q.position.y + _gl_rand(i * 3 + 2, sd) * q.size.y
+		c.draw_rect(Rect2(floorf(gx), floorf(gy), 1.0, 1.0),
+				Color(FELT.hi if _gl_rand(i * 3 + 3, sd) < 0.5 else FELT.lo, a))
+
+
+#  펠트 한 장 — 면 · 어두운 테 · 보풀(모서리 계단 안쪽만 — 계단 밖에 점이 서면 이가 빠진다).
+func _felt(c: CanvasItem, r: Rect2, a := 1.0, rad := -1) -> void:
+	r = _pr(r)
+	var k := _rad(r, rad)
+	_rr(c, r, Color(FELT.face, a), k)
+	_rr_line(c, r, Color(FELT.edge, a), k)
+	_felt_nap(c, r.grow(-maxf(float(k), 1.0)), a)
+
+
+#  에나멜 명판 — 면(face · 비면 ENAM.face) · 크림 테(rim_a) · 안쪽 검은 줄 · 30px 넘는 판은 네 귀 나사.
+#  안쪽 줄은 바깥 테와 같은 rad 로 — 제 크기로 고르면 다른 계단을 골라 모서리에 이가 빠진다.
+#  face 기본은 투명(Color() 는 불투명 검정이라 면이 까맣게 선다 — 한 번 찍혀 봤다).
+func _enamel(c: CanvasItem, r: Rect2, a := 1.0, face := Color(0.0, 0.0, 0.0, 0.0),
+		rim_a := 1.0, rad := -1) -> void:
+	r = _pr(r)
+	var k := _rad(r, rad)
+	_rr(c, r, Color(ENAM.face if face.a <= 0.0 else face, a), k)
+	_rr_line(c, r, Color(ENAM.rim, a * rim_a), k)
+	_rr_line(c, r.grow(-1.0), Color(ENAM.line, a), k)
+	if r.size.y < 30.0:
+		return
+	var d: float = float(k) + 1.0
+	for sx in [r.position.x + d, r.end.x - 1.0 - d]:
+		for sy in [r.position.y + d, r.end.y - 1.0 - d]:
+			c.draw_rect(Rect2(sx, sy, 1.0, 1.0), Color(ENAM.screw, a))
 
 
 # ══════════════════════════════════════════════════════════
