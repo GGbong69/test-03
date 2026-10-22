@@ -46292,10 +46292,13 @@ const PANEL_LIP := 3.0
 #    우물    동전 슬롯의 빈 홈 — 어두운 바닥에 놋쇠 테(왼쪽 위가 밝다).
 #  면 밝기는 둘 다 C_PANEL 과 같은 L 0.015 — 잉크 대비표(qa_ui ④ · qa_tip)가 그대로 선다.
 #  보풀의 밝은 점(L 0.024)도 C_DIM 4.9 · C_MULT 4.7 · C_TXT 12.5 다.
-const FELT := {"face": Color("301b25"), "hi": Color("3a2430"), "lo": Color("24121a"), "per": 14.0}
+#  펠트는 에나멜과 같은 병 초록 한 가지(「왜 색이 달라?」 2026-10-22 — 자주 펠트 · 초록 명판 두 색을 걷었다).
+#  면은 명판(112420 · L 0.015)보다 한 단 밝은 L 0.019 — 같은 색상이라 밝기로만 명판이 판 위에 앉는다.
+#  보풀 밝은 점 L 0.023 위에서도 C_DIM 4.6 · C_MULT 4.5 로 글이 선다.
+const FELT := {"face": Color("152925"), "hi": Color("182e29"), "lo": Color("101f1c"), "per": 14.0}
 const ENAM := {"face": Color("112420"), "rim": Color("d9cfb4"), "line": Color("0a1612"),
 		"screw": Color("8e8a7a"), "lip": Color("0a1814")}
-const WELL := {"floor": Color("1c0e14"), "brass": Color("7a4a22"), "brass_hi": Color("c88f49")}
+const WELL := {"floor": Color("0b1512"), "brass": Color("7a4a22"), "brass_hi": Color("c88f49")}
 
 
 func _panel(r: Rect2, focus := false, a := 1.0) -> void:
