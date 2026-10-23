@@ -47,6 +47,11 @@ uniform float glow = 0.0;
 uniform float diff = 1.0;
 //  바탕빛을 받는 몫 — 다트 무대처럼 바탕빛이 센 자리에서 손이 한 색 판때기가 안 되게 줄인다.
 uniform float amb = 1.0;
+//  프롤로그 앞 토막만(2026-10-23 「라이팅이랑 쉐이딩 더 퀄리티 있게 해줘 진짜 영화같은 장면 같이」 — prologue3d LOOK.skin) —
+//  soft 가 0 보다 크면 단 경계를 그 폭으로 녹이고 감쇠(무른 그림자가 든다)는 끊지 않는다 · sheen 넓고 옅은 살 윤기(너클 ·
+//  손톱). 둘 다 0 이면 옛 계단 그대로다(상점 · 다트 손).
+uniform float soft = 0.0;
+uniform float sheen = 0.0;
 
 varying float v_ny;
 
@@ -76,6 +81,11 @@ void light() {
 	float a = ATTENUATION;
 	float aq = a > 0.0001 ? exp2(floor(log2(a) * att_steps + 0.5) / att_steps) : 0.0;
 	float q = v < t1 ? 0.0 : (v < t2 ? l1 : (v < t3 ? l2 : l3));
+	if (soft > 0.0) {
+		aq = a;
+		q = l1 * smoothstep(t1 - soft, t1 + soft, v) + (l2 - l1) * smoothstep(t2 - soft, t2 + soft, v)
+				+ (l3 - l2) * smoothstep(t3 - soft, t3 + soft, v);
+	}
 	if (LIGHT_IS_DIRECTIONAL) {
 		//  상인 무대의 해 둘(왼쪽 위 채움빛 · 바닥 반사)은 약한 빛이라 고른 한 단(l1)으로 얹는다 —
 		//  빛마다 제 방향으로 단을 끊으면 경계가 겹쳐 팔뚝이 조각보가 됐다(촬영). 단은 램프가 세운다.
@@ -88,6 +98,11 @@ void light() {
 		float s = pow(max(dot(NORMAL, h), 0.0), shin);
 		//  쇠의 반짝임은 제 빛깔이다(금 · 놋쇠) — 흰 점이면 쇠가 아니라 유리 구슬이다.
 		vec3 sc = ALBEDO / max(max(ALBEDO.r, ALBEDO.g), max(ALBEDO.b, 0.001));
-		SPECULAR_LIGHT += LIGHT_COLOR / PI * spec * step(spec_cut, s) * aq * sc;
+		float cut = soft > 0.0 ? smoothstep(spec_cut * 0.6, spec_cut, s) : step(spec_cut, s);
+		SPECULAR_LIGHT += LIGHT_COLOR / PI * spec * cut * aq * sc;
+	}
+	if (sheen > 0.0 && nl > 0.0) {
+		vec3 h = normalize(LIGHT + VIEW);
+		SPECULAR_LIGHT += LIGHT_COLOR * sheen * pow(max(dot(NORMAL, h), 0.0), 18.0) * a;
 	}
 }

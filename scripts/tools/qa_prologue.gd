@@ -20,6 +20,10 @@ extends SceneTree
 #       재생 단추(2026-10-23 「손가락을 펴서 한번 버튼 클릭하기로 하지 않았어?」) — 단추가 들어갔다 돌아온다 · VFD 재생
 #       세모는 누른 뒤에만 든다 · 위잉은 철컥이 아니라 누를 때 · 누를 때 검지가 펴져 단추에 닿고 셋은 말렸다 · 걷은
 #       소매 단이 미는 동안 · 누르는 동안 그림 안에 든다
+#       다시(2026-10-23 「좀 더 꾹 누르고 테이프도 그냥 빨려가는거 같아」 · 「라이팅이랑 쉐이딩 더 퀄리티 있게」) — 단추가 2.5mm
+#       넘게 들어가 바닥에서 버틴다 · 떼면 앞으로 조금 넘쳤다 선다 · 바닥에서 검지 끝마디가 젖는다 · 카세트는 걸려 서고 →
+#       낚아채여 확 → 고른 빠르기로 끌리고 → 멎은 뒤 내려앉는다 · 소리 일곱(걸림 딸깍 · 모터) · 키가 그림자를 드리운다(손 ·
+#       카세트만) · 먼지 낀 공기 · 빛줄기 기둥이 섰다 · 층이 걷힐 때 3D 층의 색 · 낟알 · 안개가 다 걷혔다
 #   godot --path . --script scripts/tools/qa_prologue.gd
 const Save = preload("res://scripts/save.gd")
 var b = null
@@ -58,6 +62,12 @@ var poke_btn := true         # 바닥에서 검지 끝이 단추에 닿아 있�
 var poke_n := 0
 var cuff_out := [0, 0]       # 걷은 소매 단이 그림 밖이던 틀 수 [미는 동안 · 누르는 동안]
 var cuff_seen := [0, 0]      # 잰 틀 수
+var deep_hold := 0.0         # 단추가 2.5mm 넘게 들어가 있던 동안(초)
+var btn_over := 0.0          # 뗀 뒤 단추가 앞으로 넘친 가장 큰 m
+var dip_ok := false          # 바닥에서 검지 끝마디가 젖었다
+var t_prev := -1.0
+var gone_k := -1.0           # handoff 언저리의 3D 층 색 · 낟알 몫(안 쟀으면 −1)
+var gone_fog := -1.0         # 그때 안개 밀도
 
 
 func _initialize() -> void:
@@ -83,7 +93,7 @@ func _tape_watch() -> void:
 	var rel: Basis = (fl.xf as Transform3D).basis.inverse() * (fl.n as Node3D).transform.basis
 	var dn: Vector3 = rel * Vector3.DOWN
 	var fa: float = rad_to_deg(atan2(-dn.z, -dn.y))
-	if t < ck - float(TP.lead) - float(TP.snap):
+	if t < float(TP.shut) - float(TP.snap):
 		flap_max = maxf(flap_max, fa)
 	elif t > ck + 0.3 and t < TL:
 		flap_end = fa
@@ -105,6 +115,10 @@ func _tape_watch() -> void:
 		btn_deep = maxf(btn_deep, bz)
 		if t > float(pr[4]) + 0.05 and t < TL:
 			btn_back = bz
+		if bz >= 0.0025 and t_prev >= 0.0:
+			deep_hold += t - t_prev
+		if t > float(pr[3]):
+			btn_over = maxf(btn_over, -bz)
 	var pe: float = (dm.vfd_on as StandardMaterial3D).emission_energy_multiplier
 	if t > ck + 0.1 and t < float(pr[2]) - 0.02:
 		play_early = play_early or pe > 0.5
@@ -139,6 +153,9 @@ func _tape_watch() -> void:
 				pk = pk and (di * (hj.tips[k] as Node3D).global_position).z > 0.02
 			poke_btn = poke_btn and pk
 			poke_n += 1
+			#  힘이 실린 바닥 — 끝마디가 뒤로 젖는다(j2 는 Basis(BACK, −굽힘) — 젖으면 + 각)
+			if t >= float(pr[2]) + 0.03:
+				dip_ok = dip_ok or (hj.j2[0] as Node3D).basis.get_euler().z > deg_to_rad(5.0)
 		#  걷은 소매 단(단의 팔꿈치 쪽 끝) — 미는 동안 · 누르는 동안 무대 화판 안
 		var w := -1
 		if t >= float(TP.push[0]) and t <= float(TP.push[1]):
@@ -172,7 +189,11 @@ func _tape_watch() -> void:
 		cam_fov = cam_fov and is_equal_approx(cam2.fov, float(P.CAM.fov))
 	if t > TL + 0.1 and t < float(P.ON.tvs):
 		freed = not hn.has_meta("tape") and not hn.has_meta("key") and dk.get_node_or_null("Tape") == null \
-				and dk.get_node_or_null("Arm") == null
+				and dk.get_node_or_null("Arm") == null and not hn.has_meta("shaft")
+	if t >= P.handoff() - 0.03:
+		gone_k = float((hn.get_meta("grade") as ShaderMaterial).get_shader_parameter("k"))
+		gone_fog = (hn.get_meta("env") as Environment).volumetric_fog_density
+	t_prev = t
 
 
 func _ok(nm: String, cond: bool, note := "") -> void:
@@ -254,15 +275,15 @@ func _process(_d: float) -> bool:
 				_ok("⑨ TV 방의 때가 앞 토막 뒤로 섰다", float(P.ON.tvs) > TL and P.feed_at() > TL and P.handoff() > TL
 						and P.length() >= TL + 6.0 and float(P.REEL.tune) > TL and float(P.T.push0) > TL)
 				_ok("⑨ 눈이 다 오른 뒤에 TV 더미가 켜진다", float(TP.crane[1]) <= TL and float(P.ON.tvs) > float(TP.crane[1]))
-				var shut: float = float(TP.clunk) - float(TP.lead)
+				var shut: float = float(TP.shut)
 				var spine: float = P._tape_at(shut - float(TP.snap)).origin.z + (TP.tape as Vector3).z * 0.5
 				_ok("⑨ 덮개는 카세트 등이 지나간 뒤에 닫히기 시작한다", spine < float(TP.hinge) - 0.0015, "등 z %.4f" % spine)
 				var cu: Dictionary = P.cues()
-				var tape_snd := ["tape_rattle", "tape_in", "deck_whir", "deck_clunk", "deck_btn"]
+				var tape_snd := ["tape_rattle", "tape_in", "deck_grab", "deck_motor", "deck_whir", "deck_clunk", "deck_btn"]
 				var cu_ok: bool = cu.has("rain") and cu.has("hero") and cu.has("tvs") and cu.has("maker")
 				for k in tape_snd:
 					cu_ok = cu_ok and cu.has(k) and float(cu[k]) < TL and g._sfx_file(k) != null
-				_ok("⑨ 소리 때 — 비 · TV · 앞 토막 다섯(파일이 있다)", cu_ok, str(cu.keys()))
+				_ok("⑨ 소리 때 — 비 · TV · 앞 토막 일곱(파일이 있다)", cu_ok, str(cu.keys()))
 				_ok("⑨ 철컥 소리의 쿵이 TAPE.clunk 에 선다", is_equal_approx(float(cu.deck_clunk) + float(TP.lead), float(TP.clunk)))
 				var pb: float = float(TP.press[2])
 				_ok("⑨ 단추 딸깍은 바닥에 · 위잉은 철컥이 아니라 누를 때", is_equal_approx(float(cu.deck_btn), pb)
@@ -273,6 +294,49 @@ func _process(_d: float) -> bool:
 						and not (g.plg_vp.get_meta("flap") as Dictionary).is_empty() and g.plg_vp.has_meta("vfd_l"))
 				_ok("⑨ 비 자리가 섰다(Rain 버스 · 표 소리와 다른 사본)", g.plg_rain != null and g.plg_rain.bus == "Rain"
 						and AudioServer.get_bus_index("Rain") >= 0 and g.plg_rain.stream != g._sfx_file("rain"))
+				#  카세트 길(순수 함수라 틀 빠르기와 상관없이 잰다) — 걸려 선다 → 낚아채여 확 → 고르게 끌린다 → 멎은 뒤 내려앉는다
+				var gb: float = float(TP.grab)
+				var mo: Array = TP.motor
+				var fz := func(tt: float) -> float: return P._tape_at(tt).origin.z
+				var vz := func(tt: float) -> float: return (fz.call(tt + 0.002) - fz.call(tt - 0.002)) / 0.004
+				var pause_v := 0.0
+				for i in 10:
+					pause_v = maxf(pause_v, absf(vz.call(gb - 0.05 + 0.005 * float(i))))
+				var jerk_v := 0.0
+				for i in 10:
+					jerk_v = maxf(jerk_v, absf(vz.call(gb + 0.004 * float(i))))
+				var jerk_d: float = fz.call(gb) - fz.call(gb + 0.04)
+				var vs := []
+				for i in 20:
+					vs.append(-vz.call(float(mo[0]) + 0.06 + (2.97 - float(mo[0]) - 0.06) * float(i) / 19.0))
+				var vm := 0.0
+				for v in vs:
+					vm += float(v) / vs.size()
+				var vd := 0.0
+				for v in vs:
+					vd = maxf(vd, absf(float(v) - vm))
+				_ok("⑨ 카세트 — 덮개가 걸어 선다(낚아채기 앞)", pause_v < 0.02, "%.3f m/s" % pause_v)
+				_ok("⑨ 카세트 — 낚아채여 확(2mm 넘게 · 빠르게)", jerk_d > 0.002 and jerk_v > 0.15,
+						"%.1fmm · %.3f m/s" % [jerk_d * 1000.0, jerk_v])
+				_ok("⑨ 카세트 — 모터 빠르기로 고르게 끌린다", vm > 0.12 and vm < 0.22 and vd < vm * 0.08,
+						"%.3f ± %.3f m/s" % [vm, vd])
+				var sy: float = (TP.slot as Vector3).y
+				var y_slide: float = P._tape_at(float(TP.fall[0]) - 0.01).origin.y
+				var y_end: float = P._tape_at(float(TP.clunk)).origin.y
+				_ok("⑨ 카세트 — 끌기가 멎은 뒤 홀더째 내려앉아 철컥", is_equal_approx(y_slide, sy)
+						and absf(vz.call(float(TP.fall[0]))) < 0.01 and absf(sy - float(TP.drop) - y_end) < 0.0001
+						and float(TP.drop) >= 0.008, "%.1fmm" % ((sy - y_end) * 1000.0))
+				var key := g.plg_vp.get_meta("key") as SpotLight3D
+				var arm: Node = (g.plg_vp.get_meta("tape") as Dictionary).arm
+				var hand_cast := false
+				for gi in arm.find_children("*", "GeometryInstance3D", true, false):
+					hand_cast = hand_cast or ((gi as GeometryInstance3D).layers & key.shadow_caster_mask) != 0
+				_ok("⑨ 키가 무른 그림자를 드리운다(손 · 카세트만)", key.shadow_enabled and key.light_size > 0.0 and hand_cast
+						and (key.shadow_caster_mask & 1) == 0)
+				var env := g.plg_vp.get_meta("env") as Environment
+				var shaft: FogVolume = g.plg_vp.get_meta("shaft") if g.plg_vp.has_meta("shaft") else null
+				_ok("⑨ 먼지 낀 공기 · 구석 TV 빛줄기 기둥", env.volumetric_fog_enabled and key.light_volumetric_fog_energy > 0.0
+						and shaft != null and (shaft.material as FogMaterial).density > 0.0)
 				st = 1
 		1:
 			if g._plg_live() and g.plg_t > g.Plg.length() - 0.2:
@@ -322,11 +386,18 @@ func _process(_d: float) -> bool:
 				_ok("⑨ 손끝이 앞판(구멍 밖)을 안 뚫는다", poke < 0.002, "%.4f m" % poke)
 				_ok("⑨ 손은 눈이 오르기 전에 그림 밖으로 빠졌다", hand_seen and hand_out)
 				_ok("⑨ 표시등 — 철컥 전 빨강 · 뒤 초록", led0 and led1)
-				_ok("⑨ 앞 토막 소리 다섯이 한 번씩(제 자리 다섯)", snd_n == 5, str(snd_n))
+				_ok("⑨ 앞 토막 소리 일곱이 한 번씩(제 자리 일곱)", snd_n == 7, str(snd_n))
 				var TP2: Dictionary = g.Plg.TAPE
 				_ok("⑨ 재생 단추가 들어갔다(sink) 다 떼면 돌아온다", btn_deep > float(TP2.sink) * 0.9 and btn_back >= 0.0
 						and btn_back < 0.0001, "%.4f → %.4f m" % [btn_deep, btn_back])
 				_ok("⑨ VFD 재생 세모는 누른 뒤에만 든다", not play_early and play_late)
+				_ok("⑨ 꾹 — 단추가 2.5mm 넘게 들어가 바닥에서 버틴다", btn_deep >= 0.0025 and deep_hold >= 0.15,
+						"%.1fmm · %.2f초" % [btn_deep * 1000.0, deep_hold])
+				_ok("⑨ 꾹 — 떼면 단추가 앞으로 조금 넘쳤다 선다", btn_over > 0.0002 and btn_over < 0.001,
+						"%.2fmm" % (btn_over * 1000.0))
+				_ok("⑨ 꾹 — 바닥에서 검지 끝마디가 젖는다", dip_ok)
+				_ok("⑨ 층이 걷힐 때 3D 층의 색 · 낟알 · 안개가 다 걷혔다", gone_k == 0.0 and gone_fog == 0.0,
+						"%.3f · %.4f" % [gone_k, gone_fog])
 				_ok("⑨ 누를 때 검지가 펴져 단추에 닿고 셋은 말렸다", poke_n > 0 and poke_btn, "%d 틀" % poke_n)
 				_ok("⑨ 걷은 소매 단이 미는 동안 · 누르는 동안 그림 안", cuff_seen[0] > 0 and cuff_seen[1] > 0
 						and cuff_out[0] == 0 and cuff_out[1] == 0, "밖 %s / 잰 %s 틀" % [str(cuff_out), str(cuff_seen)])
@@ -346,14 +417,14 @@ func _process(_d: float) -> bool:
 				g.plg_t = maxf(g.plg_t, float(g.PLGP.lock) + 0.01)
 				g._intro_press()
 				_ok("④ 첫 누름은 빨리 감기(인트로도)", g._plg_live() and g.plg_ff and g.intro_ff, "%.2f" % g.plg_t)
-				#  단추를 누른 뒤(위잉이 도는 중)로 건너 소리 다섯을 낸 뒤 끊는다 — 3.6 초 위잉이 인트로에 새면 안 된다
+				#  단추를 누른 뒤(위잉이 도는 중)로 건너 소리 일곱을 낸 뒤 끊는다 — 3.6 초 위잉이 인트로에 새면 안 된다
 				g.plg_t = float(g.Plg.cues().deck_whir) + 0.1
 				g._plg_tick(0.0)
 				var mid_n: int = g.plg_aud.size()
 				g._intro_press()
 				_ok("④ 둘째 누름은 곧장 끝 — 주인공 전이면 인트로가 처음부터", not g._plg_live() and g.plg_vp == null
 						and g.state == g.S.INTRO and g.intro_t == 0.0)
-				_ok("⑨ 일찍 끊어도 비 · 앞 토막 소리 자리가 안 남는다", mid_n == 5 and g.plg_rain == null and g.plg_aud.is_empty(),
+				_ok("⑨ 일찍 끊어도 비 · 앞 토막 소리 자리가 안 남는다", mid_n == 7 and g.plg_rain == null and g.plg_aud.is_empty(),
 						"끊기 전 %d" % mid_n)
 				print("통과 %d · 실패 %d" % [ok, bad])
 				quit(1 if bad > 0 else 0)
