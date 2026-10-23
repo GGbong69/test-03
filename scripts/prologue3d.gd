@@ -217,7 +217,7 @@ const TAPE_POSE := {
 }
 #  층 — 게임 필터(CRT 100 · VHS 98 · 도트 97 · 반전 96) 밑
 const LAYER := 90
-#  렌더 층 2 — 구석 TV 키의 그림자를 드리우는 것(손 · 카세트 · 덮개 · 단추 — shadow_caster_mask)
+#  렌더 층 2 — 구석 TV 키의 그림자를 드리우는 것(손 · 덮개 · 단추 — shadow_caster_mask)
 const SHADOW_LAYER := 1 << 1
 const FONT_BIG := "res://fonts/Paperlogy-7Bold.ttf"
 const FONT_SM := "res://fonts/Galmuri9.ttf"
@@ -1687,7 +1687,7 @@ static func _tape_make(hn: Node, game: Node, deck: MeshInstance3D, hm: Dictionar
 	key.spot_attenuation = 0.5
 	key.spot_angle_attenuation = float(kk[4])
 	key.light_energy = 0.0
-	#  먼지 낀 공기에 그 빛줄기가 서고 · 구석 TV 화면 폭만 한 광원의 무른 그림자 — 손이 데크를 · 카세트가 구멍을 가린다
+	#  먼지 낀 공기에 그 빛줄기가 서고 · 구석 TV 화면 폭만 한 광원의 무른 그림자 — 손이 데크를 가린다
 	#  (닿는 데는 단단하고 멀수록 무르다 · mm 무대라 normal_bias 로 맞춘다 — 닿는 손끝 그림자가 뜨면 「꾹」이 거짓말이 된다)
 	var sh: Array = LOOK.shad
 	key.light_volumetric_fog_energy = float(LOOK.fog_e[0])
@@ -1767,9 +1767,10 @@ static func _tape_make(hn: Node, game: Node, deck: MeshInstance3D, hm: Dictionar
 	var fo: Dictionary = game._fore3_build(fm, float(game.FORE3.bare_r), -1.0)
 	arm.add_child(fo.root)
 	hn.set_meta("tape", {"n": tp, "arm": arm, "hj": hj, "fo": fo, "game": game})
-	#  키 그림자를 드리우는 것 — 손 · 카세트 · 덮개 · 단추만(SHADOW_LAYER). 키가 앞판을 거의 스치듯 비추므로 데크 몸 ·
-	#  위 TV 까지 그림자를 내면 앞판이 통째로 꺼졌다(첫 촬영).
-	var cast: Array = [tp, arm]
+	#  키 그림자를 드리우는 것 — 손 · 덮개 · 단추만(SHADOW_LAYER). 키가 앞판을 거의 스치듯 비추므로 데크 몸 ·
+	#  위 TV 까지 그림자를 내면 앞판이 통째로 꺼졌다(첫 촬영). 카세트도 뺀다 — 쥔 손가락이 그 그늘에 묻혀 검은 덩어리가
+	#  되고 무른 테의 잡음이 손끝을 털처럼 번지게 했다 · 라벨 끝도 제 그늘에 푸르게 꺼졌다(검토 촬영).
+	var cast: Array = [arm]
 	for pm in [hn.get_meta("flap"), hn.get_meta("btn")]:
 		if not (pm as Dictionary).is_empty():
 			cast.append(pm.n)

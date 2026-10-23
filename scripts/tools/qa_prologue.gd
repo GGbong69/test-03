@@ -23,7 +23,7 @@ extends SceneTree
 #       다시(2026-10-23 「좀 더 꾹 누르고 테이프도 그냥 빨려가는거 같아」 · 「라이팅이랑 쉐이딩 더 퀄리티 있게」) — 단추가 2.5mm
 #       넘게 들어가 바닥에서 버틴다 · 떼면 앞으로 조금 넘쳤다 선다 · 바닥에서 검지 끝마디가 젖는다 · 카세트는 걸려 서고 →
 #       낚아채여 확 → 고른 빠르기로 끌리고 → 멎은 뒤 내려앉는다 · 소리 일곱(걸림 딸깍 · 모터) · 키가 그림자를 드리운다(손 ·
-#       카세트만) · 먼지 낀 공기 · 빛줄기 기둥이 섰다 · 층이 걷힐 때 3D 층의 색 · 낟알 · 안개가 다 걷혔다
+#       덮개 · 단추만 — 카세트는 아니다) · 먼지 낀 공기 · 빛줄기 기둥이 섰다 · 층이 걷힐 때 3D 층의 색 · 낟알 · 안개가 다 걷혔다
 #   godot --path . --script scripts/tools/qa_prologue.gd
 const Save = preload("res://scripts/save.gd")
 var b = null
@@ -331,8 +331,11 @@ func _process(_d: float) -> bool:
 				var hand_cast := false
 				for gi in arm.find_children("*", "GeometryInstance3D", true, false):
 					hand_cast = hand_cast or ((gi as GeometryInstance3D).layers & key.shadow_caster_mask) != 0
-				_ok("⑨ 키가 무른 그림자를 드리운다(손 · 카세트만)", key.shadow_enabled and key.light_size > 0.0 and hand_cast
-						and (key.shadow_caster_mask & 1) == 0)
+				#  카세트는 안 드리운다 — 쥔 손가락이 그 그늘에 묻혀 손끝이 털처럼 번졌다(검토)
+				var tp_n: Node = (g.plg_vp.get_meta("tape") as Dictionary).n
+				_ok("⑨ 키가 무른 그림자를 드리운다(손 · 덮개 · 단추만 — 카세트는 아니다)", key.shadow_enabled
+						and key.light_size > 0.0 and hand_cast and (key.shadow_caster_mask & 1) == 0
+						and ((tp_n as GeometryInstance3D).layers & key.shadow_caster_mask) == 0)
 				var env := g.plg_vp.get_meta("env") as Environment
 				var shaft: FogVolume = g.plg_vp.get_meta("shaft") if g.plg_vp.has_meta("shaft") else null
 				_ok("⑨ 먼지 낀 공기 · 구석 TV 빛줄기 기둥", env.volumetric_fog_enabled and key.light_volumetric_fog_energy > 0.0
