@@ -28843,6 +28843,7 @@ func _fore3_build(mats: Dictionary, bl: float, sg := 1.0) -> Dictionary:
 	#  자뼈 붓돌기 — 손목 새끼 쪽 손등의 뼈 혹. 화면 1px 언저리지만 손목이 관절로 읽힌다.
 	var st := _mi3(_blob3_mesh(), mats.skin, Vector3(bl - 3.4, t1 * 0.3, sg * w1 * 0.4))
 	st.scale = Vector3(3.0, 2.2, 2.4)
+	st.name = "Styloid"
 	bare.add_child(st)
 	#  걷은 단 — 두 번 접어 올린 천. 겹 둘이 솟고(볼록 둘) 그 사이 · 위아래로 골이 파이며, 둘레는
 	#  고르지 않게 구겨진다(겹마다 주름 수 · 위상이 다르다). 옛 단은 8각 띠 하나에 접힌 골 띠
@@ -28860,7 +28861,7 @@ func _fore3_build(mats: Dictionary, bl: float, sg := 1.0) -> Dictionary:
 			[rr * 0.64, ww + 0.6, tt + 0.6, 0.2, 0.0, 2.3, 0.045, 6.0, 3.3],
 			[rr * 0.86, ww - 0.6, tt - 0.4, 0.0, 0.0, 2.3, 0.035, 6.0, 4.1, 0.08],
 			[rr, wi, ti, 0.0, 0.0, 2.3, 0.02, 6.0, 4.6, 0.35]], 16, -1.0, -1.0, 1.0), mats.cloth))
-	return {"root": root, "slv": slv, "bare": bare, "roll": rl, "bl": bl}
+	return {"root": root, "slv": slv, "bare": bare, "roll": rl, "bl": bl, "sty": st}
 
 
 #  깎은 상자 — x 0 의 단면 (w0 폭 · t0 두께) 에서 x 1 의 (w1 · t1) 로 좁아진다.

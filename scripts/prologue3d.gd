@@ -1756,6 +1756,9 @@ static func _tape_make(hn: Node, game: Node, deck: MeshInstance3D, hm: Dictionar
 	#  손은 상점 손과 같은 빛 계단 그대로다(「손은 옛버전에 명암이 단계로 나눠져 있는게 좋은거 같아 지금은 뭐 도형을 붙여가지고
 	#  만든 Ai티 팍팍 나는 작업물 같아」 2026-10-23 — 단 경계를 녹인 살은 조각 면이 그대로 드러나 이어 붙인 도형으로 읽혔다).
 	var fo: Dictionary = game._fore3_build(fm, float(game.FORE3.bare_r), -1.0)
+	#  손목 뼈 혹(자뼈 붓돌기)은 이 토막에서 걷는다 — 상점에서는 1px 라 관절로 읽히지만 가까이 찍으면 붙여 놓은 덩어리다
+	#  (「이 혹은 뭐야? 할거면 명암으로 표현 하던가」 2026-10-23). 손목은 팔뚝이 잘록해지는 빛 계단이 말한다.
+	(fo.sty as Node3D).visible = false
 	arm.add_child(fo.root)
 	hn.set_meta("tape", {"n": tp, "arm": arm, "hj": hj, "fo": fo, "game": game})
 	#  키 그림자를 드리우는 것 — 손 · 덮개 · 단추만(SHADOW_LAYER). 키가 앞판을 거의 스치듯 비추므로 데크 몸 ·
