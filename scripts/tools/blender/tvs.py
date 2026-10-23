@@ -15,7 +15,8 @@
 #   TvBox      작은 쇠 상자 — 화면 · 오른쪽 작은 다이얼 셋
 #   Speaker    짙은 통 · 검은 앞판 · 우퍼 둘 · 트위터
 #   TvHero     주인공(게임 TV) — 쇳빛 장 · 꺾여 드는 화면 틀 · 손잡이 다이얼 둘 · 슬라이더 · RGB 등
-#   Deck       주인공 밑 비디오 데크(카세트 구멍 · 검은 굴 · VFD · 표시등) · DeckFlap 그 덮개(따로 · 윗변 경첩)
+#   Deck       주인공 밑 비디오 데크(카세트 구멍 · 검은 굴 · VFD · 표시등) · DeckFlap 그 덮개(따로 · 윗변 경첩) ·
+#              PlayBtn 구멍 오른쪽 재생 단추(따로 · 손이 누른다)
 #   Tape       VHS 카세트(따로 · 손이 데크에 넣는다 — prologue3d.gd TAPE)
 # 화면 귀는 초타원 지수 n 으로 — 클수록 네모(주인공 6 · 나머지 5 언저리). 3.8 은 「tv의 테두리가 너무 둥글지
 # 않아?」였다(2026-10-18 · 사용자가 준 젠레스 존 제로 런처 TV 는 귀만 둥근 네모).
@@ -23,7 +24,7 @@
 # 좌표는 게임 그대로(m · x 오른쪽 · y 위 · z 앞 — 화면이 +z) · 원점은 바닥 한가운데 · 앞면이 z 0.
 # Blender 로는 (x, −z, y). 재질은 이름만 — 게임(prologue3d.gd)이 이름으로 안 재질을 끼운다:
 #   wood · plastic · metal · panel · bezel · glass · knob · grille · trim · gun · cap · led_r/g/b · lcd ·
-#   vfd · vfd_on · led_deck · flap(데크) · shell · win · hub · pack · label · ink(카세트)
+#   vfd · vfd_on · led_deck · flap · btn(데크) · shell · win · hub · pack · label · ink(카세트)
 import bpy
 import bmesh
 import math
@@ -74,6 +75,7 @@ VFD = mat("vfd", (0.2, 0.95, 0.76))
 VFDON = mat("vfd_on", (0.2, 0.95, 0.76))
 LEDD = mat("led_deck", (0.9, 0.1, 0.1))
 FLAP = mat("flap", (0.06, 0.06, 0.07), 0.0, 0.3)
+BTN = mat("btn", (0.26, 0.26, 0.28), 0.3, 0.45)
 SHELL = mat("shell", (0.08, 0.08, 0.08), 0.0, 0.4)
 WIN = mat("win", (0.16, 0.16, 0.18), 0.0, 0.1)
 HUB = mat("hub", (0.85, 0.83, 0.80))
@@ -503,6 +505,19 @@ finish("Deck")
 box("flap", (SLW - 0.006, SLH - 0.004, 0.003), (0.0, -(SLH - 0.004) * 0.5, 0.0), FLAP, 0.0008, 1)
 box("flap_rib", (SLW * 0.72, 0.0016, 0.0014), (0.0, -0.008, 0.0018), FLAP)
 finish("DeckFlap").location = G(SLX, SLY + SLH * 0.5 - 0.002, -0.004)
+#  재생 단추(PlayBtn — 따로 낸다 · 원점은 앞판 · 게임이 −z 로 누른다) — 「손가락을 펴서 한번 버튼 클릭하기로 하지
+#  않았어?」(2026-10-23). 구멍 바로 오른쪽(오른쪽 앞에서 오는 왼손 검지가 닿고 · 앞 토막 눈에 든다) · 앞판보다 한 단
+#  밝은 네모 키 · 왼쪽 반에 작은 세모(글자는 없다) — VFD 재생 세모와 같은 vfd_on 이라 어둠에서 희미하게 단추 자리를
+#  짚다가 누르면 같이 든다. 검지는 오른쪽 반을 누른다(세모가 안 가린다). 앞면은 z 0.004 — prologue3d.gd TAPE.btn 사본.
+BX, BY = 0.065, SLY
+box("btn", (0.036, 0.022, 0.010), (0.0, 0.0, -0.001), BTN, 0.0015, 2)
+bm = bmesh.new()
+tri = [bm.verts.new(G(-0.0125, -0.0038, 0.0046)), bm.verts.new(G(-0.0125, 0.0038, 0.0046)),
+       bm.verts.new(G(-0.0058, 0.0, 0.0046))]
+bm.faces.new(tri)
+face_front(bm)
+from_bm("btn_icon", bm, VFDON, smooth=False)
+finish("PlayBtn").location = G(BX, BY, 0.0)
 
 # ══ 비디오테이프 — VHS 카세트 한 개(TAPE · 손이 데크에 넣는다) ════════════════════════
 #  실측(Wikipedia 「VHS」) 187 × 25 × 103mm · 원점은 한가운데 · 등(라벨 띠)이 +z(손 · 카메라 쪽) · 덮개 변이 −z(먼저
