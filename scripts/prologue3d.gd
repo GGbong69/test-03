@@ -189,7 +189,6 @@ const TAPE := {
 #    ao 접촉 어둠(SSAO — 바탕빛이 없으니 직접광 몫 light 와 ao_channel 1 을 같이 줘야 먹는다) [반경 앞 토막 · TV 방(m) ·
 #    세기 · 직접광 몫]
 #    dof 앞 토막 초점 띠 [세기 · 앞 m · 앞 번짐 · 뒤 m · 뒤 번짐](눈에서 구멍과 단추가 9cm 차이라 띠가 좁아야 초점이 옮는다)
-#    skin 이 토막 손 재질 [단 경계 녹임 · 감싸기 · 살 윤기 · 반지 반짝 날카로움](상점 손은 옛 계단 그대로)
 #    shell 유광 검은 카세트 [거칠기 · 코팅] · deck 결 있는 데크 판 [거칠기 · 결(anisotropy)] · btn 한 단 밝은 단추 윗면
 #    grade 3D 층에만(Stage) [검정 띄움(sRGB · 아주 조금) · 그늘 빛깔 배 · 밝은 데 빛깔 배 · 낟알 바닥 · 중간 톤 낟알 · 바뀌는
 #    Hz(24 — 필름)] · gone 주인공으로 다가가는 몫(push)의 이 구간에 색 · 낟알 · 안개가 걷힌다(유리 속 그림이 게임 그림과
@@ -200,7 +199,6 @@ const LOOK := {
 	"shad": [0.12, 0.02, 0.8], "scr": 0.25,
 	"ao": [0.02, 0.08, 2.0, 0.5],
 	"dof": [0.12, 0.15, 0.15, 0.04, 0.10],
-	"skin": [0.1, 0.45, 0.05, 120.0],
 	"shell": [0.26, 0.15], "deck": [0.38, 0.6], "btn": Color("6a6e7a"),
 	"grade": [Color8(0, 0, 1), Color(0.92, 0.98, 1.10), Color(1.06, 1.0, 0.92), 0.006, 0.03, 24.0],
 	"gone": [0.35, 0.8],
@@ -1755,15 +1753,8 @@ static func _tape_make(hn: Node, game: Node, deck: MeshInstance3D, hm: Dictionar
 	arm.add_child(hj.root)
 	var fm := {"skin": mats.skin, "cloth": game._hand3_toon(game.FORE3.cloth),
 			"brass": game._hand3_toon(game.FORE3.brass, Color(0.0, 0.0, 0.0, 0.0), 0.4, 0.09, 1.0, 0.5)}
-	#  이 토막 손만 덜 끊긴 살(LOOK.skin — 단 경계를 녹이고 그림자 감쇠는 안 끊는다 · 넓게 감싸고 · 너클 · 손톱에 옅은 윤기 ·
-	#  반지에 날카로운 반짝). 재질은 이 토막이 새로 지은 것이라 상점 손은 옛 계단 그대로다.
-	var sk: Array = LOOK.skin
-	for m in [mats.skin, mats.nail, mats.ring, fm.cloth, fm.brass]:
-		(m as ShaderMaterial).set_shader_parameter("soft", float(sk[0]))
-		(m as ShaderMaterial).set_shader_parameter("wrap", float(sk[1]))
-	for m in [mats.skin, mats.nail]:
-		(m as ShaderMaterial).set_shader_parameter("sheen", float(sk[2]))
-	(mats.ring as ShaderMaterial).set_shader_parameter("shin", float(sk[3]))
+	#  손은 상점 손과 같은 빛 계단 그대로다(「손은 옛버전에 명암이 단계로 나눠져 있는게 좋은거 같아 지금은 뭐 도형을 붙여가지고
+	#  만든 Ai티 팍팍 나는 작업물 같아」 2026-10-23 — 단 경계를 녹인 살은 조각 면이 그대로 드러나 이어 붙인 도형으로 읽혔다).
 	var fo: Dictionary = game._fore3_build(fm, float(game.FORE3.bare_r), -1.0)
 	arm.add_child(fo.root)
 	hn.set_meta("tape", {"n": tp, "arm": arm, "hj": hj, "fo": fo, "game": game})
