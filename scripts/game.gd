@@ -48648,8 +48648,11 @@ func _over_write(t: String, c: Vector2, sz: int, col: Color, a: float) -> void:
 				Color(col, col.a * a * ka))
 
 
-#  놋쇠 왕관 — 다섯 봉우리 · 띠에 보석 셋 · 봉우리 끝 구슬. 커지며 선다(넘쳤다 앉는다 — 뒤로 당기는
-#  감속). 앉는 순간 둘레에 반짝 별 여섯이 한 번 튀고 진다.
+#  놋쇠 왕관 — 봉우리 셋 · 띠. 메뉴 탭 · 설정 이름표와 같은 놋쇠(2026-10-25 레퍼런스 2차 — 매끈한 금 덩이에
+#  보석 · 구슬 원이 박혀 있었다 · 보석 금지). 봉우리마다 빛(왼쪽 위) 쪽 사면은 밝은 놋쇠 · 반대 사면은 짙은
+#  놋쇠로 면마다 한 톤 · 띠는 그 사이 톤에 새긴 홈 한 줄 · 2×2 징 셋 · 봉우리 끝 1px 빛 · 테는 짙은 놋쇠로 긋되
+#  빛 쪽 왼변은 뺀다. 꼭짓점은 화면 픽셀에 앉힌다. 커지는 것은 세 단(작게 → 넘침 → 제자리)으로 끊긴다.
+#  앉는 순간 둘레에 반짝 별 여섯이 한 번 튀고 진다.
 func _over_crown(c: Vector2, a: float) -> void:
 	var B: Dictionary = OVERB
 	var t0: float = float(B.crown_t0)
@@ -48657,45 +48660,50 @@ func _over_crown(c: Vector2, a: float) -> void:
 	var u: float = 1.0 if motion_off else clampf((over_t - t0) / (t1 - t0), 0.0, 1.0)
 	if u <= 0.0:
 		return
-	var q := u - 1.0
-	var k: float = maxf(0.0, 1.0 + 2.7 * q * q * q + 1.7 * q * q)
-	var w: float = float(B.crown_w)
+	var k: float = [0.6, 1.25, 1.0][mini(int(u * 3.0), 2)]
+	var hw: float = roundf(float(B.crown_w) * 0.5)
+	var qw: float = roundf(float(B.crown_w) * 0.25)
 	var h: float = float(B.crown_h)
-	var gold := Color(C_GOLD, a)
-	var dark := Color(C_GOLD.darkened(0.45), a)
-	var lite := Color(C_GOLD.lightened(0.35), a)
+	var ty: float = roundf(-h * 0.5)          # 가운데 봉우리 끝
+	var sy: float = roundf(-h * 0.2)          # 양끝 봉우리 끝
+	var vy: float = roundf(h * 0.06)          # 골
+	var by: float = roundf(h * 0.18)          # 띠 윗변
+	var ey: float = roundf(h * 0.5)           # 밑변
+	var lit := Color(Door3D.COL.brass, a)
+	var lo := Color(MENUM.brass_lo, a)
+	var mid := Color(MENUM.brass_lo.lerp(Door3D.COL.brass, 0.5), a)
+	var hi := Color(MENUM.brass_hi, a)
 	draw_set_transform(shake_off + c, 0.0, Vector2(k, k))
+	var body := PackedVector2Array([Vector2(-hw, ey), Vector2(-hw, sy), Vector2(-qw, vy), Vector2(0.0, ty),
+			Vector2(qw, vy), Vector2(hw, sy), Vector2(hw, ey)])
 	#  그림자 — 칠판에 진다.
-	var body := PackedVector2Array([Vector2(-w * 0.5, h * 0.5), Vector2(-w * 0.5, -h * 0.2),
-			Vector2(-w * 0.25, h * 0.06), Vector2(0.0, -h * 0.5), Vector2(w * 0.25, h * 0.06),
-			Vector2(w * 0.5, -h * 0.2), Vector2(w * 0.5, h * 0.5)])
 	var shd := PackedVector2Array()
 	for v in body:
 		shd.append(v + Vector2(2.0, 3.0))
 	draw_colored_polygon(shd, Color(0.0, 0.0, 0.0, 0.35 * a))
-	draw_colored_polygon(body, gold)
-	#  띠 — 밑 3할이 한 단 어둡고 윗변에 빛 한 줄.
-	var band := Rect2(-w * 0.5, h * 0.18, w, h * 0.32)
-	draw_rect(band, dark)
-	draw_rect(Rect2(band.position, Vector2(band.size.x, 1.0)), lite)
-	#  왼쪽 변 · 봉우리 왼사면에 빛(빛은 왼쪽 위에서 온다).
-	draw_line(body[1], body[0], lite, 1.0)
-	draw_line(body[1], body[2], lite, 1.0)
-	draw_line(body[2], body[3], lite, 1.0)
-	var ol := body.duplicate()
+	#  사면 넷 — 봉우리 끝 · 골에서 띠 윗변까지 세로로 가른다(왼끝 봉우리의 오른 사면 · 가운데의 왼 · 오른 ·
+	#  오른끝의 왼 사면). 빛 쪽 사면이 밝다.
+	for i in 4:
+		var p0: Vector2 = body[i + 1]
+		var p1: Vector2 = body[i + 2]
+		draw_colored_polygon(PackedVector2Array([p0, p1, Vector2(p1.x, by), Vector2(p0.x, by)]),
+				lit if p1.y < p0.y else lo)
+	#  띠 — 사이 톤 · 윗변 빛 한 줄 · 가운데 새긴 홈 한 줄 · 징 셋(빛 쪽 한 픽셀)
+	var band := Rect2(-hw, by, hw * 2.0, ey - by)
+	draw_rect(band, mid)
+	draw_rect(Rect2(band.position, Vector2(band.size.x, 1.0)), hi)
+	var gy: float = roundf(band.get_center().y)
+	draw_rect(Rect2(-hw, gy, hw * 2.0, 1.0), Color(MENUM.engrave, a))
+	for sx in [-qw, 0.0, qw]:
+		draw_rect(Rect2(float(sx) - 1.0, gy - 1.0, 2.0, 2.0), lit)
+		draw_rect(Rect2(float(sx) - 1.0, gy - 1.0, 1.0, 1.0), hi)
+	#  테 — 짙은 놋쇠. 빛 쪽 왼변(body 0 → 1)은 뺀다.
+	var ol := body.slice(1)
 	ol.append(body[0])
-	draw_polyline(ol, Color(C_GOLD.darkened(0.6), a), 1.0)
-	#  보석 — 가운데 붉은 것 · 양옆 푸른 것.
-	var by: float = band.get_center().y
-	draw_circle(Vector2(0.0, by), 4.0, Color(C_MULT, a))
-	draw_circle(Vector2(-1.2, by - 1.2), 1.4, Color(C_TXT, 0.8 * a))
-	for sx in [-1.0, 1.0]:
-		draw_circle(Vector2(sx * w * 0.3, by), 3.0, Color(C_CHIP, a))
-		draw_circle(Vector2(sx * w * 0.3 - 0.8, by - 0.8), 1.0, Color(C_TXT, 0.7 * a))
-	#  봉우리 끝 구슬.
-	for v2 in [body[1], body[3], body[5]]:
-		draw_circle(v2, 3.2, gold)
-		draw_circle(v2 + Vector2(-0.8, -0.8), 1.2, lite)
+	draw_polyline(ol, lo, 1.0)
+	#  봉우리 끝 빛 한 픽셀 — 몸 안 픽셀(가운데는 빛 사면 쪽 · 오른끝은 한 칸 안)
+	for v2 in [body[1], body[3] - Vector2(1.0, 0.0), body[5] - Vector2(1.0, 0.0)]:
+		draw_rect(Rect2(v2 as Vector2, Vector2(1.0, 1.0)), hi)
 	draw_set_transform(shake_off)
 	#  앉는 순간의 반짝 별 — 한 번 튀고 진다(번쩍임 아님 · 0.5초).
 	if motion_off:
@@ -48706,7 +48714,7 @@ func _over_crown(c: Vector2, a: float) -> void:
 	var sk: float = st / 0.5
 	for j in 6:
 		var an: float = TAU * float(j) / 6.0 + 0.4
-		var rr: float = (w * 0.55) + sk * 18.0
+		var rr: float = (hw * 1.1) + sk * 18.0
 		var sp := c + Vector2(cos(an), sin(an) * 0.7) * rr
 		var sz: float = 4.0 * (1.0 - sk) + 1.0
 		var sc := Color(C_TXT, (1.0 - sk) * a)
