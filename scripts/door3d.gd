@@ -2322,8 +2322,10 @@ static func _lights(root: Node3D) -> void:
 	sl.spot_angle = float(LOOK.lamp_ang)
 	sl.spot_angle_attenuation = float(LOOK.lamp_att)
 	sl.shadow_enabled = true
-	sl.shadow_blur = 1.5
-	sl.light_size = 0.05
+	#  그림자는 한 톤 · 단단한 가장자리 — 번짐(1.5 · 광원 5cm)이 쇠 띠 · 징 · 손잡이 밑을 무른 얼룩으로 만들었다
+	#  (레퍼런스 2차 2026-10-25)
+	sl.shadow_blur = 0.0
+	sl.light_size = 0.0
 	sl.shadow_opacity = 0.75
 	sl.light_projector = _pool_tex()
 	sl.light_cull_mask = 1             # 밖의 빛은 밖만 — 안(LAYER_IN)은 안의 빛이 비춘다

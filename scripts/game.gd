@@ -50275,14 +50275,16 @@ func _door_set_mat(sh: Vector2, edy := 0.0) -> Transform2D:
 #  판 그림은 판 화면(다트판 벽)의 빛으로 그렸다 — 문 위에서 0.76 배로 줄면 제 그림자(3 · 6)가
 #  2~4px 로 딱 붙고, 따뜻한 램프 웅덩이 속에서 판만 중립 빛이라 문에 붙은 물건이 아니라 얹은
 #  그림으로 떴다. 문 장면의 램프(door3d LOOK.lamp_at — 판 위 · 앞 · 조금 왼쪽)를 그대로 따른다.
-#    밑  문에 진 그림자 — 판이 문에서 뜬 두께만큼 아래로 번진 부드러운 원(겹 sh_n),
-#        테가 문에 닿은 자리의 좁은 그늘(ao) — 이 한 줄이 「걸려 있다」를 말한다
+#    밑  문에 진 그림자 — 판이 문에서 뜬 두께만큼 밀린 판 실루엣 한 톤(sh_off · sh_a — 램프가 판 위 조금
+#        왼쪽이라 거의 곧게 밑 · 조금 오른쪽 · 손잡이 그늘과 같은 쪽). 옛 반투명 원 일곱 겹은 무른 얼룩에
+#        빛이 왼쪽에서 하나 더 있는 듯 손잡이와 어긋났다(레퍼런스 2차 2026-10-25).
+#        테가 문에 닿는 아랫호의 가장 짙은 1px(ao) — 이 한 줄이 「걸려 있다」를 말한다
 #    위  램프 빛 — 위는 램프 색이 얹히고(top_a) 아래로 갈수록 가라앉는다(bot_a),
 #        테 윗호의 반사 한 획(spec_a), 간판 네온이 윗가에 비친 분홍(neon_a — 제목에서만)
 #  전부 판 자리에서 그린다(_door_set_xf 변환 안) — 문이 열리면 문짝과 같이 돈다.
 const DOORB := {
-	"sh_off": Vector2(-3.0, 15.0), "sh_a": 0.50, "sh_n": 7, "sh_grow": 13.0,
-	"ao_a": 0.55, "ao_w": 3.0,
+	"sh_off": Vector2(2.0, 11.0), "sh_a": 0.50,
+	"ao_a": 0.70, "ao_arc": Vector2(25.0, 155.0),
 	"top_a": 0.12, "bot_a": 0.34,
 	"spec_a": 0.32, "spec_from": -158.0, "spec_to": -40.0,
 	"neon_a": 0.10, "neon_h": 0.42,
@@ -50347,14 +50349,11 @@ func _door_board_rim(sh: Vector2, edy: float) -> void:
 
 func _door_board_under() -> void:
 	var ro := _wall3_ro()
-	var n := int(DOORB.sh_n)
-	var off: Vector2 = DOORB.sh_off
-	for i in n:
-		var q: float = float(i) / float(maxi(n - 1, 1))
-		draw_circle(BC + off * (0.55 + 0.45 * q), ro + float(DOORB.sh_grow) * q,
-				Color(0.0, 0.0, 0.0, float(DOORB.sh_a) / float(n)))
-	draw_arc(BC + Vector2(0.0, 1.0), ro + float(DOORB.ao_w) * 0.5, 0.0, TAU, 72,
-			Color(0.0, 0.0, 0.0, float(DOORB.ao_a)), float(DOORB.ao_w))
+	draw_circle(BC + (DOORB.sh_off as Vector2), ro, Color(0.0, 0.0, 0.0, float(DOORB.sh_a)))
+	#  아랫호 1px — 판 변환(배율 sc)을 지나 화면 1px 이 되는 폭
+	var w: float = 1.0 / maxf((_door_xf()[1] as Vector2).y, 0.01)
+	var aa: Vector2 = DOORB.ao_arc
+	draw_arc(BC, ro + w * 0.5, deg_to_rad(aa.x), deg_to_rad(aa.y), 48, Color(0.0, 0.0, 0.0, float(DOORB.ao_a)), w)
 
 
 #  원 위에 세로로 곧게 바뀌는 덮개 — 꼭짓점 색이 y 의 일차식이라 삼각형 어디서도 그 식 그대로다.
