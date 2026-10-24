@@ -800,6 +800,9 @@ const BRONZE_RAMP := [Color("100804"), Color("24170b"), Color("3e2a14"), Color("
 const PROP_L := Vector3(-0.635, 0.716, 0.289)
 #  램프 몫(셰이더 lk) — 불빛을 안 받는 제 색이라 1 이면 판의 엑스트라인 소품이 옛 반사 쇠보다 한 단 떴다
 const PROP_LK := 0.8
+#  흰 줄 문턱(셰이더 hk · 문 0.955) — 문 그대로면 흰 줄(c4)이 빛 단(c3)만큼 넓게 서 저울 굽 · 등록기 왼 비탈이
+#  크림 덩이로 떴다(검토). 좁혀서 둥근 면의 가는 줄만 남긴다.
+const PROP_HK := 0.985
 
 
 static func _ramp_mat(rp: Array) -> ShaderMaterial:
@@ -807,6 +810,7 @@ static func _ramp_mat(rp: Array) -> ShaderMaterial:
 	_ramp_set(m, rp, 0)
 	m.set_shader_parameter("lk", PROP_LK)
 	m.set_shader_parameter("L", PROP_L)
+	m.set_shader_parameter("hk", PROP_HK)
 	return m
 
 

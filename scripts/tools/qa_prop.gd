@@ -638,6 +638,9 @@ func _ladder() -> void:
 	_ok("놋쇠는 다섯 단 셰이더", bm is ShaderMaterial and got[0] == rp[2], str(got[0]))
 	_ok("얹으면 한 칸 오르고 누르면 내리고 놓으면 제자리",
 			got[1] == rp[3] and got[2] == rp[3] and got[3] == rp[1] and got[4] == rp[2], str(got))
+	#  흰 줄은 문(0.955)보다 좁다 — 문 그대로면 저울 굽 · 등록기 왼 비탈이 크림 덩이로 섰다(검토)
+	_ok("흰 줄 문턱이 문보다 좁다", float(bm.get_shader_parameter("hk")) > 0.955,
+			str(bm.get_shader_parameter("hk")))
 	vp.queue_free()
 
 
