@@ -2357,8 +2357,9 @@ static func _run(g: Node, e: Dictionary) -> void:
 		"over_win", "over_lose", "over_tut":
 			#  런 끝 화면을 처음부터 — 왕관이 커지고 금화가 쏟아지고 박수가 터지는 것까지.
 			g.won = String(e.get("a", "")) != "over_lose"
-			if String(e.get("a", "")) == "over_tut":
-				g.tut_run = true
+			#  셋이 저마다 제 칠판을 연다 — 「튜토리얼 끝 보기」 뒤에 누른 「완주 화면 보기」가 튜토리얼 칠판으로
+			#  남지 않게 늘 적는다(검토 2026-10-25). 끝난 화면이라 이어하기는 저장에서 제 값을 되읽는다.
+			g.tut_run = String(e.get("a", "")) == "over_tut"
 			#  판을 안 던진 런이면 줄이 비어 보인다 — 가짜 값을 넣는다.
 			if g.run_leg_top <= 0:
 				g.run_leg_top = 12345

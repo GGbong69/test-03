@@ -159,6 +159,9 @@ func _run() -> void:
 	_ok("개발자 「튜토리얼 끝 보기」가 그 칠판을 연다", g.state == g.S.OVER and g._over_hero_on()
 			and g.run_leg_top_tg > 0)
 	await _frame()
+	Dev._run(g, {"a": "over_win"})
+	_ok("그 뒤 「완주 화면 보기」는 본편 칠판이다", g.state == g.S.OVER and not g._over_hero_on())
+	await _frame()
 	g.state = g.S.TITLE
 	_arm(false)
 	g.won = false
