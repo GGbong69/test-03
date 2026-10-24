@@ -113,7 +113,7 @@ const MOD_AXES := ["band", "slide", "ring", "bull", "out", "swap",
 		"odd", "even", "flat", "target", "pizza", "donut"]
 # 제약의 축. 발라트로의 보스 블라인드가 손패·플레잉 카드를 때리는 자리에
 # 우리는 **판과 조준**이 있다. 그래서 축을 네 갈래로 벌린다 —
-#   칸   sector_kill · color_kill · odd_mul · spin
+#   칸   sector_kill · color_kill · odd_mul · spin · close_hit(점수 낸 칸이 닫힌다)
 #   링   band_mul · ring_kill
 #   조준 gauge_mul · fog
 #   판밖 darts_add · seal_items · target_mul · reward_mul
@@ -187,7 +187,8 @@ const SCORE_MODES := ["std", "bal", "rand"]
 
 const MODIFIER_AXES := ["band_mul", "gauge_mul", "fog", "darts_add",
 		"sector_kill", "seal_items", "target_mul",
-		"color_kill", "ring_kill", "odd_mul", "shuffle", "reward_mul", "coin_mul"]
+		"color_kill", "ring_kill", "odd_mul", "shuffle", "reward_mul", "coin_mul",
+		"close_hit"]
 
 static var _raw := {}                # 표 이름 → Array[Dictionary] (전부 문자열)
 static var _tune := {}               # key → int/float

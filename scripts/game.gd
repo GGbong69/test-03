@@ -594,6 +594,7 @@ var rt_m_dbl := 2
 var rt_m_trp := 3
 var rt_m_bull := 1
 var dead_idx := -1              # "막힌 칸"이 죽이는 칸. -1 이면 안 걸렸다
+var shut_idx := []              # 보스 「닫힌 문」이 닫은 칸(sectors 의 자리) — 점수 낸 발 뒤에 는다 · 판마다 비운다
 # ── 사진 선반 ────────────────────────────────────────────
 #  상점 왼쪽 벽에 걸린다. **테이블(stock)에 안 넣는다** — 테이블은 상인이
 #  쓸어 다시 던지는 판이고 사진은 그 판에 안 오른다. 리롤해도 안 씻기는
@@ -780,6 +781,7 @@ var boss_seen := []
 #  되풀이 방지의 폭이지 밸런스 손잡이가 아니다(표 10종 − 창 3 = 일곱이
 #  남아 want 2 에도 넉넉하다).
 const BOSS_SEEN_N := 3
+const TUT_MOD_SKIP := ["shuffle", "close_hit"]   # 튜토리얼 보스가 거르는 축(_roll_boss_mods)
 var active_mods := []           # 이번 판에 걸린 제약 (겹치기면 둘)
 var sealed := -1                # "둔화"로 봉인된 아이템 인덱스
 
@@ -3225,6 +3227,7 @@ func _start_leg() -> void:
 	#  표의 번호는 스무 칸 판의 것이다. 칸 수가 다르면(피자 여덟) 같은 방위의 칸으로 옮긴다.
 	if dead_idx >= 0 and _sec_n() != GameData.SECTORS_BASE.size():
 		dead_idx = dead_idx * _sec_n() / GameData.SECTORS_BASE.size()
+	shut_idx.clear()
 	# 변형을 판 시작에 한 번 읽는다. 코드에 갈래가 없는 이름이면
 	# 여기서 한 번 울린다 — 매 프레임 울리면 로그가 못 쓰게 된다.
 	#
@@ -7343,8 +7346,10 @@ func _roll_boss_mods(bn: int, force := false,
 	var rd: int = GameData.round_of(bn)
 	var left := GameData.modifiers().filter(func(m): return rd >= int(m.get("r0", 1)))
 	#  튜토리얼 런은 「돌린 판」(칸 값 섞기)을 뺀다 — 처음 보는 판의 숫자가 섞여 규칙이 바뀐 듯 읽힌다(2026-10-21)
+	#  돌린 판은 2라운드부터라(min_round 2 · 2026-10-25) 이 거름은 안전망이다. 「닫힌 문」은 1라운드부터 서지만
+	#  튜토리얼은 넘치는 점수가 목적이라 뺀다 — 같은 칸을 두 번 맞히면 0 이 된다(2차 레퍼런스 정리 15).
 	if tut_run:
-		left = left.filter(func(m): return String(m.k) != "shuffle")
+		left = left.filter(func(m): return not TUT_MOD_SKIP.has(String(m.k)))
 	#  지난 보스가 정한 것은 **빼는 것이 아니라 뒤로 미룬다.** 표가 열
 	#  종이라 보통은 남지만, 「겹치기」가 둘을 걸면 모자랄 수 있다 —
 	#  새것만 고집하다 뽑을 것이 없어지는 쪽이 더 나쁘다(2026-09-16).
@@ -10553,6 +10558,9 @@ func _land(mark := true) -> void:
 	# 칸을 죽이는 축 셋. 번호 · 색 · 홀짝 순으로 좁아진다.
 	if dead_idx >= 0 and info.idx == dead_idx:
 		info.base = 0
+	#  보스 「닫힌 문」 — 앞 발이 점수를 낸 칸은 참나무 쪽이 박혀 0 이다. 불은 idx −1 이라 안 닫힌다(2026-10-25)
+	if shut_idx.has(info.idx):
+		info.base = 0
 	#  ⚠ **단골 자루가 막은 띠 한 칸** — 금줄과 같은 길이고 그 띠 한 칸만이다(불은 반지름).
 	#  가로채는 발도 막힌 자리에 꽂혔으면 여기서 0 이다 — 값은 「단골」 걸음이 낸다. 2026-10-06
 	if _rgl_blocks(info):
@@ -10641,6 +10649,11 @@ func _land(mark := true) -> void:
 	#  단골이 들어올 자리 — 이 발이 칸에 점수를 냈나. 죽이는 축을 다 지난 값이라 죽은 칸은
 	#  점수를 안 낸 칸이다. 2026-10-06
 	_rgl_note(aim, raw_mult, land_base)
+	#  「닫힌 문」 — 점수를 낸 칸은 이 발 뒤로 닫힌다(연발의 작은 다트도 · 같은 자를 쓴다).
+	#  20 만 파던 손이 판을 돌게 된다 — 같은 숫자를 파는 빌드를 정확히 친다(2차 레퍼런스 정리 15).
+	if land_base > 0 and raw_mult > 0 and info.idx >= 0 and has_axis("close_hit") \
+			and not shut_idx.has(info.idx):
+		shut_idx.append(int(info.idx))
 
 	# 다트 특성
 	var pierce_gain := 0
@@ -15070,6 +15083,18 @@ func _board_plank(push: float) -> void:
 	_plank_draw(a0, a0 + sw, R * rt_bull_o * push + 0.5, R * rt_dbl_out * push)
 
 
+#  보스 「닫힌 문」이 닫은 칸 — 막힌 칸과 같은 참나무 쪽 · 놋쇠 핀(2026-10-25 · 2차 레퍼런스 정리 15).
+#  점수 낸 발이 꽂히는 프레임에 박힌다(그 발의 섬광 밑). 옷 입은 판 위에도 같은 나무라 테마 갈래
+#  밖에서 부른다(_rgl_plank 와 같은 자리). 판 위에서만 — 제목 · 판 고르기 판은 _draw_board 를 같이 쓴다.
+func _shut_plank(push: float) -> void:
+	if shut_idx.is_empty() or not _is_play_deep():
+		return
+	var sw := _sec_w()
+	for si in shut_idx:
+		var a0: float = float(si) * sw - sw * 0.5
+		_plank_draw(a0, a0 + sw, R * rt_bull_o * push + 0.5, R * rt_dbl_out * push)
+
+
 #  단골이 막은 띠 한 칸 — 막힌 칸의 참나무 쪽(_plank_draw)을 그 띠 한 칸으로 좁혔다. 불이면
 #  그 불 한 바퀴(안쪽 불은 원판 · 바깥 불은 고리)다. 자루가 꽂히는 프레임에 서고 막힘이
 #  풀리면 걷힌다(rgl_pa). 옷 입은 판(테마) 위에도 같은 참나무다.
@@ -17976,6 +18001,7 @@ func _draw_board() -> void:
 		_board_plank(push)
 	else:
 		_theme_board(th, ro, push, cols)
+	_shut_plank(push)       # 보스 「닫힌 문」이 닫은 칸(2026-10-25) — 단골 쪽이 그 위에 선다
 	_rgl_plank(push)        # 단골이 막은 띠 한 칸 — 판 사건(2026-10-06)
 	_board_light(push)
 	_theme_over(th, push)
@@ -42266,6 +42292,27 @@ func _icon_modifier(c: Vector2, r: float, id: String, dim: float,
 			# (그 높이에서 조각 반폭이 0.71r 이라 ±0.44r 이 0.27r 안쪽이다).
 			draw_rect(Rect2(c + Vector2(-r * 0.44, -r * 0.54),
 					Vector2(r * 0.88, maxf(r * 0.24, 1.4))), cut)
+
+		# ── 닫힌 문 (2026-10-25) ─────────────────────────
+		# 막힌 칸과 같은 조각인데 **성한 칸(grey)** 이다 — 처음부터 죽은 칸이 아니라 맞혀서
+		# 닫힌다. 그 위로 참나무 쪽(loss)이 조각 폭보다 길게 가로질러 박히고, 양 끝에 핀(cut)
+		# 둘이 선다. 쪽은 키라인(±ks) 끝까지라 조각 밖으로 삐져 「덧댄 판자」로 읽힌다.
+		# 작은 벌은 핀을 버린다 — 1px 점이 쪽 끝에 붙으면 획으로 안 갈린다.
+		"close":
+			var cap := c + Vector2(0.0, r * 0.70)
+			var cfan := PackedVector2Array([cap])
+			for i in 9:
+				var cda := lerpf(-0.52, 0.52, float(i) / 8.0)
+				cfan.append(cap + Vector2(sin(cda), -cos(cda)) * r * 1.45)
+			draw_colored_polygon(cfan, grey)
+			var cph: float = maxf(r * 0.36, 2.4)
+			var cpy: float = -r * 0.26 - cph * 0.5
+			draw_rect(Rect2(c + Vector2(-ks, cpy), Vector2(ks * 2.0, cph)), loss)
+			if big:
+				var cns: float = maxf(r * 0.16, 1.4)
+				for sx in [-1.0, 1.0]:
+					draw_rect(Rect2(c + Vector2(sx * (ks - cns * 1.6) - cns * 0.5,
+							cpy + (cph - cns) * 0.5), Vector2(cns, cns)), cut)
 
 		# ── 높은 목표 ────────────────────────────────────
 		# 목표선(가로획)이 있고 그 위를 뚫고 오르는 화살표. 손실색 하나다 —

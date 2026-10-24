@@ -125,8 +125,8 @@ func _initialize() -> void:
 	# 따라 다섯으로 돌아가려면 그 결정이 먼저 뒤집혀야 한다.
 	_ok("다트 넷 줄 (표준 포함 · 관통 뺌)", GameData.darts().size() == 4,
 			"%d줄" % GameData.darts().size())
-	_ok("제약 11(반토막 2026-10-21) · 리그 8 · 다트통 13 (송곳 뺌)",
-			GameData.modifiers().size() == 11 and GameData.leagues().size() == 8
+	_ok("제약 12(반토막 2026-10-21 · 닫힌 문 10-25) · 리그 8 · 다트통 13 (송곳 뺌)",
+			GameData.modifiers().size() == 12 and GameData.leagues().size() == 8
 			and GameData.packs().size() == 13,
 			"제약 %d · 리그 %d · 다트통 %d" % [GameData.modifiers().size(),
 					GameData.leagues().size(), GameData.packs().size()])
