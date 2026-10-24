@@ -233,6 +233,10 @@ uniform float hk = 1.0;
 uniform vec3 base : source_color = vec3(0.5);
 uniform float grain = 1.0;
 uniform float sat = 1.0;
+//  빛을 단으로 끊는다 — 세기가 두 배 될 때마다 lsteps 단(경계는 딱 끊긴다 · 디더 없음). 「약간 경계가 딱딱 있으면
+//  좋겠는데 … 어설프게 원으로 할 빠에는」(2026-10-24) — 매끈한 감쇠는 램프 · 네온 웅덩이가 흐린 원으로 번져 붙인 빛으로
+//  읽혔다. 손(hand3)의 빛 사다리와 같은 어법 — 결(노멀)을 따라 단 경계가 벽돌 · 판자 모서리에 걸린다.
+uniform float lsteps = 2.0;
 void fragment() {
 	vec2 ts = 1.0 / vec2(textureSize(hgt, 0));
 	float l = texture(hgt, UV - vec2(ts.x, 0.0)).r * hk;
@@ -251,6 +255,13 @@ void fragment() {
 	ALBEDO = c;
 	ROUGHNESS = rough;
 	SPECULAR = spec;
+}
+void light() {
+	//  끊는 것은 빛의 감쇠(거리 · 원뿔 · 웅덩이)뿐이다 — 결 노멀까지 끊으면 텍셀마다 단이 튀어 분홍 띠가 지저분했고,
+	//  반짝임 문턱은 벽돌에 흰 점을 흩뿌렸다(촬영). 결 명암은 그대로 얹는다.
+	float a = ATTENUATION;
+	float q = a > 0.004 ? exp2(floor(log2(a) * lsteps + 0.5) / lsteps) : 0.0;
+	DIFFUSE_LIGHT += q * clamp(dot(NORMAL, LIGHT), 0.0, 1.0) * LIGHT_COLOR / PI;
 }
 """
 
@@ -2272,6 +2283,8 @@ static func _pool_tex() -> GradientTexture2D:
 	for p in LOOK.pool:
 		var v: float = float(p[1])
 		g.add_point(float(p[0]), Color(v, v, v))
+	#  웅덩이도 단으로 — 점 사이를 잇지 않고 다음 점까지 같은 값(경계가 딱 끊긴 고리)
+	g.interpolation_mode = Gradient.GRADIENT_INTERPOLATE_CONSTANT
 	var gt := GradientTexture2D.new()
 	gt.gradient = g
 	gt.fill = GradientTexture2D.FILL_RADIAL
