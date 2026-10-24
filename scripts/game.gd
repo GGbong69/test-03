@@ -42295,8 +42295,9 @@ func _icon_modifier(c: Vector2, r: float, id: String, dim: float,
 
 		# ── 닫힌 문 (2026-10-25) ─────────────────────────
 		# 막힌 칸과 같은 조각인데 **성한 칸(grey)** 이다 — 처음부터 죽은 칸이 아니라 맞혀서
-		# 닫힌다. 그 위로 참나무 쪽(loss)이 조각 폭보다 길게 가로질러 박히고, 양 끝에 핀(cut)
-		# 둘이 선다. 쪽은 키라인(±ks) 끝까지라 조각 밖으로 삐져 「덧댄 판자」로 읽힌다.
+		# 닫힌다. 그 위로 참나무 쪽(loss)이 조각 폭보다 길게 **비스듬히** 가로질러 박히고, 양 끝에
+		# 핀(cut) 둘이 선다. 쪽은 키라인(±ks) 끝까지라 조각 밖으로 삐져 「덧댄 판자」로 읽힌다.
+		# 검토 — 쪽을 가로로 눕히면 조각 윗단과 합쳐 깎은 보석 실루엣이 됐고 핀 둘이 눈으로 읽혔다.
 		# 작은 벌은 핀을 버린다 — 1px 점이 쪽 끝에 붙으면 획으로 안 갈린다.
 		"close":
 			var cap := c + Vector2(0.0, r * 0.70)
@@ -42306,13 +42307,15 @@ func _icon_modifier(c: Vector2, r: float, id: String, dim: float,
 				cfan.append(cap + Vector2(sin(cda), -cos(cda)) * r * 1.45)
 			draw_colored_polygon(cfan, grey)
 			var cph: float = maxf(r * 0.36, 2.4)
-			var cpy: float = -r * 0.26 - cph * 0.5
-			draw_rect(Rect2(c + Vector2(-ks, cpy), Vector2(ks * 2.0, cph)), loss)
+			var pa := c + Vector2(-ks, -r * 0.58)
+			var pb := c + Vector2(ks, -r * 0.02)
+			var pn: Vector2 = (pb - pa).normalized().orthogonal() * cph * 0.5
+			draw_colored_polygon(PackedVector2Array([pa + pn, pb + pn, pb - pn, pa - pn]), loss)
 			if big:
 				var cns: float = maxf(r * 0.16, 1.4)
-				for sx in [-1.0, 1.0]:
-					draw_rect(Rect2(c + Vector2(sx * (ks - cns * 1.6) - cns * 0.5,
-							cpy + (cph - cns) * 0.5), Vector2(cns, cns)), cut)
+				for t in [0.14, 0.86]:
+					draw_rect(Rect2(pa.lerp(pb, t) - Vector2(cns, cns) * 0.5,
+							Vector2(cns, cns)), cut)
 
 		# ── 높은 목표 ────────────────────────────────────
 		# 목표선(가로획)이 있고 그 위를 뚫고 오르는 화살표. 손실색 하나다 —
