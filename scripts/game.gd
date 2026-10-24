@@ -24152,6 +24152,15 @@ func _cons_draw() -> void:
 				draw_set_transform(shake_off)
 			else:
 				_icon_cons(ic, ir, String(cons[i].id))
+		else:
+			#  빈 칸 — 동전 우물(_slot_ghost)과 같은 재질의 네모 홈(2026-10-25 레퍼런스 2차 — 빈 판이 상단에서
+			#  가장 큰 초록 덩어리였다 · 「여기 둘 들어간다」). 어두운 바닥 · 윗변 그늘 · 놋쇠 테 · 왼쪽 위 빛.
+			#  날아오는 동안(_order_fly_hides)도 이 홈이다.
+			_rr(self, r, WELL.floor)
+			_rr_top(self, r.grow(-1.0), 1, C_BG)
+			_rr_line(self, r, WELL.brass)
+			_rr_top(self, r, 1, WELL.brass_hi)
+			_rr_left(self, r, WELL.brass_hi)
 	# 이름과 수 — 동전 슬롯 밑은 상인 자리라 못 쓰지만 이 자리는 벽이다.
 	# 「사탕」이라고만 적고 있었는데 이 칸에는 사진도 들어간다 — 사진을
 	# 한 장 들고 있으면 「사탕 1/2」가 거짓말이 된다.
