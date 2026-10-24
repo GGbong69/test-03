@@ -46782,7 +46782,26 @@ func _clear_roll() -> int:
 #  끝난다. 화면 어디를 눌러도 넘어가므로(_click S.CLEAR) 자리를 옮겨도 판정은 그대로다.
 const CLR := {"x": 190.0, "w": 260.0, "y": 86.0, "row": 28.0, "name_w": 150.0,
 		"big_n": 6,
-		"x_s": 227.0, "w_s": 186.0, "y_s": 78.0, "row_s": 16.0, "name_w_s": 124.0}
+		"x_s": 227.0, "w_s": 186.0, "y_s": 78.0, "row_s": 16.0, "name_w_s": 124.0,
+		#  정산 칠판(_draw_clear) — 석판 윗변 · 글과 옆 테 사이 · 합계 바닥선 밑 여백. 큰 표 여섯 줄이면
+		#  석판이 y 279 · 받침이 286 에서 끝나 「상점으로」(290) 위에 선다.
+		"slate_y": 18.0, "slate_pad": 18.0, "slate_bot": 8.0}
+#  정산 칠판의 칸 값(_chalk_board · CHALKB 와 같은 열쇠) — 점수 칠판(order)과 같은 테 · 빛(왼쪽 위 램프) ·
+#  받침의 분필 토막. 지운 자국은 없다(n 0) — 읽는 화면이라 줄 밑 얼룩이 가름줄로 읽힌다.
+const CLR_BOARD := {"sh": Vector2(2.0, 3.0), "sh_a": 0.40, "lit": -1.0, "n": 0,
+		"w": Vector2(1.0, 1.0), "h": Vector2(1.0, 1.0), "seed": 4451,
+		"stick": Vector2(-16.0, 8.0), "soft": false, "ink": 0.0}
+
+
+#  정산 칠판의 석판 — 줄 n 개 · 머리 폭 hw. 밑변은 합계 바닥선(마지막 줄 + 선 틈 + 총액) 밑 slate_bot ·
+#  폭은 표와 머리 중 넓은 쪽에 slate_pad 를 두른다. 받침까지 「상점으로」 위에 선다(qa_clear ⑥).
+func _clear_slate(n: int, hw: float) -> Rect2:
+	var big: bool = n <= int(CLR.big_n)
+	var sy: float = float(CLR.slate_y)
+	var bot: float = float(CLR.y if big else CLR.y_s) + float(maxi(n - 1, 0)) * float(CLR.row if big else CLR.row_s) \
+			+ (45.0 if big else 33.0) + float(CLR.slate_bot)
+	var sw: float = minf(maxf(float(CLR.w if big else CLR.w_s), hw) + float(CLR.slate_pad) * 2.0, VIEW.x - 40.0)
+	return Rect2(roundf((VIEW.x - sw) * 0.5), sy, roundf(sw), roundf(bot - sy))
 
 
 func _draw_clear() -> void:
@@ -46793,11 +46812,30 @@ func _draw_clear() -> void:
 		_wall3_clear()
 	else:
 		draw_rect(_full(), C_BG)
-	draw_string(_fz(font, 24), Vector2(0, 46), _L("라운드 %d  %s 클리어")
-			% [GameData.round_of(leg_no), _L(GameData.leg_name(leg_no))],
-			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 24, C_ACC)
-
+	#  판 정산을 벽에 건 칠판 장부로(2026-10-25 · 레퍼런스 2차) — 루프 안에서 재질이 없던 마지막 화면이라
+	#  글이 덮개 위에 떠 있었다. 판자 벽 가운데에 점수 칠판과 같은 나무 테 칠판이 걸리고 줄은 분필이다.
+	#  금빛은 「클리어」 · 값 플라크 · 합계뿐이다. 석판 높이는 줄 수로 미리 잰다(줄이 들기 전부터 선다).
 	var big: bool = clear_gold_detail.size() <= int(CLR.big_n)
+	var ink: Color = DOORT.chalk_ink
+	var cw: String = _L("클리어")
+	var head: String = _L("라운드 %d  %s 클리어") % [GameData.round_of(leg_no), _L(GameData.leg_name(leg_no))]
+	var hw: float = font.get_string_size(head, HORIZONTAL_ALIGNMENT_LEFT, -1, 24).x if font != null else 200.0
+	_chalk_board(self, _clear_slate(clear_gold_detail.size(), hw), float(SCOREB.frame), CLR_BOARD)
+	#  머리 — 분필 글 · 「클리어」 낱말만 금빛(세 말 다 끝에 온다 · 아니면 통째 분필)
+	var hx: float = roundf((VIEW.x - hw) * 0.5)
+	if head.ends_with(cw) and font != null:
+		var h0: String = head.left(head.length() - cw.length())
+		draw_string(_fz(font, 24), Vector2(hx, 46), h0, HORIZONTAL_ALIGNMENT_LEFT, -1, 24, Color(ink, 0.94))
+		draw_string(_fz(font, 24), Vector2(hx + font.get_string_size(h0, HORIZONTAL_ALIGNMENT_LEFT, -1, 24).x, 46),
+				cw, HORIZONTAL_ALIGNMENT_LEFT, -1, 24, C_ACC)
+	else:
+		draw_string(_fz(font, 24), Vector2(0, 46), head, HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 24, Color(ink, 0.94))
+	#  받은 줄 이름은 분필 2층(점수 칠판의 「목표」 · 「점수」와 같은 0.62) · 0 인 줄은 꺼진 분필(MENUM.off —
+	#  석판 위 3.5:1 의 밑단). 석판 위에 불투명으로 섞는다 — 줄이 드는 알파(a)를 그대로 받고, 꺼진 값의
+	#  플라크(면 · 옆면 · 빛 줄)가 겹친 자리에서 비치지 않는다.
+	var c_on: Color = (DOORT.chalk as Color).lerp(ink, 0.62)
+	var c_off: Color = (DOORT.chalk as Color).lerp(ink, float(MENUM.off))
+
 	var x0: float = float(CLR.x if big else CLR.x_s)
 	var tw: float = float(CLR.w if big else CLR.w_s)
 	var x1: float = x0 + tw
@@ -46820,15 +46858,15 @@ func _draw_clear() -> void:
 		#  한 글자 일찍 자를 수는 있어도 넘치지는 않는다.
 		if big:
 			draw_string(_fz(font_sm, 20), Vector2(x0, y), _L(_elide_word(String(row.n), nw, 20)),
-					HORIZONTAL_ALIGNMENT_LEFT, nw, 20, Color(C_DIM if got else C_OFF, a))
+					HORIZONTAL_ALIGNMENT_LEFT, nw, 20, Color(c_on if got else c_off, a))
 		else:
 			draw_string(_fz(font, 12), Vector2(x0, y), _L(_elide_word(String(row.n), nw, 12)),
-					HORIZONTAL_ALIGNMENT_LEFT, nw, 12, Color(C_DIM if got else C_OFF, a))
+					HORIZONTAL_ALIGNMENT_LEFT, nw, 12, Color(c_on if got else c_off, a))
 		#  못 받은 줄은 눌러 둔다 — 「받은 것」과 「0 인 것」이 같은 무게로
 		#  서면 내역이 목록이 아니라 벽지가 된다.
 		var vt := "+%d" % int(row.v)
 		draw_gold_at(x1 - gold_w(vt, vs), y, vt, vs,
-				Color(C_GOLD if got else C_OFF, a))
+				Color(C_GOLD if got else c_off, a))
 		if got and int(row.get("d", 0)) > 0:
 			var nf: Font = font_sm if big else font
 			var nx: float = x0 + nf.get_string_size(_L(_elide_word(String(row.n), nw, 20 if big else 12)),
@@ -46843,7 +46881,7 @@ func _draw_clear() -> void:
 	var all_in: float = float(clear_gold_detail.size()) * step
 	if step <= 0.0 or clear_t >= all_in:
 		var ly: float = y - dy + (10.0 if big else 8.0)
-		draw_rect(Rect2(Vector2(x0, ly), Vector2(tw, 1.0)), Color(C_WIRE, 0.5))
+		_chalk_rule(self, x0, ly, tw)               # 분필 한 획(끝이 조금 흐리다)
 		var et := "%+d" % _clear_roll()          # 이번 판 몫 — 줄들의 합(지갑은 자금판)
 		if big:
 			draw_gold(VIEW.x * 0.5, ly + 35.0, et, 36, C_GOLD)
