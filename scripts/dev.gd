@@ -1276,6 +1276,9 @@ static func _rows(g: Node) -> Array:
 				{"n1": "대결 상인 수 묶기", "t": "act", "a": "bdm_move"},
 				#  켤 때의 프롤로그(game.gd PLGP · scripts/prologue3d.gd)를 다시 튼다 — 끝나면 TV 켜짐 · 인트로 · 제목. 2026-10-18
 				{"n1": "프롤로그 보기", "t": "act", "a": "plg"},
+				#  튜토리얼 끝 칠판(game.gd _over_hero — 넘친 점수 · 그은 목표)을 곧장 연다. 「소리·연출」의 런 끝 두 줄은
+				#  열아홉이 차 이 쪽에 둔다. 지금 런을 튜토리얼 런으로 적는다(새 런을 열면 돌아온다). 2026-10-25
+				{"n1": "튜토리얼 끝 보기", "t": "act", "a": "over_tut"},
 			]
 
 
@@ -2351,12 +2354,16 @@ static func _run(g: Node, e: Dictionary) -> void:
 			g.over_t = 9.0
 			_say("런 끝 잠금 풀림")
 			return
-		"over_win", "over_lose":
+		"over_win", "over_lose", "over_tut":
 			#  런 끝 화면을 처음부터 — 왕관이 커지고 금화가 쏟아지고 박수가 터지는 것까지.
-			g.won = String(e.get("a", "")) == "over_win"
+			g.won = String(e.get("a", "")) != "over_lose"
+			if String(e.get("a", "")) == "over_tut":
+				g.tut_run = true
 			#  판을 안 던진 런이면 줄이 비어 보인다 — 가짜 값을 넣는다.
 			if g.run_leg_top <= 0:
 				g.run_leg_top = 12345
+			if g.run_leg_top_tg <= 0:
+				g.run_leg_top_tg = 300
 			if g.run_found <= 0:
 				g.run_found = 3
 			g.run_rec0 = 0            # 신기록 도장이 서게(본편 런일 때)
@@ -2368,7 +2375,7 @@ static func _run(g: Node, e: Dictionary) -> void:
 			g.over_t = 0.0
 			g.state = g.S.OVER
 			g._sfx("run_win" if g.won else "run_lose")
-			_say("완주 화면" if g.won else "실패 화면")
+			_say("튜토리얼 끝" if String(e.get("a", "")) == "over_tut" else ("완주 화면" if g.won else "실패 화면"))
 			return
 		"plg":
 			g._plg_begin()
