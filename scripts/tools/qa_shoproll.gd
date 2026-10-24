@@ -214,6 +214,39 @@ func _run() -> void:
 	_ok("튜토리얼 런에는 점이 없다", not g._bill_new({"type": "item", "d": {"id": "zz"}}))
 	g.tut_run = tr0
 
+	# ⑪ 새 매물의 표시는 점이 아니라 사선 반짝이다(2026-10-25 · 레퍼런스 2차) — 칸마다 한 바퀴에 한 번 ·
+	#    한 번에 하나만 · 움직임 끔이면 선 채로
+	print("")
+	var ft0: float = g.float_t
+	var mo0: bool = g.motion_off
+	g.motion_off = false
+	var gl_both := 0
+	var gl_miss := 0
+	for n in [1, 3, 6, 9]:
+		var seen := {}
+		var t := 0.0
+		while t < float(g.GLINT.period):
+			g.float_t = 100.0 + t
+			var on := 0
+			for i in n:
+				if g._glint_p(i, n) < 1.0:
+					on += 1
+					seen[i] = true
+			if on > 1:
+				gl_both += 1
+			t += 0.01
+		gl_miss += n - seen.size()
+	_ok("반짝 — 한 번에 하나만 돈다(아홉 칸까지)", gl_both == 0, "겹친 틀 %d" % gl_both)
+	_ok("반짝 — 칸마다 한 바퀴에 한 번은 돈다", gl_miss == 0, "못 돈 칸 %d" % gl_miss)
+	g.motion_off = true
+	_ok("반짝 — 움직임 끔이면 선 채로 선다", g._glint_p(2, 6) < 1.0 and g._glint_p(5, 6) < 1.0)
+	g.motion_off = mo0
+	g.float_t = ft0
+	var gl_src := FileAccess.get_file_as_string("res://scripts/game.gd")
+	var a0: int = gl_src.find("func _bill_at(")
+	var body: String = gl_src.substr(a0, gl_src.find("\nfunc ", a0 + 10) - a0)
+	_ok("값표 옆 금빛 점은 걷혔다(「20°」 로 읽혔다)", a0 >= 0 and not body.contains("draw_circle("))
+
 	print("\n%s\n" % ("전부 통과" if fail == 0 else "실패 %d건" % fail))
 	print("통과 %d · 실패 %d" % [okn, fail])
 	quit(0 if fail == 0 else 1)

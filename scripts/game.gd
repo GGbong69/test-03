@@ -22730,6 +22730,9 @@ func _panel_slot(i: int) -> void:
 
 	draw_item_sticker(c, r, it, bounce * PANEL.spin + _float_rot(i) + wg.y, up * PANEL.lift,
 			0.55 if lock else 0.0, 12)
+	#  산 동전이 앉는 틀 — 사선 반짝 한 번(GLINT · 2026-10-25 레퍼런스 2차)
+	if i == slot_gl_i:
+		_glint(c, r * 0.9, r * 0.9, (float_t - slot_gl_t) / float(GLINT.sweep))
 	#  성장형 「잭과 콩나무」 — 둘레에 덩굴이 자란 만큼 타고 오른다(BEAN).
 	if String(it.get("side", "")) == "bigdart":
 		_bean_vine(c, r, it)
@@ -36890,6 +36893,7 @@ func _goods_draw() -> void:
 			_obj_draw(i, 0.78)
 			drop[i].u = su
 		_obj_draw(i, 0.0 if (hov < 0 or hov == i) else DROP.dim_off)
+		_bill_glint(i, 0.0 if (hov < 0 or hov == i) else DROP.dim_off)    # 처음 보는 매물 — 제 몸 위에만
 	#  값은 물건을 **다 그린 뒤** 한 바퀴 돈다. 앞 물건이 뒤 물건의 값을
 	#  가리면 그 물건은 값을 모르는 채로 산다(2026-09-17 제보) — 그래서
 	#  값이 가려질 자리면 비어 있는 곁(위 · 오른쪽 · 왼쪽)으로 옮긴다
@@ -40308,12 +40312,89 @@ func _bill_at(i: int, r: Rect2) -> void:
 				HORIZONTAL_ALIGNMENT_CENTER, 80.0, 12, C_ACC)
 		return
 	var can: bool = not s.sold and gold >= s.cost
-	var bw := draw_gold_at(r.position.x, y, str(s.cost), int(BILL.sz), C_GOLD if can else C_OFF)
-	#  처음 보는 매물 — 값 오른쪽 위에 금빛 점 하나(글자 없음). 수 윗끝에 맞춘다 — 가운데 · 밑이면
-	#  「12.」 의 소수점으로 읽혔다.
-	if _bill_new(s):
-		draw_circle(Vector2(r.position.x + bw + 4.0,
-				y - float(BILL.sz) * float(INK.num) + 1.5), 1.5, C_GOLD)
+	#  처음 보는 매물의 표시는 값 옆 금빛 점이었다 — 수 윗끝에 맞추니 「20°」 로 읽혔다(레퍼런스 2차).
+	#  이제 물건 위를 사선 반짝이 스친다(_bill_glint).
+	draw_gold_at(r.position.x, y, str(s.cost), int(BILL.sz), C_GOLD if can else C_OFF)
+
+
+#  ── 사선 반짝 (2026-10-25 · 레퍼런스 2차 「「20°」로 읽히는 새 매물 점을 사선 반짝으로」) ──
+#  흰 사선 두 줄(굵은 2px · 가는 1px)이 물건 위를 왼쪽 위에서 오른쪽 아래로 4틀에 스친다. 행마다 정수 픽셀로
+#  타원 안만 칠한다 — 둥근 빛무리 · 번짐이 아니다. 처음 보는 매물은 period 마다 한 번(칸마다 박자를 고르게
+#  어긋내 한 번에 하나만) · 산 동전이 슬롯에 앉는 틀에 한 번. 움직임 끔이면 셋째 틀에 멎어 선다(슬롯은 안 선다).
+#    period 한 바퀴(초) · sweep 스치는 동안(초) · steps 틀 수 · a · a_thin 굵은 · 가는 줄 짙기
+const GLINT := {"period": 2.6, "sweep": 0.2, "steps": 4, "a": 0.85, "a_thin": 0.55}
+var slot_gl_i := -1              # 반짝이 스치는 동전 슬롯(산 동전이 앉은 칸) · −1 없음
+var slot_gl_t := 0.0             # 그 반짝이 든 float_t
+
+
+#  타원 c · rx · ry(tilt 만큼 돈다) 위에 사선 반짝 한 번의 p(0~1) 몫. 밖이면 안 그린다.
+func _glint(c: Vector2, rx: float, ry: float, p: float, a := 1.0, tilt := 0.0) -> void:
+	if p < 0.0 or p >= 1.0 or a <= 0.0 or rx < 1.0 or ry < 1.0:
+		return
+	var n: float = float(GLINT.steps)
+	var cs := cos(tilt)
+	var sn := sin(tilt)
+	#  돈 타원 qa·x² + qb·x·y + qc·y² ≤ 1 — 행 y 마다 x 두 끝을 푼다.
+	var qa: float = cs * cs / (rx * rx) + sn * sn / (ry * ry)
+	var qb: float = 2.0 * sn * cs * (1.0 / (rx * rx) - 1.0 / (ry * ry))
+	var qc: float = sn * sn / (rx * rx) + cs * cs / (ry * ry)
+	var ey: float = sqrt(rx * rx * sn * sn + ry * ry * cs * cs)
+	#  사선 x + y = d — 타원이 닿는 d 의 끝(±es)을 steps 칸으로 가르고 칸 가운데에 선다(네 틀이 다 물건 위다).
+	var es: float = sqrt((qa + qc - qb) / (qa * qc - qb * qb * 0.25))
+	var d: float = roundf(lerpf(-es - 4.0, es, (floorf(p * n) + 0.5) / n))
+	var o := c.round()
+	for yy in range(int(floorf(-ey)), int(ceilf(ey)) + 1):
+		var y: float = float(yy) + 0.5
+		var disc: float = qb * qb * y * y - 4.0 * qa * (qc * y * y - 1.0)
+		if disc <= 0.0:
+			continue
+		var sq: float = sqrt(disc)
+		var xmin: float = ceilf((-qb * y - sq) / (2.0 * qa) - 0.5)
+		var xmax: float = floorf((-qb * y + sq) / (2.0 * qa) - 0.5)
+		for band in [[0.0, 2.0, float(GLINT.a)], [3.0, 1.0, float(GLINT.a_thin)]]:
+			var x0: float = maxf(d - float(yy) + float(band[0]), xmin)
+			var x1: float = minf(d - float(yy) + float(band[0]) + float(band[1]) - 1.0, xmax)
+			if x1 >= x0:
+				draw_rect(Rect2(o.x + x0, o.y + float(yy), x1 - x0 + 1.0, 1.0),
+						Color(1.0, 1.0, 1.0, float(band[2]) * a))
+
+
+#  n 칸 중 i 째의 반짝 몫(1 이상이면 쉬는 동안) — 칸마다 한 바퀴를 n 으로 고르게 갈라 어긋낸다. sweep 이
+#  period / n 보다 짧은 동안(열셋까지)은 한 번에 하나만 돈다(qa_shoproll ⑪). 움직임 끔이면 셋째 틀에 선다.
+func _glint_p(i: int, n: int) -> float:
+	if motion_off:
+		return 0.5
+	var off: float = float(i) * float(GLINT.period) / float(maxi(n, 1))
+	return fposmod(float_t - off, float(GLINT.period)) / float(GLINT.sweep)
+
+
+#  처음 보는 매물 i 의 반짝 — 제 몸을 그린 바로 뒤(_goods_draw · 앞 물건이 위를 덮는다). 몸의 윗면 타원:
+#  동전은 면 그대로 · 플라크 · 와펜 · 사탕 · 사진은 그 안에 드는 만큼 · 다트는 자루를 따라 돈 가는 타원.
+func _bill_glint(i: int, dim: float) -> void:
+	if i >= mini(drop.size(), stock.size()):
+		return
+	var it: Dictionary = drop[i]
+	var s: Dictionary = stock[i]
+	if not it.into or it.sold > 0.0 or s.sold or not _bill_new(s):
+		return
+	var p := _glint_p(i, stock.size())
+	if p >= 1.0:
+		return
+	var c := _p2s(it.u, it.w, it.h + it.lift)
+	var a: float = 1.0 - dim
+	match String(s.type):
+		"item":
+			var rk: float = 0.7 if String(FORMS[_stock_form(s)].get("fam", "disc")) == "plaque" else 1.0
+			_glint(c, TBL.chip_r * rk, TBL.chip_r * TBL.flat * rk, p, a)
+		"mod":
+			var mr: float = TBL.mod_r * 0.74
+			_glint(c - Vector2(0.0, float(MOD_ART.side_px) + 2.0), mr, mr * TBL.flat, p, a)
+		"dart":
+			var de := _dart_e(it)
+			_glint(c, TBL.dart_l * de.length() * 0.8, 2.5, p, a, de.angle())
+		_:
+			var fr: float = 11.0 * GOODS_K * 0.75 if String(s.type) == "cons" else FIX_H * GOODS_K * 0.8
+			_glint(c, fr, fr * TBL.flat, p, a)
 
 
 #  아직 컬렉션에 없는 매물인가 — 컬렉션과 같은 열쇠(COL_TABS 의 f · 사진은 cons)로 묻는다.
@@ -43811,6 +43892,9 @@ func _drop_arrive(i: int) -> void:
 	match stock[i].type:
 		"item":
 			_panel_fire(it.slot)
+			if not motion_off:
+				slot_gl_i = int(it.slot)          # 앉는 틀에 사선 반짝 한 번(GLINT)
+				slot_gl_t = float_t
 		"mod":
 			pop(it.to, "보드 확장", C_CHIP.lightened(0.25), 12, 0.9)
 		"dart":
