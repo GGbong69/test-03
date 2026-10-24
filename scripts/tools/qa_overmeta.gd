@@ -2,6 +2,7 @@ extends SceneTree
 
 const GameData = preload("res://scripts/data.gd")
 const Save = preload("res://scripts/save.gd")
+const Dev = preload("res://scripts/dev.gd")
 
 # ══════════════════════════════════════════════════════════
 #  런 끝 · 컬렉션 · 프로필의 「이번 런 값」 (2026-10-21)
@@ -133,8 +134,37 @@ func _run() -> void:
 	_ok("프로필 최고값은 안 민다(튜토리얼)", Save.stat("best_score") == 0,
 			"%d" % Save.stat("best_score"))
 	_ok("이어하기에 적힌다(RUN_PLAIN)", _plain_has("run_leg_top"))
+	#  튜토리얼 끝 칠판의 주인공은 넘친 점수(2026-10-25 · 레퍼런스 2차) — 그 판의 목표를 같이 쥐고, 완주하면
+	#  「최고 판 점수」 줄 대신 가운데에 크게 선다 · 수 줄 · 동전 칸은 물러난다
+	var tg_want: int = t1 if t1 + 700 >= GameData.target_of(2) + 10 else GameData.target_of(2)
+	_ok("최고 판의 목표를 쥔다", g.run_leg_top_tg == tg_want, "%d · %d" % [g.run_leg_top_tg, tg_want])
+	_ok("목표도 이어하기에 적힌다(RUN_PLAIN)", _plain_has("run_leg_top_tg"))
+	var cy0: float = (g._over_coin_rect(0) as Rect2).position.y
+	g.won = true
+	_ok("튜토리얼 완주 — 「최고 판 점수」 줄이 비킨다", g._over_hero_on() and _row("최고 판 점수") == "",
+			str(g._over_rows()))
+	_ok("튜토리얼 완주 — 동전 칸이 그만큼 물러난다",
+			is_equal_approx((g._over_coin_rect(0) as Rect2).position.y - cy0, float(g.OVERB.hero_push)))
+	g.state = g.S.OVER
+	g.over_t = 3.0
+	await _frame()
+	g.state = g.S.TITLE
+	g.won = false
 	_arm(false)
-	_ok("다음 런은 다시 0", g.run_leg_top == 0)
+	_ok("다음 런은 다시 0", g.run_leg_top == 0 and g.run_leg_top_tg == 0)
+	g.won = true
+	_ok("본편 완주는 그대로 — 줄이 서고 안 물러난다", not g._over_hero_on() and _row("최고 판 점수") != ""
+			and g._over_push() == 0.0)
+	Dev._run(g, {"a": "over_tut"})
+	_ok("개발자 「튜토리얼 끝 보기」가 그 칠판을 연다", g.state == g.S.OVER and g._over_hero_on()
+			and g.run_leg_top_tg > 0)
+	await _frame()
+	Dev._run(g, {"a": "over_win"})
+	_ok("그 뒤 「완주 화면 보기」는 본편 칠판이다", g.state == g.S.OVER and not g._over_hero_on())
+	await _frame()
+	g.state = g.S.TITLE
+	_arm(false)
+	g.won = false
 
 	print("\n② 통계로 여는 다트통의 조건 글")
 	Save.peak("best_dart_lgt", 2)

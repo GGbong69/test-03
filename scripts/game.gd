@@ -2432,6 +2432,7 @@ const RUN_PLAIN := [
 	["zone_hist", {}],       # 열쇠가 **String**(zone 이름)이다 — 위 둘과 다르다
 	["run_secs", 0.0],       # 런 시간(초) — 런 끝 화면의 「클리어 시간」
 	["run_leg_top", 0],      # 이번 런 최고 판 점수 — 런 끝 「최고 판 점수」
+	["run_leg_top_tg", 0],   # 그 판의 목표 — 튜토리얼 끝 칠판이 작게 긋는 수
 	["run_fires", {}],       # 동전 id → 이번 런 발동 수 — 런 끝 「×N」 · 툴팁 「발동 N」
 	["run_rec0", -1],        # 런 시작 때 프로필 한 판 최고 점수 — 런 끝 신기록 도장(−1 은 모름 · 옛 저장)
 	["run_found", 0],        # 이번 런에 컬렉션에 새로 든 수 — 런 끝 「새로 찾음」
@@ -3017,6 +3018,7 @@ func _new_run(human := false) -> void:
 	#  런 시간도 새로 센다 — 되살리기(_run_load)는 적힌 값을 그대로 잇는다(RUN_PLAIN).
 	run_secs = 0.0
 	run_leg_top = 0
+	run_leg_top_tg = 0
 	run_fires = {}
 	run_rec0 = Save.stat("best_score")
 	run_found = 0              # 첫 다트를 쥐여 주는 _found 보다 먼저
@@ -5041,6 +5043,8 @@ func _finish_leg() -> void:
 			carry_darts = maxi(darts_left, 0)
 			break
 	#  이번 런 값이라 기록을 안 남기는 런(튜토리얼 · 챌린지 · 무한)에서도 센다 — 런 끝 「최고 판 점수」.
+	if total > run_leg_top:
+		run_leg_top_tg = target        # 튜토리얼 끝 칠판 — 넘친 점수 옆에 그어 둘 목표
 	run_leg_top = maxi(run_leg_top, total)
 	#  ⚠ 챌린지·무한은 여기부터 통째로 건너뛴다(_rec_off 머리말).
 	#  무한 구간의 수는 세기 절(endless:leg · endless:score)이 따로 센다.
@@ -7980,7 +7984,8 @@ func _process(d: float) -> void:
 		if ot0 < float(OVERB.stamp_at) and over_t >= float(OVERB.stamp_at) and _over_rec():
 			_sfx("target_hit")
 		#  잠금이 풀리는 틀에 상인 한마디(NSAY 런 끝) — 진 런은 목표 가까이 쳤으면 「아깝다」 묶음.
-		if ot0 < OVER_LOCK and over_t >= OVER_LOCK:
+		#  튜토리얼 끝은 안 한다 — 넘친 점수(_over_hero)에 밀려 내려온 동전 · 다트통 줄이 말상자 자리다.
+		if ot0 < OVER_LOCK and over_t >= OVER_LOCK and not _over_hero_on():
 			_nsay("over_win" if won else ("over_close"
 					if float(total) >= float(target) * float(NSAY.close) else "over_lose"), true)
 		queue_redraw()
@@ -20070,6 +20075,20 @@ func _dart_shade_2d(a := 1.0) -> void:
 		#  2dl 로 그으면 그림자가 꽁지 밖으로 길게 삐져나가 **자루가 아니라
 		#  금 한 줄**이 된다. 짧은 쪽으로 틀리면 자루 밑에 숨을 뿐이다.
 		draw_line(e.p + o, e.p - u * dl + o, Color(sc, sc.a * a), 2.0)
+	#  날아오는 자루의 그림자(2026-10-25 · 레퍼런스 2차 「날아오는 다트 그림자가 촉으로 모인다」) — 꽂힐 자리를
+	#  판 위 원판 대신 그림자가 말한다. 판에서 먼 동안은 꽂힐 자리 밑으로 멀리 · 옅게 지고, 다가올수록 촉 끝으로
+	#  미끄러져 짙어진다. 마지막 틀이 위 꽂힌 자루 그림자(1, 2)와 한 자리라 착탄에서 하나가 된다. 정수 px 로
+	#  옮긴다 — 반 px 씩 기면 선이 번진다. 3D 자루가 날 때만 · 움직임 끔이면 꽂힌 뒤에만 선다.
+	if state == S.FLY and _bd3_live() and not motion_off:
+		var t := clampf(fly_t / maxf(GameData.tune("fly_time"), 0.001), 0.0, 1.0)
+		var k := t * t * (3.0 - 2.0 * t)          # 자루와 같은 곡선(_bd3_fly_tf)
+		var fv: Vector2 = aim - BC
+		var fdl := clampf(fv.length() * float(DART_PERSP) * 0.5, float(DART_MIN), float(DART_MAX))
+		var fu := (-fv).normalized() if fv.length() > 0.001 else Vector2(0.0, 1.0)
+		var fo := (Vector2(1.0, 2.0) + Vector2(3.0, 16.0) * (1.0 - k)).round()
+		var fc: Color = BOARDART.shadow
+		#  처음 짙기 0.55 — 0.35 면 판 그림자(0.40)의 0.14 라 초록 · 빨강 칸 위에서 안 보였다(찍어 봤다).
+		draw_line(aim + fo, aim - fu * fdl + fo, Color(fc, fc.a * a * lerpf(0.55, 1.0, k)), 2.0)
 
 
 # 3D 가 없을 때의 받침. 같은 투영을 손으로 계산한다 — 자세한 근거는
@@ -20183,7 +20202,9 @@ func _draw_aim() -> void:
 			for rc in [[lerpf(22.0, 7.0, e), 1.0], [lerpf(30.0, 11.0, e), 0.3]]:
 				draw_arc(aim, rc[0], 0.0, TAU, 24, Color(C_BG, 0.7 * rc[1]), 3.0)
 				draw_arc(aim, rc[0], 0.0, TAU, 24, Color(C_TXT, rc[1]), 1.0)
-	elif state == S.FLY:
+	elif state == S.FLY and not _bd3_live():
+		#  3D 자루가 나는 동안은 꽂힐 자리를 자루의 그림자가 말한다(_dart_shade_2d — 2026-10-25 레퍼런스 2차).
+		#  크림색 반투명 원판은 2D 받침(헤드리스)에만 남는다.
 		#  ⚠ 0.2 가 박혀 있었다. tuning.csv 는 fly_time 을 0.05~1.0 으로 여는데
 		#  여기만 그 값을 안 읽어서, 0.2 를 넘기면 k 가 음수로 가고 반지름도
 		#  알파도 같이 음수가 됐다(fly_t 0.5 면 반지름 −36). 같은 파일
@@ -22714,6 +22735,9 @@ func _panel_slot(i: int) -> void:
 
 	draw_item_sticker(c, r, it, bounce * PANEL.spin + _float_rot(i) + wg.y, up * PANEL.lift,
 			0.55 if lock else 0.0, 12)
+	#  산 동전이 앉는 틀 — 사선 반짝 한 번(GLINT · 2026-10-25 레퍼런스 2차)
+	if i == slot_gl_i:
+		_glint(c, r * 0.9, r * 0.9, (float_t - slot_gl_t) / float(GLINT.sweep))
 	#  성장형 「잭과 콩나무」 — 둘레에 덩굴이 자란 만큼 타고 오른다(BEAN).
 	if String(it.get("side", "")) == "bigdart":
 		_bean_vine(c, r, it)
@@ -36883,6 +36907,7 @@ func _goods_draw() -> void:
 			_obj_draw(i, 0.78)
 			drop[i].u = su
 		_obj_draw(i, 0.0 if (hov < 0 or hov == i) else DROP.dim_off)
+		_bill_glint(i, 0.0 if (hov < 0 or hov == i) else DROP.dim_off)    # 처음 보는 매물 — 제 몸 위에만
 	#  값은 물건을 **다 그린 뒤** 한 바퀴 돈다. 앞 물건이 뒤 물건의 값을
 	#  가리면 그 물건은 값을 모르는 채로 산다(2026-09-17 제보) — 그래서
 	#  값이 가려질 자리면 비어 있는 곁(위 · 오른쪽 · 왼쪽)으로 옮긴다
@@ -40323,12 +40348,89 @@ func _bill_at(i: int, r: Rect2) -> void:
 				HORIZONTAL_ALIGNMENT_CENTER, 80.0, 12, C_ACC)
 		return
 	var can: bool = not s.sold and gold >= s.cost
-	var bw := draw_gold_at(r.position.x, y, str(s.cost), int(BILL.sz), C_GOLD if can else C_OFF)
-	#  처음 보는 매물 — 값 오른쪽 위에 금빛 점 하나(글자 없음). 수 윗끝에 맞춘다 — 가운데 · 밑이면
-	#  「12.」 의 소수점으로 읽혔다.
-	if _bill_new(s):
-		draw_circle(Vector2(r.position.x + bw + 4.0,
-				y - float(BILL.sz) * float(INK.num) + 1.5), 1.5, C_GOLD)
+	#  처음 보는 매물의 표시는 값 옆 금빛 점이었다 — 수 윗끝에 맞추니 「20°」 로 읽혔다(레퍼런스 2차).
+	#  이제 물건 위를 사선 반짝이 스친다(_bill_glint).
+	draw_gold_at(r.position.x, y, str(s.cost), int(BILL.sz), C_GOLD if can else C_OFF)
+
+
+#  ── 사선 반짝 (2026-10-25 · 레퍼런스 2차 「「20°」로 읽히는 새 매물 점을 사선 반짝으로」) ──
+#  흰 사선 두 줄(굵은 2px · 가는 1px)이 물건 위를 왼쪽 위에서 오른쪽 아래로 4틀에 스친다. 행마다 정수 픽셀로
+#  타원 안만 칠한다 — 둥근 빛무리 · 번짐이 아니다. 처음 보는 매물은 period 마다 한 번(칸마다 박자를 고르게
+#  어긋내 한 번에 하나만) · 산 동전이 슬롯에 앉는 틀에 한 번. 움직임 끔이면 셋째 틀에 멎어 선다(슬롯은 안 선다).
+#    period 한 바퀴(초) · sweep 스치는 동안(초) · steps 틀 수 · a · a_thin 굵은 · 가는 줄 짙기
+const GLINT := {"period": 2.6, "sweep": 0.2, "steps": 4, "a": 0.85, "a_thin": 0.55}
+var slot_gl_i := -1              # 반짝이 스치는 동전 슬롯(산 동전이 앉은 칸) · −1 없음
+var slot_gl_t := 0.0             # 그 반짝이 든 float_t
+
+
+#  타원 c · rx · ry(tilt 만큼 돈다) 위에 사선 반짝 한 번의 p(0~1) 몫. 밖이면 안 그린다.
+func _glint(c: Vector2, rx: float, ry: float, p: float, a := 1.0, tilt := 0.0) -> void:
+	if p < 0.0 or p >= 1.0 or a <= 0.0 or rx < 1.0 or ry < 1.0:
+		return
+	var n: float = float(GLINT.steps)
+	var cs := cos(tilt)
+	var sn := sin(tilt)
+	#  돈 타원 qa·x² + qb·x·y + qc·y² ≤ 1 — 행 y 마다 x 두 끝을 푼다.
+	var qa: float = cs * cs / (rx * rx) + sn * sn / (ry * ry)
+	var qb: float = 2.0 * sn * cs * (1.0 / (rx * rx) - 1.0 / (ry * ry))
+	var qc: float = sn * sn / (rx * rx) + cs * cs / (ry * ry)
+	var ey: float = sqrt(rx * rx * sn * sn + ry * ry * cs * cs)
+	#  사선 x + y = d — 타원이 닿는 d 의 끝(±es)을 steps 칸으로 가르고 칸 가운데에 선다(네 틀이 다 물건 위다).
+	var es: float = sqrt((qa + qc - qb) / (qa * qc - qb * qb * 0.25))
+	var d: float = roundf(lerpf(-es - 4.0, es, (floorf(p * n) + 0.5) / n))
+	var o := c.round()
+	for yy in range(int(floorf(-ey)), int(ceilf(ey)) + 1):
+		var y: float = float(yy) + 0.5
+		var disc: float = qb * qb * y * y - 4.0 * qa * (qc * y * y - 1.0)
+		if disc <= 0.0:
+			continue
+		var sq: float = sqrt(disc)
+		var xmin: float = ceilf((-qb * y - sq) / (2.0 * qa) - 0.5)
+		var xmax: float = floorf((-qb * y + sq) / (2.0 * qa) - 0.5)
+		for band in [[0.0, 2.0, float(GLINT.a)], [3.0, 1.0, float(GLINT.a_thin)]]:
+			var x0: float = maxf(d - float(yy) + float(band[0]), xmin)
+			var x1: float = minf(d - float(yy) + float(band[0]) + float(band[1]) - 1.0, xmax)
+			if x1 >= x0:
+				draw_rect(Rect2(o.x + x0, o.y + float(yy), x1 - x0 + 1.0, 1.0),
+						Color(1.0, 1.0, 1.0, float(band[2]) * a))
+
+
+#  n 칸 중 i 째의 반짝 몫(1 이상이면 쉬는 동안) — 칸마다 한 바퀴를 n 으로 고르게 갈라 어긋낸다. sweep 이
+#  period / n 보다 짧은 동안(열셋까지)은 한 번에 하나만 돈다(qa_shoproll ⑪). 움직임 끔이면 셋째 틀에 선다.
+func _glint_p(i: int, n: int) -> float:
+	if motion_off:
+		return 0.5
+	var off: float = float(i) * float(GLINT.period) / float(maxi(n, 1))
+	return fposmod(float_t - off, float(GLINT.period)) / float(GLINT.sweep)
+
+
+#  처음 보는 매물 i 의 반짝 — 제 몸을 그린 바로 뒤(_goods_draw · 앞 물건이 위를 덮는다). 몸의 윗면 타원:
+#  동전은 면 그대로 · 플라크 · 와펜 · 사탕 · 사진은 그 안에 드는 만큼 · 다트는 자루를 따라 돈 가는 타원.
+func _bill_glint(i: int, dim: float) -> void:
+	if i >= mini(drop.size(), stock.size()):
+		return
+	var it: Dictionary = drop[i]
+	var s: Dictionary = stock[i]
+	if not it.into or it.sold > 0.0 or s.sold or not _bill_new(s):
+		return
+	var p := _glint_p(i, stock.size())
+	if p >= 1.0:
+		return
+	var c := _p2s(it.u, it.w, it.h + it.lift)
+	var a: float = 1.0 - dim
+	match String(s.type):
+		"item":
+			var rk: float = 0.7 if String(FORMS[_stock_form(s)].get("fam", "disc")) == "plaque" else 1.0
+			_glint(c, TBL.chip_r * rk, TBL.chip_r * TBL.flat * rk, p, a)
+		"mod":
+			var mr: float = TBL.mod_r * 0.74
+			_glint(c - Vector2(0.0, float(MOD_ART.side_px) + 2.0), mr, mr * TBL.flat, p, a)
+		"dart":
+			var de := _dart_e(it)
+			_glint(c, TBL.dart_l * de.length() * 0.8, 2.5, p, a, de.angle())
+		_:
+			var fr: float = 11.0 * GOODS_K * 0.75 if String(s.type) == "cons" else FIX_H * GOODS_K * 0.8
+			_glint(c, fr, fr * TBL.flat, p, a)
 
 
 #  아직 컬렉션에 없는 매물인가 — 컬렉션과 같은 열쇠(COL_TABS 의 f · 사진은 cons)로 묻는다.
@@ -43826,6 +43928,9 @@ func _drop_arrive(i: int) -> void:
 	match stock[i].type:
 		"item":
 			_panel_fire(it.slot)
+			if not motion_off:
+				slot_gl_i = int(it.slot)          # 앉는 틀에 사선 반짝 한 번(GLINT)
+				slot_gl_t = float_t
 		"mod":
 			pop(it.to, "보드 확장", C_CHIP.lightened(0.25), 12, 0.9)
 		"dart":
@@ -46692,6 +46797,7 @@ var over_t := 0.0               # 런 종료 화면이 흐른 시간
 #  적힌다(RUN_PLAIN).
 var run_secs := 0.0
 var run_leg_top := 0            # 이번 런에서 가장 높았던 판 점수(RUN_PLAIN)
+var run_leg_top_tg := 0         # 그 판의 목표(RUN_PLAIN) — 튜토리얼 끝 칠판
 var run_fires := {}             # 동전 id → 이번 런 발동 수(RUN_PLAIN)
 var run_rec0 := -1              # 런 시작 때 프로필 한 판 최고 점수(RUN_PLAIN · −1 모름)
 var run_found := 0              # 이번 런에 컬렉션에 새로 든 수(RUN_PLAIN)
@@ -46813,7 +46919,26 @@ func _clear_roll() -> int:
 #  끝난다. 화면 어디를 눌러도 넘어가므로(_click S.CLEAR) 자리를 옮겨도 판정은 그대로다.
 const CLR := {"x": 190.0, "w": 260.0, "y": 86.0, "row": 28.0, "name_w": 150.0,
 		"big_n": 6,
-		"x_s": 227.0, "w_s": 186.0, "y_s": 78.0, "row_s": 16.0, "name_w_s": 124.0}
+		"x_s": 227.0, "w_s": 186.0, "y_s": 78.0, "row_s": 16.0, "name_w_s": 124.0,
+		#  정산 칠판(_draw_clear) — 석판 윗변 · 글과 옆 테 사이 · 합계 바닥선 밑 여백. 큰 표 여섯 줄이면
+		#  석판이 y 279 · 받침이 286 에서 끝나 「상점으로」(290) 위에 선다.
+		"slate_y": 18.0, "slate_pad": 18.0, "slate_bot": 8.0}
+#  정산 칠판의 칸 값(_chalk_board · CHALKB 와 같은 열쇠) — 점수 칠판(order)과 같은 테 · 빛(왼쪽 위 램프) ·
+#  받침의 분필 토막. 지운 자국은 없다(n 0) — 읽는 화면이라 줄 밑 얼룩이 가름줄로 읽힌다.
+const CLR_BOARD := {"sh": Vector2(2.0, 3.0), "sh_a": 0.40, "lit": -1.0, "n": 0,
+		"w": Vector2(1.0, 1.0), "h": Vector2(1.0, 1.0), "seed": 4451,
+		"stick": Vector2(-16.0, 8.0), "soft": false, "ink": 0.0}
+
+
+#  정산 칠판의 석판 — 줄 n 개 · 머리 폭 hw. 밑변은 합계 바닥선(마지막 줄 + 선 틈 + 총액) 밑 slate_bot ·
+#  폭은 표와 머리 중 넓은 쪽에 slate_pad 를 두른다. 받침까지 「상점으로」 위에 선다(qa_clear ⑥).
+func _clear_slate(n: int, hw: float) -> Rect2:
+	var big: bool = n <= int(CLR.big_n)
+	var sy: float = float(CLR.slate_y)
+	var bot: float = float(CLR.y if big else CLR.y_s) + float(maxi(n - 1, 0)) * float(CLR.row if big else CLR.row_s) \
+			+ (45.0 if big else 33.0) + float(CLR.slate_bot)
+	var sw: float = minf(maxf(float(CLR.w if big else CLR.w_s), hw) + float(CLR.slate_pad) * 2.0, VIEW.x - 40.0)
+	return Rect2(roundf((VIEW.x - sw) * 0.5), sy, roundf(sw), roundf(bot - sy))
 
 
 func _draw_clear() -> void:
@@ -46824,11 +46949,30 @@ func _draw_clear() -> void:
 		_wall3_clear()
 	else:
 		draw_rect(_full(), C_BG)
-	draw_string(_fz(font, 24), Vector2(0, 46), _L("라운드 %d  %s 클리어")
-			% [GameData.round_of(leg_no), _L(GameData.leg_name(leg_no))],
-			HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 24, C_ACC)
-
+	#  판 정산을 벽에 건 칠판 장부로(2026-10-25 · 레퍼런스 2차) — 루프 안에서 재질이 없던 마지막 화면이라
+	#  글이 덮개 위에 떠 있었다. 판자 벽 가운데에 점수 칠판과 같은 나무 테 칠판이 걸리고 줄은 분필이다.
+	#  금빛은 「클리어」 · 값 플라크 · 합계뿐이다. 석판 높이는 줄 수로 미리 잰다(줄이 들기 전부터 선다).
 	var big: bool = clear_gold_detail.size() <= int(CLR.big_n)
+	var ink: Color = DOORT.chalk_ink
+	var cw: String = _L("클리어")
+	var head: String = _L("라운드 %d  %s 클리어") % [GameData.round_of(leg_no), _L(GameData.leg_name(leg_no))]
+	var hw: float = font.get_string_size(head, HORIZONTAL_ALIGNMENT_LEFT, -1, 24).x if font != null else 200.0
+	_chalk_board(self, _clear_slate(clear_gold_detail.size(), hw), float(SCOREB.frame), CLR_BOARD)
+	#  머리 — 분필 글 · 「클리어」 낱말만 금빛(세 말 다 끝에 온다 · 아니면 통째 분필)
+	var hx: float = roundf((VIEW.x - hw) * 0.5)
+	if head.ends_with(cw) and font != null:
+		var h0: String = head.left(head.length() - cw.length())
+		draw_string(_fz(font, 24), Vector2(hx, 46), h0, HORIZONTAL_ALIGNMENT_LEFT, -1, 24, Color(ink, 0.94))
+		draw_string(_fz(font, 24), Vector2(hx + font.get_string_size(h0, HORIZONTAL_ALIGNMENT_LEFT, -1, 24).x, 46),
+				cw, HORIZONTAL_ALIGNMENT_LEFT, -1, 24, C_ACC)
+	else:
+		draw_string(_fz(font, 24), Vector2(0, 46), head, HORIZONTAL_ALIGNMENT_CENTER, VIEW.x, 24, Color(ink, 0.94))
+	#  받은 줄 이름은 분필 2층(점수 칠판의 「목표」 · 「점수」와 같은 0.62) · 0 인 줄은 꺼진 분필(MENUM.off —
+	#  석판 위 3.5:1 의 밑단). 석판 위에 불투명으로 섞는다 — 줄이 드는 알파(a)를 그대로 받고, 꺼진 값의
+	#  플라크(면 · 옆면 · 빛 줄)가 겹친 자리에서 비치지 않는다.
+	var c_on: Color = (DOORT.chalk as Color).lerp(ink, 0.62)
+	var c_off: Color = (DOORT.chalk as Color).lerp(ink, float(MENUM.off))
+
 	var x0: float = float(CLR.x if big else CLR.x_s)
 	var tw: float = float(CLR.w if big else CLR.w_s)
 	var x1: float = x0 + tw
@@ -46851,15 +46995,15 @@ func _draw_clear() -> void:
 		#  한 글자 일찍 자를 수는 있어도 넘치지는 않는다.
 		if big:
 			draw_string(_fz(font_sm, 20), Vector2(x0, y), _L(_elide_word(String(row.n), nw, 20)),
-					HORIZONTAL_ALIGNMENT_LEFT, nw, 20, Color(C_DIM if got else C_OFF, a))
+					HORIZONTAL_ALIGNMENT_LEFT, nw, 20, Color(c_on if got else c_off, a))
 		else:
 			draw_string(_fz(font, 12), Vector2(x0, y), _L(_elide_word(String(row.n), nw, 12)),
-					HORIZONTAL_ALIGNMENT_LEFT, nw, 12, Color(C_DIM if got else C_OFF, a))
+					HORIZONTAL_ALIGNMENT_LEFT, nw, 12, Color(c_on if got else c_off, a))
 		#  못 받은 줄은 눌러 둔다 — 「받은 것」과 「0 인 것」이 같은 무게로
 		#  서면 내역이 목록이 아니라 벽지가 된다.
 		var vt := "+%d" % int(row.v)
 		draw_gold_at(x1 - gold_w(vt, vs), y, vt, vs,
-				Color(C_GOLD if got else C_OFF, a))
+				Color(C_GOLD if got else c_off, a))
 		if got and int(row.get("d", 0)) > 0:
 			var nf: Font = font_sm if big else font
 			var nx: float = x0 + nf.get_string_size(_L(_elide_word(String(row.n), nw, 20 if big else 12)),
@@ -46874,7 +47018,7 @@ func _draw_clear() -> void:
 	var all_in: float = float(clear_gold_detail.size()) * step
 	if step <= 0.0 or clear_t >= all_in:
 		var ly: float = y - dy + (10.0 if big else 8.0)
-		draw_rect(Rect2(Vector2(x0, ly), Vector2(tw, 1.0)), Color(C_WIRE, 0.5))
+		_chalk_rule(self, x0, ly, tw)               # 분필 한 획(끝이 조금 흐리다)
 		var et := "%+d" % _clear_roll()          # 이번 판 몫 — 줄들의 합(지갑은 자금판)
 		if big:
 			draw_gold(VIEW.x * 0.5, ly + 35.0, et, 36, C_GOLD)
@@ -48365,7 +48509,7 @@ func _over_row_r() -> Rect2:
 func _over_coin_rect(i: int) -> Rect2:
 	var cw: float = float(OVERB.rw)
 	var step: float = minf(float(OVERB.coin_step), (cw - 8.0) / float(maxi(owned.size(), 1)))
-	var c := Vector2(float(OVERB.rx) + 12.0 + float(i) * step, float(OVERB.coin_y))
+	var c := Vector2(float(OVERB.rx) + 12.0 + float(i) * step, float(OVERB.coin_y) + _over_push())
 	return Rect2(c - Vector2(12.0, 12.0), Vector2(24.0, 24.0))
 
 
@@ -48464,6 +48608,8 @@ func _unl_cond(u: Dictionary) -> String:
 #    write_t0 · write_ch  첫 자를 쓰는 때 · 한 자의 시간
 #    rain_n · rain_t · rain_g · rain_life  금화 수 · 쏟아지는 동안 · 중력 · 한 닢이 사는 시간
 #    clap_at  박수가 터지는 때      stamp_at  신기록 도장이 찍히는 때(종 한 번)
+#    hero_dy  튜토리얼 끝 — 넘친 점수의 기준선(가름줄 밑) · hero_push  그 밑으로 물러나는 수 줄 · 동전 칸
+#    hero_gap  넘친 점수와 그은 목표 사이 · strike_t  목표를 긋는 한 획의 시간
 const OVERB := {
 	"crown_y": 46.0, "crown_w": 58.0, "crown_h": 36.0, "crown_t0": 0.20, "crown_t1": 0.70,
 	"title_y": 106.0, "title_y_lose": 84.0, "sub_dy": 28.0, "rule_dy": 14.0,
@@ -48473,6 +48619,7 @@ const OVERB := {
 	"rain_n": 44, "rain_t": 1.6, "rain_g": 300.0, "rain_life": 3.2,
 	"clap_at": 0.30,
 	"stamp_at": 0.60,
+	"hero_dy": 40.0, "hero_push": 44.0, "hero_gap": 8.0, "strike_t": 0.16,
 }
 
 
@@ -48494,15 +48641,17 @@ func _fmt_secs(t: float) -> String:
 	return "%d:%02d" % [m, sec]
 
 
-#  런 끝 왼쪽 수 줄 [이름, 값]. 「최고 판 점수」는 이번 런 값이라 튜토리얼 · 챌린지 · 무한에서도 선다.
+#  런 끝 왼쪽 수 줄 [이름, 값]. 「최고 판 점수」는 이번 런 값이라 튜토리얼 · 챌린지 · 무한에서도 선다 —
+#  튜토리얼 끝(완주)만 그 수가 줄이 아니라 칠판 한가운데의 주인공이다(_over_hero).
 func _over_rows() -> Array:
 	var cleared: int = maxi(leg_no - (0 if won else 1), 0)
 	var rows := [
 		["클리어한 판", ("%d" % cleared) if GameData.endless
 				else ("%d / %d" % [cleared, int(TUT.legs) if tut_run else GameData.legs_n()])],
 		["클리어 시간" if won else "런 시간", _fmt_secs(run_secs)],
-		["최고 판 점수", GameData.big(run_leg_top)],
 	]
+	if not _over_hero_on():
+		rows.append(["최고 판 점수", GameData.big(run_leg_top)])
 	if GameData.endless:
 		rows.append(["무한 판", str(Save.tally("endless:leg"))])
 	elif not won:
@@ -48514,6 +48663,42 @@ func _over_rows() -> Array:
 	if not _rec_off() and rows.size() < 5:
 		rows.insert(3, ["던진 다트", str(Save.stat("darts"))])
 	return rows
+
+
+#  ── 튜토리얼 끝 칠판의 주인공은 넘친 점수 (2026-10-25 · 레퍼런스 2차) ──
+#  튜토리얼의 목적은 점수가 넘치는 맛이다. 끝 칠판 가름줄 밑 가운데에 이번 런 최고 판 점수를 「완주」와 같은
+#  금빛 분필(36)로 한 자씩 크게 쓰고, 다 쓰면 그 판의 목표 수가 오른쪽 아래에 작게 서서 분필 한 획에 그어진다.
+#  글은 없고 수 둘뿐이다. 나머지 수 줄과 동전 칸은 그만큼(hero_push) 아래로 물러난다. 본편 런 끝은 그대로다.
+func _over_hero_on() -> bool:
+	return tut_run and won
+
+
+func _over_push() -> float:
+	return float(OVERB.hero_push) if _over_hero_on() else 0.0
+
+
+#  b 기준선 가운데 · col 머리 글 빛 · t0 첫 자를 쓰는 때(머리를 다 쓴 뒤).
+func _over_hero(b: Vector2, col: Color, a: float, t0: float) -> void:
+	if font == null:
+		return
+	var B: Dictionary = OVERB
+	var ht: String = GameData.big(run_leg_top)
+	_over_write(ht, b, 36, col, a, t0)
+	if run_leg_top_tg <= 0:
+		return              # 옛 매듭에서 되살린 튜토리얼 — 그 판의 목표를 모른다
+	var t1: float = t0 + float(ht.length()) * float(B.write_ch)     # 넘친 점수를 다 쓴 때
+	var ka: float = 1.0 if motion_off else clampf((over_t - t1) / float(B.write_ch), 0.0, 1.0)
+	if ka <= 0.0:
+		return
+	var gt_s: String = GameData.big(run_leg_top_tg)
+	var hw: float = font.get_string_size(_L(ht), HORIZONTAL_ALIGNMENT_LEFT, -1, 36).x
+	var x0: float = roundf(b.x + hw * 0.5 + float(B.hero_gap))
+	var tw: float = font_sm.get_string_size(_L(gt_s), HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
+	draw_string(_fz(font_sm, 20), Vector2(x0, b.y), _L(gt_s), HORIZONTAL_ALIGNMENT_LEFT, -1, 20, _mtx(0.0, a * ka))
+	#  분필 한 획 — 왼쪽에서 오른쪽으로 그어진다 · 수 잉크 가운데(20 의 수 잉크 높이 ≈ 15)
+	var ks: float = 1.0 if motion_off else clampf((over_t - t1 - float(B.write_ch)) / float(B.strike_t), 0.0, 1.0)
+	if ks > 0.0:
+		draw_rect(Rect2(x0 - 2.0, b.y - 8.0, roundf((tw + 4.0) * ks), 1.0), _mtx(1.0, a))
 
 
 #  신기록 — 본편 런의 「최고 판 점수」가 런 시작 때 내 기록을 넘었다.
@@ -48552,11 +48737,15 @@ func _draw_over() -> void:
 		_chalk_rule(self, p.position.x + 24.0, ry, p.size.x - 48.0, e)
 	else:
 		draw_rect(Rect2(p.position.x + 24.0, ry, p.size.x - 48.0, 1.0), Color(C_WIRE, 0.4 * e))
+	if _over_hero_on():
+		_over_hero(Vector2(cx, ry + float(B.hero_dy)), hc, e,
+				float(B.write_t0) + float(_L(head).length()) * float(B.write_ch))
+	var push: float = _over_push()
 
 	#  ── 왼쪽 — 이번 런의 수 ──
 	var lx: float = float(B.lx)
 	var lw: float = float(B.lw)
-	var y: float = float(B.row_y)
+	var y: float = float(B.row_y) + push
 	var rows := _over_rows()
 	for k in rows.size():
 		var yy: float = y + float(k) * float(B.row_step)
@@ -48584,7 +48773,7 @@ func _draw_over() -> void:
 	draw_string(_fz(font, 12), Vector2(rx, y), _L("마지막까지 든 것"),
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, _mtx(0.0, e))
 	if owned.is_empty():
-		draw_string(_fz(font_sm, 20), Vector2(rx, float(B.coin_y) + 7.0), _L("없음"),
+		draw_string(_fz(font_sm, 20), Vector2(rx, float(B.coin_y) + push + 7.0), _L("없음"),
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 20, _mtx_off(1.0, e))
 	else:
 		#  **자가 하나다** — 그리는 자리와 읽는 자리(툴팁)가 같은 사각이다(_over_coin_rect).
@@ -48600,7 +48789,7 @@ func _draw_over() -> void:
 				draw_string(_fz(font_sm, 10), Vector2(cr.position.x - 4.0, cr.end.y + 10.0), "×%d" % fn,
 						HORIZONTAL_ALIGNMENT_CENTER, cr.size.x + 8.0, 10,
 						Color(C_GOLD, e) if fn == ftop else _mtx(0.0, e))
-	draw_string(_fz(font, 12), Vector2(rx, float(B.coin_y) + 34.0),
+	draw_string(_fz(font, 12), Vector2(rx, float(B.coin_y) + push + 34.0),
 			_L(GameData.pack_row().get("name", "")), HORIZONTAL_ALIGNMENT_LEFT,
 			-1, 12, _mtx(0.0, e))
 
@@ -48640,13 +48829,15 @@ func _draw_over() -> void:
 
 #  결과 글을 분필로 한 자씩 쓴다 — 가운데 c(기준선)에 맞추고, 아직 안 쓴 자는 안 그린다.
 #  쓰는 자는 한 자 시간 동안 짙어진다. 모션 끄기면 통째로 선다.
-func _over_write(t: String, c: Vector2, sz: int, col: Color, a: float) -> void:
+#  t0 — 첫 자를 쓰는 때(음수면 OVERB.write_t0 · 튜토리얼 끝의 넘친 점수는 머리를 다 쓴 뒤다).
+func _over_write(t: String, c: Vector2, sz: int, col: Color, a: float, t0 := -1.0) -> void:
 	if font == null or t == "":
 		return
 	t = _L(t)                # 한 자씩 쓴다 — 옮긴 뒤에 가른다
 	var tw: float = font.get_string_size(_L(t), HORIZONTAL_ALIGNMENT_LEFT, -1, sz).x
 	var x0: float = c.x - tw * 0.5
-	var t0: float = float(OVERB.write_t0)
+	if t0 < 0.0:
+		t0 = float(OVERB.write_t0)
 	var ch: float = float(OVERB.write_ch)
 	for k in t.length():
 		var ka: float = 1.0 if motion_off else clampf((over_t - t0 - float(k) * ch) / ch, 0.0, 1.0)

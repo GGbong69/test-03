@@ -208,6 +208,24 @@ func _run() -> void:
 	_ok("표가 화면 한가운데 축", is_equal_approx(mid, g.VIEW.x * 0.5),
 			"표 중심 %.0f · 화면 중심 %.0f" % [mid, g.VIEW.x * 0.5])
 
+	# ⑥ 정산 칠판(2026-10-25 · 레퍼런스 2차) — 줄이 몇이든 표 · 합계를 다 품고, 테 · 받침 · 그늘까지
+	#    「상점으로」(y 290) 위에 선다. 머리가 길면 넓어지되 화면 안이다. 줄은 셋 · 현상금 · 골드 동전 몫이라
+	#    열하나까지 잰다 — 열둘이면 옛 표도 총액(바닥선 287)이 단추에 닿는다.
+	var over := []
+	for n in range(1, 12):
+		var big: bool = n <= int(g.CLR.big_n)
+		var sl: Rect2 = g._clear_slate(n, 200.0)
+		var tot: float = float(g.CLR.y if big else g.CLR.y_s) \
+				+ float(n - 1) * float(g.CLR.row if big else g.CLR.row_s) + (45.0 if big else 33.0)
+		var x0: float = float(g.CLR.x if big else g.CLR.x_s)
+		var tw: float = float(g.CLR.w if big else g.CLR.w_s)
+		var foot: float = sl.end.y + float(g.SCOREB.frame) + 3.0 + 3.0      # 테 · 받침 · 그늘
+		if foot >= 290.0 or sl.end.y <= tot or sl.position.x >= x0 or sl.end.x <= x0 + tw or sl.position.y >= 26.0:
+			over.append("%d줄 %s" % [n, str(sl)])
+	_ok("정산 칠판이 표를 품고 「상점으로」 위에 선다(1~11줄)", over.is_empty(), str(over))
+	var wide: Rect2 = g._clear_slate(3, 900.0)
+	_ok("머리가 길어도 칠판은 화면 안", wide.position.x >= 0.0 and wide.end.x <= g.VIEW.x, str(wide))
+
 	print("\n%s\n" % ("전부 통과" if fail == 0 else "실패 %d건" % fail))
 	print("통과 %d · 실패 %d" % [okn, fail])
 	quit(0 if fail == 0 else 1)
