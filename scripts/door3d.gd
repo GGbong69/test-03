@@ -622,7 +622,8 @@ static func _wall_things(root: Node3D) -> void:
 				c = Color("5c2a14") if rng.randf() < 0.6 else Color("6b2a1c")
 			im.set_pixel(x, y, c)
 			hm.set_pixel(x, y, Color(hv, hv, hv))
-	#  둥근 유리창 — 짙은 유리 · 흰 눈금판 · 바늘 · 위 왼쪽 1px 빛
+	#  둥근 유리창 — 짙은 유리 · 잿빛 눈금판 · 바늘 · 위 왼쪽 1px 빛. 흰 눈금판(c9bfae)은 네온 분홍을 받아 어둠
+	#  가장자리의 외딴 밝은 창으로 떴다(레퍼런스 2차 2026-10-25) — 도트 팔레트 「잿빛 0」으로 가라앉힌다.
 	var wc := Vector2(iw * 0.5, ih * 0.38)
 	var wr: float = float(iw) * 0.30
 	for y in ih:
@@ -634,7 +635,7 @@ static func _wall_things(root: Node3D) -> void:
 			elif d <= wr:
 				var c := Color("1a1c20")
 				if d <= wr - 2.0:
-					c = Color("c9bfae") if y < int(wc.y) + 2 else Color("1a1c20")
+					c = Color("3c383a") if y < int(wc.y) + 2 else Color("1a1c20")
 				hm.set_pixel(x, y, Color(0.7, 0.7, 0.7))
 				im.set_pixel(x, y, c)
 	for i in int(wr) - 2:

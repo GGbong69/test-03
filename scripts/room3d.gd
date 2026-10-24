@@ -441,14 +441,9 @@ static func make_room(host: Node) -> SubViewport:
 		var lx: float = float(sx)
 		root.add_child(_cyl(0.008, 0.008, 1.3, Vector3(lx, 2.75, -0.9), _mat(Color("0a0a0a"))))
 		root.add_child(_cyl(0.05, 0.26, 0.2, Vector3(lx, 2.02, -0.9), _mat(Color("1e3b2c"), 0.4, 0.3), 16))
-		var bulb := MeshInstance3D.new()
-		var sm := SphereMesh.new()
-		sm.radius = 0.06
-		sm.height = 0.12
-		bulb.mesh = sm
-		bulb.material_override = _glow(COL.lamp, 3.0)
-		bulb.position = Vector3(lx, 1.91, -0.9)
-		root.add_child(bulb)
+		#  갓 밑 납작한 불빛 판 — 눈 높이(1.5)에서 거의 옆으로 보여 아랫입술의 따뜻한 1px 로 선다. 옛 둥근 전구
+		#  (빛 3)는 번짐을 거쳐 등록기 옆 크림색 덩어리로 떴다(레퍼런스 2차 2026-10-25).
+		root.add_child(_cyl(0.14, 0.14, 0.004, Vector3(lx, 1.918, -0.9), _glow(COL.lamp.darkened(0.3), 1.2), 16))
 		var sl := SpotLight3D.new()
 		sl.light_color = COL.lamp
 		sl.light_energy = 3.0
