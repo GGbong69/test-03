@@ -2088,8 +2088,13 @@ static func _poly_rect(poly: PackedVector2Array) -> Rect2:
 	return r
 
 
-#  검은 쇠 그림 — 다각형 안을 망치 자국(1px 밝고 짙은 얼룩 · 높이도 같이 흔든다) · 녹(아래 변에 몰린다) ·
-#  테 1px 은 낮고 짙다(빛 받은 윗변 · 그늘진 밑변이 선다). 1 텍셀 = 판 평면의 논리 1px.
+#  검은 쇠 그림 — 단조 쇠(2026-10-24 「쇠띠가 너무 그래픽이 돌같은데?」). 옛 그림은 텍셀마다 밝고 짙은 낟알 · 녹 점 ·
+#  높이 잡음을 흩뿌려 화강암 · 사포로 읽혔다. 이제 —
+#   · 바탕은 거의 검은 쇠에 큰 얼룩(7px 칸 값 잡음 · ±4%)만 옅게 · 높이도 같은 얼룩으로 매끈하다
+#   · 망치 자국 — 2~3px 오목한 자국 몇 개(조금 짙고 낮다 · 높이가 낮아 빛 단이 그 자리에서 한 칸 내려앉는다).
+#     아랫입술에 빛 한 줄을 그렸더니 작은 「ᵕ」 무늬가 고르게 떠 그림으로 읽혔다(촬영) — 빛은 높이가 낸다
+#   · 녹 — 점이 아니라 밑변 · 못 자리 둘레의 두 톤 얼룩 몇 군데(짙은 녹 속 · 밝은 녹 가)
+#   · 테 1px 은 낮고 짙다(빛 받은 윗변 · 그늘진 밑변이 선다). 1 텍셀 = 판 평면의 논리 1px.
 static func _iron_img(poly: PackedVector2Array, r: Rect2, seed: int) -> Array:
 	var w: int = maxi(int(ceilf(r.size.x * S)), 2)
 	var h: int = maxi(int(ceilf(r.size.y * S)), 2)
@@ -2101,34 +2106,82 @@ static func _iron_img(poly: PackedVector2Array, r: Rect2, seed: int) -> Array:
 		for x in w:
 			var p := Vector2(r.position.x + (float(x) + 0.5) / S, r.end.y - (float(y) + 0.5) / S)
 			mask[y * w + x] = 1 if Geometry2D.is_point_in_polygon(p, poly) else 0
-	var im := Image.create(w, h, false, Image.FORMAT_RGBA8)
-	var hm := Image.create(w, h, false, Image.FORMAT_RGBA8)
-	im.fill(COL.iron_lit.darkened(0.45))
-	hm.fill(Color(0.0, 0.0, 0.0))
+	#  큰 얼룩 — 칸 cell 마다 값 하나 · 사이는 겹선형
+	var cell := 7
+	var gw: int = w / cell + 2
+	var gh: int = h / cell + 2
+	var gv := PackedFloat32Array()
+	gv.resize(gw * gh)
+	for k in gw * gh:
+		gv[k] = rng.randf_range(-1.0, 1.0)
+	var mot := PackedFloat32Array()
+	mot.resize(w * h)
+	for y in h:
+		for x in w:
+			var fx: float = float(x) / float(cell)
+			var fy: float = float(y) / float(cell)
+			var ix: int = int(fx)
+			var iy: int = int(fy)
+			var tx: float = smoothstep(0.0, 1.0, fx - float(ix))
+			var ty: float = smoothstep(0.0, 1.0, fy - float(iy))
+			var a: float = lerpf(gv[iy * gw + ix], gv[iy * gw + ix + 1], tx)
+			var b: float = lerpf(gv[(iy + 1) * gw + ix], gv[(iy + 1) * gw + ix + 1], tx)
+			mot[y * w + x] = lerpf(a, b, ty)
 	var base: Color = COL.iron_lit
 	var rust: Array = COL.rust
+	var im := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	var hm := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	im.fill(base.darkened(0.45))
+	hm.fill(Color(0.0, 0.0, 0.0))
 	for y in h:
 		for x in w:
 			if mask[y * w + x] == 0:
 				continue
-			var edge := false
+			var m: float = mot[y * w + x]
+			var c: Color = base.lightened(0.04 * m) if m > 0.0 else base.darkened(-0.04 * m)
+			im.set_pixel(x, y, c)
+			hm.set_pixel(x, y, Color(0.80 + 0.03 * m, 0.80 + 0.03 * m, 0.80 + 0.03 * m))
+	#  망치 자국 — 넓이 120px 마다 하나
+	for k in maxi(w * h / 120, 3):
+		var cx: int = rng.randi_range(2, w - 3)
+		var cy: int = rng.randi_range(1, h - 2)
+		var rr: float = rng.randf_range(1.0, 1.6)
+		for y in range(cy - 2, cy + 3):
+			for x in range(cx - 2, cx + 3):
+				if x < 0 or y < 0 or x >= w or y >= h or mask[y * w + x] == 0:
+					continue
+				var d: float = Vector2(x - cx, y - cy).length()
+				if d <= rr:
+					im.set_pixel(x, y, im.get_pixel(x, y).darkened(0.10))
+					hm.set_pixel(x, y, Color(0.72, 0.72, 0.72))
+	#  녹 얼룩 — 밑변 셋 · 아무 데나 하나
+	var spots := []
+	for k in 3:
+		spots.append(Vector2(rng.randf_range(2.0, float(w) - 3.0), float(h) - rng.randf_range(1.0, 2.5)))
+	spots.append(Vector2(rng.randf_range(2.0, float(w) - 3.0), rng.randf_range(1.0, float(h) - 2.0)))
+	for sp in spots:
+		var rr: float = rng.randf_range(1.6, 3.0)
+		for y in range(int(sp.y) - 4, int(sp.y) + 5):
+			for x in range(int(sp.x) - 4, int(sp.x) + 5):
+				if x < 0 or y < 0 or x >= w or y >= h or mask[y * w + x] == 0:
+					continue
+				var d: float = Vector2(x, y).distance_to(sp) + rng.randf_range(-0.5, 0.5)
+				if d <= rr * 0.55:
+					im.set_pixel(x, y, rust[0])
+				elif d <= rr:
+					im.set_pixel(x, y, rust[1] if (x + y) % 3 != 0 else rust[2])
+	#  테 1px
+	for y in h:
+		for x in w:
+			if mask[y * w + x] == 0:
+				continue
 			for o in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
 				var xx: int = x + o.x
 				var yy: int = y + o.y
 				if xx < 0 or yy < 0 or xx >= w or yy >= h or mask[yy * w + xx] == 0:
-					edge = true
-			var c: Color = base.lightened(rng.randf_range(0.0, 0.05)) if rng.randf() < 0.45 \
-					else base.darkened(rng.randf_range(0.0, 0.10))
-			var hv: float = 0.80 + rng.randf_range(-0.08, 0.06)
-			var low: bool = y >= h - 3 or x >= w - 4
-			if rng.randf() < (0.05 if low else 0.008):
-				c = rust[rng.randi() % rust.size()]
-				hv -= 0.10
-			if edge:
-				c = base.darkened(0.40)
-				hv = 0.45
-			im.set_pixel(x, y, c)
-			hm.set_pixel(x, y, Color(hv, hv, hv))
+					im.set_pixel(x, y, base.darkened(0.40))
+					hm.set_pixel(x, y, Color(0.45, 0.45, 0.45))
+					break
 	return [im, hm]
 
 
