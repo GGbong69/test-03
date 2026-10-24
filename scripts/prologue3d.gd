@@ -363,8 +363,11 @@ vec3 scene(vec2 q) {
 		float ca = 1.0 / res.x;
 		vec3 c = texture(tex, q + j).rgb;
 		c.r = texture(tex, q + j + vec2(ca, 0.0)).r;
-		c += vec3(max(hs(q * res + tk) - 0.6, 0.0) * 0.06);
-		c += vec3(0.03, 0.027, 0.024) * (1.0 - smoothstep(0.0, 0.06, abs(fract(q.y - tm * 0.18) - 0.5)));
+		//  낟알 · 띠는 글자(밝은 쪽) 위에만 — 검은 바탕에 얹으면 sRGB 로 올라 온 화면이 회색 모래였다(레퍼런스 2차)
+		float lit = smoothstep(0.05, 0.25, dot(c, vec3(0.299, 0.587, 0.114)));
+		c += vec3(max(hs(q * res + tk) - 0.6, 0.0) * 0.06) * lit;
+		c += vec3(0.03, 0.027, 0.024) * (1.0 - smoothstep(0.0, 0.06, abs(fract(q.y - tm * 0.18) - 0.5)))
+				* (0.25 + 0.75 * lit);
 		return c;
 	}
 	if (mode == 5) {
