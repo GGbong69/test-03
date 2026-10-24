@@ -238,7 +238,9 @@ uniform float sat = 1.0;
 //  둥근 면(쇠 띠 · 홈통 · 전선관 · 징)의 빛 각도도 nbands 단으로 끊는다 — 「아니 이런거 말한거여」(2026-10-24 · 쇠 띠 ·
 //  홈통 그림) — 매끈한 원통 명암이 경계 없이 번져 붙인 도형으로 읽혔다. 놋쇠 손잡이(BRASS_SHADER) · 손(hand3)과 같은
 //  어법이다. 단은 메시의 면 법선(gn)으로 재고, 결(높이) 명암은 그 단 위에 비로 얹는다 — 결까지 끊으면 텍셀마다 단이 튄다.
-uniform float nbands = 4.0;
+//  평평한 면(벽돌 · 판자 · 문틀)은 0 — 램프가 가까워 평평한 면에서도 빛 각도가 자리마다 달라, 끊으면 문판에 등고선
+//  같은 곡선 경계가 섰다(「이 가로로 된 경계는 뭐지?」 · 「계속 있는데?」 2026-10-24). 둥근 쇠붙이만 4.
+uniform float nbands = 0.0;
 //  쇠붙이의 반짝임 한 줄 — hi 세기 · 문턱을 넘는 자리만 한 단(면 법선으로 재서 결의 흰 점이 안 선다). 벽돌 · 판자는 0.
 uniform float hi = 0.0;
 uniform float hi_cut = 0.5;
@@ -268,7 +270,7 @@ void light() {
 	//  줄로 섰고(「이 가로로 된 경계는 뭐지?」) 바깥 고리가 칠판 밑 벽돌을 밝혔다(2026-10-24). 끊는 것은 면의 빛 각도뿐이다.
 	float q = ATTENUATION;
 	float g = clamp(dot(normalize(gn), LIGHT), 0.0, 1.0);
-	float gb = floor(g * nbands + 0.5) / nbands;
+	float gb = nbands > 0.0 ? floor(g * nbands + 0.5) / nbands : g;
 	float bf = clamp((clamp(dot(NORMAL, LIGHT), 0.0, 1.0) + 0.05) / (g + 0.05), 0.4, 1.8);
 	DIFFUSE_LIGHT += q * gb * bf * LIGHT_COLOR / PI;
 	if (hi > 0.0) {
@@ -308,6 +310,7 @@ static func _cel(col: Color, rough := 0.8, shine := 0.0) -> ShaderMaterial:
 	im.fill(col)
 	var m := _lit_mat(im, null, rough, 0.0)
 	m.set_shader_parameter("hi", shine)
+	m.set_shader_parameter("nbands", 4.0)
 	return m
 
 
@@ -1825,6 +1828,7 @@ static func _door_iron_mat(seed: int) -> ShaderMaterial:
 	#  망치 자국 면마다 반짝임이 조각으로 서고 창끝이 흰 덩어리로 터졌다(촬영) — 약하게 · 문턱 높게
 	m.set_shader_parameter("hi", 0.12)
 	m.set_shader_parameter("hi_cut", 0.7)
+	m.set_shader_parameter("nbands", 4.0)
 	return m
 
 
