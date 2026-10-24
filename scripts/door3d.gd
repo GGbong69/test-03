@@ -235,10 +235,6 @@ uniform float hk = 1.0;
 uniform vec3 base : source_color = vec3(0.5);
 uniform float grain = 1.0;
 uniform float sat = 1.0;
-//  빛을 단으로 끊는다 — 세기가 두 배 될 때마다 lsteps 단(경계는 딱 끊긴다 · 디더 없음). 「약간 경계가 딱딱 있으면
-//  좋겠는데 … 어설프게 원으로 할 빠에는」(2026-10-24) — 매끈한 감쇠는 램프 · 네온 웅덩이가 흐린 원으로 번져 붙인 빛으로
-//  읽혔다. 손(hand3)의 빛 사다리와 같은 어법 — 결(노멀)을 따라 단 경계가 벽돌 · 판자 모서리에 걸린다.
-uniform float lsteps = 2.0;
 //  둥근 면(쇠 띠 · 홈통 · 전선관 · 징)의 빛 각도도 nbands 단으로 끊는다 — 「아니 이런거 말한거여」(2026-10-24 · 쇠 띠 ·
 //  홈통 그림) — 매끈한 원통 명암이 경계 없이 번져 붙인 도형으로 읽혔다. 놋쇠 손잡이(BRASS_SHADER) · 손(hand3)과 같은
 //  어법이다. 단은 메시의 면 법선(gn)으로 재고, 결(높이) 명암은 그 단 위에 비로 얹는다 — 결까지 끊으면 텍셀마다 단이 튄다.
@@ -268,10 +264,9 @@ void fragment() {
 	SPECULAR = spec;
 }
 void light() {
-	//  끊는 것은 빛의 감쇠(거리 · 원뿔 · 웅덩이)뿐이다 — 결 노멀까지 끊으면 텍셀마다 단이 튀어 분홍 띠가 지저분했고,
-	//  반짝임 문턱은 벽돌에 흰 점을 흩뿌렸다(촬영). 결 명암은 그대로 얹는다.
-	float a = ATTENUATION;
-	float q = a > 0.004 ? exp2(floor(log2(a) * lsteps + 0.5) / lsteps) : 0.0;
+	//  빛의 감쇠(거리 · 원뿔 · 웅덩이)는 매끈하게 둔다 — 단으로 끊었더니 큰 웅덩이 고리 가장자리가 문판을 가로지르는
+	//  줄로 섰고(「이 가로로 된 경계는 뭐지?」) 바깥 고리가 칠판 밑 벽돌을 밝혔다(2026-10-24). 끊는 것은 면의 빛 각도뿐이다.
+	float q = ATTENUATION;
 	float g = clamp(dot(normalize(gn), LIGHT), 0.0, 1.0);
 	float gb = floor(g * nbands + 0.5) / nbands;
 	float bf = clamp((clamp(dot(NORMAL, LIGHT), 0.0, 1.0) + 0.05) / (g + 0.05), 0.4, 1.8);
@@ -2388,8 +2383,6 @@ static func _pool_tex() -> GradientTexture2D:
 	for p in LOOK.pool:
 		var v: float = float(p[1])
 		g.add_point(float(p[0]), Color(v, v, v))
-	#  웅덩이도 단으로 — 점 사이를 잇지 않고 다음 점까지 같은 값(경계가 딱 끊긴 고리)
-	g.interpolation_mode = Gradient.GRADIENT_INTERPOLATE_CONSTANT
 	var gt := GradientTexture2D.new()
 	gt.gradient = g
 	gt.fill = GradientTexture2D.FILL_RADIAL
