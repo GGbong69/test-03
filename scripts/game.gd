@@ -24152,6 +24152,15 @@ func _cons_draw() -> void:
 				draw_set_transform(shake_off)
 			else:
 				_icon_cons(ic, ir, String(cons[i].id))
+		else:
+			#  빈 칸 — 동전 우물(_slot_ghost)과 같은 재질의 네모 홈(2026-10-25 레퍼런스 2차 — 빈 판이 상단에서
+			#  가장 큰 초록 덩어리였다 · 「여기 둘 들어간다」). 어두운 바닥 · 윗변 그늘 · 놋쇠 테 · 왼쪽 위 빛.
+			#  날아오는 동안(_order_fly_hides)도 이 홈이다.
+			_rr(self, r, WELL.floor)
+			_rr_top(self, r.grow(-1.0), 1, C_BG)
+			_rr_line(self, r, WELL.brass)
+			_rr_top(self, r, 1, WELL.brass_hi)
+			_rr_left(self, r, WELL.brass_hi)
 	# 이름과 수 — 동전 슬롯 밑은 상인 자리라 못 쓰지만 이 자리는 벽이다.
 	# 「사탕」이라고만 적고 있었는데 이 칸에는 사진도 들어간다 — 사진을
 	# 한 장 들고 있으면 「사탕 1/2」가 거짓말이 된다.
@@ -38905,7 +38914,7 @@ const METAL := {
 }
 #  w 테 폭 / 반지름(바닥 w_lo · 천장 w_hi 면px) · seg 한 바퀴 칸 · reed 빗살 수 · reed_r 이 아래로는
 #  빗살을 안 긋는다(런 끝 10 · 툴팁 8 에서 결이 뭉갠다) · lx, ly 빛(화면 — 왼쪽 위).
-const RIM := {"w": 0.18, "w_lo": 1.4, "w_hi": 3.6, "seg": 48, "reed": 44, "reed_r": 12.0,
+const RIM := {"w": 0.18, "w_lo": 1.4, "w_hi": 3.6, "seg": 64, "reed": 44, "reed_r": 12.0,
 		"lx": -0.62, "ly": -0.78}
 
 
@@ -38925,56 +38934,78 @@ static func _rim_w(r: float) -> float:
 	return clampf(r * float(RIM.w), float(RIM.w_lo), float(RIM.w_hi))
 
 
+#  테 비탈 한 칸의 톤 번호(METAL 0 그늘 ~ top) — l 은 빛 쪽 몫(−1 ~ 1). inner 면 안 비탈(빛이 거꾸로 —
+#  얼굴이 움푹 들어앉는다). top 3 이면 반짝 톤까지, 2 면(작은 동전) 빛까지.
+static func _rim_tone(l: float, inner: bool, top: int) -> int:
+	var t: float = 0.42 - 0.36 * l if inner else 0.48 + 0.40 * l
+	return clampi(roundi(t * float(top)), 0, top)
+
+
 #  솟은 테 한 바퀴 — 바깥선(물린 원반이면 물린 자리째) · 마루 · 안선. ry/rx 가 누운 자세의 눌림이다.
 #  yclip 은 말림의 접는 선(c 에서 아래로) — 그 밑 점은 접는 선으로 모인다(_disc_seg 의 활꼴과 같다).
+#  2026-10-25 레퍼런스 2차 — 매끈한 그러데이션(꼭짓점마다 색)을 걷고 METAL 네 칸(그늘 · 몸 · 빛 · 반짝)으로
+#  끊는다. 칸마다 비탈 사각을 따로 내고 한 색만 준다(칸 안은 한 톤 · 맞닿은 칸끼리 색이 안 번진다).
+#  r 12 밑(런 끝 · 툴팁)은 세 칸만 — 1px 테에 반짝 톤이 서면 테가 통째로 흰 고리다.
+var _rim_idx := PackedInt32Array()     # 테 사각 seg × 2 장의 삼각형 번호 — 늘 같아 한 번 짓는다
+
+
 func _metal_rim(c: Vector2, rx: float, ry: float, rw: float, mdep: float, slots: int,
 		m: Array, dim: float, yclip := INF) -> void:
 	var n := int(RIM.seg)
 	var lv := Vector2(float(RIM.lx), float(RIM.ly))
 	var sy: float = ry / maxf(rx, 0.001)
 	var yc: float = c.y + yclip
+	var top: int = 3 if rx >= float(RIM.reed_r) else 2
+	var rc: float = rx - rw * 0.45          # 마루
+	var ri: float = rx - rw                 # 안선
+	if _rim_idx.size() != n * 12:
+		_rim_idx.clear()
+		for q in n * 2:
+			_rim_idx.append_array(PackedInt32Array([q * 4, q * 4 + 1, q * 4 + 2, q * 4, q * 4 + 2, q * 4 + 3]))
 	var pts := PackedVector2Array()
 	var cols := PackedColorArray()
 	for i in n:
-		var a: float = TAU * float(i) / float(n)
-		var dv := Vector2(cos(a), sin(a))
-		var f: float = _mill_f(a, rx, mdep, slots) if mdep > 0.0 else 1.0
-		var l: float = dv.dot(lv)
-		var band := [[rx * f, 0.42 + 0.34 * l], [rx - rw * 0.45, 0.74 + 0.24 * l],
-				[rx - rw, 0.40 - 0.30 * l]]
-		for pr in band:
-			var p := c + Vector2(dv.x * float(pr[0]), dv.y * float(pr[0]) * sy)
-			p.y = minf(p.y, yc)
-			pts.append(p)
-			cols.append(_metal_at(m, float(pr[1])).darkened(dim))
-	var idx := PackedInt32Array()
-	for i in n:
-		var j: int = (i + 1) % n
+		var a0: float = TAU * float(i) / float(n)
+		var a1: float = TAU * float(i + 1) / float(n)
+		var d0 := Vector2(cos(a0), sin(a0) * sy)
+		var d1 := Vector2(cos(a1), sin(a1) * sy)
+		var l: float = Vector2(cos((a0 + a1) * 0.5), sin((a0 + a1) * 0.5)).dot(lv)
+		var f0: float = _mill_f(a0, rx, mdep, slots) if mdep > 0.0 else 1.0
+		var f1: float = _mill_f(a1, rx, mdep, slots) if mdep > 0.0 else 1.0
+		#  b 0 바깥 비탈(빛 쪽이 밝다) · 1 안 비탈(그 반대가 밝다 — 얼굴이 움푹 들어앉는다)
 		for b in 2:
-			var a0: int = i * 3 + b
-			var a1: int = j * 3 + b
-			idx.append_array(PackedInt32Array([a0, a1, a1 + 1, a0, a1 + 1, a0 + 1]))
-	RenderingServer.canvas_item_add_triangle_array(get_canvas_item(), idx, pts, cols)
-	#  빗살 — 바깥 비탈에만. 물린 원반은 물린 자리가 곧 빗살의 한 단 위라 안 긋는다(옆면 규약 그대로).
+			var r0: float = rx * f0 if b == 0 else rc
+			var r1: float = rx * f1 if b == 0 else rc
+			var rn: float = rc if b == 0 else ri
+			var col: Color = (m[_rim_tone(l, b == 1, top)] as Color).darkened(dim)
+			pts.append(Vector2(c.x + d0.x * r0, minf(c.y + d0.y * r0, yc)))
+			pts.append(Vector2(c.x + d1.x * r1, minf(c.y + d1.y * r1, yc)))
+			pts.append(Vector2(c.x + d1.x * rn, minf(c.y + d1.y * rn, yc)))
+			pts.append(Vector2(c.x + d0.x * rn, minf(c.y + d0.y * rn, yc)))
+			for q in 4:
+				cols.append(col)
+	RenderingServer.canvas_item_add_triangle_array(get_canvas_item(), _rim_idx, pts, cols)
+	#  빗살 — 바깥 비탈에만 1px(번짐 없이) · 그 자리 비탈보다 한 칸 짙은 톤. 늘 맨 밑 톤이면 테가 검은
+	#  점 고리로 떴다(점검). 물린 원반은 물린 자리가 곧 빗살의 한 단 위라 안 긋는다.
 	if mdep <= 0.0 and rx >= float(RIM.reed_r):
 		var k := int(RIM.reed)
-		var rcol := Color(_metal_at(m, 0.08).darkened(dim), 0.55)
 		for i in k:
 			var a2: float = TAU * (float(i) + 0.5) / float(k)
 			var dv2 := Vector2(cos(a2), sin(a2) * sy)
 			var p0 := c + dv2 * (rx - 0.15)
 			var p1 := c + dv2 * (rx - rw * 0.42)
-			if maxf(p0.y, p1.y) > yc:
+			var ri2: int = _rim_tone(Vector2(cos(a2), sin(a2)).dot(lv), false, top)
+			if maxf(p0.y, p1.y) > yc or ri2 == 0:
 				continue
-			draw_line(p0, p1, rcol, 0.5, true)
-	#  반짝 — 마루 위 왼쪽에 짧은 호 하나. 이 한 줄이 「쇠」를 말한다.
+			draw_line(p0, p1, (m[ri2 - 1] as Color).darkened(dim), 1.0, false)
+	#  반짝 — 마루 위 왼쪽에 짧은 호 하나(1px 단단한 픽셀). 이 한 줄이 「쇠」를 말한다.
 	var la: float = atan2(lv.y, lv.x)
 	var gl := PackedVector2Array()
 	for i in 7:
 		var a3: float = la - 0.42 + 0.84 * float(i) / 6.0
 		gl.append(c + Vector2(cos(a3), sin(a3) * sy) * (rx - rw * 0.45))
 	if gl[0].y <= yc and gl[6].y <= yc:
-		draw_polyline(gl, Color(_metal_at(m, 1.0), 0.75 * (1.0 - dim)), maxf(rw * 0.22, 0.6), true)
+		draw_polyline(gl, Color(m[3] as Color, 1.0 - dim), 1.0, false)
 
 
 #  ── 전설 다섯 — 구운 그림 (2026-10-12) ─────────────────────
@@ -48626,8 +48657,11 @@ func _over_write(t: String, c: Vector2, sz: int, col: Color, a: float) -> void:
 				Color(col, col.a * a * ka))
 
 
-#  놋쇠 왕관 — 다섯 봉우리 · 띠에 보석 셋 · 봉우리 끝 구슬. 커지며 선다(넘쳤다 앉는다 — 뒤로 당기는
-#  감속). 앉는 순간 둘레에 반짝 별 여섯이 한 번 튀고 진다.
+#  놋쇠 왕관 — 봉우리 셋 · 띠. 메뉴 탭 · 설정 이름표와 같은 놋쇠(2026-10-25 레퍼런스 2차 — 매끈한 금 덩이에
+#  보석 · 구슬 원이 박혀 있었다 · 보석 금지). 봉우리마다 빛(왼쪽 위) 쪽 사면은 밝은 놋쇠 · 반대 사면은 짙은
+#  놋쇠로 면마다 한 톤 · 띠는 그 사이 톤에 새긴 홈 한 줄 · 2×2 징 셋 · 봉우리 끝 1px 빛 · 테는 짙은 놋쇠로 긋되
+#  빛 쪽 왼변은 뺀다. 꼭짓점은 화면 픽셀에 앉힌다. 커지는 것은 세 단(작게 → 넘침 → 제자리)으로 끊긴다.
+#  앉는 순간 둘레에 반짝 별 여섯이 한 번 튀고 진다.
 func _over_crown(c: Vector2, a: float) -> void:
 	var B: Dictionary = OVERB
 	var t0: float = float(B.crown_t0)
@@ -48635,45 +48669,50 @@ func _over_crown(c: Vector2, a: float) -> void:
 	var u: float = 1.0 if motion_off else clampf((over_t - t0) / (t1 - t0), 0.0, 1.0)
 	if u <= 0.0:
 		return
-	var q := u - 1.0
-	var k: float = maxf(0.0, 1.0 + 2.7 * q * q * q + 1.7 * q * q)
-	var w: float = float(B.crown_w)
+	var k: float = [0.6, 1.25, 1.0][mini(int(u * 3.0), 2)]
+	var hw: float = roundf(float(B.crown_w) * 0.5)
+	var qw: float = roundf(float(B.crown_w) * 0.25)
 	var h: float = float(B.crown_h)
-	var gold := Color(C_GOLD, a)
-	var dark := Color(C_GOLD.darkened(0.45), a)
-	var lite := Color(C_GOLD.lightened(0.35), a)
+	var ty: float = roundf(-h * 0.5)          # 가운데 봉우리 끝
+	var sy: float = roundf(-h * 0.2)          # 양끝 봉우리 끝
+	var vy: float = roundf(h * 0.06)          # 골
+	var by: float = roundf(h * 0.18)          # 띠 윗변
+	var ey: float = roundf(h * 0.5)           # 밑변
+	var lit := Color(Door3D.COL.brass, a)
+	var lo := Color(MENUM.brass_lo, a)
+	var mid := Color(MENUM.brass_lo.lerp(Door3D.COL.brass, 0.5), a)
+	var hi := Color(MENUM.brass_hi, a)
 	draw_set_transform(shake_off + c, 0.0, Vector2(k, k))
+	var body := PackedVector2Array([Vector2(-hw, ey), Vector2(-hw, sy), Vector2(-qw, vy), Vector2(0.0, ty),
+			Vector2(qw, vy), Vector2(hw, sy), Vector2(hw, ey)])
 	#  그림자 — 칠판에 진다.
-	var body := PackedVector2Array([Vector2(-w * 0.5, h * 0.5), Vector2(-w * 0.5, -h * 0.2),
-			Vector2(-w * 0.25, h * 0.06), Vector2(0.0, -h * 0.5), Vector2(w * 0.25, h * 0.06),
-			Vector2(w * 0.5, -h * 0.2), Vector2(w * 0.5, h * 0.5)])
 	var shd := PackedVector2Array()
 	for v in body:
 		shd.append(v + Vector2(2.0, 3.0))
 	draw_colored_polygon(shd, Color(0.0, 0.0, 0.0, 0.35 * a))
-	draw_colored_polygon(body, gold)
-	#  띠 — 밑 3할이 한 단 어둡고 윗변에 빛 한 줄.
-	var band := Rect2(-w * 0.5, h * 0.18, w, h * 0.32)
-	draw_rect(band, dark)
-	draw_rect(Rect2(band.position, Vector2(band.size.x, 1.0)), lite)
-	#  왼쪽 변 · 봉우리 왼사면에 빛(빛은 왼쪽 위에서 온다).
-	draw_line(body[1], body[0], lite, 1.0)
-	draw_line(body[1], body[2], lite, 1.0)
-	draw_line(body[2], body[3], lite, 1.0)
-	var ol := body.duplicate()
+	#  사면 넷 — 봉우리 끝 · 골에서 띠 윗변까지 세로로 가른다(왼끝 봉우리의 오른 사면 · 가운데의 왼 · 오른 ·
+	#  오른끝의 왼 사면). 빛 쪽 사면이 밝다.
+	for i in 4:
+		var p0: Vector2 = body[i + 1]
+		var p1: Vector2 = body[i + 2]
+		draw_colored_polygon(PackedVector2Array([p0, p1, Vector2(p1.x, by), Vector2(p0.x, by)]),
+				lit if p1.y < p0.y else lo)
+	#  띠 — 사이 톤 · 윗변 빛 한 줄 · 가운데 새긴 홈 한 줄 · 징 셋(빛 쪽 한 픽셀)
+	var band := Rect2(-hw, by, hw * 2.0, ey - by)
+	draw_rect(band, mid)
+	draw_rect(Rect2(band.position, Vector2(band.size.x, 1.0)), hi)
+	var gy: float = roundf(band.get_center().y)
+	draw_rect(Rect2(-hw, gy, hw * 2.0, 1.0), Color(MENUM.engrave, a))
+	for sx in [-qw, 0.0, qw]:
+		draw_rect(Rect2(float(sx) - 1.0, gy - 1.0, 2.0, 2.0), lit)
+		draw_rect(Rect2(float(sx) - 1.0, gy - 1.0, 1.0, 1.0), hi)
+	#  테 — 짙은 놋쇠. 빛 쪽 왼변(body 0 → 1)은 뺀다.
+	var ol := body.slice(1)
 	ol.append(body[0])
-	draw_polyline(ol, Color(C_GOLD.darkened(0.6), a), 1.0)
-	#  보석 — 가운데 붉은 것 · 양옆 푸른 것.
-	var by: float = band.get_center().y
-	draw_circle(Vector2(0.0, by), 4.0, Color(C_MULT, a))
-	draw_circle(Vector2(-1.2, by - 1.2), 1.4, Color(C_TXT, 0.8 * a))
-	for sx in [-1.0, 1.0]:
-		draw_circle(Vector2(sx * w * 0.3, by), 3.0, Color(C_CHIP, a))
-		draw_circle(Vector2(sx * w * 0.3 - 0.8, by - 0.8), 1.0, Color(C_TXT, 0.7 * a))
-	#  봉우리 끝 구슬.
-	for v2 in [body[1], body[3], body[5]]:
-		draw_circle(v2, 3.2, gold)
-		draw_circle(v2 + Vector2(-0.8, -0.8), 1.2, lite)
+	draw_polyline(ol, lo, 1.0)
+	#  봉우리 끝 빛 한 픽셀 — 몸 안 픽셀(가운데는 빛 사면 쪽 · 오른끝은 한 칸 안)
+	for v2 in [body[1], body[3] - Vector2(1.0, 0.0), body[5] - Vector2(1.0, 0.0)]:
+		draw_rect(Rect2(v2 as Vector2, Vector2(1.0, 1.0)), hi)
 	draw_set_transform(shake_off)
 	#  앉는 순간의 반짝 별 — 한 번 튀고 진다(번쩍임 아님 · 0.5초).
 	if motion_off:
@@ -48684,7 +48723,7 @@ func _over_crown(c: Vector2, a: float) -> void:
 	var sk: float = st / 0.5
 	for j in 6:
 		var an: float = TAU * float(j) / 6.0 + 0.4
-		var rr: float = (w * 0.55) + sk * 18.0
+		var rr: float = (hw * 1.1) + sk * 18.0
 		var sp := c + Vector2(cos(an), sin(an) * 0.7) * rr
 		var sz: float = 4.0 * (1.0 - sk) + 1.0
 		var sc := Color(C_TXT, (1.0 - sk) * a)

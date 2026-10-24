@@ -2234,7 +2234,10 @@ uniform vec3 c2 : source_color = vec3(0.6, 0.5, 0.2);
 uniform vec3 c3 : source_color = vec3(0.8, 0.7, 0.3);
 uniform vec3 c4 : source_color = vec3(1.0, 0.95, 0.8);
 uniform float lk = 1.0;
-const vec3 L = vec3(-0.5, 0.5, 0.7071);
+//  빛(눈 틀) — 테이블 소품(room3d _brass)은 −52° 로 내려다보는 눈이라 따로 준다
+uniform vec3 L = vec3(-0.5, 0.5, 0.7071);
+//  흰 줄 문턱 — 반사 방향과 법선이 이만큼 맞아야 흰 줄이다(테이블 소품은 좁힌다)
+uniform float hk = 0.955;
 void fragment() {
 	vec3 n = normalize(NORMAL);
 	float d = dot(n, L);
@@ -2246,7 +2249,7 @@ void fragment() {
 	if (d > 0.72) {
 		c = c3;
 	}
-	if (s > 0.955) {
+	if (s > hk) {
 		c = c4;
 	}
 	//  테(짙은 끝)는 눈에서 비껴 선 면 — 눈 쪽 법선(VIEW)으로 잰다. 손잡이는 카메라 축에서 14° 비껴 있어 n.z < 0.5 로
