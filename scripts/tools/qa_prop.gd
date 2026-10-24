@@ -615,6 +615,30 @@ func _run() -> void:
 	_slam()
 	_pound()
 	_rage_point()
+	_ladder()
+
+
+# ⑩ 놋쇠 사다리(2026-10-25 레퍼런스 2차) — 저울 · 등록기 놋쇠는 문 손잡이와 같은 다섯 단(BRASS_SHADER)이고,
+#  얹거나 고르면(prop_glow k ≥ 0.3) 한 칸 오르고 누르면(k ≤ −0.3) 한 칸 내리고 놓으면 제자리다.
+#  헤드리스라 진열대가 없어 노드 한 벌만 짓는다(그리지는 않는다).
+func _ladder() -> void:
+	var R3 = load("res://scripts/room3d.gd")
+	var rp: Array = load("res://scripts/door3d.gd").COL.brass_ramp
+	var vp := SubViewport.new()
+	var tb := Node3D.new()
+	tb.name = "Table"
+	vp.add_child(tb)
+	root.add_child(vp)
+	R3._scale_prop(tb, 0.0)
+	var bm = tb.get_node("Scale").get_meta("glow")
+	var got := []
+	for k in [0.0, 1.0, 0.6 * 0.6, -0.5, 0.0]:
+		R3.prop_glow(vp, 0, k, Color.WHITE, 0.0)
+		got.append(Color(bm.get_shader_parameter("c2")))
+	_ok("놋쇠는 다섯 단 셰이더", bm is ShaderMaterial and got[0] == rp[2], str(got[0]))
+	_ok("얹으면 한 칸 오르고 누르면 내리고 놓으면 제자리",
+			got[1] == rp[3] and got[2] == rp[3] and got[3] == rp[1] and got[4] == rp[2], str(got))
+	vp.queue_free()
 
 
 # ⑨ 가리키기(2026-10-11) — 「이스터에그 스테이지 진입 할때 NPC가 테이블을 한번 치잖아? 치고나서

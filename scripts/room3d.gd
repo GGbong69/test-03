@@ -784,22 +784,49 @@ static func _varnish(pair: Array) -> ORMMaterial3D:
 	return m
 
 
-#  놋쇠 — 소품마다 한 벌. 반응(prop_glow)이 이 재질의 빛을 올린다.
-#  2026-10-16 온 쇠(metallic 1 · 거칠기 0.32) — 점검(상점)에서 놋쇠가 반사 없는 노란 플라스틱으로
-#  읽혔다(metallic 0.55 에 비출 것이 없었다). 이제 반사 하늘(_rx_sky)을 비춰 윗면 · 둥근 면은
-#  빛나고 앞면은 가라앉는다 — 어두운 반사와 밝은 반사가 맞붙어야 닦은 쇠다.
-static func _brass() -> StandardMaterial3D:
-	var m := _mat(COL.brass, 0.32, 1.0)
-	m.emission_enabled = true
-	m.emission = COL.lamp
-	m.emission_energy_multiplier = 0.0
+#  놋쇠 — 소품마다 한 벌. 반응(prop_glow)이 이 재질의 사다리를 올린다.
+#  2026-10-25 레퍼런스 2차 — 반사 하늘(_rx_sky)을 비춘 온 쇠는 매끈한 금 그러데이션이라 문 손잡이(다섯 단)와
+#  딴 그림이었다. 문의 놋쇠 셰이더(Door3D BRASS_SHADER) 한 벌을 쓴다 — 짙은 끝 · 그늘 · 몸 · 빛 · 1px 흰 줄.
+#  녹 · 청동은 같은 셰이더의 다른 램프.
+#  (door3d 가 이 파일을 preload 하므로 여기서는 load 로 연다 — 서로 preload 하면 고리가 된다.)
+const RAMP_C := [&"c0", &"c1", &"c2", &"c3", &"c4"]
+#  녹 짙은 놋쇠 — 놋쇠 램프를 한 칸 내린 것(맨 밑 한 톤만 더한다)
+const PATINA_LO := Color("170c03")
+#  청동 — 등록기 몸 · 저울 주물(옛 COL.bronze.darkened(0.45) 가 몸 톤 c2)
+const BRONZE_RAMP := [Color("100804"), Color("24170b"), Color("3e2a14"), Color("5a3d1f"), Color("8a6a40")]
+#  빛(눈 틀 · 셰이더 L) — 문 손잡이의 빛(왼쪽 위 앞)을 그대로 쓰면 −52° 로 내려다보는 윗면(접시 · 받침 ·
+#  등록기 머리)이 통째로 빛 단에 들어 저울이 민 황토 덩이로 떴다(밝기 56 → 74). 빛을 위 · 왼쪽으로 눕혀 윗면은
+#  몸 · 앞면은 그늘 · 왼쪽 위로 도는 둥근 면만 빛이다.
+const PROP_L := Vector3(-0.635, 0.716, 0.289)
+#  램프 몫(셰이더 lk) — 불빛을 안 받는 제 색이라 1 이면 판의 엑스트라인 소품이 옛 반사 쇠보다 한 단 떴다
+const PROP_LK := 0.8
+
+
+static func _ramp_mat(rp: Array) -> ShaderMaterial:
+	var m: ShaderMaterial = load("res://scripts/door3d.gd")._brass_mat()
+	_ramp_set(m, rp, 0)
+	m.set_shader_parameter("lk", PROP_LK)
+	m.set_shader_parameter("L", PROP_L)
+	return m
+
+
+#  사다리를 up 칸 옮긴다(+ 밝게 · − 어둡게) — 끝은 끝 톤에 멈춘다.
+static func _ramp_set(m: ShaderMaterial, rp: Array, up: int) -> void:
+	for i in 5:
+		m.set_shader_parameter(RAMP_C[i], rp[clampi(i + up, 0, 4)])
+
+
+static func _brass() -> ShaderMaterial:
+	var m := _ramp_mat(load("res://scripts/door3d.gd").COL.brass_ramp)
+	m.set_meta("up", 0)
 	return m
 
 
 #  녹 짙은 놋쇠 — 오목한 곳 · 안쪽(접시 안 · 건반판 · 볏 바탕 · 사슬). 닦은 테(_brass)와 두 톤을
 #  이룬다 — 한 빛깔이면 접시가 금빛 원반(뚜껑)으로, 건반판이 노란 판으로 읽힌다.
-static func _patina() -> StandardMaterial3D:
-	return _mat(COL.brass.darkened(0.55), 0.55, 0.85)
+static func _patina() -> ShaderMaterial:
+	var rp: Array = load("res://scripts/door3d.gd").COL.brass_ramp
+	return _ramp_mat([PATINA_LO, rp[0], rp[1], rp[2], rp[3]])
 
 
 #  반사 하늘 — 쇠가 비출 둘레(2026-10-16 · 테이블 _tbl_env). 128x64 파노라마를 코드로 한 번 굽는다
@@ -849,23 +876,25 @@ static func _rx_sky() -> Sky:
 
 #  소품 받침 그늘 — 바닥에 붙인다. 이게 없으면 소품이 떠 보인다(Q 에서 저울
 #  받침 밑 그림자가 한 줄 떨어져 섰다). 빛이 왼쪽 위라 오른쪽 앞으로 민다.
-static func _blob(sz: Vector2, at: Vector3, a: float) -> MeshInstance3D:
-	var g := Gradient.new()
-	g.set_color(0, Color(0.0, 0.0, 0.0, 1.0))
-	g.set_color(1, Color(0.0, 0.0, 0.0, 0.0))
-	g.add_point(0.55, Color(0.0, 0.0, 0.0, 0.8))
-	var gt := GradientTexture2D.new()
-	gt.gradient = g
-	gt.fill = GradientTexture2D.FILL_RADIAL
-	gt.fill_from = Vector2(0.5, 0.5)
-	gt.fill_to = Vector2(1.0, 0.5)
-	gt.width = 64
-	gt.height = 64
+#  flat — 받침 윤곽 한 톤(2026-10-25 레퍼런스 2차 — 놋쇠 소품 밑의 둥근 번짐이 단 명암 옆에서 떠 보였다).
+static func _blob(sz: Vector2, at: Vector3, a: float, flat := false) -> MeshInstance3D:
 	var m := StandardMaterial3D.new()
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	m.albedo_color = Color(1.0, 1.0, 1.0, a)
-	m.albedo_texture = gt
+	m.albedo_color = Color(0.0, 0.0, 0.0, a) if flat else Color(1.0, 1.0, 1.0, a)
+	if not flat:
+		var g := Gradient.new()
+		g.set_color(0, Color(0.0, 0.0, 0.0, 1.0))
+		g.set_color(1, Color(0.0, 0.0, 0.0, 0.0))
+		g.add_point(0.55, Color(0.0, 0.0, 0.0, 0.8))
+		var gt := GradientTexture2D.new()
+		gt.gradient = g
+		gt.fill = GradientTexture2D.FILL_RADIAL
+		gt.fill_from = Vector2(0.5, 0.5)
+		gt.fill_to = Vector2(1.0, 0.5)
+		gt.width = 64
+		gt.height = 64
+		m.albedo_texture = gt
 	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
 	var pm := PlaneMesh.new()
 	pm.size = sz
@@ -1419,7 +1448,7 @@ static func _tbl_env() -> Environment:
 
 #  소품 반응 — 매 틀 _chute_draw 가 부른다. z 0 저울 · 1 금전등록기.
 #   k   — 스포트 세기. 0 평소 · 1 한껏 · 음수 = 눌려 가라앉음. col 쪽으로 물든다.
-#         0 을 넘으면 그 소품의 놋쇠가 col 빛으로 달아오른다.
+#         0.3 을 넘으면 그 소품의 놋쇠 사다리가 한 칸 오른다(−0.3 밑이면 한 칸 내린다).
 #   act — 소품의 몸짓. 저울은 저울대 기울기 그 값이다(0 평소 · 1 안 접시가
 #         내려앉음 · 그 너머는 출렁임) — game.gd 가 민다(scale_tilt). 접시에 얹힌
 #         동전과 그것을 집는 손이 같은 값으로 접시 자리를 셈해야(pan_top) 동전이
@@ -1452,12 +1481,13 @@ static func prop_glow(vp: SubViewport, z: int, k: float, col: Color, act := 0.0,
 	var pn: Node3D = root.get_node_or_null("Register" if z == 1 else "Scale")
 	if pn == null:
 		return
-	var e: float = 0.2 * clampf(k, 0.0, 2.0)
-	var gm: Material = pn.get_meta("glow")
-	var bm := gm as StandardMaterial3D
-	if bm != null:
-		bm.emission = col if k > 0.0 else COL.lamp
-		bm.emission_energy_multiplier = e
+	#  얹거나 고르면 놋쇠 사다리가 한 칸 오르고, 누르면 한 칸 내린다(2026-10-25 레퍼런스 2차 — 빛도 단이다).
+	#  바뀐 틀에만 램프를 다시 넣는다.
+	var bm := pn.get_meta("glow") as ShaderMaterial
+	var up: int = 1 if k >= 0.3 else (-1 if k <= -0.3 else 0)
+	if bm != null and int(bm.get_meta("up", 0)) != up:
+		bm.set_meta("up", up)
+		_ramp_set(bm, load("res://scripts/door3d.gd").COL.brass_ramp, up)
 	if z == 0:
 		_scale_set(pn, clampf(act, -0.6, 1.6))
 	else:
@@ -1788,15 +1818,14 @@ static func _scale_prop(root: Node3D, sh: float) -> void:
 	var wood := _mat(WOOD.carve, 0.4)
 	var wood2 := _mat(WOOD.beam, 0.35)
 	n.set_meta("glow", brass)
-	n.add_child(_blob(Vector2(34.0, 24.0), Vector3(2.0, 0.15, 2.0), 0.75))
+	n.add_child(_blob(Vector2(24.0, 19.0), Vector3(1.5, 0.15, 1.5), 0.6, true))      # 받침(22.8 × 17.8) 한 톤
 	#  glb 가 있으면 메시를 이름으로 집어 같은 노드 짜임(Arm · PanL · PanR)에 앉힌다. 재질은 이름으로
 	#  이 함수의 재질을 끼운다 — 놋쇠가 prop_glow 가 미는 그 재질이라 빛 · 반짝임이 그대로 탄다.
 	#  청동은 등록기 몸통과 같은 재질 · 같은 결(한 벌로 보인다). 없으면(가져오기 전) 옛 코드 몸이다.
 	var gp: Dictionary = _glb_parts(SCALE_BODY)
 	var gm := {}
 	if gp.has("ScaleBody") and gp.has("ScaleBeam") and gp.has("ScalePan") and gp.has("ScaleWeight"):
-		var bronze := _mat(COL.bronze.darkened(0.45), 0.42, 0.9)
-		bronze.albedo_texture = _noise_tex(0.35, 0.78, 1.0, 31)
+		var bronze := _ramp_mat(BRONZE_RAMP)
 		gm = {"brass": brass, "bronze": bronze, "wood": wood, "wood_lt": wood2, "patina": patina,
 				"ink": _mat(Color("1a1210"), 0.6)}
 		n.add_child(_glb_mi(gp.ScaleBody, gm))
@@ -2085,8 +2114,7 @@ static func _register_prop(root: Node3D, sh: float) -> void:
 	var wood := _mat(WOOD.carve, 0.4)
 	var wood2 := _mat(WOOD.beam, 0.35)
 	var wood3 := _mat(WOOD.carve.darkened(0.25), 0.6)
-	var body := _mat(COL.bronze.darkened(0.45), 0.42, 0.9)
-	body.albedo_texture = _noise_tex(0.35, 0.78, 1.0, 31)
+	var body := _ramp_mat(BRONZE_RAMP)
 	var slope := _mat(COL.bronze.darkened(0.72), 0.5, 0.6)
 	var brass := _brass()
 	var patina := _patina()
@@ -2095,7 +2123,7 @@ static func _register_prop(root: Node3D, sh: float) -> void:
 	var glass := _mat(COL.glass, 0.15)
 	var coin := _mat(COL.brass.lightened(0.18), 0.3, 1.0)
 	n.set_meta("glow", brass)
-	n.add_child(_blob(Vector2(54.0, 32.0), Vector3(3.0, 0.15, 2.0), 0.75))
+	n.add_child(_blob(Vector2(43.0, 23.0), Vector3(1.5, 0.15, 3.0), 0.6, true))      # 굽(42 × 22) 한 톤
 	#  몸체(움직이지 않는 주물 · 나무 · 볏)는 Blender 로 지은 glb 다(REG_BODY · scripts/tools/blender/register_body.py ·
 	#  2026-10-16 「블렌더 깔았으니까 활용해봐」). 재질은 이름으로 이 함수의 재질을 끼운다 — prop_glow 가 미는 놋쇠가
 	#  같은 것이라 빛 · 반짝임이 그대로 탄다. glb 가 없으면(가져오기 전) 옛 코드 몸으로 짓는다.
@@ -2232,6 +2260,10 @@ static func _register_prop(root: Node3D, sh: float) -> void:
 
 #  면 좌표 점 셋·넷으로 판 한 장. 점 순서대로 감는다.
 static func _quad(p: Array, m: Material) -> MeshInstance3D:
+	#  셰이더 놋쇠(금실 — _brass)는 앞면만 그린다. 누운 판이라 위를 보게 감는다.
+	if not (m is BaseMaterial3D) and (p[2] - p[0]).cross(p[1] - p[0]).y < 0.0:
+		p = p.duplicate()
+		p.reverse()
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var tris := [[0, 1, 2]]
@@ -2247,5 +2279,6 @@ static func _quad(p: Array, m: Material) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	mi.mesh = st.commit()
 	mi.material_override = m
-	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	if m is BaseMaterial3D:
+		m.cull_mode = BaseMaterial3D.CULL_DISABLED
 	return mi

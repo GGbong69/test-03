@@ -2233,7 +2233,8 @@ uniform vec3 c2 : source_color = vec3(0.6, 0.5, 0.2);
 uniform vec3 c3 : source_color = vec3(0.8, 0.7, 0.3);
 uniform vec3 c4 : source_color = vec3(1.0, 0.95, 0.8);
 uniform float lk = 1.0;
-const vec3 L = vec3(-0.5, 0.5, 0.7071);
+//  빛(눈 틀) — 테이블 소품(room3d _brass)은 −52° 로 내려다보는 눈이라 따로 준다
+uniform vec3 L = vec3(-0.5, 0.5, 0.7071);
 void fragment() {
 	vec3 n = normalize(NORMAL);
 	float d = dot(n, L);
