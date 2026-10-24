@@ -20070,6 +20070,20 @@ func _dart_shade_2d(a := 1.0) -> void:
 		#  2dl 로 그으면 그림자가 꽁지 밖으로 길게 삐져나가 **자루가 아니라
 		#  금 한 줄**이 된다. 짧은 쪽으로 틀리면 자루 밑에 숨을 뿐이다.
 		draw_line(e.p + o, e.p - u * dl + o, Color(sc, sc.a * a), 2.0)
+	#  날아오는 자루의 그림자(2026-10-25 · 레퍼런스 2차 「날아오는 다트 그림자가 촉으로 모인다」) — 꽂힐 자리를
+	#  판 위 원판 대신 그림자가 말한다. 판에서 먼 동안은 꽂힐 자리 밑으로 멀리 · 옅게 지고, 다가올수록 촉 끝으로
+	#  미끄러져 짙어진다. 마지막 틀이 위 꽂힌 자루 그림자(1, 2)와 한 자리라 착탄에서 하나가 된다. 정수 px 로
+	#  옮긴다 — 반 px 씩 기면 선이 번진다. 3D 자루가 날 때만 · 움직임 끔이면 꽂힌 뒤에만 선다.
+	if state == S.FLY and _bd3_live() and not motion_off:
+		var t := clampf(fly_t / maxf(GameData.tune("fly_time"), 0.001), 0.0, 1.0)
+		var k := t * t * (3.0 - 2.0 * t)          # 자루와 같은 곡선(_bd3_fly_tf)
+		var fv: Vector2 = aim - BC
+		var fdl := clampf(fv.length() * float(DART_PERSP) * 0.5, float(DART_MIN), float(DART_MAX))
+		var fu := (-fv).normalized() if fv.length() > 0.001 else Vector2(0.0, 1.0)
+		var fo := (Vector2(1.0, 2.0) + Vector2(3.0, 16.0) * (1.0 - k)).round()
+		var fc: Color = BOARDART.shadow
+		#  처음 짙기 0.55 — 0.35 면 판 그림자(0.40)의 0.14 라 초록 · 빨강 칸 위에서 안 보였다(찍어 봤다).
+		draw_line(aim + fo, aim - fu * fdl + fo, Color(fc, fc.a * a * lerpf(0.55, 1.0, k)), 2.0)
 
 
 # 3D 가 없을 때의 받침. 같은 투영을 손으로 계산한다 — 자세한 근거는
@@ -20183,7 +20197,9 @@ func _draw_aim() -> void:
 			for rc in [[lerpf(22.0, 7.0, e), 1.0], [lerpf(30.0, 11.0, e), 0.3]]:
 				draw_arc(aim, rc[0], 0.0, TAU, 24, Color(C_BG, 0.7 * rc[1]), 3.0)
 				draw_arc(aim, rc[0], 0.0, TAU, 24, Color(C_TXT, rc[1]), 1.0)
-	elif state == S.FLY:
+	elif state == S.FLY and not _bd3_live():
+		#  3D 자루가 나는 동안은 꽂힐 자리를 자루의 그림자가 말한다(_dart_shade_2d — 2026-10-25 레퍼런스 2차).
+		#  크림색 반투명 원판은 2D 받침(헤드리스)에만 남는다.
 		#  ⚠ 0.2 가 박혀 있었다. tuning.csv 는 fly_time 을 0.05~1.0 으로 여는데
 		#  여기만 그 값을 안 읽어서, 0.2 를 넘기면 k 가 음수로 가고 반지름도
 		#  알파도 같이 음수가 됐다(fly_t 0.5 면 반지름 −36). 같은 파일
