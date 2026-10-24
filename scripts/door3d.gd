@@ -237,7 +237,16 @@ uniform float sat = 1.0;
 //  좋겠는데 … 어설프게 원으로 할 빠에는」(2026-10-24) — 매끈한 감쇠는 램프 · 네온 웅덩이가 흐린 원으로 번져 붙인 빛으로
 //  읽혔다. 손(hand3)의 빛 사다리와 같은 어법 — 결(노멀)을 따라 단 경계가 벽돌 · 판자 모서리에 걸린다.
 uniform float lsteps = 2.0;
+//  둥근 면(쇠 띠 · 홈통 · 전선관 · 징)의 빛 각도도 nbands 단으로 끊는다 — 「아니 이런거 말한거여」(2026-10-24 · 쇠 띠 ·
+//  홈통 그림) — 매끈한 원통 명암이 경계 없이 번져 붙인 도형으로 읽혔다. 놋쇠 손잡이(BRASS_SHADER) · 손(hand3)과 같은
+//  어법이다. 단은 메시의 면 법선(gn)으로 재고, 결(높이) 명암은 그 단 위에 비로 얹는다 — 결까지 끊으면 텍셀마다 단이 튄다.
+uniform float nbands = 4.0;
+//  쇠붙이의 반짝임 한 줄 — hi 세기 · 문턱을 넘는 자리만 한 단(면 법선으로 재서 결의 흰 점이 안 선다). 벽돌 · 판자는 0.
+uniform float hi = 0.0;
+uniform float hi_cut = 0.5;
+varying vec3 gn;
 void fragment() {
+	gn = NORMAL;
 	vec2 ts = 1.0 / vec2(textureSize(hgt, 0));
 	float l = texture(hgt, UV - vec2(ts.x, 0.0)).r * hk;
 	float r = texture(hgt, UV + vec2(ts.x, 0.0)).r * hk;
@@ -261,7 +270,15 @@ void light() {
 	//  반짝임 문턱은 벽돌에 흰 점을 흩뿌렸다(촬영). 결 명암은 그대로 얹는다.
 	float a = ATTENUATION;
 	float q = a > 0.004 ? exp2(floor(log2(a) * lsteps + 0.5) / lsteps) : 0.0;
-	DIFFUSE_LIGHT += q * clamp(dot(NORMAL, LIGHT), 0.0, 1.0) * LIGHT_COLOR / PI;
+	float g = clamp(dot(normalize(gn), LIGHT), 0.0, 1.0);
+	float gb = floor(g * nbands + 0.5) / nbands;
+	float bf = clamp((clamp(dot(NORMAL, LIGHT), 0.0, 1.0) + 0.05) / (g + 0.05), 0.4, 1.8);
+	DIFFUSE_LIGHT += q * gb * bf * LIGHT_COLOR / PI;
+	if (hi > 0.0) {
+		vec3 h = normalize(VIEW + LIGHT);
+		float sp = pow(clamp(dot(normalize(gn), h), 0.0, 1.0), mix(80.0, 12.0, rough)) * q;
+		SPECULAR_LIGHT += step(hi_cut, sp) * hi * LIGHT_COLOR / PI;
+	}
 }
 """
 
@@ -285,6 +302,15 @@ static func _lit_mat(alb: Image, height: Image, rough: float, hk := 1.0,
 		m.set_shader_parameter("base", wood)
 		m.set_shader_parameter("grain", float(LOOK.grain))
 		m.set_shader_parameter("sat", float(LOOK.sat))
+	return m
+
+
+#  맨 색 재질도 같은 빛 단으로(LIT_SHADER · 결 없음) — 홈통 · 띠쇠 · 전선관 · 징 · 경첩 통.
+static func _cel(col: Color, rough := 0.8, shine := 0.0) -> ShaderMaterial:
+	var im := Image.create(2, 2, false, Image.FORMAT_RGBA8)
+	im.fill(col)
+	var m := _lit_mat(im, null, rough, 0.0)
+	m.set_shader_parameter("hi", shine)
 	return m
 
 
@@ -537,11 +563,11 @@ static func _wall(root: Node3D) -> void:
 static func _wall_things(root: Node3D) -> void:
 	var wz: float = float(DOOR.wall_z)
 	#  홈통 — 검게 칠한 쇠관 · 벽에 박은 띠쇠 둘 · 이음 고리 하나
-	var pipe := Room3D._mat(Color("2a2729"), 0.55)
+	var pipe := _cel(Color("2a2729"), 0.55, 0.5)
 	var px := -0.375
 	var pz: float = wz + 0.028
 	root.add_child(Room3D._cyl(0.02, 0.02, 2.2, Vector3(px, -0.2, pz), pipe, 16))
-	var clamp_m := Room3D._mat(Color("1f1b1c"), 0.6)
+	var clamp_m := _cel(Color("1f1b1c"), 0.6, 0.3)
 	for cy in [0.46, -0.02]:
 		root.add_child(Room3D._cyl(0.0235, 0.0235, 0.012, Vector3(px, cy, pz), clamp_m, 16))
 		root.add_child(Room3D._box(Vector3(0.012, 0.012, 0.03), Vector3(px, cy, wz + 0.008), clamp_m))
@@ -599,7 +625,7 @@ static func _wall_things(root: Node3D) -> void:
 	_panel(root, Vector3(bw, bh, bd), Vector3(bx, by, wz + bd * 0.5), _lit_mat(im, hm, 0.6, 1.0),
 			paint.darkened(0.25), "Meter")
 	#  전선관 — 상자 위 · 밑으로(벽에 붙인 반달 고리 둘)
-	var cond := Room3D._mat(Color("4a4a4c"), 0.5)
+	var cond := _cel(Color("4a4a4c"), 0.5, 0.4)
 	var cz: float = wz + 0.012
 	root.add_child(Room3D._cyl(0.008, 0.008, 0.9, Vector3(bx + 0.02, by + bh * 0.5 + 0.45, cz), cond, 8))
 	root.add_child(Room3D._cyl(0.008, 0.008, 1.3, Vector3(bx - 0.02, by - bh * 0.5 - 0.65, cz), cond, 8))
@@ -1778,7 +1804,11 @@ static func _door_iron_mat(seed: int) -> ShaderMaterial:
 	var poly := PackedVector2Array([b.position, Vector2(b.end.x, b.position.y), b.end,
 			Vector2(b.position.x, b.end.y)])
 	var ip := _iron_img(poly, b, seed)
-	return _lit_mat(ip[0], ip[1], 0.7, 1.0)
+	var m := _lit_mat(ip[0], ip[1], 0.7, 1.0)
+	#  망치 자국 면마다 반짝임이 조각으로 서고 창끝이 흰 덩어리로 터졌다(촬영) — 약하게 · 문턱 높게
+	m.set_shader_parameter("hi", 0.12)
+	m.set_shader_parameter("hi_cut", 0.7)
+	return m
 
 
 # ── 문짝 — 경첩 축(왼변)에 매단다 ───────────────────────────
@@ -1835,8 +1865,8 @@ static func _slab(root: Node3D) -> void:
 				_lit_mat(bi, null, 0.78, 2.0, bc), COL.door.darkened(0.35), "Batten")
 	#  쇠붙이 — glb 조각(_door_piece · scripts/tools/blender/door_iron.py)이면 모양만 그것이고 자리 · 축은 여기 상수,
 	#  재질은 이름으로 여기 것(놋쇠 BRASS_SHADER · 쇠 _door_iron_mat)을 끼운다. 없으면 옛 코드 모양.
-	var stud := Room3D._mat(COL.iron_lit.lightened(0.12), 0.40)
-	var knuck := Room3D._mat(COL.iron_lit, 0.55)
+	var stud := _cel(COL.iron_lit.lightened(0.12), 0.40, 0.6)
+	var knuck := _cel(COL.iron_lit, 0.55, 0.4)
 	var rp: Array = COL.brass_ramp
 	#  놋쇠 셋 — 손이 닳린 막대 가운데(br · 흰 반짝 줄까지) · 손이 덜 닿는 끝 · 받침 · 판(bt · 흰 줄 없이 —
 	#  놋쇠 손때) · 뒤판(pm · 한 단 어둡게 — 막대가 판 위로 떠 보인다)
