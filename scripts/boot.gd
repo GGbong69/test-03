@@ -16,16 +16,27 @@ extends Node
 #  검게 남겼다 — 1600×900 이면 좌우 160 · 위아래 90 기기 px. 이제 검은 테는 많아야 k − 1 px 이다.
 #  검사 · 촬영 도구는 main.tscn 을 바로 연다 — 이 화판을 안 지나 예전과 같다(scripts/tools/qa_pxbox.gd 가
 #  이 화판을 잰다).
+#  ── 정수 배율 고정 (2026-10-25 · 2차 레퍼런스 정리 18) ─────
+#  부스 모니터가 1366×768 · 1600×900 이면 넓어진 화판에 방 · HUD 가 더 펴진다. 개발자 판 「정수 배율」을
+#  켜면(전역 설정 "int_scale" · 기본 끔) 화판을 640×360 에 묶어 k 배로 띄우고 둘레는 검은 띠로 둔다 —
+#  1080p 에서 짠 구도 그대로다. 창 스트레치(content_scale_stretch)는 여기서 꺼 두므로 그 손잡이로는 안 된다.
+const Save = preload("res://scripts/save.gd")
 const MAIN := "res://scenes/main.tscn"
 const VIEW := Vector2(640.0, 360.0)     # game.gd VIEW 와 같다 — 논리 화면의 바닥 크기
 
 var game: Node = null
 var box: SubViewportContainer = null
+var bars: ColorRect = null              # 화판 밖 — 검은 띠(창의 지움 색은 회색이다)
+var int_lock := false                   # 정수 배율 고정 — 화판이 640×360 에 묶인다
 
 
 func _ready() -> void:
 	var win := get_window()
 	win.content_scale_mode = Window.CONTENT_SCALE_MODE_DISABLED
+	bars = ColorRect.new()
+	bars.color = Color.BLACK
+	bars.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(bars)
 	box = SubViewportContainer.new()
 	box.name = "Px"
 	box.stretch = true
@@ -40,6 +51,9 @@ func _ready() -> void:
 	game = (load(MAIN) as PackedScene).instantiate()
 	game.set("screen_host", self)
 	vp.add_child(game)
+	#  저장은 게임이 선 뒤에 읽는다 — game._ready 의 저장 폴더 잇기(migrate_name)가 먼저다
+	int_lock = bool(Save.get_set("int_scale", false))
+	_fit()
 
 
 #  배율 · 화판 크기를 창에 맞춘다. 창을 내리면 크기가 0 으로 들어온다 — 그때는 지난 값을 둔다.
@@ -48,7 +62,8 @@ func _fit() -> void:
 	if ws.x < 1.0 or ws.y < 1.0:
 		return
 	var k: int = maxi(1, int(floor(minf(ws.x / VIEW.x, ws.y / VIEW.y))))
-	var l: Vector2 = (ws / float(k)).floor()
+	var l: Vector2 = VIEW if int_lock else (ws / float(k)).floor()
+	bars.size = ws
 	box.stretch_shrink = k
 	box.position = ((ws - l * float(k)) * 0.5).floor()
 	box.size = l * float(k)

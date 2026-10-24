@@ -280,15 +280,15 @@ func _run() -> void:
 		pools.append(ks)
 	g.tut_run = true
 	var pool1 := []
-	var tpool := []                  # 튜토리얼은 「돌린 판」만 뺀다(2026-10-21)
+	var tpool := []                  # 튜토리얼은 TUT_MOD_SKIP(돌린 판 · 닫힌 문)만 뺀다(2026-10-21 · 10-25)
 	for m in GameData.modifiers():
 		if int(m.get("r0", 1)) <= 1:
 			pool1.append(String(m.id))
-			if String(m.k) != "shuffle":
+			if not g.TUT_MOD_SKIP.has(String(m.k)):
 				tpool.append(String(m.id))
 	pool1.sort()
 	tpool.sort()
-	_ok("튜토리얼 보스도 제약 표를 그대로 쓴다(돌린 판만 뺀다)", pools[0] == tpool and pools[1] == pool1,
+	_ok("튜토리얼 보스도 제약 표를 그대로 쓴다(TUT_MOD_SKIP 만 뺀다)", pools[0] == tpool and pools[1] == pool1,
 			"%s · %s" % [str(pools[0]), str(pools[1])])
 
 	# ── ⑥ 마지막 판에서 끝난다 ──────────────────────────────

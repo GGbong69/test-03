@@ -1279,6 +1279,11 @@ static func _rows(g: Node) -> Array:
 				#  튜토리얼 끝 칠판(game.gd _over_hero — 넘친 점수 · 그은 목표)을 곧장 연다. 「소리·연출」의 런 끝 두 줄은
 				#  열아홉이 차 이 쪽에 둔다. 지금 런을 튜토리얼 런으로 적는다(새 런을 열면 돌아온다). 2026-10-25
 				{"n1": "튜토리얼 끝 보기", "t": "act", "a": "over_tut"},
+				#  정수 배율 고정(2026-10-25 · scripts/boot.gd int_lock) — 부스 모니터가 1366×768 · 1600×900 이면
+				#  켜서 640×360 을 k 배로 · 둘레는 검은 띠. 저장한다(전역 "int_scale" · 기본 끔). 「소리·연출」이
+				#  열아홉으로 차 「해상도 다음」 곁에 못 서고 여기 섰다.
+				{"n1": "정수 배율 %s" % ("켬" if bool(Save.get_set("int_scale", false)) else "끔"),
+						"t": "act", "a": "int_scale"},
 			]
 
 
@@ -2440,6 +2445,16 @@ static func _run(g: Node, e: Dictionary) -> void:
 		"res_next":
 			g._res_step(1)
 			_say("해상도 " + g._res_label())
+			return
+		"int_scale":
+			var on2 := not bool(Save.get_set("int_scale", false))
+			Save.set_set("int_scale", on2)
+			#  화판(boot.tscn)이 없으면(검사 도구의 main.tscn) 저장만 — 다음에 켤 때 선다
+			var host: Node = g.screen_host
+			if host != null and is_instance_valid(host) and "int_lock" in host:
+				host.int_lock = on2
+				host._fit()
+			_say("정수 배율 " + ("켬" if on2 else "끔"))
 			return
 		"fsel":
 			if g._is_play():

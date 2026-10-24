@@ -4,6 +4,8 @@ extends SceneTree
 #    ② CRT · VHS · 도트 팔레트 층은 바깥(창 해상도)에, 반전 층은 화판 안에 선다
 #    ③ 바깥 창의 누름 · 움직임 · 키가 화판의 같은 논리 자리로 들어간다
 #    ④ 판(그린 띠 · 원)이 논리 격자에 선다 — 찍은 화면의 판 자리가 배율 × 배율 덩어리다
+#    ⑤ 정수 배율 고정(개발자 판 · 전역 "int_scale") — 1366×768 창에서 화판이 640×360 × 2 로 가운데 · 둘레는 검은 띠 ·
+#       끄면 창을 다시 채운다(2026-10-25)
 #   godot --path . --script scripts/tools/qa_pxbox.gd
 const Save = preload("res://scripts/save.gd")
 var b = null
@@ -47,6 +49,9 @@ func _process(_d: float) -> bool:
 	if f == 64:
 		_point_check()
 		_grid()
+		root.size = Vector2i(1366, 768)
+	if f == 70:
+		_lock()
 		print("통과 %d · 실패 %d" % [ok, bad])
 		quit(1 if bad > 0 else 0)
 	return false
@@ -119,6 +124,22 @@ func _point_check() -> void:
 	var want := [g.BC + g.view_pad, Vector2(37.0, 21.0), KEY_ESCAPE]
 	_ok("③ 바깥 창의 누름 · 움직임 · 키가 화판의 논리 자리로", rec != null and str(rec.got) == str(want),
 			"%s · %s" % [str(rec.got if rec != null else []), str(want)])
+
+
+func _lock() -> void:
+	var ws := Vector2(root.size)
+	b.int_lock = true
+	b._fit()
+	var k: int = _k()
+	var want := ((ws - Vector2(640.0, 360.0) * float(k)) * 0.5).floor()
+	_ok("⑤ 고정 — 화판 640×360 × 정수 배 · 가운데", k == 2 and b.box.size == Vector2(640.0, 360.0) * float(k)
+			and b.box.position == want, "창 %s · 배율 %d · 화판 %s @ %s" % [root.size, k, b.box.size, b.box.position])
+	_ok("⑤ 고정 — 둘레는 검은 띠", b.bars.color == Color.BLACK and b.bars.size == ws
+			and b.bars.get_index() < b.box.get_index(), "띠 %s" % b.bars.size)
+	b.int_lock = false
+	b._fit()
+	_ok("⑤ 풀면 창을 다시 채운다", b.box.size.x > ws.x - float(k) and b.box.size.y > ws.y - float(k),
+			"화판 %s" % b.box.size)
 
 
 func _grid() -> void:

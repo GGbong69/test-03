@@ -108,7 +108,7 @@ func _run() -> void:
 # ── ① 표 여섯과 id 유일성 ────────────────────────────────
 func _tables() -> void:
 	print("── 표 ──────────────────────────────────────")
-	var want := [69, 12, 4, 5, 9, 11]
+	var want := [69, 12, 4, 5, 9, 12]
 	var got := []
 	for t in 6:
 		got.append(g._col_rows(t).size())
@@ -311,7 +311,7 @@ func _pack_pool() -> void:
 	g.owned.clear()
 	_wipe_found()
 	var a := _roll_dist()
-	#  110개를 전부 심는다
+	#  111개를 전부 심는다
 	for t in 6:
 		for r in g._col_rows(t):
 			Save.discover(String(g.COL_TABS[t].f) + ":" + String(r.get("id", "")))
@@ -369,22 +369,22 @@ func _contracts() -> void:
 			Save.discover(String(g.COL_TABS[t].f) + ":" + String(r.get("id", "")))
 	Save.flush()
 
-	_ok("110개를 심어도 unlock_keys() 가 그대로", Save.unlock_keys().size() == unl0,
+	_ok("111개를 심어도 unlock_keys() 가 그대로", Save.unlock_keys().size() == unl0,
 			"%d → %d" % [unl0, Save.unlock_keys().size()])
 	#  ⚠ 프로필 화면의 「해금 N개」. slot_info(save.gd:301-304)가 [해금] 키를
 	#  **갈래를 안 가리고** 세는 그 규칙을 여기서 같은 파일에 대고 다시 센다
 	#  (slot_info 자체는 슬롯 자리를 읽으므로 도구 자리를 박은 이 자가 못
 	#  부른다). 발견을 [해금]에 넣었으면 이 수가 두 배가 됐다.
-	_ok("110개를 심어도 「해금 N개」가 그대로", _unl_on_disk() == info0,
+	_ok("111개를 심어도 「해금 N개」가 그대로", _unl_on_disk() == info0,
 			"%d → %d" % [info0, _unl_on_disk()])
-	_ok("110개를 심어도 공짜 매물이 그대로",
+	_ok("111개를 심어도 공짜 매물이 그대로",
 			String((g._item_free_pick() as Dictionary).get("id", "")) == free0 and free0 != "",
 			"'%s' → '%s'" % [free0, String((g._item_free_pick() as Dictionary).get("id", ""))])
-	#  표를 훑으며 세므로 110 다 — found_keys() 는 "_v" 까지 세어 111 이 된다
+	#  표를 훑으며 세므로 111 이다 — found_keys() 는 "_v" 까지 세어 112 가 된다
 	var n := 0
 	for t in 6:
 		n += _n(t)
-	_ok("여섯 탭 합이 110", n == 110, "%d · %s" % [n, str(_six())])
+	_ok("여섯 탭 합이 111", n == 111, "%d · %s" % [n, str(_six())])
 	Save.lock("item:" + _legend_id())
 	_wipe_found()
 
@@ -425,7 +425,7 @@ func _migrate() -> void:
 	Save.wipe()
 	g._dev_unlock_off()
 	g._found_migrate()
-	_ok("새 프로필은 이주해도 0 / 110", _six() == [0, 0, 0, 0, 0, 0], str(_six()))
+	_ok("새 프로필은 이주해도 0 / 111", _six() == [0, 0, 0, 0, 0, 0], str(_six()))
 	_ok("[발견]에는 _v 만 선다", Save.found_ready() and Save.found_keys().size() == 1,
 			"%s" % str(Save.found_keys()))
 
@@ -452,7 +452,7 @@ func _migrate() -> void:
 	#  ⚠ 이 설계에서 가장 빠뜨리기 쉬운 자리 — unfound_all 이 _v 를 다시
 	#  세우지 않으면 「발견 전부 잠그기」가 한 프레임짜리가 된다.
 	g._dev_unlock_none()
-	_ok("「발견 전부 잠그기」 뒤 0 / 110", _six() == [0, 0, 0, 0, 0, 0], str(_six()))
+	_ok("「발견 전부 잠그기」 뒤 0 / 111", _six() == [0, 0, 0, 0, 0, 0], str(_six()))
 	g._found_migrate()
 	_ok("잠근 뒤 이주가 되살리지 않는다", _six() == [0, 0, 0, 0, 0, 0], str(_six()))
 
@@ -460,12 +460,12 @@ func _migrate() -> void:
 	Save.wipe()
 	_ok("wipe() 뒤에는 빗장이 풀린다", not Save.found_ready())
 	g._found_migrate()
-	_ok("wipe() 뒤 이주는 0 / 110", _six() == [0, 0, 0, 0, 0, 0], str(_six()))
+	_ok("wipe() 뒤 이주는 0 / 111", _six() == [0, 0, 0, 0, 0, 0], str(_six()))
 
 	#  대역은 저장에 한 글자도 안 쓴다
 	var k0 := Save.found_keys().size()
 	g._dev_unlock_all()
-	_ok("「발견 전부 열기」가 N / N", _six() == [69, 12, 4, 5, 9, 11], str(_six()))
+	_ok("「발견 전부 열기」가 N / N", _six() == [69, 12, 4, 5, 9, 12], str(_six()))
 	_ok("「발견 전부 열기」가 저장에 안 쓴다", Save.found_keys().size() == k0,
 			"열쇠 %d → %d" % [k0, Save.found_keys().size()])
 	g._dev_unlock_off()

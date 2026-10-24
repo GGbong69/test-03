@@ -21,6 +21,8 @@ const Save = preload("res://scripts/save.gd")
 #    ④ 판 축 — 돌리면 자리가 바뀌고, 값의 총합은 그대로다
 #    ⑤ 판 축은 되돌아온다 — 다음 판에 제약이 빠지면 제자리다
 #    ⑥ 판밖 축 — 보상 배수가 정산에 실제로 든다
+#    ⑦ 동전 축 — 반토막
+#    ⑧ 칸 축 — 닫힌 문: 점수 낸 칸이 다음 발부터 0 · 불은 안 닫힌다 · 다음 판이면 열린다
 # ══════════════════════════════════════════════════════════
 
 var fails := 0
@@ -304,6 +306,29 @@ func _initialize() -> void:
 	_say(tnow.contains("20") and not tnow.contains("40"), "툴팁 「지금」 — 판 중 반토막이면 반", tnow)
 	g.owned = []
 	_arm(g, "")
+
+	# ⑧ 칸 축 — 「닫힌 문」(2026-10-25). 점수 낸 칸은 다음 발부터 싱글 · 트리플 다 0 · 옆 칸 · 불은 산다 ·
+	#    다음 판이면 다 열린다
+	_arm(g, "close")
+	var trm: float = (g.rt_trp_in + g.rt_trp_out) * 0.5
+	var c1 := _throw(g, 0, 0.55)
+	var shut0: Array = g.shut_idx.duplicate()
+	var c2 := _throw(g, 0, 0.55)
+	var c3 := _throw(g, 0, trm)
+	var c4 := _throw(g, 5, 0.55)
+	g.aim = g.BC
+	g.queue.clear()
+	g._land()
+	var bull_ok: bool = not g.shut_idx.has(-1)
+	var c5 := _throw(g, 5, 0.55)
+	_say(c1.x > 0.0 and shut0 == [0] and is_zero_approx(c2.x) and is_zero_approx(c3.x)
+			and c4.x > 0.0 and is_zero_approx(c5.x) and bull_ok,
+			"닫힌 문 — 점수 낸 칸만 닫힌다",
+			"첫 발 %.0f → 같은 칸 %.0f · 트리플 %.0f · 옆 칸 %.0f → 다시 %.0f · 닫힌 칸 %s"
+			% [c1.x, c2.x, c3.x, c4.x, c5.x, g.shut_idx])
+	_arm(g, "")
+	_say(g.shut_idx.is_empty() and _throw(g, 0, 0.55).x > 0.0, "닫힌 문 — 다음 판이면 다 열린다",
+			"닫힌 칸 %s" % str(g.shut_idx))
 
 	print("
 %s" % ("실패 %d건" % fails if fails > 0 else "열 검사 전부 통과"))
