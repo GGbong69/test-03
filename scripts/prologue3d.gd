@@ -129,7 +129,8 @@ const FADE := {"out": 0.45}
 #    28ms) · jolt 철컥에 데크가 덜컥이는 [m · 초] · rattle 덮개가 덜컥이는 도 · bump 눈이 덜컥이는 도
 #    flap 덮개 젖힘(도) · flap_d 그만큼 들어갈 때 다 젖혀진다(m) · hinge 경첩 z · shut 덮개가 다 닫히는 때(등이 경첩을 지난
 #    뒤 snap 동안 닫힌다) · snap 닫히는 동안 · over 넘쳤다 돈다
-#    led 표시등 [대기 · 동작] · led_gap 바뀔 때 꺼진 동안(두 틀) · vfd 청록 · vfd_e 그 제 빛 · vfd_dim 꺼진 대시 ·
+#    led 표시등 [대기 · 동작] · led_gap 바뀔 때 꺼진 동안(두 틀) · led_e 그 제 빛 · vfd 청록 · vfd_e 그 제 빛
+#    (2026-10-25 레퍼런스 2차 — 1.8 · 1.0 이면 앞 토막 초점 흐림에 손보다 짙은 청록 · 연두 얼룩이 됐다) · vfd_dim 꺼진 대시 ·
 #    vfd_hz 깜박임 · vfd_l 창 빛 [세기 · 닿는 거리 · 자리] · key 구석 TV 빛 한 줄기 [세기 · 원뿔(도) · 닿는 거리 ·
 #    겨누는 데(구멍과 재생 단추 사이 — 단추를 누르는 손도 그 빛 안에 든다)] ·
 #    key_c 그 빛깔(지지직 흑백 화면 — 옛 JOB.snow 의 푸른 빛은 살을 보랏빛으로 물들였다 · 채도를 누른다) ·
@@ -164,8 +165,8 @@ const TAPE := {
 	"fall": [3.05, 0.09], "drop": 0.010, "clunk": 3.22, "lead": 0.028, "jolt": [0.0004, 0.05], "rattle": 1.5,
 	"bump": 0.05,
 	"flap": 86.0, "flap_d": 0.02, "hinge": -0.004, "shut": 3.12, "snap": 0.12, "over": 6.0,
-	"led": [Color("ff2a1a"), Color("8cff3a")], "led_gap": 0.035,
-	"vfd": Color("33f2c2"), "vfd_e": 1.0, "vfd_dim": 0.12, "vfd_hz": 1.0,
+	"led": [Color("ff2a1a"), Color("8cff3a")], "led_gap": 0.035, "led_e": 0.5,
+	"vfd": Color("33f2c2"), "vfd_e": 0.35, "vfd_dim": 0.12, "vfd_hz": 1.0,
 	"vfd_l": [0.035, 0.12, Vector3(-0.27, 0.085, 0.02)], "key": [1.4, 13.0, 1.8, Vector3(0.0, 0.095, 0.03), 1.0],
 	"key_c": Color(0.78, 0.80, 0.86),
 	"glow": [5.0, 6.4, 0.1],
@@ -1002,9 +1003,11 @@ static func make(game: Node, outer: Node) -> Node:
 	env.glow_intensity = float(LIT.glow)
 	env.glow_bloom = 0.0
 	env.glow_hdr_threshold = float(LIT.glow_thr)
-	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_ADDITIVE
+	#  번짐은 덮기(SCREEN) · 작은 두 단만 — 더하기 · 셋째 단이면 초점 흐림을 거친 빛 점이 둥근 원판으로 부풀었다
+	#  (레퍼런스 2차 「둘레 TV 마다 붉은 원판」 2026-10-25)
+	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SCREEN
 	for lvl in 7:
-		env.set_glow_level(lvl, 1.0 if lvl < 3 else 0.0)
+		env.set_glow_level(lvl, 1.0 if lvl < 2 else 0.0)
 	#  먼지 낀 공기 — 제 빛 · 바탕빛 · 하늘을 안 받아 빛을 받은 데만 선다(방은 그대로 검다). 손이 빛줄기를 가르고 화면이
 	#  깜박이므로 되짚기(reprojection)를 낮춰 잔상을 줄인다.
 	var fg: Array = LOOK.fog
@@ -1047,7 +1050,7 @@ static func make(game: Node, outer: Node) -> Node:
 	#  데크의 제 빛 — VFD 대시 · 재생 세모 · 표시등(앞 토막이 켜고 바꾼다 · _tape_deck) · 연기빛 덮개
 	dm["vfd"] = Room3D._glow(TAPE.vfd, float(TAPE.vfd_e))
 	dm["vfd_on"] = Room3D._glow(TAPE.vfd, float(TAPE.vfd_e))
-	dm["led_deck"] = Room3D._glow(TAPE.led[0], 1.8)
+	dm["led_deck"] = Room3D._glow(TAPE.led[0], float(TAPE.led_e))
 	dm["flap"] = _lit(Color("1c1d22"), null, 0.3, 0.55)
 	#  단추 윗면은 한 단 밝게 · 조금 더 매끈하게(가라앉으면 테 그늘 · 모따기 반짝이 옮는 게 보이게)
 	dm["btn"] = _lit(LOOK.btn, null, 0.3, 0.45)
@@ -1189,9 +1192,11 @@ static func make(game: Node, outer: Node) -> Node:
 			var de: float = gb.size.x * 0.5 / (tan(deg_to_rad(float(CAM.fov)) * 0.5) * ar) * float(HERO.dive)
 			cam_end = {"look": apex, "at": apex + n * de}
 			cam_start = {"look": g, "at": g + n * float(CAM.dist)}
-		else:
-			#  빨간 대기등 — 화면 오른쪽 아래 테 밖
+		elif job == "maker":
+			#  빨간 대기등 — 화면 오른쪽 아래 테 밖. 크레딧 TV 에만 — 둘레 TV 의 것은 초점 흐림 · 번짐에 붉은
+			#  원판 대여섯으로 떠 어둠에 외딴 빛 점이 됐다(레퍼런스 2차 2026-10-25)
 			var led := MeshInstance3D.new()
+			led.name = "Standby"
 			var lm := BoxMesh.new()
 			lm.size = Vector3(0.014, 0.014, 0.01)
 			led.mesh = lm
@@ -1907,14 +1912,16 @@ static func _tape_deck(hn: Node, t: float) -> void:
 	var c: Color = lc[0] if t < ck else lc[1]
 	var on: float = 0.0 if (t >= ck and t < ck + float(TAPE.led_gap)) else 1.0
 	var led := dm.led_deck as StandardMaterial3D
-	led.albedo_color = c.darkened(0.85).lerp(c, on)
+	#  빛 없는(unshaded) 재질은 제 빛(emission)을 안 더하고 바탕색만 그린다 — 밝기는 바탕색에 곱한다
+	led.albedo_color = c.darkened(0.85).lerp(c.darkened(1.0 - float(TAPE.led_e)), on)
 	led.emission = c
-	led.emission_energy_multiplier = 1.8 * on
+	led.emission_energy_multiplier = float(TAPE.led_e) * on
 	var dk: float = float(TAPE.vfd_dim) if (t < ck and fmod(t * float(TAPE.vfd_hz), 1.0) >= 0.5) else 1.0
 	_vfd(dm.vfd, dk)
 	_vfd(dm.vfd_on, 1.0 if t >= float(TAPE.press[2]) else float(TAPE.vfd_dim))
 	if hn.has_meta("vfd_l"):
-		(hn.get_meta("vfd_l") as OmniLight3D).light_energy = float(TAPE.vfd_l[0]) * (0.55 + 0.45 * dk)
+		(hn.get_meta("vfd_l") as OmniLight3D).light_energy = float(TAPE.vfd_l[0]) * float(TAPE.vfd_e) \
+				* (0.55 + 0.45 * dk)
 	var fl: Dictionary = hn.get_meta("flap")
 	if not fl.is_empty():
 		(fl.n as Node3D).transform = (fl.xf as Transform3D) * Transform3D(Basis(Vector3.RIGHT, deg_to_rad(_flap_deg(t))),
@@ -1966,7 +1973,7 @@ static func _load(t: float) -> float:
 
 
 static func _vfd(m: StandardMaterial3D, k: float) -> void:
-	m.albedo_color = (TAPE.vfd as Color) * k
+	m.albedo_color = (TAPE.vfd as Color).darkened(1.0 - float(TAPE.vfd_e) * k)
 	m.emission_energy_multiplier = float(TAPE.vfd_e) * k
 
 

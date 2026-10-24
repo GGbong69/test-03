@@ -102,9 +102,9 @@ func _tape_watch() -> void:
 	var dm: Dictionary = hn.get_meta("deck_m")
 	var led := dm.led_deck as StandardMaterial3D
 	if t > 1.5 and t < ck - 0.05:
-		led0 = led.emission.is_equal_approx(TP.led[0]) and led.emission_energy_multiplier > 0.5
+		led0 = led.emission.is_equal_approx(TP.led[0]) and led.emission_energy_multiplier > float(TP.led_e) * 0.5
 	if t > ck + float(TP.led_gap) + 0.05 and t < TL:
-		led1 = led.emission.is_equal_approx(TP.led[1]) and led.emission_energy_multiplier > 0.5
+		led1 = led.emission.is_equal_approx(TP.led[1]) and led.emission_energy_multiplier > float(TP.led_e) * 0.5
 		if t > ck + 0.1:
 			snd_n = g.plg_aud.size()
 	#  재생 단추 — 들어갔다 돌아온다 · VFD 재생 세모는 누른 뒤에만
@@ -121,9 +121,9 @@ func _tape_watch() -> void:
 			btn_over = maxf(btn_over, -bz)
 	var pe: float = (dm.vfd_on as StandardMaterial3D).emission_energy_multiplier
 	if t > ck + 0.1 and t < float(pr[2]) - 0.02:
-		play_early = play_early or pe > 0.5
+		play_early = play_early or pe > float(TP.vfd_e) * 0.5
 	if t > float(pr[2]) + 0.02 and t < TL:
-		play_late = pe > 0.5
+		play_late = pe > float(TP.vfd_e) * 0.5
 	var cr: Array = TP.crane
 	if hn.has_meta("tape"):
 		var tp: Dictionary = hn.get_meta("tape")
@@ -340,6 +340,11 @@ func _process(_d: float) -> bool:
 				var shaft: FogVolume = g.plg_vp.get_meta("shaft") if g.plg_vp.has_meta("shaft") else null
 				_ok("⑨ 먼지 낀 공기 · 구석 TV 빛줄기 기둥", env.volumetric_fog_enabled and key.light_volumetric_fog_energy > 0.0
 						and shaft != null and (shaft.material as FogMaterial).density > 0.0)
+				#  레퍼런스 2차(2026-10-25) — 둘레 TV 대기등이 초점 흐림 · 더하기 번짐에 붉은 원판이 됐다
+				var sb: int = g.plg_vp.find_children("Standby", "MeshInstance3D", true, false).size()
+				_ok("⑨ 대기등은 크레딧 TV 하나 · 번짐은 덮기 두 단", sb == 1
+						and env.glow_blend_mode == Environment.GLOW_BLEND_MODE_SCREEN
+						and env.get_glow_level(1) > 0.0 and env.get_glow_level(2) == 0.0, "대기등 %d" % sb)
 				st = 1
 		1:
 			if g._plg_live() and g.plg_t > g.Plg.length() - 0.2:
