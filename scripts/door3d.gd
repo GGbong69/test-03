@@ -562,16 +562,36 @@ static func _wall(root: Node3D) -> void:
 #  위아래로 뻗는 전선관. 둘 다 램프 빛과 그림자를 받는다(밖 층).
 static func _wall_things(root: Node3D) -> void:
 	var wz: float = float(DOOR.wall_z)
-	#  홈통 — 검게 칠한 쇠관 · 벽에 박은 띠쇠 둘 · 이음 고리 하나
-	var pipe := _cel(Color("2a2729"), 0.55, 0.5)
+	#  홈통 — 검게 칠한 네모 쇠 홈통 · 벽에 박은 띠쇠 둘 · 이음 깃 하나. 둥근 관이었다 — 원통 명암이 단으로 끊겨도
+	#  둥글게 번져 경계가 흐렸다(「문 옆에 … 왜 동그란거야? 좀 경계 확실하면 좋겠는데」 2026-10-24). 네모 관은 앞면 ·
+	#  옆면이 저마다 한 톤이라 모서리에서 딱 끊긴다. 반짝임 줄은 뺀다(넓은 면에 얹히면 면이 통째로 뜬다).
+	var pcol := Color("2a2729")
+	var pipe := _cel(pcol, 0.55)
 	var px := -0.375
-	var pz: float = wz + 0.028
-	root.add_child(Room3D._cyl(0.02, 0.02, 2.2, Vector3(px, -0.2, pz), pipe, 16))
-	var clamp_m := _cel(Color("1f1b1c"), 0.6, 0.3)
+	var pw := 0.038
+	var pd := 0.028
+	var pz: float = wz + pd * 0.5 + 0.004
+	#  앞면 그림 — 접은 철판: 빛 받는 오른 모서리 1px 밝고 · 왼 모서리 1px 짙고 · 0.55m 마다 이음매(짙은 줄 + 밑 1px 빛)
+	var pim := Image.create(maxi(int(pw * S), 3), int(2.2 * S), false, Image.FORMAT_RGBA8)
+	var piw: int = pim.get_width()
+	var pih: int = pim.get_height()
+	pim.fill(pcol)
+	for y in pih:
+		pim.set_pixel(0, y, pcol.darkened(0.45))
+		pim.set_pixel(piw - 1, y, pcol.lightened(0.22))
+		pim.set_pixel(piw - 2, y, pcol.lightened(0.08))
+	var seam := int(0.55 * S)
+	for y0 in range(seam, pih, seam):
+		for x in piw:
+			pim.set_pixel(x, y0, pcol.darkened(0.5))
+			if y0 + 1 < pih:
+				pim.set_pixel(x, y0 + 1, pcol.lightened(0.12))
+	_panel(root, Vector3(pw, 2.2, pd), Vector3(px, -0.2, pz), _lit_mat(pim, null, 0.55, 1.0), pcol, "Pipe")
+	var clamp_m := _cel(Color("1f1b1c"), 0.6)
 	for cy in [0.46, -0.02]:
-		root.add_child(Room3D._cyl(0.0235, 0.0235, 0.012, Vector3(px, cy, pz), clamp_m, 16))
+		root.add_child(Room3D._box(Vector3(pw + 0.008, 0.012, pd + 0.004), Vector3(px, cy, pz + 0.002), clamp_m))
 		root.add_child(Room3D._box(Vector3(0.012, 0.012, 0.03), Vector3(px, cy, wz + 0.008), clamp_m))
-	root.add_child(Room3D._cyl(0.0245, 0.0245, 0.03, Vector3(px, 0.24, pz), pipe, 16))
+	root.add_child(Room3D._box(Vector3(pw + 0.006, 0.03, pd + 0.004), Vector3(px, 0.24, pz + 0.002), pipe))
 	#  계량 상자 — 칠한 쇠 상자(앞판 그림: 테 · 둥근 유리창 속 눈금판 · 바늘 · 나사 · 경첩) · 전선관
 	var bx := 0.815
 	var by := 0.06
