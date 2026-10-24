@@ -209,6 +209,9 @@ const BTL_FOIL := [[Vector2(0.4, 0.84), Vector2(0.47, 0.95), Vector2(0.47, 1.0),
 
 #  술이 찬 높이(윤곽 높이) — 윤곽마다 셋(어깨 밑까지 · 반 · 바닥 쪽). 꼭짓점 높이와 안 겹치게 둔다.
 const BTL_FILL := [[0.57, 0.43, 0.29], [0.65, 0.49, 0.33], [0.52, 0.39, 0.27]]
+#  술 빛 무리 — [병 자리 |x| 가 이보다 작으면 · 술 빛]. 상인 몸 바로 뒤 몇 병만 술빛이 서고 바깥은 어두운 몸에
+#  목 금박 · 라벨 · 밑불 줄만 남는다(일흔다섯이 같은 세기로 빛나 뒤 방이 낮이었다 · 레퍼런스 2차 2026-10-25).
+const BTL_LIT := [[0.7, 1.5], [1.5, 0.8], [INF, 0.35]]
 
 
 #  유리 빛줄 — 병 둘레(회전체 u)의 왼 앞(108~137°)만 밝은 빛 그림. 나머지는 바탕 빛 base.
@@ -301,12 +304,16 @@ static func make_room(host: Node) -> SubViewport:
 	env.ambient_light_energy = 0.55
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	env.fog_enabled = true
-	env.fog_light_color = Color("1d1420")
+	#  밤 — 먼 벽 안개는 바탕과 같은 검정(1d1420 보랏빛 회색은 바탕보다 밝아 먼 벽이 떴다) · 번짐은 문턱(1.2)을
+	#  넘는 네온만 작은 두 단으로(술병 둘레 둥근 번짐이 걷힌다 · 레퍼런스 2차 2026-10-25)
+	env.fog_light_color = Color("07050a")
 	env.fog_density = 0.06
 	env.glow_enabled = true
 	env.glow_intensity = 0.9
-	env.glow_bloom = 0.15
-	env.glow_hdr_threshold = 0.9
+	env.glow_bloom = 0.0
+	env.glow_hdr_threshold = 1.2
+	for lvl in 7:
+		env.set_glow_level(lvl, 1.0 if lvl < 2 else 0.0)
 	we.environment = env
 	root.add_child(we)
 
@@ -353,7 +360,7 @@ static func make_room(host: Node) -> SubViewport:
 	#  2026-10-18 술 · 빈 유리 — 바 선반 사진처럼(밑불이 술을 뚫고 오른다) 술이 찬 아랫몸은 병 색으로
 	#  빛나고(둥근 명암 _btl_glow), 빈 어깨 · 목은 짙은 유리에 빛줄만 선다. 윤곽을 BTL_FILL 높이에서 잘라
 	#  두 조각으로 돌린다(차는 높이 셋).
-	var gms := {}             # ci → [술 · 빈 유리]
+	var gms := {}             # ci · 무리 → [술 · 빈 유리]
 	var glow := _btl_glow()
 	var stripe := _btl_stripe(0.12)
 	var labs := []
@@ -367,10 +374,14 @@ static func make_room(host: Node) -> SubViewport:
 	for k in lay.size():
 		var b: Dictionary = lay[k]
 		var ci: int = int(b.c)
-		if not gms.has(ci):
+		var gi := 0
+		while absf(float(b.x)) >= float(BTL_LIT[gi][0]):
+			gi += 1
+		var gk: int = ci * BTL_LIT.size() + gi
+		if not gms.has(gk):
 			var bc: Color = BOTTLE_COLS[ci]
 			var gl := []
-			for q in [[bc, 0.15, glow, 1.5], [bc.darkened(0.4), 0.25, stripe, 0.6]]:
+			for q in [[bc, 0.15, glow, float(BTL_LIT[gi][1])], [bc.darkened(0.4), 0.25, stripe, 0.6]]:
 				var gm := _mat(q[0], 0.15, 0.0)
 				gm.emission_enabled = true
 				gm.emission = bc.lightened(q[1])
@@ -378,14 +389,14 @@ static func make_room(host: Node) -> SubViewport:
 				gm.emission_operator = BaseMaterial3D.EMISSION_OP_MULTIPLY
 				gm.emission_energy_multiplier = q[3]
 				gl.append(gm)
-			gms[ci] = gl
+			gms[gk] = gl
 		var ty: int = (k * 7 + ci) % 3
 		var fi: int = (k * 5 + ci) % 3
 		var fy: float = BTL_FILL[ty][fi]
 		var at := Vector3(float(b.x), float(b.sy) + 0.025, -2.32)
 		var sc := Vector3(float(b.r), float(b.h) + 0.09, float(b.r))
-		var liq := _lmi("btl%d_lq%d" % [ty, fi], _prof_cut(BTL_PROF[ty], fy, true), at, gms[ci][0], 10)
-		var body := _lmi("btl%d_gl%d" % [ty, fi], _prof_cut(BTL_PROF[ty], fy, false), at, gms[ci][1], 10)
+		var liq := _lmi("btl%d_lq%d" % [ty, fi], _prof_cut(BTL_PROF[ty], fy, true), at, gms[gk][0], 10)
+		var body := _lmi("btl%d_gl%d" % [ty, fi], _prof_cut(BTL_PROF[ty], fy, false), at, gms[gk][1], 10)
 		var lab := _lmi("btl_lab%d" % ty, PackedVector2Array(BTL_LABEL[ty]), at, labs[k % 3], 10)
 		var foil := _lmi("btl_foil%d" % ty, PackedVector2Array(BTL_FOIL[ty]), at, foils[(k * 5) % 3], 8)
 		for pt in [liq, body, lab, foil]:
