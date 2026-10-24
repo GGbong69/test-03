@@ -58489,9 +58489,10 @@ const MUS := {
 	"select": "res://assets/music/select.mp3",  # 고르는 자리 — 판 선택·상점·정산
 	"game":   "res://assets/music/game.mp3",    # 판 위 — 작은 판·큰 판
 	"boss":   "res://assets/music/boss.mp3",    # 판 위 — 보스 판
-	#  런을 완주한 화면(2026-10-08 필기 「성공 페이지 … 음악 바뀜」) — 적응형 묶음(audio/music/tracks)의
-	#  「final」 편곡. 묶음은 아직 안 켰지만(MUS_ADAPTIVE) 이 한 곡은 혼자 돌린다.
-	"win":    "res://audio/music/tracks/final.wav",
+	#  런을 완주한 화면(2026-10-08 필기 「성공 페이지 … 음악 바뀜」). 적응형 묶음의 합성 「final」(22.9초 · −20dB ·
+	#  돌아올 때 틱)은 「완주 음악 왜 이래」(2026-10-24)로 걷었다 — 완주 곡을 따로 받을 때까지 로비 곡이다.
+	#  새 곡이 오면 이 경로만 갈면 된다(같은 파일이면 _mus_want 가 lobby 로 읽어 곡이 다시 시작하지 않는다).
+	"win":    "res://assets/music/lobby.mp3",
 }
 #  음악의 기준 크기. 낮출 이유가 없어졌다 — 깔개를 효과음보다 낮게 두는
 #  일은 이제 버스가 따로 맡고(사용자가 직접 정한다), 곡 자체가 조용해서
@@ -58592,7 +58593,7 @@ func _mus_want() -> String:
 		S.FSEL:
 			return "" if fsel_first else "lobby"
 		S.OVER:
-			return "win" if won else "lobby"
+			return "win" if won and MUS.win != MUS.lobby else "lobby"
 		S.TITLE, S.SETTINGS, S.COLLECT, S.NEWRUN, S.PROFILE:
 			return "lobby"
 		S.SHOP, S.LEG, S.CLEAR:
