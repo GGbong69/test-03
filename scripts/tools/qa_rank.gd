@@ -259,6 +259,12 @@ func _run() -> void:
 		crest.append(Color(met[rr][2]))
 	_ok("쇠 셋이 서로 다른 색", crest[0] != crest[1] and crest[1] != crest[2] and crest[0] != crest[2],
 			"동 · 은 · 금")
+	#  테는 METAL 네 칸 계단(2026-10-25 레퍼런스 2차) — 바깥 비탈은 빛 쪽 반짝 · 그늘 쪽 그늘, 안 비탈은
+	#  거꾸로, 작은 동전(top 2)은 반짝 톤을 안 쓴다.
+	var tn := [g._rim_tone(1.0, false, 3), g._rim_tone(-1.0, false, 3), g._rim_tone(1.0, true, 3),
+			g._rim_tone(-1.0, true, 3), g._rim_tone(1.0, false, 2)]
+	_ok("테가 네 칸 계단 — 빛 반짝 · 그늘 그늘 · 안 비탈 거꾸로 · 작은 동전 세 칸",
+			tn == [3, 0, 0, 2, 2], str(tn))
 
 	# ⓒ **턱 색 != 옆면 색.** 이 한 줄이 그 회귀를 영구히 막는다
 	print("  ── 턱(윗면 모서리) 대 옆면 ──")
