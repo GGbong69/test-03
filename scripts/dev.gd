@@ -1276,6 +1276,11 @@ static func _rows(g: Node) -> Array:
 				{"n1": "대결 상인 수 묶기", "t": "act", "a": "bdm_move"},
 				#  켤 때의 프롤로그(game.gd PLGP · scripts/prologue3d.gd)를 다시 튼다 — 끝나면 TV 켜짐 · 인트로 · 제목. 2026-10-18
 				{"n1": "프롤로그 보기", "t": "act", "a": "plg"},
+				#  정수 배율 고정(2026-10-25 · scripts/boot.gd int_lock) — 부스 모니터가 1366×768 · 1600×900 이면
+				#  켜서 640×360 을 k 배로 · 둘레는 검은 띠. 저장한다(전역 "int_scale" · 기본 끔). 「소리·연출」이
+				#  열아홉으로 차 「해상도 다음」 곁에 못 서고 여기 섰다.
+				{"n1": "정수 배율 %s" % ("켬" if bool(Save.get_set("int_scale", false)) else "끔"),
+						"t": "act", "a": "int_scale"},
 			]
 
 
@@ -2432,6 +2437,16 @@ static func _run(g: Node, e: Dictionary) -> void:
 		"res_next":
 			g._res_step(1)
 			_say("해상도 " + g._res_label())
+			return
+		"int_scale":
+			var on2 := not bool(Save.get_set("int_scale", false))
+			Save.set_set("int_scale", on2)
+			#  화판(boot.tscn)이 없으면(검사 도구의 main.tscn) 저장만 — 다음에 켤 때 선다
+			var host: Node = g.screen_host
+			if host != null and is_instance_valid(host) and "int_lock" in host:
+				host.int_lock = on2
+				host._fit()
+			_say("정수 배율 " + ("켬" if on2 else "끔"))
 			return
 		"fsel":
 			if g._is_play():
