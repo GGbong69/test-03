@@ -436,6 +436,11 @@ class Hold extends Node:
 		spk = []
 
 
+#  다이브 몫 — 테이프 Plg 의 옛 HERO 값(끝 거리 몫 · portal · Feed 깔기). Plg 는 유리 반짝 · 번쩍으로 다이브를 고쳤다(2026-10-25 ·
+#  dive 0.70 · portal [0.70, 1.0] · flat 없음) — 바 인트로가 그 반짝을 쓰기 전까지 제 값으로 돈다.
+const DIVE := {"dive": 0.78, "portal": [0.45, 0.95], "flat": [0.8, 1.0]}
+
+
 static func length() -> float:
 	return LEN
 
@@ -443,6 +448,15 @@ static func length() -> float:
 #  층이 걷히기 시작하는 때 — 게임 필터가 이때 켜진다(game.gd _plg_cover).
 static func handoff() -> float:
 	return float(T.dive1)
+
+
+#  게임 필터가 켜지는 때 · CRT 잔상을 되살리는 때(game.gd _plg_cover · _crt_apply — 테이프 Plg 와 같은 이름).
+static func lit_at() -> float:
+	return handoff()
+
+
+static func calm_at() -> float:
+	return handoff()
 
 
 #  TV 가 게임 그림을 틀기 시작하는 때 — 게임의 인트로 시계가 이때 출발한다(지지직 사이로 비친다).
@@ -1187,7 +1201,7 @@ static func _tv(hn: Node, w: Node3D, feed: Texture2D, sz: Vector2) -> void:
 	var apex: Vector3 = G.c
 	var fov: float = float(POSE.push[3])
 	var ar: float = sz.x / maxf(sz.y, 1.0)
-	var de: float = gb.size.x * 0.5 / (tan(deg_to_rad(fov) * 0.5) * ar) * float(Plg.HERO.dive)
+	var de: float = gb.size.x * 0.5 / (tan(deg_to_rad(fov) * 0.5) * ar) * float(DIVE.dive)
 	hn.set_meta("end", {"look": apex, "at": apex + n * de})
 	var tl := SpotLight3D.new()
 	tl.name = "TvLight"
@@ -1639,12 +1653,12 @@ static func _cam(hn: Node, t: float) -> void:
 	cam.global_transform = r[0]
 	var u: float = clampf((t - float(T.dive0)) / (float(T.dive1) - float(T.dive0)), 0.0, 1.0)
 	#  유리 속 — 그림이 화면에 박힌 게임 그림으로 옮겨 가고(portal) · 끝에 화판 그림을 깐다 · 필름 말 · 안개가 걷힌다
-	var po: float = smoothstep(float(Plg.HERO.portal[0]), float(Plg.HERO.portal[1]), u)
+	var po: float = smoothstep(float(DIVE.portal[0]), float(DIVE.portal[1]), u)
 	var scr: ShaderMaterial = hn.get_meta("scr")
 	if scr != null:
 		scr.set_shader_parameter("portal", po)
 	var root := hn.get_meta("root") as Control
-	(root.get_node("Feed") as CanvasItem).modulate.a = smoothstep(float(Plg.HERO.flat[0]), float(Plg.HERO.flat[1]), u)
+	(root.get_node("Feed") as CanvasItem).modulate.a = smoothstep(float(DIVE.flat[0]), float(DIVE.flat[1]), u)
 	var gk: float = 1.0 - smoothstep(float(Plg.LOOK.gone[0]), float(Plg.LOOK.gone[1]), u)
 	(hn.get_meta("grade") as ShaderMaterial).set_shader_parameter("k", gk)
 	(hn.get_meta("env") as Environment).volumetric_fog_density = 0.006 * gk

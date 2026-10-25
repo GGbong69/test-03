@@ -15,8 +15,8 @@ extends RefCounted
 #  화판 그림(게임이 그 밑에서 그리는 인트로)을 유리 높이에 꽉 채우고 양옆을 잘라 비춘다(처음엔 16:9 를 통째로
 #  넣어 위아래 띠가 섰다 — 「해상도가 안 맞는데?」). 클로즈업은 TV 속으로 들어간다(「클로즈업이 아예 TV속으로
 #  들어가는것 같이」) — 카메라가 유리를 지나 테가 화면 밖으로 빠질 때까지 밀고 들고, 그동안 유리 속 그림은 유리를
-#  따라 커지던 것에서 화면에 박힌 게임 그림(SCREEN_UV — portal)으로 옮겨 간다. 끝에는 층 안에 화판 그림을 그대로
-#  깔아(Feed) 층을 걷어도 같은 그림이다 — 그때(handoff) 게임 필터가 켜지고 층이 걷힌다.
+#  따라 커지던 것에서 화면에 박힌 게임 그림(SCREEN_UV — portal)으로 옮겨 가며 끝까지 커진다. 끝에는 흰 번쩍 밑에서
+#  끊고(handoff) 게임 필터를 켠 화판 그림이 흰빛이 빠지는 쪽부터 드러난다(cross).
 #  「제작 김건의」는 왼쪽 빨간 휴대용 TV(maker — 엑스트라지만 흐리지 않다)에 뜬다
 #  (「이름은 붉은색으로 표시한곳에 표시해도 되잖아」 → 「이름 표시 TV 위치도 왼쪽으로」 · 지지직 → 그림).
 #  그 그림은 옛 방송 끝 자막이다 — 검은 바탕 · 크림빛 글 · 빛깔 번짐 · 낟알 · 가끔 튀는 줄 · 흐르는 밝은 띠
@@ -56,8 +56,9 @@ extends RefCounted
 #  보랏빛 언덕 가로등 옆에서 춤추는 노란 옷 · 흰 셔츠 · 새벽 계단 꼭대기에서 두 팔을 든 뒷모습 · 새벽 사막의
 #  검은 석판과 웅크린 유인원 · 공원 벤치 끝의 흰 정장과 떠다니는 깃털(「다른 영화들도 레퍼런스 조사 하고」 —
 #  장면마다 스틸 검색으로 구도를 쟀다).
-#  API — make(game, outer) · tick(h, t) · length() · handoff() · feed_at() · ON(TV 가 켜지는 때) · cues()(소리 때
-#  전부 — 앞 토막 것까지 · game.gd _plg_tick 이 한 번씩 낸다).
+#  API — make(game, outer) · tick(h, t) · length() · handoff()(유리를 뚫는 때) · feed_at() · ON(TV 가 켜지는 때) ·
+#  cues()(소리 때 전부 — 앞 토막 것까지 · game.gd _plg_tick 이 한 번씩 낸다) · 유리 뚫기 dive_w · glass_pg · portal ·
+#  glint · flash_a · flash_make · cross(바 인트로도 제 유리 재질 · 층 · handoff 로 부른다).
 # ──────────────────────────────────────────────────────────
 #  앞 토막 — 비디오테이프를 넣는 손 (2026-10-22)
 #  「시작 하면 애니메이션? 좀 영화같이 씬을 보여줘서 약간 스토리도 챙기고 싶어」 · 「애니메이션은 뭐가 되었든 TV로
@@ -108,11 +109,12 @@ const TAPE_LEN := 7.4
 const LEN := TAPE_LEN + 6.1
 #  켜지는 때 — tvs 둘레 TV(차례로) · maker 크레딧 TV · hero 주인공(이때 인트로 시계가 출발한다)
 const ON := {"tvs": TAPE_LEN + 1.0, "maker": TAPE_LEN + 1.75, "hero": TAPE_LEN + 2.55}
-#  stag 둘레 TV 가 차례로 켜지는 사이 · snow 크레딧 TV 가 켜진 뒤 지지직 동안 · push0~push1 다가가는 동안
-const T := {"stag": 0.07, "snow": 0.45, "push0": TAPE_LEN + 3.55, "push1": TAPE_LEN + 5.65}
-#  끝에 층이 걷히는 시간(LEN 앞 out 초부터 — handoff). 어둠에서 떠오르는 것은 앞 토막(TAPE.black · fade)이 맡는다 —
-#  TV 방은 눈이 데크에서 올라와 이미 보인다.
-const FADE := {"out": 0.45}
+#  stag 둘레 TV 가 차례로 켜지는 사이 · snow 크레딧 TV 가 켜진 뒤 지지직 동안 · push0~push1 다가가는 동안 — push1 이
+#  곧 유리를 뚫는 때(handoff · 번쩍의 맨 밝은 틀). 옛 +5.65 는 인트로 램프가 꺼진 뒤라 어둠 속에서 들어갔다 — 0.8 초
+#  앞당겨 램프가 켜진 판으로 든다(셋째 다트 · 180 이 들어간 뒤 게임 속에서 보인다).
+const T := {"stag": 0.07, "snow": 0.45, "push0": TAPE_LEN + 3.55, "push1": TAPE_LEN + 4.85}
+#  어둠에서 떠오르는 것은 앞 토막(TAPE.black · fade)이 맡는다 — TV 방은 눈이 데크에서 올라와 이미 보인다.
+#  끝에 층을 흐리며 걷지 않는다 — handoff 에 번쩍(GLINT) 밑에서 끊는다.
 #  앞 토막(초 · 자리는 데크 좌표 m — 원점은 바닥 한가운데 · 앞면 z 0 · 구멍 · 카세트 치수는 tvs.py 사본) —
 #    black 빗소리만 · fade 떠오르는 동안 · cam 눈(앞 왼쪽 낮게 — 빛이 왼쪽 구석 TV 에서 오므로 손등 · 카세트 왼
 #    끝이 그 빛을 받는 쪽에서 본다 · 걷은 소매 단이 그림에 들게 한 걸음 물러 조금 넓게 — 손목에서 단까지 16cm 라
@@ -215,7 +217,8 @@ const TAPE_POSE := {
 	"let": [22.0, 30.0, 45.0, 60.0, 35.0, 45.0, 60.0, 75.0, 8.0, 0.0, 10.0, 20.0],
 	"press": [-2.0, 82.0, 86.0, 88.0, 4.0, 100.0, 104.0, 104.0, 0.0, 0.7, 36.0, 26.0],
 }
-#  층 — 게임 필터(CRT 100 · VHS 98 · 도트 97 · 반전 96) 밑
+#  층 — 게임 필터(CRT 100 · VHS 98 · 도트 97 · 반전 96) 밑. 번쩍(GLINT)도 이 층 맨 위라 handoff 뒤엔 필터를 지나
+#  주사선 · 굴곡 · 둥근 테가 먹는다(옛 필터 위 101 은 화면에 붙은 흰 스티커로 읽혔다)
 const LAYER := 90
 #  렌더 층 2 — 구석 TV 키의 그림자를 드리우는 것(손 · 덮개 · 단추 — shadow_caster_mask)
 const SHADOW_LAYER := 1 << 1
@@ -242,10 +245,29 @@ const MAT := {"den": 450.0, "walnut": Color("3a2414"), "wood": Color("4a2e18")}
 #  MAKER — 크레딧 TV 의 화면 빛 세기(주인공 왼쪽 옆면 · 바닥을 물들인다).
 const MAKER := {"light": 1.3}
 #  주인공 화면 빛 — light 앞으로 나가는 원뿔 세기 · rim 유리 둘레(테 · 검은 판 안쪽)를 비추는 작은 빛 세기 ·
-#  rim_r 그 닿는 거리 · dive 끝 거리 — 유리 폭이 화면 폭을 꼭 채우는 거리의 몫(1 밑이면 유리를 지나 테가 화면
-#  밖으로 빠진다) · portal 다가가는 몫(0~1)의 이 구간에서 유리 속 그림이 화면에 박힌 그림으로 옮겨 간다 ·
-#  flat 이 구간에서 층 안에 화판 그림을 그대로 깐다(필름 톤 · 번짐이 낀 무대 그림과 게임 그림의 톤 차를 잇는다)
-const HERO := {"light": 1.1, "rim": 0.4, "rim_r": 0.55, "dive": 0.78, "portal": [0.45, 0.95], "flat": [0.8, 1.0]}
+#  rim_r 그 닿는 거리 · dive 끝 거리 — 유리 폭이 화면 폭을 꼭 채우는 거리의 몫(0.70 이면 끝에 유리 폭이 화면의
+#  143% — 유리 앞에서 서지 않고 뚫고 드는 빠르기로 끊긴다) · portal 다가가는 몫(0~1)의 이 구간에서 유리 속 그림이
+#  화면에 박힌 그림으로 옮겨 간다 · zoom 화면에 박힌 그림의 배율 = 유리 그림 높이 몫(pg)의 이 거듭제곱 — 그림이
+#  handoff 까지 카메라의 0.15 빠르기로 커진다(0 이면 끝 틀들에 그림이 섰다 · 0.3 이면 handoff 앞이 게임 그림보다 7%
+#  커서 번쩍 뒤에 고무줄처럼 줄었다 — H−6 과 H+6 이 1% 안) · creep [ua · ub · uh · vp · vh] 다가가는 몫(u)에서 —
+#  선 데서 ua 까지 vp(dw/du — 틀당 0.7%)로 미끄러져 오르고 · ub 까지 짧게 서서 · uh 까지 vh(틀당 0.07%)로 붙든 채
+#  빗금 앞쪽을 보내고 · 세제곱으로 뛰어든다(dive_w — 옛 고른 감속은 25 틀 내내 줄기만 해 멈칫이 안 읽혔다)
+const HERO := {"light": 1.1, "rim": 0.4, "rim_r": 0.55, "dive": 0.70, "portal": [0.70, 1.0], "zoom": 0.15,
+		"creep": [0.423, 0.551, 0.628, 0.40, 0.04]}
+#  유리 반짝 · 번쩍(2026-10-25 「TV에 들어갈때 … 들어갈때 유리가 반짝? 약간 삐싱 하는 그게 있잖아?」) — 다가가다
+#  미끄러지듯 다가가다 멈칫 → 굵은 띠 · 앞선 가는 줄이 유리를 왼 위 → 오른 아래로 쓸고 지난 자리에 별이 피었다
+#  잦아든다(삐싱) → 뛰어들어 같은 60°「/」 흰빛이 왼 위에서 차올라(그림이 비친다) 다 덮는 틀(handoff)에서 무대를 끊고
+#  게임 필터를 켠다 → 흰빛이 오른 아래로 빠지며 지나간 쪽부터 게임이 드러난다(cross).
+#  틀은 60Hz · lead 빗금이 handoff 몇 틀 앞에 서나(다트 2 가 유리 오른 아래로 들기 전에 빠진다) · c0 · step · n 빗금
+#  자리(틀마다 한 칸 · n 칸) · at 별이 서는 틀(굵은 띠가 별 자리를 막 지난 틀) · spark 별 단 [점 · 세로가 긴 별 · 작은
+#  별 · 점]의 틀 수 · ladder handoff −4 틀부터 번쩍 단(÷3 — 덮는 몫이자 더하는 몫 · 3 이면 꽉 찬 흰빛) · fill 번쩍
+#  빛깔(도트 팔레트 맨 흰 색 C_TXT — 필터 밑에서 디더 없이 그대로 선다) · lit handoff 뒤 게임 필터를 켜는 틀(0 — 맨
+#  밝은 틀 · lit_at) · calm handoff 뒤 CRT 잔상을 끄고 있는 틀(번쩍 단이 걷힌 뒤까지 — 앞 틀의 흰 띠를 붙들어 회색 판이
+#  한 틀 섰다 · calm_at) · cue 소리(tv_glint)가 handoff 몇 초 앞에 서나 — 빗금 앞에 쉬익이 서고 파일 0.267 초(싱
+#  첫머리)가 별이 다 핀 틀에 · 0.617 초(슈욱이 끊기고 퍽)가 handoff 에 선다(믹서가 한 틀 늦게 내므로 한 틀 앞당겨 낸다 —
+#  Movie Maker 믹스에서 퍽이 handoff 틀 끝에 걸렸다)
+const GLINT := {"lead": 36, "c0": -0.02, "step": 0.13, "n": 12, "at": 9, "spark": [6, 5, 4, 2],
+		"ladder": [1, 1, 2, 2, 3, 3, 2, 2, 1, 1], "fill": Color8(244, 239, 226), "lit": 0, "calm": 8, "cue": 0.637}
 #  엑스트라 — 점 빛 세기 · 몸 빛깔 배수 · 화면 밝기 · 채도 · 화면 도트(1m 당 칸) · 화면 색 단 수
 const EXTRA := {"light": 0.3, "tone": 0.42, "dim": 0.13, "sat": 0.6, "cells": 110.0, "lv": 8.0}
 #  화면 장면 — 번호(SCR_SHADER mode) · 앞에 둔 점 빛 빛깔. game 은 주인공(지지직 1 → 화판 그림 9) · maker 는
@@ -326,6 +348,9 @@ uniform vec2 res = vec2(40.0, 30.0);
 uniform float cw = 0.6;
 uniform float portal = 0.0;
 uniform vec2 feed = vec2(640.0, 360.0);
+uniform float zoom = 1.0;
+uniform float glint = -9.0;
+uniform int spark = 0;
 uniform sampler2D tex : source_color, filter_nearest, repeat_disable;
 //  바 인트로 천장 TV(scripts/prologue_bar3d.gd)만 — 셋 다 0 이면 옛 그림 그대로다(테이프 프롤로그).
 //  snowk mode 9 그림을 지지직이 덮는 몫(단으로 걷힌다) · crt 브라운관 결(화면 px 한 줄 걸러 주사선 · 단단한 테의
@@ -477,8 +502,10 @@ void fragment() {
 				vec2 bd = UV - 0.5;
 				bu = 0.5 + bd * (1.0 - 0.1 * ck * dot(bd, bd));
 			}
-			vec2 cu = mix(vec2((bu.x - 0.5) * cw + cx, bu.y), SCREEN_UV, portal);
-			s = texture(tex, cu).rgb * mix(1.08, 1.0, portal);
+			vec2 cu = mix(vec2((bu.x - 0.5) * cw + cx, bu.y), 0.5 + (SCREEN_UV - 0.5) / zoom, portal);
+			//  portal 끝으로 갈수록 게임 필터를 지난 그림의 밝기로 내려앉는다(handoff 앞 유리 그림이 게임 속보다 25% 밝고
+			//  따뜻해 들어와 보니 어두워졌다)
+			s = texture(tex, cu).rgb * mix(1.08, 0.75, portal);
 			if (crt > 0.0) {
 				s = mix(s, snow_crt(bu), snowk * (1.0 - portal));
 				s *= 1.0 - 0.24 * ck * mod(floor(FRAGCOORD.y), 2.0);
@@ -508,6 +535,44 @@ void fragment() {
 	if (refl > 0.0) {
 		vec2 re = (UV - vec2(0.2, 0.17)) / vec2(0.075, 0.016);
 		c += vec3(0.20, 0.14, 0.08) * refl * (1.0 - portal) * step(dot(re, re), 1.0);
+	}
+	//  반짝(GLINT · 주인공만) — 유리 UV 에 그려 돔에 붙고 유리 밖(테)으로 안 샌다. 60°「/」 빗금은 돔처럼 가운데를
+	//  두고 양쪽 바깥으로 휜다(옛 r² 항은 화면 밖 한 점을 도는 「(」 꼴이었다). 굵은 띠는 sRGB 스크린(1 − (1 − c)(1 − k) —
+	//  어두운 벽은 한 단만 들려 벽돌 결이 살고 밝은 나무는 하얘진다 · 옛 선형 더하기는 벽을 평평한 회색 테이프로 지웠다) ·
+	//  앞선 가는 줄은 연백(옛 한 칸 뒤 잔상은 셋째 줄로 복제돼 보여 뺐다). 큰 별(2)은 유리 UV 크기라 유리와 같이 커져
+	//  유리 위 반사로 붙고(옛 화면 도트 크기는 렌즈에 붙은 아이콘으로 떴다) · 점(1 · 4) · 작은 별(3)은 화면 도트 크기로
+	//  줄어든다. 끝이 딱 끊기고 0.88 밑이라 번짐(glow_thr 0.9)이 안 선다.
+	vec2 fw = max(fwidth(UV), vec2(1e-5));
+	if (mode == 9 && pw > 0.0 && (glint > -1.0 || spark > 0)) {
+		vec3 gl = vec3(0.76, 0.80, 0.85);
+		vec2 d = UV - 0.5;
+		vec2 wv = 0.5 + d * (1.0 + 0.25 * dot(d, d));
+		float g = wv.x + 0.45 * wv.y;
+		vec3 c0 = c;
+		if (abs(g - glint - 0.075) < 0.008) {
+			c = mix(c, gl, 0.8);
+		} else if (abs(g - glint) < 0.032) {
+			vec3 cs = pow(max(c, vec3(0.0)), vec3(1.0 / 2.2));
+			c = pow(1.0 - (1.0 - cs) * (1.0 - 0.35 * pow(gl, vec3(1.0 / 2.2))), vec3(2.2));
+		}
+		if (spark > 0) {
+			vec2 e = abs(UV - vec2(0.86, 0.26));
+			vec2 a = e / fw;
+			bool hit;
+			if (spark == 2) {
+				hit = sqrt(e.x / 0.056) + sqrt(e.y / 0.098) < 1.0;
+			} else if (spark == 3) {
+				hit = sqrt(a.x / 9.0) + sqrt(a.y / 12.0) < 1.0;
+			} else {
+				hit = a.x + a.y < 1.6;
+			}
+			if (hit) {
+				c = gl;
+			}
+		}
+		if (c != c0) {
+			c = min(c, vec3(0.88));
+		}
 	}
 	if (lv > 0.0) {
 		c = floor(c * lv + 0.5) / lv;
@@ -573,7 +638,7 @@ void fragment() {
 static var _tri_sh: Shader = null
 static var _wood_im := {}       # 바탕 빛깔 → 결 그림(처음 부를 때 굽는다)
 
-#  3D 층의 필름 말(LOOK.grade) — 무대 그림(Stage)에만 건다. 화판 그림(Feed) · 게임 필터에는 안 먹는다(TV 속 결함은 화면
+#  3D 층의 필름 말(LOOK.grade) — 무대 그림(Stage)에만 건다. 화판 그림 · 게임 필터에는 안 먹는다(TV 속 결함은 화면
 #  그림 안에 · 카메라 층에는 필름만 — Alien: Isolation 의 두 층). 검정을 아주 조금 띄우고 · 그늘은 차게 · 밝은 데(살)는
 #  따뜻하게 · 낟알은 논리 1px 마다 하나 · 24Hz 로 바뀌고(비디오 잡음이 아니라 필름) 중간 톤에서 가장 세다(깊은 검정과
 #  하이라이트는 깨끗하다). k 0 이면 무대 그림 그대로다(주인공 속으로 들어가며 걷힌다).
@@ -1237,6 +1302,7 @@ static func make(game: Node, outer: Node) -> Node:
 			var apex: Vector3 = g + n * gb.size.z * 0.5
 			var de: float = gb.size.x * 0.5 / (tan(deg_to_rad(float(CAM.fov)) * 0.5) * ar) * float(HERO.dive)
 			cam_end = {"look": apex, "at": apex + n * de}
+			hn.set_meta("glass_h", gb.size.y)
 			cam_start = {"look": g, "at": g + n * float(CAM.dist)}
 		elif job == "maker":
 			#  빨간 대기등 — 화면 오른쪽 아래 테 밖. 크레딧 TV 에만 — 둘레 TV 의 것은 초점 흐림 · 번짐에 붉은
@@ -1314,7 +1380,7 @@ static func make(game: Node, outer: Node) -> Node:
 	vg.fill_to = Vector2(1.0, 0.5)
 	vg.width = 320
 	vg.height = 180
-	#  층 — 무대 · 비네트 · 어둠 막. 자리는 tick 이 화판(outer.box)에 맞춘다.
+	#  층 — 무대 · 비네트 · 어둠 막 · 번쩍(GLINT — 맨 위). 자리는 tick 이 화판(outer.box)에 맞춘다.
 	var ly := CanvasLayer.new()
 	ly.name = "PrologueLayer"
 	ly.layer = LAYER
@@ -1324,11 +1390,12 @@ static func make(game: Node, outer: Node) -> Node:
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	ly.add_child(root)
 	var under := ColorRect.new()
+	under.name = "Under"
 	under.color = Color.BLACK
 	under.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	under.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.add_child(under)
-	for pr in [["Stage", vp.get_texture()], ["Vig", vg], ["Feed", feed]]:
+	for pr in [["Stage", vp.get_texture()], ["Vig", vg]]:
 		var tr := TextureRect.new()
 		tr.name = String(pr[0])
 		tr.texture = pr[1]
@@ -1358,7 +1425,7 @@ static func make(game: Node, outer: Node) -> Node:
 	fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	fade.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.add_child(fade)
-	(root.get_node("Feed") as CanvasItem).modulate.a = 0.0
+	flash_make(root, Vector2(vp.size))
 	hn.set_meta("outer", outer)
 	hn.set_meta("root", root)
 	tick(hn, 0.0)
@@ -1519,7 +1586,10 @@ static func tick(hn: Node, t: float) -> void:
 			m.set_shader_parameter("tex", rv.get_texture())
 			(tv.l as SpotLight3D).light_color = JOB[cur][1]
 		if tv.hero:
-			_dust(hn, t, minf(p * 1.6, 1.0))
+			#  먼지도 먼지 낀 공기와 같이 걷힌다(LOOK.gone) — 유리 앞 0.4m 까지 들면 카메라 코앞의 알이 12px 흰 네모로 떠
+			#  왼 벽에 외딴 점이 됐다(옛 「화판 알파」로 보던 점)
+			var uk: float = clampf((t - float(T.push0)) / (float(T.push1) - float(T.push0)), 0.0, 1.0)
+			_dust(hn, t, minf(p * 1.6, 1.0) * (1.0 - smoothstep(float(LOOK.gone[0]), float(LOOK.gone[1]), uk)))
 			#  주인공 — 깜박이며 켜지면 곧장 화판 그림(첫 그림이 어둠이라 지지직을 안 거친다)
 			(tv.r as OmniLight3D).light_energy = float(HERO.rim) * minf(p * 1.6, 1.0)
 		else:
@@ -1550,13 +1620,17 @@ static func tick(hn: Node, t: float) -> void:
 	var cs: Dictionary = hn.get_meta("start")
 	if not ce.is_empty():
 		var u: float = clampf((t - float(T.push0)) / (float(T.push1) - float(T.push0)), 0.0, 1.0)
-		var e: float = u * u * (3.0 - 2.0 * u)
+		var w: float = dive_w(u)
 		(cam.attributes as CameraAttributesPractical).dof_blur_near_enabled = t < TAPE_LEN
 		if t < TAPE_LEN and hn.has_meta("deck"):
 			_tape_cam(hn, cam, t)
 		else:
 			cam.fov = float(CAM.fov)
-			cam.look_at_from_position((cs.at as Vector3).lerp(ce.at, e), (cs.look as Vector3).lerp(ce.look, e))
+			#  로그 거리 — 꼭지까지의 거리를 비로 줄인다(w 가 고르게 늘면 그림이 고른 비로 커진다)
+			var o: Vector3 = (cs.at as Vector3) - (ce.look as Vector3)
+			var pos: Vector3 = (ce.look as Vector3) + o * pow(((ce.at as Vector3) - (ce.look as Vector3)).length()
+					/ o.length(), w)
+			cam.look_at_from_position(pos, (cs.look as Vector3).lerp(ce.look, w))
 			_focus(hn, cam)
 		#  3D 층의 필름 말 · 먼지 낀 공기 — 주인공 속으로 들어가며 걷힌다(층이 걷힐 때 유리 속 그림 = 게임 그림)
 		var gk: float = 1.0 - smoothstep(float(LOOK.gone[0]), float(LOOK.gone[1]), u)
@@ -1566,19 +1640,139 @@ static func tick(hn: Node, t: float) -> void:
 			gm.set_shader_parameter("tm", t)
 		(hn.get_meta("env") as Environment).volumetric_fog_density = lerpf(float(LOOK.fog[0]), float(LOOK.fog[1]),
 				smoothstep(float(TAPE.crane[0]), float(TAPE.crane[1]), t)) * gk
-		var pr: Array = HERO.portal
-		var fr: Array = HERO.flat
-		var po: float = smoothstep(float(pr[0]), float(pr[1]), u)
+		var root := hn.get_meta("root") as Control
+		var pg: float = glass_pg(cam, ce.look, float(hn.get_meta("glass_h")))
 		for tv in hn.get_meta("tvs"):
 			if tv.hero:
-				(tv.m as ShaderMaterial).set_shader_parameter("portal", po)
-		var root := hn.get_meta("root") as Control
-		(root.get_node("Vig") as CanvasItem).modulate.a = 1.0 - po
-		(root.get_node("Feed") as CanvasItem).modulate.a = smoothstep(float(fr[0]), float(fr[1]), u)
+				var po: float = portal(tv.m, u, pg)
+				glint(tv.m, t - handoff())
+				(root.get_node("Vig") as CanvasItem).modulate.a = 1.0 - po
 
 
-#  층 — 화판(outer.box) 자리에 맞추고 · 빗소리만 나는 어둠(TAPE.black) 뒤 TAPE.fade 에 떠오르고 · handoff 뒤
-#  FADE.out 동안 걷힌다.
+#  ── 유리 뚫기 — 바 인트로(prologue_bar3d)도 제 유리 재질 · 층 · handoff 로 이것들을 부른다 ──
+#  dive_w · glass_pg · portal · glint(유리 쪽 · 틀마다) · flash_make(층을 지을 때 한 번) · cross(층 · 틀마다) · flash_a(단)
+#  dive_w 다가가는 몫 u(0~1) → 로그 거리 몫 w — 빠르기(dw/du)가 선 데서 코사인으로 vp 까지 오르고(~ua) · 짧게 vh 로
+#  내려앉아(~ub) · vh 로 붙든 채(~uh) 반짝을 보내고 · 세제곱으로 뛰어들어 u 1 에서 가장 빠르다(빠르기가 이어진다).
+static func dive_w(u: float) -> float:
+	var cr: Array = HERO.creep
+	var ua: float = float(cr[0])
+	var ub: float = float(cr[1])
+	var uh: float = float(cr[2])
+	var vp: float = float(cr[3])
+	var vh: float = float(cr[4])
+	u = clampf(u, 0.0, 1.0)
+	if u < ua:
+		return vp * (u - ua / PI * sin(PI * u / ua)) * 0.5
+	var w: float = vp * ua * 0.5
+	if u < ub:
+		var x: float = u - ua
+		var l: float = ub - ua
+		return w + vh * x + (vp - vh) * (x + l / PI * sin(PI * x / l)) * 0.5
+	w += (vp + vh) * (ub - ua) * 0.5
+	if u < uh:
+		return w + vh * (u - ub)
+	w += vh * (uh - ub)
+	var s: float = u - uh
+	return w + vh * s + (1.0 - w - vh * (1.0 - uh)) * pow(s / (1.0 - uh), 3.0)
+
+
+#  glass_pg 유리 그림 높이 ÷ 화면 높이(유리 꼭지까지의 거리로 — 유리 높이 gh m)
+static func glass_pg(cam: Camera3D, apex: Vector3, gh: float) -> float:
+	return gh / (2.0 * maxf(cam.global_position.distance_to(apex), 0.001) * tan(deg_to_rad(cam.fov) * 0.5))
+
+
+static func _zoom(pg: float) -> float:
+	return pow(maxf(pg, 0.01), float(HERO.zoom))
+
+
+#  portal 유리 속 그림 — 유리를 따라 커지던 것(pg)에서 화면에 박힌 그림(zoom = pg 의 HERO.zoom 제곱 — 1 보다 작으면
+#  유리보다 크고 크면 화면을 덮는다 · 어느 쪽이든 보이는 유리를 다 채운다)으로 옮긴다. 옮긴 몫을 돌려준다.
+static func portal(m: ShaderMaterial, u: float, pg: float) -> float:
+	var pr: Array = HERO.portal
+	var po: float = smoothstep(float(pr[0]), float(pr[1]), u)
+	m.set_shader_parameter("portal", po)
+	m.set_shader_parameter("zoom", _zoom(pg))
+	return po
+
+
+#  glint 유리 반짝 — dt = t − handoff. 60Hz 틀로 끊어 빗금 자리(틀마다 한 칸)와 별 단을 앉힌다(그 밖이면 끈다).
+static func glint(m: ShaderMaterial, dt: float) -> void:
+	var f: int = floori(dt * 60.0 + 0.001) + int(GLINT.lead)
+	var n: int = int(GLINT.n)
+	m.set_shader_parameter("glint", float(GLINT.c0) + float(GLINT.step) * f if f >= 0 and f < n else -9.0)
+	var sp := 0
+	var at: int = int(GLINT.at)
+	for i in (GLINT.spark as Array).size():
+		var k: int = int(GLINT.spark[i])
+		if f >= at and f < at + k:
+			sp = i + 1
+		at += k
+	m.set_shader_parameter("spark", sp)
+
+
+#  flash_a 번쩍 단 — handoff −4 틀부터 2 틀마다 1/3 · 2/3 · 1 · 1 · 2/3 · 1/3(그 밖 0)
+static func flash_a(dt: float) -> float:
+	var i: int = floori(dt * 60.0 + 0.001) + 4
+	var ld: Array = GLINT.ladder
+	return float(ld[i]) / 3.0 if i >= 0 and i < ld.size() else 0.0
+
+
+#  번쩍 — 60°「/」 금으로 나눈 화면의 [lo, hi] 몫(s 0 왼 위 구석 · 1 오른 아래 구석)에 흰빛을 k 만큼 더한다(밑그림이
+#  비친다 · k 1 이면 꽉 찬 fill). 끝은 논리 도트 격자(px)에서 딱 끊긴다 — 고른 막도 · 둥근 번짐도 없다.
+const FLASH_SHADER := """
+shader_type canvas_item;
+uniform sampler2D sc : hint_screen_texture, filter_nearest;
+uniform vec2 px = vec2(640.0, 360.0);
+uniform float lo = 0.0;
+uniform float hi = 0.0;
+uniform float k = 0.0;
+void fragment() {
+	vec2 q = (floor(UV * px) + 0.5) / px;
+	float ar = px.x / px.y;
+	float m = 0.5 * ar + 0.2887;
+	float s = ((q.x - 0.5) * ar + 0.577 * (q.y - 0.5) + m) / (2.0 * m);
+	vec3 b = texture(sc, SCREEN_UV).rgb;
+	COLOR = vec4(k > 0.999 ? COLOR.rgb : min(b + COLOR.rgb * k, vec3(1.0)), (s >= lo && s <= hi) ? 1.0 : 0.0);
+}
+"""
+
+
+#  flash_make 번쩍 — 층 root 맨 위의 판 하나(이름 Flash). handoff 뒤엔 나머지가 다 숨어 이것만 게임 그림 위 · 게임 필터
+#  밑에 남는다(주사선 · 굴곡이 흰빛에도 먹는다). px 논리 화면 크기(끝을 그 도트로 끊는다).
+static func flash_make(root: Control, px := Vector2(640.0, 360.0)) -> ColorRect:
+	var fl := ColorRect.new()
+	fl.name = "Flash"
+	fl.color = GLINT.fill
+	fl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fl.set_anchors_preset(Control.PRESET_FULL_RECT)
+	var sh := Shader.new()
+	sh.code = FLASH_SHADER
+	var fm := ShaderMaterial.new()
+	fm.shader = sh
+	fm.set_shader_parameter("px", px)
+	fl.material = fm
+	fl.visible = false
+	root.add_child(fl)
+	return fl
+
+
+#  cross 유리를 뚫는 틀마다(dt = t − handoff) — 번쩍 단(flash_a)이 오르는 동안은 왼 위에서 [0, 단] 이 차오르고 · 꽉 찬
+#  두 틀 뒤 내리는 동안은 [1 − 단, 1] 만 남아 지나간 쪽부터 게임이 드러난다. handoff 에 Flash 말고 다 숨긴다(그 뒤
+#  층은 비어 LEN 에 걷혀도 튀지 않는다).
+static func cross(root: Control, dt: float) -> void:
+	var fl := root.get_node("Flash") as ColorRect
+	var f: int = floori(dt * 60.0 + 0.001)
+	var lv: float = flash_a(dt)
+	var fm := fl.material as ShaderMaterial
+	fm.set_shader_parameter("lo", 1.0 - lv if f > 1 else 0.0)
+	fm.set_shader_parameter("hi", lv if f < 0 else 1.0)
+	fm.set_shader_parameter("k", lv)
+	for c in root.get_children():
+		(c as CanvasItem).visible = lv > 0.0 if c == fl else f < 0
+
+
+#  층 — 화판(outer.box) 자리에 맞추고 · 빗소리만 나는 어둠(TAPE.black) 뒤 TAPE.fade 에 떠오르고 · handoff 에
+#  번쩍 밑에서 끊는다(cross — LEN 까지 비어 있다가 걷힌다).
 static func _layer(hn: Node, t: float) -> void:
 	var root := hn.get_meta("root") as Control
 	var outer: Node = hn.get_meta("outer")
@@ -1587,7 +1781,7 @@ static func _layer(hn: Node, t: float) -> void:
 		root.position = box.position
 		root.size = box.size
 	(root.get_node("Fade") as ColorRect).color.a = 1.0 - clampf((t - float(TAPE.black)) / float(TAPE.fade), 0.0, 1.0)
-	root.modulate.a = 1.0 - clampf((t - handoff()) / float(FADE.out), 0.0, 1.0)
+	cross(root, t - handoff())
 
 
 #  먼지 — 더하기로 얹는 작은 판(늘 카메라를 본다). 알마다 제 씨로 상자 안에 흩어 둔다.
@@ -2142,7 +2336,8 @@ static func _tape_cam(hn: Node, cam: Camera3D, t: float) -> void:
 #  소리 때 전부(이름 → 초) — TV 가 켜지는 때(ON) · 창밖 비(rain — 제 자리에서 돈다) · 앞 토막의 일곱(이름이 곧
 #  sfx 이름 — 달그락은 들어올 때 · 톡과 미끄러짐(마찰)은 덮개에 닿을 때 · 걸림 딸깍은 낚아챌 때 · 모터는 고르게 끄는 동안
 #  (철컥에서 끊긴다) · 딱 · 철컥은 홀더가 닿을 때 — 철컥은 딱의 28ms 뒤 TAPE.clunk 에 선다 · 단추 딸깍은 단추가 바닥에
-#  닿을 때 · 위잉은 그 뒤 whir 에 기계가 받을 때). game.gd _plg_tick 이 한 번씩 낸다.
+#  닿을 때 · 위잉은 그 뒤 whir 에 기계가 받을 때) · 유리 반짝 삐싱 · 뛰어듦 슈욱 · 퍽(tv_glint 한 파일 — GLINT.cue).
+#  game.gd _plg_tick 이 한 번씩 낸다.
 static var _cues := {}
 
 
@@ -2157,12 +2352,24 @@ static func cues() -> Dictionary:
 		_cues["deck_clunk"] = float(TAPE.clunk) - float(TAPE.lead)
 		_cues["deck_btn"] = float(TAPE.press[2])
 		_cues["deck_whir"] = float(TAPE.press[2]) + float(TAPE.whir)
+		_cues["tv_glint"] = handoff() - float(GLINT.cue)
 	return _cues
 
 
-#  층이 걷히기 시작하는 때 — 게임 필터가 이때 켜진다(game.gd _plg_cover).
+#  유리를 뚫는 때(T.push1 · 번쩍이 다 덮는 첫 틀) — 무대가 끊긴다.
 static func handoff() -> float:
-	return LEN - float(FADE.out)
+	return float(T.push1)
+
+
+#  게임 필터가 켜지는 때(game.gd _plg_cover) — 번쩍이 다 덮은 GLINT.lit 틀(틀 사이 반 틀에 둔다 — 60Hz 시계의 끝수에
+#  안 걸린다).
+static func lit_at() -> float:
+	return handoff() + (float(GLINT.lit) - 0.5) / 60.0
+
+
+#  CRT 잔상을 되살리는 때(game.gd _crt_apply) — 번쩍 단이 다 걷힌 GLINT.calm 틀 뒤.
+static func calm_at() -> float:
+	return handoff() + (float(GLINT.calm) - 0.5) / 60.0
 
 
 #  주인공이 화판 그림을 틀기 시작하는 때 — 게임의 인트로 시계가 이때 출발한다.
