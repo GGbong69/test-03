@@ -8,11 +8,11 @@ extends RefCounted
 #  테이프 프롤로그(prologue3d.gd · Plg)는 그대로 두고 같은 API(make · tick · cues · handoff · feed_at · length)로 선다 —
 #  game.gd 의 시계 · 누름(첫 누름 빨리 감기 · 둘째 끝) · 필터 덮개 · 넘김이 그대로 돈다(PLGP.kind · plg_mod).
 #  흐름(약 11 초 · 글 · 말 없음):
-#   1 0~1.5 검다 — 먹먹한 방 소리(냉장고 · 먼 잔 한 번). 1.2 초에 감은 눈꺼풀 너머 빛이 한 단 든다(검붉은 판).
-#   2-1 1.5~2.2 눈꺼풀이 반쯤 — 흐린 도트(덩어리 4 · 8px) · 뺨을 카운터에 댄 낮은 눈 · 코앞에 맥주잔.
-#   2-2 2.2~3 한 번 더 깜박 → 또렷 · 받침 위 반 남은 잔. TV 는 아직 안 보인다 — 찬 빛이 단으로 깜박이며 잔 테 · 카운터
+#   1 0~1.1 검다 — 먹먹한 방 소리(냉장고 · 먼 잔 한 번). 0.8 초에 감은 눈꺼풀 너머 빛이 한 단 든다(검붉은 판).
+#   2-1 1.1~1.8 눈꺼풀이 반쯤 — 흐린 도트(덩어리 2 · 4px) · 뺨을 카운터에 댄 낮은 눈 · 코앞에 맥주잔.
+#   2-2 1.8~3.1 한 번 더 깜박 → 또렷 · 받침 위 반 남은 잔(0.85 초 선다). TV 는 아직 안 보인다 — 찬 빛이 단으로 깜박이며 잔 테 · 카운터
 #       끝을 짚는다(화면 밖 TV 를 먼저 알린다).
-#   3 3~5 고개를 들며 왼쪽 — 가운데 펜던트 밑에서 상인의 손이 잔을 닦는다(가슴에서 잘린다 · 얼굴은 늘 밖 · 어둠).
+#   3 3.1~5 고개를 들며 왼쪽 — 가운데 펜던트 밑에서 상인의 손이 잔을 닦는다(가슴에서 잘린다 · 얼굴은 늘 밖 · 어둠).
 #   4 5~6.5 오른쪽 — 빈 홀 · 벽의 다트 장 · 테이블에 남은 빈 잔 둘 · 다트(방금 누가 있었다).
 #   5 6.5~8 위 — 바 뒤 천장에 매단 작은 브라운관(관 · 멍에 · 쟁반). 지지직 사이로 게임 인트로 그림이 단으로 비친다.
 #   6 8~10.2 눈 깜박임으로 한 번 다가가 끊고(30%) · 화각이 좁아지며 조금 다가간다. 방 빛이 한 등씩 꺼진다(가운데
@@ -37,7 +37,9 @@ const GLB := "res://assets/models/bar_intro.glb"
 
 #  때 — feed 화면 그림(게임 인트로 시계)이 출발 · dive0 ~ dive1 유리 속으로 · 넘김(handoff) = dive1 · 그 뒤 fade 동안
 #  층이 걷힌다(LEN)
-const T := {"feed": 7.0, "dive0": 10.2, "dive1": 11.4, "fade": 0.45}
+#  feed 8.3 — 넘김까지 3.1 초(테이프와 같다) · 인트로의 꺼짐 → 네온 → 켜짐 박자가 넘김 뒤 게임에서 선다(TV 속에서 다 써 버리고
+#  다이브 한가운데 한 틀 만에 밝기가 튀었다 · 검토 1)
+const T := {"feed": 8.3, "dive0": 10.2, "dive1": 11.4, "fade": 0.45}
 const LEN := 11.85
 #  층 — 게임 필터 밑(Plg.LAYER 와 같다)
 const LAYER := 90
@@ -50,8 +52,8 @@ const L_HERO := 1 << 5
 const POSE := {
 	"cheek": [Vector3(-0.13, -0.075, -3.57), Vector3(-0.14, -0.085, -3.88), -66.0, 44.0],
 	"merch": [Vector3(-0.10, 0.30, -3.20), Vector3(-0.40, -0.07, -3.98), 0.0, 44.0],
-	"dart": [Vector3(-0.10, 0.30, -3.20), Vector3(1.12, -0.16, -4.80), 0.0, 48.0],
-	"tv": [Vector3(-0.10, 0.30, -3.20), Vector3(-0.12, 1.0, -4.47), 0.0, 31.0],
+	"dart": [Vector3(-0.10, 0.30, -3.20), Vector3(1.06, -0.22, -4.95), 0.0, 40.0],
+	"tv": [Vector3(-0.10, 0.30, -3.20), Vector3(-0.12, 0.94, -4.47), 0.0, 26.0],
 	"tv2": [Vector3(-0.10, 0.30, -3.24), Vector3(-0.10, 0.88, -4.47), 0.0, 24.0],
 	"push": [Vector3(-0.10, 0.36, -3.36), Vector3(-0.10, 0.86, -4.47), 0.0, 16.0],
 }
@@ -59,32 +61,41 @@ const POSE := {
 #  조금 넘쳤다 선다 · cut 눈을 감은 틈에 바뀐다 · push 화각이 좁아지며 조금 다가간다. 그 사이는 완전히 멈춘다 —
 #  흔들림 · 숨 · 미세한 흐름이 있으면 640×360 텍셀이 기어 다닌다(T09).
 const MOVE := [
-	[3.0, 4.2, "cheek", "merch", "lift"],
+	[3.1, 4.2, "cheek", "merch", "lift"],
 	[5.0, 5.75, "merch", "dart", "look"],
 	[6.5, 7.25, "dart", "tv", "look"],
 	[8.05, 8.05, "tv", "tv2", "cut"],
 	[8.3, 10.2, "tv2", "push", "push"],
 ]
-#  눈꺼풀 [때, 뜬 몫] — 감기 0.1 · 뜨기 0.2(둘째는 0.3) · 첫 뜸은 반(0.45)
-const LID := [[0.0, 0.0], [1.5, 0.0], [1.95, 0.45], [2.2, 0.45], [2.3, 0.0], [2.35, 0.0], [2.65, 1.0],
+#  눈꺼풀 [때, 뜬 몫] — 감기 0.1 · 뜨기 0.2(둘째는 0.3) · 첫 뜸은 반(0.45). 검정을 1.1 초로 줄여 또렷한 잔을 고개 들기
+#  (3.1) 전에 0.85 초 세운다(0.35 초뿐이었다 · 검토 1)
+const LID := [[0.0, 0.0], [1.1, 0.0], [1.55, 0.45], [1.8, 0.45], [1.9, 0.0], [1.95, 0.0], [2.25, 1.0],
 		[7.95, 1.0], [8.05, 0.0], [8.1, 0.0], [8.3, 1.0]]
-#  감은 눈 너머 빛 — 검붉은 판(검정 위 두 단 안) · 1.2 초에 한 단 든다
+#  깨기 때 — 감은 눈 너머 빛이 한 단 드는 때 · 둘째 깜박임(초점이 잔에 서고 노출이 한 단 내린다)
+const WAKE := {"skin": 0.8, "blink": 1.9}
+#  감은 눈 너머 빛 — 검붉은 판(검정 위 두 단 안) · WAKE.skin 에 한 단 든다
 const SKIN := [Color8(8, 2, 2), Color8(20, 6, 4)]
-#  초점 [때부터, 띠 앞 m, 띠 뒤 m, 가장 작은 덩어리 px, 가장 큰 덩어리 px] — 흐름 없이 뛴다(깜박임 · 눈길 한가운데)
+#  초점 [때부터, 띠 앞 m, 띠 뒤 m, 가장 작은 덩어리 px, 가장 큰 덩어리 px] — 흐름 없이 뛴다(깜박임 · 눈길 한가운데).
+#  반 뜬 눈은 4px 까지만(8px 는 흐림이 아니라 저해상도로 읽혔다 · 나머지는 눈꺼풀이 맡는다) · 손 띠로는 고개를 들기
+#  시작할 때 뛴다(드는 동안 손이 덩어리째 반짝였다)
 const FOCUS := [
-	[0.0, 0.0, 0.0, 4.0, 8.0],
-	[2.3, 0.12, 0.42, 1.0, 4.0],
-	[3.75, 0.62, 1.40, 1.0, 4.0],
+	[0.0, 0.0, 0.25, 2.0, 4.0],
+	[1.9, 0.12, 0.42, 1.0, 4.0],
+	[3.1, 0.62, 1.40, 1.0, 4.0],
 	[5.35, 1.9, 3.5, 1.0, 4.0],
 	[6.85, 1.05, 1.95, 1.0, 4.0],
 	[10.2, 0.0, 999.0, 1.0, 1.0],
 ]
 #  빛 밑값(세기) · 표 [때부터, 이름 → 밑값의 몫] — 그 때에 그 자리에서 바뀐다(이어 붙이지 않는다). 8.4 부터 한 등씩
 #  꺼진다: 다트 장 그림등 → 촛불 · 네온 → 왼 펜던트 → 선반 밑불 · 채움 반 → 오른 펜던트 → 가운데 펜던트 · 채움 0.
-const LBASE := {"pl": 1.2, "pm": 3.0, "pr": 1.15, "shelf": 0.15, "pict": 2.6, "candle": 0.9, "neon": 0.7}
+#  가운데 펜던트는 손 + 15cm 만 덮는 좁은 원뿔(카운터 웅덩이가 화면 절반을 채우고 손이 크림으로 날았다 · 검토 1) ·
+#  오른쪽은 손님 잔 받침만
+const LBASE := {"pl": 0.9, "pm": 1.8, "pr": 0.7, "shelf": 0.15, "pict": 3.2, "candle": 1.1, "neon": 0.7}
+#  펜던트 원뿔(반각 도) · 올려다보는 때부터 갓 속 젖빛 판 · 갓 안쪽은 가장 어두운 단(올려다본 그림 귀에 큰 원판이 섰다)
+const PEND := {"ang": [24.0, 15.0, 12.0], "up": 6.5}
 const LIGHT := [
 	[0.0, {"pl": 1.0, "pm": 1.0, "pr": 1.0, "shelf": 1.0, "pict": 0.0, "candle": 0.4, "neon": 0.0, "fill": 1.0}],
-	[5.0, {"pict": 1.0, "candle": 0.75, "neon": 0.15}],
+	[5.0, {"pict": 1.0, "candle": 0.75, "neon": 0.0}],
 	[8.4, {"pict": 0.0}],
 	[8.7, {"candle": 0.0, "neon": 0.0}],
 	[9.0, {"pl": 0.0}],
@@ -95,14 +106,25 @@ const LIGHT := [
 const CLICK := [8.4, 8.7, 9.0, 9.25, 9.5, 9.85]
 #  채움 — 웅덩이 밖 바탕(안 재질 fill · 문 장면 BAR.fill 의 0.12 배 언저리 · 찬 쪽)
 const FILL := Color(0.035, 0.04, 0.06)
+#  상인 바탕빛 — 웅덩이 밖 소매 · 손이 가장 낮은 단 실루엣으로만 선다(셔츠가 푸른 흰빛이라 방 채움을 그대로 주니 파란
+#  셔츠로 읽혔다 · 고른 회색으로 더 낮게)
+const MFILL := Color(0.014, 0.014, 0.017)
 #  주인공 소품 자리 — 손님 잔(받침째) · 상인(바닥 · 요(도) · 닦는 잔 밑동 · 기울기(도)) · TV(천장 걸이 · 요 · 숙임 · 기울기
 #  축) · 잔 걸이 · 양철 천장
 const PINT := Vector3(-0.18, -0.14, -3.86)
 const MERCH := {"at": Vector3(-0.62, -1.22, -4.32), "yaw": 15.0, "glass": Vector3(0.02, 1.15, 0.36), "tilt": 30.0}
-const TV := {"at": Vector3(-0.10, 1.30, -4.60), "yaw": 4.0, "tilt": 15.0, "pivot": -0.4224, "aim": Vector3(-0.15, -0.12, -4.0)}
+const TV := {"at": Vector3(-0.10, 1.30, -4.60), "yaw": 4.0, "tilt": 15.0, "pivot": -0.4224, "aim": Vector3(-0.15, -0.14, -4.02)}
 const RACK := Vector3(-0.15, 1.30, -3.86)
-#  TV 빛 — 세기 · 빛깔(지지직 찬 빛 → 그림이 비친 뒤) · 단(밑값의 몫 — 0.5~2 초씩 버틴다 · 이어 붙이지 않는다)
-const TVL := {"e": 2.6, "c": Color(0.62, 0.68, 0.80), "c2": Color(0.74, 0.72, 0.74), "lv": [0.6, 0.68, 0.76, 0.84, 0.92, 1.0],
+#  다트 테이블 — 앉은 눈에서 윗면 앞 절반이 카운터 끝에 가려 빈 잔 · 다트 · 촛불이 안 보였다. 이 장면만 테이블 무리
+#  (테이블 · 촛불 · 의자 하나)를 벽 쪽으로 물리고 촛불을 테이블 먼 쪽으로 옮긴다(검토 1).
+const TABLE := {"dz": -0.25, "candle_dz": -0.14, "pick": 0.6, "chair0": Vector3(0.56, 0.0, -4.95)}
+#  주인공 잔 입술(잔 좌표 높이 — 이 위가 끊기지 않는 테 한 줄) · 닦는 잔 · 받침 채도 · 감싼 천 높이 몫(잔 밑 30%)
+const HERO_K := {"rim": 0.1482, "rim_pg": 0.1455, "coaster_sat": 0.6, "wrap_y": 0.3}
+#  선반 병 렌더 층 — 병 뒤 밑불은 이 층만 비춘다(판 · 기둥 · 갓까지 비춰 올려다보면 판 밑면이 평평한 주황 띠였다)
+const L_SHB := 1 << 6
+#  TV 빛 — 세기 · 빛깔(지지직 찬 빛 → 그림이 비친 뒤) · 원뿔 반각(손님 잔 · 그 너머 카운터만 — 넓게 비추니 주황 나무에
+#  묻혀 찬 빛으로 안 읽혔다) · 단(밑값의 몫 — 0.5~2 초씩 버틴다 · 이어 붙이지 않는다)
+const TVL := {"e": 2.6, "c": Color(0.56, 0.65, 0.86), "c2": Color(0.74, 0.72, 0.74), "ang": 12.0, "lv": [0.6, 0.68, 0.76, 0.84, 0.92, 1.0],
 		"hold": [0.5, 2.0], "rim": 0.2, "fog": 2.2}
 #  화면 — 지지직이 그림을 덮는 몫 [때부터, 몫](단으로 걷힌다) · 지지직 칸
 const SNOW := [[0.0, 1.0], [7.0, 0.72], [7.3, 0.42], [7.6, 0.16], [8.05, 0.05], [9.0, 0.0]]
@@ -110,11 +132,13 @@ const SNOW_RES := Vector2(46.0, 34.0)
 #  상인 — 비틀기(도 · 1.5 초에 한 번 — bar_polish 의 박자 · t 0 이 정방향 가장 빠른 때) · 받치는 손이 반대로 돌리는 몫 ·
 #  고쳐 쥐기 [시작, 끝, 잔을 돌리는 각] · 내려놓기 [시작, 닿음] · gone 안쪽으로 빠진 때(눈이 다트 장을 보는 동안)
 const POLISH := {"a": 55.0, "per": 1.5, "back": 0.45, "regrip": [4.45, 4.8, 60.0], "down": [5.45, 5.8], "gone": 6.3}
+#  일하는 손 — 손목이 테 위(up) · 잔 앞(out)에 서고 손끝은 (잔 축 아래 몫, 잔 쪽 몫)으로 내려온다
+const WORK := {"up": 0.055, "out": 0.055, "dir": [0.8, 0.6]}
 #  팔 — 위팔 길이(bar_intro.py L_UA) · 팔뚝(팔꿈치 → 손목) · 손 단위(m — prologue3d TAPE.s)
 const ARM := {"ua": 0.2956, "fa": 0.27, "s": 0.00328}
 #  손가락 [첫 굽힘 ×4 · 끝 굽힘 ×4 · 부채 · 엄지 접기 · 엄지 굽힘 · 엄지 내림](game.gd FPOSE 차례)
 const HPOSE := {
-	"pinch": [42.0, 64.0, 76.0, 88.0, 46.0, 82.0, 92.0, 100.0, 0.0, 0.45, 26.0, 16.0],
+	"pinch": [42.0, 64.0, 76.0, 88.0, 46.0, 82.0, 92.0, 100.0, 7.0, 0.45, 26.0, 16.0],
 	"cup": [28.0, 40.0, 50.0, 60.0, 30.0, 40.0, 50.0, 58.0, 4.0, 0.0, 14.0, 8.0],
 }
 
@@ -130,7 +154,8 @@ const IN_LIGHT_NEW := """	float g = clamp(dot(NORMAL, LIGHT), 0.0, 1.0);
 const IN_FK_OLD := "float fk = floor(clamp(0.6 + 0.55 * dot(fn, FD), 0.3, 1.2) * 5.0 + 0.5) / 5.0;"
 const IN_ALB_OLD := """	ALBEDO = c.rgb;
 	EMISSION = c.rgb * (fill * fk + vec3(glow_k));"""
-const IN_ALB_NEW := """	ALBEDO = mix(vec3(dot(c.rgb, vec3(0.2126, 0.7152, 0.0722))), c.rgb, sat);
+const IN_ALB_NEW := """	vec3 cc = mix(mid, c.rgb, con);
+	ALBEDO = mix(vec3(dot(cc, vec3(0.2126, 0.7152, 0.0722))), cc, sat);
 	EMISSION = ALBEDO * (fill * fk + vec3(glow_k));"""
 
 #  유리 — 너머를 굴려 비춘다(화면 그림 · 온 px 만큼만 밀고 덩어리로 — 유리 너머는 늘 초점 밖이다) · 스치는 면은 세
@@ -152,13 +177,29 @@ uniform vec3 lc0 : source_color = vec3(1.0, 0.81, 0.54);
 uniform vec3 lc1 : source_color = vec3(1.0, 0.81, 0.54);
 uniform vec3 lc2 : source_color = vec3(0.62, 0.68, 0.80);
 uniform float bend = 5.0;
-uniform float cut = 0.986;
-uniform float hi = 0.9;
+uniform float cut = 0.993;
+uniform float cut2 = 0.995;
+uniform float hi = 0.55;
 uniform vec3 edge : source_color = vec3(0.10, 0.08, 0.06);
+//  입술 — 잔 좌표 높이 이 위는 끊기지 않는 어두운 한 줄(점선 고리 · 떠 있는 밝은 타원으로 읽혔다) · 빛 자리만 짧게 밝다 · 999 면 없다
+uniform float rim_y = 999.0;
+uniform float rim_k = 0.45;
+varying float my;
+varying float mo;
+varying vec3 wp;
+varying vec3 wn;
 
-vec3 strip(vec4 lp, vec3 lc, vec3 r, vec3 vert, mat4 vm) {
-	vec3 l = normalize((vm * vec4(lp.xyz, 1.0)).xyz - vert);
-	return lc * lp.w * hi * step(cut, dot(r, l));
+void vertex() {
+	my = VERTEX.y;
+	mo = dot(NORMAL.xz, VERTEX.xz);     // 바깥 벽(+) · 안 벽(−) — 빛줄은 앞 바깥 벽에만(안 벽까지 그으면 철사 그림이 됐다)
+	wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	wn = (MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz;
+}
+
+//  세로 빛줄 — 바닥 평면에 눕혀 본 반사가 빛 쪽을 볼 때만(둥근 벽을 따라 위아래로 곧게 선다 · 빛 자리에서 난다)
+float strip(vec4 lp, vec3 r, float c) {
+	vec2 l = normalize(lp.xz - wp.xz);
+	return lp.w * step(c, dot(normalize(r.xz + vec2(1e-5)), l));
 }
 
 float want(float z) {
@@ -192,15 +233,20 @@ void fragment() {
 	}
 	vec3 c = texture(scr, clamp(uv, vec2(0.0), vec2(1.0))).rgb * tint;
 	c = f > 0.86 ? max(c * 0.3, edge) : c * (f > 0.6 ? 0.7 : 1.0);
-	vec3 r = reflect(-v, n);
-	c += strip(lp0, lc0, r, VERTEX, VIEW_MATRIX) + strip(lp1, lc1, r, VERTEX, VIEW_MATRIX)
-			+ strip(lp2, lc2, r, VERTEX, VIEW_MATRIX);
+	vec3 r = reflect(-normalize(CAMERA_POSITION_WORLD - wp), normalize(wn));
+	if (my > rim_y) {
+		//  입술 — 끊기지 않는 어두운 한 줄 · 빛을 비추는 자리만 짧게 밝다(빛깔은 그 빛 — TV 의 찬 단도 여기 든다)
+		c = c * 0.35 + rim_k * (lc0 * strip(lp0, r, 0.9) + lc1 * strip(lp1, r, 0.9) + 2.0 * lc2 * strip(lp2, r, 0.7));
+	} else if (mo > 0.0) {
+		c += hi * (lc0 * strip(lp0, r, cut) + lc1 * strip(lp1, r, cut) + lc2 * strip(lp2, r, cut2));
+	}
 	ALBEDO = c;
 }
 """
 static var _glass_sh: Shader = null
 
-#  맥주 — 밑 한 단 짙고(두 단) · 면 바로 밑 한 줄 밝고 · 뒤에서 TV 가 받치면 제 빛이 단으로 든다(glow) · 빛 각도도 세 단.
+#  맥주 — 두 띠(밑 짙고 · 몸) + 면 바로 밑 1px 밝은 줄 · 뒤에서 TV 가 받치면 제 빛이 단으로 든다(glow). 빛은 액체 속에서
+#  흩어져 면 각도를 안 탄다 — 각도 단을 끊었더니 곧은 면 3~4 띠의 다각 기둥 · 층진 칵테일로 읽혔다(검토 1).
 const BEER_SHADER := """
 shader_type spatial;
 uniform vec3 col : source_color = vec3(0.78, 0.47, 0.13);
@@ -216,16 +262,14 @@ void vertex() {
 void fragment() {
 	float h = (my - y0) / (y1 - y0);
 	vec3 c = h < 0.4 ? lo : col;
-	c = h > 0.93 ? top : c;
+	c = h > 0.975 ? top : c;
 	ALBEDO = c;
 	ROUGHNESS = 1.0;
 	SPECULAR = 0.0;
 	EMISSION = c * glow;
 }
 void light() {
-	float g = clamp(dot(NORMAL, LIGHT), 0.0, 1.0);
-	g = floor(g * 3.0 + 0.5) / 3.0;
-	DIFFUSE_LIGHT += g * ATTENUATION * LIGHT_COLOR / PI;
+	DIFFUSE_LIGHT += 0.6 * ATTENUATION * LIGHT_COLOR / PI;
 }
 """
 static var _beer_sh: Shader = null
@@ -424,7 +468,8 @@ static func _in_shader() -> Shader:
 			push_warning("prologue_bar3d — Door3D.IN_SHADER 가 바뀌어 빛 고침이 안 먹는다")
 		code = code.replace(IN_LIGHT_OLD, IN_LIGHT_NEW).replace(IN_FK_OLD, "float fk = 0.8;") \
 				.replace(IN_ALB_OLD, IN_ALB_NEW).replace("uniform float seam = 0.15;",
-				"uniform float seam = 0.15;\nuniform float nb = 0.0;\nuniform float sat = 1.0;")
+				"uniform float seam = 0.15;\nuniform float nb = 0.0;\nuniform float sat = 1.0;\nuniform float con = 1.0;\n"
+				+ "uniform vec3 mid : source_color = vec3(0.0);")
 		_in_sh = Shader.new()
 		_in_sh.code = code
 	return _in_sh
@@ -465,10 +510,15 @@ static func _patch(hn: Node, w: Node3D, bar: Node3D) -> void:
 			if cut > 0.4 and is_equal_approx(gk, 0.12):
 				spr = true
 				mi.rotation.y = atan2(eye.x - mi.position.x, eye.z - mi.position.z)
+				mi.layers = L_IN | L_SHB          # 선반 병 — 뒤 밑불은 이 층만 비춘다
 		#  다트 장 칠판(분필 점수) — 글로 읽히지 않게 한 단 어둡게
 		var chalk: bool = mi.mesh is QuadMesh and absf((mi.mesh as QuadMesh).size.y - (float(Door3D.BAR.cab) * 2.0 - 0.05)) < 0.001
 		var pr := mi.mesh is BoxMesh or mi.mesh is QuadMesh or mi.mesh is PlaneMesh
 		var nb: float = 0.0 if pr else 4.0
+		#  카운터 윗판 — 이 장면만 나무를 한 단 누르고 결 대비를 반으로(웅덩이가 밝은 주황 줄결 판이었다 · 검토 1)
+		var B: Dictionary = Door3D.BAR
+		var top: bool = mi.mesh is BoxMesh and absf((mi.mesh as BoxMesh).size.y - 0.05) < 0.001 \
+				and absf(mi.position.y - (float(B.cnt_y) - 0.025)) < 0.001
 		var slots := [mo]
 		if mo == null:
 			slots = []
@@ -490,7 +540,7 @@ static func _patch(hn: Node, w: Node3D, bar: Node3D) -> void:
 				continue
 			if not (om is ShaderMaterial) or (om as ShaderMaterial).shader != Door3D._in_sh:
 				continue
-			var key := "%d_%d_%d" % [om.get_instance_id(), int(nb), int(chalk)]
+			var key := "%d_%d_%d_%d" % [om.get_instance_id(), int(nb), int(chalk), int(top)]
 			if not conv.has(key):
 				var nmat := (om as ShaderMaterial).duplicate() as ShaderMaterial
 				nmat.shader = _in_shader()
@@ -498,7 +548,13 @@ static func _patch(hn: Node, w: Node3D, bar: Node3D) -> void:
 				nmat.set_shader_parameter("fill", FILL)
 				nmat.set_shader_parameter("nb", nb)
 				if chalk:
-					nmat.set_shader_parameter("tint", Color(0.3, 0.3, 0.3))
+					nmat.set_shader_parameter("tint", Color(0.12, 0.12, 0.12))
+				if top:
+					#  선형 0.6 배(색 값 0.79) · 결은 나무 맨색 둘레로 반만
+					nmat.set_shader_parameter("tint", Color(0.79, 0.79, 0.79))
+					nmat.set_shader_parameter("con", 0.5)
+					nmat.set_shader_parameter("sat", 0.75)
+					nmat.set_shader_parameter("mid", (B.wood as Color) * 0.79)
 				if spr:
 					#  선반 병 — 채도 · 밝기를 누르고 제 빛을 거의 걷는다(사탕 빛깔 금지 · 주인공만 제 빛깔)
 					nmat.set_shader_parameter("sat", 0.5)
@@ -557,14 +613,48 @@ static func _patch(hn: Node, w: Node3D, bar: Node3D) -> void:
 		if grp != "":
 			(gl[grp] as Array).append({"m": gm, "c": c})
 	hn.set_meta("glows", gl)
-	#  테이블 앞 의자 — 밀려난 채(방금 누가 일어났다) · 앉은 눈과 테이블 사이에 서서 윗면을 통째로 가렸다 — 테이블
-	#  너머 벽 쪽으로 빼고 비스듬히 돌린다
-	var ch: Array = Door3D.BAR.chairs[0]
+	#  테이블 무리 — 벽 쪽으로 물린다(앉은 눈에서 윗면 앞 절반이 카운터 끝에 가렸다) · 촛불은 테이블 먼 쪽으로 한 번 더.
+	#  테이블 앞 의자는 밀려난 채(방금 누가 일어났다) — 앉은 눈과 테이블 사이에 서서 윗면을 가렸다 — 테이블 너머 벽 쪽으로
+	#  빼고 비스듬히 돌린다. 의자는 채도 · 밝기를 누른다(다트 장면에서 가장 채도 높은 빨강이었다).
+	var tc: Vector2 = Door3D.BAR.table
+	var cp := Vector2(tc.x + 0.02, tc.y + 0.10)
+	var chs: Array = Door3D.BAR.chairs
+	var cmat := {}
 	for c in bar.get_children():
-		if c is Node3D and not (c is VisualInstance3D) and (c as Node3D).position.distance_to(
-				Vector3(float(ch[0]), float(Door3D.BAR.floor), float(ch[1]))) < 0.01:
-			(c as Node3D).position = Vector3(0.58, float(Door3D.BAR.floor), -4.62)
-			(c as Node3D).rotation.y = 2.3
+		if not (c is Node3D):
+			continue
+		var n3 := c as Node3D
+		var xz := Vector2(n3.position.x, n3.position.z)
+		if xz.distance_to(tc) > float(TABLE.pick):
+			continue
+		n3.position.z += float(TABLE.dz)
+		if xz.distance_to(cp) < 0.05:
+			n3.position.z += float(TABLE.candle_dz)
+		var chair := -1
+		for i in chs.size():
+			if xz.distance_to(Vector2(float(chs[i][0]), float(chs[i][1]))) < 0.01:
+				chair = i
+		if chair < 0:
+			continue
+		if chair == 0:
+			n3.position = (TABLE.chair0 as Vector3) + Vector3(0.0, float(Door3D.BAR.floor), 0.0)
+			n3.rotation.y = 2.3
+		for cm in n3.find_children("*", "MeshInstance3D", true, false):
+			var ci := cm as MeshInstance3D
+			for k in (ci.mesh.get_surface_count() if ci.mesh != null else 0):
+				var sm := ci.get_surface_override_material(k) if ci.material_override == null else ci.material_override
+				if not (sm is ShaderMaterial) or (sm as ShaderMaterial).shader != _in_shader():
+					continue
+				if not cmat.has(sm):
+					var dm := (sm as ShaderMaterial).duplicate() as ShaderMaterial
+					dm.set_shader_parameter("sat", 0.55)
+					dm.set_shader_parameter("tint", (sm.get_shader_parameter("tint") as Color) * 0.8)
+					(hn.get_meta("ins") as Array).append(dm)
+					cmat[sm] = dm
+				if ci.material_override != null:
+					ci.material_override = cmat[sm]
+				else:
+					ci.set_surface_override_material(k, cmat[sm])
 
 
 #  셰이더 값(안 준 값은 null — 기본값 0)
@@ -640,12 +730,19 @@ static func _props(hn: Node, w: Node3D) -> void:
 		"tin": _inm(hn, Color("4a4038"), 4.0),
 	}
 	hn.set_meta("pm", pm)
+	(pm.glass as ShaderMaterial).set_shader_parameter("rim_y", float(HERO_K.rim))
+	#  받침 잉크 채도를 누른다(빨강 · 크림 과녁이 화면에서 가장 채도 높았다) · 거품 옆면은 흩어진 빛으로 한 단 밝다
+	#  (그늘진 옆이 거품 밑 검은 띠로 읽혔다)
+	for k in ["coaster", "coaster_ink", "coaster_wet"]:
+		(pm[k] as ShaderMaterial).set_shader_parameter("sat", float(HERO_K.coaster_sat))
+	(pm.foam as ShaderMaterial).set_shader_parameter("glow_k", 0.1)
 	var hero := L_IN | L_HERO
 	var co := _glb_mi("Coaster", pm, PINT, hero)
 	w.add_child(co)
 	var pt := _glb_mi("Pint", pm, PINT + Vector3(0.0, 0.0022, 0.0), hero)
 	pt.rotation_degrees.y = 20.0
 	w.add_child(pt)
+	hn.set_meta("pint", pt)
 	var pb := _glb_mi("PintBeer", pm, PINT + Vector3(0.0, 0.0022, 0.0), hero)
 	pb.rotation_degrees.y = 20.0
 	w.add_child(pb)
@@ -662,8 +759,9 @@ static func _props(hn: Node, w: Node3D) -> void:
 	w.add_child(_glb_mi("Coaster", pm, lx))
 	w.add_child(_glb_mi("Pint", pm, lx + Vector3(0.0, 0.0022, 0.0)))
 	w.add_child(_glb_mi("PintBeer", pm, lx + Vector3(0.0, 0.0022, 0.0)))
-	#  테이블 — 빈 잔 둘 · 내려놓은 다트 둘(아무도 없지만 방금 누가 있었다)
-	var tc: Vector2 = B.table
+	#  테이블 — 빈 잔 둘 · 내려놓은 다트 둘(아무도 없지만 방금 누가 있었다). 테이블은 이 장면에서 벽 쪽으로 물렸고(_patch)
+	#  잔 · 다트는 앉은 눈에서 보이는 먼 반쪽 · 촛불 웅덩이 안에 둔다.
+	var tc: Vector2 = (B.table as Vector2) + Vector2(0.0, float(TABLE.dz))
 	var ty: float = float(B.floor) + float(B.table_h)
 	#  테이블 윗판 — Blender 테이블(bar_props Table) 윗면 법선이 밑을 봐서 촛불을 못 받고 검은 판이었다(문 장면은 바탕빛으로만
 	#  봤다). 윗면 바로 위에 나무 원판 한 장(평평한 면 — 빛 단 없음)을 얹는다
@@ -673,24 +771,26 @@ static func _props(hn: Node, w: Node3D) -> void:
 	var tm := pm.duplicate()
 	var tg := ShaderMaterial.new()
 	tg.shader = (pm.glass as ShaderMaterial).shader
-	tg.set_shader_parameter("lp0", Vector4(tc.x + 0.02, ty + 0.12, tc.y + 0.10, 0.8))
+	var cz: float = tc.y + 0.10 + float(TABLE.candle_dz)
+	tg.set_shader_parameter("lp0", Vector4(tc.x + 0.02, ty + 0.12, cz, 0.8))
 	tg.set_shader_parameter("lc0", Color("ff9a50"))
+	tg.set_shader_parameter("rim_y", float(HERO_K.rim))
+	tg.set_shader_parameter("rim_k", 0.8)
+	tg.set_shader_parameter("cut", 0.97)
+	tg.set_shader_parameter("hi", 1.0)
 	tm["glass"] = tg
 	hn.set_meta("table_glass", tg)
-	for g in [Vector2(-0.14, 0.04), Vector2(0.12, -0.08)]:
+	for g in [Vector2(-0.15, -0.06), Vector2(0.15, -0.12)]:
 		w.add_child(_glb_mi("Pint", tm, Vector3(tc.x + g.x, ty, tc.y + g.y)))
 	#  한 잔엔 김 빠진 맥주가 한 뼘 남았다(면을 반 높이로 · 벽 안으로 조금 줄인다)
-	var lb := _glb_mi("PintBeer", pm, Vector3(tc.x - 0.14, ty, tc.y + 0.04))
+	var lb := _glb_mi("PintBeer", pm, Vector3(tc.x - 0.15, ty, tc.y - 0.06))
 	lb.scale = Vector3(0.93, 0.5, 0.93)
 	w.add_child(lb)
 	var steel := _inm(hn, B.steel, 4.0)
 	var fl := _inm(hn, Color("8c2a52"))
-	#  카운터 오른끝 — 마시고 간 빈 잔 둘 · 내려놓은 다트 둘(테이블은 앉은 눈에서 카운터 끝에 가려 이쪽에도 둔다 · 오른 펜던트 웅덩이)
-	var cy0: float = float(B.cnt_y)
-	for gp in [Vector3(0.30, cy0, -3.66), Vector3(0.41, cy0, -3.80)]:
-		w.add_child(_glb_mi("Pint", pm, gp))
-	var darts := [[Vector3(tc.x - 0.02, ty + 0.006, tc.y + 0.13), 70.0], [Vector3(tc.x + 0.10, ty + 0.006, tc.y + 0.09), 115.0],
-			[Vector3(0.33, cy0 + 0.006, -3.58), 20.0], [Vector3(0.38, cy0 + 0.006, -3.62), 35.0]]
+	(fl as ShaderMaterial).set_shader_parameter("sat", 0.7)
+	#  카운터 오른끝 빈 잔 · 다트는 걷었다 — 눈에서 0.75m 라 다트 장면 한가운데 유령 철사 기둥으로 섰다(검토 1)
+	var darts := [[Vector3(tc.x - 0.04, ty + 0.006, tc.y - 0.16), 70.0], [Vector3(tc.x + 0.06, ty + 0.006, tc.y - 0.20), 115.0]]
 	for d in darts:
 		var dn := Node3D.new()
 		dn.position = d[0]
@@ -724,6 +824,34 @@ static func _props(hn: Node, w: Node3D) -> void:
 # ══ 상인 ══════════════════════════════════════════════════
 #  허리 ~ 깃 몸통(Blender · 머리 없음 · 깃 안은 먹 목) · 위팔 둘(어깨 축) · 상점 손 · 팔뚝(game.gd) · 닦는 빈 잔 · 바 천.
 #  얼굴은 늘 그림 밖이거나 가장 어두운 단이다(가운데 펜던트는 손을 겨눈 좁은 원뿔 · TV 빛은 이 층을 안 비춘다).
+#  상점 손 재질(shaders/hand3) 이 장면 사본 — 제 그림자를 안 받는다(펜던트 단단한 그림자가 손가락 · 팔뚝에 제 그늘
+#  얼룩을 바둑판으로 앉혔다 · 검토 1) · 빛의 감쇠는 매끈하게(면 각도 단만 남는다) · fillc 방 바탕빛(찬 한 단 —
+#  웅덩이 밖 소매 · 손이 방과 같은 바탕에 선다) · clip_y 메시 좌표 이 높이 위는 잘라 낸다(감싼 천). lv 빛 단 세기 [l1 l2 l3].
+static var _hand_sh: Shader = null
+
+
+static func _toon(src: ShaderMaterial, fill := Color.BLACK, lv: Array = []) -> ShaderMaterial:
+	if _hand_sh == null:
+		var code: String = (src.shader as Shader).code
+		if not (code.contains("render_mode cull_back;") and code.contains("EMISSION = ALBEDO * glow;")):
+			push_warning("prologue_bar3d — hand3.gdshader 가 바뀌어 손 재질 고침이 안 먹는다")
+		_hand_sh = Shader.new()
+		_hand_sh.code = code.replace("render_mode cull_back;", "render_mode cull_back, shadows_disabled;") \
+				.replace("EMISSION = ALBEDO * glow;", "EMISSION = ALBEDO * (glow + fillc);") \
+				.replace("varying float v_ny;", "uniform vec3 fillc = vec3(0.0);\nuniform float clip_y = 99.0;\n"
+						+ "varying float v_ny;\nvarying float v_my;") \
+				.replace("v_ny = NORMAL.y;", "v_ny = NORMAL.y;\n\tv_my = VERTEX.y;") \
+				.replace("vec3 c = albedo.rgb;", "if (v_my > clip_y) {\n\t\tdiscard;\n\t}\n\tvec3 c = albedo.rgb;")
+	var m := src.duplicate() as ShaderMaterial
+	m.shader = _hand_sh
+	m.set_shader_parameter("att_steps", 24.0)
+	m.set_shader_parameter("fillc", Vector3(fill.r, fill.g, fill.b))
+	if lv.size() == 3:
+		for i in 3:
+			m.set_shader_parameter("l%d" % (i + 1), float(lv[i]))
+	return m
+
+
 static func _merchant(hn: Node, w: Node3D, g: Node) -> void:
 	if g == null or not g.has_method("_hand3_build") or _glb_mesh("BarTorso") == null:
 		return
@@ -734,17 +862,23 @@ static func _merchant(hn: Node, w: Node3D, g: Node) -> void:
 	w.add_child(m)
 	var V: Dictionary = g.VEST3
 	var lay := L_MERCH | L_HERO
+	#  셔츠(위팔 · 팔뚝 소매가 같은 재질 — 이음매 색이 갈리지 않게)는 빛 단을 둘로 묶는다(걷은 단이 점선 고리였다)
+	var shirt := _toon(g._hand3_toon(g.FORE3.cloth), MFILL, [0.36, 0.36, 0.46])
 	var tm := {
-		"shirt": g._hand3_toon(g.FORE3.cloth), "shirt_btn": g._hand3_toon(Color("d8d2c4")),
-		"vest": g._hand3_toon(V.vest), "lapel": g._hand3_toon(V.lap, Color(0, 0, 0, 0), 0.5),
-		"vest_back": g._hand3_toon(Color8(30, 22, 30)), "trousers": g._hand3_toon(Color8(24, 24, 30)),
-		"belt": g._hand3_toon(Color8(48, 28, 18)),
-		"brass": g._hand3_toon(g.FORE3.brass, Color(0, 0, 0, 0), 0.4, 0.09, 1.0, 0.5),
-		"chain": g._hand3_toon(V.chain, Color(0, 0, 0, 0), 0.6, 0.1, 1.0, 0.5),
+		"shirt": shirt, "shirt_btn": _toon(g._hand3_toon(Color("d8d2c4"))),
+		"vest": _toon(g._hand3_toon(V.vest)), "lapel": _toon(g._hand3_toon(V.lap, Color(0, 0, 0, 0), 0.5)),
+		"vest_back": _toon(g._hand3_toon(Color8(30, 22, 30))), "trousers": _toon(g._hand3_toon(Color8(24, 24, 30))),
+		"belt": _toon(g._hand3_toon(Color8(48, 28, 18))),
+		#  놋쇠 소매 띠 — 제 빛을 거의 걷는다(소매가 먹인데 띠만 허공에 뜬 올리브 막대였다 · 검토 1)
+		"brass": _toon(g._hand3_toon(g.FORE3.brass, Color(0, 0, 0, 0), 0.4, 0.015, 1.0, 0.5)),
+		"chain": _toon(g._hand3_toon(V.chain, Color(0, 0, 0, 0), 0.6, 0.03, 1.0, 0.5)),
 		"void": Room3D._glow(Color.BLACK, 0.0),
-		"cloth": g._hand3_toon(Color("cfc6ae")), "cloth_stripe": g._hand3_toon(Color("6a3a22")),
+		"cloth": _toon(g._hand3_toon(Color("cfc6ae"))), "cloth_stripe": _toon(g._hand3_toon(Color("6a3a22"))),
 		"glass": _glass_mat(hn),
 	}
+	(tm.glass as ShaderMaterial).set_shader_parameter("rim_y", float(HERO_K.rim_pg))
+	#  닦는 잔 빛줄은 한 단 옅게 — 두 손 사이에 밝은 막대 둘로 읽혔다(주인공은 손님 잔)
+	(tm.glass as ShaderMaterial).set_shader_parameter("hi", 0.3)
 	m.add_child(_glb_mi("BarTorso", tm, Vector3.ZERO, lay))
 	var ua := {}
 	for sd in ["R", "L"]:
@@ -755,7 +889,12 @@ static func _merchant(hn: Node, w: Node3D, g: Node) -> void:
 	arm.name = "Arm"
 	arm.scale = Vector3.ONE * float(ARM.s)
 	m.add_child(arm)
-	var mats: Dictionary = g._hand3_mats()
+	var m0: Dictionary = g._hand3_mats()
+	var mats := {"skin": _toon(m0.skin, MFILL), "nail": _toon(m0.nail), "ring": _toon(m0.ring)}
+	#  살 — 위 두 문턱을 올려 손등 · 손가락 둥근 면에 단이 선다(펜던트가 거의 바로 위라 손등이 통째로 맨 위 단 —
+	#  크림 벙어리장갑이었다 · 검토 1)
+	(mats.skin as ShaderMaterial).set_shader_parameter("t2", 0.62)
+	(mats.skin as ShaderMaterial).set_shader_parameter("t3", 0.9)
 	var fm := {"skin": mats.skin, "cloth": tm.shirt, "brass": tm.brass}
 	var hj := {"R": g._hand3_build(mats, false, false), "L": g._hand3_build(mats, true, true)}
 	var fo := {"R": g._fore3_build(fm, float(g.FORE3.bare), 1.0), "L": g._fore3_build(fm, float(g.FORE3.bare_r), -1.0)}
@@ -767,6 +906,10 @@ static func _merchant(hn: Node, w: Node3D, g: Node) -> void:
 	gl.name = "Glass"
 	m.add_child(gl)
 	gl.add_child(_glb_mi("PolishGlass", tm, Vector3.ZERO, lay))
+	#  감싼 천은 잔 밑 30% 만(받치는 손 속 — 그 위 · 입 위 띠 · 잔 속 뭉치는 잘라 낸다 — 천 좌표 높이) — 잔을 통째로 덮어 줄 그은 크림
+	#  상자로 읽혔다 · 테를 집은 엄지 · 검지가 유리 위에 선다(검토 1). 꼬리는 원점이 위끝이라 안 잘린다.
+	for k in ["cloth", "cloth_stripe"]:
+		(tm[k] as ShaderMaterial).set_shader_parameter("clip_y", 0.148 * float(HERO_K.wrap_y))
 	gl.add_child(_glb_mi("TowelWrap", tm, Vector3.ZERO, lay))
 	var tails := []
 	for k in ["A", "B", "C"]:
@@ -863,13 +1006,15 @@ static func _merch_tick(hn: Node, t: float) -> void:
 	var wl: Vector3 = gp - a * 0.025 - xl * 0.075
 	_arm_set(g, "L", M, wl, Basis(xl, yl, xl.cross(yl)))
 	_fingers(g, M.hj.L, HPOSE.cup)
-	#  일하는 손(오른손) — 손등이 손님 쪽 · 손끝이 잔 바깥 앞면을 따라 내려가고 엄지가 천째 입 안에 · 잔 축을 따라 비튼다
+	#  일하는 손(오른손) — 손등이 손님 쪽 · 잔 앞 바깥에서 테로 내려와 검지는 바깥 벽 · 엄지는 입 안으로 테를 집는다 ·
+	#  잔 축을 따라 비튼다. 손목이 입 위 한가운데였을 때는 손가락이 잔 속으로 들어가 앞 벽 · 테가 손등 위로 그어졌다(검토 1)
 	var tw := Basis(a, deg_to_rad(th))
 	var u: Vector3 = tw * fwd
-	var xr: Vector3 = (-a * 0.92 + u * 0.38).normalized()
-	var yr: Vector3 = (u - xr * xr.dot(u)).normalized()
+	var W: Dictionary = WORK
+	var xr: Vector3 = (-a * float(W.dir[0]) - u * float(W.dir[1])).normalized()
+	var yr: Vector3 = (u + a * 0.5 - xr * xr.dot(u + a * 0.5)).normalized()
 	var rim: Vector3 = gp + a * 0.148
-	var wr: Vector3 = rim + a * 0.045 - u * 0.012
+	var wr: Vector3 = rim + a * float(W.up) + u * float(W.out)
 	_arm_set(g, "R", M, wr, Basis(xr, yr, xr.cross(yr)))
 	_fingers(g, M.hj.R, HPOSE.pinch)
 	#  천 꼬리 — 받치는 손 새끼 쪽 모서리에서 늘 곧게 늘어진다 · 비틀기를 0.15 초 늦게 따라 셋을 갈아 끼운다
@@ -931,7 +1076,7 @@ static func _tv(hn: Node, w: Node3D, feed: Texture2D, sz: Vector2) -> void:
 	var tl := SpotLight3D.new()
 	tl.name = "TvLight"
 	tl.light_color = TVL.c
-	tl.spot_angle = 22.0
+	tl.spot_angle = float(TVL.ang)
 	tl.spot_range = 2.4
 	tl.spot_attenuation = 1.0
 	tl.spot_angle_attenuation = 1.0
@@ -999,7 +1144,7 @@ static func _lights_make(hn: Node, w: Node3D, bar: Node3D) -> void:
 				(L.pend as Array).append(l)
 			else:
 				#  그림등 — 판만(칠판 분필 점수는 어둠에 둔다 · 글로 읽히지 않게)
-				(l as SpotLight3D).spot_angle = 14.0
+				(l as SpotLight3D).spot_angle = 19.0
 				L["pict"] = l
 			continue
 		var o := l as OmniLight3D
@@ -1007,19 +1152,21 @@ static func _lights_make(hn: Node, w: Node3D, bar: Node3D) -> void:
 			(L.shelf as Array).append(l)
 			o.position = Vector3(o.position.x, o.position.y - 0.11, float(Door3D.BAR.back) + 0.10)
 			o.omni_range = 0.6
+			o.light_cull_mask = L_SHB
 		elif is_equal_approx(o.omni_range, 5.2):
 			o.light_energy = 0.0
 			o.visible = false
 		elif o.light_color.is_equal_approx(Color("ff9a50")):
 			L["candle"] = l
+			(l as OmniLight3D).omni_range = 0.65         # 테이블 윗판만 — 벽으로 물린 테이블이라 벽 · 액자까지 주황으로 비췄다
 		elif o.light_color.is_equal_approx(Color("f2a13a")):
 			L["neon"] = l
 	(L.pend as Array).sort_custom(func(a: Node3D, b: Node3D) -> bool: return a.position.x < b.position.x)
 	var pd: Array = L.pend
 	if pd.size() == 3:
 		var aims := [Vector3(float(pd[0].position.x), float(Door3D.BAR.cnt_y), float(Door3D.BAR.pend_z) - 0.08),
-				hands + Vector3(0.0, -0.05, 0.05), Vector3(0.06, float(Door3D.BAR.cnt_y), -3.74)]
-		var ang := [26.0, 22.0, 24.0]
+				hands + Vector3(0.0, -0.05, 0.05), PINT + Vector3(0.0, 0.0, 0.01)]
+		var ang: Array = PEND.ang
 		for i in 3:
 			var s := pd[i] as SpotLight3D
 			s.spot_angle = float(ang[i])
@@ -1065,15 +1212,17 @@ static func _lights(hn: Node, t: float) -> void:
 			(L[k] as Light3D).light_energy = float(LBASE[k]) * float(d[k])
 	#  제 빛 재질 — 그 빛과 같이(무리마다 밑 몫 × 지금 몫)
 	var gl: Dictionary = hn.get_meta("glows")
+	#  올려다본 뒤 — 갓 속(젖빛 판 · 안쪽)은 가장 어두운 단 · 갓은 그림 귀에 어두운 테로만 든다
+	var up: float = 0.0 if t >= float(PEND.up) else 1.0
 	var gk := {"shelf": 0.15 * float(d.shelf), "cab": 0.85 * float(d.pict), "neon": 0.5 * float(d.neon),
-			"candle": float(d.candle) / 0.7 * 0.8, "shade": 0.12 * maxf(float(d.pm), float(d.pr))}
+			"candle": float(d.candle) / 0.7 * 0.8, "shade": 0.12 * maxf(float(d.pm), float(d.pr)) * up}
 	for grp in gl:
 		for e in gl[grp]:
 			(e.m as StandardMaterial3D).albedo_color = (e.c as Color) * clampf(float(gk[grp]), 0.0, 1.0)
 	for df in hn.get_meta("diff", []):
 		var x: float = df.x
 		var k: float = float(d.pl) if x < -1.0 else (float(d.pm) if x < 0.0 else float(d.pr))
-		(df.m as StandardMaterial3D).albedo_color = Color("b89a6a") * (0.05 + 0.5 * k) * (0.6 if x < -1.0 else 1.0)
+		(df.m as StandardMaterial3D).albedo_color = Color("b89a6a") * (0.05 + 0.5 * k * up) * (0.6 if x < -1.0 else 1.0)
 	#  채움 — 바뀐 때만 재질을 다 고친다
 	var fk: float = float(d.fill)
 	if not is_equal_approx(float((hn.get_meta("lt_last") as Dictionary).get("fill", -1.0)), fk):
@@ -1107,12 +1256,12 @@ static func _lights(hn: Node, t: float) -> void:
 		rg.set_shader_parameter("lp2", Vector4(rp.x, rp.y, rp.z, tvk))
 		rg.set_shader_parameter("lc2", tc)
 	if hn.has_meta("beer"):
-		(hn.get_meta("beer") as ShaderMaterial).set_shader_parameter("glow", 0.05 + 0.1 * tvk)
+		(hn.get_meta("beer") as ShaderMaterial).set_shader_parameter("glow", 0.03 + 0.16 * tvk)
 	var scr: ShaderMaterial = hn.get_meta("scr")
 	if scr != null:
 		scr.set_shader_parameter("refl", 0.9 * float(d.pm))
 	#  깨는 노출 — 둘째 깜박임까지 한 단 밝다가 그 자리에서 내린다(빛이 먼저 · 모양이 뒤)
-	(hn.get_meta("env") as Environment).tonemap_exposure = 1.35 if t < 2.32 else 1.0
+	(hn.get_meta("env") as Environment).tonemap_exposure = 1.35 if t < float(WAKE.blink) + 0.02 else 1.0
 
 
 # ══ 효과 ═════════════════════════════════════════════════
@@ -1135,6 +1284,10 @@ static func _post_make(hn: Node, w: Node3D) -> void:
 
 
 static func _post_tick(hn: Node, t: float) -> void:
+	#  반 뜬 눈 — 유리는 덩어리 판 뒤에 그려 1px 실루엣만 머리카락처럼 떴다. 화면 그림은 투명 차례 전에 한 번 떠지므로
+	#  판 밑으로 넣으면 곧 안 보이는 것과 같다 — 초점이 서는 깜박임까지 유리를 감춘다(맥주 · 받침은 덩어리째 남는다)
+	if hn.has_meta("pint"):
+		(hn.get_meta("pint") as Node3D).visible = t >= float(WAKE.blink)
 	var row: Array = FOCUS[0]
 	for r in FOCUS:
 		if t >= float(r[0]):
@@ -1175,7 +1328,7 @@ static func _lids_tick(hn: Node, t: float) -> void:
 	var lids: Array = hn.get_meta("lids")
 	var vs: Vector2 = Vector2((hn.get_meta("vp") as SubViewport).size)
 	var o: float = _lid(t)
-	var col: Color = SKIN[0] if t < 1.2 else (SKIN[1] if t < 1.5 else Color.BLACK)
+	var col: Color = SKIN[0] if t < float(WAKE.skin) else (SKIN[1] if t < float(LID[1][0]) else Color.BLACK)
 	for l in lids:
 		(l as Polygon2D).visible = o < 0.999
 		(l as Polygon2D).color = col
@@ -1276,8 +1429,11 @@ static func _pose_at(t: float) -> Array:
 		var dip := 0.0
 		match String(mv[4]):
 			"lift":
-				fe = 1.0 - pow(1.0 - u, 3.0)
-				fr = 1.0 - pow(1.0 - clampf((u - 0.2) / 0.8, 0.0, 1.0), 2.0)
+				#  처음 18% 는 천천히 붙는다(완전 정지에서 바로 가장 빠르게 떠나 덜컥으로 읽혔다) · 그 뒤 ease-out cubic
+				var p := 0.18
+				var w: float = (u * u / (2.0 * p) if u < p else u - p * 0.5) / (1.0 - p * 0.5)
+				fe = 1.0 - pow(1.0 - w, 3.0)
+				fr = 1.0 - pow(1.0 - clampf((w - 0.2) / 0.8, 0.0, 1.0), 2.0)
 				dip = 0.22 * sin(PI * u)          # 드는 동안 눈길이 카운터 쪽으로 처진다(굴린 그림 위끝이 상인 깃을 안 지나게)
 			"look":
 				fe = 0.12 * clampf((t - t0) / 0.05, 0.0, 1.0) + 0.88 * _back(u)
@@ -1343,7 +1499,7 @@ static func _snow(t: float) -> float:
 #  clink 먼 잔 · lp 로패스 [닫힘 · 열림](Hz) · static TV 지지직 [감은 눈 · 화면 밖(눈 뜬 뒤) · 올려다본 뒤](dB) · hum 웅(같은 차례) ·
 #  click 빛 딸깍 · tv 그림이 비치는 동안 SFX 에 거는 작은 스피커 [고역 통과 · 저역 통과(Hz) · 줄임(dB)] — 게임 인트로 소리가
 #  TV 소리로 들리다가 유리 속으로 들며(넘김) 걷힌다
-const SND := {"clink": 0.8, "lp": [600.0, 16000.0], "static": [-24.0, -15.0, 0.0], "hum": [-20.0, -12.0, 0.0],
+const SND := {"clink": 0.6, "lp": [600.0, 16000.0], "static": [-24.0, -15.0, 0.0], "hum": [-20.0, -12.0, 0.0],
 		"click_db": -8.0, "tv": [350.0, 4800.0, -4.0]}
 
 
@@ -1416,7 +1572,7 @@ static func _audio_tick(hn: Node, t: float) -> void:
 	#  눈과 같이 열리는 로패스(로그 눈금) — 감으면 0 · 반쯤 0.45 · 첫 뜸 뒤 깜박임은 0.3 까지만 · 빛이 꺼지는 단마다 닫힌다 ·
 	#  다이브에 다 닫힌다
 	var k: float = _lid(t)
-	if t > 2.0:
+	if t > float(LID[3][0]) - 0.2:
 		k = maxf(k, 0.3)
 	var steps := [1.0, 0.85, 0.7, 0.58, 0.45, 0.35, 0.25]
 	var n := 0
@@ -1444,14 +1600,14 @@ static func _audio_tick(hn: Node, t: float) -> void:
 		var sk: float = _snow(t)
 		var sp := pl.static as AudioStreamPlayer
 		var sd: Array = SND.static
-		var near: float = float(sd[2]) if t >= 6.5 else (float(sd[1]) if t >= 2.3 else float(sd[0]))
+		var near: float = float(sd[2]) if t >= 6.5 else (float(sd[1]) if t >= float(WAKE.blink) else float(sd[0]))
 		sp.volume_db = near + linear_to_db(0.3 + 0.7 * sk)
 		if t > handoff() and sp.playing:
 			sp.stop()
 	if pl.has("hum"):
 		var hp := pl.hum as AudioStreamPlayer
 		var hd: Array = SND.hum
-		hp.volume_db = float(hd[2]) if t >= 6.5 else (float(hd[1]) if t >= 2.3 else float(hd[0]))
+		hp.volume_db = float(hd[2]) if t >= 6.5 else (float(hd[1]) if t >= float(WAKE.blink) else float(hd[0]))
 		hp.volume_db += linear_to_db(1.0 - clampf((t - handoff()) / float(T.fade), 0.0, 0.999))
 	#  한 번씩 — 먼 잔 · 잔 놓기 · 빛이 꺼질 때마다 딸깍
 	if t >= float(SND.clink) and not rang.has("clink"):
