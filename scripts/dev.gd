@@ -1231,6 +1231,10 @@ static func _rows(g: Node) -> Array:
 				{"n1": "레전더리 다섯 테이블에", "t": "act", "a": "form_leg_table"},
 				{"n1": "레어 변형 테이블에", "t": "act", "a": "form_var_table"},
 				{"n1": "등급 테 끄기/켜기", "t": "act", "a": "rank_off"},
+				#  켤 때 여는 장면 — 테이프(기본) ↔ 바(game.gd PLGP.kind · 전역 "plg_kind" · 저장한다). 「다시 보기」가 열아홉으로
+				#  차 이 쪽 끝에 섰다(열여섯째 줄 · 한계 열아홉). 2026-10-25
+				{"n1": "켤 때 인트로 %s" % ("바" if String(Save.get_set("plg_kind", "tape")) == "bar" else "테이프"),
+						"t": "act", "a": "plg_kind"},
 			]
 		_:
 			#  ── 다시 보기 (2026-10-10 · 1쪽 「물건」에서 갈라 왔다) · 맨 끝 쪽이라 기본 갈래다 ──
@@ -1276,6 +1280,9 @@ static func _rows(g: Node) -> Array:
 				{"n1": "대결 상인 수 묶기", "t": "act", "a": "bdm_move"},
 				#  켤 때의 프롤로그(game.gd PLGP · scripts/prologue3d.gd)를 다시 튼다 — 끝나면 TV 켜짐 · 인트로 · 제목. 2026-10-18
 				{"n1": "프롤로그 보기", "t": "act", "a": "plg"},
+				#  다른 여는 장면 — 바에 앉아 눈을 뜬다(game.gd PlgBar · scripts/prologue_bar3d.gd)를 지금 튼다. 열아홉째 줄이다
+				#  (한계 열아홉 — 켤 때 무엇을 틀지 고르는 줄은 「등급」 쪽 끝에 섰다). 2026-10-25
+				{"n1": "바 인트로 보기", "t": "act", "a": "plg_bar"},
 				#  튜토리얼 끝 칠판(game.gd _over_hero — 넘친 점수 · 그은 목표)을 곧장 연다. 「소리·연출」의 런 끝 두 줄은
 				#  열아홉이 차 이 쪽에 둔다. 지금 런을 튜토리얼 런으로 적는다(새 런을 열면 돌아온다). 2026-10-25
 				{"n1": "튜토리얼 끝 보기", "t": "act", "a": "over_tut"},
@@ -2384,8 +2391,17 @@ static func _run(g: Node, e: Dictionary) -> void:
 			_say("튜토리얼 끝" if String(e.get("a", "")) == "over_tut" else ("완주 화면" if g.won else "실패 화면"))
 			return
 		"plg":
-			g._plg_begin()
+			g._plg_begin("tape")
 			_say("프롤로그")
+			return
+		"plg_bar":
+			g._plg_begin("bar")
+			_say("바 인트로")
+			return
+		"plg_kind":
+			var bar := String(Save.get_set("plg_kind", "tape")) != "bar"
+			Save.set_set("plg_kind", "bar" if bar else "tape")
+			_say("켤 때 인트로 " + ("바" if bar else "테이프"))
 			return
 		"bdm_move":
 			var mv := "catch"

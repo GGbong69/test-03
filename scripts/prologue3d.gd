@@ -327,17 +327,28 @@ uniform float cw = 0.6;
 uniform float portal = 0.0;
 uniform vec2 feed = vec2(640.0, 360.0);
 uniform sampler2D tex : source_color, filter_nearest, repeat_disable;
+//  바 인트로 천장 TV(scripts/prologue_bar3d.gd)만 — 셋 다 0 이면 옛 그림 그대로다(테이프 프롤로그).
+//  snowk mode 9 그림을 지지직이 덮는 몫(단으로 걷힌다) · crt 브라운관 결(화면 px 한 줄 걸러 주사선 · 단단한 테의
+//  웅 띠 · 두 단 귀 어둠 · 조금 볼록) · refl 유리에 비친 펜던트(단단한 테의 따뜻한 타원 — 방 빛을 따라 꺼진다).
+//  셋 다 portal 을 따라 걷혀 유리 속 그림이 게임 그림과 같아진다.
+uniform float snowk = 0.0;
+uniform float crt = 0.0;
+uniform float refl = 0.0;
 
 float hs(vec2 p) {
 	return fract(sin(dot(p, vec2(12.9898, 78.233)) + seed * 17.0) * 43758.5453);
 }
 
+vec3 snow(vec2 q) {
+	float n = hs(floor(q * res) + floor(tm * 15.0) * vec2(7.0, 13.0));
+	float v = n < 0.45 ? 0.08 : (n < 0.8 ? 0.42 : 0.78);
+	return vec3(v, v, v * 1.06) * (0.72 + 0.28 * step(0.18, fract(q.y - tm * 0.45)));
+}
+
 vec3 scene(vec2 q) {
 	float ar = res.x / res.y;
 	if (mode == 1) {
-		float n = hs(floor(q * res) + floor(tm * 15.0) * vec2(7.0, 13.0));
-		float v = n < 0.45 ? 0.08 : (n < 0.8 ? 0.42 : 0.78);
-		return vec3(v, v, v * 1.06) * (0.72 + 0.28 * step(0.18, fract(q.y - tm * 0.45)));
+		return snow(q);
 	}
 	if (mode == 2) {
 		vec3 C[7] = vec3[](vec3(0.75), vec3(0.75, 0.75, 0.0), vec3(0.0, 0.75, 0.75), vec3(0.0, 0.75, 0.0),
@@ -448,9 +459,19 @@ void fragment() {
 		vec3 s;
 		if (mode == 9) {
 			q = UV;
-			vec2 cu = mix(vec2((UV.x - 0.5) * cw + 0.5, UV.y), SCREEN_UV, portal);
+			float ck = crt * (1.0 - portal);
+			vec2 bu = UV;
+			if (ck > 0.0) {
+				vec2 bd = UV - 0.5;
+				bu = 0.5 + bd * (1.0 - 0.1 * ck * dot(bd, bd));
+			}
+			vec2 cu = mix(vec2((bu.x - 0.5) * cw + 0.5, bu.y), SCREEN_UV, portal);
 			s = texture(tex, cu).rgb * mix(1.08, 1.0, portal);
-			if (mod(floor(cu.y * feed.y), 2.0) > 0.5) {
+			if (crt > 0.0) {
+				s = mix(s, snow(bu), snowk * (1.0 - portal));
+				s *= 1.0 - 0.24 * ck * mod(floor(FRAGCOORD.y), 2.0);
+				s *= 1.0 - 0.12 * ck * step(fract(UV.y - tm * 0.5), 0.12);
+			} else if (mod(floor(cu.y * feed.y), 2.0) > 0.5) {
 				s *= mix(0.86, 1.0, portal);
 			}
 		} else {
@@ -460,12 +481,21 @@ void fragment() {
 			}
 		}
 		s = mix(s, vec3(0.9, 0.95, 1.0), (1.0 - smoothstep(0.0, 0.35, pw)) * 0.85);
-		s *= 1.0 - (mode == 9 ? 0.5 * (1.0 - portal) : 1.2) * dot(UV - 0.5, UV - 0.5);
+		if (crt > 0.0) {
+			float vd = length((UV - 0.5) * vec2(1.0, 1.15));
+			s *= 1.0 - crt * (1.0 - portal) * (0.2 * step(0.44, vd) + 0.25 * step(0.53, vd));
+		} else {
+			s *= 1.0 - (mode == 9 ? 0.5 * (1.0 - portal) : 1.2) * dot(UV - 0.5, UV - 0.5);
+		}
 		s = mix(vec3(dot(s, vec3(0.299, 0.587, 0.114))), s, sat) * dim;
 		float open = max(smoothstep(0.0, 0.55, pw), 1.5 / res.y);
 		if (abs(q.y - 0.5) * 2.0 < open) {
 			c = s;
 		}
+	}
+	if (refl > 0.0) {
+		vec2 re = (UV - vec2(0.2, 0.17)) / vec2(0.075, 0.016);
+		c += vec3(0.20, 0.14, 0.08) * refl * (1.0 - portal) * step(dot(re, re), 1.0);
 	}
 	if (lv > 0.0) {
 		c = floor(c * lv + 0.5) / lv;

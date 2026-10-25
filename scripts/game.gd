@@ -1572,8 +1572,13 @@ func _fsel_ui_draw(c: CanvasItem) -> void:
 #  잦아들어 handoff 에 선다) · 카세트 · 데크 다섯(이름이 곧 sfx — 프롤로그 제 자리 plg_aud 에서 난다. 끊으면 같이
 #  걷는다 — 3.6 초 위잉이 인트로에 새지 않게).
 #    lock · ff  인트로와 같다 · rain_db 비 크기 · rain_lp 창 너머 컷오프(Hz)
+#  다른 여는 장면 — 「바에 앉아 눈을 뜬다」(2026-10-25 · scripts/prologue_bar3d.gd PlgBar · 같은 API). kind 가 고른다 —
+#  "tape" 테이프(기본) · "bar" 바. 켤 때 무엇을 틀지는 전역 설정 "plg_kind"(개발자 판) · 시계 · 누름 · 덮개 · 끝은 같은
+#  길이다(plg_mod). 바는 제 소리를 제 자리에서 낸다(cues 가 비었다 · 비 자리도 없다).
 const Plg = preload("res://scripts/prologue3d.gd")
-const PLGP := {"lock": 0.65, "ff": 2.5, "rain_in": 1.0, "rain_db": 4.0, "rain_lp": 700.0}
+const PlgBar = preload("res://scripts/prologue_bar3d.gd")
+const PLGP := {"lock": 0.65, "ff": 2.5, "rain_in": 1.0, "rain_db": 4.0, "rain_lp": 700.0, "kind": "tape"}
+var plg_mod: GDScript = Plg  # 지금 도는 여는 장면(Plg · PlgBar)
 var plg_vp: Node = null      # Plg.make 가 낸 묶음(무대 · 층 — 화판 밖)
 var plg_t := -1.0            # 흐른 시간(초) — 안 돌면 −1
 var plg_ff := false
@@ -1588,15 +1593,19 @@ func _plg_live() -> bool:
 
 #  프롤로그가 화면을 덮고 있나 — handoff 부터는 필터가 켜진다(층이 걷히는 동안 유리 속 그림에도 먹는다).
 func _plg_cover() -> bool:
-	return _plg_live() and plg_t < Plg.handoff()
+	return _plg_live() and plg_t < plg_mod.handoff()
 
 
-func _plg_begin() -> void:
+#  kind — "tape" · "bar" · "" 이면 전역 설정 "plg_kind"(기본 PLGP.kind)
+func _plg_begin(kind := "") -> void:
 	_intro_begin()
 	_plg_close()
+	if kind == "":
+		kind = String(Save.get_set("plg_kind", PLGP.kind))
+	plg_mod = PlgBar if kind == "bar" else Plg
 	if not _has_renderer() or screen_host == null or not is_instance_valid(screen_host):
 		return
-	plg_vp = Plg.make(self, screen_host)
+	plg_vp = plg_mod.make(self, screen_host)
 	plg_t = 0.0
 	plg_ff = false
 	plg_rang.clear()
@@ -1608,7 +1617,7 @@ func _plg_begin() -> void:
 	#  창밖 비 — 순환 wav 를 제 자리에(자리 넷을 돌면 다섯째 소리가 끊는다). 사본이다 — 표 소리(_sfx · 개발자 판)가
 	#  원본을 틀면 끝없이 돌았다(골목 검토).
 	var rs := _sfx_file("rain") as AudioStreamWAV
-	if rs != null and AudioServer.get_bus_index("Rain") >= 0:
+	if rs != null and AudioServer.get_bus_index("Rain") >= 0 and plg_mod == Plg:
 		rs = rs.duplicate() as AudioStreamWAV
 		rs.loop_mode = AudioStreamWAV.LOOP_FORWARD
 		rs.loop_begin = 0
@@ -1651,9 +1660,9 @@ func _plg_snd(nm: String) -> void:
 func _plg_tick(d: float) -> void:
 	plg_t += d * (float(PLGP.ff) if plg_ff else 1.0)
 	if plg_vp != null and is_instance_valid(plg_vp):
-		Plg.tick(plg_vp, plg_t)
+		plg_mod.tick(plg_vp, plg_t)
 	#  때마다 한 번 — TV 지지직 · 주인공 켜짐 · 창밖 비 · 카세트 · 데크(Plg.cues — 나머지 이름은 곧 sfx 이름)
-	var cues: Dictionary = Plg.cues()
+	var cues: Dictionary = plg_mod.cues()
 	for job in cues:
 		if plg_t >= float(cues[job]) and not plg_rang.has(job):
 			plg_rang[job] = true
@@ -1671,12 +1680,12 @@ func _plg_tick(d: float) -> void:
 		var rk: float = clampf(plg_t / float(PLGP.rain_in), 0.05, 1.0) \
 				* (1.0 - clampf((plg_t - float(Plg.T.push0)) / (Plg.handoff() - float(Plg.T.push0)), 0.0, 0.95))
 		plg_rain.volume_db = float(PLGP.rain_db) + linear_to_db(rk)
-	if plg_t >= Plg.handoff() and not plg_rang.has("handoff"):
+	if plg_t >= plg_mod.handoff() and not plg_rang.has("handoff"):
 		plg_rang["handoff"] = true
 		if plg_rain != null:
 			plg_rain.stop()
 		_crt_apply()
-	if plg_t >= Plg.length():
+	if plg_t >= plg_mod.length():
 		_plg_end()
 		return
 	queue_redraw()
@@ -1697,7 +1706,7 @@ func _plg_press() -> void:
 func _plg_end() -> void:
 	if not _plg_live():
 		return
-	var fed: bool = plg_t >= Plg.feed_at()
+	var fed: bool = plg_t >= plg_mod.feed_at()
 	plg_t = -1.0
 	_plg_close()
 	_crt_apply()
@@ -1822,7 +1831,7 @@ func _intro_tick(d: float) -> void:
 		return
 	if _plg_live():
 		_plg_tick(d)
-		if _plg_live() and plg_t < Plg.feed_at():
+		if _plg_live() and plg_t < plg_mod.feed_at():
 			return
 	#  브라운관이 켜지는 동안은 기다린다 — 그림이 다 벌어진 뒤 어둠부터 시작한다.
 	if pwr_t >= 0.0 and pwr_on:
