@@ -22720,7 +22720,7 @@ func _panel_tilt(i: int) -> float:
 	return sin(float(i) * 2.399963) * 0.5
 
 
-#  빈 동전 칸. 펠트 쟁반에 판 우물이다 — 어두운 바닥에 놋쇠 테(빛은 왼쪽 위). 동전 밑에도 깔린다 —
+#  빈 동전 칸. 펠트 쟁반에 판 우물이다 — 어두운 바닥에 크림 테(빛은 왼쪽 위). 동전 밑에도 깔린다 —
 #  발동에 튀어오르면 우물이 드러난다.
 func _slot_ghost(i: int) -> void:
 	var c := _slot_rect(i).get_center() + Vector2(0.0, PANEL.chip_dy)
@@ -22728,8 +22728,8 @@ func _slot_ghost(i: int) -> void:
 	draw_circle(c, r, WELL.floor)
 	#  윗변 한 획 — 파인 것으로 읽히려면 위쪽이 더 어두워야 한다.
 	draw_arc(c, r - 0.5, PI, TAU, 14, C_BG, 1.0)
-	draw_arc(c, r + 0.5, 0.0, TAU, 24, WELL.brass, 1.0)
-	draw_arc(c, r + 0.5, PI * 0.85, PI * 1.65, 10, WELL.brass_hi, 1.0)
+	draw_arc(c, r + 0.5, 0.0, TAU, 24, WELL.rim, 1.0)
+	draw_arc(c, r + 0.5, PI * 0.85, PI * 1.65, 10, WELL.rim_hi, 1.0)
 
 
 func _panel_slot(i: int) -> void:
@@ -24204,13 +24204,13 @@ func _cons_draw() -> void:
 				_icon_cons(ic, ir, String(cons[i].id))
 		else:
 			#  빈 칸 — 동전 우물(_slot_ghost)과 같은 재질의 네모 홈(2026-10-25 레퍼런스 2차 — 빈 판이 상단에서
-			#  가장 큰 초록 덩어리였다 · 「여기 둘 들어간다」). 어두운 바닥 · 윗변 그늘 · 놋쇠 테 · 왼쪽 위 빛.
+			#  가장 큰 초록 덩어리였다 · 「여기 둘 들어간다」). 어두운 바닥 · 윗변 그늘 · 크림 테 · 왼쪽 위 빛.
 			#  날아오는 동안(_order_fly_hides)도 이 홈이다.
 			_rr(self, r, WELL.floor)
 			_rr_top(self, r.grow(-1.0), 1, C_BG)
-			_rr_line(self, r, WELL.brass)
-			_rr_top(self, r, 1, WELL.brass_hi)
-			_rr_left(self, r, WELL.brass_hi)
+			_rr_line(self, r, WELL.rim)
+			_rr_top(self, r, 1, WELL.rim_hi)
+			_rr_left(self, r, WELL.rim_hi)
 	# 이름과 수 — 동전 슬롯 밑은 상인 자리라 못 쓰지만 이 자리는 벽이다.
 	# 「사탕」이라고만 적고 있었는데 이 칸에는 사진도 들어간다 — 사진을
 	# 한 장 들고 있으면 「사탕 1/2」가 거짓말이 된다.
@@ -46539,7 +46539,7 @@ const PANEL_LIP := 3.0
 #            씨 고정 보풀(밝은 점 · 어두운 점) — 틀마다 같은 자리라 안 떤다.
 #    에나멜  짙은 초록 철판 — 카드 · 툴팁 · 동전 · 다트 · 정보 · 일시정지 · 명판(_panel focus). 크림 테 한 줄 ·
 #            그 안 검은 줄 · 네 귀 나사 점 · 밑턱(PANEL_LIP).
-#    우물    동전 슬롯의 빈 홈 — 어두운 바닥에 놋쇠 테(왼쪽 위가 밝다).
+#    우물    동전 슬롯의 빈 홈 — 어두운 바닥에 크림 테(왼쪽 위가 밝다).
 #  면 밝기는 둘 다 C_PANEL 과 같은 L 0.015 — 잉크 대비표(qa_ui ④ · qa_tip)가 그대로 선다.
 #  보풀의 밝은 점(L 0.024)도 C_DIM 4.9 · C_MULT 4.7 · C_TXT 12.5 다.
 #  펠트는 에나멜과 같은 병 초록 한 가지(「왜 색이 달라?」 2026-10-22 — 자주 펠트 · 초록 명판 두 색을 걷었다).
@@ -46548,7 +46548,9 @@ const PANEL_LIP := 3.0
 const FELT := {"face": Color("152925"), "hi": Color("182e29"), "lo": Color("101f1c"), "per": 14.0}
 const ENAM := {"face": Color("112420"), "rim": Color("d9cfb4"), "line": Color("0a1612"),
 		"screw": Color("8e8a7a"), "lip": Color("0a1814")}
-const WELL := {"floor": Color("0b1512"), "brass": Color("7a4a22"), "brass_hi": Color("c88f49")}
+#  테는 에나멜 명판과 같은 크림 한 가지(2026-10-25 「UI 테두리 걍 다 하얀 느낌으로 통일하자 왜 어떤건 하얀색이고 어떤건
+#  갈색이야?」) — 펠트 판 · 동전 우물 · 빈 사탕 칸의 놋쇠 테를 걷었다. rim_hi 는 우물 왼쪽 위 빛 받는 호 한 줄.
+const WELL := {"floor": Color("0b1512"), "rim": Color("d9cfb4"), "rim_hi": Color("f4efe2")}
 
 
 func _panel(r: Rect2, focus := false, a := 1.0) -> void:
@@ -46571,14 +46573,14 @@ func _felt_nap(c: CanvasItem, q: Rect2, a := 1.0) -> void:
 				Color(FELT.hi if _gl_rand(i * 3 + 3, sd) < 0.5 else FELT.lo, a))
 
 
-#  펠트 한 장 — 면 · 놋쇠 테 · 보풀(모서리 계단 안쪽만 — 계단 밖에 점이 서면 이가 빠진다).
+#  펠트 한 장 — 면 · 크림 테 · 보풀(모서리 계단 안쪽만 — 계단 밖에 점이 서면 이가 빠진다).
 #  테는 홈과 같은 놋쇠다 — 같은 색상의 어두운 테(1f1017)는 필터를 켜면 묻혀 쟁반이 테 없는 면으로
 #  읽혔다(「쟁반에 테가 없다」 2026-10-22).
 func _felt(c: CanvasItem, r: Rect2, a := 1.0, rad := -1) -> void:
 	r = _pr(r)
 	var k := _rad(r, rad)
 	_rr(c, r, Color(FELT.face, a), k)
-	_rr_line(c, r, Color(WELL.brass, a), k)
+	_rr_line(c, r, Color(WELL.rim, a), k)
 	_felt_nap(c, r.grow(-maxf(float(k), 1.0)), a)
 
 
