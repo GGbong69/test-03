@@ -1610,6 +1610,7 @@ func _plg_begin(kind := "") -> void:
 	plg_mod = PlgBar if kind == "bar" else Plg
 	if not _has_renderer() or screen_host == null or not is_instance_valid(screen_host):
 		return
+	intro_soft = plg_mod == PlgBar
 	plg_vp = plg_mod.make(self, screen_host)
 	plg_t = 0.0
 	plg_ff = false
@@ -1725,6 +1726,7 @@ func _plg_end() -> void:
 	_crt_apply()
 	if not fed:
 		intro_t = 0.0
+		intro_soft = false        # 처음부터 트는 인트로는 제 쾅(금빛 번쩍)대로
 		_pwr_start(true)
 	queue_redraw()
 
@@ -1802,6 +1804,8 @@ var intro_out := 0.0       # 제목으로 넘긴 뒤 글줄을 덮은 막(1 → 
 var intro_fired := 0       # 던진 자루 수
 var intro_rang := {}       # 한 번만 울리는 소리
 var intro_ff := false      # 첫 누름 뒤 — 빨리 감는 중
+#  바 인트로가 튼 인트로 — 네온 쾅은 금빛 번쩍 없이 −6dB(0.34 초 앞 흰 번쩍 · 퍽이 절정으로 남는다 · 유리 반짝 검토 2)
+var intro_soft := false
 
 
 func _intro_wanted() -> bool:
@@ -1816,17 +1820,18 @@ func _intro_begin() -> void:
 	intro_out = 0.0
 	intro_fired = 0
 	intro_ff = false
+	intro_soft = false
 	intro_rang.clear()
 	pause_from = -1
 	state = S.INTRO
 	queue_redraw()
 
 
-func _intro_once(key: String, sfx: String) -> void:
+func _intro_once(key: String, sfx: String, db := 0.0) -> void:
 	if intro_rang.has(key):
 		return
 	intro_rang[key] = true
-	_sfx(sfx)
+	_sfx(sfx, 0.0, db)
 
 
 #  트리플 20 의 한 점. 판 좌표다.
@@ -1864,7 +1869,7 @@ func _intro_tick(d: float) -> void:
 	if maxf(t, plg_sign_t) >= float(INTRO.sign):
 		_intro_once("sign", "leg_open")
 	if t >= float(INTRO.snap) + float(INTRO.snap_t):
-		_intro_once("snap", "settle_total")
+		_intro_once("snap", "settle_total", -6.0 if intro_soft else 0.0)
 		if not intro_rang.has("snap_shake"):
 			intro_rang["snap_shake"] = true
 			shake = maxf(shake, 3.0)
@@ -1952,7 +1957,9 @@ func _draw_intro() -> void:
 	var st: float = clampf((t - float(INTRO.settle)) / (float(INTRO.end) - float(INTRO.settle)), 0.0, 1.0)
 	st = st * st * (3.0 - 2.0 * st)
 	var glow: float = light * (1.0 - st)
-	var neon := _intro_neon(t)
+	#  어둠 · 네온 빛도 그려지는 간판 시계를 따른다 — 바 인트로가 간판을 앞당겨 켜 두면 램프가 꺼진 뒤 방이 깜깜했다가 글자가
+	#  켜지듯 다시 차올라 TV 가 꺼졌다 켜진 것으로 읽혔다(유리 반짝 검토 2)
+	var neon := _intro_neon(maxf(t, plg_sign_t))
 	#  어둠 — 램프가 다 켜지면 lit, 네온만 켜지면 neon_lit 만 남는다. 끝에서
 	#  제목 스크림의 짙기로 가라앉는다.
 	var da: float = minf(lerpf(1.0, float(INTRO.lit), light),
@@ -1979,9 +1986,9 @@ func _draw_intro() -> void:
 	_ttl_draw()
 	draw_set_transform(shake_off)
 	_intro_sign(maxf(t, plg_sign_t), 1.0 - st, _sign_base(shake_off))
-	#  두 낱말이 붙는 순간 금빛 번쩍
+	#  두 낱말이 붙는 순간 금빛 번쩍(바 인트로는 없다 — intro_soft)
 	var ft: float = t - float(INTRO.snap) - float(INTRO.snap_t)
-	if ft >= 0.0 and ft < float(INTRO.flash):
+	if ft >= 0.0 and ft < float(INTRO.flash) and not intro_soft:
 		var fk: float = 1.0 - ft / float(INTRO.flash)
 		draw_rect(_full(), Color(C_ACC, 0.16 * fk * fk))
 

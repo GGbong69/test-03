@@ -265,12 +265,9 @@ const HERO := {"light": 1.1, "rim": 0.4, "rim_r": 0.55, "dive": 0.70, "portal": 
 #  밝은 틀 · lit_at) · calm handoff 뒤 CRT 잔상을 끄고 있는 틀(번쩍 단이 걷힌 뒤까지 — 앞 틀의 흰 띠를 붙들어 회색 판이
 #  한 틀 섰다 · calm_at) · cue 소리(tv_glint)가 handoff 몇 초 앞에 서나 — 빗금 앞에 쉬익이 서고 파일 0.267 초(싱
 #  첫머리)가 별이 다 핀 틀에 · 0.617 초(슈욱이 끊기고 퍽)가 handoff 에 선다(믹서가 한 틀 늦게 내므로 한 틀 앞당겨 낸다 —
-#  Movie Maker 믹스에서 퍽이 handoff 틀 끝에 걸렸다) · rise 오름 단(1/3 · 2/3)을 유리 위에 그릴 때 더하는 몫 — 무대 톤
-#  매핑(filmic)을 지나며 sRGB 더하기가 약 1.4 배로 커져 2D Flash 와 같은 밝기로 줄인다(유리 반짝 검토 — 2D 판은 유리 둘레 테까지
-#  하얘졌다)
+#  Movie Maker 믹스에서 퍽이 handoff 틀 끝에 걸렸다)
 const GLINT := {"lead": 36, "c0": -0.02, "step": 0.13, "n": 12, "at": 9, "spark": [6, 5, 4, 2],
-		"ladder": [1, 1, 2, 2, 3, 3, 2, 2, 1, 1], "fill": Color8(244, 239, 226), "lit": 0, "calm": 8, "cue": 0.637,
-		"rise": 0.72}
+		"ladder": [1, 1, 2, 2, 3, 3, 2, 2, 1, 1], "fill": Color8(244, 239, 226), "lit": 0, "calm": 8, "cue": 0.637}
 #  엑스트라 — 점 빛 세기 · 몸 빛깔 배수 · 화면 밝기 · 채도 · 화면 도트(1m 당 칸) · 화면 색 단 수
 const EXTRA := {"light": 0.3, "tone": 0.42, "dim": 0.13, "sat": 0.6, "cells": 110.0, "lv": 8.0}
 #  화면 장면 — 번호(SCR_SHADER mode) · 앞에 둔 점 빛 빛깔. game 은 주인공(지지직 1 → 화판 그림 9) · maker 는
@@ -356,6 +353,8 @@ uniform float glint = -9.0;
 uniform int spark = 0;
 //  별 자리(유리 UV) — 굵은 띠가 GLINT.at 앞 틀에 지나는 오른 위 · 바 인트로는 간판 끝을 비켜 유리 귀로 옮긴다
 uniform vec2 star = vec2(0.86, 0.26);
+//  빗금 · 별 빛깔(선형) — 바 인트로는 찬 TV 빛 쪽으로 한 단 옮긴다
+uniform vec3 gcol = vec3(0.76, 0.80, 0.85);
 uniform sampler2D tex : source_color, filter_nearest, repeat_disable;
 //  바 인트로 천장 TV(scripts/prologue_bar3d.gd)만 — 셋 다 0 이면 옛 그림 그대로다(테이프 프롤로그).
 //  snowk mode 9 그림을 지지직이 덮는 몫(단으로 걷힌다) · crt 브라운관 결(화면 px 한 줄 걸러 주사선 · 단단한 테의
@@ -368,9 +367,6 @@ uniform float refl = 0.0;
 uniform float cx = 0.5;
 //  land portal 끝 밝기 몫(게임 필터를 지난 그림 밝기에 맞춘다) — 무대마다 톤 매핑이 달라 바 인트로는 제 값을 준다
 uniform float land = 0.75;
-//  fk 번쩍 오름 단(handoff 앞 · Plg.glint 가 flash_a 를 준다 — 0 이면 없다) · ffill 번쩍 빛깔(GLINT.fill · sRGB)
-uniform float fk = 0.0;
-uniform vec3 ffill = vec3(1.0);
 
 float hs(vec2 p) {
 	return fract(sin(dot(p, vec2(12.9898, 78.233)) + seed * 17.0) * 43758.5453);
@@ -554,7 +550,7 @@ void fragment() {
 	//  줄어든다. 끝이 딱 끊기고 0.88 밑이라 번짐(glow_thr 0.9)이 안 선다.
 	vec2 fw = max(fwidth(UV), vec2(1e-5));
 	if (mode == 9 && pw > 0.0 && (glint > -1.0 || spark > 0)) {
-		vec3 gl = vec3(0.76, 0.80, 0.85);
+		vec3 gl = gcol;
 		vec2 d = UV - 0.5;
 		vec2 wv = 0.5 + d * (1.0 + 0.25 * dot(d, d));
 		float g = wv.x + 0.45 * wv.y;
@@ -582,18 +578,6 @@ void fragment() {
 		}
 		if (c != c0) {
 			c = min(c, vec3(0.88));
-		}
-	}
-	//  번쩍 오름 단 — 2D Flash(FLASH_SHADER)와 같은 화면 60°「/」 금 · 같은 도트 끝의 [0, fk] 몫에 흰빛 fk 를 sRGB 로 더한다.
-	//  유리에만 그린다 — 아직 화면을 다 못 채운 유리 둘레의 테가 하얘져 스티커로 읽혔다(유리 반짝 검토). 0.88 밑(번짐이 안
-	//  선다). 맨 밝은 틀부터는 2D Flash 가 받는다(cross).
-	if (mode == 9 && pw > 0.0 && fk > 0.0) {
-		float fa = VIEWPORT_SIZE.x / VIEWPORT_SIZE.y;
-		float fm = 0.5 * fa + 0.2887;
-		float fs = ((SCREEN_UV.x - 0.5) * fa + 0.577 * (SCREEN_UV.y - 0.5) + fm) / (2.0 * fm);
-		if (fs <= fk) {
-			vec3 cs = pow(max(c, vec3(0.0)), vec3(1.0 / 2.2));
-			c = min(pow(min(cs + ffill * fk, vec3(1.0)), vec3(2.2)), vec3(0.88));
 		}
 	}
 	if (lv > 0.0) {
@@ -1256,11 +1240,13 @@ static func make(game: Node, outer: Node) -> Node:
 		var ms: Dictionary = (dm if String(e[0]) == "Deck" else hm) if hero else xm
 		var gm: ShaderMaterial = null
 		var gb := AABB()
+		var gk := -1
 		for k in me.get_surface_count():
 			var sm: Material = me.surface_get_material(k)
 			var key: String = sm.resource_name if sm != null else ""
 			if key == "glass":
 				gb = _surf_aabb(me, k)
+				gk = k
 				var rt: Texture2D = null
 				if job.begins_with("reel"):
 					var c0: String = deck[dealt % deck.size()]
@@ -1325,6 +1311,7 @@ static func make(game: Node, outer: Node) -> Node:
 			var de: float = gb.size.x * 0.5 / (tan(deg_to_rad(float(CAM.fov)) * 0.5) * ar) * float(HERO.dive)
 			cam_end = {"look": apex, "at": apex + n * de}
 			hn.set_meta("glass_h", gb.size.y)
+			hn.set_meta("rim", {"n": mi, "p": glass_rim(me, gk)})
 			cam_start = {"look": g, "at": g + n * float(CAM.dist)}
 		elif job == "maker":
 			#  빨간 대기등 — 화면 오른쪽 아래 테 밖. 크레딧 TV 에만 — 둘레 TV 의 것은 초점 흐림 · 번짐에 붉은
@@ -1627,7 +1614,6 @@ static func tick(hn: Node, t: float) -> void:
 			m.set_shader_parameter("warm", wk)
 			wk *= float(gw[2])
 		(tv.l as SpotLight3D).light_energy = float(tv.e) * (minf(p * 1.6, 1.0) + wk) * fl
-	_layer(hn, t)
 	var reels: Dictionary = hn.get_meta("reels")
 	for rn in reels.values():
 		(rn as Node2D).set("t", t)
@@ -1669,6 +1655,8 @@ static func tick(hn: Node, t: float) -> void:
 				var po: float = portal(tv.m, u, pg)
 				glint(tv.m, t - handoff())
 				(root.get_node("Vig") as CanvasItem).modulate.a = 1.0 - po
+	#  층은 카메라가 선 뒤에(번쩍 오름 단이 이 틀의 유리 둘레로 잘린다)
+	_layer(hn, t)
 
 
 #  ── 유리 뚫기 — 바 인트로(prologue_bar3d)도 제 유리 재질 · 층 · handoff 로 이것들을 부른다 ──
@@ -1730,10 +1718,6 @@ static func glint(m: ShaderMaterial, dt: float) -> void:
 			sp = i + 1
 		at += k
 	m.set_shader_parameter("spark", sp)
-	#  번쩍 오름 단은 유리 위에(handoff 앞만 — 그 뒤는 2D Flash · cross)
-	var fc: Color = GLINT.fill * float(GLINT.rise)
-	m.set_shader_parameter("fk", flash_a(dt) if f < int(GLINT.lead) else 0.0)
-	m.set_shader_parameter("ffill", Vector3(fc.r, fc.g, fc.b))
 
 
 #  flash_a 번쩍 단 — handoff −4 틀부터 2 틀마다 1/3 · 2/3 · 1 · 1 · 2/3 · 1/3(그 밖 0)
@@ -1745,6 +1729,7 @@ static func flash_a(dt: float) -> float:
 
 #  번쩍 — 60°「/」 금으로 나눈 화면의 [lo, hi] 몫(s 0 왼 위 구석 · 1 오른 아래 구석)에 흰빛을 k 만큼 더한다(밑그림이
 #  비친다 · k 1 이면 꽉 찬 fill). 끝은 논리 도트 격자(px)에서 딱 끊긴다 — 고른 막도 · 둥근 번짐도 없다.
+#  poly · pn 화면 몫(0~1)의 유리 둘레(rim_poly) — pn 이 0 이 아니면 그 안만(오름 단 — 유리 둘레 테는 안 하얘진다).
 const FLASH_SHADER := """
 shader_type canvas_item;
 uniform sampler2D sc : hint_screen_texture, filter_nearest;
@@ -1752,15 +1737,75 @@ uniform vec2 px = vec2(640.0, 360.0);
 uniform float lo = 0.0;
 uniform float hi = 0.0;
 uniform float k = 0.0;
+uniform vec2 poly[64];
+uniform int pn = 0;
 void fragment() {
 	vec2 q = (floor(UV * px) + 0.5) / px;
 	float ar = px.x / px.y;
 	float m = 0.5 * ar + 0.2887;
 	float s = ((q.x - 0.5) * ar + 0.577 * (q.y - 0.5) + m) / (2.0 * m);
+	bool in_g = pn == 0;
+	for (int i = 0; i < pn; i++) {
+		vec2 a = poly[i];
+		vec2 e = poly[i == 0 ? pn - 1 : i - 1];
+		if ((a.y > q.y) != (e.y > q.y) && q.x < (e.x - a.x) * (q.y - a.y) / (e.y - a.y) + a.x) {
+			in_g = !in_g;
+		}
+	}
 	vec3 b = texture(sc, SCREEN_UV).rgb;
-	COLOR = vec4(k > 0.999 ? COLOR.rgb : min(b + COLOR.rgb * k, vec3(1.0)), (s >= lo && s <= hi) ? 1.0 : 0.0);
+	COLOR = vec4(k > 0.999 ? COLOR.rgb : min(b + COLOR.rgb * k, vec3(1.0)), (s >= lo && s <= hi && in_g) ? 1.0 : 0.0);
 }
 """
+
+
+#  glass_rim 유리 면(메시 me 의 겉 k)의 둘레 고리 — 한 삼각형에만 쓰인 모서리를 차례로 이은 꼭짓점(메시 좌표). 유리는 테 밑으로
+#  안 든다(정면에서 테가 덮는 몫 0mm — 두 TV 다) — 이 고리가 곧 보이는 유리 끝이다.
+static func glass_rim(me: Mesh, k: int) -> PackedVector3Array:
+	var a := me.surface_get_arrays(k)
+	var vs: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
+	var ix: PackedInt32Array = a[Mesh.ARRAY_INDEX]
+	var cnt := {}
+	for t in range(0, ix.size(), 3):
+		for e in 3:
+			var p: Vector3 = vs[ix[t + e]].snapped(Vector3.ONE * 1e-5)
+			var q: Vector3 = vs[ix[t + (e + 1) % 3]].snapped(Vector3.ONE * 1e-5)
+			var ek: Array = [p, q] if str(p) < str(q) else [q, p]
+			cnt[ek] = int(cnt.get(ek, 0)) + 1
+	var nb := {}
+	for ek in cnt:
+		if int(cnt[ek]) == 1:
+			for j in 2:
+				if not nb.has(ek[j]):
+					nb[ek[j]] = []
+				(nb[ek[j]] as Array).append(ek[1 - j])
+	var out := PackedVector3Array()
+	if nb.is_empty():
+		return out
+	var prev: Vector3 = nb.keys()[0]
+	var cur: Vector3 = (nb[prev] as Array)[0]
+	out.append(prev)
+	while cur != out[0] and out.size() <= nb.size():
+		out.append(cur)
+		var nx: Array = nb[cur]
+		var n2: Vector3 = nx[0] if nx[0] != prev else nx[1]
+		prev = cur
+		cur = n2
+	return out
+
+
+#  rim_poly 오름 단 틀(handoff 앞 · flash_a > 0)에만 — 유리 둘레(hn 메타 rim {n 유리 노드 · p glass_rim})를 무대 카메라(cam ·
+#  vp 메타)로 화면 몫에. 그 밖 틀은 빈 것(자르지 않는다).
+static func rim_poly(hn: Node, dt: float) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	if dt >= 0.0 or flash_a(dt) <= 0.0 or not hn.has_meta("rim"):
+		return out
+	var cam := hn.get_meta("cam") as Camera3D
+	var vs := Vector2((hn.get_meta("vp") as SubViewport).size)
+	var r: Dictionary = hn.get_meta("rim")
+	var xf: Transform3D = (r.n as Node3D).global_transform
+	for p in r.p:
+		out.append(cam.unproject_position(xf * p) / vs)
+	return out
 
 
 #  flash_make 번쩍 — 층 root 맨 위의 판 하나(이름 Flash). handoff 뒤엔 나머지가 다 숨어 이것만 게임 그림 위 · 게임 필터
@@ -1782,19 +1827,25 @@ static func flash_make(root: Control, px := Vector2(640.0, 360.0)) -> ColorRect:
 	return fl
 
 
-#  cross 유리를 뚫는 틀마다(dt = t − handoff) — 번쩍 단(flash_a)이 오르는 동안은 유리 위에서 왼 위 [0, 단] 이 차오르고
-#  (glint — 유리 둘레 테는 안 하얘진다) · 꽉 찬 맨 밝은 틀부터 이 판이 받아 두 틀 뒤 내리는 동안은 [1 − 단, 1] 만 남아
-#  지나간 쪽부터 게임이 드러난다. handoff 에 Flash 말고 다 숨긴다(그 뒤 층은 비어 LEN 에 걷혀도 튀지 않는다).
-static func cross(root: Control, dt: float) -> void:
+#  cross 유리를 뚫는 틀마다(dt = t − handoff) — 번쩍 단(flash_a)이 오르는 동안은 왼 위 [0, 단] 이 유리 둘레(poly —
+#  rim_poly) 안에서만 차오르고(무대 위 2D 더하기 — 유리 셰이더에 그리면 톤 매핑 · 번짐 상한에 눌려 회색 막이었다 · 테는 안
+#  하얘진다) · 꽉 찬 맨 밝은 틀부터 화면을 다 덮어 두 틀 뒤 내리는 동안은 [1 − 단, 1] 만 남아 지나간 쪽부터 게임이
+#  드러난다. handoff 에 Flash 말고 다 숨긴다(그 뒤 층은 비어 LEN 에 걷혀도 튀지 않는다).
+static func cross(root: Control, dt: float, poly := PackedVector2Array()) -> void:
 	var fl := root.get_node("Flash") as ColorRect
 	var f: int = floori(dt * 60.0 + 0.001)
 	var lv: float = flash_a(dt)
 	var fm := fl.material as ShaderMaterial
 	fm.set_shader_parameter("lo", 1.0 - lv if f > 1 else 0.0)
-	fm.set_shader_parameter("hi", 1.0)
+	fm.set_shader_parameter("hi", lv if f < 0 else 1.0)
 	fm.set_shader_parameter("k", lv)
+	var pn: int = mini(poly.size(), 64) if f < 0 else 0
+	fm.set_shader_parameter("pn", pn)
+	if pn > 0:
+		poly.resize(64)
+		fm.set_shader_parameter("poly", poly)
 	for c in root.get_children():
-		(c as CanvasItem).visible = (lv > 0.0 and f >= 0) if c == fl else f < 0
+		(c as CanvasItem).visible = lv > 0.0 if c == fl else f < 0
 
 
 #  층 — 화판(outer.box) 자리에 맞추고 · 빗소리만 나는 어둠(TAPE.black) 뒤 TAPE.fade 에 떠오르고 · handoff 에
@@ -1807,7 +1858,7 @@ static func _layer(hn: Node, t: float) -> void:
 		root.position = box.position
 		root.size = box.size
 	(root.get_node("Fade") as ColorRect).color.a = 1.0 - clampf((t - float(TAPE.black)) / float(TAPE.fade), 0.0, 1.0)
-	cross(root, t - handoff())
+	cross(root, t - handoff(), rim_poly(hn, t - handoff()))
 
 
 #  먼지 — 더하기로 얹는 작은 판(늘 카메라를 본다). 알마다 제 씨로 상자 안에 흩어 둔다.
