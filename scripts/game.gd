@@ -1589,7 +1589,7 @@ func _plg_live() -> bool:
 	return plg_t >= 0.0
 
 
-#  프롤로그가 화면을 덮고 있나 — 유리를 뚫은(handoff) 뒤 번쩍이 다 덮은 틀이 지나면(Plg.lit_at) 필터가 켜진다.
+#  프롤로그가 화면을 덮고 있나 — 유리를 뚫는 번쩍의 맨 밝은 틀(Plg.lit_at)에 필터가 켜진다(잔상은 Plg.calm_at 까지 끈다).
 func _plg_cover() -> bool:
 	return _plg_live() and plg_t < Plg.lit_at()
 
@@ -1682,9 +1682,10 @@ func _plg_tick(d: float) -> void:
 		plg_rang["handoff"] = true
 		if plg_rain != null:
 			plg_rain.stop()
-	if plg_t >= Plg.lit_at() and not plg_rang.has("lit"):
-		plg_rang["lit"] = true
-		_crt_apply()
+	for k in ["lit", "calm"]:
+		if plg_t >= (Plg.lit_at() if k == "lit" else Plg.calm_at()) and not plg_rang.has(k):
+			plg_rang[k] = true
+			_crt_apply()
 	if plg_t >= Plg.length():
 		_plg_end()
 		return
@@ -7694,9 +7695,10 @@ const SFX := {
 	#  걸림 딸깍 · 고른 로딩 모터(2026-10-23 「테이프도 그냥 빨려가는거 같아」 — 낚아챔 → 고른 끌기 → 내려앉음)
 	"deck_grab":      {"f": 1400.0, "d": 0.03, "a": 0.07},
 	"deck_motor":     {"f": 420.0, "d": 0.10, "a": 0.03},
-	#  유리 반짝 · 뛰어듦(2026-10-25 · Plg GLINT) — 짧은 쉬익이 차올라 끊기며 삐 → 싱(유리 부분음 · 엇갈린 맥놀이) · 슈욱이
-	#  handoff 에 끊기고 퍽. 앞 50ms 가 쉬익의 발치라 a 가 작다(피크 0.26 언저리 — tv_on 0.16 · deck_clunk 0.33 사이).
-	"tv_glint":       {"f": 3600.0, "d": 0.08, "a": 0.025},
+	#  유리 반짝 · 뛰어듦(2026-10-25 · Plg GLINT) — 쉬익이 차올라 끊기며 삐 → 싱(유리 부분음 · 엇갈린 맥놀이) · 슈욱이
+	#  handoff 에 끊기고 퍽(파일 피크 0.47 — 싱 0.26 보다 5dB 위라 건너는 순간이 이 장면에서 가장 센 타격이다). 앞 50ms 가
+	#  쉬익의 발치라 a 가 작다.
+	"tv_glint":       {"f": 3600.0, "d": 0.08, "a": 0.014},
 	"drop_skip":      {"f": 330.0, "d": 0.05, "a": 0.10},
 	"chute_enter":    {"f": 523.0, "d": 0.04, "a": 0.10},
 
@@ -57311,6 +57313,12 @@ func _crt_apply() -> void:
 	if vs.x >= 1.0 and vs.y >= 1.0:
 		mat.set_shader_parameter("logical", vs)
 	mat.set_shader_parameter("motion", 0.0 if motion_off else 1.0)
+	#  잔상 — 프롤로그 번쩍이 걷히는 동안(Plg.calm_at 앞)은 끈다. 앞 틀의 흰 띠를 붙들어 판 위에 회색 평행사변형이 한 틀
+	#  섰다. null 이면 셰이더 기본값으로 돌아간다.
+	if _plg_live() and plg_t < Plg.calm_at():
+		mat.set_shader_parameter("trail", 0.0)
+	else:
+		mat.set_shader_parameter("trail", null)
 
 
 # ══════════════════════════════════════════════════════════
