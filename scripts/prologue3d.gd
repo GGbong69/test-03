@@ -265,9 +265,12 @@ const HERO := {"light": 1.1, "rim": 0.4, "rim_r": 0.55, "dive": 0.70, "portal": 
 #  밝은 틀 · lit_at) · calm handoff 뒤 CRT 잔상을 끄고 있는 틀(번쩍 단이 걷힌 뒤까지 — 앞 틀의 흰 띠를 붙들어 회색 판이
 #  한 틀 섰다 · calm_at) · cue 소리(tv_glint)가 handoff 몇 초 앞에 서나 — 빗금 앞에 쉬익이 서고 파일 0.267 초(싱
 #  첫머리)가 별이 다 핀 틀에 · 0.617 초(슈욱이 끊기고 퍽)가 handoff 에 선다(믹서가 한 틀 늦게 내므로 한 틀 앞당겨 낸다 —
-#  Movie Maker 믹스에서 퍽이 handoff 틀 끝에 걸렸다)
+#  Movie Maker 믹스에서 퍽이 handoff 틀 끝에 걸렸다) · rise 오름 단(1/3 · 2/3)을 유리 위에 그릴 때 더하는 몫 — 무대 톤
+#  매핑(filmic)을 지나며 sRGB 더하기가 약 1.4 배로 커져 2D Flash 와 같은 밝기로 줄인다(유리 반짝 검토 — 2D 판은 유리 둘레 테까지
+#  하얘졌다)
 const GLINT := {"lead": 36, "c0": -0.02, "step": 0.13, "n": 12, "at": 9, "spark": [6, 5, 4, 2],
-		"ladder": [1, 1, 2, 2, 3, 3, 2, 2, 1, 1], "fill": Color8(244, 239, 226), "lit": 0, "calm": 8, "cue": 0.637}
+		"ladder": [1, 1, 2, 2, 3, 3, 2, 2, 1, 1], "fill": Color8(244, 239, 226), "lit": 0, "calm": 8, "cue": 0.637,
+		"rise": 0.72}
 #  엑스트라 — 점 빛 세기 · 몸 빛깔 배수 · 화면 밝기 · 채도 · 화면 도트(1m 당 칸) · 화면 색 단 수
 const EXTRA := {"light": 0.3, "tone": 0.42, "dim": 0.13, "sat": 0.6, "cells": 110.0, "lv": 8.0}
 #  화면 장면 — 번호(SCR_SHADER mode) · 앞에 둔 점 빛 빛깔. game 은 주인공(지지직 1 → 화판 그림 9) · maker 는
@@ -365,6 +368,9 @@ uniform float refl = 0.0;
 uniform float cx = 0.5;
 //  land portal 끝 밝기 몫(게임 필터를 지난 그림 밝기에 맞춘다) — 무대마다 톤 매핑이 달라 바 인트로는 제 값을 준다
 uniform float land = 0.75;
+//  fk 번쩍 오름 단(handoff 앞 · Plg.glint 가 flash_a 를 준다 — 0 이면 없다) · ffill 번쩍 빛깔(GLINT.fill · sRGB)
+uniform float fk = 0.0;
+uniform vec3 ffill = vec3(1.0);
 
 float hs(vec2 p) {
 	return fract(sin(dot(p, vec2(12.9898, 78.233)) + seed * 17.0) * 43758.5453);
@@ -576,6 +582,18 @@ void fragment() {
 		}
 		if (c != c0) {
 			c = min(c, vec3(0.88));
+		}
+	}
+	//  번쩍 오름 단 — 2D Flash(FLASH_SHADER)와 같은 화면 60°「/」 금 · 같은 도트 끝의 [0, fk] 몫에 흰빛 fk 를 sRGB 로 더한다.
+	//  유리에만 그린다 — 아직 화면을 다 못 채운 유리 둘레의 테가 하얘져 스티커로 읽혔다(유리 반짝 검토). 0.88 밑(번짐이 안
+	//  선다). 맨 밝은 틀부터는 2D Flash 가 받는다(cross).
+	if (mode == 9 && pw > 0.0 && fk > 0.0) {
+		float fa = VIEWPORT_SIZE.x / VIEWPORT_SIZE.y;
+		float fm = 0.5 * fa + 0.2887;
+		float fs = ((SCREEN_UV.x - 0.5) * fa + 0.577 * (SCREEN_UV.y - 0.5) + fm) / (2.0 * fm);
+		if (fs <= fk) {
+			vec3 cs = pow(max(c, vec3(0.0)), vec3(1.0 / 2.2));
+			c = min(pow(min(cs + ffill * fk, vec3(1.0)), vec3(2.2)), vec3(0.88));
 		}
 	}
 	if (lv > 0.0) {
@@ -1712,6 +1730,10 @@ static func glint(m: ShaderMaterial, dt: float) -> void:
 			sp = i + 1
 		at += k
 	m.set_shader_parameter("spark", sp)
+	#  번쩍 오름 단은 유리 위에(handoff 앞만 — 그 뒤는 2D Flash · cross)
+	var fc: Color = GLINT.fill * float(GLINT.rise)
+	m.set_shader_parameter("fk", flash_a(dt) if f < int(GLINT.lead) else 0.0)
+	m.set_shader_parameter("ffill", Vector3(fc.r, fc.g, fc.b))
 
 
 #  flash_a 번쩍 단 — handoff −4 틀부터 2 틀마다 1/3 · 2/3 · 1 · 1 · 2/3 · 1/3(그 밖 0)
@@ -1760,19 +1782,19 @@ static func flash_make(root: Control, px := Vector2(640.0, 360.0)) -> ColorRect:
 	return fl
 
 
-#  cross 유리를 뚫는 틀마다(dt = t − handoff) — 번쩍 단(flash_a)이 오르는 동안은 왼 위에서 [0, 단] 이 차오르고 · 꽉 찬
-#  두 틀 뒤 내리는 동안은 [1 − 단, 1] 만 남아 지나간 쪽부터 게임이 드러난다. handoff 에 Flash 말고 다 숨긴다(그 뒤
-#  층은 비어 LEN 에 걷혀도 튀지 않는다).
+#  cross 유리를 뚫는 틀마다(dt = t − handoff) — 번쩍 단(flash_a)이 오르는 동안은 유리 위에서 왼 위 [0, 단] 이 차오르고
+#  (glint — 유리 둘레 테는 안 하얘진다) · 꽉 찬 맨 밝은 틀부터 이 판이 받아 두 틀 뒤 내리는 동안은 [1 − 단, 1] 만 남아
+#  지나간 쪽부터 게임이 드러난다. handoff 에 Flash 말고 다 숨긴다(그 뒤 층은 비어 LEN 에 걷혀도 튀지 않는다).
 static func cross(root: Control, dt: float) -> void:
 	var fl := root.get_node("Flash") as ColorRect
 	var f: int = floori(dt * 60.0 + 0.001)
 	var lv: float = flash_a(dt)
 	var fm := fl.material as ShaderMaterial
 	fm.set_shader_parameter("lo", 1.0 - lv if f > 1 else 0.0)
-	fm.set_shader_parameter("hi", lv if f < 0 else 1.0)
+	fm.set_shader_parameter("hi", 1.0)
 	fm.set_shader_parameter("k", lv)
 	for c in root.get_children():
-		(c as CanvasItem).visible = lv > 0.0 if c == fl else f < 0
+		(c as CanvasItem).visible = (lv > 0.0 and f >= 0) if c == fl else f < 0
 
 
 #  층 — 화판(outer.box) 자리에 맞추고 · 빗소리만 나는 어둠(TAPE.black) 뒤 TAPE.fade 에 떠오르고 · handoff 에

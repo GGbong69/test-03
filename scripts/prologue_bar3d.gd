@@ -43,11 +43,14 @@ const GLB := "res://assets/models/bar_intro.glb"
 
 #  때 — feed 화면 그림(게임 인트로 시계)이 출발 · dive0 ~ dive1 유리 속으로 · 넘김(handoff) = dive1 = 번쩍의 맨 밝은 틀 —
 #  그 틀에 층이 끊기고(Plg.cross) LEN 까지 비어 있다가 걷힌다(옛 0.45 초 층 흐림은 번쩍이 맡는다)
-#  feed 13.44 — 넘김까지 3.96 초. 인트로의 램프 딸깍(0.45)이 TV 앞에 눈이 선 동안 · 램프 밑 문 그림이 밀기 내내 · 꺼짐(2.85)은
-#  다이브 속 · 네온이 붙는 쾅(3.96)은 넘김 = 번쩍의 맨 밝은 틀(검토 1 — 다이브 한가운데 한 틀 만에 밝기가 튀었다 · 검토 2 — 밀기
-#  첫 1 초가 인트로의 꺼진 박자라 TV 가 방보다 어두웠다 · 유리 반짝 — 13.6 이면 쾅이 퍽 0.16 초 뒤라 두 번 치고 금빛 번쩍이
-#  흰 번쩍 뒤에 한 번 더 튀었다 · 쾅은 짧은 창 크기로 퍽보다 1.4~3.2dB 컸다 — 둘을 한 틀에 겹쳐 건너는 한 방으로)
-const T := {"feed": 13.44, "dive0": 16.2, "dive1": 17.4}
+#  feed 13.78 — 넘김까지 3.62 초. 인트로의 램프 딸깍(0.45 → 14.23)은 TV 앞 깜박임(LID 13.8~14.15)이 끝난 뒤 · 램프 밑 문
+#  그림이 밀기 내내 · 꺼짐(2.85 → 16.63)은 반짝 바로 앞(어두워진 유리를 빗금이 쓸고 네온이 붙어 온다) · 네온이 붙는
+#  쾅(3.96 → 17.74 = 넘김 + 20 틀)은 흰빛이 다 걷히고 잔상이 돌아온 뒤 게임 속에서 따로 — 테이프의 퍽 뒤 다트처럼 「들어왔고
+#  살아 있다」 한 박(검토 1 — 다이브 한가운데 한 틀 만에 밝기가 튀었다 · 검토 2 — 밀기 첫 1 초가 인트로의 꺼진 박자라 TV 가
+#  방보다 어두웠다 · 유리 반짝 검토 — 13.6 은 쾅이 퍽 0.16 초 뒤라 두 번 쳤고 · 13.44 는 쾅이 퍽에 겹쳐 유리 퍽이 settle_total
+#  의 둥에 묻히고 흰 번쩍 뒤에 금빛 막이 매끈하게 꺼지며 · 건넌 뒤 게임 속이 1.3 초 정지 그림이었고 · 램프 딸깍이 감은 눈에
+#  났다). 간판 소리는 이 장면이 간판을 켜는 때(SIGN.t0)에 난다(game.gd — 인트로 시계로는 반짝 쉬익에 겹친다).
+const T := {"feed": 13.78, "dive0": 16.2, "dive1": 17.4}
 const LEN := 17.85
 #  층 — 게임 필터 밑(Plg.LAYER 와 같다)
 const LAYER := 90
@@ -106,6 +109,8 @@ const FOCUS := [
 #  꺼진다: 다트 장 그림등 → 촛불 · 네온 → 왼 펜던트 → 선반 밑불 · 채움 반 → 오른 펜던트 → 가운데 펜던트 · 채움 0.
 #  손 컷은 선반 밑불을 한 단 내린다 · 올려다볼 때 한 단 더(앞에서 비춘 주황 병 줄이 TV 등장을 가로챘다) · 다트 장면은 찬
 #  채움을 되살려 벽 · 장 문짝 · 그림등 · 의자가 1~2 단 실루엣으로 선다(검은 허공에 다트판과 원판만 떴다 · 검토 3).
+#  tvb TV 몸 빛(TvRim · 전원 등) — 가운데 펜던트와 같이 꺼진다: 깜깜한 방에 TV 테 윗면의 무른 타원 하이라이트 · 화면 밑
+#  끝의 쨍한 주황 전원 등만 유리 밖에 남아 별과 시선을 다퉜다(유리 반짝 검토 — 빛은 유리 하나만 · 등은 어두운 불씨 단으로).
 #  가운데 펜던트는 손 + 15cm 만 덮는 좁은 원뿔(카운터 웅덩이가 화면 절반을 채우고 손이 크림으로 날았다 · 검토 1) ·
 #  오른쪽은 손님 잔 받침만 — 초점이 손으로 뛰면 한 단 내린다(손님 잔이 손보다 밝아 이 컷 주인공과 다퉜다 · 검토 2).
 #  촛불은 다트 장면에서 0.4(채도 높은 주황 웅덩이가 다트판과 다퉜다 · 검토 2)
@@ -113,7 +118,7 @@ const LBASE := {"pl": 0.9, "pm": 1.8, "pr": 0.7, "shelf": 0.15, "pict": 2.7, "ca
 #  펜던트 원뿔(반각 도) · 올려다보는 때부터 갓 속 젖빛 판 · 갓 안쪽은 가장 어두운 단(올려다본 그림 귀에 큰 원판이 섰다)
 const PEND := {"ang": [24.0, 17.0, 12.0], "up": 11.3}
 const LIGHT := [
-	[0.0, {"pl": 1.0, "pm": 1.0, "pr": 1.0, "shelf": 1.0, "pict": 0.0, "candle": 0.4, "neon": 0.0, "fill": 1.0}],
+	[0.0, {"pl": 1.0, "pm": 1.0, "pr": 1.0, "shelf": 1.0, "pict": 0.0, "candle": 0.4, "neon": 0.0, "fill": 1.0, "tvb": 1.0}],
 	[3.2, {"pr": 0.45, "shelf": 0.35}],
 	[7.9, {"pict": 1.0, "candle": 0.3, "neon": 0.0, "fill": 5.0}],
 	[11.3, {"shelf": 0.3, "fill": 1.0}],
@@ -122,7 +127,7 @@ const LIGHT := [
 	[15.2, {"pl": 0.0}],
 	[15.45, {"shelf": 0.0, "fill": 0.5}],
 	[15.7, {"pr": 0.0}],
-	[16.0, {"pm": 0.0, "fill": 0.0}],
+	[16.0, {"pm": 0.0, "fill": 0.0, "tvb": 0.0}],
 ]
 const CLICK := [14.6, 14.9, 15.2, 15.45, 15.7, 16.0]
 #  채움 — 웅덩이 밖 바탕(안 재질 fill · 문 장면 BAR.fill 의 0.12 배 언저리 · 찬 쪽)
@@ -172,7 +177,7 @@ const L_TBL := 1 << 7
 #  TV 빛 — 세기 · 빛깔(지지직 찬 빛 → 그림이 비친 뒤) · 원뿔 반각(손님 잔 · 그 너머 카운터만 — 넓게 비추니 주황 나무에
 #  묻혀 찬 빛으로 안 읽혔다) · 단(밑값의 몫 — 0.5~2 초씩 버틴다 · 이어 붙이지 않는다)
 const TVL := {"e": 2.6, "c": Color(0.56, 0.65, 0.86), "c2": Color(0.74, 0.72, 0.74), "ang": 12.0, "lv": [0.6, 0.68, 0.76, 0.84, 0.92, 1.0],
-		"hold": [0.5, 2.0], "rim": 0.2, "fog": 2.2}
+		"hold": [0.5, 2.0], "rim": 0.2, "fog": 2.2, "led": [Color("ff3b2e"), Color("2a0d0b")]}
 #  화면 — 지지직이 그림을 덮는 몫 [때부터, 몫](단으로 걷힌다) · 지지직 칸
 const SNOW := [[0.0, 1.0], [13.4, 0.72], [13.7, 0.42], [14.0, 0.16], [14.4, 0.05], [14.9, 0.0]]
 #  칸 40 × 90 — 칸이 가로 3 : 세로 1(가로 번진 인광 · Plg snow_crt) · 멈춘 TV 에서 세로 1.5px 언저리. 46 × 34(칸 8px 네모)는
@@ -447,8 +452,10 @@ class Hold extends Node:
 #  뛰어든다) · uh 는 테이프와 같아 빗금 · 별이 뛰어듦에 같은 자리로 걸린다. star 별 자리(유리 UV — 테이프 자리 0.86 · 0.26 은
 #  이 그림에서 HIGHTON 간판 끝이라 네온과 다퉜다 · 간판을 비켜 오른 위 귀의 어두운 벽돌 위 — 숙여 단 유리의 위 어깨가 TV 빛 ·
 #  펜던트를 받는 자리 · 굵은 띠가 GLINT.at 앞 틀에 지난다) · land portal 끝 그림 밝기 몫(테이프 0.75 — 이 무대 톤 매핑으로는
-#  H−6 유리가 게임 속 H+6 보다 16% 밝고 붉었다 · 필터를 켠 게임 그림에 맞춘다)
-const DIVE := {"creep": [0.0, 0.0, 0.628, 0.0, 0.0], "star": Vector2(0.92, 0.14), "land": 0.62}
+#  H−6 유리가 게임 속 H+6 보다 16% 밝고 붉었다 · 필터를 켠 게임 그림에 맞춘다) · sat portal 끝 그림 채도 몫(SCR sat — 필터를
+#  안 지난 유리 그림이 자홍으로 짙어 문 채도 0.54 · 간판 띠 0.65 가 게임 속 0.43 · 0.56 이었고 번쩍이 빠지는 1/3 틀에 분홍
+#  자리에 갈색이 붙어 보였다 · 유리 반짝 검토)
+const DIVE := {"creep": [0.0, 0.0, 0.628, 0.0, 0.0], "star": Vector2(0.92, 0.14), "land": 0.59, "sat": 0.75}
 
 
 static func length() -> float:
@@ -1178,9 +1185,10 @@ static func _tv(hn: Node, w: Node3D, feed: Texture2D, sz: Vector2) -> void:
 	var tm := {
 		"crt_body": _inm(hn, Color("2a292d"), 4.0), "crt_bezel": _inm(hn, Color("121114"), 4.0),
 		"crt_btn": _inm(hn, Color("3a3a40"), 4.0), "crt_grille": _inm(hn, Color("0c0c0f")),
-		"crt_led": Room3D._glow(Color("ff3b2e"), 1.0), "iron": pm.iron, "knob": _inm(hn, Color("26232a"), 4.0),
+		"crt_led": Room3D._glow(TVL.led[0], 1.0), "iron": pm.iron, "knob": _inm(hn, Color("26232a"), 4.0),
 		"cable": _inm(hn, Color("0c0a0e"), 4.0), "rubber": pm.rubber,
 	}
+	hn.set_meta("led", tm.crt_led)
 	var mnt := _glb_mi("TvMount", tm, TV.at)
 	mnt.rotation_degrees = Vector3(0.0, float(TV.yaw), 0.0)
 	w.add_child(mnt)
@@ -1404,8 +1412,12 @@ static func _lights(hn: Node, t: float) -> void:
 	if tl.size() == 2:
 		(tl[0] as SpotLight3D).light_energy = float(TVL.e) * tvk
 		(tl[0] as SpotLight3D).light_color = tc
-		(tl[1] as OmniLight3D).light_energy = float(TVL.rim) * tvk
+		(tl[1] as OmniLight3D).light_energy = float(TVL.rim) * tvk * float(d.tvb)
 		(tl[1] as OmniLight3D).light_color = tc
+	if hn.has_meta("led"):
+		var lm := hn.get_meta("led") as StandardMaterial3D
+		lm.albedo_color = TVL.led[0] if float(d.tvb) > 0.0 else TVL.led[1]
+		lm.emission = lm.albedo_color
 	var ps: Array = []
 	for i in mini(pd.size(), 3):
 		ps.append((pd[i] as Node3D).global_position)
@@ -1651,7 +1663,8 @@ static func _cam_xf(t: float, c: Vector3, ce: Dictionary) -> Array:
 	if u > 0.0 and not ce.is_empty():
 		var o: Vector3 = eye - (ce.look as Vector3)
 		eye = (ce.look as Vector3) + o * pow(float(ce.d) / o.length(), Plg.dive_w(u, DIVE.creep))
-		look = ce.look
+		#  보는 점에도 숨을 싣는다(눈에만 남으면 dive0 첫 틀에 방향이 0.06° 꺾여 화면이 1 도트 튀었다 · 검토)
+		look = (ce.look as Vector3) + Vector3(0.0, float(br[1]), 0.0)
 	var xf := Transform3D(Basis.looking_at(look - eye, Vector3.UP), eye)
 	if absf(float(p[2])) > 0.01:
 		xf.basis = xf.basis * Basis(Vector3.BACK, deg_to_rad(float(p[2])))
@@ -1670,7 +1683,8 @@ static func _cam(hn: Node, t: float) -> void:
 	var scr: ShaderMaterial = hn.get_meta("scr")
 	if scr != null:
 		var G := _tv_glass()
-		Plg.portal(scr, u, Plg.glass_pg(cam, G.c, (G.gb as AABB).size.y))
+		var po: float = Plg.portal(scr, u, Plg.glass_pg(cam, G.c, (G.gb as AABB).size.y))
+		scr.set_shader_parameter("sat", lerpf(1.0, float(DIVE.sat), po))
 		Plg.glint(scr, t - handoff())
 	var gk: float = 1.0 - smoothstep(float(Plg.LOOK.gone[0]), float(Plg.LOOK.gone[1]), u)
 	(hn.get_meta("grade") as ShaderMaterial).set_shader_parameter("k", gk)
@@ -1707,9 +1721,10 @@ static func _snow(t: float) -> float:
 #  닫히고 다이브에 다 닫힌다) · TV 지지직 · 웅(순환)은 SFX(먹먹해지지 않는다). 넘김(퍽)에 버스를 걷는다.
 #  clink 먼 잔 · lp 로패스 [닫힘 · 열림](Hz) · static TV 지지직 [감은 눈 · 화면 밖(눈 뜬 뒤) · 올려다본 뒤](dB) · hum 웅(같은 차례) ·
 #  click 빛 딸깍 · tv 그림이 비치는 동안 SFX 에 거는 작은 스피커 [고역 통과 · 저역 통과(Hz) · 줄임(dB)] — 게임 인트로 소리가
-#  TV 소리로 들리다가 · tv_out 유리 반짝(cues tv_glint)이 서면 이 초에 걸쳐 TV 소리(스피커 · 지지직 · 웅)를 걷는다 — 반짝 ·
+#  TV 소리로 들리다가 · tv_out 유리 반짝(cues tv_glint) 앞 이 초에 걸쳐 TV 소리(스피커 · 지지직 · 웅)를 걷는다 — 반짝 ·
 #  삐싱 · 퍽은 TV 소리가 아니다(스피커를 지나니 싱 −22 · 퍽 −11dBFS 로 먹먹하고 퍽이 인트로의 네온 쾅(−10)보다 작았다).
-#  그 사이 인트로는 소리가 없다(sign 딸깍은 반짝 앞에 끝난다) · 방은 로패스로 닫히는 중이라 쉬익이 홀로 차오른다
+#  그 사이 인트로는 소리가 없다(램프 꺼짐 딸깍은 반짝 앞에 끝나고 · 간판 소리는 SIGN.t0 · 쾅은 건넌 뒤) · 방은 로패스로 닫히는
+#  중이라 쉬익이 홀로 차오른다
 const SND := {"clink": 0.6, "lp": [600.0, 16000.0], "static": [-24.0, -15.0, 0.0], "hum": [-20.0, -12.0, 0.0],
 		"click_db": -8.0, "tv": [350.0, 4800.0, -4.0], "tv_out": 0.07}
 
@@ -1806,10 +1821,11 @@ static func _audio_tick(hn: Node, t: float) -> void:
 		pp.volume_db = linear_to_db(q) - 3.0
 		if t >= float(POLISH.down[0]) and pp.playing:
 			pp.stop()
-	#  TV — 지지직은 그림이 비칠수록 단으로 잦아들고 · 웅은 올려다볼 때부터 크다. 반짝이 서면 SND.tv_out 에 걸쳐 걷고 멎는다
-	#  (스피커가 걷힌 뒤 60Hz 웅이 날것으로 남지 않게 스피커보다 먼저)
+	#  TV — 지지직은 그림이 비칠수록 단으로 잦아들고 · 웅은 올려다볼 때부터 크다. 반짝 앞 SND.tv_out 에 걸쳐 걷고 반짝 틀에
+	#  멎는다 — 스피커도 그 틀에 걷혀 쉬익은 처음부터 날것이다(반짝 뒤에 걷으니 차오르는 쉬익 4 틀째에 고역이 한 틀에 열려
+	#  「틱」 이음매가 났다 · 검토)
 	var tg: float = float(cues().tv_glint)
-	var tvk: float = 1.0 - clampf((t - tg) / float(SND.tv_out), 0.0, 1.0)
+	var tvk: float = 1.0 - clampf((t - (tg - float(SND.tv_out))) / float(SND.tv_out), 0.0, 1.0)
 	if pl.has("static"):
 		var sk: float = _snow(t)
 		var sp := pl.static as AudioStreamPlayer

@@ -10,7 +10,8 @@ extends SceneTree
 #    ⑥ 개발자 판 — 「바 인트로 보기」 · 「켤 때 인트로」 줄이 있고 그 쪽이 열아홉 줄 안 · 켤 때 인트로 줄이 전역 값을 바꾼다
 #    ⑦ 유리 뚫기(테이프 Plg 와 같은 반짝 · 번쩍) — tv_glint 가 handoff − GLINT.cue · 밀기가 서는 때 = 뛰어듦 시작 · 빗금은
 #      handoff − GLINT.lead 틀에 서고 별은 번쩍 앞에 진다 · 번쩍은 handoff −4 틀 ~ +6 틀만 · 필터는 맨 밝은 틀(lit_at)에 켜지고
-#      잔상은 calm_at 까지 0 · handoff 뒤 층은 Flash 만 · TV 스피커는 반짝이 서면 걷힌다(게임 필터는 처음 켠 값으로 돈다)
+#      잔상은 calm_at 까지 0 · handoff 뒤 층은 Flash 만 · TV 스피커는 반짝 틀에 걷혀 있다(게임 필터는 처음 켠 값으로 돈다) ·
+#      번쩍 오름 단은 유리 위(SCR fk)에만 · 인트로 박자(램프는 깜박임 뒤 · 쾅은 건넌 뒤 · 간판 소리는 SIGN.t0)
 #   godot --path . --script scripts/tools/qa_barintro.gd
 const Save = preload("res://scripts/save.gd")
 const Dev = preload("res://scripts/dev.gd")
@@ -40,6 +41,9 @@ var lit0 := -1.0
 var trail_ok := true       # calm_at 앞 필터가 선 틀은 잔상 0
 var cut_ok := true         # handoff 뒤 층에 Flash 말고 선 것이 없다
 var spk_late := false      # 반짝이 서고 나서도 TV 스피커가 걸려 있었다
+var sign_snd := -1.0       # 인트로 간판 소리가 난 때
+var fk0 := -1.0            # 유리 위 번쩍 오름 단(SCR fk)이 처음 · 마지막 선 때
+var fk1 := -1.0
 
 
 func _initialize() -> void:
@@ -122,6 +126,9 @@ func _process(_d: float) -> bool:
 				if fl.visible:
 					fl0 = t if fl0 < 0.0 else fl0
 					fl1 = t
+				if float(sm.get_shader_parameter("fk")) > 0.0:
+					fk0 = t if fk0 < 0.0 else fk0
+					fk1 = t
 				if g.crt_layer.visible and lit0 < 0.0:
 					lit0 = t
 				if g.crt_layer.visible and t < P.calm_at():
@@ -130,8 +137,10 @@ func _process(_d: float) -> bool:
 				if t >= hf + 0.5 / 60.0:
 					for c in rt.get_children():
 						cut_ok = cut_ok and (c == fl or not (c as CanvasItem).visible)
-				if t > float(P.cues().tv_glint) + float(P.SND.tv_out) + 0.05:
+				if t >= float(P.cues().tv_glint):
 					spk_late = spk_late or _sfx_fx() > fx0
+				if sign_snd < 0.0 and g.intro_rang.has("sign"):
+					sign_snd = t
 				if t < P.feed_at() - 0.05:
 					early_intro = early_intro or g.intro_t > 0.0
 				else:
@@ -181,11 +190,27 @@ func _process(_d: float) -> bool:
 						and absf(float(mp[0]) + float(mp[1]) - l0) < fr and Pg.dive_w(float(cr[2]), cr) == 0.0
 						and is_equal_approx(Pg.dive_w(1.0, cr), 1.0) and P.lit_at() < hf and P.lit_at() > hf - fr
 						and P.calm_at() > hf + 6.0 * fr, "반짝 %.3f · 뛰어듦 %.3f" % [float(P.cues().tv_glint), l0])
-				_ok("⑦ 빗금 · 별 · 번쩍 · 필터 때", absf(gl0 - (hf - float(Pg.GLINT.lead) * fr)) <= 3.0 * fr
-						and sp1 > 0.0 and sp1 < hf - 4.0 * fr and fl0 >= hf - 4.5 * fr and fl0 < hf
+				_ok("⑦ 빗금 · 별 · 번쩍(오름 단은 유리 위 · 맨 밝은 틀부터 화면) · 필터 때",
+						absf(gl0 - (hf - float(Pg.GLINT.lead) * fr)) <= 3.0 * fr
+						and sp1 > 0.0 and sp1 < hf - 4.0 * fr and fk0 >= hf - 4.5 * fr and fk1 < hf
+						and fl0 >= hf - 0.5 * fr and fl0 < hf + 3.0 * fr
 						and fl1 < hf + 6.0 * fr and lit0 >= P.lit_at() and lit0 < hf + 3.0 * fr,
-						"빗금 H%+.0f · 별 끝 H%+.0f · 번쩍 H%+.0f~H%+.0f · 필터 H%+.0f 틀" % [(gl0 - hf) / fr, (sp1 - hf) / fr,
-						(fl0 - hf) / fr, (fl1 - hf) / fr, (lit0 - hf) / fr])
+						"빗금 H%+.0f · 별 끝 H%+.0f · 유리 번쩍 H%+.0f~H%+.0f · 화면 번쩍 H%+.0f~H%+.0f · 필터 H%+.0f 틀" % [
+						(gl0 - hf) / fr, (sp1 - hf) / fr, (fk0 - hf) / fr, (fk1 - hf) / fr, (fl0 - hf) / fr, (fl1 - hf) / fr,
+						(lit0 - hf) / fr])
+				#  인트로 박자 — 램프 딸깍은 TV 앞 깜박임 뒤 · 쾅은 번쩍 · 잔상이 걷힌 뒤 게임 속 · TV 그림의 소리(램프 · 꺼짐 · 쾅)는
+				#  반짝 쉬익 ~ 잔상 창 밖 · 간판 소리는 이 장면이 간판을 켜는 때(SIGN.t0)
+				var IN: Dictionary = g.INTRO
+				var fa: float = P.feed_at()
+				var lid: Array = P.LID
+				var snap: float = fa + float(IN.snap) + float(IN.snap_t)
+				var w0: float = float(P.cues().tv_glint) - float(P.SND.tv_out)
+				var beat_ok: bool = fa + float(IN.lamp) > float(lid[lid.size() - 1][0]) and snap > P.calm_at()
+				for bt in [fa + float(IN.lamp), fa + float(IN.off), snap]:
+					beat_ok = beat_ok and (bt < w0 or bt > P.calm_at())
+				_ok("⑦ 인트로 박자 — 램프는 깜박임 뒤 · 쾅은 건넌 뒤 따로 · 건너기 창에 TV 그림 소리 없음",
+						beat_ok and sign_snd >= float(P.SIGN.t0) - fr and sign_snd < float(P.SIGN.t0) + 3.0 * fr,
+						"램프 %.2f · 쾅 %.2f(H%+.0f) · 간판 소리 %.2f" % [fa + float(IN.lamp), snap, (snap - hf) / fr, sign_snd])
 				_ok("⑦ 잔상 calm 까지 0 · 넘김 뒤 층은 번쩍만 · 반짝에 TV 스피커가 걷힌다", trail_ok and cut_ok and not spk_late)
 				st = 2
 				f = 0

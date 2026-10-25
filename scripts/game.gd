@@ -1859,7 +1859,9 @@ func _intro_tick(d: float) -> void:
 	while intro_fired < ds.size() and t >= float(ds[intro_fired]):
 		_ttl_throw(_intro_aim(intro_fired))
 		intro_fired += 1
-	if t >= float(INTRO.sign):
+	#  간판 소리는 그려지는 간판 시계를 따른다 — 바 인트로가 밀기 동안 간판을 앞당겨 켜면(plg_sign_t) 그때 난다(인트로 시계로는
+	#  유리 반짝의 쉬익에 겹쳤다)
+	if maxf(t, plg_sign_t) >= float(INTRO.sign):
 		_intro_once("sign", "leg_open")
 	if t >= float(INTRO.snap) + float(INTRO.snap_t):
 		_intro_once("snap", "settle_total")

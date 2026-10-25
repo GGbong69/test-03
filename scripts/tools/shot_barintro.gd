@@ -8,7 +8,7 @@ extends SceneTree
 #    ② TV 유리 한가운데가 그림 한가운데 — TV 가 다 들어온 뒤(멈춤 · 밀기 · 다이브) |dx| · |dy| ≤ 그림 폭 · 높이의 5%.
 #    ③ 다가감 빠르기(틀당 그림이 커지는 몫 — 거리 · 화각) — 뛰어듦 앞은 어느 틀도 Z_MAX 를 안 넘고(밀기는 천천히) ·
 #       뛰어듦(Plg dive_w 세제곱)은 handoff 까지 줄지 않고 는다(유리 앞에서 서지 않고 뚫는다).
-#  <스틸 폴더>/tmap.txt — 그린 틀마다 [틀 번호 · plg_t · 유리까지 거리 · 화각 · glint · spark · portal · 번쩍 단 ·
+#  <스틸 폴더>/tmap.txt — 그린 틀마다 [틀 번호 · plg_t · 유리까지 거리 · 화각 · glint · spark · portal · 번쩍 단(오름 단은 유리 fk) ·
 #  CRT · VHS · 도트 켜짐] — Movie Maker 그림 번호는 틀 번호 − 1. 게임 필터는 처음 켠 값(CRT_DEF …)으로 찍는다.
 #   godot --path . --resolution 1280x720 --fixed-fps 60 [--write-movie <폴더>/m.png] \
 #       --script scripts/tools/shot_barintro.gd -- <스틸 폴더> [때,때,…]
@@ -126,7 +126,8 @@ func _track(t: float) -> void:
 	var fl := (hn.get_meta("root") as Control).get_node("Flash") as CanvasItem
 	tmap.append("%d %.4f %.4f %.2f %.3f %d %.3f %.3f %s" % [drawn, t, dd, cam.fov, float(m.get_shader_parameter("glint")),
 			int(m.get_shader_parameter("spark")), float(m.get_shader_parameter("portal")),
-			float((fl.material as ShaderMaterial).get_shader_parameter("k")) if fl.visible else 0.0,
+			float((fl.material as ShaderMaterial).get_shader_parameter("k")) if fl.visible
+					else float(m.get_shader_parameter("fk")),
 			"%d%d%d" % [int(g.crt_layer.visible), int(g.vhs_rect.visible), int(g.dot_rect.visible)]])
 
 
@@ -146,11 +147,13 @@ func _report() -> void:
 		w.append([float(rec[i][0]), _ang(rec[i - 1][1], rec[i][1]) / maxf(dt, 0.0001)])
 	var dive0: float = P.T.dive0
 	var dive1: float = P.T.dive1
+	#  눈길이 끝나는 때 = 뛰어듦 시작(밀기는 dive0 너머 creep uh 몫까지 간다 — 옛 창은 16.2 에 끊겨 마지막 0.75 초를 안 쟀다)
+	var l0: float = dive0 + float(P.DIVE.creep[2]) * (dive1 - dive0)
 	#  ① 길마다 — 가장 빠른 틀 · 첫 · 끝 틀(움직임이 0.05°/s 넘는 첫 · 마지막 틀)
 	var H: Dictionary = P.HEAD
 	for mv in P.MOVE:
 		var a: float = float(mv[0]) - float(H.lead)
-		var e: float = minf(float(mv[0]) + float(mv[1]) + float(H.settle), dive0)
+		var e: float = minf(float(mv[0]) + float(mv[1]) + float(H.settle), l0)
 		var mx := 0.0
 		var at := 0.0
 		var first := -1.0
@@ -178,14 +181,14 @@ func _report() -> void:
 	var over := 0
 	var dmx := 0.0
 	for r in w:
-		if float(r[0]) >= dive0:
+		if float(r[0]) >= l0:
 			dmx = maxf(dmx, r[1])
 		elif float(r[1]) > W_MAX:
 			over += 1
 	lines.append("다이브 앞 45°/s 넘는 틀 %d · 다이브 최고 %.1f°/s(효과 — 따로 적기만)" % [over, dmx])
 	var sp := []
 	for i in range(1, w.size()):
-		if float(w[i][0]) < dive0 and absf(float(w[i][1]) - float(w[i - 1][1])) > J_MAX:
+		if float(w[i][0]) < l0 and absf(float(w[i][1]) - float(w[i - 1][1])) > J_MAX:
 			sp.append("%.3f:%.1f→%.1f" % [w[i][0], w[i - 1][1], w[i][1]])
 	lines.append("틀 사이 뜀(다이브 앞) %d %s" % [sp.size(), " ".join(sp.slice(0, 12))])
 	if not sp.is_empty():
@@ -212,7 +215,6 @@ func _report() -> void:
 	if not cok:
 		fail.append("tv")
 	#  ③ 다가감 빠르기 — 틀당 그림이 커지는 몫 z = ln(앞 틀 거리 · tan(화각/2) ÷ 이 틀 것). 밀기 시작 ~ 뛰어듦 앞 · 뛰어듦
-	var l0: float = dive0 + float(P.DIVE.creep[2]) * (dive1 - dive0)
 	var zmx := 0.0
 	var zat := 0.0
 	var zdrop := 0
