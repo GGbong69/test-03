@@ -24,7 +24,7 @@ extends SceneTree
 #       넘게 들어가 바닥에서 버틴다 · 떼면 앞으로 조금 넘쳤다 선다 · 바닥에서 검지 끝마디가 젖는다 · 카세트는 걸려 서고 →
 #       낚아채여 확 → 고른 빠르기로 끌리고 → 멎은 뒤 내려앉는다 · 소리 일곱(걸림 딸깍 · 모터) · 키가 그림자를 드리운다(손 ·
 #       덮개 · 단추만 — 카세트는 아니다) · 먼지 낀 공기 · 빛줄기 기둥이 섰다 · 층이 걷힐 때 3D 층의 색 · 낟알 · 안개가 다 걷혔다
-#       유리 뚫기(2026-10-25 「들어갈때 유리가 반짝? 약간 삐싱」) — 반짝 소리 때 · handoff = push1 · 번쩍 단 · 다가감 몫 · 번쩍 막
+#       유리 뚫기(2026-10-25 「들어갈때 유리가 반짝? 약간 삐싱」) — 반짝 소리 때 · handoff = push1 · 번쩍 단 · 다가감 몫 · 번쩍 띠 · 내려앉기
 #   godot --path . --script scripts/tools/qa_prologue.gd
 const Save = preload("res://scripts/save.gd")
 var b = null
@@ -286,13 +286,19 @@ func _process(_d: float) -> bool:
 					cu_ok = cu_ok and cu.has(k) and float(cu[k]) < TL and g._sfx_file(k) != null
 				_ok("⑨ 소리 때 — 비 · TV · 앞 토막 일곱(파일이 있다)", cu_ok, str(cu.keys()))
 				#  유리 뚫기(2026-10-25 GLINT) — 반짝 소리는 handoff − cue · handoff 가 곧 push1 · 번쩍 단(−2 틀 2/3 · 맨 밝은 틀 1 ·
-				#  6 틀 뒤 0) · 다가감 몫(멈칫 0.32 · 끝 1) · 층 맨 위 번쩍 막
+				#  6 틀 뒤 0) · 다가감 몫(가장 느린 틀의 w · 끝 1) · 번쩍 띠는 게임 필터(CRT) 위 제 층 · 내려앉는 Land
 				var hf: float = P.handoff()
-				_ok("⑨ 유리 뚫기 — 반짝 소리 · 번쩍 단 · 다가감 몫 · 번쩍 막", cu.has("tv_glint") and g._sfx_file("tv_glint") != null
+				var cr: Array = P.HERO.creep
+				var rt := g.plg_vp.get_meta("root") as Control
+				var fl = rt.get_meta("flash", null)
+				_ok("⑨ 유리 뚫기 — 반짝 소리 · 번쩍 단 · 다가감 몫 · 번쩍 띠 · 내려앉기", cu.has("tv_glint")
+						and g._sfx_file("tv_glint") != null
 						and is_equal_approx(float(cu.tv_glint), hf - float(P.GLINT.cue)) and is_equal_approx(hf, float(P.T.push1))
 						and is_equal_approx(P.flash_a(0.0), 1.0) and is_equal_approx(P.flash_a(-0.03), 2.0 / 3.0)
-						and P.flash_a(0.1) == 0.0 and is_equal_approx(P.dive_w(0.5), 0.32) and is_equal_approx(P.dive_w(1.0), 1.0)
-						and (g.plg_vp.get_meta("root") as Control).get_node_or_null("Flash") != null,
+						and P.flash_a(0.1) == 0.0 and is_equal_approx(P.dive_w(float(cr[0])), float(cr[1]))
+						and is_equal_approx(P.dive_w(1.0), 1.0) and fl is ColorRect
+						and ((fl as ColorRect).get_parent() as CanvasLayer).layer > (g.crt_layer.layer if g.crt_layer != null else 100)
+						and rt.get_node_or_null("Land") is TextureRect,
 						"반짝 %.3f · handoff %.2f" % [float(cu.get("tv_glint", -1.0)), hf])
 				_ok("⑨ 철컥 소리의 쿵이 TAPE.clunk 에 선다", is_equal_approx(float(cu.deck_clunk) + float(TP.lead), float(TP.clunk)))
 				var pb: float = float(TP.press[2])

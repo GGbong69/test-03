@@ -1562,10 +1562,10 @@ func _fsel_ui_draw(c: CanvasItem) -> void:
 #  무대 · 카메라 · TV · 층은 scripts/prologue3d.gd(Plg) 가 도트 화판 밖(screen_host)에 짓고 민다. 여기는
 #  시계 · 누름 · 끝이다. 켜면 인트로 앞에 한 번 — 인트로(INTRO)의 단 안에서 돈다(state INTRO). 게임은 그
 #  밑에서 인트로를 그대로 그리고, 주인공 TV 가 켜지는 때(Plg.feed_at)부터 인트로 시계가 간다 — 주인공 유리가
-#  그 화판 그림을 튼다(「TV가 깜박이고 좀 재생되는 중에 클로즈업」). 카메라가 다 다가가면(Plg.handoff) 필터가
-#  켜지고 층이 걷혀 인트로가 그대로 이어진다. 그 전까지는 TV 밖(현실)이라 CRT · VHS · 도트 · 굴곡이 꺼진다
-#  (_plg_cover). 누름은 인트로와 같은 두 걸음(lock 앞은 안 먹는다 · 첫 누름 빨리 감기 — 인트로도 같이 ·
-#  둘째 누름 곧장 끝 — 주인공이 아직 안 켜졌으면 브라운관을 켜고 인트로를 처음부터).
+#  그 화판 그림을 튼다(「TV가 깜박이고 좀 재생되는 중에 클로즈업」). 카메라가 유리를 뚫으면(Plg.handoff) 흰
+#  번쩍 밑에서 층이 끊기고 필터가 켜져(Plg.lit_at) 인트로가 그대로 이어진다. 그 전까지는 TV 밖(현실)이라
+#  CRT · VHS · 도트 · 굴곡이 꺼진다(_plg_cover). 누름은 인트로와 같은 두 걸음(lock 앞은 안 먹는다 · 첫 누름
+#  빨리 감기 — 인트로도 같이 · 둘째 누름 곧장 끝 — 주인공이 아직 안 켜졌으면 브라운관을 켜고 인트로를 처음부터).
 #  모션 끄기 · 검사 도구 · 화면 없는 실행 · 화판 없는 실행에서는 안 튼다.
 #  앞에 「비디오테이프를 넣는 손」이 붙었다(2026-10-22 · Plg TAPE). 소리 때는 Plg.cues() 한 표다 — TV 지지직 · 켜짐 ·
 #  창밖 비(plg_rain 제 자리 순환 · Rain 버스 로패스로 먹먹하게 · 처음 rain_in 초에 차오르고 TV 속으로 드는 동안
@@ -1573,8 +1573,11 @@ func _fsel_ui_draw(c: CanvasItem) -> void:
 #  걷는다 — 3.6 초 위잉이 인트로에 새지 않게).
 #    lock · ff  인트로와 같다 · rain_db 비 크기 · rain_lp 창 너머 컷오프(Hz)
 const Plg = preload("res://scripts/prologue3d.gd")
-const PLGP := {"lock": 0.65, "ff": 2.5, "rain_in": 1.0, "rain_db": 4.0, "rain_lp": 700.0}
+#    spk  주인공 TV 가 트는 인트로 소리 — 유리를 뚫기(handoff) 전엔 TV 스피커다(TvSpk 버스 · [줄임 dB · 밑 · 위 Hz]).
+#         방 안 소리(다트 박힘 −6dBFS)가 반짝의 싱 · 퍽을 덮었고, 뚫는 순간 소리가 꽉 찬 안쪽으로 열리는 것이 밖 → 안이다.
+const PLGP := {"lock": 0.65, "ff": 2.5, "rain_in": 1.0, "rain_db": 4.0, "rain_lp": 700.0, "spk": [-8.0, 400.0, 3500.0]}
 var plg_vp: Node = null      # Plg.make 가 낸 묶음(무대 · 층 — 화판 밖)
+var plg_spk := false         # 지금 _sfx 가 TV 스피커(TvSpk)로 나나 — _plg_tick 이 cue 소리를 낸 뒤 세운다
 var plg_t := -1.0            # 흐른 시간(초) — 안 돌면 −1
 var plg_ff := false
 var plg_rang := {}
@@ -1586,9 +1589,9 @@ func _plg_live() -> bool:
 	return plg_t >= 0.0
 
 
-#  프롤로그가 화면을 덮고 있나 — handoff 부터는 필터가 켜진다(층이 걷히는 동안 유리 속 그림에도 먹는다).
+#  프롤로그가 화면을 덮고 있나 — 유리를 뚫은(handoff) 뒤 번쩍이 다 덮은 틀이 지나면(Plg.lit_at) 필터가 켜진다.
 func _plg_cover() -> bool:
-	return _plg_live() and plg_t < Plg.handoff()
+	return _plg_live() and plg_t < Plg.lit_at()
 
 
 func _plg_begin() -> void:
@@ -1622,6 +1625,7 @@ func _plg_begin() -> void:
 
 
 func _plg_close() -> void:
+	plg_spk = false
 	if plg_vp != null and is_instance_valid(plg_vp):
 		plg_vp.queue_free()
 	plg_vp = null
@@ -1654,6 +1658,7 @@ func _plg_tick(d: float) -> void:
 		Plg.tick(plg_vp, plg_t)
 	#  때마다 한 번 — TV 지지직 · 주인공 켜짐 · 창밖 비 · 카세트 · 데크(Plg.cues — 나머지 이름은 곧 sfx 이름)
 	var cues: Dictionary = Plg.cues()
+	plg_spk = false
 	for job in cues:
 		if plg_t >= float(cues[job]) and not plg_rang.has(job):
 			plg_rang[job] = true
@@ -1667,6 +1672,8 @@ func _plg_tick(d: float) -> void:
 						plg_rain.play()
 				_:
 					_plg_snd(String(job))
+	#  cue 소리(방 안)는 위에서 났다 — 그 밖의 _sfx(주인공 TV 가 트는 인트로)는 필터가 켜질 때까지(_plg_cover) TV 스피커로
+	plg_spk = _plg_cover() and plg_t >= Plg.feed_at()
 	if plg_rain != null and plg_rain.playing:
 		var rk: float = clampf(plg_t / float(PLGP.rain_in), 0.05, 1.0) \
 				* (1.0 - clampf((plg_t - float(Plg.T.push0)) / (Plg.handoff() - float(Plg.T.push0)), 0.0, 0.95))
@@ -1675,6 +1682,8 @@ func _plg_tick(d: float) -> void:
 		plg_rang["handoff"] = true
 		if plg_rain != null:
 			plg_rain.stop()
+	if plg_t >= Plg.lit_at() and not plg_rang.has("lit"):
+		plg_rang["lit"] = true
 		_crt_apply()
 	if plg_t >= Plg.length():
 		_plg_end()
@@ -7685,9 +7694,9 @@ const SFX := {
 	#  걸림 딸깍 · 고른 로딩 모터(2026-10-23 「테이프도 그냥 빨려가는거 같아」 — 낚아챔 → 고른 끌기 → 내려앉음)
 	"deck_grab":      {"f": 1400.0, "d": 0.03, "a": 0.07},
 	"deck_motor":     {"f": 420.0, "d": 0.10, "a": 0.03},
-	#  유리 반짝 · 뛰어듦(2026-10-25 · Plg GLINT) — 쉬익이 차올라 끊기며 삐 → 싱(유리 부분음 떨림) · 슈욱이 handoff 에
-	#  끊기고 퍽. 앞 50ms 가 쉬익의 발치라 a 가 작다(피크 0.26 언저리 — tv_on 0.16 · deck_clunk 0.33 사이).
-	"tv_glint":       {"f": 3600.0, "d": 0.08, "a": 0.00026},
+	#  유리 반짝 · 뛰어듦(2026-10-25 · Plg GLINT) — 짧은 쉬익이 차올라 끊기며 삐 → 싱(유리 부분음 · 엇갈린 맥놀이) · 슈욱이
+	#  handoff 에 끊기고 퍽. 앞 50ms 가 쉬익의 발치라 a 가 작다(피크 0.26 언저리 — tv_on 0.16 · deck_clunk 0.33 사이).
+	"tv_glint":       {"f": 3600.0, "d": 0.08, "a": 0.025},
 	"drop_skip":      {"f": 330.0, "d": 0.05, "a": 0.10},
 	"chute_enter":    {"f": 523.0, "d": 0.04, "a": 0.10},
 
@@ -7770,6 +7779,7 @@ func _sfx(name: String, f := 0.0, db := 0.0) -> void:
 		pl.pitch_scale = clampf(f / SFX_BASE, 0.25, 4.0) if f > 0.0 \
 				else (_sfx_jit() if SFX_JIT.has(name) else 1.0)
 		pl.volume_db = db
+		pl.bus = "TvSpk" if plg_spk else "SFX"
 		pl.play()
 		return
 	var e: Dictionary = SFX.get(name, {})
@@ -59064,6 +59074,20 @@ func _bus_setup() -> void:
 		var lp := AudioEffectLowPassFilter.new()
 		lp.cutoff_hz = float(PLGP.rain_lp)
 		AudioServer.add_bus_effect(ri, lp)
+	#  TV 스피커(프롤로그 · plg_spk) — SFX 밑 · 줄이고 밑 · 위를 깎는다(PLGP.spk)
+	if AudioServer.get_bus_index("TvSpk") < 0:
+		var ti := AudioServer.bus_count
+		AudioServer.add_bus(ti)
+		AudioServer.set_bus_name(ti, "TvSpk")
+		AudioServer.set_bus_send(ti, "SFX")
+		var sk: Array = PLGP.spk
+		AudioServer.set_bus_volume_db(ti, float(sk[0]))
+		var hp := AudioEffectHighPassFilter.new()
+		hp.cutoff_hz = float(sk[1])
+		AudioServer.add_bus_effect(ti, hp)
+		var tl := AudioEffectLowPassFilter.new()
+		tl.cutoff_hz = float(sk[2])
+		AudioServer.add_bus_effect(ti, tl)
 
 
 
