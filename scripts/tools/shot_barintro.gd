@@ -6,6 +6,10 @@ extends SceneTree
 #    ① 눈길 각속도 — 어느 틀도 45°/s 를 안 넘고 · 길마다 첫 · 끝 틀은 5°/s 아래(덜컥 붙거나 딱 서지 않는다). 다이브는
 #       유리 속으로 빨려 드는 효과라 따로 적기만 한다.
 #    ② TV 유리 한가운데가 그림 한가운데 — TV 가 다 들어온 뒤(멈춤 · 밀기 · 다이브) |dx| · |dy| ≤ 그림 폭 · 높이의 5%.
+#    ③ 다가감 빠르기(틀당 그림이 커지는 몫 — 거리 · 화각) — 뛰어듦 앞은 어느 틀도 Z_MAX 를 안 넘고(밀기는 천천히) ·
+#       뛰어듦(Plg dive_w 세제곱)은 handoff 까지 줄지 않고 는다(유리 앞에서 서지 않고 뚫는다).
+#  <스틸 폴더>/tmap.txt — 그린 틀마다 [틀 번호 · plg_t · 유리까지 거리 · 화각 · glint · spark · portal · 번쩍 단 ·
+#  CRT · VHS · 도트 켜짐] — Movie Maker 그림 번호는 틀 번호 − 1. 게임 필터는 처음 켠 값(CRT_DEF …)으로 찍는다.
 #   godot --path . --resolution 1280x720 --fixed-fps 60 [--write-movie <폴더>/m.png] \
 #       --script scripts/tools/shot_barintro.gd -- <스틸 폴더> [때,때,…]
 const Save = preload("res://scripts/save.gd")
@@ -14,6 +18,7 @@ const W_MAX := 45.0
 const W_EDGE := 5.0
 const C_MAX := 0.05
 const J_MAX := 2.0
+const Z_MAX := 0.01
 var b: Node = null
 var g: Node = null
 var f := 0
@@ -25,7 +30,8 @@ var started := false
 var ended := false
 var last_t := 0.0
 var after := 0.0
-var rec := []            # [t, 카메라 basis, 화면 한가운데 dx, dy, TV 다 들어옴]
+var rec := []            # [t, 카메라 basis, 화면 한가운데 dx, dy, TV 다 들어옴, 유리까지 거리, 화각]
+var tmap := []
 
 
 func _initialize() -> void:
@@ -53,6 +59,11 @@ func _process(d: float) -> bool:
 		return false
 	if f == 10:
 		g = b.game
+		#  게임 필터는 처음 켠 값으로(도구는 끈 채 뜬다) — 번쩍의 맨 밝은 틀에 켜지는 것까지 찍는다
+		g.crt = g.CRT_DEF
+		g.warp = g.WARP_DEF
+		g.vhs = g.VHS_DEF
+		g.dot = g.DOT_DEF
 		g._plg_begin("bar")
 		started = true
 		print("START_FRAME %d" % drawn)
@@ -109,7 +120,14 @@ func _track(t: float) -> void:
 				var w: Vector3 = gx * Vector3(cx, cy, gb.end.z)
 				var q := cam.unproject_position(w)
 				full = full and not cam.is_position_behind(w) and Rect2(Vector2.ZERO, vs).has_point(q)
-	rec.append([t, cam.global_transform.basis.orthonormalized(), dx, dy, full])
+	var dd: float = cam.global_position.distance_to(c)
+	rec.append([t, cam.global_transform.basis.orthonormalized(), dx, dy, full, dd, cam.fov])
+	var m: ShaderMaterial = hn.get_meta("scr")
+	var fl := (hn.get_meta("root") as Control).get_node("Flash") as CanvasItem
+	tmap.append("%d %.4f %.4f %.2f %.3f %d %.3f %.3f %s" % [drawn, t, dd, cam.fov, float(m.get_shader_parameter("glint")),
+			int(m.get_shader_parameter("spark")), float(m.get_shader_parameter("portal")),
+			float((fl.material as ShaderMaterial).get_shader_parameter("k")) if fl.visible else 0.0,
+			"%d%d%d" % [int(g.crt_layer.visible), int(g.vhs_rect.visible), int(g.dot_rect.visible)]])
 
 
 #  두 basis 사이 각(도) — 작은 각도 정확하게(acos 는 1 언저리에서 0.02° 로 뭉개져 틀마다 0 · 2.4°/s 가 번갈았다)
@@ -193,6 +211,34 @@ func _report() -> void:
 			str(full), "통과" if cok else "실패"])
 	if not cok:
 		fail.append("tv")
+	#  ③ 다가감 빠르기 — 틀당 그림이 커지는 몫 z = ln(앞 틀 거리 · tan(화각/2) ÷ 이 틀 것). 밀기 시작 ~ 뛰어듦 앞 · 뛰어듦
+	var l0: float = dive0 + float(P.DIVE.creep[2]) * (dive1 - dive0)
+	var zmx := 0.0
+	var zat := 0.0
+	var zdrop := 0
+	var pz := -1.0
+	var zl := []
+	for i in range(1, rec.size()):
+		var t1: float = rec[i][0]
+		if t1 < float(P.MOVE[3][0]) or t1 >= dive1:
+			continue
+		var z: float = log(float(rec[i - 1][5]) * tan(deg_to_rad(float(rec[i - 1][6])) * 0.5)
+				/ (float(rec[i][5]) * tan(deg_to_rad(float(rec[i][6])) * 0.5)))
+		if t1 < l0:
+			if z > zmx:
+				zmx = z
+				zat = t1
+		else:
+			if pz >= 0.0 and z < pz - 0.00001:
+				zdrop += 1
+			pz = z
+			zl.append("%.3f:%.2f" % [t1, z * 100.0])
+	var zok: bool = zmx <= Z_MAX and zdrop == 0 and pz > 0.05
+	lines.append("다가감 밀기 최고 %.2f%%/틀(%.2f) · 뛰어듦 %.3f~ 줄어든 틀 %d · 끝 틀 %.1f%%  %s" % [zmx * 100.0, zat, l0, zdrop,
+			pz * 100.0, "통과" if zok else "실패"])
+	lines.append("뛰어듦(%/틀) " + " ".join(zl))
+	if not zok:
+		fail.append("zoom")
 	#  TV 가 들어오는 길(올려다보기)에서 한가운데로 가는 모양 — 0.25 초마다
 	var tl := []
 	for r in rec:
@@ -211,3 +257,6 @@ func _report() -> void:
 		print(l)
 		if fh != null:
 			fh.store_line(l)
+	var th := FileAccess.open(out.path_join("tmap.txt"), FileAccess.WRITE)
+	if th != null:
+		th.store_string("\n".join(tmap) + "\n")

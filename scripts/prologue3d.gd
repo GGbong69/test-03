@@ -351,6 +351,8 @@ uniform vec2 feed = vec2(640.0, 360.0);
 uniform float zoom = 1.0;
 uniform float glint = -9.0;
 uniform int spark = 0;
+//  별 자리(유리 UV) — 굵은 띠가 GLINT.at 앞 틀에 지나는 오른 위 · 바 인트로는 간판 끝을 비켜 유리 귀로 옮긴다
+uniform vec2 star = vec2(0.86, 0.26);
 uniform sampler2D tex : source_color, filter_nearest, repeat_disable;
 //  바 인트로 천장 TV(scripts/prologue_bar3d.gd)만 — 셋 다 0 이면 옛 그림 그대로다(테이프 프롤로그).
 //  snowk mode 9 그림을 지지직이 덮는 몫(단으로 걷힌다) · crt 브라운관 결(화면 px 한 줄 걸러 주사선 · 단단한 테의
@@ -361,6 +363,8 @@ uniform float crt = 0.0;
 uniform float refl = 0.0;
 //  cx mode 9 자르기 한가운데(그림 폭 몫 — 0.5 가 옛 그림) — 바 인트로는 문 한가운데(다트판 · 간판)를 유리 세로축에 둔다
 uniform float cx = 0.5;
+//  land portal 끝 밝기 몫(게임 필터를 지난 그림 밝기에 맞춘다) — 무대마다 톤 매핑이 달라 바 인트로는 제 값을 준다
+uniform float land = 0.75;
 
 float hs(vec2 p) {
 	return fract(sin(dot(p, vec2(12.9898, 78.233)) + seed * 17.0) * 43758.5453);
@@ -505,7 +509,7 @@ void fragment() {
 			vec2 cu = mix(vec2((bu.x - 0.5) * cw + cx, bu.y), 0.5 + (SCREEN_UV - 0.5) / zoom, portal);
 			//  portal 끝으로 갈수록 게임 필터를 지난 그림의 밝기로 내려앉는다(handoff 앞 유리 그림이 게임 속보다 25% 밝고
 			//  따뜻해 들어와 보니 어두워졌다)
-			s = texture(tex, cu).rgb * mix(1.08, 0.75, portal);
+			s = texture(tex, cu).rgb * mix(1.08, land, portal);
 			if (crt > 0.0) {
 				s = mix(s, snow_crt(bu), snowk * (1.0 - portal));
 				s *= 1.0 - 0.24 * ck * mod(floor(FRAGCOORD.y), 2.0);
@@ -556,7 +560,7 @@ void fragment() {
 			c = pow(1.0 - (1.0 - cs) * (1.0 - 0.35 * pow(gl, vec3(1.0 / 2.2))), vec3(2.2));
 		}
 		if (spark > 0) {
-			vec2 e = abs(UV - vec2(0.86, 0.26));
+			vec2 e = abs(UV - star);
 			vec2 a = e / fw;
 			bool hit;
 			if (spark == 2) {
@@ -1653,8 +1657,8 @@ static func tick(hn: Node, t: float) -> void:
 #  dive_w · glass_pg · portal · glint(유리 쪽 · 틀마다) · flash_make(층을 지을 때 한 번) · cross(층 · 틀마다) · flash_a(단)
 #  dive_w 다가가는 몫 u(0~1) → 로그 거리 몫 w — 빠르기(dw/du)가 선 데서 코사인으로 vp 까지 오르고(~ua) · 짧게 vh 로
 #  내려앉아(~ub) · vh 로 붙든 채(~uh) 반짝을 보내고 · 세제곱으로 뛰어들어 u 1 에서 가장 빠르다(빠르기가 이어진다).
-static func dive_w(u: float) -> float:
-	var cr: Array = HERO.creep
+#  cr 다가감 몫 [ua · ub · uh · vp · vh](기본 HERO.creep — 바 인트로는 다가감을 제 밀기가 맡아 vp · vh 0 으로 부른다).
+static func dive_w(u: float, cr: Array = HERO.creep) -> float:
 	var ua: float = float(cr[0])
 	var ub: float = float(cr[1])
 	var uh: float = float(cr[2])

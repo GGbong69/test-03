@@ -8,6 +8,9 @@ extends SceneTree
 #    ④ 로패스 버스가 섰다가 넘김에 걷히고 · TV 스피커 효과(SFX)도 걷힌다 · 끝까지 가면 인트로가 이어진다
 #    ⑤ 누름 — 첫 누름 빨리 감기 · 둘째 누름 끝 → 버스 · 효과 · 무대가 안 남는다
 #    ⑥ 개발자 판 — 「바 인트로 보기」 · 「켤 때 인트로」 줄이 있고 그 쪽이 열아홉 줄 안 · 켤 때 인트로 줄이 전역 값을 바꾼다
+#    ⑦ 유리 뚫기(테이프 Plg 와 같은 반짝 · 번쩍) — tv_glint 가 handoff − GLINT.cue · 밀기가 서는 때 = 뛰어듦 시작 · 빗금은
+#      handoff − GLINT.lead 틀에 서고 별은 번쩍 앞에 진다 · 번쩍은 handoff −4 틀 ~ +6 틀만 · 필터는 맨 밝은 틀(lit_at)에 켜지고
+#      잔상은 calm_at 까지 0 · handoff 뒤 층은 Flash 만 · TV 스피커는 반짝이 서면 걷힌다(게임 필터는 처음 켠 값으로 돈다)
 #   godot --path . --script scripts/tools/qa_barintro.gd
 const Save = preload("res://scripts/save.gd")
 const Dev = preload("res://scripts/dev.gd")
@@ -29,6 +32,14 @@ var late_intro := 0.0
 var sign_on := false       # 밀기 동안 간판을 앞당겨 켰나
 var sign_late := false     # 넘김 뒤에도 앞당김이 남았나
 var early_intro := false
+var gl0 := -1.0            # ⑦ 빗금이 처음 선 때 · 별이 마지막으로 선 때 · 번쩍이 처음 · 마지막 선 때 · 필터가 처음 선 때
+var sp1 := -1.0
+var fl0 := -1.0
+var fl1 := -1.0
+var lit0 := -1.0
+var trail_ok := true       # calm_at 앞 필터가 선 틀은 잔상 0
+var cut_ok := true         # handoff 뒤 층에 Flash 말고 선 것이 없다
+var spk_late := false      # 반짝이 서고 나서도 TV 스피커가 걸려 있었다
 
 
 func _initialize() -> void:
@@ -69,6 +80,11 @@ func _process(_d: float) -> bool:
 				_ok("① 켤 때 기본은 테이프", String(Save.get_set("plg_kind", g.PLGP.kind)) == "tape")
 				fx0 = _sfx_fx()
 				Save.set_set("plg_kind", "bar")
+				#  게임 필터는 처음 켠 값으로(도구는 끈 채 뜬다) — 덮개 · 맨 밝은 틀에 켜지는 것을 잰다
+				g.crt = g.CRT_DEF
+				g.warp = g.WARP_DEF
+				g.vhs = g.VHS_DEF
+				g.dot = g.DOT_DEF
 				g._plg_begin()
 				_ok("② 전역 bar 면 바를 튼다 · 인트로 단 안", g.plg_mod == g.PlgBar and g._plg_live()
 						and g.state == g.S.INTRO)
@@ -94,6 +110,28 @@ func _process(_d: float) -> bool:
 				if g._plg_cover():
 					cover_ok = cover_ok and not (g.crt_layer.visible or g.vhs_rect.visible or g.dot_rect.visible)
 				spk_seen = spk_seen or _sfx_fx() >= fx0 + 3
+				#  ⑦ 유리 뚫기 — 틀마다 유리 재질 · 층 · 필터를 본다
+				var hf: float = P.handoff()
+				var sm: ShaderMaterial = hn.get_meta("scr")
+				if gl0 < 0.0 and float(sm.get_shader_parameter("glint")) > -1.0:
+					gl0 = t
+				if int(sm.get_shader_parameter("spark")) > 0:
+					sp1 = t
+				var rt := hn.get_meta("root") as Control
+				var fl := rt.get_node("Flash") as CanvasItem
+				if fl.visible:
+					fl0 = t if fl0 < 0.0 else fl0
+					fl1 = t
+				if g.crt_layer.visible and lit0 < 0.0:
+					lit0 = t
+				if g.crt_layer.visible and t < P.calm_at():
+					var tr = (g.crt_rect.material as ShaderMaterial).get_shader_parameter("trail")
+					trail_ok = trail_ok and tr != null and float(tr) == 0.0
+				if t >= hf + 0.5 / 60.0:
+					for c in rt.get_children():
+						cut_ok = cut_ok and (c == fl or not (c as CanvasItem).visible)
+				if t > float(P.cues().tv_glint) + float(P.SND.tv_out) + 0.05:
+					spk_late = spk_late or _sfx_fx() > fx0
 				if t < P.feed_at() - 0.05:
 					early_intro = early_intro or g.intro_t > 0.0
 				else:
@@ -130,6 +168,25 @@ func _process(_d: float) -> bool:
 				_ok("④ TV 스피커 효과가 섰다가 걷혔다", spk_seen and _sfx_fx() == fx0, "%d → %d" % [fx0, _sfx_fx()])
 				_ok("④ 끝 — 무대가 걷히고 인트로가 이어진다", g.plg_vp == null and g.state == g.S.INTRO
 						and g.intro_t >= late_intro - 0.01, "intro %.2f" % g.intro_t)
+				#  ⑦ 때는 틀 단위 — 창 실행이라 틀이 빠질 수 있어 3 틀까지 본다
+				var P = g.PlgBar
+				var Pg = g.Plg
+				var hf: float = P.handoff()
+				var fr := 1.0 / 60.0
+				var cr: Array = P.DIVE.creep
+				var mp: Array = P.MOVE[3]
+				var l0: float = float(P.T.dive0) + float(cr[2]) * (float(P.T.dive1) - float(P.T.dive0))
+				_ok("⑦ 유리 뚫기 — 반짝 소리 · 밀기 끝 = 뛰어듦 시작 · 다가감 몫", is_equal_approx(float(P.cues().tv_glint),
+						hf - float(Pg.GLINT.cue)) and g._sfx_file("tv_glint") != null
+						and absf(float(mp[0]) + float(mp[1]) - l0) < fr and Pg.dive_w(float(cr[2]), cr) == 0.0
+						and is_equal_approx(Pg.dive_w(1.0, cr), 1.0) and P.lit_at() < hf and P.lit_at() > hf - fr
+						and P.calm_at() > hf + 6.0 * fr, "반짝 %.3f · 뛰어듦 %.3f" % [float(P.cues().tv_glint), l0])
+				_ok("⑦ 빗금 · 별 · 번쩍 · 필터 때", absf(gl0 - (hf - float(Pg.GLINT.lead) * fr)) <= 3.0 * fr
+						and sp1 > 0.0 and sp1 < hf - 4.0 * fr and fl0 >= hf - 4.5 * fr and fl0 < hf
+						and fl1 < hf + 6.0 * fr and lit0 >= P.lit_at() and lit0 < hf + 3.0 * fr,
+						"빗금 H%+.0f · 별 끝 H%+.0f · 번쩍 H%+.0f~H%+.0f · 필터 H%+.0f 틀" % [(gl0 - hf) / fr, (sp1 - hf) / fr,
+						(fl0 - hf) / fr, (fl1 - hf) / fr, (lit0 - hf) / fr])
+				_ok("⑦ 잔상 calm 까지 0 · 넘김 뒤 층은 번쩍만 · 반짝에 TV 스피커가 걷힌다", trail_ok and cut_ok and not spk_late)
 				st = 2
 				f = 0
 		2:
