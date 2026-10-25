@@ -7358,11 +7358,18 @@ func _roll_boss_mods(bn: int, force := false,
 	#  종이라 보통은 남지만, 「겹치기」가 둘을 걸면 모자랄 수 있다 —
 	#  새것만 고집하다 뽑을 것이 없어지는 쪽이 더 나쁘다(2026-09-16).
 	var held := []
+	var held_avoid := []
 	for m in left.duplicate():
 		var mid := String(m.id)
-		if boss_seen.has(mid) or avoid.has(mid):
+		if avoid.has(mid):
+			held_avoid.append(m)
+			left.erase(m)
+		elif boss_seen.has(mid):
 			held.append(m)
 			left.erase(m)
+	#  피할 것(카산드라가 바꾸려는 지금 제약)은 미룬 것 중에도 맨 뒤 — 풀이 좁은 1라운드(실띠 · 막힌 칸 · 닫힌 문)에서
+	#  미룬 것부터 도로 꺼내다 같은 제약이 다시 나와 카드가 헛돌았다(qa_photo ⑨ · 2026-10-25).
+	held.append_array(held_avoid)
 	var want: int = maxi(GameData.chal_i("mods_n", 1), 1)
 	#  무한 N라운드마다 그 라운드 보스는 제약이 둘이다. 「겹치기」가 이미
 	#  쓰는 그 손잡이라 **새 시스템이 안 는다** — 발라트로가 8안테마다
