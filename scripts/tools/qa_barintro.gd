@@ -2,7 +2,8 @@ extends SceneTree
 #  바 인트로(scripts/prologue_bar3d.gd · game.gd PLGP.kind · 2026-10-25) — 창이 있어야 돈다. 못 박는 것:
 #    ① 같은 API(make · tick · cues · handoff · feed_at · length) — feed_at < handoff < length · 켤 때 기본은 테이프
 #    ② 전역 "plg_kind" 가 bar 면 _plg_begin() 이 바를 튼다 · 인트로 단 안 · 무대 · 층은 화판 밖 · 덮개 동안 필터가 꺼진다
-#    ③ 상인 머리(깃 위)는 서 있는 동안 어느 틀에도 그림 안에 안 든다 · TV 빛은 상인 층을 안 비춘다 · 펜던트는 비춘다
+#    ③ 상인 머리(깃 위)는 서 있는 동안 어느 틀에도 그림 안에 안 든다 · TV 빛은 상인 층을 안 비춘다 · 펜던트는 비춘다 ·
+#      손목 — 손끝 축이 팔뚝 축에서 35° 안(「손목이 이상하지 않아?」 — 팔 옆에 90° 로 꺾여 붙은 주걱이었다)
 #    ④ 로패스 버스가 섰다가 넘김에 걷히고 · TV 스피커 효과(SFX)도 걷힌다 · 끝까지 가면 인트로가 이어진다
 #    ⑤ 누름 — 첫 누름 빨리 감기 · 둘째 누름 끝 → 버스 · 효과 · 무대가 안 남는다
 #    ⑥ 개발자 판 — 「바 인트로 보기」 · 「켤 때 인트로」 줄이 있고 그 쪽이 열아홉 줄 안 · 켤 때 인트로 줄이 전역 값을 바꾼다
@@ -18,6 +19,7 @@ var st := 0
 var head_in := 0           # 상인 깃 위가 그림 안에 든 틀 수
 var head_n := 0
 var head_t := []           # 그림 안에 든 때 [처음 · 끝]
+var wrist_max := 0.0       # 손끝 축 ↔ 팔뚝 축 가장 큰 각(도)
 var bus_seen := false
 var spk_seen := false
 var fx0 := 0               # 처음 SFX 효과 수
@@ -95,6 +97,12 @@ func _process(_d: float) -> bool:
 					late_intro = g.intro_t
 				#  상인 깃 위(목 · 머리 자리) — 다이브 앞 모든 틀에서 그림 밖
 				var mn: Node3D = (hn.get_meta("merch") as Dictionary).n if hn.has_meta("merch") else null
+				if mn != null and mn.visible:
+					var M: Dictionary = hn.get_meta("merch")
+					for sd in ["R", "L"]:
+						var hx: Vector3 = ((M.hj[sd] as Dictionary).root as Node3D).transform.basis.x
+						var fx: Vector3 = ((M.fo[sd] as Dictionary).root as Node3D).transform.basis.x
+						wrist_max = maxf(wrist_max, rad_to_deg(hx.angle_to(fx)))
 				if t < float(P.T.dive0) and mn != null and mn.visible:
 					var cam := hn.get_meta("cam") as Camera3D
 					head_n += 1
@@ -109,6 +117,7 @@ func _process(_d: float) -> bool:
 				_ok("② 인트로 시계 — TV 가 그림을 틀기 전엔 안 가고 그 뒤로 간다", not early_intro and late_intro > 2.0,
 						"%.2f" % late_intro)
 				_ok("③ 상인 깃 위는 그림 밖", head_n > 100 and head_in == 0, "%d / %d 틀 %s" % [head_in, head_n, str(head_t)])
+				_ok("③ 손목 — 손끝 축이 팔뚝 축에서 35° 안", head_n > 100 and wrist_max <= 35.0, "%.1f°" % wrist_max)
 				_ok("④ 로패스 버스가 섰다가 걷혔다", bus_seen and _no_bar_bus())
 				_ok("④ TV 스피커 효과가 섰다가 걷혔다", spk_seen and _sfx_fx() == fx0, "%d → %d" % [fx0, _sfx_fx()])
 				_ok("④ 끝 — 무대가 걷히고 인트로가 이어진다", g.plg_vp == null and g.state == g.S.INTRO

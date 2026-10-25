@@ -10,7 +10,8 @@
 #                   공단 깃) · 허리띠 · 위팔(셔츠 소매 · 놋쇠 소매 띠). 원점 = 발 밑 바닥 한가운데 · 얼굴이 +z.
 #                   팔꿈치 ElbowR(−x) · ElbowL(+x) 빈 노드 — game.gd _fore3_build 의 팔뚝 뿌리(팔꿈치)가 여기 선다.
 #   PolishGlass     상인이 닦는 빈 파인트(곧은 셰이커) · 원점 = 밑바닥 한가운데 · 축 +y
-#   TowelWrap       닦는 잔을 감싼 바 천(밑동 감쌈 · 테를 넘어 입에 박힌 뭉치) — PolishGlass 와 같은 원점 · 같이 돈다
+#   TowelWrap       닦는 잔을 감싼 바 천(밑동 감쌈 · 말린 테 · 잔 허리 뭉치) — PolishGlass 와 같은 원점 · 같이 돈다
+#   TowelBand       뭉치에서 안벽을 타고 테를 넘는 천 띠 — 같은 원점 · 잔 좌표 +x 쪽(게임이 집는 자리로 돌린다)
 #   TowelTail_A/B/C 받치는 손 밑으로 늘어진 천 꼬리 셋(곧게 · +x 로 · −x 로 비튼) · 원점 = 꼬리 윗끝(모인 자리) · −y 로
 #                   늘어진다(늘 세계 위를 보게 둔다 — 잔을 따라 기울지 않는다)
 #   Pint · PintBeer 손님 앞 반 남은 논익 파인트 — 유리(glass) / 맥주 · 거품 · 거품 고리(beer · foam) · 원점 = 잔 밑바닥
@@ -761,7 +762,16 @@ prof += [(0.020, 0.0092), (0.0, 0.0090)]
 lathe("pglass", prof, (0, 0, 0), GLASS, 48)
 finish("PolishGlass", 30.0)
 
-#  천 — 밑동을 감싸 받치는 손 밑으로 들어간 자락 · 겉을 타고 테를 넘어 입에 박힌 띠 · 입 안 뭉치
+#  천 — 밑동 감쌈(잔 밑 30% · 큰 주름 넷 · 위끝은 말린 테 — 잘린 껍데기 끝이 종이 상자 · 검은 구멍으로 읽혔다) · 잔 허리
+#  뭉치(빈 잔 속이 천으로 찬다 — 입 높이에 두면 맥주 거품으로 읽혔다)
+def wrap_top(ph):
+    return 0.037 + 0.005 * math.sin(2.0 * ph + 0.7) + 0.0025 * math.sin(5.0 * ph)
+
+
+def wrap_fold(ph, yy, q):
+    return (0.0042 * (0.5 + 0.5 * math.sin(4.0 * ph + yy * 50.0)) + 0.0012 * math.sin(9.0 * ph)) * (0.3 + 0.7 * q)
+
+
 def wrap(u, v):
     ph = math.tau * u
     if v < 0.25:
@@ -769,35 +779,37 @@ def wrap(u, v):
         yy = -0.0045
     else:
         q = (v - 0.25) / 0.75
-        top = 0.040 + 0.009 * math.sin(2.0 * ph + 0.7) + 0.004 * math.sin(5.0 * ph)
-        yy = lerp(-0.0045, top, q)
-        fold = 0.0035 * (0.5 + 0.5 * math.sin(7.0 * ph + yy * 90.0)) * (0.3 + 0.7 * q)
-        rr = polish_ro(max(yy, 0.0)) + 0.0035 + fold
+        yy = lerp(-0.0045, wrap_top(ph), q)
+        rr = polish_ro(max(yy, 0.0)) + 0.0035 + wrap_fold(ph, yy, q)
     return V3(rr * math.cos(ph), yy, rr * math.sin(ph))
 
 
 shell("wrap", wrap, 56, 14, 0.0026, CLOTH, wrap_u=True)
-PH_R = math.pi - 1.0        # 띠가 오르는 쪽(−x 앞 — 일하는 손 쪽 · 손님 눈에 앞면이 보인다)
-rope = []
-for yy, dr in ((0.030, 0.0050), (0.060, 0.0058), (0.095, 0.0062), (0.128, 0.0064), (0.146, 0.0058)):
-    r = polish_ro(yy) + dr
-    rope.append(V3(r * math.cos(PH_R), yy, r * math.sin(PH_R)))
-#  테를 넘어 안벽을 타고 내려가 입 안 뭉치로 — 엄지가 밀어 넣은 자리. 맥주 거품으로 안 읽히게 뭉치는 테보다 한참 밑(잔 허리)
-for r, yy in ((0.0455, 0.1525), (0.040, 0.1550), (0.0345, 0.1450), (0.030, 0.124), (0.022, 0.104)):
-    rope.append(V3(r * math.cos(PH_R), yy, r * math.sin(PH_R)))
-rope = crs(rope, 4)
-
-
-def rope_mat(k, i):
-    #  밤색 줄 둘 — 같은 천(꼬리 끝단의 줄)이라는 표지
-    return 1 if 9 <= k <= 10 or 13 <= k <= 13 else 0
-
-
-tube_path("rope", rope, lambda i, q: (lerp(0.050, 0.034, q), 0.0105, 2.2, 0.20, 3.0, 1.0 + q * 5.0), None, n=16,
-          cap0=0.005, cap1=0.006, ref=V3(math.cos(PH_R), 0.0, math.sin(PH_R)), mats=[CLOTH, STRIPE],
-          matf=rope_mat)
-ellipsoid("wad", V3(-0.004, 0.086, 0.004), (0.024, 0.030, 0.024), CLOTH, 3, 0.20, 3.1, 4.0)
+lip = []
+for i in range(65):
+    ph = math.tau * i / 64.0
+    yy = wrap_top(ph)
+    rr = polish_ro(yy) + 0.0035 + wrap_fold(ph, yy, 1.0) + 0.0022
+    lip.append(V3(rr * math.cos(ph), yy - 0.0012, rr * math.sin(ph)))
+tube_path("lip", lip, lambda i, q: (0.0072, 0.0058, 2.0, 0.12, 5.0, q * 31.0), CLOTH, n=10, cap0=0.0, cap1=0.0,
+          ref=V3(0.0, 1.0, 0.0))
+ellipsoid("wad", V3(-0.003, 0.090, 0.003), (0.029, 0.036, 0.029), CLOTH, 3, 0.12, 3.1, 4.0)
 finish("TowelWrap", 50.0)
+
+#  테를 넘는 천 띠 — 잔 허리 뭉치에서 안벽을 타고 올라 테를 넘어 바깥 벽으로 2~3cm(엄지가 밀어 넣은 자리 · 검지가 바깥에서
+#  집는다) · 밤색 줄 둘(꼬리 끝단과 같은 천). 잔 좌표 +x 쪽에 짓는다 — 게임이 잔 축 둘레로 집는 자리에 돌린다.
+band = [V3(r, yy, 0.0) for r, yy in ((0.018, 0.098), (0.026, 0.116), (0.0332, 0.133), (0.0368, 0.1465),
+                                       (0.0430, 0.1545), (0.0490, 0.1478), (0.0503, 0.134), (0.0499, 0.120))]
+band = crs(band, 4)
+
+
+def band_mat(k, i):
+    return 1 if k in (24, 25, 28) else 0
+
+
+tube_path("band", band, lambda i, q: (lerp(0.036, 0.044, q), 0.0075, 2.2, 0.18, 3.0, 1.0 + q * 5.0), None, n=16,
+          cap0=0.005, cap1=0.005, ref=V3(1.0, 0.0, 0.0), mats=[CLOTH, STRIPE], matf=band_mat)
+finish("TowelBand", 50.0)
 
 #  천 꼬리 — 받치는 손 밑으로 30cm · 손 길이의 1.6배 · 큰 세로 주름 셋~넷 · 끝단 말아 박음 · 밤색 줄 둘(주름을 타고 꺾인다).
 #  셋을 갈아 끼우며 한 박자 늦게 흔들린다(영상 — 비틀기 0.5~0.7s 에 꼬리 ±3~5cm). A 곧게 · B +x · C −x 로 비틀린다.
@@ -875,10 +887,10 @@ prof += [(nonic_ri(0.0838) - 0.0018, 0.0846), (nonic_ri(0.083) - 0.0042, 0.0832)
          (0.016, 0.0812), (0.0, 0.0809)]
 lathe("foam", prof, (0, 0, 0), FOAM, 64)
 rng = random.Random(25)
-for _ in range(16):
+for k in range(10):
     a = rng.uniform(0.0, math.tau)
-    r = rng.uniform(0.0, 0.032)
-    rad = rng.uniform(0.0016, 0.0032)
+    r = rng.uniform(0.006, 0.030) if k < 4 else rng.uniform(0.0, 0.032)
+    rad = rng.uniform(0.0055, 0.0080) if k < 4 else rng.uniform(0.0018, 0.0032)
     ellipsoid("bub", V3(r * math.cos(a), 0.0812 - rad * 0.35, r * math.sin(a)), (rad, rad * 0.75, rad), FOAM, 1, 0.1,
               rng.uniform(0, 9))
 #  거품 고리 — 마신 자리마다 안벽에 남은 흰 줄(조각 · 틈 · 가끔 밑으로 흐른 자국)
@@ -900,13 +912,11 @@ for row_y in (0.0965, 0.1175):
         a = a1 + rng.uniform(0.15, 0.6)
 finish("PintBeer", 40.0)
 
-#  받침 — 둥근 판지 10cm · 2.2mm · 둥근 테 · 인쇄(테 띠 · 가는 고리) · 잔 자리 젖은 고리 · 흰 판지 단면
+#  받침 — 둥근 판지 10cm · 2.2mm · 둥근 테 · 흰 판지 단면 · 인쇄는 네 갈래 별 하나(두 색 · 고리 없음 — 동심원 인쇄가 평평한 면의
+#  빛 고리로 읽혔다). 별은 윗면 위 0.15mm 판(잔 밑동 둘레로 끝 넷만 나온다)
 CR = 0.050
 CT = 0.0022
-cprof = [(0.0, 0.0), (CR - 0.0010, 0.0), (CR, 0.0006), (CR, CT - 0.0006), (CR - 0.0010, CT)]
-for r in (0.0476, 0.0446, 0.0404, 0.0390, 0.0336, 0.0290, 0.012):
-    cprof.append((r, CT))
-cprof.append((0.0, CT))
+cprof = [(0.0, 0.0), (CR - 0.0010, 0.0), (CR, 0.0006), (CR, CT - 0.0006), (CR - 0.0010, CT), (0.0, CT)]
 
 
 def coaster_mat(r, y):
@@ -914,14 +924,25 @@ def coaster_mat(r, y):
         return 0 if y < 1e-4 else 3
     if r > CR - 0.0008:
         return 3
-    if 0.0446 <= r <= 0.0476 or 0.0390 <= r <= 0.0404:
-        return 1
-    if 0.0290 <= r <= 0.0336:
-        return 2
     return 0
 
 
 lathe("coaster", cprof, (0, 0, 0), None, 64, mats=[COASTER, INK, WET, CARD], matf=coaster_mat)
+bm = bmesh.new()
+cv = bm.verts.new(G(0.0, CT + 0.00015, 0.0))
+ring = []
+for k in range(16):
+    a = math.tau * k / 16.0 + math.pi / 4.0
+    r = 0.0455 if k % 4 == 0 else (0.0215 if k % 2 == 1 else 0.0175)
+    ring.append(bm.verts.new(G(r * math.cos(a), CT + 0.00015, r * math.sin(a))))
+for k in range(16):
+    f = bm.faces.new((cv, ring[k], ring[(k + 1) % 16]))
+    f.normal_update()
+    if f.normal.z < 0.0:
+        f.normal_flip()
+star = from_bm("star", bm, [COASTER, INK], False)
+for pl in star.data.polygons:
+    pl.material_index = 1
 finish("Coaster", 30.0)
 
 
@@ -1392,11 +1413,11 @@ if PREVIEW:
     shot("tv.png", ["TvMount", "BarCrt"], (0.45, -0.75, 1.30), (0.0, -0.40, 0.0), 40.0)
     shot("tv_side.png", ["TvMount", "BarCrt"], (1.30, -0.35, -0.10), (0.0, -0.35, -0.1), 40.0)
     for nm, p in (("Pint", (0, 0, 0)), ("PintBeer", (0, 0, 0)), ("Coaster", (0, -0.0022, 0)),
-                  ("PolishGlass", (0.20, 0, 0)), ("TowelWrap", (0.20, 0, 0)), ("TowelTail_A", (0.20, -0.005, 0)),
+                  ("PolishGlass", (0.20, 0, 0)), ("TowelWrap", (0.20, 0, 0)), ("TowelBand", (0.20, 0, 0)), ("TowelTail_A", (0.20, -0.005, 0)),
                   ("TowelTail_B", (0.40, 0.0, 0)), ("TowelTail_C", (0.55, 0.0, 0)), ("NutBowl", (-0.18, -0.0022, 0.05)),
                   ("CntRail", (0.0, -0.0022, 0.25)), ("BarMat", (0.25, -0.0022, -0.18))):
         byname[nm].location = G(*p)
-    shot("props.png", ["Pint", "PintBeer", "Coaster", "PolishGlass", "TowelWrap", "TowelTail_A", "TowelTail_B",
+    shot("props.png", ["Pint", "PintBeer", "Coaster", "PolishGlass", "TowelWrap", "TowelBand", "TowelTail_A", "TowelTail_B",
                        "TowelTail_C", "NutBowl", "CntRail", "BarMat"], (0.20, 0.25, 0.75), (0.20, -0.02, 0.0), 35.0)
     shot("pint_low.png", ["Pint", "PintBeer", "Coaster"], (0.0, 0.07, 0.26), (0.0, 0.07, 0.0), 35.0)
     print("preview", PREVIEW)
