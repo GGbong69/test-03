@@ -18,7 +18,8 @@ extends RefCounted
 #   5 11.3~14.4 위 — 바 뒤 천장에 매단 작은 브라운관(관 · 멍에 · 쟁반)이 그림 한가운데 선다. 지지직이 단으로 걷히고 게임
 #     인트로의 램프가 딸깍 켜진다 · 한 번 깜박인다.
 #   6 14.4~16.2 TV 를 한가운데 둔 채 화각이 좁아지며 조금 다가간다(눈은 화면 한가운데로 가는 선 위로만). 방 빛이 한 등씩
-#     꺼진다(가운데 펜던트가 마지막) · 방 소리가 먹먹해지고 TV 소리만 남는다.
+#     꺼진다(가운데 펜던트가 마지막) · 방 소리가 먹먹해지고 TV 소리만 남는다. TV 그림 속 문 위 HIGHTON 간판이 한 글자씩
+#     켜진다(SIGN · 문 한가운데가 유리 세로축).
 #   7 16.2~ TV 유리 속으로 든다(테이프 프롤로그의 다이브 · 유리 속 그림이 화면에 박힌 게임 그림으로 · Plg SCR_SHADER
 #     mode 9 · portal) → 인트로 → 제목 문.
 #  빛 · 효과로 가린다(조사 T01~T14): 채움빛을 걷고 찬 바탕 한 단만(밤 · 주인공만 빛) · 펜던트 · TV 의 단단한 그림자 ·
@@ -57,7 +58,7 @@ const L_HERO := 1 << 5
 const POSE := {
 	"cheek": [Vector3(-0.13, -0.075, -3.57), Vector3(-0.14, -0.085, -3.88), -66.0, 44.0],
 	"merch": [Vector3(-0.10, 0.30, -3.20), Vector3(-0.40, -0.07, -3.98), 0.0, 44.0],
-	"dart": [Vector3(-0.10, 0.30, -3.20), Vector3(1.10, -0.04, -4.92), 0.0, 34.0],
+	"dart": [Vector3(-0.10, 0.30, -3.20), Vector3(1.20, 0.02, -4.92), 0.0, 34.0],
 	"tv": [Vector3(-0.10, 0.30, -3.20), null, 0.0, 22.0],
 	"push": [Vector3(-0.10, 0.30, -3.20), null, 0.0, 14.0, 0.14],
 }
@@ -82,19 +83,23 @@ const LID := [[0.0, 0.0], [1.1, 0.0], [1.55, 0.45], [1.8, 0.45], [1.9, 0.0], [1.
 const WAKE := {"skin": 0.8, "blink": 1.9}
 #  감은 눈 너머 빛 — 검붉은 판(검정 위 두 단 안) · WAKE.skin 에 한 단 든다
 const SKIN := [Color8(8, 2, 2), Color8(20, 6, 4)]
-#  초점 [때부터, 띠 앞 m, 띠 뒤 m, 가장 작은 덩어리 px, 가장 큰 덩어리 px] — 흐름 없이 뛴다(깜박임 · 눈길 한가운데).
+#  초점 [때부터, 띠 앞 m, 띠 뒤 m, 가장 작은 덩어리 px, 가장 큰 덩어리 px, 띠 앞 또렷(1)] — 흐름 없이 뛴다(깜박임 · 눈길 한가운데).
 #  반 뜬 눈은 4px 까지만(8px 는 흐림이 아니라 저해상도로 읽혔다 · 나머지는 눈꺼풀이 맡는다) · 손 띠로는 고개를 들기
-#  시작할 때 뛴다(드는 동안 손이 덩어리째 반짝였다)
+#  시작할 때 뛴다(드는 동안 손이 덩어리째 반짝였다). 손 띠는 선반 전체를 한 띠에 넣는다(왼 위 병만 4px 덩어리 ·
+#  오른쪽은 1px — 한 그림에 텍셀 크기가 섞였다 · 검토 3) · 손 · 다트 띠 앞 가까운 손님 잔은 덩어리 없이(거품이 4~8px
+#  블록으로 깨져 JPEG 덩어리였다 — 어둠이 맡는다)
 const FOCUS := [
 	[0.0, 0.0, 0.25, 2.0, 4.0],
 	[1.9, 0.12, 0.42, 1.0, 4.0],
-	[3.2, 0.62, 1.40, 1.0, 4.0],
-	[9.05, 1.9, 3.5, 1.0, 4.0],
+	[3.2, 0.62, 2.4, 1.0, 4.0, 1.0],
+	[9.05, 1.9, 3.5, 1.0, 4.0, 1.0],
 	[12.35, 1.05, 1.95, 1.0, 4.0],
 	[16.2, 0.0, 999.0, 1.0, 1.0],
 ]
 #  빛 밑값(세기) · 표 [때부터, 이름 → 밑값의 몫] — 그 때에 그 자리에서 바뀐다(이어 붙이지 않는다). 밀기 동안 한 등씩
 #  꺼진다: 다트 장 그림등 → 촛불 · 네온 → 왼 펜던트 → 선반 밑불 · 채움 반 → 오른 펜던트 → 가운데 펜던트 · 채움 0.
+#  손 컷은 선반 밑불을 한 단 내린다 · 올려다볼 때 한 단 더(앞에서 비춘 주황 병 줄이 TV 등장을 가로챘다) · 다트 장면은 찬
+#  채움을 되살려 벽 · 장 문짝 · 그림등 · 의자가 1~2 단 실루엣으로 선다(검은 허공에 다트판과 원판만 떴다 · 검토 3).
 #  가운데 펜던트는 손 + 15cm 만 덮는 좁은 원뿔(카운터 웅덩이가 화면 절반을 채우고 손이 크림으로 날았다 · 검토 1) ·
 #  오른쪽은 손님 잔 받침만 — 초점이 손으로 뛰면 한 단 내린다(손님 잔이 손보다 밝아 이 컷 주인공과 다퉜다 · 검토 2).
 #  촛불은 다트 장면에서 0.4(채도 높은 주황 웅덩이가 다트판과 다퉜다 · 검토 2)
@@ -103,8 +108,9 @@ const LBASE := {"pl": 0.9, "pm": 1.8, "pr": 0.7, "shelf": 0.15, "pict": 2.7, "ca
 const PEND := {"ang": [24.0, 17.0, 12.0], "up": 11.3}
 const LIGHT := [
 	[0.0, {"pl": 1.0, "pm": 1.0, "pr": 1.0, "shelf": 1.0, "pict": 0.0, "candle": 0.4, "neon": 0.0, "fill": 1.0}],
-	[3.2, {"pr": 0.45}],
-	[7.9, {"pict": 1.0, "candle": 0.3, "neon": 0.0}],
+	[3.2, {"pr": 0.45, "shelf": 0.35}],
+	[7.9, {"pict": 1.0, "candle": 0.3, "neon": 0.0, "fill": 5.0}],
+	[11.3, {"shelf": 0.3, "fill": 1.0}],
 	[14.6, {"pict": 0.0}],
 	[14.9, {"candle": 0.0, "neon": 0.0}],
 	[15.2, {"pl": 0.0}],
@@ -118,11 +124,17 @@ const FILL := Color(0.035, 0.04, 0.06)
 #  상인 바탕빛 — 웅덩이 밖 소매 · 손이 가장 낮은 단 실루엣으로만 선다(셔츠가 푸른 흰빛이라 방 채움을 그대로 주니 파란
 #  셔츠로 읽혔다 · 고른 회색으로 더 낮게)
 const MFILL := Color(0.014, 0.014, 0.017)
-#  주인공 소품 자리 — 손님 잔(받침째) · 상인(바닥 · 요(도) · 닦는 잔 밑동 · 기울기(도)) · TV(천장 걸이 · 요 · 숙임 · 기울기
-#  축) · 잔 걸이 · 양철 천장
+#  살 바탕빛 — 살만 따뜻한 한 단 위로(손가락 틈 · 손목 밑이 MFILL 거의 검정이라 금 · 구멍으로 읽혔다 · 검토 3). 웅덩이 밖
+#  팔뚝도 이 단으로 실루엣이 선다
+const SKIN_FILL := Color(0.05, 0.03, 0.025)
+#  주인공 소품 자리 — 손님 잔(받침째) · 상인(바닥 · 요(도) · 닦는 잔 밑동 · 기울기(도 — 일하는 손 쪽) · 숙임(도 — 입이 앉은
+#  눈 쪽으로 열린다: 축이 시선과 거의 같아 테 타원이 모서리로 서서 직선이었다 · 검토 3) · 내려놓은 자리 · 가운데 펜던트가
+#  겨누는 데(잔 밑동에서 — 손 · 잔 앞 · 일하는 팔뚝 쪽 · 가슴은 웅덩이 밖)) · TV(천장 걸이 · 요 · 숙임 · 기울기 축) · 잔 걸이 ·
+#  양철 천장. 잔은 가슴 가까이(z 0.24) · 받치는 손 쪽(+x)으로 — 일하는 팔이 몸 옆에서 안으로 들어와 팔뚝이 그림 면을
+#  가로지른다(잔이 몸 앞 33cm 면 팔뚝이 앉은 눈을 곧게 겨눠 손이 위팔 소매에서 돋은 주걱이었다 · 검토 3)
 const PINT := Vector3(-0.18, -0.14, -3.86)
-const MERCH := {"at": Vector3(-0.62, -1.22, -4.32), "yaw": 15.0, "glass": Vector3(0.02, 1.13, 0.33), "tilt": 35.0,
-		"down": Vector3(-0.02, 1.081, 0.40)}
+const MERCH := {"at": Vector3(-0.62, -1.22, -4.32), "yaw": 15.0, "glass": Vector3(0.08, 1.15, 0.24), "tilt": 35.0,
+		"down": Vector3(-0.02, 1.081, 0.40), "lean": 15.0, "aim": Vector3(-0.09, 0.0, 0.08)}
 const TV := {"at": Vector3(-0.10, 1.30, -4.60), "yaw": 4.0, "tilt": 15.0, "pivot": -0.4224, "aim": Vector3(-0.15, -0.14, -4.02)}
 const RACK := Vector3(-0.15, 1.30, -3.86)
 #  다트 테이블 — 앉은 눈에서 윗면 앞 절반이 카운터 끝에 가려 빈 잔 · 다트 · 촛불이 안 보였다. 이 장면만 테이블 무리
@@ -133,13 +145,17 @@ const TABLE := {"dz": -0.25, "candle_dz": -0.14, "pick": 0.6, "chair0": Vector3(
 #  받침 채도
 const HERO_K := {"coaster_sat": 0.6}
 #  유리 값(GLASS_SHADER uniform) — rim_y 입술(잔 좌표 높이 — 이 위가 끊기지 않는 테 한 줄) · sy0 · sy1 빛줄 높이 띠 ·
-#  body_k 몸 단 · ef 가장자리 문턱 · base_y 두꺼운 밑 · lip 입술 바탕. 손님 잔(논익 15cm · 밑 12.5mm) · 닦는 빈 잔(14.8cm ·
-#  밑 9mm — 실루엣이 두께 있는 몸으로 · 입술 한 단 밝게) · 테이블 빈 잔(촛불 빛줄 · 몸 단)
+#  body_k 몸 단 · body_y 몸 단이 서는 높이 · ef 가장자리 문턱 · base_y 두꺼운 밑 · lip 입술 바탕 · bend 너머 굴림(px).
+#  손님 잔(논익 15cm · 밑 12.5mm) — 빛줄은 벽 밑끝부터 논익 굴곡 밑까지 1~2px(거품 높이에 짧게 떠 잔 밖으로 튀어나온 빨대
+#  둘로 읽혔다 · 굴곡을 넘기면 테두리 그린 만화 잔의 지그재그) · 빈 윗부분만 찬 몸 한 단(뒤 병이 「유리 너머」로) · 너머
+#  굴림 1px(굴린 병 모자이크가 얼룩무늬였다 · 검토 3). 닦는 빈 잔(14.8cm · 밑 9mm) — 몸 단은 거의 걷고(0.32 는 남색 카드로
+#  읽혔다) 끊기지 않는 밝은 입술 · 위아래로 이은 빛줄 한 줄. 테이블 빈 잔(촛불 빛줄 · 몸 단)
 const GLASS_K := {
-	"pint": {"rim_y": 0.1482, "sy0": 0.06, "sy1": 0.095, "body_k": 0.10, "base_y": 0.0125, "hi": 0.3, "cut": 0.995},
-	"polish": {"rim_y": 0.1455, "sy0": 0.045, "sy1": 0.09, "body_k": 0.32, "ef": 0.6, "base_y": 0.009, "hi": 0.45,
-			"lip": Color(0.11, 0.12, 0.13), "rim_k": 0.6},
-	"table": {"rim_y": 0.1482, "sy0": 0.05, "sy1": 0.11, "body_k": 0.25, "ef": 0.6, "base_y": 0.0125, "hi": 1.0,
+	"pint": {"rim_y": 0.1482, "sy0": 0.012, "sy1": 0.104, "body_k": 0.22, "body_y": 0.086, "base_y": 0.0125, "hi": 0.3,
+			"cut": 0.999, "bend": 1.0},
+	"polish": {"rim_y": 0.143, "sy0": 0.012, "sy1": 0.14, "body_k": 0.08, "ef": 0.6, "base_y": 0.009, "hi": 0.55,
+			"cut": 0.985, "lip": Color(0.30, 0.32, 0.34), "rim_k": 1.0},
+	"table": {"rim_y": 0.1482, "sy0": 0.012, "sy1": 0.14, "body_k": 0.08, "ef": 0.6, "base_y": 0.0125, "hi": 0.6,
 			"cut": 0.97, "rim_k": 0.8, "lip": Color(0.06, 0.05, 0.04)},
 }
 #  선반 병 렌더 층 — 병 뒤 밑불은 이 층만 비춘다(판 · 기둥 · 갓까지 비춰 올려다보면 판 밑면이 평평한 주황 띠였다)
@@ -153,23 +169,33 @@ const TVL := {"e": 2.6, "c": Color(0.56, 0.65, 0.86), "c2": Color(0.74, 0.72, 0.
 		"hold": [0.5, 2.0], "rim": 0.2, "fog": 2.2}
 #  화면 — 지지직이 그림을 덮는 몫 [때부터, 몫](단으로 걷힌다) · 지지직 칸
 const SNOW := [[0.0, 1.0], [13.4, 0.72], [13.7, 0.42], [14.0, 0.16], [14.4, 0.05], [14.9, 0.0]]
-const SNOW_RES := Vector2(46.0, 34.0)
+#  칸 40 × 90 — 칸이 가로 3 : 세로 1(가로 번진 인광 · Plg snow_crt) · 멈춘 TV 에서 세로 1.5px 언저리. 46 × 34(칸 8px 네모)는
+#  브라운관 눈이 아니라 위장무늬 · QR 로 읽혔다(검토 3)
+const SNOW_RES := Vector2(40.0, 90.0)
+#  간판 — 밀기 동안 TV 그림의 HIGHTON 네온을 인트로보다 앞당겨 한 글자씩 켠다(game.plg_sign_t — 그림 속 인트로는 아직 램프
+#  박자라 간판이 꺼진 검은 띠였고 제목이 다이브에서야 처음 보였다 · 검토 3). t0 부터 rate 배로 인트로 간판 시계(INTRO.sign
+#  3.0 → 다 켜짐 · 붙기 전 hold)를 민다 · 넘김에 놓는다(그때 인트로는 이미 그 자리 — 다 켜지고 붙기 직전)
+const SIGN := {"t0": 15.0, "rate": 0.5, "from": 3.0, "hold": 3.6}
 #  상인 — 비틀기(도 · 1.5 초에 한 번 — bar_polish 의 박자 · t 0 이 정방향 가장 빠른 때) · 받치는 손이 반대로 돌리는 몫 ·
 #  고쳐 쥐기 [시작, 끝, 잔을 돌리는 각] · 내려놓기 [시작, 닿음] · gone 안쪽으로 빠진 때(눈이 다트 장을 보는 동안)
 const POLISH := {"a": 28.0, "per": 1.5, "back": 0.45, "regrip": [6.9, 7.25, 60.0], "down": [8.5, 8.85], "gone": 9.6}
-#  일하는 손 — 집는 테 자리: 잔 축 둘레 각(0 = 일하는 손 쪽 · + 가 손님 쪽) · 높이(잔 좌표) · 반지름
-const WORK := {"phi": 30.0, "h": 0.147, "r": 0.044}
+#  일하는 손 — 집는 테 자리: 잔 축 둘레 각(0 = 일하는 손 쪽 · + 가 손님 쪽) · 높이(잔 좌표) · 반지름. 90° — 테 앞(손님 쪽)을
+#  집는다: 집는 선(엄지 안 · 검지 밖)이 손님 쪽이라 손끝 축이 팔뚝을 그대로 잇고 손등이 눈을 본다(사진 — 일하는 손은 엎어
+#  손등이 보는 쪽)
+const WORK := {"phi": 90.0, "h": 0.147, "r": 0.044}
 #  손 닿는 자리(손 단위) — 받치는 손바닥 한가운데(잔 밑동이 앉는다)
 const HAND_AT := {"palm": Vector3(18.0, -8.0, 0.0)}
 #  손목 한계(도) — 굽힘(손바닥 쪽) · 젖힘 · 옆 꺾임(사진: 닦는 손 굽힘 20~30° · 새끼 쪽 약 10° · 받치는 손 젖힘 10~20°)
 const WRIST := {"flex": 28.0, "ext": 20.0, "dev": 14.0}
 #  팔 — 위팔 길이(bar_intro.py L_UA) · 팔뚝(팔꿈치 → 손목) · 손 단위(m — prologue3d TAPE.s 0.00328 보다 5% 작게: 손 18 × 9.6cm ·
-#  1배에서 손이 잔보다 커 보였다) · 팔꿈치가 굽는 쪽(어깨에서 —
-#  바깥 x · 아래 · 뒤 — 팔꿈치가 갈비 옆에 붙는다)
-const ARM := {"ua": 0.2956, "fa": 0.27, "s": 0.0031, "pole": Vector3(0.10, -0.60, -0.15)}
+#  1배에서 손이 잔보다 커 보였다) · 팔꿈치가 굽는 쪽(어깨에서 — 바깥 x · 아래 · 뒤 — 받치는 팔꿈치는 갈비 옆에 붙는다) ·
+#  pole_R 일하는 팔만 — 팔꿈치를 옆 · 조금 앞으로 들어(비틀 때 일하는 팔꿈치가 든다) 팔뚝이 몸 옆에서 안으로 · fs 맨 팔뚝
+#  단면 몫(game _fore3_fit — 맨 팔뚝이 잔보다 가늘어 막대에 붙은 큰 손이었다 · 손 : 팔뚝 ≈ 0.9 : 1)
+const ARM := {"ua": 0.2956, "fa": 0.27, "s": 0.0031, "pole": Vector3(0.10, -0.60, -0.15),
+		"pole_R": Vector3(0.45, -0.45, 0.10), "fs": 1.3}
 #  손가락 [첫 굽힘 ×4 · 끝 굽힘 ×4 · 부채 · 엄지 접기 · 엄지 굽힘 · 엄지 내림](game.gd FPOSE 차례)
 const HPOSE := {
-	"pinch": [42.0, 64.0, 76.0, 88.0, 46.0, 82.0, 92.0, 100.0, 7.0, 0.45, 26.0, 16.0],
+	"pinch": [42.0, 70.0, 85.0, 95.0, 46.0, 82.0, 92.0, 100.0, 7.0, 0.45, 26.0, 16.0],
 	"cup": [48.0, 56.0, 62.0, 68.0, 34.0, 40.0, 46.0, 52.0, 3.0, 0.15, 24.0, 12.0],
 }
 
@@ -222,6 +248,9 @@ uniform float base_y = -1.0;
 uniform float sy0 = -1.0;
 uniform float sy1 = 999.0;
 uniform vec3 lip : source_color = vec3(0.0);
+//  몸 단이 서는 높이(잔 좌표 — 이 위만 · 맥주가 든 아래는 맥주가 맡는다) · nsh 1 이면 초점 띠 앞(가까운 전경)은 덩어리 없이
+uniform float body_y = -1.0;
+uniform float nsh = 0.0;
 //  입술 — 잔 좌표 높이 이 위는 끊기지 않는 어두운 한 줄(점선 고리 · 떠 있는 밝은 타원으로 읽혔다) · 빛 자리만 짧게 밝다 · 999 면 없다
 uniform float rim_y = 999.0;
 uniform float rim_k = 0.45;
@@ -245,7 +274,7 @@ float strip(vec4 lp, vec3 r, float c) {
 
 float want(float z) {
 	float o = max(f0 - z, z - f1);
-	if (o <= 0.0) {
+	if (o <= 0.0 || (nsh > 0.5 && z < f0)) {
 		return 1.0;
 	}
 	float r = o / max(f1, 0.2);
@@ -273,7 +302,7 @@ void fragment() {
 		}
 	}
 	vec3 c = texture(scr, clamp(uv, vec2(0.0), vec2(1.0))).rgb * tint;
-	c = mix(c, body, body_k);
+	c = mix(c, body, my > body_y ? body_k : 0.0);
 	if (my < base_y) {
 		c = c * 1.3 + body * 0.35;
 	}
@@ -307,7 +336,7 @@ void vertex() {
 void fragment() {
 	float h = (my - y0) / (y1 - y0);
 	vec3 c = h < 0.4 ? lo : col;
-	c = h > 0.975 ? top : c;
+	c = h > 0.94 ? top : c;
 	ALBEDO = c;
 	ROUGHNESS = 1.0;
 	SPECULAR = 0.0;
@@ -330,6 +359,7 @@ uniform float f0 = 0.0;
 uniform float f1 = 999.0;
 uniform float bmin = 1.0;
 uniform float bmax = 4.0;
+uniform float nsh = 0.0;
 
 void vertex() {
 	POSITION = vec4(VERTEX.xy, 1.0, 1.0);
@@ -343,7 +373,7 @@ float lin(vec2 uv, mat4 ip) {
 
 float want(float z) {
 	float o = max(f0 - z, z - f1);
-	if (o <= 0.0) {
+	if (o <= 0.0 || (nsh > 0.5 && z < f0)) {
 		return 1.0;
 	}
 	float r = o / max(f1, 0.2);
@@ -936,7 +966,7 @@ static func _merchant(hn: Node, w: Node3D, g: Node) -> void:
 	arm.scale = Vector3.ONE * float(ARM.s)
 	m.add_child(arm)
 	var m0: Dictionary = g._hand3_mats()
-	var mats := {"skin": _toon(m0.skin, MFILL), "nail": _toon(m0.nail), "ring": _toon(m0.ring)}
+	var mats := {"skin": _toon(m0.skin, SKIN_FILL), "nail": _toon(m0.nail), "ring": _toon(m0.ring)}
 	#  살 — 위 두 문턱을 올려 손등 · 손가락 둥근 면에 단이 선다(펜던트가 거의 바로 위라 손등이 통째로 맨 위 단 —
 	#  크림 벙어리장갑이었다 · 검토 1)
 	(mats.skin as ShaderMaterial).set_shader_parameter("t2", 0.62)
@@ -1019,7 +1049,7 @@ static func _arm_set(g: Node, sd: String, M: Dictionary, P: Vector3, k: Vector3,
 	var fo: Dictionary = M.fo[sd]
 	var out: float = -1.0 if sd == "R" else 1.0
 	var sh: Vector3 = (_xf.get("Shoulder" + sd, Transform3D()) as Transform3D).origin
-	var pv: Vector3 = ARM.pole
+	var pv: Vector3 = ARM.get("pole_" + sd, ARM.pole)
 	var pole: Vector3 = sh + Vector3(out * pv.x, pv.y, pv.z)
 	var h0 := Basis(Quaternion(kl.normalized(), k.normalized()))
 	var f: Vector3 = (P - sh).normalized()
@@ -1040,7 +1070,7 @@ static func _arm_set(g: Node, sd: String, M: Dictionary, P: Vector3, k: Vector3,
 	var es: Vector3 = el / s
 	var ax: Vector3 = es - (ws - es).normalized() * float(g.HAND3.back)
 	(fo.root as Node3D).transform = g._aim3(ax, ws, 1.0, 0.0, hb.y)
-	g._fore3_fit(fo, (ws - ax).length(), 1.0)
+	g._fore3_fit(fo, (ws - ax).length(), float(ARM.fs))
 	return [wr, hb, el]
 
 
@@ -1086,7 +1116,8 @@ static func _merch_tick(hn: Node, t: float) -> void:
 	#  내려놓기 — 잔이 곧게 서며 카운터(상인 좌표 y 1.08)로 내려와 닿는다(잔 놓는 소리)
 	var dk: float = smoothstep(float(dn[0]), float(dn[1]), t)
 	var gp: Vector3 = (MERCH.glass as Vector3).lerp(MERCH.down, dk)
-	var gb := Basis(Vector3.BACK, deg_to_rad(float(MERCH.tilt) * (1.0 - dk))) * Basis(Vector3.UP, deg_to_rad(sp))
+	var gb := Basis(Vector3.BACK, deg_to_rad(float(MERCH.tilt) * (1.0 - dk))) \
+			* Basis(Vector3.RIGHT, deg_to_rad(float(MERCH.lean) * (1.0 - dk))) * Basis(Vector3.UP, deg_to_rad(sp))
 	(M.glass as Node3D).transform = Transform3D(gb, gp)
 	var a: Vector3 = gb.y
 	var s: float = ARM.s
@@ -1240,7 +1271,7 @@ static func _tv_level(hn: Node, t: float) -> float:
 static func _lights_make(hn: Node, w: Node3D, bar: Node3D) -> void:
 	var L := {"pend": [], "shelf": []}
 	var hands: Vector3 = (MERCH.at as Vector3) + Basis(Vector3.UP, deg_to_rad(float(MERCH.yaw))) \
-			* ((MERCH.glass as Vector3) + Vector3(-0.04, 0.07, 0.0))
+			* ((MERCH.glass as Vector3) + (MERCH.aim as Vector3))
 	for n in bar.find_children("*", "Light3D", true, false):
 		var l := n as Light3D
 		#  빛 이름도 겹쳐 붙으며 바뀐다 — 꼴 · 닿는 거리 · 빛깔로 가린다(Door3D _bar_lamps · _bar_back · _bar_darts · _bar_table ·
@@ -1325,7 +1356,7 @@ static func _lights(hn: Node, t: float) -> void:
 	#  올려다본 뒤 — 갓 속(젖빛 판 · 안쪽)은 가장 어두운 단 · 갓은 그림 귀에 어두운 테로만 든다
 	var up: float = 0.0 if t >= float(PEND.up) else 1.0
 	#  선반 앞 띠 등(제 빛)도 올려다본 뒤엔 꺼 둔다 — TV 를 한가운데 두면 그림 밑끝에 크림 가로줄로 걸렸다
-	var gk := {"shelf": 0.15 * float(d.shelf) * up, "cab": 0.85 * float(d.pict), "neon": 0.5 * float(d.neon),
+	var gk := {"shelf": 0.15 * float(d.shelf) * up, "cab": 0.3 * float(d.pict), "neon": 0.5 * float(d.neon),
 			"candle": float(d.candle) / 0.7 * 0.8, "shade": 0.12 * maxf(float(d.pm), float(d.pr)) * up}
 	for grp in gl:
 		for e in gl[grp]:
@@ -1412,6 +1443,7 @@ static func _post_tick(hn: Node, t: float) -> void:
 		(m as ShaderMaterial).set_shader_parameter("f1", float(row[2]))
 		(m as ShaderMaterial).set_shader_parameter("bmin", float(row[3]))
 		(m as ShaderMaterial).set_shader_parameter("bmax", float(row[4]))
+		(m as ShaderMaterial).set_shader_parameter("nsh", float(row[5]) if row.size() > 5 else 0.0)
 
 
 #  눈꺼풀 — 무대 화판 위 2D 두 장(논리 px 에 그려 테가 도트 계단이다). 틈은 렌즈 꼴 — 가운데가 넓고 귀가 좁다.
@@ -1625,6 +1657,14 @@ static func _tv_tick(hn: Node, t: float) -> void:
 		return
 	scr.set_shader_parameter("tm", t)
 	scr.set_shader_parameter("snowk", _snow(t))
+	#  자르기 한가운데 — 문 한가운데(다트판 · 간판)가 유리 세로축에(그림 속 판이 오른쪽에 서서 TV 는 가운데인데 눈이 오른쪽으로
+	#  끌렸다 · 검토 3)
+	var g: Node = hn.get_meta("game")
+	if g != null and g.has_method("_title_c"):
+		var cw: float = float(scr.get_shader_parameter("cw"))
+		scr.set_shader_parameter("cx", clampf(float(g._title_c().x) / float(g.VIEW.x), cw * 0.5, 1.0 - cw * 0.5))
+		var on: bool = t >= float(SIGN.t0) and t < handoff()
+		g.plg_sign_t = minf(float(SIGN.from) + (t - float(SIGN.t0)) * float(SIGN.rate), float(SIGN.hold)) if on else -1.0
 
 
 static func _snow(t: float) -> float:

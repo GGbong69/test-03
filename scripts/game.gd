@@ -1585,6 +1585,7 @@ var plg_ff := false
 var plg_rang := {}
 var plg_rain: AudioStreamPlayer = null
 var plg_aud := []            # 앞 토막 소리 자리(카세트 · 데크) — _plg_close 가 걷는다
+var plg_sign_t := -1.0       # 여는 장면이 TV 그림의 간판만 앞당겨 켜는 인트로 때(바 인트로 · −1 이면 인트로 시계 그대로)
 
 
 func _plg_live() -> bool:
@@ -1631,6 +1632,7 @@ func _plg_begin(kind := "") -> void:
 
 
 func _plg_close() -> void:
+	plg_sign_t = -1.0
 	if plg_vp != null and is_instance_valid(plg_vp):
 		plg_vp.queue_free()
 	plg_vp = null
@@ -1963,7 +1965,7 @@ func _draw_intro() -> void:
 	_ttly_draw(1.0 - st)
 	_ttl_draw()
 	draw_set_transform(shake_off)
-	_intro_sign(t, 1.0 - st, _sign_base(shake_off))
+	_intro_sign(maxf(t, plg_sign_t), 1.0 - st, _sign_base(shake_off))
 	#  두 낱말이 붙는 순간 금빛 번쩍
 	var ft: float = t - float(INTRO.snap) - float(INTRO.snap_t)
 	if ft >= 0.0 and ft < float(INTRO.flash):

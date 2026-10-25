@@ -334,6 +334,8 @@ uniform sampler2D tex : source_color, filter_nearest, repeat_disable;
 uniform float snowk = 0.0;
 uniform float crt = 0.0;
 uniform float refl = 0.0;
+//  cx mode 9 자르기 한가운데(그림 폭 몫 — 0.5 가 옛 그림) — 바 인트로는 문 한가운데(다트판 · 간판)를 유리 세로축에 둔다
+uniform float cx = 0.5;
 
 float hs(vec2 p) {
 	return fract(sin(dot(p, vec2(12.9898, 78.233)) + seed * 17.0) * 43758.5453);
@@ -341,6 +343,16 @@ float hs(vec2 p) {
 
 vec3 snow(vec2 q) {
 	float n = hs(floor(q * res) + floor(tm * 15.0) * vec2(7.0, 13.0));
+	float v = n < 0.45 ? 0.08 : (n < 0.8 ? 0.42 : 0.78);
+	return vec3(v, v, v * 1.06) * (0.72 + 0.28 * step(0.18, fract(q.y - tm * 0.45)));
+}
+
+//  브라운관 지지직(crt) — 칸이 가로로 길다(가로 번진 인광 · 1 × 3) · 줄마다 위상이 흔들려 세로로 안 줄 선다 · 세 단 명도
+vec3 snow_crt(vec2 q) {
+	float tk = floor(tm * 15.0);
+	float row = floor(q.y * res.y);
+	float x = floor(q.x * res.x + hs(vec2(row, tk + 5.0)));
+	float n = hs(vec2(x, row) + tk * vec2(7.0, 13.0));
 	float v = n < 0.45 ? 0.08 : (n < 0.8 ? 0.42 : 0.78);
 	return vec3(v, v, v * 1.06) * (0.72 + 0.28 * step(0.18, fract(q.y - tm * 0.45)));
 }
@@ -465,10 +477,10 @@ void fragment() {
 				vec2 bd = UV - 0.5;
 				bu = 0.5 + bd * (1.0 - 0.1 * ck * dot(bd, bd));
 			}
-			vec2 cu = mix(vec2((bu.x - 0.5) * cw + 0.5, bu.y), SCREEN_UV, portal);
+			vec2 cu = mix(vec2((bu.x - 0.5) * cw + cx, bu.y), SCREEN_UV, portal);
 			s = texture(tex, cu).rgb * mix(1.08, 1.0, portal);
 			if (crt > 0.0) {
-				s = mix(s, snow(bu), snowk * (1.0 - portal));
+				s = mix(s, snow_crt(bu), snowk * (1.0 - portal));
 				s *= 1.0 - 0.24 * ck * mod(floor(FRAGCOORD.y), 2.0);
 				s *= 1.0 - 0.12 * ck * step(fract(UV.y - tm * 0.5), 0.12);
 			} else if (mod(floor(cu.y * feed.y), 2.0) > 0.5) {
