@@ -570,8 +570,10 @@ static func tick_room(vp: SubViewport, t: float) -> void:
 #  y 64 · 받침 · 서랍장 앞끝 y 159 · 160)도 그대로다. 상인 쪽으로 38 · 49 다가와 팔은 덜 뻗는다.
 #  받침 네 귀는 넓어진 카운터 한가운데라 틀에서 30 · 18 떨어진다(foot_clear).
 #  이름 · 값은 그 소품 밑 카운터 한가운데에 선다(game.gd CHUTE_TXT · _chute_txt_cx).
+#  HUD 줄이 48 로 자라 자금판 · 사탕·사진 이름 줄이 y 65 까지 내려왔다(2026-10-25) — 저울을 곱 2.0 → 1.95 ·
+#  w 24 → 26.5 로 앞당겨 꼭지 y 66 · 받침 앞끝 y 161(이름 글 161.5 위)에 끼운다.
 const TOP_H := 3.0                              # 옆 카운터 윗면 — 벨벳보다 한 단 위
-const SELL_AT := Vector3(70.0, TOP_H, 24.0)     # 저울 — 왼 카운터 한가운데(2 : 6 : 2)
+const SELL_AT := Vector3(70.0, TOP_H, 26.5)     # 저울 — 왼 카운터 한가운데(2 : 6 : 2)
 const BUY_AT := Vector3(574.0, TOP_H, 19.0)     # 금전등록기 — 오른 카운터 한가운데
 #  넓은 화면(2026-10-14 「와일드 그니까 양쪽으로 넓은거는 테이블이 넓으면 좋겠어, 판매와 구매도 넓은 만큼
 #  양쪽으로 가면 좋겠고」) — 화면이 16:9 보다 넓으면 펠트가 양옆으로 wide 씩 넓어지고(부르는 쪽이 side 를 그만큼
@@ -585,7 +587,7 @@ static func sell_at() -> Vector3:
 
 static func buy_at() -> Vector3:
 	return BUY_AT + Vector3(wide, 0.0, 0.0)
-const SELL_K := 2.0
+const SELL_K := 1.95
 const BUY_K := 1.9
 #  받침 네 귀 — 곱하기 전 (u, h, w). 저울은 놋쇠 띠(받침에서 가장 넓은 단), 등록기는
 #  서랍장 뒤끝과 앞 모서리 놋쇠 갓. foot_clear 가 이 넷을 기울여 카운터에 대 본다.
