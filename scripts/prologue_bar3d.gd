@@ -21,8 +21,9 @@ extends RefCounted
 #     꺼진다(가운데 펜던트가 마지막) · 방 소리가 먹먹해지고 TV 소리만 남는다. TV 그림 속 문 위 HIGHTON 간판이 한 글자씩
 #     켜진다(SIGN · 문 한가운데가 유리 세로축).
 #   7 16.8~17.4 TV 유리 속으로 든다 — 테이프 프롤로그와 같은 유리 뚫기(Plg dive_w · portal · glint · flash · cross):
-#     밀기가 매끈하게 서는 동안 유리에 빗금이 쓸고 오른 위 귀에 별이 핀다(반짝 · 삐싱 — tv_glint) → 세제곱으로 뛰어들어
-#     60°「/」 흰빛이 왼 위에서 차오르고 맨 밝은 틀(handoff)에서 무대를 끊고 게임 필터를 켠다(퍽) → 흰빛이 오른 아래로
+#     밀기가 매끈하게 서는 동안 유리에 빗금이 쓸고 오른 위 귀에 별이 핀다(반짝 — 소리는 없다 · 2026-10-28 「바텐더 오프닝에서
+#     삐씽 효과음은 쫌 뺄까?」 · 테이프는 그대로 tv_glint) → 세제곱으로 뛰어들어
+#     60°「/」 흰빛이 왼 위에서 차오르고 맨 밝은 틀(handoff)에서 무대를 끊고 게임 필터를 켠다 → 흰빛이 오른 아래로
 #     빠지며 게임 속(인트로 — 네온이 붙는 쾅) → 제목 문.
 #  빛 · 효과로 가린다(조사 T01~T14): 채움빛을 걷고 찬 바탕 한 단만(밤 · 주인공만 빛) · 펜던트 · TV 의 단단한 그림자 ·
 #  니스 반짝 · 빛무리 · 전구 · 도트 잔 그림 · 거울 비침 걷기 · 선반 병은 뒤에서 · 채도를 누른다 · 깊이 덩어리 흐림(초점은
@@ -34,8 +35,7 @@ extends RefCounted
 #  팔뚝 · 손은 상점 손 그대로(game.gd _hand3_build · _fore3_build). TV 는 이 장면의 세계(제 SubViewport)에만 있다 —
 #  제목 문 카메라는 다른 세계라 못 본다.
 #  소리는 제 자리에서 낸다 — 방 소리 · 잔 · 닦기 · 잔 놓기는 이 장면의 BarAmb 버스(로패스 — 눈과 같이 열리고 다이브에
-#  닫힌다 · 넘김에 걷는다)로, TV 지지직 · 웅은 SFX 로(먹먹해지지 않는다). cues 는 유리 반짝 하나(tv_glint — 테이프와 같은
-#  파일 · 같은 handoff 앞 때 · game.gd 가 낸다).
+#  닫힌다 · 넘김에 걷는다)로, TV 지지직 · 웅은 SFX 로(먹먹해지지 않는다). cues 는 비었다 — 유리 반짝(glint_at)에 소리를 안 낸다.
 const Door3D = preload("res://scripts/door3d.gd")
 const Room3D = preload("res://scripts/room3d.gd")
 const Plg = preload("res://scripts/prologue3d.gd")
@@ -490,9 +490,15 @@ static func feed_at() -> float:
 	return float(T.feed)
 
 
-#  소리는 이 장면이 제 자리에서 낸다(로패스 버스 · 박자) — game.gd 가 낼 것은 유리 반짝 하나(테이프와 같은 handoff 앞 때).
+#  소리는 이 장면이 제 자리에서 낸다(로패스 버스 · 박자) — game.gd 가 낼 것이 없다. 유리 반짝의 삐싱(tv_glint)은 테이프에만
+#  난다(2026-10-28 「바텐더 오프닝에서 삐씽 효과음은 쫌 뺄까?」).
 static func cues() -> Dictionary:
-	return {"tv_glint": handoff() - float(Plg.GLINT.cue)}
+	return {}
+
+
+#  유리 반짝 때 — 테이프의 삐싱 큐와 같은 handoff 앞 자리. TV 소리를 걷는 기준이다.
+static func glint_at() -> float:
+	return handoff() - float(Plg.GLINT.cue)
 
 
 # ══ 짓기 ═══════════════════════════════════════════════════
@@ -1746,7 +1752,7 @@ static func _snow(t: float) -> float:
 #  닫히고 다이브에 다 닫힌다) · TV 지지직 · 웅(순환)은 SFX(먹먹해지지 않는다). 넘김(퍽) 뒤 꼬리(SND.tail)가 잦아들면 버스를 걷는다.
 #  clink 먼 잔 · lp 로패스 [닫힘 · 열림](Hz) · static TV 지지직 [감은 눈 · 화면 밖(눈 뜬 뒤) · 올려다본 뒤](dB) · hum 웅(같은 차례) ·
 #  click 빛 딸깍 · tv 그림이 비치는 동안 SFX 에 거는 작은 스피커 [고역 통과 · 저역 통과(Hz) · 줄임(dB)] — 게임 인트로 소리가
-#  TV 소리로 들리다가 · tv_out 유리 반짝(cues tv_glint) 앞 이 초에 걸쳐 TV 소리(스피커 · 지지직 · 웅)를 걷는다 — 반짝 ·
+#  TV 소리로 들리다가 · tv_out 유리 반짝(glint_at) 앞 이 초에 걸쳐 TV 소리(스피커 · 지지직 · 웅)를 걷는다 — 반짝 ·
 #  삐싱 · 퍽은 TV 소리가 아니다(스피커를 지나니 싱 −22 · 퍽 −11dBFS 로 먹먹하고 퍽이 인트로의 네온 쾅(−10)보다 작았다).
 #  그 사이 인트로는 소리가 없다(램프 꺼짐 딸깍은 반짝 앞에 끝나고 · 간판 소리는 SIGN.t0 · 쾅은 건넌 뒤) · 방은 로패스로 닫히는
 #  중이라 쉬익이 홀로 차오른다 · tail 넘김 뒤 방 소리(로패스가 다 닫힌 채 −50dBFS 언저리)가 다 잦아드는 초 — 넘김에 끊으니 퍽 뒤
@@ -1855,7 +1861,7 @@ static func _audio_tick(hn: Node, t: float) -> void:
 	#  TV — 지지직은 그림이 비칠수록 단으로 잦아들고 · 웅은 올려다볼 때부터 크다. 반짝 앞 SND.tv_out 에 걸쳐 걷고 반짝 틀에
 	#  멎는다 — 스피커도 그 틀에 걷혀 쉬익은 처음부터 날것이다(반짝 뒤에 걷으니 차오르는 쉬익 4 틀째에 고역이 한 틀에 열려
 	#  「틱」 이음매가 났다 · 검토)
-	var tg: float = float(cues().tv_glint)
+	var tg: float = glint_at()
 	var tvk: float = 1.0 - clampf((t - (tg - float(SND.tv_out))) / float(SND.tv_out), 0.0, 1.0)
 	if pl.has("static"):
 		var sk: float = _snow(t)

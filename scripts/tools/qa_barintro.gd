@@ -10,7 +10,7 @@ extends SceneTree
 #    ⑤ 누름 — 첫 누름 빨리 감기 · 둘째 누름 끝 → 버스 · 효과 · 무대가 안 남는다
 #    ⑧ 런 끝(완주 · 실패)의 「새 런」 — 바를 틀고 끝나면(건너뛰어도) 인트로 나머지 없이 제목 문으로(2026-10-28)
 #    ⑥ 개발자 판 — 「바 인트로 보기」 · 「켤 때 인트로」 줄이 있고 그 쪽이 열아홉 줄 안 · 켤 때 인트로 줄이 전역 값을 바꾼다
-#    ⑦ 유리 뚫기(테이프 Plg 와 같은 반짝 · 번쩍) — tv_glint 가 handoff − GLINT.cue · 밀기가 서는 때 = 뛰어듦 시작 · 빗금은
+#    ⑦ 유리 뚫기(테이프 Plg 와 같은 반짝 · 번쩍 · 삐싱 소리는 없다) — 반짝 때(glint_at)가 handoff − GLINT.cue · 밀기가 서는 때 = 뛰어듦 시작 · 빗금은
 #      handoff − GLINT.lead 틀에 서고 별은 번쩍 앞에 진다 · 번쩍은 handoff −4 틀 ~ +6 틀만 · 필터는 맨 밝은 틀(lit_at)에 켜지고
 #      잔상은 calm_at 까지 0 · handoff 뒤 층은 Flash 만 · TV 스피커는 반짝 틀에 걷혀 있다(게임 필터는 처음 켠 값으로 돈다) ·
 #      번쩍 오름 단은 유리 둘레 안(Flash pn)에만 · 인트로 박자(램프는 깜박임 뒤 · 쾅은 건넌 뒤 · 간판 소리는 SIGN.t0) ·
@@ -142,7 +142,7 @@ func _process(_d: float) -> bool:
 				if t >= hf + 0.5 / 60.0:
 					for c in rt.get_children():
 						cut_ok = cut_ok and (c == fl or not (c as CanvasItem).visible)
-				if t >= float(P.cues().tv_glint):
+				if t >= P.glint_at():
 					spk_late = spk_late or _sfx_fx() > fx0
 				if sign_snd < 0.0 and g.intro_rang.has("sign"):
 					sign_snd = t
@@ -202,11 +202,11 @@ func _process(_d: float) -> bool:
 				var cr: Array = P.DIVE.creep
 				var mp: Array = P.MOVE[3]
 				var l0: float = float(P.T.dive0) + float(cr[2]) * (float(P.T.dive1) - float(P.T.dive0))
-				_ok("⑦ 유리 뚫기 — 반짝 소리 · 밀기 끝 = 뛰어듦 시작 · 다가감 몫", is_equal_approx(float(P.cues().tv_glint),
-						hf - float(Pg.GLINT.cue)) and g._sfx_file("tv_glint") != null
+				_ok("⑦ 유리 뚫기 — 반짝 때 · 삐싱 소리 없음 · 밀기 끝 = 뛰어듦 시작 · 다가감 몫", is_equal_approx(P.glint_at(),
+						hf - float(Pg.GLINT.cue)) and P.cues().is_empty()
 						and absf(float(mp[0]) + float(mp[1]) - l0) < fr and Pg.dive_w(float(cr[2]), cr) == 0.0
 						and is_equal_approx(Pg.dive_w(1.0, cr), 1.0) and P.lit_at() < hf and P.lit_at() > hf - fr
-						and P.calm_at() > hf + 6.0 * fr, "반짝 %.3f · 뛰어듦 %.3f" % [float(P.cues().tv_glint), l0])
+						and P.calm_at() > hf + 6.0 * fr, "반짝 %.3f · 뛰어듦 %.3f" % [P.glint_at(), l0])
 				_ok("⑦ 빗금 · 별 · 번쩍(오름 단은 유리 둘레 안 · 맨 밝은 틀부터 화면) · 필터 때",
 						absf(gl0 - (hf - float(Pg.GLINT.lead) * fr)) <= 3.0 * fr
 						and sp1 > 0.0 and sp1 < hf - 4.0 * fr and fk0 >= hf - 4.5 * fr and fk1 < hf
@@ -221,7 +221,7 @@ func _process(_d: float) -> bool:
 				var fa: float = P.feed_at()
 				var lid: Array = P.LID
 				var snap: float = fa + float(IN.snap) + float(IN.snap_t)
-				var w0: float = float(P.cues().tv_glint) - float(P.SND.tv_out)
+				var w0: float = P.glint_at() - float(P.SND.tv_out)
 				var beat_ok: bool = fa + float(IN.lamp) > float(lid[lid.size() - 1][0]) and snap > P.calm_at()
 				for bt in [fa + float(IN.lamp), fa + float(IN.off), snap]:
 					beat_ok = beat_ok and (bt < w0 or bt > P.calm_at())
