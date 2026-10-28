@@ -9,7 +9,7 @@ extends SceneTree
 #    ③ 다가감 빠르기(틀당 그림이 커지는 몫 — 거리 · 화각) — 뛰어듦 앞은 어느 틀도 Z_MAX 를 안 넘고(밀기는 천천히) ·
 #       뛰어듦(Plg dive_w 세제곱)은 handoff 까지 줄지 않고 는다(유리 앞에서 서지 않고 뚫는다).
 #  <스틸 폴더>/tmap.txt — 그린 틀마다 [틀 번호 · plg_t · 유리까지 거리 · 화각 · glint · spark · portal · 번쩍 단 · 유리 둘레
-#  꼭짓점 수(오름 단 — 0 이면 화면 전체) · CRT · VHS · 도트 켜짐] — Movie Maker 그림 번호는 틀 번호 − 1. 게임 필터는 처음 켠 값(CRT_DEF …)으로 찍는다.
+#  꼭짓점 수(오름 단 — 0 이면 화면 전체) · CRT · VHS · 도트 켜짐 · 인광 판 배 · 겹침 비킴] — Movie Maker 그림 번호는 틀 번호 − 1. 게임 필터는 처음 켠 값(CRT_DEF …)으로 찍는다.
 #   godot --path . --resolution 1280x720 --fixed-fps 60 [--write-movie <폴더>/m.png] \
 #       --script scripts/tools/shot_barintro.gd -- <스틸 폴더> [때,때,…]
 const Save = preload("res://scripts/save.gd")
@@ -125,10 +125,19 @@ func _track(t: float) -> void:
 	var m: ShaderMaterial = hn.get_meta("scr")
 	var fl := (hn.get_meta("root") as Control).get_node("Flash") as CanvasItem
 	var fm := fl.material as ShaderMaterial
-	tmap.append("%d %.4f %.4f %.2f %.3f %d %.3f %.3f %d %s" % [drawn, t, dd, cam.fov, float(m.get_shader_parameter("glint")),
-			int(m.get_shader_parameter("spark")), float(m.get_shader_parameter("portal")),
-			float(fm.get_shader_parameter("k")) if fl.visible else 0.0, int(fm.get_shader_parameter("pn")),
-			"%d%d%d" % [int(g.crt_layer.visible), int(g.vhs_rect.visible), int(g.dot_rect.visible)]])
+	#  인광 판(Phos — 배 · 겹침 비킴 화면 UV) — 안 보이면 0 · −1
+	var ph := (hn.get_meta("root") as Control).get_node_or_null("Phos") as CanvasItem
+	var pm: ShaderMaterial = ph.material as ShaderMaterial if ph != null else null
+	tmap.append("%d %.4f %.4f %.2f %.3f %d %.3f %.3f %d %s %.1f %.4f" % [drawn, t, dd, cam.fov, _u(m, "glint", -9.0),
+			int(_u(m, "spark", 0.0)), _u(m, "portal", 0.0), _u(fm, "k", 0.0) if fl.visible else 0.0, int(_u(fm, "pn", 0.0)),
+			"%d%d%d" % [int(g.crt_layer.visible), int(g.vhs_rect.visible), int(g.dot_rect.visible)],
+			_u(pm, "m", 0.0) if ph != null and ph.visible else 0.0, _u(pm, "ou", -1.0) if ph != null and ph.visible else -1.0])
+
+
+#  재질 값 — 한 번도 안 넣은 uniform 은 null 이다(인광 점 속으로는 반짝 · 번쩍 값을 안 넣는다)
+static func _u(mt: ShaderMaterial, nm: String, d: float) -> float:
+	var v = mt.get_shader_parameter(nm) if mt != null else null
+	return float(v) if v != null else d
 
 
 #  두 basis 사이 각(도) — 작은 각도 정확하게(acos 는 1 언저리에서 0.02° 로 뭉개져 틀마다 0 · 2.4°/s 가 번갈았다)

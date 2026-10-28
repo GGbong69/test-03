@@ -1,12 +1,12 @@
 extends SceneTree
-#  술집에서 눈을 뜬다 — 그 장면의 소리 여섯(2026-10-25 · scripts/tools/sfx_bar.py 가 굽는다). 화면 없이 돈다. 못 박는 것:
-#    ① 여섯이 game.gd SFX 표에 있고 게임 길(_sfx_file)로 이름만 대서 읽힌다 — 16비트 PCM · 44.1k · 모노 · 길이
+#  술집에서 눈을 뜬다 — 그 장면의 소리 일곱(인광 점 속으로 bar_phos · 2026-10-28 · 2026-10-25 · scripts/tools/sfx_bar.py 가 굽는다). 화면 없이 돈다. 못 박는 것:
+#    ① 일곱이 game.gd SFX 표에 있고 게임 길(_sfx_file)로 이름만 대서 읽힌다 — 16비트 PCM · 44.1k · 모노 · 길이
 #    ② 순환 넷은 사본에 LOOP_FORWARD 를 걸어(창밖 비와 같은 길) 끝 너머로 돌고, 원본은 안 바뀐다 · 한 번 소리는 끝나면 멎는다
 #    ③ 방 소리 로패스 — 버스를 코드로 세우고(BarAmb · SFX 밑 · AudioEffectLowPassFilter — default_bus_layout.tres 는 안
 #       건드린다) 눈 뜨는 정도로 컷오프를 밀고, 걷으면 그 이름이 사라지고 버스 수가 처음으로 돌아온다
 #   godot --headless --path . --script scripts/tools/qa_barsfx.gd
 const LEN := {"bar_room": 8.0, "bar_clink": 1.3, "bar_polish": 3.0, "bar_glass_down": 0.8,
-		"bar_tv_static": 4.0, "bar_tv_hum": 4.0}
+		"bar_tv_static": 4.0, "bar_tv_hum": 4.0, "bar_phos": 1.13}
 const LOOP := ["bar_room", "bar_polish", "bar_tv_static", "bar_tv_hum"]
 const AMB := ["bar_room", "bar_clink", "bar_polish", "bar_glass_down"]   # 방 소리 — 로패스 밑 · TV 둘은 SFX 그대로
 var ok := 0

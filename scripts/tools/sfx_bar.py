@@ -332,8 +332,74 @@ def b_tv_hum():
     return unit(hum) + unit(wh) * np.sqrt(share / (1.0 - share)), True
 
 
+#  인광 점 속으로(2026-10-28 · prologue3d PHOS · prologue_bar3d DIVE.cue) — 파일 PH_H 초가 handoff(무대를 끊고 게임 필터를
+#  켜는 틀). 그 앞 틀 자리는 Phos 단(PH_STEPS) · 뒤는 겹침 단(PH_CONV) — 둘 다 handoff 기준 60Hz 틀.
+PH_H = 0.66
+PH_STEPS = (-24, -21, -18, -15, -12, -9, -7, -5, -3, -2, -1)
+PH_CONV = (0, 2, 4, 6, 8, 10)
+
+
+def b_phos():
+    #  브라운관 속으로 빨려 든다 — 차오르는 웅(수직 편향 60Hz 홀수 배음 · 60 → 90Hz 로 오른다) 위에 이잉(1.2 → 4.6kHz 로
+    #  빨라지며 오르는 가는 사인 · 다가감처럼 끝에 가장 빠르다) · 유리를 다 덮은 뒤 인광 줄을 지날 때 지직(Phos 단마다 한 줌 —
+    #  단 첫머리에 고압 톡 · 단이 갈수록 세다 · 1.8~4.8k 띠 잡음이 그 단 동안 잦아든다). handoff 에 셋이 5ms 로 끊기고 무른
+    #  툭(110 → 50Hz — 0.33 초 뒤 인트로의 네온 쾅보다 작다 · 그쪽이 「들어왔다」 한 박)과 60Hz 웅 꼬리 · 겹침 단마다 작아지는
+    #  톡 — 방에 울리지 않는다(TV 속이다 · 잔향 없음).
+    L = PH_H + 0.47
+    n = ns(L)
+    t = np.arange(n) / SR
+    rng = np.random.default_rng(2661)
+    pre = t < PH_H
+    u = np.clip(t / PH_H, 0.0, 1.0)
+    cut = np.clip((PH_H - t) / 0.005, 0.0, 1.0)            # handoff 에 5ms 로 끊는다
+    #  웅 — 위상을 쌓아 오르는 음정(60 → 90Hz)
+    fh = 60.0 * (1.0 + 0.5 * u ** 2)
+    ph = 2 * np.pi * np.cumsum(fh) / SR
+    hum = sum((1.4 if k % 2 else 1.0) / k * np.sin(k * ph + rng.uniform(0, 2 * np.pi)) for k in range(1, 21))
+    hum = shape(hum, lambda f: hp(f, 70) * lp(f, 1400), False) * (0.08 + 0.92 * u ** 1.6) * cut
+    #  이잉
+    fw = 1200.0 * (4600.0 / 1200.0) ** (u ** 1.4) * (1.0 + 0.004 * np.sin(2 * np.pi * 6.0 * t))
+    wh = np.sin(2 * np.pi * np.cumsum(fw) / SR) * u ** 2.2 * cut
+    #  지직 — Phos 단마다
+    fz = np.zeros(n)
+    tk = np.zeros(n)
+    st = [PH_H + f / 60.0 for f in PH_STEPS] + [PH_H]
+    band = lambda f: hp(f, 1800) * lp(f, 4800, 3)
+    for i in range(len(PH_STEPS)):
+        a, b = ns(st[i]), ns(st[i + 1])
+        lv = 0.35 + 0.65 * i / (len(PH_STEPS) - 1)
+        seg = unit(shape(rng.standard_normal(b - a), band, False))
+        tt = np.arange(b - a) / SR
+        fz[a:b] += lv * seg * np.exp(-tt / 0.035) * np.minimum(tt / 0.002, 1.0)
+        tk += lv * burst(n, st[i], 0.004, 0.0006, rng, band)
+        for _ in range(2 + i // 2):
+            tk += lv * 0.5 * rng.random() * burst(n, rng.uniform(st[i], st[i + 1]), 0.003, 0.0004, rng, band)
+    fz *= cut
+    tk *= cut
+    #  넘김 — 낮은 툭 · 무른 딸깍 · 웅 꼬리 · 겹침 단마다 작아지는 톡
+    tl = np.clip(t - PH_H, 0.0, None)
+    post = ~pre
+    thud = np.zeros(n)
+    thud[post] = np.sin(2 * np.pi * np.cumsum(50.0 + 60.0 * np.exp(-tl[post] / 0.04)) / SR) \
+        * np.exp(-tl[post] / 0.06) * np.minimum(tl[post] / 0.002, 1.0)
+    clk = burst(n, PH_H, 0.006, 0.0012, rng, lambda f: hp(f, 150) * lp(f, 1200))
+    tail = np.zeros(n)
+    tph = 2 * np.pi * 60.0 * tl[post]
+    tail[post] = (np.sin(tph) + 0.5 * np.sin(3 * tph) + 0.25 * np.sin(5 * tph)) * np.exp(-tl[post] / 0.15) \
+        * np.minimum(tl[post] / 0.004, 1.0)
+    cv = np.zeros(n)
+    for j, f in enumerate(PH_CONV[1:]):
+        cv += (0.5 - 0.08 * j) * burst(n, PH_H + f / 60.0, 0.003, 0.0005, rng, band)
+    pk = lambda y: y / max(np.max(np.abs(y)), 1e-9)       # 봉우리 1 로 맞춰 섞는다(섞는 몫이 곧 봉우리)
+    x = (0.32 * pk(hum) + 0.10 * wh + 0.16 * pk(fz) + 0.22 * pk(tk) + 0.24 * thud + 0.12 * pk(clk)
+         + 0.14 * tail + 0.10 * pk(cv))
+    return roof(x, False, 35.0) * raised(n, 0.0, 60.0), False
+
+
 BUILD = {"bar_room": b_room, "bar_clink": b_clink, "bar_polish": b_polish,
-         "bar_glass_down": b_glass_down, "bar_tv_static": b_tv_static, "bar_tv_hum": b_tv_hum}
+         "bar_glass_down": b_glass_down, "bar_tv_static": b_tv_static, "bar_tv_hum": b_tv_hum, "bar_phos": b_phos}
+#  부푸는 소리 — 봉우리가 끝(handoff)에 선다(「닿는 때 30ms」 검사를 안 건다 · tv_glint 와 같은 꼴)
+SWELL = {"bar_phos"}
 
 
 # ══════════════════════════════════════════════════════════
@@ -474,7 +540,7 @@ def main():
               % (nm, len(y) / SR, np.max(np.abs(y)), atk, ddb, li, lm, hi * 100, "%.2f" % seam if loop else "-"))
         if abs(ddb) > 0.5:
             bad.append("%s — 표와 %+.1fdB" % (nm, ddb))
-        if atk > 30.0:
+        if atk > 30.0 and nm not in SWELL:
             bad.append("%s — 봉우리 절반에 %.0fms 뒤에 닿는다(probe_sfx 「부푸는 소리」)" % (nm, atk))
         if hi >= 0.02:
             bad.append("%s — 6kHz 위 %.1f%%" % (nm, hi * 100))

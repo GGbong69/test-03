@@ -1848,6 +1848,167 @@ static func cross(root: Control, dt: float, poly := PackedVector2Array()) -> voi
 		(c as CanvasItem).visible = lv > 0.0 if c == fl else f < 0
 
 
+#  ── 인광 점 속으로 — 반짝 · 번쩍 대신 브라운관 제 결로 든다(2026-10-28 「그 티비로 들어가는 그 연출이 문제인거 같아 좀
+#  브라운관 들어가는 연출을 생각해서 다시 만들어 보자」 · 바 인트로 DIVE.mode "phosphor" · 테이프는 아직 반짝) ──
+#  유리가 화면을 다 덮은 틀(handoff + steps 첫 틀)부터 2D 판 Phos 가 같은 게임 그림을 이어받아 배율이 단으로 뛴다(이어
+#  붙이지 않는다 · 뛸 때마다 그 단에서 선다). 배가 클수록 브라운관 결이 하나씩 선다 — 행 아래 gap.y 몫이 검은 주사선 →
+#  stripe 배부터 낟알 하나가 R · G · B 세로 줄 셋(줄 끝 gap.x 몫이 검다 · 단색 판 · 번짐 없음) → round 배부터 줄 끝이 둥근
+#  인광 줄 → 한가운데가 줄 틈과 행 틈이 엇갈린 검은 십자라 마지막 단들은 줄 사이 어둠으로 날아든다(줄이 바깥으로 빠진다).
+#  넘김(handoff)에 무대를 끊고 게임 필터를 켜면 같은 판이 밑 화면(필터 밑 게임 그림)을 R · G · B 세 장으로 갈라 conv 논리
+#  px 만큼 비켜 놓았다가 단으로 겹친다 — 셋을 더하면 제 빛깔이다(줄이 다시 한 그림으로 모인다).
+#  steps [handoff 앞 틀, 배(화면 논리 px ÷ 게임 px)] · gap [줄 틈 · 행 틈 몫] · stripe · round 그 결이 서는 배 ·
+#  gain [주사선 단 · 줄 단] 빛 배(1 에서 자른다 — 검은 틈이 먹은 밝기를 빔이 되돌린다) · tint 게임 그림 빛깔 배(무대 유리는 필름
+#  톤 · 말을 지나 붉고 짙다 — 넘겨받는 틀에 잿빛으로 바래지 않게) · 줄 단의 배는 3 의 배수(줄 폭이 고른 논리 px) · aim_n 날아들
+#  낟알(phos aim)에 한가운데가 닿는 단 차례 · conv [handoff 뒤 틀, 비킴 논리 px] · lit 필터를 켜는 틀 · calm 잔상을 끄는
+#  틀(겹침이 끝난 뒤 — 잔상이 비킨 장을 붙들지 않게) · take 무대 유리가 Phos 에 넘기는 배(3D 다가감의 그 틀 배)
+const PHOS := {
+	"steps": [[-24, 2.0], [-21, 3.0], [-18, 5.0], [-15, 12.0], [-12, 21.0], [-9, 33.0], [-7, 54.0], [-5, 90.0],
+			[-3, 159.0], [-2, 300.0], [-1, 600.0]],
+	"gap": Vector2(0.25, 0.4), "stripe": 12.0, "round": 30.0, "gain": Vector2(1.5, 1.6),
+	"tint": Vector3(1.2, 0.9, 0.9), "aim_n": 3,
+	"conv": [[0, 16.0], [2, 8.0], [4, 4.0], [6, 2.0], [8, 1.0], [10, 0.0]],
+	"lit": 0, "calm": 13, "take": 1.6,
+}
+const PHOS_SHADER := """
+shader_type canvas_item;
+uniform sampler2D feed : filter_nearest, repeat_disable;
+uniform sampler2D sc : hint_screen_texture, filter_nearest;
+uniform vec2 px = vec2(640.0, 360.0);
+uniform vec2 fsz = vec2(640.0, 360.0);
+uniform vec2 c = vec2(320.0, 180.0);
+uniform float m = 2.0;
+//  0 이상이면 겹침 — 밑 화면을 R 은 왼 · B 는 오른으로 ou(화면 UV) 비켜 더한다
+uniform float ou = -1.0;
+uniform vec2 gap = vec2(0.25, 0.4);
+uniform float stripe = 9.0;
+uniform float rnd = 40.0;
+uniform vec2 gain = vec2(1.25, 1.6);
+uniform vec3 tint = vec3(1.0);
+void fragment() {
+	if (ou >= 0.0) {
+		vec2 o = vec2(ou, 0.0);
+		vec2 ur = SCREEN_UV + o;
+		vec2 ub = SCREEN_UV - o;
+		//  비켜 난 끝은 검다(끝 열을 늘이지 않는다)
+		COLOR = vec4(ur.x <= 1.0 ? texture(sc, ur).r : 0.0, texture(sc, SCREEN_UV).g, ub.x >= 0.0 ? texture(sc, ub).b : 0.0,
+				1.0);
+	} else {
+		vec2 q = floor(UV * px) + 0.5;
+		vec2 g = c + (q - px * 0.5) / m;
+		vec2 gi = floor(g);
+		vec2 f = g - gi;
+		vec3 s = texture(feed, (gi + 0.5) / fsz).rgb * tint;
+		if (gi.x < 0.0 || gi.y < 0.0 || gi.x >= fsz.x || gi.y >= fsz.y) {
+			s = vec3(0.0);
+		}
+		float ly = 1.0 - gap.y;
+		float lx = 1.0 - gap.x;
+		vec3 o = vec3(0.0);
+		if (f.y < ly) {
+			if (m < stripe) {
+				o = s * gain.x;
+			} else {
+				float k = floor(f.x * 3.0);
+				float fx = fract(f.x * 3.0);
+				bool on = fx < lx;
+				if (on && m >= rnd) {
+					//  줄 빛 판(논리 px) 안 자리 — 끝이 둥근 판(반지름 = 줄 폭의 0.45 · 테는 도트 계단)
+					vec2 w = vec2(lx * m / 3.0, ly * m);
+					vec2 p = vec2(fx * m / 3.0, f.y * m);
+					float r = w.x * 0.45;
+					vec2 d = abs(p - w * 0.5) - (w * 0.5 - r);
+					on = length(max(d, vec2(0.0))) <= r;
+				}
+				if (on) {
+					vec3 e = k < 0.5 ? vec3(1.0, 0.0, 0.0) : (k < 1.5 ? vec3(0.0, 1.0, 0.0) : vec3(0.0, 0.0, 1.0));
+					o = s * e * gain.y;
+				}
+			}
+		}
+		COLOR = vec4(min(o, vec3(1.0)), 1.0);
+	}
+}
+"""
+
+
+#  phos_make 인광 판 — 층 root 맨 위(이름 Phos). feed 게임 그림(TV 유리가 트는 그것) · px 논리 화면 크기.
+static func phos_make(root: Control, feed: Texture2D, px := Vector2(640.0, 360.0)) -> ColorRect:
+	var pr := ColorRect.new()
+	pr.name = "Phos"
+	pr.color = Color.BLACK
+	pr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pr.set_anchors_preset(Control.PRESET_FULL_RECT)
+	var sh := Shader.new()
+	sh.code = PHOS_SHADER
+	var pm := ShaderMaterial.new()
+	pm.shader = sh
+	pm.set_shader_parameter("feed", feed)
+	pm.set_shader_parameter("px", px)
+	pm.set_shader_parameter("fsz", Vector2(feed.get_size()) if feed != null else px)
+	pm.set_shader_parameter("gap", PHOS.gap)
+	pm.set_shader_parameter("stripe", float(PHOS.stripe))
+	pm.set_shader_parameter("rnd", float(PHOS.round))
+	pm.set_shader_parameter("gain", PHOS.gain)
+	pm.set_shader_parameter("tint", PHOS.tint)
+	pr.material = pm
+	pr.visible = false
+	root.add_child(pr)
+	return pr
+
+
+#  phos_m 이 틀(dt = t − handoff)의 배 — steps 밖(첫 단 앞 · handoff 뒤)이면 0
+static func phos_m(dt: float) -> float:
+	var f: int = floori(dt * 60.0 + 0.001)
+	var m := 0.0
+	for s in PHOS.steps:
+		if f >= int(s[0]) and f < 0:
+			m = float(s[1])
+	return m
+
+
+#  phos_conv 넘김 뒤 겹침 비킴(논리 px) — 겹침이 끝났으면 −1
+static func phos_conv(dt: float) -> float:
+	var f: int = floori(dt * 60.0 + 0.001)
+	var cv: Array = PHOS.conv
+	if f < 0 or f >= int(cv[cv.size() - 1][0]) + 2:
+		return -1.0
+	var o := -1.0
+	for s in cv:
+		if f >= int(s[0]):
+			o = float(s[1])
+	return o
+
+
+#  phos 틀마다 — ce 유리 한가운데의 게임 px(feed px) · aim 날아들 낟알(다트판 한가운데 — 다트 게임이니 불로 든다). 배 단이면
+#  Phos 가 화면을 다 덮고(무대는 그 밑에 그대로) · 넘김부터 겹침이 끝날 때까지 Phos 만 남는다(그 뒤 층은 비어 LEN 에 걷혀도
+#  튀지 않는다). 한가운데는 첫 단의 유리 한가운데에서 단마다 aim 쪽으로 옮겨 aim_n 째 단부터 그 낟알의 줄 틈 · 행 틈 한가운데
+#  (검은 십자로 날아든다 — 둘레가 그 낟알의 인광 줄)에 서고, 배마다 논리 px 격자에 맞춘다(c · m 이 정수면 낟알 끝이 화면 px
+#  끝에 선다 — 줄 폭이 고르다). 옮김은 단이 뛰는 틀에만 일어난다(뛸 때 같이 미끄러진다 — 흐르지 않는다).
+static func phos(root: Control, dt: float, ce: Vector2, aim: Vector2) -> void:
+	var pr := root.get_node("Phos") as ColorRect
+	var pm := pr.material as ShaderMaterial
+	var f: int = floori(dt * 60.0 + 0.001)
+	var m: float = phos_m(dt)
+	var cv: float = phos_conv(dt)
+	if m > 0.0:
+		var gp: Vector2 = PHOS.gap
+		var k := 0
+		for s in PHOS.steps:
+			if f >= int(s[0]):
+				k += 1
+		var ct: Vector2 = ce.lerp(aim.floor() + Vector2(1.0 - gp.x / 6.0, 1.0 - gp.y / 2.0),
+				minf(float(k - 1) / float(PHOS.aim_n), 1.0))
+		pm.set_shader_parameter("c", (ct * m).round() / m)
+		pm.set_shader_parameter("m", m)
+		pm.set_shader_parameter("ou", -1.0)
+	elif cv >= 0.0:
+		var vw: float = root.get_viewport_rect().size.x
+		var px: Vector2 = pm.get_shader_parameter("px")
+		pm.set_shader_parameter("ou", cv / px.x * root.size.x / maxf(vw, 1.0))
+	for c in root.get_children():
+		(c as CanvasItem).visible = (m > 0.0 or cv >= 0.0) if c == pr else (f < 0 and (c as Node).name != "Flash")
+
+
 #  층 — 화판(outer.box) 자리에 맞추고 · 빗소리만 나는 어둠(TAPE.black) 뒤 TAPE.fade 에 떠오르고 · handoff 에
 #  번쩍 밑에서 끊는다(cross — LEN 까지 비어 있다가 걷힌다).
 static func _layer(hn: Node, t: float) -> void:

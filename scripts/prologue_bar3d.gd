@@ -20,11 +20,13 @@ extends RefCounted
 #   6 14.4~16.95 TV 를 한가운데 둔 채 화각이 좁아지며 조금 다가가 매끈하게 선다(눈은 화면 한가운데로 가는 선 위로만). 방 빛이 한 등씩
 #     꺼진다(가운데 펜던트가 마지막) · 방 소리가 먹먹해지고 TV 소리만 남는다. TV 그림 속 문 위 HIGHTON 간판이 한 글자씩
 #     켜진다(SIGN · 문 한가운데가 유리 세로축).
-#   7 16.8~17.4 TV 유리 속으로 든다 — 테이프 프롤로그와 같은 유리 뚫기(Plg dive_w · portal · glint · flash · cross):
-#     밀기가 매끈하게 서는 동안 유리에 빗금이 쓸고 오른 위 귀에 별이 핀다(반짝 — 소리는 없다 · 2026-10-28 「바텐더 오프닝에서
-#     삐씽 효과음은 쫌 뺄까?」 · 테이프는 그대로 tv_glint) → 세제곱으로 뛰어들어
-#     60°「/」 흰빛이 왼 위에서 차오르고 맨 밝은 틀(handoff)에서 무대를 끊고 게임 필터를 켠다 → 흰빛이 오른 아래로
-#     빠지며 게임 속(인트로 — 네온이 붙는 쾅) → 제목 문.
+#   7 16.7~17.4 TV 유리 속으로 든다 — 인광 점 속으로(DIVE.mode "phosphor" · Plg PHOS · 2026-10-28 「그 티비로 들어가는
+#     그 연출이 문제인거 같아 좀 브라운관 들어가는 연출을 생각해서 다시 만들어 보자」): 밀기가 매끈하게 서면 곧장 매끈하게
+#     붙어 뛰어든다 — TV 몸 · 테가 화면 밖으로 빠지고 유리가 화면을 다 덮는 틀부터 배율이 단으로 뛰며 그림이 브라운관 제
+#     결로 갈라진다(주사선 틈 → R · G · B 인광 줄 → 끝이 둥근 줄 → 줄 사이 검은 틈으로 날아든다). 넘김(handoff)에 무대를
+#     끊고 게임 필터를 켜면 게임 그림이 R · G · B 세 장으로 비켜 있다가 단으로 겹쳐 제 빛깔이 된다 → 게임 속(인트로 — 네온이
+#     붙는 쾅) → 제목 문. 소리는 들어가는 동안 차오르는 웅 · 이잉에 줄을 지날 때 지직(bar_phos) — 넘김에 끊기고 웅 꼬리.
+#     옛 반짝 · 번쩍(테이프와 같은 Plg glint · flash · cross)은 DIVE.mode "glint" 로 남는다.
 #  빛 · 효과로 가린다(조사 T01~T14): 채움빛을 걷고 찬 바탕 한 단만(밤 · 주인공만 빛) · 펜던트 · TV 의 단단한 그림자 ·
 #  니스 반짝 · 빛무리 · 전구 · 도트 잔 그림 · 거울 비침 걷기 · 선반 병은 뒤에서 · 채도를 누른다 · 깊이 덩어리 흐림(초점은
 #  깜박임 · 눈길에 뛴다 — 흐르지 않는다) · TV 빛줄기에만 옅은 안개 · 눈길은 보는 점이 조금 앞서고 고개가 매끈하게 따라
@@ -35,7 +37,7 @@ extends RefCounted
 #  팔뚝 · 손은 상점 손 그대로(game.gd _hand3_build · _fore3_build). TV 는 이 장면의 세계(제 SubViewport)에만 있다 —
 #  제목 문 카메라는 다른 세계라 못 본다.
 #  소리는 제 자리에서 낸다 — 방 소리 · 잔 · 닦기 · 잔 놓기는 이 장면의 BarAmb 버스(로패스 — 눈과 같이 열리고 다이브에
-#  닫힌다 · 넘김에 걷는다)로, TV 지지직 · 웅은 SFX 로(먹먹해지지 않는다). cues 는 비었다 — 유리 반짝(glint_at)에 소리를 안 낸다.
+#  닫힌다 · 넘김에 걷는다)로, TV 지지직 · 웅 · 들어가는 소리(bar_phos — entry_at)는 SFX 로(먹먹해지지 않는다). cues 는 비었다.
 const Door3D = preload("res://scripts/door3d.gd")
 const Room3D = preload("res://scripts/room3d.gd")
 const Plg = preload("res://scripts/prologue3d.gd")
@@ -76,13 +78,14 @@ const POSE := {
 #  때가 사람 고개만큼(≤ 약 38°/s · 깬 직후 들기는 더 느리게) · 끝에 HEAD.over 만큼 넘쳤다가 HEAD.settle 초에 매끈하게
 #  돌아와 선다 · 보는 점이 눈 자리보다 HEAD.lead 초 먼저 간다(눈이 앞선다). lift 고개를 든다(굴림이 늦게 끝난다 · 드는 동안
 #  눈길이 카운터 쪽으로 처진다) · look 고개를 돌린다(낮은 호) · push 화각이 좁아지며 조금 다가간다 — 다가감이 곧 유리
-#  뚫기의 다가감이다: 뛰어듦이 시작하는 때(dive0 + DIVE.creep uh 몫 = 16.954)에 매끈하게 선다(옛 밀기는 16.2 에 섰고
-#  다이브가 다시 붙었다 서서 두 번 멈칫했다). 그 꼬리(틀당 0.1% 아래)가 빗금을 보내는 멈칫이다.
+#  뚫기의 다가감이다: 뛰어듦이 시작하는 때(dive0 + DIVE.creep uh 몫 = 16.7)에 매끈하게 선다(옛 밀기는 16.2 에 섰고
+#  다이브가 다시 붙었다 서서 두 번 멈칫했다). 인광 점 속으로는 0.7 초가 든다(유리가 화면을 덮는 0.3 초 + 결이 단으로 서는
+#  0.4 초) — 옛 반짝의 16.954 보다 0.25 초 앞에 선다.
 const MOVE := [
 	[3.2, 3.6, "cheek", "merch", "lift"],
 	[7.9, 2.3, "merch", "dart", "look"],
 	[11.3, 2.1, "dart", "tv", "look"],
-	[14.4, 2.554, "tv", "push", "push"],
+	[14.4, 2.3, "tv", "push", "push"],
 ]
 #  고개 — 끝 넘침 몫 · 돌아와 서는 초 · 눈이 앞서는 초 · 숨(Hz · 숙임 도 · 눈 높이 m · 켜지는 초 — 눈을 뜬 뒤 늘 · 다이브에
 #  걷는다). 멈춤이 딱 서는 게임 카메라로 읽혔다(검토 2 — 숨 0).
@@ -463,8 +466,12 @@ class Hold extends Node:
 #  안 지난 유리 그림이 자홍으로 짙어 문 채도 0.54 · 간판 띠 0.65 가 게임 속 0.43 · 0.56 이었고 번쩍이 빠지는 1/3 틀에 분홍
 #  자리에 갈색이 붙어 보였다 · 유리 반짝 검토) · gcol 빗금 · 별 빛깔(SCR gcol · 선형) — 찬 TV 빛 쪽으로 한 단(테이프의 중성
 #  흰빛은 불 꺼진 방에서 무엇을 비추는지 모를 그래픽이었다 · 유리 반짝 검토 2)
-const DIVE := {"creep": [0.0, 0.0, 0.628, 0.0, 0.0], "star": Vector2(0.92, 0.14), "land": 0.59, "sat": 0.75,
-		"gcol": Vector3(0.55, 0.70, 0.95)}
+#  mode 들어가는 꼴 — "phosphor" 인광 점 속으로(Plg PHOS · 머리말 7) · "glint" 옛 반짝 · 번쩍(테이프와 같다). 둘 다 creep uh
+#  (= 16.7 · MOVE push 끝)에서 뛰어든다. phosphor 는 다가감을 제 곡선으로 민다(_phos_d — 유리 배가 PHOS.take 에 닿는 틀이 Phos
+#  첫 단 · 그 뒤 3D 는 Phos 밑에서 끝 배 end 까지 늘 빨라진다 — end 의 거리가 카메라 near 0.02m 보다 멀어야 유리 한가운데가
+#  카메라 앞에 남는다) · cue 들어가는 소리(bar_phos)의 넘김 자리(파일 초)
+const DIVE := {"mode": "phosphor", "creep": [0.0, 0.0, 0.416667, 0.0, 0.0], "star": Vector2(0.92, 0.14), "land": 0.59,
+		"sat": 0.75, "gcol": Vector3(0.55, 0.70, 0.95), "end": 30.0, "cue": 0.66}
 
 
 static func length() -> float:
@@ -478,11 +485,15 @@ static func handoff() -> float:
 
 #  게임 필터가 켜지는 때 · CRT 잔상을 되살리는 때(game.gd _plg_cover · _crt_apply — 테이프 Plg 와 같은 이름 · 같은 틀).
 static func lit_at() -> float:
-	return handoff() + (float(Plg.GLINT.lit) - 0.5) / 60.0
+	return handoff() + (float((Plg.PHOS if _phos() else Plg.GLINT).lit) - 0.5) / 60.0
 
 
 static func calm_at() -> float:
-	return handoff() + (float(Plg.GLINT.calm) - 0.5) / 60.0
+	return handoff() + (float((Plg.PHOS if _phos() else Plg.GLINT).calm) - 0.5) / 60.0
+
+
+static func _phos() -> bool:
+	return String(DIVE.mode) == "phosphor"
 
 
 #  TV 가 게임 그림을 틀기 시작하는 때 — 게임의 인트로 시계가 이때 출발한다(지지직 사이로 비친다).
@@ -496,9 +507,10 @@ static func cues() -> Dictionary:
 	return {}
 
 
-#  유리 반짝 때 — 테이프의 삐싱 큐와 같은 handoff 앞 자리. TV 소리를 걷는 기준이다.
-static func glint_at() -> float:
-	return handoff() - float(Plg.GLINT.cue)
+#  들어가는 때 — TV 소리를 걷는 기준 · 인광 점 속으로는 그 틀에 들어가는 소리(bar_phos)를 낸다(파일 DIVE.cue 초가 handoff —
+#  믹서가 한 틀 늦게 내므로 한 틀 앞당긴다). 옛 반짝은 테이프의 삐싱 큐와 같은 자리(handoff − GLINT.cue).
+static func entry_at() -> float:
+	return handoff() - (float(DIVE.cue) + 1.0 / 60.0 if _phos() else float(Plg.GLINT.cue))
 
 
 # ══ 짓기 ═══════════════════════════════════════════════════
@@ -1595,11 +1607,13 @@ static func _layer_make(hn: Node, vp: SubViewport, outer: Node) -> void:
 	tr.material = gm
 	hn.set_meta("grade", gm)
 	Plg.flash_make(root, Vector2(vp.size))
+	var g: Node = hn.get_meta("game")
+	Plg.phos_make(root, g.get_viewport().get_texture() if g != null else null, Vector2(vp.size))
 	hn.set_meta("outer", outer)
 	hn.set_meta("root", root)
 
 
-#  층 — 화판(outer.box) 자리에 맞추고 · handoff 에 번쩍 밑에서 끊는다(Plg.cross — LEN 까지 비어 있다가 걷힌다).
+#  층 — 화판(outer.box) 자리에 맞추고 · handoff 에 끊는다(인광 Plg.phos · 옛 번쩍 Plg.cross — LEN 까지 비어 있다가 걷힌다).
 static func _layer(hn: Node, t: float) -> void:
 	var root := hn.get_meta("root") as Control
 	var outer: Node = hn.get_meta("outer")
@@ -1607,7 +1621,16 @@ static func _layer(hn: Node, t: float) -> void:
 	if box != null:
 		root.position = box.position
 		root.size = box.size
-	Plg.cross(root, t - handoff(), Plg.rim_poly(hn, t - handoff()))
+	if _phos():
+		#  유리 한가운데의 게임 px — TV 그림 자르기 한가운데(cx) · 세로 한가운데 · 날아들 낟알은 다트판 한가운데(_title_c)
+		var scr: ShaderMaterial = hn.get_meta("scr")
+		var fs: Vector2 = scr.get_shader_parameter("feed") if scr != null else Vector2(640.0, 360.0)
+		var cx: float = float(scr.get_shader_parameter("cx")) if scr != null else 0.5
+		var g: Node = hn.get_meta("game")
+		var ce := Vector2(cx * fs.x, fs.y * 0.5)
+		Plg.phos(root, t - handoff(), ce, g._title_c() if g != null and g.has_method("_title_c") else ce)
+	else:
+		Plg.cross(root, t - handoff(), Plg.rim_poly(hn, t - handoff()))
 	#  건넌 뒤 무대는 안 보인다 — 방 소리 꼬리(LEN)까지 그리지 않는다
 	(hn.get_meta("vp") as SubViewport).render_target_update_mode = SubViewport.UPDATE_DISABLED \
 			if t >= handoff() + 0.5 / 60.0 else SubViewport.UPDATE_ALWAYS
@@ -1693,7 +1716,10 @@ static func _cam_xf(t: float, c: Vector3, ce: Dictionary) -> Array:
 	var u: float = clampf((t - float(T.dive0)) / (float(T.dive1) - float(T.dive0)), 0.0, 1.0)
 	if u > 0.0 and not ce.is_empty():
 		var o: Vector3 = eye - (ce.look as Vector3)
-		eye = (ce.look as Vector3) + o * pow(float(ce.d) / o.length(), Plg.dive_w(u, DIVE.creep))
+		if _phos():
+			eye = (ce.look as Vector3) + o.normalized() * _phos_d(t, o.length(), float(p[3]))
+		else:
+			eye = (ce.look as Vector3) + o * pow(float(ce.d) / o.length(), Plg.dive_w(u, DIVE.creep))
 		#  보는 점에도 숨을 싣는다(눈에만 남으면 dive0 첫 틀에 방향이 0.06° 꺾여 화면이 1 도트 튀었다 · 검토)
 		look = (ce.look as Vector3) + Vector3(0.0, float(br[1]), 0.0)
 	var xf := Transform3D(Basis.looking_at(look - eye, Vector3.UP), eye)
@@ -1701,6 +1727,24 @@ static func _cam_xf(t: float, c: Vector3, ce: Dictionary) -> Array:
 		xf.basis = xf.basis * Basis(Vector3.BACK, deg_to_rad(float(p[2])))
 	xf.basis = xf.basis * Basis(Vector3.RIGHT, deg_to_rad(float(br[0])))
 	return [xf, float(p[3])]
+
+
+#  인광 점 속으로의 다가감 거리 — 유리 배 M(= 유리 높이 ÷ 화면 높이 · Plg.glass_pg = k ÷ 거리)을 로그로 민다: 뛰어듦 시작
+#  (l0)의 배 m0 에서 s^p 꼴로 매끈하게 붙어(시작 빠르기 0 · p > 1 이라 늘 빨라진다) Phos 첫 단 틀에 PHOS.take(유리가 화면을
+#  다 덮는다) · handoff 에 DIVE.end(Phos 밑이라 안 보인다 — 틀당 커지는 몫이 handoff 까지 줄지 않는다). p 는 그 두 점에서 푼다.
+#  d0 뛰어듦 앞 눈 ↔ 유리 한가운데 거리 · fov 화각
+static func _phos_d(t: float, d0: float, fov: float) -> float:
+	var h: float = handoff()
+	var l0: float = float(T.dive0) + float(DIVE.creep[2]) * (h - float(T.dive0))
+	var s: float = clampf((t - l0) / (h - l0), 0.0, 1.0)
+	if s <= 0.0:
+		return d0
+	var k: float = (_tv_glass().gb as AABB).size.y / (2.0 * tan(deg_to_rad(fov) * 0.5))
+	var m0: float = k / d0
+	var me: float = float(DIVE.end)
+	var st: float = (h + float(Plg.PHOS.steps[0][0]) / 60.0 - l0) / (h - l0)
+	var pw: float = log(log(float(Plg.PHOS.take) / m0) / log(me / m0)) / log(st)
+	return k / (m0 * pow(me / m0, pow(s, pw)))
 
 
 static func _cam(hn: Node, t: float) -> void:
@@ -1711,8 +1755,9 @@ static func _cam(hn: Node, t: float) -> void:
 	var u: float = clampf((t - float(T.dive0)) / (float(T.dive1) - float(T.dive0)), 0.0, 1.0)
 	#  유리 속 — 그림이 화면에 박힌 게임 그림으로 옮겨 가고(Plg.portal) · 유리 반짝(Plg.glint — 틀마다 · 창 밖이면 끈다) ·
 	#  필름 말 · 안개가 걷힌다
+	#  인광 점 속으로는 그림이 끝까지 유리에 붙어 커진다(portal 0 · 반짝 없음 — Phos 가 이어받는다)
 	var scr: ShaderMaterial = hn.get_meta("scr")
-	if scr != null:
+	if scr != null and not _phos():
 		var G := _tv_glass()
 		var po: float = Plg.portal(scr, u, Plg.glass_pg(cam, G.c, (G.gb as AABB).size.y))
 		scr.set_shader_parameter("sat", lerpf(1.0, float(DIVE.sat), po))
@@ -1752,7 +1797,7 @@ static func _snow(t: float) -> float:
 #  닫히고 다이브에 다 닫힌다) · TV 지지직 · 웅(순환)은 SFX(먹먹해지지 않는다). 넘김(퍽) 뒤 꼬리(SND.tail)가 잦아들면 버스를 걷는다.
 #  clink 먼 잔 · lp 로패스 [닫힘 · 열림](Hz) · static TV 지지직 [감은 눈 · 화면 밖(눈 뜬 뒤) · 올려다본 뒤](dB) · hum 웅(같은 차례) ·
 #  click 빛 딸깍 · tv 그림이 비치는 동안 SFX 에 거는 작은 스피커 [고역 통과 · 저역 통과(Hz) · 줄임(dB)] — 게임 인트로 소리가
-#  TV 소리로 들리다가 · tv_out 유리 반짝(glint_at) 앞 이 초에 걸쳐 TV 소리(스피커 · 지지직 · 웅)를 걷는다 — 반짝 ·
+#  TV 소리로 들리다가 · tv_out 들어가는 때(entry_at) 앞 이 초에 걸쳐 TV 소리(스피커 · 지지직 · 웅)를 걷는다 — 반짝 ·
 #  삐싱 · 퍽은 TV 소리가 아니다(스피커를 지나니 싱 −22 · 퍽 −11dBFS 로 먹먹하고 퍽이 인트로의 네온 쾅(−10)보다 작았다).
 #  그 사이 인트로는 소리가 없다(램프 꺼짐 딸깍은 반짝 앞에 끝나고 · 간판 소리는 SIGN.t0 · 쾅은 건넌 뒤) · 방은 로패스로 닫히는
 #  중이라 쉬익이 홀로 차오른다 · tail 넘김 뒤 방 소리(로패스가 다 닫힌 채 −50dBFS 언저리)가 다 잦아드는 초 — 넘김에 끊으니 퍽 뒤
@@ -1861,8 +1906,12 @@ static func _audio_tick(hn: Node, t: float) -> void:
 	#  TV — 지지직은 그림이 비칠수록 단으로 잦아들고 · 웅은 올려다볼 때부터 크다. 반짝 앞 SND.tv_out 에 걸쳐 걷고 반짝 틀에
 	#  멎는다 — 스피커도 그 틀에 걷혀 쉬익은 처음부터 날것이다(반짝 뒤에 걷으니 차오르는 쉬익 4 틀째에 고역이 한 틀에 열려
 	#  「틱」 이음매가 났다 · 검토)
-	var tg: float = glint_at()
+	var tg: float = entry_at()
 	var tvk: float = 1.0 - clampf((t - (tg - float(SND.tv_out))) / float(SND.tv_out), 0.0, 1.0)
+	#  인광 점 속으로 — TV 웅이 걷히는 틀에 들어가는 소리가 이어받는다(차오르는 웅 · 이잉 · 줄을 지날 때 지직 · 넘김에 끊긴다)
+	if _phos() and t >= tg and not rang.has("phos"):
+		rang["phos"] = true
+		_shot(hn, "bar_phos", "SFX")
 	if pl.has("static"):
 		var sk: float = _snow(t)
 		var sp := pl.static as AudioStreamPlayer
