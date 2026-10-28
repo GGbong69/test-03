@@ -2855,6 +2855,10 @@ static func _run(g: Node, e: Dictionary) -> void:
 			Save.wipe()
 			g._use_profile(Save.slot())
 			g.tut_run = false
+			#  설정 게이지 일곱도 처음 값(60)으로 — 설정은 전역 파일이라 프로필을 비워도 앞 손님 값이 남았다(2026-10-28)
+			for sk in ["vol", "vol_mus", "vol_all", "crt", "warp", "vhs", "dot"]:
+				Save.set_set(sk, 0.6)
+			g._load_settings()
 			if g.state != g.S.TITLE:
 				g._wipe(g._to_lobby)
 			_say("새 손님")
