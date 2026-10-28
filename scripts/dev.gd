@@ -1620,10 +1620,10 @@ static func _grow_sync(g: Node) -> void:
 			bf = j
 	pick["fglow"] = bf
 
-#  CRT 필터 사다리(2026-10-03). 0 이 「끔」이고 셋째(0.50 — 2026-10-14 기본값 50)가 게임 기본값
+#  CRT 필터 사다리(2026-10-03). 0 이 「끔」이고 셋째(0.60 — 2026-10-28 기본값 60)가 게임 기본값
 #  (game.gd 의 CRT_DEF)이다. 값 칸은 매번 지금 값에 가장 가까운 칸으로 맞춘다 —
 #  설정 게이지가 같은 값을 0.01 씩 밀기 때문이다(조작감 넷이 세운 규약).
-const CRT_STEPS := [0.00, 0.25, 0.50, 0.75, 1.00]
+const CRT_STEPS := [0.00, 0.30, 0.60, 0.80, 1.00]
 
 
 static func _crt_name(v: float) -> String:
@@ -1642,9 +1642,9 @@ static func _crt_sync(g: Node) -> void:
 
 
 #  화면 굴곡 사다리(2026-10-03). 0 이 「끔」(굽힘 · 입력 되짚기가 정확히 항등)이고
-#  셋째(0.50)가 게임 기본값(game.gd 의 WARP_DEF)이다. 값 칸은 CRT 사다리와 같은
+#  셋째(0.60)가 게임 기본값(game.gd 의 WARP_DEF)이다. 값 칸은 CRT 사다리와 같은
 #  규약으로 매번 지금 값에 가장 가까운 칸에 맞춘다(설정 게이지가 0.01 씩 민다).
-const WARP_STEPS := [0.00, 0.25, 0.50, 0.75, 1.00]
+const WARP_STEPS := [0.00, 0.30, 0.60, 0.80, 1.00]
 
 
 static func _warp_sync(g: Node) -> void:
@@ -1661,8 +1661,8 @@ static func _warp_sync(g: Node) -> void:
 #  VHS 필터 · 도트 팔레트 사다리(2026-10-04). 0 이 「끔」이고 셋째가 게임 기본값
 #  (game.gd 의 VHS_DEF · DOT_DEF)이다. 값 칸은 CRT 사다리와 같은 규약으로 매번 지금 값에
 #  가장 가까운 칸에 맞춘다(설정 게이지가 0.01 씩 민다).
-const VHS_STEPS := [0.00, 0.25, 0.50, 0.75, 1.00]
-const DOT_STEPS := [0.00, 0.25, 0.50, 0.75, 1.00]
+const VHS_STEPS := [0.00, 0.30, 0.60, 0.80, 1.00]
+const DOT_STEPS := [0.00, 0.30, 0.60, 0.80, 1.00]
 #  팩 겉 — 이름 · game.gd 의 PACK_LOOKS 열쇠(빈 글은 무작위).
 const PACK_LOOK_STEPS := [["무작위", ""], ["포일 봉투", "foil"], ["봉인 편지봉투", "env"],
 		["놋쇠 깡통", "tin"]]

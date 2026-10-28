@@ -49073,26 +49073,27 @@ func _over_rain() -> void:
 var collect_tab := 0
 # 소리 크기 0~1. 효과음과 음악을 따로 잡는다 — 깔개는 계속 울리고 효과음은
 # 순간이라, 한 손잡이로 묶으면 한쪽에 맞추면 다른 쪽이 어긋난다.
-var vol := 1.0           # 효과음. 예전 저장 키("vol")를 그대로 물려받는다
-var vol_mus := 0.8       # 음악. 깔개라 기본값이 효과음보다 한 뼘 낮다
-var vol_all := 1.0       # 전체 음량 — Master 버스. 둘의 비는 두고 크기만 한 번에 민다(부스 현장 음량)
-#  CRT 필터 세기 0~1. 0 이면 층째 꺼진다(_crt_apply). 필터 넷의 기본값은 다 50 이다
-#  (2026-10-14 「그냥 기본 값을 다 50으로 설정해줘」 — 옛 CRT 40 · 도트 60).
-const CRT_DEF := 0.5
+#  설정 게이지 일곱(음량 셋 · 필터 넷)의 처음 값은 다 60 이다(2026-10-28 「처음부터 시작하면 설정값들 다 60 고정으로」).
+var vol := 0.6           # 효과음. 예전 저장 키("vol")를 그대로 물려받는다
+var vol_mus := 0.6       # 음악
+var vol_all := 0.6       # 전체 음량 — Master 버스. 둘의 비는 두고 크기만 한 번에 민다(부스 현장 음량)
+#  CRT 필터 세기 0~1. 0 이면 층째 꺼진다(_crt_apply). 필터 넷의 기본값은 다 60 이다
+#  (2026-10-28 「다 60」 · 그 전 2026-10-14 「다 50」 — 옛 CRT 40 · 도트 60).
+const CRT_DEF := 0.6
 var crt := CRT_DEF
 #  화면 굴곡 0~1(2026-10-03 「약간 발라트로 같이 그 화면의 왜곡?」). 0 이면 평평 —
 #  굽힘이 정확히 항등이다. 기본 50 이 발라트로 기본 화면의 곡면이다(shots/warp_50).
 #  CRT 필터와 **따로 민다** — 주사선은 싫고 곡면만 원하는 사람, 그 반대가 다 있다.
-const WARP_DEF := 0.5
+const WARP_DEF := 0.6
 var warp := WARP_DEF
 #  VHS 필터 · 도트 팔레트 0~1(2026-10-04). 0 이면 그 층째 꺼진다(_retro_apply).
 #  CRT 밑에 선다 — 도트(97)가 깨끗한 그림을 줄이고, VHS(98)가 테이프로 흔들고,
 #  CRT(100)가 그것을 브라운관에 띄운다. 기본값은 셋 겹친 화면(shots/retro_final_*)에서
 #  가장 작은 HUD 글이 또렷한 자리다. VHS 30 은 1배 온 화면에서 거의 안 보이면서 값은
 #  다 냈다(화소 평균 차 1.5%) — 50 도 「이자 +4」 · 「사탕·사진」이 30 과 같이 읽힌다.
-const VHS_DEF := 0.5
+const VHS_DEF := 0.6
 var vhs := VHS_DEF
-const DOT_DEF := 0.5
+const DOT_DEF := 0.6
 var dot := DOT_DEF
 #  설정의 쪽(2026-10-03 「설정이 저기서 다 나열되기 보단 … 상위가 있으면 좋겠는데,
 #  esc를 누르면 일시정지가 되어야지 일시정지에 설정을 누르면 설정창이 되어야지」).
@@ -49652,9 +49653,9 @@ func _load_settings() -> void:
 	# 리그도 저장에서 되살린다. 모르는 id 면 league_row 가 첫 단으로 떨군다.
 	GameData.league = String(Save.get_pick("league", ""))
 	GameData.pack = String(Save.get_pick("pack", ""))
-	vol = clampf(float(Save.get_set("vol", 1.0)), 0.0, 1.0)
-	vol_mus = clampf(float(Save.get_set("vol_mus", 0.8)), 0.0, 1.0)
-	vol_all = clampf(float(Save.get_set("vol_all", 1.0)), 0.0, 1.0)
+	vol = clampf(float(Save.get_set("vol", 0.6)), 0.0, 1.0)
+	vol_mus = clampf(float(Save.get_set("vol_mus", 0.6)), 0.0, 1.0)
+	vol_all = clampf(float(Save.get_set("vol_all", 0.6)), 0.0, 1.0)
 	crt = clampf(float(Save.get_set("crt", CRT_DEF)), 0.0, 1.0)
 	warp = clampf(float(Save.get_set("warp", WARP_DEF)), 0.0, 1.0)
 	vhs = clampf(float(Save.get_set("vhs", VHS_DEF)), 0.0, 1.0)

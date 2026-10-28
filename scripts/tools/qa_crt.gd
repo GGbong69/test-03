@@ -130,8 +130,8 @@ func _run() -> void:
 			"VHS %.2f · 도트 %.2f" % [float(g.vhs), float(g.dot)])
 	#  게임이 켤 때 읽는 그 길(_load_settings) — 빈 저장이면 40.
 	g._load_settings()
-	_ok("기본값 50", is_equal_approx(float(g.CRT_DEF), 0.5)
-			and is_equal_approx(float(g.crt), 0.5), "CRT_DEF %.2f · 빈 저장에서 읽은 값 %.2f"
+	_ok("기본값 60", is_equal_approx(float(g.CRT_DEF), 0.6)
+			and is_equal_approx(float(g.crt), 0.6), "CRT_DEF %.2f · 빈 저장에서 읽은 값 %.2f"
 			% [float(g.CRT_DEF), float(g.crt)])
 	_ok("저장에 아직 안 적었다", _disk_crt() == null, "%s" % [_disk_crt()])
 	_ok("VHS · 도트 기본값도 빈 저장에서 앉는다 · 층이 선다", is_equal_approx(float(g.vhs),
@@ -143,7 +143,7 @@ func _run() -> void:
 	#  굴곡도 같은 길로 50 이 앉았다. 아래 클릭은 원본 자리를 그대로 누르므로 굴곡을
 	#  0 으로 내리고 잰다 — 굴곡 위의 누름은 qa_warp 가 잰다. 둘 다 서 있는 층에서
 	#  CRT 만 0 이면 층은 **선 채로** 남아야 한다(굴곡이 그리는 중이다).
-	_ok("굴곡 기본 50 도 같이 앉는다", is_equal_approx(float(g.warp), 0.5), "%.2f" % float(g.warp))
+	_ok("굴곡 기본 60 도 같이 앉는다", is_equal_approx(float(g.warp), 0.6), "%.2f" % float(g.warp))
 	g._vol_set("crt", 0.0)
 	_ok("CRT 0 이어도 굴곡이 서 있으면 층이 선다", lay.visible
 			and is_equal_approx(float((g.crt_rect.material as ShaderMaterial)
@@ -345,15 +345,15 @@ func _run() -> void:
 		Dev.pick["crt"] = j
 		Dev._run(g, {"k": "crt"})
 		got.append(int(roundf(g.crt * 100.0)))
-	_ok("사다리 0 · 25 · 50 · 75 · 100", got == [0, 25, 50, 75, 100], "%s" % [got])
+	_ok("사다리 0 · 30 · 60 · 80 · 100", got == [0, 30, 60, 80, 100], "%s" % [got])
 	Dev.pick["crt"] = 0
 	Dev._run(g, {"k": "crt"})
 	_ok("사다리 0 이면 숨는다", not lay.visible)
-	g.crt = 0.75
+	g.crt = 0.8
 	Dev.page = hit
 	Dev._rows(g)
 	_ok("값 칸이 지금 값에 맞는다", int(Dev.pick.get("crt", -1)) == 3
-			and String(Dev._cur_name(g, {"k": "crt"})).contains("75"),
+			and String(Dev._cur_name(g, {"k": "crt"})).contains("80"),
 			Dev._cur_name(g, {"k": "crt"}))
 	#  「화면 굴곡」 줄 — CRT 줄 바로 밑(개발자 모드에 제때 넣기, 2026-10-03).
 	var rs4: Array = Dev._rows(g)
@@ -373,17 +373,17 @@ func _run() -> void:
 		Dev.pick["warp"] = j
 		Dev._run(g, {"k": "warp"})
 		gotw.append(int(roundf(g.warp * 100.0)))
-	_ok("굴곡 사다리 0 · 25 · 50 · 75 · 100", gotw == [0, 25, 50, 75, 100], "%s" % [gotw])
+	_ok("굴곡 사다리 0 · 30 · 60 · 80 · 100", gotw == [0, 30, 60, 80, 100], "%s" % [gotw])
 	_ok("굴곡 100 이 셰이더에 앉는다", is_equal_approx(
 			float(mat.get_shader_parameter("warp")), 1.0))
 	g.crt = 0.0
 	Dev.pick["warp"] = 0
 	Dev._run(g, {"k": "warp"})
 	_ok("CRT 0 · 굴곡 사다리 0 이면 층이 숨는다", not lay.visible)
-	g.warp = 0.75
+	g.warp = 0.8
 	Dev._rows(g)
 	_ok("굴곡 값 칸이 지금 값에 맞는다", int(Dev.pick.get("warp", -1)) == 3
-			and String(Dev._cur_name(g, {"k": "warp"})).contains("75"),
+			and String(Dev._cur_name(g, {"k": "warp"})).contains("80"),
 			Dev._cur_name(g, {"k": "warp"}))
 	g.warp = 0.0
 	Dev.page = pg0

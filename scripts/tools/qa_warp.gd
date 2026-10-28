@@ -222,8 +222,8 @@ func _run() -> void:
 			and is_equal_approx(g.dot, 0.0) and not g.vhs_rect.visible and not g.dot_rect.visible,
 			"VHS %.2f · 도트 %.2f" % [g.vhs, g.dot])
 	g._load_settings()
-	_ok("빈 저장의 기본 굴곡 50", is_equal_approx(g.warp, 0.5)
-			and is_equal_approx(float(g.WARP_DEF), 0.5), "%.2f" % g.warp)
+	_ok("빈 저장의 기본 굴곡 60", is_equal_approx(g.warp, 0.6)
+			and is_equal_approx(float(g.WARP_DEF), 0.6), "%.2f" % g.warp)
 	_set_w(0.0)
 	g.crt = 0.0
 	g._crt_apply()
