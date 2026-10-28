@@ -201,6 +201,8 @@ const POLISH := {"a": 28.0, "per": 1.5, "back": 0.45, "regrip": [6.9, 7.25, 60.0
 const WORK := {"phi": 90.0, "h": 0.147, "r": 0.044}
 #  손 닿는 자리(손 단위) — 받치는 손바닥 한가운데(잔 밑동이 앉는다)
 const HAND_AT := {"palm": Vector3(18.0, -8.0, 0.0)}
+#  내려놓을 때 받치는 손이 옮겨 쥐는 잔 옆 — 높이(잔 좌표 · 밑에서) · 잔 축에서 손바닥까지(논익 몸 아래 1/3 의 반지름 + 살)
+const SIDE := {"h": 0.07, "r": 0.041}
 #  손목 한계(도) — 굽힘(손바닥 쪽) · 젖힘 · 옆 꺾임(사진: 닦는 손 굽힘 20~30° · 새끼 쪽 약 10° · 받치는 손 젖힘 10~20°)
 const WRIST := {"flex": 28.0, "ext": 20.0, "dev": 14.0}
 #  팔 — 위팔 길이(bar_intro.py L_UA) · 팔뚝(팔꿈치 → 손목) · 손 단위(m — prologue3d TAPE.s 0.00328 보다 5% 작게: 손 18 × 9.6cm ·
@@ -1159,9 +1161,14 @@ static func _merch_tick(hn: Node, t: float) -> void:
 	(M.glass as Node3D).transform = Transform3D(gb, gp)
 	var a: Vector3 = gb.y
 	var s: float = ARM.s
-	#  받치는 손(왼손 · 반지) — 오므린 손바닥이 위로 밑동을 받친다(손바닥 법선 = 잔 축) · 손끝은 팔뚝을 잇는다
+	#  받치는 손(왼손 · 반지) — 오므린 손바닥이 위로 밑동을 받친다(손바닥 법선 = 잔 축) · 손끝은 팔뚝을 잇는다.
+	#  내려놓기 전에 밑동에서 잔 옆(받치는 손 쪽 · 몸 아래)으로 미끄러져 옆에서 쥔 채 내려놓는다 — 밑을 받친 채 내려 손이
+	#  카운터를 뚫었다(2026-10-28 「컵을 잡고 있는손 테이블 뚫는거 알지?」)
 	_fingers(g, M.hj.L, HPOSE.cup)
-	var lr: Array = _arm_set(g, "L", M, gp - a * 0.003, a, Vector3.DOWN, (HAND_AT.palm as Vector3) * s)
+	var sk: float = smoothstep(float(dn[0]) - 0.3, float(dn[0]) + 0.1, t)
+	var sd: Vector3 = (Vector3.RIGHT - a * a.dot(Vector3.RIGHT)).normalized()
+	var lp: Vector3 = (gp - a * 0.003).lerp(gp + a * float(SIDE.h) + sd * float(SIDE.r), sk)
+	var lr: Array = _arm_set(g, "L", M, lp, a.slerp(-sd, sk), Vector3.DOWN, (HAND_AT.palm as Vector3) * s)
 	#  일하는 손(오른손) — 엄지는 천째 입 안 · 검지는 바깥 벽으로 테 한 점을 집는다(집는 선이 테의 지름 방향) · 손은 그 선
 	#  둘레로 굴러 팔뚝을 잇는다 · 비틀면 집는 자리가 잔 축 둘레로 테를 훑는다
 	_fingers(g, M.hj.R, HPOSE.pinch)
@@ -1181,6 +1188,8 @@ static func _merch_tick(hn: Node, t: float) -> void:
 	var tn := M.tail as Node3D
 	tn.visible = dk < 0.5
 	tn.position = wl + hl.x * 0.07 - hl.z * 0.03 - Vector3(0.0, 0.015, 0.0)
+	#  손이 잔 옆으로 내려가면 꼬리는 손 안으로 걷힌다(원점이 윗끝 — 늘어진 채면 카운터 앞끝을 뚫었다)
+	tn.scale = Vector3(1.0, 1.0 - 0.8 * sk, 1.0)
 
 
 # ══ TV ═══════════════════════════════════════════════════

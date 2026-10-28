@@ -3,7 +3,8 @@ extends SceneTree
 #    ① 같은 API(make · tick · cues · handoff · feed_at · length) — feed_at < handoff < length · 켤 때 기본은 테이프
 #    ② 전역 "plg_kind" 가 bar 면 _plg_begin() 이 바를 튼다 · 인트로 단 안 · 무대 · 층은 화판 밖 · 덮개 동안 필터가 꺼진다
 #    ③ 상인 머리(깃 위)는 서 있는 동안 어느 틀에도 그림 안에 안 든다 · TV 빛은 상인 층을 안 비춘다 · 펜던트는 비춘다 ·
-#      손목 — 손끝 축이 팔뚝 축에서 35° 안(「손목이 이상하지 않아?」 — 팔 옆에 90° 로 꺾여 붙은 주걱이었다)
+#      손목 — 손끝 축이 팔뚝 축에서 35° 안(「손목이 이상하지 않아?」 — 팔 옆에 90° 로 꺾여 붙은 주걱이었다) ·
+#      잔을 내려놓는 동안 받치는 손 · 천 꼬리가 카운터 윗면 위(「컵을 잡고 있는손 테이블 뚫는거 알지?」 — 밑을 받친 채 내렸다)
 #    ④ TV 그림 간판 — 밀기 동안 앞당겨 켜지고(plg_sign_t) 넘김 뒤 · 끝에 안 남는다
 #    ④ 로패스 버스가 섰다가 넘김에 걷히고 · TV 스피커 효과(SFX)도 걷힌다 · 끝까지 가면 인트로가 이어진다
 #    ⑤ 누름 — 첫 누름 빨리 감기 · 둘째 누름 끝 → 버스 · 효과 · 무대가 안 남는다
@@ -26,6 +27,8 @@ var head_in := 0           # 상인 깃 위가 그림 안에 든 틀 수
 var head_n := 0
 var head_t := []           # 그림 안에 든 때 [처음 · 끝]
 var wrist_max := 0.0       # 손끝 축 ↔ 팔뚝 축 가장 큰 각(도)
+var down_low := INF        # 내려놓는 동안 받치는 손 · 천 꼬리 밑끝 − 카운터 윗면(m) 가장 작은 값
+var down_n := 0
 var bus_seen := false
 var spk_seen := false
 var fx0 := 0               # 처음 SFX 효과 수
@@ -158,6 +161,16 @@ func _process(_d: float) -> bool:
 						var hx: Vector3 = ((M.hj[sd] as Dictionary).root as Node3D).transform.basis.x
 						var fx: Vector3 = ((M.fo[sd] as Dictionary).root as Node3D).transform.basis.x
 						wrist_max = maxf(wrist_max, rad_to_deg(hx.angle_to(fx)))
+					if t >= float(P.POLISH.down[0]):
+						var top: float = (mn.global_transform * (P.MERCH.down as Vector3)).y
+						var parts: Array = ((M.hj.L as Dictionary).root as Node).find_children("*", "MeshInstance3D", true, false)
+						if (M.tail as Node3D).visible:
+							parts.append(M.tail)
+						for mi in parts:
+							if (mi as MeshInstance3D).is_visible_in_tree():
+								var ab: AABB = (mi as MeshInstance3D).global_transform * (mi as MeshInstance3D).get_aabb()
+								down_low = minf(down_low, ab.position.y - top)
+						down_n += 1
 				if t < float(P.T.dive0) and mn != null and mn.visible:
 					var cam := hn.get_meta("cam") as Camera3D
 					head_n += 1
@@ -173,6 +186,8 @@ func _process(_d: float) -> bool:
 						"%.2f" % late_intro)
 				_ok("③ 상인 깃 위는 그림 밖", head_n > 100 and head_in == 0, "%d / %d 틀 %s" % [head_in, head_n, str(head_t)])
 				_ok("③ 손목 — 손끝 축이 팔뚝 축에서 35° 안", head_n > 100 and wrist_max <= 35.0, "%.1f°" % wrist_max)
+				_ok("③ 잔 내려놓기 — 받치는 손 · 천 꼬리가 카운터 위", down_n > 20 and down_low >= -0.002,
+						"%d 틀 · 가장 낮은 밑끝 %+.1f cm" % [down_n, down_low * 100.0])
 				_ok("④ TV 간판 — 밀기 동안 켜지고 넘김 뒤 · 끝에 안 남는다", sign_on and not sign_late and g.plg_sign_t < 0.0)
 				_ok("④ 로패스 버스가 섰다가 걷혔다", bus_seen and _no_bar_bus())
 				_ok("④ TV 스피커 효과가 섰다가 걷혔다", spk_seen and _sfx_fx() == fx0, "%d → %d" % [fx0, _sfx_fx()])
