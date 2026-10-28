@@ -120,8 +120,8 @@ func _run() -> void:
 			"부르는 자리 %d (키 · 손가락 · 함수 제 몸)"
 					% src.count("_intro_press()"))
 	_ok("_intro_end 를 입력에서 직접 안 부른다",
-			src.count("_intro_end()") == 3,
-			"틱 하나 · 제 몸 하나 · _intro_press 하나")
+			src.count("_intro_end()") == 4,
+			"틱 하나 · 제 몸 하나 · _intro_press 하나 · 런 끝 바의 끝(_plg_end) 하나")
 
 	# ── ⑥ 다시 보기(개발자 판)는 그대로 ──────────────
 	print("⑥ 개발자 판의 다시 보기")

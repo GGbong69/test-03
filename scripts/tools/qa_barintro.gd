@@ -8,6 +8,7 @@ extends SceneTree
 #    ④ TV 그림 간판 — 밀기 동안 앞당겨 켜지고(plg_sign_t) 넘김 뒤 · 끝에 안 남는다
 #    ④ 로패스 버스가 섰다가 넘김에 걷히고 · TV 스피커 효과(SFX)도 걷힌다 · 끝까지 가면 인트로가 이어진다
 #    ⑤ 누름 — 첫 누름 빨리 감기 · 둘째 누름 끝 → 버스 · 효과 · 무대가 안 남는다
+#    ⑧ 런 끝(완주 · 실패)의 「새 런」 — 바를 틀고 끝나면(건너뛰어도) 인트로 나머지 없이 제목 문으로(2026-10-28)
 #    ⑥ 개발자 판 — 「바 인트로 보기」 · 「켤 때 인트로」 줄이 있고 그 쪽이 열아홉 줄 안 · 켤 때 인트로 줄이 전역 값을 바꾼다
 #    ⑦ 유리 뚫기(테이프 Plg 와 같은 반짝 · 번쩍) — tv_glint 가 handoff − GLINT.cue · 밀기가 서는 때 = 뛰어듦 시작 · 빗금은
 #      handoff − GLINT.lead 틀에 서고 별은 번쩍 앞에 진다 · 번쩍은 handoff −4 틀 ~ +6 틀만 · 필터는 맨 밝은 틀(lit_at)에 켜지고
@@ -267,6 +268,20 @@ func _process(_d: float) -> bool:
 				g._plg_end()
 			if f == 40:
 				_ok("⑥ 끝내면 버스가 안 남는다", _no_bar_bus() and _sfx_fx() == fx0)
+				#  ⑧ 런 끝 — 「새 런」이 바를 틀고(제목행) · 끝나면 인트로 나머지 없이 제목 문
+				g.state = g.S.OVER
+				g.tut_run = false
+				g.won = false
+				g._open_newrun()
+				_ok("⑧ 런 끝 「새 런」 — 바가 돈다 · 끝나면 제목으로", g._plg_live() and g.plg_mod == g.PlgBar
+						and g.plg_title and g.state == g.S.INTRO)
+				g.plg_t = float(g.PLGP.lock) + 0.01
+				g._intro_press()
+				g._intro_press()
+				_ok("⑧ 건너뛰면 곧장 제목 문 · 바가 안 남는다", not g._plg_live() and not g.plg_title
+						and g.state == g.S.TITLE, "state %d" % g.state)
+			if f == 46:
+				_ok("⑧ 끝내면 버스가 안 남는다", _no_bar_bus() and _sfx_fx() == fx0)
 				print("통과 %d · 실패 %d" % [ok, bad])
 				quit(1 if bad > 0 else 0)
 	if f > 3000:

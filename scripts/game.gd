@@ -1590,6 +1590,7 @@ var plg_rang := {}
 var plg_rain: AudioStreamPlayer = null
 var plg_aud := []            # 앞 토막 소리 자리(카세트 · 데크) — _plg_close 가 걷는다
 var plg_sign_t := -1.0       # 여는 장면이 TV 그림의 간판만 앞당겨 켜는 인트로 때(바 인트로 · −1 이면 인트로 시계 그대로)
+var plg_title := false       # 런 끝에서 튼 바 — 끝나면 인트로 나머지 없이 곧장 제목 문(_plg_end)
 
 
 func _plg_live() -> bool:
@@ -1601,10 +1602,11 @@ func _plg_cover() -> bool:
 	return _plg_live() and plg_t < plg_mod.lit_at()
 
 
-#  kind — "tape" · "bar" · "" 이면 전역 설정 "plg_kind"(기본 PLGP.kind)
-func _plg_begin(kind := "") -> void:
+#  kind — "tape" · "bar" · "" 이면 전역 설정 "plg_kind"(기본 PLGP.kind) · to_title — 끝나면 인트로를 건너 제목 문으로
+func _plg_begin(kind := "", to_title := false) -> void:
 	_intro_begin()
 	_plg_close()
+	plg_title = to_title
 	if kind == "":
 		kind = String(Save.get_set("plg_kind", PLGP.kind))
 	plg_mod = PlgBar if kind == "bar" else Plg
@@ -1638,6 +1640,7 @@ func _plg_begin(kind := "") -> void:
 
 func _plg_close() -> void:
 	plg_sign_t = -1.0
+	plg_title = false
 	plg_spk = false
 	if plg_vp != null and is_instance_valid(plg_vp):
 		plg_vp.queue_free()
@@ -1721,10 +1724,13 @@ func _plg_end() -> void:
 	if not _plg_live():
 		return
 	var fed: bool = plg_t >= plg_mod.feed_at()
+	var to_title := plg_title
 	plg_t = -1.0
 	_plg_close()
 	_crt_apply()
-	if not fed:
+	if to_title:
+		_intro_end()
+	elif not fed:
 		intro_t = 0.0
 		intro_soft = false        # 처음부터 트는 인트로는 제 쾅(금빛 번쩍)대로
 		_pwr_start(true)
@@ -56127,6 +56133,12 @@ func _open_newrun() -> void:
 	#  저장된 고름 그대로다. 그다음 런부터 새 런 화면에서 고른다.
 	if state == S.OVER and tut_run and won:
 		_wipe(_new_run.bind(true))
+		return
+	#  런 끝(완주 · 실패) → 바에서 깨어나 TV 로 빨려 들어 제목 문으로(2026-10-28 「플레이어가 런 완주나 실패하면 시작화면으로
+	#  돌아갈거 아니야? 그때 바텐더를 보여주는거 어때?」 · 켤 때는 테이프). 바를 못 트는 자리(화면 없음 · 모션 끄기)는 옛 길이다.
+	if state == S.OVER and not motion_off and _has_renderer() and screen_host != null and is_instance_valid(screen_host):
+		_to_lobby()
+		_plg_begin("bar", true)
 		return
 	#  게임 오버에서 새 런으로 — 판을 떠나 메뉴로 가는 길이라 덮는다(WIPE). 덮개가 다
 	#  덮었을 때 이 함수를 다시 부른다(그때는 덮는 중이라 아래로 간다).
