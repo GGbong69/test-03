@@ -336,7 +336,7 @@ func _process(_d: float) -> bool:
 				var ce: Dictionary = hn0.get_meta("end")
 				var d0: float = (cs.at as Vector3).distance_to(ce.look)
 				var ze: float = log(d0 / (ce.at as Vector3).distance_to(ce.look))
-				var kz: float = float(hn0.get_meta("glass_h")) / (2.0 * tan(deg_to_rad(float(P.CAM.fov)) * 0.5))
+				var kz: float = float(hn0.get_meta("glass_h")) * float(P.HERO.pic) / (2.0 * tan(deg_to_rad(float(P.CAM.fov)) * 0.5))
 				var re: float = float(P.PHOS.v0)
 				var mono := true
 				var pv := 0.0

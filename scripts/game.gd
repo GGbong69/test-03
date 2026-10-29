@@ -1612,6 +1612,7 @@ func _plg_begin(kind := "", to_title := false) -> void:
 	plg_mod = PlgBar if kind == "bar" else Plg
 	if not _has_renderer() or screen_host == null or not is_instance_valid(screen_host):
 		return
+	intro_soft = plg_mod == PlgBar
 	plg_vp = plg_mod.make(self, screen_host)
 	plg_t = 0.0
 	plg_ff = false
@@ -1688,7 +1689,10 @@ func _plg_tick(d: float) -> void:
 				_:
 					_plg_snd(String(job))
 	#  cue 소리(방 안)는 위에서 났다 — 그 밖의 _sfx(주인공 TV 가 트는 인트로)는 필터가 켜질 때까지(_plg_cover) TV 스피커로
-	plg_spk = plg_mod == Plg and _plg_cover() and plg_t >= Plg.feed_at()
+	#  바는 제 스피커(SFX 효과)를 들어가는 때에 걷으니(들어가는 소리가 날것이게) 그 뒤 유리가 화면을 덮을 때까지 TV 그림
+	#  소리(셋째 다트)는 TvSpk 로 난다(그 뒤는 _sfx 가 막는다)
+	plg_spk = (plg_mod == Plg and _plg_cover() and plg_t >= Plg.feed_at()) \
+			or (plg_mod == PlgBar and plg_t >= PlgBar.entry_at() and plg_t < PlgBar.handoff())
 	if plg_rain != null and plg_rain.playing:
 		var rk: float = clampf(plg_t / float(PLGP.rain_in), 0.05, 1.0) \
 				* (1.0 - clampf((plg_t - float(Plg.T.push0)) / (Plg.handoff() - float(Plg.T.push0)), 0.0, 0.95))
@@ -1731,6 +1735,7 @@ func _plg_end() -> void:
 		_intro_end()
 	elif not fed:
 		intro_t = 0.0
+		intro_soft = false        # 처음부터 트는 인트로는 제 금빛 번쩍대로
 		_pwr_start(true)
 	queue_redraw()
 
@@ -1808,6 +1813,9 @@ var intro_out := 0.0       # 제목으로 넘긴 뒤 글줄을 덮은 막(1 → 
 var intro_fired := 0       # 던진 자루 수
 var intro_rang := {}       # 한 번만 울리는 소리
 var intro_ff := false      # 첫 누름 뒤 — 빨리 감는 중
+#  바 인트로가 튼 인트로 — 두 낱말이 붙는 쾅의 금빛 번쩍이 간판 판자에만 선다(온 화면을 씻으면 검던 벽돌 벽이 갈색으로
+#  떠 밤 어둠 · 주인공만 밝은 규칙이 0.35 초 깨졌다 · 인광 검토 2 — 쾅은 0dB 그대로 도착 한 박)
+var intro_soft := false
 
 
 func _intro_wanted() -> bool:
@@ -1822,6 +1830,7 @@ func _intro_begin() -> void:
 	intro_out = 0.0
 	intro_fired = 0
 	intro_ff = false
+	intro_soft = false
 	intro_rang.clear()
 	pause_from = -1
 	state = S.INTRO
@@ -1987,11 +1996,17 @@ func _draw_intro() -> void:
 	_ttl_draw()
 	draw_set_transform(shake_off)
 	_intro_sign(maxf(t, plg_sign_t), 1.0 - st, _sign_base(shake_off))
-	#  두 낱말이 붙는 순간 금빛 번쩍(두 여는 장면도 — 인광 점 속으로는 넘김에 때리는 그림 · 소리가 없어 이 쾅이 도착 한 박이다)
+	#  두 낱말이 붙는 순간 금빛 번쩍(인광 점 속으로는 넘김에 때리는 그림 · 소리가 없어 이 쾅이 도착 한 박이다 · 바 인트로는
+	#  간판 판자에만 — intro_soft)
 	var ft: float = t - float(INTRO.snap) - float(INTRO.snap_t)
 	if ft >= 0.0 and ft < float(INTRO.flash):
 		var fk: float = 1.0 - ft / float(INTRO.flash)
-		draw_rect(_full(), Color(C_ACC, 0.16 * fk * fk))
+		if intro_soft:
+			draw_set_transform_matrix(_sign_base(shake_off) * _sign_rot())
+			draw_rect(_sign_rect().grow(float(SIGNH.frame)), Color(C_ACC, 0.16 * fk * fk))
+			draw_set_transform_matrix(_sign_base(shake_off))
+		else:
+			draw_rect(_full(), Color(C_ACC, 0.16 * fk * fk))
 
 
 #  램프 빛 원뿔 — 겹 여섯이 안쪽부터 좁고 짙게 · 바깥은 넓고 옅게 겹쳐 가장자리가 무르게 진다.
@@ -7727,8 +7742,8 @@ const SFX := {
 	"bar_tv_static":  {"f": 147.0, "d": 0.12, "a": 0.06},
 	"bar_tv_hum":     {"f": 60.0, "d": 0.30, "a": 0.016},
 	#  인광 점 속으로(2026-10-28 · 바 인트로 PlgBar DIVE.mode "phosphor") — 차오르는 웅 · 이잉 · 인광 줄을 지날 때 단마다 지직 ·
-	#  넘김(파일 0.66 초)에 끊기고 낮은 툭 · 웅 꼬리. 앞 50ms 가 웅의 발치라 a 가 작다(봉우리 0.35 언저리).
-	"bar_phos":       {"f": 60.0, "d": 0.30, "a": 0.0105},
+	#  넘김에 끊기고 낮은 툭 · 웅 꼬리. 앞 50ms 가 웅의 발치라 a 가 작다(인광 검토 2 — 섞인 소리 꼭대기가 방 바닥보다 6~10dB 밑이라 +3dB).
+	"bar_phos":       {"f": 60.0, "d": 0.30, "a": 0.0148},
 	#  유리 반짝 · 뛰어듦(2026-10-25 · Plg GLINT) — 쉬익이 차올라 끊기며 삐 → 싱(유리 부분음 · 엇갈린 맥놀이) · 슈욱이
 	#  handoff 에 끊기고 퍽(파일 피크 0.47 — 싱 0.26 보다 5dB 위라 건너는 순간이 이 장면에서 가장 센 타격이다). 앞 50ms 가
 	#  쉬익의 발치라 a 가 작다.
@@ -7806,9 +7821,9 @@ func _sfx_jit() -> float:
 
 #  db — 얇게 겹치는 층(×배수의 5도). 자리를 돌려 쓰므로 매번 덮는다.
 func _sfx(name: String, f := 0.0, db := 0.0) -> void:
-	#  여는 장면이 TV 유리 속으로 드는 동안(entry_at ~ handoff)은 TV 그림 소리가 없다(바는 TV 소리가 그 앞에 걷혀 램프 꺼짐
-	#  딸깍 · 다트가 스피커 없이 뛰어듦 한가운데 났고 · 테이프는 들어가는 소리 밑에 다트 · 딸깍이 섞였다)
-	if _plg_live() and plg_t >= plg_mod.entry_at() and plg_t < plg_mod.handoff():
+	#  여는 장면이 TV 유리가 화면을 덮은 뒤(hush_at ~ handoff)는 TV 그림 소리가 없다(램프 꺼짐 딸깍이 인광 판 한가운데
+	#  났다 · 그 앞 셋째 다트는 TV 안에 보이니 난다 — 들어가는 때부터 막으니 쿵 · 쿵 · 쿵 마지막 한 방이 빠졌다)
+	if _plg_live() and plg_t >= plg_mod.hush_at() and plg_t < plg_mod.handoff():
 		return
 	var st := _sfx_file(name)
 	if st != null and not sfx_pool.is_empty():

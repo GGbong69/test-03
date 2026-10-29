@@ -116,7 +116,7 @@ const ON := {"tvs": TAPE_LEN + 1.0, "maker": TAPE_LEN + 1.75, "hero": TAPE_LEN +
 #  앞당겨 램프가 켜진 판으로 든다(셋째 다트 · 180 이 들어간 뒤 게임 속에서 보인다).
 #  인광 점 속으로(2026-10-29 · _push_w) — push0 에 선 데서 붙어 인광 판 첫 틀(handoff − PHOS.run 틀)까지 3D 로 다가간다.
 #  넘김은 바와 같은 인트로 때(feed_at + 3.62 = 바 handoff − feed)라 두 여는 장면이 같은 그림으로 든다 — 셋째 다트 · 180 은
-#  느린 다가감 동안 TV 안에서 보이고 · 램프 꺼짐(인트로 2.85)은 인광 판 첫머리(H−46)에 묻히고 · 간판이 켜진 어두운 문에
+#  느린 다가감 동안 TV 안에서 보이고 · 램프 꺼짐(인트로 2.85)은 인광 판 안(H−46)에 묻히고 · 간판이 켜진 어두운 문에
 #  내려앉아 두 낱말이 붙는 쾅(H+20)이 도착 한 박이다(2026-10-29 검토 — 옛 넘김 12.25 는 TV 가 켜지자 0.3 초 만에 유리가
 #  화면을 덮었고 · 도착 0.7 초 안에 다트 쿵 · 램프 딸깍 · 암전 · 네온이 몰렸다 · 밝은 램프 판이 크림빛으로 번쩍했다).
 #  push0 은 램프가 선 뒤 0.4 초(앞 0.4 초는 깜박임을 본다).
@@ -260,8 +260,9 @@ const MAKER := {"light": 1.3}
 #  rim_r 그 닿는 거리 · dive 끝 거리 — 유리 폭이 화면 폭을 꼭 채우는 거리의 몫(0.70 이면 끝에 유리 폭이 화면의
 #  143% — Phos 밑에서 여기까지 가서 선다) · portal 다가가는 몫(0~1)의 이 구간에서 둘레 비네트가 걷힌다(유리가 화면을 다
 #  덮는 인광 판 첫 틀에 비네트가 없다 — 바 인트로 옛 반짝은 유리 속 그림이 화면에 박힌 그림으로 옮겨 간다) · zoom 화면에 박힌
-#  그림의 배율 = 유리 그림 높이 몫(pg)의 이 거듭제곱(바 옛 반짝만)
-const HERO := {"light": 1.1, "rim": 0.4, "rim_r": 0.55, "dive": 0.70, "portal": [0.70, 1.0], "zoom": 0.15}
+#  그림의 배율 = 유리 그림 높이 몫(pg)의 이 거듭제곱(바 옛 반짝만) · pic 유리 코앞에서 보이는 그림 높이 ÷ 유리 높이(glass_h —
+#  볼록한 유리라 둘레가 꼭지보다 멀어 작게 보인다 · 이 몫 없이 밀면 인광 판 첫 틀에 그림이 한 틀 1.6% 더 튀었다 · 녹화에서 잼 · 검토 2)
+const HERO := {"light": 1.1, "rim": 0.4, "rim_r": 0.55, "dive": 0.70, "portal": [0.70, 1.0], "zoom": 0.15, "pic": 0.985}
 #  유리 반짝 · 번쩍 — 지금은 바 인트로 DIVE.mode "glint" 만 쓴다(테이프는 2026-10-29 인광 점 속으로 · PHOS).
 #  (2026-10-25 「TV에 들어갈때 … 들어갈때 유리가 반짝? 약간 삐싱 하는 그게 있잖아?」) — 다가가다
 #  미끄러지듯 다가가다 멈칫 → 굵은 띠 · 앞선 가는 줄이 유리를 왼 위 → 오른 아래로 쓸고 지난 자리에 별이 피었다
@@ -1610,6 +1611,8 @@ static func tick(hn: Node, t: float) -> void:
 			_dust(hn, t, minf(p * 1.6, 1.0) * (1.0 - smoothstep(float(LOOK.gone[0]), float(LOOK.gone[1]), _push_u(t))))
 			#  주인공 — 깜박이며 켜지면 곧장 화판 그림(첫 그림이 어둠이라 지지직을 안 거친다)
 			(tv.r as OmniLight3D).light_energy = float(HERO.rim) * minf(p * 1.6, 1.0)
+			#  다가가는 동안 눈이 유리 빛에 맞춘다(인광 판 첫 틀 밝기와 같아진다)
+			m.set_shader_parameter("dim", phos_dim(_push_u(t)))
 		else:
 			lit += minf(p * 1.6, 1.0)
 			nx += 1
@@ -1683,7 +1686,7 @@ static func _push_w(hn: Node, t: float) -> float:
 	var ce: Dictionary = hn.get_meta("end")
 	var d0: float = (cs.at as Vector3).distance_to(ce.look)
 	var ze: float = log(d0 / (ce.at as Vector3).distance_to(ce.look))
-	var m0: float = float(hn.get_meta("glass_h")) / (2.0 * d0 * tan(deg_to_rad(float(CAM.fov)) * 0.5))
+	var m0: float = float(hn.get_meta("glass_h")) * float(HERO.pic) / (2.0 * d0 * tan(deg_to_rad(float(CAM.fov)) * 0.5))
 	var n: float = _push_n()
 	var f: float = maxf((t - float(T.push0)) * 60.0, 0.0)
 	var zt: float = log(float(PHOS.mag[0]) / m0)
@@ -1889,29 +1892,42 @@ static func cross(root: Control, dt: float, poly := PackedVector2Array()) -> voi
 #  한가운데가 줄 틈과 행 틈이 엇갈린 검은 십자라 끝은 줄 사이 어둠으로 날아든다(줄이 바깥으로 빠진다).
 #  넘김(handoff)에 무대를 끊고 게임 필터를 켜면 같은 판이 밑 화면(필터 밑 게임 그림)을 R · B 두 장만 conv 논리 px 비켜
 #  놓았다가 한 틀에 1 씩 겹친다(초록은 제자리 — 셋을 더하면 제 빛깔이다 · 줄이 다시 한 그림으로 모인다).
-#  빠르기(2026-10-29 「지금 들어가는 속도가 좀 빠르네 좀 자연스러운 속도를 찾아서 수정하고」) — 뛰어듦은 solid + run 틀(1.5 초 ·
-#  옛 0.7 초 크래시 줌의 두 배 남짓). 빠르기(로그 배 / 틀)가 한 번도 꺾이거나 서지 않는다: 밀기 꼬리 빠르기에서 3D 다가감이
-#  붙어 v0(유리가 화면을 덮는 틀)까지 오르고 · 인광 판은 거기서 틀마다 같은 몫씩 올라 handoff 에 mag[1] 에 닿는다(끝 빠르기 =
-#  2·ln(mag1 ÷ mag0) ÷ run − v0 ≈ 0.20 — 옛 판 끝의 3 분의 1). 3D 몫 0.7 초 · 그림이 읽히는 블록 몫 0.63 초 · 줄 몫 0.17 초.
+#  빠르기(2026-10-29 「지금 들어가는 속도가 좀 빠르네 좀 자연스러운 속도를 찾아서 수정하고」) — 뛰어듦은 solid + run 틀(1.65 초 ·
+#  옛 0.7 초 크래시 줌의 두 배 남짓). 빠르기(로그 배 / 틀)가 한 번도 꺾이거나 줄지 않는다: 밀기 꼬리 빠르기에서 3D 다가감이
+#  붙어 v0(유리가 화면을 덮는 틀)까지 오르고 · 인광 판은 거기서 ramp 틀 동안 같은 몫씩 올라 그 뒤 고른 빠르기로 handoff 에
+#  mag[1] 에 닿는다(고른 빠르기 = (ln(mag1 ÷ mag0) − v0·ramp ÷ 2) ÷ (run − ramp ÷ 2) ≈ 0.12 · 검토 2 — 틀마다 오르기만 하니
+#  이 판의 얼굴인 R · G · B 줄이 가장 빠른 0.17 초에 지나 끝이 크래시 줌으로 읽혔다 → 줄 0.27 초 · 끝 빠르기 61%).
 #  mag [첫 틀 배 · handoff 배](배 = 화면 논리 px ÷ 게임 px — 첫 틀 배는 3D 다가감이 유리를 넘기는 배와 같다 · 유리 높이 ÷ 화면
-#  높이 · 옛 판은 1.6 에 넘겨 받고 2 로 그려 한 틀에 그림이 1.3 배 튀었다) · shut 행 틈이 어두워지는 배 [0 · 다 어둡다] · gap [줄 틈 · 행 틈 몫] ·
-#  stripe · round 그 결이 서는 배(줄은 ×90 부터 — 화면에 낟알 일곱 · 줄 스물하나 · ×33 줄 쉰여덟은 낟알밭으로 읽혔다 · 그 앞
-#  ×45 에 낟알을 같은 빛깔 세 칸으로 먼저 가르니 화면 가득 작은 타일밭이 섰다) ·
-#  gain [블록 빛 배(mag0) · 블록 빛 배(stripe) · 줄 빛 배] — 블록은 배의 로그로 고르게 어두워진다(속으로 들수록 틈이 빛을
-#  먹는다 · stripe 배에서 줄 판 밝기와 같아 결만 바뀐다 · 옛 판은 주사선 단이 도착한 게임의 두 배로 밝다가 줄 단에 −75% 꺼졌다) ·
+#  높이 · 옛 판은 1.6 에 넘겨 받고 2 로 그려 한 틀에 그림이 1.3 배 튀었다) · shut 행 틈이 어두워지는 배 [0 · 다 어둡다](첫 틀
+#  1.6 에 틈이 유리 주사선만큼 이미 어둡다 — 0 에서 서니 넘기는 틀에 주사선이 세 틀 꺼졌다 켜졌다 · 검토 2) · gap [줄 틈 · 행 틈 몫] ·
+#  med 이 배부터 낟알 빛깔을 십자 다섯 텍셀의 가운데값으로(다트판 크림 칸 · 녹색 테의 1px 점 무늬가 행 틈과 겹쳐 화면 가득
+#  끊긴 대시밭이었다 · 검토 2 — 칸 경계의 곧은 단은 남는다) ·
+#  stripe · round0 · round 그 결이 서는 배(줄은 ×90 부터 — 화면에 낟알 일곱 · 줄 스물하나 · ×33 줄 쉰여덟은 낟알밭으로 읽혔다 ·
+#  그 앞 ×45 에 낟알을 같은 빛깔 세 칸으로 먼저 가르니 화면 가득 작은 타일밭이 섰다 · 줄 끝은 round0 에 조금 · round 에 다
+#  둥글다 — 한 틀에 각진 판이 알약으로 바뀌었다) ·
+#  gain [블록 빛 배(mag0) · 블록 빛 배(stripe) · 줄 빛 배] — 첫 값은 dim 으로 낮춘 유리 그림과 같고 · 둘째 값은 줄이 서는
+#  틀에 불 빨강의 꼭대기가 블록과 줄에서 같게(검토 2 — 블록 끝 0.3 은 불을 검붉은 진흙으로 죽였다가 줄이 서는 틀에 4 배
+#  다시 켰다 · 평균만 맞아 있었다 — 줄이 서는 틀의 평균은 줄 틈만큼 떨어진다 · 불은 끝까지 켜진 빨강 · 철사 테의 G 줄이 녹화 80 넘게) ·
+#  dim 3D 다가감 끝 유리 그림 밝기 몫(보이는 밝기 · sRGB — 유리 재질은 선형이라 2.2 제곱으로 준다 · 유리가 화면을 덮어 갈수록
+#  눈이 그 빛에 맞춘다 — 유리가 화면을 덮는 틀이 바 인트로에서 가장 밝고 평평해 도착한 게임의 2.4 배였다 · 검토 2) ·
 #  tint 게임 그림 빛깔 배(무대 유리는 필름 톤 · 조금 붉다 — 넘겨받는 틀의 R · G · B 가 유리와 같게 · gain 첫 값과 함께 맞췄다) · ink [R · G · B 줄 빛의
-#  끝](채널 세기 × 줄 빛 배가 1 에서 선다 — 바의 따뜻한 어둠 쪽으로 누른 인광 · 다트판 불의 빨강만 끝에 닿는다 · 순 원색 막대가
-#  다른 그림체 스티커로 떴다) · aim 한가운데가 날아들 낟알(다트판 불 · 줄 틈 · 행 틈 십자)에 닿는 배 ·
-#  conv [handoff 뒤 틀, 비킴 논리 px, 크기 배] — 3 논리 px(간판 획 · 다트판 칸보다 좁다 — 8 px 은 HHIGHTO 겹글자 · 무지개로
-#  읽혔다)에서 한 틀에 1 씩 · 크기 1.03 → 1.0 고르게(빛 배는 1 — 밝게 선 틀이 한 틀에 꺼지며 튀었다) · lit 필터를 켜는 틀 ·
-#  calm 잔상을 끄는 틀(겹침이 끝난 뒤 — 잔상이 비킨 장을 붙들지 않게)
+#  끝](채널 세기 × 줄 빛 배가 1 에서 선다 — 순 원색을 바의 따뜻한 쪽으로 한 단 누른 인광 · 다트판 불의 빨강 줄이 가장 밝다 ·
+#  G · B 를 너무 누르니 셋이 같이 켜진 인광 줄이 한 틀도 안 보이고 빨간 알약 무늬로 읽혔다 · 검토 2) ·
+#  aim 한가운데가 날아들 낟알(줄 틈 · 행 틈 십자)에 닿는 배 · edge 날아들 낟알 — 다트판 한가운데에서 불 빨강의 오른 끝
+#  낟알(텍셀)까지(줄이 서는 동안 화면에 불 빨강 · 철사 테(크림) · 녹색 테가 같이 들어 R · G · B 셋이 켜진다 · 한가운데로 드니
+#  화면이 다 불 안이라 G · B 줄이 검었다 · 검토 2) ·
+#  conv [handoff 뒤 틀, 비킴 논리 px, 크기 배, 빛 배] — 2 논리 px(3 은 HIGH 글자에 노랑 · 하늘 테가 한 틀 또렷했다 · 8 은
+#  HHIGHTO 겹글자)에서 한 틀에 1 씩 · 크기 0.97 → 1.0(안으로 이어 커진다 — 1.03 → 1.0 은 들던 움직임이 넘김 직후 거꾸로
+#  꺾였다 · 비는 끝은 검다) · 빛 배는 필터를 지나 도착한 밝기의 45 · 65 · 85 · 100% 가 되는 단(필터가 검정을 조금 띄워
+#  0.28 · 0.56 · 0.84 — 녹화에서 잼 · 검은 줄 틈에서 한 틀에 밝기가 ×5 뛰는 소리 없는 컷이었다 · 검토 2 — 밝게
+#  치는 박자는 두 낱말이 붙는 쾅 하나) · lit 필터를 켜는 틀 · calm 잔상을 끄는 틀(겹침이 끝난 뒤 — 잔상이 비킨 장을 붙들지 않게)
 const PHOS := {
-	"solid": 42, "run": 48, "v0": 0.045,
-	"mag": [1.6, 600.0], "shut": Vector2(1.6, 5.0),
-	"gap": Vector2(0.25, 0.4), "stripe": 90.0, "round": 180.0, "gain": [1.13, 0.3, 1.6],
-	"tint": Vector3(1.02, 1.0, 0.97), "aim": 20.0,
-	"ink": [Vector3(0.784, 0.125, 0.063), Vector3(0.094, 0.282, 0.063), Vector3(0.063, 0.063, 0.251)],
-	"conv": [[0, 3.0, 1.03], [1, 2.0, 1.02], [2, 1.0, 1.01], [3, 0.0, 1.0]],
+	"solid": 42, "run": 57, "v0": 0.045, "ramp": 25,
+	"mag": [1.6, 600.0], "shut": Vector2(1.1, 5.0), "med": 3.0,
+	"gap": Vector2(0.25, 0.4), "stripe": 90.0, "round0": 130.0, "round": 180.0, "gain": [0.76, 0.88, 1.12], "dim": 0.62,
+	"tint": Vector3(1.02, 1.0, 0.97), "aim": 20.0, "edge": Vector2(3.0, 0.0),
+	"ink": [Vector3(0.784, 0.125, 0.063), Vector3(0.13, 0.86, 0.11), Vector3(0.10, 0.16, 0.62)],
+	"conv": [[0, 2.0, 0.97, 0.28], [1, 1.0, 0.98, 0.56], [2, 0.0, 0.99, 0.84], [3, 0.0, 1.0, 1.0]],
 	"lit": 0, "calm": 7,
 }
 const PHOS_SHADER := """
@@ -1926,7 +1942,9 @@ uniform float m = 2.0;
 uniform float ou = -1.0;
 uniform vec2 gap = vec2(0.25, 0.4);
 uniform float stripe = 90.0;
+uniform float rnd0 = 130.0;
 uniform float rnd = 180.0;
+uniform float med = 3.0;
 //  행 틈 어둠 몫(0 — 틈 없음 · 1 — 검다) · 블록 빛 배 · 줄 빛 배
 uniform float sh = 0.0;
 uniform float gx = 1.0;
@@ -1935,8 +1953,15 @@ uniform vec3 tint = vec3(1.0);
 uniform vec3 ink_r = vec3(1.0, 0.0, 0.0);
 uniform vec3 ink_g = vec3(0.0, 1.0, 0.0);
 uniform vec3 ink_b = vec3(0.0, 0.0, 1.0);
-//  겹침 틀의 크기 배(내려앉는 틀 — 한가운데에서 크다)
+//  겹침 틀의 크기 배(안으로 이어 커진다 — 1 보다 작으면 비는 끝은 검다) · 빛 배(단으로 선다)
 uniform float cz = 1.0;
+uniform float cl = 1.0;
+vec3 fe(vec2 p) {
+	return texture(feed, (p + 0.5) / fsz).rgb;
+}
+vec3 med3(vec3 a, vec3 b, vec3 d) {
+	return max(min(a, b), min(max(a, b), d));
+}
 void fragment() {
 	if (ou >= 0.0) {
 		vec2 su = 0.5 + (SCREEN_UV - 0.5) / cz;
@@ -1944,13 +1969,25 @@ void fragment() {
 		vec2 ur = su + o;
 		vec2 ub = su - o;
 		//  비켜 난 끝은 검다(끝 열을 늘이지 않는다)
-		COLOR = vec4(ur.x <= 1.0 ? texture(sc, ur).r : 0.0, texture(sc, su).g, ub.x >= 0.0 ? texture(sc, ub).b : 0.0, 1.0);
+		COLOR = vec4(vec3(ur.x <= 1.0 ? texture(sc, ur).r : 0.0, texture(sc, su).g, ub.x >= 0.0 ? texture(sc, ub).b : 0.0) * cl, 1.0);
+		if (any(lessThan(su, vec2(0.0))) || any(greaterThan(su, vec2(1.0)))) {
+			COLOR = vec4(0.0, 0.0, 0.0, 1.0);
+		}
 	} else {
 		vec2 q = floor(UV * px) + 0.5;
 		vec2 g = c + (q - px * 0.5) / m;
 		vec2 gi = floor(g);
 		vec2 f = g - gi;
-		vec3 s = texture(feed, (gi + 0.5) / fsz).rgb * tint;
+		vec3 s = fe(gi);
+		if (m >= med) {
+			//  십자 다섯 텍셀 가운데값(채널마다) — 따로 떨어진 1px 점만 지워진다
+			vec3 l = fe(gi - vec2(1.0, 0.0));
+			vec3 r = fe(gi + vec2(1.0, 0.0));
+			vec3 u = fe(gi - vec2(0.0, 1.0));
+			vec3 d = fe(gi + vec2(0.0, 1.0));
+			s = med3(s, max(min(l, r), min(u, d)), min(max(l, r), max(u, d)));
+		}
+		s *= tint;
 		if (gi.x < 0.0 || gi.y < 0.0 || gi.x >= fsz.x || gi.y >= fsz.y) {
 			s = vec3(0.0);
 		}
@@ -1971,11 +2008,11 @@ void fragment() {
 			float k = floor(f.x * 3.0);
 			float fx = fract(f.x * 3.0);
 			bool on = f.y < ly && fx < lx;
-			if (on && m >= rnd) {
-				//  줄 빛 판(논리 px) 안 자리 — 끝이 둥근 판(반지름 = 줄 폭의 0.45 · 테는 도트 계단)
+			if (on && m >= rnd0) {
+				//  줄 빛 판(논리 px) 안 자리 — 끝이 둥근 판(반지름 = 줄 폭의 0.2 → 0.45 두 단 · 테는 도트 계단)
 				vec2 w = vec2(lx * m / 3.0, ly * m);
 				vec2 p = vec2(fx * m / 3.0, f.y * m);
-				float r = w.x * 0.45;
+				float r = w.x * (m >= rnd ? 0.45 : 0.2);
 				vec2 d = abs(p - w * 0.5) - (w * 0.5 - r);
 				on = length(max(d, vec2(0.0))) <= r;
 			}
@@ -2008,6 +2045,8 @@ static func phos_make(root: Control, feed: Texture2D, px := Vector2(640.0, 360.0
 	pm.set_shader_parameter("gap", PHOS.gap)
 	pm.set_shader_parameter("stripe", float(PHOS.stripe))
 	pm.set_shader_parameter("rnd", float(PHOS.round))
+	pm.set_shader_parameter("rnd0", float(PHOS.round0))
+	pm.set_shader_parameter("med", float(PHOS.med))
 	pm.set_shader_parameter("gy", float(PHOS.gain[2]))
 	pm.set_shader_parameter("tint", PHOS.tint)
 	for i in 3:
@@ -2023,18 +2062,26 @@ static func phos_lunge() -> float:
 	return float(int(PHOS.solid) + int(PHOS.run)) / 60.0
 
 
-#  phos_m 이 때(dt = t − handoff)의 배 — 인광 판 밖(첫 틀 앞 · handoff 뒤)이면 0. 빠르기가 v0 에서 틀마다 같은 몫씩 올라
-#  run 틀째에 mag[1] 에 닿는다(로그 배 = v0·F + (v1 − v0)·F² ÷ 2run).
+#  phos_m 이 때(dt = t − handoff)의 배 — 인광 판 밖(첫 틀 앞 · handoff 뒤)이면 0. 빠르기가 v0 에서 ramp 틀 동안 같은 몫씩
+#  올라 vm 에 서고 그대로 run 틀째에 mag[1] 에 닿는다(로그 배 = v0·a + (vm − v0)·a² ÷ 2ramp + vm·(F − ramp) · a = min(F, ramp)).
 static func phos_m(dt: float) -> float:
 	var f: int = floori(dt * 60.0 + 0.001)
 	if f < -int(PHOS.run) or f >= 0:
 		return 0.0
 	var n := float(PHOS.run)
+	var rp := float(PHOS.ramp)
 	var fr: float = maxf(dt * 60.0 + n, 0.0)
 	var m0 := float(PHOS.mag[0])
 	var v0 := float(PHOS.v0)
-	var v1: float = 2.0 * log(float(PHOS.mag[1]) / m0) / n - v0
-	return m0 * exp(v0 * fr + (v1 - v0) * fr * fr / (2.0 * n))
+	var vm: float = (log(float(PHOS.mag[1]) / m0) - v0 * rp * 0.5) / (n - rp * 0.5)
+	var a: float = minf(fr, rp)
+	return m0 * exp(v0 * a + (vm - v0) * a * a / (2.0 * rp) + vm * maxf(fr - rp, 0.0))
+
+
+#  phos_dim 3D 다가감 몫 u(0 — 뛰어듦 첫 틀 · 1 — 유리가 화면을 덮는 틀)의 유리 그림 밝기(scr dim) — 눈이 화면을 채워 가는
+#  빛에 맞춘다(gain 첫 값이 그 끝 밝기와 같다)
+static func phos_dim(u: float) -> float:
+	return pow(lerpf(1.0, float(PHOS.dim), smoothstep(0.0, 1.0, u)), 2.2)
 
 
 #  phos_z 3D 다가감의 로그 배 — 뛰어듦 첫 틀에서 f 틀째 · r0 그 첫 틀의 빠르기(밀기 꼬리 · 테이프는 0) · zt 유리 배가 mag[0] 에
@@ -2066,7 +2113,8 @@ static func phos_conv(dt: float) -> float:
 	return float(r[1]) if not r.is_empty() else -1.0
 
 
-#  phos 틀마다 — ce 유리 한가운데의 게임 px(feed px) · aim 날아들 낟알(다트판 한가운데 — 다트 게임이니 불로 든다). 배가 있으면
+#  phos 틀마다 — ce 유리 한가운데의 게임 px(feed px) · aim 다트판 한가운데(다트 게임이니 불로 든다 — 날아들 낟알은 거기서
+#  PHOS.edge · 불 빨강의 끝). 배가 있으면
 #  Phos 가 화면을 다 덮고(무대는 그 밑에 그대로) · 넘김부터 겹침이 끝날 때까지 Phos 만 남는다(그 뒤 층은 비어 LEN 에 걷혀도
 #  튀지 않는다). 날아들 자리(그 낟알의 줄 틈 · 행 틈 한가운데 — 검은 십자 · 둘레가 그 낟알의 인광 줄)는 첫 틀 유리 한가운데에서
 #  화면 위 제자리를 지키다 배의 로그 몫으로 고르게(선 데서 붙어 선다) 화면 한가운데로 미끄러져 aim 배에 닿는다. 한가운데는
@@ -2081,7 +2129,7 @@ static func phos(root: Control, dt: float, ce: Vector2, aim: Vector2) -> void:
 		var gp: Vector2 = PHOS.gap
 		var m0 := float(PHOS.mag[0])
 		var lm: float = log(m / m0)
-		var ct: Vector2 = aim.floor() + Vector2(1.0 - gp.x / 6.0, 1.0 - gp.y / 2.0)
+		var ct: Vector2 = aim.floor() + (PHOS.edge as Vector2) + Vector2(1.0 - gp.x / 6.0, 1.0 - gp.y / 2.0)
 		var c: Vector2 = ct - (ct - ce) * m0 * (1.0 - smoothstep(0.0, log(float(PHOS.aim) / m0), lm)) / m
 		pm.set_shader_parameter("c", (c * m).round() / m)
 		pm.set_shader_parameter("m", m)
@@ -2096,6 +2144,7 @@ static func phos(root: Control, dt: float, ce: Vector2, aim: Vector2) -> void:
 		var px: Vector2 = pm.get_shader_parameter("px")
 		pm.set_shader_parameter("ou", cv / px.x * root.size.x / maxf(vw, 1.0))
 		pm.set_shader_parameter("cz", float(_phos_row(dt)[2]))
+		pm.set_shader_parameter("cl", float(_phos_row(dt)[3]))
 	for c in root.get_children():
 		(c as CanvasItem).visible = (m > 0.0 or cv >= 0.0) if c == pr else (f < 0 and (c as Node).name != "Flash")
 
@@ -2693,10 +2742,15 @@ static func cues() -> Dictionary:
 	return _cues
 
 
-#  들어가는 때 — 뛰어듦 첫 틀(handoff − phos_lunge)의 한 틀 앞(믹서가 한 틀 늦게 낸다) · 이때부터 handoff 까지 TV 그림 소리가
-#  없다(game.gd _sfx — 바와 같은 규칙 · 들어가는 소리 밑에 인트로 다트 · 램프 딸깍이 섞였다)
+#  들어가는 때 — 뛰어듦 첫 틀(handoff − phos_lunge)의 한 틀 앞(믹서가 한 틀 늦게 낸다) · TV 그림 소리는 hush_at 부터 막는다
 static func entry_at() -> float:
 	return handoff() - phos_lunge() - 1.0 / 60.0
+
+
+#  TV 그림 소리를 막는 때 — 유리가 화면을 덮는 틀(인광 판 첫 틀)부터 handoff 까지(game.gd _sfx · 램프 꺼짐 딸깍은 막히고
+#  그 앞 셋째 다트 · 180 은 TV 안에 보이니 난다 — 들어가는 소리 때부터 막으니 쿵 · 쿵 · 쿵 마지막 한 방이 빠졌다 · 검토 2)
+static func hush_at() -> float:
+	return handoff() - float(PHOS.run) / 60.0
 
 
 #  유리를 뚫는 때(T.push1 · 인광 판 단이 끝나는 틀) — 무대가 끊긴다.

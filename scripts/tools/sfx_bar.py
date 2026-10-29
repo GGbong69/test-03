@@ -340,10 +340,10 @@ def phos_table():
     src = (ROOT / "scripts" / "prologue3d.gd").read_text(encoding="utf-8")
     ph = re.search(r"^const PHOS := \{(.*?)^\}", src, re.S | re.M).group(1)
     num = lambda k: float(re.search(r'"%s":\s*([\d.]+)' % k, ph).group(1))
-    solid, run, v0 = int(num("solid")), int(num("run")), num("v0")
+    solid, run, v0, rp = int(num("solid")), int(num("run")), num("v0"), num("ramp")
     m0, m1 = (float(v) for v in re.search(r'"mag":\s*\[([\d.]+),\s*([\d.]+)\]', ph).groups())
-    v1 = 2.0 * np.log(m1 / m0) / run - v0
-    mag = lambda F: m0 * np.exp(v0 * F + (v1 - v0) * F * F / (2.0 * run))
+    vm = (np.log(m1 / m0) - v0 * rp * 0.5) / (run - rp * 0.5)
+    mag = lambda F: m0 * np.exp(v0 * min(F, rp) + (vm - v0) * min(F, rp) ** 2 / (2.0 * rp) + vm * max(F - rp, 0.0))
     steps = [-run] + [next(F for F in range(run) if mag(F) >= num(k)) - run for k in ("stripe", "round")]
     cv = re.search(r'"conv":\s*\[(.*?)\]\],', ph, re.S).group(1)
     conv = [int(v) for v in re.findall(r"\[(\d+),", cv)]
@@ -372,9 +372,10 @@ def b_phos():
     ph = 2 * np.pi * np.cumsum(fh) / SR
     hum = sum((1.4 if k % 2 else 1.0) / k * np.sin(k * ph + rng.uniform(0, 2 * np.pi)) for k in range(1, 21))
     hum = shape(hum, lambda f: hp(f, 70) * lp(f, 1400), False) * (0.16 + 0.84 * u ** 1.6) * cut
-    #  이잉 — 사인과 같은 띠 잡음을 반씩
+    #  이잉 — 사인과 같은 띠 잡음을 반씩(검토 2 — 웅이 59% 라 150Hz 밑이 빠지는 노트북 · 발표장 스피커에서 차오르는 동안
+    #  거의 안 들렸다 → 이잉 · 띠 잡음 +6dB · 2~6kHz 몫이 차오르는 내내 12% 넘게)
     fw = 2400.0 * (4500.0 / 2400.0) ** (u ** 1.4) * (1.0 + 0.004 * np.sin(2 * np.pi * 6.0 * t))
-    ew = u ** 2.2 * cut
+    ew = u ** 1.2 * cut                                  # 일찍 들린다(옛 u^2.2 는 앞 0.5 초 2~6k 가 4% 밑)
     wh = np.sin(2 * np.pi * np.cumsum(fw) / SR) * ew
     wn = unit(shape(rng.standard_normal(n), lambda f: hp(f, 2200) * lp(f, 4800, 3), False)) * ew
     #  지직 — 결이 바뀌는 틀마다
@@ -403,7 +404,7 @@ def b_phos():
     for j, f in enumerate(PH_CONV[1:]):
         cv += (0.5 - 0.08 * j) * burst(n, PH_H + f / 60.0, 0.003, 0.0005, rng, band)
     pk = lambda y: y / max(np.max(np.abs(y)), 1e-9)       # 봉우리 1 로 맞춰 섞는다(섞는 몫이 곧 봉우리)
-    x = (0.32 * pk(hum) + 0.05 * wh + 0.05 * pk(wn) + 0.30 * pk(fz) + 0.40 * pk(tk) + 0.07 * tail
+    x = (0.32 * pk(hum) + 0.10 * wh + 0.10 * pk(wn) + 0.30 * pk(fz) + 0.40 * pk(tk) + 0.07 * tail
          + 0.10 * pk(cv))
     return roof(x, False, 35.0) * raised(n, 0.0, 60.0), False
 

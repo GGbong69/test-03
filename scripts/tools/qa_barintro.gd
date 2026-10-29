@@ -17,7 +17,7 @@ extends SceneTree
 #      handoff − run 틀에 서서 배가 틀마다 커지고(줄지 않는다) · 넘김 뒤 R · B 겹침을 지나 calm_at 앞에 걷힌다 ·
 #      필터는 handoff 틀(lit_at)에 켜지고 잔상은 calm_at 까지 0 · handoff 뒤 층은 Phos 만 · 들어가는 소리(bar_phos)가 entry_at 에
 #      나고 TV 스피커는 그 틀에 걷혀 있다(게임 필터는 처음 켠 값으로 돈다) · 인트로 박자(램프는 깜박임 뒤 · 꺼짐은 인광 판 안 · 쾅은 건넌 뒤 · 간판
-#      소리는 SIGN.t0 · 들어가는 동안(entry_at ~ handoff) 게임 소리가 하나도 안 난다 — 램프 꺼짐 딸깍 · 다트) · LEN(방 소리
+#      소리는 SIGN.t0 · 유리가 화면을 덮은 뒤(hush_at = handoff − run 틀 ~ handoff) 게임 소리가 하나도 안 난다 — 램프 꺼짐 딸깍) · LEN(방 소리
 #      꼬리)은 인트로 끝 앞
 #   godot --path . --script scripts/tools/qa_barintro.gd
 const Save = preload("res://scripts/save.gd")
@@ -54,8 +54,11 @@ var trail_ok := true       # calm_at 앞 필터가 선 틀은 잔상 0
 var cut_ok := true         # handoff 뒤 층에 Phos 말고 선 것이 없다
 var spk_late := false      # 들어가는 때가 지나고도 TV 스피커가 걸려 있었다
 var sign_snd := -1.0       # 인트로 간판 소리가 난 때
-var hush_nx := -1          # 들어가는 창 첫 틀의 게임 소리 자리(sfx_next) — 창 동안 바뀌면 소리가 났다
+var hush_nx := -1          # 막는 창(hush_at ~ handoff) 첫 틀의 게임 소리 자리(sfx_next) — 창 동안 바뀌면 소리가 났다
 var hush_n := 0            # 들어가는 창 동안 난 게임 소리 수
+var pre_nx := -1           # 뛰어듦 ~ 유리가 덮기 전(entry_at ~ hush_at) — 셋째 다트가 TV 스피커(TvSpk)로 난다
+var pre_n := 0
+var pre_spk := true
 
 
 func _initialize() -> void:
@@ -159,7 +162,11 @@ func _process(_d: float) -> bool:
 						cut_ok = cut_ok and (c == ph or not (c as CanvasItem).visible)
 				if t >= P.entry_at():
 					spk_late = spk_late or _sfx_fx() > fx0
-				if t >= P.entry_at() and t < hf:
+				if t >= P.entry_at() and t < P.hush_at():
+					pre_n += 0 if pre_nx < 0 or int(g.sfx_next) == pre_nx else 1
+					pre_nx = int(g.sfx_next)
+					pre_spk = pre_spk and g.plg_spk
+				if t >= P.hush_at() and t < hf:
 					hush_n += 0 if hush_nx < 0 or int(g.sfx_next) == hush_nx else 1
 					hush_nx = int(g.sfx_next)
 				if sign_snd < 0.0 and g.intro_rang.has("sign"):
@@ -268,11 +275,13 @@ func _process(_d: float) -> bool:
 				#  램프 꺼짐은 인광 판 안 — 유리가 화면을 덮는 틀 뒤(그 틀에 떨어지면 다이브 한가운데 밝기가 튀었다)
 				var off_f: int = roundi((fa + float(IN.off) - hf) / fr)
 				beat_ok = beat_ok and off_f > -run and off_f < 0
-				_ok("⑦ 인트로 박자 — 램프는 깜박임 뒤 · 꺼짐은 인광 판 안 · 쾅은 건넌 뒤 따로 · 들어가는 창에 게임 소리 없음",
-						beat_ok and hush_nx >= 0 and hush_n == 0
+				_ok("⑦ 인트로 박자 — 램프는 깜박임 뒤 · 꺼짐은 인광 판 안 · 쾅은 건넌 뒤 따로 · 유리가 덮은 뒤 게임 소리 없음",
+						beat_ok and hush_nx >= 0 and hush_n == 0 and is_equal_approx(P.hush_at(), hf - float(run) * fr)
+						and P.hush_at() > P.entry_at() and pre_n > 0 and pre_spk
 						and sign_snd >= float(P.SIGN.t0) - fr and sign_snd < float(P.SIGN.t0) + 3.0 * fr,
-						"램프 %.2f · 꺼짐 %.2f(H%+.0f) · 쾅 %.2f(H%+.0f) · 창 소리 %d · 간판 소리 %.2f" % [fa + float(IN.lamp),
-						fa + float(IN.off), (fa + float(IN.off) - hf) / fr, snap, (snap - hf) / fr, hush_n, sign_snd])
+						"램프 %.2f · 꺼짐 %.2f(H%+.0f) · 쾅 %.2f(H%+.0f) · 덮기 앞 TV 스피커 소리 %d · 창 소리 %d · 간판 소리 %.2f" % [
+						fa + float(IN.lamp), fa + float(IN.off), (fa + float(IN.off) - hf) / fr, snap, (snap - hf) / fr, pre_n, hush_n,
+						sign_snd])
 				_ok("⑦ 잔상 calm 까지 0 · 넘김 뒤 층은 인광 판만 · 들어갈 때 TV 스피커가 걷힌다", trail_ok and cut_ok and not spk_late)
 				st = 2
 				f = 0
