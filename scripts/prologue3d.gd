@@ -1856,18 +1856,36 @@ static func cross(root: Control, dt: float, poly := PackedVector2Array()) -> voi
 #  인광 줄 → 한가운데가 줄 틈과 행 틈이 엇갈린 검은 십자라 마지막 단들은 줄 사이 어둠으로 날아든다(줄이 바깥으로 빠진다).
 #  넘김(handoff)에 무대를 끊고 게임 필터를 켜면 같은 판이 밑 화면(필터 밑 게임 그림)을 R · G · B 세 장으로 갈라 conv 논리
 #  px 만큼 비켜 놓았다가 단으로 겹친다 — 셋을 더하면 제 빛깔이다(줄이 다시 한 그림으로 모인다).
-#  steps [handoff 앞 틀, 배(화면 논리 px ÷ 게임 px)] · gap [줄 틈 · 행 틈 몫] · stripe · round 그 결이 서는 배 ·
+#  rate 들어가는 빠르기(PHOS_RATE 의 한 줄) · mag 단마다 배(화면 논리 px ÷ 게임 px) — 단 표(phos_steps)는 rate 의 머묾에서
+#  쌓는다 · gap [줄 틈 · 행 틈 몫] · stripe · round 그 결이 서는 배(×5 주사선에서 ×33 끝이 둥근 줄로 곧장 뛴다 — 둘 사이 ×12 ·
+#  ×21 단은 화면 가득 R · G · B 낟알밭이라 그림이 안 읽혔다 · 2026-10-29 판정) ·
 #  gain [주사선 단 · 줄 단] 빛 배(1 에서 자른다 — 검은 틈이 먹은 밝기를 빔이 되돌린다) · tint 게임 그림 빛깔 배(무대 유리는 필름
-#  톤 · 말을 지나 붉고 짙다 — 넘겨받는 틀에 잿빛으로 바래지 않게) · 줄 단의 배는 3 의 배수(줄 폭이 고른 논리 px) · aim_n 날아들
-#  낟알(phos aim)에 한가운데가 닿는 단 차례 · conv [handoff 뒤 틀, 비킴 논리 px] · lit 필터를 켜는 틀 · calm 잔상을 끄는
+#  톤 · 말을 지나 붉고 짙다 — 넘겨받는 틀에 잿빛으로 바래지 않게) · ink [R · G · B 줄 빛깔] — 순 원색을 바의 따뜻하고 어두운
+#  빛 쪽으로 한 단 눌렀다(초록 · 파랑 줄은 한 단 더 어둡다 — 다트판 불의 빨강만 가장 밝다 · 순 원색 막대가 다른 그림체
+#  스티커로 떴다) · 줄 단의 배는 3 의 배수(줄 폭이 고른 논리 px) · aim_n 날아들 낟알(phos aim)에 한가운데가 닿는 단 차례 ·
+#  conv [handoff 뒤 틀, 비킴 논리 px, 크기 배, 빛 배] — 8 논리 px 에서 4 틀 안에 겹치고 첫 세 틀은 3% 크고 한 단 밝다(브라운관
+#  켜짐처럼 내려앉는다 · 16px 에서 시작하니 HIGHTON 간판이 겹글자로 읽혔다) · lit 필터를 켜는 틀 · calm 잔상을 끄는
 #  틀(겹침이 끝난 뒤 — 잔상이 비킨 장을 붙들지 않게) · take 무대 유리가 Phos 에 넘기는 배(3D 다가감의 그 틀 배)
 const PHOS := {
-	"steps": [[-24, 2.0], [-21, 3.0], [-18, 5.0], [-15, 12.0], [-12, 21.0], [-9, 33.0], [-7, 54.0], [-5, 90.0],
-			[-3, 159.0], [-2, 300.0], [-1, 600.0]],
+	"rate": "가운데",
+	"mag": [2.0, 3.0, 5.0, 33.0, 54.0, 90.0, 159.0, 300.0, 600.0],
 	"gap": Vector2(0.25, 0.4), "stripe": 12.0, "round": 30.0, "gain": Vector2(1.5, 1.6),
 	"tint": Vector3(1.2, 0.9, 0.9), "aim_n": 3,
-	"conv": [[0, 16.0], [2, 8.0], [4, 4.0], [6, 2.0], [8, 1.0], [10, 0.0]],
-	"lit": 0, "calm": 13, "take": 1.6,
+	"ink": [Vector3(1.0, 0.16, 0.08), Vector3(0.22, 0.62, 0.16), Vector3(0.14, 0.16, 0.58)],
+	"conv": [[0, 8.0, 1.03, 1.15], [1, 4.0, 1.03, 1.15], [2, 2.0, 1.03, 1.15], [3, 0.0, 1.0, 1.0]],
+	"lit": 0, "calm": 7, "take": 1.6,
+}
+#  들어가는 빠르기(2026-10-29 「지금 들어가는 속도가 좀 빠르네 좀 자연스러운 속도를 찾아서 수정하고」) — 한 줄이 뛰어듦을 다
+#  정한다: solid 3D 다가감 틀(뛰어듦 시작 → 유리가 화면을 다 덮는 틀 = Phos 첫 단) · hold mag 단마다 머무는 틀(줄어들기만
+#  한다 — 박자가 빨라진다 · 그림이 보이는 ×2 · 3 · 5 · 첫 줄 ×33 은 5~8 틀(애니 twos ~ threes) · 뒤 단도 3 틀 밑으로는 안
+#  간다 — 1~2 틀 단은 단으로 안 읽히고 깜박였다). 뛰어듦 = solid + Σhold 틀(phos_lunge) · handoff 에 끝난다. 3D 다가감은 로그
+#  줌 ease-in 이고 그 끝 빠르기를 첫 단 빠르기(ln(mag 1 ÷ mag 0) ÷ hold 0)에 맞춰 곡선 지수를 푼다(바 _phos_d — 유리가 화면을
+#  덮는 틀에 빠르기가 안 튄다). 옛 판은 0.7 초(3D 18 틀 · 단 1~3 틀 · 끝 τ 24ms — 크래시 줌 · 박치기)였다.
+#  느림 1.5 초 · 가운데 1.15 초 · 조금 빠름 0.95 초(조사 — 밀기 · 눈길 박자 1.0~1.3 초 · 브라운관 속으로 드는 장면들 1.5 초 언저리)
+const PHOS_RATE := {
+	"느림": {"solid": 36, "hold": [8, 8, 8, 7, 6, 5, 4, 4, 4]},
+	"가운데": {"solid": 26, "hold": [6, 6, 6, 6, 5, 4, 4, 3, 3]},
+	"조금 빠름": {"solid": 20, "hold": [5, 5, 5, 5, 4, 4, 3, 3, 3]},
 }
 const PHOS_SHADER := """
 shader_type canvas_item;
@@ -1884,14 +1902,21 @@ uniform float stripe = 9.0;
 uniform float rnd = 40.0;
 uniform vec2 gain = vec2(1.25, 1.6);
 uniform vec3 tint = vec3(1.0);
+uniform vec3 ink_r = vec3(1.0, 0.0, 0.0);
+uniform vec3 ink_g = vec3(0.0, 1.0, 0.0);
+uniform vec3 ink_b = vec3(0.0, 0.0, 1.0);
+//  겹침 틀의 크기 · 빛 배(내려앉는 틀 — 한가운데에서 크다)
+uniform float cz = 1.0;
+uniform float cg = 1.0;
 void fragment() {
 	if (ou >= 0.0) {
+		vec2 su = 0.5 + (SCREEN_UV - 0.5) / cz;
 		vec2 o = vec2(ou, 0.0);
-		vec2 ur = SCREEN_UV + o;
-		vec2 ub = SCREEN_UV - o;
+		vec2 ur = su + o;
+		vec2 ub = su - o;
 		//  비켜 난 끝은 검다(끝 열을 늘이지 않는다)
-		COLOR = vec4(ur.x <= 1.0 ? texture(sc, ur).r : 0.0, texture(sc, SCREEN_UV).g, ub.x >= 0.0 ? texture(sc, ub).b : 0.0,
-				1.0);
+		COLOR = vec4(vec3(ur.x <= 1.0 ? texture(sc, ur).r : 0.0, texture(sc, su).g, ub.x >= 0.0 ? texture(sc, ub).b : 0.0)
+				* cg, 1.0);
 	} else {
 		vec2 q = floor(UV * px) + 0.5;
 		vec2 g = c + (q - px * 0.5) / m;
@@ -1920,8 +1945,9 @@ void fragment() {
 					on = length(max(d, vec2(0.0))) <= r;
 				}
 				if (on) {
-					vec3 e = k < 0.5 ? vec3(1.0, 0.0, 0.0) : (k < 1.5 ? vec3(0.0, 1.0, 0.0) : vec3(0.0, 0.0, 1.0));
-					o = s * e * gain.y;
+					vec3 e = k < 0.5 ? ink_r : (k < 1.5 ? ink_g : ink_b);
+					//  줄은 제 채널 세기만큼 제 인광 빛깔(ink)로 빛난다
+					o = (k < 0.5 ? s.r : (k < 1.5 ? s.g : s.b)) * e * gain.y;
 				}
 			}
 		}
@@ -1950,33 +1976,65 @@ static func phos_make(root: Control, feed: Texture2D, px := Vector2(640.0, 360.0
 	pm.set_shader_parameter("rnd", float(PHOS.round))
 	pm.set_shader_parameter("gain", PHOS.gain)
 	pm.set_shader_parameter("tint", PHOS.tint)
+	for i in 3:
+		pm.set_shader_parameter(["ink_r", "ink_g", "ink_b"][i], PHOS.ink[i])
 	pr.material = pm
 	pr.visible = false
 	root.add_child(pr)
 	return pr
 
 
-#  phos_m 이 틀(dt = t − handoff)의 배 — steps 밖(첫 단 앞 · handoff 뒤)이면 0
+#  phos_rate 지금 빠르기 줄 · phos_lunge 뛰어듦 초(3D 다가감 + 단 — handoff 에 끝난다)
+static func phos_rate() -> Dictionary:
+	return PHOS_RATE[PHOS.rate]
+
+
+static func phos_lunge() -> float:
+	var r := phos_rate()
+	var n: int = int(r.solid)
+	for h in r.hold:
+		n += int(h)
+	return float(n) / 60.0
+
+
+#  phos_steps 단 표 [handoff 앞 틀, 배] — 머묾을 handoff 에서 거꾸로 쌓는다(마지막 단이 handoff 앞 틀에 끝난다)
+static func phos_steps() -> Array:
+	var hd: Array = phos_rate().hold
+	var out := []
+	var f := 0
+	for i in range(hd.size() - 1, -1, -1):
+		f -= int(hd[i])
+		out.push_front([f, float(PHOS.mag[i])])
+	return out
+
+
+#  phos_m 이 틀(dt = t − handoff)의 배 — 단 밖(첫 단 앞 · handoff 뒤)이면 0
 static func phos_m(dt: float) -> float:
 	var f: int = floori(dt * 60.0 + 0.001)
 	var m := 0.0
-	for s in PHOS.steps:
+	for s in phos_steps():
 		if f >= int(s[0]) and f < 0:
 			m = float(s[1])
 	return m
 
 
-#  phos_conv 넘김 뒤 겹침 비킴(논리 px) — 겹침이 끝났으면 −1
-static func phos_conv(dt: float) -> float:
+#  넘김 뒤 겹침 줄(PHOS.conv 의 그 틀 줄) — 겹침이 끝났으면 빈 줄
+static func _phos_row(dt: float) -> Array:
 	var f: int = floori(dt * 60.0 + 0.001)
 	var cv: Array = PHOS.conv
 	if f < 0 or f >= int(cv[cv.size() - 1][0]) + 2:
-		return -1.0
-	var o := -1.0
+		return []
+	var r: Array = cv[0]
 	for s in cv:
 		if f >= int(s[0]):
-			o = float(s[1])
-	return o
+			r = s
+	return r
+
+
+#  phos_conv 넘김 뒤 겹침 비킴(논리 px) — 겹침이 끝났으면 −1
+static func phos_conv(dt: float) -> float:
+	var r := _phos_row(dt)
+	return float(r[1]) if not r.is_empty() else -1.0
 
 
 #  phos 틀마다 — ce 유리 한가운데의 게임 px(feed px) · aim 날아들 낟알(다트판 한가운데 — 다트 게임이니 불로 든다). 배 단이면
@@ -1993,7 +2051,7 @@ static func phos(root: Control, dt: float, ce: Vector2, aim: Vector2) -> void:
 	if m > 0.0:
 		var gp: Vector2 = PHOS.gap
 		var k := 0
-		for s in PHOS.steps:
+		for s in phos_steps():
 			if f >= int(s[0]):
 				k += 1
 		var ct: Vector2 = ce.lerp(aim.floor() + Vector2(1.0 - gp.x / 6.0, 1.0 - gp.y / 2.0),
@@ -2005,6 +2063,9 @@ static func phos(root: Control, dt: float, ce: Vector2, aim: Vector2) -> void:
 		var vw: float = root.get_viewport_rect().size.x
 		var px: Vector2 = pm.get_shader_parameter("px")
 		pm.set_shader_parameter("ou", cv / px.x * root.size.x / maxf(vw, 1.0))
+		var cr := _phos_row(dt)
+		pm.set_shader_parameter("cz", float(cr[2]))
+		pm.set_shader_parameter("cg", float(cr[3]))
 	for c in root.get_children():
 		(c as CanvasItem).visible = (m > 0.0 or cv >= 0.0) if c == pr else (f < 0 and (c as Node).name != "Flash")
 

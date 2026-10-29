@@ -10,12 +10,15 @@ extends SceneTree
 #    ⑤ 누름 — 첫 누름 빨리 감기 · 둘째 누름 끝 → 버스 · 효과 · 무대가 안 남는다
 #    ⑧ 런 끝(완주 · 실패)의 「새 런」 — 바를 틀고 끝나면(건너뛰어도) 인트로 나머지 없이 제목 문으로(2026-10-28)
 #    ⑥ 개발자 판 — 「바 인트로 보기」 · 「켤 때 인트로」 줄이 있고 그 쪽이 열아홉 줄 안 · 켤 때 인트로 줄이 전역 값을 바꾼다
-#    ⑦ 인광 점 속으로(2026-10-28 · DIVE.mode "phosphor" · Plg PHOS — 반짝 · 번쩍은 없다) — 들어가는 때(entry_at)가
-#      handoff − (DIVE.cue + 한 틀) · 밀기가 서는 때 = 뛰어듦 시작 · 빗금 · 별 · 번쩍(Flash)이 한 틀도 안 선다 · 인광 판(Phos)은
-#      handoff + PHOS.steps 첫 틀에 서서 배가 단으로만 커지고(줄지 않는다) · 넘김 뒤 R · G · B 겹침을 지나 calm_at 앞에 걷힌다 ·
+#    ⑦ 인광 점 속으로(2026-10-28 · DIVE.mode "phosphor" · Plg PHOS — 반짝 · 번쩍은 없다) — 뛰어듦(lunge_at)이 handoff −
+#      Plg.phos_lunge() 이고 들어가는 때(entry_at)가 그 한 틀 앞 · 뛰어듦은 밀기 꼬리 위(밀기가 서기 전에 붙는다) · 단 표
+#      (phos_steps — PHOS_RATE 한 줄: 머묾은 줄어들기만 · 3 틀 밑 단 없음 · 첫 단 = 3D 끝 · 줄만 선 낟알밭 단(stripe ≤ 배 <
+#      round) 없음 · 겹침은 8 논리 px 밑에서 4 틀 안에 0) · 빗금 · 별 · 번쩍(Flash)이 한 틀도 안 선다 · 인광 판(Phos)은
+#      handoff + 단 표 첫 틀에 서서 배가 단으로만 커지고(줄지 않는다) · 넘김 뒤 R · G · B 겹침을 지나 calm_at 앞에 걷힌다 ·
 #      필터는 handoff 틀(lit_at)에 켜지고 잔상은 calm_at 까지 0 · handoff 뒤 층은 Phos 만 · 들어가는 소리(bar_phos)가 entry_at 에
 #      나고 TV 스피커는 그 틀에 걷혀 있다(게임 필터는 처음 켠 값으로 돈다) · 인트로 박자(램프는 깜박임 뒤 · 쾅은 건넌 뒤 · 간판
-#      소리는 SIGN.t0) · LEN(방 소리 꼬리)은 인트로 끝 앞
+#      소리는 SIGN.t0 · 들어가는 동안(entry_at ~ handoff) 게임 소리가 하나도 안 난다 — 램프 꺼짐 딸깍 · 다트) · LEN(방 소리
+#      꼬리)은 인트로 끝 앞
 #   godot --path . --script scripts/tools/qa_barintro.gd
 const Save = preload("res://scripts/save.gd")
 const Dev = preload("res://scripts/dev.gd")
@@ -51,6 +54,8 @@ var trail_ok := true       # calm_at 앞 필터가 선 틀은 잔상 0
 var cut_ok := true         # handoff 뒤 층에 Phos 말고 선 것이 없다
 var spk_late := false      # 들어가는 때가 지나고도 TV 스피커가 걸려 있었다
 var sign_snd := -1.0       # 인트로 간판 소리가 난 때
+var hush_nx := -1          # 들어가는 창 첫 틀의 게임 소리 자리(sfx_next) — 창 동안 바뀌면 소리가 났다
+var hush_n := 0            # 들어가는 창 동안 난 게임 소리 수
 
 
 func _initialize() -> void:
@@ -154,6 +159,9 @@ func _process(_d: float) -> bool:
 						cut_ok = cut_ok and (c == ph or not (c as CanvasItem).visible)
 				if t >= P.entry_at():
 					spk_late = spk_late or _sfx_fx() > fx0
+				if t >= P.entry_at() and t < hf:
+					hush_n += 0 if hush_nx < 0 or int(g.sfx_next) == hush_nx else 1
+					hush_nx = int(g.sfx_next)
 				if sign_snd < 0.0 and g.intro_rang.has("sign"):
 					sign_snd = t
 				if t < P.feed_at() - 0.05:
@@ -209,24 +217,31 @@ func _process(_d: float) -> bool:
 				var Pg = g.Plg
 				var hf: float = P.handoff()
 				var fr := 1.0 / 60.0
-				var cr: Array = P.DIVE.creep
 				var mp: Array = P.MOVE[3]
-				var l0: float = float(P.T.dive0) + float(cr[2]) * (float(P.T.dive1) - float(P.T.dive0))
+				var l0: float = P.lunge_at()
 				var PH: Dictionary = Pg.PHOS
-				var stp: Array = PH.steps
+				var RT: Dictionary = Pg.phos_rate()
+				var stp: Array = Pg.phos_steps()
 				var cv: Array = PH.conv
 				var tab_ok: bool = (Pg.phos_m((float(stp[0][0]) - 1.0) * fr) == 0.0 and Pg.phos_m(0.0) == 0.0
-						and Pg.phos_conv(-fr) < 0.0 and Pg.phos_conv(0.0) > 0.0
-						and Pg.phos_conv((float(cv[cv.size() - 1][0]) + 2.0) * fr) < 0.0)
-				for i in range(1, stp.size()):
-					tab_ok = tab_ok and float(stp[i][1]) > float(stp[i - 1][1]) and int(stp[i][0]) > int(stp[i - 1][0])
-				_ok("⑦ 인광 점 속으로 — 들어가는 때 · 소리 큐 없음 · 밀기 끝 = 뛰어듦 시작 · 단 표 · 필터 · 잔상 때",
-						P._phos() and is_equal_approx(P.entry_at(), hf - float(P.DIVE.cue) - fr) and P.cues().is_empty()
-						and absf(float(mp[0]) + float(mp[1]) - l0) < fr and tab_ok
-						and P.lit_at() < hf and P.lit_at() > hf - fr
+						and Pg.phos_conv(-fr) < 0.0 and Pg.phos_conv(0.0) > 0.0 and Pg.phos_conv(0.0) <= 8.0
+						and int(cv[cv.size() - 1][0]) <= 3 and float(cv[cv.size() - 1][1]) == 0.0
+						and Pg.phos_conv((float(cv[cv.size() - 1][0]) + 2.0) * fr) < 0.0
+						and int(stp[0][0]) == -(roundi(Pg.phos_lunge() * 60.0) - int(RT.solid))
+						and stp.size() == (PH.mag as Array).size())
+				var hd: Array = RT.hold
+				for i in stp.size():
+					var mm: float = float(stp[i][1])
+					tab_ok = tab_ok and int(hd[i]) >= 3 and not (mm >= float(PH.stripe) and mm < float(PH.round))
+					if i > 0:
+						tab_ok = tab_ok and mm > float(stp[i - 1][1]) and int(stp[i][0]) > int(stp[i - 1][0]) 								and int(hd[i]) <= int(hd[i - 1])
+				_ok("⑦ 인광 점 속으로 — 들어가는 때 = 뛰어듦 한 틀 앞 · 소리 큐 없음 · 뛰어듦은 밀기 꼬리 위 · 단 표 · 필터 · 잔상 때",
+						P._phos() and is_equal_approx(P.entry_at(), l0 - fr) and is_equal_approx(l0, hf - Pg.phos_lunge())
+						and P.cues().is_empty() and l0 <= float(mp[0]) + float(mp[1]) + fr and float(mp[0]) + float(mp[1]) < hf
+						and tab_ok and P.lit_at() < hf and P.lit_at() > hf - fr
 						and is_equal_approx(P.calm_at(), hf + (float(PH.calm) - 0.5) * fr)
 						and P.calm_at() > hf + (float(cv[cv.size() - 1][0]) + 1.0) * fr,
-						"들어감 %.3f · 뛰어듦 %.3f" % [P.entry_at(), l0])
+						"%s · 들어감 %.3f · 뛰어듦 %.3f(%.2f 초) · 단 %s" % [PH.rate, P.entry_at(), l0, Pg.phos_lunge(), str(stp)])
 				_ok("⑦ 반짝 · 번쩍 없음 · 인광 판(첫 단 틀 · 배는 단으로만 큰다 · 넘김 뒤 겹침 · calm 앞에 걷힌다) · 필터 때",
 						not gl_seen and absf(ph0 - (hf + float(stp[0][0]) * fr)) <= 3.0 * fr and ph_up
 						and ph_m.size() >= stp.size() - 3 and ph_cv and ph1 < P.calm_at()
@@ -241,12 +256,12 @@ func _process(_d: float) -> bool:
 				var lid: Array = P.LID
 				var snap: float = fa + float(IN.snap) + float(IN.snap_t)
 				var w0: float = P.entry_at() - float(P.SND.tv_out)
-				var beat_ok: bool = fa + float(IN.lamp) > float(lid[lid.size() - 1][0]) and snap > P.calm_at()
-				for bt in [fa + float(IN.lamp), fa + float(IN.off), snap]:
-					beat_ok = beat_ok and (bt < w0 or bt > P.calm_at())
-				_ok("⑦ 인트로 박자 — 램프는 깜박임 뒤 · 쾅은 건넌 뒤 따로 · 들어가는 창에 TV 그림 소리 없음",
-						beat_ok and sign_snd >= float(P.SIGN.t0) - fr and sign_snd < float(P.SIGN.t0) + 3.0 * fr,
-						"램프 %.2f · 쾅 %.2f(H%+.0f) · 간판 소리 %.2f" % [fa + float(IN.lamp), snap, (snap - hf) / fr, sign_snd])
+				var beat_ok: bool = fa + float(IN.lamp) > float(lid[lid.size() - 1][0]) and fa + float(IN.lamp) < w0 						and snap > P.calm_at()
+				_ok("⑦ 인트로 박자 — 램프는 깜박임 뒤 · 쾅은 건넌 뒤 따로 · 들어가는 창에 게임 소리 없음",
+						beat_ok and hush_nx >= 0 and hush_n == 0
+						and sign_snd >= float(P.SIGN.t0) - fr and sign_snd < float(P.SIGN.t0) + 3.0 * fr,
+						"램프 %.2f · 꺼짐 %.2f(H%+.0f) · 쾅 %.2f(H%+.0f) · 창 소리 %d · 간판 소리 %.2f" % [fa + float(IN.lamp),
+						fa + float(IN.off), (fa + float(IN.off) - hf) / fr, snap, (snap - hf) / fr, hush_n, sign_snd])
 				_ok("⑦ 잔상 calm 까지 0 · 넘김 뒤 층은 인광 판만 · 들어갈 때 TV 스피커가 걷힌다", trail_ok and cut_ok and not spk_late)
 				st = 2
 				f = 0

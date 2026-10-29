@@ -7811,6 +7811,10 @@ func _sfx_jit() -> float:
 
 #  db — 얇게 겹치는 층(×배수의 5도). 자리를 돌려 쓰므로 매번 덮는다.
 func _sfx(name: String, f := 0.0, db := 0.0) -> void:
+	#  바 인트로가 TV 유리 속으로 드는 동안(entry_at ~ handoff)은 TV 그림 소리가 없다 — TV 소리는 그 앞에 걷혔다(램프 꺼짐
+	#  딸깍 · 다트가 스피커 없이 뛰어듦 한가운데 났다)
+	if _plg_live() and plg_mod == PlgBar and plg_t >= PlgBar.entry_at() and plg_t < PlgBar.handoff():
+		return
 	var st := _sfx_file(name)
 	if st != null and not sfx_pool.is_empty():
 		var pl: AudioStreamPlayer = sfx_pool[sfx_next]

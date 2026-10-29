@@ -7,7 +7,8 @@ extends SceneTree
 #       유리 속으로 빨려 드는 효과라 따로 적기만 한다.
 #    ② TV 유리 한가운데가 그림 한가운데 — TV 가 다 들어온 뒤(멈춤 · 밀기 · 다이브) |dx| · |dy| ≤ 그림 폭 · 높이의 5%.
 #    ③ 다가감 빠르기(틀당 그림이 커지는 몫 — 거리 · 화각) — 뛰어듦 앞은 어느 틀도 Z_MAX 를 안 넘고(밀기는 천천히) ·
-#       뛰어듦(Plg dive_w 세제곱)은 handoff 까지 줄지 않고 는다(유리 앞에서 서지 않고 뚫는다).
+#       뛰어듦은 handoff 까지 줄지 않고 는다(유리 앞에서 서지 않고 뚫는다 · 끝 틀 5% 넘게). 인광 점 속으로는 유리가 화면을
+#       다 덮는 틀(Phos 첫 단 — 그 뒤 3D 는 안 보인다)까지 · 끝 빠르기가 첫 단 빠르기의 0.9 배 넘게(이어받을 때 안 튄다).
 #  <스틸 폴더>/tmap.txt — 그린 틀마다 [틀 번호 · plg_t · 유리까지 거리 · 화각 · glint · spark · portal · 번쩍 단 · 유리 둘레
 #  꼭짓점 수(오름 단 — 0 이면 화면 전체) · CRT · VHS · 도트 켜짐 · 인광 판 배 · 겹침 비킴] — Movie Maker 그림 번호는 틀 번호 − 1. 게임 필터는 처음 켠 값(CRT_DEF …)으로 찍는다.
 #   godot --path . --resolution 1280x720 --fixed-fps 60 [--write-movie <폴더>/m.png] \
@@ -39,6 +40,7 @@ func _initialize() -> void:
 	Save.path = "user://_bi.cfg"
 	Save.prof_fmt = "user://_bi_%d.cfg"
 	Save.wipe()
+	seed(2661)            # 같은 씨 — 판끼리 견줄 때 다트 · 잡음이 같다
 	var a := OS.get_cmdline_user_args()
 	out = a[0] if a.size() > 0 else OS.get_user_data_dir().path_join("barintro")
 	if a.size() > 1:
@@ -156,8 +158,8 @@ func _report() -> void:
 		w.append([float(rec[i][0]), _ang(rec[i - 1][1], rec[i][1]) / maxf(dt, 0.0001)])
 	var dive0: float = P.T.dive0
 	var dive1: float = P.T.dive1
-	#  눈길이 끝나는 때 = 뛰어듦 시작(밀기는 dive0 너머 creep uh 몫까지 간다 — 옛 창은 16.2 에 끊겨 마지막 0.75 초를 안 쟀다)
-	var l0: float = dive0 + float(P.DIVE.creep[2]) * (dive1 - dive0)
+	#  눈길이 끝나는 때 = 뛰어듦 시작(P.lunge_at — 옛 창은 16.2 에 끊겨 마지막 0.75 초를 안 쟀다)
+	var l0: float = P.lunge_at()
 	#  ① 길마다 — 가장 빠른 틀 · 첫 · 끝 틀(움직임이 0.05°/s 넘는 첫 · 마지막 틀)
 	var H: Dictionary = P.HEAD
 	for mv in P.MOVE:
@@ -217,7 +219,7 @@ func _report() -> void:
 		n += 1
 		cx = maxf(cx, absf(float(r[2])))
 		cy = maxf(cy, absf(float(r[3])))
-		full = full and bool(r[4]) if float(r[0]) < dive0 else full
+		full = full and bool(r[4]) if float(r[0]) < minf(dive0, l0) else full
 	var cok: bool = n > 30 and cx <= C_MAX and cy <= C_MAX and full
 	lines.append("TV 한가운데 %.2f~%.2f  틀 %d  |dx| 최대 %.3f  |dy| 최대 %.3f  다이브 앞 유리 다 듦 %s  %s" % [c0, dive1, n, cx, cy,
 			str(full), "통과" if cok else "실패"])
@@ -229,9 +231,15 @@ func _report() -> void:
 	var zdrop := 0
 	var pz := -1.0
 	var zl := []
+	var z1: float = dive1
+	var zend := 0.05
+	if P._phos():
+		var Pg = g.Plg
+		z1 = P.handoff() + (float(Pg.phos_steps()[0][0]) - 0.5) / 60.0
+		zend = 0.9 * log(float(Pg.PHOS.mag[1]) / float(Pg.PHOS.mag[0])) / float(Pg.phos_rate().hold[0])
 	for i in range(1, rec.size()):
 		var t1: float = rec[i][0]
-		if t1 < float(P.MOVE[3][0]) or t1 >= dive1:
+		if t1 < float(P.MOVE[3][0]) or t1 >= z1:
 			continue
 		var z: float = log(float(rec[i - 1][5]) * tan(deg_to_rad(float(rec[i - 1][6])) * 0.5)
 				/ (float(rec[i][5]) * tan(deg_to_rad(float(rec[i][6])) * 0.5)))
@@ -244,7 +252,7 @@ func _report() -> void:
 				zdrop += 1
 			pz = z
 			zl.append("%.3f:%.2f" % [t1, z * 100.0])
-	var zok: bool = zmx <= Z_MAX and zdrop == 0 and pz > 0.05
+	var zok: bool = zmx <= Z_MAX and zdrop == 0 and pz > zend
 	lines.append("다가감 밀기 최고 %.2f%%/틀(%.2f) · 뛰어듦 %.3f~ 줄어든 틀 %d · 끝 틀 %.1f%%  %s" % [zmx * 100.0, zat, l0, zdrop,
 			pz * 100.0, "통과" if zok else "실패"])
 	lines.append("뛰어듦(%/틀) " + " ".join(zl))

@@ -332,19 +332,35 @@ def b_tv_hum():
     return unit(hum) + unit(wh) * np.sqrt(share / (1.0 - share)), True
 
 
-#  인광 점 속으로(2026-10-28 · prologue3d PHOS · prologue_bar3d DIVE.cue) — 파일 PH_H 초가 handoff(무대를 끊고 게임 필터를
-#  켜는 틀). 그 앞 틀 자리는 Phos 단(PH_STEPS) · 뒤는 겹침 단(PH_CONV) — 둘 다 handoff 기준 60Hz 틀.
-PH_H = 0.66
-PH_STEPS = (-24, -21, -18, -15, -12, -9, -7, -5, -3, -2, -1)
-PH_CONV = (0, 2, 4, 6, 8, 10)
+#  인광 점 속으로(2026-10-28 · prologue3d PHOS · PHOS_RATE) — 파일 PH_H 초가 handoff(무대를 끊고 게임 필터를 켜는 틀) ·
+#  파일 0 초가 뛰어듦 첫 틀(prologue_bar3d entry_at). 그 앞 틀 자리는 Phos 단(PH_STEPS) · 뒤는 겹침 단(PH_CONV) — 둘 다
+#  handoff 기준 60Hz 틀. 손으로 옮겨 적지 않고 prologue3d.gd 의 표를 읽는다(빠르기 줄을 바꾸면 다시 굽는다 · Plg phos_lunge ·
+#  phos_steps 와 같은 셈).
+def phos_table():
+    src = (ROOT / "scripts" / "prologue3d.gd").read_text(encoding="utf-8")
+    ph = re.search(r"^const PHOS := \{(.*?)^\}", src, re.S | re.M).group(1)
+    rate = re.search(r'"rate":\s*"([^"]+)"', ph).group(1)
+    tb = re.search(r"^const PHOS_RATE := \{(.*?)^\}", src, re.S | re.M).group(1)
+    m = re.search(r'"%s":\s*\{"solid":\s*(\d+),\s*"hold":\s*\[([\d,\s]+)\]\}' % re.escape(rate), tb)
+    solid, hold = int(m.group(1)), [int(v) for v in m.group(2).split(",")]
+    steps, f = [], 0
+    for h in reversed(hold):
+        f -= h
+        steps.insert(0, f)
+    cv = re.search(r'"conv":\s*\[(.*?)\]\],', ph, re.S).group(1)
+    conv = [int(v) for v in re.findall(r"\[(\d+),", cv)]
+    return (solid + sum(hold)) / 60.0, tuple(steps), tuple(conv)
+
+
+PH_H, PH_STEPS, PH_CONV = phos_table()
 
 
 def b_phos():
     #  브라운관 속으로 빨려 든다 — 차오르는 웅(수직 편향 60Hz 홀수 배음 · 60 → 90Hz 로 오른다) 위에 이잉(1.2 → 4.6kHz 로
     #  빨라지며 오르는 가는 사인 · 다가감처럼 끝에 가장 빠르다) · 유리를 다 덮은 뒤 인광 줄을 지날 때 지직(Phos 단마다 한 줌 —
-    #  단 첫머리에 고압 톡 · 단이 갈수록 세다 · 1.8~4.8k 띠 잡음이 그 단 동안 잦아든다). handoff 에 셋이 5ms 로 끊기고 무른
-    #  툭(110 → 50Hz — 0.33 초 뒤 인트로의 네온 쾅보다 작다 · 그쪽이 「들어왔다」 한 박)과 60Hz 웅 꼬리 · 겹침 단마다 작아지는
-    #  톡 — 방에 울리지 않는다(TV 속이다 · 잔향 없음).
+    #  단 첫머리에 고압 톡 · 단이 갈수록 세다 · 1.8~4.8k 띠 잡음이 그 단 동안 잦아든다). handoff 에 셋이 5ms 로 끊기고 60Hz
+    #  웅 꼬리 · 겹침 단마다 작아지는 톡 — 넘김엔 때리는 소리가 없다(옛 무른 툭 · 딸깍이 0.34 초 뒤 인트로의 네온 쾅과 비슷한
+    #  크기로 두 번 쳤다 — 쾅이 「들어왔다」 한 박) · 방에 울리지 않는다(TV 속이다 · 잔향 없음).
     L = PH_H + 0.47
     n = ns(L)
     t = np.arange(n) / SR
@@ -376,13 +392,9 @@ def b_phos():
             tk += lv * 0.5 * rng.random() * burst(n, rng.uniform(st[i], st[i + 1]), 0.003, 0.0004, rng, band)
     fz *= cut
     tk *= cut
-    #  넘김 — 낮은 툭 · 무른 딸깍 · 웅 꼬리 · 겹침 단마다 작아지는 톡
+    #  넘김 — 웅 꼬리 · 겹침 단마다 작아지는 톡
     tl = np.clip(t - PH_H, 0.0, None)
     post = ~pre
-    thud = np.zeros(n)
-    thud[post] = np.sin(2 * np.pi * np.cumsum(50.0 + 60.0 * np.exp(-tl[post] / 0.04)) / SR) \
-        * np.exp(-tl[post] / 0.06) * np.minimum(tl[post] / 0.002, 1.0)
-    clk = burst(n, PH_H, 0.006, 0.0012, rng, lambda f: hp(f, 150) * lp(f, 1200))
     tail = np.zeros(n)
     tph = 2 * np.pi * 60.0 * tl[post]
     tail[post] = (np.sin(tph) + 0.5 * np.sin(3 * tph) + 0.25 * np.sin(5 * tph)) * np.exp(-tl[post] / 0.15) \
@@ -391,8 +403,7 @@ def b_phos():
     for j, f in enumerate(PH_CONV[1:]):
         cv += (0.5 - 0.08 * j) * burst(n, PH_H + f / 60.0, 0.003, 0.0005, rng, band)
     pk = lambda y: y / max(np.max(np.abs(y)), 1e-9)       # 봉우리 1 로 맞춰 섞는다(섞는 몫이 곧 봉우리)
-    x = (0.32 * pk(hum) + 0.10 * wh + 0.16 * pk(fz) + 0.22 * pk(tk) + 0.24 * thud + 0.12 * pk(clk)
-         + 0.14 * tail + 0.10 * pk(cv))
+    x = 0.32 * pk(hum) + 0.10 * wh + 0.16 * pk(fz) + 0.22 * pk(tk) + 0.14 * tail + 0.10 * pk(cv)
     return roof(x, False, 35.0) * raised(n, 0.0, 60.0), False
 
 

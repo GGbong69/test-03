@@ -6,7 +6,7 @@ extends SceneTree
 #       건드린다) 눈 뜨는 정도로 컷오프를 밀고, 걷으면 그 이름이 사라지고 버스 수가 처음으로 돌아온다
 #   godot --headless --path . --script scripts/tools/qa_barsfx.gd
 const LEN := {"bar_room": 8.0, "bar_clink": 1.3, "bar_polish": 3.0, "bar_glass_down": 0.8,
-		"bar_tv_static": 4.0, "bar_tv_hum": 4.0, "bar_phos": 1.13}
+		"bar_tv_static": 4.0, "bar_tv_hum": 4.0, "bar_phos": 0.47}   # bar_phos 는 뛰어듦(Plg.phos_lunge) + 넘김 뒤 0.47
 const LOOP := ["bar_room", "bar_polish", "bar_tv_static", "bar_tv_hum"]
 const AMB := ["bar_room", "bar_clink", "bar_polish", "bar_glass_down"]   # 방 소리 — 로패스 밑 · TV 둘은 SFX 그대로
 var ok := 0
@@ -40,7 +40,8 @@ func _initialize() -> void:
 			continue
 		_chk(st.format == AudioStreamWAV.FORMAT_16_BITS and st.mix_rate == 44100 and not st.stereo,
 				"%s — 16비트 · 44.1k · 모노" % nm)
-		_chk(absf(st.get_length() - float(LEN[nm])) < 0.01, "%s — %.2f초 (%.2f)" % [nm, st.get_length(), LEN[nm]])
+		var ln: float = float(LEN[nm]) + (G.Plg.phos_lunge() if nm == "bar_phos" else 0.0)
+		_chk(absf(st.get_length() - ln) < 0.01, "%s — %.2f초 (%.2f)" % [nm, st.get_length(), ln])
 		_chk(st.loop_mode == AudioStreamWAV.LOOP_DISABLED, "%s — 원본은 한 번만 난다(.import loop 0)" % nm)
 	#  ③ 버스 — 게임에서는 _bus_setup 이 SFX 를 이미 세웠다. 여기는 화면 없는 도구라 없으면 세운다.
 	if AudioServer.get_bus_index("SFX") < 0:
