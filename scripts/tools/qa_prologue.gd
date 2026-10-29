@@ -24,9 +24,10 @@ extends SceneTree
 #       넘게 들어가 바닥에서 버틴다 · 떼면 앞으로 조금 넘쳤다 선다 · 바닥에서 검지 끝마디가 젖는다 · 카세트는 걸려 서고 →
 #       낚아채여 확 → 고른 빠르기로 끌리고 → 멎은 뒤 내려앉는다 · 소리 일곱(걸림 딸깍 · 모터) · 키가 그림자를 드리운다(손 ·
 #       덮개 · 단추만 — 카세트는 아니다) · 먼지 낀 공기 · 빛줄기 기둥이 섰다 · 층이 걷힐 때 3D 층의 색 · 낟알 · 안개가 다 걷혔다
-#       유리 뚫기 — 인광 점 속으로(2026-10-29 「1번으로 하자」 · 바 인트로와 같은 PHOS 단 표 · 옛 반짝 · 번쩍 · 삐싱은 걷었다):
-#       들어가는 소리(bar_phos) 때 · handoff = push1 · 다가감은 램프가 켜진 뒤 선 데서 붙어 줄지 않고 늘어 Phos 첫 단에 유리 배
-#       take · 그 틀 빠르기 = 첫 단 빠르기 · 인광 판이 층 맨 위 · 반짝이 한 틀도 안 서고 판이 첫 단 틀에 서서 배가 단으로만 크고
+#       유리 뚫기 — 인광 점 속으로(2026-10-29 「1번으로 하자」 · 바 인트로와 같은 PHOS 표 · 옛 반짝 · 번쩍 · 삐싱은 걷었다):
+#       들어가는 소리(bar_phos) 때 · handoff = push1 = 바와 같은 인트로 때 · 다가감은 램프가 선 뒤 0.4 초에 선 데서 붙어 줄지
+#       않고 늘어 인광 판 첫 틀에 유리 배 mag[0] · 그 틀 빠르기 = PHOS.v0 · 인광 판이 층 맨 위 · 반짝이 한 틀도 안 서고 판이 첫
+#       틀에 서서 배가 틀마다 크고
 #       넘김 뒤 R · G · B 겹침 · 필터는 넘김 틀 · 잔상은 겹침 뒤
 #   godot --path . --script scripts/tools/qa_prologue.gd
 const Save = preload("res://scripts/save.gd")
@@ -318,9 +319,10 @@ func _process(_d: float) -> bool:
 				for k in tape_snd:
 					cu_ok = cu_ok and cu.has(k) and float(cu[k]) < TL and g._sfx_file(k) != null
 				_ok("⑨ 소리 때 — 비 · TV · 앞 토막 일곱(파일이 있다)", cu_ok, str(cu.keys()))
-				#  유리 뚫기 — 인광 점 속으로(2026-10-29 「1번으로 하자」 · PHOS — 바 인트로와 같은 단 표): 들어가는 소리(bar_phos)가
-				#  handoff − phos_lunge 한 틀 앞 · 반짝 소리(tv_glint) 없음 · handoff 가 곧 push1 · 다가감은 램프가 켜진 뒤 선 데서 붙어
-				#  (w 0 · 빠르기 0) 빠르기가 줄지 않고 늘어 Phos 첫 단에 유리 배 take · 그 틀 빠르기가 첫 단 빠르기 · 넘김엔 끝 거리(w 1) ·
+				#  유리 뚫기 — 인광 점 속으로(2026-10-29 「1번으로 하자」 · PHOS — 바 인트로와 같은 표): 들어가는 소리(bar_phos)가
+				#  handoff − phos_lunge 한 틀 앞 · 반짝 소리(tv_glint) 없음 · handoff 가 곧 push1 · 바와 같은 인트로 때 · 다가감은 램프가
+				#  선 뒤 0.4 초에 선 데서 붙어(w 0 · 빠르기 0) 빠르기가 줄지 않고 늘어 인광 판 첫 틀에 유리 배 mag[0] · 그 틀 빠르기가
+				#  PHOS.v0 · 넘김엔 끝 거리(w 1) ·
 				#  층 맨 위가 인광 판(번쩍 판 없음) · 필터는 넘김 틀에 켜지고 잔상은 겹침이 끝난 뒤
 				var hf: float = P.handoff()
 				var hn0: Node = g.plg_vp
@@ -335,7 +337,7 @@ func _process(_d: float) -> bool:
 				var d0: float = (cs.at as Vector3).distance_to(ce.look)
 				var ze: float = log(d0 / (ce.at as Vector3).distance_to(ce.look))
 				var kz: float = float(hn0.get_meta("glass_h")) / (2.0 * tan(deg_to_rad(float(P.CAM.fov)) * 0.5))
-				var re: float = log(float(P.PHOS.mag[1]) / float(P.PHOS.mag[0])) / float(P.phos_rate().hold[0])
+				var re: float = float(P.PHOS.v0)
 				var mono := true
 				var pv := 0.0
 				var pw := 0.0
@@ -351,12 +353,14 @@ func _process(_d: float) -> bool:
 				_ok("⑨ 유리 뚫기 — 들어가는 소리 · 다가감(선 데서 · 줄지 않고 · 유리 배 · 첫 단 빠르기) · 인광 판 자리 · 필터 · 잔상 때",
 						cu.has("bar_phos") and not cu.has("tv_glint") and g._sfx_file("bar_phos") != null
 						and is_equal_approx(float(cu.bar_phos), hf - P.phos_lunge() - fr) and is_equal_approx(hf, float(P.T.push1))
-						and p0 > P.feed_at() + float(IN.lamp) and P._push_w(hn0, p0) == 0.0 and P._push_w(hn0, hf) == 1.0
-						and mono and absf(m1 - float(P.PHOS.take)) < 0.01 and absf(r1 - re) < re * 0.06
+						and p0 >= P.feed_at() + float(IN.lamp) + float((IN.flick as Array).back()) + 0.4 - fr
+						and absf((hf - P.feed_at()) - (g.PlgBar.handoff() - g.PlgBar.feed_at())) < fr
+						and P._push_w(hn0, p0) == 0.0 and P._push_w(hn0, hf) == 1.0
+						and mono and absf(m1 - float(P.PHOS.mag[0])) < 0.01 and absf(r1 - re) < re * 0.06
 						and ph is ColorRect and ph.get_index() == rt.get_child_count() - 1 and rt.get_node_or_null("Flash") == null
 						and P.lit_at() < hf and P.lit_at() > hf - fr
 						and P.calm_at() > hf + (float(cv[cv.size() - 1][0]) + 1.0) * fr,
-						"소리 %.3f · 다가감 %.2f~%.2f(%d 틀) · 유리 배 %.2f · 끝 빠르기 %.4f / 첫 단 %.4f · handoff %.2f" % [
+						"소리 %.3f · 다가감 %.2f~%.2f(%d 틀) · 유리 배 %.2f · 끝 빠르기 %.4f / 인광 판 첫 %.4f · handoff %.2f" % [
 						float(cu.get("bar_phos", -1.0)), p0, t1, roundi(n), m1, r1, re, hf])
 				_ok("⑨ 철컥 소리의 쿵이 TAPE.clunk 에 선다", is_equal_approx(float(cu.deck_clunk) + float(TP.lead), float(TP.clunk)))
 				var pb: float = float(TP.press[2])
@@ -479,12 +483,14 @@ func _process(_d: float) -> bool:
 				_ok("⑨ 꾹 — 떼면 단추가 앞으로 조금 넘쳤다 선다", btn_over > 0.0002 and btn_over < 0.001,
 						"%.2fmm" % (btn_over * 1000.0))
 				_ok("⑨ 꾹 — 바닥에서 검지 끝마디가 젖는다", dip_ok)
-				var stp: Array = g.Plg.phos_steps()
+				var run: int = int(g.Plg.PHOS.run)
 				var hf2: float = g.Plg.handoff()
-				_ok("⑨ 인광 점 속으로 — 반짝 없음 · 판이 첫 단 틀에 서서 배가 단으로만 크고 · 넘김 뒤 겹침 · 필터는 넘김 틀",
-						not gl_seen and absf(ph0 - (hf2 + float(stp[0][0]) / 60.0)) <= 3.0 / 60.0 and ph_up
-						and ph_m.size() >= stp.size() - 3 and ph_cv and lit0 >= g.Plg.lit_at() and lit0 < hf2 + 3.0 / 60.0,
-						"판 H%+.0f 틀 · 배 %s · 필터 H%+.0f 틀" % [(ph0 - hf2) * 60.0, str(ph_m), (lit0 - hf2) * 60.0])
+				_ok("⑨ 인광 점 속으로 — 반짝 없음 · 판이 첫 틀에 서서 배가 틀마다 크고 · 넘김 뒤 겹침 · 필터는 넘김 틀",
+						not gl_seen and absf(ph0 - (hf2 - float(run) / 60.0)) <= 3.0 / 60.0 and ph_up
+						and ph_m.size() >= run - 6 and ph_cv and lit0 >= g.Plg.lit_at() and lit0 < hf2 + 3.0 / 60.0,
+						"판 H%+.0f 틀 · 배 %d 틀 %.1f → %.0f · 필터 H%+.0f 틀" % [(ph0 - hf2) * 60.0, ph_m.size(),
+						float(ph_m[0]) if not ph_m.is_empty() else 0.0, float(ph_m[ph_m.size() - 1]) if not ph_m.is_empty() else 0.0,
+						(lit0 - hf2) * 60.0])
 				_ok("⑨ 층이 걷힐 때 3D 층의 색 · 낟알 · 안개가 다 걷혔다", gone_k == 0.0 and gone_fog == 0.0,
 						"%.3f · %.4f" % [gone_k, gone_fog])
 				_ok("⑨ 누를 때 검지가 펴져 단추에 닿고 셋은 말렸다", poke_n > 0 and poke_btn, "%d 틀" % poke_n)

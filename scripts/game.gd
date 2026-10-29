@@ -1612,7 +1612,6 @@ func _plg_begin(kind := "", to_title := false) -> void:
 	plg_mod = PlgBar if kind == "bar" else Plg
 	if not _has_renderer() or screen_host == null or not is_instance_valid(screen_host):
 		return
-	intro_soft = plg_mod == PlgBar
 	plg_vp = plg_mod.make(self, screen_host)
 	plg_t = 0.0
 	plg_ff = false
@@ -1732,7 +1731,6 @@ func _plg_end() -> void:
 		_intro_end()
 	elif not fed:
 		intro_t = 0.0
-		intro_soft = false        # 처음부터 트는 인트로는 제 쾅(금빛 번쩍)대로
 		_pwr_start(true)
 	queue_redraw()
 
@@ -1810,8 +1808,6 @@ var intro_out := 0.0       # 제목으로 넘긴 뒤 글줄을 덮은 막(1 → 
 var intro_fired := 0       # 던진 자루 수
 var intro_rang := {}       # 한 번만 울리는 소리
 var intro_ff := false      # 첫 누름 뒤 — 빨리 감는 중
-#  바 인트로가 튼 인트로 — 네온 쾅은 금빛 번쩍 없이 −6dB(0.34 초 앞 흰 번쩍 · 퍽이 절정으로 남는다 · 유리 반짝 검토 2)
-var intro_soft := false
 
 
 func _intro_wanted() -> bool:
@@ -1826,7 +1822,6 @@ func _intro_begin() -> void:
 	intro_out = 0.0
 	intro_fired = 0
 	intro_ff = false
-	intro_soft = false
 	intro_rang.clear()
 	pause_from = -1
 	state = S.INTRO
@@ -1875,7 +1870,7 @@ func _intro_tick(d: float) -> void:
 	if maxf(t, plg_sign_t) >= float(INTRO.sign):
 		_intro_once("sign", "leg_open")
 	if t >= float(INTRO.snap) + float(INTRO.snap_t):
-		_intro_once("snap", "settle_total", -6.0 if intro_soft else 0.0)
+		_intro_once("snap", "settle_total")
 		if not intro_rang.has("snap_shake"):
 			intro_rang["snap_shake"] = true
 			shake = maxf(shake, 3.0)
@@ -1992,9 +1987,9 @@ func _draw_intro() -> void:
 	_ttl_draw()
 	draw_set_transform(shake_off)
 	_intro_sign(maxf(t, plg_sign_t), 1.0 - st, _sign_base(shake_off))
-	#  두 낱말이 붙는 순간 금빛 번쩍(바 인트로는 없다 — intro_soft)
+	#  두 낱말이 붙는 순간 금빛 번쩍(두 여는 장면도 — 인광 점 속으로는 넘김에 때리는 그림 · 소리가 없어 이 쾅이 도착 한 박이다)
 	var ft: float = t - float(INTRO.snap) - float(INTRO.snap_t)
-	if ft >= 0.0 and ft < float(INTRO.flash) and not intro_soft:
+	if ft >= 0.0 and ft < float(INTRO.flash):
 		var fk: float = 1.0 - ft / float(INTRO.flash)
 		draw_rect(_full(), Color(C_ACC, 0.16 * fk * fk))
 
@@ -7811,9 +7806,9 @@ func _sfx_jit() -> float:
 
 #  db — 얇게 겹치는 층(×배수의 5도). 자리를 돌려 쓰므로 매번 덮는다.
 func _sfx(name: String, f := 0.0, db := 0.0) -> void:
-	#  바 인트로가 TV 유리 속으로 드는 동안(entry_at ~ handoff)은 TV 그림 소리가 없다 — TV 소리는 그 앞에 걷혔다(램프 꺼짐
-	#  딸깍 · 다트가 스피커 없이 뛰어듦 한가운데 났다)
-	if _plg_live() and plg_mod == PlgBar and plg_t >= PlgBar.entry_at() and plg_t < PlgBar.handoff():
+	#  여는 장면이 TV 유리 속으로 드는 동안(entry_at ~ handoff)은 TV 그림 소리가 없다(바는 TV 소리가 그 앞에 걷혀 램프 꺼짐
+	#  딸깍 · 다트가 스피커 없이 뛰어듦 한가운데 났고 · 테이프는 들어가는 소리 밑에 다트 · 딸깍이 섞였다)
+	if _plg_live() and plg_t >= plg_mod.entry_at() and plg_t < plg_mod.handoff():
 		return
 	var st := _sfx_file(name)
 	if st != null and not sfx_pool.is_empty():

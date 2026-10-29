@@ -22,12 +22,12 @@ extends RefCounted
 #     켜진다(SIGN · 문 한가운데가 유리 세로축).
 #   7 15.9~17.4 TV 유리 속으로 든다 — 인광 점 속으로(DIVE.mode "phosphor" · Plg PHOS · 2026-10-28 「그 티비로 들어가는
 #     그 연출이 문제인거 같아 좀 브라운관 들어가는 연출을 생각해서 다시 만들어 보자」 · 2026-10-29 「지금 들어가는 속도가 좀
-#     빠르네」 — 빠르기는 Plg PHOS_RATE 한 줄 · 느림 1.5 초 — 테이프도 같은 줄): 밀기 꼬리 위에서 그 빠르기 그대로 이어 뛰어든다(서지 않는다)
-#     — TV 몸 · 테가 화면 밖으로 빠지고 유리가 화면을 다 덮는 틀부터 배율이 단으로 뛰며 그림이 브라운관 제
+#     빠르네」 — 빠르기는 Plg PHOS 한 표 · 1.5 초 — 테이프도 같은 표): 밀기 꼬리 위에서 그 빠르기 그대로 이어 뛰어든다(서지 않는다)
+#     — TV 몸 · 테가 화면 밖으로 빠지고 유리가 화면을 다 덮는 틀부터 배율이 끊이지 않고 커지며 그림이 브라운관 제
 #     결로 갈라진다(주사선 틈 → 끝이 둥근 R · G · B 인광 줄 → 줄 사이 검은 틈으로 날아든다). 넘김(handoff)에 무대를
-#     끊고 게임 필터를 켜면 게임 그림이 R · G · B 세 장으로 비켜 있다가 단으로 겹쳐 제 빛깔이 된다 → 게임 속(인트로 — 네온이
-#     붙는 쾅) → 제목 문. 소리는 들어가는 동안 차오르는 웅 · 이잉에 줄을 지날 때 지직(bar_phos) — 넘김에 끊기고 웅 꼬리(넘김엔
-#     때리는 소리가 없다 — 0.34 초 뒤 네온 쾅이 한 박). 들어가는 동안 TV 그림 소리(램프 꺼짐 딸깍 · 다트)는 안 난다(game _sfx).
+#     끊고 게임 필터를 켜면 게임 그림의 R · B 가 조금 비켜 있다가 한 틀씩 겹쳐 제 빛깔이 된다 → 게임 속(인트로 — 두 낱말이
+#     붙는 쾅 · 금빛 번쩍) → 제목 문. 소리는 들어가는 동안 차오르는 웅 · 이잉에 결이 바뀔 때 지직(bar_phos) — 넘김에 끊기고 웅
+#     꼬리(넘김엔 때리는 소리가 없다 — 0.33 초 뒤 쾅이 한 박). 들어가는 동안 TV 그림 소리(램프 꺼짐 딸깍 · 다트)는 안 난다(game _sfx).
 #     옛 반짝 · 번쩍(테이프와 같은 Plg glint · flash · cross)은 DIVE.mode "glint" 로 남는다.
 #  빛 · 효과로 가린다(조사 T01~T14): 채움빛을 걷고 찬 바탕 한 단만(밤 · 주인공만 빛) · 펜던트 · TV 의 단단한 그림자 ·
 #  니스 반짝 · 빛무리 · 전구 · 도트 잔 그림 · 거울 비침 걷기 · 선반 병은 뒤에서 · 채도를 누른다 · 깊이 덩어리 흐림(초점은
@@ -50,8 +50,8 @@ const GLB := "res://assets/models/bar_intro.glb"
 #  feed 13.78 — 넘김까지 3.62 초. 인트로의 램프 딸깍(0.45 → 14.23)은 TV 앞 깜박임(LID 13.8~14.15)이 끝난 뒤 · 램프 밑 문
 #  그림이 밀기 내내 · 꺼짐(2.85 → 16.63)은 반짝 바로 앞 — 앞당겨 켠 간판의 네온 밝기로 한 번에 내려앉아(game.gd 어둠도
 #  간판 시계를 따른다) 문 · 다트판이 네온 빛에 남은 유리를 빗금이 쓴다 · 네온이 붙는 쾅(3.96 → 17.74 = 넘김 + 20 틀)은
-#  흰빛이 다 걷히고 잔상이 돌아온 뒤 게임 속에서 따로 — 테이프의 퍽 뒤 다트처럼 「들어왔고 살아 있다」 한 박 · 금빛 번쩍 없이
-#  −6dB(game.gd intro_soft — 0.34 초 앞 흰 번쩍 · 퍽이 절정이다 · 유리 반짝 검토 2)(검토 1 — 다이브 한가운데 한 틀 만에
+#  잔상이 돌아온 뒤 게임 속에서 따로 — 「들어왔고 살아 있다」 한 박 · 인광 점 속으로는 넘김에 때리는 그림 · 소리가 없어 제
+#  금빛 번쩍 · 0dB 그대로(2026-10-29 검토 — 옛 흰 번쩍 판의 −6dB · 번쩍 없음은 그림 없이 두 번째로 치는 소리로 들렸다)(검토 1 — 다이브 한가운데 한 틀 만에
 #  밝기가 튀었다 · 검토 2 — 밀기 첫 1 초가 인트로의 꺼진 박자라 TV 가 방보다 어두웠다 · 유리 반짝 검토 — 13.6 은 쾅이 퍽 0.16 초 뒤라 두 번 쳤고 · 13.44 는 쾅이 퍽에 겹쳐 유리 퍽이 settle_total
 #  의 둥에 묻히고 흰 번쩍 뒤에 금빛 막이 매끈하게 꺼지며 · 건넌 뒤 게임 속이 1.3 초 정지 그림이었고 · 램프 딸깍이 감은 눈에
 #  났다). 간판 소리는 이 장면이 간판을 켜는 때(SIGN.t0)에 난다(game.gd — 인트로 시계로는 반짝 쉬익에 겹친다).
@@ -470,11 +470,10 @@ class Hold extends Node:
 #  흰빛은 불 꺼진 방에서 무엇을 비추는지 모를 그래픽이었다 · 유리 반짝 검토 2)
 #  mode 들어가는 꼴 — "phosphor" 인광 점 속으로(Plg PHOS · 머리말 7) · "glint" 옛 반짝 · 번쩍(테이프와 같다 — creep uh
 #  = 16.7 · MOVE push 끝에서 뛰어든다). phosphor 는 handoff − Plg.phos_lunge() 에 뛰어들어 다가감을 제 곡선으로 민다(_phos_d —
-#  유리 배가 PHOS.take 에 닿는 틀이 Phos 첫 단 · 그 뒤 3D 는 Phos 밑에서 고른 빠르기로 handoff 까지 — 끝 배는 end 를 안 넘는다:
-#  그 거리가 카메라 near 0.02m 보다 멀어야 유리 한가운데가 카메라 앞에 남는다). 들어가는 소리(bar_phos)는 파일
+#  유리 배가 PHOS.mag[0] 에 닿는 틀이 인광 판 첫 틀 · 그 뒤 3D 는 Phos 밑에서 선다). 들어가는 소리(bar_phos)는 파일
 #  phos_lunge() 초가 handoff 다(sfx_bar.py 가 같은 표로 굽는다).
 const DIVE := {"mode": "phosphor", "creep": [0.0, 0.0, 0.416667, 0.0, 0.0], "star": Vector2(0.92, 0.14), "land": 0.59,
-		"sat": 0.75, "gcol": Vector3(0.55, 0.70, 0.95), "end": 30.0}
+		"sat": 0.75, "gcol": Vector3(0.55, 0.70, 0.95)}
 
 
 static func length() -> float:
@@ -1742,11 +1741,10 @@ static func _cam_xf(t: float, c: Vector3, ce: Dictionary) -> Array:
 
 
 #  인광 점 속으로의 다가감 거리 — 유리 배 M(= 유리 높이 ÷ 화면 높이 · Plg.glass_pg = k ÷ 거리)을 뛰어듦 시작(l0) 뒤 틀 f 의
-#  로그 줌 Z(f) 로 민다. 밀기 꼬리 위에서 붙으니 그 틀의 밀기 빠르기 r0 를 그대로 잇는다(서지 않는다): Z = r0·f + q·(f/n)^p ·
-#  n 틀(PHOS_RATE solid)에 PHOS.take(유리가 화면을 다 덮는다 = Phos 첫 단) · 그 틀 빠르기가 첫 단 빠르기 re(ln(mag 1 ÷ mag 0) ÷
-#  hold 0) — 둘에서 p 를 푼다(p > 1 — 늘 빨라진다 · 유리가 화면을 덮는 틀에 빠르기가 안 튄다). 그 뒤 Phos 밑에서는 re 로
-#  고르게 handoff 까지(안 보인다 · 줄지 않는다 · DIVE.end 를 안 넘게 re 를 누른다). 밀기는 그동안에도 화각을 좁히지만 거리가
-#  배를 맞춘다(눈은 한가운데로 가는 선 위). fov 이 틀 화각
+#  로그 줌 Plg.phos_z 로 민다. 밀기 꼬리 위에서 붙으니 그 틀의 밀기 빠르기 r0 를 그대로 잇고(서지 않는다) · PHOS.solid 틀째에
+#  PHOS.mag[0](유리가 화면을 다 덮는다 = 인광 판 첫 틀) · 그 틀 빠르기가 PHOS.v0(인광 판이 거기서 이어 빨라진다 — 유리가 화면을
+#  덮는 틀에 빠르기가 안 튄다). 그 뒤 3D 는 Phos 밑에서 선다(안 보인다 · 카메라 near 0.02m 보다 멀다). 밀기는 그동안에도 화각을
+#  좁히지만 거리가 배를 맞춘다(눈은 한가운데로 가는 선 위). fov 이 틀 화각
 static func _phos_d(t: float, fov: float) -> float:
 	var G := _tv_glass()
 	var c: Vector3 = G.c
@@ -1754,18 +1752,7 @@ static func _phos_d(t: float, fov: float) -> float:
 	var l0 := lunge_at()
 	var m0 := _push_m(l0, c, gh)
 	var r0: float = log(m0 / _push_m(l0 - 1.0 / 60.0, c, gh))
-	var R := Plg.phos_rate()
-	var n: float = float(R.solid)
-	var hd: Array = R.hold
-	var mg: Array = Plg.PHOS.mag
-	var tk: float = float(Plg.PHOS.take)
-	var re: float = minf(log(float(mg[1]) / float(mg[0])) / float(hd[0]),
-			log(float(DIVE.end) / tk) / (Plg.phos_lunge() * 60.0 - n))
-	var zt: float = log(tk / m0)
-	var q: float = zt - r0 * n
-	var p: float = (re - r0) * n / q
-	var f: float = clampf((t - l0) * 60.0, 0.0, Plg.phos_lunge() * 60.0)
-	var z: float = r0 * f + q * pow(f / n, p) if f < n else zt + re * (f - n)
+	var z: float = Plg.phos_z((t - l0) * 60.0, r0, log(float(Plg.PHOS.mag[0]) / m0))
 	return gh / (2.0 * tan(deg_to_rad(fov) * 0.5) * m0 * exp(z))
 
 

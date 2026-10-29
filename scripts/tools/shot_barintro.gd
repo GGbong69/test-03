@@ -8,7 +8,7 @@ extends SceneTree
 #    ② TV 유리 한가운데가 그림 한가운데 — TV 가 다 들어온 뒤(멈춤 · 밀기 · 다이브) |dx| · |dy| ≤ 그림 폭 · 높이의 5%.
 #    ③ 다가감 빠르기(틀당 그림이 커지는 몫 — 거리 · 화각) — 뛰어듦 앞은 어느 틀도 Z_MAX 를 안 넘고(밀기는 천천히) ·
 #       뛰어듦은 handoff 까지 줄지 않고 는다(유리 앞에서 서지 않고 뚫는다 · 끝 틀 5% 넘게). 인광 점 속으로는 유리가 화면을
-#       다 덮는 틀(Phos 첫 단 — 그 뒤 3D 는 안 보인다)까지 · 끝 빠르기가 첫 단 빠르기의 0.9 배 넘게(이어받을 때 안 튄다).
+#       다 덮는 틀(인광 판 첫 틀 — 그 뒤 3D 는 안 보인다)까지 · 끝 빠르기가 인광 판 첫 빠르기(PHOS.v0)의 0.9 배 넘게(이어받을 때 안 튄다).
 #  <스틸 폴더>/tmap.txt — 그린 틀마다 [틀 번호 · plg_t · 유리까지 거리 · 화각 · glint · spark · portal · 번쩍 단 · 유리 둘레
 #  꼭짓점 수(오름 단 — 0 이면 화면 전체) · CRT · VHS · 도트 켜짐 · 인광 판 배 · 겹침 비킴] — Movie Maker 그림 번호는 틀 번호 − 1. 게임 필터는 처음 켠 값(CRT_DEF …)으로 찍는다.
 #   godot --path . --resolution 1280x720 --fixed-fps 60 [--write-movie <폴더>/m.png] \
@@ -235,8 +235,8 @@ func _report() -> void:
 	var zend := 0.05
 	if P._phos():
 		var Pg = g.Plg
-		z1 = P.handoff() + (float(Pg.phos_steps()[0][0]) - 0.5) / 60.0
-		zend = 0.9 * log(float(Pg.PHOS.mag[1]) / float(Pg.PHOS.mag[0])) / float(Pg.phos_rate().hold[0])
+		z1 = P.handoff() - (float(Pg.PHOS.run) + 0.5) / 60.0
+		zend = 0.9 * float(Pg.PHOS.v0)
 	for i in range(1, rec.size()):
 		var t1: float = rec[i][0]
 		if t1 < float(P.MOVE[3][0]) or t1 >= z1:
