@@ -278,6 +278,14 @@ func _run() -> void:
 	g.owned[0].gs = 3
 	g._coin_fx_tick(1.0 / 60.0)
 	_ok("⑨ 움직임 끄기면 곧장", float(g.owned[0]._fxs) == 5.0)
+	#  굴려서 부서지는 둘(유리 대포 · 이카로스)은 버틴 판 수가 보이는 값이다.
+	var glass: Dictionary = {}
+	for it in GameData.items():
+		if String(it.id) == "c03":
+			glass = (it as Dictionary).duplicate()
+	_ok("⑨ 유리 대포는 산 적 없으면(상점 · 컬렉션) 0", g._grow_amt(glass) == 0.0)
+	glass.bought = g.leg_no - 3
+	_ok("⑨ 유리 대포는 버틴 판 수(셋)", g._grow_amt(glass) == 3.0, "%.1f" % g._grow_amt(glass))
 	g.motion_off = false
 	g.owned = keep
 

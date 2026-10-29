@@ -21991,11 +21991,13 @@ func _ring_i(c: Vector2, rx: float, ry: float, col: Color) -> void:
 #    c45 삼미신        칠 때마다 +15 — 칠 때마다 꽃잎 하나가 둘레를 돈다(열둘까지 보인다)
 #    r13 88날어        8 을 칠 때마다 +8 — 둘레 보석 자리 여덟이 하나씩 켜지고, 한 바퀴를 채우면
 #                      다음 바퀴는 다른 빛으로 다시 켜진다
+#    c03 유리 대포     판마다 1/2 로 부서진다 — 버틴 판마다 금이 하나씩 더 간다(여섯까지)
+#    c06 이카로스      판마다 1/10 로 녹는다 — 버틴 판마다 밀랍이 한 줄기씩 더 흘러내린다(여덟까지)
 #  보이는 값(_fxs)은 실제 값으로 스르르 간다(_coin_fx_tick) — 조각이 툭 없어지지 않고 흐려지며
 #  빠지고, 꽃잎 · 보석은 서서히 돋는다. 상점 테이블 · 컬렉션의 동전은 갓 산 상태(키가 없으면 실제 값)다.
 #  너무 작은 그림(얼굴 반지름 6 밑 — 툴팁의 작은 동전)에서는 안 얹는다. 움직임 끄기면 곧장 선다.
 const COINFX := {
-	"ids": ["c04", "c34", "c35", "c45", "r13"],
+	"ids": ["c04", "c34", "c35", "c45", "r13", "c03", "c06"],
 	"rate": 3.2,                   # 보이는 값이 실제 값으로 가는 빠르기(초당)
 	"min_r": 6.0,
 	"plate": Color("3a2a22"), "crumb": Color("c99a52"), "cut": Color(0.0, 0.0, 0.0, 0.38),
@@ -22004,16 +22006,21 @@ const COINFX := {
 	"petal": Color("f5a3cb"), "petal_dk": Color("d86f9c"),
 	"gem_off": Color(0.0, 0.0, 0.0, 0.45),
 	"gem_laps": [Color("f2c94c"), Color("7fe0c8"), Color("8fb8ff"), Color("ef86c6")],
+	"crack": Color("ffffff"), "crack_dk": Color("16202c"),   # 유리 금 — 흰 줄 밑에 어두운 그늘 줄
+	"wax": Color("f3e4ad"), "wax_dk": Color("c9b26a"),        # 밀랍 줄기 · 끝 방울
 }
 
 
 #  성장 · 소모형의 실제 값 — GameData.item_amt 의 성장 갈래와 같은 식(문맥이 필요 없는 몫).
+#  굴려서 부서지는 동전(boom)은 산 뒤 버틴 판 수다 — bought 가 없으면(상점 · 컬렉션) 0.
 func _grow_amt(it: Dictionary) -> float:
 	var g := String(it.get("grow", ""))
 	if g == "fire" or g == "hitmiss":
 		return float(int(it.get("gs", 0)))
 	if g == "tdec" or g == "rdec":
 		return float(maxi(0, int(it.get("v", 0)) - int(it.get("gstep", 0)) * int(it.get("gs", 0))))
+	if String(it.get("boom", "")) != "":
+		return float(maxi(0, leg_no - int(it.get("bought", leg_no))))
 	return 0.0
 
 
@@ -22053,6 +22060,49 @@ func _coin_fx(c: Vector2, fr: float, it: Dictionary, dim: float) -> void:
 		"c35": _fx_tempo(c, fr, v, a)
 		"c45": _fx_petals(c, fr, v / maxf(float(int(it.get("gstep", 15))), 1.0), a)
 		"r13": _fx_gems(c, fr, v / maxf(float(int(it.get("gstep", 8))), 1.0), a)
+		"c03": _fx_cracks(c, fr, v, a)
+		"c06": _fx_wax(c, fr, v, a)
+
+
+#  유리 대포 — 버틴 판마다 금이 하나씩 더 간다(여섯까지). 금은 테 가까이에서 안쪽으로 꺾여 들고,
+#  막 생기는 금은 흐리게 돋는다. 흰 줄 밑에 어두운 줄 한 올을 깔아 유리 두께가 읽힌다.
+func _fx_cracks(c: Vector2, fr: float, v: float, a: float) -> void:
+	for k in 6:
+		var ak: float = clampf(v - float(k), 0.0, 1.0)
+		if ak <= 0.001:
+			continue
+		var th := 0.7 + 2.4 * float(k)
+		var p := c + Vector2(cos(th), sin(th)) * fr * 0.96
+		var ln: float = fr * (0.55 + 0.12 * float(k % 3)) * (0.6 + 0.4 * ak)
+		var seg := 3
+		for j in seg:
+			#  안쪽으로 꺾이는 세 마디 — 마디마다 조금씩 비틀린다(칸 번호로 정한다).
+			var bend: float = sin(float(k * 7 + j * 3)) * 0.55
+			var q := p + Vector2(cos(th + PI + bend), sin(th + PI + bend)) * ln / float(seg)
+			draw_line(p + Vector2(0.7, 0.7), q + Vector2(0.7, 0.7),
+					Color(COINFX.crack_dk, 0.45 * ak * a), 1.0)
+			draw_line(p, q, Color(COINFX.crack, 0.80 * ak * a), 1.0)
+			if j == 1 and k >= 2:
+				#  셋째 금부터 가지 하나 — 거미줄이 된다.
+				var br := q + Vector2(cos(th + PI * 0.5 + bend), sin(th + PI * 0.5 + bend)) * ln * 0.22
+				draw_line(q, br, Color(COINFX.crack, 0.60 * ak * a), 1.0)
+			p = q
+
+
+#  이카로스 — 버틴 판마다 밀랍이 한 줄기씩 더 흘러내린다(여덟까지). 줄기는 얼굴 위 테에서 아래로,
+#  끝에 방울. 막 생기는 줄기는 짧게 돋아 제 길이까지 자란다.
+func _fx_wax(c: Vector2, fr: float, v: float, a: float) -> void:
+	for k in 8:
+		var ak: float = clampf(v - float(k), 0.0, 1.0)
+		if ak <= 0.001:
+			continue
+		var x: float = -0.72 + 1.44 * fmod(0.5 + 0.618 * float(k), 1.0)
+		var y0: float = -sqrt(maxf(1.0 - x * x, 0.0)) * 0.95
+		var ln: float = (0.42 + 0.14 * float(k % 3)) * (0.5 + 0.5 * ak)
+		var top := c + Vector2(x, y0) * fr
+		var bot := c + Vector2(x, y0 + ln) * fr
+		draw_line(top, bot, Color(COINFX.wax, 0.92 * ak * a), 2.0)
+		draw_circle(bot, 1.4, Color(COINFX.wax_dk, 0.92 * ak * a))
 
 
 #  위대한 피자 — 여덟 조각. 남은 배수만큼 남고(12시부터 시계 방향으로 먹는다) 먹은 자리는 빈 판에
