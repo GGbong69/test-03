@@ -24,7 +24,10 @@ extends SceneTree
 #       넘게 들어가 바닥에서 버틴다 · 떼면 앞으로 조금 넘쳤다 선다 · 바닥에서 검지 끝마디가 젖는다 · 카세트는 걸려 서고 →
 #       낚아채여 확 → 고른 빠르기로 끌리고 → 멎은 뒤 내려앉는다 · 소리 일곱(걸림 딸깍 · 모터) · 키가 그림자를 드리운다(손 ·
 #       덮개 · 단추만 — 카세트는 아니다) · 먼지 낀 공기 · 빛줄기 기둥이 섰다 · 층이 걷힐 때 3D 층의 색 · 낟알 · 안개가 다 걷혔다
-#       유리 뚫기(2026-10-25 「들어갈때 유리가 반짝? 약간 삐싱」) — 반짝 소리 때 · handoff = push1 · 번쩍 단 · 다가감 몫 · 번쩍 자리 · 필터 · 잔상 때
+#       유리 뚫기 — 인광 점 속으로(2026-10-29 「1번으로 하자」 · 바 인트로와 같은 PHOS 단 표 · 옛 반짝 · 번쩍 · 삐싱은 걷었다):
+#       들어가는 소리(bar_phos) 때 · handoff = push1 · 다가감은 램프가 켜진 뒤 선 데서 붙어 줄지 않고 늘어 Phos 첫 단에 유리 배
+#       take · 그 틀 빠르기 = 첫 단 빠르기 · 인광 판이 층 맨 위 · 반짝이 한 틀도 안 서고 판이 첫 단 틀에 서서 배가 단으로만 크고
+#       넘김 뒤 R · G · B 겹침 · 필터는 넘김 틀 · 잔상은 겹침 뒤
 #   godot --path . --script scripts/tools/qa_prologue.gd
 const Save = preload("res://scripts/save.gd")
 var b = null
@@ -69,6 +72,12 @@ var dip_ok := false          # 바닥에서 검지 끝마디가 젖었다
 var t_prev := -1.0
 var gone_k := -1.0           # handoff 언저리의 3D 층 색 · 낟알 몫(안 쟀으면 −1)
 var gone_fog := -1.0         # 그때 안개 밀도
+var ph0 := -1.0              # 인광 판이 처음 선 때(넘김 앞)
+var ph_m := []               # 넘김 앞 인광 판 배(바뀔 때마다)
+var ph_up := true            # 배가 늘기만 했다
+var ph_cv := false           # 넘김 뒤 R · G · B 겹침이 섰다
+var gl_seen := false         # 유리 반짝(빗금 · 별)이 한 틀이라도 섰다
+var lit0 := -1.0             # 필터가 처음 켜진 때
 
 
 func _initialize() -> void:
@@ -197,6 +206,30 @@ func _tape_watch() -> void:
 	t_prev = t
 
 
+#  인광 점 속으로 — 틀마다 주인공 유리 반짝 값 · 인광 판 · 필터를 본다(반짝 값은 안 넣으면 null 이다)
+func _phos_watch() -> void:
+	var hn: Node = g.plg_vp
+	var t: float = g.plg_t
+	for tv in hn.get_meta("tvs"):
+		if tv.hero:
+			var gv = (tv.m as ShaderMaterial).get_shader_parameter("glint")
+			var sv = (tv.m as ShaderMaterial).get_shader_parameter("spark")
+			gl_seen = gl_seen or (gv != null and float(gv) > -1.0) or (sv != null and int(sv) > 0)
+	var ph := (hn.get_meta("root") as Control).get_node("Phos") as CanvasItem
+	if ph.visible:
+		var pm := ph.material as ShaderMaterial
+		if t >= g.Plg.handoff():
+			ph_cv = ph_cv or float(pm.get_shader_parameter("ou")) >= 0.0
+		else:
+			ph0 = t if ph0 < 0.0 else ph0
+			var mm: float = float(pm.get_shader_parameter("m"))
+			if ph_m.is_empty() or mm != float(ph_m[ph_m.size() - 1]):
+				ph_up = ph_up and (ph_m.is_empty() or mm > float(ph_m[ph_m.size() - 1]))
+				ph_m.append(mm)
+	if g.crt_layer.visible and lit0 < 0.0:
+		lit0 = t
+
+
 func _ok(nm: String, cond: bool, note := "") -> void:
 	if cond:
 		ok += 1
@@ -285,23 +318,46 @@ func _process(_d: float) -> bool:
 				for k in tape_snd:
 					cu_ok = cu_ok and cu.has(k) and float(cu[k]) < TL and g._sfx_file(k) != null
 				_ok("⑨ 소리 때 — 비 · TV · 앞 토막 일곱(파일이 있다)", cu_ok, str(cu.keys()))
-				#  유리 뚫기(2026-10-25 GLINT) — 반짝 소리는 handoff − cue · handoff 가 곧 push1 · 번쩍 단(−2 틀 2/3 · 맨 밝은 틀 1 ·
-				#  6 틀 뒤 0) · 다가감 몫(선 데서 · 붙드는 동안 vh · 끝 1) · 번쩍은 층 root 맨 위(필터 밑) · 필터는 맨 밝은 틀에 켜지고
-				#  잔상은 번쩍이 걷힌 뒤에 돌아온다
+				#  유리 뚫기 — 인광 점 속으로(2026-10-29 「1번으로 하자」 · PHOS — 바 인트로와 같은 단 표): 들어가는 소리(bar_phos)가
+				#  handoff − phos_lunge 한 틀 앞 · 반짝 소리(tv_glint) 없음 · handoff 가 곧 push1 · 다가감은 램프가 켜진 뒤 선 데서 붙어
+				#  (w 0 · 빠르기 0) 빠르기가 줄지 않고 늘어 Phos 첫 단에 유리 배 take · 그 틀 빠르기가 첫 단 빠르기 · 넘김엔 끝 거리(w 1) ·
+				#  층 맨 위가 인광 판(번쩍 판 없음) · 필터는 넘김 틀에 켜지고 잔상은 겹침이 끝난 뒤
 				var hf: float = P.handoff()
-				var cr: Array = P.HERO.creep
-				var rt := g.plg_vp.get_meta("root") as Control
-				var fl := rt.get_node_or_null("Flash")
-				_ok("⑨ 유리 뚫기 — 반짝 소리 · 번쩍 단 · 다가감 몫 · 번쩍 자리 · 필터 · 잔상 때", cu.has("tv_glint")
-						and g._sfx_file("tv_glint") != null
-						and is_equal_approx(float(cu.tv_glint), hf - float(P.GLINT.cue)) and is_equal_approx(hf, float(P.T.push1))
-						and is_equal_approx(P.flash_a(0.0), 1.0) and is_equal_approx(P.flash_a(-0.03), 2.0 / 3.0)
-						and P.flash_a(0.1) == 0.0 and P.dive_w(0.0) == 0.0 and is_equal_approx(P.dive_w(1.0), 1.0)
-						and is_equal_approx(P.dive_w(float(cr[2])) - P.dive_w(float(cr[1])),
-								float(cr[4]) * (float(cr[2]) - float(cr[1])))
-						and fl is ColorRect and fl.get_index() == rt.get_child_count() - 1
-						and P.lit_at() < hf and P.lit_at() > hf - 1.0 / 60.0 and P.calm_at() > hf + 6.0 / 60.0,
-						"반짝 %.3f · handoff %.2f" % [float(cu.get("tv_glint", -1.0)), hf])
+				var hn0: Node = g.plg_vp
+				var rt := hn0.get_meta("root") as Control
+				var ph := rt.get_node_or_null("Phos")
+				var fr := 1.0 / 60.0
+				var p0: float = float(P.T.push0)
+				var n: float = P._push_n()
+				var t1: float = p0 + n * fr
+				var cs: Dictionary = hn0.get_meta("start")
+				var ce: Dictionary = hn0.get_meta("end")
+				var d0: float = (cs.at as Vector3).distance_to(ce.look)
+				var ze: float = log(d0 / (ce.at as Vector3).distance_to(ce.look))
+				var kz: float = float(hn0.get_meta("glass_h")) / (2.0 * tan(deg_to_rad(float(P.CAM.fov)) * 0.5))
+				var re: float = log(float(P.PHOS.mag[1]) / float(P.PHOS.mag[0])) / float(P.phos_rate().hold[0])
+				var mono := true
+				var pv := 0.0
+				var pw := 0.0
+				for i in int(n) + 1:
+					var w: float = P._push_w(hn0, p0 + float(i) * fr)
+					mono = mono and w - pw >= pv - 1e-6
+					pv = w - pw
+					pw = w
+				var m1: float = kz / (d0 * exp(-P._push_w(hn0, t1) * ze))
+				var r1: float = (P._push_w(hn0, t1) - P._push_w(hn0, t1 - fr)) * ze
+				var cv: Array = P.PHOS.conv
+				var IN: Dictionary = g.INTRO
+				_ok("⑨ 유리 뚫기 — 들어가는 소리 · 다가감(선 데서 · 줄지 않고 · 유리 배 · 첫 단 빠르기) · 인광 판 자리 · 필터 · 잔상 때",
+						cu.has("bar_phos") and not cu.has("tv_glint") and g._sfx_file("bar_phos") != null
+						and is_equal_approx(float(cu.bar_phos), hf - P.phos_lunge() - fr) and is_equal_approx(hf, float(P.T.push1))
+						and p0 > P.feed_at() + float(IN.lamp) and P._push_w(hn0, p0) == 0.0 and P._push_w(hn0, hf) == 1.0
+						and mono and absf(m1 - float(P.PHOS.take)) < 0.01 and absf(r1 - re) < re * 0.06
+						and ph is ColorRect and ph.get_index() == rt.get_child_count() - 1 and rt.get_node_or_null("Flash") == null
+						and P.lit_at() < hf and P.lit_at() > hf - fr
+						and P.calm_at() > hf + (float(cv[cv.size() - 1][0]) + 1.0) * fr,
+						"소리 %.3f · 다가감 %.2f~%.2f(%d 틀) · 유리 배 %.2f · 끝 빠르기 %.4f / 첫 단 %.4f · handoff %.2f" % [
+						float(cu.get("bar_phos", -1.0)), p0, t1, roundi(n), m1, r1, re, hf])
 				_ok("⑨ 철컥 소리의 쿵이 TAPE.clunk 에 선다", is_equal_approx(float(cu.deck_clunk) + float(TP.lead), float(TP.clunk)))
 				var pb: float = float(TP.press[2])
 				_ok("⑨ 단추 딸깍은 바닥에 · 위잉은 철컥이 아니라 누를 때", is_equal_approx(float(cu.deck_btn), pb)
@@ -386,6 +442,7 @@ func _process(_d: float) -> bool:
 				slid_up = (sd2.n as Node3D).transform.is_equal_approx(sd2.xf)
 			if g._plg_live():
 				_tape_watch()
+				_phos_watch()
 				if g._plg_cover():
 					seen_crt = seen_crt or g.crt_layer.visible or g.vhs_rect.visible or g.dot_rect.visible
 				seen_pwr = seen_pwr or g.pwr_t >= 0.0
@@ -422,6 +479,12 @@ func _process(_d: float) -> bool:
 				_ok("⑨ 꾹 — 떼면 단추가 앞으로 조금 넘쳤다 선다", btn_over > 0.0002 and btn_over < 0.001,
 						"%.2fmm" % (btn_over * 1000.0))
 				_ok("⑨ 꾹 — 바닥에서 검지 끝마디가 젖는다", dip_ok)
+				var stp: Array = g.Plg.phos_steps()
+				var hf2: float = g.Plg.handoff()
+				_ok("⑨ 인광 점 속으로 — 반짝 없음 · 판이 첫 단 틀에 서서 배가 단으로만 크고 · 넘김 뒤 겹침 · 필터는 넘김 틀",
+						not gl_seen and absf(ph0 - (hf2 + float(stp[0][0]) / 60.0)) <= 3.0 / 60.0 and ph_up
+						and ph_m.size() >= stp.size() - 3 and ph_cv and lit0 >= g.Plg.lit_at() and lit0 < hf2 + 3.0 / 60.0,
+						"판 H%+.0f 틀 · 배 %s · 필터 H%+.0f 틀" % [(ph0 - hf2) * 60.0, str(ph_m), (lit0 - hf2) * 60.0])
 				_ok("⑨ 층이 걷힐 때 3D 층의 색 · 낟알 · 안개가 다 걷혔다", gone_k == 0.0 and gone_fog == 0.0,
 						"%.3f · %.4f" % [gone_k, gone_fog])
 				_ok("⑨ 누를 때 검지가 펴져 단추에 닿고 셋은 말렸다", poke_n > 0 and poke_btn, "%d 틀" % poke_n)

@@ -16,7 +16,7 @@ extends SceneTree
 #      round) 없음 · 겹침은 8 논리 px 밑에서 4 틀 안에 0) · 빗금 · 별 · 번쩍(Flash)이 한 틀도 안 선다 · 인광 판(Phos)은
 #      handoff + 단 표 첫 틀에 서서 배가 단으로만 커지고(줄지 않는다) · 넘김 뒤 R · G · B 겹침을 지나 calm_at 앞에 걷힌다 ·
 #      필터는 handoff 틀(lit_at)에 켜지고 잔상은 calm_at 까지 0 · handoff 뒤 층은 Phos 만 · 들어가는 소리(bar_phos)가 entry_at 에
-#      나고 TV 스피커는 그 틀에 걷혀 있다(게임 필터는 처음 켠 값으로 돈다) · 인트로 박자(램프는 깜박임 뒤 · 쾅은 건넌 뒤 · 간판
+#      나고 TV 스피커는 그 틀에 걷혀 있다(게임 필터는 처음 켠 값으로 돈다) · 인트로 박자(램프는 깜박임 뒤 · 꺼짐은 인광 단이 뛰는 틀 밖 · 쾅은 건넌 뒤 · 간판
 #      소리는 SIGN.t0 · 들어가는 동안(entry_at ~ handoff) 게임 소리가 하나도 안 난다 — 램프 꺼짐 딸깍 · 다트) · LEN(방 소리
 #      꼬리)은 인트로 끝 앞
 #   godot --path . --script scripts/tools/qa_barintro.gd
@@ -257,7 +257,11 @@ func _process(_d: float) -> bool:
 				var snap: float = fa + float(IN.snap) + float(IN.snap_t)
 				var w0: float = P.entry_at() - float(P.SND.tv_out)
 				var beat_ok: bool = fa + float(IN.lamp) > float(lid[lid.size() - 1][0]) and fa + float(IN.lamp) < w0 						and snap > P.calm_at()
-				_ok("⑦ 인트로 박자 — 램프는 깜박임 뒤 · 쾅은 건넌 뒤 따로 · 들어가는 창에 게임 소리 없음",
+				#  램프 꺼짐은 인광 단이 뛰는 틀에 안 떨어진다(2026-10-29 — 느림 첫 판은 꺼짐이 ×3 첫 틀이라 다이브 한가운데 밝기가 튀었다)
+				var off_f: int = roundi((fa + float(IN.off) - hf) / fr)
+				for s in stp:
+					beat_ok = beat_ok and int(s[0]) != off_f
+				_ok("⑦ 인트로 박자 — 램프는 깜박임 뒤 · 꺼짐은 단이 뛰는 틀 밖 · 쾅은 건넌 뒤 따로 · 들어가는 창에 게임 소리 없음",
 						beat_ok and hush_nx >= 0 and hush_n == 0
 						and sign_snd >= float(P.SIGN.t0) - fr and sign_snd < float(P.SIGN.t0) + 3.0 * fr,
 						"램프 %.2f · 꺼짐 %.2f(H%+.0f) · 쾅 %.2f(H%+.0f) · 창 소리 %d · 간판 소리 %.2f" % [fa + float(IN.lamp),
