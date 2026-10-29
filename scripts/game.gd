@@ -5933,6 +5933,10 @@ func _leg_end_wear() -> void:
 		var rolled := bn > 0
 		var boomed := rolled and randf() < 1.0 / float(bn)
 		var dead := perished or decayed or boomed
+		#  얼굴이 세는 판 수(COINFX) — 굴림을 버틴 판 · 금알을 낳은 판. 성장 갈래가 없는 장이라 gs 가 비어 있다.
+		if not dead and String(it.get("grow", "")) == "" \
+				and (rolled or String(it.get("g", "")) == "leg"):
+			it.gs = int(it.get("gs", 0)) + 1
 		if dead:
 			#  **확정 죽음이 굴림을 이긴다.** 삭아 죽는 장은 굴림 결과와
 			#  무관하게 이번 판에 떠난다 — 그 장에 「1/10」을 붙이면
@@ -21991,13 +21995,26 @@ func _ring_i(c: Vector2, rx: float, ry: float, col: Color) -> void:
 #    c45 삼미신        칠 때마다 +15 — 칠 때마다 꽃잎 하나가 둘레를 돈다(열둘까지 보인다)
 #    r13 88날어        8 을 칠 때마다 +8 — 둘레 보석 자리 여덟이 하나씩 켜지고, 한 바퀴를 채우면
 #                      다음 바퀴는 다른 빛으로 다시 켜진다
-#    c03 유리 대포     판마다 1/2 로 부서진다 — 버틴 판마다 금이 하나씩 더 간다(여섯까지)
+#  2026-10-29 「다른 동전들도 이런 변화를 가지면 좋을거 같아」 — 값이 런 상태를 따라 바뀌는 장도 얹는다:
+#    c03 유리 대포     판마다 1/2 로 부서진다 — 굴림을 버틴 판마다 금이 하나씩 더 간다(여섯까지)
 #    c06 이카로스      판마다 1/10 로 녹는다 — 버틴 판마다 밀랍이 한 줄기씩 더 흘러내린다(여덟까지)
+#    c31 알 낳는 거위  판마다 골드 — 낳은 판마다 둥지에 금알이 하나씩(다섯까지)
+#                      (셋 다 동전의 gs 가 센다 — _leg_end_wear 가 판 끝에 올린다. 성장 갈래가 없어 비어 있던 칸)
+#    c33 푸른 구슬     남은 다트당 점수 — 판 중에만, 남은 다트만큼 달이 돈다(아홉까지)
+#    u18 머니건        골드당 점수 — 골드 5 마다 지폐가 한 장씩 날린다(여섯까지)
+#    c38 베르툼누스    동전 수당 배수 — 같이 든 동전마다 머리 둘레에 과일이 하나씩(여덟까지)
+#    c37 진열장        다른 동전 판매가당 배수 — 판매가 3 마다 진열장에 반짝임이 하나씩(여덟까지)
+#    c36 연속사진      한 숫자를 맞힌 수당 배수 — 가장 많이 맞힌 숫자의 수만큼 필름 구멍에 불이(열까지)
+#    c02 닌자          무거운 다트당 배수 — 탄창의 무거운 다트만큼 작은 표창이 둘레를 돈다(여덟까지)
+#    c30 윅 존         안 빗나간 판에 골드 — 판 중에 아직 안 빗나갔으면 눈구멍에 불씨 · 빗나가면 꺼지고
+#                      이마에 금이 간다(보이는 값 1 → −1 — 불씨가 꺼진 뒤 금이 돋는다)
 #  보이는 값(_fxs)은 실제 값으로 스르르 간다(_coin_fx_tick) — 조각이 툭 없어지지 않고 흐려지며
-#  빠지고, 꽃잎 · 보석은 서서히 돋는다. 상점 테이블 · 컬렉션의 동전은 갓 산 상태(키가 없으면 실제 값)다.
+#  빠지고, 꽃잎 · 보석은 서서히 돋는다. 상점 테이블 · 컬렉션의 동전은 갓 산 상태(키가 없으면 실제 값)다
+#  — 런 상태를 세는 장은 든 동전에만 얹고 테이블 · 컬렉션에서는 맨 그림이다.
 #  너무 작은 그림(얼굴 반지름 6 밑 — 툴팁의 작은 동전)에서는 안 얹는다. 움직임 끄기면 곧장 선다.
 const COINFX := {
-	"ids": ["c04", "c34", "c35", "c45", "r13", "c03", "c06"],
+	"ids": ["c04", "c34", "c35", "c45", "r13", "c03", "c06", "c31", "c33", "u18", "c38", "c37",
+			"c36", "c02", "c30"],
 	"rate": 3.2,                   # 보이는 값이 실제 값으로 가는 빠르기(초당)
 	"min_r": 6.0,
 	"plate": Color("3a2a22"), "crumb": Color("c99a52"), "cut": Color(0.0, 0.0, 0.0, 0.38),
@@ -22008,23 +22025,59 @@ const COINFX := {
 	"gem_laps": [Color("f2c94c"), Color("7fe0c8"), Color("8fb8ff"), Color("ef86c6")],
 	"crack": Color("ffffff"), "crack_dk": Color("16202c"),   # 유리 금 — 흰 줄 밑에 어두운 그늘 줄
 	"wax": Color("f3e4ad"), "wax_dk": Color("c9b26a"),        # 밀랍 줄기 · 끝 방울
+	"egg": Color("f0c828"), "egg_hi": Color("fdeaa0"), "egg_dk": Color("a05028"),   # 얼굴의 금알과 같은 빛
+	"moon": Color("d9dde6"), "moon_dk": Color("5d6577"),
+	"bill": Color("78c878"), "bill_dk": Color("286850"),       # 얼굴의 지폐와 같은 초록
+	"fruits": [Color("f2c94c"), Color("a98be0"), Color("ef8a3a"), Color("e070b0"),
+			Color("7cc87a"), Color("d8463c")],
+	"fruit_rim": Color("28002a"),                              # 얼굴 바탕 보라의 그늘 — 과일 테
+	"glint": Color("fff2b0"),
+	"film": Color("f2c94c"),                                   # 영사기 불빛
+	"ninja": Color("2a2b30"), "ninja_hi": Color("c9ccd2"),
+	"ember": Color("ff5a3a"), "ember_hi": Color("ffd080"),
 }
 
 
 #  성장 · 소모형의 실제 값 — GameData.item_amt 의 성장 갈래와 같은 식(문맥이 필요 없는 몫).
-#  굴려서 부서지는 동전(boom)은 산 뒤 버틴 판 수다 — bought 가 없으면(상점 · 컬렉션) 0.
 func _grow_amt(it: Dictionary) -> float:
 	var g := String(it.get("grow", ""))
 	if g == "fire" or g == "hitmiss":
 		return float(int(it.get("gs", 0)))
 	if g == "tdec" or g == "rdec":
 		return float(maxi(0, int(it.get("v", 0)) - int(it.get("gstep", 0)) * int(it.get("gs", 0))))
-	if String(it.get("boom", "")) != "":
-		return float(maxi(0, leg_no - int(it.get("bought", leg_no))))
 	return 0.0
 
 
-#  보이는 값 — 동전 슬롯의 동전은 스르르 따라간 값(_fxs), 아니면 실제 값.
+#  보이는 값이 가는 곳 — 성장 · 소모형은 실제 값, 나머지는 그 동전이 세는 런 상태(COINFX 머리말).
+func _fx_want(it: Dictionary) -> float:
+	if String(it.get("grow", "")) != "":
+		return _grow_amt(it)
+	match String(it.get("id", "")):
+		"c03", "c06", "c31":
+			return float(int(it.get("gs", 0)))
+		"c33":
+			return float(darts_left) if _is_play_deep() else 0.0
+		"u18":
+			return float(gold)
+		"c38":
+			return float(maxi(0, owned.size() - 1))
+		"c37":
+			return float(maxi(0, _rack_val() - GameData.sell_value(it)))
+		"c36":
+			var m := 0
+			for n in (it.get("hist", {}) as Dictionary).values():
+				m = maxi(m, int(n))
+			return float(m)
+		"c02":
+			return float(_mag_hvy())
+		"c30":
+			if not _is_play_deep():
+				return 0.0
+			return -1.0 if leg_miss else 1.0
+	return 0.0
+
+
+#  보이는 값 — 동전 슬롯의 동전은 스르르 따라간 값(_fxs), 아니면 갓 산 값(런 상태를 세는 장은 0 — 맨 그림).
 func _fx_val(it: Dictionary) -> float:
 	return float(it.get("_fxs", _grow_amt(it)))
 
@@ -22035,7 +22088,7 @@ func _coin_fx_tick(d: float) -> void:
 	for it in owned:
 		if not (COINFX.ids as Array).has(String(it.get("id", ""))):
 			continue
-		var want := _grow_amt(it)
+		var want := _fx_want(it)
 		if not it.has("_fxs") or motion_off:
 			it["_fxs"] = want
 			continue
@@ -22062,6 +22115,196 @@ func _coin_fx(c: Vector2, fr: float, it: Dictionary, dim: float) -> void:
 		"r13": _fx_gems(c, fr, v / maxf(float(int(it.get("gstep", 8))), 1.0), a)
 		"c03": _fx_cracks(c, fr, v, a)
 		"c06": _fx_wax(c, fr, v, a)
+		"c31": _fx_eggs(c, fr, v, a)
+		"c33": _fx_moons(c, fr, v, a)
+		"u18": _fx_bills(c, fr, v, a)
+		"c38": _fx_fruits(c, fr, v, a)
+		"c37": _fx_glints(c, fr, v, a)
+		"c36": _fx_film(c, fr, v, a)
+		"c02": _fx_stars(c, fr, v, a)
+		"c30": _fx_skull(c, fr, v, a)
+
+
+#  자리 표 — 얼굴(36px 그림) 위 정규 좌표. (px + 0.5 − 18) / 18 로 그림에서 읽었다.
+const FX_SPOTS := {
+	#  알 낳는 거위 — 둥지 앞 짚 위, 왼쪽부터 · 마지막은 큰 금알 오른쪽
+	"eggs": [Vector2(-0.61, 0.53), Vector2(-0.39, 0.58), Vector2(-0.17, 0.61),
+			Vector2(0.06, 0.58), Vector2(0.53, 0.53)],
+	#  머니건 — 총 둘레 빈 바탕(얼굴의 지폐 셋을 피했다)
+	"bills": [Vector2(-0.67, -0.61), Vector2(0.50, -0.44), Vector2(-0.06, 0.50),
+			Vector2(0.78, 0.28), Vector2(-0.72, 0.28), Vector2(0.28, -0.83)],
+	#  베르툼누스 — 얼굴 양옆 · 밑 · 위 바탕, 좌우가 짝으로 돋는다
+	"fruits": [Vector2(-0.83, -0.11), Vector2(0.83, -0.11), Vector2(-0.83, 0.17),
+			Vector2(0.83, 0.17), Vector2(-0.72, 0.44), Vector2(0.72, 0.44),
+			Vector2(-0.67, -0.78), Vector2(0.61, -0.78)],
+	#  진열장 — 칸마다 비어 있는 어두운 자리
+	"glints": [Vector2(-0.42, -0.56), Vector2(-0.03, -0.56), Vector2(-0.03, -0.25),
+			Vector2(0.31, -0.25), Vector2(0.0, 0.03), Vector2(-0.39, 0.19),
+			Vector2(-0.33, 0.56), Vector2(0.17, 0.56)],
+	#  연속사진 — 필름 구멍 위 다섯 · 밑 다섯
+	"film_x": [-0.444, -0.222, 0.0, 0.222, 0.444], "film_y": 0.778, "film_h": 0.056,
+	#  윅 존 — 눈구멍 둘 · 이마에서 코로 내려가는 금
+	"eyes": [Vector2(-0.278, -0.056), Vector2(0.222, -0.056)],
+	"skull_crack": [Vector2(0.06, -0.44), Vector2(-0.06, -0.33), Vector2(0.04, -0.24),
+			Vector2(-0.08, -0.14), Vector2(-0.02, -0.04)],
+	"skull_branch": [Vector2(0.04, -0.24), Vector2(-0.18, -0.20), Vector2(-0.24, -0.12)],
+}
+
+
+#  알 낳는 거위 — 낳은 판마다 둥지에 금알 하나(다섯까지). 막 낳은 알은 작게 돋아 제 크기에 앉는다.
+func _fx_eggs(c: Vector2, fr: float, v: float, a: float) -> void:
+	var sp: Array = FX_SPOTS.eggs
+	for k in mini(int(ceil(v)), sp.size()):
+		var al: float = clampf(v - float(k), 0.0, 1.0)
+		var p: Vector2 = c + (sp[k] as Vector2) * fr
+		var s: float = 0.5 + 0.5 * al
+		var rx := maxf(1.2, fr * 0.10) * s
+		var ry := maxf(1.5, fr * 0.13) * s
+		_fx_ell_fill(p, rx + 0.6, ry + 0.6, Color(COINFX.egg_dk, a * al))
+		_fx_ell_fill(p, rx, ry, Color(COINFX.egg, a * al))
+		draw_circle(p + Vector2(-rx * 0.35, -ry * 0.4), maxf(0.5, rx * 0.35), Color(COINFX.egg_hi, a * al))
+
+
+#  채운 타원 — 열여섯 꼭짓점.
+func _fx_ell_fill(c: Vector2, rx: float, ry: float, col: Color) -> void:
+	var pts := PackedVector2Array()
+	for j in 16:
+		var t := TAU * float(j) / 16.0
+		pts.append(c + Vector2(cos(t) * rx, sin(t) * ry))
+	draw_colored_polygon(pts, col)
+
+
+#  푸른 구슬 — 판 중에 남은 다트만큼 달이 둘레를 돈다(아홉까지). 던질 때마다 하나가 흐려지며 빠진다.
+func _fx_moons(c: Vector2, fr: float, v: float, a: float) -> void:
+	var m := minf(v, 9.0)
+	if m <= 0.0:
+		return
+	var spin: float = 0.0 if motion_off else float_t * 0.5
+	var rr := fr * 0.88
+	var mr := maxf(1.1, fr * 0.085)
+	for k in int(ceil(m)):
+		var al: float = clampf(m - float(k), 0.0, 1.0)
+		var th := spin - PI * 0.5 + TAU * float(k) / 9.0
+		var p := c + Vector2(cos(th), sin(th)) * rr
+		draw_circle(p, mr + 0.5, Color(COINFX.moon_dk, a * al))
+		draw_circle(p + Vector2(-0.3, -0.3), mr, Color(COINFX.moon, a * al))
+
+
+#  기운 네모 — 가운데 p · 반축 ax · ay.
+func _fx_quad(p: Vector2, ax: Vector2, ay: Vector2, col: Color) -> void:
+	draw_colored_polygon(PackedVector2Array([p - ax - ay, p + ax - ay, p + ax + ay, p - ax + ay]), col)
+
+
+#  머니건 — 골드 5 마다 지폐가 한 장씩 날린다(여섯까지). 지폐는 제자리에서 살랑인다.
+func _fx_bills(c: Vector2, fr: float, v: float, a: float) -> void:
+	var sp: Array = FX_SPOTS.bills
+	var m := minf(v / 5.0, float(sp.size()))
+	if m <= 0.0:
+		return
+	for k in int(ceil(m)):
+		var al: float = clampf(m - float(k), 0.0, 1.0)
+		var bob: float = 0.0 if motion_off else sin(float_t * 2.2 + float(k) * 1.7) * 0.04
+		var p: Vector2 = c + ((sp[k] as Vector2) + Vector2(0.0, bob)) * fr
+		var tilt: float = -0.5 + 0.35 * float(k % 3)
+		var ax := Vector2(cos(tilt), sin(tilt))
+		var ay := Vector2(-ax.y, ax.x)
+		var hw := maxf(1.8, fr * 0.17) * (0.6 + 0.4 * al)
+		var hh := maxf(1.0, fr * 0.09) * (0.6 + 0.4 * al)
+		_fx_quad(p, ax * (hw + 0.6), ay * (hh + 0.6), Color(COINFX.bill_dk, a * al))
+		_fx_quad(p, ax * hw, ay * hh, Color(COINFX.bill, a * al))
+		_fx_quad(p, ax * hw * 0.35, ay * hh * 0.55, Color(COINFX.bill_dk, a * al))
+
+
+#  베르툼누스 — 같이 든 동전마다 머리 둘레에 과일이 하나씩(여덟까지). 막 돋는 과일은 작게 맺힌다.
+func _fx_fruits(c: Vector2, fr: float, v: float, a: float) -> void:
+	var sp: Array = FX_SPOTS.fruits
+	var cols: Array = COINFX.fruits
+	for k in mini(int(ceil(v)), sp.size()):
+		var al: float = clampf(v - float(k), 0.0, 1.0)
+		var p: Vector2 = c + (sp[k] as Vector2) * fr
+		var r := maxf(1.3, fr * 0.11) * (0.5 + 0.5 * al)
+		draw_circle(p, r + 0.6, Color(COINFX.fruit_rim, a * al))
+		draw_circle(p, r, Color(cols[k % cols.size()], a * al))
+		draw_circle(p + Vector2(-r * 0.4, -r * 0.4), maxf(0.5, r * 0.35), Color(1.0, 1.0, 1.0, 0.55 * a * al))
+
+
+#  진열장 — 다른 동전 판매가 3 마다 진열장에 반짝임이 하나씩(여덟까지). 반짝임마다 박자가 다르다.
+func _fx_glints(c: Vector2, fr: float, v: float, a: float) -> void:
+	var sp: Array = FX_SPOTS.glints
+	var m := minf(v / 3.0, float(sp.size()))
+	if m <= 0.0:
+		return
+	for k in int(ceil(m)):
+		var al: float = clampf(m - float(k), 0.0, 1.0)
+		var tw: float = 1.0 if motion_off else 0.55 + 0.45 * sin(float_t * 3.0 + float(k) * 2.1)
+		var p: Vector2 = c + (sp[k] as Vector2) * fr
+		var l := maxf(1.8, fr * 0.14) * tw * al
+		var col := Color(COINFX.glint, a * al)
+		draw_line(p - Vector2(l, 0.0), p + Vector2(l, 0.0), col, 1.0)
+		draw_line(p - Vector2(0.0, l), p + Vector2(0.0, l), col, 1.0)
+		draw_circle(p, 0.7, col)
+
+
+#  연속사진 — 가장 많이 맞힌 숫자의 맞힌 수만큼 필름 구멍에 영사기 불이 든다(위 다섯 → 밑 다섯).
+func _fx_film(c: Vector2, fr: float, v: float, a: float) -> void:
+	var xs: Array = FX_SPOTS.film_x
+	var n := xs.size()
+	var m := minf(v, float(n * 2))
+	if m <= 0.0:
+		return
+	var h := maxf(0.8, fr * float(FX_SPOTS.film_h))
+	for k in int(ceil(m)):
+		var al: float = clampf(m - float(k), 0.0, 1.0)
+		var y: float = -float(FX_SPOTS.film_y) if k < n else float(FX_SPOTS.film_y)
+		var p := c + Vector2(float(xs[k % n]), y) * fr
+		draw_circle(p, h * 2.2, Color(COINFX.film, 0.30 * a * al))
+		draw_rect(Rect2(p - Vector2(h, h), Vector2(h, h) * 2.0), Color(COINFX.film, a * al))
+
+
+#  닌자 — 탄창의 무거운 다트만큼 작은 표창이 둘레를 돈다(여덟까지).
+func _fx_stars(c: Vector2, fr: float, v: float, a: float) -> void:
+	var m := minf(v, 8.0)
+	if m <= 0.0:
+		return
+	var spin: float = 0.0 if motion_off else float_t * 0.7
+	var turn: float = 0.0 if motion_off else float_t * 6.0
+	var rr := fr * 0.78
+	var s := maxf(2.2, fr * 0.21)
+	for k in int(ceil(m)):
+		var al: float = clampf(m - float(k), 0.0, 1.0)
+		var th := spin - PI * 0.5 + PI / 8.0 + TAU * float(k) / 8.0
+		var p := c + Vector2(cos(th), sin(th)) * rr
+		#  흰 테 한 겹 위에 검은 쇠 — 붉은 바탕에서 점이 아니라 별로 읽힌다.
+		for layer in 2:
+			var pts := PackedVector2Array()
+			var pad: float = 0.7 if layer == 0 else 0.0
+			for j in 8:
+				var t := turn + TAU * float(j) / 8.0
+				var rd: float = ((s if j % 2 == 0 else s * 0.40) + pad) * (0.5 + 0.5 * al)
+				pts.append(p + Vector2(cos(t), sin(t)) * rd)
+			draw_colored_polygon(pts, Color(COINFX.ninja_hi if layer == 0 else COINFX.ninja, a * al))
+		draw_circle(p, maxf(0.5, s * 0.16), Color(COINFX.ninja_hi, a * al))
+
+
+#  윅 존 — 판 중에 아직 안 빗나갔으면 눈구멍에 불씨가 일렁인다. 빗나가면 불씨가 꺼지고 이마에 금이 간다.
+#  v 가 1(불씨) ~ −1(금)이라 스르르 갈 때 불씨가 먼저 꺼지고 금이 뒤에 돋는다.
+func _fx_skull(c: Vector2, fr: float, v: float, a: float) -> void:
+	var glow: float = clampf(v, 0.0, 1.0)
+	var crack: float = clampf(-v, 0.0, 1.0)
+	if glow > 0.001:
+		for k in 2:
+			var fl: float = 1.0 if motion_off else 0.85 + 0.15 * sin(float_t * 9.0 + float(k) * 2.3)
+			var p: Vector2 = c + (FX_SPOTS.eyes[k] as Vector2) * fr
+			draw_circle(p, maxf(1.6, fr * 0.13), Color(COINFX.ember, 0.28 * glow * fl * a))
+			draw_circle(p, maxf(0.9, fr * 0.07) * fl, Color(COINFX.ember, 0.95 * glow * a))
+			draw_circle(p + Vector2(-0.3, -0.3), maxf(0.5, fr * 0.03), Color(COINFX.ember_hi, glow * a))
+	if crack > 0.001:
+		for key in ["skull_crack", "skull_branch"]:
+			var cp: Array = FX_SPOTS[key]
+			for j in cp.size() - 1:
+				var p0: Vector2 = c + (cp[j] as Vector2) * fr
+				var p1: Vector2 = c + (cp[j + 1] as Vector2) * fr
+				draw_line(p0, p1, Color(COINFX.crack_dk, 0.9 * crack * a), 1.0)
 
 
 #  유리 대포 — 버틴 판마다 금이 하나씩 더 간다(여섯까지). 금은 테 가까이에서 안쪽으로 꺾여 들고,
@@ -22101,8 +22344,8 @@ func _fx_wax(c: Vector2, fr: float, v: float, a: float) -> void:
 		var ln: float = (0.42 + 0.14 * float(k % 3)) * (0.5 + 0.5 * ak)
 		var top := c + Vector2(x, y0) * fr
 		var bot := c + Vector2(x, y0 + ln) * fr
-		draw_line(top, bot, Color(COINFX.wax, 0.92 * ak * a), 2.0)
-		draw_circle(bot, 1.4, Color(COINFX.wax_dk, 0.92 * ak * a))
+		draw_line(top, bot, Color(COINFX.wax, 0.92 * ak * a), clampf(fr * 0.13, 1.0, 2.0))
+		draw_circle(bot, clampf(fr * 0.09, 0.8, 1.4), Color(COINFX.wax_dk, 0.92 * ak * a))
 
 
 #  위대한 피자 — 여덟 조각. 남은 배수만큼 남고(12시부터 시계 방향으로 먹는다) 먹은 자리는 빈 판에

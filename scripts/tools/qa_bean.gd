@@ -15,6 +15,9 @@ extends SceneTree
 #      (양옆 칸 수 + 반 칸) 멀리. 없으면 · 불이면 안 뻗는다. 머물다 진다.
 #   ⑨ 성장 · 소모형 동전 다섯(COINFX)의 보이는 값 — 처음 본 값은 곧장 서고, 값이 바뀌면 스르르
 #      따라간다(한 틀에 툭 안 간다) · 움직임 끄기면 곧장 · 실제 값은 item_amt 와 같다.
+#   ⑩ 런 상태를 세는 장(2026-10-29) — 유리 대포 · 이카로스 · 거위는 판 끝마다 gs 가 하나씩(부서진 장 · 성장 갈래는
+#      제 걸음만) · 머니건 골드 · 베르툼누스 같이 든 수 · 연속사진 가장 많이 맞힌 수 · 진열장 다른 판매가 ·
+#      달(남은 다트) · 불씨(안 빗나감)는 판 중에만 · 테이블 · 컬렉션의 장은 맨 그림.
 #   godot --headless --path . --script scripts/tools/qa_bean.gd
 const Save = preload("res://scripts/save.gd")
 const GameData = preload("res://scripts/data.gd")
@@ -278,14 +281,49 @@ func _run() -> void:
 	g.owned[0].gs = 3
 	g._coin_fx_tick(1.0 / 60.0)
 	_ok("⑨ 움직임 끄기면 곧장", float(g.owned[0]._fxs) == 5.0)
-	#  굴려서 부서지는 둘(유리 대포 · 이카로스)은 버틴 판 수가 보이는 값이다.
-	var glass: Dictionary = {}
+	#  ⑩ 런 상태를 세는 장(2026-10-29) — 보이는 값이 그 동전이 세는 것과 같다.
+	var by := {}
 	for it in GameData.items():
-		if String(it.id) == "c03":
-			glass = (it as Dictionary).duplicate()
-	_ok("⑨ 유리 대포는 산 적 없으면(상점 · 컬렉션) 0", g._grow_amt(glass) == 0.0)
-	glass.bought = g.leg_no - 3
-	_ok("⑨ 유리 대포는 버틴 판 수(셋)", g._grow_amt(glass) == 3.0, "%.1f" % g._grow_amt(glass))
+		by[String(it.id)] = (it as Dictionary).duplicate(true)
+	var glass: Dictionary = by["c03"]
+	_ok("⑩ 테이블 · 컬렉션의 유리 대포는 맨 그림(0)", g._fx_val(glass) == 0.0)
+	glass.gs = 3
+	_ok("⑩ 유리 대포는 버틴 판 수", g._fx_want(glass) == 3.0, "%.1f" % g._fx_want(glass))
+	var goose: Dictionary = by["c31"]
+	goose.gs = 0
+	g.owned = [goose]
+	g._leg_end_wear()
+	_ok("⑩ 거위는 판 끝마다 금알 하나", int(g.owned[0].get("gs", 0)) == 1)
+	var gl2: Dictionary = by["c03"].duplicate(true)
+	gl2.gs = 0
+	g.owned = [gl2]
+	g._leg_end_wear()
+	_ok("⑩ 유리 대포는 버티면 금 하나 · 아니면 부서진다",
+			g.owned.is_empty() or int(g.owned[0].get("gs", 0)) == 1)
+	g.wreck.clear()
+	g.wreck_n = 0
+	var pz2: Dictionary = by["c04"].duplicate(true)
+	pz2.gs = 0
+	g.owned = [pz2]
+	g._leg_end_wear()
+	_ok("⑩ 성장 갈래가 있는 장은 제 걸음만(피자 한 조각)", int(g.owned[0].get("gs", 0)) == 1)
+	g.gold = 17
+	_ok("⑩ 머니건은 골드", g._fx_want(by["u18"]) == 17.0)
+	g.owned = [by["c38"], by["c01"], by["c02"]]
+	_ok("⑩ 베르툼누스는 같이 든 동전 수", g._fx_want(g.owned[0]) == 2.0)
+	var film: Dictionary = by["c36"]
+	film.hist = {5: 2, 20: 4}
+	_ok("⑩ 연속사진은 가장 많이 맞힌 숫자의 수", g._fx_want(film) == 4.0)
+	g.owned = [by["c37"], by["c01"], by["c02"]]
+	var rv: float = float(g._rack_val() - GameData.sell_value(g.owned[0]))
+	_ok("⑩ 진열장은 다른 동전 판매가", g._fx_want(g.owned[0]) == rv and rv > 0.0, "%.0f" % rv)
+	if g._is_play_deep():
+		_ok("⑩ 판 중 — 달은 남은 다트 · 불씨는 안 빗나갔을 때",
+				g._fx_want(by["c33"]) == float(g.darts_left)
+				and g._fx_want(by["c30"]) == (-1.0 if g.leg_miss else 1.0))
+	else:
+		_ok("⑩ 판 밖 — 달 · 불씨가 없다",
+				g._fx_want(by["c33"]) == 0.0 and g._fx_want(by["c30"]) == 0.0)
 	g.motion_off = false
 	g.owned = keep
 

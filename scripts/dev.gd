@@ -822,6 +822,9 @@ static func _rows(g: Node) -> Array:
 						"n": GameData.items().size()},
 				{"n1": "동전 무작위", "t": "act", "a": "item_rand"},
 				{"n1": "동전 슬롯 비우기", "t": "act", "a": "item_clear"},
+				#  든 동전의 얼굴 상태(game.gd COINFX)를 한 걸음 — 판을 안 넘기고 금 · 밀랍 · 금알 · 조각을 본다.
+				#  골드 · 다트 · 동전 수를 세는 장은 그 값을 바꾸는 줄이 따로 있다(0쪽 · 이 쪽 위).
+				{"n1": "동전 상태 한 걸음", "t": "act", "a": "item_fx"},
 				{"n1": "사탕 주기", "t": "list", "k": "cons",
 						"n": _list("cons").size()},
 				{"n1": "사진 주기", "t": "list", "k": "photo",
@@ -2112,6 +2115,23 @@ static func _run(g: Node, e: Dictionary) -> void:
 			g.sealed = -1
 			g._panel_reset()
 			_say("동전 슬롯 비움")
+			return
+		"item_fx":
+			#  판 끝(_leg_end_wear) · 발동(fire)의 한 걸음과 같은 수만 민다 — 굴림 · 삭음은 안 돈다.
+			#  연속사진은 제 hist 의 20 을 하나 올린다. 피자가 0 에 닿아도 여기서는 안 먹어 치운다.
+			for it in g.owned:
+				var gk := String(it.get("grow", ""))
+				if gk == "fire":
+					it.gs = int(it.get("gs", 0)) + int(it.get("gstep", 0))
+				elif gk != "":
+					it.gs = int(it.get("gs", 0)) + 1
+				elif String(it.get("id", "")) == "c36":
+					var h: Dictionary = it.get("hist", {})
+					h[20] = int(h.get(20, 0)) + 1
+					it.hist = h
+				elif String(it.get("boom", "")) != "" or String(it.get("g", "")) == "leg":
+					it.gs = int(it.get("gs", 0)) + 1     # 버틴 판 · 금알 — _leg_end_wear 와 같은 가름
+			_say("동전 상태 한 걸음")
 			return
 		"replay":
 			# 정산 연출은 한 번 지나가면 다시 못 본다. 고치는 동안 매번
