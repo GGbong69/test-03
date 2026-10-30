@@ -4,7 +4,8 @@ extends SceneTree
 #   ② 모니터를 모르면(헤드리스) 크기 여섯 다 · 값 글은 「가로 × 세로」
 #   ③ ▶ 는 한 칸 크게 · 끝에서 감는다 · ◀ 는 한 칸 작게 · 고른 가로가 저장된다
 #   ④ ◀ · ▶ 단추가 줄 안 · 조작 칸(이름 칸 뒤) · 서로 안 겹친다 · 누르면 그 쪽으로 민다
-#   ⑤ 일곱 줄이 「뒤로」에 안 닿고 줄 높이 26 이다(2026-10-14 「화면 고르기」 줄을 걷어 여덟 → 일곱)
+#   ⑤ 여덟 줄이 「뒤로」에 안 닿고 줄 높이 26 이다(2026-10-14 「화면 고르기」 줄을 걷어 여덟 → 일곱 ·
+#      2026-10-20 「수직 동기화」 줄이 들어 일곱 → 여덟)
 #   ⑥ 넓은 화면 — 펠트 · 창구가 넓어지고 저울 · 등록기가 바깥으로(화면 안) · TBL_WIDE 까지
 #   godot --headless --path . --script scripts/tools/qa_res.gd
 const Save = preload("res://scripts/save.gd")
@@ -94,7 +95,7 @@ func _run() -> void:
 	# ⑤
 	var last: Rect2 = g._set_rect(rows.size() - 2)
 	var back: Rect2 = g._set_rect(rows.size() - 1)
-	_ok("⑤ 일곱 줄이 「뒤로」에 안 닿는다", rows.size() == 8 and last.end.y < back.position.y,
+	_ok("⑤ 여덟 줄이 「뒤로」에 안 닿는다", rows.size() == 9 and last.end.y < back.position.y,
 			"%d줄 · %.0f < %.0f" % [rows.size() - 1, last.end.y, back.position.y])
 	_ok("⑤ 줄 높이 26", is_equal_approx(r.size.y, 26.0), "%.0f" % r.size.y)
 
