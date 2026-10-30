@@ -18,6 +18,9 @@ extends SceneTree
 #   ⑩ 런 상태를 세는 장(2026-10-29) — 유리 대포 · 이카로스 · 거위는 판 끝마다 gs 가 하나씩(부서진 장 · 성장 갈래는
 #      제 걸음만) · 머니건 골드 · 베르툼누스 같이 든 수 · 연속사진 가장 많이 맞힌 수 · 진열장 다른 판매가 ·
 #      달(남은 다트) · 불씨(안 빗나감)는 판 중에만 · 테이블 · 컬렉션의 장은 맨 그림.
+#   ⑪ 그림 속 물건이 움직이는 장(2026-10-30 COINANIM) — 층 그림이 다 있다 · 수리검은 상태만큼 돌고 0 이면
+#      네 날이 제자리에 선다 · 말은 달리다 0 이면 첫 자세에 멎는다 · 총은 골드만큼 쏘고 0 이면 안 쏜다 ·
+#      테이블 · 컬렉션의 장(보이는 값 없음) · 움직임 끄기는 원래 얼굴 한 장.
 #   godot --headless --path . --script scripts/tools/qa_bean.gd
 const Save = preload("res://scripts/save.gd")
 const GameData = preload("res://scripts/data.gd")
@@ -324,6 +327,57 @@ func _run() -> void:
 	else:
 		_ok("⑩ 판 밖 — 달 · 불씨가 없다",
 				g._fx_want(by["c33"]) == 0.0 and g._fx_want(by["c30"]) == 0.0)
+
+	# ⑪ 그림 속 물건이 움직인다
+	var lay_ok := true
+	for nm in ["c02_bg", "c02_fg", "c02_sh", "u18_bg", "u18_fg", "c36_bg",
+			"c36_f0", "c36_f1", "c36_f2", "c36_f3"]:
+		if g._coin_art(nm) == null:
+			lay_ok = false
+	_ok("⑪ 층 그림 열 장이 다 있다", lay_ok)
+	g.motion_off = false
+	var dt := 1.0 / 60.0
+	var star: Dictionary = by["c02"].duplicate(true)
+	star["_fxs"] = 2.0
+	for k in 30:
+		g._anim_tick(star, dt)
+	var a1: float = float(star.get("_fxa", 0.0))
+	_ok("⑪ 수리검은 무거운 다트만큼 돈다(둘 · 반 초에 0.45 바퀴)", absf(a1 - TAU * 0.45) < 0.01,
+			"%.3f" % a1)
+	star["_fxs"] = 0.0
+	for k in 240:
+		g._anim_tick(star, dt)
+	var a2: float = fmod(float(star._fxa), TAU / 4.0)
+	_ok("⑪ 0 이면 네 날이 제자리에 선다", a2 < 0.001 or TAU / 4.0 - a2 < 0.001, "%.4f" % a2)
+	var horse: Dictionary = by["c36"].duplicate(true)
+	horse["_fxs"] = 2.0
+	for k in 30:
+		g._anim_tick(horse, dt)
+	_ok("⑪ 말은 맞힌 수만큼 달린다(둘 · 반 초에 두 자세 반)",
+			absf(float(horse._fxp) - 2.5) < 0.01, "%.3f" % float(horse._fxp))
+	horse["_fxs"] = 0.0
+	for k in 120:
+		g._anim_tick(horse, dt)
+	_ok("⑪ 0 이면 첫 자세에 멎는다", float(horse._fxp) < 0.001)
+	var gun: Dictionary = by["u18"].duplicate(true)
+	gun["_fxs"] = 40.0
+	var fired := 0
+	for k in 60:
+		var n0: int = (gun.get("_fxb", []) as Array).size()
+		g.float_t += dt
+		g._anim_tick(gun, dt)
+		if (gun.get("_fxb", []) as Array).size() > n0:
+			fired += 1
+	_ok("⑪ 총은 골드만큼 쏜다(마흔 · 한 초에 두 발 이상)", fired >= 2, "%d" % fired)
+	gun["_fxs"] = 0.0
+	gun["_fxb"] = []
+	for k in 120:
+		g.float_t += dt
+		g._anim_tick(gun, dt)
+	_ok("⑪ 골드가 없으면 안 쏜다", (gun.get("_fxb", []) as Array).is_empty())
+	_ok("⑪ 테이블 · 컬렉션의 장은 원래 얼굴", not g._anim_face(Vector2.ZERO, 14.0, by["c02"], 0.0))
+	g.motion_off = true
+	_ok("⑪ 움직임 끄기면 원래 얼굴", not g._anim_face(Vector2.ZERO, 14.0, star, 0.0))
 	g.motion_off = false
 	g.owned = keep
 

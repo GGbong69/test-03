@@ -22001,11 +22001,11 @@ func _ring_i(c: Vector2, rx: float, ry: float, col: Color) -> void:
 #    c31 알 낳는 거위  판마다 골드 — 낳은 판마다 둥지에 금알이 하나씩(다섯까지)
 #                      (셋 다 동전의 gs 가 센다 — _leg_end_wear 가 판 끝에 올린다. 성장 갈래가 없어 비어 있던 칸)
 #    c33 푸른 구슬     남은 다트당 점수 — 판 중에만, 남은 다트만큼 달이 돈다(아홉까지)
-#    u18 머니건        골드당 점수 — 골드 5 마다 지폐가 한 장씩 날린다(여섯까지)
+#    u18 머니건        골드당 점수 — 골드가 많을수록 총이 자주 쏜다(COINANIM — 그림 속 총이 움직인다)
 #    c38 베르툼누스    동전 수당 배수 — 같이 든 동전마다 머리 둘레에 과일이 하나씩(여덟까지)
 #    c37 진열장        다른 동전 판매가당 배수 — 판매가 3 마다 진열장에 반짝임이 하나씩(여덟까지)
-#    c36 연속사진      한 숫자를 맞힌 수당 배수 — 가장 많이 맞힌 숫자의 수만큼 필름 구멍에 불이(열까지)
-#    c02 닌자          무거운 다트당 배수 — 탄창의 무거운 다트만큼 작은 표창이 둘레를 돈다(여덟까지)
+#    c36 연속사진      한 숫자를 맞힌 수당 배수 — 가장 많이 맞힌 숫자의 수가 많을수록 말이 빨리 달린다(COINANIM)
+#    c02 닌자          무거운 다트당 배수 — 탄창의 무거운 다트가 많을수록 수리검이 빨리 돈다(COINANIM)
 #    c30 윅 존         안 빗나간 판에 골드 — 판 중에 아직 안 빗나갔으면 눈구멍에 불씨 · 빗나가면 꺼지고
 #                      이마에 금이 간다(보이는 값 1 → −1 — 불씨가 꺼진 뒤 금이 돋는다)
 #  보이는 값(_fxs)은 실제 값으로 스르르 간다(_coin_fx_tick) — 조각이 툭 없어지지 않고 흐려지며
@@ -22097,6 +22097,7 @@ func _coin_fx_tick(d: float) -> void:
 		if absf(cur - want) < 0.01:
 			cur = want
 		it["_fxs"] = cur
+		_anim_tick(it, d)
 
 
 func _coin_fx(c: Vector2, fr: float, it: Dictionary, dim: float) -> void:
@@ -22117,11 +22118,8 @@ func _coin_fx(c: Vector2, fr: float, it: Dictionary, dim: float) -> void:
 		"c06": _fx_wax(c, fr, v, a)
 		"c31": _fx_eggs(c, fr, v, a)
 		"c33": _fx_moons(c, fr, v, a)
-		"u18": _fx_bills(c, fr, v, a)
 		"c38": _fx_fruits(c, fr, v, a)
 		"c37": _fx_glints(c, fr, v, a)
-		"c36": _fx_film(c, fr, v, a)
-		"c02": _fx_stars(c, fr, v, a)
 		"c30": _fx_skull(c, fr, v, a)
 
 
@@ -22130,9 +22128,6 @@ const FX_SPOTS := {
 	#  알 낳는 거위 — 둥지 앞 짚 위, 왼쪽부터 · 마지막은 큰 금알 오른쪽
 	"eggs": [Vector2(-0.61, 0.53), Vector2(-0.39, 0.58), Vector2(-0.17, 0.61),
 			Vector2(0.06, 0.58), Vector2(0.53, 0.53)],
-	#  머니건 — 총 둘레 빈 바탕(얼굴의 지폐 셋을 피했다)
-	"bills": [Vector2(-0.67, -0.61), Vector2(0.50, -0.44), Vector2(-0.06, 0.50),
-			Vector2(0.78, 0.28), Vector2(-0.72, 0.28), Vector2(0.28, -0.83)],
 	#  베르툼누스 — 얼굴 양옆 · 밑 · 위 바탕, 좌우가 짝으로 돋는다
 	"fruits": [Vector2(-0.83, -0.11), Vector2(0.83, -0.11), Vector2(-0.83, 0.17),
 			Vector2(0.83, 0.17), Vector2(-0.72, 0.44), Vector2(0.72, 0.44),
@@ -22141,8 +22136,6 @@ const FX_SPOTS := {
 	"glints": [Vector2(-0.42, -0.56), Vector2(-0.03, -0.56), Vector2(-0.03, -0.25),
 			Vector2(0.31, -0.25), Vector2(0.0, 0.03), Vector2(-0.39, 0.19),
 			Vector2(-0.33, 0.56), Vector2(0.17, 0.56)],
-	#  연속사진 — 필름 구멍 위 다섯 · 밑 다섯
-	"film_x": [-0.444, -0.222, 0.0, 0.222, 0.444], "film_y": 0.778, "film_h": 0.056,
 	#  윅 존 — 눈구멍 둘 · 이마에서 코로 내려가는 금
 	"eyes": [Vector2(-0.278, -0.056), Vector2(0.222, -0.056)],
 	"skull_crack": [Vector2(0.06, -0.44), Vector2(-0.06, -0.33), Vector2(0.04, -0.24),
@@ -22195,24 +22188,133 @@ func _fx_quad(p: Vector2, ax: Vector2, ay: Vector2, col: Color) -> void:
 	draw_colored_polygon(PackedVector2Array([p - ax - ay, p + ax - ay, p + ax + ay, p - ax + ay]), col)
 
 
-#  머니건 — 골드 5 마다 지폐가 한 장씩 날린다(여섯까지). 지폐는 제자리에서 살랑인다.
-func _fx_bills(c: Vector2, fr: float, v: float, a: float) -> void:
-	var sp: Array = FX_SPOTS.bills
-	var m := minf(v / 5.0, float(sp.size()))
-	if m <= 0.0:
+#  ══ 그림 속 물건이 움직인다 (2026-10-30) ═══════════════════════════════════
+#  「닌자같은건 수리검을 더 추가 말고 일러스트 안에 있는 수리검이 움직여야지 · 머니건도 그렇고 ·
+#  연속사진도 안에 있는 말이 움직여야지」. 얼굴을 바탕 · 움직이는 것으로 갈라 구웠다
+#  (scripts/tools/make_coin_anim.py — 바탕 + 쉬는 자세 = 원래 얼굴). 든 동전만 층으로 그리고,
+#  테이블 · 컬렉션 · 작은 그림은 원래 얼굴 한 장이다. 빠르기는 보이는 값(_fxs)을 따라 스르르 오르내리고,
+#  상태가 0 이면 쉬는 자세에 멎는다(수리검은 네 날이 제자리 · 말은 첫 자세). 움직임 끄기면 쉬는 자세.
+#    c02 닌자     무거운 다트 하나에 0.45 바퀴/초씩 빨리 돈다(두 바퀴/초까지) — 그림자도 따라 돈다
+#    u18 머니건   골드 하나에 0.06 발/초씩 자주 쏜다(2.5 발/초까지) — 반동으로 튕기고 총구에서 지폐가 난다
+#    c36 연속사진 맞힌 수 하나에 2.5 자세/초씩 빨리 달린다(14 까지) — 네 자세(뻗기 · 밀기 · 모아 뜨기 · 딛기)
+const COINANIM := {
+	"ids": ["c02", "u18", "c36"],
+	"spin_per": 0.45, "spin_max": 2.0,
+	"gun_per": 0.06, "gun_max": 2.5,
+	"gallop_per": 2.5, "gallop_max": 14.0, "gallop_n": 4,
+	"shadow": Vector2(1.5, 1.5),            # 수리검 그림자 — 얼굴 화소(36) 단위 · 그림의 손그림자 자리
+	"shadow_col": Color("8c2233"),          # 그림의 그림자 빛(바탕 짙은 빨강)
+	"muzzle": Vector2(0.44, -0.06),         # 총구 — 그림의 총 앞 끝
+	"pivot": Vector2(-0.53, 0.58),          # 반동이 도는 자리 — 손잡이 밑
+	"kick": 11.0, "kick_rot": 0.22, "kick_back": 0.10,
+	#  지폐는 총구에서 위로 튀어 포물선 — 그림의 오른쪽 지폐에 안 묻히고 얼굴 안에서 진다
+	"bill_life": 0.75, "bill_v": Vector2(0.42, -1.40), "bill_g": 3.2,   # 얼굴 반지름 / 초
+	"flash": Color("fff2b0"),
+}
+
+
+#  움직임 셈 — _coin_fx_tick 이 든 동전마다 부른다. 각 · 자세 · 쏜 때는 그림만의 값이라 안 적힌다.
+func _anim_tick(it: Dictionary, d: float) -> void:
+	var id := String(it.get("id", ""))
+	if motion_off or not (COINANIM.ids as Array).has(id):
 		return
-	for k in int(ceil(m)):
-		var al: float = clampf(m - float(k), 0.0, 1.0)
-		var bob: float = 0.0 if motion_off else sin(float_t * 2.2 + float(k) * 1.7) * 0.04
-		var p: Vector2 = c + ((sp[k] as Vector2) + Vector2(0.0, bob)) * fr
-		var tilt: float = -0.5 + 0.35 * float(k % 3)
-		var ax := Vector2(cos(tilt), sin(tilt))
-		var ay := Vector2(-ax.y, ax.x)
-		var hw := maxf(1.8, fr * 0.17) * (0.6 + 0.4 * al)
-		var hh := maxf(1.0, fr * 0.09) * (0.6 + 0.4 * al)
-		_fx_quad(p, ax * (hw + 0.6), ay * (hh + 0.6), Color(COINFX.bill_dk, a * al))
-		_fx_quad(p, ax * hw, ay * hh, Color(COINFX.bill, a * al))
-		_fx_quad(p, ax * hw * 0.35, ay * hh * 0.55, Color(COINFX.bill_dk, a * al))
+	var v: float = float(it.get("_fxs", 0.0))
+	match id:
+		"c02":
+			var q := TAU / 4.0
+			var ang: float = float(it.get("_fxa", 0.0))
+			var rate: float = minf(float(COINANIM.spin_per) * v, float(COINANIM.spin_max))
+			if rate > 0.02:
+				ang += TAU * rate * d
+			else:
+				ang = move_toward(ang, ceil(ang / q - 0.001) * q, TAU * 0.3 * d)   # 네 날이 제자리에 선다
+			it["_fxa"] = fmod(ang, TAU)
+		"u18":
+			var ph: float = float(it.get("_fxp", 0.0))
+			var rate: float = minf(float(COINANIM.gun_per) * v, float(COINANIM.gun_max))
+			var ph2: float = ph + rate * d
+			var shots: Array = it.get("_fxb", [])
+			if floor(ph2) > floor(ph):
+				shots.append(float_t)
+			it["_fxp"] = fmod(ph2, 1000.0)
+			it["_fxb"] = shots.filter(func(t: float) -> bool: return float_t - t < float(COINANIM.bill_life))
+		"c36":
+			var n := float(COINANIM.gallop_n)
+			var ph: float = float(it.get("_fxp", 0.0))
+			var fps: float = minf(float(COINANIM.gallop_per) * v, float(COINANIM.gallop_max))
+			if fps > 0.05:
+				ph += fps * d
+			else:
+				ph = move_toward(ph, ceil(ph / n - 0.001) * n, 6.0 * d)            # 첫 자세에서 멎는다
+			it["_fxp"] = fmod(ph, n)
+
+
+#  든 동전의 얼굴을 층으로 — 그렸으면 true(원래 얼굴을 안 그린다).
+func _anim_face(c: Vector2, fr: float, it: Dictionary, dim: float) -> bool:
+	var id := String(it.get("id", ""))
+	if motion_off or fr < float(COINFX.min_r) or not it.has("_fxs") 			or not (COINANIM.ids as Array).has(id):
+		return false
+	var bg := _coin_art(id + "_bg")
+	if bg == null:
+		return false
+	var col := Color(1.0, 1.0, 1.0).darkened(dim)
+	draw_texture_rect(bg, Rect2(c - Vector2(fr, fr), Vector2(fr, fr) * 2.0), false, col)
+	match id:
+		"c02":
+			var ang: float = float(it.get("_fxa", 0.0))
+			var sh := _coin_art("c02_sh")
+			var fg := _coin_art("c02_fg")
+			var off: Vector2 = (COINANIM.shadow as Vector2) * fr / 18.0
+			if sh != null:
+				_tex_quad(sh, c + off, fr, ang, c + off, Vector2.ZERO, Color(COINANIM.shadow_col).darkened(dim))
+			if fg != null:
+				_tex_quad(fg, c, fr, ang, c, Vector2.ZERO, col)
+		"u18":
+			var shots: Array = it.get("_fxb", [])
+			var kick := 0.0
+			if not shots.is_empty():
+				kick = exp(-(float_t - float(shots.back())) * float(COINANIM.kick))
+			var fg := _coin_art("u18_fg")
+			if fg != null:
+				_tex_quad(fg, c, fr, -kick * float(COINANIM.kick_rot), c + (COINANIM.pivot as Vector2) * fr,
+						Vector2(-kick * float(COINANIM.kick_back) * fr, 0.0), col)
+			var mz: Vector2 = c + (COINANIM.muzzle as Vector2) * fr
+			var a: float = 1.0 - dim
+			for k in shots.size():
+				var age: float = float_t - float(shots[k])
+				var life: float = float(COINANIM.bill_life)
+				if age < 0.0 or age >= life:
+					continue
+				#  쏜 차례마다 조금씩 다른 쪽으로 — 지폐가 한 줄로 안 겹친다.
+				var spread: float = [0.0, 0.18, -0.12][int(float(shots[k]) * 7.0) % 3]
+				var vel: Vector2 = (COINANIM.bill_v as Vector2).rotated(spread)
+				var p: Vector2 = mz + (vel * age + Vector2(0.0, 0.5 * float(COINANIM.bill_g) * age * age)) * fr
+				var al: float = 1.0 - pow(age / life, 2.0)
+				var ax := Vector2(cos(age * 7.0 - 0.3), sin(age * 7.0 - 0.3))
+				var ay := Vector2(-ax.y, ax.x)
+				var hw := maxf(1.8, fr * 0.16)
+				var hh := maxf(1.0, fr * 0.085)
+				_fx_quad(p, ax * (hw + 0.6), ay * (hh + 0.6), Color(COINFX.bill_dk, a * al))
+				_fx_quad(p, ax * hw, ay * hh, Color(COINFX.bill, a * al))
+				_fx_quad(p, ax * hw * 0.35, ay * hh * 0.55, Color(COINFX.bill_dk, a * al))
+				if age < 0.08:
+					draw_circle(mz, maxf(1.2, fr * 0.09) * (1.0 - age / 0.08), Color(COINANIM.flash, a))
+		"c36":
+			var k := int(floor(float(it.get("_fxp", 0.0)))) % int(COINANIM.gallop_n)
+			var fx := _coin_art("c36_f%d" % k)
+			if fx != null:
+				draw_texture_rect(fx, Rect2(c - Vector2(fr, fr), Vector2(fr, fr) * 2.0), false, col)
+	return true
+
+
+#  얼굴 한 장을 기울여 — 네 귀를 pivot 둘레로 ang 만큼 돌리고 shift 만큼 민다.
+func _tex_quad(tx: Texture2D, c: Vector2, fr: float, ang: float, pivot: Vector2, shift: Vector2,
+		col: Color) -> void:
+	var pts := PackedVector2Array()
+	for q in [Vector2(-fr, -fr), Vector2(fr, -fr), Vector2(fr, fr), Vector2(-fr, fr)]:
+		pts.append(pivot + (c + (q as Vector2) - pivot).rotated(ang) + shift)
+	draw_colored_polygon(pts, col,
+			PackedVector2Array([Vector2(0.0, 0.0), Vector2(1.0, 0.0), Vector2(1.0, 1.0), Vector2(0.0, 1.0)]), tx)
 
 
 #  베르툼누스 — 같이 든 동전마다 머리 둘레에 과일이 하나씩(여덟까지). 막 돋는 과일은 작게 맺힌다.
@@ -22243,47 +22345,6 @@ func _fx_glints(c: Vector2, fr: float, v: float, a: float) -> void:
 		draw_line(p - Vector2(l, 0.0), p + Vector2(l, 0.0), col, 1.0)
 		draw_line(p - Vector2(0.0, l), p + Vector2(0.0, l), col, 1.0)
 		draw_circle(p, 0.7, col)
-
-
-#  연속사진 — 가장 많이 맞힌 숫자의 맞힌 수만큼 필름 구멍에 영사기 불이 든다(위 다섯 → 밑 다섯).
-func _fx_film(c: Vector2, fr: float, v: float, a: float) -> void:
-	var xs: Array = FX_SPOTS.film_x
-	var n := xs.size()
-	var m := minf(v, float(n * 2))
-	if m <= 0.0:
-		return
-	var h := maxf(0.8, fr * float(FX_SPOTS.film_h))
-	for k in int(ceil(m)):
-		var al: float = clampf(m - float(k), 0.0, 1.0)
-		var y: float = -float(FX_SPOTS.film_y) if k < n else float(FX_SPOTS.film_y)
-		var p := c + Vector2(float(xs[k % n]), y) * fr
-		draw_circle(p, h * 2.2, Color(COINFX.film, 0.30 * a * al))
-		draw_rect(Rect2(p - Vector2(h, h), Vector2(h, h) * 2.0), Color(COINFX.film, a * al))
-
-
-#  닌자 — 탄창의 무거운 다트만큼 작은 표창이 둘레를 돈다(여덟까지).
-func _fx_stars(c: Vector2, fr: float, v: float, a: float) -> void:
-	var m := minf(v, 8.0)
-	if m <= 0.0:
-		return
-	var spin: float = 0.0 if motion_off else float_t * 0.7
-	var turn: float = 0.0 if motion_off else float_t * 6.0
-	var rr := fr * 0.78
-	var s := maxf(2.2, fr * 0.21)
-	for k in int(ceil(m)):
-		var al: float = clampf(m - float(k), 0.0, 1.0)
-		var th := spin - PI * 0.5 + PI / 8.0 + TAU * float(k) / 8.0
-		var p := c + Vector2(cos(th), sin(th)) * rr
-		#  흰 테 한 겹 위에 검은 쇠 — 붉은 바탕에서 점이 아니라 별로 읽힌다.
-		for layer in 2:
-			var pts := PackedVector2Array()
-			var pad: float = 0.7 if layer == 0 else 0.0
-			for j in 8:
-				var t := turn + TAU * float(j) / 8.0
-				var rd: float = ((s if j % 2 == 0 else s * 0.40) + pad) * (0.5 + 0.5 * al)
-				pts.append(p + Vector2(cos(t), sin(t)) * rd)
-			draw_colored_polygon(pts, Color(COINFX.ninja_hi if layer == 0 else COINFX.ninja, a * al))
-		draw_circle(p, maxf(0.5, s * 0.16), Color(COINFX.ninja_hi, a * al))
 
 
 #  윅 존 — 판 중에 아직 안 빗나갔으면 눈구멍에 불씨가 일렁인다. 빗나가면 불씨가 꺼지고 이마에 금이 간다.
@@ -22535,7 +22596,8 @@ func draw_item_sticker(c: Vector2, r: float, it: Dictionary, rot: float, lift: f
 	var fcp := c + Vector2(0.0, fv.y)     # 얼굴 중심 — drip 만 +1.223k 처진다
 	var fr: float = fv.z
 	if _mat_of(it) != "hollow" and fr > 2.0:
-		_icon_item(fcp, fr, fr, String(it.get("id", "")), dim)
+		if not _anim_face(fcp, fr, it, dim):     # 그림 속 물건이 움직이는 장(COINANIM)
+			_icon_item(fcp, fr, fr, String(it.get("id", "")), dim)
 		_coin_fx(fcp, fr, it, dim)       # 성장 · 소모형의 지금 상태(COINFX)
 	#  움푹한 얼굴 — 쇠 테가 빛 쪽 안 가장자리에 드리운 그늘(얼굴 **뒤**). 도트 재질은 옛 테라 안 둔다.
 	if String(FORMS[form].get("fam", "disc")) != "plaque" and _mat_of(it) != "pixel":

@@ -3,6 +3,8 @@ extends SceneTree
 #  박아 동전 슬롯 그림 그대로(draw_item_sticker) 찍는다. 필터는 끈다. 게임 파일은 안 고친다
 #  (그리기는 poster/coin_sheet_game.gd 가 가른다).
 #    godot --path . --script scripts/tools/shot_coinfx.gd -- out=<png 경로> r=18 k=6
+#  mode=anim — 그림 속 물건이 움직이는 장(COINANIM)을 셋 × 상태 둘로 세우고 틀마다 한 장씩
+#  <out>_NNN.png 로 찍는다(n 틀 · fps). 움직임 셈은 게임의 _anim_tick 그대로다.
 #  창이 있어야 돈다.
 const Save = preload("res://scripts/save.gd")
 const GameData = preload("res://scripts/data.gd")
@@ -18,7 +20,10 @@ const STEPS := {
 	"c36": [0.0, 2.0, 4.5, 7.0, 10.0], "c02": [0.0, 1.0, 2.5, 4.0, 8.0],
 	"c30": [1.0, 0.5, 0.0, -0.5, -1.0],
 }
-var A := {"out": "user://coinfx_sheet.png", "r": 18.0, "k": 6, "cell": 40.0}
+var A := {"out": "user://coinfx_sheet.png", "r": 18.0, "k": 6, "cell": 40.0, "mode": "sheet",
+		"n": 60, "fps": 30}
+#  anim — 동전마다 (낮은 상태, 높은 상태)
+const ANIM := {"c02": [1.0, 6.0], "u18": [10.0, 40.0], "c36": [1.0, 6.0]}
 var g = null
 var vp: SubViewport = null
 var busy := false
@@ -67,6 +72,10 @@ func _run() -> void:
 	var by := {}
 	for it in GameData.items():
 		by[String(it.id)] = it
+	if String(A.mode) == "anim":
+		await _anim(by)
+		quit(0)
+		return
 	var cell: float = float(A.cell)
 	var ids: Array = STEPS.keys()
 	var x0: float = (640.0 - float(ids.size()) * cell) * 0.5
@@ -91,3 +100,29 @@ func _run() -> void:
 	img.save_png(String(A.out))
 	print("saved ", A.out, " ", img.get_size(), " ", ids)
 	quit(0)
+
+
+func _anim(by: Dictionary) -> void:
+	var cell: float = float(A.cell)
+	var ids: Array = ANIM.keys()
+	var sheet := []
+	var x0: float = (640.0 - float(ids.size() * 2) * cell) * 0.5
+	for i in ids.size():
+		for j in 2:
+			var it: Dictionary = (by[ids[i]] as Dictionary).duplicate(true)
+			it["_fxs"] = float(ANIM[ids[i]][j])
+			sheet.append({"c": Vector2(x0 + (float(i * 2 + j) + 0.5) * cell, 180.0), "r": float(A.r), "it": it})
+	g.sheet = sheet
+	g.motion_off = false
+	var dt: float = 1.0 / float(A.fps)
+	for f in int(A.n):
+		for e in sheet:
+			g._anim_tick(e.it, dt)
+		g.float_t += dt
+		g.queue_redraw()
+		for _i in 2:
+			await process_frame
+		await RenderingServer.frame_post_draw
+		var img: Image = vp.get_texture().get_image()
+		img.save_png(String(A.out).replace(".png", "_%03d.png" % f))
+	print("saved ", A.n, " frames ", A.out)

@@ -6,6 +6,7 @@ u"""동전 얼굴 굽기 — assets/coin_src/faces.txt 를 assets/coin/<id>.png 
     python scripts/tools/make_coin_art.py           동전 · 와펜 둘 다
     python scripts/tools/make_coin_art.py --mods    와펜만(아래 「보드 확장 와펜」 절)
     godot --headless --path . --import      ← 구운 뒤 한 번. .import 를 세운다
+    python scripts/tools/make_coin_anim.py  ← 움직이는 얼굴 층(닌자 · 머니건 · 연속사진)을 이 PNG 에서 다시 뜬다
 
 원본은 파일이 아니라 **faces.txt 의 격자**다. 글 하나가 도트 하나이고,
 장마다 제 팔레트를 들고 있다. 효과음(sfx_bake.gd)·음악(mus_bake.py)과 같은
