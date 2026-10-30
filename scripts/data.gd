@@ -3347,9 +3347,11 @@ static func _v_legs() -> void:
 			_errs.append("rounds — 라운드 %d 목표가 안 오른다 (%.0f → %.0f). curve_bow 가 너무 크다"
 					% [a, prevb, b])
 		prevb = b
+	#  ⚠ 문턱을 60% → 100% 로 옮겼다(2026-10-30 「초반에 너무 쉬워 · 라운드 1의 점수를 150까지 가자」 —
+	#  첫 판 75 = 기댓값의 87%). 첫 판은 동전 없이 던지므로 기댓값을 넘으면 손으로는 못 넘는 판이 된다.
 	var unarmed := float(tune_i("darts_base")) * 14.4
-	if round_base(1) > unarmed * 0.6:
-		_errs.append("tuning — curve_first %.0f 가 무장 없는 한 판 기댓값 %.0f 의 60%% 를 넘는다. 첫 라운드가 튜토리얼이 아니게 된다"
+	if round_base(1) > unarmed:
+		_errs.append("tuning — curve_first %.0f 가 무장 없는 한 판 기댓값 %.0f 를 넘는다. 첫 판을 동전 없이 못 넘는다"
 				% [round_base(1), unarmed])
 
 	#  조준 바닥이 견줄 두 수. **숫자로 안 박는다** — 등급 저울이 바뀌면
