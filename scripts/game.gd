@@ -6634,7 +6634,7 @@ func _mod_step(b: Dictionary, sec: Array, m: Dictionary) -> void:
 			# 문턱을 **값이 아니라 표에 자리가 없어서** 여기 둔다. mods.csv 의
 			# 값 열은 v0·v1 둘뿐이고 그 둘을 증분이 이미 쓴다 — 열을 늘리면
 			# 모든 축이 읽는 계약이 바뀌므로 이 한 축을 위해 늘리지 않았다.
-			# mods.csv 의 desc 가 같은 11·10 을 적고 있으니 같이 고쳐야 한다.
+			# mods.csv 의 rule 이 같은 11·10 을 적고 있으니 같이 고쳐야 한다.
 			const DNUT_HI := 11         # 이 값 이상이 v0, 아래가 v1
 			# 값을 읽는 차례가 곧 판단의 차례다 — 먼저 걸린 보드 확장이
 			# 칸을 이미 바꿨으면 **바뀐 값**으로 갈린다. 표 순서가 적용
@@ -18305,7 +18305,7 @@ func _rulep_rows() -> Array:
 	if _board_theme() != "" and not mods_own.is_empty():
 		var bm := GameData.mod_of(String(mods_own[0]))
 		out.append({"key": "b:" + String(bm.id), "k": "board", "id": String(bm.id), "n": String(bm.n),
-				"d": [String(bm.d)], "left": -1, "max": 0})
+				"d": [String(bm.rd)], "left": -1, "max": 0})
 	for mo in active_mods:
 		var mid := String(mo.get("id", ""))
 		out.append({"key": "m:" + mid, "k": "mod", "id": mid, "n": String(mo.get("n", "")),

@@ -783,6 +783,10 @@ static func mods() -> Array:
 			"excl": r.get("excl", ""),
 			"cost": _i(r, "cost", "mods"),
 			"d": _fd(r.get("desc", ""), {"v0": v0, "v1": v1}),
+			#  판 위 규칙 명판(RULEP)의 효과 — rule 이 비면 desc 그대로. 판 모양을 바꾸는 장은
+			#  툴팁이 「보드판이 피자가 됩니다」 한 줄이고 칸 값 · 띠는 명판이 말한다(2026-10-31).
+			"rd": _fd(r.get("rule", "") if String(r.get("rule", "")) != "" else r.get("desc", ""),
+					{"v0": v0, "v1": v1}),
 			"line": r.get("_line", 0),
 		})
 	_cache["mods"] = out
@@ -3235,6 +3239,7 @@ static func _v_mods() -> void:
 				_warns.append("%s — band 축의 합이 0 이 아니다 (%.3f) — 링 총 폭이 그만큼 바뀐다"
 						% [who, sum])
 		_v_desc(who, r.get("desc", ""), ["v0", "v1"])
+		_v_desc(who, r.get("rule", ""), ["v0", "v1"])
 	# 배타는 대칭이어야 한다. 한쪽만 적으면 사는 순서에 따라 결과가 달라진다.
 	for r in raw:
 		var e: String = r.get("excl", "")

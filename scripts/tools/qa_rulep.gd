@@ -275,8 +275,9 @@ func _run() -> void:
 	g.mods_own = ["aimb"]
 	var am: Dictionary = GameData.mod_of("aimb")
 	var br0: Array = g._rulep_rows()
-	_ok("⑪ 과녁 — 보드 확장 한 장 · 이름 · 효과 표 그대로", br0.size() == 1 and String(br0[0].k) == "board"
-			and String(br0[0].n) == String(am.n) and String(br0[0].d[0]) == String(am.d), str(br0))
+	_ok("⑪ 과녁 — 보드 확장 한 장 · 이름 · 효과(rule) 표 그대로", br0.size() == 1 and String(br0[0].k) == "board"
+			and String(br0[0].n) == String(am.n) and String(br0[0].d[0]) == String(am.rd)
+			and String(am.rd) != String(am.d), str(br0))
 	_ok("⑪ 과녁이면 오른쪽 아래 이름 명판은 접는다", not g._modplate_on())
 	g.active_mods = [mf[0]]
 	_tick(1.0)
