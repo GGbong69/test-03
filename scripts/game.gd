@@ -18284,11 +18284,12 @@ func _modplate_draw() -> void:
 #    flash · flash_a   드는 빛의 길이(초) · 짙기
 #    dim       조준 중에 물러나는 몫 · follow 밑 명판이 올라와 메우는 빠르기
 #    tick · tick_dx   남은 발 눈금 한 획 [폭, 높이] · 획 사이 · tick_off 지운 획의 짙기
+#    dart_pick 판 위 라이벌 자루(촉 ~ 꽁지)를 잡는 폭(px · 자루 줄에서)
 const RULEP := {"y": 70.0, "bot": 200.0, "w": 184.0, "w_min": 112.0, "right": 4.0,
 		"pad": 6.0, "icon_r": 8.0, "gap": 6.0, "name_h": 14.0, "line_h": 13.0, "step": 4.0,
 		"in_t": 0.34, "out_t": 0.26, "slide": 40.0, "stagger": 0.12,
 		"flash": 0.5, "flash_a": 0.28, "dim": 0.35, "follow": 14.0,
-		"tick": Vector2(1.0, 7.0), "tick_dx": 3.0, "tick_off": 0.22}
+		"tick": Vector2(1.0, 7.0), "tick_dx": 3.0, "tick_off": 0.22, "dart_pick": 5.0}
 #  명판 — 열쇠 → {"row": 지금 줄, "t": 든 뒤 흐른 시간(음수면 차례를 기다린다),
 #  "o": 빠지기 시작한 뒤 흐른 시간(−1 이면 서 있다), "y": 보이는 윗변(NAN 이면 아직 안 잡았다)}.
 #  차례는 넣은 차례다(사전은 넣은 차례를 지킨다).
@@ -18508,13 +18509,80 @@ func _rulep_hit(m: Vector2) -> Dictionary:
 	if key == "" and _order_board_on() and _order_foot().has_point(m):
 		key = "ev:order"
 		src = "board"
+	var cell := {}
+	if key == "":
+		cell = _rulep_cell(m)
+		key = String(cell.get("key", ""))
 	if key == "":
 		return {}
 	var rows := _rulep_rows()
 	for j in rows.size():
 		if String(rows[j].key) == key:
-			return {"k": "rulep", "i": j, "src": src}
+			return {"k": "rulep", "i": j, "src": src, "ring": cell.get("ring", [])}
 	return {}
+
+
+#  판 위에 선 규칙 그림 — 올리면 그 명판의 툴팁이 뜬다(2026-10-31 「라이벌이랑 불씨 … 보드 판에
+#  표시 되잖아? 그런게에 마우스 오버 넣고 설명이 뜨면 좋겠어 · 지금 오른쪽에 표시하면 잘 못 보더라고」).
+#  라이벌 자루(촉 ~ 꽁지)와 막은 띠 한 칸 · 불씨 칸 · 막힌 칸과 닫힌 문의 참나무 쪽(라이벌 쪽과 같은
+#  나무라 같이 읽힌다). 던질 다트를 고르는 동안(PICK)만 잡는다 — 조준 · 비행 · 셈 동안 판 위에
+#  툴팁이 서면 판을 가린다. {key(_rulep_rows 의 열쇠), ring(흰 테로 두를 선들)} · 없으면 빈 사전.
+func _rulep_cell(m: Vector2) -> Dictionary:
+	if state != S.PICK:
+		return {}
+	if rgl_st == "on" and rgl_ph == "on":
+		var tail := _ttl3_tail_b(rgl_p, rgl_rot)
+		if _cell_has(m, rgl_idx, rgl_r) or m.distance_to(
+				Geometry2D.get_closest_point_to_segment(m, rgl_p, tail)) <= float(RULEP.dart_pick):
+			return {"key": "ev:regular", "ring": _cell_ring(rgl_idx, rgl_r)}
+	if leg_ev == "ember":
+		var ei := ember_idx if ember_from < 0 else ember_from
+		var er := _ember_band_r(ember_band)
+		if ei >= 0 and _cell_has(m, ei, er):
+			return {"key": "ev:ember", "ring": _cell_ring(ei, er)}
+	var full := Vector2(R * rt_bull_o, R * rt_dbl_out)
+	for mo in active_mods:
+		var hit := []
+		match String(mo.get("k", "")):
+			"sector_kill":
+				hit = [dead_idx]
+			"close_hit":
+				hit = shut_idx
+		for si in hit:
+			if int(si) >= 0 and _cell_has(m, int(si), full):
+				return {"key": "m:" + String(mo.get("id", "")), "ring": _cell_ring(int(si), full)}
+	return {}
+
+
+#  판 위 한 점이 칸 idx 의 반지름 [안, 밖] 안인가. idx 가 음수면 한 바퀴(불)다.
+func _cell_has(m: Vector2, idx: int, rr: Vector2) -> bool:
+	var v := m - BC
+	var r := v.length()
+	if r < rr.x or r > rr.y:
+		return false
+	if idx < 0:
+		return true
+	var sw := _sec_w()
+	return absf(wrapf(atan2(v.x, -v.y) - float(idx) * sw, -PI, PI)) <= sw * 0.5
+
+
+#  그 칸의 테두리 선들 — 칸이면 닫힌 띠 한 조각, 불이면 안 · 바깥 원.
+func _cell_ring(idx: int, rr: Vector2) -> Array:
+	if idx < 0:
+		var out := []
+		for rad in [rr.x, rr.y]:
+			if float(rad) <= 0.5:
+				continue
+			var c := PackedVector2Array()
+			for k in 33:
+				var a := TAU * float(k) / 32.0
+				c.append(BC + Vector2(sin(a), -cos(a)) * float(rad))
+			out.append(c)
+		return out
+	var sw := _sec_w()
+	var pts := annulus(rr.x, rr.y, float(idx) * sw - sw * 0.5, float(idx) * sw + sw * 0.5)
+	pts.append(pts[0])
+	return [pts]
 
 
 func _rulep_draw() -> void:
@@ -44518,6 +44586,7 @@ var tip_mark := Rect2()         # 대상 사각 (동전 슬롯은 링으로 대�
 # 카드는 "커서 아래 카드가 선다" 를 tip_mark 로 판정하므로(_drop_update)
 # 사각 자체는 살아 있어야 하고, 그리기만 빠져야 한다.
 var tip_box := true
+var tip_ring := []              # 판 위 그림의 테두리 선들(_rulep_cell) — 사각 대신 칸 모양을 두른다
 var tip_slot := -1              # 호버 중인 동전 슬롯 칸
 var tip_spot := -1              # 호버 중인 테이블 자리 (테이블 구획용)
 var tip_a := 0.0                # 페이드
@@ -44804,6 +44873,7 @@ func _tip_clear() -> void:
 	tip_tags = []
 	tip_mark = Rect2()
 	tip_box = true
+	tip_ring = []
 	tip_slot = -1
 	tip_spot = -1
 
@@ -45222,6 +45292,14 @@ func _tip_build(hit: Dictionary) -> void:
 			_tip_set_tag({"mod": "제약", "board": "보드 확장"}.get(String(rw.k), "사건"))
 			tip_mark = _order_foot() if String(hit.get("src", "")) == "board" \
 					else _rulep_rect(String(rw.key))
+			var ring: Array = hit.get("ring", [])
+			if not ring.is_empty():
+				tip_ring = ring
+				tip_box = false
+				tip_mark = Rect2((ring[0] as PackedVector2Array)[0], Vector2.ZERO)
+				for pl in ring:
+					for q in pl:
+						tip_mark = tip_mark.expand(q)
 			tip_title = String(rw.n)
 			for ln in rw.d:
 				_tip_add(String(ln), 20, C_TXT)
@@ -45684,6 +45762,8 @@ func _tip_draw(sh: Vector2) -> void:
 	# 테두리는 대상과 같이 흔들려야 어긋나 보이지 않는다 — 현재 transform 그대로.
 	if tip_box and tip_mark.size.x > 0.0:
 		_rr_line(self, tip_mark, Color(C_TXT, tip_a * 0.9))
+	for pl in tip_ring:
+		draw_polyline(pl, Color(C_TXT, tip_a * 0.9), 1.0)
 
 	# 판과 글자는 흔들리면 못 읽는다 — 흔들림 밖에서 그린다.
 	draw_set_transform(Vector2.ZERO)

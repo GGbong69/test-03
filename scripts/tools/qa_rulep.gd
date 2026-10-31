@@ -12,6 +12,8 @@ extends SceneTree
 #   ⑨ 판이 안 서 있으면(판 갈이 · 상점) 비운다 · 움직임 끄기면 빠지는 명판이 곧장 지워진다.
 #   ⑩ events.csv 의 사건 세 갈래에 desc 가 있다.
 #   ⑪ 판 모양을 바꾼 보드 확장(과녁 등)은 맨 위 한 장 · 효과는 mods.csv · 오른쪽 아래 이름 명판은 접는다.
+#   ⑫ 판 위 그림에 올려도 그 명판의 툴팁(2026-10-31) — 라이벌이 막은 칸 · 자루 꽁지, 불씨 칸, 막힌 칸 ·
+#      닫힌 문의 참나무 쪽. 테는 칸 모양(사각 아님) · 옆 칸은 안 잡는다 · 다트를 고르는 동안만.
 #   godot --headless --path . --script scripts/tools/qa_rulep.gd
 const Save = preload("res://scripts/save.gd")
 const GameData = preload("res://scripts/data.gd")
@@ -303,3 +305,72 @@ func _run() -> void:
 	_ok("⑪ 판 모양을 안 바꾸는 확장(핵심)은 명판 없음 · 이름 명판 그대로",
 			g._rulep_rows().is_empty() and g._modplate_on())
 	g.mods_own = []
+
+	# ⑫ 판 위 그림 — 올리면 그 명판의 툴팁
+	_clear()
+	g.mods_own = []
+	g.state = g.S.PICK
+	var rg_ev: Dictionary = GameData.event_of("regular")
+	g._rgl_open(g._rgl_at(g._ember_at(3, "t")), 4242)
+	g._rgl_in(0.0)
+	g._rgl_stick()
+	var rk := func(q: Vector2) -> String:
+		var h: Dictionary = g._tip_hit(q)
+		if String(h.get("k", "")) != "rulep":
+			return ""
+		var rws: Array = g._rulep_rows()
+		return String(rws[int(h.i)].key) if int(h.i) < rws.size() else "?"
+	var c3: Vector2 = g._ember_at(3, "t")
+	_ok("⑫ 라이벌이 막은 칸에 올리면 라이벌 툴팁", rk.call(c3) == "ev:regular", rk.call(c3))
+	var tail: Vector2 = g._ttl3_tail_b(g.rgl_p, g.rgl_rot)
+	_ok("⑫ 자루 꽁지에 올려도", rk.call(tail) == "ev:regular", "%s %s" % [tail, rk.call(tail)])
+	var c4: Vector2 = g._ember_at(4, "t")
+	var far4: bool = c4.distance_to(g.rgl_p) > 12.0 and c4.distance_to(tail) > 12.0
+	_ok("⑫ 옆 칸은 안 잡는다", not far4 or rk.call(c4) == "", rk.call(c4))
+	g._tip_build(g._tip_hit(c3))
+	var tg12: Array = g.tip_tags.map(func(t): return String(t.t))
+	_ok("⑫ 툴팁 — 이름 · [사건] · 칸 모양 테 · 사각 테 없음", g.tip_title == String(rg_ev.name)
+			and tg12.has("사건") and not g.tip_ring.is_empty() and not g.tip_box
+			and g.tip_mark.grow(0.5).has_point(c3), "%s %s %s" % [g.tip_title, tg12, g.tip_mark])
+	g._tip_clear()
+	_ok("⑫ 툴팁을 비우면 테도 빈다", g.tip_ring.is_empty() and g.tip_box)
+	for st in [g.S.AIM_V, g.S.AIM_H, g.S.CONFIRM, g.S.FLY, g.S.RESOLVE]:
+		g.state = st
+		if rk.call(c3) != "":
+			_ok("⑫ 조준 · 비행 · 셈 동안은 판 위를 안 잡는다", false, str(st))
+	g.state = g.S.PICK
+	g.rgl_r = Vector2(0.0, g.R * g.rt_bull_i)
+	g.rgl_idx = -1
+	g.rgl_p = g.BC
+	_ok("⑫ 이너 불을 막으면 한복판 · 테는 원 하나", rk.call(g.BC + Vector2(1.0, 0.0)) == "ev:regular"
+			and (g._rulep_cell(g.BC + Vector2(1.0, 0.0)).get("ring", []) as Array).size() == 1)
+	_clear()
+	g._ember_light(5, "d")
+	var e5: Vector2 = g._ember_at(5, "d")
+	_ok("⑫ 불씨 칸에 올리면 불씨 툴팁", rk.call(e5) == "ev:ember", rk.call(e5))
+	_ok("⑫ 불씨 칸 안쪽 싱글은 안 잡는다", rk.call(g._ember_at(5, "s")) == "", rk.call(g._ember_at(5, "s")))
+	g._ember_douse()
+	_ok("⑫ 꺼지면 안 잡는다", rk.call(e5) == "")
+	var m_dead := {}
+	var m_close := {}
+	for mo in mf:
+		if String(mo.k) == "sector_kill":
+			m_dead = mo
+		elif String(mo.k) == "close_hit":
+			m_close = mo
+	_clear()
+	g.active_mods = [m_dead]
+	var dead0: int = g.dead_idx
+	g.dead_idx = 0
+	_ok("⑫ 막힌 칸에 올리면 그 제약 툴팁", rk.call(g._ember_at(0, "s")) == "m:" + String(m_dead.id),
+			rk.call(g._ember_at(0, "s")))
+	g.dead_idx = dead0
+	_clear()
+	g.active_mods = [m_close]
+	var shut0: Array = g.shut_idx.duplicate()
+	g.shut_idx = [7]
+	_ok("⑫ 닫힌 문이 닫은 칸에 올리면 그 제약 툴팁", rk.call(g._ember_at(7, "t")) == "m:" + String(m_close.id))
+	_ok("⑫ 안 닫힌 칸은 안 잡는다", rk.call(g._ember_at(8, "t")) == "")
+	g.shut_idx = shut0
+	_clear()
+	_ok("⑫ 아무것도 없는 판은 안 잡는다", rk.call(c3) == "" and rk.call(g.BC) == "")
