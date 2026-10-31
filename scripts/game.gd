@@ -52903,6 +52903,11 @@ const CUP3 := {
 	#  뒤처짐 ≈ 통 속도 / 이 값이라, 30 이면 최고 속도에서 0.13 (0.35×r) 이다.
 	"drag":   30.0,
 	"lid":    26.0,    # 아가리 위로 통째로 떠오를 때 눌러 내리는 가속도
+	#  나가는 통에 실을 때 세우는 선(_cup3_hold). 들어온 통은 멎은 직후까지 달그락이
+	#  남아 있어, 그때 넘기면 48~63도로 누운 자루 · 벽 밖 촉(1.11×r)이 그대로 굳어
+	#  나갔다(2026-10-31 실측 · qa_cupleave 84프레임). 그 선 안의 자루는 안 건드린다.
+	"hold_lean": 32.0,  # 이보다 누운 자루는 촉을 축으로 이 각까지 세운다(도)
+	"hold_tip":  0.95,  # 촉이 안쪽 반지름의 이 배 밖이면 그만큼 안으로 들인다
 }
 
 # 다트통마다 통이 다르다. 통은 다트통의 얼굴이라 목록을 훑을 때 눈이 먼저
@@ -55650,11 +55655,35 @@ func _cup3_step(dir: int) -> void:
 # 붙이는 일은 그리기 틱에서 해도 된다. 강체를 **미는** 일만
 # _physics_process 몫이고, 여기서는 아무것도 안 민다.
 func _cup3_hold(rig: Dictionary) -> void:
-	for b in rig.get("darts", []) + rig.get("gold", []):
+	var darts: Array = rig.get("darts", [])
+	for b in darts + rig.get("gold", []):
 		if not is_instance_valid(b) or b.get_parent() == rig.cup:
 			continue
 		b.freeze = true
 		b.reparent(rig.cup, true)
+		if b in darts:
+			_cup3_upright(b, rig.cup.global_position, float(rig.get("r", CUP3.r)))
+
+
+# 실은 자루가 달그락 도중의 누운 자세로 굳지 않게 세운다(CUP3.hold_*). 촉을 축으로
+# 기울기만 줄이고(꽁지는 제 쪽 그대로) 벽 밖 촉은 안으로 들인다 — 선 안이면 그대로.
+func _cup3_upright(b: Node3D, c: Vector3, r: float) -> void:
+	var dl: float = float(CUP3.dl)
+	var t: Transform3D = b.global_transform
+	var ax: Vector3 = t.basis.y.normalized()          # 촉 → 꽁지
+	var tip: Vector3 = t.origin - ax * dl
+	var lean: float = ax.angle_to(Vector3.UP)
+	var lim: float = deg_to_rad(float(CUP3.hold_lean))
+	if lean > lim:
+		t.basis = Basis(ax.cross(Vector3.UP).normalized(), lean - lim) * t.basis
+		ax = t.basis.y.normalized()
+	var off := Vector2(tip.x - c.x, tip.z - c.z)
+	var lim_r: float = r * float(CUP3.hold_tip)
+	if off.length() > lim_r:
+		off = off.normalized() * lim_r
+		tip = Vector3(c.x + off.x, tip.y, c.z + off.y)
+	t.origin = tip + ax * dl
+	b.global_transform = t
 
 
 # 통 한 벌 몫의 물리. **들어오는 통은 통만 옮긴다** — 자루를 같이 옮기면
