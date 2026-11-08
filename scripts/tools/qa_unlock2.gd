@@ -164,7 +164,7 @@ func _run() -> void:
 
 	# ── 리그 여덟 (s9) — 「현재 다트통으로 런 N회 클리어」 ──
 	print("\n  리그 (s9)")
-	var lw := [0, 1, 2, 2, 4, 5, 6, 7]
+	var lw := [0, 1, 2, 3, 4, 5, 6, 7]
 	var i := 0
 	var lbad := PackedStringArray()
 	for r in GameData.rows("leagues"):
